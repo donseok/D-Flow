@@ -1,5 +1,6 @@
 // 에이전트 허브 조회 — 서버 전용(service_role). 1차 5건 병렬 + 2차(감시자·살아 있는 주문의 완료 보고) 병렬.
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
+import { loadQueueApprovals } from '@/lib/agent/approvalState'
 import { adminFor } from '@/lib/supabase/adminFor'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
@@ -76,5 +77,16 @@ export async function getAgentHub(projectId: string, viewer: { userId: string; i
   // 호출부(페이지·허브 액션)가 requireProjectMember(projectId) 를 통과한 뒤다 — 조회는 전부 이 projectId 로 좁힌다.
   const { admin } = adminFor({ projectId })
   const rows = await fetchAgentHubRows(admin, projectId, nowMs)
-  return assembleAgentHub(rows, nowMs, { userId: viewer.userId, isAdmin: viewer.isAdmin })
+  const hub = assembleAgentHub(rows, nowMs, { userId: viewer.userId, isAdmin: viewer.isAdmin })
+  // SP5b W1 — 결재 대기열의 대기 단계(n/m·라벨·expectedStep). 큐가 비면 읽지 않는다. 판독 실패는 로그 + 표시 없음(승인은 서버가 다시 판정)
+  const itemIds = hub.queue.map((q) => q.itemId).filter((x): x is string => x !== null)
+  if (itemIds.length === 0) return hub
+  const approvals = await loadQueueApprovals(admin, projectId, itemIds)
+  return {
+    ...hub,
+    queue: hub.queue.map((q) => {
+      const a = q.itemId ? approvals.get(q.itemId) : undefined
+      return a ? { ...q, approval: { step: a.step, index: a.index, total: a.total, label: a.label } } : q
+    }),
+  }
 }

@@ -10,9 +10,11 @@ import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ERR_REPORT_STALE, isUuidLike } from '@/lib/domain/agentWork'
 import { emitNotification } from '@/lib/notify/emit'
-import { applyWorkflowEvent, notifyOnReached, SKIPPED_WARN, type WorkflowEventOk, type WorkflowSkipped } from '@/lib/agent/workflowEvent'
+import { applyWorkflowEvent, notifyOnReached, REASON_TEXT, SKIPPED_WARN, type WorkflowEventOk, type WorkflowSkipped } from '@/lib/agent/workflowEvent'
 import { requireDelegationRight } from '@/lib/agent/delegation'
 import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/agent/subtreeManager'
+import { loadApprovalState, notifyApprovalStep } from '@/lib/agent/approvalState'
+import { STEP_CODE_RE, type PendingApproval } from '@/lib/domain/approvalSteps'
 
 /**
  * 에이전트 작업 루프 UI 서버 액션 — 스펙 §5. 2026-08-24: 전용 관제 화면(/agent-ops)을 없애고
@@ -24,7 +26,8 @@ import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/a
  * 조회(getAgentOrderForItem)만 세션 클라이언트로 해 RLS 조회 정책을 2차 방어선으로 쓴다.
  */
 
-type ActionResult = { ok: boolean; error?: string; warning?: string; stale?: true }
+type ActionResult = { ok: boolean; error?: string; warning?: string; stale?: true
+  /** SP5b: 중간 단계 승인이면 남은 단계 수(주문은 reported 그대로) */ remaining?: number }
 
 /** 승인 계열의 agents 관문(스펙 §4.2) — 가드를 지난 주문의 프로젝트로 판정한다. */
 async function withAgents<T extends { ok: true }>(projectId: string, pass: T): Promise<T | { ok: false; error: string }> {
@@ -39,7 +42,7 @@ async function withAgents<T extends { ok: true }>(projectId: string, pass: T): P
  * WBS 항목이 삭제된 주문(wbs_item_id 없음)은 조상을 특정할 수 없어 관리자만.
  */
 async function loadOrderForAdmin(orderId: string): Promise<
-  | { ok: true; order: { id: string; project_id: string; status: string; wbs_item_id: string | null; claimed_by_user_id: string | null }; actor: { userId: string } }
+  | { ok: true; order: { id: string; project_id: string; status: string; wbs_item_id: string | null; claimed_by_user_id: string | null }; actor: { userId: string }; pending: PendingApproval | null }
   | { ok: false; error: string }
 > {
   if (!isUuidLike(orderId)) return { ok: false, error: '잘못된 요청입니다.' }
@@ -52,11 +55,20 @@ async function loadOrderForAdmin(orderId: string): Promise<
   if (row.wbs_item_id === null) {
     const g = await requireProjectAdmin(row.project_id)
     if (!g.ok) return { ok: false, error: g.error }
-    return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: g.actor.userId } })
+    return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: g.actor.userId }, pending: null })
+  }
+  // SP5b(D18): 대기 단계의 승인자가 가드를 고른다 — admin 단계는 프로젝트 관리자만, subtree_or_admin 은 현행 승인 가드(자기 승인 금지 포함).
+  // 판독 실패·설정 손상은 거부(fail-closed)
+  const st = await loadApprovalState(admin, row.wbs_item_id, row.project_id)
+  if (!st.ok) return st
+  if (st.pending.approver === 'admin') {
+    const g = await requireProjectAdmin(row.project_id)
+    if (!g.ok) return { ok: false, error: g.error }
+    return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: g.actor.userId }, pending: st.pending })
   }
   const right = await requireCompletionApprover(row.wbs_item_id, row.project_id, { claimedByUserId: row.claimed_by_user_id })
   if (!right.ok) return { ok: false, error: right.error }
-  return withAgents(row.project_id, { ok: true as const, order: row, actor: right.actor })
+  return withAgents(row.project_id, { ok: true as const, order: row, actor: right.actor, pending: st.pending })
 }
 
 /**
@@ -207,22 +219,36 @@ async function recordReviewOn(admin: AdminClient, reportId: string | null, patch
  * 실적 쓰기가 담당 팀 게이트(updateActual)를 거치지 않는 이유는 종전과 같다 — 승인 자격(관리자·서브트리 관리자)은
  * loadOrderForAdmin 이 이미 확정했고, 실적은 사람이 치는 값이 아니라 승인 사건의 크레딧이다.
  */
-export async function approveAgentCompletion(orderId: string, expectedReportId: string | null): Promise<ActionResult> {
+export async function approveAgentCompletion(orderId: string, expectedReportId: string | null, expectedStep?: string | null): Promise<ActionResult> {
   if (!isExpectedReportId(expectedReportId)) return { ok: false, error: '잘못된 요청입니다.' }
+  if (expectedStep != null && (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep))) return { ok: false, error: '잘못된 요청입니다.' }
   const loaded = await loadOrderForAdmin(orderId)
   if (!loaded.ok) return loaded
-  const { order, actor } = loaded
+  const { order, actor, pending } = loaded
   if (order.status !== 'reported') return { ok: false, error: `승인 가능한 상태가 아닙니다(${order.status}).` }
   if (!order.wbs_item_id) return { ok: false, error: 'WBS 항목이 삭제된 주문입니다. 취소로 정리하세요.' }
+  // 화면이 본 단계가 지금 대기 단계가 아니면 쓰기 전에 돌려보낸다 — RPC 가 같은 대조를 설정 FOR SHARE 아래에서 다시 한다
+  if (expectedStep != null && pending && pending.step !== expectedStep) return { ok: false, stale: true, error: REASON_TEXT.approval_stale }
 
   const admin = createAdminClient()
   // RPC 가 주문 행 잠금 아래에서 같은 보고 id 를 다시 대조한다(0011 H2-i) — 이 대조와 전이 사이의 재보고도 stale 로 막힌다.
   const fresh = await checkReportFresh(admin, orderId, expectedReportId)
   if (!fresh.ok) return fresh
-  const transition = await applyWorkflowEvent(admin, { event: 'approve', actorUserId: actor.userId, orderId, expectedReportId })
+  const transition = await applyWorkflowEvent(admin, { event: 'approve', actorUserId: actor.userId, orderId, expectedReportId, expectedStep })
   if (!transition.ok) {
     if (transition.stale) return { ok: false, stale: true, error: ERR_REPORT_STALE }
+    if (transition.reason === 'approval_stale') return { ok: false, stale: true, error: transition.error }
     return { ok: false, error: transition.conflict ? '상태가 바뀌어 승인하지 못했습니다. 다시 시도하세요.' : transition.error }
+  }
+  // 중간 단계(SP5b): 주문은 reported·단계 im 그대로 — 검토 기록(review_action)은 마지막 단계에서만 쓴다. 다음 단계 승인 자격자에게 알린다
+  if (transition.approval && transition.approval.remaining > 0) {
+    const total = pending?.total ?? transition.approval.remaining + 1
+    await notifyApprovalStep(admin, {
+      projectId: order.project_id, itemId: order.wbs_item_id, entity: { type: 'agent_order', id: order.id },
+      actorUserId: actor.userId, nextIndex: total - transition.approval.remaining + 1, total,
+    })
+    await afterTransition(admin, { projectId: order.project_id, itemId: order.wbs_item_id, actorUserId: actor.userId, transition })
+    return { ok: true, remaining: transition.approval.remaining }
   }
   await recordReviewOn(admin, fresh.reportId, { review_action: 'approve', reviewed_by: actor.userId, reviewed_at: new Date().toISOString() }, '승인')
   await notifyReviewResult(admin, order, 'work.approved', actor.userId)

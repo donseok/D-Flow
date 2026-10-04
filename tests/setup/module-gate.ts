@@ -18,3 +18,20 @@ vi.mock('@/lib/modules/gate', () => ({
 vi.mock('@/lib/modules/aiAvailable', () => ({
   aiAvailable: vi.fn(async () => (await import('@/lib/ai/provider')).hasLLM()),
 }))
+
+// SP5b W1 — 승인 판정 재료 로더(src/lib/agent/approvalState.ts)의 기본값 = 설정 키 없음(기본 1단계 review·subtree_or_admin, 대기 = review).
+// 승인 액션을 import 하는 기존 테스트의 admin 조회 큐가 밀리지 않게 한다(스펙 §4.7 호환 규칙). 로더 자체는 tests/agent/approval-state.test.ts 가
+// vi.importActual 로 본다. 다단계 경로를 보는 테스트는 vi.mocked(loadApprovalState).mockResolvedValue(…) 로 준다.
+vi.mock('@/lib/agent/approvalState', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/agent/approvalState')>('@/lib/agent/approvalState')
+  const { DEFAULT_APPROVAL_STEPS } = await import('@/lib/domain/approvalSteps')
+  return {
+    ...actual,
+    loadApprovalState: vi.fn(async () => ({
+      ok: true, pending: { step: 'review', index: 1, total: 1, approver: 'subtree_or_admin' },
+      steps: DEFAULT_APPROVAL_STEPS.map((s) => ({ ...s })), stage: 'im',
+    })),
+    notifyApprovalStep: vi.fn(async () => {}),
+    loadQueueApprovals: vi.fn(async () => new Map()),
+  }
+})

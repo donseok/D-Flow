@@ -9,7 +9,7 @@ import { UUID_RE } from '@/lib/domain/validate'
  * 호출부는 성공 뒤 actualChanged 면 진척 스냅샷을, reachedFirst 면 notifyOnReached 를 부른다(둘 다 실패는 로깅만).
  */
 export type WorkflowEvent =
-  | 'assign' | 'unassign' | 'claim' | 'report_completion' | 'approve' | 'unapprove' | 'reject' | 'rework' | 'release' | 'set_stage'
+  | 'assign' | 'unassign' | 'claim' | 'report_completion' | 'approve' | 'approve_step' | 'unapprove' | 'reject' | 'rework' | 'release' | 'set_stage'
 
 export type WorkflowEventArgs = {
   event: WorkflowEvent
@@ -24,12 +24,19 @@ export type WorkflowEventArgs = {
   /** approve·reject 전용 — 사람이 본 completion 보고 id(보고 없음 = null). RPC 가 주문 행 잠금 아래에서 최신 보고와 대조한다(0011 H2-i).
    *  생략하면 null 로 대조한다(보고가 있으면 stale). */
   expectedReportId?: string | null
+  /** SP5b(D18·S6): 승인 판정 사건(approve·approve_step·set_stage 'xx')이 본 대기 단계 code. RPC 가 설정 FOR SHARE 아래 대기 단계와 대조한다.
+   *  있을 때만 보낸다(호환 규칙 S1) — 생략은 유효 단계가 하나일 때만 통과한다. */
+  expectedStep?: string | null
 }
+
+/** 승인 판정 결과(중간 단계면 remaining > 0 — 주문 reported·stage im·실적 불변). RPC 가 돌려줄 때만 실린다 */
+export type WorkflowApproval = { round: number; stepCode: string; remaining: number }
 
 export type WorkflowSkipped = 'parent' | 'not_workflow' | 'stage' | 'no_item'
 export type WorkflowEventOk = {
   ok: true; orderStatus: string | null; stage: string | null; actualPct: number | null
   stageChanged: boolean; actualChanged: boolean; reachedFirst: boolean; skipped: WorkflowSkipped | null
+  approval?: WorkflowApproval
 }
 export type WorkflowEventFail = { ok: false; conflict: boolean; reason: string; orderStatus: string | null; error: string; stale?: true }
 
@@ -50,6 +57,13 @@ export const REASON_TEXT: Record<string, string> = {
   bad_event: '알 수 없는 사건입니다.',
   bad_stage: '허용되지 않는 단계입니다.',
   report_stale: ERR_REPORT_STALE,
+  // SP5b W1 — 승인 단계(스펙 §3.4)
+  approval_stale: '승인 단계가 바뀌었습니다 — 새로고침한 뒤 다시 처리하세요.',
+  approval_same_actor: '같은 검수 라운드의 다른 단계를 이미 승인했습니다 — 다른 사람이 승인해야 합니다.',
+  approval_required: '이 프로젝트는 승인 단계가 둘 이상입니다 — 검수 대기로 올린 뒤 단계별 승인으로 완료하세요.',
+  approval_forbidden: '이 승인 단계는 프로젝트 관리자만 승인할 수 있습니다.',
+  not_in_review: '검수 대기 중인 항목만 단계 승인할 수 있습니다.',
+  config_invalid: '프로젝트의 업무 흐름 설정이 손상돼 처리하지 못했습니다 — 관리자에게 알리세요.',
 }
 
 /** 주문 사건이 단계·실적을 건너뛴 사유 — 사람이 할 일이 달라 warning 으로 드러낸다. */
@@ -66,8 +80,14 @@ export async function applyWorkflowEvent(admin: AdminClient, args: WorkflowEvent
     p_item_id: args.itemId ?? null, p_order_id: args.orderId ?? null, p_stage: args.stage ?? null,
     p_agent: args.agent ?? null, p_agent_user_id: args.agentUserId ?? null,
     ...(args.event === 'approve' || args.event === 'reject' ? { p_expected_report_id: args.expectedReportId ?? null } : {}),
+    ...(args.expectedStep != null ? { p_expected_step: args.expectedStep } : {}),
   })
   if (error) {
+    // 설정 손상(D20 — workflow_value_of 의 22023 CONFIG_INVALID:<key>)은 사유로 접는다 — 관리자가 고칠 수 있는 상태라 원문은 로그에만
+    if (error.code === '22023' && /^CONFIG_INVALID:/.test(error.message ?? '')) {
+      console.error(`[apply_workflow_event ${args.event}] 설정 손상:`, error.message)
+      return { ok: false, conflict: false, reason: 'config_invalid', orderStatus: null, error: REASON_TEXT.config_invalid }
+    }
     // 로그 머리의 id 는 UUID 꼴일 때만 — 호출자가 넘긴 값이 로그 줄을 지어내지 못하게 한다.
     const id = (v: string | null | undefined) => (v == null ? '-' : UUID_RE.test(v) ? v : '(id 아님)')
     console.error(`[apply_workflow_event ${args.event} order=${id(args.orderId)} item=${id(args.itemId)}] RPC 실패:`, error.message)
@@ -89,7 +109,15 @@ export async function applyWorkflowEvent(admin: AdminClient, args: WorkflowEvent
     actualChanged: r.actual_changed === true,
     reachedFirst: r.reached_first === true,
     skipped: typeof r.skipped === 'string' ? (r.skipped as WorkflowSkipped) : null,
+    ...(parseApproval(r.approval) ?? {}),
   }
+}
+
+function parseApproval(raw: unknown): { approval: WorkflowApproval } | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const a = raw as Record<string, unknown>
+  if (typeof a.step_code !== 'string' || typeof a.round !== 'number' || typeof a.remaining !== 'number') return null
+  return { approval: { round: a.round, stepCode: a.step_code, remaining: a.remaining } }
 }
 
 /** im·xx 첫 도달 뒤 후행 unblocked 알림(§2.10) — 항목을 읽어 notifySuccessorsOnReached 에 넘긴다. 실패는 로깅만. */

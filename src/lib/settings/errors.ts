@@ -166,5 +166,14 @@ export function inUseFieldErrors(detail: string | null): { key: string; message:
         : `'${o.code}' 을(를) 쓰는 기록이 ${n}건 있어 집계 분류를 바꿀 수 없습니다. 새 항목을 만들어 옮긴 뒤 바꾸세요.`
     return [{ key: o.key, message, refCount: n, code: o.code }]
   }
+  // SP5b W1 — 승인 단계(settings_ref_check): 대기 라운드의 스냅샷 단계 삭제, 대기 단계의 승인자 넓히기(admin → subtree_or_admin)
+  if (typeof o.key === 'string' && typeof o.code === 'string' && Number.isSafeInteger(o.count)
+      && (o.reason === 'pending_round' || o.reason === 'approver_widen')) {
+    const n = Number(o.count)
+    const message = o.reason === 'pending_round'
+      ? `'${o.code}' 단계로 검수 중인 항목이 ${n}건 있어 지울 수 없습니다. 그 검수가 끝난 뒤 지우세요.`
+      : `'${o.code}' 단계 승인을 기다리는 항목이 ${n}건 있어 승인자를 넓힐 수 없습니다. 그 승인이 끝난 뒤 바꾸세요.`
+    return [{ key: o.key, message, refCount: n, code: o.code }]
+  }
   return typeof o.key === 'string' ? [{ key: o.key, message: ERR_CONFIG_IN_USE }] : []
 }

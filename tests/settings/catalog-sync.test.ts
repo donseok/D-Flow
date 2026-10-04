@@ -19,6 +19,9 @@ const expectedStatus: Record<string, string> = {
   'attendance.types': 'verified', 'meetings.categories': 'verified', 'issues.severities': 'verified', 'issues.sources': 'verified', 'issues.cause_categories': 'verified',
   // SP5 B2 — 최상위 폴더 모드. SQL(create_team·ensure_team_roots)·편집기·앱 소비처(편철 정규화 v2.9)·검증 네 연결
   'minutes.root_folders': 'verified',
+  // SP5b W1 — 흐름 다섯. 정의·SQL·승인 액션까지(wired·stored). 화면 주입·설정 편집기(W2) 뒤 Z 가 verified 로 올린다
+  'workflow.credit_policy': 'stored', 'workflow.wbs_stage_labels': 'stored', 'workflow.approval_steps': 'wired',
+  'workflow.approval_distinct_approvers': 'wired', 'workflow.predecessor_gate': 'wired',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.
@@ -26,12 +29,15 @@ const expectedStatus: Record<string, string> = {
  * 그 키가 verified 로 오르기 전(과제 29)에 컴포넌트가 생기거나 위젯 이름이 실재 컴포넌트로 바뀌어야 한다 */
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
   // SP5 A 과제 25 가 셋(TimezoneSelect·WorkingDaysEditor·WeekStartEditor)을 만들어 비었다(판정 J1) — 과제 29 가 빈 목록을 완료 조건으로 본다
+  // SP5b W1 — 키 정의(W1)가 설정 화면 WBS 몫(W2)보다 먼저다. Z 의 verified 전에 비어야 한다
+  StageLabelsEditor: 'SP5b W2 과제 설정 화면 — 단계 라벨 5칸',
+  ApprovalStepsEditor: 'SP5b W2 과제 설정 화면 — 승인 단계 1~3',
 }
 
 describe('설정 카탈로그 동기화', () => {
-  it('31정의(키 이름 27)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('36정의(키 이름 32)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(31)
+    expect(defs).toHaveLength(36)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
     for (const def of defs) {
@@ -55,7 +61,7 @@ describe('설정 카탈로그 동기화', () => {
   it('아직 없는 custom 편집 UI 는 닫힌 목록뿐이고, 그 키는 verified 가 아니며, 컴포넌트가 생기면 항목을 지운다(죽은 항목 실패)', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
     for (const [component, why] of Object.entries(PENDING_CUSTOM_WIDGETS)) {
-      expect(why, component).toMatch(/^SP5 (A|B1|B3) 과제 \d+/)
+      expect(why, component).toMatch(/^SP5 (A|B1|B3) 과제 \d+|^SP5b W2 과제 /)
       expect(existsSync(`src/components/settings/${component}.tsx`), `${component} 가 생겼다 — 이 항목을 지운다`).toBe(false)
       const users = defs.filter((d) => d.widget.kind === 'custom' && d.widget.component === component)
       expect(users.length, `${component} 를 쓰는 정의가 없다 — 죽은 항목`).toBeGreaterThan(0)

@@ -77,10 +77,10 @@ const HELPER_CALLERS: Readonly<Record<string, HelperSpec>> = {
     helper: 'applyWorkflowEvent', source: '@/lib/agent/workflowEvent', field: 'actorUserId',
     callers: {
       'src/app/actions/wbsAssign.ts': {
-        count: 4,   // setWbsAssignee·assignWbsCascade 의 둘은 requireProjectAdmin 직접
+        count: 5,   // setWbsAssignee·assignWbsCascade 의 둘은 requireProjectAdmin 직접
         except: {
-          expr: 'g.actor.userId', count: 2,
-          why: 'setWbsStage·setWbsDevWorkflow 의 g 는 requireSubtreeManagerOrAdmin(lib/agent/subtreeManager — requireProjectAdmin 또는 requireProjectMember + 서브트리 관리자 판정의 actor)',
+          expr: 'g.actor.userId', count: 3,
+          why: 'setWbsStage·setWbsDevWorkflow 의 g 는 requireSubtreeManagerOrAdmin(lib/agent/subtreeManager — requireProjectAdmin 또는 requireProjectMember + 서브트리 관리자 판정의 actor). SP5b(B-23): setWbsStage 의 xx 지정·approveWbsStep 의 g 는 guardStepApproval — 대기 단계 승인자에 따라 requireProjectAdmin 또는 requireCompletionApprover(같은 파일 도우미)의 actor',
         },
       },
       'src/app/actions/agentWork.ts': {

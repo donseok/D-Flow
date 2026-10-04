@@ -65,6 +65,8 @@ export interface HubQueueEntry {
   canManage: boolean
   /** 승인 버튼 노출 — HubRow.canApprove 와 같은 식을 이 주문으로(자기 담당·자기 착수 제외, AUTH-07a). */
   canApprove: boolean
+  /** SP5b W1 — 대기 승인 단계("n/m · 라벨", 승인에 expectedStep 으로 싣는다). 판독 전·실패면 없다. label null = 기본 단계 */
+  approval?: { step: string; index: number; total: number; label: string | null }
 }
 export interface AgentHub {
   projectId: string; projectName: string

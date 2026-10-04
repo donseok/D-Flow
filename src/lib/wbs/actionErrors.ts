@@ -21,6 +21,8 @@ export const WBS_ACTION_ERRORS = {
   siblingLookup: '형제 항목을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.',
   save: '저장하지 못했습니다 — 잠시 후 다시 시도하세요.',
   add: '추가하지 못했습니다 — 잠시 후 다시 시도하세요.',
+  // SP5b(D14) — 유효 승인 단계 ≥2 항목의 실적 100(앱 판정·DB 가드 WORKFLOW_APPROVAL_REQUIRED 가 같은 문구)
+  approvalRequired: '이 프로젝트는 승인 단계가 둘 이상이라 완료(100%)는 단계 승인으로만 됩니다 — 99% 까지 입력할 수 있습니다.',
 } as const
 
 const KEY: Readonly<Record<string, DictKey>> = {

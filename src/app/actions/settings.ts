@@ -21,7 +21,7 @@ import { CONFIG_MESSAGES, ConfigUnavailableError, ERR_EXPLICIT_UNSET, inUseField
 import { changedKeysSince, findCommandOutcome, listHistory, type SettingsHistoryRow } from '@/lib/settings/history'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { SETTINGS_SCHEMA_VERSION, settingDef, type SettingKey, type SettingScope } from '@/lib/settings/registry'
-import { availableOf, loadProjectValidateDeps, modulesAllowedBroken, ERR_MODULES_ALLOWED_BROKEN, validateProjectConfig, validateWorkspaceConfig, workspaceAllowedOrNone, type FieldError, type ValidateResult } from '@/lib/settings/validateConfig'
+import { availableOf, creditStateOf, loadProjectValidateDeps, modulesAllowedBroken, ERR_MODULES_ALLOWED_BROKEN, validateProjectConfig, validateWorkspaceConfig, workspaceAllowedOrNone, type FieldError, type ValidateResult } from '@/lib/settings/validateConfig'
 import { getWorkspaceConfig, type WorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { listWeekKeys } from '@/lib/settings/weekKeys'
 import { commandDigestInput } from '@/lib/settings/write'
@@ -58,7 +58,7 @@ interface ScopeAdapter {
   load: (admin: AdminClient) => Promise<Loaded>
   /** 편집 문맥(입력≠저장 키의 toStored 가 받는다) — 판독 결과에서 만든다(프로젝트 tz 의 오늘 — SP5 §4.2) */
   editCtx: (loaded: Loaded) => EditCtx
-  validate: (admin: AdminClient, next: Record<string, unknown>, loaded: Loaded, allowed: readonly ModuleId[]) => Promise<ValidateResult>
+  validate: (admin: AdminClient, next: Record<string, unknown>, loaded: Loaded, allowed: readonly ModuleId[], unset: readonly string[]) => Promise<ValidateResult>
   rpc: (admin: AdminClient, args: RpcArgs) => PromiseLike<{ data: unknown; error: DbErrorLike | null }>
   afterApplied: (admin: AdminClient, prev: Doc, set: Record<string, unknown>, actor: Actor) => Promise<{ ok: true } | { ok: false; what: string; error: string }>
   revalidate: () => void
@@ -178,7 +178,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
     if (!built.ok) return invalid(commandId, 'CONFIG_INVALID', built.fieldErrors)
     // 5. 교차 불변식
     let v: ValidateResult
-    try { v = await a.validate(admin, built.set, loaded, allowedIds) } catch (e) {
+    try { v = await a.validate(admin, built.set, loaded, allowedIds, unset) } catch (e) {
       if (e instanceof ConfigUnavailableError) return unavailableLogged(a, commandId, '교차 검증 조회', e.message)
       throw e
     }
@@ -275,7 +275,8 @@ function projectAdapter(projectId: string, now: Date): ScopeAdapter {
       return { scope: 'project', projectId, today: typeof tz === 'string' ? todayIn(tz, now) : '',
         loadWeekKeys: () => listWeekKeys(adminFor({ projectId }).admin, projectId) }
     },
-    validate: async (admin, next, { ws, cfg }, allowed) => validateProjectConfig(next, await loadProjectValidateDeps(admin, cfg!, ws, { allowed })),
+    validate: async (admin, next, { ws, cfg }, allowed, unset) =>
+      validateProjectConfig(next, { ...await loadProjectValidateDeps(admin, cfg!, ws, { allowed }), credit: creditStateOf(cfg!) }, unset),
     rpc: (admin, x) => admin.rpc('apply_project_settings', { p_project_id: projectId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
     afterApplied: async (_admin, prev, set, actor) => {

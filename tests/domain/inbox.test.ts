@@ -8,9 +8,10 @@ describe('notification catalog', () => {
     const cats = new Set(Object.values(NOTIFICATION_CATALOG).map(c => c.category))
     for (const c of cats) expect(['work', 'issue', 'meeting', 'announce', 'system']).toContain(c)
   })
-  it('REQUIRED 는 승인 요청류 둘뿐이다', () => {
+  // SP5b(의도적 수정 표): 다단계 승인의 중간 단계 통과(work.approval_step)도 다음 단계 승인 요청이다
+  it('REQUIRED 는 승인 요청류 셋뿐이다', () => {
     const required = Object.entries(NOTIFICATION_CATALOG).filter(([, c]) => c.required).map(([t]) => t)
-    expect(required.sort()).toEqual(['work.rejected', 'work.reported'])
+    expect(required.sort()).toEqual(['work.approval_step', 'work.rejected', 'work.reported'])
   })
   it('categoryOf — issue.assigned 는 issue', () => {
     expect(categoryOf('issue.assigned')).toBe('issue')

@@ -15,6 +15,7 @@ import { requireCalendar } from '@/lib/calendar/load'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { AGENT_HELD_ORDER_STATUSES, stageLockedForHuman } from '@/lib/domain/agentWork'
+import { DEFAULT_APPROVAL_STEPS, actualHundredBlocked } from '@/lib/domain/approvalSteps'
 import { failWith } from '@/lib/errors/dbFail'
 import { WBS_ACTION_ERRORS as E } from '@/lib/wbs/actionErrors'
 import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, dbToken } from '@/lib/settings/errors'
@@ -141,7 +142,7 @@ export async function updateActual(
   itemId: string,
   newPct: number,
   expectedCurrent?: number | null,
-): Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' }> {
+): Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' | 'approval_required' }> {
   if (!Number.isFinite(newPct) || newPct < 0 || newPct > 100) return { ok: false, error: E.range }
   // projectId 를 인자로 받지 않으므로 판정 전에 대상 행에서 읽는다 — 조회 실패는 쓰기 중단 사유.
   const found = await resolveProjectId('wbs_items', itemId)
@@ -150,7 +151,7 @@ export async function updateActual(
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   // PGRST116 = 0행(항목 없음). 그 외 에러는 진성 조회 실패이므로 '항목 없음'으로 위장하지 않고 그대로 알린다.
-  const { data: item, error: itemErr } = await sb.from('wbs_items').select('id, actual_pct, project_id, dev_workflow, tags').eq('id', itemId).single()
+  const { data: item, error: itemErr } = await sb.from('wbs_items').select('id, actual_pct, project_id, dev_workflow, tags, stage, review_steps').eq('id', itemId).single()
   if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.updateActual', itemErr, ERR_ITEM_LOOKUP) }
   if (!item) return { ok: false, error: E.itemMissing }
   // 자식이 있으면 롤업 부모 — 직접 입력한 값은 화면에도 엑셀에도 안 나오므로 거부한다.
@@ -173,19 +174,33 @@ export async function updateActual(
   // D7(스펙 2026-09-15 §3.6) — 에이전트 관할 작업(잠금: 위임됨 ∨ 주문 claimed·reported)의 100 은 승인 버튼으로만.
   // 에이전트 API 가 progress 를 99 로 막는 규칙과 같다(2026-08-25 드롭다운 우회 사고 재발 방지). ready 는 dev_workflow
   // 리프마다 상주하므로 잠금이 아니다 — 사람이 직접 하는 Task 는 100 을 넣을 수 있다. 권한 판정 뒤에 둬 잠금 여부를 흘리지 않는다.
-  const flags = item as { dev_workflow?: boolean | null; tags?: string[] | null }
-  if (newPct > 99 && flags.dev_workflow === true) {
-    const delegated = (flags.tags ?? []).includes(AGENT_TAG)
-    let heldStatus: string | null = null
-    if (!delegated) {
-      // 쓰기 전 선행 조회 — 실패는 거부(3원칙). 모르는 채로 100 을 쓰면 승인 우회가 된다.
-      const { data: held, error: heldErr } = await sb
-        .from('agent_work_orders').select('status').eq('wbs_item_id', itemId)
-        .in('status', [...AGENT_HELD_ORDER_STATUSES]).limit(1).maybeSingle()
-      if (heldErr) return { ok: false, error: failWith('wbs.updateActual', heldErr, ERR_ORDER_LOOKUP) }
-      heldStatus = (held as { status: string } | null)?.status ?? null
+  // SP5b(D14) — 순서는 DB guard_workflow_actual 과 같다: im ∧ 유효 단계 ≥2 → 잠금(위임·점유) → xx 아님 ∧ 유효 단계 ≥2(actualHundredBlocked).
+  const flags = item as { dev_workflow?: boolean | null; tags?: string[] | null; stage?: string | null; review_steps?: string[] | null }
+  if (newPct > 99) {
+    const stage = flags.stage ?? null
+    const reviewSteps = flags.review_steps ?? null
+    const devWorkflow = flags.dev_workflow === true
+    let locked = false
+    if (devWorkflow) {
+      const delegated = (flags.tags ?? []).includes(AGENT_TAG)
+      let heldStatus: string | null = null
+      if (!delegated) {
+        // 쓰기 전 선행 조회 — 실패는 거부(3원칙). 모르는 채로 100 을 쓰면 승인 우회가 된다.
+        const { data: held, error: heldErr } = await sb
+          .from('agent_work_orders').select('status').eq('wbs_item_id', itemId)
+          .in('status', [...AGENT_HELD_ORDER_STATUSES]).limit(1).maybeSingle()
+        if (heldErr) return { ok: false, error: failWith('wbs.updateActual', heldErr, ERR_ORDER_LOOKUP) }
+        heldStatus = (held as { status: string } | null)?.status ?? null
+      }
+      locked = stageLockedForHuman({ delegated, orderStatus: heldStatus })
     }
-    if (stageLockedForHuman({ delegated, orderStatus: heldStatus })) return ACTUAL_LOCKED
+    // 설정(승인 단계)을 읽어야 하는 판정은 DB 가드(guard_workflow_actual — 이 쓰기가 JWT 경로라 반드시 돈다)가 같은 문구(WORKFLOW_APPROVAL_REQUIRED)로
+    // 막는다. 앱은 행 값만으로 되는 판정(잠금·스냅샷 단계 수)을 먼저 해 흔한 거부를 쓰기 전에 돌려준다 — 기본 설정으로 판정하면 1단계라 통과다.
+    const approvalSteps = DEFAULT_APPROVAL_STEPS
+    const blocked = actualHundredBlocked({ devWorkflow, locked, stage, reviewSteps, approvalSteps })
+    if (blocked === 'locked') return ACTUAL_LOCKED
+    // SP5b(D14): 유효 승인 단계 ≥2 — 단계 승인으로만 완료한다. DB 가드(WORKFLOW_APPROVAL_REQUIRED)와 같은 결과
+    if (blocked === 'approval_required') return { ok: false, error: E.approvalRequired, code: 'approval_required' }
   }
 
   const old = item.actual_pct
@@ -205,6 +220,7 @@ export async function updateActual(
     // 앱 잠금 판정과 이 쓰기 사이에 주문이 claim 되면 DB 가드(0011 guard_workflow_actual)가 막는다 — 같은 문구로.
     // — 첫 낱말로 판정한다(부분 문자열로 뜻을 뽑지 않는다, D21)
     if (dbToken(upErr.message) === 'WORKFLOW_ACTUAL_LOCKED') return ACTUAL_LOCKED
+    if (dbToken(upErr.message) === 'WORKFLOW_APPROVAL_REQUIRED') return { ok: false, error: E.approvalRequired, code: 'approval_required' }
     return { ok: false, error: failWith('wbs.updateActual', upErr, ERR_SAVE) }
   }
   if (!updated?.length) return { ok: false, error: E.noWritePermission }

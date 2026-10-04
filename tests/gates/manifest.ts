@@ -64,7 +64,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('agentTokens')}#revokeAgentToken`]: { ...nul('session', '계정 단위 PAT 회수'), sample: [U] },   // isUuidLike 가 세션 앞
   [`${A('agentTokens')}#listMyAgentTokens`]: nul('session', '계정 단위 PAT 목록'),
   // ── agentWork — 옛 토글 둘은 모듈을 켜는 문(P8), 승인 계열은 agents
-  [`${A('agentWork')}#approveAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U, null], adminBeforeGuard: 'loadOrderForAdmin 이 주문 행에서 프로젝트를 읽는다(service_role)' },
+  [`${A('agentWork')}#approveAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U, null], adminBeforeGuard: 'loadOrderForAdmin 이 주문 행에서 프로젝트를 읽고, SP5b 부터 대기 단계(승인자)를 읽어 가드를 고른다(service_role)' },
   [`${A('agentWork')}#rejectAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U, '사유', null], adminBeforeGuard: 'loadOrderForReview 가 주문 행에서 프로젝트를 읽는다' },
   [`${A('agentWork')}#unapproveAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U], adminBeforeGuard: 'loadOrderForReview' },
   [`${A('agentWork')}#requestAgentRework`]: { guard: 'projectAdmin', module: 'agents', sample: [U, '사유'], adminBeforeGuard: 'loadOrderForReview' },
@@ -236,6 +236,10 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('wbsAssign')}#setWbsAssignee`]: { ...nul('projectAdmin'), sample: [U, null] },   // resolveItemProjectId 의 isUuidLike 가 가드 앞
   [`${A('wbsAssign')}#setWbsAssigneeCascade`]: { ...nul('projectAdmin'), sample: [U, U] },
   [`${A('wbsAssign')}#setWbsStage`]: { ...nul('projectAdmin'), sample: [U, null] },
+  // SP5b(D19·스펙 §3.5): 주문 없는 단계 승인 — wbs 는 core 라 모듈 관문 없음. 대기 단계의 승인자에 따라 completionApprover(관리자 또는 서브트리 관리자,
+  // 자기 담당 제외)로 갈린다. 순서 = resolveProjectId → requireProjectMember → 대기 단계 판독 → 승인자 가드
+  [`${A('wbsAssign')}#approveWbsStep`]: { ...nul('projectAdmin', '대기 단계 승인자에 따라 completionApprover'), sample: [U, 'review'],
+    adminBeforeGuard: '멤버 가드 뒤 대기 단계(승인자)를 service_role 로 읽어 승인자 가드를 고른다' },
   [`${A('wbsAssign')}#setWbsDevWorkflow`]: { ...nul('projectAdmin', 'WBS 필드(core) — 주문 발행은 ensureOrder 의 두 원천 AND 가 막는다(P19)'), sample: [U, false, false] },
   [`${A('wbsAssign')}#getWbsAssigneeStage`]: { ...nul('projectMember'), sample: [U] },
   [`${A('wbsMarkdown')}#previewWbsUpload`]: nul('projectAdmin'),

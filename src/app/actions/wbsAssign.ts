@@ -9,10 +9,12 @@ import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { isStageCode, type StageCode } from '@/lib/domain/stageLabels'
 import { emitNotification } from '@/lib/notify/emit'
 import { backfillProjectOrders, ensureAgentProject, ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
-import { applyWorkflowEvent, notifyOnReached } from '@/lib/agent/workflowEvent'
+import { applyWorkflowEvent, notifyOnReached, REASON_TEXT } from '@/lib/agent/workflowEvent'
+import { loadApprovalState, notifyApprovalStep } from '@/lib/agent/approvalState'
+import { STEP_CODE_RE, type PendingApproval } from '@/lib/domain/approvalSteps'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { after } from 'next/server'
-import { requireSubtreeManagerOrAdmin } from '@/lib/agent/subtreeManager'
+import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/agent/subtreeManager'
 
 /**
  * WBS 담당자(로스터 축)·단계(stage) 갱신 — §2.5. 배정 권한은 프로젝트 관리자.
@@ -336,20 +338,75 @@ export async function setWbsAssigneeCascade(
  * 해제(null)는 잠금이 아니면 워크플로·리프와 무관하게 허용한다 — 잘못 찍힌 값을 지울 길이 이것뿐이다.
  */
 export async function setWbsStage(
-  itemId: string, stage: StageCode | null,
-): Promise<{ ok: boolean; error?: string }> {
+  itemId: string, stage: StageCode | null, expectedStep?: string | null,
+): Promise<{ ok: boolean; error?: string; stale?: true }> {
   if (stage !== null && !isStageCode(stage)) return { ok: false, error: '허용되지 않는 단계입니다.' }
+  if (expectedStep != null && (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep))) return { ok: false, error: '잘못된 요청입니다.' }
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
-  const g = await requireSubtreeManagerOrAdmin(itemId, resolved.projectId)
+  // SP5b(D18·§8 #3): xx 지정은 승인과 같은 판정 — 대기 단계의 승인자 가드(admin 단계는 관리자만, 그 밖은 자기 승인 금지가 붙은 승인 가드).
+  // 유효 단계가 둘 이상이면 RPC 가 approval_required 로 거부한다(im 으로 올린 뒤 단계 승인으로만 xx)
+  const g = stage === 'xx' ? await guardStepApproval(itemId, resolved.projectId) : await requireSubtreeManagerOrAdmin(itemId, resolved.projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  if (expectedStep != null && 'pending' in g && g.pending.step !== expectedStep) return { ok: false, stale: true, error: REASON_TEXT.approval_stale }
   const admin = createAdminClient()
-  const tr = await applyWorkflowEvent(admin, { event: 'set_stage', actorUserId: g.actor.userId, itemId, stage })
-  if (!tr.ok) return { ok: false, error: tr.error }
+  const tr = await applyWorkflowEvent(admin, { event: 'set_stage', actorUserId: g.actor.userId, itemId, stage, expectedStep })
+  if (!tr.ok) return tr.reason === 'approval_stale' ? { ok: false, stale: true, error: tr.error } : { ok: false, error: tr.error }
   revalidatePath(`/p/${resolved.projectId}`, 'layout')
   if (tr.actualChanged) after(() => recordProgressSnapshot(resolved.projectId))
   // §2.10 — im·xx 에 "처음" 도달할 때만 후행 알림(재설정·역전이는 RPC 의 reachedFirst 가 거른다).
   if (tr.reachedFirst) await notifyOnReached(admin, itemId, g.actor.userId)
+  return { ok: true }
+}
+
+/**
+ * 승인 판정 가드(SP5b D18) — 멤버 확인 → 대기 단계 판독 → 승인자 가드. 가드 앞 service_role 읽기가 없다(멤버 가드 뒤에 판독한다, 스펙 §3.5).
+ * admin 단계 = requireProjectAdmin, subtree_or_admin = requireCompletionApprover(관리자, 또는 서브트리 관리자이면서 리프 담당자 본인이 아닌 사람).
+ * 사람 경로라 claim 계정은 없다(에이전트가 쥔 항목은 RPC 가 locked 로 막는다).
+ */
+async function guardStepApproval(itemId: string, projectId: string): Promise<
+  { ok: true; actor: { userId: string }; pending: PendingApproval } | { ok: false; error: string }
+> {
+  const m = await requireProjectMember(projectId)
+  if (!m.ok) return { ok: false, error: m.error }
+  const st = await loadApprovalState(createAdminClient(), itemId, projectId)
+  if (!st.ok) return st
+  if (st.pending.approver === 'admin') {
+    const g = await requireProjectAdmin(projectId)
+    if (!g.ok) return { ok: false, error: g.error }
+    return { ok: true, actor: { userId: g.actor.userId }, pending: st.pending }
+  }
+  const g = await requireCompletionApprover(itemId, projectId, { claimedByUserId: null })
+  if (!g.ok) return { ok: false, error: g.error }
+  return { ok: true, actor: { userId: g.actor.userId }, pending: st.pending }
+}
+
+/**
+ * 주문 없는 단계 승인(SP5b — 개정 §3.3.2 approve_step) — 사람이 검수 대기(im)로 올린 리프의 대기 단계를 승인한다. 모듈 관문 없음
+ * (wbs 는 core — D19). 마지막 단계면 RPC 가 xx·실적 100 으로, 중간이면 im 그대로 두고 다음 단계 승인 자격자에게 알린다.
+ * expectedStep 은 필수다 — 화면이 본 대기 단계와 RPC 가 설정 FOR SHARE 아래에서 대조한다(S6).
+ */
+export async function approveWbsStep(itemId: string, expectedStep: string): Promise<{ ok: boolean; error?: string; stale?: true; remaining?: number }> {
+  if (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep)) return { ok: false, error: '잘못된 요청입니다.' }
+  const resolved = await resolveItemProjectId(itemId)
+  if (!resolved.ok) return resolved
+  const g = await guardStepApproval(itemId, resolved.projectId)
+  if (!g.ok) return g
+  if (g.pending.step !== expectedStep) return { ok: false, stale: true, error: REASON_TEXT.approval_stale }
+  const admin = createAdminClient()
+  const tr = await applyWorkflowEvent(admin, { event: 'approve_step', actorUserId: g.actor.userId, itemId, expectedStep })
+  if (!tr.ok) return tr.reason === 'approval_stale' ? { ok: false, stale: true, error: tr.error } : { ok: false, error: tr.error }
+  revalidatePath(`/p/${resolved.projectId}`, 'layout')
+  if (tr.actualChanged) after(() => recordProgressSnapshot(resolved.projectId))
+  if (tr.reachedFirst) await notifyOnReached(admin, itemId, g.actor.userId)
+  const remaining = tr.approval?.remaining ?? 0
+  if (remaining > 0) {
+    await notifyApprovalStep(admin, {
+      projectId: resolved.projectId, itemId, entity: { type: 'wbs_item', id: itemId }, actorUserId: g.actor.userId,
+      nextIndex: g.pending.total - remaining + 1, total: g.pending.total,
+    })
+    return { ok: true, remaining }
+  }
   return { ok: true }
 }
 
@@ -581,6 +638,9 @@ export async function getWbsAssigneeStage(
 ): Promise<{
   assigneeMemberId: string | null; stage: string | null; devWorkflow: boolean
   delegated: boolean; canDevWorkflow: boolean
+  /** SP5b W1: 대기 승인 단계 — 쓰이는 때(검수 대기 im 의 승인 버튼, 유효 단계 ≥2 의 xx 선택지 제한)만 싣는다. label null = 기본 단계(사전 문구).
+   *  판독 실패면 null(로그 — 승인은 액션·RPC 가 다시 판정한다) */
+  approval?: { step: string; index: number; total: number; label: string | null } | null
 } | null> {
   if (!isUuidLike(itemId)) return null
   const resolved = await resolveProjectId('wbs_items', itemId)
@@ -610,6 +670,15 @@ export async function getWbsAssigneeStage(
   }
   if (!data) return null
   const row = data as { assignee_member_id: string | null; stage: string | null; dev_workflow: boolean | null; tags: string[] | null }
+  let approval: { step: string; index: number; total: number; label: string | null } | null = null
+  if (projectId !== null) {
+    const st = await loadApprovalState(createAdminClient(), itemId, projectId)   // 멤버 가드 뒤
+    if (st.ok) {
+      const { step, index, total } = st.pending
+      approval = { step, index, total, label: st.steps.find((d) => d.code === step)?.label ?? null }
+    } else console.error('[getWbsAssigneeStage] 승인 단계 판독 실패:', st.error)
+  }
+  const showApproval = approval === null || row.stage === 'im' || approval.total >= 2
   return {
     assigneeMemberId: row.assignee_member_id ?? null,
     stage: row.stage ?? null,
@@ -620,5 +689,6 @@ export async function getWbsAssigneeStage(
     // 개발 워크플로 체크박스의 활성 여부 — setWbsDevWorkflow 의 가드와 같은 판정을 서버가 실어 보낸다
     // (화면이 역할·담당자에서 재파생하지 않는다). 판정 실패는 거부로 잡히므로 fail-closed 다.
     canDevWorkflow: perm.ok,
+    ...(showApproval ? { approval } : {}),
   }
 }
