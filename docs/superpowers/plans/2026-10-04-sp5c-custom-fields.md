@@ -110,3 +110,13 @@ WBS 시트 추가 열·키보드 이동, 이슈/주간 입력·목록과 필터,
 2026-10-05: Linked-minute custom inputs now use a service-only required-p_custom overload. SQL rechecks actor/protected keys and inserts core/custom/assignees/source in one transaction while preserving source verification and attachment retry. The form uses the guarded selected-project display permission. Dedicated reset/bootstrap, DB 869/869 and unit 12,311/12,311 passed. Browser and final lint/build evidence is recorded in baseline/sp5c-e2e.md.
 
 Remaining: WBS sheet columns/keyboard, weekly input/carry, Excel roundtrip, AI reindex and final synthetic/performance verification. SP5c remains incomplete; catalog remains stored.
+
+## V WBS 시트 사용자 정의 필드 열 (2026-10-05)
+
+WBS 간트 시트에 활성 `show_in_list` 필드를 간트 이전 위치에 추가 열(`cf:<key>`)로 연결했다.
+- CustomFieldsProvider 의 스코프를 조회해 `useCustomFieldScope()` 훅으로 열 정의 목록과 언어별 포맷터를 전달한다.
+- `show_in_list` 가 참이고 활성인 필드만 폭 140px 열로 추가되며, 열 헤더 라벨과 행 셀의 공통 서식(숫자 0, 불리언 예/아니오, 빈 값 '—', 파싱 손상 '!')을 안전하게 렌더링한다.
+- 단위 테스트 3건(`tests/ui/wbs-custom-columns.test.tsx`) 및 전체 단위 테스트 925파일 12,314건 통과, lint 오류 0(기존 경고 4), 프로덕션 빌드 통과.
+- 실제 빌드 앱 3101 + 전용 DB 브라우저 QA(`wbs-cols-browser.mjs`): 1440px 데스크톱 및 390px 모바일 화면에서 추가 열 표시, 0 및 불리언 서식 표시, show_in_list 비활성 열 미표시, 가로 넘침(overflow) 없음 및 콘솔 오류 0 검증 완료. 로컬 증거 `.superpowers/sp5c/wbs-cols-browser-result.json`, `wbs-cols-desktop.png`, `wbs-cols-mobile.png`.
+
+남은 작업: 주간 값 입력/이월, Excel 왕복, AI 재색인 및 합성/최종 성능 검증. SP5c 전체 미완료, fields 카탈로그 stored 유지.

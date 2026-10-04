@@ -37,6 +37,9 @@ import type { DictKey } from '@/lib/i18n/dict'
 import { wbsFontScaleVariables } from '@/lib/wbsFontScale'
 import { useWbsRealtime } from '@/lib/hooks/useWbsRealtime'
 import { applyWbsChange } from '@/lib/domain/wbsRealtime'
+import { useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
+import { formatCustomValue, orderedFields } from '@/lib/domain/customFields'
+import { parseCustomValues } from '@/lib/domain/customFieldValues'
 
 /* ── 컬럼 메타 (좌→우). frozen=true면 sticky 동결, sk=누적 left offset ──
    구분(LevelBadge) 열은 삭제됐다(2026-08-21 개편) — 계층은 들여쓰기·타이포·1단계 스트립이
@@ -450,7 +453,13 @@ export function WbsGanttSheet({
     handle.addEventListener('pointercancel', onUp)
   }
   // 개요 번호 열 켜짐 여부에 따라 동결 오프셋(sk)이 달라져 컬럼 메타 자체가 파생값이다.
-  const cols = useMemo(() => buildCols(outlineVisible, narrow, nameColWidth), [outlineVisible, narrow, nameColWidth])
+  const fieldScope = useCustomFieldScope()
+  const customListDefs = useMemo(() => orderedFields(fieldScope?.defs ?? []).filter(d => d.active && d.show_in_list), [fieldScope?.defs])
+  const customFormat = useMemo(() => ({ locale: fieldScope?.locale ?? 'ko', yes: fieldScope?.locale === 'en' ? 'Yes' : '예', no: fieldScope?.locale === 'en' ? 'No' : '아니오', empty: '—' }), [fieldScope?.locale])
+  const cols = useMemo(() => [
+    ...buildCols(outlineVisible, narrow, nameColWidth),
+    ...customListDefs.map((d): Col => ({ key: `cf:${d.key}`, w: 140 })),
+  ], [outlineVisible, narrow, nameColWidth, customListDefs])
   const colOf = (key: string) => cols.find(c => c.key === key)!
   const W = (k: string) => colOf(k).w
   const visibleCols = useMemo(() => {
@@ -1481,6 +1490,7 @@ export function WbsGanttSheet({
             {showCol('pplan') && headCell(colOf('pplan'), t('wbs.colPlannedPct'), 'justify-end')}
             {showCol('pactual') && headCell(colOf('pactual'), t('wbs.colActualPct'), 'justify-end')}
             {showCol('achieve') && headCell(colOf('achieve'), t('wbs.colAchievement'), 'justify-center')}
+            {customListDefs.map(d => showCol(`cf:${d.key}`) && headCell(colOf(`cf:${d.key}`), d.label, 'justify-start'))}
             {/* 간트 헤더 (월/주/일 3단) */}
             <div
               className="relative box-border h-[var(--wbs-head-h)] shrink-0 border-b-2 border-grid-strong bg-sheet-head"
@@ -1920,6 +1930,23 @@ export function WbsGanttSheet({
                   )}
                 </div>
                 )}
+                {/* 사용자 정의 필드 열(show_in_list) — 읽기 전용, 편집은 상세 패널 */}
+                {customListDefs.map(d => {
+                  if (!showCol(`cf:${d.key}`)) return null
+                  const parsed = parseCustomValues(n.custom ?? {})
+                  const text = parsed.ok ? formatCustomValue(d, parsed.value[d.key], customFormat) : '!'
+                  return (
+                    <div
+                      key={`cf:${d.key}`}
+                      data-wbs-col={`cf:${d.key}`}
+                      title={parsed.ok ? text : undefined}
+                      className={`${cellBase} items-center justify-start border-r border-grid ${cellBg}`}
+                      style={{ width: W(`cf:${d.key}`) }}
+                    >
+                      <span className={`truncate ${parsed.ok ? '' : 'text-delayed'}`}>{text}</span>
+                    </div>
+                  )
+                })}
                 {/* 간트 셀 */}
                 <div
                   data-wbs-col="gantt"

@@ -78,3 +78,7 @@ The linked-minute form explicitly opts in to custom inputs and receives the sele
 Dedicated d-flow-sp4 (54521/54522), CLI 2.75.0: clean reset and bootstrap passed. Full DB suite: 46 files, 869/869. Full unit suite: 924 files, 12,311/12,311. Five new DB cases cover zero/false and protected generated defaults; supplied admin values; inactive/unknown/null/type/unaffiliated actor rejection; bad-source/assignee atomicity; service-only ACL and rollback preservation.
 
 2026-10-05 browser: dedicated d-flow-sp4 + built app 3101, real minute block -> 'create issue' with required zero default and admin-only boolean; server-derived admin permission, core/custom/source links saved atomically, 1440/390 no overflow or pageerror. Final DB reset 05:04 KST, full DB suite 46 files 869/869, lint 0 errors (4 existing warnings), build passed. Local evidence .superpowers/sp5c/minute-custom-browser-result.json.
+
+2026-10-05: WBS sheet custom columns
+
+WBS sheet renders active `show_in_list` custom fields as read-only table columns before the Gantt timeline with 140px width. Values format using common custom field formatting (preserving 0, false, options). Units: 925 files, 12,314/12,314 passed. Production build and lint passed. Real browser QA (1440/390) confirmed column header labels, zero/boolean formatting, hidden-column exclusion, and zero page errors/overflow. Evidence: `.superpowers/sp5c/wbs-cols-browser-result.json`.

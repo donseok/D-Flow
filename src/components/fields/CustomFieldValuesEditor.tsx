@@ -12,6 +12,8 @@ const Context = createContext<Scope | null>(null)
 export function CustomFieldsProvider({ children, ...scope }: Scope & { children: ReactNode }) {
   return <Context.Provider value={scope}>{children}</Context.Provider>
 }
+/** Read-only access to the surrounding field scope (null outside a provider), for list columns. */
+export function useCustomFieldScope() { return useContext(Context) }
 const own = (v: object, k: string) => Object.prototype.hasOwnProperty.call(v, k)
 const reason = (code: FieldRowError, ko: boolean) => {
   const messages: Partial<Record<FieldRowError, [string, string]>> = {
