@@ -37,8 +37,9 @@ SP5c(사용자 정의 필드)의 모든 단계(F~Z)가 성공적으로 구현·�
   - [x] V render xlsx: 셀 값 치환, `{{#items}}` 는 셀 안 개행, `{{#rows}}` 는 duplicateRow. 0건이면 그 행을 지운다
   - [x] pptx 넘침 연속 슬라이드 (§4.4.6 `max_lines_per_cell`·`max_rows_per_slide`). 값 토큰 단독은 나누지 않는다
   - [ ] 활성화의 `engineVersion` 불일치 재스캔(§4.7.3) — 지금은 재등록 오류다
-  - [ ] `/api/report`, `/api/export` 라우트 연동 (활성 템플릿 우선, 미등록 시 기본 템플릿 폴백). 정본 §4.8 은 `/api/issue-analysis` 와 `GET /api/export?form=1` 도 같은 전환
-  - [ ] `X-Form-Template: default | custom` 응답 헤더
+  - [x] `/api/report` 라우트 연동 (활성 템플릿 우선, 미등록 시 기본 템플릿 폴백)와 그 응답의 `X-Form-Template: default | custom`
+  - [ ] `/api/export` 라우트 연동. 정본 §4.8 은 `/api/issue-analysis` 와 `GET /api/export?form=1` 도 같은 전환
+  - [ ] 그 응답들의 `X-Form-Template: default | custom`
   - [ ] 중립 기본 템플릿 자산 (`assets/default` 4개 + `assets/fixed/issue-analysis-process.pptx`). CI `scan` error 0·warning 0 은 OPC scan 이 있어야 한다
 - [ ] Z: 합성 게이트 S8, 부정 테스트 6, 카탈로그 verified 승격 및 마감
   - 부정 테스트 6 (제조/영업 예시 단어 미노출 검증)

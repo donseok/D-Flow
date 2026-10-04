@@ -308,7 +308,7 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('minutes/chat')}#POST`]: sess('minutes', 'tests/api/minutes-chat-route.test.ts', '로그인 — 문서 모드는 회의록 행의 워크스페이스, 보관함 모드는 요청의 workspaceId(소속 확인, 없으면 400 — D26, 과제 34). 검색도 그 워크스페이스로, 명단 밖 비공개 프로젝트 회의록·폴더는 뺀다(FA1, CC1)'),
   [`${R('minutes/export')}#GET`]: sess('minutes', 'tests/minutes/export-route.test.ts', '로그인 — ?workspaceId=(소속 확인, 없으면 400 — D26, 과제 34). 그 워크스페이스 회의록 ZIP, 명단 밖 비공개 프로젝트 회의록은 뺀다(판정 실패 503 — FA1, CC1)'),
   [`${R('prefs')}#POST`]: nul('session', '셸 개인 설정 — 안의 액션이 세션을 본다'),
-  [`${R('report')}#GET`]: sess('weekly', 'tests/api/report-route.test.ts', 'source=sheet 갈래만 weekly 관문 — 기본 갈래(WBS 보고서 모달)는 core(P4)'),
+  [`${R('report')}#GET`]: sess('weekly', 'tests/api/report-route.test.ts', '정본 §4.8 — requireProjectMember 뒤 weekly 관문. source 분기는 없다'),
   [`${R('shell')}#GET`]: nul('session', '셸 — 범위(ws 소속·볼 수 있는 프로젝트)를 먼저 거르고 안의 액션이 각자 관문을 지나 그 항목만 비운다(§4.2), 결재 배지는 projectsWithModule'),
   [`${R('nav/switch-target')}#GET`]: nul('session', '로그인 — 대상 프로젝트 숨김 판정 후 effectiveModules 로 전환 대상만 계산(읽기 전용, D41)'),
   [`${R('track')}#POST`]: sess('usage', 'tests/actions/usage-track-gate.test.ts', '로그인 claims — 경로의 프로젝트, 없으면 본문 workspaceId(소속 확인), 둘 다 없으면 400(D26, 과제 34). 꺼지면 200 skipped(P19)'),

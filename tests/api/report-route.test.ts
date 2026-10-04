@@ -1,330 +1,242 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ERR_DENIED, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
+import { FormRenderError } from '@/lib/report/engine/types'
+import { weeklyReference } from '@/lib/report/forms/reference'
+import { defaultFormSetting } from '@/lib/settings/defs/forms'
+import type { ConfigArea } from '@/lib/settings/projectConfig'
+import type { WeeklyReportModel } from '@/lib/report/weekly'
+import { makeMemberActor } from '../fixtures/actor'
+import { monProjectValues } from '../helpers/calendarFixture'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
-// 라우트 배선만 본다 — 데이터 페치·보고서 빌더는 mock. 명단·공지·회의 조회 실패가 '없는 데이터' 로 위장되지 않고 503 이 되는지
-// (에러 처리 3원칙 ①), 성공이면 명단 행이 그대로 모델에 들어가는지, 프로젝트 판정이 다른 조회보다 먼저인지 확인한다.
-const mocks = vi.hoisted(() => ({
-  getSession: vi.fn(),
-  getComputedWbs: vi.fn(),
-  getProjectRoster: vi.fn(),
-  getAttendanceRecords: vi.fn(),
-  getProjectMeetingData: vi.fn(),
-  getAnnouncements: vi.fn(),
-  listProjectsWithState: vi.fn(),
-  getWeeklySheet: vi.fn(),
-  loadProjectFacts: vi.fn(),
-  fillWeeklyTemplate: vi.fn(),
-  fillSheetTemplate: vi.fn(),
-  getProjectConfig: vi.fn(),
-  buildWeeklyReportModel: vi.fn(),
-  buildReportWorkbook: vi.fn(),
-  loadDisplayBranding: vi.fn(),
-  projectTeams: vi.fn(async () => []),
+const h = vi.hoisted(() => {
+  class FormTemplateLoadError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = 'FormTemplateLoadError'
+    }
+  }
+  return {
+    render: vi.fn(),
+    scan: vi.fn(),
+    loadTemplate: vi.fn(),
+    loadProject: vi.fn(),
+    getProjectConfig: vi.fn(),
+    requireProjectMember: vi.fn(),
+    getComputedWbs: vi.fn(),
+    getProjectRoster: vi.fn(),
+    getAttendanceRecords: vi.fn(),
+    getProjectMeetingData: vi.fn(),
+    getAnnouncements: vi.fn(),
+    getWeeklySheet: vi.fn(),
+    projectTeams: vi.fn(),
+    loadProjectFacts: vi.fn(),
+    getAiBrief: vi.fn(),
+    buildWeeklyReportModel: vi.fn(),
+    FormTemplateLoadError,
+  }
+})
+
+vi.mock('@/lib/authz', () => ({ requireProjectMember: h.requireProjectMember }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: h.getProjectConfig }))
+vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: h.getComputedWbs }))
+vi.mock('@/lib/data/members', () => ({ getProjectRoster: h.getProjectRoster }))
+vi.mock('@/lib/data/attendance', () => ({ getAttendanceRecords: h.getAttendanceRecords }))
+vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: h.getProjectMeetingData }))
+vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: h.getAnnouncements }))
+vi.mock('@/lib/data/weeklySheet', () => ({ getWeeklySheet: h.getWeeklySheet }))
+vi.mock('@/lib/teams/source', () => ({ projectTeams: h.projectTeams }))
+vi.mock('@/lib/report/forms/loadTemplate', () => ({
+  loadFormTemplate: h.loadTemplate,
+  FormTemplateLoadError: h.FormTemplateLoadError,
 }))
-vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
-vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: mocks.getComputedWbs }))
-vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster }))
-vi.mock('@/lib/data/attendance', () => ({ getAttendanceRecords: mocks.getAttendanceRecords }))
-vi.mock('@/lib/data/meetings', () => ({ getProjectMeetingData: mocks.getProjectMeetingData }))
-vi.mock('@/lib/data/announcements', () => ({ getAnnouncements: mocks.getAnnouncements }))
-vi.mock('@/app/actions/project', () => ({ listProjectsWithState: mocks.listProjectsWithState }))
-vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
-// 주차 계산(report/week → fmtUTC)은 실제 것을 쓴다 — source=sheet 분기가 탄다.
-vi.mock('@/lib/report/weekly', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/report/weekly')>()),
-  buildWeeklyReportModel: mocks.buildWeeklyReportModel,
+vi.mock('@/lib/report/forms/project', () => ({ loadReportProject: h.loadProject }))
+vi.mock('@/lib/report/engine', () => ({ engineFor: () => ({ render: h.render }) }))
+vi.mock('@/lib/report/engine/scan', () => ({ scanFormTemplate: h.scan }))
+vi.mock('@/lib/ai/projectFacts', () => ({ loadProjectFacts: h.loadProjectFacts }))
+vi.mock('@/lib/data/aiBriefs', () => ({ getAiBrief: h.getAiBrief }))
+vi.mock('@/lib/report/weekly', () => ({ buildWeeklyReportModel: h.buildWeeklyReportModel }))
+vi.mock('@/lib/report/narrative', () => ({
+  buildWeeklyNarrative: () => ({ prev: [], curr: [], issues: [], events: [] }),
 }))
-vi.mock('@/lib/report/excel', () => ({ buildReportWorkbook: mocks.buildReportWorkbook }))
-vi.mock('@/lib/settings/displayBranding', () => ({ loadDisplayBranding: mocks.loadDisplayBranding }))
-vi.mock('@/lib/report/narrative', () => ({ buildWeeklyNarrative: vi.fn() }))
-vi.mock('@/lib/report/templateFill', () => ({ fillWeeklyTemplate: mocks.fillWeeklyTemplate, fillSheetTemplate: mocks.fillSheetTemplate }))
-vi.mock('@/lib/data/weeklySheet', () => ({ getWeeklySheet: mocks.getWeeklySheet }))
-vi.mock('@/lib/ai/projectFacts', () => ({ loadProjectFacts: mocks.loadProjectFacts }))
-vi.mock('@/lib/ai/brief', () => ({ briefFactsHash: vi.fn(), buildBriefFacts: vi.fn() }))
-vi.mock('@/lib/data/aiBriefs', () => ({ getAiBrief: vi.fn() }))
-vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams }))
 
 import { GET } from '@/app/api/report/route'
-import { makeProjectConfig } from '../helpers/projectConfigFixture'
-import { calUtcSun, monProjectValues } from '../helpers/calendarFixture'
-import { ConfigKeyError, ConfigUnavailableError, CONFIG_MESSAGES } from '@/lib/settings/errors'
-import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
-import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 
-const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
-const OTHER_ID = '22222222-2222-4222-8222-222222222222'
-const req = (pid = PROJECT_ID) => new NextRequest(`http://localhost/api/report?projectId=${pid}&format=xlsx`)
-const sheetReq = (pid = PROJECT_ID) =>
-  new NextRequest(`http://localhost/api/report?projectId=${pid}&format=pptx&source=sheet&week=2026-09-21`)
+const TPL = '11111111-1111-4111-8111-111111111111'
+
+function req(query: string): NextRequest {
+  return new NextRequest(`http://localhost/api/report?${query}`)
+}
+
+function ph(path: string) {
+  return { token: `{{${path}}}`, kind: 'value' as const, path, scope: [] as string[], location: {}, mergedRuns: false }
+}
+
+function area(code: string): ConfigArea {
+  return { id: code, kind: 'weekly_section', code, name: code, sortOrder: 0, active: true, teams: [] }
+}
+
+function stubModel(today: string): WeeklyReportModel {
+  return {
+    meta: {
+      projectName: 'Acme', description: null, generatedAt: 't', today,
+      isoYear: 1999, isoWeek: 1, weekTag: 'tag', weekLabel: 'label',
+      weekRange: 'r', nextWeekRange: 'n', weekStart: '2026-09-28', weekEnd: '2026-10-04',
+      weekDays: ['2026-09-28'], weekDayLabels: ['월'],
+      nextWeekStart: '2026-10-05', nextWeekDays: [], nextWeekDayLabels: [],
+      prevWeekStart: '2026-09-21', prevWeekDays: [], prevWeekRange: 'p',
+      totalLeaves: 0, phaseCount: 0,
+    },
+    kpi: {
+      planned: 0, actual: 0, variance: 0, total: 0, done: 0, inProgress: 0, notStarted: 0, delayed: 0,
+      doneThisWeek: 0, doneRatio: 0, inProgressRatio: 0, delayedRatio: 0,
+    },
+    phases: [], planActual: [], workload: [], issues: [], wbs: [], dev: [], devOwnerSummary: '',
+    attendance: { thisWeek: [], nextWeek: [] },
+    meetings: { thisWeek: [], nextWeek: [], total: 0 },
+    announcements: { prevWeek: [], thisWeek: [] },
+  } as unknown as WeeklyReportModel
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.getSession.mockResolvedValue({ userId: 'u1' })
-  mocks.getComputedWbs.mockResolvedValue({ items: [], today: '2026-09-26', calendar: calUtcSun })
-  mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [] })
-  mocks.getAttendanceRecords.mockResolvedValue([])
-  mocks.getProjectMeetingData.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
-  mocks.getAnnouncements.mockResolvedValue({ ok: true, rows: [] })
-  mocks.listProjectsWithState.mockResolvedValue({ projects: [{ id: PROJECT_ID, name: 'Acme' }], degraded: false })
-  mocks.getWeeklySheet.mockResolvedValue(null)
-  // 월요일 규칙 프로젝트(SP5 D28 월요일 회귀 — 시트 갈래의 week=2026-09-21(월) 기대값 그대로)
-  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'], ...monProjectValues }))
-  mocks.buildWeeklyReportModel.mockReturnValue({ meta: { weekTag: '9월4주차' } })
-  mocks.buildReportWorkbook.mockResolvedValue(new ArrayBuffer(1))
-  mocks.loadDisplayBranding.mockResolvedValue({ productName: '한빛 플로우', mailFromName: '한빛 플로우' })
-})
-afterEach(() => vi.restoreAllMocks())
-// 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)
-afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
-
-describe('GET /api/report — 명단 조회', () => {
-  it('명단 조회 실패 → 503 + 로그, 보고서를 만들지 않는다', async () => {
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    mocks.getProjectRoster.mockResolvedValue({ ok: false, error: '명단을 불러오지 못했습니다.' })
-
-    const res = await GET(req())
-    expect(res.status).toBe(503)
-    expect(await res.json()).toEqual({ error: '명단을 불러오지 못했습니다.' })
-    expect(err).toHaveBeenCalledWith(expect.stringContaining(PROJECT_ID))
-    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
-    expect(mocks.buildReportWorkbook).not.toHaveBeenCalled()
-  })
-
-  it('명단 조회 성공 → 명단 행을 그대로 모델에 넘기고 200', async () => {
-    const rows = [{ id: 'm1', name: 'alice' }]
-    mocks.getProjectRoster.mockResolvedValue({ ok: true, rows })
-
-    const res = await GET(req())
-    expect(res.status).toBe(200)
-    expect(mocks.getProjectRoster).toHaveBeenCalledWith(PROJECT_ID)
-    expect(mocks.buildWeeklyReportModel.mock.calls[0][3]).toMatchObject({ members: rows })
-  })
+  vi.mocked(requireModule).mockReset()
+  vi.mocked(requireModule).mockResolvedValue({ ok: true })
+  h.requireProjectMember.mockResolvedValue({ ok: true, actor: makeMemberActor('p1') })
+  h.getProjectConfig.mockResolvedValue(makeProjectConfig())
+  h.loadProject.mockResolvedValue({ name: 'Acme', description: null, start_date: null, end_date: null })
+  h.loadTemplate.mockResolvedValue({ bytes: new Uint8Array([1]), source: 'default' })
+  h.render.mockResolvedValue(new Uint8Array([9]))
+  h.scan.mockResolvedValue({ placeholders: [ph('slide.page')], issues: [] })
+  h.getComputedWbs.mockResolvedValue({ today: '2026-10-07', items: [], calendar: { timezone: 'Asia/Seoul' } })
+  h.getProjectRoster.mockResolvedValue({ ok: true, rows: [] })
+  h.getAttendanceRecords.mockResolvedValue([])
+  h.getProjectMeetingData.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+  h.getAnnouncements.mockResolvedValue({ ok: true, rows: [] })
+  h.getWeeklySheet.mockResolvedValue({ rows: [] })
+  h.projectTeams.mockResolvedValue([])
+  h.loadProjectFacts.mockResolvedValue(null)
+  h.getAiBrief.mockResolvedValue(null)
+  h.buildWeeklyReportModel.mockImplementation((_items: unknown, _project: unknown, today: string) => stubModel(today))
 })
 
-describe('GET /api/report — 프로젝트 설정', () => {
-  it('엑셀 작성자는 프로젝트 워크스페이스 제품명을 쓴다', async () => {
-    expect((await GET(req())).status).toBe(200)
-    expect(mocks.loadDisplayBranding).toHaveBeenCalledWith('ws-test')
-    expect(mocks.buildReportWorkbook).toHaveBeenCalledWith(expect.anything(), '한빛 플로우')
-  })
-  it('설정 조회 실패 → 503(전체 500 이 아니다), 보고서를 만들지 않는다', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    mocks.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: db down'))
-    const res = await GET(req())
-    expect(res.status).toBe(503)
-    expect(await res.json()).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
-    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
-  })
-  it('WBS 달력 손상(getComputedWbs 의 ConfigKeyError)은 시트 갈래처럼 configStatus — 일반 500 이 아니다(A-3 리뷰 P3, M5)', async () => {
-    mocks.getComputedWbs.mockRejectedValueOnce(new ConfigKeyError('CONFIG_INVALID', 'calendar.week_start'))
-    const res = await GET(req())
-    expect(res.status).toBe(422)
-    expect(await res.json()).toEqual({ error: `${CONFIG_MESSAGES.CONFIG_INVALID} (calendar.week_start)`, code: 'CALENDAR_INVALID', key: 'calendar.week_start' })
-    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
-  })
-  it('팀 원천 실패는 503 고정 문구 — 보고서를 빈 팀 축으로 만들지 않는다(SP4 A2)', async () => {
-    mocks.projectTeams.mockRejectedValueOnce(new Error('relation "teams" boom'))
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await GET(req())
-    expect(res.status).toBe(503)
-    expect(await res.text()).not.toContain('boom')
-    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
-    err.mockRestore()
-  })
-  it('단계 이름이 손상이면 그 키의 오류(422) — 기본 라벨로 만들지 않는다', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 42 }))
-    const res = await GET(req())
-    expect(res.status).toBe(422)
-    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
-  })
-  it('단계 이름을 모델에 넘긴다', async () => {
-    await GET(req())
-    expect(mocks.buildWeeklyReportModel.mock.calls[0][3]).toMatchObject({ levelLabels: ['Phase', 'Task', 'Activity'] })
-  })
+afterEach(() => {
+  for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset()
 })
 
-describe('GET /api/report — 프로젝트 판정은 다른 조회보다 먼저', () => {
-  const dataLoaders = () => [mocks.getComputedWbs, mocks.getProjectRoster, mocks.getAnnouncements, mocks.getProjectMeetingData]
-
-  it('(a) 목록에 없는 프로젝트 → 404 이고 데이터 조회를 시작하지 않는다', async () => {
-    const res = await GET(req(OTHER_ID))
-    expect(res.status).toBe(404)
-    expect(await res.json()).toEqual({ error: '프로젝트를 찾을 수 없습니다.' })
-    for (const fn of dataLoaders()) expect(fn).not.toHaveBeenCalled()
-  })
-
-  it('(b) 목록 조회 실패(degraded) + 목록에 없음 → 500 — 조회 실패를 없는 프로젝트(404)로 위장하지 않는다', async () => {
-    mocks.listProjectsWithState.mockResolvedValue({ projects: [], degraded: true })
-    const res = await GET(req())
-    expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({ error: '프로젝트 목록을 확인할 수 없습니다.' })
-    for (const fn of dataLoaders()) expect(fn).not.toHaveBeenCalled()
-  })
-
-  it('(c) source=sheet 도 같은 판정을 먼저 한다 — 없으면 404, degraded 면 500, 시트는 읽지 않는다', async () => {
-    const notFound = await GET(sheetReq(OTHER_ID))
-    expect(notFound.status).toBe(404)
-    expect(await notFound.json()).toEqual({ error: '프로젝트를 찾을 수 없습니다.' })
-
-    mocks.listProjectsWithState.mockResolvedValue({ projects: [], degraded: true })
-    const degraded = await GET(sheetReq())
-    expect(degraded.status).toBe(500)
-    expect(await degraded.json()).toEqual({ error: '프로젝트 목록을 확인할 수 없습니다.' })
-    expect(mocks.getWeeklySheet).not.toHaveBeenCalled()
-  })
-
-  it('(c) source=sheet 정상 판정 뒤에만 시트를 읽는다', async () => {
-    const res = await GET(sheetReq())
-    expect(res.status).toBe(400) // 시트 없음 — 판정은 통과했다
-    expect(mocks.getWeeklySheet).toHaveBeenCalledWith(PROJECT_ID, '2026-09-21')
-  })
-})
-
-describe('GET /api/report — 공지·회의 조회 실패', () => {
-  it('(d) 공지 조회 실패 → 503 + 로그, 보고서를 만들지 않는다', async () => {
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    mocks.getAnnouncements.mockResolvedValue({ ok: false, error: '공지를 불러오지 못했습니다.' })
-    const res = await GET(req())
-    expect(res.status).toBe(503)
-    expect(await res.json()).toEqual({ error: '공지를 불러오지 못했습니다.' })
-    expect(err).toHaveBeenCalledWith(expect.stringContaining(PROJECT_ID))
-    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
-  })
-
-  it('(e) 회의 조회 실패 → 503 + 로그, 보고서를 만들지 않는다', async () => {
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    mocks.getProjectMeetingData.mockResolvedValue({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
-    const res = await GET(req())
-    expect(res.status).toBe(503)
-    expect(await res.json()).toEqual({ error: '회의 일정을 불러오지 못했습니다.' })
-    expect(err).toHaveBeenCalledWith(expect.stringContaining(PROJECT_ID))
-    expect(mocks.buildWeeklyReportModel).not.toHaveBeenCalled()
-  })
-
-  it('정상이면 공지 행·회의를 그대로 모델에 넘긴다', async () => {
-    const rows = [{ id: 'a1', title: '공지' }]
-    const meetings = [{ id: 'm1' }]
-    mocks.getAnnouncements.mockResolvedValue({ ok: true, rows })
-    mocks.getProjectMeetingData.mockResolvedValue({ ok: true, meetings, exceptions: [] })
-    const res = await GET(req())
-    expect(res.status).toBe(200)
-    expect(mocks.buildWeeklyReportModel.mock.calls[0][3]).toMatchObject({ announcements: rows, meetings, meetingExceptions: [] })
-  })
-})
-
-describe('GET /api/report — AI 코멘트 슬라이드(ai=1) 근거 조회 실패', () => {
-  const aiReq = () => new NextRequest(`http://localhost/api/report?projectId=${PROJECT_ID}&format=pptx&ai=1`)
-
-  it('근거 로더가 던지면(이력·회의 조회 실패, 팀 캐시 미로드) 로그 후 503 + 사유 — 맨 500 으로 새지 않는다', async () => {
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const boom = new Error('[projectFacts] 진척 이력을 불러오지 못했습니다.')
-    mocks.loadProjectFacts.mockRejectedValue(boom)
-    const res = await GET(aiReq())
-    expect(res.status).toBe(503)
-    expect(await res.json()).toEqual({ error: 'AI 브리핑 근거를 불러오지 못했습니다.' })
-    expect(err).toHaveBeenCalledWith('[report] AI 브리핑 근거 조회 실패:', { projectId: PROJECT_ID }, boom)
-    expect(mocks.fillWeeklyTemplate).not.toHaveBeenCalled()
-  })
-})
-
-// P4 — weekly 관문은 주간업무 시트 갈래(source=sheet)만(BRANCH_GATE). 기본 갈래는 WBS 화면 보고서 모달이 부르는 core 기능이다.
-describe('GET /api/report — weekly 관문은 시트 갈래만(과제 20, P4)', () => {
-  it('source=sheet 는 weekly 가 꺼지면 404 이고 시트를 읽지 않는다 — 프로젝트 판정 뒤', async () => {
-    vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
-    const res = await GET(sheetReq())
+describe('GET /api/report (정본 §4.8)', () => {
+  it('주간 모듈이 꺼지면 양식을 읽기 전에 404', async () => {
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    const res = await GET(req('projectId=p1&format=pptx'))
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
-    expect(requireModule).toHaveBeenCalledWith({ projectId: PROJECT_ID }, 'weekly')
-    expect(mocks.listProjectsWithState).toHaveBeenCalled()
-    expect(mocks.getWeeklySheet).not.toHaveBeenCalled()
+    expect(h.loadTemplate).not.toHaveBeenCalled()
   })
-  it('source=sheet 의 없는 프로젝트는 모듈 판정 전에 404 — 존재 판정이 먼저다', async () => {
-    expect((await GET(sheetReq(OTHER_ID))).status).toBe(404)
+
+  it('멤버가 아니면 모듈 관문보다 먼저 거절한다', async () => {
+    h.requireProjectMember.mockResolvedValue({ ok: false, error: ERR_DENIED })
+    const res = await GET(req('projectId=p1&format=pptx'))
+    expect(res.status).toBe(403)
     expect(requireModule).not.toHaveBeenCalled()
   })
-  it('기본 갈래(WBS 화면의 현황 보고서 — core)는 weekly 관문을 부르지 않는다', async () => {
-    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
-    expect((await GET(req())).status).toBe(200)
-    expect(requireModule).not.toHaveBeenCalled()
-    expect(requireSessionModule).not.toHaveBeenCalled()
-  })
-})
 
-describe('GET /api/report — 시트 갈래(source=sheet) 의 영역 기준(스펙 §4.1.4)', () => {
-  const area = (id: string, name: string, sortOrder: number, active = true) =>
-    ({ id, kind: 'weekly_section' as const, code: id.toUpperCase(), name, sortOrder, active, teams: [] })
-  const AREAS = [area('a-exp', '실험', 1), area('a-ops', '운영', 2), area('a-old', '구 영역', 0, false)]
-  const withAreas = (values: Record<string, unknown> = monProjectValues) =>
-    makeProjectConfig({ 'core.level_labels': ['Phase'], ...values }, { areas: { weekly_section: AREAS, issue_area: [] } })
-  const sheetRow = (id: string, areaId: string, thisContent = '') =>
-    ({ id, reportId: 'rep', areaId, thisContent, thisIssue: '', nextContent: '', nextIssue: '' })
-  const sheetOf = (rows: ReturnType<typeof sheetRow>[]) =>
-    ({ report: { id: 'rep', projectId: PROJECT_ID, weekStart: '2026-09-21', title: '' }, rows })
-
-  it('설정 조회 실패 → 503 이고 시트를 읽지 않으며 PPT 를 만들지 않는다', async () => {
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    mocks.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: db down'))
-    const res = await GET(sheetReq())
-    expect(res.status).toBe(503)
-    expect(await res.json()).toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
-    expect(err.mock.calls.some(c => c.some(x => String(x).includes('db down')))).toBe(true)   // 원인은 로그로만
-    expect(mocks.getWeeklySheet).not.toHaveBeenCalled()
-    expect(mocks.fillSheetTemplate).not.toHaveBeenCalled()
-  })
-
-  it('페이지는 보이는 영역 순 — 내용 없는 비활성 영역은 빠지고, 페이지 머리는 영역 이름', async () => {
-    mocks.getProjectConfig.mockResolvedValue(withAreas())
-    mocks.getWeeklySheet.mockResolvedValue(sheetOf([sheetRow('r-ops', 'a-ops', '운영 실적'), sheetRow('r-old', 'a-old'), sheetRow('r-exp', 'a-exp')]))
-    mocks.fillSheetTemplate.mockResolvedValue(Buffer.from('pptx'))
-    const res = await GET(sheetReq())
+  it('source=sheet 는 무시하고 기본 양식 헤더를 붙인다', async () => {
+    const res = await GET(req('projectId=p1&format=pptx&source=sheet'))
     expect(res.status).toBe(200)
-    const sections = mocks.fillSheetTemplate.mock.calls[0][0] as { areaId: string; section: string }[]
-    expect(sections.map(s => [s.areaId, s.section])).toEqual([['a-exp', '실험'], ['a-ops', '운영']])
+    expect(res.headers.get('X-Form-Template')).toBe('default')
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
+    expect(h.loadTemplate).toHaveBeenCalledWith('p1', 'weekly_report_pptx', null)
+    expect(h.getWeeklySheet).not.toHaveBeenCalled()
+    expect(h.buildWeeklyReportModel).not.toHaveBeenCalled()
   })
 
-  it('네 칸이 모두 비면(공백뿐 포함) 400 — 지금 문구 그대로, PPT 를 만들지 않는다', async () => {
-    mocks.getProjectConfig.mockResolvedValue(withAreas())
-    mocks.getWeeklySheet.mockResolvedValue(sheetOf([sheetRow('r-exp', 'a-exp', '   \n  '), sheetRow('r-ops', 'a-ops')]))
-    const res = await GET(sheetReq())
+  it('활성 양식이면 X-Form-Template 은 custom', async () => {
+    h.getProjectConfig.mockResolvedValue(makeProjectConfig({
+      'forms.weekly_report_xlsx': { ...defaultFormSetting('weekly_report_xlsx'), template_id: TPL },
+    }))
+    h.loadTemplate.mockResolvedValue({ bytes: new Uint8Array([2]), source: 'custom' })
+    const res = await GET(req('projectId=p1&format=xlsx'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Form-Template')).toBe('custom')
+    expect(h.loadTemplate).toHaveBeenCalledWith('p1', 'weekly_report_xlsx', TPL)
+  })
+
+  it('활성 양식을 못 읽으면 500 이고 렌더하지 않는다', async () => {
+    h.getProjectConfig.mockResolvedValue(makeProjectConfig({
+      'forms.weekly_report_pptx': { ...defaultFormSetting('weekly_report_pptx'), template_id: TPL },
+    }))
+    h.loadTemplate.mockRejectedValue(new h.FormTemplateLoadError('양식 파일을 읽지 못했습니다.'))
+    const res = await GET(req('projectId=p1&format=pptx'))
+    expect(res.status).toBe(500)
+    expect(await res.json()).toMatchObject({ error: '양식 파일을 읽지 못했습니다.' })
+    expect(h.render).not.toHaveBeenCalled()
+  })
+
+  it('week 형식이 틀리면 sections 가 없어도 400', async () => {
+    const res = await GET(req('projectId=p1&format=pptx&week=2026-13-40'))
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: '해당 주차에 작성된 내용이 없습니다' })
-    expect(mocks.fillSheetTemplate).not.toHaveBeenCalled()
+    expect(await res.json()).toMatchObject({ error: 'week(YYYY-MM-DD)가 필요합니다' })
+    expect(h.loadProject).not.toHaveBeenCalled()
   })
 
-  it('주 키는 그 프로젝트 규칙의 키 — 일요일 규칙이면 week=2026-09-21(월)은 2026-09-20 문서, 파일명 주차도 그 키(SP5 P9)', async () => {
-    mocks.getProjectConfig.mockResolvedValue(withAreas({}))
-    mocks.getWeeklySheet.mockResolvedValue(sheetOf([sheetRow('r-exp', 'a-exp', '실적')]))
-    mocks.fillSheetTemplate.mockResolvedValue(Buffer.from('pptx'))
-    const res = await GET(sheetReq())
+  it('sections 가 있는데 week 가 없으면 400', async () => {
+    h.scan.mockResolvedValue({ placeholders: [ph('sections.name')], issues: [] })
+    h.getProjectConfig.mockResolvedValue(makeProjectConfig({}, { areas: { weekly_section: [area('a')], issue_area: [] } }))
+    const res = await GET(req('projectId=p1&format=pptx'))
+    expect(res.status).toBe(400)
+    expect(h.getWeeklySheet).not.toHaveBeenCalled()
+  })
+
+  it('sections 인데 영역이 하나도 없으면 409 설정 필요', async () => {
+    h.scan.mockResolvedValue({ placeholders: [ph('sections.name')], issues: [] })
+    const res = await GET(req('projectId=p1&format=pptx&week=2026-10-05'))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ error: '설정 필요' })
+    expect(h.getWeeklySheet).not.toHaveBeenCalled()
+  })
+
+  it('지난 week 는 표시 요일 끝으로 모델과 시트를 맞춘다', async () => {
+    h.scan.mockResolvedValue({ placeholders: [ph('report.title'), ph('sections.name')], issues: [] })
+    const cfg = makeProjectConfig({ ...monProjectValues, 'core.level_labels': ['Phase', 'Task'] }, { areas: { weekly_section: [area('a')], issue_area: [] } })
+    h.getProjectConfig.mockResolvedValue(cfg)
+    const ref = weeklyReference(cfg.calendar!, '2026-10-07', '2026-09-30')
+    const res = await GET(req('projectId=p1&format=pptx&week=2026-09-30'))
     expect(res.status).toBe(200)
-    expect(mocks.getWeeklySheet).toHaveBeenCalledWith(PROJECT_ID, '2026-09-20')
-    expect(decodeURIComponent(res.headers.get('Content-Disposition') ?? '')).toContain('_2026-09-20.pptx')
+    expect(ref.weekStart).toBe('2026-09-28')
+    expect(ref.today).toBe('2026-10-02')
+    expect(h.getWeeklySheet).toHaveBeenCalledWith('p1', ref.weekStart)
+    expect(h.buildWeeklyReportModel.mock.calls[0][2]).toBe(ref.today)
   })
 
-  it('[RF4] 달력 키가 손상이면 그 상태 코드(422)로 멈추고 시트를 읽지 않는다', async () => {
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    mocks.getProjectConfig.mockResolvedValue(withAreas({ 'calendar.week_start': 'monday' }))
-    err.mockRestore()
-    const res = await GET(sheetReq())
+  it('ai=1 이어도 ai_comment 토큰이 없으면 브리핑을 보지 않는다', async () => {
+    const res = await GET(req('projectId=p1&format=pptx&ai=1'))
+    expect(res.status).toBe(200)
+    expect(h.loadProjectFacts).not.toHaveBeenCalled()
+  })
+
+  it('ai_comment 토큰과 ai=1 인데 브리핑이 없으면 409', async () => {
+    h.scan.mockResolvedValue({ placeholders: [ph('ai_comment.headline')], issues: [] })
+    const res = await GET(req('projectId=p1&format=pptx&ai=1'))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ error: 'AI 브리핑이 없거나 최신이 아닙니다. 리포트 화면의 AI 브리핑 생성 버튼으로 먼저 생성하세요.' })
+    expect(h.render).not.toHaveBeenCalled()
+  })
+
+  it('렌더 오류는 422 와 위치·토큰', async () => {
+    h.render.mockRejectedValue(new FormRenderError('MISSING_PATH', { slide: 2 }, 'report.nope', '없는 경로'))
+    const res = await GET(req('projectId=p1&format=pptx'))
     expect(res.status).toBe(422)
-    expect(mocks.getWeeklySheet).not.toHaveBeenCalled()
+    expect(await res.json()).toMatchObject({ code: 'MISSING_PATH', location: 'slide 2', token: 'report.nope', error: '없는 경로' })
   })
 
-  it('없는 날짜(2026-02-30)는 400 — 정규화하지 않는다', async () => {
-    const res = await GET(new NextRequest(`http://localhost/api/report?projectId=${PROJECT_ID}&format=pptx&source=sheet&week=2026-02-30`))
-    expect(res.status).toBe(400)
-    expect(mocks.getWeeklySheet).not.toHaveBeenCalled()
-  })
-
-  it('시트 갈래는 WBS 모델·명단·회의·공지를 읽지 않는다 — 시트 하나만 읽는다(쓰기 0)', async () => {
-    mocks.getProjectConfig.mockResolvedValue(withAreas())
-    mocks.getWeeklySheet.mockResolvedValue(sheetOf([sheetRow('r-exp', 'a-exp', '실적')]))
-    mocks.fillSheetTemplate.mockResolvedValue(Buffer.from('pptx'))
-    expect((await GET(sheetReq())).status).toBe(200)
-    for (const fn of [mocks.getComputedWbs, mocks.getProjectRoster, mocks.getProjectMeetingData, mocks.getAnnouncements]) {
-      expect(fn).not.toHaveBeenCalled()
-    }
-    expect(mocks.getWeeklySheet).toHaveBeenCalledTimes(1)
+  it('명단이 없으면 503 이고 렌더하지 않는다', async () => {
+    h.scan.mockResolvedValue({ placeholders: [ph('report.title')], issues: [] })
+    h.getProjectRoster.mockResolvedValue({ ok: false, error: '명단을 불러오지 못했습니다.' })
+    const res = await GET(req('projectId=p1&format=pptx'))
+    expect(res.status).toBe(503)
+    expect(h.render).not.toHaveBeenCalled()
+    expect(h.buildWeeklyReportModel).not.toHaveBeenCalled()
   })
 })
