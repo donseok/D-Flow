@@ -192,4 +192,27 @@ describe('IssuesView Mega 필터', () => {
     expect(options).not.toContain('03')
   })
 
+  it('renders configured custom columns and filters typed false without hiding historical option labels', async () => {
+    const defs = [
+      { key: 'approved', label: '검증 여부', description: '', type: 'boolean' as const, active: true, required: false, editable_by: 'member' as const, show_in_list: true, searchable: false, sort: 0 },
+      { key: 'result', label: '결과', description: '', type: 'select' as const, active: true, required: false, editable_by: 'member' as const, show_in_list: true, searchable: false, sort: 1,
+        options: [{code:'old',label:'이전 결과',active:false,color:'neutral' as const,sort:0}] },
+      { key: 'hidden', label: '숨긴 열', description: '', type: 'text' as const, active: true, required: false, editable_by: 'member' as const, show_in_list: false, searchable: false, sort: 2 },
+    ]
+    await act(async()=>root.render(<IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="project-1" currentUserId="user-1" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]}
+      issues={[{...issue('a','00','거짓 행'),custom:{approved:false,result:'old'}},{...issue('b','02','참 행'),custom:{approved:true}}]} severities={SEVERITIES} sources={SOURCES} customFields={defs} />))
+    expect([...container.querySelectorAll('th')].map(el=>el.textContent)).toContain('검증 여부')
+    expect([...container.querySelectorAll('th')].map(el=>el.textContent)).not.toContain('숨긴 열')
+    expect(container.textContent).toContain('이전 결과')
+    const choose=async(label:string,value:string)=>act(async()=>{
+      const el=container.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!
+      el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}))
+    })
+    await choose('추가 정보 필터','approved'); await choose('검증 여부','false')
+    expect(container.textContent).toContain('거짓 행');expect(container.textContent).not.toContain('참 행')
+    await choose('추가 정보 필터','');expect(container.textContent).toContain('참 행')
+    await choose('추가 정보 필터','result');await choose('결과','old')
+    expect(container.textContent).toContain('거짓 행');expect(container.textContent).not.toContain('참 행')
+  })
+
 })

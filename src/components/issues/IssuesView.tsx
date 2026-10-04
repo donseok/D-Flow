@@ -24,6 +24,10 @@ import { StatusMessage } from '@/components/ui/StatusMessage'
 import type { IssueEntryContext } from '@/lib/issues/context'
 import { activeVocab, orderedVocab, vocabLabel, vocabView, DEFAULT_ISSUE_STATUSES, type IssueStatusDef, type SeverityDef, type SourceDef } from '@/lib/settings/vocab'
 import { IssueStatusPill } from '@/components/ui/StatusPill'
+import { CustomFieldInput } from '@/components/fields/CustomFieldInput'
+import { formatCustomValue, orderedFields, type FieldDef, type FieldValue } from '@/lib/domain/customFields'
+import { parseCustomValues } from '@/lib/domain/customFieldValues'
+import { matchesCustomFieldFilter } from '@/lib/domain/customFieldFilter'
 import type { ProjectMember } from '@/lib/domain/types'
 
 /** 페이지당 행 수 선택지 — 'all' 은 페이징 없이 전량. 기본은 20(사용자 요청). */
@@ -32,8 +36,9 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, myMemberIdsFailed = false, today, timeZone, entryContext, entryError, severities, sources, statuses,
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, myMemberIdsFailed = false, today, timeZone, entryContext, entryError, severities, sources, statuses, customFields = [],
 }: {
+  customFields?: FieldDef[] | null
   entryContext: IssueEntryContext | null
   entryError?: string
   issues: Issue[]
@@ -58,7 +63,7 @@ export function IssuesView({
   /** 이 프로젝트의 표시 상태(SP5b — 설정 workflow.issue_statuses). 없으면 제품 기본 4정의 */
   statuses?: readonly IssueStatusDef[]
 }) {
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const { toast } = useToast()
   const areas = entryContext?.areas ?? []
   const analysisVisible = !!entryContext && entryContext.rules.analysis !== 'off'
@@ -74,6 +79,13 @@ export function IssuesView({
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>('all')
   const [areaFilter, setAreaFilter] = useState<IssueAreaFilter>('all')
   const [mineOnly, setMineOnly] = useState(false)
+  const [customKey, setCustomKey] = useState('')
+  const [customCriterion, setCustomCriterion] = useState<FieldValue | undefined>()
+  const fieldDefs = useMemo(() => orderedFields(customFields ?? []).filter(d => d.active), [customFields])
+  const listFields = fieldDefs.filter(d => d.show_in_list)
+  const filterDef = fieldDefs.find(d => d.key === customKey)
+  const customFormat = { locale, yes: locale === 'ko' ? '예' : 'Yes', no: locale === 'ko' ? '아니오' : 'No', empty: '—' }
+
   // 페이징 — 필터를 바꾸면 1페이지로 돌아간다(안 그러면 결과가 줄었을 때 빈 페이지가 보인다).
   // 목록 자체가 줄어드는 경우(삭제·refresh)는 렌더 시점 clamp 로 잡는다.
   const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
@@ -128,8 +140,9 @@ export function IssuesView({
       area: areaFilter,
       mineOnly,
       myMemberIds: myIds,
-    }).filter(i => statusCodeFilter === 'all' || (i.statusCode ?? i.status) === statusCodeFilter), today, severities),
-    [issues, statusFilter, statusCodeFilter, severityFilter, areaFilter, mineOnly, myIds, today, severities],
+    }).filter(i => statusCodeFilter === 'all' || (i.statusCode ?? i.status) === statusCodeFilter)
+      .filter(i => matchesCustomFieldFilter(i.custom, filterDef, customCriterion)), today, severities),
+    [issues, statusFilter, statusCodeFilter, severityFilter, areaFilter, mineOnly, myIds, today, severities, filterDef, customCriterion],
   )
 
   const pageCount = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(visible.length / pageSize))
@@ -171,6 +184,7 @@ export function IssuesView({
     || severityFilter !== 'all'
     || areaFilter !== 'all'
     || mineOnly
+    || (!!filterDef && customCriterion !== undefined)
   // 조회 전용에게는 등록 어포던스를 숨긴다 — 서버 createIssue 는 requireProjectMember(스펙 §6.3).
   // 이슈별 전체 편집(canEditIssue — 작성자 또는 관리자)과는 다른 축이다.
   const canWrite = canEdit && !!entryContext
@@ -224,6 +238,20 @@ export function IssuesView({
         >
           {t('issue.filter.mine')}
         </button>
+        {customFields === null && <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보 설정을 읽을 수 없습니다.' : 'Custom field settings could not be read.'}</p>}
+        {fieldDefs.length > 0 && <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
+          <label className="space-y-1 text-xs text-ink-muted">
+            <span>{locale === 'ko' ? '추가 정보 필터' : 'Custom field filter'}</span>
+            <select aria-label={locale === 'ko' ? '추가 정보 필터' : 'Custom field filter'} value={filterDef?.key ?? ''}
+              className="app-input h-9 w-full min-w-[140px] text-xs"
+              onChange={e => { setCustomKey(e.target.value); setCustomCriterion(undefined); setPage(1) }}>
+              <option value="">{locale === 'ko' ? '전체' : 'All'}</option>
+              {fieldDefs.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+            </select>
+          </label>
+          {filterDef && <div className="min-w-0 max-w-full sm:w-48"><CustomFieldInput def={{ ...filterDef, required: false, options: filterDef.options?.map(o => ({ ...o, active: true })) }} value={customCriterion}
+            label={filterDef.label} emptyLabel={locale === 'ko' ? '전체' : 'All'} locale={locale} onChange={v => { setCustomCriterion(Array.isArray(v) && v.length === 0 ? undefined : v); setPage(1) }} /></div>}
+        </div>}
         {myMemberIdsFailed && <StatusMessage compact kind="partial_error" title={t('issue.filter.mineFailed')} />}
         {canEdit && entryError && <StatusMessage compact kind="partial_error" title={entryError} />}
         {canWrite && (
@@ -247,19 +275,20 @@ export function IssuesView({
       {visible.length > 0 ? (
         <div className="card overflow-hidden p-0">
           <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full table-fixed border-collapse text-[13px]">
-              {/* 10열 폭 합 100 — 열을 더하거나 뺄 때 합이 어긋나면 table-fixed 가 조용히 뭉갠다. */}
+            <table className="min-w-[1100px] w-full table-fixed border-collapse text-[13px]" style={listFields.length ? { minWidth: 1100 + 160 * listFields.length } : undefined}>
+              {/* Core widths retain their proportions; custom columns receive 160px each. */}
               <colgroup>
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '22%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '7%' }} />
+                <col style={{ width: `${11 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${9 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${22 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${7 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${7 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${12 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${9 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${9 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${7 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${7 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                {listFields.map(d => <col key={d.key} style={{ width: `${16000 / (1100 + 160 * listFields.length)}%` }} />)}
               </colgroup>
               <thead>
                 <tr className="whitespace-nowrap border-b border-line bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-subtle">
@@ -273,10 +302,12 @@ export function IssuesView({
                   <th className="px-2.5 py-2.5">{t('issue.col.endDate')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.daysLeft')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.created')}</th>
+                  {listFields.map(d => <th key={d.key} className="px-2.5 py-2.5">{d.label}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {paged.map(issue => {
+                  const custom = parseCustomValues(issue.custom)
                   const overdue = isOverdue(issue, today)
                   // 남은일수(2026-08-28) — 오늘→종료일자 달력일. 7일 이내·경과는 빨강, 해결·기한 없음은 —.
                   const daysLeft = dueDaysLeft(issue, today)
@@ -347,6 +378,10 @@ export function IssuesView({
                       <td className="whitespace-normal break-words px-2.5 py-2.5 text-ink-muted">
                         {issue.createdByName ?? '—'}
                       </td>
+                      {listFields.map(d => <td key={d.key} className="whitespace-pre-wrap break-words px-2.5 py-2.5 text-ink-muted">
+                        {custom.ok ? formatCustomValue(d, custom.value[d.key], customFormat)
+                          : <span role="status">{locale === 'ko' ? '값 확인 필요' : 'Unreadable value'}</span>}
+                      </td>)}
                     </tr>
                   )
                 })}

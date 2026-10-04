@@ -76,6 +76,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
     >
       <CustomFieldsProvider projectId={projectId} entity="issue" defs={customFields.ok ? customFields.value : null} canAdmin={isProjectAdmin(m, projectId)} locale={locale}>
       <IssuesView
+        customFields={customFields.ok ? customFields.value : null}
         entryContext={entry.ok ? entry.value : null}
         entryError={entry.ok ? undefined : entry.error}
         issues={issues}
