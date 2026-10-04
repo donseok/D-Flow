@@ -40,6 +40,8 @@ npm run dev:bootstrap
 
 `*_attachments_rollback.sql`은 `minute_files.deleted_at is not null` 행이 하나라도 있으면 `ATTACHMENTS_ROLLBACK_BLOCKED`로 중단한다. 객체 삭제가 끝나 `purged_at`이 채워져도 감사 메타 행은 남으므로 롤백 가능 상태가 되지 않는다. 파일 삭제 이전 백업으로 복구하거나, 객체 정리 뒤 톰스톤 메타를 없애는 별도 데이터 손실 작업을 명시적으로 확인해야 한다. 롤백 오류를 무시하거나 가드를 지우지 않는다.
 
+`purged_at`이 비어 있는 톰스톤(앱이 객체 삭제에 실패한 행)은 청소 잡으로 먼저 정리한다 — `npm run minutes:sweep -- --target <local|staging|prod>`(기본 dry-run, 지우려면 `--apply`). 잡은 minute-files 세그먼트만 보고 본문·과거 버전 객체는 대상에서 뺀다. 고아 객체는 생성 뒤 24시간이 지난 것만 지우고, 읽기가 하나라도 실패하면 아무것도 지우지 않는다. 이 잡은 톰스톤 메타 행을 지우지 않으므로 롤백 가드는 그대로다.
+
 메타 삭제를 승인받은 경우에만, 백업·대상 스택 확인 후 이미 객체 정리가 끝난 행을 지운다. 다음 SQL은 검토용이며 사용자 DB에서 자동 실행하지 않는다. 정리되지 않은 행은 계속 롤백을 막는다.
 
 ```sql
