@@ -142,7 +142,7 @@ export class ConfigKeyError extends Error {
  * SETTINGS_CODE_IN_USE 의 detail(JSON) → 키별 문구(SP5 D53 — [RF3]). calendar.week_start 는 막는 주차(최대 20)를 싣는다.
  * 모르는 모양이면 빈 목록 — 호출부가 일반 CONFIG_IN_USE 문구를 쓴다. 순수(throw 없음)
  */
-export function inUseFieldErrors(detail: string | null): { key: string; message: string }[] {
+export function inUseFieldErrors(detail: string | null): { key: string; message: string; refCount?: number; code?: string }[] {
   if (!detail) return []
   let d: unknown
   try { d = JSON.parse(detail) } catch { return [] }
@@ -150,6 +150,14 @@ export function inUseFieldErrors(detail: string | null): { key: string; message:
   const o = d as Record<string, unknown>
   if (o.key === 'calendar.week_start' && Array.isArray(o.weeks) && o.weeks.length > 0 && o.weeks.every((w) => typeof w === 'string')) {
     return [{ key: 'calendar.week_start', message: `이미 만든 주간보고(${(o.weeks as string[]).join(', ')})가 새 주 시작 규칙과 맞지 않아 저장할 수 없습니다.` }]
+  }
+  // 어휘(SP5 B4 — 0023): 지운 code·집계 분류를 바꾼 근태 유형의 참조 건수. 화면이 '다른 항목으로 옮긴 뒤 삭제'를 연다
+  if (typeof o.key === 'string' && typeof o.code === 'string' && Number.isSafeInteger(o.count) && (o.reason === 'removed' || o.reason === 'counts_as')) {
+    const n = Number(o.count)
+    const message = o.reason === 'removed'
+      ? `'${o.code}' 을(를) 쓰는 기록이 ${n}건 있어 지울 수 없습니다. 다른 항목으로 옮긴 뒤 지우세요.`
+      : `'${o.code}' 을(를) 쓰는 기록이 ${n}건 있어 집계 분류를 바꿀 수 없습니다. 새 항목을 만들어 옮긴 뒤 바꾸세요.`
+    return [{ key: o.key, message, refCount: n, code: o.code }]
   }
   return typeof o.key === 'string' ? [{ key: o.key, message: ERR_CONFIG_IN_USE }] : []
 }

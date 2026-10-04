@@ -39,7 +39,7 @@ export type SettingsCommandResult =
   | { ok: false; kind: 'conflict'; code: 'CONFIG_CONFLICT'; commandId: string; error: string
       latest: { revision: number; values: Partial<Record<SettingKey, unknown>>; invalidKeys: SettingKey[] }; changedKeys: SettingKey[]; retryable: false }
   | { ok: false; kind: 'invalid'; code: InvalidCode
-      commandId: string; error: string; fieldErrors: { key: SettingKey; message: string; refCount?: number }[]; retryable: false }
+      commandId: string; error: string; fieldErrors: { key: SettingKey; message: string; refCount?: number; code?: string }[]; retryable: false }
   // appliedRevision: 저장은 됐지만 저장 뒤 동기화가 실패한 경우에만 — 편집기가 그 revision 을 기준으로 채택한다
   | { ok: false; kind: 'denied' | 'unavailable' | 'schema_ahead'; code: string; commandId: string; error: string; retryable: boolean; appliedRevision?: number }
 export type SettingsHistoryScope = { projectId: string } | { workspaceId: string }

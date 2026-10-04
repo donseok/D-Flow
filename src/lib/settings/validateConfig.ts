@@ -16,7 +16,7 @@ import type { WorkspaceConfig } from './workspaceConfig'
 import { valueOf } from './registry'
 import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 
-export interface FieldError { key: string; message: string; refCount?: number }
+export interface FieldError { key: string; message: string; refCount?: number; code?: string }
 export type ValidateResult = { ok: true } | { ok: false; fieldErrors: FieldError[] }
 export interface ProjectValidateDeps {
   treeMaxDepth: number | null            // 0-base. 빈 트리는 null

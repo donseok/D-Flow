@@ -16,6 +16,8 @@ import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
 import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
 import { IssuePolicyEditor } from '@/components/settings/IssuePolicyEditor'
 import { AttachmentPolicyEditor } from '@/components/settings/AttachmentPolicyEditor'
+import { VocabEditor } from '@/components/settings/VocabEditor'
+import type { VocabEntry, VocabKey } from '@/lib/settings/vocab'
 import type { AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
 import { moduleState, requireModule } from '@/lib/modules/gate'
 import { issueCodeYear, type IdPolicy } from '@/lib/issues/idPolicy'
@@ -44,7 +46,7 @@ import { calendarFieldOf } from '@/lib/settings/calendarField'
 import { createServerClient } from '@/lib/supabase/server'
 import { ClearExcelProfileButton } from '@/components/settings/ClearExcelProfileButton'
 import { assistantIndexStatus, type IndexStatus } from '@/lib/ai/health'
-import { t, type Locale } from '@/lib/i18n/dict'
+import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { requireModulePage } from '@/lib/modules/pageGate'
@@ -204,6 +206,16 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 회의록 첨부 정책(SP5 B3 과제9) — 회의록은 워크스페이스 모듈이라 워크스페이스로 관문을 본다. 손상 값도 편집기를 그린다(복구 경로).
   const minutesGate = pc.ok ? await requireModule({ workspaceId: pc.cfg.workspaceId }, 'minutes') : { ok: false as const, error: 'unavailable' }
   const attachmentPolicy = pc.ok ? pick(pc.cfg, 'minutes.attachments') : null
+  // 용어·분류(SP5 B4 묶음4) — 모듈이 켜진 키만. 손상 값도 편집기를 그린다(복구 경로). 판정 실패(unknown)는 그리지 않는다(fail-closed)
+  const [attendanceState, meetingsState] = pc.ok
+    ? await Promise.all([moduleState({ projectId }, 'attendance'), moduleState({ projectId }, 'meetings')])
+    : ['unknown', 'unknown'] as const
+  const vocabKeys: VocabKey[] = pc.ok ? [
+    ...(attendanceState === 'on' ? ['attendance.types' as const] : []),
+    ...(meetingsState === 'on' ? ['meetings.categories' as const] : []),
+    ...(issuesGate.ok ? ['issues.severities' as const] : []),
+    ...(issuesGate.ok && analysisState === 'on' ? ['issues.sources' as const, 'issues.cause_categories' as const] : []),
+  ] : []
   const timezoneState = pc.ok ? pc.cfg.keys['calendar.timezone'] : null
   const issueYear = timezoneState && (timezoneState.status === 'set' || timezoneState.status === 'default')
     ? issueCodeYear(timezoneState.value, new Date()) : null
@@ -256,7 +268,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         { id: 'project-general', label: '일반' }, { id: 'project-modules', label: '모듈·메뉴' },
         ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []),
         ...(isAdmin && issuesGate.ok ? [{ id: 'project-issues', label: locale === 'ko' ? '이슈' : 'Issues' }] : []),
-        ...(isAdmin && pc.ok && minutesGate.ok ? [{ id: 'project-minutes', label: locale === 'ko' ? '회의록' : 'Minutes' }] : []), { id: 'project-status', label: '상태·승인' },
+        ...(isAdmin && pc.ok && minutesGate.ok ? [{ id: 'project-minutes', label: locale === 'ko' ? '회의록' : 'Minutes' }] : []),
+        ...(isAdmin && vocabKeys.length ? [{ id: 'project-vocab', label: t(locale, 'settings.vocab.section') }] : []), { id: 'project-status', label: '상태·승인' },
         { id: 'project-calendar', label: '달력' }, { id: 'project-history', label: '기록' },
       ]}>
       <div className="space-y-5">
@@ -540,6 +553,18 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             <AttachmentPolicyEditor key={`${projectId}-${revision}`} scope={{ projectId }} revision={revision} canEdit={canMutate}
               policy={attachmentPolicy.ok ? attachmentPolicy.value as AttachmentPolicy : null} invalid={!attachmentPolicy.ok} />
           </SectionCard>
+        </div>}
+
+        {isAdmin && pc.ok && vocabKeys.length > 0 && <div id="project-vocab" className="scroll-mt-24 space-y-5">
+          {vocabKeys.map(key => {
+            const st = pc.cfg.keys[key]
+            const ok = st.status === 'set' || st.status === 'default'
+            return <SectionCard key={key} searchText={`${key} 용어 분류 어휘 vocabulary ${t(locale, `settings.${key}.label` as DictKey)}`} eyebrow="VOCABULARY" title={t(locale, `settings.${key}.label` as DictKey)} icon={LayoutList}>
+              <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, `settings.${key}.desc` as DictKey)}</p>
+              <VocabEditor key={`${projectId}-${key}-${revision}`} projectId={projectId} vocabKey={key} revision={revision} canEdit={canMutate}
+                value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
+            </SectionCard>
+          })}
         </div>}
 
         {/* ════ 상태·승인 ════ */}

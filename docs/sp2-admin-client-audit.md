@@ -141,6 +141,7 @@ service_role DEFINER RPC 를 부르므로 표에 행이 없다. 세션 RLS(2차 
 | `src/app/api/import/execute/route.ts#POST` | `import_wbs_cmd` | `requireProjectAdmin(pid)` | 관리자 아님 `42501 IMPORT_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND`, 같은 명령 id·다른 요약 `23505 COMMAND_REUSED` |
 | `src/app/api/import/execute/route.ts#POST`(상속 프로젝트의 미등록 팀 등록 앞) | `convert_inherited_teams` | `requireProjectAdmin(pid)` | 관리자 아님 `42501 TEAM_CONVERT_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND` |
 | `src/app/actions/projectTeams.ts#copyGlobalTeams`('공용 팀 전환으로 시작' — SP4 B, T14) | `convert_inherited_teams` | `requireProjectAdmin(pid)` | 관리자 아님 `42501 TEAM_CONVERT_FORBIDDEN`, 프로젝트 없음 `P0002 PROJECT_NOT_FOUND` |
+| `src/app/actions/vocab.ts#migrateVocabCode`(어휘 code 이관 — SP5 B4) | `migrate_setting_code` | `requireProjectAdmin(pid)` → 키의 모듈 관문 | 관리자 아님 `42501 VOCAB_MIGRATE_FORBIDDEN`, 같은 code·모르는 키 `22023 VOCAB_MIGRATE_INPUT`, 설정 행 없음 `P0001 SETTINGS_ROW_MISSING`, 격리 수준 `25001 VOCAB_MIGRATE_ISOLATION`, 대상 비활성 `23514 PROJECT_VOCAB_INACTIVE`. advisory 잠금 대신 설정 행 `FOR UPDATE`(어휘 쓰기·다른 이관과 줄 세움) |
 
 가져오기 라우트는 `createAdminClient` 를 직접 부르므로 위 감사표에도 행이 있다(이 절은 클라이언트와 무관하게 RPC 쪽 판정을 적는다).
 넷 모두 실행권은 service_role 만이고(anon·authenticated 는 EXECUTE 가 없다 — 각 마이그레이션의 사후검사), 등급은 도우미

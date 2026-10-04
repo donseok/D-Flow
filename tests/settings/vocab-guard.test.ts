@@ -33,3 +33,17 @@ describe('vocabWriteFailure — 트리거 원문을 화면에 흘리지 않는�
     expect(vocabWriteFailure(null)).toBeNull()
   })
 })
+
+describe('inUseFieldErrors — 어휘 참조 detail(0023)', async () => {
+  const { inUseFieldErrors } = await import('@/lib/settings/errors')
+  it('지운 code·집계 분류 변경의 건수를 키 오류로', () => {
+    const removed = inUseFieldErrors(JSON.stringify({ key: 'meetings.categories', code: 'review', reason: 'removed', count: 3 }))
+    expect(removed).toEqual([expect.objectContaining({ key: 'meetings.categories', code: 'review', refCount: 3 })])
+    expect(removed[0].message).toContain('3건')
+    const countsAs = inUseFieldErrors(JSON.stringify({ key: 'attendance.types', code: 'remote', reason: 'counts_as', count: 1 }))
+    expect(countsAs[0].message).toContain('집계 분류')
+  })
+  it('모양이 다르면 일반 문구(건수 없음)', () => {
+    expect(inUseFieldErrors(JSON.stringify({ key: 'meetings.categories', code: 'x', reason: 'other', count: 1 }))[0].refCount).toBeUndefined()
+  })
+})
