@@ -783,11 +783,11 @@ async function main() {
   mustOk('R 이슈 5상태', await updateSettings(R, { 'workflow.issue_statuses': RESEARCH_STATUSES }))
   mustOk('R 승인 단계·선행 기준', await updateSettings(R, { 'workflow.approval_steps': R_STEPS, 'workflow.predecessor_gate': 'final' }))
   const rFlow = (await readDoc(admin.sb, 'project_settings', 'project_id', R.id)).values
-  same('R workflow.issue_statuses', rFlow['workflow.issue_statuses'], RESEARCH_STATUSES)
-  same('R workflow.approval_steps', rFlow['workflow.approval_steps'], R_STEPS)
-  same('R workflow.predecessor_gate', rFlow['workflow.predecessor_gate'], 'final')
-  same('R workflow.credit_policy', rFlow['workflow.credit_policy'], R_POLICY)
-  same('R workflow.stage_credits', rFlow['workflow.stage_credits'], R_CREDITS)
+  same('R 이슈 상태', rFlow['workflow.issue_statuses'], RESEARCH_STATUSES)
+  same('R 승인 단계', rFlow['workflow.approval_steps'], R_STEPS)
+  same('R 선행 기준', rFlow['workflow.predecessor_gate'], 'final')
+  same('R 크레딧 정책', rFlow['workflow.credit_policy'], R_POLICY)
+  same('R 크레딧 표', rFlow['workflow.stage_credits'], R_CREDITS)
   const cFlowKeys = Object.keys((await readDoc(admin.sb, 'project_settings', 'project_id', C.id)).values)
     .filter((k) => ['workflow.issue_statuses', 'workflow.approval_steps', 'workflow.predecessor_gate', 'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_distinct_approvers'].includes(k))
   const s1wChecks = {
