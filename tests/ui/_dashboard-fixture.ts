@@ -5,6 +5,7 @@ import type { DashboardView } from '@/components/dashboard/DashboardView'
 import type { Announcement, Meeting } from '@/lib/domain/types'
 import type { DashboardIssue } from '@/lib/domain/issueDashboard'
 import { calInputUtcMon } from '../helpers/calendarFixture'
+import { MEET_CATS, SEVERITIES } from '../fixtures/vocab'
 
 type Props = ComponentProps<typeof DashboardView>
 export const DASH_ISSUE: DashboardIssue = {
@@ -24,7 +25,7 @@ export function dashboardProps(over: Partial<Props> = {}): Props {
   return {
     issueAreas: TEST_AREAS, items: [], projectId: 'p1', projectName: 'Acme', today: '2026-09-27', realToday: '2026-09-27', calendar: calInputUtcMon, snapshots: [], historyFailed: false,
     announcements: [DASH_ANN], meetings: [DASH_MEETING], meetingExceptions: [], issues: [DASH_ISSUE], milestoneKeywords: [],
-    modules: { issues: true, announcements: true, meetings: true }, minutesHref: null,
+    modules: { issues: true, announcements: true, meetings: true }, minutesHref: null, meetingCategories: MEET_CATS, issueSeverities: SEVERITIES,
     ...over,
   }
 }

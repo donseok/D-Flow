@@ -1,7 +1,7 @@
+import { DEFAULT_SOURCES } from '@/lib/settings/vocab'
 import { describe, expect, it } from 'vitest'
 import {
   ISSUE_MAJOR_NAME_MAX,
-  ISSUE_SOURCE_TYPES,
   formatIssueMajorCode,
   normalizeIssueAnalysisInput,
   type IssueAnalysisInput,
@@ -18,7 +18,7 @@ const VALID = {
 
 describe('이슈 분석 메타 정본', () => {
   it('원천 화이트리스트를 고정한다', () => {
-    expect(ISSUE_SOURCE_TYPES).toEqual([
+    expect(DEFAULT_SOURCES.map(e => e.code)).toEqual([
       'minutes',
       'interview',
       'deliverable',

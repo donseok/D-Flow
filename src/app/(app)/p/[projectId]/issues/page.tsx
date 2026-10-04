@@ -15,7 +15,7 @@ import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { IssuesView } from '@/components/issues/IssuesView'
 import { todayIn } from '@/lib/domain/calendar'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
-import { pickCalendar } from '@/lib/settings/pick'
+import { pick, pickCalendar } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
@@ -44,6 +44,11 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
   if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
   const cal = pickCalendar(pc.cfg)
   if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} /></div>
+  // 목록의 심각도 칩·정렬·필터 = 설정 어휘(B4). 등록 문맥(entry)과 따로 읽어 문맥이 실패해도 목록은 그린다
+  const severities = pick(pc.cfg, 'issues.severities')
+  if (!severities.ok) return <div className="p-6"><ConfigLoadError error={severities.error} keyName={severities.key} kind={severities.kind} locale={locale} /></div>
+  const sources = pick(pc.cfg, 'issues.sources')
+  if (!sources.ok) return <div className="p-6"><ConfigLoadError error={sources.error} keyName={sources.key} kind={sources.kind} locale={locale} /></div>
   const today = todayIn(cal.calendar.timezone, new Date())
   // 명단은 담당자 선택·이름 표시용 곁가지 — 실패해도 이슈는 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
   if (!roster.ok) console.error(`[issues] 명단 조회 실패(project=${projectId}) — 담당자 목록 없이 그리고 경고를 띄운다`)
@@ -77,6 +82,8 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
         myMemberIds={myMemberIds}
         today={today}
         timeZone={cal.calendar.timezone}
+        severities={severities.value}
+        sources={sources.value}
       />
     </ProjectPageShell>
   )

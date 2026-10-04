@@ -39,6 +39,7 @@ export default async function MyMeetingsPage({ params }: { params: Promise<{ slu
   // 실패가 0 으로 보이지 않게 '—'(모름)로 맞춰 둔다. 실패 로그는 로더(getMyMeetings)가 남긴다.
   const meetings = res.ok ? res.meetings : []
   const exceptions = res.ok ? res.exceptions : []
+  const categories = res.ok ? res.categories : {}
   const mineOcc = expandMeetings(meetings.filter(x => x.isMine), exceptions, gs, ge)
   const { today: todayN, upcoming7d, total } = summarizeMeetings(mineOcc, today)
   const kpi = (n: number) => (res.ok ? n : '—')
@@ -61,7 +62,7 @@ export default async function MyMeetingsPage({ params }: { params: Promise<{ slu
     >
       {/* 항목마다 프로젝트가 다른 전역 목록 — 전역 shim 대신 '내가 관리자인 프로젝트 집합'을 내려
           클라이언트가 열려 있는 회차의 프로젝트로 판정한다(서버 adminOrOwnerGate 와 같은 기준). */}
-      <MyMeetingsView workspaceId={scope.ws.id} initialMeetings={meetings} initialExceptions={exceptions} initialFailed={!res.ok}
+      <MyMeetingsView workspaceId={scope.ws.id} initialMeetings={meetings} initialExceptions={exceptions} initialCategories={categories} initialFailed={!res.ok}
         todayIso={today} currentUserId={user?.id ?? null}
         adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false}
         calendar={calendarViewOf(vc.calendar)} />

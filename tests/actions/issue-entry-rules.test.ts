@@ -19,27 +19,28 @@ import { createIssue } from '@/app/actions/issues'
 import { requireModule } from '@/lib/modules/gate'
 import { DEFAULT_ID_POLICY } from '@/lib/issues/idPolicy'
 import { ISSUE_DB_MESSAGES, ERR_ISSUE_RETRY } from '@/lib/issues/errors'
+import { TEST_ISSUE_VOCAB } from '../fixtures/issue-areas'
 const AREA = { id: '00000000-0000-0000-7e57-000000001bb1', code: 'RND', name: '연구', sortOrder: 1, active: true }
 const input = (over: Record<string, unknown> = {}) => ({ title: '새 이슈', body: '', severity: 'medium' as const,
   startDate: null, dueDate: null, assigneeMemberIds: [], areaId: null, analysis: null, ...over })
 beforeEach(() => {
   h.insert.mockReset()
   h.result = { data: { id: 'i1', code: 'RS-RND-001' }, error: null }
-  h.context.mockResolvedValue({ ok: true, value: { policy: DEFAULT_ID_POLICY, rules: { areaRequired: false, analysis: 'optional' }, areas: [AREA] } })
+  h.context.mockResolvedValue({ ok: true, value: { policy: DEFAULT_ID_POLICY, rules: { areaRequired: false, analysis: 'optional' }, areas: [AREA], vocab: TEST_ISSUE_VOCAB } })
 })
 describe('서버 이슈 등록 규칙', () => {
   it('영역 정책인데 영역이 없으면 insert 전에 거부한다', async () => {
     h.context.mockResolvedValue({ ok: true, value: { policy: { ...DEFAULT_ID_POLICY, pattern: '{area}-{seq:3}' },
-      rules: { areaRequired: true, analysis: 'off' }, areas: [AREA] } })
+      rules: { areaRequired: true, analysis: 'off' }, areas: [AREA], vocab: TEST_ISSUE_VOCAB } })
     expect(await createIssue('p1', input())).toEqual({ ok: false, error: ISSUE_DB_MESSAGES.ISSUE_AREA_REQUIRED })
     expect(h.insert).not.toHaveBeenCalled()
   })
   it('필수 분석 없이 새로 등록할 수 없다', async () => {
-    h.context.mockResolvedValue({ ok: true, value: { policy: DEFAULT_ID_POLICY, rules: { areaRequired: true, analysis: 'required' }, areas: [AREA] } })
+    h.context.mockResolvedValue({ ok: true, value: { policy: DEFAULT_ID_POLICY, rules: { areaRequired: true, analysis: 'required' }, areas: [AREA], vocab: TEST_ISSUE_VOCAB } })
     expect(await createIssue('p1', input({ areaId: AREA.id }))).toEqual({ ok: false, error: ISSUE_DB_MESSAGES.ISSUE_ANALYSIS_REQUIRED })
   })
   it('비활성 영역은 저장 전에 거부한다', async () => {
-    h.context.mockResolvedValue({ ok: true, value: { policy: DEFAULT_ID_POLICY, rules: { areaRequired: false, analysis: 'off' }, areas: [{ ...AREA, active: false }] } })
+    h.context.mockResolvedValue({ ok: true, value: { policy: DEFAULT_ID_POLICY, rules: { areaRequired: false, analysis: 'off' }, areas: [{ ...AREA, active: false }], vocab: TEST_ISSUE_VOCAB } })
     expect(await createIssue('p1', input({ areaId: AREA.id }))).toEqual({ ok: false, error: ISSUE_DB_MESSAGES.ISSUE_AREA_INACTIVE })
     expect(h.insert).not.toHaveBeenCalled()
   })
@@ -49,7 +50,7 @@ describe('서버 이슈 등록 규칙', () => {
     expect(h.insert).not.toHaveBeenCalled()
   })
   it('분석 off는 입력 묶음을 거부하고 분석 관문도 확인한다', async () => {
-    h.context.mockResolvedValue({ ok: true, value: { policy: DEFAULT_ID_POLICY, rules: { areaRequired: false, analysis: 'off' }, areas: [AREA] } })
+    h.context.mockResolvedValue({ ok: true, value: { policy: DEFAULT_ID_POLICY, rules: { areaRequired: false, analysis: 'off' }, areas: [AREA], vocab: TEST_ISSUE_VOCAB } })
     const analysis = { majorName: '연구관리', subProcess: '실험', ownerDepartment: '연구팀', relatedSystems: [], sourceType: 'other', sourceDetail: '' }
     expect(await createIssue('p1', input({ areaId: AREA.id, analysis }))).toMatchObject({ ok: false })
     expect(vi.mocked(requireModule)).toHaveBeenCalledWith({ projectId: 'p1' }, 'issue_analysis')

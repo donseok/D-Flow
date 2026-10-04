@@ -436,6 +436,7 @@ export function MinutesView({
               currentUserId={currentUserId} adminWorkspaceIds={adminWorkspaceIds}
               adminProjectIds={adminProjectIds} isSuperuser={isSuperuser} teamCodes={teamCodes}
               projects={projects} myProjectIds={myProjectIds}
+              meetingCategories={typeof treeState === 'object' ? treeState.meetingCategories : undefined}
               onChanged={() => { void loadTree(); router.refresh() }}
               onFolderSelect={id => { uploadFolderRef.current = id }} />
           </div>

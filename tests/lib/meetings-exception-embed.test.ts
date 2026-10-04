@@ -3,6 +3,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 // 비공개 프로젝트 거르기(FA1)가 쓰는 보는 사람의 권한 — 기본은 명단이 없는 워크스페이스 멤버
 vi.mock('@/lib/authz', () => ({ getActorViewState: vi.fn() }))
+// 회의 범주(B4)는 설정 해석기의 여러 프로젝트 읽기 — 이 파일은 회의·예외 조회를 보므로 기본 범주로 채운다
+vi.mock('@/lib/settings/projectConfig', async (importOriginal) => {
+  const { defaultVocab } = await import('@/lib/settings/vocab')
+  return {
+    ...(await importOriginal<typeof import('@/lib/settings/projectConfig')>()),
+    getProjectVocabs: vi.fn(async (ids: string[]) => new Map(ids.map(id => [id, defaultVocab('meetings.categories')]))),
+  }
+})
 
 import { createServerClient } from '@/lib/supabase/server'
 import { getActorViewState } from '@/lib/authz'
@@ -220,7 +228,7 @@ describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
   it('비로그인이면 조회 없이 빈 결과', async () => {
     const { tables } = makeSb({ user: null, meetings: () => OK([]) })
     expect(await getMyMeetings(MWS, '2026-07-01', '2026-07-31'))
-      .toEqual({ ok: true, meetings: [], exceptions: [] })
+      .toEqual({ ok: true, meetings: [], exceptions: [], categories: {} })
     expect(tables).not.toContain('meetings')
   })
 

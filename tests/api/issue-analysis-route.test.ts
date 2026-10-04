@@ -1,4 +1,4 @@
-import { TEST_AREAS } from '../fixtures/issue-areas'
+import { TEST_AREAS, TEST_SEVERITY_CODES } from '../fixtures/issue-areas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
@@ -76,7 +76,7 @@ function issue(): IssueAnalysisIssueInput {
 }
 
 function report() {
-  const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue()], [], TEST_AREAS)
+  const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue()], [], TEST_AREAS, TEST_SEVERITY_CODES)
   return buildIssueAnalysisReport(snapshot, {
     '00': [{
       title: '기준정보 단일화',

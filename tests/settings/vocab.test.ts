@@ -1,22 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { ATTENDANCE_META } from '@/lib/domain/attendance'
-import { ISSUE_SEVERITY_META } from '@/lib/domain/issues'
-import { ISSUE_SOURCE_TYPES } from '@/lib/domain/issueAnalysis'
-import { MEETING_META } from '@/lib/domain/meetings'
-import { ISSUE_ANALYSIS_CAUSE_CATEGORIES } from '@/lib/report/issues/model'
 import {
   DEFAULT_VOCAB, VOCAB_KEYS, defaultVocab, parseVocab, summarizeAttendance, vocabChangeError, vocabColor, vocabLabel, activeVocab,
 } from '@/lib/settings/vocab'
 import { PROJECT_SETTINGS } from '@/lib/settings/registry'
 
 // SP5 B4 — 어휘 5키의 순수 계약. 기본값은 B4 이전 상수와 같은 code·순서여야 한다(키 없는 프로젝트의 화면·DB 판정이 그대로).
+// 옛 상수(ATTENDANCE_META·MEETING_META·ISSUE_SEVERITY_META·ISSUE_SOURCE_TYPES·ISSUE_ANALYSIS_CAUSE_CATEGORIES)는 B4 묶음3 에서 지웠다 — 그 값을 오라클로 박제한다.
+const OLD = {
+  attendance: ['work', 'remote', 'annual', 'half', 'quarter', 'sick', 'trip', 'official', 'absent'],
+  meetings: ['general', 'routine', 'kickoff', 'review', 'report', 'external'],
+  severities: ['high', 'medium', 'low'],
+  sources: ['minutes', 'interview', 'deliverable', 'as_is_analysis', 'data_analysis', 'other'],
+  causes: ['strategy_policy', 'process', 'organization', 'it'],
+}
 describe('기본값 = B4 이전 상수', () => {
   it('code 집합이 같다', () => {
-    expect(DEFAULT_VOCAB['attendance.types'].map(e => e.code).sort()).toEqual(Object.keys(ATTENDANCE_META).sort())
-    expect(DEFAULT_VOCAB['meetings.categories'].map(e => e.code).sort()).toEqual(Object.keys(MEETING_META).sort())
-    expect(DEFAULT_VOCAB['issues.severities'].map(e => e.code).sort()).toEqual(Object.keys(ISSUE_SEVERITY_META).sort())
-    expect(DEFAULT_VOCAB['issues.sources'].map(e => e.code)).toEqual([...ISSUE_SOURCE_TYPES])
-    expect(DEFAULT_VOCAB['issues.cause_categories'].map(e => e.code)).toEqual([...ISSUE_ANALYSIS_CAUSE_CATEGORIES])
+    expect(DEFAULT_VOCAB['attendance.types'].map(e => e.code).sort()).toEqual([...OLD.attendance].sort())
+    expect(DEFAULT_VOCAB['meetings.categories'].map(e => e.code).sort()).toEqual([...OLD.meetings].sort())
+    expect(DEFAULT_VOCAB['issues.severities'].map(e => e.code).sort()).toEqual([...OLD.severities].sort())
+    expect(DEFAULT_VOCAB['issues.sources'].map(e => e.code)).toEqual(OLD.sources)
+    expect(DEFAULT_VOCAB['issues.cause_categories'].map(e => e.code)).toEqual(OLD.causes)
   })
   it('근태 등록 선택지·회의 순서·심각도 순위가 옛 표시 순서와 같다', () => {
     expect(activeVocab(DEFAULT_VOCAB['attendance.types']).filter(e => e.selectable).map(e => e.code))

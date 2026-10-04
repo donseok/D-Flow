@@ -42,7 +42,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.actor.current = duo()
   m.getWorkspaceConfig.mockImplementation(async (id: string) => ({ calendar: CAL[id] ?? null, calendarError: CAL[id] ? null : new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone') }))
-  m.getMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+  m.getMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
   // 2026-10-04(일) 20:00Z = 서울 10-05(월) 05:00 · LA 10-04(일) 13:00 · UTC 10-04(일)
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-04T20:00:00Z'))
 })

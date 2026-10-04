@@ -1,4 +1,4 @@
-import { TEST_AREAS } from '../fixtures/issue-areas'
+import { TEST_AREAS, TEST_SEVERITY_CODES } from '../fixtures/issue-areas'
 // @vitest-environment jsdom
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -127,7 +127,7 @@ describe('IssueAnalysisModal', () => {
 
   it('서버 검증·AI 결과와 템플릿 차단 상태를 한 화면에 표시한다', async () => {
     const current = issue()
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS)
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const analysis = buildIssueAnalysisReport(snapshot, {
       '02': [{
         title: '주문 승인·입력 통합',
@@ -190,7 +190,7 @@ describe('IssueAnalysisModal', () => {
       code: 'PI-I-00-01',
       subProcess: '',
     })
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS)
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const analysis = buildIssueAnalysisReport(snapshot, {
       '02': [{
         title: '주문 통합',
@@ -238,7 +238,7 @@ describe('IssueAnalysisModal', () => {
 
   it('템플릿과 렌더러가 모두 준비되면 저장 runId 다운로드 링크를 연다', async () => {
     const current = issue()
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS)
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const analysis = buildIssueAnalysisReport(snapshot, {
       '02': [{
         title: '주문 통합',

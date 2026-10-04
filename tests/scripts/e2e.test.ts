@@ -15,7 +15,8 @@ import { isValidEmail } from '@/lib/domain/validate'
 import { ERR_DENIED as APP_ERR_DENIED, ERR_MODULE_DISABLED as APP_ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { FORBIDDEN_REFS } from '../../scripts/lib/targets.mjs'
 import { TEMPLATE_HEADER as APP_TEMPLATE_HEADER } from '@/lib/excel/template'
-import { MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
+import { RECURRENCE_ORDER } from '@/lib/domain/meetings'
+import { DEFAULT_MEETING_CATEGORIES } from '@/lib/settings/vocab'
 import { isInviteToken, validateSignupInput } from '@/lib/domain/invites'
 import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
@@ -295,7 +296,7 @@ describe('meetingInput·inviteInput·signupInput — 앱 검증 규칙과 드리
   it('회의: 단발 킥오프, 참석자 그대로, 카테고리·반복은 앱 목록 안', () => {
     const m = meetingInput({ date: '2026-09-28', attendeeIds: ['bob'] })
     expect(m).toMatchObject({ meetingDate: '2026-09-28', recurrence: 'none', recurrenceUntil: null, attendeeIds: ['bob'] })
-    expect(MEETING_CATEGORIES).toContain(m.category)
+    expect(DEFAULT_MEETING_CATEGORIES.map(e => e.code)).toContain(m.category)
     expect(RECURRENCE_ORDER).toContain(m.recurrence)
     expect(m.startTime! < m.endTime!).toBe(true)
     expect(() => meetingInput({ date: '2026-9-28', attendeeIds: [] })).toThrow(/날짜/)

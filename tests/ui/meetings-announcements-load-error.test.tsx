@@ -37,7 +37,9 @@ vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id:
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: mocks.getServerLocale }))
 vi.mock('@/lib/settings/pageConfig', async () => {
   const { calSeoulMon } = await import('../helpers/calendarFixture')
-  return { loadProjectConfigForPage: vi.fn(async () => ({ ok: true, cfg: { calendar: calSeoulMon, calendarError: null, holidays: [] } })) }
+  const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
+  // 회의 범주(B4)는 기본 어휘 — 달력은 이 파일의 고정 값
+  return { loadProjectConfigForPage: vi.fn(async () => ({ ok: true, cfg: { ...makeProjectConfig(), calendar: calSeoulMon, calendarError: null, holidays: [] } })) }
 })
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: mocks.ProjectPageShell }))

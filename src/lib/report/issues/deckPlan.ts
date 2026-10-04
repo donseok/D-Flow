@@ -1,12 +1,14 @@
 import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import type { IssueSourceType } from '@/lib/domain/issueAnalysis'
-import type {
-  IssueAnalysisCauseCategory,
-  IssueAnalysisIssueCauseAnalysis,
-  IssueAnalysisOpportunity,
-  IssueAnalysisReport,
-  IssueAnalysisReportArea,
-  IssueAnalysisReportIssue,
+import {
+  DEFAULT_ISSUE_ANALYSIS_VOCAB,
+  analysisVocab,
+  type IssueAnalysisIssueCauseAnalysis,
+  type IssueAnalysisOpportunity,
+  type IssueAnalysisReport,
+  type IssueAnalysisReportArea,
+  type IssueAnalysisReportIssue,
+  type IssueAnalysisVocab,
 } from './model'
 import {
   buildIssueAnalysisProcessSlides,
@@ -200,6 +202,7 @@ export interface IssueAnalysisDeckPlan {
   slides: IssueAnalysisDeckSlide[]
 }
 
+/** 기본 출처의 PPT 표기(B4 이전 덱 문구) — 기본 라벨 그대로인 code 만 이 표기를, 바꾼 라벨은 그 라벨을 쓴다 */
 const SOURCE_TYPE_LABELS: Record<IssueSourceType, string> = {
   minutes: '회의록',
   interview: '현업 인터뷰',
@@ -249,10 +252,24 @@ function splitDetail(value: string): string[] {
     .filter(Boolean)
 }
 
-export function issueSourceLines(issue: IssueAnalysisReportIssue): string[] {
+/** 덱의 어휘 표기 — 보고서의 분석 어휘(analysisVocab)에서 만든다. 없는 code 는 code 그대로(조용히 지우지 않는다) */
+export interface IssueAnalysisDeckLabels {
+  source: (code: string) => string
+  cause: (code: string) => string | undefined
+}
+export function deckLabelsOf(vocab: IssueAnalysisVocab): IssueAnalysisDeckLabels {
+  const defaults = (list: readonly { code: string; label: string }[]) => new Map(list.map(e => [e.code, e.label]))
+  const defSource = defaults(DEFAULT_ISSUE_ANALYSIS_VOCAB.sources)
+  const source = new Map(vocab.sources.map(e => [e.code, defSource.get(e.code) === e.label && SOURCE_TYPE_LABELS[e.code] ? SOURCE_TYPE_LABELS[e.code] : e.label]))
+  const cause = new Map(vocab.causeCategories.map(e => [e.code, e.label]))
+  return { source: code => source.get(code) ?? code, cause: code => cause.get(code) }
+}
+const DEFAULT_DECK_LABELS = deckLabelsOf(DEFAULT_ISSUE_ANALYSIS_VOCAB)
+
+export function issueSourceLines(issue: IssueAnalysisReportIssue, labels: IssueAnalysisDeckLabels = DEFAULT_DECK_LABELS): string[] {
   const lines: string[] = []
   if (issue.source.manual) {
-    lines.push(SOURCE_TYPE_LABELS[issue.source.manual.type])
+    lines.push(labels.source(issue.source.manual.type))
     lines.push(...splitDetail(issue.source.manual.detail))
   }
   for (const source of issue.source.minutes) {
@@ -266,7 +283,7 @@ export function fullSourceLines(lines: readonly string[]): string[] {
   return [...new Set(lines.map(compact).filter(Boolean))]
 }
 
-function toDeckIssue(issue: IssueAnalysisReportIssue): IssueAnalysisDeckIssue {
+function toDeckIssue(issue: IssueAnalysisReportIssue, labels: IssueAnalysisDeckLabels): IssueAnalysisDeckIssue {
   return {
     id: issue.id,
     code: issue.code,
@@ -275,7 +292,7 @@ function toDeckIssue(issue: IssueAnalysisReportIssue): IssueAnalysisDeckIssue {
     subProcess: compact(issue.subProcess),
     // 셈플의 원천 표기(▪ 항목). 페이지 분할 전에 접두해야 계속 조각의 중간 줄에
     // 기호가 잘못 반복되지 않고, 열 너비 계산에도 기호 폭이 반영된다.
-    sourceLines: fullSourceLines(issueSourceLines(issue)).map(line => `▪ ${line}`),
+    sourceLines: fullSourceLines(issueSourceLines(issue, labels)).map(line => `▪ ${line}`),
   }
 }
 
@@ -598,9 +615,9 @@ function takeIssuePage(
   return { page, next }
 }
 
-function areaSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSlide[] {
+function areaSlides(area: IssueAnalysisReportArea, labels: IssueAnalysisDeckLabels): IssueAnalysisDeckSlide[] {
   if (!area.issues.length) return []
-  const rows = area.issues.flatMap(issue => issueRows(toDeckIssue(issue)))
+  const rows = area.issues.flatMap(issue => issueRows(toDeckIssue(issue, labels)))
   const first = takeIssuePage(rows, 0, ISSUE_ANALYSIS_FIRST_PAGE_CAPACITY)
   const slides: IssueAnalysisDeckSlide[] = [
     {
@@ -631,12 +648,6 @@ function areaSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSlide[] {
   return slides
 }
 
-const CAUSE_CATEGORY_LABELS: Record<IssueAnalysisCauseCategory, string> = {
-  strategy_policy: 'S · 전략/규정',
-  process: 'P · 프로세스',
-  organization: 'O · 조직',
-  it: 'I · IT',
-}
 
 function causeAnalysisText(
   cause: IssueAnalysisIssueCauseAnalysis['causes'][number],
@@ -693,7 +704,7 @@ function validateCauseAnalysisCoverage(areas: readonly IssueAnalysisReportArea[]
   }
 }
 
-function causeRows(analysis: IssueAnalysisIssueCauseAnalysis): IssueAnalysisDeckCauseRow[] {
+function causeRows(analysis: IssueAnalysisIssueCauseAnalysis, labels: IssueAnalysisDeckLabels): IssueAnalysisDeckCauseRow[] {
   return analysis.causes.flatMap(cause => {
     const text = causeAnalysisText(cause)
     const chunks = splitIssueAnalysisTextForRows(
@@ -701,7 +712,7 @@ function causeRows(analysis: IssueAnalysisIssueCauseAnalysis): IssueAnalysisDeck
       ISSUE_ANALYSIS_CAUSE_LINE_WIDTH,
       ISSUE_ANALYSIS_CAUSE_LINES_PER_ROW_UNIT,
     )
-    const categoryLabel = CAUSE_CATEGORY_LABELS[cause.category]
+    const categoryLabel = labels.cause(cause.category)
     if (!categoryLabel) {
       throw new Error(`지원하지 않는 원인 Category입니다: ${cause.category}`)
     }
@@ -728,7 +739,7 @@ function causeIssueRows(issue: IssueAnalysisDeckIssue): IssueAnalysisDeckIssueRo
   })
 }
 
-function causeAnalysisSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSlide[] {
+function causeAnalysisSlides(area: IssueAnalysisReportArea, labels: IssueAnalysisDeckLabels): IssueAnalysisDeckSlide[] {
   const analyses = areaCauseAnalyses(area)
   if (!analyses.length) return []
 
@@ -748,9 +759,9 @@ function causeAnalysisSlides(area: IssueAnalysisReportArea): IssueAnalysisDeckSl
   for (const reportIssue of area.issues) {
     const analysis = analysesByIssueId.get(reportIssue.id)
     if (!analysis?.causes.length) continue
-    const deckIssue = toDeckIssue(reportIssue)
+    const deckIssue = toDeckIssue(reportIssue, labels)
     const contextRows = causeIssueRows(deckIssue)
-    const rows = causeRows(analysis)
+    const rows = causeRows(analysis, labels)
     if (!rows.length) continue
 
     const pages: Array<{
@@ -903,6 +914,7 @@ function opportunityBlocks(
   area: IssueAnalysisReportArea,
   opportunity: IssueAnalysisOpportunity,
   opportunityNo: number,
+  labels: IssueAnalysisDeckLabels,
 ): IssueAnalysisDeckOpportunityBlock[] {
   if (
     opportunity.issueIds.length < 1
@@ -921,7 +933,7 @@ function opportunityBlocks(
     if (!issue) {
       throw new Error(`${area.areaName} 개선기회 ${opportunityNo}가 영역 밖 이슈를 참조합니다: ${id}`)
     }
-    const deckIssue = toDeckIssue(issue)
+    const deckIssue = toDeckIssue(issue, labels)
     return {
       id: deckIssue.id,
       code: deckIssue.code,
@@ -1022,6 +1034,7 @@ export function buildIssueAnalysisDeckPlan(
   const populatedAreas = report.areas.filter(area => area.issues.length > 0).slice().sort((a, b) => (areas.find(ref => ref.code === a.areaCode)?.sortOrder ?? Number.MAX_SAFE_INTEGER) - (areas.find(ref => ref.code === b.areaCode)?.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.areaCode.localeCompare(b.areaCode))
   if (!populatedAreas.length) throw new Error('분류된 Mega 영역 이슈가 없습니다.')
   validateCauseAnalysisCoverage(populatedAreas)
+  const labels = deckLabelsOf(analysisVocab(report))
 
   const projectName = compact(meta.projectName)
   const authorName = compact(meta.authorName)
@@ -1045,8 +1058,8 @@ export function buildIssueAnalysisDeckPlan(
 
   for (const area of populatedAreas) {
     slides.push(...buildIssueAnalysisProcessSlides(area))
-    slides.push(...areaSlides(area))
-    slides.push(...causeAnalysisSlides(area))
+    slides.push(...areaSlides(area, labels))
+    slides.push(...causeAnalysisSlides(area, labels))
   }
   slides.push({ kind: 'contents', sourceSlide: 11, activeSection: 3 })
 
@@ -1054,7 +1067,7 @@ export function buildIssueAnalysisDeckPlan(
   const opportunityPageBlocks: IssueAnalysisDeckOpportunityBlock[] = []
   for (const area of populatedAreas) {
     for (const opportunity of area.opportunities) {
-      opportunityPageBlocks.push(...opportunityBlocks(area, opportunity, opportunityNo))
+      opportunityPageBlocks.push(...opportunityBlocks(area, opportunity, opportunityNo, labels))
       opportunityNo += 1
     }
   }

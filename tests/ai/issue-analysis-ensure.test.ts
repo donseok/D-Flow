@@ -1,4 +1,4 @@
-import { TEST_AREAS } from '../fixtures/issue-areas'
+import { TEST_AREAS, TEST_VOCAB_ARG } from '../fixtures/issue-areas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
 
@@ -164,8 +164,8 @@ describe('ensureIssueAnalysis', () => {
     const issues = [issue('00', 1), issue('01', 2), issue('02', 3)]
 
     const [first, duplicate] = await Promise.all([
-      ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS),
-      ensureIssueAnalysis('project-1', issues, MAJORS, 'user-2', TEST_AREAS),
+      ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG),
+      ensureIssueAnalysis('project-1', issues, MAJORS, 'user-2', TEST_AREAS, TEST_VOCAB_ARG),
     ])
 
     expect(first).toMatchObject({ state: 'generated', runId: 'generated-run' })
@@ -201,7 +201,7 @@ describe('ensureIssueAnalysis', () => {
       messages: Array<{ content: string }>,
     ) => analysisResponse(_system, messages[0].content))
     const issues = [issue('00', 1)]
-    const generated = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS)
+    const generated = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
     expect(generated.state).toBe('generated')
     const saved = mocks.upserts[0]
     mocks.cached = {
@@ -211,7 +211,7 @@ describe('ensureIssueAnalysis', () => {
     }
     mocks.generateAnswer.mockClear()
 
-    const cached = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS)
+    const cached = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
     expect(cached).toMatchObject({
       state: 'ready',
       runId: 'cached-run',
@@ -226,7 +226,7 @@ describe('ensureIssueAnalysis', () => {
       messages: Array<{ content: string }>,
     ) => analysisResponse(system, messages[0].content))
     const issues = [issue('00', 1)]
-    const generated = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS)
+    const generated = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
     expect(generated.state).toBe('generated')
     const legacyAnalysis = JSON.parse(JSON.stringify(mocks.upserts[0].analysis_json)) as {
       areas: Array<Record<string, unknown>>
@@ -239,7 +239,7 @@ describe('ensureIssueAnalysis', () => {
     }
     mocks.generateAnswer.mockClear()
 
-    const cached = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS)
+    const cached = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
 
     expect(cached).toMatchObject({ state: 'unavailable', reason: 'storage_failed' })
     expect(mocks.generateAnswer).not.toHaveBeenCalled()
@@ -251,7 +251,7 @@ describe('ensureIssueAnalysis', () => {
       messages: Array<{ content: string }>,
     ) => analysisResponse(_system, messages[0].content))
     const issues = [issue('00', 1)]
-    const first = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS)
+    const first = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
     expect(first.state).toBe('generated')
     mocks.cached = {
       id: 'old-model-run',
@@ -260,7 +260,7 @@ describe('ensureIssueAnalysis', () => {
     }
     mocks.generateAnswer.mockClear()
 
-    const regenerated = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS)
+    const regenerated = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
     expect(regenerated).toMatchObject({ state: 'generated', model: 'test-model' })
     expect(mocks.generateAnswer).toHaveBeenCalledTimes(2)
     expect(mocks.upserts).toHaveLength(2)
@@ -280,7 +280,7 @@ describe('ensureIssueAnalysis', () => {
       issue('00', 1),
       issue('01', 2),
       issue('02', 3),
-    ], MAJORS, 'user-1', TEST_AREAS)
+    ], MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
     expect(result).toMatchObject({ state: 'unavailable', reason: 'llm_failed' })
     expect(mocks.upserts).toHaveLength(0)
   })
@@ -307,7 +307,7 @@ describe('ensureIssueAnalysis', () => {
       title: `기준관리 이슈 ${index + 1}`,
     }))
 
-    const result = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS)
+    const result = await ensureIssueAnalysis('project-1', issues, MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
 
     expect(result).toMatchObject({ state: 'generated' })
     expect(mocks.generateAnswer).toHaveBeenCalledTimes(3)
@@ -329,7 +329,7 @@ describe('ensureIssueAnalysis', () => {
       return opportunityResponse(messages[0].content)
     })
 
-    const result = await ensureIssueAnalysis('project-1', [issue('00', 1)], MAJORS, 'user-1', TEST_AREAS)
+    const result = await ensureIssueAnalysis('project-1', [issue('00', 1)], MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
 
     expect(result).toMatchObject({ state: 'unavailable', reason: 'invalid_response' })
     expect(mocks.upserts).toHaveLength(0)
@@ -341,7 +341,7 @@ describe('ensureIssueAnalysis', () => {
       messages: Array<{ content: string }>,
     ) => analysisResponse(system, messages[0].content))
 
-    const result = await ensureIssueAnalysis('project-1', [issue('02', 1)], MAJORS, 'user-1', TEST_AREAS)
+    const result = await ensureIssueAnalysis('project-1', [issue('02', 1)], MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
 
     expect(result.state).toBe('generated')
     if (result.state !== 'generated') return
@@ -391,7 +391,7 @@ describe('ensureIssueAnalysis', () => {
       })
     })
 
-    const result = await ensureIssueAnalysis('project-1', [issue('00', 1)], MAJORS, 'user-1', TEST_AREAS)
+    const result = await ensureIssueAnalysis('project-1', [issue('00', 1)], MAJORS, 'user-1', TEST_AREAS, TEST_VOCAB_ARG)
 
     expect(result).toMatchObject({ state: 'unavailable', reason: 'invalid_response' })
     expect(mocks.upserts).toHaveLength(0)

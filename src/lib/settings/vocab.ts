@@ -97,7 +97,8 @@ export const defaultVocab = <K extends VocabKey>(key: K): VocabValues[K] =>
 
 /** `issues.sources` 의 'minutes' 는 회의록에서 만든 이슈가 쓰는 예약 code — 삭제·비활성 불가(개정 §2.4.2). */
 export const RESERVED_SOURCE = 'minutes'
-const CODE_RE = /^[a-z][a-z0-9_]{0,19}$/
+/** 어휘 code 형식 — 설정 parse·서버 입력 검증이 같은 규칙을 쓴다 */
+export const VOCAB_CODE_RE = /^[a-z][a-z0-9_]{0,19}$/
 const MAX_ENTRIES = 50
 
 type Field = 'label' | 'short' | 'color' | 'counts_as' | 'selectable' | 'sort' | 'rank' | 'announce_default' | 'active'
@@ -134,7 +135,7 @@ export function parseVocab<K extends VocabKey>(key: K, raw: unknown): Parsed<Voc
     if (typeof item !== 'object' || item === null || Array.isArray(item)) return fail('어휘 항목은 객체여야 합니다.')
     const x = item as Record<string, unknown>
     if (Object.keys(x).sort().join(',') !== allowed) return fail('어휘 항목의 필드가 빠졌거나 모르는 필드가 있습니다.')
-    if (typeof x.code !== 'string' || !CODE_RE.test(x.code)) return fail('코드는 영소문자로 시작하는 영소문자·숫자·_ 1~20자여야 합니다.')
+    if (typeof x.code !== 'string' || !VOCAB_CODE_RE.test(x.code)) return fail('코드는 영소문자로 시작하는 영소문자·숫자·_ 1~20자여야 합니다.')
     if (codes.has(x.code)) return fail(`코드가 중복됩니다: ${x.code}`)
     codes.add(x.code)
     for (const f of fields) {
@@ -197,6 +198,14 @@ export function vocabLabel(key: VocabKey, list: readonly VocabEntry[], code: str
   if (t && dict && def && def.label === e.label) return t(dict(code) as DictKey)
   return e.label
 }
+/** 근태 짧은 라벨 — 기본 code·기본 short 면 사전 'att.typeShort.*', 아니면 저장 short. 목록 밖 code 는 code. */
+export function vocabShort(list: readonly AttendanceTypeDef[], code: string, t?: (k: DictKey) => string): string {
+  const e = list.find(x => x.code === code)
+  if (!e) return code
+  const def = DEFAULT_ATTENDANCE_TYPES.find(x => x.code === code)
+  if (t && def && def.short === e.short) return t(`att.typeShort.${code}` as DictKey)
+  return e.short
+}
 export const vocabColor = (list: readonly VocabEntry[], code: string | null | undefined) => {
   const e = code == null ? undefined : list.find(x => x.code === code)
   const color = e && 'color' in e ? e.color : 'neutral'
@@ -214,4 +223,17 @@ export function summarizeAttendance(types: readonly AttendanceTypeDef[], records
     else if (c === 'remote') remote++
   }
   return { total: records.length, leave, trip, remote }
+}
+
+/**
+ * 프로젝트 id → 그 프로젝트의 어휘(직렬화 가능 — RSC 경계를 넘는다). 한 프로젝트 화면은 { [projectId]: list }, 프로젝트를 가로지르는 목록
+ * (내 회의·회의록 탐색기)은 getProjectVocabs 의 결과. null·없는 프로젝트 = 못 읽음 → 빈 목록(라벨은 code, 색은 neutral — 기본값으로 풀지 않는다).
+ */
+export type VocabByProject<K extends VocabKey> = Readonly<Record<string, VocabValues[K] | null>>
+export function vocabOf<K extends VocabKey>(m: VocabByProject<K>, projectId: string | null | undefined): VocabValues[K] {
+  return ((projectId ? m[projectId] : null) ?? []) as VocabValues[K]
+}
+/** 표시 한 벌 — 라벨(기본 라벨이면 사전)·점·칩 */
+export function vocabView(key: VocabKey, list: readonly VocabEntry[], code: string, t?: (k: DictKey) => string) {
+  return { label: vocabLabel(key, list, code, t), ...vocabColor(list, code) }
 }

@@ -190,6 +190,7 @@ describe('ensureIssueAnalysisAction', () => {
       [READY_MAJOR],
       'user-1',
       TEST_AREAS,
+      { severityCodes: ['high', 'medium', 'low'], analysis: undefined },
     )
   })
 
@@ -221,6 +222,7 @@ describe('ensureIssueAnalysisAction', () => {
       [SALES_MAJOR],
       'user-1',
       TEST_AREAS,
+      { severityCodes: ['high', 'medium', 'low'], analysis: undefined },
     )
   })
 

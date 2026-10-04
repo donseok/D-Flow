@@ -1,4 +1,5 @@
 import type { ThemePref } from '@/lib/theme/policy'
+import type { VocabByProject } from '@/lib/settings/vocab'
 
 /** DEPRECATED — 깊이 판정에 쓰지 않는다(진실은 parent_id 트리). 프로젝트별 레벨 라벨은 ProjectConfig.levelLabels. */
 export type Level = string
@@ -97,10 +98,8 @@ export interface DeliverableAttachment {
 }
 
 /* ── 근태현황 ──
- * work=정상근무 annual=연차 half=반차 quarter=반반차 sick=병가 trip=출장
- * (remote=재택 official=공가 absent=결근 은 등록 옵션에서 제외 — 과거 기록 표시용으로만 타입 유지) */
-export type AttendanceType =
-  | 'work' | 'remote' | 'annual' | 'half' | 'quarter' | 'sick' | 'trip' | 'official' | 'absent'
+ * 유형 code 는 프로젝트 설정 attendance.types(SP5 B4) — 목록·라벨·집계 분류는 설정에서 읽는다(컴파일 타임 유니언 금지). */
+export type AttendanceType = string
 export interface AttendanceRecord {
   id: string
   projectId: string
@@ -132,7 +131,8 @@ export interface Announcement {
 }
 
 /* ── 회의 (meetings) ── */
-export type MeetingCategory = 'general' | 'routine' | 'kickoff' | 'review' | 'report' | 'external'
+/** 회의 범주 code — 프로젝트 설정 meetings.categories(SP5 B4). 컴파일 타임 유니언 금지 */
+export type MeetingCategory = string
 export type MeetingRecurrence = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly'
 
 export interface Meeting {
@@ -281,6 +281,8 @@ export interface ExplorerData {
   leaves: ExplorerLeaf[]             // 전 기간 flat, 날짜 내림차순
   total: number
   truncated: boolean
+  /** 연결 회의의 프로젝트(meetingProjectId)별 회의 범주(설정 meetings.categories, SP5 B4). 없거나 null = 못 읽음 → 칩은 code */
+  meetingCategories?: VocabByProject<'meetings.categories'>
 }
 
 export interface MinuteFile {

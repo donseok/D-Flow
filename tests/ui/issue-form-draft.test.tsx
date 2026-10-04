@@ -33,6 +33,7 @@ vi.mock('@/app/actions/issueUpdates', () => ({
 
 import { DeleteIssueModal, IssueDetailModal, IssueFormModal } from '@/components/issues/IssueModals'
 import type { Issue } from '@/lib/domain/issues'
+import { SEVERITIES, SOURCES } from '../fixtures/vocab'
 
 describe('IssueFormModal 회의록 초안', () => {
   let container: HTMLDivElement
@@ -419,8 +420,7 @@ describe('IssueFormModal 회의록 초안', () => {
           today="2026-07-31"
           onClose={() => undefined}
           onEdit={() => undefined}
-          onDelete={() => undefined}
-        />,
+          onDelete={() => undefined} severities={SEVERITIES} sources={SOURCES} />,
       )
     })
 

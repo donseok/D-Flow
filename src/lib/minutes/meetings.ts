@@ -1,6 +1,11 @@
 import { revalidatePath } from 'next/cache'
 import type { AdminClient, ExternalMeetingInput, ResolvedUser } from '@/lib/minutes/externalApi'
 import { isProjectMember, type Actor } from '@/lib/domain/authz'
+import { activeVocab } from '@/lib/settings/vocab'
+import { loadProjectVocab, vocabCodeError, vocabWriteFailure } from '@/lib/settings/vocabGuard'
+
+/** 생략된 범주의 기본값 — 'general'(v2.5 계약)이 활성이면 그것, 아니면 첫 활성 범주(SP5 B4) */
+const DEFAULT_EXTERNAL_CATEGORY = 'general'
 
 /**
  * 외부 회의록 API 의 inline `meeting` 처리 — 회의 확보(신규 생성 또는 dedup 재사용).
@@ -26,7 +31,7 @@ export async function resolveOrCreateExternalMeeting(
   authz: Actor,
 ): Promise<
   | { ok: true; meetingId: string; projectId: string; created: boolean }
-  | { ok: false; status: 404 | 500; code: string; error: string }
+  | { ok: false; status: 400 | 404 | 500 | 503; code: string; error: string }
 > {
   const fail500 = {
     ok: false as const, status: 500 as const, code: 'internal_error', error: '서버 오류가 발생했습니다.',
@@ -48,6 +53,15 @@ export async function resolveOrCreateExternalMeeting(
   }
   if (dup) return { ok: true, meetingId: dup.id as string, projectId: m.projectId, created: false }
 
+  // 범주 = 그 프로젝트의 활성 회의 범주(설정). 설정을 못 읽으면 만들지 않는다(쓰기 선행조회 실패는 중단)
+  const cats = await loadProjectVocab(m.projectId, 'meetings.categories', { client: admin })   // 실패 로그는 loadProjectVocab
+  if (!cats.ok) return fail500
+  const active = activeVocab(cats.value)
+  const category = m.category ?? (active.some(e => e.code === DEFAULT_EXTERNAL_CATEGORY) ? DEFAULT_EXTERNAL_CATEGORY : active[0]?.code ?? '')
+  if (vocabCodeError('meetings.categories', cats.value, category)) {
+    return { ok: false, status: 400, code: 'invalid_category', error: `meeting.category가 이 프로젝트의 회의 범주가 아닙니다: ${category}` }
+  }
+
   // 고정 속성(v2.5 §4.2) — 외부 API 는 항상 단발(recurrence none)·참석자 없는 회의만 만든다.
   const { data: created, error: insErr } = await admin
     .from('meetings')
@@ -55,7 +69,7 @@ export async function resolveOrCreateExternalMeeting(
       project_id: m.projectId,
       title: m.title,
       meeting_date: m.date,
-      category: m.category,
+      category,
       body: '',
       recurrence: 'none',
       recurrence_until: null,
@@ -69,6 +83,10 @@ export async function resolveOrCreateExternalMeeting(
     .single()
   if (insErr || !created) {
     console.error('[minutes-api] 회의 생성 실패:', insErr?.message ?? 'no row')
+    // 확인 뒤 범주가 꺼진 경합(트리거) → 400, 교착(40P01) → 503 재시도
+    const vocab = vocabWriteFailure(insErr)
+    if (vocab && insErr?.message?.startsWith('PROJECT_VOCAB_INACTIVE')) return { ok: false, status: 400, code: 'invalid_category', error: vocab }
+    if (vocab) return { ok: false, status: 503, code: 'retry', error: vocab }
     return fail500
   }
   // 내부 회의 화면 캐시 갱신 — actions/meetings.ts revalidateMeetings 와 동일 경로.

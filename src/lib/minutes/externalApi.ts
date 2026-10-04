@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { UUID_RE } from '@/lib/domain/validate'
-import { MEETING_CATEGORIES } from '@/lib/domain/meetings'
+import { VOCAB_CODE_RE } from '@/lib/settings/vocab'
 import { MINUTE_FOLDER_NAME_MAX, normalizeFolderName, validateMinuteFields } from '@/lib/domain/minutes'
 import { splitMinuteBlocks } from '@/lib/minutes/blocks'
 import { rematchHighlights, type HighlightRow } from '@/lib/minutes/rematch'
@@ -140,7 +140,8 @@ export interface ExternalMeetingInput {
   projectId: string
   title: string
   date: string
-  category: MeetingCategory
+  /** null = 생략 — 회의 확보 단계가 프로젝트 설정의 기본 범주로 정한다(SP5 B4) */
+  category: MeetingCategory | null
 }
 
 /** 내부 회의 생성의 제목 상한과 동일(actions/meetings.ts TITLE_MAX=200 — 'use server' 파일이라 import 불가). */
@@ -279,10 +280,10 @@ export function parseMinutePayload(raw: unknown): { payload: ExternalMinutePaylo
     if (typeof m.date !== 'string' || !DATE_RE.test(m.date)) {
       return { error: 'meeting.date 형식이 올바르지 않습니다.' }
     }
-    // meta 와 같은 소스(MEETING_CATEGORIES)로 검증 — 하드코딩 금지(§2.1).
-    let category: MeetingCategory = 'general'
+    // 형식만 여기서 — 그 프로젝트에서 활성인지는 회의 확보 단계가 설정(meetings.categories)으로 판정한다(SP5 B4, 하드코딩 금지 §2.1)
+    let category: MeetingCategory | null = null
     if (m.category !== undefined) {
-      if (typeof m.category !== 'string' || !(MEETING_CATEGORIES as readonly string[]).includes(m.category)) {
+      if (typeof m.category !== 'string' || !VOCAB_CODE_RE.test(m.category)) {
         return { error: 'meeting.category가 올바르지 않습니다.' }
       }
       category = m.category as MeetingCategory

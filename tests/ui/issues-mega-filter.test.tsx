@@ -32,6 +32,7 @@ vi.mock('@/components/issues/IssueAnalysisModal', () => ({
 }))
 
 import { IssuesView } from '@/components/issues/IssuesView'
+import { SEVERITIES, SOURCES } from '../fixtures/vocab'
 
 function issue(id: string, areaId: '00' | '02', title: string): Issue {
   return {
@@ -91,8 +92,7 @@ describe('IssuesView Mega 필터', () => {
           myMemberIds={[]}
           today="2026-07-31"
           members={[]}
-          issues={[issue('issue-00', '00', '기준정보 중복')]}
-        />,
+          issues={[issue('issue-00', '00', '기준정보 중복')]} severities={SEVERITIES} sources={SOURCES} />,
       )
     })
 
@@ -121,8 +121,7 @@ describe('IssuesView Mega 필터', () => {
           issues={[
             issue('issue-00', '00', '기준정보 중복'),
             issue('issue-02', '02', '주문 승인 지연'),
-          ]}
-        />,
+          ]} severities={SEVERITIES} sources={SOURCES} />,
       )
     })
 
@@ -171,7 +170,7 @@ describe('IssuesView Mega 필터', () => {
     expect(container.querySelector('[data-analysis-mega="02"]')).not.toBeNull()
   })
   it('entry context failure retains the list and blocks write affordances', async () => {
-    await act(async () => root.render(<IssuesView entryContext={null} entryError="entry unavailable" timeZone="UTC" projectId="project-1" currentUserId="u" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]} issues={[issue('i1', '00', 'readable issue')]} />))
+    await act(async () => root.render(<IssuesView entryContext={null} entryError="entry unavailable" timeZone="UTC" projectId="project-1" currentUserId="u" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]} issues={[issue('i1', '00', 'readable issue')]} severities={SEVERITIES} sources={SOURCES} />))
     expect(container.textContent).toContain('readable issue')
     expect(container.querySelector('[data-status-kind="partial_error"]')?.textContent).toContain('entry unavailable')
     expect(container.textContent).not.toContain('issue.new')
@@ -179,7 +178,7 @@ describe('IssuesView Mega 필터', () => {
   })
   it('analysis off hides report action and filters out unused inactive areas', async () => {
     const entry = { ...TEST_ENTRY_CONTEXT, rules: { areaRequired: false, analysis: 'off' as const }, areas: TEST_ENTRY_CONTEXT.areas.map(a => ({ ...a, active: a.id !== '02' && a.id !== '03' })) }
-    await act(async () => root.render(<IssuesView entryContext={entry} timeZone="UTC" projectId="project-1" currentUserId="u" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]} issues={[issue('i1', '02', 'historic area issue')]} />))
+    await act(async () => root.render(<IssuesView entryContext={entry} timeZone="UTC" projectId="project-1" currentUserId="u" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]} issues={[issue('i1', '02', 'historic area issue')]} severities={SEVERITIES} sources={SOURCES} />))
     expect(container.textContent).not.toContain('issue.analysis.open')
     const options = [...container.querySelectorAll('select[aria-label="issue.filter.area"] option')].map(o => (o as HTMLOptionElement).value)
     expect(options).toContain('02')

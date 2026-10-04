@@ -8,6 +8,12 @@ import { classifyRecipients, MAX_EXTRA_EMAILS } from '@/lib/mail/recipients'
 import { renderMeetingInvite, type InviteKind } from '@/lib/mail/meetingInvite'
 import { getTransport } from '@/lib/mail/transport'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { pick } from '@/lib/settings/pick'
+import { vocabLabel, type VocabValues } from '@/lib/settings/vocab'
+import { t, type DictKey } from '@/lib/i18n/dict'
+
+/** 메일 본문 언어 — 렌더러(meetingInvite LOCALE)와 같다 */
+const MAIL_LOCALE = 'ko' as const
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
@@ -83,10 +89,15 @@ export async function notifyMeetingSaved(
   if (valid.length === 0) return { ok: true, sentTo: [], skipped }
 
   let fromName: string | undefined
+  // 메일의 '구분' = 그 프로젝트의 회의 범주 라벨(설정, B4). 못 읽으면 code 를 쓴다(메일 발송을 막지 않는다 — 로그만)
+  let categories: VocabValues['meetings.categories'] = []
   try {
     const project = await getProjectConfig(found.projectId)
+    const cats = pick(project, 'meetings.categories')
+    if (cats.ok) categories = cats.value
+    else console.error('[notifyMeetingSaved] 회의 범주 설정 손상 — 메일 구분은 code:', cats.error)
     fromName = (await loadDisplayBranding(project.workspaceId)).mailFromName
-  } catch (error) { console.error('[notifyMeetingSaved] 브랜딩 조회 실패:', error) }
+  } catch (error) { console.error('[notifyMeetingSaved] 브랜딩·범주 조회 실패:', error) }
   const transport = getTransport(fromName)
   if (!transport.ok) return { ok: false, error: transport.error, sentTo: [], skipped }
 
@@ -97,6 +108,7 @@ export async function notifyMeetingSaved(
     // displayNameFrom 도 null 을 낼 수 있다. 빈 문자열이면 렌더러가 '작성자' 줄 자체를 생략한다.
     senderName: meeting.createdByName ?? displayNameFrom(user.user_metadata, user.email) ?? '',
     appUrl: resolveAppUrl(),
+    categoryLabel: vocabLabel('meetings.categories', categories, meeting.category, (k: DictKey) => t(MAIL_LOCALE, k)),
   })
 
   try {

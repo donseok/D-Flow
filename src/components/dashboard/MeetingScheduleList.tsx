@@ -6,7 +6,8 @@ import { Users, NotebookText } from 'lucide-react'
 import type { MeetingOccurrence } from '@/lib/domain/types'
 import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { MEETING_META, meetingEditHref, type MeetingRowExtra } from '@/lib/domain/meetings'
+import { meetingEditHref, type MeetingRowExtra } from '@/lib/domain/meetings'
+import { vocabOf, vocabView, type VocabByProject } from '@/lib/settings/vocab'
 import { MeetingDetailModal } from '@/components/meetings/MeetingDetailModal'
 import { DateCell, weekdayKey } from './bits'
 
@@ -17,7 +18,7 @@ import { DateCell, weekdayKey } from './bits'
 const MAX_NAMES = 3
 const EMPTY_EXTRA: MeetingRowExtra = { attendees: [], memo: '' }
 
-export function MeetingScheduleList({ rows, extras, today, currentUserId = null, canManage = false }: {
+export function MeetingScheduleList({ rows, extras, today, currentUserId = null, canManage = false, categories }: {
   rows: MeetingOccurrence[]
   /** 시리즈 id → 참석자 이름·메모 요약. 조회 실패로 비면 빈 상태 문구가 나온다. */
   extras: Record<string, MeetingRowExtra>
@@ -25,6 +26,8 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
   currentUserId?: string | null
   /** 이 프로젝트 관리자 이상(isProjectAdmin). 기본 false = fail-closed. */
   canManage?: boolean
+  /** 회의 범주(설정 meetings.categories) — 프로젝트별 */
+  categories: VocabByProject<'meetings.categories'>
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -34,7 +37,7 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
     <>
       <ul className="divide-y divide-line">
         {rows.map(o => {
-          const meta = MEETING_META[o.category]
+          const meta = vocabView('meetings.categories', vocabOf(categories, o.projectId), o.category, t)
           const extra = extras[o.seriesId] ?? EMPTY_EXTRA
           const shownNames = extra.attendees.slice(0, MAX_NAMES).join(', ')
           const moreNames = extra.attendees.length - MAX_NAMES
@@ -83,7 +86,7 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
                   )}
                 </div>
               </div>
-              <span className={`badge shrink-0 ${meta.chip}`}>{t(meta.labelKey as DictKey)}</span>
+              <span className={`badge shrink-0 ${meta.chip}`}>{meta.label}</span>
             </li>
           )
         })}
@@ -93,7 +96,7 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
         currentUserId={currentUserId} isAdmin={canManage}
         onClose={() => setDetailOcc(null)}
         onEditSeries={m => router.push(meetingEditHref(m.projectId, m.id, detailOcc?.occurrenceDate))}
-        onChanged={() => router.refresh()} />
+        onChanged={() => router.refresh()} categories={categories} />
     </>
   )
 }

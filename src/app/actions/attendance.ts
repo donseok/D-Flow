@@ -5,6 +5,7 @@ import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { revalidatePath } from 'next/cache'
 import type { AttendanceType } from '@/lib/domain/types'
+import { checkProjectVocab, vocabWriteFailure } from '@/lib/settings/vocabGuard'
 
 /** member_id+date 유니크 충돌 시 갱신(upsert). 해당 프로젝트 멤버 이상만 허용. */
 export async function upsertAttendance(
@@ -16,7 +17,6 @@ export async function upsertAttendance(
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'attendance')                 // 스펙 §4.2 — 가드 뒤(가드 앞 필수값 검사는 그대로)
   if (!mod.ok) return { ok: false, error: mod.error }
-
   const sb = await createServerClient()
   // 대상 멤버가 **이 프로젝트 로스터** 소속인지 확인한다. 없으면 남의 프로젝트 멤버 id 로
   // 이 프로젝트 근태 행을 만들 수 있고(로스터 읽기는 전면 개방이라 id 확보가 쉽다),
@@ -30,6 +30,9 @@ export async function upsertAttendance(
     return { ok: false, error: '대상 멤버를 확인할 수 없어 중단했습니다.' }
   }
   if (!member) return { ok: false, error: '이 프로젝트의 멤버가 아닙니다.' }
+  // 유형 = 이 프로젝트의 활성 근태 유형(설정 attendance.types, B4). 경합은 DB 트리거가 닫는다
+  const typeErr = await checkProjectVocab(projectId, 'attendance.types', input.type)
+  if (typeErr) return { ok: false, error: typeErr }
 
   const { error } = await sb
     .from('attendance_records')
@@ -43,7 +46,7 @@ export async function upsertAttendance(
       },
       { onConflict: 'member_id,date' },
     )
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: vocabWriteFailure(error) ?? error.message }
   revalidatePath(`/p/${projectId}/attendance`)
   return { ok: true }
 }

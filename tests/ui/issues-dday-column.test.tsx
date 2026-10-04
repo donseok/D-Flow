@@ -24,6 +24,7 @@ vi.mock('@/components/issues/IssueModals', () => ({
 vi.mock('@/components/issues/IssueAnalysisModal', () => ({ IssueAnalysisModal: () => null }))
 
 import { IssuesView } from '@/components/issues/IssuesView'
+import { SEVERITIES, SOURCES } from '../fixtures/vocab'
 
 const TODAY = '2026-08-28'
 let seq = 0
@@ -53,7 +54,7 @@ describe('IssuesView 시작일자·남은일수 열', () => {
     issue({ title: '기한 없음', startDate: null }),
   ]
   const render = () => act(async () => root.render(
-    <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" issues={issues} members={[]} projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today={TODAY} />,
+    <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" issues={issues} members={[]} projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today={TODAY} severities={SEVERITIES} sources={SOURCES} />,
   ))
   const cellOf = (text: string) => [...container.querySelectorAll('td')].find(td => td.textContent === text)
 

@@ -1,7 +1,8 @@
+import { DEFAULT_MEETING_CATEGORIES } from '@/lib/settings/vocab'
 import { describe, it, expect } from 'vitest'
 import {
   expandMeetings, occurrencesByDate, sortOccurrences, canEditMeeting, summarizeMeetings,
-  meetingEditHref, MEETING_CATEGORIES, memoPreview, buildMeetingRowExtras,
+  meetingEditHref, memoPreview, buildMeetingRowExtras,
 } from '@/lib/domain/meetings'
 import type { Meeting, MeetingException } from '@/lib/domain/types'
 
@@ -120,8 +121,8 @@ describe('canEditMeeting', () => {
   })
 })
 
-describe('MEETING_CATEGORIES', () => {
-  it('6종', () => expect(MEETING_CATEGORIES).toHaveLength(6))
+describe('기본 회의 범주(설정 어휘)', () => {
+  it('6종', () => expect(DEFAULT_MEETING_CATEGORIES).toHaveLength(6))
 })
 
 describe('summarizeMeetings', () => {

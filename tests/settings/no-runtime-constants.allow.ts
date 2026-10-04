@@ -27,18 +27,6 @@ export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
 
 /** 파일 → { patterns, removedBy } */
 export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removedBy: 'SP5' | 'SP5b' | 'SP6' }> = {
-  'src/components/issues/IssueModals.tsx': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
-  'src/components/issues/IssuesView.tsx': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
-  'src/lib/report/issues/storedRun.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
-  // 어휘(근태 유형·회의 범주·이슈 심각도 — SP5 Phase B)
-  'src/components/attendance/AttendanceView.tsx': { patterns: ['ATTENDANCE_TYPES'], removedBy: 'SP5' },
-  'src/lib/ai/tools/attendance.ts': { patterns: ['ATTENDANCE_TYPES'], removedBy: 'SP5' },
-  'src/lib/domain/attendance.ts': { patterns: ['ATTENDANCE_TYPES'], removedBy: 'SP5' },
-  'src/app/actions/meetings.ts': { patterns: ['MEETING_CATEGORIES'], removedBy: 'SP5' },
-  'src/components/meetings/MeetingFormModal.tsx': { patterns: ['MEETING_CATEGORIES'], removedBy: 'SP5' },
-  'src/lib/domain/meetings.ts': { patterns: ['MEETING_CATEGORIES'], removedBy: 'SP5' },
-  'src/lib/minutes/externalApi.ts': { patterns: ['MEETING_CATEGORIES'], removedBy: 'SP5' },
-  'src/app/actions/issues.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
-  'src/lib/domain/issues.ts': { patterns: ['ISSUE_SEVERITIES'], removedBy: 'SP5' },
+  // 어휘(근태 유형·회의 범주·이슈 심각도 — SP5 B4 묶음3 이 0 으로 — 허용 항목 없음 = 영구 가드)
   // 시간대·고정 오프셋(SP5 Phase A calendar.timezone) — 과제 32 로 0(허용 항목 없음 — 영구 가드, no-runtime-constants.test.ts)
 }

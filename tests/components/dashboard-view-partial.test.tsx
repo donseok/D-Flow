@@ -36,6 +36,7 @@ import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
 import { registerEn, t, type DictKey } from '@/lib/i18n/dict'
 import { EN } from '@/lib/i18n/dict/en'
 import { calInputUtcMon, calUtcSun } from '../helpers/calendarFixture'
+import { MEET_CATS, SEVERITIES } from '../fixtures/vocab'
 
 // 사유는 사전 문구(ko·en)로 보인다 — 로더의 ERR_* 한국어 상수는 로그·시험용(최종 리뷰 UI M-1).
 registerEn(EN)
@@ -86,7 +87,7 @@ type Props = Parameters<typeof DashboardView>[0]
 const base: Props = { issueAreas: TEST_AREAS,
   items: ITEMS, projectId: 'p1', projectName: 'Acme', startDate: '2026-09-01', endDate: '2026-12-31', today: TODAY, realToday: TODAY,
   calendar: calInputUtcMon, snapshots: [], historyFailed: false, announcements: [ANN], meetings: [MEETING], meetingExceptions: [],
-  issues: [ISSUE], milestoneKeywords: [], modules: { issues: true, announcements: true, meetings: true }, minutesHref: null,
+  issues: [ISSUE], milestoneKeywords: [], modules: { issues: true, announcements: true, meetings: true }, minutesHref: null, meetingCategories: MEET_CATS, issueSeverities: SEVERITIES,
 }
 const view = async (over: Partial<Props> = {}) => (await DashboardView({ ...base, ...over })) as ReactElement
 

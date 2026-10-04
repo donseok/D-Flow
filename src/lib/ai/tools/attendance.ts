@@ -1,5 +1,4 @@
 import { attendanceHref } from '@/lib/ai/chat/deep-links'
-import { summarize } from '@/lib/domain/attendance'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import type { AttendanceRecord, AttendanceType, TeamCode } from '@/lib/domain/types'
 import type { AttendanceRepository } from '@/lib/repositories/types'
@@ -17,11 +16,12 @@ import {
 } from './common'
 import type { BotSource, ReadOnlyBotTool } from './types'
 import type { ToolTeamSource } from './teamSource'
+import type { ToolVocabSource } from './vocabSource'
+import { summarizeAttendance, vocabLabel, VOCAB_CODE_RE } from '@/lib/settings/vocab'
 
 const ATTENDANCE_CAPABILITY = 'attendance:read' as const
-const ATTENDANCE_TYPES = new Set<AttendanceType>([
-  'work', 'remote', 'annual', 'half', 'quarter', 'sick', 'trip', 'official', 'absent',
-])
+/** 한 번에 거를 수 있는 유형 수 상한 — 어휘 목록 상한(parseVocab 50)과 같다 */
+const TYPES_MAX = 50
 
 export interface AttendanceToolRecord {
   id: string
@@ -35,9 +35,10 @@ export interface AttendanceToolRecord {
 
 function parseTypes(value: unknown): AttendanceType[] | null | undefined {
   if (value === undefined || value === null) return undefined
-  if (!Array.isArray(value) || value.length > ATTENDANCE_TYPES.size) return null
+  if (!Array.isArray(value) || value.length > TYPES_MAX) return null
+  // 형식만 — 그 프로젝트의 유형인지는 접근 판정 뒤 설정(attendance.types)으로 본다
   const types = value.filter((item): item is AttendanceType =>
-    typeof item === 'string' && ATTENDANCE_TYPES.has(item as AttendanceType),
+    typeof item === 'string' && VOCAB_CODE_RE.test(item),
   )
   return types.length === value.length ? [...new Set(types)] : null
 }
@@ -45,6 +46,7 @@ function parseTypes(value: unknown): AttendanceType[] | null | undefined {
 export function createGetAttendanceTool(
   repository: AttendanceRepository,
   teams: ToolTeamSource,
+  vocab: ToolVocabSource,
 ): ReadOnlyBotTool<AttendanceToolRecord> {
   return {
     name: 'get_attendance',
@@ -67,6 +69,11 @@ export function createGetAttendanceTool(
       // 담당팀은 접근 판정 뒤에 본다 — 먼저 보면 볼 수 없는 프로젝트의 팀 구성이 검증 결과로 샌다(팀 목록).
       if (team && !(await teams.projectTeamCodes(projectId)).includes(team)) {
         return invalidArgument('알 수 없는 담당팀입니다.')
+      }
+      // 근태 유형 = 이 프로젝트의 설정 어휘(B4) — 집계 분류(counts_as)·라벨도 여기서. 팀처럼 접근 판정 뒤에 읽는다
+      const typeDefs = await vocab.projectVocab(projectId, 'attendance.types')
+      if (types && types.some(type => !typeDefs.some(def => def.code === type))) {
+        return invalidArgument('알 수 없는 근태 유형입니다.')
       }
 
       const repoResult = await repository.listRecords(projectId, from, to)
@@ -93,7 +100,7 @@ export function createGetAttendanceTool(
         type: record.type,
         note: null,
       }))
-      const counts = summarize(summaryInput)
+      const counts = summarizeAttendance(typeDefs, summaryInput)
       // 출처는 조회 조건을 그대로 복원한다. 복수 type 조회는 화면 필터로 재현할 수 없어 생략.
       const href = attendanceHref(projectId, {
         from,
@@ -107,7 +114,7 @@ export function createGetAttendanceTool(
         entityType: 'attendance_record',
         entityId: record.id,
         projectId,
-        title: `${record.date} ${record.memberName} · ${record.type}`,
+        title: `${record.date} ${record.memberName} · ${vocabLabel('attendance.types', typeDefs, record.type)}`,
         href,
         updatedAt: null,
       }))

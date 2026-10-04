@@ -18,7 +18,7 @@ vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ lo
 vi.mock('@/components/chat/BotPageContextProvider', () => ({ useBotPageContext: mocks.botCtx }))
 vi.mock('@/app/actions/attendance', () => ({ upsertAttendance: vi.fn(async () => ({ ok: true })), removeAttendance: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/app/actions/meetings', () => ({
-  fetchMyMeetings: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [] })),
+  fetchMyMeetings: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [], categories: {} })),
   fetchMeetingDetail: vi.fn(async () => null),
   cancelOccurrence: vi.fn(async () => ({ ok: true })),
   deleteMeeting: vi.fn(async () => ({ ok: true })),
@@ -34,6 +34,7 @@ import { MinutesCalendar } from '@/components/minutes/MinutesCalendar'
 import { monthGridRange } from '@/lib/domain/attendance'
 import { withTeams } from '../fixtures/teams'
 import { HOLIDAY_NAMES, MONDAY_CAL, SUNDAY_CAL, WORKSPACE_CAL } from '../fixtures/calendarView'
+import { ANY_CATS, ATT_TYPES, MEET_CATS } from '../fixtures/vocab'
 
 let container: HTMLDivElement
 let root: Root
@@ -51,9 +52,9 @@ const cell = (date: string) => container.querySelector<HTMLElement>(`[data-date=
 type MakeCalendar = (cal: CalendarView, names?: Readonly<Record<string, string>>) => ReactElement
 const CALENDARS: Record<'attendance' | 'meeting' | 'minutes', MakeCalendar> = {
   attendance: (cal, names) => withTeams(
-    <AttendanceView projectId="p1" records={[]} members={[]} initialDate={TODAY} canEdit={false} calendar={cal} holidayNames={names} />),
+    <AttendanceView projectId="p1" records={[]} members={[]} initialDate={TODAY} canEdit={false} calendar={cal} holidayNames={names} types={ATT_TYPES} />),
   meeting: (cal, names) =>
-    <MeetingCalendar year={2026} month0={9} todayIso={TODAY} occurrences={[]} onSelectOccurrence={() => {}} calendar={cal} holidayNames={names} />,
+    <MeetingCalendar year={2026} month0={9} todayIso={TODAY} occurrences={[]} onSelectOccurrence={() => {}} calendar={cal} holidayNames={names} categories={ANY_CATS} />,
   minutes: (cal) =>   // 회의록은 워크스페이스 화면 — 휴무 이름이 없다
     <MinutesCalendar year={2026} month0={9} todayIso={TODAY} minutes={[] as Minute[]} onSelectDate={() => {}} selectedDate={null} calendar={cal} />,
 }
@@ -136,14 +137,14 @@ describe('회의 뷰 둘 — 그리드 범위가 같은 규칙(사본 gridRange 
   it('MeetingsView — 월요일 규칙이면 봇 문맥 범위가 monthGridRange(…, monday)', async () => {
     const { MeetingsView } = await import('@/components/meetings/MeetingsView')
     await render(<MeetingsView projectId="p1" meetings={[]} exceptions={[]} members={[]} todayIso={TODAY}
-      currentUserId="u1" canManage={false} canEdit calendar={MONDAY_CAL} />)
+      currentUserId="u1" canManage={false} canEdit calendar={MONDAY_CAL} categories={MEET_CATS} />)
     const [from, to] = monthGridRange(2026, 9, 'monday')
     expect(mocks.botCtx).toHaveBeenLastCalledWith(expect.objectContaining({ range: { from, to } }))
   })
 
   it('MyMeetingsView — 일요일 규칙이면 범위가 monthGridRange(…, sunday)', async () => {
     const { MyMeetingsView } = await import('@/components/meetings/MyMeetingsView')
-    await render(<MyMeetingsView workspaceId="ws-1" initialMeetings={[]} initialExceptions={[]} todayIso={TODAY} currentUserId="u1" calendar={SUNDAY_CAL} />)
+    await render(<MyMeetingsView workspaceId="ws-1" initialMeetings={[]} initialExceptions={[]} todayIso={TODAY} currentUserId="u1" calendar={SUNDAY_CAL} initialCategories={ANY_CATS} />)
     const [from, to] = monthGridRange(2026, 9, 'sunday')
     expect(mocks.botCtx).toHaveBeenLastCalledWith(expect.objectContaining({ range: { from, to } }))
   })

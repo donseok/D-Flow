@@ -32,19 +32,19 @@ describe('fetchMyMeetings — 결과형', () => {
   })
 
   it('로더의 성공을 그대로 넘긴다', async () => {
-    getMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
-    expect(await fetchMyMeetings(W, '2026-07-01', '2026-07-31')).toEqual({ ok: true, meetings: [], exceptions: [] })
+    getMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
+    expect(await fetchMyMeetings(W, '2026-07-01', '2026-07-31')).toEqual({ ok: true, meetings: [], exceptions: [], categories: {} })
   })
 
   it('비로그인은 로더를 부르지 않고 빈 성공 결과 — 세션은 호출부(레이아웃)가 따로 본다', async () => {
     getSession.mockResolvedValue(null)
-    expect(await fetchMyMeetings(W, '2026-07-01', '2026-07-31')).toEqual({ ok: true, meetings: [], exceptions: [] })
+    expect(await fetchMyMeetings(W, '2026-07-01', '2026-07-31')).toEqual({ ok: true, meetings: [], exceptions: [], categories: {} })
     expect(getMyMeetings).not.toHaveBeenCalled()
   })
 
   it('meetings 관문(화면의 워크스페이스 — D26)이 거부하면 빈 성공이고 로더를 부르지 않는다(B5 F2 — 모듈 인자 고정)', async () => {
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
-    expect(await fetchMyMeetings(W, '2026-07-01', '2026-07-31')).toEqual({ ok: true, meetings: [], exceptions: [] })
+    expect(await fetchMyMeetings(W, '2026-07-01', '2026-07-31')).toEqual({ ok: true, meetings: [], exceptions: [], categories: {} })
     expect(requireModule).toHaveBeenCalledWith({ workspaceId: W }, 'meetings')
     expect(requireSessionModule).not.toHaveBeenCalled()
     expect(getMyMeetings).not.toHaveBeenCalled()

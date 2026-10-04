@@ -30,6 +30,14 @@ const mocks = vi.hoisted(() => ({
 }))
 // 소속은 fixture 로 준다 — 실구현(buildActor)은 이 스위트의 테이블 큐를 소비해 버린다.
 vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
+// 회의 범주(B4) — 기본 어휘 프로젝트(설정 해석기 대신)
+vi.mock('@/lib/settings/vocabGuard', async (importOriginal) => {
+  const { defaultVocab } = await import('@/lib/settings/vocab')
+  return {
+    ...(await importOriginal<typeof import('@/lib/settings/vocabGuard')>()),
+    loadProjectVocab: vi.fn(async (_pid: string, key: 'meetings.categories') => ({ ok: true, value: defaultVocab(key) })),
+  }
+})
 
 vi.mock('@/lib/minutes/teamScope', () => ({
   activeTeamCodesForMinuteScope: async (scope: { projectId: string | null; workspaceId: string }) =>

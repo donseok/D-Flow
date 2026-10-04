@@ -76,7 +76,7 @@ describe('내 회의 화면 — 회의 조회 실패', () => {
   })
 
   it('정상 + 회의 0건은 실패가 아니다 — 넘기는 KPI 값은 숫자 0', async () => {
-    mocks.getMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+    mocks.getMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
     const { kpis, viewProps } = await renderPage()
     expect(viewProps).toMatchObject({ initialFailed: false })
     expect(kpis).toEqual([0, 0, 0])

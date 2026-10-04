@@ -7,6 +7,8 @@ import { fetchAllPages } from '@/lib/data/paging'
 import { projectsWithModule } from '@/lib/modules/gate'
 import { getActorViewState } from '@/lib/authz'
 import { canSeeProject } from '@/lib/domain/authz'
+import { getProjectVocabs } from '@/lib/settings/projectConfig'
+import type { VocabByProject, VocabValues } from '@/lib/settings/vocab'
 import type {
   Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingException, MeetingRecurrence,
 } from '@/lib/domain/types'
@@ -93,7 +95,8 @@ export const ERR_MEETINGS_LOAD = '회의 일정을 불러오지 못했습니다.
 /** 내 회의 조회 결과 — 회의 조회 실패·예외 폴백 실패·내 명단 행 조회 실패는 ok:false(ERR_MEETINGS_LOAD). '이번 달 회의 없음'과 '못 읽음'을 가른다.
  *  단 meetings 모듈 판정 실패(설정 조회·손상)는 ok:false 가 아니라 그 프로젝트의 행 생략이다 — 로그는 [requireModule](스펙 §3 modules.* fail-closed, P13). */
 export type MyMeetingsResult =
-  | { ok: true; meetings: Meeting[]; exceptions: MeetingException[] }
+  /** categories = 보이는 회의의 프로젝트별 회의 범주(설정 meetings.categories). 못 읽은 프로젝트는 null — 화면은 code 를 보인다 */
+  | { ok: true; meetings: Meeting[]; exceptions: MeetingException[]; categories: VocabByProject<'meetings.categories'> }
   | { ok: false; error: string }
 
 /**
@@ -241,7 +244,7 @@ export const getMyMeetings = cache(async (
   const { data: u } = await sb.auth.getUser()
   const user = u.user
   const uid = user?.id ?? null
-  if (!user || !uid) return { ok: true, meetings: [], exceptions: [] }
+  if (!user || !uid) return { ok: true, meetings: [], exceptions: [], categories: {} }
 
   // 프로젝트를 가로지르는 조회라 로그에 실을 id 가 없다 — 어느 달력 범위였는지를 싣는다.
   // 두 인자는 서버 액션(fetchMyMeetings)을 거쳐 오므로 형식이 보장되지 않는다: 날짜 꼴이 아니면 그대로 찍지 않는다.
@@ -310,7 +313,14 @@ export const getMyMeetings = cache(async (
     ? exceptionsFrom(visible)
     : await fetchExceptionsByIds(sb, meetings.map(m => m.id), tag)
   if (exceptions === null) return { ok: false, error: ERR_MEETINGS_LOAD }
-  return { ok: true, meetings, exceptions }
+  // 범주 라벨·색은 곁가지 — 못 읽어도 회의는 그린다(라벨 자리에 code). 실패는 로그로 남긴다(3원칙 ①)
+  const categories: Record<string, VocabValues['meetings.categories'] | null> = {}
+  try {
+    for (const [pid, list] of await getProjectVocabs([...on], 'meetings.categories', { client: sb })) categories[pid] = list
+  } catch (e) {
+    console.error(`[${tag}] 회의 범주 조회 실패 — 범주는 code 로 보인다`, e)
+  }
+  return { ok: true, meetings, exceptions, categories }
 })
 
 /**

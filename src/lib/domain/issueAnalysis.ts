@@ -1,29 +1,12 @@
 // 이슈 분석서 분류 메타 — 순수 함수만(I/O 없음).
 // 영역 정본은 프로젝트 영역(project_areas kind issue_area — SP5 B1)이다.
 
+import { VOCAB_CODE_RE } from '@/lib/settings/vocab'
+
 export type IssueAreaFilter = 'all' | string
 
-export const ISSUE_SOURCE_TYPES = [
-  'minutes',
-  'interview',
-  'deliverable',
-  'as_is_analysis',
-  'data_analysis',
-  'other',
-] as const
-export type IssueSourceType = (typeof ISSUE_SOURCE_TYPES)[number]
-
-export const ISSUE_SOURCE_META: Record<
-  IssueSourceType,
-  { labelKey: `issue.source.type.${IssueSourceType}` }
-> = {
-  minutes: { labelKey: 'issue.source.type.minutes' },
-  interview: { labelKey: 'issue.source.type.interview' },
-  deliverable: { labelKey: 'issue.source.type.deliverable' },
-  as_is_analysis: { labelKey: 'issue.source.type.as_is_analysis' },
-  data_analysis: { labelKey: 'issue.source.type.data_analysis' },
-  other: { labelKey: 'issue.source.type.other' },
-}
+/** 이슈 원천 code — 프로젝트 설정 issues.sources(SP5 B4, 'minutes' 는 예약). 목록·라벨은 설정에서 읽는다 */
+export type IssueSourceType = string
 
 export const ISSUE_MAJOR_NAME_MAX = 100
 /**
@@ -65,8 +48,9 @@ export type IssueAnalysisValidationResult =
   | { ok: true; value: NormalizedIssueAnalysisInput }
   | { ok: false; error: string }
 
+/** 원천 code 의 형식만 본다 — 그 프로젝트에서 활성인지는 서버 액션(설정 issues.sources)과 DB 트리거(enforce_project_vocab)가 판정한다 */
 export function isIssueSourceType(value: unknown): value is IssueSourceType {
-  return typeof value === 'string' && (ISSUE_SOURCE_TYPES as readonly string[]).includes(value)
+  return typeof value === 'string' && VOCAB_CODE_RE.test(value)
 }
 
 /**

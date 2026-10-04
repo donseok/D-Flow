@@ -4,13 +4,12 @@ import {
 import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import { ISSUE_MINUTE_SOURCE_KINDS } from '@/lib/domain/issueMinuteSource'
 import {
-  ISSUE_SEVERITIES,
   ISSUE_STATUSES,
   type IssueSeverity,
   type IssueStatus,
 } from '@/lib/domain/issues'
 import {
-  ISSUE_ANALYSIS_CAUSE_CATEGORIES,
+  DEFAULT_ISSUE_ANALYSIS_VOCAB,
   ISSUE_ANALYSIS_CAUSES_PER_ISSUE_MAX,
   ISSUE_ANALYSIS_DIRECT_CAUSE_MAX,
   ISSUE_ANALYSIS_MAJOR_DEFINITION_MAX,
@@ -26,7 +25,9 @@ import {
   type IssueAnalysisReport,
   type IssueAnalysisReportArea,
   type IssueAnalysisReportIssue,
+  type IssueAnalysisVocab,
 } from './model'
+import { VOCAB_CODE_RE } from '@/lib/settings/vocab'
 
 type JsonRecord = Record<string, unknown>
 
@@ -136,7 +137,7 @@ function parseIssue(
     || typeof status !== 'string'
     || !(ISSUE_STATUSES as readonly string[]).includes(status)
     || typeof severity !== 'string'
-    || !(ISSUE_SEVERITIES as readonly string[]).includes(severity)
+    || !VOCAB_CODE_RE.test(severity)   // 심각도는 설정 어휘(B4) — 기록된 code 를 받는다(지금 목록에 없어도 당시 값)
     || !source
   ) return null
 
@@ -181,7 +182,13 @@ function parseSummary(
   const object = record(value)
   if (!object || object.totalCount !== issues.length) return null
   const statusCounts = parseCountMap(object.statusCounts, ISSUE_STATUSES)
-  const severityCounts = parseCountMap(object.severityCounts, ISSUE_SEVERITIES)
+  // 심각도 칸 = 저장된 키 전부(당시 프로젝트 어휘 — B4 이전은 high·medium·low). 이슈에 나온 code 는 반드시 있어야 하고 값은 이슈와 같아야 한다
+  const severityRecord = record(object.severityCounts)
+  const severityKeys = severityRecord ? Object.keys(severityRecord) : []
+  const severityCounts = severityRecord && severityKeys.every(k => VOCAB_CODE_RE.test(k))
+    && issues.every(issue => severityKeys.includes(issue.severity))
+    ? parseCountMap(severityRecord, severityKeys)
+    : null
   const ownerDepartments = stringArray(object.ownerDepartments)
   const relatedSystems = stringArray(object.relatedSystems)
   if (!statusCounts || !severityCounts || !ownerDepartments || !relatedSystems) return null
@@ -193,14 +200,14 @@ function parseSummary(
     ]),
   ) as Record<IssueStatus, number>
   const expectedSeverities = Object.fromEntries(
-    ISSUE_SEVERITIES.map(severity => [
+    severityKeys.map(severity => [
       severity,
       issues.filter(issue => issue.severity === severity).length,
     ]),
   ) as Record<IssueSeverity, number>
   if (
     ISSUE_STATUSES.some(status => statusCounts[status] !== expectedStatuses[status])
-    || ISSUE_SEVERITIES.some(severity => severityCounts[severity] !== expectedSeverities[severity])
+    || severityKeys.some(severity => severityCounts[severity] !== expectedSeverities[severity])
   ) return null
 
   const expectedDepartments = [...new Set(issues.map(issue => issue.ownerDepartment))]
@@ -323,6 +330,7 @@ function parseProcessDefinitions(
 function parseCauseAnalyses(
   value: unknown,
   issues: readonly IssueAnalysisReportIssue[],
+  categoryCodes: readonly string[],
 ): IssueAnalysisIssueCauseAnalysis[] | null {
   if (!Array.isArray(value) || value.length !== issues.length) return null
 
@@ -352,7 +360,7 @@ function parseCauseAnalyses(
       if (
         !cause
         || typeof category !== 'string'
-        || !(ISSUE_ANALYSIS_CAUSE_CATEGORIES as readonly string[]).includes(category)
+        || !categoryCodes.includes(category)
         || categories.has(category)
         || !directCause
         || directCause.length > ISSUE_ANALYSIS_DIRECT_CAUSE_MAX
@@ -381,13 +389,35 @@ function parseCauseAnalyses(
       })
     }
     causes.sort((left, right) =>
-      ISSUE_ANALYSIS_CAUSE_CATEGORIES.indexOf(left.category)
-      - ISSUE_ANALYSIS_CAUSE_CATEGORIES.indexOf(right.category))
+      categoryCodes.indexOf(left.category)
+      - categoryCodes.indexOf(right.category))
     byIssueId.set(issueId, { issueId, causes })
   }
 
   if (issues.some(issue => !byIssueId.has(issue.id))) return null
   return issues.map(issue => byIssueId.get(issue.id)!)
+}
+
+/** 분석 어휘 스냅샷 — 두 목록 모두 { code, label } 만, code 형식·유일, 라벨 비어 있지 않음. 원인 분류는 1개 이상 */
+function parseVocabSnapshot(value: unknown): IssueAnalysisVocab | null {
+  const object = record(value)
+  if (!object || Object.keys(object).sort().join(',') !== 'causeCategories,sources') return null
+  const list = (raw: unknown): Array<{ code: string; label: string }> | null => {
+    if (!Array.isArray(raw)) return null
+    const out: Array<{ code: string; label: string }> = []
+    for (const item of raw) {
+      const e = record(item)
+      if (!e || Object.keys(e).sort().join(',') !== 'code,label') return null
+      if (typeof e.code !== 'string' || !VOCAB_CODE_RE.test(e.code) || typeof e.label !== 'string' || !e.label.trim()) return null
+      if (out.some(x => x.code === e.code)) return null
+      out.push({ code: e.code, label: e.label })
+    }
+    return out
+  }
+  const causeCategories = list(object.causeCategories)
+  const sources = list(object.sources)
+  if (!causeCategories?.length || !sources) return null
+  return { causeCategories, sources }
 }
 
 /**
@@ -413,6 +443,11 @@ export function parseStoredIssueAnalysisReport(
     || Number(object.issueCount) < 1
     || !Array.isArray(object.areas)
   ) return null
+  // 분석 어휘(B4) — 있으면 엄격히 읽고, 없으면 기본값(B4 이전·기본 어휘 실행)
+  const hasVocab = Object.prototype.hasOwnProperty.call(object, 'vocab')
+  const vocab = hasVocab ? parseVocabSnapshot(object.vocab) : DEFAULT_ISSUE_ANALYSIS_VOCAB
+  if (!vocab) return null
+  const causeCodes = vocab.causeCategories.map(e => e.code)
 
   const allIds = new Set<string>()
   const areas: IssueAnalysisReportArea[] = []
@@ -456,7 +491,7 @@ export function parseStoredIssueAnalysisReport(
       'causeAnalyses',
     )
     const causeAnalyses = hasCauseAnalyses
-      ? parseCauseAnalyses(areaObject.causeAnalyses, typedIssues)
+      ? parseCauseAnalyses(areaObject.causeAnalyses, typedIssues, causeCodes)
       : undefined
     if (!summary || !opportunities) return null
     if (hasCauseAnalyses && causeAnalyses === null) return null
@@ -483,6 +518,7 @@ export function parseStoredIssueAnalysisReport(
     projectId,
     issueCount: Number(object.issueCount),
     generatedAt,
+    ...(hasVocab ? { vocab } : {}),
     areas: areas.sort((a, b) => (areaRefs.find(area => area.code === a.areaCode)?.sortOrder ?? Number.MAX_SAFE_INTEGER) - (areaRefs.find(area => area.code === b.areaCode)?.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.areaCode.localeCompare(b.areaCode)),
   }
 }

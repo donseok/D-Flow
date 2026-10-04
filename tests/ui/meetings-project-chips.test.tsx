@@ -30,6 +30,7 @@ vi.mock('@/app/actions/announcements', () => ({
 
 import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
 import { SUNDAY_CAL } from '../fixtures/calendarView'
+import { ANY_CATS } from '../fixtures/vocab'
 
 function meeting(overrides: Partial<Meeting> = {}): Meeting {
   return {
@@ -74,8 +75,7 @@ describe('MyMeetingsView 프로젝트 필터 칩', () => {
     const p2 = meeting({ id: 'm-p2', projectId: 'p2', projectName: '프로젝트 둘', title: '피투 회의', meetingDate: '2026-07-15' })
     await mount(
       <MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL}
-        initialMeetings={[p1, p2]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null}
-      />,
+        initialMeetings={[p1, p2]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} initialCategories={ANY_CATS} />,
     )
 
     // 전체 + 프로젝트 2개 = 칩 3개, 초기엔 둘 다 보인다.
@@ -103,8 +103,7 @@ describe('MyMeetingsView 프로젝트 필터 칩', () => {
     const p1b = meeting({ id: 'm-p1b', projectId: 'p1', projectName: '프로젝트 하나', title: '피원 회의 2', meetingDate: '2026-07-16' })
     await mount(
       <MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL}
-        initialMeetings={[p1a, p1b]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null}
-      />,
+        initialMeetings={[p1a, p1b]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} initialCategories={ANY_CATS} />,
     )
 
     expect(chipButtons()).toHaveLength(0)
@@ -117,8 +116,7 @@ describe('MyMeetingsView 프로젝트 필터 칩', () => {
     const p2 = meeting({ id: 'm-p2', projectId: 'p2', projectName: '프로젝트 둘', title: '피투 회의', meetingDate: '2026-07-15' })
     await mount(
       <MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL}
-        initialMeetings={[p1, p2]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null}
-      />,
+        initialMeetings={[p1, p2]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} initialCategories={ANY_CATS} />,
     )
 
     const p2Chip = chipButtons().find(b => b.textContent?.includes('프로젝트 둘'))
@@ -128,7 +126,7 @@ describe('MyMeetingsView 프로젝트 필터 칩', () => {
 
     // 8월로 이동 — 서버가 돌려주는 새 달 데이터엔 p1 프로젝트만 있다(p2 없음).
     const augMeeting = meeting({ id: 'm-aug', projectId: 'p1', projectName: '프로젝트 하나', title: '8월 회의', meetingDate: '2026-08-10' })
-    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [augMeeting], exceptions: [] })
+    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [augMeeting], exceptions: [], categories: ANY_CATS })
 
     const nextBtn = [...container.querySelectorAll<HTMLButtonElement>('button')]
       .find(b => b.getAttribute('aria-label') === 'meet.nextMonth')

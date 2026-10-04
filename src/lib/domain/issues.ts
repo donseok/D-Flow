@@ -8,8 +8,8 @@ import { diffDaysCal } from './dashboard'
 export const ISSUE_STATUSES = ['open', 'in_progress', 'resolved', 'on_hold'] as const
 export type IssueStatus = (typeof ISSUE_STATUSES)[number]
 
-export const ISSUE_SEVERITIES = ['high', 'medium', 'low'] as const
-export type IssueSeverity = (typeof ISSUE_SEVERITIES)[number]
+/** 심각도 code — 프로젝트 설정 issues.severities(SP5 B4). 순서는 설정의 rank */
+export type IssueSeverity = string
 
 export interface Issue {
   id: string
@@ -89,15 +89,6 @@ export const ISSUE_STATUS_META: Record<
   on_hold:     { labelKey: 'issue.status.on_hold',     chip: 'bg-neutral-weak text-neutral',   dot: 'bg-slate-400' },
 }
 
-export const ISSUE_SEVERITY_META: Record<
-  IssueSeverity,
-  { labelKey: `issue.severity.${IssueSeverity}`; chip: string }
-> = {
-  high:   { labelKey: 'issue.severity.high',   chip: 'bg-delayed-weak text-delayed' },
-  medium: { labelKey: 'issue.severity.medium', chip: 'bg-pending-weak text-pending' },
-  low:    { labelKey: 'issue.severity.low',    chip: 'bg-neutral-weak text-neutral' },
-}
-
 /** 지연 = 기한 경과(당일 제외) + 미해결. today 는 'YYYY-MM-DD'(프로젝트 calendar.timezone 의 오늘) — 호출부가 계산해 내려준다. */
 export function isOverdue(issue: Pick<Issue, 'dueDate' | 'status'>, today: string): boolean {
   if (!issue.dueDate || issue.status === 'resolved') return false
@@ -121,10 +112,10 @@ export function isDueUrgent(daysLeft: number | null): boolean {
   return daysLeft !== null && daysLeft <= DUE_URGENT_DAYS
 }
 
-const SEVERITY_ORDER: Record<IssueSeverity, number> = { high: 0, medium: 1, low: 2 }
-
-/** 기본 정렬: 미해결 우선 → 지연 우선 → 심각도(높음 먼저) → 목표일 오름차순(없으면 뒤) → 최신 등록순. 원본 불변. */
-export function sortIssues(issues: Issue[], today: string): Issue[] {
+/** 기본 정렬: 미해결 우선 → 지연 우선 → 심각도(설정 rank 작은 것 먼저, 목록 밖 code 는 뒤) → 목표일 오름차순(없으면 뒤) → 최신 등록순. 원본 불변. */
+export function sortIssues(issues: Issue[], today: string, severities: readonly { code: string; rank: number }[]): Issue[] {
+  const rankOf = new Map(severities.map(e => [e.code, e.rank]))
+  const rank = (code: string) => rankOf.get(code) ?? Number.POSITIVE_INFINITY
   return [...issues].sort((a, b) => {
     const ar = a.status === 'resolved' ? 1 : 0
     const br = b.status === 'resolved' ? 1 : 0
@@ -132,8 +123,8 @@ export function sortIssues(issues: Issue[], today: string): Issue[] {
     const ao = isOverdue(a, today) ? 0 : 1
     const bo = isOverdue(b, today) ? 0 : 1
     if (ao !== bo) return ao - bo
-    if (SEVERITY_ORDER[a.severity] !== SEVERITY_ORDER[b.severity]) {
-      return SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
+    if (rank(a.severity) !== rank(b.severity)) {
+      return rank(a.severity) < rank(b.severity) ? -1 : 1
     }
     if (a.dueDate !== b.dueDate) {
       if (a.dueDate === null) return 1

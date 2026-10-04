@@ -1,4 +1,4 @@
-import { TEST_AREAS } from '../fixtures/issue-areas'
+import { TEST_AREAS, TEST_SEVERITY_CODES } from '../fixtures/issue-areas'
 import { describe, expect, it } from 'vitest'
 import type { IssueMinuteSource } from '@/lib/domain/issueMinuteSource'
 import {
@@ -143,7 +143,7 @@ describe('이슈 분석 입력/결과 모델', () => {
         sourceDetail: '',
         minuteSources: [source('first')],
       }),
-    ], [], TEST_AREAS)
+    ], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const area = snapshot.areas[0]
     expect(area.issues.map(item => item.id)).toEqual(['first', 'second'])
     expect(area.issues[0].source.minutes[0]).toMatchObject({
@@ -159,7 +159,7 @@ describe('이슈 분석 입력/결과 모델', () => {
   })
 
   it('개선기회를 직렬화 가능한 area 결과에 결합한다', () => {
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('i-1')], [], TEST_AREAS)
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('i-1')], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const report = buildIssueAnalysisReport(snapshot, {
       '00': [{
         title: '기준정보 단일화',
@@ -179,7 +179,7 @@ describe('이슈 분석 입력/결과 모델', () => {
   })
 
   it('이슈별 직접·근본 원인을 UUID 기준으로 직렬화하고 입력 스냅샷과 분리한다', () => {
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('i-1')], [], TEST_AREAS)
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('i-1')], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const causeAnalyses = {
       '00': [{
         issueId: 'i-1',
@@ -245,7 +245,7 @@ describe('스냅샷 Major 기준정보', () => {
     const snapshot = buildIssueAnalysisInputSnapshot(
       'project-1',
       [salesIssue('sales-1')],
-      [MAJOR_B, MAJOR_A, MAJOR_OTHER_MEGA], TEST_AREAS,
+      [MAJOR_B, MAJOR_A, MAJOR_OTHER_MEGA], TEST_AREAS, TEST_SEVERITY_CODES,
     )
     const area = snapshot.areas.find(candidate => candidate.areaCode === '02')
     expect(area?.majors).toEqual([
@@ -259,12 +259,12 @@ describe('스냅샷 Major 기준정보', () => {
 
   it('이슈가 기준정보에 없는 Major를 참조하면 throw한다', () => {
     expect(() =>
-      buildIssueAnalysisInputSnapshot('project-1', [salesIssue('sales-1')], [], TEST_AREAS))
+      buildIssueAnalysisInputSnapshot('project-1', [salesIssue('sales-1')], [], TEST_AREAS, TEST_SEVERITY_CODES))
       .toThrow('기준정보에 없습니다')
   })
 
   it('majors 생략(구 시그니처)은 빈 기준정보로 동작한다', () => {
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('legacy-1')], [], TEST_AREAS)
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('legacy-1')], [], TEST_AREAS, TEST_SEVERITY_CODES)
     expect(snapshot.areas.every(area => area.majors.length === 0)).toBe(true)
     expect(snapshot.areas[0].issues[0].majorId).toBeNull()
   })
@@ -275,7 +275,7 @@ describe('보고서 processDefinitions', () => {
     const snapshot = buildIssueAnalysisInputSnapshot(
       'project-1',
       [salesIssue('sales-1')],
-      [MAJOR_A, MAJOR_B], TEST_AREAS,
+      [MAJOR_A, MAJOR_B], TEST_AREAS, TEST_SEVERITY_CODES,
     )
     const definitions = {
       megaDefinition: '고객 주문 이행 전반을 관리하는 프로세스임',

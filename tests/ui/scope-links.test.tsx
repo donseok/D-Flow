@@ -31,6 +31,7 @@ import { MinuteViewer } from '@/components/minutes/MinuteViewer'
 import { WikiChangeList, WikiItemCard } from '@/components/wiki/WikiShared'
 import type { WikiItem, WikiSource } from '@/lib/data/wiki'
 import type { Minute } from '@/lib/domain/types'
+import { ANY_CATS } from '../fixtures/vocab'
 
 const ACME: ScopeValue = { workspace: { id: 'w', slug: 'acme', name: 'Acme' }, projectId: null }
 const NONE: ScopeValue = { workspace: null, projectId: null }
@@ -90,7 +91,7 @@ describe('화면 안 링크 — 클라이언트(jsdom)', () => {
   it('MeetingDetailModal 의 연결 회의록 링크가 /w/<s>/minutes/<id>', async () => {
     const occ = { occurrenceId: 's:2026-09-01', seriesId: 's', occurrenceDate: '2026-09-01', projectId: 'p', title: '주간', startTime: null, endTime: null, location: null, category: 'general', isRecurring: false, attendeeCount: 0 } as const
     await act(async () => {
-      root.render(<ScopeProvider value={ACME}><MeetingDetailModal open occurrence={occ} currentUserId="u1" isAdmin={false} onClose={() => {}} onEditSeries={() => {}} onChanged={() => {}} /></ScopeProvider>)
+      root.render(<ScopeProvider value={ACME}><MeetingDetailModal open occurrence={occ} currentUserId="u1" isAdmin={false} onClose={() => {}} onEditSeries={() => {}} onChanged={() => {}} categories={ANY_CATS} /></ScopeProvider>)
       await new Promise((r) => setTimeout(r, 0))
     })
     const hrefs = [...document.body.querySelectorAll('a')].map((a) => a.getAttribute('href'))

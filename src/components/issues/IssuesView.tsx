@@ -15,13 +15,14 @@ import {
   type IssueAreaFilter,
 } from '@/lib/domain/issueAnalysis'
 import {
-  ISSUE_SEVERITIES, ISSUE_SEVERITY_META, ISSUE_STATUSES, ISSUE_STATUS_META,
+  ISSUE_STATUSES, ISSUE_STATUS_META,
   canEditIssue, dueDaysLeft, filterIssues, isDueUrgent, isOverdue, sortIssues,
   type Issue, type IssueSeverityFilter, type IssueStatusFilter,
 } from '@/lib/domain/issues'
 import { areaLabel } from '@/lib/domain/issueAreas'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import type { IssueEntryContext } from '@/lib/issues/context'
+import { activeVocab, vocabView, type SeverityDef, type SourceDef } from '@/lib/settings/vocab'
 import type { ProjectMember } from '@/lib/domain/types'
 
 /** 페이지당 행 수 선택지 — 'all' 은 페이징 없이 전량. 기본은 20(사용자 요청). */
@@ -30,7 +31,7 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today, timeZone, entryContext, entryError,
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today, timeZone, entryContext, entryError, severities, sources,
 }: {
   entryContext: IssueEntryContext | null
   entryError?: string
@@ -48,6 +49,9 @@ export function IssuesView({
   today: string
   /** 시각 표시의 시간대(프로젝트 calendar.timezone — 계획 P8) */
   timeZone: string
+  /** 이 프로젝트의 심각도·출처(설정 어휘, SP5 B4) — 칩·정렬·필터·상세 라벨 */
+  severities: readonly SeverityDef[]
+  sources: readonly SourceDef[]
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
@@ -115,8 +119,8 @@ export function IssuesView({
       area: areaFilter,
       mineOnly,
       myMemberIds: myIds,
-    }), today),
-    [issues, statusFilter, severityFilter, areaFilter, mineOnly, myIds, today],
+    }), today, severities),
+    [issues, statusFilter, severityFilter, areaFilter, mineOnly, myIds, today, severities],
   )
 
   const pageCount = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(visible.length / pageSize))
@@ -133,7 +137,7 @@ export function IssuesView({
   ]
   const severityTabs = [
     { key: 'all' as const, label: t('issue.filter.all') },
-    ...ISSUE_SEVERITIES.map(s => ({ key: s, label: t(ISSUE_SEVERITY_META[s].labelKey) })),
+    ...activeVocab(severities).map(s => ({ key: s.code, label: vocabView('issues.severities', severities, s.code, t).label })),
   ]
 
   function openWrite() {
@@ -306,7 +310,7 @@ export function IssuesView({
                         </span>
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
-                        <span className={`chip px-2 py-0.5 text-[11px] ${ISSUE_SEVERITY_META[issue.severity].chip}`}>{t(ISSUE_SEVERITY_META[issue.severity].labelKey)}</span>
+                        <span className={`chip px-2 py-0.5 text-[11px] ${vocabView('issues.severities', severities, issue.severity, t).chip}`}>{vocabView('issues.severities', severities, issue.severity, t).label}</span>
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 text-ink-muted" title={assignees}>
                         <span className="block truncate">{assignees}</span>
@@ -401,6 +405,8 @@ export function IssuesView({
 
       <IssueDetailModal
         areas={areas}
+        severities={severities}
+        sources={sources}
         issue={viewing}
         members={members}
         memberName={memberName}

@@ -5,6 +5,8 @@ import { loadIssueAnalysisIssues } from '@/lib/data/issueAnalysis'
 import { requireModule } from '@/lib/modules/gate'
 import type { IssueAreaFilter } from '@/lib/domain/issueAnalysis'
 import { loadIssueEntryContext } from '@/lib/issues/context'
+import { issueAnalysisVocabOf } from '@/lib/report/issues/model'
+import { orderedVocab } from '@/lib/settings/vocab'
 import {
   ensureIssueAnalysis,
   type EnsureIssueAnalysisResult,
@@ -173,7 +175,14 @@ export async function ensureIssueAnalysisAction(
   }
 
   try {
-    const result = await ensureIssueAnalysis(projectId, issues, majors, guard.actor.userId, context.value.areas)
+    const { severities, sources, causeCategories } = context.value.vocab
+    if (!causeCategories) {
+      return { ok: false, state: 'unavailable', error: '원인 분류 설정(issues.cause_categories)이 손상돼 분석서를 만들 수 없습니다. 관리자에게 설정 점검을 요청하세요.', preflight, template, pptExport }
+    }
+    const result = await ensureIssueAnalysis(projectId, issues, majors, guard.actor.userId, context.value.areas, {
+      severityCodes: orderedVocab(severities).map(e => e.code),
+      analysis: issueAnalysisVocabOf(causeCategories, sources),
+    })
     return fromEnsureResult(result, preflight, template)
   } catch (error) {
     // ensure 계층은 정상적으로는 never-throw 결과를 주지만, 예기치 않은 프로그래밍/IO

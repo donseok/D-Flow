@@ -16,6 +16,7 @@ registerEn(EN)
 import { IssueTrendCard } from '@/components/dashboard/IssueTrendCard'
 import { IssueQueueCard } from '@/components/dashboard/IssueQueueCard'
 import { MON_RULES } from '../helpers/calendarFixture'
+import { SEVERITIES } from '../fixtures/vocab'
 
 const TODAY = '2026-08-28'
 /** 태그를 벗긴 텍스트 — 클래스명 안의 숫자(text-[10px] 등)가 단언을 오염시키지 않게. */
@@ -168,7 +169,7 @@ describe('IssueTrendCard', () => {
 
 describe('IssueQueueCard', () => {
   it('지연(경과 많은 순) → 임박 순으로 focus 딥링크 행을 그린다', () => {
-    const html = renderToStaticMarkup(<IssueQueueCard issues={ISSUES} projectId="p1" today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={ISSUES} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map(m => m[1]).filter(h => h.includes('focus='))
     expect(hrefs).toEqual(['/p/p1/issues?focus=ov14', '/p/p1/issues?focus=ov3', '/p/p1/issues?focus=d0'])
     expect(html).toContain('14일 지연')
@@ -177,7 +178,7 @@ describe('IssueQueueCard', () => {
   })
 
   it('배지는 지연·마감임박 건수, 미분류 이슈도 DB code로 표기', () => {
-    const html = renderToStaticMarkup(<IssueQueueCard issues={[...ISSUES, issue({ id: 'n2', areaId: null, code: 'PI-U001',  dueDate: '2026-08-29' })]} projectId="p1" today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={[...ISSUES, issue({ id: 'n2', areaId: null, code: 'PI-U001',  dueDate: '2026-08-29' })]} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
     expect(html).toContain('지연 2 · 마감임박 2')
     expect(html).toContain('PI-U001')
     expect(html).not.toContain('#77')
@@ -185,20 +186,20 @@ describe('IssueQueueCard', () => {
   })
 
   it('행 aria-label 에 심각도와 마감일이 들어간다(색·위치 없이도 읽히게)', () => {
-    const html = renderToStaticMarkup(<IssueQueueCard issues={ISSUES} projectId="p1" today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={ISSUES} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
     expect(html).toMatch(/aria-label="PI-00-001 작업지시 실적 수기 입력 지연, 높음, 14일 지연, 26\.08\.14"/)
   })
 
   it('상한을 넘으면 +N 과 이슈관리 링크를 보인다 — 조용히 자르지 않는다', () => {
     const many = Array.from({ length: 7 }, (_, i) => issue({ dueDate: `2026-08-${String(10 + i).padStart(2, '0')}` }))
-    const html = renderToStaticMarkup(<IssueQueueCard issues={many} projectId="p1" today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={many} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
     expect((html.match(/focus=/g) ?? []).length).toBe(5)
     expect(html).toContain('+2')
     expect(html).toContain('href="/p/p1/issues"')
   })
 
   it('해당 이슈가 없으면 안내 문구', () => {
-    const html = renderToStaticMarkup(<IssueQueueCard issues={[issue()]} projectId="p1" today={TODAY} locale="ko" />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={[issue()]} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
     expect(html).toContain('기한이 지났거나')
     expect(html).not.toContain('focus=')
   })

@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useMinuteLinks } from './minuteLinks'
 import {
@@ -17,7 +17,7 @@ import {
   resolveFolderDrop, resolveLeafDrop, type MinuteDropReject, type MinuteDropResult,
 } from '@/lib/domain/minutes-drop'
 import { sortMyProjectsFirst } from '@/lib/domain/projectPick'
-import { MEETING_META } from '@/lib/domain/meetings'
+import { vocabOf, vocabView, type VocabByProject } from '@/lib/settings/vocab'
 import {
   assignMinutesProject, deleteMinute, fetchMinuteDetail, moveMinuteFolder, moveMinuteToFolder,
 } from '@/app/actions/minutes'
@@ -86,7 +86,7 @@ export function MinutesExplorer({
   folders, leaves, favorites, onToggleFavorite, onRetryFavorites,
   layout, currentUserId, adminWorkspaceIds = [], adminProjectIds = [], isSuperuser = false,
   onChanged, onFolderSelect, teamCodes = [], projects = [],
-  myProjectIds = null,
+  myProjectIds = null, meetingCategories,
 }: {
   folders: MinuteFolder[]
   leaves: ExplorerLeaf[]
@@ -111,6 +111,8 @@ export function MinutesExplorer({
   projects?: { id: string; name: string }[]
   /** 내가 멤버로 등록된 프로젝트 id — 수정 모달의 프로젝트 기본 선택 근거. */
   myProjectIds?: string[] | null
+  /** 연결 회의 프로젝트별 회의 범주(ExplorerData.meetingCategories) — 없으면 칩은 code */
+  meetingCategories?: VocabByProject<'meetings.categories'>
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
@@ -644,6 +646,7 @@ export function MinutesExplorer({
   // isolate — 카드의 z-10·z-20 버튼·메뉴가 이 상자 안에서만 겨룬다. main 을 스크롤하면 그 위의 고정 필터 바(z-10, D54)를 넘지 않는다.
   // 폴더 트리(nav)는 lg 에서 고정 — 문서형 main 스크롤에서 목록과 함께 사라지지 않게 필터 바(--minutes-bar-h) 아래에 붙고, 결과보다 길면 안에서 스크롤(BB2)
   return (
+    <CategoriesCtx.Provider value={meetingCategories ?? NO_CATEGORIES}>
     <div
       data-minutes-explorer
       className="isolate flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch"
@@ -780,6 +783,7 @@ export function MinutesExplorer({
       <DragGhost kind="leaf" innerRef={leafGhostRef} />
       <DragGhost kind="folder" innerRef={folderGhostRef} />
     </div>
+    </CategoriesCtx.Provider>
   )
 }
 
@@ -922,9 +926,12 @@ function LeafMenu({ open, busy, onToggle, onEdit, onMove, onArchive, canSelect, 
   )
 }
 
-function CategoryChip({ cat, t }: { cat: MeetingCategory; t: T }) {
-  const meta = MEETING_META[cat]
-  return <span className={`chip ${meta.chip}`}>{t(meta.labelKey)}</span>
+/** 회의 범주 칩 — 라벨·색은 연결 회의 프로젝트의 설정(meetings.categories). 리프 렌더러가 여럿이라 컨텍스트로 내린다 */
+const NO_CATEGORIES: VocabByProject<'meetings.categories'> = {}
+const CategoriesCtx = createContext<VocabByProject<'meetings.categories'>>(NO_CATEGORIES)
+function CategoryChip({ cat, projectId, t }: { cat: MeetingCategory; projectId: string | null | undefined; t: T }) {
+  const meta = vocabView('meetings.categories', vocabOf(useContext(CategoriesCtx), projectId), cat, t)
+  return <span className={`chip ${meta.chip}`}>{meta.label}</span>
 }
 
 /** 연결된 회의 — 상세 뷰어와 같은 문구·같은 대상(그 회의가 속한 프로젝트의 회의 달력).
@@ -1000,7 +1007,7 @@ function MinuteCard({
               <BookOpenText aria-hidden className="h-3 w-3" />{l.projectName}
             </span>
           )}
-          {l.meetingCategory && <CategoryChip cat={l.meetingCategory} t={t} />}
+          {l.meetingCategory && <CategoryChip cat={l.meetingCategory} projectId={l.meetingProjectId} t={t} />}
           {meetingProjectId && <LinkedMeetingChip projectId={meetingProjectId} t={t} />}
           {folderName && (
             <span className="chip bg-surface-2 text-ink-muted">
@@ -1054,7 +1061,7 @@ function MinuteRow({
           <span className="block truncate text-sm font-medium text-ink">{l.title}</span>
           {l.bodyPreview && <span className="block truncate text-xs text-ink-subtle">{l.bodyPreview}</span>}
         </span>
-        {l.meetingCategory && <span className="hidden shrink-0 sm:inline-flex"><CategoryChip cat={l.meetingCategory} t={t} /></span>}
+        {l.meetingCategory && <span className="hidden shrink-0 sm:inline-flex"><CategoryChip cat={l.meetingCategory} projectId={l.meetingProjectId} t={t} /></span>}
         {meetingProjectId && (
           <span className="hidden shrink-0 sm:inline-flex">
             <LinkedMeetingChip projectId={meetingProjectId} t={t} />

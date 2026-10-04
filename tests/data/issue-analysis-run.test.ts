@@ -1,5 +1,5 @@
 vi.mock('@/lib/issues/context', async () => ({ loadIssueEntryContext: async () => ({ ok: true, value: (await import('../fixtures/issue-areas')).TEST_ENTRY_CONTEXT }) }))
-import { TEST_AREAS } from '../fixtures/issue-areas'
+import { TEST_AREAS, TEST_SEVERITY_CODES } from '../fixtures/issue-areas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
 import {
@@ -69,7 +69,7 @@ function issue(): IssueAnalysisIssueInput {
 function report() {
   const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue()], [
     { id: 'major-1', areaId: '00', majorSeq: 1, name: '기준정보 표준화' },
-  ], TEST_AREAS)
+  ], TEST_AREAS, TEST_SEVERITY_CODES)
   return buildIssueAnalysisReport(snapshot, {
     '00': [{
       title: '기준정보 단일화',

@@ -1,5 +1,7 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
+import { getProjectVocabs } from '@/lib/settings/projectConfig'
+import type { VocabValues } from '@/lib/settings/vocab'
 import type {
   ExplorerData, ExplorerLeaf, InsightKind, MeetingCategory, Minute, MinuteFile, MinuteFolder, MinuteHighlight,
   MinuteInsight, MinuteSignal, TeamCode,
@@ -169,7 +171,15 @@ export const getMinutesExplorer = cache(async (workspaceId: string, projectId: s
   // 비공개 프로젝트 이름이 폴더 트리(이름만으로도)로 노출되지 않는다.
   const folders = allFolders.filter(f => f.projectId === null || !hidden.has(f.projectId))
   // truncated 는 필터 전 페치 건수 기준 — 숨김으로 줄어든 것을 '전량 수신'으로 위장하지 않는다.
-  return { folders, leaves, total: rows.length, truncated: (mRes.data ?? []).length >= MINUTES_TREE_LIMIT }
+  // 회의 범주 칩의 라벨·색 = 연결 회의 프로젝트의 설정(곁가지 — 못 읽으면 칩은 code, 로그만)
+  const meetingCategories: Record<string, VocabValues['meetings.categories'] | null> = {}
+  const meetingProjects = [...new Set(leaves.flatMap(l => (l.meetingCategory && l.meetingProjectId ? [l.meetingProjectId] : [])))]
+  try {
+    for (const [pid, list] of await getProjectVocabs(meetingProjects, 'meetings.categories', { client: sb })) meetingCategories[pid] = list
+  } catch (e) {
+    console.error('[getMinutesExplorer] 회의 범주 조회 실패 — 칩은 code 로 보인다', e)
+  }
+  return { folders, leaves, total: rows.length, truncated: (mRes.data ?? []).length >= MINUTES_TREE_LIMIT, meetingCategories }
 })
 
 export const ERR_MINUTE_FILES_LOAD = '첨부 목록을 불러오지 못했습니다.'

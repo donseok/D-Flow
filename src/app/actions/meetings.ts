@@ -7,7 +7,8 @@ import { requireModule } from '@/lib/modules/gate'
 import { isWorkspaceMember, type Actor } from '@/lib/domain/authz'
 import { revalidatePath } from 'next/cache'
 import { ERR_MEETINGS_LOAD, getMyMeetings, getMeetingDetail, type MyMeetingsResult } from '@/lib/data/meetings'
-import { expandMeetings, MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
+import { expandMeetings, RECURRENCE_ORDER } from '@/lib/domain/meetings'
+import { checkProjectVocab, vocabWriteFailure } from '@/lib/settings/vocabGuard'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { SAFE_ID_RE } from '@/lib/domain/validate'
 import type { Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
@@ -48,7 +49,7 @@ function validate(input: MeetingInput): string | null {
   if (input.startTime && input.endTime && input.endTime <= input.startTime) return '종료 시각은 시작 시각보다 뒤여야 합니다.'
   if (input.body.length > BODY_MAX) return `회의록은 ${BODY_MAX}자 이하여야 합니다.`
   if (input.location && input.location.length > LOCATION_MAX) return `장소는 ${LOCATION_MAX}자 이하여야 합니다.`
-  if (!MEETING_CATEGORIES.includes(input.category)) return '잘못된 카테고리입니다.'
+  if (typeof input.category !== 'string' || !input.category) return '잘못된 카테고리입니다.'   // 활성 여부는 checkProjectVocab(설정 meetings.categories)
   if (!RECURRENCE_ORDER.includes(input.recurrence)) return '잘못된 반복 옵션입니다.'
   if (input.recurrence === 'none' && input.recurrenceUntil !== null) return '반복 없음에는 종료일을 둘 수 없습니다.'
   if (input.recurrence !== 'none') {
@@ -140,6 +141,8 @@ export async function createMeeting(projectId: string, input: MeetingInput): Pro
   if (!mod.ok) return { ok: false, error: mod.error }
   const err = validate(input)
   if (err) return { ok: false, error: err }
+  const catErr = await checkProjectVocab(projectId, 'meetings.categories', input.category)
+  if (catErr) return { ok: false, error: catErr }
 
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
@@ -155,7 +158,7 @@ export async function createMeeting(projectId: string, input: MeetingInput): Pro
     })
     .select('id')
     .single()
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: vocabWriteFailure(error) ?? error.message }
   const meetingId = data.id as string
   const attErr = await replaceAttendees(sb, meetingId, projectId, input.attendeeIds)
   if (attErr) {
@@ -184,7 +187,7 @@ export async function updateMeeting(id: string, input: MeetingInput): Promise<Me
   // 소유권 선검증(RLS 와 동일 — 0-row 무음 성공 방지) + 규칙 변경 감지
   const { data: cur, error: curErr } = await sb
     .from('meetings')
-    .select('project_id, created_by, meeting_date, recurrence, recurrence_until')
+    .select('project_id, created_by, meeting_date, recurrence, recurrence_until, category')
     .eq('id', id)
     .maybeSingle()
   if (curErr) return { ok: false, error: ERR_LOOKUP } // 소유권 판정의 입력이다 — 실패를 '없음'으로 위장하지 않는다
@@ -192,6 +195,9 @@ export async function updateMeeting(id: string, input: MeetingInput): Promise<Me
   const isOwner = (cur.created_by as string | null) === gate.userId
   if (!gate.isAdmin && !isOwner) return { ok: false, error: '권한 없음' }
   const projectId = cur.project_id as string
+  // 범주를 그대로 두는 수정은 비활성 범주여도 통과(트리거와 같은 규칙)
+  const catErr = await checkProjectVocab(projectId, 'meetings.categories', input.category, (cur.category as string | null) ?? null)
+  if (catErr) return { ok: false, error: catErr }
 
   const { error } = await sb
     .from('meetings')
@@ -199,7 +205,7 @@ export async function updateMeeting(id: string, input: MeetingInput): Promise<Me
     .eq('id', id)
     .select('id')
     .single()
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: vocabWriteFailure(error) ?? error.message }
 
   // 시작일/반복규칙/종료일이 바뀌면 취소 예외가 어긋나므로 전부 삭제(정직한 v1 의미)
   const ruleChanged =
@@ -302,13 +308,13 @@ export async function fetchMyMeetings(
   gridEndIso: string,
 ): Promise<MyMeetingsResult> {
   const user = await getSession()
-  if (!user) return { ok: true, meetings: [], exceptions: [] }
+  if (!user) return { ok: true, meetings: [], exceptions: [], categories: {} }
   let actor: Actor | null
   try { actor = await getActor() } catch { return { ok: false, error: ERR_MEETINGS_LOAD } }
   // 플랫폼 관리자는 소속과 무관하게 참이라 임의 문자열이 관문 로그·설정 조회 오류에 실린다 — 그 입력만 모양(SAFE_ID_RE)을 먼저 본다(FA3)
-  if (typeof workspaceId !== 'string' || !workspaceId || (actor?.isSuperuser && !SAFE_ID_RE.test(workspaceId)) || !isWorkspaceMember(actor, workspaceId)) return { ok: true, meetings: [], exceptions: [] }
+  if (typeof workspaceId !== 'string' || !workspaceId || (actor?.isSuperuser && !SAFE_ID_RE.test(workspaceId)) || !isWorkspaceMember(actor, workspaceId)) return { ok: true, meetings: [], exceptions: [], categories: {} }
   const mod = await requireModule({ workspaceId }, 'meetings')
-  if (!mod.ok) return { ok: true, meetings: [], exceptions: [] }
+  if (!mod.ok) return { ok: true, meetings: [], exceptions: [], categories: {} }
   return getMyMeetings(workspaceId, gridStartIso, gridEndIso)
 }
 

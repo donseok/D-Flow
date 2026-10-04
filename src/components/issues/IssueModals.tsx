@@ -16,7 +16,7 @@ import {
   type IssueActionResult, type IssueInput,
 } from '@/app/actions/issues'
 import {
-  ISSUE_SEVERITIES, ISSUE_SEVERITY_META, ISSUE_STATUS_META, STATUS_TRANSITIONS,
+  ISSUE_STATUS_META, STATUS_TRANSITIONS,
   isOverdue, type Issue, type IssueSeverity, type IssueStatus,
 } from '@/lib/domain/issues'
 import {
@@ -26,8 +26,6 @@ import {
   ISSUE_RELATED_SYSTEM_MAX,
   ISSUE_RELATED_SYSTEMS_MAX,
   ISSUE_SOURCE_DETAIL_MAX,
-  ISSUE_SOURCE_META,
-  ISSUE_SOURCE_TYPES,
   ISSUE_SUB_PROCESS_MAX,
   formatIssueMajorCode,
   type IssueMajorProcess,
@@ -35,6 +33,7 @@ import {
 } from '@/lib/domain/issueAnalysis'
 import { areaLabel, type IssueAreaRef } from '@/lib/domain/issueAreas'
 import type { IssueEntryContext } from '@/lib/issues/context'
+import { activeVocab, vocabLabel, vocabView, RESERVED_SOURCE, type SeverityDef, type SourceDef } from '@/lib/settings/vocab'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import { memberOptionView } from '@/lib/domain/memberPicker'
 import { validateIssueDateRange } from '@/lib/domain/issueMinuteSource'
@@ -66,9 +65,16 @@ function StatusChip({ status }: { status: IssueStatus }) {
   )
 }
 
-function SeverityChip({ severity }: { severity: IssueSeverity }) {
+function SeverityChip({ severity, severities }: { severity: IssueSeverity; severities: readonly SeverityDef[] }) {
   const { t } = useLocale()
-  return <span className={`chip ${ISSUE_SEVERITY_META[severity].chip}`}>{t(ISSUE_SEVERITY_META[severity].labelKey)}</span>
+  const v = vocabView('issues.severities', severities, severity, t)
+  return <span className={`chip ${v.chip}`}>{v.label}</span>
+}
+
+/** 새 이슈의 기본 심각도 — 활성 심각도의 가운데(rank 순 — 기본 어휘면 '보통'). 없으면 빈 값(서버가 거부한다) */
+export function defaultSeverityOf(severities: readonly SeverityDef[]): string {
+  const act = activeVocab(severities)
+  return act[Math.floor((act.length - 1) / 2)]?.code ?? ''
 }
 
 /** 순서 무시 동등 비교 — 피커가 중복 없는 배열을 보장하므로 정렬 후 비교로 충분하다. */
@@ -180,8 +186,12 @@ function megaAreaName(id: string, areas: readonly IssueAreaRef[]): string {
 
 export function IssueDetailModal({
   issue, members, memberName, canEdit, canWrite, currentUserId, isProjectAdmin, today, timeZone, areas = [], onClose, onEdit, onDelete,
+  severities, sources,
 }: {
   issue: Issue | null
+  /** 이 프로젝트의 심각도·출처(설정 어휘) */
+  severities: readonly SeverityDef[]
+  sources: readonly SourceDef[]
   areas?: readonly IssueAreaRef[]
   members: ProjectMember[]
   memberName: (id: string | null) => string | null
@@ -237,7 +247,7 @@ export function IssueDetailModal({
       ? `${formatIssueMajorCode(areas.find(area => area.id === issue.areaId)?.code ?? '?', issue.majorSeq)} · ${issue.majorName}`
       : issue.majorName
     : '—'
-  const analysisSourceLabel = issue?.sourceType ? t(ISSUE_SOURCE_META[issue.sourceType].labelKey) : '—'
+  const analysisSourceLabel = issue?.sourceType ? vocabLabel('issues.sources', sources, issue.sourceType, t) : '—'
 
   // 표시용 담당자 칩 — 가나다순, 회의 상세 참석자 칩과 같은 표기(이름 · 팀코드).
   // 여러 명이 쉼표 나열로 좁은 그리드 칸에 들어가면 화면이 빡빡해져 전체 폭 칩 줄로 편다.
@@ -305,7 +315,7 @@ export function IssueDetailModal({
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip status={issue.status} />
-            <SeverityChip severity={issue.severity} />
+            <SeverityChip severity={issue.severity} severities={severities} />
             {overdue && <span className="chip bg-delayed-weak text-delayed">{t('issue.overdueBadge')}</span>}
           </div>
 
@@ -546,8 +556,14 @@ export function IssueFormModal({
     && draftValue?.trim()
     && current.trim() === draftValue.trim(),
   )
-  const sourceOptions = ISSUE_SOURCE_TYPES.filter(type =>
-    type !== 'minutes' || minuteSourceLocked || initial?.sourceType === 'minutes')
+  // 출처·심각도 선택지 = 설정의 활성 항목(B4). 회의록 출처는 원문 연결 경로에서만. 수정 중인 값이 비활성이면 그 값을 보존해 보인다(저장 시 서버가 거부)
+  const sourceList = context?.vocab.sources ?? []
+  const sourceOptions = activeVocab(sourceList).map(e => e.code).filter(type =>
+    type !== RESERVED_SOURCE || minuteSourceLocked || initial?.sourceType === RESERVED_SOURCE)
+  if (sourceType && !sourceOptions.includes(sourceType)) sourceOptions.push(sourceType)
+  const severityList = context?.vocab.severities ?? []
+  const severityOptions = activeVocab(severityList).map(e => e.code)
+  if (severity && !severityOptions.includes(severity)) severityOptions.push(severity)
   // 호출부가 draft 객체/배열을 인라인으로 만들어도 매 렌더 입력을 덮어쓰지 않고,
   // 실제 초깃값 내용이 바뀌거나 모달이 다시 열릴 때만 폼을 재베이스라인한다.
   const seedKey = JSON.stringify(issueFormSeed(initial, draft, sourcePreview))
@@ -624,6 +640,14 @@ export function IssueFormModal({
     }).catch(() => { if (!cancelled) setError('이슈 설정을 읽지 못했습니다. 다시 시도하세요.') })
     return () => { cancelled = true }
   }, [open, projectId, entryContext])
+  // 새 이슈의 기본 심각도·출처가 이 프로젝트에서 비활성이면(기본 'medium'·'other') 문맥이 도착한 때 한 번 활성 값으로 맞춘다
+  useEffect(() => {
+    if (!open || !context || isEdit) return
+    const sev = activeVocab(context.vocab.severities)
+    setSeverity(cur => (sev.some(e => e.code === cur) ? cur : defaultSeverityOf(context.vocab.severities)))
+    const src = activeVocab(context.vocab.sources).filter(e => e.code !== RESERVED_SOURCE)
+    setSourceType(cur => (cur === '' || cur === RESERVED_SOURCE || src.some(e => e.code === cur) ? cur : (src[src.length - 1]?.code ?? '')))
+  }, [open, context, isEdit])
   useEffect(() => {
     if (!open || !context) return
     setAnalysisEnabled(Boolean(initial?.majorId || draft?.analysis) || (!isEdit && context.rules.analysis === 'required'))
@@ -921,7 +945,7 @@ export function IssueFormModal({
               >
                 <option value="">{t('issue.analysis.sourceTypePlaceholder')}</option>
                 {sourceOptions.map(type => (
-                  <option key={type} value={type}>{t(ISSUE_SOURCE_META[type].labelKey)}</option>
+                  <option key={type} value={type}>{vocabLabel('issues.sources', sourceList, type, t)}</option>
                 ))}
               </select>
               {minuteSourceLocked && (
@@ -948,8 +972,8 @@ export function IssueFormModal({
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.form.severity')}</span>
             <select className="app-input" value={severity} onChange={e => setSeverity(e.target.value as IssueSeverity)}>
-              {ISSUE_SEVERITIES.map(s => (
-                <option key={s} value={s}>{t(ISSUE_SEVERITY_META[s].labelKey)}</option>
+              {severityOptions.map(s => (
+                <option key={s} value={s}>{vocabLabel('issues.severities', severityList, s, t)}</option>
               ))}
             </select>
           </label>

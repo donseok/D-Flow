@@ -32,7 +32,7 @@ vi.mock('@/components/providers/LocaleProvider', () => ({
 // 이 테스트는 뷰만 단독 마운트해 ToastProvider 가 없으므로 훅 자체를 대체한다.
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 vi.mock('@/app/actions/meetings', () => ({
-  fetchMyMeetings: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [] })),
+  fetchMyMeetings: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [], categories: {} })),
   fetchMeetingDetail: vi.fn(async () => null),
   cancelOccurrence: vi.fn(async () => ({ ok: true })),
   deleteMeeting: vi.fn(async () => ({ ok: true })),
@@ -85,6 +85,7 @@ import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { IssuesView } from '@/components/issues/IssuesView'
 import type { Issue } from '@/lib/domain/issues'
 import { SUNDAY_CAL } from '../fixtures/calendarView'
+import { ANY_CATS, ATT_TYPES, MEET_CATS, SEVERITIES, SOURCES } from '../fixtures/vocab'
 
 function meeting(overrides: Partial<Meeting> = {}): Meeting {
   return {
@@ -178,7 +179,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     currentSearch = 'focus=m1&date=2026-09-15'
     await mount(
       <MeetingsView calendar={SUNDAY_CAL} projectId="p1" meetings={[meeting()]} exceptions={[]} members={[]}
-        todayIso="2026-07-19" currentUserId={null} canManage={false} canEdit={false} />,
+        todayIso="2026-07-19" currentUserId={null} canManage={false} canEdit={false} categories={MEET_CATS} />,
     )
     expect(dialog()).not.toBeNull()
     expect(dialog()!.textContent).toContain('주간 정기회의')
@@ -189,7 +190,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     currentSearch = 'focus=ghost&date=2026-09-15'
     await mount(
       <MeetingsView calendar={SUNDAY_CAL} projectId="p1" meetings={[meeting()]} exceptions={[]} members={[]}
-        todayIso="2026-07-19" currentUserId={null} canManage={false} canEdit={false} />,
+        todayIso="2026-07-19" currentUserId={null} canManage={false} canEdit={false} categories={MEET_CATS} />,
     )
     expect(dialog()).toBeNull()
     expect(container.textContent).toContain('2026. 7.')
@@ -200,7 +201,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     await mount(
       <MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL}
         initialMeetings={[meeting({ meetingDate: '2026-07-21', projectName: '프로젝트 1', isMine: true })]}
-        initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} />,
+        initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} initialCategories={ANY_CATS} />,
     )
     expect(dialog()).not.toBeNull()
     expect(dialog()!.textContent).toContain('주간 정기회의')
@@ -219,7 +220,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     ]
     await mount(
       <AttendanceView calendar={SUNDAY_CAL} projectId="p1" records={records} members={members}
-        initialDate="2026-07-19" canEdit={false} />,
+        initialDate="2026-07-19" canEdit={false} types={ATT_TYPES} />,
     )
     // from 의 달(6월)로 이동 + ERP·annual·기간 내 기록 칩만 남는다(멤버 셀렉트 옵션은 제외하고 판정).
     expect(container.textContent).toContain('2026. 6.')
@@ -236,7 +237,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     currentSearch = 'from=bad&to=2026-06-30&team=QA&type=nope'
     await mount(
       <AttendanceView calendar={SUNDAY_CAL} projectId="p1" records={[attendance()]} members={[member()]}
-        initialDate="2026-07-19" canEdit={false} />,
+        initialDate="2026-07-19" canEdit={false} types={ATT_TYPES} />,
     )
     expect(container.textContent).toContain('2026. 7.')
     expect([...container.querySelectorAll('button')].some(b => b.textContent === '해제')).toBe(false)
@@ -305,7 +306,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     currentSearch = 'focus=iss-2'
     await mount(
       <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
-        members={[]} issues={[issueFx(), issueFx({ id: 'iss-2', title: '인터페이스 오류' })]} />,
+        members={[]} issues={[issueFx(), issueFx({ id: 'iss-2', title: '인터페이스 오류' })]} severities={SEVERITIES} sources={SOURCES} />,
     )
     expect(dialog()).not.toBeNull()
     expect(dialog()!.textContent).toContain('인터페이스 오류')
@@ -315,7 +316,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     currentSearch = 'focus=iss-없음'
     await mount(
       <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
-        members={[]} issues={[issueFx()]} />,
+        members={[]} issues={[issueFx()]} severities={SEVERITIES} sources={SOURCES} />,
     )
     expect(dialog()).toBeNull()
   })
@@ -330,14 +331,14 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     currentSearch = ''
     await mount(
       <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
-        members={[]} issues={issues} />,
+        members={[]} issues={issues} severities={SEVERITIES} sources={SOURCES} />,
     )
     expect(dialog()).toBeNull()
 
     currentSearch = 'focus=iss-2'
     await mount(
       <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
-        members={[]} issues={issues} />,
+        members={[]} issues={issues} severities={SEVERITIES} sources={SOURCES} />,
     )
     expect(dialog()).not.toBeNull()
     expect(dialog()!.textContent).toContain('인터페이스 오류')
@@ -348,7 +349,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     const issues = [issueFx(), issueFx({ id: 'iss-2', title: '인터페이스 오류' })]
     await mount(
       <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
-        members={[]} issues={issues} />,
+        members={[]} issues={issues} severities={SEVERITIES} sources={SOURCES} />,
     )
     expect(dialog()).not.toBeNull()
 
@@ -370,7 +371,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     // 다시 열린다 — 그게 무한 재오픈 버그다.
     await mount(
       <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
-        members={[]} issues={issues} />,
+        members={[]} issues={issues} severities={SEVERITIES} sources={SOURCES} />,
     )
     expect(dialog()).toBeNull()
   })
@@ -390,7 +391,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     const issues = [issueFx(), issueFx({ id: 'iss-2', title: '인터페이스 오류' })]
     await mount(
       <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
-        members={[]} issues={issues} />,
+        members={[]} issues={issues} severities={SEVERITIES} sources={SOURCES} />,
     )
     expect(dialog()).not.toBeNull()
 
@@ -403,12 +404,12 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     // 흉내) 닫힌 채로 남아야 한다.
     await mount(
       <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
-        members={[]} issues={issues} />,
+        members={[]} issues={issues} severities={SEVERITIES} sources={SOURCES} />,
     )
     expect(dialog()).toBeNull()
     await mount(
       <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today="2026-07-23"
-        members={[]} issues={issues} />,
+        members={[]} issues={issues} severities={SEVERITIES} sources={SOURCES} />,
     )
     expect(dialog()).toBeNull()
   })

@@ -70,7 +70,7 @@ const RUN_WBS_IMPORT_CALL = /\brunWbsImport\s*(?:\?\.)?\s*\(/g
 
 /** 파일 → 허용 표·표 참조 수(리터럴·조각·임베드·SQL 참조의 합)와 사유(G1). 접근은 읽기뿐이다(G2) */
 const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
-  'src/lib/settings/projectConfig.ts': { tables: ['project_settings'], refs: 2, why: '해석기 — 유일한 읽기 경로(한 프로젝트의 load + 여러 프로젝트의 시간대 getProjectTimezones — SP5 과제 32, select 만)' },
+  'src/lib/settings/projectConfig.ts': { tables: ['project_settings'], refs: 3, why: '해석기 — 유일한 읽기 경로(한 프로젝트의 load + 여러 프로젝트의 시간대 getProjectTimezones — SP5 과제 32 + 여러 프로젝트의 어휘 getProjectVocabs — SP5 B4, select 만)' },
   'src/lib/settings/workspaceConfig.ts': { tables: ['workspace_settings'], refs: 1, why: '해석기 — 유일한 읽기 경로' },
   'src/lib/modules/effectiveMany.ts': { tables: ['project_settings'], refs: 1, why: '여러 프로젝트의 모듈 판정(SP3b D39) — values 를 in() 끝까지 select 로 읽어 해석기의 resolveKeys 로 판정(쓰기 없음, effectiveModules 와 동치 테스트)' },
   'src/lib/settings/write.ts': { tables: ['project_settings'], refs: 2, why: 'revision 판독 뒤 RPC(머리 주석의 백틱 이름도 원문 검사라 센다)' },
@@ -573,8 +573,8 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     const PC = 'src/lib/settings/projectConfig.ts'
     const evil = 'src/app/actions/evil.ts'
     const quiet = (v: ReturnType<typeof verdicts>, file: string) => [...v.G1, ...v.G2, ...v.G1refs.filter((l) => l.startsWith(file))]
-    // 못 잡음: 허용 파일이 가진 표 이름을 상수로 export(참조 수 그대로 — 해석기의 참조 둘: load·getProjectTimezones) → 다른 파일이 from(X) 쓰기
-    const exported = judge([[PC, "export const PS = 'project_settings'\nconst s = await sb.from(PS).select('values')\nconst t = await sb.from('project_settings').select('project_id, values')"],
+    // 못 잡음: 허용 파일이 가진 표 이름을 상수로 export(참조 수 그대로 — 해석기의 참조 셋: load·getProjectTimezones·getProjectVocabs) → 다른 파일이 from(X) 쓰기
+    const exported = judge([[PC, "export const PS = 'project_settings'\nconst s = await sb.from(PS).select('values')\nconst t = await sb.from('project_settings').select('project_id, values')\nconst v = await sb.from('project_settings').select('project_id, values')"],
       [evil, "import { PS } from '@/lib/settings/projectConfig'\nawait admin.from(PS).update({ values: {} })"]])
     expect(quiet(exported, PC)).toEqual([])
     // 못 잡음: 허용 파일 안 기존 참조를 대괄호 접근 쓰기로 바꾸기(참조 수 그대로)

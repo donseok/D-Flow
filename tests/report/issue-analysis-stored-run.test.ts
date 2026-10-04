@@ -1,4 +1,4 @@
-import { TEST_AREAS } from '../fixtures/issue-areas'
+import { TEST_AREAS, TEST_SEVERITY_CODES } from '../fixtures/issue-areas'
 import { describe, expect, it, vi } from 'vitest'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
 import {
@@ -39,7 +39,7 @@ function issue(): IssueAnalysisIssueInput {
 }
 
 function validStoredReport() {
-  const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue()], [], TEST_AREAS)
+  const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue()], [], TEST_AREAS, TEST_SEVERITY_CODES)
   return buildIssueAnalysisReport(snapshot, {
     '00': [{
       title: '기준정보 단일화',
@@ -209,7 +209,7 @@ function storedReportWithProcess() {
   const snapshot = buildIssueAnalysisInputSnapshot(
     'project-1',
     [{ ...issue(), majorId: MAJOR_A.id }],
-    [MAJOR_A, MAJOR_B], TEST_AREAS,
+    [MAJOR_A, MAJOR_B], TEST_AREAS, TEST_SEVERITY_CODES,
   )
   return buildIssueAnalysisReport(snapshot, {
     '00': [{
@@ -331,5 +331,36 @@ describe('저장된 실행의 영역 호환', () => {
       expect(result?.areas[0].issues).toHaveLength(1)
       expect(log).toHaveBeenCalled()
     } finally { log.mockRestore() }
+  })
+})
+
+describe('저장 실행의 어휘(SP5 B4)', () => {
+  const VOCAB = {
+    causeCategories: [{ code: 'it', label: 'I · IT' }, { code: 'vendor', label: '협력사' }],
+    sources: [{ code: 'interview', label: '현업 인터뷰' }],
+  }
+  function customRun(category = 'vendor', severity = 'critical') {
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [{ ...issue(), severity }], [], TEST_AREAS, ['critical', 'high'], VOCAB)
+    return buildIssueAnalysisReport(snapshot, {
+      '00': [{ title: '기준정보 단일화', description: '중복 등록을 통제한다.', issueIds: ['issue-uuid-1'] }],
+    }, '2026-07-31T00:00:00Z', {
+      '00': [{ issueId: 'issue-uuid-1', causes: [{ category, directCause: '협력사 코드 체계가 다르다', rootCause: null }] }],
+    })
+  }
+  it('스냅샷의 원인 분류·기록된 심각도 code 로 읽고, 어휘를 그대로 돌려준다', () => {
+    const parsed = parseStoredIssueAnalysisReport(JSON.parse(JSON.stringify(customRun())), 'project-1', TEST_AREAS)
+    expect(parsed?.vocab).toEqual(VOCAB)
+    expect(parsed?.areas[0].causeAnalyses?.[0].causes[0].category).toBe('vendor')
+    expect(parsed?.areas[0].summary.severityCounts).toEqual({ critical: 1, high: 0 })
+  })
+  it('스냅샷 밖 원인 분류·손상된 어휘는 거부한다', () => {
+    expect(parseStoredIssueAnalysisReport(JSON.parse(JSON.stringify(customRun('process'))), 'project-1', TEST_AREAS)).toBeNull()
+    const broken = { ...JSON.parse(JSON.stringify(customRun())), vocab: { causeCategories: [], sources: [] } }
+    expect(parseStoredIssueAnalysisReport(broken, 'project-1', TEST_AREAS)).toBeNull()
+  })
+  it('B4 이전 실행(어휘 없음)은 기본 원인 분류로 읽는다', () => {
+    const parsed = parseStoredIssueAnalysisReport(JSON.parse(JSON.stringify(validStoredReport())), 'project-1', TEST_AREAS)
+    expect(parsed).not.toBeNull()
+    expect(parsed && 'vocab' in parsed).toBe(false)
   })
 })

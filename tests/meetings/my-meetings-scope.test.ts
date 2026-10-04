@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   getSession: vi.fn(async (): Promise<{ id: string } | null> => ({ id: 'u1' })), getActor: vi.fn(),
-  getMyMeetings: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [] })),
+  getMyMeetings: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [], categories: {} })),
 }))
 vi.mock('@/lib/auth', () => ({ getSession: h.getSession }))
 vi.mock('@/lib/authz', () => ({ getActor: h.getActor, requireProjectAdmin: vi.fn(), requireProjectMember: vi.fn(), resolveProjectId: vi.fn() }))
@@ -16,7 +16,7 @@ import { requireModule, requireSessionModule } from '@/lib/modules/gate'
 import { makeActor } from '../fixtures/actor'
 
 const WA = '00000000-0000-0000-7e57-000000001691', WB = '00000000-0000-0000-7e57-000000001692'
-const EMPTY = { ok: true, meetings: [], exceptions: [] }
+const EMPTY = { ok: true, meetings: [], exceptions: [], categories: {} }
 beforeEach(() => { vi.clearAllMocks(); h.getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([[WA, 'member']]) })) })
 
 describe('fetchMyMeetings(workspaceId, …)', () => {

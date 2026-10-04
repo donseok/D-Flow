@@ -1,4 +1,5 @@
 import { meetingHref, myMeetingHref } from '@/lib/ai/chat/deep-links'
+import { VOCAB_CODE_RE } from '@/lib/settings/vocab'
 import { expandMeetings, sortOccurrences, summarizeMeetings } from '@/lib/domain/meetings'
 import type { MeetingCategory, MeetingRecurrence, TeamCode } from '@/lib/domain/types'
 import type {
@@ -112,7 +113,8 @@ export function createListMeetingsTool(
         return invalidArgument()
       }
       if (!validDateRange(from, to)) return invalidArgument('회의 조회 기간이 올바르지 않습니다.')
-      if (category && !(['general', 'routine', 'kickoff', 'review', 'report', 'external'] as string[]).includes(category)) {
+      // 범주는 프로젝트 설정 어휘(B4) — 형식만 본다(목록 밖 code 는 거를 결과가 없을 뿐)
+      if (category && !VOCAB_CODE_RE.test(category)) {
         return invalidArgument('알 수 없는 회의 분류입니다.')
       }
       const denied = checkProjectAccess(context, projectId, MEETINGS_CAPABILITY)
@@ -278,7 +280,7 @@ export function createListMyMeetingsTool(
       if (!validDateRange(from, to)) return invalidArgument('회의 조회 기간이 올바르지 않습니다.')
       if (
         category
-        && !(['general', 'routine', 'kickoff', 'review', 'report', 'external'] as string[]).includes(category)
+        && !VOCAB_CODE_RE.test(category)
       ) return invalidArgument('알 수 없는 회의 분류입니다.')
 
       if (projectId) {

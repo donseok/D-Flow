@@ -5,12 +5,12 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronLeft, ChevronRight, CalendarDays, List, Plus, CalendarX2 } from 'lucide-react'
 import type { Meeting, MeetingException, MeetingOccurrence, ProjectMember } from '@/lib/domain/types'
-import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { fmtDate } from '@/components/wbs/shared'
-import { expandMeetings, sortOccurrences, MEETING_META, canEditMeeting } from '@/lib/domain/meetings'
+import { expandMeetings, sortOccurrences, canEditMeeting } from '@/lib/domain/meetings'
+import { vocabView, type MeetingCategoryDef } from '@/lib/settings/vocab'
 import { MeetingCalendar } from './MeetingCalendar'
 import { monthGridRange, type CalendarView } from '@/lib/domain/attendance'
 import { currentRuleDay } from '@/lib/domain/calendar'
@@ -43,7 +43,7 @@ function resolveFocusOccurrence(
 }
 
 export function MeetingsView({
-  projectId, meetings, exceptions, members, loadFailed = false, todayIso, currentUserId, canManage, canEdit, minutesHref = null, calendar, holidayNames,
+  projectId, meetings, exceptions, members, loadFailed = false, todayIso, currentUserId, canManage, canEdit, minutesHref = null, calendar, holidayNames, categories,
 }: {
   projectId: string
   meetings: Meeting[]
@@ -63,10 +63,13 @@ export function MeetingsView({
   calendar: CalendarView
   /** 이 프로젝트의 휴무 이름(holidays.name) */
   holidayNames?: Readonly<Record<string, string>>
+  /** 이 프로젝트의 회의 범주(설정 meetings.categories) */
+  categories: readonly MeetingCategoryDef[]
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
   const searchParams = useSearchParams()
+  const categoryMap = useMemo(() => ({ [projectId]: [...categories] }), [projectId, categories])
   // 이 화면은 프로젝트 하나에 고정돼 있어 두 불리언이 곧 그 프로젝트의 판정이다 — 항목마다 프로젝트가
   // 섞이는 전역 목록(내 회의)은 adminProjectIds 로 항목별 판정한다.
   // 챗봇 딥링크는 최초 마운트에서 한 번만 소비한다 — 이후 내비게이션은 화면 상태가 소유.
@@ -146,7 +149,7 @@ export function MeetingsView({
       </div>
 
       {view === 'calendar' ? (
-        <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} calendar={calendar} holidayNames={holidayNames} />
+        <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} calendar={calendar} holidayNames={holidayNames} categories={categoryMap} />
       ) : listRows.length === 0 ? (
         loadFailed ? null : <EmptyState icon={CalendarX2} title={t('meet.empty.title')} description={t('meet.empty.desc')} />
       ) : (
@@ -164,7 +167,7 @@ export function MeetingsView({
               </thead>
               <tbody>
                 {listRows.map(o => {
-                  const meta = MEETING_META[o.category]
+                  const meta = vocabView('meetings.categories', categories, o.category, t)
                   return (
                     <tr key={o.occurrenceId} onClick={() => setDetailOcc(o)} role="button" tabIndex={0}
                       onKeyDown={e => { if (e.key === 'Enter') setDetailOcc(o) }}
@@ -172,7 +175,7 @@ export function MeetingsView({
                       <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-ink">{fmtDate(o.occurrenceDate)}</td>
                       <td className="whitespace-nowrap px-4 py-3 tabular-nums text-ink-muted">{o.startTime ?? t('meet.allDay')}</td>
                       <td className="px-4 py-3 text-ink">{o.title}</td>
-                      <td className="px-4 py-3"><span className={`chip ${meta.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{t(meta.labelKey as DictKey)}</span></td>
+                      <td className="px-4 py-3"><span className={`chip ${meta.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}</span></td>
                       <td className="px-4 py-3 text-ink-muted">{o.attendeeCount}</td>
                     </tr>
                   )
@@ -184,10 +187,10 @@ export function MeetingsView({
       )}
 
       <MeetingFormModal open={formOpen} projectId={projectId} members={members} initial={editing} todayIso={todayIso}
-        canManage={canManage} onClose={() => { setFormOpen(false); setEditing(null) }} onSaved={onSaved} />
+        canManage={canManage} categories={categories} onClose={() => { setFormOpen(false); setEditing(null) }} onSaved={onSaved} />
       <MeetingDetailModal open={!!detailOcc} occurrence={detailOcc}
         currentUserId={currentUserId} isAdmin={canManage}
-        onClose={() => setDetailOcc(null)} onEditSeries={openEditFromDetail} onChanged={() => router.refresh()} />
+        onClose={() => setDetailOcc(null)} onEditSeries={openEditFromDetail} onChanged={() => router.refresh()} categories={categoryMap} />
     </div>
   )
 }

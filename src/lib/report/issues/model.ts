@@ -2,18 +2,35 @@ import type { IssueSourceType } from '@/lib/domain/issueAnalysis'
 import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import type { Issue, IssueSeverity, IssueStatus } from '@/lib/domain/issues'
 import type { IssueMinuteSource } from '@/lib/domain/issueMinuteSource'
+import { DEFAULT_CAUSE_CATEGORIES, DEFAULT_SOURCES, activeVocab, orderedVocab, type CauseCategoryDef, type SourceDef } from '@/lib/settings/vocab'
 
 export const ISSUE_ANALYSIS_SCHEMA_VERSION = 'issue-analysis.v1' as const
 
-/** 표준 템플릿의 원인 유형 정본(전략/규정, 프로세스, 조직, IT). */
-export const ISSUE_ANALYSIS_CAUSE_CATEGORIES = [
-  'strategy_policy',
-  'process',
-  'organization',
-  'it',
-] as const
-export type IssueAnalysisCauseCategory =
-  (typeof ISSUE_ANALYSIS_CAUSE_CATEGORIES)[number]
+/** 원인 유형 code — 프로젝트 설정 issues.cause_categories(SP5 B4, 기본 = 표준 템플릿의 전략/규정·프로세스·조직·IT). 삭제 금지·비활성만 */
+export type IssueAnalysisCauseCategory = string
+
+/**
+ * 분석 실행의 어휘 스냅샷(SP5 B4) — 원인 분류(활성, 설정 순서 = 프롬프트 선택지·정렬)와 출처(전부, 옛 이슈의 비활성 code 라벨까지).
+ * 프로젝트 어휘가 제품 기본값과 같으면 스냅샷·보고서에 싣지 않는다 — 기본 어휘 프로젝트의 입력 해시·저장 실행이 B4 이전과 같게(캐시 유지).
+ * 없는 실행(B4 이전·기본 어휘)은 DEFAULT_ISSUE_ANALYSIS_VOCAB 로 읽는다 — 당시 생성 어휘가 곧 기본값이었다.
+ */
+export interface IssueAnalysisVocab {
+  causeCategories: Array<{ code: string; label: string }>
+  sources: Array<{ code: string; label: string }>
+}
+const vocabPairs = (list: readonly { code: string; label: string }[]) => list.map(e => ({ code: e.code, label: e.label }))
+export const DEFAULT_ISSUE_ANALYSIS_VOCAB: IssueAnalysisVocab = {
+  causeCategories: vocabPairs(activeVocab(DEFAULT_CAUSE_CATEGORIES)),
+  sources: vocabPairs(orderedVocab(DEFAULT_SOURCES)),
+}
+/** 설정 두 키 → 스냅샷 어휘. 기본값과 같으면 undefined(싣지 않는다) */
+export function issueAnalysisVocabOf(
+  causeCategories: readonly CauseCategoryDef[], sources: readonly SourceDef[],
+): IssueAnalysisVocab | undefined {
+  const v: IssueAnalysisVocab = { causeCategories: vocabPairs(activeVocab(causeCategories)), sources: vocabPairs(orderedVocab(sources)) }
+  return JSON.stringify(v) === JSON.stringify(DEFAULT_ISSUE_ANALYSIS_VOCAB) ? undefined : v
+}
+export const analysisVocab = (x: { vocab?: IssueAnalysisVocab }): IssueAnalysisVocab => x.vocab ?? DEFAULT_ISSUE_ANALYSIS_VOCAB
 
 // LLM 출력과 저장 JSON의 비정상적인 팽창을 막는 계약 상한이다. PPT 페이지 분할은
 // 이 상한 안의 원문을 줄이지 않고 별도로 처리한다.
@@ -179,6 +196,8 @@ export interface IssueAnalysisInputSnapshot {
       'causeAnalyses' | 'opportunities' | 'processDefinitions' | 'majors'
     > & { majors: IssueAnalysisAreaMajor[] }
   >
+  /** 기본값과 다른 프로젝트만 — issueAnalysisVocabOf */
+  vocab?: IssueAnalysisVocab
   /** Mega가 없는 레거시 이슈도 hard delete 감사 입력에서 사라지지 않게 보존한다. */
   unclassifiedIssues: Array<{
     id: string
@@ -193,6 +212,8 @@ export interface IssueAnalysisReport {
   projectId: string
   issueCount: number
   generatedAt: string
+  /** 기본값과 다른 프로젝트만(입력 스냅샷에서 옮긴다) — 없으면 DEFAULT_ISSUE_ANALYSIS_VOCAB */
+  vocab?: IssueAnalysisVocab
   areas: IssueAnalysisReportArea[]
 }
 
@@ -203,11 +224,6 @@ const EMPTY_STATUS_COUNTS = (): Record<IssueStatus, number> => ({
   on_hold: 0,
 })
 
-const EMPTY_SEVERITY_COUNTS = (): Record<IssueSeverity, number> => ({
-  high: 0,
-  medium: 0,
-  low: 0,
-})
 
 const compact = (value: unknown): string =>
   typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
@@ -359,14 +375,15 @@ export function toIssueAnalysisReportIssue(
   }
 }
 
-function buildAreaSummary(issues: readonly IssueAnalysisReportIssue[]): IssueAnalysisAreaSummary {
+function buildAreaSummary(issues: readonly IssueAnalysisReportIssue[], severityCodes: readonly string[]): IssueAnalysisAreaSummary {
   const statusCounts = EMPTY_STATUS_COUNTS()
-  const severityCounts = EMPTY_SEVERITY_COUNTS()
+  // 심각도 키 = 그 프로젝트의 심각도 code 전부(0 포함 — 기본 어휘면 B4 이전 high·medium·low 와 같은 꼴이라 입력 해시가 그대로) + 목록 밖 옛 code
+  const severityCounts: Record<IssueSeverity, number> = Object.fromEntries(severityCodes.map(code => [code, 0]))
   const ownerDepartments = new Set<string>()
   const relatedSystems = new Set<string>()
   for (const issue of issues) {
     statusCounts[issue.status] += 1
-    severityCounts[issue.severity] += 1
+    severityCounts[issue.severity] = (severityCounts[issue.severity] ?? 0) + 1
     if (issue.ownerDepartment) ownerDepartments.add(issue.ownerDepartment)
     for (const system of issue.relatedSystems) relatedSystems.add(system)
   }
@@ -385,6 +402,9 @@ export function buildIssueAnalysisInputSnapshot(
   issues: readonly IssueAnalysisIssueInput[],
   majors: readonly IssueAnalysisMajorProcess[],
   areaRefs: readonly IssueAreaRef[],
+  /** 그 프로젝트의 심각도 code(설정 issues.severities) — 영역 요약의 0 칸 */
+  severityCodes: readonly string[],
+  vocab?: IssueAnalysisVocab,
 ): IssueAnalysisInputSnapshot {
   const areas = sortedAreas(areaRefs).filter(area => area.active || issues.some(issue => issue.areaId === area.id)).map(area => {
     const areaIssues = issues
@@ -409,7 +429,7 @@ export function buildIssueAnalysisInputSnapshot(
       areaCode: area.code,
       areaName: area.name,
       majors: areaMajors,
-      summary: buildAreaSummary(areaIssues),
+      summary: buildAreaSummary(areaIssues, severityCodes),
       issues: areaIssues,
     }
   })
@@ -427,6 +447,7 @@ export function buildIssueAnalysisInputSnapshot(
     projectId,
     issueCount: issues.length,
     areas,
+    ...(vocab ? { vocab } : {}),
     unclassifiedIssues,
   }
 }
@@ -445,6 +466,7 @@ export function buildIssueAnalysisReport(
     projectId: snapshot.projectId,
     issueCount: snapshot.issueCount,
     generatedAt,
+    ...(snapshot.vocab ? { vocab: snapshot.vocab } : {}),
     areas: snapshot.areas.map(area => {
       const areaCauseAnalyses = causeAnalyses[area.areaCode]
       const areaProcessDefinitions = processDefinitions[area.areaCode]

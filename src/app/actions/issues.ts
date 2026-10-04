@@ -8,6 +8,7 @@ import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
 import { ERR_LOOKUP, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { loadIssueEntryContext, type IssueEntryContext } from '@/lib/issues/context'
+import { vocabCodeError, vocabWriteFailure } from '@/lib/settings/vocabGuard'
 import { policyNeedsArea } from '@/lib/issues/idPolicy'
 import { ISSUE_DB_MESSAGES, ISSUE_OWN_TOKENS, ERR_ISSUE_RETRY } from '@/lib/issues/errors'
 import { failWith, rpcFailure } from '@/lib/errors/dbFail'
@@ -16,7 +17,7 @@ import { emitNotification } from '@/lib/notify/emit'
 import { revalidatePath } from 'next/cache'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import {
-  ISSUE_SEVERITIES, canTransition, nextResolvedAt,
+  canTransition, nextResolvedAt,
   type IssueSeverity, type IssueStatus,
 } from '@/lib/domain/issues'
 import { encodeStatusChange } from '@/lib/domain/issueUpdates'
@@ -450,7 +451,7 @@ function validateInput(input: IssueInput, mode: IssueInputMode): IssueInputValid
   if (!title) return { ok: false, error: '제목을 입력하세요.' }
   if (title.length > TITLE_MAX) return { ok: false, error: `제목은 ${TITLE_MAX}자 이하여야 합니다.` }
   if (input.body.length > TEXT_MAX) return { ok: false, error: `내용은 ${TEXT_MAX}자 이하여야 합니다.` }
-  if (!ISSUE_SEVERITIES.includes(input.severity)) return { ok: false, error: '잘못된 심각도입니다.' }
+  if (typeof input.severity !== 'string' || !input.severity) return { ok: false, error: '잘못된 심각도입니다.' }   // 활성 여부는 checkEntry(설정 issues.severities)
   const assigneeErr = validateAssignees(input.assigneeMemberIds)
   if (assigneeErr) return { ok: false, error: assigneeErr }
   // 과거 날짜는 허용(즉시 지연 표시 안내는 폼 몫) — 형식·실재성만 검증
@@ -476,13 +477,25 @@ function issueWriteFailure(error: { code?: string; message?: string }): string {
   console.error('[issues] 저장 실패', error)
   if (error.code === '40P01' || error.code === '55P03'
       || (error.code === '23505' && error.message?.includes('issues_project_code_uidx'))) return ERR_ISSUE_RETRY
+  const vocab = vocabWriteFailure(error)          // 어휘 트리거(B4) — 비활성 code·격리·설정 행 없음
+  if (vocab) return vocab
   return rpcFailure(error, ISSUE_OWN_TOKENS)?.message ?? failWith('issues', error, '이슈를 저장하지 못했습니다.')
 }
 
-async function checkEntry(projectId: string, input: NormalizedIssueInput, existing?: { areaId: string | null; codeAreaId: string | null }): Promise<string | null> {
+async function checkEntry(
+  projectId: string, input: NormalizedIssueInput,
+  existing?: { areaId: string | null; codeAreaId: string | null; severity: string | null; sourceType: string | null },
+): Promise<string | null> {
   const loaded = await loadIssueEntryContext(projectId)
   if (!loaded.ok) return loaded.error
   const ctx = loaded.value
+  // 심각도·원천 = 이 프로젝트의 활성 어휘(B4). 값을 그대로 두는 수정은 비활성이어도 통과(트리거와 같은 규칙)
+  const sevErr = vocabCodeError('issues.severities', ctx.vocab.severities, input.severity, existing?.severity)
+  if (sevErr) return sevErr
+  if (input.analysis) {
+    const srcErr = vocabCodeError('issues.sources', ctx.vocab.sources, input.analysis.sourceType, existing?.sourceType)
+    if (srcErr) return srcErr
+  }
   if (input.analysis) {
     const mod = await requireModule({ projectId }, 'issue_analysis')
     if (!mod.ok) return mod.error
@@ -990,7 +1003,7 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
   // 소유권 선검증(RLS 와 동일 — 0행 무음 성공 방지, meetings 관례)
   const { data: cur, error: curErr } = await sb
     .from('issues')
-    .select('project_id, created_by, area_id, code_area_id, major_id, source_type')
+    .select('project_id, created_by, area_id, code_area_id, major_id, source_type, severity')
     .eq('id', issueId)
     .maybeSingle()
   if (curErr) return { ok: false, error: ERR_LOOKUP } // 소유권 판정의 입력이다 — 실패를 '없음'으로 위장하지 않는다
@@ -999,6 +1012,7 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
   if (!gate.isAdmin && !isOwner) return { ok: false, error: '권한 없음' }
   const entryError = await checkEntry(cur.project_id as string, value, {
     areaId: (cur.area_id as string | null) ?? null, codeAreaId: (cur.code_area_id as string | null) ?? null,
+    severity: (cur.severity as string | null) ?? null, sourceType: (cur.source_type as string | null) ?? null,
   })
   if (entryError) return { ok: false, error: entryError }
   const currentSourceType = (cur.source_type as string | null) ?? null

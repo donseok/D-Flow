@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { createServerClient, requireProjectMember, getSession } = vi.hoisted(() => ({
   createServerClient: vi.fn(), requireProjectMember: vi.fn(), getSession: vi.fn(),
 }))
+// 어휘 관문(B4)은 설정 해석기를 읽는다 — 이 파일은 명단·권한 대조를 보므로 활성 어휘로 통과시킨다(어휘 판정은 tests/settings/vocab-guard.test.ts)
+vi.mock('@/lib/settings/vocabGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/settings/vocabGuard')>()), checkProjectVocab: vi.fn(async () => null),
+}))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getSession }))
 vi.mock('@/lib/authz', () => ({
