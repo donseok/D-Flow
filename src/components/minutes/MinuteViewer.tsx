@@ -5,7 +5,7 @@ import { useMinuteLinks } from './minuteLinks'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, ChevronRight, Download, ExternalLink, FolderOpen, History, Maximize2, Minimize2,
-  Paperclip, Share2,
+  Share2,
 } from 'lucide-react'
 import type {
   InsightKind, Minute, MinuteFile, MinuteHighlight, MinuteInsight, ProjectMember,
@@ -43,6 +43,7 @@ import { MinuteSelectionBubble, type MinuteSelectionTarget } from './MinuteSelec
 import { MinuteFontSizeControl } from './MinuteFontSizeControl'
 import { useMinuteFontSize } from './useMinuteFontSize'
 import { MinuteVersionPanel, type MinuteVersionListItem } from './MinuteVersionPanel'
+import { MinuteAttachmentsPanel } from './MinuteAttachmentsPanel'
 import { MinuteWikiImpactCard, type MinuteWikiImpactCardProps } from './MinuteWikiImpactCard'
 import { useTeamSlot } from '@/components/app/TeamsProvider'
 import {
@@ -750,12 +751,6 @@ export function MinuteViewer({
                 <Download className="h-3.5 w-3.5" />{t('min.detail.downloadBody')}
               </button>
             )}
-            {attachments.map(f => (
-              <button key={f.id} onClick={() => void download(f.id)} disabled={busy}
-                className="btn h-8 max-w-[10rem] px-2.5 text-xs">
-                <Paperclip className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{f.fileName}</span>
-              </button>
-            ))}
             {minute.meetingId && minute.meetingProjectId && (
               <Link href={`/p/${minute.meetingProjectId}/meetings`}
                 className="inline-flex items-center gap-1 text-xs text-brand underline underline-offset-2 hover:text-brand-hover">
@@ -792,7 +787,6 @@ export function MinuteViewer({
           </div>
         </div>
         {err && <p className="text-sm text-delayed">{err}</p>}
-        {filesError && !historicalVersion && <p role="alert" className="text-sm text-delayed">{t('min.detail.filesLoadFailed')}</p>}
       </div>
 
       {historicalVersion && (
@@ -811,6 +805,14 @@ export function MinuteViewer({
           <History className="h-4 w-4 text-ink-muted" aria-hidden />
           <p className="text-sm font-medium text-ink">{t('min.archive.banner')}</p>
         </div>
+      )}
+
+      {/* 첨부 — 현재 회의록에서만(과거 버전 화면은 첨부를 스냅샷하지 않는다, D56). 목록 실패도 여기서 알린다. */}
+      {!historicalVersion && (
+        <MinuteAttachmentsPanel
+          minuteId={minute.id} workspaceId={minute.workspaceId ?? null} projectId={minute.ownProjectId ?? null}
+          files={attachments} filesError={filesError} canManage={canManage} timeZone={timeZone}
+        />
       )}
 
       {/* 핵심 요약 카드 — shrink-0 유지(xl 높이 체인) */}
