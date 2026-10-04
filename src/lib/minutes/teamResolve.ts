@@ -32,3 +32,24 @@ export function teamsInScope<T extends Pick<TeamRef, 'code' | 'projectId'>>(
   return teams.filter(t => (scope.projectId !== null && t.projectId === scope.projectId)
     || (t.projectId === null && !ownCodes.has(t.code)))
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** 회의록 화면의 `?team=` 해석(SP5 B2 — 필터는 팀 id). 옛 링크의 `?team=<code>` 는 code 단위로 한 번 해석해 id 로 리다이렉트한다.
+ *  teams 는 그 화면이 고르게 하는 팀 목록(필터 탭과 같은 것)이다.
+ *  - id: 그 목록의 팀 id 면 그대로 필터
+ *  - redirect: 옛 code(→ 해석한 id) 또는 범위 밖·모르는 값(→ null = 팀 파라미터 제거)
+ *  - none: 파라미터 없음 */
+export type TeamParam = { kind: 'none' } | { kind: 'id'; id: string } | { kind: 'redirect'; id: string | null }
+
+export function resolveTeamParam<T extends Pick<TeamRef, 'id' | 'code' | 'projectId'>>(
+  raw: string | null | undefined, teams: readonly T[], scope: { projectId: string | null },
+): TeamParam {
+  const v = (raw ?? '').trim()
+  if (!v) return raw === undefined || raw === null ? { kind: 'none' } : { kind: 'redirect', id: null }
+  if (UUID.test(v)) {
+    const lower = v.toLowerCase()
+    return teams.some(t => t.id.toLowerCase() === lower) ? { kind: 'id', id: lower } : { kind: 'redirect', id: null }
+  }
+  return { kind: 'redirect', id: teamForCode(teams, scope, v)?.id ?? null }
+}

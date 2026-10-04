@@ -4,14 +4,14 @@
 // moveMinuteFolder 가 같은 함수로 재검증한다(클라이언트 판정 신뢰 금지).
 // 편집 권한(canManageFolder/canMoveLeaf)은 호출부가 선판정 — 여기서는 다루지 않는다.
 import type { ExplorerLeaf, MinuteFolder } from './types'
-import { folderDepthOf, isTeamRootFolder, isTeamRootName, MINUTE_FOLDER_DEPTH_MAX } from './minutes'
+import { folderDepthOf, isLockedRootFolder, isTeamRootName, MINUTE_FOLDER_DEPTH_MAX } from './minutes'
 
 export type MinuteDropReject =
-  | 'team-root'     // 팀 시드 루트는 이동 금지 — 옮기면 자동 편철 앵커가 소리 없이 끊긴다
+  | 'team-root'     // 최상위 루트(팀·지정 — kind)는 이동 금지 — 옮기면 편철 앵커가 끊긴다(DB 가드도 막는다)
   | 'not-found'     // 대상 폴더가 목록에 없음(방금 삭제 등)
   | 'cycle'         // 자기 자신/자손으로 이동 — 서브트리가 트리에서 떨어져 나간다
   | 'depth'         // 이동 후 서브트리 최심 깊이가 상한 초과
-  | 'anchor-squat'  // 루트로 이동 시 팀코드 동명 — 앵커 사칭(createMinuteFolder 가드와 동일 규칙)
+  | 'anchor-squat'  // 루트로 이동 시 팀 이름과 같음 — 팀 루트 이름 선점(createMinuteFolder 가드·DB MINUTE_FOLDER_NAME_RESERVED 와 같은 규칙)
   | 'cross-project' // 새 부모의 프로젝트가 자신과 다름 — 서브트리가 남의 프로젝트 트리에 붙는 것을 막는다
 
 export type MinuteDropResult =
@@ -27,18 +27,18 @@ export function resolveLeafDrop(
 }
 
 /** folder 를 targetParentId 아래로 옮길 때의 결과. targetParentId null = 루트 레벨.
- *  teamCodes 는 루트 예약어 판정용(비활성 포함 전체 등록 팀) — 비면 앵커 사칭 검사를 건너뛴다.
+ *  teamNames 는 루트 예약어 판정용(그 범위의 비활성 포함 전체 팀 이름) — 비면 선점 검사를 건너뛴다.
  *  클라이언트가 활성 팀만 알아 과소 거부해도 서버가 전체 목록으로 최종 판정한다(fail-closed). */
 export function resolveFolderDrop(
   folder: MinuteFolder,
   targetParentId: string | null,
   folders: MinuteFolder[],
-  teamCodes: readonly string[] = [],
+  teamNames: readonly string[] = [],
 ): MinuteDropResult {
   // 제자리 드롭은 사고가 아니라 취소 — 에러 토스트를 띄우지 않는다(팀 루트를 루트에 놓는 경우 포함).
   // 그래서 team-root 거부보다 앞선다.
   if (targetParentId === folder.id || targetParentId === folder.parentId) return { kind: 'noop' }
-  if (isTeamRootFolder(folder)) return { kind: 'reject', reason: 'team-root' }
+  if (isLockedRootFolder(folder)) return { kind: 'reject', reason: 'team-root' }
   if (targetParentId !== null && !folders.some(f => f.id === targetParentId))
     return { kind: 'reject', reason: 'not-found' }
   // 순환 검사는 반드시 깊이 검사보다 먼저다 — 아래 folderDepthOf 는 **이동 전** 배열로 대상의
@@ -48,7 +48,7 @@ export function resolveFolderDrop(
     return { kind: 'reject', reason: 'cycle' }
   if (folderDepthOf(folders, targetParentId) + subtreeHeight(folders, folder.id) > MINUTE_FOLDER_DEPTH_MAX)
     return { kind: 'reject', reason: 'depth' }
-  if (targetParentId === null && isTeamRootName(folder.name, teamCodes))
+  if (targetParentId === null && isTeamRootName(folder.name, teamNames))
     return { kind: 'reject', reason: 'anchor-squat' }
   // 새 부모(null=루트는 target 유지 스코프)와 프로젝트가 다르면 거부 — 폴더 서브트리가
   // 통째로 남의 프로젝트 트리에 붙는 것을 막는다. 프로젝트 간 이동은 회의록 단위로만.

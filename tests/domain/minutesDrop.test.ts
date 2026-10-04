@@ -5,7 +5,11 @@ import type { MinuteFolder } from '@/lib/domain/types'
 const f = (
   id: string, name: string, parentId: string | null = null, createdBy: string | null = 'u1',
   projectId: string | null = null,
-): MinuteFolder => ({ id, name, parentId, sort: 100, createdBy, projectId })
+): MinuteFolder => ({
+  id, name, parentId, sort: 100, createdBy, projectId,
+  // SP5 B2 — 이 표본의 '시드 루트'(루트 + createdBy null)는 kind = team_root 로 표시한다(판정은 kind 만 본다)
+  ...(parentId === null && createdBy === null ? { kind: 'team_root' as const, teamCode: name } : { kind: 'user' as const }),
+})
 
 const TEAMS = ['PMO', 'MES', 'ERP', 'APS'] as const
 
@@ -45,7 +49,11 @@ describe('resolveFolderDrop — noop', () => {
 })
 
 describe('resolveFolderDrop — 거부', () => {
-  it('팀 시드 루트(루트 + createdBy null)는 어디로도 이동 금지', () => {
+  it('지정 루트(kind = custom_root)도 이동 금지 — 세션이 바꾸지 못하는 최상위 폴더(SP5 B2)', () => {
+    const custom: MinuteFolder = { id: 'c', name: '외부', parentId: null, sort: 100, createdBy: null, projectId: null, kind: 'custom_root' }
+    expect(resolveFolderDrop(custom, 'o', [custom, f('o', '내폴더', null)], TEAMS)).toEqual({ kind: 'reject', reason: 'team-root' })
+  })
+  it('팀 루트(kind = team_root)는 어디로도 이동 금지', () => {
     const seed = f('t', 'PMO', null, null)
     const other = f('o', '내폴더', null)
     const folders = [seed, other]

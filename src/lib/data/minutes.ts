@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { MINUTE_FOLDER_COLS, minuteFolderFromRow } from '@/lib/minutes/folderRow'
 import { createServerClient } from '@/lib/supabase/server'
 import { getProjectVocabs } from '@/lib/settings/projectConfig'
 import type { VocabValues } from '@/lib/settings/vocab'
@@ -57,7 +58,7 @@ export const getProjectMinuteSignals = cache(async (projectId: string, limit = 8
 })
 
 const LIST_COLS =
-  'id, minute_date, team_code, title, meeting_id, project_id, meeting_occurrence_date, archived_at, created_by, created_by_name, created_at, updated_at, body_preview, folder_id, minute_files(count), meetings(category, project_id), projects(name)'
+  'id, minute_date, team_code, team_id, title, meeting_id, project_id, meeting_occurrence_date, archived_at, created_by, created_by_name, created_at, updated_at, body_preview, folder_id, minute_files(count), meetings(category, project_id), projects(name)'
 
 function mapMinute(r: Row, bodyMd = ''): Minute {
   const files = r.minute_files as { count: number }[] | undefined
@@ -65,6 +66,7 @@ function mapMinute(r: Row, bodyMd = ''): Minute {
     id: r.id as string,
     minuteDate: r.minute_date as string,
     teamCode: r.team_code as TeamCode,
+    teamId: (r.team_id as string | null) ?? null,
     title: r.title as string,
     bodyMd,
     meetingId: (r.meeting_id as string | null) ?? null,
@@ -88,10 +90,10 @@ function mapMinute(r: Row, bodyMd = ''): Minute {
   }
 }
 
-/** 기간(달력 그리드) + 담당 필터 목록. body_md 제외. 실패 시 빈 배열.
+/** 기간(달력 그리드) + 담당 필터 목록. body_md 제외. 실패 시 빈 배열. 담당 필터는 팀 id(minutes.team_id — SP5 B2).
  *  범위(계획 V13) — 그 워크스페이스의 회의록만, projectId 가 있으면 그 프로젝트의 것만(?project=, D53). */
 export const getMinutesPage = cache(async (
-  workspaceId: string, projectId: string | null, rangeStart: string, rangeEnd: string, team: TeamCode | null,
+  workspaceId: string, projectId: string | null, rangeStart: string, rangeEnd: string, teamId: string | null,
 ): Promise<Minute[]> => {
   const sb = await createServerClient()
   let q = sb.from('minutes').select(LIST_COLS)
@@ -99,7 +101,7 @@ export const getMinutesPage = cache(async (
     .is('archived_at', null)
     .gte('minute_date', rangeStart).lte('minute_date', rangeEnd)
     .order('minute_date', { ascending: false }).order('created_at', { ascending: false })
-  if (team) q = q.eq('team_code', team)
+  if (teamId) q = q.eq('team_id', teamId)
   if (projectId) q = q.eq('project_id', projectId)
   const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 목록 — 실패를 삼키면 보관함이 '회의록 없음' 빈 화면으로 위장돼 재업로드를 유발한다. 최소한 원인은 남긴다.
@@ -110,7 +112,7 @@ export const getMinutesPage = cache(async (
 
 /** 전 기간 제목/본문 ILIKE 검색 — minute_date desc, 최대 limit건. */
 export const searchMinutes = cache(async (
-  workspaceId: string, projectId: string | null, qtext: string, team: TeamCode | null, limit = 100,
+  workspaceId: string, projectId: string | null, qtext: string, teamId: string | null, limit = 100,
 ): Promise<Minute[]> => {
   const needle = qtext.trim()
   if (!needle) return []
@@ -121,7 +123,7 @@ export const searchMinutes = cache(async (
     .is('archived_at', null)
     .or(`title.ilike.${pat},body_md.ilike.${pat}`)
     .order('minute_date', { ascending: false }).limit(limit)
-  if (team) q = q.eq('team_code', team)
+  if (teamId) q = q.eq('team_id', teamId)
   if (projectId) q = q.eq('project_id', projectId)
   const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 검색 — 실패를 '검색 결과 0건'으로 위장하면 사용자는 회의록이 없다고 오인한다. 폴백은 유지하되 로깅.
@@ -139,7 +141,7 @@ export const getMinutesExplorer = cache(async (workspaceId: string, projectId: s
   if (projectId) mq = mq.eq('project_id', projectId)
   // 폴더 — 그 워크스페이스의 것, 프로젝트로 거를 때는 워크스페이스 폴더(팀 루트)와 그 프로젝트 폴더(트리의 뼈대가 끊기지 않게).
   // projectId 는 페이지(UUID_RE·권한 맵)·액션 관문(UUID_RE·권한 맵)을 지난 값만 온다 — .or 문자열에 그대로 싣는다
-  let fq = sb.from('minute_folders').select('id, name, parent_id, sort, created_by, project_id, workspace_id').eq('workspace_id', workspaceId)
+  let fq = sb.from('minute_folders').select(MINUTE_FOLDER_COLS).eq('workspace_id', workspaceId)
   if (projectId) fq = fq.or(`project_id.is.null,project_id.eq.${projectId}`)
   const [mRes, fRes, hidden] = await Promise.all([
     mq.order('minute_date', { ascending: false }).order('created_at', { ascending: false }).limit(MINUTES_TREE_LIMIT),
@@ -153,20 +155,14 @@ export const getMinutesExplorer = cache(async (workspaceId: string, projectId: s
   if (hidden === null) { console.error('[getMinutesExplorer] 비공개 프로젝트 판정 실패 — 탐색기를 열지 않는다(fail-closed)'); return null }
   const rows = dropHidden((mRes.data ?? []).map((r: Row) => mapMinute(r)), hidden)
   const leaves: ExplorerLeaf[] = rows.map(mi => ({
-    id: mi.id, minuteDate: mi.minuteDate, teamCode: mi.teamCode, title: mi.title,
+    id: mi.id, minuteDate: mi.minuteDate, teamCode: mi.teamCode, teamId: mi.teamId ?? null, title: mi.title,
     fileCount: mi.fileCount ?? 0, createdBy: mi.createdBy, createdByName: mi.createdByName,
     bodyPreview: mi.bodyPreview ?? '', meetingCategory: mi.meetingCategory ?? null,
     folderId: mi.folderId ?? null,
     projectId: mi.projectId ?? null, projectName: mi.projectName ?? null,
     meetingId: mi.meetingId, meetingProjectId: mi.meetingProjectId ?? null,
   }))
-  const allFolders: MinuteFolder[] = ((fRes.data ?? []) as Row[]).map(f => ({
-    id: f.id as string, name: f.name as string,
-    parentId: (f.parent_id as string | null) ?? null,
-    sort: f.sort as number, createdBy: (f.created_by as string | null) ?? null,
-    projectId: (f.project_id as string | null) ?? null,
-    workspaceId: (f.workspace_id as string | null) ?? null,
-  }))
+  const allFolders: MinuteFolder[] = ((fRes.data ?? []) as Row[]).map(minuteFolderFromRow)
   // 숨김 프로젝트의 폴더 제거 — 리프는 dropHidden 이 이미 걸렀다. 폴더까지 걸러야
   // 비공개 프로젝트 이름이 폴더 트리(이름만으로도)로 노출되지 않는다.
   const folders = allFolders.filter(f => f.projectId === null || !hidden.has(f.projectId))
@@ -252,7 +248,7 @@ export const getMinuteFolderPath = cache(async (
 ): Promise<string[] | null> => {
   if (!folderId) return null
   const sb = await createServerClient()
-  return folderPathOf(sb, folderId)
+  return folderPathOf(sb, folderId, 'display')
 })
 
 /** 뷰어 주석 데이터 — 하이라이트 전체 + AI 인사이트. 실패 시 빈 배열(뷰어는 주석 없이 동작). */

@@ -8,7 +8,11 @@ import {
 const F = (
   id: string, name: string, parentId: string | null = null,
   createdBy: string | null = null, sort = 100,
-): MinuteFolder => ({ id, name, parentId, sort, createdBy, projectId: null })
+): MinuteFolder => ({
+  id, name, parentId, sort, createdBy, projectId: null,
+  // SP5 B2 — 시드 루트(옛 created_by null)는 이제 kind = team_root 와 팀 code(조인)로 표시한다. 이 표본의 루트 이름은 팀 code 와 같다
+  ...(parentId === null && createdBy === null ? { kind: 'team_root' as const, teamId: `t-${name}`, teamCode: name } : { kind: 'user' as const }),
+})
 
 // 0043 시드 트리(sort 는 프로덕션 시드값) + 사용자 폴더 — 하위 구분은 이 실폴더에서 동적 유도된다
 const tree: MinuteFolder[] = [
@@ -130,5 +134,28 @@ describe('isTeamRootFolder — 개명·삭제 금지 대상(루트 앵커만)', 
   it('루트 시드는 이름과 무관하게 보호 — 팀 마스터 신규 팀 시드 자동 보호(2026-07-24 계약 변경)', () => {
     // 0043 이후 루트의 created_by null 은 팀 시드뿐이다(신규 팀 추가 액션 포함).
     expect(isTeamRootFolder(F('r-new', '신팀', null, null))).toBe(true)
+  })
+})
+
+describe('SP5 B2 — 폴더 종류는 kind, 팀은 team_id(조인한 code)', () => {
+  const root = (over: Partial<MinuteFolder>): MinuteFolder => ({ id: 'r-q', name: '품질보증팀', parentId: null, sort: 0, createdBy: null, projectId: null, ...over })
+  it('created_by null 이어도 kind 가 user 면 팀 루트가 아니다(탈퇴 사용자의 폴더 등)', () => {
+    expect(isTeamRootFolder(root({ kind: 'user' }))).toBe(false)
+    expect(isTeamRootFolder(root({}))).toBe(false)   // kind 없음 = 일반 폴더(루트 특권을 주지 않는 쪽)
+  })
+  it('루트 이름(= 팀 이름)이 code 와 달라도 팀 code 로 찾고 파생한다', () => {
+    const folders = [root({ kind: 'team_root', teamId: 't-qa', teamCode: 'QA' }), F('c-x', '정기', 'r-q', 'u1')]
+    expect(teamRootFolderIdOf(folders, 'QA')).toBe('r-q')
+    expect(teamRootFolderIdOf(folders, '품질보증팀')).toBeNull()
+    expect(teamSubOfFolder(folders, 'c-x')).toEqual({ team: 'QA', sub: '정기' })
+  })
+  it('팀을 못 읽은 팀 루트(조인 null)는 팀을 파생하지 않는다(fail-closed)', () => {
+    const folders = [root({ kind: 'team_root', teamId: 't-qa', teamCode: null }), F('c-x', '정기', 'r-q', 'u1')]
+    expect(teamSubOfFolder(folders, 'c-x')).toBeNull()
+  })
+  it('custom_root 는 팀 루트가 아니다 — 팀을 파생하지 않는다', () => {
+    const folders = [root({ kind: 'custom_root', name: '외부 연동' }), F('c-x', '정기', 'r-q', 'u1')]
+    expect(isTeamRootFolder(folders[0])).toBe(false)
+    expect(teamSubOfFolder(folders, 'c-x')).toBeNull()
   })
 })

@@ -47,7 +47,11 @@ const P3 = 'bbbbbbbb-3333-4333-8333-333333333333'
 const F = (
   id: string, name: string, parentId: string | null = null,
   createdBy: string | null = null, sort = 0,
-): MinuteFolder => ({ id, name, parentId, sort, createdBy, projectId: null })
+): MinuteFolder => ({
+  id, name, parentId, sort, createdBy, projectId: null,
+  // SP5 B2 — 시드 루트(옛 created_by null)는 kind = team_root + 팀 code(조인). 이 표본의 루트 이름은 팀 code 와 같다
+  ...(parentId === null && createdBy === null ? { kind: 'team_root' as const, teamCode: name } : { kind: 'user' as const }),
+})
 
 // sort 는 프로덕션 시드값(0043) — 트리 표시 순서가 이 값에서 유도되므로 순서가 계약
 const tree: MinuteFolder[] = [

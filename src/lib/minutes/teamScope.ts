@@ -27,3 +27,8 @@ export async function activeTeamCodesForMinuteScope(scope: MinuteScope, opts?: O
 export async function teamCodesForMinuteScope(scope: MinuteScope, opts?: Opts): Promise<TeamCode[]> {
   return (await teamsOf(scope, opts)).map((t) => t.code)
 }
+
+/** 등록 팀 이름(비활성 포함) — 최상위 일반 폴더가 팀 루트 이름(= 팀 이름)을 선점하지 못하게(SP5 B2, DB MINUTE_FOLDER_NAME_RESERVED 의 앞단). */
+export async function teamNamesForMinuteScope(scope: MinuteScope, opts?: Opts): Promise<string[]> {
+  return (await teamsOf(scope, opts)).map((t) => t.name.trim())
+}

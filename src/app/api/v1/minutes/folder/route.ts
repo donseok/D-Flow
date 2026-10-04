@@ -4,6 +4,8 @@ import { BRAND } from '@/lib/branding'
 import { actorFromUser } from '@/lib/authz'
 import { isAnyProjectAdmin, isWorkspaceMember } from '@/lib/domain/authz'
 import { activeTeamCodesForMinuteScope } from '@/lib/minutes/teamScope'
+import { loadRootFolders } from '@/lib/minutes/rootMode'
+import type { RootFoldersSetting } from '@/lib/minutes/rootFolders'
 import type { TeamCode } from '@/lib/domain/types'
 import {
   ancestorIdsOf, folderPathOfSnapshot, loadFolderSnapshot, resolveFolderPath, type FolderSnapshot,
@@ -159,6 +161,8 @@ async function processItem(
   actorId: string,
   /** 이 회의록 범위(프로젝트, 미지정이면 워크스페이스)의 활성 팀 — 라우트가 쓰기 전에 확보해 넘긴다. */
   activeTeamCodes: TeamCode[],
+  /** 그 회의록 워크스페이스의 최상위 폴더 모드(SP5 B2 — v2.9). 없으면 teams */
+  rootMode?: RootFoldersSetting,
 ): Promise<ItemResult> {
   const key = item.externalId
   if (!row) return { external_id: key, status: 'not_found' }
@@ -178,7 +182,7 @@ async function processItem(
   const teamCode = item.team ?? row.team_code
   const from = folderPathOfSnapshot(snap, row.folder_id)
   // 0076 — 이 회의록이 속한 프로젝트 트리에서 해석한다(전역 트리와 섞이지 않는다).
-  // 스냅샷은 배치 전체가 공유해도 안전하다 — seedRoots 키가 (프로젝트, 팀코드)라 프로젝트별
+  // 스냅샷은 배치 전체가 공유해도 안전하다 — seedRoots 키가 (프로젝트|워크스페이스, 팀 code)라 범위별
   // 루트가 서로 다른 항목으로 공존한다.
   const projectId = row.project_id
 
@@ -188,7 +192,7 @@ async function processItem(
   // 판정에는 생성이 필요 없다 — 조상 규칙은 **이미 존재하는** 조상 체인만 보면 되기 때문이다.
   const resolved = await resolveFolderPath(admin, teamCode, item.folderPath, {
     actorId, activeTeamCodes, snapshot: snap, create: false,
-    projectId, workspaceId: row.workspace_id,
+    projectId, workspaceId: row.workspace_id, rootMode,
   })
   if (!resolved.ok) {
     // no_team_root 는 moved 로 집계하면 안 된다 — 배치는 '등록'이 아니라 '이동'이라
@@ -232,7 +236,7 @@ async function processItem(
   // 이동이 확정된 지금에서야 부족한 폴더를 만든다.
   const applied = await resolveFolderPath(admin, teamCode, item.folderPath, {
     actorId, activeTeamCodes, snapshot: snap, create: true,
-    projectId, workspaceId: row.workspace_id,
+    projectId, workspaceId: row.workspace_id, rootMode,
   })
   if (!applied.ok) return { external_id: key, status: 'failed', reason: applied.reason, from }
   // 경로를 끝까지 못 만들었다 = 생성 실패. 조상에 떨구면 리포트(to)와 실제 트리가 어긋난다.
@@ -353,12 +357,20 @@ export async function POST(req: NextRequest) {
       if (!byScope.has(key)) byScope.set(key, activeTeamCodesForMinuteScope(scope, { client: admin }))
       teamCodesByMinute.set(r.id, await byScope.get(key)!)
     }
+    // 워크스페이스별 최상위 폴더 모드(SP5 B2 — v2.9) — 정규화가 모드로 갈린다. 첫 이동 전에 전부 읽고, 못 읽으면 아무것도 옮기지 않는다(500)
+    const rootModeByWs = new Map<string, RootFoldersSetting>()
+    for (const w of targetWs) {
+      const roots = await loadRootFolders(w, { client: admin })
+      if (!roots.ok) return apiInternalError('최상위 폴더 설정을 불러오지 못했습니다.')
+      rootModeByWs.set(w, roots.value)
+    }
 
     const results: ItemResult[] = []
     for (const item of batch.items) {
       const row = byExternalId.get(item.externalId)
       const res = await processItem(
         admin, item, row, snap, batch, user.id, row ? teamCodesByMinute.get(row.id)! : [],
+        row ? rootModeByWs.get(row.workspace_id) : undefined,
       )
       // 같은 external_id 가 한 요청에 두 번 오면 두 번째는 갱신된 위치를 봐야 한다 —
       // 안 그러면 이미 옮긴 건이 다시 moved 로 집계된다(멱등 위반).

@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   actorFromUser: vi.fn(),
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
+// 최상위 폴더 모드(SP5 B2) — 기본 teams(v2.8 그대로)
+vi.mock('@/lib/minutes/rootMode', () => ({ loadRootFolders: vi.fn(async () => ({ ok: true, value: { mode: 'teams' } })) }))
 vi.mock('@/lib/authz', () => ({ actorFromUser: mocks.actorFromUser }))
 vi.mock('@/lib/minutes/teamScope', () => ({
   activeTeamCodesForMinuteScope: vi.fn(async (scope: { projectId: string | null; workspaceId: string }) =>
@@ -80,8 +82,8 @@ function post(body: unknown, headers: Record<string, string> = {}): NextRequest 
 
 /* ── fixtures ─────────────────────────────────────────────────────────────── */
 
-const SEED_MES = { id: 'f-mes', name: 'MES', parent_id: null, created_by: null, workspace_id: 'ws-1' }
-const SEED_ERP = { id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, workspace_id: 'ws-1' }
+const SEED_MES = { id: 'f-mes', name: 'MES', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-MES', team: { code: 'MES', project_id: null }, workspace_id: 'ws-1' }
+const SEED_ERP = { id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, workspace_id: 'ws-1' }
 const F_QUALITY = { id: 'f-q', name: '품질', parent_id: 'f-mes', created_by: 'u-9', workspace_id: 'ws-1' }
 const F_WEEKLY = { id: 'f-w', name: '주간정례', parent_id: 'f-q', created_by: 'u-9', workspace_id: 'ws-1' }
 const TREE = [SEED_MES, SEED_ERP, F_QUALITY, F_WEEKLY]
@@ -717,7 +719,7 @@ describe('비활성 팀 시나리오 (§3.2 ① 단독 조건)', () => {
   it('team_code 가 비활성이어도 루트 세그먼트가 중복되지 않는다', async () => {
     mocks.activeTeamCodes = ['PMO', 'ERP', 'MES', '가공']        // MDM 비활성
     useAdmin({
-      minute_folders: [{ data: [...TREE, { id: 'f-mdm', name: 'MDM', parent_id: null, created_by: null, workspace_id: 'ws-1' }] }],
+      minute_folders: [{ data: [...TREE, { id: 'f-mdm', name: 'MDM', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-MDM', team: { code: 'MDM', project_id: null }, workspace_id: 'ws-1' }] }],
       minutes: [{ data: [minute(1, { team_code: 'MDM', folder_id: 'f-mdm' })] }],
     })
     const r = await POST(post(body({
@@ -753,7 +755,7 @@ describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Tas
   const PROJECT_UUID = '90b95d7d-8d5c-4f8c-9915-4a07b876af27'
   // 같은 이름 'MES' 루트가 전역(f-mes)과 프로젝트(f-mes-p)에 각각 존재 — 스코프를 안 가리면
   // 전역 루트와 뒤섞인다.
-  const SEED_MES_PROJECT = { id: 'f-mes-p', name: 'MES', parent_id: null, created_by: null, project_id: PROJECT_UUID, workspace_id: 'ws-1' }
+  const SEED_MES_PROJECT = { id: 'f-mes-p', name: 'MES', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-MES', team: { code: 'MES', project_id: null }, project_id: PROJECT_UUID, workspace_id: 'ws-1' }
   const TREE_WITH_PROJECT = [...TREE, SEED_MES_PROJECT]
 
   it('회의록의 project_id 스코프 루트를 기준으로 판정한다 — 전역 루트와 혼동하지 않는다', async () => {
@@ -788,7 +790,7 @@ describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Tas
     mocks.activeTeamCodesForProject.mockImplementation((projectId: string) =>
       projectId === PROJECT_UUID ? ['PMO', 'ERP', 'MES', '가공', 'MDM', '신설팀'] : mocks.activeTeamCodes)
     const tree = [...TREE_WITH_PROJECT, {
-      id: 'f-newteam-p', name: '신설팀', parent_id: null, created_by: null, project_id: PROJECT_UUID,
+      id: 'f-newteam-p', name: '신설팀', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-신설팀', team: { code: '신설팀', project_id: null }, project_id: PROJECT_UUID,
     }]
     useAdmin({
       minute_folders: [{ data: tree }],

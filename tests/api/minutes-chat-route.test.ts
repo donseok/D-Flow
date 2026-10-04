@@ -49,16 +49,16 @@ import { makeActor, makeSuperuser } from '../fixtures/actor'
 
 // 두 워크스페이스에 동명 'PMO' 미지정 루트가 공존한다 — 시드 루트 키는 범위를 품는다.
 const FOLDERS = [
-  { id: 'a-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: null, workspace_id: 'ws-a' },
+  { id: 'a-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: null, workspace_id: 'ws-a' },
   { id: 'a-sub', name: '주간', parent_id: 'a-pmo', created_by: 'u1', project_id: null, workspace_id: 'ws-a' },
   { id: 'a-leaf', name: '정례', parent_id: 'a-sub', created_by: 'u1', project_id: null, workspace_id: 'ws-a' },
-  { id: 'a-erp', name: 'ERP', parent_id: null, created_by: null, project_id: null, workspace_id: 'ws-a' },
+  { id: 'a-erp', name: 'ERP', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, project_id: null, workspace_id: 'ws-a' },
   { id: 'a-erp-sub', name: '물류', parent_id: 'a-erp', created_by: 'u1', project_id: null, workspace_id: 'ws-a' },
   // 명단 밖 비공개 프로젝트(pa-priv)의 전용 트리 — 같은 워크스페이스·같은 담당(PMO) 루트(CC1)
-  { id: 'priv-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: 'pa-priv', workspace_id: 'ws-a' },
+  { id: 'priv-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: 'pa-priv', workspace_id: 'ws-a' },
   { id: 'priv-sub', name: '비공개 정례', parent_id: 'priv-pmo', created_by: 'u1', project_id: 'pa-priv', workspace_id: 'ws-a' },
   // 볼 수 있는 프로젝트(pa)의 전용 트리(대조)
-  { id: 'pa-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: 'pa', workspace_id: 'ws-a' },
+  { id: 'pa-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: 'pa', workspace_id: 'ws-a' },
   { id: 'pa-sub', name: '프로젝트 정례', parent_id: 'pa-pmo', created_by: 'u1', project_id: 'pa', workspace_id: 'ws-a' },
 ]
 

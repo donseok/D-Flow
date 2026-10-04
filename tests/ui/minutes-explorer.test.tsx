@@ -29,7 +29,9 @@ import { MinutesExplorer } from '@/components/minutes/MinutesExplorer'
 import { MinutesScopeProvider } from '@/components/minutes/MinutesScopeContext'
 
 const folder = (id: string, name: string, parentId: string | null = null, sort = 100, createdBy: string | null = null): MinuteFolder =>
-  ({ id, name, parentId, sort, createdBy, projectId: null })
+  ({ id, name, parentId, sort, createdBy, projectId: null,
+    // SP5 B2 — 시드 루트(옛 created_by null)는 kind = team_root 로 표시한다
+    ...(parentId === null && createdBy === null ? { kind: 'team_root' as const, teamCode: name } : { kind: 'user' as const }) })
 const leaf = (id: string, date: string, title: string, folderId: string | null, extra: Partial<ExplorerLeaf> = {}): ExplorerLeaf => ({
   id, minuteDate: date, teamCode: 'MES', title, fileCount: 0,
   createdBy: 'u1', createdByName: '홍길동', bodyPreview: '', meetingCategory: null,
@@ -66,7 +68,6 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
           onToggleFavorite={onToggle} onRetryFavorites={onRetry}
           layout="grid"
           currentUserId="u1" onChanged={onChanged} onFolderSelect={onFolderSelect}
-          teamCodes={['PMO', 'MES', 'ERP']}
           {...over} />
       </MinutesScopeProvider>,
     ))

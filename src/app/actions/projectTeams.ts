@@ -14,6 +14,7 @@ import { pickTeamColor } from '@/lib/domain/teamColor'
 import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { referencedCommonTeamCodes } from '@/lib/teams/referencedCommon'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
+import { teamRootNameError } from '@/lib/minutes/teamRootErrors'
 import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 
 export type ProjectTeamActionResult = { ok: true } | { ok: false; error: string }
@@ -116,7 +117,12 @@ export async function updateProjectTeam(
   // .select('id') 로 영향 행을 확인한다 — 0행이면 조용한 no-op 을 성공으로 위장하지 않는다
   // (teams.ts updateTeam 과 대칭되는 방어, revokeProjectInvite 원조 관례).
   const upd = await admin.from('teams').update(row).eq('id', teamId).eq('project_id', projectId).select('id')
-  if (upd.error) return { ok: false, error: failWith('projectTeams.update', upd.error, ERR_TEAM_UPDATE) }
+  if (upd.error) {
+    // 개명이 회의록 팀 루트 이름 동기에서 막혔다(SP5 B2 — D52)
+    const rootErr = teamRootNameError(upd.error)
+    if (rootErr) return { ok: false, error: rootErr }
+    return { ok: false, error: failWith('projectTeams.update', upd.error, ERR_TEAM_UPDATE) }
+  }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '이 프로젝트의 팀이 아니거나 존재하지 않습니다.' }
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }

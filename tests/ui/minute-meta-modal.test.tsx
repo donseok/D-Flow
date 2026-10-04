@@ -29,7 +29,11 @@ import { MinuteMetaModal } from '@/components/minutes/MinuteMetaModal'
 const F = (
   id: string, name: string, parentId: string | null = null,
   createdBy: string | null = null, sort = 0,
-): MinuteFolder => ({ id, name, parentId, sort, createdBy, projectId: null })
+): MinuteFolder => ({
+  id, name, parentId, sort, createdBy, projectId: null,
+  // SP5 B2 — 시드 루트(옛 created_by null)는 kind = team_root + 팀 code(조인). 이 표본의 루트 이름은 팀 code 와 같다
+  ...(parentId === null && createdBy === null ? { kind: 'team_root' as const, teamCode: name } : { kind: 'user' as const }),
+})
 
 // sort 는 프로덕션 시드값(0043) — 트리 표시 순서가 이 값에서 유도되므로 순서가 계약
 const tree: MinuteFolder[] = [
@@ -185,8 +189,8 @@ describe('MinuteMetaModal — 폴더 직접 선택 + 또박또박 연결', () =>
 
   it('폴더 픽커는 선택된 프로젝트 소속 폴더만 보여준다', async () => {
     const scoped: MinuteFolder[] = [
-      { id: 'r-erp', name: 'ERP', parentId: null, sort: 0, createdBy: null, projectId: 'pA' },
-      { id: 'r-mes2', name: 'MES(B)', parentId: null, sort: 1, createdBy: null, projectId: 'pB' },
+      { id: 'r-erp', name: 'ERP', parentId: null, sort: 0, createdBy: null, kind: 'team_root', teamCode: 'ERP', projectId: 'pA' },
+      { id: 'r-mes2', name: 'MES(B)', parentId: null, sort: 1, createdBy: null, kind: 'team_root', teamCode: 'MES', projectId: 'pB' },
     ]
     fetchMinuteFoldersLite.mockImplementation(async () => scoped)
     await mount({ ...baseMinute, projectId: 'pA' }, [{ id: 'pA', name: 'A' }, { id: 'pB', name: 'B' }])
@@ -197,8 +201,8 @@ describe('MinuteMetaModal — 폴더 직접 선택 + 또박또박 연결', () =>
 
   it('프로젝트를 바꾸면 스코프 밖 폴더 선택이 미분류로 해제된다 — 기존 편철(초기값)은 무접촉', async () => {
     const scoped: MinuteFolder[] = [
-      { id: 'r-a', name: '루트A', parentId: null, sort: 0, createdBy: null, projectId: 'pA' },
-      { id: 'r-b', name: '루트B', parentId: null, sort: 1, createdBy: null, projectId: 'pB' },
+      { id: 'r-a', name: '루트A', parentId: null, sort: 0, createdBy: null, kind: 'team_root', teamCode: '루트A', projectId: 'pA' },
+      { id: 'r-b', name: '루트B', parentId: null, sort: 1, createdBy: null, kind: 'team_root', teamCode: '루트B', projectId: 'pB' },
     ]
     fetchMinuteFoldersLite.mockImplementation(async () => scoped)
     await mount(

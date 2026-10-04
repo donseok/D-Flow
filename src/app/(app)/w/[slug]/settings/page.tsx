@@ -84,7 +84,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
       </div>
       <SettingsShell items={[
         { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
-        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-minutes', label: '회의록' }, { id: 'workspace-menu', label: '메뉴' },
+        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-minutes', label: '회의록' }, { id: 'workspace-minute-roots', label: '회의록 폴더' }, { id: 'workspace-menu', label: '메뉴' },
         { id: 'workspace-history', label: '기록' },
       ]}>
       <SectionCard id="workspace-general" searchText="branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow="일반" title="이름과 메일" icon={Palette}>
@@ -133,7 +133,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         <AttachmentPolicyEditor key={`${access.id}-${config.revision}`} scope={{ workspaceId: access.id }} revision={config.revision} canEdit
           policy={attPolicy} invalid={attPolicy === null} />
       </SectionCard>
-      <SectionCard id="workspace-minute-roots" searchText="minutes.root_folders 회의록 최상위 폴더 팀 폴더" eyebrow="회의록" title={t(locale, 'settings.minutes.root_folders.label')} icon={FolderTree}>
+      <SectionCard id="workspace-minute-roots" searchText="minutes.root_folders 회의록 최상위 폴더 팀 폴더" eyebrow="회의록 폴더" title={t(locale, 'settings.minutes.root_folders.label')} icon={FolderTree}>
         <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.minutes.root_folders.desc')}</p>
         <RootFoldersEditor key={`${access.id}-${config.revision}`} workspaceId={access.id} revision={config.revision} canEdit={access.isSuperuser}
           value={rootFolders} invalid={rootFolders === null} />

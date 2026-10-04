@@ -94,7 +94,7 @@ import {
 } from '@/app/actions/minutes'
 
 const seedFolders = [
-  { id: 'f1', name: 'PMO', parent_id: null, sort: 0, created_by: null, workspace_id: 'ws-1' },
+  { id: 'f1', name: 'PMO', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: 'ws-1' },
   { id: 'f2', name: '하위', parent_id: 'f1', sort: 100, created_by: 'u1', workspace_id: 'ws-1' },
 ]
 
@@ -129,7 +129,7 @@ describe('createMinuteFolder', () => {
   })
   it('깊이 5단 초과는 거부', async () => {
     const chain = [
-      { id: 'd1', name: '1', parent_id: null, sort: 0, created_by: null, workspace_id: 'ws-1' },
+      { id: 'd1', name: '1', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-1', team: { code: '1', project_id: null }, workspace_id: 'ws-1' },
       { id: 'd2', name: '2', parent_id: 'd1', sort: 0, created_by: null, workspace_id: 'ws-1' },
       { id: 'd3', name: '3', parent_id: 'd2', sort: 0, created_by: null, workspace_id: 'ws-1' },
       { id: 'd4', name: '4', parent_id: 'd3', sort: 0, created_by: null, workspace_id: 'ws-1' },
@@ -227,9 +227,9 @@ describe('createMinuteFolder', () => {
 describe('fetchMinuteFoldersLite', () => {
   it('숨김(비공개) 프로젝트 폴더는 목록에서 제외 — 챗 패널로 폴더명 유출 차단(레저 항목 12)', async () => {
     const folders = [
-      { id: 'f-pub', name: 'ERP', parent_id: null, sort: 0, created_by: null, project_id: 'p-pub', workspace_id: 'ws-1' },
-      { id: 'f-priv', name: 'MES', parent_id: null, sort: 1, created_by: null, project_id: 'p-priv', workspace_id: 'ws-1' },
-      { id: 'f-none', name: 'PMO', parent_id: null, sort: 2, created_by: null, project_id: null, workspace_id: 'ws-1' },
+      { id: 'f-pub', name: 'ERP', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, project_id: 'p-pub', workspace_id: 'ws-1' },
+      { id: 'f-priv', name: 'MES', parent_id: null, sort: 1, created_by: null, kind: 'team_root', team_id: 't-MES', team: { code: 'MES', project_id: null }, project_id: 'p-priv', workspace_id: 'ws-1' },
+      { id: 'f-none', name: 'PMO', parent_id: null, sort: 2, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: null, workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({ minute_folders: { data: folders, error: null } })
     createServerClient.mockResolvedValue(client)
@@ -239,14 +239,14 @@ describe('fetchMinuteFoldersLite', () => {
     expect(r!.map(f => f.id)).toEqual(['f-pub', 'f-none'])
   })
   it('숨김 판정이 실패하면 폴더를 열지 않는다 — null(fail-closed, 비공개 폴더명이 새지 않게)', async () => {
-    const { client } = fakeClient({ minute_folders: { data: [{ id: 'f1', name: 'ERP', parent_id: null, sort: 0, created_by: null, project_id: 'p1', workspace_id: 'ws-1' }], error: null } })
+    const { client } = fakeClient({ minute_folders: { data: [{ id: 'f1', name: 'ERP', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, project_id: 'p1', workspace_id: 'ws-1' }], error: null } })
     createServerClient.mockResolvedValue(client)
     getHiddenProjectIds.mockRejectedValue(new Error('hidden down'))
     expect(await fetchMinuteFoldersLite('ws-1')).toBeNull()
   })
   it('숨김 집합이 비면 전량 반환 — 기존 동작 무변경', async () => {
     const folders = [
-      { id: 'f1', name: 'ERP', parent_id: null, sort: 0, created_by: null, project_id: 'p1', workspace_id: 'ws-1' },
+      { id: 'f1', name: 'ERP', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, project_id: 'p1', workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({ minute_folders: { data: folders, error: null } })
     createServerClient.mockResolvedValue(client)
@@ -283,7 +283,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
 
   it('delete: 비우기 우선 — 하위 폴더·소속 회의록을 부모로 승격한 뒤 지운다(§6)', async () => {
     const tree = [
-      { id: 'f1', name: 'PMO', parent_id: null, sort: 0, created_by: null, workspace_id: 'ws-1' },
+      { id: 'f1', name: 'PMO', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: 'ws-1' },
       { id: 'f2', name: '대상', parent_id: 'f1', sort: 100, created_by: 'u1', workspace_id: 'ws-1' },
       { id: 'f3', name: '자식', parent_id: 'f2', sort: 100, created_by: 'u9', workspace_id: 'ws-1' },
     ]
@@ -304,7 +304,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
 
   it('delete: 승격 시 상위에 동명이 있으면 중단 — cascade 로 조용히 지우지 않는다', async () => {
     const tree = [
-      { id: 'f1', name: 'PMO', parent_id: null, sort: 0, created_by: null, workspace_id: 'ws-1' },
+      { id: 'f1', name: 'PMO', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: 'ws-1' },
       { id: 'f2', name: '대상', parent_id: 'f1', sort: 100, created_by: 'u1', workspace_id: 'ws-1' },
       { id: 'f3', name: '겹침', parent_id: 'f2', sort: 100, created_by: 'u1', workspace_id: 'ws-1' },
       { id: 'f4', name: '겹침', parent_id: 'f1', sort: 100, created_by: 'u1', workspace_id: 'ws-1' },
@@ -319,7 +319,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
 
   it('delete: 작성자도 pmo_admin 도 아니면 승격 전에 거절', async () => {
     const tree = [
-      { id: 'f1', name: 'PMO', parent_id: null, sort: 0, created_by: null, workspace_id: 'ws-1' },
+      { id: 'f1', name: 'PMO', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: 'ws-1' },
       { id: 'f2', name: '남의폴더', parent_id: 'f1', sort: 100, created_by: 'other', workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({ minute_folders: { data: tree, error: null } })
@@ -330,16 +330,16 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
   })
   it('rename: 시드 팀 루트(MES)는 개명 금지 — 자동 편철 앵커 보호(0043)', async () => {
     const { client } = fakeClient({
-      minute_folders: { data: [{ id: 'f-mes', name: 'MES', parent_id: null, sort: 2, created_by: null, workspace_id: 'ws-1' }], error: null },
+      minute_folders: { data: [{ id: 'f-mes', name: 'MES', parent_id: null, sort: 2, created_by: null, kind: 'team_root', team_id: 't-MES', team: { code: 'MES', project_id: null }, workspace_id: 'ws-1' }], error: null },
     })
     createServerClient.mockResolvedValue(client)
     const r = await renameMinuteFolder('ws-1', 'f-mes', '엠이에스')
     expect(r.ok).toBe(false)
-    expect(r.error).toContain('팀 기본 폴더')
+    expect(r.error).toContain('최상위 기본 폴더')
   })
   it('rename/delete: 시드 하위 구분(구매)은 허용 — 하위 구분이 실폴더 동적 유도로 바뀌어 앵커 보호 해제', async () => {
     const seedTree = [
-      { id: 'r-erp', name: 'ERP', parent_id: null, sort: 1, created_by: null, workspace_id: 'ws-1' },
+      { id: 'r-erp', name: 'ERP', parent_id: null, sort: 1, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, workspace_id: 'ws-1' },
       { id: 'c-buy', name: '구매', parent_id: 'r-erp', sort: 1, created_by: null, workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({ minute_folders: { data: seedTree, error: null } })
@@ -363,7 +363,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
     createServerClient.mockResolvedValue(client)
     const r = await renameMinuteFolder('ws-1', 'f-mine', 'MDM')
     expect(r.ok).toBe(false)
-    expect(r.error).toContain('팀 기본 폴더명')
+    expect(r.error).toContain('팀 이름과 같은 이름')
   })
   it('rename: 사용자 폴더의 일반 개명은 허용', async () => {
     const { client } = fakeClient({
@@ -374,7 +374,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
   })
   it('delete: 시드 팀 루트(ERP)는 삭제 금지 — cascade 소실 방지(0043)', async () => {
     const { client, calls } = fakeClient({
-      minute_folders: { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, sort: 1, created_by: null, workspace_id: 'ws-1' }], error: null },
+      minute_folders: { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, sort: 1, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, workspace_id: 'ws-1' }], error: null },
     })
     createServerClient.mockResolvedValue(client)
     const r = await deleteMinuteFolder('ws-1', 'f-erp')
@@ -398,7 +398,7 @@ describe('renameMinuteFolder / deleteMinuteFolder', () => {
     const { client } = fakeClient({
       minute_folders: {
         data: [
-          { id: 'pf1', name: 'P1루트', parent_id: null, sort: 0, created_by: null, project_id: 'p2', workspace_id: 'ws-1' },
+          { id: 'pf1', name: 'P1루트', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-P1루트', team: { code: 'P1루트', project_id: null }, project_id: 'p2', workspace_id: 'ws-1' },
           { id: 'pf2', name: '하위', parent_id: 'pf1', sort: 100, created_by: 'u1', project_id: 'p2', workspace_id: 'ws-1' },
         ],
         error: null,
@@ -424,7 +424,7 @@ describe('updateMinuteMeta 폴더 이동(하위 구분, 수정 모달)', () => {
   const patch = { minuteDate: '2026-07-24', teamCode: 'MES' as const, title: '제목', meetingId: null }
   it('folderId 전달 시 folder_id 포함 갱신 + team_code 를 폴더에서 파생(클라이언트 값 불신)', async () => {
     const tree = [
-      { id: 'r-erp', name: 'ERP', parent_id: null, sort: 1, created_by: null, workspace_id: 'ws-1' },
+      { id: 'r-erp', name: 'ERP', parent_id: null, sort: 1, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, workspace_id: 'ws-1' },
       { id: 'c-log', name: '물류', parent_id: 'r-erp', sort: 1, created_by: 'u1', workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({
@@ -480,7 +480,7 @@ describe('updateMinuteMeta 폴더 이동(하위 구분, 수정 모달)', () => {
   })
   it('명시 지정 폴더가 옮겨갈 프로젝트와 다르면 거부 — RPC 미도달(moveMinuteToFolder 와 동일 관용구)', async () => {
     const tree = [
-      { id: 'p2-root', name: 'MES', parent_id: null, sort: 1, created_by: null, project_id: 'p2', workspace_id: 'ws-1' },
+      { id: 'p2-root', name: 'MES', parent_id: null, sort: 1, created_by: null, kind: 'team_root', team_id: 't-MES', team: { code: 'MES', project_id: null }, project_id: 'p2', workspace_id: 'ws-1' },
     ]
     const { client, calls } = fakeClient({
       minutes: { data: { created_by: 'u1', archived_at: null, project_id: 'p1', workspace_id: 'ws-1' }, error: null },
@@ -496,7 +496,7 @@ describe('updateMinuteMeta 폴더 이동(하위 구분, 수정 모달)', () => {
   })
   it('명시 지정 폴더가 옮겨갈 프로젝트와 일치하면 통과 — team 파생 + RPC 갱신', async () => {
     const tree = [
-      { id: 'p1-root', name: 'ERP', parent_id: null, sort: 1, created_by: null, project_id: 'p1', workspace_id: 'ws-1' },
+      { id: 'p1-root', name: 'ERP', parent_id: null, sort: 1, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, project_id: 'p1', workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({
       minutes: { data: { created_by: 'u1', archived_at: null, project_id: 'p1', workspace_id: 'ws-1' }, error: null },
@@ -533,7 +533,7 @@ describe('updateMinuteMeta 폴더 이동(하위 구분, 수정 모달)', () => {
 describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
   // 서버는 클라이언트 판정을 신뢰하지 않는다 — 거부 케이스마다 update 미도달까지 확인
   const tree = [
-    { id: 'f-mes', name: 'MES', parent_id: null, sort: 2, created_by: null, workspace_id: 'ws-1' },   // 팀 시드 루트
+    { id: 'f-mes', name: 'MES', parent_id: null, sort: 2, created_by: null, kind: 'team_root', team_id: 't-MES', team: { code: 'MES', project_id: null }, workspace_id: 'ws-1' },   // 팀 시드 루트
     { id: 'f-a', name: '가', parent_id: null, sort: 100, created_by: 'u1', workspace_id: 'ws-1' },
     { id: 'f-b', name: '나', parent_id: 'f-a', sort: 100, created_by: 'u1', workspace_id: 'ws-1' },
     { id: 'f-c', name: '다', parent_id: 'f-b', sort: 100, created_by: 'u1', workspace_id: 'ws-1' },
@@ -564,7 +564,7 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
     createServerClient.mockResolvedValue(client)
     const r = await moveMinuteFolder('ws-1', 'f-mes', 'f-a')
     expect(r.ok).toBe(false)
-    expect(r.error).toContain('팀 기본 폴더')
+    expect(r.error).toContain('최상위 기본 폴더')
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
   })
   it('자손으로의 이동(순환)은 거부 — update 미도달', async () => {
@@ -607,7 +607,7 @@ describe('moveMinuteFolder (폴더 드래그앤드롭)', () => {
     createServerClient.mockResolvedValue(client)
     const r = await moveMinuteFolder('ws-1', 'x', null)
     expect(r.ok).toBe(false)
-    expect(r.error).toContain('팀 기본 폴더명')
+    expect(r.error).toContain('팀 이름과 같은 이름')
     expect(calls['minute_folders']!.some(c => c.method === 'update')).toBe(false)
   })
   it('제자리(현재 부모) 드롭은 쓰기 없이 성공', async () => {
@@ -709,7 +709,7 @@ describe('moveMinuteToFolder', () => {
   it('§6.4 팀을 넘어가면 team_code 를 동반 갱신하고 메타 RPC 를 경유한다', async () => {
     const folders = [
       ...seedFolders,
-      { id: 'f3', name: 'MES', parent_id: null, sort: 2, created_by: null, workspace_id: 'ws-1' },
+      { id: 'f3', name: 'MES', parent_id: null, sort: 2, created_by: null, kind: 'team_root', team_id: 't-MES', team: { code: 'MES', project_id: null }, workspace_id: 'ws-1' },
       { id: 'f4', name: '품질', parent_id: 'f3', sort: 100, created_by: 'u1', workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({
@@ -767,7 +767,7 @@ describe('moveMinuteToFolder', () => {
 describe('createMinute 폴더 프로젝트 스코프', () => {
   it('명시 지정 폴더가 회의록이 속할 프로젝트와 다르면 거부 — RPC 미도달', async () => {
     const tree = [
-      { id: 'p2-root', name: 'MES', parent_id: null, sort: 1, created_by: null, project_id: 'p2', workspace_id: 'ws-1' },
+      { id: 'p2-root', name: 'MES', parent_id: null, sort: 1, created_by: null, kind: 'team_root', team_id: 't-MES', team: { code: 'MES', project_id: null }, project_id: 'p2', workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({
       projects: { data: { id: 'p1' }, error: null },
@@ -784,7 +784,7 @@ describe('createMinute 폴더 프로젝트 스코프', () => {
   })
   it('명시 지정 폴더가 회의록이 속할 프로젝트와 일치하면 통과', async () => {
     const tree = [
-      { id: 'p1-root', name: 'ERP', parent_id: null, sort: 1, created_by: null, project_id: 'p1', workspace_id: 'ws-1' },
+      { id: 'p1-root', name: 'ERP', parent_id: null, sort: 1, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, project_id: 'p1', workspace_id: 'ws-1' },
     ]
     const { client } = fakeClient({
       projects: { data: { id: 'p1' }, error: null },
@@ -860,7 +860,8 @@ describe('createMinute 프로젝트 미지정 — 워크스페이스(0006)', () 
   }))
 
   it('화면의 워크스페이스(인자)를 p_workspace_id 로 넘기고, 팀 루트도 그 워크스페이스의 미지정 루트에서 찾는다(D26)', async () => {
-    const { client, calls } = fakeClient({ minute_folders: { data: { id: 'ws1-pmo' }, error: null } })
+    // 팀 루트 조회(SP5 B2): kind = team_root 행들을 읽어 팀 code(조인)로 고른다
+    const { client, calls } = fakeClient({ minute_folders: { data: [{ id: 'ws1-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: null, workspace_id: 'ws-1', kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null } }], error: null } })
     createServerClient.mockResolvedValue(client)
     const rpc = rpcOk()
     adminMocks.createAdminClient.mockReturnValue({ rpc, from: vi.fn() })
@@ -903,7 +904,7 @@ describe('createMinute 프로젝트 미지정 — 워크스페이스(0006)', () 
   })
 
   it('다른 워크스페이스의 미지정 폴더를 명시하면 거부 — RPC 미도달', async () => {
-    const tree = [{ id: 'ws2-pmo', name: 'PMO', parent_id: null, sort: 0, created_by: null, project_id: null, workspace_id: 'ws-2' }]
+    const tree = [{ id: 'ws2-pmo', name: 'PMO', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: null, workspace_id: 'ws-2' }]
     createServerClient.mockResolvedValue(fakeClient({ minute_folders: { data: tree, error: null } }).client)
     const r = await createMinute(input, 'ws2-pmo', undefined, 'ws-1')
     expect(r).toMatchObject({ ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' })
@@ -913,7 +914,7 @@ describe('createMinute 프로젝트 미지정 — 워크스페이스(0006)', () 
 
 describe('폴더 가드 — RLS(0006)와 같은 워크스페이스 판정', () => {
   const W2_TREE = [
-    { id: 'w2-root', name: 'PMO', parent_id: null, sort: 0, created_by: null, project_id: null, workspace_id: 'ws-2' },
+    { id: 'w2-root', name: 'PMO', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: null, workspace_id: 'ws-2' },
     { id: 'w2-sub', name: '남의폴더', parent_id: 'w2-root', sort: 100, created_by: 'other', project_id: null, workspace_id: 'ws-2' },
   ]
 
@@ -973,7 +974,7 @@ describe('폴더 가드 — RLS(0006)와 같은 워크스페이스 판정', () =
 describe('프로젝트 없는 회의록의 폴더 이동 — 워크스페이스 경계(0006)', () => {
   // 메타 RPC·raw update·minutes 트리거는 폴더 워크스페이스를 보지 않는다 — 액션 가드가 유일한 관문이다.
   const W2_TREE = [
-    { id: 'w2-root', name: 'ERP', parent_id: null, sort: 1, created_by: null, project_id: null, workspace_id: 'ws-2' },
+    { id: 'w2-root', name: 'ERP', parent_id: null, sort: 1, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, project_id: null, workspace_id: 'ws-2' },
     { id: 'w2-sub', name: '물류', parent_id: 'w2-root', sort: 1, created_by: 'u1', project_id: null, workspace_id: 'ws-2' },
   ]
   const patch = { minuteDate: '2026-09-26', teamCode: 'ERP' as const, title: '제목', meetingId: null }
@@ -1022,7 +1023,7 @@ describe('프로젝트 없는 회의록의 폴더 이동 — 워크스페이스 
   })
 
   it('createMinute: RPC 의 MINUTE_FOLDER_WORKSPACE_MISMATCH(0006:606)는 사용자 문구로 매핑 — 영문 상수 노출 금지', async () => {
-    createServerClient.mockResolvedValue(fakeClient({ minute_folders: { data: { id: 'ws1-pmo' }, error: null } }).client)
+    createServerClient.mockResolvedValue(fakeClient({ minute_folders: { data: [{ id: 'ws1-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: null, workspace_id: 'ws-1', kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null } }], error: null } }).client)
     const rpc = vi.fn(() => ({
       single: () => Promise.resolve({ data: null, error: { message: 'MINUTE_FOLDER_WORKSPACE_MISMATCH' } }),
     }))

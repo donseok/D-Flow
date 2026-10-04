@@ -52,6 +52,8 @@ vi.mock('@/lib/teams/source', () => ({
 }))
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
+// 최상위 폴더 모드(SP5 B2) — 기본 teams(v2.8 그대로). custom 분기는 아래 v2.9 절이 바꾼다
+vi.mock('@/lib/minutes/rootMode', () => ({ loadRootFolders: vi.fn(async () => ({ ok: true, value: { mode: 'teams' } })) }))
 // inline meeting 헬퍼(minutes/meetings.ts)가 revalidatePath 를 호출한다 — vitest(요청 스코프 밖)
 // 에서는 throw 하므로 after() 와 같은 이유로 목킹한다.
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }))
@@ -78,6 +80,7 @@ import type { ProjectRole, TeamView } from '@/lib/domain/authz'
 import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
+import { loadRootFolders } from '@/lib/minutes/rootMode'
 
 const SECRET = 'test-minutes-secret'
 const EXTERNAL_ID = 'ddobak:0198c9f2-3a41-7c22-b1e4-9f3d2a8c1b77'
@@ -132,6 +135,11 @@ function fakeAdmin(
           ? { error: { message: 'profiles unavailable' } }
           : { data: profileRowFor(users, email) })
         b.eq = vi.fn((col: string, val: unknown) => { if (col === 'email') email = val; return b })
+      } else if (table === 'teams' && !tables.teams) {
+        // 팀 루트 지연 생성(ensureTeamRoot — SP5 B2)의 팀 조회 — 큐가 없으면 그 code 의 활성 공용 팀이 하나 있다(v2.8 의 활성 팀 판정과 같은 전제)
+        let code: unknown
+        b = queryBuilder(() => ({ data: [{ id: `t-${String(code)}`, code, name: code, project_id: null, active: true }] }))
+        b.eq = vi.fn((col: string, val: unknown) => { if (col === 'code') code = val; return b })
       } else {
         const queued = (tables[table] ?? []).shift()
         b = queryBuilder(queued ?? { data: null, error: null })
@@ -426,7 +434,7 @@ describe('POST /api/v1/minutes upsert (§4, §9.6 ⑤⑥⑦⑧⑨)', () => {
       ],
       // Task 6 이후 폴백은 resolveFolderPath(path: []) 공유 구현을 태운다 — 순수 select 가
       // 아니라 스냅샷 전체 로드(loadFolderSnapshot)라 응답이 배열이다.
-      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
+      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }] }],
     })
     const res = await POST(post(payload))
     expect(res.status).toBe(201)
@@ -460,7 +468,7 @@ describe('POST /api/v1/minutes upsert (§4, §9.6 ⑤⑥⑦⑧⑨)', () => {
         { data: null },
         { data: { id: 'm-1', created_at: '2026-07-27T01:00:00+00:00', updated_at: '2026-07-27T01:00:00+00:00' } },
       ],
-      minute_folders: [{ data: [{ id: 'f-new', name: '신설팀', parent_id: null, created_by: null, workspace_id: WS }] }],
+      minute_folders: [{ data: [{ id: 'f-new', name: '신설팀', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-신설팀', team: { code: '신설팀', project_id: null }, workspace_id: WS }] }],
     })
     const res = await POST(post({ ...payload, team: '신설팀' }))
     expect(res.status).toBe(201)
@@ -734,7 +742,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
   const created = { id: 'm-1', created_at: '2026-07-27T01:00:00+00:00', updated_at: '2026-07-27T01:00:00+00:00' }
   const insertQueue = [{ data: null }, { data: created }]
   // resolveFolderPath 는 폴더 전량 스냅샷 1회 + 부족분 insert 순으로 질의한다.
-  const SEED_PMO = { id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }
+  const SEED_PMO = { id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }
   const snapshot = (...rs: Array<Record<string, unknown>>) => ({ data: [SEED_PMO, ...rs] })
 
   /** 신규 등록 경로의 minute_folders 응답 큐를 세팅한다. */
@@ -793,6 +801,23 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
     expect(admin.rpc).toHaveBeenCalledWith(
       'create_minute_with_version', expect.objectContaining({ p_folder_id: null }),
     )
+  })
+
+  it('v2.9 custom 모드: 루트가 지정 폴더가 아니면 미분류(unclassified·null 둘) — 팀 code 루트도 한 칸 내리지 않는다, 등록은 201', async () => {
+    vi.mocked(loadRootFolders).mockResolvedValueOnce({ ok: true, value: { mode: 'custom', names: ['외부 연동'] } })
+    const { admin } = useInsert([snapshot()])
+    const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
+    expect(res.status).toBe(201)
+    expect(await res.json()).toMatchObject({ folder_id: null, folder_path: null, folder_path_status: 'unclassified' })
+    expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({ p_folder_id: null }))
+  })
+
+  it('v2.9 — 모드를 못 읽으면 쓰지 않는다(500, 새 오류 code 없음)', async () => {
+    vi.mocked(loadRootFolders).mockResolvedValueOnce({ ok: false })
+    const { admin } = useInsert([snapshot()])
+    const res = await POST(post({ ...payload, folder_path: ['PMO'] }))
+    expect(res.status).toBe(500)
+    expect(admin.rpc).not.toHaveBeenCalled()
   })
 
   it('6단 경로는 5단으로 절단해 편철하고 절단된 경로를 에코한다', async () => {
@@ -859,7 +884,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
     it('키 부재 → metadata 에 folder_id 키가 없다(기존 위치 유지)', async () => {
       const { admin } = useAdmin({
         minutes: [...replaceQueue],
-        minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],  // 에코 역해석
+        minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }] }],  // 에코 역해석
       })
       const res = await POST(post(payload))
       expect(res.status).toBe(200)
@@ -895,7 +920,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
         minute_folders: [
           snapshot(),                                                   // 팀 루트만 존재
           { data: null, error: { code: '42501', message: 'denied' } },  // '품질' 생성 실패
-          { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] },  // 에코 역해석
+          { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }] },  // 에코 역해석
         ],
       })
       const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
@@ -910,7 +935,7 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
         minutes: [...replaceQueue],
         minute_folders: [
           { data: [] },                                                                 // 시드 루트 없음
-          { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] },   // 에코 역해석
+          { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }] },   // 에코 역해석
         ],
       })
       const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
@@ -933,9 +958,9 @@ describe('folder_path 편철 (v2.3 §3.1~§3.3 — W3·W4·W5)', () => {
 describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Task 6)', () => {
   const created = { id: 'm-1', created_at: '2026-07-27T01:00:00+00:00', updated_at: '2026-07-27T01:00:00+00:00' }
   // 같은 이름 'PMO' 시드 루트가 전역과 프로젝트에 각각 존재 — 스코프를 안 가리면 엉뚱한 쪽으로 편철된다.
-  const SEED_PMO_GLOBAL = { id: 'f-pmo-global', name: 'PMO', parent_id: null, created_by: null, project_id: null, workspace_id: WS }
+  const SEED_PMO_GLOBAL = { id: 'f-pmo-global', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: null, workspace_id: WS }
   const SEED_PMO_PROJECT = {
-    id: 'f-pmo-project', name: 'PMO', parent_id: null, created_by: null, project_id: PROJECT_UUID,
+    id: 'f-pmo-project', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: PROJECT_UUID,
   }
 
   it('케이스1: meetingId로 연결된 프로젝트가 있으면 그 프로젝트 트리의 시드 루트로 편철된다', async () => {
@@ -991,7 +1016,7 @@ describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Tas
     expect(res.status).toBe(201)
     expect(await res.json()).toMatchObject({ folder_id: 'f-pmo-project-new', folder_path: ['PMO'] })
     expect(builders.minute_folders[1].insert).toHaveBeenCalledWith({
-      name: 'PMO', parent_id: null, created_by: null, project_id: PROJECT_UUID,
+      name: 'PMO', parent_id: null, created_by: null, project_id: PROJECT_UUID, workspace_id: WS, kind: 'team_root', team_id: 't-PMO', sort: 100,
     })
     expect(admin.rpc).toHaveBeenCalledWith(
       'create_minute_with_version', expect.objectContaining({ p_folder_id: 'f-pmo-project-new' }),
@@ -1010,11 +1035,11 @@ describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Tas
       minute_folders: [
         // refileMinuteAfterProjectChange 내부 loadFolderSnapshot — 신·구 프로젝트 루트가 모두 필요
         { data: [
-          { id: 'f-old-root', name: 'PMO', parent_id: null, created_by: null, project_id: OLD_PROJECT_UUID, workspace_id: WS },
-          { id: 'f-new-root', name: 'PMO', parent_id: null, created_by: null, project_id: PROJECT_UUID, workspace_id: WS },
+          { id: 'f-old-root', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: OLD_PROJECT_UUID, workspace_id: WS },
+          { id: 'f-new-root', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: PROJECT_UUID, workspace_id: WS },
         ] },
         // 응답 에코(folderPathOf)용 — existing.folder_id(로컬 변수, 갱신 전 값) 역해석
-        { data: [{ id: 'f-old-root', name: 'PMO', parent_id: null, created_by: null, project_id: OLD_PROJECT_UUID, workspace_id: WS }] },
+        { data: [{ id: 'f-old-root', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: OLD_PROJECT_UUID, workspace_id: WS }] },
       ],
     })
     const res = await POST(post({ ...payload, meeting_id: MEETING_UUID }))
@@ -1034,7 +1059,7 @@ describe('W25 MINUTES_FOLDER_PATH_ENABLED = false (R1 배포 형상 · 결정 §
     const { admin } = useAdmin({
       minutes: [{ data: null }, { data: created }],
       // 팀 루트 폴백 경로(resolveFolderPath(path: []) 공유 구현) — 스냅샷 배열 응답.
-      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
+      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }] }],
     })
     const res = await POST(post({ ...payload, folder_path: ['PMO', '품질', '주간정례'] }))
     expect(res.status).toBe(201)
@@ -1050,7 +1075,7 @@ describe('W25 MINUTES_FOLDER_PATH_ENABLED = false (R1 배포 형상 · 결정 §
     // 플래그 없이 W1 만 먼저 내면 이 세 입력이 400 이 되어 오늘 정상 전송되는 회의가 실패한다.
     const queue = () => ({
       minutes: [{ data: null }, { data: created }],
-      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
+      minute_folders: [{ data: [{ id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }] }],
     })
     useAdmin(queue())
     expect((await POST(post({ ...payload, folder_path: ['PMO', '가'.repeat(61)] }))).status).toBe(201)
@@ -1067,7 +1092,7 @@ describe('W25 MINUTES_FOLDER_PATH_ENABLED = false (R1 배포 형상 · 결정 §
         { data: { ...existingRow, folder_id: 'f-old' } },
         { data: { id: 'm-1', created_at: existingRow.created_at, updated_at: '2026-07-27T02:00:00+00:00' } },
       ],
-      minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
+      minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }] }],
     })
     const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
     expect(res.status).toBe(200)
@@ -1081,7 +1106,7 @@ describe('folder_path_status 에코 (결정 §2-C — POST 응답)', () => {
   // 또박또박 ddobak-W8 배지가 이 값 하나에 걸려 있어(절단·부분편철·미분류가 보이는 유일한 경로)
   // 조용히 잘못된 값이 나가면 사용자에게 "정상 편철"로 보인다.
   const created = { id: 'm-1', created_at: '2026-07-27T01:00:00+00:00', updated_at: '2026-07-27T01:00:00+00:00' }
-  const SEED_PMO = { id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }
+  const SEED_PMO = { id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }
   const insertQueue = () => [{ data: null }, { data: created }]
 
   it('정상 편철 → exact', async () => {
@@ -1154,8 +1179,8 @@ describe('구버전 replace 의 team 불일치 (결정 §6 — 플래그와 무�
       minutes: [{ data: { ...existingRow, folder_id: 'f-old' } }, { data: replaced }],
       // 팀 루트 폴백(resolveFolderPath(path: [])) 스냅샷 → f-erp, 그다음 응답은 에코 역해석용 스냅샷
       minute_folders: [
-        { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, workspace_id: WS }] },
-        { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, workspace_id: WS }] },
+        { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, workspace_id: WS }] },
+        { data: [{ id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, workspace_id: WS }] },
       ],
     })
     const res = await POST(post({ ...payload, team: 'ERP' }))
@@ -1168,7 +1193,7 @@ describe('구버전 replace 의 team 불일치 (결정 §6 — 플래그와 무�
     vi.stubEnv('MINUTES_FOLDER_PATH_ENABLED', 'false')
     const { admin } = useAdmin({
       minutes: [{ data: { ...existingRow, folder_id: 'f-old' } }, { data: replaced }],
-      minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }],
+      minute_folders: [{ data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }] }],
     })
     const res = await POST(post(payload))
     expect(res.status).toBe(200)
@@ -1181,7 +1206,7 @@ describe('구버전 replace 의 team 불일치 (결정 §6 — 플래그와 무�
       minutes: [{ data: { ...existingRow, folder_id: 'f-old' } }, { data: replaced }],
       minute_folders: [
         { data: null },                                                              // 팀 루트 조회 실패
-        { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, workspace_id: WS }] }, // 에코는 기존 위치
+        { data: [{ id: 'f-old', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }] }, // 에코는 기존 위치
       ],
     })
     const res = await POST(post({ ...payload, team: 'ERP' }))
@@ -1210,7 +1235,7 @@ describe('구버전 replace 의 team 불일치 (결정 §6 — 플래그와 무�
     expect(res.status).toBe(200)
     expect(metadataOf(admin)).toMatchObject({ folder_id: 'f-erp-project-new' })
     expect(builders.minute_folders[1].insert).toHaveBeenCalledWith({
-      name: 'ERP', parent_id: null, created_by: null, project_id: PROJECT_UUID,
+      name: 'ERP', parent_id: null, created_by: null, project_id: PROJECT_UUID, workspace_id: WS, kind: 'team_root', team_id: 't-ERP', sort: 100,
     })
     expect(await res.json()).toMatchObject({ folder_id: 'f-erp-project-new', folder_path: ['ERP'] })
   })
@@ -1221,7 +1246,7 @@ describe('구버전 replace 의 team 불일치 (결정 §6 — 플래그와 무�
       minutes: [{ data: { ...existingRow, folder_id: 'f-old' } }, { data: replaced }],
       minute_folders: [
         { data: [
-          { id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, workspace_id: WS },
+          { id: 'f-erp', name: 'ERP', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, workspace_id: WS },
           { id: 'f-sales', name: '영업', parent_id: 'f-erp', created_by: 'u-9', workspace_id: WS },
         ] },
       ],
@@ -1777,8 +1802,8 @@ describe('워크스페이스 스코프 미지정 트리 (0006 · 2 워크스페�
   const W2 = 'ws-2'
   const created = { id: 'm-1', created_at: '2026-09-26T01:00:00+00:00', updated_at: '2026-09-26T01:00:00+00:00' }
   // 두 워크스페이스에 동명 'PMO' 미지정 루트가 공존한다 — rootKey 가 워크스페이스를 안 보면 뒤엣것이 이긴다.
-  const W1_PMO = { id: 'w1-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: null, workspace_id: WS }
-  const W2_PMO = { id: 'w2-pmo', name: 'PMO', parent_id: null, created_by: null, project_id: null, workspace_id: W2 }
+  const W1_PMO = { id: 'w1-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: null, workspace_id: WS }
+  const W2_PMO = { id: 'w2-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: null, workspace_id: W2 }
   const W2_Q = { id: 'w2-q', name: '품질', parent_id: 'w2-pmo', created_by: 'u-9', project_id: null, workspace_id: W2 }
 
   it('프로젝트 없는 신규 등록은 작성자의 유일 워크스페이스를 p_workspace_id 로 넘기고 그 워크스페이스 루트에 편철한다', async () => {

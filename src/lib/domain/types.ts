@@ -212,6 +212,8 @@ export interface Minute {
   id: string
   minuteDate: string           // 'YYYY-MM-DD'
   teamCode: TeamCode
+  /** SP5 B2 — 담당 팀 id(code 단위 해석 결과 — minutes.team_id). 맞는 팀이 없으면 null */
+  teamId?: string | null
   title: string
   bodyMd: string               // 목록 조회에선 ''
   meetingId: string | null
@@ -243,17 +245,26 @@ export interface MinuteFolder {
   name: string
   parentId: string | null
   sort: number
-  createdBy: string | null           // null = 시드 폴더(관리자만 관리)
+  createdBy: string | null           // 작성자(계정 삭제·시스템 생성이면 null) — 폴더 종류 판정에 쓰지 않는다(kind)
   projectId: string | null           // 0076 — 귀속 프로젝트. null = 미지정
   /** 0006 — 소속 워크스페이스. 폴더 관리 판정(작성자 ∨ 그 워크스페이스 관리자)의 근거. 없으면 작성자만(fail-closed). */
   workspaceId?: string | null
+  /** SP5 B2 — 폴더 종류. 없으면 일반 폴더로 본다(루트 특권을 주지 않는 쪽). team_root·custom_root 는 세션이 바꾸거나 지우지 못한다(DB 가드) */
+  kind?: MinuteFolderKind
+  /** team_root 의 팀 id. 그 밖은 null */
+  teamId?: string | null
+  /** team_root 의 팀 code(teams 조인). 못 읽으면 null — 팀을 파생하지 않는다(fail-closed) */
+  teamCode?: string | null
 }
+export type MinuteFolderKind = 'user' | 'team_root' | 'custom_root'
 
 /** 탐색기 리프 — 목록 조회 shape 에 폴더 소속 부착. */
 export interface ExplorerLeaf {
   id: string
   minuteDate: string                 // 'YYYY-MM-DD'
   teamCode: TeamCode
+  /** SP5 B2 — 담당 팀 id(code 단위 해석 결과). 맞는 팀이 없으면 null */
+  teamId?: string | null
   title: string
   fileCount: number
   createdBy: string | null           // 이동 버튼 노출 판정(작성자 or 관리자)

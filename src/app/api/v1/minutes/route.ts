@@ -2,6 +2,8 @@ import { after, NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BRAND } from '@/lib/branding'
 import { folderPathOf, refileMinuteAfterProjectChange, resolveFolderPath } from '@/lib/minutes/folders'
+import { loadRootFolders } from '@/lib/minutes/rootMode'
+import type { RootFoldersSetting } from '@/lib/minutes/rootFolders'
 import { fnv1a64 } from '@/lib/minutes/blocks'
 import {
   enqueueMinuteWikiProcessing,
@@ -97,6 +99,8 @@ function respondMinute(req: NextRequest, status: number, args: {
 interface WriteTarget {
   scope: MinuteScope
   activeTeamCodes: TeamCode[]
+  /** 그 워크스페이스의 최상위 폴더 모드(SP5 B2) */
+  rootMode: RootFoldersSetting
 }
 
 /** 회의록의 워크스페이스는 바뀌지 않는다 — 다른 워크스페이스 프로젝트의 회의로 옮기는 요청의 400 문구. */
@@ -146,13 +150,16 @@ async function resolveWriteTarget(
   const activeTeamCodes = await activeTeamCodesForMinuteScope(scope, { client: admin })
   const teamErr = validateMinuteTeam(p.teamCode, activeTeamCodes)
   if (teamErr) return { ok: false, response: apiBadRequest(teamErr) }
-  return { ok: true, target: { scope, activeTeamCodes } }
+  // 최상위 폴더 모드(SP5 B2 — 계약 v2.9) — 편철 정규화가 모드로 갈리므로 못 읽으면 쓰지 않는다(새 오류 code 없이 500 — Q6)
+  const roots = await loadRootFolders(scope.workspaceId, { client: admin })
+  if (!roots.ok) return { ok: false, response: apiInternalError() }
+  return { ok: true, target: { scope, activeTeamCodes, rootMode: roots.value } }
 }
 
 /**
  * 팀 루트 폴더 id — folder_path 키 부재 폴백 전용(§3.2-5 의 등록/이동 경로).
  * `resolveTeamRootFolderId`(순수 select)와 달리 `resolveFolderPath(path: [])`를 태워
- * **프로젝트 루트가 없으면 지연 생성**한다(공유 `ensureProjectTeamRoot` 구현) — 0076 시드는
+ * **팀 루트가 없으면 지연 생성**한다(공유 `ensureTeamRoot` 구현 — custom 모드면 만들지 않고 미분류) — 0076 시드는
  * "회의록이 이미 있던 프로젝트"만 커버해, 회의록 0건 프로젝트의 첫 업로드나 0076 이후 신설
  * 팀에서는 시드가 없다. 여기서 생성하지 않으면 그 경로가 전부 미분류로 떨어진다.
  */
@@ -161,7 +168,7 @@ async function resolveTeamRootWithLazyCreate(
 ): Promise<string | null> {
   const res = await resolveFolderPath(admin, teamCode, [], {
     actorId, activeTeamCodes: target.activeTeamCodes,
-    projectId: target.scope.projectId, workspaceId: target.scope.workspaceId,
+    projectId: target.scope.projectId, workspaceId: target.scope.workspaceId, rootMode: target.rootMode,
   })
   return res.ok ? res.folderId : null
 }
@@ -189,12 +196,13 @@ async function resolvePayloadFolder(
     activeTeamCodes: target.activeTeamCodes,
     projectId: target.scope.projectId,
     workspaceId: target.scope.workspaceId,
+    rootMode: target.rootMode,
   })
   if (!res.ok) {
     if (res.kind === 'validation_failed') return { ok: false, error: res.error }
-    // no_team_root — 편철 실패가 등록 자체를 막으면 안 된다(resolveTeamRootFolderId 관례 유지).
-    // 원인은 거의 항상 0043 미적용이다.
-    console.error(`[minutes-api] ${res.error} 미분류 폴백 — 0043 적용 여부를 확인하세요.`)
+    // no_team_root(팀 루트 부재·지연 생성 실패)·unmatched_root(custom 모드 루트 불일치 — v2.9) — 편철 실패가 등록 자체를
+    // 막으면 안 된다. 미분류 + folder_id null(v2.8 §4.7-5 규약 그대로)
+    console.error(`[minutes-api] ${res.error} 미분류 폴백(${res.kind}).`)
     return { ok: true, provided: true, folderId: null, folderPath: null, status: 'unclassified' }
   }
   if (!res.complete) {
@@ -313,7 +321,7 @@ async function handleExisting(
     await refileMinuteAfterProjectChange(admin, {
       minuteId: existing.id, teamCode: p.teamCode, oldFolderId: existing.folder_id,
       newProjectId: targetProjectId, actorId: actor.id,
-      activeTeamCodes: target.activeTeamCodes,
+      activeTeamCodes: target.activeTeamCodes, rootMode: target.rootMode,
     })
   }
   const wikiJobId = committed.wiki_rebuild_required || projectChanged

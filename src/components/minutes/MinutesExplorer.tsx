@@ -10,7 +10,7 @@ import type {
   ExplorerLeaf, FolderNode, MeetingCategory, Minute, MinuteFolder,
 } from '@/lib/domain/types'
 import {
-  buildFolderTree, folderDepthOf, groupExplorerByProject, isTeamRootFolder, MINUTE_FOLDER_DEPTH_MAX,
+  buildFolderTree, folderDepthOf, groupExplorerByProject, isLockedRootFolder, isTeamRootFolder, MINUTE_FOLDER_DEPTH_MAX,
   type ExplorerProjectGroup,
 } from '@/lib/domain/minutes'
 import {
@@ -85,7 +85,7 @@ const rowCls = (active: boolean) =>
 export function MinutesExplorer({
   folders, leaves, favorites, onToggleFavorite, onRetryFavorites,
   layout, currentUserId, adminWorkspaceIds = [], adminProjectIds = [], isSuperuser = false,
-  onChanged, onFolderSelect, teamCodes = [], projects = [],
+  onChanged, onFolderSelect, projects = [],
   myProjectIds = null, meetingCategories,
 }: {
   folders: MinuteFolder[]
@@ -104,9 +104,6 @@ export function MinutesExplorer({
   isSuperuser?: boolean
   onChanged: () => void
   onFolderSelect?: (folderId: string | null) => void
-  /** 루트 예약어(팀 앵커) 판정용. 여기서 훅으로 직접 읽지 않는 이유는 이 목록이 **활성** 팀이라
-   *  비활성 팀 앵커를 놓칠 수 있어서다 — 최종 판정은 전체 등록 팀을 아는 서버가 한다(fail-closed). */
-  teamCodes?: readonly string[]
   /** 카드 [수정] 이 여는 메타 모달의 프로젝트 셀렉트 옵션. 빈 배열이면 '연결 없음'만 고를 수 있다. */
   projects?: { id: string; name: string }[]
   /** 내가 멤버로 등록된 프로젝트 id — 수정 모달의 프로젝트 기본 선택 근거. */
@@ -374,7 +371,11 @@ export function MinutesExplorer({
     }
     if (isUnfiledKey(target)) return null
     const f = folderById.get(item.id)
-    return f ? resolveFolderDrop(f, target === ROOT_KEY ? null : target, folders, teamCodes) : null
+    // 루트 예약어(팀 루트 이름 선점) — 같은 범위 팀 루트의 이름(= 팀 이름)으로 미리 거른다. 루트가 아직 없는 팀은 서버(전체 등록 팀)·DB 가드가 최종 판정
+    const teamNames = target === ROOT_KEY && f
+      ? folders.filter(r => isTeamRootFolder(r) && r.projectId === f.projectId && r.workspaceId === f.workspaceId).map(r => r.name)
+      : []
+    return f ? resolveFolderDrop(f, target === ROOT_KEY ? null : target, folders, teamNames) : null
   }
 
   async function handleDrop(target: string) {
@@ -467,7 +468,7 @@ export function MinutesExplorer({
     const active = scope.kind === 'folder' && scope.id === f.id
     const FolderIcon = active || isExpanded ? FolderOpen : Folder
     const drop = dropTarget(f.id)
-    const canDrag = canManageFolder(f) && !isTeamRootFolder(f)
+    const canDrag = canManageFolder(f) && !isLockedRootFolder(f)
     const dragging = drag?.kind === 'folder' && drag.id === f.id
     return (
       <li key={f.id}>
@@ -505,7 +506,7 @@ export function MinutesExplorer({
                   <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-line bg-surface p-1 shadow-[var(--shadow-md)]">
                     {/* 팀 루트 시드(편철 앵커)만 개명·삭제 불가 — 하위 폴더는 개명·삭제가
                         업로드·수정 모달의 하위 구분 옵션에 그대로 반영된다(서버 가드와 동일 기준) */}
-                    {!isTeamRootFolder(f) && (
+                    {!isLockedRootFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'rename', folder: f }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-surface-2">
                         {t('min.fold.rename')}
@@ -517,7 +518,7 @@ export function MinutesExplorer({
                         {t('min.fold.addSub')}
                       </button>
                     )}
-                    {!isTeamRootFolder(f) && (
+                    {!isLockedRootFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'delete', folder: f }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-delayed hover:bg-surface-2">
                         {t('min.fold.delete')}

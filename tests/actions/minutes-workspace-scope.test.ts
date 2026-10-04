@@ -65,7 +65,9 @@ vi.mock('@/lib/minutes/teamScope', () => {
   const byProject: Record<string, string> = { [PA]: WA, [PB]: WB }
   const codes = (s: { projectId: string | null; workspaceId: string }) => mocks.workspaceTeams(s.projectId ? byProject[s.projectId] : s.workspaceId)
   return { activeTeamCodesForMinuteScope: async (s: { projectId: string | null; workspaceId: string }) => codes(s),
-    teamCodesForMinuteScope: async (s: { projectId: string | null; workspaceId: string }) => codes(s) }
+    teamCodesForMinuteScope: async (s: { projectId: string | null; workspaceId: string }) => codes(s),
+    // SP5 B2 — 루트 예약어는 팀 이름. 이 표본의 팀 이름은 code 와 같다
+    teamNamesForMinuteScope: async (s: { projectId: string | null; workspaceId: string }) => codes(s) }
 })
 
 import {
@@ -164,11 +166,11 @@ const minuteRow = (over: Record<string, unknown> = {}) => ({
 })
 /** WA·WB 의 무프로젝트 트리 — 각 워크스페이스의 팀 시드 루트와 하위 폴더, WA 의 사용자 루트(옛 데이터). */
 const FOLDERS = [
-  { id: 'wa-pmo', name: 'PMO', parent_id: null, sort: 0, created_by: null, project_id: null, workspace_id: WA },
+  { id: 'wa-pmo', name: 'PMO', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: null, workspace_id: WA },
   { id: 'wa-sub', name: '하위', parent_id: 'wa-pmo', sort: 0, created_by: 'u1', project_id: null, workspace_id: WA },
   { id: 'wa-free', name: '자유', parent_id: 'wa-pmo', sort: 1, created_by: 'u1', project_id: null, workspace_id: WA },
   { id: 'wa-legacy', name: '옛루트', parent_id: null, sort: 2, created_by: 'u1', project_id: null, workspace_id: WA },
-  { id: 'wb-erp', name: 'ERP', parent_id: null, sort: 0, created_by: null, project_id: null, workspace_id: WB },
+  { id: 'wb-erp', name: 'ERP', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-ERP', team: { code: 'ERP', project_id: null }, project_id: null, workspace_id: WB },
   { id: 'wb-sub', name: '물류', parent_id: 'wb-erp', sort: 0, created_by: 'u1', project_id: null, workspace_id: WB },
 ]
 const seedDb = (results: Record<string, TableResult | TableResult[]> = {}, storage: StorageResults = {}) => {
