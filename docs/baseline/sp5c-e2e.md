@@ -33,3 +33,15 @@ WBS 시트 추가 열·키보드 이동, 이슈/주간 입력·목록과 필터,
 실제 브라우저에서 ?focus 직접 링크로 모달을 처음 열 때 React hydration 오류를 발견했다. 공통 Modal의 서버/첫 hydration은 포털을 생략하고 브라우저 마운트 뒤 포털과 포커스 처리를 함께 시작하도록 수정했다. 초기 열린 모달 SSR→hydration, 포커스·Escape·복원과 기존 모달 40건 통과. 전체 단위 921파일 12,279건 통과. 이후 수정 시각 보완의 액션/주간 열 검사 2파일 24건 통과, 최종 프로덕션 build·타입·lint 통과.
 
 최종 빌드의 실제 브라우저/전용 DB에서 이슈의 required false 기본값→true JWT 저장→수정 시각 증가→직접 링크 새 조회를 확인했다. 1440px/390px 눈확인, pageerror/hydration 오류·가로 넘침 0. 같은 실행에서 WBS CAS·관리 화면 백필/purge 회귀도 통과. 임시 계정·프로젝트 및 앱 3101 정리. 로컬 증거 `.superpowers/sp5c/issue-field-browser-result.json`, `issue-fields-desktop.png`, `issue-fields-mobile.png`. 등록/수정 폼·목록/필터·주간·실시간 등 V 후속 및 X/I/Z는 남았다.
+
+## V 실시간 사용자 필드 전달 검증 (2026-10-05)
+
+0028은 WBS 변경 방송에 custom 전체 스냅샷을 포함하고 이슈 custom 변경 시각을 DB에서 갱신한다. WBS에는 일반 수정 시각 트리거가 없어 custom-only 방송의 시각이 그대로였으며, 실제 채널 가입 후에도 UI가 변경을 버리는 문제를 재현했다. 0029로 WBS custom 변경 시각도 단조 증가하게 보완했다. 같은 값 쓰기는 시각/방송을 바꾸지 않고 백필·purge도 동일 경로로 전달된다. 롤백은 0029→0028→0027 순서이며 기존 값/시각/감사 기록을 보존한다.
+
+클라이언트는 custom 전체 스냅샷을 읽어 빈 객체 purge까지 반영한다. 구형 방송의 custom 생략은 기존 값을 유지하며, 손상 custom 방송은 거부한다. 시각 비교는 PostgreSQL 마이크로초를 보존해 같은 밀리초 내 변경을 놓치지 않는다.
+
+전용 A DB 0000–0029 재생 성공(10-05 03:48 KST), 전체 RLS 45파일 864/864·skip0(실시간 신규 8건), 전체 타입 검사와 실시간/마이그레이션/actor 검사 40건 통과. 앱 변경의 직전 전체 단위 921파일 12,288건 및 lint/build 통과. CI에서 발견한 UI 옵션 픽스처 타입은 44561f6e에서 수정했으며, 이후 실패한 역사적 롤백 검사는 후속 마이그레이션부터 되돌리도록 보완했다. 새 커밋 CI 결과는 별도 확인한다.
+
+실제 빌드 앱에서 private websocket 가입→작성 중 6에 서버 7 도착→초안 6 유지/저장 차단→취소 후 7→새로고침 없이 서버 9 반영을 확인했다. 실시간을 끈 별도 세션의 CAS, 이슈 false 기본값→true JWT 저장/수정 시각/직접 링크 조회, 설정 백필·필수·정확한 건수 purge도 통과. 1440/390 화면 눈확인, pageerror/가로 넘침 0. 임시 계정/프로젝트 정리. 증거 `.superpowers/sp5c/realtime-field-browser-result.json`, `wbs-fields-realtime-desktop.png`, `issue-fields-mobile.png`.
+
+등록/수정 폼·목록/필터·WBS 시트 열/키보드·주간 값 입력, X/I/Z는 남았으며 SP5c와 카탈로그 fields의 상태는 완료/verified로 바꾸지 않는다.
