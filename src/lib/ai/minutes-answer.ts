@@ -128,8 +128,11 @@ export async function streamArchiveAnswer(input: {
     const vecs = await embedTexts([input.message], 'RETRIEVAL_QUERY')
     if (vecs?.[0]?.length) {
       const { data, error } = await sb.rpc('match_minute_documents', {
-        // RPC 에 워크스페이스 인자가 없어(마이그레이션 — 이월) 다른 워크스페이스·숨김 회의록이 상위를 차지할 수 있다 — 넉넉히 받아 거른 뒤 자른다(CC6)
+        // 범위(워크스페이스·숨김 프로젝트 제외)는 SQL 안에서 거른 뒤 순위를 매긴다(0022 — 여러 워크스페이스 소속자의 회수율, 스펙 §9 ⑦).
+        // 유사도 컷오프로 빠지는 몫이 있어 넉넉히 받아 자른다(CC6). 아래 워크스페이스·숨김 재확인은 이중 방어로 남긴다
         query_embedding: vecs[0], match_count: ARCHIVE_VECTOR_FETCH,
+        p_workspace_id: input.workspaceId,
+        p_exclude_project_ids: [...hidden],
         p_team: input.filters.team ?? null,
         p_date_from: input.filters.from ?? null,
         p_date_to: input.filters.to ?? null,

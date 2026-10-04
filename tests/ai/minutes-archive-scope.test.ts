@@ -1,5 +1,6 @@
 // 보관함 Q&A 의 워크스페이스 거르기(과제 34, D26) — 두 워크스페이스 소속자가 W 의 회의록 화면에서 물으면 W 의 회의록만 근거·출처가 된다.
-// 벡터 RPC(match_minute_documents)는 워크스페이스 인자가 없어 찾은 회의록을 한 번 더 읽어 거른다 — 그 확인이 실패하면 벡터 결과를 버린다(fail-closed).
+// 벡터 RPC(match_minute_documents)는 0022 부터 워크스페이스·숨김 제외 인자로 SQL 안에서 거른다. 찾은 회의록을 한 번 더 읽어 거르는 확인은
+// 이중 방어로 남는다 — 그 확인이 실패하면 벡터 결과를 버린다(fail-closed).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ createServerClient: vi.fn(), embedTexts: vi.fn(), heal: vi.fn(async () => undefined), getHiddenProjectIds: vi.fn() }))
 // 비공개 프로젝트 숨김(FA1) — 명단 밖 비공개 프로젝트의 회의록은 근거·출처에 싣지 않는다(U2b-5 리뷰 수정 CC1)
@@ -111,5 +112,14 @@ describe('streamArchiveAnswer — 명단 밖 비공개 프로젝트의 회의록
     expect(fake.client.rpc).toHaveBeenCalledWith('match_minute_documents', expect.objectContaining({ match_count: 24 }))
     expect(out).toContain('회의 7')
     expect(out).not.toContain('회의 8')
+  })
+  it('범위는 SQL 에 넘긴다 — 그 워크스페이스와 숨김 프로젝트 제외 목록(0022, 스펙 §9 ⑦)', async () => {
+    m.getHiddenProjectIds.mockResolvedValue(new Set(['p-priv', 'p-priv2']))
+    const fake = client({ ownIds: [], vector: [] })
+    m.createServerClient.mockResolvedValue(fake.client)
+    await readAll(await streamArchiveAnswer({ workspaceId: W, message: '결정 사항 알려줘', history: [], filters: {} }))
+    expect(fake.client.rpc).toHaveBeenCalledWith('match_minute_documents', expect.objectContaining({
+      p_workspace_id: W, p_exclude_project_ids: ['p-priv', 'p-priv2'],
+    }))
   })
 })
