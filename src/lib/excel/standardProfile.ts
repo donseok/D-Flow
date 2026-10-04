@@ -3,6 +3,7 @@
 // 레거시 5팀·3단이면 옛 프로파일과 같다(W26), 결과는 옛 빌더와 셀 단위로 같다(W23 — tests/excel/standard-profile.test.ts).
 import type { ComputedItem } from '@/lib/domain/types'
 import type { ExcelProfile } from '@/lib/excel/profile'
+import type { FieldDef } from '@/lib/domain/customFields'
 
 /** 표준 양식의 담당 마크 — 정확히 둘(감지기의 기본 마크 다섯을 쓰면 옛 양식과 달라진다) */
 export const STANDARD_OWNER_MARKS: Readonly<Record<string, 'primary' | 'support'>> = Object.freeze({ '●': 'primary', '△': 'support' })
@@ -20,12 +21,21 @@ export function resolveTeamColumns(items: readonly ComputedItem[], teamCodes: re
   return cols
 }
 
-/** 표준 프로파일 — L = 단계 이름 수, 팀 열은 1 + L + 2 부터, 그 뒤 산출물·시작·종료·가중치·(빈칸)·실적% */
-export function deriveStandardExcelProfile(teamColumns: readonly string[], levelLabels: readonly string[]): ExcelProfile {
+/** 표준 프로파일 — L = 단계 이름 수, 팀 열은 1 + L + 2 부터, 그 뒤 산출물·시작·종료·가중치·(빈칸)·실적%, 그 뒤 활성 사용자 정의 열(base + 6, 스펙 §3.6.7) */
+export function deriveStandardExcelProfile(
+  teamColumns: readonly string[],
+  levelLabels: readonly string[],
+  customFields?: readonly Pick<FieldDef, 'key' | 'sort' | 'active'>[],
+): ExcelProfile {
   const L = levelLabels.length
   if (L < 1) throw new Error('단계 이름이 없어 표준 엑셀 양식을 만들 수 없습니다')
   const teamsStart = 1 + L + 2
   const base = teamsStart + teamColumns.length
+  const activeFields = (customFields ?? [])
+    .filter((f) => f.active)
+    .slice()
+    .sort((a, b) => a.sort - b.sort)
+  const customColumns: [number, string][] = activeFields.map((f, i) => [base + 6 + i, f.key])
   return {
     version: 1,
     sheetName: 'WBS',
@@ -35,5 +45,6 @@ export function deriveStandardExcelProfile(teamColumns: readonly string[], level
     logical: { extraAxis: 0, code: null, name: null, deliverable: base, start: base + 1, end: base + 2, weight: base + 3, actualPct: base + 5 },
     teamColumns: teamColumns.map((c, i) => [teamsStart + i, c] as [number, string]),
     ownerMarks: { ...STANDARD_OWNER_MARKS },
+    customColumns,
   }
 }

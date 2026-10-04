@@ -13,6 +13,7 @@ import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConf
 import { valueOf } from '@/lib/settings/registry'
 import { exportHolidayRows } from '@/lib/domain/holidayImport'
 import { configFailureResponse } from '@/lib/api/http'
+import type { FieldDef } from '@/lib/domain/customFields'
 
 // 손상 안내는 설정 화면의 '저장된 양식 비우기'로 — 마법사 재저장은 가져오기를 다시 해야 해서, 막힌 파일로 덮어쓸 위험이 있다.
 const errProfileCorrupt = (detail: string) => `저장된 엑셀 양식이 손상되었습니다: ${detail} — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요.`
@@ -80,8 +81,16 @@ export async function GET(req: NextRequest) {
     layout = 'saved'
   } else {
     // 표준 — 활성 프로젝트 팀 코드 뒤에 트리 담당에 처음 나온 팀(비활성 포함)을 등장 순으로(계획 P8). 팀 원천 실패는 503 — 빈 팀 열로 내지 않는다.
+    const fieldDefsState = cfg.keys['fields.wbs_item']
+    const customFields = fieldDefsState && (fieldDefsState.status === 'set' || fieldDefsState.status === 'default')
+      ? (fieldDefsState.value as FieldDef[])
+      : []
     try {
-      profile = deriveStandardExcelProfile(resolveTeamColumns(items, activeCodes(await projectTeams(projectId))), levelLabels)
+      profile = deriveStandardExcelProfile(
+        resolveTeamColumns(items, activeCodes(await projectTeams(projectId))),
+        levelLabels,
+        customFields,
+      )
     } catch (e) {
       if (!(e instanceof TeamsUnavailableError)) throw e
       console.error('[export] 프로젝트 팀 조회 실패:', e.message, e.cause)
@@ -90,7 +99,16 @@ export async function GET(req: NextRequest) {
     layout = 'standard'
   }
   // 표준은 깊은 WBS 를 마지막 계층 열로 접고(옛 빌더와 같다), 저장 양식은 거부한다(그 문구의 처방 '저장된 양식 비우기'는 저장 양식에만 맞다 — D16).
-  const built = buildWorkbookWithProfile(items, profile, hol, { expandSubActs: expand, levelLabels, deep: layout === 'standard' ? 'fold' : 'reject' }, name)
+  const fieldDefsState = cfg.keys['fields.wbs_item']
+  const customFieldDefs = fieldDefsState && (fieldDefsState.status === 'set' || fieldDefsState.status === 'default')
+    ? (fieldDefsState.value as FieldDef[])
+    : []
+  const built = buildWorkbookWithProfile(items, profile, hol, {
+    expandSubActs: expand,
+    levelLabels,
+    deep: layout === 'standard' ? 'fold' : 'reject',
+    ...(customFieldDefs.length > 0 ? { customFieldDefs } : {}),
+  }, name)
   if (!built.ok) {
     if (layout === 'standard') {
       console.error('[export] 표준 양식 생성 거부(결함):', built.error)

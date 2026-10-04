@@ -8,6 +8,7 @@ export interface ImportItem {
   owners: { team: TeamCode; kind: OwnerKind }[]
   /** 담당별 자동 분리(sub-act) 생성 항목 여부 — import_wbs RPC 가 is_owner_split 컬럼에 그대로 싣는다. */
   isOwnerSplit: boolean
+  custom?: Record<string, unknown>
 }
 export interface ImportError { excelRow: number; message: string }
 
@@ -49,6 +50,7 @@ export function splitLeafOwners(items: ImportItem[]): ImportItem[] {
         actualPct: it.actualPct,
         owners: [o],
         isOwnerSplit: true,
+        ...(it.custom ? { custom: { ...it.custom } } : {}),
       })
     })
   }

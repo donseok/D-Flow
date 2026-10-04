@@ -58,6 +58,18 @@ describe('deriveStandardExcelProfile — W26', () => {
   it('단계 이름이 없으면 throw — 표준 양식을 만들 수 없다(라우트가 먼저 409·422 로 거른다)', () => {
     expect(() => deriveStandardExcelProfile(TEAMS, [])).toThrow()
   })
+  it('customFields 주입 — 활성 필드만 sort 순으로 base + 6 부터 배치(스펙 §3.6.7)', () => {
+    const fields = [
+      { key: 'f_active_2', sort: 20, active: true },
+      { key: 'f_inactive', sort: 5, active: false },
+      { key: 'f_active_1', sort: 10, active: true },
+    ]
+    const p = deriveStandardExcelProfile(TEAMS, LABELS5, fields)
+    expect(p.customColumns).toEqual([
+      [16, 'f_active_1'],
+      [17, 'f_active_2'],
+    ])
+  })
 })
 
 describe('resolveTeamColumns', () => {

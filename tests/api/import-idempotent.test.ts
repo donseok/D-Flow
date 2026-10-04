@@ -45,6 +45,7 @@ const PROFILE: ExcelProfile = {
   version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 0, hierarchy: { kind: 'columns', columns: [0, 1] },
   logical: { extraAxis: null, code: null, name: null, deliverable: null, start: null, end: null, weight: null, actualPct: null },
   teamColumns: [[2, 'RES'], [3, 'QA']], ownerMarks: { '●': 'primary', '△': 'support' },
+  customColumns: [],
 }
 const row = (...teams: string[]) => ({ depth: 0, code: null, name: 'x', extraAxis: null, deliverable: null, plannedStart: null,
   plannedEnd: null, weight: null, actualPct: null, owners: teams.map((team) => ({ team, kind: 'primary' as const })), excelRow: 2 })

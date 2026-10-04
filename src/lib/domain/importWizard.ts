@@ -31,7 +31,7 @@ export type WizardStep = 'select' | 'review' | 'done'
 
 /** 좌표가 다를 수 있는 프로파일 항목 — 논리 열 키 + 시트·헤더 행·휴일 시트·계층 열·팀 열 위치. */
 export type ProfileMismatchField =
-  | 'sheetName' | 'headerRow' | 'holidaySheetName' | 'hierarchy' | keyof ExcelProfile['logical'] | 'teamColumns'
+  | 'sheetName' | 'headerRow' | 'holidaySheetName' | 'hierarchy' | keyof ExcelProfile['logical'] | 'teamColumns' | 'customColumns'
 
 /** 저장 양식과 업로드 파일이 감지한 양식의 구조 차이(Task 1b). 저장 양식으로 읽으면 값이 다른 열에서 읽히고(fields)
  *  양식 밖 팀의 담당이 사라진다(extraTeams) — 파싱은 오류 없이 끝나 틀린 값이 그대로 쓰인다(에러 3원칙 ①). */
@@ -70,6 +70,14 @@ export function compareProfiles(saved: ExcelProfile, detected: ExcelProfile): Pr
   const detectedTeams = teamCols(detected)
   const moved = [...savedTeams].some(([t, c]) => detectedTeams.has(t) && detectedTeams.get(t) !== c)
   if (moved || starCol(saved) !== starCol(detected)) fields.push('teamColumns')
+
+  const savedCustom = new Map(saved.customColumns ?? [])
+  const detectedCustom = new Map(detected.customColumns ?? [])
+  const customMoved = [...savedCustom].some(([c, k]) => detectedCustom.has(c) && detectedCustom.get(c) !== k)
+    || savedCustom.size !== detectedCustom.size
+    || [...savedCustom.keys()].some((c) => !detectedCustom.has(c))
+  if (customMoved) fields.push('customColumns')
+
   const extraTeams = [...detectedTeams.keys()].filter(t => !savedTeams.has(t))
   const missingTeams = [...savedTeams.keys()].filter(t => !detectedTeams.has(t))
 

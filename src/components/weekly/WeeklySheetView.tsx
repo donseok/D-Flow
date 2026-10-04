@@ -812,7 +812,7 @@ export function WeeklySheetView({
                         <button
                           type="button"
                           onClick={() => setSelectedCustomRowId(r.id)}
-                          className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[11px] font-normal text-fg-muted hover:bg-surface-hover hover:text-fg"
+                          className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-xs font-normal text-fg-muted hover:bg-surface-hover hover:text-fg"
                           title="추가 정보 편집"
                         >
                           추가 정보

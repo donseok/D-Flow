@@ -2,6 +2,7 @@
  *    초안이 된다. 영역 id 로 옮긴다 — 활성 영역은 자기 자리로, 지금 비활성인 영역의 대기 내용은 명시 매핑(다른 활성 영역 또는 'skip')
  *    으로만. 첫 영역·폴백 흡수·절단·원본 수정은 없다. 넘치면(20,000자) 거부한다 — 개정 §4.3.3 의 "상한에서 자름"과 다르다(E25).
  *    옛 구분 기반 이월(weeklySheet.ts 의 carryOverRows)은 지웠다 — 이 모듈이 유일한 이월 규칙이다. ── */
+import type { CustomValues } from './customFields'
 import {
   NEXT_CELLS, UNKNOWN_AREA_LABEL, WEEKLY_CELL_MAX, hasContent, orderAreas,
   type NewWeeklyRow, type WeeklyArea, type WeeklyCellKey, type WeeklyCells,
@@ -36,12 +37,11 @@ const append = (cur: string, add: string): string => {
  * ok:false(문서를 만들지 않는다). carryCustom 은 SP4 에서 쓰지 않는다 — custom 열이 없다(SP5c 가 행·시드에 싣는다, 스펙 E28).
  */
 export function carryOverRows(
-  prev: readonly ({ areaId: string } & WeeklyCells)[],
+  prev: readonly ({ areaId: string; custom?: unknown } & WeeklyCells)[],
   areas: readonly WeeklyArea[],
   mapping: CarryMapping = {},
-  carryCustom: (custom: unknown) => Record<string, unknown> = () => ({}),
+  carryCustom: (custom: unknown) => CustomValues = () => ({}),
 ): CarryOverResult {
-  void carryCustom
   const ordered = orderAreas(areas)
   const rank = new Map(ordered.map((a, i) => [a.id, i]))
   const rankOf = (id: string): number => rank.get(id) ?? ordered.length
@@ -57,6 +57,10 @@ export function carryOverRows(
     if (own) {                                       // 활성 영역 X — 자기 자리로
       own.thisContent = append(own.thisContent, r.nextContent)
       own.thisIssue = append(own.thisIssue, r.nextIssue)
+      const carried = carryCustom(r.custom)
+      if (Object.keys(carried).length > 0) {
+        own.custom = { ...(own.custom || {}), ...carried }
+      }
       return
     }
     if (!hasContent(r, NEXT_CELLS)) return           // 비활성·모르는 영역이고 대기 내용 없음 — 무시

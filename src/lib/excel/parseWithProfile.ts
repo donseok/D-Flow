@@ -18,6 +18,7 @@ export interface ParsedRowN {
   plannedStart: string | null; plannedEnd: string | null
   weight: number | null; actualPct: number | null
   owners: { team: string; kind: 'primary' | 'support' }[]
+  custom?: Record<string, unknown>
   excelRow: number
 }
 
@@ -87,7 +88,8 @@ export function parseWithProfile(
   let wb: XLSX.WorkBook
   try {
     // cellDates:false — 날짜를 시리얼(정수)로 유지해 toIso 에서 타임존 무관 변환(위 참조).
-    wb = XLSX.read(buf, { type: 'array', cellDates: false })
+    // cellNF:true — 셀의 number format 서식 코드(z)를 보존해 날짜/숫자 판별에 활용.
+    wb = XLSX.read(buf, { type: 'array', cellDates: false, cellNF: true })
   } catch {
     return { ok: false, error: '워크북을 읽을 수 없습니다' }
   }
@@ -144,6 +146,35 @@ export function parseWithProfile(
       code = outlineCode
     }
 
+    let custom: Record<string, unknown> | undefined
+    if (profile.customColumns && profile.customColumns.length > 0) {
+      const cMap: Record<string, unknown> = {}
+      for (const [col, key] of profile.customColumns) {
+        const raw = r[col]
+        if (!isBlankCell(raw)) {
+          const cellObj = ws[XLSX.utils.encode_cell({ r: i, c: col })]
+          const isDateCell = cellObj && (cellObj.t === 'd' || (typeof cellObj.z === 'string' && XLSX.SSF.is_date(cellObj.z)))
+          if (isDateCell || raw instanceof Date) {
+            const iso = toIso(raw)
+            if (iso) cMap[key] = iso
+          } else if (typeof raw === 'number' || typeof raw === 'boolean') {
+            cMap[key] = raw
+          } else {
+            const s = String(raw).trim()
+            if (ISO_DATE_TEXT.test(s)) {
+              const iso = toIso(s)
+              cMap[key] = iso ?? s
+            } else {
+              cMap[key] = s
+            }
+          }
+        }
+      }
+      if (Object.keys(cMap).length > 0) {
+        custom = cMap
+      }
+    }
+
     rows.push({
       depth,
       code,
@@ -155,6 +186,7 @@ export function parseWithProfile(
       weight: profile.logical.weight !== null ? toNum(r[profile.logical.weight]) : null,
       actualPct: profile.logical.actualPct !== null ? toNum(r[profile.logical.actualPct]) : null,
       owners: parseOwners(r, profile),
+      custom,
       excelRow,
     })
   }
@@ -240,6 +272,7 @@ export function linkByDepth(
       code, sortOrder: order++, name: r.name, biz: r.extraAxis, deliverable: r.deliverable,
       plannedStart: s, plannedEnd: e, weight: r.weight, actualPct: r.actualPct,
       owners: r.owners, isOwnerSplit: false,
+      ...(r.custom ? { custom: r.custom } : {}),
     })
 
     lastAtDepth[d] = tempId

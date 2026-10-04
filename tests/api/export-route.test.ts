@@ -40,6 +40,7 @@ const SAVED: ExcelProfile = {
   hierarchy: { kind: 'columns', columns: [0, 1] },
   logical: { extraAxis: null, code: null, name: null, deliverable: 2, start: 3, end: 4, weight: null, actualPct: 5 },
   teamColumns: [[6, 'RES']], ownerMarks: { '●': 'primary', '△': 'support' },
+  customColumns: [],
 }
 const row = (over: Partial<WbsRow>): WbsRow => ({ id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x', biz: null, deliverable: null,
   plannedStart: null, plannedEnd: null, weight: null, actualPct: null, owners: [], isOwnerSplit: false, ...over })

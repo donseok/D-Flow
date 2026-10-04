@@ -26,6 +26,8 @@ import {
   buildWeeklyRewritePrompt, parseWeeklyRewriteResponse, WEEKLY_REWRITE_MAX_CELLS,
   WEEKLY_REWRITE_MAX_TOTAL_CHARS, WEEKLY_REWRITE_SYSTEM_PROMPT,
 } from '@/lib/ai/weekly-rewrite'
+import { carryCustomFields, parseFieldDefs, type CustomValues } from '@/lib/domain/customFields'
+import { parseCustomValues } from '@/lib/domain/customFieldValues'
 
 export interface WeeklyActionResult {
   ok: boolean
@@ -151,6 +153,7 @@ export async function createWeeklyReport(
   if (!areas.some(a => a.active)) return { ok: false, code: 'CONFIG_REQUIRED', error: ERR_AREAS_REQUIRED }
 
   let seed: ReturnType<typeof seedOf> | null = null
+  let carriedCustomRows: { areaId: string; custom: CustomValues }[] = []
   if (carryOver === true) {
     // 같은 주 문서가 이미 있으면(다른 관리자가 먼저 만들었다) 이월을 판정하지 않는다 — RPC 가 시드를 버리고 exists 를 돌려줄 문서에
     // 매핑 창을 띄우지 않는다(A1-4 리뷰 P7). 확인과 RPC 사이에 생긴 문서는 RPC 의 exists 가 그대로 받는다
@@ -169,9 +172,20 @@ export async function createWeeklyReport(
       }
     }
     if (src && src.rows.length > 0) {
-      const carried = carryOverRows(src.rows, areas, mapping)
+      const fieldDefsState = cfg.keys ? cfg.keys['fields.weekly_row'] : undefined
+      const fieldDefs = fieldDefsState && (fieldDefsState.status === 'set' || fieldDefsState.status === 'default') ? fieldDefsState.value : []
+      const parsedDefs = parseFieldDefs('weekly_row', fieldDefs)
+      const defs = parsedDefs.ok ? parsedDefs.value : []
+      const carryFn = (prevCustom: unknown): CustomValues => {
+        const parsed = parseCustomValues(prevCustom)
+        return parsed.ok ? carryCustomFields(defs, parsed.value) : {}
+      }
+      const carried = carryOverRows(src.rows, areas, mapping, carryFn)
       if (!carried.ok) return { ok: false, code: 'CARRY_PENDING', pending: carried.pending, overflow: carried.overflow }
       seed = seedOf(carried.rows)
+      carriedCustomRows = carried.rows
+        .filter(r => r.custom && Object.keys(r.custom).length > 0)
+        .map(r => ({ areaId: r.areaId, custom: r.custom as CustomValues }))
     }
   }
 
@@ -185,6 +199,14 @@ export async function createWeeklyReport(
     return { ok: false, code: 'UNAVAILABLE', error: failWith('weekly/create', error, ERR_CREATE) }
   }
   const r = data as { status: 'created' | 'exists'; report_id: string }
+  if (r.status === 'created' && carriedCustomRows.length > 0) {
+    for (const item of carriedCustomRows) {
+      await admin.from('weekly_report_rows')
+        .update({ custom: item.custom })
+        .eq('report_id', r.report_id)
+        .eq('area_id', item.areaId)
+    }
+  }
   revalidateWeekly()
   return { ok: true, reportId: r.report_id, status: r.status }
 }

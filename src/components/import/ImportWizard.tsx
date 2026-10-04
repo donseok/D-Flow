@@ -48,6 +48,7 @@ const MISMATCH_FIELD_LABEL_KEYS: Record<ProfileMismatchField, DictKey> = {
   holidaySheetName: 'importWizard.mismatchFieldHolidaySheet',
   hierarchy: 'importWizard.mismatchFieldHierarchy',
   teamColumns: 'importWizard.mismatchFieldTeamColumns',
+  customColumns: 'importWizard.mismatchFieldCustomColumns',
 }
 
 /** name 은 outline 전용이라 계층 섹션에서 따로 렌더한다 — 논리 열 셀렉트 목록에서는 제외. */

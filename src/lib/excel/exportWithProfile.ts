@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 import type { ComputedItem } from '@/lib/domain/types'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import { HEADER, TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
+import { formatCustomValue, type FieldDef, type FieldValue } from '@/lib/domain/customFields'
 
 const STATUS_LABEL: Record<ComputedItem['status'], string> = {
   not_started: '시작전', in_progress: '진행중', delayed: '지연', done: '완료',
@@ -95,10 +96,15 @@ function collectTeams(items: ComputedItem[]): string[] {
 export function buildAoaWithProfile(
   items: ComputedItem[],
   profile: ExcelProfile,
-  opts: { expandSubActs: boolean; levelLabels: readonly string[]; deep?: 'fold' | 'reject' },
+  opts: {
+    expandSubActs: boolean
+    levelLabels: readonly string[]
+    deep?: 'fold' | 'reject'
+    customFieldDefs?: readonly FieldDef[]
+  },
   projectName = 'WBS',
 ): { ok: true; aoa: unknown[][] } | { ok: false; error: string } {
-  const { expandSubActs, levelLabels, deep = 'reject' } = opts
+  const { expandSubActs, levelLabels, deep = 'reject', customFieldDefs } = opts
 
   if (profile.hierarchy.kind === 'outline' && expandSubActs) {
     return { ok: false, error: '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다' }
@@ -135,6 +141,7 @@ export function buildAoaWithProfile(
   const weightCol = profile.logical.weight != null ? shift(profile.logical.weight) : null
   const actualPctCol = profile.logical.actualPct != null ? shift(profile.logical.actualPct) : null
   const declaredTeamCols: [number, string][] = profile.teamColumns.map(([c, label]) => [shift(c), label])
+  const declaredCustomCols: [number, string][] = (profile.customColumns ?? []).map(([c, key]) => [shift(c), key])
 
   const knownCols: number[] = [
     ...(hierColsOut ?? (outlineColOut != null ? [outlineColOut] : [])),
@@ -142,6 +149,7 @@ export function buildAoaWithProfile(
     ...[extraAxisCol, codeCol, nameCol, deliverableCol, startCol, endCol, weightCol, actualPctCol]
       .filter((c): c is number => c != null),
     ...declaredTeamCols.map(([c]) => c),
+    ...declaredCustomCols.map(([c]) => c),
   ]
   const maxKnown = knownCols.length ? Math.max(...knownCols) : -1
 
@@ -189,6 +197,10 @@ export function buildAoaWithProfile(
   if (weightCol != null) header3[weightCol] = HEADER.weight
   if (actualPctCol != null) header3[actualPctCol] = HEADER.actualPct
   if (insertAt != null) header3[insertAt] = HEADER.subAct // 펼침 전용 — 접기 모드는 insertAt 자체가 null
+  const defMap = new Map((customFieldDefs ?? []).map((d) => [d.key, d]))
+  declaredCustomCols.forEach(([c, key]) => {
+    header3[c] = defMap.get(key)?.label ?? key
+  })
   header3[maxCol + 1] = HEADER.plannedPct
   header3[maxCol + 2] = HEADER.vsPlan
   header3[maxCol + 3] = HEADER.progress
@@ -239,6 +251,34 @@ export function buildAoaWithProfile(
             : ''
     }
 
+    declaredCustomCols.forEach(([c, key]) => {
+      const val = item.custom?.[key]
+      if (val === undefined || val === null) {
+        row[c] = ''
+        return
+      }
+      const def = defMap.get(key)
+      if (def) {
+        if (def.type === 'number' && typeof val === 'number') {
+          row[c] = val
+        } else if (def.type === 'date' && typeof val === 'string') {
+          row[c] = isoToDate(val)
+        } else if (def.type === 'boolean' && typeof val === 'boolean') {
+          row[c] = val
+        } else {
+          row[c] = formatCustomValue(def, val as FieldValue)
+        }
+      } else {
+        if (typeof val === 'number' || typeof val === 'boolean') {
+          row[c] = val
+        } else if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+          row[c] = isoToDate(val)
+        } else {
+          row[c] = String(val)
+        }
+      }
+    })
+
     // 읽기용 계산 컬럼 — 모든 행에 무조건(리프/상위/sub-act 구분 없이) 싣는다. 옛 빌더와 동일 규약.
     row[maxCol + 1] = Math.round(item.plannedPct)
     row[maxCol + 2] = Math.round(item.rolledActualPct)
@@ -272,7 +312,12 @@ export function buildWorkbookWithProfile(
   items: ComputedItem[],
   profile: ExcelProfile,
   holidays: { date: string; name: string }[],
-  opts: { expandSubActs: boolean; levelLabels: readonly string[]; deep?: 'fold' | 'reject' },
+  opts: {
+    expandSubActs: boolean
+    levelLabels: readonly string[]
+    deep?: 'fold' | 'reject'
+    customFieldDefs?: readonly FieldDef[]
+  },
   projectName = 'WBS',
 ): { ok: true; buffer: ArrayBuffer } | { ok: false; error: string } {
   const built = buildAoaWithProfile(items, profile, opts, projectName)

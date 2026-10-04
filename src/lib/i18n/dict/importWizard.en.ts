@@ -90,6 +90,7 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.mismatchFieldHolidaySheet': 'Holiday sheet',
   'importWizard.mismatchFieldHierarchy': 'Hierarchy columns',
   'importWizard.mismatchFieldTeamColumns': 'Team column positions',
+  'importWizard.mismatchFieldCustomColumns': 'Custom field column positions',
   'importWizard.useSavedProfileButton': 'Use saved layout',
 
   'importWizard.previewTitle': 'Preview (first 10 rows)',

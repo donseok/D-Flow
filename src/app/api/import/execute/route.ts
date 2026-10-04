@@ -354,8 +354,17 @@ export async function POST(req: NextRequest) {
 
   // #9 결과 종류 — duplicate 는 저장된 결과(건수·모드)다. 백업은 싣지 않는다(이번에 읽었어도 이미 교체된 트리다 — D50·K9)
   const duplicate = outcome.kind === 'duplicate'
+  const customDeletedWarnings: string[] = []
+  if (outcome.mode === 'replace' && backup && Array.isArray(backup.rows)) {
+    const customCount = (backup.rows as Record<string, unknown>[]).filter(
+      (r) => r.custom && typeof r.custom === 'object' && Object.keys(r.custom as object).length > 0,
+    ).length
+    if (customCount > 0) {
+      customDeletedWarnings.push(`사용자 정의 값 ${customCount}건 삭제`)
+    }
+  }
   if (duplicate) backup = undefined
-  const warnings = outcome.mode === 'replace' ? (duplicate ? [DUPLICATE_REPLACE_WARNING] : REPLACE_WARNINGS) : []
+  const warnings = outcome.mode === 'replace' ? (duplicate ? [DUPLICATE_REPLACE_WARNING] : [...REPLACE_WARNINGS, ...customDeletedWarnings]) : []
 
   // #10 양식 저장(W5, 설정의 별도 명령) — 중복이어도 요청이면 다시 돈다(같은 값이면 changed: 0). 실패해도 가져오기는 성공이고 사유를
   // 응답의 profileSave 경고로 싣는다(로그만 남기고 삼키지 않는다 — 3원칙 ①). 저장 전 교차 검증(양식의 팀 열 ⊆ 프로젝트 팀 —
