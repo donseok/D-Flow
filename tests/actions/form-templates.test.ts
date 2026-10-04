@@ -167,9 +167,9 @@ const pptxBytes = () => storedZip([
 describe('registerFormTemplate', () => {
   const incoming = `ws/ws-1/p/${P}/weekly_report_pptx/incoming/${T}.pptx`
 
-  it('패키지가 맞으면 v<n> 으로 옮기고 토큰 스캔 없는 비활성 행을 넣는다', async () => {
+  it('패키지가 맞으면 스캔 결과를 담은 비활성 행을 v<n> 에 넣는다', async () => {
     const moved: string[] = []
-    const inserted: { version?: number; active?: boolean; placeholders?: { tokenScan?: boolean }; uploaded_by?: string; storage_path?: string }[] = []
+    const inserted: { version?: number; active?: boolean; placeholders?: { tokenScan?: boolean; engineVersion?: string; placeholders?: unknown[] }; uploaded_by?: string; storage_path?: string }[] = []
     h.adminFor.mockImplementation(() => ({
       admin: {
         storage: { from: () => ({
@@ -188,7 +188,8 @@ describe('registerFormTemplate', () => {
     expect(requireModule).toHaveBeenCalledWith({ projectId: P }, 'weekly')
     expect(r).toMatchObject({ ok: true, version: 3, path: `ws/ws-1/p/${P}/weekly_report_pptx/v3.pptx`, warnings: [] })
     expect(moved).toEqual([`${incoming} -> ws/ws-1/p/${P}/weekly_report_pptx/v3.pptx`])
-    expect(inserted[0]).toMatchObject({ active: false, uploaded_by: 'u-admin', version: 3, placeholders: { tokenScan: false } })
+    expect(inserted[0]).toMatchObject({ active: false, uploaded_by: 'u-admin', version: 3, placeholders: { engineVersion: 'forms-engine.v1', format: 'pptx', placeholders: [], issues: [] } })
+    expect(inserted[0].placeholders).not.toHaveProperty('tokenScan')
   })
 
   it('DRM·만료 파일은 행을 만들지 않고 incoming 을 지운다', async () => {
@@ -233,5 +234,27 @@ describe('registerFormTemplate', () => {
     h.guard.mockResolvedValue({ ok: true, actor })
     expect(await registerFormTemplate(P, 'weekly_report_pptx', incoming, 'a.pptx')).toMatchObject({ ok: false, error: '모듈이 꺼져 있습니다.' })
     expect(h.adminFor).not.toHaveBeenCalled()
+  })
+
+  it('자리표시자 문법 오류면 행 없이 incoming 을 지운다', async () => {
+    const removed: string[][] = []
+    const slide = `<p:sld><p:cSld><p:spTree><p:sp><p:nvSpPr><p:cNvPr id="2" name="t"/></p:nvSpPr><p:txBody><a:p><a:r><a:t>{{BAD}}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`
+    h.adminFor.mockImplementation(() => ({
+      admin: {
+        storage: { from: () => ({
+          info: async () => ({ data: { created_at: new Date().toISOString() }, error: null }),
+          download: async () => ({ data: storedZip([
+            { name: '[Content_Types].xml', data: '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/></Types>' },
+            { name: 'ppt/presentation.xml', data: '<p:presentation/>' },
+            { name: 'ppt/slides/slide1.xml', data: slide },
+          ]), error: null }),
+          remove: async (paths: string[]) => { removed.push(paths); return { data: [], error: null } },
+          move: async () => ({ data: {}, error: null }),
+        }) },
+        from: () => { throw new Error('no row') },
+      },
+    }))
+    expect(await registerFormTemplate(P, 'weekly_report_pptx', incoming, 'a.pptx')).toMatchObject({ ok: false, code: 'FORM_SCAN' })
+    expect(removed).toEqual([[incoming]])
   })
 })

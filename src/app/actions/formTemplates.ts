@@ -1,8 +1,8 @@
 'use server'
 /**
  * SP6 S2 — 양식 업로드 준비·등록·활성화·활성 해제(정본 §4.7.1·§4.7.2).
- * 파일 바이트는 준비 액션으로 받지 않는다. 등록은 incoming 을 내려 패키지만 검사하고 v<n> 으로 옮긴다.
- * 토큰 스캔(FormEngine.scan)은 하지 않는다. 활성 해제가 계획의 삭제다.
+ * 파일 바이트는 준비 액션으로 받지 않는다. 등록은 incoming 을 내려 패키지를 검사하고 scan 한 뒤 v<n> 으로 옮긴다.
+ * 활성 해제가 계획의 삭제다. tokenScan:false 로 남은 옛 행은 활성화하지 않는다.
  */
 import { revalidatePath } from 'next/cache'
 import { requireProjectAdmin } from '@/lib/authz'
@@ -12,6 +12,7 @@ import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import { isUuidLike } from '@/lib/domain/validate'
 import { assessFormActivation } from '@/lib/forms/activation'
 import { FORM_FORMAT, FORM_TEMPLATE_MAX_BYTES, type FormKind } from '@/lib/report/engine/types'
+import { scanFormTemplate } from '@/lib/report/engine/scan'
 import { validateFormPackage } from '@/lib/report/engine/validate'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { FORM_SETTING_MODULE, isFormKind, type FormSetting, type FormSettingKey } from '@/lib/settings/defs/forms'
@@ -217,8 +218,8 @@ async function asBytes(data: unknown): Promise<Uint8Array | null> {
 }
 
 /**
- * incoming 객체를 받아 패키지를 검사하고 v<n> 으로 옮긴 뒤 active=false 행을 넣는다.
- * 토큰 스캔은 하지 않는다(tokenScan:false). 실패하면 incoming 을 지운다(정본 §4.7.1).
+ * incoming 객체를 받아 패키지를 검사하고 FormEngine.scan 으로 문법·구조를 본 뒤 v<n> 으로 옮긴다.
+ * 스캔 오류가 있으면 행을 만들지 않고 incoming 을 지운다(정본 §4.7.1·§4.7.2).
  */
 export async function registerFormTemplate(
   projectId: string, formKind: string, incomingPath: string, fileName: string,
@@ -255,6 +256,18 @@ export async function registerFormTemplate(
     return { ok: false, code: checked.code, error: checked.error }
   }
   const ext = FORM_FORMAT[formKind]
+  let scanned
+  try {
+    scanned = await scanFormTemplate(bytes, ext)
+  } catch {
+    await bucket.remove([incomingPath])
+    return { ok: false, code: 'PACKAGE', error: '양식 파일의 구성이 올바르지 않습니다. pptx 는 프레젠테이션, xlsx 는 통합 문서여야 합니다.' }
+  }
+  const scanError = scanned.issues.find((i) => i.severity === 'error')
+  if (scanError) {
+    await bucket.remove([incomingPath])
+    return { ok: false, code: 'FORM_SCAN', error: '양식의 자리표시자 문법이나 구조에 오류가 있어 등록할 수 없습니다.' }
+  }
   const latest = await admin.from('form_templates').select('version').eq('project_id', projectId).eq('form_kind', formKind)
     .order('version', { ascending: false }).limit(1).maybeSingle()
   if (latest.error) {
@@ -270,13 +283,7 @@ export async function registerFormTemplate(
     return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('formTemplates.register', moved.error, ERR_REGISTER) }
   }
   const id = crypto.randomUUID()
-  const placeholders = {
-    tokenScan: false,
-    engineVersion: 'forms-engine.v1',
-    format: ext,
-    placeholders: [],
-    issues: checked.warnings.map((w) => ({ code: w.code, severity: 'warning' as const, message: w.message })),
-  }
+  const placeholders = scanned
   const inserted = await admin.from('form_templates').insert({
     id, project_id: projectId, form_kind: formKind, file_name: fileName, storage_path: dest,
     size_bytes: bytes.length, version, placeholders, active: false, uploaded_by: g.actor.userId,

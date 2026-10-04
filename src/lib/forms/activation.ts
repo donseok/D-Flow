@@ -1,5 +1,6 @@
-// 활성화 전 매핑 완전성(정본 §4.7.3). 파일 바이트가 필요한 재스캔은 여기 없다 —
-// engineVersion 이 현재가 아니면 등록을 다시 하라는 거부로 멈춘다(OPC scan 은 아직 없다).
+// 활성화 전 매핑 완전성(정본 §4.7.3).
+// 저장된 값이 ScanReport 이면 통과할 수 있다. tokenScan:false(스캔 전에 등록된 행)는 여전히 거부한다.
+// engineVersion 이 다르면 여기서 파일을 다시 읽지 않고 재등록을 요구한다.
 import { validatePlaceholders } from '@/lib/report/engine/scanner'
 import {
   FORM_FORMAT, type FormKind, type Placeholder, type PlaceholderKind, type RenderMapping, type ScanIssue, type ScanReport,

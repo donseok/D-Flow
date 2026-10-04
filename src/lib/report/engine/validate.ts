@@ -1,6 +1,6 @@
 /**
  * 양식 패키지 검증(정본 §4.7.2). 매직바이트·DRM·OPC 본체·매크로·zip 안전·라운드트립 경고.
- * 토큰 문법 스캔(FormEngine.scan)은 여기 없다. 등록 행은 tokenScan:false 로 남고, 활성화는 엔진이 생기기 전에 거부한다.
+ * 토큰 문법 스캔은 FormEngine.scan 이다. 이 함수는 패키지 거부 사유와 라운드트립 경고만 본다.
  */
 import { inflateRawSync } from 'node:zlib'
 import type { FormFormat } from './types'
