@@ -9,7 +9,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25   # 단위 ~12천 건(~8분)+build(~6분)이 15분 경계에 닿았다(2026-10-04 efad1eb 취소)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
