@@ -2,6 +2,7 @@
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
 // 단 agents 모듈 판정 실패(설정 조회·손상)는 그 프로젝트의 층을 뺀다 — 로그는 [requireModule](스펙 §3 modules.* fail-closed, P13).
 import { loadPredecessorGates } from '@/lib/agent/predecessorGate'
+import { loadQueueApprovals } from '@/lib/agent/approvalState'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { personOf } from '@/lib/data/memberSelect'
 import type { AdminClient } from '@/lib/minutes/externalApi'
@@ -107,7 +108,12 @@ export async function fetchSeatmapRows(admin: AdminClient, projectIds: readonly 
   // 선행 기준(SP5b D21) — 선행 대기를 판정할 ready 좌석이 있는 프로젝트만. 판독 실패는 throw(좌석표 오류 — 위장 금지)
   const gateProjects = [...new Set(orders.filter(o => o.status === 'ready').map(o => o.project_id))]
   const gates = refs.length && gateProjects.length ? Object.fromEntries(await loadPredecessorGates(admin, gateProjects)) : {}
-  return { orders, items, parents, reviews, watchers, projects, members, predecessors, reports, gates }
+  // 결재 대기 항목의 대기 승인 단계(SP5b S20) — 좌석의 승인 버튼이 서버 판정과 같게. 판독 실패는 로그 + 현행 셈(loadQueueApprovals 의 계약)
+  const reportedByProject = new Map<string, string[]>()
+  for (const o of orders) if (o.status === 'reported' && o.wbs_item_id) reportedByProject.set(o.project_id, [...(reportedByProject.get(o.project_id) ?? []), o.wbs_item_id])
+  const stepApprovals = Object.fromEntries((await Promise.all([...reportedByProject].map(([pid, ids]) => loadQueueApprovals(admin, pid, ids))))
+    .flatMap((m) => [...m]))
+  return { orders, items, parents, reviews, watchers, projects, members, predecessors, reports, gates, stepApprovals }
 }
 
 /** 명단 행(people 임베드) → 층 조립기가 쓰는 평평한 행. 이름·계정은 people 이 정본이다. */

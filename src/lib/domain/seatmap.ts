@@ -1,5 +1,6 @@
 import type { PredecessorGate } from './agentWork'
 // 좌석표 조립 — IO 없음. 층=프로젝트, 구역=주문 항목의 부모 항목, 책상=주문(스펙 §5-1).
+import { canApproveCompletion } from './authz'
 import {
   animFor, deriveSeatState, fnv1a32, inferPhase, isRejected, isWatcherAlive, lastSignalMs, pickCharacter,
   type AnimName, type CharacterName, type OrderStatus, type Phase, type SeatState,
@@ -46,6 +47,8 @@ export interface SeatmapRows {
   reports?: ReportRow[]
   /** 프로젝트별 선행 기준(SP5b D21) — 없는 프로젝트는 reached(현행). 로더가 ready 좌석이 있는 프로젝트마다 싣는다 */
   gates?: Readonly<Record<string, PredecessorGate>>
+  /** 결재 대기(reported) 항목의 대기 승인 단계(SP5b S20 — 승인 가능 셈 재료). 없는 항목은 현행으로 센다 */
+  stepApprovals?: Readonly<Record<string, { approver: 'subtree_or_admin' | 'admin'; approvedBy: readonly string[]; distinct: boolean }>>
 }
 
 export interface Seat {
@@ -137,13 +140,8 @@ export function isSubtreeManagerOf(
   return false
 }
 
-/**
- * 완료 승인 자격 — 관리자, 또는 서브트리 관리자이면서 그 리프의 담당자 본인도 그 주문을 claim 한 계정도 아닌 사람
- * (제7부 AUTH-07a). 서버 가드 requireCompletionApprover(agent/subtreeManager.ts)와 같은 축이며 허브·좌석·배지가 같이 쓴다.
- */
-export function canApproveCompletion(r: { isAdmin: boolean; subtreeManager: boolean; assigneeMine: boolean; claimedByMe: boolean }): boolean {
-  return r.isAdmin || (r.subtreeManager && !r.assigneeMine && !r.claimedByMe)
-}
+/** 완료 승인 자격 — 정본은 domain/authz.ts(SP5b S20 이전). 허브·좌석·배지·기존 시험이 이 이름으로 쓴다(재수출) */
+export { canApproveCompletion }
 
 /**
  * ISO 시각을 µs 정수로 — DB timestamptz 의 해상도. Date.parse 는 ms 에서 잘라 .123456 과 .123999 를 같게 본다.
@@ -310,7 +308,11 @@ export function assembleSeatmap(rows: SeatmapRows, nowMs: number, opts: { mine?:
     const assigneeMine = item?.assignee_member_id != null && myMemberIds.has(item.assignee_member_id)
     const rights = {
       canManage: isAdminP || subtree, assigneeMine,
-      canApprove: canApproveCompletion({ isAdmin: isAdminP, subtreeManager: subtree, assigneeMine, claimedByMe: viewerId !== undefined && o.claimed_by_user_id === viewerId }),
+      canApprove: canApproveCompletion({ isAdmin: isAdminP, subtreeManager: subtree, assigneeMine, claimedByMe: viewerId !== undefined && o.claimed_by_user_id === viewerId,
+        ...(() => {
+          const st = o.status === 'reported' && o.wbs_item_id ? rows.stepApprovals?.[o.wbs_item_id] : undefined
+          return st ? { pendingStepApprover: st.approver, approvedThisRound: st.distinct && viewerId !== undefined && st.approvedBy.includes(viewerId) } : {}
+        })() }),
     }
     const seat = toSeat(o, item, reviewByOrder.get(o.id), nowMs, rights, reportByOrder.get(o.id),
       ownerOf(o.claimed_by_user_id, viewerId, ownerName(o.project_id)))

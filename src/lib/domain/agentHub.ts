@@ -26,6 +26,13 @@ export interface AgentHubRows {
   approvedItemIds: string[]
   /** 프로젝트의 선행 기준(SP5b D21) — 없으면 reached(현행). 로더가 싣는다 */
   gate?: PredecessorGate
+  /** 결재 대기 항목(itemId)의 대기 승인 단계(SP5b — 카드 표시·승인 가능 셈 재료). 없으면 현행(기본 1단계)으로 센다 */
+  queueApprovals?: Readonly<Record<string, HubStepApproval>>
+}
+/** 결재 대기 단계 재료 — agent/approvalState 의 QueueApproval 과 같은 꼴(도메인은 그 모듈을 모른다) */
+export interface HubStepApproval {
+  step: string; index: number; total: number; approver: 'subtree_or_admin' | 'admin'; label: string | null
+  approvedBy: readonly string[]; distinct: boolean
 }
 export type HubOrderState = SeatState
 export interface HubRow {
@@ -136,6 +143,11 @@ function watchersFor(watchers: WatcherRow[], projectId: string, nowMs: number): 
     .sort((a, b) => a.agent.localeCompare(b.agent))
 }
 
+/** 대기 승인 단계 → 승인 가능 셈 재료(S20). 재료가 없으면 빈 객체 — 현행 셈 */
+function stepMaterials(step: HubStepApproval | undefined, viewerId: string) {
+  return step ? { pendingStepApprover: step.approver, approvedThisRound: step.distinct && step.approvedBy.includes(viewerId) } : {}
+}
+
 export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubViewer): AgentHub {
   const memberIds = myMemberIdsOf(rows.members, viewer)
   const mine = new Set(memberIds)
@@ -208,7 +220,8 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
       itemId: item.id, code: item.code, name: item.name, depth, parentId: item.parent_id,
       isLeaf, milestone: item.milestone,
       assigneeName: item.assignee_member_id ? (memberName.get(item.assignee_member_id) ?? null) : null, assigneeMine, canManage,
-      canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: picked?.claimed_by_user_id === viewer.userId }),
+      canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: picked?.claimed_by_user_id === viewer.userId,
+        ...stepMaterials(picked?.status === 'reported' ? rows.queueApprovals?.[item.id] : undefined, viewer.userId) }),
       delegated, devWorkflow: item.dev_workflow, stage: item.stage,
       stageLocked: stageLockedForHuman({ delegated, orderStatus: picked?.status ?? null }),
       order, prompt: item.agent_prompt,
@@ -224,12 +237,15 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
       const rep = latestReport.get(o.id)
       const assigneeMine = it?.assignee_member_id != null && mine.has(it.assignee_member_id)
       const canManage = it ? isSubtreeManagerOf(it.id, itemById, mine) : false
+      const step = o.wbs_item_id ? rows.queueApprovals?.[o.wbs_item_id] : undefined
       return {
         orderId: o.id, itemId: o.wbs_item_id, code: it?.code ?? '', name: it?.name ?? '',
         agent: rep?.agent ?? o.heartbeat_agent ?? o.claimed_by ?? '', percent: rep?.percent ?? 0, summary: rep?.summary ?? '',
         links: rep?.links ?? [], reportedAt: rep?.created_at ?? o.updated_at, reportId: rep?.id ?? null,
         assigneeMine, canManage,
-        canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: o.claimed_by_user_id === viewer.userId }),
+        canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: o.claimed_by_user_id === viewer.userId,
+          ...stepMaterials(step, viewer.userId) }),
+        ...(step ? { approval: { step: step.step, index: step.index, total: step.total, label: step.label } } : {}),
       }
     })
     .sort((a, b) => Date.parse(a.reportedAt) - Date.parse(b.reportedAt))

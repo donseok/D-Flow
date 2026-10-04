@@ -73,23 +73,16 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
     : []
   // 선행 기준(SP5b D21) — 착수 대기 사유가 claim 게이트와 같은 기준으로 말하게. 판독 실패는 throw(허브 오류 — 위장 금지)
   const gate = await loadPredecessorGate(admin, projectId)
-  return { project: project && { id: project.id, name: project.name }, agentProject, items, orders, reports, watchers, members, approvedItemIds, gate }
+  // 결재 대기(reported) 항목의 대기 승인 단계(SP5b W1·S20) — 카드의 "n/m · 라벨"·expectedStep 과 승인 가능 셈 재료. 큐가 비면 읽지 않는다.
+  // 판독 실패는 로그 + 빈 맵(단계 표시 없이 현행 셈 — 승인은 서버가 다시 판정한다)
+  const reportedItemIds = [...new Set(orders.filter(o => o.status === 'reported' && o.wbs_item_id !== null).map(o => o.wbs_item_id as string))]
+  const queueApprovals = Object.fromEntries(await loadQueueApprovals(admin, projectId, reportedItemIds))
+  return { project: project && { id: project.id, name: project.name }, agentProject, items, orders, reports, watchers, members, approvedItemIds, gate, queueApprovals }
 }
 
 export async function getAgentHub(projectId: string, viewer: { userId: string; isAdmin: boolean }, nowMs = Date.now()): Promise<AgentHub> {
   // 호출부(페이지·허브 액션)가 requireProjectMember(projectId) 를 통과한 뒤다 — 조회는 전부 이 projectId 로 좁힌다.
   const { admin } = adminFor({ projectId })
   const rows = await fetchAgentHubRows(admin, projectId, nowMs)
-  const hub = assembleAgentHub(rows, nowMs, { userId: viewer.userId, isAdmin: viewer.isAdmin })
-  // SP5b W1 — 결재 대기열의 대기 단계(n/m·라벨·expectedStep). 큐가 비면 읽지 않는다. 판독 실패는 로그 + 표시 없음(승인은 서버가 다시 판정)
-  const itemIds = hub.queue.map((q) => q.itemId).filter((x): x is string => x !== null)
-  if (itemIds.length === 0) return hub
-  const approvals = await loadQueueApprovals(admin, projectId, itemIds)
-  return {
-    ...hub,
-    queue: hub.queue.map((q) => {
-      const a = q.itemId ? approvals.get(q.itemId) : undefined
-      return a ? { ...q, approval: { step: a.step, index: a.index, total: a.total, label: a.label } } : q
-    }),
-  }
+  return assembleAgentHub(rows, nowMs, { userId: viewer.userId, isAdmin: viewer.isAdmin })
 }

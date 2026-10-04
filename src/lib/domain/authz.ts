@@ -288,3 +288,18 @@ export function actorFromView(view: ProjectActorView | null, projectId: string):
     rosterTeams: new Map(view.rosterTeamCodes.length ? [[projectId, { teamIds: view.rosterTeamIds, teamCodes: view.rosterTeamCodes }]] : []),
   }
 }
+
+/**
+ * 완료 승인 자격(화면 어포던스·결재 배지·포털 '검토') — 서버 가드와 같은 축(SP5b D18·S20 — seatmap 에서 옮겨 왔다, seatmap 은 재수출).
+ * 기본: 관리자, 또는 서브트리 관리자이면서 그 리프의 담당자 본인도 그 주문을 claim 한 계정도 아닌 사람(제7부 AUTH-07a — requireCompletionApprover).
+ * 다단계 승인(SP5b) 재료: pendingStepApprover 가 'admin' 이면 관리자만(requireProjectAdmin), approvedThisRound(서로 다른 승인자 설정에서
+ * 이번 라운드의 다른 단계를 이미 승인함)이면 관리자도 못 한다(RPC approval_same_actor). 재료를 주지 않으면 현행(기본 1단계)과 같다.
+ */
+export function canApproveCompletion(r: {
+  isAdmin: boolean; subtreeManager: boolean; assigneeMine: boolean; claimedByMe: boolean
+  pendingStepApprover?: 'subtree_or_admin' | 'admin'; approvedThisRound?: boolean
+}): boolean {
+  if (r.approvedThisRound === true) return false
+  if (r.pendingStepApprover === 'admin') return r.isAdmin
+  return r.isAdmin || (r.subtreeManager && !r.assigneeMine && !r.claimedByMe)
+}

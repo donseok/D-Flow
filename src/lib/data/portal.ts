@@ -13,6 +13,8 @@ import { fetchAllPages, type PageResult } from '@/lib/data/paging'
 import { getMyMeetings } from '@/lib/data/meetings'
 import { getProjectsCompletion } from '@/lib/data/wbs'
 import { filterApprovable } from '@/lib/domain/approvable'
+import { loadQueueApprovals } from '@/lib/agent/approvalState'
+import type { AdminClient } from '@/lib/minutes/externalApi'
 import { effectiveModulesMany } from '@/lib/modules/effectiveMany'
 import { canSeeProject, isProjectAdmin, isProjectMember, type Actor } from '@/lib/domain/authz'
 import { todayIn } from '@/lib/domain/calendar'
@@ -136,11 +138,15 @@ async function approvalRows(client: Db, actor: Actor, pids: string[]): Promise<M
   type I = { id: string; parent_id: string | null; assignee_member_id: string | null; project_id: string }
   const items = (await Promise.all(chunks(treeFor).map((ids) => page<I>('결재 대기 항목 트리', (f, t) => client.from('wbs_items')
     .select('id, parent_id, assignee_member_id, project_id', { count: 'exact' }).in('project_id', ids).order('id').range(f, t))))).flat()
+  // 대기 승인 단계(SP5b S20 — 결재 배지와 같은 셈). 세션 클라이언트라 RLS 안에서만 읽는다. 판독 실패는 로그 + 현행 셈(loadQueueApprovals 의 계약)
+  const stepsByProject = new Map(await Promise.all(need.map(async (pid) => [pid, Object.fromEntries(await loadQueueApprovals(
+    client as unknown as AdminClient, pid, [...new Set(orders.filter((o) => o.project_id === pid && o.wbs_item_id !== null).map((o) => o.wbs_item_id as string))],
+  ))] as const)))
   const out: MyWorkRow[] = []
   for (const pid of need) {
     const own = actor.memberIds.get(pid)
     const viewer = { isAdmin: isProjectAdmin(actor, pid), memberIds: own ? [own] : [], userId: actor.userId }
-    for (const o of filterApprovable(orders.filter((x) => x.project_id === pid), items.filter((i) => i.project_id === pid), viewer)) {
+    for (const o of filterApprovable(orders.filter((x) => x.project_id === pid), items.filter((i) => i.project_id === pid), viewer, stepsByProject.get(pid))) {
       out.push({ kind: 'approval', id: o.id, title: o.wbs_items?.name ?? '에이전트 작업 보고', projectId: pid, projectName: o.projects?.name ?? '',
         due: null, overdueDays: null, status: '검토 대기', href: `/p/${pid}/agents` })
     }
