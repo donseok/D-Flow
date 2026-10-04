@@ -30,6 +30,7 @@
 @source not "../../assets";
 @source not "../../CLAUDE.md";
 @source not "../../README.md";
+@source not "../../HANDOFF.md";
 
 /* Tailwind v4 다크 변형: <html class="dark"> 하위에서 dark: 유틸 활성 */
 @custom-variant dark (&:where(.dark, .dark *));
