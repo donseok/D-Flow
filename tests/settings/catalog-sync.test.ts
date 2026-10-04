@@ -23,6 +23,8 @@ const expectedStatus: Record<string, string> = {
   // SP5b — 흐름 다섯(+크레딧 표). 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성 S1/S3/S9-workflow(Z) 뒤 verified
   'workflow.credit_policy': 'verified', 'workflow.wbs_stage_labels': 'verified', 'workflow.approval_steps': 'verified',
   'workflow.approval_distinct_approvers': 'verified', 'workflow.predecessor_gate': 'verified',
+  // SP6 S1 — 정의·parse 만. 편집기 FormsManager·렌더 소비는 뒤 단계. verified 는 Z
+  'forms.weekly_report_pptx': 'stored', 'forms.weekly_report_xlsx': 'stored', 'forms.issue_analysis_pptx': 'stored', 'forms.wbs_export_xlsx': 'stored',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.
@@ -31,12 +33,14 @@ const expectedStatus: Record<string, string> = {
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
   // SP5 A 과제 25 가 셋(TimezoneSelect·WorkingDaysEditor·WeekStartEditor)을 만들어 비었다(판정 J1) — 과제 29 가 빈 목록을 완료 조건으로 본다
   // SP5b W1 의 둘(StageLabelsEditor·ApprovalStepsEditor)은 W2 가 만들어 비었다
+  // SP6 S1 은 정의만. 업로드·활성화 화면은 S2
+  FormsManager: 'SP6 Phase S 편집기 — 정의가 화면보다 먼저',
 }
 
 describe('설정 카탈로그 동기화', () => {
-  it('39정의(키 이름 35)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('43정의(키 이름 39)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(39)
+    expect(defs).toHaveLength(43)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
     for (const def of defs) {
@@ -60,7 +64,7 @@ describe('설정 카탈로그 동기화', () => {
   it('아직 없는 custom 편집 UI 는 닫힌 목록뿐이고, 그 키는 verified 가 아니며, 컴포넌트가 생기면 항목을 지운다(죽은 항목 실패)', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
     for (const [component, why] of Object.entries(PENDING_CUSTOM_WIDGETS)) {
-      expect(why, component).toMatch(/^SP5 (A|B1|B3) 과제 \d+|^SP5b W2 과제 /)
+      expect(why, component).toMatch(/^SP5 (A|B1|B3) 과제 \d+|^SP5b W2 과제 |^SP6 Phase S /)
       expect(existsSync(`src/components/settings/${component}.tsx`), `${component} 가 생겼다 — 이 항목을 지운다`).toBe(false)
       const users = defs.filter((d) => d.widget.kind === 'custom' && d.widget.component === component)
       expect(users.length, `${component} 를 쓰는 정의가 없다 — 죽은 항목`).toBeGreaterThan(0)

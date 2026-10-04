@@ -18,6 +18,7 @@ import {
 import { DEFAULT_ID_POLICY, parseIdPolicy, type IdPolicy } from '@/lib/issues/idPolicy'
 import { parseFieldDefs, type FieldDef } from '@/lib/domain/customFields'
 import { RESERVED_SOURCE, defaultVocab, parseVocab, vocabChangeError, type VocabKey, type VocabValues } from '../vocab'
+import { formSettingDef } from './forms'
 
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error })
 
@@ -272,5 +273,10 @@ export const PROJECT_DEFS = [
     sql: { readers: ['enforce_custom_fields', 'custom_fields_ref_check', 'settings_ref_check'] },
     reindexOn: ['label', 'searchable', 'options.label'] as const,
   }),
+  // SP6 S1(정본 §4.4.7·§4.6.3, 개정 §2.8.2) — 양식 네 키. 활성 행·미매핑 검사는 아직 없다(S2).
+  formSettingDef('forms.weekly_report_pptx', 'weekly_report_pptx'),
+  formSettingDef('forms.weekly_report_xlsx', 'weekly_report_xlsx'),
+  formSettingDef('forms.issue_analysis_pptx', 'issue_analysis_pptx'),
+  formSettingDef('forms.wbs_export_xlsx', 'wbs_export_xlsx'),
 ] as const satisfies readonly SettingDef[]
 export type { ModuleId }

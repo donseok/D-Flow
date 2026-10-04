@@ -293,4 +293,8 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.fields.wbs_item.label': 'WBS custom fields', 'settings.fields.wbs_item.desc': 'Manage project fields, their types, defaults, permissions and display settings.',
   'settings.fields.issue.label': 'Issue custom fields', 'settings.fields.issue.desc': 'Manage project fields, their types, defaults, permissions and display settings.',
   'settings.fields.weekly_row.label': 'Weekly row custom fields', 'settings.fields.weekly_row.desc': 'Manage project fields, their types, defaults, permissions and display settings.',
+  'settings.forms.weekly_report_pptx.label': 'Weekly report PowerPoint form', 'settings.forms.weekly_report_pptx.desc': 'Template, placeholder mapping, and overflow options for the weekly report PowerPoint. No template means the product default.',
+  'settings.forms.weekly_report_xlsx.label': 'Weekly report Excel form', 'settings.forms.weekly_report_xlsx.desc': 'Template, placeholder mapping, and overflow options for the weekly report workbook. No template means the product default.',
+  'settings.forms.issue_analysis_pptx.label': 'Issue analysis PowerPoint form', 'settings.forms.issue_analysis_pptx.desc': 'Template, placeholder mapping, and overflow options for the issue analysis deck. No template means the product default.',
+  'settings.forms.wbs_export_xlsx.label': 'WBS Excel form', 'settings.forms.wbs_export_xlsx.desc': 'Template, placeholder mapping, and overflow options for the WBS workbook export. No template means the product default.',
 }

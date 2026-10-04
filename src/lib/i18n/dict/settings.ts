@@ -291,4 +291,8 @@ export const settingsKo = {
   'settings.fields.wbs_item.label': 'WBS 추가 필드', 'settings.fields.wbs_item.desc': '프로젝트별 추가 정보의 유형·기본값·편집 권한과 표시 방식을 관리합니다.',
   'settings.fields.issue.label': '이슈 추가 필드', 'settings.fields.issue.desc': '프로젝트별 추가 정보의 유형·기본값·편집 권한과 표시 방식을 관리합니다.',
   'settings.fields.weekly_row.label': '주간보고 추가 필드', 'settings.fields.weekly_row.desc': '프로젝트별 추가 정보의 유형·기본값·편집 권한과 표시 방식을 관리합니다.',
+  'settings.forms.weekly_report_pptx.label': '주간보고 PPT 양식', 'settings.forms.weekly_report_pptx.desc': '주간보고 PPT의 템플릿·자리표시 매핑·넘침 옵션입니다. 템플릿이 없으면 제품 기본 양식입니다.',
+  'settings.forms.weekly_report_xlsx.label': '주간보고 엑셀 양식', 'settings.forms.weekly_report_xlsx.desc': '주간보고 엑셀의 템플릿·자리표시 매핑·넘침 옵션입니다. 템플릿이 없으면 제품 기본 양식입니다.',
+  'settings.forms.issue_analysis_pptx.label': '이슈 분석서 PPT 양식', 'settings.forms.issue_analysis_pptx.desc': '이슈 분석서 PPT의 템플릿·자리표시 매핑·넘침 옵션입니다. 템플릿이 없으면 제품 기본 양식입니다.',
+  'settings.forms.wbs_export_xlsx.label': 'WBS 엑셀 양식', 'settings.forms.wbs_export_xlsx.desc': 'WBS 엑셀 내보내기 양식의 템플릿·자리표시 매핑·넘침 옵션입니다. 템플릿이 없으면 제품 기본 양식입니다.',
 } as const

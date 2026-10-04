@@ -1,4 +1,4 @@
-// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 24키 등록(SP5 A 의 calendar.* 여섯 포함 — 같은 이름이 두 스코프, SP5 B1 의 issues.* 둘), 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
+// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 43정의(SP6 forms.* 넷 포함). 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
@@ -18,7 +18,7 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 39키 — 워크스페이스 13, 프로젝트 26(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯)', () => {
+  it('정확히 43키 — 워크스페이스 13, 프로젝트 30(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP6 forms.* 넷)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
       'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'minutes.attachments', 'minutes.root_folders'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
@@ -26,7 +26,8 @@ describe('등록 키', () => {
       'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers', 'workflow.predecessor_gate',
       'calendar.timezone', 'calendar.working_days', 'calendar.week_start',
       'issues.id_policy', 'issues.analysis', 'minutes.attachments',
-      'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses', 'fields.wbs_item', 'fields.issue', 'fields.weekly_row'])
+      'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses', 'fields.wbs_item', 'fields.issue', 'fields.weekly_row',
+      'forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'])
     for (const k of ['agents.stage_workflow', 'portal.widgets', 'views.default', 'core.stage_credits']) {
       expect(KEYS, k).not.toContain(k)
     }
@@ -324,6 +325,8 @@ describe('카탈로그 메타와 사전', () => {
     // SP5 A 과제 29 — 달력 셋은 정의·편집·소비처·테스트 네 연결이 끝나 verified(스펙 D44)
     expect(['calendar.timezone', 'calendar.working_days', 'calendar.week_start'].map(status)).toEqual(Array(3).fill('verified'))
     expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['portal.widgets', 'views.default']))
+    expect(['forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'].map(status)).toEqual(Array(4).fill('stored'))
+    expect(PLANNED_KEYS.map((p) => p.key).some((k) => k.startsWith('forms.'))).toBe(false)
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)
   })
   it('키마다 라벨·설명 사전 키가 ko·en 둘 다 있다', () => {

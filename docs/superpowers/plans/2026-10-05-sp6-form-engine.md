@@ -25,9 +25,9 @@ SP5c(사용자 정의 필드)의 모든 단계(F~Z)가 성공적으로 구현·�
   - `copy_project_config`의 `form_templates` 메타 복사 연동
   - 전용 DB(`54522`) 대상 RLS 테스트
 - [ ] S: `forms.*` 설정 레지스트리 및 관리 액션
-  - `forms.weekly_report_pptx`, `forms.weekly_report_xlsx`, `forms.issue_analysis_pptx`, `forms.wbs_export_xlsx` 설정 정의 및 검증기
-  - 양식 템플릿 업로드 준비(`prepareFormTemplateUpload`), 활성화(`activateFormTemplate`), 삭제 액션 구현
-  - 액션 관문 및 권한 검증 테스트
+  - [x] S1: `forms.weekly_report_pptx`, `forms.weekly_report_xlsx`, `forms.issue_analysis_pptx`, `forms.wbs_export_xlsx` 설정 정의 및 검증기(형태·카탈로그 경로·options). 편집 화면은 아직 없다
+  - [ ] S2: 양식 템플릿 업로드 준비(`prepareFormTemplateUpload`), 활성화(`activateFormTemplate`), 삭제 액션 구현
+  - [ ] S2: 액션 관문 및 권한 검증 테스트
 - [ ] V: 양식 병합 엔진 및 라우트 연결
   - PPTX/XLSX 템플릿 병합 엔진 구현
   - `/api/report`, `/api/export` 라우트 연동 (활성 템플릿 우선, 미등록 시 기본 템플릿 폴백)

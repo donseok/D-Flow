@@ -14,6 +14,7 @@ const S5B4 = (status: CatalogStatus, consumers: string[], tests: string[]): Cata
 const S5BW = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b W' })
 const S5BI = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b I' })
 const S5C = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5c' })
+const S6 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP6' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'fields.wbs_item': S5C('verified',
     ['src/components/settings/CustomFieldsSettings.tsx', 'src/components/fields/CustomFieldValuesEditor.tsx', 'src/components/wbs/RowDetailPanel.tsx', 'src/components/wbs/WbsGanttSheet.tsx', 'src/lib/excel/exportWithProfile.ts', 'src/lib/excel/parseWithProfile.ts', 'src/lib/ai/index/content.ts', 'supabase/migrations/0027_custom_fields.sql'],
@@ -87,6 +88,11 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'workflow.approval_distinct_approvers': S5BW('verified', ['src/lib/domain/approvable.ts', 'src/components/settings/ApprovalStepsEditor.tsx', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/approval-count.test.ts', 'tests/rls/workflow-policy.test.ts']),
   'workflow.predecessor_gate': S5BW('verified', ['src/lib/domain/agentWork.ts', 'src/lib/agent/predecessorGate.ts', 'src/lib/agent/depends.ts', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/agent/predecessor-gate.test.ts', 'tests/agent/claim-gate-final.test.ts', 'tests/rls/workflow-policy.test.ts']),
   'issues.cause_categories': S5B4('verified', ['src/lib/ai/issue-analysis.ts', 'src/lib/report/issues/storedRun.ts', 'src/lib/report/issues/deckPlan.ts', 'src/app/actions/issueAnalysis.ts'], ['tests/settings/vocab.test.ts', 'tests/ai/issue-analysis.test.ts', 'tests/report/issue-analysis-stored-run.test.ts', 'tests/report/issue-analysis-vocab.test.ts']),
+  // SP6 S1 — 정의·parse(형태·카탈로그 경로). 업로드·활성화·렌더 소비는 S2·V. verified 는 Z
+  'forms.weekly_report_pptx': S6('stored', ['src/lib/settings/defs/forms.ts'], ['tests/settings/forms-defs.test.ts']),
+  'forms.weekly_report_xlsx': S6('stored', ['src/lib/settings/defs/forms.ts'], ['tests/settings/forms-defs.test.ts']),
+  'forms.issue_analysis_pptx': S6('stored', ['src/lib/settings/defs/forms.ts'], ['tests/settings/forms-defs.test.ts']),
+  'forms.wbs_export_xlsx': S6('stored', ['src/lib/settings/defs/forms.ts'], ['tests/settings/forms-defs.test.ts']),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
@@ -94,10 +100,6 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
   { key: 'portal.widgets', scope: 'workspace', sp: 'SP3b', shape: '{ id: PortalWidgetId; enabled: boolean }[]' },
   { key: 'security.local_drafts', scope: 'workspace', sp: 'SPU1', shape: '{ allowed: boolean; retention_days: number }' },
   { key: 'notify.policy', scope: 'workspace', sp: 'SP8', shape: '{ [type]: { enabled: boolean } }' },
-  { key: 'forms.weekly_report_pptx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
-  { key: 'forms.weekly_report_xlsx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
-  { key: 'forms.issue_analysis_pptx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
-  { key: 'forms.wbs_export_xlsx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
   { key: 'minutes.auto_file_by_path', scope: 'project', sp: 'SP7', shape: 'boolean' },
   { key: 'views.default', scope: 'project', sp: 'SP3b', shape: "{ wbs: 'sheet'|'timeline'|'board'; density }" },
 ]
