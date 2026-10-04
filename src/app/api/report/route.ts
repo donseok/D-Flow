@@ -27,7 +27,7 @@ import { projectTeams } from '@/lib/teams/source'
 import { activeCodes } from '@/lib/domain/teams'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
-import { valueOf } from '@/lib/settings/registry'
+import { valueOf, type ProjectSettingValue } from '@/lib/settings/registry'
 import { stampIn } from '@/lib/domain/calendar'
 import { configFailureResponse } from '@/lib/api/http'
 
@@ -150,7 +150,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: '프로젝트 팀을 확인할 수 없습니다.' }, { status: 503 })
   }
   let levelLabels: string[]
-  try { levelLabels = valueOf(cfgRes.cfg, 'core.level_labels') } catch (e) {
+  let attendanceTypes: ProjectSettingValue<'attendance.types'>
+  try {
+    levelLabels = valueOf(cfgRes.cfg, 'core.level_labels')
+    attendanceTypes = valueOf(cfgRes.cfg, 'attendance.types')   // 근태 약칭(SP5 B4) — 손상이면 단계 이름처럼 code·key 로
+  } catch (e) {
     const failed = configFailureResponse(e, 'report')   // 단계 이름 손상도 같은 꼴(code·key — N5)
     if (failed) return failed
     throw e
@@ -176,7 +180,7 @@ export async function GET(req: NextRequest) {
   const model = buildWeeklyReportModel(items, project, today, {
     members, attendance, generatedAt: stamp(now),
     meetings: meetRes.meetings, meetingExceptions: meetRes.exceptions, announcements: annRes.rows,
-    teams: activeCodes(teamsRes.teams), levelLabels, calendar,
+    teams: activeCodes(teamsRes.teams), levelLabels, calendar, attendanceTypes,
   })
   const meta = FORMATS[format]
 

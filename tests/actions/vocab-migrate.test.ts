@@ -24,9 +24,8 @@ describe('migrateVocabCode', () => {
     expect(h.rpc).toHaveBeenCalledWith('migrate_setting_code', { p_actor: 'u-admin', p_project_id: P, p_key: 'meetings.categories', p_from: 'review', p_to: 'routine' })
   })
   it('원인 분류·모르는 키·같은 code·형식 밖 code 는 RPC 전에 거부', async () => {
-    for (const args of [['issues.cause_categories', 'it', 'process'], ['x.y', 'a', 'b'], ['issues.severities', 'low', 'low'], ['issues.severities', 'Low', 'high']] as const) {
-      expect((await migrateVocabCode(P, ...args)).ok).toBe(false)
-    }
+    const cases: [string, string, string][] = [['issues.cause_categories', 'it', 'process'], ['x.y', 'a', 'b'], ['issues.severities', 'low', 'low'], ['issues.severities', 'Low', 'high']]
+    for (const [k, from, to] of cases) expect((await migrateVocabCode(P, k, from, to)).ok).toBe(false)
     expect(h.rpc).not.toHaveBeenCalled()
   })
   it('가드·모듈 관문이 닫히면 RPC 에 닿지 않는다', async () => {

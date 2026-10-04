@@ -4,6 +4,7 @@ import { todayIn, type RequestCalendar } from '@/lib/domain/calendar'
 import { dateAnchors, inclusiveRange, weekRefOf } from './calendarAnchors'
 import { classifyIntent } from '@/lib/ai/intent'
 import type { CoreBotToolName } from '@/lib/ai/tools/types'
+import { DEFAULT_ATTENDANCE_TYPES, type AttendanceTypeDef } from '@/lib/settings/vocab'
 import type {
   BotDomain,
   BotEntityRef,
@@ -25,7 +26,10 @@ export type RouteTeam = { code: string; name: string }
 export type RouteChatOptions = {
   /** 프로젝트(전역 회의·회의록이면 null)의 활성 팀. 호출부가 권한 범위로 좁혀 준다. 던지면 그대로 전파한다. */
   teamsFor?: (projectId: string | null) => readonly RouteTeam[]
+  /** 그 프로젝트의 근태 유형(설정 attendance.types — SP5 B4 D46). 없으면 제품 기본 어휘의 라벨로 읽는다(도구가 그 프로젝트 목록으로 다시 거른다) */
+  attendanceTypes?: readonly RouteAttendanceType[]
 }
+export type RouteAttendanceType = Pick<AttendanceTypeDef, 'code' | 'label' | 'counts_as' | 'selectable'>
 
 export type DeterministicRoute =
   | {
@@ -249,17 +253,24 @@ function teamFrom(message: string, context: PageContextV1 | undefined, teams: re
   return teamFromTeams(message, teams)
 }
 
-function attendanceTypesFrom(message: string): string[] | undefined {
-  if (/반반차/.test(message)) return ['quarter']
-  if (/반차/.test(message)) return ['half']
-  if (/연차/.test(message)) return ['annual']
-  if (/공가/.test(message)) return ['official']
-  if (/재택/.test(message)) return ['remote']
-  if (/출장/.test(message)) return ['trip']
-  if (/병가/.test(message)) return ['sick']
-  if (/결근/.test(message)) return ['absent']
-  if (/정상\s*근무|출근/.test(message)) return ['work']
-  if (/휴가/.test(message)) return ['annual', 'half', 'quarter', 'sick']
+/**
+ * 질문 속 근태 유형 — 그 프로젝트 설정의 라벨에서 만든다(SP5 B4 D46). 공백을 무시하고 긴 라벨부터 대조해 '반반차'가 '반차'를 이긴다.
+ * 짧은 이름(short)은 쓰지 않는다 — '근무' 같은 짧은 이름이 '재택근무'·'근무 현황'에 걸려 엉뚱하게 거른다.
+ * 라벨이 없으면 '출근' = 등록 선택지인 근무 집계 유형, '휴가' = 휴가 집계 유형 전부.
+ */
+function attendanceTypesFrom(message: string, types: readonly RouteAttendanceType[]): string[] | undefined {
+  const text = message.replace(/\s+/g, '')
+  const byLength = [...types].filter(e => e.label.trim()).sort((a, b) => b.label.replace(/\s+/g, '').length - a.label.replace(/\s+/g, '').length)
+  const hit = byLength.find(e => text.includes(e.label.replace(/\s+/g, '')))
+  if (hit) return [hit.code]
+  if (/출근/.test(text)) {
+    const work = types.filter(e => e.counts_as === 'work' && e.selectable).map(e => e.code)
+    if (work.length) return work
+  }
+  if (/휴가/.test(text)) {
+    const leave = types.filter(e => e.counts_as === 'leave').map(e => e.code)
+    if (leave.length) return leave
+  }
   return undefined
 }
 
@@ -496,9 +507,9 @@ function meetingsCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar
   }
 }
 
-function attendanceCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, teams: readonly RouteTeam[]): RoutedToolCall {
+function attendanceCall(input: ChatRequestV2, now: Date, calendar: RequestCalendar, teams: readonly RouteTeam[], attendanceTypes: readonly RouteAttendanceType[]): RoutedToolCall {
   const range = requestedRange(input.message, input.pageContext, now, calendar)
-  const types = attendanceTypesFrom(input.message)
+  const types = attendanceTypesFrom(input.message, attendanceTypes)
   return {
     id: 'call_attendance',
     tool: 'get_attendance',
@@ -774,7 +785,7 @@ export function routeChatRequest(input: ChatRequestV2, now: Date, calendar: Requ
     if (domain === 'wbs') return wbsCall(input, now, calendar, teams)
     if (domain === 'weekly') return weeklyCall(input, now, calendar, teams)
     if (domain === 'meetings') return meetingsCall(input, now, calendar)
-    if (domain === 'attendance') return attendanceCall(input, now, calendar, teams)
+    if (domain === 'attendance') return attendanceCall(input, now, calendar, teams, opts.attendanceTypes ?? DEFAULT_ATTENDANCE_TYPES)
     if (domain === 'announcements') return announcementsCall(input, now, calendar)
     if (domain === 'minutes') return minutesCall(input, now, calendar, teams)
     if (domain === 'wiki') return wikiCall(input)
