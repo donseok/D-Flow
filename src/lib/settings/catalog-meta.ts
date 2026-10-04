@@ -53,7 +53,7 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // SP5 B1 — 정의·편집·소비처·검증이 이어졌다(스펙 D44)
   'issues.id_policy': S5B1('verified', ['src/lib/issues/context.ts', 'src/app/actions/issues.ts', 'src/components/settings/IssuePolicyEditor.tsx'], ['tests/issues/id-policy.test.ts', 'tests/rls/issue-code-policy.test.ts', 'tests/ui/issue-policy-editor.test.tsx']),
   'issues.analysis': S5B1('verified', ['src/lib/issues/rules.ts', 'src/app/actions/issues.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/issues/rules.test.ts', 'tests/actions/issue-entry-rules.test.ts', 'tests/rls/issue-areas.test.ts']),
-  'minutes.attachments': S5B3('stored', ['src/lib/minutes/resolveAttachmentPolicy.ts', 'src/app/actions/project.ts'], ['tests/minutes/attachment-policy.test.ts', 'tests/minutes/resolve-attachment-policy.test.ts', 'tests/settings/attachment-defs.test.ts']),
+  'minutes.attachments': S5B3('verified', ['src/lib/minutes/resolveAttachmentPolicy.ts', 'src/app/actions/minutes.ts', 'src/components/settings/AttachmentPolicyEditor.tsx'], ['tests/minutes/attachment-policy.test.ts', 'tests/rls/minute-attachments-policy.test.ts', 'tests/ui/attachment-policy-editor.test.tsx']),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */

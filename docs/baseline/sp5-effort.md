@@ -56,3 +56,17 @@ CI 등가 기준선 reset→비교→migration up→RLS와 마지막 새 DB rese
 전체 unit 885 files·11,710 중 11,709 통과, 기존 macOS baseline-cli 경로 실패1(검사 제외/완화 없음). 빌드 `eWyqvRNYthPXlzylKbFMV` 통과. 새 RLS 파일을 포함한 최종 typecheck/lint 결과는 커밋 전 확인했다(기존 lint 경고4). 빈 파일을 잘못 거부하던 TS 사전 판정을 기존 DB 계약과 일치시켰다. 자체 검토이며 독립 리뷰가 아니다. 원본 증거는 리포 밖 `.superpowers/sp5/codex-b3/`의 roundtrip/ci/final-rls/db-full/db-build 로그다.
 
 이 묶음은 DB 계층 완료다. 기존 removeMinuteFile을 톰스톤으로 연결하는 과제5와 읽기/클릭 발급/화면/청소 등 과제5~14는 미완료이며 B3 전체 체크포인트를 만들지 않는다. main 병합·사용자 DB 데이터 조회/변경·성능 측정은 하지 않았다. 사용자 지시에 따라 여기까지 커밋·푸시 후 개발을 중단한다.
+
+### B3 과제 5~14 — 액션·화면·편집기·청소·의미검색 이월·실화면 검증 (Claude Cloud 인수)
+
+Codex 토큰 소진 뒤 클라우드 세션이 `e7d2f911` 위에서 이어받았다. 실측 벽시계는 착수(2026-10-04 09:28 KST 무렵)부터 마지막 코드 커밋 `6a1defc`(10:58 KST)까지 약 **1.5h**(휴식 공백 없음, 근사치). 작업자 한 명이라 약 1.5 에이전트 시간, 9.4h/노력주 기준 약 **0.16 노력주**(추정).
+
+- 과제5: `removeMinuteFile` 톰스톤(가드 → service_role 활성 행 deleted_at/by → 객체 삭제 → purged_at, 객체 실패는 사용자 성공·로그·청소 잡), 확정 가드 사유 전부 문구 매핑(원시 DB 오류 0), `getMinuteFilePreviewUrl`(정책 ∧ 안전 확장자 ∧ 객체 MIME), 행 범위·저장 범위 정책 조회 액션 둘, 본문 커밋 RPC 원시 오류 매핑. `recordMinuteFile` 서버 정책 사전 확인은 넣지 않았다(DB 가드가 사유별 같은 판정 — 결정 기록).
+- 과제6: 첨부 등록자 이름. 세션 읽기는 0021 정책이 톰스톤을 가리고 src 의 service_role `minute_files` 읽기는 없다.
+- 과제7: 산출물·이슈 목록 서명 제거, 클릭 때 엔티티·첨부 짝과 그 순간 권한으로 60초 발급. `LIST_SIGNED_URL_TTL_SEC` 삭제.
+- 과제8·9: `MinuteAttachmentsPanel`·새 회의록 모달 범위 정책 사전 확인, `AttachmentPolicyEditor`(워크스페이스·프로젝트 설정). 실화면 확인 중 390 폭에서 파일 이름이 잘리는 문제를 찾아 고쳤다(`6a1defc`).
+- 과제10: `npm run minutes:sweep`. 실제 로컬 DB 에서 고아(25시간 전) 1건·미정리 톰스톤 1건을 dry-run 으로 정확히 집계, `--apply` 로 정리, 재실행 0건(멱등). 정상 첨부·본문·버전 객체 보존.
+- 과제11: `0022_semantic_scope`(match_minute_documents p_workspace_id·p_exclude_project_ids, match_wbs_documents p_project_ids, INVOKER·실행권 유지, 옛 overload 제거) + 호출부 전환. 실제 DB 에서 두 워크스페이스 소속자의 top-1 회수율·제외/허용 목록·RLS 확대 불가·롤백→재적용 왕복 확인.
+- 과제12: B3 "두지 않는 것" 0건 불변식. 외부 메타 운영 상한 계약은 기존 테스트가 고정(10개·20,971,520). v2.9 계약 절은 B2 산출물이라 아직 없다 — 첨부 운영 상한 한 줄은 B2 가 절을 만들 때 넣는다(이월).
+
+검증: 로컬 Supabase(CLI 2.75)에서 `db reset`(2026-10-04 10:48:41 KST, 0022 포함) → bootstrap → settings:verify → 전체 test:rls 39 files·609 통과/skip0. 이 컨테이너 커널에 IPv6 가 없어 realtime v2.73.2 의 HTTP 리스너만 IPv4 로 바꾼 로컬 이미지로 띄웠다(리포 변경 없음, DB 스키마 무관). 단위 전체 11,802 중 마지막 전체 실행 실패 8(원인 2건 수정 뒤 해당 파일 통과), 부하 시 간헐 실패하는 WBS·탐색기 UI 4파일은 단독 실행 통과. typecheck·lint(오류0/기존 경고4)·build 통과. 실제 앱(next start)을 Playwright 로 조작해 새 회의록 첨부 2 → 패널 추가 → PNG 미리보기 → 삭제(톰스톤·정리·객체 0) → 설정 저장/재조회 → 패널 새 한도 반영까지 18/18, 1440/390 light/dark 가로 넘침 0. 자체 검토이며 독립 리뷰가 아니다. 사용자 DB 적용·성능 측정은 하지 않았다.
