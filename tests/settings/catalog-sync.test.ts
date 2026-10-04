@@ -21,7 +21,6 @@ const expectedStatus: Record<string, string> = {
  * SP5 B1 의 issues.id_policy 도 같은 꼴이다(정의 과제 3 → 편집기 IssuePolicyEditor 과제 11 → verified 과제 13).
  * 그 키가 verified 로 오르기 전(과제 29)에 컴포넌트가 생기거나 위젯 이름이 실재 컴포넌트로 바뀌어야 한다 */
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
-  AttachmentPolicyEditor: 'SP5 B3 과제 9에서 생성·장착, 정의는 과제 2에서 먼저 등록',
   // SP5 A 과제 25 가 셋(TimezoneSelect·WorkingDaysEditor·WeekStartEditor)을 만들어 비었다(판정 J1) — 과제 29 가 빈 목록을 완료 조건으로 본다
 }
 

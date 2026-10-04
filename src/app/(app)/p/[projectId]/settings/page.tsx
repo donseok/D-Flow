@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History } from 'lucide-react'
+import { Upload, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
@@ -15,6 +15,8 @@ import { areaTeamOptions } from '@/lib/domain/areas'
 import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
 import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
 import { IssuePolicyEditor } from '@/components/settings/IssuePolicyEditor'
+import { AttachmentPolicyEditor } from '@/components/settings/AttachmentPolicyEditor'
+import type { AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
 import { moduleState, requireModule } from '@/lib/modules/gate'
 import { issueCodeYear, type IdPolicy } from '@/lib/issues/idPolicy'
 import type { IssueAnalysisSetting } from '@/lib/settings/defs/project'
@@ -199,6 +201,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const analysisState = pc.ok ? await moduleState({ projectId }, 'issue_analysis') : 'unknown'
   const issuePolicy = pc.ok ? pick(pc.cfg, 'issues.id_policy') : null
   const issueAnalysis = pc.ok ? pick(pc.cfg, 'issues.analysis') : null
+  // 회의록 첨부 정책(SP5 B3 과제9) — 회의록은 워크스페이스 모듈이라 워크스페이스로 관문을 본다. 손상 값도 편집기를 그린다(복구 경로).
+  const minutesGate = pc.ok ? await requireModule({ workspaceId: pc.cfg.workspaceId }, 'minutes') : { ok: false as const, error: 'unavailable' }
+  const attachmentPolicy = pc.ok ? pick(pc.cfg, 'minutes.attachments') : null
   const timezoneState = pc.ok ? pc.cfg.keys['calendar.timezone'] : null
   const issueYear = timezoneState && (timezoneState.status === 'set' || timezoneState.status === 'default')
     ? issueCodeYear(timezoneState.value, new Date()) : null
@@ -250,7 +255,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       <SettingsShell items={[
         { id: 'project-general', label: '일반' }, { id: 'project-modules', label: '모듈·메뉴' },
         ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []),
-        ...(isAdmin && issuesGate.ok ? [{ id: 'project-issues', label: locale === 'ko' ? '이슈' : 'Issues' }] : []), { id: 'project-status', label: '상태·승인' },
+        ...(isAdmin && issuesGate.ok ? [{ id: 'project-issues', label: locale === 'ko' ? '이슈' : 'Issues' }] : []),
+        ...(isAdmin && pc.ok && minutesGate.ok ? [{ id: 'project-minutes', label: locale === 'ko' ? '회의록' : 'Minutes' }] : []), { id: 'project-status', label: '상태·승인' },
         { id: 'project-calendar', label: '달력' }, { id: 'project-history', label: '기록' },
       ]}>
       <div className="space-y-5">
@@ -525,6 +531,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           <SectionCard searchText="issues.id_policy issue code analysis policy" eyebrow="ISSUE POLICY" title={t(locale, 'settings.issues.policy.title')} icon={LayoutList}>
             <p className="mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.issues.id_policy.desc')}</p>
             {issuePolicy?.ok && issueAnalysis?.ok && issueYear !== null ? <IssuePolicyEditor key={`${projectId}-${revision}`} projectId={projectId} policy={issuePolicy.value as IdPolicy} revision={revision} areas={pc.cfg.areas.issue_area} year={issueYear} canEdit={canMutate} analysis={issueAnalysis.value as IssueAnalysisSetting} analysisEnabled={analysisState === 'on'} locale={locale} /> : <ConfigStateNotice kind="unavailable" locale={locale} />}
+          </SectionCard>
+        </div>}
+
+        {isAdmin && pc.ok && minutesGate.ok && attachmentPolicy && <div id="project-minutes" className="scroll-mt-24 space-y-5">
+          <SectionCard searchText="minutes.attachments 회의록 첨부 정책 용량 개수 형식 미리보기 attachment" eyebrow="MINUTES" title={t(locale, 'settings.minutes.attachments.label')} icon={Paperclip}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.minutes.attachments.desc')}</p>
+            <AttachmentPolicyEditor key={`${projectId}-${revision}`} scope={{ projectId }} revision={revision} canEdit={canMutate}
+              policy={attachmentPolicy.ok ? attachmentPolicy.value as AttachmentPolicy : null} invalid={!attachmentPolicy.ok} />
           </SectionCard>
         </div>}
 

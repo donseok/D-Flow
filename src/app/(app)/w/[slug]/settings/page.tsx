@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Settings2, Palette, Mail, Menu, History, CalendarDays } from 'lucide-react'
+import { Settings2, Palette, Mail, Menu, History, CalendarDays, Paperclip } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
@@ -19,6 +19,9 @@ import { SettingsShell } from '@/components/settings/SettingsShell'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { CalendarSettingsPanel } from '@/components/settings/CalendarSettingsPanel'
+import { AttachmentPolicyEditor } from '@/components/settings/AttachmentPolicyEditor'
+import { parseAttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
+import { t } from '@/lib/i18n/dict'
 import { workspaceCalendarFieldsOf } from '@/lib/settings/calendarField'
 import { todayIn } from '@/lib/domain/calendar'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -57,6 +60,10 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   }
 
   const allowed = config.keys['modules.allowed']
+  // 회의록 첨부 정책(SP5 B3 과제9) — 손상 값도 편집기를 그린다(복구 경로). 저장 값의 재검증은 편집기와 같은 순수 파서.
+  const attState = config.keys['minutes.attachments']
+  const attParsed = attState.status === 'set' || attState.status === 'default' ? parseAttachmentPolicy(attState.value) : null
+  const attPolicy = attParsed?.ok ? attParsed.value : null
   // 달력 절(스펙 D36·§5.1 A 둘째 행) — 손상 키도 편집기를 그린다(복구 경로). '오늘'은 tz 가 유효할 때만
   const calendarFields = workspaceCalendarFieldsOf(config.keys)
   const calendarToday = calendarFields.timezone.value ? todayIn(calendarFields.timezone.value, new Date()) : null
@@ -73,7 +80,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
       </div>
       <SettingsShell items={[
         { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
-        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-menu', label: '메뉴' },
+        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-minutes', label: '회의록' }, { id: 'workspace-menu', label: '메뉴' },
         { id: 'workspace-history', label: '기록' },
       ]}>
       <SectionCard id="workspace-general" searchText="branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow="일반" title="이름과 메일" icon={Palette}>
@@ -115,6 +122,12 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
           <CalendarSettingsPanel scope={{ workspaceId: access.id }} revision={config.revision} todayIso={calendarToday} locale={locale}
             canEdit suggestBrowserTimezone {...calendarFields} />
         </div>
+      </SectionCard>
+      <SectionCard id="workspace-minutes" searchText="minutes.attachments 회의록 첨부 정책 용량 개수 형식 미리보기" eyebrow="회의록" title={t(locale, 'settings.minutes.attachments.label')} icon={Paperclip}>
+        <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.minutes.attachments.desc')}</p>
+        {/* 이 페이지는 워크스페이스 관리자만 들인다 — 키 정의의 editor 도 workspace_admin 이라 액션이 다시 판정한다 */}
+        <AttachmentPolicyEditor key={`${access.id}-${config.revision}`} scope={{ workspaceId: access.id }} revision={config.revision} canEdit
+          policy={attPolicy} invalid={attPolicy === null} />
       </SectionCard>
       <SectionCard id="workspace-menu" searchText="navigation.menu" eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
         <MenuOrderEditor workspaceId={access.id} revision={config.revision}

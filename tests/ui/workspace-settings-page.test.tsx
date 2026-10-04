@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   access: vi.fn(), config: vi.fn(), history: vi.fn(), events: vi.fn(),
   eventsList: vi.fn<(p: Record<string, unknown>) => null>(() => null),
   allowEditor: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div id="mock-allow-editor" />),
+  attEditor: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => null),
   shell: vi.fn<(p: { items: { id: string; label: string }[]; children: ReactNode }) => ReactNode>(({ children }) => <>{children}</>),
   redirect: vi.fn((to: string): never => { throw new Error(`NEXT_REDIRECT ${to}`) }),
   calendarPanel: vi.fn<(p: Record<string, unknown>) => null>(() => null),
@@ -27,6 +28,7 @@ vi.mock('@/components/settings/LogoEditor', () => ({ LogoEditor: () => null }))
 vi.mock('@/components/settings/AccentEditor', () => ({ AccentEditor: () => null }))
 vi.mock('@/components/settings/MenuOrderEditor', () => ({ MenuOrderEditor: () => null }))
 vi.mock('@/components/settings/SettingsHistoryList', () => ({ SettingsHistoryList: () => null }))
+vi.mock('@/components/settings/AttachmentPolicyEditor', () => ({ AttachmentPolicyEditor: (p: Record<string, unknown>) => h.attEditor(p) }))
 vi.mock('@/components/settings/CalendarSettingsPanel', () => ({ CalendarSettingsPanel: (p: Record<string, unknown>) => h.calendarPanel(p) }))
 vi.mock('@/components/settings/ConfigLoadError', () => ({ ConfigLoadError: ({ error }: { error: string }) => <p data-load-error>{error}</p> }))
 
@@ -58,13 +60,25 @@ describe('/w/[slug]/settings 페이지', () => {
     expect(h.config).not.toHaveBeenCalled()
   })
 
-  it('여섯 범주 목차를 스펙 순서로 낸다(달력 — SP5 과제 26)', async () => {
+  it('일곱 범주 목차를 스펙 순서로 낸다(달력 — SP5 과제 26, 회의록 첨부 — SP5 B3 과제 9)', async () => {
     await render()
     expect(h.shell.mock.calls[0][0].items).toEqual([
       { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
       { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' },
+      { id: 'workspace-minutes', label: '회의록' },
       { id: 'workspace-menu', label: '메뉴' }, { id: 'workspace-history', label: '기록' },
     ])
+  })
+
+  it('회의록 첨부 정책 — 워크스페이스 범위·revision 으로 편집기를 그리고, 손상 값이면 복구 상태(invalid)로 넘긴다', async () => {
+    await render()
+    expect(h.attEditor).toHaveBeenLastCalledWith(expect.objectContaining({
+      scope: { workspaceId: WID }, revision: 7, canEdit: true, invalid: false,
+      policy: expect.objectContaining({ enabled: true, maxFileBytes: 20_971_520, maxCount: 10, allowedExtensions: null }),
+    }))
+    h.config.mockResolvedValue(config({ 'minutes.attachments': { enabled: 'yes' } }))
+    await render()
+    expect(h.attEditor).toHaveBeenLastCalledWith(expect.objectContaining({ policy: null, invalid: true }))
   })
 
   it('달력 절 — 워크스페이스 범위·세 키(요일은 규칙 하나로 승격)·브라우저 시간대 제안을 편집기에 넘긴다', async () => {
