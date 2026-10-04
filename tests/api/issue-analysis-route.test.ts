@@ -3,21 +3,35 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
 import { makeMemberActor } from '../fixtures/actor'
-import { calSeoulMon } from '../helpers/calendarFixture'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ConfigKeyError, ConfigUnavailableError, CONFIG_MESSAGES } from '@/lib/settings/errors'
+import { FormRenderError } from '@/lib/report/engine/types'
+import { defaultFormSetting } from '@/lib/settings/defs/forms'
 import {
   buildIssueAnalysisInputSnapshot,
   buildIssueAnalysisReport,
 } from '@/lib/report/issues/model'
 
-const mocks = vi.hoisted(() => ({
-  requireProjectMember: vi.fn(),
-  getDisplayName: vi.fn(),
-  loadSavedIssueAnalysisRun: vi.fn(),
-  getDiagnostic: vi.fn(),
-  renderIssueAnalysisPpt: vi.fn(),
-  getProjectConfig: vi.fn(),
-}))
+const mocks = vi.hoisted(() => {
+  class FormTemplateLoadError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = 'FormTemplateLoadError'
+    }
+  }
+  return {
+    requireProjectMember: vi.fn(),
+    getDisplayName: vi.fn(),
+    loadSavedIssueAnalysisRun: vi.fn(),
+    getDiagnostic: vi.fn(),
+    renderIssueAnalysisPpt: vi.fn(),
+    getProjectConfig: vi.fn(),
+    render: vi.fn(),
+    scan: vi.fn(),
+    loadTemplate: vi.fn(),
+    FormTemplateLoadError,
+  }
+})
 
 vi.mock('@/lib/authz', () => ({
   requireProjectMember: mocks.requireProjectMember,
@@ -28,7 +42,6 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/data/issueAnalysis', () => ({
   loadSavedIssueAnalysisRun: mocks.loadSavedIssueAnalysisRun,
 }))
-// 생성일 라벨·파일명 날짜의 tz = 프로젝트 달력(SP5 과제 20) — 해석기만 바꿔 끼운다
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 vi.mock('@/lib/report/issues/export', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/report/issues/export')>()
@@ -38,10 +51,22 @@ vi.mock('@/lib/report/issues/export', async importOriginal => {
     renderIssueAnalysisPpt: mocks.renderIssueAnalysisPpt,
   }
 })
+vi.mock('@/lib/report/forms/loadTemplate', () => ({
+  loadFormTemplate: mocks.loadTemplate,
+  FormTemplateLoadError: mocks.FormTemplateLoadError,
+}))
+vi.mock('@/lib/report/engine', () => ({ engineFor: () => ({ render: mocks.render }) }))
+vi.mock('@/lib/report/engine/scan', () => ({ scanFormTemplate: mocks.scan }))
 import { GET } from '@/app/api/issue-analysis/route'
+
+const TPL = '11111111-1111-4111-8111-111111111111'
 
 function request(query = ''): NextRequest {
   return new NextRequest(`http://localhost/api/issue-analysis${query}`)
+}
+
+function ph(path: string) {
+  return { token: `{{${path}}}`, kind: 'value' as const, path, scope: [] as string[], location: {}, mergedRuns: false }
 }
 
 function issue(): IssueAnalysisIssueInput {
@@ -65,7 +90,6 @@ function issue(): IssueAnalysisIssueInput {
     createdAt: '2026-07-30T00:00:00Z',
     updatedAt: '2026-07-30T00:00:00Z',
     areaId: '00',
-
     code: 'PI-I-00-01',
     subProcess: '자재 등록',
     ownerDepartment: '기준정보팀',
@@ -97,7 +121,6 @@ function report() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  // 작성 팀 = 이 프로젝트 명단의 대표 팀(첫 원소). 다른 프로젝트의 팀은 섞이지 않는다.
   mocks.requireProjectMember.mockResolvedValue({
     ok: true,
     actor: makeMemberActor('project-1', ['PI', 'ERP'], {
@@ -109,8 +132,9 @@ beforeEach(() => {
     }),
   })
   mocks.getDisplayName.mockResolvedValue('홍길동')
-  mocks.getProjectConfig.mockResolvedValue({ calendar: calSeoulMon, calendarError: null })
-  mocks.loadSavedIssueAnalysisRun.mockResolvedValue({ areas: TEST_AREAS,
+  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig())
+  mocks.loadSavedIssueAnalysisRun.mockResolvedValue({
+    areas: TEST_AREAS,
     runId: 'run-1',
     projectId: 'project-1',
     projectName: 'Acme 프로젝트',
@@ -122,6 +146,9 @@ beforeEach(() => {
     message: '배포용 PPT 생성 엔진 선택이 필요합니다.',
   })
   mocks.renderIssueAnalysisPpt.mockResolvedValue(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+  mocks.loadTemplate.mockResolvedValue({ bytes: new Uint8Array([1]), source: 'default' })
+  mocks.scan.mockResolvedValue({ placeholders: [ph('summary.project_name')], issues: [] })
+  mocks.render.mockResolvedValue(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
 })
 
 describe('GET /api/issue-analysis', () => {
@@ -136,70 +163,102 @@ describe('GET /api/issue-analysis', () => {
     const response = await GET(request('?projectId=project-1&runId=run-1'))
     expect(response.status).toBe(403)
     expect(mocks.loadSavedIssueAnalysisRun).not.toHaveBeenCalled()
+    expect(mocks.render).not.toHaveBeenCalled()
     expect(mocks.renderIssueAnalysisPpt).not.toHaveBeenCalled()
   })
 
-  it('배포 렌더러 미연결 상태를 no-store JSON 503으로 명시한다', async () => {
-    const response = await GET(request('?projectId=project-1&runId=run-1'))
-    expect(response.status).toBe(503)
-    expect(response.headers.get('cache-control')).toBe('no-store')
-    await expect(response.json()).resolves.toMatchObject({
-      code: 'PPT_RENDERER_UNAVAILABLE',
-    })
-    expect(mocks.loadSavedIssueAnalysisRun).not.toHaveBeenCalled()
-  })
-
-  it('렌더러가 준비되면 저장 실행으로 deck plan을 만들고 PPTX를 다운로드한다', async () => {
-    mocks.getDiagnostic.mockReturnValue({
-      status: 'ready',
-      code: 'PPT_EXPORT_READY',
-      message: '다운로드 가능',
-    })
+  it('데이터 루트가 있으면 저장 실행으로 양식을 렌더하고 X-Form-Template 을 붙인다', async () => {
     const response = await GET(request('?projectId=project-1&runId=run-1'))
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('presentationml.presentation')
     expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('X-Form-Template')).toBe('default')
     expect(response.headers.get('content-disposition')).toContain('Acme_%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8')
+    expect(mocks.loadTemplate).toHaveBeenCalledWith('project-1', 'issue_analysis_pptx', null)
     expect(mocks.loadSavedIssueAnalysisRun).toHaveBeenCalledWith('project-1', 'run-1')
-    expect(mocks.renderIssueAnalysisPpt).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: 'project-1',
-      issueCount: 1,
-      meta: expect.objectContaining({ authorTeam: 'PI', authorName: '홍길동' }),
-      slides: expect.arrayContaining([
-        expect.objectContaining({ sourceSlide: 8 }),
-        expect.objectContaining({ sourceSlide: 10 }),
-        expect.objectContaining({ sourceSlide: 12 }),
-      ]),
-    }))
-    expect(new Uint8Array(await response.arrayBuffer())).toEqual(
-      new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+    expect(mocks.getDiagnostic).not.toHaveBeenCalled()
+    expect(mocks.renderIssueAnalysisPpt).not.toHaveBeenCalled()
+    expect(mocks.render).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      expect.objectContaining({
+        summary: expect.objectContaining({ author_name: '홍길동', author_team: 'PI', project_name: 'Acme 프로젝트' }),
+      }),
+      {},
+      expect.objectContaining({ empty_text: '' }),
     )
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+  })
+
+  it('활성 양식이면 X-Form-Template 은 custom', async () => {
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({
+      'forms.issue_analysis_pptx': { ...defaultFormSetting('issue_analysis_pptx'), template_id: TPL },
+    }))
+    mocks.loadTemplate.mockResolvedValue({ bytes: new Uint8Array([2]), source: 'custom' })
+    const response = await GET(request('?projectId=project-1&runId=run-1'))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('X-Form-Template')).toBe('custom')
+    expect(mocks.loadTemplate).toHaveBeenCalledWith('project-1', 'issue_analysis_pptx', TPL)
+  })
+
+  it('데이터 루트가 없으면 저장 실행을 읽지 않는다', async () => {
+    mocks.scan.mockResolvedValue({ placeholders: [ph('slide.page')], issues: [] })
+    const response = await GET(request('?projectId=project-1&runId=run-1'))
+    expect(response.status).toBe(200)
+    expect(mocks.loadSavedIssueAnalysisRun).not.toHaveBeenCalled()
+    expect(response.headers.get('X-Form-Template')).toBe('default')
+  })
+
+  it('저장된 실행이 없으면 404', async () => {
+    mocks.loadSavedIssueAnalysisRun.mockResolvedValue(null)
+    const response = await GET(request('?projectId=project-1&runId=run-1'))
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toMatchObject({ error: '저장된 이슈 분석 실행을 찾을 수 없습니다.' })
+    expect(mocks.render).not.toHaveBeenCalled()
+  })
+
+  it('양식 파일을 못 읽으면 500 이고 렌더하지 않는다', async () => {
+    mocks.loadTemplate.mockRejectedValue(new mocks.FormTemplateLoadError('양식 파일을 읽지 못했습니다.'))
+    const response = await GET(request('?projectId=project-1&runId=run-1'))
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toMatchObject({ error: '양식 파일을 읽지 못했습니다.' })
+    expect(mocks.render).not.toHaveBeenCalled()
+    expect(mocks.loadSavedIssueAnalysisRun).not.toHaveBeenCalled()
+  })
+
+  it('양식 렌더 오류는 422 이고 위치가 없으면 location 을 빼며 unknown location 도 보내지 않는다', async () => {
+    mocks.render.mockRejectedValue(new FormRenderError('MISSING_PATH', {}, 'summary.nope', '없는 경로'))
+    const response = await GET(request('?projectId=project-1&runId=run-1'))
+    expect(response.status).toBe(422)
+    await expect(response.json()).resolves.toEqual({ error: '없는 경로', code: 'MISSING_PATH', token: 'summary.nope' })
   })
 
   it('이 프로젝트 명단 팀이 없으면 작성 팀은 빈 값 — 다른 프로젝트 팀을 빌려오지 않는다', async () => {
-    mocks.getDiagnostic.mockReturnValue({ status: 'ready', code: 'PPT_EXPORT_READY', message: '다운로드 가능' })
     mocks.requireProjectMember.mockResolvedValue({
       ok: true,
       actor: makeMemberActor('project-1', [], { rosterTeams: new Map([['project-2', { teamIds: ['t-mes'], teamCodes: ['MES'] }]]) }),
     })
     const response = await GET(request('?projectId=project-1&runId=run-1'))
     expect(response.status).toBe(200)
-    expect(mocks.renderIssueAnalysisPpt).toHaveBeenCalledWith(expect.objectContaining({
-      meta: expect.objectContaining({ authorTeam: '' }),
-    }))
+    expect(mocks.render).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      expect.objectContaining({ summary: expect.objectContaining({ author_team: '' }) }),
+      expect.anything(),
+      expect.anything(),
+    )
   })
 
-  it('프로젝트 달력이 손상이면 422 CALENDAR_INVALID + 키 — 서울·UTC 로 대체하지 않는다(A-4 리뷰 N5 — 세 라우트 같은 꼴)', async () => {
-    mocks.getDiagnostic.mockReturnValue({ status: 'ready', code: 'PPT_EXPORT_READY', message: '다운로드 가능' })
-    mocks.getProjectConfig.mockResolvedValue({ calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone') })
+  it('프로젝트 달력이 손상이면 422 CALENDAR_INVALID + 키 — 서울·UTC 로 대체하지 않는다', async () => {
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({}, {
+      calendar: null,
+      calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone'),
+    }))
     const response = await GET(request('?projectId=project-1&runId=run-1'))
     expect(response.status).toBe(422)
     await expect(response.json()).resolves.toEqual({ error: `${CONFIG_MESSAGES.CONFIG_INVALID} (calendar.timezone)`, code: 'CALENDAR_INVALID', key: 'calendar.timezone' })
-    expect(mocks.renderIssueAnalysisPpt).not.toHaveBeenCalled()
+    expect(mocks.render).not.toHaveBeenCalled()
   })
 
   it('프로젝트 설정 조회 실패는 503 고정 문구(원문은 로그)', async () => {
-    mocks.getDiagnostic.mockReturnValue({ status: 'ready', code: 'PPT_EXPORT_READY', message: '다운로드 가능' })
     mocks.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: db down'))
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const response = await GET(request('?projectId=project-1&runId=run-1'))
@@ -208,4 +267,15 @@ describe('GET /api/issue-analysis', () => {
     await expect(response.json()).resolves.toEqual({ error: '프로젝트 설정을 확인할 수 없습니다.' })
   })
 
+  it('custom 루트가 있을 때만 fields.issue 손상을 본다', async () => {
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'fields.issue': 'bad' }))
+    const plain = await GET(request('?projectId=project-1&runId=run-1'))
+    expect(plain.status).toBe(200)
+
+    mocks.scan.mockResolvedValue({ placeholders: [ph('issues.custom.note')], issues: [] })
+    const custom = await GET(request('?projectId=project-1&runId=run-1'))
+    expect(custom.status).toBe(422)
+    await expect(custom.json()).resolves.toMatchObject({ code: 'CONFIG_INVALID', key: 'fields.issue' })
+    expect(mocks.render).toHaveBeenCalledTimes(1)
+  })
 })

@@ -27,3 +27,10 @@ export const WEEKLY_MODEL_ROOTS = [
 export function needsWeeklyModel(roots: ReadonlySet<string>): boolean {
   return WEEKLY_MODEL_ROOTS.some((root) => roots.has(root))
 }
+
+/** 이슈 분석 저장 실행 로더 한 묶음이 채우는 루트 (정본 §4.5.4). custom 은 경로에 custom 이 있을 때. */
+export const ISSUE_ANALYSIS_RUN_ROOTS = ['summary', 'areas', 'issues', 'opportunities', 'custom'] as const
+
+export function needsIssueAnalysisRun(roots: ReadonlySet<string>): boolean {
+  return ISSUE_ANALYSIS_RUN_ROOTS.some((root) => roots.has(root))
+}
