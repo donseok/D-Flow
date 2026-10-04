@@ -4,7 +4,7 @@
 // 표는 프로젝트마다 하나다(2026-09-16). 카테고리별 if·doc 표를 없앴고 항목 credit_key 는 전이 계산에 쓰지 않는다.
 // 값은 핸들 위에서 바로 고치고, XX 는 승인으로만 100 이 되므로 입력 없이 자물쇠로 굳힌다.
 // 아래 미리보기는 지금 값으로 위임 Task 의 사건 흐름을 보여 준다(저장과 무관한 계산기).
-// 순서·간격·5 단위 제약의 정본은 도메인(clampCredit·validateStageCredits)이고 설정 액션(updateProjectSettings,
+// 순서·간격·단위 제약의 정본은 도메인(clampCredit·validateStageCredits — 프로젝트의 크레딧 정책 workflow.credit_policy, SP5b)이고 설정 액션(updateProjectSettings,
 // workflow.stage_credits)이 다시 검사한다. 저장은 소급하지 않는다 — 이미 기록된 실적%는 그대로이고 다음 단계 전이부터 새 값이 쓰인다.
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
@@ -16,8 +16,8 @@ import type { DictKey } from '@/lib/i18n/dict'
 import { ConflictCompare } from './ConflictCompare'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import {
-  CREDIT_GAP, CREDIT_KEYS, CREDIT_STEP, DEFAULT_STAGE_CREDITS, clampCredit, validateStageCredits,
-  type CreditKey, type CreditTable, type StageCredits,
+  CREDIT_KEYS, CREDIT_MIN_GAP_MAX, CREDIT_POLICY_STEPS, DEFAULT_CREDIT_POLICY, DEFAULT_STAGE_CREDITS, STRUCTURAL_CREDIT_POLICY,
+  clampCredit, validateStageCredits, type CreditKey, type CreditPolicy, type CreditTable, type StageCredits,
 } from '@/lib/domain/stageCredits'
 
 type Status = ReturnType<typeof statusOf>
@@ -49,8 +49,10 @@ const STATUS_CHIP: Record<Status, string> = {
   not_started: 'bg-surface-2 text-ink-subtle', in_progress: 'bg-progress-weak text-progress',
   delayed: 'bg-delayed-weak text-delayed', done: 'bg-done-weak text-done',
 }
-/** 눈금 — 입력 가능한 값(5)마다 긋고 10 마다 숫자를 붙인다. 이웃 최소 간격(10)을 눈으로 세도록. */
-const SCALE_TICKS = Array.from({ length: 100 / CREDIT_STEP + 1 }, (_, i) => i * CREDIT_STEP)
+/** 눈금 — 5 마다 긋고 10 마다 숫자를 붙인다(읽기용 자 — 입력 단위·최소 간격은 프로젝트의 크레딧 정책이 정한다, SP5b). */
+const TICK = 5
+const TICK_MAJOR = 10
+const SCALE_TICKS = Array.from({ length: 100 / TICK + 1 }, (_, i) => i * TICK)
 
 /** 미리보기 흐름 — 위임 Task 하나가 거치는 사건 순서(스펙 §3.4 사건 표). */
 const FLOW: { ev: DictKey; order: string; stage: Exclude<CreditKey, 'rw'>; cur: Cursor; same?: boolean }[] = [
@@ -72,10 +74,12 @@ function LockGlyph({ spin }: { spin: boolean }) {
   )
 }
 
-export function StageCreditSlider({ projectId, initial, editable, revision }: {
+export function StageCreditSlider({ projectId, initial, initialPolicy = null, editable, revision }: {
   projectId: string
   /** workflow.stage_credits — null 이면 코드 기본값으로 시작한다. */
   initial: StageCredits | null
+  /** workflow.credit_policy(SP5b) — 입력 단위·최소 간격. null 이면 기본 정책(5 단위·간격 10 = 현행). 표와 한 명령으로 저장한다 */
+  initialPolicy?: CreditPolicy | null
   editable: boolean
   /** 설정 문서의 revision — 첫 마운트 때 편집 세션의 기준(base)이 된다. 뒤에 바뀐 값은 저장에 쓰지 않는다(FN-2) */
   revision: number
@@ -86,6 +90,9 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   const [table, setTable] = useState<CreditTable>(() => ({ ...(initial?.default ?? DEFAULT_STAGE_CREDITS.default) }))
   const [baseline, setBaseline] = useState<CreditTable>(() => ({ ...(initial?.default ?? DEFAULT_STAGE_CREDITS.default) }))
   const [dirty, setDirty] = useState(false)
+  const [policy, setPolicy] = useState<CreditPolicy>(() => ({ ...(initialPolicy ?? DEFAULT_CREDIT_POLICY) }))
+  const [basePolicy, setBasePolicy] = useState<CreditPolicy>(() => ({ ...(initialPolicy ?? DEFAULT_CREDIT_POLICY) }))
+  const policyChanged = policy.step !== basePolicy.step || policy.min_gap !== basePolicy.min_gap
   // 편집 세션의 기준 revision — LevelSettingsManager 와 같다(최종 리뷰 FN-2): prop 이 아니라 초안을 읽은 시점으로 보내고, 자기 저장·충돌 때만 올린다
   const [base, setBase] = useState(revision)
   const [saved, setSaved] = useState(false)
@@ -106,7 +113,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
 
   const locked = !editable || pending || !!uncertainPatch
   const setValue = (key: CreditKey, raw: number) => {
-    setTable(prev => ({ ...prev, [key]: clampCredit(raw, key, prev) }))
+    setTable(prev => ({ ...prev, [key]: clampCredit(raw, key, prev, policy) }))
     setDirty(true); setSaved(false); setNoChange(false); setError(null); setFieldError(null); setReviewing(false)
   }
   const commitDraft = (key: CreditKey) => {
@@ -135,8 +142,8 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   const onHandleKey = (key: CreditKey) => (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (locked) return
     const cur = table[key]
-    const next = e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? cur - CREDIT_STEP
-      : e.key === 'ArrowRight' || e.key === 'ArrowUp' ? cur + CREDIT_STEP
+    const next = e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? cur - policy.step
+      : e.key === 'ArrowRight' || e.key === 'ArrowUp' ? cur + policy.step
         : e.key === 'Home' ? 0
           : e.key === 'End' ? 100
             : null
@@ -148,16 +155,17 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
     let r: SettingsCommandResult | null = null
     try { r = await updateProjectSettings(projectId, patch) } catch { /* 명령 이력에서 확인 */ }
     if (r?.ok) {
-      setBase(r.revision); setBaseline({ ...table }); setDirty(false); setSaved(true); setNoChange(r.revision === patch.expectedRevision)
+      setBase(r.revision); setBaseline({ ...table }); setBasePolicy({ ...policy }); setDirty(false); setSaved(true); setNoChange(r.revision === patch.expectedRevision)
       setReviewing(false); setUncertainPatch(null); setFieldError(null); router.refresh(); return
     }
     if (r?.kind === 'conflict') {
-      const parsed = validateStageCredits(r.latest.values['workflow.stage_credits'])
+      // 최신 표는 고정 불변식으로만 읽는다(저장된 표는 그 시점 정책을 지켰다 — 정책 교차는 저장 때)
+      const parsed = validateStageCredits(r.latest.values['workflow.stage_credits'] ?? DEFAULT_STAGE_CREDITS, STRUCTURAL_CREDIT_POLICY)
       setConflict({ revision: r.latest.revision, latest: parsed.ok ? parsed.credits : null })
       setError(messageOf(r)); setUncertainPatch(null); setReviewing(false); router.refresh(); return
     }
     if (r && (r.kind !== 'unavailable' || !r.retryable)) {
-      const fieldMessage = r.kind === 'invalid' ? r.fieldErrors.find(e => e.key === 'workflow.stage_credits')?.message : undefined
+      const fieldMessage = r.kind === 'invalid' ? r.fieldErrors.find(e => e.key === 'workflow.stage_credits' || e.key === 'workflow.credit_policy')?.message : undefined
       setFieldError(fieldMessage ?? null)
       setError(fieldMessage ? null : messageOf(r) ?? t('settings.actionFailed'))
       setUncertainPatch(null); return
@@ -165,7 +173,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
     try {
       const found = await getSettingsCommandOutcome({ projectId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
-        setBase(found.outcome.revision); setBaseline({ ...table }); setDirty(false); setSaved(true); setNoChange(found.outcome.revision === patch.expectedRevision)
+        setBase(found.outcome.revision); setBaseline({ ...table }); setBasePolicy({ ...policy }); setDirty(false); setSaved(true); setNoChange(found.outcome.revision === patch.expectedRevision)
         setReviewing(false); setUncertainPatch(null); setFieldError(null); router.refresh(); return
       }
     } catch { /* 같은 명령으로 재시도 */ }
@@ -175,11 +183,13 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
   }
   function save() {
     if (conflict || (!dirty && !uncertainPatch)) return
-    const v = validateStageCredits({ default: table })
+    const v = validateStageCredits({ default: table }, policy)
     if (!v.ok) { setFieldError(v.error); return }
     if (!reviewing && !uncertainPatch) { setError(null); setReviewing(true); return }
     setError(null); setFieldError(null)
-    const patch = uncertainPatch ?? { expectedRevision: base, commandId: newUuid(), set: { 'workflow.stage_credits': v.credits }, unset: [] }
+    // 정책이 바뀌었으면 표와 한 명령으로 — 서버 교차 검사(validateProjectConfig)가 두 값을 같이 본다
+    const set: Record<string, unknown> = { 'workflow.stage_credits': v.credits, ...(policyChanged ? { 'workflow.credit_policy': policy } : {}) }
+    const patch = uncertainPatch ?? { expectedRevision: base, commandId: newUuid(), set, unset: [] }
     startTransition(async () => submit(patch))
   }
 
@@ -276,8 +286,8 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
           <div data-credit-scale className="absolute bottom-1 left-7 right-7 h-[30px]" aria-hidden>
             {SCALE_TICKS.map(v => (
               <span key={v} data-credit-tick={v} className="absolute top-0" style={{ left: `${v}%` }}>
-                <span className={`absolute -translate-x-[0.5px] w-px bg-line-strong ${v % CREDIT_GAP === 0 ? 'h-2.5' : 'h-1.5'}`} />
-                {v % CREDIT_GAP === 0 && (
+                <span className={`absolute -translate-x-[0.5px] w-px bg-line-strong ${v % TICK_MAJOR === 0 ? 'h-2.5' : 'h-1.5'}`} />
+                {v % TICK_MAJOR === 0 && (
                   <span data-credit-tick-label={v}
                     className="absolute top-3.5 -translate-x-1/2 text-[11px] leading-none tabular-nums text-ink-subtle">
                     {v}
@@ -304,7 +314,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
             <h3 className="text-sm font-bold text-ink">{t('settings.creditPvTitle')}</h3>
             <label className="ml-auto inline-flex items-center gap-1.5 text-xs text-ink-muted">
               {t('settings.creditPvPlan')}
-              <input type="number" min={0} max={100} step={CREDIT_STEP} data-credit-pv-plan value={plan}
+              <input type="number" min={0} max={100} step={policy.step} data-credit-pv-plan value={plan}
                 onChange={e => setPlan(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
                 className="app-input h-7 w-16 text-right text-xs tabular-nums" />
               %
@@ -354,7 +364,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
                       <td data-credit-pv-actual={i} className="whitespace-nowrap border-b border-line px-2.5 py-[7px] text-right font-mono text-[13px] tabular-nums text-ink">
                         {f.cur === 'manual' ? (
                           <span className="inline-flex items-center gap-1.5">
-                            <input type="number" min={0} max={99} step={CREDIT_STEP} data-credit-pv-manual value={manual}
+                            <input type="number" min={0} max={99} step={policy.step} data-credit-pv-manual value={manual}
                               aria-label={t('settings.creditPvEvManual')}
                               onChange={e => { setManual(Math.max(0, Math.min(99, Number(e.target.value) || 0))); setCursor('manual') }}
                               className="app-input h-7 w-16 text-right text-xs tabular-nums" />
@@ -387,6 +397,22 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
         </div>
       </div>
 
+      {/* 크레딧 정책(SP5b — workflow.credit_policy): 입력 단위·이웃 최소 간격. 줄이면 반례(0/20/25/90/100) 같은 표를 저장할 수 있다 */}
+      <div data-credit-policy className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-muted">
+        <label className="flex items-center gap-1.5">
+          {t('settings.creditPolicyStep')}
+          <select className="app-input h-8 w-20 text-xs" value={policy.step} disabled={locked} data-credit-policy-step
+            onChange={e => { setPolicy(p => ({ ...p, step: Number(e.target.value) as CreditPolicy['step'] })); setDirty(true); setSaved(false); setReviewing(false); setFieldError(null) }}>
+            {CREDIT_POLICY_STEPS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">
+          {t('settings.creditPolicyGap')}
+          <input type="number" min={1} max={CREDIT_MIN_GAP_MAX} step={1} className="app-input h-8 w-20 text-xs" value={policy.min_gap} disabled={locked} data-credit-policy-gap
+            onChange={e => { const g = Math.round(Number(e.target.value)); if (Number.isFinite(g)) { setPolicy(p => ({ ...p, min_gap: Math.min(CREDIT_MIN_GAP_MAX, Math.max(1, g)) })); setDirty(true); setSaved(false); setReviewing(false); setFieldError(null) } }} />
+        </label>
+        <span className="text-[11px] text-ink-subtle">{t('settings.creditPolicyHint')}</span>
+      </div>
       {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
       {error && <div data-credit-error><ConfigStateNotice kind="patch" locale={locale} message={error} /></div>}
       <div className="flex flex-wrap items-center gap-2">
@@ -402,6 +428,7 @@ export function StageCreditSlider({ projectId, initial, editable, revision }: {
         <h3 className="font-semibold text-ink">변경 내용 검토</h3>
         {CREDIT_KEYS.filter(key => baseline[key] !== table[key]).map(key =>
           <p key={key} className="text-ink-muted">{key.toUpperCase()}: {baseline[key]}% → {table[key]}%</p>)}
+        {policyChanged && <p className="text-ink-muted">{t('settings.creditPolicyStep')} {basePolicy.step} → {policy.step} · {t('settings.creditPolicyGap')} {basePolicy.min_gap} → {policy.min_gap}</p>}
         <p className="text-ink-muted">새 크레딧은 다음 단계 전이부터 적용됩니다. 이미 기록된 실적은 바뀌지 않습니다.</p>
         <button type="button" className="btn btn-secondary" onClick={() => setReviewing(false)}>계속 수정</button>
       </section>}

@@ -29,9 +29,7 @@ const expectedStatus: Record<string, string> = {
  * 그 키가 verified 로 오르기 전(과제 29)에 컴포넌트가 생기거나 위젯 이름이 실재 컴포넌트로 바뀌어야 한다 */
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
   // SP5 A 과제 25 가 셋(TimezoneSelect·WorkingDaysEditor·WeekStartEditor)을 만들어 비었다(판정 J1) — 과제 29 가 빈 목록을 완료 조건으로 본다
-  // SP5b W1 — 키 정의(W1)가 설정 화면 WBS 몫(W2)보다 먼저다. Z 의 verified 전에 비어야 한다
-  StageLabelsEditor: 'SP5b W2 과제 설정 화면 — 단계 라벨 5칸',
-  ApprovalStepsEditor: 'SP5b W2 과제 설정 화면 — 승인 단계 1~3',
+  // SP5b W1 의 둘(StageLabelsEditor·ApprovalStepsEditor)은 W2 가 만들어 비었다
 }
 
 describe('설정 카탈로그 동기화', () => {

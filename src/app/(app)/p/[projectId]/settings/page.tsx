@@ -25,6 +25,9 @@ import type { IssueAnalysisSetting } from '@/lib/settings/defs/project'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
 import { MilestoneKeywordsEditor } from '@/components/settings/MilestoneKeywordsEditor'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
+import type { ProjectSettingValue } from '@/lib/settings/registry'
+import { StageLabelsEditor } from '@/components/settings/StageLabelsEditor'
+import { ApprovalStepsEditor } from '@/components/settings/ApprovalStepsEditor'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick, pickCalendar } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
@@ -170,6 +173,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const teams = pc.ok ? await loadTeams(projectId, pc.cfg.workspaceId) : { ok: false as const }
   const labels = pc.ok ? pick(pc.cfg, 'core.level_labels') : null
   const credits = pc.ok ? pick(pc.cfg, 'workflow.stage_credits') : null
+  // 크레딧 정책(SP5b) — 손상이면 슬라이더는 기본 정책으로 시작하고 저장 때 서버 교차 검사가 막는다(손상 값과의 조합을 추측하지 않는다)
+  const creditPolicy = pc.ok ? pick(pc.cfg, 'workflow.credit_policy') : null
   // 에이전트 관문 상태는 크레딧 편집기 안내에만 쓴다. 켜기·중지는 위의 모듈 편집기가 맡는다.
   const agentsGate = await requireModule({ projectId }, 'agents')
   const agentsOn = agentsGate.ok
@@ -580,6 +585,29 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
           </SectionCard>
         })()}
+        {/* WBS 승인 흐름(SP5b W2 — 단계 이름·승인 단계·서로 다른 승인자·선행 기준). wbs 는 core 라 모듈 관문 없음. 손상 값도 편집기를 그린다(복구 경로) */}
+        {isAdmin && pc.ok && (() => {
+          const st = <K extends 'workflow.wbs_stage_labels' | 'workflow.approval_steps' | 'workflow.approval_distinct_approvers' | 'workflow.predecessor_gate'>(k: K) => {
+            const v = pc.cfg.keys[k]
+            return v.status === 'set' || v.status === 'default' ? v.value as ProjectSettingValue<K> : null
+          }
+          return <SectionCard searchText={`workflow.wbs_stage_labels workflow.approval_steps workflow.approval_distinct_approvers workflow.predecessor_gate 승인 단계 선행 ${t(locale, 'settings.workflow.wbsTitle')}`}
+            eyebrow="WORKFLOW" title={t(locale, 'settings.workflow.wbsTitle')} icon={LayoutList}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.workflow.wbsDesc')}</p>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-ink">{t(locale, 'settings.workflow.wbs_stage_labels.label')}</p>
+                <StageLabelsEditor key={`labels-${revision}`} projectId={projectId} value={st('workflow.wbs_stage_labels')} revision={revision} canEdit={canMutate}
+                  invalid={st('workflow.wbs_stage_labels') === null} />
+              </div>
+              <div className="space-y-2 border-t border-line pt-4">
+                <p className="text-sm font-semibold text-ink">{t(locale, 'settings.workflow.approval_steps.label')}</p>
+                <ApprovalStepsEditor key={`steps-${revision}`} projectId={projectId} steps={st('workflow.approval_steps')} distinct={st('workflow.approval_distinct_approvers')}
+                  gate={st('workflow.predecessor_gate')} revision={revision} canEdit={canMutate} />
+              </div>
+            </div>
+          </SectionCard>
+        })()}
       {/* ── 에이전트 (킬스위치) ── */}
         <SectionCard
         searchText="workflow.stage_credits 에이전트 상태 승인 크레딧"
@@ -605,7 +633,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             {/* agents 가 꺼져도 크레딧 편집기는 남는다 — 다시 켤 때 쓸 값이다(스펙 §4.4, 정본 §3.3.1) */}
             {!agentsOn && <p className="text-xs leading-5 text-pending">{t(locale, 'settings.agentsModuleOff')}</p>}
             {credits.ok
-              ? <StageCreditSlider projectId={projectId} initial={credits.value} editable={canMutate} revision={revision} />
+              ? <StageCreditSlider projectId={projectId} initial={credits.value} initialPolicy={creditPolicy?.ok ? creditPolicy.value : null} editable={canMutate} revision={revision} />
               : <ConfigLoadError error={credits.error} keyName={credits.key} kind={credits.kind} locale={locale}
                 isAdmin={canMutate} settingsHref={`/p/${projectId}/settings`} />}
           </div>
