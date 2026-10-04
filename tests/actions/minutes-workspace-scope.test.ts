@@ -69,7 +69,7 @@ vi.mock('@/lib/minutes/teamScope', () => {
 })
 
 import {
-  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, fetchMinuteAttachmentPolicy, getMinuteFilePreviewUrl,
+  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, fetchAttachmentPolicyForScope, fetchMinuteAttachmentPolicy, getMinuteFilePreviewUrl,
   getMinuteFileUrl, getMinuteShare, getMinuteVersionFileUrl,
   moveMinuteFolder, moveMinuteToFolder, removeMinuteFile, renameMinuteFolder, setMinuteShare, toggleMinuteHighlight,
   updateMinuteMeta,
@@ -597,6 +597,23 @@ describe('첨부 정책·미리보기(SP5 B3 D24·D25) — 행의 실제 범위,
     seedDb({ minutes: { data: minuteRow({ project_id: PA }), error: null } })
     getActor.mockResolvedValue(onlyInB)
     expect((await fetchMinuteAttachmentPolicy(M)).ok).toBe(false)
+    expect(mocks.resolveAttachmentPolicy).not.toHaveBeenCalled()
+  })
+
+  it('fetchAttachmentPolicyForScope: 소속 워크스페이스의 그 프로젝트 범위로 읽는다', async () => {
+    seedDb()
+    getActor.mockResolvedValue(inA)
+    expect(await fetchAttachmentPolicyForScope({ workspaceId: WA, projectId: PA })).toEqual({ ok: true, policy: POLICY })
+    expect(mocks.resolveAttachmentPolicy).toHaveBeenCalledWith({ workspaceId: WA, projectId: PA })
+  })
+  it.each([
+    ['다른 워크스페이스의 프로젝트', { workspaceId: WA, projectId: PB }],
+    ['비소속 워크스페이스', { workspaceId: 'ffffffff-0000-4000-8000-000000000000', projectId: null }],
+    ['모양이 아닌 입력', 'nope'],
+  ])('fetchAttachmentPolicyForScope: %s 는 정책을 읽지 않는다', async (_n, scope) => {
+    seedDb()
+    getActor.mockResolvedValue(inA)
+    expect((await fetchAttachmentPolicyForScope(scope)).ok).toBe(false)
     expect(mocks.resolveAttachmentPolicy).not.toHaveBeenCalled()
   })
 

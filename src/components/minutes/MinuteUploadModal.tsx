@@ -3,13 +3,14 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { AlertTriangle, Folder } from 'lucide-react'
 import type { MinuteFolder, TeamCode } from '@/lib/domain/types'
 import {
-  MINUTES_ATTACHMENTS_MAX_COUNT, MINUTES_ATTACHMENT_MAX_BYTES, MINUTE_BODY_FILE_MAX,
-  MINUTE_BODY_MAX, stampedFileName, teamSubOfFolder,
+  MINUTE_BODY_FILE_MAX, MINUTE_BODY_MAX, stampedFileName, teamSubOfFolder,
 } from '@/lib/domain/minutes'
+import { attachmentRejection, type AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
+import type { DictKey } from '@/lib/i18n/dict'
 import { makeStoragePath } from '@/lib/domain/storagePath'
 import { pickDefaultProjectId, sortMyProjectsFirst } from '@/lib/domain/projectPick'
 import {
-  createMinute, fetchMinuteFoldersLite, fetchProjectMeetingsLite, recordMinuteFile,
+  createMinute, fetchAttachmentPolicyForScope, fetchMinuteFoldersLite, fetchProjectMeetingsLite, recordMinuteFile,
 } from '@/app/actions/minutes'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -134,6 +135,38 @@ export function MinuteUploadModal({
       : { ok: false, error: t('min.err.noWorkspace') })
     : (noProjectWorkspace ?? { ok: false, error: t('min.err.noWorkspace') })
 
+  // 첨부 정책(D24) — 저장할 범위(워크스페이스 + 선택 프로젝트)의 유효 정책. 상세 패널과 같은 사전 확인을 하고, 최종 판정은 DB 가드다.
+  // 못 읽으면 첨부만 막는다(기본값으로 열지 않는다) — 본문만 있는 회의록 저장은 막지 않는다.
+  type PolicyState = { kind: 'loading' } | { kind: 'ok'; policy: AttachmentPolicy } | { kind: 'failed'; error: string }
+  const [attPolicy, setAttPolicy] = useState<PolicyState>({ kind: 'loading' })
+  const policyWs = targetWs.ok ? targetWs.workspaceId : null
+  useEffect(() => {
+    if (!policyWs) return
+    let alive = true
+    setAttPolicy({ kind: 'loading' })
+    fetchAttachmentPolicyForScope({ workspaceId: policyWs, projectId: projectId || null })
+      .then(res => { if (alive) setAttPolicy(res.ok ? { kind: 'ok', policy: res.policy } : { kind: 'failed', error: res.error }) })
+      .catch(e => {
+        console.error('[MinuteUploadModal] 첨부 정책 조회 실패:', e)
+        if (alive) setAttPolicy({ kind: 'failed', error: '' })
+      })
+    return () => { alive = false }
+  }, [policyWs, projectId])
+
+  /** 첨부 목록 전체를 정책에 대 본다 — 새 회의록이라 확정 첨부는 0개. 첫 위반 사유를 문구로. 정책이 아직 없으면 null(저장 때 다시 본다). */
+  function attachmentProblem(list: File[]): string | null {
+    if (list.length === 0) return null
+    if (attPolicy.kind === 'failed') return attPolicy.error || t('min.att.policyFailed')
+    if (attPolicy.kind === 'loading') return null
+    const usage = { count: 0, bytes: 0 }
+    for (const f of list) {
+      const r = attachmentRejection(attPolicy.policy, { fileName: f.name, size: f.size }, usage)
+      if (r) return `${f.name}: ${t(`min.att.reject.${r}` as DictKey)}`
+      usage.count++; usage.bytes += f.size
+    }
+    return null
+  }
+
   /** 파일 일괄 선택(단일 입력 UX) — 본문이 비어 있으면 첫 .md가 본문, 나머지는 전부 첨부로 자동 분류.
    *  검증을 모두 통과한 뒤에만 상태를 반영해 부분 적용을 막는다. */
   async function onFiles(e: ChangeEvent<HTMLInputElement>) {
@@ -145,8 +178,8 @@ export function MinuteUploadModal({
     const bodyCand = !bodyFile ? files.find(isMd) ?? null : null
     const rest = files.filter(f => f !== bodyCand)
     if (bodyCand && bodyCand.size > MINUTE_BODY_FILE_MAX) { setErr(t('min.err.bodyFileMax')); return }
-    if (attachments.length + rest.length > MINUTES_ATTACHMENTS_MAX_COUNT) { setErr(t('min.err.attachCount')); return }
-    if (rest.some(f => f.size > MINUTES_ATTACHMENT_MAX_BYTES)) { setErr(t('min.err.attachMax')); return }
+    const problem = attachmentProblem([...attachments, ...rest])
+    if (problem) { setErr(problem); return }
     if (bodyCand) {
       const text = await bodyCand.text()
       if (text.length > MINUTE_BODY_MAX) { setErr(t('min.err.bodyMax')); return }
@@ -233,6 +266,12 @@ export function MinuteUploadModal({
     if (!team) { setErr('먼저 팀을 등록하세요.'); return }
     // 새로 만들 때만 경로 워크스페이스가 필요하다 — 재시도는 생성 시점 scope 를 쓴다.
     if (!progressRef.current && !targetWs.ok) { setErr(targetWs.error); return }
+    // 회의록을 만들기 전에 첨부를 정책에 대 본다 — 프로젝트를 바꿨으면 범위 정책도 바뀌었다. 아직 못 읽었으면 기다리게 한다.
+    if (!progressRef.current && attachments.length > 0) {
+      if (attPolicy.kind === 'loading') { setErr(t('min.att.policyLoading')); return }
+      const problem = attachmentProblem(attachments)
+      if (problem) { setErr(problem); return }
+    }
     setBusy(true); setErr(null)
     try {
       const progress = progressRef.current ?? await createWithBody(bodyFile)

@@ -234,6 +234,22 @@ describe('replaceMinuteBody — scope 는 DB 의 회의록 행', () => {
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
   })
 
+  // SP5 B3 과제5 — RPC 원문(영문 상수·DB 오류)을 화면에 싣지 않는다. 아는 사유는 문구로, 모르는 것은 일반 문구로(로그만).
+  it.each([
+    ['MINUTE_ARCHIVED', '보관된 회의록은 변경할 수 없습니다.'],
+    ['MINUTE_FILE_INPUT_INVALID', '원본 파일 정보가 올바르지 않습니다 — 다시 올려 주세요.'],
+    ['relation "x" does not exist', '새 버전 저장에 실패했습니다.'],
+  ])('본문 커밋 RPC 오류 %s → 사용자 문구', async (raw, text) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    createServerClient.mockResolvedValue(fakeDb({ data: row() }).client)
+    adminMocks.createAdminClient.mockReturnValue({
+      rpc: () => ({ single: async () => ({ data: null, error: { message: raw } }) }),
+    })
+    expect(await replaceMinuteBody(M, '본문', file(`ws/${W}/p/${P}/minutes/${M}/1-a.md`))).toEqual({ ok: false, error: text })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
   it('회의록 행 조회가 실패하면 쓰기를 중단한다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     createServerClient.mockResolvedValue(fakeDb({ error: { message: 'boom' } }).client)

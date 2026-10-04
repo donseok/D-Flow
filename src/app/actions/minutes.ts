@@ -765,7 +765,7 @@ export async function replaceMinuteBody(
   }).single()
   if (commitError || !committedRaw) {
     console.error('[replaceMinuteBody] 원자 커밋 실패:', commitError?.message ?? 'no row')
-    return { ok: false, error: commitError?.message ?? '새 버전 저장에 실패했습니다.' }
+    return { ok: false, error: rpcErrorMessage(commitError?.message, '새 버전 저장에 실패했습니다.') }
   }
   const committed = committedRaw as unknown as {
     version_id: string
@@ -823,6 +823,19 @@ export type MinuteAttachmentPolicyResult = { ok: true; policy: AttachmentPolicy 
 
 /** 첨부 패널의 정책 안내·사전 확인용(D24) — 회의록 행의 실제 범위(resolveScope)로 읽는다. 클라이언트가 고른 범위·정책을 받지 않는다.
  *  최종 판정은 DB 가드다. 읽기 권한(isMinuteMember)이면 볼 수 있다 — 정책 값은 그 범위 멤버에게 숨길 정보가 아니다. */
+/** 새 회의록 모달용(아직 행이 없다) — 저장할 범위(워크스페이스 + 선택 프로젝트)의 첨부 정책. 범위 관문(minutesScopeGate)이
+ *  소속·프로젝트의 워크스페이스를 확인한다. 회의록 생성 뒤 첨부 확정은 DB 가드가 그 행의 실제 범위로 다시 판정한다. */
+export async function fetchAttachmentPolicyForScope(scope: unknown): Promise<MinuteAttachmentPolicyResult> {
+  const gate = await minutesScopeGate(scope)
+  if (!gate.ok) return { ok: false, error: gate.error }
+  try {
+    return { ok: true, policy: await resolveAttachmentPolicy(gate.scope) }
+  } catch (e) {
+    console.error(`[fetchAttachmentPolicyForScope ws=${gate.scope.workspaceId}] 정책 조회 실패:`, e instanceof Error ? e.message : e)
+    return { ok: false, error: POLICY_LOOKUP_FAILED_MSG }
+  }
+}
+
 export async function fetchMinuteAttachmentPolicy(minuteId: string): Promise<MinuteAttachmentPolicyResult> {
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
@@ -876,7 +889,8 @@ export async function recordMinuteFile(
       p_actor_name: displayNameFrom(user.user_metadata, user.email),
     }).single()
     if (commitError || !committedRaw) {
-      return { ok: false, error: commitError?.message ?? '원본 버전 기록에 실패했습니다.' }
+      console.error(`[recordMinuteFile minute=${minuteId}] 원본 버전 커밋 실패:`, commitError?.message ?? 'no row')
+      return { ok: false, error: rpcErrorMessage(commitError?.message, '원본 버전 기록에 실패했습니다.') }
     }
     const committed = committedRaw as unknown as {
       version_id: string
@@ -1378,6 +1392,10 @@ const RPC_ERROR_MESSAGES: ReadonlyArray<[string, string]> = [
   ['WORKSPACE_SCOPE_MISMATCH', CROSS_WORKSPACE_MOVE_MSG],
   ['MINUTE_METADATA_REQUIRED', '회의록 필수 항목이 비어 있습니다.'],
   ['MINUTE_METADATA_KEY_NOT_ALLOWED', '허용되지 않은 항목이 포함됐습니다.'],
+  // 0007 commit_minute_body_version — 본문 새 버전·원본 연결(SP5 B3 과제5: 원시 오류 이월을 닫는다)
+  ['MINUTE_FILE_INPUT_INVALID', '원본 파일 정보가 올바르지 않습니다 — 다시 올려 주세요.'],
+  ['MINUTE_VERSION_INPUT_INVALID', '새 버전 정보가 올바르지 않습니다.'],
+  ['MINUTE_METADATA_INVALID', '회의록 항목 값이 올바르지 않습니다.'],
 ]
 function rpcErrorMessage(message: string | undefined, fallback: string): string {
   if (!message) return fallback
