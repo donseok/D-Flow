@@ -25,7 +25,7 @@ import {
   type IssueUpdate,
   type IssueUpdateCategory,
 } from '@/lib/domain/issueUpdates'
-import { ISSUE_STATUS_META } from '@/lib/domain/issues'
+import { DEFAULT_ISSUE_STATUSES, vocabLabel, type IssueStatusDef } from '@/lib/settings/vocab'
 import type { ProjectMember } from '@/lib/domain/types'
 
 /** 기본으로 펴는 건수 — 모달 본문이 max-h-[70vh] 스크롤 박스라 전량을 펴면 푸터가 밀린다. */
@@ -41,6 +41,8 @@ export interface IssueUpdatesProps {
   members: ProjectMember[]
   /** 이력 시각을 찍을 시간대 — 서버가 내려준 프로젝트 calendar.timezone(계획 P8 — 브라우저 tz 가 아니다, A-4 리뷰 N7) */
   timeZone: string
+  /** 상태 줄의 라벨 — 프로젝트 표시 상태(SP5b, 비활성 포함). 없으면 제품 기본 4정의 */
+  statuses?: readonly IssueStatusDef[]
 }
 
 function fmtAt(iso: string, locale: string, timeZone: string): string {
@@ -50,7 +52,8 @@ function fmtAt(iso: string, locale: string, timeZone: string): string {
   })
 }
 
-export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin, members, timeZone }: IssueUpdatesProps) {
+export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin, members, timeZone, statuses }: IssueUpdatesProps) {
+  const statusDefs = statuses ?? DEFAULT_ISSUE_STATUSES
   const { t, locale } = useLocale()
   const [list, setList] = useState<IssueUpdate[] | null>(null)
   // 실패 '여부'만 담는다 — 번역문을 state 에 넣으면 load 가 t 에 의존해 무한 루프가 된다.
@@ -185,7 +188,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
           <ol className="space-y-2">
             {visible.map(u => {
               const archived = u.archivedAt !== null
-              const status = u.kind === 'status' ? parseStatusChange(u.body) : null
+              const status = u.kind === 'status' ? parseStatusChange(u.body, statusDefs.map(d => d.code)) : null
               const mayArchive = canWrite && canArchiveUpdate(u, currentUserId, isProjectAdmin) && u.kind === 'note'
               const mayPurge = canWrite && canPurgeUpdate(isProjectAdmin)
               return (
@@ -245,8 +248,8 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                   {status ? (
                     <p className="mt-1 text-[13px] text-ink-muted">
                       {t('issue.update.statusChange')
-                        .replace('{from}', t(ISSUE_STATUS_META[status.from].labelKey))
-                        .replace('{to}', t(ISSUE_STATUS_META[status.to].labelKey))}
+                        .replace('{from}', vocabLabel('workflow.issue_statuses', statusDefs, status.from, t))
+                        .replace('{to}', vocabLabel('workflow.issue_statuses', statusDefs, status.to, t))}
                     </p>
                   ) : (
                     <p

@@ -17,6 +17,8 @@ export const issuesEn: Record<keyof typeof issuesKo, string> = {
   'issue.status.in_progress': 'In progress',
   'issue.status.resolved': 'Resolved',
   'issue.status.on_hold': 'On hold',
+  'issue.status.inactiveBadge': '(inactive)',
+  'issue.status.codeFilterAll': 'All statuses',
   'issue.severity.high': 'High',
   'issue.severity.medium': 'Medium',
   'issue.severity.low': 'Low',

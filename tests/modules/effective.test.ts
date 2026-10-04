@@ -79,9 +79,9 @@ describe('effectiveModules — 경계', () => {
 })
 
 describe('꺼진 모듈의 준비 설정(③-4) — 비core 소유 픽스처 키로 본다(SP3a 등록 키는 전부 core 소유)', () => {
-  // 등록되지 않은 비core 키여야 한다 — issues.severities 는 SP5 B4 가 등록했으므로 SP5b 계획 키를 쓴다
-  const fixture = defineSetting<'workflow.issue_statuses', string[]>({
-    key: 'workflow.issue_statuses', scope: 'project', module: 'issues', default: [], parse: (raw) => (Array.isArray(raw) ? { ok: true, value: raw as string[] } : { ok: false, error: 'x' }),
+  // 등록되지 않은 비core 키여야 한다 — workflow.issue_statuses 는 SP5b I 가 등록했으므로 SP5c 계획 키를 쓴다
+  const fixture = defineSetting<'fields.issue', string[]>({
+    key: 'fields.issue', scope: 'project', module: 'issues', default: [], parse: (raw) => (Array.isArray(raw) ? { ok: true, value: raw as string[] } : { ok: false, error: 'x' }),
     widget: { kind: 'vocab' }, editor: 'project_admin', apply: 'immediate', impact: ['guarded'], sql: null,
   })
   it('허용된 꺼진 모듈의 키는 prepared(저장 허용), 허용 밖은 not_allowed(거부)', () => {

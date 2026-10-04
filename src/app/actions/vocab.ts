@@ -20,6 +20,7 @@ const MIGRATABLE: Readonly<Partial<Record<VocabKey, ModuleId>>> = {
   'meetings.categories': 'meetings',
   'issues.severities': 'issues',
   'issues.sources': 'issue_analysis',
+  'workflow.issue_statuses': 'issues',          // SP5b D3 — 같은 범주 안으로만(RPC 가 판정)
 }
 const ERR_MIGRATE = '기록을 옮기지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_INPUT = '옮길 항목과 대상 항목을 고르세요(서로 달라야 합니다).'
@@ -43,6 +44,7 @@ export async function migrateVocabCode(projectId: string, key: string, from: str
     VOCAB_MIGRATE_ISOLATION: { status: 503, code: 'RETRY', message: ERR_VOCAB_RETRY },
     SETTINGS_ROW_MISSING: { status: 500, code: 'CONFIG_UNAVAILABLE', message: ERR_MIGRATE },
     PROJECT_VOCAB_INACTIVE: { status: 400, code: 'TARGET_INACTIVE', message: vocabInactiveMessage(key as VocabKey) },
+    SETTINGS_CODE_CATEGORY_MISMATCH: { status: 400, code: 'CATEGORY_MISMATCH', message: '같은 범주(열림·진행·보류·해결)의 상태로만 옮길 수 있습니다. 먼저 같은 범주에 상태를 추가하거나 이슈를 하나씩 옮기세요.' },
   }
   const { admin } = adminFor({ projectId })
   const { data, error } = await admin.rpc('migrate_setting_code', {

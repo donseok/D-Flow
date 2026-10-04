@@ -12,15 +12,14 @@ import { vocabCodeError, vocabWriteFailure } from '@/lib/settings/vocabGuard'
 import { policyNeedsArea } from '@/lib/issues/idPolicy'
 import { ISSUE_DB_MESSAGES, ISSUE_OWN_TOKENS, ERR_ISSUE_RETRY } from '@/lib/issues/errors'
 import { failWith, rpcFailure } from '@/lib/errors/dbFail'
+import { mapDbError } from '@/lib/settings/errors'
+import { VOCAB_CODE_RE } from '@/lib/settings/vocab'
+import type { IssueStatusCode } from '@/lib/domain/issueWorkflow'
 import { UUID_RE } from '@/lib/domain/validate'
 import { emitNotification } from '@/lib/notify/emit'
 import { revalidatePath } from 'next/cache'
 import { displayNameFrom } from '@/lib/domain/display-name'
-import {
-  canTransition, nextResolvedAt,
-  type IssueSeverity, type IssueStatus,
-} from '@/lib/domain/issues'
-import { encodeStatusChange } from '@/lib/domain/issueUpdates'
+import type { IssueSeverity } from '@/lib/domain/issues'
 import { computeAddedAssignees } from '@/lib/domain/inbox'
 import {
   normalizeIssueAnalysisInput,
@@ -79,9 +78,10 @@ export interface IssueInput {
 }
 
 export interface IssueProgressPatch {
-  status?: IssueStatus
-  /** status 를 보낼 때 필수 — 클라이언트가 화면에 보이는 상태(CAS 비교 기준). 서버가 방금 읽은 상태가 아니다. */
-  expectedStatus?: IssueStatus
+  /** 옮길 **표시 상태 code**(SP5b D6 — 필드 이름은 그대로, 뜻이 범주에서 표시 상태로. 기본 4개는 범주 code 와 같다) */
+  status?: IssueStatusCode
+  /** status 를 보낼 때 필수 — 클라이언트가 화면에 보이는 표시 상태 code(CAS 비교 기준). 서버가 방금 읽은 상태가 아니다. */
+  expectedStatus?: IssueStatusCode
   assigneeMemberIds?: string[]
   // resolutionNote 는 0087 이후 이 경로로 쓰지 않는다. 이력(issue_updates)이 유일 관문이고
   // issues.resolution_note 는 그 파생 미러다 — 두 주체가 쓰면 서로를 덮고, 이력에 없는
@@ -471,6 +471,21 @@ function validateInput(input: IssueInput, mode: IssueInputMode): IssueInputValid
   )
   if (analysis && !analysis.ok) return analysis
   return { ok: true, value: { ...input, title, analysis: analysis?.ok ? analysis.value : null } }
+}
+
+const ERR_STATUS_TRANSITION = '허용되지 않는 상태 전환입니다. 화면을 새로고침해 주세요.'
+/** 상태 쓰기의 트리거 토큰(SP5b §3.4 — 개정 §2.3.4 표 한 곳, settings/errors.ts) → 문구. 그 밖은 이슈 쓰기 공통 매핑 */
+function statusWriteFailure(error: { code?: string; message?: string; details?: string }): string {
+  const token = (error.message ?? '').split(':')[0].trim()
+  if (token.startsWith('ISSUE_STATUS') || token === 'ISSUE_TRANSITION_DENIED' || token === 'ISSUE_RESOLVED_AT_DERIVED') {
+    console.error('[issues] 상태 전환 거부', error)
+    return mapDbError(error)?.message ?? ERR_STATUS_TRANSITION
+  }
+  if (token === 'ISSUE_WORKFLOW_ISOLATION') {
+    console.error('[issues] 상태 전환 격리 수준 거부', error)
+    return ERR_ISSUE_RETRY
+  }
+  return issueWriteFailure(error)
 }
 
 function issueWriteFailure(error: { code?: string; message?: string }): string {
@@ -1098,23 +1113,27 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
   }
 
   const sb = await createServerClient()
-  const { data: cur } = await sb.from('issues').select('project_id, created_by, status, resolved_at, title').eq('id', issueId).maybeSingle()
+  // 선조회 실패는 중단한다(3원칙 ② — 없는 이슈로 위장하지 않는다)
+  const { data: cur, error: curErr } = await sb.from('issues').select('project_id, created_by, status_code, title').eq('id', issueId).maybeSingle()
+  if (curErr) return { ok: false, error: failWith('issues.updateIssueProgress', curErr, ERR_LOOKUP) }
   if (!cur) return { ok: false, error: '이슈를 찾을 수 없습니다.' }
-  const curStatus = cur.status as IssueStatus
 
   // 담당자만 바꿔도 issues.updated_at 은 반드시 오른다 — AI 인덱스 신선도 가드의 입력(0041 헤더).
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (patch.status !== undefined) {
-    // CAS 비교 기준은 서버가 방금 읽은 curStatus 가 아니라 클라이언트가 화면에서 관측한 expectedStatus.
+    if (typeof patch.status !== 'string' || !VOCAB_CODE_RE.test(patch.status)
+        || typeof patch.expectedStatus !== 'string' || !VOCAB_CODE_RE.test(patch.expectedStatus)) {
+      return { ok: false, error: ERR_STATUS_TRANSITION }
+    }
+    // CAS 비교 기준은 서버가 방금 읽은 값이 아니라 클라이언트가 화면에서 관측한 expectedStatus.
     // 그래야 read→write 사이가 아니라 "클라이언트가 화면을 마지막으로 갱신한 시점 이후" 변경까지 잡아낸다.
-    if (curStatus !== patch.expectedStatus) {
+    if (cur.status_code !== patch.expectedStatus) {
       return { ok: false, conflict: true, error: '다른 사용자가 먼저 변경했거나 이슈가 삭제되었습니다. 최신 상태로 새로고침합니다.' }
     }
-    if (!canTransition(patch.expectedStatus, patch.status)) {
-      return { ok: false, error: '허용되지 않는 상태 전환입니다. 화면을 새로고침해 주세요.' }
-    }
-    payload.status = patch.status
-    payload.resolved_at = nextResolvedAt(patch.expectedStatus, patch.status, (cur.resolved_at as string | null) ?? null, new Date().toISOString())
+    if (patch.status === patch.expectedStatus) return { ok: false, error: ERR_STATUS_TRANSITION }
+    // 전이 허용(범주 전이표·활성)·파생 status·resolved_at·이력은 DB 트리거가 최종으로 정한다(SP5b D4·D5) — 화면 선택지는
+    // allowedTargets 로 같은 규칙을 그린다. 여기서 정의를 다시 읽지 않는다(판정 한 곳, 오류는 토큰으로 옮긴다).
+    payload.status_code = patch.status
   }
 
   if (patch.status !== undefined) {
@@ -1124,9 +1143,9 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
       .from('issues')
       .update(payload)
       .eq('id', issueId)
-      .eq('status', patch.expectedStatus)
+      .eq('status_code', patch.expectedStatus)
       .select('id')
-    if (error) return { ok: false, error: issueWriteFailure(error) }
+    if (error) return { ok: false, error: statusWriteFailure(error) }
     if (!updated?.length) {
       return { ok: false, conflict: true, error: '다른 사용자가 먼저 변경했거나 이슈가 삭제되었습니다. 최신 상태로 새로고침합니다.' }
     }
@@ -1139,25 +1158,8 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
     if (error) return { ok: false, error: issueWriteFailure(error) }
     if (!updated?.length) return { ok: false, error: '이슈가 삭제되어 저장할 수 없습니다.' }
   }
-
-  // 상태 변경 자동 기록 — 지금 이 흔적은 어디에도 남지 않는다.
-  // service_role 로 쓰는 이유: 위 sb 는 사용자 JWT 라 kind 컬럼 grant 밖이고, RLS insert
-  // 정책도 kind='note' 만 허용한다. 이 자리는 requireProjectMember 를 이미 통과했으므로
-  // "service_role 쓰기는 서버 액션 가드가 유일한 관문"이라는 계약을 지킨다.
-  if (patch.status !== undefined && patch.expectedStatus !== patch.status) {
-    const user = await getSession()
-    const admin = createAdminClient()
-    const { error: logErr } = await admin.from('issue_updates').insert({
-      issue_id: issueId,
-      project_id: cur.project_id as string,
-      kind: 'status',
-      body: encodeStatusChange(patch.expectedStatus as IssueStatus, patch.status),
-      author_user_id: g.actor.userId,
-      author_name: user ? (displayNameFrom(user.user_metadata, user.email) ?? '(이름 없음)') : '(이름 없음)',
-    })
-    // 기록 실패가 상태 변경을 되돌리지는 않는다 — 이미 커밋됐다. 로그만 남긴다.
-    if (logErr) console.error('[updateIssueProgress] 상태 변경 이력 기록 실패:', logErr.message)
-  }
+  // 상태 변경 이력(issue_updates kind='status')은 DB 트리거(record_issue_status_change)가 같은 트랜잭션에서 남긴다(SP5b D5) —
+  // 직접 PATCH·이관도 같은 이력을 남기고, 이력만 빠지는 반쪽 저장이 없다.
 
   // 담당자 교체는 상태 CAS 가 통과한 뒤에만 — 충돌 감지 시 담당자까지 절반만 저장되는 일이 없게 한다.
   if (patch.assigneeMemberIds !== undefined) {

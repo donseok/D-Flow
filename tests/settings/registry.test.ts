@@ -18,13 +18,13 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 30키 — 워크스페이스 13, 프로젝트 17(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더)', () => {
+  it('정확히 31키 — 워크스페이스 13, 프로젝트 18(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
       'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'minutes.attachments', 'minutes.root_folders'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
       'wbs.excel_profile', 'modules.enabled', 'workflow.stage_credits', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start',
       'issues.id_policy', 'issues.analysis', 'minutes.attachments',
-      'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories'])
+      'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses'])
     for (const k of ['agents.stage_workflow', 'portal.widgets', 'views.default', 'core.stage_credits']) {
       expect(KEYS, k).not.toContain(k)
     }
@@ -47,16 +47,19 @@ describe('등록 키', () => {
     expect(row('issues.severities')).toEqual(['project', 'project_admin', 'issues', 'vocab', 'immediate', ['guarded']])
     expect(row('issues.sources')).toEqual(['project', 'project_admin', 'issue_analysis', 'vocab', 'immediate', ['guarded']])
     expect(row('issues.cause_categories')).toEqual(['project', 'project_admin', 'issue_analysis', 'vocab', 'immediate', ['guarded']])
+    // SP5b I(D1) — 이슈 표시 상태는 어휘 계열의 여섯째 키(개정 §2.8.2 immediate/guarded)
+    expect(row('workflow.issue_statuses')).toEqual(['project', 'project_admin', 'issues', 'vocab', 'immediate', ['guarded']])
     expect(settingDef('project', 'workflow.stage_credits')!.sql).toEqual({ readers: ['apply_workflow_event'] })
     // SQL 판독·seedFrom·edit 은 SP3a 에서 stage_credits·없음·accent 하나였고 SP5 A 의 프로젝트 calendar.* 가 더한다(tests/settings/calendar-keys).
     // SP5 B1 의 issues.* 둘은 SQL 판독만 더한다(tests/settings/issues-defs)
     expect(ALL.filter((d) => d.sql !== null).map((d) => `${d.scope}/${d.key}`)).toEqual(['workspace/minutes.attachments', 'workspace/minutes.root_folders', 'project/workflow.stage_credits', 'project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start',
       'project/issues.id_policy', 'project/issues.analysis', 'project/minutes.attachments',
-      'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources'])
+      'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources', 'project/workflow.issue_statuses'])
     expect(ALL.filter((d) => d.seedFrom).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start', 'project/minutes.attachments'])
     expect(ALL.every((d) => d.reindexOn === undefined)).toBe(true)
     expect(ALL.filter((d) => d.edit).map((d) => `${d.scope}/${d.key}`)).toEqual(['workspace/branding.accent', 'project/calendar.week_start',
-      'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources', 'project/issues.cause_categories'])
+      'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources', 'project/issues.cause_categories',
+      'project/workflow.issue_statuses'])
   })
   it('settingDef 는 스코프와 키로 찾는다 — 다른 스코프의 키는 없음', () => {
     expect(settingDef('project', 'core.level_labels')?.key).toBe('core.level_labels')

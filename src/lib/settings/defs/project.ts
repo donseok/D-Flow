@@ -189,5 +189,8 @@ export const PROJECT_DEFS = [
   vocabDef('issues.sources', 'issue_analysis', ['enforce_project_vocab', 'settings_ref_check'], [RESERVED_SOURCE]),
   // 원인 분류는 분석 실행 JSON 이 참조한다 — DB 가 세지 않으므로(삭제 금지, TS) SQL 판독자가 없다
   vocabDef('issues.cause_categories', 'issue_analysis', null),
+  // SP5b(스펙 D1) — 이슈 표시 상태. 판정은 DB 트리거 enforce_issue_workflow(범주 전이표·파생 status·resolved_at), 의미 속성 category 의
+  // 참조 검사는 settings_ref_check 가 한다
+  vocabDef('workflow.issue_statuses', 'issues', ['enforce_issue_workflow', 'settings_ref_check']),
 ] as const satisfies readonly SettingDef[]
 export type { ModuleId }

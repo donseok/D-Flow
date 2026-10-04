@@ -9,7 +9,7 @@ import { migrateVocabCode } from '@/app/actions/vocab'
 import { newUuid } from '@/lib/domain/uuid'
 import type { DictKey } from '@/lib/i18n/dict'
 import {
-  COUNTS_AS, RESERVED_SOURCE, VOCAB_CODE_RE, VOCAB_COLORS, VOCAB_COLOR_CLASS, activeVocab, defaultVocab, parseVocab, vocabChangeError,
+  COUNTS_AS, ISSUE_CATEGORIES, RESERVED_SOURCE, VOCAB_CODE_RE, VOCAB_COLORS, VOCAB_COLOR_CLASS, activeVocab, defaultVocab, parseVocab, vocabChangeError,
   vocabLabel, type VocabEntry, type VocabKey,
 } from '@/lib/settings/vocab'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -17,10 +17,11 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 /** 편집 행 — 저장 값의 모든 필드를 느슨하게 들고 있다가 저장 때 키의 모양으로 다시 짠다(순서 = sort·rank) */
 type Row = Record<string, unknown> & { code: string; label: string; active: boolean; isNew?: boolean }
 
-const hasField = (key: VocabKey, field: 'short' | 'color' | 'counts_as' | 'selectable' | 'announce_default') => {
+const hasField = (key: VocabKey, field: 'short' | 'color' | 'counts_as' | 'category' | 'selectable' | 'announce_default') => {
   switch (field) {
     case 'short': case 'counts_as': case 'selectable': return key === 'attendance.types'
-    case 'color': return key === 'attendance.types' || key === 'meetings.categories' || key === 'issues.severities'
+    case 'category': return key === 'workflow.issue_statuses'
+    case 'color': return key === 'attendance.types' || key === 'meetings.categories' || key === 'issues.severities' || key === 'workflow.issue_statuses'
     case 'announce_default': return key === 'meetings.categories'
   }
 }
@@ -44,6 +45,8 @@ function toValue(key: VocabKey, rows: readonly Row[]): unknown[] {
         return { ...base, color: r.color ?? 'neutral', sort: i + 1, announce_default: r.announce_default === true }
       case 'issues.severities':
         return { ...base, rank: i + 1, color: r.color ?? 'neutral' }
+      case 'workflow.issue_statuses':
+        return { ...base, category: r.category ?? 'open', color: r.color ?? 'neutral', sort: i + 1 }
       default:
         return { ...base, sort: i + 1 }
     }
@@ -109,6 +112,7 @@ export function VocabEditor({ projectId, vocabKey, value, invalid = false, revis
     const extra: Record<string, unknown> = {}
     if (hasField(vocabKey, 'short')) Object.assign(extra, { short: label.slice(0, 10), counts_as: 'work', selectable: true })
     if (hasField(vocabKey, 'color')) extra.color = 'neutral'
+    if (hasField(vocabKey, 'category')) extra.category = 'open'
     if (hasField(vocabKey, 'announce_default')) extra.announce_default = false
     setRows(prev => [...prev, { code, label, active: true, isNew: true, ...extra }])
     setNewCode(''); setNewLabel(''); setError('')
@@ -130,7 +134,7 @@ export function VocabEditor({ projectId, vocabKey, value, invalid = false, revis
       const fe = result.kind === 'invalid' ? result.fieldErrors.find(f => f.key === vocabKey && f.code && f.refCount) : undefined
       if (fe?.code && fe.refCount) {
         setInUse({ code: fe.code, count: fe.refCount })
-        setTarget(activeVocab(parsed.ok ? parsed.value as readonly VocabEntry[] : []).find(e => e.code !== fe.code)?.code ?? '')
+        setTarget(migrateTargets(fe.code)[0]?.code ?? '')
       }
       setError(fe?.message ?? result.error)
       return
@@ -160,8 +164,14 @@ export function VocabEditor({ projectId, vocabKey, value, invalid = false, revis
     })
   }
 
-  // 이관 대상 = 저장하려는 목록의 활성 항목 중 옮기는 code 가 아닌 것(DB 는 저장된 목록의 활성 항목만 받는다 — 새 항목이면 먼저 저장이 필요)
-  const targets = inUse ? activeVocab(baseline.map(r => r as unknown as VocabEntry)).filter(e => e.code !== inUse.code) : []
+  // 이관 대상 = 저장된 목록의 활성 항목 중 옮기는 code 가 아닌 것(DB 는 저장된 목록의 활성 항목만 받는다 — 새 항목이면 먼저 저장이 필요).
+  // 이슈 표시 상태는 같은 범주만(SP5b D3 — DB 가 SETTINGS_CODE_CATEGORY_MISMATCH 로 거부한다)
+  function migrateTargets(code: string): VocabEntry[] {
+    const fromCategory = baseline.find(r => r.code === code)?.category
+    return activeVocab(baseline.map(r => r as unknown as VocabEntry))
+      .filter(e => e.code !== code && (vocabKey !== 'workflow.issue_statuses' || (e as unknown as Row).category === fromCategory))
+  }
+  const targets = inUse ? migrateTargets(inUse.code) : []
   const label = (code: string) => vocabLabel(vocabKey, rows as unknown as VocabEntry[], code, t)
 
   return <div className="space-y-3" data-vocab-editor={vocabKey}>
@@ -177,6 +187,7 @@ export function VocabEditor({ projectId, vocabKey, value, invalid = false, revis
             {hasField(vocabKey, 'short') && <th className="px-2 py-2">{tr('settings.vocab.short')}</th>}
             {hasField(vocabKey, 'color') && <th className="px-2 py-2">{tr('settings.vocab.color')}</th>}
             {hasField(vocabKey, 'counts_as') && <th className="px-2 py-2">{tr('settings.vocab.countsAs')}</th>}
+            {hasField(vocabKey, 'category') && <th className="px-2 py-2">{tr('settings.vocab.category')}</th>}
             {hasField(vocabKey, 'selectable') && <th className="px-2 py-2">{tr('settings.vocab.selectable')}</th>}
             {hasField(vocabKey, 'announce_default') && <th className="px-2 py-2">{tr('settings.vocab.announce')}</th>}
             <th className="px-2 py-2">{tr('settings.vocab.active')}</th>
@@ -209,6 +220,11 @@ export function VocabEditor({ projectId, vocabKey, value, invalid = false, revis
                   {COUNTS_AS.map(c => <option key={c} value={c}>{tr(`settings.vocab.countsAs.${c}`)}</option>)}
                 </select>
               </td>}
+              {hasField(vocabKey, 'category') && <td className="px-2 py-1.5">
+                <select className="app-input h-8" aria-label={`${tr('settings.vocab.category')} ${r.code}`} value={String(r.category ?? 'open')} disabled={locked} onChange={e => change(i, { category: e.target.value })}>
+                  {ISSUE_CATEGORIES.map(c => <option key={c} value={c}>{tr(`issue.status.${c}`)}</option>)}
+                </select>
+              </td>}
               {hasField(vocabKey, 'selectable') && <td className="px-2 py-1.5 text-center"><input type="checkbox" aria-label={`${tr('settings.vocab.selectable')} ${r.code}`} checked={r.selectable !== false} disabled={locked} onChange={e => change(i, { selectable: e.target.checked })} /></td>}
               {hasField(vocabKey, 'announce_default') && <td className="px-2 py-1.5 text-center"><input type="checkbox" aria-label={`${tr('settings.vocab.announce')} ${r.code}`} checked={r.announce_default === true} disabled={locked} onChange={e => change(i, { announce_default: e.target.checked })} /></td>}
               <td className="px-2 py-1.5 text-center"><input type="checkbox" aria-label={`${tr('settings.vocab.active')} ${r.code}`} checked={r.active} disabled={locked || fixed} title={fixed ? tr('settings.vocab.fixed') : undefined} onChange={e => change(i, { active: e.target.checked })} /></td>
@@ -233,6 +249,7 @@ export function VocabEditor({ projectId, vocabKey, value, invalid = false, revis
     </div>}
     {inUse && <div role="group" aria-label={tr('settings.vocab.migrate')} className="flex flex-wrap items-end gap-2 rounded-lg border border-line px-3 py-2">
       <span className="text-sm text-ink">{label(inUse.code)} · {inUse.count}</span>
+      {targets.length === 0 && <span className="text-xs text-delayed">{tr('settings.vocab.noSameCategory')}</span>}
       <label className="flex flex-col gap-1 text-xs text-ink-muted">{tr('settings.vocab.migrateTo')}
         <select className="app-input h-8" value={target} disabled={pending} onChange={e => setTarget(e.target.value)}>
           {targets.map(e => <option key={e.code} value={e.code}>{label(e.code)}</option>)}

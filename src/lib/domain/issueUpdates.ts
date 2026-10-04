@@ -77,12 +77,15 @@ export function encodeStatusChange(from: IssueStatus, to: IssueStatus): string {
   return `${from}>${to}`
 }
 
-export function parseStatusChange(body: string): { from: IssueStatus; to: IssueStatus } | null {
+/**
+ * 'from>to' 본문 → 상태 code 쌍. known = 그 프로젝트의 표시 상태 code(SP5b — 비활성 포함, 호출부가 정의에서 넘긴다). 생략하면 제품 기본 4범주.
+ * 목록에 없는 code(지워진 상태)·형식이 아닌 글은 null — 화면은 본문을 그대로 보인다(사람이 쓴 글을 상태 줄로 오독하지 않는다).
+ */
+export function parseStatusChange(body: string, known: readonly string[] = ISSUE_STATUSES): { from: string; to: string } | null {
   const parts = body.split('>')
   if (parts.length !== 2) return null
   const [from, to] = parts
-  const known = (v: string): v is IssueStatus => (ISSUE_STATUSES as readonly string[]).includes(v)
-  if (!known(from) || !known(to)) return null
+  if (!known.includes(from) || !known.includes(to)) return null
   return { from, to }
 }
 

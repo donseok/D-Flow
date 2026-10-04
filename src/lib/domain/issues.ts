@@ -36,7 +36,13 @@ export interface Issue {
   attachmentCount?: number
   title: string
   body: string
+  /** 범주(제품 고정 4종) — 집계·지연·정렬이 읽는다. 표시 상태는 statusCode */
   status: IssueStatus
+  /**
+   * 표시 상태 code(SP5b — 설정 workflow.issue_statuses). optional 인 이유는 majorId 와 같다(옛 픽스처 호환 — 생략 = 범주 code 와 같은 기본 상태).
+   * getIssues 는 항상 채운다.
+   */
+  statusCode?: string
   severity: IssueSeverity
   /** 담당자 멤버 id 목록(0042 조인 테이블). 표시 순서는 뷰가 이름순으로 다시 정렬한다. */
   assigneeMemberIds: string[]

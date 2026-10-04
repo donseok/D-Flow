@@ -10,7 +10,7 @@ const expectedStatus: Record<string, string> = {
   'modules.allowed': 'verified', 'ai.enabled': 'verified', 'invites.allowed_domains': 'verified',
   'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'stored', 'branding.mail_from_name': 'verified',
   'navigation.menu': 'stored', 'core.level_labels': 'verified', 'core.extra_axis_label': 'stored',
-  'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'wired',
+  'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'wired', 'workflow.issue_statuses': 'verified',
   // SP5 A — 달력 셋(스펙 D44: 정의·편집·소비처·테스트 네 연결). 두 스코프가 같은 키 이름을 쓴다(워크스페이스 기본값 → 프로젝트 생성 시 복사)
   'calendar.timezone': 'verified', 'calendar.working_days': 'verified', 'calendar.week_start': 'verified',
   // SP5 B1 — 정의·편집·소비처·테스트 네 연결
@@ -29,9 +29,9 @@ const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
 }
 
 describe('설정 카탈로그 동기화', () => {
-  it('30정의(키 이름 26)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('31정의(키 이름 27)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(30)
+    expect(defs).toHaveLength(31)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
     for (const def of defs) {

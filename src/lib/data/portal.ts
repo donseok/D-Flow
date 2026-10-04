@@ -21,6 +21,10 @@ import { getProjectTimezones } from '@/lib/settings/projectConfig'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { expandMeetings } from '@/lib/domain/meetings'
 import { projectLifecycleStatus, type ProjectLifecycleStatus } from '@/lib/domain/project-status'
+import { DEFAULT_ISSUE_STATUSES } from '@/lib/settings/vocab'
+
+/** 이슈 범주 → 표시(SP5b — 지금까지 원 code 'open' 이 그대로 보였다). 포털은 프로젝트를 가로지르므로 범주 라벨로 그린다 */
+const issueCategoryLabel = (category: string) => DEFAULT_ISSUE_STATUSES.find((d) => d.code === category)?.label ?? category
 import { meetingHref, wbsItemHref } from '@/lib/ai/chat/deep-links'
 import { getWorkspacePrefs } from '@/app/actions/preferences'
 import { CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
@@ -110,7 +114,7 @@ async function issueRows(client: Db, actor: Actor, pids: string[], todays: Reado
   const seen = new Set<string>()
   return rows.flatMap((r) => (r.issues && !seen.has(r.issues.id) && seen.add(r.issues.id) ? [{
     kind: 'issue' as const, id: r.issues.id, title: r.issues.title, projectId: r.issues.project_id, projectName: r.issues.projects?.name ?? '',
-    due: r.issues.due_date, overdueDays: overdue(r.issues.due_date, todays.get(r.issues.project_id) as string), status: r.issues.status, href: `/p/${r.issues.project_id}/issues?focus=${r.issues.id}`,
+    due: r.issues.due_date, overdueDays: overdue(r.issues.due_date, todays.get(r.issues.project_id) as string), status: issueCategoryLabel(r.issues.status), href: `/p/${r.issues.project_id}/issues?focus=${r.issues.id}`,
   }] : []))
 }
 

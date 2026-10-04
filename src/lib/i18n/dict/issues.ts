@@ -16,6 +16,8 @@ export const issuesKo = {
   'issue.status.in_progress': '진행중',
   'issue.status.resolved': '해결',
   'issue.status.on_hold': '보류',
+  'issue.status.inactiveBadge': '(비활성)',
+  'issue.status.codeFilterAll': '모든 상태',
   'issue.severity.high': '높음',
   'issue.severity.medium': '보통',
   'issue.severity.low': '낮음',

@@ -238,6 +238,8 @@ export const settingsKo = {
   'settings.rootFolders.saved': '팀별 폴더로 되돌렸습니다.', 'settings.rootFolders.uncertain': '저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.',
   'settings.attendance.types.label': '근태 유형', 'settings.attendance.types.desc': '근태 등록 선택지·범례·월 집계에 쓰는 유형입니다. 집계 분류는 기록이 있으면 바꿀 수 없고, 기록이 있는 유형은 다른 유형으로 옮긴 뒤 지웁니다.',
   'settings.meetings.categories.label': '회의 분류', 'settings.meetings.categories.desc': '회의 등록 선택지와 색입니다. 회의가 있는 분류는 다른 분류로 옮긴 뒤 지웁니다.',
+  'settings.workflow.issue_statuses.label': '이슈 상태', 'settings.workflow.issue_statuses.desc': '이슈의 표시 상태입니다. 상태마다 범주(열림·진행중·보류·해결)를 정하고, 범주 사이 이동은 정해진 규칙을 따릅니다. 새 이슈는 열림 범주의 첫 상태로 시작합니다. 이슈가 있는 상태는 같은 범주의 다른 상태로 옮긴 뒤 지웁니다.',
+  'settings.vocab.category': '범주', 'settings.vocab.noSameCategory': '같은 범주의 다른 활성 상태가 없습니다 — 먼저 추가해 저장하거나 이슈를 하나씩 옮기세요.',
   'settings.issues.severities.label': '이슈 심각도', 'settings.issues.severities.desc': '이슈 심각도 선택지·순위·색입니다. 이슈가 있는 심각도는 다른 값으로 옮긴 뒤 지웁니다.',
   'settings.issues.sources.label': '이슈 출처', 'settings.issues.sources.desc': '이슈 분석의 출처 분류입니다. 회의록 출처는 예약 항목이라 지우거나 끌 수 없습니다.',
   'settings.issues.cause_categories.label': '원인 분류', 'settings.issues.cause_categories.desc': '분석서·AI 분석의 원인 분류입니다. 분석 기록이 참조하므로 지울 수 없고 끌 수만 있습니다.',

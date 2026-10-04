@@ -569,6 +569,17 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
         {/* ════ 상태·승인 ════ */}
         <div id="project-status" className="scroll-mt-24 space-y-5">
+        {/* 이슈 표시 상태(SP5b I — D1) — 이슈 모듈이 켜진 관리자만. 손상 값도 편집기를 그린다(복구 경로) */}
+        {isAdmin && pc.ok && issuesGate.ok && (() => {
+          const key = 'workflow.issue_statuses' as const
+          const st = pc.cfg.keys[key]
+          const ok = st.status === 'set' || st.status === 'default'
+          return <SectionCard searchText={`${key} 이슈 상태 범주 업무 흐름 workflow status ${t(locale, 'settings.workflow.issue_statuses.label')}`} eyebrow="WORKFLOW" title={t(locale, 'settings.workflow.issue_statuses.label')} icon={LayoutList}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.workflow.issue_statuses.desc')}</p>
+            <VocabEditor key={`${projectId}-${key}-${revision}`} projectId={projectId} vocabKey={key} revision={revision} canEdit={canMutate}
+              value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
+          </SectionCard>
+        })()}
       {/* ── 에이전트 (킬스위치) ── */}
         <SectionCard
         searchText="workflow.stage_credits 에이전트 상태 승인 크레딧"

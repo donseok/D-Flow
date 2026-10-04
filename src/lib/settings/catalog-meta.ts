@@ -11,6 +11,7 @@ const S5B1 = (status: CatalogStatus, consumers: string[], tests: string[]): Cata
 const S5B3 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B3' })
 const S5B2 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B2' })
 const S5B4 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B4' })
+const S5BI = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b I' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
@@ -63,6 +64,8 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'meetings.categories': S5B4('verified', ['src/components/meetings/MeetingFormModal.tsx', 'src/components/meetings/MeetingCalendar.tsx', 'src/app/actions/meetings.ts', 'src/lib/data/meetings.ts', 'src/lib/minutes/meetings.ts', 'src/app/actions/meetingNotify.ts'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/minutes/external-api.test.ts', 'tests/ui/meeting-form-announce.test.tsx', 'tests/ui/vocab-editor.test.tsx']),
   'issues.severities': S5B4('verified', ['src/components/issues/IssuesView.tsx', 'src/components/issues/IssueModals.tsx', 'src/app/actions/issues.ts', 'src/lib/domain/issues.ts', 'src/lib/report/issues/model.ts', 'src/components/dashboard/IssueQueueCard.tsx'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/domain/issues.test.ts', 'tests/actions/vocab-migrate.test.ts', 'tests/ui/vocab-editor.test.tsx']),
   'issues.sources': S5B4('verified', ['src/components/issues/IssueModals.tsx', 'src/app/actions/issues.ts', 'src/lib/report/issues/deckPlan.ts', 'src/lib/report/issues/model.ts'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/report/issue-analysis-vocab.test.ts', 'tests/ui/vocab-editor.test.tsx']),
+  // SP5b I — 정의·편집기(VocabEditor 범주 칸)·DB 트리거·소비처(목록·모달·이력)·테스트(골든 TS·SQL) 넷이 이어져 verified
+  'workflow.issue_statuses': S5BI('verified', ['src/lib/domain/issueWorkflow.ts', 'src/app/actions/issues.ts', 'src/components/issues/IssuesView.tsx', 'src/components/issues/IssueModals.tsx', 'src/components/settings/VocabEditor.tsx', 'supabase/migrations/0025_issue_status_vocab.sql'], ['tests/domain/issue-workflow.test.ts', 'tests/rls/issue-workflow.test.ts', 'tests/actions/issues-gate.test.ts']),
   'issues.cause_categories': S5B4('verified', ['src/lib/ai/issue-analysis.ts', 'src/lib/report/issues/storedRun.ts', 'src/lib/report/issues/deckPlan.ts', 'src/app/actions/issueAnalysis.ts'], ['tests/settings/vocab.test.ts', 'tests/ai/issue-analysis.test.ts', 'tests/report/issue-analysis-stored-run.test.ts', 'tests/report/issue-analysis-vocab.test.ts']),
 }
 
@@ -71,7 +74,6 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
   { key: 'portal.widgets', scope: 'workspace', sp: 'SP3b', shape: '{ id: PortalWidgetId; enabled: boolean }[]' },
   { key: 'security.local_drafts', scope: 'workspace', sp: 'SPU1', shape: '{ allowed: boolean; retention_days: number }' },
   { key: 'notify.policy', scope: 'workspace', sp: 'SP8', shape: '{ [type]: { enabled: boolean } }' },
-  { key: 'workflow.issue_statuses', scope: 'project', sp: 'SP5b', shape: '{ code; label; color; category; sort; active }[]' },
   { key: 'workflow.wbs_stage_labels', scope: 'project', sp: 'SP5b', shape: 'Partial<Record<단계, string>>' },
   { key: 'workflow.approval_steps', scope: 'project', sp: 'SP5b', shape: '{ code; label; approver }[] 1~3' },
   { key: 'workflow.approval_distinct_approvers', scope: 'project', sp: 'SP5b', shape: 'boolean' },

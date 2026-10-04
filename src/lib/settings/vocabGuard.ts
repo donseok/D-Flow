@@ -14,6 +14,7 @@ const WHAT: Readonly<Record<VocabKey, string>> = {
   'issues.severities': '심각도',
   'issues.sources': '이슈 원천',
   'issues.cause_categories': '원인 분류',
+  'workflow.issue_statuses': '이슈 상태',
 }
 export const vocabInactiveMessage = (key: VocabKey) =>
   `선택한 ${WHAT[key]}은(는) 이 프로젝트에서 쓰지 않습니다. 새로고침 후 다른 값을 고르세요.`

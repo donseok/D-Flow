@@ -36,6 +36,8 @@ export interface MinuteLinkedIssue {
   projectId: string
   title: string
   status: 'open' | 'in_progress' | 'resolved' | 'on_hold'
+  /** 표시 상태 code(SP5b) — 생략 = 범주 code */
+  statusCode?: string
   minuteVersionId: string
   bodyHash: string
   blockIndex: number

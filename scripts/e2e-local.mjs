@@ -117,6 +117,9 @@ const ACTIONS = {
   redeemInviteWithSignup: { filename: 'src/app/actions/inviteRedeem.ts', exportedName: 'redeemInviteWithSignup', worker: '/invite/[token]/page' },
   updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
   createIssue: { filename: 'src/app/actions/issues.ts', exportedName: 'createIssue', worker: '/p/[projectId]/issues/page' },
+  // SP5b I issue-status-flow — 이슈 모달의 진행 저장과 설정 화면의 기록 옮기기
+  updateIssueProgress: { filename: 'src/app/actions/issues.ts', exportedName: 'updateIssueProgress', worker: '/p/[projectId]/issues/page' },
+  migrateVocabCode: { filename: 'src/app/actions/vocab.ts', exportedName: 'migrateVocabCode', worker: '/p/[projectId]/settings/page' },
   createAgentToken: { filename: 'src/app/actions/agentTokens.ts', exportedName: 'createAgentToken', worker: '/account/page' },
   setWorkspaceRole: { filename: 'src/app/actions/accounts.ts', exportedName: 'setWorkspaceRole', worker: '/w/[slug]/admin/accounts/page' },
   listAuthzEvents: { filename: 'src/app/actions/authzEvents.ts', exportedName: 'listAuthzEvents', worker: '/w/[slug]/settings/page' },
@@ -1508,6 +1511,65 @@ async function main() {
   step('minutes-teams', { team: { id: mtTeam.id, code: MT_CODE, name: MT_NAME }, rootId: mtRoot.id, minuteId: mtMinute.id,
     denied: { folder: folderDenied?.error, minute: minuteDenied?.error }, checks: mtChecks },
   Object.values(mtChecks).every(Boolean) ? undefined : `회의록 팀 루트: ${JSON.stringify(mtChecks)}`)
+
+  // 19c. 이슈 표시 상태(SP5b I — 스펙 §6.1 issue-status-flow): 연구 5상태 정의를 설정 액션으로 저장 → 새 이슈는 첫 상태(접수) →
+  // 허용 전이(접수→고객 승인→종료)는 통과·이력 2행, 전이표 밖(종료→고객 승인 = resolved→on_hold)은 거부 → 참조 있는 상태(검토) 삭제는
+  // CONFIG_IN_USE → 다른 범주로 옮기기는 거부, 같은 범주(접수)로 옮긴 뒤 삭제는 통과. 모두 화면과 같은 서버 액션 경로다.
+  const RESEARCH_STATUSES = [
+    { code: 'intake', label: '접수', category: 'open', color: 'delayed', sort: 1, active: true },
+    { code: 'review', label: '검토', category: 'open', color: 'brand', sort: 2, active: true },
+    { code: 'client_approval', label: '고객 승인', category: 'on_hold', color: 'pending', sort: 3, active: true },
+    { code: 'execution', label: '실행', category: 'in_progress', color: 'progress', sort: 4, active: true },
+    { code: 'done', label: '종료', category: 'resolved', color: 'done', sort: 5, active: true },
+  ]
+  // 기본 4상태를 쓰는 이슈가 있는 프로젝트에서는 'open' 을 지울 수 없다(CONFIG_IN_USE — 그것도 계약이다). 새 프로젝트에서 시작한다
+  const flowName = `E2E 상태 흐름 ${randomUUID().slice(0, 8)}`
+  await admin.http('GET', wsPath(wsA, 'projects'))
+  mustOk('E2E 상태 흐름 프로젝트', (await admin.action(wsPath(wsA, 'projects'), 'createProject', [{
+    workspaceId: wsA, name: flowName, startDate: null, endDate: null, description: null, levelLabels: LEVEL_LABELS, commandId: randomUUID(),
+  }])).result)
+  const flowP = rows('E2E 상태 흐름 프로젝트 조회', await admin.sb.from('projects').select('id').eq('name', flowName).single())
+  const updateFlowSettings = async (set, unset = []) => {
+    await admin.http('GET', `/p/${flowP.id}/settings`)
+    const doc = rows('상태 흐름 프로젝트 설정', await admin.sb.from('project_settings').select('revision').eq('project_id', flowP.id).single())
+    return (await admin.action(`/p/${flowP.id}/settings`, 'updateProjectSettings',
+      [flowP.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset }])).result
+  }
+  mustOk('이슈 상태 5개 저장', await updateFlowSettings({ 'workflow.issue_statuses': RESEARCH_STATUSES }))
+  await admin.http('GET', `/p/${flowP.id}/issues`)
+  const newFlowIssue = async (title) => mustOk(title, (await admin.action(`/p/${flowP.id}/issues`, 'createIssue', [flowP.id, {
+    title, body: '상태 흐름', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: null, analysis: null,
+  }])).result)
+  const progress = async (id, status, expectedStatus) => (await admin.action(`/p/${flowP.id}/issues`, 'updateIssueProgress', [id, { status, expectedStatus }])).result
+  const flowIssue = await newFlowIssue('E2E 상태 흐름')
+  const flowRow = () => admin.sb.from('issues').select('status, status_code, resolved_at').eq('id', flowIssue.id).single()
+  const firstState = rows('첫 상태', await flowRow())
+  const toApproval = await progress(flowIssue.id, 'client_approval', 'intake')
+  const toDone = await progress(flowIssue.id, 'done', 'client_approval')
+  const backToApproval = await progress(flowIssue.id, 'client_approval', 'done')
+  const doneState = rows('종료 상태', await flowRow())
+  const history = rows('상태 이력', await admin.sb.from('issue_updates').select('body').eq('issue_id', flowIssue.id).eq('kind', 'status').order('created_at'))
+  const reviewIssue = await newFlowIssue('E2E 검토 상태')
+  const toReview = await progress(reviewIssue.id, 'review', 'intake')
+  const withoutReview = RESEARCH_STATUSES.filter((d) => d.code !== 'review')
+  const deleteInUse = await updateFlowSettings({ 'workflow.issue_statuses': withoutReview })
+  await admin.http('GET', `/p/${flowP.id}/settings`)
+  const crossMigrate = (await admin.action(`/p/${flowP.id}/settings`, 'migrateVocabCode', [flowP.id, 'workflow.issue_statuses', 'review', 'done'])).result
+  const sameMigrate = (await admin.action(`/p/${flowP.id}/settings`, 'migrateVocabCode', [flowP.id, 'workflow.issue_statuses', 'review', 'intake'])).result
+  const deleteAfter = await updateFlowSettings({ 'workflow.issue_statuses': withoutReview })
+  const isChecks = {
+    firstIsIntake: firstState?.status_code === 'intake' && firstState?.status === 'open',
+    allowedPassed: toApproval?.ok === true && toDone?.ok === true,
+    outsideDenied: backToApproval?.ok === false && String(backToApproval?.error).includes('옮길 수 없습니다'),
+    resolvedDerived: doneState?.status === 'resolved' && doneState?.status_code === 'done' && doneState?.resolved_at !== null,
+    historyTwo: JSON.stringify(history.map((h) => h.body)) === JSON.stringify(['intake>client_approval', 'client_approval>done']),
+    inUseDenied: toReview?.ok === true && deleteInUse?.ok === false && deleteInUse?.code === 'CONFIG_IN_USE',
+    crossCategoryDenied: crossMigrate?.ok === false && String(crossMigrate?.error).includes('같은 범주'),
+    sameCategoryMoved: sameMigrate?.ok === true && sameMigrate?.moved === 1,
+    deletedAfterMove: deleteAfter?.ok === true,
+  }
+  step('issue-status-flow', { project: flowP.id, issue: flowIssue.id, results: { toApproval, toDone, backToApproval, deleteInUse, crossMigrate, sameMigrate, deleteAfter }, checks: isChecks },
+    Object.values(isChecks).every(Boolean) ? undefined : `이슈 상태 흐름: ${JSON.stringify(isChecks)}`)
 
   // 20. 시드 이슈가 켜진 화면에 보이는지 먼저 확인한 뒤, 꺼진 화면·액션·분석 API 모두에서 차단되는지 본다.
   const issueTitle = `E2E 관문 이슈 ${randomUUID().slice(0, 8)}`

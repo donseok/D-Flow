@@ -351,11 +351,15 @@ describe('updateIssue — 회의록 원천 불변성/0055 이전 이슈 최초 �
 })
 
 describe('updateIssueProgress — 전환 검증 + CAS', () => {
-  it('전환 맵에 없는 전환은 거부 (resolved→on_hold)', async () => {
+  it('전환 맵에 없는 전환(resolved→on_hold)은 DB 트리거가 거부하고 액션은 그 토큰을 문구로 옮긴다(SP5b D4 — 판정 한 곳)', async () => {
     asMember()
-    state.client = sbWithCurrent({ project_id: 'p1', created_by: 'other', status: 'resolved', resolved_at: '2026-07-20T00:00:00Z' })
+    const update = vi.fn(() => ({
+      eq: vi.fn(() => ({ eq: vi.fn(() => ({ select: vi.fn(async () => ({ data: null, error: { code: '23514', message: 'ISSUE_TRANSITION_DENIED:resolved>on_hold' } })) })) })),
+    }))
+    state.client = sbWithCurrent({ project_id: 'p1', created_by: 'other', status_code: 'resolved', title: 't' }, { update })
     const res = await updateIssueProgress('i1', { status: 'on_hold', expectedStatus: 'resolved' })
-    expect(res.ok).toBe(false)
+    expect(res).toMatchObject({ ok: false, error: '이 상태로는 옮길 수 없습니다.' })
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ status_code: 'on_hold' }))
   })
   it('status 만 있고 expectedStatus 가 없으면 검증 에러 (DB 미도달)', async () => {
     asMember()
@@ -367,7 +371,7 @@ describe('updateIssueProgress — 전환 검증 + CAS', () => {
     asMember()
     state.client = {
       from: vi.fn(() => ({
-        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { project_id: 'p1', created_by: 'other', status: 'open', resolved_at: null } })) })) })),
+        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { project_id: 'p1', created_by: 'other', status_code: 'open' } })) })) })),
         update: vi.fn(() => ({
           eq: vi.fn(() => ({ eq: vi.fn(() => ({ select: vi.fn(async () => ({ data: [], error: null })) })) })),
         })),
@@ -380,7 +384,7 @@ describe('updateIssueProgress — 전환 검증 + CAS', () => {
     // A 가 open 을 보는 동안 B 가 resolved 로 바꿈. A 의 in_progress 저장(expectedStatus:'open')은
     // 선검증에서 즉시 conflict — 서버가 방금 읽은 status(resolved)가 아니라 클라이언트 관측값이 기준.
     asMember()
-    state.client = sbWithCurrent({ project_id: 'p1', created_by: 'other', status: 'resolved', resolved_at: '2026-07-20T00:00:00Z' })
+    state.client = sbWithCurrent({ project_id: 'p1', created_by: 'other', status_code: 'resolved' })
     const res = await updateIssueProgress('i1', { status: 'in_progress', expectedStatus: 'open' })
     expect(res).toMatchObject({ ok: false, conflict: true })
   })
@@ -405,7 +409,7 @@ describe('updateIssueProgress — 전환 검증 + CAS', () => {
     }))
     state.client = {
       from: vi.fn(() => ({
-        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { project_id: 'p1', created_by: 'other', status: 'open', resolved_at: null, title: 't' } })) })) })),
+        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { project_id: 'p1', created_by: 'other', status_code: 'open', title: 't' } })) })) })),
         update,
       })),
     }
@@ -623,186 +627,68 @@ describe('updateIssueProgress — 담당자 검증', () => {
   })
 })
 
-describe('updateIssueProgress — 상태 변경 자동 기록', () => {
-  it('상태가 바뀌면 kind=status 이력을 service_role 로 남긴다', async () => {
-    asMember()
-    // 사용자 JWT 클라이언트(state.client, createServerClient 가 반환)는 issues 테이블만 건드린다.
-    // issue_updates 삽입은 아래 admin(createAdminClient 반환)에서만 캡처한다 — kind 컬럼이
-    // 사용자 JWT grant 밖이라 여기로 오면 안 된다.
-    state.client = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            maybeSingle: vi.fn(async () => ({
-              data: { project_id: 'p1', created_by: 'other', status: 'open', resolved_at: null, title: 't' },
-            })),
-          })),
+describe('updateIssueProgress — 상태 변경 이력은 DB 트리거가 남긴다(SP5b D5)', () => {
+  // 이력(issue_updates kind='status')은 record_issue_status_change 트리거가 같은 트랜잭션에서 쓴다 — 액션은 service_role 로 따로 넣지 않는다.
+  // 이력만 빠지는 반쪽 저장이 없고, 직접 PATCH·이관도 같은 이력을 남긴다(tests/rls/issue-workflow.test.ts 가 DB 로 확인).
+  function progressClient(update = vi.fn(() => ({
+    eq: vi.fn(() => ({ eq: vi.fn(() => ({ select: vi.fn(async () => ({ data: [{ id: 'i1' }], error: null })) })) })),
+  }))) {
+    return {
+      update,
+      client: {
+        from: vi.fn(() => ({
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { project_id: 'p1', created_by: 'other', status_code: 'open', title: 't' }, error: null })) })) })),
+          update,
         })),
-        update: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => ({ select: vi.fn(async () => ({ data: [{ id: 'i1' }], error: null })) })),
-          })),
-        })),
-      })),
+      },
     }
-    const insert = vi.fn(async () => ({ error: null }))
-    createAdminClient.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === 'issue_updates') return { insert }
-        throw new Error(`unexpected admin table: ${table}`)
-      }),
-    })
-
+  }
+  it('상태가 바뀌면 status_code 만 CAS 로 쓰고(status·resolved_at 은 트리거 파생) service_role insert 는 없다', async () => {
+    asMember()
+    const { client, update } = progressClient()
+    state.client = client
     const res = await updateIssueProgress('i1', { status: 'resolved', expectedStatus: 'open' })
-
-    expect(res.ok).toBe(true)
-    expect(createAdminClient).toHaveBeenCalledOnce()
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
-      issue_id: 'i1',
-      project_id: 'p1',
-      kind: 'status',
-      body: 'open>resolved',
-      author_user_id: 'me',
-      author_name: 'me',
-    }))
-  })
-
-  it('상태가 그대로면 이력을 남기지 않는다', async () => {
-    asMember()
-    // 담당자만 바꾸는 호출 — status 자체를 안 보낸다. issue_assignees/project_members 는
-    // 기존 담당자 검증 성공 경로(issue-notify.test.ts)와 같은 스텁 구조를 쓴다.
-    state.client = {
-      from: vi.fn((table: string) => {
-        if (table === 'issues') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn(async () => ({
-                  data: { project_id: 'p1', created_by: 'other', status: 'open', resolved_at: null, title: 't' },
-                })),
-              })),
-            })),
-            update: vi.fn(() => ({
-              eq: vi.fn(() => ({ select: vi.fn(async () => ({ data: [{ id: 'i1' }], error: null })) })),
-            })),
-          }
-        }
-        if (table === 'issue_assignees') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(async () => ({ data: [{ member_id: 'm1' }, { member_id: 'm2' }], error: null })),
-            })),
-            delete: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
-            insert: vi.fn(async () => ({ error: null })),
-          }
-        }
-        if (table === 'project_members') return assigneeRosterStub()
-        throw new Error(`unexpected table: ${table}`)
-      }),
-    }
-
-    const res = await updateIssueProgress('i1', { assigneeMemberIds: ['m1', 'm2'] })
-
-    expect(res.ok).toBe(true)
-    expect(createAdminClient).not.toHaveBeenCalled()
-  })
-
-  // status 필드 자체가 없으면(assigneeMemberIds 만) 위 테스트로 충분하지만, 폼이 이전 상태의
-  // expectedStatus 만 흘려보내고 status 는 안 보내는 경우까지 막는지는 별도로 봐야 한다 —
-  // status===undefined 가드가 없으면 encodeStatusChange(expectedStatus, undefined) 로 허위 이력이 남는다.
-  it('status 없이 expectedStatus 만 섞여 들어온 호출도 이력을 남기지 않는다', async () => {
-    asMember()
-    state.client = {
-      from: vi.fn((table: string) => {
-        if (table === 'issues') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn(async () => ({
-                  data: { project_id: 'p1', created_by: 'other', status: 'open', resolved_at: null, title: 't' },
-                })),
-              })),
-            })),
-            update: vi.fn(() => ({
-              eq: vi.fn(() => ({ select: vi.fn(async () => ({ data: [{ id: 'i1' }], error: null })) })),
-            })),
-          }
-        }
-        if (table === 'issue_assignees') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(async () => ({ data: [{ member_id: 'm1' }, { member_id: 'm2' }], error: null })),
-            })),
-            delete: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
-            insert: vi.fn(async () => ({ error: null })),
-          }
-        }
-        if (table === 'project_members') return assigneeRosterStub()
-        throw new Error(`unexpected table: ${table}`)
-      }),
-    }
-
-    // status 는 빼고 expectedStatus 만 실은 위조/잔류 입력 — 서버 검증은 이를 막지 않으므로
-    // 이력 기록 가드 자체가 status===undefined 를 걸러야 한다.
-    const res = await updateIssueProgress('i1', { assigneeMemberIds: ['m1', 'm2'], expectedStatus: 'open' } as never)
-
-    expect(res.ok).toBe(true)
-    expect(createAdminClient).not.toHaveBeenCalled()
-  })
-
-  it('CAS 가 0행이면(경합 패배) 이력도 기록하지 않는다 — INSERT 는 CAS 성공 뒤여야 한다', async () => {
-    asMember()
-    const insert = vi.fn(async () => ({ error: null }))
-    createAdminClient.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === 'issue_updates') return { insert }
-        throw new Error(`unexpected admin table: ${table}`)
-      }),
-    })
-    state.client = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { project_id: 'p1', created_by: 'other', status: 'open', resolved_at: null, title: 't' } })) })) })),
-        update: vi.fn(() => ({
-          eq: vi.fn(() => ({ eq: vi.fn(() => ({ select: vi.fn(async () => ({ data: [], error: null })) })) })),
-        })),
-      })),
-    }
-
-    const res = await updateIssueProgress('i1', { status: 'in_progress', expectedStatus: 'open' })
-
-    expect(res).toMatchObject({ ok: false, conflict: true })
-    expect(createAdminClient).not.toHaveBeenCalled()
-    expect(insert).not.toHaveBeenCalled()
-  })
-
-  it('issue_updates insert 가 실패해도 상태 변경 자체는 성공으로 반환한다(되돌리지 않는다)', async () => {
-    asMember()
-    state.client = {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            maybeSingle: vi.fn(async () => ({
-              data: { project_id: 'p1', created_by: 'other', status: 'open', resolved_at: null, title: 't' },
-            })),
-          })),
-        })),
-        update: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => ({ select: vi.fn(async () => ({ data: [{ id: 'i1' }], error: null })) })),
-          })),
-        })),
-      })),
-    }
-    const insert = vi.fn(async () => ({ error: { message: '기록 실패' } }))
-    createAdminClient.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === 'issue_updates') return { insert }
-        throw new Error(`unexpected admin table: ${table}`)
-      }),
-    })
-
-    const res = await updateIssueProgress('i1', { status: 'resolved', expectedStatus: 'open' })
-
     expect(res).toEqual({ ok: true })
+    const payload = (update.mock.calls as unknown as [Record<string, unknown>][])[0][0]
+    expect(payload).toMatchObject({ status_code: 'resolved' })
+    expect(payload).not.toHaveProperty('status')
+    expect(payload).not.toHaveProperty('resolved_at')
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+  it('담당자만 바꾸면 status_code 를 쓰지 않는다(상태 이력·트리거 판정이 일어나지 않는다)', async () => {
+    asMember()
+    const update = vi.fn(() => ({ eq: vi.fn(() => ({ select: vi.fn(async () => ({ data: [{ id: 'i1' }], error: null })) })) }))
+    state.client = {
+      from: vi.fn((table: string) => {
+        if (table === 'issues') {
+          return {
+            select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { project_id: 'p1', created_by: 'other', status_code: 'open', title: 't' }, error: null })) })) })),
+            update,
+          }
+        }
+        if (table === 'issue_assignees') {
+          return {
+            select: vi.fn(() => ({ eq: vi.fn(async () => ({ data: [{ member_id: 'm1' }, { member_id: 'm2' }], error: null })) })),
+            delete: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
+            insert: vi.fn(async () => ({ error: null })),
+          }
+        }
+        if (table === 'project_members') return assigneeRosterStub()
+        throw new Error(`unexpected table: ${table}`)
+      }),
+    }
+    const res = await updateIssueProgress('i1', { assigneeMemberIds: ['m1', 'm2'] })
+    expect(res.ok).toBe(true)
+    expect((update.mock.calls as unknown as [Record<string, unknown>][])[0][0]).not.toHaveProperty('status_code')
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+  it('선조회 실패는 중단한다 — 없는 이슈로 위장하지 않는다(3원칙 ②)', async () => {
+    asMember()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    state.client = { from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: null, error: { message: 'boom' } })) })) })) })) }
+    const res = await updateIssueProgress('i1', { status: 'resolved', expectedStatus: 'open' })
+    expect(res.ok).toBe(false)
+    expect(res).not.toMatchObject({ error: '이슈를 찾을 수 없습니다.' })
+    errorSpy.mockRestore()
   })
 })

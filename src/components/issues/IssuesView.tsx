@@ -15,14 +15,15 @@ import {
   type IssueAreaFilter,
 } from '@/lib/domain/issueAnalysis'
 import {
-  ISSUE_STATUSES, ISSUE_STATUS_META,
+  ISSUE_STATUSES,
   canEditIssue, dueDaysLeft, filterIssues, isDueUrgent, isOverdue, sortIssues,
   type Issue, type IssueSeverityFilter, type IssueStatusFilter,
 } from '@/lib/domain/issues'
 import { areaLabel } from '@/lib/domain/issueAreas'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import type { IssueEntryContext } from '@/lib/issues/context'
-import { activeVocab, vocabView, type SeverityDef, type SourceDef } from '@/lib/settings/vocab'
+import { activeVocab, orderedVocab, vocabLabel, vocabView, DEFAULT_ISSUE_STATUSES, type IssueStatusDef, type SeverityDef, type SourceDef } from '@/lib/settings/vocab'
+import { IssueStatusPill } from '@/components/ui/StatusPill'
 import type { ProjectMember } from '@/lib/domain/types'
 
 /** 페이지당 행 수 선택지 — 'all' 은 페이징 없이 전량. 기본은 20(사용자 요청). */
@@ -31,7 +32,7 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, myMemberIdsFailed = false, today, timeZone, entryContext, entryError, severities, sources,
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, myMemberIdsFailed = false, today, timeZone, entryContext, entryError, severities, sources, statuses,
 }: {
   entryContext: IssueEntryContext | null
   entryError?: string
@@ -54,6 +55,8 @@ export function IssuesView({
   /** 이 프로젝트의 심각도·출처(설정 어휘, SP5 B4) — 칩·정렬·필터·상세 라벨 */
   severities: readonly SeverityDef[]
   sources: readonly SourceDef[]
+  /** 이 프로젝트의 표시 상태(SP5b — 설정 workflow.issue_statuses). 없으면 제품 기본 4정의 */
+  statuses?: readonly IssueStatusDef[]
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
@@ -64,6 +67,10 @@ export function IssuesView({
   const pathname = usePathname()
 
   const [statusFilter, setStatusFilter] = useState<IssueStatusFilter>('all')
+  // 필터 두 층(SP5b §5): 범주 4탭(제품 고정) + 표시 상태 드롭다운(설정 — 한 범주에 상태가 둘 이상인 프로젝트에서만 보인다)
+  const [statusCodeFilter, setStatusCodeFilter] = useState<string>('all')
+  const statusDefs = statuses ?? DEFAULT_ISSUE_STATUSES
+  const showCodeFilter = new Set(statusDefs.map(d => d.category)).size < statusDefs.length
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>('all')
   const [areaFilter, setAreaFilter] = useState<IssueAreaFilter>('all')
   const [mineOnly, setMineOnly] = useState(false)
@@ -121,8 +128,8 @@ export function IssuesView({
       area: areaFilter,
       mineOnly,
       myMemberIds: myIds,
-    }), today, severities),
-    [issues, statusFilter, severityFilter, areaFilter, mineOnly, myIds, today, severities],
+    }).filter(i => statusCodeFilter === 'all' || (i.statusCode ?? i.status) === statusCodeFilter), today, severities),
+    [issues, statusFilter, statusCodeFilter, severityFilter, areaFilter, mineOnly, myIds, today, severities],
   )
 
   const pageCount = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(visible.length / pageSize))
@@ -135,7 +142,7 @@ export function IssuesView({
 
   const statusTabs = [
     { key: 'all' as const, label: t('issue.filter.all') },
-    ...ISSUE_STATUSES.map(s => ({ key: s, label: t(ISSUE_STATUS_META[s].labelKey) })),
+    ...ISSUE_STATUSES.map(s => ({ key: s, label: t(`issue.status.${s}`) })),
   ]
   const severityTabs = [
     { key: 'all' as const, label: t('issue.filter.all') },
@@ -160,6 +167,7 @@ export function IssuesView({
   }
 
   const filtered = statusFilter !== 'all'
+    || statusCodeFilter !== 'all'
     || severityFilter !== 'all'
     || areaFilter !== 'all'
     || mineOnly
@@ -177,6 +185,19 @@ export function IssuesView({
           onChange={v => { setStatusFilter(v); setPage(1) }}
           size="sm"
         />
+        {showCodeFilter && (
+          <select
+            aria-label={t('issue.col.status')}
+            value={statusCodeFilter}
+            onChange={event => { setStatusCodeFilter(event.target.value); setPage(1) }}
+            className="app-input h-9 w-full min-w-[140px] text-xs sm:w-auto"
+          >
+            <option value="all">{t('issue.status.codeFilterAll')}</option>
+            {orderedVocab(statusDefs).filter(d => statusFilter === 'all' || d.category === statusFilter).map(d => (
+              <option key={d.code} value={d.code}>{vocabLabel('workflow.issue_statuses', statusDefs, d.code, t)}</option>
+            ))}
+          </select>
+        )}
         <SegmentedTabs
           tabs={severityTabs}
           value={severityFilter}
@@ -256,7 +277,6 @@ export function IssuesView({
               </thead>
               <tbody>
                 {paged.map(issue => {
-                  const sMeta = ISSUE_STATUS_META[issue.status]
                   const overdue = isOverdue(issue, today)
                   // 남은일수(2026-08-28) — 오늘→종료일자 달력일. 7일 이내·경과는 빨강, 해결·기한 없음은 —.
                   const daysLeft = dueDaysLeft(issue, today)
@@ -307,10 +327,7 @@ export function IssuesView({
                         )}
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
-                        <span className={`chip px-2 py-0.5 text-[11px] ${sMeta.chip}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${sMeta.dot}`} />
-                          {t(sMeta.labelKey)}
-                        </span>
+                        <IssueStatusPill category={issue.status} code={issue.statusCode} defs={statusDefs} />
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
                         <span className={`chip px-2 py-0.5 text-[11px] ${vocabView('issues.severities', severities, issue.severity, t).chip}`}>{vocabView('issues.severities', severities, issue.severity, t).label}</span>
@@ -410,6 +427,7 @@ export function IssuesView({
         areas={areas}
         severities={severities}
         sources={sources}
+        statuses={statusDefs}
         issue={viewing}
         members={members}
         memberName={memberName}

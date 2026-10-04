@@ -177,7 +177,6 @@ async function seed(argv) {
       project_id: projectId,
       title: `이슈 ${n}`,
       body: `성능 기준선 시드 이슈 ${n}`,
-      status: ['open', 'in_progress', 'resolved', 'on_hold'][n % 4],
       severity: ['high', 'medium', 'low'][n % 3],
     }
   })
@@ -188,6 +187,12 @@ async function seed(argv) {
       const { error } = await admin.from(table).upsert(chunk, { onConflict: 'id' })
       if (error) fail(`${label} 시드 실패(${i}~${i + chunk.length}): ${error.message}`)
     }
+  }
+  // 이슈 상태는 두 단계(SP5b D4 — 새 이슈는 트리거가 열림으로 시작하고, 상태는 전이로만 바뀐다). 이미 그 상태면 건너뛴다(멱등)
+  for (const code of ['in_progress', 'resolved', 'on_hold']) {
+    const ids = issueRows.filter((_, i) => ['open', 'in_progress', 'resolved', 'on_hold'][(i + 1) % 4] === code).map((r) => r.id)
+    const { error } = await admin.from('issues').update({ status_code: code }).in('id', ids).neq('status_code', code)
+    if (error) fail(`issues 상태 시드 실패(${code}): ${error.message}`)
   }
 
   // P12 — 주간 화면 기록용(SP4 스키마 전용). ui-capture 시드와 같은 길: service_role 이 결정적 id 로 넣는다(있으면 그대로 — ignoreDuplicates,

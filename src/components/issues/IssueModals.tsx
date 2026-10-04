@@ -15,10 +15,9 @@ import {
   createIssue, deleteIssue, fetchIssueEntryContext, fetchIssueMajorProcesses, updateIssue, updateIssueProgress,
   type IssueActionResult, type IssueInput,
 } from '@/app/actions/issues'
-import {
-  ISSUE_STATUS_META, STATUS_TRANSITIONS,
-  isOverdue, type Issue, type IssueSeverity, type IssueStatus,
-} from '@/lib/domain/issues'
+import { isOverdue, type Issue, type IssueSeverity } from '@/lib/domain/issues'
+import { allowedTargets } from '@/lib/domain/issueWorkflow'
+import { IssueStatusPill } from '@/components/ui/StatusPill'
 import {
   ISSUE_MAJOR_NAME_MAX,
   ISSUE_MAJOR_NAME_NUMBERED_RE,
@@ -33,7 +32,7 @@ import {
 } from '@/lib/domain/issueAnalysis'
 import { areaLabel, type IssueAreaRef } from '@/lib/domain/issueAreas'
 import type { IssueEntryContext } from '@/lib/issues/context'
-import { activeVocab, vocabLabel, vocabView, RESERVED_SOURCE, type SeverityDef, type SourceDef } from '@/lib/settings/vocab'
+import { activeVocab, vocabLabel, vocabView, RESERVED_SOURCE, DEFAULT_ISSUE_STATUSES, type IssueStatusDef, type SeverityDef, type SourceDef } from '@/lib/settings/vocab'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import { memberOptionView } from '@/lib/domain/memberPicker'
 import { validateIssueDateRange } from '@/lib/domain/issueMinuteSource'
@@ -54,16 +53,6 @@ function ErrorBox({ message }: { message: string }) {
   )
 }
 
-function StatusChip({ status }: { status: IssueStatus }) {
-  const { t } = useLocale()
-  const meta = ISSUE_STATUS_META[status]
-  return (
-    <span className={`chip ${meta.chip}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-      {t(meta.labelKey)}
-    </span>
-  )
-}
 
 function SeverityChip({ severity, severities }: { severity: IssueSeverity; severities: readonly SeverityDef[] }) {
   const { t } = useLocale()
@@ -186,12 +175,14 @@ function megaAreaName(id: string, areas: readonly IssueAreaRef[]): string {
 
 export function IssueDetailModal({
   issue, members, memberName, canEdit, canWrite, currentUserId, isProjectAdmin, today, timeZone, areas = [], onClose, onEdit, onDelete,
-  severities, sources,
+  severities, sources, statuses,
 }: {
   issue: Issue | null
   /** 이 프로젝트의 심각도·출처(설정 어휘) */
   severities: readonly SeverityDef[]
   sources: readonly SourceDef[]
+  /** 이 프로젝트의 표시 상태(SP5b — 설정 workflow.issue_statuses). 없으면 제품 기본 4정의 */
+  statuses?: readonly IssueStatusDef[]
   areas?: readonly IssueAreaRef[]
   members: ProjectMember[]
   memberName: (id: string | null) => string | null
@@ -213,7 +204,7 @@ export function IssueDetailModal({
   const minutesBase = useMinuteLinks().list   // 원문 링크의 기준 경로 — 슬러그 워크스페이스(D38 ①), 범위가 없으면 영구 링크 형식
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [status, setStatus] = useState<IssueStatus>('open')
+  const [status, setStatus] = useState<string>('open')
   const [assignees, setAssignees] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -223,7 +214,7 @@ export function IssueDetailModal({
   // 에러 초기화는 아래 이펙트(대상 이슈 '전환' 시점)만 담당한다(리뷰 F2).
   useEffect(() => {
     if (!issue) return
-    setStatus(issue.status)
+    setStatus(issue.statusCode ?? issue.status)
     setAssignees(issue.assigneeMemberIds)
   }, [issue])
   const issueId = issue?.id
@@ -238,9 +229,14 @@ export function IssueDetailModal({
         ? `${issue.startDate} → —`
         : issue.dueDate ?? t('issue.noDue')
     : ''
-  const statusOptions: IssueStatus[] = issue ? [issue.status, ...STATUS_TRANSITIONS[issue.status]] : []
+  // 선택지 = [현재, ...허용 전이](SP5b — 범주 전이표 + 같은 범주 자유 이동, 활성만). 판정은 DB 트리거가 최종으로 한다
+  const statusDefs = statuses ?? DEFAULT_ISSUE_STATUSES
+  const currentCode = issue ? (issue.statusCode ?? issue.status) : null
+  const statusOptions: string[] = issue && currentCode
+    ? [currentCode, ...allowedTargets(statusDefs, currentCode, issue.status).map(d => d.code)]
+    : []
   const assigneesDirty = issue !== null && !sameIds(assignees, issue.assigneeMemberIds)
-  const dirty = issue !== null && (status !== issue.status || assigneesDirty)
+  const dirty = issue !== null && (status !== currentCode || assigneesDirty)
   const analysisMegaLabel = issue?.areaId ? megaAreaName(issue.areaId, areas) : '—'
   const analysisMajorLabel = issue?.majorName
     ? issue.areaId && issue.majorSeq
@@ -268,7 +264,7 @@ export function IssueDetailModal({
   function saveProgress() {
     if (!issue || !dirty) return
     const patch = {
-      ...(status !== issue.status ? { status, expectedStatus: issue.status } : {}),
+      ...(currentCode && status !== currentCode ? { status, expectedStatus: currentCode } : {}),
       ...(assigneesDirty ? { assigneeMemberIds: assignees } : {}),
     }
     startTransition(async () => {
@@ -314,7 +310,7 @@ export function IssueDetailModal({
       {issue && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusChip status={issue.status} />
+            <IssueStatusPill category={issue.status} code={issue.statusCode} defs={statusDefs} />
             <SeverityChip severity={issue.severity} severities={severities} />
             {overdue && <span className="chip bg-delayed-weak text-delayed">{t('issue.overdueBadge')}</span>}
           </div>
@@ -451,6 +447,7 @@ export function IssueDetailModal({
             isProjectAdmin={isProjectAdmin}
             members={members}
             timeZone={timeZone}
+            statuses={statusDefs}
           />
 
           <div className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">
@@ -458,9 +455,9 @@ export function IssueDetailModal({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.detail.status')}</span>
-                <select className="app-input" value={status} onChange={e => setStatus(e.target.value as IssueStatus)}>
+                <select className="app-input" value={status} onChange={e => setStatus(e.target.value)}>
                   {statusOptions.map(s => (
-                    <option key={s} value={s}>{t(ISSUE_STATUS_META[s].labelKey)}</option>
+                    <option key={s} value={s}>{vocabLabel('workflow.issue_statuses', statusDefs, s, t)}</option>
                   ))}
                 </select>
               </label>
