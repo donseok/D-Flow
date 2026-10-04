@@ -14,6 +14,8 @@ import { adminFor, type AdminClient } from '@/lib/supabase/adminFor'
 import { createServerClient } from '@/lib/supabase/server'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { agentsNewlyEnabled, backfillWorkspaceAgentOrders, syncAgentsModule } from '@/lib/modules/agentsSync'
+import { hasCustomFieldReindexChange, type FieldDef } from '@/lib/domain/customFields'
+import { enqueueCustomFieldsReindex } from '@/lib/ai/index/reindexCustomFields'
 import { moduleKeyRule } from '@/lib/modules/saveRule'
 import type { EditCtx, SettingDef } from '@/lib/settings/def'
 import { isRecord } from '@/lib/settings/resolve'
@@ -217,7 +219,9 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
         a.revalidate()
         const recovery = a.scope === 'workspace'
           ? '같은 modules.allowed 값을 새 명령으로 다시 저장하면 백필을 재시도합니다.'
-          : '프로젝트 설정에서 agents 모듈을 끈 뒤 다시 켜세요.'
+          : after.what === 'AI 색인 갱신'
+            ? '설정을 다시 저장하면 색인 갱신을 재시도합니다.'
+            : '프로젝트 설정에서 agents 모듈을 끈 뒤 다시 켜세요.'
         return { ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, retryable: false, appliedRevision: r.revision,
           error: `설정은 revision ${r.revision} 으로 저장됐지만 ${after.what}에 실패했습니다 — ${recovery}` }
       }
@@ -279,14 +283,34 @@ function projectAdapter(projectId: string, now: Date): ScopeAdapter {
       validateProjectConfig(next, { ...await loadProjectValidateDeps(admin, cfg!, ws, { allowed }), credit: creditStateOf(cfg!) }, unset),
     rpc: (admin, x) => admin.rpc('apply_project_settings', { p_project_id: projectId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
-    afterApplied: async (_admin, prev, set, actor) => {
-      if (!('modules.enabled' in set)) return { ok: true }
-      const prevEnabled = (stateValue(prev.keys['modules.enabled']) as ModuleId[] | undefined) ?? null
-      const next = set['modules.enabled'] as ModuleId[]
-      if (!agentsNewlyEnabled(prevEnabled, next)) return { ok: true }
-      // 저장 전 getProjectConfig 와 같은 클라이언트면 요청 캐시가 옛 modules.enabled 를 돌려줄 수 있다.
-      const r = await syncAgentsModule(adminFor({ projectId }).admin, { projectId, actorUserId: actor.userId, prevEnabled, nextEnabled: next })
-      return r.ok ? { ok: true } : { ok: false, what: '에이전트 등록 동기화', error: r.error }
+    afterApplied: async (admin, prev, set, actor) => {
+      if ('modules.enabled' in set) {
+        const prevEnabled = (stateValue(prev.keys['modules.enabled']) as ModuleId[] | undefined) ?? null
+        const next = set['modules.enabled'] as ModuleId[]
+        if (agentsNewlyEnabled(prevEnabled, next)) {
+          // 저장 전 getProjectConfig 와 같은 클라이언트면 요청 캐시가 옛 modules.enabled 를 돌려줄 수 있다.
+          const r = await syncAgentsModule(adminFor({ projectId }).admin, { projectId, actorUserId: actor.userId, prevEnabled, nextEnabled: next })
+          if (!r.ok) return { ok: false, what: '에이전트 등록 동기화', error: r.error }
+        }
+      }
+      for (const [key, entity] of [
+        ['fields.wbs_item', 'wbs_item'],
+        ['fields.issue', 'issue'],
+        ['fields.weekly_row', 'weekly_row'],
+      ] as const) {
+        if (key in set) {
+          const prevDefs = (stateValue(prev.keys[key]) as FieldDef[] | undefined) ?? []
+          const nextDefs = (set[key] as FieldDef[] | undefined) ?? []
+          if (hasCustomFieldReindexChange(prevDefs, nextDefs)) {
+            const r = await enqueueCustomFieldsReindex(admin, projectId, entity)
+            if (!r.ok) {
+              console.error('[settings] 재색인 잡 등록 실패', { projectId, entity, error: r.error })
+              return { ok: false, what: 'AI 색인 갱신', error: '색인 갱신 대기 + 재시도' }
+            }
+          }
+        }
+      }
+      return { ok: true }
     },
     revalidate: () => revalidatePath(`/p/${projectId}`, 'layout'),
   }

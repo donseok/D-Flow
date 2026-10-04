@@ -19,6 +19,7 @@ export class FakeSettingsDb {
   wbsItems: Record<string, unknown>[] = []
   agentProjects: Record<string, unknown>[] = []
   weeklyReports: Record<string, unknown>[] = []
+  issues: Record<string, unknown>[] = []
   /** 날짜 예외(holidays — project_id·date·name·kind). 해석기의 달력 로더가 키셋으로 읽는다(SP5 A 과제 13) */
   holidays: Record<string, unknown>[] = []
   /** apply_*_settings 의 ⑥ 참조 검사 흉내 — 값을 돌려주면 그 오류로 거부한다(SP5 — settings_ref_check 의 SETTINGS_CODE_IN_USE) */
@@ -97,6 +98,7 @@ export class FakeSettingsDb {
         db.rpcCalls.push({ name, args })
         if (db.beforeRpc) { const f = db.beforeRpc; db.beforeRpc = null; f() }
         if (name === 'create_project_with_settings') return db.createProject(args)
+        if (name === 'upsert_ai_index_jobs') return { data: { count: (args.p_jobs as unknown[])?.length ?? 0 }, error: null }
         if (name !== 'apply_project_settings' && name !== 'apply_workspace_settings') return { data: null, error: { message: `fake: unknown rpc ${name}` } }
         return db.apply(name === 'apply_project_settings' ? { projectId: args.p_project_id as string } : { workspaceId: args.p_workspace_id as string }, args)
       },
@@ -137,6 +139,7 @@ export class FakeSettingsDb {
       case 'wbs_items': return this.wbsItems
       case 'agent_projects': return this.agentProjects
       case 'weekly_reports': return this.weeklyReports
+      case 'issues': return this.issues
       case 'holidays': return this.holidays
       case 'project_settings_history': return this.history.filter((h) => h.project_id) as unknown as Record<string, unknown>[]
       case 'workspace_settings_history': return this.history.filter((h) => h.workspace_id) as unknown as Record<string, unknown>[]

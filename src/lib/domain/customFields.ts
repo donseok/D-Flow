@@ -179,3 +179,49 @@ export function customSearchText(defs: readonly FieldDef[], values: CustomValues
   return orderedFields(defs).filter(d => d.active && d.searchable && own(values, d.key))
     .map(d => `${d.label}: ${formatCustomValue(d, values[d.key], opts)}`).join('\n')
 }
+
+/**
+ * Detects whether field definition changes affect AI search indexing (reindexOn: ['label', 'searchable', 'options.label']).
+ * Returns true if:
+ * - A searchable field was added, removed, or had its `searchable` or `active` flag changed
+ * - An active & searchable field had its `label` changed
+ * - An active & searchable select/multiselect field had any of its option labels changed
+ */
+export function hasCustomFieldReindexChange(
+  prevDefs: readonly FieldDef[] = [],
+  nextDefs: readonly FieldDef[] = [],
+): boolean {
+  const prevMap = new Map(prevDefs.map(d => [d.key, d]))
+  const nextMap = new Map(nextDefs.map(d => [d.key, d]))
+  const allKeys = new Set([...prevMap.keys(), ...nextMap.keys()])
+  for (const k of allKeys) {
+    const p = prevMap.get(k)
+    const n = nextMap.get(k)
+    if (!p && !n) continue
+    if (!p && n) {
+      if (n.active && n.searchable) return true
+      continue
+    }
+    if (p && !n) {
+      if (p.active && p.searchable) return true
+      continue
+    }
+    if (p && n) {
+      if (p.searchable !== n.searchable) return true
+      if (p.active !== n.active && (p.searchable || n.searchable)) return true
+      if ((p.searchable || n.searchable) && (p.active || n.active)) {
+        if (p.label !== n.label) return true
+        const pOpts = p.options ?? []
+        const nOpts = n.options ?? []
+        const pOptMap = new Map(pOpts.map(o => [o.code, o.label]))
+        const nOptMap = new Map(nOpts.map(o => [o.code, o.label]))
+        const allCodes = new Set([...pOptMap.keys(), ...nOptMap.keys()])
+        for (const code of allCodes) {
+          if (pOptMap.get(code) !== nOptMap.get(code)) return true
+        }
+      }
+    }
+  }
+  return false
+}
+

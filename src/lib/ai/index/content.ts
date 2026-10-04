@@ -14,6 +14,8 @@ import {
   type KnowledgeDocumentInput,
 } from './types'
 import { rowLabel, visibleRows, type WeeklyArea } from '@/lib/domain/weeklySheet'
+import { customSearchText, type CustomValues, type FieldDef, type FieldEntity } from '@/lib/domain/customFields'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
 
 export const CURRENT_INDEX_VERSION = 1
 export const INDEX_CHUNKER_VERSION = 'md1500-v1'
@@ -113,14 +115,36 @@ function ownerLine(raw: unknown): string | null {
   return teams.length ? `담당팀: ${[...new Set(teams)].join(', ')}` : null
 }
 
+async function loadSearchableCustomDefs(
+  client: SupabaseKnowledgeClient,
+  projectId: string | null | undefined,
+  entity: FieldEntity,
+): Promise<FieldDef[]> {
+  if (!projectId) return []
+  try {
+    const config = await getProjectConfig(projectId, { client: client as never })
+    const state = config.keys[`fields.${entity}` as const]
+    if (state && (state.status === 'set' || state.status === 'default')) {
+      const defs = state.value as FieldDef[]
+      return (defs ?? []).filter(d => d.active && d.searchable)
+    }
+    return []
+  } catch {
+    return []
+  }
+}
+
 async function loadWbsItem(client: SupabaseKnowledgeClient, job: ClaimedIndexJob): Promise<IndexContentLoadResult> {
-  const { data, error } = await client.from('wbs_items')
-    .select('id, project_id, code, name, biz, deliverable, planned_start, planned_end, actual_pct, updated_at, item_owners(kind, teams(code))')
-    .eq('id', job.entityId)
-    .maybeSingle()
-  if (error) return readError('WBS_ITEMS_READ_FAILED', error)
-  if (!data) return { ok: true, data: null }
-  const row = data as Row
+  const [wbsResult, customDefs] = await Promise.all([
+    client.from('wbs_items')
+      .select('id, project_id, code, name, biz, deliverable, planned_start, planned_end, actual_pct, updated_at, custom, item_owners(kind, teams(code))')
+      .eq('id', job.entityId)
+      .maybeSingle(),
+    loadSearchableCustomDefs(client, job.projectId, 'wbs_item'),
+  ])
+  if (wbsResult.error) return readError('WBS_ITEMS_READ_FAILED', wbsResult.error)
+  if (!wbsResult.data) return { ok: true, data: null }
+  const row = wbsResult.data as Row
   if (row.project_id !== job.projectId || row.id !== job.entityId) return scopeMismatch()
 
   const code = str(row.code) ?? ''
@@ -130,6 +154,8 @@ async function loadWbsItem(client: SupabaseKnowledgeClient, job: ClaimedIndexJob
     : null
   const plannedStart = safeDate(row.planned_start)
   const plannedEnd = safeDate(row.planned_end)
+  const customValues = (row.custom && typeof row.custom === 'object' ? row.custom : {}) as CustomValues
+  const customLines = customSearchText(customDefs, customValues)
   const text = joinLines([
     `# WBS ${code} ${name}`.trim(),
     str(row.biz) ? `구분: ${str(row.biz)}` : null,
@@ -137,6 +163,7 @@ async function loadWbsItem(client: SupabaseKnowledgeClient, job: ClaimedIndexJob
     plannedStart || plannedEnd ? `계획 기간: ${plannedStart ?? '미정'} ~ ${plannedEnd ?? '미정'}` : null,
     pct !== null ? `진행률: ${pct}%` : null,
     ownerLine(row.item_owners),
+    customLines || null,
   ])
   return {
     ok: true,
@@ -164,15 +191,16 @@ async function loadWeeklyReport(client: SupabaseKnowledgeClient, job: ClaimedInd
 
   // 행은 영역 id 로 묶인다(SP4) — 머리는 그 프로젝트 주간 영역의 이름, 순서는 시트와 같은 visibleRows(D32).
   // 지운 열(section·module·sort_order)을 고르면 열 drop 뒤 조회 전체가 42703 으로 실패한다(런타임에서만 드러난다).
-  const [rowsResult, areasResult] = await Promise.all([
+  const [rowsResult, areasResult, customDefs] = await Promise.all([
     client.from('weekly_report_rows')
-      .select('area_id, this_content, this_issue, next_content, next_issue, updated_at')
+      .select('area_id, this_content, this_issue, next_content, next_issue, updated_at, custom')
       .eq('report_id', job.entityId)
       .eq('project_id', report.project_id),
     client.from('project_areas')
       .select('id, code, name, sort_order, active')
       .eq('project_id', report.project_id)
       .eq('kind', 'weekly_section'),
+    loadSearchableCustomDefs(client, job.projectId, 'weekly_row'),
   ])
   if (rowsResult.error) return readError('WEEKLY_ROWS_READ_FAILED', rowsResult.error)
   if (areasResult.error) return readError('WEEKLY_AREAS_READ_FAILED', areasResult.error)
@@ -190,6 +218,7 @@ async function loadWeeklyReport(client: SupabaseKnowledgeClient, job: ClaimedInd
     thisIssue: str(row.this_issue) ?? '',
     nextContent: str(row.next_content) ?? '',
     nextIssue: str(row.next_issue) ?? '',
+    custom: (row.custom && typeof row.custom === 'object' ? row.custom : {}) as CustomValues,
     updatedAt: row.updated_at,
   })), areas)
 
@@ -203,9 +232,11 @@ async function loadWeeklyReport(client: SupabaseKnowledgeClient, job: ClaimedInd
       ['차주 업무', row.nextContent],
       ['차주 이슈', row.nextIssue],
     ].filter((cell): cell is [string, string] => Boolean(cell[1] && cell[1].trim()))
-    if (!cells.length) continue
+    const customText = customSearchText(customDefs, row.custom ?? {})
+    if (!cells.length && !customText) continue
     lines.push(`## ${rowLabel(row, areas)}`)
     for (const [label, value] of cells) lines.push(`${label}: ${value.trim()}`)
+    if (customText) lines.push(customText)
     const rowUpdated = safeTimestamp(row.updatedAt)
     // 멀티셀 편집은 행 단위로 갱신되므로 최신 시각은 보고서·행 전체의 max가 원본 시각이다.
     if (rowUpdated && (!latest || Date.parse(rowUpdated) > Date.parse(latest))) latest = rowUpdated
@@ -291,18 +322,23 @@ async function loadAnnouncement(client: SupabaseKnowledgeClient, job: ClaimedInd
 }
 
 async function loadIssue(client: SupabaseKnowledgeClient, job: ClaimedIndexJob): Promise<IndexContentLoadResult> {
-  const { data, error } = await client.from('issues')
-    .select('id, project_id, code, title, body, status, severity, owner_department, sub_process, resolution_note, due_date, related_systems, created_at, updated_at')
-    .eq('id', job.entityId)
-    .maybeSingle()
-  if (error) return readError('ISSUES_READ_FAILED', error)
-  if (!data) return { ok: true, data: null }
-  const row = data as Row
+  const [issueResult, customDefs] = await Promise.all([
+    client.from('issues')
+      .select('id, project_id, code, title, body, status, severity, owner_department, sub_process, resolution_note, due_date, related_systems, created_at, updated_at, custom')
+      .eq('id', job.entityId)
+      .maybeSingle(),
+    loadSearchableCustomDefs(client, job.projectId, 'issue'),
+  ])
+  if (issueResult.error) return readError('ISSUES_READ_FAILED', issueResult.error)
+  if (!issueResult.data) return { ok: true, data: null }
+  const row = issueResult.data as Row
   if (row.project_id !== job.projectId) return scopeMismatch()
 
   const code = str(row.code)
   if (!code) return readError('ISSUE_CODE_MISSING', new Error('이슈 코드가 없습니다.'))
   const title = str(row.title) ?? '이슈'
+  const customValues = (row.custom && typeof row.custom === 'object' ? row.custom : {}) as CustomValues
+  const customLines = customSearchText(customDefs, customValues)
   const text = joinLines([
     `# 이슈 ${code} ${title}`,
     str(row.status) ? `상태: ${str(row.status)}` : null,
@@ -313,6 +349,7 @@ async function loadIssue(client: SupabaseKnowledgeClient, job: ClaimedIndexJob):
     Array.isArray(row.related_systems) && row.related_systems.length > 0 ? `연관 시스템: ${row.related_systems.join(', ')}` : null,
     str(row.body),
     str(row.resolution_note) ? `조치: ${str(row.resolution_note)}` : null,
+    customLines || null,
   ])
   return {
     ok: true,

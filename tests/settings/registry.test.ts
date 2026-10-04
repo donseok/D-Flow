@@ -65,8 +65,9 @@ describe('등록 키', () => {
       'project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start',
       'project/issues.id_policy', 'project/issues.analysis', 'project/minutes.attachments',
       'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources', 'project/workflow.issue_statuses', 'project/fields.wbs_item', 'project/fields.issue', 'project/fields.weekly_row'])
-    expect(ALL.filter((d) => d.seedFrom).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start', 'project/minutes.attachments'])
-    expect(ALL.every((d) => d.reindexOn === undefined)).toBe(true)
+    expect(ALL.filter((d) => d.reindexOn).map((d) => `${d.scope}/${d.key}`)).toEqual([
+      'project/fields.wbs_item', 'project/fields.issue', 'project/fields.weekly_row',
+    ])
     expect(ALL.filter((d) => d.edit).map((d) => `${d.scope}/${d.key}`)).toEqual(['workspace/branding.accent', 'project/calendar.week_start',
       'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources', 'project/issues.cause_categories',
       'project/workflow.issue_statuses'])

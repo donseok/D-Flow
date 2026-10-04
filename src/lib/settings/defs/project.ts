@@ -256,18 +256,21 @@ export const PROJECT_DEFS = [
     parse: raw => parseFieldDefs('wbs_item', raw),
     widget: { kind: 'custom', component: 'CustomFieldsSettings' }, editor: 'project_admin', apply: 'immediate', impact: ['guarded'],
     sql: { readers: ['enforce_custom_fields', 'custom_fields_ref_check', 'settings_ref_check'] },
+    reindexOn: ['label', 'searchable', 'options.label'] as const,
   }),
   defineSetting<'fields.issue', FieldDef[]>({
     key: 'fields.issue', scope: 'project', module: 'issues', default: [],
     parse: raw => parseFieldDefs('issue', raw),
     widget: { kind: 'custom', component: 'CustomFieldsSettings' }, editor: 'project_admin', apply: 'immediate', impact: ['guarded'],
     sql: { readers: ['enforce_custom_fields', 'custom_fields_ref_check', 'settings_ref_check'] },
+    reindexOn: ['label', 'searchable', 'options.label'] as const,
   }),
   defineSetting<'fields.weekly_row', FieldDef[]>({
     key: 'fields.weekly_row', scope: 'project', module: 'weekly', default: [],
     parse: raw => parseFieldDefs('weekly_row', raw),
     widget: { kind: 'custom', component: 'CustomFieldsSettings' }, editor: 'project_admin', apply: 'immediate', impact: ['guarded'],
     sql: { readers: ['enforce_custom_fields', 'custom_fields_ref_check', 'settings_ref_check'] },
+    reindexOn: ['label', 'searchable', 'options.label'] as const,
   }),
 ] as const satisfies readonly SettingDef[]
 export type { ModuleId }
