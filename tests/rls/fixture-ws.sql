@@ -188,6 +188,10 @@ insert into public.agent_watchers (id, user_id, agent, project_id) values
   ('00000000-0000-0000-7e57-000000001127', '00000000-0000-0000-7e57-0000000000a3', 'rls-agent', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.agent_work_reports (id, work_order_id, kind, percent, summary, agent) values
   ('00000000-0000-0000-7e57-000000001128', '00000000-0000-0000-7e57-00000000110b', 'progress', 10, 'rls', 'rls-agent') on conflict do nothing;
+-- SP5b W1: 승인 원장 A 행 하나(전수 교차 탐침용). 철회된 행이라 workflow-parity 등의 라운드 판정에 끼지 않는다
+insert into public.wbs_stage_approvals (id, project_id, wbs_item_id, round, step_code, via, approved_by, revoked_at, revoked_by, revoke_reason) values
+  ('00000000-0000-0000-7e57-00000000112a', '00000000-0000-0000-7e57-0000000000c1', '00000000-0000-0000-7e57-0000000000f1', 999, 'review', 'set_stage',
+   '00000000-0000-0000-7e57-0000000000a3', now(), '00000000-0000-0000-7e57-0000000000a3', 'stage_reset') on conflict do nothing;
 insert into public.project_invites (id, workspace_id, project_id, email, access_role, token_hash, created_by, expires_at) values
   ('00000000-0000-0000-7e57-000000001129', '00000000-0000-0000-7e57-00000000aa01', '00000000-0000-0000-7e57-0000000000c1', 'rls-invitee@example.com', 'member', 'rls-invite-hash', '00000000-0000-0000-7e57-0000000000a2', now() + interval '1 year')
   on conflict do nothing;

@@ -47,7 +47,10 @@ describe('0011 사후검증 블록', () => {
   })
 
   it('⑪ 트리거 — 꺼짐(D)뿐 아니라 복제 세션에서만 도는 것(R)도 잡는다. 항상(A)은 평소 세션에서 돌므로 통과', async () => {
-    const sql = block('트리거가 없다: %')
+    // SP5b(D11 — 의도적 수정 표): apply_workflow_event 가 9인자가 됐다 — 블록 안 옛 시그니처 리터럴을 지금 카탈로그의 시그니처로 바꿔 같은 검사를 돈다
+    const { rows: [cur] } = await pool.query<{ sig: string }>(
+      `select 'public.' || p.oid::regprocedure::text as sig from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'apply_workflow_event'`)
+    const sql = block('트리거가 없다: %').replaceAll('public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid, uuid)', cur.sig)
     expect(await runAfter(sql, [])).toBeNull()
     expect(await runAfter(sql, ['alter table public.wbs_items disable trigger guard_workflow_actual'])).toMatchObject(POSTCHECK)
     expect(await runAfter(sql, ['alter table public.wbs_items enable replica trigger guard_workflow_actual'])).toMatchObject(POSTCHECK)

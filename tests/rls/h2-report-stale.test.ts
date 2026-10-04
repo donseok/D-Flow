@@ -107,12 +107,15 @@ describe('H2-i apply_workflow_event p_expected_report_id', () => {
     })
   })
 
+  // SP5b(D11 — 의도적 수정 표): 9인자(p_expected_step)가 지금 시그니처다 — 0011 의 8인자도 옛 것이 됐다
   it('새 시그니처만 있고 service_role 만 실행한다(authenticated·anon 없음)', async () => {
+    const SIG = 'public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid, uuid, text)'
     const { rows: [r] } = await pool.query(`select
-      to_regprocedure('public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid)') is null as old_gone,
-      has_function_privilege('authenticated', 'public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid, uuid)', 'EXECUTE') as auth,
-      has_function_privilege('anon', 'public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid, uuid)', 'EXECUTE') as anon,
-      has_function_privilege('service_role', 'public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid, uuid)', 'EXECUTE') as svc`)
+      to_regprocedure('public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid)') is null
+        and to_regprocedure('public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid, uuid)') is null as old_gone,
+      has_function_privilege('authenticated', '${SIG}', 'EXECUTE') as auth,
+      has_function_privilege('anon', '${SIG}', 'EXECUTE') as anon,
+      has_function_privilege('service_role', '${SIG}', 'EXECUTE') as svc`)
     expect(r).toEqual({ old_gone: true, auth: false, anon: false, svc: true })
   })
 
@@ -123,7 +126,7 @@ describe('H2-i apply_workflow_event p_expected_report_id', () => {
                 from aclexplode(p.proacl) a where a.privilege_type = 'EXECUTE') as grantees
         from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'apply_workflow_event'`)
     expect(rows).toEqual([{
-      sig: 'apply_workflow_event(text,uuid,uuid,uuid,text,text,uuid,uuid)', definer: false, config: null,
+      sig: 'apply_workflow_event(text,uuid,uuid,uuid,text,text,uuid,uuid,text)', definer: false, config: null,
       grantees: ['postgres', 'service_role'],
     }])
   })

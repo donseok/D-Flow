@@ -1,0 +1,1533 @@
+{
+ "_comment": "SP5b W1 골든 — TS(approvalSteps·agentWork·stageCredits·레지스트리 parse)와 SQL(workflow_value_of·wbs_predecessor_reached·wbs_stage_reaches_gate)이 같은 파일을 읽는다. 기대값은 개정 §3.3.3 표·§2.8.2 검증 열에서 직접 적었다(어느 구현의 출력도 아니다).",
+ "defaults": {
+  "workflow.stage_credits": {
+   "default": {
+    "as": 0,
+    "ip": 30,
+    "rw": 50,
+    "im": 80,
+    "xx": 100
+   }
+  },
+  "workflow.credit_policy": {
+   "step": 5,
+   "min_gap": 10
+  },
+  "workflow.approval_steps": [
+   {
+    "code": "review",
+    "label": null,
+    "approver": "subtree_or_admin"
+   }
+  ],
+  "workflow.approval_distinct_approvers": true,
+  "workflow.predecessor_gate": "reached",
+  "workflow.wbs_stage_labels": {}
+ },
+ "predecessor": [
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": null,
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "as",
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "ip",
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "im",
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "reached",
+   "stage": "xx",
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": null,
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "as",
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "ip",
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": false
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "im",
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": false,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": false,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": false,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": false,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": false,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": false,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": true,
+   "actual": null,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": true,
+   "actual": null,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": true,
+   "actual": 99.5,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": true,
+   "actual": 99.5,
+   "dev": true,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": true,
+   "actual": 100,
+   "dev": false,
+   "reached": true
+  },
+  {
+   "gate": "final",
+   "stage": "xx",
+   "approved": true,
+   "actual": 100,
+   "dev": true,
+   "reached": true
+  }
+ ],
+ "stageReaches": [
+  {
+   "stage": null,
+   "gate": "reached",
+   "reaches": false
+  },
+  {
+   "stage": "as",
+   "gate": "reached",
+   "reaches": false
+  },
+  {
+   "stage": "ip",
+   "gate": "reached",
+   "reaches": false
+  },
+  {
+   "stage": "im",
+   "gate": "reached",
+   "reaches": true
+  },
+  {
+   "stage": "xx",
+   "gate": "reached",
+   "reaches": true
+  },
+  {
+   "stage": null,
+   "gate": "final",
+   "reaches": false
+  },
+  {
+   "stage": "as",
+   "gate": "final",
+   "reaches": false
+  },
+  {
+   "stage": "ip",
+   "gate": "final",
+   "reaches": false
+  },
+  {
+   "stage": "im",
+   "gate": "final",
+   "reaches": false
+  },
+  {
+   "stage": "xx",
+   "gate": "final",
+   "reaches": true
+  }
+ ],
+ "shape": {
+  "workflow.approval_steps": [
+   {
+    "value": [
+     {
+      "code": "review",
+      "label": null,
+      "approver": "subtree_or_admin"
+     }
+    ],
+    "ok": true
+   },
+   {
+    "value": [
+     {
+      "code": "internal",
+      "label": "내부 검토",
+      "approver": "subtree_or_admin"
+     },
+     {
+      "code": "client",
+      "label": "고객 승인",
+      "approver": "admin"
+     }
+    ],
+    "ok": true
+   },
+   {
+    "value": [
+     {
+      "code": "internal",
+      "label": "내부 검토",
+      "approver": "subtree_or_admin"
+     },
+     {
+      "code": "qa",
+      "label": "품질",
+      "approver": "subtree_or_admin"
+     },
+     {
+      "code": "client",
+      "label": "고객 승인",
+      "approver": "admin"
+     }
+    ],
+    "ok": true
+   },
+   {
+    "value": [],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "internal",
+      "label": "내부 검토",
+      "approver": "subtree_or_admin"
+     },
+     {
+      "code": "qa",
+      "label": "품질",
+      "approver": "subtree_or_admin"
+     },
+     {
+      "code": "client",
+      "label": "고객 승인",
+      "approver": "admin"
+     },
+     {
+      "code": "x",
+      "label": "x",
+      "approver": "admin"
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "internal",
+      "label": null,
+      "approver": "admin"
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "review",
+      "label": null,
+      "approver": "admin"
+     }
+    ],
+    "ok": true
+   },
+   {
+    "value": [
+     {
+      "code": "Bad",
+      "label": "x",
+      "approver": "admin"
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "a",
+      "label": "x",
+      "approver": "owner"
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "a",
+      "label": "",
+      "approver": "admin"
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "a",
+      "label": "   ",
+      "approver": "admin"
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "a",
+      "label": "xxxxxxxxxxxxxxxxxxxxx",
+      "approver": "admin"
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "a",
+      "label": "xxxxxxxxxxxxxxxxxxxx",
+      "approver": "admin"
+     }
+    ],
+    "ok": true
+   },
+   {
+    "value": [
+     {
+      "code": "a",
+      "label": "x",
+      "approver": "admin"
+     },
+     {
+      "code": "a",
+      "label": "y",
+      "approver": "admin"
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "a",
+      "label": "x",
+      "approver": "admin",
+      "extra": 1
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": [
+     {
+      "code": "a",
+      "approver": "admin"
+     }
+    ],
+    "ok": false
+   },
+   {
+    "value": {
+     "code": "a"
+    },
+    "ok": false
+   },
+   {
+    "value": "review",
+    "ok": false
+   }
+  ],
+  "workflow.credit_policy": [
+   {
+    "value": {
+     "step": 5,
+     "min_gap": 10
+    },
+    "ok": true
+   },
+   {
+    "value": {
+     "step": 1,
+     "min_gap": 1
+    },
+    "ok": true
+   },
+   {
+    "value": {
+     "step": 5,
+     "min_gap": 5
+    },
+    "ok": true
+   },
+   {
+    "value": {
+     "step": 2,
+     "min_gap": 5
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "step": 5,
+     "min_gap": 0
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "step": 5,
+     "min_gap": 11
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "step": 5,
+     "min_gap": 2.5
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "step": 5
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "step": 5,
+     "min_gap": 5,
+     "x": 1
+    },
+    "ok": false
+   },
+   {
+    "value": [
+     5,
+     5
+    ],
+    "ok": false
+   },
+   {
+    "value": "5",
+    "ok": false
+   }
+  ],
+  "workflow.stage_credits": [
+   {
+    "value": {
+     "default": {
+      "as": 0,
+      "ip": 30,
+      "rw": 50,
+      "im": 80,
+      "xx": 100
+     }
+    },
+    "ok": true
+   },
+   {
+    "value": {
+     "default": {
+      "as": 0,
+      "ip": 20,
+      "rw": 25,
+      "im": 90,
+      "xx": 100
+     }
+    },
+    "ok": true
+   },
+   {
+    "value": {
+     "default": {
+      "as": 0,
+      "ip": 22,
+      "rw": 23,
+      "im": 90,
+      "xx": 100
+     }
+    },
+    "ok": true
+   },
+   {
+    "value": {
+     "default": {
+      "as": 0,
+      "ip": 30,
+      "rw": 30,
+      "im": 90,
+      "xx": 100
+     }
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "default": {
+      "as": 0,
+      "ip": 30,
+      "rw": 50,
+      "im": 80,
+      "xx": 90
+     }
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "default": {
+      "as": 0,
+      "ip": 30,
+      "rw": 50,
+      "im": 80
+     }
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "default": {
+      "as": 0,
+      "ip": 30.5,
+      "rw": 50,
+      "im": 80,
+      "xx": 100
+     }
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "default": {
+      "as": -5,
+      "ip": 30,
+      "rw": 50,
+      "im": 80,
+      "xx": 100
+     }
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "default": {
+      "as": 0,
+      "ip": 30,
+      "rw": 50,
+      "im": 80,
+      "xx": 100,
+      "zz": 1
+     }
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "default": {
+      "as": 0,
+      "ip": 30,
+      "rw": 50,
+      "im": 80,
+      "xx": 100
+     },
+     "etc": {}
+    },
+    "ok": false
+   },
+   {
+    "value": {},
+    "ok": false
+   },
+   {
+    "value": [
+     1
+    ],
+    "ok": false
+   }
+  ],
+  "workflow.approval_distinct_approvers": [
+   {
+    "value": true,
+    "ok": true
+   },
+   {
+    "value": false,
+    "ok": true
+   },
+   {
+    "value": "true",
+    "ok": false
+   },
+   {
+    "value": 1,
+    "ok": false
+   }
+  ],
+  "workflow.predecessor_gate": [
+   {
+    "value": "reached",
+    "ok": true
+   },
+   {
+    "value": "final",
+    "ok": true
+   },
+   {
+    "value": "Final",
+    "ok": false
+   },
+   {
+    "value": 1,
+    "ok": false
+   }
+  ],
+  "workflow.wbs_stage_labels": [
+   {
+    "value": {},
+    "ok": true
+   },
+   {
+    "value": {
+     "im": "내부 검토",
+     "none": "대기"
+    },
+    "ok": true
+   },
+   {
+    "value": {
+     "im": ""
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "zz": "x"
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "im": "xxxxxxxxxxxxxxxxxxxxx"
+    },
+    "ok": false
+   },
+   {
+    "value": {
+     "im": 1
+    },
+    "ok": false
+   },
+   {
+    "value": [
+     "im"
+    ],
+    "ok": false
+   }
+  ]
+ }
+}
