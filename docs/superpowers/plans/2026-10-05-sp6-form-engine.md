@@ -33,7 +33,9 @@ SP5c(사용자 정의 필드)의 모든 단계(F~Z)가 성공적으로 구현·�
 - [ ] V: 양식 병합 엔진 및 라우트 연결
   - [x] V1: `capItems`·`lineCost`·`paginateGroups`·`paginateLines` 를 `engine/paginate.ts` 로 이동(정본 §4.3·§4.8). `templateFill.ts` 는 재수출만 한다. 렌더 삭제·라우트 전환은 render 이후
   - [x] V scan: `FormEngine.scan` — pptx 는 `slideN.xml` 의 `<a:p>` 만, xlsx 는 셀 문자열·리치텍스트만(§4.4.1·§4.7.2). 등록은 `ScanReport` 를 저장하고 문법·구조 오류면 incoming 을 지운다. `tokenScan:false` 행은 활성화 거부. 카탈로그 매핑 판정은 활성화에 둔다
-  - [ ] PPTX/XLSX `FormEngine.render` (pptx 슬라이드·행·문단 복제, xlsx duplicateRow, OPC 배선)
+  - [x] V render pptx: 값 치환(런 병합·빈 값·개행 문단), `{{#items}}`·`{{#rows}}`·`{{#slide}}`, OPC 배선. §4.4.6 넘침 연속 슬라이드는 아직 없다
+  - [ ] XlsxFormEngine.render (`duplicateRow`, 셀 값)
+  - [ ] pptx 넘침 연속 슬라이드 (§4.4.6 `max_lines_per_cell`·`max_rows_per_slide`)
   - [ ] 활성화의 `engineVersion` 불일치 재스캔(§4.7.3) — 지금은 재등록 오류다
   - [ ] `/api/report`, `/api/export` 라우트 연동 (활성 템플릿 우선, 미등록 시 기본 템플릿 폴백). 정본 §4.8 은 `/api/issue-analysis` 와 `GET /api/export?form=1` 도 같은 전환
   - [ ] `X-Form-Template: default | custom` 응답 헤더
