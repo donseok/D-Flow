@@ -65,6 +65,8 @@ export default async function WbsPage({
   // 선행 기준·승인 주문 축(SP5b D21) — 상세 패널의 "시작 가능"이 claim 게이트와 같은 판정이 되게. 기준이 손상이면 final(엄격 — 시작 가능으로
   // 위장하지 않는다). agents 가 꺼진 프로젝트는 주문 표를 읽지 않는다(승인 축 = false)
   const gate = pick(pc.cfg, 'workflow.predecessor_gate')
+  // 단계 이름(SP5b W2) — 손상이면 기본 이름으로 그린다(표시 전용 — 판정에 쓰지 않는다)
+  const stageLabels = pick(pc.cfg, 'workflow.wbs_stage_labels')
   if (!gate.ok) console.error(`[wbs] 선행 기준 손상(project=${projectId}) — final 로 판정한다`)
   const approvedItemIds = (await moduleState({ projectId }, 'agents')) === 'on' ? await getApprovedItemIds(projectId) : []
   const pinned = roster.ok && keywords.ok ? undefined : (
@@ -107,6 +109,7 @@ export default async function WbsPage({
         members={members}
         predecessorGate={gate.ok ? gate.value : 'final'}
         approvedItemIds={approvedItemIds ?? []}
+        stageLabels={stageLabels.ok ? stageLabels.value : null}
       />
     </ProjectPageShell>
   )

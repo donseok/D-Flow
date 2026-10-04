@@ -17,6 +17,8 @@ import { refreshAgentHub } from '@/app/actions/agentHub'
 import { useWbsRealtimeBurst } from '@/lib/hooks/useWbsRealtimeBurst'
 import { applyWbsChange } from '@/lib/domain/wbsRealtime'
 import { RowDetailPanel } from '@/components/wbs/RowDetailPanel'
+import { StageLabelsProvider } from '@/components/wbs/StageLabelsProvider'
+import type { StageLabels } from '@/lib/settings/defs/project'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -49,6 +51,8 @@ export type HubWbsBundle = {
   /** 선행 기준·승인 주문 축(SP5b D21) — 상세 패널의 spec 선행 판정 재료. 옛 호출부·시험은 생략할 수 있다(reached·승인 축 없음) */
   predecessorGate?: PredecessorGate
   approvedItemIds?: readonly string[]
+  /** 프로젝트의 단계 이름(SP5b W2) — 없으면 기본 이름 */
+  stageLabels?: StageLabels | null
 }
 
 /** 트리를 전위 순서로 평탄화 — 색인·일정 계산용(WbsGanttSheet 의 지역 flatten 과 같은 규칙). */
@@ -171,6 +175,7 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
   )
 
   return (
+    <StageLabelsProvider labels={wbs.stageLabels}>
     <AgentFrame projectId={hub.projectId} projectName={hub.projectName} title="위임·승인" lede={lede} tiles={tiles} tools={tools}>
       <div className="space-y-4">
         {wbs.membersError && <RosterLoadError error={wbs.membersError} />}
@@ -215,5 +220,6 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
         )}
       </div>
     </AgentFrame>
+    </StageLabelsProvider>
   )
 }

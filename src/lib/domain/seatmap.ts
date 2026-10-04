@@ -47,6 +47,8 @@ export interface SeatmapRows {
   reports?: ReportRow[]
   /** 프로젝트별 선행 기준(SP5b D21) — 없는 프로젝트는 reached(현행). 로더가 ready 좌석이 있는 프로젝트마다 싣는다 */
   gates?: Readonly<Record<string, PredecessorGate>>
+  /** 프로젝트별 단계 이름(SP5b W2) — 선행 대기 문구의 단계 표기 */
+  stageLabels?: Readonly<Record<string, Readonly<Partial<Record<string, string>>>>>
   /** 결재 대기(reported) 항목의 대기 승인 단계(SP5b S20 — 승인 가능 셈 재료). 없는 항목은 현행으로 센다 */
   stepApprovals?: Readonly<Record<string, { approver: 'subtree_or_admin' | 'admin'; approvedBy: readonly string[]; distinct: boolean }>>
 }
@@ -325,6 +327,7 @@ export function assembleSeatmap(rows: SeatmapRows, nowMs: number, opts: { mine?:
         assignee: item.assignee_member_id ? { name: m?.name ?? '(로스터에 없음)', user_id: m?.user_id ?? null } : null,
         watchers: watchersOf(o.project_id),
         gate: rows.gates?.[o.project_id] ?? 'reached',
+        stageLabels: rows.stageLabels?.[o.project_id],
       })
       // 선행 대기는 빈자리가 아니다 — 올 사람이 정해져 있고 앞 작업만 기다린다. 실루엣으로 그린다(안 A).
       if (seat.waitReason?.kind === 'dependency') seat.anim = 'waiting'

@@ -28,6 +28,8 @@ export interface AgentHubRows {
   gate?: PredecessorGate
   /** 결재 대기 항목(itemId)의 대기 승인 단계(SP5b — 카드 표시·승인 가능 셈 재료). 없으면 현행(기본 1단계)으로 센다 */
   queueApprovals?: Readonly<Record<string, HubStepApproval>>
+  /** 프로젝트의 단계 이름(SP5b W2) — 대기 사유 문구의 단계 표기. 없으면 기본 이름 */
+  stageLabels?: Readonly<Partial<Record<string, string>>>
 }
 /** 결재 대기 단계 재료 — agent/approvalState 의 QueueApproval 과 같은 꼴(도메인은 그 모듈을 모른다) */
 export interface HubStepApproval {
@@ -213,6 +215,7 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
           assignee: item.assignee_member_id ? { name: assigneeMember?.name ?? '(로스터에 없음)', user_id: assigneeMember?.user_id ?? null } : null,
           watchers: hubWatchers,
           gate: rows.gate ?? 'reached',
+          stageLabels: rows.stageLabels,
         })
       : null
     if (waitReason !== null && (waitReason.kind === 'dependency' || waitReason.kind === 'agent_off')) counters.stuck++

@@ -15,6 +15,7 @@ import { useDebouncedSave } from './useDebouncedSave'
 import { PendingSaveChip } from './PendingSaveChip'
 import type { DictKey } from '@/lib/i18n/dict'
 import { STAGE_CODES, type StageCode } from '@/lib/domain/stageLabels'
+import { useStageLabel } from './StageLabelsProvider'
 
 type Stage = StageCode
 /** 서버 확정 값이자 debounce 저장 필드 — getWbsAssigneeStage 의 반환 형태 그대로다. */
@@ -92,6 +93,7 @@ export function WbsAssigneeStagePanel({
   // 서버 액션 + router.refresh() 가 나가 WBS 페이지 전체가 다시 렌더됐다. 마지막 변경 뒤 SAVE_DEBOUNCE_MS
   // 가 지나면(또는 패널 닫힘·항목 변경·「지금 저장」) 모아서 순서대로 저장하고 refresh 는 1회만 부른다.
   // 화면은 quick.view 로 낙관 표시하고, 실패한 필드는 대기에서 빠져 loaded(서버 확정 값)로 돌아간다.
+  const stageName = useStageLabel()   // 프로젝트의 단계 이름(SP5b W2) — 없는 칸은 사전 이름
   const quick = useDebouncedSave<AssigneeStage, AssigneeStageResult>({
     scope: itemId,
     baseline: loaded && loaded !== 'error' ? loaded : null,
@@ -242,17 +244,17 @@ export function WbsAssigneeStagePanel({
                       title={delegated ? t('wbs.stageLockedByOrder') : undefined}
                       className="app-input h-9 text-xs"
                     >
-                      <option value="">{t('wbs.stageNoneOption')}</option>
+                      <option value="">{stageName(null, t('wbs.stageNoneOption'))}</option>
                       {/* 개발 워크플로 단계는 최종단계의 것이다 — 상위 항목에서는 서버(setWbsStage)가
                           거절하므로 고를 수 있게 두면 화면이 거절당할 값을 권하는 꼴이 된다.
                           '미착수'는 남긴다: 이미 잘못 찍힌 값을 지울 길이 여기뿐이다. */}
                       {!hasChildren && STAGES.map(s => (
-                        <option key={s} value={s} disabled={s === 'xx' && multiStep && view.stage !== 'xx'}>{t(STAGE_KEYS[s])}</option>
+                        <option key={s} value={s} disabled={s === 'xx' && multiStep && view.stage !== 'xx'}>{stageName(s, t(STAGE_KEYS[s]))}</option>
                       ))}
                     </select>
                   ) : (
                     <p className="text-[13px] text-ink">
-                      {view.stage && STAGE_KEYS[view.stage as Stage] ? t(STAGE_KEYS[view.stage as Stage]) : t('wbs.stageNoneOption')}
+                      {view.stage && STAGE_KEYS[view.stage as Stage] ? stageName(view.stage, t(STAGE_KEYS[view.stage as Stage])) : stageName(null, t('wbs.stageNoneOption'))}
                     </p>
                   )}
                   {editable && view.devWorkflow && hasChildren && (

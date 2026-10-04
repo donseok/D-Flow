@@ -6,9 +6,10 @@ import { STAGE_LABEL_KO, isStageCode } from './stageLabels'
 export type WaitReasonKind = 'dependency' | 'agent_off' | 'agents_busy' | 'pickup'
 export interface WaitReason { kind: WaitReasonKind; label: string; text: string }
 
-export function stageText(stage: string | null): string {
+/** 단계 표기 — labels 는 프로젝트의 단계 이름(SP5b W2 workflow.wbs_stage_labels). 없는 칸은 STAGE_LABEL_KO */
+export function stageText(stage: string | null, labels?: Readonly<Partial<Record<string, string>>>): string {
   if (stage === null) return '단계 없음'
-  return isStageCode(stage) ? `${stage}(${STAGE_LABEL_KO[stage]})` : stage
+  return isStageCode(stage) ? `${stage}(${labels?.[stage] ?? STAGE_LABEL_KO[stage]})` : stage
 }
 
 export interface PredecessorLike {
@@ -32,8 +33,8 @@ export function unmetDepends(depends: string[] | null, byRef: (ref: string) => P
   return out
 }
 
-export function unmetDependsList(u: UnmetDepend[]): string {
-  return u.map(d => d.found ? `${d.code} ${d.name}(현재 ${stageText(d.stage ?? null)})` : `${d.ref}(프로젝트에 없는 항목)`).join(', ')
+export function unmetDependsList(u: UnmetDepend[], labels?: Readonly<Partial<Record<string, string>>>): string {
+  return u.map(d => d.found ? `${d.code} ${d.name}(현재 ${stageText(d.stage ?? null, labels)})` : `${d.ref}(프로젝트에 없는 항목)`).join(', ')
 }
 
 export interface WatcherLike { agent: string; user_id: string | null; slots: number | null; busy: number | null; until_label: string | null }
@@ -50,6 +51,8 @@ export function deriveWaitReason(args: {
   watchers: WatcherLike[]
   /** 프로젝트의 선행 기준(SP5b D21) — claim 게이트와 같은 판정·문구. 생략은 reached(호환 규칙 S1), src 호출부는 늘 넘긴다 */
   gate?: PredecessorGate
+  /** 프로젝트의 단계 이름(SP5b W2) — 선행 대기 문구의 단계 표기 */
+  stageLabels?: Readonly<Partial<Record<string, string>>>
 }): WaitReason {
   const gate = args.gate ?? 'reached'
   const unmet = unmetDepends(args.depends, args.predecessorByRef, gate)
@@ -59,7 +62,7 @@ export function deriveWaitReason(args: {
       : '선행이 검수 대기(im) 이상이 되거나, 그 주문이 승인되거나, 실적이 100% 가 돼야'
     return {
       kind: 'dependency', label: '선행 대기',
-      text: `선행 작업이 아직 끝나지 않았습니다: ${unmetDependsList(unmet)}. ${need} 이 작업을 집어갈 수 있습니다.`,
+      text: `선행 작업이 아직 끝나지 않았습니다: ${unmetDependsList(unmet, args.stageLabels)}. ${need} 이 작업을 집어갈 수 있습니다.`,
     }
   }
   const a = args.assignee

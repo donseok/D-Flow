@@ -41,6 +41,7 @@ vi.mock('@/lib/agent/approvalState', async () => {
 vi.mock('@/lib/agent/predecessorGate', () => ({
   loadPredecessorGate: vi.fn(async () => 'reached'),
   loadPredecessorGates: vi.fn(async (_admin: unknown, ids: readonly string[]) => new Map([...new Set(ids)].map((id) => [id, 'reached']))),
+  loadStageLabelsMap: vi.fn(async (_admin: unknown, ids: readonly string[]) => new Map([...new Set(ids)].map((id) => [id, {}]))),
 }))
 // SP5b W2 — WBS 화면의 승인 주문 축(src/lib/data/approvedItems.ts) 기본값 = 없음. 페이지 테스트가 주문 표를 흉내 내지 않아도 되게
 vi.mock('@/lib/data/approvedItems', () => ({ getApprovedItemIds: vi.fn(async () => []) }))

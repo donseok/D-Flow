@@ -21,6 +21,8 @@ import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
 import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText } from './shared'
 import { RowDetailPanel } from './RowDetailPanel'
+import { StageLabelsProvider } from './StageLabelsProvider'
+import type { StageLabels } from '@/lib/settings/defs/project'
 import { WbsProgressLens } from './WbsProgressLens'
 import { WbsFontSizeControl } from './WbsFontSizeControl'
 import { useWbsFontScale } from './useWbsFontScale'
@@ -212,6 +214,7 @@ export function WbsGanttSheet({
   members = EMPTY_MEMBERS,
   predecessorGate = 'reached',
   approvedItemIds,
+  stageLabels = null,
 }: {
   items: ComputedItem[]
   dependencies?: TaskDependency[]
@@ -259,6 +262,8 @@ export function WbsGanttSheet({
   predecessorGate?: PredecessorGate
   /** approved 주문이 있는 항목 id(SP5b D21 — 승인 축). agents 꺼짐이면 서버가 빈 목록을 준다 */
   approvedItemIds?: readonly string[]
+  /** 프로젝트의 단계 이름(SP5b W2 — workflow.wbs_stage_labels). null·없는 칸은 사전 이름 */
+  stageLabels?: StageLabels | null
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -1102,6 +1107,7 @@ export function WbsGanttSheet({
   }
 
   return (
+    <StageLabelsProvider labels={stageLabels}>
     <div
       ref={rootRef}
       data-wbs-gantt-sheet
@@ -2153,6 +2159,7 @@ export function WbsGanttSheet({
         />
       )}
     </div>
+    </StageLabelsProvider>
   )
 }
 
