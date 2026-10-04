@@ -300,7 +300,7 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('chat/v2/stream')}#POST`]: sess('chatbot', 'tests/ai/chat-v2-route.test.ts', '로그인 — 요청의 프로젝트 힌트(pageContext·projectId), 없으면 요청의 workspaceId(pageContext 우선, 소속 확인), 둘 다 없으면 400(D26, 과제 34). env 501 은 관문 앞, 강등 501 은 관문 뒤'),
   [`${R('cron/ai-index')}#GET`]: nul('cronSecret', 'CRON_SECRET — 잡마다 moduleState(과제 22)'),
   [`${R('cron/inbox-retention')}#GET`]: nul('cronSecret', 'CRON_SECRET — 알림함 보존(셸)'),
-  [`${R('export')}#GET`]: nul('session', '로그인 + 목록 — WBS 내보내기(core)'),
+  [`${R('export')}#GET`]: { guard: 'projectMember', module: null, note: '정본 §4.8 — requireProjectMember. wbs 는 core 라 모듈 관문은 없다. form=1 은 양식, 그 밖은 프로파일 라운드트립' },
   [`${R('import/execute')}#POST`]: nul('projectAdmin'),
   [`${R('import/inspect')}#POST`]: nul('projectAdmin'),
   [`${R('import/template')}#GET`]: nul('session', '로그인 — 정적 양식(core)'),

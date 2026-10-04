@@ -312,7 +312,7 @@ export interface WbsExportCatalogItem {
   deliverable: string
   owner_text: string
   owners: WbsExportCatalogOwner[]
-  weight_pct: number
+  weight_pct: number | null
   planned_pct: number
   actual_pct: number
   gap: number
