@@ -488,10 +488,12 @@ function AiRecommendedHint({ show, text }: { show: boolean; text: string }) {
 }
 
 export function IssueFormModal({
-  open, onClose, projectId, workspaceId, initial, members, draft, sourcePreview, onCreate, onCreated, entryContext, canManage = false,
+  open, onClose, projectId, workspaceId, initial, members, draft, sourcePreview, onCreate, onCreated, entryContext, canManage = false, supportsCustomFields = false,
 }: {
   entryContext?: IssueEntryContext
   canManage?: boolean
+  /** Custom create handlers opt in only when their atomic server write accepts custom values. */
+  supportsCustomFields?: boolean
   open: boolean
   onClose: () => void
   projectId: string
@@ -528,7 +530,8 @@ export function IssueFormModal({
   // 이후의 저장은 생성을 건너뛰고 남은 첨부만 올린다.
   const createdIdRef = useRef<string | null>(null)
   const customDefs = context?.customFields ?? []
-  const customEnabled = !onCreate || !!initial
+  const customEnabled = !onCreate || !!initial || supportsCustomFields
+  const customCanAdmin = context?.canManageCustom ?? canManage
   const customWriteNeeded = customEnabled && (!!initial || createdIdRef.current === null)
   const [customBase,setCustomBase] = useState<CustomValues>({})
   const [customDraft,setCustomDraft] = useState<CustomValues>({})
@@ -544,7 +547,7 @@ export function IssueFormModal({
     const parsed = initial ? parseCustomValues(initial.custom === undefined && !customDefs.length ? {} : initial.custom) : {ok:true as const,value:{}}
     setCustomUnreadable(!parsed.ok)
     if (parsed.ok) {
-      const seed = initial ? parsed.value : Object.fromEntries(customDefs.filter(d => d.required && d.active && (d.editable_by !== 'admin' || canManage) && d.default !== undefined)
+      const seed = initial ? parsed.value : Object.fromEntries(customDefs.filter(d => d.required && d.active && (d.editable_by !== 'admin' || customCanAdmin) && d.default !== undefined)
         .map(d => [d.key,Array.isArray(d.default) ? [...d.default] : d.default])) as CustomValues
       setCustomBase(initial ? parsed.value : {});setCustomDraft(seed);setCustomErrors({});setCustomStale(false)
     }
@@ -770,8 +773,8 @@ export function IssueFormModal({
       return
     }
     if (customWriteNeeded && (!customReady || customUnreadable || customStale)) return
-    const custom = customWriteNeeded ? (isEdit ? validateCustomValues(customDefs,customDraft,customBase,canManage)
-      : validateCustomInsertValues(customDefs,customDraft,canManage)) : null
+    const custom = customWriteNeeded ? (isEdit ? validateCustomValues(customDefs,customDraft,customBase,customCanAdmin)
+      : validateCustomInsertValues(customDefs,customDraft,customCanAdmin)) : null
     if (custom && !custom.ok) {setCustomErrors(custom.errors);setError(locale === 'ko' ? '추가 정보 입력값을 확인하세요.' : 'Check custom field values.');return}
     const input: IssueFormInput = {
       ...(custom?.ok && customDefs.length ? {custom:custom.value,...(isEdit ? {expectedCustom:customBase} : {})} : {}),
@@ -1059,7 +1062,7 @@ export function IssueFormModal({
         </div>
         <p className="text-[11px] text-ink-subtle">{t('issue.form.dueHint')}</p>
         {customEnabled && customUnreadable && <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보를 읽을 수 없습니다. 행을 새로 조회하세요.' : 'Custom values could not be read. Reload the row.'}</p>}
-        {customEnabled && customReady && !customUnreadable && <CustomFieldDraft defs={customDefs} values={customDraft} base={customBase} canAdmin={canManage} creating={!isEdit} disabled={pending || createdIdRef.current !== null} locale={locale} errors={customErrors}
+        {customEnabled && customReady && !customUnreadable && <CustomFieldDraft defs={customDefs} values={customDraft} base={customBase} canAdmin={customCanAdmin} creating={!isEdit} disabled={pending || createdIdRef.current !== null} locale={locale} errors={customErrors}
           onChange={(key,value)=>{setCustomDraft(prev=>{const next={...prev};if(value===undefined)delete next[key];else next[key]=value;return next});setCustomErrors({})}} />}
         {customEnabled && customStale && <div className="space-y-2">
           <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보가 변경되었습니다. 작성 중인 값은 유지됩니다. 최신 값을 불러온 뒤 저장하세요.' : 'Custom values changed. Your draft is preserved. Load the latest values before saving.'}</p>

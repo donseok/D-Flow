@@ -964,6 +964,7 @@ export function MinuteViewer({
             classificationRecommended: preparedIssueDraft?.mode === 'ai'
               && Boolean(preparedIssueDraft.areaId && preparedIssueDraft.analysis?.subProcess),
           }}
+          supportsCustomFields
           onCreate={createLinkedIssue}
           onCreated={onIssueCreated}
         />

@@ -132,7 +132,8 @@ export async function fetchIssueEntryContext(projectId: string): Promise<{ ok: t
   if (!guard.ok) return guard
   const mod = await requireModule({ projectId }, 'issues')
   if (!mod.ok) return mod
-  return loadIssueEntryContext(projectId)
+  const context = await loadIssueEntryContext(projectId)
+  return context.ok ? { ok: true, value: { ...context.value, canManageCustom: isProjectAdmin(guard.actor, projectId) } } : context
 }
 
 /** 폼의 Major Process 자동완성 후보 — 조회 전용(로그인 사용자, 이슈 읽기 관례와 동일 범위). */
@@ -937,11 +938,10 @@ export async function createIssueFromMinuteBlock(
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, ['issues', 'minutes'])
   if (!mod.ok) return { ok: false, error: mod.error }
-  if (input.custom !== undefined) return { ok: false, error: '회의록 연결 등록의 추가 정보 입력은 아직 지원하지 않습니다.' }
   const checked = validateInput(input, 'minute-create')
   if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
-  const entryError = await checkEntry(projectId, value)
+  const entryError = await checkEntry(projectId, value, undefined, isProjectAdmin(g.actor, projectId))
   if (entryError) return { ok: false, error: entryError }
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
@@ -970,6 +970,7 @@ export async function createIssueFromMinuteBlock(
   // 검증된 block hash/excerpt를 위조하지 못하도록, 파싱 검증이 끝난 서버 액션만 진입한다.
   const { data: created, error } = await admin.rpc('create_issue_from_minute_block', {
     p_project_id: projectId,
+    p_custom: value.custom ?? {},
     p_title: value.title,
     p_body: value.body,
     p_severity: value.severity,

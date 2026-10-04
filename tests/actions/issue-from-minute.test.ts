@@ -1,9 +1,10 @@
 import { actionAreaId } from '../fixtures/issue-areas'
-vi.mock('@/lib/issues/context', async () => ({ loadIssueEntryContext: async () => ({ ok: true, value: (await import('../fixtures/issue-areas')).ACTION_ENTRY_CONTEXT }) }))
+vi.mock('@/lib/issues/context', async () => ({ loadIssueEntryContext: async () => ({ ok: true, value: { ...(await import('../fixtures/issue-areas')).ACTION_ENTRY_CONTEXT, customFields: state.fields } }) }))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fnv1a64, splitMinuteBlocks } from '@/lib/minutes/blocks'
 
 const state = vi.hoisted(() => ({
+  fields: [] as import('@/lib/domain/customFields').FieldDef[],
   client: undefined as unknown,
   admin: undefined as unknown,
 }))
@@ -211,6 +212,7 @@ function asMember() {
 }
 
 beforeEach(() => {
+  state.fields = []
   state.client = undefined
   state.admin = undefined
   createServerClient.mockClear()
@@ -444,6 +446,23 @@ describe('prepareMinuteIssueDraft', () => {
 })
 
 describe('createIssueFromMinuteBlock', () => {
+  it('forwards typed custom values only after source validation to the atomic RPC',async()=>{
+    asMember()
+    state.fields=[{key:'quantity',label:'수량',description:'',type:'number',required:false,active:true,editable_by:'member',show_in_list:false,searchable:false,sort:0}]
+    const fixture=clientsWithVersion();state.client=fixture.client;state.admin=fixture.admin
+    expect(await createIssueFromMinuteBlock('project-1',{...INPUT,custom:{quantity:0}},SOURCE)).toMatchObject({ok:true})
+    expect(fixture.admin.rpc).toHaveBeenCalledWith('create_issue_from_minute_block',expect.objectContaining({p_custom:{quantity:0},p_actor_id:USER.id,p_block_hash:BLOCK.hash}))
+  })
+  it('rejects explicit admin custom input before source and service access but allows omitted required default',async()=>{
+    asMember()
+    state.fields=[{key:'approved',label:'승인',description:'',type:'boolean',required:true,default:false,active:true,editable_by:'admin',show_in_list:false,searchable:false,sort:0}]
+    expect(await createIssueFromMinuteBlock('project-1',{...INPUT,custom:{approved:false}},SOURCE)).toMatchObject({ok:false})
+    expect(createAdminClient).not.toHaveBeenCalled();expect(createServerClient).not.toHaveBeenCalled()
+    const fixture=clientsWithVersion();state.client=fixture.client;state.admin=fixture.admin
+    expect(await createIssueFromMinuteBlock('project-1',{...INPUT,custom:{}},SOURCE)).toMatchObject({ok:true})
+    expect(fixture.admin.rpc).toHaveBeenCalledWith('create_issue_from_minute_block',expect.objectContaining({p_custom:{}}))
+  })
+
   it('프로젝트 역할이 없는 사용자는 DB에 접근하기 전에 거부한다', async () => {
     requireProjectMember.mockResolvedValue({ ok: false, error: '권한 없음' })
     const result = await createIssueFromMinuteBlock('project-1', INPUT, SOURCE)

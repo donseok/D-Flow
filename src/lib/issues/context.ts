@@ -10,6 +10,8 @@ import type { CauseCategoryDef, SeverityDef, SourceDef } from '@/lib/settings/vo
 
 /** vocab = 설정 어휘(SP5 B4). 원인 분류는 분석서만 쓴다 — 손상이면 null(이슈 등록은 막지 않고 분석서가 사유를 낸다) */
 export type IssueEntryContext = {
+  /** Session-derived display permission; row writes independently recheck the actor. */
+  canManageCustom?: boolean
   customFields?: FieldDef[]
   rules: IssueEntryRules; policy: IdPolicy; areas: IssueAreaRef[]
   vocab: { severities: SeverityDef[]; sources: SourceDef[]; causeCategories: CauseCategoryDef[] | null }

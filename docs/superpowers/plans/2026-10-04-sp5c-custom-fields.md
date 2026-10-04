@@ -105,3 +105,8 @@ WBS 시트 추가 열·키보드 이동, 이슈/주간 입력·목록과 필터,
 최종 빌드 앱/전용 A DB에서 일반 폼의 required false 등록→기본 정보/custom 동시 수정→서버가 제목/custom을 동시에 갱신→오래된 폼의 양쪽 변경 차단→사용자 제목/추가 정보 초안 유지→명시적 최신 custom 채택→재저장을 확인했다. 1440/390 화면 눈확인, pageerror/문서 가로 넘침0. 기존 WBS 실제 websocket/CAS·이슈 상세/목록·설정 백필/purge도 함께 통과. 임시 프로젝트/계정과 앱 3101 정리. 증거 `.superpowers/sp5c/issue-form-browser-result.json`, `issue-form-desktop.png`, `issue-form-mobile.png`.
 
 회의록 원문 연결 신규 등록은 별도 RPC가 custom 입력을 받지 않아 아직 추가 정보 입력을 노출하지 않는다. 해당 액션은 custom 공급을 명시적으로 거부해 값을 조용히 버리지 않으며 기존 DB 필수 기본값은 유지한다. 이 RPC 확장, WBS 시트 열/키보드·주간 입력, X/I/Z는 후속이다. SP5c 전체 미완료, fields 카탈로그 stored 유지. 사용자 DB/main에는 적용·통합하지 않았다.
+
+
+2026-10-05: Linked-minute custom inputs now use a service-only required-p_custom overload. SQL rechecks actor/protected keys and inserts core/custom/assignees/source in one transaction while preserving source verification and attachment retry. The form uses the guarded selected-project display permission. Dedicated reset/bootstrap, DB 869/869 and unit 12,311/12,311 passed. Browser and final lint/build evidence is recorded in baseline/sp5c-e2e.md.
+
+Remaining: WBS sheet columns/keyboard, weekly input/carry, Excel roundtrip, AI reindex and final synthetic/performance verification. SP5c remains incomplete; catalog remains stored.

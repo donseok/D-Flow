@@ -474,6 +474,15 @@ describe('IssueFormModal 회의록 초안', () => {
     expect(createIssue).toHaveBeenCalledWith('project-1',expect.objectContaining({title:'Typed create',custom:{quantity:0,verified:false}}))
     expect(vi.mocked(createIssue).mock.calls[0][1]).not.toHaveProperty('expectedCustom')
   })
+  it('opted-in source creation sends admin custom inputs using the fetched project permission',async()=>{
+    const onCreate=vi.fn(async()=>({ok:true,id:'linked-1'}))
+    const defs:FieldDef[]=[{key:'approved',label:'Approval',description:'',type:'boolean',required:true,default:false,active:true,editable_by:'admin',show_in_list:false,searchable:false,sort:0}]
+    await act(async()=>root.render(<IssueFormModal open onClose={()=>{}} projectId="project-1" workspaceId="ws" initial={null} members={[]} onCreate={onCreate} supportsCustomFields entryContext={{...TEST_ENTRY_CONTEXT,canManageCustom:true,rules:{areaRequired:false,analysis:'off'},customFields:defs}} />))
+    expect(labelSelect('Approval').disabled).toBe(false)
+    await act(async()=>{const el=labelInput('issue.form.title');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,'Linked create');el.dispatchEvent(new Event('input',{bubbles:true}))})
+    await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='issue.form.save')!.click())
+    expect(onCreate).toHaveBeenCalledWith('project-1',expect.objectContaining({custom:{approved:false}}))
+  })
   it('retains a dirty custom draft on refresh and adopts the newest base only on explicit discard', async () => {
     const {updateIssue}=await import('@/app/actions/issues');vi.mocked(updateIssue).mockClear()
     const defs:FieldDef[]=[{key:'quantity',label:'Quantity',description:'',type:'number',required:false,active:true,editable_by:'member',show_in_list:false,searchable:false,sort:0}]
