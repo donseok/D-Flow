@@ -166,7 +166,8 @@ export function VocabEditor({ projectId, vocabKey, value, invalid = false, revis
 
   return <div className="space-y-3" data-vocab-editor={vocabKey}>
     {invalid && !repaired && <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{tr('settings.vocab.invalid')}</p>}
-    <div className="overflow-x-auto">
+    {/* relative — 머리의 sr-only(절대 위치) 칸이 이 스크롤 상자를 빠져나가 문서 폭을 밀지 않게(390 실측) */}
+    <div className="relative overflow-x-auto">
       <table className="w-full min-w-[560px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-line text-left text-[11px] font-semibold text-ink-subtle">

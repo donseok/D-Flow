@@ -70,3 +70,11 @@ Codex 토큰 소진 뒤 클라우드 세션이 `e7d2f911` 위에서 이어받았
 - 과제12: B3 "두지 않는 것" 0건 불변식. 외부 메타 운영 상한 계약은 기존 테스트가 고정(10개·20,971,520). v2.9 계약 절은 B2 산출물이라 아직 없다 — 첨부 운영 상한 한 줄은 B2 가 절을 만들 때 넣는다(이월).
 
 검증: 로컬 Supabase(CLI 2.75)에서 `db reset`(2026-10-04 10:48:41 KST, 0022 포함) → bootstrap → settings:verify → 전체 test:rls 39 files·609 통과/skip0. 이 컨테이너 커널에 IPv6 가 없어 realtime v2.73.2 의 HTTP 리스너만 IPv4 로 바꾼 로컬 이미지로 띄웠다(리포 변경 없음, DB 스키마 무관). 단위 전체 11,802 중 마지막 전체 실행 실패 8(원인 2건 수정 뒤 해당 파일 통과), 부하 시 간헐 실패하는 WBS·탐색기 UI 4파일은 단독 실행 통과. typecheck·lint(오류0/기존 경고4)·build 통과. 실제 앱(next start)을 Playwright 로 조작해 새 회의록 첨부 2 → 패널 추가 → PNG 미리보기 → 삭제(톰스톤·정리·객체 0) → 설정 저장/재조회 → 패널 새 한도 반영까지 18/18, 1440/390 light/dark 가로 넘침 0. 자체 검토이며 독립 리뷰가 아니다. 사용자 DB 적용·성능 측정은 하지 않았다.
+
+## B4 — 어휘 설정값 승격 · 2026-10-04 (Claude Cloud)
+
+브랜치 `sp5/b4`(B3 체크포인트 `0e1e601` 위), 계획 `docs/superpowers/plans/2026-10-04-sp5-phase-b4.md`. 어휘 5키(`attendance.types`·`meetings.categories`·`issues.severities`·`issues.sources`·`issues.cause_categories`)를 순수 계약(`src/lib/settings/vocab.ts`) → `0023_vocab_settings`(고정 check 넷 삭제·`enforce_project_vocab` 트리거 넷·`settings_ref_check` 어휘 분기·`migrate_setting_code`) → 소비처(근태·회의·이슈·분석서·PPT·AI 프롬프트·봇·외부 회의록 API·초대 메일) → 설정 편집기·이관 명령 → 잔여 문자열·봇 근태 유형 순으로 옮겼다. 카탈로그 다섯 키 verified, `no-runtime-constants` 허용 목록 SP5 어휘 행 0.
+
+검증: 로컬 db reset(2026-10-04 12:07:24 KST) → 리허설 `*_vocab_settings_smoke` 통과 → test:rls 40 files·627/skip0(경합 셋·40P01 포함 `config-vocabulary` 18). 단위 896 files·11,855 통과/실패0(마지막 실행의 불변식 참조 수 1건은 합성 게이트 판독 추가분으로 목록을 올려 고침), typecheck·lint 오류0(기존 경고4), 프로덕션 빌드 통과. 합성 게이트 `accept:synthetic` 19단계 초록 — 새 `S1-vocab`(R 심각도 저장 → 참조 4건 거부 → 4건 이관 → 삭제 → 지운 code 로 등록 거부). 실앱 Playwright 12/12(1440: 편집기·라벨 저장·참조 건수·이관·삭제·이슈 목록 라벨·새 심각도 탭 / 390: 가로 넘침 0 — 첫 측정에서 표 머리 `sr-only` 칸이 위치 지정 없는 스크롤 상자를 빠져나가 문서 폭 561 이 되는 것을 잡아 `relative` 로 고쳤다). 자체 검토이며 독립 리뷰가 아니다. 사용자 DB 적용·성능 측정은 하지 않았다(§8 #13 — main 반영 뒤 따로 확인).
+
+결정 기록: 분석서 입력 해시·프롬프트·저장 실행은 기본 어휘 프로젝트에서 B4 이전과 글자까지 같다(어휘 스냅샷은 기본값과 다를 때만 싣는다 — 캐시 무효화 없음). 주간보고 '평상 근무' = 등록 선택지인 근무 집계 유형(공가는 특이 근태로 유지). 봇 근태 유형은 라벨만 대조(짧은 이름 '근무'의 오적중 회피).
