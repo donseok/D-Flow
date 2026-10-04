@@ -58,9 +58,9 @@ export function ApprovalStepsEditor({ projectId, steps, distinct, gate, revision
             <span className="pt-2 text-center text-xs font-semibold tabular-nums text-ink-subtle">{i + 1}</span>
             <input className="app-input h-9 font-mono text-xs" value={r.code} disabled={locked || r.fixed} maxLength={20} aria-label={t('settings.workflow.stepCode')}
               placeholder="code" onChange={(e) => edit(i, { code: e.target.value.toLowerCase() })} />
-            <input className="app-input h-9 text-xs" value={r.label} disabled={locked} maxLength={20} aria-label={t('settings.workflow.stepLabel')}
+            <input className="app-input col-span-2 h-9 text-xs sm:col-span-1" value={r.label} disabled={locked} maxLength={20} aria-label={t('settings.workflow.stepLabel')}
               placeholder={r.code === DEFAULT_STEP_CODE ? t('wbs.approveStepDefault') : t('settings.workflow.stepLabel')} onChange={(e) => edit(i, { label: e.target.value })} />
-            <select className="app-input h-9 text-xs" value={r.approver} disabled={locked} aria-label={t('settings.workflow.stepApprover')}
+            <select className="app-input col-span-2 h-9 text-xs sm:col-span-1" value={r.approver} disabled={locked} aria-label={t('settings.workflow.stepApprover')}
               onChange={(e) => edit(i, { approver: e.target.value as Approver })}>
               {APPROVERS.map((a) => <option key={a} value={a}>{t(APPROVER_KEY[a])}</option>)}
             </select>
