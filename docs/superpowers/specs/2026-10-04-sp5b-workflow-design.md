@@ -329,7 +329,7 @@ CLAUDE.md UI 위험 파일은 건드리지 않는다. `StatusPill` 과 이슈 �
 | 합성 | D24 | `npm run accept:synthetic` |
 | 성능 | D22 — RPC p95·화면 경로 p95 각각 ≤ 1.20 | `perf-baseline.mjs workflow`·`measure` |
 | 눈확인 | D25 — 설정 '상태·승인'·이슈 목록/모달·회의록 칩·단계 패널·결재 대기열·위임 표 | 스크린샷 기록 |
-| 상수 가드 | `no-runtime-constants` 패턴 + `ISSUE_STATUS_META`·`STAGE_LABEL_KO`·`STAGE_NONE_LABEL_KO`·`CREDIT_STEP`·`CREDIT_GAP`(허용 = 정의 파일만, `removedBy: 'SP5b'`) | `npm run test` |
+| 상수 가드 | `no-runtime-constants` 패턴 + `STAGE_LABEL_KO`·`STAGE_NONE_LABEL_KO`·`CREDIT_STEP`·`CREDIT_GAP`(허용 = 정의 파일과 "설정에 없는 칸" 의 폴백 자리 넷 — `stageLabels.ts`·`waitReason.ts`·`agent-hub/labels.ts`·`stageCredits.ts`, `removedBy: 'never'`). **Z 정정**: `ISSUE_STATUS_META` 는 가드하지 않는다 — 표시 상태가 아니라 **범주**(제품 고정 4종)의 메타이고, 대시보드 카운트가 범주 기준(done_when #2)이라 `IssueStatusCard` 의 사용이 정답이다 | `npm run test` |
 
 ### 6.2 의도적 수정 표(done_when #1 의 예외 — 단언의 의도는 보존)
 
@@ -344,7 +344,14 @@ CLAUDE.md UI 위험 파일은 건드리지 않는다. `StatusPill` 과 이슈 �
 | `tests/domain/inbox.test.ts` | REQUIRED 목록에 `work.approval_step` | §8 기본값(개정 승인 요청류) |
 | `tests/scripts/synthetic.test.ts` | `PENDING_STEPS` | D24 |
 | `tests/css/no-raw-color.test.ts` | `issues.ts` slate-400 허용 행 제거 | D8 |
-| (W1 계획에서 확인) `tests/actions/agent-work-actions.test.ts` | 큐 mock 이 밀리면 | §4.7 |
+| (W1 계획에서 확인) `tests/actions/agent-work-actions.test.ts` | 큐 mock 이 밀리면 | §4.7 — **Z 확인: 고치지 않았다**(승인 재료 로더를 단위 전역 셋업이 mock — W1·W2 계획) |
+| `tests/modules/registry.test.ts` | 등록 키 셈·흐름 키의 모듈 | 6키 등록(Z 가 행 추가 — W1 계획) |
+| `tests/invariants/settings-writes.test.ts` | e2e 참조 허용 수(이슈 상태·승인 흐름 E2E 단계의 설정 액션) | E2E 두 단계(Z 가 행 추가) |
+| `tests/modules/effective.test.ts` | "등록되지 않은 비core 키" 픽스처를 `workflow.issue_statuses` → `fields.issue`(SP5c 계획 키) | D1 — 픽스처 키가 등록됐다(Z 가 행 추가) |
+| `tests/rls/issue-areas.test.ts` | 트리거를 끈 CHECK 케이스의 직접 INSERT 에 `status_code` | `status_code` NOT NULL(트리거가 채움) — 트리거를 끈 케이스만(Z 가 행 추가) |
+| `tests/setup/module-gate.ts` | 승인 재료·선행 기준·승인 주문·단계 이름 로더 전역 mock | §4.7 호환 — 기존 큐 mock 보호(Z 가 행 추가) |
+
+Z 확인 — 표에 있었으나 고치지 않고도 초록으로 끝난 것(`git diff 87c6116` 0줄): `tests/settings/vocab.test.ts`·`tests/css/no-raw-color.test.ts`·`tests/actions/issue-notify.test.ts`·`tests/actions/agent-work-actions.test.ts`. `tests/scripts/perf-baseline.test.ts` 는 P0 의 새 명령에 대한 **추가**(수정 아님)다.
 
 ### 6.3 고정 테스트 갱신 표
 

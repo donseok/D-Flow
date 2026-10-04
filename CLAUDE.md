@@ -137,6 +137,12 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
   **WBS 가져오기**의 앱 경로도 같은 꼴의 `import_wbs_cmd`(DEFINER·service_role, 등급 재판정·영수증·멱등)지만, 옛 `import_wbs`·`replace_wbs`·`import_wbs_upsert(uuid, jsonb, uuid)`(에이전트 가져오기 — 0000 기준선, 0006 은 public·anon 만 회수) 는
   INVOKER 로 **authenticated 실행권이 남아 있다** — 세션의 프로젝트 관리자는 PostgREST 로 직접 가져올 수 있고(RLS `wbs_items`·`item_owners`·
   `holidays` 쓰기 정책이 관문, 영수증·사전 백업·전환 없음), 그 실행권 회수는 SP4 스펙 §9 의 이월(SP9 출시 점검)이다. "가져오기는 RPC 한 길"로 가정하지 않는다.
+- **WBS 흐름 다섯 열(`stage`·`review_round`·`review_steps`·`dev_workflow`·`tags`)은 RPC 전용이다**(SP5b, 0026 `guard_workflow_columns`).
+  JWT 세션의 쓰기는 관리자도 42501 `WORKFLOW_COLUMNS_RPC_ONLY`(INSERT 는 흐름이 꺼진 빈 행만) — 앱 쓰기는 service_role 의 `apply_workflow_event`
+  (9인자 `p_expected_step`·DEFINER) 한 길이고, 승인 판정은 액션 가드(`guardStepApproval` — 대기 단계의 승인자가 admin 이면 `requireProjectAdmin`,
+  아니면 자기 승인 금지가 붙은 승인 가드)와 RPC 안의 `actor_is_project_admin` 재판정 두 관문이다. 사람의 xx 지정(`setWbsStage(…,'xx')`)도 같은 판정을 거친다.
+  유효 단계가 둘 이상·위임·점유 항목의 `actual_pct=100` 은 `guard_workflow_actual` 이 JWT 경로에서 막는다. 위 옛 가져오기 RPC(`import_wbs` 등 INVOKER)의
+  JWT 직접 호출은 흐름 열이 있는 행에서 이 가드에 걸린다(42501) — 실행권 회수는 그대로 SP9 이월이다.
 - `p_actor` 를 받는 RPC 에는 **가드 결과의 `actor.userId` 만** 넘긴다(`const g = await require*(…)` → `g.actor.userId`, 같은 파일 도우미로
   넘기면 한 단계까지 추적). 그 밖의 출처(에이전트 토큰 행위자 등)는 `tests/invariants/rpc-actor-source.test.ts` 의 닫힌 목록에 사유와 함께 적는다.
 - 사용 현황(`/usage`)은 슈퍼유저 전용 — `canViewUsage()` 와 `0000_baseline.sql` 의 `read_usage_events` 정책이 쌍이다.

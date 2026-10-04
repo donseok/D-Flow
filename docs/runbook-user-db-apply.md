@@ -1,4 +1,4 @@
-# 사용자 DB(메인 스택) 마이그레이션 적용 runbook — SP4·UI-2·SP5 (0013~0024)
+# 사용자 DB(메인 스택) 마이그레이션 적용 runbook — SP4·UI-2·SP5·SP5b (0013~0026)
 
 > 대상: 사용자의 로컬 개발 데이터가 든 **메인 스택**(`/Users/jerry/D-Flow` 체크아웃, project_id `d-flow`, DB `54322`·API `54321`, 컨테이너 `supabase_db_d-flow`).
 > 이 스택은 개발 중 한 번도 `db:reset` 한 적이 없는 실데이터이며 평소 내려 둔다. **이 문서의 절차는 사용자의 명시적 확인(§8 #13) 뒤에만 실행한다**
@@ -20,6 +20,8 @@
 | 0022 | `semantic_scope` | SP5 B3 | 의미검색 RPC 두 개에 범위 인자(함수 교체) — 데이터 변화 없음 |
 | 0023 | `vocab_settings` | SP5 B4 | 근태·회의·이슈 어휘 다섯의 고정 check 를 걷고 설정 판정 트리거·참조 검사·이관 RPC — 데이터 변화 없음(기존 code 는 제품 기본 어휘 안). 롤백은 기본 어휘 밖 code 가 있으면 `VOCAB_ROLLBACK_BLOCKED` |
 | 0024 | `minutes_teams` | SP5 B2 | 회의록 폴더 `kind`·`team_id`(팀 루트 이름 = 팀 이름으로 이관)·회의록 `team_id`(code 단위 이관)·종류/범위 가드·`create_team`·`ensure_team_roots`·개명 동기·세션 공용 팀 INSERT 정책 삭제. **사전검사 `MINUTES_TEAMS_PRECHECK`**(팀 이름과 같은 이름의 최상위 사용자 폴더 / 61자 넘는 팀 이름이면 멈춘다). 롤백은 폴더 이름을 code 로 되돌린 뒤 열을 지운다(`MINUTES_TEAMS_ROLLBACK_BLOCKED` — 되돌릴 이름이 겹치면 멈춘다). 회의록 `team_id` 이관 결과는 되돌리지 않는다(`team_code` 원문이 남는다) |
+| 0025 | `issue_status_vocab` | SP5b I | 이슈 `status_code`(표시 상태 — 기존 이슈는 `status` 와 같은 code 로 이관)·판정 트리거·상태 이력 트리거(DB 가 `issue_updates(kind='status')` 를 쓴다)·`workflow.issue_statuses` 참조 검사·이관 분기(같은 범주만). **사전검사 `ISSUE_STATUS_PRECHECK`**(손상된 `workflow.issue_statuses` 가 있으면 멈춘다 — 키를 쓴 프로젝트가 없으면 0). 데이터 변화: 새 열 이관뿐, 설정을 바꾸기 전까지 동작 동일 |
+| 0026 | `workflow_policy` | SP5b W1 | WBS 승인 라운드 열(`review_round`·`review_steps` — im·xx 항목은 1·`{review}` 로 이관)·승인 원장 `wbs_stage_approvals`·`apply_workflow_event` 9인자 교체·**JWT 의 흐름 다섯 열 쓰기 차단**(`guard_workflow_columns` — 관리자가 PostgREST 로 `stage`·`dev_workflow`·`tags` 를 바로 바꾸던 길이 닫힌다, §8 #2)·실적 100 가드 교체·`set_dependency_waiver` 삭제. **사전검사 `WORKFLOW_POLICY_PRECHECK`**(손상된 `workflow.*` 설정 — 특히 0012 이래 조용히 기본값으로 풀리던 `workflow.stage_credits` — 가 있으면 멈춘다). 롤백은 흐름 설정·대기 라운드·원장 행이 있으면 `WORKFLOW_POLICY_ROLLBACK_BLOCKED` |
 
 사용자가 미리 답한 결정: §8 #1(주차 라벨 통일 — 계산값이라 저장 없음)·#2(전환). 마이그레이션 본문과 사후검사는 `supabase/migrations/`, 롤백은 `supabase/rollbacks/`,
 리허설 SQL 은 `supabase/rehearsal/`.
@@ -57,7 +59,14 @@
    select count(*) from public.minute_folders where parent_id is null and created_by is null;
    select team_code, count(*) from public.minutes group by 1 order by 1;
    ```
-4. 적용 코드: 메인 체크아웃이 `main`(SP5 B2 반영본 — `sp5-done`) 최신인지 `git status`·`git log -1`.
+   SP5b(0025·0026)의 읽기 전용 사전 수치 — `npm run settings:verify` 가 문제 0 이면 두 사전검사도 통과한다(같은 판독). 이관 대조용 수치를 함께 남긴다:
+
+   ```sql
+   select status, count(*) from public.issues group by 1 order by 1;               -- 0025 뒤 status_code 가 같은 분포여야 한다
+   select stage, count(*) from public.wbs_items group by 1 order by 1;              -- 0026 뒤 im·xx 수 = review_round 1 인 행 수
+   select project_id, "values" -> 'workflow.stage_credits' from public.project_settings where "values" ? 'workflow.stage_credits';
+   ```
+4. 적용 코드: 메인 체크아웃이 `main`(SP5b 반영본 — `sp5b-done`) 최신인지 `git status`·`git log -1`.
 
 ## 2. 덤프(되돌림의 유일한 수단)
 
@@ -79,15 +88,15 @@ ls -l "$D"; pg_restore -l "$D/full.dump" | head -3                       # 크�
 1. 사용자 DB 와 **같은 버전**까지만 만든다: `lane-a-run.sh npx supabase db reset --version <1단계에서 본 N>`(주의: 그 워크트리가 `main` 의 마이그레이션을 가진 상태여야 한다).
 2. 데이터만 되싣는다 — `data.sql` 을 한 트랜잭션에서 `set session_replication_role = replica;` + public·auth 표 `truncate … cascade` 선행 + `psql -v ON_ERROR_STOP=1`
    (검증된 예: 성능 재측정 때 쓴 `/Users/jerry/D-Flow/.superpowers/qa/sp3b/r25/perf-r25.sh` 의 백업·복원 구간). 행 수를 1단계 기록과 대조한다.
-3. 0024 까지 올린다: PATH 의 `supabase --version` 이 2.75 인지 확인한 뒤 `lane-a-run.sh supabase migration up --local` 을 실행한다(`npx supabase` 는 다른 버전을 받을 수 있어 쓰지 않는다). `CALENDAR_PRECHECK`·`ISSUE_AREAS_PRECHECK`·`MINUTES_TEAMS_PRECHECK` 가 멈추면 메시지의 데이터 원인을 확인하고 이 3단계를 처음부터 다시 한다.
-4. 검증: `lane-a-run.sh npm run settings:verify` 문제 0, 최대 버전 0024, 기존 행 수 대조. 0024 는 `psql -f supabase/rehearsal/0024_minutes_teams_smoke.sql`(롤백되는 스모크 — 옛 시드 루트 0·루트 이름 = 팀 이름·`team_id` code 단위·개명 동기·범위 가드)과 NOTICE `MINUTES_TEAMS: 회의록 team_id 이관 N · 맞는 팀 없음(null) M` 을 사전 수치와 대조한다. 마이그레이션 NOTICE 의 영역·분류·레거시·ISS 수가 사전 확인으로 설명되는지 대조하고, 화면 스모크(`/w/<slug>` 홈·프로젝트 이슈 목록의 코드·영역 필터·WBS·주간보고·`/usage`)를 확인한다. 달력 설정은 기존 검사대로 `calendar.week_start` 를 대조한다.
+3. 0026 까지 올린다: PATH 의 `supabase --version` 이 2.75 인지 확인한 뒤 `lane-a-run.sh supabase migration up --local` 을 실행한다(`npx supabase` 는 다른 버전을 받을 수 있어 쓰지 않는다). `CALENDAR_PRECHECK`·`ISSUE_AREAS_PRECHECK`·`MINUTES_TEAMS_PRECHECK`·`ISSUE_STATUS_PRECHECK`·`WORKFLOW_POLICY_PRECHECK` 가 멈추면 메시지의 데이터 원인을 확인하고 이 3단계를 처음부터 다시 한다.
+4. 검증: `lane-a-run.sh npm run settings:verify` 문제 0, 최대 버전 0026, 기존 행 수 대조. 0025·0026 은 `supabase/rehearsal/0025_issue_status_vocab_smoke.sql`·`0026_workflow_policy_smoke.sql`(롤백되는 스모크)과 위 SP5b 사전 수치(상태 분포·im/xx 수)를 대조한다. 0024 는 `psql -f supabase/rehearsal/0024_minutes_teams_smoke.sql`(롤백되는 스모크 — 옛 시드 루트 0·루트 이름 = 팀 이름·`team_id` code 단위·개명 동기·범위 가드)과 NOTICE `MINUTES_TEAMS: 회의록 team_id 이관 N · 맞는 팀 없음(null) M` 을 사전 수치와 대조한다. 마이그레이션 NOTICE 의 영역·분류·레거시·ISS 수가 사전 확인으로 설명되는지 대조하고, 화면 스모크(`/w/<slug>` 홈·프로젝트 이슈 목록의 코드·영역 필터·WBS·주간보고·`/usage`)를 확인한다. 달력 설정은 기존 검사대로 `calendar.week_start` 를 대조한다.
 5. **go/no-go**: 리허설이 초록이면 사용자에게 결과(위 4단계 수치)를 보고하고 "메인 스택에 적용해도 되는가"를 **다시** 묻는다.
 
 ## 4. 메인 스택 적용
 
 1. 개발 서버·다른 연결을 모두 내린다(`lsof -iTCP:54322`).
-2. `cd /Users/jerry/D-Flow && supabase migration up --local`(`supabase db push` 는 쓰지 않는다 — CLAUDE.md, Supabase CLI 2.75 확인). 한 번에 0024 까지.
-3. 사후: 최대 버전 0024 · `npm run settings:verify` 문제 0 · 3단계 검증과 같은 행 수·NOTICE 대조 · `npm run dev` 로 홈·이슈 목록·주간보고 한 번.
+2. `cd /Users/jerry/D-Flow && supabase migration up --local`(`supabase db push` 는 쓰지 않는다 — CLAUDE.md, Supabase CLI 2.75 확인). 한 번에 0026 까지.
+3. 사후: 최대 버전 0026 · `npm run settings:verify` 문제 0 · 3단계 검증과 같은 행 수·NOTICE 대조 · `npm run dev` 로 홈·이슈 목록·주간보고 한 번.
 4. 이상이 있으면 **앱을 켜지 않고** 5단계로.
 
 ## 5. 되돌림

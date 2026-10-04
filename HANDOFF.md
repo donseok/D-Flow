@@ -199,3 +199,16 @@ Codex 토큰 소진. Claude Haiku 2.1.288 인수, HANDOFF.md 최신화 및 상�
 - **SP5 마감**: A·B1·B3·B4·B2 전부 main. 일괄 성능 `docs/baseline/sp5-perf.md`(8칸 모두 ≤ 1.20). 개정 스펙 §6.3 에 0018~0024 실측과 다음 SP 시작 번호 0025, §8.1 닫음 표기.
 - **사용자 DB 적용은 하지 않았다** — 0019~0024 는 `docs/runbook-user-db-apply.md` 대로 §8 #13 확인 뒤 적용한다(0024 는 사전 검사 SQL 먼저).
 - **다음**: 개정 스펙의 SP5b(또는 사용자가 정하는 다음 SP). 관찰: 390 회의록 머리의 보기 전환 줄이 안쪽 가로 스크롤이라 첫 버튼이 살짝 잘려 보인다(기존 배치).
+
+## 17. SP5b 완료(업무 흐름 설정화) — Claude Cloud 세션 (2026-10-04 15:01 ~ 19:50 KST)
+
+- **Phase P0 → I → W1 → W2 → Z 전부 main**(브랜치 `sp5b/{w1,w2,z}`, 태그 `sp5b-done`). 스펙 `docs/superpowers/specs/2026-10-04-sp5b-workflow-design.md`(판정 S1~S26 반영),
+  계획·진행 `docs/superpowers/plans/2026-10-04-sp5b-phase-{i,w1,w2,z}.md`, 원장 `docs/baseline/sp5b-{e2e,ui,perf,effort}.md`·`synthetic-acceptance.md` SP5b 절.
+  - I(`0025_issue_status_vocab`): 이슈 상태 = 범주(제품 고정 4) + 프로젝트 표시 상태(`workflow.issue_statuses`), DB 트리거가 전이·해결일·상태 이력을 정한다.
+  - W1(`0026_workflow_policy`): 승인 단계 1~3·서로 다른 승인자·선행 기준(`reached`|`final`)·크레딧 정책, 승인 원장 `wbs_stage_approvals`, JWT 의 흐름 다섯 열 쓰기 42501.
+  - W2: 선행 기준을 claim 게이트·후속 알림·대기 사유·상세 패널 다섯 곳에 같은 입력으로, 결재 배지·포털·허브의 승인 가능 셈, 설정 '상태·승인' 편집기, 단계 이름 주입.
+  - Z: 합성 S1/S3/S6/S9-workflow, 성능 A/B, 카탈로그 workflow 6키 verified, `api-contract.md` SP5b 주석, CLAUDE.md 권한 절, 개정 스펙 §3.0a·§6.2·§6.3 반영.
+- **열린 것(사용자 확인)**: done_when #8 의 RPC 몫 — `apply_workflow_event` 판정 사건(approve·set_stage:xx) p95 가 기준선 대비 1.31~1.34, 합계 1.22(+0.3~0.45ms 절대).
+  화면 경로는 통과. 설정 행 잠금·새 트리거는 원인이 아님을 실험으로 확인(`sp5b-perf.md`). 기본값 = 기능 비용으로 수용.
+- **사용자 DB 적용은 하지 않았다** — 0019~0026 은 `docs/runbook-user-db-apply.md`(0025·0026 행·사전검사 추가) 대로 §8 #13 확인 뒤.
+- **다음**: 개정 스펙 순서상 SP5c(사용자 정의 필드 — 합성 `S3` 의 필드 몫). 이월은 개정 §6.2 SPU1·SPU2·SPU3·SP8·SP9 블록의 "SP5b 에서 넘어옴" 줄.

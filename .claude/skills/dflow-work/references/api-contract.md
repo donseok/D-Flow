@@ -23,15 +23,24 @@
 | 3 | claim | 주문 CAS 뒤 stage `ip` 를 따로 실행 | 한 트랜잭션: 주문 `claimed` + stage `ip` + 실적 = 크레딧 표 IP 값 |
 | 4 | completion 보고 | 주문 `reported` 뒤 stage `im` 을 따로 실행 | 한 트랜잭션: 주문 `reported`(점유자 일치 조건) + stage `im` + 실적 = 크레딧 표 IM 값. 경합·오류면 보고 행을 지우고 409·500 |
 | 5 | release | 주문만 `ready` | 한 트랜잭션: 주문 `ready` + 점유·heartbeat 흔적 삭제 + stage `as` + 실적 = 크레딧 표 AS 값 |
-| 6 | depends_evidence | `{external_ref, stage, branch, head_sha, order_approved}` | `actual_pct`·`reached` 추가. `reached` = stage∈{im,xx} ∨ order_approved ∨ actual_pct≥100 — 서버 claim 게이트와 같은 함수(`predecessorReached`) |
-| 7 | claim 게이트 | stage ≥ im ∨ order_approved | `reached:false` 인 선행이 하나라도 있으면 403 `dependency_not_met` |
+| 6 | depends_evidence | `{external_ref, stage, branch, head_sha, order_approved}` | `actual_pct`·`reached` 추가. `reached` = stage∈{im,xx} ∨ order_approved ∨ actual_pct≥100 — 서버 claim 게이트와 같은 함수(`predecessorReachedFor`). **값만** 프로젝트 설정 `workflow.predecessor_gate` 를 따른다(아래 SP5b 주석) — 키·타입 불변 |
+| 7 | claim 게이트 | stage ≥ im ∨ order_approved | `reached:false` 인 선행이 하나라도 있으면 403 `dependency_not_met`(`final` 이면 거부 문구가 "최종 승인" 을 말한다 — `code`·키 불변) |
 
 ⚠️ **`reached` 도 키 존재 여부로 지원을 가른다**(`'reached' in d`). 키가 없으면 v2.2 판정(stage ≥ im ∨ `order_approved`)으로
 폴백하고 그 사실을 한 줄 남긴다 — 실적 100 축이 없는 옛 서버에서는 사람이 끝낸 선행이 여전히 막힌다.
 
-크레딧 표는 프로젝트 설정 `project_settings.stage_credits` 의 `default` 하나다(없으면 기본
-`as 0 · ip 30 · rw 50 · im 80 · xx 100`). 항목의 `credit_key` 는 전이 계산에 쓰이지 않는다 — 카테고리별 표는
-2026-09-16(마이그레이션 0097)에 없앴다. 설정 저장은 소급하지 않는다.
+크레딧 표는 프로젝트 설정 `workflow.stage_credits`(`project_settings.values` 의 키 — D-Flow 0012 이후. 옛 `project_settings.stage_credits`
+열이 아니다)의 `default` 하나다(없으면 기본 `as 0 · ip 30 · rw 50 · im 80 · xx 100`). 표의 단위·최소 간격은 `workflow.credit_policy`
+(기본 `{step: 5, min_gap: 10}`, SP5b)가 정하고 저장 때만 검사한다. 항목의 `credit_key` 는 전이 계산에 쓰이지 않는다 — 카테고리별 표는
+2026-09-16(원본 리포 마이그레이션 0097)에 없앴다. 설정 저장은 소급하지 않는다.
+
+**SP5b 주석(2026-10-04 — `contract_version` 유지, 응답 키·URL·주문 상태 불변)**: 프로젝트 설정 `workflow.predecessor_gate` 가
+
+- `reached`(기본 — 현행): `reached` = stage∈{im,xx} ∨ order_approved ∨ actual_pct≥100.
+- `final`: `reached` = stage=xx ∨ order_approved ∨ (선행의 `dev_workflow` 가 꺼져 있고 actual_pct≥100). 검수 대기(im)는 미충족이다.
+
+승인 단계가 둘 이상인 프로젝트(`workflow.approval_steps`)에서 첫 승인은 주문을 `reported` 로 둔다(중간 단계 — 주문 상태 어휘는 그대로).
+마지막 단계 승인에서만 `approved` 가 된다. 클라이언트는 `reached`·`order_approved` 를 그대로 읽으면 되고 고칠 것이 없다.
 
 ## v2.2 변경점 (2026-08-28)
 
@@ -167,7 +176,7 @@ stage 워크플로 재설계(마이그레이션 0082)를 계약에 반영. **엔
   포함 — 각 선행 항목의 **approved 주문의 completion 보고 evidence**에서 추출(없으면 null).
   `order_approved`(v2.2)는 그 선행에 `status='approved'` 주문이 하나라도 있는지다. 최신 주문이
   아니라 "아무 approved 주문" 이라 재발행을 겪은 선행에서도 승인 사실이 살아남는다.
-- **서버 선행 게이트(v2.3)**: claim 시 depends의 선행 항목 중 `reached`(= `stage` ∈ {`im`,`xx`} ∨ `order_approved` ∨ `actual_pct` ≥ 100)가 false 인 것이 하나라도 있으면
+- **서버 선행 게이트(v2.3)**: claim 시 depends의 선행 항목 중 `reached`(= `stage` ∈ {`im`,`xx`} ∨ `order_approved` ∨ `actual_pct` ≥ 100 — 선행 기준 `final` 이면 위 SP5b 주석의 판정)가 false 인 것이 하나라도 있으면
   403 `dependency_not_met` + `unmet: [{external_ref, stage}]`. 선행 external_ref가 프로젝트에 없으면 미충족(fail-closed).
   dflow.sh 는 이 403 을 바디 `code` 로 판독해 **exit 4**(선행·상태로 인한 진행 불가)로 낸다 — 권한 403(exit 5)과 처방이 다르기 때문이다(구조 필드 판독이므로 "산문 파싱 금지" 위반이 아니다).
 - **클라이언트 하드 차단**: ① claim 전 `show`의 depends_evidence로 `git cat-file -e <sha>` + `git merge-base --is-ancestor <sha> HEAD` 검사 — 미도달이면 메시지 출력 후 **실행 거부(exit 4)**. ② `done`은 `git ls-remote`로 현재 브랜치 tip이 원격에 도달했는지 확인 — 미도달이면 **보고 거부(exit 2)**. "완료 = push 완료"가 클라이언트 계약이다.

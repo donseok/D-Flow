@@ -1100,6 +1100,28 @@ P1-6, A, P1-8, P3-§3.1, P3-§3.2, P3-§3.3, P1-우선순위, P3-§0, P1-1/D(키
 
 ---
 
+### 3.0a SP5b 확정 반영(2026-10-04 — 마감 Z, SP5b 스펙 §11)
+
+SP5b 확정 스펙 `2026-10-04-sp5b-workflow-design.md`(이하 "SP5b Dn")가 이 절 §3.1~§3.8 의 몇 곳을 **상위와 다르게** 정했다. 본문은 개정 기록으로 그대로 두고,
+아래 표가 우선한다(구현·테스트가 따르는 쪽). 마이그레이션 번호는 §6.3 의 SP5b 마감 실측(`0025_issue_status_vocab`·`0026_workflow_policy`)을 따른다.
+
+| 이 문서 자리 | 확정 | 근거 |
+|---|---|---|
+| §2.8.2 `workflow.issue_statuses` 행·§3.2.1·§3.2.4 | 라벨 **필수 문자열**(기본 code·기본 라벨이면 사전 문구 `issue.status.<code>`), 색은 `VOCAB_COLORS`(7색 토큰 이행은 디자인 SP — §8.1), 기본 색 = 현 칩 색 | SP5b D1·D2 |
+| §2.3.4 토큰 표 | 새 토큰: `ISSUE_WORKFLOW_ISOLATION`(25001)·`SETTINGS_CODE_CATEGORY_MISMATCH`·`WORKFLOW_COLUMNS_RPC_ONLY`(42501)·`WORKFLOW_APPROVAL_REQUIRED`·`CONFIG_INVALID:workflow.*`(22023)·RPC 사유 `approval_required`·`approval_stale`·`approval_forbidden`·`approval_same_actor`·`not_in_review` | SP5b §3.4(S13) |
+| §2.4.2·§3.2.2 이관 행·§3.2.3 ③ | `migrate_setting_code` 는 B4 **5인자 계약 그대로**(설정 행 먼저 잠금 → 참조 update → 건수), 이슈 분기는 **같은 범주 안으로만**, 삭제 = 이관 + 일반 저장의 **두 명령**, GUC 없음 | SP5b D3(E3·E15) |
+| §3.2.2 판정 표 | 판정 트리거에 ① 격리 가드 25001 ② `resolved_at` 은 트리거만 정한다(service_role 직접 쓰기도 거부) ③ 명시값이 파생값과 다르면 거부(조용히 덮지 않는다) ④ 트리거 열 `status, status_code, resolved_at` | SP5b D4 |
+| §3.2.4·§3.2.5 | `nextResolvedAt`·`canTransition` 은 **남는다**(TS 오라클), 액션 patch 필드 이름 `status`·`expectedStatus` 유지(값 = 표시 상태 code), 상태 이력은 AFTER 트리거가 쓴다, AI 색인 라벨은 SP8(§6.2 SP8 블록), 알림 `issue.status` 는 발행하지 않는다 | SP5b D5·D6·D7·D9·D10 |
+| §3.3.2 코드 블록·사건 표 | `guard_workflow_columns` — JWT 의 흐름 다섯 열 쓰기 42501(INSERT 는 흐름이 꺼진 빈 행만). 사람의 `xx → im` 은 새 라운드 + 옛 라운드 승인 철회(`stage_reset`). 스냅샷 없는 im·xx 에 판정 사건이 오면 **라운드를 먼저 연다**(라운드 0 개시). 사람의 xx 지정도 승인 판정(액션 가드 + RPC 의 admin 재판정), 원장 `via ∈ {approve, approve_step, set_stage}` | SP5b D13·D15·D16·D18 |
+| §3.3.5 | `guard_workflow_actual` 순서 — 값 불변·≤99 통과 → **im 대기 절(유효 단계 ≥2, dev_workflow 무관)** → dev_workflow → 0011 잠금 절 → 단계 ≥2 절. 트리거 `BEFORE INSERT OR UPDATE OF actual_pct`. 유효 단계 규칙은 D15 하나(스냅샷이 있으면 스냅샷) | SP5b D14·D15 |
+| §3.3.4 SQL 행·§2.8.2 `workflow.stage_credits` | SQL 판독 fail-closed — 키 없음·null = 기본값, **모양 손상 = 22023 `CONFIG_INVALID:workflow.stage_credits`**(값 받는 헬퍼 `workflow_value_of`). "재검증 안 함" 을 대체 | SP5b D20 |
+| §3.3.6·§3.7 현행 고정 행·§3.0 | `apply_workflow_event` 출발점은 `0012_settings.sql` 본문(9번째 인자 `p_expected_step`), 롤백은 0012 본문 바이트 그대로·8인자. 롤백은 흐름 설정·대기 라운드·원장 행이 있으면 멈춘다 | SP5b D11·D12(E2·S10) |
+| §3.5 보드 행·§5.9.2·§5.12.5 ② | 이슈 보드·WBS 보드 '흐름' 보기·카드 이동 메뉴는 **SPU2** 로(§6.2 SPU2 블록). 설정 '상태·승인' 은 `WorkflowSettings.tsx` 하나가 아니라 `StageLabelsEditor`·`ApprovalStepsEditor`·`StageCreditSlider`(정책)·`VocabEditor`(이슈 상태) 넷 | SP5b D8·D17 |
+| §3.7 회귀 목록·매니페스트 문장 | 의도적 수정 표는 SP5b §6.2(+ Z 가 더한 행). `approveWbsStep` 은 `module: null`(wbs 는 core). `migrateVocabCode` 는 이슈 상태 분기까지 | SP5b §6.2·D19 |
+| §3.8 SP5b done_when #8 | 화면 경로는 통과. `apply_workflow_event` 의 판정 사건(approve·set_stage:xx)과 합계 p95 는 같은 세션 A/B 에서 1.31~1.34·1.22 로 **한도 초과** — 설정 행 잠금·새 트리거는 원인이 아니다(실험). §2.4.1 의 advisory 대안은 효과 없음을 확인했다. 처리는 사용자 확인 대기(`docs/baseline/sp5b-perf.md`) | SP5b Z |
+| CLAUDE.md 권한 절 | 흐름 다섯 열 RPC 전용·승인 판정 두 관문·옛 가져오기 RPC 의 JWT 경로(42501) — 반영됨 | SP5b D13 |
+| `.claude/skills/dflow-work/references/api-contract.md` | `reached` 값의 `final` 주석·크레딧 표 위치(`workflow.stage_credits`)·다단계에서 주문 `reported` 유지 — 반영됨(`contract_version` 유지) | SP5b §4.6 |
+
 ### 3.0 현행 실측
 
 | 항목 | 현행 | 근거(file:line) |
@@ -3757,6 +3779,7 @@ MIN-ATT 완료 조건(아래 SP5 done_when 에 더한다):
 - SP4 에서 넘어옴(SP4 스펙 §9): `command_receipts` 보존·정리 — 정리 잡은 `command_receipts_reject_mutation()` 의 예외(보존 기간이 지난 행)부터 설계하고, 계정 삭제 때의 처리(`actor` 에 FK 가 없어 계정이 지워져도 행이 남는다)를 포함한다(SP4 Q28 — §4.10 알림·보존·스케줄 정책).
 - SP4 에서 넘어옴(SP4 스펙 §9): 팀 코드 리터럴의 일괄 합성 치환 — SP4 가 다시 쓰지 않은 WBS·주간·Excel 계열 테스트와 라우터·골든. 옛 5팀 양식을 보존 대상(SP4 W25·W26, 3단 회귀 기준)으로 쓰는 `tests/excel/{detect,export,export-with-profile,parse-with-profile,profile,split}.test.ts` 도 여기로 온다(SP4 A2 Excel 해석).
 - SP5 에서 넘어옴(SP5 스펙 §9, 2026-10-04 마감): 이슈 색인 문구의 `code` 반영 재색인, 회의록 색인의 `team_id` 재생성(지금 색인 본문·`ai_documents.team` 은 팀 code), 첨부 청소 잡(`npm run minutes:sweep`)의 스케줄 배선, 사용현황 표 직접 조회의 tz 오류 갈래(`USAGE_TIMEZONE_INVALID` 로 가르기).
+- SP5b 에서 넘어옴(SP5b 스펙 §9, 2026-10-04 마감): AI 색인의 이슈 상태 라벨(해석된 표시 상태 — 지금 색인은 범주)과 그 재색인 — 위 재색인 줄과 한 번에. 알림 `issue.status` 발행은 비목표이며 필요하면 ⑥ `notify.policy` 와 함께 정한다.
 
 #### SPU1 — 저장 신뢰성·상태 표현(UI 트랙 1)
 
@@ -3777,6 +3800,7 @@ MIN-ATT 완료 조건(아래 SP5 done_when 에 더한다):
   - 헤더 "동기화됨" 은 미저장·실패·대기 명령이 0일 때만 보인다.
   - 실시간(§5.8.8): 원격 재정렬·신규 행을 받는 중에도 편집 셀의 위치와 focus 가 유지된다. 재연결 뒤 revision 을 다시 조회하고 달라졌으면 비교로 들어간다.
   - 개인 알림 토글: `required` 유형은 끌 수 없고, opt-out 이 조회 시점 필터로 소급 적용된다(§4.10).
+- SP5b 에서 넘어옴(SP5b 스펙 §9, 2026-10-04 마감): 이슈 상태 이력(`issue_updates.kind='status'` — SP5b 부터 DB 트리거가 쓴다)의 삭제 제한. 지금은 관리자 삭제 정책이 `note` 와 같다 — 감사 기록으로 묶을 때 `status` 행은 지우지 못하게 한다.
 
 #### SPU2 — 탐색·검토(UI 트랙 2)
 
@@ -3792,6 +3816,7 @@ MIN-ATT 완료 조건(아래 SP5 done_when 에 더한다):
   - Q07: 합성 WBS 1만 행에서 UI-0(SP3b) 기준 대비 회귀가 없다. 수치 목표는 UI-0 실측 뒤 적는다.
   - Q09: 과제 11 확장. 검토 중 재제출·타인 처리·권한 회수가 일어나도 검토하지 않은 버전은 승인되지 않는다.
   - 검색 결과는 서버에서 권한을 다시 검증한다. 미색인·실패·0건을 구분해 보인다.
+- SP5b 에서 넘어옴(SP5b 스펙 D8·D17·§9, 2026-10-04 마감): 이슈 보드(표시 상태 정의에서 파생한 열)와 WBS 보드 '흐름' 그룹 보기(단계 열 + `im` 열 부제에 승인 단계)·카드 이동 메뉴(같은 액션·검증, 드래그 없음), §5.12.5 ②. 완료 조건에 한 줄: 두 보드의 열·이동 선택지가 설정의 전이표·승인 단계와 같다(카드 이동은 `updateIssueProgress`·`setWbsStage`/`approveWbsStep` 한 길).
 
 #### SPU3 — 대량 변경·간트·모바일(UI 트랙 3)
 
@@ -3805,7 +3830,7 @@ MIN-ATT 완료 조건(아래 SP5 done_when 에 더한다):
 - SP4 에서 넘어옴(SP4 스펙 §9): #15 의 `PageHeader`·상태 계약·12px 미만·uppercase(공용 팀 관리의 `eyebrow="ADMIN"`·KPI 라벨 포함), #19 개요 위젯·#30 명단의 패턴(명단 팀 칩 색 포함), `ProjectAreasManager` 의 SP3b 패턴 — SP4 는 기능만 하고 패턴 정리를 넘겼다(SP4 D52·E33, 사용자 확인 §8 #5).
 - SP4 B 리뷰에서 넘어옴: ① 채움형 화면(주간·WBS)은 세로가 아주 짧으면(1280×720 의 400% 확대 ≈ 320×180) 시트 상자가 0px 이 되어 아래에 닿을 수 없다 — SP4 는 주간의 상태 두 화면만 국소 처리했다(`docs/baseline/sp4-ui.md` 관찰 ③). 높이 하한에서 문서형 스크롤로 되돌리는 꼴은 `globals.css` 를 고치므로 UI 위험 파일이다 ② `StatusMessage` 의 compact + blocking 오류(주간 이월 매핑 창·AI 다시 쓰기)는 테두리·바탕이 없어 옛 붉은 상자보다 덜 띈다 — 상태 계약을 정할 때 이 두 자리를 사례로 본다.
 - 완료 조건: Q06·Q08·Q11·Q12(터치·가상 키보드)를 통과한다. 제5부 §7 적용표의 모든 라우트가 새 패턴이다(`docs/baseline/spu3-ui.md`).
-- SP5 에서 넘어옴(SP5 스펙 §9·§5.2, 2026-10-04 마감): 화면 순수 패턴 이행 여섯(#8·#9·#24·#26·#29·#31). **노력 재산정**: SP4 D52 넷 + SP5 여섯 누적으로 +0.75~1.25주 — §6.2 의 SPU3 2.5주 → **3.25~3.75주**. 레버 L2(SPU3 를 출시 후로)를 쓰면 Q06·Q08·Q11(390px·키보드·대량 변경 실측)이 미검증인 채 출시된다.
+- SP5 에서 넘어옴(SP5 스펙 §9·§5.2, 2026-10-04 마감): 화면 순수 패턴 이행 여섯(#8·#9·#24·#26·#29·#31). SP5b 에서 넘어옴(SP5b 스펙 §9): 범주를 넘는 이슈 일괄 상태 이동 — 이관 명령은 같은 범주만 받는다(D3), 범주를 넘으면 대량 변경의 항목별 결과로. **노력 재산정**: SP4 D52 넷 + SP5 여섯 누적으로 +0.75~1.25주 — §6.2 의 SPU3 2.5주 → **3.25~3.75주**. 레버 L2(SPU3 를 출시 후로)를 쓰면 Q06·Q08·Q11(390px·키보드·대량 변경 실측)이 미검증인 채 출시된다.
 
 #### SP9 — 온보딩·패키징·폐쇄망 리허설·출시 수용
 
@@ -3818,7 +3843,7 @@ MIN-ATT 완료 조건(아래 SP5 done_when 에 더한다):
 | 범위 추가 | ① 준비 체크리스트(UX-01: 기본 정보 → 사용 기능 → 달력·업무 규칙 → 첫 데이터, 건너뛰기·이어하기). ② 합성 2프로젝트 최종 게이트 전 단계(6.5.8). ③ COM-6 출시 수용 Q01~Q14 전부. 31라우트 × 라이트/다크 × 4크기, J1~J3 워크스루(6.5.9). ④ `docs/settings-catalog.md` 전 항목의 "상태" 열이 5기준 충족이거나 "고정/지원 제한(사유)" 이다 |
 | 완료 조건 추가 | 6.5.8 S1~S10 전부 통과(건너뜀 0). 6.5.9 Q01~Q14 기록 — 통과·실패·미검증을 구분하고, 미검증이 있으면 제6부 §11 에 따라 "상용 설계 전체 완료" 라고 표현하지 않는다. §5.12.5 SP9 행. 첫 원격 배포와 `mark:good` 은 §8 에 따른다 |
 
-- SP4 에서 넘어옴(SP4 스펙 §9): 옛 `import_wbs`·`replace_wbs`·`import_wbs_upsert(uuid, jsonb, uuid)` 의 세션(authenticated) 실행권 회수 — 앱 가져오기는 `import_wbs_cmd`(DEFINER·service_role) 한 길이지만 이 셋은 INVOKER 로 실행권이 남아, 세션의 프로젝트 관리자가 PostgREST 로 바로 부를 수 있다(RLS 쓰기 정책이 유일한 관문 — 영수증·사전 백업 없음).
+- SP4 에서 넘어옴(SP4 스펙 §9): 옛 `import_wbs`·`replace_wbs`·`import_wbs_upsert(uuid, jsonb, uuid)` 의 세션(authenticated) 실행권 회수 — 앱 가져오기는 `import_wbs_cmd`(DEFINER·service_role) 한 길이지만 이 셋은 INVOKER 로 실행권이 남아, 세션의 프로젝트 관리자가 PostgREST 로 바로 부를 수 있다(RLS 쓰기 정책이 유일한 관문 — 영수증·사전 백업 없음). SP5b(`0026_workflow_policy` 의 `guard_workflow_columns`) 뒤로는 흐름 다섯 열(`stage`·`review_round`·`review_steps`·`dev_workflow`·`tags`)이 있는 행을 이 RPC 가 JWT 로 쓰면 42501 `WORKFLOW_COLUMNS_RPC_ONLY` 다 — 회수 전까지 관리자 직접 호출은 흐름 열이 빈 행만 된다(SP5b 스펙 §9).
 - SP4 에서 넘어옴(SP4 스펙 §9): 팀 이름 규칙(길이·예약어·겹침 — SP4 D37)과 새 code 규칙(`normalizeNewTeamCode`)의 DB 이관 — 앱의 팀 쓰기는 전부 service_role 인데 세션의 `teams` insert·update 정책과 `GRANT ALL … TO authenticated` 가 남아 워크스페이스 관리자가 PostgREST 로 규칙을 비킬 수 있다(code 불변만 DB 가 지킨다 — `TEAM_CODE_IMMUTABLE`). 세션 쓰기 길 회수(또는 열 단위 update)와 `check` 를 둔다.
 - SP4 에서 넘어옴(SP4 스펙 §9): 팀 추가·개명·새 code 겹침 검사의 같은 범위 팀 질의가 한 응답(PostgREST `max_rows` 1,000행)이다 — 위 이관으로 사라지고, 그 전이면 `fetchAllByKeyset` 으로 끝까지 읽는다(SP4 A2 최종 리뷰 P2-2).
 
@@ -3849,6 +3874,8 @@ MIN-ATT 완료 조건(아래 SP5 done_when 에 더한다):
 | — | 없음 | SP3b(조건부 행 제외)·SPU1~3·SP9 | — |
 
 **SP5 마감 실측(2026-10-04)** — 위 표의 SP5 행(`0015`~`0018`)은 계획이었고 실제 main 배정은 다음과 같다: `0018_account_preferences`(SP3b UI-2 — 조건부 행 채택), `0019_calendar`(SP5 A), `0020_issue_areas`(B1), `0021_attachments`·`0022_semantic_scope`(B3 — 제8부 첨부는 B3 로 분리), `0023_vocab_settings`(B4), `0024_minutes_teams`(B2). 그래서 위 표의 `0019`~`0024`(SP7·SP5b·SP8·SP5c·SP6) 예정 번호는 무효이고, 다음 SP 는 **`0025` 부터** 머지 순서대로 받는다(원격 DB 가 아직 없어 재배정 비용 0).
+
+**SP5b 마감 실측(2026-10-04)** — SP5b 는 표의 `0020_workflow_policy`·`0021_issue_status_vocab` 대신 스펙 D23 순서(I → W1)로 `0025_issue_status_vocab`(이슈 표시 상태)·`0026_workflow_policy`(WBS 흐름)를 받았다. 이 문서 본문 §2.3.2·§3.2·§3.3 의 `0020`·`0021` 은 각각 `0026`·`0025` 로 읽는다. 다음 SP 는 **`0027` 부터**다.
 
 번호 규칙:
 
