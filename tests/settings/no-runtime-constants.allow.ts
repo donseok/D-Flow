@@ -6,6 +6,7 @@ export type RuntimeConstantPattern =
   | 'DEFAULT_TEAMS' | 'WEEKLY_SECTIONS' | 'WEEKLY_TEAM_SECTIONS' | 'FALLBACK_SECTION' | 'LEGACY_EXCEL_PROFILE_V1' | 'LEGACY_LABEL_ABBR'
   | 'ATTENDANCE_TYPES' | 'MEETING_CATEGORIES' | 'ISSUE_SEVERITIES' | 'Asia/Seoul' | '+09:00' | '9 * 3600_000' | 'RESERVED_TEAM_NAMES'
   | 'fixtures/excel/legacyBuild' | 'DEFAULT_LEVEL_LABELS' | 'teamStyle' | 'team-[1-5]'
+  | 'STAGE_LABEL_KO' | 'STAGE_NONE_LABEL_KO' | 'CREDIT_STEP' | 'CREDIT_GAP'
 
 // SP4 A1 이 지운 주간 상수(WEEKLY_SECTIONS·WEEKLY_TEAM_SECTIONS·FALLBACK_SECTION)는 허용 항목 없이 패턴만 남는다 — 재도입을 막는 영구 가드(스펙 §4.8)
 export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
@@ -23,10 +24,19 @@ export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
   // SP4 B 가 지운 팀 색 — 코드 해시 슬롯 함수와 옛 팀 토큰 클래스. 화면 색은 teamColor.ts 의 teamSlot·teamSlotFor(category-N). 허용 항목 없음 = 영구 가드(§4.8)
   teamStyle: /\bteamStyle\b/,
   'team-[1-5]': /\b(?:text|bg)-team-[1-5]\b/,
+  // SP5b(스펙 §6.1 상수 가드) — 단계 이름은 workflow.wbs_stage_labels(useStageLabel·loadStageLabelsMap), 크레딧 단위·간격은 workflow.credit_policy.
+  // 아래 허용 목록의 정의·폴백 파일만 남고, 새 소비처는 설정을 읽어야 한다
+  STAGE_LABEL_KO: /\bSTAGE_LABEL_KO\b/, STAGE_NONE_LABEL_KO: /\bSTAGE_NONE_LABEL_KO\b/,
+  CREDIT_STEP: /\bCREDIT_STEP\b/, CREDIT_GAP: /\bCREDIT_GAP\b/,
 }
 
 /** 파일 → { patterns, removedBy } */
-export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removedBy: 'SP5' | 'SP5b' | 'SP6' }> = {
+export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removedBy: 'SP5' | 'SP5b' | 'SP6' | 'never' }> = {
   // 어휘(근태 유형·회의 범주·이슈 심각도 — SP5 B4 묶음3 이 0 으로 — 허용 항목 없음 = 영구 가드)
   // 시간대·고정 오프셋(SP5 Phase A calendar.timezone) — 과제 32 로 0(허용 항목 없음 — 영구 가드, no-runtime-constants.test.ts)
+  // SP5b — 정의 파일과 "설정에 없는 칸" 의 폴백 자리만(소비처는 W2 가 설정으로 바꿨다). 지울 SP 가 없는 고정 허용('never') — 이 넷 밖으로 늘지 않는다
+  'src/lib/domain/stageLabels.ts': { patterns: ['STAGE_LABEL_KO', 'STAGE_NONE_LABEL_KO'], removedBy: 'never' },
+  'src/lib/domain/waitReason.ts': { patterns: ['STAGE_LABEL_KO'], removedBy: 'never' },
+  'src/components/agent-hub/labels.ts': { patterns: ['STAGE_NONE_LABEL_KO'], removedBy: 'never' },
+  'src/lib/domain/stageCredits.ts': { patterns: ['CREDIT_STEP', 'CREDIT_GAP'], removedBy: 'never' },
 }
