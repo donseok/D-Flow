@@ -19,6 +19,9 @@ export const FORM_FORMAT: Record<FormKind, FormFormat> = {
   wbs_export_xlsx: 'xlsx',
 }
 
+/** 양식 파일 상한(정본 §4.7.2). 버킷 file_size_limit 과 같다. */
+export const FORM_TEMPLATE_MAX_BYTES = 10_485_760
+
 export type PlaceholderKind = 'value' | 'rows' | 'slide' | 'items'
 
 /** 토큰이 있는 자리. pptx는 slide·shapeId(·table 셀·paragraph), xlsx는 sheet·cell */

@@ -27,6 +27,11 @@ export const FORM_SETTING_MODULE: Record<FormKind, ModuleId> = {
   wbs_export_xlsx: 'wbs',
 }
 
+const FORM_KINDS = new Set<string>(Object.keys(FORM_SETTING_MODULE))
+export function isFormKind(v: unknown): v is FormKind {
+  return typeof v === 'string' && FORM_KINDS.has(v)
+}
+
 const OPTION_KEYS = ['max_lines_per_cell', 'max_rows_per_slide', 'item_cap', 'empty_text', 'continuation_label'] as const
 const VALUE_KEYS = ['template_id', 'mapping', 'options'] as const
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
