@@ -125,3 +125,9 @@ SP8(봇 테스트 정비)의 몫이다(A2 최종 리뷰 완료 P3-3 — 계획 �
 - `scripts/e2e-synthetic.mjs`, 전용 3102 `next start`, source HEAD `4eb5fe81`; **exit 0, `ok:true`, 18/18**. 확인한 활성 단계: `S1-issues`, `S6-issue-codes`, `S10-negative`, `S6-pending`, `S10-pending`; SP4 단계 포함 전체 18단계 통과.
 - S10 음성 검사에서 R 대상 7·C 대상 9, 적중·교차 모두 0. 화면 증거는 `weekly_section`만 대상으로 삼아 issue-area 원자료를 주간 출력으로 오인하지 않는다. 합성 영역명 `QA 검사`는 SP4 센티널 단어와 충돌하지 않도록 정했다.
 - 실행 전후 `git diff --quiet -- src supabase` 참. 검사는 로컬 합성 데이터만 사용했다.
+
+## SP5 B2 — 2026-10-04
+
+- `scripts/e2e-synthetic.mjs`, 서버 3101 `next start`, `sp5/b2` 묶음4 커밋 위(14:26 KST). **exit 0, `ok:true`, 19/19** — B4 의 `S1-vocab` 포함 전 단계 통과, 실패 0·빠진 필수 0.
+- B2 는 새 합성 단계를 더하지 않았다 — 회의록 팀 루트·비활성 거부는 로컬 E2E `minutes-teams` 단계(`sp5-e2e.md` B2 절)와 RLS `minutes-teams` 계열이 본다. `S10-negative` 적중·교차 0.
+- 실행 전후 `git diff --quiet -- src supabase` 참.

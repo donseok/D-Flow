@@ -69,3 +69,21 @@
 에이전트 허브 오류 시나리오는 전용 DB의 설정을 임시 손상한 뒤 `finally` 복구를 확인했다. workspace 달력의 한국어 ‘오늘’ 선택 표시와 2026-10-03 회의, 포털의 프로젝트 현지 날짜 표기를 눈으로 확인했다. 모든 dark 캡처에서 `html.dark`가 참이고 대응 light 이미지와 해시가 달랐다.
 
 파일명은 화면에 따라 `issues-list`, `issue-form-analysis-off`, `issue-form-required`, `issue-form-needs-setup`, `issue-detail`, `issue-analysis-modal`, `issue-dashboard-cards`, `issue-settings`, `minute-issue-popover-insight`, `project-meetings-tz`, `workspace-meetings-tz`, `portal-today-meeting`, `agent-hub-calendar-broken`에 `-<1440|390>-<light|dark>.png`를 붙인다. 코어 캡처는 `/tmp/sp5b1-ui.CV5dt6`, 카드/회의록/허브 보완은 각각 `/tmp/sp5b1-dashboard-eye.nX2h0I`, `/tmp/sp5b1-minute-eye.F6j3t1`, `/tmp/sp5b1-agent-eye.1AtR9x`에 남겼다(임시 파일 수명에 의존).
+
+## B2 — 회의록 팀·폴더 · 2026-10-04 · `sp5/b2`
+
+`next start` 3101, 플랫폼 관리자 검증 계정, E2E 데이터 위. 6 화면 × 1440/390 × light/dark = 24 캡처. 가로 넘침 0·페이지 오류 0. sha 는 PNG 앞 12자리.
+
+| 화면 | 1440 light | 390 light | 1440 dark | 390 dark | 확인 |
+|---|---|---|---|---|---|
+| 설정·회의록 최상위 폴더 | `1626d4a4d1c9` | `e5f5f5dadaf7` | `ffa0f601d4e4` | `91cd4c1bc308` | 현재 방식(팀별 폴더) 표기, 개명 따라감 안내 |
+| 회의록 트리 | `19d2a249a420` | `3c70274c7010` | `1d7fa31d6561` | `c4e67820c57e` | 팀 루트 = 팀 이름, 잠긴 루트(이름 변경·삭제 없음) |
+| 회의록 팀 필터 | `e1442f403a7c` | `e9b1b96707da` | `1da0869cad9d` | `3c83caf63e81` | `?team=OPS` → 팀 id 리다이렉트, 탭 선택 |
+| 공용 팀 관리 | `efd8be10d169` | `4bd8d06a6887` | `1aa497103e33` | `9afb46cc63d2` | 팀 추가·개명 문구 |
+| 내 회의 목록 | `24c65aca2059` | `3128e45d2064` | `848be63382f2` | `170b9a5e6587` | 결과형 — 로딩 표시 |
+| 포트폴리오 | `e0cf87d0e9d3` | `535327288d6a` | `7403ee2f5b4a` | `f44ac04b116c` | 프로젝트 점 = category 토큰 |
+
+- 고친 것: ① 탐색기 카드 격자가 390 에서 미리보기 글이 넘쳤다 → `grid-cols-1 sm:grid-cols-2 xl:grid-cols-3` + 미리보기 `break-words`. ② 팀 관리 하단 문구를 "팀 이름을 바꾸면 회의록 폴더 이름이 따라간다"로 바꿨다.
+- 다크 캡처 주의: 첫 캡처 묶음은 계정 선호(`account_preferences.prefs.theme='light'`)를 `PrefsSync` 가 적용해 다크 캡처가 라이트로 찍혔다(해시 동일). 검증 계정의 선호를 dark 로 바꿔 다크만 다시 찍고 light 로 되돌렸다 — 12 다크 캡처 모두 `html.dark` 참, 대응 라이트와 해시가 다르다.
+- 관찰(B2 범위 밖): 390 회의록 머리의 보기 전환 줄은 안쪽 가로 스크롤이라 '트리' 버튼 앞이 살짝 잘려 보인다(문서 폭 넘침은 아님, 기존 배치).
+- 이미지는 작업 트리 밖 스크래치(`shots3/`)에 두었다(세션 수명에 의존).

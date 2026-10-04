@@ -83,3 +83,14 @@
 - 소비처: 일반 등록과 분석 필드 쓰기의 모듈 관문 분리, 분석 모듈 OFF일 때 기존 메타를 보존하는 수정 계약, 코드/영역을 사용하는 목록·회의록·분석서·색인, 영역별 채번/정책 렌더 골든 표의 TS·SQL 대응을 확인했다.
 - 제한: 전체 테스트의 알려진 firmlink 실패 1건, 외부 LLM 봇 호출 미실행, 성능 측정은 사용자 지시대로 SP5 전체 구현 뒤 일괄 실행. `.github/workflows/ci.yml`은 `sp5/**` push를 대상으로 하지 않아 B1 원격 CI 실행은 없다(로컬 CI 등가 결과를 사용).
 - GitHub `origin/sp5/b1`에 체크포인트 커밋을 푸시했고 작업 트리는 깨끗하다. 태그는 로컬 유지. main 반영과 사용자 DB 적용은 별도 단계다.
+
+## B2 체크포인트 — 회의록 팀·폴더 · 2026-10-04 (Claude Cloud)
+
+- 소스: `sp5/b2`, 체크포인트 커밋 `9ad2e8e` + 묶음5 작업 트리(E2E 단계·탐색기 390 폭·팀 관리 문구), 마지막 이관 `0024_minutes_teams`. 로컬 Supabase(CLI 2.75, `supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,postgres-meta`). 사용자 DB 접근 없음.
+- 리허설: `db reset`(14:13:24 KST) → `*_minutes_teams_*` 리허설 smoke 통과 → `dev:bootstrap` → `settings:verify` 문제 0. test:rls 41 files·644 통과/skip 0.
+- 로컬 E2E(`scripts/e2e-local.mjs`, `next start` 3101, 14:48 KST): **`ok:true`, 56/56**. 새 단계 `minutes-teams`(issue-code-flow 뒤):
+  공용 팀 추가(`addTeam` → `create_team`) → 팀 루트(kind team_root·이름 = 팀 code·무프로젝트) → 폴더 없이 올린 회의록이 그 루트로 편철되고 `team_id` 가 그 팀 → 팀 개명 → 루트 이름이 따라가고 폴더 id 불변 → 탐색기에 새 이름 → 비활성 → 그 루트 아래 새 폴더 거부("비활성 팀의 폴더…")·그 팀 code 의 새 회의록 거부·루트 보존.
+- 합성 게이트: `synthetic-acceptance.md` SP5 B2 절(19/19). 눈확인: `sp5-ui.md` B2 절. 성능: `sp5-perf.md`(SP5 전체 일괄).
+- 단위 전체 통과(11,916·skip 2 — 묶음5 직전 실행, 마감 직전 재실행은 아래 effort 절), typecheck·lint(오류 0, 기존 경고 4)·build 통과.
+- 옛 링크: `?team=OPS`(code) → 해석한 팀 id 로 리다이렉트(`resolveTeamParam`)를 실화면에서 확인했다.
+- 제한: 외부 LLM 호출 없음. 자체 검토이며 독립 리뷰가 아니다. `.github/workflows/ci.yml` 은 `sp5/**` push 를 대상으로 하지 않는다(로컬 등가 결과 사용).
