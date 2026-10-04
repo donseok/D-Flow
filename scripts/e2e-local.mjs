@@ -120,6 +120,11 @@ const ACTIONS = {
   // SP5b I issue-status-flow — 이슈 모달의 진행 저장과 설정 화면의 기록 옮기기
   updateIssueProgress: { filename: 'src/app/actions/issues.ts', exportedName: 'updateIssueProgress', worker: '/p/[projectId]/issues/page' },
   migrateVocabCode: { filename: 'src/app/actions/vocab.ts', exportedName: 'migrateVocabCode', worker: '/p/[projectId]/settings/page' },
+  // SP5b W1 workflow-approval — 명세 패널의 승인 버튼, 단계 패널의 단계 지정·단계 승인
+  approveAgentCompletion: { filename: 'src/app/actions/agentWork.ts', exportedName: 'approveAgentCompletion', worker: '/p/[projectId]/wbs/page' },
+  setWbsStage: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsStage', worker: '/p/[projectId]/wbs/page' },
+  setWbsDevWorkflow: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsDevWorkflow', worker: '/p/[projectId]/wbs/page' },
+  approveWbsStep: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'approveWbsStep', worker: '/p/[projectId]/wbs/page' },
   createAgentToken: { filename: 'src/app/actions/agentTokens.ts', exportedName: 'createAgentToken', worker: '/account/page' },
   setWorkspaceRole: { filename: 'src/app/actions/accounts.ts', exportedName: 'setWorkspaceRole', worker: '/w/[slug]/admin/accounts/page' },
   listAuthzEvents: { filename: 'src/app/actions/authzEvents.ts', exportedName: 'listAuthzEvents', worker: '/w/[slug]/settings/page' },
@@ -1570,6 +1575,96 @@ async function main() {
   }
   step('issue-status-flow', { project: flowP.id, issue: flowIssue.id, results: { toApproval, toDone, backToApproval, deleteInUse, crossMigrate, sameMigrate, deleteAfter }, checks: isChecks },
     Object.values(isChecks).every(Boolean) ? undefined : `이슈 상태 흐름: ${JSON.stringify(isChecks)}`)
+
+  // 19d. WBS 2단계 승인(SP5b W1 — 스펙 §6.1 workflow-approval): 새 프로젝트에 승인 단계 둘(내부 검토 = 서브트리 관리자 이상, 고객 승인 = 관리자)을
+  // 설정 액션으로 저장 → 위임 리프의 주문을 PAT 로 claim·완료 보고 → 첫 승인(나) 뒤 주문 reported·단계 im·work.approval_step 1·work.approved 0 →
+  // 같은 사람의 둘째 단계는 거부(서로 다른 승인자) → 다른 관리자(carol)의 둘째 승인 뒤 approved·xx·100·work.approved 1, 원장 2행(via=approve).
+  // 사람 경로: 위임 없는 리프는 xx 직행이 approval_required, im 으로 올린 뒤 단계 승인 둘로 xx. 선행 기준(final)의 claim 게이트 대조는 W2 가 이 단계에 더한다.
+  const wfName = `E2E 승인 흐름 ${randomUUID().slice(0, 8)}`
+  await admin.http('GET', wsPath(wsA, 'projects'))
+  mustOk('E2E 승인 흐름 프로젝트', (await admin.action(wsPath(wsA, 'projects'), 'createProject', [{
+    workspaceId: wsA, name: wfName, startDate: null, endDate: null, description: null, levelLabels: LEVEL_LABELS, commandId: randomUUID(),
+  }])).result)
+  const wfP = rows('E2E 승인 흐름 프로젝트 조회', await admin.sb.from('projects').select('id').eq('name', wfName).single())
+  const updateWfSettings = async (set, unset = []) => {
+    await admin.http('GET', `/p/${wfP.id}/settings`)
+    const doc = rows('승인 흐름 프로젝트 설정', await admin.sb.from('project_settings').select('revision').eq('project_id', wfP.id).single())
+    return (await admin.action(`/p/${wfP.id}/settings`, 'updateProjectSettings',
+      [wfP.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset }])).result
+  }
+  const WF_STEPS = [{ code: 'internal', label: '내부 검토', approver: 'subtree_or_admin' }, { code: 'client', label: '고객 승인', approver: 'admin' }]
+  mustOk('승인 단계 둘 저장', await updateWfSettings({ 'workflow.approval_steps': WF_STEPS }))
+  // agents 등록 행은 모듈을 새로 켤 때 생긴다(agentsSync) — 껐다 켠다
+  const wfModules = async (label, fn) => {
+    const cur = rows('승인 흐름 모듈', await admin.sb.from('project_settings').select('values').eq('project_id', wfP.id).single()).values['modules.enabled']
+    mustOk(label, await updateWfSettings({ 'modules.enabled': fn(cur) }))
+  }
+  await wfModules('승인 흐름 agents 끄기', (e) => e.filter((id) => id !== 'agents'))
+  await wfModules('승인 흐름 agents 켜기', (e) => [...e.filter((id) => id !== 'agents'), 'agents'])
+  // 둘째 관리자 — 초대로 들어온 carol 을 이 프로젝트 명단의 관리자로(명단 = 권한)
+  const carolPerson = rows('carol 인물', await svc.from('people').select('id').eq('workspace_id', wsA).eq('user_id', carolUser.id).single())
+  rows('carol 명단', await svc.from('project_members').insert({ project_id: wfP.id, person_id: carolPerson.id, access_role: 'admin' }).select('id'))
+  // 리프 둘(에이전트 리프 W·사람 리프 H) — 화면과 같은 액션으로 만든다: 추가 → (W 만) 담당 지정 → 개발 워크플로 켜기. W 는 담당자가 있는 리프라
+  // 켜는 순간 assign 사건(as)과 ready 주문 자동 발행이 따른다(ensureOrderForWorkflowLeaf). W 의 담당자는 나 — claim 은 담당자 본인만,
+  // work.approved 는 담당자에게 간다(워크스페이스 관리자는 명단 없이도 관리자다 — 담당자가 되려면 명단 행이 있어야 한다)
+  const myPerson = rows('내 인물', await svc.from('people').select('id').eq('workspace_id', wsA).eq('user_id', me.id).single())
+  const myWfMember = rows('승인 흐름 내 명단', await svc.from('project_members').insert({ project_id: wfP.id, person_id: myPerson.id, access_role: 'member' }).select('id'))[0]
+  await admin.http('GET', `/p/${wfP.id}/wbs`)
+  const wfLeaf = mustOk('승인 흐름 W', (await admin.action(`/p/${wfP.id}/wbs`, 'addWbsItem', [wfP.id, null, 'E2E 에이전트 리프'])).result)
+  const humanLeaf = mustOk('승인 흐름 H', (await admin.action(`/p/${wfP.id}/wbs`, 'addWbsItem', [wfP.id, null, 'E2E 사람 리프'])).result)
+  mustOk('W 담당', (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsAssignee', [wfLeaf.id, myWfMember.id])).result)
+  mustOk('W 워크플로', (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsDevWorkflow', [wfLeaf.id, true, false])).result)
+  mustOk('H 워크플로', (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsDevWorkflow', [humanLeaf.id, true, false])).result)
+  const wfOrder = rows('승인 흐름 주문', await svc.from('agent_work_orders').select('id').eq('wbs_item_id', wfLeaf.id).eq('status', 'ready'))[0]
+  if (!wfOrder) throw new Fail('개발 워크플로를 켠 담당 리프에 ready 주문이 없다')
+  await admin.http('GET', '/account')
+  const wfToken = mustOk('승인 흐름 토큰', (await admin.action('/account', 'createAgentToken', [{ name: `e2e-wf-${randomUUID().slice(0, 8)}`, projectId: wfP.id, scopes: ['work:read', 'work:claim'], expiresDays: 1 }])).result)
+  const agentPost = async (path, body, expectedStatus) => {
+    const res = await fetch(`${base}${path}`, { method: 'POST', headers: { authorization: `Bearer ${wfToken.token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    const json = await res.json().catch(() => null)
+    if (res.status !== expectedStatus) throw new Fail(`POST ${path} → ${res.status}(기대 ${expectedStatus}): ${JSON.stringify(json)?.slice(0, 300)}`)
+    return json
+  }
+  await agentPost(`/api/v1/agent/work/${wfOrder.id}/claim`, { agent: 'e2e-wf' }, 200)
+  await agentPost(`/api/v1/agent/work/${wfOrder.id}/report`, { agent: 'e2e-wf', kind: 'completion', percent: 100, summary: 'E2E 완료' }, 200)
+  const wfReport = rows('완료 보고', await svc.from('agent_work_reports').select('id').eq('work_order_id', wfOrder.id).eq('kind', 'completion'))[0]
+  const notifCount = async (type) => rows(`알림 ${type}`, await svc.from('notification_events').select('id').eq('project_id', wfP.id).eq('type', type)).length
+  const wfState = async () => ({
+    order: rows('주문 상태', await svc.from('agent_work_orders').select('status').eq('id', wfOrder.id).single()).status,
+    item: rows('항목 상태', await svc.from('wbs_items').select('stage, actual_pct, review_round, review_steps').eq('id', wfLeaf.id).single()),
+  })
+  const approvedBefore = await notifCount('work.approved')
+  await admin.http('GET', `/p/${wfP.id}/wbs`)
+  const step1 = (await admin.action(`/p/${wfP.id}/wbs`, 'approveAgentCompletion', [wfOrder.id, wfReport.id, 'internal'])).result
+  const afterStep1 = await wfState()
+  const approvalStepEvents = await notifCount('work.approval_step')
+  const approvedAfterStep1 = await notifCount('work.approved')
+  const sameActor = (await admin.action(`/p/${wfP.id}/wbs`, 'approveAgentCompletion', [wfOrder.id, wfReport.id, 'client'])).result
+  await carol.http('GET', `/p/${wfP.id}/wbs`)
+  const step2 = (await carol.action(`/p/${wfP.id}/wbs`, 'approveAgentCompletion', [wfOrder.id, wfReport.id, 'client'])).result
+  const afterStep2 = await wfState()
+  const approvedAfterStep2 = await notifCount('work.approved')
+  const ledger = rows('승인 원장', await svc.from('wbs_stage_approvals').select('step_code, via, revoked_at').eq('wbs_item_id', wfLeaf.id).order('step_code'))
+  // 사람 경로
+  const directXx = (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsStage', [humanLeaf.id, 'xx'])).result
+  const toIm = (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsStage', [humanLeaf.id, 'im'])).result
+  const human1 = (await admin.action(`/p/${wfP.id}/wbs`, 'approveWbsStep', [humanLeaf.id, 'internal'])).result
+  const human2 = (await carol.action(`/p/${wfP.id}/wbs`, 'approveWbsStep', [humanLeaf.id, 'client'])).result
+  const humanItem = rows('사람 리프', await svc.from('wbs_items').select('stage, actual_pct').eq('id', humanLeaf.id).single())
+  const wfChecks = {
+    firstStepIntermediate: step1?.ok === true && step1?.remaining === 1 && afterStep1.order === 'reported' && afterStep1.item.stage === 'im'
+      && JSON.stringify(afterStep1.item.review_steps) === JSON.stringify(['internal', 'client']),
+    approvalStepNotified: approvalStepEvents === 1 && approvedAfterStep1 === approvedBefore,
+    sameActorDenied: sameActor?.ok === false && String(sameActor?.error).includes('다른 사람'),
+    finalApproved: step2?.ok === true && step2?.remaining === undefined && afterStep2.order === 'approved' && afterStep2.item.stage === 'xx' && Number(afterStep2.item.actual_pct) === 100,
+    approvedNotified: approvedAfterStep2 === approvedBefore + 1,
+    ledgerTwo: ledger.length === 2 && ledger.every((r) => r.via === 'approve' && r.revoked_at === null),
+    humanDirectXxDenied: directXx?.ok === false && String(directXx?.error).includes('승인 단계가 둘 이상'),
+    humanStepApproved: toIm?.ok === true && human1?.ok === true && human1?.remaining === 1 && human2?.ok === true
+      && humanItem.stage === 'xx' && Number(humanItem.actual_pct) === 100,
+  }
+  step('workflow-approval', { project: wfP.id, order: wfOrder.id, results: { step1, sameActor, step2, directXx, toIm, human1, human2 }, ledger, checks: wfChecks },
+    Object.values(wfChecks).every(Boolean) ? undefined : `승인 흐름: ${JSON.stringify(wfChecks)}`)
 
   // 20. 시드 이슈가 켜진 화면에 보이는지 먼저 확인한 뒤, 꺼진 화면·액션·분석 API 모두에서 차단되는지 본다.
   const issueTitle = `E2E 관문 이슈 ${randomUUID().slice(0, 8)}`

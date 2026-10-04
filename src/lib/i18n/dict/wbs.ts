@@ -68,6 +68,9 @@ export const wbsKo = {
   'wbs.toastYourValue': '입력한 값',
   'wbs.toastSaveFail': '저장 실패',
   // updateActual 의 사유 코드 actual_locked — 액션의 한국어 문구와 같다. WBS 와 칸반의 실적 저장 토스트가 함께 쓴다.
+  'wbs.approveStep': '승인({i}/{n} · {label})', 'wbs.approveStepDefault': '승인',
+  'wbs.approveStepStale': '승인 단계가 바뀌었습니다 — 새로 불러온 단계를 확인한 뒤 다시 승인하세요.',
+  'wbs.stageXxNeedsApproval': '승인 단계가 둘 이상이라 완료는 검수 대기에서 단계 승인으로만 됩니다.',
   'wbs.actualLocked': '완료는 승인 버튼으로 처리합니다 — 에이전트 관할 작업(위임됨·작업 중·검수 대기)은 99% 까지 입력할 수 있습니다. 직접 완료하려면 위임을 끄세요.',
   'wbs.toastPhaseAdded': 'Phase가 추가되었습니다',
   'wbs.toastAddFail': '추가 실패',
@@ -340,6 +343,7 @@ export const wbsKo = {
   'wbs.err.siblingLookup': '형제 항목을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.',
   'wbs.err.save': '저장하지 못했습니다 — 잠시 후 다시 시도하세요.',
   'wbs.err.add': '추가하지 못했습니다 — 잠시 후 다시 시도하세요.',
+  'wbs.err.approvalRequired': '이 프로젝트는 승인 단계가 둘 이상이라 완료(100%)는 단계 승인으로만 됩니다 — 99% 까지 입력할 수 있습니다.',
   'wbs.err.anon': '로그인 필요',
   'wbs.err.denied': '권한 없음',
   'wbs.err.lookup': '권한을 확인할 수 없어 중단했습니다.',

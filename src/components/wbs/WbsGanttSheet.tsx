@@ -951,7 +951,7 @@ export function WbsGanttSheet({
       lastRejected.current = draft
       if (via === 'enter') inputRef.current?.focus()
     }
-    let run: () => Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' }>
+    let run: () => Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' | 'approval_required' }>
     if (field === 'actual') {
       if (draft.trim() === '') return reject(t('wbs.toastEmpty'))
       const pct = Number(draft)
@@ -982,7 +982,7 @@ export function WbsGanttSheet({
         cancel()
       } else {
         // 잠금 거부는 사유 코드로, 나머지는 액션 문구를 사전 키로 바꿔 고른다(SP4 D21) — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
-        setToast({ kind: 'err', msg: res.code === 'actual_locked' ? t('wbs.actualLocked') : wbsToastText(t, res.error, 'wbs.toastSaveFail') })
+        setToast({ kind: 'err', msg: res.code === 'actual_locked' ? t('wbs.actualLocked') : res.code === 'approval_required' ? t('wbs.err.approvalRequired') : wbsToastText(t, res.error, 'wbs.toastSaveFail') })
         if (via === 'enter') inputRef.current?.focus()
       }
     } finally {

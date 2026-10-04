@@ -64,6 +64,13 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
         </div>
         <span className="text-[11px] text-ink-subtle">{q.agent} · {when(q.reportedAt, timeZone, locale)}{showTimeZone ? ` (${timeZone})` : ''} · {q.percent}%</span>
       </div>
+      {/* SP5b W1 — 승인 단계가 둘 이상이면 지금 기다리는 단계를 보인다("1/2 · 내부 검토") */}
+      {q.approval && q.approval.total >= 2 && (
+        <p data-queue-step={q.approval.step} className="mt-1 text-[11px] font-medium text-progress">
+          {t('agent.queue.step').replace('{i}', String(q.approval.index)).replace('{n}', String(q.approval.total))
+            .replace('{label}', q.approval.label ?? t('wbs.approveStepDefault'))}
+        </p>
+      )}
       {q.summary && <p className="mt-1 whitespace-pre-wrap text-xs text-ink">{q.summary}</p>}
       {q.links.length > 0 && (
         <ul className="mt-1 flex flex-wrap gap-2 text-[11px]">
@@ -78,7 +85,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
           <div className="flex gap-2">
             {q.canApprove && (
               <button type="button" data-queue-approve disabled={busy} title={OP_TITLE.approve}
-                onClick={() => { void run({ kind: 'approve', orderId: q.orderId, expectedReportId: q.reportId }) }} className="btn btn-primary h-8 px-3 text-xs">{OP_LABEL.approve}</button>
+                onClick={() => { void run({ kind: 'approve', orderId: q.orderId, expectedReportId: q.reportId, ...(q.approval ? { expectedStep: q.approval.step } : {}) }) }} className="btn btn-primary h-8 px-3 text-xs">{OP_LABEL.approve}</button>
             )}
             <button type="button" data-queue-reject-open disabled={busy} aria-expanded={rejecting} title={OP_TITLE.reject}
               onClick={() => setRejecting(v => !v)} className="btn btn-ghost h-8 px-3 text-xs">{OP_LABEL.reject}</button>

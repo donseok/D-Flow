@@ -83,6 +83,7 @@ export const commonKo = {
   'common.attach.objectRemoveFailed': '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.',
   'common.attach.rowRemoveFailed': '첨부 기록을 지우지 못했습니다 — 새로고침한 뒤 확인하세요.',
   // 에이전트 결재 안내 — 에이전트 화면의 나머지 문구는 아직 한국어 하드코딩이다(사전 이관은 별도).
+  'agent.queue.step': '승인 {i}/{n} · {label}',
   'agent.queue.selfApprovalHint': '자기 담당·자기 착수 항목은 다른 관리자나 상위 담당자가 승인합니다. 반려로 보고를 물릴 수는 있습니다.',
   'agent.queue.adminApprovesHint': '승인은 관리자가 합니다. 담당자는 반려로 자기 보고를 물릴 수 있습니다.',
   'agent.seat.selfApprovalHint': '자기 담당·자기 착수 항목의 완료는 다른 관리자나 상위 담당자가 승인합니다.',

@@ -77,6 +77,7 @@ export const commonEn: Record<keyof typeof commonKo, string> = {
   'common.err.tryAgain': 'Please try again later.',
   'common.attach.objectRemoveFailed': 'The attached file could not be deleted — check your permission or the storage status and try again.',
   'common.attach.rowRemoveFailed': 'The attachment record could not be deleted — refresh the page and check again.',
+  'agent.queue.step': 'Approval {i}/{n} · {label}',
   'agent.queue.selfApprovalHint': 'Items you are assigned to or claimed yourself are approved by another admin or a higher-level assignee. You can still reject to withdraw the report.',
   'agent.queue.adminApprovesHint': 'An admin approves. Assignees can reject to withdraw their own report.',
   'agent.seat.selfApprovalHint': 'Completion of items you are assigned to or claimed yourself is approved by another admin or a higher-level assignee.',

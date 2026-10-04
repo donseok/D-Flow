@@ -199,7 +199,8 @@ export function KanbanBoard({
           // 잠금 거부는 사유 코드로, 나머지는 액션 문구를 사전 키로 바꿔 고른다(SP4 D21) — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
           description: res.conflict ? t('kanban.conflict')
             : res.code === 'actual_locked' ? t('wbs.actualLocked')
-              : wbsToastText(t, res.error, 'kanban.errChange'),
+              : res.code === 'approval_required' ? t('wbs.err.approvalRequired')
+                : wbsToastText(t, res.error, 'kanban.errChange'),
           variant: 'error',
         })
         if (res.conflict) router.refresh()
