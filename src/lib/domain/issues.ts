@@ -1,6 +1,7 @@
 // 이슈관리 도메인 — 순수 함수만(I/O 없음).
 // 상태 전환의 단일 정본은 STATUS_TRANSITIONS — UI(select 옵션)와 서버 액션(전환 검증)이
 // 이 맵만 참조한다. 5번째 상태를 추가할 때 이 파일 + 0041 check 제약만 바꾸면 되게 유지할 것.
+import type { CustomValues } from './customFields'
 import type { IssueMinuteSource } from './issueMinuteSource'
 import type { IssueAreaFilter, IssueSourceType } from './issueAnalysis'
 import { diffDaysCal } from './dashboard'
@@ -12,6 +13,8 @@ export type IssueStatus = (typeof ISSUE_STATUSES)[number]
 export type IssueSeverity = string
 
 export interface Issue {
+  /** null is an unreadable custom snapshot; old fixtures may omit this optional field. */
+  custom?: CustomValues | null
   id: string
   issueNo: number
   /** DB가 등록 때 발급하는 불변 업무 코드. issueNo는 내부 정렬 보조다. */

@@ -1,3 +1,4 @@
+import { CustomFieldsProvider } from '@/components/fields/CustomFieldValuesEditor'
 import { loadIssueEntryContext } from '@/lib/issues/context'
 import { getIssues } from '@/lib/data/issues'
 import { getProjectRoster } from '@/lib/data/members'
@@ -52,6 +53,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
   // 표시 상태(SP5b) — 칩·선택지·두 층 필터. 키 손상이면 기본값으로 풀지 않는다(개정 §2.5)
   const statuses = pick(pc.cfg, 'workflow.issue_statuses')
   if (!statuses.ok) return <div className="p-6"><ConfigLoadError error={statuses.error} keyName={statuses.key} kind={statuses.kind} locale={locale} /></div>
+  const customFields = pick(pc.cfg, 'fields.issue')
   const today = todayIn(cal.calendar.timezone, new Date())
   // 명단은 담당자 선택·이름 표시용 곁가지 — 실패해도 이슈는 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
   if (!roster.ok) console.error(`[issues] 명단 조회 실패(project=${projectId}) — 담당자 목록 없이 그리고 경고를 띄운다`)
@@ -72,6 +74,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
         />
       }
     >
+      <CustomFieldsProvider projectId={projectId} entity="issue" defs={customFields.ok ? customFields.value : null} canAdmin={isProjectAdmin(m, projectId)} locale={locale}>
       <IssuesView
         entryContext={entry.ok ? entry.value : null}
         entryError={entry.ok ? undefined : entry.error}
@@ -89,6 +92,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
         sources={sources.value}
         statuses={statuses.value}
       />
+      </CustomFieldsProvider>
     </ProjectPageShell>
   )
 }

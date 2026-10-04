@@ -1,9 +1,13 @@
 'use client'
 
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
+
+const subscribeMounted = () => () => {}
+const clientMounted = () => true
+const serverMounted = () => false
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
@@ -21,6 +25,8 @@ export function Modal({
 }) {
   const { t } = useLocale()
   const panelRef = useRef<HTMLDivElement>(null)
+  // SSR and the first hydration render both omit the portal, including direct ?focus links.
+  const mounted = useSyncExternalStore(subscribeMounted, clientMounted, serverMounted)
 
   // onClose는 소비자가 인라인 화살표로 넘기는 게 보통이라 렌더마다 identity가 바뀐다.
   // 이를 effect 의존성에 넣으면 타이핑(리렌더)마다 트랩이 재설치되며 포커스를 빼앗으므로,
@@ -34,13 +40,13 @@ export function Modal({
   // 있으므로 복원 대상은 아래 effect에서 하이브리드로 결정한다.
   const prevFocusRef = useRef<HTMLElement | null>(null)
   const wasOpenRef = useRef(false)
-  if (open !== wasOpenRef.current) {
+  if (mounted && open !== wasOpenRef.current) {
     if (open && typeof document !== 'undefined') prevFocusRef.current = document.activeElement as HTMLElement | null
     wasOpenRef.current = open
   }
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !mounted) return
     const panel = panelRef.current
     // 복원 대상(트리거) 하이브리드 결정: effect 시점 activeElement가 패널 밖이면 그것 —
     // 연쇄 모달에서는 앞 모달의 cleanup(destroy가 create보다 먼저)이 이 시점에 이미
@@ -77,9 +83,9 @@ export function Modal({
       // 닫힐 때 트리거로 포커스 복원.
       previouslyFocused?.focus?.()
     }
-  }, [open])
+  }, [open, mounted])
 
-  if (!open || typeof document === 'undefined') return null
+  if (!open || !mounted || typeof document === 'undefined') return null
   const width = size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'
 
   return createPortal(

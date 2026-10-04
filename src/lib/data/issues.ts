@@ -1,3 +1,4 @@
+import { parseCustomValues } from '@/lib/domain/customFieldValues'
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import type { Issue, IssueSeverity, IssueStatus } from '@/lib/domain/issues'
@@ -20,7 +21,7 @@ export const getIssues = cache(async (projectId: string): Promise<Issue[]> => {
   const sb = await createServerClient()
   const [issuesRes, assigneesRes, linksRes, majorsRes, attachRes] = await Promise.all([
     sb.from('issues')
-      .select('id, issue_no, code, project_id, area_id, code_area_id, major_id, title, body, status, status_code, severity, start_date, due_date, sub_process, owner_department, related_systems, source_type, source_detail, resolution_note, resolved_at, created_by, created_by_name, created_at, updated_at')
+      .select('id, issue_no, code, project_id, area_id, code_area_id, major_id, title, body, status, status_code, severity, start_date, due_date, sub_process, owner_department, related_systems, source_type, source_detail, resolution_note, resolved_at, created_by, created_by_name, created_at, updated_at, custom')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false }),
     // 지정 순서(created_at)로 정렬해 두 번 실행해도 배열 순서가 같게 한다 — 뷰 정렬과 무관한 안정성.
@@ -129,6 +130,7 @@ export const getIssues = cache(async (projectId: string): Promise<Issue[]> => {
     createdByName: (r.created_by_name as string | null) ?? null,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
+    custom: r.custom === undefined ? undefined : (() => { const parsed = parseCustomValues(r.custom); return parsed.ok ? parsed.value : null })(),
     }
   })
 })

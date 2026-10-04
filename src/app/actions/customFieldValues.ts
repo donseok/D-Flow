@@ -45,7 +45,7 @@ export async function saveCustomFieldValues(projectId: string, entity: FieldEnti
     const reply = entity === 'wbs_item'
       ? await sb.from('wbs_items').update(patch).eq('project_id', projectId).eq('id', rowId).eq('custom', old).select('custom').maybeSingle()
       : entity === 'issue'
-        ? await sb.from('issues').update(patch).eq('project_id', projectId).eq('id', rowId).eq('custom', old).select('custom').maybeSingle()
+        ? await sb.from('issues').update({ ...patch, updated_at: new Date().toISOString() }).eq('project_id', projectId).eq('id', rowId).eq('custom', old).select('custom').maybeSingle()
         : await sb.from('weekly_report_rows').update(patch).eq('project_id', projectId).eq('id', rowId).eq('custom', old).select('custom').maybeSingle()
     if (reply.error) {
       const mapped = rpcFailure(reply.error, TOKENS)

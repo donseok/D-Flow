@@ -21,8 +21,14 @@ describe('JWT field value saves', () => {
   it.each([['wbs_item', 'wbs', 'wbs_items'], ['issue', 'issues', 'issues'], ['weekly_row', 'weekly', 'weekly_report_rows']] as const)('%s is owner-gated and scoped by project/id/JSONB CAS', async (entity, module, table) => {
     expect(await saveCustomFieldValues(P, entity, R, { quantity: 1 }, { quantity: 2 })).toEqual({ ok: true, values: { quantity: 2 } })
     expect(h.mod).toHaveBeenCalledWith({ projectId: P }, module); expect(h.config).toHaveBeenCalledWith(P)
-    expect(h.from).toHaveBeenCalledWith(table); expect(h.update).toHaveBeenCalledWith({ custom: { quantity: 2 } })
+    expect(h.from).toHaveBeenCalledWith(table); expect(h.update).toHaveBeenCalledWith(entity === 'issue' ? { custom: { quantity: 2 }, updated_at: expect.any(String) } : { custom: { quantity: 2 } })
     expect(h.eq.mock.calls).toEqual([['project_id', P], ['id', R], ['custom', '{"quantity":1}']]); expect(h.revalidate).toHaveBeenCalledWith(`/p/${P}`, 'layout')
+  })
+  it('issue value writes advance updated_at for index freshness; grant-limited weekly writes do not send it', async () => {
+    const before = Date.now()
+    await saveCustomFieldValues(P, 'issue', R, { quantity: 1 }, { quantity: 2 })
+    const timestamp = Date.parse(h.update.mock.calls[0][0].updated_at)
+    expect(timestamp).toBeGreaterThanOrEqual(before); expect(timestamp).toBeLessThanOrEqual(Date.now())
   })
   it('guard rejection precedes module, config and session access', async () => {
     h.guard.mockResolvedValue({ ok: false, error: 'denied' }); expect(await saveCustomFieldValues(P, 'issue', R, {}, {})).toMatchObject({ ok: false, code: 'ERR_DENIED' })

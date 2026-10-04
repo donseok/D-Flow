@@ -1,4 +1,5 @@
 'use client'
+import { CustomFieldValuesEditor } from '@/components/fields/CustomFieldValuesEditor'
 // 이슈 모달 3종 — 상세(진행 편집 포함) / 등록·수정 폼 / 삭제 확인.
 // 공지 AnnouncementsView 의 3모달 구조를 파일 분리로 복제(스펙 §6).
 // 진행 필드(상태·담당자·조치메모)는 멤버 전체, 전체 편집·삭제 버튼은 canEdit(작성자/pmo)만 노출 —
@@ -398,6 +399,8 @@ export function IssueDetailModal({
               </div>
             </dl>
           </section>
+
+          <CustomFieldValuesEditor rowId={issue.id} values={issue.custom} canEdit={canWrite} />
 
           {issue.minuteSources.length > 0 && (
             <section>

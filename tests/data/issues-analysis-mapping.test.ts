@@ -31,6 +31,7 @@ describe('이슈 분석 메타 DB 매핑', () => {
       data: [
         {
           id: 'i1',
+          custom: { quantity: 0, approved: false, archive: ['old'] },
           issue_no: 12,
           code: 'PI-I-03-02',
           project_id: 'p-map',
@@ -57,6 +58,7 @@ describe('이슈 분석 메타 DB 매핑', () => {
         },
         {
           id: 'legacy',
+          custom: { corrupt: null },
           issue_no: 11,
           code: 'PI-U-001',
           project_id: 'p-map',
@@ -108,6 +110,9 @@ describe('이슈 분석 메타 DB 매핑', () => {
     }
 
     const result = await getIssues('p-map')
+    expect(result.find(i => i.id === 'i1')?.custom).toEqual({ quantity: 0, approved: false, archive: ['old'] })
+    expect(result.find(i => i.id === 'legacy')?.custom).toBeNull()
+    expect(issues.select).toHaveBeenCalledWith(expect.stringContaining('custom'))
 
     expect(result[0]).toMatchObject({
       code: 'PI-I-03-02',

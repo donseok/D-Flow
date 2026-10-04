@@ -53,7 +53,7 @@ function Editor({ scope, rowId, values, canEdit }: { scope: Scope & { defs: Fiel
   const fields = orderedFields(scope.defs).filter(d => d.active || own(draft, d.key))
   const editable = (def: FieldDef) => canEdit && def.active && (def.editable_by !== 'admin' || scope.canAdmin)
   const change = (key: string, v: FieldValue | undefined) => {
-    setDraft(prev => Object.fromEntries([...Object.entries(prev).filter(([k]) => k !== key), ...(v === undefined ? [] : [[key, v]])]))
+    setDraft(prev => { const next = { ...prev }; if (v === undefined) delete next[key]; else next[key] = v; return next })
     setErrors({}); setMessage(null)
   }
   const reset = () => { setBase(values); setDraft(values); setStale(false); setErrors({}); setMessage(null) }

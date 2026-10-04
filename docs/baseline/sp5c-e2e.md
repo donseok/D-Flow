@@ -25,3 +25,11 @@ S 관리자 액션 커밋 `6ec37531`의 GitHub CI 성공. 설정 키 3개와 관
 전체 단위 921파일 12,277건 모두 통과. 프로덕션 build·타입·lint 검사 통과. 실제 빌드 앱/전용 DB에서 WBS 값 0 조회→JWT 저장 2→다른 경로의 값 4 갱신→오래된 폼의 저장 3 충돌 차단→초안 3 유지→취소 후 최신 4 채택을 확인했다. 데스크톱 1440px/모바일 390px 눈확인, 가로 넘침/pageerror 없음. 임시 계정·프로젝트 정리. 로컬 증거 `.superpowers/sp5c/wbs-field-browser-result.json`, `wbs-fields-desktop.png`, `wbs-fields-mobile.png`.
 
 WBS 시트 추가 열·키보드 이동, 이슈/주간 입력·목록과 필터, custom 실시간 페이로드 연결 등 V 후속 작업은 남았다. X/I/Z 및 최종 성능 검증도 남았으므로 SP5c 완료로 표시하지 않는다.
+
+## V 이슈 상세 입력·직접 링크 검증 (2026-10-04)
+
+이슈 로더/도메인/상세에 공통 입력기를 연결했다. false·0·선택 목록을 보존하고 손상 값은 편집 가능한 빈 객체로 바꾸지 않는다. 멤버의 추가 정보 편집은 기존 이슈 행 RLS로 검사하며 관리자 필드는 별도로 제한한다. 이슈 값 저장에는 updated_at을 함께 갱신해 색인 신선도 판정에서 변경을 놓치지 않게 했다(주간은 제한된 열 권한을 유지하고 기존 DB touch 트리거를 사용). 입력값을 원래 값으로 되돌렸을 때 다른 키 순서를 바꿔 불필요한 저장을 켜던 문제도 보완했다.
+
+실제 브라우저에서 ?focus 직접 링크로 모달을 처음 열 때 React hydration 오류를 발견했다. 공통 Modal의 서버/첫 hydration은 포털을 생략하고 브라우저 마운트 뒤 포털과 포커스 처리를 함께 시작하도록 수정했다. 초기 열린 모달 SSR→hydration, 포커스·Escape·복원과 기존 모달 40건 통과. 전체 단위 921파일 12,279건 통과. 이후 수정 시각 보완의 액션/주간 열 검사 2파일 24건 통과, 최종 프로덕션 build·타입·lint 통과.
+
+최종 빌드의 실제 브라우저/전용 DB에서 이슈의 required false 기본값→true JWT 저장→수정 시각 증가→직접 링크 새 조회를 확인했다. 1440px/390px 눈확인, pageerror/hydration 오류·가로 넘침 0. 같은 실행에서 WBS CAS·관리 화면 백필/purge 회귀도 통과. 임시 계정·프로젝트 및 앱 3101 정리. 로컬 증거 `.superpowers/sp5c/issue-field-browser-result.json`, `issue-fields-desktop.png`, `issue-fields-mobile.png`. 등록/수정 폼·목록/필터·주간·실시간 등 V 후속 및 X/I/Z는 남았다.

@@ -28,6 +28,10 @@ describe('custom value form', () => {
     expect(h.refresh).toHaveBeenCalledOnce(); expect(c.textContent).toContain('saved')
     await render({ quantity: 0 }); expect(c.querySelector<HTMLInputElement>('input')!.value).toBe('2')
   })
+  it('editing a value back to its original value does not reorder other keys or enable a no-op save', async () => {
+    await render({ quantity: 0, archive: '' }, [def(), def({ key: 'archive', type: 'multiline', active: false })])
+    await change('2'); await change('0'); expect(button('Save custom fields').disabled).toBe(true)
+  })
   it('shows false and inactive option labels in read-only fields', async () => {
     await render({ quantity: false }, [def({ type: 'boolean' })], false); expect(c.textContent).toContain('No'); expect(c.querySelector('input')).toBeNull()
     await render({ quantity: 'old' }, [def({ type: 'select', active: false, options: [{ code: 'old', label: 'Historical', color: 'gray', active: false, sort: 0 }] })])
