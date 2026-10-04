@@ -8,7 +8,7 @@ const h = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh }) }))
 vi.mock('@/app/actions/customFieldValues', () => ({ saveCustomFieldValues: h.save }))
 import { CustomFieldsProvider, CustomFieldValuesEditor } from '@/components/fields/CustomFieldValuesEditor'
-const def = (patch: Partial<FieldDef> = {}): FieldDef => ({ key: 'quantity', label: 'Quantity', description: 'Units', type: 'number', active: true, required: false, editable_by: 'member', show_in_list: false, searchable: false, carry_over: false, sort: 0, ...patch })
+const def = (patch: Partial<FieldDef> = {}): FieldDef => ({ key: 'quantity', label: 'Quantity', description: 'Units', type: 'number', active: true, required: false, editable_by: 'member', show_in_list: false, searchable: false, sort: 0, ...patch })
 let c: HTMLDivElement, root: Root
 beforeEach(() => { vi.clearAllMocks(); h.save.mockResolvedValue({ ok: true, values: { quantity: 2 } }); c = document.createElement('div'); document.body.append(c); root = createRoot(c) })
 afterEach(() => { act(() => root.unmount()); c.remove() })
@@ -34,7 +34,7 @@ describe('custom value form', () => {
   })
   it('shows false and inactive option labels in read-only fields', async () => {
     await render({ quantity: false }, [def({ type: 'boolean' })], false); expect(c.textContent).toContain('No'); expect(c.querySelector('input')).toBeNull()
-    await render({ quantity: 'old' }, [def({ type: 'select', active: false, options: [{ code: 'old', label: 'Historical', color: 'gray', active: false, sort: 0 }] })])
+    await render({ quantity: 'old' }, [def({ type: 'select', active: false, options: [{ code: 'old', label: 'Historical', color: 'neutral', active: false, sort: 0 }] })])
     expect(c.textContent).toContain('Historical'); expect(c.textContent).toContain('(inactive)'); expect(c.querySelector('select')).toBeNull()
   })
   it('never offers admin fields to a member or broadens the row affordance', async () => {
