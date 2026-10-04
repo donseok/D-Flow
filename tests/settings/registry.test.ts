@@ -317,7 +317,9 @@ describe('카탈로그 메타와 사전', () => {
       .map(status)).toEqual(Array(8).fill('verified'))
     expect(['branding.product_name', 'branding.logo', 'branding.accent', 'navigation.menu', 'core.extra_axis_label'].map(status))
       .toEqual(Array(5).fill('stored'))
-    expect(status('workflow.stage_credits')).toBe('wired')
+    // SP5b Z — 크레딧 표와 흐름 다섯은 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성(Z) 뒤 verified
+    expect(['workflow.stage_credits', 'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers',
+      'workflow.predecessor_gate'].map(status)).toEqual(Array(6).fill('verified'))
     // SP5 A 과제 29 — 달력 셋은 정의·편집·소비처·테스트 네 연결이 끝나 verified(스펙 D44)
     expect(['calendar.timezone', 'calendar.working_days', 'calendar.week_start'].map(status)).toEqual(Array(3).fill('verified'))
     expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['portal.widgets', 'views.default', 'fields.issue']))

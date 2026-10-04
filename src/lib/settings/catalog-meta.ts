@@ -36,7 +36,7 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     tests: ['tests/excel/standard-profile.test.ts', 'tests/api/export-route.test.ts'],
   },
   'modules.enabled': A('verified', ['src/lib/modules/effective.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
-  'workflow.stage_credits': A('wired', ['src/components/settings/StageCreditSlider.tsx', 'supabase/migrations/0012_settings.sql'], ['tests/settings/registry.test.ts']),
+  'workflow.stage_credits': A('verified', ['src/components/settings/StageCreditSlider.tsx', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/settings/registry.test.ts', 'tests/domain/stage-credits.test.ts', 'tests/rls/workflow-policy.test.ts']),
   // SP5 A(스펙 D44) — 두 스코프 공용 키 이름(메타는 키 이름 하나 — 스코프별 소비처 (나) 꼴은 SP5 B 마감 판정). 워크스페이스 값의 소비처는
   // 새 프로젝트의 초기값(createProject 의 seedFrom — 상속 아님)과 워크스페이스 화면 달력(viewZone — merge 뒤 슬러그 워크스페이스), 프로젝트 값의
   // 소비처는 load.ts·주간·봇 도구 등이다. 과제 29 가 정의·편집(설정 화면 달력 절)·소비처·테스트 네 연결을 확인하고 verified 로 올렸다.
@@ -68,11 +68,11 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // SP5b I — 정의·편집기(VocabEditor 범주 칸)·DB 트리거·소비처(목록·모달·이력)·테스트(골든 TS·SQL) 넷이 이어져 verified
   'workflow.issue_statuses': S5BI('verified', ['src/lib/domain/issueWorkflow.ts', 'src/app/actions/issues.ts', 'src/components/issues/IssuesView.tsx', 'src/components/issues/IssueModals.tsx', 'src/components/settings/VocabEditor.tsx', 'supabase/migrations/0025_issue_status_vocab.sql'], ['tests/domain/issue-workflow.test.ts', 'tests/rls/issue-workflow.test.ts', 'tests/actions/issues-gate.test.ts']),
   // SP5b W1 — 정의·SQL 판독(workflow_value_of·apply_workflow_event·guard_workflow_actual)·승인 액션까지. 화면 주입·설정 편집기는 W2, verified 는 Z
-  'workflow.credit_policy': S5BW('stored', ['src/lib/settings/validateConfig.ts', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/stage-credits.test.ts', 'tests/settings/registry.test.ts']),
-  'workflow.wbs_stage_labels': S5BW('stored', ['src/lib/settings/defs/project.ts'], ['tests/settings/registry.test.ts']),
-  'workflow.approval_steps': S5BW('wired', ['src/lib/domain/approvalSteps.ts', 'src/app/actions/agentWork.ts', 'src/app/actions/wbsAssign.ts', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/approval-steps.test.ts', 'tests/rls/workflow-policy.test.ts']),
-  'workflow.approval_distinct_approvers': S5BW('wired', ['supabase/migrations/0026_workflow_policy.sql'], ['tests/rls/workflow-policy.test.ts']),
-  'workflow.predecessor_gate': S5BW('wired', ['src/lib/domain/agentWork.ts', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/approval-steps.test.ts', 'tests/rls/workflow-policy.test.ts']),
+  'workflow.credit_policy': S5BW('verified', ['src/lib/settings/validateConfig.ts', 'src/components/settings/StageCreditSlider.tsx', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/stage-credits.test.ts', 'tests/settings/registry.test.ts', 'tests/ui/workflow-settings-editors.test.tsx']),
+  'workflow.wbs_stage_labels': S5BW('verified', ['src/components/wbs/StageLabelsProvider.tsx', 'src/lib/agent/predecessorGate.ts', 'src/components/settings/StageLabelsEditor.tsx'], ['tests/ui/stage-labels-injection.test.tsx', 'tests/ui/workflow-settings-editors.test.tsx', 'tests/settings/registry.test.ts']),
+  'workflow.approval_steps': S5BW('verified', ['src/lib/domain/approvalSteps.ts', 'src/app/actions/agentWork.ts', 'src/app/actions/wbsAssign.ts', 'src/components/settings/ApprovalStepsEditor.tsx', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/approval-steps.test.ts', 'tests/domain/approval-count.test.ts', 'tests/rls/workflow-policy.test.ts']),
+  'workflow.approval_distinct_approvers': S5BW('verified', ['src/lib/domain/approvable.ts', 'src/components/settings/ApprovalStepsEditor.tsx', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/approval-count.test.ts', 'tests/rls/workflow-policy.test.ts']),
+  'workflow.predecessor_gate': S5BW('verified', ['src/lib/domain/agentWork.ts', 'src/lib/agent/predecessorGate.ts', 'src/lib/agent/depends.ts', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/agent/predecessor-gate.test.ts', 'tests/agent/claim-gate-final.test.ts', 'tests/rls/workflow-policy.test.ts']),
   'issues.cause_categories': S5B4('verified', ['src/lib/ai/issue-analysis.ts', 'src/lib/report/issues/storedRun.ts', 'src/lib/report/issues/deckPlan.ts', 'src/app/actions/issueAnalysis.ts'], ['tests/settings/vocab.test.ts', 'tests/ai/issue-analysis.test.ts', 'tests/report/issue-analysis-stored-run.test.ts', 'tests/report/issue-analysis-vocab.test.ts']),
 }
 

@@ -10,7 +10,7 @@ const expectedStatus: Record<string, string> = {
   'modules.allowed': 'verified', 'ai.enabled': 'verified', 'invites.allowed_domains': 'verified',
   'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'stored', 'branding.mail_from_name': 'verified',
   'navigation.menu': 'stored', 'core.level_labels': 'verified', 'core.extra_axis_label': 'stored',
-  'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'wired', 'workflow.issue_statuses': 'verified',
+  'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'verified', 'workflow.issue_statuses': 'verified',
   // SP5 A — 달력 셋(스펙 D44: 정의·편집·소비처·테스트 네 연결). 두 스코프가 같은 키 이름을 쓴다(워크스페이스 기본값 → 프로젝트 생성 시 복사)
   'calendar.timezone': 'verified', 'calendar.working_days': 'verified', 'calendar.week_start': 'verified',
   // SP5 B1 — 정의·편집·소비처·테스트 네 연결
@@ -19,9 +19,9 @@ const expectedStatus: Record<string, string> = {
   'attendance.types': 'verified', 'meetings.categories': 'verified', 'issues.severities': 'verified', 'issues.sources': 'verified', 'issues.cause_categories': 'verified',
   // SP5 B2 — 최상위 폴더 모드. SQL(create_team·ensure_team_roots)·편집기·앱 소비처(편철 정규화 v2.9)·검증 네 연결
   'minutes.root_folders': 'verified',
-  // SP5b W1 — 흐름 다섯. 정의·SQL·승인 액션까지(wired·stored). 화면 주입·설정 편집기(W2) 뒤 Z 가 verified 로 올린다
-  'workflow.credit_policy': 'stored', 'workflow.wbs_stage_labels': 'stored', 'workflow.approval_steps': 'wired',
-  'workflow.approval_distinct_approvers': 'wired', 'workflow.predecessor_gate': 'wired',
+  // SP5b — 흐름 다섯(+크레딧 표). 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성 S1/S3/S9-workflow(Z) 뒤 verified
+  'workflow.credit_policy': 'verified', 'workflow.wbs_stage_labels': 'verified', 'workflow.approval_steps': 'verified',
+  'workflow.approval_distinct_approvers': 'verified', 'workflow.predecessor_gate': 'verified',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.
