@@ -17,6 +17,7 @@ const ERR_UNMAPPED = '매핑되지 않은 자리표시자가 있어 활성화할
 const ERR_TYPE = '자리표시자 종류와 경로 타입이 맞지 않아 활성화할 수 없습니다.'
 const ERR_SCAN = '양식 스캔에 오류가 있어 활성화할 수 없습니다. 파일을 다시 등록하세요.'
 const ERR_RESCAN = '양식 스캔이 현재 엔진과 다릅니다. 파일을 다시 등록하세요.'
+const ERR_UNSCANNED = '자리표시자 스캔은 양식 엔진이 생긴 뒤에 합니다. 그때 파일을 다시 등록하세요.'
 const ERR_SHAPE = '양식 스캔 결과를 읽지 못했습니다. 파일을 다시 등록하세요.'
 
 function isPlaceholder(v: unknown): v is Placeholder {
@@ -37,6 +38,7 @@ function isIssue(v: unknown): v is ScanIssue {
 /** 저장된 스캔이 현재 엔진의 ScanReport 인지. 다른 engineVersion 은 stale */
 function readReport(raw: unknown, kind: FormKind): { ok: true; report: ScanReport } | { ok: false; code: 'RESCAN' | 'SHAPE' } {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { ok: false, code: 'SHAPE' }
+  if ((raw as { tokenScan?: unknown }).tokenScan === false) return { ok: false, code: 'RESCAN' }
   const version = (raw as { engineVersion?: unknown }).engineVersion
   if (version !== ENGINE) return { ok: false, code: typeof version === 'string' ? 'RESCAN' : 'SHAPE' }
   const format = (raw as { format?: unknown }).format
@@ -60,7 +62,10 @@ export function assessFormActivation(
   activeCustomKeys?: readonly string[],
 ): ActivationAssessment {
   const read = readReport(placeholders, kind)
-  if (!read.ok) return { ok: false, code: read.code, error: read.code === 'RESCAN' ? ERR_RESCAN : ERR_SHAPE }
+  if (!read.ok) {
+    const unscanned = typeof placeholders === 'object' && placeholders !== null && (placeholders as { tokenScan?: unknown }).tokenScan === false
+    return { ok: false, code: read.code, error: read.code === 'RESCAN' ? (unscanned ? ERR_UNSCANNED : ERR_RESCAN) : ERR_SHAPE }
+  }
   if (read.report.issues.some((i) => i.severity === 'error')) return { ok: false, code: 'SCAN', error: ERR_SCAN }
   const issues = validatePlaceholders(read.report.placeholders, kind, mapping, activeCustomKeys)
   const errors = issues.filter((i) => i.severity === 'error')

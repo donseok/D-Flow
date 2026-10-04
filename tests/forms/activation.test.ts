@@ -39,6 +39,7 @@ describe('양식 활성화 완전성(정본 §4.7.3)', () => {
   })
   it('engineVersion 이 다르면 재스캔(재등록)을 요구하고, 형식이 깨지면 모양 오류다', () => {
     expect(assessFormActivation('weekly_report_pptx', { ...report([]), engineVersion: 'forms-engine.v0' }, {})).toMatchObject({ ok: false, code: 'RESCAN' })
+    expect(assessFormActivation('weekly_report_pptx', { ...report([]), tokenScan: false }, {})).toMatchObject({ ok: false, code: 'RESCAN', error: expect.stringContaining('엔진') })
     expect(assessFormActivation('weekly_report_pptx', { engineVersion: 'forms-engine.v1', format: 'xlsx', placeholders: [], issues: [] }, {})).toMatchObject({ ok: false, code: 'SHAPE' })
     expect(assessFormActivation('weekly_report_pptx', null, {})).toMatchObject({ ok: false, code: 'SHAPE' })
   })

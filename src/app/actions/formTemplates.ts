@@ -1,8 +1,8 @@
 'use server'
 /**
- * SP6 S2 — 양식 업로드 준비·활성화·활성 해제(정본 §4.7.1).
- * 파일 바이트는 받지 않는다. 브라우저가 incoming 경로에 직접 올린 뒤, 등록(registerFormTemplate)은 다음 조각이다.
- * 활성 해제가 계획의 삭제다. 버전 행·스토리지 객체를 지우는 액션은 정본에 없다.
+ * SP6 S2 — 양식 업로드 준비·등록·활성화·활성 해제(정본 §4.7.1·§4.7.2).
+ * 파일 바이트는 준비 액션으로 받지 않는다. 등록은 incoming 을 내려 패키지만 검사하고 v<n> 으로 옮긴다.
+ * 토큰 스캔(FormEngine.scan)은 하지 않는다. 활성 해제가 계획의 삭제다.
  */
 import { revalidatePath } from 'next/cache'
 import { requireProjectAdmin } from '@/lib/authz'
@@ -12,6 +12,7 @@ import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import { isUuidLike } from '@/lib/domain/validate'
 import { assessFormActivation } from '@/lib/forms/activation'
 import { FORM_FORMAT, FORM_TEMPLATE_MAX_BYTES, type FormKind } from '@/lib/report/engine/types'
+import { validateFormPackage } from '@/lib/report/engine/validate'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { FORM_SETTING_MODULE, isFormKind, type FormSetting, type FormSettingKey } from '@/lib/settings/defs/forms'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
@@ -28,6 +29,11 @@ const ERR_COMMAND = '양식을 바꾸지 못했습니다. 같은 요청으로 �
 const ERR_SETTING = '양식 설정이 손상되어 활성화할 수 없습니다.'
 const ERR_SCHEMA = '설정 형식이 더 새로워 양식을 바꾸지 못했습니다.'
 const ERR_FIELDS = '추가 필드 설정을 읽지 못해 활성화할 수 없습니다.'
+const ERR_REGISTER = '양식을 등록하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_REUPLOAD = '업로드를 다시 하세요.'
+const ERR_PATH = '올린 파일의 경로가 이 프로젝트의 양식과 맞지 않습니다.'
+const INCOMING_TTL_MS = 24 * 60 * 60 * 1000
+const BUCKET = 'form-templates'
 
 const FIELD_KEY: Record<FormKind, ProjectSettingKey> = {
   weekly_report_pptx: 'fields.weekly_row',
@@ -44,6 +50,9 @@ const TOKENS: OwnTokenTable = {
 }
 
 export type FormPrepareResult = { ok: true; path: string } | { ok: false; error: string }
+export type FormRegisterResult =
+  | { ok: true; templateId: string; version: number; path: string; warnings: { code: 'ROUNDTRIP_LOSS'; message: string }[] }
+  | { ok: false; error: string; code?: string }
 export type FormCommand = { expectedRevision: number; commandId: string }
 export type FormCommandResult =
   | { ok: true; status: 'applied' | 'duplicate'; revision: number }
@@ -182,3 +191,102 @@ export async function deactivateFormTemplate(projectId: string, templateId: stri
   if (result.ok) revalidatePath(`/p/${projectId}`, 'layout')
   return result
 }
+
+function incomingMatches(workspaceId: string, projectId: string, kind: FormKind, incomingPath: string): boolean {
+  const parts = incomingPath.split('/')
+  if (parts.length !== 7) return false
+  const [ws, wid, p, pid, form, incoming, file] = parts
+  if (ws !== 'ws' || wid !== workspaceId || p !== 'p' || pid !== projectId || form !== kind || incoming !== 'incoming') return false
+  const m = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([A-Za-z0-9]+)$/.exec(file)
+  return !!m && m[2].toLowerCase() === FORM_FORMAT[kind]
+}
+
+function createdMs(info: unknown): number | null {
+  if (!info || typeof info !== 'object') return null
+  const raw = (info as { created_at?: unknown; createdAt?: unknown }).created_at ?? (info as { createdAt?: unknown }).createdAt
+  if (typeof raw !== 'string') return null
+  const t = Date.parse(raw)
+  return Number.isFinite(t) ? t : null
+}
+
+async function asBytes(data: unknown): Promise<Uint8Array | null> {
+  if (data instanceof Uint8Array) return data
+  if (data instanceof ArrayBuffer) return new Uint8Array(data)
+  if (typeof Blob !== 'undefined' && data instanceof Blob) return new Uint8Array(await data.arrayBuffer())
+  return null
+}
+
+/**
+ * incoming 객체를 받아 패키지를 검사하고 v<n> 으로 옮긴 뒤 active=false 행을 넣는다.
+ * 토큰 스캔은 하지 않는다(tokenScan:false). 실패하면 incoming 을 지운다(정본 §4.7.1).
+ */
+export async function registerFormTemplate(
+  projectId: string, formKind: string, incomingPath: string, fileName: string,
+): Promise<FormRegisterResult> {
+  const g = await requireProjectAdmin(projectId)
+  if (!g.ok) return { ok: false, error: g.error }
+  if (!isFormKind(formKind)) return { ok: false, code: 'CONFIG_INVALID', error: ERR_INPUT }
+  const mod = await requireModule({ projectId }, FORM_SETTING_MODULE[formKind])
+  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: mod.error }
+  const workspaceId = g.actor.projectWorkspace.get(projectId)
+  if (!workspaceId) return { ok: false, code: 'CONFIG_INVALID', error: ERR_WORKSPACE }
+  if (extensionOf(fileName) !== FORM_FORMAT[formKind] || !incomingMatches(workspaceId, projectId, formKind, incomingPath)) {
+    return { ok: false, code: 'CONFIG_INVALID', error: ERR_PATH }
+  }
+  const { admin } = adminFor({ projectId })
+  const bucket = admin.storage.from(BUCKET)
+  const info = await bucket.info(incomingPath)
+  if (info.error || !info.data) return { ok: false, code: 'FORM_GONE', error: ERR_REUPLOAD }
+  const created = createdMs(info.data)
+  if (created !== null && Date.now() - created > INCOMING_TTL_MS) {
+    await bucket.remove([incomingPath])
+    return { ok: false, code: 'FORM_GONE', error: ERR_REUPLOAD }
+  }
+  const downloaded = await bucket.download(incomingPath)
+  if (downloaded.error || downloaded.data == null) return { ok: false, code: 'FORM_GONE', error: ERR_REUPLOAD }
+  const bytes = await asBytes(downloaded.data)
+  if (!bytes || bytes.length < 1 || bytes.length > FORM_TEMPLATE_MAX_BYTES) {
+    await bucket.remove([incomingPath])
+    return { ok: false, code: 'FORM_SIZE', error: bytes && bytes.length > FORM_TEMPLATE_MAX_BYTES ? ERR_SIZE : ERR_PACKAGE_SIZE() }
+  }
+  const checked = validateFormPackage(bytes, FORM_FORMAT[formKind])
+  if (!checked.ok) {
+    await bucket.remove([incomingPath])
+    return { ok: false, code: checked.code, error: checked.error }
+  }
+  const ext = FORM_FORMAT[formKind]
+  const latest = await admin.from('form_templates').select('version').eq('project_id', projectId).eq('form_kind', formKind)
+    .order('version', { ascending: false }).limit(1).maybeSingle()
+  if (latest.error) {
+    await bucket.remove([incomingPath])
+    return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('formTemplates.register', latest.error, ERR_REGISTER) }
+  }
+  const version = (typeof latest.data?.version === 'number' && Number.isSafeInteger(latest.data.version) && latest.data.version >= 1)
+    ? latest.data.version + 1 : 1
+  const dest = `ws/${workspaceId}/p/${projectId}/${formKind}/v${version}.${ext}`
+  const moved = await bucket.move(incomingPath, dest)
+  if (moved.error) {
+    await bucket.remove([incomingPath])
+    return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('formTemplates.register', moved.error, ERR_REGISTER) }
+  }
+  const id = crypto.randomUUID()
+  const placeholders = {
+    tokenScan: false,
+    engineVersion: 'forms-engine.v1',
+    format: ext,
+    placeholders: [],
+    issues: checked.warnings.map((w) => ({ code: w.code, severity: 'warning' as const, message: w.message })),
+  }
+  const inserted = await admin.from('form_templates').insert({
+    id, project_id: projectId, form_kind: formKind, file_name: fileName, storage_path: dest,
+    size_bytes: bytes.length, version, placeholders, active: false, uploaded_by: g.actor.userId,
+  }).select('id').single()
+  if (inserted.error || !inserted.data) {
+    await bucket.remove([dest])
+    return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('formTemplates.register', inserted.error ?? new Error('insert'), ERR_REGISTER) }
+  }
+  revalidatePath(`/p/${projectId}`, 'layout')
+  return { ok: true, templateId: id, version, path: dest, warnings: checked.warnings }
+}
+
+function ERR_PACKAGE_SIZE(): string { return '양식 파일을 읽지 못했습니다. 업로드를 다시 하세요.' }

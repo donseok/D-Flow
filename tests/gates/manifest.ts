@@ -221,6 +221,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('formTemplates')}#prepareFormTemplateUpload`]: { guard: 'projectAdmin', module: 'weekly', sample: [P, 'weekly_report_pptx', 'weekly.pptx', 1024] },
   [`${A('formTemplates')}#activateFormTemplate`]: { guard: 'projectAdmin', module: 'weekly', sample: [P, U, {}] },
   [`${A('formTemplates')}#deactivateFormTemplate`]: { guard: 'projectAdmin', module: 'weekly', sample: [P, U, {}] },
+  [`${A('formTemplates')}#registerFormTemplate`]: { guard: 'projectAdmin', module: 'weekly', sample: [P, 'weekly_report_pptx', 'incoming', 'weekly.pptx'] },
   // ── vocab(SP5 B4) — 어휘 code 이관. 모듈은 키마다(근태·회의·이슈·분석) — 표본은 근태 유형
   [`${A('vocab')}#migrateVocabCode`]: { guard: 'projectAdmin', module: 'attendance', sample: [P, 'attendance.types', 'annual', 'work'] },
   [`${A('settingsPreview')}#previewSettingsImpact`]: { ...nul('workspaceAdmin', '설정 미리보기 — 모듈을 켜는 관리 화면이어서 모듈 관문 밖'), sample: [U, ['agents']] },
