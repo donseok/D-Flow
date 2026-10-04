@@ -17,8 +17,8 @@ const expectedStatus: Record<string, string> = {
   'issues.id_policy': 'verified', 'issues.analysis': 'verified', 'minutes.attachments': 'verified',
   // SP5 B4 — 어휘 다섯. 정의만 먼저(stored) — 트리거·소비처·편집기가 이어지면 verified 로 올린다
   'attendance.types': 'verified', 'meetings.categories': 'verified', 'issues.severities': 'verified', 'issues.sources': 'verified', 'issues.cause_categories': 'verified',
-  // SP5 B2 — 최상위 폴더 모드. SQL(create_team·ensure_team_roots)과 편집기가 먼저 이어지고(wired), 앱 소비처·검증이 끝나면 verified
-  'minutes.root_folders': 'wired',
+  // SP5 B2 — 최상위 폴더 모드. SQL(create_team·ensure_team_roots)·편집기·앱 소비처(편철 정규화 v2.9)·검증 네 연결
+  'minutes.root_folders': 'verified',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.

@@ -704,7 +704,7 @@ export function MinutesExplorer({
                   ? <EmptyState icon={Star} title={t('min.exp.favEmpty')} />
                   : <EmptyState title={t('min.empty.title')} description={t('min.empty.desc')} />
               ) : layout === 'grid' ? (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {shown.map(l => <MinuteCard key={l.id} {...leafItemProps(l)} />)}
                 </div>
               ) : (
@@ -1007,7 +1007,7 @@ function MinuteCard({
           )}
         </div>
       )}
-      {l.bodyPreview && <p className="line-clamp-3 text-[13px] leading-5 text-ink-muted">{l.bodyPreview}</p>}
+      {l.bodyPreview && <p className="line-clamp-3 break-words text-[13px] leading-5 text-ink-muted">{l.bodyPreview}</p>}
       <div className="mt-auto flex items-center gap-2 pt-1 text-xs text-ink-subtle">
         <span className="tabular-nums">{l.minuteDate}</span>
         {l.createdByName && <><span aria-hidden>·</span><span className="truncate">{l.createdByName}</span></>}

@@ -105,6 +105,9 @@ const ACTIONS = {
   createProject: { filename: 'src/app/actions/project.ts', exportedName: 'createProject', worker: '/w/[slug]/projects/page' },
   createAccount: { filename: 'src/app/actions/accounts.ts', exportedName: 'createAccount', worker: '/w/[slug]/admin/accounts/page' },
   addTeam: { filename: 'src/app/actions/teams.ts', exportedName: 'addTeam', worker: '/w/[slug]/admin/teams/page' },
+  // SP5 B2 minutes-teams — 팀 개명·비활성(공용 팀 관리 화면)과 탐색기의 폴더 만들기
+  updateTeam: { filename: 'src/app/actions/teams.ts', exportedName: 'updateTeam', worker: '/w/[slug]/admin/teams/page' },
+  createMinuteFolder: { filename: 'src/app/actions/minutes.ts', exportedName: 'createMinuteFolder', worker: '/w/[slug]/minutes/page' },
   createMinute: { filename: 'src/app/actions/minutes.ts', exportedName: 'createMinute', worker: '/w/[slug]/minutes/page' },
   addProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'addProjectTeam', worker: '/p/[projectId]/settings/page' },
   upsertRosterMember: { filename: 'src/app/actions/roster.ts', exportedName: 'upsertRosterMember', worker: '/p/[projectId]/members/page' },
@@ -1466,6 +1469,45 @@ async function main() {
     report: { status: deckRes.status, bytes: deck.length, codeAndArea: deckCheck },
     analysisOff: { rejectedWrite: analysisDenied.result.error, reportStatus: reportOff.status, plainCodeAfterOff: plainAfterOff.code }, bot,
   })
+
+  // 19b. 회의록 팀 루트(SP5 B2 — §6.3 minutes-teams): 공용 팀 생성(create_team) → 같은 트랜잭션의 팀 루트(kind·team_id, 이름 = 팀 이름) →
+  // 폴더 없이 올린 회의록이 그 루트로 편철되고 team_id 가 그 팀 → 팀 개명 → 루트 이름이 따라가고 폴더 id 는 그대로 → 비활성 → 그 루트 아래
+  // 새 폴더(편철)와 그 팀 담당의 새 회의록이 거부된다. 팀 루트의 세션 위조 다섯(선점·종류 변경·삭제·비활성 아래 생성·팀 이름 선점)은 RLS 테스트가 본다.
+  const MT_CODE = `MT${stamp.slice(-4)}`
+  await admin.http('GET', wsPath(wsA, 'admin/teams'))
+  mustOk(`addTeam(${MT_CODE})`, (await admin.action(wsPath(wsA, 'admin/teams'), 'addTeam', [wsA, MT_CODE])).result)
+  const [mtTeam] = rows('회의록 팀', await svc.from('teams').select('id, code, name, active').eq('workspace_id', wsA).is('project_id', null).eq('code', MT_CODE))
+  const mtRoots = () => svc.from('minute_folders').select('id, name, kind, team_id, project_id, parent_id').eq('team_id', mtTeam.id)
+  const [mtRoot] = rows('팀 루트', await mtRoots())
+  same('팀 루트(생성 직후)', mtRoot && { kind: mtRoot.kind, name: mtRoot.name, project_id: mtRoot.project_id, parent_id: mtRoot.parent_id },
+    { kind: 'team_root', name: MT_CODE, project_id: null, parent_id: null })
+  await ana.http('GET', wsPath(wsA, 'minutes'))
+  const mtMinute = mustOk('createMinute(팀 루트 자동 편철)', (await ana.action(wsPath(wsA, 'minutes'), 'createMinute', [
+    minuteInput({ date: meetingDate, teamCode: MT_CODE, title: `E2E-MT-${stamp}`, bodyMd: '# E2E 팀 루트 편철\n', projectId: null }), null, null, wsA,
+  ])).result)
+  const [mtRow] = rows('팀 루트 회의록', await svc.from('minutes').select('id, folder_id, team_id, team_code').eq('id', mtMinute.id))
+  same('팀 루트 회의록 편철·team_id', mtRow && { folder_id: mtRow.folder_id, team_id: mtRow.team_id, team_code: mtRow.team_code },
+    { folder_id: mtRoot.id, team_id: mtTeam.id, team_code: MT_CODE })
+  const MT_NAME = `E2E 회의록팀 ${stamp.slice(-4)}`
+  mustOk('updateTeam(개명)', (await admin.action(wsPath(wsA, 'admin/teams'), 'updateTeam', [mtTeam.id, { name: MT_NAME }])).result)
+  const [mtRenamed] = rows('개명 뒤 팀 루트', await mtRoots())
+  same('개명 뒤 팀 루트(이름 추종·id 불변)', mtRenamed && { id: mtRenamed.id, name: mtRenamed.name }, { id: mtRoot.id, name: MT_NAME })
+  const explorerHtml = await (await ana.http('GET', wsPath(wsA, 'minutes'))).text()
+  mustOk('updateTeam(비활성)', (await admin.action(wsPath(wsA, 'admin/teams'), 'updateTeam', [mtTeam.id, { active: false }])).result)
+  const folderDenied = (await ana.action(wsPath(wsA, 'minutes'), 'createMinuteFolder', [wsA, 'E2E 비활성 아래', mtRoot.id])).result
+  const minuteDenied = (await ana.action(wsPath(wsA, 'minutes'), 'createMinute', [
+    minuteInput({ date: meetingDate, teamCode: MT_CODE, title: `E2E-MT-DENY-${stamp}`, bodyMd: '# 거부\n', projectId: null }), null, null, wsA,
+  ])).result
+  const [mtAfter] = rows('비활성 뒤 팀 루트', await mtRoots())
+  const mtChecks = {
+    rootRenderedAsTeamName: explorerHtml.includes(MT_NAME),
+    folderUnderInactiveDenied: folderDenied?.ok === false && String(folderDenied.error).includes('비활성 팀'),
+    minuteForInactiveDenied: minuteDenied?.ok === false,
+    rootKept: mtAfter?.id === mtRoot.id && mtAfter?.name === MT_NAME,
+  }
+  step('minutes-teams', { team: { id: mtTeam.id, code: MT_CODE, name: MT_NAME }, rootId: mtRoot.id, minuteId: mtMinute.id,
+    denied: { folder: folderDenied?.error, minute: minuteDenied?.error }, checks: mtChecks },
+  Object.values(mtChecks).every(Boolean) ? undefined : `회의록 팀 루트: ${JSON.stringify(mtChecks)}`)
 
   // 20. 시드 이슈가 켜진 화면에 보이는지 먼저 확인한 뒤, 꺼진 화면·액션·분석 API 모두에서 차단되는지 본다.
   const issueTitle = `E2E 관문 이슈 ${randomUUID().slice(0, 8)}`
