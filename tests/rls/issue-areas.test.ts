@@ -72,7 +72,8 @@ describe('등록·분류 규칙(P4·D55)', () => {
     await asService(pool, async (c) => {
       await scene(c, PI)
       await c.query(`set local session_replication_role = replica`)   // 트리거를 끄고 CHECK 만 본다(postgres 롤)
-      const insert = `insert into public.issues (project_id, title, area_id, code, code_seq, code_scope, code_area_id) values ($1, 'chk', $2, $3, 1, $4, $5)`
+      // status_code 는 SP5b 부터 NOT NULL(DEFAULT 없음 — 트리거가 채운다). 트리거를 끈 이 케이스는 직접 준다(의도 — CHECK 만 본다 — 보존)
+      const insert = `insert into public.issues (project_id, title, area_id, code, code_seq, code_scope, code_area_id, status_code) values ($1, 'chk', $2, $3, 1, $4, $5, 'open')`
       expect(await pgError(c, insert, [P, AX, 'PI-I-OPS-01', `a:${AY}`, AY])).toMatchObject({ code: '23514', constraint: 'issues_code_area_check' })
       expect(await pgError(c, insert, [P, null, 'PI-I-RND-01', `a:${AX}`, AX])).toMatchObject({ code: '23514', constraint: 'issues_code_area_check' })
       expect(await pgError(c, insert, [P, AX, 'PI-I-RND-01', `a:${AX}`, AX])).toBeNull()
