@@ -1,6 +1,6 @@
 name: ci
 on:
-  push: { branches: [main, staging, 'sp0/**', 'sp5/**', 'ui/**'] }
+  push: { branches: [main, staging, 'sp0/**', 'sp5/**', 'sp5c/**', 'ui/**'] }
   pull_request: {}
 permissions: { contents: read }
 concurrency:
