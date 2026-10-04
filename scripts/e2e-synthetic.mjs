@@ -19,7 +19,9 @@
 //   SP5 B4: S1-vocab — R 심각도를 설정 액션으로(새 code·라벨·순서), 참조 있는 code 삭제 거부(건수) → 이관 명령 → 삭제, 지운 code 로 등록 거부.
 //   SP5 B1: S1-issues — R·C 정책과 R 의 10 issue_area 를 설정 액션으로. S6-issue-codes — R 영역별 RS·C 베를린 연도별 CN 를 실제 등록·DB 대조.
 //        S10-negative 에 이슈 화면을 더하고 옛 영역명·PI-I- 센티널을 센다(이슈 이름·코드 그려짐도 증명).
-//   S3·S6~S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
+//   SP5b(스펙 D24): S1-workflow(R 이슈 5상태·승인 단계 둘·선행 final·크레딧 정책 {5,5}), S6-issue-status(R 5상태 흐름), S3-flow(R 2단계·C 1단계 승인),
+//        S9-workflow(R 상태 비활성·단계 개명 뒤 C 의 설정·이슈·WBS 엑셀 불변).
+//   S3(필드)·S7·S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
 // 설정은 service_role 로 넣지 않는다(워크스페이스 행 셋과 그 허용 모듈 시드만 로컬 픽스처 — 생성 화면은 SP3). 실행 전후 src·DB 스키마(supabase/migrations 등)에
 // 미커밋 변경이 없어야 한다 — 합성 게이트는 소스를 고치지 않고 통과해야 한다(config.toml 의 로컬 포트 오버라이드는 제외, 대신 전후 diff 가 같아야 한다).
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), e2e-local.mjs 와 같은 방식으로 3101 에 띄운 npm run dev 가 떠 있는 상태에서
@@ -80,6 +82,11 @@ const ACTIONS = {
   addHoliday: { filename: 'src/app/actions/project.ts', exportedName: 'addHoliday', worker: '/p/[projectId]/settings/page' },
   setBaseDate: { filename: 'src/app/actions/project.ts', exportedName: 'setBaseDate', worker: '/p/[projectId]/settings/page' },
   createIssue: { filename: 'src/app/actions/issues.ts', exportedName: 'createIssue', worker: '/p/[projectId]/issues/page' },
+  // SP5b(스펙 D24) — 이슈 모달의 진행 저장, 단계 패널의 흐름 켜기·단계 지정·단계 승인
+  updateIssueProgress: { filename: 'src/app/actions/issues.ts', exportedName: 'updateIssueProgress', worker: '/p/[projectId]/issues/page' },
+  setWbsDevWorkflow: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsDevWorkflow', worker: '/p/[projectId]/wbs/page' },
+  setWbsStage: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsStage', worker: '/p/[projectId]/wbs/page' },
+  approveWbsStep: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'approveWbsStep', worker: '/p/[projectId]/wbs/page' },
 }
 const session = createSessionFactory({ env, base, manifestPath: MANIFEST, actions: ACTIONS, Fail })
 
@@ -738,6 +745,141 @@ async function main() {
   }
   const boundaryOk = ['R', 'C'].every((k) => [boundary[k].empty, boundary[k].inactive, boundary[k].rename].every((g) => Object.values(g).every(Boolean)))
   step('boundary-sp4', boundary, boundaryOk ? undefined : `경계 행렬 SP4 행: ${JSON.stringify(boundary)}`)
+
+  // ── SP5b(스펙 D24) — 흐름 설정은 R 에만, C 는 workflow 새 키 없음(기본). 모두 설정 화면·이슈 모달·단계 패널과 같은 서버 액션이다.
+  const updateSettings = async (proj, set, unset = []) => {
+    await admin.http('GET', `/p/${proj.id}/settings`)
+    const doc = await readDoc(admin.sb, 'project_settings', 'project_id', proj.id)
+    return (await admin.action(`/p/${proj.id}/settings`, 'updateProjectSettings', [proj.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset }])).result
+  }
+  // C 의 판정·출력 기준 — 흐름 설정을 R 에 넣기 전에 잡는다(S9-workflow 가 끝에서 대조)
+  const cWbsExportText = async () => {
+    const res = await admin.http('GET', `/api/export?projectId=${C.id}`)
+    if (res.status !== 200) throw new Fail(`C WBS 엑셀 ${res.status}`)
+    // 시트 본문만(docProps 의 생성 시각은 실행마다 다르다)
+    return (await zipTextParts(Buffer.from(await res.arrayBuffer()))).filter((p) => p.name.startsWith('xl/'))
+  }
+  const cIssueStates = async () => rows('C 이슈 상태', await admin.sb.from('issues').select('id, status, status_code').eq('project_id', C.id).order('issue_no'))
+  const cBeforeFlow = { settings: await snapshot(C), issues: await cIssueStates() }
+
+  // S1-workflow — 크레딧 0/20/25/90/100 은 기본 정책(5·10)에서 거부, 정책 {5,5} 와 한 명령이면 저장. 이슈 5상태는 기존 이슈가 쓰는 'open' 을
+  // 함께 둔 채 저장 → 같은 범주 이관(open → 접수) → 'open' 을 뺀 5상태로 저장. 승인 단계 둘·선행 기준 final.
+  const RESEARCH_STATUSES = [
+    { code: 'intake', label: '접수', category: 'open', color: 'delayed', sort: 1, active: true },
+    { code: 'review', label: '검토', category: 'open', color: 'brand', sort: 2, active: true },
+    { code: 'client_approval', label: '고객 승인', category: 'on_hold', color: 'pending', sort: 3, active: true },
+    { code: 'execution', label: '실행', category: 'in_progress', color: 'progress', sort: 4, active: true },
+    { code: 'done', label: '종료', category: 'resolved', color: 'done', sort: 5, active: true },
+  ]
+  const R_STEPS = [{ code: 'internal', label: '내부 검토', approver: 'subtree_or_admin' }, { code: 'client', label: '고객 승인', approver: 'admin' }]
+  const R_CREDITS = { default: { as: 0, ip: 20, rw: 25, im: 90, xx: 100 } }
+  const R_POLICY = { step: 5, min_gap: 5 }
+  const creditDenied = await updateSettings(R, { 'workflow.stage_credits': R_CREDITS })
+  mustOk('R 크레딧·정책', await updateSettings(R, { 'workflow.stage_credits': R_CREDITS, 'workflow.credit_policy': R_POLICY }))
+  const rOpenIssues = rows('R 이슈 상태', await admin.sb.from('issues').select('status_code').eq('project_id', R.id)).filter((x) => x.status_code === 'open').length
+  mustOk('R 이슈 상태 + open', await updateSettings(R, { 'workflow.issue_statuses': [...RESEARCH_STATUSES, { code: 'open', label: '열림', category: 'open', color: 'neutral', sort: 6, active: true }] }))
+  await admin.http('GET', `/p/${R.id}/settings`)
+  const statusMoved = mustOk('R 이슈 상태 이관', (await admin.action(`/p/${R.id}/settings`, 'migrateVocabCode', [R.id, 'workflow.issue_statuses', 'open', 'intake'])).result)
+  mustOk('R 이슈 5상태', await updateSettings(R, { 'workflow.issue_statuses': RESEARCH_STATUSES }))
+  mustOk('R 승인 단계·선행 기준', await updateSettings(R, { 'workflow.approval_steps': R_STEPS, 'workflow.predecessor_gate': 'final' }))
+  const rFlow = (await readDoc(admin.sb, 'project_settings', 'project_id', R.id)).values
+  same('R workflow.issue_statuses', rFlow['workflow.issue_statuses'], RESEARCH_STATUSES)
+  same('R workflow.approval_steps', rFlow['workflow.approval_steps'], R_STEPS)
+  same('R workflow.predecessor_gate', rFlow['workflow.predecessor_gate'], 'final')
+  same('R workflow.credit_policy', rFlow['workflow.credit_policy'], R_POLICY)
+  same('R workflow.stage_credits', rFlow['workflow.stage_credits'], R_CREDITS)
+  const cFlowKeys = Object.keys((await readDoc(admin.sb, 'project_settings', 'project_id', C.id)).values)
+    .filter((k) => ['workflow.issue_statuses', 'workflow.approval_steps', 'workflow.predecessor_gate', 'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_distinct_approvers'].includes(k))
+  const s1wChecks = {
+    defaultPolicyDenied: creditDenied?.ok === false, migrated: statusMoved.moved === rOpenIssues && rOpenIssues > 0, cNoNewKeys: cFlowKeys.length === 0,
+  }
+  step('S1-workflow', { R: { statuses: RESEARCH_STATUSES.map((d) => d.code), steps: R_STEPS.map((s) => s.code), gate: 'final', policy: R_POLICY, credits: R_CREDITS.default,
+    creditDenied: creditDenied?.error ?? creditDenied?.code, moved: statusMoved.moved }, C: { workflowKeys: cFlowKeys }, checks: s1wChecks },
+  Object.values(s1wChecks).every(Boolean) ? undefined : `S1-workflow: ${JSON.stringify(s1wChecks)}`)
+
+  // S6-issue-status — R 5상태 흐름: 새 이슈는 접수, 접수 → 고객 승인 → 종료(해결 범주·해결일), 전이표 밖(종료 → 고객 승인) 거부, 이력 2행
+  await admin.http('GET', `/p/${R.id}/issues`)
+  const flowIssue = mustOk('R 상태 흐름 이슈', (await admin.action(`/p/${R.id}/issues`, 'createIssue', [R.id, {
+    title: '합성 상태 흐름', body: '표시 상태', severity: 'low', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: rIssueSetup.areaIdByCode.get('RND'), analysis: null,
+  }])).result)
+  const issueRow = async () => rows('R 상태 흐름 이슈', await admin.sb.from('issues').select('status, status_code, resolved_at').eq('id', flowIssue.id).single())
+  const progress = async (status, expectedStatus) => (await admin.action(`/p/${R.id}/issues`, 'updateIssueProgress', [flowIssue.id, { status, expectedStatus }])).result
+  const first = await issueRow()
+  const toApproval = await progress('client_approval', 'intake')
+  const toDone = await progress('done', 'client_approval')
+  const back = await progress('client_approval', 'done')
+  const doneRow = await issueRow()
+  const statusHistory = rows('R 상태 이력', await admin.sb.from('issue_updates').select('body').eq('issue_id', flowIssue.id).eq('kind', 'status').order('created_at'))
+  const s6Checks = {
+    firstIntake: first.status_code === 'intake' && first.status === 'open',
+    allowed: toApproval?.ok === true && toDone?.ok === true,
+    outsideDenied: back?.ok === false,
+    resolved: doneRow.status === 'resolved' && doneRow.status_code === 'done' && doneRow.resolved_at !== null,
+    historyTwo: canonical(statusHistory.map((h) => h.body)) === canonical(['intake>client_approval', 'client_approval>done']),
+  }
+  step('S6-issue-status', { R: { issue: flowIssue.id, results: { toApproval, toDone, back }, history: statusHistory.map((h) => h.body) }, checks: s6Checks },
+    Object.values(s6Checks).every(Boolean) ? undefined : `S6-issue-status: ${JSON.stringify(s6Checks)}`)
+
+  // S3-flow — R(2단계): 사람 리프의 xx 직행 거부 → im → 내부 검토(나) 뒤 im 그대로 → 같은 사람의 고객 승인 거부 → 다른 관리자(R 워크스페이스
+  // 관리자 — 계정 생성 액션으로 만든다)의 고객 승인 뒤 xx·100, 원장 2행. C(기본 1단계): im → 승인 한 번에 xx. 선행 기준 final 의 claim 게이트는
+  // 라우트 수준 단위 테스트(tests/agent/claim-gate-final)가 고정한다 — 합성 구성은 depends 를 화면 액션으로 만들 길이 없다.
+  const leafOf = async (proj) => {
+    const items = rows('리프', await admin.sb.from('wbs_items').select('id, parent_id').eq('project_id', proj.id).order('sort_order'))
+    const parents = new Set(items.map((i) => i.parent_id).filter(Boolean))
+    const leaf = items.find((i) => !parents.has(i.id))
+    if (!leaf) throw new Fail(`${proj.name} 에 리프가 없다`)
+    return leaf.id
+  }
+  const r2Email = `syn-r2-${stamp}@example.com`
+  const r2Password = `Syn-${randomUUID()}`
+  await admin.http('GET', wsHref(wsR, 'admin/accounts'))
+  mustOk('R 둘째 관리자 계정', (await admin.action(wsHref(wsR, 'admin/accounts'), 'createAccount',
+    [workspaceAdminAccountInput({ workspaceId: wsR.id, email: r2Email, name: '합성 R 둘째 관리자', password: r2Password })])).result)
+  const rAdmin2 = session('syn-r2')
+  await rAdmin2.login(r2Email, r2Password)
+  const flowOf = async (actor, proj, leaf, calls) => {
+    await actor.http('GET', `/p/${proj.id}/wbs`)
+    const out = {}
+    for (const [k, name, args] of calls) out[k] = (await actor.action(`/p/${proj.id}/wbs`, name, [leaf, ...args])).result
+    return out
+  }
+  const itemState = async (leaf) => rows('리프 상태', await admin.sb.from('wbs_items').select('stage, actual_pct, review_steps').eq('id', leaf).single())
+  const rLeaf = await leafOf(R)
+  const rA = await flowOf(admin, R, rLeaf, [['workflow', 'setWbsDevWorkflow', [true, false]], ['directXx', 'setWbsStage', ['xx']], ['toIm', 'setWbsStage', ['im']], ['step1', 'approveWbsStep', ['internal']]])
+  const rMid = await itemState(rLeaf)
+  const rSame = await flowOf(admin, R, rLeaf, [['sameActor', 'approveWbsStep', ['client']]])
+  const rB = await flowOf(rAdmin2, R, rLeaf, [['step2', 'approveWbsStep', ['client']]])
+  const rEnd = await itemState(rLeaf)
+  const rLedger = rows('R 승인 원장', await admin.sb.from('wbs_stage_approvals').select('step_code, via, revoked_at').eq('wbs_item_id', rLeaf).order('step_code'))
+  const cLeaf = await leafOf(C)
+  const cA = await flowOf(admin, C, cLeaf, [['workflow', 'setWbsDevWorkflow', [true, false]], ['toIm', 'setWbsStage', ['im']], ['step1', 'approveWbsStep', ['review']]])
+  const cEnd = await itemState(cLeaf)
+  const s3Checks = {
+    rDirectXxDenied: rA.workflow?.ok === true && rA.directXx?.ok === false,
+    rIntermediate: rA.toIm?.ok === true && rA.step1?.ok === true && rA.step1?.remaining === 1 && rMid.stage === 'im' && canonical(rMid.review_steps) === canonical(['internal', 'client']),
+    rSameActorDenied: rSame.sameActor?.ok === false,
+    rFinal: rB.step2?.ok === true && rEnd.stage === 'xx' && Number(rEnd.actual_pct) === 100,
+    rLedgerTwo: rLedger.length === 2 && rLedger.every((x) => x.via === 'approve_step' && x.revoked_at === null),
+    cSingleStep: cA.workflow?.ok === true && cA.toIm?.ok === true && cA.step1?.ok === true && cA.step1?.remaining === undefined && cEnd.stage === 'xx' && Number(cEnd.actual_pct) === 100,
+  }
+  step('S3-flow', { R: { leaf: rLeaf, results: { ...rA, ...rSame, ...rB }, ledger: rLedger }, C: { leaf: cLeaf, results: cA }, checks: s3Checks },
+    Object.values(s3Checks).every(Boolean) ? undefined : `S3-flow: ${JSON.stringify(s3Checks)}`)
+
+  // S9-workflow — R 의 상태 하나(실행)를 비활성하고 im 단계 이름을 바꾼 뒤, C 의 설정 문서·이력·이슈 상태가 흐름 설정 전과 같고,
+  // C 의 WBS 엑셀 시트 본문이 R 의 변경 직전(S3 뒤 — C 리프 하나가 xx 다)과 글자 단위로 같다
+  const cExportBefore = await cWbsExportText()
+  mustOk('R 상태 비활성', await updateSettings(R, { 'workflow.issue_statuses': RESEARCH_STATUSES.map((d) => (d.code === 'execution' ? { ...d, active: false } : d)) }))
+  mustOk('R 단계 이름', await updateSettings(R, { 'workflow.wbs_stage_labels': { im: '고객 검토' } }))
+  const rWbsHtml = await (await admin.http('GET', `/p/${R.id}/wbs`)).text()
+  const cAfterFlow = { settings: await snapshot(C), issues: await cIssueStates(), export: await cWbsExportText() }
+  const s9Checks = {
+    cSettings: canonical(cAfterFlow.settings) === canonical(cBeforeFlow.settings),
+    cIssues: canonical(cAfterFlow.issues) === canonical(cBeforeFlow.issues),
+    cExport: cExportBefore.length > 0 && canonical(cAfterFlow.export) === canonical(cExportBefore),
+    rLabelRendered: rWbsHtml.includes('고객 검토'),
+  }
+  step('S9-workflow', { checks: s9Checks, cExportParts: cAfterFlow.export.length },
+    Object.values(s9Checks).every(Boolean) ? undefined : `S9-workflow: ${JSON.stringify(s9Checks)}`)
 
   for (const [id, owner] of Object.entries(PENDING_STEPS)) step(`${id}-pending`, { status: '미활성', owner })
 

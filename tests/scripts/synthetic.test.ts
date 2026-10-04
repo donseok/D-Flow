@@ -37,9 +37,9 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
     expect(new Set(slugs).size).toBe(3)
     for (const ws of [SYNTHETIC_R, SYNTHETIC_C, SYNTHETIC_WORKSPACE_B]) expect(String(ws.name)).toMatch(/^합성 /)
   })
-  it('아직 켜지지 않은 단계는 S3·S6·S7·S8·S10(나머지)이고 담당 SP 가 적혀 있다 — SP5 A 가 S4(일)·S5 를 켰다(D43)', () => {
-    expect(Object.keys(PENDING_STEPS)).toEqual(['S3', 'S6', 'S7', 'S8', 'S10'])
-    expect(PENDING_STEPS.S6).toBe('SP5b(표시 상태)')
+  it('아직 켜지지 않은 단계는 S3(필드)·S7·S8·S10(나머지)이고 담당 SP 가 적혀 있다 — SP5 A 가 S4(일)·S5 를, SP5b 가 S3-flow·S6-issue-status 를 켰다', () => {
+    expect(Object.keys(PENDING_STEPS)).toEqual(['S3', 'S7', 'S8', 'S10'])
+    expect(PENDING_STEPS.S3).toBe('SP5c(필드)')
     expect(PENDING_STEPS.S10).toBe('SP6~SP8(나머지 부분 집합)')
     for (const owner of Object.values(PENDING_STEPS)) expect(String(owner)).toMatch(/^SP/)
   })
@@ -129,10 +129,10 @@ describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
   it('단계 순서 — 이슈 구성 S1 과 발급 S6 이 캘린더 이후·S10 앞에 돈다', () => {
     const at = (n: string) => src.indexOf(`step('${n}'`)
     const order = ['S1-create', 'S1-teams-areas', 'S1-calendar', 'S1-issues', 'S9-isolation', 'S2-wbs-import', 'S4-weekly-monday', 'S4-weekly-sunday',
-      'S5-calendar', 'S6-issue-codes', 'S10-negative', 'boundary-sp4']
+      'S5-calendar', 'S6-issue-codes', 'S10-negative', 'boundary-sp4', 'S1-workflow', 'S6-issue-status', 'S3-flow', 'S9-workflow']
     for (const n of order) expect(at(n), n).toBeGreaterThan(-1)
     for (let i = 1; i < order.length; i++) expect(at(order[i - 1]), `${order[i - 1]} < ${order[i]}`).toBeLessThan(at(order[i]))
-    expect(at('boundary-sp4')).toBeLessThan(src.indexOf('Object.entries(PENDING_STEPS)'))
+    expect(at('S9-workflow')).toBeLessThan(src.indexOf('Object.entries(PENDING_STEPS)'))
   })
   it('달력 쓰기는 화면과 같은 서버 액션 — 일정 화면 둘(addHoliday·setBaseDate), 달력·설정 표를 service_role 로 쓰지 않는다, 서울 관용구 0', () => {
     for (const [name, worker] of [['addHoliday', '/p/[projectId]/settings/page'], ['setBaseDate', '/p/[projectId]/settings/page']] as const) {
