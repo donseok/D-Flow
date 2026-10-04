@@ -14,6 +14,8 @@ import { projectOwnTeams, projectTeams, workspaceTeams } from '@/lib/teams/sourc
 import { areaTeamOptions } from '@/lib/domain/areas'
 import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
 import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
+import { CustomFieldsSettings } from '@/components/settings/CustomFieldsSettings'
+import { FIELD_ENTITIES, type FieldEntity, type FieldDef } from '@/lib/domain/customFields'
 import { IssuePolicyEditor } from '@/components/settings/IssuePolicyEditor'
 import { AttachmentPolicyEditor } from '@/components/settings/AttachmentPolicyEditor'
 import { VocabEditor } from '@/components/settings/VocabEditor'
@@ -221,6 +223,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
     ...(issuesGate.ok ? ['issues.severities' as const] : []),
     ...(issuesGate.ok && analysisState === 'on' ? ['issues.sources' as const, 'issues.cause_categories' as const] : []),
   ] : []
+  const fieldModules = pc.ok ? await Promise.all([moduleState({ projectId }, 'wbs'), moduleState({ projectId }, 'issues'), moduleState({ projectId }, 'weekly')]) : ['unknown', 'unknown', 'unknown'] as const
+  const fieldStates = pc.ok ? Object.fromEntries(FIELD_ENTITIES.map((entity, i) => {
+    const st = pc.cfg.keys[`fields.${entity}`]
+    return [entity, { enabled: fieldModules[i] === 'on', value: st.status === 'set' || st.status === 'default' ? st.value : null,
+      error: fieldModules[i] === 'unknown' ? (locale === 'ko' ? '모듈 상태를 확인하지 못했습니다.' : 'Could not determine module availability.') : st.status === 'invalid' ? st.error : undefined }]
+  })) as Record<FieldEntity, { value: readonly FieldDef[] | null; error?: string; enabled: boolean }> : null
   const timezoneState = pc.ok ? pc.cfg.keys['calendar.timezone'] : null
   const issueYear = timezoneState && (timezoneState.status === 'set' || timezoneState.status === 'default')
     ? issueCodeYear(timezoneState.value, new Date()) : null
@@ -274,7 +282,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []),
         ...(isAdmin && issuesGate.ok ? [{ id: 'project-issues', label: locale === 'ko' ? '이슈' : 'Issues' }] : []),
         ...(isAdmin && pc.ok && minutesGate.ok ? [{ id: 'project-minutes', label: locale === 'ko' ? '회의록' : 'Minutes' }] : []),
-        ...(isAdmin && vocabKeys.length ? [{ id: 'project-vocab', label: t(locale, 'settings.vocab.section') }] : []), { id: 'project-status', label: '상태·승인' },
+        ...(isAdmin && vocabKeys.length ? [{ id: 'project-vocab', label: t(locale, 'settings.vocab.section') }] : []),
+        ...(isAdmin && pc.ok ? [{ id: 'project-fields', label: locale === 'ko' ? '추가 필드' : 'Custom fields' }] : []), { id: 'project-status', label: '상태·승인' },
         { id: 'project-calendar', label: '달력' }, { id: 'project-history', label: '기록' },
       ]}>
       <div className="space-y-5">
@@ -570,6 +579,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
             </SectionCard>
           })}
+        </div>}
+
+        {isAdmin && pc.ok && fieldStates && <div id="project-fields" className="scroll-mt-24 space-y-5">
+          <SectionCard searchText="fields.wbs_item fields.issue fields.weekly_row 추가 필드 custom fields" eyebrow="CUSTOM FIELDS" title={locale === 'ko' ? '추가 필드' : 'Custom fields'} icon={LayoutList}>
+            <CustomFieldsSettings key={`${projectId}-fields-${revision}`} projectId={projectId} states={fieldStates} revision={revision} canEdit={canMutate} locale={locale} />
+          </SectionCard>
         </div>}
 
         {/* ════ 상태·승인 ════ */}

@@ -18,7 +18,7 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 36키 — 워크스페이스 13, 프로젝트 23(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯)', () => {
+  it('정확히 39키 — 워크스페이스 13, 프로젝트 26(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
       'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'minutes.attachments', 'minutes.root_folders'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
@@ -26,7 +26,7 @@ describe('등록 키', () => {
       'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers', 'workflow.predecessor_gate',
       'calendar.timezone', 'calendar.working_days', 'calendar.week_start',
       'issues.id_policy', 'issues.analysis', 'minutes.attachments',
-      'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses'])
+      'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses', 'fields.wbs_item', 'fields.issue', 'fields.weekly_row'])
     for (const k of ['agents.stage_workflow', 'portal.widgets', 'views.default', 'core.stage_credits']) {
       expect(KEYS, k).not.toContain(k)
     }
@@ -64,7 +64,7 @@ describe('등록 키', () => {
       'project/workflow.credit_policy', 'project/workflow.approval_steps', 'project/workflow.approval_distinct_approvers', 'project/workflow.predecessor_gate',
       'project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start',
       'project/issues.id_policy', 'project/issues.analysis', 'project/minutes.attachments',
-      'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources', 'project/workflow.issue_statuses'])
+      'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources', 'project/workflow.issue_statuses', 'project/fields.wbs_item', 'project/fields.issue', 'project/fields.weekly_row'])
     expect(ALL.filter((d) => d.seedFrom).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start', 'project/minutes.attachments'])
     expect(ALL.every((d) => d.reindexOn === undefined)).toBe(true)
     expect(ALL.filter((d) => d.edit).map((d) => `${d.scope}/${d.key}`)).toEqual(['workspace/branding.accent', 'project/calendar.week_start',
@@ -322,7 +322,7 @@ describe('카탈로그 메타와 사전', () => {
       'workflow.predecessor_gate'].map(status)).toEqual(Array(6).fill('verified'))
     // SP5 A 과제 29 — 달력 셋은 정의·편집·소비처·테스트 네 연결이 끝나 verified(스펙 D44)
     expect(['calendar.timezone', 'calendar.working_days', 'calendar.week_start'].map(status)).toEqual(Array(3).fill('verified'))
-    expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['portal.widgets', 'views.default', 'fields.issue']))
+    expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['portal.widgets', 'views.default']))
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)
   })
   it('키마다 라벨·설명 사전 키가 ko·en 둘 다 있다', () => {

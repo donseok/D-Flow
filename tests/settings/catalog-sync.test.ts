@@ -7,6 +7,7 @@ import { PROJECT_SETTINGS, WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 
 const file = 'docs/settings-catalog.md'
 const expectedStatus: Record<string, string> = {
+  'fields.wbs_item': 'stored', 'fields.issue': 'stored', 'fields.weekly_row': 'stored',
   'modules.allowed': 'verified', 'ai.enabled': 'verified', 'invites.allowed_domains': 'verified',
   'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'stored', 'branding.mail_from_name': 'verified',
   'navigation.menu': 'stored', 'core.level_labels': 'verified', 'core.extra_axis_label': 'stored',
@@ -33,9 +34,9 @@ const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
 }
 
 describe('설정 카탈로그 동기화', () => {
-  it('36정의(키 이름 32)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('39정의(키 이름 35)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(36)
+    expect(defs).toHaveLength(39)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
     for (const def of defs) {

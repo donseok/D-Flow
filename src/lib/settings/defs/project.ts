@@ -16,6 +16,7 @@ import {
   type IsoDow, type WeekStartDay, type WeekStartRule,
 } from '@/lib/domain/calendar'
 import { DEFAULT_ID_POLICY, parseIdPolicy, type IdPolicy } from '@/lib/issues/idPolicy'
+import { parseFieldDefs, type FieldDef } from '@/lib/domain/customFields'
 import { RESERVED_SOURCE, defaultVocab, parseVocab, vocabChangeError, type VocabKey, type VocabValues } from '../vocab'
 
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error })
@@ -250,5 +251,23 @@ export const PROJECT_DEFS = [
   // SP5b(스펙 D1) — 이슈 표시 상태. 판정은 DB 트리거 enforce_issue_workflow(범주 전이표·파생 status·resolved_at), 의미 속성 category 의
   // 참조 검사는 settings_ref_check 가 한다
   vocabDef('workflow.issue_statuses', 'issues', ['enforce_issue_workflow', 'settings_ref_check']),
+  defineSetting<'fields.wbs_item', FieldDef[]>({
+    key: 'fields.wbs_item', scope: 'project', module: 'wbs', default: [],
+    parse: raw => parseFieldDefs('wbs_item', raw),
+    widget: { kind: 'custom', component: 'CustomFieldsSettings' }, editor: 'project_admin', apply: 'immediate', impact: ['guarded'],
+    sql: { readers: ['enforce_custom_fields', 'custom_fields_ref_check', 'settings_ref_check'] },
+  }),
+  defineSetting<'fields.issue', FieldDef[]>({
+    key: 'fields.issue', scope: 'project', module: 'issues', default: [],
+    parse: raw => parseFieldDefs('issue', raw),
+    widget: { kind: 'custom', component: 'CustomFieldsSettings' }, editor: 'project_admin', apply: 'immediate', impact: ['guarded'],
+    sql: { readers: ['enforce_custom_fields', 'custom_fields_ref_check', 'settings_ref_check'] },
+  }),
+  defineSetting<'fields.weekly_row', FieldDef[]>({
+    key: 'fields.weekly_row', scope: 'project', module: 'weekly', default: [],
+    parse: raw => parseFieldDefs('weekly_row', raw),
+    widget: { kind: 'custom', component: 'CustomFieldsSettings' }, editor: 'project_admin', apply: 'immediate', impact: ['guarded'],
+    sql: { readers: ['enforce_custom_fields', 'custom_fields_ref_check', 'settings_ref_check'] },
+  }),
 ] as const satisfies readonly SettingDef[]
 export type { ModuleId }

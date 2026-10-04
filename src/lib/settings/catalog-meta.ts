@@ -14,6 +14,9 @@ const S5B4 = (status: CatalogStatus, consumers: string[], tests: string[]): Cata
 const S5BW = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b W' })
 const S5BI = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b I' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
+  'fields.wbs_item': { status: 'stored', sp: 'SP5c', consumers: ['src/components/settings/CustomFieldsSettings.tsx', 'supabase/migrations/0027_custom_fields.sql'], tests: ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx'] },
+  'fields.issue': { status: 'stored', sp: 'SP5c', consumers: ['src/components/settings/CustomFieldsSettings.tsx', 'supabase/migrations/0027_custom_fields.sql'], tests: ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx'] },
+  'fields.weekly_row': { status: 'stored', sp: 'SP5c', consumers: ['src/components/settings/CustomFieldsSettings.tsx', 'supabase/migrations/0027_custom_fields.sql'], tests: ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx'] },
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
   'invites.allowed_domains': A('verified', ['src/lib/data/inviteDomains.ts'], ['tests/settings/workspace-config.test.ts', 'tests/domain/invites.test.ts']),
@@ -81,9 +84,6 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
   { key: 'portal.widgets', scope: 'workspace', sp: 'SP3b', shape: '{ id: PortalWidgetId; enabled: boolean }[]' },
   { key: 'security.local_drafts', scope: 'workspace', sp: 'SPU1', shape: '{ allowed: boolean; retention_days: number }' },
   { key: 'notify.policy', scope: 'workspace', sp: 'SP8', shape: '{ [type]: { enabled: boolean } }' },
-  { key: 'fields.wbs_item', scope: 'project', sp: 'SP5c', shape: 'FieldDef[]' },
-  { key: 'fields.issue', scope: 'project', sp: 'SP5c', shape: 'FieldDef[]' },
-  { key: 'fields.weekly_row', scope: 'project', sp: 'SP5c', shape: 'FieldDef[]' },
   { key: 'forms.weekly_report_pptx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
   { key: 'forms.weekly_report_xlsx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
   { key: 'forms.issue_analysis_pptx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },

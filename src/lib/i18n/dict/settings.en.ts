@@ -290,4 +290,7 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.vocab.color.done': 'Green', 'settings.vocab.color.brand': 'Blue', 'settings.vocab.color.progress': 'Sky', 'settings.vocab.color.delayed': 'Red',
   'settings.vocab.color.accent': 'Purple', 'settings.vocab.color.pending': 'Orange', 'settings.vocab.color.neutral': 'Gray',
   'settings.configLoadFailed': 'Settings could not be loaded, so this view cannot be drawn. Refresh in a moment.', 'settings.configLoadFailedKey': 'Corrupt or missing setting: {key}',
+  'settings.fields.wbs_item.label': 'WBS custom fields', 'settings.fields.wbs_item.desc': 'Manage project fields, their types, defaults, permissions and display settings.',
+  'settings.fields.issue.label': 'Issue custom fields', 'settings.fields.issue.desc': 'Manage project fields, their types, defaults, permissions and display settings.',
+  'settings.fields.weekly_row.label': 'Weekly row custom fields', 'settings.fields.weekly_row.desc': 'Manage project fields, their types, defaults, permissions and display settings.',
 }

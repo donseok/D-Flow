@@ -288,4 +288,7 @@ export const settingsKo = {
   'settings.vocab.color.done': '초록', 'settings.vocab.color.brand': '파랑', 'settings.vocab.color.progress': '하늘', 'settings.vocab.color.delayed': '빨강',
   'settings.vocab.color.accent': '보라', 'settings.vocab.color.pending': '주황', 'settings.vocab.color.neutral': '회색',
   'settings.configLoadFailed': '설정을 불러오지 못해 이 화면을 그릴 수 없습니다. 잠시 뒤 새로고침하세요.', 'settings.configLoadFailedKey': '손상되었거나 비어 있는 설정: {key}',
+  'settings.fields.wbs_item.label': 'WBS 추가 필드', 'settings.fields.wbs_item.desc': '프로젝트별 추가 정보의 유형·기본값·편집 권한과 표시 방식을 관리합니다.',
+  'settings.fields.issue.label': '이슈 추가 필드', 'settings.fields.issue.desc': '프로젝트별 추가 정보의 유형·기본값·편집 권한과 표시 방식을 관리합니다.',
+  'settings.fields.weekly_row.label': '주간보고 추가 필드', 'settings.fields.weekly_row.desc': '프로젝트별 추가 정보의 유형·기본값·편집 권한과 표시 방식을 관리합니다.',
 } as const

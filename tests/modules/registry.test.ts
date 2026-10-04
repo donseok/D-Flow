@@ -91,16 +91,18 @@ describe('목록', () => {
     expect(new Set([...claimed, 'projects', 'unknown'])).toEqual(new Set(BOT_DOMAINS))
     expect([...byId.chatbot.botDomains]).toEqual([])
   })
-  it('settings — 36정의(SP5 A calendar.*·B1 issues.*·B2 minutes.root_folders·B3 minutes.attachments·B4 어휘 다섯·SP5b 이슈 상태·W1 흐름 다섯 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 10·settings 15 다', () => {
+  it('settings — 39정의(SP5c 필드 셋·SP5 A calendar.*·B1 issues.*·B2 minutes.root_folders·B3 minutes.attachments·B4 어휘 다섯·SP5b 이슈 상태·W1 흐름 다섯 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 11·settings 15 다', () => {
     const owned = MODULES.flatMap((m) => m.settings.map((s) => [m.id, s.key] as const))
-    expect(owned).toHaveLength(36)
+    expect(owned).toHaveLength(39)
     for (const [mid, key] of owned) {
       const def = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS].find((d) => d.key === key)!
       expect(def.module, key).toBe(mid)
     }
     expect(byId.wbs.settings.map((s) => s.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords', 'wbs.excel_profile', 'workflow.stage_credits',
-      'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers', 'workflow.predecessor_gate'])
+      'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers', 'workflow.predecessor_gate', 'fields.wbs_item'])
     expect(byId.settings.settings).toHaveLength(15)
+    expect(byId.issues.settings.map(s => s.key)).toContain('fields.issue')
+    expect(byId.weekly.settings.map(s => s.key)).toEqual(['fields.weekly_row'])
     expect(byId.minutes.settings.map(s => `${s.scope}/${s.key}`)).toEqual(['workspace/minutes.attachments', 'workspace/minutes.root_folders', 'project/minutes.attachments'])
     expect(byId.attendance.settings.map(s => s.key)).toEqual(['attendance.types'])
     expect(byId.meetings.settings.map(s => s.key)).toEqual(['meetings.categories'])
