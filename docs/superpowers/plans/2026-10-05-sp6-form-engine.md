@@ -35,7 +35,7 @@ SP5c(사용자 정의 필드)의 모든 단계(F~Z)가 성공적으로 구현·�
   - [x] V scan: `FormEngine.scan` — pptx 는 `slideN.xml` 의 `<a:p>` 만, xlsx 는 셀 문자열·리치텍스트만(§4.4.1·§4.7.2). 등록은 `ScanReport` 를 저장하고 문법·구조 오류면 incoming 을 지운다. `tokenScan:false` 행은 활성화 거부. 카탈로그 매핑 판정은 활성화에 둔다
   - [x] V render pptx: 값 치환(런 병합·빈 값·개행 문단), `{{#items}}`·`{{#rows}}`·`{{#slide}}`, OPC 배선. §4.4.6 넘침 연속 슬라이드는 아직 없다
   - [x] V render xlsx: 셀 값 치환, `{{#items}}` 는 셀 안 개행, `{{#rows}}` 는 duplicateRow. 0건이면 그 행을 지운다
-  - [ ] pptx 넘침 연속 슬라이드 (§4.4.6 `max_lines_per_cell`·`max_rows_per_slide`)
+  - [x] pptx 넘침 연속 슬라이드 (§4.4.6 `max_lines_per_cell`·`max_rows_per_slide`). 값 토큰 단독은 나누지 않는다
   - [ ] 활성화의 `engineVersion` 불일치 재스캔(§4.7.3) — 지금은 재등록 오류다
   - [ ] `/api/report`, `/api/export` 라우트 연동 (활성 템플릿 우선, 미등록 시 기본 템플릿 폴백). 정본 §4.8 은 `/api/issue-analysis` 와 `GET /api/export?form=1` 도 같은 전환
   - [ ] `X-Form-Template: default | custom` 응답 헤더

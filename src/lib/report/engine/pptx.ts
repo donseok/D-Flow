@@ -1,14 +1,16 @@
 /**
- * PptxFormEngine.render (정본 §4.3.2 2–8, §4.4.2–§4.4.5, §4.4.7).
- * 넘침으로 슬라이드를 나누는 §4.4.6 은 여기 없다. XlsxFormEngine 도 여기 없다.
+ * PptxFormEngine.render (정본 §4.3.2 2–8, §4.4.2–§4.4.7).
+ * §4.4.6 넘침은 pptx 만 연속 슬라이드로 나눈다. XlsxFormEngine 은 여기 없다.
  * render 인자에는 저장된 스캔이 없어 TEMPLATE_DRIFT 대조는 하지 않는다.
  * 바이트를 다시 scan 해 severity error 가 있으면 부분 출력 없이 멈춘다.
  */
 import JSZip from 'jszip'
 import { formatCatalogValue, resolveCatalogPath } from '../catalog'
 import type { CatalogModel } from '../catalog/types'
+import { splitIssueAnalysisTextForRows } from '../issues/deckPlan'
 import { escapeXml } from '../xml'
-import { capItems } from './paginate'
+import { capItems, lineCost, paginateGroups, paginateLines } from './paginate'
+import type { NarrativeGroup } from '../narrative'
 import { scanFormTemplate } from './scan'
 import { parseTokenBody } from './scanner'
 import {
@@ -25,13 +27,28 @@ const TX_RE = /<(p|a):txBody\b[^>]*>[\s\S]*?<\/\1:txBody>/g
 const P_RE = /<a:p\b[^>]*>[\s\S]*?<\/a:p>/g
 
 interface Run { rPr: string; text: string }
+interface ItemSlice { items: unknown[] | null; extra: string | null }
+interface RowPiece { item: unknown; literals: string[] | null; suffix: string }
+interface PlannedPage {
+  continuation: string
+  itemSlices?: Array<ItemSlice | undefined>
+  rowPieces?: Array<RowPiece[] | undefined>
+}
 interface Ctx {
   scope: string[]
   items: unknown[]
   page: number
   pageCount: number
   continuation: string
+  itemSlices?: Array<ItemSlice | undefined>
+  itemCursor?: number
+  rowPieces?: Array<RowPiece[] | undefined>
+  rowCursor?: number
 }
+
+/** lineCost 와 같은 전각 26자. 셀 분할의 줄 폭으로만 쓴다. */
+const FULLWIDTH_PER_LINE = 26
+const GROUP_MARK = ' (계속)'
 
 function decodeXml(s: string): string {
   return s
@@ -132,15 +149,30 @@ class Renderer {
       if (!open) return this.renderFragment(row, ctx)
       const parsed = parseTokenBody(`#rows ${open[1]}`)
       if (!parsed.ok || parsed.kind !== 'rows') fail('MISSING_PATH', open[0], parsed.ok ? 'rows' : parsed.error)
+      if (ctx.rowPieces) {
+        const pieces = ctx.rowPieces[ctx.rowCursor ?? 0]
+        ctx.rowCursor = (ctx.rowCursor ?? 0) + 1
+        if (!pieces || pieces.length === 0) return ''
+        return pieces.map((piece) => this.renderRowPiece(row, parsed.token, piece, ctx)).join('')
+      }
       const list = this.blockList(parsed.token, parsed.path, ctx)
       if (list.length === 0) return ''
-      return list.map((item) => {
-        const stripped = row.replace(/\{\{#rows[ \t]+[\s\S]*?\}\}/, '').replace(/\{\{\/rows\}\}/, '')
-        const child: Ctx = { ...ctx, scope: [...ctx.scope, parsed.token], items: [...ctx.items, item] }
-        return this.renderFragment(stripped, child)
-      }).join('')
+      return list.map((item) => this.renderRowPiece(row, parsed.token, { item, literals: null, suffix: '' }, ctx)).join('')
     })
     return this.fillValues(/\{\{#items[ \t]/.test(out) ? this.expandItems(out, ctx) : out, ctx)
+  }
+
+  private renderRowPiece(row: string, token: string, piece: RowPiece, ctx: Ctx): string {
+    const stripped = row.replace(/\{\{#rows[ \t]+[\s\S]*?\}\}/, '').replace(/\{\{\/rows\}\}/, '')
+    const child: Ctx = { ...ctx, scope: [...ctx.scope, token], items: [...ctx.items, piece.item] }
+    if (!piece.literals) return this.renderFragment(stripped, child)
+    let index = 0
+    return stripped.replace(/<a:tc\b[^>]*>[\s\S]*?<\/a:tc>/g, (cell) => {
+      const literal = piece.literals?.[index] ?? ''
+      const text = index === 0 && piece.suffix ? (literal ? `${literal} ${piece.suffix}` : piece.suffix) : literal
+      index += 1
+      return replaceCellText(cell, text)
+    })
   }
 
   private expandItems(xml: string, ctx: Ctx): string {
@@ -159,8 +191,20 @@ class Renderer {
     if (!found) return region
     const parsed = parseTokenBody(`#items ${found.path}`)
     if (!parsed.ok || parsed.kind !== 'items') fail('MISSING_PATH', found.rawOpen, parsed.ok ? 'items' : parsed.error)
-    const list = this.blockList(parsed.token, parsed.path, ctx)
-    const { items, extra } = this.cap(list)
+    const controlled = ctx.itemSlices !== undefined && !insideBlock(ctx)
+    const slice = controlled ? ctx.itemSlices![ctx.itemCursor ?? 0] : undefined
+    if (controlled) ctx.itemCursor = (ctx.itemCursor ?? 0) + 1
+    let items: unknown[]
+    let extra: string | null
+    if (controlled && slice) {
+      items = slice.items ?? []
+      extra = slice.extra
+    } else {
+      const list = this.blockList(parsed.token, parsed.path, ctx)
+      const capped = this.cap(list)
+      items = capped.items
+      extra = capped.extra
+    }
     const paras = paragraphSpans(region)
     const first = paras.findIndex((p) => p.start <= found.start && found.start < p.end)
     const last = paras.findIndex((p) => p.start < found.end && found.end <= p.end)
@@ -214,6 +258,207 @@ class Renderer {
     }
     return groups.map((runs) => emitParagraph(parsed.pPr, parsed.end, runs)).join('')
   }
+
+  planPages(xml: string, ctx: Ctx): PlannedPage[] {
+    const itemPlans: ItemSlice[][] = []
+    for (const region of outerItemRegions(xml)) {
+      let rest = region
+      let guard = 0
+      while (guard++ < 50 && /\{\{#items[ \t]/.test(rest)) {
+        const found = matchItems(rest)
+        if (!found) break
+        itemPlans.push(this.paginateItemBlock(found.rawOpen, found.path, ctx))
+        rest = rest.slice(0, found.start) + rest.slice(found.end)
+      }
+    }
+    const rowPlans: RowPiece[][][] = []
+    for (const row of xml.matchAll(/<a:tr\b[^>]*>[\s\S]*?<\/a:tr>/g)) {
+      const open = /\{\{#rows[ \t]+([\s\S]*?)\}\}/.exec(row[0])
+      if (!open) continue
+      const parsed = parseTokenBody(`#rows ${open[1]}`)
+      if (!parsed.ok || parsed.kind !== 'rows') fail('MISSING_PATH', open[0], parsed.ok ? 'rows' : parsed.error)
+      rowPlans.push(this.paginateRowBlock(row[0], parsed.token, parsed.path, ctx))
+    }
+    let count = 1
+    for (const pages of itemPlans) count = Math.max(count, pages.length)
+    for (const pages of rowPlans) count = Math.max(count, pages.length)
+    const splitCells = rowPlans.some((pages) => pages.some((page) => page.some((piece) => piece.literals)))
+    if (count === 1 && !splitCells) return [{ continuation: '' }]
+    return Array.from({ length: count }, (_, index) => {
+      const itemSlices = itemPlans.map((pages) => {
+        if (index === 0 && pages.length <= 1) return undefined
+        if (index >= pages.length) return { items: null, extra: null }
+        return pages[index]
+      })
+      const rowPieces = rowPlans.map((pages) => {
+        const split = pages.some((page) => page.some((piece) => piece.literals))
+        if (index === 0 && pages.length <= 1 && !split) return undefined
+        if (index >= pages.length) return []
+        return pages[index]
+      })
+      return {
+        continuation: index === 0 ? '' : this.options.continuation_label,
+        itemSlices: itemSlices.every((slice) => slice === undefined) ? undefined : itemSlices,
+        rowPieces: rowPieces.every((pieces) => pieces === undefined) ? undefined : rowPieces,
+      }
+    })
+  }
+
+  bind(ctx: Ctx, page: PlannedPage): Ctx {
+    return {
+      ...ctx,
+      continuation: page.continuation,
+      itemSlices: page.itemSlices,
+      rowPieces: page.rowPieces,
+      itemCursor: 0,
+      rowCursor: 0,
+    }
+  }
+
+  private paginateItemBlock(token: string, path: string, ctx: Ctx): ItemSlice[] {
+    const list = this.blockList(token, path, ctx)
+    const { items, extra } = this.cap(list)
+    const budget = this.options.max_lines_per_cell
+    if (items.every((value) => typeof value === 'string')) {
+      const pages = paginateLines(items as string[], budget)
+      return pages.map((page, index) => ({ items: page, extra: index === pages.length - 1 ? extra : null }))
+    }
+    if (isGroupList(items)) {
+      const groups = items.map(toGroup)
+      // 복제 문단은 양식 줄 그대로다. subLineText 접두사는 옛 xml.ts 전용이라 붙이지 않는다.
+      const pages = paginateGroups(groups, budget, (line) => line)
+      return pages.map((page, index) => ({
+        items: page.map((group) => relabelGroup(group, this.options.continuation_label)),
+        extra: index === pages.length - 1 ? extra : null,
+      }))
+    }
+    return [{ items, extra }]
+  }
+
+  private paginateRowBlock(row: string, token: string, path: string, ctx: Ctx): RowPiece[][] {
+    const list = this.blockList(token, path, ctx)
+    if (list.length === 0) return [[]]
+    const pieces = list.flatMap((item) => this.splitRowItem(row, token, item, ctx))
+    const max = this.options.max_rows_per_slide
+    if (pieces.length <= max) return [pieces]
+    const pages: RowPiece[][] = []
+    for (let i = 0; i < pieces.length; i += max) pages.push(pieces.slice(i, i + max))
+    return pages
+  }
+
+  private splitRowItem(row: string, token: string, item: unknown, ctx: Ctx): RowPiece[] {
+    const child: Ctx = { ...ctx, scope: [...ctx.scope, token], items: [...ctx.items, item] }
+    const stripped = row.replace(/\{\{#rows[ \t]+[\s\S]*?\}\}/, '').replace(/\{\{\/rows\}\}/, '')
+    const cells = [...stripped.matchAll(/<a:tc\b[^>]*>[\s\S]*?<\/a:tc>/g)].map((match) => match[0])
+    const texts = cells.map((cell) => this.cellText(cell, child))
+    const budget = this.options.max_lines_per_cell
+    if (!texts.some((value) => visualLines(value) > budget)) return [{ item, literals: null, suffix: '' }]
+    const chunks = texts.map((value) => (
+      visualLines(value) > budget ? splitIssueAnalysisTextForRows(value, FULLWIDTH_PER_LINE, budget) : [value]
+    ))
+    const count = Math.max(1, ...chunks.map((chunk) => chunk.length))
+    if (count <= 1) return [{ item, literals: null, suffix: '' }]
+    return Array.from({ length: count }, (_, index) => ({
+      item,
+      literals: chunks.map((chunk) => chunk[index] ?? ''),
+      suffix: `${this.options.continuation_label} ${index + 1}/${count}`,
+    }))
+  }
+
+  private cellText(cell: string, ctx: Ctx): string {
+    const paras = paragraphSpans(cell)
+    return paras.map((para) => fillPlain(parseParagraph(para.xml).runs.map((run) => run.text).join(''), (token, path) => this.text(token, path, ctx))).join('\n')
+  }
+}
+
+
+function insideBlock(ctx: Ctx): boolean {
+  return ctx.scope.some((token) => token.startsWith('{{#items') || token.startsWith('{{#rows'))
+}
+
+function txBodies(xml: string): string[] {
+  return [...xml.matchAll(TX_RE)].map((match) => match[0])
+}
+
+/** 렌더가 아이템 슬라이스를 소비하는 순서. #rows 행 안은 행 스코프라 빠진다. */
+function outerItemRegions(xml: string): string[] {
+  const hasRows = /<a:tr\b/.test(xml) && /\{\{#rows[ \t]/.test(xml)
+  if (!hasRows) return txBodies(xml)
+  const regions: string[] = []
+  let rest = xml
+  const consumed: string[] = []
+  for (const row of xml.matchAll(/<a:tr\b[^>]*>[\s\S]*?<\/a:tr>/g)) {
+    if (/\{\{#rows[ \t]/.test(row[0])) continue
+    regions.push(...txBodies(row[0]))
+    consumed.push(row[0])
+  }
+  for (const row of consumed) rest = rest.replace(row, '')
+  for (const row of xml.matchAll(/<a:tr\b[^>]*>[\s\S]*?<\/a:tr>/g)) {
+    if (/\{\{#rows[ \t]/.test(row[0])) rest = rest.replace(row[0], '')
+  }
+  regions.push(...txBodies(rest))
+  return regions
+}
+
+function isGroupList(list: unknown[]): list is Array<{ title: string; num?: number; lines: string[] }> {
+  return list.length > 0 && list.every((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const record = value as { title?: unknown; lines?: unknown }
+    return typeof record.title === 'string'
+      && Array.isArray(record.lines)
+      && record.lines.every((line) => typeof line === 'string')
+  })
+}
+
+function toGroup(value: { title: string; num?: number; lines: string[] }): NarrativeGroup {
+  return { phase: value.title, num: typeof value.num === 'number' ? value.num : 0, items: value.lines }
+}
+
+function relabel(text: string, label: string): string {
+  if (label === '(계속)' || !text.endsWith(GROUP_MARK)) return text
+  const stem = text.slice(0, -GROUP_MARK.length)
+  return label ? `${stem} ${label}` : stem
+}
+
+function relabelGroup(group: NarrativeGroup, label: string): { title: string; num: number; lines: string[] } {
+  return {
+    title: relabel(group.phase, label),
+    num: group.num,
+    lines: group.items.map((line) => relabel(line, label)),
+  }
+}
+
+function visualLines(text: string): number {
+  if (!text) return 0
+  return text.split('\n').reduce((sum, line) => sum + lineCost(line), 0)
+}
+
+function fillPlain(raw: string, resolve: (token: string, path: string) => string): string {
+  let text = raw
+  let guard = 0
+  while (guard++ < 100) {
+    const tok = findToken(text)
+    if (!tok) break
+    const body = parseTokenBody(text.slice(tok.start + 2, tok.end - 2))
+    if (!body.ok) break
+    const value = body.kind === 'value' ? resolve(body.token, body.path) : ''
+    text = text.slice(0, tok.start) + value + text.slice(tok.end)
+  }
+  return text
+}
+
+function replaceCellText(cell: string, text: string): string {
+  const match = cell.match(/<(p|a):txBody\b[^>]*>[\s\S]*<\/\1:txBody>/)
+  if (!match || match.index === undefined) return cell
+  const body = match[0]
+  const paras = paragraphSpans(body)
+  const sample = paras[0]?.xml ?? '<a:p><a:r><a:t></a:t></a:r></a:p>'
+  const lines = text.split('\n')
+  const rendered = (lines.length ? lines : ['']).map((line) => textParagraph(sample, line)).join('')
+  const first = paras[0]?.start ?? body.length
+  const last = paras.length ? paras[paras.length - 1].end : first
+  const next = body.slice(0, first) + rendered + body.slice(last)
+  return cell.slice(0, match.index) + next + cell.slice(match.index + body.length)
 }
 
 function blockOnly(text: string): boolean {
@@ -395,6 +640,13 @@ function slideToken(xml: string): { token: string; path: string } | null {
   return { token: parsed.token, path: parsed.path }
 }
 
+function pushPlanned(out: OutSlide[], renderer: Renderer, xml: string, source: string, ctx: Ctx, cloneFirst: boolean) {
+  const pages = renderer.planPages(xml, ctx)
+  pages.forEach((page, index) => {
+    out.push({ xml, source, clone: cloneFirst || index > 0, ctx: renderer.bind(ctx, page) })
+  })
+}
+
 async function expandSlides(zip: JSZip, renderer: Renderer, base: Ctx): Promise<OutSlide[]> {
   const order = await deckOrder(zip)
   const out: OutSlide[] = []
@@ -404,18 +656,13 @@ async function expandSlides(zip: JSZip, renderer: Renderer, base: Ctx): Promise<
     const xml = await file.async('string')
     const token = slideToken(xml)
     if (!token) {
-      out.push({ xml, source, clone: false, ctx: base })
+      pushPlanned(out, renderer, xml, source, base, false)
       continue
     }
     const list = renderer.blockList(token.token, token.path, base)
     if (list.length === 0) continue
     list.forEach((item, index) => {
-      out.push({
-        xml,
-        source,
-        clone: index > 0,
-        ctx: { ...base, scope: [token.token], items: [item] },
-      })
+      pushPlanned(out, renderer, xml, source, { ...base, scope: [token.token], items: [item] }, index > 0)
     })
   }
   const pageCount = out.length
