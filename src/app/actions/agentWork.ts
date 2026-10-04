@@ -350,6 +350,8 @@ export type AgentOrderStatus = {
   id: string; status: string
   claimed_by: string | null; claimed_at: string | null; updated_at: string
   reports: AgentOrderReport[]
+  /** SP5b W2 — 결재 대기(reported)이고 유효 승인 단계가 둘 이상일 때만: 대기 단계("승인(i/n · 라벨)"·expectedStep). label null = 기본 단계 */
+  approval?: { step: string; index: number; total: number; label: string | null }
 }
 /** 이전 주문 한 줄 — 본문 없이 "있었다"는 사실만. 상세는 주문 id 로 단건 조회한다. */
 export type AgentOrderBrief = { id: string; status: string; updated_at: string }
@@ -393,5 +395,16 @@ export async function getAgentOrderForItem(itemId: string): Promise<
     // created_at 이 같으면 id 순 — 명세 패널이 고르는 마지막 completion 이 서버의 최신(latestCompletionReportId)과 같다.
     .order('created_at', { ascending: true }).order('id', { ascending: true })
   if (repErr) return { ok: false, error: `보고 조회 실패: ${repErr.message}` }
-  return { ok: true, order: { ...row, reports: (reports ?? []) as AgentOrderReport[] }, priorOrders, projectId }
+  // 결재 대기면 대기 승인 단계(SP5b) — 둘 이상일 때만 싣는다(1단계는 expectedStep 생략이 계약이고 기존 반환 형태를 지킨다).
+  // 판독 실패는 로그 + 생략(버튼은 그대로 — 서버가 approval_stale 로 다시 판정한다)
+  let approval: AgentOrderStatus['approval']
+  if (row.status === 'reported') {
+    const st = await loadApprovalState(createAdminClient(), itemId, projectId)   // 멤버 가드·모듈 관문 뒤
+    if (!st.ok) console.error('[agentWork] 명세 패널 대기 단계 판독 실패:', st.error)
+    else if (st.pending.total >= 2) {
+      const { step, index, total } = st.pending
+      approval = { step, index, total, label: st.steps.find((d) => d.code === step)?.label ?? null }
+    }
+  }
+  return { ok: true, order: { ...row, reports: (reports ?? []) as AgentOrderReport[], ...(approval ? { approval } : {}) }, priorOrders, projectId }
 }
