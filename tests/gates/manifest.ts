@@ -212,6 +212,10 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('settings')}#updateWorkspaceSettings`]: { ...nul('workspaceAdmin'), sample: [U, {}] },   // isUuidLike 가 가드 앞
   [`${A('settings')}#getSettingsCommandOutcome`]: { ...nul('session', '범위 분기 — 프로젝트 관리자·워크스페이스 관리자(내부 가드)'), sample: [{ projectId: P }, U] },   // 범위 객체가 가드 인자
   [`${A('settings')}#listSettingsHistory`]: { ...nul('session', '범위 분기 — 프로젝트 관리자·워크스페이스 관리자(내부 가드)'), sample: [{ projectId: P }] },
+  // SP5c: entity selects wbs/issues/weekly; dedicated tests deny each owner before any access.
+  [`${A('customFields')}#getCustomFieldUsage`]: { guard: 'projectAdmin', module: 'issues', sample: [P, 'issue'] },
+  [`${A('customFields')}#backfillCustomField`]: { guard: 'projectAdmin', module: 'issues', sample: [P, 'issue', {}] },
+  [`${A('customFields')}#purgeCustomField`]: { guard: 'projectAdmin', module: 'issues', sample: [P, 'issue', {}] },
   // ── vocab(SP5 B4) — 어휘 code 이관. 모듈은 키마다(근태·회의·이슈·분석) — 표본은 근태 유형
   [`${A('vocab')}#migrateVocabCode`]: { guard: 'projectAdmin', module: 'attendance', sample: [P, 'attendance.types', 'annual', 'work'] },
   [`${A('settingsPreview')}#previewSettingsImpact`]: { ...nul('workspaceAdmin', '설정 미리보기 — 모듈을 켜는 관리 화면이어서 모듈 관문 밖'), sample: [U, ['agents']] },

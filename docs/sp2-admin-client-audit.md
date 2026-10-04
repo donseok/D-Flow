@@ -148,3 +148,5 @@ service_role DEFINER RPC 를 부르므로 표에 행이 없다. 세션 RLS(2차 
 `public.actor_is_project_admin(p_actor, p_project_id)`(플랫폼 관리자 ∨ 그 프로젝트 워크스페이스 관리자 ∨ 활성 명단 행·인물의
 `access_role = 'admin'`) 하나로 판정하고 거짓이면 쓰기 전에 42501 이다. 넷 다 advisory 잠금을 잡고 함수 속성 `lock_timeout = 15s` 를
 둔다(55P03 은 호출부가 503 재시도로 바꾼다).
+
+SP5c `src/app/actions/customFields.ts`는 `adminFor({ projectId })`를 사용한다. 관리자·해당 엔티티 모듈 가드 뒤 프로젝트에 한정한 사용 건수를 키셋으로 읽고, 일괄 채움·삭제는 가드의 actor를 RPC에 전달하여 DB에서 관리자 권한을 다시 검사한다. 직접 클라이언트를 만들지 않으므로 위 감사표의 대상이 아니다.
