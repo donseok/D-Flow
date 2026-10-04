@@ -16,7 +16,7 @@ const expectedStatus: Record<string, string> = {
   // SP5 B1 — 정의·편집·소비처·테스트 네 연결
   'issues.id_policy': 'verified', 'issues.analysis': 'verified', 'minutes.attachments': 'verified',
   // SP5 B4 — 어휘 다섯. 정의만 먼저(stored) — 트리거·소비처·편집기가 이어지면 verified 로 올린다
-  'attendance.types': 'stored', 'meetings.categories': 'stored', 'issues.severities': 'stored', 'issues.sources': 'stored', 'issues.cause_categories': 'stored',
+  'attendance.types': 'verified', 'meetings.categories': 'verified', 'issues.severities': 'verified', 'issues.sources': 'verified', 'issues.cause_categories': 'verified',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.

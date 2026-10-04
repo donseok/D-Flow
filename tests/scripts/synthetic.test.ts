@@ -40,7 +40,7 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
   it('아직 켜지지 않은 단계는 S3·S6·S7·S8·S10(나머지)이고 담당 SP 가 적혀 있다 — SP5 A 가 S4(일)·S5 를 켰다(D43)', () => {
     expect(Object.keys(PENDING_STEPS)).toEqual(['S3', 'S6', 'S7', 'S8', 'S10'])
     expect(PENDING_STEPS.S6).toBe('SP5b(표시 상태)')
-    expect(PENDING_STEPS.S10).toBe('SP5 B4~SP8(나머지 부분 집합)')
+    expect(PENDING_STEPS.S10).toBe('SP6~SP8(나머지 부분 집합)')
     for (const owner of Object.values(PENDING_STEPS)) expect(String(owner)).toMatch(/^SP/)
   })
   it('C 만 월요일 주 시작 규칙(SP5 D28) — S1-calendar 가 설정 액션으로 주차 문서(S4(월))보다 먼저 쓴다(과제 30 이 calendar 블록으로 옮겼다)', () => {

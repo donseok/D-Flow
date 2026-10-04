@@ -16,6 +16,7 @@
 //        C 의 날짜 예외 둘(10/10 토 휴무·10/25 일 근무)을 일정 화면과 같은 액션(addHoliday)으로. S4-weekly-sunday — R 에서 연속 2주(일요일 키)·이월·
 //        영역 개명. S5-calendar — 기준일 고정(setBaseDate) 뒤 WBS 엑셀의 계획%(R 60·60, C 60·67)와 '오늘'(프로젝트 tz 의 이번 주 문서가 화면에 실린다).
 //        S10-negative 에 시간대 센티널(Asia/Seoul·+09:00)을 더한다. 러너의 '오늘'은 저장된 tz 의 todayInTz 다.
+//   SP5 B4: S1-vocab — R 심각도를 설정 액션으로(새 code·라벨·순서), 참조 있는 code 삭제 거부(건수) → 이관 명령 → 삭제, 지운 code 로 등록 거부.
 //   SP5 B1: S1-issues — R·C 정책과 R 의 10 issue_area 를 설정 액션으로. S6-issue-codes — R 영역별 RS·C 베를린 연도별 CN 를 실제 등록·DB 대조.
 //        S10-negative 에 이슈 화면을 더하고 옛 영역명·PI-I- 센티널을 센다(이슈 이름·코드 그려짐도 증명).
 //   S3·S6~S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
@@ -520,6 +521,41 @@ async function main() {
     if (!row || row.code_scope !== `y:${cToday.slice(0, 4)}` || row.code_area_id !== null) throw new Fail(`C 코드 범위가 다르다: ${JSON.stringify(row)}`)
   }
   step('S6-issue-codes', { R: { codes: rCodes, scopes: rIssueIds.map((x) => x.code_scope) }, C: { codes: cCodes, scopes: cIssueIds.map((x) => x.code_scope) }, yearBasis: cToday })
+
+  // ── S1-vocab(SP5 B4 — 스펙 D43 S1 의 B4 몫) — R 의 심각도를 설정 화면과 같은 액션으로 바꾸고(새 code·바꾼 라벨·순서),
+  //    참조가 있는 code 삭제는 건수와 함께 거부 → 이관 명령 → 삭제가 되는지, 지운 code 로 새 이슈를 못 만드는지 본다.
+  const severitiesOf = async () => rows('R 심각도(다시 읽기)', await admin.sb.from('project_settings').select('revision, values').eq('project_id', R.id).single())
+  const setSeverities = async (list) => {
+    await admin.http('GET', `/p/${R.id}/settings`)
+    const doc = await severitiesOf()
+    return (await admin.action(`/p/${R.id}/settings`, 'updateProjectSettings',
+      [R.id, { expectedRevision: doc.revision, commandId: randomUUID(), set: { 'issues.severities': list }, unset: [] }])).result
+  }
+  const vocabFull = [
+    { code: 'critical', label: '치명', rank: 1, color: 'delayed', active: true },
+    { code: 'high', label: '긴급', rank: 2, color: 'delayed', active: true },
+    { code: 'medium', label: '보통', rank: 3, color: 'pending', active: true },
+    { code: 'low', label: '낮음', rank: 4, color: 'neutral', active: true },
+  ]
+  mustOk('R 심각도 저장', await setSeverities(vocabFull))
+  same('R 심각도(다시 읽기)', (await severitiesOf()).values?.['issues.severities'], vocabFull)
+  const withoutMedium = vocabFull.filter((e) => e.code !== 'medium').map((e, i) => ({ ...e, rank: i + 1 }))
+  const blocked = await setSeverities(withoutMedium)
+  const inUse = blocked?.ok === false ? blocked.fieldErrors?.find((f) => f.key === 'issues.severities') : undefined
+  if (blocked?.ok !== false || blocked.code !== 'CONFIG_IN_USE' || inUse?.code !== 'medium' || inUse?.refCount !== rCodes.length) {
+    throw new Fail(`참조 있는 심각도 삭제가 건수와 함께 거부되지 않았다: ${JSON.stringify(blocked)}`)
+  }
+  const moved = mustOk('R 심각도 이관', (await admin.action(`/p/${R.id}/settings`, 'migrateVocabCode', [R.id, 'issues.severities', 'medium', 'low'])).result)
+  if (moved.moved !== rCodes.length) throw new Fail(`이관 건수가 다르다: ${JSON.stringify(moved)}`)
+  mustOk('R 심각도 삭제(이관 뒤)', await setSeverities(withoutMedium))
+  const sevRows = rows('R 이슈 심각도', await admin.sb.from('issues').select('severity').eq('project_id', R.id))
+  same('R 이슈 심각도(이관 뒤)', [...new Set(sevRows.map((x) => x.severity))], ['low'])
+  await admin.http('GET', `/p/${R.id}/issues`)
+  const stale = (await admin.action(`/p/${R.id}/issues`, 'createIssue', [R.id, {
+    title: '지운 심각도', body: '', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: rIssueSetup.areaIdByCode.get('RND'), analysis: null,
+  }])).result
+  if (stale?.ok !== false) throw new Fail(`지운 심각도로 이슈가 만들어졌다: ${JSON.stringify(stale)}`)
+  step('S1-vocab', { R: { saved: vocabFull.map((e) => e.code), inUse: { code: inUse.code, count: inUse.refCount }, moved: moved.moved, rejected: stale.error } })
 
   // ── S10(SP4·SP5 A·B1 부분) — 스펙 §6.4. 출력을 다시 받아(읽기 전용) 설정 전환 전 옛 기본값 센티널을 센다. 일치 규칙(대소문자·영문 코드 경계·마스크·zip 텍스트 파트)은
   //    sentinels.mjs 하나다. 등록 이름과 **같은** 센티널만 뺀다(C 의 영역 이름 하나가 11구분명과 같다 — D8). 교차: 팀 code 만(영역 이름은 일반어).
