@@ -157,6 +157,7 @@ export const issuesKo = {
   'issue.attach.add': '파일 추가',
   'issue.attach.empty': '첨부된 파일이 없습니다.',
   'issue.attach.remove': '첨부 삭제',
+  'issue.attach.linkFailed': '내려받기 링크를 만들지 못했습니다. 잠시 후 다시 시도하세요.',
   'issue.attach.pending': '이슈를 저장하면 함께 올라갑니다.',
   'issue.attach.uploading': '올리는 중…',
   'issue.attach.count': '첨부 {n}개',

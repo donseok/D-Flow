@@ -10,13 +10,14 @@ import type { IssueAttachment } from '@/lib/domain/issueAttachments'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const { listIssueAttachments, removeIssueAttachment, L } = vi.hoisted(() => ({
+const { listIssueAttachments, removeIssueAttachment, getIssueAttachmentUrl, L } = vi.hoisted(() => ({
   listIssueAttachments: vi.fn(),
+  getIssueAttachmentUrl: vi.fn<(issueId: string, id: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>>(),
   removeIssueAttachment: vi.fn<(id: string) => Promise<{ ok: boolean; error?: string }>>(),
   L: { locale: 'ko' as 'ko' | 'en' },
 }))
 registerEn(EN)
-vi.mock('@/app/actions/issueAttachments', () => ({ listIssueAttachments, removeIssueAttachment }))
+vi.mock('@/app/actions/issueAttachments', () => ({ listIssueAttachments, removeIssueAttachment, getIssueAttachmentUrl }))
 vi.mock('@/lib/issues/uploadIssueAttachments', () => ({ uploadIssueAttachments: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
@@ -29,7 +30,7 @@ import { ERR_OBJECT_REMOVE, ERR_ROW_REMOVE } from '@/lib/attachments/removeStore
 const ISSUE = 'cccccccc-3333-4333-8333-333333333333'
 const ATT: IssueAttachment = {
   id: 'a1', issueId: ISSUE, fileName: 'plan.pdf', filePath: `ws/w/p/p1/issue-attachments/${ISSUE}/1-plan.pdf`,
-  size: 10, mime: 'application/pdf', createdAt: '2026-09-27T00:00:00Z', url: 'https://signed.example.com/plan',
+  size: 10, mime: 'application/pdf', createdAt: '2026-09-27T00:00:00Z',
 }
 
 describe('IssueAttachments — 삭제 실패 문구', () => {
@@ -78,5 +79,30 @@ describe('IssueAttachments — 삭제 실패 문구', () => {
     removeIssueAttachment.mockResolvedValue({ ok: false })
     await act(async () => { del().click() })
     expect(line()).toBe(realT('ko', 'issue.err.attachRemoveFailed'))
+  })
+
+  // SP5 B3 과제7 — 목록에 서명 링크가 없다. 파일명을 누르면 그때 이슈·첨부 id 로 60초 링크를 받아 연다.
+  it('파일명을 누르면 링크를 받아 새 창으로 연다 — 목록에는 a[href] 가 없다', async () => {
+    getIssueAttachmentUrl.mockResolvedValue({ ok: true, url: 'https://signed.example.com/plan' })
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    await render()
+    expect(container.querySelectorAll('a')).toHaveLength(0)
+    const btn = container.querySelector('button[title="plan.pdf"]') as HTMLButtonElement
+    await act(async () => { btn.click() })
+    expect(getIssueAttachmentUrl).toHaveBeenCalledWith(ISSUE, 'a1')
+    expect(open).toHaveBeenCalledWith('https://signed.example.com/plan', '_blank', 'noopener,noreferrer')
+    open.mockRestore()
+  })
+
+  it('링크 발급 실패는 사전 문구로 — 영어 화면에 한국어 사유를 싣지 않는다', async () => {
+    L.locale = 'en'
+    getIssueAttachmentUrl.mockResolvedValue({ ok: false, error: '첨부 없음' })
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await render()
+    await act(async () => { (container.querySelector('button[title="plan.pdf"]') as HTMLButtonElement).click() })
+    expect(open).not.toHaveBeenCalled()
+    expect(line()).toBe(realT('en', 'issue.attach.linkFailed'))
+    open.mockRestore(); err.mockRestore()
   })
 })

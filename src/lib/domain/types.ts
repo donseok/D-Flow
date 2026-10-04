@@ -94,8 +94,6 @@ export interface DeliverableAttachment {
   size: number | null
   mime: string | null
   createdAt: string
-  url?: string | null      // 서명 URL(읽기 시 생성) — 다운로드가 허락될 때만
-  linkError?: boolean      // 다운로드는 허락됐지만 서명 URL 발급에 실패
 }
 
 /* ── 근태현황 ──

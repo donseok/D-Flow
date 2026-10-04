@@ -78,6 +78,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('announcements')}#createAnnouncementFromMeeting`]: { guard: 'projectAdmin', module: ['announcements', 'meetings'], sample: [U, '2026-09-01'] },
   // ── attachments — WBS 산출물(core)
   [`${A('attachments')}#listAttachments`]: nul('session', '로그인 + 세션 RLS(wbs 산출물)'),
+  [`${A('attachments')}#getAttachmentUrl`]: nul('session', '로그인 + 항목·첨부 id 짝 + can_attach(Storage 읽기 정책과 같은 판정) — 60초 서명'),
   [`${A('attachments')}#recordAttachment`]: nul('projectMember'),
   [`${A('attachments')}#removeAttachment`]: nul('projectMember'),
   // ── attendance
@@ -107,6 +108,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('issueAnalysis')}#ensureIssueAnalysisAction`]: { guard: 'projectMember', module: 'issue_analysis', sample: [P, 'all'] },
   // ── issueAttachments
   [`${A('issueAttachments')}#listIssueAttachments`]: { guard: 'session', module: 'issues', note: '로그인 + 이슈 행의 프로젝트', sample: [U] },
+  [`${A('issueAttachments')}#getIssueAttachmentUrl`]: { guard: 'session', module: 'issues', note: '로그인 + 이슈 행의 프로젝트, 이슈·첨부 id 짝 — 60초 서명(세션 Storage 정책)', sample: [U, U] },
   [`${A('issueAttachments')}#recordIssueAttachment`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(requireIssueEditable)', sample: [U, { fileName: 'a.txt', filePath: 'x/a.txt', size: 1, mime: 'text/plain' }], ownerBranch: 'requireIssueEditable — issues.created_by' },
   [`${A('issueAttachments')}#removeIssueAttachment`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U], ownerBranch: 'requireIssueEditable(첨부 행의 이슈) — issues.created_by' },
   // ── issueUpdates

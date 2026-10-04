@@ -10,8 +10,9 @@ import { EN } from '@/lib/i18n/dict/en'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const { listAttachments, removeAttachment, L } = vi.hoisted(() => ({
+const { listAttachments, removeAttachment, getAttachmentUrl, L } = vi.hoisted(() => ({
   listAttachments: vi.fn<(itemId: string) => Promise<AttachmentList>>(),
+  getAttachmentUrl: vi.fn<(itemId: string, id: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>>(),
   removeAttachment: vi.fn<(id: string) => Promise<{ ok: boolean; error?: string }>>(),
   L: { locale: 'ko' as 'ko' | 'en' },
 }))
@@ -23,7 +24,7 @@ vi.mock('@/app/actions/wbs', () => ({
   addTaskDependency: vi.fn(), removeTaskDependency: vi.fn(),
 }))
 vi.mock('@/app/actions/attachments', () => ({
-  listAttachments, recordAttachment: vi.fn(), removeAttachment,
+  listAttachments, recordAttachment: vi.fn(), removeAttachment, getAttachmentUrl,
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
@@ -46,7 +47,7 @@ const item: ComputedItem = {
 }
 const att = (over: Partial<DeliverableAttachment> = {}): DeliverableAttachment => ({
   id: 'att-1', wbsItemId: 'item-1', fileName: 'plan.xlsx', filePath: 'ws/w/p/p1/deliverables/item-1/1-plan.xlsx',
-  size: 2048, mime: 'application/octet-stream', createdAt: '2026-09-27T00:00:00Z', url: null,
+  size: 2048, mime: 'application/octet-stream', createdAt: '2026-09-27T00:00:00Z',
   ...over,
 })
 
@@ -86,6 +87,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     const s = section()
     expect(fileNode('plan.xlsx')).toBeTruthy()
     expect(fileNode('plan.xlsx')!.tagName).not.toBe('A')
+    expect(fileNode('plan.xlsx')!.tagName).not.toBe('BUTTON')
     expect(s.querySelectorAll('a[href="#"]')).toHaveLength(0)
     expect(s.querySelectorAll('a')).toHaveLength(0)
     expect(s.textContent).toContain(ko('wbs.attachDownloadDenied'))
@@ -162,27 +164,35 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     expect(fileNode('plan.xlsx')!.tagName).not.toBe('A')
   })
 
-  it('allowed — 서명 URL 은 링크, linkError 행은 링크 없이 실패 표시', async () => {
-    listAttachments.mockResolvedValue({
-      ok: true, download: 'allowed',
-      rows: [
-        att({ id: 'att-1', fileName: 'plan.xlsx', url: 'https://signed.example.com/plan' }),
-        att({ id: 'att-2', fileName: 'spec.pdf', url: null, linkError: true }),
-      ],
-    })
+  // SP5 B3 과제7 — 목록에는 서명 링크가 없다. 파일명을 누르면 그때 60초 링크를 받아 연다.
+  it('allowed — 파일명은 버튼, 누르면 항목·첨부 id 로 링크를 받아 새 창으로 연다(목록에 href 없음)', async () => {
+    listAttachments.mockResolvedValue({ ok: true, download: 'allowed', rows: [att()] })
+    getAttachmentUrl.mockResolvedValue({ ok: true, url: 'https://signed.example.com/plan' })
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     await render()
     const s = section()
-    const ok = fileNode('plan.xlsx')!
-    expect(ok.tagName).toBe('A')
-    expect(ok.getAttribute('href')).toBe('https://signed.example.com/plan')
-    const bad = fileNode('spec.pdf')!
-    expect(bad.tagName).not.toBe('A')
-    expect(bad.closest('li')!.textContent).toContain(ko('wbs.attachLinkFail'))
-    expect(ok.closest('li')!.textContent).not.toContain(ko('wbs.attachLinkFail'))
-    expect(s.querySelectorAll('a[href="#"]')).toHaveLength(0)
-    expect(s.querySelectorAll('a')).toHaveLength(1)
+    expect(s.querySelectorAll('a')).toHaveLength(0)
+    const btn = fileNode('plan.xlsx')!
+    expect(btn.tagName).toBe('BUTTON')
+    await act(async () => { btn.click() })
+    expect(getAttachmentUrl).toHaveBeenCalledWith('item-1', 'att-1')
+    expect(open).toHaveBeenCalledWith('https://signed.example.com/plan', '_blank', 'noopener,noreferrer')
     expect(s.textContent).not.toContain(ko('wbs.attachDownloadDenied'))
-    expect(s.querySelector('[role="alert"]')).toBeNull()
+    open.mockRestore()
+  })
+
+  it('allowed — 링크 발급이 거부되면(권한 회수 등) 사전 문구로 알리고 창을 열지 않는다', async () => {
+    L.locale = 'en'
+    listAttachments.mockResolvedValue({ ok: true, download: 'allowed', rows: [att()] })
+    getAttachmentUrl.mockResolvedValue({ ok: false, error: '권한 없음' })
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await render()
+    await act(async () => { fileNode('plan.xlsx')!.click() })
+    expect(open).not.toHaveBeenCalled()
+    expect(section().textContent).toContain(realT('en', 'wbs.attachLinkFail'))
+    expect(section().textContent).not.toMatch(/[가-힣]/)
+    open.mockRestore(); err.mockRestore()
   })
 
   // 재시도(최종 리뷰 UI m-2) — 재시도 중에 알림·목록을 걷어 내면 재시도 버튼이 사라져 키보드 포커스가 body 로 떨어지고,

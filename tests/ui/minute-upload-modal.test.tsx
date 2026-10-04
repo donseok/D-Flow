@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { MinuteFolder } from '@/lib/domain/types'
+import type { AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
 import { withTeams } from '../fixtures/teams'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
@@ -20,8 +21,8 @@ const recordMinuteFile = vi.fn<(...a: unknown[]) => Promise<{ ok: boolean }>>(as
 const fetchMinuteFoldersLite = vi.fn<() => Promise<MinuteFolder[]>>(async () => tree)
 type MeetingsLite = { ok: true; meetings: { id: string; title: string; meetingDate: string }[] } | { ok: false; error: string }
 const fetchProjectMeetingsLite = vi.fn<(pid: string) => Promise<MeetingsLite>>(async () => ({ ok: true, meetings: [] }))
-const POLICY = { enabled: true, maxFileBytes: 20_971_520, maxCount: 10, maxTotalBytes: 209_715_200, allowedExtensions: null, previewEnabled: true }
-type PolicyRes = { ok: true; policy: typeof POLICY } | { ok: false; error: string }
+const POLICY: AttachmentPolicy = { enabled: true, maxFileBytes: 20_971_520, maxCount: 10, maxTotalBytes: 209_715_200, allowedExtensions: null, previewEnabled: true }
+type PolicyRes = { ok: true; policy: AttachmentPolicy } | { ok: false; error: string }
 const fetchAttachmentPolicyForScope = vi.fn<(scope: unknown) => Promise<PolicyRes>>(async () => ({ ok: true, policy: POLICY }))
 vi.mock('@/app/actions/minutes', () => ({
   createMinute: (...a: unknown[]) => createMinute(...(a as [unknown, string | null])),

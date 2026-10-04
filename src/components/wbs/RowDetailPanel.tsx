@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, X, FileText, Pencil, Plus, ChevronUp, ChevronDown, ChevronRight, Trash2, Paperclip, Upload, GitBranchPlus, GitBranch } from 'lucide-react'
+import { X, FileText, Pencil, Plus, ChevronUp, ChevronDown, ChevronRight, Trash2, Paperclip, Upload, GitBranchPlus, GitBranch } from 'lucide-react'
 import type { ComputedItem, DependencyType, OwnerKind, ProjectMember, TaskDependency, TeamCode } from '@/lib/domain/types'
 import type { TaskSchedule } from '@/lib/domain/dependencySchedule'
 import { evaluateStartReadiness, type PredecessorState } from '@/lib/domain/dependencyReadiness'
@@ -11,7 +11,7 @@ import {
 } from '@/app/actions/wbs'
 import { availableSubActTeams, willDiscardActual } from '@/lib/domain/subact'
 import { canAddChild, canSplit } from '@/lib/domain/wbsAffordance'
-import { listAttachments, recordAttachment, removeAttachment, type AttachmentList } from '@/app/actions/attachments'
+import { getAttachmentUrl, listAttachments, recordAttachment, removeAttachment, type AttachmentList } from '@/app/actions/attachments'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { removeErrorKey } from '@/lib/attachments/removeErrors'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
@@ -785,6 +785,20 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
     } finally { setBusy(false) }
   }
 
+  // 내려받기는 클릭 때 60초 링크를 받는다(SP5 B3 과제7) — 목록에는 서명이 없다. 실패는 사전 문구로(액션 문구는 로그 몫).
+  const [opening, setOpening] = useState<string | null>(null)
+  async function open(id: string) {
+    setOpening(id); setErr(null)
+    try {
+      const res = await getAttachmentUrl(itemId, id)
+      if (res.ok) window.open(res.url, '_blank', 'noopener,noreferrer')
+      else { console.error('[AttachmentSection] 내려받기 링크 실패:', res.error); setErr(t('wbs.attachLinkFail')) }
+    } catch (e) {
+      console.error('[AttachmentSection] 내려받기 링크 호출 실패:', e)
+      setErr(t('wbs.attachLinkFail'))
+    } finally { setOpening(null) }
+  }
+
   async function del(id: string) {
     setBusy(true); setErr(null)
     const res = await removeAttachment(id)
@@ -827,13 +841,13 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
             {list.rows.map(a => (
               <li key={a.id} className="flex items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-2.5 py-2">
                 <FileText className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
-                {list.download === 'allowed' && a.url ? (
-                  <a href={a.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[13px] text-brand hover:underline" title={a.fileName}>{a.fileName}</a>
+                {list.download === 'allowed' ? (
+                  <button type="button" onClick={() => void open(a.id)} disabled={opening === a.id}
+                    className="min-w-0 flex-1 truncate text-left text-[13px] text-brand hover:underline" title={a.fileName}>{a.fileName}</button>
                 ) : (
                   <span className="min-w-0 flex-1 truncate text-[13px] text-ink" title={a.fileName}>{a.fileName}</span>
                 )}
                 {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(a.size)}</span>}
-                {a.linkError && <span className="flex shrink-0 items-center gap-1 text-[11px] text-ink"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-delayed" />{t('wbs.attachLinkFail')}</span>}
                 {canAttach && <button onClick={() => del(a.id)} disabled={busy} aria-label={t('wbs.deleteAttachmentAria')} className="shrink-0 text-ink-subtle transition hover:text-delayed"><Trash2 className="h-3.5 w-3.5" /></button>}
               </li>
             ))}

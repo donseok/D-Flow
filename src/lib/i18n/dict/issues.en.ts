@@ -158,6 +158,7 @@ export const issuesEn: Record<keyof typeof issuesKo, string> = {
   'issue.attach.add': 'Add files',
   'issue.attach.empty': 'No files attached.',
   'issue.attach.remove': 'Remove attachment',
+  'issue.attach.linkFailed': 'Could not create the download link. Please try again shortly.',
   'issue.attach.pending': 'These upload when the issue is saved.',
   'issue.attach.uploading': 'Uploading…',
   'issue.attach.count': '{n} attachment(s)',

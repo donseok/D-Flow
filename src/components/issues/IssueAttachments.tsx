@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, Paperclip, Upload, X } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { listIssueAttachments, removeIssueAttachment } from '@/app/actions/issueAttachments'
+import { getIssueAttachmentUrl, listIssueAttachments, removeIssueAttachment } from '@/app/actions/issueAttachments'
 import {
   ISSUE_ATTACHMENT_MAX_BYTES,
   ISSUE_ATTACHMENT_MAX_COUNT,
@@ -120,6 +120,21 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
     } finally { setBusy(false) }
   }
 
+  // 내려받기는 클릭 때 60초 링크를 받는다(SP5 B3 과제7) — 목록에는 서명이 없다.
+  const [opening, setOpening] = useState<string | null>(null)
+  async function openAttachment(id: string) {
+    if (!issueId) return
+    setOpening(id); setErr(null)
+    try {
+      const res = await getIssueAttachmentUrl(issueId, id)
+      if (res.ok) window.open(res.url, '_blank', 'noopener,noreferrer')
+      else { console.error('[IssueAttachments] 내려받기 링크 실패:', res.error); setErr(t('issue.attach.linkFailed')) }
+    } catch (e) {
+      console.error('[IssueAttachments] 내려받기 링크 호출 실패:', e)
+      setErr(t('issue.attach.linkFailed'))
+    } finally { setOpening(null) }
+  }
+
   async function del(id: string) {
     setBusy(true); setErr(null)
     const res = await removeIssueAttachment(id)
@@ -171,15 +186,15 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
           {saved.map(a => (
             <li key={a.id} className="flex items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-2.5 py-2">
               <FileText className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
-              <a
-                href={a.url ?? '#'}
-                target="_blank"
-                rel="noreferrer"
-                className="min-w-0 flex-1 truncate text-[13px] text-brand hover:underline"
+              <button
+                type="button"
+                onClick={() => void openAttachment(a.id)}
+                disabled={opening === a.id}
+                className="min-w-0 flex-1 truncate text-left text-[13px] text-brand hover:underline"
                 title={a.fileName}
               >
                 {a.fileName}
-              </a>
+              </button>
               {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(a.size)}</span>}
               {editable && (
                 <button
