@@ -13,7 +13,7 @@ SP5c(사용자 정의 필드)의 모든 단계(F~Z)가 성공적으로 구현·�
   - 카탈로그에 `custom.<key>` (SP5c), `status_code` / `status_label` (SP5b), 통일 주차 원자 토큰(`week_year`, `week_month`, `week_ordinal`, `week_end`, `week_days[]`) 확장
   - PPTX/XLSX 순수 자리표시자 스캐너 및 검증기
   - 토큰 단위 및 한국어 고정 서식 라벨 불변식 테스트
-- [ ] B: 영역 8개 초과 체브론 8칸 창 및 6근무일 렌더링 (Chevron Windowing & Multi-area Rendering)
+- [x] B: 영역 8개 초과 체브론 8칸 창 및 6근무일 렌더링 (Chevron Windowing & Multi-area Rendering)
   - `buildIssueAnalysisProcessSlides` 8칸 창 분할 (`areas.slice(8w, 8w+8)`) 및 제목 접미 `(영역 9–16 / 17)`
   - `FIXED_SLIDE_LIMIT` 제거
   - 주간보고 6일 근무 프로젝트의 `per_day` 6칸 렌더링 지원

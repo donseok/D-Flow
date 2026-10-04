@@ -1056,8 +1056,16 @@ export function buildIssueAnalysisDeckPlan(
     { kind: 'contents', sourceSlide: 4, activeSection: 2 },
   ]
 
+  const deckAreas: Array<{ code: string; name: string }> = [
+    ...areas.filter(ref => ref.active || report.areas.some(area => area.areaCode === ref.code))
+      .slice().sort((a, b) => a.sortOrder - b.sortOrder)
+      .map(ref => ({ code: ref.code, name: ref.name })),
+    ...report.areas.filter(area => !areas.some(ref => ref.code === area.areaCode))
+      .map(area => ({ code: area.areaCode, name: area.areaName })),
+  ]
+
   for (const area of populatedAreas) {
-    slides.push(...buildIssueAnalysisProcessSlides(area))
+    slides.push(...buildIssueAnalysisProcessSlides(area, deckAreas))
     slides.push(...areaSlides(area, labels))
     slides.push(...causeAnalysisSlides(area, labels))
   }
@@ -1075,8 +1083,7 @@ export function buildIssueAnalysisDeckPlan(
   slides.push(...opportunitySlides(opportunityPageBlocks))
 
   return {
-    areas: [...areas.filter(ref => ref.active || report.areas.some(area => area.areaCode === ref.code)).slice().sort((a, b) => a.sortOrder - b.sortOrder).map(ref => ({ code: ref.code, name: ref.name })),
-      ...report.areas.filter(area => !areas.some(ref => ref.code === area.areaCode)).map(area => ({ code: area.areaCode, name: area.areaName }))],
+    areas: deckAreas,
     schemaVersion: 'issue-analysis-deck.v1',
     projectId: report.projectId,
     issueCount: report.issueCount,

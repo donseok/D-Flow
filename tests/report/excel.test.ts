@@ -100,3 +100,26 @@ describe('buildReportWorkbook — WBS 시트 Lv 열·행 배경/볼드는 depth 
     expect(bolds).toEqual([true, true, false, false])
   })
 })
+
+describe('buildReportWorkbook — 12영역 이상 및 6근무일 (개정 §4.5.4)', () => {
+  it('12개 이상 팀/영역과 6근무일 환경에서 정상 빌드되고 워크로드 6칸을 유지한다', async () => {
+    const twelveTeams = Array.from({ length: 14 }, (_, i) => `팀${i + 1}`)
+    const { calendarOf } = await import('@/lib/domain/calendar')
+    const sixDay = calendarOf({ timezone: 'Asia/Seoul', workingDays: [1, 2, 3, 4, 5, 6], weekStart: [{ day: 'monday', from: null }] })
+    const model = buildWeeklyReportModel([], project, '2026-06-30', { teams: twelveTeams, calendar: sixDay })
+    expect(model.workload).toHaveLength(14)
+    expect(model.workload.every(w => w.perDay.length === 6)).toBe(true)
+
+    const buf = await buildReportWorkbook(model, 'Acme 14Teams')
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(buf)
+    const ws = wb.getWorksheet('1.공정보고')!
+    expect(ws).toBeDefined()
+    let foundWorkloadRows = 0
+    ws.eachRow(row => {
+      const vals = (row.values as unknown[]).slice(1).map(v => (v == null ? '' : String(v)))
+      if (vals[1]?.startsWith('팀')) foundWorkloadRows += 1
+    })
+    expect(foundWorkloadRows).toBe(14)
+  })
+})

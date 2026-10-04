@@ -29,6 +29,8 @@ export interface IssueAnalysisDeckProcessTreeSlide {
   pageCount: number
   headline: string
   columns: IssueAnalysisDeckTreeColumn[]
+  windowSuffix?: string
+  windowAreas?: Array<{ code: string; name: string }>
 }
 
 export interface IssueAnalysisDeckProcessDefinitionSlide {
@@ -42,6 +44,7 @@ export interface IssueAnalysisDeckProcessDefinitionSlide {
   headline: string
   megaDefinition: string
   rows: IssueAnalysisDeckDefinitionRow[]
+  windowSuffix?: string
 }
 
 export type IssueAnalysisDeckProcessSlide =
@@ -117,15 +120,39 @@ function treeHeadline(
 }
 
 /**
+ * 영역 수가 8개를 초과할 때의 체브론 창 접미 표기 (개정 §4.5.1, R4-13)
+ * 예: " (영역 9–16 / 17)"
+ */
+export function formatWindowSuffix(activeIndex: number, totalAreas: number): string {
+  if (totalAreas <= 8 || activeIndex < 0) return ''
+  const w = Math.floor(activeIndex / 8)
+  const start = 8 * w + 1
+  const end = Math.min(8 * (w + 1), totalAreas)
+  const range = start === end ? `${start}` : `${start}–${end}`
+  return ` (영역 ${range} / ${totalAreas})`
+}
+
+/**
  * 저장 실행에 프로세스 정의가 있는 영역만 트리→정의 순의 슬라이드 시리즈를 만든다.
  * 정의가 없는 구버전 저장 실행은 빈 배열 — 기존 덱 구성이 한 장도 변하지 않는다.
+ * 8개 초과 영역은 8칸 창으로 분할하여 창 슬라이드를 구성한다 (개정 §4.5.1).
  */
 export function buildIssueAnalysisProcessSlides(
   area: IssueAnalysisReportArea,
+  areas?: readonly { code: string; name: string }[],
 ): IssueAnalysisDeckProcessSlide[] {
   const definitions = area.processDefinitions
   const majors = area.majors
   if (!definitions || !majors || !area.issues.length) return []
+
+  const total = areas?.length ?? 1
+  const activeIndex = areas ? areas.findIndex(a => a.code === area.areaCode) : -1
+  const i = activeIndex >= 0 ? activeIndex : 0
+  const w = Math.floor(i / 8)
+  const windowAreas = areas
+    ? areas.slice(8 * w, 8 * w + 8).map(a => ({ code: a.code, name: a.name }))
+    : undefined
+  const windowSuffix = total > 8 && activeIndex >= 0 ? formatWindowSuffix(activeIndex, total) : ''
 
   const columns = treeColumns(area)
   const headline = treeHeadline(area, columns)
@@ -139,6 +166,8 @@ export function buildIssueAnalysisProcessSlides(
     pageCount: treePages.length,
     headline,
     columns: pageColumns,
+    windowSuffix,
+    windowAreas,
   }))
 
   const definitionById = new Map(
@@ -170,6 +199,7 @@ export function buildIssueAnalysisProcessSlides(
       headline,
       megaDefinition: definitions.megaDefinition,
       rows: pageRows,
+      windowSuffix,
     })
   })
   return slides

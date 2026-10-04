@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ISSUE_ANALYSIS_UNCLASSIFIED_MAJOR_LABEL,
   buildIssueAnalysisProcessSlides,
+  formatWindowSuffix,
   type IssueAnalysisDeckProcessTreeSlide,
 } from '@/lib/report/issues/processPages'
 import { buildIssueAnalysisDeckPlan } from '@/lib/report/issues/deckPlan'
@@ -273,5 +274,66 @@ describe('buildIssueAnalysisDeckPlan 통합', () => {
     expect(plan.slides.some(slide =>
       slide.kind === 'process-tree' || slide.kind === 'process-definition')).toBe(false)
     expect(plan.slides.map(slide => slide.sourceSlide)).toEqual([1, 2, 3, 4, 8, 9, 11, 12])
+  })
+})
+
+describe('formatWindowSuffix — 체브론 8칸 창 제목 접미 (개정 §4.5.1, R4-13)', () => {
+  it('영역 8개 이하는 접미가 없다', () => {
+    expect(formatWindowSuffix(0, 0)).toBe('')
+    expect(formatWindowSuffix(0, 1)).toBe('')
+    expect(formatWindowSuffix(0, 8)).toBe('')
+    expect(formatWindowSuffix(7, 8)).toBe('')
+  })
+
+  it('영역 9개: 1~8번 영역은 (영역 1–8 / 9), 9번 영역은 (영역 9 / 9)', () => {
+    expect(formatWindowSuffix(0, 9)).toBe(' (영역 1–8 / 9)')
+    expect(formatWindowSuffix(7, 9)).toBe(' (영역 1–8 / 9)')
+    expect(formatWindowSuffix(8, 9)).toBe(' (영역 9 / 9)')
+  })
+
+  it('영역 17개: 창 1 (1–8 / 17), 창 2 (9–16 / 17), 창 3 (17 / 17)', () => {
+    expect(formatWindowSuffix(0, 17)).toBe(' (영역 1–8 / 17)')
+    expect(formatWindowSuffix(7, 17)).toBe(' (영역 1–8 / 17)')
+    expect(formatWindowSuffix(8, 17)).toBe(' (영역 9–16 / 17)')
+    expect(formatWindowSuffix(15, 17)).toBe(' (영역 9–16 / 17)')
+    expect(formatWindowSuffix(16, 17)).toBe(' (영역 17 / 17)')
+  })
+})
+
+describe('buildIssueAnalysisProcessSlides — 8칸 창 분할 (개정 §4.5.1)', () => {
+  const makeAreas = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      code: String(i + 1).padStart(2, '0'),
+      name: `영역${i + 1}`,
+    }))
+
+  it('17개 영역일 때 9번 영역은 windowAreas 8개(9~16)와 접미 (영역 9–16 / 17)을 가진다', () => {
+    const areas17 = makeAreas(17)
+    const area9 = areaFixture()
+    area9.areaCode = '09'
+    area9.areaName = '영역9'
+
+    const slides = buildIssueAnalysisProcessSlides(area9, areas17)
+    expect(slides.length).toBeGreaterThan(0)
+    const treeSlide = slides.find(s => s.kind === 'process-tree') as IssueAnalysisDeckProcessTreeSlide
+    expect(treeSlide).toBeDefined()
+    expect(treeSlide.windowSuffix).toBe(' (영역 9–16 / 17)')
+    expect(treeSlide.windowAreas).toHaveLength(8)
+    expect(treeSlide.windowAreas?.[0].code).toBe('09')
+    expect(treeSlide.windowAreas?.[7].code).toBe('16')
+  })
+
+  it('17개 영역일 때 17번 영역은 windowAreas 1개(17)와 접미 (영역 17 / 17)을 가진다', () => {
+    const areas17 = makeAreas(17)
+    const area17 = areaFixture()
+    area17.areaCode = '17'
+    area17.areaName = '영역17'
+
+    const slides = buildIssueAnalysisProcessSlides(area17, areas17)
+    const treeSlide = slides.find(s => s.kind === 'process-tree') as IssueAnalysisDeckProcessTreeSlide
+    expect(treeSlide).toBeDefined()
+    expect(treeSlide.windowSuffix).toBe(' (영역 17 / 17)')
+    expect(treeSlide.windowAreas).toHaveLength(1)
+    expect(treeSlide.windowAreas?.[0].code).toBe('17')
   })
 })

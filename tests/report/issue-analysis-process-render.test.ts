@@ -217,3 +217,212 @@ describe('덱 검증', () => {
       .rejects.toThrow('프로세스 트리')
   })
 })
+
+function multiAreaReportFixture(count: number, options?: { longNameIndex?: number }): {
+  report: IssueAnalysisReport
+  areas: import('@/lib/domain/issueAreas').IssueAreaRef[]
+} {
+  const areasList: import('@/lib/domain/issueAreas').IssueAreaRef[] = []
+  const reportAreas: import('@/lib/report/issues/model').IssueAnalysisReportArea[] = []
+  let totalIssues = 0
+
+  for (let i = 1; i <= count; i += 1) {
+    const code = String(i).padStart(2, '0')
+    const isLong = options?.longNameIndex === i
+    const name = isLong ? '매우긴이름의특수공정및품질관리영역' : `영역${i}`
+    areasList.push({
+      id: `area-id-${code}`,
+      code,
+      name,
+      sortOrder: i,
+      active: true,
+    })
+
+    const major1 = {
+      id: `major-${code}-1`,
+      majorSeq: 1,
+      name: `${name}업무1`,
+    }
+    const issue1: IssueAnalysisReportIssue = {
+      id: `issue-${code}-1`,
+      code: `PI-I-${code}-01`,
+      areaId: code,
+      majorId: major1.id,
+      title: `${name} 이슈 1`,
+      body: `${name} 이슈 1 상세 내용`,
+      status: 'open',
+      severity: 'medium',
+      subProcess: '세부공정1',
+      ownerDepartment: '담당팀',
+      relatedSystems: ['ERP'],
+      assigneeMemberIds: [],
+      source: {
+        manual: { type: 'interview', detail: '현업 인터뷰' },
+        minutes: [],
+      },
+    }
+    totalIssues += 1
+
+    reportAreas.push({
+      areaId: code,
+      areaCode: code,
+      areaName: name,
+      majors: [major1],
+      processDefinitions: {
+        megaDefinition: `${name} 프로세스 개요 정의`,
+        majors: [
+          { majorId: major1.id, definition: `${major1.name} 프로세스 정의 내용` },
+        ],
+      },
+      summary: {
+        totalCount: 1,
+        statusCounts: { open: 1, in_progress: 0, resolved: 0, on_hold: 0 },
+        severityCounts: { high: 0, medium: 1, low: 0 },
+        ownerDepartments: ['담당팀'],
+        relatedSystems: ['ERP'],
+      },
+      issues: [issue1],
+      opportunities: [{
+        title: `${name} 개선기회`,
+        description: `${name} 표준화 기회`,
+        issueIds: [issue1.id],
+      }],
+    })
+  }
+
+  return {
+    areas: areasList,
+    report: {
+      schemaVersion: 'issue-analysis.v1',
+      projectId: 'project-multi',
+      issueCount: totalIssues,
+      generatedAt: '2026-08-02T00:00:00Z',
+      areas: reportAreas,
+    },
+  }
+}
+
+describe('체브론 8칸 창 분할 및 영역 0·1·8·9·17개 회귀 렌더 (개정 §4.5.1, §4.5.4)', () => {
+  it('영역 0개: 이슈가 없는 빈 리포트는 렌더 전 거부된다', () => {
+    const { report, areas } = multiAreaReportFixture(0)
+    expect(() => buildIssueAnalysisDeckPlan(report, META, areas))
+      .toThrow('분석서에 포함할 이슈가 없습니다.')
+  })
+
+  it('설정 영역 0개(빈 배열)여도 리포트 영역을 폴백으로 채택해 정상 렌더된다', async () => {
+    const { report } = multiAreaReportFixture(1)
+    const plan = buildIssueAnalysisDeckPlan(report, META, [])
+    const slides = await renderedSlides(plan)
+    const treeIdx = plan.slides.findIndex(s => s.kind === 'process-tree')
+    expect(treeIdx).toBeGreaterThan(-1)
+    const tree = slides[treeIdx]
+    expect(tree).toContain('As-Is 프로세스 체계 – 01_영역1')
+    expect(tree).not.toContain('(영역')
+  })
+
+  it('영역 1개: 체브론 1칸만 렌더되고 나머지 7개 슬롯은 생략된다', async () => {
+    const { report, areas } = multiAreaReportFixture(1)
+    const plan = buildIssueAnalysisDeckPlan(report, META, areas)
+    const slides = await renderedSlides(plan)
+    const treeIdx = plan.slides.findIndex(s => s.kind === 'process-tree')
+    const tree = slides[treeIdx]
+    expect(tree).toContain('As-Is 프로세스 체계 – 01_영역1')
+    expect(tree).not.toContain('(영역')
+    const treeText = paragraphTexts(tree)
+    expect(treeText).toContain('01\n영역1')
+    expect(treeText).not.toContain('02\n')
+  })
+
+  it('영역 8개: 창 접미 없이 8칸 체브론이 모두 그려지고 활성 영역이 강조된다', async () => {
+    const { report, areas } = multiAreaReportFixture(8)
+    const plan = buildIssueAnalysisDeckPlan(report, META, areas)
+    const slides = await renderedSlides(plan)
+    const treeIndices = plan.slides
+      .map((s, idx) => s.kind === 'process-tree' ? idx : -1)
+      .filter(idx => idx >= 0)
+    // 8개 영역 * 1페이지(트리) = 8개 트리 슬라이드
+    expect(treeIndices).toHaveLength(8)
+    for (let i = 1; i <= 8; i += 1) {
+      const code = String(i).padStart(2, '0')
+      const tree = slides[treeIndices[i - 1]]
+      expect(tree).toContain(`– ${code}_영역${i}`)
+      expect(tree).not.toContain('(영역')
+      const treeText = paragraphTexts(tree)
+      // 8개 체브론 라벨 모두 포함
+      for (let j = 1; j <= 8; j += 1) {
+        expect(treeText).toContain(`${String(j).padStart(2, '0')}\n영역${j}`)
+      }
+    }
+  })
+
+  it('영역 9개: 1~8번 영역은 (영역 1–8 / 9), 9번 영역은 (영역 9 / 9) 및 1칸 체브론 렌더', async () => {
+    const { report, areas } = multiAreaReportFixture(9)
+    const plan = buildIssueAnalysisDeckPlan(report, META, areas)
+    const slides = await renderedSlides(plan)
+    const treeIndices = plan.slides
+      .map((s, idx) => s.kind === 'process-tree' ? idx : -1)
+      .filter(idx => idx >= 0)
+    expect(treeIndices).toHaveLength(9)
+
+    // 1~8번 영역: 창 1 (영역 1–8 / 9)
+    for (let i = 1; i <= 8; i += 1) {
+      const code = String(i).padStart(2, '0')
+      const tree = slides[treeIndices[i - 1]]
+      expect(tree).toContain(`– ${code}_영역${i}`)
+      expect(tree).toContain(`(영역 1–8 / 9)`)
+      const treeText = paragraphTexts(tree)
+      expect(treeText).toContain('01\n영역1')
+      expect(treeText).toContain('08\n영역8')
+      expect(treeText).not.toContain('09\n영역9')
+    }
+
+    // 9번 영역: 창 2 (영역 9 / 9)
+    const tree9 = slides[treeIndices[8]]
+    expect(tree9).toContain(`– 09_영역9`)
+    expect(tree9).toContain(`(영역 9 / 9)`)
+    const tree9Text = paragraphTexts(tree9)
+    expect(tree9Text).toContain('09\n영역9')
+    // 1~8번 체브론은 창 2에 미포함
+    expect(tree9Text).not.toContain('01\n영역1')
+    expect(tree9Text).not.toContain('08\n영역8')
+  })
+
+  it('영역 17개: 마지막 영역 누락 0, 창 1 (1–8 / 17), 창 2 (9–16 / 17), 창 3 (17 / 17) 완결 렌더', async () => {
+    const { report, areas } = multiAreaReportFixture(17, { longNameIndex: 17 })
+    const plan = buildIssueAnalysisDeckPlan(report, META, areas)
+    const slides = await renderedSlides(plan)
+    const treeIndices = plan.slides
+      .map((s, idx) => s.kind === 'process-tree' ? idx : -1)
+      .filter(idx => idx >= 0)
+    // 17개 영역 모두 트리 슬라이드 생성 (마지막 영역 누락 0)
+    expect(treeIndices).toHaveLength(17)
+
+    // 창 1 (1~8)
+    const tree1 = slides[treeIndices[0]]
+    expect(tree1).toContain('– 01_영역1')
+    expect(tree1).toContain('(영역 1–8 / 17)')
+    const tree1Text = paragraphTexts(tree1)
+    expect(tree1Text).toContain('01\n영역1')
+    expect(tree1Text).toContain('08\n영역8')
+    expect(tree1Text).not.toContain('09\n영역9')
+
+    // 창 2 (9~16)
+    const tree9 = slides[treeIndices[8]]
+    expect(tree9).toContain('– 09_영역9')
+    expect(tree9).toContain('(영역 9–16 / 17)')
+    const tree9Text = paragraphTexts(tree9)
+    expect(tree9Text).toContain('09\n영역9')
+    expect(tree9Text).toContain('16\n영역16')
+    expect(tree9Text).not.toContain('01\n영역1')
+    expect(tree9Text).not.toContain('17\n')
+
+    // 창 3 (17): 긴 영역명 픽스처 포함
+    const tree17 = slides[treeIndices[16]]
+    expect(tree17).toContain('– 17_매우긴이름의특수공정및품질관리영역')
+    expect(tree17).toContain('(영역 17 / 17)')
+    const tree17Text = paragraphTexts(tree17)
+    expect(tree17Text).toContain('17\n매우긴이름의특수공정및품질관리영역')
+    expect(tree17Text).not.toContain('16\n영역16')
+  })
+})
+
