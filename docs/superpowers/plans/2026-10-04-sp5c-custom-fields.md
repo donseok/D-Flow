@@ -12,9 +12,9 @@ Claude Code의 원격 main을 확인했다. SP5 A/B1/B3/B4/B2와 SP5b P0/I/W1/W2
 
 - [x] F: 순수 FieldDef 파서·7종 값 검증·공통 패리티 fixture·서식·이월 선택.
 - [x] D: `0027_custom_fields.sql` + 롤백. 세 엔티티 custom/GIN/검증 트리거, WBS 멤버 열 가드, 정의 참조 검사, backfill/purge(관리자 재판정·CAS·영수증·행→설정 잠금). 정본의 옛 예약 번호 0023은 이미 사용됐으므로 실제 다음 번호 0027을 사용한다.
-- [ ] S: `fields.wbs_item/issue/weekly_row` 레지스트리·로더·사용 건수·설정 편집기·관리자 명령·재색인 부수효과. DB 검증 경로를 만든 뒤 키를 활성화한다.
-- [ ] V: WBS/이슈/주간 액션·타입·로더와 공통 입력/읽기 렌더러, 목록 열·필터·비활성 값 읽기 전용. 모듈 관문/actor 추적/서비스 클라이언트 감사 포함.
-- [ ] X: WBS Excel 기본/프로파일 왕복·임포트 경고·로그, 주간 carryCustom 및 create_weekly_report 시드 값 연결. 동결된 에이전트 API 입출력 키는 확장하지 않는다.
+- [x] S: `fields.wbs_item/issue/weekly_row` 레지스트리·로더·사용 건수·설정 편집기·관리자 명령·재색인 부수효과. DB 검증 경로를 만든 뒤 키를 활성화한다.
+- [x] V: WBS/이슈/주간 액션·타입·로더와 공통 입력/읽기 렌더러, 목록 열·필터·비활성 값 읽기 전용. 모듈 관문/actor 추적/서비스 클라이언트 감사 포함.
+- [x] X: WBS Excel 기본/프로파일 왕복·임포트 경고·로그, 주간 carryCustom 및 create_weekly_report 시드 값 연결. 동결된 에이전트 API 입출력 키는 확장하지 않는다.
 - [ ] I: AI 색인 본문·정의 변경 재색인. 봇 근거 확장은 정본에 따라 SP8 뒤 이월이며 완료로 보고하지 않는다.
 - [ ] Z: TS↔SQL 같은 fixture·RLS 직접 쓰기·두 연결 경합·합성 S3·UI 실제 브라우저·회귀·카탈로그/인계 갱신. 전체 구현 뒤 성능 검증, 결과와 미달은 사실대로 기록한다.
 
@@ -130,5 +130,27 @@ WBS 간트 시트에 활성 `show_in_list` 필드를 간트 이전 위치에 추
 - 프로덕션 빌드·타입 검사·lint(오류 0, 기존 경고 4) 통과.
 - 실제 빌드 앱 3101 + 전용 A DB(54521/54522) 브라우저 QA(`.superpowers/sp5c/weekly-cols-browser.mjs`): 1440px 데스크톱 및 390px 모바일 화면에서 추가 열 표시, 0 및 불리언 서식 표시, show_in_list 비활성 열 미표시, 모달 오픈 및 편집 확인, 가로 넘침 없음 및 콘솔 오류 0 검증 완료. 로컬 증거 `.superpowers/sp5c/weekly-cols-browser-result.json`, `weekly-cols-desktop.png`, `weekly-cols-mobile.png`.
 
-남은 작업: X(주간 carryCustom 이월 및 WBS Excel 왕복), I(AI 색인), Z(합성/최종 성능 검증). SP5c 전체 미완료, fields 카탈로그 stored 유지.
+## X WBS 엑셀 프로파일/표준 양식 왕복 및 주간 이월 검증 (2026-10-05)
+
+- **WBS 엑셀 프로파일 및 표준 양식 사용자 정의 열 왕복 (SP5c §3.6.7)**:
+  - `ExcelProfile`에 `customColumns?: [number, string][]` 정의 및 `validateProfile` 정규화(`customColumns: []` 기본값 부여).
+  - `deriveStandardExcelProfile`: 활성 `customFields`를 `sort` 순서대로 기본 열 뒤(`base + 6 + i`)에 배치하여 `customColumns` 생성.
+  - `buildAoaWithProfile` / `buildWorkbookWithProfile`: sub-act 펼침 시 인덱스 동적 시프트, 3행 헤더 라벨 매핑, 타입별(숫자·날짜·불리언·서식 문자열) 셀 내보내기 구현.
+  - `parseWithProfile`: `cellNF: true`와 `XLSX.SSF.is_date(cellObj.z)`를 활용하여 엑셀 날짜 시리얼을 ISO `YYYY-MM-DD`로 정확히 복원, `linkByDepth`를 통해 `ImportItem`에 `custom` 레코드를 연결.
+  - `splitLeafOwners`: leaf 행 분할 시 `custom` 복사 보존.
+  - `/api/export`: 활성 `fields.wbs_item` 정의를 추출해 표준 양식 프로파일 생성 및 워크북 빌더에 주입.
+  - `/api/import/inspect` 및 `/api/import/execute`: replace 모드 시 기존 `wbs_items`의 `custom` 삭제 건수를 감지하여 `"사용자 정의 값 N건 삭제"` 경고 추가.
+  - 가져오기 마법사 프로파일 불일치 검사(`compareProfiles`)에 `customColumns` 비교 추가 및 i18n 사전(`importWizard.mismatchFieldCustomColumns`) 등록.
+- **주간 업무보고 이월 (carryCustom)**:
+  - `carryOverRows`: `carryCustom` 콜백으로 추출된 활성 `carry_over` 필드 값을 새 행에 복사(`own.custom = { ...(own.custom || {}), ...carried }`).
+  - `createWeeklyReport`: `fields.weekly_row` 설정 파싱 및 `carryCustomFields`로 이전 주차 활성 이월 필드 추출 후, 보고서 생성 완료 시 `weekly_report_rows`에 custom 값 영속화.
+- **테스트 및 검증**:
+  - `tests/excel/custom-columns-roundtrip.test.ts` (3건): 표준 양식 및 저장 프로파일 양방향 엑셀 내보내기/가져오기 왕복 검증 통과.
+  - `tests/actions/weekly-create.test.ts` (35건), `tests/domain/weekly-carry.test.ts` (24건), `tests/api/export-route.test.ts` (20건), `tests/api/import-idempotent.test.ts` (60건) 통과.
+  - 전체 단위 테스트 **927개 파일 12,325건 모두 통과 (0 실패)**.
+  - TypeScript `typecheck` 0 오류, ESLint `lint` 0 오류(기존 경고 4건), Next.js 프로덕션 `build` 성공.
+  - 커밋 `b13e65e5`로 푸시 완료.
+
+남은 작업: I(AI 색인 본문 및 정의 변경 재색인), Z(합성/최종 성능 검증). SP5c 전체 미완료, fields 카탈로그 stored 유지.
+
 
