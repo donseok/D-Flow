@@ -242,7 +242,7 @@ export function MinuteAttachmentsPanel({
               <FileText aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
               <button type="button" onClick={() => void onDownload(f)} disabled={busyId === f.id}
                 title={t('min.att.download')}
-                className="min-w-0 flex-1 truncate text-left text-sm font-medium text-ink hover:text-brand">
+                className="min-w-0 basis-[calc(100%-1.75rem)] truncate text-left text-sm font-medium text-ink hover:text-brand sm:flex-1 sm:basis-0">
                 {f.fileName}
               </button>
               <span className="text-xs tabular-nums text-ink-muted">{formatBytes(f.size)}</span>
@@ -286,7 +286,7 @@ export function MinuteAttachmentsPanel({
               {q.status === 'failed'
                 ? <X aria-hidden className="h-4 w-4 shrink-0 text-delayed" />
                 : <Loader2 aria-hidden className={`h-4 w-4 shrink-0 text-ink-subtle ${q.status === 'pending' ? '' : 'animate-spin'}`} />}
-              <span className="min-w-0 flex-1 truncate text-sm text-ink-muted">{q.fileName}</span>
+              <span className="min-w-0 basis-[calc(100%-1.75rem)] truncate text-sm text-ink-muted sm:flex-1 sm:basis-0">{q.fileName}</span>
               <span className="text-xs tabular-nums text-ink-muted">{formatBytes(q.size)}</span>
               <span className={`text-xs ${q.status === 'failed' ? 'text-delayed' : 'text-ink-subtle'}`} role={q.status === 'failed' ? 'alert' : undefined}>
                 {q.status === 'failed'
