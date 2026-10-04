@@ -24,11 +24,11 @@ async function seedMinutes(c: PoolClient) {
   await c.query(`set local session_replication_role = replica`)
   for (const [id, ws, project] of [[MA, F.ws, F.projects.a], [MA0, F.ws, null], [MB, F.wsB, null]] as const) {
     await c.query(`insert into public.minutes (id, workspace_id, project_id, minute_date, team_code, title, body_md, created_by)
-      values ($1, $2, $3, '2026-10-04', 'ERP', $1, '# x', $4)`, [id, ws, project, F.users.dual])
+      values ($1::uuid, $2, $3, '2026-10-04', 'ERP', $1::text, '# x', $4)`, [id, ws, project, F.users.dual])
   }
   // B 회의록이 가장 가깝다 — 범위 인자 없이 top-1 이면 A 화면에서 B 가 이긴다(회수율 문제)
   for (const [id, v] of [[MB, NEAR], [MA, MID], [MA0, FAR]] as const) {
-    await c.query(`insert into public.minute_embeddings (minute_id, chunk_index, content, embedding) values ($1, 0, $1, $2::public.vector)`, [id, v])
+    await c.query(`insert into public.minute_embeddings (minute_id, chunk_index, content, embedding) values ($1::uuid, 0, $1::text, $2::public.vector)`, [id, v])
   }
   await c.query(`set local session_replication_role = origin`)
   await c.query('set local role authenticated')
@@ -73,8 +73,10 @@ describe('match_minute_documents — 워크스페이스·제외 프로젝트', (
 describe('match_wbs_documents — 허용 프로젝트 목록', () => {
   async function seedWbs(c: PoolClient) {
     await c.query('reset role')
+    // 픽스처의 기존 청크를 비운다(롤백되는 트랜잭션 안) — 순위 비교를 이 세 청크로만 한다
+    await c.query('delete from public.wbs_embeddings')
     for (const [p, v] of [[F.projects.a, MID], [F.projects.bWs, NEAR], [F.projects.b, FAR]] as const) {
-      await c.query(`insert into public.wbs_embeddings (project_id, kind, ref_id, content, embedding) values ($1, 'project', null, $1, $2::public.vector)`, [p, v])
+      await c.query(`insert into public.wbs_embeddings (project_id, kind, ref_id, content, embedding) values ($1::uuid, 'project', null, $1::text, $2::public.vector)`, [p, v])
     }
     await c.query('set local role authenticated')
   }
