@@ -94,9 +94,9 @@ export const SYNTHETIC_WORKSPACE_B = Object.freeze({ slug: 'syn-b', name: '합�
 
 /** 아직 켜지지 않은 단계 → 켜는 SP(개정 §6.5.8, 스펙 D25·SP4 §6.4·SP5 D43). 건너뜀으로 세지 않고 '미활성'으로 기록한다.
  *  SP4 A1 이 S2·S4(월)를, SP4 A2 가 S10 의 SP4 부분을, SP5 A 가 S4(일)·S5·S1 의 달력 키·S10 의 시간대 부분을,
- *  SP5b 가 S1-workflow·S3-flow(승인 단계 — S3 의 필드 몫은 SP5c)·S6-issue-status·S9-workflow 를 켰다 */
+ *  SP5b 가 S1-workflow·S3-flow(승인 단계)·S6-issue-status·S9-workflow 를, SP5c 가 S3-fields 를 켰다 */
 export const PENDING_STEPS = Object.freeze({
-  S3: 'SP5c(필드)', S7: 'SP8(봇)·SPU1(개인 알림)', S8: 'SP6', S10: 'SP6~SP8(나머지 부분 집합)',
+  S7: 'SP8(봇)·SPU1(개인 알림)', S8: 'SP6', S10: 'SP6~SP8(나머지 부분 집합)',
 })
 
 /**

@@ -13,10 +13,20 @@ const S5B2 = (status: CatalogStatus, consumers: string[], tests: string[]): Cata
 const S5B4 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B4' })
 const S5BW = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b W' })
 const S5BI = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b I' })
+const S5C = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5c' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
-  'fields.wbs_item': { status: 'stored', sp: 'SP5c', consumers: ['src/components/settings/CustomFieldsSettings.tsx', 'supabase/migrations/0027_custom_fields.sql'], tests: ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx'] },
-  'fields.issue': { status: 'stored', sp: 'SP5c', consumers: ['src/components/settings/CustomFieldsSettings.tsx', 'supabase/migrations/0027_custom_fields.sql'], tests: ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx'] },
-  'fields.weekly_row': { status: 'stored', sp: 'SP5c', consumers: ['src/components/settings/CustomFieldsSettings.tsx', 'supabase/migrations/0027_custom_fields.sql'], tests: ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx'] },
+  'fields.wbs_item': S5C('verified',
+    ['src/components/settings/CustomFieldsSettings.tsx', 'src/components/fields/CustomFieldValuesEditor.tsx', 'src/components/wbs/RowDetailPanel.tsx', 'src/components/wbs/WbsGanttSheet.tsx', 'src/lib/excel/exportWithProfile.ts', 'src/lib/excel/parseWithProfile.ts', 'src/lib/ai/index/content.ts', 'supabase/migrations/0027_custom_fields.sql'],
+    ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx', 'tests/ui/wbs-custom-columns.test.tsx', 'tests/excel/custom-columns-roundtrip.test.ts', 'tests/ai/index-custom-fields.test.ts'],
+  ),
+  'fields.issue': S5C('verified',
+    ['src/components/settings/CustomFieldsSettings.tsx', 'src/components/fields/CustomFieldValuesEditor.tsx', 'src/components/issues/IssueModals.tsx', 'src/app/(app)/p/[projectId]/issues/page.tsx', 'src/app/actions/issues.ts', 'src/lib/ai/index/content.ts', 'supabase/migrations/0027_custom_fields.sql'],
+    ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx', 'tests/actions/custom-fields-actions.test.ts', 'tests/ai/index-custom-fields.test.ts'],
+  ),
+  'fields.weekly_row': S5C('verified',
+    ['src/components/settings/CustomFieldsSettings.tsx', 'src/components/fields/CustomFieldValuesEditor.tsx', 'src/components/weekly/WeeklySheetView.tsx', 'src/app/(app)/p/[projectId]/weekly/page.tsx', 'src/app/actions/weekly.ts', 'src/lib/ai/index/content.ts', 'supabase/migrations/0027_custom_fields.sql'],
+    ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx', 'tests/ui/weekly-custom-columns.test.tsx', 'tests/actions/weekly-create.test.ts', 'tests/ai/index-custom-fields.test.ts'],
+  ),
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
   'invites.allowed_domains': A('verified', ['src/lib/data/inviteDomains.ts'], ['tests/settings/workspace-config.test.ts', 'tests/domain/invites.test.ts']),

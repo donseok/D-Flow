@@ -87,6 +87,11 @@ const ACTIONS = {
   setWbsDevWorkflow: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsDevWorkflow', worker: '/p/[projectId]/wbs/page' },
   setWbsStage: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsStage', worker: '/p/[projectId]/wbs/page' },
   approveWbsStep: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'approveWbsStep', worker: '/p/[projectId]/wbs/page' },
+  // SP5c(스펙 §3.6) — 사용자 정의 필드 설정 관리 및 행 단위 값 저장
+  getCustomFieldUsage: { filename: 'src/app/actions/customFields.ts', exportedName: 'getCustomFieldUsage', worker: '/p/[projectId]/settings/page' },
+  backfillCustomField: { filename: 'src/app/actions/customFields.ts', exportedName: 'backfillCustomField', worker: '/p/[projectId]/settings/page' },
+  purgeCustomField: { filename: 'src/app/actions/customFields.ts', exportedName: 'purgeCustomField', worker: '/p/[projectId]/settings/page' },
+  saveCustomFieldValues: { filename: 'src/app/actions/customFieldValues.ts', exportedName: 'saveCustomFieldValues', worker: '/p/[projectId]/wbs/page' },
 }
 const session = createSessionFactory({ env, base, manifestPath: MANIFEST, actions: ACTIONS, Fail })
 
@@ -880,6 +885,121 @@ async function main() {
   }
   step('S9-workflow', { checks: s9Checks, cExportParts: cAfterFlow.export.length },
     Object.values(s9Checks).every(Boolean) ? undefined : `S9-workflow: ${JSON.stringify(s9Checks)}`)
+
+  // ── S3-fields (SP5c — 사용자 정의 필드)
+  // R(연구): 이슈 experiment_result(select, 필수, 기본 pending) 설정 등록 및 기존 이슈 행 백필,
+  //         정상 값 pass 등록 성공, 유효하지 않은 코드 등록 거부.
+  // C(건설): WBS 및 주간 행에 inspected_quantity(number, decimals 1, unit 'm³') 등록,
+  //         WBS 리프 행 custom 저장(12.5), 소수점 2자리 초과(12.55) 거부, 주간 행 custom 저장(45.0).
+  // 교차 검증: R 이슈에 inspected_quantity 없음, C WBS/주간 행에 experiment_result 없음.
+  const R_ISSUE_FIELD = {
+    key: 'experiment_result',
+    label: '실험 결과',
+    description: '실험 결과 선택',
+    type: 'select',
+    required: false,
+    default: 'pending',
+    options: [
+      { code: 'pending', label: '대기', sort: 0, active: true },
+      { code: 'pass', label: '성공', sort: 1, active: true },
+      { code: 'fail', label: '실패', sort: 2, active: true },
+    ],
+    editable_by: 'member',
+    show_in_list: true,
+    searchable: true,
+    sort: 0,
+    active: true,
+  }
+  const C_WBS_FIELD = {
+    key: 'inspected_quantity',
+    label: '검측 수량',
+    description: '검측된 수량',
+    type: 'number',
+    required: false,
+    limits: { decimals: 1, unit: 'm³' },
+    editable_by: 'member',
+    show_in_list: true,
+    searchable: true,
+    sort: 0,
+    active: true,
+  }
+  const C_WEEKLY_FIELD = {
+    key: 'inspected_quantity',
+    label: '검측 수량',
+    description: '검측된 수량',
+    type: 'number',
+    required: false,
+    limits: { decimals: 1, unit: 'm³' },
+    editable_by: 'member',
+    show_in_list: true,
+    searchable: true,
+    carry_over: true,
+    sort: 0,
+    active: true,
+  }
+
+  // 1) R 이슈 필드 등록 및 백필
+  mustOk('R 이슈 필드 등록', await updateSettings(R, { 'fields.issue': [R_ISSUE_FIELD] }))
+  const rDocForBackfill = await readDoc(admin.sb, 'project_settings', 'project_id', R.id)
+  await admin.http('GET', `/p/${R.id}/settings`)
+  const rBackfillRes = mustOk('R 이슈 필드 백필', (await admin.action(`/p/${R.id}/settings`, 'backfillCustomField', [
+    R.id, 'issue', { expectedRevision: rDocForBackfill.revision, commandId: randomUUID(), key: 'experiment_result', value: 'pending' },
+  ])).result)
+  const rUsageRes = mustOk('R 이슈 필드 사용 건수', (await admin.action(`/p/${R.id}/settings`, 'getCustomFieldUsage', [R.id, 'issue'])).result)
+
+  // 2) R 새 이슈 등록(성공 및 거부)
+  await admin.http('GET', `/p/${R.id}/issues`)
+  const rNewIssue = mustOk('R 필드 적용 이슈 생성', (await admin.action(`/p/${R.id}/issues`, 'createIssue', [R.id, {
+    title: '합성 실험 결과 이슈', body: '필드 검증', severity: 'low', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: rIssueSetup.areaIdByCode.get('RND'), analysis: null, custom: { experiment_result: 'pass' },
+  }])).result)
+  const rNewRow = rows('R 신규 이슈 custom 확인', await admin.sb.from('issues').select('custom').eq('id', rNewIssue.id).single())
+  const rInvalidIssue = (await admin.action(`/p/${R.id}/issues`, 'createIssue', [R.id, {
+    title: '합성 무효 필드 이슈', body: '거부 검증', severity: 'low', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: rIssueSetup.areaIdByCode.get('RND'), analysis: null, custom: { experiment_result: 'unknown_option' },
+  }]).catch((e) => ({ result: { ok: false, error: e.message } }))).result
+
+  // 3) C WBS·주간 필드 등록 및 값 저장
+  mustOk('C WBS·주간 필드 등록', await updateSettings(C, { 'fields.wbs_item': [C_WBS_FIELD], 'fields.weekly_row': [C_WEEKLY_FIELD] }))
+  await admin.http('GET', `/p/${C.id}/wbs`)
+  const cLeafForFields = await leafOf(C)
+  const cLeafBeforeFields = rows('C 리프 custom 조회', await admin.sb.from('wbs_items').select('custom').eq('id', cLeafForFields).single())
+  const cSaveWbs = mustOk('C WBS 필드 값 저장', (await admin.action(`/p/${C.id}/wbs`, 'saveCustomFieldValues', [
+    C.id, 'wbs_item', cLeafForFields, cLeafBeforeFields.custom ?? {}, { inspected_quantity: 12.5 },
+  ])).result)
+  const cLeafAfterFields = rows('C 리프 custom 확인', await admin.sb.from('wbs_items').select('custom').eq('id', cLeafForFields).single())
+  const cInvalidWbs = (await admin.action(`/p/${C.id}/wbs`, 'saveCustomFieldValues', [
+    C.id, 'wbs_item', cLeafForFields, cLeafAfterFields.custom, { inspected_quantity: 12.55 },
+  ]).catch((e) => ({ result: { ok: false, error: e.message } }))).result
+
+  await admin.http('GET', `/p/${C.id}/weekly`)
+  const cWeeklyRows = rows('C 주간 행', await admin.sb.from('weekly_report_rows').select('id, custom').eq('project_id', C.id).limit(1))
+  let cWeeklyUpdated = false
+  if (cWeeklyRows.length > 0) {
+    const wRow = cWeeklyRows[0]
+    const cSaveWeekly = mustOk('C 주간 행 필드 값 저장', (await admin.action(`/p/${C.id}/weekly`, 'saveCustomFieldValues', [
+      C.id, 'weekly_row', wRow.id, wRow.custom ?? {}, { inspected_quantity: 45.0 },
+    ])).result)
+    const wRowAfter = rows('C 주간 행 custom 확인', await admin.sb.from('weekly_report_rows').select('custom').eq('id', wRow.id).single())
+    cWeeklyUpdated = cSaveWeekly.ok === true && wRowAfter.custom?.inspected_quantity === 45.0
+  }
+
+  // 4) 불변식 및 교차 확인
+  const rDocFinal = (await readDoc(admin.sb, 'project_settings', 'project_id', R.id)).values
+  const cDocFinal = (await readDoc(admin.sb, 'project_settings', 'project_id', C.id)).values
+  const s3FieldsChecks = {
+    rBackfillApplied: rBackfillRes.ok === true && rBackfillRes.count > 0,
+    rUsageMatches: rUsageRes.usage?.counts?.experiment_result === rUsageRes.usage?.total,
+    rNewIssuePass: rNewRow.custom?.experiment_result === 'pass',
+    rInvalidChoiceDenied: rInvalidIssue?.ok === false,
+    cWbsValueSaved: cSaveWbs.ok === true && cLeafAfterFields.custom?.inspected_quantity === 12.5,
+    cInvalidDecimalsDenied: cInvalidWbs?.ok === false,
+    cWeeklyValueSaved: cWeeklyUpdated,
+    crossNoFieldsLeak: !('fields.issue' in cDocFinal) && !('fields.wbs_item' in rDocFinal) && !('fields.weekly_row' in rDocFinal),
+  }
+  step('S3-fields', {
+    R: { backfilled: rBackfillRes.count, issue: rNewIssue.id, value: rNewRow.custom },
+    C: { wbsItem: cLeafForFields, wbsValue: cLeafAfterFields.custom, weeklyUpdated: cWeeklyUpdated },
+    checks: s3FieldsChecks,
+  }, Object.values(s3FieldsChecks).every(Boolean) ? undefined : `S3-fields: ${JSON.stringify(s3FieldsChecks)}`)
 
   for (const [id, owner] of Object.entries(PENDING_STEPS)) step(`${id}-pending`, { status: '미활성', owner })
 

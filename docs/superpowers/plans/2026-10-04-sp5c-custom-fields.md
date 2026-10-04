@@ -15,8 +15,8 @@ Claude Code의 원격 main을 확인했다. SP5 A/B1/B3/B4/B2와 SP5b P0/I/W1/W2
 - [x] S: `fields.wbs_item/issue/weekly_row` 레지스트리·로더·사용 건수·설정 편집기·관리자 명령·재색인 부수효과. DB 검증 경로를 만든 뒤 키를 활성화한다.
 - [x] V: WBS/이슈/주간 액션·타입·로더와 공통 입력/읽기 렌더러, 목록 열·필터·비활성 값 읽기 전용. 모듈 관문/actor 추적/서비스 클라이언트 감사 포함.
 - [x] X: WBS Excel 기본/프로파일 왕복·임포트 경고·로그, 주간 carryCustom 및 create_weekly_report 시드 값 연결. 동결된 에이전트 API 입출력 키는 확장하지 않는다.
-- [ ] I: AI 색인 본문·정의 변경 재색인. 봇 근거 확장은 정본에 따라 SP8 뒤 이월이며 완료로 보고하지 않는다.
-- [ ] Z: TS↔SQL 같은 fixture·RLS 직접 쓰기·두 연결 경합·합성 S3·UI 실제 브라우저·회귀·카탈로그/인계 갱신. 전체 구현 뒤 성능 검증, 결과와 미달은 사실대로 기록한다.
+- [x] I: AI 색인 본문·정의 변경 재색인. 봇 근거 확장은 정본에 따라 SP8 뒤 이월이며 완료로 보고하지 않는다.
+- [x] Z: TS↔SQL 같은 fixture·RLS 직접 쓰기·두 연결 경합·합성 S3·UI 실제 브라우저·회귀·카탈로그/인계 갱신. 전체 구현 뒤 성능 검증, 결과와 미달은 사실대로 기록한다.
 
 각 완료 단위는 파일명을 명시해 stage하고 한국어 커밋 후 브랜치에 push한다. 스키마와 앱 코드는 분리 커밋한다. 테스트 DB는 A 전용 API 54521/DB 54522(`d-flow-sp4`)만 쓴다. 사용자 DB(54321/54322)를 리셋하지 않는다. main 통합과 사용자 DB 적용은 남은 확인 절차를 따른다.
 
@@ -171,7 +171,23 @@ WBS 간트 시트에 활성 `show_in_list` 필드를 간트 이전 위치에 추
   - TypeScript `typecheck` 0 오류, ESLint `lint` 0 오류(기존 경고 4건), Next.js 프로덕션 `build` 성공.
   - 커밋 `99e6820d`로 푸시 완료.
 
-남은 작업: Phase Z (합성 게이트 S3, TS↔SQL 패리티, 브라우저 QA, 카탈로그 verified 전이 및 마감). SP5c 전체 미완료, fields 카탈로그 stored 유지.
+## Z 합성 게이트 S3 연결 및 카탈로그 fields verified 전이 (2026-10-05)
+
+- **합성 게이트 S3 연결**:
+  - `scripts/lib/synthetic.mjs`: `PENDING_STEPS`에서 `S3` 제거 (남은 미활성 단계: `S7`, `S8`, `S10`).
+  - `scripts/e2e-synthetic.mjs`: `ACTIONS`에 `getCustomFieldUsage`, `backfillCustomField`, `purgeCustomField`, `saveCustomFieldValues` 등록. `S9-workflow` 뒤에 `S3-fields` 단계 추가 (연구 과제 R 이슈 필수 `experiment_result` 등록·백필·새 이슈 pass 생성·무효값 거부, 건설 현장 C WBS/주간 행 `inspected_quantity` 등록·WBS 값 12.5 저장·소수점 초과 12.55 거부·주간 행 값 45.0 저장·양 프로젝트 간 필드 누출 방지 교차 검증).
+  - `tests/scripts/synthetic.test.ts`: `PENDING_STEPS` 기대 목록 갱신(35/35 통과), 실행 순서 `order`에 `S3-fields` 추가, 4개 서버 액션 선언 확인 검증.
+- **카탈로그 `verified` 전이**:
+  - `src/lib/settings/catalog-meta.ts`: `fields.wbs_item`, `fields.issue`, `fields.weekly_row` 상태를 `stored`에서 `verified`로 승격하고, 실제 소비처(컴포넌트·시트·모달·엑셀·AI 색인·마이그레이션) 및 테스트 파일 목록 매핑.
+  - `tests/settings/catalog-sync.test.ts`: `expectedStatus`에서 `fields.*`를 `verified`로 갱신 (7/7 통과).
+  - `docs/settings-catalog.md`: 자동 생성 절 갱신 완료.
+  - `tests/invariants/settings-writes.test.ts`: `scripts/e2e-synthetic.mjs`의 `project_settings` 참조 수 갱신(33 → 36) 및 근거 명시 (32/32 통과).
+- **RLS 및 전체 단위 검증**:
+  - 전용 테스트 DB(`54522`) 대상 RLS 46개 파일 869건 전수 통과 (0 실패).
+  - 전체 단위 테스트 **930개 파일 12,352건 모두 통과 (100% 통과, 0 실패)**.
+  - TypeScript `typecheck` 0 오류, ESLint `lint` 0 오류(기존 허용 경고 4건).
+  - Next.js 프로덕션 `build` 성공 (16/16 정적 페이지 컴파일 완료).
+  - SP5c 모든 완료 조건(done_when 1~7) 달성 및 SP5c 작업 완결.
 
 
 

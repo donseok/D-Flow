@@ -7,7 +7,7 @@ import { PROJECT_SETTINGS, WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 
 const file = 'docs/settings-catalog.md'
 const expectedStatus: Record<string, string> = {
-  'fields.wbs_item': 'stored', 'fields.issue': 'stored', 'fields.weekly_row': 'stored',
+  'fields.wbs_item': 'verified', 'fields.issue': 'verified', 'fields.weekly_row': 'verified',
   'modules.allowed': 'verified', 'ai.enabled': 'verified', 'invites.allowed_domains': 'verified',
   'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'stored', 'branding.mail_from_name': 'verified',
   'navigation.menu': 'stored', 'core.level_labels': 'verified', 'core.extra_axis_label': 'stored',
