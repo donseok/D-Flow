@@ -153,4 +153,25 @@ WBS 간트 시트에 활성 `show_in_list` 필드를 간트 이전 위치에 추
 
 남은 작업: I(AI 색인 본문 및 정의 변경 재색인), Z(합성/최종 성능 검증). SP5c 전체 미완료, fields 카탈로그 stored 유지.
 
+## I AI 색인 본문 사용자 정의 필드 반영 및 정의 변경 시 재색인 잡 발행 (2026-10-05)
+
+- **재색인 조건 검출 및 메타데이터**:
+  - `src/lib/domain/customFields.ts`: `hasCustomFieldReindexChange(prevDefs, nextDefs)` 구현 (`reindexOn: ['label', 'searchable', 'options.label']` 대상 속성 및 선택지 명칭 변경 감지).
+  - `src/lib/settings/defs/project.ts`: `fields.wbs_item`, `fields.issue`, `fields.weekly_row` 설정 정의에 `reindexOn: ['label', 'searchable', 'options.label']` 명시.
+- **재색인 잡 큐잉**:
+  - `src/lib/ai/index/reindexCustomFields.ts`: `enqueueCustomFieldsReindex(admin, projectId, entity)` 구현. 해당 프로젝트의 엔티티 ID를 조회하여 `upsert_ai_index_jobs` RPC를 200건 단위 배치로 큐잉.
+  - `src/app/actions/settings.ts`: `afterApplied` 훅에서 세 설정 키의 `hasCustomFieldReindexChange`를 검사하여 잡 발행, 실패 시 `CONFIG_UNAVAILABLE` 및 재시도 복구 안내 반환.
+- **AI 색인 본문 반영**:
+  - `src/lib/ai/index/content.ts`: `getProjectConfig` 해석기를 통해 활성 및 `searchable` 필드 정의를 안전하게 조회(G1 불변식 준수).
+  - `loadWbsItem`, `loadIssue`, `loadWeeklyReport`: `customSearchText`로 형식화된 라벨: 값 텍스트를 각 마크다운 본문에 추가하고 `contentHash`에 반영. 주간보고 행의 경우 본문 텍스트가 없고 사용자 정의 값만 있어도 누락되지 않도록 연동.
+- **테스트 및 검증**:
+  - `tests/domain/custom-fields-reindex.test.ts` (16건), `tests/ai/index-custom-fields.test.ts` (5건), `tests/actions/settings-custom-fields-reindex.test.ts` (5건) 통과.
+  - 설정 표 읽기/쓰기 불변식(`tests/invariants/settings-writes.test.ts`, 32건) 통과.
+  - 전체 단위 테스트 **930개 파일 12,351건 모두 통과 (0 실패)**.
+  - TypeScript `typecheck` 0 오류, ESLint `lint` 0 오류(기존 경고 4건), Next.js 프로덕션 `build` 성공.
+  - 커밋 `99e6820d`로 푸시 완료.
+
+남은 작업: Phase Z (합성 게이트 S3, TS↔SQL 패리티, 브라우저 QA, 카탈로그 verified 전이 및 마감). SP5c 전체 미완료, fields 카탈로그 stored 유지.
+
+
 
