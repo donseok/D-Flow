@@ -230,6 +230,11 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.calendar.week_start.sunday': 'Sunday', 'settings.calendar.week_start.monday': 'Monday',
   // SP5 B1 — issue code rule (issues.id_policy) and analysis requirement (issues.analysis). Editor in task 11
   'settings.minutes.attachments.label': 'Minute attachment policy', 'settings.minutes.attachments.desc': 'Limits size, count, extensions, and previews for new attachments. Existing files are kept; workspace values are copied once to new projects.',
+  'settings.attendance.types.label': 'Attendance types', 'settings.attendance.types.desc': 'Types used in attendance entry, legends, and monthly totals. The tally class cannot change once records exist; move records to another type before deleting one.',
+  'settings.meetings.categories.label': 'Meeting categories', 'settings.meetings.categories.desc': 'Meeting category options and colors. Move meetings to another category before deleting one in use.',
+  'settings.issues.severities.label': 'Issue severities', 'settings.issues.severities.desc': 'Issue severity options, ranks, and colors. Move issues to another severity before deleting one in use.',
+  'settings.issues.sources.label': 'Issue sources', 'settings.issues.sources.desc': 'Source classes for issue analysis. The minutes source is reserved and cannot be deleted or turned off.',
+  'settings.issues.cause_categories.label': 'Cause categories', 'settings.issues.cause_categories.desc': 'Cause classes for analysis decks and AI analysis. Analysis records refer to them, so they can be turned off but not deleted.',
   'settings.minAtt.enabled': 'Allow minute attachments', 'settings.minAtt.preview': 'Preview safe formats (images, PDF)',
   'settings.minAtt.maxFile': 'Max size per file (MB)', 'settings.minAtt.maxCount': 'Max files per minute', 'settings.minAtt.maxTotal': 'Total size per minute (MB)',
   'settings.minAtt.extMode': 'Allowed types', 'settings.minAtt.extAny': 'No restriction', 'settings.minAtt.extList': 'Only listed types',

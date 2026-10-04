@@ -9,6 +9,7 @@ const A = (status: CatalogStatus, consumers: string[], tests: string[]): Catalog
 const S5A = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 A' })
 const S5B1 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B1' })
 const S5B3 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B3' })
+const S5B4 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B4' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
@@ -54,6 +55,11 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'issues.id_policy': S5B1('verified', ['src/lib/issues/context.ts', 'src/app/actions/issues.ts', 'src/components/settings/IssuePolicyEditor.tsx'], ['tests/issues/id-policy.test.ts', 'tests/rls/issue-code-policy.test.ts', 'tests/ui/issue-policy-editor.test.tsx']),
   'issues.analysis': S5B1('verified', ['src/lib/issues/rules.ts', 'src/app/actions/issues.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/issues/rules.test.ts', 'tests/actions/issue-entry-rules.test.ts', 'tests/rls/issue-areas.test.ts']),
   'minutes.attachments': S5B3('verified', ['src/lib/minutes/resolveAttachmentPolicy.ts', 'src/app/actions/minutes.ts', 'src/components/settings/AttachmentPolicyEditor.tsx'], ['tests/minutes/attachment-policy.test.ts', 'tests/rls/minute-attachments-policy.test.ts', 'tests/ui/attachment-policy-editor.test.tsx']),
+  'attendance.types': S5B4('stored', ['src/lib/settings/vocab.ts'], ['tests/settings/vocab.test.ts']),
+  'meetings.categories': S5B4('stored', ['src/lib/settings/vocab.ts'], ['tests/settings/vocab.test.ts']),
+  'issues.severities': S5B4('stored', ['src/lib/settings/vocab.ts'], ['tests/settings/vocab.test.ts']),
+  'issues.sources': S5B4('stored', ['src/lib/settings/vocab.ts'], ['tests/settings/vocab.test.ts']),
+  'issues.cause_categories': S5B4('stored', ['src/lib/settings/vocab.ts'], ['tests/settings/vocab.test.ts']),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
@@ -68,11 +74,6 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
   { key: 'workflow.approval_distinct_approvers', scope: 'project', sp: 'SP5b', shape: 'boolean' },
   { key: 'workflow.predecessor_gate', scope: 'project', sp: 'SP5b', shape: "'reached' | 'final'" },
   { key: 'workflow.credit_policy', scope: 'project', sp: 'SP5b', shape: '{ step: 1 | 5; min_gap: 1..10 }' },
-  { key: 'issues.severities', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
-  { key: 'issues.cause_categories', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
-  { key: 'issues.sources', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
-  { key: 'attendance.types', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
-  { key: 'meetings.categories', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
   { key: 'fields.wbs_item', scope: 'project', sp: 'SP5c', shape: 'FieldDef[]' },
   { key: 'fields.issue', scope: 'project', sp: 'SP5c', shape: 'FieldDef[]' },
   { key: 'fields.weekly_row', scope: 'project', sp: 'SP5c', shape: 'FieldDef[]' },

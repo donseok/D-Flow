@@ -85,7 +85,7 @@ describe('카탈로그·사전(D44 — 들어가는 체크포인트에서 planne
   it('PLANNED_KEYS 에 calendar.* 가 없고, 남은 SP5 행은 체크포인트 이름(B1~B4)으로 적혀 있다', () => {
     expect(PLANNED_KEYS.filter((p) => p.key.startsWith('calendar.'))).toEqual([])
     const sp5 = PLANNED_KEYS.filter((p) => p.sp.startsWith('SP5 '))
-    expect(sp5.length).toBe(6)   // SP5 B1 과제 3 이 issues.id_policy·issues.analysis 를 등록해 10 → 8
+    expect(sp5.length).toBe(1)   // B1 이 issues 둘, B3 가 minutes.attachments, B4 가 어휘 다섯을 등록 — B2 의 minutes.root_folders 만 남는다
     for (const p of sp5) expect(p.sp, p.key).toMatch(/^SP5 B[1-4]$/)
   })
   it.each(KEYS)('%s — 메타는 SP5 A·verified(과제 29 — 정의·편집·소비처·테스트 네 연결)', (key) => {

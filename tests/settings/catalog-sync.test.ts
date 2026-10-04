@@ -15,6 +15,8 @@ const expectedStatus: Record<string, string> = {
   'calendar.timezone': 'verified', 'calendar.working_days': 'verified', 'calendar.week_start': 'verified',
   // SP5 B1 — 정의·편집·소비처·테스트 네 연결
   'issues.id_policy': 'verified', 'issues.analysis': 'verified', 'minutes.attachments': 'verified',
+  // SP5 B4 — 어휘 다섯. 정의만 먼저(stored) — 트리거·소비처·편집기가 이어지면 verified 로 올린다
+  'attendance.types': 'stored', 'meetings.categories': 'stored', 'issues.severities': 'stored', 'issues.sources': 'stored', 'issues.cause_categories': 'stored',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.
@@ -25,9 +27,9 @@ const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
 }
 
 describe('설정 카탈로그 동기화', () => {
-  it('24정의(키 이름 20)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('29정의(키 이름 25)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(24)
+    expect(defs).toHaveLength(29)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
     for (const def of defs) {
@@ -84,17 +86,13 @@ describe('설정 카탈로그 동기화', () => {
 })
 
 describe('PLANNED_KEYS — SP5 의 남은 키는 체크포인트 이름으로(스펙 §1.1 정본 결정 9 행)', () => {
-  it('달력 셋·B1 이슈 둘·B3 첨부는 등록돼 목록에 없고, SP5 행은 B1~B4 체크포인트를 적는다', () => {
+  it('달력 셋·B1 이슈 둘·B3 첨부·B4 어휘 다섯은 등록돼 목록에 없고, SP5 행은 B1~B4 체크포인트를 적는다', () => {
     expect(PLANNED_KEYS.filter((k) => k.key.startsWith('calendar.'))).toEqual([])
     expect(PLANNED_KEYS.filter((k) => k.key === 'issues.id_policy' || k.key === 'issues.analysis')).toEqual([])   // SP5 B1 과제 3 이 등록
     const sp5 = PLANNED_KEYS.filter((k) => k.sp.startsWith('SP5 '))
     expect(sp5.length).toBeGreaterThan(0)
     for (const k of sp5) expect(k.sp, k.key).toMatch(/^SP5 B[1-4]$/)
     const where = Object.fromEntries(sp5.map((k) => [`${k.scope}/${k.key}`, k.sp]))
-    expect(where).toMatchObject({
-      'workspace/minutes.root_folders': 'SP5 B2',
-      'project/issues.severities': 'SP5 B4', 'project/issues.cause_categories': 'SP5 B4', 'project/issues.sources': 'SP5 B4',
-      'project/attendance.types': 'SP5 B4', 'project/meetings.categories': 'SP5 B4',
-    })
+    expect(where).toEqual({ 'workspace/minutes.root_folders': 'SP5 B2' })
   })
 })

@@ -12,8 +12,24 @@ import {
   type IsoDow, type WeekStartDay, type WeekStartRule,
 } from '@/lib/domain/calendar'
 import { DEFAULT_ID_POLICY, parseIdPolicy, type IdPolicy } from '@/lib/issues/idPolicy'
+import { RESERVED_SOURCE, defaultVocab, parseVocab, vocabChangeError, type VocabKey, type VocabValues } from '../vocab'
 
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error })
+
+/** SP5 B4(D29, 개정 §2.4.2·§2.8.2) — 어휘 5키. 저장 검증은 parseVocab, 이전 값과 비교한 규칙(원인 분류 삭제 금지)은 toStored.
+ *  참조가 있는 code 의 삭제·의미 속성 변경은 DB(settings_ref_check)가 실제 건수로 막는다(guarded). */
+function vocabDef<const K extends VocabKey>(key: K, module: ModuleId, readers: readonly string[] | null, fixedCodes?: readonly string[]) {
+  return defineSetting<K, VocabValues[K]>({
+    key, scope: 'project', module, default: defaultVocab(key),
+    parse: (raw) => parseVocab(key, raw),
+    edit: {
+      parseInput: (raw) => parseVocab(key, raw),
+      toStored: (prev, input) => { const e = vocabChangeError(key, prev, input); return e ? fail(e) : { ok: true, value: input } },
+    },
+    widget: { kind: 'vocab', ...(fixedCodes ? { fixedCodes } : {}) }, editor: 'project_admin', apply: 'immediate', impact: ['guarded'],
+    sql: readers ? { readers } : null,
+  })
+}
 
 /** issues.analysis 의 값(스펙 D16) — 분석 모듈이 켜진 프로젝트에서 등록 때 분석 분류가 선택인지 필수인지 */
 export type IssueAnalysisSetting = 'optional' | 'required'
@@ -167,5 +183,11 @@ export const PROJECT_DEFS = [
     sql: { readers: ['minute_files_attachment_guard'] },
     seedFrom: { key: 'minutes.attachments' },
   }),
+  vocabDef('attendance.types', 'attendance', ['enforce_project_vocab', 'settings_ref_check']),
+  vocabDef('meetings.categories', 'meetings', ['enforce_project_vocab', 'settings_ref_check']),
+  vocabDef('issues.severities', 'issues', ['enforce_project_vocab', 'settings_ref_check']),
+  vocabDef('issues.sources', 'issue_analysis', ['enforce_project_vocab', 'settings_ref_check'], [RESERVED_SOURCE]),
+  // 원인 분류는 분석 실행 JSON 이 참조한다 — DB 가 세지 않으므로(삭제 금지, TS) SQL 판독자가 없다
+  vocabDef('issues.cause_categories', 'issue_analysis', null),
 ] as const satisfies readonly SettingDef[]
 export type { ModuleId }

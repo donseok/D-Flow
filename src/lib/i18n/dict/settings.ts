@@ -228,6 +228,11 @@ export const settingsKo = {
   'settings.calendar.week_start.sunday': '일요일', 'settings.calendar.week_start.monday': '월요일',
   // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11
   'settings.minutes.attachments.label': '회의록 첨부 정책', 'settings.minutes.attachments.desc': '새 첨부의 용량·개수·형식과 미리보기를 정합니다. 기존 파일은 지우지 않으며 워크스페이스 값은 새 프로젝트에 한 번 복사됩니다.',
+  'settings.attendance.types.label': '근태 유형', 'settings.attendance.types.desc': '근태 등록 선택지·범례·월 집계에 쓰는 유형입니다. 집계 분류는 기록이 있으면 바꿀 수 없고, 기록이 있는 유형은 다른 유형으로 옮긴 뒤 지웁니다.',
+  'settings.meetings.categories.label': '회의 분류', 'settings.meetings.categories.desc': '회의 등록 선택지와 색입니다. 회의가 있는 분류는 다른 분류로 옮긴 뒤 지웁니다.',
+  'settings.issues.severities.label': '이슈 심각도', 'settings.issues.severities.desc': '이슈 심각도 선택지·순위·색입니다. 이슈가 있는 심각도는 다른 값으로 옮긴 뒤 지웁니다.',
+  'settings.issues.sources.label': '이슈 출처', 'settings.issues.sources.desc': '이슈 분석의 출처 분류입니다. 회의록 출처는 예약 항목이라 지우거나 끌 수 없습니다.',
+  'settings.issues.cause_categories.label': '원인 분류', 'settings.issues.cause_categories.desc': '분석서·AI 분석의 원인 분류입니다. 분석 기록이 참조하므로 지울 수 없고 끌 수만 있습니다.',
   'settings.minAtt.enabled': '회의록 첨부 사용', 'settings.minAtt.preview': '안전 형식 미리보기(이미지·PDF)',
   'settings.minAtt.maxFile': '파일당 최대 용량(MB)', 'settings.minAtt.maxCount': '회의록당 최대 개수', 'settings.minAtt.maxTotal': '회의록당 총 용량(MB)',
   'settings.minAtt.extMode': '허용 형식', 'settings.minAtt.extAny': '제한 없음', 'settings.minAtt.extList': '목록의 형식만',
