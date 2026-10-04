@@ -190,7 +190,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     await render()
     await act(async () => { fileNode('plan.xlsx')!.click() })
     expect(open).not.toHaveBeenCalled()
-    expect(section().textContent).toContain(realT('en', 'wbs.attachLinkFail'))
+    expect(fileNode('plan.xlsx')!.closest('li')!.textContent).toContain(realT('en', 'wbs.attachLinkFail'))
     expect(section().textContent).not.toMatch(/[가-힣]/)
     open.mockRestore(); err.mockRestore()
   })

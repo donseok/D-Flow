@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, FileText, Pencil, Plus, ChevronUp, ChevronDown, ChevronRight, Trash2, Paperclip, Upload, GitBranchPlus, GitBranch } from 'lucide-react'
+import { AlertTriangle, X, FileText, Pencil, Plus, ChevronUp, ChevronDown, ChevronRight, Trash2, Paperclip, Upload, GitBranchPlus, GitBranch } from 'lucide-react'
 import type { ComputedItem, DependencyType, OwnerKind, ProjectMember, TaskDependency, TeamCode } from '@/lib/domain/types'
 import type { TaskSchedule } from '@/lib/domain/dependencySchedule'
 import { evaluateStartReadiness, type PredecessorState } from '@/lib/domain/dependencyReadiness'
@@ -786,16 +786,18 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
   }
 
   // 내려받기는 클릭 때 60초 링크를 받는다(SP5 B3 과제7) — 목록에는 서명이 없다. 실패는 사전 문구로(액션 문구는 로그 몫).
+  // 실패는 그 행에 표시한다(줄 단위 실패 문구 — 글자는 ink, 위험색은 아이콘).
   const [opening, setOpening] = useState<string | null>(null)
+  const [linkFailed, setLinkFailed] = useState<string | null>(null)
   async function open(id: string) {
-    setOpening(id); setErr(null)
+    setOpening(id); setErr(null); setLinkFailed(null)
     try {
       const res = await getAttachmentUrl(itemId, id)
       if (res.ok) window.open(res.url, '_blank', 'noopener,noreferrer')
-      else { console.error('[AttachmentSection] 내려받기 링크 실패:', res.error); setErr(t('wbs.attachLinkFail')) }
+      else { console.error('[AttachmentSection] 내려받기 링크 실패:', res.error); setLinkFailed(id) }
     } catch (e) {
       console.error('[AttachmentSection] 내려받기 링크 호출 실패:', e)
-      setErr(t('wbs.attachLinkFail'))
+      setLinkFailed(id)
     } finally { setOpening(null) }
   }
 
@@ -848,6 +850,7 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
                   <span className="min-w-0 flex-1 truncate text-[13px] text-ink" title={a.fileName}>{a.fileName}</span>
                 )}
                 {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(a.size)}</span>}
+                {linkFailed === a.id && <span role="alert" className="flex shrink-0 items-center gap-1 text-[11px] text-ink"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-delayed" />{t('wbs.attachLinkFail')}</span>}
                 {canAttach && <button onClick={() => del(a.id)} disabled={busy} aria-label={t('wbs.deleteAttachmentAria')} className="shrink-0 text-ink-subtle transition hover:text-delayed"><Trash2 className="h-3.5 w-3.5" /></button>}
               </li>
             ))}
