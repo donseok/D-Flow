@@ -154,10 +154,11 @@ describe('Realtime presence(0007)', () => {
     for (const [uid, expected] of [[F.users.member, 1], [F.users.bAdmin, 0]] as const) {
       await asUser(pool, uid, async (c) => {
         await c.query('reset role')
-        await c.query(`insert into realtime.messages (topic, extension, event, payload, private) values ($1, 'broadcast', 'wbs_changed', '{}', true)`, [wbsA])
+        const message = (await c.query(`insert into realtime.messages (topic, extension, event, payload, private) values ($1, 'broadcast', 'wbs_changed', '{}', true) returning id`, [wbsA])).rows[0]
+        // Observe this fixture's message, not committed broadcasts emitted by earlier suites.
         await c.query('set local role authenticated')
         await asTopic(c, wbsA)
-        expect((await c.query(`select 1 from realtime.messages where topic = $1 and extension = 'broadcast'`, [wbsA])).rowCount).toBe(expected)
+        expect((await c.query(`select 1 from realtime.messages where topic = $1 and extension = 'broadcast' and id = $2`, [wbsA, message.id])).rowCount).toBe(expected)
       })
     }
   })

@@ -217,7 +217,7 @@ describe('weekly_areas ⑩ 카탈로그 — 정책·열 권한', () => {
     })
   })
 
-  it('authenticated 의 INSERT·UPDATE 열 권한은 주간 행 네 칸과 주간 문서 title 의 UPDATE 뿐, DELETE 는 넷 다 없다', async () => {
+  it('authenticated 의 INSERT·UPDATE 열 권한은 주간 행 네 칸·custom과 주간 문서 title 의 UPDATE 뿐, DELETE 는 넷 다 없다', async () => {
     await asService(pool, async (c) => {
       const { rows } = await c.query<{ t: string; col: string; priv: string }>(
         `select c.relname::text as t, a.attname::text as col, p.priv
@@ -229,6 +229,8 @@ describe('weekly_areas ⑩ 카탈로그 — 정책·열 권한', () => {
             and has_column_privilege('authenticated', c.oid, a.attnum, p.priv)
           order by c.relname, a.attname, p.priv`)
       expect(rows).toEqual([
+        // SP5c: a single custom JSON column, validated by the key-level permission trigger.
+        { t: 'weekly_report_rows', col: 'custom', priv: 'UPDATE' },
         { t: 'weekly_report_rows', col: 'next_content', priv: 'UPDATE' },
         { t: 'weekly_report_rows', col: 'next_issue', priv: 'UPDATE' },
         { t: 'weekly_report_rows', col: 'this_content', priv: 'UPDATE' },
@@ -744,6 +746,10 @@ describe('⑫ 사후검사 — 마이그레이션의 블록을 그대로 돌린�
   const POSTCHECK = { message: expect.stringContaining('WEEKLY_AREAS_POSTCHECK') }
   /** 롤백하는 트랜잭션에서 mutate 뒤 블록을 돌려 오류를 돌려준다(통과하면 null) */
   const runAfter = (mutate: string[]) => asService(pool, async (c) => {
+    // This executes the historical SP4 postcheck against its own column/ACL shape.
+    // Current SP5c columns/permissions are checked in custom-fields.test.ts. DDL rolls back.
+    await c.query('drop trigger weekly_report_rows_custom_fields_trg on public.weekly_report_rows')
+    await c.query('alter table public.weekly_report_rows drop column custom')
     for (const m of mutate) await c.query(m)
     return pgError(c, blocks()[0])
   })
