@@ -294,6 +294,10 @@ export interface MinuteFile {
   size: number | null
   mime: string | null
   createdAt: string
+  /** 올린 계정. 계정이 지워졌으면 null(FK set null). */
+  uploadedBy?: string | null
+  /** 올린 계정의 표시 이름 — 같은 워크스페이스 공유 계정만 읽힌다(profiles_read). 못 읽으면 null. */
+  uploadedByName?: string | null
   url?: string | null          // 서명 URL(요청 시 발급)
 }
 

@@ -19,7 +19,9 @@ const mocks = vi.hoisted(() => ({
   ensureMinuteInsights: vi.fn(),
   // 팀 마스터 — 워크스페이스·프로젝트마다 팀이 다르다. 옛 전역 접근자는 전 워크스페이스 합집합(실구현과 같은 성질).
   workspaceTeams: vi.fn<(workspaceId: string) => string[]>(),
+  resolveAttachmentPolicy: vi.fn(),
 }))
+vi.mock('@/lib/minutes/resolveAttachmentPolicy', () => ({ resolveAttachmentPolicy: mocks.resolveAttachmentPolicy }))
 vi.mock('@/lib/auth', () => ({ getSession: (...a: unknown[]) => getSession(...(a as [])) }))
 vi.mock('@/lib/authz', async () => ({
   getActor: (...a: unknown[]) => getActor(...(a as [])),
@@ -67,8 +69,8 @@ vi.mock('@/lib/minutes/teamScope', () => {
 })
 
 import {
-  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, getMinuteFileUrl, getMinuteShare,
-  getMinuteVersionFileUrl,
+  assignMinutesProject, createMinute, deleteMinute, ensureMinuteInsightsAction, fetchMinuteAttachmentPolicy, getMinuteFilePreviewUrl,
+  getMinuteFileUrl, getMinuteShare, getMinuteVersionFileUrl,
   moveMinuteFolder, moveMinuteToFolder, removeMinuteFile, renameMinuteFolder, setMinuteShare, toggleMinuteHighlight,
   updateMinuteMeta,
 } from '@/app/actions/minutes'
@@ -96,8 +98,8 @@ const soloA = makeActor({
 })
 
 type TableResult = { data?: unknown; error: { message: string } | null }
-type StorageResults = { createSignedUrl?: TableResult; remove?: TableResult; exists?: TableResult }
-type StorageCall = { bucket: string; op: 'createSignedUrl' | 'remove'; args: unknown[] }
+type StorageResults = { createSignedUrl?: TableResult; remove?: TableResult; exists?: TableResult; info?: TableResult }
+type StorageCall = { bucket: string; op: 'createSignedUrl' | 'remove' | 'info'; args: unknown[] }
 /** from() 한 번 = 쿼리 하나. ops 는 그 체인의 [메서드, ...인자] — 어느 행을 읽고 무엇을 썼는지(필터·payload)를 단언한다. */
 type Query = { table: string; ops: unknown[][] }
 /** 테이블별 결과를 주입하는 thenable 가짜 빌더 — 결과가 배열이면 같은 표를 부를 때마다 순서대로 꺼내고 마지막 값을
@@ -141,6 +143,10 @@ function fakeClient(results: Record<string, TableResult | TableResult[]>, storag
     remove: vi.fn(async (...args: unknown[]) => {
       storageCalls.push({ bucket, op: 'remove', args })
       return storage.remove ?? { data: [], error: null }
+    }),
+    info: vi.fn(async (...args: unknown[]) => {
+      storageCalls.push({ bucket, op: 'info', args })
+      return storage.info ?? { data: null, error: { message: 'no info' } }
     }),
   })
   // rpc 는 첨부 존재 확인(attachment_object_exists) — 기본은 객체가 남아 있음(true).
@@ -487,63 +493,143 @@ describe('회의록 파일 서명 URL — 60초, 버전 원본은 클릭 때 발
   })
 })
 
-describe('removeMinuteFile — Storage 객체가 실제로 지워졌을 때만 행을 지운다(P8-H1-1 최소)', () => {
-  const PATH = `${M}/첨부.pdf`
+describe('removeMinuteFile — 톰스톤 → 객체 정리 → purged_at(SP5 B3 D23, 0021 세션 DELETE 회수)', () => {
+  const PATH = `ws/${WA}/p/_/minute-files/${M}/1-첨부.pdf`
   const FILE_ROW = { id: 'file-1', minute_id: M, role: 'attachment', file_path: PATH }
-  const RM_FAILED = '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.'
   const ROW_FAILED = '첨부 기록을 지우지 못했습니다 — 새로고침한 뒤 확인하세요.'
+  /** service_role 클라이언트 — minute_files 갱신 결과를 순서대로(① 톰스톤 ③ purged_at), storage.remove 결과를 준다. */
+  const seedAdmin = (files: TableResult[], storage: StorageResults = {}) => {
+    const admin = fakeClient({ minute_files: files }, storage)
+    mocks.createAdminClient.mockReturnValue(admin.client)
+    return admin
+  }
+  const TOMBSTONED = { data: [{ id: 'file-1', file_path: PATH }], error: null }
 
-  it.each([
-    ['RLS 에 막혀 빈 배열(오류 없음)', { data: [], error: null }],
-    ['Storage 오류', { data: null, error: { message: 'storage down' } }],
-  ])('remove 가 1건이 아니면(%s) 실패로 답하고 행을 남긴다', async (_name, removed) => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const db = seedDb({ minute_files: { data: FILE_ROW, error: null } }, { remove: removed })
+  it('활성 첨부에 톰스톤을 찍고 객체를 지운 뒤 purged_at 을 기록한다 — 세션은 행을 지우지 않는다', async () => {
+    const db = seedDb({ minute_files: { data: FILE_ROW, error: null } })
+    const admin = seedAdmin([TOMBSTONED, { data: null, error: null }], { remove: { data: [{ name: PATH }], error: null } })
     getActor.mockResolvedValue(inA)
-    expect(await removeMinuteFile('file-1')).toEqual({ ok: false, error: RM_FAILED })
-    expect(db.storageCalls).toEqual([{ bucket: 'minutes', op: 'remove', args: [[PATH]] }])
+    expect(await removeMinuteFile('file-1')).toEqual({ ok: true })
     expect(db.calls.minute_files).not.toContain('delete')
-    expect(spy).toHaveBeenCalled()
-    spy.mockRestore()
+    expect(admin.calls.minute_files).not.toContain('delete')
+    expect(admin.queries).toEqual([
+      { table: 'minute_files', ops: [
+        ['update', { deleted_at: expect.any(String), deleted_by: 'u1' }],
+        ['eq', 'id', 'file-1'], ['eq', 'minute_id', M], ['eq', 'role', 'attachment'], ['is', 'deleted_at', null],
+        ['select', 'id, file_path'],
+      ] },
+      { table: 'minute_files', ops: [['update', { purged_at: expect.any(String) }], ['eq', 'id', 'file-1'], ['is', 'purged_at', null]] },
+    ])
+    expect(admin.storageCalls).toEqual([{ bucket: 'minutes', op: 'remove', args: [[PATH]] }])
   })
 
-  it('객체는 지웠는데 행 삭제가 0건이면 기록 삭제 실패로 답한다', async () => {
+  it('톰스톤 기록이 실패하면 실패로 답하고 객체를 건드리지 않는다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const db = seedDb(
-      { minute_files: [{ data: FILE_ROW, error: null }, { data: [], error: null }] },
-      { remove: { data: [{ name: PATH }], error: null } },
-    )
+    seedDb({ minute_files: { data: FILE_ROW, error: null } })
+    const admin = seedAdmin([{ data: null, error: { message: 'MINUTE_FILE_IMMUTABLE' } }])
     getActor.mockResolvedValue(inA)
     expect(await removeMinuteFile('file-1')).toEqual({ ok: false, error: ROW_FAILED })
-    expect(db.calls.minute_files).toContain('delete')
+    expect(admin.storageCalls).toEqual([])
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
   })
 
-  it('remove 0건이어도 객체가 이미 없으면(RPC false) 행을 지우고 성공', async () => {
-    const db = seedDb(
-      { minute_files: [{ data: FILE_ROW, error: null }, { data: [{ id: 'file-1' }], error: null }] },
-      { remove: { data: [], error: null }, exists: { data: false, error: null } },
-    )
+  it('톰스톤 갱신이 0행이면(다른 요청이 먼저 지웠다) 성공 — 객체 정리는 하지 않는다', async () => {
+    seedDb({ minute_files: { data: FILE_ROW, error: null } })
+    const admin = seedAdmin([{ data: [], error: null }])
     getActor.mockResolvedValue(inA)
     expect(await removeMinuteFile('file-1')).toEqual({ ok: true })
-    expect(db.calls.minute_files).toContain('delete')
-    // 도우미에 넘기는 값 — 회의록 버킷·그 행의 file_path, 존재 확인과 행 삭제는 첨부 id(회의록 id 가 아니다)로.
-    expect(db.storageCalls).toEqual([{ bucket: 'minutes', op: 'remove', args: [[PATH]] }])
-    expect(db.rpcCalls).toEqual([['attachment_object_exists', { p_kind: 'minute', p_id: 'file-1' }]])
-    expect(db.queries.filter(q => q.ops.some(o => o[0] === 'delete'))).toEqual([
-      { table: 'minute_files', ops: [['delete'], ['eq', 'id', 'file-1'], ['select', 'id']] },
-    ])
+    expect(admin.storageCalls).toEqual([])
   })
 
-  it('객체 1건·행 1건이 지워져야 성공', async () => {
-    const db = seedDb(
-      { minute_files: [{ data: FILE_ROW, error: null }, { data: [{ id: 'file-1' }], error: null }] },
-      { remove: { data: [{ name: PATH }], error: null } },
-    )
+  it.each([
+    ['0건(이미 없음·불일치)', { data: [], error: null }],
+    ['Storage 오류', { data: null, error: { message: 'storage down' } }],
+  ])('객체 삭제가 %s 이어도 사용자에게는 성공 — 로그만, purged_at 은 남기지 않는다(청소 잡 몫)', async (_n, removed) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    seedDb({ minute_files: { data: FILE_ROW, error: null } })
+    const admin = seedAdmin([TOMBSTONED], { remove: removed })
     getActor.mockResolvedValue(inA)
     expect(await removeMinuteFile('file-1')).toEqual({ ok: true })
-    expect(db.calls.minute_files).toContain('delete')
+    expect(admin.queries).toHaveLength(1)
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('편집 권한이 없으면(다른 워크스페이스에만 역할) service_role 에 닿지 않는다', async () => {
+    seedDb({ minute_files: { data: FILE_ROW, error: null } })
+    getActor.mockResolvedValue(onlyInB)
+    expect((await removeMinuteFile('file-1')).ok).toBe(false)
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('본문 파일은 지우지 않는다 — service_role 미도달', async () => {
+    seedDb({ minute_files: { data: { ...FILE_ROW, role: 'body' }, error: null } })
+    getActor.mockResolvedValue(inA)
+    expect(await removeMinuteFile('file-1')).toEqual({ ok: false, error: '본문 파일은 교체로만 변경할 수 있습니다.' })
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+})
+
+describe('첨부 정책·미리보기(SP5 B3 D24·D25) — 행의 실제 범위, 안전 형식 ∧ 객체 MIME', () => {
+  const PATH = `ws/${WA}/p/_/minute-files/${M}/1-a.png`
+  const FILE = (over: Record<string, unknown> = {}) => ({ file_path: PATH, file_name: 'a.png', minute_id: M, role: 'attachment', ...over })
+  const POLICY = { enabled: true, maxFileBytes: 100, maxCount: 3, maxTotalBytes: 300, allowedExtensions: null, previewEnabled: true }
+  const UNAVAILABLE = '미리 볼 수 없는 파일입니다. 내려받아 확인하세요.'
+  beforeEach(() => { mocks.resolveAttachmentPolicy.mockReset(); mocks.resolveAttachmentPolicy.mockResolvedValue(POLICY) })
+
+  it('fetchMinuteAttachmentPolicy: 회의록 행의 범위(워크스페이스·프로젝트)로 읽는다', async () => {
+    seedDb({ minutes: { data: minuteRow({ project_id: PA }), error: null } })
+    getActor.mockResolvedValue(inA)
+    expect(await fetchMinuteAttachmentPolicy(M)).toEqual({ ok: true, policy: POLICY })
+    expect(mocks.resolveAttachmentPolicy).toHaveBeenCalledWith({ projectId: PA, workspaceId: WA })
+  })
+  it('fetchMinuteAttachmentPolicy: 정책 조회 실패는 기본값이 아니라 실패로', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    seedDb()
+    getActor.mockResolvedValue(inA)
+    mocks.resolveAttachmentPolicy.mockRejectedValue(new Error('CONFIG'))
+    expect(await fetchMinuteAttachmentPolicy(M)).toEqual({ ok: false, error: '첨부 설정을 불러오지 못했습니다. 잠시 후 다시 시도하세요.' })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+  it('fetchMinuteAttachmentPolicy: 범위 밖 사용자는 정책을 읽지 않는다', async () => {
+    seedDb({ minutes: { data: minuteRow({ project_id: PA }), error: null } })
+    getActor.mockResolvedValue(onlyInB)
+    expect((await fetchMinuteAttachmentPolicy(M)).ok).toBe(false)
+    expect(mocks.resolveAttachmentPolicy).not.toHaveBeenCalled()
+  })
+
+  it('안전 확장자 + 객체 MIME 일치면 download 없이 서명하고 종류를 돌려준다', async () => {
+    const db = seedDb({ minute_files: { data: FILE(), error: null } }, { info: { data: { contentType: 'image/png' }, error: null } })
+    expect(await getMinuteFilePreviewUrl('file-1')).toEqual({ ok: true, url: 'https://signed.example.com/x', kind: 'image' })
+    expect(db.storageCalls).toEqual([
+      { bucket: 'minutes', op: 'info', args: [PATH] },
+      { bucket: 'minutes', op: 'createSignedUrl', args: [PATH, 60] },
+    ])
+  })
+  it.each([
+    ['객체 MIME 위조(svg 를 png 로)', FILE(), { contentType: 'image/svg+xml' }, POLICY],
+    ['위험 확장자', FILE({ file_name: 'a.html' }), { contentType: 'image/png' }, POLICY],
+    ['정책 미리보기 꺼짐', FILE(), { contentType: 'image/png' }, { ...POLICY, previewEnabled: false }],
+    ['본문 파일', FILE({ role: 'body', file_name: 'a.md' }), { contentType: 'text/markdown' }, POLICY],
+  ])('%s 은 서명하지 않는다', async (_n, row, info, policy) => {
+    mocks.resolveAttachmentPolicy.mockResolvedValue(policy)
+    const db = seedDb({ minute_files: { data: row, error: null } }, { info: { data: info, error: null } })
+    expect(await getMinuteFilePreviewUrl('file-1')).toEqual({ ok: false, error: UNAVAILABLE })
+    expect(db.storageCalls.filter(c => c.op === 'createSignedUrl')).toEqual([])
+  })
+  it('톰스톤(세션 정책이 가린 행)은 파일 없음 — 서명 0', async () => {
+    const db = seedDb({ minute_files: { data: null, error: null } })
+    expect(await getMinuteFilePreviewUrl('file-1')).toEqual({ ok: false, error: '파일 없음' })
+    expect(db.storageCalls).toEqual([])
+  })
+  it('객체 메타 조회 실패는 미리보기 불가로 위장하지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    seedDb({ minute_files: { data: FILE(), error: null } })
+    expect(await getMinuteFilePreviewUrl('file-1')).toEqual({ ok: false, error: '첨부 파일 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.' })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
   })
 })
 

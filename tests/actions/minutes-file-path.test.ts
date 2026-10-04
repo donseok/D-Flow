@@ -167,7 +167,13 @@ describe('recordMinuteFile — scope 는 DB 의 회의록 행', () => {
   })
 
   it.each([
-    ['MINUTE_ATTACHMENT_LIMIT', '첨부는 회의록당 10개까지입니다.'],
+    ['MINUTE_ATTACHMENT_LIMIT', '첨부 개수 한도에 도달했습니다.'],
+    ['MINUTE_ATTACHMENT_DISABLED', '이 범위에서는 회의록 첨부가 꺼져 있습니다.'],
+    ['MINUTE_ATTACHMENT_TOO_LARGE', '파일 하나의 용량 한도를 넘었습니다.'],
+    ['MINUTE_ATTACHMENT_TOTAL_EXCEEDED', '이 회의록의 첨부 총용량 한도를 넘었습니다.'],
+    ['MINUTE_ATTACHMENT_EXTENSION', '허용되지 않은 파일 형식입니다.'],
+    ['MINUTE_ATTACHMENT_FORBIDDEN', '이 회의록에 첨부할 권한이 없습니다.'],
+    ['CONFIG_INVALID:minutes.attachments', '첨부 설정을 확인하지 못했습니다. 관리자에게 문의하세요.'],
     ['MINUTE_ATTACHMENT_DUPLICATE', '같은 파일이 이미 첨부돼 있습니다.'],
     ['MINUTE_ATTACHMENT_ARCHIVED', '보관된 회의록에는 첨부할 수 없습니다.'],
     ['MINUTE_ATTACHMENT_PATH', '잘못된 파일 경로입니다.'],

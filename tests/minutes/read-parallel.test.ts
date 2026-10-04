@@ -93,8 +93,24 @@ describe('getMinuteDetail — 본문/파일 병렬화', () => {
     expect(result?.files).toEqual({ ok: true, rows: [{
       id: 'f1', minuteId: 'min-1', role: 'attachment', fileName: '자료.pdf',
       filePath: 'minutes/min-1/자료.pdf', size: 1024, mime: 'application/pdf',
-      createdAt: '2026-08-01T02:00:00Z',
+      createdAt: '2026-08-01T02:00:00Z', uploadedBy: null, uploadedByName: null,
     }] })
+  })
+
+  // SP5 B3 과제 6: 첨부 등록자 이름은 부가 정보 — 같은 워크스페이스 계정만 읽히고, 조회 실패는 이름만 비운다(목록은 정상).
+  it.each([
+    ['이름을 읽으면 등록자 이름을 싣는다', { data: [{ user_id: 'u9', display_name: '김첨부' }], error: null }, '김첨부', false],
+    ['이름 조회 실패는 로그 + 이름 null(목록 실패로 바꾸지 않는다)', { data: null, error: { message: 'rls' } }, null, true],
+  ] as const)('%s', async (_n, profiles, name, logged) => {
+    const filesQ = queryBuilder({ data: [{ ...FILE_ROW, uploaded_by: 'u9' }], error: null })
+    const profilesQ = queryBuilder(profiles as QueryResult)
+    const from = vi.fn((table: string) =>
+      table === 'minutes' ? queryBuilder({ data: MINUTE_ROW, error: null }) : table === 'profiles' ? profilesQ : filesQ)
+    mocks.createServerClient.mockResolvedValue({ from })
+    const result = await getMinuteDetail('min-1')
+    expect(result?.files).toMatchObject({ ok: true, rows: [{ id: 'f1', uploadedBy: 'u9', uploadedByName: name }] })
+    expect(profilesQ.in).toHaveBeenCalledWith('user_id', ['u9'])
+    expect(consoleError.mock.calls.length > 0).toBe(logged)
   })
 
   it('본문 조회 실패는 파일 조회가 성공해도 여전히 throw 한다(행 없음으로 위장 금지)', async () => {

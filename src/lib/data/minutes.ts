@@ -188,7 +188,7 @@ export const getMinuteDetail = cache(async (
       .select('id, minute_date, team_code, title, body_md, meeting_id, project_id, meeting_occurrence_date, archived_at, external_id, created_by, created_by_name, created_at, updated_at, folder_id, workspace_id, meetings(project_id), projects(name)')
       .eq('id', id).maybeSingle(),
     sb.from('minute_files')
-      .select('id, minute_id, role, file_name, file_path, size, mime, created_at')
+      .select('id, minute_id, role, file_name, file_path, size, mime, created_at, uploaded_by')
       .eq('minute_id', id).order('created_at', { ascending: true }),
   ])
   // null 은 호출자에서 404(삭제됨)로 렌더된다 — 조회 실패를 '행 없음'으로 위장하면
@@ -201,6 +201,14 @@ export const getMinuteDetail = cache(async (
     console.error('[getMinuteDetail] 파일 목록 조회 실패:', fsErr.message)
     files = { ok: false, error: ERR_MINUTE_FILES_LOAD }
   } else {
+    // 등록자 이름은 표시용 부가 정보 — 조회 실패는 로그를 남기고 이름 칸만 비운다(파일 목록 자체는 정상이다).
+    const uploaderIds = [...new Set((fs ?? []).map((f: Row) => f.uploaded_by as string | null).filter((v): v is string => !!v))]
+    const names = new Map<string, string>()
+    if (uploaderIds.length > 0) {
+      const { data: ps, error: psErr } = await sb.from('profiles').select('user_id, display_name').in('user_id', uploaderIds)
+      if (psErr) console.error('[getMinuteDetail] 첨부 등록자 이름 조회 실패:', psErr.message)
+      for (const p of (ps ?? []) as Row[]) if (p.display_name) names.set(p.user_id as string, p.display_name as string)
+    }
     files = {
       ok: true,
       rows: (fs ?? []).map((f: Row) => ({
@@ -212,6 +220,8 @@ export const getMinuteDetail = cache(async (
         size: (f.size as number) ?? null,
         mime: (f.mime as string) ?? null,
         createdAt: f.created_at as string,
+        uploadedBy: (f.uploaded_by as string | null) ?? null,
+        uploadedByName: f.uploaded_by ? names.get(f.uploaded_by as string) ?? null : null,
       })),
     }
   }

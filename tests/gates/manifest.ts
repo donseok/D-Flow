@@ -156,6 +156,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('minutes')}#deleteMinute`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U] },
   [`${A('minutes')}#fetchMinuteDetail`]: { guard: 'session', module: 'minutes', note: '로그인 + 행', sample: [U], deny: null },
   [`${A('minutes')}#getMinuteFileUrl`]: { guard: 'session', module: 'minutes', note: '로그인 + 파일 행의 회의록(행의 워크스페이스 — /minutes/[id] 와 같은 판정)', sample: [U] },
+  [`${A('minutes')}#getMinuteFilePreviewUrl`]: { guard: 'session', module: 'minutes', note: '로그인 + 파일 행의 회의록(행의 워크스페이스) — 범위 정책·객체 MIME 의 안전 형식만 inline 서명', sample: [U] },
+  [`${A('minutes')}#fetchMinuteAttachmentPolicy`]: { guard: 'session', module: 'minutes', note: 'requireActor + requireMinuteMember(행의 범위) — 행의 범위 정책만, 클라이언트 범위 불신', sample: [U] },
   [`${A('minutes')}#getMinuteVersionFileUrl`]: { guard: 'session', module: 'minutes', note: '로그인 + 행', sample: [U, U] },
   [`${A('minutes')}#fetchProjectMeetingsLite`]: { guard: 'session', module: ['minutes', 'meetings'], note: '로그인 + 인자 프로젝트(회의록 폼의 회의 선택)', sample: [P], deny: { ok: true, meetings: [] } },
   [`${A('minutes')}#fetchMeetingMinutesLite`]: { guard: 'session', module: ['minutes', 'meetings'], note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: [] },
