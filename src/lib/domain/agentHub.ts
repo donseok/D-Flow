@@ -3,7 +3,7 @@
 import { deriveSeatState, isWatcherAlive, lastSignalMs, type OrderStatus, type SeatState } from './seatState'
 import { AGENT_TAG, canApproveCompletion, isLaterReport, isSubtreeManagerOf, type OrderRow, type Watcher, type WatcherRow } from './seatmap'
 import { deriveWaitReason, type WaitReason } from './waitReason'
-import { stageLockedForHuman } from './agentWork'
+import { stageLockedForHuman, type PredecessorGate } from './agentWork'
 
 export interface HubItemRow {
   id: string; project_id: string; parent_id: string | null; code: string; name: string; sort_order: number
@@ -24,6 +24,8 @@ export interface AgentHubRows {
   items: HubItemRow[]; orders: OrderRow[]; reports: HubReportRow[]; watchers: WatcherRow[]; members: HubMemberRow[]
   /** 선행 항목 중 approved 주문이 있는 항목 id — orders 는 7일 창이라 오래전 승인을 따로 본다(착수 대기 사유 스펙 §3). */
   approvedItemIds: string[]
+  /** 프로젝트의 선행 기준(SP5b D21) — 없으면 reached(현행). 로더가 싣는다 */
+  gate?: PredecessorGate
 }
 export type HubOrderState = SeatState
 export interface HubRow {
@@ -194,10 +196,11 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
     const waitReason = isLeaf && delegated && waitingStart
       ? deriveWaitReason({
           depends: item.depends,
-          predecessorByRef: ref => { const p = byRef.get(ref); return p ? { external_ref: ref, code: p.code, name: p.name, stage: p.stage, order_approved: approved.has(p.id), actual_pct: p.actual_pct } : undefined },
+          predecessorByRef: ref => { const p = byRef.get(ref); return p ? { external_ref: ref, code: p.code, name: p.name, stage: p.stage, order_approved: approved.has(p.id), actual_pct: p.actual_pct, dev_workflow: p.dev_workflow } : undefined },
           // 담당자 id 는 있는데 로스터 행이 없으면 계정 미연결과 같은 취급(seatmap.ts 와 같은 규칙).
           assignee: item.assignee_member_id ? { name: assigneeMember?.name ?? '(로스터에 없음)', user_id: assigneeMember?.user_id ?? null } : null,
           watchers: hubWatchers,
+          gate: rows.gate ?? 'reached',
         })
       : null
     if (waitReason !== null && (waitReason.kind === 'dependency' || waitReason.kind === 'agent_off')) counters.stuck++

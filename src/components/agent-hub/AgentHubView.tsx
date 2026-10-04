@@ -4,6 +4,7 @@
 // 그 밖의 변경 뒤 refreshAgentHub 1회, 탭이 다시 보이면 1회. 실패는 마지막 데이터 유지 + 상단 표시. 페이지 전체 refresh 금지(허브 스펙 §7).
 // 표에서 이름을 누르면 WBS 상세 패널(RowDetailPanel)을 이 화면 위에 그대로 띄운다(2026-09-15) — WBS 페이지로 이동하지 않는다.
 // 그 패널이 요구하는 계산된 WBS 데이터(ComputedItem·의존·일정)는 서버 페이지가 허브와 함께 실어 준다.
+import type { PredecessorGate } from '@/lib/domain/agentWork'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentHub } from '@/lib/domain/agentHub'
 import type { ComputedItem, ProjectMember, TaskDependency } from '@/lib/domain/types'
@@ -45,6 +46,9 @@ export type HubWbsBundle = {
   /** 명단 조회 실패 사유 — null 이면 정상. 실패면 members 는 비어 있고 표 위에 사유를 띄운다(0명으로 위장하지 않는다). */
   membersError: string | null
   actorView: ProjectActorView | null
+  /** 선행 기준·승인 주문 축(SP5b D21) — 상세 패널의 spec 선행 판정 재료. 옛 호출부·시험은 생략할 수 있다(reached·승인 축 없음) */
+  predecessorGate?: PredecessorGate
+  approvedItemIds?: readonly string[]
 }
 
 /** 트리를 전위 순서로 평탄화 — 색인·일정 계산용(WbsGanttSheet 의 지역 flatten 과 같은 규칙). */
@@ -203,6 +207,8 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
             levelLabels={wbs.levelLabels}
             maxDepth={wbs.maxDepth}
             members={wbs.members}
+            predecessorGate={wbs.predecessorGate}
+            approvedItemIds={wbs.approvedItemIds}
             onSelectItem={setSelectedId}
             unresolvedRefs={wbs.unresolvedDepends[selectedItem.id] ?? EMPTY_REFS}
           />

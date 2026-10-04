@@ -1,5 +1,6 @@
 import type { AdminClient } from '@/lib/minutes/externalApi'
-import { predecessorReached } from '@/lib/domain/agentWork'
+import { predecessorReachedFor, type PredecessorGate } from '@/lib/domain/agentWork'
+import { loadPredecessorGate } from '@/lib/agent/predecessorGate'
 
 export type DependInfo = {
   external_ref: string; stage: string | null; branch: string | null; head_sha: string | null
@@ -13,8 +14,9 @@ export type DependInfo = {
   /** 선행 실적%(스펙 2026-09-15 §3.7 세 번째 축) — 프로젝트에 없는 ref 는 null. */
   actual_pct: number | null
   /**
-   * 선행 충족 판정 결과(계약 v2.3) = stage ∈ {im,xx} ∨ order_approved ∨ actual_pct ≥ 100. claim 게이트와 같은
-   * 함수(predecessorReached)라, 스킬은 축을 다시 조합하지 않고 이 값을 본다.
+   * 선행 충족 판정 결과(계약 v2.3) — 프로젝트의 선행 기준(SP5b D21 `workflow.predecessor_gate`)으로 판정한다:
+   * reached(기본·현행) = stage ∈ {im,xx} ∨ order_approved ∨ actual_pct ≥ 100, final = stage = xx ∨ order_approved ∨ (흐름 밖 ∧ 실적 100).
+   * claim 게이트와 같은 함수(predecessorReachedFor)라, 스킬은 축을 다시 조합하지 않고 이 값을 본다(키·타입 불변 — 값만 기준을 따른다).
    */
   reached: boolean
 }
@@ -33,15 +35,17 @@ export const ITEM_DETAIL_COLUMNS =
  */
 export async function loadDependsInfo(
   admin: AdminClient,
-  args: { projectId: string; depends: string[] },
+  args: { projectId: string; depends: string[]; gate?: PredecessorGate },
 ): Promise<DependInfo[]> {
+  // 선행 기준 — 호출부가 이미 읽었으면 그 값(claim 라우트는 거부 문구도 기준에 맞춘다). 판독 실패는 throw(게이트 재료 — 호출부 500)
+  const gate = args.gate ?? await loadPredecessorGate(admin, args.projectId)
   const { data: items, error } = await admin
-    .from('wbs_items').select('id, external_ref, stage, actual_pct')
+    .from('wbs_items').select('id, external_ref, stage, actual_pct, dev_workflow')
     .eq('project_id', args.projectId).in('external_ref', args.depends)
   if (error) throw new Error(`선행 항목 조회 실패: ${error.message}`) // 게이트 재료 — 위장 금지(호출부 500)
   const byRef = new Map(
     (items ?? []).map((i) => [(i as { external_ref: string }).external_ref, i]) as Array<
-      [string, { id: string; stage: string | null; actual_pct: number | string | null }]
+      [string, { id: string; stage: string | null; actual_pct: number | string | null; dev_workflow: boolean | null }]
     >,
   )
   const out: DependInfo[] = []
@@ -69,7 +73,7 @@ export async function loadDependsInfo(
     const actualPct = item.actual_pct == null ? null : Number(item.actual_pct)
     out.push({
       external_ref: ref, stage: item.stage, branch, head_sha: headSha, order_approved: order !== null, actual_pct: actualPct,
-      reached: predecessorReached({ stage: item.stage, orderApproved: order !== null, actualPct }),
+      reached: predecessorReachedFor({ stage: item.stage, orderApproved: order !== null, actualPct, devWorkflow: item.dev_workflow === true }, gate),
     })
   }
   return out

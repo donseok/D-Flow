@@ -1,4 +1,5 @@
 'use client'
+import type { PredecessorGate } from '@/lib/domain/agentWork'
 import { useCallback, useState, useEffect, useId, useLayoutEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ComputedItem, ProjectMember, TaskDependency } from '@/lib/domain/types'
@@ -209,6 +210,8 @@ export function WbsGanttSheet({
   maxDepth = null,
   milestoneKeywords = EMPTY_MILESTONE_KEYWORDS,
   members = EMPTY_MEMBERS,
+  predecessorGate = 'reached',
+  approvedItemIds,
 }: {
   items: ComputedItem[]
   dependencies?: TaskDependency[]
@@ -252,6 +255,10 @@ export function WbsGanttSheet({
   milestoneKeywords?: readonly string[]
   /** 프로젝트 로스터 — WbsAssigneeStagePanel 의 담당자 셀렉트 데이터 소스(§2.5). */
   members?: ProjectMember[]
+  /** 프로젝트의 선행 기준(SP5b D21) — 상세 패널의 spec 선행 판정이 claim 게이트와 같은 기준이 되게. 생략은 reached */
+  predecessorGate?: PredecessorGate
+  /** approved 주문이 있는 항목 id(SP5b D21 — 승인 축). agents 꺼짐이면 서버가 빈 목록을 준다 */
+  approvedItemIds?: readonly string[]
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -2141,6 +2148,8 @@ export function WbsGanttSheet({
           members={members}
           onSelectItem={selectLinkedItem}
           unresolvedRefs={unresolvedDepends[selectedItem.id] ?? EMPTY_REFS}
+          predecessorGate={predecessorGate}
+          approvedItemIds={approvedItemIds}
         />
       )}
     </div>

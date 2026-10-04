@@ -1,6 +1,7 @@
 // 좌석표 조회 — 서버 전용(service_role). 프로젝트 필터는 항상 seatmapProjectIds 로 건다.
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
 // 단 agents 모듈 판정 실패(설정 조회·손상)는 그 프로젝트의 층을 뺀다 — 로그는 [requireModule](스펙 §3 modules.* fail-closed, P13).
+import { loadPredecessorGates } from '@/lib/agent/predecessorGate'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { personOf } from '@/lib/data/memberSelect'
 import type { AdminClient } from '@/lib/minutes/externalApi'
@@ -95,7 +96,7 @@ export async function fetchSeatmapRows(admin: AdminClient, projectIds: readonly 
   let predecessors: PredecessorRow[] = []
   if (refs.length) {
     const found = must<Array<Omit<PredecessorRow, 'order_approved'>>>('선행 항목',
-      await admin.from('wbs_items').select('id, project_id, external_ref, code, name, stage, actual_pct').in('project_id', projIds).in('external_ref', refs))
+      await admin.from('wbs_items').select('id, project_id, external_ref, code, name, stage, actual_pct, dev_workflow').in('project_id', projIds).in('external_ref', refs))
     const approved = found.length
       ? must<Array<{ wbs_item_id: string }>>('선행 승인 주문',
         await admin.from('agent_work_orders').select('wbs_item_id').in('wbs_item_id', found.map(p => p.id)).eq('status', 'approved'))
@@ -103,7 +104,10 @@ export async function fetchSeatmapRows(admin: AdminClient, projectIds: readonly 
     const ok = new Set(approved.map(a => a.wbs_item_id))
     predecessors = found.map(p => ({ ...p, order_approved: ok.has(p.id) }))
   }
-  return { orders, items, parents, reviews, watchers, projects, members, predecessors, reports }
+  // 선행 기준(SP5b D21) — 선행 대기를 판정할 ready 좌석이 있는 프로젝트만. 판독 실패는 throw(좌석표 오류 — 위장 금지)
+  const gateProjects = [...new Set(orders.filter(o => o.status === 'ready').map(o => o.project_id))]
+  const gates = refs.length && gateProjects.length ? Object.fromEntries(await loadPredecessorGates(admin, gateProjects)) : {}
+  return { orders, items, parents, reviews, watchers, projects, members, predecessors, reports, gates }
 }
 
 /** 명단 행(people 임베드) → 층 조립기가 쓰는 평평한 행. 이름·계정은 people 이 정본이다. */

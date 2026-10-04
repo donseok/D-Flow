@@ -18,6 +18,8 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { moduleState } from '@/lib/modules/gate'
+import { getApprovedItemIds } from '@/lib/data/approvedItems'
 
 type ProjectRow = { id: string; name: string; description?: string | null; start_date?: string | null; end_date?: string | null }
 
@@ -60,6 +62,11 @@ export default async function WbsPage({
     isAdmin={isProjectAdmin(actor, projectId)} settingsHref={`/p/${projectId}/settings`} /></ProjectPageShell>
   // 키워드 손상은 마커 없이 그리고 명단 오류와 같은 자리에 사유를 띄운다.
   const keywords = pick(pc.cfg, 'core.milestone_keywords')
+  // 선행 기준·승인 주문 축(SP5b D21) — 상세 패널의 "시작 가능"이 claim 게이트와 같은 판정이 되게. 기준이 손상이면 final(엄격 — 시작 가능으로
+  // 위장하지 않는다). agents 가 꺼진 프로젝트는 주문 표를 읽지 않는다(승인 축 = false)
+  const gate = pick(pc.cfg, 'workflow.predecessor_gate')
+  if (!gate.ok) console.error(`[wbs] 선행 기준 손상(project=${projectId}) — final 로 판정한다`)
+  const approvedItemIds = (await moduleState({ projectId }, 'agents')) === 'on' ? await getApprovedItemIds(projectId) : []
   const pinned = roster.ok && keywords.ok ? undefined : (
     <>
       {!roster.ok && <RosterLoadError error={roster.error} />}
@@ -98,6 +105,8 @@ export default async function WbsPage({
         initialOutline={uiPrefs.wbsOutline ?? false}
         initialGanttScale={uiPrefs.wbsGanttScale}
         members={members}
+        predecessorGate={gate.ok ? gate.value : 'final'}
+        approvedItemIds={approvedItemIds ?? []}
       />
     </ProjectPageShell>
   )

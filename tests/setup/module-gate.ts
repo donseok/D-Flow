@@ -35,3 +35,12 @@ vi.mock('@/lib/agent/approvalState', async () => {
     loadQueueApprovals: vi.fn(async () => new Map()),
   }
 })
+
+// SP5b W2 — 선행 충족 기준 판독(src/lib/agent/predecessorGate.ts)의 기본값 = 키 없음('reached' — 현행). 선행 판정 소비처(claim 게이트·알림·
+// 대기 사유)를 import 하는 기존 테스트의 admin 조회 큐가 밀리지 않게 한다. 기준을 바꿔 보는 테스트는 vi.mocked(…).mockResolvedValue('final').
+vi.mock('@/lib/agent/predecessorGate', () => ({
+  loadPredecessorGate: vi.fn(async () => 'reached'),
+  loadPredecessorGates: vi.fn(async (_admin: unknown, ids: readonly string[]) => new Map([...new Set(ids)].map((id) => [id, 'reached']))),
+}))
+// SP5b W2 — WBS 화면의 승인 주문 축(src/lib/data/approvedItems.ts) 기본값 = 없음. 페이지 테스트가 주문 표를 흉내 내지 않아도 되게
+vi.mock('@/lib/data/approvedItems', () => ({ getApprovedItemIds: vi.fn(async () => []) }))

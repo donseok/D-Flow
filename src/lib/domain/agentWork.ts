@@ -31,6 +31,13 @@ export function stageReachesGate(stage: string | null, gate: PredecessorGate): b
   return gate === 'final' ? stage === 'xx' : REACHED_STAGES.has(stage)
 }
 
+/** claim 거부 문구(에이전트 error 문자열 — 동결 대상 아님, 응답 키·code 는 불변). 기준마다 충족 조건을 말한다 */
+export function dependencyNotMetMessage(gate: PredecessorGate): string {
+  return gate === 'final'
+    ? '선행 작업이 최종 승인되지 않았습니다(완료도, 승인된 주문도, 개발 워크플로 밖의 실적 100% 도 아님).'
+    : '선행 작업이 끝나지 않았습니다(검수 대기 이상도, 승인도, 실적 100% 도 아님).'
+}
+
 /**
  * gate 를 받는 선행 충족(SQL wbs_predecessor_reached 와 패리티). gate 는 기본값 없는 필수 인자 — 소비처 전수가 tsc 로 드러난다(S1).
  * final 은 dev_workflow 항목의 실적 100 축을 뺀다(승인을 건너뛴 100 이 게이트를 여는 우회 차단). devWorkflow 미지정 = false(SQL coalesce 와 같다).

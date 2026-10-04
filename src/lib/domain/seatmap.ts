@@ -1,3 +1,4 @@
+import type { PredecessorGate } from './agentWork'
 // 좌석표 조립 — IO 없음. 층=프로젝트, 구역=주문 항목의 부모 항목, 책상=주문(스펙 §5-1).
 import {
   animFor, deriveSeatState, fnv1a32, inferPhase, isRejected, isWatcherAlive, lastSignalMs, pickCharacter,
@@ -43,6 +44,8 @@ export interface SeatmapRows {
   members: MemberRow[]; predecessors: PredecessorRow[]
   /** 최근 보고(없으면 말풍선 없음). 옛 호출부·시험이 비워 둘 수 있게 선택 필드다. */
   reports?: ReportRow[]
+  /** 프로젝트별 선행 기준(SP5b D21) — 없는 프로젝트는 reached(현행). 로더가 ready 좌석이 있는 프로젝트마다 싣는다 */
+  gates?: Readonly<Record<string, PredecessorGate>>
 }
 
 export interface Seat {
@@ -319,6 +322,7 @@ export function assembleSeatmap(rows: SeatmapRows, nowMs: number, opts: { mine?:
         // 담당자 id 는 있는데 로스터 행이 없으면 계정 미연결과 같은 취급(어느 PAT 도 담당자로 인정되지 않는다).
         assignee: item.assignee_member_id ? { name: m?.name ?? '(로스터에 없음)', user_id: m?.user_id ?? null } : null,
         watchers: watchersOf(o.project_id),
+        gate: rows.gates?.[o.project_id] ?? 'reached',
       })
       // 선행 대기는 빈자리가 아니다 — 올 사람이 정해져 있고 앞 작업만 기다린다. 실루엣으로 그린다(안 A).
       if (seat.waitReason?.kind === 'dependency') seat.anim = 'waiting'

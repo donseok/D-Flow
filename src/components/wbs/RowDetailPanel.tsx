@@ -1,4 +1,5 @@
 'use client'
+import type { PredecessorGate } from '@/lib/domain/agentWork'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, X, FileText, Pencil, Plus, ChevronUp, ChevronDown, ChevronRight, Trash2, Paperclip, Upload, GitBranchPlus, GitBranch } from 'lucide-react'
@@ -36,6 +37,7 @@ export function RowDetailPanel({
   item, allItems = [], dependencies = [], schedule, onClose, editable = false, canAttach = false,
   canEditDeliverable = false, projectId, workspaceId = null, levelLabels, maxDepth = null,
   members = EMPTY_MEMBERS, onSelectItem, unresolvedRefs = EMPTY_REFS, timeZone,
+  predecessorGate = 'reached', approvedItemIds,
 }: {
   item: ComputedItem
   allItems?: ComputedItem[]
@@ -64,6 +66,10 @@ export function RowDetailPanel({
   unresolvedRefs?: string[]
   /** 변경 이력 시각의 시간대 — 서버가 내려준 프로젝트 calendar.timezone(계획 P8, A-4 리뷰 N7) */
   timeZone: string
+  /** 프로젝트의 선행 기준(SP5b D21) — spec 선행 판정이 claim 게이트와 같은 기준이 되게 숙주가 넘긴다. 생략은 reached(현행) */
+  predecessorGate?: PredecessorGate
+  /** approved 주문이 있는 항목 id(SP5b D21 — claim 게이트의 승인 축). agents 모듈이 꺼진 프로젝트는 숙주가 주지 않는다(= false) */
+  approvedItemIds?: readonly string[]
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -122,6 +128,11 @@ export function RowDetailPanel({
   const subTeams = useMemo(() => availableSubActTeams(item.children, allTeamCodes), [item.children, allTeamCodes])
   const flipWarn = willDiscardActual(item.children.length, item.actualPct)
   const itemById = useMemo(() => new Map(allItems.map(candidate => [candidate.id, candidate])), [allItems])
+  // spec 선행 판정 재료(SP5b D21) — claim 게이트와 같은 입력: 단계·승인 주문(숙주가 준 맵 — agents 꺼짐이면 없음 = false)·실적·dev_workflow
+  const readinessById = useMemo(() => {
+    const approved = new Set(approvedItemIds ?? [])
+    return new Map(allItems.map(c => [c.id, { ...c, orderApproved: approved.has(c.id) }]))
+  }, [allItems, approvedItemIds])
   const incomingDependencies = useMemo(
     () => dependencies.filter(dep => dep.successorId === item.id),
     [dependencies, item.id],
@@ -135,10 +146,11 @@ export function RowDetailPanel({
     () => evaluateStartReadiness(
       { id: item.id, rolledActualPct: item.rolledActualPct, stage: item.stage ?? null },
       incomingDependencies,
-      itemById,
+      readinessById,
       unresolvedRefs,
+      predecessorGate,
     ),
-    [item.id, item.rolledActualPct, item.stage, incomingDependencies, itemById, unresolvedRefs],
+    [item.id, item.rolledActualPct, item.stage, incomingDependencies, readinessById, unresolvedRefs, predecessorGate],
   )
   const relationBadge = (dep: TaskDependency) => `${dep.type}${dep.lagDays > 0 ? ` +${dep.lagDays}` : ''}`
   const egoPredecessors = useMemo<EgoNode[]>(() => [

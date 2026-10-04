@@ -1,6 +1,7 @@
 // 에이전트 허브 조회 — 서버 전용(service_role). 1차 5건 병렬 + 2차(감시자·살아 있는 주문의 완료 보고) 병렬.
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
 import { loadQueueApprovals } from '@/lib/agent/approvalState'
+import { loadPredecessorGate } from '@/lib/agent/predecessorGate'
 import { adminFor } from '@/lib/supabase/adminFor'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
@@ -70,7 +71,9 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
   const approvedItemIds = predIds.length
     ? must<Array<{ wbs_item_id: string }>>('선행 승인 주문', await admin.from('agent_work_orders').select('wbs_item_id').in('wbs_item_id', predIds).eq('status', 'approved')).map(r => r.wbs_item_id)
     : []
-  return { project: project && { id: project.id, name: project.name }, agentProject, items, orders, reports, watchers, members, approvedItemIds }
+  // 선행 기준(SP5b D21) — 착수 대기 사유가 claim 게이트와 같은 기준으로 말하게. 판독 실패는 throw(허브 오류 — 위장 금지)
+  const gate = await loadPredecessorGate(admin, projectId)
+  return { project: project && { id: project.id, name: project.name }, agentProject, items, orders, reports, watchers, members, approvedItemIds, gate }
 }
 
 export async function getAgentHub(projectId: string, viewer: { userId: string; isAdmin: boolean }, nowMs = Date.now()): Promise<AgentHub> {

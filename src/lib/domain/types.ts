@@ -32,6 +32,8 @@ export interface WbsRow {
   stage?: string | null
   /** 에이전트 위임(tags 에 'agent') 여부 — WBS 「단계」 컬럼 표시 조건(스펙 2026-09-15 D9). 선택 필드인 이유는 stage 와 같다. */
   agentDelegated?: boolean
+  /** 개발 워크플로 대상 — 선행 기준 final 의 실적 축 재료(SP5b D21, claim 게이트와 같은 입력). 선택 필드인 이유는 stage 와 같다 */
+  devWorkflow?: boolean
   /**
    * 개인 담당자(project_members.id, §항목1 2026-09-15). team(owners)과 별개 축 — 팀 컬럼을
    * 대체하지 않고 병존한다. stage 와 같은 이유로 선택 필드다: 필수로 올리면 WbsRow 리터럴을
