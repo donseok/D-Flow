@@ -230,6 +230,14 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.calendar.week_start.sunday': 'Sunday', 'settings.calendar.week_start.monday': 'Monday',
   // SP5 B1 — issue code rule (issues.id_policy) and analysis requirement (issues.analysis). Editor in task 11
   'settings.minutes.attachments.label': 'Minute attachment policy', 'settings.minutes.attachments.desc': 'Limits size, count, extensions, and previews for new attachments. Existing files are kept; workspace values are copied once to new projects.',
+  // SP5 B2 — minute root folder mode (D21 — the screen shows teams only; custom is set by platform admins through the settings RPC)
+  'settings.minutes.root_folders.label': 'Minute root folders', 'settings.minutes.root_folders.desc': 'Keeps one top-level folder per team in the minutes explorer. Creating a team creates its folder, and renaming a team renames the folder.',
+  'settings.rootFolders.teams': 'Per-team folders', 'settings.rootFolders.custom': 'Named folders (external sync only)',
+  'settings.rootFolders.current': 'Current mode', 'settings.rootFolders.names': 'Named root folders',
+  'settings.rootFolders.toTeams': 'Switch back to per-team folders', 'settings.rootFolders.toTeamsHint': 'Switching back creates folders for active common teams that have none. Existing folders stay.',
+  'settings.rootFolders.platformOnly': 'Only platform admins can change this mode.',
+  'settings.rootFolders.invalid': 'The saved root folder setting is damaged, so per-team folders apply. A platform admin can repair it by switching back.',
+  'settings.rootFolders.saved': 'Switched back to per-team folders.', 'settings.rootFolders.uncertain': 'Could not confirm the save. Retry the same command to check it.',
   'settings.attendance.types.label': 'Attendance types', 'settings.attendance.types.desc': 'Types used in attendance entry, legends, and monthly totals. The tally class cannot change once records exist; move records to another type before deleting one.',
   'settings.meetings.categories.label': 'Meeting categories', 'settings.meetings.categories.desc': 'Meeting category options and colors. Move meetings to another category before deleting one in use.',
   'settings.issues.severities.label': 'Issue severities', 'settings.issues.severities.desc': 'Issue severity options, ranks, and colors. Move issues to another severity before deleting one in use.',

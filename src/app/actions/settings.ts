@@ -303,6 +303,13 @@ function workspaceAdapter(workspaceId: string): ScopeAdapter {
     rpc: (admin, x) => admin.rpc('apply_workspace_settings', { p_workspace_id: workspaceId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
     afterApplied: async (_admin, _prev, set, actor) => {
+      // 최상위 폴더 모드 → teams(SP5 B2 — D50 ③④): 루트 없는 활성 공용 팀의 루트를 만든다(멱등, 설정 행 FOR UPDATE 로 create_team 과 직렬).
+      // 둘째 트랜잭션이라 실패할 수 있다 — 저장은 성공으로 두고 로그만 남긴다. 편철·업로드의 지연 수렴(ensureTeamRoot)이 메운다
+      const roots = set['minutes.root_folders'] as { mode?: unknown } | undefined
+      if (roots?.mode === 'teams') {
+        const { error } = await adminFor({ workspaceId }).admin.rpc('ensure_team_roots', { p_actor: actor.userId, p_workspace_id: workspaceId })
+        if (error) console.error('[settings] 팀 루트 보장 실패(지연 수렴에 맡긴다)', { workspaceId, code: error.code, message: error.message })
+      }
       const allowed = set['modules.allowed'] as ModuleId[] | undefined
       if (!allowed?.includes('agents')) return { ok: true }
       // 허용 목록의 같은 값 재저장도 백필한다. RPC 적용 후 일부 프로젝트에서 실패한 경우의 복구 경로다.

@@ -17,6 +17,8 @@ const expectedStatus: Record<string, string> = {
   'issues.id_policy': 'verified', 'issues.analysis': 'verified', 'minutes.attachments': 'verified',
   // SP5 B4 — 어휘 다섯. 정의만 먼저(stored) — 트리거·소비처·편집기가 이어지면 verified 로 올린다
   'attendance.types': 'verified', 'meetings.categories': 'verified', 'issues.severities': 'verified', 'issues.sources': 'verified', 'issues.cause_categories': 'verified',
+  // SP5 B2 — 최상위 폴더 모드. SQL(create_team·ensure_team_roots)과 편집기가 먼저 이어지고(wired), 앱 소비처·검증이 끝나면 verified
+  'minutes.root_folders': 'wired',
 }
 
 /** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.
@@ -27,9 +29,9 @@ const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
 }
 
 describe('설정 카탈로그 동기화', () => {
-  it('29정의(키 이름 25)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('30정의(키 이름 26)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(29)
+    expect(defs).toHaveLength(30)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
     for (const def of defs) {
@@ -85,14 +87,10 @@ describe('설정 카탈로그 동기화', () => {
   })
 })
 
-describe('PLANNED_KEYS — SP5 의 남은 키는 체크포인트 이름으로(스펙 §1.1 정본 결정 9 행)', () => {
-  it('달력 셋·B1 이슈 둘·B3 첨부·B4 어휘 다섯은 등록돼 목록에 없고, SP5 행은 B1~B4 체크포인트를 적는다', () => {
+describe('PLANNED_KEYS — SP5 의 키는 전부 등록됐다(스펙 §1.1 정본 결정 9 행·D44)', () => {
+  it('달력 셋·B1 이슈 둘·B2 최상위 폴더·B3 첨부·B4 어휘 다섯은 등록돼 목록에 SP5 행이 없다', () => {
     expect(PLANNED_KEYS.filter((k) => k.key.startsWith('calendar.'))).toEqual([])
     expect(PLANNED_KEYS.filter((k) => k.key === 'issues.id_policy' || k.key === 'issues.analysis')).toEqual([])   // SP5 B1 과제 3 이 등록
-    const sp5 = PLANNED_KEYS.filter((k) => k.sp.startsWith('SP5 '))
-    expect(sp5.length).toBeGreaterThan(0)
-    for (const k of sp5) expect(k.sp, k.key).toMatch(/^SP5 B[1-4]$/)
-    const where = Object.fromEntries(sp5.map((k) => [`${k.scope}/${k.key}`, k.sp]))
-    expect(where).toEqual({ 'workspace/minutes.root_folders': 'SP5 B2' })
+    expect(PLANNED_KEYS.filter((k) => k.sp.startsWith('SP5 '))).toEqual([])                                    // B2 가 minutes.root_folders 를 등록 — 마지막 행
   })
 })

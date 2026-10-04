@@ -1,5 +1,6 @@
-// 워크스페이스 키 12개(SP5 A 의 calendar.* 셋 포함)(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
+// 워크스페이스 키 13개(SP5 A 의 calendar.* 셋, B3 의 minutes.attachments, B2 의 minutes.root_folders 포함)(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
 import { DEFAULT_ATTACHMENT_POLICY, parseAttachmentPolicy, type AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
+import { DEFAULT_ROOT_FOLDERS, parseRootFolders, type RootFoldersSetting } from '@/lib/minutes/rootFolders'
 import { defineSetting, type Parsed, type SettingDef } from '../def'
 import { NON_CORE_MODULES, isModuleId, type ModuleId } from '@/lib/modules/defaults'
 import { isNavItemId, type NavItemId } from '@/lib/nav/ids'
@@ -194,5 +195,13 @@ export const WORKSPACE_DEFS = [
     parse: parseAttachmentPolicy,
     widget: { kind: 'custom', component: 'AttachmentPolicyEditor' }, editor: 'workspace_admin', apply: 'immediate', impact: ['future_only'],
     sql: { readers: ['minute_files_attachment_guard'] },
+  }),
+  // SP5 B2(D21·D50): editor 는 SP7 전까지 키 전체가 platform_admin(값 안의 mode 를 가리지 못한다 — custom 은 v2.9 송부 전 켜지 않는다).
+  // create_team(FOR SHARE)·ensure_team_roots(FOR UPDATE)가 설정 행을 잠그고 mode 를 읽는다. 바꾼 모드는 이후 팀 생성·편철에만 — 기존 폴더는 그대로
+  defineSetting<'minutes.root_folders', RootFoldersSetting>({
+    key: 'minutes.root_folders', scope: 'workspace', module: 'minutes', default: { ...DEFAULT_ROOT_FOLDERS },
+    parse: parseRootFolders,
+    widget: { kind: 'custom', component: 'RootFoldersEditor' }, editor: 'platform_admin', apply: 'immediate', impact: ['future_only'],
+    sql: { readers: ['create_team', 'ensure_team_roots'] },
   }),
 ] as const satisfies readonly SettingDef[]

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Settings2, Palette, Mail, Menu, History, CalendarDays, Paperclip } from 'lucide-react'
+import { Settings2, Palette, Mail, Menu, History, CalendarDays, Paperclip, FolderTree } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
@@ -20,6 +20,7 @@ import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } f
 import { SectionCard } from '@/components/ui/SectionCard'
 import { CalendarSettingsPanel } from '@/components/settings/CalendarSettingsPanel'
 import { AttachmentPolicyEditor } from '@/components/settings/AttachmentPolicyEditor'
+import { RootFoldersEditor } from '@/components/settings/RootFoldersEditor'
 import { parseAttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
 import { t } from '@/lib/i18n/dict'
 import { workspaceCalendarFieldsOf } from '@/lib/settings/calendarField'
@@ -64,6 +65,9 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   const attState = config.keys['minutes.attachments']
   const attParsed = attState.status === 'set' || attState.status === 'default' ? parseAttachmentPolicy(attState.value) : null
   const attPolicy = attParsed?.ok ? attParsed.value : null
+  // 최상위 폴더 모드(SP5 B2) — 상태 그대로(손상은 invalid). 화면은 teams 만 고르게 하고 되돌리기는 플랫폼 관리자만(D21)
+  const rootState = config.keys['minutes.root_folders']
+  const rootFolders = rootState.status === 'set' || rootState.status === 'default' ? rootState.value : null
   // 달력 절(스펙 D36·§5.1 A 둘째 행) — 손상 키도 편집기를 그린다(복구 경로). '오늘'은 tz 가 유효할 때만
   const calendarFields = workspaceCalendarFieldsOf(config.keys)
   const calendarToday = calendarFields.timezone.value ? todayIn(calendarFields.timezone.value, new Date()) : null
@@ -128,6 +132,11 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         {/* 이 페이지는 워크스페이스 관리자만 들인다 — 키 정의의 editor 도 workspace_admin 이라 액션이 다시 판정한다 */}
         <AttachmentPolicyEditor key={`${access.id}-${config.revision}`} scope={{ workspaceId: access.id }} revision={config.revision} canEdit
           policy={attPolicy} invalid={attPolicy === null} />
+      </SectionCard>
+      <SectionCard id="workspace-minute-roots" searchText="minutes.root_folders 회의록 최상위 폴더 팀 폴더" eyebrow="회의록" title={t(locale, 'settings.minutes.root_folders.label')} icon={FolderTree}>
+        <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.minutes.root_folders.desc')}</p>
+        <RootFoldersEditor key={`${access.id}-${config.revision}`} workspaceId={access.id} revision={config.revision} canEdit={access.isSuperuser}
+          value={rootFolders} invalid={rootFolders === null} />
       </SectionCard>
       <SectionCard id="workspace-menu" searchText="navigation.menu" eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
         <MenuOrderEditor workspaceId={access.id} revision={config.revision}

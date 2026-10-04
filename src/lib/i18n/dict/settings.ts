@@ -228,6 +228,14 @@ export const settingsKo = {
   'settings.calendar.week_start.sunday': '일요일', 'settings.calendar.week_start.monday': '월요일',
   // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11
   'settings.minutes.attachments.label': '회의록 첨부 정책', 'settings.minutes.attachments.desc': '새 첨부의 용량·개수·형식과 미리보기를 정합니다. 기존 파일은 지우지 않으며 워크스페이스 값은 새 프로젝트에 한 번 복사됩니다.',
+  // SP5 B2 — 회의록 최상위 폴더 모드(D21 — 화면은 teams 만, custom 은 플랫폼 관리자가 설정 RPC 로만)
+  'settings.minutes.root_folders.label': '회의록 최상위 폴더', 'settings.minutes.root_folders.desc': '회의록 탐색기의 최상위 폴더를 팀마다 하나씩 둡니다. 팀을 만들면 그 팀의 폴더가 생기고, 팀 이름을 바꾸면 폴더 이름이 따라갑니다.',
+  'settings.rootFolders.teams': '팀별 폴더', 'settings.rootFolders.custom': '지정 이름 폴더(외부 연동 전용)',
+  'settings.rootFolders.current': '현재 방식', 'settings.rootFolders.names': '지정한 최상위 폴더',
+  'settings.rootFolders.toTeams': '팀별 폴더로 되돌리기', 'settings.rootFolders.toTeamsHint': '되돌리면 폴더가 없는 활성 공용 팀의 폴더를 만듭니다. 기존 폴더는 그대로입니다.',
+  'settings.rootFolders.platformOnly': '이 방식은 플랫폼 관리자만 바꿀 수 있습니다.',
+  'settings.rootFolders.invalid': '저장된 최상위 폴더 설정이 손상되어 팀별 폴더로 동작합니다. 플랫폼 관리자가 되돌리면 고쳐집니다.',
+  'settings.rootFolders.saved': '팀별 폴더로 되돌렸습니다.', 'settings.rootFolders.uncertain': '저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.',
   'settings.attendance.types.label': '근태 유형', 'settings.attendance.types.desc': '근태 등록 선택지·범례·월 집계에 쓰는 유형입니다. 집계 분류는 기록이 있으면 바꿀 수 없고, 기록이 있는 유형은 다른 유형으로 옮긴 뒤 지웁니다.',
   'settings.meetings.categories.label': '회의 분류', 'settings.meetings.categories.desc': '회의 등록 선택지와 색입니다. 회의가 있는 분류는 다른 분류로 옮긴 뒤 지웁니다.',
   'settings.issues.severities.label': '이슈 심각도', 'settings.issues.severities.desc': '이슈 심각도 선택지·순위·색입니다. 이슈가 있는 심각도는 다른 값으로 옮긴 뒤 지웁니다.',

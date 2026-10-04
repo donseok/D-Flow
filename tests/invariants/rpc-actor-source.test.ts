@@ -44,6 +44,11 @@ const ACTOR_SOURCE_EXCEPTIONS: Readonly<Record<string, ActorException>> = {
     count: 1,
     why: '설정 명령 어댑터(두 단계) — updateWorkspaceSettings 의 가드 결과 g.actor 를 runCommand 가 받아 어댑터 rpc(admin, x) 의 x.actor 로 싣는다',
   },
+  'src/app/actions/settings.ts#ensure_team_roots': {
+    expr: 'actor.userId',
+    count: 1,
+    why: '설정 명령 어댑터의 저장 뒤 후처리(SP5 B2 — 최상위 폴더 모드 teams) — updateWorkspaceSettings 의 가드 결과 g.actor 를 runCommand 가 afterApplied(…, actor) 로 넘긴다. RPC 가 워크스페이스 관리자를 다시 판정한다',
+  },
   'src/lib/settings/write.ts#apply_project_settings': {
     expr: 'actorUserId',
     count: 1,

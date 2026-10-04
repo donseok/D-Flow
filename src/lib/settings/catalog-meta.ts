@@ -9,6 +9,7 @@ const A = (status: CatalogStatus, consumers: string[], tests: string[]): Catalog
 const S5A = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 A' })
 const S5B1 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B1' })
 const S5B3 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B3' })
+const S5B2 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B2' })
 const S5B4 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B4' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
@@ -55,6 +56,8 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'issues.id_policy': S5B1('verified', ['src/lib/issues/context.ts', 'src/app/actions/issues.ts', 'src/components/settings/IssuePolicyEditor.tsx'], ['tests/issues/id-policy.test.ts', 'tests/rls/issue-code-policy.test.ts', 'tests/ui/issue-policy-editor.test.tsx']),
   'issues.analysis': S5B1('verified', ['src/lib/issues/rules.ts', 'src/app/actions/issues.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/issues/rules.test.ts', 'tests/actions/issue-entry-rules.test.ts', 'tests/rls/issue-areas.test.ts']),
   'minutes.attachments': S5B3('verified', ['src/lib/minutes/resolveAttachmentPolicy.ts', 'src/app/actions/minutes.ts', 'src/components/settings/AttachmentPolicyEditor.tsx'], ['tests/minutes/attachment-policy.test.ts', 'tests/rls/minute-attachments-policy.test.ts', 'tests/ui/attachment-policy-editor.test.tsx']),
+  // SP5 B2 — create_team·ensure_team_roots(SQL)가 모드를 읽고, 외부 업로드의 경로 정규화가 모드별로 갈린다(v2.9). 화면은 teams 만(D21)
+  'minutes.root_folders': S5B2('wired', ['supabase/migrations/0024_minutes_teams.sql', 'src/components/settings/RootFoldersEditor.tsx'], ['tests/minutes/root-folders.test.ts', 'tests/rls/minutes-teams.test.ts']),
   'attendance.types': S5B4('verified', ['src/components/attendance/AttendanceView.tsx', 'src/app/actions/attendance.ts', 'src/lib/report/weekly.ts', 'src/lib/ai/tools/attendance.ts', 'src/lib/ai/chat/router.ts', 'src/components/settings/VocabEditor.tsx'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/report/weekly.test.ts', 'tests/ai/chat-v2-router.test.ts', 'tests/ui/vocab-editor.test.tsx']),
   'meetings.categories': S5B4('verified', ['src/components/meetings/MeetingFormModal.tsx', 'src/components/meetings/MeetingCalendar.tsx', 'src/app/actions/meetings.ts', 'src/lib/data/meetings.ts', 'src/lib/minutes/meetings.ts', 'src/app/actions/meetingNotify.ts'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/minutes/external-api.test.ts', 'tests/ui/meeting-form-announce.test.tsx', 'tests/ui/vocab-editor.test.tsx']),
   'issues.severities': S5B4('verified', ['src/components/issues/IssuesView.tsx', 'src/components/issues/IssueModals.tsx', 'src/app/actions/issues.ts', 'src/lib/domain/issues.ts', 'src/lib/report/issues/model.ts', 'src/components/dashboard/IssueQueueCard.tsx'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/domain/issues.test.ts', 'tests/actions/vocab-migrate.test.ts', 'tests/ui/vocab-editor.test.tsx']),
@@ -66,7 +69,6 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
 export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: string; shape: string }[] = [
   { key: 'portal.widgets', scope: 'workspace', sp: 'SP3b', shape: '{ id: PortalWidgetId; enabled: boolean }[]' },
   { key: 'security.local_drafts', scope: 'workspace', sp: 'SPU1', shape: '{ allowed: boolean; retention_days: number }' },
-  { key: 'minutes.root_folders', scope: 'workspace', sp: 'SP5 B2', shape: "{ mode: 'teams' } | { mode: 'custom'; names: string[] }" },
   { key: 'notify.policy', scope: 'workspace', sp: 'SP8', shape: '{ [type]: { enabled: boolean } }' },
   { key: 'workflow.issue_statuses', scope: 'project', sp: 'SP5b', shape: '{ code; label; color; category; sort; active }[]' },
   { key: 'workflow.wbs_stage_labels', scope: 'project', sp: 'SP5b', shape: 'Partial<Record<단계, string>>' },
