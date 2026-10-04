@@ -52,6 +52,8 @@ export const meetingsKo = {
   'meet.form.noEmailWarn': '이메일 없음 — 내 회의에 표시되지 않을 수 있습니다.',
   'meet.attendeeSearch': '이름·팀 검색',
   'meet.attendeeSelected': '명 선택',
+  'meet.list.loading': '이 달의 회의를 불러오는 중입니다…',
+  'meet.detail.loadFailed': '회의 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.',
   'meet.detail.attendees': '참석자',
   'meet.detail.noAttendees': '지정된 참석자가 없습니다.',
   'meet.detail.linkedMinutes': '연결된 회의록',

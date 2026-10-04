@@ -45,7 +45,7 @@ import { useMinuteFontSize } from './useMinuteFontSize'
 import { MinuteVersionPanel, type MinuteVersionListItem } from './MinuteVersionPanel'
 import { MinuteAttachmentsPanel } from './MinuteAttachmentsPanel'
 import { MinuteWikiImpactCard, type MinuteWikiImpactCardProps } from './MinuteWikiImpactCard'
-import { useTeamSlot } from '@/components/app/TeamsProvider'
+import { TeamBar } from '@/components/minutes/TeamBar'
 import {
   type IssueMinuteSourceKind,
   type MinuteLinkedIssue,
@@ -125,7 +125,6 @@ export function MinuteViewer({
   const currentHref = links.minute(minute.id)
   const { t } = useLocale()
   const { toast } = useToast()
-  const slotOf = useTeamSlot()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [metaOpen, setMetaOpen] = useState(false)
@@ -712,9 +711,7 @@ export function MinuteViewer({
               표시 전용 링크 아님 — 탐색기가 아직 폴더 딥링크(?folder=)를 받지 않는다. */}
           <div className={`inline-flex min-w-0 max-w-[22rem] items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 shadow-sm ${
             pathSegments ? 'border-line-strong bg-surface' : 'border-dashed border-line-strong bg-surface/60'}`}>
-            <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(minute.teamCode).bar}`}>
-              {minute.teamCode}
-            </span>
+            <TeamBar code={minute.teamCode} shape="pill" />
             <nav aria-label={t('min.detail.pathAria')} title={pathTitle}
               className="flex min-w-0 items-center gap-1 text-xs">
               <FolderOpen aria-hidden className={`h-3.5 w-3.5 shrink-0 ${pathSegments ? 'text-brand' : 'text-ink-subtle'}`} />

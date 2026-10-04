@@ -138,6 +138,18 @@ describe('MyMeetingsView — 조회 실패', () => {
     expect(container.textContent).not.toContain('meet.empty.desc')
   })
 
+  it('목록 탭은 달을 읽는 동안 빈 상태가 아니라 읽는 중을 보이고, 다 읽으면 결과를 그린다(SP5 B2 — D39)', async () => {
+    await mount()
+    await openListTab()
+    const release = holdFetch()
+    await act(async () => { monthBtn('next').click(); await flush() })
+    expect(container.querySelector('[data-my-meetings-loading]')?.textContent).toContain('meet.list.loading')
+    expect(container.textContent).not.toContain('meet.empty.mineTitle')
+    await release({ ok: true, meetings: [], exceptions: [], categories: {} })
+    expect(container.querySelector('[data-my-meetings-loading]')).toBeNull()
+    expect(container.textContent).toContain('meet.empty.mineTitle')
+  })
+
   it('조회 성공 + 회의 0건이면 종전대로 빈 상태이고 경고는 없다', async () => {
     await mount()
     await openListTab()

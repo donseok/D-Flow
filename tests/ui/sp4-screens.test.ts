@@ -32,10 +32,10 @@ const FIXED_COLOR = /(?<![\w-])(?:text|bg|border|outline|ring|fill|stroke)-(?:bl
 
 describe('#25 주간 — 색 토큰', () => {
   it.each(WEEKLY_COLOR_FILES)('%s — 원색·흑백 고정색 0', (f) => { expect(read(f)).not.toMatch(FIXED_COLOR) })
-  it('no-raw-color 허용 목록에 주간 줄이 없고, 프로젝트 점 색 표의 사유는 SP5 다(스펙 §2.4)', () => {
+  it('no-raw-color 허용 목록에 주간 줄이 없고, 프로젝트 점 색 표는 SP5 B2 가 토큰으로 옮겨 줄이 없다(스펙 §2.4 — SP5 D39)', () => {
     const allow = read('tests/css/no-raw-color.test.ts')
     expect(allow).not.toContain("'src/components/weekly/")
-    expect(allow).toMatch(/'src\/lib\/domain\/projectColors\.ts': \{[^}]*SP5/)
+    expect(allow).not.toContain("'src/lib/domain/projectColors.ts'")
   })
   it('프레즌스 이름 칩은 배경·글자 짝(presenceStyle) — 흰 글자 고정이 없다(레인 B 인계 E)', () => {
     const src = read('src/components/weekly/SheetCell.tsx')

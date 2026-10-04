@@ -11,7 +11,7 @@ import { MINUTES_TREE_LIMIT } from '@/lib/domain/minutes'
 import { fetchMinutesRange, fetchMinutesSearch, fetchMinutesExplorer, fetchMinuteFavorites, toggleMinuteFavorite } from '@/app/actions/minutes'
 import { queueUiPref } from '@/lib/prefs/debouncedSave'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamSlot } from '@/components/app/TeamsProvider'
+import { TeamBar } from '@/components/minutes/TeamBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { CardSkeleton } from '@/components/ui/Skeleton'
@@ -38,7 +38,7 @@ function monthRangeOf(year: number, month0: number): [string, string] {
 export function MinutesView({
   scope, initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
   initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
-  adminProjectIds = [], isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null, calendar,
+  isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null, calendar,
   teamOptions = [], initialTeamId = null,
 }: {
   /** 화면의 범위(슬러그 워크스페이스 + ?project=, 계획 V13) — 월 이동·검색·탐색기·즐겨찾기 재조회에 그대로 넘긴다 */
@@ -51,12 +51,10 @@ export function MinutesView({
   projects: { id: string; name: string }[]
   currentUserId: string | null
   /** 관리자인 워크스페이스 id — **폴더 조작**(개명·이동·삭제)의 폴더별 판정 근거(서버: 작성자 ∨ 그 폴더
-   *  워크스페이스의 관리자, 0006). 회의록 개별 건 판정은 adminProjectIds·isSuperuser 로 한다. */
+   *  워크스페이스의 관리자, 0006). 회의록 개별 건 판정은 리프의 canEdit(서버 canEditMinute — D40)이다. */
   adminWorkspaceIds?: string[]
   /** 이 화면의 워크스페이스에 역할이 있음(hasProjectRoleInWorkspace) — 업로드 자격. */
   canEdit: boolean
-  /** 관리자 이상인 프로젝트 id — 회의록 개별 건 조작의 항목별 판정 근거(서버 checkOwner 미러). */
-  adminProjectIds?: string[]
   /** 슈퍼유저 — 프로젝트 미지정 회의록은 작성자 본인 또는 슈퍼유저만 조작 가능. */
   isSuperuser?: boolean
   defaultTeam?: TeamCode | null
@@ -98,7 +96,6 @@ export function MinutesView({
     key: tm.id,
     label: teamOptions.filter(o => o.code === tm.code).length > 1 ? `${tm.code} · ${tm.name}` : tm.code,
   })), [teamOptions])
-  const slotOf = useTeamSlot()
   const [initY, initM] = useMemo(() => todayIso.split('-').map(Number), [todayIso])
   const [year, setYear] = useState(initY)
   const [month0, setMonth0] = useState((initM || 1) - 1)
@@ -381,9 +378,7 @@ export function MinutesView({
                     <li key={mi.id}>
                       <Link href={minuteLinks.minute(mi.id)}
                         className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
-                        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
-                          {mi.teamCode}
-                        </span>
+                        <TeamBar code={mi.teamCode} />
                         <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
                         <span className="w-24 truncate text-right text-xs text-ink-subtle">{mi.createdByName ?? ''}</span>
                       </Link>
@@ -410,9 +405,7 @@ export function MinutesView({
                   <li key={mi.id}>
                     <Link href={minuteLinks.minute(mi.id)}
                       className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
-                      <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
-                        {mi.teamCode}
-                      </span>
+                      <TeamBar code={mi.teamCode} />
                       <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
                       <span className="w-24 truncate text-right text-xs text-ink-subtle">{mi.createdByName ?? ''}</span>
                     </Link>
@@ -445,7 +438,7 @@ export function MinutesView({
               onRetryFavorites={() => void loadFavorites()}
               layout={exLayout}
               currentUserId={currentUserId} adminWorkspaceIds={adminWorkspaceIds}
-              adminProjectIds={adminProjectIds} isSuperuser={isSuperuser}
+              isSuperuser={isSuperuser}
               projects={projects} myProjectIds={myProjectIds}
               meetingCategories={typeof treeState === 'object' ? treeState.meetingCategories : undefined}
               onChanged={() => { void loadTree(); router.refresh() }}

@@ -6,12 +6,12 @@ import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { isWorkspaceMember, type Actor } from '@/lib/domain/authz'
 import { revalidatePath } from 'next/cache'
-import { ERR_MEETINGS_LOAD, getMyMeetings, getMeetingDetail, type MyMeetingsResult } from '@/lib/data/meetings'
+import { ERR_MEETING_DETAIL, ERR_MEETINGS_LOAD, getMyMeetings, getMeetingDetail, type MeetingDetailResult, type MyMeetingsResult } from '@/lib/data/meetings'
 import { expandMeetings, RECURRENCE_ORDER } from '@/lib/domain/meetings'
 import { checkProjectVocab, vocabWriteFailure } from '@/lib/settings/vocabGuard'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { SAFE_ID_RE } from '@/lib/domain/validate'
-import type { Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
+import type { Meeting, MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
 
 export interface MeetingInput {
   title: string
@@ -318,14 +318,17 @@ export async function fetchMyMeetings(
   return getMyMeetings(workspaceId, gridStartIso, gridEndIso)
 }
 
-/** 상세 모달에서 호출하는 얇은 래퍼 — getMeetingDetail(서버 전용)을 세션 게이트 후 위임. */
-export async function fetchMeetingDetail(id: string): Promise<{ meeting: Meeting; attendees: MeetingAttendeeInfo[] } | null> {
+/** 상세 모달에서 호출하는 얇은 래퍼 — getMeetingDetail(서버 전용)을 세션 게이트 후 위임.
+ *  결과형(SP5 B2 — D39): 없음·거부·꺼진 모듈은 detail null(존재 은닉), 범위 조회 실패·상세 조회 실패는 ok:false(모달이 사유를 보인다) */
+export async function fetchMeetingDetail(id: string): Promise<MeetingDetailResult> {
+  const none: MeetingDetailResult = { ok: true, detail: null }
   const user = await getSession()
-  if (!user) return null
-  // 모듈 관문(스펙 §4.2) — 회의 행의 프로젝트로 판정한다. 범위 실패·거부는 기존 '없음'(null)
+  if (!user) return none
+  // 모듈 관문(스펙 §4.2) — 회의 행의 프로젝트로 판정한다. 범위 조회 실패는 실패, 없음·거부는 '없음'
   const scope = await resolveProjectId('meetings', id)
-  if (!scope.ok || !scope.projectId) return null
+  if (!scope.ok) return scope.error === ERR_LOOKUP ? { ok: false, error: ERR_MEETING_DETAIL } : none
+  if (!scope.projectId) return none
   const mod = await requireModule({ projectId: scope.projectId }, 'meetings')
-  if (!mod.ok) return null
+  if (!mod.ok) return none
   return getMeetingDetail(id)
 }

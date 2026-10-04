@@ -176,6 +176,13 @@ describe('IssuesView Mega 필터', () => {
     expect(container.textContent).not.toContain('issue.new')
     expect(container.textContent).not.toContain('issue.analysis.open')
   })
+  it('내 명단 행 조회 실패면 \'내 담당\' 옆에 사유를 보인다 — 빈 결과로 위장하지 않는다(SP5 B2 — D39)', async () => {
+    await act(async () => root.render(<IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="UTC" projectId="project-1" currentUserId="u" canEdit isProjectAdmin={false} myMemberIds={[]} myMemberIdsFailed today="2026-07-31" members={[]} issues={[issue('i1', '00', 'readable issue')]} severities={SEVERITIES} sources={SOURCES} />))
+    expect(container.textContent).toContain('issue.filter.mineFailed')
+    await act(async () => root.render(<IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="UTC" projectId="project-1" currentUserId="u" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]} issues={[issue('i1', '00', 'readable issue')]} severities={SEVERITIES} sources={SOURCES} />))
+    expect(container.textContent).not.toContain('issue.filter.mineFailed')
+  })
+
   it('analysis off hides report action and filters out unused inactive areas', async () => {
     const entry = { ...TEST_ENTRY_CONTEXT, rules: { areaRequired: false, analysis: 'off' as const }, areas: TEST_ENTRY_CONTEXT.areas.map(a => ({ ...a, active: a.id !== '02' && a.id !== '03' })) }
     await act(async () => root.render(<IssuesView entryContext={entry} timeZone="UTC" projectId="project-1" currentUserId="u" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]} issues={[issue('i1', '02', 'historic area issue')]} severities={SEVERITIES} sources={SOURCES} />))

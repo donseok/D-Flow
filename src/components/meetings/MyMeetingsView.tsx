@@ -7,6 +7,7 @@ import type { Meeting, MeetingException, MeetingOccurrence } from '@/lib/domain/
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Spinner } from '@/components/ui/Spinner'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { fmtDate } from '@/components/wbs/shared'
 import { expandMeetings, sortOccurrences, meetingEditHref } from '@/lib/domain/meetings'
@@ -263,8 +264,13 @@ export function MyMeetingsView({
         // 아래로 내려 보던 화면에서 실패해도 경고가 고정 툴바 뒤에 가려지지 않는다.
         failed ? null : <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} projectDotClass={projectDotClass} calendar={calendar} categories={data.categories} />
       ) : listRows.length === 0 ? (
-        // 못 읽은 달을 '회의 없음'으로 그리지 않는다 — 사유는 위 경고가 보인다. 읽는 중인 달(stale)도 아직 '없음'이 아니다.
-        failed || isStale ? null : <EmptyState icon={CalendarX2}
+        // 못 읽은 달을 '회의 없음'으로 그리지 않는다 — 사유는 위 경고가 보인다. 읽는 중인 달(stale)도 아직 '없음'이 아니다 —
+        // 빈 화면 대신 읽는 중임을 보인다(SP5 B2 — D39, 개정 §8.1 #22 '목록 탭 로딩')
+        failed ? null : isStale ? (
+          <div data-my-meetings-loading className="card flex items-center justify-center gap-2 py-10 text-sm text-ink-muted">
+            <Spinner className="h-4 w-4" />{t('meet.list.loading')}
+          </div>
+        ) : <EmptyState icon={CalendarX2}
           title={onlyMine ? t('meet.empty.mineTitle') : t('meet.empty.title')}
           description={onlyMine ? t('meet.empty.mineDesc') : t('meet.empty.desc')} />
       ) : (

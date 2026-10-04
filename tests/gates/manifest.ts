@@ -145,7 +145,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('meetings')}#setMeetingAttendees`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, []], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
   [`${A('meetings')}#cancelOccurrence`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, '2026-09-01'], ownerBranch: 'occurrenceGate → adminOrOwnerGate' },
   [`${A('meetings')}#fetchMyMeetings`]: { guard: 'session', module: 'meetings', note: '내 회의 — 인자 워크스페이스(소속 확인), 행은 getMyMeetings 가 그 워크스페이스로 거른다', sample: [W, '2026-09-01', '2026-09-30'], deny: { ok: true, meetings: [], exceptions: [], categories: {} }, target: 'workspace' },
-  [`${A('meetings')}#fetchMeetingDetail`]: { guard: 'session', module: 'meetings', note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: null },
+  [`${A('meetings')}#fetchMeetingDetail`]: { guard: 'session', module: 'meetings', note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: { ok: true, detail: null } },   // 결과형(SP5 B2 — D39): 없음·거부·꺼진 모듈은 detail null, 조회 실패만 ok:false
   // ── minutes — 워크스페이스 모듈(행의 워크스페이스 / 새 회의록은 대상 / 행 없는 목록·폴더는 세션 유일 워크스페이스)
   [`${A('minutes')}#createMinute`]: { guard: 'session', module: 'minutes', note: 'requireActor — 프로젝트면 그 프로젝트, 아니면 인자 워크스페이스(소속 확인 — D26)', sample: [{ date: '2026-09-01', teamCode: 'PMO', title: 'Acme', bodyMd: '# b', projectId: null }, null, undefined, W], target: 'workspace' },
   [`${A('minutes')}#updateMinuteMeta`]: { guard: 'session', module: 'minutes', note: 'requireActor + checkOwner(행의 워크스페이스) — 관문이 입력 검증 뒤라 유효한 표본', sample: [U, { minuteDate: '2026-09-01', teamCode: 'PMO', title: 'Acme', meetingId: null }] },

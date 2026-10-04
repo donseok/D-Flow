@@ -72,9 +72,11 @@ export async function notifyMeetingSaved(
     return { ok: false, error: `추가 수신 이메일은 최대 ${MAX_EXTRA_EMAILS}개까지 입력할 수 있습니다.`, ...NONE }
   }
 
-  const detail = await getMeetingDetail(meetingId)
-  if (!detail) return { ok: false, error: '회의를 찾을 수 없습니다.', ...NONE }
-  const { meeting, attendees } = detail
+  const res = await getMeetingDetail(meetingId)
+  // 조회 실패를 '회의 없음'으로 보이지 않는다 — 다시 시도할 수 있는 실패다(SP5 B2 — D39)
+  if (!res.ok) return { ok: false, error: res.error, ...NONE }
+  if (!res.detail) return { ok: false, error: '회의를 찾을 수 없습니다.', ...NONE }
+  const { meeting, attendees } = res.detail
 
   // 남의 회의 ID 로 메일을 반복 발송하는 통로를 막는 유일한 지점.
   const isOwner = meeting.createdBy === actor?.userId

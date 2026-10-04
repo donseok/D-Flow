@@ -42,7 +42,7 @@ describe('?project= 거르기(D53)', () => {
   it('접근 가능한 그 워크스페이스 프로젝트 — 로더·뷰에 projectId, 칩과 × 링크', async () => {
     const html = await render({ project: P_IN })
     expect(h.getMinutesPage).toHaveBeenCalledWith(WS.id, P_IN, expect.any(String), expect.any(String), null)
-    expect(h.getMinutesExplorer).toHaveBeenCalledWith(WS.id, P_IN)
+    expect(h.getMinutesExplorer).toHaveBeenCalledWith(WS.id, P_IN, expect.anything())
     expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ scope: { workspaceId: WS.id, projectId: P_IN } }))
     expect(html).toContain('프로젝트: <!-- -->Apollo')
     expect(html).toContain('href="/w/acme/minutes"')
@@ -51,7 +51,7 @@ describe('?project= 거르기(D53)', () => {
     for (const p of [P_OTHER_WS, P_HIDDEN, 'x', [P_IN, P_IN]]) {
       vi.clearAllMocks()
       const html = await render({ project: p })
-      expect(h.getMinutesExplorer, String(p)).toHaveBeenCalledWith(WS.id, null)
+      expect(h.getMinutesExplorer, String(p)).toHaveBeenCalledWith(WS.id, null, expect.anything())
       expect(h.viewProps, String(p)).toHaveBeenCalledWith(expect.objectContaining({ scope: { workspaceId: WS.id, projectId: null } }))
       expect(html, String(p)).not.toContain('프로젝트:')
     }

@@ -47,7 +47,7 @@ const folders: MinuteFolder[] = [
 const leaves: ExplorerLeaf[] = [
   {
     id: 'm1', minuteDate: '2026-07-24', teamCode: 'MES', title: '생산계획-기획팀',
-    fileCount: 0, createdBy: 'u1', createdByName: '홍길동', bodyPreview: '',
+    fileCount: 0, createdBy: 'u1', createdByName: '홍길동', bodyPreview: '', canEdit: true,
     meetingCategory: null, folderId: 'f-plan',
   },
 ]

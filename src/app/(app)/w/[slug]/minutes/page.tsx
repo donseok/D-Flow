@@ -6,7 +6,7 @@ import { getMinuteFavorites, getMinutesExplorer, getMinutesPage } from '@/lib/da
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { UUID_RE } from '@/lib/domain/validate'
-import { adminProjectIds, adminWorkspaceIdList, hasProjectRoleInWorkspace } from '@/lib/domain/authz'
+import { adminWorkspaceIdList, hasProjectRoleInWorkspace } from '@/lib/domain/authz'
 import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { getMyProjectIds } from '@/lib/data/members'
 import { getAccountPrefs } from '@/app/actions/preferences'
@@ -71,7 +71,7 @@ export default async function MinutesPage({ params, searchParams }: {
   // 아래 히어로 KPI(minutes.length)와 리스트/달력 전환용 월 목록까지 늦어진다.
   const [minutes, tree, favs, user, prefs, locale, myProjectIds] = await Promise.all([
     getMinutesPage(scope.ws.id, projectId, rs, re, initialTeamId),
-    getMinutesExplorer(scope.ws.id, projectId),
+    getMinutesExplorer(scope.ws.id, projectId, m ?? null),
     getMinuteFavorites(scope.ws.id),
     getSession(),
     getAccountPrefs(),
@@ -110,7 +110,7 @@ export default async function MinutesPage({ params, searchParams }: {
           myProjectIds={myProjectIds}
           projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
           noProjectWorkspace={{ ok: true, workspaceId: scope.ws.id }}
-          adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false}
+          isSuperuser={m?.isSuperuser ?? false}
           calendar={calendarViewOf(vc.calendar)} teamOptions={teamOptions} initialTeamId={initialTeamId} />
       </ProjectPageShell>
     </MinutesScopeProvider>

@@ -25,7 +25,7 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
-import { useTeamSlot } from '@/components/app/TeamsProvider'
+import { TeamBar } from '@/components/minutes/TeamBar'
 import { Modal } from '@/components/ui/Modal'
 import { FolderManageModal } from './FolderManageModal'
 import { FolderPickModal } from './FolderPickModal'
@@ -84,7 +84,7 @@ const rowCls = (active: boolean) =>
  *  leaves 는 팀 탭 필터가 이미 적용된 것 — 카운트·스코프가 필터와 정합. folders 는 항상 전부. */
 export function MinutesExplorer({
   folders, leaves, favorites, onToggleFavorite, onRetryFavorites,
-  layout, currentUserId, adminWorkspaceIds = [], adminProjectIds = [], isSuperuser = false,
+  layout, currentUserId, adminWorkspaceIds = [], isSuperuser = false,
   onChanged, onFolderSelect, projects = [],
   myProjectIds = null, meetingCategories,
 }: {
@@ -98,9 +98,7 @@ export function MinutesExplorer({
   /** 관리자인 워크스페이스 id — 폴더 개명·이동·삭제의 폴더별 판정 근거. 서버 가드(작성자 ∨ 그 폴더
    *  워크스페이스의 관리자, 0006)를 미러한다. 프로젝트 관리자라는 사실만으로는 열리지 않는다. */
   adminWorkspaceIds?: string[]
-  /** 회의록 개별 건은 **그 회의록 프로젝트의** 관리자 기준(서버 checkOwner). 관리자인 프로젝트 id 목록. */
-  adminProjectIds?: string[]
-  /** 프로젝트 미지정(projectId null) 회의록은 isProjectAdmin(actor, null)=슈퍼유저만 — fail-closed. */
+  /** 플랫폼 관리자 — 폴더 관리 판정(모든 워크스페이스의 관리자). 회의록 개별 건은 리프의 canEdit(서버 canEditMinute — D40) */
   isSuperuser?: boolean
   onChanged: () => void
   onFolderSelect?: (folderId: string | null) => void
@@ -219,14 +217,9 @@ export function MinutesExplorer({
   const canManageFolder = (f: MinuteFolder) =>
     (f.createdBy !== null && f.createdBy === currentUserId)
     || isSuperuser || (f.workspaceId != null && adminWorkspaceIds.includes(f.workspaceId))
-  /** isProjectAdmin(actor, projectId) 의 클라이언트 등가식 — 슈퍼유저는 모든 프로젝트의 관리자다. */
-  const isAdminOf = (projectId: string | null | undefined) =>
-    isSuperuser || (projectId != null && adminProjectIds.includes(projectId))
-  // 서버 checkOwner 와 같은 식: 작성자 본인 또는 **그 회의록 프로젝트의** 관리자.
-  // 전역 shim(어느 프로젝트든 관리자)으로 판정하면 A 프로젝트 관리자에게 B 프로젝트 회의록의
-  // 이동·일괄지정 어포던스가 열리고 전부 서버에서 거부된다.
-  const canMoveLeaf = (l: ExplorerLeaf) =>
-    (l.createdBy !== null && l.createdBy === currentUserId) || isAdminOf(l.projectId)
+  // 이동·일괄 지정 어포던스(D40) = 서버 checkOwner 와 같은 canEditMinute — 서버가 회의록의 project_id 그대로 판정해 싣는다.
+  // 리프의 projectId 는 회의 폴백이 섞인 귀속 프로젝트라, 그것으로 판정하면 회의 프로젝트의 관리자에게 열리고 서버가 거부한다
+  const canMoveLeaf = (l: ExplorerLeaf) => l.canEdit === true
 
   const total = leaves.length
   const favCount = favorites === null
@@ -975,7 +968,6 @@ function MinuteCard({
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
   const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
-  const slotOf = useTeamSlot()
   return (
     <article {...dragProps}
       className={`card relative flex flex-col gap-2 p-4 transition-shadow duration-150 hover:shadow-[var(--shadow-md)] ${
@@ -997,9 +989,7 @@ function MinuteCard({
         {canMove && <LeafMenu open={menuOpen} busy={menuBusy} onToggle={onMenuToggle}
           onEdit={onEdit} onMove={onMove} onArchive={onArchive}
           canSelect={canSelect} onSelect={onSelect} t={t} />}
-        <span className={`inline-flex shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(l.teamCode).bar}`}>
-          {l.teamCode}
-        </span>
+        <TeamBar code={l.teamCode} shape="chip" />
       </div>
       {(l.projectName || l.meetingCategory || folderName || meetingProjectId) && (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -1038,7 +1028,6 @@ function MinuteRow({
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
   const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
-  const slotOf = useTeamSlot()
   return (
     <li {...dragProps} className={`relative ${dragging ? 'opacity-40' : ''}`}>
       {/* 선택 모드에서는 링크를 렌더하지 않는다(카드와 같은 이유).
@@ -1055,9 +1044,7 @@ function MinuteRow({
         {selecting
           ? <SelectBox checked={selected} onToggle={() => onSelectToggle?.()} t={t} />
           : <StarButton id={l.id} fav={fav} disabled={favDisabled} onToggle={onToggle} t={t} />}
-        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(l.teamCode).bar}`}>
-          {l.teamCode}
-        </span>
+        <TeamBar code={l.teamCode} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-ink">{l.title}</span>
           {l.bodyPreview && <span className="block truncate text-xs text-ink-subtle">{l.bodyPreview}</span>}

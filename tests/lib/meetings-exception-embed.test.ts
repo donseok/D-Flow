@@ -37,6 +37,8 @@ function makeSb(opts: {
   /** 예외 폴백 조회의 응답 — 함수면 요청한 범위(range)를 받아 그 페이지를 돌려준다. */
   exceptions?: Reply | ((from: number, to: number) => Reply)
   members?: Reply | Promise<Reply>
+  /** auth.getUser 의 오류(SP5 B2 — D39). 없으면 오류 없음 */
+  authError?: { name: string; message: string }
 }) {
   const selects: string[] = []
   const tables: string[] = []
@@ -58,7 +60,7 @@ function makeSb(opts: {
   }
   const sb = {
     auth: {
-      getUser: async () => ({ data: { user: opts.user ?? null } }),
+      getUser: async () => ({ data: { user: opts.user ?? null }, error: opts.authError ?? null }),
       // getActor 는 getClaims 로 세션을 본다(2026-09-14) — getUser 는 getSession 경로용으로 남긴다.
       getClaims: async () => ({ data: opts.user ? { claims: { sub: opts.user.id, email: opts.user.email } } : null }),
     },
@@ -230,6 +232,17 @@ describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
     expect(await getMyMeetings(MWS, '2026-07-01', '2026-07-31'))
       .toEqual({ ok: true, meetings: [], exceptions: [], categories: {} })
     expect(tables).not.toContain('meetings')
+  })
+
+  it('세션 없음(AuthSessionMissingError)만 비로그인이다 — 인증 확인 실패는 빈 달력이 아니라 실패(SP5 B2 — D39)', async () => {
+    makeSb({ user: null, meetings: () => OK([]), authError: { name: 'AuthSessionMissingError', message: 'Auth session missing!' } })
+    expect(await getMyMeetings(MWS, '2026-07-02', '2026-07-31')).toEqual({ ok: true, meetings: [], exceptions: [], categories: {} })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { tables } = makeSb({ user: null, meetings: () => OK([]), authError: { name: 'AuthRetryableFetchError', message: 'fetch failed' } })
+    expect(await getMyMeetings(MWS, '2026-07-03', '2026-07-31')).toMatchObject({ ok: false })
+    expect(tables).not.toContain('meetings')
+    expect(err).toHaveBeenCalled()
+    err.mockRestore()
   })
 
   it('멤버 조회를 기다리지 않고 회의 조회를 함께 띄운다', async () => {

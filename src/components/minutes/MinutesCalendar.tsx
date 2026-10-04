@@ -5,7 +5,7 @@ import { calendarDayInfo, monthMatrix, weekdayColumns, type CalendarView } from 
 import { currentRuleDay } from '@/lib/domain/calendar'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
-import { useTeamSlot } from '@/components/app/TeamsProvider'
+import { TeamBar } from '@/components/minutes/TeamBar'
 import { RestDayMark } from '@/components/calendar/RestDayMark'
 
 export function MinutesCalendar({
@@ -21,7 +21,6 @@ export function MinutesCalendar({
   calendar: CalendarView
 }) {
   const { t } = useLocale()
-  const slotOf = useTeamSlot()
   // 첫 열 = 오늘 적용되는 규칙의 시작 요일(SP5 §4.4)
   const firstDay = currentRuleDay(calendar.weekStart, todayIso)
   const columns = useMemo(() => weekdayColumns(firstDay), [firstDay])
@@ -60,10 +59,7 @@ export function MinutesCalendar({
               {!working && <RestDayMark named={false} mark={t('att.restMark')} label={t('att.restDay')} />}
               <div className="mt-1 flex flex-wrap gap-1">
                 {rows.slice(0, 4).map(mi => (
-                  <span key={mi.id}
-                    className={`inline-flex items-center rounded px-1 py-px text-[10px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
-                    {mi.teamCode}
-                  </span>
+                  <TeamBar key={mi.id} code={mi.teamCode} shape="tag" />
                 ))}
                 {rows.length > 4 && (
                   <span className="text-[10px] font-medium text-ink-subtle">+{rows.length - 4}</span>

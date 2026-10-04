@@ -59,6 +59,8 @@ export interface BriefStatusPayload {
   fresh: boolean
   hasBrief: boolean
   baseDate: string | null
+  /** 상태를 판정하지 못했다(사실 재료·캐시 조회 실패 — 회의·진척 이력 포함). '브리핑 없음'과 가른다(SP5 B2 — D39) */
+  failed?: boolean
 }
 
 /** ReportModal 신선도 조회 — LLM 0콜(캐시 읽기 + 해시 대조만). */
@@ -66,7 +68,7 @@ export async function getProjectBriefAction(projectId: string): Promise<BriefSta
   // 캐시 신선도 조회뿐이라 로그인만 확인한다(LLM 호출 0회).
   if (!(await getSession())) {
     console.error('[brief] getProjectBriefAction 비로그인 호출')
-    return { fresh: false, hasBrief: false, baseDate: null }
+    return { fresh: false, hasBrief: false, baseDate: null, failed: true }
   }
   try {
     const src = await loadProjectFacts(projectId)
@@ -79,7 +81,8 @@ export async function getProjectBriefAction(projectId: string): Promise<BriefSta
       baseDate: facts.todayWbs,
     }
   } catch (e) {
+    // 회의·진척 이력 조회 실패(loadProjectFacts 가 던진다)를 '브리핑 없음'으로 보이지 않는다 — 실패로 돌려준다
     console.error('[brief] getProjectBriefAction 실패:', e instanceof Error ? e.message : e)
-    return { fresh: false, hasBrief: false, baseDate: null }
+    return { fresh: false, hasBrief: false, baseDate: null, failed: true }
   }
 }

@@ -1211,7 +1211,7 @@ export async function fetchMinutesExplorer(scope: MinutesScope): Promise<Explore
   if (!user) return null
   const g = await minutesScopeGate(scope)
   if (!g.ok) return null
-  return getMinutesExplorer(g.scope.workspaceId, g.scope.projectId)
+  return getMinutesExplorer(g.scope.workspaceId, g.scope.projectId, g.actor)
 }
 
 /** 액션 내부용 폴더 행 — 가드가 RLS 와 같은 워크스페이스 판정을 하도록 workspace_id 를 싣는다(0006). */

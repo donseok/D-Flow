@@ -16,6 +16,7 @@ import type {
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
+import { canEditMinute, type Actor } from '@/lib/domain/authz'
 
 type Row = Record<string, unknown>
 
@@ -58,7 +59,7 @@ export const getProjectMinuteSignals = cache(async (projectId: string, limit = 8
 })
 
 const LIST_COLS =
-  'id, minute_date, team_code, team_id, title, meeting_id, project_id, meeting_occurrence_date, archived_at, created_by, created_by_name, created_at, updated_at, body_preview, folder_id, minute_files(count), meetings(category, project_id), projects(name)'
+  'id, minute_date, team_code, team_id, title, meeting_id, project_id, workspace_id, meeting_occurrence_date, archived_at, created_by, created_by_name, created_at, updated_at, body_preview, folder_id, minute_files(count), meetings(category, project_id), projects(name)'
 
 function mapMinute(r: Row, bodyMd = ''): Minute {
   const files = r.minute_files as { count: number }[] | undefined
@@ -135,7 +136,11 @@ export const searchMinutes = cache(async (
 /** 탐색기 v2 — 전 기간 리프 + 폴더 전량. 실패 시 로깅 + null(빈 결과 객체와 구분 —
  *  조용한 빈 화면 방지). 트리 조립은 클라이언트(buildFolderTree) — 팀 탭 필터를 리프에
  *  먼저 적용해야 하므로 서버 조립은 성립하지 않는다. */
-export const getMinutesExplorer = cache(async (workspaceId: string, projectId: string | null): Promise<ExplorerData | null> => {
+export const getMinutesExplorer = cache(async (
+  workspaceId: string, projectId: string | null,
+  /** 리프의 canEdit(D40)을 판정할 행위자 — 없으면 전부 거짓(fail-closed) */
+  actor: Actor | null = null,
+): Promise<ExplorerData | null> => {
   const sb = await createServerClient()
   let mq = sb.from('minutes').select(LIST_COLS).eq('workspace_id', workspaceId).is('archived_at', null)
   if (projectId) mq = mq.eq('project_id', projectId)
@@ -153,8 +158,13 @@ export const getMinutesExplorer = cache(async (workspaceId: string, projectId: s
     return null
   }
   if (hidden === null) { console.error('[getMinutesExplorer] 비공개 프로젝트 판정 실패 — 탐색기를 열지 않는다(fail-closed)'); return null }
+  // 이동·일괄 지정 자격(D40) — 회의록 행의 project_id 그대로(mapMinute 의 projectId 는 회의 폴백이 섞인 귀속 프로젝트라 판정에 쓰지 않는다)
+  const editable = new Set(((mRes.data ?? []) as Row[])
+    .filter((r) => canEditMinute(actor, { created_by: (r.created_by as string | null) ?? null, project_id: (r.project_id as string | null) ?? null, workspace_id: r.workspace_id as string }))
+    .map((r) => r.id as string))
   const rows = dropHidden((mRes.data ?? []).map((r: Row) => mapMinute(r)), hidden)
   const leaves: ExplorerLeaf[] = rows.map(mi => ({
+    canEdit: editable.has(mi.id),
     id: mi.id, minuteDate: mi.minuteDate, teamCode: mi.teamCode, teamId: mi.teamId ?? null, title: mi.title,
     fileCount: mi.fileCount ?? 0, createdBy: mi.createdBy, createdByName: mi.createdByName,
     bodyPreview: mi.bodyPreview ?? '', meetingCategory: mi.meetingCategory ?? null,

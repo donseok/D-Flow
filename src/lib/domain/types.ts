@@ -278,6 +278,9 @@ export interface ExplorerLeaf {
   /** 연결 회의가 속한 프로젝트 — 회의 달력 링크 대상. 회의가 지워졌거나 볼 권한이 없으면 null 이라
    *  meetingId 만으로 링크를 만들지 않는다(상세 뷰어와 같은 fail-closed 판정). */
   meetingProjectId?: string | null
+  /** SP5 B2(D40) — 이 회의록을 고칠(이동·일괄 지정) 수 있는가. 서버가 canEditMinute(회의록의 project_id 그대로 — 회의 폴백 아님)로
+   *  판정해 싣는다. 없으면 거짓(fail-closed) */
+  canEdit?: boolean
 }
 
 export interface FolderNode {

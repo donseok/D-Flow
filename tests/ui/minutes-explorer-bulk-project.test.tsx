@@ -36,9 +36,10 @@ import { MinutesExplorer } from '@/components/minutes/MinutesExplorer'
 import { MinutesScopeProvider } from '@/components/minutes/MinutesScopeContext'
 
 const folders: MinuteFolder[] = [{ id: 'f1', name: 'MES', parentId: null, sort: 0, createdBy: null, projectId: null }]
-const leaf = (id: string, createdBy: string | null, folderId = 'f1', projectId: string | null = null): ExplorerLeaf => ({
+// canEdit = 서버 canEditMinute 의 결과(D40). 이 표본은 본인(u1) 작성 건만 고칠 수 있게 둔다 — 그 밖은 표본마다 준다
+const leaf = (id: string, createdBy: string | null, folderId = 'f1', projectId: string | null = null, canEdit = createdBy === 'u1'): ExplorerLeaf => ({
   id, minuteDate: '2026-07-24', teamCode: 'MES', title: `회의록 ${id}`, fileCount: 0,
-  createdBy, createdByName: '홍길동', bodyPreview: '', meetingCategory: null, folderId, projectId,
+  createdBy, createdByName: '홍길동', bodyPreview: '', meetingCategory: null, folderId, projectId, canEdit,
 })
 const leaves = [leaf('m1', 'u1'), leaf('m2', 'u1'), leaf('m3', 'other')]
 const projects = [{ id: 'p1', name: 'Acme 프로젝트' }]
@@ -119,21 +120,20 @@ describe('MinutesExplorer — 프로젝트 일괄 지정', () => {
 
   // 개별 건 판정은 '그 회의록 프로젝트의 관리자'다 — 프로젝트 미지정 건은 작성자 본인 또는
   // 슈퍼유저만(서버 checkOwner 와 같은 fail-closed). 전역 '어느 프로젝트든 관리자'로는 열리지 않는다.
-  it('슈퍼유저는 전부 고를 수 있다 — 프로젝트 미지정 건까지', async () => {
+  it('서버가 고칠 수 있다고 판정한 건(canEdit)만 고를 수 있다 — 프로젝트 미지정 건까지(슈퍼유저 등)', async () => {
+    await mount({ leaves: [leaves[0], leaves[1], leaf('m3', 'other', 'f1', null, true)] })
+    await enterSelect()
+    expect(checkboxes().length).toBe(3)
+  })
+
+  it('화면 쪽 판정은 하지 않는다 — 플랫폼 관리자 표식만으로는 열리지 않는다(서버가 canEdit 을 싣는다, D40)', async () => {
     await mount({ isSuperuser: true })
     await enterSelect()
-    expect(checkboxes().length).toBe(3)
+    expect(checkboxes().length).toBe(2)
   })
 
-  it('타인 작성 건은 그 회의록 프로젝트의 관리자일 때만 고를 수 있다', async () => {
-    // m3 를 p1 소속으로 두고 p1 관리자로 마운트하면 3건 전부 선택 가능
-    await mount({ leaves: [leaves[0], leaves[1], leaf('m3', 'other', 'f1', 'p1')], adminProjectIds: ['p1'] })
-    await enterSelect()
-    expect(checkboxes().length).toBe(3)
-  })
-
-  it('다른 프로젝트 관리자에게는 열리지 않는다 — 서버가 거절할 어포던스를 만들지 않는다', async () => {
-    await mount({ leaves: [leaves[0], leaves[1], leaf('m3', 'other', 'f1', 'p1')], adminProjectIds: ['p2'] })
+  it('회의 폴백 프로젝트(귀속 projectId)의 관리자라도 canEdit 이 없으면 열리지 않는다 — 서버가 거절할 어포던스를 만들지 않는다(D40)', async () => {
+    await mount({ leaves: [leaves[0], leaves[1], leaf('m3', 'other', 'f1', 'p1', false)] })
     await enterSelect()
     expect(checkboxes().length).toBe(2)
   })

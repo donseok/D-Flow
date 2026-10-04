@@ -28,3 +28,15 @@ describe('useTeamSlot', () => {
     expect(renderToString(h(Probe, { codes: ['RES'] }))).toContain(`RES=${NEUTRAL_SLOT.fg}`)
   })
 })
+
+describe('회의록 팀 막대 패턴(SP5 B2 — D39)', () => {
+  it('막대는 TeamBar 한 곳 — 회의록 화면이 슬롯·채움 전경을 직접 조립하지 않는다', async () => {
+    const { readFileSync, readdirSync } = await import('node:fs')
+    const dir = 'src/components/minutes'
+    const files = readdirSync(dir).filter((f) => f.endsWith('.tsx') && f !== 'TeamBar.tsx')
+    for (const f of files) expect(readFileSync(`${dir}/${f}`, 'utf8'), f).not.toMatch(/useTeamSlot|slotOf\(/)
+    const bar = readFileSync(`${dir}/TeamBar.tsx`, 'utf8')
+    expect(bar).toContain('text-category-fg')
+    expect(bar).toContain('slotOf(code).bar')
+  })
+})

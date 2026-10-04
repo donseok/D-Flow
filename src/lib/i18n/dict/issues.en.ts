@@ -10,6 +10,7 @@ export const issuesEn: Record<keyof typeof issuesKo, string> = {
   'issue.edit': 'Edit issue',
   'issue.filter.all': 'All',
   'issue.filter.mine': 'Mine',
+  'issue.filter.mineFailed': 'Could not load your roster entries, so the Mine filter may look empty. Refresh the page.',
   'issue.filter.area': 'area filter',
   'issue.filter.areaAll': 'All areas',
   'issue.status.open': 'Open',

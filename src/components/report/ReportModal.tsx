@@ -90,7 +90,7 @@ export function ReportModal({
     setAiChecked(false)
     setAiError(null)
     getProjectBriefAction(projectId)
-      .then(r => { if (alive) setAiStatus(r.fresh ? 'fresh' : r.hasBrief ? 'stale' : 'none') })
+      .then(r => { if (alive) setAiStatus(r.failed ? 'failed' : r.fresh ? 'fresh' : r.hasBrief ? 'stale' : 'none') })
       .catch(() => { if (alive) setAiStatus('failed') })
     return () => { alive = false }
   }, [open, projectId])

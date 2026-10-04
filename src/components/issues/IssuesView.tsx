@@ -31,7 +31,7 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today, timeZone, entryContext, entryError, severities, sources,
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, myMemberIdsFailed = false, today, timeZone, entryContext, entryError, severities, sources,
 }: {
   entryContext: IssueEntryContext | null
   entryError?: string
@@ -46,6 +46,8 @@ export function IssuesView({
   /** 프로젝트 관리자 이상(isProjectAdmin) — 남의 이슈 전체 편집·삭제. */
   isProjectAdmin: boolean
   myMemberIds: string[]
+  /** 내 명단 행 조회가 실패했다 — '내 담당' 필터가 비어 보이는 이유를 표시한다(빈 결과로 위장하지 않는다) */
+  myMemberIdsFailed?: boolean
   today: string
   /** 시각 표시의 시간대(프로젝트 calendar.timezone — 계획 P8) */
   timeZone: string
@@ -201,6 +203,7 @@ export function IssuesView({
         >
           {t('issue.filter.mine')}
         </button>
+        {myMemberIdsFailed && <StatusMessage compact kind="partial_error" title={t('issue.filter.mineFailed')} />}
         {canEdit && entryError && <StatusMessage compact kind="partial_error" title={entryError} />}
         {canWrite && (
           <div className="ml-auto flex items-center gap-2">
