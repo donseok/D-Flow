@@ -1,4 +1,5 @@
-import { TEST_AREAS, REQUIRED_ENTRY_CONTEXT } from '../fixtures/issue-areas'
+import type { FieldDef } from '@/lib/domain/customFields'
+import { TEST_AREAS, REQUIRED_ENTRY_CONTEXT, TEST_ENTRY_CONTEXT } from '../fixtures/issue-areas'
 // @vitest-environment jsdom
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -462,4 +463,45 @@ describe('IssueFormModal 회의록 초안', () => {
     expect(labelInput('issue.analysis.majorProcess').value).toBe('')
     expect(labelSelect('issue.analysis.sourceType').value).toBe('')
   })
+  it('creates typed custom values in the same issue request with zero/false required defaults', async () => {
+    const {createIssue}=await import('@/app/actions/issues');vi.mocked(createIssue).mockClear()
+    const defs:FieldDef[]=[{key:'quantity',label:'Quantity',description:'',type:'number',required:true,default:0,active:true,editable_by:'member',show_in_list:false,searchable:false,sort:0},
+      {key:'verified',label:'Verified',description:'',type:'boolean',required:true,default:false,active:true,editable_by:'member',show_in_list:false,searchable:false,sort:1}]
+    await act(async()=>root.render(<IssueFormModal open onClose={()=>{}} projectId="project-1" workspaceId="ws" initial={null} members={[]} entryContext={{...TEST_ENTRY_CONTEXT,rules:{areaRequired:false,analysis:'off'},customFields:defs}} />))
+    expect(labelInput('Quantity').value).toBe('0');expect(labelSelect('Verified').value).toBe('false')
+    await act(async()=>{const el=labelInput('issue.form.title');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,'Typed create');el.dispatchEvent(new Event('input',{bubbles:true}))})
+    await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='issue.form.save')!.click())
+    expect(createIssue).toHaveBeenCalledWith('project-1',expect.objectContaining({title:'Typed create',custom:{quantity:0,verified:false}}))
+    expect(vi.mocked(createIssue).mock.calls[0][1]).not.toHaveProperty('expectedCustom')
+  })
+  it('retains a dirty custom draft on refresh and adopts the newest base only on explicit discard', async () => {
+    const {updateIssue}=await import('@/app/actions/issues');vi.mocked(updateIssue).mockClear()
+    const defs:FieldDef[]=[{key:'quantity',label:'Quantity',description:'',type:'number',required:false,active:true,editable_by:'member',show_in_list:false,searchable:false,sort:0}]
+    const ctx={...TEST_ENTRY_CONTEXT,rules:{areaRequired:false,analysis:'off' as const},customFields:defs}
+    const render=(quantity:number)=>act(async()=>root.render(<IssueFormModal open onClose={()=>{}} projectId="project-1" workspaceId="ws" initial={issue({custom:{quantity},areaId:null})} members={[]} entryContext={ctx} />))
+    await render(0)
+    await act(async()=>{const el=labelInput('Quantity');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,'2');el.dispatchEvent(new Event('input',{bubbles:true}))})
+    await render(3);expect(labelInput('Quantity').value).toBe('2')
+    expect(([...document.querySelectorAll('button')].find(b=>b.textContent==='issue.form.save') as HTMLButtonElement).disabled).toBe(true)
+    await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='추가 정보 초안 취소')!.click())
+    expect(labelInput('Quantity').value).toBe('3')
+    await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='issue.form.save')!.click())
+    expect(updateIssue).toHaveBeenCalledWith(expect.any(String),expect.objectContaining({custom:{quantity:3},expectedCustom:{quantity:3}}))
+  })
+
+  it('keeps a core-only save conflict locked even when the custom draft was pristine',async()=>{
+    const {updateIssue}=await import('@/app/actions/issues');vi.mocked(updateIssue).mockResolvedValueOnce({ok:false,conflict:true,error:'Conflict'})
+    const defs:FieldDef[]=[{key:'quantity',label:'Quantity',description:'',type:'number',required:false,active:true,editable_by:'member',show_in_list:false,searchable:false,sort:0}]
+    const ctx={...TEST_ENTRY_CONTEXT,rules:{areaRequired:false,analysis:'off' as const},customFields:defs}
+    const render=(quantity:number,title?:string)=>act(async()=>root.render(<IssueFormModal open onClose={()=>{}} projectId="project-1" workspaceId="ws" initial={issue({custom:{quantity},areaId:null,...(title ? {title} : {})})} members={[]} entryContext={ctx} />))
+    await render(0)
+    await act(async()=>{const el=labelInput('issue.form.title');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,'Core draft');el.dispatchEvent(new Event('input',{bubbles:true}))})
+    await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='issue.form.save')!.click())
+    await render(3,'Server title')
+    expect(labelInput('Quantity').value).toBe('0');expect(labelInput('issue.form.title').value).toBe('Core draft')
+    expect(([...document.querySelectorAll('button')].find(b=>b.textContent==='issue.form.save') as HTMLButtonElement).disabled).toBe(true)
+    await act(async()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='추가 정보 초안 취소')!.click())
+    expect(labelInput('Quantity').value).toBe('3');expect(labelInput('issue.form.title').value).toBe('Core draft')
+  })
+
 })

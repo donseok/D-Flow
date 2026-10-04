@@ -37,6 +37,24 @@ export function validateCustomValues(defs: readonly FieldDef[], next: unknown, p
   return parsed.ok ? parsed : { ok: false, errors: { $: 'shape' } }
 }
 
+/** INSERT alone receives required defaults. Return only supplied keys so the DB remains their source. */
+export function validateCustomInsertValues(defs: readonly FieldDef[], raw: unknown, canAdmin: boolean): FieldRowValidation {
+  const supplied = parseCustomValues(raw)
+  if (!supplied.ok) return { ok: false, errors: { $: 'shape' } }
+  const errors: Record<string, FieldRowError> = {}
+  for (const key of Object.keys(supplied.value)) {
+    const def = defs.find(d => d.key === key)
+    if (!def) errors[key] = 'unknown'
+    else if (!def.active) errors[key] = 'inactive'
+    else if (def.editable_by === 'admin' && !canAdmin) errors[key] = 'admin_only'
+  }
+  if (Object.keys(errors).length) return { ok: false, errors }
+  const generated = Object.fromEntries(defs.filter(d => d.required && d.default !== undefined && !own(supplied.value, d.key))
+    .map(d => [d.key, Array.isArray(d.default) ? [...d.default] : d.default]))
+  const checked = validateCustomValues(defs, { ...generated, ...supplied.value }, generated, canAdmin)
+  return checked.ok ? supplied : checked
+}
+
 /** Only documented DB prefixes and closed reason codes become field errors. Never return arbitrary DB detail to a form. */
 export function mapCustomFieldDbError(error: { message?: string }): Record<string, FieldRowError> | null {
   const hit = /^CUSTOM_FIELD_(UNKNOWN|NULL|INVALID|INACTIVE|REQUIRED|ADMIN_ONLY):([a-z][a-z0-9_]{0,31})(?::([a-z_]+))?$/.exec(error.message ?? '')

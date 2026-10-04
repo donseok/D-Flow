@@ -1,4 +1,7 @@
 'use client'
+import { CustomFieldDraft } from '@/components/fields/CustomFieldDraft'
+import type { CustomValues } from '@/lib/domain/customFields'
+import { parseCustomValues, validateCustomValues, validateCustomInsertValues, type FieldRowError } from '@/lib/domain/customFieldValues'
 import { CustomFieldValuesEditor } from '@/components/fields/CustomFieldValuesEditor'
 // 이슈 모달 3종 — 상세(진행 편집 포함) / 등록·수정 폼 / 삭제 확인.
 // 공지 AnnouncementsView 의 3모달 구조를 파일 분리로 복제(스펙 §6).
@@ -505,7 +508,7 @@ export function IssueFormModal({
   /** 신규 등록 성공 응답에 id가 있을 때, DB가 확정한 체번 결과와 함께 한 번 호출된다. */
   onCreated?: (id: string, result: IssueActionResult) => void
 }) {
-  const { t } = useLocale()
+  const { t, locale } = useLocale()
   const [loadedContext, setLoadedContext] = useState<IssueEntryContext | null>(null)
   const context = entryContext ?? loadedContext
   const areas = context?.areas ?? []
@@ -524,6 +527,42 @@ export function IssueFormModal({
   // createIssue 가 또 돌아 **같은 이슈가 두 건 생긴다.** 한 번 만들어진 id 를 여기 걸어 두고,
   // 이후의 저장은 생성을 건너뛰고 남은 첨부만 올린다.
   const createdIdRef = useRef<string | null>(null)
+  const customDefs = context?.customFields ?? []
+  const customEnabled = !onCreate || !!initial
+  const customWriteNeeded = customEnabled && (!!initial || createdIdRef.current === null)
+  const [customBase,setCustomBase] = useState<CustomValues>({})
+  const [customDraft,setCustomDraft] = useState<CustomValues>({})
+  const [customReady,setCustomReady] = useState(false)
+  const [customUnreadable,setCustomUnreadable] = useState(false)
+  const [customStale,setCustomStale] = useState(false)
+  const [customErrors,setCustomErrors] = useState<Record<string,FieldRowError>>({})
+  const customSeen = useRef<string | null>(null)
+  const customRow = useRef<string | null>(null)
+  const customSignature = JSON.stringify(initial?.custom)
+  const customDirty = JSON.stringify(customBase) !== JSON.stringify(customDraft)
+  const adoptCustom = () => {
+    const parsed = initial ? parseCustomValues(initial.custom === undefined && !customDefs.length ? {} : initial.custom) : {ok:true as const,value:{}}
+    setCustomUnreadable(!parsed.ok)
+    if (parsed.ok) {
+      const seed = initial ? parsed.value : Object.fromEntries(customDefs.filter(d => d.required && d.active && (d.editable_by !== 'admin' || canManage) && d.default !== undefined)
+        .map(d => [d.key,Array.isArray(d.default) ? [...d.default] : d.default])) as CustomValues
+      setCustomBase(initial ? parsed.value : {});setCustomDraft(seed);setCustomErrors({});setCustomStale(false)
+    }
+    setCustomReady(true)
+  }
+  useEffect(() => {
+    if (!open) {customRow.current=null;customSeen.current=null;setCustomReady(false);return}
+    if (!context || !customEnabled) return
+    const row=initial?.id ?? 'new'
+    if (customRow.current !== row) {customRow.current=row;customSeen.current=customSignature ?? '';adoptCustom();return}
+    if (customSeen.current === (customSignature ?? '')) return
+    customSeen.current=customSignature ?? ''
+    if (customDirty || pending || customStale) setCustomStale(true)
+    else adoptCustom()
+  // A changed server snapshot cannot erase a dirty draft; definitions are validated again on submit.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[open,context,customEnabled,initial?.id,customSignature,customDirty,pending,customStale])
+
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [severity, setSeverity] = useState<IssueSeverity>('medium')
@@ -567,6 +606,8 @@ export function IssueFormModal({
   // 호출부가 draft 객체/배열을 인라인으로 만들어도 매 렌더 입력을 덮어쓰지 않고,
   // 실제 초깃값 내용이 바뀌거나 모달이 다시 열릴 때만 폼을 재베이스라인한다.
   const seedKey = JSON.stringify(issueFormSeed(initial, draft, sourcePreview))
+  const coreSeedSeen = useRef<string | null>(null)
+  const coreRowSeen = useRef<string | null>(null)
 
   function closeIfIdle() {
     // 원자 생성 요청이 끝나기 전에 폼이 닫혔다가 다른 블록으로 다시 열리면, 이전
@@ -577,6 +618,7 @@ export function IssueFormModal({
 
   useEffect(() => {
     if (!open) {
+      coreSeedSeen.current=null;coreRowSeen.current=null
       submittingRef.current = false
       // 첨부 state 는 여기(!open)에서만 비운다. 아래 open 분기는 seedKey 가 바뀔 때마다,
       // 즉 **모달이 열려 있는 중에도** 다시 도는데 거기서 비우면 사용자가 고른 파일이
@@ -585,6 +627,12 @@ export function IssueFormModal({
       createdIdRef.current = null
       return
     }
+    if (coreSeedSeen.current === seedKey) return
+    coreSeedSeen.current=seedKey
+    const sameRow=coreRowSeen.current === initial?.id
+    coreRowSeen.current=initial?.id ?? null
+    // A conflict refresh may change core props too. Keep the user's core draft with the custom draft.
+    if (initial?.id && sameRow && (customDirty || customStale || pending)) return
     const seed = JSON.parse(seedKey) as IssueFormSeed
     setTitle(seed.title)
     setBody(seed.body)
@@ -601,7 +649,7 @@ export function IssueFormModal({
     setSourceDetail(seed.sourceDetail)
     setError(null)
     submittingRef.current = false
-  }, [open, seedKey])
+  }, [open, seedKey, initial?.id, customDirty, customStale, pending])
 
   // Major 자동완성 후보 — 같은 이름 재사용이 기존 체번(02.01…)을 유지하는 핵심이라
   // 열 때마다 프로젝트의 정본 목록을 불러온다. 실패는 입력을 막지 않되 로그로 남긴다.
@@ -721,7 +769,12 @@ export function IssueFormModal({
       setError(t('issue.err.sourceDetailTooLong').replace('{n}', String(ISSUE_SOURCE_DETAIL_MAX)))
       return
     }
+    if (customWriteNeeded && (!customReady || customUnreadable || customStale)) return
+    const custom = customWriteNeeded ? (isEdit ? validateCustomValues(customDefs,customDraft,customBase,canManage)
+      : validateCustomInsertValues(customDefs,customDraft,canManage)) : null
+    if (custom && !custom.ok) {setCustomErrors(custom.errors);setError(locale === 'ko' ? '추가 정보 입력값을 확인하세요.' : 'Check custom field values.');return}
     const input: IssueFormInput = {
+      ...(custom?.ok && customDefs.length ? {custom:custom.value,...(isEdit ? {expectedCustom:customBase} : {})} : {}),
       title: title.trim(),
       body,
       severity,
@@ -800,6 +853,7 @@ export function IssueFormModal({
       } else {
         submittingRef.current = false
         setError(res.error ?? t('issue.err.saveFailed'))
+        if (res.conflict) {setCustomStale(true);router.refresh()}
       }
     })
   }
@@ -813,7 +867,7 @@ export function IssueFormModal({
       footer={
         <div className="flex w-full items-center justify-end gap-2">
           <button onClick={closeIfIdle} disabled={pending} className="btn btn-ghost text-xs">{t('issue.form.cancel')}</button>
-          <button onClick={submit} disabled={pending || submittingRef.current || !context || needsAreaSetup} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
+          <button onClick={submit} disabled={pending || submittingRef.current || !context || needsAreaSetup || (customWriteNeeded && (!customReady || customUnreadable || customStale))} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
         </div>
       }
     >
@@ -1004,6 +1058,13 @@ export function IssueFormModal({
           <IssueAssigneePicker members={members} selected={assignees} onChange={setAssignees} />
         </div>
         <p className="text-[11px] text-ink-subtle">{t('issue.form.dueHint')}</p>
+        {customEnabled && customUnreadable && <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보를 읽을 수 없습니다. 행을 새로 조회하세요.' : 'Custom values could not be read. Reload the row.'}</p>}
+        {customEnabled && customReady && !customUnreadable && <CustomFieldDraft defs={customDefs} values={customDraft} base={customBase} canAdmin={canManage} creating={!isEdit} disabled={pending || createdIdRef.current !== null} locale={locale} errors={customErrors}
+          onChange={(key,value)=>{setCustomDraft(prev=>{const next={...prev};if(value===undefined)delete next[key];else next[key]=value;return next});setCustomErrors({})}} />}
+        {customEnabled && customStale && <div className="space-y-2">
+          <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보가 변경되었습니다. 작성 중인 값은 유지됩니다. 최신 값을 불러온 뒤 저장하세요.' : 'Custom values changed. Your draft is preserved. Load the latest values before saving.'}</p>
+          <button type="button" disabled={pending} className="btn btn-ghost text-xs" onClick={adoptCustom}>{locale === 'ko' ? '추가 정보 초안 취소' : 'Discard custom draft'}</button>
+        </div>}
         {/* 수정 폼은 이슈가 이미 있으니 고르는 즉시 올린다. 등록 폼은 id 가 없어 담아만 두고,
             저장이 성공한 뒤 submit() 이 발급된 id 로 올린다. */}
         <IssueAttachments

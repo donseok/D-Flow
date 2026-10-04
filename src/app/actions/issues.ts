@@ -15,6 +15,9 @@ import { failWith, rpcFailure } from '@/lib/errors/dbFail'
 import { mapDbError } from '@/lib/settings/errors'
 import { VOCAB_CODE_RE } from '@/lib/settings/vocab'
 import type { IssueStatusCode } from '@/lib/domain/issueWorkflow'
+import type { CustomValues } from '@/lib/domain/customFields'
+import { validateCustomValues, validateCustomInsertValues } from '@/lib/domain/customFieldValues'
+import { isProjectAdmin } from '@/lib/domain/authz'
 import { UUID_RE } from '@/lib/domain/validate'
 import { emitNotification } from '@/lib/notify/emit'
 import { revalidatePath } from 'next/cache'
@@ -67,6 +70,8 @@ export interface IssueActionResult {
 }
 
 export interface IssueInput {
+  custom?: CustomValues
+  expectedCustom?: CustomValues
   title: string
   body: string
   severity: IssueSeverity
@@ -500,10 +505,17 @@ function issueWriteFailure(error: { code?: string; message?: string }): string {
 async function checkEntry(
   projectId: string, input: NormalizedIssueInput,
   existing?: { areaId: string | null; codeAreaId: string | null; severity: string | null; sourceType: string | null },
+  canAdmin = false,
 ): Promise<string | null> {
   const loaded = await loadIssueEntryContext(projectId)
   if (!loaded.ok) return loaded.error
   const ctx = loaded.value
+  if (input.custom !== undefined) {
+    const defs = ctx.customFields ?? []
+    const custom = existing ? validateCustomValues(defs, input.custom, input.expectedCustom, canAdmin)
+      : validateCustomInsertValues(defs, input.custom, canAdmin)
+    if (!custom.ok) return '추가 정보의 필수 값·형식·편집 권한을 확인하세요.'
+  }
   // 심각도·원천 = 이 프로젝트의 활성 어휘(B4). 값을 그대로 두는 수정은 비활성이어도 통과(트리거와 같은 규칙)
   const sevErr = vocabCodeError('issues.severities', ctx.vocab.severities, input.severity, existing?.severity)
   if (sevErr) return sevErr
@@ -676,7 +688,7 @@ export async function createIssue(projectId: string, input: IssueInput): Promise
   const checked = validateInput(input, 'normal-create')
   if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
-  const entryError = await checkEntry(projectId, value)
+  const entryError = await checkEntry(projectId, value, undefined, isProjectAdmin(g.actor, projectId))
   if (entryError) return { ok: false, error: entryError }
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
@@ -688,6 +700,7 @@ export async function createIssue(projectId: string, input: IssueInput): Promise
     .from('issues')
     .insert({
       project_id: projectId,
+      ...(value.custom !== undefined ? { custom: value.custom } : {}),
       title: value.title,
       body: value.body,
       severity: value.severity,
@@ -924,6 +937,7 @@ export async function createIssueFromMinuteBlock(
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, ['issues', 'minutes'])
   if (!mod.ok) return { ok: false, error: mod.error }
+  if (input.custom !== undefined) return { ok: false, error: '회의록 연결 등록의 추가 정보 입력은 아직 지원하지 않습니다.' }
   const checked = validateInput(input, 'minute-create')
   if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
@@ -1028,7 +1042,7 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
   const entryError = await checkEntry(cur.project_id as string, value, {
     areaId: (cur.area_id as string | null) ?? null, codeAreaId: (cur.code_area_id as string | null) ?? null,
     severity: (cur.severity as string | null) ?? null, sourceType: (cur.source_type as string | null) ?? null,
-  })
+  }, gate.isAdmin)
   if (entryError) return { ok: false, error: entryError }
   const currentSourceType = (cur.source_type as string | null) ?? null
   if (currentSourceType === 'minutes' && value.analysis && value.analysis.sourceType !== 'minutes') {
@@ -1061,9 +1075,10 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
   const major = value.analysis ? await resolveIssueMajorId(sb, cur.project_id as string, value.areaId!, value.analysis.majorName) : { ok: true as const, id: null }
   if (!major.ok) return { ok: false, error: major.error }
 
-  const { data: updated, error } = await sb
+  let write = sb
     .from('issues')
     .update({
+      ...(value.custom !== undefined ? { custom: value.custom } : {}),
       title: value.title,
       body: value.body,
       severity: value.severity,
@@ -1075,8 +1090,10 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
       // created_by / status / resolution_note 는 여기서 SET 하지 않음(전자 불변, 후자는 진행 액션 전용)
     })
     .eq('id', issueId)
-    .select('id, code')
-    .single()
+  if (value.custom !== undefined) write = write.eq('project_id', cur.project_id as string).eq('custom', JSON.stringify(value.expectedCustom))
+  const query = write.select('id, code')
+  const { data: updated, error } = value.custom !== undefined ? await query.maybeSingle() : await query.single()
+  if (!error && !updated) return { ok: false, conflict: true, error: '추가 정보가 변경되었습니다. 최신 값을 확인한 뒤 다시 저장하세요.' }
   if (error) return { ok: false, error: issueWriteFailure(error) }
   // 본문 수정은 이미 커밋됨 — 담당자 교체가 실패해도 변경분이 보이도록 revalidate 후 에러 보고(회의 관례).
   const assignErr = await replaceAssignees(sb, issueId, cur.project_id as string, input.assigneeMemberIds,
@@ -1087,7 +1104,7 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
   if (assignErr) return { ok: false, error: `담당자 저장에 실패했습니다(${assignErr}). 제목·내용 등 나머지 변경은 저장되었습니다.` }
   return {
     ok: true,
-    code: updated.code as string,
+    code: updated!.code as string,
   }
 }
 

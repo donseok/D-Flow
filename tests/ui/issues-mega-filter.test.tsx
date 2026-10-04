@@ -22,8 +22,8 @@ vi.mock('@/components/ui/Toast', () => ({
 }))
 vi.mock('@/components/issues/IssueModals', () => ({
   DeleteIssueModal: () => null,
-  IssueDetailModal: () => null,
-  IssueFormModal: () => null,
+  IssueDetailModal: ({issue,onEdit}:{issue:Issue|null;onEdit:()=>void}) => issue ? <button onClick={onEdit}>Edit selected issue</button> : null,
+  IssueFormModal: ({open,initial}:{open:boolean;initial:Issue|null}) => open ? <div data-issue-form={initial?.id ?? 'new'} /> : null,
 }))
 vi.mock('@/components/issues/IssueAnalysisModal', () => ({
   IssueAnalysisModal: ({ open, areaFilter }: { open: boolean; areaFilter: string }) => (
@@ -213,6 +213,15 @@ describe('IssuesView Mega 필터', () => {
     await choose('추가 정보 필터','');expect(container.textContent).toContain('참 행')
     await choose('추가 정보 필터','result');await choose('결과','old')
     expect(container.textContent).toContain('거짓 행');expect(container.textContent).not.toContain('참 행')
+  })
+
+  it('refreshes an open edit by id and never converts a vanished edited row into a create form',async()=>{
+    const render=(issues:Issue[])=>act(async()=>root.render(<IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="UTC" projectId="project-1" currentUserId="user-1" canEdit isProjectAdmin={false} myMemberIds={[]} today="2026-07-31" members={[]} issues={issues} severities={SEVERITIES} sources={SOURCES} />))
+    await render([issue('a','00','Editable')])
+    await act(async()=>(container.querySelector('tbody tr') as HTMLElement).click())
+    await act(async()=>[...container.querySelectorAll('button')].find(b=>b.textContent==='Edit selected issue')!.click())
+    expect(container.querySelector('[data-issue-form]')?.getAttribute('data-issue-form')).toBe('a')
+    await render([]);expect(container.querySelector('[data-issue-form]')).toBeNull()
   })
 
 })

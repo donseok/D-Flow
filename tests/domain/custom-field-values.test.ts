@@ -1,3 +1,4 @@
+import { validateCustomInsertValues } from '@/lib/domain/customFieldValues'
 import { describe, expect, it } from 'vitest'
 import { mapCustomFieldDbError, parseCustomValues, validateCustomValues } from '@/lib/domain/customFieldValues'
 import type { FieldDef } from '@/lib/domain/customFields'
@@ -41,4 +42,26 @@ describe('whole-row field edits', () => {
 describe('DB field errors', () => {
   it.each([['CUSTOM_FIELD_INVALID:quantity:length', { quantity: 'length' }], ['CUSTOM_FIELD_REQUIRED:quantity', { quantity: 'required' }], ['CUSTOM_FIELD_ADMIN_ONLY:constructor', { constructor: 'admin_only' }]])('maps %s to a safe field reason', (message, expected) => expect(mapCustomFieldDbError({ message })).toEqual(expected))
   it.each(['CUSTOM_FIELD_INVALID:quantity:private', 'CUSTOM_FIELD_UNKNOWN:quantity:private', 'CUSTOM_FIELD_REQUIRED:Quantity', 'private DB message', 'CUSTOM_FIELD_SIZE'])('does not expose arbitrary details: %s', message => expect(mapCustomFieldDbError({ message })).toBeNull())
+})
+
+
+describe('INSERT-only required defaults', () => {
+  const d = (patch: Partial<FieldDef> = {}): FieldDef => ({key:'value',label:'Value',description:'',type:'number',required:true,default:0,active:true,editable_by:'member',show_in_list:false,searchable:false,sort:0,...patch})
+  it('lets the DB generate required defaults, including admin/inactive defaults, without sending them as member edits', () => {
+    expect(validateCustomInsertValues([d({editable_by:'admin'})],{},false)).toEqual({ok:true,value:{}})
+    expect(validateCustomInsertValues([d({active:false})],{},false)).toEqual({ok:true,value:{}})
+    expect(validateCustomInsertValues([d({type:'boolean',default:false})],{},false)).toEqual({ok:true,value:{}})
+    expect(validateCustomInsertValues([d({required:false,default:0})],{},false)).toEqual({ok:true,value:{}})
+  })
+  it('rejects explicit protected values even if equal to defaults and keeps zero/false supplied values', () => {
+    expect(validateCustomInsertValues([d({editable_by:'admin'})],{value:0},false)).toMatchObject({ok:false,errors:{value:'admin_only'}})
+    expect(validateCustomInsertValues([d({active:false})],{value:0},true)).toMatchObject({ok:false,errors:{value:'inactive'}})
+    expect(validateCustomInsertValues([d()],{value:0},false)).toEqual({ok:true,value:{value:0}})
+    expect(validateCustomInsertValues([d({type:'boolean',default:false})],{value:false},false)).toEqual({ok:true,value:{value:false}})
+  })
+  it('fails for required values without a default, unknown keys and corrupt shapes', () => {
+    expect(validateCustomInsertValues([d({default:undefined})],{},false)).toMatchObject({ok:false,errors:{value:'required'}})
+    expect(validateCustomInsertValues([d()],{other:0},false)).toMatchObject({ok:false,errors:{other:'unknown'}})
+    expect(validateCustomInsertValues([d()],null,false)).toMatchObject({ok:false,errors:{$:'shape'}})
+  })
 })

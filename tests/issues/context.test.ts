@@ -23,4 +23,11 @@ describe('등록 문맥', () => {
     h.config.mockResolvedValue(makeProjectConfig({ 'issues.id_policy': null }))
     expect(await loadIssueEntryContext('p1')).toMatchObject({ ok: false })
   })
+  it('corrupt custom definitions block a form instead of providing an empty editable field list',async()=>{
+    h.config.mockResolvedValue(makeProjectConfig({'fields.issue':null}))
+    expect(await loadIssueEntryContext('p1')).toMatchObject({ok:false})
+    h.config.mockResolvedValue(makeProjectConfig())
+    expect(await loadIssueEntryContext('p1')).toMatchObject({ok:true,value:{customFields:[]}})
+  })
+
 })

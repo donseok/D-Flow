@@ -118,7 +118,8 @@ export function IssuesView({
   )
   const [formOpen, setFormOpen] = useState(false)
   const [analysisOpen, setAnalysisOpen] = useState(false)
-  const [editing, setEditing] = useState<Issue | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const editing = issues.find(i => i.id === editingId) ?? null
   const [deleting, setDeleting] = useState<Issue | null>(null)
 
   const myIds = useMemo(() => new Set(myMemberIds), [myMemberIds])
@@ -163,12 +164,12 @@ export function IssuesView({
   ]
 
   function openWrite() {
-    setEditing(null)
+    setEditingId(null)
     setFormOpen(true)
   }
   function openEdit(issue: Issue) {
     setViewingId(null)
-    setEditing(issue)
+    setEditingId(issue.id)
     setFormOpen(true)
   }
   function openAnalysis() {
@@ -489,7 +490,7 @@ export function IssuesView({
           setViewingId(null)
         }}
       />
-      <IssueFormModal entryContext={entryContext ?? undefined} canManage={isProjectAdmin} open={formOpen} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
+      <IssueFormModal entryContext={entryContext ?? undefined} canManage={isProjectAdmin} open={formOpen && (editingId === null || editing !== null)} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
       <DeleteIssueModal issue={deleting} onClose={() => setDeleting(null)} />
       <IssueAnalysisModal
         areas={areas}
