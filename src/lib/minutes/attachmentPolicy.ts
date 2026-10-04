@@ -68,7 +68,7 @@ export function attachmentRejection(
   active: { count: number; bytes: number },
 ): AttachmentRejection | null {
   if (!policy.enabled) return 'DISABLED'
-  if (!Number.isSafeInteger(file.size) || file.size < 1
+  if (!Number.isSafeInteger(file.size) || file.size < 0
     || !Number.isSafeInteger(active.count) || active.count < 0
     || !Number.isSafeInteger(active.bytes) || active.bytes < 0) return 'INVALID'
   if (active.count >= policy.maxCount) return 'LIMIT'

@@ -259,7 +259,7 @@ describe('minute_files 첨부 정책(0007 can_manage_minute · 0011 가드 — �
     values ($1, 'attachment', 'x.txt', $2, 1, 'text/plain', $3)`
   const pathFor = (minuteId: string, projectId: string | null, uid: string) =>
     makeStoragePath({ workspaceId: F.ws, projectId, entity: 'minute-files', entityId: minuteId, fileName: `rls-${uid.slice(-2)}.txt` })
-  it('⑪ 작성자·A 워크스페이스 관리자는 첨부를 넣고 지우며, 명단 없는 A 멤버·B 관리자·보관된 회의록은 거부', async () => {
+  it('⑪ 작성자·A 워크스페이스 관리자는 첨부를 넣지만 세션 DELETE는 모두 닫히며, 명단 없는 A 멤버·B 관리자·보관된 회의록은 거부', async () => {
     for (const [uid, allowed] of [[F.users.member, true], [F.users.wsAdmin, true], [F.users.aLoose, false], [F.users.bAdmin, false]] as const) {
       await asUser(pool, uid, async (c) => {
         for (const [minuteId, projectId] of [[F.rows.minute, F.projects.a], [F.rows.nullMinute, null]] as const) {
@@ -269,8 +269,8 @@ describe('minute_files 첨부 정책(0007 can_manage_minute · 0011 가드 — �
           if (allowed) expect(err, `${uid} ${minuteId}`).toBeNull()
           else expect(err, `${uid} ${minuteId}`).toMatchObject({ code: '42501' })
         }
-        const del = await c.query(`delete from public.minute_files where minute_id = $1 and role = 'attachment'`, [F.rows.minute])
-        expect(del.rowCount, `${uid} 삭제`).toBe(allowed ? 2 : 0)   // 픽스처 첨부 1 + 방금 넣은 1(허용된 경우)
+        expect(await pgError(c, `delete from public.minute_files where minute_id = $1 and role = 'attachment'`, [F.rows.minute]))
+          .toMatchObject({ code: '42501', message: expect.stringContaining('permission denied') }) // B3 톰스톤은 가드 뒤 service_role 한 길
       })
     }
     await asUser(pool, F.users.member, async (c) => {

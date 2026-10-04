@@ -41,6 +41,7 @@ describe('사전 제한과 안전한 미리보기', () => {
   it('운영 기본값이 좁은 정책을 덮지 않고 파일/개수/총량을 각각 거부한다', () => {
     const file = { fileName: 'file.PDF', size: 50 }, active = { count: 1, bytes: 100 }
     expect(attachmentRejection(small, file, active)).toBeNull()
+    expect(attachmentRejection(small, { ...file, size: 0 }, { count: 0, bytes: 0 })).toBeNull()
     expect(attachmentRejection({ ...small, enabled: false }, file, active)).toBe('DISABLED')
     expect(attachmentRejection(small, file, { ...active, count: 2 })).toBe('LIMIT')
     expect(attachmentRejection(small, { ...file, size: 101 }, active)).toBe('TOO_LARGE')

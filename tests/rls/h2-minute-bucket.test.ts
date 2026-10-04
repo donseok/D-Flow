@@ -222,8 +222,10 @@ describe('H2-g attachment_object_exists — 행의 경로가 그 행의 범위�
       expect((await c.query('select 1 from storage.objects where bucket_id = $1 and name = $2', ['deliverables', foreign])).rowCount).toBe(0)
       for (const [i, path] of paths.entries()) {
         const rowId = `00000000-0000-0000-7e57-0000000012a${i}`
-        await c.query(`insert into public.deliverable_attachments (id, wbs_item_id, file_name, file_path) values ($1, $2, 'x.pdf', $3)`,
-          [rowId, F.leaf.aErp, path])   // 두 첨부 표의 insert 정책은 경로를 보지 않는다 — 경로 검사는 SP5
+        const sql = `insert into public.deliverable_attachments (id, wbs_item_id, file_name, file_path) values ($1, $2, 'x.pdf', $3)`
+        const args = [rowId, F.leaf.aErp, path]
+        expect(await pgError(c, sql, args)).toMatchObject({ code: '42501', message: expect.stringContaining('row-level security') }) // B3 새 경로는 insert에서 거부
+        await c.query('reset role'); await c.query(sql, args); await c.query('set local role authenticated') // 이관하지 않은 옛 행도 존재 확인으로 우회하지 못함
         expect(await pgError(c, EXISTS, ['deliverable', rowId]), path).toMatchObject(FORBIDDEN)
       }
       expect(await pgError(c, EXISTS, ['deliverable', DELIV_ATT]), '옛 형식 경로(rls/d.txt)').toMatchObject(FORBIDDEN)
@@ -236,8 +238,10 @@ describe('H2-g attachment_object_exists — 행의 경로가 그 행의 범위�
       await c.query('reset role'); await put(c, 'issue-attachments', foreign, F.users.bAdmin); await c.query('set local role authenticated')
       for (const [i, path] of paths.entries()) {
         const rowId = `00000000-0000-0000-7e57-0000000012b${i}`
-        await c.query(`insert into public.issue_attachments (id, issue_id, project_id, file_name, file_path) values ($1, $2, $3, 'x.pdf', $4)`,
-          [rowId, F.rows.issue, F.projects.a, path])
+        const sql = `insert into public.issue_attachments (id, issue_id, project_id, file_name, file_path) values ($1, $2, $3, 'x.pdf', $4)`
+        const args = [rowId, F.rows.issue, F.projects.a, path]
+        expect(await pgError(c, sql, args)).toMatchObject({ code: '42501', message: expect.stringContaining('row-level security') })
+        await c.query('reset role'); await c.query(sql, args); await c.query('set local role authenticated')
         expect(await pgError(c, EXISTS, ['issue', rowId]), path).toMatchObject(FORBIDDEN)
       }
       expect(await pgError(c, EXISTS, ['issue', ISSUE_ATT]), '옛 형식 경로(rls/a.txt)').toMatchObject(FORBIDDEN)

@@ -36,6 +36,20 @@ npm run dev:bootstrap
 
 ---
 
+### 첨부 마이그레이션의 조건부 롤백
+
+`*_attachments_rollback.sql`은 `minute_files.deleted_at is not null` 행이 하나라도 있으면 `ATTACHMENTS_ROLLBACK_BLOCKED`로 중단한다. 객체 삭제가 끝나 `purged_at`이 채워져도 감사 메타 행은 남으므로 롤백 가능 상태가 되지 않는다. 파일 삭제 이전 백업으로 복구하거나, 객체 정리 뒤 톰스톤 메타를 없애는 별도 데이터 손실 작업을 명시적으로 확인해야 한다. 롤백 오류를 무시하거나 가드를 지우지 않는다.
+
+메타 삭제를 승인받은 경우에만, 백업·대상 스택 확인 후 이미 객체 정리가 끝난 행을 지운다. 다음 SQL은 검토용이며 사용자 DB에서 자동 실행하지 않는다. 정리되지 않은 행은 계속 롤백을 막는다.
+
+```sql
+-- 별도 승인한 대상 DB에서만. 첨부 삭제 감사 메타가 영구 손실된다.
+delete from public.minute_files
+ where role = 'attachment' and deleted_at is not null and purged_at is not null;
+```
+
+워크스페이스·프로젝트의 저장된 `minutes.attachments` 정책과 설정 이력은 스키마 롤백으로 되돌리지 않는다. 전용 스택에서 적용·롤백·재적용과 데이터 보존을 먼저 검증한다. 이 PC의 사용자 DB는 메인 스택에 있으므로 §1의 예시 컨테이너 이름을 개발 리허설에 그대로 사용하지 않는다.
+
 ## 2. 원격이 생긴 뒤 — 프로덕션 화면이 깨졌을 때
 
 아래는 **첫 배포 이후에나 실행 가능한** 절차다. 원본 리포에서 2026-07-27

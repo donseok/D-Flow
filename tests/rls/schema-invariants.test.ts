@@ -122,7 +122,7 @@ describe('스키마 불변식', () => {
     'public.item_owned_by_my_team(uuid, uuid)',
     'public.uuid_or_null(text)', 'public.storage_ws(text)', 'public.storage_project(text)', 'public.storage_entity_id(text)',
     'public.minute_body_path_ok(text, uuid, uuid, uuid)', 'public.presence_topic_project(text)', 'public.can_manage_minute(uuid)',
-    'public.has_project_role_in_ws(uuid)',
+    'public.has_project_role_in_ws(uuid)', 'public.minute_attachment_path_active(text)',
     // 정책 헬퍼는 아니지만 같은 관례(authenticated·service_role 만, 0011 ⑦)다 — anon·PUBLIC·그 밖의 롤에 열리면 여기서 빨개진다
     'public.attachment_object_exists(text, uuid)',
   ]
@@ -159,6 +159,7 @@ describe('스키마 불변식', () => {
     'accessible_project_ids()': HELPER, 'my_workspace_ids()': HELPER, 'is_superuser()': HELPER,
     'is_ws_member(uuid)': HELPER, 'is_ws_admin(uuid)': HELPER, 'can_read_project(uuid)': HELPER,
     'is_project_admin(uuid)': HELPER, 'is_project_member(uuid)': HELPER, 'is_project_admin_anywhere_in_ws(uuid)': HELPER,
+    'minute_attachment_path_active(text)': '첨부 Storage 읽기 헬퍼 — 원래 호출자 Storage scope 안에서만 톰스톤 여부를 boolean으로 반환한다(B3)',
     'can_attach(uuid)': HELPER, 'can_edit_issue(uuid)': HELPER, 'can_manage_minute(uuid)': HELPER,
     'item_owned_by_my_team(uuid, uuid)': HELPER,
     'has_project_role_in_ws(uuid)': HELPER,
