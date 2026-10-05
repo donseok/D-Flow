@@ -281,6 +281,9 @@ describe('rollback / reapply — one transaction, no audit/data removal', () => 
       expect(await pgError(c,rb)).toMatchObject({message:'CUSTOM_FIELDS_ROLLBACK_IN_USE'})
       await define(c,'issue',[])
       // Rehearse 0027 at its own schema boundary: newer dependent migrations roll back first.
+      await c.query(sql('supabase/rollbacks','_form_template_guards_rollback.sql'))
+      await c.query(sql('supabase/rollbacks','_form_template_activation_rollback.sql'))
+      await c.query(sql('supabase/rollbacks','_form_templates_rollback.sql'))
       await c.query(sql('supabase/rollbacks','_minute_issue_custom_fields_rollback.sql'))
       await c.query(sql('supabase/rollbacks','_custom_field_wbs_clock_rollback.sql'))
       await c.query(sql('supabase/rollbacks','_custom_field_realtime_rollback.sql'))

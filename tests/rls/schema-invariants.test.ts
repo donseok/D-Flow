@@ -87,6 +87,8 @@ describe('스키마 불변식', () => {
   // 수 있다(Task 2 리뷰 이월). 정책은 public·storage·realtime 셋을 본다(Task 4 리뷰 이월). 허용 목록은 표를 읽지 않는
   // immutable 순수 함수뿐이다 — 순환이 생길 쿼리가 없다. 아래 테스트가 그 전제(immutable·INVOKER)도 같이 고정한다.
   const POLICY_CALLED_INVOKER_ALLOWLIST: Record<string, string> = {
+    form_template_path_project: 'SP6 — immutable form path parser, no table access',
+    uuid_or_null: '0007 — immutable UUID parser, now directly used by the form bucket policy; no table access',
     storage_ws: '0007 — 객체 이름 세그먼트 파싱, 표 접근 없음',
     storage_project: '0007 — 객체 이름 세그먼트 파싱, 표 접근 없음',
     storage_entity_id: '0007 — 객체 이름 세그먼트 파싱, 표 접근 없음',

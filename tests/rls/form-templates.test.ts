@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { Pool } from 'pg'
@@ -9,14 +9,7 @@ let pool: Pool
 beforeAll(async () => {
   pool = openPool()
   await loadFixture(pool)
-  // 0031 마이그레이션 적용 (asService 트랜잭션 롤백 우회하여 영구 적용)
-  const c = await pool.connect()
-  try {
-    const sql = readFileSync(join(process.cwd(), 'supabase/migrations/0031_form_templates.sql'), 'utf8')
-    await c.query(sql)
-  } finally {
-    c.release()
-  }
+
 })
 
 afterAll(async () => {
@@ -134,43 +127,20 @@ describe('form_templates RLS 정책', () => {
     const tid = randomUUID()
     const wbsPath = `ws/${W}/p/${P}/wbs_export_xlsx/v1.xlsx`
     await asService(pool, async c => {
-      await c.query(`
-        insert into public.form_templates (
-          id, project_id, form_kind, file_name, storage_path, size_bytes, version, placeholders, active
-        ) values (
-          $1, $2, 'wbs_export_xlsx', 'wbs.xlsx', $3,
-          1024, 1, $4::jsonb, true
-        )
-      `, [tid, P, wbsPath, JSON.stringify(sampleScanReport)])
-    })
-
-
-    // 프로젝트 멤버(F.users.member)는 조회 가능
-    await asUser(pool, F.users.member, async c => {
-      const rows = (await c.query('select id from public.form_templates where id = $1', [tid])).rows
-      expect(rows).toHaveLength(1)
-    })
-
-    // 외부 사용자(F.users.aLoose)는 조회 불가 (RLS 필터링)
-    await asUser(pool, F.users.aLoose, async c => {
-      const rows = (await c.query('select id from public.form_templates where id = $1', [tid])).rows
-      expect(rows).toHaveLength(0)
-    })
-
-    // 일반 authenticated 사용자의 직접 INSERT/UPDATE/DELETE 차단 (쓰기 정책 부재)
-    await asUser(pool, F.users.member, async c => {
-      expect(await pgError(c, `
-        insert into public.form_templates (project_id, form_kind, file_name, storage_path, size_bytes, version, placeholders)
-        values ($1, 'weekly_report_xlsx', 'w.xlsx', 'pathX', 1024, 1, '{}')
-      `, [P])).toMatchObject({ code: '42501' })
-
-      expect(await pgError(c, `
-        delete from public.form_templates where id = $1
-      `, [tid])).toMatchObject({ code: '42501' })
-    })
-
-    await asService(pool, async c => {
-      await c.query('delete from public.form_templates where id = $1', [tid])
+      await c.query(`insert into public.form_templates(id,project_id,form_kind,file_name,storage_path,size_bytes,version,placeholders,active)
+        values($1,$2,'wbs_export_xlsx','wbs.xlsx',$3,1024,1,$4::jsonb,true)`,[tid,P,wbsPath,JSON.stringify(sampleScanReport)])
+      const user=async(id:string)=>{
+        await c.query(`select set_config('request.jwt.claims',$1,true)`,[JSON.stringify({sub:id,role:'authenticated'})])
+        await c.query('set local role authenticated')
+      }
+      await user(F.users.member)
+      expect((await c.query('select id from public.form_templates where id=$1',[tid])).rows).toHaveLength(1)
+      await user(F.users.bMember)
+      expect((await c.query('select id from public.form_templates where id=$1',[tid])).rows).toHaveLength(0)
+      await user(F.users.member)
+      expect(await pgError(c,`insert into public.form_templates(project_id,form_kind,file_name,storage_path,size_bytes,version,placeholders)
+        values($1,'weekly_report_xlsx','w.xlsx','pathX',1024,1,'{}')`,[P])).toMatchObject({code:'42501'})
+      expect(await pgError(c,'delete from public.form_templates where id=$1',[tid])).toMatchObject({code:'42501'})
     })
   })
 })
@@ -220,10 +190,6 @@ describe('Storage form-templates 버킷 정책 (개정 §4.6.2)', () => {
       `, [`ws/${W}/p/${P}/weekly_report_pptx/incoming/${randomUUID()}.pptx`, F.users.aLoose])).toMatchObject({ code: '42501' })
     })
 
-    // 정리
-    await asService(pool, async c => {
-      await c.query("delete from storage.objects where bucket_id = 'form-templates'")
-    })
   })
 })
 
@@ -234,6 +200,7 @@ describe('FORM_MAPPING_IN_USE 가드 (개정 §3.6.5)', () => {
     label: '비용센터',
     required: false,
     active: true,
+    description: '', editable_by: 'member', show_in_list: false, searchable: false, sort: 0,
   }
 
   it('활성 양식 매핑이 가리키는 필드의 정의 삭제 및 purge 차단', async () => {
@@ -364,10 +331,13 @@ describe('copy_project_config 연동 (개정 §4.6.3)', () => {
 describe('롤백 및 재적용 정합성', () => {
   it('0031 롤백 스크립트 실행 후 테이블·버킷 정리 및 재적용 성공', async () => {
     await asService(pool, async c => {
-      const rollbackSql = readFileSync(join(process.cwd(), 'supabase/rollbacks/0031_form_templates_rollback.sql'), 'utf8')
-      const migrateSql = readFileSync(join(process.cwd(), 'supabase/migrations/0031_form_templates.sql'), 'utf8')
+      const sql=(dir:string,suffix:string)=>readFileSync(join(process.cwd(),dir,readdirSync(join(process.cwd(),dir)).find(f=>f.endsWith(suffix))!),'utf8')
+      const rollbackSql = sql('supabase/rollbacks','_form_templates_rollback.sql')
+      const migrateSql = sql('supabase/migrations','_form_templates.sql')
 
-      // 롤백 실행
+      // Roll newer dependent migrations back at the historical schema boundary.
+      await c.query(sql('supabase/rollbacks','_form_template_guards_rollback.sql'))
+      await c.query(sql('supabase/rollbacks','_form_template_activation_rollback.sql'))
       await c.query(rollbackSql)
 
       // 테이블 및 버킷 부재 단언
@@ -376,6 +346,8 @@ describe('롤백 및 재적용 정합성', () => {
 
       // 재적용 실행
       await c.query(migrateSql)
+      await c.query(sql('supabase/migrations','_form_template_activation.sql'))
+      await c.query(sql('supabase/migrations','_form_template_guards.sql'))
 
       // 재적용 후 정상 존재 단언
       expect((await c.query("select 1 from information_schema.tables where table_schema='public' and table_name='form_templates'")).rows).toHaveLength(1)

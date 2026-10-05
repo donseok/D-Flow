@@ -288,3 +288,9 @@ begin
     raise exception 'fixture-ws: c1 의 월요일 주 시작 규칙 선기록이 0행이다(설정 행 없음 — projects_settings_row 트리거 확인)';
   end if;
 end $$;
+
+-- SP6: an inactive A template makes the whole-catalog isolation probe non-vacuous.
+insert into public.form_templates(id,project_id,form_kind,file_name,storage_path,size_bytes,version,placeholders,active)
+values('00000000-0000-0000-7e57-00000000f301','00000000-0000-0000-7e57-0000000000c1','wbs_export_xlsx','isolation.xlsx',
+'ws/00000000-0000-0000-7e57-00000000aa01/p/00000000-0000-0000-7e57-0000000000c1/wbs_export_xlsx/v999.xlsx',1024,999,'{}',false)
+on conflict(id) do update set project_id=excluded.project_id,version=excluded.version,storage_path=excluded.storage_path;

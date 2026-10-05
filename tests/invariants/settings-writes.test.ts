@@ -283,6 +283,10 @@ const OLD = /(?<!(?:['"`]|settings\.)(?:core|wbs|workflow|invites|calendar)\.)\b
 const STRUCTURE = 'src/app/api/v1/wbs/structure/route.ts'
 /** 외부 계약의 같은 이름 — 줄 모양만 지우고 남은 줄을 다시 본다(단어째 빼면 그 파일의 옛 열 접근까지 놓친다) */
 const CONTRACT_SHAPES: { file: string | null; shape: RegExp; why: string }[] = [
+  { file: 'src/app/api/export/route.ts', shape: /^\s+return path === 'project\.level_labels' \|\| path\.startsWith\('project\.level_labels\.'\)$/, why: 'SP6 catalog collection token check, not a storage column' },
+  { file: 'src/lib/report/catalog/types.ts', shape: /^\s+level_labels: string\[\]\s*$/, why: 'SP6 project.level_labels catalog type, not a storage column' },
+  { file: 'src/lib/report/catalog/index.ts', shape: /^\s+'project\.level_labels': \{ path: 'project\.level_labels', type: 'list<text>', description: '[^']+' \},$/, why: 'SP6 project.level_labels catalog metadata, not a storage column' },
+  { file: 'src/lib/report/catalog/wbsExportBuild.ts', shape: /^\s+level_labels: \[\.\.\.labels\],$/, why: 'SP6 project.level_labels payload copied from core.level_labels' },
   { file: STRUCTURE, shape: /searchParams\.get\('max_depth'\)/, why: 'structure 질의 인자 max_depth(스킬 계약)' },
   { file: STRUCTURE, shape: /`max_depth 는 0~/, why: 'structure 질의 인자의 오류 문구' },
   { file: null, shape: /\bmax_depth:\s/, why: '응답 필드 키 max_depth:(스킬 계약)' },
@@ -356,6 +360,15 @@ describe('settings-writes', () => {
     expect(offenders).toEqual([])
     expect(exempt, '예외가 더 넓어지거나 죽으면 실패').toEqual(Object.fromEntries(CONTRACT_SHAPES.map((c) => [c.why, 1])))
   }, 20_000)
+})
+
+describe('SP6 catalog field contract remains narrowly exempt',()=>{
+  it('allows the catalog clone but still rejects legacy column reads and other files',()=>{
+    const file='src/lib/report/catalog/wbsExportBuild.ts'
+    expect(oldNames(file,'      level_labels: [...labels],').offenders).toEqual([])
+    expect(oldNames(file,'      level_labels: row.level_labels,').offenders).toHaveLength(1)
+    expect(oldNames('src/app/actions/project.ts','      level_labels: [...labels],').offenders).toHaveLength(1)
+  })
 })
 
 describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rereview-gate 1·2차)을 게이트 본체에 먹인다', () => {

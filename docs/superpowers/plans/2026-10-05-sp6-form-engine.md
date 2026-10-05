@@ -29,11 +29,11 @@ SP5c(사용자 정의 필드)의 모든 단계(F~Z)가 성공적으로 구현·�
   - [x] S2: 양식 템플릿 업로드 준비(`prepareFormTemplateUpload`), 활성화(`activateFormTemplate`), 활성 해제(`deactivateFormTemplate` — 계획의 삭제. 버전 행을 지우는 액션은 정본에 없다)
   - [x] S2: 액션 관문 및 권한 검증 테스트
   - 활성화의 `engineVersion` 불일치는 재스캔하지 않고 재등록 오류로 막는다(OPC `scan` 미구현).
-  - [x] S2 등록: `registerFormTemplate` — 다운로드, 매직바이트·OPC·매크로·zip 한도, `v<n>` 이동, `active=false` 행. 토큰 scan 은 하지 않는다(`tokenScan:false`, 활성화 거부). incoming GC 는 아니다.
+  - [x] S2 등록: registerFormTemplate — 패키지 검증과 토큰 스캔 후 버전 파일로 이동하고 active=false 및 ScanReport를 저장한다. incoming GC는 후속이다.
 - [ ] V: 양식 병합 엔진 및 라우트 연결
   - [x] V1: `capItems`·`lineCost`·`paginateGroups`·`paginateLines` 를 `engine/paginate.ts` 로 이동(정본 §4.3·§4.8). `templateFill.ts` 는 재수출만 한다. 렌더 삭제·라우트 전환은 render 이후
   - [x] V scan: `FormEngine.scan` — pptx 는 `slideN.xml` 의 `<a:p>` 만, xlsx 는 셀 문자열·리치텍스트만(§4.4.1·§4.7.2). 등록은 `ScanReport` 를 저장하고 문법·구조 오류면 incoming 을 지운다. `tokenScan:false` 행은 활성화 거부. 카탈로그 매핑 판정은 활성화에 둔다
-  - [x] V render pptx: 값 치환(런 병합·빈 값·개행 문단), `{{#items}}`·`{{#rows}}`·`{{#slide}}`, OPC 배선. §4.4.6 넘침 연속 슬라이드는 아직 없다
+  - [x] V render pptx: 값 치환(런 병합·빈 값·개행 문단), `{{#items}}`·`{{#rows}}`·`{{#slide}}`, OPC 배선. §4.4.6 넘침은 아래 별도 항목에서 구현했다
   - [x] V render xlsx: 셀 값 치환, `{{#items}}` 는 셀 안 개행, `{{#rows}}` 는 duplicateRow. 0건이면 그 행을 지운다
   - [x] pptx 넘침 연속 슬라이드 (§4.4.6 `max_lines_per_cell`·`max_rows_per_slide`). 값 토큰 단독은 나누지 않는다
   - [ ] 활성화의 `engineVersion` 불일치 재스캔(§4.7.3) — 지금은 재등록 오류다
@@ -49,3 +49,12 @@ SP5c(사용자 정의 필드)의 모든 단계(F~Z)가 성공적으로 구현·�
 
 각 단계가 완료될 때마다 명시적으로 파일들을 스테이징하고 설명적인 한국어 커밋 메시지로 커밋한 뒤 원격에 즉시 푸시한다.
 테스트 DB는 A 전용 API 54521 / DB 54522 (`d-flow-sp4`)만 사용하며, 사용자 운영 DB(54321/54322)는 일체 건드리지 않는다.
+
+
+## 인계 이후 검증 (2026-10-05)
+
+최신 원격 ef27f273까지 fast-forward했다. SP6 push가 CI 필터에서 빠진 것을 확인해 sp6/**를 추가한다. 기준선 DB 전체 검사 878건 중 12건 실패를 확인했고, 0033_form_template_guards 및 별도 롤백으로 테이블 권한·필드 타입/범위 보호·엔티티별 활성 양식 참조·양식 Storage 경로를 보강했다. 격리 픽스처/등록 및 역사적 스키마 경계 리허설을 복구해 DB 전체 48파일 881/881 통과. 카탈로그 project.level_labels는 저장소 열이 아니라 공개 양식 데이터 계약이므로 닫힌 코드 형태만 기존 열 접근 검사에서 제외하고, 실제 옛 열 읽기는 계속 차단한다.
+
+D는 실파일 복사가 남아 전체 완료로 표시하지 않는다. 정본 §4.6.3의 Storage.copy→copy_project_config 및 실패 보상 순서가 createProject에 아직 없다. 기본 출력 라우트가 요구하는 assets/default 4종도 없으므로 자산 작성과 실제 출력 검증을 다음 우선 작업으로 둔다. UI·재스캔·S8 등 전체 잔여 물량은 docs/baseline/sp6-handoff-review.md에 정리했다.
+
+최종 앱 검증: 단위 전체 946파일 12,489/12,489, 전체 typecheck와 production build 통과. lint 오류 0, 기존 경고 4건. SQL 마이그레이션과 검증/CI 변경은 분리 커밋한다. 사용자 DB 및 main 미통합, forms 카탈로그 stored 유지.
