@@ -256,7 +256,10 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   })
   let response: Awaited<ReturnType<typeof invokeCreate>>
   try { response = await invokeCreate() }
-  catch (cause) { response = { data: null, error: { code: '', message: cause instanceof Error ? cause.message : String(cause) } } as typeof response }
+  catch (cause) {
+    console.error('[createProject] 생성 RPC 전송 실패', { ...ctx, cause: cause instanceof Error ? cause.message : String(cause) })
+    response = { data: null, error: { code: '', message: '생성 요청이 전달되지 못했습니다.' } } as typeof response
+  }
   const { data } = response
   const validResult = data && isUuidLike(data.project_id) && ['applied', 'duplicate'].includes(data.status)
   const error = response.error ?? (validResult ? null : { code: '', message: '생성 응답을 확인하지 못했습니다.' })
