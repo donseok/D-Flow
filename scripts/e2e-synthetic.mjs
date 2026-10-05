@@ -615,11 +615,13 @@ async function main() {
     // ② 시트 PPT — 그 프로젝트의 주간 문서 전부. 내용 없는 주차(① 이 방금 만든 이번 주 등)는 앱이 400 '해당 주차에 작성된 내용이 없습니다' 로
     //    거절한다(SP0 부터 — 출력이 없다). 그 주차는 400 과 문구를 확인해 emptyWeeks 에 적고 출력 대상으로 세지 않는다(과제 24 첫 실행에서 찾은 러너 결함)
     const emptyWeeks = []
+    let contentWeek = null
     const weeks = rows('주차', await admin.sb.from('weekly_reports').select('id, week_start').eq('project_id', proj.id).order('week_start'))
     for (const w of weeks) {
       const path = `/api/report?projectId=${proj.id}&source=sheet&format=pptx&week=${w.week_start}`
       const cells = rows('주차 행', await admin.sb.from('weekly_report_rows').select('this_content, this_issue, next_content, next_issue').eq('report_id', w.id))
       if (weekRowsHaveContent(cells)) {
+        contentWeek ??= w.week_start
         out.push({ target: '②', path, text: await zipText(await admin.http('GET', path)) })
       } else {
         const body = await (await admin.http('GET', path, { expect: 400 })).json()
@@ -628,7 +630,8 @@ async function main() {
       }
     }
     // ③ 기본 갈래 주간 보고서
-    for (const path of [`/api/report?projectId=${proj.id}&format=xlsx`, `/api/report?projectId=${proj.id}&format=pptx`]) {
+    if (!contentWeek) throw new Fail('S10 주간 출력에 사용할 내용이 있는 주차가 없다')
+    for (const path of [`/api/report?projectId=${proj.id}&format=xlsx&week=${contentWeek}`, `/api/report?projectId=${proj.id}&format=pptx&week=${contentWeek}`]) {
       out.push({ target: '③', path, text: await zipText(await admin.http('GET', path)) })
     }
     // ④ WBS 엑셀 접기·펼침 — 접기 파일을 가져오기 감지에 다시 넣은 응답도 ①(라우트 응답 본문)로 센다. 저장 양식이 아웃라인이면 펼침은 앱이
@@ -1008,11 +1011,12 @@ async function main() {
   const s8 = { R: {}, C: {}, checks: {} }
 
   for (const [label, proj] of [['R', R], ['C', C]]) {
-    const weeklyPptxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=pptx`)
+    const reportWeek = label === 'R' ? rWeeks.w1 : weeks.w1
+    const weeklyPptxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=pptx&week=${reportWeek}`)
     if (weeklyPptxRes.status !== 200) throw new Fail(`S8 ${label} 주간 PPTX 실패: ${weeklyPptxRes.status}`)
     const weeklyPptxZip = await JSZip.loadAsync(Buffer.from(await weeklyPptxRes.arrayBuffer()))
 
-    const weeklyXlsxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=xlsx`)
+    const weeklyXlsxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=xlsx&week=${reportWeek}`)
     if (weeklyXlsxRes.status !== 200) throw new Fail(`S8 ${label} 주간 XLSX 실패: ${weeklyXlsxRes.status}`)
     const weeklyXlsxZip = await JSZip.loadAsync(Buffer.from(await weeklyXlsxRes.arrayBuffer()))
 
