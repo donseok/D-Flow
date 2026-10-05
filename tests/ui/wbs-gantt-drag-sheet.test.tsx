@@ -100,6 +100,15 @@ function pointer(type: 'mousedown' | 'mousemove' | 'mouseup', x: number) {
 }
 
 describe('WBS 간트 시트 — 선택 의존선과 드래그 저장', () => {
+  it('두 체크박스를 연속 선택해도 첫 선택을 보존한다', async () => {
+    await render(admin)
+    const inputs = [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"][aria-label$="대량 수정 선택"]')]
+    expect(inputs).toHaveLength(2)
+    await act(async () => { inputs[0].click(); inputs[1].click() })
+    expect(inputs.every(input => input.checked)).toBe(true)
+    expect(document.body.textContent).toContain('2개 선택됨')
+  })
+
   it('행을 선택하면 그 작업의 의존선을 그린다', async () => {
     await render(admin)
     expect(document.querySelector('[data-testid="gantt-dependency-overlay"]')).toBeNull()

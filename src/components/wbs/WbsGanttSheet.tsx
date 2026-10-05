@@ -1851,12 +1851,15 @@ export function WbsGanttSheet({
                   {isAdmin && !readOnly ? (
                     <input type="checkbox" aria-label={`${n.name} 대량 수정 선택`}
                       checked={bulkSelection.has(n.id)}
-                      onChange={e => setBulkSelection(current => {
-                        const next = new Set(current)
-                        if (e.target.checked) next.add(n.id)
-                        else next.delete(n.id)
-                        return next
-                      })} />
+                      onChange={e => {
+                        const checked = e.currentTarget.checked
+                        setBulkSelection(current => {
+                          const next = new Set(current)
+                          if (checked) next.add(n.id)
+                          else next.delete(n.id)
+                          return next
+                        })
+                      }} />
                   ) : rowNo}
                 </div>
                 {/* 개요 번호(토글) — 저장 code 아님, 트리 위치 파생 */}

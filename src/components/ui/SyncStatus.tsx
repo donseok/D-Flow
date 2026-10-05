@@ -4,6 +4,11 @@ import { useSyncExternalStore, useCallback } from 'react'
 import { Loader2, AlertCircle, WifiOff, Check } from 'lucide-react'
 import { editSessionStore, type SyncSummary } from '@/lib/sync/editSession'
 
+const SERVER_SUMMARY: SyncSummary = {
+  connectionState: 'online', savingCount: 0, failedCount: 0, conflictCount: 0,
+  outcomeUnknownCount: 0, lastSavedAt: null, needsAttentionCount: 0, isFullySynced: true,
+}
+
 export function useSyncStatus(): SyncSummary {
   const subscribe = useCallback((onStoreChange: () => void) => {
     return editSessionStore.subscribe(onStoreChange)
@@ -14,7 +19,7 @@ export function useSyncStatus(): SyncSummary {
   }, [])
 
   const getServerSnapshot = useCallback(() => {
-    return editSessionStore.getSummary()
+    return SERVER_SUMMARY
   }, [])
 
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)

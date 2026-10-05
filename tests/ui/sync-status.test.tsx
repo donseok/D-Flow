@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { createRoot, hydrateRoot, type Root } from 'react-dom/client'
+import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SyncStatus } from '@/components/ui/SyncStatus'
 import { editSessionStore } from '@/lib/sync/editSession'
@@ -28,6 +29,17 @@ const mount = async () => {
 }
 
 describe('SyncStatus component', () => {
+  it('서버 초기 상태와 클라이언트 상태가 달라도 hydration 오류 없이 최신 상태를 표시한다', async () => {
+    container.innerHTML = renderToString(<SyncStatus />)
+    expect(container.innerHTML).toBe('')
+    editSessionStore.setSession('hydration', 'wbs', 'i-1', 'failed')
+    const errors: unknown[] = []
+    await act(async () => {
+      root = hydrateRoot(container, <SyncStatus />, { onRecoverableError: error => errors.push(error) })
+    })
+    expect(errors).toEqual([])
+    expect(container.textContent).toContain('확인 필요 1')
+  })
   it('저장 중인 세션이 있으면 "저장 중..."을 표시한다', async () => {
     editSessionStore.setSession('s-1', 'wbs', 'i-1', 'saving')
     await mount()

@@ -108,9 +108,9 @@ export function GanttImpactConfirmDialog({
       aria-modal="true"
       aria-labelledby={`${dialogId}-title`}
       data-testid="gantt-impact-dialog"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-(--z-modal) flex items-start justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
     >
-      <div className="flex flex-col w-full max-w-lg max-h-[calc(100dvh-2rem)] rounded-2xl border border-border bg-surface-raised shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+      <div className="my-auto flex shrink-0 flex-col w-full max-w-lg max-h-[max(300px,calc(100dvh-2rem))] rounded-2xl border border-border bg-surface-raised shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
         {/* 헤더 */}
         <div className="flex shrink-0 items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2.5">
