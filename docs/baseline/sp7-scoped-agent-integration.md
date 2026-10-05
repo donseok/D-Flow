@@ -11,10 +11,13 @@
 - 감시자 유니크 키는 `(workspace_id,user_id,agent)`이다. 새 토큰의 stop/정리/재개 조회와 응답도 범위로 제한한다.
 - 롤백은 무변경 이관만 허용한다. 신규 발급, 삭제, 회수, 사용시각, 범위/메타 변경 및 다중 WS 감시자 행이 있으면 데이터 손실이나 옛 토큰 부활 대신 명시적으로 거절한다.
 - 통합 자격증명의 WS 공용 팀 참조는 프로젝트 상속 팀 전환 대상이 아니다. 여러 프로젝트가 사용하는 외부 별칭을 한 프로젝트의 전용 팀으로 바꾸지 않는다.
+- 회의록 v3 API(`POST /api/v1/minutes`, `meta`, `link`, `folder`)에 `integration_credentials`(`minutes_api`) 연동을 완료했다. 워크스페이스 한정, `minutes_integration` 모듈 게이트, 자격증명 허용 프로젝트 범위 검증, 팀 매핑 해석을 지원하며 비허용 프로젝트는 403 `project_not_allowed`, 타 워크스페이스는 404로 보호한다.
+- 워크스페이스 관리자 전용 연동 자격증명 관리 화면(`/w/[slug]/settings/integrations`)과 Server Actions(`createMinutesApiCredential`, `revokeIntegrationCredential`, `listWorkspaceCredentials`)를 구현했다. 토큰 1회 노출, prefix/상태 배지, 회수 모달, 프로젝트/팀 매핑 관리를 지원한다.
+- 에이전트 WBS 가져오기(`POST /api/v1/wbs/import`)에 `command_receipts` 기반 명령 멱등성을 적용했다. `command_id` 지정 시 payload digest를 검증하여 중복 요청에 대해 WBS 재수행 없이 기수행 결과를 즉시 반환(status: 'duplicate')하고, 다른 내용으로 재사용 시 409 `command_reused`로 차단한다.
 
 ## 남은 SP7 범위
 
-회의록 v3 API 및 관리자 통합 자격증명 관리, 기존 전역 비밀키/등록 표/옛 PAT 호환 경로의 최종 폐기, WBS 명령 멱등성 작업은 다음 단계다. 이번 구현은 에이전트 소비처의 단계적 전환이며 SP7 전체 완료가 아니다. 회의록용 팀 범위 열과 공통 resolver는 준비됐지만 아직 v3 회의록 소비처에 연결되지 않았다.
+회의록 v3 API, 관리자 통합 자격증명 관리, 에이전트 WBS 명령 멱등성 구현이 완료되었다. 남은 것은 외부 연동 시스템(또박또박 v3) 배포 이후 과도기 레거시 전역 비밀키/등록 표 호환 경로의 단계적 폐기다.
 
 ## 배포 순서와 검증 환경
 
