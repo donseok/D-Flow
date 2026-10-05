@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Settings2, Palette, Mail, Menu, History, CalendarDays, Paperclip, FolderTree } from 'lucide-react'
+import { Settings2, Palette, Mail, Menu, History, CalendarDays, Paperclip, FolderTree, KeyRound } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
@@ -102,7 +102,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
             invalidReason={config.keys['branding.accent'].status === 'invalid' ? config.keys['branding.accent'].error : undefined} />
         </div>
       </SectionCard>
-      <SectionCard id="workspace-modules" searchText={access.isSuperuser ? 'modules.allowed ai.enabled' : 'ai.enabled'}
+      <SectionCard id="workspace-modules" searchText={access.isSuperuser ? 'modules.allowed ai.enabled integrations api 연동 자격증명' : 'ai.enabled integrations api 연동 자격증명'}
         eyebrow="모듈·AI" title={access.isSuperuser ? '모듈 사용 범위' : 'AI 사용'} icon={Settings2}>
         <div className="space-y-5">
           <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'ai.enabled')]} />
@@ -112,6 +112,21 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
               invalidReason={allowed.status === 'invalid' ? allowed.error : undefined}
               requiredMissing={allowed.status === 'required_missing'} />
           ) : null}
+          <div className="border-t border-line pt-4">
+            <h4 className="text-sm font-semibold text-ink">외부 연동 자격증명</h4>
+            <p className="mt-1 text-xs leading-5 text-ink-muted">
+              회의록 자동 등록(v3 API) 및 에이전트 워크스페이스 권한을 위한 API 토큰을 발급하고 관리합니다.
+            </p>
+            <div className="mt-3">
+              <Link
+                href={wsHref(access.slug, 'settings/integrations')}
+                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-ink hover:bg-surface-hover hover:border-line-hover transition-colors shadow-xs"
+              >
+                <KeyRound className="size-3.5 text-ink-muted" />
+                연동 자격증명 관리 바로가기
+              </Link>
+            </div>
+          </div>
         </div>
       </SectionCard>
       <SectionCard id="workspace-invites" searchText="invites.allowed_domains" eyebrow="초대" title="초대 정책" icon={Mail}>
