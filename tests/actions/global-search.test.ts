@@ -9,6 +9,10 @@ vi.mock('@/lib/supabase/server', () => ({
   })),
 }))
 
+vi.mock('@/lib/authz', () => ({
+  getActor: vi.fn(async () => ({ userId: 'u1' })),
+}))
+
 describe('searchTitles server action (개정 §5.3.7, UX-04)', () => {
   beforeEach(() => {
     vi.clearAllMocks()

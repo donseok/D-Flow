@@ -97,7 +97,7 @@ export function GlobalBar({
         >
           <Search size={14} aria-hidden />
           <span className="text-meta">제목 검색...</span>
-          <kbd className="ml-1.5 rounded border border-border bg-surface-muted px-1.5 py-0.5 text-[10px] font-mono text-fg-muted">⌘K</kbd>
+          <kbd className="ml-1.5 rounded border border-border bg-surface-subtle px-1.5 py-0.5 text-[10px] font-mono text-fg-muted">⌘K</kbd>
         </button>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">

@@ -9,10 +9,10 @@ import { GlobalBar } from '@/components/app/GlobalBar'
 const brand = { productName: 'Acme', workspaceId: 'w1', hasFull: false, hasFullDark: false, hasMark: false }
 const base = { brand, homeHref: '/w/acme', identity: null, staging: false, onOpenDrawer: () => {} }
 describe('GlobalBar(★10, D28)', () => {
-  it('티커 없음, 찾기 자리에 조작 없음, 브랜드 → 워크스페이스 홈, 셸 층', () => {
+  it('티커 없음, 제목 검색 버튼 제공, 브랜드 → 워크스페이스 홈, 셸 층', () => {
     const html = renderToString(<GlobalBar {...base} scope="workspace" crumbs={{ scope: 'workspace', workspace: { name: 'Acme', href: '/w/acme' }, project: null, screen: '회의록' }} />)
     expect(html).not.toContain('data-ticker'); expect(html).not.toContain('HeaderAnnouncementTicker')
-    expect(html).toMatch(/data-slot="search"[^>]*><\/div>/)
+    expect(html).toContain('aria-label="전역 검색 (⌘K)"')
     expect(html).toContain('href="/w/acme"')
     expect(html).toContain('z-(--z-shell)'); expect(html).toContain('h-12')
     expect(html).toContain('data-bell'); expect(html).toContain('data-account')

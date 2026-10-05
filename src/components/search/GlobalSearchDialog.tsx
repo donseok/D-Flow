@@ -249,7 +249,7 @@ export function GlobalSearchDialog({
         </div>
 
         {/* 범위 칩 바 */}
-        <div className="flex items-center justify-between border-b border-border bg-surface-muted/50 px-3 py-1.5 text-xs">
+        <div className="flex items-center justify-between border-b border-border bg-surface-subtle/50 px-3 py-1.5 text-xs">
           <div className="flex items-center gap-1.5">
             <span className="text-fg-muted">범위:</span>
             {projectId && (
@@ -319,7 +319,7 @@ export function GlobalSearchDialog({
                   <div className="flex min-w-0 items-center gap-2.5">
                     {item.kind === 'nav' && <ArrowRight size={15} className="text-fg-muted shrink-0" />}
                     {item.kind === 'project' && <FolderOpen size={15} className="text-brand shrink-0" />}
-                    {item.kind === 'wbs' && <ListTodo size={15} className="text-emerald-500 shrink-0" />}
+                    {item.kind === 'wbs' && <ListTodo size={15} className="text-success shrink-0" />}
                     <div className="min-w-0">
                       <div className="truncate font-medium text-fg">{item.title}</div>
                       <div className="truncate text-xs text-fg-muted">{item.subtitle}</div>
@@ -332,7 +332,7 @@ export function GlobalSearchDialog({
         </div>
 
         {/* 키보드 도움말 하단 바 */}
-        <div className="flex items-center justify-between border-t border-border bg-surface-muted/30 px-3 py-1.5 text-[11px] text-fg-muted">
+        <div className="flex items-center justify-between border-t border-border bg-surface-subtle/30 px-3 py-1.5 text-[11px] text-fg-muted">
           <div className="flex items-center gap-3">
             <span>↑↓ 이동</span>
             <span>↵ 선택</span>

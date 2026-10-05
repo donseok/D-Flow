@@ -34,6 +34,7 @@
 | src/app/actions/projectTeams.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 teams 를 project_id=pid 로 쓴다. copyGlobalTeams 는 전환 RPC convert_inherited_teams 를 부른다 — 행위자 등급을 RPC 가 다시 판정한다(아래 'DEFINER RPC 가 등급을 다시 판정하는 경로'). addProjectTeam 은 그 pid 가 이미 쓰는 공용 팀과 code·이름 키(NFKC·소문자)가 같은지 referencedCommonTeamCodes(adminFor({ projectId }) — 그 pid 의 담당·명단 팀·영역 팀·수락 전 초대, 후보는 그 워크스페이스 공용 팀만 — workspaceTeams)로 본 뒤에만 만든다(SP4 A2-1·A2-2 리뷰) |
 | src/app/actions/roster.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin 또는 Member(pid) 뒤에 project_members 를 pid·memberId 로 읽고, upsert RPC 에 pid 를 넘긴다 |
 | src/app/actions/teams.ts | 세션 가드 뒤 id 스코프 | addTeam 은 requireWorkspaceAdmin(wid) 뒤에 wid 로 필터한다. updateTeam 은 행의 workspace_id 로 가드한 뒤 eq(workspace_id) 로 쓴다. listTeamsAdmin 은 adminFor({ workspaceId }) 를 쓴다 |
+| src/app/actions/wbsBulk.ts | 세션 가드 뒤 id 스코프 | projectMember 및 isProjectAdmin 판정 뒤 RPC의 project/item/revision과 DB의 actor 관리자 재판정으로 쓴다 |
 | src/app/actions/wbsAssign.ts | 세션 가드 뒤 id 스코프 | resolveItemProjectId 로 항목의 pid 를 구해 가드한 뒤, 항목 id 와 멤버의 project_id 일치를 확인하고 쓴다 |
 | src/app/actions/wbsMarkdown.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 부착점·import 를 pid 로 한다. 골격 단계 이름 시드는 가드한 그 pid 로 writeProjectSettingsInternal(runWbsImport 안), PL 대조는 그 pid 로 해석기(getProjectConfig) 판독이다 |
 | src/app/actions/wbsSpec.ts | 세션 가드 뒤 id 스코프 | 항목의 pid 로 requireProjectAdmin 또는 위임 자격을 판정한 뒤, 그 항목 id 로만 update 한다 |
@@ -152,3 +153,5 @@ service_role DEFINER RPC 를 부르므로 표에 행이 없다. 세션 RLS(2차 
 둔다(55P03 은 호출부가 503 재시도로 바꾼다).
 
 SP5c `src/app/actions/customFields.ts`는 `adminFor({ projectId })`를 사용한다. 관리자·해당 엔티티 모듈 가드 뒤 프로젝트에 한정한 사용 건수를 키셋으로 읽고, 일괄 채움·삭제는 가드의 actor를 RPC에 전달하여 DB에서 관리자 권한을 다시 검사한다. 직접 클라이언트를 만들지 않으므로 위 감사표의 대상이 아니다.
+
+SPU3 `src/app/actions/wbsBulk.ts#bulkUpdateWbsItems`: projectMember 가드 및 isProjectAdmin(actor, projectId) 뒤 서비스 클라이언트를 만든다. 대상마다 apply_wbs_bulk_item RPC가 프로젝트 관리자 등급과 소속/revision을 다시 확인한다. 팀·이력·필드 쓰기는 항목별 트랜잭션이며 알림/워크플로는 기존 wbsAssign 경로를 사용한다.

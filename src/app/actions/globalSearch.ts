@@ -2,6 +2,8 @@
 
 import { createServerClient } from '@/lib/supabase/server'
 import { wbsItemHref } from '@/lib/ai/chat/deep-links'
+import { getActor } from '@/lib/authz'
+import { ERR_DENIED } from '@/lib/authz/errors'
 
 export interface SearchProjectItem {
   type: 'project'
@@ -32,14 +34,19 @@ export interface GlobalSearchResponse {
  * - 본문이 아닌 "제목 검색" 전용 (프로젝트명, WBS 코드/이름).
  * - 미색인·실패·0건 명확한 결과 반환.
  */
-export async function searchTitles(params: {
+export async function searchTitles(params?: {
   workspaceId: string
   query: string
   scope: 'workspace' | 'project'
   projectId?: string | null
 }): Promise<GlobalSearchResponse> {
-  const q = params.query.trim()
-  if (!q) {
+  const actor = await getActor()
+  if (!actor) {
+    return { ok: false, error: ERR_DENIED, projects: [], wbsItems: [] }
+  }
+
+  const q = params?.query?.trim() ?? ''
+  if (!params || !q) {
     return { ok: true, projects: [], wbsItems: [] }
   }
 

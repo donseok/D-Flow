@@ -197,6 +197,12 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('preferences')}#saveUiPrefs`]: nul('session', SESSION_SELF),
   [`${A('preferences')}#getWbsCollapse`]: nul('session', SESSION_SELF),
   [`${A('preferences')}#saveWbsCollapse`]: nul('session', SESSION_SELF),
+  [`${A('preferences')}#saveNotifPrefs`]: nul('session', SESSION_SELF),
+  // ── globalSearch — ⌘K 검색 (SPU2)
+  [`${A('globalSearch')}#searchTitles`]: {
+    ...nul('session', '로그인 + 세션 RLS(제목 검색)'),
+    sample: [{ workspaceId: W, query: 'test', scope: 'workspace' }],
+  },
   // ── project(A) — 설정·프로젝트 관리(core)
   [`${A('project')}#listProjects`]: nul('session', '로그인 + RLS — 셸 프로젝트 목록'),
   [`${A('project')}#listProjectsWithState`]: nul('session', '로그인 + RLS'),
@@ -270,6 +276,10 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('wbsSpec')}#updateWbsSpecFields`]: { ...nul('projectAdmin'), sample: [U, { priority: null }] },   // 빈 fields 는 가드 앞에서 막힌다(fields.priority TypeError)
   [`${A('wbsSpec')}#updateAgentPrompt`]: { guard: 'projectAdmin', module: 'agents', note: '위임권(requireDelegationRight)', sample: [U, '프롬프트'] },
   [`${A('wbsSpec')}#setAgentDelegation`]: { guard: 'projectAdmin', module: 'agents', note: '위임권(requireDelegationRight)', sample: [U, true] },
+  [`${A('wbsBulk')}#createWbsBulkSnapshot`]: { ...nul('projectMember'), sample: [P, [U]] },
+  [`${A('wbsBulk')}#bulkPasteWbsItems`]: { ...nul('projectMember'), sample: [P, []] },
+  // ── wbsBulk — WBS 대량 변경 (UX-08, D6-§8-bulk, Q06)
+  [`${A('wbsBulk')}#bulkUpdateWbsItems`]: { ...nul('projectMember'), sample: [P, [U], {}] },
   // ── weekly
   [`${A('weekly')}#createWeeklyReport`]: { guard: 'projectAdmin', module: 'weekly', sample: [P, '2026-09-07', false] },
   [`${A('weekly')}#saveWeeklyTitle`]: { guard: 'projectMember', module: 'weekly', sample: [P, U, '제목'] },

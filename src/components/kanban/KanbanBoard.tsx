@@ -15,7 +15,7 @@ import {
   lensCards, applyQuickFilters, sortCards, FLOW_STAGE_KEYS,
   type KanbanColumn, type ProgressBucket, type QuickFilters, type FlowStageKey,
 } from '@/lib/domain/kanban'
-import { isStageCode, STAGE_LABEL_KO, STAGE_NONE_LABEL_KO, type StageCode } from '@/lib/domain/stageLabels'
+import { isStageCode, stageLabelKo, type StageCode } from '@/lib/domain/stageLabels'
 import { type ApprovalStepDef, DEFAULT_STEP_CODE } from '@/lib/domain/approvalSteps'
 import { setWbsStage, approveWbsStep } from '@/app/actions/wbsAssign'
 import { resolveDrop } from '@/lib/domain/kanban-drop'
@@ -531,11 +531,11 @@ export function KanbanBoard({
                     const curStage = (card.stage && isStageCode(card.stage)) ? card.stage : 'none'
                     const stageOpts = isFlow ? FLOW_STAGE_KEYS.map(k => {
                       const titles: Record<FlowStageKey, string> = {
-                        none: stageLabels?.none || STAGE_NONE_LABEL_KO,
-                        as: stageLabels?.as || STAGE_LABEL_KO.as,
-                        ip: stageLabels?.ip || STAGE_LABEL_KO.ip,
-                        im: stageLabels?.im || STAGE_LABEL_KO.im,
-                        xx: stageLabels?.xx || STAGE_LABEL_KO.xx,
+                        none: stageLabels?.none || stageLabelKo(null),
+                        as: stageLabels?.as || stageLabelKo('as'),
+                        ip: stageLabels?.ip || stageLabelKo('ip'),
+                        im: stageLabels?.im || stageLabelKo('im'),
+                        xx: stageLabels?.xx || stageLabelKo('xx'),
                       }
                       return {
                         key: k,

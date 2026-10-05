@@ -592,6 +592,13 @@ textarea {
   }
 }
 
+/* SPU3: 짧은 화면/확대에서는 문서 스크롤로 복귀해 시트가 0px로 사라지지 않게 한다. */
+@media (max-height: 560px) {
+  .app-main:has([data-frame="fill"]) { overflow-y: auto; scrollbar-gutter: stable; }
+  [data-frame="fill"] { height: auto; min-height: 100%; }
+  [data-frame="fill"] > [data-frame-body] { flex: none; min-height: 300px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,7 +1,7 @@
 import type { ComputedItem, Status, TeamCode } from '@/lib/domain/types'
 import { teamSlotFor, type TeamColorRef } from '@/lib/domain/teamColor'
 import {
-  STAGE_LABEL_KO, STAGE_NONE_LABEL_KO,
+  stageLabelKo,
 } from '@/lib/domain/stageLabels'
 import {
   type ApprovalStepDef, DEFAULT_APPROVAL_STEPS,
@@ -137,11 +137,11 @@ export function groupByFlow(
   }
 
   const defaultTitles: Record<FlowStageKey, string> = {
-    none: STAGE_NONE_LABEL_KO,
-    as: STAGE_LABEL_KO.as,
-    ip: STAGE_LABEL_KO.ip,
-    im: STAGE_LABEL_KO.im,
-    xx: STAGE_LABEL_KO.xx,
+    none: stageLabelKo(null),
+    as: stageLabelKo('as'),
+    ip: stageLabelKo('ip'),
+    im: stageLabelKo('im'),
+    xx: stageLabelKo('xx'),
   }
 
   return FLOW_STAGE_KEYS.map(key => {

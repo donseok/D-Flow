@@ -92,14 +92,14 @@ export function DirtyConfirmDialog({
             ref={continueBtnRef}
             type="button"
             onClick={onContinue}
-            className="rounded-(--radius-control) border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent"
+            className="rounded-(--radius-control) border border-border bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-border-focus"
           >
             {resolvedContinue}
           </button>
           <button
             type="button"
             onClick={onDiscard}
-            className="rounded-(--radius-control) bg-danger px-3 py-1.5 text-sm font-medium text-white hover:bg-danger/90 focus:outline-none focus:ring-2 focus:ring-danger"
+            className="rounded-(--radius-control) bg-danger px-3 py-1.5 text-sm font-medium text-danger-fg hover:bg-danger/90 focus:outline-none focus:ring-2 focus:ring-danger"
           >
             {resolvedDiscard}
           </button>

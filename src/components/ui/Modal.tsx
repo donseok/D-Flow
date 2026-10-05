@@ -117,16 +117,16 @@ export function Modal({
         <div className="fixed inset-0 z-(--z-modal) flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
           {/* 등장 페이드는 배경·패널에 따로 — 바깥(조상)에 opacity 전환을 두면 전환 동안 배경의 backdrop-blur 가 꺼졌다가 끝에 켜진다 */}
           <button className="absolute inset-0 bg-black/45 backdrop-blur-sm transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0" aria-label={t('common.close')} onClick={requestClose} tabIndex={-1} />
-          <div ref={panelRef} tabIndex={-1} className={`relative z-10 w-full ${width} overflow-hidden rounded-(--radius-panel) border border-border bg-surface-raised shadow-(--shadow-modal) focus:outline-none transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0`}>
-            <div className="flex items-start justify-between gap-3 border-b border-line px-6 py-4">
+          <div ref={panelRef} tabIndex={-1} className={`relative z-10 flex max-h-[calc(100dvh-2rem)] w-full ${width} flex-col overflow-hidden rounded-(--radius-panel) border border-border bg-surface-raised shadow-(--shadow-modal) focus:outline-none transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0`}>
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-6 py-4">
               <div className="min-w-0">
                 {eyebrow && <div className="text-meta font-semibold text-fg-muted">{eyebrow}</div>}
                 {title && <h2 className="mt-0.5 text-base font-bold tracking-tight text-ink">{title}</h2>}
               </div>
               <button onClick={requestClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line text-ink-muted transition hover:text-ink" aria-label={t('common.close')}><X className="h-4 w-4" /></button>
             </div>
-            <div className="max-h-[70vh] overflow-y-auto px-6 py-5">{children}</div>
-            {footer && <div className="flex items-center justify-end gap-2 border-t border-line bg-surface-2 px-6 py-4">{footer}</div>}
+            <div className="min-h-0 max-h-[70vh] overflow-y-auto px-6 py-5">{children}</div>
+            {footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line bg-surface-2 px-6 py-4">{footer}</div>}
           </div>
         </div>,
         document.body,

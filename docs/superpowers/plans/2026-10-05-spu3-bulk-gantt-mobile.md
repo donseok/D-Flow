@@ -4,7 +4,7 @@
 > **스펙 정본**: `docs/superpowers/specs/2026-09-27-platform-revision-configurability-design.md` §5.9.2, §5.9.3, §6.2 SPU3, UX-08, D6-§8-bulk, D6-§8-gantt, D6-§8-docs, D6-§9-mobile-a11y  
 > **관련 품질 기준**: Q06(대량 변경), Q08(일정·간트), Q11(문서·첨부), Q12(모바일·접근성)  
 > **브랜치**: `spu3/bulk-gantt`  
-> **마이그레이션**: 없음 (기존 테이블 및 스키마 활용)
+> **마이그레이션**: `0037_wbs_bulk_cas.sql` (기존 테이블에 항목별 CAS·이력 원자 저장 RPC 추가, 롤백 포함)
 
 ---
 
@@ -40,7 +40,7 @@
 ### 과제 1: WBS 대량 변경 Server Action 및 데이터 모델 (`UX-08`, `D6-§8-bulk`, `Q06`)
 - [ ] `src/app/actions/wbsBulk.ts`:
   - `bulkUpdateWbsItems(projectId: string, itemIds: string[], changes: WbsBulkChanges)`
-  - 지원 필드: `plannedStart`, `plannedEnd`, `deliverable`, `biz`, `stage`, `assignedUserId`, `teamCode`.
+  - 지원 필드: `plannedStart`, `plannedEnd`, `deliverable`, `biz`, `stage`, `assigneeMemberId` (프로젝트 로스터 ID), `teamCode`.
   - 3단 변경 정책: `unchanged`(변경 안 함) | `set`(값 지정) | `clear`(값 비우기).
   - 항목별 결과 반환: `{ total, succeeded: string[], failed: Array<{ itemId, name?, reason, message }> }`.
   - 실패 사유 분류: `permission`(권한 없음), `validation`(시작일>종료일 등), `conflict`(충돌/상태 잠금), `unknown`.
@@ -66,10 +66,10 @@
 - [ ] `tests/ui/wbs-gantt-interactions.test.tsx`: 의존선 선택 렌더링 및 드래그 영향 검토 테스트.
 
 ### 과제 4: 문서 버전·최신 여부 & 산출물 첨부 상태 (`D6-§8-docs`, `Q11`, P7-2-DL)
-- [ ] `src/components/wiki/WikiDocumentHeader.tsx` & `src/components/minutes/MinutesDocumentHeader.tsx`:
+- [ ] `src/components/doc/DocumentVersionStatus.tsx` + `WikiTopicDetail`/`WikiDocumentEditor`/`MinuteViewer`:
   - 열람 버전 뱃지, 최신 버전 여부 판별 ("최신 버전이 아닙니다. 최신본 보기" 링크).
-  - 초안(draft) / 게시(published) 구분 칩.
-- [ ] `src/components/wbs/WbsDeliverableAttachment.tsx`:
+  - 편집 중 초안(draft) / 저장된 문서(saved) 구분 칩. 기존 DB에는 게시 상태가 없으므로 published를 추정하지 않는다.
+- [ ] 기존 `src/components/wbs/RowDetailPanel.tsx` 첨부 영역:
   - 산출물 첨부 상태 표시 및 `can_attach` / download 가능 여부에 따른 정직한 링크/비활성화 처리.
 - [ ] `tests/ui/document-version-status.test.tsx`: 문서 버전 안내 및 첨부 상태 UI 테스트.
 
@@ -77,6 +77,16 @@
 - [ ] `src/app/(app)/p/[projectId]/wbs/page.tsx` 및 `src/components/wbs/WbsGanttSheet.tsx`:
   - 390px 모바일 화면에서 핵심 조작(작업 목록 확인, 상태/진척도 변경, 인스펙터 상세) 보장.
   - 채움형 WBS/주간 시트에 `min-h-[300px]` 하한선 적용하여 극단 축소/확대 시 시트 상자가 0px이 되지 않도록 방어.
-- [ ] `src/components/app/StatusMessage.tsx`:
+- [ ] `src/components/ui/StatusMessage.tsx`:
   - compact + blocking 에러 시 명확한 테두리(`border-red-300 dark:border-red-800`) 및 바탕색 부여.
 - [ ] `tests/ui/mobile-a11y-layout.test.tsx`: 모바일 뷰포트 및 높이 하한 방어 테스트.
+
+## 3. 인계 후 구현 결정 (2026-10-05)
+
+- 새 테이블은 만들지 않지만 화면이 검토한 revision에서 팀·필드·이력을 함께 저장하려면 DB RPC가 필요해 0037을 추가했다.
+- 일괄 수정은 관리자 전용이다. 단계·담당자는 기존 승인/배정 경로를 유지하고 각각 다른 필드와 분리해서 적용한다.
+- 붙여넣기는 선택된 표시 행과 표시된 편집 열에 한정한 검토 모달로 제공한다. Excel 인용 TSV, 행별 값, 빈 셀 지우기, 200행 상한, revision 충돌 및 실패한 행만 재검토를 지원한다.
+- 문서 버전은 실제 조회한 번호만 표시한다. 번호를 모르면 버전 정보 없음, 편집 중이면 초안, 저장된 위키/회의록이면 저장된 문서로 표시한다. 별도 게시 상태 모델 도입은 이 작업에 포함하지 않는다.
+- 첨부는 기존 권한 구분 구현을 유지한다. 내려받기 denied/unknown에 가짜 링크를 만들지 않는다.
+- 극단적인 짧은 화면은 바깥 문서 스크롤로 전환해 채움 시트 최소 300px을 보존한다.
+- 간트 바를 놓은 뒤의 저장은 기존 단일 필드 갱신이 아니라 `bulkUpdateWbsItems`에 드래그 시작 시각을 넘긴다. 검토 중에 바뀐 행은 덮지 않고, 후속 작업은 자동으로 밀지 않는다.

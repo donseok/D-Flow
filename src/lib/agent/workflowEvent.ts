@@ -27,6 +27,9 @@ export type WorkflowEventArgs = {
   /** SP5b(D18·S6): 승인 판정 사건(approve·approve_step·set_stage 'xx')이 본 대기 단계 code. RPC 가 설정 FOR SHARE 아래 대기 단계와 대조한다.
    *  있을 때만 보낸다(호환 규칙 S1) — 생략은 유효 단계가 하나일 때만 통과한다. */
   expectedStep?: string | null
+  /** SPU3: 대량 변경이 검토한 행 revision. set_stage만 지원하며 DB가 행 잠금 아래 비교한다. */
+  expectedUpdatedAt?: string | null
+  projectId?: string
 }
 
 /** 승인 판정 결과(중간 단계면 remaining > 0 — 주문 reported·stage im·실적 불변). RPC 가 돌려줄 때만 실린다 */
@@ -75,7 +78,10 @@ export const SKIPPED_WARN: Record<WorkflowSkipped, string> = {
 }
 
 export async function applyWorkflowEvent(admin: AdminClient, args: WorkflowEventArgs): Promise<WorkflowEventOk | WorkflowEventFail> {
-  const { data, error } = await admin.rpc('apply_workflow_event', {
+  const { data, error } = args.expectedUpdatedAt !== undefined && args.event === 'set_stage'
+    ? await admin.rpc('apply_workflow_event_cas', { p_project_id: args.projectId, p_actor: args.actorUserId,
+        p_item_id: args.itemId, p_expected_updated_at: args.expectedUpdatedAt, p_stage: args.stage ?? null, p_expected_step: args.expectedStep ?? null })
+    : await admin.rpc('apply_workflow_event', {
     p_event: args.event, p_actor: args.actorUserId,
     p_item_id: args.itemId ?? null, p_order_id: args.orderId ?? null, p_stage: args.stage ?? null,
     p_agent: args.agent ?? null, p_agent_user_id: args.agentUserId ?? null,

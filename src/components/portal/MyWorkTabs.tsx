@@ -42,7 +42,7 @@ export function MyWorkTabNav({
           >
             <span>{tab.label}</span>
             {tab.count !== undefined && tab.count > 0 && (
-              <span className="rounded-full bg-surface-muted px-1.5 py-0.5 text-xs text-fg-secondary">
+              <span className="rounded-full bg-surface-subtle px-1.5 py-0.5 text-xs text-fg-secondary">
                 {tab.count}
               </span>
             )}

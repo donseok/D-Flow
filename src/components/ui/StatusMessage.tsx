@@ -42,7 +42,11 @@ export function StatusMessage({ kind, title, detail, action, compact = false, bl
   announce?: boolean
 }) {
   const alert = kind === 'permission_changed' || (blocking && kind === 'partial_error')
-  const frame = compact ? 'flex items-start gap-2 py-2' : 'flex items-start gap-3 rounded-(--radius-panel) border border-border bg-surface p-4'
+  const frame = compact
+    ? alert
+      ? 'flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-weak/30 px-3 py-2'
+      : 'flex items-start gap-2 py-2'
+    : 'flex items-start gap-3 rounded-(--radius-panel) border border-border bg-surface p-4'
   if (kind === 'loading') {
     return (
       <div role="status" aria-busy="true" data-status-kind="loading" className={`${frame} ${compact ? 'min-h-8' : 'min-h-24'}`}>

@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import Link from 'next/link'
+import { DocumentVersionStatus } from '@/components/doc/DocumentVersionStatus'
 import { useMinuteLinks } from './minuteLinks'
 import { useRouter } from 'next/navigation'
 import {
@@ -786,6 +787,11 @@ export function MinuteViewer({
         {err && <p className="text-sm text-delayed">{err}</p>}
       </div>
 
+      <div className="px-4 py-2">
+        <DocumentVersionStatus currentVersionNo={currentVersion?.versionNo ?? null}
+          viewingVersionNo={historicalVersion?.versionNo ?? currentVersion?.versionNo ?? null}
+          publicationState="saved" latestHref={currentHref} documentType="minute" />
+      </div>
       {historicalVersion && (
         <div className="card flex shrink-0 flex-wrap items-center gap-2 border-brand/30 bg-brand-weak/35 px-4 py-2">
           <History className="h-4 w-4 text-brand" aria-hidden />

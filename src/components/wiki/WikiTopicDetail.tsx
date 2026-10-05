@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DocumentVersionStatus } from '@/components/doc/DocumentVersionStatus'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -283,6 +284,8 @@ export function WikiTopicDetail({
               {topic.documentKind && <span className="chip bg-brand-weak text-brand">{kindLabel(topic.documentKind, locale)}</span>}
               <span className={`chip ${trustStatus.wrap}`}><TrustStatusIcon className="h-3 w-3" />{trustStatus.label}</span>
             </div>
+            <DocumentVersionStatus currentVersionNo={data.revisions?.[0]?.versionNo ?? null}
+              viewingVersionNo={data.revisions?.[0]?.versionNo ?? null} publicationState="saved" className="mt-2" />
             <h2 className="mt-2 text-xl font-bold tracking-tight text-ink sm:text-2xl">{topic.title}</h2>
             <p className="mt-1.5 text-sm text-ink-muted">{topic.ownerTeam ?? t(locale, 'wiki.noOwner')}<span className="mx-2 text-line-strong">·</span>{t(locale, 'wiki.updatedAt')} {formatWikiDate(topic.bodyUpdatedAt ?? topic.lastChangedAt, locale, false, timeZone)}</p>
           </div>

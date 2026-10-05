@@ -23,6 +23,12 @@ import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
 import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText } from './shared'
 import { RowDetailPanel } from './RowDetailPanel'
+import { bulkUpdateWbsItems, createWbsBulkSnapshot, type WbsBulkSnapshotRow } from '@/app/actions/wbsBulk'
+import { WbsPasteDialog } from './WbsPasteDialog'
+import { type WbsPasteField } from '@/lib/domain/wbsPaste'
+import { WbsBulkBar } from './WbsBulkBar'
+import { WbsBulkEditDialog } from './WbsBulkEditDialog'
+import { GanttImpactConfirmDialog } from './GanttImpactConfirmDialog'
 import { StageLabelsProvider } from './StageLabelsProvider'
 import type { StageLabels } from '@/lib/settings/defs/project'
 import { WbsProgressLens } from './WbsProgressLens'
@@ -328,6 +334,9 @@ export function WbsGanttSheet({
   const timelineScrollRef = useRef<HTMLDivElement>(null)
   const centeredViewRef = useRef<string | null>(null)
   const [query, setQuery] = useState('')
+  const [bulkSelection, setBulkSelection] = useState<Set<string>>(new Set())
+  const [pasteSnapshot, setPasteSnapshot] = useState<{ rows: WbsBulkSnapshotRow[]; columns: WbsPasteField[] } | null>(null)
+  const [bulkSnapshot, setBulkSnapshot] = useState<{ rows: WbsBulkSnapshotRow[]; selectedIds: string[] } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [addPhase, setAddPhase] = useState<string | null>(null) // null=닫힘
 
@@ -738,16 +747,103 @@ export function WbsGanttSheet({
     ),
     [allFlatItems, dependencies, cal, today],
   )
-  // hover 중인 작업에 걸린 선만 그린다. 선행·후행 양쪽을 다 잡아야 그 작업의 문맥이 보인다.
-  const hoveredDependencies = useMemo(
-    () => hoveredDepItemId === null
+  // hover 중이거나 현재 선택된 작업에 걸린 선을 그린다 (D6-§8-gantt).
+  const activeDepItemId = hoveredDepItemId || selectedId
+  const activeDependencies = useMemo(
+    () => activeDepItemId === null
       ? EMPTY_DEPENDENCIES
       : dependencies.filter(
-          dep => dep.predecessorId === hoveredDepItemId || dep.successorId === hoveredDepItemId,
+          dep => dep.predecessorId === activeDepItemId || dep.successorId === activeDepItemId,
         ),
-    [dependencies, hoveredDepItemId],
+    [dependencies, activeDepItemId],
   )
   const itemById = useMemo(() => new Map(allFlatItems.map(item => [item.id, item])), [allFlatItems])
+
+  // 간트 바 드래그 및 선후행 영향 검토 상태 (D6-§8-gantt, Q08)
+  // 리스너는 드래그 상태와 분리한다. state 를 의존성에 넣으면 픽셀마다 끊겨 mouseup 을 놓친다.
+  type BarDrag = {
+    itemId: string
+    startX: number
+    currentX: number
+    originalStart: string
+    originalEnd: string
+    updatedAt: string | null
+  }
+  const [draggingBar, setDraggingBar] = useState<BarDrag | null>(null)
+  const dragRef = useRef<BarDrag | null>(null)
+  const dayPxRef = useRef(dayPx)
+  const itemByIdRef = useRef(itemById)
+  dayPxRef.current = dayPx
+  itemByIdRef.current = itemById
+
+  const [impactDialogState, setImpactDialogState] = useState<{
+    item: ComputedItem
+    originalStart: string
+    originalEnd: string
+    proposedStart: string
+    proposedEnd: string
+    updatedAt: string | null
+  } | null>(null)
+  const [isSavingImpact, setIsSavingImpact] = useState(false)
+
+  useEffect(() => {
+    const addDaysToIso = (iso: string, days: number) => {
+      const date = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
+      date.setUTCDate(date.getUTCDate() + days)
+      return date.toISOString().slice(0, 10)
+    }
+    const handleMouseMove = (e: MouseEvent) => {
+      const prev = dragRef.current
+      if (!prev) return
+      const next = { ...prev, currentX: e.clientX }
+      dragRef.current = next
+      setDraggingBar(next)
+    }
+    const handleMouseUp = () => {
+      const prev = dragRef.current
+      if (!prev) return
+      dragRef.current = null
+      setDraggingBar(null)
+      const dayDelta = Math.round((prev.currentX - prev.startX) / dayPxRef.current)
+      if (dayDelta === 0 || !prev.originalStart || !prev.originalEnd) return
+      const item = itemByIdRef.current.get(prev.itemId)
+      if (!item) return
+      setImpactDialogState({
+        item,
+        originalStart: prev.originalStart,
+        originalEnd: prev.originalEnd,
+        proposedStart: addDaysToIso(prev.originalStart, dayDelta),
+        proposedEnd: addDaysToIso(prev.originalEnd, dayDelta),
+        updatedAt: prev.updatedAt,
+      })
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
+
+  const handleConfirmImpact = async () => {
+    if (!impactDialogState) return
+    setIsSavingImpact(true)
+    try {
+      const { item, proposedStart, proposedEnd, updatedAt } = impactDialogState
+      const res = await bulkUpdateWbsItems(projectId, [item.id], {
+        plannedStart: { mode: 'set', value: proposedStart },
+        plannedEnd: { mode: 'set', value: proposedEnd },
+      }, [{ id: item.id, updatedAt }])
+      if (res.ok) {
+        setImpactDialogState(null)
+        router.refresh()
+      } else {
+        setToast({ kind: 'err', msg: res.failed[0]?.message || res.error || '일정 변경 저장에 실패했습니다.' })
+      }
+    } finally {
+      setIsSavingImpact(false)
+    }
+  }
   const progressLensPathById = useMemo(() => {
     const paths = new Map<string, string[]>()
     const walk = (nodes: ComputedItem[], parents: string[]) => {
@@ -1222,7 +1318,7 @@ export function WbsGanttSheet({
         fullscreen
           ? // 층은 --z-fullscreen(120) — AI 버튼·패널은 --z-rail(90)로 내려가 그 아래다(z 대응표 §1). 우측 레일은 아래 레일 자리로 포털된다(D56)
             'fixed inset-0 z-(--z-fullscreen) flex min-h-0 overflow-hidden bg-canvas'
-          : 'relative flex h-full min-h-0 w-full min-w-0 max-w-full flex-col'
+          : 'relative flex h-full min-h-[260px] w-full min-w-0 max-w-full flex-col'
       }
       role={fullscreen ? 'dialog' : undefined}
       aria-modal={fullscreen || undefined}
@@ -1752,7 +1848,16 @@ export function WbsGanttSheet({
                   />
                   {/* focus 도착 마커 — 동결(#) 셀 안에 두어 가로 스크롤에도 항상 보인다 */}
                   {isFlash && <span aria-hidden data-flash-accent className="absolute inset-y-0 left-0 z-10 w-1 bg-brand" />}
-                  {rowNo}
+                  {isAdmin && !readOnly ? (
+                    <input type="checkbox" aria-label={`${n.name} 대량 수정 선택`}
+                      checked={bulkSelection.has(n.id)}
+                      onChange={e => setBulkSelection(current => {
+                        const next = new Set(current)
+                        if (e.target.checked) next.add(n.id)
+                        else next.delete(n.id)
+                        return next
+                      })} />
+                  ) : rowNo}
                 </div>
                 {/* 개요 번호(토글) — 저장 code 아님, 트리 위치 파생 */}
                 {showCol('outline') && (
@@ -2053,6 +2158,21 @@ export function WbsGanttSheet({
                         // 떠날 때 무조건 null 로 두면, 옆 바로 옮겨간 뒤 도착한 leave 가 새 hover 를 지운다.
                         prev => (hovering ? n.id : prev === n.id ? null : prev),
                       )}
+                      onDragStart={isAdmin && !readOnly && n.depth > 0 ? e => {
+                        e.stopPropagation()
+                        const next = {
+                          itemId: n.id,
+                          startX: e.clientX,
+                          currentX: e.clientX,
+                          originalStart: n.plannedStart!,
+                          originalEnd: n.plannedEnd!,
+                          updatedAt: n.updatedAt ?? null,
+                        }
+                        dragRef.current = next
+                        setDraggingBar(next)
+                      } : undefined}
+                      isDragging={draggingBar?.itemId === n.id}
+                      dragOffsetPx={draggingBar?.itemId === n.id ? draggingBar.currentX - draggingBar.startX : 0}
                     />
                   )}
                 </div>
@@ -2060,9 +2180,9 @@ export function WbsGanttSheet({
             )
           })}
 
-          {hoveredDependencies.length > 0 && rowsH > 0 && (
+          {activeDependencies.length > 0 && rowsH > 0 && (
             <DependencyOverlay
-              dependencies={hoveredDependencies}
+              dependencies={activeDependencies}
               itemById={itemById}
               scheduleById={dependencySchedule.byId}
               criticalDependencyIds={dependencySchedule.criticalDependencyIds}
@@ -2171,7 +2291,7 @@ export function WbsGanttSheet({
       {progressLensEnabled && (
         <div
           data-wbs-progress-lens-wrap
-          className="pointer-events-none fixed inset-x-3 bottom-4 z-[45] flex justify-center sm:inset-x-6"
+          className={`pointer-events-none fixed inset-x-3 z-[45] flex justify-center sm:inset-x-6 ${bulkSelection.size > 0 ? 'bottom-36' : 'bottom-4'}`}
           style={{ transform: `translate(${lensOffset.x}px, ${lensOffset.y}px)` }}
         >
           <WbsProgressLens
@@ -2247,7 +2367,7 @@ export function WbsGanttSheet({
 
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${
+          className={`fixed right-6 z-50 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${bulkSelection.size > 0 ? 'bottom-36' : 'bottom-6'} ${
             toast.kind === 'ok' ? 'bg-done text-success-fg' : 'bg-delayed text-danger-fg'
           }`}
           role={toast.kind === 'err' ? 'alert' : 'status'}
@@ -2276,6 +2396,54 @@ export function WbsGanttSheet({
           unresolvedRefs={unresolvedDepends[selectedItem.id] ?? EMPTY_REFS}
           predecessorGate={predecessorGate}
           approvedItemIds={approvedItemIds}
+        />
+      )}
+
+      {isAdmin && !readOnly && (
+        <WbsBulkBar selectedCount={flatRows.filter(row => bulkSelection.has(row.id)).length}
+          totalCount={flatRows.length}
+          onClearSelection={() => setBulkSelection(new Set())}
+          onSelectAll={() => setBulkSelection(new Set(flatRows.map(row => row.id)))}
+          isAllSelected={flatRows.length > 0 && flatRows.every(row => bulkSelection.has(row.id))}
+          onOpenPaste={async () => {
+            const fields: Array<[string, WbsPasteField]> = [['deliverable', 'deliverable'], ['pstart', 'plannedStart'], ['pend', 'plannedEnd']]
+            const columns = fields.filter(([key]) => showCol(key)).map(([, field]) => field)
+            if (!columns.length) { setToast({ kind: 'err', msg: '편집할 계획 열을 먼저 표시해 주세요.' }); return }
+            const ids = flatRows.filter(row => bulkSelection.has(row.id)).map(row => row.id)
+            const snapshot = await createWbsBulkSnapshot(projectId, ids)
+            if (!snapshot.ok) { setToast({ kind: 'err', msg: snapshot.error }); return }
+            setPasteSnapshot({ rows: snapshot.rows, columns })
+          }}
+          onOpenBulkEdit={async () => {
+            const selectedIds = flatRows.filter(row => bulkSelection.has(row.id)).map(row => row.id)
+            const snapshot = await createWbsBulkSnapshot(projectId, flatRows.map(row => row.id))
+            if (!snapshot.ok) { setToast({ kind: 'err', msg: snapshot.error }); return }
+            setBulkSnapshot({ rows: snapshot.rows, selectedIds })
+          }} />
+      )}
+      {pasteSnapshot && <WbsPasteDialog projectId={projectId} rows={pasteSnapshot.rows} columns={pasteSnapshot.columns}
+        onClose={() => setPasteSnapshot(null)} onSuccess={() => router.refresh()} />}
+      {bulkSnapshot && (
+        <WbsBulkEditDialog open projectId={projectId}
+          selectedItems={bulkSnapshot.rows.filter(row => bulkSnapshot.selectedIds.includes(row.id))}
+          totalCount={bulkSnapshot.rows.length} allItemIdsSnapshot={bulkSnapshot.rows.map(row => row.id)}
+          snapshotRows={bulkSnapshot.rows} members={members}
+          onClose={() => setBulkSnapshot(null)} onSuccess={() => router.refresh()} />
+      )}
+      {impactDialogState && (
+        <GanttImpactConfirmDialog
+          open={!!impactDialogState}
+          item={impactDialogState.item}
+          originalStart={impactDialogState.originalStart}
+          originalEnd={impactDialogState.originalEnd}
+          proposedStart={impactDialogState.proposedStart}
+          proposedEnd={impactDialogState.proposedEnd}
+          dependencies={dependencies}
+          calendar={cal}
+          itemById={itemById}
+          onConfirm={handleConfirmImpact}
+          onCancel={() => setImpactDialogState(null)}
+          isSaving={isSavingImpact}
         />
       )}
       </div>
@@ -2322,6 +2490,7 @@ function DependencyOverlay({
 
   return (
     <svg
+      data-testid="gantt-dependency-overlay"
       className="pointer-events-none absolute z-20 overflow-visible"
       style={{ left, top: 'var(--wbs-head-h)', clipPath }}
       width={width}
@@ -2376,6 +2545,7 @@ function DependencyOverlay({
         return (
           <path
             key={dep.id}
+            data-dep-id={dep.id}
             d={dropIn
               ? `M ${sourceX} ${sourceY} H ${targetX} V ${dropEndY}`
               : `M ${sourceX} ${sourceY} H ${elbowX} V ${targetY} H ${targetX}`}
@@ -2400,6 +2570,9 @@ function Bar({
   xOf,
   dayPx,
   onHover,
+  onDragStart,
+  isDragging = false,
+  dragOffsetPx = 0,
 }: {
   n: ComputedItem
   schedule?: TaskSchedule
@@ -2407,6 +2580,9 @@ function Bar({
   dayPx: number
   /** 바 위에 마우스가 올라오고 내려갈 때 — 의존성 연결선 표시의 방아쇠. */
   onHover?: (hovering: boolean) => void
+  onDragStart?: (e: React.MouseEvent) => void
+  isDragging?: boolean
+  dragOffsetPx?: number
 }) {
   const left = xOf(n.plannedStart!)
   const width = Math.max(dayPx * 0.5, xOf(n.plannedEnd!) + dayPx - left)
@@ -2459,9 +2635,20 @@ function Bar({
 
   return (
     <>
+      {isDragging && (
+        <div
+          data-testid="gantt-bar-original-dashed"
+          className="absolute top-1/2 h-3.5 -translate-y-1/2 rounded-full border border-dashed border-action/70 bg-action/10 pointer-events-none"
+          style={{ left, width }}
+        />
+      )}
       <div
-        className="absolute top-1/2 h-3.5 -translate-y-1/2 overflow-visible rounded-full"
-        style={{ left, width }}
+        data-testid={`gantt-bar-${n.id}`}
+        className={`absolute top-1/2 h-3.5 -translate-y-1/2 overflow-visible rounded-full select-none ${
+          onDragStart ? 'cursor-grab active:cursor-grabbing' : ''
+        } ${isDragging ? 'shadow-lg ring-2 ring-action z-30' : ''}`}
+        style={{ left: left + (isDragging ? dragOffsetPx : 0), width }}
+        onMouseDown={onDragStart}
         onMouseEnter={onHover ? () => onHover(true) : undefined}
         onMouseLeave={onHover ? () => onHover(false) : undefined}
       >

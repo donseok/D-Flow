@@ -71,8 +71,8 @@ async function loadItem(itemId: string): Promise<
 }
 
 export async function setWbsAssignee(
-  itemId: string, memberId: string | null,
-): Promise<{ ok: boolean; error?: string; orderCreated?: boolean }> {
+  itemId: string, memberId: string | null, expectedUpdatedAt?: string | null,
+): Promise<{ ok: boolean; error?: string; orderCreated?: boolean; conflict?: boolean }> {
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
   const g = await requireProjectAdmin(resolved.projectId)
@@ -83,7 +83,7 @@ export async function setWbsAssignee(
   // 이미 같은 담당자면 쓰기·알림 없이 성공 — 알림 멱등은 dedupeKey(영구 억제)가 아니라
   // 상태 비교로 확보한다. dedupeKey를 쓰면 재배정 순환(M1→M2→M1)에서 두 번째 M1 배정이
   // 조용히 무발행된다(23505를 성공으로 처리하는 emit.ts 특성).
-  if ((item.assignee_member_id ?? null) === memberId) return { ok: true }
+  if (expectedUpdatedAt === undefined && (item.assignee_member_id ?? null) === memberId) return { ok: true }
   const admin = createAdminClient()
   if (memberId !== null) {
     if (!isUuidLike(memberId)) return { ok: false, error: '잘못된 요청입니다.' }
@@ -96,12 +96,22 @@ export async function setWbsAssignee(
       return { ok: false, error: '이 프로젝트의 로스터 멤버가 아닙니다.' }
     }
   }
-  const { data: updated, error } = await admin
-    .from('wbs_items')
-    .update({ assignee_member_id: memberId, updated_at: new Date().toISOString() })
-    .eq('id', itemId).select('id')
-  if (error) return { ok: false, error: error.message }
-  if (!updated || updated.length === 0) return { ok: false, error: '갱신 대상 없음' }
+  if (expectedUpdatedAt !== undefined) {
+    const { data, error } = await admin.rpc('apply_wbs_bulk_item', {
+      p_project_id: item.project_id, p_actor: g.actor.userId, p_item_id: itemId,
+      p_expected_updated_at: expectedUpdatedAt, p_patch: { assignee_member_id: memberId },
+    })
+    if (error) { console.error('[wbsAssign.cas]', error); return { ok: false, error: '담당자를 저장하지 못했습니다. 다시 시도해 주세요.' } }
+    if (data?.ok !== true) return { ok: false, conflict: data?.reason === 'conflict', error: data?.reason === 'conflict' ? '다른 사용자가 수정했습니다. 최신 내용을 확인해 주세요.' : '담당자 변경 값을 확인해 주세요.' }
+    if ((item.assignee_member_id ?? null) === memberId) return { ok: true }
+  } else {
+    const { data: updated, error } = await admin
+      .from('wbs_items')
+      .update({ assignee_member_id: memberId, updated_at: new Date().toISOString() })
+      .eq('id', itemId).select('id')
+    if (error) return { ok: false, error: error.message }
+    if (!updated || updated.length === 0) return { ok: false, error: '갱신 대상 없음' }
+  }
   revalidatePath(`/p/${item.project_id}`, 'layout')
   // 배정↔as 전이(스펙 2026-09-15 §3.4) — RPC 가 dev_workflow·리프·현재 stage 를 판정한다(배정은 stage 가 null
   // 일 때만 as·표.as, 해제는 as 일 때만 null·실적 불변). 실패는 로깅만, 배정 결과(ok:true)는 유지한다.
@@ -338,7 +348,7 @@ export async function setWbsAssigneeCascade(
  * 해제(null)는 잠금이 아니면 워크플로·리프와 무관하게 허용한다 — 잘못 찍힌 값을 지울 길이 이것뿐이다.
  */
 export async function setWbsStage(
-  itemId: string, stage: StageCode | null, expectedStep?: string | null,
+  itemId: string, stage: StageCode | null, expectedStep?: string | null, expectedUpdatedAt?: string | null,
 ): Promise<{ ok: boolean; error?: string; stale?: true }> {
   if (stage !== null && !isStageCode(stage)) return { ok: false, error: '허용되지 않는 단계입니다.' }
   if (expectedStep != null && (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep))) return { ok: false, error: '잘못된 요청입니다.' }
@@ -350,8 +360,8 @@ export async function setWbsStage(
   if (!g.ok) return { ok: false, error: g.error }
   if (expectedStep != null && 'pending' in g && g.pending.step !== expectedStep) return { ok: false, stale: true, error: REASON_TEXT.approval_stale }
   const admin = createAdminClient()
-  const tr = await applyWorkflowEvent(admin, { event: 'set_stage', actorUserId: g.actor.userId, itemId, stage, expectedStep })
-  if (!tr.ok) return tr.reason === 'approval_stale' ? { ok: false, stale: true, error: tr.error } : { ok: false, error: tr.error }
+  const tr = await applyWorkflowEvent(admin, { event: 'set_stage', actorUserId: g.actor.userId, itemId, stage, expectedStep, expectedUpdatedAt, projectId: expectedUpdatedAt !== undefined ? resolved.projectId : undefined })
+  if (!tr.ok) return tr.reason === 'approval_stale' || tr.conflict ? { ok: false, stale: true, error: tr.error } : { ok: false, error: tr.error }
   revalidatePath(`/p/${resolved.projectId}`, 'layout')
   if (tr.actualChanged) after(() => recordProgressSnapshot(resolved.projectId))
   // §2.10 — im·xx 에 "처음" 도달할 때만 후행 알림(재설정·역전이는 RPC 의 reachedFirst 가 거른다).
@@ -395,7 +405,7 @@ export async function approveWbsStep(itemId: string, expectedStep: string): Prom
   if (g.pending.step !== expectedStep) return { ok: false, stale: true, error: REASON_TEXT.approval_stale }
   const admin = createAdminClient()
   const tr = await applyWorkflowEvent(admin, { event: 'approve_step', actorUserId: g.actor.userId, itemId, expectedStep })
-  if (!tr.ok) return tr.reason === 'approval_stale' ? { ok: false, stale: true, error: tr.error } : { ok: false, error: tr.error }
+  if (!tr.ok) return tr.reason === 'approval_stale' || tr.conflict ? { ok: false, stale: true, error: tr.error } : { ok: false, error: tr.error }
   revalidatePath(`/p/${resolved.projectId}`, 'layout')
   if (tr.actualChanged) after(() => recordProgressSnapshot(resolved.projectId))
   if (tr.reachedFirst) await notifyOnReached(admin, itemId, g.actor.userId)

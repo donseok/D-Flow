@@ -26,6 +26,8 @@ export const DYNAMIC_RPC_ALLOW: Readonly<Record<string, { count: number; why: st
 
 export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   apply_project_settings: ['project_settings', 'project_settings_history'],
+  apply_wbs_bulk_item: ['wbs_items', 'item_owners', 'change_logs'],
+  apply_workflow_event_cas: ['wbs_items', 'agent_work_orders', 'change_logs', 'wbs_stage_approvals'],
   apply_workspace_settings: ['workspace_settings', 'workspace_settings_history'],
   can_attach: [],
   consume_project_invite: ['people', 'profiles', 'project_invites', 'project_member_teams', 'project_members', 'workspace_members'],

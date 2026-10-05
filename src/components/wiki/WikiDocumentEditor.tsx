@@ -1,4 +1,5 @@
 'use client'
+import { DocumentVersionStatus } from '@/components/doc/DocumentVersionStatus'
 
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
@@ -366,6 +367,8 @@ export function WikiDocumentEditor({
   if (editing) {
     return (
       <div className="space-y-4">
+        <DocumentVersionStatus currentVersionNo={null} viewingVersionNo={null} publicationState="draft" />
+        <p className="text-xs text-fg-secondary">편집 중인 초안입니다. 저장 전까지 다른 사람에게 반영되지 않습니다.</p>
         {draft && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-pending/40 bg-pending-weak px-4 py-3">
             <p className="text-xs font-medium text-ink">
