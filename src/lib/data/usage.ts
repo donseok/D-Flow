@@ -21,9 +21,11 @@ export interface UsageEventRow {
   occurredAt: string
 }
 
-export async function getUsageSummary(from: string, to: string, today: string, timezone: string): Promise<UsageSummary> {
+export async function getUsageSummary(from: string, to: string, today: string, timezone: string, workspaceId?: string | null): Promise<UsageSummary> {
   const sb = await createServerClient()
-  const { data, error } = await sb.rpc('usage_summary', { p_from: from, p_to: to, p_today: today, p_timezone: timezone })
+  const params: Record<string, unknown> = { p_from: from, p_to: to, p_today: today, p_timezone: timezone }
+  if (workspaceId !== undefined) params.p_workspace_id = workspaceId
+  const { data, error } = await sb.rpc('usage_summary', params)
   // 요약 실패를 0으로 표시하면 '아무도 안 썼다'와 '집계가 깨졌다'가 화면에서 같아 보인다.
   if (error) throw usageRpcError('사용 현황 요약', error)
   const row = (data as Record<string, unknown>[] | null)?.[0]
@@ -35,9 +37,11 @@ export async function getUsageSummary(from: string, to: string, today: string, t
   }
 }
 
-export async function getDailyActives(from: string, to: string, timezone: string): Promise<DailyActive[]> {
+export async function getDailyActives(from: string, to: string, timezone: string, workspaceId?: string | null): Promise<DailyActive[]> {
   const sb = await createServerClient()
-  const { data, error } = await sb.rpc('usage_daily_actives', { p_from: from, p_to: to, p_timezone: timezone })
+  const params: Record<string, unknown> = { p_from: from, p_to: to, p_timezone: timezone }
+  if (workspaceId !== undefined) params.p_workspace_id = workspaceId
+  const { data, error } = await sb.rpc('usage_daily_actives', params)
   if (error) throw usageRpcError('일별 활성 사용자', error)
   return ((data as Record<string, unknown>[] | null) ?? []).map(r => ({
     d: r.d as string,
@@ -46,9 +50,11 @@ export async function getDailyActives(from: string, to: string, timezone: string
   }))
 }
 
-export async function getMenuRanking(from: string, to: string, timezone: string): Promise<MenuRank[]> {
+export async function getMenuRanking(from: string, to: string, timezone: string, workspaceId?: string | null): Promise<MenuRank[]> {
   const sb = await createServerClient()
-  const { data, error } = await sb.rpc('usage_menu_ranking', { p_from: from, p_to: to, p_timezone: timezone })
+  const params: Record<string, unknown> = { p_from: from, p_to: to, p_timezone: timezone }
+  if (workspaceId !== undefined) params.p_workspace_id = workspaceId
+  const { data, error } = await sb.rpc('usage_menu_ranking', params)
   if (error) throw usageRpcError('메뉴 사용량', error)
   return ((data as Record<string, unknown>[] | null) ?? []).map(r => ({
     menuKey: r.menu_key as string,
@@ -57,9 +63,11 @@ export async function getMenuRanking(from: string, to: string, timezone: string)
   }))
 }
 
-export async function getUserRollup(from: string, to: string, timezone: string): Promise<UserRollup[]> {
+export async function getUserRollup(from: string, to: string, timezone: string, workspaceId?: string | null): Promise<UserRollup[]> {
   const sb = await createServerClient()
-  const { data, error } = await sb.rpc('usage_user_rollup', { p_from: from, p_to: to, p_timezone: timezone })
+  const params: Record<string, unknown> = { p_from: from, p_to: to, p_timezone: timezone }
+  if (workspaceId !== undefined) params.p_workspace_id = workspaceId
+  const { data, error } = await sb.rpc('usage_user_rollup', params)
   if (error) throw usageRpcError('사용자별 활동', error)
   return ((data as Record<string, unknown>[] | null) ?? []).map(r => ({
     userId: r.user_id as string,
@@ -74,17 +82,19 @@ export async function getUserRollup(from: string, to: string, timezone: string):
  * 반드시 사용자별로 끊어야 하므로 SQL 의 lag() 로 계산한다. 표시용 로그 200건이 아니라
  * 기간 전체가 대상이라 다른 KPI 와 같은 축이다.
  */
-export async function getUsageSessions(from: string, to: string, gapMinutes: number, timezone: string): Promise<number> {
+export async function getUsageSessions(from: string, to: string, gapMinutes: number, timezone: string, workspaceId?: string | null): Promise<number> {
   const sb = await createServerClient()
-  const { data, error } = await sb.rpc('usage_sessions', {
+  const params: Record<string, unknown> = {
     p_from: from, p_to: to, p_timezone: timezone, p_gap_minutes: gapMinutes,
-  })
+  }
+  if (workspaceId !== undefined) params.p_workspace_id = workspaceId
+  const { data, error } = await sb.rpc('usage_sessions', params)
   if (error) throw usageRpcError('접속 횟수', error)
   return Number(data ?? 0)
 }
 
 export async function getRecentUsageEvents(o: {
-  from: string; to: string; userId?: string; menuKey?: string; limit: number; timezone: string
+  from: string; to: string; userId?: string; menuKey?: string; limit: number; timezone: string; workspaceId?: string | null
 }): Promise<UsageEventRow[]> {
   const sb = await createServerClient()
   // 일자 경계는 그 tz 의 자정 — RPC 의 `(p_from::timestamp at time zone p_timezone)` 와 같은 기준(스펙 D14)
@@ -97,6 +107,7 @@ export async function getRecentUsageEvents(o: {
     // 0079의 Wiki 제품 이벤트는 참여 퍼널용이다. 기존 화면의 "접속 로그"와 섞으면
     // 질문 한 번이 여러 페이지 방문처럼 보여 메뉴·세션 지표가 부풀려진다.
     if (withEventDimension) q = q.eq('event_name', 'page_view')
+    if (o.workspaceId) q = q.eq('workspace_id', o.workspaceId)
     q = q
       .gte('occurred_at', fromAt)
       .lt('occurred_at', toAt)

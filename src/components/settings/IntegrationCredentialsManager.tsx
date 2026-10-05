@@ -212,7 +212,7 @@ export function IntegrationCredentialsManager({
     if (c.revoked_at || !c.enabled) return { label: '회수됨', color: 'bg-muted text-muted-foreground' }
     const isExpired = new Date(c.expires_at).getTime() < Date.now()
     if (isExpired) return { label: '만료됨', color: 'bg-destructive/10 text-destructive border-destructive/20' }
-    return { label: '활성', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' }
+    return { label: '활성', color: 'bg-success-weak text-success border-success/20' }
   }
 
   return (
@@ -316,15 +316,15 @@ export function IntegrationCredentialsManager({
                           <div className="flex items-center gap-1.5">
                             <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ${
                               c.kind === 'minutes_api'
-                                ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
-                                : 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
+                                ? 'bg-action-soft text-action'
+                                : 'bg-neutral-weak text-neutral'
                             }`}>
                               {c.kind === 'minutes_api' ? '회의록 연동' : '에이전트'}
                             </span>
                             <span className="font-semibold text-foreground">{c.name}</span>
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            발급일: {new Date(c.created_at).toLocaleDateString()}
+                            발급일: {c.created_at ? c.created_at.slice(0, 10) : ''}
                           </span>
                         </div>
                       </td>
@@ -385,8 +385,8 @@ export function IntegrationCredentialsManager({
 
                       <td className="px-4 py-3.5 text-xs text-muted-foreground">
                         <div className="flex flex-col">
-                          <span>사용: {c.last_used_at ? new Date(c.last_used_at).toLocaleString() : '미사용'}</span>
-                          <span>만료: {new Date(c.expires_at).toLocaleDateString()}</span>
+                          <span>사용: {c.last_used_at ? c.last_used_at.slice(0, 16).replace('T', ' ') : '미사용'}</span>
+                          <span>만료: {c.expires_at ? c.expires_at.slice(0, 10) : ''}</span>
                         </div>
                       </td>
 
@@ -641,8 +641,8 @@ export function IntegrationCredentialsManager({
           title="새 연동 토큰이 발급되었습니다"
         >
           <div className="space-y-4 py-2">
-            <div className="rounded-lg bg-amber-500/10 p-3.5 text-sm text-amber-700 dark:text-amber-300 border border-amber-500/20 flex gap-2.5">
-              <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="rounded-lg bg-warning-weak p-3.5 text-sm text-warning border border-warning/20 flex gap-2.5">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-warning" />
               <div className="space-y-1">
                 <p className="font-semibold">이 토큰은 지금 한 번만 확인할 수 있습니다.</p>
                 <p className="text-xs">
@@ -671,7 +671,7 @@ export function IntegrationCredentialsManager({
                   onClick={() => copyToken(issuedResult.token)}
                   className="absolute right-1.5 top-1.5 inline-flex items-center gap-1 rounded bg-background border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted transition"
                 >
-                  {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                  {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
                   <span>{copied ? '복사됨' : '복사'}</span>
                 </button>
               </div>

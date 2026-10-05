@@ -365,6 +365,19 @@ export async function prepareWeeklyCellRewrite(
   }
 }
 
+async function touchWeeklyReports(projectId: string, reportIds: Iterable<string>): Promise<void> {
+  const ids = [...new Set(reportIds)].filter(Boolean)
+  if (ids.length === 0) return
+  try {
+    const { admin } = adminFor({ projectId })
+    await admin.from('weekly_reports')
+      .update({ updated_at: new Date().toISOString() })
+      .in('id', ids)
+  } catch (e) {
+    console.error('[weekly] 주간보고 updated_at 갱신 실패(무시하고 계속):', e instanceof Error ? e.message : e)
+  }
+}
+
 /** 셀 저장 — 열 화이트리스트 강제(last-write-wins, 스펙 §2). updated_at 은 트리거(Q13). */
 export async function saveWeeklyCell(
   projectId: string, rowId: string, cellKey: string, content: string,
@@ -385,9 +398,13 @@ export async function saveWeeklyCell(
   const { data, error } = await sb.from('weekly_report_rows')
     .update({ [cellKey]: content })
     .eq('id', rowId)
-    .select('id')
+    .select('id, report_id')
   if (error) return { ok: false, error: failWith('weekly/cell', error, ERR_CELL_SAVE) }
   if (!data || data.length === 0) return { ok: false, error: ERR_ROW_GONE, gone: true }
+  const reportId = (data[0] as { id: string; report_id?: string })?.report_id
+  if (reportId) {
+    void touchWeeklyReports(projectId, [reportId])
+  }
   // revalidate 불필요 — 셀 값은 클라이언트 상태 + Realtime으로 동기화(새로고침 시 서버 조회가 최신)
   return { ok: true }
 }
@@ -427,6 +444,7 @@ export async function saveWeeklyCells(
   const scope = await rowAreasInProject(sb, projectId, [...new Set([...deduped.values()].map(e => e.rowId))])
   if (!scope.ok) return { ok: false, error: scope.error }
   const goneRowIds: string[] = []
+  const touchedReportIds = new Set<string>()
   // 행 단위 그룹핑 — 같은 행의 여러 cellKey 는 patch 하나로 합쳐 행당 1 update 로 보낸다.
   const patches = new Map<string, Record<string, string>>()
   for (const e of deduped.values()) {
@@ -449,8 +467,9 @@ export async function saveWeeklyCells(
         const { data, error } = await sb.from('weekly_report_rows')
           .update(patch)    // updated_at 없음 — 트리거가 채운다(Q13)
           .eq('id', rowId)
-          .select('id')
-        return { rowId, failure: (error ?? null) as unknown, gone: !error && (!data || data.length === 0) }
+          .select('id, report_id')
+        const reportId = (data as Array<{ id: string; report_id?: string }> | null)?.[0]?.report_id
+        return { rowId, reportId, failure: (error ?? null) as unknown, gone: !error && (!data || data.length === 0) }
       } catch (e) {
         return { rowId, failure: e as unknown, gone: false }
       }
@@ -459,7 +478,11 @@ export async function saveWeeklyCells(
       // 진성 DB 에러 — 청크 경계에서 중단(비원자적, 재시도는 멱등). 원문은 로그로만(D21)
       if (r.failure !== null) return { ok: false, error: failWith('weekly/cells', r.failure, ERR_CELL_SAVE) }
       if (r.gone) goneRowIds.push(r.rowId)                            // 0행 영향(삭제된 행) — 스킵하고 계속(전체 실패 아님)
+      else if (r.reportId) touchedReportIds.add(r.reportId)
     }
+  }
+  if (touchedReportIds.size > 0) {
+    void touchWeeklyReports(projectId, touchedReportIds)
   }
   // revalidate 안 함 — 행 update 하나가 그 행의 Realtime 이벤트 하나를 발생시켜 타 세션에 전파.
   return goneRowIds.length ? { ok: true, goneRowIds } : { ok: true }

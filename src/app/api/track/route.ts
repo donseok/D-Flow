@@ -20,7 +20,7 @@ const MAX_PATH_LEN = 512
  *
  * /api/** 는 middleware matcher 밖이라 여기서 직접 인증한다.
  * 본문은 경로(와 프로젝트 밖 화면의 워크스페이스)만 받는다: 사용자 id·메뉴 키·프로젝트 id 는 전부 서버가 판정한다.
- * 클라이언트가 보낸 식별자를 그대로 쓰면 남의 이름으로 기록을 남길 수 있다. 워크스페이스는 기록하지 않고 usage 관문에만 쓴다(소속 확인 뒤).
+ * 클라이언트가 보낸 식별자를 그대로 쓰면 남의 이름으로 기록을 남길 수 있다. 워크스페이스는 mod.workspaceId를 usage_events.workspace_id에 기록한다(소속 확인 뒤).
  */
 export async function POST(req: NextRequest) {
   if (!trackingEnabled(process.env)) {
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
     menu_key: resolveMenuKey(path),
     path: normalizeUsagePath(path),
     project_id: projectId,
+    workspace_id: mod.workspaceId,
   }
   const { error } = await admin.from('usage_events').insert({
     ...legacyRow,

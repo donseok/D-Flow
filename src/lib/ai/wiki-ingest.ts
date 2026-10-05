@@ -883,7 +883,7 @@ export async function enqueueMinuteWikiProcessing(args: {
     locked_at: null,
     locked_by: null,
     last_error: null,
-    prompt_version: 'wiki-v1',
+    prompt_version: 'wiki-v2',
     apply_generation: 0,
     rerun_requested: false,
     payload: {

@@ -120,7 +120,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
             <div className="mt-3">
               <Link
                 href={wsHref(access.slug, 'settings/integrations')}
-                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-ink hover:bg-surface-hover hover:border-line-hover transition-colors shadow-xs"
+                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-ink hover:bg-surface-hover hover:border-line-strong transition-colors shadow-xs"
               >
                 <KeyRound className="size-3.5 text-ink-muted" />
                 연동 자격증명 관리 바로가기

@@ -23,6 +23,7 @@ const EXCLUDED: Record<string, string> = {
   'src/app/(app)/(global)/admin/ui-states/page.tsx': '플랫폼 진단 — 모듈 밖(SP3b D16)',
   'src/app/(app)/w/[slug]/projects/page.tsx': '셸(프로젝트 목록)',
   'src/app/(app)/w/[slug]/settings/page.tsx': '워크스페이스 관리 화면 — 모듈을 허용하는 문이어서 자기 모듈 관문 밖(§5.2)',
+  'src/app/(app)/w/[slug]/settings/integrations/page.tsx': '워크스페이스 연동 자격증명 관리 — 모듈 밖',
   'src/app/(app)/w/[slug]/page.tsx': '셸(워크스페이스 홈) — 모듈 밖, 원천마다 로더가 모듈을 본다(D39)',
   'src/app/(app)/w/[slug]/my-work/page.tsx': '셸(내 업무) — 모듈 밖, 원천마다 로더가 모듈을 본다(D39)',
 }
@@ -158,7 +159,10 @@ export function inspect(file: string, text: string, expected: readonly ModuleId[
  *  레이아웃의 notFound() 는 페이지 로더를 멈추지 못한다(병렬로 도는 로더·after() 쓰기가 비소속에게도 실행된다) — 페이지가 스스로 판정한다.
  *  params·searchParams 를 기다리는 것만 그 앞에 올 수 있다. 판정은 함수 본문 최상위 문이고, 인자는 경로 조각에서 꺼낸 식별자다(UI-2a 최종 수정 FA2). */
 const SCOPE_ROOT = 'src/app/(app)/w/[slug]/'
-const SCOPE_GATE_BY_FILE: Record<string, string> = { 'src/app/(app)/w/[slug]/settings/page.tsx': 'workspacePageAccess' }
+const SCOPE_GATE_BY_FILE: Record<string, string> = {
+  'src/app/(app)/w/[slug]/settings/page.tsx': 'workspacePageAccess',
+  'src/app/(app)/w/[slug]/settings/integrations/page.tsx': 'workspacePageAccess',
+}
 export function inspectScopeFirst(file: string, text: string): string[] {
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
   const fn = sf.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s)

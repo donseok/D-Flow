@@ -44,6 +44,25 @@ describe('사용현황 RPC 다섯 — p_timezone 을 이름 인자로 넘긴다'
     ])
   })
 
+  it('workspaceId가 주어지면 p_workspace_id를 이름 인자로 넘긴다', async () => {
+    const WID = '00000000-0000-0000-7e57-000000001751'
+    m.rpc.mockClear()
+    m.rpc.mockResolvedValue({ data: [], error: null })
+    await getUsageSummary('2026-10-01', '2026-10-07', '2026-10-07', LA, WID)
+    await getDailyActives('2026-10-01', '2026-10-07', LA, WID)
+    await getMenuRanking('2026-10-01', '2026-10-07', LA, WID)
+    await getUserRollup('2026-10-01', '2026-10-07', LA, WID)
+    m.rpc.mockResolvedValueOnce({ data: 3, error: null })
+    await getUsageSessions('2026-10-01', '2026-10-07', 30, LA, WID)
+    expect(m.rpc.mock.calls).toEqual([
+      ['usage_summary', { p_from: '2026-10-01', p_to: '2026-10-07', p_today: '2026-10-07', p_timezone: LA, p_workspace_id: WID }],
+      ['usage_daily_actives', { p_from: '2026-10-01', p_to: '2026-10-07', p_timezone: LA, p_workspace_id: WID }],
+      ['usage_menu_ranking', { p_from: '2026-10-01', p_to: '2026-10-07', p_timezone: LA, p_workspace_id: WID }],
+      ['usage_user_rollup', { p_from: '2026-10-01', p_to: '2026-10-07', p_timezone: LA, p_workspace_id: WID }],
+      ['usage_sessions', { p_from: '2026-10-01', p_to: '2026-10-07', p_timezone: LA, p_gap_minutes: 30, p_workspace_id: WID }],
+    ])
+  })
+
   it('22023 은 USAGE_TIMEZONE_INVALID — 문구에 DB 원문이 없다', async () => {
     m.rpc.mockResolvedValue({ data: null, error: { code: '22023', message: 'time zone "Mars/Base" not recognized' } })
     for (const run of [

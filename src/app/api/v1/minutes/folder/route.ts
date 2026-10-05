@@ -16,7 +16,7 @@ import {
   isBatchAuthorized, isMinutesWorkspaceMember, type AdminClient, type MinutesPrincipal,
 } from '@/lib/minutes/externalApi'
 import { credentialAllows, narrowActor } from '@/lib/authz/credentials'
-import { requireModule, workspacesWithModule } from '@/lib/modules/gate'
+import { workspacesWithModule } from '@/lib/modules/gate'
 
 /**
  * POST /api/v1/minutes/folder — 이미 전송된 회의록의 **일괄 재편철**. 계약 §4c(작업지시 §8).
@@ -328,16 +328,17 @@ export async function POST(req: NextRequest) {
       if (!isWsAdmin && !hasProjectAdminInWs) {
         return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
       }
-
-      const mod = await requireModule({ workspaceId: wid }, 'minutes_integration', { client: admin })
-      if (!mod.ok) return apiModuleDisabled()
     } else {
       if (!isAnyProjectAdmin(authz)) {
         return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
       }
-      const onWs = new Set(await workspacesWithModule([...authz.workspaceRoles.keys()], 'minutes_integration', { client: admin }))
-      if (onWs.size === 0 && !authz.isSuperuser) return apiModuleDisabled()
     }
+
+    const candidateWs = principal.kind === 'minutes_api'
+      ? [principal.credential.workspaceId]
+      : [...authz.workspaceRoles.keys()]
+    const onWs = new Set(await workspacesWithModule(candidateWs, 'minutes_integration', { client: admin }))
+    if (onWs.size === 0 && (principal.kind === 'minutes_api' || !authz.isSuperuser)) return apiModuleDisabled()
 
     const parsed = parseBatchPayload(raw)
     if ('error' in parsed) return apiBadRequest(parsed.error)

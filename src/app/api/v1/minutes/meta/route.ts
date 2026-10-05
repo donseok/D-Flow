@@ -9,7 +9,7 @@ import { actorFromUser } from '@/lib/authz'
 import { canSeeProject } from '@/lib/domain/authz'
 import { fetchAllPages } from '@/lib/data/paging'
 import { BRAND } from '@/lib/branding'
-import { requireModule, workspacesWithModule } from '@/lib/modules/gate'
+import { workspacesWithModule } from '@/lib/modules/gate'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, isMinutesWorkspaceMember, isUuid, MINUTES_API_MAX_REQUEST_BYTES,
   resolveMinutesPrincipal, resolveUserByEmail, type AdminClient,
@@ -50,11 +50,15 @@ export async function GET(req: NextRequest) {
     if (principal.kind === 'minutes_api') {
       const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
       if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
-      const wsMod = await requireModule({ workspaceId: principal.credential.workspaceId }, 'minutes_integration', { client: admin })
-      if (!wsMod.ok) return apiModuleDisabled()
     }
 
     const actor = await actorFromUser(admin, user.id)
+    const candidateWs = principal.kind === 'minutes_api'
+      ? [principal.credential.workspaceId]
+      : [...new Set([...actor.workspaceRoles.keys(), ...actor.projectWorkspace.values()])]
+    const onWs = new Set(await workspacesWithModule(candidateWs, 'minutes_integration', { client: admin }))
+    if (onWs.size === 0 && (principal.kind === 'minutes_api' || !actor.isSuperuser)) return apiModuleDisabled()
+
     let projects: Array<{ id: string; name: string }> = []
     let teams: string[] = []
     let workspaceInfo: { id: string; slug: string; name: string } | null = null
@@ -78,11 +82,6 @@ export async function GET(req: NextRequest) {
         teams = activeCodes(await workspaceTeams(wsId, { client: admin }))
       }
     } else {
-      // 목록형 — minutes_integration 이 허용된 워크스페이스의 프로젝트·팀만(스펙 §4.2·§4.3). 하나도 없으면 닫는다(409)
-      const actorWs = [...new Set([...actor.workspaceRoles.keys(), ...actor.projectWorkspace.values()])]
-      const onWs = new Set(await workspacesWithModule(actorWs, 'minutes_integration', { client: admin }))
-      if (onWs.size === 0) return apiModuleDisabled()
-
       if (actor.projectWorkspace.size > 0) {
         const workspaceIds = [...actor.workspaceRoles.keys()]
         let rows: Array<{ id: string; name: string; is_private: boolean | null }>

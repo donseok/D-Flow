@@ -39,7 +39,7 @@ const GATE_DENY = /!\s*(?:isProjectMember|isProjectAdmin|roleIn)\(|(?<![!\w])isH
 const GATE_VAR = /\b(?:const|let)\s+(\w+)\s*=\s*(?:await\s+)?.*\b(isHiddenProject|roleIn|isProjectMember|isProjectAdmin|require(?:Superuser|ProjectAdmin|ProjectMember|WorkspaceAdmin))\(/
 const GATE_IF = /\bif\s*\((.*)\)\s*(?:return\s+)?(?:notFound|redirect)\(/
 /** 그 호출 자체가 거부(notFound)를 던지는 범위 판정 — 끝까지 기다려야 게이트다 */
-const GATE_CALL = /\bawait\s+loadWorkspaceScope\(/
+const GATE_CALL = /\bawait\s+(?:loadWorkspaceScope|workspacePageAccess)\(/
 const IMPORT_RE = /^\s*import\s+(type\s+)?([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/gm
 /** re-export — `export { a, type B } from '…'`·`export * from '…'`·`export * as ns from '…'`. `export type { … } from` 은 값이 아니다. */
 const REEXPORT_RE = /^\s*export\s+(type\s+)?(\{[\s\S]*?\}|\*(?:\s+as\s+\w+)?)\s+from\s+['"]([^'"]+)['"]/gm

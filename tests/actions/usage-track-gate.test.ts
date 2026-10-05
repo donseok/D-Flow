@@ -89,6 +89,7 @@ describe('기록 내용 — 본문을 신뢰하지 않는다', () => {
       menu_key: 'wbs',
       path: '/p/:id/wbs',
       project_id: PID,
+      workspace_id: null,
       event_name: 'page_view',
       metadata: {},
     })
@@ -126,6 +127,7 @@ describe('기록 내용 — 본문을 신뢰하지 않는다', () => {
       menu_key: 'wiki',
       path: '/p/:id/wiki',
       project_id: PID,
+      workspace_id: null,
     })
   })
 
@@ -203,9 +205,9 @@ describe('usage 모듈 관문(과제 20, P19)', () => {
     expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'usage')
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ project_id: PID }))
   })
-  it('본문의 워크스페이스는 기록하지 않는다(관문에만)', async () => {
+  it('본문의 워크스페이스(소속 검증됨)를 usage_events에 기록한다', async () => {
     expect((await POST(req({ path: '/w/acme/minutes', workspaceId: W }))).status).toBe(200)
-    expect(insert).toHaveBeenCalledWith(expect.not.objectContaining({ workspace_id: expect.anything() }))
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ workspace_id: W }))
   })
   it('잘못된 이벤트 경로는 모듈 판정 전에 400 — 입력 모양 검사는 관문 앞(기존 계약)', async () => {
     expect((await POST(req({ path: `/p/${PID}/wbs`, eventName: 'wiki_search' }))).status).toBe(400)

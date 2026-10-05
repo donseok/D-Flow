@@ -91,7 +91,7 @@
 | `NEXT_PUBLIC_BRAND_NAME` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/branding.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `NEXT_PUBLIC_BRAND_TAGLINE` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/branding.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `NEXT_PUBLIC_BRAND_COPYRIGHT` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/branding.ts` | rebuild | — | — | 운영 설정 | SP3a |
-| `NEXT_PUBLIC_APP_URL` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/app/actions/meetingNotify.ts`, `src/app/actions/projectInvites.ts` | rebuild | — | — | 운영 설정 | SP3a |
+| `NEXT_PUBLIC_APP_URL` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/app/actions/meetingNotify.ts`, `src/app/actions/projectInvites.ts`, `src/app/api/v1/minutes/route.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `VERCEL_PROJECT_PRODUCTION_URL` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/actions/meetingNotify.ts` | restart | — | — | 운영 설정 | SP3a |
 | `VERCEL_ENV` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `next.config.ts` | restart | — | — | 운영 설정 | SP3a |
 | `STAGING` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/(app)/layout.tsx`, `next.config.ts` | restart | — | — | 운영 설정 | SP3a |
@@ -110,7 +110,6 @@
 | `CHAT_V2_PLANNER_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/modules/flags.ts` | restart | — | — | 운영 설정 | SP3a |
 | `CHAT_V2_LLM_SYNTHESIS_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/modules/flags.ts` | restart | — | — | 운영 설정 | SP3a |
 | `CHAT_V2_INDEX_WORKER_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/modules/flags.ts` | restart | — | — | 운영 설정 | SP3a |
-| `CHAT_V2_INDEX_ENQUEUE_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/ai/index/enqueue.ts` | restart | — | — | 운영 설정 | SP3a |
 | `AI_PROVIDER` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/ai/provider.ts`, `src/lib/ai/llm.ts`, `src/lib/ai/similarity.ts` | restart | — | — | 운영 설정 | SP3a |
 | `LLM_API_KEY` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/ai/provider.ts`, `src/lib/ai/llm.ts`, `src/lib/ai/similarity.ts` | restart | — | — | 운영 설정 | SP3a |
 | `OPENAI_API_KEY` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/ai/provider.ts`, `src/lib/ai/llm.ts`, `src/lib/ai/similarity.ts` | restart | — | — | 운영 설정 | SP3a |

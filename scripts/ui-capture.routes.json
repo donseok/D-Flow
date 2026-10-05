@@ -72,6 +72,7 @@
     { "key": "p-wbs-fullscreen-compact", "path": "/p/{pid}/wbs", "grade": "member", "tags": ["P"], "since": "UI-2b", "clicks": ["[data-wbs-toolbar-toggle]", "[data-wbs-fullscreen-toggle]"], "expect": ["[data-wbs-fullscreen=\"open\"] [data-rail-host=\"fullscreen\"]"] },
     { "key": "inbox-popover", "path": "/p/{pid}/dashboard", "grade": "member", "tags": [], "since": "UI-1", "click": "[aria-label=\"알림\"]" },
     { "key": "ws-settings", "path": "/w/{wsSlug}/settings", "file": "(app)/w/[slug]/settings/page.tsx", "grade": "wsAdmin", "tags": ["S"], "since": "C" },
+    { "key": "ws-settings-integrations", "path": "/w/{wsSlug}/settings/integrations", "file": "(app)/w/[slug]/settings/integrations/page.tsx", "grade": "wsAdmin", "tags": ["S"], "since": "C" },
     { "key": "report-modal", "path": "/p/{pid}/dashboard", "grade": "member", "tags": ["P"], "since": "UI-1", "click": "button:has-text(\"주간보고서 요약(PPT)\")", "focusStart": "[role=\"dialog\"]", "focusTargets": ["[role=\"dialog\"] button"] },
     { "key": "p-meetings-list", "path": "/p/{pid}/meetings", "grade": "member", "tags": ["P"], "since": "UI-1", "click": "[role=\"tab\"]:has-text(\"리스트\")", "focusStart": "table:has(tr[role=\"button\"])", "focusTargets": ["tr[role=\"button\"]"] },
     { "key": "ws-home-wsadmin", "path": "/w/{wsSlug}", "grade": "wsAdmin", "tags": ["W"], "since": "UI-3", "supplement": true },

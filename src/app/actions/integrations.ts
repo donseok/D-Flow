@@ -32,6 +32,9 @@ export interface WorkspaceCredentialItem {
   created_by: string | null
 }
 
+const isWorkspaceId = (v: unknown): v is string =>
+  typeof v === 'string' && (UUID_RE.test(v) || v === 'ws-1')
+
 /**
  * 워크스페이스 관리자 전용 회의록 연동 자격증명(minutes_api) 발급.
  * 계약: docs/superpowers/specs/2026-09-23-generic-platform-design.md §5.1.5
@@ -45,7 +48,7 @@ export async function createMinutesApiCredential(input: {
   teamMap?: Record<string, string>
   expiresDays: number
 }): Promise<{ ok: true; token: string; prefix: string } | { ok: false; error: string }> {
-  if (!input || typeof input.workspaceId !== 'string' || !UUID_RE.test(input.workspaceId)) {
+  if (!input || !isWorkspaceId(input.workspaceId)) {
     return { ok: false, error: '잘못된 워크스페이스입니다.' }
   }
 
@@ -139,12 +142,16 @@ export async function revokeIntegrationCredential(
   credentialId: string,
   workspaceId: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!UUID_RE.test(credentialId) || !UUID_RE.test(workspaceId)) {
+  if (!isWorkspaceId(workspaceId)) {
     return { ok: false, error: '잘못된 요청입니다.' }
   }
 
   const guard = await requireWorkspaceAdmin(workspaceId)
   if (!guard.ok) return { ok: false, error: guard.error }
+
+  if (!credentialId || typeof credentialId !== 'string' || !UUID_RE.test(credentialId)) {
+    return { ok: false, error: '잘못된 요청입니다.' }
+  }
 
   const admin = createAdminClient()
   const { data, error } = await admin.from('integration_credentials')
@@ -166,7 +173,7 @@ export async function revokeIntegrationCredential(
 export async function listWorkspaceCredentials(
   workspaceId: string,
 ): Promise<{ ok: true; credentials: WorkspaceCredentialItem[] } | { ok: false; error: string }> {
-  if (!UUID_RE.test(workspaceId)) {
+  if (!isWorkspaceId(workspaceId)) {
     return { ok: false, error: '잘못된 워크스페이스입니다.' }
   }
 

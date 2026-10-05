@@ -22,6 +22,8 @@ import {
 } from '@/lib/data/usage'
 import { todayIn } from '@/lib/domain/calendar'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
+import { requireCalendar } from '@/lib/calendar/load'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 접속 지표는 항상 최신이어야 한다
@@ -39,10 +41,17 @@ export default async function UsagePage({ params, searchParams }: {
   if (!canViewUsage(scope.actor)) redirect(wsHref(scope.ws.slug))
   await requireModulePage({ workspaceId: scope.ws.id }, 'usage')
 
-  const [{ days, user, menu }, locale] = await Promise.all([searchParams, getServerLocale()])
+  const [{ days, user, menu }, locale, wsCfg] = await Promise.all([
+    searchParams,
+    getServerLocale(),
+    getWorkspaceConfig(scope.ws.id).catch(() => null),
+  ])
   const period = parsePeriodDays(days)
-  // 워크스페이스 필터가 없다 — 전체 합산이라 UTC 를 명시한다(스펙 D14). 필터는 SP8(p_workspace_id)
-  const timezone = usageTimezone(null)
+  let wsTimezone: string | null = null
+  if (wsCfg) {
+    try { wsTimezone = requireCalendar(wsCfg).timezone } catch {}
+  }
+  const timezone = usageTimezone(wsTimezone)
   const today = todayIn(timezone, new Date())
   const from = addDaysIso(today, -(period - 1))
   // 메뉴 필터는 여기서 검증 가능하지만 사용자 필터는 계정 목록을 받아야 한다(아래 2단계).
@@ -50,19 +59,19 @@ export default async function UsagePage({ params, searchParams }: {
 
   // 단일 왕복 — 직렬 2단째를 만들지 않는다(대시보드 관례).
   const [summary, daily, ranks, rollup, directory, sessions] = await Promise.all([
-    getUsageSummary(from, today, today, timezone),
-    getDailyActives(from, today, timezone),
-    getMenuRanking(from, today, timezone),
-    getUserRollup(from, today, timezone),
+    getUsageSummary(from, today, today, timezone, scope.ws.id),
+    getDailyActives(from, today, timezone, scope.ws.id),
+    getMenuRanking(from, today, timezone, scope.ws.id),
+    getUserRollup(from, today, timezone, scope.ws.id),
     getUsageDirectory(),
-    getUsageSessions(from, today, SESSION_GAP_MINUTES, timezone),
+    getUsageSessions(from, today, SESSION_GAP_MINUTES, timezone, scope.ws.id),
   ])
 
   // 사용자 필터는 실재하는 계정 id 만 허용한다 — 검증 없이 넘기면 존재하지 않는 id 로
   // 영원히 빈 표가 나오고 그게 '기록 없음'과 구별되지 않는다.
   const userFilter = pickAllowed(user, directory.map(a => a.id))
   const events = await getRecentUsageEvents({
-    from, to: today, limit: EVENT_LIMIT, userId: userFilter, menuKey: menuFilter, timezone,
+    from, to: today, limit: EVENT_LIMIT, userId: userFilter, menuKey: menuFilter, timezone, workspaceId: scope.ws.id,
   })
 
   const series = fillDailySeries(daily, from, today)
@@ -78,8 +87,7 @@ export default async function UsagePage({ params, searchParams }: {
   return (
     <div className="space-y-6">
       <PageHero eyebrow="OPERATIONS" title="사용 현황" />
-      {/* 수치는 플랫폼 전체다 — 워크스페이스 경로 아래지만 usage_events 에 워크스페이스 축이 없다(D21, SP8) */}
-      <UsageScopeChip />
+      <UsageScopeChip workspaceName={scope.ws.name} />
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-ink-muted">
           최근 {period}일 · {timezone} 기준 · 원시 기록은 {USAGE_RETAIN_DAYS}일간 보관됩니다.

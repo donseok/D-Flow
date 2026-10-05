@@ -104,6 +104,17 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('inviteRedeem')}#getInviteSessionState`]: nul('public', '초대 토큰'),
   [`${A('inviteRedeem')}#redeemInvite`]: nul('public', '초대 토큰 + 로그인 세션'),
   [`${A('inviteRedeem')}#redeemInviteWithSignup`]: nul('public', '초대 토큰 — 가입'),
+  // ── integrations — 워크스페이스 연동 자격증명 관리 (SP7)
+  [`${A('integrations')}#createMinutesApiCredential`]: {
+    guard: 'workspaceAdmin',
+    module: 'minutes_integration',
+    note: '인자 워크스페이스(소속 확인)',
+    sample: [{ workspaceId: W, name: '토큰', expiresDays: 30 }],
+    target: 'workspace',
+    deny: { ok: false, error: '이 워크스페이스에서 회의록 연동이 꺼져 있습니다.' },
+  },
+  [`${A('integrations')}#revokeIntegrationCredential`]: { ...nul('workspaceAdmin'), sample: [U, W] },
+  [`${A('integrations')}#listWorkspaceCredentials`]: { ...nul('workspaceAdmin'), sample: [W] },
   // ── issueAnalysis
   [`${A('issueAnalysis')}#ensureIssueAnalysisAction`]: { guard: 'projectMember', module: 'issue_analysis', sample: [P, 'all'] },
   // ── issueAttachments

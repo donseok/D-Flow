@@ -1,7 +1,7 @@
 // SP8: AI·위키·챗봇·사용현황 워크스페이스 스코프 RLS 검증
 import type { Pool, PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { F, asService, asUser, loadFixture, openPool, pgError } from './harness'
+import { F, asService, asUser, loadFixture, openPool } from './harness'
 
 let pool: Pool
 beforeAll(async () => {
