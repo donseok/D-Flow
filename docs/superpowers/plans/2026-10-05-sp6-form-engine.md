@@ -40,7 +40,8 @@ SP5c(사용자 정의 필드)의 모든 단계(F~Z)가 성공적으로 구현·�
   - [x] `/api/report` 라우트 연동 (활성 템플릿 우선, 미등록 시 기본 템플릿 폴백)와 그 응답의 `X-Form-Template: default | custom`
   - [x] `/api/export` 프로파일 경로는 유지. `GET /api/export?form=1` 은 `wbs_export_xlsx` 와 `X-Form-Template: default | custom`. 가드는 `requireProjectMember` (wbs 는 core)
   - [x] `/api/issue-analysis` 같은 전환과 그 응답의 `X-Form-Template: default | custom`. 고정 슬라이드 삽입(§4.9 A/B)은 스파이크라 이 전환에 넣지 않는다
-  - [ ] 중립 기본 템플릿 자산 (`assets/default` 4개 + `assets/fixed/issue-analysis-process.pptx`). CI `scan` error 0·warning 0 은 OPC scan 이 있어야 한다
+  - [x] `assets/default` 기본 4종: 무매핑 카탈로그 토큰, OPC 참조, scan error 0·warning 0, 0·1·8·17건 실제 엔진 출력 검증. 생성기 및 다운로드 라우트 파일 추적 포함
+  - [ ] `assets/fixed/issue-analysis-process.pptx`, 기존 SP0 자산 제거 및 전체 Office/장문 출력 검증
 - [ ] Z: 합성 게이트 S8, 부정 테스트 6, 카탈로그 verified 승격 및 마감
   - 부정 테스트 6 (제조/영업 예시 단어 미노출 검증)
   - `scripts/e2e-synthetic.mjs`에 `S8` 합성 단계 구현 및 `PENDING_STEPS`에서 `S8` 제거

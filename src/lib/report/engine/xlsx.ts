@@ -177,6 +177,9 @@ function fillRow(row: ExcelJS.Row, renderer: Renderer, ctx: Ctx): void {
     const text = cellText(cell.value)
     if (text === null || !text.includes('{{')) return
     const stripped = text.replace(/\{\{#rows[ \t]+[\s\S]*?\}\}/g, '').replace(/\{\{\/rows\}\}/g, '')
+    // ExcelJS shares style objects after loading/duplicating rows. Assigning a Date
+    // adds numFmt in place; isolate the cell so numeric neighbours retain their type.
+    cell.style = { ...cell.style }
     cell.value = renderer.fillText(stripped, ctx)
   })
 }
