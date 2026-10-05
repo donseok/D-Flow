@@ -1,7 +1,10 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
-/** PAT 발급·검증 — 평문은 호출부의 발급 응답 1회만 존재한다. DB 에는 hash 만 저장. */
-export function generateAgentToken(): { token: string; prefix: string; hash: string } {
+export type CredentialKind = 'agent_runner' | 'minutes_api'
+
+/** 평문은 발급 응답 1회만 존재한다. DB 에는 hash 만 저장한다. */
+export function generateCredentialToken(kind: CredentialKind): { token: string; prefix: string; hash: string } {
+  if (kind !== 'agent_runner' && kind !== 'minutes_api') throw new Error('지원하지 않는 자격증명 유형입니다.')
   // prefix 12자 영숫자 — base64url 에서 -,_ 를 걸러 12자를 채운다(조회 키, 충돌 시 재생성은 호출부 unique 위반 처리).
   let prefix = ''
   while (prefix.length < 12) {
@@ -9,8 +12,14 @@ export function generateAgentToken(): { token: string; prefix: string; hash: str
   }
   prefix = prefix.slice(0, 12)
   const secret = randomBytes(32).toString('base64url') // 43자
-  const token = `dflow_pat_${prefix}_${secret}`
+  const tag = kind === 'minutes_api' ? 'int' : 'pat'
+  const token = `dflow_${tag}_${prefix}_${secret}`
   return { token, prefix, hash: hashToken(token) }
+}
+
+/** 기존 PAT 형식 및 발급 계약은 유지한다. */
+export function generateAgentToken(): { token: string; prefix: string; hash: string } {
+  return generateCredentialToken('agent_runner')
 }
 
 export function hashToken(token: string): string {

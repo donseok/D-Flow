@@ -3,6 +3,7 @@
  * 형식: dflow_pat_<prefix 12자 영숫자>_<secret base64url>. prefix 는 비밀이 아니라 조회 키다.
  */
 export const PAT_RE = /^dflow_pat_([A-Za-z0-9]{12})_([A-Za-z0-9_-]{20,})$/
+export const INT_RE = /^dflow_int_([A-Za-z0-9]{12})_([A-Za-z0-9_-]{20,})$/
 
 export function isPatFormat(token: string): boolean {
   return PAT_RE.test(token)
@@ -11,6 +12,17 @@ export function isPatFormat(token: string): boolean {
 export function parsePatPrefix(token: string): string | null {
   const m = PAT_RE.exec(token)
   return m ? m[1] : null
+}
+
+/** 자격증명 유형에 맞는 태그만 허용한다. PAT_RE는 기존 계약 그대로다. */
+export function parseCredentialPrefix(token: string, kind: 'agent_runner' | 'minutes_api'): string | null {
+  if (kind === 'agent_runner') return parsePatPrefix(token)
+  if (kind !== 'minutes_api') return null
+  return INT_RE.exec(token)?.[1] ?? null
+}
+
+export function isCredentialFormat(token: string, kind: 'agent_runner' | 'minutes_api'): boolean {
+  return parseCredentialPrefix(token, kind) !== null
 }
 
 export type TokenRowState = { enabled: boolean; revoked_at: string | null; expires_at: string }
