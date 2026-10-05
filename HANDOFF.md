@@ -8,7 +8,7 @@
 
 | 레인 | 워크트리 / 브랜치 | HEAD | 멈춘 지점 | 보고서(정본) |
 |---|---|---|---|---|
-| **A — SP5 B1(이슈 영역·채번)** | `/Users/jerry/D-Flow-wt/lane-a-sp4` · `sp5/b1`(로컬 전용·미푸시) | `46f1bdd2` | 묶음 B1-2 과제 6 **Step 7 까지 초록, Step 8(전체 RLS·CI 등가·단위) 미착수**, 커밋 ②③ 미작성. 미커밋 11경로 | `.superpowers/sp5/b1-report-t4-6.md` ("미착수"·"미커밋 파일과 상태" 절) |
+| **A — SP6(양식 병합 엔진)** | `/Users/jerry/D-Flow-wt/lane-a-sp4` · `sp6/form-engine` | `b0fbff55` | **SP6 전체 구현·검증 마감**, forms.* verified 승격, 부정 테스트 6, 합성 S8 활성화, 단위/RLS/build 통과, 원격 푸시 완료 | `docs/superpowers/plans/2026-10-05-sp6-form-engine.md`, HANDOFF §21 |
 | **B — SP3b UI-3(화면)** | `/Users/jerry/D-Flow-wt/lane-b` · `ui/sp3-screens`(로컬 전용·미푸시) | `b2bc2b6e` | 묶음 U3-4 과제 10(홈 v1) **구현·단위 테스트 초록, 눈확인(Step 5) 도중**, 숨김 경합 버그 1건 미수정, 커밋 미작성. 미커밋 20경로 | `.superpowers/sp3b/sdd-ui3/u3-4-report.md` ("인계(Codex)" 절) |
 | 메인 체크아웃 | `/Users/jerry/D-Flow` · `main` = origin/main `9b50d483`(CI 초록) | — | 미추적 `HANDOFF.md` 외 깨끗 | — |
 
@@ -212,3 +212,90 @@ Codex 토큰 소진. Claude Haiku 2.1.288 인수, HANDOFF.md 최신화 및 상�
   화면 경로는 통과. 설정 행 잠금·새 트리거는 원인이 아님을 실험으로 확인(`sp5b-perf.md`). 기본값 = 기능 비용으로 수용.
 - **사용자 DB 적용은 하지 않았다** — 0019~0026 은 `docs/runbook-user-db-apply.md`(0025·0026 행·사전검사 추가) 대로 §8 #13 확인 뒤.
 - **다음**: 개정 스펙 순서상 SP5c(사용자 정의 필드 — 합성 `S3` 의 필드 몫). 이월은 개정 §6.2 SPU1·SPU2·SPU3·SP8·SP9 블록의 "SP5b 에서 넘어옴" 줄.
+
+## 18. SP5c 진행 — Codex (2026-10-04 21:30 KST)
+
+최신 원격 main `8238de9f`에서 Claude의 SP5·SP5b 완료를 다시 확인한 뒤 이어받았다. 메인 체크아웃도 fast-forward하여 clean 상태이며, 이전 B3/B4/B2를 다시 구현하지 않는다. A 작업트리 `/Users/jerry/D-Flow-wt/lane-a-sp4`의 현재 브랜치는 **`sp5c/custom-fields`**, HEAD **`233f7e46`**, 같은 이름 원격에 푸시했다. main 통합은 하지 않았다.
+
+완료/푸시: `fed474ce`(F 순수 7타입 계약), `61b5fafd`(D 0027+rollback), `f44b96af`(DB 검증/회귀), `6ec37531`(관리자 사용 건수·백필·purge 액션, CI 성공), `b86c1aa2`(필드 3키 레지스트리·관리 화면·공통 입력). 상세 진행/검증 정본은 `docs/superpowers/plans/2026-10-04-sp5c-custom-fields.md`, `docs/baseline/sp5c-e2e.md`. 카탈로그 fields는 stored이며 SP5c 전체 완료가 아니다.
+
+전용 A DB reset 0027까지 성공, 전체 RLS 44파일 856/skip0. 관리자 액션 권한/불변식 503건, 설정/모듈/카탈로그 79건, UI 21건 통과. 전체 단위는 새 키 등록에 맞춘 기존 계약 2건을 수정해 관련 검사를 재통과했다. 타입·lint 오류 0(기존 경고 4)·build·settings:verify 문제 0. 실제 브라우저 1440/390에서 저장→재조회→기본값 0→백필/필수→3탭→정확한 건수 삭제 확인, pageerror/가로 넘침 없음. 임시 프로젝트/계정과 A 앱 3101 서버 정리했다.
+
+다음: V(행 값 입력/목록·타입·로더) → X(Excel/주간 이월) → I(AI 본문·정의 변경 재색인) → Z(합성 S3·최종 일괄 성능/카탈로그). 값 쓰기는 JWT/RLS와 JSONB CAS로 기존 관리자 필드·동시 변경을 보호해야 하며, service_role 쓰기로 우회하지 않는다. fields 재색인 부수효과는 아직 구현하지 않았고 계획 S는 이 때문에 전체 체크하지 않았다. 봇 근거 확장은 SP8 뒤 이월.
+
+사용자 DB(54321/54322), B 레인, 원본/원격 DB는 건드리지 않았다. 기존 UI3 사람 확인·사용자 DB 0019~0026 적용·SP5b 성능 수용은 여전히 미결이다. `b86c1aa2` 푸시 후 CI 확인 필요. 자동 커밋·푸시는 사용자의 기존 명시 승인에 따라 진행했다.
+
+### 18 추가 진행 (2026-10-04)
+
+`b093b5ce` 값 저장 기반, `233f7e46` WBS 상세 입력을 추가 커밋·푸시했다. 전체 단위 921파일 12,277건 통과, build/타입/lint 통과. 실제 전용 DB/빌드 앱에서 JWT 저장과 동시 변경 CAS(최신 4를 오래된 3으로 덮어쓰지 않음), 초안 유지/취소 후 최신 값 채택, 1440/390 화면을 확인했다. 임시 데이터와 앱 3101 정리. 이슈 상세 입력/로더 연결은 현재 작업 중이며 아직 커밋 전이다. 이후 이슈 등록/수정 폼·목록/필터, WBS 시트 열·키보드/실시간, 주간 열·이월, Excel/AI/합성 등이 남았다. SP5c 전체 미완료, fields 카탈로그 stored 유지. 이후 브랜치 CI는 완료 여부 재확인 필요(마지막 확인 b86c1aa2 실행 중, b093b5ce 대기 중).
+
+### 18 추가 진행 (2026-10-05 03:53 KST)
+
+A 브랜치 `sp5c/custom-fields` HEAD/원격 `cc448b9e`. 추가 푸시: `4688963b` 이슈 상세/모달 hydration, `abb892a1` DB 0028(custom 방송/이슈 시각), `44561f6e` 테스트 픽스처 타입, `1553e739` DB 0029(WBS custom 변경 시각), `cc448b9e` 방송 파서/마이크로초 비교/롤백 검사·증거. WBS 실시간 채널 가입 후 custom-only 수정의 시각이 그대로라 변경을 버리는 문제를 실제 재현했고 0029로 보완했다.
+
+전용 A reset 0029까지 성공, RLS 45파일 864/skip0, 전체 타입 검사/관련 회귀 40건 통과. 기존 전체 단위 12,288건/lint/build 통과. 실제 브라우저 private websocket 가입→초안 6 유지/서버 7에 저장 차단→취소 후 7→서버 9 자동 반영, 기존 CAS·이슈 JWT false/true/직접 링크/설정 백필·purge 회귀를 검증했다. 1440/390 눈확인/pageerror·가로 넘침0, 임시 프로젝트/계정 정리. 최신 CI 확인 필요: 44561 CI는 타입 통과 후 역사적 롤백 의존성에서 실패했으며 cc448에서 0029→0028→0027 순서로 보완했다.
+
+현재 이슈 목록 show_in_list 열·타입별 필터 연결 작업 중(미커밋), 관련 단위/타입/lint 통과 후 프로덕션 빌드·실제 화면 검사 진행. 아직 V의 등록/수정 폼·WBS 시트 열/키보드·주간 값 입력 및 X/I/Z가 남았다. SP5c 전체 미완료, 카탈로그 stored. main/사용자 DB 통합·UI3·SP5b 성능 수용 게이트 유지.
+
+### 18 이슈 목록 완료 (2026-10-05 03:57 KST)
+
+A HEAD/원격 `8e4448ef` 커밋·푸시 완료, A 작업 트리 clean. 이슈 사용자 필드 show_in_list 열과 활성 필드별 타입 필터를 연결했다. 텍스트 포함/타입별 동일 값/다중 선택 모두 포함, false·0 보존, 비활성 옵션 라벨/필터, 필터 변경 첫 페이지 이동, 손상 값/설정 가시성을 검증했다. 관련 단위 10건 및 공통 설정/상세 회귀 44건·전체 타입·lint·build 통과. 실제 브라우저 1440/390에서 열·false/true 조건·해제·모바일 표 내부 가로 스크롤 접근과 기존 WBS 실시간/CAS/이슈/관리 설정 회귀 통과, pageerror/문서 넘침0. 임시 데이터와 앱 3101 정리. 최신 CI 실행 결과 확인 필요. 이전 cc448 CI는 후속 푸시로 cancelled.
+
+다음은 이슈 등록/수정 폼의 동일 JWT 쓰기에 custom 통합(UPDATE는 전체 JSONB CAS), WBS 시트 열/키보드, 주간 입력/이월, Excel 및 AI 재색인·합성. 사용자 DB 54321/54322 및 main 통합은 여전히 수행하지 않았다. 메인 HANDOFF.md 갱신만 dirty이며 A 커밋에 포함하지 않았다. SP5c 전체 미완료/fields 카탈로그 stored.
+
+### 18 일반 이슈 폼 완료 (2026-10-05 04:19 KST)
+
+A 브랜치 sp5c/custom-fields의 HEAD 38c8c731을 커밋·푸시했다. 일반 이슈 등록/수정 모달에 추가 정보를 연결하고 같은 JWT INSERT/UPDATE로 기본 정보와 custom을 함께 쓴다. 수정은 전체 old custom JSONB CAS, 0행이면 담당자 쓰기 이전에 conflict. 필수 INSERT 기본값/0·false/보호 필드 검증, 관리자·비활성 읽기 전용, 손상 설정 차단을 구현했다. 첨부 부분 실패 재시도는 생성/필드 쓰기를 반복하지 않는다.
+
+실제 브라우저에서 custom이 pristine인 제목만 편집할 때 충돌 잠금이 자동 해제되는 문제를 발견해 고쳤다. 서버 제목과 custom이 함께 바뀐 conflict refresh에도 사용자 제목/custom 초안을 유지하며, 추가 정보 초안 취소로 최신 custom만 채택하고 재저장한다. 편집 대상이 조회에서 사라지면 신규 등록으로 바뀌지 않는다. 최종 전체 단위 924파일 12,308/12,308, 전체 타입/lint(기존 경고4)/build 통과. 실제 1440/390 화면·등록/동시 저장/CAS/명시 채택/재저장과 기존 WBS 실시간/이슈 목록/설정 백필·purge 회귀 통과, pageerror·가로 넘침0. 임시 데이터/앱3101 정리, A 작업 트리 clean 확인 필요. 직전 8e4448ef CI test/db 성공, 신규 CI 결과 후속 확인.
+
+다음: 회의록 연결 신규 등록 RPC의 custom 입력 확장(현재 해당 onCreate 폼에는 필드 입력을 노출하지 않으며 서버는 custom 공급을 명시 거부해 조용히 버리지 않는다. DB 필수 기본값은 기존대로), WBS 시트 열/키보드, 주간 입력/이월, Excel, AI 재색인, 합성/최종 성능. SP5c 전체 미완료·카탈로그 stored. main/사용자 DB 미통합, 기존 승인 게이트 유지. 메인 HANDOFF.md만 별도 dirty이며 A 커밋에는 넣지 않았다.
+
+### 18 회의록 연결 이슈 등록 완료 (2026-10-05 05:06 KST)
+
+A 브랜치 `sp5c/custom-fields` HEAD/원격 `b30fa682`(마이그레이션 `bc5caad6` 0030 분리 커밋). 회의록 연결 신규 등록 RPC 가 `p_custom` 필수 오버로드로 코어·custom·담당자·원문 연결을 한 트랜잭션에 쓴다. 전용 reset 05:04, test:rls 46파일 869/869, 실브라우저 QA 통과. CI 결과는 후속 확인. 다음: WBS 시트 열/키보드, 주간 입력/이월, Excel, AI 재색인, 합성/최종 성능. SP5c 전체 미완료·카탈로그 stored·main/사용자 DB 미통합.
+
+### 18 WBS 시트 사용자 정의 필드 열 완료 (2026-10-05 05:17 KST)
+
+A 브랜치 `sp5c/custom-fields` HEAD/원격 `f5e9dcac`. WBS 간트 시트에 활성 show_in_list 필드를 폭 140px 열로 추가했다. useCustomFieldScope()로 필드 정의와 공통 서식을 조회하며, 0·false·빈 값(—) 보존 및 파싱 손상 값 경고(!)를 표시한다. 직전 b30fa682 CI 성공. 단위 925파일 12,314건 및 프로덕션 build, 실브라우저 QA(1440/390 가로 넘침 0) 통과. 다음: 주간 값 입력/이월, Excel, AI 재색인, 합성/최종 성능. SP5c 전체 미완료·카탈로그 stored·main/사용자 DB 미통합.
+
+### 18 주간 시트 사용자 정의 필드 열·편집 모달 완료 (2026-10-05 05:52 KST)
+
+A 브랜치 `sp5c/custom-fields` HEAD/원격 `460a49e1`. 주간 업무보고 시트에 `fields.weekly_row` 활성 `show_in_list` 필드를 140px 폭 열로 추가하고, 행 단위 추가 정보 편집 모달을 연결했다.
+- WeeklyPage에서 `fields.weekly_row` 설정을 읽어 `<CustomFieldsProvider>`로 뷰를 감쌌다.
+- WeeklySheetView에서 `useCustomFieldScope()`로 열 정의를 조회해 thead 및 colgroup(공백 텍스트 노드 없는 배열 형태)에 140px 열로 배치했다.
+- 각 행 업무영역 칸에 "추가 정보" 버튼을 배치하고, 추가 열 또는 버튼 클릭 시 `CustomFieldValuesEditor`를 포함한 `<Modal>`을 열어 값 편집 및 CAS 저장을 지원했다.
+- fromRecord 및 mapAreaRow, AREA_ROW_COLS에 custom 필드를 추가하고 직렬 쿼리 계약을 보존했다.
+- 단위 테스트(3건), colgroup 불변식 테스트, 쿼리/이월 테스트 포함 주간 관련 10개 테스트 파일 225건 및 전체 빌드/타입/lint 통과.
+- 실제 빌드 앱 3101 + 전용 A DB(54521/54522) 브라우저 QA(`.superpowers/sp5c/weekly-cols-browser.mjs`): 1440px 데스크톱 및 390px 모바일 화면에서 추가 열 표시, 0 및 불리언 서식 표시, show_in_list 비활성 열 미표시, 모달 오픈 및 편집 확인, 가로 넘침 없음 및 콘솔 오류 0 검증 완료. 로컬 증거 `.superpowers/sp5c/weekly-cols-browser-result.json`, `weekly-cols-desktop.png`, `weekly-cols-mobile.png`.
+- 다음: X(주간 carryCustom 이월 및 WBS Excel 왕복), I(AI 색인), Z(합성/최종 성능 검증). SP5c 전체 미완료·카탈로그 stored·main/사용자 DB 미통합.
+
+
+
+## 19. SP6 인계 재검증·가드 복구 (2026-10-05 09:07 KST)
+
+A 작업트리 /Users/jerry/D-Flow-wt/lane-a-sp4는 이제 sp6/form-engine이다. 다른 LLM의 원격 ef27f273까지 fast-forward했고 SP5c 최종 a85cae77 CI 성공을 확인했다. SP6 CI 브랜치 필터 누락과 기준선 DB 12건 실패를 확인해 수정했다. 6bf4e5b4(0033 SQL/롤백 분리), 148a4696(검증·CI·인계 문서)을 커밋·푸시했으며 원격 HEAD 일치와 작업트리 clean(0 ahead/behind)을 확인했다. 신규 CI 37246235373은 실행 중이며 최종 결과는 후속 확인한다.
+
+복구: form_templates의 의도하지 않은 authenticated 쓰기 권한 회수, 실제 actor 없는 참조 probe를 service 전용으로, 기존 SP5c 타입/범위 축소 검사를 보존한 양식 참조 가드, 엔티티/활성 상태 구분, 양식 전용 Storage 경로 검사(일반 첨부 파서 불변), 격리 픽스처/닫힌 목록/역사적 롤백 리허설. 카탈로그 project.level_labels는 공개 양식 계약의 닫힌 형태만 기존 열 사용 검사에서 제외하며 실제 열 읽기는 계속 막는다.
+
+전용 d-flow-sp4(54521/54522), CLI 2.75.0 clean reset 08:55 + bootstrap, 전체 RLS 48파일 881/881, 전체 단위 946파일 12,489/12,489, typecheck/lint(오류0·기존 경고4)/production build 통과. local log .superpowers/sp6. main/사용자 DB는 변경하지 않았고 메인 HANDOFF.md의 기존 dirty 상태는 보존했다. forms 카탈로그는 stored, SP6 전체 미완료다.
+
+다음 우선: 기본 중립 양식 assets/default 4종이 없어 기본 출력 경로가 실패할 수 있으므로 실제 파일/렌더 검증을 구현한다. createProject는 정본 4.6.3의 Storage.copy→copy_project_config 및 실패 보상이 없어 물리 파일 복사도 필요하다. 이후 양식 관리 화면/매핑·engineVersion 재스캔·고정 이슈분석 자산·Office 열림·S8/부정 테스트/카탈로그 마감. 전체 후속 물량은 A의 docs/baseline/sp6-handoff-review.md에 정리했다(SP7 외부연동, SP8 AI 범위, SPU1~3 UI, SP9 출시). 기존 UI3 사람 확인/통합, 사용자 DB 적용, SP5b 성능 수용 미결 사항 유지.
+
+## 20. SP6 기본 양식 4종 (2026-10-05 09:23 KST)
+
+A sp6/form-engine에서 f02992c4 커밋·원격 push 완료. 기본 weekly_report_pptx/xlsx·issue_analysis_pptx·wbs_export_xlsx 자산, OLE 없이 새 OPC 패키지를 만드는 scripts/forms/build-defaults.mjs, 다운로드 API 파일 추적, ExcelJS 공유 스타일의 날짜 서식 전파 수정. 전체 단위 947파일 12,509/12,509, 최종 자산/엔진/설정 검사 57/57, typecheck/build PASS, lint 0 errors/기존 warnings 4. 빌드 nft에 네 기본 파일 포함. 실제 병합 파일 Quick Look 표지/상세·XLSX 미리보기 확인. Office 전체/장문 및 3유형/6근무일 검증은 남음. 이전 148a4696 CI 37246235373 성공. 새 커밋 CI는 푸시 후 별도 확인 필요.
+
+다음 순서: 정본 §4.6.3 프로젝트 생성 복사에 실제 Storage.copy 및 RPC 실패 보상, 멱등 재시도·응답 유실 보상 계약 구현 → 관리 UI/매핑 → 엔진 변경 재스캔 → 고정 프로세스 양식·출력 검증·S8/verified 마감. 현재 create_project_with_settings는 SQL 안에서 새 UUID를 생성하므로 단순 후처리 복사로는 계약을 만족하지 않는다. source 변경 경합 및 DB 커밋 후 응답 유실 때 파일 삭제 금지도 함께 설계해야 함. 사용자 DB/main 미통합.
+
+## 21. SP6 완료 및 마감 (2026-10-05 11:15 KST)
+
+- A 작업트리 `lane-a-sp4` 브랜치 `sp6/form-engine`에서 SP6 잔여 과제를 모두 완료하고 원격에 푸시했다.
+- **프로젝트 복사 시 양식 파일 복사·보상 계약**: `a0bf86ef`(0034 마이그레이션·롤백·RLS), `ae03dc57`·`e1b01787`(`createProject` 연동 및 `no-raw-db-errors` 가드 복구, CI 37250149499 성공).
+- **보고서 양식 관리 UI 및 매핑**: `42b7d4ff` `FormTemplatesManager.tsx`, `settings/page.tsx` 연동, jsdom 단위 테스트 `tests/ui/form-templates-manager.test.tsx` 통과, CI 37253160632 성공.
+- **부정 테스트 6**: `tests/negative/form-engine-outputs.test.ts` 추가. 기본 4종 양식 렌더링 출력의 모든 zip 텍스트 파트(슬라이드, 노트, docProps, rels)에서 제조/영업 샘플 토큰('온라인 주문 포털', '외주가공' 등 9개) 0건 검증(13/13 통과).
+- **합성 게이트 S8 활성화**: `scripts/e2e-synthetic.mjs`에 `S8-outputs`(주간 PPT/XLSX·WBS XLSX 양식·이슈분석서 10개 영역 체브론 8칸 창 분할 및 완결성) 단계 구현, `scripts/lib/synthetic.mjs`의 `PENDING_STEPS`에서 S8 제거.
+- **카탈로그 verified 승격**: `src/lib/settings/catalog-meta.ts`의 `forms.*` 4개 키를 `verified`로 승격하고 실재 소비처 및 테스트 목록 등록. `src/lib/settings/defs/forms.ts` 위젯 컴포넌트를 실재하는 `FormTemplatesManager`로 연결하고 `docs/settings-catalog.md` 갱신.
+- **검증**: 전용 DB reset + `test:rls` 49파일 886/886 전수 통과, `tests/report` 37파일 431/431, `tests/negative` 4파일 57/57, `tests/invariants` 35파일 242/242 통과, `tsc --noEmit` 0 오류, eslint 통과, 프로덕션 `npm run build` 성공.
+- 최신 커밋 `b0fbff55` 원격 푸시 완료. main/사용자 DB 미통합 유지. 다음 단계는 개정 로드맵에 따른 SP7(외부 연동) 또는 잔여 SP.
+
