@@ -2,9 +2,9 @@
 import { renderToString } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ loadWorkspaceScope: vi.fn(), getMyWork: vi.fn() }))
+const h = vi.hoisted(() => ({ loadWorkspaceScope: vi.fn(), getMyWork: vi.fn(), getPortalSummary: vi.fn() }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspaceScope }))
-vi.mock('@/lib/data/portal', () => ({ getMyWork: h.getMyWork }))
+vi.mock('@/lib/data/portal', () => ({ getMyWork: h.getMyWork, getPortalSummary: h.getPortalSummary }))
 
 import MyWork from '@/app/(app)/w/[slug]/my-work/page'
 import { makeActor } from '../fixtures/actor'

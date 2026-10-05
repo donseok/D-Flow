@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Layers, Users, Columns3, Search, Inbox } from 'lucide-react'
+import { Layers, Users, Columns3, Search, Inbox, GitBranch } from 'lucide-react'
 import type { ComputedItem } from '@/lib/domain/types'
 import { actorFromView, isProjectAdmin, type ProjectActorView } from '@/lib/domain/authz'
 import { canEditActual } from '@/lib/domain/permissions'
@@ -11,10 +11,13 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import {
-  groupByPhase, groupByOwner, groupByProgress, bucketOf, dueSignal, leafPaths,
-  lensCards, applyQuickFilters, sortCards,
-  type KanbanColumn, type ProgressBucket, type QuickFilters,
+  groupByPhase, groupByOwner, groupByProgress, groupByFlow, bucketOf, dueSignal, leafPaths,
+  lensCards, applyQuickFilters, sortCards, FLOW_STAGE_KEYS,
+  type KanbanColumn, type ProgressBucket, type QuickFilters, type FlowStageKey,
 } from '@/lib/domain/kanban'
+import { isStageCode, STAGE_LABEL_KO, STAGE_NONE_LABEL_KO, type StageCode } from '@/lib/domain/stageLabels'
+import { type ApprovalStepDef, DEFAULT_STEP_CODE } from '@/lib/domain/approvalSteps'
+import { setWbsStage, approveWbsStep } from '@/app/actions/wbsAssign'
 import { resolveDrop } from '@/lib/domain/kanban-drop'
 import { statusOf } from '@/lib/domain/progress'
 import { updateActual } from '@/app/actions/wbs'
@@ -27,7 +30,7 @@ import { KanbanCard } from './KanbanCard'
 import { ProgressPopover } from './ProgressPopover'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 
-type Mode = 'progress' | 'phase' | 'owner'
+type Mode = 'progress' | 'flow' | 'phase' | 'owner'
 
 // 표시 전용 매핑 — 도메인(src/lib/domain/kanban.ts)이 만드는 한국어 컬럼 제목을 번역 키로 변환.
 // 매핑에 없는 값(동적 팀명·담당자명·Phase명)은 원본 그대로 표시한다.
@@ -37,6 +40,10 @@ const COLUMN_TITLE_KEY: Record<string, DictKey> = {
   '지연': 'status.delayed',
   '완료': 'status.done',
   '미배정': 'kanban.unassigned',
+  '미착수': 'wbs.stageNoneOption',
+  '할당됨': 'wbs.stageAs',
+  '작업 중': 'wbs.stageIp',
+  '검수 대기': 'wbs.stageIm',
 }
 
 export function KanbanBoard({
@@ -45,6 +52,8 @@ export function KanbanBoard({
   actorView,
   today,
   readOnly = false,
+  stageLabels = null,
+  approvalSteps = null,
 }: {
   projectId: string
   items: ComputedItem[]
@@ -53,6 +62,8 @@ export function KanbanBoard({
   today: string
   /** 데모 모드 등에서 편집 어포던스 비활성화 */
   readOnly?: boolean
+  stageLabels?: Readonly<Partial<Record<string, string>>> | null
+  approvalSteps?: readonly ApprovalStepDef[] | null
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -62,7 +73,7 @@ export function KanbanBoard({
   const searchParams = useSearchParams()
   // 묶음 기준은 ?group(D36). ?view는 작업 계획 보기(sheet·timeline·board)다.
   const group = searchParams.get('group')
-  const urlMode: Mode = group === 'phase' || group === 'owner' ? group : 'progress'
+  const urlMode: Mode = group === 'flow' || group === 'phase' || group === 'owner' ? group : 'progress'
   const [mode, setMode] = useState<Mode>(urlMode)
   useEffect(() => setMode(urlMode), [urlMode])
   // 렌즈 기본값 — 관리자 이상이거나 이 프로젝트 명단 팀이 없으면 전체, 그 외(팀 소속 멤버 등)는 내 팀부터.
@@ -84,6 +95,7 @@ export function KanbanBoard({
   const [confirmCard, setConfirmCard] = useState<ComputedItem | null>(null)
   const [promptState, setPromptState] = useState<{ card: ComputedItem; suggested: number } | null>(null)
   const [override, setOverride] = useState<Record<string, number>>({})
+  const [stageOverride, setStageOverride] = useState<Record<string, string | null>>({})
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
   const [failedMoves, setFailedMoves] = useState<Record<string, { attemptedPct: number; prevPct: number; error: string }>>({})
   const [liveMsg, setLiveMsg] = useState('')
@@ -110,6 +122,17 @@ export function KanbanBoard({
       return next
     })
   }, [rawLeafById])
+  useEffect(() => {
+    setStageOverride(prev => {
+      if (Object.keys(prev).length === 0) return prev
+      const next: Record<string, string | null> = {}
+      for (const [id, val] of Object.entries(prev)) {
+        const leaf = rawLeafById.get(id)
+        if (!leaf || (leaf.stage ?? null) !== val) next[id] = val
+      }
+      return next
+    })
+  }, [rawLeafById])
   useBotPageContext({
     domain: 'kanban',
     projectId,
@@ -121,7 +144,9 @@ export function KanbanBoard({
     },
   })
 
-  const editable = !readOnly && mode === 'progress'
+  const isProgress = mode === 'progress'
+  const isFlow = mode === 'flow'
+  const editable = !readOnly && (isProgress || isFlow)
   const cardEditable = (card: ComputedItem) => editable && canEditActual(card, actor, projectId)
 
   // 최초 방문 코치마크 — 진행 뷰(편집 가능) 진입 시 1회, localStorage 플래그로 재노출 방지.
@@ -137,18 +162,25 @@ export function KanbanBoard({
 
   // 낙관적 override를 items 트리에 입힌 뷰. 저장 확정 전까지 카드가 즉시 옮겨 보이게 한다.
   const viewItems = useMemo<ComputedItem[]>(() => {
-    const ids = Object.keys(override)
-    if (ids.length === 0) return items
+    const hasPct = Object.keys(override).length > 0
+    const hasStage = Object.keys(stageOverride).length > 0
+    if (!hasPct && !hasStage) return items
     const map = (ns: ComputedItem[]): ComputedItem[] => ns.map(n => {
-      if (!n.children.length && override[n.id] !== undefined) {
-        const pct = override[n.id]
-        return { ...n, actualPct: pct, rolledActualPct: pct, status: statusOf(pct, n.plannedPct, n.plannedStart, today) }
+      let updated = n
+      if (!n.children.length) {
+        if (override[n.id] !== undefined) {
+          const pct = override[n.id]
+          updated = { ...updated, actualPct: pct, rolledActualPct: pct, status: statusOf(pct, n.plannedPct, n.plannedStart, today) }
+        }
+        if (stageOverride[n.id] !== undefined) {
+          updated = { ...updated, stage: stageOverride[n.id] }
+        }
       }
-      if (n.children.length) return { ...n, children: map(n.children) }
-      return n
+      if (n.children.length) return { ...updated, children: map(n.children) }
+      return updated
     })
     return map(items)
-  }, [items, override, today])
+  }, [items, override, stageOverride, today])
 
   const cardById = useMemo(() => {
     const m = new Map<string, ComputedItem>()
@@ -161,10 +193,11 @@ export function KanbanBoard({
   const pathById = useMemo(() => leafPaths(viewItems), [viewItems])
 
   const baseColumns = useMemo<KanbanColumn[]>(() => {
+    if (mode === 'flow') return groupByFlow(viewItems, stageLabels, approvalSteps)
     if (mode === 'owner') return groupByOwner(viewItems, teamCodes, teams)
     if (mode === 'phase') return groupByPhase(viewItems)
     return groupByProgress(viewItems)
-  }, [mode, viewItems, teamCodes, teams])
+  }, [mode, viewItems, stageLabels, approvalSteps, teamCodes, teams])
 
   const columns = useMemo<KanbanColumn[]>(() => {
     const q = query.trim().toLowerCase()
@@ -230,6 +263,102 @@ export function KanbanBoard({
     }
   }
 
+  async function handleMoveStage(card: ComputedItem, nextStageKey: FlowStageKey) {
+    const currentStage = (card.stage && isStageCode(card.stage)) ? card.stage : 'none'
+    if (currentStage === nextStageKey) return
+    const nextStage: StageCode | null = nextStageKey === 'none' ? null : nextStageKey
+
+    if (inFlightRef.current.has(card.id)) return
+    inFlightRef.current.add(card.id)
+    const sessionId = `kanban-stage:${card.id}`
+    setStageOverride(prev => ({ ...prev, [card.id]: nextStage }))
+    setSavingIds(s => new Set(s).add(card.id))
+    editSessionStore.setSession(sessionId, 'kanban', card.id, 'saving')
+
+    try {
+      const res = await setWbsStage(card.id, nextStage)
+      if (!res.ok) {
+        setStageOverride(prev => {
+          const copy = { ...prev }
+          delete copy[card.id]
+          return copy
+        })
+        const errMsg = res.error || t('kanban.errChange')
+        toast({
+          title: t('kanban.saveFailedTitle'),
+          description: errMsg,
+          variant: 'error',
+        })
+        editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
+          error: { kind: 'server_reject', message: errMsg },
+        })
+        return
+      }
+      editSessionStore.setSession(sessionId, 'kanban', card.id, 'saved')
+      setLiveMsg(`${card.name} 단계 변경: ${nextStage ?? '미착수'}`)
+      router.refresh()
+    } catch {
+      setStageOverride(prev => {
+        const copy = { ...prev }
+        delete copy[card.id]
+        return copy
+      })
+      const errMsg = t('kanban.saveFailedTitle') || '저장에 실패했습니다.'
+      toast({ title: errMsg, variant: 'error' })
+      editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
+        error: { kind: 'server_reject', message: errMsg },
+      })
+    } finally {
+      setSavingIds(s => { const n = new Set(s); n.delete(card.id); return n })
+      inFlightRef.current.delete(card.id)
+    }
+  }
+
+  async function handleApproveStep(card: ComputedItem) {
+    if (inFlightRef.current.has(card.id)) return
+    inFlightRef.current.add(card.id)
+    const sessionId = `kanban-approve:${card.id}`
+    setSavingIds(s => new Set(s).add(card.id))
+    editSessionStore.setSession(sessionId, 'kanban', card.id, 'saving')
+
+    try {
+      const stepCode = approvalSteps?.[0]?.code ?? DEFAULT_STEP_CODE
+      const res = await approveWbsStep(card.id, stepCode)
+      if (!res.ok) {
+        const errMsg = res.error || t('kanban.errChange')
+        toast({
+          title: t('kanban.saveFailedTitle'),
+          description: errMsg,
+          variant: 'error',
+        })
+        editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
+          error: { kind: 'server_reject', message: errMsg },
+        })
+        return
+      }
+      editSessionStore.setSession(sessionId, 'kanban', card.id, 'saved')
+      setLiveMsg(`${card.name} 승인 완료`)
+      router.refresh()
+    } catch {
+      const errMsg = t('kanban.saveFailedTitle') || '승인에 실패했습니다.'
+      toast({ title: errMsg, variant: 'error' })
+      editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
+        error: { kind: 'server_reject', message: errMsg },
+      })
+    } finally {
+      setSavingIds(s => { const n = new Set(s); n.delete(card.id); return n })
+      inFlightRef.current.delete(card.id)
+    }
+  }
+
+  function handleMoveBucket(card: ComputedItem, targetBucket: ProgressBucket) {
+    const r = resolveDrop(card, targetBucket)
+    if (r.kind === 'noop') return
+    if (r.kind === 'set') commit(card, r.pct)
+    else if (r.kind === 'confirm-reset') setConfirmCard(card)
+    else if (r.kind === 'prompt') setPromptState({ card, suggested: r.suggested })
+  }
+
   function handleDrop(e: DragEvent<HTMLDivElement>, columnKey: string) {
     e.preventDefault()
     setDragOverKey(null)
@@ -270,6 +399,7 @@ export function KanbanBoard({
           onChange={setMode}
           tabs={[
             { key: 'progress', label: t('kanban.byProgress'), icon: Columns3 },
+            { key: 'flow', label: t('kanban.byFlow'), icon: GitBranch },
             { key: 'phase', label: t('kanban.byPhase'), icon: Layers },
             { key: 'owner', label: t('kanban.byOwner'), icon: Users },
           ]}
@@ -321,10 +451,17 @@ export function KanbanBoard({
         </div>
       </div>
 
-      {/* 조회 전용 힌트(진행 뷰가 아닐 때) */}
-      {!editable && !readOnly && (
+      {/* 조회 전용 힌트(phase·owner 뷰일 때) */}
+      {(mode === 'phase' || mode === 'owner') && !readOnly && (
         <div className="flex shrink-0 items-center gap-2 rounded-xl border border-line bg-surface-2 px-3.5 py-2 text-[12px] text-ink-subtle">
           {t('kanban.readOnlyHint')}
+        </div>
+      )}
+
+      {/* 흐름 뷰 안내 */}
+      {mode === 'flow' && !readOnly && (
+        <div className="flex shrink-0 items-center gap-2 rounded-xl border border-line bg-surface-2 px-3.5 py-2 text-[12px] text-ink-subtle">
+          {t('kanban.flowReadOnlyHint')}
         </div>
       )}
 
@@ -353,7 +490,7 @@ export function KanbanBoard({
           // 표시 시점에만 한국어 컬럼 제목을 번역 — 도메인의 Record 키('미배정' 등)는 건드리지 않는다.
           const titleKey = COLUMN_TITLE_KEY[col.title]
           const displayTitle = titleKey ? t(titleKey) : col.title
-          const isDropZone = editable // 세 컬럼(시작전/진행중/완료) 모두 드롭 대상
+          const isDropZone = editable && isProgress // 진행 모드일 때만 드롭 대상 (흐름 모드는 드래그 없음)
           // 드래그 중인 카드를 이 컬럼이 받을 수 있을 때만 활성 하이라이트.
           const accepts = isDropZone && (!draggingCard || resolveDrop(draggingCard, col.key as ProgressBucket).kind !== 'noop')
           const active = accepts && dragOverKey === col.key && draggingId !== null
@@ -366,12 +503,19 @@ export function KanbanBoard({
               className={`card flex max-h-full w-[286px] min-w-[286px] flex-col p-3 transition
                 ${active ? 'border-brand ring-2 ring-brand-ring' : ''}`}
             >
-              <header className="flex items-center justify-between gap-2 px-1 pb-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${col.accentDot ?? 'bg-brand'}`} />
-                  <h3 className="truncate text-[13px] font-semibold text-ink" title={displayTitle}>{displayTitle}</h3>
+              <header className="flex flex-col gap-1 px-1 pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${col.accentDot ?? 'bg-brand'}`} />
+                    <h3 className="truncate text-[13px] font-semibold text-ink" title={displayTitle}>{displayTitle}</h3>
+                  </div>
+                  <span className="badge shrink-0 bg-surface-2 text-ink-muted">{col.count}</span>
                 </div>
-                <span className="badge shrink-0 bg-surface-2 text-ink-muted">{col.count}</span>
+                {col.subtitle && (
+                  <p className="truncate pl-4.5 text-[11px] text-ink-subtle" data-testid="kanban-col-subtitle" title={col.subtitle}>
+                    {col.subtitle}
+                  </p>
+                )}
               </header>
 
               <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-0.5">
@@ -381,8 +525,30 @@ export function KanbanBoard({
                   </div>
                 ) : (
                   col.cards.map(card => {
-                    const canDrag = cardEditable(card)
+                    const canEdit = cardEditable(card)
+                    const canDrag = canEdit && isProgress
                     const b = bucketOf(card.rolledActualPct)
+                    const curStage = (card.stage && isStageCode(card.stage)) ? card.stage : 'none'
+                    const stageOpts = isFlow ? FLOW_STAGE_KEYS.map(k => {
+                      const titles: Record<FlowStageKey, string> = {
+                        none: stageLabels?.none || STAGE_NONE_LABEL_KO,
+                        as: stageLabels?.as || STAGE_LABEL_KO.as,
+                        ip: stageLabels?.ip || STAGE_LABEL_KO.ip,
+                        im: stageLabels?.im || STAGE_LABEL_KO.im,
+                        xx: stageLabels?.xx || STAGE_LABEL_KO.xx,
+                      }
+                      return {
+                        key: k,
+                        label: titles[k],
+                        current: curStage === k,
+                      }
+                    }) : undefined
+                    const bucketOpts = isProgress ? ([
+                      { key: 'not_started' as const, label: t('status.not_started'), current: b === 'not_started' },
+                      { key: 'in_progress' as const, label: t('status.in_progress'), current: b === 'in_progress' },
+                      { key: 'done' as const, label: t('status.done'), current: b === 'done' },
+                    ]) : undefined
+
                     return (
                       <KanbanCard
                         key={card.id}
@@ -391,7 +557,12 @@ export function KanbanBoard({
                         pathLabel={pathById.get(card.id)?.[0]}
                         due={dueSignal(card.plannedEnd, card.rolledActualPct, today)}
                         draggable={canDrag}
-                        editable={canDrag}
+                        editable={canEdit}
+                        stageOptions={stageOpts}
+                        onMoveStage={canEdit && isFlow ? (k) => void handleMoveStage(card, k as FlowStageKey) : undefined}
+                        bucketOptions={bucketOpts}
+                        onMoveBucket={canEdit && isProgress ? (k) => handleMoveBucket(card, k) : undefined}
+                        onApprove={canEdit && isFlow && card.stage === 'im' ? () => void handleApproveStep(card) : undefined}
                         dragging={draggingId === card.id}
                         saving={savingIds.has(card.id)}
                         failed={failedMoves[card.id] ? {

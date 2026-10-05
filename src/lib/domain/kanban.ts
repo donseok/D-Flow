@@ -1,5 +1,11 @@
 import type { ComputedItem, Status, TeamCode } from '@/lib/domain/types'
 import { teamSlotFor, type TeamColorRef } from '@/lib/domain/teamColor'
+import {
+  STAGE_LABEL_KO, STAGE_NONE_LABEL_KO,
+} from '@/lib/domain/stageLabels'
+import {
+  type ApprovalStepDef, DEFAULT_APPROVAL_STEPS,
+} from '@/lib/domain/approvalSteps'
 
 /** 칸반 컬럼 — leaf(말단) 작업 카드 묶음. */
 export type KanbanColumn = {
@@ -8,6 +14,7 @@ export type KanbanColumn = {
   count: number
   cards: ComputedItem[]
   accentDot?: string
+  subtitle?: string
 }
 
 const STATUS_ORDER: Status[] = ['not_started', 'in_progress', 'delayed', 'done']
@@ -90,6 +97,67 @@ export function groupByProgress(items: ComputedItem[]): KanbanColumn[] {
   return PROGRESS_ORDER.map(bucket => {
     const cards = leaves.filter(leaf => bucketOf(leaf.rolledActualPct) === bucket)
     return { key: bucket, title: PROGRESS_LABEL[bucket], count: cards.length, cards, accentDot: PROGRESS_DOT[bucket] }
+  })
+}
+
+export const FLOW_STAGE_KEYS = ['none', 'as', 'ip', 'im', 'xx'] as const
+export type FlowStageKey = (typeof FLOW_STAGE_KEYS)[number]
+
+const FLOW_STAGE_DOT: Record<FlowStageKey, string> = {
+  none: 'bg-pending',
+  as: 'bg-brand',
+  ip: 'bg-progress',
+  im: 'bg-warning',
+  xx: 'bg-done',
+}
+
+export function formatApprovalStepsSubtitle(steps?: readonly ApprovalStepDef[] | null): string {
+  if (!steps || steps.length === 0) return '1단계 승인 (검토)'
+  const stepNames = steps.map((s, i) => s.label || (s.code === 'review' ? '검토' : `${i + 1}단계`)).join(' → ')
+  return `${steps.length}단계 승인 (${stepNames})`
+}
+
+/** 흐름별 — 5단계: 미착수(none), 할당됨(as), 작업 중(ip), 검수 대기(im), 완료(xx). */
+export function groupByFlow(
+  items: ComputedItem[],
+  stageLabels?: Readonly<Partial<Record<string, string>>> | null,
+  approvalSteps?: readonly ApprovalStepDef[] | null,
+): KanbanColumn[] {
+  const leaves = leavesOf(items)
+  const buckets: Record<FlowStageKey, ComputedItem[]> = {
+    none: [], as: [], ip: [], im: [], xx: [],
+  }
+  for (const leaf of leaves) {
+    const s = leaf.stage
+    if (s === 'as') buckets.as.push(leaf)
+    else if (s === 'ip') buckets.ip.push(leaf)
+    else if (s === 'im') buckets.im.push(leaf)
+    else if (s === 'xx') buckets.xx.push(leaf)
+    else buckets.none.push(leaf)
+  }
+
+  const defaultTitles: Record<FlowStageKey, string> = {
+    none: STAGE_NONE_LABEL_KO,
+    as: STAGE_LABEL_KO.as,
+    ip: STAGE_LABEL_KO.ip,
+    im: STAGE_LABEL_KO.im,
+    xx: STAGE_LABEL_KO.xx,
+  }
+
+  return FLOW_STAGE_KEYS.map(key => {
+    const title = stageLabels?.[key] || defaultTitles[key]
+    const cards = buckets[key]
+    const col: KanbanColumn = {
+      key,
+      title,
+      count: cards.length,
+      cards,
+      accentDot: FLOW_STAGE_DOT[key],
+    }
+    if (key === 'im') {
+      col.subtitle = formatApprovalStepsSubtitle(approvalSteps ?? DEFAULT_APPROVAL_STEPS)
+    }
+    return col
   })
 }
 

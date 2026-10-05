@@ -29,7 +29,10 @@ export const kanbanKo = {
   'kanban.card.actual': '실적',
   // ── 재개편(실행 보드) ──
   'kanban.byProgress': '진행',
+  'kanban.byFlow': '흐름',
   'kanban.readOnlyHint': '이 뷰는 조회 전용입니다 — 진척 이동은 ‘진행’ 뷰에서 하세요.',
+  'kanban.flowReadOnlyHint': '흐름 뷰에서는 카드 이동 메뉴를 사용해 단계를 변경할 수 있습니다.',
+  'kanban.move': '이동',
   // 렌즈·필터
   'kanban.lensMyTeam': '내 팀',
   'kanban.lensAll': '전체',

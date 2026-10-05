@@ -83,6 +83,8 @@ export default async function WbsPage({
   const gate = pick(pc.cfg, 'workflow.predecessor_gate')
   // 단계 이름(SP5b W2) — 손상이면 기본 이름으로 그린다(표시 전용 — 판정에 쓰지 않는다)
   const stageLabels = pick(pc.cfg, 'workflow.wbs_stage_labels')
+  // 승인 단계(SP5b) — 검수 대기(im) 열 부제 표시 등에 사용
+  const approvalSteps = pick(pc.cfg, 'workflow.approval_steps')
   if (!gate.ok) console.error(`[wbs] 선행 기준 손상(project=${projectId}) — final 로 판정한다`)
   const approvedItemIds = (await moduleState({ projectId }, 'agents')) === 'on' ? await getApprovedItemIds(projectId) : []
 
@@ -114,7 +116,14 @@ export default async function WbsPage({
         {decided.view === 'board' ? <>
           {/* 조작 화면의 done 보고를 짧은 창으로 재조회한다. 연속 이벤트는 합쳐 렌더하며 채널 구독을 중복하지 않는다. */}
           <WbsRealtimeRefresh projectId={projectId} delayMs={1_500} maxWaitMs={5_000} jitterMs={3_000} />
-          <KanbanBoard projectId={projectId} items={items} actorView={toProjectActorView(actor, projectId)} today={today} />
+          <KanbanBoard
+            projectId={projectId}
+            items={items}
+            actorView={toProjectActorView(actor, projectId)}
+            today={today}
+            stageLabels={stageLabels.ok ? stageLabels.value : null}
+            approvalSteps={approvalSteps.ok ? approvalSteps.value : null}
+          />
         </> : <WbsGanttSheet
           key={projectId}
           items={items}
