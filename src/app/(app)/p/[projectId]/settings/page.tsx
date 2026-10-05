@@ -18,6 +18,9 @@ import { CustomFieldsSettings } from '@/components/settings/CustomFieldsSettings
 import { FIELD_ENTITIES, type FieldEntity, type FieldDef } from '@/lib/domain/customFields'
 import { IssuePolicyEditor } from '@/components/settings/IssuePolicyEditor'
 import { AttachmentPolicyEditor } from '@/components/settings/AttachmentPolicyEditor'
+import { FormTemplatesManager, type FormKindState } from '@/components/settings/FormTemplatesManager'
+import { FORM_SETTING_MODULE } from '@/lib/settings/defs/forms'
+import type { FormKind } from '@/lib/report/engine/types'
 import { VocabEditor } from '@/components/settings/VocabEditor'
 import type { VocabEntry, VocabKey } from '@/lib/settings/vocab'
 import type { AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
@@ -61,6 +64,11 @@ import { PROJECT_TOGGLABLE } from '@/lib/modules/defaults'
 import { MODULE_LABEL } from '@/lib/modules/labels'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
+
+const FORM_KIND_LABEL: Record<FormKind, string> = {
+  weekly_report_pptx: '주간보고 (PPTX)', weekly_report_xlsx: '주간보고 (XLSX)',
+  issue_analysis_pptx: '이슈 분석 (PPTX)', wbs_export_xlsx: 'WBS 내보내기 (XLSX)',
+}
 
 type ProjectRow = {
   id: string
@@ -240,6 +248,44 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   } : null
   const calendarToday = calendarFields?.timezone.value ? todayIn(calendarFields.timezone.value, new Date()) : null
 
+  // 양식(SP6) — 모듈이 켜진 종류만. 목록 조회가 실패하면 섹션을 그리지 않는다(없음으로 위장 금지).
+  let formKinds: FormKindState[] | null = null
+  // 양식 섹션은 부가 화면이다 — 조회 중 예외도 설정 페이지 전체를 막지 않고 섹션만 그리지 않는다(로그는 남긴다).
+  try {
+    if (isAdmin && pc.ok) {
+      const kindIds = Object.keys(FORM_SETTING_MODULE) as FormKind[]
+      const states = await Promise.all(kindIds.map((k) => moduleState({ projectId }, FORM_SETTING_MODULE[k])))
+      const enabled = kindIds.filter((_, i) => states[i] === 'on')
+      if (enabled.length) {
+        const { data: rows, error: rowsErr } = await (await createServerClient()).from('form_templates')
+          .select('id, form_kind, file_name, size_bytes, version, active, created_at, placeholders')
+          .eq('project_id', projectId).in('form_kind', enabled).order('version', { ascending: false })
+        if (rowsErr) console.error('[settings] 양식 목록 조회 실패:', rowsErr.message)
+        else {
+          formKinds = enabled.map((kind) => {
+            const st = pc.cfg.keys[`forms.${kind}` as const]
+            const ok = st.status === 'set' || st.status === 'default'
+            return {
+              kind, label: FORM_KIND_LABEL[kind],
+              setting: ok ? st.value as FormKindState['setting'] : null,
+              templates: (rows ?? []).filter((r) => r.form_kind === kind).map((r) => {
+                const issues = (r.placeholders as { issues?: { severity?: string }[] } | null)?.issues ?? []
+                return {
+                  id: r.id as string, version: r.version as number, fileName: r.file_name as string, sizeBytes: r.size_bytes as number,
+                  active: !!r.active, createdAt: r.created_at as string,
+                  errors: issues.filter((i) => i.severity === 'error').length, warnings: issues.filter((i) => i.severity === 'warning').length,
+                }
+              }),
+            }
+          })
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[settings] 양식 섹션 로드 실패:', e instanceof Error ? e.message : String(e))
+    formKinds = null
+  }
+
   const assistantIndex = await assistantIndexStatus(projectId)
   const settingsHistory = await listSettingsHistory({ projectId })
 
@@ -283,6 +329,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         ...(isAdmin && issuesGate.ok ? [{ id: 'project-issues', label: locale === 'ko' ? '이슈' : 'Issues' }] : []),
         ...(isAdmin && pc.ok && minutesGate.ok ? [{ id: 'project-minutes', label: locale === 'ko' ? '회의록' : 'Minutes' }] : []),
         ...(isAdmin && vocabKeys.length ? [{ id: 'project-vocab', label: t(locale, 'settings.vocab.section') }] : []),
+        ...(isAdmin && formKinds ? [{ id: 'project-forms', label: locale === 'ko' ? '양식' : 'Forms' }] : []),
         ...(isAdmin && pc.ok ? [{ id: 'project-fields', label: locale === 'ko' ? '추가 필드' : 'Custom fields' }] : []), { id: 'project-status', label: '상태·승인' },
         { id: 'project-calendar', label: '달력' }, { id: 'project-history', label: '기록' },
       ]}>
@@ -579,6 +626,13 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
             </SectionCard>
           })}
+        </div>}
+
+        {isAdmin && pc.ok && formKinds && <div id="project-forms" className="scroll-mt-24 space-y-5">
+          <SectionCard searchText="forms 양식 템플릿 보고서 pptx xlsx 업로드 매핑 자리표시자" eyebrow="FORMS" title={locale === 'ko' ? '보고서 양식' : 'Report templates'} icon={Upload}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{locale === 'ko' ? '자체 양식 파일을 올려 활성화하면 보고서·내보내기가 그 양식으로 만들어집니다. 활성 양식이 없으면 기본 양식을 씁니다.' : 'Upload and activate your own template to use it for reports and exports. Without an active one, the default template is used.'}</p>
+            <FormTemplatesManager key={`${projectId}-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate} kinds={formKinds} />
+          </SectionCard>
         </div>}
 
         {isAdmin && pc.ok && fieldStates && <div id="project-fields" className="scroll-mt-24 space-y-5">
