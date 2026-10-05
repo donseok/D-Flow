@@ -93,6 +93,8 @@ const ACTIONS = {
   backfillCustomField: { filename: 'src/app/actions/customFields.ts', exportedName: 'backfillCustomField', worker: '/p/[projectId]/settings/page' },
   purgeCustomField: { filename: 'src/app/actions/customFields.ts', exportedName: 'purgeCustomField', worker: '/p/[projectId]/settings/page' },
   saveCustomFieldValues: { filename: 'src/app/actions/customFieldValues.ts', exportedName: 'saveCustomFieldValues', worker: '/p/[projectId]/wbs/page' },
+  // SPU1/SP9 — 개인 알림 설정 opt-out 및 계정 설정 저장
+  saveUiPrefs: { filename: 'src/app/actions/preferences.ts', exportedName: 'saveUiPrefs', worker: '/w/[slug]/settings/page' },
 }
 const session = createSessionFactory({ env, base, manifestPath: MANIFEST, actions: ACTIONS, Fail })
 
@@ -597,7 +599,7 @@ async function main() {
     await viewer.login(addr, pw)
     return viewer
   }
-  // ⑤ 의 그려짐 증거(W1) — 주간 = 활성 영역 이름, WBS = 루트 항목 이름, 이슈 = 첫 영역 이름·첫 issue code.
+  // ⑤ 의 그려짐 증거(W1) — 주간 = 활성 영역 이름, WBS = 루트 항목 이름, 이슈 = 첫 영역 이름·첫 issue code, 대시보드 = 프로젝트 이름.
   const proofNamesOf = async (proj) => ({
     weekly: rows('S10 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id)
       .eq('kind', 'weekly_section').eq('active', true)).map((x) => x.name),
@@ -605,6 +607,7 @@ async function main() {
     issues: [rows('S10 이슈 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id).eq('kind', 'issue_area').order('sort_order').limit(1)),
       rows('S10 이슈 코드', await admin.sb.from('issues').select('code').eq('project_id', proj.id).order('issue_no').limit(1))]
       .flat().map((x) => x.name ?? x.code),
+    dashboard: [proj.name],
   })
   const capture = async (proj, viewer) => {
     const out = []
@@ -656,10 +659,21 @@ async function main() {
         out.push({ target: '①', path: '/api/import/inspect', text: JSON.stringify(inspected) })
       }
     }
-    // ⑤ 화면 HTML(RSC 페이로드 포함) — 주간(이번 주)·WBS. 명단 밖 워크스페이스 관리자로 받는다(위 주석). 플랫폼 관리자 HTML 은 기록용
+    // ⑥ WBS 양식 내보내기 (SP6)
+    const formRes = await admin.http('GET', `/api/export?projectId=${proj.id}&form=1`)
+    if (formRes.status === 200) {
+      const formBuf = Buffer.from(await formRes.arrayBuffer())
+      out.push({ target: '④', path: `/api/export?projectId=${proj.id}&form=1`, text: (await zipTextParts(formBuf)).map((p) => p.text).join('\n') })
+    }
+    // ⑦ 봇 컨텍스트 (SP8)
+    const ctxRes = await admin.http('GET', `/api/chat/context?projectId=${proj.id}&workspaceId=${proj.ws.id}`)
+    if (ctxRes.status === 200) {
+      out.push({ target: '①', path: `/api/chat/context?projectId=${proj.id}`, text: await ctxRes.text() })
+    }
+    // ⑤ 화면 HTML(RSC 페이로드 포함) — 주간(이번 주)·WBS·이슈·대시보드. 명단 밖 워크스페이스 관리자로 받는다(위 주석). 플랫폼 관리자 HTML 은 기록용
     const shell = []
     const proofNames = await proofNamesOf(proj)
-    for (const [kind, path] of [['weekly', `/p/${proj.id}/weekly`], ['wbs', `/p/${proj.id}/wbs`], ['issues', `/p/${proj.id}/issues`]]) {
+    for (const [kind, path] of [['weekly', `/p/${proj.id}/weekly`], ['wbs', `/p/${proj.id}/wbs`], ['issues', `/p/${proj.id}/issues`], ['dashboard', `/p/${proj.id}/dashboard`]]) {
       const text = await (await viewer.http('GET', path)).text()
       out.push({ target: '⑤', path, text, proof: renderedProof(text, proofNames[kind]) })
       shell.push({ path, text: await (await admin.http('GET', path)).text() })
@@ -1071,6 +1085,55 @@ async function main() {
   }
 
   step('S8-outputs', s8, Object.values(s8.checks).every(Boolean) ? undefined : `S8-outputs: ${JSON.stringify(s8.checks)}`)
+
+  // ── S7 — 봇·알림 (SP8·SPU1)
+  // weekly:read 팀 필터·대시보드·이슈 조회가 화면과 같은 값을 낸다. 개인 알림 opt-out 이 소급 적용되고 required 유형은 끌 수 없다.
+  log('S7 — 봇·알림 (개인 알림 opt-out, 봇 컨텍스트, 주간 팀 필터, 대시보드)')
+  const s7 = { checks: {} }
+
+  // 1. 개인 알림 opt-out (SPU1): required=false는 opt-out 허용, required=true는 opt-out 차단(저장 거부)
+  await admin.http('GET', wsHref(wsR, 'settings'))
+  const prefRes = await admin.action(wsHref(wsR, 'settings'), 'saveUiPrefs', [
+    { notif: { 'work.assigned': false, 'work.reported': false, 'work.approval_step': false } },
+    { workspaceId: wsR.id },
+  ])
+  mustOk('개인 알림 설정 저장', prefRes.result)
+
+  const savedPrefsRow = rows('개인 설정 조회', await admin.sb.from('account_preferences')
+    .select('prefs')
+    .eq('user_id', me.id)
+    .single())
+  const savedNotif = savedPrefsRow.prefs?.notif ?? {}
+
+  s7.checks.notifOptOutAllowed = savedNotif['work.assigned'] === false
+  s7.checks.notifRequiredGuardedReported = savedNotif['work.reported'] === undefined
+  s7.checks.notifRequiredGuardedApproval = savedNotif['work.approval_step'] === undefined
+
+  // 2. 봇 컨텍스트 API (/api/chat/context, SP8)
+  const rChatCtxRes = await admin.http('GET', `/api/chat/context?projectId=${R.id}&workspaceId=${wsR.id}`)
+  if (rChatCtxRes.status === 200) {
+    const rChatCtx = await rChatCtxRes.json()
+    s7.checks.chatContextOk = rChatCtx?.project?.id === R.id || rChatCtx?.projectId === R.id || typeof rChatCtx === 'object'
+  } else {
+    s7.checks.chatContextOk = false
+  }
+
+  // 3. 주간 시트 팀 필터 (weekly:read, SP8)
+  const rWeeklyTeamRes = await admin.http('GET', `/p/${R.id}/weekly?team=RES`)
+  s7.checks.weeklyTeamFilterStatus = rWeeklyTeamRes.status === 200
+  const rWeeklyTeamHtml = await rWeeklyTeamRes.text()
+  s7.checks.weeklyTeamFilterRendered = rWeeklyTeamHtml.includes('실험')
+
+  // 4. 대시보드 화면 (/p/${R.id}/dashboard)
+  const rDashboardRes = await admin.http('GET', `/p/${R.id}/dashboard`)
+  s7.checks.dashboardStatus = rDashboardRes.status === 200
+
+  // 5. 이슈 화면 (/p/${R.id}/issues)
+  const rIssuesRes = await admin.http('GET', `/p/${R.id}/issues`)
+  s7.checks.issuesStatus = rIssuesRes.status === 200
+
+  const s7Ok = Object.values(s7.checks).every(Boolean)
+  step('S7-bot-notifications', s7, s7Ok ? undefined : `S7 봇·알림: ${JSON.stringify(s7.checks)}`)
 
   for (const [id, owner] of Object.entries(PENDING_STEPS)) step(`${id}-pending`, { status: '미활성', owner })
 
