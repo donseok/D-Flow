@@ -1,9 +1,9 @@
 # 사용자 DB(메인 스택) 마이그레이션 적용 runbook — SP4·UI-2·SP5·SP5b (0013~0026)
 
-> **2026-10-06 추가 적용 대상: 0038_ai_index_job_scope.** 메인 DB의 현재 max(version)=0037을 읽기 전용으로 확인했다. 이번 적용은 0038 하나이며 아래 0013~0026 절은 과거 이관 기록이다.
-> 0038은 사용자 정의 필드 저장 뒤 색인 잡 등록이 workspace_id NOT NULL 오류로 실패하는 문제를 고친다. 데이터/열 삭제 없이 기존 RPC를 교체한다. 프로젝트의 workspace를 서버에서 확정하고 범위가 다른 job_key 재사용을 거부한다.
-> 격리 전체 reset·RLS 913건·롤백/재적용 통과. 사전 백업 `/Users/jerry/D-Flow-backup/20261006-ai-index-scope/full.dump` (pg_restore 목록 확인).
-> 메인 DB를 사용 중인 서버·도구와 작업 중인 데이터 유무에 대한 사용자 답변을 받은 뒤, `supabase migration up --local`로 적용한다. **db reset은 하지 않는다.** 적용 후 max(version)=0038과 등록 RPC의 workspace 확정 동작을 확인한다.
+> **2026-10-06 적용 완료: 0038_ai_index_job_scope 및 0039_authz_legacy_cleanup.**
+> 메인 DB(54322)에 대해 사용자 명시 승인 후 `supabase migration up --local`로 적용 완료 (2026-10-06 08:51 KST).
+> 적용 전 백업: `/Users/jerry/D-Flow-backup/20261006-sp9-release/full.dump` (1.76MB).
+> 적용 후 max(version)=0039 확인 완료. `import_wbs` authenticated 실행권 회수 및 `teams` authenticated 쓰기 권한 회수 사후 검증 통과.
 
 
 > 대상: 사용자의 로컬 개발 데이터가 든 **메인 스택**(`/Users/jerry/D-Flow` 체크아웃, project_id `d-flow`, DB `54322`·API `54321`, 컨테이너 `supabase_db_d-flow`).
