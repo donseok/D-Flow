@@ -325,7 +325,7 @@ describe('카탈로그 메타와 사전', () => {
     // SP5 A 과제 29 — 달력 셋은 정의·편집·소비처·테스트 네 연결이 끝나 verified(스펙 D44)
     expect(['calendar.timezone', 'calendar.working_days', 'calendar.week_start'].map(status)).toEqual(Array(3).fill('verified'))
     expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['portal.widgets', 'views.default']))
-    expect(['forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'].map(status)).toEqual(Array(4).fill('stored'))
+    expect(['forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'].map(status)).toEqual(Array(4).fill('verified'))
     expect(PLANNED_KEYS.map((p) => p.key).some((k) => k.startsWith('forms.'))).toBe(false)
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)
   })

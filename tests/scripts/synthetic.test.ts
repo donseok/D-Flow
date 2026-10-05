@@ -37,8 +37,8 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
     expect(new Set(slugs).size).toBe(3)
     for (const ws of [SYNTHETIC_R, SYNTHETIC_C, SYNTHETIC_WORKSPACE_B]) expect(String(ws.name)).toMatch(/^합성 /)
   })
-  it('아직 켜지지 않은 단계는 S7·S8·S10(나머지)이고 담당 SP 가 적혀 있다 — SP5 A 가 S4(일)·S5 를, SP5b 가 S3-flow·S6-issue-status 를, SP5c 가 S3-fields 를 켰다', () => {
-    expect(Object.keys(PENDING_STEPS)).toEqual(['S7', 'S8', 'S10'])
+  it('아직 켜지지 않은 단계는 S7·S10(나머지)이고 담당 SP 가 적혀 있다 — SP5 A 가 S4(일)·S5 를, SP5b 가 S3-flow·S6-issue-status 를, SP5c 가 S3-fields 를, SP6 이 S8 을 켰다', () => {
+    expect(Object.keys(PENDING_STEPS)).toEqual(['S7', 'S10'])
     expect(PENDING_STEPS.S10).toBe('SP6~SP8(나머지 부분 집합)')
     for (const owner of Object.values(PENDING_STEPS)) expect(String(owner)).toMatch(/^SP/)
   })
