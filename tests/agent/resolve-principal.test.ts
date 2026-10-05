@@ -17,7 +17,7 @@ function adminWith(row: unknown, user = { id: 'u-1', email: 'dev@example.com' })
   b.maybeSingle = async () => ({ data: row, error: null })
   b.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: row, error: null }).then(r)
   return {
-    from: () => b,
+    from: (table: string) => table === 'integration_credentials' ? { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) } : b,
     auth: { admin: { getUserById: vi.fn(async () => ({ data: { user }, error: null })) } },
   }
 }

@@ -6,6 +6,7 @@ import { hashMatches } from '@/lib/agent/token'
 import { buildActor } from '@/lib/authz/buildActor'
 import { isProjectAdmin, isProjectMember, roleIn, type Actor } from '@/lib/domain/authz'
 import { requireModule } from '@/lib/modules/gate'
+import { actorFromCredential, credentialAllows, resolveCredential, type ResolvedCredential } from '@/lib/authz/credentials'
 
 /**
  * 에이전트 작업 루프 외부 API 공용 헬퍼 — 스펙 §3.1.
@@ -48,7 +49,8 @@ export function gateAgentApi(req: Request): NextResponse | null {
 
 /** 등록·enabled 프로젝트이고 agents 모듈이 켜졌을 때만 루프가 열린다(스펙 §1.1-2, §4.4 두 원천 AND). 행 조회 실패는 404 로 위장하지 않고 throw.
  *  행을 먼저 본다 — 꺼진 행은 설정을 읽지 않는다. 모듈 판정은 세션이 없으니 admin 으로(스펙 §4.2 에이전트 API 행) */
-export async function requireAgentProject(admin: AdminClient, projectId: string): Promise<boolean> {
+export async function requireAgentProject(admin: AdminClient, projectId: string, principal?: AgentPrincipal): Promise<boolean> {
+  if (principal?.kind === 'pat' && principal.credential) return (await requireModule({ projectId }, 'agents', { client: admin })).ok
   const { data, error } = await admin
     .from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle()
   if (error) throw new Error(`agent_projects 조회 실패: ${error.message}`)
@@ -69,10 +71,10 @@ export async function requireAgentProject(admin: AdminClient, projectId: string)
  * 보안 가드이므로 조회 실패는 false(fail-closed).
  */
 export async function isAgentProjectMember(
-  admin: AdminClient, userId: string, projectId: string,
+  admin: AdminClient, userId: string, projectId: string, principal?: AgentPrincipal,
 ): Promise<boolean> {
   try {
-    return isProjectMember(await buildActor(admin, userId), projectId)
+    return isProjectMember(await agentActorFromPrincipal(admin, userId, principal), projectId)
   } catch (e) {
     console.error('[agent-api] 멤버 판정 조회 실패(거절):', e instanceof Error ? e.message : e)
     return false
@@ -87,9 +89,9 @@ export async function isAgentProjectMember(
  * 어느 경로로도 통과로 새지 않으므로 fail-closed 는 유지된다.
  */
 export async function isAgentProjectAdmin(
-  admin: AdminClient, userId: string, projectId: string,
+  admin: AdminClient, userId: string, projectId: string, principal?: AgentPrincipal,
 ): Promise<boolean> {
-  return isProjectAdmin(await buildActor(admin, userId), projectId)   // throw → 라우트 try/catch 가 500(현 계약 유지)
+  return isProjectAdmin(await agentActorFromPrincipal(admin, userId, principal), projectId)   // throw → 라우트 try/catch 가 500(현 계약 유지)
 }
 
 /**
@@ -97,10 +99,10 @@ export async function isAgentProjectAdmin(
  * 보안 가드이므로 조회 실패는 null(fail-closed). 위장하지 않고 로깅한다.
  */
 export async function agentMemberRole(
-  admin: AdminClient, userId: string, projectId: string,
+  admin: AdminClient, userId: string, projectId: string, principal?: AgentPrincipal,
 ): Promise<'superuser' | 'admin' | 'member' | null> {
   try {
-    return agentRoleFromActor(await buildActor(admin, userId), projectId)
+    return agentRoleFromActor(await agentActorFromPrincipal(admin, userId, principal), projectId)
   } catch (e) {
     console.error('[agent-api] 역할 조회 실패(거절):', e instanceof Error ? e.message : e)
     return null
@@ -123,7 +125,15 @@ export type AgentPrincipal =
       tokenExpiresAt: string
       /** 발급할 때 사람이 적은 이름과 조회 키(계약 2.4). /me 가 "이 키가 무엇인지" 알려 주는 데만 쓴다. */
       runnerName: string; tokenPrefix: string
+      /** SP7 이관 자격증명은 현재 권한을 이 범위로 좁힌다. */
+      credential?: ResolvedCredential
     }
+
+/** 과도기 원천 구분: 새 자격증명은 반드시 workspace/project 범위로 좁힌다. */
+export async function agentActorFromPrincipal(admin: AdminClient, userId: string, principal?: AgentPrincipal): Promise<Actor> {
+  if (principal?.kind === 'pat' && principal.credential) return actorFromCredential(admin, principal.credential, userId)
+  return buildActor(admin, userId)
+}
 
 type RunnerRow = {
   id: string; kind: 'user_pat' | 'runner'; owner_user_id: string; name: string
@@ -148,6 +158,24 @@ export async function resolveAgentPrincipal(
 
   const prefix = parsePatPrefix(bearer)
   if (!prefix) return apiUnauthorized()
+  // 단계적 DB/클라이언트 전환: 새 저장소에 있는 prefix는 권위 있는 원천이다.
+  // 회수·손상·조회 장애가 있으면 옛 agent_runners로 다시 인증하지 않는다.
+  const { data: migrated, error: migratedErr } = await admin.from('integration_credentials')
+    .select('id').eq('token_prefix', prefix).maybeSingle()
+  if (migratedErr) return apiUnauthorized()
+  if (migrated) {
+    const cred = await resolveCredential(req, admin, 'agent_runner')
+    if (cred instanceof NextResponse) return cred
+    if (!cred.ownerUserId) return apiUnauthorized()
+    const { data: owner, error: ownerErr } = await admin.auth.admin.getUserById(cred.ownerUserId)
+    if (ownerErr || !owner?.user?.email || owner.user.id !== cred.ownerUserId) return apiUnauthorized()
+    return {
+      kind: 'pat', runnerId: cred.id, userId: cred.ownerUserId, userEmail: owner.user.email.toLowerCase(),
+      scopes: [...cred.scopes], projectId: cred.projectIds?.length === 1 ? cred.projectIds[0] : null,
+      runnerKind: 'user_pat', tokenExpiresAt: cred.expiresAt, runnerName: cred.name, tokenPrefix: cred.tokenPrefix,
+      credential: cred,
+    }
+  }
   const { data, error } = await admin
     .from('agent_runners')
     .select('id, kind, owner_user_id, name, token_prefix, token_hash, project_id, scopes, enabled, revoked_at, expires_at')
@@ -203,5 +231,6 @@ export function requireScope(
 /** PAT 의 project_id 한정 — null 이면 전 프로젝트(멤버십 게이트는 별도). */
 export function patProjectAllowed(p: AgentPrincipal, projectId: string): boolean {
   if (p.kind === 'legacy') return true
+  if (p.credential) return credentialAllows(p.credential, projectId)
   return p.projectId === null || p.projectId === projectId
 }

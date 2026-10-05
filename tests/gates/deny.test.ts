@@ -40,9 +40,6 @@ const has = (v: unknown, id: string): boolean =>
 /** module null 인데 모듈 데이터 표를 만지는 항목(닫힌 목록 — 항목마다 그 표와 사유. settings-writes 의 허용 파일 표와 같은 모양이다).
  *  새 null 항목이 모듈 표를 만지면 여기 표·사유를 확인한 뒤 더한다 — 관문 모듈로 적는 쪽은 다른 축(MU4)이 교차 검증한다 */
 const NULL_TABLE_ALLOW: Readonly<Record<string, { tables: readonly string[]; why: string }>> = {
-  'src/app/actions/agentTokens.ts#createAgentToken': { tables: ['agent_runners'], why: '계정 단위 PAT — 대상 프로젝트가 없다. agents 모듈이 아니라 API 계정 표(노트)' },
-  'src/app/actions/agentTokens.ts#revokeAgentToken': { tables: ['agent_runners'], why: 'PAT 회수 — 계정 단위 표' },
-  'src/app/actions/agentTokens.ts#listMyAgentTokens': { tables: ['agent_runners'], why: 'PAT 목록 — 계정 단위 표' },
   'src/app/actions/projectTeams.ts#copyGlobalTeams': { tables: ['minute_folders', 'minutes'], why: '상속 공용 팀 전환(convert_inherited_teams — SP5 B2)이 회의록·폴더의 팀 참조(team_id)를 새 전용 팀으로 옮긴다 — 행을 만들거나 내용을 바꾸지 않는다' },
   'src/app/api/import/execute/route.ts#POST': { tables: ['minute_folders', 'minutes'], why: '가져오기의 공용 팀 전환(convert_inherited_teams — SP5 B2)이 회의록·폴더의 팀 참조(team_id)를 옮긴다 — 행을 만들거나 내용을 바꾸지 않는다' },
   'src/app/actions/projectAreas.ts#upsertArea': { tables: ['weekly_report_rows'], why: '영역 추가·재활성은 모듈이 꺼져도 현 주 이후 문서에 행을 만든다 — 다시 켰을 때 행이 있어야 한다(R25)' },

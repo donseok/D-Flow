@@ -560,6 +560,9 @@ describe('카탈로그 불변식 — teams 를 가리키는 열 = 전환 RPC 가
       `select prosrc as src from pg_proc where oid = 'public.convert_inherited_teams(uuid, uuid)'::regprocedure`)).rows[0].src
     const moved = [...new Set([...src.matchAll(/update public\.(\w+) \w+\s+set (\w+) =/g)].map((m) => `${m[1]}.${m[2]}`))].sort()
     expect(catalog.length, '팀을 가리키는 열').toBeGreaterThan(0)
-    expect(moved).toEqual(catalog)
+    // 통합 자격증명의 팀은 WS 전체/여러 프로젝트의 외부 별칭이다. 한 프로젝트의
+    // 상속 팀 전환이 이 WS 공용 참조를 다른 프로젝트의 전용 팀으로 바꾸면 범위를 훼손한다.
+    expect(catalog).toContain('integration_credentials.default_team_id')
+    expect(moved).toEqual(catalog.filter(col => col !== 'integration_credentials.default_team_id'))
   })
 })

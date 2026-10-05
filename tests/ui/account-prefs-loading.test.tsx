@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({ current: vi.fn(), account: vi.fn(), workspace: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getSession: async () => null }))
 vi.mock('@/app/actions/project', () => ({ listProjectsWithState: async () => ({ projects: [], degraded: false }) }))
+vi.mock('@/lib/workspace/list', () => ({ listMyWorkspaces: async () => ({ ok: true, rows: [] }) }))
 vi.mock('@/lib/workspace/current', () => ({ readCurrentWorkspace: h.current }))
 vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: h.account, getWorkspacePrefs: h.workspace }))
 vi.mock('@/components/account/AccountView', () => ({ AccountView: () => null }))

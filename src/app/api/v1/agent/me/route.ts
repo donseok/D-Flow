@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  AGENT_CONTRACT_VERSION, agentRoleFromActor, apiFail, apiInternalError, apiNotFound,
+  AGENT_CONTRACT_VERSION, agentActorFromPrincipal, agentRoleFromActor, apiFail, apiInternalError, apiNotFound,
   patProjectAllowed, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
 import { actorFromUser } from '@/lib/authz'
@@ -24,20 +24,27 @@ export async function GET(req: NextRequest) {
 
     // SP2 §4.2 — 후보를 PAT 소유자가 볼 수 있는 프로젝트(내 워크스페이스들의 프로젝트, 플랫폼 관리자는 전부)로 좁힌다.
     // 종전엔 전 워크스페이스의 enabled 프로젝트를 훑었다. 권한 조회 실패는 throw → catch 의 500.
-    const actor = await actorFromUser(admin, principal.userId)
+    const actor = principal.credential ? await agentActorFromPrincipal(admin, principal.userId, principal) : await actorFromUser(admin, principal.userId)
     // 프로젝트 id 목록을 .in() 으로 싣지 않는다 — URL 이 프로젝트 수에 비례해 늘어 약 205개부터 게이트웨이가 414 로 거절한다.
     // 등록 행을 projects 임베드(!inner)의 워크스페이스로 좁혀 이름까지 한 번에 읽는다(페이지로 끝까지). 플랫폼 관리자는 필터 없음.
     let regs: Array<{ projectId: string; name: string }> = []
     if (actor.projectWorkspace.size > 0) {
       const workspaceIds = [...actor.workspaceRoles.keys()]
       try {
-        const rows = await fetchAllPages<Registration>('agent_projects', (from, to) => {
-          const q = admin.from('agent_projects').select('project_id, projects!inner(name)', { count: 'exact' }).eq('enabled', true)
-          return (actor.isSuperuser ? q : q.in('projects.workspace_id', workspaceIds)).order('project_id').range(from, to)
-        })
-        regs = rows.map(r => ({
-          projectId: r.project_id, name: (Array.isArray(r.projects) ? r.projects[0]?.name : r.projects?.name) ?? '',
-        }))
+        if (principal.credential) {
+          regs = (await fetchAllPages<{ id: string; name: string }>('projects', (from, to) =>
+            admin.from('projects').select('id, name', { count: 'exact' })
+              .eq('workspace_id', principal.credential!.workspaceId).order('id').range(from, to)))
+            .map(r => ({ projectId: r.id, name: r.name }))
+        } else {
+          const rows = await fetchAllPages<Registration>('agent_projects', (from, to) => {
+            const q = admin.from('agent_projects').select('project_id, projects!inner(name)', { count: 'exact' }).eq('enabled', true)
+            return (actor.isSuperuser ? q : q.in('projects.workspace_id', workspaceIds)).order('project_id').range(from, to)
+          })
+          regs = rows.map(r => ({
+            projectId: r.project_id, name: (Array.isArray(r.projects) ? r.projects[0]?.name : r.projects?.name) ?? '',
+          }))
+        }
       } catch (e) {
         console.error('[agent-api] enabled 프로젝트 조회 실패:', e instanceof Error ? e.message : e)
         return apiInternalError()

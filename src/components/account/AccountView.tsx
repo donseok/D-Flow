@@ -15,10 +15,12 @@ import { useLocale } from '@/components/providers/LocaleProvider'
  * 내 계정 — 결정 D. 구획: 프로필 정보 · 비밀번호 변경 · 화면(테마 3단·언어 — SP3b UI-1, 결정 #21) · PAT 발급/관리.
  * HeaderChrome 드롭다운의 비밀번호 변경 진입은 이 화면으로 이동했다(ChangePasswordModal 재사용).
  */
-export function AccountView({ email, displayName, projects, currentWorkspace = null, currentWorkspaceError = false, startPage = null, projectsView = 'rows' }: {
+export function AccountView({ email, displayName, projects, currentWorkspace = null, currentWorkspaceError = false, startPage = null, projectsView = 'rows', tokenWorkspaces = [], tokenWorkspaceError = false }: {
   email: string | null
   displayName: string | null
-  projects: { id: string; name: string }[]
+  projects: { id: string; name: string; workspace_id?: string }[]
+  tokenWorkspaces?: { id: string; name: string }[]
+  tokenWorkspaceError?: boolean
   currentWorkspace?: { id: string; name: string } | null
   currentWorkspaceError?: boolean
   startPage?: UiPrefs['startPage'] | null
@@ -28,7 +30,7 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
   const { t } = useLocale()
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6">
       <PageHeader title="내 계정" />
 
       <div className="card p-5 sm:p-6">
@@ -70,7 +72,7 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
 
       <WorkspacePrefsSection key={currentWorkspace?.id ?? 'none'} currentWorkspace={currentWorkspace} currentWorkspaceError={currentWorkspaceError} startPage={startPage} projectsView={projectsView} />
 
-      <MyTokensSection projects={projects} />
+      <MyTokensSection projects={projects} workspaces={tokenWorkspaces} currentWorkspaceId={currentWorkspace?.id} workspaceError={tokenWorkspaceError} />
 
       <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
     </div>

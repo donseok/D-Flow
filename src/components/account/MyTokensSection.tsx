@@ -13,7 +13,7 @@ import {
 
 type TokenRow = {
   id: string; name: string; token_prefix: string; scopes: string[]
-  project_id: string | null; expires_at: string; revoked_at: string | null; last_seen_at: string | null
+  workspace_id: string; project_ids: string[] | null; project_id: string | null; expires_at: string; revoked_at: string | null; last_seen_at: string | null
 }
 
 // 스코프 설명(스테이징 실사용 피드백 2026-08-11) — 52명+ 로스터에서 claim 스코프가 조회를
@@ -29,7 +29,12 @@ const SCOPE_OPTIONS: readonly { value: string; label: string; descKey: DictKey }
 const EXPIRES_OPTIONS = [30, 90, 180] as const
 
 /** PAT 발급·목록·폐기(결정 D). 평문은 발급 직후 1회만 표시. */
-export function MyTokensSection({ projects }: { projects: { id: string; name: string }[] }) {
+export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId, workspaceError = false }: {
+  projects: { id: string; name: string; workspace_id?: string }[]
+  workspaces?: { id: string; name: string }[]
+  currentWorkspaceId?: string
+  workspaceError?: boolean
+}) {
   const { toast } = useToast()
   const { t } = useLocale()
   const [tokens, setTokens] = useState<TokenRow[]>([])
@@ -37,7 +42,9 @@ export function MyTokensSection({ projects }: { projects: { id: string; name: st
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [name, setName] = useState('')
-  const [projectId, setProjectId] = useState('')
+  const [workspaceId, setWorkspaceId] = useState(workspaces.some(w => w.id === currentWorkspaceId) ? currentWorkspaceId! : workspaces[0]?.id ?? '')
+  const [allProjects, setAllProjects] = useState(true)
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([])
   const [scopes, setScopes] = useState<string[]>(['work:read'])
   const [expiresDays, setExpiresDays] = useState<number>(90)
   const [issuing, setIssuing] = useState(false)
@@ -66,17 +73,20 @@ export function MyTokensSection({ projects }: { projects: { id: string; name: st
     setIssueError(null)
     const trimmed = name.trim()
     if (!trimmed) { setIssueError('이름을 입력하세요.'); return }
+    if (!workspaceId || workspaceError) { setIssueError('워크스페이스 소속을 확인하고 하나 선택하세요.'); return }
+    if (!allProjects && selectedProjects.length === 0) { setIssueError('허용할 프로젝트를 선택하세요.'); return }
     if (scopes.length === 0) { setIssueError('스코프를 1개 이상 선택하세요.'); return }
     setIssuing(true)
     try {
       const r = await createAgentToken({
-        name: trimmed, projectId: projectId || null, scopes, expiresDays,
+        name: trimmed, workspaceId, projectIds: allProjects ? null : selectedProjects, scopes, expiresDays,
       })
       if (!r.ok) { setIssueError(r.error); return }
       setIssued({ token: r.token, prefix: r.prefix })
       setCopied(false)
       setName('')
-      setProjectId('')
+      setSelectedProjects([])
+      setAllProjects(true)
       setScopes(['work:read'])
       setExpiresDays(90)
       await reload()
@@ -106,10 +116,15 @@ export function MyTokensSection({ projects }: { projects: { id: string; name: st
     }
   }
 
-  const projectName = (id: string | null) => id ? (projects.find((p) => p.id === id)?.name ?? id) : '전체'
+  const projectName = (token: TokenRow) => {
+    const workspace = workspaces.find(w => w.id === token.workspace_id)?.name ?? token.workspace_id
+    const names = token.project_ids === null ? '전체 프로젝트' : token.project_ids.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ')
+    return `${workspace} · ${names}`
+  }
+  const candidates = projects.filter(p => p.workspace_id === workspaceId)
 
   return (
-    <div className="card overflow-hidden">
+    <div className="card w-full min-w-0 max-w-full overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
         <div>
           <div className="eyebrow">Agent access</div>
@@ -117,15 +132,15 @@ export function MyTokensSection({ projects }: { projects: { id: string; name: st
         </div>
       </div>
 
-      <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1.1fr_1fr]">
-        <div className="min-w-0">
+      <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-6 p-5 sm:p-6 lg:grid-cols-[1.1fr_1fr]">
+        <div className="w-full min-w-0 max-w-full">
           {loadError && <p role="alert" className="mb-3 text-sm font-medium text-delayed">토큰 목록을 불러오지 못했습니다: {loadError}</p>}
           {loading ? (
             <p className="text-sm text-ink-subtle">불러오는 중…</p>
           ) : tokens.length === 0 ? (
             <EmptyState icon={KeyRound} title="발급된 토큰이 없습니다" description="오른쪽 폼으로 새 토큰을 발급하세요." />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="w-full min-w-0 max-w-full overflow-x-auto">
               <table className="w-full min-w-[560px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
@@ -147,7 +162,7 @@ export function MyTokensSection({ projects }: { projects: { id: string; name: st
                         <td className="py-2.5 pr-3 font-medium text-ink">{tk.name}</td>
                         <td className="py-2.5 pr-3 font-mono text-xs text-ink-muted">{tk.token_prefix}</td>
                         <td className="py-2.5 pr-3 text-ink-muted">{tk.scopes.join(', ')}</td>
-                        <td className="py-2.5 pr-3 text-ink-muted">{projectName(tk.project_id)}</td>
+                        <td className="py-2.5 pr-3 text-ink-muted">{projectName(tk)}</td>
                         <td className="py-2.5 pr-3 text-ink-subtle">{tk.expires_at.slice(0, 10)}</td>
                         <td className="py-2.5 pr-3 text-ink-subtle">{tk.last_seen_at ? tk.last_seen_at.slice(0, 10) : '—'}</td>
                         <td className="py-2.5 pr-3 text-right">
@@ -170,27 +185,45 @@ export function MyTokensSection({ projects }: { projects: { id: string; name: st
           )}
         </div>
 
-        <div className="rounded-2xl border border-line bg-surface-2 p-4">
+        <div className="w-full min-w-0 max-w-full rounded-2xl border border-line bg-surface-2 p-4">
           <h3 className="text-sm font-semibold text-ink">새 토큰 발급</h3>
           <div className="mt-3 space-y-3">
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-ink-muted">이름</span>
               <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 노트북" maxLength={64} disabled={issuing} />
             </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">프로젝트</span>
-              <select className="app-input" value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={issuing}>
-                <option value="">전체 프로젝트</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
+            {workspaceError && <p role="alert" className="text-sm text-delayed">워크스페이스 소속을 불러오지 못했습니다. 토큰 발급을 잠시 중단합니다.</p>}
+            {workspaces.length > 1 ? (
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-ink-muted">워크스페이스</span>
+                <select aria-label="워크스페이스" className="app-input" value={workspaceId} disabled={issuing || workspaceError} onChange={e => {
+                  setWorkspaceId(e.target.value); setSelectedProjects([]); setAllProjects(true)
+                }}>
+                  {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </label>
+            ) : <p className="text-sm text-ink-muted">워크스페이스: {workspaces[0]?.name ?? '소속 없음'}</p>}
+            <fieldset className="min-w-0 space-y-2" disabled={issuing || workspaceError}>
+              <legend className="text-xs font-semibold text-ink-muted">허용 프로젝트</legend>
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input type="checkbox" checked={allProjects} onChange={e => setAllProjects(e.target.checked)} />
+                이 워크스페이스의 전체 프로젝트
+              </label>
+              {!allProjects && candidates.map(p => (
+                <label key={p.id} className="flex items-center gap-2 text-sm text-ink">
+                  <input type="checkbox" checked={selectedProjects.includes(p.id)} onChange={e => setSelectedProjects(prev => e.target.checked ? [...prev, p.id] : prev.filter(id => id !== p.id))} />
+                  <span className="min-w-0 break-words">{p.name}</span>
+                </label>
+              ))}
+              {!allProjects && candidates.length === 0 && <p className="text-xs text-ink-subtle">선택할 프로젝트가 없습니다.</p>}
+            </fieldset>
             <div>
               <span className="mb-1.5 block text-xs font-semibold text-ink-muted">스코프</span>
               <div className="flex flex-col gap-1.5">
                 {SCOPE_OPTIONS.map((opt) => (
                   <label key={opt.value} className="flex items-start gap-2 text-sm text-ink">
                     <input type="checkbox" checked={scopes.includes(opt.value)} onChange={() => toggleScope(opt.value)} disabled={issuing} className="mt-0.5" />
-                    <span>
+                    <span className="min-w-0 break-words">
                       {opt.label}
                       <span className="block text-xs text-ink-subtle">{t(opt.descKey)}</span>
                     </span>
@@ -205,7 +238,7 @@ export function MyTokensSection({ projects }: { projects: { id: string; name: st
               </select>
             </label>
             {issueError && <p role="alert" className="text-sm font-medium text-delayed">{issueError}</p>}
-            <button onClick={submitIssue} className="btn btn-primary w-full" disabled={issuing}>
+            <button onClick={submitIssue} className="btn btn-primary w-full" disabled={issuing || workspaceError || !workspaceId}>
               {issuing ? '발급 중…' : '토큰 발급'}
             </button>
           </div>

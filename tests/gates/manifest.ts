@@ -60,7 +60,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   // ── agentSeatmap — 좌석표(projectId 가 없으면 인자 워크스페이스 — D26)
   [`${A('agentSeatmap')}#refreshSeatmap`]: { guard: 'session', module: 'agents', note: 'getActorForView + canViewAgents(인자 워크스페이스) — 층은 getSeatmap 이 그 워크스페이스로 거른다', sample: ['all', undefined, W], target: 'workspace' },
   // ── agentTokens — 계정 단위 PAT(P19)
-  [`${A('agentTokens')}#createAgentToken`]: nul('session', '계정 단위 PAT — 대상 프로젝트가 없다. API 표면은 v1 라우트 관문이 닫는다'),
+  [`${A('agentTokens')}#createAgentToken`]: { guard: 'session', module: 'agents', note: '실제 소속 워크스페이스에 한정된 PAT 발급', target: 'session', sample: [{ name: 'gate-token', projectIds: null, scopes: ['work:read'], expiresDays: 30 }] },
   [`${A('agentTokens')}#revokeAgentToken`]: { ...nul('session', '계정 단위 PAT 회수'), sample: [U] },   // isUuidLike 가 세션 앞
   [`${A('agentTokens')}#listMyAgentTokens`]: nul('session', '계정 단위 PAT 목록'),
   // ── agentWork — 옛 토글 둘은 모듈을 켜는 문(P8), 승인 계열은 agents

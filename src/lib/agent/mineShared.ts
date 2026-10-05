@@ -1,6 +1,7 @@
 import type { AdminClient } from '@/lib/minutes/externalApi'
-import { isAgentProjectMember, patProjectAllowed, type AgentPrincipal } from '@/lib/agent/externalApi'
+import { agentActorFromPrincipal, isAgentProjectMember, patProjectAllowed, type AgentPrincipal } from '@/lib/agent/externalApi'
 import { myMemberIds } from '@/lib/agent/assignee'
+import { isProjectMember } from '@/lib/domain/authz'
 import { projectsWithModule } from '@/lib/modules/gate'
 
 /**
@@ -11,6 +12,11 @@ export async function accessibleProjectIds(
   admin: AdminClient,
   principal: Extract<AgentPrincipal, { kind: 'pat' }>,
 ): Promise<string[]> {
+  if (principal.credential) {
+    const actor = await agentActorFromPrincipal(admin, principal.userId, principal)
+    const ids = [...actor.projectWorkspace.keys()].filter(pid => isProjectMember(actor, pid) && patProjectAllowed(principal, pid))
+    return projectsWithModule(ids, 'agents', { client: admin })
+  }
   const { data: regs, error } = await admin.from('agent_projects').select('project_id').eq('enabled', true)
   if (error) throw new Error(`enabled 프로젝트 조회 실패: ${error.message}`)
   const out: string[] = []

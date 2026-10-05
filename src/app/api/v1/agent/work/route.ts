@@ -42,8 +42,8 @@ export async function GET(req: NextRequest) {
     // 레거시도 신원(user_email)을 받아 PAT 와 같은 멤버십 판정을 한다 — 시크릿만으로는 워크스페이스 경계가 없다.
     const reader = await resolveReader(req, admin, principal)
     if (!reader.ok) return reader.res
-    if (!(await requireAgentProject(admin, projectId))) return apiNotFound()
-    if (!(await isAgentProjectMember(admin, reader.userId, projectId))) {
+    if (!(await requireAgentProject(admin, projectId, principal))) return apiNotFound()
+    if (!(await isAgentProjectMember(admin, reader.userId, projectId, principal))) {
       return apiNotFound() // 비멤버 404 — 존재 은닉 관례(§2.2)
     }
 

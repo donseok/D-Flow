@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createServerClient } from '@/lib/supabase/server'
 import { agentApiEnabled } from '@/lib/agent/externalApi'
 import { generateAgentToken } from '@/lib/agent/token'
+import { requireModule } from '@/lib/modules/gate'
 import { isUuidLike } from '@/lib/domain/agentWork'
 
 /**
@@ -14,7 +15,7 @@ import { isUuidLike } from '@/lib/domain/agentWork'
  * (본인 claim 건만 쓸 수 있다는 강제는 report 라우트의 claimed_by_user_id 판정이 한다 §2.3).
  * 그래서 발급 가능 스코프에서 뺀다. 이미 발급된 토큰의 work:report 는 서버 판정부가
  * work:claim 과 동등하게 수용한다(externalApi.requireScope) — 옛 토큰을 끊지 않기 위해서다.
- * agent_runners 는 RLS 정책 0 — 이 액션이 유일한 관문이다(fail-closed).
+ * integration_credentials 는 RLS 정책 0 — 이 액션이 유일한 관문이다(fail-closed).
  */
 
 const SELF_ISSUE_SCOPES = new Set(['work:read', 'work:claim'])
@@ -29,28 +30,41 @@ async function sessionUserId(): Promise<string | null> {
 }
 
 export async function createAgentToken(input: {
-  name: string; projectId: string | null; scopes: string[]; expiresDays: number
+  name: string; workspaceId?: string; projectIds?: string[] | null; projectId?: string | null; scopes: string[]; expiresDays: number
 }): Promise<{ ok: true; token: string; prefix: string } | { ok: false; error: string }> {
   if (!agentApiEnabled()) return { ok: false, error: '에이전트 API가 꺼져 있어 발급할 수 없습니다.' }
   const uid = await sessionUserId()
   if (!uid) return { ok: false, error: '로그인이 필요합니다.' }
+  if (!input || typeof input.name !== 'string' || !Array.isArray(input.scopes)) return { ok: false, error: '잘못된 요청입니다.' }
   const name = input.name.trim()
   if (!NAME_RE.test(name)) return { ok: false, error: '이름 형식이 올바르지 않습니다(64자 이내).' }
-  if (input.projectId !== null && !isUuidLike(input.projectId)) return { ok: false, error: '잘못된 프로젝트입니다.' }
+  if (input.workspaceId !== undefined && (typeof input.workspaceId !== 'string' || !isUuidLike(input.workspaceId))) return { ok: false, error: '잘못된 워크스페이스입니다.' }
+  const projectIds = input.projectIds !== undefined ? input.projectIds : input.projectId ? [input.projectId] : null
+  if (projectIds !== null && (!Array.isArray(projectIds) || projectIds.length === 0 || projectIds.some(id => typeof id !== 'string' || !isUuidLike(id)))) return { ok: false, error: '잘못된 프로젝트입니다.' }
   if (input.scopes.length === 0) return { ok: false, error: '스코프를 1개 이상 선택하세요.' }
   for (const s of input.scopes) {
     if (!SELF_ISSUE_SCOPES.has(s)) return { ok: false, error: `${s}는 알 수 없는 스코프입니다.` }
   }
-  const days = Math.trunc(input.expiresDays)
+  const days = input.expiresDays
   if (!Number.isInteger(days) || days < 1 || days > MAX_EXPIRES_DAYS) {
     return { ok: false, error: `만료는 1~${MAX_EXPIRES_DAYS}일입니다.` }
   }
 
-  const { token, prefix, hash } = generateAgentToken()
   const admin = createAdminClient()
-  const { data, error } = await admin.from('agent_runners').insert({
-    name, kind: 'user_pat', owner_user_id: uid, token_prefix: prefix, token_hash: hash,
-    project_id: input.projectId, scopes: input.scopes,
+  let workspaceMemberships = admin.from('workspace_members').select('workspace_id').eq('user_id', uid)
+  if (input.workspaceId) workspaceMemberships = workspaceMemberships.eq('workspace_id', input.workspaceId)
+  const { data: rows, error: membershipErr } = await workspaceMemberships.limit(2)
+  if (membershipErr) return { ok: false, error: '워크스페이스 소속을 확인할 수 없습니다.' }
+  if (!rows || rows.length !== 1 || typeof rows[0].workspace_id !== 'string' || !rows[0].workspace_id) return { ok: false, error: '소속 워크스페이스를 하나 선택하세요.' }
+  const workspaceId = rows[0].workspace_id as string
+  const gate = await requireModule({ workspaceId }, 'agents', { client: admin })
+  if (!gate.ok) return gate
+  // DB 트리거가 프로젝트 소속과 현재 소유자 멤버십을 다시 검사한다.
+  const allowedProjects = projectIds === null ? null : [...new Set(projectIds)]
+  const { token, prefix, hash } = generateAgentToken()
+  const { data, error } = await admin.from('integration_credentials').insert({
+    workspace_id: workspaceId, name, kind: 'agent_runner', owner_user_id: uid, token_prefix: prefix, token_hash: hash,
+    project_ids: allowedProjects, default_project_id: allowedProjects?.length === 1 ? allowedProjects[0] : null, scopes: [...new Set(input.scopes)],
     expires_at: new Date(Date.now() + days * 86400_000).toISOString(), created_by: uid,
   }).select('id')
   if (error) {
@@ -67,9 +81,9 @@ export async function revokeAgentToken(runnerId: string): Promise<{ ok: boolean;
   const uid = await sessionUserId()
   if (!uid) return { ok: false, error: '로그인이 필요합니다.' }
   const admin = createAdminClient()
-  const { data, error } = await admin.from('agent_runners')
+  const { data, error } = await admin.from('integration_credentials')
     .update({ revoked_at: new Date().toISOString(), enabled: false })
-    .eq('id', runnerId).eq('owner_user_id', uid) // 본인 소유만 — 소유자 한정이 곧 권한 판정
+    .eq('id', runnerId).eq('owner_user_id', uid).eq('kind', 'agent_runner') // 본인 소유만 — 소유자 한정이 곧 권한 판정
     .select('id')
   if (error) return { ok: false, error: error.message }
   if (!data || data.length === 0) return { ok: false, error: '대상 토큰이 없습니다.' }
@@ -78,16 +92,16 @@ export async function revokeAgentToken(runnerId: string): Promise<{ ok: boolean;
 }
 
 export async function listMyAgentTokens(): Promise<
-  | { ok: true; tokens: Array<{ id: string; name: string; token_prefix: string; scopes: string[]; project_id: string | null; expires_at: string; revoked_at: string | null; last_seen_at: string | null }> }
+  | { ok: true; tokens: Array<{ id: string; name: string; token_prefix: string; scopes: string[]; workspace_id: string; project_ids: string[] | null; project_id: string | null; expires_at: string; revoked_at: string | null; last_seen_at: string | null }> }
   | { ok: false; error: string }
 > {
   const uid = await sessionUserId()
   if (!uid) return { ok: false, error: '로그인이 필요합니다.' }
   const admin = createAdminClient()
   // token_hash 는 어떤 경로로도 반환하지 않는다.
-  const { data, error } = await admin.from('agent_runners')
-    .select('id, name, token_prefix, scopes, project_id, expires_at, revoked_at, last_seen_at')
-    .eq('owner_user_id', uid).order('created_at', { ascending: false })
+  const { data, error } = await admin.from('integration_credentials')
+    .select('id, workspace_id, name, token_prefix, scopes, project_ids, expires_at, revoked_at, last_used_at')
+    .eq('owner_user_id', uid).eq('kind', 'agent_runner').order('created_at', { ascending: false })
   if (error) return { ok: false, error: error.message }
-  return { ok: true, tokens: (data ?? []) as never }
+  return { ok: true, tokens: (data ?? []).map(r => ({ ...r, project_id: r.project_ids?.length === 1 ? r.project_ids[0] : null, last_seen_at: r.last_used_at })) as never }
 }

@@ -25,6 +25,7 @@ export const A_ROW_FILTER: Record<string, string> = {
   command_receipts: `t.workspace_id = ${A}`,
   deliverable_attachments: `t.wbs_item_id in (select id from public.wbs_items where project_id in ${AP})`,
   form_templates: inAP,
+  integration_credentials: `t.workspace_id = ${A}`,
   holidays: inAP, issue_analysis_runs: inAP, issue_assignees: inAP, issue_attachments: inAP, issue_links: inAP,
   issue_major_processes: inAP, issue_number_counters: inAP, issue_updates: inAP, issues: inAP,
   item_owners: `t.wbs_item_id in (select id from public.wbs_items where project_id in ${AP})`,
@@ -124,7 +125,7 @@ export const KNOWN_LEAKS: Record<'bea' | 'ben', readonly string[]> = { bea: [], 
  */
 export const UPDATE_DENIED_BY_GRANT: ReadonlySet<string> = new Set([
   'agent_lead_leases', 'agent_projects', 'agent_runners', 'agent_watchers', 'agent_work_orders', 'agent_work_reports',
-  'ai_documents', 'ai_index_jobs', 'area_teams', 'authz_commands', 'authz_events', 'change_logs', 'command_receipts', 'deliverable_attachments', 'form_templates', 'issue_analysis_runs',
+  'ai_documents', 'ai_index_jobs', 'area_teams', 'authz_commands', 'authz_events', 'change_logs', 'command_receipts', 'deliverable_attachments', 'form_templates', 'integration_credentials', 'issue_analysis_runs',
   'issue_assignees', 'issue_attachments', 'issue_links', 'issue_major_processes', 'issue_number_counters',
   'minute_embeddings', 'minute_files', 'minute_highlights', 'minute_insights', 'minute_versions', 'minutes',
   'notification_events', 'notification_recipients', 'platform_admins', 'project_ai_briefs', 'project_areas', 'project_invites',

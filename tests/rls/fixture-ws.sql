@@ -182,7 +182,7 @@ insert into public.ai_documents (id, project_id, domain, entity_type, entity_id,
   ('00000000-0000-0000-7e57-000000001125', '00000000-0000-0000-7e57-0000000000c1', 'wbs', 'wbs_item', '00000000-0000-0000-7e57-0000000000f1', 0, 'rls', 'rls-c', '/p/x/wbs', 'rls-model', 'v1')
   on conflict do nothing;
 insert into public.agent_runners (id, name, owner_user_id, token_prefix, token_hash, expires_at, project_id) values
-  ('00000000-0000-0000-7e57-000000001126', 'rls', '00000000-0000-0000-7e57-0000000000a3', 'rls_a', 'rls-token-hash', now() + interval '1 year', '00000000-0000-0000-7e57-0000000000c1')
+  ('00000000-0000-0000-7e57-000000001126', 'rls', '00000000-0000-0000-7e57-0000000000a3', 'RlsAgentKey1', repeat('a',64), now() + interval '1 year', '00000000-0000-0000-7e57-0000000000c1')
   on conflict do nothing;
 insert into public.agent_watchers (id, user_id, agent, project_id) values
   ('00000000-0000-0000-7e57-000000001127', '00000000-0000-0000-7e57-0000000000a3', 'rls-agent', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
@@ -294,3 +294,9 @@ insert into public.form_templates(id,project_id,form_kind,file_name,storage_path
 values('00000000-0000-0000-7e57-00000000f301','00000000-0000-0000-7e57-0000000000c1','wbs_export_xlsx','isolation.xlsx',
 'ws/00000000-0000-0000-7e57-00000000aa01/p/00000000-0000-0000-7e57-0000000000c1/wbs_export_xlsx/v999.xlsx',1024,999,'{}',false)
 on conflict(id) do update set project_id=excluded.project_id,version=excluded.version,storage_path=excluded.storage_path;
+
+-- SP7: 서비스 전용 자격증명도 전수 교차 탐침에서 실제 A 행을 검사한다.
+insert into public.integration_credentials(id,workspace_id,kind,name,token_prefix,token_hash,expires_at)
+values('00000000-0000-0000-7e57-00000000f701','00000000-0000-0000-7e57-00000000aa01',
+'minutes_api','rls-minutes','RlsMinutesA1',repeat('a',64),'2099-01-01T00:00:00Z')
+on conflict(id) do nothing;

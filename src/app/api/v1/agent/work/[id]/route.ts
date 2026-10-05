@@ -40,8 +40,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const row = order as { project_id: string; claimed_at: string | null; wbs_item_id: string | null }
     if (principal.kind === 'pat' && !patProjectAllowed(principal, row.project_id)) return apiNotFound()
     // 미등록 프로젝트의 주문은 존재 자체를 숨긴다 — 게이트 순서상 등록 해제 뒤에도 새지 않게.
-    if (!(await requireAgentProject(admin, row.project_id))) return apiNotFound()
-    if (!(await isAgentProjectMember(admin, reader.userId, row.project_id))) {
+    if (!(await requireAgentProject(admin, row.project_id, principal))) return apiNotFound()
+    if (!(await isAgentProjectMember(admin, reader.userId, row.project_id, principal))) {
       return apiNotFound() // 비멤버 404 — 존재 은닉 관례(§2.2)
     }
 

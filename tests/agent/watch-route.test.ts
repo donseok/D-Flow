@@ -67,7 +67,7 @@ describe('POST /agent/watch', () => {
     const body = await res.json()
     const [payload, opts] = calls['agent_watchers:upsert'][0] as [Record<string, unknown>, Record<string, unknown>]
     expect(payload).toMatchObject({ user_id: 'u-1', agent: 'hong/mbp/lead', host: 'mbp', slots: 3, busy: 1, until_label: '18:00', project_id: null, workspace_id: WS })
-    expect(opts).toEqual({ onConflict: 'user_id,agent' })
+    expect(opts).toEqual({ onConflict: 'workspace_id,user_id,agent' })
     expect(Date.parse(body.expires_at) - Date.parse(payload.last_seen_at as string)).toBe(WATCHER_TTL_MS)
   })
   it('오래된 행(7일)을 같은 호출에서 지운다', async () => {

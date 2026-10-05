@@ -42,7 +42,7 @@ export function fakeClient(): Record<string, unknown> {
     for (const k of ['insert', 'update', 'upsert', 'delete']) chain[k] = () => { state.writes += 1; return chain }
     chain.single = async () => ({ data: row, error: null })
     chain.maybeSingle = async () => ({ data: row, error: null })
-    chain.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve({ data: [], error: null, count: 0 }).then(res, rej)
+    chain.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve({ data: table === 'workspace_members' ? [row] : [], error: null, count: table === 'workspace_members' ? 1 : 0 }).then(res, rej)
     return chain
   }
   const user = () => { state.authReads += 1; return guardSaid(state.guards === 'deny', state.guards === 'deny' ? null : { id: 'u-gate', email: 'gate@example.com' }) }   // 세션 읽기도 가드 흔적으로 센다

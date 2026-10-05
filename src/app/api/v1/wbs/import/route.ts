@@ -42,13 +42,13 @@ export async function POST(req: NextRequest) {
     const scopeErr = requireScope(principal, 'work:claim')
     if (scopeErr) return scopeErr
     if (!patProjectAllowed(principal, projectId)) return apiNotFound()
-    if (!(await requireAgentProject(admin, projectId))) return apiNotFound()
+    if (!(await requireAgentProject(admin, projectId, principal))) return apiNotFound()
     // 비멤버는 404(존재 은닉, 계약 §인증 — "PAT principal 은 멤버십 없으면 404"). 관리자 판정보다 먼저 —
     // 아니면 완전 비멤버가 관리자 판정에서 403 forbidden_role 을 받아 "프로젝트가 존재한다"가 샌다.
-    if (!(await isAgentProjectMember(admin, principal.userId, projectId))) return apiNotFound()
+    if (!(await isAgentProjectMember(admin, principal.userId, projectId, principal))) return apiNotFound()
     // import = 구조 쓰기 + 자동 발행 트리거 — 발행과 같은 관리자 전용(§2.8). member 는 403.
     // 판정은 isAgentProjectAdmin 한 곳 — 조회 실패는 헬퍼가 throw 해 아래 catch 가 500 으로 답한다.
-    if (!(await isAgentProjectAdmin(admin, principal.userId, projectId))) {
+    if (!(await isAgentProjectAdmin(admin, principal.userId, projectId, principal))) {
       return apiFail(403, 'forbidden_role', '프로젝트 관리자만 업로드할 수 있습니다.')
     }
 
