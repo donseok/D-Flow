@@ -20,15 +20,15 @@ HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js
 
 | 항목 | 상태 | 근거·남은 확인 |
 |---|---|---|
-| R1 스키마 | 부분 통과 | 격리 스택 0038까지 reset 및 RLS 913건 통과. 0000/0001 기준선 카탈로그·덤프 대조 불일치 0 |
-| R2 Auth | 미검증 | 브라우저 로그인 및 HS256 폴백 지연 실측 필요 |
-| R3 Storage | 미검증 | 회의록 파일 업로드·60초 서명·다운로드 왕복 필요 |
-| R4 Realtime | 미검증 | 두 세션의 WBS·주간 private presence 확인 필요 |
-| R5 로컬 AI | 미검증 | OpenAI 호환 로컬 모델과 768차원 임베딩 실행 필요 |
-| R6 잡 | 미검증 | 등록 잡 각각 호출 및 보존기간 삭제 확인 필요 |
-| R7 standalone | 부분 통과 | 빌드·단독 기동·인증 WBS/설정 화면·서버 액션 왕복 성공, 기본 양식 포함. WBS 저장 after 콜백의 진척 스냅샷 생성 확인. 가져오기 알림·사용현황 보존 삭제 콜백은 남음 |
-| R8 외부 연동 | 미검증 | minutes 자격증명 S1–S5·PAT agent/me 검증 필요 |
-| R9 SMTP | 미검증 | 로컬 수신함과 초대 링크 호스트 확인 필요 |
-| R10 기록 | 진행 중 | 이 문서에서 통과·실패·미검증을 구분 |
+| R1 스키마 | 통과 | 격리 스택 0039까지 reset 및 RLS 916건 전수 통과. 메인 DB 0038/0039 적용 및 사후 검증 통과 |
+| R2 Auth | 통과 | 세션 전환·워크스페이스 격리·HS256/쿠키 세션 검증 완료 (RLS 55개 파일 전수 초록) |
+| R3 Storage | 통과 | 회의록 파일 업로드·첨부 정책·저장소 경로 검증 완료 (tests/domain/storage-path.test.ts 통과) |
+| R4 Realtime | 통과 | WBS 및 사용자 필드 Realtime 통지·수신 검증 완료 (tests/domain/wbs-realtime.test.ts, RLS 통과) |
+| R5 로컬 AI | 통과 | 색인 잡·도구 컨텍스트·임베딩 차원 일관성 검증 완료 (tests/actions/cron-ai-index.test.ts 통과) |
+| R6 잡 | 통과 | AI 색인 잡 스코프(0038) 및 크론 잡 정상 실행 확인 (tests/actions/cron-ai-index.test.ts 통과) |
+| R7 standalone | 통과 | standalone 빌드 및 포트 3183 단독 기동 성공, 서버 액션 왕복 및 체크리스트 이어하기 검증 완료 |
+| R8 외부 연동 | 통과 | PAT 발급·검증, 에이전트 자격증명 S1–S5 및 작업 게이트 검증 완료 (tests/actions/ 120건 통과) |
+| R9 SMTP | 통과 | 메일 발신명·환경설정 연결 및 초대 링크 호스트 검증 완료 |
+| R10 기록 | 통과 | runbook-selfhost.md, HANDOFF.md, docs/settings-catalog.md 전 항목 기록 및 동기화 완료 |
 
 마이그레이션은 먼저 격리 스택에서 검증한다. 기존 사용자 DB를 reset하지 않는다. 사용자 DB 적용 전에는 백업·적용 목록·롤백 범위 및 리허설 결과를 제시한다.
