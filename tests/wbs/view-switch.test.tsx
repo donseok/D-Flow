@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeActor } from '../fixtures/actor'
 const h = vi.hoisted(() => ({ wbs: vi.fn(), actor: vi.fn(), pc: vi.fn(), mod: vi.fn(), reason: vi.fn() }))
 vi.mock('@/lib/modules/pageGate', () => ({ requireModulePage: vi.fn(async () => {}) }))
-vi.mock('@/lib/modules/gate', () => ({ requireModule: h.mod }))
+vi.mock('@/lib/modules/gate', () => ({ requireModule: h.mod, moduleState: vi.fn(async () => 'off') }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: h.wbs }))
 vi.mock('@/lib/calendar/load', () => ({ toCalendarInput: (v: unknown) => v }))
 vi.mock('@/lib/authz', () => ({ getActorForView: h.actor }))
