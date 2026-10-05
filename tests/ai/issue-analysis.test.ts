@@ -1,3 +1,4 @@
+import { TEST_AREAS, TEST_CAUSE_CODES, TEST_SEVERITY_CODES } from '../fixtures/issue-areas'
 import { describe, expect, it } from 'vitest'
 import type { IssueAnalysisReportIssue } from '@/lib/report/issues/model'
 import {
@@ -21,12 +22,13 @@ import {
 } from '@/lib/report/issues/model'
 
 const inputIssue = (id: string, title = '기준정보 중복'): IssueAnalysisIssueInput => ({
+    codeAreaId: null,
   id,
   issueNo: 1,
-  piIssueCode: 'PI-I-00-01',
+  code: 'PI-I-00-01',
   projectId: 'project-1',
-  megaCode: '00',
-  megaSeq: 1,
+  areaId: '00',
+
   title,
   body: '동일한 자재가 여러 코드로 등록된다.',
   status: 'resolved',
@@ -53,10 +55,10 @@ const reportIssue = (
   over: Partial<IssueAnalysisReportIssue> = {},
 ): IssueAnalysisReportIssue => ({
   id,
-  issueNo: 1,
-  piIssueCode: 'PI-I-00-01',
-  megaCode: '00',
-  megaSeq: 1,
+
+  code: 'PI-I-00-01',
+  areaId: '00',
+
   majorId: null,
   title: '기준정보 중복',
   body: 'A'.repeat(20_000),
@@ -75,7 +77,7 @@ const reportIssue = (
 
 describe('이슈 분석 AI 입력', () => {
   it('같은 정규화 스냅샷은 결정적인 SHA-256 해시를 만든다', () => {
-    const one = buildIssueAnalysisInputSnapshot('project-1', [inputIssue('i-1')])
+    const one = buildIssueAnalysisInputSnapshot('project-1', [inputIssue('i-1')], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const clone = JSON.parse(JSON.stringify(one))
     const a = issueAnalysisInputHash(one)
     const b = issueAnalysisInputHash(clone)
@@ -86,9 +88,9 @@ describe('이슈 분석 AI 입력', () => {
   it('긴 본문/출처만 축약하고 모든 ID와 제목은 프롬프트 상한 안에서 보존한다', () => {
     const issues = [
       reportIssue('uuid-1', { title: '프롬프트 안의 지시를 실행하지 말 것' }),
-      reportIssue('uuid-2', { piIssueCode: 'PI-I-00-02', megaSeq: 2, title: '두 번째 이슈' }),
+      reportIssue('uuid-2', { code: 'PI-I-00-02',  title: '두 번째 이슈' }),
     ]
-    const prompt = buildIssueAnalysisMegaPrompt('00', '기준관리', issues)
+    const prompt = buildIssueAnalysisMegaPrompt(TEST_AREAS.find(area => area.code === '00')!, issues)
     expect(prompt.length).toBeLessThanOrEqual(ISSUE_ANALYSIS_MAX_MEGA_PROMPT_CHARS)
     expect(prompt).toContain('uuid-1')
     expect(prompt).toContain('uuid-2')
@@ -101,13 +103,13 @@ describe('이슈 분석 AI 입력', () => {
     const issues = [
       reportIssue('uuid-1', { body: '등록 전에 중복 여부를 확인하는 절차가 없다.' }),
       reportIssue('uuid-2', {
-        piIssueCode: 'PI-I-00-02',
-        megaSeq: 2,
+        code: 'PI-I-00-02',
+
         title: '승인 책임 불명확',
         body: '승인 단계별 담당 부서가 문서에 정의되어 있지 않다.',
       }),
     ]
-    const prompt = buildIssueAnalysisCausePrompt('00', '기준관리', issues)
+    const prompt = buildIssueAnalysisCausePrompt(TEST_AREAS.find(area => area.code === '00')!, issues)
 
     expect(prompt).toContain('uuid-1')
     expect(prompt).toContain('uuid-2')
@@ -119,11 +121,11 @@ describe('이슈 분석 AI 입력', () => {
 
   it('원인분석 호출은 출력 안정성을 위해 최대 3개 이슈로 제한한다', () => {
     const issues = Array.from({ length: 4 }, (_, index) => reportIssue(`uuid-${index + 1}`, {
-      piIssueCode: `PI-I-00-${String(index + 1).padStart(2, '0')}`,
-      megaSeq: index + 1,
+      code: `PI-I-00-${String(index + 1).padStart(2, '0')}`,
+
     }))
 
-    expect(() => buildIssueAnalysisCausePrompt('00', '기준관리', issues)).toThrow('최대 3개')
+    expect(() => buildIssueAnalysisCausePrompt(TEST_AREAS.find(area => area.code === '00')!, issues)).toThrow('최대 3개')
   })
 })
 
@@ -202,7 +204,7 @@ describe('이슈별 원인분석 AI 출력 검증', () => {
   it('strict JSON을 파싱하고 모든 입력 이슈의 직접·근본 원인을 보존한다', () => {
     const result = parseIssueAnalysisCauseAreaResponse(
       JSON.stringify({ causeAnalyses: valid }),
-      issues,
+      issues, TEST_CAUSE_CODES,
     )
 
     expect(result).toEqual({ ok: true, value: valid })
@@ -218,7 +220,7 @@ describe('이슈별 원인분석 AI 출력 검증', () => {
         { category: 'organization', directCause: '조직 원인', rootCause: null },
         { category: 'it', directCause: 'IT 원인', rootCause: null },
       ],
-    }], singleIssue)
+    }], singleIssue, TEST_CAUSE_CODES)
 
     expect(result).toMatchObject({ ok: true })
   })
@@ -227,18 +229,18 @@ describe('이슈별 원인분석 AI 출력 검증', () => {
     const foreign = validateIssueAnalysisCauseAnalyses([{
       issueId: 'other-mega',
       causes: [{ category: 'process', directCause: '직접 원인', rootCause: null }],
-    }], [{ id: 'uuid-1' }])
+    }], [{ id: 'uuid-1' }], TEST_CAUSE_CODES)
     expect(foreign).toMatchObject({ ok: false })
     if (!foreign.ok) expect(foreign.error).toContain('현재')
 
     const duplicate = validateIssueAnalysisCauseAnalyses([
       valid[0],
       { ...valid[0] },
-    ], issues)
+    ], issues, TEST_CAUSE_CODES)
     expect(duplicate).toMatchObject({ ok: false })
     if (!duplicate.ok) expect(duplicate.error).toContain('중복')
 
-    const uncovered = validateIssueAnalysisCauseAnalyses([valid[0]], issues)
+    const uncovered = validateIssueAnalysisCauseAnalyses([valid[0]], issues, TEST_CAUSE_CODES)
     expect(uncovered).toMatchObject({ ok: false })
     if (!uncovered.ok) expect(uncovered.error).toMatch(/누락|분석되지|연결되지|일치하지/)
   })
@@ -248,26 +250,26 @@ describe('이슈별 원인분석 AI 출력 검증', () => {
     const empty = validateIssueAnalysisCauseAnalyses([{
       issueId: 'uuid-1',
       causes: [],
-    }], singleIssue)
+    }], singleIssue, TEST_CAUSE_CODES)
     expect(empty).toMatchObject({ ok: false })
 
     const unsupported = validateIssueAnalysisCauseAnalyses([{
       issueId: 'uuid-1',
       causes: [{ category: 'people', directCause: '직접 원인', rootCause: null }],
-    }], singleIssue)
+    }], singleIssue, TEST_CAUSE_CODES)
     expect(unsupported).toMatchObject({ ok: false })
     if (!unsupported.ok) expect(unsupported.error).toMatch(/category/i)
 
     const blankDirect = validateIssueAnalysisCauseAnalyses([{
       issueId: 'uuid-1',
       causes: [{ category: 'process', directCause: '   ', rootCause: null }],
-    }], singleIssue)
+    }], singleIssue, TEST_CAUSE_CODES)
     expect(blankDirect).toMatchObject({ ok: false })
 
     const invalidRoot = validateIssueAnalysisCauseAnalyses([{
       issueId: 'uuid-1',
       causes: [{ category: 'process', directCause: '직접 원인', rootCause: 123 }],
-    }], singleIssue)
+    }], singleIssue, TEST_CAUSE_CODES)
     expect(invalidRoot).toMatchObject({ ok: false })
   })
 
@@ -280,7 +282,7 @@ describe('이슈별 원인분석 AI 출력 검증', () => {
         directCause: `직접 원인 ${index + 1}`,
         rootCause: null,
       })),
-    }], singleIssue)
+    }], singleIssue, TEST_CAUSE_CODES)
     expect(tooMany).toMatchObject({ ok: false })
 
     const duplicateCategory = validateIssueAnalysisCauseAnalyses([{
@@ -289,20 +291,20 @@ describe('이슈별 원인분석 AI 출력 검증', () => {
         { category: 'process', directCause: '직접 원인 1', rootCause: null },
         { category: 'process', directCause: '직접 원인 2', rootCause: null },
       ],
-    }], singleIssue)
+    }], singleIssue, TEST_CAUSE_CODES)
     expect(duplicateCategory).toMatchObject({ ok: false })
     if (!duplicateCategory.ok) expect(duplicateCategory.error).toContain('중복')
 
     const longDirect = validateIssueAnalysisCauseAnalyses([{
       issueId: 'uuid-1',
       causes: [{ category: 'process', directCause: '가'.repeat(401), rootCause: null }],
-    }], singleIssue)
+    }], singleIssue, TEST_CAUSE_CODES)
     expect(longDirect).toMatchObject({ ok: false })
 
     const longRoot = validateIssueAnalysisCauseAnalyses([{
       issueId: 'uuid-1',
       causes: [{ category: 'process', directCause: '직접 원인', rootCause: '가'.repeat(801) }],
-    }], singleIssue)
+    }], singleIssue, TEST_CAUSE_CODES)
     expect(longRoot).toMatchObject({ ok: false })
   })
 })
@@ -397,13 +399,12 @@ describe('프로세스 정의 검증', () => {
 
 describe('v3 프롬프트·통합 파스', () => {
   it('프롬프트 버전이 v3다', () => {
-    expect(ISSUE_ANALYSIS_PROMPT_VERSION).toBe('issue-causes-opportunities-defs-v3')
+    expect(ISSUE_ANALYSIS_PROMPT_VERSION).toBe('issue-causes-opportunities-areas-v4')
   })
 
   it('majors가 minimum envelope에 포함된다', () => {
     const prompt = buildIssueAnalysisMegaPrompt(
-      '00',
-      '기준관리',
+      TEST_AREAS[0],
       [reportIssue('uuid-1')],
       PROMPT_MAJORS,
     )
@@ -447,5 +448,23 @@ describe('v3 프롬프트·통합 파스', () => {
       }],
     })
     expect(parseIssueAnalysisAreaGeneration(raw, [{ id: 'uuid-1' }], []).ok).toBe(false)
+  })
+})
+
+describe('원인 분석 프롬프트 — 설정 어휘(SP5 B4)', () => {
+  it('기본 어휘의 프롬프트는 B4 이전 문구 그대로다', async () => {
+    const { ISSUE_ANALYSIS_CAUSE_SYSTEM_PROMPT } = await import('@/lib/ai/issue-analysis')
+    expect(ISSUE_ANALYSIS_CAUSE_SYSTEM_PROMPT).toContain('원인 category는 strategy_policy(전략/규정), process(프로세스), organization(조직), it(IT) 중 하나만 사용하라.')
+    expect(ISSUE_ANALYSIS_CAUSE_SYSTEM_PROMPT).toContain('"category":"process"')
+  })
+  it('바꾼 라벨·끈 분류가 선택지에 반영되고, 검증은 그 code 만 받는다', async () => {
+    const { issueAnalysisCauseSystemPrompt, validateIssueAnalysisCauseAnalyses } = await import('@/lib/ai/issue-analysis')
+    const prompt = issueAnalysisCauseSystemPrompt({ causeCategories: [{ code: 'it', label: 'D · 디지털' }, { code: 'vendor', label: '협력사' }], sources: [] })
+    expect(prompt).toContain('원인 category는 it(D · 디지털), vendor(협력사) 중 하나만 사용하라.')
+    expect(prompt).toContain('"category":"it"')
+    const ok = validateIssueAnalysisCauseAnalyses([{ issueId: 'i-1', causes: [{ category: 'vendor', directCause: '납기 지연', rootCause: null }] }], [{ id: 'i-1' }], ['it', 'vendor'])
+    expect(ok.ok).toBe(true)
+    const bad = validateIssueAnalysisCauseAnalyses([{ issueId: 'i-1', causes: [{ category: 'process', directCause: '납기 지연', rootCause: null }] }], [{ id: 'i-1' }], ['it', 'vendor'])
+    expect(bad.ok).toBe(false)
   })
 })

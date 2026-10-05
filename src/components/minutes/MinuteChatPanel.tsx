@@ -5,7 +5,7 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes } from '@/components/app/TeamsProvider'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { fetchMinuteFoldersLite } from '@/app/actions/minutes'
-import { teamChildFoldersOf } from '@/lib/domain/minutes'
+import { isTeamRootFolder, teamChildFoldersOf } from '@/lib/domain/minutes'
 import type { MinuteFolder, TeamCode } from '@/lib/domain/types'
 import { linkifyMinutePaths } from './linkify'
 import { useMinutesScope } from './MinutesScopeContext'
@@ -157,14 +157,14 @@ export function MinuteChatPanel({ minuteId, projects = [], workspaceId }: {
   const chat = scope === 'doc' ? doc : archive
   const subFolders = scope === 'archive' && team !== 'ALL' && Array.isArray(folders)
     ? teamChildFoldersOf(folders, team) : []
-  // teamChildFoldersOf(→teamRootFolderIdOf)는 이름이 일치하는 팀 루트 중 첫 번째 것만 본다 —
+  // teamChildFoldersOf(→teamRootFolderIdOf)는 팀 code 가 일치하는 팀 루트 중 첫 번째 것만 본다 —
   // 0076 이후 같은 팀 이름의 루트가 프로젝트마다 있을 수 있어(각 프로젝트의 같은 이름 팀 등), 어느
   // 프로젝트 것이 뽑혔는지 화면에서 알 길이 없었다. 동명 루트가 하나뿐일 때(지금의 보통 상태)는
   // 종전과 똑같이 보이고, 여럿일 때만 지금 뽑힌 루트의 프로젝트 이름을 칩에 붙인다.
   const ambiguousTeamRoot = Array.isArray(folders)
-    && folders.filter(f => f.parentId === null && f.createdBy === null && f.name === team).length > 1
+    && folders.filter(f => isTeamRootFolder(f) && f.teamCode === team).length > 1
   const pickedRootProjectId = Array.isArray(folders)
-    ? folders.find(f => f.parentId === null && f.createdBy === null && f.name === team)?.projectId ?? null
+    ? folders.find(f => isTeamRootFolder(f) && f.teamCode === team)?.projectId ?? null
     : null
   const subFolderProjectLabel = ambiguousTeamRoot
     ? (pickedRootProjectId ? (projects.find(p => p.id === pickedRootProjectId)?.name ?? null) : t('min.grp.unassigned'))

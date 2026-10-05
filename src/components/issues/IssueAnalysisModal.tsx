@@ -13,10 +13,10 @@ import {
 import { ensureIssueAnalysisAction } from '@/app/actions/issueAnalysis'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { Modal } from '@/components/ui/Modal'
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import type { Issue } from '@/lib/domain/issues'
 import {
-  ISSUE_MEGA_AREAS,
-  type IssueMegaFilter,
+  type IssueAreaFilter,
 } from '@/lib/domain/issueAnalysis'
 import {
   buildIssueAnalysisPreflight,
@@ -37,50 +37,52 @@ export function IssueAnalysisModal({
   onClose,
   projectId,
   issues,
-  megaFilter = 'all',
+  areas,
+  areaFilter = 'all',
 }: {
   open: boolean
   onClose: () => void
   projectId: string
+  areas: readonly IssueAreaRef[]
   issues: Issue[]
-  megaFilter?: IssueMegaFilter
+  areaFilter?: IssueAreaFilter
 }) {
-  const { locale, t } = useLocale()
+  const { t } = useLocale()
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const scopedIssues = useMemo(
-    () => megaFilter === 'all'
+    () => areaFilter === 'all'
       ? issues
-      : issues.filter(issue => issue.megaCode === megaFilter),
-    [issues, megaFilter],
+      : issues.filter(issue => issue.areaId === areaFilter),
+    [issues, areaFilter],
   )
-  const preflight = useMemo(() => buildIssueAnalysisPreflight(scopedIssues), [scopedIssues])
+  const preflight = useMemo(() => buildIssueAnalysisPreflight(scopedIssues, areas), [scopedIssues, areas])
   const majorUnsetCount = useMemo(
-    () => scopedIssues.filter(issue => issue.megaCode && !issue.majorId).length,
+    () => scopedIssues.filter(issue => issue.areaId && !issue.majorId).length,
     [scopedIssues],
   )
   const populatedAreas = preflight.areas.filter(area => area.count > 0)
   const canGenerate = preflight.totalCount > 0 && preflight.blockedCount === 0
-  const selectedArea = megaFilter === 'all'
+  const selectedArea = areaFilter === 'all'
     ? null
-    : ISSUE_MEGA_AREAS.find(area => area.code === megaFilter) ?? null
+    : areas.find(area => area.id === areaFilter) ?? null
   const scopeLabel = selectedArea
-    ? `${selectedArea.code} · ${locale === 'en' ? selectedArea.nameEn : selectedArea.nameKo}`
+    ? `${selectedArea.code} · ${selectedArea.name}`
     : t('issue.analysis.scopeAll')
 
   useEffect(() => {
     if (!open) return
     setResult(null)
     setError(null)
-  }, [open, issues, megaFilter])
+  }, [open, issues, areaFilter])
 
   function generate() {
     if (!canGenerate || pending) return
     setError(null)
     startTransition(async () => {
       try {
-        const response = await ensureIssueAnalysisAction(projectId, megaFilter)
+        const response = await ensureIssueAnalysisAction(projectId, areaFilter)
         if (
           response.ok
           && response.runId
@@ -191,12 +193,12 @@ export function IssueAnalysisModal({
         {populatedAreas.length > 0 && (
           <section>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
-              Mega
+              {t('issue.analysis.area')}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {populatedAreas.map(area => (
-                <span key={area.megaCode} className="chip bg-surface-2 text-ink">
-                  {area.megaCode} · {area.megaName} {area.count}
+                <span key={area.areaCode} className="chip bg-surface-2 text-ink">
+                  {area.areaCode} · {area.areaName} {area.count}
                 </span>
               ))}
             </div>
@@ -258,17 +260,17 @@ export function IssueAnalysisModal({
               <h3 className="text-sm font-semibold text-ink">{t('issue.analysis.opportunities')}</h3>
             </div>
             {result.analysis.areas.filter(area => area.opportunities.length > 0).map(area => (
-              <div key={area.megaCode} className="rounded-2xl border border-line bg-surface-2 p-4">
+              <div key={area.areaCode} className="rounded-2xl border border-line bg-surface-2 p-4">
                 <div className="text-xs font-semibold text-ink">
-                  {area.megaCode} · {area.megaName}
+                  {area.areaCode} · {area.areaName}
                 </div>
                 <div className="mt-3 space-y-3">
                   {area.opportunities.map((opportunity, index) => {
                     const issueCodes = opportunity.issueIds
-                      .map(id => area.issues.find(issue => issue.id === id)?.piIssueCode)
+                      .map(id => area.issues.find(issue => issue.id === id)?.code)
                       .filter((code): code is string => Boolean(code))
                     return (
-                      <article key={`${area.megaCode}-${index}`} className="rounded-xl border border-line bg-surface p-3">
+                      <article key={`${area.areaCode}-${index}`} className="rounded-xl border border-line bg-surface p-3">
                         <div className="text-sm font-semibold text-ink">{opportunity.title}</div>
                         <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-ink-muted">
                           {opportunity.description}

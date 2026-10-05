@@ -1,24 +1,27 @@
 // 이슈관리 도메인 — 순수 함수만(I/O 없음).
 // 상태 전환의 단일 정본은 STATUS_TRANSITIONS — UI(select 옵션)와 서버 액션(전환 검증)이
 // 이 맵만 참조한다. 5번째 상태를 추가할 때 이 파일 + 0041 check 제약만 바꾸면 되게 유지할 것.
+import type { CustomValues } from './customFields'
 import type { IssueMinuteSource } from './issueMinuteSource'
-import type { IssueMegaCode, IssueMegaFilter, IssueSourceType } from './issueAnalysis'
+import type { IssueAreaFilter, IssueSourceType } from './issueAnalysis'
 import { diffDaysCal } from './dashboard'
 
 export const ISSUE_STATUSES = ['open', 'in_progress', 'resolved', 'on_hold'] as const
 export type IssueStatus = (typeof ISSUE_STATUSES)[number]
 
-export const ISSUE_SEVERITIES = ['high', 'medium', 'low'] as const
-export type IssueSeverity = (typeof ISSUE_SEVERITIES)[number]
+/** 심각도 code — 프로젝트 설정 issues.severities(SP5 B4). 순서는 설정의 rank */
+export type IssueSeverity = string
 
 export interface Issue {
+  /** null is an unreadable custom snapshot; old fixtures may omit this optional field. */
+  custom?: CustomValues | null
   id: string
   issueNo: number
-  /** 보고서 업무키. 0055 이전 미분류 이슈는 null이며 최초 Mega 분류 때 한 번 발급된다. */
-  piIssueCode: string | null
+  /** DB가 등록 때 발급하는 불변 업무 코드. issueNo는 내부 정렬 보조다. */
+  code: string
   projectId: string
-  megaCode: IssueMegaCode | null
-  megaSeq: number | null
+  areaId: string | null
+  codeAreaId: string | null
   /**
    * Major Process 연결(0062). 레거시(0062 이전 분류) 이슈는 null — 편집으로 백필된다.
    * optional 인 이유: 0062 이전에 만들어진 Issue 픽스처·스냅샷과의 호환(생략 = 미연결).
@@ -36,7 +39,13 @@ export interface Issue {
   attachmentCount?: number
   title: string
   body: string
+  /** 범주(제품 고정 4종) — 집계·지연·정렬이 읽는다. 표시 상태는 statusCode */
   status: IssueStatus
+  /**
+   * 표시 상태 code(SP5b — 설정 workflow.issue_statuses). optional 인 이유는 majorId 와 같다(옛 픽스처 호환 — 생략 = 범주 code 와 같은 기본 상태).
+   * getIssues 는 항상 채운다.
+   */
+  statusCode?: string
   severity: IssueSeverity
   /** 담당자 멤버 id 목록(0042 조인 테이블). 표시 순서는 뷰가 이름순으로 다시 정렬한다. */
   assigneeMemberIds: string[]
@@ -89,15 +98,6 @@ export const ISSUE_STATUS_META: Record<
   on_hold:     { labelKey: 'issue.status.on_hold',     chip: 'bg-neutral-weak text-neutral',   dot: 'bg-slate-400' },
 }
 
-export const ISSUE_SEVERITY_META: Record<
-  IssueSeverity,
-  { labelKey: `issue.severity.${IssueSeverity}`; chip: string }
-> = {
-  high:   { labelKey: 'issue.severity.high',   chip: 'bg-delayed-weak text-delayed' },
-  medium: { labelKey: 'issue.severity.medium', chip: 'bg-pending-weak text-pending' },
-  low:    { labelKey: 'issue.severity.low',    chip: 'bg-neutral-weak text-neutral' },
-}
-
 /** 지연 = 기한 경과(당일 제외) + 미해결. today 는 'YYYY-MM-DD'(프로젝트 calendar.timezone 의 오늘) — 호출부가 계산해 내려준다. */
 export function isOverdue(issue: Pick<Issue, 'dueDate' | 'status'>, today: string): boolean {
   if (!issue.dueDate || issue.status === 'resolved') return false
@@ -121,10 +121,10 @@ export function isDueUrgent(daysLeft: number | null): boolean {
   return daysLeft !== null && daysLeft <= DUE_URGENT_DAYS
 }
 
-const SEVERITY_ORDER: Record<IssueSeverity, number> = { high: 0, medium: 1, low: 2 }
-
-/** 기본 정렬: 미해결 우선 → 지연 우선 → 심각도(높음 먼저) → 목표일 오름차순(없으면 뒤) → 최신 등록순. 원본 불변. */
-export function sortIssues(issues: Issue[], today: string): Issue[] {
+/** 기본 정렬: 미해결 우선 → 지연 우선 → 심각도(설정 rank 작은 것 먼저, 목록 밖 code 는 뒤) → 목표일 오름차순(없으면 뒤) → 최신 등록순. 원본 불변. */
+export function sortIssues(issues: Issue[], today: string, severities: readonly { code: string; rank: number }[]): Issue[] {
+  const rankOf = new Map(severities.map(e => [e.code, e.rank]))
+  const rank = (code: string) => rankOf.get(code) ?? Number.POSITIVE_INFINITY
   return [...issues].sort((a, b) => {
     const ar = a.status === 'resolved' ? 1 : 0
     const br = b.status === 'resolved' ? 1 : 0
@@ -132,8 +132,8 @@ export function sortIssues(issues: Issue[], today: string): Issue[] {
     const ao = isOverdue(a, today) ? 0 : 1
     const bo = isOverdue(b, today) ? 0 : 1
     if (ao !== bo) return ao - bo
-    if (SEVERITY_ORDER[a.severity] !== SEVERITY_ORDER[b.severity]) {
-      return SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
+    if (rank(a.severity) !== rank(b.severity)) {
+      return rank(a.severity) < rank(b.severity) ? -1 : 1
     }
     if (a.dueDate !== b.dueDate) {
       if (a.dueDate === null) return 1
@@ -153,7 +153,7 @@ export function filterIssues(
   f: {
     status: IssueStatusFilter
     severity: IssueSeverityFilter
-    mega: IssueMegaFilter
+    area: IssueAreaFilter
     mineOnly: boolean
     myMemberIds: ReadonlySet<string>
   },
@@ -161,7 +161,7 @@ export function filterIssues(
   return issues.filter(i =>
     (f.status === 'all' || i.status === f.status)
     && (f.severity === 'all' || i.severity === f.severity)
-    && (f.mega === 'all' || i.megaCode === f.mega)
+    && (f.area === 'all' || i.areaId === f.area)
     && (!f.mineOnly || i.assigneeMemberIds.some(id => f.myMemberIds.has(id))))
 }
 

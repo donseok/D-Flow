@@ -1,3 +1,4 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
 import { describe, expect, it } from 'vitest'
 import type {
   IssueAnalysisReport,
@@ -14,13 +15,13 @@ import {
   splitIssueAnalysisTextForRows,
 } from '@/lib/report/issues/deckPlan'
 
-function issue(index: number, megaCode = '02'): IssueAnalysisReportIssue {
+function issue(index: number, areaCode = '02'): IssueAnalysisReportIssue {
   return {
     id: `issue-${index}`,
-    issueNo: index,
-    piIssueCode: `PI-I-${megaCode}-${String(index).padStart(2, '0')}`,
-    megaCode: megaCode as IssueAnalysisReportIssue['megaCode'],
-    megaSeq: index,
+
+    code: `PI-I-${areaCode}-${String(index).padStart(2, '0')}`,
+    areaId: areaCode as IssueAnalysisReportIssue['areaId'],
+
     majorId: null,
     title: `이슈 ${index}`,
     body: `이슈 ${index} 상세 내용`,
@@ -48,12 +49,13 @@ function issue(index: number, megaCode = '02'): IssueAnalysisReportIssue {
   }
 }
 
-function area(count: number, megaCode = '02'): IssueAnalysisReportArea {
-  const issues = Array.from({ length: count }, (_, index) => issue(index + 1, megaCode))
+function area(count: number, areaCode = '02'): IssueAnalysisReportArea {
+  const issues = Array.from({ length: count }, (_, index) => issue(index + 1, areaCode))
   return {
-    megaCode: megaCode as IssueAnalysisReportArea['megaCode'],
-    megaName: megaCode === '02' ? '영업' : '기준관리',
-    megaNameEn: megaCode === '02' ? 'Sales' : 'Master Data',
+    areaId: areaCode as IssueAnalysisReportArea['areaCode'],
+    areaCode: areaCode as IssueAnalysisReportArea['areaCode'],
+    areaName: areaCode === '02' ? '영업' : '기준관리',
+
     summary: {
       totalCount: count,
       statusCounts: { open: count, in_progress: 0, resolved: 0, on_hold: 0 },
@@ -64,7 +66,7 @@ function area(count: number, megaCode = '02'): IssueAnalysisReportArea {
     issues,
     opportunities: count
       ? [{
-          title: `${megaCode} 개선기회`,
+          title: `${areaCode} 개선기회`,
           description: '업무를 표준화한다.',
           issueIds: issues.slice(0, 5).map(item => item.id),
         }]
@@ -101,8 +103,8 @@ function withCauseAnalyses(
 describe('buildIssueAnalysisDeckPlan', () => {
   it('생성일 라벨은 프로젝트 tz 의 날짜다 — 같은 instant 가 LA 에서는 전날', () => {
     const meta = { projectName: 'Acme', authorName: 'alice', authorTeam: 'RES', generatedAt: '2026-07-31T03:00:00Z' }
-    expect(buildIssueAnalysisDeckPlan(report([area(8)]), { ...meta, timeZone: 'Asia/Seoul' }).meta.dateLabel).toBe('26.07.31')
-    expect(buildIssueAnalysisDeckPlan(report([area(8)]), { ...meta, timeZone: 'America/Los_Angeles' }).meta.dateLabel).toBe('26.07.30')
+    expect(buildIssueAnalysisDeckPlan(report([area(8)]), { ...meta, timeZone: 'Asia/Seoul' }, TEST_AREAS).meta.dateLabel).toBe('26.07.31')
+    expect(buildIssueAnalysisDeckPlan(report([area(8)]), { ...meta, timeZone: 'America/Los_Angeles' }, TEST_AREAS).meta.dateLabel).toBe('26.07.30')
   })
 
   it('고정 페이지를 유지하고 8건을 3+5 이슈 페이지로 나눈다', () => {
@@ -112,13 +114,13 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: 'PI팀',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     expect(plan.slides.map(slide => slide.sourceSlide)).toEqual([
       1, 2, 3, 4, 8, 9, 11, 12,
     ])
     expect(plan.slides[4]).toMatchObject({
       kind: 'area-summary',
-      issues: [{ piIssueCode: 'PI-I-02-01' }, {}, {}],
+      issues: [{ code: 'PI-I-02-01' }, {}, {}],
     })
     expect(plan.slides[5]).toMatchObject({
       kind: 'area-summary-continuation',
@@ -155,7 +157,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const issueSlides = plan.slides.filter(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation')
     expect(issueSlides.map(slide => slide.issues.length)).toEqual([3, 5, 1])
@@ -171,13 +173,13 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: 'TF',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const opportunities = plan.slides.filter(slide => slide.kind === 'opportunity')
     expect(opportunities).toHaveLength(1)
-    expect(opportunities[0].blocks.map(block => block.megaCode)).toEqual(['00', '02'])
+    expect(opportunities[0].blocks.map(block => block.areaCode)).toEqual(['00', '02'])
     expect(opportunities[0].blocks[1]).toMatchObject({
       opportunityNo: 2,
-      issues: [{ id: 'issue-1', piIssueCode: 'PI-I-02-01', title: '이슈 1' }],
+      issues: [{ id: 'issue-1', code: 'PI-I-02-01', title: '이슈 1' }],
     })
   })
 
@@ -198,7 +200,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: 'PI팀',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const causeSlides = plan.slides.filter(slide => slide.kind === 'cause-analysis')
 
     expect(plan.slides.map(slide => slide.sourceSlide)).toEqual([
@@ -207,10 +209,10 @@ describe('buildIssueAnalysisDeckPlan', () => {
     expect(causeSlides).toHaveLength(1)
     expect(causeSlides[0]).toMatchObject({
       sourceSlide: 10,
-      megaCode: '02',
-      megaName: '영업',
+      areaCode: '02',
+      areaName: '영업',
       issueId: sales.issues[0].id,
-      piIssueCode: 'PI-I-02-01',
+      code: 'PI-I-02-01',
       pageInIssue: 1,
       pageCount: 1,
       issue: {
@@ -249,11 +251,11 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const causeSlides = plan.slides.filter(slide => slide.kind === 'cause-analysis')
 
-    expect(causeSlides.map(slide => slide.megaCode)).toEqual(['00', '00', '02'])
-    expect(causeSlides.map(slide => slide.piIssueCode)).toEqual([
+    expect(causeSlides.map(slide => slide.areaCode)).toEqual(['00', '00', '02'])
+    expect(causeSlides.map(slide => slide.code)).toEqual([
       'PI-I-00-01', 'PI-I-00-02', 'PI-I-02-01',
     ])
     expect(causeSlides.map(slide => slide.pageInIssue)).toEqual([1, 1, 1])
@@ -274,7 +276,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })).toThrow('중복 이슈')
+    }, TEST_AREAS)).toThrow('중복 이슈')
 
     const foreign = area(1)
     withCauseAnalyses(foreign, [{ ...valid, issueId: 'other-area' }])
@@ -284,7 +286,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })).toThrow('영역 밖 이슈')
+    }, TEST_AREAS)).toThrow('영역 밖 이슈')
 
     const uncovered = area(2)
     withCauseAnalyses(uncovered, [{
@@ -297,7 +299,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })).toThrow('정확히 1건')
+    }, TEST_AREAS)).toThrow('정확히 1건')
 
     const unsupported = area(1)
     withCauseAnalyses(unsupported, [{
@@ -314,7 +316,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })).toThrow('지원하지 않는 원인 Category')
+    }, TEST_AREAS)).toThrow('지원하지 않는 원인 Category')
   })
 
   it('짧은 개선기회는 한 페이지에 묶고 높이가 찰 때만 2·3페이지를 만든다', () => {
@@ -330,7 +332,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const opportunityPages = plan.slides.filter(slide => slide.kind === 'opportunity')
 
     expect(opportunityPages).toHaveLength(3)
@@ -353,7 +355,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })).toThrow('영역 밖 이슈')
+    }, TEST_AREAS)).toThrow('영역 밖 이슈')
 
     const tooMany = area(6)
     tooMany.opportunities[0].issueIds = tooMany.issues.map(item => item.id)
@@ -363,7 +365,7 @@ describe('buildIssueAnalysisDeckPlan', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })).toThrow('1~5건')
+    }, TEST_AREAS)).toThrow('1~5건')
   })
 })
 
@@ -436,7 +438,7 @@ describe('PPT 표시 정규화', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const issueSlides = plan.slides.filter(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation')
     const rows = issueSlides.flatMap(slide => slide.issues)
@@ -486,7 +488,7 @@ describe('PPT 표시 정규화', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const rows = plan.slides.flatMap(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation'
         ? slide.issues
@@ -519,7 +521,7 @@ describe('PPT 표시 정규화', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const rows = plan.slides.flatMap(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation'
         ? slide.issues
@@ -563,7 +565,7 @@ describe('PPT 표시 정규화', () => {
       authorTeam: 'PI팀',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const issueSlides = plan.slides.filter(slide =>
       slide.kind === 'area-summary' || slide.kind === 'area-summary-continuation')
     const rows = issueSlides.flatMap(slide => slide.issues)
@@ -604,7 +606,7 @@ describe('PPT 표시 정규화', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const pages = plan.slides.filter(slide => slide.kind === 'opportunity')
     const blocks = pages.flatMap(slide => slide.blocks)
 
@@ -639,7 +641,7 @@ describe('PPT 표시 정규화', () => {
       authorTeam: '',
       generatedAt: '2026-07-31T00:00:00Z',
       timeZone: 'Asia/Seoul',
-    })
+    }, TEST_AREAS)
     const pages = plan.slides.filter(slide => slide.kind === 'cause-analysis')
     const causeRows = pages.flatMap(slide => slide.causes)
 

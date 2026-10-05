@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { CircleAlert, ExternalLink, Highlighter, LoaderCircle, Users } from 'lucide-react'
 import type { InsightKind } from '@/lib/domain/types'
 import type { MinuteLinkedIssue } from '@/lib/domain/issueMinuteSource'
-import { ISSUE_STATUS_META } from '@/lib/domain/issues'
+import { IssueStatusPill } from '@/components/ui/StatusPill'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
 const KIND_CHIP: Record<InsightKind, string> = {
@@ -86,7 +86,6 @@ export function MinuteBlockPopover({
               <p className="mb-1.5 text-[11px] font-semibold text-ink-subtle">{t('min.issue.linked')}</p>
               <div className="space-y-1.5">
                 {linkedIssues.slice(0, 2).map(issue => {
-                  const meta = ISSUE_STATUS_META[issue.status]
                   return (
                     <Link
                       key={issue.linkId}
@@ -94,16 +93,15 @@ export function MinuteBlockPopover({
                       onClick={onClose}
                       className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 px-2.5 py-2 text-xs text-ink transition hover:border-brand/40 hover:text-brand"
                     >
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`} />
-                      <span className="min-w-0 flex-1">
+                                            <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium">
-                          {issue.piIssueCode ?? t('min.issue.open').replace('{n}', String(issue.issueNo))}
+                          {issue.code}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] text-ink-muted">
                           {issue.title}
                         </span>
                       </span>
-                      <span className={`chip shrink-0 ${meta.chip}`}>{t(meta.labelKey)}</span>
+                      <span className="shrink-0"><IssueStatusPill category={issue.status} /></span>
                       <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     </Link>
                   )

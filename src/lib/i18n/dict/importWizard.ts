@@ -88,6 +88,7 @@ export const importWizardKo = {
   'importWizard.mismatchFieldHolidaySheet': '휴일 시트',
   'importWizard.mismatchFieldHierarchy': '계층 열',
   'importWizard.mismatchFieldTeamColumns': '팀 열 위치',
+  'importWizard.mismatchFieldCustomColumns': '사용자 정의 열 위치',
   'importWizard.useSavedProfileButton': '저장된 양식 사용',
 
   'importWizard.previewTitle': '미리보기(상위 10행)',

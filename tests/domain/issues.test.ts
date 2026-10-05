@@ -1,6 +1,7 @@
+import { DEFAULT_SEVERITIES } from '@/lib/settings/vocab'
 import { describe, it, expect } from 'vitest'
 import {
-  ISSUE_STATUSES, ISSUE_SEVERITIES, STATUS_TRANSITIONS,
+  ISSUE_STATUSES, STATUS_TRANSITIONS,
   canTransition, isOverdue, nextResolvedAt, sortIssues, filterIssues, canEditIssue,
   dueDaysLeft, isDueUrgent, DUE_URGENT_DAYS,
   type Issue,
@@ -8,8 +9,8 @@ import {
 
 function issue(id: string, opts: Partial<Issue> = {}): Issue {
   return {
-    id, issueNo: 1, piIssueCode: 'PI-I-00-01', projectId: 'p1',
-    megaCode: '00', megaSeq: 1, title: `이슈 ${id}`, body: '',
+    id, issueNo: 1, code: 'RS-RND-001', projectId: 'p1',
+    areaId: 'rnd', codeAreaId: 'rnd', title: `이슈 ${id}`, body: '',
     status: 'open', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null,
     subProcess: '기준정보 등록', ownerDepartment: '경영관리팀', relatedSystems: ['ERP'],
     sourceType: 'interview', sourceDetail: '현업 인터뷰',
@@ -70,58 +71,58 @@ describe('nextResolvedAt — resolved 진입/이탈 규칙', () => {
 
 describe('sortIssues — 미해결 → 지연 → 심각도 → 목표일 → 최신 등록', () => {
   it('resolved 는 항상 마지막', () => {
-    const r = sortIssues([issue('done', { status: 'resolved', severity: 'high' }), issue('open1')], TODAY)
+    const r = sortIssues([issue('done', { status: 'resolved', severity: 'high' }), issue('open1')], TODAY, DEFAULT_SEVERITIES)
     expect(r.map(i => i.id)).toEqual(['open1', 'done'])
   })
   it('미해결 안에서 지연이 먼저', () => {
-    const r = sortIssues([issue('later', { dueDate: '2026-08-01' }), issue('over', { dueDate: '2026-07-01' })], TODAY)
+    const r = sortIssues([issue('later', { dueDate: '2026-08-01' }), issue('over', { dueDate: '2026-07-01' })], TODAY, DEFAULT_SEVERITIES)
     expect(r.map(i => i.id)).toEqual(['over', 'later'])
   })
   it('같은 지연 여부면 심각도 높음 먼저', () => {
-    const r = sortIssues([issue('lo', { severity: 'low' }), issue('hi', { severity: 'high' }), issue('mid')], TODAY)
+    const r = sortIssues([issue('lo', { severity: 'low' }), issue('hi', { severity: 'high' }), issue('mid')], TODAY, DEFAULT_SEVERITIES)
     expect(r.map(i => i.id)).toEqual(['hi', 'mid', 'lo'])
   })
   it('같은 심각도면 목표일 오름차순, 목표일 없음은 뒤', () => {
-    const r = sortIssues([issue('none'), issue('aug', { dueDate: '2026-08-10' }), issue('jul', { dueDate: '2026-07-30' })], TODAY)
+    const r = sortIssues([issue('none'), issue('aug', { dueDate: '2026-08-10' }), issue('jul', { dueDate: '2026-07-30' })], TODAY, DEFAULT_SEVERITIES)
     expect(r.map(i => i.id)).toEqual(['jul', 'aug', 'none'])
   })
   it('전부 같으면 최신 등록순(createdAt desc)', () => {
     const r = sortIssues([
       issue('old', { createdAt: '2026-07-01T00:00:00+00:00' }),
       issue('new', { createdAt: '2026-07-20T00:00:00+00:00' }),
-    ], TODAY)
+    ], TODAY, DEFAULT_SEVERITIES)
     expect(r.map(i => i.id)).toEqual(['new', 'old'])
   })
   it('원본 배열을 변경하지 않는다', () => {
     const src = [issue('b', { severity: 'low' }), issue('a', { severity: 'high' })]
-    sortIssues(src, TODAY)
+    sortIssues(src, TODAY, DEFAULT_SEVERITIES)
     expect(src.map(i => i.id)).toEqual(['b', 'a'])
   })
 })
 
-describe('filterIssues — 상태·심각도·Mega·내 담당', () => {
+describe('filterIssues — 상태·심각도·프로젝트·내 담당', () => {
   const list = [
     issue('a', { status: 'open', severity: 'high', assigneeMemberIds: ['m1'] }),
-    issue('b', { status: 'resolved', severity: 'low', megaCode: '02', assigneeMemberIds: ['m2', 'm3'] }),
+    issue('b', { status: 'resolved', severity: 'low', areaId: 'ops', assigneeMemberIds: ['m2', 'm3'] }),
     issue('c', { status: 'open', severity: 'low', assigneeMemberIds: [] }),
   ]
   it('all 필터는 전량 통과', () => {
-    expect(filterIssues(list, { status: 'all', severity: 'all', mega: 'all', mineOnly: false, myMemberIds: new Set() })).toHaveLength(3)
+    expect(filterIssues(list, { status: 'all', severity: 'all', area: 'all', mineOnly: false, myMemberIds: new Set() })).toHaveLength(3)
   })
   it('상태·심각도 AND 결합', () => {
-    const r = filterIssues(list, { status: 'open', severity: 'low', mega: 'all', mineOnly: false, myMemberIds: new Set() })
+    const r = filterIssues(list, { status: 'open', severity: 'low', area: 'all', mineOnly: false, myMemberIds: new Set() })
     expect(r.map(i => i.id)).toEqual(['c'])
   })
-  it('Mega 영역을 선택하면 해당 영역 이슈만 남긴다', () => {
-    const r = filterIssues(list, { status: 'all', severity: 'all', mega: '02', mineOnly: false, myMemberIds: new Set() })
+  it('프로젝트 영역을 선택하면 해당 영역 이슈만 남긴다', () => {
+    const r = filterIssues(list, { status: 'all', severity: 'all', area: 'ops', mineOnly: false, myMemberIds: new Set() })
     expect(r.map(i => i.id)).toEqual(['b'])
   })
   it('내 담당은 myMemberIds 포함 여부 — 미지정 담당은 제외', () => {
-    const r = filterIssues(list, { status: 'all', severity: 'all', mega: 'all', mineOnly: true, myMemberIds: new Set(['m1']) })
+    const r = filterIssues(list, { status: 'all', severity: 'all', area: 'all', mineOnly: true, myMemberIds: new Set(['m1']) })
     expect(r.map(i => i.id)).toEqual(['a'])
   })
   it('여러 담당자 중 한 명만 나여도 내 담당이다', () => {
-    const r = filterIssues(list, { status: 'all', severity: 'all', mega: 'all', mineOnly: true, myMemberIds: new Set(['m3']) })
+    const r = filterIssues(list, { status: 'all', severity: 'all', area: 'all', mineOnly: true, myMemberIds: new Set(['m3']) })
     expect(r.map(i => i.id)).toEqual(['b'])
   })
 })
@@ -141,9 +142,11 @@ describe('canEditIssue — 전체 편집/삭제 게이트(UI 노출용)', () => 
   })
 })
 
-describe('심각도 상수', () => {
-  it('ISSUE_SEVERITIES 는 high/medium/low', () => {
-    expect([...ISSUE_SEVERITIES]).toEqual(['high', 'medium', 'low'])
+describe('심각도 정렬 — 설정 rank', () => {
+  it('rank 가 작은 것이 먼저, 목록 밖 code 는 뒤', () => {
+    const sev = [{ code: 'crit', rank: 0 }, ...DEFAULT_SEVERITIES]
+    const r = sortIssues([issue('x', { severity: 'ghost' }), issue('lo', { severity: 'low' }), issue('c', { severity: 'crit' })], TODAY, sev)
+    expect(r.map(i => i.id)).toEqual(['c', 'lo', 'x'])
   })
 })
 

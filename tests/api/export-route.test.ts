@@ -7,13 +7,17 @@ import * as XLSX from 'xlsx'
 // 팀·WBS 를 읽기 전에 404 다(SP2 Task 16b). 빌더는 실물을 감싼 vi.fn 이다 — 인자를 보고 실제 결과도 본다.
 const mocks = vi.hoisted(() => ({
   state: { projects: [] as Array<{ id: string; name: string }>, degraded: false },
-  getSession: vi.fn(async () => ({ id: 'u1' }) as { id: string } | null),
+  requireProjectMember: vi.fn(),
   getComputedWbs: vi.fn(),
   projectTeams: vi.fn(),
   getProjectConfig: vi.fn(),
   buildWorkbookWithProfile: vi.fn(),
+  loadTemplate: vi.fn(),
+  loadProject: vi.fn(),
+  scan: vi.fn(),
+  render: vi.fn(),
 }))
-vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }))
+vi.mock('@/lib/authz', () => ({ requireProjectMember: mocks.requireProjectMember }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: mocks.getComputedWbs }))
 vi.mock('@/app/actions/project', () => ({ listProjectsWithState: vi.fn(async () => mocks.state) }))
 vi.mock('@/lib/teams/source', async () => {
@@ -22,6 +26,13 @@ vi.mock('@/lib/teams/source', async () => {
 })
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 vi.mock('@/lib/excel/exportWithProfile', () => ({ buildWorkbookWithProfile: mocks.buildWorkbookWithProfile }))
+vi.mock('@/lib/report/forms/loadTemplate', () => ({
+  loadFormTemplate: mocks.loadTemplate,
+  FormTemplateLoadError: class FormTemplateLoadError extends Error {},
+}))
+vi.mock('@/lib/report/forms/project', () => ({ loadReportProject: mocks.loadProject }))
+vi.mock('@/lib/report/engine', () => ({ engineFor: () => ({ render: mocks.render }) }))
+vi.mock('@/lib/report/engine/scan', () => ({ scanFormTemplate: mocks.scan }))
 
 import { GET } from '@/app/api/export/route'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
@@ -40,6 +51,7 @@ const SAVED: ExcelProfile = {
   hierarchy: { kind: 'columns', columns: [0, 1] },
   logical: { extraAxis: null, code: null, name: null, deliverable: 2, start: 3, end: 4, weight: null, actualPct: 5 },
   teamColumns: [[6, 'RES']], ownerMarks: { '●': 'primary', '△': 'support' },
+  customColumns: [],
 }
 const row = (over: Partial<WbsRow>): WbsRow => ({ id: 'x', parentId: null, code: 'x', sortOrder: 0, name: 'x', biz: null, deliverable: null,
   plannedStart: null, plannedEnd: null, weight: null, actualPct: null, owners: [], isOwnerSplit: false, ...over })
@@ -55,7 +67,12 @@ beforeEach(async () => {
   vi.clearAllMocks()
   const actual = await vi.importActual<typeof import('@/lib/excel/exportWithProfile')>('@/lib/excel/exportWithProfile')
   mocks.buildWorkbookWithProfile.mockImplementation(actual.buildWorkbookWithProfile)
+  mocks.requireProjectMember.mockResolvedValue({ ok: true, actor: { userId: 'u1' } })
   mocks.state = { projects: [{ id: 'p-mine', name: 'Acme' }], degraded: false }
+  mocks.loadProject.mockResolvedValue({ name: 'Acme', description: null, start_date: '2026-01-01', end_date: '2026-12-31' })
+  mocks.loadTemplate.mockResolvedValue({ bytes: new Uint8Array([1]), source: 'default' })
+  mocks.render.mockResolvedValue(new Uint8Array([9]))
+  mocks.scan.mockResolvedValue({ placeholders: [{ token: '{{project.name}}', kind: 'value', path: 'project.name', scope: [], location: {}, mergedRuns: false }], issues: [] })
   mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업'] }))
   mocks.getComputedWbs.mockResolvedValue({ items: [], holidays: [], calendar: calUtcSun })
   mocks.projectTeams.mockResolvedValue([...teamRows(['RES']), ...teamRows(['OLD'], { active: false, id: 't-OLD2' })])
@@ -73,8 +90,10 @@ describe('GET /api/export — 볼 수 없는 프로젝트는 팀·WBS 전에 404
     expect((await get('p-mine')).status).toBe(500)
   })
   it('비로그인은 401', async () => {
-    mocks.getSession.mockResolvedValueOnce(null)
+    const { ERR_ANON } = await import('@/lib/authz/errors')
+    mocks.requireProjectMember.mockResolvedValueOnce({ ok: false, error: ERR_ANON })
     expect((await get('p-mine')).status).toBe(401)
+    expect(mocks.getComputedWbs).not.toHaveBeenCalled()
   })
 })
 
@@ -210,5 +229,31 @@ describe('GET /api/export — Holiday 시트(SP5 D7)', () => {
     ] })
     expect((await get('p-mine')).status).toBe(200)
     expect(mocks.buildWorkbookWithProfile.mock.calls[0][2]).toEqual([{ date: '2026-10-05', name: '창립기념일' }])
+  })
+})
+
+describe('GET /api/export?form=1 (정본 §4.8)', () => {
+  const form = () => GET(new NextRequest('http://localhost/api/export?projectId=p-mine&form=1'))
+
+  it('양식 출력이고 프로파일 빌더를 타지 않는다', async () => {
+    const res = await form()
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Form-Template')).toBe('default')
+    expect(res.headers.get('X-Excel-Layout')).toBeNull()
+    expect(mocks.buildWorkbookWithProfile).not.toHaveBeenCalled()
+    expect(mocks.loadTemplate).toHaveBeenCalledWith('p-mine', 'wbs_export_xlsx', null)
+  })
+
+  it('멤버가 아니면 양식을 읽지 않는다', async () => {
+    const { ERR_MISSING } = await import('@/lib/authz/errors')
+    mocks.requireProjectMember.mockResolvedValueOnce({ ok: false, error: ERR_MISSING })
+    expect((await form()).status).toBe(404)
+    expect(mocks.loadTemplate).not.toHaveBeenCalled()
+  })
+
+  it('expand=1 이 있어도 form=1 은 프로파일 경로가 아니다', async () => {
+    const res = await GET(new NextRequest('http://localhost/api/export?projectId=p-mine&form=1&expand=1'))
+    expect(res.status).toBe(200)
+    expect(mocks.buildWorkbookWithProfile).not.toHaveBeenCalled()
   })
 })

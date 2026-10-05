@@ -12,4 +12,5 @@ export const LEGACY_EXCEL_PROFILE_V1: ExcelProfile = {
   logical: { extraAxis: 0, code: null, name: null, deliverable: 11, start: 12, end: 13, weight: 14, actualPct: 16 },
   teamColumns: [[6, 'PMO'], [7, 'ERP'], [8, 'MES'], [9, '가공'], [10, 'MDM']],
   ownerMarks: { '●': 'primary', '△': 'support' },
+  customColumns: [],
 }

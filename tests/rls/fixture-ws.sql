@@ -82,10 +82,6 @@ insert into public.item_owners (wbs_item_id, team_id, kind) values
   ('00000000-0000-0000-7e57-0000000000f4', '00000000-0000-0000-7e57-0000000000d5', 'primary')
 on conflict do nothing;
 
--- 전역 참조(D2 예외) — 이슈 대분류·번호 카운터의 전제
-insert into public.issue_mega_areas (code, name, sort_order, active) values ('99', 'RLS 영역', 999, true)
-on conflict do nothing;
-
 -- ── A(프로젝트 c1) 엔터티: 스코프 표마다 1행 ────────────────────────────────────────────
 insert into public.meetings (id, project_id, title, meeting_date) values
   ('00000000-0000-0000-7e57-000000001101', '00000000-0000-0000-7e57-0000000000c1', 'RLS 회의', '2026-09-01') on conflict do nothing;
@@ -122,10 +118,14 @@ insert into public.agent_work_orders (id, project_id) values
   ('00000000-0000-0000-7e57-00000000110b', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.project_areas (id, project_id, kind, code, name) values
   ('00000000-0000-0000-7e57-00000000110c', '00000000-0000-0000-7e57-0000000000c1', 'weekly_section', 'RLSA', 'RLS 영역') on conflict do nothing;
+-- 이슈 영역(SP5 B1 — 프로젝트 영역) — 이슈 대분류·번호 카운터의 전제. 1bf0 활성(R99), 1bf1 비활성(OFF1 — 세션 위조·회의록 RPC 케이스)
+insert into public.project_areas (id, project_id, kind, code, name, active) values
+  ('00000000-0000-0000-7e57-000000001bf0', '00000000-0000-0000-7e57-0000000000c1', 'issue_area', 'R99', 'RLS 이슈 영역', true),
+  ('00000000-0000-0000-7e57-000000001bf1', '00000000-0000-0000-7e57-0000000000c1', 'issue_area', 'OFF1', 'RLS 꺼진 영역', false) on conflict do nothing;
 insert into public.minute_folders (id, project_id, name, created_by) values
   ('00000000-0000-0000-7e57-00000000110d', '00000000-0000-0000-7e57-0000000000c1', 'RLS 폴더', '00000000-0000-0000-7e57-0000000000a3') on conflict do nothing;
-insert into public.issue_major_processes (id, project_id, mega_code, name) values
-  ('00000000-0000-0000-7e57-00000000110e', '00000000-0000-0000-7e57-0000000000c1', '99', 'RLS 대분류') on conflict do nothing;
+insert into public.issue_major_processes (id, project_id, area_id, name) values
+  ('00000000-0000-0000-7e57-00000000110e', '00000000-0000-0000-7e57-0000000000c1', '00000000-0000-0000-7e57-000000001bf0', 'RLS 대분류') on conflict do nothing;
 insert into public.wiki_item_sources (id, wiki_item_id, minute_id, minute_version_id, body_hash, block_index, block_hash, relation) values
   ('00000000-0000-0000-7e57-00000000110f', '00000000-0000-0000-7e57-000000001106', '00000000-0000-0000-7e57-000000001103', '00000000-0000-0000-7e57-000000001104', 'rls-h', 0, 'rls-b', 'supports')
   on conflict do nothing;
@@ -188,6 +188,10 @@ insert into public.agent_watchers (id, user_id, agent, project_id) values
   ('00000000-0000-0000-7e57-000000001127', '00000000-0000-0000-7e57-0000000000a3', 'rls-agent', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.agent_work_reports (id, work_order_id, kind, percent, summary, agent) values
   ('00000000-0000-0000-7e57-000000001128', '00000000-0000-0000-7e57-00000000110b', 'progress', 10, 'rls', 'rls-agent') on conflict do nothing;
+-- SP5b W1: 승인 원장 A 행 하나(전수 교차 탐침용). 철회된 행이라 workflow-parity 등의 라운드 판정에 끼지 않는다
+insert into public.wbs_stage_approvals (id, project_id, wbs_item_id, round, step_code, via, approved_by, revoked_at, revoked_by, revoke_reason) values
+  ('00000000-0000-0000-7e57-00000000112a', '00000000-0000-0000-7e57-0000000000c1', '00000000-0000-0000-7e57-0000000000f1', 999, 'review', 'set_stage',
+   '00000000-0000-0000-7e57-0000000000a3', now(), '00000000-0000-0000-7e57-0000000000a3', 'stage_reset') on conflict do nothing;
 insert into public.project_invites (id, workspace_id, project_id, email, access_role, token_hash, created_by, expires_at) values
   ('00000000-0000-0000-7e57-000000001129', '00000000-0000-0000-7e57-00000000aa01', '00000000-0000-0000-7e57-0000000000c1', 'rls-invitee@example.com', 'member', 'rls-invite-hash', '00000000-0000-0000-7e57-0000000000a2', now() + interval '1 year')
   on conflict do nothing;
@@ -206,7 +210,7 @@ insert into public.announcement_seen (user_id, project_id) values ('00000000-000
 insert into public.holidays (project_id, date) values ('00000000-0000-0000-7e57-0000000000c1', '2026-01-01') on conflict do nothing;
 insert into public.issue_assignees (issue_id, member_id, project_id) values
   ('00000000-0000-0000-7e57-000000001102', '00000000-0000-0000-7e57-0000000000e1', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
-insert into public.issue_number_counters (project_id, mega_code, last_no) values ('00000000-0000-0000-7e57-0000000000c1', '99', 1) on conflict do nothing;
+insert into public.issue_number_counters (project_id, scope_key, last_no) values ('00000000-0000-0000-7e57-0000000000c1', 'a:00000000-0000-0000-7e57-000000001bf0', 1) on conflict do nothing;
 insert into public.meeting_attendees (meeting_id, member_id, project_id) values
   ('00000000-0000-0000-7e57-000000001101', '00000000-0000-0000-7e57-0000000000e1', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.meeting_exceptions (meeting_id, occurrence_date) values ('00000000-0000-0000-7e57-000000001101', '2026-09-08') on conflict do nothing;
@@ -284,3 +288,9 @@ begin
     raise exception 'fixture-ws: c1 의 월요일 주 시작 규칙 선기록이 0행이다(설정 행 없음 — projects_settings_row 트리거 확인)';
   end if;
 end $$;
+
+-- SP6: an inactive A template makes the whole-catalog isolation probe non-vacuous.
+insert into public.form_templates(id,project_id,form_kind,file_name,storage_path,size_bytes,version,placeholders,active)
+values('00000000-0000-0000-7e57-00000000f301','00000000-0000-0000-7e57-0000000000c1','wbs_export_xlsx','isolation.xlsx',
+'ws/00000000-0000-0000-7e57-00000000aa01/p/00000000-0000-0000-7e57-0000000000c1/wbs_export_xlsx/v999.xlsx',1024,999,'{}',false)
+on conflict(id) do update set project_id=excluded.project_id,version=excluded.version,storage_path=excluded.storage_path;

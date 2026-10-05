@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { summarize, monthMatrix, monthGridRange, weekdayColumns, calendarDayInfo, calendarViewOf, holidayNamesOf, recordsByDate, ATTENDANCE_META } from '@/lib/domain/attendance'
+import { monthMatrix, monthGridRange, weekdayColumns, calendarDayInfo, calendarViewOf, holidayNamesOf, recordsByDate } from '@/lib/domain/attendance'
+import { DEFAULT_ATTENDANCE_TYPES, summarizeAttendance } from '@/lib/settings/vocab'
+
+// B4 — 집계는 설정 어휘(counts_as)로 한다. 기본 어휘의 집계는 B4 이전 summarize 와 같다
+const summarize = (records: { type: string }[]) => summarizeAttendance(DEFAULT_ATTENDANCE_TYPES, records)
 import { SUNDAY_CAL, MONDAY_CAL, WORKSPACE_CAL, HOLIDAY_NAMES } from '../fixtures/calendarView'
 import type { AttendanceRecord, AttendanceType } from '@/lib/domain/types'
 
@@ -137,16 +141,6 @@ describe('recordsByDate', () => {
   })
 })
 
-describe('ATTENDANCE_META', () => {
-  it('has an entry with korean label for every attendance type', () => {
-    const types: AttendanceType[] = ['work', 'remote', 'annual', 'half', 'sick', 'trip', 'official', 'absent']
-    for (const t of types) {
-      expect(ATTENDANCE_META[t]).toBeTruthy()
-      expect(ATTENDANCE_META[t].label.length).toBeGreaterThan(0)
-      expect(ATTENDANCE_META[t].dot).toMatch(/^bg-/)
-    }
-  })
-})
 
 describe('calendarViewOf·holidayNamesOf — 서버 페이지의 달력 props', () => {
   it('날짜 예외가 없는 달력(워크스페이스)은 빈 집합을 채운다', () => {

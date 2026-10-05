@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { MinuteFolder } from '@/lib/domain/types'
+import type { AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
 import { withTeams } from '../fixtures/teams'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
@@ -20,11 +21,15 @@ const recordMinuteFile = vi.fn<(...a: unknown[]) => Promise<{ ok: boolean }>>(as
 const fetchMinuteFoldersLite = vi.fn<() => Promise<MinuteFolder[]>>(async () => tree)
 type MeetingsLite = { ok: true; meetings: { id: string; title: string; meetingDate: string }[] } | { ok: false; error: string }
 const fetchProjectMeetingsLite = vi.fn<(pid: string) => Promise<MeetingsLite>>(async () => ({ ok: true, meetings: [] }))
+const POLICY: AttachmentPolicy = { enabled: true, maxFileBytes: 20_971_520, maxCount: 10, maxTotalBytes: 209_715_200, allowedExtensions: null, previewEnabled: true }
+type PolicyRes = { ok: true; policy: AttachmentPolicy } | { ok: false; error: string }
+const fetchAttachmentPolicyForScope = vi.fn<(scope: unknown) => Promise<PolicyRes>>(async () => ({ ok: true, policy: POLICY }))
 vi.mock('@/app/actions/minutes', () => ({
   createMinute: (...a: unknown[]) => createMinute(...(a as [unknown, string | null])),
   recordMinuteFile: (...a: unknown[]) => recordMinuteFile(...a),
   fetchProjectMeetingsLite: (pid: string) => fetchProjectMeetingsLite(pid),
   fetchMinuteFoldersLite: () => fetchMinuteFoldersLite(),
+  fetchAttachmentPolicyForScope: (scope: unknown) => fetchAttachmentPolicyForScope(scope),
 }))
 const upload = vi.fn(async () => ({ error: null }))
 vi.mock('@/lib/supabase/client', () => ({
@@ -42,7 +47,11 @@ const P3 = 'bbbbbbbb-3333-4333-8333-333333333333'
 const F = (
   id: string, name: string, parentId: string | null = null,
   createdBy: string | null = null, sort = 0,
-): MinuteFolder => ({ id, name, parentId, sort, createdBy, projectId: null })
+): MinuteFolder => ({
+  id, name, parentId, sort, createdBy, projectId: null,
+  // SP5 B2 — 시드 루트(옛 created_by null)는 kind = team_root + 팀 code(조인). 이 표본의 루트 이름은 팀 code 와 같다
+  ...(parentId === null && createdBy === null ? { kind: 'team_root' as const, teamCode: name } : { kind: 'user' as const }),
+})
 
 // sort 는 프로덕션 시드값(0043) — 트리 표시 순서가 이 값에서 유도되므로 순서가 계약
 const tree: MinuteFolder[] = [
@@ -61,6 +70,8 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
     root = createRoot(container)
     createMinute.mockClear(); recordMinuteFile.mockClear(); upload.mockClear(); onSaved.mockClear(); fetchProjectMeetingsLite.mockClear()
     fetchMinuteFoldersLite.mockImplementation(async () => tree)
+    fetchAttachmentPolicyForScope.mockReset()
+    fetchAttachmentPolicyForScope.mockImplementation(async () => ({ ok: true, policy: POLICY }))
   })
   afterEach(() => { act(() => root.unmount()); container.remove() })
 
@@ -325,6 +336,36 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
     expect(cand.file.filePath).toBe(bodyPath)
     expect(attPath).toMatch(new RegExp(`^ws/${WS}/p/_/minute-files/${M}/\\d+-`))
     expect(recordMinuteFile).toHaveBeenCalledWith(M, expect.objectContaining({ role: 'attachment', filePath: attPath }))
+  })
+
+  // SP5 B3 — 새 회의록도 저장할 범위의 유효 정책으로 사전 확인한다(상세 패널과 같은 판정, 최종은 DB 가드)
+  it('정책은 저장할 범위(워크스페이스 + 선택 프로젝트)로 묻는다', async () => {
+    await mount({ projects: [{ id: P1, name: 'A' }] })
+    expect(fetchAttachmentPolicyForScope).toHaveBeenLastCalledWith({ workspaceId: WS, projectId: P1 })
+  })
+  it('범위 정책의 개수 한도를 넘는 첨부는 고를 때 거부 — 회의록을 만들지 않는다', async () => {
+    fetchAttachmentPolicyForScope.mockImplementation(async () => ({ ok: true, policy: { ...POLICY, maxCount: 1, maxTotalBytes: POLICY.maxFileBytes } }))
+    await mount()
+    await attachFiles([new File(['# 본문'], 'a.md', { type: 'text/markdown' }), new File(['x'], 'b.pdf'), new File(['y'], 'c.pdf')])
+    expect(mainDialog().textContent).toContain('c.pdf: min.att.reject.LIMIT')
+    await clickSave()
+    expect(createMinute).not.toHaveBeenCalled()
+  })
+  it('범위 정책의 허용 형식 밖이면 거부', async () => {
+    fetchAttachmentPolicyForScope.mockImplementation(async () => ({ ok: true, policy: { ...POLICY, allowedExtensions: ['png'] } }))
+    await mount()
+    await attachFiles([new File(['x'], 'b.pdf')])
+    expect(mainDialog().textContent).toContain('b.pdf: min.att.reject.EXTENSION')
+  })
+  it('정책을 못 읽으면 첨부만 막는다 — 본문만인 회의록은 저장된다', async () => {
+    fetchAttachmentPolicyForScope.mockImplementation(async () => ({ ok: false, error: '첨부 설정을 불러오지 못했습니다.' }))
+    await mount()
+    await attachFiles([new File(['# 본문'], 'a.md', { type: 'text/markdown' }), new File(['x'], 'b.pdf')])
+    expect(mainDialog().textContent).toContain('첨부 설정을 불러오지 못했습니다.')
+    await attachBodyFile()
+    await clickSave()
+    expect(createMinute).toHaveBeenCalledTimes(1)
+    expect(recordMinuteFile).not.toHaveBeenCalled()
   })
 
   it('프로젝트 회의록: 경로의 워크스페이스·프로젝트는 그 프로젝트의 것', async () => {

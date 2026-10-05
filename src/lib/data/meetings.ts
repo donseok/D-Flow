@@ -7,6 +7,8 @@ import { fetchAllPages } from '@/lib/data/paging'
 import { projectsWithModule } from '@/lib/modules/gate'
 import { getActorViewState } from '@/lib/authz'
 import { canSeeProject } from '@/lib/domain/authz'
+import { getProjectVocabs } from '@/lib/settings/projectConfig'
+import type { VocabByProject, VocabValues } from '@/lib/settings/vocab'
 import type {
   Meeting, MeetingAttendeeInfo, MeetingCategory, MeetingException, MeetingRecurrence,
 } from '@/lib/domain/types'
@@ -93,7 +95,8 @@ export const ERR_MEETINGS_LOAD = '회의 일정을 불러오지 못했습니다.
 /** 내 회의 조회 결과 — 회의 조회 실패·예외 폴백 실패·내 명단 행 조회 실패는 ok:false(ERR_MEETINGS_LOAD). '이번 달 회의 없음'과 '못 읽음'을 가른다.
  *  단 meetings 모듈 판정 실패(설정 조회·손상)는 ok:false 가 아니라 그 프로젝트의 행 생략이다 — 로그는 [requireModule](스펙 §3 modules.* fail-closed, P13). */
 export type MyMeetingsResult =
-  | { ok: true; meetings: Meeting[]; exceptions: MeetingException[] }
+  /** categories = 보이는 회의의 프로젝트별 회의 범주(설정 meetings.categories). 못 읽은 프로젝트는 null — 화면은 code 를 보인다 */
+  | { ok: true; meetings: Meeting[]; exceptions: MeetingException[]; categories: VocabByProject<'meetings.categories'> }
   | { ok: false; error: string }
 
 /**
@@ -164,10 +167,15 @@ export const getProjectMeetingData = cache(async (
   return { ok: true, meetings, exceptions }
 })
 
-/** 상세 모달 — body + 참석자 표시 정보. 없으면 null. */
+export type MeetingDetail = { meeting: Meeting; attendees: MeetingAttendeeInfo[] }
+/** 상세 조회 결과(SP5 B2 — D39) — 없음(ok·null)과 조회 실패(ok:false)를 가른다. 실패를 '삭제된 회의'·'참석자 없음'으로 보이지 않는다 */
+export type MeetingDetailResult = { ok: true; detail: MeetingDetail | null } | { ok: false; error: string }
+export const ERR_MEETING_DETAIL = '회의 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+
+/** 상세 모달 — body + 참석자 표시 정보. 없으면 detail null, 회의·참석자 조회 실패는 ok:false */
 export const getMeetingDetail = cache(async (
   id: string,
-): Promise<{ meeting: Meeting; attendees: MeetingAttendeeInfo[] } | null> => {
+): Promise<MeetingDetailResult> => {
   const sb = await createServerClient()
   const { data: r, error } = await sb
     .from('meetings')
@@ -175,9 +183,12 @@ export const getMeetingDetail = cache(async (
     .eq('id', id)
     .maybeSingle()
 
-  // 조회 실패가 null 폴백을 타면 호출부(상세 모달)는 '삭제된 회의'로 오인한다 — 원인을 로그로 남긴다.
-  if (error) console.error('[getMeetingDetail] 조회 실패:', error.message)
-  if (!r) return null
+  // 조회 실패가 null 폴백을 타면 호출부(상세 모달)는 '삭제된 회의'로 오인한다 — 실패로 돌려준다.
+  if (error) {
+    console.error('[getMeetingDetail] 조회 실패:', error.message)
+    return { ok: false, error: ERR_MEETING_DETAIL }
+  }
+  if (!r) return { ok: true, detail: null }
 
   const attendeeIds = attendeeIdsFrom(r as Row)
   let attendees: MeetingAttendeeInfo[] = []
@@ -186,8 +197,11 @@ export const getMeetingDetail = cache(async (
       .from('project_members')
       .select(ROSTER_SELECT)
       .in('id', attendeeIds)
-    // 참석자 조회 실패 = 참석자가 지정돼 있는데도 '참석자 없음'으로 보인다.
-    if (memErr) console.error('[getMeetingDetail] 참석자 조회 실패:', memErr.message)
+    // 참석자 조회 실패 = 참석자가 지정돼 있는데도 '참석자 없음'으로 보인다(안내 메일도 빈 수신자로 간다) — 실패로 돌려준다.
+    if (memErr) {
+      console.error('[getMeetingDetail] 참석자 조회 실패:', memErr.message)
+      return { ok: false, error: ERR_MEETING_DETAIL }
+    }
     // `.in()` 은 순서를 보장하지 않는다 — 정렬하지 않으면 참석자 칩과 안내 메일의 이름 순서가
     // 조회할 때마다 달라진다. 상세 모달·메일 본문·챗봇이 전부 이 배열을 그대로 쓰므로 여기서 가나다순으로 고정.
     // id tiebreak — `.in()` 결과에는 기준 순서가 없어, 이름만으로 정렬하면 동명이인의 앞뒤가 요청마다 뒤집힌다.
@@ -195,7 +209,7 @@ export const getMeetingDetail = cache(async (
       .sort((x, y) => compareKoreanName(x.name, y.name) || x.id.localeCompare(y.id))
       .map(m => ({ id: m.id, name: m.name, email: m.email, teamCodes: m.teams.map(t => t.code) }))
   }
-  return { meeting: mapMeeting(r as Row, attendeeIds), attendees }
+  return { ok: true, detail: { meeting: mapMeeting(r as Row, attendeeIds), attendees } }
 })
 
 /**
@@ -238,10 +252,15 @@ export const getMyMeetings = cache(async (
   gridEndIso: string,
 ): Promise<MyMeetingsResult> => {
   const sb = await createServerClient()
-  const { data: u } = await sb.auth.getUser()
+  const { data: u, error: authError } = await sb.auth.getUser()
+  // 세션이 없는 것(AuthSessionMissingError)만 비로그인이다 — 인증 서버 장애·토큰 검증 실패를 '내 회의 없음'으로 보이지 않는다(SP5 B2 — D39)
+  if (authError && authError.name !== 'AuthSessionMissingError') {
+    console.error('[getMyMeetings] 인증 확인 실패 — 호출부가 내 회의 달력 대신 사유를 보인다:', authError.name, authError.message)
+    return { ok: false, error: ERR_MEETINGS_LOAD }
+  }
   const user = u.user
   const uid = user?.id ?? null
-  if (!user || !uid) return { ok: true, meetings: [], exceptions: [] }
+  if (!user || !uid) return { ok: true, meetings: [], exceptions: [], categories: {} }
 
   // 프로젝트를 가로지르는 조회라 로그에 실을 id 가 없다 — 어느 달력 범위였는지를 싣는다.
   // 두 인자는 서버 액션(fetchMyMeetings)을 거쳐 오므로 형식이 보장되지 않는다: 날짜 꼴이 아니면 그대로 찍지 않는다.
@@ -310,7 +329,14 @@ export const getMyMeetings = cache(async (
     ? exceptionsFrom(visible)
     : await fetchExceptionsByIds(sb, meetings.map(m => m.id), tag)
   if (exceptions === null) return { ok: false, error: ERR_MEETINGS_LOAD }
-  return { ok: true, meetings, exceptions }
+  // 범주 라벨·색은 곁가지 — 못 읽어도 회의는 그린다(라벨 자리에 code). 실패는 로그로 남긴다(3원칙 ①)
+  const categories: Record<string, VocabValues['meetings.categories'] | null> = {}
+  try {
+    for (const [pid, list] of await getProjectVocabs([...on], 'meetings.categories', { client: sb })) categories[pid] = list
+  } catch (e) {
+    console.error(`[${tag}] 회의 범주 조회 실패 — 범주는 code 로 보인다`, e)
+  }
+  return { ok: true, meetings, exceptions, categories }
 })
 
 /**

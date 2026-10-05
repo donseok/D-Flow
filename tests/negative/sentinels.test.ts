@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
-import { SP4_SENTINELS_B64, SP5A_SENTINELS, sp4Sentinels, sp5aSentinels } from '../../scripts/lib/sentinels.mjs'
+import { SP4_SENTINELS_B64, SP5A_SENTINELS, SP5B1_SENTINELS_B64, sp4Sentinels, sp5aSentinels, sp5b1Sentinels } from '../../scripts/lib/sentinels.mjs'
 import {
   LEGACY_SENTINELS, SENTINEL_MASKS, SENTINELS_BY_SP, findSentinels, isZipTextPart, sentinelsFor, zipTextParts,
 } from '../fixtures/legacy-sentinels'
@@ -27,6 +27,13 @@ describe('센티널 목록', () => {
   it('.mjs 러너의 base64 사본은 픽스처의 SP4 목록과 같다(P6 — 드리프트 0)', () => {
     expect(sp4Sentinels()).toEqual([...SP4])
     expect(SP4_SENTINELS_B64).toBe(Buffer.from(SP4.join('\n'), 'utf8').toString('base64'))
+  })
+
+  it('SP5 B1 센티널 사본은 옛 8영역명과 PI-I- 접두 목록과 같다', () => {
+    const b1 = SENTINELS_BY_SP.SP5B1
+    expect(b1).toEqual([...LEGACY_SENTINELS.issueAreas, LEGACY_SENTINELS.issueIdPrefix])
+    expect(sp5b1Sentinels()).toEqual([...b1])
+    expect(SP5B1_SENTINELS_B64).toBe(Buffer.from(b1.join('\n'), 'utf8').toString('base64'))
   })
 
   it('런타임 코드(src)는 센티널 목록·규칙 파일을 import 하지 않는다 — 목록은 시험 도구다', () => {

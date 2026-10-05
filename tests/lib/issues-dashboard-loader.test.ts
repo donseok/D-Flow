@@ -21,7 +21,7 @@ function makeSb(reply: Reply) {
 }
 
 const row = {
-  id: 'i1', issue_no: 7, pi_issue_code: 'PI-03-002', mega_code: '03', title: '부적합 판정 코드 통합',
+  id: 'i1', code: 'RS-QA-002', area_id: 'qa', title: '부적합 판정 코드 통합',
   status: 'resolved', severity: 'medium', due_date: '2026-08-08', resolved_at: '2026-08-05T02:00:00+00:00',
   created_at: '2026-07-02T00:00:00+00:00',
 }
@@ -36,17 +36,17 @@ describe('getIssuesForDashboard — 대시보드 전용 1쿼리 슬라이스', (
     expect(calls.eq).toEqual([['project_id', 'p1']])
   })
 
-  it('행을 DashboardIssue 로 옮긴다 — 결측은 null, issue_no 는 숫자', async () => {
-    makeSb({ data: [row, { ...row, id: 'i2', issue_no: '8', pi_issue_code: null, mega_code: null, due_date: null, resolved_at: null }], error: null })
+  it('행을 DashboardIssue 로 옮긴다 — 영역 결측은 null, code는 DB 문자열', async () => {
+    makeSb({ data: [row, { ...row, id: 'i2', code: 'ISS-001', area_id: null, due_date: null, resolved_at: null }], error: null })
     const res = await getIssuesForDashboard('p1')
     if (!res.ok) throw new Error('성공이어야 한다')
     const list = res.rows
     expect(list[0]).toEqual({
-      id: 'i1', issueNo: 7, piIssueCode: 'PI-03-002', megaCode: '03', title: '부적합 판정 코드 통합',
+      id: 'i1', code: 'RS-QA-002', areaId: 'qa', title: '부적합 판정 코드 통합',
       status: 'resolved', severity: 'medium', dueDate: '2026-08-08', resolvedAt: '2026-08-05T02:00:00+00:00',
       createdAt: '2026-07-02T00:00:00+00:00',
     })
-    expect(list[1]).toMatchObject({ issueNo: 8, piIssueCode: null, megaCode: null, dueDate: null, resolvedAt: null })
+    expect(list[1]).toMatchObject({ code: 'ISS-001', areaId: null, dueDate: null, resolvedAt: null })
   })
 
   it('조회 실패는 로그를 남기고 결과로 돌려준다 — 0건으로 위장하지 않는다(표시=로깅)', async () => {

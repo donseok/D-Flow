@@ -18,12 +18,13 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient }))
 
 import { getSession } from '@/lib/auth'
 import {
+  getIssueAttachmentUrl,
   listIssueAttachments,
   recordIssueAttachment,
   removeIssueAttachment,
 } from '@/app/actions/issueAttachments'
 import { ISSUE_ATTACHMENT_MAX_BYTES } from '@/lib/domain/issueAttachments'
-import { LIST_SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
+import { SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
 import { makeMemberActor } from '../fixtures/actor'
 
 const USER = { id: 'me', email: 'me@x.com', user_metadata: {} } as const
@@ -102,12 +103,18 @@ function makeClient(opts: {
   }
   // 실제 PostgrestFilterBuilder 는 thenable 이다 — .eq(...) 를 그대로 await 하면 쿼리가 돈다.
   // 개수 조회가 그 경로를 쓰므로 mock 도 thenable 이어야 한다.
-  const attachChain = () => ({
-    maybeSingle: vi.fn(async () => opts.attachment ?? { data: null, error: null }),
-    order: vi.fn(async () => opts.listRows ?? { data: [], error: null }),
-    then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
-      Promise.resolve(opts.countRows ?? { data: [], error: null }).then(res, rej),
-  })
+  const eqs: unknown[][] = []
+  const attachChain = (...first: unknown[]) => {
+    eqs.push(first)
+    const chain: Record<string, unknown> = {
+      maybeSingle: vi.fn(async () => opts.attachment ?? { data: null, error: null }),
+      order: vi.fn(async () => opts.listRows ?? { data: [], error: null }),
+      then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
+        Promise.resolve(opts.countRows ?? { data: [], error: null }).then(res, rej),
+    }
+    chain.eq = vi.fn((...a: unknown[]) => { eqs.push(a); return chain })
+    return chain
+  }
   const attachTable = (table: string) => ({
     select: vi.fn(() => ({ eq: vi.fn(attachChain) })),
     insert,
@@ -132,6 +139,7 @@ function makeClient(opts: {
     insert,
     remove,
     createSignedUrl,
+    eqs,
     client: {
       from: vi.fn((t: string) => (t === 'issues' ? issuesTable : t === 'projects' ? projectsTable : attachTable(t))),
       storage: { from: vi.fn((b: string) => { bucket = b; return { createSignedUrl, remove } }) },
@@ -410,26 +418,7 @@ describe('listIssueAttachments', () => {
     spy.mockRestore()
   })
 
-  it('서명 URL 실패를 삼키지 않는다 — 표시 = 로깅', async () => {
-    const m = makeClient({
-      listRows: {
-        data: [{ id: 'a1', issue_id: ISSUE, file_name: 'x.pdf', file_path: `${ISSUE}/1-x.pdf`, size: 1, mime: null, created_at: 't' }],
-        error: null,
-      },
-      signed: { data: null, error: { message: 'signing failed' } },
-    })
-    state.client = m.client
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const out = await listIssueAttachments(ISSUE)
-    expect(out.ok).toBe(true)
-    const items = (out as { items: Array<{ url: string | null }> }).items
-    expect(items).toHaveLength(1)
-    expect(items[0]?.url).toBeNull()
-    expect(spy).toHaveBeenCalled()
-    spy.mockRestore()
-  })
-
-  it('원본 파일명으로 내려받도록 서명 URL 에 download 를 준다', async () => {
+  it('목록은 서명하지 않는다 — 메타만(SP5 B3 과제7)', async () => {
     const m = makeClient({
       listRows: {
         data: [{ id: 'a1', issue_id: ISSUE, file_name: '보고서.pdf', file_path: `${ISSUE}/1-x.pdf`, size: 1, mime: null, created_at: 't' }],
@@ -437,7 +426,46 @@ describe('listIssueAttachments', () => {
       },
     })
     state.client = m.client
-    await listIssueAttachments(ISSUE)
-    expect(m.createSignedUrl).toHaveBeenCalledWith(`${ISSUE}/1-x.pdf`, LIST_SIGNED_URL_TTL_SEC, { download: '보고서.pdf' })
+    expect(await listIssueAttachments(ISSUE)).toEqual({ ok: true, items: [
+      { id: 'a1', issueId: ISSUE, fileName: '보고서.pdf', filePath: `${ISSUE}/1-x.pdf`, size: 1, mime: null, createdAt: 't' },
+    ] })
+    expect(m.createSignedUrl).not.toHaveBeenCalled()
+  })
+})
+
+describe('getIssueAttachmentUrl — 클릭 때 60초 링크(이슈·첨부 짝)', () => {
+  it('짝이 맞으면 60초·원본 파일명으로 서명한다', async () => {
+    const m = makeClient({ attachment: { data: { id: 'a1', file_path: `${ISSUE}/1-x.pdf`, issue_id: ISSUE, file_name: '보고서.pdf' } as never, error: null } })
+    state.client = m.client
+    expect(await getIssueAttachmentUrl(ISSUE, 'a1')).toEqual({ ok: true, url: 'https://signed' })
+    expect(m.eqs).toEqual([['id', 'a1'], ['issue_id', ISSUE]])
+    expect(m.createSignedUrl).toHaveBeenCalledWith(`${ISSUE}/1-x.pdf`, SIGNED_URL_TTL_SEC, { download: '보고서.pdf' })
+  })
+
+  it('다른 이슈의 첨부 id(짝이 안 맞아 0행)는 서명하지 않는다', async () => {
+    const m = makeClient({ attachment: { data: null, error: null } })
+    state.client = m.client
+    expect(await getIssueAttachmentUrl(ISSUE, 'a-other')).toEqual({ ok: false, error: '첨부 없음' })
+    expect(m.createSignedUrl).not.toHaveBeenCalled()
+  })
+
+  it('서명 실패(권한 회수 — Storage 정책 거부)는 로그 + 실패', async () => {
+    const m = makeClient({
+      attachment: { data: { id: 'a1', file_path: `${ISSUE}/1-x.pdf`, issue_id: ISSUE, file_name: '보고서.pdf' } as never, error: null },
+      signed: { data: null, error: { message: 'Object not found' } },
+    })
+    state.client = m.client
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await getIssueAttachmentUrl(ISSUE, 'a1')).ok).toBe(false)
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('비로그인은 DB 를 부르지 않는다', async () => {
+    vi.mocked(getSession).mockResolvedValue(null as never)
+    const m = makeClient({})
+    state.client = m.client
+    expect(await getIssueAttachmentUrl(ISSUE, 'a1')).toEqual({ ok: false, error: '로그인 필요' })
+    expect(m.createSignedUrl).not.toHaveBeenCalled()
   })
 })

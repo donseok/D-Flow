@@ -120,7 +120,7 @@ describe('열거 — 민감도(합성 소스)', () => {
     expect(r.problems).toEqual(['src/app/api/v1/x/route.ts: 알 수 없는 export const helper'])
     expect(expectedRouteModule('/api/nowhere')).toEqual({ problem: '/api/nowhere: 어느 모듈의 apiPrefixes 에도, core 허용 목록에도 없다' })
     expect(expectedRouteModule('/api/export')).toEqual({ module: null })
-    expect(expectedRouteModule('/api/issue-analysis')).toEqual({ module: 'issues' })
+    expect(expectedRouteModule('/api/issue-analysis')).toEqual({ module: 'issue_analysis' })
   })
   it('export 선언문(export { h as GET })은 열거를 우회하지 못한다', () => {
     const r = enumerateRoutes([{ rel: 'src/app/api/v1/y/route.ts', text: 'async function h() { return new Response() }\nexport { h as GET }\nexport type { X } from "./x"\n' }])

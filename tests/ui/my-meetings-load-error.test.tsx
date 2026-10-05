@@ -30,6 +30,7 @@ vi.mock('@/app/actions/announcements', () => ({ createAnnouncementFromMeeting: v
 
 import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
 import { SUNDAY_CAL } from '../fixtures/calendarView'
+import { ANY_CATS } from '../fixtures/vocab'
 
 function meeting(overrides: Partial<Meeting> = {}): Meeting {
   return {
@@ -74,7 +75,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   }
   async function mount(props: Partial<Parameters<typeof MyMeetingsView>[0]> = {}) {
     await act(async () => {
-      root.render(<MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL} initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} {...props} />)
+      root.render(<MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL} initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} {...props} initialCategories={ANY_CATS} />)
       await Promise.resolve()
     })
   }
@@ -84,9 +85,9 @@ describe('MyMeetingsView — 조회 실패', () => {
   }
 
   it('initialFailed 면 경고와 재시도, 재시도가 성공하면 경고가 사라진다', async () => {
-    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
     await act(async () => {
-      root.render(<MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL} initialMeetings={[]} initialExceptions={[]} initialFailed todayIso="2026-07-19" currentUserId={null} />)
+      root.render(<MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL} initialMeetings={[]} initialExceptions={[]} initialFailed todayIso="2026-07-19" currentUserId={null} initialCategories={ANY_CATS} />)
       await Promise.resolve()
     })
     const alert = container.querySelector('[role="alert"]')
@@ -100,7 +101,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   it('달을 옮겨 다시 읽다가 실패하면 경고가 뜬다', async () => {
     mocks.fetchMyMeetings.mockResolvedValue({ ok: false, error: '회의 일정을 불러오지 못했습니다.' })
     await act(async () => {
-      root.render(<MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL} initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} />)
+      root.render(<MyMeetingsView workspaceId="ws-1" calendar={SUNDAY_CAL} initialMeetings={[]} initialExceptions={[]} todayIso="2026-07-19" currentUserId={null} initialCategories={ANY_CATS} />)
       await Promise.resolve()
     })
     expect(container.querySelector('[role="alert"]')).toBeNull()
@@ -137,6 +138,18 @@ describe('MyMeetingsView — 조회 실패', () => {
     expect(container.textContent).not.toContain('meet.empty.desc')
   })
 
+  it('목록 탭은 달을 읽는 동안 빈 상태가 아니라 읽는 중을 보이고, 다 읽으면 결과를 그린다(SP5 B2 — D39)', async () => {
+    await mount()
+    await openListTab()
+    const release = holdFetch()
+    await act(async () => { monthBtn('next').click(); await flush() })
+    expect(container.querySelector('[data-my-meetings-loading]')?.textContent).toContain('meet.list.loading')
+    expect(container.textContent).not.toContain('meet.empty.mineTitle')
+    await release({ ok: true, meetings: [], exceptions: [], categories: {} })
+    expect(container.querySelector('[data-my-meetings-loading]')).toBeNull()
+    expect(container.textContent).toContain('meet.empty.mineTitle')
+  })
+
   it('조회 성공 + 회의 0건이면 종전대로 빈 상태이고 경고는 없다', async () => {
     await mount()
     await openListTab()
@@ -162,21 +175,21 @@ describe('MyMeetingsView — 조회 실패', () => {
     // 도는 중의 누름은 무시한다 — 같은 조회를 겹쳐 보내지 않는다.
     await act(async () => { retryBtn()!.click(); await flush() })
     expect(mocks.fetchMyMeetings).toHaveBeenCalledTimes(1)
-    await act(async () => { release({ ok: true, meetings: [], exceptions: [] }); await flush() })
+    await act(async () => { release({ ok: true, meetings: [], exceptions: [], categories: {} }); await flush() })
     expect(alertEl()).toBeNull()
   })
 
   // 아래 셋: 서버 렌더를 다시 읽히는 목적은 화면 갱신이 아니다(PageHero 는 heroKpis 를 그리지 않는다) —
   // 실패한 서버 결과가 라우터 캐시(staleTimes.dynamic 30초)에 남아 재방문·뒤로가기 때 경고째 다시 쓰이지 않게 한다.
   it('서버 첫 조회가 실패했던 화면은 재시도가 성공하면 서버 렌더도 다시 읽힌다 — 실패한 서버 결과를 캐시에 남기지 않는다', async () => {
-    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
     await mount({ initialFailed: true })
     await act(async () => { retryBtn()!.click(); await flush() })
     expect(mocks.routerRefresh).toHaveBeenCalledTimes(1)
   })
 
   it('서버 첫 조회가 실패했어도 달을 옮겨 읽기에 성공하면 서버 렌더를 다시 읽힌다', async () => {
-    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
     await mount({ initialFailed: true })
     const next = container.querySelector<HTMLButtonElement>('button[aria-label="meet.nextMonth"]')
     await act(async () => { next!.click(); await flush() })
@@ -196,7 +209,7 @@ describe('MyMeetingsView — 조회 실패', () => {
     await mount()
     const next = container.querySelector<HTMLButtonElement>('button[aria-label="meet.nextMonth"]')
     await act(async () => { next!.click(); await flush() })
-    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [meeting({ title: '8월 회의', meetingDate: '2026-08-10' })], exceptions: [] })
+    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [meeting({ title: '8월 회의', meetingDate: '2026-08-10' })], exceptions: [], categories: ANY_CATS })
     await act(async () => { retryBtn()!.click(); await flush() })
     expect(mocks.fetchMyMeetings).toHaveBeenCalledTimes(2)
     expect(mocks.fetchMyMeetings).toHaveBeenLastCalledWith('ws-1', '2026-07-26', '2026-09-05')
@@ -215,7 +228,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   })
 
   it('정상 결과만 오가면 로그를 남기지 않는다 — 실패 로그가 소음이 되지 않게', async () => {
-    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
     await mount()
     const next = container.querySelector<HTMLButtonElement>('button[aria-label="meet.nextMonth"]')
     await act(async () => { next!.click(); await flush() })
@@ -225,7 +238,7 @@ describe('MyMeetingsView — 조회 실패', () => {
 
   it('조회 실패는 딥링크 대상이 없다는 뜻이 아니다 — 재시도가 성공하면 그 회의 상세를 연다', async () => {
     currentSearch = 'focus=m1'
-    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [meeting()], exceptions: [] })
+    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [meeting()], exceptions: [], categories: ANY_CATS })
     await mount({ initialFailed: true })
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     await act(async () => { retryBtn()!.click(); await flush() })
@@ -233,7 +246,7 @@ describe('MyMeetingsView — 조회 실패', () => {
   })
 
   it('재시도가 성공해 경고가 사라지면 포커스가 body 로 떨어지지 않는다', async () => {
-    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+    mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
     await mount({ initialFailed: true })
     retryBtn()!.focus()
     expect(document.activeElement).toBe(retryBtn())
@@ -267,14 +280,14 @@ describe('MyMeetingsView — 조회 실패', () => {
       await act(async () => { monthBtn('next').click(); await flush() })
       expect(alertEl()).toBeNull()
       expect(container.textContent).not.toContain('meet.empty.mineTitle')
-      await release({ ok: true, meetings: [], exceptions: [] })
+      await release({ ok: true, meetings: [], exceptions: [], categories: {} })
       // 다 읽었고 0건이면 그때 빈 상태다.
       expect(container.textContent).toContain('meet.empty.mineTitle')
 
       const release2 = holdFetch()
       await act(async () => { monthBtn('next').click(); await flush() })
       expect(container.textContent).not.toContain('meet.empty.mineTitle')
-      await release2({ ok: true, meetings: [], exceptions: [] })
+      await release2({ ok: true, meetings: [], exceptions: [], categories: {} })
       expect(container.textContent).toContain('meet.empty.mineTitle')
     })
 
@@ -285,7 +298,7 @@ describe('MyMeetingsView — 조회 실패', () => {
       expect(mocks.fetchMyMeetings).toHaveBeenCalledWith('ws-1', '2026-08-30', '2026-10-10')
       // 실패한 것은 서버가 읽은 7월이지 지금 보이는 9월이 아니다.
       expect(alertEl()).toBeNull()
-      await release({ ok: true, meetings: [meeting({ meetingDate: '2026-09-10' })], exceptions: [] })
+      await release({ ok: true, meetings: [meeting({ meetingDate: '2026-09-10' })], exceptions: [], categories: ANY_CATS })
       expect(alertEl()).toBeNull()
       expect(document.querySelector('[role="dialog"]')?.textContent).toContain('주간 회의')
     })
@@ -299,7 +312,7 @@ describe('MyMeetingsView — 조회 실패', () => {
       await act(async () => { monthBtn('prev').click(); await flush() })
       expect(alertEl()?.textContent).toContain('common.loadFailed.meetings')
       expect(retryBtn()?.getAttribute('aria-busy')).toBe('true')
-      await release({ ok: true, meetings: [], exceptions: [] })
+      await release({ ok: true, meetings: [], exceptions: [], categories: {} })
       expect(alertEl()).toBeNull()
     })
 
@@ -333,7 +346,7 @@ describe('MyMeetingsView — 조회 실패', () => {
 
   describe('못 읽은 달은 빈 달력으로 그리지 않는다', () => {
     it('initialFailed 면 달력 탭에 격자 없이 경고만, 재시도가 성공하면 격자가 돌아온다', async () => {
-      mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [meeting()], exceptions: [] })
+      mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [meeting()], exceptions: [], categories: ANY_CATS })
       await mount({ initialFailed: true })
       expect(alertEl()).not.toBeNull()
       expect(hasGrid()).toBe(false)
@@ -353,7 +366,7 @@ describe('MyMeetingsView — 조회 실패', () => {
     })
 
     it('조회 성공 + 회의 0건은 빈 달력을 그대로 그린다 — 실패가 아니다', async () => {
-      mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
+      mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
       await mount()
       expect(hasGrid()).toBe(true)
       await act(async () => { monthBtn('next').click(); await flush() })

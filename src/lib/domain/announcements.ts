@@ -5,7 +5,7 @@ import { zonedMidnightUtc } from './calendar'
 
 /**
  * 카테고리 메타 — 라벨은 dict 키(표시 지점에서 t()로 해석), 색상은 상태 팔레트
- * 재사용으로 라이트·다크 자동 대응. (ATTENDANCE_META/roleMeta 관례)
+ * 재사용으로 라이트·다크 자동 대응. (roleMeta 관례)
  */
 export const ANNOUNCEMENT_META: Record<
   AnnouncementCategory,

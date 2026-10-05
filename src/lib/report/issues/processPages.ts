@@ -14,7 +14,7 @@ export interface IssueAnalysisDeckTreeColumn {
 }
 
 export interface IssueAnalysisDeckDefinitionRow {
-  /** `{megaCode}.{seq2}` — 0062 체번을 그대로 노출한다(예: 02.01). */
+  /** `{areaCode}.{seq2}` — 0062 체번을 그대로 노출한다(예: 02.01). */
   seqLabel: string
   name: string
   definition: string
@@ -23,25 +23,28 @@ export interface IssueAnalysisDeckDefinitionRow {
 export interface IssueAnalysisDeckProcessTreeSlide {
   kind: 'process-tree'
   sourceSlide: 5
-  megaCode: string
-  megaName: string
+  areaCode: string
+  areaName: string
   pageInSeries: number
   pageCount: number
   headline: string
   columns: IssueAnalysisDeckTreeColumn[]
+  windowSuffix?: string
+  windowAreas?: Array<{ code: string; name: string }>
 }
 
 export interface IssueAnalysisDeckProcessDefinitionSlide {
   kind: 'process-definition'
   sourceSlide: 6
-  megaCode: string
-  megaName: string
+  areaCode: string
+  areaName: string
   pageInSeries: number
   pageCount: number
   /** 셈플은 트리 페이지의 요약문을 정의 페이지에도 반복한다. */
   headline: string
   megaDefinition: string
   rows: IssueAnalysisDeckDefinitionRow[]
+  windowSuffix?: string
 }
 
 export type IssueAnalysisDeckProcessSlide =
@@ -64,12 +67,12 @@ function treeColumns(area: IssueAnalysisReportArea): IssueAnalysisDeckTreeColumn
   for (const issue of area.issues) {
     if (issue.majorId !== null && !majorIds.has(issue.majorId)) {
       throw new Error(
-        `${area.megaName} ${issue.piIssueCode} 이슈가 영역 Major 목록에 없는 Major를 참조합니다.`,
+        `${area.areaName} ${issue.code} 이슈가 영역 Major 목록에 없는 Major를 참조합니다.`,
       )
     }
     const sub = compactText(issue.subProcess)
     if (!sub) {
-      throw new Error(`${area.megaName} ${issue.piIssueCode} 이슈의 Sub Process가 비어 있습니다.`)
+      throw new Error(`${area.areaName} ${issue.code} 이슈의 Sub Process가 비어 있습니다.`)
     }
     const key = issue.majorId ?? ''
     const list = subsByKey.get(key)
@@ -108,24 +111,48 @@ function treeHeadline(
   // Sub 마스터가 없어 트리의 Sub는 이슈의 구분에서 관찰된 것만이다(디자인 감사 #1).
   // 셈플처럼 "M개의 Sub로 구성됨"이라고 쓰면 전체 체계 수처럼 읽히므로 출처를 정직하게 쓴다.
   if (!majors.length) {
-    return `현행 ${area.megaName} 프로세스에서 이슈가 확인된 Sub 프로세스는 ${subCount}개임 (Major 미지정)`
+    return `현행 ${area.areaName} 프로세스에서 이슈가 확인된 Sub 프로세스는 ${subCount}개임 (Major 미지정)`
   }
   const names = majors.map(major => major.name)
   const listed = names.slice(0, 3).join(',')
   const suffix = names.length > 3 ? ' 등' : ''
-  return `현행 ${area.megaName} 프로세스는 ${listed}${suffix} ${majors.length}개의 Major 프로세스로 구성되며, 이슈가 확인된 Sub 프로세스는 ${subCount}개임`
+  return `현행 ${area.areaName} 프로세스는 ${listed}${suffix} ${majors.length}개의 Major 프로세스로 구성되며, 이슈가 확인된 Sub 프로세스는 ${subCount}개임`
+}
+
+/**
+ * 영역 수가 8개를 초과할 때의 체브론 창 접미 표기 (개정 §4.5.1, R4-13)
+ * 예: " (영역 9–16 / 17)"
+ */
+export function formatWindowSuffix(activeIndex: number, totalAreas: number): string {
+  if (totalAreas <= 8 || activeIndex < 0) return ''
+  const w = Math.floor(activeIndex / 8)
+  const start = 8 * w + 1
+  const end = Math.min(8 * (w + 1), totalAreas)
+  const range = start === end ? `${start}` : `${start}–${end}`
+  return ` (영역 ${range} / ${totalAreas})`
 }
 
 /**
  * 저장 실행에 프로세스 정의가 있는 영역만 트리→정의 순의 슬라이드 시리즈를 만든다.
  * 정의가 없는 구버전 저장 실행은 빈 배열 — 기존 덱 구성이 한 장도 변하지 않는다.
+ * 8개 초과 영역은 8칸 창으로 분할하여 창 슬라이드를 구성한다 (개정 §4.5.1).
  */
 export function buildIssueAnalysisProcessSlides(
   area: IssueAnalysisReportArea,
+  areas?: readonly { code: string; name: string }[],
 ): IssueAnalysisDeckProcessSlide[] {
   const definitions = area.processDefinitions
   const majors = area.majors
   if (!definitions || !majors || !area.issues.length) return []
+
+  const total = areas?.length ?? 1
+  const activeIndex = areas ? areas.findIndex(a => a.code === area.areaCode) : -1
+  const i = activeIndex >= 0 ? activeIndex : 0
+  const w = Math.floor(i / 8)
+  const windowAreas = areas
+    ? areas.slice(8 * w, 8 * w + 8).map(a => ({ code: a.code, name: a.name }))
+    : undefined
+  const windowSuffix = total > 8 && activeIndex >= 0 ? formatWindowSuffix(activeIndex, total) : ''
 
   const columns = treeColumns(area)
   const headline = treeHeadline(area, columns)
@@ -133,27 +160,29 @@ export function buildIssueAnalysisProcessSlides(
   const slides: IssueAnalysisDeckProcessSlide[] = treePages.map((pageColumns, index) => ({
     kind: 'process-tree',
     sourceSlide: 5,
-    megaCode: area.megaCode,
-    megaName: area.megaName,
+    areaCode: area.areaCode,
+    areaName: area.areaName,
     pageInSeries: index + 1,
     pageCount: treePages.length,
     headline,
     columns: pageColumns,
+    windowSuffix,
+    windowAreas,
   }))
 
   const definitionById = new Map(
     definitions.majors.map(major => [major.majorId, major.definition]),
   )
   if (definitionById.size !== definitions.majors.length) {
-    throw new Error(`${area.megaName} 프로세스 정의에 중복 Major가 있습니다.`)
+    throw new Error(`${area.areaName} 프로세스 정의에 중복 Major가 있습니다.`)
   }
   const rows = majors.map(major => {
     const definition = definitionById.get(major.id)
     if (definition === undefined) {
-      throw new Error(`${area.megaName} ${major.name} Major의 프로세스 정의가 없습니다.`)
+      throw new Error(`${area.areaName} ${major.name} Major의 프로세스 정의가 없습니다.`)
     }
     return {
-      seqLabel: `${area.megaCode}.${String(major.majorSeq).padStart(2, '0')}`,
+      seqLabel: `${area.areaCode}.${String(major.majorSeq).padStart(2, '0')}`,
       name: major.name,
       definition,
     }
@@ -163,13 +192,14 @@ export function buildIssueAnalysisProcessSlides(
     slides.push({
       kind: 'process-definition',
       sourceSlide: 6,
-      megaCode: area.megaCode,
-      megaName: area.megaName,
+      areaCode: area.areaCode,
+      areaName: area.areaName,
       pageInSeries: index + 1,
       pageCount: definitionPages.length,
       headline,
       megaDefinition: definitions.megaDefinition,
       rows: pageRows,
+      windowSuffix,
     })
   })
   return slides

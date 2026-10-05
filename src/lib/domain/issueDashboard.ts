@@ -3,7 +3,7 @@
 // 이슈 기한은 실제 달력이라 회의·근태 카드와 같은 시계를 쓴다(DashboardView 섹션 D 주석).
 import type { Issue, IssueSeverity, IssueStatus } from './issues'
 import { ISSUE_STATUSES, isOverdue } from './issues'
-import { ISSUE_MEGA_AREAS, type IssueMegaCode } from './issueAnalysis'
+import { areaLabel, type IssueAreaRef } from './issueAreas'
 import { addDaysIso } from './dates'
 import { currentRuleDay, startOfWeek, ymdIn, type WeekStartRule } from './calendar'
 import { diffDaysCal } from './dashboard'
@@ -11,7 +11,7 @@ import { diffDaysCal } from './dashboard'
 /** 대시보드가 쓰는 이슈 슬라이스 — getIssuesForDashboard(1쿼리)와 getIssues(전체) 둘 다 만족한다. */
 export type DashboardIssue = Pick<
   Issue,
-  'id' | 'issueNo' | 'piIssueCode' | 'megaCode' | 'title' | 'status' | 'severity' | 'dueDate' | 'resolvedAt' | 'createdAt'
+  'id' | 'code' | 'areaId' | 'title' | 'status' | 'severity' | 'dueDate' | 'resolvedAt' | 'createdAt'
 >
 
 /** 임박 = 오늘(D-0)부터 D-7까지 마감(RiskWorklist dueSoonLeaves 와 같은 창 — 달력일 8일). */
@@ -67,25 +67,27 @@ export function issueStatusCounts(issues: Pick<DashboardIssue, 'status'>[]): Iss
   return counts
 }
 
-export interface IssueMegaRow {
-  /** null = 미분류(megaCode 없음). 미분류 행은 해당 이슈가 있을 때만 마지막에 붙는다. */
-  code: IssueMegaCode | null
+export interface IssueAreaRow {
+  areaId: string | null
+  label: string
   total: number
   counts: IssueStatusCounts
-  /** 해결 비율(정수 %). total 0 이면 null — 0% 와 구분한다. */
   resolvedPct: number | null
 }
 
-/** Mega 8영역을 코드순 고정으로 — 이슈 없는 영역도 행을 남긴다(TeamProgress 의 '-' 관례). */
-export function issueMegaBreakdown(issues: DashboardIssue[]): IssueMegaRow[] {
-  const row = (code: IssueMegaCode | null, list: DashboardIssue[]): IssueMegaRow => {
+/** 영역 정렬 순서. 비활성 영역은 연결된 이슈가 있을 때만, 미분류는 마지막에 표시한다. */
+export function issueAreaBreakdown(issues: DashboardIssue[], areas: readonly IssueAreaRef[]): IssueAreaRow[] {
+  const row = (areaId: string | null, label: string, list: DashboardIssue[]): IssueAreaRow => {
     const counts = issueStatusCounts(list)
-    const total = list.length
-    return { code, total, counts, resolvedPct: total ? Math.round(counts.resolved / total * 100) : null }
+    return { areaId, label, total: list.length, counts, resolvedPct: list.length ? Math.round(counts.resolved / list.length * 100) : null }
   }
-  const rows = ISSUE_MEGA_AREAS.map(a => row(a.code, issues.filter(i => i.megaCode === a.code)))
-  const unclassified = issues.filter(i => i.megaCode === null)
-  if (unclassified.length) rows.push(row(null, unclassified))
+  const rows = [...areas].sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code))
+    .flatMap(area => {
+      const list = issues.filter(issue => issue.areaId === area.id)
+      return area.active || list.length ? [row(area.id, areaLabel(area, area.id), list)] : []
+    })
+  const unclassified = issues.filter(issue => issue.areaId === null)
+  if (unclassified.length) rows.push(row(null, '미분류', unclassified))
   return rows
 }
 

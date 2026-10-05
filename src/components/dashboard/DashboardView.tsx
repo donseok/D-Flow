@@ -1,3 +1,4 @@
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import Link from 'next/link'
 import { calendarOf } from '@/lib/domain/calendar'
 import type { CalendarInput } from '@/lib/calendar/load'
@@ -27,6 +28,7 @@ import { TeamProgress } from './TeamProgress'
 import { IssueStatusCard } from './IssueStatusCard'
 import { IssueTrendCard } from './IssueTrendCard'
 import { IssueQueueCard } from './IssueQueueCard'
+import type { MeetingCategoryDef, SeverityDef } from '@/lib/settings/vocab'
 
 /** 경영진·관리자 대시보드 — 읽기 순서(2026-08-28 재배치): 어디까지 왔나(요약·마일스톤·S-Curve·팀별)
  *  → 앞으로 뭐가 있나(회의) → 이슈가 어떤 상태인가(현황·추이) → 맨 아래 조치 큐(WBS 큐·이슈 큐, 사용자 요청).
@@ -49,12 +51,15 @@ export async function DashboardView({
   meetings,
   meetingExceptions,
   issues,
+  issueAreas,
   currentUserId = null,
   canManage = false,
   canGenerateBrief = false,
   milestoneKeywords,
   modules,
   minutesHref,
+  meetingCategories,
+  issueSeverities,
 }: {
   items: ComputedItem[]
   projectId: string
@@ -77,6 +82,7 @@ export async function DashboardView({
   meetings: Meeting[] | null
   meetingExceptions: MeetingException[]
   /** 이슈 현황 카드용 슬라이스(page.tsx 의 getIssuesForDashboard). null = 조회 실패 — 카드 대신 사유를 보인다. */
+  issueAreas: readonly IssueAreaRef[]
   issues: DashboardIssue[] | null
   /** 회의 카드에서 작성자 본인/프로젝트 관리자 이상에게 수정·삭제를 열기 위한 식별자. */
   currentUserId?: string | null
@@ -91,6 +97,9 @@ export async function DashboardView({
   modules: { issues: boolean; announcements: boolean; meetings: boolean }
   /** 회의 카드 머리의 '이 프로젝트 회의록'(D53) — 회의록 모듈이 꺼졌거나 슬러그를 모르면 null */
   minutesHref: string | null
+  /** 이 프로젝트의 회의 범주·이슈 심각도(설정 어휘) — 키가 손상이면 page 가 위에 사유를 띄우고 빈 목록(라벨 = code) */
+  meetingCategories: readonly MeetingCategoryDef[]
+  issueSeverities: readonly SeverityDef[]
 }) {
   const locale = await getServerLocale()
   const tr = (k: DictKey) => t(locale, k)
@@ -175,17 +184,17 @@ export async function DashboardView({
           날짜 셀 + 제목 행 목록은 전폭에 어울린다. 회의는 실제 달력이므로 실제 오늘 기준(base_date 금지). */}
       {modules.meetings && (meetings === null ? <LoadErrorNotice message={tr('common.loadFailed.meetings')} /> : (
         <MeetingSchedule projectId={projectId} meetings={meetings} exceptions={meetingExceptions} today={realToday}
-          currentUserId={currentUserId} canManage={canManage} minutesHref={minutesHref} />
+          currentUserId={currentUserId} canManage={canManage} minutesHref={minutesHref} categories={meetingCategories} />
       ))}
 
       {/* E. 이슈 — 좌: 이슈 현황(KPI·상태 분포·Mega별), 우: 등록·해결 추이(차트 + 최근 6주 표).
           추이 카드는 표로 높이를 채워 좌측과 균형을 맞춘다(차트만 두면 아래가 빈다 — 목업 B안에서 확인).
           이슈 0건이면 현황 카드 하나만 빈 상태로 — 빈 카드를 나란히 두지 않는다. 조회 실패면 카드 대신 사유. */}
       {modules.issues && (issues === null ? issuesError : issues.length === 0 ? (
-        <IssueStatusCard issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
+        <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
-          <IssueStatusCard issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
+          <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
           <IssueTrendCard issues={issues} today={realToday} weekStart={cal.weekStart} timeZone={cal.timezone} locale={locale} />
         </div>
       ))}
@@ -199,7 +208,7 @@ export async function DashboardView({
         <div className={wbs && modules.issues ? 'grid gap-5 lg:grid-cols-2' : undefined}>
           {wbs && <RiskWorklist items={items} projectId={projectId} today={today} />}
           {modules.issues && (issues === null ? issuesError
-            : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} locale={locale} />)}
+            : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} locale={locale} severities={issueSeverities} />)}
         </div>
       )}
 

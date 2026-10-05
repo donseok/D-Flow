@@ -21,6 +21,7 @@ vi.mock('@/app/actions/minutes', () => ({
   getMinuteFileUrl: vi.fn(), getMinuteVersionFileUrl: vi.fn(), deleteMinute: vi.fn(), toggleMinuteHighlight: vi.fn(),
   replaceMinuteBody: m.replaceMinuteBody,
 }))
+vi.mock('@/components/minutes/MinuteAttachmentsPanel', () => ({ MinuteAttachmentsPanel: () => null }))
 vi.mock('@/lib/supabase/client', () => ({ createBrowserClient: () => ({ storage: { from: () => ({ upload: m.upload, remove: m.remove }) } }) }))
 vi.mock('@/components/minutes/MarkdownView', () => ({ MarkdownView: () => null }))
 vi.mock('@/components/minutes/MinuteInsightCard', () => ({ MinuteInsightCard: () => null }))

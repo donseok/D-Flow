@@ -1,3 +1,5 @@
+vi.mock('@/lib/issues/context', async () => ({ loadIssueEntryContext: async () => ({ ok: true, value: (await import('../fixtures/issue-areas')).TEST_ENTRY_CONTEXT }) }))
+import { TEST_AREAS } from '../fixtures/issue-areas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IssueAnalysisIssueInput } from '@/lib/report/issues/model'
 
@@ -29,24 +31,25 @@ import { ensureIssueAnalysisAction } from '@/app/actions/issueAnalysis'
 
 const READY_MAJOR = {
   id: 'major-1',
-  megaCode: '00' as const,
+  areaId: '00' as const,
   majorSeq: 1,
   name: '기준정보 표준화',
 }
 const SALES_MAJOR = {
   id: 'major-2',
-  megaCode: '02' as const,
+  areaId: '02' as const,
   majorSeq: 1,
   name: '주문관리',
 }
 
 const readyIssue = (over: Partial<IssueAnalysisIssueInput> = {}): IssueAnalysisIssueInput => ({
+    codeAreaId: null,
   id: '550e8400-e29b-41d4-a716-446655440000',
   issueNo: 1,
-  piIssueCode: 'PI-I-00-01',
+  code: 'PI-I-00-01',
   projectId: 'project-1',
-  megaCode: '00',
-  megaSeq: 1,
+  areaId: '00',
+
   majorId: 'major-1',
   majorSeq: 1,
   majorName: '기준정보 표준화',
@@ -108,7 +111,7 @@ describe('ensureIssueAnalysisAction', () => {
     expect(result).toMatchObject({
       ok: false,
       state: 'unavailable',
-      error: '잘못된 Mega 분석 범위입니다.',
+      error: '잘못된 영역 분석 범위입니다.',
       preflight: null,
     })
     expect(mocks.loadIssueAnalysisIssues).not.toHaveBeenCalled()
@@ -126,17 +129,15 @@ describe('ensureIssueAnalysisAction', () => {
       state: 'unavailable',
       preflight: null,
     })
-    expect(result.error).toContain('담당자 조회 실패')
+    expect(result.error).toBe('이슈 분석 처리에 실패했습니다. 다시 시도하세요.')
+    expect(result.error).not.toContain('담당자 조회 실패')
     expect(mocks.ensureIssueAnalysis).not.toHaveBeenCalled()
     errorSpy.mockRestore()
   })
 
   it('사전 점검 누락을 상세 preflight와 함께 blocked로 반환한다', async () => {
     mocks.loadIssueAnalysisIssues.mockResolvedValue({
-      issues: [readyIssue({
-        megaCode: null, megaSeq: null, piIssueCode: null,
-        majorId: null, majorSeq: null, majorName: null,
-      })],
+      issues: [readyIssue({ areaId: null, code: 'PI-U001', majorId: null, majorSeq: null, majorName: null })],
       majors: [],
     })
     const result = await ensureIssueAnalysisAction('project-1')
@@ -146,7 +147,7 @@ describe('ensureIssueAnalysisAction', () => {
       preflight: { totalCount: 1, readyCount: 0, blockedCount: 1 },
     })
     expect(result.preflight?.blockedIssues[0].reasons).toContain(
-      'Mega 영역이 지정되지 않았습니다.',
+      '이슈 영역이 지정되지 않았거나 현재 영역 목록에 없습니다.',
     )
     expect(mocks.ensureIssueAnalysis).not.toHaveBeenCalled()
   })
@@ -188,15 +189,17 @@ describe('ensureIssueAnalysisAction', () => {
       expect.any(Array),
       [READY_MAJOR],
       'user-1',
+      TEST_AREAS,
+      { severityCodes: ['high', 'medium', 'low'], analysis: undefined },
     )
   })
 
   it('선택 Mega만 엄격 로더와 AI 입력 범위로 전달한다', async () => {
     const salesIssue = readyIssue({
       id: '550e8400-e29b-41d4-a716-446655440002',
-      megaCode: '02',
-      megaSeq: 1,
-      piIssueCode: 'PI-I-02-01',
+      areaId: '02',
+
+      code: 'PI-I-02-01',
       title: '주문 승인 지연',
     })
     mocks.loadIssueAnalysisIssues.mockResolvedValue({
@@ -218,6 +221,8 @@ describe('ensureIssueAnalysisAction', () => {
       [salesIssue],
       [SALES_MAJOR],
       'user-1',
+      TEST_AREAS,
+      { severityCodes: ['high', 'medium', 'low'], analysis: undefined },
     )
   })
 
@@ -237,7 +242,7 @@ describe('ensureIssueAnalysisAction', () => {
 
   it('로더가 선택 Mega 밖의 행을 반환하면 fail-closed로 중단한다', async () => {
     mocks.loadIssueAnalysisIssues.mockResolvedValue({
-      issues: [readyIssue({ megaCode: '00' })],
+      issues: [readyIssue({ areaId: '00' })],
       majors: [READY_MAJOR],
     })
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -245,7 +250,7 @@ describe('ensureIssueAnalysisAction', () => {
     const result = await ensureIssueAnalysisAction('project-1', '02')
 
     expect(result).toMatchObject({ ok: false, state: 'unavailable', preflight: null })
-    expect(result.error).toContain('범위 정합성')
+    expect(result.error).toBe('이슈 분석 처리에 실패했습니다. 다시 시도하세요.')
     expect(mocks.ensureIssueAnalysis).not.toHaveBeenCalled()
     errorSpy.mockRestore()
   })

@@ -10,8 +10,8 @@ function linkedIssue(linkId: string, blockIndex: number): MinuteLinkedIssue {
   return {
     linkId,
     issueId: `issue-${linkId}`,
-    issueNo: Number(linkId),
-    piIssueCode: null,
+
+    code: 'PI-U001',
     projectId: 'project-1',
     title: `이슈 ${linkId}`,
     status: 'open',

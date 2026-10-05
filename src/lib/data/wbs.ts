@@ -1,3 +1,4 @@
+import { parseCustomValues } from '@/lib/domain/customFieldValues'
 import { cache } from 'react'
 import { unstable_rethrow } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
@@ -111,6 +112,9 @@ export const getComputedWbs = cache(async (
     updatedAt: (r.updated_at as string | null) ?? null,
     // 「단계」 컬럼 표시 조건(D9) — 위임 태그. select('*') 가 tags 를 이미 싣는다.
     agentDelegated: Array.isArray(r.tags) && (r.tags as unknown[]).includes(AGENT_TAG),
+    // 선행 기준 final 의 실적 축(SP5b D21) — select('*') 가 dev_workflow 를 이미 싣는다
+    devWorkflow: r.dev_workflow === true,
+    custom: r.custom === undefined ? undefined : (() => { const parsed = parseCustomValues(r.custom); return parsed.ok ? parsed.value : null })(),
   }))
 
   // 달력 키가 손상이면 ConfigKeyError — 에러 바운더리가 그 화면을 멈춘다(기본 달력으로 계획%를 내지 않는다, [RF4])

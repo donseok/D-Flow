@@ -26,16 +26,17 @@ beforeEach(() => {
 })
 
 describe('이슈 분석 메타 DB 매핑', () => {
-  it('getIssues가 신규 메타와 0055 이전 null/default 행을 모두 도메인 형태로 매핑한다', async () => {
+  it('getIssues가 신규 메타와 이관된 미분류 행을 모두 도메인 형태로 매핑한다', async () => {
     const issues = query({
       data: [
         {
           id: 'i1',
+          custom: { quantity: 0, approved: false, archive: ['old'] },
           issue_no: 12,
-          pi_issue_code: 'PI-I-03-02',
+          code: 'PI-I-03-02',
           project_id: 'p-map',
-          mega_code: '03',
-          mega_seq: 2,
+          area_id: 'area-qa', code_area_id: 'area-qa',
+
           major_id: 'mj1',
           title: '설계 변경 지연',
           body: '',
@@ -57,11 +58,12 @@ describe('이슈 분석 메타 DB 매핑', () => {
         },
         {
           id: 'legacy',
+          custom: { corrupt: null },
           issue_no: 11,
-          pi_issue_code: null,
+          code: 'PI-U-001',
           project_id: 'p-map',
-          mega_code: null,
-          mega_seq: null,
+          area_id: null, code_area_id: null,
+
           major_id: null,
           title: '기존 이슈',
           body: '',
@@ -90,7 +92,7 @@ describe('이슈 분석 메타 DB 매핑', () => {
     })
     const links = query({ data: [], error: null })
     const majors = query({
-      data: [{ id: 'mj1', mega_code: '03', major_seq: 1, name: '설계관리' }],
+      data: [{ id: 'mj1', area_id: 'area-qa', code_area_id: 'area-qa', major_seq: 1, name: '설계관리' }],
       error: null,
     })
     // 첨부 개수(0068)는 tests/data/issue-attachment-count.test.ts 가 본다. 여기서는
@@ -108,11 +110,14 @@ describe('이슈 분석 메타 DB 매핑', () => {
     }
 
     const result = await getIssues('p-map')
+    expect(result.find(i => i.id === 'i1')?.custom).toEqual({ quantity: 0, approved: false, archive: ['old'] })
+    expect(result.find(i => i.id === 'legacy')?.custom).toBeNull()
+    expect(issues.select).toHaveBeenCalledWith(expect.stringContaining('custom'))
 
     expect(result[0]).toMatchObject({
-      piIssueCode: 'PI-I-03-02',
-      megaCode: '03',
-      megaSeq: 2,
+      code: 'PI-I-03-02',
+      areaId: 'area-qa', codeAreaId: 'area-qa',
+
       majorId: 'mj1',
       majorSeq: 1,
       majorName: '설계관리',
@@ -124,9 +129,9 @@ describe('이슈 분석 메타 DB 매핑', () => {
       assigneeMemberIds: ['m1'],
     })
     expect(result[1]).toMatchObject({
-      piIssueCode: null,
-      megaCode: null,
-      megaSeq: null,
+      code: 'PI-U-001',
+      areaId: null, codeAreaId: null,
+
       majorId: null,
       majorSeq: null,
       majorName: null,
@@ -138,7 +143,7 @@ describe('이슈 분석 메타 DB 매핑', () => {
     })
   })
 
-  it('회의록 역링크에도 PI 업무키를 포함하고 기존 null을 보존한다', async () => {
+  it('회의록 역링크에도 불변 코드를 포함하고 이관된 미분류 코드도 보존한다', async () => {
     state.client = {
       from: vi.fn(() => query({
         data: [
@@ -152,7 +157,7 @@ describe('이슈 분석 메타 DB 매핑', () => {
             block_hash: 'block',
             issues: {
               issue_no: 12,
-              pi_issue_code: 'PI-I-03-02',
+              code: 'PI-I-03-02',
               title: '설계 변경 지연',
               status: 'open',
             },
@@ -167,7 +172,7 @@ describe('이슈 분석 메타 DB 매핑', () => {
             block_hash: 'block2',
             issues: [{
               issue_no: 11,
-              pi_issue_code: null,
+              code: 'PI-U-001',
               title: '기존 이슈',
               status: 'open',
             }],
@@ -179,9 +184,9 @@ describe('이슈 분석 메타 DB 매핑', () => {
 
     const result = await getMinuteLinkedIssues('minute-reverse')
 
-    expect(result.map(({ issueId, piIssueCode }) => ({ issueId, piIssueCode }))).toEqual([
-      { issueId: 'i1', piIssueCode: 'PI-I-03-02' },
-      { issueId: 'legacy', piIssueCode: null },
+    expect(result.map(({ issueId, code }) => ({ issueId, code }))).toEqual([
+      { issueId: 'i1', code: 'PI-I-03-02' },
+      { issueId: 'legacy', code: 'PI-U-001' },
     ])
   })
 })

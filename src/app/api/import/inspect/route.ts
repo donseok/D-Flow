@@ -9,6 +9,7 @@ import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 import { skippedHolidaysOf } from '@/lib/domain/holidayImport'
 import { readHolidaysFromBuffer } from '@/lib/excel/parseWithProfile'
+import { createServerClient } from '@/lib/supabase/server'
 
 /**
  * 임포트 마법사 1단계 — 업로드된 워크북을 감지만 하고 아무것도 쓰지 않는다(§6.2, DB 쓰기 0).
@@ -60,6 +61,20 @@ export async function POST(req: NextRequest) {
   // 겹치는 날짜를 '건너뜀'으로 미리 보인다. 실행은 사용자가 고른 양식으로 다시 읽으므로 결과 화면(실행 응답)이 최종이다.
   const fileHolidays = readHolidaysFromBuffer(buf, detection.profile.holidaySheetName) ?? []
   const skippedHolidays = skippedHolidaysOf(fileHolidays, cfg.holidays)
+
+  try {
+    const sb = await createServerClient()
+    const { count: customCount } = await sb
+      .from('wbs_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .neq('custom', '{}')
+    if (customCount && customCount > 0) {
+      detection.warnings.push(`사용자 정의 값 ${customCount}건 삭제`)
+    }
+  } catch {
+    // 테스트 환경 또는 세션 없는 조회 등 실패 시에는 기존 감지 결과 보존
+  }
 
   return NextResponse.json({ ok: true, detection, savedProfile, profileMismatch, skippedHolidays })
 }

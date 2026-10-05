@@ -35,4 +35,27 @@ describe('ExcelProfile', () => {
     expect(res.ok).toBe(true)
     if (res.ok) expect(res.profile.logical.name).toBeNull()
   })
+
+  it('customColumns 키 부재(SP5c 이전 저장분) → [] 로 정규화해 통과시킨다(전방호환, 스펙 §3.6.7)', () => {
+    const raw = JSON.parse(JSON.stringify(LEGACY_EXCEL_PROFILE_V1))
+    delete raw.customColumns
+    const res = validateProfile(raw)
+    expect(res.ok).toBe(true)
+    if (res.ok) expect(res.profile.customColumns).toEqual([])
+  })
+
+  it('customColumns — [열번호, 키] 튜플 검증 및 음수·빈키·배열아님 거부', () => {
+    const valid = validateProfile({
+      ...LEGACY_EXCEL_PROFILE_V1,
+      customColumns: [[17, 'field_a'], [18, 'field_b']],
+    })
+    expect(valid.ok).toBe(true)
+    if (valid.ok) {
+      expect(valid.profile.customColumns).toEqual([[17, 'field_a'], [18, 'field_b']])
+    }
+
+    expect(validateProfile({ ...LEGACY_EXCEL_PROFILE_V1, customColumns: 'not-array' }).ok).toBe(false)
+    expect(validateProfile({ ...LEGACY_EXCEL_PROFILE_V1, customColumns: [[-1, 'field_a']] }).ok).toBe(false)
+    expect(validateProfile({ ...LEGACY_EXCEL_PROFILE_V1, customColumns: [[17, '   ']] }).ok).toBe(false)
+  })
 })

@@ -51,10 +51,31 @@ describe('getMeetingDetail — 참석자는 명단 정본(ROSTER_SELECT)으로 �
 
     expect(selects.project_members).toBe(ROSTER_SELECT)
     expect(inArgs[0]).toEqual(['id', ['b', 'a2', 'a1']])
-    expect(out?.attendees).toEqual([
+    expect(out.ok && out.detail?.attendees).toEqual([
       { id: 'a1', name: '가', email: 'x1@example.com', teamCodes: ['ERP', 'MES'] },
       { id: 'a2', name: '가', email: 'x2@example.com', teamCodes: [] },
       { id: 'b', name: '나', email: null, teamCodes: [] },
     ])
+  })
+
+  it('없음(ok·null)과 조회 실패(ok:false)를 가른다 — 참석자 조회 실패도 실패다(SP5 B2 — D39)', async () => {
+    const make = (meeting: { data: unknown; error: unknown }, members?: { data: unknown; error: unknown }) => ({
+      from: () => ({ select: () => {
+        const q: Record<string, unknown> = {}
+        q.eq = () => q
+        q.maybeSingle = async () => meeting
+        q.in = async () => members ?? { data: [], error: null }
+        return q
+      } }),
+    })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const mock = createServerClient as unknown as { mockResolvedValue: (v: unknown) => void }
+    mock.mockResolvedValue(make({ data: null, error: null }))
+    expect(await getMeetingDetail('meet-none')).toEqual({ ok: true, detail: null })
+    mock.mockResolvedValue(make({ data: null, error: { message: 'down' } }))
+    expect(await getMeetingDetail('meet-down')).toMatchObject({ ok: false })
+    mock.mockResolvedValue(make({ data: MEETING, error: null }, { data: null, error: { message: 'down' } }))
+    expect(await getMeetingDetail('meet-att-down')).toMatchObject({ ok: false })
+    err.mockRestore()
   })
 })

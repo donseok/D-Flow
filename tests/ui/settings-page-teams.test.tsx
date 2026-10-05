@@ -33,7 +33,7 @@ vi.mock('@/components/settings/ModuleToggleEditor', () => ({ ModuleToggleEditor:
 vi.mock('@/components/settings/ViewsDefaultEditor', () => ({ ViewsDefaultEditor: () => null }))
 vi.mock('@/lib/ai/health', () => ({ assistantIndexStatus: vi.fn(async () => ({ freshness: 'disabled', indexed: 0 })) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
-vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }) }))
+vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }), useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ children }: { children: ReactNode }) => children }))
 // actions 도 그린다 — 재색인 버튼·권한 배지가 카드 머리(actions)에 있다.
@@ -115,7 +115,7 @@ describe('설정 화면 — 팀 절은 요청 범위 팀 원천(스펙 §4.2.1·
     const html = await render()
     expect(mocks.ProjectTeamsManager).not.toHaveBeenCalled()
     expect(mocks.ProjectAreasManager).not.toHaveBeenCalled()
-    expect(html.split(ERR_TEAMS_UI).length - 1).toBe(2)   // 팀 절·업무영역 카드
+    expect(html.split(ERR_TEAMS_UI).length - 1).toBe(3)   // 팀 절·주간 영역·이슈 영역 카드
     expect(html).not.toContain('db down')
     expect(err).toHaveBeenCalled()
     err.mockRestore()
@@ -131,10 +131,13 @@ describe('설정 화면 — 업무영역 편집기(스펙 §4.1.8·D26)', () => 
   it('kind 고정·해석기의 주간 영역·팀 선택지(프로젝트 팀 + 배정된 목록 밖 팀은 비활성)를 넘긴다', async () => {
     vi.mocked(projectTeams).mockResolvedValue([team('t-res', 'RES'), team('t-arc', 'ARC', { active: false })])
     await render()
-    expect(mocks.ProjectAreasManager).toHaveBeenCalledTimes(1)
-    expect(mocks.ProjectAreasManager.mock.calls[0][0]).toEqual({
-      projectId: 'p1', kind: 'weekly_section', areas: [AREA],
+    expect(mocks.ProjectAreasManager).toHaveBeenCalledTimes(2)
+    expect(mocks.ProjectAreasManager.mock.calls.find(([props]) => props.kind === 'weekly_section')?.[0]).toEqual({
+      projectId: 'p1', kind: 'weekly_section', areas: [AREA], locale: 'ko',
       teamOptions: [{ id: 't-res', code: 'RES', active: true }, { id: 't-arc', code: 'ARC', active: false }, { id: 't-old', code: 'OLD', active: false }],
+    })
+    expect(mocks.ProjectAreasManager.mock.calls.find(([props]) => props.kind === 'issue_area')?.[0]).toMatchObject({
+      projectId: 'p1', kind: 'issue_area', areas: [],
     })
   })
   it('설정 조회가 실패하면 편집기를 그리지 않는다 — 머리의 오류 상태 하나로 갈음하고, 팀 절은 안내를 보인다', async () => {

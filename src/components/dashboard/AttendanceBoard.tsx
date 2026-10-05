@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { CalendarCheck, ArrowRight } from 'lucide-react'
 import type { AttendanceRecord, ProjectMember } from '@/lib/domain/types'
-import { ATTENDANCE_META, summarize } from '@/lib/domain/attendance'
+import { summarizeAttendance, vocabColor, vocabLabel, type AttendanceTypeDef } from '@/lib/settings/vocab'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { t, type DictKey } from '@/lib/i18n/dict'
@@ -14,24 +14,27 @@ const MAX_ROWS = 6
 const WINDOW_DAYS = 14
 
 /** 향후 2주 근태 — 오늘 휴가/출장/재택 스탯 + 자리비움 예정 리스트('정상근무' 기록은 제외). */
-export async function AttendanceBoard({ projectId, records, members, today }: {
+export async function AttendanceBoard({ projectId, records, members, today, types }: {
   projectId: string
   records: AttendanceRecord[]
   members: ProjectMember[]
   today: string
+  /** 이 프로젝트의 근태 유형(설정 attendance.types) */
+  types: readonly AttendanceTypeDef[]
 }) {
   const locale = await getServerLocale()
   const tr = (k: DictKey) => t(locale, k)
 
   const windowEnd = addDaysIso(today, WINDOW_DAYS - 1)
+  const countsAs = new Map(types.map(e => [e.code, e.counts_as]))
   const nameOf = new Map(members.map(m => [m.id, m.name]))
   const upcoming = records
-    .filter(r => r.type !== 'work' && r.date >= today && r.date <= windowEnd)
+    .filter(r => countsAs.get(r.type) !== 'work' && r.date >= today && r.date <= windowEnd)
     // 같은 날짜 안에서는 이름 가나다순. localeCompare 를 로케일 인자 없이 쓰면
     // 실행 환경 기본 로케일에 따라 순서가 달라진다(서버 렌더 ≠ 사용자 기대).
     .sort((a, b) => a.date.localeCompare(b.date)
       || compareKoreanName(nameOf.get(a.memberId), nameOf.get(b.memberId)))
-  const s = summarize(upcoming.filter(r => r.date === today))
+  const s = summarizeAttendance(types, upcoming.filter(r => r.date === today))
   const rows = upcoming.slice(0, MAX_ROWS)
 
   return (
@@ -53,7 +56,7 @@ export async function AttendanceBoard({ projectId, records, members, today }: {
         ) : (
           <ul className="divide-y divide-line">
             {rows.map(r => {
-              const meta = ATTENDANCE_META[r.type]
+              const meta = vocabColor(types, r.type)
               const name = nameOf.get(r.memberId) ?? tr('att.unknown')
               return (
                 <li key={r.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
@@ -64,7 +67,7 @@ export async function AttendanceBoard({ projectId, records, members, today }: {
                     <div className="truncate text-[13px] font-medium text-ink" title={name}>{name}</div>
                     {r.note && <div className="mt-0.5 truncate text-[11px] text-ink-muted" title={r.note}>{r.note}</div>}
                   </div>
-                  <span className={`badge shrink-0 ${meta.chip}`}>{tr(`att.type.${r.type}` as DictKey)}</span>
+                  <span className={`badge shrink-0 ${meta.chip}`}>{vocabLabel('attendance.types', types, r.type, tr)}</span>
                 </li>
               )
             })}

@@ -5,7 +5,7 @@ import { useMinuteLinks } from './minuteLinks'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, ChevronRight, Download, ExternalLink, FolderOpen, History, Maximize2, Minimize2,
-  Paperclip, Share2,
+  Share2,
 } from 'lucide-react'
 import type {
   InsightKind, Minute, MinuteFile, MinuteHighlight, MinuteInsight, ProjectMember,
@@ -43,8 +43,9 @@ import { MinuteSelectionBubble, type MinuteSelectionTarget } from './MinuteSelec
 import { MinuteFontSizeControl } from './MinuteFontSizeControl'
 import { useMinuteFontSize } from './useMinuteFontSize'
 import { MinuteVersionPanel, type MinuteVersionListItem } from './MinuteVersionPanel'
+import { MinuteAttachmentsPanel } from './MinuteAttachmentsPanel'
 import { MinuteWikiImpactCard, type MinuteWikiImpactCardProps } from './MinuteWikiImpactCard'
-import { useTeamSlot } from '@/components/app/TeamsProvider'
+import { TeamBar } from '@/components/minutes/TeamBar'
 import {
   type IssueMinuteSourceKind,
   type MinuteLinkedIssue,
@@ -124,7 +125,6 @@ export function MinuteViewer({
   const currentHref = links.minute(minute.id)
   const { t } = useLocale()
   const { toast } = useToast()
-  const slotOf = useTeamSlot()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [metaOpen, setMetaOpen] = useState(false)
@@ -251,9 +251,8 @@ export function MinuteViewer({
       )
     if (!draft) return undefined
     return {
-      ...draft,
-      // AI 초안 스키마의 majorProcess 를 폼 입력 정본(majorName)으로 경계에서 변환한다.
-      majorName: draft.majorProcess,
+      title: draft.title, body: draft.body, areaId: draft.areaId,
+      analysis: draft.analysis ? { ...draft.analysis, sourceType: 'minutes' } : null,
       severity: 'medium',
       assigneeMemberIds: [],
       startDate: null,
@@ -595,8 +594,8 @@ export function MinuteViewer({
   function onIssueCreated(_id: string, result: IssueActionResult) {
     toast({
       title: t('min.issue.created'),
-      description: result.piIssueCode
-        ? t('min.issue.createdCode').replace('{code}', result.piIssueCode)
+      description: result.code
+        ? t('min.issue.createdCode').replace('{code}', result.code)
         : t('min.issue.createdDesc'),
       variant: 'success',
     })
@@ -712,9 +711,7 @@ export function MinuteViewer({
               표시 전용 링크 아님 — 탐색기가 아직 폴더 딥링크(?folder=)를 받지 않는다. */}
           <div className={`inline-flex min-w-0 max-w-[22rem] items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 shadow-sm ${
             pathSegments ? 'border-line-strong bg-surface' : 'border-dashed border-line-strong bg-surface/60'}`}>
-            <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(minute.teamCode).bar}`}>
-              {minute.teamCode}
-            </span>
+            <TeamBar code={minute.teamCode} shape="pill" />
             <nav aria-label={t('min.detail.pathAria')} title={pathTitle}
               className="flex min-w-0 items-center gap-1 text-xs">
               <FolderOpen aria-hidden className={`h-3.5 w-3.5 shrink-0 ${pathSegments ? 'text-brand' : 'text-ink-subtle'}`} />
@@ -751,12 +748,6 @@ export function MinuteViewer({
                 <Download className="h-3.5 w-3.5" />{t('min.detail.downloadBody')}
               </button>
             )}
-            {attachments.map(f => (
-              <button key={f.id} onClick={() => void download(f.id)} disabled={busy}
-                className="btn h-8 max-w-[10rem] px-2.5 text-xs">
-                <Paperclip className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{f.fileName}</span>
-              </button>
-            ))}
             {minute.meetingId && minute.meetingProjectId && (
               <Link href={`/p/${minute.meetingProjectId}/meetings`}
                 className="inline-flex items-center gap-1 text-xs text-brand underline underline-offset-2 hover:text-brand-hover">
@@ -793,7 +784,6 @@ export function MinuteViewer({
           </div>
         </div>
         {err && <p className="text-sm text-delayed">{err}</p>}
-        {filesError && !historicalVersion && <p role="alert" className="text-sm text-delayed">{t('min.detail.filesLoadFailed')}</p>}
       </div>
 
       {historicalVersion && (
@@ -812,6 +802,14 @@ export function MinuteViewer({
           <History className="h-4 w-4 text-ink-muted" aria-hidden />
           <p className="text-sm font-medium text-ink">{t('min.archive.banner')}</p>
         </div>
+      )}
+
+      {/* 첨부 — 현재 회의록에서만(과거 버전 화면은 첨부를 스냅샷하지 않는다, D56). 목록 실패도 여기서 알린다. */}
+      {!historicalVersion && (
+        <MinuteAttachmentsPanel
+          minuteId={minute.id} workspaceId={minute.workspaceId ?? null} projectId={minute.ownProjectId ?? null}
+          files={attachments} filesError={filesError} canManage={canManage} timeZone={timeZone}
+        />
       )}
 
       {/* 핵심 요약 카드 — shrink-0 유지(xl 높이 체인) */}
@@ -964,8 +962,9 @@ export function MinuteViewer({
               : t('min.issue.sourceLabel')} · v${currentVersion?.versionNo ?? 1}`,
             organizedDraft: true,
             classificationRecommended: preparedIssueDraft?.mode === 'ai'
-              && Boolean(preparedIssueDraft.megaCode && preparedIssueDraft.subProcess),
+              && Boolean(preparedIssueDraft.areaId && preparedIssueDraft.analysis?.subProcess),
           }}
+          supportsCustomFields
           onCreate={createLinkedIssue}
           onCreated={onIssueCreated}
         />

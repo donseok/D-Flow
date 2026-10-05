@@ -23,6 +23,7 @@ function client(tables: { report: Response; rows: Response; areas: Response }) {
     if (table === 'weekly_reports') return built.report
     if (table === 'weekly_report_rows') return built.rows
     if (table === 'project_areas') return built.areas
+    if (table === 'project_settings') return builder({ data: null, error: null })
     throw new Error(`예상 밖 표: ${table}`)
   })
   return { client: { from, rpc: vi.fn() } as never, built }

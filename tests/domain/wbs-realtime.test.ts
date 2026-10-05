@@ -155,3 +155,31 @@ describe('applyWbsChange — 부분 패치와 롤업', () => {
     expect(findNode(next, 'a').stage).toBeNull()
   })
 })
+
+
+describe('custom snapshots in WBS realtime', () => {
+  const payload = (custom?: unknown, updated_at = '2026-09-17T01:00:00.000102Z') => parseWbsPayload({ id: 'a', project_id: 'p1', stage: 'ip', actual_pct: 40, updated_at, ...(custom === undefined ? {} : { custom }) })
+  it('preserves typed zero/false and clones arrays without altering the legacy payload shape', () => {
+    const raw = { quantity: 0, approved: false, selected: ['old'] }
+    expect(payload(raw)?.custom).toEqual(raw)
+    expect(payload(raw)?.custom?.selected).not.toBe(raw.selected)
+    expect(payload()).not.toHaveProperty('custom')
+  })
+  it.each([null, [], { bad: null }, { bad: {} }, { bad: Infinity }])('rejects an unreadable custom snapshot %j instead of silently applying the other fields', raw => { expect(payload(raw)).toBeNull() })
+  it('replaces custom, including an empty purge snapshot; legacy core updates retain existing values', () => {
+    const before = tree(40, 0)
+    findNode(before, 'a').custom = { quantity: 1 }
+    const fresh = applyWbsChange(before, payload({ quantity: 0, approved: false })!, { today: TODAY, calendar: CAL })!
+    expect(findNode(fresh, 'a').custom).toEqual({ quantity: 0, approved: false })
+    expect(findNode(before, 'a').custom).toEqual({ quantity: 1 })
+    expect(findNode(applyWbsChange(before, payload({})!, { today: TODAY, calendar: CAL })!, 'a').custom).toEqual({})
+    expect(findNode(applyWbsChange(before, payload()!, { today: TODAY, calendar: CAL })!, 'a').custom).toEqual({ quantity: 1 })
+  })
+  it('retains microsecond ordering within the same millisecond and rejects reversed/duplicate custom snapshots', () => {
+    const before = tree(40, 0, '2026-09-17T01:00:00.000101Z')
+    const newer = applyWbsChange(before, payload({ quantity: 2 })!, { today: TODAY, calendar: CAL })!
+    expect(findNode(newer, 'a').custom).toEqual({ quantity: 2 })
+    expect(applyWbsChange(newer, payload({ quantity: 1 }, '2026-09-17T01:00:00.000101+00:00')!, { today: TODAY, calendar: CAL })).toBeNull()
+    expect(applyWbsChange(newer, payload({ quantity: 3 }, '2026-09-17T10:00:00.000102+09:00')!, { today: TODAY, calendar: CAL })).toBeNull()
+  })
+})

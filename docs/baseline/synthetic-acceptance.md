@@ -118,3 +118,30 @@ SP8(봇 테스트 정비)의 몫이다(A2 최종 리뷰 완료 P3-3 — 계획 �
 - 기존 단계 ✓: `S1-create`·`S1-teams-areas`·`S9-isolation`·`S2-wbs-import`·`S4-weekly-monday`·`boundary-sp4`.
 - 미활성(건너뜀 아님): `S3`(SP5b·SP5c)·`S6`(SP5 B1·SP5b)·`S7`(SP8·SPU1)·`S8`(SP6)·`S10` 나머지(SP5 B1·B4~SP8).
 - 1회차(`0431001e`, 08:16)도 ok — E2E 의 `calendar-tz` 러너 결함과 무관하게 같은 판정이었다. 실행 뒤 `settings:verify` exit 0(프로젝트 17·워크스페이스 5·문제 0).
+
+
+## SP5 B1 — 2026-10-03
+
+- `scripts/e2e-synthetic.mjs`, 전용 3102 `next start`, source HEAD `4eb5fe81`; **exit 0, `ok:true`, 18/18**. 확인한 활성 단계: `S1-issues`, `S6-issue-codes`, `S10-negative`, `S6-pending`, `S10-pending`; SP4 단계 포함 전체 18단계 통과.
+- S10 음성 검사에서 R 대상 7·C 대상 9, 적중·교차 모두 0. 화면 증거는 `weekly_section`만 대상으로 삼아 issue-area 원자료를 주간 출력으로 오인하지 않는다. 합성 영역명 `QA 검사`는 SP4 센티널 단어와 충돌하지 않도록 정했다.
+- 실행 전후 `git diff --quiet -- src supabase` 참. 검사는 로컬 합성 데이터만 사용했다.
+
+## SP5 B2 — 2026-10-04
+
+- `scripts/e2e-synthetic.mjs`, 서버 3101 `next start`, `sp5/b2` 묶음4 커밋 위(14:26 KST). **exit 0, `ok:true`, 19/19** — B4 의 `S1-vocab` 포함 전 단계 통과, 실패 0·빠진 필수 0.
+- B2 는 새 합성 단계를 더하지 않았다 — 회의록 팀 루트·비활성 거부는 로컬 E2E `minutes-teams` 단계(`sp5-e2e.md` B2 절)와 RLS `minutes-teams` 계열이 본다. `S10-negative` 적중·교차 0.
+- 실행 전후 `git diff --quiet -- src supabase` 참.
+
+## SP5b — 2026-10-04(Z, 스펙 D24)
+
+- `scripts/e2e-synthetic.mjs`, `db:reset` + `dev:bootstrap` 직후, 서버 3101 `next start`(W2 main `cedcdb7` 과 같은 소스), 19:05~19:06 KST. **exit 0, `ok:true`, 22/22** — 실패 0.
+  `S6-pending` 이 빠지고(이번에 켬) SP5b 단계 넷이 더해졌다.
+- 실행 전후 `git diff --quiet -- src supabase` 참(러너의 `assertSourceClean`). 흐름 설정은 R 에만 — C 는 `workflow.*` 새 키 0(`S1-workflow` 가 확인).
+
+| 단계 | 판정 |
+|---|---|
+| `S1-workflow` | R 에 설정 액션으로 크레딧 `{as:0, ip:20, rw:25, im:90, xx:100}` — **기본 정책(5·10)만으로는 거부**(`설정 값이 올바르지 않습니다.`), 정책 `{step:5, min_gap:5}` 와 한 명령이면 저장. 이슈 5상태(접수·검토·고객 승인·실행·종료)는 기존 이슈가 쓰는 `open` 을 함께 둔 채 저장 → 같은 범주 이관(`open` → 접수, 4건) → `open` 을 뺀 5상태 저장. 승인 단계 둘(내부 검토 = 서브트리 관리자 이상, 고객 승인 = 관리자)·선행 기준 `final`. 다시 읽은 값이 넣은 값과 같다 |
+| `S6-issue-status` | R 새 이슈는 접수(범주 open) → 고객 승인 → 종료(범주 resolved·해결일 채워짐), 전이표 밖(종료 → 고객 승인) `이 상태로는 옮길 수 없습니다.`, 이력 2행(`intake>client_approval`·`client_approval>done`) |
+| `S3-flow` | R(2단계) 사람 리프: xx 직행 거부(`승인 단계가 둘 이상`) → im → 내부 검토(나) 뒤 `remaining 1`·im·스냅샷 `[internal, client]` → 같은 사람의 고객 승인 거부 → R 둘째 관리자(계정 생성 액션으로 만든 워크스페이스 관리자)의 고객 승인 뒤 xx·100, 원장 2행(`via=approve_step`, 철회 없음). C(기본 1단계): im → 승인 한 번에 xx·100. 선행 `final` 의 claim 게이트는 라우트 수준 단위 테스트(`claim-gate-final`)가 본다 |
+| `S9-workflow` | R 의 상태 하나(실행) 비활성·im 단계 이름 "고객 검토" 뒤 — C 의 설정 문서·이력(흐름 설정 전과)·이슈 상태 같다, C 의 WBS 엑셀 시트 본문 7파트가 R 변경 직전과 **글자 단위로 같다**, R WBS 화면 HTML 에 "고객 검토" |
+| 미활성 | `S3`(필드 — SP5c)·`S7`(SP8 봇·SPU1 알림)·`S8`(SP6)·`S10`(SP6~SP8 나머지 부분 집합) |

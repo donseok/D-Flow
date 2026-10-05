@@ -15,7 +15,9 @@ import {
   type ToolPlan,
 } from '@/lib/ai/chat/planner'
 import { sanitizeChatRequestV2 } from '@/lib/ai/chat/protocol'
-import { planningSignals, projectHint, routeChatRequest, type RouteTeam } from '@/lib/ai/chat/router'
+import { planningSignals, projectHint, routeChatRequest, type RouteAttendanceType, type RouteTeam } from '@/lib/ai/chat/router'
+import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { pick } from '@/lib/settings/pick'
 import { teamViewOfScope } from '@/lib/domain/authz'
 import { chatPlannerEnabled, chatV2Enabled } from '@/lib/modules/flags'
 import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
@@ -144,7 +146,18 @@ export async function POST(req: NextRequest) {
       console.error('[chat-v2] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
       return jsonError('팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'TEAMS_UNAVAILABLE')
     }
-    route = routeChatRequest(request, now, calendar, { teamsFor: () => teams })
+    // 근태 유형 = 그 프로젝트 설정 라벨(SP5 B4 D46). 못 읽으면 제품 기본 라벨로 라우팅하고(도구가 그 프로젝트 목록으로 다시 거른다) 로그를 남긴다
+    let attendanceTypes: RouteAttendanceType[] | undefined
+    if (pid !== null && new Set(allowedProjectIds).has(pid) && plannedRoute.domains.includes('attendance')) {
+      try {
+        const v = pick(await getProjectConfig(pid, { client: sb }), 'attendance.types')
+        if (v.ok) attendanceTypes = v.value
+        else console.error('[chat-v2] 근태 유형 설정 손상 — 기본 라벨로 라우팅:', v.error)
+      } catch (e) {
+        console.error('[chat-v2] 근태 유형 조회 실패 — 기본 라벨로 라우팅:', e instanceof Error ? e.message : e)
+      }
+    }
+    route = routeChatRequest(request, now, calendar, { teamsFor: () => teams, attendanceTypes })
   }
 
   const id = requestId()

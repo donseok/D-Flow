@@ -1,14 +1,16 @@
 import { createServerClient } from '@/lib/supabase/server'
 import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
+import type { CustomValues } from '@/lib/domain/customFields'
 
 export interface WeeklyReportDoc { id: string; projectId: string; weekStart: string; title: string }
 
 /** 영역 행의 열(SP4 — 지운 section·module·sort_order 대신 area_id, Q35). getWeeklySheet·findCarryOverSource 가 같이 쓴다 */
-export const AREA_ROW_COLS = 'id, report_id, area_id, this_content, this_issue, next_content, next_issue'
+export const AREA_ROW_COLS = 'id, report_id, area_id, this_content, this_issue, next_content, next_issue, custom'
 
 type AreaRowRecord = {
   id: string; report_id: string; area_id: string
   this_content: string; this_issue: string; next_content: string; next_issue: string
+  custom?: unknown
 }
 
 export function mapAreaRow(r: AreaRowRecord): WeeklySheetRow {
@@ -16,6 +18,7 @@ export function mapAreaRow(r: AreaRowRecord): WeeklySheetRow {
     id: r.id, reportId: r.report_id, areaId: r.area_id,
     thisContent: r.this_content, thisIssue: r.this_issue,
     nextContent: r.next_content, nextIssue: r.next_issue,
+    custom: (r.custom as CustomValues | null) ?? null,
   }
 }
 

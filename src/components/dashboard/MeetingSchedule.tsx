@@ -8,6 +8,7 @@ import { t, type DictKey } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { CountBadge, MiniEmpty, addDaysIso } from './bits'
 import { MeetingScheduleList } from './MeetingScheduleList'
+import type { MeetingCategoryDef } from '@/lib/settings/vocab'
 
 /** 리스트 표시 상한 — 카드 높이를 근태 카드와 비슷하게 유지한다. */
 const MAX_ROWS = 10
@@ -15,7 +16,7 @@ const MAX_ROWS = 10
 const WINDOW_DAYS = 14
 
 /** 향후 2주 회의 일정 — 날짜순 리스트. */
-export async function MeetingSchedule({ projectId, meetings, exceptions, today, currentUserId = null, canManage = false, minutesHref = null }: {
+export async function MeetingSchedule({ projectId, meetings, exceptions, today, currentUserId = null, canManage = false, minutesHref = null, categories }: {
   projectId: string
   meetings: Meeting[]
   exceptions: MeetingException[]
@@ -26,6 +27,8 @@ export async function MeetingSchedule({ projectId, meetings, exceptions, today, 
   canManage?: boolean
   /** '이 프로젝트 회의록'(D53) — /w/<slug>/minutes?project=<pid>. 회의록 모듈이 꺼졌거나 슬러그를 모르면 null(링크 없음) */
   minutesHref?: string | null
+  /** 이 프로젝트의 회의 범주(설정 meetings.categories) */
+  categories: readonly MeetingCategoryDef[]
 }) {
   const locale = await getServerLocale()
   const tr = (k: DictKey) => t(locale, k)
@@ -62,7 +65,8 @@ export async function MeetingSchedule({ projectId, meetings, exceptions, today, 
         {rows.length === 0 ? (
           <MiniEmpty text={tr('dash.meet.empty')} />
         ) : (
-          <MeetingScheduleList rows={rows} extras={extras} today={today} currentUserId={currentUserId} canManage={canManage} />
+          <MeetingScheduleList rows={rows} extras={extras} today={today} currentUserId={currentUserId} canManage={canManage}
+            categories={{ [projectId]: [...categories] }} />
         )}
         <Link href={`/p/${projectId}/meetings`} className="inline-flex items-center gap-1 text-[12px] font-medium text-brand hover:underline">
           {tr('dash.viewAll')} <ArrowRight className="h-3.5 w-3.5" />

@@ -1,4 +1,5 @@
 'use client'
+import type { PredecessorGate } from '@/lib/domain/agentWork'
 import { useCallback, useState, useEffect, useId, useLayoutEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ComputedItem, ProjectMember, TaskDependency } from '@/lib/domain/types'
@@ -20,6 +21,8 @@ import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
 import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText } from './shared'
 import { RowDetailPanel } from './RowDetailPanel'
+import { StageLabelsProvider } from './StageLabelsProvider'
+import type { StageLabels } from '@/lib/settings/defs/project'
 import { WbsProgressLens } from './WbsProgressLens'
 import { WbsFontSizeControl } from './WbsFontSizeControl'
 import { useWbsFontScale } from './useWbsFontScale'
@@ -35,6 +38,9 @@ import { wbsFontScaleVariables } from '@/lib/wbsFontScale'
 import { WBS_ADD_PHASE_EVENT } from './WbsAddButton'
 import { useWbsRealtime } from '@/lib/hooks/useWbsRealtime'
 import { applyWbsChange } from '@/lib/domain/wbsRealtime'
+import { useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
+import { formatCustomValue, orderedFields } from '@/lib/domain/customFields'
+import { parseCustomValues } from '@/lib/domain/customFieldValues'
 
 /* ── 컬럼 메타 (좌→우). frozen=true면 sticky 동결, sk=누적 left offset ──
    구분(LevelBadge) 열은 삭제됐다(2026-08-21 개편) — 계층은 들여쓰기·타이포·1단계 스트립이
@@ -210,6 +216,9 @@ export function WbsGanttSheet({
   maxDepth = null,
   milestoneKeywords = EMPTY_MILESTONE_KEYWORDS,
   members = EMPTY_MEMBERS,
+  predecessorGate = 'reached',
+  approvedItemIds,
+  stageLabels = null,
 }: {
   items: ComputedItem[]
   dependencies?: TaskDependency[]
@@ -253,6 +262,12 @@ export function WbsGanttSheet({
   milestoneKeywords?: readonly string[]
   /** 프로젝트 로스터 — WbsAssigneeStagePanel 의 담당자 셀렉트 데이터 소스(§2.5). */
   members?: ProjectMember[]
+  /** 프로젝트의 선행 기준(SP5b D21) — 상세 패널의 spec 선행 판정이 claim 게이트와 같은 기준이 되게. 생략은 reached */
+  predecessorGate?: PredecessorGate
+  /** approved 주문이 있는 항목 id(SP5b D21 — 승인 축). agents 꺼짐이면 서버가 빈 목록을 준다 */
+  approvedItemIds?: readonly string[]
+  /** 프로젝트의 단계 이름(SP5b W2 — workflow.wbs_stage_labels). null·없는 칸은 사전 이름 */
+  stageLabels?: StageLabels | null
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -443,7 +458,13 @@ export function WbsGanttSheet({
     handle.addEventListener('pointercancel', onUp)
   }
   // 개요 번호 열 켜짐 여부에 따라 동결 오프셋(sk)이 달라져 컬럼 메타 자체가 파생값이다.
-  const cols = useMemo(() => buildCols(outlineVisible, narrow, nameColWidth), [outlineVisible, narrow, nameColWidth])
+  const fieldScope = useCustomFieldScope()
+  const customListDefs = useMemo(() => orderedFields(fieldScope?.defs ?? []).filter(d => d.active && d.show_in_list), [fieldScope?.defs])
+  const customFormat = useMemo(() => ({ locale: fieldScope?.locale ?? 'ko', yes: fieldScope?.locale === 'en' ? 'Yes' : '예', no: fieldScope?.locale === 'en' ? 'No' : '아니오', empty: '—' }), [fieldScope?.locale])
+  const cols = useMemo(() => [
+    ...buildCols(outlineVisible, narrow, nameColWidth),
+    ...customListDefs.map((d): Col => ({ key: `cf:${d.key}`, w: 140 })),
+  ], [outlineVisible, narrow, nameColWidth, customListDefs])
   const colOf = (key: string) => cols.find(c => c.key === key)!
   const W = (k: string) => colOf(k).w
   const visibleCols = useMemo(() => {
@@ -967,7 +988,7 @@ export function WbsGanttSheet({
       lastRejected.current = draft
       if (via === 'enter') inputRef.current?.focus()
     }
-    let run: () => Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' }>
+    let run: () => Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' | 'approval_required' }>
     if (field === 'actual') {
       if (draft.trim() === '') return reject(t('wbs.toastEmpty'))
       const pct = Number(draft)
@@ -998,7 +1019,7 @@ export function WbsGanttSheet({
         cancel()
       } else {
         // 잠금 거부는 사유 코드로, 나머지는 액션 문구를 사전 키로 바꿔 고른다(SP4 D21) — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
-        setToast({ kind: 'err', msg: res.code === 'actual_locked' ? t('wbs.actualLocked') : wbsToastText(t, res.error, 'wbs.toastSaveFail') })
+        setToast({ kind: 'err', msg: res.code === 'actual_locked' ? t('wbs.actualLocked') : res.code === 'approval_required' ? t('wbs.err.approvalRequired') : wbsToastText(t, res.error, 'wbs.toastSaveFail') })
         if (via === 'enter') inputRef.current?.focus()
       }
     } finally {
@@ -1111,6 +1132,7 @@ export function WbsGanttSheet({
   }
 
   return (
+    <StageLabelsProvider labels={stageLabels}>
     <div
       ref={rootRef}
       data-wbs-gantt-sheet
@@ -1480,6 +1502,7 @@ export function WbsGanttSheet({
             {showCol('pplan') && headCell(colOf('pplan'), t('wbs.colPlannedPct'), 'justify-end')}
             {showCol('pactual') && headCell(colOf('pactual'), t('wbs.colActualPct'), 'justify-end')}
             {showCol('achieve') && headCell(colOf('achieve'), t('wbs.colAchievement'), 'justify-center')}
+            {customListDefs.map(d => showCol(`cf:${d.key}`) && headCell(colOf(`cf:${d.key}`), d.label, 'justify-start'))}
             {/* 간트 헤더 (월/주/일 3단) */}
             <div
               className="relative box-border h-[var(--wbs-head-h)] shrink-0 border-b-2 border-grid-strong bg-sheet-head"
@@ -1919,6 +1942,23 @@ export function WbsGanttSheet({
                   )}
                 </div>
                 )}
+                {/* 사용자 정의 필드 열(show_in_list) — 읽기 전용, 편집은 상세 패널 */}
+                {customListDefs.map(d => {
+                  if (!showCol(`cf:${d.key}`)) return null
+                  const parsed = parseCustomValues(n.custom ?? {})
+                  const text = parsed.ok ? formatCustomValue(d, parsed.value[d.key], customFormat) : '!'
+                  return (
+                    <div
+                      key={`cf:${d.key}`}
+                      data-wbs-col={`cf:${d.key}`}
+                      title={parsed.ok ? text : undefined}
+                      className={`${cellBase} items-center justify-start border-r border-grid ${cellBg}`}
+                      style={{ width: W(`cf:${d.key}`) }}
+                    >
+                      <span className={`truncate ${parsed.ok ? '' : 'text-delayed'}`}>{text}</span>
+                    </div>
+                  )
+                })}
                 {/* 간트 셀 */}
                 <div
                   data-wbs-col="gantt"
@@ -2153,11 +2193,14 @@ export function WbsGanttSheet({
           members={members}
           onSelectItem={selectLinkedItem}
           unresolvedRefs={unresolvedDepends[selectedItem.id] ?? EMPTY_REFS}
+          predecessorGate={predecessorGate}
+          approvedItemIds={approvedItemIds}
         />
       )}
       </div>
       {fullscreen && <div data-rail-host="fullscreen" className="relative z-(--z-rail) flex min-h-0 shrink-0" />}
     </div>
+    </StageLabelsProvider>
   )
 }
 

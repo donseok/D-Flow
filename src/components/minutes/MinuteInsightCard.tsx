@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp, CircleAlert, ExternalLink, Sparkles } from 'luc
 import type { InsightKind, MinuteHighlight, MinuteInsight } from '@/lib/domain/types'
 import type { MinuteBlock } from '@/lib/minutes/blocks'
 import type { MinuteLinkedIssue } from '@/lib/domain/issueMinuteSource'
-import { ISSUE_STATUS_META } from '@/lib/domain/issues'
+import { IssueStatusPill } from '@/components/ui/StatusPill'
 import {
   INS_PRIORITY, insightCardState, topHighlightedBlocks, visibleInsights,
 } from '@/lib/minutes/annotations'
@@ -146,7 +146,6 @@ export function MinuteInsightCard({
                 <p className="eyebrow mb-1.5">{t('min.issue.linked')}</p>
                 <ul className="space-y-1.5">
                   {linkedIssues.map(issue => {
-                    const meta = ISSUE_STATUS_META[issue.status]
                     return (
                       <li key={issue.linkId} className="flex items-center gap-1.5">
                         <button
@@ -155,10 +154,10 @@ export function MinuteInsightCard({
                         >
                           <CircleAlert className="h-3.5 w-3.5 shrink-0 text-progress" aria-hidden />
                           <span className="shrink-0 font-semibold text-progress">
-                            {issue.piIssueCode ?? t('min.issue.open').replace('{n}', String(issue.issueNo))}
+                            {issue.code}
                           </span>
                           <span className="min-w-0 flex-1 truncate">{issue.title}</span>
-                          <span className={`chip shrink-0 ${meta.chip}`}>{t(meta.labelKey)}</span>
+                          <span className="shrink-0"><IssueStatusPill category={issue.status} /></span>
                           <span className="shrink-0 text-[11px] text-brand">{t('min.issue.jump')}</span>
                         </button>
                         <Link

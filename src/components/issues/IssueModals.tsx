@@ -1,38 +1,42 @@
 'use client'
+import { CustomFieldDraft } from '@/components/fields/CustomFieldDraft'
+import type { CustomValues } from '@/lib/domain/customFields'
+import { parseCustomValues, validateCustomValues, validateCustomInsertValues, type FieldRowError } from '@/lib/domain/customFieldValues'
+import { CustomFieldValuesEditor } from '@/components/fields/CustomFieldValuesEditor'
 // 이슈 모달 3종 — 상세(진행 편집 포함) / 등록·수정 폼 / 삭제 확인.
 // 공지 AnnouncementsView 의 3모달 구조를 파일 분리로 복제(스펙 §6).
 // 진행 필드(상태·담당자·조치메모)는 멤버 전체, 전체 편집·삭제 버튼은 canEdit(작성자/pmo)만 노출 —
 // 서버 액션이 같은 규칙을 재검증한다(UI 노출은 편의일 뿐 보안 경계가 아니다).
 import { useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { IssueAreaSelect } from './IssueAreaSelect'
+import { policyNeedsArea } from '@/lib/issues/idPolicy'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, ExternalLink, FileText, Pencil, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import {
-  createIssue, deleteIssue, fetchIssueMajorProcesses, updateIssue, updateIssueProgress,
+  createIssue, deleteIssue, fetchIssueEntryContext, fetchIssueMajorProcesses, updateIssue, updateIssueProgress,
   type IssueActionResult, type IssueInput,
 } from '@/app/actions/issues'
-import {
-  ISSUE_SEVERITIES, ISSUE_SEVERITY_META, ISSUE_STATUS_META, STATUS_TRANSITIONS,
-  isOverdue, type Issue, type IssueSeverity, type IssueStatus,
-} from '@/lib/domain/issues'
+import { isOverdue, type Issue, type IssueSeverity } from '@/lib/domain/issues'
+import { allowedTargets } from '@/lib/domain/issueWorkflow'
+import { IssueStatusPill } from '@/components/ui/StatusPill'
 import {
   ISSUE_MAJOR_NAME_MAX,
   ISSUE_MAJOR_NAME_NUMBERED_RE,
-  ISSUE_MEGA_AREAS,
   ISSUE_OWNER_DEPARTMENT_MAX,
   ISSUE_RELATED_SYSTEM_MAX,
   ISSUE_RELATED_SYSTEMS_MAX,
   ISSUE_SOURCE_DETAIL_MAX,
-  ISSUE_SOURCE_META,
-  ISSUE_SOURCE_TYPES,
   ISSUE_SUB_PROCESS_MAX,
   formatIssueMajorCode,
   type IssueMajorProcess,
-  type IssueMegaCode,
   type IssueSourceType,
 } from '@/lib/domain/issueAnalysis'
+import { areaLabel, type IssueAreaRef } from '@/lib/domain/issueAreas'
+import type { IssueEntryContext } from '@/lib/issues/context'
+import { activeVocab, vocabLabel, vocabView, RESERVED_SOURCE, DEFAULT_ISSUE_STATUSES, type IssueStatusDef, type SeverityDef, type SourceDef } from '@/lib/settings/vocab'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import { memberOptionView } from '@/lib/domain/memberPicker'
 import { validateIssueDateRange } from '@/lib/domain/issueMinuteSource'
@@ -53,20 +57,17 @@ function ErrorBox({ message }: { message: string }) {
   )
 }
 
-function StatusChip({ status }: { status: IssueStatus }) {
+
+function SeverityChip({ severity, severities }: { severity: IssueSeverity; severities: readonly SeverityDef[] }) {
   const { t } = useLocale()
-  const meta = ISSUE_STATUS_META[status]
-  return (
-    <span className={`chip ${meta.chip}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-      {t(meta.labelKey)}
-    </span>
-  )
+  const v = vocabView('issues.severities', severities, severity, t)
+  return <span className={`chip ${v.chip}`}>{v.label}</span>
 }
 
-function SeverityChip({ severity }: { severity: IssueSeverity }) {
-  const { t } = useLocale()
-  return <span className={`chip ${ISSUE_SEVERITY_META[severity].chip}`}>{t(ISSUE_SEVERITY_META[severity].labelKey)}</span>
+/** 새 이슈의 기본 심각도 — 활성 심각도의 가운데(rank 순 — 기본 어휘면 '보통'). 없으면 빈 값(서버가 거부한다) */
+export function defaultSeverityOf(severities: readonly SeverityDef[]): string {
+  const act = activeVocab(severities)
+  return act[Math.floor((act.length - 1) / 2)]?.code ?? ''
 }
 
 /** 순서 무시 동등 비교 — 피커가 중복 없는 배열을 보장하므로 정렬 후 비교로 충분하다. */
@@ -80,7 +81,7 @@ function sameIds(a: string[], b: string[]): boolean {
 export type IssueFormInput = IssueInput
 
 /** 신규 등록 폼의 선택적 초깃값. 지정하지 않은 값은 일반 신규 등록 기본값을 쓴다. */
-export type IssueFormDraft = Partial<IssueFormInput>
+export type IssueFormDraft = Omit<Partial<IssueFormInput>, 'analysis'> & { analysis?: Partial<NonNullable<IssueFormInput['analysis']>> | null }
 
 /** 회의록 등 이슈가 파생된 원문을 폼에서 읽기 전용으로 확인하기 위한 표시 모델. */
 export interface IssueSourcePreview {
@@ -107,7 +108,7 @@ interface IssueFormSeed {
   assigneeMemberIds: string[]
   startDate: string
   dueDate: string
-  megaCode: IssueMegaCode | ''
+  areaId: string | ''
   majorName: string
   subProcess: string
   ownerDepartment: string
@@ -134,7 +135,7 @@ function issueFormSeed(
       assigneeMemberIds: [...initial.assigneeMemberIds],
       startDate: initial.startDate ?? '',
       dueDate: initial.dueDate ?? '',
-      megaCode: initial.megaCode ?? '',
+      areaId: initial.areaId ?? '',
       majorName: initial.majorName ?? '',
       subProcess: initial.subProcess,
       ownerDepartment: initial.ownerDepartment,
@@ -155,15 +156,15 @@ function issueFormSeed(
     assigneeMemberIds: [...(draft?.assigneeMemberIds ?? [])],
     startDate: draft?.startDate ?? '',
     dueDate: draft?.dueDate ?? '',
-    megaCode: draft?.megaCode ?? '',
-    majorName: draft?.majorName ?? '',
-    subProcess: draft?.subProcess ?? '',
-    ownerDepartment: draft?.ownerDepartment ?? '',
-    relatedSystems: [...(draft?.relatedSystems ?? [])],
+    areaId: draft?.areaId ?? '',
+    majorName: draft?.analysis?.majorName ?? '',
+    subProcess: draft?.analysis?.subProcess ?? '',
+    ownerDepartment: draft?.analysis?.ownerDepartment ?? '',
+    relatedSystems: [...(draft?.analysis?.relatedSystems ?? [])],
     sourceType: minuteSource
       ? 'minutes'
-      : draft?.sourceType === 'minutes' ? 'other' : (draft?.sourceType ?? 'other'),
-    sourceDetail: draft?.sourceDetail?.trim() ? draft.sourceDetail : sourcePreviewDetail(sourcePreview),
+      : draft?.analysis?.sourceType === 'minutes' ? 'other' : (draft?.analysis?.sourceType ?? 'other'),
+    sourceDetail: draft?.analysis?.sourceDetail?.trim() ? draft.analysis!.sourceDetail : sourcePreviewDetail(sourcePreview),
   }
 }
 
@@ -172,16 +173,21 @@ export function normalizeRelatedSystems(raw: string): string[] {
   return [...new Set(raw.split(/[,，]/).map(value => value.trim()).filter(Boolean))]
 }
 
-function megaAreaName(code: IssueMegaCode, locale: 'ko' | 'en' | undefined): string {
-  const area = ISSUE_MEGA_AREAS.find(candidate => candidate.code === code)
-  if (!area) return code
-  return `${area.code} · ${locale === 'en' ? area.nameEn : area.nameKo}`
+function megaAreaName(id: string, areas: readonly IssueAreaRef[]): string {
+  return areaLabel(areas.find(area => area.id === id), id)
 }
 
 export function IssueDetailModal({
-  issue, members, memberName, canEdit, canWrite, currentUserId, isProjectAdmin, today, timeZone, onClose, onEdit, onDelete,
+  issue, members, memberName, canEdit, canWrite, currentUserId, isProjectAdmin, today, timeZone, areas = [], onClose, onEdit, onDelete,
+  severities, sources, statuses,
 }: {
   issue: Issue | null
+  /** 이 프로젝트의 심각도·출처(설정 어휘) */
+  severities: readonly SeverityDef[]
+  sources: readonly SourceDef[]
+  /** 이 프로젝트의 표시 상태(SP5b — 설정 workflow.issue_statuses). 없으면 제품 기본 4정의 */
+  statuses?: readonly IssueStatusDef[]
+  areas?: readonly IssueAreaRef[]
   members: ProjectMember[]
   memberName: (id: string | null) => string | null
   /** 이슈 전체 편집·삭제 게이트(작성자 또는 프로젝트 관리자 이상). 이력 등록 권한과는 다른 축이다. */
@@ -198,11 +204,11 @@ export function IssueDetailModal({
   onEdit: () => void
   onDelete: () => void
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const minutesBase = useMinuteLinks().list   // 원문 링크의 기준 경로 — 슬러그 워크스페이스(D38 ①), 범위가 없으면 영구 링크 형식
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [status, setStatus] = useState<IssueStatus>('open')
+  const [status, setStatus] = useState<string>('open')
   const [assignees, setAssignees] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -212,7 +218,7 @@ export function IssueDetailModal({
   // 에러 초기화는 아래 이펙트(대상 이슈 '전환' 시점)만 담당한다(리뷰 F2).
   useEffect(() => {
     if (!issue) return
-    setStatus(issue.status)
+    setStatus(issue.statusCode ?? issue.status)
     setAssignees(issue.assigneeMemberIds)
   }, [issue])
   const issueId = issue?.id
@@ -227,16 +233,21 @@ export function IssueDetailModal({
         ? `${issue.startDate} → —`
         : issue.dueDate ?? t('issue.noDue')
     : ''
-  const statusOptions: IssueStatus[] = issue ? [issue.status, ...STATUS_TRANSITIONS[issue.status]] : []
+  // 선택지 = [현재, ...허용 전이](SP5b — 범주 전이표 + 같은 범주 자유 이동, 활성만). 판정은 DB 트리거가 최종으로 한다
+  const statusDefs = statuses ?? DEFAULT_ISSUE_STATUSES
+  const currentCode = issue ? (issue.statusCode ?? issue.status) : null
+  const statusOptions: string[] = issue && currentCode
+    ? [currentCode, ...allowedTargets(statusDefs, currentCode, issue.status).map(d => d.code)]
+    : []
   const assigneesDirty = issue !== null && !sameIds(assignees, issue.assigneeMemberIds)
-  const dirty = issue !== null && (status !== issue.status || assigneesDirty)
-  const analysisMegaLabel = issue?.megaCode ? megaAreaName(issue.megaCode, locale) : '—'
+  const dirty = issue !== null && (status !== currentCode || assigneesDirty)
+  const analysisMegaLabel = issue?.areaId ? megaAreaName(issue.areaId, areas) : '—'
   const analysisMajorLabel = issue?.majorName
-    ? issue.megaCode && issue.majorSeq
-      ? `${formatIssueMajorCode(issue.megaCode, issue.majorSeq)} · ${issue.majorName}`
+    ? issue.areaId && issue.majorSeq
+      ? `${formatIssueMajorCode(areas.find(area => area.id === issue.areaId)?.code ?? '?', issue.majorSeq)} · ${issue.majorName}`
       : issue.majorName
     : '—'
-  const analysisSourceLabel = issue?.sourceType ? t(ISSUE_SOURCE_META[issue.sourceType].labelKey) : '—'
+  const analysisSourceLabel = issue?.sourceType ? vocabLabel('issues.sources', sources, issue.sourceType, t) : '—'
 
   // 표시용 담당자 칩 — 가나다순, 회의 상세 참석자 칩과 같은 표기(이름 · 팀코드).
   // 여러 명이 쉼표 나열로 좁은 그리드 칸에 들어가면 화면이 빡빡해져 전체 폭 칩 줄로 편다.
@@ -257,7 +268,7 @@ export function IssueDetailModal({
   function saveProgress() {
     if (!issue || !dirty) return
     const patch = {
-      ...(status !== issue.status ? { status, expectedStatus: issue.status } : {}),
+      ...(currentCode && status !== currentCode ? { status, expectedStatus: currentCode } : {}),
       ...(assigneesDirty ? { assigneeMemberIds: assignees } : {}),
     }
     startTransition(async () => {
@@ -277,11 +288,7 @@ export function IssueDetailModal({
     <Modal
       open={issue !== null}
       onClose={onClose}
-      eyebrow={issue
-        ? issue.piIssueCode
-          ? `${issue.piIssueCode} · #${issue.issueNo}`
-          : `#${issue.issueNo}`
-        : undefined}
+      eyebrow={issue?.code}
       title={issue?.title ?? ''}
       size="lg"
       footer={
@@ -307,8 +314,8 @@ export function IssueDetailModal({
       {issue && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusChip status={issue.status} />
-            <SeverityChip severity={issue.severity} />
+            <IssueStatusPill category={issue.status} code={issue.statusCode} defs={statusDefs} />
+            <SeverityChip severity={issue.severity} severities={severities} />
             {overdue && <span className="chip bg-delayed-weak text-delayed">{t('issue.overdueBadge')}</span>}
           </div>
 
@@ -358,7 +365,7 @@ export function IssueDetailModal({
             </div>
             <dl className="mt-3 grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-[11px] font-semibold text-ink-subtle">{t('issue.analysis.mega')}</dt>
+                <dt className="text-[11px] font-semibold text-ink-subtle">{t('issue.analysis.area')}</dt>
                 <dd className="mt-0.5 text-ink">{analysisMegaLabel}</dd>
               </div>
               <div>
@@ -395,6 +402,8 @@ export function IssueDetailModal({
               </div>
             </dl>
           </section>
+
+          <CustomFieldValuesEditor rowId={issue.id} values={issue.custom} canEdit={canWrite} />
 
           {issue.minuteSources.length > 0 && (
             <section>
@@ -444,6 +453,7 @@ export function IssueDetailModal({
             isProjectAdmin={isProjectAdmin}
             members={members}
             timeZone={timeZone}
+            statuses={statusDefs}
           />
 
           <div className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">
@@ -451,9 +461,9 @@ export function IssueDetailModal({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.detail.status')}</span>
-                <select className="app-input" value={status} onChange={e => setStatus(e.target.value as IssueStatus)}>
+                <select className="app-input" value={status} onChange={e => setStatus(e.target.value)}>
                   {statusOptions.map(s => (
-                    <option key={s} value={s}>{t(ISSUE_STATUS_META[s].labelKey)}</option>
+                    <option key={s} value={s}>{vocabLabel('workflow.issue_statuses', statusDefs, s, t)}</option>
                   ))}
                 </select>
               </label>
@@ -478,8 +488,12 @@ function AiRecommendedHint({ show, text }: { show: boolean; text: string }) {
 }
 
 export function IssueFormModal({
-  open, onClose, projectId, workspaceId, initial, members, draft, sourcePreview, onCreate, onCreated,
+  open, onClose, projectId, workspaceId, initial, members, draft, sourcePreview, onCreate, onCreated, entryContext, canManage = false, supportsCustomFields = false,
 }: {
+  entryContext?: IssueEntryContext
+  canManage?: boolean
+  /** Custom create handlers opt in only when their atomic server write accepts custom values. */
+  supportsCustomFields?: boolean
   open: boolean
   onClose: () => void
   projectId: string
@@ -497,6 +511,13 @@ export function IssueFormModal({
   onCreated?: (id: string, result: IssueActionResult) => void
 }) {
   const { t, locale } = useLocale()
+  const [loadedContext, setLoadedContext] = useState<IssueEntryContext | null>(null)
+  const context = entryContext ?? loadedContext
+  const areas = context?.areas ?? []
+  const [analysisEnabled, setAnalysisEnabled] = useState(false)
+  const includeAnalysis = !!context && context.rules.analysis !== 'off' && analysisEnabled
+  const areaRequired = !!context && (policyNeedsArea(context.policy) || includeAnalysis || (!initial && context.rules.analysis === 'required'))
+  const showArea = !!context && (areaRequired || !!initial?.areaId || context.rules.analysis !== 'off')
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   // pending 렌더 전에 발생하는 빠른 연속 클릭도 막는다.
@@ -508,13 +529,51 @@ export function IssueFormModal({
   // createIssue 가 또 돌아 **같은 이슈가 두 건 생긴다.** 한 번 만들어진 id 를 여기 걸어 두고,
   // 이후의 저장은 생성을 건너뛰고 남은 첨부만 올린다.
   const createdIdRef = useRef<string | null>(null)
+  const customDefs = context?.customFields ?? []
+  const customEnabled = !onCreate || !!initial || supportsCustomFields
+  const customCanAdmin = context?.canManageCustom ?? canManage
+  const customWriteNeeded = customEnabled && (!!initial || createdIdRef.current === null)
+  const [customBase,setCustomBase] = useState<CustomValues>({})
+  const [customDraft,setCustomDraft] = useState<CustomValues>({})
+  const [customReady,setCustomReady] = useState(false)
+  const [customUnreadable,setCustomUnreadable] = useState(false)
+  const [customStale,setCustomStale] = useState(false)
+  const [customErrors,setCustomErrors] = useState<Record<string,FieldRowError>>({})
+  const customSeen = useRef<string | null>(null)
+  const customRow = useRef<string | null>(null)
+  const customSignature = JSON.stringify(initial?.custom)
+  const customDirty = JSON.stringify(customBase) !== JSON.stringify(customDraft)
+  const adoptCustom = () => {
+    const parsed = initial ? parseCustomValues(initial.custom === undefined && !customDefs.length ? {} : initial.custom) : {ok:true as const,value:{}}
+    setCustomUnreadable(!parsed.ok)
+    if (parsed.ok) {
+      const seed = initial ? parsed.value : Object.fromEntries(customDefs.filter(d => d.required && d.active && (d.editable_by !== 'admin' || customCanAdmin) && d.default !== undefined)
+        .map(d => [d.key,Array.isArray(d.default) ? [...d.default] : d.default])) as CustomValues
+      setCustomBase(initial ? parsed.value : {});setCustomDraft(seed);setCustomErrors({});setCustomStale(false)
+    }
+    setCustomReady(true)
+  }
+  useEffect(() => {
+    if (!open) {customRow.current=null;customSeen.current=null;setCustomReady(false);return}
+    if (!context || !customEnabled) return
+    const row=initial?.id ?? 'new'
+    if (customRow.current !== row) {customRow.current=row;customSeen.current=customSignature ?? '';adoptCustom();return}
+    if (customSeen.current === (customSignature ?? '')) return
+    customSeen.current=customSignature ?? ''
+    if (customDirty || pending || customStale) setCustomStale(true)
+    else adoptCustom()
+  // A changed server snapshot cannot erase a dirty draft; definitions are validated again on submit.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[open,context,customEnabled,initial?.id,customSignature,customDirty,pending,customStale])
+
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [severity, setSeverity] = useState<IssueSeverity>('medium')
   const [assignees, setAssignees] = useState<string[]>([])
   const [startDate, setStartDate] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [megaCode, setMegaCode] = useState<IssueMegaCode | ''>('')
+  const [areaId, setAreaId] = useState<string | ''>('')
+  const needsAreaSetup = areaRequired && !(initial?.areaId && areaId === initial.areaId) && !areas.some(a => a.active)
   const [majorName, setMajorName] = useState('')
   const [majorOptions, setMajorOptions] = useState<IssueMajorProcess[]>([])
   const [subProcess, setSubProcess] = useState('')
@@ -527,23 +586,31 @@ export function IssueFormModal({
   const attachScope = workspaceId ? { workspaceId, projectId } : null
   const minuteSourceLocked = (!isEdit && sourcePreview !== undefined)
     || (isEdit && (initial?.sourceType === 'minutes' || Boolean(initial?.minuteSources.length)))
-  const megaLocked = isEdit && Boolean(initial?.piIssueCode)
+  const megaLocked = isEdit && Boolean(initial?.codeAreaId)
   // 'AI 추천 일치' 판정 — 세 분류 필드가 공통 전제(신규 등록 + 추천 플래그 + Mega 일치)를
   // 각자 복제하다 한 곳만 고쳐져 조건이 어긋나는 것을 막기 위해 한 함수에 모은다.
-  // Mega 자체는 '필드값 = megaCode' 인 경우로 같은 판정을 지난다(코드에 공백이 없어 trim 은 무해).
+  // Mega 자체는 '필드값 = areaId' 인 경우로 같은 판정을 지난다(코드에 공백이 없어 trim 은 무해).
   const matchesAiDraft = (draftValue: string | null | undefined, current: string): boolean => Boolean(
     !isEdit
     && sourcePreview?.classificationRecommended
-    && draft?.megaCode
-    && megaCode === draft.megaCode
+    && draft?.areaId
+    && areaId === draft.areaId
     && draftValue?.trim()
     && current.trim() === draftValue.trim(),
   )
-  const sourceOptions = ISSUE_SOURCE_TYPES.filter(type =>
-    type !== 'minutes' || minuteSourceLocked || initial?.sourceType === 'minutes')
+  // 출처·심각도 선택지 = 설정의 활성 항목(B4). 회의록 출처는 원문 연결 경로에서만. 수정 중인 값이 비활성이면 그 값을 보존해 보인다(저장 시 서버가 거부)
+  const sourceList = context?.vocab.sources ?? []
+  const sourceOptions = activeVocab(sourceList).map(e => e.code).filter(type =>
+    type !== RESERVED_SOURCE || minuteSourceLocked || initial?.sourceType === RESERVED_SOURCE)
+  if (sourceType && !sourceOptions.includes(sourceType)) sourceOptions.push(sourceType)
+  const severityList = context?.vocab.severities ?? []
+  const severityOptions = activeVocab(severityList).map(e => e.code)
+  if (severity && !severityOptions.includes(severity)) severityOptions.push(severity)
   // 호출부가 draft 객체/배열을 인라인으로 만들어도 매 렌더 입력을 덮어쓰지 않고,
   // 실제 초깃값 내용이 바뀌거나 모달이 다시 열릴 때만 폼을 재베이스라인한다.
   const seedKey = JSON.stringify(issueFormSeed(initial, draft, sourcePreview))
+  const coreSeedSeen = useRef<string | null>(null)
+  const coreRowSeen = useRef<string | null>(null)
 
   function closeIfIdle() {
     // 원자 생성 요청이 끝나기 전에 폼이 닫혔다가 다른 블록으로 다시 열리면, 이전
@@ -554,6 +621,7 @@ export function IssueFormModal({
 
   useEffect(() => {
     if (!open) {
+      coreSeedSeen.current=null;coreRowSeen.current=null
       submittingRef.current = false
       // 첨부 state 는 여기(!open)에서만 비운다. 아래 open 분기는 seedKey 가 바뀔 때마다,
       // 즉 **모달이 열려 있는 중에도** 다시 도는데 거기서 비우면 사용자가 고른 파일이
@@ -562,6 +630,12 @@ export function IssueFormModal({
       createdIdRef.current = null
       return
     }
+    if (coreSeedSeen.current === seedKey) return
+    coreSeedSeen.current=seedKey
+    const sameRow=coreRowSeen.current === initial?.id
+    coreRowSeen.current=initial?.id ?? null
+    // A conflict refresh may change core props too. Keep the user's core draft with the custom draft.
+    if (initial?.id && sameRow && (customDirty || customStale || pending)) return
     const seed = JSON.parse(seedKey) as IssueFormSeed
     setTitle(seed.title)
     setBody(seed.body)
@@ -569,7 +643,7 @@ export function IssueFormModal({
     setAssignees(seed.assigneeMemberIds)
     setStartDate(seed.startDate)
     setDueDate(seed.dueDate)
-    setMegaCode(seed.megaCode)
+    setAreaId(seed.areaId)
     setMajorName(seed.majorName)
     setSubProcess(seed.subProcess)
     setOwnerDepartment(seed.ownerDepartment)
@@ -578,12 +652,12 @@ export function IssueFormModal({
     setSourceDetail(seed.sourceDetail)
     setError(null)
     submittingRef.current = false
-  }, [open, seedKey])
+  }, [open, seedKey, initial?.id, customDirty, customStale, pending])
 
   // Major 자동완성 후보 — 같은 이름 재사용이 기존 체번(02.01…)을 유지하는 핵심이라
   // 열 때마다 프로젝트의 정본 목록을 불러온다. 실패는 입력을 막지 않되 로그로 남긴다.
   useEffect(() => {
-    if (!open || !projectId) {
+    if (!open || !projectId || !includeAnalysis) {
       setMajorOptions([])
       return
     }
@@ -604,10 +678,34 @@ export function IssueFormModal({
         setMajorOptions([])
       })
     return () => { cancelled = true }
-  }, [open, projectId])
+  }, [open, projectId, includeAnalysis])
+
+  useEffect(() => {
+    if (!open || entryContext) return
+    let cancelled = false
+    setLoadedContext(null)
+    fetchIssueEntryContext(projectId).then(result => {
+      if (cancelled) return
+      if (result.ok) setLoadedContext(result.value)
+      else setError(result.error)
+    }).catch(() => { if (!cancelled) setError('이슈 설정을 읽지 못했습니다. 다시 시도하세요.') })
+    return () => { cancelled = true }
+  }, [open, projectId, entryContext])
+  // 새 이슈의 기본 심각도·출처가 이 프로젝트에서 비활성이면(기본 'medium'·'other') 문맥이 도착한 때 한 번 활성 값으로 맞춘다
+  useEffect(() => {
+    if (!open || !context || isEdit) return
+    const sev = activeVocab(context.vocab.severities)
+    setSeverity(cur => (sev.some(e => e.code === cur) ? cur : defaultSeverityOf(context.vocab.severities)))
+    const src = activeVocab(context.vocab.sources).filter(e => e.code !== RESERVED_SOURCE)
+    setSourceType(cur => (cur === '' || cur === RESERVED_SOURCE || src.some(e => e.code === cur) ? cur : (src[src.length - 1]?.code ?? '')))
+  }, [open, context, isEdit])
+  useEffect(() => {
+    if (!open || !context) return
+    setAnalysisEnabled(Boolean(initial?.majorId || draft?.analysis) || (!isEdit && context.rules.analysis === 'required'))
+  }, [open, context, initial?.id, initial?.majorId, isEdit, draft?.analysis])
 
   function submit() {
-    if (submittingRef.current) return
+    if (submittingRef.current || !context) return
     if (!title.trim()) {
       setError(t('issue.err.titleRequired'))
       return
@@ -616,12 +714,12 @@ export function IssueFormModal({
       setError(t('issue.err.dateRange'))
       return
     }
-    if (!megaCode) {
-      setError(t('issue.err.megaRequired'))
+    if (areaRequired && !areaId) {
+      setError(t('issue.err.areaRequired'))
       return
     }
     const normalizedMajorName = majorName.trim()
-    if (!normalizedMajorName) {
+    if (includeAnalysis && !normalizedMajorName) {
       setError(t('issue.err.majorRequired'))
       return
     }
@@ -634,7 +732,7 @@ export function IssueFormModal({
       return
     }
     const normalizedSubProcess = subProcess.trim()
-    if (!normalizedSubProcess) {
+    if (includeAnalysis && !normalizedSubProcess) {
       setError(t('issue.err.subProcessRequired'))
       return
     }
@@ -643,7 +741,7 @@ export function IssueFormModal({
       return
     }
     const normalizedOwnerDepartment = ownerDepartment.trim()
-    if (!normalizedOwnerDepartment) {
+    if (includeAnalysis && !normalizedOwnerDepartment) {
       setError(t('issue.err.ownerDepartmentRequired'))
       return
     }
@@ -661,7 +759,7 @@ export function IssueFormModal({
       return
     }
     const normalizedSourceType = minuteSourceLocked ? 'minutes' : sourceType
-    if (!normalizedSourceType) {
+    if (includeAnalysis && !normalizedSourceType) {
       setError(t('issue.err.sourceTypeRequired'))
       return
     }
@@ -674,20 +772,25 @@ export function IssueFormModal({
       setError(t('issue.err.sourceDetailTooLong').replace('{n}', String(ISSUE_SOURCE_DETAIL_MAX)))
       return
     }
+    if (customWriteNeeded && (!customReady || customUnreadable || customStale)) return
+    const custom = customWriteNeeded ? (isEdit ? validateCustomValues(customDefs,customDraft,customBase,customCanAdmin)
+      : validateCustomInsertValues(customDefs,customDraft,customCanAdmin)) : null
+    if (custom && !custom.ok) {setCustomErrors(custom.errors);setError(locale === 'ko' ? '추가 정보 입력값을 확인하세요.' : 'Check custom field values.');return}
     const input: IssueFormInput = {
+      ...(custom?.ok && customDefs.length ? {custom:custom.value,...(isEdit ? {expectedCustom:customBase} : {})} : {}),
       title: title.trim(),
       body,
       severity,
       assigneeMemberIds: assignees,
       startDate: startDate || null,
       dueDate: dueDate || null,
-      megaCode,
-      majorName: normalizedMajorName,
+      areaId: areaId || null,
+      analysis: includeAnalysis ? { majorName: normalizedMajorName,
       subProcess: normalizedSubProcess,
       ownerDepartment: normalizedOwnerDepartment,
       relatedSystems,
-      sourceType: normalizedSourceType,
-      sourceDetail: normalizedSourceDetail,
+      sourceType: normalizedSourceType as IssueSourceType,
+      sourceDetail: normalizedSourceDetail } : null,
     }
     submittingRef.current = true
     startTransition(async () => {
@@ -710,13 +813,14 @@ export function IssueFormModal({
         }
       }
       if (res.ok) {
-        if (!isEdit && res.id) {
-          createdIdRef.current = res.id
+        const createdId = res.id ?? res.issueId
+        if (!isEdit && createdId) {
+          createdIdRef.current = createdId
           // 생성은 이미 확정됐다. 알림 훅의 UI 오류가 재시도(중복 생성)로 이어지지 않게 분리한다.
           // 재시도 경로에서는 이미 한 번 불렀으므로 다시 부르지 않는다.
           if (!alreadyCreated) {
             try {
-              onCreated?.(res.id, res)
+              onCreated?.(createdId, res)
             } catch (cause) {
               console.error('[IssueFormModal] onCreated callback failed:', cause)
             }
@@ -726,7 +830,7 @@ export function IssueFormModal({
           // 닫기 버튼이 막히는데, 업로드 중 창이 닫히지 않는 편이 낫다.
           if (pendingFiles.length > 0) {
             const up = attachScope
-              ? await uploadIssueAttachments(attachScope, res.id, pendingFiles)
+              ? await uploadIssueAttachments(attachScope, createdId, pendingFiles)
               : { ok: false as const, doneCount: 0, fileName: pendingFiles[0]!.name, reason: 'upload' as const, error: t('issue.err.attachNoScope') }
             if (!up.ok) {
               // 이슈는 이미 만들어졌다. 되돌리면 사용자가 입력을 통째로 잃으므로 되돌리지 않고,
@@ -752,6 +856,7 @@ export function IssueFormModal({
       } else {
         submittingRef.current = false
         setError(res.error ?? t('issue.err.saveFailed'))
+        if (res.conflict) {setCustomStale(true);router.refresh()}
       }
     })
   }
@@ -765,7 +870,7 @@ export function IssueFormModal({
       footer={
         <div className="flex w-full items-center justify-end gap-2">
           <button onClick={closeIfIdle} disabled={pending} className="btn btn-ghost text-xs">{t('issue.form.cancel')}</button>
-          <button onClick={submit} disabled={pending || submittingRef.current} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
+          <button onClick={submit} disabled={pending || submittingRef.current || !context || needsAreaSetup || (customWriteNeeded && (!customReady || customUnreadable || customStale))} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
         </div>
       }
     >
@@ -807,37 +912,15 @@ export function IssueFormModal({
           <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.form.body')}</span>
           <textarea className="app-textarea min-h-[220px] resize-y" value={body} onChange={e => setBody(e.target.value)} placeholder={t('issue.form.bodyPh')} maxLength={20_000} />
         </label>
-        <section className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">
+        {context && (showArea || context.rules.analysis !== 'off') && <section className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">
           <div>
-            <h3 className="text-xs font-bold text-ink">{t('issue.analysis.fieldsTitle')}</h3>
-            <p className="mt-0.5 text-[11px] leading-5 text-ink-subtle">{t('issue.analysis.fieldsDesc')}</p>
+            <h3 className="text-xs font-bold text-ink">{t(context.rules.analysis === 'off' ? 'issue.analysis.area' : 'issue.analysis.fieldsTitle')}</h3>
+            {context.rules.analysis !== 'off' && <p className="mt-0.5 text-[11px] leading-5 text-ink-subtle">{t('issue.analysis.fieldsDesc')}</p>}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.analysis.mega')}</span>
-              <select
-                className="app-input"
-                value={megaCode}
-                disabled={megaLocked}
-                required
-                aria-describedby={megaLocked ? 'issue-mega-locked' : undefined}
-                onChange={e => setMegaCode(e.target.value as IssueMegaCode | '')}
-              >
-                <option value="">{t('issue.analysis.megaPlaceholder')}</option>
-                {ISSUE_MEGA_AREAS.map(area => (
-                  <option key={area.code} value={area.code}>{megaAreaName(area.code, locale)}</option>
-                ))}
-              </select>
-              {megaLocked && (
-                <p id="issue-mega-locked" className="mt-1 text-[11px] leading-4 text-ink-subtle">
-                  {t('issue.analysis.megaLocked').replace('{id}', initial?.piIssueCode ?? '')}
-                </p>
-              )}
-              <AiRecommendedHint
-                show={matchesAiDraft(draft?.megaCode, megaCode)}
-                text={t('issue.analysis.megaRecommended').replace('{code}', draft?.megaCode ?? '')}
-              />
-            </label>
+          {showArea && <IssueAreaSelect areas={areas} value={areaId} onChange={setAreaId} required={areaRequired} disabled={megaLocked} canManage={canManage} projectId={projectId} />}
+          <AiRecommendedHint show={matchesAiDraft(draft?.areaId, areaId)} text={t('issue.analysis.areaRecommended').replace('{code}', areas.find(a => a.id === draft?.areaId)?.code ?? '')} />
+          {(context?.rules.analysis === 'optional' || (context?.rules.analysis === 'required' && isEdit && !initial?.majorId)) && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={analysisEnabled} onChange={e => setAnalysisEnabled(e.target.checked)} />{t('issue.analysis.enableFields')}</label>}
+          {includeAnalysis && <fieldset className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.analysis.majorProcess')}</span>
               <input
@@ -854,10 +937,10 @@ export function IssueFormModal({
                   타 Mega 후보를 골라 엉뚱한 영역에 신규 체번되는 것을 막기 위해 후보는
                   Mega 선택 후에만 노출한다. */}
               <datalist id="issue-major-process-options">
-                {(megaCode ? majorOptions.filter(major => major.megaCode === megaCode) : [])
+                {(areaId ? majorOptions.filter(major => major.areaId === areaId) : [])
                   .map(major => (
                     <option key={major.id} value={major.name}>
-                      {`${formatIssueMajorCode(major.megaCode, major.majorSeq)} · ${major.name}`}
+                      {`${formatIssueMajorCode(areas.find(area => area.id === major.areaId)?.code ?? '?', major.majorSeq)} · ${major.name}`}
                     </option>
                   ))}
               </datalist>
@@ -865,7 +948,7 @@ export function IssueFormModal({
                 {t('issue.analysis.majorProcessHint')}
               </span>
               <AiRecommendedHint
-                show={matchesAiDraft(draft?.majorName, majorName)}
+                show={matchesAiDraft(draft?.analysis?.majorName, majorName)}
                 text={t('issue.analysis.majorProcessRecommended')}
               />
             </label>
@@ -880,7 +963,7 @@ export function IssueFormModal({
                 placeholder={t('issue.analysis.subProcessPh')}
               />
               <AiRecommendedHint
-                show={matchesAiDraft(draft?.subProcess, subProcess)}
+                show={matchesAiDraft(draft?.analysis?.subProcess, subProcess)}
                 text={t('issue.analysis.subProcessRecommended')}
               />
             </label>
@@ -919,7 +1002,7 @@ export function IssueFormModal({
               >
                 <option value="">{t('issue.analysis.sourceTypePlaceholder')}</option>
                 {sourceOptions.map(type => (
-                  <option key={type} value={type}>{t(ISSUE_SOURCE_META[type].labelKey)}</option>
+                  <option key={type} value={type}>{vocabLabel('issues.sources', sourceList, type, t)}</option>
                 ))}
               </select>
               {minuteSourceLocked && (
@@ -940,14 +1023,14 @@ export function IssueFormModal({
                 placeholder={t('issue.analysis.sourceDetailPh')}
               />
             </label>
-          </div>
-        </section>
+          </fieldset>}
+        </section>}
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('issue.form.severity')}</span>
             <select className="app-input" value={severity} onChange={e => setSeverity(e.target.value as IssueSeverity)}>
-              {ISSUE_SEVERITIES.map(s => (
-                <option key={s} value={s}>{t(ISSUE_SEVERITY_META[s].labelKey)}</option>
+              {severityOptions.map(s => (
+                <option key={s} value={s}>{vocabLabel('issues.severities', severityList, s, t)}</option>
               ))}
             </select>
           </label>
@@ -978,6 +1061,13 @@ export function IssueFormModal({
           <IssueAssigneePicker members={members} selected={assignees} onChange={setAssignees} />
         </div>
         <p className="text-[11px] text-ink-subtle">{t('issue.form.dueHint')}</p>
+        {customEnabled && customUnreadable && <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보를 읽을 수 없습니다. 행을 새로 조회하세요.' : 'Custom values could not be read. Reload the row.'}</p>}
+        {customEnabled && customReady && !customUnreadable && <CustomFieldDraft defs={customDefs} values={customDraft} base={customBase} canAdmin={customCanAdmin} creating={!isEdit} disabled={pending || createdIdRef.current !== null} locale={locale} errors={customErrors}
+          onChange={(key,value)=>{setCustomDraft(prev=>{const next={...prev};if(value===undefined)delete next[key];else next[key]=value;return next});setCustomErrors({})}} />}
+        {customEnabled && customStale && <div className="space-y-2">
+          <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보가 변경되었습니다. 작성 중인 값은 유지됩니다. 최신 값을 불러온 뒤 저장하세요.' : 'Custom values changed. Your draft is preserved. Load the latest values before saving.'}</p>
+          <button type="button" disabled={pending} className="btn btn-ghost text-xs" onClick={adoptCustom}>{locale === 'ko' ? '추가 정보 초안 취소' : 'Discard custom draft'}</button>
+        </div>}
         {/* 수정 폼은 이슈가 이미 있으니 고르는 즉시 올린다. 등록 폼은 id 가 없어 담아만 두고,
             저장이 성공한 뒤 submit() 이 발급된 id 로 올린다. */}
         <IssueAttachments
@@ -1031,7 +1121,7 @@ export function DeleteIssueModal({ issue, onClose }: { issue: Issue | null; onCl
         <p className="text-sm text-ink">{t('issue.delete.confirmPrefix')}</p>
         {issue && (
           <p className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm font-medium text-ink">
-            {issue.piIssueCode ? `${issue.piIssueCode} · #${issue.issueNo}` : `#${issue.issueNo}`} {issue.title}
+            {issue.code} {issue.title}
           </p>
         )}
         {error && <ErrorBox message={error} />}

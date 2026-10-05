@@ -54,11 +54,12 @@ const MEETING = {
   createdAt: '2026-07-22T00:00:00Z', updatedAt: '2026-07-22T00:00:00Z', attendeeIds: [],
 }
 
+/** getMeetingDetail 의 결과형(SP5 B2 — D39) */
 function detail(attendees: { id: string; name: string; email: string | null }[], createdBy = 'u1') {
-  return {
+  return { ok: true, detail: {
     meeting: { ...MEETING, createdBy },
     attendees: attendees.map(a => ({ ...a, teamCode: null })),
-  }
+  } }
 }
 
 describe('notifyMeetingSaved 권한 게이트', () => {
@@ -88,9 +89,16 @@ describe('notifyMeetingSaved 권한 게이트', () => {
   })
 
   it('게이트 통과 후 상세가 사라졌으면 거부한다', async () => {
-    vi.mocked(getMeetingDetail).mockResolvedValue(null as never)
+    vi.mocked(getMeetingDetail).mockResolvedValue({ ok: true, detail: null })
     const res = await notifyMeetingSaved('m1', 'created')
     expect(res).toMatchObject({ ok: false, error: '회의를 찾을 수 없습니다.' })
+    expect(getTransport).not.toHaveBeenCalled()
+  })
+
+  it('상세 조회 실패는 \'없음\'이 아니라 그 사유 — 보내지 않는다(SP5 B2 — D39)', async () => {
+    vi.mocked(getMeetingDetail).mockResolvedValue({ ok: false, error: '회의 정보를 불러오지 못했습니다. 잠시 후 다시 시도하세요.' })
+    const res = await notifyMeetingSaved('m1', 'created')
+    expect(res).toMatchObject({ ok: false, error: expect.stringContaining('불러오지 못했습니다') })
     expect(getTransport).not.toHaveBeenCalled()
   })
 

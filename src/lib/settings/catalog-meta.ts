@@ -7,7 +7,27 @@ export interface CatalogMeta { consumers: readonly string[]; tests: readonly str
 
 const A = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP3a' })
 const S5A = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 A' })
+const S5B1 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B1' })
+const S5B3 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B3' })
+const S5B2 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B2' })
+const S5B4 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5 B4' })
+const S5BW = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b W' })
+const S5BI = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b I' })
+const S5C = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5c' })
+const S6 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP6' })
 export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
+  'fields.wbs_item': S5C('verified',
+    ['src/components/settings/CustomFieldsSettings.tsx', 'src/components/fields/CustomFieldValuesEditor.tsx', 'src/components/wbs/RowDetailPanel.tsx', 'src/components/wbs/WbsGanttSheet.tsx', 'src/lib/excel/exportWithProfile.ts', 'src/lib/excel/parseWithProfile.ts', 'src/lib/ai/index/content.ts', 'supabase/migrations/0027_custom_fields.sql'],
+    ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx', 'tests/ui/wbs-custom-columns.test.tsx', 'tests/excel/custom-columns-roundtrip.test.ts', 'tests/ai/index-custom-fields.test.ts'],
+  ),
+  'fields.issue': S5C('verified',
+    ['src/components/settings/CustomFieldsSettings.tsx', 'src/components/fields/CustomFieldValuesEditor.tsx', 'src/components/issues/IssueModals.tsx', 'src/app/(app)/p/[projectId]/issues/page.tsx', 'src/app/actions/issues.ts', 'src/lib/ai/index/content.ts', 'supabase/migrations/0027_custom_fields.sql'],
+    ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx', 'tests/actions/custom-fields-actions.test.ts', 'tests/ai/index-custom-fields.test.ts'],
+  ),
+  'fields.weekly_row': S5C('verified',
+    ['src/components/settings/CustomFieldsSettings.tsx', 'src/components/fields/CustomFieldValuesEditor.tsx', 'src/components/weekly/WeeklySheetView.tsx', 'src/app/(app)/p/[projectId]/weekly/page.tsx', 'src/app/actions/weekly.ts', 'src/lib/ai/index/content.ts', 'supabase/migrations/0027_custom_fields.sql'],
+    ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx', 'tests/ui/weekly-custom-columns.test.tsx', 'tests/actions/weekly-create.test.ts', 'tests/ai/index-custom-fields.test.ts'],
+  ),
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
   'invites.allowed_domains': A('verified', ['src/lib/data/inviteDomains.ts'], ['tests/settings/workspace-config.test.ts', 'tests/domain/invites.test.ts']),
@@ -30,7 +50,7 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     tests: ['tests/excel/standard-profile.test.ts', 'tests/api/export-route.test.ts'],
   },
   'modules.enabled': A('verified', ['src/lib/modules/effective.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
-  'workflow.stage_credits': A('wired', ['src/components/settings/StageCreditSlider.tsx', 'supabase/migrations/0012_settings.sql'], ['tests/settings/registry.test.ts']),
+  'workflow.stage_credits': A('verified', ['src/components/settings/StageCreditSlider.tsx', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/settings/registry.test.ts', 'tests/domain/stage-credits.test.ts', 'tests/rls/workflow-policy.test.ts']),
   // SP5 A(스펙 D44) — 두 스코프 공용 키 이름(메타는 키 이름 하나 — 스코프별 소비처 (나) 꼴은 SP5 B 마감 판정). 워크스페이스 값의 소비처는
   // 새 프로젝트의 초기값(createProject 의 seedFrom — 상속 아님)과 워크스페이스 화면 달력(viewZone — merge 뒤 슬러그 워크스페이스), 프로젝트 값의
   // 소비처는 load.ts·주간·봇 도구 등이다. 과제 29 가 정의·편집(설정 화면 달력 절)·소비처·테스트 네 연결을 확인하고 verified 로 올렸다.
@@ -52,36 +72,50 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'portal.widgets': { consumers: ['src/app/(app)/w/[slug]/page.tsx', 'src/lib/portal/widgets.ts', 'src/components/settings/PortalWidgetsEditor.tsx'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts', 'tests/settings/portal-widgets-editor.test.tsx', 'tests/portal/partial-failure.test.tsx'], status: 'wired', sp: 'SP3b' },
   // SP3b UI-3 과제 3·7 — 정의·보드 교차 검사·편집기·테스트(네 연결 ①②④). 소비처(과제 14 작업 계획 보기 결정)가 붙으면 올린다
   'views.default': { consumers: ['src/lib/settings/defs/project.ts', 'src/lib/settings/validateConfig.ts', 'src/components/settings/ViewsDefaultEditor.tsx', 'src/app/(app)/p/[projectId]/wbs/page.tsx'], tests: ['tests/settings/views-default-def.test.ts', 'tests/settings/views-default-editor.test.tsx', 'tests/wbs/view-switch.test.tsx'], status: 'wired', sp: 'SP3b' },
+  // SP5 B1 — 정의·편집·소비처·검증이 이어졌다(스펙 D44)
+  'issues.id_policy': S5B1('verified', ['src/lib/issues/context.ts', 'src/app/actions/issues.ts', 'src/components/settings/IssuePolicyEditor.tsx'], ['tests/issues/id-policy.test.ts', 'tests/rls/issue-code-policy.test.ts', 'tests/ui/issue-policy-editor.test.tsx']),
+  'issues.analysis': S5B1('verified', ['src/lib/issues/rules.ts', 'src/app/actions/issues.ts', 'src/app/(app)/p/[projectId]/settings/page.tsx'], ['tests/issues/rules.test.ts', 'tests/actions/issue-entry-rules.test.ts', 'tests/rls/issue-areas.test.ts']),
+  'minutes.attachments': S5B3('verified', ['src/lib/minutes/resolveAttachmentPolicy.ts', 'src/app/actions/minutes.ts', 'src/components/settings/AttachmentPolicyEditor.tsx'], ['tests/minutes/attachment-policy.test.ts', 'tests/rls/minute-attachments-policy.test.ts', 'tests/ui/attachment-policy-editor.test.tsx']),
+  // SP5 B2 — create_team·ensure_team_roots(SQL)가 모드를 읽고, 외부 업로드·배치·재편철의 경로 정규화가 모드별로 갈린다(v2.9 — rootMode·folders).
+  // 정의·편집(teams 되돌리기 — 플랫폼 관리자)·소비처·테스트 네 연결로 verified. 화면은 teams 만(D21)
+  'minutes.root_folders': S5B2('verified', ['src/lib/minutes/rootMode.ts', 'src/lib/minutes/folders.ts', 'src/app/api/v1/minutes/route.ts', 'src/app/actions/teams.ts', 'src/app/actions/settings.ts', 'src/components/settings/RootFoldersEditor.tsx'], ['tests/minutes/root-folders.test.ts', 'tests/rls/minutes-teams.test.ts', 'tests/minutes/folder-path.test.ts', 'tests/minutes/external-api.test.ts', 'tests/ui/workspace-settings-page.test.tsx']),
+  'attendance.types': S5B4('verified', ['src/components/attendance/AttendanceView.tsx', 'src/app/actions/attendance.ts', 'src/lib/report/weekly.ts', 'src/lib/ai/tools/attendance.ts', 'src/lib/ai/chat/router.ts', 'src/components/settings/VocabEditor.tsx'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/report/weekly.test.ts', 'tests/ai/chat-v2-router.test.ts', 'tests/ui/vocab-editor.test.tsx']),
+  'meetings.categories': S5B4('verified', ['src/components/meetings/MeetingFormModal.tsx', 'src/components/meetings/MeetingCalendar.tsx', 'src/app/actions/meetings.ts', 'src/lib/data/meetings.ts', 'src/lib/minutes/meetings.ts', 'src/app/actions/meetingNotify.ts'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/minutes/external-api.test.ts', 'tests/ui/meeting-form-announce.test.tsx', 'tests/ui/vocab-editor.test.tsx']),
+  'issues.severities': S5B4('verified', ['src/components/issues/IssuesView.tsx', 'src/components/issues/IssueModals.tsx', 'src/app/actions/issues.ts', 'src/lib/domain/issues.ts', 'src/lib/report/issues/model.ts', 'src/components/dashboard/IssueQueueCard.tsx'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/domain/issues.test.ts', 'tests/actions/vocab-migrate.test.ts', 'tests/ui/vocab-editor.test.tsx']),
+  'issues.sources': S5B4('verified', ['src/components/issues/IssueModals.tsx', 'src/app/actions/issues.ts', 'src/lib/report/issues/deckPlan.ts', 'src/lib/report/issues/model.ts'], ['tests/settings/vocab.test.ts', 'tests/rls/config-vocabulary.test.ts', 'tests/report/issue-analysis-vocab.test.ts', 'tests/ui/vocab-editor.test.tsx']),
+  // SP5b I — 정의·편집기(VocabEditor 범주 칸)·DB 트리거·소비처(목록·모달·이력)·테스트(골든 TS·SQL) 넷이 이어져 verified
+  'workflow.issue_statuses': S5BI('verified', ['src/lib/domain/issueWorkflow.ts', 'src/app/actions/issues.ts', 'src/components/issues/IssuesView.tsx', 'src/components/issues/IssueModals.tsx', 'src/components/settings/VocabEditor.tsx', 'supabase/migrations/0025_issue_status_vocab.sql'], ['tests/domain/issue-workflow.test.ts', 'tests/rls/issue-workflow.test.ts', 'tests/actions/issues-gate.test.ts']),
+  // SP5b W1 — 정의·SQL 판독(workflow_value_of·apply_workflow_event·guard_workflow_actual)·승인 액션까지. 화면 주입·설정 편집기는 W2, verified 는 Z
+  'workflow.credit_policy': S5BW('verified', ['src/lib/settings/validateConfig.ts', 'src/components/settings/StageCreditSlider.tsx', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/stage-credits.test.ts', 'tests/settings/registry.test.ts', 'tests/ui/workflow-settings-editors.test.tsx']),
+  'workflow.wbs_stage_labels': S5BW('verified', ['src/components/wbs/StageLabelsProvider.tsx', 'src/lib/agent/predecessorGate.ts', 'src/components/settings/StageLabelsEditor.tsx'], ['tests/ui/stage-labels-injection.test.tsx', 'tests/ui/workflow-settings-editors.test.tsx', 'tests/settings/registry.test.ts']),
+  'workflow.approval_steps': S5BW('verified', ['src/lib/domain/approvalSteps.ts', 'src/app/actions/agentWork.ts', 'src/app/actions/wbsAssign.ts', 'src/components/settings/ApprovalStepsEditor.tsx', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/approval-steps.test.ts', 'tests/domain/approval-count.test.ts', 'tests/rls/workflow-policy.test.ts']),
+  'workflow.approval_distinct_approvers': S5BW('verified', ['src/lib/domain/approvable.ts', 'src/components/settings/ApprovalStepsEditor.tsx', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/domain/approval-count.test.ts', 'tests/rls/workflow-policy.test.ts']),
+  'workflow.predecessor_gate': S5BW('verified', ['src/lib/domain/agentWork.ts', 'src/lib/agent/predecessorGate.ts', 'src/lib/agent/depends.ts', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/agent/predecessor-gate.test.ts', 'tests/agent/claim-gate-final.test.ts', 'tests/rls/workflow-policy.test.ts']),
+  'issues.cause_categories': S5B4('verified', ['src/lib/ai/issue-analysis.ts', 'src/lib/report/issues/storedRun.ts', 'src/lib/report/issues/deckPlan.ts', 'src/app/actions/issueAnalysis.ts'], ['tests/settings/vocab.test.ts', 'tests/ai/issue-analysis.test.ts', 'tests/report/issue-analysis-stored-run.test.ts', 'tests/report/issue-analysis-vocab.test.ts']),
+  // SP6 S1 — 정의·parse(형태·카탈로그 경로). 업로드·활성화·렌더 소비는 S2·V. verified 는 Z
+  'forms.weekly_report_pptx': S6('verified',
+    ['src/components/settings/FormTemplatesManager.tsx', 'src/app/actions/formTemplates.ts', 'src/lib/forms/activation.ts', 'src/lib/report/forms/loadTemplate.ts', 'src/lib/report/engine/scan.ts', 'src/lib/report/engine/pptx.ts', 'src/app/api/report/route.ts'],
+    ['tests/settings/forms-defs.test.ts', 'tests/ui/form-templates-manager.test.tsx', 'tests/actions/form-templates.test.ts', 'tests/forms/activation.test.ts', 'tests/report/forms/default-assets.test.ts', 'tests/negative/form-engine-outputs.test.ts'],
+  ),
+  'forms.weekly_report_xlsx': S6('verified',
+    ['src/components/settings/FormTemplatesManager.tsx', 'src/app/actions/formTemplates.ts', 'src/lib/forms/activation.ts', 'src/lib/report/forms/loadTemplate.ts', 'src/lib/report/engine/scan.ts', 'src/lib/report/engine/xlsx.ts', 'src/app/api/report/route.ts'],
+    ['tests/settings/forms-defs.test.ts', 'tests/ui/form-templates-manager.test.tsx', 'tests/actions/form-templates.test.ts', 'tests/forms/activation.test.ts', 'tests/report/forms/default-assets.test.ts', 'tests/negative/form-engine-outputs.test.ts'],
+  ),
+  'forms.issue_analysis_pptx': S6('verified',
+    ['src/components/settings/FormTemplatesManager.tsx', 'src/app/actions/formTemplates.ts', 'src/lib/forms/activation.ts', 'src/lib/report/forms/loadTemplate.ts', 'src/lib/report/engine/scan.ts', 'src/lib/report/engine/pptx.ts', 'src/app/api/issue-analysis/route.ts'],
+    ['tests/settings/forms-defs.test.ts', 'tests/ui/form-templates-manager.test.tsx', 'tests/actions/form-templates.test.ts', 'tests/forms/activation.test.ts', 'tests/report/forms/default-assets.test.ts', 'tests/negative/form-engine-outputs.test.ts'],
+  ),
+  'forms.wbs_export_xlsx': S6('verified',
+    ['src/components/settings/FormTemplatesManager.tsx', 'src/app/actions/formTemplates.ts', 'src/lib/forms/activation.ts', 'src/lib/report/forms/loadTemplate.ts', 'src/lib/report/engine/scan.ts', 'src/lib/report/engine/xlsx.ts', 'src/app/api/export/route.ts'],
+    ['tests/settings/forms-defs.test.ts', 'tests/ui/form-templates-manager.test.tsx', 'tests/actions/form-templates.test.ts', 'tests/forms/activation.test.ts', 'tests/report/forms/default-assets.test.ts', 'tests/negative/form-engine-outputs.test.ts'],
+  ),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
 export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: string; shape: string }[] = [
   { key: 'security.local_drafts', scope: 'workspace', sp: 'SPU1', shape: '{ allowed: boolean; retention_days: number }' },
-  { key: 'minutes.root_folders', scope: 'workspace', sp: 'SP5 B2', shape: "{ mode: 'teams' } | { mode: 'custom'; names: string[] }" },
-  { key: 'minutes.attachments', scope: 'workspace', sp: 'SP5 B3', shape: '첨부 정책 객체' },
   { key: 'notify.policy', scope: 'workspace', sp: 'SP8', shape: '{ [type]: { enabled: boolean } }' },
-  { key: 'workflow.issue_statuses', scope: 'project', sp: 'SP5b', shape: '{ code; label; color; category; sort; active }[]' },
-  { key: 'workflow.wbs_stage_labels', scope: 'project', sp: 'SP5b', shape: 'Partial<Record<단계, string>>' },
-  { key: 'workflow.approval_steps', scope: 'project', sp: 'SP5b', shape: '{ code; label; approver }[] 1~3' },
-  { key: 'workflow.approval_distinct_approvers', scope: 'project', sp: 'SP5b', shape: 'boolean' },
-  { key: 'workflow.predecessor_gate', scope: 'project', sp: 'SP5b', shape: "'reached' | 'final'" },
-  { key: 'workflow.credit_policy', scope: 'project', sp: 'SP5b', shape: '{ step: 1 | 5; min_gap: 1..10 }' },
-  { key: 'issues.id_policy', scope: 'project', sp: 'SP5 B1', shape: '{ prefix; pattern; counter_scope; reset }' },
-  { key: 'issues.analysis', scope: 'project', sp: 'SP5 B1', shape: "'optional' | 'required'" },
-  { key: 'issues.severities', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
-  { key: 'issues.cause_categories', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
-  { key: 'issues.sources', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
-  { key: 'attendance.types', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
-  { key: 'meetings.categories', scope: 'project', sp: 'SP5 B4', shape: '어휘 목록' },
-  { key: 'fields.wbs_item', scope: 'project', sp: 'SP5c', shape: 'FieldDef[]' },
-  { key: 'fields.issue', scope: 'project', sp: 'SP5c', shape: 'FieldDef[]' },
-  { key: 'fields.weekly_row', scope: 'project', sp: 'SP5c', shape: 'FieldDef[]' },
-  { key: 'forms.weekly_report_pptx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
-  { key: 'forms.weekly_report_xlsx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
-  { key: 'forms.issue_analysis_pptx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
-  { key: 'forms.wbs_export_xlsx', scope: 'project', sp: 'SP6', shape: '{ template_id; mapping; options }' },
   { key: 'minutes.auto_file_by_path', scope: 'project', sp: 'SP7', shape: 'boolean' },
-  { key: 'minutes.attachments', scope: 'project', sp: 'SP5 B3', shape: '첨부 정책 객체(seedFrom)' },
 ]
 
 /** 개인 설정(개정 §2.8.5) — 계정 키는 계정 행, 워크스페이스 키는 그 워크스페이스의 개인 행(SP3b D9 — 키 목록의 정본은 prefs 의 split.ts).

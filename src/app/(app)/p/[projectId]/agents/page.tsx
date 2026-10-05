@@ -6,6 +6,7 @@ import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin, isProjectMember, toProjectActorView } from '@/lib/domain/authz'
 import { getAgentHub } from '@/lib/data/agentHub'
 import { getComputedWbs } from '@/lib/data/wbs'
+import { getApprovedItemIds } from '@/lib/data/approvedItems'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick } from '@/lib/settings/pick'
 import { levelDepthOf } from '@/lib/settings/projectConfig'
@@ -49,6 +50,11 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
   if (!roster.ok) console.error(`[agents] 명단 조회 실패(project=${projectId}) — 담당자 목록 없이 그리고 경고를 띄운다`)
   // 달력 손상이면 상세 패널 데이터는 비우고 사유를 싣는다. 허브 시각은 기준 UTC 로 찍고 그 이름을 적는다(손상 키가 tz 일 수 있다 — 라벨이 사실이게)
   const wbsData = wbsRes.ok ? wbsRes.data : null
+  // 선행 기준·승인 주문 축(SP5b D21) — 상세 패널의 spec 선행 판정이 claim 게이트와 같게. 기준이 손상이면 final(엄격). 이 화면은 agents 가 켜져 있다
+  const gate = pick(pc.cfg, 'workflow.predecessor_gate')
+  const stageLabels = pick(pc.cfg, 'workflow.wbs_stage_labels')   // 단계 이름(SP5b W2) — 손상이면 기본 이름
+  if (!gate.ok) console.error(`[agents] 선행 기준 손상(project=${projectId}) — final 로 판정한다`)
+  const approvedItemIds = await getApprovedItemIds(projectId)
   const timeZone = wbsData ? wbsData.calendar.timezone : DEFAULT_REQUEST_CALENDAR.timezone
   const wbs = {
     items: wbsData?.items ?? [],
@@ -63,6 +69,9 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
     members: roster.ok ? roster.rows : [],
     membersError: roster.ok ? null : roster.error,
     actorView: toProjectActorView(actor, projectId),
+    predecessorGate: gate.ok ? gate.value : 'final' as const,
+    approvedItemIds: approvedItemIds ?? [],
+    stageLabels: stageLabels.ok ? stageLabels.value : null,
   }
   // 공통 헤더(탭·요약·타일)는 뷰가 그린다 — 타일이 뷰의 최신 허브 상태를 따라가야 한다(AgentFrame).
   // 시각의 tz — getComputedWbs 가 판독한 프로젝트 달력. 달력이 손상이면 위의 결과 갈래가 허브를 그대로 그리고(FN-8) 시각은 UTC + 그 이름

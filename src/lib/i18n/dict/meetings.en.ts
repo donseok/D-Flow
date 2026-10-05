@@ -56,6 +56,8 @@ export const meetingsEn: Record<keyof typeof meetingsKo, string> = {
   'meet.form.noEmailWarn': 'No email — may not appear in My Meetings.',
   'meet.attendeeSearch': 'Search name or team',
   'meet.attendeeSelected': ' selected',
+  'meet.list.loading': 'Loading meetings for this month…',
+  'meet.detail.loadFailed': 'Could not load the meeting details. Try again shortly.',
   'meet.detail.attendees': 'Attendees',
   'meet.detail.noAttendees': 'No attendees assigned.',
   'meet.detail.linkedMinutes': 'Linked minutes',

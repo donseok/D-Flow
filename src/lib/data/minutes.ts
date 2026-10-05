@@ -1,5 +1,8 @@
 import { cache } from 'react'
+import { MINUTE_FOLDER_COLS, minuteFolderFromRow } from '@/lib/minutes/folderRow'
 import { createServerClient } from '@/lib/supabase/server'
+import { getProjectVocabs } from '@/lib/settings/projectConfig'
+import type { VocabValues } from '@/lib/settings/vocab'
 import type {
   ExplorerData, ExplorerLeaf, InsightKind, MeetingCategory, Minute, MinuteFile, MinuteFolder, MinuteHighlight,
   MinuteInsight, MinuteSignal, TeamCode,
@@ -13,6 +16,7 @@ import type {
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
+import { canEditMinute, type Actor } from '@/lib/domain/authz'
 
 type Row = Record<string, unknown>
 
@@ -55,7 +59,7 @@ export const getProjectMinuteSignals = cache(async (projectId: string, limit = 8
 })
 
 const LIST_COLS =
-  'id, minute_date, team_code, title, meeting_id, project_id, meeting_occurrence_date, archived_at, created_by, created_by_name, created_at, updated_at, body_preview, folder_id, minute_files(count), meetings(category, project_id), projects(name)'
+  'id, minute_date, team_code, team_id, title, meeting_id, project_id, workspace_id, meeting_occurrence_date, archived_at, created_by, created_by_name, created_at, updated_at, body_preview, folder_id, minute_files(count), meetings(category, project_id), projects(name)'
 
 function mapMinute(r: Row, bodyMd = ''): Minute {
   const files = r.minute_files as { count: number }[] | undefined
@@ -63,6 +67,7 @@ function mapMinute(r: Row, bodyMd = ''): Minute {
     id: r.id as string,
     minuteDate: r.minute_date as string,
     teamCode: r.team_code as TeamCode,
+    teamId: (r.team_id as string | null) ?? null,
     title: r.title as string,
     bodyMd,
     meetingId: (r.meeting_id as string | null) ?? null,
@@ -86,10 +91,10 @@ function mapMinute(r: Row, bodyMd = ''): Minute {
   }
 }
 
-/** 기간(달력 그리드) + 담당 필터 목록. body_md 제외. 실패 시 빈 배열.
+/** 기간(달력 그리드) + 담당 필터 목록. body_md 제외. 실패 시 빈 배열. 담당 필터는 팀 id(minutes.team_id — SP5 B2).
  *  범위(계획 V13) — 그 워크스페이스의 회의록만, projectId 가 있으면 그 프로젝트의 것만(?project=, D53). */
 export const getMinutesPage = cache(async (
-  workspaceId: string, projectId: string | null, rangeStart: string, rangeEnd: string, team: TeamCode | null,
+  workspaceId: string, projectId: string | null, rangeStart: string, rangeEnd: string, teamId: string | null,
 ): Promise<Minute[]> => {
   const sb = await createServerClient()
   let q = sb.from('minutes').select(LIST_COLS)
@@ -97,7 +102,7 @@ export const getMinutesPage = cache(async (
     .is('archived_at', null)
     .gte('minute_date', rangeStart).lte('minute_date', rangeEnd)
     .order('minute_date', { ascending: false }).order('created_at', { ascending: false })
-  if (team) q = q.eq('team_code', team)
+  if (teamId) q = q.eq('team_id', teamId)
   if (projectId) q = q.eq('project_id', projectId)
   const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 목록 — 실패를 삼키면 보관함이 '회의록 없음' 빈 화면으로 위장돼 재업로드를 유발한다. 최소한 원인은 남긴다.
@@ -108,7 +113,7 @@ export const getMinutesPage = cache(async (
 
 /** 전 기간 제목/본문 ILIKE 검색 — minute_date desc, 최대 limit건. */
 export const searchMinutes = cache(async (
-  workspaceId: string, projectId: string | null, qtext: string, team: TeamCode | null, limit = 100,
+  workspaceId: string, projectId: string | null, qtext: string, teamId: string | null, limit = 100,
 ): Promise<Minute[]> => {
   const needle = qtext.trim()
   if (!needle) return []
@@ -119,7 +124,7 @@ export const searchMinutes = cache(async (
     .is('archived_at', null)
     .or(`title.ilike.${pat},body_md.ilike.${pat}`)
     .order('minute_date', { ascending: false }).limit(limit)
-  if (team) q = q.eq('team_code', team)
+  if (teamId) q = q.eq('team_id', teamId)
   if (projectId) q = q.eq('project_id', projectId)
   const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 검색 — 실패를 '검색 결과 0건'으로 위장하면 사용자는 회의록이 없다고 오인한다. 폴백은 유지하되 로깅.
@@ -131,13 +136,17 @@ export const searchMinutes = cache(async (
 /** 탐색기 v2 — 전 기간 리프 + 폴더 전량. 실패 시 로깅 + null(빈 결과 객체와 구분 —
  *  조용한 빈 화면 방지). 트리 조립은 클라이언트(buildFolderTree) — 팀 탭 필터를 리프에
  *  먼저 적용해야 하므로 서버 조립은 성립하지 않는다. */
-export const getMinutesExplorer = cache(async (workspaceId: string, projectId: string | null): Promise<ExplorerData | null> => {
+export const getMinutesExplorer = cache(async (
+  workspaceId: string, projectId: string | null,
+  /** 리프의 canEdit(D40)을 판정할 행위자 — 없으면 전부 거짓(fail-closed) */
+  actor: Actor | null = null,
+): Promise<ExplorerData | null> => {
   const sb = await createServerClient()
   let mq = sb.from('minutes').select(LIST_COLS).eq('workspace_id', workspaceId).is('archived_at', null)
   if (projectId) mq = mq.eq('project_id', projectId)
   // 폴더 — 그 워크스페이스의 것, 프로젝트로 거를 때는 워크스페이스 폴더(팀 루트)와 그 프로젝트 폴더(트리의 뼈대가 끊기지 않게).
   // projectId 는 페이지(UUID_RE·권한 맵)·액션 관문(UUID_RE·권한 맵)을 지난 값만 온다 — .or 문자열에 그대로 싣는다
-  let fq = sb.from('minute_folders').select('id, name, parent_id, sort, created_by, project_id, workspace_id').eq('workspace_id', workspaceId)
+  let fq = sb.from('minute_folders').select(MINUTE_FOLDER_COLS).eq('workspace_id', workspaceId)
   if (projectId) fq = fq.or(`project_id.is.null,project_id.eq.${projectId}`)
   const [mRes, fRes, hidden] = await Promise.all([
     mq.order('minute_date', { ascending: false }).order('created_at', { ascending: false }).limit(MINUTES_TREE_LIMIT),
@@ -149,27 +158,34 @@ export const getMinutesExplorer = cache(async (workspaceId: string, projectId: s
     return null
   }
   if (hidden === null) { console.error('[getMinutesExplorer] 비공개 프로젝트 판정 실패 — 탐색기를 열지 않는다(fail-closed)'); return null }
+  // 이동·일괄 지정 자격(D40) — 회의록 행의 project_id 그대로(mapMinute 의 projectId 는 회의 폴백이 섞인 귀속 프로젝트라 판정에 쓰지 않는다)
+  const editable = new Set(((mRes.data ?? []) as Row[])
+    .filter((r) => canEditMinute(actor, { created_by: (r.created_by as string | null) ?? null, project_id: (r.project_id as string | null) ?? null, workspace_id: r.workspace_id as string }))
+    .map((r) => r.id as string))
   const rows = dropHidden((mRes.data ?? []).map((r: Row) => mapMinute(r)), hidden)
   const leaves: ExplorerLeaf[] = rows.map(mi => ({
-    id: mi.id, minuteDate: mi.minuteDate, teamCode: mi.teamCode, title: mi.title,
+    canEdit: editable.has(mi.id),
+    id: mi.id, minuteDate: mi.minuteDate, teamCode: mi.teamCode, teamId: mi.teamId ?? null, title: mi.title,
     fileCount: mi.fileCount ?? 0, createdBy: mi.createdBy, createdByName: mi.createdByName,
     bodyPreview: mi.bodyPreview ?? '', meetingCategory: mi.meetingCategory ?? null,
     folderId: mi.folderId ?? null,
     projectId: mi.projectId ?? null, projectName: mi.projectName ?? null,
     meetingId: mi.meetingId, meetingProjectId: mi.meetingProjectId ?? null,
   }))
-  const allFolders: MinuteFolder[] = ((fRes.data ?? []) as Row[]).map(f => ({
-    id: f.id as string, name: f.name as string,
-    parentId: (f.parent_id as string | null) ?? null,
-    sort: f.sort as number, createdBy: (f.created_by as string | null) ?? null,
-    projectId: (f.project_id as string | null) ?? null,
-    workspaceId: (f.workspace_id as string | null) ?? null,
-  }))
+  const allFolders: MinuteFolder[] = ((fRes.data ?? []) as Row[]).map(minuteFolderFromRow)
   // 숨김 프로젝트의 폴더 제거 — 리프는 dropHidden 이 이미 걸렀다. 폴더까지 걸러야
   // 비공개 프로젝트 이름이 폴더 트리(이름만으로도)로 노출되지 않는다.
   const folders = allFolders.filter(f => f.projectId === null || !hidden.has(f.projectId))
   // truncated 는 필터 전 페치 건수 기준 — 숨김으로 줄어든 것을 '전량 수신'으로 위장하지 않는다.
-  return { folders, leaves, total: rows.length, truncated: (mRes.data ?? []).length >= MINUTES_TREE_LIMIT }
+  // 회의 범주 칩의 라벨·색 = 연결 회의 프로젝트의 설정(곁가지 — 못 읽으면 칩은 code, 로그만)
+  const meetingCategories: Record<string, VocabValues['meetings.categories'] | null> = {}
+  const meetingProjects = [...new Set(leaves.flatMap(l => (l.meetingCategory && l.meetingProjectId ? [l.meetingProjectId] : [])))]
+  try {
+    for (const [pid, list] of await getProjectVocabs(meetingProjects, 'meetings.categories', { client: sb })) meetingCategories[pid] = list
+  } catch (e) {
+    console.error('[getMinutesExplorer] 회의 범주 조회 실패 — 칩은 code 로 보인다', e)
+  }
+  return { folders, leaves, total: rows.length, truncated: (mRes.data ?? []).length >= MINUTES_TREE_LIMIT, meetingCategories }
 })
 
 export const ERR_MINUTE_FILES_LOAD = '첨부 목록을 불러오지 못했습니다.'
@@ -188,7 +204,7 @@ export const getMinuteDetail = cache(async (
       .select('id, minute_date, team_code, title, body_md, meeting_id, project_id, meeting_occurrence_date, archived_at, external_id, created_by, created_by_name, created_at, updated_at, folder_id, workspace_id, meetings(project_id), projects(name)')
       .eq('id', id).maybeSingle(),
     sb.from('minute_files')
-      .select('id, minute_id, role, file_name, file_path, size, mime, created_at')
+      .select('id, minute_id, role, file_name, file_path, size, mime, created_at, uploaded_by')
       .eq('minute_id', id).order('created_at', { ascending: true }),
   ])
   // null 은 호출자에서 404(삭제됨)로 렌더된다 — 조회 실패를 '행 없음'으로 위장하면
@@ -201,6 +217,14 @@ export const getMinuteDetail = cache(async (
     console.error('[getMinuteDetail] 파일 목록 조회 실패:', fsErr.message)
     files = { ok: false, error: ERR_MINUTE_FILES_LOAD }
   } else {
+    // 등록자 이름은 표시용 부가 정보 — 조회 실패는 로그를 남기고 이름 칸만 비운다(파일 목록 자체는 정상이다).
+    const uploaderIds = [...new Set((fs ?? []).map((f: Row) => f.uploaded_by as string | null).filter((v): v is string => !!v))]
+    const names = new Map<string, string>()
+    if (uploaderIds.length > 0) {
+      const { data: ps, error: psErr } = await sb.from('profiles').select('user_id, display_name').in('user_id', uploaderIds)
+      if (psErr) console.error('[getMinuteDetail] 첨부 등록자 이름 조회 실패:', psErr.message)
+      for (const p of (ps ?? []) as Row[]) if (p.display_name) names.set(p.user_id as string, p.display_name as string)
+    }
     files = {
       ok: true,
       rows: (fs ?? []).map((f: Row) => ({
@@ -212,6 +236,8 @@ export const getMinuteDetail = cache(async (
         size: (f.size as number) ?? null,
         mime: (f.mime as string) ?? null,
         createdAt: f.created_at as string,
+        uploadedBy: (f.uploaded_by as string | null) ?? null,
+        uploadedByName: f.uploaded_by ? names.get(f.uploaded_by as string) ?? null : null,
       })),
     }
   }
@@ -232,7 +258,7 @@ export const getMinuteFolderPath = cache(async (
 ): Promise<string[] | null> => {
   if (!folderId) return null
   const sb = await createServerClient()
-  return folderPathOf(sb, folderId)
+  return folderPathOf(sb, folderId, 'display')
 })
 
 /** 뷰어 주석 데이터 — 하이라이트 전체 + AI 인사이트. 실패 시 빈 배열(뷰어는 주석 없이 동작). */

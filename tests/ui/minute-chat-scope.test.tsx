@@ -121,7 +121,7 @@ describe('MinuteChatPanel 범위 전환', () => {
 
   it('팀 루트가 유일하면 하위 구분 칩에 프로젝트 라벨을 붙이지 않는다(종전과 동일)', async () => {
     fetchMinuteFoldersLite.mockImplementation(async () => [
-      { id: 'r-pmo', name: 'PMO', parentId: null, sort: 0, createdBy: null, projectId: null },
+      { id: 'r-pmo', name: 'PMO', parentId: null, sort: 0, createdBy: null, kind: 'team_root', teamCode: 'PMO', projectId: null },
       { id: 'c1', name: '하위구분1', parentId: 'r-pmo', sort: 0, createdBy: null, projectId: null },
     ])
     await mountPanel()
@@ -131,10 +131,10 @@ describe('MinuteChatPanel 범위 전환', () => {
 
   it('같은 이름의 팀 루트가 여러 프로젝트에 있으면 하위 구분 칩에 그 프로젝트 이름이 붙는다', async () => {
     fetchMinuteFoldersLite.mockImplementation(async () => [
-      { id: 'r-pmo-p1', name: 'PMO', parentId: null, sort: 0, createdBy: null, projectId: 'p1' },
+      { id: 'r-pmo-p1', name: 'PMO', parentId: null, sort: 0, createdBy: null, kind: 'team_root', teamCode: 'PMO', projectId: 'p1' },
       { id: 'c1', name: '하위구분1', parentId: 'r-pmo-p1', sort: 0, createdBy: null, projectId: 'p1' },
       // 동명 루트가 다른 프로젝트에도 있다 — 뽑히지는 않지만 중의성의 원인
-      { id: 'r-pmo-p2', name: 'PMO', parentId: null, sort: 1, createdBy: null, projectId: 'p2' },
+      { id: 'r-pmo-p2', name: 'PMO', parentId: null, sort: 1, createdBy: null, kind: 'team_root', teamCode: 'PMO', projectId: 'p2' },
     ])
     await mountPanel([{ id: 'p1', name: 'P1 프로젝트' }, { id: 'p2', name: 'P2 프로젝트' }])
     await openArchiveTeam('PMO')
@@ -143,9 +143,9 @@ describe('MinuteChatPanel 범위 전환', () => {
 
   it('뽑힌 루트가 미지정(프로젝트 null)이면 미지정 라벨을 붙인다', async () => {
     fetchMinuteFoldersLite.mockImplementation(async () => [
-      { id: 'r-pmo-un', name: 'PMO', parentId: null, sort: 0, createdBy: null, projectId: null },
+      { id: 'r-pmo-un', name: 'PMO', parentId: null, sort: 0, createdBy: null, kind: 'team_root', teamCode: 'PMO', projectId: null },
       { id: 'c1', name: '하위구분1', parentId: 'r-pmo-un', sort: 0, createdBy: null, projectId: null },
-      { id: 'r-pmo-p2', name: 'PMO', parentId: null, sort: 1, createdBy: null, projectId: 'p2' },
+      { id: 'r-pmo-p2', name: 'PMO', parentId: null, sort: 1, createdBy: null, kind: 'team_root', teamCode: 'PMO', projectId: 'p2' },
     ])
     await mountPanel([{ id: 'p2', name: 'P2 프로젝트' }])
     await openArchiveTeam('PMO')
@@ -154,9 +154,9 @@ describe('MinuteChatPanel 범위 전환', () => {
 
   it('선택은 folder_id 그대로 전송된다 — 라벨이 붙어도 필터 동작은 무변경', async () => {
     fetchMinuteFoldersLite.mockImplementation(async () => [
-      { id: 'r-pmo-p1', name: 'PMO', parentId: null, sort: 0, createdBy: null, projectId: 'p1' },
+      { id: 'r-pmo-p1', name: 'PMO', parentId: null, sort: 0, createdBy: null, kind: 'team_root', teamCode: 'PMO', projectId: 'p1' },
       { id: 'c1', name: '하위구분1', parentId: 'r-pmo-p1', sort: 0, createdBy: null, projectId: 'p1' },
-      { id: 'r-pmo-p2', name: 'PMO', parentId: null, sort: 1, createdBy: null, projectId: 'p2' },
+      { id: 'r-pmo-p2', name: 'PMO', parentId: null, sort: 1, createdBy: null, kind: 'team_root', teamCode: 'PMO', projectId: 'p2' },
     ])
     await mountPanel([{ id: 'p1', name: 'P1 프로젝트' }, { id: 'p2', name: 'P2 프로젝트' }])
     await openArchiveTeam('PMO')

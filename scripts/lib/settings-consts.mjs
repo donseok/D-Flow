@@ -4,8 +4,8 @@
 /** 설정 스키마 세대(p_schema_version) — src/lib/settings/registry.ts SETTINGS_SCHEMA_VERSION 과 같다 */
 export const SCRIPT_SCHEMA_VERSION = 1
 
-/** 프로젝트 층 토글 9개(성능 시드의 modules.enabled) — src/lib/modules/defaults.ts PROJECT_TOGGLABLE 과 같은 순서 */
-export const PROJECT_TOGGLE_IDS = Object.freeze(['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot'])
+/** 프로젝트 층 토글 10개(성능 시드의 modules.enabled — SP5 B1 issue_analysis 포함) — src/lib/modules/defaults.ts PROJECT_TOGGLABLE 과 같은 순서 */
+export const PROJECT_TOGGLE_IDS = Object.freeze(['kanban', 'meetings', 'weekly', 'issues', 'issue_analysis', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot'])
 
 /** 모듈 플래그 8개 — src/lib/modules/flags.ts MODULE_FLAG_NAMES 와 같은 순서(tests/modules/bootstrap-ids.test.ts 가 대조) */
 export const MODULE_FLAG_NAMES_SCRIPT = Object.freeze([

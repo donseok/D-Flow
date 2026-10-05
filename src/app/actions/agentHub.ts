@@ -131,7 +131,9 @@ const STAGE_CODES: ReadonlySet<string> = new Set(DOMAIN_STAGE_CODES)
 
 export type HubProcessOp =
   /** expectedReportId — 화면이 본 최신 완료 보고(없으면 null). 서버의 최신과 다르면 stale 로 거부한다(H1 Task 11). */
-  | { kind: 'approve'; orderId: string; expectedReportId: string | null }
+  | { kind: 'approve'; orderId: string; expectedReportId: string | null
+      /** SP5b W1 — 카드가 보여 준 대기 승인 단계(있을 때만). 서버의 대기 단계와 다르면 stale 로 거부한다 */
+      expectedStep?: string }
   | { kind: 'reject'; orderId: string; note: string; expectedReportId: string | null }
   | { kind: 'unapprove'; orderId: string }
   /** 완료 취소 — 승인된(xx) 작업을 에이전트에게 되돌린다. 사용자 결정(2026-09-14): "완료취소 = 재작업 요청". */
@@ -312,7 +314,8 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
 
   let r: { ok: boolean; error?: string; warning?: string; stale?: true }
   switch (op.kind) {
-    case 'approve': r = await approveAgentCompletion(op.orderId, op.expectedReportId); break
+    // expectedStep 은 있을 때만 넘긴다(호환 규칙 S1 — 기본 1단계 화면은 지금과 같은 두 인자)
+    case 'approve': r = op.expectedStep !== undefined ? await approveAgentCompletion(op.orderId, op.expectedReportId, op.expectedStep) : await approveAgentCompletion(op.orderId, op.expectedReportId); break
     case 'reject': r = await rejectAgentCompletion(op.orderId, op.note, op.expectedReportId); break
     case 'unapprove': r = await unapproveAgentCompletion(op.orderId); break
     case 'rework': r = await requestAgentRework(op.orderId, op.note); break

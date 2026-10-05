@@ -39,7 +39,7 @@ async function mountExplorer() {
   await act(async () => root.render(
     <main><MinutesScopeProvider scope={{ workspaceId: 'ws-1', projectId: null }}>
       <MinutesExplorer folders={folders} leaves={leaves} favorites={new Set()} onToggleFavorite={vi.fn()} onRetryFavorites={vi.fn()}
-        layout="grid" currentUserId="u1" onChanged={vi.fn()} onFolderSelect={vi.fn()} teamCodes={['MES']} />
+        layout="grid" currentUserId="u1" onChanged={vi.fn()} onFolderSelect={vi.fn()} />
     </MinutesScopeProvider></main>,
   ))
 }

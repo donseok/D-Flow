@@ -17,6 +17,7 @@ import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 import type { AgentHub, HubRow } from '@/lib/domain/agentHub'
 import { ageLabel } from '@/lib/domain/seatmap'
 import { stageLabelKo } from '@/lib/domain/stageLabels'
+import { useStageLabel } from '@/components/wbs/StageLabelsProvider'
 import { updateAgentPrompt } from '@/app/actions/wbsSpec'
 import { applyHubDelegations, runHubProcessOp, type HubDelegationsResult, type HubProcessOp, type WbsStageCode } from '@/app/actions/agentHub'
 import { PendingSaveChip } from '@/components/wbs/PendingSaveChip'
@@ -115,6 +116,7 @@ function ParentCheckbox({ state, count, onClick }: { state: 'all' | 'some' | 'no
 }
 
 export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, nowMs, onHub, onChanged, onSelect }: Props) {
+  const stageName = useStageLabel()   // 프로젝트의 단계 이름(SP5b W2) — 없는 칸은 STAGE_LABEL_KO
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set())
   // 프롬프트 저장·조정 처리 중인 행 — 체크는 잠그지 않으므로 여기에 들어가지 않는다.
   const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set())
@@ -451,11 +453,11 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                               ? '에이전트에 위임된 작업입니다. 단계는 승인·반려로 바뀝니다. 직접 바꾸려면 위임을 끄세요.'
                               : '단계 직접 조정 — 실적은 그 단계의 크레딧으로 지정됩니다'}
                             onChange={e => changeStage(r, e.target.value)} className="app-input h-6 min-w-0 shrink py-0 text-[11px]">
-                            <option value="">{STAGE_NONE_LABEL}</option>
-                            {STAGE_CODES.map(c => <option key={c} value={c}>{stageLabelKo(c)}</option>)}
+                            <option value="">{stageName(null, STAGE_NONE_LABEL)}</option>
+                            {STAGE_CODES.map(c => <option key={c} value={c}>{stageName(c, stageLabelKo(c))}</option>)}
                           </select>
                         : r.isLeaf && !r.milestone
-                          ? <span data-hub-stage-text className="shrink-0 text-[11px] text-ink-muted">{stageLabelKo(r.stage)}</span>
+                          ? <span data-hub-stage-text className="shrink-0 text-[11px] text-ink-muted">{stageName(r.stage, stageLabelKo(r.stage))}</span>
                           : null}
                       {r.order
                         ? <span className={`chip shrink-0 ${STATE_TONE[r.order.state]}`}>{STATE_LABEL[r.order.state]}</span>

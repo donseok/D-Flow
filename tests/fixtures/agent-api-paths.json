@@ -1,0 +1,25 @@
+{
+  "_note": "SP5b P0 — 스킬이 부르는 에이전트 API 경로 동결 목록(스펙 done_when #4·E18). upstream = 개정:1708 의 정규식 결과(정본 6.6 대조), normalized = 넓힌 정규식([a-zA-Z_/{}$-])의 {id}·$_id 를 [id] 로 맞춘 결과 = src/app/api/v1 의 에이전트·WBS 라우트 11개",
+  "upstream": [
+    "api/v1/agent/me",
+    "api/v1/agent/watch",
+    "api/v1/agent/work",
+    "api/v1/agent/work/",
+    "api/v1/agent/work/mine",
+    "api/v1/wbs/import",
+    "api/v1/wbs/structure"
+  ],
+  "normalized": [
+    "api/v1/agent/me",
+    "api/v1/agent/watch",
+    "api/v1/agent/work",
+    "api/v1/agent/work/[id]",
+    "api/v1/agent/work/[id]/claim",
+    "api/v1/agent/work/[id]/heartbeat",
+    "api/v1/agent/work/[id]/release",
+    "api/v1/agent/work/[id]/report",
+    "api/v1/agent/work/mine",
+    "api/v1/wbs/import",
+    "api/v1/wbs/structure"
+  ]
+}

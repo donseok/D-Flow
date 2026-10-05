@@ -1,3 +1,4 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -35,6 +36,7 @@ import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
 import { registerEn, t, type DictKey } from '@/lib/i18n/dict'
 import { EN } from '@/lib/i18n/dict/en'
 import { calInputUtcMon, calUtcSun } from '../helpers/calendarFixture'
+import { MEET_CATS, SEVERITIES } from '../fixtures/vocab'
 
 // 사유는 사전 문구(ko·en)로 보인다 — 로더의 ERR_* 한국어 상수는 로그·시험용(최종 리뷰 UI M-1).
 registerEn(EN)
@@ -66,24 +68,26 @@ const leaf: WbsRow = {
 }
 const ITEMS = computeTree([leaf], TODAY, calUtcSun, { subActTeamOrder: new Map() })
 const ISSUE: DashboardIssue = {
-  id: 'i1', issueNo: 1, piIssueCode: null, megaCode: null, title: '접속 오류', status: 'open', severity: 'high',
+  id: 'i1',  code: 'PI-U001', areaId: null, title: '접속 오류', status: 'open', severity: 'high',
   dueDate: '2026-09-20', resolvedAt: null, createdAt: '2026-09-01T00:00:00+00:00',
 }
 const ANN: Announcement = {
+
   id: 'a1', projectId: 'p1', title: '킥오프 안내', body: '', category: 'general', isPinned: false,
   publishFrom: null, publishTo: null, milestoneDate: null, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z',
 }
 const MEETING: Meeting = {
+
   id: 'm1', projectId: 'p1', title: '주간 회의', meetingDate: '2026-09-28', startTime: null, endTime: null, location: null,
   category: 'routine', body: '', recurrence: 'none', recurrenceUntil: null, createdBy: null, createdByName: null,
   createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', attendeeIds: [],
 }
 
 type Props = Parameters<typeof DashboardView>[0]
-const base: Props = {
+const base: Props = { issueAreas: TEST_AREAS,
   items: ITEMS, projectId: 'p1', projectName: 'Acme', startDate: '2026-09-01', endDate: '2026-12-31', today: TODAY, realToday: TODAY,
   calendar: calInputUtcMon, snapshots: [], historyFailed: false, announcements: [ANN], meetings: [MEETING], meetingExceptions: [],
-  issues: [ISSUE], milestoneKeywords: [], modules: { issues: true, announcements: true, meetings: true }, minutesHref: null,
+  issues: [ISSUE], milestoneKeywords: [], modules: { issues: true, announcements: true, meetings: true }, minutesHref: null, meetingCategories: MEET_CATS, issueSeverities: SEVERITIES,
 }
 const view = async (over: Partial<Props> = {}) => (await DashboardView({ ...base, ...over })) as ReactElement
 

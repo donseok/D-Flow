@@ -118,9 +118,10 @@ describe('CC2 — 프로젝트 없는 옛 챗의 원천은 그 워크스페이�
     expect((await buildBotContext(null, W_B)).totalProjects).toBe(1)
   })
 
-  it('범위 밖 청크가 상위를 차지해도 근거가 0 이 되지 않게 넉넉히 받아 거른 뒤 k 개로 자른다', async () => {
+  // SP5 B3 과제11(0022) — 범위 밖 청크가 상위를 차지해 근거가 0 이 되던 것을 SQL 안의 허용 목록으로 막는다(넉넉히 받던 방식 대체)
+  it('프로젝트 없는 질문은 그 워크스페이스·chatbot 켜진 프로젝트 허용 목록을 SQL 에 넘겨 그 안에서 k 개를 받는다', async () => {
     await answerQuestion({ projectId: null, workspaceId: W_A, message: '결제 모듈 이관은 어떻게 되고 있어?', history: [] })
-    expect(m.rpc).toHaveBeenCalledWith('match_wbs_documents', expect.objectContaining({ p_project_id: null, match_count: 32 }))
+    expect(m.rpc).toHaveBeenCalledWith('match_wbs_documents', expect.objectContaining({ p_project_id: null, match_count: 8, p_project_ids: [PA_ON] }))
   })
 
   it('프로젝트 목록을 못 읽었으면 던진다 — "등록된 프로젝트가 없습니다"로 위장하지 않는다(라우트의 500)', async () => {

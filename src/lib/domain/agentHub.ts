@@ -3,7 +3,7 @@
 import { deriveSeatState, isWatcherAlive, lastSignalMs, type OrderStatus, type SeatState } from './seatState'
 import { AGENT_TAG, canApproveCompletion, isLaterReport, isSubtreeManagerOf, type OrderRow, type Watcher, type WatcherRow } from './seatmap'
 import { deriveWaitReason, type WaitReason } from './waitReason'
-import { stageLockedForHuman } from './agentWork'
+import { stageLockedForHuman, type PredecessorGate } from './agentWork'
 
 export interface HubItemRow {
   id: string; project_id: string; parent_id: string | null; code: string; name: string; sort_order: number
@@ -24,6 +24,17 @@ export interface AgentHubRows {
   items: HubItemRow[]; orders: OrderRow[]; reports: HubReportRow[]; watchers: WatcherRow[]; members: HubMemberRow[]
   /** 선행 항목 중 approved 주문이 있는 항목 id — orders 는 7일 창이라 오래전 승인을 따로 본다(착수 대기 사유 스펙 §3). */
   approvedItemIds: string[]
+  /** 프로젝트의 선행 기준(SP5b D21) — 없으면 reached(현행). 로더가 싣는다 */
+  gate?: PredecessorGate
+  /** 결재 대기 항목(itemId)의 대기 승인 단계(SP5b — 카드 표시·승인 가능 셈 재료). 없으면 현행(기본 1단계)으로 센다 */
+  queueApprovals?: Readonly<Record<string, HubStepApproval>>
+  /** 프로젝트의 단계 이름(SP5b W2) — 대기 사유 문구의 단계 표기. 없으면 기본 이름 */
+  stageLabels?: Readonly<Partial<Record<string, string>>>
+}
+/** 결재 대기 단계 재료 — agent/approvalState 의 QueueApproval 과 같은 꼴(도메인은 그 모듈을 모른다) */
+export interface HubStepApproval {
+  step: string; index: number; total: number; approver: 'subtree_or_admin' | 'admin'; label: string | null
+  approvedBy: readonly string[]; distinct: boolean
 }
 export type HubOrderState = SeatState
 export interface HubRow {
@@ -65,6 +76,8 @@ export interface HubQueueEntry {
   canManage: boolean
   /** 승인 버튼 노출 — HubRow.canApprove 와 같은 식을 이 주문으로(자기 담당·자기 착수 제외, AUTH-07a). */
   canApprove: boolean
+  /** SP5b W1 — 대기 승인 단계("n/m · 라벨", 승인에 expectedStep 으로 싣는다). 판독 전·실패면 없다. label null = 기본 단계 */
+  approval?: { step: string; index: number; total: number; label: string | null }
 }
 export interface AgentHub {
   projectId: string; projectName: string
@@ -132,6 +145,11 @@ function watchersFor(watchers: WatcherRow[], projectId: string, nowMs: number): 
     .sort((a, b) => a.agent.localeCompare(b.agent))
 }
 
+/** 대기 승인 단계 → 승인 가능 셈 재료(S20). 재료가 없으면 빈 객체 — 현행 셈 */
+function stepMaterials(step: HubStepApproval | undefined, viewerId: string) {
+  return step ? { pendingStepApprover: step.approver, approvedThisRound: step.distinct && step.approvedBy.includes(viewerId) } : {}
+}
+
 export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubViewer): AgentHub {
   const memberIds = myMemberIdsOf(rows.members, viewer)
   const mine = new Set(memberIds)
@@ -192,10 +210,12 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
     const waitReason = isLeaf && delegated && waitingStart
       ? deriveWaitReason({
           depends: item.depends,
-          predecessorByRef: ref => { const p = byRef.get(ref); return p ? { external_ref: ref, code: p.code, name: p.name, stage: p.stage, order_approved: approved.has(p.id), actual_pct: p.actual_pct } : undefined },
+          predecessorByRef: ref => { const p = byRef.get(ref); return p ? { external_ref: ref, code: p.code, name: p.name, stage: p.stage, order_approved: approved.has(p.id), actual_pct: p.actual_pct, dev_workflow: p.dev_workflow } : undefined },
           // 담당자 id 는 있는데 로스터 행이 없으면 계정 미연결과 같은 취급(seatmap.ts 와 같은 규칙).
           assignee: item.assignee_member_id ? { name: assigneeMember?.name ?? '(로스터에 없음)', user_id: assigneeMember?.user_id ?? null } : null,
           watchers: hubWatchers,
+          gate: rows.gate ?? 'reached',
+          stageLabels: rows.stageLabels,
         })
       : null
     if (waitReason !== null && (waitReason.kind === 'dependency' || waitReason.kind === 'agent_off')) counters.stuck++
@@ -203,7 +223,8 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
       itemId: item.id, code: item.code, name: item.name, depth, parentId: item.parent_id,
       isLeaf, milestone: item.milestone,
       assigneeName: item.assignee_member_id ? (memberName.get(item.assignee_member_id) ?? null) : null, assigneeMine, canManage,
-      canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: picked?.claimed_by_user_id === viewer.userId }),
+      canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: picked?.claimed_by_user_id === viewer.userId,
+        ...stepMaterials(picked?.status === 'reported' ? rows.queueApprovals?.[item.id] : undefined, viewer.userId) }),
       delegated, devWorkflow: item.dev_workflow, stage: item.stage,
       stageLocked: stageLockedForHuman({ delegated, orderStatus: picked?.status ?? null }),
       order, prompt: item.agent_prompt,
@@ -219,12 +240,15 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
       const rep = latestReport.get(o.id)
       const assigneeMine = it?.assignee_member_id != null && mine.has(it.assignee_member_id)
       const canManage = it ? isSubtreeManagerOf(it.id, itemById, mine) : false
+      const step = o.wbs_item_id ? rows.queueApprovals?.[o.wbs_item_id] : undefined
       return {
         orderId: o.id, itemId: o.wbs_item_id, code: it?.code ?? '', name: it?.name ?? '',
         agent: rep?.agent ?? o.heartbeat_agent ?? o.claimed_by ?? '', percent: rep?.percent ?? 0, summary: rep?.summary ?? '',
         links: rep?.links ?? [], reportedAt: rep?.created_at ?? o.updated_at, reportId: rep?.id ?? null,
         assigneeMine, canManage,
-        canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: o.claimed_by_user_id === viewer.userId }),
+        canApprove: canApproveCompletion({ isAdmin: viewer.isAdmin, subtreeManager: canManage, assigneeMine, claimedByMe: o.claimed_by_user_id === viewer.userId,
+          ...stepMaterials(step, viewer.userId) }),
+        ...(step ? { approval: { step: step.step, index: step.index, total: step.total, label: step.label } } : {}),
       }
     })
     .sort((a, b) => Date.parse(a.reportedAt) - Date.parse(b.reportedAt))

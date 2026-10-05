@@ -1,3 +1,4 @@
+import { TEST_ENTRY_CONTEXT } from '../fixtures/issue-areas'
 // @vitest-environment jsdom
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -23,13 +24,15 @@ vi.mock('@/components/issues/IssueModals', () => ({
 vi.mock('@/components/issues/IssueAnalysisModal', () => ({ IssueAnalysisModal: () => null }))
 
 import { IssuesView } from '@/components/issues/IssuesView'
+import { SEVERITIES, SOURCES } from '../fixtures/vocab'
 
 const TODAY = '2026-08-28'
 let seq = 0
 function issue(over: Partial<Issue>): Issue {
   seq += 1
   return {
-    id: `i${seq}`, issueNo: seq, piIssueCode: `PI-I-00-0${seq}`, projectId: 'p1', megaCode: '00', megaSeq: seq,
+    codeAreaId: null,
+    id: `i${seq}`, issueNo: seq, code: `PI-I-00-0${seq}`, projectId: 'p1', areaId: '00',
     title: `이슈 ${seq}`, body: '', status: 'open', severity: 'medium', assigneeMemberIds: [],
     startDate: '2026-07-01', dueDate: null, subProcess: '', ownerDepartment: '', relatedSystems: [],
     sourceType: null, sourceDetail: '', minuteSources: [], resolutionNote: '', resolvedAt: null,
@@ -51,7 +54,7 @@ describe('IssuesView 시작일자·남은일수 열', () => {
     issue({ title: '기한 없음', startDate: null }),
   ]
   const render = () => act(async () => root.render(
-    <IssuesView timeZone="Asia/Seoul" issues={issues} members={[]} projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today={TODAY} />,
+    <IssuesView entryContext={TEST_ENTRY_CONTEXT} timeZone="Asia/Seoul" issues={issues} members={[]} projectId="p1" currentUserId={null} canEdit={false} isProjectAdmin={false} myMemberIds={[]} today={TODAY} severities={SEVERITIES} sources={SOURCES} />,
   ))
   const cellOf = (text: string) => [...container.querySelectorAll('td')].find(td => td.textContent === text)
 

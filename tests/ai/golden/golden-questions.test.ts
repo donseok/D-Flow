@@ -9,6 +9,7 @@ import { calSeoulMon } from '../../helpers/calendarFixture'
 import { describe, expect, it } from 'vitest'
 // 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
 import { fixedToolTeams } from '../../helpers/tool-team-source'
+import { fixedToolVocab } from '../../helpers/tool-vocab-source'
 const toolTeams = fixedToolTeams()
 import {
   orchestrateChatV2,
@@ -60,7 +61,7 @@ function buildRegistry(options: FakeRepositoryOptions) {
     createListMeetingsTool(repos.meetings),
     createGetMeetingDetailTool(repos.meetings),
     createListMyMeetingsTool(repos.meetings),
-    createGetAttendanceTool(repos.attendance, toolTeams),
+    createGetAttendanceTool(repos.attendance, toolTeams, fixedToolVocab()),
     createListAnnouncementsTool(repos.announcements),
     createSearchAnnouncementsTool(repos.announcements),
     createSearchMinutesTool(repos.minutes, toolTeams),

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { effectiveModules } from '@/lib/modules/effective'
 import { effectiveModulesMany } from '@/lib/modules/effectiveMany'
 import type { ConfigReadClient } from '@/lib/settings/projectConfig'
+import { PRE_B1_NON_CORE_MODULES, PRE_B1_PROJECT_TOGGLABLE } from '../fixtures/pre-b1-modules'
 
 const WS = '00000000-0000-0000-7e57-000000001631', WS2 = '00000000-0000-0000-7e57-000000001632'
 const P1 = '00000000-0000-0000-7e57-000000001633', P2 = '00000000-0000-0000-7e57-000000001634', P3 = '00000000-0000-0000-7e57-000000001635'
@@ -105,6 +106,21 @@ describe('effectiveModulesMany = 프로젝트마다 effectiveModules(D39)', () =
     const on = await expectSame({ ...tables, project_settings,
       workspace_settings: [wsRow(WS, { 'modules.allowed': ['wiki', 'issues', 'minutes'], 'ai.enabled': true })] }, [P1])
     expect(on.sets.get(P1)!.has('wiki')).toBe(true)
+  })
+  it('SP5 B1 — 옛 modules.enabled(9개) 프로젝트는 워크스페이스가 issue_analysis 를 허용해도 issue_analysis 를 얻지 않는다(명시 값 그대로, 리뷰 P2-6)', async () => {
+    const ws = [wsRow(WS, { 'modules.allowed': [...PRE_B1_NON_CORE_MODULES, 'issue_analysis'] })]
+    const legacy = await expectSame({ ...tables, workspace_settings: ws,
+      project_settings: [pRow(P1, WS, { 'modules.enabled': [...PRE_B1_PROJECT_TOGGLABLE] })] }, [P1])
+    expect(legacy.sets.get(P1)!.has('issues')).toBe(true)
+    expect(legacy.sets.get(P1)!.has('issue_analysis')).toBe(false)
+    // 켠 프로젝트에는 들어온다 — 위 단언이 허용 목록 때문에 비어 있는 것이 아님을 보인다
+    const on = await expectSame({ ...tables, workspace_settings: ws,
+      project_settings: [pRow(P1, WS, { 'modules.enabled': [...PRE_B1_PROJECT_TOGGLABLE, 'issue_analysis'] })] }, [P1])
+    expect(on.sets.get(P1)!.has('issue_analysis')).toBe(true)
+    // 옛 허용 13개 워크스페이스는 새 모듈을 켠 프로젝트에도 주지 않는다
+    const oldAllowed = await expectSame({ ...tables, workspace_settings: [wsRow(WS, { 'modules.allowed': [...PRE_B1_NON_CORE_MODULES] })],
+      project_settings: [pRow(P1, WS, { 'modules.enabled': [...PRE_B1_PROJECT_TOGGLABLE, 'issue_analysis'] })] }, [P1])
+    expect(oldAllowed.sets.get(P1)!.has('issue_analysis')).toBe(false)
   })
   it('1,000행을 넘는 프로젝트 목록도 .range() 로 끝까지 읽는다(D51) — 잘리면 뒤 프로젝트가 failed 로 샌다', async () => {
     const n = 1005

@@ -417,7 +417,7 @@ export function seedPlan(ctx) {
   const issues = [
     ['로그인 화면 응답 지연', 'open', 'high'], ['일정표 인쇄 여백', 'in_progress', 'medium'], ['권한 안내 문구 누락', 'resolved', 'low'],
     ['첨부 미리보기 실패', 'on_hold', 'medium'], ['주간 보고 합계 오차', 'open', 'low'],
-  ].map(([title, status, severity], i) => ({ id: id(`issue:${i}`), project_id: pid, title, body: `${title} — 캡처 표본`, status, severity }))
+  ].map(([title, status, severity], i) => ({ id: id(`issue:${i}`), project_id: pid, title, body: `${title} — 캡처 표본`, severity, statusCode: status }))
   const announcements = [
     ['분기 점검 일정 안내', 'important', true], ['회의실 변경', 'general', false], ['워크숍 참가 신청', 'event', false],
   ].map(([title, category, is_pinned], i) => ({ id: id(`ann:${i}`), project_id: pid, title, body: `${title} 본문`, category, is_pinned, created_by: ctx.users.wsAdmin }))
@@ -835,7 +835,11 @@ async function cmdSeed() {
   must('item_owners 비우기', await db.from('item_owners').delete().in('wbs_item_id', plan.wbs.map((r) => r.id)))
   must('item_owners', await db.from('item_owners').insert(plan.owners))
   await insertOnce('task_dependencies', plan.deps, (c) => db.from('task_dependencies').upsert(c, once()))
-  await insertOnce('issues', plan.issues, (c) => db.from('issues').upsert(c, once()))
+  // 이슈 상태는 두 단계(SP5b D4 — 트리거가 열림으로 시작, 상태는 전이로만). 이미 그 상태면 건너뛴다(멱등)
+  await insertOnce('issues', plan.issues.map((r) => { const row = { ...r }; delete row.statusCode; return row }), (c) => db.from('issues').upsert(c, once()))
+  for (const row of plan.issues.filter((r) => r.statusCode !== 'open')) {
+    must(`이슈 상태(${row.statusCode})`, await db.from('issues').update({ status_code: row.statusCode }).eq('id', row.id).neq('status_code', row.statusCode).select('id'))
+  }
   await insertOnce('announcements', plan.announcements, (c) => db.from('announcements').upsert(c, once()))
   await insertOnce('meetings', plan.meetings, (c) => db.from('meetings').upsert(c, once()))
   await insertOnce('meeting_attendees', plan.attendees, (c) => db.from('meeting_attendees').upsert(c, once('meeting_id,member_id')))

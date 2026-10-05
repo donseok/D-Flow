@@ -3,7 +3,8 @@ import { getAttendanceRecords } from '@/lib/data/attendance'
 import { getProjectRoster } from '@/lib/data/members'
 import { getActorForView } from '@/lib/authz'
 import { isProjectMember } from '@/lib/domain/authz'
-import { calendarViewOf, holidayNamesOf, summarize } from '@/lib/domain/attendance'
+import { calendarViewOf, holidayNamesOf } from '@/lib/domain/attendance'
+import { summarizeAttendance } from '@/lib/settings/vocab'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { PageHero, HeroBadge } from '@/components/ui/PageHero'
@@ -13,7 +14,7 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { todayIn } from '@/lib/domain/calendar'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
-import { pickCalendar } from '@/lib/settings/pick'
+import { pick, pickCalendar } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
@@ -34,8 +35,10 @@ export default async function AttendancePage({ params }: { params: Promise<{ pro
   if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
   const cal = pickCalendar(pc.cfg)
   if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} /></div>
+  const types = pick(pc.cfg, 'attendance.types')
+  if (!types.ok) return <div className="p-6"><ConfigLoadError error={types.error} keyName={types.key} kind={types.kind} locale={locale} /></div>
   const today = todayIn(cal.calendar.timezone, new Date())
-  const s = summarize(records)
+  const s = summarizeAttendance(types.value, records)
 
   return (
     <ProjectPageShell
@@ -62,6 +65,7 @@ export default async function AttendancePage({ params }: { params: Promise<{ pro
         canEdit={isProjectMember(m, projectId)}
         calendar={calendarViewOf(cal.calendar)}
         holidayNames={holidayNamesOf(pc.cfg.holidays)}
+        types={types.value}
       />
     </ProjectPageShell>
   )

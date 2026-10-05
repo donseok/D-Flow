@@ -4,12 +4,12 @@ import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useMinuteLinks } from '@/components/minutes/minuteLinks'
 import { CalendarDays, Clock4, MapPin, Repeat, Trash2, Pencil, Ban, User, AlertTriangle, NotebookText, Megaphone, Check } from 'lucide-react'
-import type { DictKey } from '@/lib/i18n/dict'
 import type { Meeting, MeetingAttendeeInfo, MeetingOccurrence } from '@/lib/domain/types'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { Modal } from '@/components/ui/Modal'
 import { fmtDate } from '@/components/wbs/shared'
-import { MEETING_META, canEditMeeting } from '@/lib/domain/meetings'
+import { canEditMeeting } from '@/lib/domain/meetings'
+import { vocabOf, vocabView, type VocabByProject } from '@/lib/settings/vocab'
 import { fetchMeetingDetail, cancelOccurrence, deleteMeeting } from '@/app/actions/meetings'
 import { createAnnouncementFromMeeting } from '@/app/actions/announcements'
 import { fetchMeetingMinutesLite } from '@/app/actions/minutes'
@@ -17,7 +17,7 @@ import { fetchMeetingMinutesLite } from '@/app/actions/minutes'
 type LinkedMinute = { id: string; title: string; minuteDate: string }
 
 export function MeetingDetailModal({
-  open, occurrence, currentUserId, isAdmin, onClose, onEditSeries, onChanged,
+  open, occurrence, currentUserId, isAdmin, onClose, onEditSeries, onChanged, categories,
 }: {
   open: boolean
   occurrence: MeetingOccurrence | null
@@ -28,6 +28,8 @@ export function MeetingDetailModal({
   onClose: () => void
   onEditSeries: (m: Meeting) => void
   onChanged: () => void
+  /** 회의 범주(설정 meetings.categories) — 프로젝트별 */
+  categories: VocabByProject<'meetings.categories'>
 }) {
   const { t } = useLocale()
   const minuteLinks = useMinuteLinks()   // 화면 안 링크의 범위(D38 ①) — 없으면 옛 형식(스텁이 행의 워크스페이스로, D6)
@@ -37,28 +39,37 @@ export function MeetingDetailModal({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 상세 조회 실패 — msg 가 null 이면(던짐) 공용 문구. 효과 안에서 t 를 읽지 않는다(t 가 바뀔 때마다 다시 읽지 않게)
+  const [loadError, setLoadError] = useState<{ msg: string | null } | null>(null)
   const [pending, startTransition] = useTransition()
   const [posting, startPost] = useTransition()
   const [posted, setPosted] = useState(false)
 
   useEffect(() => {
     if (!open || !occurrence) {
-      setDetail(null); setMinutes([]); setConfirmDelete(false); setConfirmCancel(false); setPosted(false); setError(null); return
+      setDetail(null); setMinutes([]); setConfirmDelete(false); setConfirmCancel(false); setPosted(false); setError(null); setLoadError(null); return
     }
     let alive = true
     setLoading(true)
     // 회의록 조회는 부가 정보 — 실패해도 상세 표시를 막지 않는다
+    setLoadError(null)
     Promise.all([
-      fetchMeetingDetail(occurrence.seriesId).catch(() => null),
+      // 상세 조회 실패는 '참석자 없음·본문 없음'이 아니다 — 사유를 보인다(SP5 B2 — D39). 던짐도 같은 실패
+      fetchMeetingDetail(occurrence.seriesId).catch(() => ({ ok: false as const, error: null })),
       fetchMeetingMinutesLite(occurrence.seriesId).catch(() => [] as LinkedMinute[]),
     ])
-      .then(([d, ms]) => { if (alive) { setDetail(d); setMinutes(ms) } })
+      .then(([d, ms]) => {
+        if (!alive) return
+        if (d && d.ok === false) { setDetail(null); setLoadError({ msg: d.error }) }
+        else setDetail(d && d.ok ? d.detail : null)
+        setMinutes(ms)
+      })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [open, occurrence])
 
   if (!occurrence) return null
-  const meta = MEETING_META[occurrence.category]
+  const meta = vocabView('meetings.categories', vocabOf(categories, occurrence.projectId), occurrence.category, t)
   const canEdit = detail ? canEditMeeting(detail.meeting, currentUserId, isAdmin) : false
   const timeLabel = occurrence.startTime
     ? `${occurrence.startTime}${occurrence.endTime ? `–${occurrence.endTime}` : ''}`
@@ -86,7 +97,7 @@ export function MeetingDetailModal({
       <Modal
         open={open && !confirmDelete && !confirmCancel}
         onClose={onClose}
-        eyebrow={t(meta.labelKey as DictKey)}
+        eyebrow={meta.label}
         title={occurrence.title}
         footer={canEdit ? (
           <>
@@ -112,11 +123,11 @@ export function MeetingDetailModal({
         )}
       >
         <div className="space-y-3 text-sm">
-          <span className={`chip ${meta.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{t(meta.labelKey as DictKey)}</span>
+          <span className={`chip ${meta.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}</span>
 
-          {error && (
-            <p className="flex items-center gap-1.5 rounded-lg bg-delayed-weak px-3 py-2 text-xs font-medium text-delayed">
-              <AlertTriangle className="h-4 w-4 shrink-0" />{error}
+          {(error || loadError) && (
+            <p role="alert" className="flex items-center gap-1.5 rounded-lg bg-delayed-weak px-3 py-2 text-xs font-medium text-delayed">
+              <AlertTriangle className="h-4 w-4 shrink-0" />{error || loadError?.msg || t('meet.detail.loadFailed')}
             </p>
           )}
           <div className="flex items-center gap-2 text-ink"><CalendarDays className="h-4 w-4 text-ink-subtle" />{fmtDate(occurrence.occurrenceDate)}

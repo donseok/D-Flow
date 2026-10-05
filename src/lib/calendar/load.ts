@@ -57,6 +57,11 @@ export function projectCalendarOf(keys: ProjectConfig['keys'], holidays: readonl
   })
 }
 
+/** 날짜 경계만 필요한 소비처용 — 주 규칙/근무 요일 손상은 시간대 계산에 영향을 주지 않는다. */
+export function projectTimezone(cfg: { keys: ProjectConfig['keys'] }): string {
+  return settled('calendar.timezone', cfg.keys['calendar.timezone'])
+}
+
 /** 워크스페이스에는 날짜 예외 표가 없다(D36) — 요일 하나를 규칙 하나로 승격한다 */
 export function workspaceCalendarOf(keys: WorkspaceConfig['keys']): WorkCalendar {
   return calendarOf({

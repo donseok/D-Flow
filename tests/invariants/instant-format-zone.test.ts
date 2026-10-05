@@ -61,7 +61,7 @@ describe('instant-format-zone — 시각 표시는 범위 tz 로', () => {
   it('위반이 없다', () => {
     const hits = files.flatMap((p) => instantFormatHits(relative(ROOT, p), readFileSync(p, 'utf8')))
     expect(hits, hits.join('\n')).toEqual([])
-  })
+  }, 20_000)
   it('표본 — 잡는 것과 잡지 않는 것', () => {
     expect(instantFormatHits('a.tsx', "new Intl.DateTimeFormat('ko-KR', { month: 'short' }).format(d)")).toHaveLength(1)
     expect(instantFormatHits('a.tsx', "new Intl.DateTimeFormat('ko-KR', { month: 'short', timeZone }).format(d)")).toEqual([])

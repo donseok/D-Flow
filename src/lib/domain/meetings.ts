@@ -1,25 +1,6 @@
-import type { Meeting, MeetingCategory, MeetingException, MeetingOccurrence, MeetingRecurrence } from '@/lib/domain/types'
+import type { Meeting, MeetingException, MeetingOccurrence, MeetingRecurrence } from '@/lib/domain/types'
 import { addDaysIso } from './dates'
 import { compareKoreanName } from './nameSort'
-
-/**
- * 카테고리 메타 — 라벨은 dict 키(표시 지점에서 t()로 해석), 색상은 상태/팀 팔레트
- * 재사용으로 라이트·다크 자동 대응. (ANNOUNCEMENT_META/ATTENDANCE_META 관례)
- */
-export const MEETING_META: Record<
-  MeetingCategory,
-  { labelKey: `meet.cat.${MeetingCategory}`; chip: string; dot: string }
-> = {
-  general:  { labelKey: 'meet.cat.general',  chip: 'bg-brand-weak text-brand',                dot: 'bg-brand' },
-  routine:  { labelKey: 'meet.cat.routine',  chip: 'bg-progress-weak text-progress',          dot: 'bg-progress' },
-  kickoff:  { labelKey: 'meet.cat.kickoff',  chip: 'bg-done-weak text-done',                  dot: 'bg-done' },
-  review:   { labelKey: 'meet.cat.review',   chip: 'bg-pending-weak text-pending',            dot: 'bg-pending' },
-  report:   { labelKey: 'meet.cat.report',   chip: 'bg-accent-secondary/15 text-accent-secondary', dot: 'bg-accent-secondary' },
-  external: { labelKey: 'meet.cat.external', chip: 'bg-delayed-weak text-delayed',            dot: 'bg-delayed' },
-}
-
-/** 표시 순서(폼 셀렉트/범례용) */
-export const MEETING_CATEGORIES: MeetingCategory[] = ['routine', 'general', 'kickoff', 'review', 'report', 'external']
 
 /** 반복 옵션 표시 순서 */
 export const RECURRENCE_ORDER: MeetingRecurrence[] = ['none', 'daily', 'weekly', 'biweekly', 'monthly']

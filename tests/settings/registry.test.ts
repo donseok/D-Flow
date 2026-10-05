@@ -1,4 +1,4 @@
-// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 22키 등록(SP5 A 의 calendar.* 여섯 포함 — 같은 이름이 두 스코프, SP3b UI-3 의 portal.widgets·views.default), 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
+// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 45키 등록(SP6 forms.* 넷, SP3b UI-3 portal.widgets·views.default 둘 포함). 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
@@ -18,11 +18,17 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 22키 — 워크스페이스 12, 프로젝트 10(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP3b UI-3 portal.widgets·views.default)', () => {
+  it('정확히 45키 — 워크스페이스 14, 프로젝트 31(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 둘)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
-      'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'portal.widgets'])
+      'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'portal.widgets', 'minutes.attachments', 'minutes.root_folders'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
-      'wbs.excel_profile', 'modules.enabled', 'workflow.stage_credits', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'views.default'])
+      'wbs.excel_profile', 'modules.enabled', 'workflow.stage_credits',
+      'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers', 'workflow.predecessor_gate',
+      'calendar.timezone', 'calendar.working_days', 'calendar.week_start',
+      'views.default',
+      'issues.id_policy', 'issues.analysis', 'minutes.attachments',
+      'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses', 'fields.wbs_item', 'fields.issue', 'fields.weekly_row',
+      'forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'])
     for (const k of ['agents.stage_workflow', 'core.stage_credits']) {
       expect(KEYS, k).not.toContain(k)
     }
@@ -39,12 +45,36 @@ describe('등록 키', () => {
     expect(row('modules.enabled')).toEqual(['project', 'project_admin', 'settings', 'custom', 'immediate', ['recompute']])
     expect(row('workflow.stage_credits')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['future_only']])
     expect(row('views.default')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['none']])
-    expect(settingDef('project', 'workflow.stage_credits')!.sql).toEqual({ readers: ['apply_workflow_event'] })
-    // SQL 판독·seedFrom·edit 은 SP3a 에서 stage_credits·없음·accent 하나였고 SP5 A 의 프로젝트 calendar.* 가 더한다(tests/settings/calendar-keys)
-    expect(ALL.filter((d) => d.sql !== null).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/workflow.stage_credits', 'project/calendar.working_days', 'project/calendar.week_start'])
-    expect(ALL.filter((d) => d.seedFrom).map((d) => `${d.scope}/${d.key}`)).toEqual(['project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start'])
-    expect(ALL.every((d) => d.reindexOn === undefined)).toBe(true)
-    expect(ALL.filter((d) => d.edit).map((d) => `${d.scope}/${d.key}`)).toEqual(['workspace/branding.accent', 'project/calendar.week_start'])
+    // SP5 B2 — SP7 전까지 키 전체가 platform_admin(D21)
+    expect(row('minutes.root_folders')).toEqual(['workspace', 'platform_admin', 'minutes', 'custom', 'immediate', ['future_only']])
+    // SP5 B4 어휘 — 참조 검사가 있는 guarded, 소유 모듈은 그 어휘를 쓰는 기능
+    expect(row('attendance.types')).toEqual(['project', 'project_admin', 'attendance', 'vocab', 'immediate', ['guarded']])
+    expect(row('meetings.categories')).toEqual(['project', 'project_admin', 'meetings', 'vocab', 'immediate', ['guarded']])
+    expect(row('issues.severities')).toEqual(['project', 'project_admin', 'issues', 'vocab', 'immediate', ['guarded']])
+    expect(row('issues.sources')).toEqual(['project', 'project_admin', 'issue_analysis', 'vocab', 'immediate', ['guarded']])
+    expect(row('issues.cause_categories')).toEqual(['project', 'project_admin', 'issue_analysis', 'vocab', 'immediate', ['guarded']])
+    // SP5b I(D1) — 이슈 표시 상태는 어휘 계열의 여섯째 키(개정 §2.8.2 immediate/guarded)
+    expect(row('workflow.issue_statuses')).toEqual(['project', 'project_admin', 'issues', 'vocab', 'immediate', ['guarded']])
+    // SP5b W1(스펙 §4.5, 개정 §2.8.2) — 흐름 다섯 키. 크레딧 표는 workflow_value_of 로도 읽힌다(D20)
+    expect(row('workflow.credit_policy')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['future_only']])
+    expect(row('workflow.wbs_stage_labels')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['none']])
+    expect(row('workflow.approval_steps')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['future_only', 'guarded']])
+    expect(row('workflow.approval_distinct_approvers')).toEqual(['project', 'project_admin', 'wbs', 'boolean', 'immediate', ['future_only']])
+    expect(row('workflow.predecessor_gate')).toEqual(['project', 'project_admin', 'wbs', 'select', 'immediate', ['recompute']])
+    expect(settingDef('project', 'workflow.stage_credits')!.sql).toEqual({ readers: ['apply_workflow_event', 'workflow_value_of'] })
+    // SQL 판독·seedFrom·edit 은 SP3a 에서 stage_credits·없음·accent 하나였고 SP5 A 의 프로젝트 calendar.* 가 더한다(tests/settings/calendar-keys).
+    // SP5 B1 의 issues.* 둘은 SQL 판독만 더한다(tests/settings/issues-defs)
+    expect(ALL.filter((d) => d.sql !== null).map((d) => `${d.scope}/${d.key}`)).toEqual(['workspace/minutes.attachments', 'workspace/minutes.root_folders', 'project/workflow.stage_credits',
+      'project/workflow.credit_policy', 'project/workflow.approval_steps', 'project/workflow.approval_distinct_approvers', 'project/workflow.predecessor_gate',
+      'project/calendar.timezone', 'project/calendar.working_days', 'project/calendar.week_start',
+      'project/issues.id_policy', 'project/issues.analysis', 'project/minutes.attachments',
+      'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources', 'project/workflow.issue_statuses', 'project/fields.wbs_item', 'project/fields.issue', 'project/fields.weekly_row'])
+    expect(ALL.filter((d) => d.reindexOn).map((d) => `${d.scope}/${d.key}`)).toEqual([
+      'project/fields.wbs_item', 'project/fields.issue', 'project/fields.weekly_row',
+    ])
+    expect(ALL.filter((d) => d.edit).map((d) => `${d.scope}/${d.key}`)).toEqual(['workspace/branding.accent', 'project/calendar.week_start',
+      'project/attendance.types', 'project/meetings.categories', 'project/issues.severities', 'project/issues.sources', 'project/issues.cause_categories',
+      'project/workflow.issue_statuses'])
   })
   it('settingDef 는 스코프와 키로 찾는다 — 다른 스코프의 키는 없음', () => {
     expect(settingDef('project', 'core.level_labels')?.key).toBe('core.level_labels')
@@ -106,7 +136,8 @@ describe('parse — 워크스페이스 키', () => {
     expect(P('modules.allowed')(['kanban', 'minutes'])).toEqual({ ok: true, value: ['kanban', 'minutes'] })
     expect(P('modules.allowed')(['wbs']).ok).toBe(false)             // core
     expect(P('modules.allowed')(['kanban', 'kanban']).ok).toBe(false)
-    expect(P('modules.allowed')(['issue_analysis']).ok).toBe(false)   // SP5 부터
+    expect(P('modules.allowed')(['issue_analysis']).ok).toBe(true)    // SP5 B1 부터 비core 모듈
+    expect(P('modules.allowed')(['issue_mega']).ok).toBe(false)       // 모르는 id
     expect(P('modules.allowed')('kanban').ok).toBe(false)
   })
   it('ai.enabled 는 boolean 만', () => {
@@ -216,12 +247,17 @@ describe('parse — 프로젝트 키', () => {
     expect(P('modules.enabled')(['kanban', 'kanban']).ok).toBe(false)
     expect(settingDef('project', 'modules.enabled')!.default).toEqual(['kanban', 'meetings', 'weekly', 'issues', 'announcements', 'attendance', 'agents', 'wiki', 'chatbot'])
   })
-  it('workflow.stage_credits — validateStageCredits 와 같은 답, 정책 인자 자리(SP5b 가 주입)', () => {
+  it('workflow.stage_credits — validateStageCredits 와 같은 답, 정책 주입(SP5b — 레지스트리 판독은 고정 불변식만, 정책과의 교차는 저장 검사)', () => {
     expect(parseStageCredits(DEFAULT_STAGE_CREDITS)).toEqual({ ok: true, value: DEFAULT_STAGE_CREDITS })
     expect(parseStageCredits({ default: { as: 0, ip: 20, rw: 30, im: 90, xx: 100 } }).ok).toBe(true)
     expect(parseStageCredits({ default: { as: 0, ip: 22, rw: 30, im: 90, xx: 100 } }).ok).toBe(false)   // 5 단위
     expect(parseStageCredits({ default: { as: 0, ip: 30, rw: 50, im: 80, xx: 90 } }).ok).toBe(false)    // xx=100
-    expect(() => parseStageCredits(DEFAULT_STAGE_CREDITS, { step: 1, min_gap: 5 })).toThrow(/SP5b/)
+    // SP5b(의도적 수정 표): 정책 인자를 받는다 — 개정 §3.3.4 반례 0/20/25/90/100 은 {5,5} 에서 통과, 기본 정책에서 거부
+    expect(parseStageCredits({ default: { as: 0, ip: 20, rw: 25, im: 90, xx: 100 } }, { step: 5, min_gap: 5 }).ok).toBe(true)
+    expect(parseStageCredits({ default: { as: 0, ip: 20, rw: 25, im: 90, xx: 100 } }).ok).toBe(false)
+    // 레지스트리 parse 는 고정 불변식만(STRUCTURAL) — 저장된 표가 정책 변경으로 invalid 가 되지 않는다
+    expect(settingDef('project', 'workflow.stage_credits')!.parse({ default: { as: 0, ip: 22, rw: 23, im: 90, xx: 100 } }).ok).toBe(true)
+    expect(settingDef('project', 'workflow.stage_credits')!.parse({ default: { as: 0, ip: 30, rw: 30, im: 90, xx: 100 } }).ok).toBe(false)
     expect(settingDef('project', 'workflow.stage_credits')!.default).toEqual(DEFAULT_STAGE_CREDITS)
   })
 })
@@ -272,7 +308,8 @@ describe('G0-4 — 등록하지 않는 네 선언이 형 검사를 통과하고 
       .toEqual({ ok: true, value: [{ day: 'sunday', from: null }, { day: 'monday', from: null }] })
     expect(issueFields.reindexOn).toEqual(['label', 'searchable', 'options.label'])
     expect(issueStatuses.impact).toEqual(['guarded'])
-    expect(KEYS).not.toContain(approvalSteps.key)
+    // SP5b W1 이 workflow.approval_steps 를 실제로 등록했다(이 선언은 형 검사 표본으로 남는다)
+    expect(KEYS).toContain(approvalSteps.key)
   })
 })
 
@@ -285,15 +322,18 @@ describe('카탈로그 메타와 사전', () => {
       .map(status)).toEqual(Array(8).fill('verified'))
     expect(['branding.product_name', 'branding.logo', 'branding.accent', 'navigation.menu', 'core.extra_axis_label'].map(status))
       .toEqual(Array(5).fill('stored'))
-    expect(status('workflow.stage_credits')).toBe('wired')
+    // SP5b Z — 크레딧 표와 흐름 다섯은 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성(Z) 뒤 verified
+    expect(['workflow.stage_credits', 'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers',
+      'workflow.predecessor_gate'].map(status)).toEqual(Array(6).fill('verified'))
     // SP5 A 과제 29 — 달력 셋은 정의·편집·소비처·테스트 네 연결이 끝나 verified(스펙 D44)
     expect(['calendar.timezone', 'calendar.working_days', 'calendar.week_start'].map(status)).toEqual(Array(3).fill('verified'))
     // SP3b UI-3 — portal.widgets 는 소비처(과제 10 홈 v1)까지 네 연결이라 wired, views.default도 작업 계획 소비처(과제 14)까지 wired
     expect(status('portal.widgets')).toBe('wired')
     expect(status('views.default')).toBe('wired')
-    expect(PLANNED_KEYS.map((p) => p.key)).toEqual(expect.arrayContaining(['workflow.approval_steps']))
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('portal.widgets')
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('views.default')
+    expect(['forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'].map(status)).toEqual(Array(4).fill('verified'))
+    expect(PLANNED_KEYS.map((p) => p.key).some((k) => k.startsWith('forms.'))).toBe(false)
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)
   })
   it('키마다 라벨·설명 사전 키가 ko·en 둘 다 있다', () => {

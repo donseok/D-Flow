@@ -16,6 +16,8 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { PageHero } from '@/components/ui/PageHero'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { WeeklySheetView } from '@/components/weekly/WeeklySheetView'
+import { CustomFieldsProvider } from '@/components/fields/CustomFieldValuesEditor'
+import { pick } from '@/lib/settings/pick'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
 export default async function WeeklyPage({
@@ -59,28 +61,37 @@ export default async function WeeklyPage({
     hasCarryOverSource(projectId, weekStart),
   ])
   const areas = pc.cfg.areas.weekly_section
+  const customFields = pick(pc.cfg, 'fields.weekly_row')
 
   return (
     <ProjectPageShell hero={hero} variant="fill">
-      <WeeklySheetView
+      <CustomFieldsProvider
         projectId={projectId}
-        weekStart={weekStart}
-        prevWeek={prevWeekKey(cal.weekStart, weekStart)}
-        nextWeek={nextWeekKey(cal.weekStart, weekStart)}
-        weekLabel={`${wk.label} (${wk.thisRange})`}
-        weekTitle={wk.label}
-        thisRange={wk.thisRange}
-        nextRange={wk.nextRange}
-        projectName={projectName}
-        report={sheet ? { id: sheet.report.id, title: sheet.report.title } : null}
-        areas={areas}
-        // 표시 집합은 여기서 한 번 정한다(D32 — 활성 영역의 행 → 내용 있는 비활성 영역의 행). 같은 화면 안에서는 빼지 않는다.
-        initialRows={sheet ? visibleRows(sheet.rows, areas) : []}
-        hasCarrySource={hasCarry}
-        me={me}
-        canEditCells={isProjectMember(actor, projectId)}
-        canCreateRound={isProjectAdmin(actor, projectId)}
-      />
+        entity="weekly_row"
+        defs={customFields.ok ? customFields.value : null}
+        canAdmin={isProjectAdmin(actor, projectId)}
+        locale={locale}
+      >
+        <WeeklySheetView
+          projectId={projectId}
+          weekStart={weekStart}
+          prevWeek={prevWeekKey(cal.weekStart, weekStart)}
+          nextWeek={nextWeekKey(cal.weekStart, weekStart)}
+          weekLabel={`${wk.label} (${wk.thisRange})`}
+          weekTitle={wk.label}
+          thisRange={wk.thisRange}
+          nextRange={wk.nextRange}
+          projectName={projectName}
+          report={sheet ? { id: sheet.report.id, title: sheet.report.title } : null}
+          areas={areas}
+          // 표시 집합은 여기서 한 번 정한다(D32 — 활성 영역의 행 → 내용 있는 비활성 영역의 행). 같은 화면 안에서는 빼지 않는다.
+          initialRows={sheet ? visibleRows(sheet.rows, areas) : []}
+          hasCarrySource={hasCarry}
+          me={me}
+          canEditCells={isProjectMember(actor, projectId)}
+          canCreateRound={isProjectAdmin(actor, projectId)}
+        />
+      </CustomFieldsProvider>
     </ProjectPageShell>
   )
 }

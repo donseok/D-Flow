@@ -14,11 +14,13 @@ type Filter = { op: 'eq' | 'is' | 'gt' | 'lt'; col: string; val: unknown } | { o
 export class FakeSettingsDb {
   projects = new Map<string, FakeProject>()
   workspaces = new Map<string, FakeWorkspace>()
+  formTemplates: Record<string, unknown>[] = []
   areas: Record<string, unknown>[] = []
   teams: Record<string, unknown>[] = []
   wbsItems: Record<string, unknown>[] = []
   agentProjects: Record<string, unknown>[] = []
   weeklyReports: Record<string, unknown>[] = []
+  issues: Record<string, unknown>[] = []
   /** 날짜 예외(holidays — project_id·date·name·kind). 해석기의 달력 로더가 키셋으로 읽는다(SP5 A 과제 13) */
   holidays: Record<string, unknown>[] = []
   /** apply_*_settings 의 ⑥ 참조 검사 흉내 — 값을 돌려주면 그 오류로 거부한다(SP5 — settings_ref_check 의 SETTINGS_CODE_IN_USE) */
@@ -96,7 +98,17 @@ export class FakeSettingsDb {
       async rpc(name: string, args: Record<string, unknown>) {
         db.rpcCalls.push({ name, args })
         if (db.beforeRpc) { const f = db.beforeRpc; db.beforeRpc = null; f() }
+        if (name === 'get_project_creation_receipt') {
+          const request = args.p_request as { name: string; values: unknown }
+          const digest = createHash('sha256').update(JSON.stringify({ name: request.name, values: request.values })).digest('hex')
+          const found = db.history.find(h => h.command_id === args.p_command_id && h.changed_by === args.p_actor && (h.source === 'create' || h.source === 'copy'))
+          return found ? found.command_digest === digest
+            ? { data: { status: 'duplicate', project_id: found.project_id, revision: 1 }, error: null }
+            : { data: null, error: { code: '23505', message: 'COMMAND_REUSED' } }
+            : { data: null, error: null }
+        }
         if (name === 'create_project_with_settings') return db.createProject(args)
+        if (name === 'upsert_ai_index_jobs') return { data: { count: (args.p_jobs as unknown[])?.length ?? 0 }, error: null }
         if (name !== 'apply_project_settings' && name !== 'apply_workspace_settings') return { data: null, error: { message: `fake: unknown rpc ${name}` } }
         return db.apply(name === 'apply_project_settings' ? { projectId: args.p_project_id as string } : { workspaceId: args.p_workspace_id as string }, args)
       },
@@ -117,7 +129,7 @@ export class FakeSettingsDb {
       const src = this.projects.get(a.p_copy_from as string)
       if (!src || src.workspaceId !== a.p_workspace_id) return err('42501', 'COPY_SOURCE_FORBIDDEN')
     }
-    const id = `00000000-0000-4000-8000-${String(this.seq++).padStart(12, '0')}`
+    const id = (a.p_destination_id as string | undefined) ?? `00000000-0000-4000-8000-${String(this.seq++).padStart(12, '0')}`
     this.projects.set(id, { id, workspaceId: a.p_workspace_id as string, values: { ...values }, revision: 1, schemaVersion: 1 })
     for (const [k, v] of Object.entries(values)) {
       this.history.push({ id: this.seq++, project_id: id, revision: 1, key: k, old_value: null, new_value: v, source: a.p_copy_from ? 'copy' : 'create',
@@ -131,12 +143,14 @@ export class FakeSettingsDb {
       case 'project_settings': return [...this.projects.values()].map((p) => ({ project_id: p.id, values: p.values, revision: p.revision, schema_version: p.schemaVersion,
         ...(select.includes('projects') ? { projects: { workspace_id: p.workspaceId } } : {}) }))
       case 'workspace_settings': return [...this.workspaces.values()].map((w) => ({ workspace_id: w.id, values: w.values, revision: w.revision, schema_version: w.schemaVersion }))
+      case 'form_templates': return this.formTemplates
       case 'projects': return [...this.projects.values()].map((p) => ({ id: p.id, workspace_id: p.workspaceId }))
       case 'project_areas': return this.areas
       case 'teams': return this.teams
       case 'wbs_items': return this.wbsItems
       case 'agent_projects': return this.agentProjects
       case 'weekly_reports': return this.weeklyReports
+      case 'issues': return this.issues
       case 'holidays': return this.holidays
       case 'project_settings_history': return this.history.filter((h) => h.project_id) as unknown as Record<string, unknown>[]
       case 'workspace_settings_history': return this.history.filter((h) => h.workspace_id) as unknown as Record<string, unknown>[]

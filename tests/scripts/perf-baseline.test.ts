@@ -139,3 +139,24 @@ describe('iaRoutes — IA 별로 경로 셋에 더할 경로(SP3b 과제 37, D32
     expect(src).toMatch(/\[\.\.\.perfRoutes\(project\.id, routeNames\), \.\.\.iaRoutes\(ia,/)
   })
 })
+
+describe('workflow 측정 순환(SP5b P0 — D22)', async () => {
+  const { WORKFLOW_AGENT_CYCLE, WORKFLOW_HUMAN_CYCLE, summarizeEventSamples } = await import('../../scripts/lib/perf.mjs')
+  it('에이전트 순환은 주문 상태표를 따라 한 바퀴(ready → … → approved), 사람 순환은 ip·im·xx', () => {
+    expect(WORKFLOW_AGENT_CYCLE[0]).toBe('claim')
+    expect(WORKFLOW_AGENT_CYCLE.at(-1)).toBe('approve')
+    expect(WORKFLOW_HUMAN_CYCLE).toEqual(['ip', 'im', 'xx'])
+  })
+  it('사건별 p50/p95 와 전체(all)를 낸다 — 빈 표본은 throw', () => {
+    const s = summarizeEventSamples({ claim: [1, 2, 3, 4], approve: [10, 20] })
+    expect(s.claim).toEqual({ n: 4, p50: 2, p95: 4 })
+    expect(s.approve).toEqual({ n: 2, p50: 10, p95: 20 })
+    expect(s.all.n).toBe(6)
+    expect(() => summarizeEventSamples({ claim: [] })).toThrow()
+  })
+  it('perf-baseline.mjs 는 이름 인자로 부른다 — 8인자·9인자 두 스키마에서 같은 호출', () => {
+    const src = readFileSync('scripts/perf-baseline.mjs', 'utf8')
+    expect(src).toMatch(/apply_workflow_event\(p_event => \$1, p_actor => \$2, p_item_id => \$3, p_order_id => \$4, p_stage => \$5\)/)
+    expect(src).toMatch(/cmd === 'workflow'/)
+  })
+})

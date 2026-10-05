@@ -115,3 +115,26 @@ export function iaRoutes(ia, { slug, wid, pid }) {
   if (ia === 'ws') return [`/w/${encodeURIComponent(slug)}`, `/w/${encodeURIComponent(slug)}/projects`, `/api/shell?ws=${wid}&project=${pid}`]
   throw new Error(`--ia 는 ${IA_KINDS.join('|')}: ${ia}`)
 }
+
+/**
+ * apply_workflow_event 측정 순환(SP5b D22) — 에이전트 경로(주문 사건)와 사람 경로(단계 지정). 한 순환은 한 트랜잭션에서 돌고 롤백한다.
+ * 두 스키마(87c6116 의 8인자·SP5b 의 9인자)에서 같은 이름 인자로 부른다 — 9번째 인자(p_expected_step)는 기본 1단계에서 생략 가능이다.
+ */
+export const WORKFLOW_AGENT_CYCLE = Object.freeze(['claim', 'report_completion', 'reject', 'report_completion', 'approve', 'unapprove', 'approve', 'rework', 'report_completion', 'approve'])
+export const WORKFLOW_HUMAN_CYCLE = Object.freeze(['ip', 'im', 'xx'])
+
+/**
+ * 사건별 표본 → { 사건: { n, p50, p95 } } + 전체(all). 빈 표본은 throw(측정이 조용히 비지 않게).
+ * @param {Record<string, number[]>} samples @returns {Record<string, { n: number, p50: number, p95: number }>}
+ */
+export function summarizeEventSamples(samples) {
+  /** @type {Record<string, { n: number, p50: number, p95: number }>} */
+  const out = {}
+  const all = []
+  for (const [event, values] of Object.entries(samples)) {
+    out[event] = { n: values.length, p50: percentile(values, 50), p95: percentile(values, 95) }
+    all.push(...values)
+  }
+  out.all = { n: all.length, p50: percentile(all, 50), p95: percentile(all, 95) }
+  return out
+}

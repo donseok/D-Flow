@@ -304,6 +304,24 @@ describe('chat v2 deterministic router', () => {
     expect(member.calls[0].args).toMatchObject({ memberId: 'member-1', types: ['quarter'] })
   })
 
+  it('근태 유형은 그 프로젝트 설정 라벨에서 읽는다 — 바꾼 라벨·새 유형·공백 무시, 짧은 이름은 대조하지 않는다(SP5 B4 D46)', () => {
+    const types = [
+      { code: 'work', label: '정상근무', counts_as: 'work' as const, selectable: true },
+      { code: 'annual', label: '연가', counts_as: 'leave' as const, selectable: true },
+      { code: 'edu', label: '사내 교육', counts_as: 'work' as const, selectable: false },
+      { code: 'sick', label: '병가', counts_as: 'leave' as const, selectable: true },
+    ]
+    const ask = (q: string) => {
+      const r = routeChatRequest(request(q, context('attendance', { filters: { memberId: 'all' } })), NOW, SEOUL_MON, { attendanceTypes: types })
+      return r.kind === 'tools' ? r.calls[0].args.types : 'not-tools'
+    }
+    expect(ask('이번 주 연가 쓴 사람')).toEqual(['annual'])
+    expect(ask('오늘 사내교육 간 사람')).toEqual(['edu'])
+    expect(ask('오늘 휴가인 사람')).toEqual(['annual', 'sick'])
+    expect(ask('오늘 출근한 사람')).toEqual(['work'])
+    expect(ask('이번 달 연차 현황')).toBeUndefined()   // 옛 라벨은 이 프로젝트의 말이 아니다
+  })
+
   it.each([
     ['전체 프로젝트 현황 알려줘', context('wbs')],
     ['주간 요약', context('dashboard')],

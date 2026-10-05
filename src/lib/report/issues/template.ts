@@ -2,6 +2,9 @@ import 'server-only'
 
 import { open } from 'node:fs/promises'
 import path from 'node:path'
+import { hasZipHeader } from '@/lib/report/engine/validate'
+
+export { hasZipHeader }
 
 export const ISSUE_ANALYSIS_TEMPLATE_RELATIVE_PATH =
   'src/lib/report/assets/issue-analysis-template.pptx'
@@ -22,18 +25,6 @@ export interface IssueAnalysisTemplateDiagnostic {
   code: IssueAnalysisTemplateCode
   message: string
   path: string
-}
-
-/** OOXML(PPTX/ZIP) 파일의 최소 매직 바이트 검사. */
-export function hasZipHeader(header: Uint8Array): boolean {
-  return header.length >= 4
-    && header[0] === 0x50
-    && header[1] === 0x4b
-    && (
-      (header[2] === 0x03 && header[3] === 0x04)
-      || (header[2] === 0x05 && header[3] === 0x06)
-      || (header[2] === 0x07 && header[3] === 0x08)
-    )
 }
 
 /**

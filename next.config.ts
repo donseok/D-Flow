@@ -12,9 +12,10 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: process.cwd(),
   // PPTX 템플릿을 각 Node.js 다운로드 라우트 서버 번들에 포함(런타임 fs 읽기).
   outputFileTracingIncludes: {
-    "/api/report": ["./src/lib/report/assets/weekly-template.pptx"],
+    "/api/report": ["./src/lib/report/assets/default/weekly_report_*.pptx", "./src/lib/report/assets/default/weekly_report_*.xlsx"],
+    "/api/export": ["./src/lib/report/assets/default/wbs_export_xlsx.xlsx"],
     // 렌더링 API와 모달 사전 진단 Server Action은 서로 다른 함수로 배포된다.
-    "/api/issue-analysis": [issueAnalysisTemplate],
+    "/api/issue-analysis": ["./src/lib/report/assets/default/issue_analysis_pptx.pptx"],
     "/p/[projectId]/issues": [issueAnalysisTemplate],
   },
   async headers() {

@@ -21,7 +21,7 @@ export const ROW: Record<string, unknown> = {
   minute_id: U, issue_id: U, meeting_id: U, parent_id: null, name: 'Acme', title: 'Acme', claimed_by: null,
 }
 /** 표에 따라 달라야 가드까지 가는 행 — 워크스페이스 팀은 project_id 가 null 이다(updateTeam 이 프로젝트 팀을 ERR_MISSING 으로 거른다) */
-const TABLE_ROWS: Readonly<Record<string, Record<string, unknown>>> = { teams: { project_id: null } }
+const TABLE_ROWS: Readonly<Record<string, Record<string, unknown>>> = { teams: { project_id: null }, form_templates: { form_kind: 'weekly_report_pptx' } }
 
 /** pass = 가드 통과, deny = 세션 없음(모든 가드·행위자·세션 거부), rank = 세션은 있고 네 등급 가드만 거부,
  *  notAdmin = 관리자 아닌 멤버(관리자 가드 셋만 거부 — requireProjectMember·행위자·세션은 통과, 행위자는 MEMBER_ACTOR) */

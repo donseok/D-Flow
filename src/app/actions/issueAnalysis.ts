@@ -3,10 +3,10 @@
 import { requireProjectMember } from '@/lib/authz'
 import { loadIssueAnalysisIssues } from '@/lib/data/issueAnalysis'
 import { requireModule } from '@/lib/modules/gate'
-import {
-  isIssueMegaCode,
-  type IssueMegaFilter,
-} from '@/lib/domain/issueAnalysis'
+import type { IssueAreaFilter } from '@/lib/domain/issueAnalysis'
+import { loadIssueEntryContext } from '@/lib/issues/context'
+import { issueAnalysisVocabOf } from '@/lib/report/issues/model'
+import { orderedVocab } from '@/lib/settings/vocab'
 import {
   ensureIssueAnalysis,
   type EnsureIssueAnalysisResult,
@@ -94,7 +94,7 @@ function fromEnsureResult(
  */
 export async function ensureIssueAnalysisAction(
   projectId: string,
-  megaFilter: IssueMegaFilter = 'all',
+  areaFilter: IssueAreaFilter = 'all',
 ): Promise<EnsureIssueAnalysisActionResult> {
   const guard = await requireProjectMember(projectId)
   const template = await safeTemplateDiagnostic()
@@ -109,13 +109,15 @@ export async function ensureIssueAnalysisAction(
       pptExport,
     }
   }
-  const mod = await requireModule({ projectId }, 'issues')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17). 꺼지면 로더·LLM 에 닿지 않는다
+  const mod = await requireModule({ projectId }, 'issue_analysis')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17). 꺼지면 로더·LLM 에 닿지 않는다
   if (!mod.ok) return { ok: false, state: 'unavailable', error: mod.error, preflight: null, template, pptExport }
-  if (megaFilter !== 'all' && !isIssueMegaCode(megaFilter)) {
+  const context = await loadIssueEntryContext(projectId)
+  if (!context.ok) return { ok: false, state: 'unavailable', error: context.error, preflight: null, template, pptExport }
+  if (areaFilter !== 'all' && !context.value.areas.some(area => area.id === areaFilter)) {
     return {
       ok: false,
       state: 'unavailable',
-      error: '잘못된 Mega 분석 범위입니다.',
+      error: '잘못된 영역 분석 범위입니다.',
       preflight: null,
       template,
       pptExport,
@@ -127,15 +129,15 @@ export async function ensureIssueAnalysisAction(
   try {
     const loaded = await loadIssueAnalysisIssues(
       projectId,
-      megaFilter === 'all' ? undefined : megaFilter,
+      areaFilter === 'all' ? undefined : areaFilter,
     )
     issues = loaded.issues
     majors = loaded.majors
     if (
-      megaFilter !== 'all'
-      && issues.some(issue => issue.megaCode !== megaFilter)
+      areaFilter !== 'all'
+      && issues.some(issue => issue.areaId !== areaFilter)
     ) {
-      throw new Error('[issue-analysis] Mega 분석 범위 정합성이 올바르지 않습니다.')
+      throw new Error('[issue-analysis] 영역 분석 범위 정합성이 올바르지 않습니다.')
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : '이슈 분석 데이터를 불러오지 못했습니다.'
@@ -143,14 +145,14 @@ export async function ensureIssueAnalysisAction(
     return {
       ok: false,
       state: 'unavailable',
-      error: message,
+      error: '이슈 분석 처리에 실패했습니다. 다시 시도하세요.',
       preflight: null,
       template,
       pptExport,
     }
   }
 
-  const preflight = buildIssueAnalysisPreflight(issues)
+  const preflight = buildIssueAnalysisPreflight(issues, context.value.areas)
   if (preflight.totalCount === 0) {
     return {
       ok: false,
@@ -173,7 +175,14 @@ export async function ensureIssueAnalysisAction(
   }
 
   try {
-    const result = await ensureIssueAnalysis(projectId, issues, majors, guard.actor.userId)
+    const { severities, sources, causeCategories } = context.value.vocab
+    if (!causeCategories) {
+      return { ok: false, state: 'unavailable', error: '원인 분류 설정(issues.cause_categories)이 손상돼 분석서를 만들 수 없습니다. 관리자에게 설정 점검을 요청하세요.', preflight, template, pptExport }
+    }
+    const result = await ensureIssueAnalysis(projectId, issues, majors, guard.actor.userId, context.value.areas, {
+      severityCodes: orderedVocab(severities).map(e => e.code),
+      analysis: issueAnalysisVocabOf(causeCategories, sources),
+    })
     return fromEnsureResult(result, preflight, template)
   } catch (error) {
     // ensure 계층은 정상적으로는 never-throw 결과를 주지만, 예기치 않은 프로그래밍/IO
@@ -183,7 +192,7 @@ export async function ensureIssueAnalysisAction(
     return {
       ok: false,
       state: 'unavailable',
-      error: message,
+      error: '이슈 분석 처리에 실패했습니다. 다시 시도하세요.',
       preflight,
       template,
       pptExport,

@@ -23,6 +23,7 @@ function render(
     attendeeNames: ['김철수', '박영희'],
     senderName: '김철수',
     appUrl,
+    categoryLabel: '정례',
   })
 }
 
@@ -180,7 +181,7 @@ describe('renderMeetingInvite — 본문', () => {
 
   it('참석자가 없으면 참석자 줄을 넣지 않는다', () => {
     const out = renderMeetingInvite({
-      kind: 'created', meeting: BASE, attendeeNames: [], senderName: '김철수', appUrl: null,
+      kind: 'created', meeting: BASE, attendeeNames: [], senderName: '김철수', appUrl: null, categoryLabel: '정례',
     })
     expect(out.text).not.toContain('참석자')
     expect(out.html).not.toContain('참석자')
@@ -188,7 +189,7 @@ describe('renderMeetingInvite — 본문', () => {
 
   it('작성자 이름이 비면 작성자 줄을 넣지 않는다', () => {
     const out = renderMeetingInvite({
-      kind: 'created', meeting: BASE, attendeeNames: ['박영희'], senderName: '  ', appUrl: null,
+      kind: 'created', meeting: BASE, attendeeNames: ['박영희'], senderName: '  ', appUrl: null, categoryLabel: '정례',
     })
     expect(out.text).not.toContain('작성자')
     expect(out.html).not.toContain('작성자')
@@ -238,7 +239,7 @@ describe('renderMeetingInvite — 이스케이프', () => {
 
   it('참석자 이름도 이스케이프한다', () => {
     const out = renderMeetingInvite({
-      kind: 'created', meeting: BASE, attendeeNames: ['<b>김철수</b>'], senderName: '<i>박영희</i>', appUrl: null,
+      kind: 'created', meeting: BASE, attendeeNames: ['<b>김철수</b>'], senderName: '<i>박영희</i>', appUrl: null, categoryLabel: '정례',
     })
     expect(out.html).not.toContain('<b>김철수</b>')
     expect(out.html).toContain('&lt;b&gt;')

@@ -159,8 +159,8 @@ export function TeamsManager({ teams, workspaceId }: {
           </table>
         </div>
         <p className="mt-3 text-xs text-ink-subtle">
-          팀 추가 시 회의록 보관함에 같은 이름의 기본 폴더(자동 편철 앵커)가 함께 생성됩니다. 이름을
-          바꿔도 팀 코드(엑셀·필터·봇이 쓰는 식별자)와 회의록 기본 폴더 이름은 그대로입니다.
+          팀 추가 시 회의록 보관함에 그 팀의 최상위 폴더(자동 편철 앵커)가 함께 생성됩니다. 이름을 바꾸면
+          그 폴더 이름도 따라 바뀌고, 팀 코드(엑셀·필터·봇이 쓰는 식별자)는 그대로입니다.
         </p>
       </div>
     </section>

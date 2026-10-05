@@ -32,11 +32,12 @@ export interface IssueMinuteSource {
 export interface MinuteLinkedIssue {
   linkId: string
   issueId: string
-  issueNo: number
-  piIssueCode: string | null
+  code: string
   projectId: string
   title: string
   status: 'open' | 'in_progress' | 'resolved' | 'on_hold'
+  /** 표시 상태 code(SP5b) — 생략 = 범주 code */
+  statusCode?: string
   minuteVersionId: string
   bodyHash: string
   blockIndex: number

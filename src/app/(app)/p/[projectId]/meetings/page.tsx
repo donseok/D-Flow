@@ -17,7 +17,7 @@ import { MeetingsView } from '@/components/meetings/MeetingsView'
 import { currentRuleDay, todayIn } from '@/lib/domain/calendar'
 import { calendarViewOf, holidayNamesOf, monthGridRange } from '@/lib/domain/attendance'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
-import { pickCalendar } from '@/lib/settings/pick'
+import { pick, pickCalendar } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { moduleSetFor } from '@/lib/modules/gate'
@@ -48,6 +48,8 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
   if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
   const cal = pickCalendar(pc.cfg)
   if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} /></div>
+  const categories = pick(pc.cfg, 'meetings.categories')
+  if (!categories.ok) return <div className="p-6"><ConfigLoadError error={categories.error} keyName={categories.key} kind={categories.kind} locale={locale} /></div>
   const today = todayIn(cal.calendar.timezone, new Date())
   const minutesHref = mods.has('minutes') && wsRef?.ok ? wsHref(wsRef.ws.slug, 'minutes', { project: projectId }) : null
   // 명단은 참석자 선택·이름 표시용 곁가지 — 실패해도 일정은 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
@@ -90,7 +92,8 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
       <MeetingsView projectId={projectId} meetings={meetings} exceptions={exceptions} members={members}
         loadFailed={!meetRes.ok} todayIso={today} currentUserId={user?.id ?? null}
         canManage={isProjectAdmin(m, projectId)} canEdit={isProjectMember(m, projectId)} minutesHref={minutesHref}
-        calendar={calendarViewOf(cal.calendar)} holidayNames={holidayNamesOf(pc.cfg.holidays)} />
+        calendar={calendarViewOf(cal.calendar)} holidayNames={holidayNamesOf(pc.cfg.holidays)}
+        categories={categories.value} />
     </ProjectPageShell>
   )
 }

@@ -18,6 +18,7 @@ vi.mock('@/components/meetings/MeetingDetailModal', () => ({ MeetingDetailModal:
 
 import { MeetingsView } from '@/components/meetings/MeetingsView'
 import { SUNDAY_CAL } from '../fixtures/calendarView'
+import { MEET_CATS } from '../fixtures/vocab'
 
 let container: HTMLDivElement, root: Root
 beforeEach(() => { container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container) })
@@ -26,7 +27,7 @@ afterEach(() => { act(() => root.unmount()); container.remove() })
 async function openList(loadFailed?: boolean) {
   await act(async () => {
     root.render(<MeetingsView calendar={SUNDAY_CAL} projectId="p1" meetings={[]} exceptions={[]} members={[]} todayIso="2026-09-27"
-      currentUserId="u1" canManage={false} canEdit {...(loadFailed === undefined ? {} : { loadFailed })} />)
+      currentUserId="u1" canManage={false} canEdit {...(loadFailed === undefined ? {} : { loadFailed })} categories={MEET_CATS} />)
   })
   const listTab = [...container.querySelectorAll('button[role="tab"]')].find(b => b.textContent === 'meet.view.list')!
   await act(async () => { (listTab as HTMLButtonElement).click() })

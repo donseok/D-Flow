@@ -43,7 +43,7 @@ describe('정의 — 두 스코프에 같은 이름 셋(스펙 §4.2 정의 행)
   it('SQL 판독 — 근무 요일은 is_workday, 주 시작은 키 함수·트리거·참조 검사(패리티 대상)', () => {
     expect(settingDef('project', 'calendar.working_days')!.sql).toEqual({ readers: ['is_workday'] })
     expect(settingDef('project', 'calendar.week_start')!.sql).toEqual({ readers: ['week_key_of', 'weekly_reports_week_key_guard', 'settings_ref_check'] })
-    expect(settingDef('project', 'calendar.timezone')!.sql).toBeNull()
+    expect(settingDef('project', 'calendar.timezone')!.sql).toEqual({ readers: ['assign_issue_code'] })
     expect(settingDef('project', 'calendar.week_start')!.impact).toEqual(['future_only', 'recompute'])
   })
   it('검증 — 오프셋 꼴 tz·빈 근무 요일·목록 아닌 규칙은 parse 실패', () => {
@@ -85,7 +85,7 @@ describe('카탈로그·사전(D44 — 들어가는 체크포인트에서 planne
   it('PLANNED_KEYS 에 calendar.* 가 없고, 남은 SP5 행은 체크포인트 이름(B1~B4)으로 적혀 있다', () => {
     expect(PLANNED_KEYS.filter((p) => p.key.startsWith('calendar.'))).toEqual([])
     const sp5 = PLANNED_KEYS.filter((p) => p.sp.startsWith('SP5 '))
-    expect(sp5.length).toBe(10)
+    expect(sp5.length).toBe(0)   // B1 이 issues 둘, B3 가 minutes.attachments, B4 가 어휘 다섯, B2 가 minutes.root_folders 를 등록 — 남은 SP5 행 없음
     for (const p of sp5) expect(p.sp, p.key).toMatch(/^SP5 B[1-4]$/)
   })
   it.each(KEYS)('%s — 메타는 SP5 A·verified(과제 29 — 정의·편집·소비처·테스트 네 연결)', (key) => {

@@ -11,7 +11,7 @@ import { MINUTES_TREE_LIMIT } from '@/lib/domain/minutes'
 import { fetchMinutesRange, fetchMinutesSearch, fetchMinutesExplorer, fetchMinuteFavorites, toggleMinuteFavorite } from '@/app/actions/minutes'
 import { queueUiPref } from '@/lib/prefs/debouncedSave'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes, useTeamSlot } from '@/components/app/TeamsProvider'
+import { TeamBar } from '@/components/minutes/TeamBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { CardSkeleton } from '@/components/ui/Skeleton'
@@ -26,7 +26,8 @@ import type { MinutesScope } from '@/lib/minutes/scope'
 
 type ViewKey = 'list' | 'calendar' | 'tree'
 type TreeState = 'idle' | 'loading' | 'error' | ExplorerData
-type TeamKey = 'ALL' | TeamCode
+/** 'ALL' 또는 팀 id(SP5 B2 — 담당 필터는 minutes.team_id) */
+type TeamKey = 'ALL' | string
 
 function monthRangeOf(year: number, month0: number): [string, string] {
   const last = new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate()
@@ -37,7 +38,8 @@ function monthRangeOf(year: number, month0: number): [string, string] {
 export function MinutesView({
   scope, initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
   initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
-  adminProjectIds = [], isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null, calendar,
+  isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null, calendar,
+  teamOptions = [], initialTeamId = null,
 }: {
   /** 화면의 범위(슬러그 워크스페이스 + ?project=, 계획 V13) — 월 이동·검색·탐색기·즐겨찾기 재조회에 그대로 넘긴다 */
   scope: MinutesScope
@@ -49,12 +51,10 @@ export function MinutesView({
   projects: { id: string; name: string }[]
   currentUserId: string | null
   /** 관리자인 워크스페이스 id — **폴더 조작**(개명·이동·삭제)의 폴더별 판정 근거(서버: 작성자 ∨ 그 폴더
-   *  워크스페이스의 관리자, 0006). 회의록 개별 건 판정은 adminProjectIds·isSuperuser 로 한다. */
+   *  워크스페이스의 관리자, 0006). 회의록 개별 건 판정은 리프의 canEdit(서버 canEditMinute — D40)이다. */
   adminWorkspaceIds?: string[]
   /** 이 화면의 워크스페이스에 역할이 있음(hasProjectRoleInWorkspace) — 업로드 자격. */
   canEdit: boolean
-  /** 관리자 이상인 프로젝트 id — 회의록 개별 건 조작의 항목별 판정 근거(서버 checkOwner 미러). */
-  adminProjectIds?: string[]
   /** 슈퍼유저 — 프로젝트 미지정 회의록은 작성자 본인 또는 슈퍼유저만 조작 가능. */
   isSuperuser?: boolean
   defaultTeam?: TeamCode | null
@@ -69,6 +69,10 @@ export function MinutesView({
   noProjectWorkspace?: { ok: true; workspaceId: string } | { ok: false; error: string } | null
   /** 워크스페이스 달력 — 요일만(날짜 예외 없음, D36). 달력 보기의 첫 열·쉬는 날 */
   calendar: CalendarView
+  /** 담당 필터 선택지(SP5 B2) — 그 범위의 활성 팀(프로젝트를 고르면 그 프로젝트의 전용 + 공용). 키는 팀 id */
+  teamOptions?: { id: string; code: string; name: string }[]
+  /** ?team=<팀 id> — 페이지가 확인한 선택지의 id 만 온다 */
+  initialTeamId?: string | null
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
@@ -87,15 +91,18 @@ export function MinutesView({
     ro.observe(bar)
     return () => { ro.disconnect(); view.style.setProperty('--minutes-bar-h', '0px') }
   }, [])
-  const teamCodes = useTeamCodes()
-  const slotOf = useTeamSlot()
+  // 같은 code 의 팀이 둘이면(공용·전용) 이름을 붙여 가른다
+  const teamTabs = useMemo(() => teamOptions.map(tm => ({
+    key: tm.id,
+    label: teamOptions.filter(o => o.code === tm.code).length > 1 ? `${tm.code} · ${tm.name}` : tm.code,
+  })), [teamOptions])
   const [initY, initM] = useMemo(() => todayIso.split('-').map(Number), [todayIso])
   const [year, setYear] = useState(initY)
   const [month0, setMonth0] = useState((initM || 1) - 1)
   // 리스트 뷰 폐지(사용자 결정 2026-07-24) — 구 저장값('list')은 트리로 정규화.
   // 리스트 렌더 경로 자체는 검색 결과 표시용으로 남는다(isSearch).
   const [view, setView] = useState<ViewKey>(initialView === 'list' ? 'tree' : initialView)
-  const [team, setTeam] = useState<TeamKey>('ALL')
+  const [team, setTeam] = useState<TeamKey>(initialTeamId ?? 'ALL')
   const [minutes, setMinutes] = useState<Minute[]>(initialMinutes)
   const [query, setQuery] = useState('')
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -106,7 +113,7 @@ export function MinutesView({
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const reqRef = useRef(0)
   // 마지막으로 **받은** (연·월·팀) — 실패하면 직전 머리가 아니라 이 값으로 되돌린다(빠른 연속 이동에서 첫 요청이 더 새 요청에 밀려 버려지면 직전 머리는 받지 못한 달이다)
-  const settledRef = useRef<{ y: number; m0: number; team: TeamKey }>({ y: initY, m0: (initM || 1) - 1, team: 'ALL' })
+  const settledRef = useRef<{ y: number; m0: number; team: TeamKey }>({ y: initY, m0: (initM || 1) - 1, team: initialTeamId ?? 'ALL' })
   // 서버가 트리를 실어 보냈으면 그대로 초기값으로 쓴다 — 아래 마운트 effect 와 changeView 는
   // 둘 다 'idle'/비객체일 때만 조회하므로 자동으로 no-op 이 되어 왕복이 사라진다.
   // 서버 조회가 실패해 null 이면 'idle' 로 떨어져 기존 클라이언트 폴백 경로가 그대로 산다.
@@ -157,7 +164,8 @@ export function MinutesView({
   }
 
   const canUpload = canEdit
-  const teamOrNull = team === 'ALL' ? null : team
+  // 보관함 챗의 담당 필터는 팀 code 계약(폴더 루트 판정)이라 선택한 팀의 code 를 넘긴다
+  const teamCodeOrNull = team === 'ALL' ? null : teamOptions.find(o => o.id === team)?.code ?? null
   const isSearch = query.trim().length > 0
   const isTreeExplorer = view === 'tree' && !isSearch
 
@@ -281,7 +289,7 @@ export function MinutesView({
 
   // 팀 탭은 재조회 없이 리프만 클라이언트 필터(폴더 레일은 항상 전부 — 스펙 v2)
   const explorerLeaves: ExplorerLeaf[] = typeof treeState === 'object'
-    ? (team === 'ALL' ? treeState.leaves : treeState.leaves.filter(l => l.teamCode === team))
+    ? (team === 'ALL' ? treeState.leaves : treeState.leaves.filter(l => l.teamId === team))
     : []
   const explorerFolders: MinuteFolder[] = typeof treeState === 'object' ? treeState.folders : []
 
@@ -298,7 +306,7 @@ export function MinutesView({
       <div ref={filterBarRef} className="sticky top-(--frame-sticky-top) z-10 -mx-1 shrink-0 space-y-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedTabs<TeamKey>
-            tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamCodes.map(tk => ({ key: tk, label: tk }))]}
+            tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamTabs]}
             value={team} onChange={changeTeam} size="sm" />
           <div className="flex items-center gap-1">
             <button onClick={() => shift(-1)} disabled={isSearch || view === 'tree'} className="chrome-icon disabled:opacity-40" aria-label="prev month">
@@ -370,9 +378,7 @@ export function MinutesView({
                     <li key={mi.id}>
                       <Link href={minuteLinks.minute(mi.id)}
                         className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
-                        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
-                          {mi.teamCode}
-                        </span>
+                        <TeamBar code={mi.teamCode} />
                         <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
                         <span className="w-24 truncate text-right text-xs text-ink-subtle">{mi.createdByName ?? ''}</span>
                       </Link>
@@ -399,9 +405,7 @@ export function MinutesView({
                   <li key={mi.id}>
                     <Link href={minuteLinks.minute(mi.id)}
                       className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
-                      <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(mi.teamCode).bar}`}>
-                        {mi.teamCode}
-                      </span>
+                      <TeamBar code={mi.teamCode} />
                       <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
                       <span className="w-24 truncate text-right text-xs text-ink-subtle">{mi.createdByName ?? ''}</span>
                     </Link>
@@ -434,8 +438,9 @@ export function MinutesView({
               onRetryFavorites={() => void loadFavorites()}
               layout={exLayout}
               currentUserId={currentUserId} adminWorkspaceIds={adminWorkspaceIds}
-              adminProjectIds={adminProjectIds} isSuperuser={isSuperuser} teamCodes={teamCodes}
+              isSuperuser={isSuperuser}
               projects={projects} myProjectIds={myProjectIds}
+              meetingCategories={typeof treeState === 'object' ? treeState.meetingCategories : undefined}
               onChanged={() => { void loadTree(); router.refresh() }}
               onFolderSelect={id => { uploadFolderRef.current = id }} />
           </div>
@@ -462,7 +467,7 @@ export function MinutesView({
       {/* 트리 뷰는 화면이 전 기간이므로 챗 범위도 전 기간으로 일치시킨다(월 라벨 '전체 기간'과 정합) */}
       <ArchiveChatPanel open={chatOpen} onClose={() => setChatOpen(false)}
         workspaceId={scope.workspaceId}
-        team={teamOrNull}
+        team={teamCodeOrNull}
         from={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[0]}
         to={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[1]} />
       {void locale}

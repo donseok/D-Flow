@@ -27,7 +27,7 @@
 //        E10 비소속 배지. E3(옛 칸반 → 작업 계획 보드 307 — UI-3 과제 1 이 더했다, 과제 14 의 스텁 뒤에 초록)은 E1 바로 뒤.
 //   SP5 A: import-unregistered-teams 뒤(SP4 A2 의 export-standard 뒤)·render-pages 앞에서 달력 넷 — calendar-week-sunday(일요일 프로젝트 S 와 월요일·월~토
 //        프로젝트 M 의 연속 2주·이월·라벨·범위·기본 보고서 라벨), calendar-week-transition(월요일 T 를 일요일로 전환 — 미리보기 E = 저장 E, 과도기 6일,
-//        과거·과도기 URL 이 같은 문서), calendar-tz(워크스페이스 tz 를 LA 로 바꾼 뒤 만든 L 의 시드·오늘·공지 게시 판정·사용현황 일자, 끝에 tz 복귀),
+//        과거·과도기 URL 이 같은 문서), calendar-tz(워크스페이스 Pago Pago 와 프로젝트 Kiritimati 시간대 검증, 끝에 tz 복귀),
 //        calendar-workday(토요일 근무 예외 → 의존성 연결·계획%, 예외 없는 토요일로 옮기면 거부). 기존 주간 단계의 키는 일요일(워크스페이스 기본값 복사 —
 //        SP5 D5)이고 러너의 '오늘'은 그 범위에 저장된 tz 다.
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
@@ -59,7 +59,7 @@ import {
 } from './lib/e2e.mjs'
 import {
   A2_TEAM, E2E_AREAS, REGISTERED_AREA, UNREGISTERED_TEAM, areaInput, carriedText, fillWbsWorkbook, importForm, importResultView, inspectForm, nextServerMode,
-  pptText, sentinelReport, shiftDays, slideCount, teamRefs, teamSlotVerdict,
+  pptText, sentinelReport, shiftDays, slideCount, teamRefs, teamSlotVerdict, issueAnalysisRunFixture, zipHasAll,
   dowOfIso, nextDowOnOrAfter, plainWeekLabel, plannedPctByName, rangeText, storedTimezone, todayInTz,
 } from './lib/e2e.mjs'
 import { SENTINEL_MASKS, excludeRegistered, findSentinels, sp4Sentinels, zipTextParts } from './lib/sentinels.mjs'
@@ -83,10 +83,11 @@ const log = (m) => console.error(`· ${m}`)
 
 let env
 let adminEnv
+let envText
 try {
-  const text = readFileSync('.env.local', 'utf8')
-  env = localClientEnv(text)
-  adminEnv = localAdminEnv(text) // 타 워크스페이스 픽스처 전용(로컬 판정은 targets.mjs 한 곳)
+  envText = readFileSync('.env.local', 'utf8')
+  env = localClientEnv(envText)
+  adminEnv = localAdminEnv(envText) // 타 워크스페이스 픽스처 전용(로컬 판정은 targets.mjs 한 곳)
 } catch (e) {
   console.error(`✗ ${e.message}`)
   process.exit(1)
@@ -115,6 +116,9 @@ const ACTIONS = {
   createProject: { filename: 'src/app/actions/project.ts', exportedName: 'createProject', worker: '/w/[slug]/projects/page' },
   createAccount: { filename: 'src/app/actions/accounts.ts', exportedName: 'createAccount', worker: '/w/[slug]/admin/accounts/page' },
   addTeam: { filename: 'src/app/actions/teams.ts', exportedName: 'addTeam', worker: '/w/[slug]/admin/teams/page' },
+  // SP5 B2 minutes-teams — 팀 개명·비활성(공용 팀 관리 화면)과 탐색기의 폴더 만들기
+  updateTeam: { filename: 'src/app/actions/teams.ts', exportedName: 'updateTeam', worker: '/w/[slug]/admin/teams/page' },
+  createMinuteFolder: { filename: 'src/app/actions/minutes.ts', exportedName: 'createMinuteFolder', worker: '/w/[slug]/minutes/page' },
   createMinute: { filename: 'src/app/actions/minutes.ts', exportedName: 'createMinute', worker: '/w/[slug]/minutes/page' },
   addProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'addProjectTeam', worker: '/p/[projectId]/settings/page' },
   upsertRosterMember: { filename: 'src/app/actions/roster.ts', exportedName: 'upsertRosterMember', worker: '/p/[projectId]/members/page' },
@@ -124,6 +128,14 @@ const ACTIONS = {
   redeemInviteWithSignup: { filename: 'src/app/actions/inviteRedeem.ts', exportedName: 'redeemInviteWithSignup', worker: '/invite/[token]/page' },
   updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
   createIssue: { filename: 'src/app/actions/issues.ts', exportedName: 'createIssue', worker: '/p/[projectId]/issues/page' },
+  // SP5b I issue-status-flow — 이슈 모달의 진행 저장과 설정 화면의 기록 옮기기
+  updateIssueProgress: { filename: 'src/app/actions/issues.ts', exportedName: 'updateIssueProgress', worker: '/p/[projectId]/issues/page' },
+  migrateVocabCode: { filename: 'src/app/actions/vocab.ts', exportedName: 'migrateVocabCode', worker: '/p/[projectId]/settings/page' },
+  // SP5b W1 workflow-approval — 명세 패널의 승인 버튼, 단계 패널의 단계 지정·단계 승인
+  approveAgentCompletion: { filename: 'src/app/actions/agentWork.ts', exportedName: 'approveAgentCompletion', worker: '/p/[projectId]/wbs/page' },
+  setWbsStage: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsStage', worker: '/p/[projectId]/wbs/page' },
+  setWbsDevWorkflow: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsDevWorkflow', worker: '/p/[projectId]/wbs/page' },
+  approveWbsStep: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'approveWbsStep', worker: '/p/[projectId]/wbs/page' },
   createAgentToken: { filename: 'src/app/actions/agentTokens.ts', exportedName: 'createAgentToken', worker: '/account/page' },
   setWorkspaceRole: { filename: 'src/app/actions/accounts.ts', exportedName: 'setWorkspaceRole', worker: '/w/[slug]/admin/accounts/page' },
   listAuthzEvents: { filename: 'src/app/actions/authzEvents.ts', exportedName: 'listAuthzEvents', worker: '/w/[slug]/settings/page' },
@@ -1155,9 +1167,9 @@ async function main() {
   step('calendar-week-transition', { ...transition, pastUrl: `/p/${calT.id}/weekly?week=${tPastKey}`, midTransitionUrl: `/p/${calT.id}/weekly?week=${shiftDays(kp, 2)}` },
     Object.values(transition.checks).every(Boolean) ? undefined : `주 시작 전환: ${JSON.stringify(transition)}`)
 
-  // calendar-tz — 워크스페이스 A 의 tz 를 LA 로 바꾼 뒤 만든 L 은 그 tz 를 복사한다(seedFrom — 상속 아님). L 의 '오늘'은 LA: 이번 주 문서가 매개변수 없는
-  // 주간 화면에 실리고, 오늘 게시(시작 = 종료 = LA 오늘) 공지는 헤더 티커에 있고 내일 시작 공지는 없다. 사용현황 일자는 결정적 순간
-  // (2026-01-15T03:30Z — LA 01-14·UTC 01-15)의 이벤트 한 행으로 두 tz 를 비교한다(행은 로컬 픽스처 — 끝에 지운다). 끝에 워크스페이스 tz 를 되돌린다
+  // calendar-tz — 워크스페이스 A(Pago Pago)와 새 프로젝트(Kiritimati)를 서로 다른 tz 로 둔다(UTC−11·UTC+14, 날짜 경계가 항상 갈린다).
+  // 프로젝트 '오늘' 기준 주간 문서·공지와 워크스페이스 '오늘'을 따로 계산한다. 사용현황 일자는 결정적 순간
+  // (2026-01-15T03:30Z — Pago Pago 01-14·UTC 01-15)의 이벤트 한 행으로 두 tz 를 비교한다(행은 로컬 픽스처 — 끝에 지운다). 끝에 워크스페이스 tz 를 되돌린다
   // (키가 없던 워크스페이스면 unset — 뒤 단계의 '오늘'이 원래 tz 를 전제한다).
   const wsPage = `/w/${encodeURIComponent(wsARow.slug)}/settings`   // wsARow — 단계 16 이 읽은 워크스페이스 A 의 슬러그
   const wsTzBefore = rows('워크스페이스 A 설정', await svc.from('workspace_settings').select('values').eq('workspace_id', wsA).single()).values['calendar.timezone']
@@ -1167,18 +1179,22 @@ async function main() {
     const patch = tz === undefined ? { set: {}, unset: ['calendar.timezone'] } : { set: { 'calendar.timezone': tz }, unset: [] }
     return mustOk('updateWorkspaceSettings', (await admin.action(wsPage, 'updateWorkspaceSettings', [wsA, { expectedRevision: doc.revision, commandId: randomUUID(), ...patch }])).result)
   }
-  const LA = 'America/Los_Angeles'
+  const WORKSPACE_TZ = 'Pacific/Pago_Pago'
+  const PROJECT_TZ = 'Pacific/Kiritimati'
   let tzStep
-  await setWorkspaceTz(LA)
+  await setWorkspaceTz(WORKSPACE_TZ)
   try {
     const calL = await newCalProject('L')
+    await setProject(calL, { 'calendar.timezone': PROJECT_TZ })
     const lStored = await storedOf(calL)
+    const workspaceTzStored = storedTimezone(rows('워크스페이스 시간대', await svc.from('workspace_settings').select('values').eq('workspace_id', wsA).single()).values)
     await withArea(calL)
-    const lToday = todayInTz(LA)
+    const lToday = todayInTz(PROJECT_TZ)
+    const workspaceToday = todayInTz(WORKSPACE_TZ)
     await admin.http('GET', `/p/${calL.id}/weekly`)
     const lDoc = mustOk('L 이번 주', await createWeek(calL, lToday, false))
     const lHtml = await (await admin.http('GET', `/p/${calL.id}/weekly`)).text()
-    const lAfter = todayInTz(LA)
+    const lAfter = todayInTz(PROJECT_TZ)
     await admin.http('GET', `/p/${calL.id}/announcements`)
     const annNow = `E2E 오늘 게시 ${calTag}`
     const annLater = `E2E 내일 게시 ${calTag}`
@@ -1207,8 +1223,8 @@ async function main() {
         return (data ?? []).filter((r) => r.events > 0).map((r) => String(r.d))
       }
       // 일자 판독을 /usage GET 보다 먼저 — 그 화면의 after()(purgeOldUsageEvents)가 보존 기간(90일) 밖인 이 픽스처를 지운다(체크포인트 A 첫 실행에서
-      // LA 판독 뒤 UTC 판독이 빈 배열이었다 — 경합)
-      const la = await day(LA)
+      // Pago Pago 판독 뒤 UTC 판독이 빈 배열이었다 — 경합)
+      const la = await day(WORKSPACE_TZ)
       const utc = await day('UTC')
       const bad = await admin.sb.rpc('usage_daily_actives', { p_from: '2026-01-13', p_to: '2026-01-16', p_timezone: 'Asia/Seol' })
       const usageHtml = await (await admin.http('GET', wsPath(wsA, 'usage'))).text()
@@ -1217,11 +1233,13 @@ async function main() {
       await svc.from('usage_events').delete().eq('id', ev.id)
     }
     tzStep = {
-      projectId: calL.id, seeded: { timezone: lStored['calendar.timezone'], weekStart: lStored['calendar.week_start'] }, today: lToday,
+      projectId: calL.id, seeded: { workspaceTimezone: workspaceTzStored, projectTimezone: lStored['calendar.timezone'], weekStart: lStored['calendar.week_start'] },
+      today: { workspace: workspaceToday, project: lToday, distinct: workspaceToday !== lToday },
       reportOnPage: lHtml.includes(lDoc.reportId) || lToday !== lAfter, unreadBadge, portalHome: { now: homeHtml.includes(annNow), later: homeHtml.includes(annLater) }, usage,
-      discriminating: todayInTz('UTC') !== lToday,
       checks: {
-        seeded: lStored['calendar.timezone'] === LA && JSON.stringify(lStored['calendar.week_start']) === JSON.stringify([{ day: 'sunday', from: null }]),
+        seeded: workspaceTzStored === WORKSPACE_TZ && lStored['calendar.timezone'] === PROJECT_TZ
+          && JSON.stringify(lStored['calendar.week_start']) === JSON.stringify([{ day: 'sunday', from: null }]),
+        todayPair: workspaceToday !== lToday,
         // 자정을 넘긴 순간이면 다음 키 화면이 정답이다 — 그때는 이 항목을 판정하지 않는다(lToday !== lAfter)
         today: lHtml.includes(lDoc.reportId) || lToday !== lAfter,
         badge: unreadBadge === 1,
@@ -1295,10 +1313,10 @@ async function main() {
     // SP4 A1 — B 의 주간(이번 주 W1: 개명한 실험·비활성 운영·신규)과 설정(주간 영역 편집기)
     [`/p/${B.id}/weekly`, [exp.renamed, fresh.name]],
     [`/p/${B.id}/settings`, [exp.renamed, fresh.name]],
-    // SP5 A — 일요일 프로젝트의 주간(라벨·범위), 전환 프로젝트의 과거 URL(옛 월요일 키 — 같은 문서), LA 프로젝트 설정(달력 절)
+    // SP5 A — 일요일 프로젝트의 주간(라벨·범위), 전환 프로젝트의 과거 URL(옛 월요일 키 — 같은 문서), Kiritimati 프로젝트 설정(달력 절)
     [`/p/${calS.id}/weekly?week=${sundayWeek.S.weeks.w1}`, [sundayWeek.S.labels.w1]],
     [`/p/${calT.id}/weekly?week=${transition.docs.past}`, []],
-    [`/p/${calL.id}/settings`, ['America/Los_Angeles']],
+    [`/p/${calL.id}/settings`, ['Pacific/Kiritimati']],
   ]
   const rendered = []
   for (const [path, expectTexts] of pages) {
@@ -1358,6 +1376,306 @@ async function main() {
     if (!response.result?.ok || response.result.kind !== 'applied') throw new Fail(`${what}: updateProjectSettings 결과: ${JSON.stringify(response.result)}`)
     return (await projectModules()).enabled
   }
+
+  // ── issue-code-flow (SP5 B1, P1-AC2): 기본 코드·영역 코드·분석서·색인·모듈 전환을 한 흐름으로 확인한다.
+  const basicName = `E2E 코드 기본 ${randomUUID().slice(0, 8)}`
+  await admin.http('GET', wsPath(wsA, 'projects'))
+  mustOk('E2E 코드 기본 프로젝트', (await admin.action(wsPath(wsA, 'projects'), 'createProject', [{
+    workspaceId: wsA, name: basicName, startDate: null, endDate: null, description: null, levelLabels: LEVEL_LABELS, commandId: randomUUID(),
+  }])).result)
+  const basic = rows('E2E 코드 기본 프로젝트 조회', await admin.sb.from('projects').select('id').eq('name', basicName).single())
+  await admin.http('GET', `/p/${basic.id}/issues`)
+  const basicCreated = mustOk('ISS-001 기본 이슈', (await admin.action(`/p/${basic.id}/issues`, 'createIssue', [basic.id, {
+    title: 'E2E 기본 코드 이슈', body: '분석 없이 등록', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null,
+    areaId: null, analysis: null,
+  }])).result)
+  const [basicIssue] = rows('기본 이슈 다시 읽기', await admin.sb.from('issues').select('id, issue_no, code').eq('id', basicCreated.id))
+  if (basicCreated.code !== 'ISS-001' || basicIssue?.code !== 'ISS-001') throw new Fail(`새 프로젝트 기본 코드는 ISS-001 이어야 한다: ${JSON.stringify({ action: basicCreated.code, row: basicIssue })}`)
+
+  const aSettingsBefore = rows('A 이슈 흐름 설정 백업', await admin.sb.from('project_settings').select('revision, values').eq('project_id', A.id).single())
+  const aModulesBefore = aSettingsBefore.values['modules.enabled']
+  const aPolicyBefore = aSettingsBefore.values['issues.id_policy']
+  const updateASettings = async (set, unset = []) => {
+    await admin.http('GET', `/p/${A.id}/settings`)
+    const doc = rows('A 이슈 흐름 설정', await admin.sb.from('project_settings').select('revision').eq('project_id', A.id).single())
+    return mustOk('A 이슈 흐름 설정 갱신', (await admin.action(`/p/${A.id}/settings`, 'updateProjectSettings',
+      [A.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset }])).result)
+  }
+  const analysisPolicy = { prefix: 'E2E', pattern: '{prefix}-{area}-{seq:3}', counter_scope: 'area', reset: 'never' }
+  const hasIndexKey = /^(OPENAI|ANTHROPIC|AI_GATEWAY)[A-Z_]*=.+/m.test(envText)
+  const enabledForIssueFlow = [...new Set([...aModulesBefore, 'issue_analysis', ...(hasIndexKey ? ['chatbot'] : [])])]
+  await updateASettings({ 'issues.id_policy': analysisPolicy, 'modules.enabled': enabledForIssueFlow })
+  await admin.http('GET', `/p/${A.id}/settings`)
+  const analysisArea = mustOk('RND issue_area', (await admin.action(`/p/${A.id}/settings`, 'upsertArea', [A.id, {
+    kind: 'issue_area', code: 'RND', name: '연구', sortOrder: 1, active: true, teams: [],
+  }])).result)
+  const areaId = analysisArea.id
+  await admin.http('GET', `/p/${A.id}/issues`)
+  const richIssue = mustOk('E2E 분석 분류 이슈', (await admin.action(`/p/${A.id}/issues`, 'createIssue', [A.id, {
+    title: 'E2E 영역 코드 이슈', body: '영역 코드와 분석 분류가 연결된다.', severity: 'high', assigneeMemberIds: [], startDate: null, dueDate: null,
+    areaId, analysis: { majorName: 'E2E 원인', subProcess: '등록 절차', ownerDepartment: 'E2E 부서', relatedSystems: ['E2E 시스템'], sourceType: 'other', sourceDetail: 'E2E 인터뷰' },
+  }])).result)
+  if (richIssue.code !== 'E2E-RND-001') throw new Fail(`영역 이슈 코드가 다르다: ${richIssue.code}`)
+  const [richRow] = rows('영역 코드 이슈 다시 읽기', await admin.sb.from('issues')
+    .select('id, issue_no, code, area_id, code_area_id').eq('id', richIssue.id))
+  if (!richRow || richRow.code !== 'E2E-RND-001' || richRow.area_id !== areaId || richRow.code_area_id !== areaId) {
+    throw new Fail(`이슈 영역 외래 키가 다르다: ${JSON.stringify(richRow)}`)
+  }
+  const issueHtmlBeforeRename = await (await admin.http('GET', `/p/${A.id}/issues`)).text()
+  if (!issueHtmlBeforeRename.includes(richRow.code) || issueHtmlBeforeRename.includes(`#${richRow.issue_no}`)) {
+    throw new Fail('이슈 목록은 업무 코드를 표시하고 #issue_no 를 숨겨야 한다')
+  }
+
+  const analysisJson = { ...issueAnalysisRunFixture({ areaCode: 'RND', areaName: '연구', issueId: richRow.id, code: richRow.code }), projectId: A.id }
+  const [analysisRun] = rows('E2E 저장 분석 실행', await svc.from('issue_analysis_runs').insert({
+    project_id: A.id, input_hash: createHash('sha256').update(`${A.id}:${richRow.id}`).digest('hex'), prompt_version: 'e2e-issue-code-flow',
+    model: 'e2e-fixture', status: 'ready', analysis_json: analysisJson, input_snapshot: {}, issue_count: 1, created_by: me.id,
+  }).select('id'))
+  const deckRes = await admin.http('GET', `/api/issue-analysis?projectId=${A.id}&runId=${analysisRun.id}`)
+  const deck = Buffer.from(await deckRes.arrayBuffer())
+  const deckCheck = await zipHasAll(deck, ['E2E-RND-001', '연구'])
+  if (!deckCheck.ok) throw new Fail(`분석서 텍스트에 영역·이슈 코드가 없다: ${deckCheck.missing.join(', ')}`)
+
+  let bot = { mode: 'unit-only', evidence: 'tests/ai/index-issue-loader.test.ts' }
+  if (hasIndexKey) {
+    const jobKey = ['v1', A.id, 'issues', 'issue', richRow.id].map(encodeURIComponent).join(':')
+    const { error: enqueueError } = await svc.rpc('upsert_ai_index_jobs', { p_jobs: [{
+      job_key: jobKey, operation: 'upsert', project_id: A.id, domain: 'issues', entity_type: 'issue', entity_id: richRow.id,
+      payload: {}, run_after: new Date(Date.now() - 60_000).toISOString(),
+    }] })
+    if (enqueueError) throw new Fail(`이슈 색인 잡 등록 실패: ${enqueueError.message}`)
+    const cronRes = await fetch(`${base}/api/cron/ai-index`, { headers: { authorization: `Bearer ${cronSecret}` }, redirect: 'manual' })
+    const cronJson = await cronRes.json().catch(() => null)
+    if (cronRes.status !== 200) throw new Fail(`이슈 색인 크론 응답 ${cronRes.status}: ${JSON.stringify(cronJson)}`)
+    const docs = rows('이슈 색인 문서', await svc.from('ai_documents').select('title, content')
+      .eq('project_id', A.id).eq('domain', 'issues').eq('entity_type', 'issue').eq('entity_id', richRow.id))
+    const doc = docs[0]
+    if (!doc || !String(doc.title).includes(richRow.code) || String(doc.title).includes(`#${richRow.issue_no}`)
+      || String(doc.content).includes(`#${richRow.issue_no}`)) throw new Fail('색인 문서에 이슈 코드가 없거나 #issue_no 가 남았다')
+    bot = { mode: 'indexed', cron: { status: cronRes.status, claimed: cronJson?.claimed ?? null }, title: doc.title,
+      noIssueNo: !String(doc.content).includes(`#${richRow.issue_no}`) }
+  }
+
+  await admin.http('GET', `/p/${A.id}/settings`)
+  mustOk('RND 영역 개명', (await admin.action(`/p/${A.id}/settings`, 'upsertArea', [A.id, {
+    id: areaId, kind: 'issue_area', code: 'RND', name: '연구개발', sortOrder: 1, active: true, teams: [],
+  }])).result)
+  const [renamedRow] = rows('개명 뒤 코드', await admin.sb.from('issues').select('code, area_id, code_area_id').eq('id', richRow.id))
+  if (renamedRow?.code !== 'E2E-RND-001' || renamedRow.area_id !== areaId || renamedRow.code_area_id !== areaId) {
+    throw new Fail(`영역 개명 뒤 코드·영역 id 가 바뀌었다: ${JSON.stringify(renamedRow)}`)
+  }
+  await updateASettings({ 'modules.enabled': aModulesBefore })
+  const analysisDenied = await admin.action(`/p/${A.id}/issues`, 'createIssue', [A.id, {
+    title: 'E2E 분석 꺼짐 거부', body: '', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null,
+    areaId, analysis: { majorName: '거부', subProcess: '거부', ownerDepartment: '거부', relatedSystems: [], sourceType: 'other', sourceDetail: '거부' },
+  }])
+  const reportOff = await admin.http('GET', `/api/issue-analysis?projectId=${A.id}&runId=${analysisRun.id}`, { expect: 404 })
+  const reportOffBody = await reportOff.json()
+  if (analysisDenied.result?.ok !== false || analysisDenied.result.error !== ERR_MODULE_DISABLED || reportOffBody?.error !== ERR_MODULE_DISABLED) {
+    throw new Fail(`분석 모듈 꺼짐을 쓰기·다운로드가 거부하지 않았다: ${JSON.stringify({ action: analysisDenied.result, report: reportOffBody })}`)
+  }
+  await admin.http('GET', `/p/${A.id}/issues`)
+  const plainAfterOff = mustOk('분석 꺼진 일반 이슈 등록', (await admin.action(`/p/${A.id}/issues`, 'createIssue', [A.id, {
+    title: 'E2E 분석 없이 등록', body: '영역 코드는 유지', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null,
+    areaId, analysis: null,
+  }])).result)
+  if (plainAfterOff.code !== 'E2E-RND-002') throw new Fail(`분석 꺼짐이 일반 발급을 막았거나 카운터가 틀리다: ${plainAfterOff.code}`)
+  await updateASettings(aPolicyBefore === undefined ? {} : { 'issues.id_policy': aPolicyBefore }, aPolicyBefore === undefined ? ['issues.id_policy'] : [])
+  step('issue-code-flow', {
+    basic: { projectId: basic.id, code: basicCreated.code },
+    area: { id: areaId, code: richRow.code, areaId: richRow.area_id, codeAreaId: richRow.code_area_id, renamedCode: renamedRow.code, nextCode: plainAfterOff.code },
+    list: { codeRendered: issueHtmlBeforeRename.includes(richRow.code), noIssueNo: !issueHtmlBeforeRename.includes(`#${richRow.issue_no}`) },
+    report: { status: deckRes.status, bytes: deck.length, codeAndArea: deckCheck },
+    analysisOff: { rejectedWrite: analysisDenied.result.error, reportStatus: reportOff.status, plainCodeAfterOff: plainAfterOff.code }, bot,
+  })
+
+  // 19b. 회의록 팀 루트(SP5 B2 — §6.3 minutes-teams): 공용 팀 생성(create_team) → 같은 트랜잭션의 팀 루트(kind·team_id, 이름 = 팀 이름) →
+  // 폴더 없이 올린 회의록이 그 루트로 편철되고 team_id 가 그 팀 → 팀 개명 → 루트 이름이 따라가고 폴더 id 는 그대로 → 비활성 → 그 루트 아래
+  // 새 폴더(편철)와 그 팀 담당의 새 회의록이 거부된다. 팀 루트의 세션 위조 다섯(선점·종류 변경·삭제·비활성 아래 생성·팀 이름 선점)은 RLS 테스트가 본다.
+  const MT_CODE = `MT${stamp.slice(-4)}`
+  await admin.http('GET', wsPath(wsA, 'admin/teams'))
+  mustOk(`addTeam(${MT_CODE})`, (await admin.action(wsPath(wsA, 'admin/teams'), 'addTeam', [wsA, MT_CODE])).result)
+  const [mtTeam] = rows('회의록 팀', await svc.from('teams').select('id, code, name, active').eq('workspace_id', wsA).is('project_id', null).eq('code', MT_CODE))
+  const mtRoots = () => svc.from('minute_folders').select('id, name, kind, team_id, project_id, parent_id').eq('team_id', mtTeam.id)
+  const [mtRoot] = rows('팀 루트', await mtRoots())
+  same('팀 루트(생성 직후)', mtRoot && { kind: mtRoot.kind, name: mtRoot.name, project_id: mtRoot.project_id, parent_id: mtRoot.parent_id },
+    { kind: 'team_root', name: MT_CODE, project_id: null, parent_id: null })
+  await ana.http('GET', wsPath(wsA, 'minutes'))
+  const mtMinute = mustOk('createMinute(팀 루트 자동 편철)', (await ana.action(wsPath(wsA, 'minutes'), 'createMinute', [
+    minuteInput({ date: meetingDate, teamCode: MT_CODE, title: `E2E-MT-${stamp}`, bodyMd: '# E2E 팀 루트 편철\n', projectId: null }), null, null, wsA,
+  ])).result)
+  const [mtRow] = rows('팀 루트 회의록', await svc.from('minutes').select('id, folder_id, team_id, team_code').eq('id', mtMinute.id))
+  same('팀 루트 회의록 편철·team_id', mtRow && { folder_id: mtRow.folder_id, team_id: mtRow.team_id, team_code: mtRow.team_code },
+    { folder_id: mtRoot.id, team_id: mtTeam.id, team_code: MT_CODE })
+  const MT_NAME = `E2E 회의록팀 ${stamp.slice(-4)}`
+  mustOk('updateTeam(개명)', (await admin.action(wsPath(wsA, 'admin/teams'), 'updateTeam', [mtTeam.id, { name: MT_NAME }])).result)
+  const [mtRenamed] = rows('개명 뒤 팀 루트', await mtRoots())
+  same('개명 뒤 팀 루트(이름 추종·id 불변)', mtRenamed && { id: mtRenamed.id, name: mtRenamed.name }, { id: mtRoot.id, name: MT_NAME })
+  const explorerHtml = await (await ana.http('GET', wsPath(wsA, 'minutes'))).text()
+  mustOk('updateTeam(비활성)', (await admin.action(wsPath(wsA, 'admin/teams'), 'updateTeam', [mtTeam.id, { active: false }])).result)
+  const folderDenied = (await ana.action(wsPath(wsA, 'minutes'), 'createMinuteFolder', [wsA, 'E2E 비활성 아래', mtRoot.id])).result
+  const minuteDenied = (await ana.action(wsPath(wsA, 'minutes'), 'createMinute', [
+    minuteInput({ date: meetingDate, teamCode: MT_CODE, title: `E2E-MT-DENY-${stamp}`, bodyMd: '# 거부\n', projectId: null }), null, null, wsA,
+  ])).result
+  const [mtAfter] = rows('비활성 뒤 팀 루트', await mtRoots())
+  const mtChecks = {
+    rootRenderedAsTeamName: explorerHtml.includes(MT_NAME),
+    folderUnderInactiveDenied: folderDenied?.ok === false && String(folderDenied.error).includes('비활성 팀'),
+    minuteForInactiveDenied: minuteDenied?.ok === false,
+    rootKept: mtAfter?.id === mtRoot.id && mtAfter?.name === MT_NAME,
+  }
+  step('minutes-teams', { team: { id: mtTeam.id, code: MT_CODE, name: MT_NAME }, rootId: mtRoot.id, minuteId: mtMinute.id,
+    denied: { folder: folderDenied?.error, minute: minuteDenied?.error }, checks: mtChecks },
+  Object.values(mtChecks).every(Boolean) ? undefined : `회의록 팀 루트: ${JSON.stringify(mtChecks)}`)
+
+  // 19c. 이슈 표시 상태(SP5b I — 스펙 §6.1 issue-status-flow): 연구 5상태 정의를 설정 액션으로 저장 → 새 이슈는 첫 상태(접수) →
+  // 허용 전이(접수→고객 승인→종료)는 통과·이력 2행, 전이표 밖(종료→고객 승인 = resolved→on_hold)은 거부 → 참조 있는 상태(검토) 삭제는
+  // CONFIG_IN_USE → 다른 범주로 옮기기는 거부, 같은 범주(접수)로 옮긴 뒤 삭제는 통과. 모두 화면과 같은 서버 액션 경로다.
+  const RESEARCH_STATUSES = [
+    { code: 'intake', label: '접수', category: 'open', color: 'delayed', sort: 1, active: true },
+    { code: 'review', label: '검토', category: 'open', color: 'brand', sort: 2, active: true },
+    { code: 'client_approval', label: '고객 승인', category: 'on_hold', color: 'pending', sort: 3, active: true },
+    { code: 'execution', label: '실행', category: 'in_progress', color: 'progress', sort: 4, active: true },
+    { code: 'done', label: '종료', category: 'resolved', color: 'done', sort: 5, active: true },
+  ]
+  // 기본 4상태를 쓰는 이슈가 있는 프로젝트에서는 'open' 을 지울 수 없다(CONFIG_IN_USE — 그것도 계약이다). 새 프로젝트에서 시작한다
+  const flowName = `E2E 상태 흐름 ${randomUUID().slice(0, 8)}`
+  await admin.http('GET', wsPath(wsA, 'projects'))
+  mustOk('E2E 상태 흐름 프로젝트', (await admin.action(wsPath(wsA, 'projects'), 'createProject', [{
+    workspaceId: wsA, name: flowName, startDate: null, endDate: null, description: null, levelLabels: LEVEL_LABELS, commandId: randomUUID(),
+  }])).result)
+  const flowP = rows('E2E 상태 흐름 프로젝트 조회', await admin.sb.from('projects').select('id').eq('name', flowName).single())
+  const updateFlowSettings = async (set, unset = []) => {
+    await admin.http('GET', `/p/${flowP.id}/settings`)
+    const doc = rows('상태 흐름 프로젝트 설정', await admin.sb.from('project_settings').select('revision').eq('project_id', flowP.id).single())
+    return (await admin.action(`/p/${flowP.id}/settings`, 'updateProjectSettings',
+      [flowP.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset }])).result
+  }
+  mustOk('이슈 상태 5개 저장', await updateFlowSettings({ 'workflow.issue_statuses': RESEARCH_STATUSES }))
+  await admin.http('GET', `/p/${flowP.id}/issues`)
+  const newFlowIssue = async (title) => mustOk(title, (await admin.action(`/p/${flowP.id}/issues`, 'createIssue', [flowP.id, {
+    title, body: '상태 흐름', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: null, analysis: null,
+  }])).result)
+  const progress = async (id, status, expectedStatus) => (await admin.action(`/p/${flowP.id}/issues`, 'updateIssueProgress', [id, { status, expectedStatus }])).result
+  const flowIssue = await newFlowIssue('E2E 상태 흐름')
+  const flowRow = () => admin.sb.from('issues').select('status, status_code, resolved_at').eq('id', flowIssue.id).single()
+  const firstState = rows('첫 상태', await flowRow())
+  const toApproval = await progress(flowIssue.id, 'client_approval', 'intake')
+  const toDone = await progress(flowIssue.id, 'done', 'client_approval')
+  const backToApproval = await progress(flowIssue.id, 'client_approval', 'done')
+  const doneState = rows('종료 상태', await flowRow())
+  const history = rows('상태 이력', await admin.sb.from('issue_updates').select('body').eq('issue_id', flowIssue.id).eq('kind', 'status').order('created_at'))
+  const reviewIssue = await newFlowIssue('E2E 검토 상태')
+  const toReview = await progress(reviewIssue.id, 'review', 'intake')
+  const withoutReview = RESEARCH_STATUSES.filter((d) => d.code !== 'review')
+  const deleteInUse = await updateFlowSettings({ 'workflow.issue_statuses': withoutReview })
+  await admin.http('GET', `/p/${flowP.id}/settings`)
+  const crossMigrate = (await admin.action(`/p/${flowP.id}/settings`, 'migrateVocabCode', [flowP.id, 'workflow.issue_statuses', 'review', 'done'])).result
+  const sameMigrate = (await admin.action(`/p/${flowP.id}/settings`, 'migrateVocabCode', [flowP.id, 'workflow.issue_statuses', 'review', 'intake'])).result
+  const deleteAfter = await updateFlowSettings({ 'workflow.issue_statuses': withoutReview })
+  const isChecks = {
+    firstIsIntake: firstState?.status_code === 'intake' && firstState?.status === 'open',
+    allowedPassed: toApproval?.ok === true && toDone?.ok === true,
+    outsideDenied: backToApproval?.ok === false && String(backToApproval?.error).includes('옮길 수 없습니다'),
+    resolvedDerived: doneState?.status === 'resolved' && doneState?.status_code === 'done' && doneState?.resolved_at !== null,
+    historyTwo: JSON.stringify(history.map((h) => h.body)) === JSON.stringify(['intake>client_approval', 'client_approval>done']),
+    inUseDenied: toReview?.ok === true && deleteInUse?.ok === false && deleteInUse?.code === 'CONFIG_IN_USE',
+    crossCategoryDenied: crossMigrate?.ok === false && String(crossMigrate?.error).includes('같은 범주'),
+    sameCategoryMoved: sameMigrate?.ok === true && sameMigrate?.moved === 1,
+    deletedAfterMove: deleteAfter?.ok === true,
+  }
+  step('issue-status-flow', { project: flowP.id, issue: flowIssue.id, results: { toApproval, toDone, backToApproval, deleteInUse, crossMigrate, sameMigrate, deleteAfter }, checks: isChecks },
+    Object.values(isChecks).every(Boolean) ? undefined : `이슈 상태 흐름: ${JSON.stringify(isChecks)}`)
+
+  // 19d. WBS 2단계 승인(SP5b W1 — 스펙 §6.1 workflow-approval): 새 프로젝트에 승인 단계 둘(내부 검토 = 서브트리 관리자 이상, 고객 승인 = 관리자)을
+  // 설정 액션으로 저장 → 위임 리프의 주문을 PAT 로 claim·완료 보고 → 첫 승인(나) 뒤 주문 reported·단계 im·work.approval_step 1·work.approved 0 →
+  // 같은 사람의 둘째 단계는 거부(서로 다른 승인자) → 다른 관리자(carol)의 둘째 승인 뒤 approved·xx·100·work.approved 1, 원장 2행(via=approve).
+  // 사람 경로: 위임 없는 리프는 xx 직행이 approval_required, im 으로 올린 뒤 단계 승인 둘로 xx. 선행 기준(final)의 claim 게이트 대조는 W2 가 이 단계에 더한다.
+  const wfName = `E2E 승인 흐름 ${randomUUID().slice(0, 8)}`
+  await admin.http('GET', wsPath(wsA, 'projects'))
+  mustOk('E2E 승인 흐름 프로젝트', (await admin.action(wsPath(wsA, 'projects'), 'createProject', [{
+    workspaceId: wsA, name: wfName, startDate: null, endDate: null, description: null, levelLabels: LEVEL_LABELS, commandId: randomUUID(),
+  }])).result)
+  const wfP = rows('E2E 승인 흐름 프로젝트 조회', await admin.sb.from('projects').select('id').eq('name', wfName).single())
+  const updateWfSettings = async (set, unset = []) => {
+    await admin.http('GET', `/p/${wfP.id}/settings`)
+    const doc = rows('승인 흐름 프로젝트 설정', await admin.sb.from('project_settings').select('revision').eq('project_id', wfP.id).single())
+    return (await admin.action(`/p/${wfP.id}/settings`, 'updateProjectSettings',
+      [wfP.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset }])).result
+  }
+  const WF_STEPS = [{ code: 'internal', label: '내부 검토', approver: 'subtree_or_admin' }, { code: 'client', label: '고객 승인', approver: 'admin' }]
+  mustOk('승인 단계 둘 저장', await updateWfSettings({ 'workflow.approval_steps': WF_STEPS }))
+  // agents 등록 행은 모듈을 새로 켤 때 생긴다(agentsSync) — 껐다 켠다
+  const wfModules = async (label, fn) => {
+    const cur = rows('승인 흐름 모듈', await admin.sb.from('project_settings').select('values').eq('project_id', wfP.id).single()).values['modules.enabled']
+    mustOk(label, await updateWfSettings({ 'modules.enabled': fn(cur) }))
+  }
+  await wfModules('승인 흐름 agents 끄기', (e) => e.filter((id) => id !== 'agents'))
+  await wfModules('승인 흐름 agents 켜기', (e) => [...e.filter((id) => id !== 'agents'), 'agents'])
+  // 둘째 관리자 — 초대로 들어온 carol 을 이 프로젝트 명단의 관리자로(명단 = 권한)
+  const carolPerson = rows('carol 인물', await svc.from('people').select('id').eq('workspace_id', wsA).eq('user_id', carolUser.id).single())
+  rows('carol 명단', await svc.from('project_members').insert({ project_id: wfP.id, person_id: carolPerson.id, access_role: 'admin' }).select('id'))
+  // 리프 둘(에이전트 리프 W·사람 리프 H) — 화면과 같은 액션으로 만든다: 추가 → (W 만) 담당 지정 → 개발 워크플로 켜기. W 는 담당자가 있는 리프라
+  // 켜는 순간 assign 사건(as)과 ready 주문 자동 발행이 따른다(ensureOrderForWorkflowLeaf). W 의 담당자는 나 — claim 은 담당자 본인만,
+  // work.approved 는 담당자에게 간다(워크스페이스 관리자는 명단 없이도 관리자다 — 담당자가 되려면 명단 행이 있어야 한다)
+  const myPerson = rows('내 인물', await svc.from('people').select('id').eq('workspace_id', wsA).eq('user_id', me.id).single())
+  const myWfMember = rows('승인 흐름 내 명단', await svc.from('project_members').insert({ project_id: wfP.id, person_id: myPerson.id, access_role: 'member' }).select('id'))[0]
+  await admin.http('GET', `/p/${wfP.id}/wbs`)
+  const wfLeaf = mustOk('승인 흐름 W', (await admin.action(`/p/${wfP.id}/wbs`, 'addWbsItem', [wfP.id, null, 'E2E 에이전트 리프'])).result)
+  const humanLeaf = mustOk('승인 흐름 H', (await admin.action(`/p/${wfP.id}/wbs`, 'addWbsItem', [wfP.id, null, 'E2E 사람 리프'])).result)
+  mustOk('W 담당', (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsAssignee', [wfLeaf.id, myWfMember.id])).result)
+  mustOk('W 워크플로', (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsDevWorkflow', [wfLeaf.id, true, false])).result)
+  mustOk('H 워크플로', (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsDevWorkflow', [humanLeaf.id, true, false])).result)
+  const wfOrder = rows('승인 흐름 주문', await svc.from('agent_work_orders').select('id').eq('wbs_item_id', wfLeaf.id).eq('status', 'ready'))[0]
+  if (!wfOrder) throw new Fail('개발 워크플로를 켠 담당 리프에 ready 주문이 없다')
+  await admin.http('GET', '/account')
+  const wfToken = mustOk('승인 흐름 토큰', (await admin.action('/account', 'createAgentToken', [{ name: `e2e-wf-${randomUUID().slice(0, 8)}`, projectId: wfP.id, scopes: ['work:read', 'work:claim'], expiresDays: 1 }])).result)
+  const agentPost = async (path, body, expectedStatus) => {
+    const res = await fetch(`${base}${path}`, { method: 'POST', headers: { authorization: `Bearer ${wfToken.token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    const json = await res.json().catch(() => null)
+    if (res.status !== expectedStatus) throw new Fail(`POST ${path} → ${res.status}(기대 ${expectedStatus}): ${JSON.stringify(json)?.slice(0, 300)}`)
+    return json
+  }
+  await agentPost(`/api/v1/agent/work/${wfOrder.id}/claim`, { agent: 'e2e-wf' }, 200)
+  await agentPost(`/api/v1/agent/work/${wfOrder.id}/report`, { agent: 'e2e-wf', kind: 'completion', percent: 100, summary: 'E2E 완료' }, 200)
+  const wfReport = rows('완료 보고', await svc.from('agent_work_reports').select('id').eq('work_order_id', wfOrder.id).eq('kind', 'completion'))[0]
+  const notifCount = async (type) => rows(`알림 ${type}`, await svc.from('notification_events').select('id').eq('project_id', wfP.id).eq('type', type)).length
+  const wfState = async () => ({
+    order: rows('주문 상태', await svc.from('agent_work_orders').select('status').eq('id', wfOrder.id).single()).status,
+    item: rows('항목 상태', await svc.from('wbs_items').select('stage, actual_pct, review_round, review_steps').eq('id', wfLeaf.id).single()),
+  })
+  const approvedBefore = await notifCount('work.approved')
+  await admin.http('GET', `/p/${wfP.id}/wbs`)
+  const step1 = (await admin.action(`/p/${wfP.id}/wbs`, 'approveAgentCompletion', [wfOrder.id, wfReport.id, 'internal'])).result
+  const afterStep1 = await wfState()
+  const approvalStepEvents = await notifCount('work.approval_step')
+  const approvedAfterStep1 = await notifCount('work.approved')
+  const sameActor = (await admin.action(`/p/${wfP.id}/wbs`, 'approveAgentCompletion', [wfOrder.id, wfReport.id, 'client'])).result
+  await carol.http('GET', `/p/${wfP.id}/wbs`)
+  const step2 = (await carol.action(`/p/${wfP.id}/wbs`, 'approveAgentCompletion', [wfOrder.id, wfReport.id, 'client'])).result
+  const afterStep2 = await wfState()
+  const approvedAfterStep2 = await notifCount('work.approved')
+  const ledger = rows('승인 원장', await svc.from('wbs_stage_approvals').select('step_code, via, revoked_at').eq('wbs_item_id', wfLeaf.id).order('step_code'))
+  // 사람 경로
+  const directXx = (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsStage', [humanLeaf.id, 'xx'])).result
+  const toIm = (await admin.action(`/p/${wfP.id}/wbs`, 'setWbsStage', [humanLeaf.id, 'im'])).result
+  const human1 = (await admin.action(`/p/${wfP.id}/wbs`, 'approveWbsStep', [humanLeaf.id, 'internal'])).result
+  const human2 = (await carol.action(`/p/${wfP.id}/wbs`, 'approveWbsStep', [humanLeaf.id, 'client'])).result
+  const humanItem = rows('사람 리프', await svc.from('wbs_items').select('stage, actual_pct').eq('id', humanLeaf.id).single())
+  const wfChecks = {
+    firstStepIntermediate: step1?.ok === true && step1?.remaining === 1 && afterStep1.order === 'reported' && afterStep1.item.stage === 'im'
+      && JSON.stringify(afterStep1.item.review_steps) === JSON.stringify(['internal', 'client']),
+    approvalStepNotified: approvalStepEvents === 1 && approvedAfterStep1 === approvedBefore,
+    sameActorDenied: sameActor?.ok === false && String(sameActor?.error).includes('다른 사람'),
+    finalApproved: step2?.ok === true && step2?.remaining === undefined && afterStep2.order === 'approved' && afterStep2.item.stage === 'xx' && Number(afterStep2.item.actual_pct) === 100,
+    approvedNotified: approvedAfterStep2 === approvedBefore + 1,
+    ledgerTwo: ledger.length === 2 && ledger.every((r) => r.via === 'approve' && r.revoked_at === null),
+    humanDirectXxDenied: directXx?.ok === false && String(directXx?.error).includes('승인 단계가 둘 이상'),
+    humanStepApproved: toIm?.ok === true && human1?.ok === true && human1?.remaining === 1 && human2?.ok === true
+      && humanItem.stage === 'xx' && Number(humanItem.actual_pct) === 100,
+  }
+  step('workflow-approval', { project: wfP.id, order: wfOrder.id, results: { step1, sameActor, step2, directXx, toIm, human1, human2 }, ledger, checks: wfChecks },
+    Object.values(wfChecks).every(Boolean) ? undefined : `승인 흐름: ${JSON.stringify(wfChecks)}`)
 
   // 20. 시드 이슈가 켜진 화면에 보이는지 먼저 확인한 뒤, 꺼진 화면·액션·분석 API 모두에서 차단되는지 본다.
   const issueTitle = `E2E 관문 이슈 ${randomUUID().slice(0, 8)}`

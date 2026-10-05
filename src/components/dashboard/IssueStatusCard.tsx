@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { CircleAlert } from 'lucide-react'
 import { ISSUE_STATUSES, ISSUE_STATUS_META, type IssueStatus } from '@/lib/domain/issues'
-import { ISSUE_MEGA_AREAS } from '@/lib/domain/issueAnalysis'
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import {
-  issueKpis, issueMegaBreakdown, issueStatusCounts, RESOLVED_WINDOW_DAYS,
+  issueKpis, issueAreaBreakdown, issueStatusCounts, RESOLVED_WINDOW_DAYS,
   type DashboardIssue, type IssueStatusCounts,
 } from '@/lib/domain/issueDashboard'
 import { addDaysIso } from '@/lib/domain/dates'
@@ -36,7 +36,8 @@ function StatusDots({ counts, total }: { counts: IssueStatusCounts; total: numbe
   )
 }
 
-export function IssueStatusCard({ issues, projectId, today, timeZone, locale }: {
+export function IssueStatusCard({ issues, projectId, today, timeZone, locale, areas }: {
+  areas: readonly IssueAreaRef[]
   issues: DashboardIssue[]
   projectId: string
   /** 실제 오늘(그 프로젝트 tz 의 todayIn) — 공정율 base_date 가 아니다. */
@@ -53,7 +54,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale }: 
 
   const kpi = issueKpis(issues, today, timeZone)
   const all = issueStatusCounts(issues)
-  const rows = issueMegaBreakdown(issues)
+  const rows = issueAreaBreakdown(issues, areas)
   const resolvedPct = kpi.total ? Math.round((all.resolved / kpi.total) * 100) : 0
   const windowStart = addDaysIso(today, -(RESOLVED_WINDOW_DAYS - 1))
 
@@ -113,16 +114,16 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale }: 
         {/* Mega 업무영역별 — 미니 링 타일(8영역 코드순 고정 + 미분류는 있을 때만). 이슈 없는 영역은 흐리게. */}
         <div>
           <div className="mb-2 flex justify-between text-[11px] text-ink-subtle">
-            <span>{tr('dash.issues.byMegaRate')}</span><span>{tr('dash.issues.ringHint')}</span>
+            <span>{tr('dash.issues.byAreaRate')}</span><span>{tr('dash.issues.ringHint')}</span>
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2">
             {rows.map(r => {
-              const area = r.code ? ISSUE_MEGA_AREAS.find(a => a.code === r.code) : null
-              const name = area ? (locale === 'en' ? area.nameEn : area.nameKo) : tr('dash.issues.unclassified')
+              const area = areas.find(a => a.id === r.areaId)
+              const name = area?.name ?? r.label
               const empty = r.total === 0
               const title = empty ? `${name}: ${tr('dash.issues.noIssues')}` : `${name}: ${countsText(r.counts)}`
               return (
-                <div key={r.code ?? 'none'} title={title}
+                <div key={r.areaId ?? 'none'} title={title}
                   className={`flex min-w-0 flex-col gap-1.5 rounded-xl border border-line p-2.5 ${empty ? 'opacity-60' : ''}`}>
                   {/* 상태 내역은 글로도 — 점(aria-hidden)·title(호버 전용)만으론 키보드·스크린리더 경로가 없다 */}
                   {!empty && <span className="sr-only">{countsText(r.counts)}</span>}
@@ -133,7 +134,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale }: 
                     </RingGauge>
                     <div className="min-w-0">
                       <div className="truncate text-xs font-semibold text-ink">
-                        <span className="mr-1 text-[10px] font-semibold tabular-nums text-ink-subtle">{r.code ?? '–'}</span>{name}
+                        <span className="mr-1 text-[10px] font-semibold tabular-nums text-ink-subtle">{area?.code ?? '–'}</span>{name}
                       </div>
                       <div className="text-[11px] text-ink-subtle">
                         {empty ? tr('dash.issues.noIssues') : `${r.total}${unit} · ${tr('dash.issues.trendResolvedShort')} ${r.counts.resolved}`}

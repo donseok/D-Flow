@@ -19,7 +19,7 @@ function queryBuilder(response: QueryResponse) {
   const builder: Record<string, ReturnType<typeof vi.fn>> & {
     then?: (r: (v: unknown) => unknown, j: (r: unknown) => unknown) => Promise<unknown>
   } = {}
-  for (const m of ['select', 'insert', 'eq', 'is', 'in', 'maybeSingle', 'single']) {
+  for (const m of ['select', 'insert', 'eq', 'is', 'in', 'or', 'maybeSingle', 'single']) {
     builder[m] = vi.fn(() => builder)
   }
   builder.then = (resolve, reject) =>
@@ -44,14 +44,14 @@ function fakeSb() {
   return fakeDb([]).db
 }
 
-/** insert(...).select('id, workspace_id').single() 이 행을 돌려주는 스텁 — ensureProjectTeamRoot 지연 생성용. */
-function fakeSbInsertReturning(id: string, workspaceId = 'ws-1') {
-  return fakeDb([{ data: { id, workspace_id: workspaceId } }]).db
+/** 팀 루트 지연 생성(ensureTeamRoot — SP5 B2) 스텁: 팀 조회(그 code 의 활성 공용 팀) → insert(...).select('id').single() 이 행을 돌려준다 */
+function fakeSbInsertReturning(id: string, code = 'PMO') {
+  return fakeDb([{ data: [{ id: `t-${code}`, code, name: code, project_id: null, active: true }] }, { data: { id } }]).db
 }
 
 /** 폴더 전량 스냅샷 응답을 만든다 — resolveFolderPath 의 첫 질의. */
 const rows = (...rs: Array<Record<string, unknown>>) => ({ data: rs })
-const SEED_ROOT = { id: 'f-root', name: 'MES', parent_id: null, created_by: null, workspace_id: 'ws-1' }
+const SEED_ROOT = { id: 'f-root', name: 'MES', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-MES', team: { code: 'MES', project_id: null }, workspace_id: 'ws-1' }
 const QUALITY = { id: 'f-q', name: '품질', parent_id: 'f-root', created_by: 'u-9', workspace_id: 'ws-1' }
 
 beforeEach(() => vi.clearAllMocks())
@@ -263,7 +263,7 @@ describe('resolveFolderPath (경로 해석·생성)', () => {
   it('스냅샷을 주면 질의 0회 — 배치가 항목마다 왕복하지 않게 하는 계약', async () => {
     const { db, from } = fakeDb([])
     const snapshot = buildFolderSnapshot([
-      { id: 'f-root', name: 'MES', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1' },
+      { id: 'f-root', name: 'MES', parentId: null, createdBy: null, kind: 'team_root' as const, teamCode: 'MES', projectId: null, workspaceId: 'ws-1' },
       { id: 'f-q', name: '품질', parentId: 'f-root', createdBy: 'u-9', projectId: null, workspaceId: 'ws-1' },
     ])
     const r = await resolveFolderPath(db, 'MES', ['MES', '품질'], { ...opts, snapshot })
@@ -274,7 +274,7 @@ describe('resolveFolderPath (경로 해석·생성)', () => {
   it('생성한 폴더는 스냅샷에 반영돼 다음 항목이 재사용한다(배치 멱등·중복 생성 없음)', async () => {
     const { db, from } = fakeDb([{ data: { id: 'f-new' } }])
     const snapshot = buildFolderSnapshot([
-      { id: 'f-root', name: 'MES', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1' },
+      { id: 'f-root', name: 'MES', parentId: null, createdBy: null, kind: 'team_root' as const, teamCode: 'MES', projectId: null, workspaceId: 'ws-1' },
     ])
     const a = await resolveFolderPath(db, 'MES', ['MES', '품질'], { ...opts, snapshot })
     const b = await resolveFolderPath(db, 'MES', ['MES', '품질'], { ...opts, snapshot })
@@ -326,8 +326,8 @@ describe('folderPathOf / folderPathOfSnapshot (응답 에코용 역해석)', () 
 describe('프로젝트 스코프 경로 해석 (0076)', () => {
   const P1 = 'aaaaaaaa-0000-0000-0000-000000000001'
   const rows = [
-    { id: 'g-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1' },
-    { id: 'p1-pmo', name: 'PMO', parentId: null, createdBy: null, projectId: P1, workspaceId: 'ws-1' },
+    { id: 'g-pmo', name: 'PMO', parentId: null, createdBy: null, kind: 'team_root' as const, teamCode: 'PMO', projectId: null, workspaceId: 'ws-1' },
+    { id: 'p1-pmo', name: 'PMO', parentId: null, createdBy: null, kind: 'team_root' as const, teamCode: 'PMO', projectId: P1, workspaceId: 'ws-1' },
     { id: 'p1-sub', name: '주간회의', parentId: 'p1-pmo', createdBy: 'u1', projectId: P1, workspaceId: 'ws-1' },
   ]
 
@@ -353,14 +353,22 @@ describe('프로젝트 스코프 경로 해석 (0076)', () => {
     expect(res.ok && res.folderId).toBe('g-pmo')
   })
 
-  it('프로젝트 루트 부재 + create 시 ensureProjectTeamRoot 로 지연 생성한다', async () => {
+  it('프로젝트 루트 부재 + create 시 ensureTeamRoot 로 지연 생성한다(팀 = code 단위 해석, 이름 = 팀 이름)', async () => {
+    const snap = buildFolderSnapshot([rows[0]])
+    const res = await resolveFolderPath(fakeSbInsertReturning('new-root'), 'PMO', ['PMO'], {
+      actorId: 'u1', activeTeamCodes: ['PMO'], snapshot: snap, projectId: P1, workspaceId: 'ws-1',
+    })
+    expect(res.ok && res.folderId).toBe('new-root')
+    expect(snap.seedRoots.get(`p:${P1} PMO`)).toBe('new-root')  // 스냅샷에도 반영
+    expect(snap.byId.get('new-root')).toMatchObject({ workspaceId: 'ws-1', kind: 'team_root' as const, teamCode: 'PMO' })
+  })
+
+  it('워크스페이스를 모르면 지연 생성하지 않는다(팀을 고를 범위가 없다) — no_team_root', async () => {
     const snap = buildFolderSnapshot([rows[0]])
     const res = await resolveFolderPath(fakeSbInsertReturning('new-root'), 'PMO', ['PMO'], {
       actorId: 'u1', activeTeamCodes: ['PMO'], snapshot: snap, projectId: P1, workspaceId: null,
     })
-    expect(res.ok && res.folderId).toBe('new-root')
-    expect(snap.seedRoots.get(`p:${P1} PMO`)).toBe('new-root')  // 스냅샷에도 반영
-    expect(snap.byId.get('new-root')?.workspaceId).toBe('ws-1')  // 트리거가 채운 값을 되읽어 싣는다
+    expect(!res.ok && res.kind).toBe('no_team_root')
   })
 
   it('프로젝트 루트 부재 + create:false 는 no_team_root — 생성하지 않는다', async () => {
@@ -391,9 +399,9 @@ describe('프로젝트 스코프 경로 해석 (0076)', () => {
 describe('워크스페이스 스코프 미지정 트리 (0006)', () => {
   const W1 = 'ws-1', W2 = 'ws-2'
   const twoWs = [
-    { id: 'w1-mes', name: 'MES', parentId: null, createdBy: null, projectId: null, workspaceId: W1 },
+    { id: 'w1-mes', name: 'MES', parentId: null, createdBy: null, kind: 'team_root' as const, teamCode: 'MES', projectId: null, workspaceId: W1 },
     { id: 'w1-q', name: '품질', parentId: 'w1-mes', createdBy: 'u1', projectId: null, workspaceId: W1 },
-    { id: 'w2-mes', name: 'MES', parentId: null, createdBy: null, projectId: null, workspaceId: W2 },
+    { id: 'w2-mes', name: 'MES', parentId: null, createdBy: null, kind: 'team_root' as const, teamCode: 'MES', projectId: null, workspaceId: W2 },
   ]
 
   it('두 워크스페이스의 동명 미지정 루트가 스냅샷에 공존한다(덮어쓰지 않는다)', () => {
@@ -431,5 +439,44 @@ describe('워크스페이스 스코프 미지정 트리 (0006)', () => {
     expect(!r.ok && r.kind).toBe('no_team_root')
     expect(spy).toHaveBeenCalled()
     spy.mockRestore()
+  })
+})
+
+describe('custom 모드 정규화(계약 v2.9 — SP5 B2)', () => {
+  const CUSTOM = { mode: 'custom' as const, names: ['외부 연동', '본부 회의'] }
+  const ROOT = { id: 'c-ext', name: '외부 연동', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1', kind: 'custom_root' as const }
+  const base = { actorId: 'u1', activeTeamCodes: TEAMS, projectId: null, workspaceId: 'ws-1', rootMode: CUSTOM }
+  it('path[0] 이 그 범위의 지정 루트면 그 아래로 — 한 칸 내림·다른 팀 code 거절이 없다', async () => {
+    const snap = buildFolderSnapshot([ROOT, { id: 'c-sub', name: 'MES', parentId: 'c-ext', createdBy: 'u9', projectId: null, workspaceId: 'ws-1', kind: 'user' }])
+    const res = await resolveFolderPath(fakeSb(), 'PMO', ['외부 연동', 'MES'], { ...base, snapshot: snap, create: false })
+    expect(res).toMatchObject({ ok: true, folderId: 'c-sub', resolvedPath: ['외부 연동', 'MES'], complete: true })
+  })
+  it('지정 루트가 아직 없어도 설정 names 에 있으면 그 이름의 지정 루트를 만든다', async () => {
+    const snap = buildFolderSnapshot([])
+    const res = await resolveFolderPath(fakeDb([{ data: { id: 'c-new' } }]).db, 'PMO', ['본부 회의'], { ...base, snapshot: snap })
+    expect(res).toMatchObject({ ok: true, folderId: 'c-new', resolvedPath: ['본부 회의'] })
+    expect(snap.customRoots.get('w:ws-1 본부 회의')).toBe('c-new')
+  })
+  it('루트 불일치·빈 경로는 unmatched_root(호출부가 미분류로 저장) — 팀 code 를 루트로 보내도 같다', async () => {
+    const snap = buildFolderSnapshot([ROOT])
+    for (const path of [['신규TF', '킥오프'], [], ['PMO']]) {
+      const res = await resolveFolderPath(fakeSb(), 'PMO', path, { ...base, snapshot: snap })
+      expect(!res.ok && res.kind, path.join('/')).toBe('unmatched_root')
+    }
+  })
+  it('깊이 절단은 v2.8 그대로(5단)', async () => {
+    const snap = buildFolderSnapshot([ROOT])
+    const res = await resolveFolderPath(fakeSb(), 'PMO', ['외부 연동', 'a', 'b', 'c', 'd', 'e'], { ...base, snapshot: snap, create: false })
+    expect(res).toMatchObject({ ok: true, truncated: true, targetPath: ['외부 연동', 'a', 'b', 'c', 'd'] })
+  })
+  it('팀 루트는 code 로 에코하고 지정 루트는 이름으로 — api 경로 언어(v2.9 R1), 화면은 이름', () => {
+    const snap = buildFolderSnapshot([
+      { id: 'r', name: '품질보증팀', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1', kind: 'team_root', teamCode: 'QA' },
+      { id: 's', name: '정기', parentId: 'r', createdBy: 'u9', projectId: null, workspaceId: 'ws-1', kind: 'user' },
+      ROOT,
+    ])
+    expect(folderPathOfSnapshot(snap, 's')).toEqual(['QA', '정기'])
+    expect(folderPathOfSnapshot(snap, 's', 'display')).toEqual(['품질보증팀', '정기'])
+    expect(folderPathOfSnapshot(snap, 'c-ext')).toEqual(['외부 연동'])
   })
 })

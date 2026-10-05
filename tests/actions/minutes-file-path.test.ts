@@ -167,7 +167,13 @@ describe('recordMinuteFile — scope 는 DB 의 회의록 행', () => {
   })
 
   it.each([
-    ['MINUTE_ATTACHMENT_LIMIT', '첨부는 회의록당 10개까지입니다.'],
+    ['MINUTE_ATTACHMENT_LIMIT', '첨부 개수 한도에 도달했습니다.'],
+    ['MINUTE_ATTACHMENT_DISABLED', '이 범위에서는 회의록 첨부가 꺼져 있습니다.'],
+    ['MINUTE_ATTACHMENT_TOO_LARGE', '파일 하나의 용량 한도를 넘었습니다.'],
+    ['MINUTE_ATTACHMENT_TOTAL_EXCEEDED', '이 회의록의 첨부 총용량 한도를 넘었습니다.'],
+    ['MINUTE_ATTACHMENT_EXTENSION', '허용되지 않은 파일 형식입니다.'],
+    ['MINUTE_ATTACHMENT_FORBIDDEN', '이 회의록에 첨부할 권한이 없습니다.'],
+    ['CONFIG_INVALID:minutes.attachments', '첨부 설정을 확인하지 못했습니다. 관리자에게 문의하세요.'],
     ['MINUTE_ATTACHMENT_DUPLICATE', '같은 파일이 이미 첨부돼 있습니다.'],
     ['MINUTE_ATTACHMENT_ARCHIVED', '보관된 회의록에는 첨부할 수 없습니다.'],
     ['MINUTE_ATTACHMENT_PATH', '잘못된 파일 경로입니다.'],
@@ -226,6 +232,22 @@ describe('replaceMinuteBody — scope 는 DB 의 회의록 행', () => {
     const res = await replaceMinuteBody(M, '본문', file(`ws/${W2}/p/${P}/minutes/${M}/1-a.md`))
     expect(res).toEqual({ ok: false, error: '잘못된 파일 경로입니다.' })
     expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  // SP5 B3 과제5 — RPC 원문(영문 상수·DB 오류)을 화면에 싣지 않는다. 아는 사유는 문구로, 모르는 것은 일반 문구로(로그만).
+  it.each([
+    ['MINUTE_ARCHIVED', '보관된 회의록은 변경할 수 없습니다.'],
+    ['MINUTE_FILE_INPUT_INVALID', '원본 파일 정보가 올바르지 않습니다 — 다시 올려 주세요.'],
+    ['relation "x" does not exist', '새 버전 저장에 실패했습니다.'],
+  ])('본문 커밋 RPC 오류 %s → 사용자 문구', async (raw, text) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    createServerClient.mockResolvedValue(fakeDb({ data: row() }).client)
+    adminMocks.createAdminClient.mockReturnValue({
+      rpc: () => ({ single: async () => ({ data: null, error: { message: raw } }) }),
+    })
+    expect(await replaceMinuteBody(M, '본문', file(`ws/${W}/p/${P}/minutes/${M}/1-a.md`))).toEqual({ ok: false, error: text })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   it('회의록 행 조회가 실패하면 쓰기를 중단한다', async () => {

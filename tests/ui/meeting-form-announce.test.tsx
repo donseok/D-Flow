@@ -32,6 +32,7 @@ import { LocaleProvider } from '@/components/providers/LocaleProvider'
 import { ToastProvider } from '@/components/ui/Toast'
 import { MeetingFormModal } from '@/components/meetings/MeetingFormModal'
 import type { Meeting } from '@/lib/domain/types'
+import { MEET_CATS } from '../fixtures/vocab'
 
 const LABEL = '이 회의를 공지사항으로도 등록'
 
@@ -71,8 +72,7 @@ describe('MeetingFormModal — 공지사항으로도 등록', () => {
         <ToastProvider>
           <MeetingFormModal
             open projectId="p1" members={[]} initial={initial} todayIso="2026-07-24"
-            canManage={canManage} onClose={() => {}} onSaved={onSaved}
-          />
+            canManage={canManage} onClose={() => {}} onSaved={onSaved} categories={MEET_CATS} />
         </ToastProvider>
       </LocaleProvider>,
     ))

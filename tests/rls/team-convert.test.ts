@@ -151,7 +151,7 @@ describe('convert_inherited_teams — 전환', () => {
       await seedInherited(c)
       const qBefore = await refs(c, Q)
       expect((await c.query(CONVERT, [F.users.platform, P])).rows[0].r)
-        .toEqual({ status: 'converted', teams: 3, moved: { item_owners: 2, project_member_teams: 1, area_teams: 1, invites: 1 } })
+        .toEqual({ status: 'converted', teams: 3, moved: { item_owners: 2, project_member_teams: 1, area_teams: 1, invites: 1, minutes: 0, minute_folders: 0 } })
       // 복사본 — code·이름·색·순서·progress_visible·활성이 원본 그대로. 아무도 가리키지 않는 비활성 NOP 는 복사하지 않는다
       expect((await c.query(`select code, name, color, sort_order, progress_visible, active, workspace_id
                                from public.teams where project_id = $1 order by sort_order`, [P])).rows).toEqual([
@@ -339,7 +339,7 @@ describe('convert_inherited_teams — 두 연결(커밋)', () => {
       await s1.query('begin')
       await s2.query('begin')
       expect((await s1.query(CONVERT, [F.users.platform, P2])).rows[0].r)
-        .toEqual({ status: 'converted', teams: 1, moved: { item_owners: 0, project_member_teams: 0, area_teams: 1, invites: 0 } })
+        .toEqual({ status: 'converted', teams: 1, moved: { item_owners: 0, project_member_teams: 0, area_teams: 1, invites: 0, minutes: 0, minute_folders: 0 } })
       let settled = false
       const second = s2.query(CONVERT, [F.users.platform, P2]).then(
         (res) => res.rows[0].r as unknown, (e: unknown) => { if (e instanceof DatabaseError) return e; throw e },
@@ -412,7 +412,7 @@ describe('convert_inherited_teams — 두 연결(커밋)', () => {
       ).finally(() => { settled = true })
       expect(await waitBlocked(s1, s2Pid, () => settled), '전환이 프로젝트 행(for update)을 기다린다').toBe(true)
       await s1.query('commit')
-      expect(await conv).toEqual({ status: 'converted', teams: 1, moved: { item_owners: 0, project_member_teams: 0, area_teams: 1, invites: 0 } })
+      expect(await conv).toEqual({ status: 'converted', teams: 1, moved: { item_owners: 0, project_member_teams: 0, area_teams: 1, invites: 0, minutes: 0, minute_folders: 0 } })
       await s2.query('commit')
       const { rows } = await s1.query<{ project_id: string | null }>(
         'select t.project_id from public.area_teams art join public.teams t on t.id = art.team_id where art.area_id = $1', [AREA3])
@@ -512,7 +512,7 @@ describe('convert_inherited_teams — 두 연결(커밋)', () => {
       await s1.query('begin')
       await s2.query('begin')
       expect((await s1.query(CONVERT, [F.users.platform, P3])).rows[0].r)
-        .toEqual({ status: 'converted', teams: 1, moved: { item_owners: 0, project_member_teams: 0, area_teams: 1, invites: 0 } })
+        .toEqual({ status: 'converted', teams: 1, moved: { item_owners: 0, project_member_teams: 0, area_teams: 1, invites: 0, minutes: 0, minute_folders: 0 } })
       let settled = false
       // 영역·명단 RPC 의 재저장 꼴 — 같은 키 insert … on conflict do update
       const write = s2.query(`insert into public.area_teams (area_id, team_id, kind) values ($1, $2, 'support')

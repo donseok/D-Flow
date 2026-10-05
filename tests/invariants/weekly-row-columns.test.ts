@@ -15,6 +15,8 @@ import { walk } from './_walk'
 /** 주간 행을 조회·쓰는 파일(스펙 Q35 의 명시 select·정렬·임베드가 든 곳) */
 const WEEKLY_ROW_FILES = [
   'src/app/actions/weekly.ts',
+  'src/app/actions/customFieldValues.ts', // SP5c session CAS update: custom only
+  'src/app/actions/customFields.ts', // SP5c admin usage preview: id/custom only, project-scoped keyset query
   'src/lib/ai/index/content.ts',
   'src/lib/data/weeklySheet.ts',
   'src/lib/repositories/supabase/weekly.ts',

@@ -68,7 +68,7 @@ describe('목록 액션(scope 첫 인자)', () => {
     await fetchMinutesSearch({ workspaceId: WA, projectId: PA }, 'acme', null)
     expect(h.searchMinutes).toHaveBeenCalledWith(WA, PA, 'acme', null, 100)
     await fetchMinutesExplorer({ workspaceId: WA, projectId: PA })
-    expect(h.getMinutesExplorer).toHaveBeenCalledWith(WA, PA)
+    expect(h.getMinutesExplorer).toHaveBeenCalledWith(WA, PA, expect.objectContaining({ userId: expect.any(String) }))   // 행위자 = 리프 canEdit 판정(D40)
     expect(await fetchMinuteFavorites(WA)).toEqual(['m1'])
     expect(h.getMinuteFavorites).toHaveBeenCalledWith(WA)           // 인자 워크스페이스의 즐겨찾기만(FA3)
   })

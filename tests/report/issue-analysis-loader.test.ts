@@ -1,3 +1,4 @@
+import { actionAreaId } from '../fixtures/issue-areas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type TableResult = { data: unknown[] | null; error: { message: string } | null }
@@ -46,9 +47,9 @@ const issueRow = {
   created_by_name: '테스터',
   created_at: '2026-07-01T00:00:00Z',
   updated_at: '2026-07-30T00:00:00Z',
-  mega_code: '00',
+  area_id: actionAreaId('00'),
   mega_seq: 2,
-  pi_issue_code: 'PI-I-00-02',
+  code: 'PI-I-00-02',
   major_id: 'major-1',
   sub_process: '자재 등록',
   owner_department: '기준정보팀',
@@ -87,7 +88,7 @@ beforeEach(() => {
       error: null,
     },
     issue_major_processes: {
-      data: [{ id: 'major-1', mega_code: '00', major_seq: 1, name: '자재관리' }],
+      data: [{ id: 'major-1', area_id: actionAreaId('00'), major_seq: 1, name: '자재관리' }],
       error: null,
     },
   }
@@ -99,9 +100,8 @@ describe('loadIssueAnalysisIssues', () => {
     expect(issues).toHaveLength(1)
     expect(issues[0]).toMatchObject({
       id: 'issue-1',
-      piIssueCode: 'PI-I-00-02',
-      megaCode: '00',
-      megaSeq: 2,
+      code: 'PI-I-00-02',
+      areaId: actionAreaId('00'),
       majorId: 'major-1',
       majorSeq: 1,
       majorName: '자재관리',
@@ -120,22 +120,22 @@ describe('loadIssueAnalysisIssues', () => {
   it('Major 기준정보를 mega·seq 순으로 함께 반환한다', async () => {
     state.results.issue_major_processes = {
       data: [
-        { id: 'm2', mega_code: '02', major_seq: 2, name: '수출관리' },
-        { id: 'm1', mega_code: '02', major_seq: 1, name: '주문관리' },
-        { id: 'major-1', mega_code: '00', major_seq: 1, name: '자재관리' },
+        { id: 'm2', area_id: actionAreaId('02'), major_seq: 2, name: '수출관리' },
+        { id: 'm1', area_id: actionAreaId('02'), major_seq: 1, name: '주문관리' },
+        { id: 'major-1', area_id: actionAreaId('00'), major_seq: 1, name: '자재관리' },
       ],
       error: null,
     }
     const { majors } = await loadIssueAnalysisIssues('project-1')
     expect(majors.map(major => major.id)).toEqual(['major-1', 'm1', 'm2'])
     expect(majors[1]).toEqual({
-      id: 'm1', megaCode: '02', majorSeq: 1, name: '주문관리',
+      id: 'm1', areaId: actionAreaId('02'), majorSeq: 1, name: '주문관리',
     })
   })
 
-  it('알 수 없는 Mega 코드의 Major 행이 오면 throw한다', async () => {
+  it('잘못된 영역 id의 Major 행이 오면 throw한다', async () => {
     state.results.issue_major_processes = {
-      data: [{ id: 'm9', mega_code: '99', major_seq: 1, name: '유령 프로세스' }],
+      data: [{ id: 'm9', area_id: 'not-a-uuid', major_seq: 1, name: '유령 프로세스' }],
       error: null,
     }
     await expect(loadIssueAnalysisIssues('project-1')).rejects.toThrow('Major')
@@ -144,13 +144,13 @@ describe('loadIssueAnalysisIssues', () => {
   it('Mega 범위가 있으면 프로젝트 조건과 함께 issues 쿼리에 강제한다', async () => {
     await loadIssueAnalysisIssues('project-1', '00')
     expect(state.filters).toContainEqual(['issues', 'project_id', 'project-1'])
-    expect(state.filters).toContainEqual(['issues', 'mega_code', '00'])
+    expect(state.filters).toContainEqual(['issues', 'area_id', '00'])
   })
 
   it('전체 범위는 issues 쿼리에 Mega 조건을 추가하지 않는다', async () => {
     await loadIssueAnalysisIssues('project-1')
     expect(state.filters.some(([table, column]) => (
-      table === 'issues' && column === 'mega_code'
+      table === 'issues' && column === 'area_id'
     ))).toBe(false)
   })
 

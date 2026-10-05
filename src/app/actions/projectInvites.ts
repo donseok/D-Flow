@@ -12,7 +12,7 @@ import { getTransport } from '@/lib/mail/transport'
 import { renderInviteMail } from '@/lib/mail/projectInvite'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
-import { requireCalendar } from '@/lib/calendar/load'
+import { projectTimezone } from '@/lib/calendar/load'
 import {
   DEFAULT_INVITE_DAYS, inviteStatus, canonicalInviteEmail, isAllowedInviteDomain, normalizeInviteDays,
   normalizeInviteEmail, type InviteDomainSource, type InviteStatus,
@@ -375,7 +375,7 @@ async function sendInviteMail(
 
   // 만료 시각의 tz — 초대는 이미 저장됐으므로 달력을 못 읽어도 메일은 보낸다. 대신 UTC 로 찍고 꼬리에 'UTC' 라고 적는다(라벨이 사실)
   let timeZone = 'UTC'
-  try { timeZone = requireCalendar(await getProjectConfig(i.projectId, { client: admin })).timezone } catch (e) {
+  try { timeZone = projectTimezone(await getProjectConfig(i.projectId, { client: admin })) } catch (e) {
     console.error('[createProjectInvite] 프로젝트 달력 판독 실패 — 만료 시각을 UTC 로 표기한다', { projectId: i.projectId, cause: String(e) })
   }
   const { subject, html, text } = renderInviteMail({

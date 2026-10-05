@@ -6,17 +6,19 @@ import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { calendarDayInfo, monthMatrix, weekdayColumns, type CalendarView } from '@/lib/domain/attendance'
 import { currentRuleDay } from '@/lib/domain/calendar'
-import { occurrencesByDate, sortOccurrences, MEETING_META } from '@/lib/domain/meetings'
+import { occurrencesByDate, sortOccurrences } from '@/lib/domain/meetings'
+import { vocabColor, vocabOf, type VocabByProject } from '@/lib/settings/vocab'
 import { DayPopover, type DayPopoverAnchor } from '@/components/ui/DayPopover'
 import { RestDayMark } from '@/components/calendar/RestDayMark'
 
-function OccurrenceChip({ o, onSelect, t, projectDotClass }: {
+function OccurrenceChip({ o, onSelect, t, projectDotClass, categories }: {
   o: MeetingOccurrence
+  categories: VocabByProject<'meetings.categories'>
   onSelect: (o: MeetingOccurrence) => void
   t: (k: DictKey) => string
   projectDotClass?: (projectId: string) => string | null
 }) {
-  const meta = MEETING_META[o.category]
+  const meta = vocabColor(vocabOf(categories, o.projectId), o.category)
   const timeLabel = o.startTime ?? t('meet.allDay')
   const dotClass = projectDotClass?.(o.projectId)
   return (
@@ -34,7 +36,7 @@ function OccurrenceChip({ o, onSelect, t, projectDotClass }: {
 }
 
 export function MeetingCalendar({
-  year, month0, todayIso, occurrences, onSelectOccurrence, projectDotClass, calendar, holidayNames,
+  year, month0, todayIso, occurrences, onSelectOccurrence, projectDotClass, calendar, holidayNames, categories,
 }: {
   year: number
   month0: number
@@ -47,6 +49,8 @@ export function MeetingCalendar({
   calendar: CalendarView
   /** 휴무 이름(프로젝트 holidays.name) — 워크스페이스 달력은 없다 */
   holidayNames?: Readonly<Record<string, string>>
+  /** 회의 범주(설정 meetings.categories) — 프로젝트별 */
+  categories: VocabByProject<'meetings.categories'>
 }) {
   const { t } = useLocale()
   const [more, setMore] = useState<DayPopoverAnchor | null>(null)
@@ -88,7 +92,7 @@ export function MeetingCalendar({
               </div>
               <div className="mt-1 space-y-1">
                 {dayOcc.slice(0, 3).map(o => (
-                  <OccurrenceChip key={o.occurrenceId} o={o} t={t} onSelect={onSelectOccurrence} projectDotClass={projectDotClass} />
+                  <OccurrenceChip key={o.occurrenceId} o={o} t={t} onSelect={onSelectOccurrence} projectDotClass={projectDotClass} categories={categories} />
                 ))}
                 {dayOcc.length > 3 && (
                   <button
@@ -109,7 +113,7 @@ export function MeetingCalendar({
       {more && (
         <DayPopover anchor={more} count={moreOcc.length} onClose={() => setMore(null)}>
           {moreOcc.map(o => (
-            <OccurrenceChip key={o.occurrenceId} o={o} t={t} onSelect={occ => { setMore(null); onSelectOccurrence(occ) }} projectDotClass={projectDotClass} />
+            <OccurrenceChip key={o.occurrenceId} o={o} t={t} onSelect={occ => { setMore(null); onSelectOccurrence(occ) }} projectDotClass={projectDotClass} categories={categories} />
           ))}
         </DayPopover>
       )}

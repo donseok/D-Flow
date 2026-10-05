@@ -12,14 +12,22 @@ import { DeleteIssueModal, IssueDetailModal, IssueFormModal } from './IssueModal
 import { IssueAnalysisModal } from './IssueAnalysisModal'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import {
-  ISSUE_MEGA_AREAS,
-  type IssueMegaFilter,
+  type IssueAreaFilter,
 } from '@/lib/domain/issueAnalysis'
 import {
-  ISSUE_SEVERITIES, ISSUE_SEVERITY_META, ISSUE_STATUSES, ISSUE_STATUS_META,
+  ISSUE_STATUSES,
   canEditIssue, dueDaysLeft, filterIssues, isDueUrgent, isOverdue, sortIssues,
   type Issue, type IssueSeverityFilter, type IssueStatusFilter,
 } from '@/lib/domain/issues'
+import { areaLabel } from '@/lib/domain/issueAreas'
+import { StatusMessage } from '@/components/ui/StatusMessage'
+import type { IssueEntryContext } from '@/lib/issues/context'
+import { activeVocab, orderedVocab, vocabLabel, vocabView, DEFAULT_ISSUE_STATUSES, type IssueStatusDef, type SeverityDef, type SourceDef } from '@/lib/settings/vocab'
+import { IssueStatusPill } from '@/components/ui/StatusPill'
+import { CustomFieldInput } from '@/components/fields/CustomFieldInput'
+import { formatCustomValue, orderedFields, type FieldDef, type FieldValue } from '@/lib/domain/customFields'
+import { parseCustomValues } from '@/lib/domain/customFieldValues'
+import { matchesCustomFieldFilter } from '@/lib/domain/customFieldFilter'
 import type { ProjectMember } from '@/lib/domain/types'
 
 /** 페이지당 행 수 선택지 — 'all' 은 페이징 없이 전량. 기본은 20(사용자 요청). */
@@ -28,8 +36,11 @@ type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
 
 export function IssuesView({
-  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, today, timeZone,
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, myMemberIdsFailed = false, today, timeZone, entryContext, entryError, severities, sources, statuses, customFields = [],
 }: {
+  customFields?: FieldDef[] | null
+  entryContext: IssueEntryContext | null
+  entryError?: string
   issues: Issue[]
   members: ProjectMember[]
   projectId: string
@@ -41,20 +52,40 @@ export function IssuesView({
   /** 프로젝트 관리자 이상(isProjectAdmin) — 남의 이슈 전체 편집·삭제. */
   isProjectAdmin: boolean
   myMemberIds: string[]
+  /** 내 명단 행 조회가 실패했다 — '내 담당' 필터가 비어 보이는 이유를 표시한다(빈 결과로 위장하지 않는다) */
+  myMemberIdsFailed?: boolean
   today: string
   /** 시각 표시의 시간대(프로젝트 calendar.timezone — 계획 P8) */
   timeZone: string
+  /** 이 프로젝트의 심각도·출처(설정 어휘, SP5 B4) — 칩·정렬·필터·상세 라벨 */
+  severities: readonly SeverityDef[]
+  sources: readonly SourceDef[]
+  /** 이 프로젝트의 표시 상태(SP5b — 설정 workflow.issue_statuses). 없으면 제품 기본 4정의 */
+  statuses?: readonly IssueStatusDef[]
 }) {
-  const { locale, t } = useLocale()
+  const { t, locale } = useLocale()
   const { toast } = useToast()
+  const areas = entryContext?.areas ?? []
+  const analysisVisible = !!entryContext && entryContext.rules.analysis !== 'off'
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
 
   const [statusFilter, setStatusFilter] = useState<IssueStatusFilter>('all')
+  // 필터 두 층(SP5b §5): 범주 4탭(제품 고정) + 표시 상태 드롭다운(설정 — 한 범주에 상태가 둘 이상인 프로젝트에서만 보인다)
+  const [statusCodeFilter, setStatusCodeFilter] = useState<string>('all')
+  const statusDefs = statuses ?? DEFAULT_ISSUE_STATUSES
+  const showCodeFilter = new Set(statusDefs.map(d => d.category)).size < statusDefs.length
   const [severityFilter, setSeverityFilter] = useState<IssueSeverityFilter>('all')
-  const [megaFilter, setMegaFilter] = useState<IssueMegaFilter>('all')
+  const [areaFilter, setAreaFilter] = useState<IssueAreaFilter>('all')
   const [mineOnly, setMineOnly] = useState(false)
+  const [customKey, setCustomKey] = useState('')
+  const [customCriterion, setCustomCriterion] = useState<FieldValue | undefined>()
+  const fieldDefs = useMemo(() => orderedFields(customFields ?? []).filter(d => d.active), [customFields])
+  const listFields = fieldDefs.filter(d => d.show_in_list)
+  const filterDef = fieldDefs.find(d => d.key === customKey)
+  const customFormat = { locale, yes: locale === 'ko' ? '예' : 'Yes', no: locale === 'ko' ? '아니오' : 'No', empty: '—' }
+
   // 페이징 — 필터를 바꾸면 1페이지로 돌아간다(안 그러면 결과가 줄었을 때 빈 페이지가 보인다).
   // 목록 자체가 줄어드는 경우(삭제·refresh)는 렌더 시점 clamp 로 잡는다.
   const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
@@ -87,7 +118,8 @@ export function IssuesView({
   )
   const [formOpen, setFormOpen] = useState(false)
   const [analysisOpen, setAnalysisOpen] = useState(false)
-  const [editing, setEditing] = useState<Issue | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const editing = issues.find(i => i.id === editingId) ?? null
   const [deleting, setDeleting] = useState<Issue | null>(null)
 
   const myIds = useMemo(() => new Set(myMemberIds), [myMemberIds])
@@ -106,11 +138,12 @@ export function IssuesView({
     () => sortIssues(filterIssues(issues, {
       status: statusFilter,
       severity: severityFilter,
-      mega: megaFilter,
+      area: areaFilter,
       mineOnly,
       myMemberIds: myIds,
-    }), today),
-    [issues, statusFilter, severityFilter, megaFilter, mineOnly, myIds, today],
+    }).filter(i => statusCodeFilter === 'all' || (i.statusCode ?? i.status) === statusCodeFilter)
+      .filter(i => matchesCustomFieldFilter(i.custom, filterDef, customCriterion)), today, severities),
+    [issues, statusFilter, statusCodeFilter, severityFilter, areaFilter, mineOnly, myIds, today, severities, filterDef, customCriterion],
   )
 
   const pageCount = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(visible.length / pageSize))
@@ -123,37 +156,39 @@ export function IssuesView({
 
   const statusTabs = [
     { key: 'all' as const, label: t('issue.filter.all') },
-    ...ISSUE_STATUSES.map(s => ({ key: s, label: t(ISSUE_STATUS_META[s].labelKey) })),
+    ...ISSUE_STATUSES.map(s => ({ key: s, label: t(`issue.status.${s}`) })),
   ]
   const severityTabs = [
     { key: 'all' as const, label: t('issue.filter.all') },
-    ...ISSUE_SEVERITIES.map(s => ({ key: s, label: t(ISSUE_SEVERITY_META[s].labelKey) })),
+    ...activeVocab(severities).map(s => ({ key: s.code, label: vocabView('issues.severities', severities, s.code, t).label })),
   ]
 
   function openWrite() {
-    setEditing(null)
+    setEditingId(null)
     setFormOpen(true)
   }
   function openEdit(issue: Issue) {
     setViewingId(null)
-    setEditing(issue)
+    setEditingId(issue.id)
     setFormOpen(true)
   }
   function openAnalysis() {
-    if (megaFilter === 'all') {
-      toast({ title: t('issue.analysis.selectOneMega'), variant: 'error' })
+    if (areaFilter === 'all') {
+      toast({ title: t('issue.analysis.selectOneArea'), variant: 'error' })
       return
     }
     setAnalysisOpen(true)
   }
 
   const filtered = statusFilter !== 'all'
+    || statusCodeFilter !== 'all'
     || severityFilter !== 'all'
-    || megaFilter !== 'all'
+    || areaFilter !== 'all'
     || mineOnly
+    || (!!filterDef && customCriterion !== undefined)
   // 조회 전용에게는 등록 어포던스를 숨긴다 — 서버 createIssue 는 requireProjectMember(스펙 §6.3).
   // 이슈별 전체 편집(canEditIssue — 작성자 또는 관리자)과는 다른 축이다.
-  const canWrite = canEdit
+  const canWrite = canEdit && !!entryContext
 
   return (
     <div className="space-y-4">
@@ -165,6 +200,19 @@ export function IssuesView({
           onChange={v => { setStatusFilter(v); setPage(1) }}
           size="sm"
         />
+        {showCodeFilter && (
+          <select
+            aria-label={t('issue.col.status')}
+            value={statusCodeFilter}
+            onChange={event => { setStatusCodeFilter(event.target.value); setPage(1) }}
+            className="app-input h-9 w-full min-w-[140px] text-xs sm:w-auto"
+          >
+            <option value="all">{t('issue.status.codeFilterAll')}</option>
+            {orderedVocab(statusDefs).filter(d => statusFilter === 'all' || d.category === statusFilter).map(d => (
+              <option key={d.code} value={d.code}>{vocabLabel('workflow.issue_statuses', statusDefs, d.code, t)}</option>
+            ))}
+          </select>
+        )}
         <SegmentedTabs
           tabs={severityTabs}
           value={severityFilter}
@@ -172,15 +220,15 @@ export function IssuesView({
           size="sm"
         />
         <select
-          aria-label={t('issue.filter.mega')}
-          value={megaFilter}
-          onChange={event => { setMegaFilter(event.target.value as IssueMegaFilter); setPage(1) }}
+          aria-label={t('issue.filter.area')}
+          value={areaFilter}
+          onChange={event => { setAreaFilter(event.target.value as IssueAreaFilter); setPage(1) }}
           className="app-input h-9 w-full min-w-[180px] text-xs sm:w-auto"
         >
-          <option value="all">{t('issue.filter.megaAll')}</option>
-          {ISSUE_MEGA_AREAS.map(area => (
-            <option key={area.code} value={area.code}>
-              {area.code} · {locale === 'en' ? area.nameEn : area.nameKo}
+          <option value="all">{t('issue.filter.areaAll')}</option>
+          {areas.filter(area => area.active || issues.some(i => i.areaId === area.id)).map(area => (
+            <option key={area.id} value={area.id}>
+              {area.code} · {area.name}
             </option>
           ))}
         </select>
@@ -191,16 +239,32 @@ export function IssuesView({
         >
           {t('issue.filter.mine')}
         </button>
+        {customFields === null && <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보 설정을 읽을 수 없습니다.' : 'Custom field settings could not be read.'}</p>}
+        {fieldDefs.length > 0 && <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
+          <label className="space-y-1 text-xs text-ink-muted">
+            <span>{locale === 'ko' ? '추가 정보 필터' : 'Custom field filter'}</span>
+            <select aria-label={locale === 'ko' ? '추가 정보 필터' : 'Custom field filter'} value={filterDef?.key ?? ''}
+              className="app-input h-9 w-full min-w-[140px] text-xs"
+              onChange={e => { setCustomKey(e.target.value); setCustomCriterion(undefined); setPage(1) }}>
+              <option value="">{locale === 'ko' ? '전체' : 'All'}</option>
+              {fieldDefs.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+            </select>
+          </label>
+          {filterDef && <div className="min-w-0 max-w-full sm:w-48"><CustomFieldInput def={{ ...filterDef, required: false, options: filterDef.options?.map(o => ({ ...o, active: true })) }} value={customCriterion}
+            label={filterDef.label} emptyLabel={locale === 'ko' ? '전체' : 'All'} locale={locale} onChange={v => { setCustomCriterion(Array.isArray(v) && v.length === 0 ? undefined : v); setPage(1) }} /></div>}
+        </div>}
+        {myMemberIdsFailed && <StatusMessage compact kind="partial_error" title={t('issue.filter.mineFailed')} />}
+        {canEdit && entryError && <StatusMessage compact kind="partial_error" title={entryError} />}
         {canWrite && (
           <div className="ml-auto flex items-center gap-2">
-            <button
+            {analysisVisible && <button
               type="button"
               onClick={openAnalysis}
               className="btn btn-ghost inline-flex items-center gap-1.5 text-xs"
             >
               <Presentation className="h-3.5 w-3.5" />
               {t('issue.analysis.open')}
-            </button>
+            </button>}
             <button onClick={openWrite} className="btn btn-primary inline-flex items-center gap-1.5 text-xs">
               <Plus className="h-3.5 w-3.5" />{t('issue.new')}
             </button>
@@ -211,25 +275,26 @@ export function IssuesView({
       {/* 테이블 (MeetingsView 골격) */}
       {visible.length > 0 ? (
         <div className="card overflow-hidden p-0">
-          <div>
-            <table className="w-full table-fixed border-collapse text-[13px]">
-              {/* 10열 폭 합 100 — 열을 더하거나 뺄 때 합이 어긋나면 table-fixed 가 조용히 뭉갠다. */}
+          <div className="overflow-x-auto">
+            <table className="min-w-[1100px] w-full table-fixed border-collapse text-[13px]" style={listFields.length ? { minWidth: 1100 + 160 * listFields.length } : undefined}>
+              {/* Core widths retain their proportions; custom columns receive 160px each. */}
               <colgroup>
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '22%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '7%' }} />
+                <col style={{ width: `${11 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${9 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${22 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${7 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${7 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${12 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${9 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${9 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${7 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                <col style={{ width: `${7 * 1100 / (1100 + 160 * listFields.length)}%` }} />
+                {listFields.map(d => <col key={d.key} style={{ width: `${16000 / (1100 + 160 * listFields.length)}%` }} />)}
               </colgroup>
               <thead>
                 <tr className="whitespace-nowrap border-b border-line bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-subtle">
                   <th className="px-2.5 py-2.5">{t('issue.col.no')}</th>
-                  <th className="px-2.5 py-2.5">{t('issue.col.mega')}</th>
+                  <th className="px-2.5 py-2.5">{t('issue.col.area')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.title')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.status')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.severity')}</th>
@@ -238,18 +303,19 @@ export function IssuesView({
                   <th className="px-2.5 py-2.5">{t('issue.col.endDate')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.daysLeft')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.created')}</th>
+                  {listFields.map(d => <th key={d.key} className="px-2.5 py-2.5">{d.label}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {paged.map(issue => {
-                  const sMeta = ISSUE_STATUS_META[issue.status]
+                  const custom = parseCustomValues(issue.custom)
                   const overdue = isOverdue(issue, today)
                   // 남은일수(2026-08-28) — 오늘→종료일자 달력일. 7일 이내·경과는 빨강, 해결·기한 없음은 —.
                   const daysLeft = dueDaysLeft(issue, today)
                   const ddayText = daysLeft === null ? '—'
                     : daysLeft >= 0 ? t('issue.dday.left').replace('{n}', String(daysLeft))
                     : t('issue.dday.over').replace('{n}', String(-daysLeft))
-                  const megaArea = ISSUE_MEGA_AREAS.find(area => area.code === issue.megaCode)
+                  const megaArea = areas.find(area => area.id === issue.areaId)
                   const assignees = assigneeLabel(issue) ?? t('issue.unassigned')
                   return (
                     <tr
@@ -260,26 +326,19 @@ export function IssuesView({
                       onKeyDown={e => { if (e.key === 'Enter') setViewingId(issue.id) }}
                       className="cursor-pointer border-b border-line/70 transition last:border-0 hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2"
                     >
-                      <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums">
-                        {issue.piIssueCode ? (
-                          <>
-                            <span className="font-semibold text-ink">{issue.piIssueCode}</span>
-                            <span className="ml-1.5 text-[10px] text-ink-subtle">#{issue.issueNo}</span>
-                          </>
-                        ) : (
-                          <span className="text-ink-muted">#{issue.issueNo}</span>
-                        )}
+                      <td className="whitespace-normal break-all px-2.5 py-2.5 tabular-nums">
+                        <span className="font-semibold text-ink">{issue.code}</span>
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
                         {megaArea ? (
                           <span
                             className="inline-block max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-lg border border-brand-ring bg-brand-weak px-2 py-1 text-[11px] font-semibold text-brand"
-                            title={`${megaArea.code} · ${locale === 'en' ? megaArea.nameEn : megaArea.nameKo}`}
+                            title={`${megaArea.code} · ${megaArea.name}`}
                           >
-                            {megaArea.code} · {locale === 'en' ? megaArea.nameEn : megaArea.nameKo}
+                            {megaArea.code} · {megaArea.name}
                           </span>
                         ) : (
-                          <span className="text-ink-subtle">—</span>
+                          <span className="text-ink-subtle">{areaLabel(undefined, issue.areaId)}</span>
                         )}
                       </td>
                       <td className="whitespace-normal break-words px-2.5 py-2.5 font-medium leading-5 text-ink" title={issue.title}>
@@ -300,13 +359,10 @@ export function IssuesView({
                         )}
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
-                        <span className={`chip px-2 py-0.5 text-[11px] ${sMeta.chip}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${sMeta.dot}`} />
-                          {t(sMeta.labelKey)}
-                        </span>
+                        <IssueStatusPill category={issue.status} code={issue.statusCode} defs={statusDefs} />
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
-                        <span className={`chip px-2 py-0.5 text-[11px] ${ISSUE_SEVERITY_META[issue.severity].chip}`}>{t(ISSUE_SEVERITY_META[issue.severity].labelKey)}</span>
+                        <span className={`chip px-2 py-0.5 text-[11px] ${vocabView('issues.severities', severities, issue.severity, t).chip}`}>{vocabView('issues.severities', severities, issue.severity, t).label}</span>
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 text-ink-muted" title={assignees}>
                         <span className="block truncate">{assignees}</span>
@@ -323,6 +379,10 @@ export function IssuesView({
                       <td className="whitespace-normal break-words px-2.5 py-2.5 text-ink-muted">
                         {issue.createdByName ?? '—'}
                       </td>
+                      {listFields.map(d => <td key={d.key} className="whitespace-pre-wrap break-words px-2.5 py-2.5 text-ink-muted">
+                        {custom.ok ? formatCustomValue(d, custom.value[d.key], customFormat)
+                          : <span role="status">{locale === 'ko' ? '값 확인 필요' : 'Unreadable value'}</span>}
+                      </td>)}
                     </tr>
                   )
                 })}
@@ -400,10 +460,14 @@ export function IssuesView({
       )}
 
       <IssueDetailModal
+        areas={areas}
+        severities={severities}
+        sources={sources}
+        statuses={statusDefs}
         issue={viewing}
         members={members}
         memberName={memberName}
-        canEdit={viewing ? canEditIssue(viewing, currentUserId, isProjectAdmin) : false}
+        canEdit={viewing && entryContext ? canEditIssue(viewing, currentUserId, isProjectAdmin) : false}
         canWrite={canWrite}
         currentUserId={currentUserId}
         isProjectAdmin={isProjectAdmin}
@@ -426,14 +490,15 @@ export function IssuesView({
           setViewingId(null)
         }}
       />
-      <IssueFormModal open={formOpen} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
+      <IssueFormModal entryContext={entryContext ?? undefined} canManage={isProjectAdmin} open={formOpen && (editingId === null || editing !== null)} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
       <DeleteIssueModal issue={deleting} onClose={() => setDeleting(null)} />
       <IssueAnalysisModal
+        areas={areas}
         open={analysisOpen}
         onClose={() => setAnalysisOpen(false)}
         projectId={projectId}
         issues={issues}
-        megaFilter={megaFilter}
+        areaFilter={areaFilter}
       />
     </div>
   )

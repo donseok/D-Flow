@@ -1,7 +1,10 @@
+import { actionAreaId } from '../fixtures/issue-areas'
+vi.mock('@/lib/issues/context', async () => ({ loadIssueEntryContext: async () => ({ ok: true, value: { ...(await import('../fixtures/issue-areas')).ACTION_ENTRY_CONTEXT, customFields: state.fields } }) }))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fnv1a64, splitMinuteBlocks } from '@/lib/minutes/blocks'
 
 const state = vi.hoisted(() => ({
+  fields: [] as import('@/lib/domain/customFields').FieldDef[],
   client: undefined as unknown,
   admin: undefined as unknown,
 }))
@@ -50,22 +53,7 @@ const ACTOR = makeMemberActor('project-1', [], { userId: USER.id })
 const BODY = '# 제목\n\n인터페이스 전환 지연 위험을 담당자와 확인한다.'
 const BODY_HASH = fnv1a64(BODY)
 const BLOCK = splitMinuteBlocks(BODY)[1]
-const INPUT = {
-  title: '인터페이스 전환 지연 위험',
-  body: BLOCK.text,
-  severity: 'high' as const,
-  assigneeMemberIds: ['member-1'],
-  startDate: '2026-07-27',
-  dueDate: '2026-08-03',
-  megaCode: '02' as const,
-  majorName: '주문관리',
-  subProcess: '수주 등록',
-  ownerDepartment: '영업팀',
-  relatedSystems: ['CRM', 'ERP'],
-  // 전용 액션은 이 값을 신뢰하지 않고 minutes로 강제해야 한다.
-  sourceType: 'other' as const,
-  sourceDetail: '주간 영업회의 위험 블록',
-}
+const INPUT = { title: '인터페이스 전환 지연 위험', body: BLOCK.text, severity: 'high' as const, assigneeMemberIds: ['member-1'], startDate: '2026-07-27', dueDate: '2026-08-03', areaId: actionAreaId('02'), analysis: { majorName: '주문관리', subProcess: '수주 등록', ownerDepartment: '영업팀', relatedSystems: ['CRM', 'ERP'], sourceType: 'other' as const, sourceDetail: '주간 영업회의 위험 블록' } }
 const SOURCE = {
   minuteId: 'minute-1',
   minuteVersionId: 'version-1',
@@ -101,13 +89,7 @@ const SELECTION_SOURCE = {
 }
 
 function aiResponseForAction(title: string): string {
-  return JSON.stringify({
-    title,
-    body: '[현황]\n- 주문 입력을 처리하고 있습니다.\n[문제/영향]\n- 입력 오류와 납기 지연이 발생합니다.\n[필요 조치]\n- 주문 등록 절차 개선이 필요합니다.',
-    megaCode: '02',
-    majorProcess: '주문관리',
-    subProcess: '주문접수/등록',
-  })
+  return JSON.stringify({ title, body: '[현황]\n- 주문 입력을 처리하고 있습니다.\n[문제/영향]\n- 입력 오류와 납기 지연이 발생합니다.\n[필요 조치]\n- 주문 등록 절차 개선이 필요합니다.', areaCode: '02', analysis: { majorName: '주문관리', subProcess: '주문접수/등록', ownerDepartment: '영업팀', relatedSystems: [], sourceDetail: '' } })
 }
 
 function clientsWithVersion({
@@ -118,12 +100,12 @@ function clientsWithVersion({
   body = BODY,
   bodyHash = fnv1a64(body),
   knownMajorProcesses = [
-    { mega_code: '02', name: '주문관리' },
-    { mega_code: '07', name: '원가관리' },
+    { area_id: actionAreaId('02'), name: '주문관리' },
+    { area_id: actionAreaId('07'), name: '원가관리' },
   ],
   knownSubProcesses = [
-    { mega_code: '02', sub_process: '주문접수/등록' },
-    { mega_code: '07', sub_process: '원가손익분석' },
+    { area_id: actionAreaId('02'), sub_process: '주문접수/등록' },
+    { area_id: actionAreaId('07'), sub_process: '원가손익분석' },
   ],
 }: {
   currentProjectId?: string | null
@@ -133,11 +115,11 @@ function clientsWithVersion({
   archivedAt?: string | null
   body?: string
   bodyHash?: string
-  knownMajorProcesses?: Array<{ mega_code: string; name: string }>
-  knownSubProcesses?: Array<{ mega_code: string; sub_process: string }>
+  knownMajorProcesses?: Array<{ area_id: string; name: string }>
+  knownSubProcesses?: Array<{ area_id: string; sub_process: string }>
 } = {}) {
   const rpcSingle = vi.fn(async () => ({
-    data: { issue_id: 'issue-1', issue_no: 27, pi_issue_code: 'PI-I-02-03' },
+    data: { issue_id: 'issue-1', issue_no: 27, code: 'PI-I-02-03' },
     error: null,
   }))
   const rpc = vi.fn((name: string, args: Record<string, unknown>) => {
@@ -230,6 +212,7 @@ function asMember() {
 }
 
 beforeEach(() => {
+  state.fields = []
   state.client = undefined
   state.admin = undefined
   createServerClient.mockClear()
@@ -261,13 +244,7 @@ describe('prepareMinuteIssueDraft', () => {
     asMember()
     const fixture = clientsWithVersion()
     state.client = fixture.client
-    ai.generateAnswer.mockResolvedValue(JSON.stringify({
-      title: '인터페이스 전환 지연 대응',
-      body: '[현황]\n- 인터페이스 전환이 지연되고 있습니다.\n\n[문제/영향]\n- 전환 일정에 차질 위험이 있습니다.\n\n[필요 조치]\n- 담당자와 대응 방안을 확인합니다.',
-      megaCode: '02',
-      majorProcess: '주문관리',
-      subProcess: '주문접수/등록',
-    }))
+    ai.generateAnswer.mockResolvedValue(JSON.stringify({ title: '인터페이스 전환 지연 대응', body: '[현황]\n- 인터페이스 전환이 지연되고 있습니다.\n\n[문제/영향]\n- 전환 일정에 차질 위험이 있습니다.\n\n[필요 조치]\n- 담당자와 대응 방안을 확인합니다.', areaCode: '02', analysis: { majorName: '주문관리', subProcess: '주문접수/등록', ownerDepartment: '영업팀', relatedSystems: [], sourceDetail: '' } }))
 
     const first = await prepareMinuteIssueDraft('project-1', SOURCE)
     const second = await prepareMinuteIssueDraft('project-1', SOURCE)
@@ -275,13 +252,7 @@ describe('prepareMinuteIssueDraft', () => {
     expect(first).toEqual(second)
     expect(first).toMatchObject({
       ok: true,
-      draft: {
-        title: '인터페이스 전환 지연 대응',
-        megaCode: '02',
-        majorProcess: '주문관리',
-        subProcess: '주문접수/등록',
-        mode: 'ai',
-      },
+      draft: { title: '인터페이스 전환 지연 대응', areaId: actionAreaId('02'), mode: 'ai', analysis: { majorName: '주문관리', subProcess: '주문접수/등록' } },
     })
     expect(ai.generateAnswer).toHaveBeenCalledOnce()
     const [, messages, options] = ai.generateAnswer.mock.calls[0]
@@ -383,73 +354,49 @@ describe('prepareMinuteIssueDraft', () => {
   it('프로젝트의 Sub Process 사례가 바뀌면 이전 AI 캐시를 재사용하지 않는다', async () => {
     asMember()
     const firstFixture = clientsWithVersion({
-      knownSubProcesses: [{ mega_code: '02', sub_process: '주문접수/등록' }],
+      knownSubProcesses: [{ area_id: actionAreaId('02'), sub_process: '주문접수/등록' }],
     })
     state.client = firstFixture.client
-    ai.generateAnswer.mockResolvedValueOnce(JSON.stringify({
-      title: '첫 분류 기준의 주문 이슈',
-      body: '[현황]\n- 주문 입력을 처리하고 있습니다.\n[문제/영향]\n- 입력 오류가 발생합니다.\n[필요 조치]\n- 등록 절차를 확인해야 합니다.',
-      megaCode: '02',
-      majorProcess: '주문관리',
-      subProcess: '주문접수/등록',
-    }))
+    ai.generateAnswer.mockResolvedValueOnce(JSON.stringify({ title: '첫 분류 기준의 주문 이슈', body: '[현황]\n- 주문 입력을 처리하고 있습니다.\n[문제/영향]\n- 입력 오류가 발생합니다.\n[필요 조치]\n- 등록 절차를 확인해야 합니다.', areaCode: '02', analysis: { majorName: '주문관리', subProcess: '주문접수/등록', ownerDepartment: '영업팀', relatedSystems: [], sourceDetail: '' } }))
     const source = { ...SOURCE, kind: 'action' as const }
     const first = await prepareMinuteIssueDraft('project-1', source)
 
     const secondFixture = clientsWithVersion({
-      knownSubProcesses: [{ mega_code: '02', sub_process: '주문진행관리' }],
+      knownSubProcesses: [{ area_id: actionAreaId('02'), sub_process: '주문진행관리' }],
     })
     state.client = secondFixture.client
-    ai.generateAnswer.mockResolvedValueOnce(JSON.stringify({
-      title: '변경된 분류 기준의 주문 이슈',
-      body: '[현황]\n- 주문 진행 정보를 관리하고 있습니다.\n[문제/영향]\n- 진행 정보가 부정확합니다.\n[필요 조치]\n- 관리 절차를 확인해야 합니다.',
-      megaCode: '02',
-      majorProcess: '주문관리',
-      subProcess: '주문진행관리',
-    }))
+    ai.generateAnswer.mockResolvedValueOnce(JSON.stringify({ title: '변경된 분류 기준의 주문 이슈', body: '[현황]\n- 주문 진행 정보를 관리하고 있습니다.\n[문제/영향]\n- 진행 정보가 부정확합니다.\n[필요 조치]\n- 관리 절차를 확인해야 합니다.', areaCode: '02', analysis: { majorName: '주문관리', subProcess: '주문진행관리', ownerDepartment: '영업팀', relatedSystems: [], sourceDetail: '' } }))
     const second = await prepareMinuteIssueDraft('project-1', source)
 
-    expect(first.draft?.subProcess).toBe('주문접수/등록')
-    expect(second.draft?.subProcess).toBe('주문진행관리')
+    expect(first.draft?.analysis?.subProcess).toBe('주문접수/등록')
+    expect(second.draft?.analysis?.subProcess).toBe('주문진행관리')
     expect(ai.generateAnswer).toHaveBeenCalledTimes(2)
   })
 
   it('체번된 Major Process 사례가 바뀌면 이전 AI 캐시를 재사용하지 않는다', async () => {
     asMember()
     state.client = clientsWithVersion({
-      knownMajorProcesses: [{ mega_code: '02', name: '주문관리' }],
+      knownMajorProcesses: [{ area_id: actionAreaId('02'), name: '주문관리' }],
     }).client
-    ai.generateAnswer.mockResolvedValueOnce(JSON.stringify({
-      title: '기존 Major 기준의 주문 이슈',
-      body: '[현황]\n- 주문 입력을 처리하고 있습니다.\n[문제/영향]\n- 입력 오류가 발생합니다.\n[필요 조치]\n- 등록 절차를 확인해야 합니다.',
-      megaCode: '02',
-      majorProcess: '주문관리',
-      subProcess: '주문접수/등록',
-    }))
+    ai.generateAnswer.mockResolvedValueOnce(JSON.stringify({ title: '기존 Major 기준의 주문 이슈', body: '[현황]\n- 주문 입력을 처리하고 있습니다.\n[문제/영향]\n- 입력 오류가 발생합니다.\n[필요 조치]\n- 등록 절차를 확인해야 합니다.', areaCode: '02', analysis: { majorName: '주문관리', subProcess: '주문접수/등록', ownerDepartment: '영업팀', relatedSystems: [], sourceDetail: '' } }))
     const source = { ...SOURCE, kind: 'action' as const }
     const first = await prepareMinuteIssueDraft('project-1', source)
 
     state.client = clientsWithVersion({
-      knownMajorProcesses: [{ mega_code: '02', name: '수주관리' }],
+      knownMajorProcesses: [{ area_id: actionAreaId('02'), name: '수주관리' }],
     }).client
-    ai.generateAnswer.mockResolvedValueOnce(JSON.stringify({
-      title: '개명된 Major 기준의 주문 이슈',
-      body: '[현황]\n- 수주 정보를 관리하고 있습니다.\n[문제/영향]\n- 수주 정보가 부정확합니다.\n[필요 조치]\n- 관리 절차를 확인해야 합니다.',
-      megaCode: '02',
-      majorProcess: '수주관리',
-      subProcess: '주문접수/등록',
-    }))
+    ai.generateAnswer.mockResolvedValueOnce(JSON.stringify({ title: '개명된 Major 기준의 주문 이슈', body: '[현황]\n- 수주 정보를 관리하고 있습니다.\n[문제/영향]\n- 수주 정보가 부정확합니다.\n[필요 조치]\n- 관리 절차를 확인해야 합니다.', areaCode: '02', analysis: { majorName: '수주관리', subProcess: '주문접수/등록', ownerDepartment: '영업팀', relatedSystems: [], sourceDetail: '' } }))
     const second = await prepareMinuteIssueDraft('project-1', source)
 
-    expect(first.draft?.majorProcess).toBe('주문관리')
-    expect(second.draft?.majorProcess).toBe('수주관리')
+    expect(first.draft?.analysis?.majorName).toBe('주문관리')
+    expect(second.draft?.analysis?.majorName).toBe('수주관리')
     expect(ai.generateAnswer).toHaveBeenCalledTimes(2)
     // 입력 JSON에는 체번 정본 이름이 knownMajorProcesses 로 직렬화돼 재사용을 유도한다.
     const firstPrompt = ai.generateAnswer.mock.calls[0][1][0].content as string
     const firstPayload = JSON.parse(firstPrompt.split('\n')[1]) as {
-      knownMajorProcesses: Array<{ megaCode: string; name: string }>
+      knownMajorProcesses: Array<{ areaCode: string; name: string }>
     }
-    expect(firstPayload.knownMajorProcesses).toEqual([{ megaCode: '02', name: '주문관리' }])
+    expect(firstPayload.knownMajorProcesses).toEqual([{ areaCode: '02', name: '주문관리' }])
   })
 
   it('변조된 블록 앵커는 AI 호출 전에 거부한다', async () => {
@@ -487,10 +434,7 @@ describe('prepareMinuteIssueDraft', () => {
   it('aiAvailable 이 거짓이면 인스턴스 캐시에 AI 초안이 있어도 결정형 초안이다(Review Focus 4)', async () => {
     asMember()
     state.client = clientsWithVersion().client
-    ai.generateAnswer.mockResolvedValue(JSON.stringify({
-      title: '인터페이스 전환 지연 대응', body: '[현황]\n- 가\n\n[문제/영향]\n- 나\n\n[필요 조치]\n- 다',
-      megaCode: '02', majorProcess: '주문관리', subProcess: '주문접수/등록',
-    }))
+    ai.generateAnswer.mockResolvedValue(JSON.stringify({ title: '인터페이스 전환 지연 대응', body: '[현황]\n- 가\n\n[문제/영향]\n- 나\n\n[필요 조치]\n- 다', areaCode: '02', analysis: { majorName: '주문관리', subProcess: '주문접수/등록', ownerDepartment: '영업팀', relatedSystems: [], sourceDetail: '' } }))
     const warm = await prepareMinuteIssueDraft('project-1', SOURCE)
     expect(warm.draft?.mode).toBe('ai')                                   // 캐시에 AI 초안(앞 케이스가 넣었을 수도 있다)
     state.client = clientsWithVersion().client
@@ -502,12 +446,41 @@ describe('prepareMinuteIssueDraft', () => {
 })
 
 describe('createIssueFromMinuteBlock', () => {
+  it('forwards typed custom values only after source validation to the atomic RPC',async()=>{
+    asMember()
+    state.fields=[{key:'quantity',label:'수량',description:'',type:'number',required:false,active:true,editable_by:'member',show_in_list:false,searchable:false,sort:0}]
+    const fixture=clientsWithVersion();state.client=fixture.client;state.admin=fixture.admin
+    expect(await createIssueFromMinuteBlock('project-1',{...INPUT,custom:{quantity:0}},SOURCE)).toMatchObject({ok:true})
+    expect(fixture.admin.rpc).toHaveBeenCalledWith('create_issue_from_minute_block',expect.objectContaining({p_custom:{quantity:0},p_actor_id:USER.id,p_block_hash:BLOCK.hash}))
+  })
+  it('rejects explicit admin custom input before source and service access but allows omitted required default',async()=>{
+    asMember()
+    state.fields=[{key:'approved',label:'승인',description:'',type:'boolean',required:true,default:false,active:true,editable_by:'admin',show_in_list:false,searchable:false,sort:0}]
+    expect(await createIssueFromMinuteBlock('project-1',{...INPUT,custom:{approved:false}},SOURCE)).toMatchObject({ok:false})
+    expect(createAdminClient).not.toHaveBeenCalled();expect(createServerClient).not.toHaveBeenCalled()
+    const fixture=clientsWithVersion();state.client=fixture.client;state.admin=fixture.admin
+    expect(await createIssueFromMinuteBlock('project-1',{...INPUT,custom:{}},SOURCE)).toMatchObject({ok:true})
+    expect(fixture.admin.rpc).toHaveBeenCalledWith('create_issue_from_minute_block',expect.objectContaining({p_custom:{}}))
+  })
+
   it('프로젝트 역할이 없는 사용자는 DB에 접근하기 전에 거부한다', async () => {
     requireProjectMember.mockResolvedValue({ ok: false, error: '권한 없음' })
     const result = await createIssueFromMinuteBlock('project-1', INPUT, SOURCE)
     expect(result).toMatchObject({ ok: false, error: '권한 없음' })
     expect(requireProjectMember).toHaveBeenCalledWith('project-1')
     expect(createServerClient).not.toHaveBeenCalled()
+  })
+
+  it('분석 없는 회의록 이슈는 새 RPC의 분석 인자 여섯을 모두 null로 보낸다', async () => {
+    asMember()
+    const fixture = clientsWithVersion()
+    state.client = fixture.client; state.admin = fixture.admin
+    const result = await createIssueFromMinuteBlock('project-1', { ...INPUT, areaId: null, analysis: null }, SOURCE)
+    expect(result).toEqual({ ok: true, issueId: 'issue-1', code: 'PI-I-02-03' })
+    const args = fixture.admin.rpc.mock.calls[0][1]
+    expect(args).not.toHaveProperty('p_mega_code')
+    expect(args).toMatchObject({ p_area_id: null, p_major_name: null, p_sub_process: null, p_owner_department: null,
+      p_related_systems: null, p_source_type: null, p_source_detail: null, p_actor_id: ACTOR.userId })
   })
 
   it('서버가 불변 원문을 재검증하고 원자 생성 RPC를 호출한다', async () => {
@@ -520,9 +493,9 @@ describe('createIssueFromMinuteBlock', () => {
 
     expect(result).toEqual({
       ok: true,
-      id: 'issue-1',
-      issueNo: 27,
-      piIssueCode: 'PI-I-02-03',
+      issueId: 'issue-1',
+
+      code: 'PI-I-02-03',
     })
     expect(fixture.admin.rpc).toHaveBeenCalledWith('create_issue_from_minute_block', expect.objectContaining({
       p_project_id: 'project-1',
@@ -536,7 +509,7 @@ describe('createIssueFromMinuteBlock', () => {
       p_source_kind: 'risk',
       p_start_date: '2026-07-27',
       p_due_date: '2026-08-03',
-      p_mega_code: '02',
+      p_area_id: actionAreaId('02'),
       p_major_name: '주문관리',
       p_sub_process: '수주 등록',
       p_owner_department: '영업팀',

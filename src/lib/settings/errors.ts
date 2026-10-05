@@ -83,10 +83,17 @@ const TOKENS: Readonly<Record<string, Row>> = {
   SETTINGS_REVISION_OVERFLOW: { code: 'CONFIG_SCHEMA_AHEAD', message: ERR_CONFIG_SCHEMA_AHEAD },
   SETTINGS_ROW_MISSING: { code: 'CONFIG_UNAVAILABLE', message: ERR_CONFIG_UNAVAILABLE },
   SETTINGS_CODE_IN_USE: { code: 'CONFIG_IN_USE', message: ERR_CONFIG_IN_USE },
+  FORM_TEMPLATE_COPY_CHANGED: { code: 'CONFIG_UNAVAILABLE', message: '복사 원본이 변경되었습니다. 다시 시도하세요.' },
+  FORM_TEMPLATE_COPY_INPUT: { code: 'CONFIG_INVALID', message: '원본 양식 연결을 확인하세요.' },
+  FORM_TEMPLATE_COPY_MISSING: { code: 'CONFIG_UNAVAILABLE', message: '양식 파일 복사를 확인하지 못했습니다. 다시 시도하세요.' },
+  FORM_TEMPLATE_COPY_REQUIRED: { code: 'CONFIG_UNAVAILABLE', message: '양식 복사를 지원하는 버전에서 다시 시도하세요.' },
   FORM_MAPPING_IN_USE: { code: 'CONFIG_IN_USE', message: ERR_CONFIG_IN_USE },
   CONFIG_INVALID: { code: 'CONFIG_INVALID', message: ERR_CONFIG_INVALID },
   PROJECT_VOCAB_INACTIVE: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },
   ISSUE_STATUS_INACTIVE: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },
+  ISSUE_STATUS_UNKNOWN: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },               // SP5b — 개정 :541 "미존재 code"
+  ISSUE_RESOLVED_AT_DERIVED: { code: 'CONFIG_INVALID', message: ERR_ISSUE_TRANSITION },    // SP5b D4 — 해결일은 트리거만 정한다
+  SETTINGS_CODE_CATEGORY_MISMATCH: { code: 'CONFIG_INVALID', message: '같은 범주의 상태로만 옮길 수 있습니다.' },   // SP5b D3
   CUSTOM_FIELD_INACTIVE: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },
   CUSTOM_FIELD_UNKNOWN: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },
   ISSUE_TRANSITION_DENIED: { code: 'CONFIG_INVALID', message: ERR_ISSUE_TRANSITION },
@@ -142,7 +149,7 @@ export class ConfigKeyError extends Error {
  * SETTINGS_CODE_IN_USE 의 detail(JSON) → 키별 문구(SP5 D53 — [RF3]). calendar.week_start 는 막는 주차(최대 20)를 싣는다.
  * 모르는 모양이면 빈 목록 — 호출부가 일반 CONFIG_IN_USE 문구를 쓴다. 순수(throw 없음)
  */
-export function inUseFieldErrors(detail: string | null): { key: string; message: string }[] {
+export function inUseFieldErrors(detail: string | null): { key: string; message: string; refCount?: number; code?: string }[] {
   if (!detail) return []
   let d: unknown
   try { d = JSON.parse(detail) } catch { return [] }
@@ -150,6 +157,27 @@ export function inUseFieldErrors(detail: string | null): { key: string; message:
   const o = d as Record<string, unknown>
   if (o.key === 'calendar.week_start' && Array.isArray(o.weeks) && o.weeks.length > 0 && o.weeks.every((w) => typeof w === 'string')) {
     return [{ key: 'calendar.week_start', message: `이미 만든 주간보고(${(o.weeks as string[]).join(', ')})가 새 주 시작 규칙과 맞지 않아 저장할 수 없습니다.` }]
+  }
+  // 어휘(SP5 B4 — 0023): 지운 code·집계 분류를 바꾼 근태 유형의 참조 건수. 화면이 '다른 항목으로 옮긴 뒤 삭제'를 연다
+  // SP5b I — 이슈 표시 상태의 범주 변경(reason 'category')도 같은 꼴: 이슈가 있는 상태의 범주는 바꿀 수 없다(과거 집계 의미 보존)
+  if (typeof o.key === 'string' && typeof o.code === 'string' && Number.isSafeInteger(o.count)
+      && (o.reason === 'removed' || o.reason === 'counts_as' || o.reason === 'category')) {
+    const n = Number(o.count)
+    const message = o.reason === 'removed'
+      ? `'${o.code}' 을(를) 쓰는 기록이 ${n}건 있어 지울 수 없습니다. 다른 항목으로 옮긴 뒤 지우세요.`
+      : o.reason === 'category'
+        ? `'${o.code}' 상태의 이슈가 ${n}건 있어 범주를 바꿀 수 없습니다. 새 상태를 만들어 이슈를 옮긴 뒤 바꾸세요.`
+        : `'${o.code}' 을(를) 쓰는 기록이 ${n}건 있어 집계 분류를 바꿀 수 없습니다. 새 항목을 만들어 옮긴 뒤 바꾸세요.`
+    return [{ key: o.key, message, refCount: n, code: o.code }]
+  }
+  // SP5b W1 — 승인 단계(settings_ref_check): 대기 라운드의 스냅샷 단계 삭제, 대기 단계의 승인자 넓히기(admin → subtree_or_admin)
+  if (typeof o.key === 'string' && typeof o.code === 'string' && Number.isSafeInteger(o.count)
+      && (o.reason === 'pending_round' || o.reason === 'approver_widen')) {
+    const n = Number(o.count)
+    const message = o.reason === 'pending_round'
+      ? `'${o.code}' 단계로 검수 중인 항목이 ${n}건 있어 지울 수 없습니다. 그 검수가 끝난 뒤 지우세요.`
+      : `'${o.code}' 단계 승인을 기다리는 항목이 ${n}건 있어 승인자를 넓힐 수 없습니다. 그 승인이 끝난 뒤 바꾸세요.`
+    return [{ key: o.key, message, refCount: n, code: o.code }]
   }
   return typeof o.key === 'string' ? [{ key: o.key, message: ERR_CONFIG_IN_USE }] : []
 }

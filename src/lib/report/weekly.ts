@@ -10,6 +10,7 @@ import {
 } from '@/lib/domain/calendar'
 import { addDaysIso } from '@/lib/domain/dates'
 import { mdOf, weekLabelTexts } from './week'
+import { vocabShort, type AttendanceTypeDef } from '@/lib/settings/vocab'
 
 /* ============================================================================
  * 주간 공정보고 모델 — 주간보고(PPT)·공정보고(Excel)가 공유하는 단일 출처.
@@ -286,6 +287,8 @@ export function buildWeeklyReportModel(
   today: string,
   opts: {
     members?: ProjectMember[]; attendance?: AttendanceRecord[]; generatedAt?: string
+    /** 그 프로젝트의 근태 유형(설정 attendance.types — SP5 B4). 근태 기록을 넘기면 필수 — 약칭·'평상 근무' 판정의 원천 */
+    attendanceTypes?: readonly AttendanceTypeDef[]
     meetings?: Meeting[]; meetingExceptions?: MeetingException[]
     announcements?: Announcement[]
     /** 팀별 워크로드·미완료 요약 대상(활성 팀) — 호출처가 팀 마스터에서 주입한다(필수). */
@@ -427,12 +430,16 @@ export function buildWeeklyReportModel(
   // ── 근태 (멤버별, 특이 근태만) ──
   const recByMemberDate = new Map<string, AttendanceType>()
   for (const r of attendance) recByMemberDate.set(`${r.memberId}|${r.date}`, r.type)
+  if (attendance.length && !opts.attendanceTypes) throw new Error('[weekly] 근태 기록에는 그 프로젝트의 근태 유형(attendanceTypes)이 필요하다')
+  const attTypes = opts.attendanceTypes ?? []
+  // 표에서 빼는 '평상 근무' = 등록 선택지인 근무 집계 유형(기본 어휘의 정상근무). 공가처럼 근무로 세지만 선택지 밖인 유형은 특이 근태로 보인다(B4 이전과 같다)
+  const ordinary = new Set(attTypes.filter(e => e.counts_as === 'work' && e.selectable).map(e => e.code))
   const buildAttendance = (days: string[]): AttendanceRow[] => {
     const rows: AttendanceRow[] = []
     for (const m of members) {
       const perDay = days.map(day => {
         const t = recByMemberDate.get(`${m.id}|${day}`)
-        return t && t !== 'work' ? ATT_SHORT[t] : null
+        return t && !ordinary.has(t) ? vocabShort(attTypes, t) : null
       })
       const count = perDay.filter(Boolean).length
       if (count > 0) rows.push({ memberName: m.name, perDay, count })
@@ -527,8 +534,4 @@ export function buildWeeklyReportModel(
   }
 }
 
-/** 근태 약칭 (모델 자급 — 컴포넌트 계층 의존 회피). */
-const ATT_SHORT: Record<AttendanceType, string> = {
-  work: '근무', remote: '재택', annual: '연차', half: '반차', quarter: '반반차', sick: '병가', trip: '출장', official: '공가', absent: '결근',
-}
 

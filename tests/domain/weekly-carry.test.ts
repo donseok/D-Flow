@@ -1,6 +1,7 @@
 // 이월 계약(스펙 §4.1.1 이월 규칙 표, D31·D33·Q37, W12·W13) — 영역 id 로 옮기고, 지금 비활성인 영역의 대기 내용은 명시 매핑으로만,
 // 넘치면 거부(자르지 않음). 첫 영역·폴백 흡수·절단·원본 수정은 없다. 합성 구성의 영역만 쓴다.
 import { describe, expect, it } from 'vitest'
+import type { CustomValues } from '@/lib/domain/customFields'
 import { CARRY_SKIP, carryOverRows, defaultWeeklyRows, seedOf, type CarryOverResult } from '@/lib/domain/weeklyCarry'
 import { UNKNOWN_AREA_LABEL, orderAreas, type WeeklyArea, type WeeklyCells } from '@/lib/domain/weeklySheet'
 import { SYNTHETIC_CONFIGS } from '../fixtures/synthetic/configs'
@@ -38,6 +39,21 @@ describe('carryOverRows — 활성 영역은 자기 자리로(W12)', () => {
   it('같은 영역의 원본 행이 여럿이면(유일 인덱스 이전 데이터) 입력 순으로 잇는다', () => {
     const r = carryOverRows([src(EXP, { nextContent: '둘째' }), src(EXP, { nextContent: '첫째', nextIssue: '이슈' })], R)
     expect(rowOf(r, EXP)).toEqual({ areaId: EXP, thisContent: '둘째\n첫째', thisIssue: '이슈', nextContent: '', nextIssue: '' })
+  })
+
+  it('carryCustom 주입 — 활성 같은 영역의 carry_over 필드만 새 행으로 복사된다', () => {
+    const prev = [
+      { ...src(EXP, { nextContent: '실험' }), custom: { keep: '유지값', drop: '버림값' } },
+      { ...src(DATA, {}), custom: { keep: '데이터유지' } },
+    ]
+    const carryFn = (c: unknown): CustomValues => {
+      const rec = (c as CustomValues) ?? {}
+      return rec.keep ? { keep: rec.keep } : {}
+    }
+    const r = carryOverRows(prev, R, {}, carryFn)
+    expect(rowOf(r, EXP)?.custom).toEqual({ keep: '유지값' })
+    expect(rowOf(r, DATA)?.custom).toEqual({ keep: '데이터유지' })
+    expect(rowOf(r, RUN)?.custom).toBeUndefined()
   })
 })
 
@@ -124,9 +140,9 @@ describe('carryOverRows — 20,000자 넘침은 거부한다(D31·E25 — 자르
 })
 
 describe('사용자 정의 값·시드', () => {
-  it('carryCustom 은 받되 행·시드에 싣지 않는다 — SP4 에는 custom 열이 없다(SP5c, 스펙 E28)', () => {
+  it('carryCustom — 행에는 custom 이 실리고, seedOf 는 RPC 계약대로 네 칸만 유지(SP5c, 스펙 E28)', () => {
     const rows = okRows(carryOverRows([src(EXP, { nextContent: 'x' })], R, {}, () => ({ k: 1 })))
-    expect(rows.every((row) => !('custom' in row))).toBe(true)
+    expect(rows.find((r) => r.areaId === EXP)?.custom).toEqual({ k: 1 })
     expect(seedOf(rows).every((s) => !('custom' in s))).toBe(true)
   })
 

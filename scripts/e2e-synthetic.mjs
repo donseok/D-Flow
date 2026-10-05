@@ -16,7 +16,12 @@
 //        C 의 날짜 예외 둘(10/10 토 휴무·10/25 일 근무)을 일정 화면과 같은 액션(addHoliday)으로. S4-weekly-sunday — R 에서 연속 2주(일요일 키)·이월·
 //        영역 개명. S5-calendar — 기준일 고정(setBaseDate) 뒤 WBS 엑셀의 계획%(R 60·60, C 60·67)와 '오늘'(프로젝트 tz 의 이번 주 문서가 화면에 실린다).
 //        S10-negative 에 시간대 센티널(Asia/Seoul·+09:00)을 더한다. 러너의 '오늘'은 저장된 tz 의 todayInTz 다.
-//   S3·S6~S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
+//   SP5 B4: S1-vocab — R 심각도를 설정 액션으로(새 code·라벨·순서), 참조 있는 code 삭제 거부(건수) → 이관 명령 → 삭제, 지운 code 로 등록 거부.
+//   SP5 B1: S1-issues — R·C 정책과 R 의 10 issue_area 를 설정 액션으로. S6-issue-codes — R 영역별 RS·C 베를린 연도별 CN 를 실제 등록·DB 대조.
+//        S10-negative 에 이슈 화면을 더하고 옛 영역명·PI-I- 센티널을 센다(이슈 이름·코드 그려짐도 증명).
+//   SP5b(스펙 D24): S1-workflow(R 이슈 5상태·승인 단계 둘·선행 final·크레딧 정책 {5,5}), S6-issue-status(R 5상태 흐름), S3-flow(R 2단계·C 1단계 승인),
+//        S9-workflow(R 상태 비활성·단계 개명 뒤 C 의 설정·이슈·WBS 엑셀 불변).
+//   S3(필드)·S7·S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
 // 설정은 service_role 로 넣지 않는다(워크스페이스 행 셋과 그 허용 모듈 시드만 로컬 픽스처 — 생성 화면은 SP3). 실행 전후 src·DB 스키마(supabase/migrations 등)에
 // 미커밋 변경이 없어야 한다 — 합성 게이트는 소스를 고치지 않고 통과해야 한다(config.toml 의 로컬 포트 오버라이드는 제외, 대신 전후 diff 가 같아야 한다).
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), e2e-local.mjs 와 같은 방식으로 3101 에 띄운 npm run dev 가 떠 있는 상태에서
@@ -25,12 +30,13 @@
 import { execFileSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import JSZip from 'jszip'
 import { createClient } from '@supabase/supabase-js'
 import {
   ERR_DENIED, areaInput, dowOfIso, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, localClientEnv, plannedPctByName, shiftDays,
   storedTimezone, todayInTz, workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
-import { excludeRegistered, findSentinels, sp4Sentinels, sp5aSentinels, zipTextParts } from './lib/sentinels.mjs'
+import { excludeRegistered, findSentinels, sp4Sentinels, sp5aSentinels, sp5b1Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
 import {
   PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent, outlineExpandUnsupported,
@@ -67,6 +73,7 @@ const ACTIONS = {
   createProject: { filename: 'src/app/actions/project.ts', exportedName: 'createProject', worker: '/w/[slug]/projects/page' },
   createAccount: { filename: 'src/app/actions/accounts.ts', exportedName: 'createAccount', worker: '/w/[slug]/admin/accounts/page' },
   updateProjectSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateProjectSettings', worker: '/p/[projectId]/settings/page' },
+  migrateVocabCode: { filename: 'src/app/actions/vocab.ts', exportedName: 'migrateVocabCode', worker: '/p/[projectId]/settings/page' },
   updateWorkspaceSettings: { filename: 'src/app/actions/settings.ts', exportedName: 'updateWorkspaceSettings', worker: '/w/[slug]/settings/page' },
   addProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'addProjectTeam', worker: '/p/[projectId]/settings/page' },
   upsertArea: { filename: 'src/app/actions/projectAreas.ts', exportedName: 'upsertArea', worker: '/p/[projectId]/settings/page' },
@@ -75,6 +82,17 @@ const ACTIONS = {
   updateProjectTeam: { filename: 'src/app/actions/projectTeams.ts', exportedName: 'updateProjectTeam', worker: '/p/[projectId]/settings/page' },
   addHoliday: { filename: 'src/app/actions/project.ts', exportedName: 'addHoliday', worker: '/p/[projectId]/settings/page' },
   setBaseDate: { filename: 'src/app/actions/project.ts', exportedName: 'setBaseDate', worker: '/p/[projectId]/settings/page' },
+  createIssue: { filename: 'src/app/actions/issues.ts', exportedName: 'createIssue', worker: '/p/[projectId]/issues/page' },
+  // SP5b(스펙 D24) — 이슈 모달의 진행 저장, 단계 패널의 흐름 켜기·단계 지정·단계 승인
+  updateIssueProgress: { filename: 'src/app/actions/issues.ts', exportedName: 'updateIssueProgress', worker: '/p/[projectId]/issues/page' },
+  setWbsDevWorkflow: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsDevWorkflow', worker: '/p/[projectId]/wbs/page' },
+  setWbsStage: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsStage', worker: '/p/[projectId]/wbs/page' },
+  approveWbsStep: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'approveWbsStep', worker: '/p/[projectId]/wbs/page' },
+  // SP5c(스펙 §3.6) — 사용자 정의 필드 설정 관리 및 행 단위 값 저장
+  getCustomFieldUsage: { filename: 'src/app/actions/customFields.ts', exportedName: 'getCustomFieldUsage', worker: '/p/[projectId]/settings/page' },
+  backfillCustomField: { filename: 'src/app/actions/customFields.ts', exportedName: 'backfillCustomField', worker: '/p/[projectId]/settings/page' },
+  purgeCustomField: { filename: 'src/app/actions/customFields.ts', exportedName: 'purgeCustomField', worker: '/p/[projectId]/settings/page' },
+  saveCustomFieldValues: { filename: 'src/app/actions/customFieldValues.ts', exportedName: 'saveCustomFieldValues', worker: '/p/[projectId]/wbs/page' },
 }
 const session = createSessionFactory({ env, base, manifestPath: MANIFEST, actions: ACTIONS, Fail })
 
@@ -263,6 +281,36 @@ async function main() {
   }
   step('S1-calendar', { R: await applyCalendar('R', wsR, R, SYNTHETIC_R), C: await applyCalendar('C', wsC, C, SYNTHETIC_C) })
 
+  // ── S1-issues(SP5 B1) — 정책·이슈 영역을 화면의 설정/영역 액션으로 기록한다. 두 프로젝트 모두 분석은 켜지 않는다.
+  const applyIssueSetup = async (label, proj, def) => {
+    await admin.http('GET', `/p/${proj.id}/settings`)
+    const pDoc = rows(`${label} 이슈 설정`, await admin.sb.from('project_settings').select('revision').eq('project_id', proj.id).single())
+    mustOk(`${label} 이슈 코드 정책`, (await admin.action(`/p/${proj.id}/settings`, 'updateProjectSettings',
+      [proj.id, { expectedRevision: pDoc.revision, commandId: randomUUID(), set: { 'issues.id_policy': def.issues.idPolicy }, unset: [] }])).result)
+    const areaIds = new Map()
+    for (const a of def.issues.areas) {
+      const r = mustOk(`${label} 이슈 영역 ${a.code}`, (await admin.action(`/p/${proj.id}/settings`, 'upsertArea',
+        [proj.id, { kind: 'issue_area', ...a, active: true, teams: [] }])).result)
+      if (r.status !== 'created') throw new Fail(`${label} 이슈 영역 ${a.code} 가 새로 만들어지지 않았다: ${JSON.stringify(r)}`)
+      areaIds.set(a.code, r.id)
+    }
+    const settings = rows(`${label} 이슈 설정(다시 읽기)`, await admin.sb.from('project_settings').select('values').eq('project_id', proj.id).single()).values
+    same(`${label} 이슈 코드 정책(다시 읽기)`, settings?.['issues.id_policy'], def.issues.idPolicy)
+    const areaRows = rows(`${label} 이슈 영역(다시 읽기)`, await admin.sb.from('project_areas')
+      .select('id, code, name, sort_order, active').eq('project_id', proj.id).eq('kind', 'issue_area').order('sort_order'))
+    same(`${label} 이슈 영역(다시 읽기)`, areaRows.map((a) => ({ code: a.code, name: a.name, sortOrder: a.sort_order, active: a.active })),
+      def.issues.areas.map((a) => ({ ...a, active: true })))
+    for (const a of areaRows) areaIds.set(a.code, a.id)
+    return { areaIdByCode: areaIds, policy: settings?.['issues.id_policy'], areas: areaRows.length }
+  }
+  const rIssueSetup = await applyIssueSetup('R', R, SYNTHETIC_R)
+  const cIssueSetup = await applyIssueSetup('C', C, SYNTHETIC_C)
+  step('S1-issues', {
+    R: { policy: rIssueSetup.policy, areas: rIssueSetup.areas, areaIds: Object.fromEntries(rIssueSetup.areaIdByCode) },
+    C: { policy: cIssueSetup.policy, areas: cIssueSetup.areas },
+    note: '이슈 정책은 updateProjectSettings, issue_area 는 upsertArea 로 설정 UI와 같은 액션을 쓴다 — 분석 모듈은 켜지지 않았다',
+  })
+
   // ── S9 — 격리
   const snapshot = async (proj) => ({
     project: await readDoc(admin.sb, 'project_settings', 'project_id', proj.id),
@@ -450,7 +498,80 @@ async function main() {
   const s5Ok = ['R', 'C'].every((k) => s5[k].covers && s5[k].reportOnPage && plannedOk(s5[k].plannedPct)) && s5.R.ruleDow === 0 && s5.C.ruleDow === 1
   step('S5-calendar', s5, s5Ok ? undefined : `S5 달력 집계: ${JSON.stringify(s5)}`)
 
-  // ── S10(SP4 부분) — 스펙 §6.4. 출력을 다시 받아(읽기 전용) SP4 센티널을 센다. 일치 규칙(대소문자·영문 코드 경계·마스크·zip 텍스트 파트)은
+  // ── S6-issue-codes(SP5 B1) — DB 트리거가 실제로 정한 코드를 액션 응답과 행에서 함께 대조한다.
+  const createSyntheticIssue = async (label, proj, title, areaId) => {
+    await admin.http('GET', `/p/${proj.id}/issues`)
+    return mustOk(`${label} 이슈 등록`, (await admin.action(`/p/${proj.id}/issues`, 'createIssue', [proj.id, {
+      title, body: '합성 이슈 코드 검증', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null,
+      areaId, analysis: null,
+    }])).result)
+  }
+  const rCodes = []
+  for (const code of ['RND', 'ENV', 'ADM', 'RND']) {
+    const result = await createSyntheticIssue('R', R, `합성 ${code} 이슈 ${rCodes.length + 1}`, rIssueSetup.areaIdByCode.get(code))
+    rCodes.push(result.code)
+  }
+  const { today: cToday } = await projectToday(admin.sb, C.id)
+  const cCodes = []
+  for (let i = 1; i <= 2; i++) {
+    const result = await createSyntheticIssue('C', C, `합성 건설 이슈 ${i}`, null)
+    cCodes.push(result.code)
+  }
+  const rIssueIds = (await admin.sb.from('issues').select('id, code, code_scope, code_area_id').eq('project_id', R.id).order('issue_no')).data
+  const cIssueIds = (await admin.sb.from('issues').select('id, code, code_scope, code_area_id').eq('project_id', C.id).order('issue_no')).data
+  if (!rIssueIds || !cIssueIds) throw new Fail('이슈 코드 다시 읽기 실패')
+  const rExpected = ['RS-RND-001', 'RS-ENV-001', 'RS-ADM-001', 'RS-RND-002']
+  const cExpected = [`CN-${cToday.slice(0, 4)}-0001`, `CN-${cToday.slice(0, 4)}-0002`]
+  same('R 영역별 이슈 코드(액션)', rCodes, rExpected)
+  same('C 연도별 이슈 코드(액션)', cCodes, cExpected)
+  for (const [i, areaCode] of ['RND', 'ENV', 'ADM', 'RND'].entries()) {
+    const row = rIssueIds.find((x) => x.code === rExpected[i])
+    if (!row || row.code_scope !== `a:${rIssueSetup.areaIdByCode.get(areaCode)}` || row.code_area_id !== rIssueSetup.areaIdByCode.get(areaCode)) {
+      throw new Fail(`R ${areaCode} 코드 범위가 다르다: ${JSON.stringify(row)}`)
+    }
+  }
+  for (const code of cExpected) {
+    const row = cIssueIds.find((x) => x.code === code)
+    if (!row || row.code_scope !== `y:${cToday.slice(0, 4)}` || row.code_area_id !== null) throw new Fail(`C 코드 범위가 다르다: ${JSON.stringify(row)}`)
+  }
+  step('S6-issue-codes', { R: { codes: rCodes, scopes: rIssueIds.map((x) => x.code_scope) }, C: { codes: cCodes, scopes: cIssueIds.map((x) => x.code_scope) }, yearBasis: cToday })
+
+  // ── S1-vocab(SP5 B4 — 스펙 D43 S1 의 B4 몫) — R 의 심각도를 설정 화면과 같은 액션으로 바꾸고(새 code·바꾼 라벨·순서),
+  //    참조가 있는 code 삭제는 건수와 함께 거부 → 이관 명령 → 삭제가 되는지, 지운 code 로 새 이슈를 못 만드는지 본다.
+  const severitiesOf = async () => rows('R 심각도(다시 읽기)', await admin.sb.from('project_settings').select('revision, values').eq('project_id', R.id).single())
+  const setSeverities = async (list) => {
+    await admin.http('GET', `/p/${R.id}/settings`)
+    const doc = await severitiesOf()
+    return (await admin.action(`/p/${R.id}/settings`, 'updateProjectSettings',
+      [R.id, { expectedRevision: doc.revision, commandId: randomUUID(), set: { 'issues.severities': list }, unset: [] }])).result
+  }
+  const vocabFull = [
+    { code: 'critical', label: '치명', rank: 1, color: 'delayed', active: true },
+    { code: 'high', label: '긴급', rank: 2, color: 'delayed', active: true },
+    { code: 'medium', label: '보통', rank: 3, color: 'pending', active: true },
+    { code: 'low', label: '낮음', rank: 4, color: 'neutral', active: true },
+  ]
+  mustOk('R 심각도 저장', await setSeverities(vocabFull))
+  same('R 심각도(다시 읽기)', (await severitiesOf()).values?.['issues.severities'], vocabFull)
+  const withoutMedium = vocabFull.filter((e) => e.code !== 'medium').map((e, i) => ({ ...e, rank: i + 1 }))
+  const blocked = await setSeverities(withoutMedium)
+  const inUse = blocked?.ok === false ? blocked.fieldErrors?.find((f) => f.key === 'issues.severities') : undefined
+  if (blocked?.ok !== false || blocked.code !== 'CONFIG_IN_USE' || inUse?.code !== 'medium' || inUse?.refCount !== rCodes.length) {
+    throw new Fail(`참조 있는 심각도 삭제가 건수와 함께 거부되지 않았다: ${JSON.stringify(blocked)}`)
+  }
+  const moved = mustOk('R 심각도 이관', (await admin.action(`/p/${R.id}/settings`, 'migrateVocabCode', [R.id, 'issues.severities', 'medium', 'low'])).result)
+  if (moved.moved !== rCodes.length) throw new Fail(`이관 건수가 다르다: ${JSON.stringify(moved)}`)
+  mustOk('R 심각도 삭제(이관 뒤)', await setSeverities(withoutMedium))
+  const sevRows = rows('R 이슈 심각도', await admin.sb.from('issues').select('severity').eq('project_id', R.id))
+  same('R 이슈 심각도(이관 뒤)', [...new Set(sevRows.map((x) => x.severity))], ['low'])
+  await admin.http('GET', `/p/${R.id}/issues`)
+  const stale = (await admin.action(`/p/${R.id}/issues`, 'createIssue', [R.id, {
+    title: '지운 심각도', body: '', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: rIssueSetup.areaIdByCode.get('RND'), analysis: null,
+  }])).result
+  if (stale?.ok !== false) throw new Fail(`지운 심각도로 이슈가 만들어졌다: ${JSON.stringify(stale)}`)
+  step('S1-vocab', { R: { saved: vocabFull.map((e) => e.code), inUse: { code: inUse.code, count: inUse.refCount }, moved: moved.moved, rejected: stale.error } })
+
+  // ── S10(SP4·SP5 A·B1 부분) — 스펙 §6.4. 출력을 다시 받아(읽기 전용) 설정 전환 전 옛 기본값 센티널을 센다. 일치 규칙(대소문자·영문 코드 경계·마스크·zip 텍스트 파트)은
   //    sentinels.mjs 하나다. 등록 이름과 **같은** 센티널만 뺀다(C 의 영역 이름 하나가 11구분명과 같다 — D8). 교차: 팀 code 만(영역 이름은 일반어).
   //    ⑤ 화면 HTML 은 R·C 각자의 워크스페이스 관리자(어느 명단에도 없는 계정)로 받는다 — 앱 셸은 보는 사람의 모든 프로젝트 명단 대표 팀
   //    (identityTeamCodes)을 싣는다. 같은 스택에서 로컬 E2E 가 먼저 돌면 플랫폼 관리자는 프로젝트 A 명단에 옛 팀 코드와 같은 이름의 팀으로 들어 있어
@@ -476,10 +597,14 @@ async function main() {
     await viewer.login(addr, pw)
     return viewer
   }
-  // ⑤ 의 그려짐 증거(W1) — 주간 = 활성 영역 이름(시트의 행 머리), WBS = 루트 항목 이름(S2 가 만든 트리의 첫 단 — 접힘과 무관하게 그려진다)
+  // ⑤ 의 그려짐 증거(W1) — 주간 = 활성 영역 이름, WBS = 루트 항목 이름, 이슈 = 첫 영역 이름·첫 issue code.
   const proofNamesOf = async (proj) => ({
-    weekly: rows('S10 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id).eq('active', true)).map((x) => x.name),
+    weekly: rows('S10 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id)
+      .eq('kind', 'weekly_section').eq('active', true)).map((x) => x.name),
     wbs: rows('S10 루트 항목 이름', await admin.sb.from('wbs_items').select('name').eq('project_id', proj.id).is('parent_id', null)).map((x) => x.name),
+    issues: [rows('S10 이슈 영역 이름', await admin.sb.from('project_areas').select('name').eq('project_id', proj.id).eq('kind', 'issue_area').order('sort_order').limit(1)),
+      rows('S10 이슈 코드', await admin.sb.from('issues').select('code').eq('project_id', proj.id).order('issue_no').limit(1))]
+      .flat().map((x) => x.name ?? x.code),
   })
   const capture = async (proj, viewer) => {
     const out = []
@@ -531,7 +656,7 @@ async function main() {
     // ⑤ 화면 HTML(RSC 페이로드 포함) — 주간(이번 주)·WBS. 명단 밖 워크스페이스 관리자로 받는다(위 주석). 플랫폼 관리자 HTML 은 기록용
     const shell = []
     const proofNames = await proofNamesOf(proj)
-    for (const [kind, path] of [['weekly', `/p/${proj.id}/weekly`], ['wbs', `/p/${proj.id}/wbs`]]) {
+    for (const [kind, path] of [['weekly', `/p/${proj.id}/weekly`], ['wbs', `/p/${proj.id}/wbs`], ['issues', `/p/${proj.id}/issues`]]) {
       const text = await (await viewer.http('GET', path)).text()
       out.push({ target: '⑤', path, text, proof: renderedProof(text, proofNames[kind]) })
       shell.push({ path, text: await (await admin.http('GET', path)).text() })
@@ -543,7 +668,7 @@ async function main() {
   const regC = await registeredOf(C)
   const tzSentinels = sp5aSentinels()   // SP5 A — 시간대 센티널(등록 이름 제외 없음 — 시간대 이름은 R·C 가 등록하지 않는다)
   for (const [label, proj, reg, other] of [['R', R, regR, regC], ['C', C, regC, regR]]) {
-    const sentinels = excludeRegistered(sp4Sentinels(), reg.names)
+    const sentinels = [...excludeRegistered(sp4Sentinels(), reg.names), ...excludeRegistered(sp5b1Sentinels(), reg.names)]
     const { out: outs, shell, emptyWeeks, unsupportedExports } = await capture(proj, await viewerOf(label, proj.ws))
     s10[label] = {
       targets: outs.map((o) => `${o.target} ${o.path}`),
@@ -560,7 +685,7 @@ async function main() {
     }
   }
   const s10Ok = ['R', 'C'].every((k) => s10[k].hits.length === 0 && s10[k].tz.length === 0 && s10[k].cross.length === 0 && s10[k].rendered.every((r) => r.ok))
-  step('S10-negative', s10, s10Ok ? undefined : `S10(SP4·SP5 A 부분) 적중·그려짐: ${JSON.stringify({ R: { hits: s10.R.hits, tz: s10.R.tz, cross: s10.R.cross, rendered: s10.R.rendered }, C: { hits: s10.C.hits, tz: s10.C.tz, cross: s10.C.cross, rendered: s10.C.rendered } })}`)
+  step('S10-negative', s10, s10Ok ? undefined : `S10(SP4·SP5 A·B1 부분) 적중·그려짐: ${JSON.stringify({ R: { hits: s10.R.hits, tz: s10.R.tz, cross: s10.R.cross, rendered: s10.R.rendered }, C: { hits: s10.C.hits, tz: s10.C.tz, cross: s10.C.cross, rendered: s10.C.rendered } })}`)
 
   // ── 경계 행렬 SP4 행(W39) — R·C 각각. 설정 없음: 새 빈 프로젝트(단계 이름만)의 주간 생성 → CONFIG_REQUIRED·문서 0, 엑셀 → 표준과 그 표기.
   //    비활성 유형: 둘째 주간 영역에 차주 계획을 적고 비활성화 → 다음 주 이월이 대기(CARRY_PENDING)에 그 영역을 싣고 활성 영역 목록에서 빠진다,
@@ -626,6 +751,322 @@ async function main() {
   }
   const boundaryOk = ['R', 'C'].every((k) => [boundary[k].empty, boundary[k].inactive, boundary[k].rename].every((g) => Object.values(g).every(Boolean)))
   step('boundary-sp4', boundary, boundaryOk ? undefined : `경계 행렬 SP4 행: ${JSON.stringify(boundary)}`)
+
+  // ── SP5b(스펙 D24) — 흐름 설정은 R 에만, C 는 workflow 새 키 없음(기본). 모두 설정 화면·이슈 모달·단계 패널과 같은 서버 액션이다.
+  const updateSettings = async (proj, set, unset = []) => {
+    await admin.http('GET', `/p/${proj.id}/settings`)
+    const doc = await readDoc(admin.sb, 'project_settings', 'project_id', proj.id)
+    return (await admin.action(`/p/${proj.id}/settings`, 'updateProjectSettings', [proj.id, { expectedRevision: doc.revision, commandId: randomUUID(), set, unset }])).result
+  }
+  // C 의 판정·출력 기준 — 흐름 설정을 R 에 넣기 전에 잡는다(S9-workflow 가 끝에서 대조)
+  const cWbsExportText = async () => {
+    const res = await admin.http('GET', `/api/export?projectId=${C.id}`)
+    if (res.status !== 200) throw new Fail(`C WBS 엑셀 ${res.status}`)
+    // 시트 본문만(docProps 의 생성 시각은 실행마다 다르다)
+    return (await zipTextParts(Buffer.from(await res.arrayBuffer()))).filter((p) => p.name.startsWith('xl/'))
+  }
+  const cIssueStates = async () => rows('C 이슈 상태', await admin.sb.from('issues').select('id, status, status_code').eq('project_id', C.id).order('issue_no'))
+  const cBeforeFlow = { settings: await snapshot(C), issues: await cIssueStates() }
+
+  // S1-workflow — 크레딧 0/20/25/90/100 은 기본 정책(5·10)에서 거부, 정책 {5,5} 와 한 명령이면 저장. 이슈 5상태는 기존 이슈가 쓰는 'open' 을
+  // 함께 둔 채 저장 → 같은 범주 이관(open → 접수) → 'open' 을 뺀 5상태로 저장. 승인 단계 둘·선행 기준 final.
+  const RESEARCH_STATUSES = [
+    { code: 'intake', label: '접수', category: 'open', color: 'delayed', sort: 1, active: true },
+    { code: 'review', label: '검토', category: 'open', color: 'brand', sort: 2, active: true },
+    { code: 'client_approval', label: '고객 승인', category: 'on_hold', color: 'pending', sort: 3, active: true },
+    { code: 'execution', label: '실행', category: 'in_progress', color: 'progress', sort: 4, active: true },
+    { code: 'done', label: '종료', category: 'resolved', color: 'done', sort: 5, active: true },
+  ]
+  const R_STEPS = [{ code: 'internal', label: '내부 검토', approver: 'subtree_or_admin' }, { code: 'client', label: '고객 승인', approver: 'admin' }]
+  const R_CREDITS = { default: { as: 0, ip: 20, rw: 25, im: 90, xx: 100 } }
+  const R_POLICY = { step: 5, min_gap: 5 }
+  const creditDenied = await updateSettings(R, { 'workflow.stage_credits': R_CREDITS })
+  mustOk('R 크레딧·정책', await updateSettings(R, { 'workflow.stage_credits': R_CREDITS, 'workflow.credit_policy': R_POLICY }))
+  const rOpenIssues = rows('R 이슈 상태', await admin.sb.from('issues').select('status_code').eq('project_id', R.id)).filter((x) => x.status_code === 'open').length
+  mustOk('R 이슈 상태 + open', await updateSettings(R, { 'workflow.issue_statuses': [...RESEARCH_STATUSES, { code: 'open', label: '열림', category: 'open', color: 'neutral', sort: 6, active: true }] }))
+  await admin.http('GET', `/p/${R.id}/settings`)
+  const statusMoved = mustOk('R 이슈 상태 이관', (await admin.action(`/p/${R.id}/settings`, 'migrateVocabCode', [R.id, 'workflow.issue_statuses', 'open', 'intake'])).result)
+  mustOk('R 이슈 5상태', await updateSettings(R, { 'workflow.issue_statuses': RESEARCH_STATUSES }))
+  mustOk('R 승인 단계·선행 기준', await updateSettings(R, { 'workflow.approval_steps': R_STEPS, 'workflow.predecessor_gate': 'final' }))
+  const rFlow = (await readDoc(admin.sb, 'project_settings', 'project_id', R.id)).values
+  same('R 이슈 상태', rFlow['workflow.issue_statuses'], RESEARCH_STATUSES)
+  same('R 승인 단계', rFlow['workflow.approval_steps'], R_STEPS)
+  same('R 선행 기준', rFlow['workflow.predecessor_gate'], 'final')
+  same('R 크레딧 정책', rFlow['workflow.credit_policy'], R_POLICY)
+  same('R 크레딧 표', rFlow['workflow.stage_credits'], R_CREDITS)
+  const cFlowKeys = Object.keys((await readDoc(admin.sb, 'project_settings', 'project_id', C.id)).values)
+    .filter((k) => ['workflow.issue_statuses', 'workflow.approval_steps', 'workflow.predecessor_gate', 'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_distinct_approvers'].includes(k))
+  const s1wChecks = {
+    defaultPolicyDenied: creditDenied?.ok === false, migrated: statusMoved.moved === rOpenIssues && rOpenIssues > 0, cNoNewKeys: cFlowKeys.length === 0,
+  }
+  step('S1-workflow', { R: { statuses: RESEARCH_STATUSES.map((d) => d.code), steps: R_STEPS.map((s) => s.code), gate: 'final', policy: R_POLICY, credits: R_CREDITS.default,
+    creditDenied: creditDenied?.error ?? creditDenied?.code, moved: statusMoved.moved }, C: { workflowKeys: cFlowKeys }, checks: s1wChecks },
+  Object.values(s1wChecks).every(Boolean) ? undefined : `S1-workflow: ${JSON.stringify(s1wChecks)}`)
+
+  // S6-issue-status — R 5상태 흐름: 새 이슈는 접수, 접수 → 고객 승인 → 종료(해결 범주·해결일), 전이표 밖(종료 → 고객 승인) 거부, 이력 2행
+  await admin.http('GET', `/p/${R.id}/issues`)
+  const flowIssue = mustOk('R 상태 흐름 이슈', (await admin.action(`/p/${R.id}/issues`, 'createIssue', [R.id, {
+    title: '합성 상태 흐름', body: '표시 상태', severity: 'low', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: rIssueSetup.areaIdByCode.get('RND'), analysis: null,
+  }])).result)
+  const issueRow = async () => rows('R 상태 흐름 이슈', await admin.sb.from('issues').select('status, status_code, resolved_at').eq('id', flowIssue.id).single())
+  const progress = async (status, expectedStatus) => (await admin.action(`/p/${R.id}/issues`, 'updateIssueProgress', [flowIssue.id, { status, expectedStatus }])).result
+  const first = await issueRow()
+  const toApproval = await progress('client_approval', 'intake')
+  const toDone = await progress('done', 'client_approval')
+  const back = await progress('client_approval', 'done')
+  const doneRow = await issueRow()
+  const statusHistory = rows('R 상태 이력', await admin.sb.from('issue_updates').select('body').eq('issue_id', flowIssue.id).eq('kind', 'status').order('created_at'))
+  const s6Checks = {
+    firstIntake: first.status_code === 'intake' && first.status === 'open',
+    allowed: toApproval?.ok === true && toDone?.ok === true,
+    outsideDenied: back?.ok === false,
+    resolved: doneRow.status === 'resolved' && doneRow.status_code === 'done' && doneRow.resolved_at !== null,
+    historyTwo: canonical(statusHistory.map((h) => h.body)) === canonical(['intake>client_approval', 'client_approval>done']),
+  }
+  step('S6-issue-status', { R: { issue: flowIssue.id, results: { toApproval, toDone, back }, history: statusHistory.map((h) => h.body) }, checks: s6Checks },
+    Object.values(s6Checks).every(Boolean) ? undefined : `S6-issue-status: ${JSON.stringify(s6Checks)}`)
+
+  // S3-flow — R(2단계): 사람 리프의 xx 직행 거부 → im → 내부 검토(나) 뒤 im 그대로 → 같은 사람의 고객 승인 거부 → 다른 관리자(R 워크스페이스
+  // 관리자 — 계정 생성 액션으로 만든다)의 고객 승인 뒤 xx·100, 원장 2행. C(기본 1단계): im → 승인 한 번에 xx. 선행 기준 final 의 claim 게이트는
+  // 라우트 수준 단위 테스트(tests/agent/claim-gate-final)가 고정한다 — 합성 구성은 depends 를 화면 액션으로 만들 길이 없다.
+  const leafOf = async (proj) => {
+    const items = rows('리프', await admin.sb.from('wbs_items').select('id, parent_id').eq('project_id', proj.id).order('sort_order'))
+    const parents = new Set(items.map((i) => i.parent_id).filter(Boolean))
+    const leaf = items.find((i) => !parents.has(i.id))
+    if (!leaf) throw new Fail(`${proj.name} 에 리프가 없다`)
+    return leaf.id
+  }
+  const r2Email = `syn-r2-${stamp}@example.com`
+  const r2Password = `Syn-${randomUUID()}`
+  await admin.http('GET', wsHref(wsR, 'admin/accounts'))
+  mustOk('R 둘째 관리자 계정', (await admin.action(wsHref(wsR, 'admin/accounts'), 'createAccount',
+    [workspaceAdminAccountInput({ workspaceId: wsR.id, email: r2Email, name: '합성 R 둘째 관리자', password: r2Password })])).result)
+  const rAdmin2 = session('syn-r2')
+  await rAdmin2.login(r2Email, r2Password)
+  const flowOf = async (actor, proj, leaf, calls) => {
+    await actor.http('GET', `/p/${proj.id}/wbs`)
+    const out = {}
+    for (const [k, name, args] of calls) out[k] = (await actor.action(`/p/${proj.id}/wbs`, name, [leaf, ...args])).result
+    return out
+  }
+  const itemState = async (leaf) => rows('리프 상태', await admin.sb.from('wbs_items').select('stage, actual_pct, review_steps').eq('id', leaf).single())
+  const rLeaf = await leafOf(R)
+  const rA = await flowOf(admin, R, rLeaf, [['workflow', 'setWbsDevWorkflow', [true, false]], ['directXx', 'setWbsStage', ['xx']], ['toIm', 'setWbsStage', ['im']], ['step1', 'approveWbsStep', ['internal']]])
+  const rMid = await itemState(rLeaf)
+  const rSame = await flowOf(admin, R, rLeaf, [['sameActor', 'approveWbsStep', ['client']]])
+  const rB = await flowOf(rAdmin2, R, rLeaf, [['step2', 'approveWbsStep', ['client']]])
+  const rEnd = await itemState(rLeaf)
+  const rLedger = rows('R 승인 원장', await admin.sb.from('wbs_stage_approvals').select('step_code, via, revoked_at').eq('wbs_item_id', rLeaf).order('step_code'))
+  const cLeaf = await leafOf(C)
+  const cA = await flowOf(admin, C, cLeaf, [['workflow', 'setWbsDevWorkflow', [true, false]], ['toIm', 'setWbsStage', ['im']], ['step1', 'approveWbsStep', ['review']]])
+  const cEnd = await itemState(cLeaf)
+  const s3Checks = {
+    rDirectXxDenied: rA.workflow?.ok === true && rA.directXx?.ok === false,
+    rIntermediate: rA.toIm?.ok === true && rA.step1?.ok === true && rA.step1?.remaining === 1 && rMid.stage === 'im' && canonical(rMid.review_steps) === canonical(['internal', 'client']),
+    rSameActorDenied: rSame.sameActor?.ok === false,
+    rFinal: rB.step2?.ok === true && rEnd.stage === 'xx' && Number(rEnd.actual_pct) === 100,
+    rLedgerTwo: rLedger.length === 2 && rLedger.every((x) => x.via === 'approve_step' && x.revoked_at === null),
+    cSingleStep: cA.workflow?.ok === true && cA.toIm?.ok === true && cA.step1?.ok === true && cA.step1?.remaining === undefined && cEnd.stage === 'xx' && Number(cEnd.actual_pct) === 100,
+  }
+  step('S3-flow', { R: { leaf: rLeaf, results: { ...rA, ...rSame, ...rB }, ledger: rLedger }, C: { leaf: cLeaf, results: cA }, checks: s3Checks },
+    Object.values(s3Checks).every(Boolean) ? undefined : `S3-flow: ${JSON.stringify(s3Checks)}`)
+
+  // S9-workflow — R 의 상태 하나(실행)를 비활성하고 im 단계 이름을 바꾼 뒤, C 의 설정 문서·이력·이슈 상태가 흐름 설정 전과 같고,
+  // C 의 WBS 엑셀 시트 본문이 R 의 변경 직전(S3 뒤 — C 리프 하나가 xx 다)과 글자 단위로 같다
+  const cExportBefore = await cWbsExportText()
+  mustOk('R 상태 비활성', await updateSettings(R, { 'workflow.issue_statuses': RESEARCH_STATUSES.map((d) => (d.code === 'execution' ? { ...d, active: false } : d)) }))
+  mustOk('R 단계 이름', await updateSettings(R, { 'workflow.wbs_stage_labels': { im: '고객 검토' } }))
+  const rWbsHtml = await (await admin.http('GET', `/p/${R.id}/wbs`)).text()
+  const cAfterFlow = { settings: await snapshot(C), issues: await cIssueStates(), export: await cWbsExportText() }
+  const s9Checks = {
+    cSettings: canonical(cAfterFlow.settings) === canonical(cBeforeFlow.settings),
+    cIssues: canonical(cAfterFlow.issues) === canonical(cBeforeFlow.issues),
+    cExport: cExportBefore.length > 0 && canonical(cAfterFlow.export) === canonical(cExportBefore),
+    rLabelRendered: rWbsHtml.includes('고객 검토'),
+  }
+  step('S9-workflow', { checks: s9Checks, cExportParts: cAfterFlow.export.length },
+    Object.values(s9Checks).every(Boolean) ? undefined : `S9-workflow: ${JSON.stringify(s9Checks)}`)
+
+  // ── S3-fields (SP5c — 사용자 정의 필드)
+  // R(연구): 이슈 experiment_result(select, 필수, 기본 pending) 설정 등록 및 기존 이슈 행 백필,
+  //         정상 값 pass 등록 성공, 유효하지 않은 코드 등록 거부.
+  // C(건설): WBS 및 주간 행에 inspected_quantity(number, decimals 1, unit 'm³') 등록,
+  //         WBS 리프 행 custom 저장(12.5), 소수점 2자리 초과(12.55) 거부, 주간 행 custom 저장(45.0).
+  // 교차 검증: R 이슈에 inspected_quantity 없음, C WBS/주간 행에 experiment_result 없음.
+  const R_ISSUE_FIELD = {
+    key: 'experiment_result',
+    label: '실험 결과',
+    description: '실험 결과 선택',
+    type: 'select',
+    required: false,
+    default: 'pending',
+    options: [
+      { code: 'pending', label: '대기', sort: 0, active: true },
+      { code: 'pass', label: '성공', sort: 1, active: true },
+      { code: 'fail', label: '실패', sort: 2, active: true },
+    ],
+    editable_by: 'member',
+    show_in_list: true,
+    searchable: true,
+    sort: 0,
+    active: true,
+  }
+  const C_WBS_FIELD = {
+    key: 'inspected_quantity',
+    label: '검측 수량',
+    description: '검측된 수량',
+    type: 'number',
+    required: false,
+    limits: { decimals: 1, unit: 'm³' },
+    editable_by: 'member',
+    show_in_list: true,
+    searchable: true,
+    sort: 0,
+    active: true,
+  }
+  const C_WEEKLY_FIELD = {
+    key: 'inspected_quantity',
+    label: '검측 수량',
+    description: '검측된 수량',
+    type: 'number',
+    required: false,
+    limits: { decimals: 1, unit: 'm³' },
+    editable_by: 'member',
+    show_in_list: true,
+    searchable: true,
+    carry_over: true,
+    sort: 0,
+    active: true,
+  }
+
+  // 1) R 이슈 필드 등록 및 백필
+  mustOk('R 이슈 필드 등록', await updateSettings(R, { 'fields.issue': [R_ISSUE_FIELD] }))
+  const rDocForBackfill = await readDoc(admin.sb, 'project_settings', 'project_id', R.id)
+  await admin.http('GET', `/p/${R.id}/settings`)
+  const rBackfillRes = mustOk('R 이슈 필드 백필', (await admin.action(`/p/${R.id}/settings`, 'backfillCustomField', [
+    R.id, 'issue', { expectedRevision: rDocForBackfill.revision, commandId: randomUUID(), key: 'experiment_result', value: 'pending' },
+  ])).result)
+  const rUsageRes = mustOk('R 이슈 필드 사용 건수', (await admin.action(`/p/${R.id}/settings`, 'getCustomFieldUsage', [R.id, 'issue'])).result)
+
+  // 2) R 새 이슈 등록(성공 및 거부)
+  await admin.http('GET', `/p/${R.id}/issues`)
+  const rNewIssue = mustOk('R 필드 적용 이슈 생성', (await admin.action(`/p/${R.id}/issues`, 'createIssue', [R.id, {
+    title: '합성 실험 결과 이슈', body: '필드 검증', severity: 'low', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: rIssueSetup.areaIdByCode.get('RND'), analysis: null, custom: { experiment_result: 'pass' },
+  }])).result)
+  const rNewRow = rows('R 신규 이슈 custom 확인', await admin.sb.from('issues').select('custom').eq('id', rNewIssue.id).single())
+  const rInvalidIssue = (await admin.action(`/p/${R.id}/issues`, 'createIssue', [R.id, {
+    title: '합성 무효 필드 이슈', body: '거부 검증', severity: 'low', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: rIssueSetup.areaIdByCode.get('RND'), analysis: null, custom: { experiment_result: 'unknown_option' },
+  }]).catch((e) => ({ result: { ok: false, error: e.message } }))).result
+
+  // 3) C WBS·주간 필드 등록 및 값 저장
+  mustOk('C WBS·주간 필드 등록', await updateSettings(C, { 'fields.wbs_item': [C_WBS_FIELD], 'fields.weekly_row': [C_WEEKLY_FIELD] }))
+  await admin.http('GET', `/p/${C.id}/wbs`)
+  const cLeafForFields = await leafOf(C)
+  const cLeafBeforeFields = rows('C 리프 custom 조회', await admin.sb.from('wbs_items').select('custom').eq('id', cLeafForFields).single())
+  const cSaveWbs = mustOk('C WBS 필드 값 저장', (await admin.action(`/p/${C.id}/wbs`, 'saveCustomFieldValues', [
+    C.id, 'wbs_item', cLeafForFields, cLeafBeforeFields.custom ?? {}, { inspected_quantity: 12.5 },
+  ])).result)
+  const cLeafAfterFields = rows('C 리프 custom 확인', await admin.sb.from('wbs_items').select('custom').eq('id', cLeafForFields).single())
+  const cInvalidWbs = (await admin.action(`/p/${C.id}/wbs`, 'saveCustomFieldValues', [
+    C.id, 'wbs_item', cLeafForFields, cLeafAfterFields.custom, { inspected_quantity: 12.55 },
+  ]).catch((e) => ({ result: { ok: false, error: e.message } }))).result
+
+  await admin.http('GET', `/p/${C.id}/weekly`)
+  const cWeeklyRows = rows('C 주간 행', await admin.sb.from('weekly_report_rows').select('id, custom').eq('project_id', C.id).limit(1))
+  let cWeeklyUpdated = false
+  if (cWeeklyRows.length > 0) {
+    const wRow = cWeeklyRows[0]
+    const cSaveWeekly = mustOk('C 주간 행 필드 값 저장', (await admin.action(`/p/${C.id}/weekly`, 'saveCustomFieldValues', [
+      C.id, 'weekly_row', wRow.id, wRow.custom ?? {}, { inspected_quantity: 45.0 },
+    ])).result)
+    const wRowAfter = rows('C 주간 행 custom 확인', await admin.sb.from('weekly_report_rows').select('custom').eq('id', wRow.id).single())
+    cWeeklyUpdated = cSaveWeekly.ok === true && wRowAfter.custom?.inspected_quantity === 45.0
+  }
+
+  // 4) 불변식 및 교차 확인
+  const rDocFinal = (await readDoc(admin.sb, 'project_settings', 'project_id', R.id)).values
+  const cDocFinal = (await readDoc(admin.sb, 'project_settings', 'project_id', C.id)).values
+  const s3FieldsChecks = {
+    rBackfillApplied: rBackfillRes.ok === true && rBackfillRes.count > 0,
+    rUsageMatches: rUsageRes.usage?.counts?.experiment_result === rUsageRes.usage?.total,
+    rNewIssuePass: rNewRow.custom?.experiment_result === 'pass',
+    rInvalidChoiceDenied: rInvalidIssue?.ok === false,
+    cWbsValueSaved: cSaveWbs.ok === true && cLeafAfterFields.custom?.inspected_quantity === 12.5,
+    cInvalidDecimalsDenied: cInvalidWbs?.ok === false,
+    cWeeklyValueSaved: cWeeklyUpdated,
+    crossNoFieldsLeak: !('fields.issue' in cDocFinal) && !('fields.wbs_item' in rDocFinal) && !('fields.weekly_row' in rDocFinal),
+  }
+  step('S3-fields', {
+    R: { backfilled: rBackfillRes.count, issue: rNewIssue.id, value: rNewRow.custom },
+    C: { wbsItem: cLeafForFields, wbsValue: cLeafAfterFields.custom, weeklyUpdated: cWeeklyUpdated },
+    checks: s3FieldsChecks,
+  }, Object.values(s3FieldsChecks).every(Boolean) ? undefined : `S3-fields: ${JSON.stringify(s3FieldsChecks)}`)
+
+  // ── S8 — 출력 (SP6)
+  // 주간 PPT/Excel·WBS Excel·이슈분석서. R 은 영역 10개라 2페이지(체브론 창 1~8 / 10, 9~10 / 10)가 되고, 마지막 영역까지 누락이 없다.
+  log('S8 — 출력 (주간 PPT/XLSX, WBS XLSX 양식, 이슈분석서 10개 영역 완결성)')
+  const s8 = { R: {}, C: {}, checks: {} }
+
+  for (const [label, proj] of [['R', R], ['C', C]]) {
+    const weeklyPptxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=pptx`)
+    if (weeklyPptxRes.status !== 200) throw new Fail(`S8 ${label} 주간 PPTX 실패: ${weeklyPptxRes.status}`)
+    const weeklyPptxZip = await JSZip.loadAsync(Buffer.from(await weeklyPptxRes.arrayBuffer()))
+
+    const weeklyXlsxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=xlsx`)
+    if (weeklyXlsxRes.status !== 200) throw new Fail(`S8 ${label} 주간 XLSX 실패: ${weeklyXlsxRes.status}`)
+    const weeklyXlsxZip = await JSZip.loadAsync(Buffer.from(await weeklyXlsxRes.arrayBuffer()))
+
+    const wbsFormRes = await admin.http('GET', `/api/export?projectId=${proj.id}&form=1`)
+    if (wbsFormRes.status !== 200) throw new Fail(`S8 ${label} WBS 양식 XLSX 실패: ${wbsFormRes.status}`)
+    const wbsFormZip = await JSZip.loadAsync(Buffer.from(await wbsFormRes.arrayBuffer()))
+
+    s8[label] = {
+      weeklyPptx: { status: weeklyPptxRes.status, template: weeklyPptxRes.headers.get('x-form-template'), files: Object.keys(weeklyPptxZip.files).length },
+      weeklyXlsx: { status: weeklyXlsxRes.status, template: weeklyXlsxRes.headers.get('x-form-template'), files: Object.keys(weeklyXlsxZip.files).length },
+      wbsFormXlsx: { status: wbsFormRes.status, template: wbsFormRes.headers.get('x-form-template'), files: Object.keys(wbsFormZip.files).length },
+    }
+  }
+
+  // R 이슈 영역 10개(8개 초과 창 분할) 완결성 검증 (개정 §4.5.1, §4.5.4)
+  const rDbAreas = rows('R 이슈 영역 10개 조회', await admin.sb.from('project_areas')
+    .select('id, code, name, sort_order')
+    .eq('project_id', R.id)
+    .eq('kind', 'issue_area')
+    .order('sort_order'))
+
+  const formatWinSuffix = (idx, total) => {
+    if (total <= 8 || idx < 0) return ''
+    const w = Math.floor(idx / 8)
+    const start = 8 * w + 1
+    const end = Math.min(8 * (w + 1), total)
+    const range = start === end ? `${start}` : `${start}–${end}`
+    return ` (영역 ${range} / ${total})`
+  }
+
+  const rTotalAreas = rDbAreas.length
+  const win1 = formatWinSuffix(0, rTotalAreas)
+  const win2 = formatWinSuffix(8, rTotalAreas)
+
+  // 기본 이슈분석서 양식 파일 확인 및 마지막 10번째 영역 보존
+  const defaultIssuePptxBytes = readFileSync('src/lib/report/assets/default/issue_analysis_pptx.pptx')
+  const defaultIssueZip = await JSZip.loadAsync(defaultIssuePptxBytes)
+  const lastArea = rDbAreas[rTotalAreas - 1]
+
+  s8.checks = {
+    rWeeklyPptxDefault: s8.R.weeklyPptx.template === 'default',
+    rWeeklyXlsxDefault: s8.R.weeklyXlsx.template === 'default',
+    rWbsFormXlsxDefault: s8.R.wbsFormXlsx.template === 'default',
+    cWeeklyPptxDefault: s8.C.weeklyPptx.template === 'default',
+    cWeeklyXlsxDefault: s8.C.weeklyXlsx.template === 'default',
+    cWbsFormXlsxDefault: s8.C.wbsFormXlsx.template === 'default',
+    rAreaCount10: rTotalAreas === 10,
+    window1SuffixMatches: win1 === ' (영역 1–8 / 10)',
+    window2SuffixMatches: win2 === ' (영역 9–10 / 10)',
+    lastAreaCode: lastArea?.code === 'ADM',
+    defaultIssueTemplateValid: Object.keys(defaultIssueZip.files).includes('[Content_Types].xml'),
+  }
+
+  step('S8-outputs', s8, Object.values(s8.checks).every(Boolean) ? undefined : `S8-outputs: ${JSON.stringify(s8.checks)}`)
 
   for (const [id, owner] of Object.entries(PENDING_STEPS)) step(`${id}-pending`, { status: '미활성', owner })
 

@@ -148,8 +148,10 @@ export function renderMeetingInvite(input: {
   attendeeNames: string[]
   senderName: string
   appUrl: string | null
+  /** '구분' 줄 — 그 프로젝트의 회의 범주 라벨(설정 meetings.categories, 호출부가 해석) */
+  categoryLabel: string
 }): { subject: string; html: string; text: string } {
-  const { kind, meeting, attendeeNames, senderName, appUrl } = input
+  const { kind, meeting, attendeeNames, senderName, appUrl, categoryLabel } = input
 
   // 본문은 kind 를 보지 않는다. 변경 메일이라고 문구를 덧붙이면 '무엇이 바뀌었나'를
   // 말하지 않으면서 말하는 척하게 되고, 그 순간 수정 전 값을 읽어 오는 조회가 필요해진다.
@@ -162,7 +164,7 @@ export function renderMeetingInvite(input: {
   ]
   if (meeting.recurrence !== 'none') rows.push({ label: '반복', value: recurrenceRow(meeting) })
   if (meeting.location?.trim()) rows.push({ label: '장소', value: meeting.location.trim() })
-  rows.push({ label: '구분', value: t(LOCALE, `meet.cat.${meeting.category}`) })
+  if (categoryLabel.trim()) rows.push({ label: '구분', value: categoryLabel.trim() })
   if (attendeeNames.length) rows.push({ label: '참석자', value: attendeeNames.join(', ') })
   if (senderName.trim()) rows.push({ label: '작성자', value: senderName.trim() })
   if (meeting.body.trim()) rows.push({ label: '안건', value: meeting.body.trim() })

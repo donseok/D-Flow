@@ -62,6 +62,7 @@ const PROFILE: ExcelProfile = {
   logical: { extraAxis: 0, code: null, name: null, deliverable: 6, start: 7, end: 8, weight: 9, actualPct: 11 },
   teamColumns: [[4, 'RES'], [5, 'OPS']],
   ownerMarks: { '●': 'primary', '△': 'support' },
+  customColumns: [],
 }
 const team = (code: string, sortOrder: number): Team => ({
   id: `own-${code.toLowerCase()}`, code, name: code, color: '#6b7280', sortOrder,

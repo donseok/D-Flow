@@ -7,7 +7,8 @@ import type { Meeting, MeetingCategory, MeetingRecurrence, ProjectMember } from 
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useToast } from '@/components/ui/Toast'
 import { Modal } from '@/components/ui/Modal'
-import { MEETING_CATEGORIES, RECURRENCE_ORDER } from '@/lib/domain/meetings'
+import { RECURRENCE_ORDER } from '@/lib/domain/meetings'
+import { activeVocab, vocabLabel, type MeetingCategoryDef } from '@/lib/settings/vocab'
 import { MeetingAttendeePicker } from './MeetingAttendeePicker'
 import { createMeeting, updateMeeting, type MeetingInput } from '@/app/actions/meetings'
 import { notifyMeetingSaved } from '@/app/actions/meetingNotify'
@@ -25,12 +26,14 @@ type FormState = {
   announce: boolean
 }
 
-function initState(initial: Meeting | null, todayIso: string): FormState {
+function initState(initial: Meeting | null, todayIso: string, categories: readonly MeetingCategoryDef[]): FormState {
+  // 새 회의의 범주 = 활성 범주의 첫째(설정 순서), 공지 체크 기본값 = 그 범주의 announce_default
+  const first = activeVocab(categories)[0]
   if (!initial) return {
     title: '', meetingDate: todayIso, allDay: false, startTime: '10:00', endTime: '11:00',
-    location: '', category: 'routine', recurrence: 'none', recurrenceUntil: '', body: '',
-    // announce 기본 꺼짐 — 공지는 프로젝트 전원에게 보이는 확성기라 명시적 옵트인만 받는다.
-    attendeeIds: [], notify: true, extraEmails: '', announce: false,
+    location: '', category: first?.code ?? '', recurrence: 'none', recurrenceUntil: '', body: '',
+    // announce 기본값은 범주 설정(announce_default — 제품 기본은 모두 꺼짐). 공지는 프로젝트 전원에게 보이는 확성기라 관리자가 범주에 켜 둔 때만 미리 켠다.
+    attendeeIds: [], notify: true, extraEmails: '', announce: first?.announce_default ?? false,
   }
   return {
     title: initial.title,
@@ -56,7 +59,7 @@ function initState(initial: Meeting | null, todayIso: string): FormState {
 }
 
 export function MeetingFormModal({
-  open, projectId, members, initial, todayIso, canManage, onClose, onSaved,
+  open, projectId, members, initial, todayIso, canManage, categories, onClose, onSaved,
 }: {
   open: boolean
   projectId: string
@@ -65,12 +68,14 @@ export function MeetingFormModal({
   todayIso: string
   /** 이 프로젝트 관리자 이상(isProjectAdmin) — 공지 등록 체크박스 노출. */
   canManage: boolean
+  /** 이 프로젝트의 회의 범주(설정 meetings.categories) — 선택지 = 활성 범주 */
+  categories: readonly MeetingCategoryDef[]
   onClose: () => void
   onSaved: () => void
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
-  const [form, setForm] = useState<FormState>(() => initState(initial, todayIso))
+  const [form, setForm] = useState<FormState>(() => initState(initial, todayIso, categories))
   const [err, setErr] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   // 결과 패널이 떠 있는 동안 회의는 이미 저장된 상태다. 폼을 잠가 중복 생성을 막는다.
@@ -91,11 +96,18 @@ export function MeetingFormModal({
   useEffect(() => {
     if (open) {
       runRef.current += 1
-      setForm(initState(initial, todayIso)); setErr(null); setOutcome(null); setSending(false)
+      setForm(initState(initial, todayIso, categories)); setErr(null); setOutcome(null); setSending(false)
     }
+    // categories 는 열 때의 값으로 충분하다 — 열린 폼을 설정 갱신으로 리셋하지 않는다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial, todayIso])
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm(f => ({ ...f, [k]: v }))
+  // 새 회의에서 범주를 바꾸면 공지 체크도 그 범주의 기본값으로 따라간다(수정 폼은 공지 등록이 없다)
+  const changeCategory = (code: string) => setForm(f => ({
+    ...f, category: code,
+    announce: initial ? f.announce : (categories.find(c => c.code === code)?.announce_default ?? false),
+  }))
 
   const locked = outcome !== null
   const busy = pending || sending
@@ -258,8 +270,12 @@ export function MeetingFormModal({
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.category')}</span>
-              <select value={form.category} onChange={e => set('category', e.target.value as MeetingCategory)} className="app-input">
-                {MEETING_CATEGORIES.map(c => <option key={c} value={c}>{t(`meet.cat.${c}` as DictKey)}</option>)}
+              <select value={form.category} onChange={e => changeCategory(e.target.value)} className="app-input">
+                {activeVocab(categories).map(c => <option key={c.code} value={c.code}>{vocabLabel('meetings.categories', categories, c.code, t)}</option>)}
+                {/* 수정 중인 회의의 범주가 비활성이면 그 값을 보존해 보인다 — 저장 시 서버가 활성 여부를 다시 본다 */}
+                {form.category && !activeVocab(categories).some(c => c.code === form.category) && (
+                  <option value={form.category}>{vocabLabel('meetings.categories', categories, form.category, t)}</option>
+                )}
               </select>
             </label>
           </div>

@@ -159,16 +159,6 @@ function clientProblems(key: string, sites: readonly GateSite[]): string[] {
  *  위임 파일은 갈래마다 그 표지만 품고 거부를 단언하는 it 을, core 가 있으면 어느 갈래 표지도 없이 관문 비호출을 단언하는 it 을 둔다 */
 type BranchGate = { reason: string; gated: Readonly<Record<string, string>>; ungated?: Readonly<Record<string, string>>; core?: string }
 const BRANCH_GATE: Readonly<Record<string, BranchGate>> = {
-  'src/app/api/report/route.ts#GET': {
-    reason: 'P4 — 주간업무 시트 갈래(source=sheet)만 weekly 관문. 기본 갈래는 WBS 화면 보고서 모달이 부르는 core 현황 보고서라 관문을 부르지 않는다',
-    gated: { "source === 'sheet'": 'source=sheet' },
-    ungated: {
-      '!(await getSession())': '로그인 가드',
-      '!projectId': 'projectId 누락 400',
-      "format !== 'xlsx' && format !== 'pptx'": '형식 검증 400',
-    },
-    core: '기본 갈래 — WBS 현황 보고서(xlsx·pptx)',
-  },
   'src/app/api/minutes/chat/route.ts#POST': {
     reason: '두 모드의 판정 범위가 다르다 — 문서 모드는 회의록 행의 워크스페이스(resolveScope 뒤), 보관함 모드는 요청의 워크스페이스(소속 확인 — D26, 과제 34). 모드 밖 요청은 400 뿐이라 core 갈래가 없다',
     gated: { "body.mode === 'doc'": 'doc', "body.mode === 'archive'": 'archive' },

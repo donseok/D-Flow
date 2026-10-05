@@ -6,22 +6,28 @@ import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
-import { ERR_LOOKUP } from '@/lib/authz/errors'
+import { ERR_LOOKUP, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { loadIssueEntryContext, type IssueEntryContext } from '@/lib/issues/context'
+import { vocabCodeError, vocabWriteFailure } from '@/lib/settings/vocabGuard'
+import { policyNeedsArea } from '@/lib/issues/idPolicy'
+import { ISSUE_DB_MESSAGES, ISSUE_OWN_TOKENS, ERR_ISSUE_RETRY } from '@/lib/issues/errors'
+import { failWith, rpcFailure } from '@/lib/errors/dbFail'
+import { mapDbError } from '@/lib/settings/errors'
+import { VOCAB_CODE_RE } from '@/lib/settings/vocab'
+import type { IssueStatusCode } from '@/lib/domain/issueWorkflow'
+import type { CustomValues } from '@/lib/domain/customFields'
+import { validateCustomValues, validateCustomInsertValues } from '@/lib/domain/customFieldValues'
+import { isProjectAdmin } from '@/lib/domain/authz'
+import { UUID_RE } from '@/lib/domain/validate'
 import { emitNotification } from '@/lib/notify/emit'
 import { revalidatePath } from 'next/cache'
 import { displayNameFrom } from '@/lib/domain/display-name'
-import {
-  ISSUE_SEVERITIES, canTransition, nextResolvedAt,
-  type IssueSeverity, type IssueStatus,
-} from '@/lib/domain/issues'
-import { encodeStatusChange } from '@/lib/domain/issueUpdates'
+import type { IssueSeverity } from '@/lib/domain/issues'
 import { computeAddedAssignees } from '@/lib/domain/inbox'
 import {
-  isIssueMegaCode,
   normalizeIssueAnalysisInput,
   type IssueAnalysisInput,
   type IssueMajorProcess,
-  type IssueMegaCode,
   type NormalizedIssueAnalysisInput,
 } from '@/lib/domain/issueAnalysis'
 import {
@@ -48,6 +54,7 @@ import {
   buildMinuteIssueDraft,
   buildMinuteIssueDraftPrompt,
   type MinuteIssueDraft,
+  type MinuteIssueDraftContext,
   type MinuteIssueMajorProcessReference,
   type MinuteIssueSubProcessReference,
 } from '@/lib/ai/minute-issue-draft'
@@ -56,25 +63,30 @@ export interface IssueActionResult {
   ok: boolean
   error?: string
   id?: string
-  issueNo?: number
-  piIssueCode?: string | null
+  issueId?: string
+  code?: string
   /** CAS 0행 — 다른 사용자가 먼저 상태를 바꿨다. 클라이언트는 router.refresh() 후 안내. */
   conflict?: boolean
 }
 
-export interface IssueInput extends IssueAnalysisInput {
+export interface IssueInput {
+  custom?: CustomValues
+  expectedCustom?: CustomValues
   title: string
   body: string
   severity: IssueSeverity
   assigneeMemberIds: string[]
   startDate: string | null
   dueDate: string | null
+  areaId: string | null
+  analysis: IssueAnalysisInput | null
 }
 
 export interface IssueProgressPatch {
-  status?: IssueStatus
-  /** status 를 보낼 때 필수 — 클라이언트가 화면에 보이는 상태(CAS 비교 기준). 서버가 방금 읽은 상태가 아니다. */
-  expectedStatus?: IssueStatus
+  /** 옮길 **표시 상태 code**(SP5b D6 — 필드 이름은 그대로, 뜻이 범주에서 표시 상태로. 기본 4개는 범주 code 와 같다) */
+  status?: IssueStatusCode
+  /** status 를 보낼 때 필수 — 클라이언트가 화면에 보이는 표시 상태 code(CAS 비교 기준). 서버가 방금 읽은 상태가 아니다. */
+  expectedStatus?: IssueStatusCode
   assigneeMemberIds?: string[]
   // resolutionNote 는 0087 이후 이 경로로 쓰지 않는다. 이력(issue_updates)이 유일 관문이고
   // issues.resolution_note 는 그 파생 미러다 — 두 주체가 쓰면 서로를 덮고, 이력에 없는
@@ -114,18 +126,28 @@ export interface IssueMajorProcessesResult {
   error?: string
 }
 
+/** 프로젝트 선택 후 폼에 표시할 등록 규칙을 읽는다. 저장할 때 다시 검증한다. */
+export async function fetchIssueEntryContext(projectId: string): Promise<{ ok: true; value: IssueEntryContext } | { ok: false; error: string }> {
+  const guard = await requireProjectMember(projectId)
+  if (!guard.ok) return guard
+  const mod = await requireModule({ projectId }, 'issues')
+  if (!mod.ok) return mod
+  const context = await loadIssueEntryContext(projectId)
+  return context.ok ? { ok: true, value: { ...context.value, canManageCustom: isProjectAdmin(guard.actor, projectId) } } : context
+}
+
 /** 폼의 Major Process 자동완성 후보 — 조회 전용(로그인 사용자, 이슈 읽기 관례와 동일 범위). */
 export async function fetchIssueMajorProcesses(projectId: string): Promise<IssueMajorProcessesResult> {
   const user = await getSession()
   if (!user || !projectId) return { ok: false, error: '로그인 필요' }
-  const mod = await requireModule({ projectId }, 'issues')                    // 스펙 §4.2 — 세션 확인 뒤·조회 앞(P17)
+  const mod = await requireModule({ projectId }, 'issue_analysis')                    // 분석 기준정보 관문
   if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('issue_major_processes')
-    .select('id, project_id, mega_code, major_seq, name')
+    .select('id, project_id, area_id, major_seq, name')
     .eq('project_id', projectId)
-    .order('mega_code', { ascending: true })
+    .order('area_id', { ascending: true })
     .order('major_seq', { ascending: true })
   if (error) {
     console.error('[fetchIssueMajorProcesses] 조회 실패:', error.message)
@@ -136,7 +158,7 @@ export async function fetchIssueMajorProcesses(projectId: string): Promise<Issue
     majors: ((data ?? []) as Record<string, unknown>[]).map(row => ({
       id: row.id as string,
       projectId: row.project_id as string,
-      megaCode: row.mega_code as IssueMegaCode,
+      areaId: row.area_id as string,
       majorSeq: Number(row.major_seq),
       name: row.name as string,
     })),
@@ -423,17 +445,19 @@ function validateAssignees(ids: unknown): string | null {
 }
 
 type IssueInputMode = 'normal-create' | 'minute-create' | 'update'
-type NormalizedIssueInput = Omit<IssueInput, keyof IssueAnalysisInput> & NormalizedIssueAnalysisInput
+type NormalizedIssueInput = Omit<IssueInput, 'analysis'> & { analysis: NormalizedIssueAnalysisInput | null }
 type IssueInputValidation =
   | { ok: true; value: NormalizedIssueInput }
   | { ok: false; error: string }
 
 function validateInput(input: IssueInput, mode: IssueInputMode): IssueInputValidation {
+  if (!input || typeof input.title !== 'string' || typeof input.body !== 'string') return { ok: false, error: '이슈 입력 형식이 올바르지 않습니다.' }
+  if (input.areaId !== null && (typeof input.areaId !== 'string' || !UUID_RE.test(input.areaId))) return { ok: false, error: ISSUE_DB_MESSAGES.ISSUE_AREA_NOT_FOUND }
   const title = input.title.trim()
   if (!title) return { ok: false, error: '제목을 입력하세요.' }
   if (title.length > TITLE_MAX) return { ok: false, error: `제목은 ${TITLE_MAX}자 이하여야 합니다.` }
   if (input.body.length > TEXT_MAX) return { ok: false, error: `내용은 ${TEXT_MAX}자 이하여야 합니다.` }
-  if (!ISSUE_SEVERITIES.includes(input.severity)) return { ok: false, error: '잘못된 심각도입니다.' }
+  if (typeof input.severity !== 'string' || !input.severity) return { ok: false, error: '잘못된 심각도입니다.' }   // 활성 여부는 checkEntry(설정 issues.severities)
   const assigneeErr = validateAssignees(input.assigneeMemberIds)
   if (assigneeErr) return { ok: false, error: assigneeErr }
   // 과거 날짜는 허용(즉시 지연 표시 안내는 폼 몫) — 형식·실재성만 검증
@@ -447,21 +471,78 @@ function validateInput(input: IssueInput, mode: IssueInputMode): IssueInputValid
     return { ok: false, error: '이슈 시작일은 목표 해결일보다 늦을 수 없습니다.' }
   }
 
-  // 회의록 생성은 클라이언트 sourceType을 신뢰하지 않고 검증된 원문 경로로 강제한다.
-  const analysis = normalizeIssueAnalysisInput(
-    mode === 'minute-create' ? { ...input, sourceType: 'minutes' } : input,
+  const analysis = input.analysis === null ? null : normalizeIssueAnalysisInput(
+    mode === 'minute-create' ? { ...input.analysis, sourceType: 'minutes' } : input.analysis,
     { allowMinutesSource: mode !== 'normal-create' },
   )
-  if (!analysis.ok) return analysis
+  if (analysis && !analysis.ok) return analysis
+  return { ok: true, value: { ...input, title, analysis: analysis?.ok ? analysis.value : null } }
+}
 
-  return {
-    ok: true,
-    value: {
-      ...input,
-      ...analysis.value,
-      title,
-    },
+const ERR_STATUS_TRANSITION = '허용되지 않는 상태 전환입니다. 화면을 새로고침해 주세요.'
+/** 상태 쓰기의 트리거 토큰(SP5b §3.4 — 개정 §2.3.4 표 한 곳, settings/errors.ts) → 문구. 그 밖은 이슈 쓰기 공통 매핑 */
+function statusWriteFailure(error: { code?: string; message?: string; details?: string }): string {
+  const token = (error.message ?? '').split(':')[0].trim()
+  if (token.startsWith('ISSUE_STATUS') || token === 'ISSUE_TRANSITION_DENIED' || token === 'ISSUE_RESOLVED_AT_DERIVED') {
+    console.error('[issues] 상태 전환 거부', error)
+    return mapDbError(error)?.message ?? ERR_STATUS_TRANSITION
   }
+  if (token === 'ISSUE_WORKFLOW_ISOLATION') {
+    console.error('[issues] 상태 전환 격리 수준 거부', error)
+    return ERR_ISSUE_RETRY
+  }
+  return issueWriteFailure(error)
+}
+
+function issueWriteFailure(error: { code?: string; message?: string }): string {
+  console.error('[issues] 저장 실패', error)
+  if (error.code === '40P01' || error.code === '55P03'
+      || (error.code === '23505' && error.message?.includes('issues_project_code_uidx'))) return ERR_ISSUE_RETRY
+  const vocab = vocabWriteFailure(error)          // 어휘 트리거(B4) — 비활성 code·격리·설정 행 없음
+  if (vocab) return vocab
+  return rpcFailure(error, ISSUE_OWN_TOKENS)?.message ?? failWith('issues', error, '이슈를 저장하지 못했습니다.')
+}
+
+async function checkEntry(
+  projectId: string, input: NormalizedIssueInput,
+  existing?: { areaId: string | null; codeAreaId: string | null; severity: string | null; sourceType: string | null },
+  canAdmin = false,
+): Promise<string | null> {
+  const loaded = await loadIssueEntryContext(projectId)
+  if (!loaded.ok) return loaded.error
+  const ctx = loaded.value
+  if (input.custom !== undefined) {
+    const defs = ctx.customFields ?? []
+    const custom = existing ? validateCustomValues(defs, input.custom, input.expectedCustom, canAdmin)
+      : validateCustomInsertValues(defs, input.custom, canAdmin)
+    if (!custom.ok) return '추가 정보의 필수 값·형식·편집 권한을 확인하세요.'
+  }
+  // 심각도·원천 = 이 프로젝트의 활성 어휘(B4). 값을 그대로 두는 수정은 비활성이어도 통과(트리거와 같은 규칙)
+  const sevErr = vocabCodeError('issues.severities', ctx.vocab.severities, input.severity, existing?.severity)
+  if (sevErr) return sevErr
+  if (input.analysis) {
+    const srcErr = vocabCodeError('issues.sources', ctx.vocab.sources, input.analysis.sourceType, existing?.sourceType)
+    if (srcErr) return srcErr
+  }
+  if (input.analysis) {
+    const mod = await requireModule({ projectId }, 'issue_analysis')
+    if (!mod.ok) return mod.error
+    if (ctx.rules.analysis === 'off') return ERR_MODULE_DISABLED
+  }
+  if (!existing && ctx.rules.analysis === 'required' && !input.analysis) return ISSUE_DB_MESSAGES.ISSUE_ANALYSIS_REQUIRED
+  if (existing?.codeAreaId && input.areaId !== existing.codeAreaId) return ISSUE_DB_MESSAGES.ISSUE_AREA_IMMUTABLE
+  if (input.areaId) {
+    const area = ctx.areas.find(area => area.id === input.areaId)
+    if (!area) return ISSUE_DB_MESSAGES.ISSUE_AREA_NOT_FOUND
+    if (!area.active && (!existing || input.areaId !== existing.areaId)) return ISSUE_DB_MESSAGES.ISSUE_AREA_INACTIVE
+  } else if (policyNeedsArea(ctx.policy) || input.analysis || (!existing && ctx.rules.areaRequired)) return ISSUE_DB_MESSAGES.ISSUE_AREA_REQUIRED
+  return null
+}
+
+/** 분석 없는 신규 등록은 빈 메타를 쓰고, 수정은 기존 분석 메타를 보존한다. */
+function analysisColumns(analysis: NormalizedIssueAnalysisInput | null, majorId: string | null) {
+  return { major_id: majorId, sub_process: analysis?.subProcess ?? '', owner_department: analysis?.ownerDepartment ?? '',
+    related_systems: analysis?.relatedSystems ?? [], source_type: analysis?.sourceType ?? null, source_detail: analysis?.sourceDetail ?? '' }
 }
 
 /**
@@ -479,7 +560,7 @@ async function replaceAssignees(
   const unique = [...new Set(memberIds)]
   if (unique.length === 0) {
     const { error: clrErr } = await sb.from('issue_assignees').delete().eq('issue_id', issueId)
-    return clrErr ? clrErr.message : null
+    return clrErr ? issueWriteFailure(clrErr) : null
   }
   // 활성 명단 행·활성 인물만 담당자가 될 수 있다(비활성은 명단·조직에서 빠진 사람).
   const { data: valid, error: validErr } = await sb
@@ -493,7 +574,7 @@ async function replaceAssignees(
   // 액션은 성공을 보고한다 — 실패는 실패로 올린다(silent-empty 금지).
   if (validErr) {
     console.error('[replaceAssignees] 멤버 검증 조회 실패:', validErr.message)
-    return validErr.message
+    return failWith('replaceAssignees', validErr, '담당자 정보를 확인하지 못했습니다. 다시 시도하세요.')
   }
   const validIds = (valid ?? []).map((r: { id: string }) => r.id)
   if (validIds.length !== unique.length) return '프로젝트 멤버가 아닌 담당자가 있습니다. 새로고침 후 다시 시도하세요.'
@@ -509,11 +590,11 @@ async function replaceAssignees(
   }
 
   const { error: delErr } = await sb.from('issue_assignees').delete().eq('issue_id', issueId)
-  if (delErr) return delErr.message // 삭제 실패를 삼키면 이어지는 insert 가 PK 충돌이 된다
+  if (delErr) return issueWriteFailure(delErr) // 삭제 실패를 삼키면 이어지는 insert 가 PK 충돌이 된다
   const { error } = await sb
     .from('issue_assignees')
     .insert(validIds.map(id => ({ issue_id: issueId, member_id: id, project_id: projectId })))
-  if (error) return error.message
+  if (error) return issueWriteFailure(error)
 
   if (notify && added.length > 0) {
     await emitNotification({
@@ -532,21 +613,21 @@ function revalidateIssues(projectId: string) {
 }
 
 /**
- * Major Process resolve-or-create — 같은 (project, mega, 이름)은 기존 체번을 재사용하고,
+ * Major Process resolve-or-create — 같은 (project, area, 이름)은 기존 체번을 재사용하고,
  * 새 이름은 insert 때 0062 트리거가 advisory lock 아래 다음 번호(01, 02, 03…)를 발급한다.
  * 동시 등록 경합의 유니크 충돌(23505)은 승자 행 재조회로 수렴. 조회 실패는 중단(쓰기 선행 조회 원칙).
  */
 async function resolveIssueMajorId(
   sb: Awaited<ReturnType<typeof createServerClient>>,
   projectId: string,
-  megaCode: IssueMegaCode,
+  areaId: string,
   majorName: string,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const findExisting = async () => sb
     .from('issue_major_processes')
     .select('id')
     .eq('project_id', projectId)
-    .eq('mega_code', megaCode)
+    .eq('area_id', areaId)
     .eq('name', majorName)
     .maybeSingle()
 
@@ -559,7 +640,7 @@ async function resolveIssueMajorId(
 
   const { data: inserted, error: insErr } = await sb
     .from('issue_major_processes')
-    .insert({ project_id: projectId, mega_code: megaCode, name: majorName })
+    .insert({ project_id: projectId, area_id: areaId, name: majorName })
     .select('id')
     .single()
   if (!insErr && inserted) return { ok: true, id: inserted.id as string }
@@ -573,7 +654,7 @@ async function resolveIssueMajorId(
     if (winner) return { ok: true, id: winner.id as string }
   }
   console.error('[resolveIssueMajorId] 등록 실패:', insErr?.message ?? 'empty result')
-  return { ok: false, error: 'Major Process 등록에 실패했습니다. 다시 시도하세요.' }
+  return { ok: false, error: insErr ? issueWriteFailure(insErr) : 'Major Process 등록에 실패했습니다. 다시 시도하세요.' }
 }
 
 /**
@@ -608,34 +689,32 @@ export async function createIssue(projectId: string, input: IssueInput): Promise
   const checked = validateInput(input, 'normal-create')
   if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
+  const entryError = await checkEntry(projectId, value, undefined, isProjectAdmin(g.actor, projectId))
+  if (entryError) return { ok: false, error: entryError }
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
 
   const sb = await createServerClient()
-  const major = await resolveIssueMajorId(sb, projectId, value.megaCode, value.majorName)
+  const major = value.analysis ? await resolveIssueMajorId(sb, projectId, value.areaId!, value.analysis.majorName) : { ok: true as const, id: null }
   if (!major.ok) return { ok: false, error: major.error }
   const { data, error } = await sb
     .from('issues')
     .insert({
       project_id: projectId,
+      ...(value.custom !== undefined ? { custom: value.custom } : {}),
       title: value.title,
       body: value.body,
       severity: value.severity,
       start_date: value.startDate,
       due_date: value.dueDate,
-      mega_code: value.megaCode,
-      major_id: major.id,
-      sub_process: value.subProcess,
-      owner_department: value.ownerDepartment,
-      related_systems: value.relatedSystems,
-      source_type: value.sourceType,
-      source_detail: value.sourceDetail,
+      area_id: value.areaId,
+      ...analysisColumns(value.analysis, major.id),
       created_by: user.id,
       created_by_name: displayNameFrom(user.user_metadata, user.email),
     })
-    .select('id, issue_no, pi_issue_code')
+    .select('id, code')
     .single()
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: issueWriteFailure(error) }
   const issueId = data.id as string
 
   const assignErr = await replaceAssignees(sb, issueId, projectId, value.assigneeMemberIds,
@@ -654,8 +733,7 @@ export async function createIssue(projectId: string, input: IssueInput): Promise
   return {
     ok: true,
     id: issueId,
-    issueNo: Number(data.issue_no),
-    piIssueCode: (data.pi_issue_code as string | null) ?? null,
+    code: data.code as string,
   }
 }
 
@@ -679,6 +757,7 @@ async function summarizeVerifiedMinuteBlock(
   insightLabel: string | null,
   prompt: string,
   llm: boolean,
+  context: MinuteIssueDraftContext,
 ): Promise<MinuteIssueDraft | null> {
   const fallback = buildFallbackMinuteIssueDraft(blockText, insightLabel)
   // AI 를 쓸 수 없으면(키 없음·워크스페이스 AI 끔·모듈 꺼짐) 캐시를 보기 전에 결정형으로 — 끈 뒤에 옛 AI 초안이 나오지 않게(Review Focus 4)
@@ -713,7 +792,7 @@ async function summarizeVerifiedMinuteBlock(
       )
       return fallback
     }
-    const draft = buildMinuteIssueDraft({ sourceText: blockText, insightLabel, aiResponse: raw }) ?? fallback
+    const draft = buildMinuteIssueDraft({ sourceText: blockText, insightLabel, aiResponse: raw, context }) ?? fallback
     // 일시 장애로 만든 폴백은 캐시하지 않아 다음 열기에서 AI를 다시 시도할 수 있게 한다.
     if (draft?.mode === 'ai') rememberMinuteDraft(cacheKey, draft)
     return draft
@@ -731,16 +810,16 @@ async function loadKnownMajorProcesses(projectId: string): Promise<MinuteIssueMa
     const sb = await createServerClient()
     const { data, error } = await sb
       .from('issue_major_processes')
-      .select('mega_code, name')
+      .select('area_id, name')
       .eq('project_id', projectId)
-      .order('mega_code', { ascending: true })
+      .order('area_id', { ascending: true })
       .order('major_seq', { ascending: true })
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).flatMap(row => {
-      const megaCode = row.mega_code
+      const areaId = row.area_id
       const name = typeof row.name === 'string' ? row.name.trim() : ''
-      if (!isIssueMegaCode(megaCode) || !name) return []
-      return [{ megaCode, name }]
+      if (typeof areaId !== 'string' || !UUID_RE.test(areaId) || !name) return []
+      return [{ areaId, name }]
     })
   } catch (cause) {
     // 기존 Major 사례는 이름 재사용을 돕는 보조 정보다. 조회 실패가 등록 흐름을 막지는 않는다.
@@ -758,7 +837,7 @@ async function loadKnownSubProcesses(projectId: string): Promise<MinuteIssueSubP
     const sb = await createServerClient()
     const { data, error } = await sb
       .from('issues')
-      .select('mega_code, sub_process')
+      .select('area_id, sub_process')
       .eq('project_id', projectId)
     if (error) throw error
     rows = (data ?? []) as Array<Record<string, unknown>>
@@ -773,18 +852,18 @@ async function loadKnownSubProcesses(projectId: string): Promise<MinuteIssueSubP
   const seen = new Set<string>()
   const references: MinuteIssueSubProcessReference[] = []
   for (const row of rows) {
-    const megaCode = row.mega_code
+    const areaId = row.area_id
     const subProcess = typeof row.sub_process === 'string'
       ? row.sub_process.trim()
       : ''
-    if (!isIssueMegaCode(megaCode) || !subProcess) continue
-    const key = `${megaCode}\u0000${subProcess}`
+    if (typeof areaId !== 'string' || !UUID_RE.test(areaId) || !subProcess) continue
+    const key = `${areaId}\u0000${subProcess}`
     if (seen.has(key)) continue
     seen.add(key)
-    references.push({ megaCode, subProcess })
+    references.push({ areaId, subProcess })
   }
   return references.sort((a, b) =>
-    a.megaCode.localeCompare(b.megaCode)
+    a.areaId.localeCompare(b.areaId)
     || a.subProcess.localeCompare(b.subProcess, 'ko'))
 }
 
@@ -808,23 +887,22 @@ export async function prepareMinuteIssueDraft(
   if (!source.selection && block.headingDepth) {
     return { ok: false, error: '제목이 아닌 실제 이슈 내용이 있는 블록을 선택해 주세요.' }
   }
-  const [knownMajorProcesses, knownSubProcesses] = await Promise.all([
-    loadKnownMajorProcesses(projectId),
-    loadKnownSubProcesses(projectId),
+  const loaded = await loadIssueEntryContext(projectId)
+  if (!loaded.ok) return loaded
+  const [knownMajorProcesses, knownSubProcesses] = loaded.value.rules.analysis === 'off' ? [[], []] : await Promise.all([
+    loadKnownMajorProcesses(projectId), loadKnownSubProcesses(projectId),
   ])
+  const context: MinuteIssueDraftContext = { areas: loaded.value.areas.filter(area => area.active), analysis: loaded.value.rules.analysis,
+    contextText: draftContextText, knownMajorProcesses, knownSubProcesses }
   const blockText = selectionExcerpt ?? minuteBlockDraftText(block)
-  const prompt = buildMinuteIssueDraftPrompt(blockText, insightLabel, {
-    contextText: draftContextText,
-    knownMajorProcesses,
-    knownSubProcesses,
-  })
+  const prompt = buildMinuteIssueDraftPrompt(blockText, insightLabel, context)
   const cacheKey = [
-    // v4: majorProcess 5키 스키마 — 구버전 4키 캐시 초안과 섞이지 않게 버전으로 격리한다.
-    'minute-issue-draft-v4', projectId, source.minuteVersionId, source.blockIndex, block.hash,
+    // v5: 프로젝트 영역·분석 모드가 프롬프트 해시에 포함된다. 옛 Mega 스키마 캐시는 재사용하지 않는다.
+    'minute-issue-draft-v5', projectId, source.minuteVersionId, source.blockIndex, block.hash,
     source.kind, fnv1a64(prompt),
   ].join(':')
   const llm = await aiAvailable({ projectId }, { module: 'issues' })
-  const draft = await summarizeVerifiedMinuteBlock(cacheKey, blockText, insightLabel, prompt, llm)
+  const draft = await summarizeVerifiedMinuteBlock(cacheKey, blockText, insightLabel, prompt, llm, context)
   if (!draft) {
     return {
       ok: false,
@@ -863,6 +941,8 @@ export async function createIssueFromMinuteBlock(
   const checked = validateInput(input, 'minute-create')
   if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
+  const entryError = await checkEntry(projectId, value, undefined, isProjectAdmin(g.actor, projectId))
+  if (entryError) return { ok: false, error: entryError }
   const user = await getSession()
   if (!user) return { ok: false, error: '로그인 필요' }
 
@@ -890,21 +970,22 @@ export async function createIssueFromMinuteBlock(
   // 검증된 block hash/excerpt를 위조하지 못하도록, 파싱 검증이 끝난 서버 액션만 진입한다.
   const { data: created, error } = await admin.rpc('create_issue_from_minute_block', {
     p_project_id: projectId,
+    p_custom: value.custom ?? {},
     p_title: value.title,
     p_body: value.body,
     p_severity: value.severity,
     p_assignee_member_ids: [...new Set(value.assigneeMemberIds)],
     p_start_date: value.startDate,
     p_due_date: value.dueDate,
-    p_mega_code: value.megaCode,
-    p_major_name: value.majorName,
-    p_sub_process: value.subProcess,
-    p_owner_department: value.ownerDepartment,
-    p_related_systems: value.relatedSystems,
+    p_area_id: value.areaId,
+    p_major_name: value.analysis?.majorName ?? null,
+    p_sub_process: value.analysis?.subProcess ?? null,
+    p_owner_department: value.analysis?.ownerDepartment ?? null,
+    p_related_systems: value.analysis?.relatedSystems ?? null,
     // 클라이언트 값과 무관하게 minute 버전/블록 검증을 통과한 이 경로에서만 고정한다.
-    p_source_type: 'minutes',
-    p_source_detail: value.sourceDetail,
-    p_actor_id: user.id,
+    p_source_type: value.analysis ? 'minutes' : null,
+    p_source_detail: value.analysis?.sourceDetail ?? null,
+    p_actor_id: g.actor.userId,
     p_created_by_name: displayNameFrom(user.user_metadata, user.email),
     p_minute_id: source.minuteId,
     p_minute_version_id: source.minuteVersionId,
@@ -917,13 +998,12 @@ export async function createIssueFromMinuteBlock(
   }).single()
   if (error || !created) {
     console.error('[createIssueFromMinuteBlock] 원자적 생성 실패:', error?.message ?? 'empty result')
-    return { ok: false, error: error?.message ?? '이슈 등록에 실패했습니다.' }
+    return { ok: false, error: error ? issueWriteFailure(error) : '이슈 등록에 실패했습니다.' }
   }
 
   const row = created as {
     issue_id: string
-    issue_no: number | string
-    pi_issue_code: string | null
+    code: string
   }
   await emitNotification({
     type: 'issue.assigned', projectId, actorUserId: user.id,
@@ -936,9 +1016,8 @@ export async function createIssueFromMinuteBlock(
   revalidatePath('/(app)/w/[slug]/minutes/[id]', 'page')
   return {
     ok: true,
-    id: row.issue_id,
-    issueNo: Number(row.issue_no),
-    piIssueCode: row.pi_issue_code,
+    issueId: row.issue_id,
+    code: row.code,
   }
 }
 
@@ -954,22 +1033,23 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
   // 소유권 선검증(RLS 와 동일 — 0행 무음 성공 방지, meetings 관례)
   const { data: cur, error: curErr } = await sb
     .from('issues')
-    .select('project_id, created_by, mega_code, source_type')
+    .select('project_id, created_by, area_id, code_area_id, major_id, source_type, severity')
     .eq('id', issueId)
     .maybeSingle()
   if (curErr) return { ok: false, error: ERR_LOOKUP } // 소유권 판정의 입력이다 — 실패를 '없음'으로 위장하지 않는다
   if (!cur) return { ok: false, error: '이슈를 찾을 수 없습니다.' }
   const isOwner = (cur.created_by as string | null) === gate.userId
   if (!gate.isAdmin && !isOwner) return { ok: false, error: '권한 없음' }
-  const currentMegaCode = (cur.mega_code as string | null) ?? null
-  if (currentMegaCode !== null && currentMegaCode !== value.megaCode) {
-    return { ok: false, error: '발급된 이슈 ID의 Mega 영역은 변경할 수 없습니다.' }
-  }
+  const entryError = await checkEntry(cur.project_id as string, value, {
+    areaId: (cur.area_id as string | null) ?? null, codeAreaId: (cur.code_area_id as string | null) ?? null,
+    severity: (cur.severity as string | null) ?? null, sourceType: (cur.source_type as string | null) ?? null,
+  }, gate.isAdmin)
+  if (entryError) return { ok: false, error: entryError }
   const currentSourceType = (cur.source_type as string | null) ?? null
-  if (currentSourceType === 'minutes' && value.sourceType !== 'minutes') {
+  if (currentSourceType === 'minutes' && value.analysis && value.analysis.sourceType !== 'minutes') {
     return { ok: false, error: '회의록 원천은 검증된 원문 연결을 유지해야 하므로 변경할 수 없습니다.' }
   }
-  if (value.sourceType === 'minutes' && currentSourceType !== 'minutes') {
+  if (value.analysis?.sourceType === 'minutes' && currentSourceType !== 'minutes') {
     if (currentSourceType !== null) {
       return { ok: false, error: '등록된 이슈 원천을 회의록 원천으로 변경할 수 없습니다.' }
     }
@@ -992,32 +1072,30 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
     }
   }
 
-  // Major 는 오분류 교정·레거시 백필을 위해 편집에서 바꿀 수 있다(mega 와 달리 이슈 ID 와 무관).
-  const major = await resolveIssueMajorId(sb, cur.project_id as string, value.megaCode, value.majorName)
+  // Major 는 오분류 교정·레거시 백필을 위해 편집에서 바꿀 수 있다(code_area_id 와 달리 이슈 ID 와 무관).
+  const major = value.analysis ? await resolveIssueMajorId(sb, cur.project_id as string, value.areaId!, value.analysis.majorName) : { ok: true as const, id: null }
   if (!major.ok) return { ok: false, error: major.error }
 
-  const { data: updated, error } = await sb
+  let write = sb
     .from('issues')
     .update({
+      ...(value.custom !== undefined ? { custom: value.custom } : {}),
       title: value.title,
       body: value.body,
       severity: value.severity,
       start_date: value.startDate,
       due_date: value.dueDate,
-      mega_code: value.megaCode,
-      major_id: major.id,
-      sub_process: value.subProcess,
-      owner_department: value.ownerDepartment,
-      related_systems: value.relatedSystems,
-      source_type: value.sourceType,
-      source_detail: value.sourceDetail,
+      area_id: value.areaId,
+      ...(value.analysis ? analysisColumns(value.analysis, major.id) : {}),
       updated_at: new Date().toISOString(),
       // created_by / status / resolution_note 는 여기서 SET 하지 않음(전자 불변, 후자는 진행 액션 전용)
     })
     .eq('id', issueId)
-    .select('id, pi_issue_code')
-    .single()
-  if (error) return { ok: false, error: error.message }
+  if (value.custom !== undefined) write = write.eq('project_id', cur.project_id as string).eq('custom', JSON.stringify(value.expectedCustom))
+  const query = write.select('id, code')
+  const { data: updated, error } = value.custom !== undefined ? await query.maybeSingle() : await query.single()
+  if (!error && !updated) return { ok: false, conflict: true, error: '추가 정보가 변경되었습니다. 최신 값을 확인한 뒤 다시 저장하세요.' }
+  if (error) return { ok: false, error: issueWriteFailure(error) }
   // 본문 수정은 이미 커밋됨 — 담당자 교체가 실패해도 변경분이 보이도록 revalidate 후 에러 보고(회의 관례).
   const assignErr = await replaceAssignees(sb, issueId, cur.project_id as string, input.assigneeMemberIds,
     { issueTitle: value.title, actorUserId: gate.userId })
@@ -1027,7 +1105,7 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
   if (assignErr) return { ok: false, error: `담당자 저장에 실패했습니다(${assignErr}). 제목·내용 등 나머지 변경은 저장되었습니다.` }
   return {
     ok: true,
-    piIssueCode: (updated.pi_issue_code as string | null) ?? null,
+    code: updated!.code as string,
   }
 }
 
@@ -1053,23 +1131,27 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
   }
 
   const sb = await createServerClient()
-  const { data: cur } = await sb.from('issues').select('project_id, created_by, status, resolved_at, title').eq('id', issueId).maybeSingle()
+  // 선조회 실패는 중단한다(3원칙 ② — 없는 이슈로 위장하지 않는다)
+  const { data: cur, error: curErr } = await sb.from('issues').select('project_id, created_by, status_code, title').eq('id', issueId).maybeSingle()
+  if (curErr) return { ok: false, error: failWith('issues.updateIssueProgress', curErr, ERR_LOOKUP) }
   if (!cur) return { ok: false, error: '이슈를 찾을 수 없습니다.' }
-  const curStatus = cur.status as IssueStatus
 
   // 담당자만 바꿔도 issues.updated_at 은 반드시 오른다 — AI 인덱스 신선도 가드의 입력(0041 헤더).
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (patch.status !== undefined) {
-    // CAS 비교 기준은 서버가 방금 읽은 curStatus 가 아니라 클라이언트가 화면에서 관측한 expectedStatus.
+    if (typeof patch.status !== 'string' || !VOCAB_CODE_RE.test(patch.status)
+        || typeof patch.expectedStatus !== 'string' || !VOCAB_CODE_RE.test(patch.expectedStatus)) {
+      return { ok: false, error: ERR_STATUS_TRANSITION }
+    }
+    // CAS 비교 기준은 서버가 방금 읽은 값이 아니라 클라이언트가 화면에서 관측한 expectedStatus.
     // 그래야 read→write 사이가 아니라 "클라이언트가 화면을 마지막으로 갱신한 시점 이후" 변경까지 잡아낸다.
-    if (curStatus !== patch.expectedStatus) {
+    if (cur.status_code !== patch.expectedStatus) {
       return { ok: false, conflict: true, error: '다른 사용자가 먼저 변경했거나 이슈가 삭제되었습니다. 최신 상태로 새로고침합니다.' }
     }
-    if (!canTransition(patch.expectedStatus, patch.status)) {
-      return { ok: false, error: '허용되지 않는 상태 전환입니다. 화면을 새로고침해 주세요.' }
-    }
-    payload.status = patch.status
-    payload.resolved_at = nextResolvedAt(patch.expectedStatus, patch.status, (cur.resolved_at as string | null) ?? null, new Date().toISOString())
+    if (patch.status === patch.expectedStatus) return { ok: false, error: ERR_STATUS_TRANSITION }
+    // 전이 허용(범주 전이표·활성)·파생 status·resolved_at·이력은 DB 트리거가 최종으로 정한다(SP5b D4·D5) — 화면 선택지는
+    // allowedTargets 로 같은 규칙을 그린다. 여기서 정의를 다시 읽지 않는다(판정 한 곳, 오류는 토큰으로 옮긴다).
+    payload.status_code = patch.status
   }
 
   if (patch.status !== undefined) {
@@ -1079,9 +1161,9 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
       .from('issues')
       .update(payload)
       .eq('id', issueId)
-      .eq('status', patch.expectedStatus)
+      .eq('status_code', patch.expectedStatus)
       .select('id')
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: statusWriteFailure(error) }
     if (!updated?.length) {
       return { ok: false, conflict: true, error: '다른 사용자가 먼저 변경했거나 이슈가 삭제되었습니다. 최신 상태로 새로고침합니다.' }
     }
@@ -1091,28 +1173,11 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
       .update(payload)
       .eq('id', issueId)
       .select('id')
-    if (error) return { ok: false, error: error.message }
+    if (error) return { ok: false, error: issueWriteFailure(error) }
     if (!updated?.length) return { ok: false, error: '이슈가 삭제되어 저장할 수 없습니다.' }
   }
-
-  // 상태 변경 자동 기록 — 지금 이 흔적은 어디에도 남지 않는다.
-  // service_role 로 쓰는 이유: 위 sb 는 사용자 JWT 라 kind 컬럼 grant 밖이고, RLS insert
-  // 정책도 kind='note' 만 허용한다. 이 자리는 requireProjectMember 를 이미 통과했으므로
-  // "service_role 쓰기는 서버 액션 가드가 유일한 관문"이라는 계약을 지킨다.
-  if (patch.status !== undefined && patch.expectedStatus !== patch.status) {
-    const user = await getSession()
-    const admin = createAdminClient()
-    const { error: logErr } = await admin.from('issue_updates').insert({
-      issue_id: issueId,
-      project_id: cur.project_id as string,
-      kind: 'status',
-      body: encodeStatusChange(patch.expectedStatus as IssueStatus, patch.status),
-      author_user_id: g.actor.userId,
-      author_name: user ? (displayNameFrom(user.user_metadata, user.email) ?? '(이름 없음)') : '(이름 없음)',
-    })
-    // 기록 실패가 상태 변경을 되돌리지는 않는다 — 이미 커밋됐다. 로그만 남긴다.
-    if (logErr) console.error('[updateIssueProgress] 상태 변경 이력 기록 실패:', logErr.message)
-  }
+  // 상태 변경 이력(issue_updates kind='status')은 DB 트리거(record_issue_status_change)가 같은 트랜잭션에서 남긴다(SP5b D5) —
+  // 직접 PATCH·이관도 같은 이력을 남기고, 이력만 빠지는 반쪽 저장이 없다.
 
   // 담당자 교체는 상태 CAS 가 통과한 뒤에만 — 충돌 감지 시 담당자까지 절반만 저장되는 일이 없게 한다.
   if (patch.assigneeMemberIds !== undefined) {
@@ -1154,7 +1219,7 @@ export async function deleteIssue(issueId: string): Promise<IssueActionResult> {
   const paths = (atts ?? []).map(a => a.file_path as string)
 
   const { error } = await sb.from('issues').delete().eq('id', issueId).select('id').single()
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: issueWriteFailure(error) }
 
   if (paths.length > 0) {
     // remove() 는 아무것도 지우지 못해도 error 가 null 이라 성공을 판정할 수 없다.

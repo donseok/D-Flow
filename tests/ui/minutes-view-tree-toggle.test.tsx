@@ -31,7 +31,7 @@ vi.mock('@/components/minutes/ArchiveChatPanel', () => ({
 const treeResult = {
   folders: [{ id: 'f1', name: '생산계획', parentId: null, sort: 5, createdBy: null, projectId: null }],
   leaves: [{
-    id: 'm1', minuteDate: '2026-07-16', teamCode: 'MES', title: '주간회의_260716',
+    id: 'm1', minuteDate: '2026-07-16', teamCode: 'MES', teamId: 't-mes', title: '주간회의_260716',
     fileCount: 0, createdBy: null, createdByName: null,
     bodyPreview: '', meetingCategory: null, folderId: 'f1',
   }],
@@ -44,7 +44,7 @@ const treeResultTwoLeaves = {
   leaves: [
     ...treeResult.leaves,
     {
-      id: 'm2', minuteDate: '2026-07-15', teamCode: 'PMO', title: '운영회의_260715',
+      id: 'm2', minuteDate: '2026-07-15', teamCode: 'PMO', teamId: 't-pmo', title: '운영회의_260715',
       fileCount: 0, createdBy: null, createdByName: null,
       bodyPreview: '', meetingCategory: null, folderId: 'f2',
     },
@@ -67,6 +67,9 @@ import { MinutesView } from '@/components/minutes/MinutesView'
 import { withTeams } from '../fixtures/teams'
 import { SUNDAY_CAL } from '../fixtures/calendarView'
 
+// 담당 필터 선택지(SP5 B2) — 키는 팀 id, 라벨은 code
+const TEAM_OPTIONS = [{ id: 't-pmo', code: 'PMO', name: 'PMO' }, { id: 't-mes', code: 'MES', name: 'MES' }]
+
 describe('MinutesView 트리 뷰 배선', () => {
   let container: HTMLDivElement, root: Root
   beforeEach(() => {
@@ -86,7 +89,7 @@ describe('MinutesView 트리 뷰 배선', () => {
   ) {
     await act(async () => root.render(withTeams(
       <MinutesView calendar={SUNDAY_CAL} scope={{ workspaceId: 'ws-1', projectId: null }} initialMinutes={[]} todayIso="2026-07-17" initialView={initialView}
-        projects={[]} currentUserId="u1" canEdit={perms.canEdit} />,
+        projects={[]} currentUserId="u1" canEdit={perms.canEdit} teamOptions={TEAM_OPTIONS} />,
     )))
   }
   function buttonByText(text: string): HTMLButtonElement {
@@ -146,6 +149,17 @@ describe('MinutesView 트리 뷰 배선', () => {
     await act(async () => buttonByText('min.tree.retry').click())
     expect(fetchMinutesExplorer).toHaveBeenCalledTimes(2)
     expect(container.textContent).toContain('주간회의')
+  })
+
+  it('같은 code 의 팀이 둘이면 탭 라벨에 이름을 붙여 가르고, 보관함 챗에는 고른 팀의 code 를 넘긴다(SP5 B2)', async () => {
+    await act(async () => root.render(withTeams(
+      <MinutesView calendar={SUNDAY_CAL} scope={{ workspaceId: 'ws-1', projectId: 'p1' }} initialMinutes={[]} todayIso="2026-07-17" initialView="calendar"
+        projects={[]} currentUserId="u1" canEdit teamOptions={[{ id: 't-qa', code: 'QA', name: '품질(공용)' }, { id: 't-qa-p', code: 'QA', name: '품질(전용)' }]}
+        initialTeamId="t-qa-p" />,
+    )))
+    expect(tabByText('QA · 품질(전용)')!.getAttribute('aria-selected')).toBe('true')
+    expect(tabByText('QA · 품질(공용)')).toBeTruthy()
+    expect((chatProps.mock.calls.at(-1)![0] as { team: string | null }).team).toBe('QA')
   })
 
   it('트리 뷰에서 팀 탭 선택은 재조회 없이 클라이언트 프루닝한다', async () => {
@@ -210,7 +224,7 @@ describe('MinutesView 트리 뷰 배선', () => {
     await mount('calendar')
     fetchMinutesRange.mockResolvedValueOnce({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
     await act(async () => tabByText('PMO')!.click())
-    expect(fetchMinutesRange).toHaveBeenLastCalledWith({ workspaceId: 'ws-1', projectId: null }, '2026-07-01', '2026-07-31', 'PMO')
+    expect(fetchMinutesRange).toHaveBeenLastCalledWith({ workspaceId: 'ws-1', projectId: null }, '2026-07-01', '2026-07-31', 't-pmo')   // 팀 id(SP5 B2)
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'min.list.loadError', variant: 'error' }))
     expect(tabByText('PMO')!.getAttribute('aria-selected')).toBe('false')
     // 성공하면 바뀐다(대조)

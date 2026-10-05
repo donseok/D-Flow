@@ -1,3 +1,4 @@
+import { TEST_AREAS, TEST_SEVERITY_CODES } from '../fixtures/issue-areas'
 import { describe, expect, it } from 'vitest'
 import type { IssueMinuteSource } from '@/lib/domain/issueMinuteSource'
 import {
@@ -29,12 +30,13 @@ const issue = (
   id: string,
   over: Partial<IssueAnalysisIssueInput> = {},
 ): IssueAnalysisIssueInput => ({
+    codeAreaId: null,
   id,
   issueNo: 1,
-  piIssueCode: 'PI-I-00-01',
+  code: 'PI-I-00-01',
   projectId: 'project-1',
-  megaCode: '00',
-  megaSeq: 1,
+  areaId: '00',
+
   title: '기준정보 중복',
   body: '동일 자재가 여러 코드로 관리된다.',
   status: 'open',
@@ -62,50 +64,50 @@ describe('buildIssueAnalysisPreflight', () => {
     const issues = [
       issue('cost-1', {
         issueNo: 3,
-        megaCode: '07',
-        megaSeq: 1,
-        piIssueCode: 'PI-I-07-01',
+        areaId: '07',
+
+        code: 'PI-I-07-01',
         status: 'resolved',
       }),
-      issue('master-2', { issueNo: 2, megaSeq: 2, piIssueCode: 'PI-I-00-02' }),
+      issue('master-2', { issueNo: 2,  code: 'PI-I-00-02' }),
       issue('master-1'),
     ]
-    const result = buildIssueAnalysisPreflight(issues)
+    const result = buildIssueAnalysisPreflight(issues, TEST_AREAS)
     expect(result).toMatchObject({ totalCount: 3, readyCount: 3, blockedCount: 0 })
-    expect(result.areas.map(area => area.megaCode)).toEqual([
+    expect(result.areas.map(area => area.areaCode)).toEqual([
       '00', '01', '02', '03', '04', '05', '06', '07',
     ])
-    expect(result.areas.find(area => area.megaCode === '00')).toMatchObject({
-      megaName: '기준관리',
+    expect(result.areas.find(area => area.areaCode === '00')).toMatchObject({
+      areaName: '기준관리',
       count: 2,
       readyCount: 2,
       blockedCount: 0,
     })
-    expect(result.areas.find(area => area.megaCode === '07')?.count).toBe(1)
+    expect(result.areas.find(area => area.areaCode === '07')?.count).toBe(1)
   })
 
   it('필수 필드와 미분류 이슈를 상세 사유로 반환한다', () => {
     const legacy = issue('legacy', {
-      megaCode: null,
-      megaSeq: null,
-      piIssueCode: null,
+      areaId: null,
+
+      code: '',
       body: ' ',
       subProcess: '',
       ownerDepartment: '',
       sourceType: null,
     })
-    const result = buildIssueAnalysisPreflight([legacy])
+    const result = buildIssueAnalysisPreflight([legacy], TEST_AREAS)
     expect(result).toMatchObject({ totalCount: 1, readyCount: 0, blockedCount: 1 })
     expect(result.blockedIssues[0].missingFields).toEqual([
-      'megaCode',
-      'piIssueCode',
+      'areaId',
+      'code',
       'body',
       'subProcess',
       'ownerDepartment',
       'source',
     ])
     expect(result.unclassifiedIssues).toHaveLength(1)
-    expect(result.blockedIssues[0].label).toContain('#1')
+    expect(result.blockedIssues[0].label).toContain('기준정보 중복')
   })
 
   it('회의록 원천은 실제 불변 링크가 있어야 준비 완료다', () => {
@@ -116,12 +118,12 @@ describe('buildIssueAnalysisPreflight', () => {
     })
     const linked = issue('minutes-linked', {
       issueNo: 2,
-      megaSeq: 2,
-      piIssueCode: 'PI-I-00-02',
+
+      code: 'PI-I-00-02',
       sourceType: 'minutes',
       minuteSources: [source('minutes-linked')],
     })
-    const result = buildIssueAnalysisPreflight([missingLink, linked])
+    const result = buildIssueAnalysisPreflight([missingLink, linked], TEST_AREAS)
     expect(result).toMatchObject({ readyCount: 1, blockedCount: 1 })
     expect(result.blockedIssues[0].missingFields).toContain('source')
   })
@@ -132,8 +134,8 @@ describe('이슈 분석 입력/결과 모델', () => {
     const snapshot = buildIssueAnalysisInputSnapshot('project-1', [
       issue('second', {
         issueNo: 2,
-        megaSeq: 2,
-        piIssueCode: 'PI-I-00-02',
+
+        code: 'PI-I-00-02',
         relatedSystems: ['MES', 'ERP', 'MES'],
       }),
       issue('first', {
@@ -141,7 +143,7 @@ describe('이슈 분석 입력/결과 모델', () => {
         sourceDetail: '',
         minuteSources: [source('first')],
       }),
-    ])
+    ], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const area = snapshot.areas[0]
     expect(area.issues.map(item => item.id)).toEqual(['first', 'second'])
     expect(area.issues[0].source.minutes[0]).toMatchObject({
@@ -157,7 +159,7 @@ describe('이슈 분석 입력/결과 모델', () => {
   })
 
   it('개선기회를 직렬화 가능한 area 결과에 결합한다', () => {
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('i-1')])
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('i-1')], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const report = buildIssueAnalysisReport(snapshot, {
       '00': [{
         title: '기준정보 단일화',
@@ -177,7 +179,7 @@ describe('이슈 분석 입력/결과 모델', () => {
   })
 
   it('이슈별 직접·근본 원인을 UUID 기준으로 직렬화하고 입력 스냅샷과 분리한다', () => {
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('i-1')])
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('i-1')], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const causeAnalyses = {
       '00': [{
         issueId: 'i-1',
@@ -213,27 +215,27 @@ describe('이슈 분석 입력/결과 모델', () => {
 
 const MAJOR_A = {
   id: '31000000-0000-4000-8000-000000000001',
-  megaCode: '02' as const,
+  areaId: '02' as const,
   majorSeq: 1,
   name: '주문관리',
 }
 const MAJOR_B = {
   id: '31000000-0000-4000-8000-000000000002',
-  megaCode: '02' as const,
+  areaId: '02' as const,
   majorSeq: 2,
   name: '수출관리',
 }
 const MAJOR_OTHER_MEGA = {
   id: '31000000-0000-4000-8000-000000000003',
-  megaCode: '00' as const,
+  areaId: '00' as const,
   majorSeq: 1,
   name: '품목기준정보',
 }
 
 const salesIssue = (id: string, over: Partial<IssueAnalysisIssueInput> = {}) =>
   issue(id, {
-    megaCode: '02',
-    piIssueCode: 'PI-I-02-01',
+    areaId: '02',
+    code: 'PI-I-02-01',
     majorId: MAJOR_A.id,
     ...over,
   })
@@ -243,26 +245,26 @@ describe('스냅샷 Major 기준정보', () => {
     const snapshot = buildIssueAnalysisInputSnapshot(
       'project-1',
       [salesIssue('sales-1')],
-      [MAJOR_B, MAJOR_A, MAJOR_OTHER_MEGA],
+      [MAJOR_B, MAJOR_A, MAJOR_OTHER_MEGA], TEST_AREAS, TEST_SEVERITY_CODES,
     )
-    const area = snapshot.areas.find(candidate => candidate.megaCode === '02')
+    const area = snapshot.areas.find(candidate => candidate.areaCode === '02')
     expect(area?.majors).toEqual([
       { id: MAJOR_A.id, majorSeq: 1, name: '주문관리' },
       { id: MAJOR_B.id, majorSeq: 2, name: '수출관리' },
     ])
     expect(area?.issues[0].majorId).toBe(MAJOR_A.id)
-    expect(snapshot.areas.find(candidate => candidate.megaCode === '00')?.majors)
+    expect(snapshot.areas.find(candidate => candidate.areaCode === '00')?.majors)
       .toEqual([{ id: MAJOR_OTHER_MEGA.id, majorSeq: 1, name: '품목기준정보' }])
   })
 
   it('이슈가 기준정보에 없는 Major를 참조하면 throw한다', () => {
     expect(() =>
-      buildIssueAnalysisInputSnapshot('project-1', [salesIssue('sales-1')], []))
+      buildIssueAnalysisInputSnapshot('project-1', [salesIssue('sales-1')], [], TEST_AREAS, TEST_SEVERITY_CODES))
       .toThrow('기준정보에 없습니다')
   })
 
   it('majors 생략(구 시그니처)은 빈 기준정보로 동작한다', () => {
-    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('legacy-1')])
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [issue('legacy-1')], [], TEST_AREAS, TEST_SEVERITY_CODES)
     expect(snapshot.areas.every(area => area.majors.length === 0)).toBe(true)
     expect(snapshot.areas[0].issues[0].majorId).toBeNull()
   })
@@ -273,7 +275,7 @@ describe('보고서 processDefinitions', () => {
     const snapshot = buildIssueAnalysisInputSnapshot(
       'project-1',
       [salesIssue('sales-1')],
-      [MAJOR_A, MAJOR_B],
+      [MAJOR_A, MAJOR_B], TEST_AREAS, TEST_SEVERITY_CODES,
     )
     const definitions = {
       megaDefinition: '고객 주문 이행 전반을 관리하는 프로세스임',
@@ -290,7 +292,7 @@ describe('보고서 processDefinitions', () => {
       }],
     }, '2026-08-02T00:00:00Z', {}, { '02': definitions })
 
-    const area = report.areas.find(candidate => candidate.megaCode === '02')
+    const area = report.areas.find(candidate => candidate.areaCode === '02')
     expect(area?.processDefinitions).toEqual(definitions)
     expect(area?.processDefinitions).not.toBe(definitions)
     expect(area?.majors).toEqual([
@@ -298,7 +300,7 @@ describe('보고서 processDefinitions', () => {
       { id: MAJOR_B.id, majorSeq: 2, name: '수출관리' },
     ])
     expect(Object.prototype.hasOwnProperty.call(
-      report.areas.find(candidate => candidate.megaCode === '00'),
+      report.areas.find(candidate => candidate.areaCode === '00'),
       'processDefinitions',
     )).toBe(false)
     expect(JSON.parse(JSON.stringify(report))).toEqual(report)

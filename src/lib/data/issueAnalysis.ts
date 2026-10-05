@@ -1,8 +1,8 @@
+import { loadIssueEntryContext } from '@/lib/issues/context'
 import { createServerClient } from '@/lib/supabase/server'
+import { UUID_RE } from '@/lib/domain/validate'
 import {
-  isIssueMegaCode,
   isIssueSourceType,
-  type IssueMegaCode,
 } from '@/lib/domain/issueAnalysis'
 import type { IssueSeverity, IssueStatus } from '@/lib/domain/issues'
 import type {
@@ -32,7 +32,7 @@ function assertQuery(
 
 export interface IssueAnalysisLoadResult {
   issues: IssueAnalysisIssueInput[]
-  /** 프로젝트 전체 Major 기준정보 — Mega 분석 범위와 무관하게 전량이다. */
+  /** 프로젝트 전체 Major 기준정보 — 영역 분석 범위와 무관하게 전량이다. */
   majors: IssueAnalysisMajorProcess[]
 }
 
@@ -47,7 +47,7 @@ export interface IssueAnalysisLoadResult {
  */
 export async function loadIssueAnalysisIssues(
   projectId: string,
-  megaCode?: IssueMegaCode,
+  areaId?: string,
 ): Promise<IssueAnalysisLoadResult> {
   const sb = await createServerClient()
   const issuesQuery = sb.from('issues')
@@ -67,9 +67,9 @@ export async function loadIssueAnalysisIssues(
       'created_by_name',
       'created_at',
       'updated_at',
-      'mega_code',
-      'mega_seq',
-      'pi_issue_code',
+      'area_id',
+      'code_area_id',
+      'code',
       'sub_process',
       'owner_department',
       'related_systems',
@@ -78,9 +78,9 @@ export async function loadIssueAnalysisIssues(
       'major_id',
     ].join(', '))
     .eq('project_id', projectId)
-  const scopedIssuesQuery = megaCode === undefined
+  const scopedIssuesQuery = areaId === undefined
     ? issuesQuery
-    : issuesQuery.eq('mega_code', megaCode)
+    : issuesQuery.eq('area_id', areaId)
 
   const [issuesResult, assigneesResult, linksResult, majorsResult] = await Promise.all([
     scopedIssuesQuery.order('issue_no', { ascending: true }),
@@ -111,7 +111,7 @@ export async function loadIssueAnalysisIssues(
       .eq('link_type', 'minute_block')
       .order('created_at', { ascending: true }),
     sb.from('issue_major_processes')
-      .select('id, mega_code, major_seq, name')
+      .select('id, area_id, major_seq, name')
       .eq('project_id', projectId),
   ])
 
@@ -123,10 +123,10 @@ export async function loadIssueAnalysisIssues(
   const majors: IssueAnalysisMajorProcess[] = (
     majorsResult.data as unknown as Record<string, unknown>[]
   ).map(raw => {
-    const rawMegaCode = raw.mega_code
-    if (!isIssueMegaCode(rawMegaCode)) {
+    const rawAreaId = raw.area_id
+    if (typeof rawAreaId !== 'string' || !UUID_RE.test(rawAreaId)) {
       throw new Error(
-        `[issue-analysis] Major 기준정보의 Mega 코드가 올바르지 않습니다: ${String(rawMegaCode)}`,
+        `[issue-analysis] Major 기준정보의 영역 id가 올바르지 않습니다: ${String(rawAreaId)}`,
       )
     }
     const majorSeq = Number(raw.major_seq)
@@ -134,9 +134,9 @@ export async function loadIssueAnalysisIssues(
     if (!Number.isSafeInteger(majorSeq) || majorSeq < 1 || !name) {
       throw new Error('[issue-analysis] Major 기준정보 행이 올바르지 않습니다.')
     }
-    return { id: String(raw.id), megaCode: rawMegaCode, majorSeq, name }
+    return { id: String(raw.id), areaId: rawAreaId, majorSeq, name }
   }).sort((a, b) =>
-    a.megaCode.localeCompare(b.megaCode) || a.majorSeq - b.majorSeq)
+    a.areaId.localeCompare(b.areaId) || a.majorSeq - b.majorSeq)
 
   const majorById = new Map<string, { majorSeq: number; name: string }>()
   for (const major of majors) {
@@ -179,7 +179,7 @@ export async function loadIssueAnalysisIssues(
 
   const issues = (issuesResult.data as unknown as Record<string, unknown>[]).map(raw => {
     const id = String(raw.id)
-    const rawMegaCode = raw.mega_code
+    const rawAreaId = raw.area_id
     const rawSourceType = raw.source_type
     const majorId = typeof raw.major_id === 'string' ? raw.major_id : null
     const major = majorId ? majorById.get(majorId) ?? null : null
@@ -204,11 +204,9 @@ export async function loadIssueAnalysisIssues(
       createdByName: typeof raw.created_by_name === 'string' ? raw.created_by_name : null,
       createdAt: String(raw.created_at),
       updatedAt: String(raw.updated_at),
-      megaCode: isIssueMegaCode(rawMegaCode) ? rawMegaCode : null,
-      megaSeq: Number.isSafeInteger(Number(raw.mega_seq)) && Number(raw.mega_seq) > 0
-        ? Number(raw.mega_seq)
-        : null,
-      piIssueCode: typeof raw.pi_issue_code === 'string' ? raw.pi_issue_code : null,
+      areaId: typeof rawAreaId === 'string' ? rawAreaId : null,
+      codeAreaId: typeof raw.code_area_id === 'string' ? raw.code_area_id : null,
+      code: String(raw.code),
       subProcess: String(raw.sub_process ?? ''),
       ownerDepartment: String(raw.owner_department ?? ''),
       relatedSystems: Array.isArray(raw.related_systems)
@@ -222,6 +220,7 @@ export async function loadIssueAnalysisIssues(
 }
 
 export interface SavedIssueAnalysisRun {
+  areas: import('@/lib/domain/issueAreas').IssueAreaRef[]
   runId: string
   projectId: string
   projectName: string
@@ -272,7 +271,9 @@ export async function loadSavedIssueAnalysisRun(
     || !project.data.name.trim()
   ) return null
 
-  const report = parseStoredIssueAnalysisReport(run.data.analysis_json, projectId)
+  const context = await loadIssueEntryContext(projectId)
+  if (!context.ok) throw new Error(context.error)
+  const report = parseStoredIssueAnalysisReport(run.data.analysis_json, projectId, context.value.areas)
   if (!report) {
     throw new Error('[issue-analysis] 저장된 실행 결과 스키마 또는 데이터 정합성이 유효하지 않습니다.')
   }
@@ -281,5 +282,6 @@ export async function loadSavedIssueAnalysisRun(
     projectId,
     projectName: project.data.name.trim(),
     report,
+    areas: context.value.areas,
   }
 }

@@ -16,7 +16,7 @@ describe('settings-consts 상수(스크립트가 설정 RPC 에 넘기는 값)',
   it('설정 스키마 세대 = SETTINGS_SCHEMA_VERSION', () => {
     expect(SCRIPT_SCHEMA_VERSION).toBe(SETTINGS_SCHEMA_VERSION)
   })
-  it('프로젝트 토글 9 = PROJECT_TOGGLABLE(순서까지) — 성능 시드의 modules.enabled', () => {
+  it('프로젝트 토글 10 = PROJECT_TOGGLABLE(순서까지) — 성능 시드의 modules.enabled', () => {
     expect([...PROJECT_TOGGLE_IDS]).toEqual([...PROJECT_TOGGLABLE])
   })
   it('모듈 플래그 8 = MODULE_FLAG_NAMES(순서까지) — env:local 이 쓰는 목록', () => {

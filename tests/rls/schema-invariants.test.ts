@@ -62,7 +62,6 @@ describe('스키마 불변식', () => {
   // 판정(isScopedQual) 은 scripts/lib/rls-scope.mjs 순수 모듈 — auth.uid() 단독 존재(`is not null`)는 스코프로
   // 치지 않는다(리뷰 라운드 1). tests/scripts/rls-scope.test.ts 가 그 경계를 DB 없이 고정한다.
   const OPEN_READ_EXCEPTIONS: Record<string, string> = {
-    'public.issue_mega_areas.read_all_issue_mega_areas': 'D2 — 전역 참조 데이터(테넌트 행 없음). 만료: SP5 에서 표가 프로젝트 영역으로 대체',
     'realtime.messages.receive_own_notification_channel':
       "SP1 — topic = 'user-' || auth.uid() || '-notifications'(본인 채널만). auth.uid() 가 문자열 조합 안에 있어 판정기의 '= auth.uid()' 비교로 읽히지 않는다",
   }
@@ -88,6 +87,8 @@ describe('스키마 불변식', () => {
   // 수 있다(Task 2 리뷰 이월). 정책은 public·storage·realtime 셋을 본다(Task 4 리뷰 이월). 허용 목록은 표를 읽지 않는
   // immutable 순수 함수뿐이다 — 순환이 생길 쿼리가 없다. 아래 테스트가 그 전제(immutable·INVOKER)도 같이 고정한다.
   const POLICY_CALLED_INVOKER_ALLOWLIST: Record<string, string> = {
+    form_template_path_project: 'SP6 — immutable form path parser, no table access',
+    uuid_or_null: '0007 — immutable UUID parser, now directly used by the form bucket policy; no table access',
     storage_ws: '0007 — 객체 이름 세그먼트 파싱, 표 접근 없음',
     storage_project: '0007 — 객체 이름 세그먼트 파싱, 표 접근 없음',
     storage_entity_id: '0007 — 객체 이름 세그먼트 파싱, 표 접근 없음',
@@ -123,7 +124,7 @@ describe('스키마 불변식', () => {
     'public.item_owned_by_my_team(uuid, uuid)',
     'public.uuid_or_null(text)', 'public.storage_ws(text)', 'public.storage_project(text)', 'public.storage_entity_id(text)',
     'public.minute_body_path_ok(text, uuid, uuid, uuid)', 'public.presence_topic_project(text)', 'public.can_manage_minute(uuid)',
-    'public.has_project_role_in_ws(uuid)',
+    'public.has_project_role_in_ws(uuid)', 'public.minute_attachment_path_active(text)',
     // 정책 헬퍼는 아니지만 같은 관례(authenticated·service_role 만, 0011 ⑦)다 — anon·PUBLIC·그 밖의 롤에 열리면 여기서 빨개진다
     'public.attachment_object_exists(text, uuid)',
   ]
@@ -160,6 +161,7 @@ describe('스키마 불변식', () => {
     'accessible_project_ids()': HELPER, 'my_workspace_ids()': HELPER, 'is_superuser()': HELPER,
     'is_ws_member(uuid)': HELPER, 'is_ws_admin(uuid)': HELPER, 'can_read_project(uuid)': HELPER,
     'is_project_admin(uuid)': HELPER, 'is_project_member(uuid)': HELPER, 'is_project_admin_anywhere_in_ws(uuid)': HELPER,
+    'minute_attachment_path_active(text)': '첨부 Storage 읽기 헬퍼 — 원래 호출자 Storage scope 안에서만 톰스톤 여부를 boolean으로 반환한다(B3)',
     'can_attach(uuid)': HELPER, 'can_edit_issue(uuid)': HELPER, 'can_manage_minute(uuid)': HELPER,
     'item_owned_by_my_team(uuid, uuid)': HELPER,
     'has_project_role_in_ws(uuid)': HELPER,

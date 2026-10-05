@@ -28,6 +28,14 @@ type Arrange = {
 }
 /** postgres 로 리프 상태를 맞춘다 — 매번 같은 출발점(단계 없음, 실적 0, 주문 하나 또는 없음) */
 async function arrange(c: PoolClient, o: Arrange) {
+  // SP5b(S2 — 의도적 수정 표): 흐름 열 가드(guard_workflow_columns)가 JWT 세션의 stage·tags·dev_workflow 쓰기를 막는다 — 준비는 claims 를 비운 채로
+  // 하고 원래 claims 로 되돌린다(단언 무수정)
+  const { rows: [{ claims }] } = await c.query<{ claims: string | null }>(`select current_setting('request.jwt.claims', true) as claims`)
+  await c.query(`select set_config('request.jwt.claims', '', true)`)
+  await arrangeRows(c, o)
+  await c.query(`select set_config('request.jwt.claims', $1, true)`, [claims ?? ''])
+}
+async function arrangeRows(c: PoolClient, o: Arrange) {
   const leaf = o.leaf ?? LEAF
   await c.query('update public.wbs_items set dev_workflow = $2, tags = $3, stage = $4, actual_pct = $5 where id = $1',
     [leaf, o.devWorkflow ?? true, o.delegated ? ['agent'] : [], o.stage ?? null, o.pct ?? 0])
@@ -57,7 +65,7 @@ const leafState = async (c: PoolClient, id: string = LEAF) =>
 describe('WF-GAP-2 TS↔SQL 현행 패리티', () => {
   it('크레딧 기본값 — RPC 의 c_default = DEFAULT_STAGE_CREDITS', async () => {
     const { rows: [r] } = await pool.query<{ src: string }>(
-      `select prosrc as src from pg_proc where oid = 'public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid, uuid)'::regprocedure`)
+      `select prosrc as src from pg_proc where oid = 'public.apply_workflow_event(text, uuid, uuid, uuid, text, text, uuid, uuid, text)'::regprocedure`)
     const m = r.src.match(/c_default constant jsonb := '([^']+)'::jsonb/)
     expect(m, 'c_default 선언을 찾지 못했다').not.toBeNull()
     expect(JSON.parse(m![1])).toEqual(DEFAULT_STAGE_CREDITS)
@@ -317,7 +325,8 @@ describe('WF-GAP-1 guard_workflow_actual(잠금 절)', () => {
         where t.tgrelid = 'public.wbs_items'::regclass and t.tgname = 'guard_workflow_actual' and not t.tgisinternal) as trg
       from pg_proc p where p.oid = 'public.guard_workflow_actual()'::regprocedure`)
     expect(r).toMatchObject({ definer: true, config: ['search_path=""'], auth: false, anon: false, public_grants: 0 })
-    expect(r.trg).toMatch(/BEFORE UPDATE OF actual_pct ON public\.wbs_items FOR EACH ROW EXECUTE FUNCTION (public\.)?guard_workflow_actual\(\)/)
+    // SP5b(D14 — 의도적 수정 표): INSERT 갈래가 더해졌다
+    expect(r.trg).toMatch(/BEFORE INSERT OR UPDATE OF actual_pct ON public\.wbs_items FOR EACH ROW EXECUTE FUNCTION (public\.)?guard_workflow_actual\(\)/)
   })
 
   it('read committed 가 아닌 트랜잭션은 주문을 읽기 전에 WORKFLOW_ACTUAL_ISOLATION(25001) — repeatable read·serializable·read uncommitted. read committed 는 통과', async () => {

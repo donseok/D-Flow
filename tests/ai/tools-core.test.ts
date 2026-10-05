@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 // 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
 import { calWithOff, monProjectValues } from '../helpers/calendarFixture'
 import { fixedToolTeams } from '../helpers/tool-team-source'
+import { fixedToolVocab } from '../helpers/tool-vocab-source'
 const toolTeams = fixedToolTeams()
 import { createGetAttendanceTool } from '@/lib/ai/tools/attendance'
 import { createListMeetingsTool } from '@/lib/ai/tools/meetings'
@@ -136,7 +137,7 @@ describe('core read tools', () => {
       createListMeetingsTool(rogueMeetings).execute(
         { projectId: 'p1', from: '2026-07-20', to: '2026-07-20' }, context,
       ),
-      createGetAttendanceTool(rogueAttendance, toolTeams).execute(
+      createGetAttendanceTool(rogueAttendance, toolTeams, fixedToolVocab()).execute(
         { projectId: 'p1', from: '2026-07-20', to: '2026-07-20' }, context,
       ),
     ])
@@ -267,7 +268,7 @@ describe('core read tools', () => {
           { id: 'a2', projectId: 'p1', memberId: 'member-2', memberName: '박PMO', teamCodes: ['PMO'], date: '2026-07-20', type: 'trip' },
       ])),
     }
-    const result = await createGetAttendanceTool(repository, toolTeams).execute(
+    const result = await createGetAttendanceTool(repository, toolTeams, fixedToolVocab()).execute(
       { projectId: 'p1', from: '2026-07-20', to: '2026-07-26', team: 'ERP' }, context,
     )
 

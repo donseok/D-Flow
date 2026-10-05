@@ -70,16 +70,16 @@ const RUN_WBS_IMPORT_CALL = /\brunWbsImport\s*(?:\?\.)?\s*\(/g
 
 /** 파일 → 허용 표·표 참조 수(리터럴·조각·임베드·SQL 참조의 합)와 사유(G1). 접근은 읽기뿐이다(G2) */
 const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
-  'src/lib/settings/projectConfig.ts': { tables: ['project_settings'], refs: 2, why: '해석기 — 유일한 읽기 경로(한 프로젝트의 load + 여러 프로젝트의 시간대 getProjectTimezones — SP5 과제 32, select 만)' },
+  'src/lib/settings/projectConfig.ts': { tables: ['project_settings'], refs: 3, why: '해석기 — 유일한 읽기 경로(한 프로젝트의 load + 여러 프로젝트의 시간대 getProjectTimezones — SP5 과제 32 + 여러 프로젝트의 어휘 getProjectVocabs — SP5 B4, select 만)' },
   'src/lib/settings/workspaceConfig.ts': { tables: ['workspace_settings'], refs: 1, why: '해석기 — 유일한 읽기 경로' },
   'src/lib/modules/effectiveMany.ts': { tables: ['project_settings'], refs: 1, why: '여러 프로젝트의 모듈 판정(SP3b D39) — values 를 in() 끝까지 select 로 읽어 해석기의 resolveKeys 로 판정(쓰기 없음, effectiveModules 와 동치 테스트)' },
   'src/lib/settings/write.ts': { tables: ['project_settings'], refs: 2, why: 'revision 판독 뒤 RPC(머리 주석의 백틱 이름도 원문 검사라 센다)' },
   'src/lib/settings/history.ts': { tables: ['project_settings_history', 'workspace_settings_history'], refs: 5, why: '이력 읽기(D24·SP4 D48 의 latestKeyChange) — tableOf 가 이름을 고르고 from(table).select 만 한다' },
   'scripts/settings-verify.check.ts': { tables: ['project_settings', 'workspace_settings'], refs: 2, why: '전 행을 해석기로 검사 — pg SQL 읽기' },
   'scripts/dev-bootstrap.mjs': { tables: ['workspace_settings'], refs: 2, why: 'revision 판독 뒤 apply_workspace_settings(나머지 1은 롤백 이름표 문자열)' },
-  'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings', 'authz_events'], refs: 16, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독, SP3a D 의 권한 이력 읽기(select 한 곳), SP3b E7 의 모듈 토글 expectedRevision 판독(읽기 한 곳 — 쓰기는 updateProjectSettings 액션, 브랜치 전용 e2e-sp3b 에서 과제 39 가 옮김). SP5 A 과제 31 — 저장된 tz 판독 둘(tzOfProject·tzOfWorkspace)·달력 단계의 revision·저장값 다시 읽기 둘(setProject·storedOf)·calendar-tz 의 워크스페이스 tz 전·후 판독과 revision 판독 셋(모두 select — 쓰기는 설정 액션)' },
+  'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings', 'authz_events'], refs: 22, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독, SP3a D 의 권한 이력 읽기(select 한 곳), SP3b E7 의 모듈 토글 expectedRevision 판독(읽기 한 곳 — 쓰기는 updateProjectSettings 액션, 브랜치 전용 e2e-sp3b 에서 과제 39 가 옮김). SP5 A 과제 31 — 저장된 tz 판독 둘(tzOfProject·tzOfWorkspace)·달력 단계의 revision·저장값 다시 읽기 둘(setProject·storedOf)·calendar-tz 의 워크스페이스 tz 전·후 판독과 revision 판독 셋(모두 select — 쓰기는 설정 액션). SP5 B1 issue-code-flow 의 설정 snapshot·새 revision 재조회·이전 값 복원 판독 셋(모두 select — 쓰기는 updateProjectSettings 액션). SP5b I issue-status-flow 의 새 프로젝트 revision 판독 하나, SP5b W1 workflow-approval 의 revision·modules.enabled 판독 둘(모두 select — 쓰기는 설정 액션)' },
   'scripts/ui-capture.mjs': { tables: ['workspace_settings'], refs: 1, why: '캡처 시드 — 워크스페이스 설정 시드 한 길(B 허용 모듈·A 초대 허용 도메인)의 revision 판독 뒤 apply_workspace_settings(로컬 전용, SP3b UI-0)' },
-  'scripts/e2e-synthetic.mjs': { tables: ['project_settings', 'workspace_settings', 'project_settings_history', 'workspace_settings_history'], refs: 27, why: '합성 게이트(마감) — 설정은 화면과 같은 서버 액션으로 넣고 여기서는 결과·이력·격리를 읽는다. 워크스페이스 시드(허용 모듈)만 apply_workspace_settings. SP4 A1 S2 — wbs.excel_profile 이력 건수(project_settings_history 읽기 한 곳, readHistory 경유 select)·S10 경계 행렬의 빈 프로젝트 모듈. SP5 A 과제 30 — S1-calendar 의 revision 판독·다시 읽기 넷(두 설정 표 각 둘)·projectToday 의 저장된 tz 읽기 하나(모두 select)' },
+  'scripts/e2e-synthetic.mjs': { tables: ['project_settings', 'workspace_settings', 'project_settings_history', 'workspace_settings_history'], refs: 36, why: '합성 게이트(마감) — 설정은 화면과 같은 서버 액션으로 넣고 여기서는 결과·이력·격리를 읽는다. 워크스페이스 시드(허용 모듈)만 apply_workspace_settings. SP4 A1 S2 — wbs.excel_profile 이력 건수(project_settings_history 읽기 한 곳, readHistory 경유 select)·S10 경계 행렬의 빈 프로젝트 모듈. SP5 A 과제 30 — S1-calendar 의 revision 판독·다시 읽기 넷(두 설정 표 각 둘)·projectToday 의 저장된 tz 읽기 하나(모두 select). SP5 B1 S1-issues·S6-issue-codes 설정 확인 select 둘(쓰기 없음). SP5 B4 S1-vocab 의 revision·값 판독 select 하나(쓰기는 updateProjectSettings 액션). SP5b Z — S1-workflow·S9-workflow 의 revision 판독(updateSettings)·R 다시 읽기·C 의 workflow 키 확인 select 셋(쓰기는 updateProjectSettings 액션). SP5c Z — S3-fields 의 백필용 revision 판독 및 R·C 최종 설정 격리 확인 select 셋(모두 select — 쓰기는 설정 액션 및 backfillCustomField RPC)' },
   'src/lib/authz/events.ts': { tables: ['authz_events'], refs: 1, why: '권한 이력 읽기(Phase D) — select 만, from 리터럴 하나(쓰기는 권한 RPC 안의 트리거)' },
 }
 
@@ -283,6 +283,10 @@ const OLD = /(?<!(?:['"`]|settings\.)(?:core|wbs|workflow|invites|calendar)\.)\b
 const STRUCTURE = 'src/app/api/v1/wbs/structure/route.ts'
 /** 외부 계약의 같은 이름 — 줄 모양만 지우고 남은 줄을 다시 본다(단어째 빼면 그 파일의 옛 열 접근까지 놓친다) */
 const CONTRACT_SHAPES: { file: string | null; shape: RegExp; why: string }[] = [
+  { file: 'src/app/api/export/route.ts', shape: /^\s+return path === 'project\.level_labels' \|\| path\.startsWith\('project\.level_labels\.'\)$/, why: 'SP6 catalog collection token check, not a storage column' },
+  { file: 'src/lib/report/catalog/types.ts', shape: /^\s+level_labels: string\[\]\s*$/, why: 'SP6 project.level_labels catalog type, not a storage column' },
+  { file: 'src/lib/report/catalog/index.ts', shape: /^\s+'project\.level_labels': \{ path: 'project\.level_labels', type: 'list<text>', description: '[^']+' \},$/, why: 'SP6 project.level_labels catalog metadata, not a storage column' },
+  { file: 'src/lib/report/catalog/wbsExportBuild.ts', shape: /^\s+level_labels: \[\.\.\.labels\],$/, why: 'SP6 project.level_labels payload copied from core.level_labels' },
   { file: STRUCTURE, shape: /searchParams\.get\('max_depth'\)/, why: 'structure 질의 인자 max_depth(스킬 계약)' },
   { file: STRUCTURE, shape: /`max_depth 는 0~/, why: 'structure 질의 인자의 오류 문구' },
   { file: null, shape: /\bmax_depth:\s/, why: '응답 필드 키 max_depth:(스킬 계약)' },
@@ -356,6 +360,15 @@ describe('settings-writes', () => {
     expect(offenders).toEqual([])
     expect(exempt, '예외가 더 넓어지거나 죽으면 실패').toEqual(Object.fromEntries(CONTRACT_SHAPES.map((c) => [c.why, 1])))
   }, 20_000)
+})
+
+describe('SP6 catalog field contract remains narrowly exempt',()=>{
+  it('allows the catalog clone but still rejects legacy column reads and other files',()=>{
+    const file='src/lib/report/catalog/wbsExportBuild.ts'
+    expect(oldNames(file,'      level_labels: [...labels],').offenders).toEqual([])
+    expect(oldNames(file,'      level_labels: row.level_labels,').offenders).toHaveLength(1)
+    expect(oldNames('src/app/actions/project.ts','      level_labels: [...labels],').offenders).toHaveLength(1)
+  })
 })
 
 describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rereview-gate 1·2차)을 게이트 본체에 먹인다', () => {
@@ -573,8 +586,8 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     const PC = 'src/lib/settings/projectConfig.ts'
     const evil = 'src/app/actions/evil.ts'
     const quiet = (v: ReturnType<typeof verdicts>, file: string) => [...v.G1, ...v.G2, ...v.G1refs.filter((l) => l.startsWith(file))]
-    // 못 잡음: 허용 파일이 가진 표 이름을 상수로 export(참조 수 그대로 — 해석기의 참조 둘: load·getProjectTimezones) → 다른 파일이 from(X) 쓰기
-    const exported = judge([[PC, "export const PS = 'project_settings'\nconst s = await sb.from(PS).select('values')\nconst t = await sb.from('project_settings').select('project_id, values')"],
+    // 못 잡음: 허용 파일이 가진 표 이름을 상수로 export(참조 수 그대로 — 해석기의 참조 셋: load·getProjectTimezones·getProjectVocabs) → 다른 파일이 from(X) 쓰기
+    const exported = judge([[PC, "export const PS = 'project_settings'\nconst s = await sb.from(PS).select('values')\nconst t = await sb.from('project_settings').select('project_id, values')\nconst v = await sb.from('project_settings').select('project_id, values')"],
       [evil, "import { PS } from '@/lib/settings/projectConfig'\nawait admin.from(PS).update({ values: {} })"]])
     expect(quiet(exported, PC)).toEqual([])
     // 못 잡음: 허용 파일 안 기존 참조를 대괄호 접근 쓰기로 바꾸기(참조 수 그대로)

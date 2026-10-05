@@ -15,11 +15,41 @@ export const REACHED_STAGES: ReadonlySet<string> = new Set(['im', 'xx'])
  * 선행 충족(§3.7) = stage ∈ {im,xx} ∨ 승인된 주문 ∨ 실적 ≥ 100. 세 번째 축은 위임하지 않은 사람 Task 가
  * 선행일 때 드롭다운 없이 풀리게 한다. claim 게이트·대기 사유·WBS 착수 판정·unblocked 알림이 전부 이 함수다.
  * 실적은 원시값 비교(statusOf 의 done 판정과 같다 — 99.6 은 완료가 아니다).
+ * SP5b: 기준(gate)을 받는 predecessorReachedFor 의 'reached' 래퍼로 남는다(호환 규칙 S1) — src 의 새 사용은 0 이어야 한다.
  */
 export function predecessorReached(p: { stage: string | null; orderApproved?: boolean; actualPct?: number | null }): boolean {
-  if (p.stage !== null && REACHED_STAGES.has(p.stage)) return true
+  return predecessorReachedFor(p, 'reached')
+}
+
+/** 선행 충족 기준(SP5b D21, 개정 §3.3.3) — 설정 `workflow.predecessor_gate`. reached = 현행, final = 최종 승인 전 후속 금지 */
+export const PREDECESSOR_GATES = ['reached', 'final'] as const
+export type PredecessorGate = (typeof PREDECESSOR_GATES)[number]
+
+/** RPC 첫 도달(reached_first)과 같은 단계 축 — reached: im|xx, final: xx (SQL wbs_stage_reaches_gate) */
+export function stageReachesGate(stage: string | null, gate: PredecessorGate): boolean {
+  if (stage === null) return false
+  return gate === 'final' ? stage === 'xx' : REACHED_STAGES.has(stage)
+}
+
+/** claim 거부 문구(에이전트 error 문자열 — 동결 대상 아님, 응답 키·code 는 불변). 기준마다 충족 조건을 말한다 */
+export function dependencyNotMetMessage(gate: PredecessorGate): string {
+  return gate === 'final'
+    ? '선행 작업이 최종 승인되지 않았습니다(완료도, 승인된 주문도, 개발 워크플로 밖의 실적 100% 도 아님).'
+    : '선행 작업이 끝나지 않았습니다(검수 대기 이상도, 승인도, 실적 100% 도 아님).'
+}
+
+/**
+ * gate 를 받는 선행 충족(SQL wbs_predecessor_reached 와 패리티). gate 는 기본값 없는 필수 인자 — 소비처 전수가 tsc 로 드러난다(S1).
+ * final 은 dev_workflow 항목의 실적 100 축을 뺀다(승인을 건너뛴 100 이 게이트를 여는 우회 차단). devWorkflow 미지정 = false(SQL coalesce 와 같다).
+ */
+export function predecessorReachedFor(
+  p: { stage: string | null; orderApproved?: boolean; actualPct?: number | null; devWorkflow?: boolean | null },
+  gate: PredecessorGate,
+): boolean {
+  if (stageReachesGate(p.stage, gate)) return true
   if (p.orderApproved === true) return true
-  return typeof p.actualPct === 'number' && Number.isFinite(p.actualPct) && p.actualPct >= 100
+  const hundred = typeof p.actualPct === 'number' && Number.isFinite(p.actualPct) && p.actualPct >= 100
+  return gate === 'final' ? hundred && p.devWorkflow !== true : hundred
 }
 
 /** 에이전트가 쥐고 있는 주문 status — ready 는 dev_workflow 리프마다 상주하므로 넣지 않는다(스펙 §3.5). */
@@ -28,7 +58,7 @@ export const AGENT_HELD_ORDER_STATUSES = ['claimed', 'reported'] as const
 /**
  * 사람의 단계 지정·실적 100 입력 잠금(§3.5·§3.6) = 위임됨 ∨ 에이전트가 주문을 쥠. 위임된 ready 주문은
  * /dflow-poll 이 자동 claim 하므로 잠그지 않으면 사람이 찍은 완료가 claim 사건으로 되돌아간다.
- * RPC apply_workflow_event 의 set_stage 가 같은 조건을 SQL 로 복제한다(tests/migrations/0096 이 대조).
+ * RPC apply_workflow_event 의 set_stage 가 같은 조건을 SQL 로 복제한다(tests/rls/workflow-parity.test.ts 가 대조).
  */
 export function stageLockedForHuman(p: { delegated: boolean; orderStatus: string | null }): boolean {
   return p.delegated || (p.orderStatus !== null && (AGENT_HELD_ORDER_STATUSES as readonly string[]).includes(p.orderStatus))

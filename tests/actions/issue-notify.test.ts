@@ -1,3 +1,5 @@
+import { actionAreaId } from '../fixtures/issue-areas'
+vi.mock('@/lib/issues/context', async () => ({ loadIssueEntryContext: async () => ({ ok: true, value: (await import('../fixtures/issue-areas')).ACTION_ENTRY_CONTEXT }) }))
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { computeAddedAssignees } from '@/lib/domain/inbox'
 
@@ -64,21 +66,7 @@ import { makeMemberActor } from '../fixtures/actor'
 const USER = { id: 'me', email: 'me@x.com', user_metadata: {} } as const
 const ACTOR = makeMemberActor('p1', [], { userId: 'me' })
 
-const INPUT = {
-  title: '테스트 이슈',
-  body: '',
-  severity: 'medium' as const,
-  assigneeMemberIds: ['m1', 'm2'],
-  startDate: null,
-  dueDate: null,
-  megaCode: '00' as const,
-  majorName: '기준정보관리',
-  subProcess: '기준정보 등록',
-  ownerDepartment: '경영관리팀',
-  relatedSystems: ['ERP'],
-  sourceType: 'interview' as const,
-  sourceDetail: '현업 인터뷰',
-}
+const INPUT = { title: '테스트 이슈', body: '', severity: 'medium' as const, assigneeMemberIds: ['m1', 'm2'], startDate: null, dueDate: null, areaId: actionAreaId('00'), analysis: { majorName: '기준정보관리', subProcess: '기준정보 등록', ownerDepartment: '경영관리팀', relatedSystems: ['ERP'], sourceType: 'interview' as const, sourceDetail: '현업 인터뷰' } }
 
 beforeEach(() => {
   state.client = undefined
@@ -101,7 +89,7 @@ describe('updateIssue — replaceAssignees diff 발행 배선', () => {
     const update = vi.fn(() => ({
       eq: vi.fn(() => ({
         select: vi.fn(() => ({
-          single: vi.fn(async () => ({ data: { id: 'i1', pi_issue_code: null }, error: null })),
+          single: vi.fn(async () => ({ data: { id: 'i1', code: null }, error: null })),
         })),
       })),
     }))
@@ -112,7 +100,7 @@ describe('updateIssue — replaceAssignees diff 발행 배선', () => {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
                 maybeSingle: vi.fn(async () => ({
-                  data: { project_id: 'p1', created_by: 'me', mega_code: '00', source_type: 'interview' },
+                  data: { project_id: 'p1', created_by: 'me', area_id: actionAreaId('00'), source_type: 'interview' },
                 })),
               })),
             })),

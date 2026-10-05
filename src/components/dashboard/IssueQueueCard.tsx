@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { AlertTriangle, CalendarClock } from 'lucide-react'
-import { ISSUE_SEVERITY_META } from '@/lib/domain/issues'
+import { vocabView, type SeverityDef } from '@/lib/settings/vocab'
 import { issueQueue, type DashboardIssue, type IssueQueueKind } from '@/lib/domain/issueDashboard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
@@ -16,12 +16,14 @@ const ROW_META: Record<IssueQueueKind, { border: string; icon: string }> = {
  * 지연·임박 이슈 — 실행 큐(RiskWorklist)의 이슈판. 기한 경과(경과 많은 순) → 7일 내 마감(가까운 순),
  * 행은 이슈관리 ?focus= 딥링크. 상한(QUEUE_LIMIT)을 넘는 건수는 +N 으로 알린다(조용한 절단 금지).
  */
-export function IssueQueueCard({ issues, projectId, today, locale }: {
+export function IssueQueueCard({ issues, projectId, today, locale, severities }: {
   issues: DashboardIssue[]
   projectId: string
   /** 실제 오늘(그 프로젝트 tz 의 todayIn). */
   today: string
   locale: Locale
+  /** 이 프로젝트의 이슈 심각도(설정 issues.severities) */
+  severities: readonly SeverityDef[]
 }) {
   const tr = (k: DictKey) => t(locale, k)
   const q = issueQueue(issues, today)
@@ -35,10 +37,10 @@ export function IssueQueueCard({ issues, projectId, today, locale }: {
         <div className="space-y-2">
           {q.rows.map(({ issue, kind, days }) => {
             const meta = ROW_META[kind]
-            const sev = ISSUE_SEVERITY_META[issue.severity]
-            const code = issue.piIssueCode ?? `#${issue.issueNo}`
+            const sev = vocabView('issues.severities', severities, issue.severity, tr)
+            const code = issue.code
             const detail = kind === 'overdue' ? `${days}${tr('dash.overdueSuffix')}` : ddayText(days)
-            const sevLabel = t(locale, sev.labelKey)
+            const sevLabel = sev.label
             const due = issue.dueDate ? fmtDate(issue.dueDate) : null
             // 코드·마감일은 sm 미만에서 숨긴다 — 360px 에서 고정폭 요소들이 제목을 0 으로 밀어낸다.
             // aria-label 이 둘을 그대로 담아 스크린리더·모바일 모두 정보 손실이 없다.

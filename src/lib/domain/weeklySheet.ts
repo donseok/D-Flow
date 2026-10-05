@@ -1,5 +1,6 @@
 /* ── 주간업무 시트 도메인(순수) — 행 타입(영역 id 로 묶인다)·셀 키·영역 순서·라벨·서버 병합. I/O 없음. 이월은 weeklyCarry.ts. ── */
 import type { ConfigArea, ConfigTeam } from '@/lib/settings/projectConfig'
+import type { CustomValues } from './customFields'
 
 /** 셀 1개 상한 — 서버 액션·클라이언트 클램프·이월 병합이 공유하는 단일 출처. */
 export const WEEKLY_CELL_MAX = 20000
@@ -57,6 +58,7 @@ export interface WeeklySheetRow extends WeeklyCells {
   id: string
   reportId: string
   areaId: string
+  custom?: CustomValues | null
 }
 
 export type NewWeeklyRow = Omit<WeeklySheetRow, 'id' | 'reportId'>

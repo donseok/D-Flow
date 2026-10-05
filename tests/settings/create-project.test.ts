@@ -12,6 +12,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => 
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: vi.fn() }))
 import { createProject, getProjectCopySource, type CreateProjectInput } from '@/app/actions/project'
 import { ERR_DENIED } from '@/lib/authz/errors'
+import { DEFAULT_ATTACHMENT_POLICY } from '@/lib/minutes/attachmentPolicy'
 import { CONFIG_MESSAGES } from '@/lib/settings/errors'
 import { ERR_MODULES_ALLOWED_BROKEN } from '@/lib/settings/validateConfig'
 import { makeActor } from '../fixtures/actor'
@@ -50,8 +51,8 @@ describe('createProject', () => {
     if (!r.ok) return
     const p = db.projects.get(r.projectId)!
     expect(p.values).toEqual({ 'core.level_labels': ['Phase', 'Task'], 'modules.enabled': ['kanban', 'meetings', 'issues'],   // wiki 는 minutes 미허용으로 빠진다
-      'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }] })   // SP5 A — 워크스페이스 값(여기는 기본값)을 복사
-    expect(db.history.filter((x) => x.project_id === r.projectId).map((x) => x.source)).toEqual(Array(5).fill('create'))
+      'minutes.attachments': DEFAULT_ATTACHMENT_POLICY, 'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }] })   // SP5 A — 워크스페이스 값(여기는 기본값)을 복사
+    expect(db.history.filter((x) => x.project_id === r.projectId).map((x) => x.source)).toEqual(Array(6).fill('create'))
     expect(db.rpcCalls[0].args).toMatchObject({ p_workspace_id: WID, p_name: 'Acme 신규', p_copy_from: null, p_actor: 'u-admin', p_command_id: CMD, p_schema_version: 1 })
     expect(h.revalidatePath).toHaveBeenCalledWith('/(app)/w/[slug]', 'layout')
   })
@@ -60,6 +61,30 @@ describe('createProject', () => {
     expect(a.ok && b.ok && a.projectId === b.projectId && b.status === 'duplicate').toBe(true)
     expect(db.projects.size).toBe(3)
   })
+  it('첨부 정책을 생성 때 한 번 복사하며 워크스페이스 변경은 기존 프로젝트에 상속하지 않는다', async () => {
+    const narrow = { ...DEFAULT_ATTACHMENT_POLICY, maxCount: 2, maxTotalBytes: 2 * DEFAULT_ATTACHMENT_POLICY.maxFileBytes }
+    db.workspaces.get(WID)!.values['minutes.attachments'] = narrow
+    const r = await createProject(input())
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(db.projects.get(r.projectId)!.values['minutes.attachments']).toEqual(narrow)
+    db.workspaces.get(WID)!.values['minutes.attachments'] = DEFAULT_ATTACHMENT_POLICY
+    expect(db.projects.get(r.projectId)!.values['minutes.attachments']).toEqual(narrow)
+  })
+  it('프로젝트 복사는 원본의 명시 첨부 정책을 보존하고 손상된 원본/워크스페이스는 생성하지 않는다', async () => {
+    const narrow = { ...DEFAULT_ATTACHMENT_POLICY, allowedExtensions: ['pdf'] }
+    db.projects.get(SRC)!.values['minutes.attachments'] = narrow
+    const r = await createProject(input({ copyFromProjectId: SRC }))
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(db.projects.get(r.projectId)!.values['minutes.attachments']).toEqual(narrow)
+    const before = db.projects.size
+    db.projects.get(SRC)!.values['minutes.attachments'] = null
+    expect(await createProject(input({ copyFromProjectId: SRC, commandId: '00000000-0000-4000-8000-00000000dd21' }))).toMatchObject({ ok: false, code: 'CONFIG_INVALID', fieldErrors: [{ key: 'minutes.attachments' }] })
+    db.workspaces.get(WID)!.values['minutes.attachments'] = null
+    expect(await createProject(input({ commandId: '00000000-0000-4000-8000-00000000dd22' }))).toMatchObject({ ok: false, code: 'CONFIG_INVALID', fieldErrors: [{ key: 'minutes.attachments' }] })
+    expect(db.projects.size).toBe(before)
+  })
   it('복사 — 원본의 set 키 전부를 넘기고 modules.enabled 는 대상 허용과 재교집합, 라벨은 입력값. 이력 source copy', async () => {
     const r = await createProject(input({ copyFromProjectId: SRC, levelLabels: ['P', 'T', 'A'] }))
     expect(r).toMatchObject({ ok: true })
@@ -67,7 +92,7 @@ describe('createProject', () => {
     expect(db.projects.get(r.projectId)!.values).toEqual({
       'core.level_labels': ['P', 'T', 'A'], 'modules.enabled': ['kanban'],           // agents 미허용, wiki 는 minutes 없음
       'core.milestone_keywords': ['출시'], 'core.extra_axis_label': 'Track',
-      'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }],
+      'minutes.attachments': DEFAULT_ATTACHMENT_POLICY, 'calendar.timezone': 'UTC', 'calendar.working_days': [1, 2, 3, 4, 5], 'calendar.week_start': [{ day: 'sunday', from: null }],
     })
     expect(db.history.filter((x) => x.project_id === r.projectId).every((x) => x.source === 'copy' && x.copied_from === SRC)).toBe(true)
   })
@@ -185,5 +210,121 @@ describe('createProject — DB 원문은 응답에 싣지 않는다(로그로)·
   it('같은 요청 번호에 다른 내용이면 code COMMAND_REUSED(M-3 — 모달이 새 번호를 발급한다)', async () => {
     expect(await createProject(input())).toMatchObject({ ok: true })
     expect(await createProject(input({ name: 'Acme 다른 이름' }))).toMatchObject({ ok: false, code: 'COMMAND_REUSED' })
+  })
+})
+
+describe('createProject 양식 파일 복사와 보상', () => {
+  const FT = '00000000-0000-4000-8000-00000000ff01'
+  const sourcePath = `ws/${WID}/p/${SRC}/weekly_report_pptx/v3.pptx`
+  const scan = { engineVersion: 'forms-engine.v1', format: 'pptx', placeholders: [], issues: [] }
+  let files: Set<string>
+  let copy: ReturnType<typeof vi.fn>
+  let remove: ReturnType<typeof vi.fn>
+  let invoke: ReturnType<typeof vi.fn>
+  let mode: 'ok' | 'sql' | 'lost' | 'malformed' | 'unknown' | 'race' | 'reused'
+  beforeEach(() => {
+    mode = 'ok'
+    files = new Set([sourcePath])
+    copy = vi.fn(async (_src: string, dest: string) => { files.add(dest); return { data: { path: dest }, error: null } })
+    remove = vi.fn(async (paths: string[]) => { paths.forEach(p => files.delete(p)); return { data: [], error: null } })
+    db.projects.get(SRC)!.revision = 7
+    db.projects.get(SRC)!.values['forms.weekly_report_pptx'] = {
+      template_id: FT, mapping: {}, options: { max_lines_per_cell: 15, max_rows_per_slide: 5, item_cap: 0, empty_text: '', continuation_label: '(계속)' },
+    }
+    db.formTemplates = [{ id: FT, project_id: SRC, form_kind: 'weekly_report_pptx', storage_path: sourcePath,
+      size_bytes: 100, version: 3, placeholders: scan, file_name: '양식.pptx', active: true },
+      { id: '00000000-0000-4000-8000-00000000ff02', project_id: SRC, form_kind: 'weekly_report_pptx', storage_path: sourcePath.replace('v3','v2'),
+        size_bytes: 100, version: 2, placeholders: scan, file_name: '이전.pptx', active: false }]
+    const base = db.client()
+    let receipts = 0
+    invoke = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === 'get_project_creation_receipt') {
+        receipts++
+        if (receipts > 1 && mode === 'unknown') return { data: null, error: { code: '', message: 'connection lost' } }
+        if (receipts > 1 && mode === 'reused') return { data: null, error: { code: '23505', message: 'COMMAND_REUSED' } }
+      }
+      if (name === 'create_project_with_settings') {
+        if (mode === 'sql') return { data: null, error: { code: '40001', message: 'FORM_TEMPLATE_COPY_CHANGED' } }
+        if (mode === 'reused') return { data: null, error: { code: '', message: 'connection lost' } }
+        if (mode === 'race') {
+          const other = await base.rpc(name, { ...args, p_destination_id: '00000000-0000-4000-8000-00000000ee01' })
+          return { ...other, data: { status: 'duplicate', project_id: '00000000-0000-4000-8000-00000000ee01' } }
+        }
+        const applied = await base.rpc(name, args)
+        if (['lost', 'unknown'].includes(mode)) return { data: null, error: { code: '', message: 'connection lost' } }
+        if (mode === 'malformed') return { data: {}, error: null }
+        return applied
+      }
+      return base.rpc(name, args)
+    })
+    h.adminFor.mockImplementation(s => ({ ...s, admin: { ...base, rpc: invoke, storage: { from: () => ({ copy, remove }) } } }))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+  it('활성 버전만 새 프로젝트 v1에 복사한 후 RPC를 호출하며 같은 명령 재시도는 파일을 복사하지 않는다', async () => {
+    const r = await createProject(input({ copyFromProjectId: SRC }))
+    expect(r).toMatchObject({ ok: true, status: 'applied' })
+    if (!r.ok) return
+    expect(copy).toHaveBeenCalledExactlyOnceWith(sourcePath, `ws/${WID}/p/${r.projectId}/weekly_report_pptx/v1.pptx`)
+    const args = invoke.mock.calls.find(c => c[0] === 'create_project_with_settings')![1]
+    expect(args).toMatchObject({ p_destination_id: r.projectId, p_source_revision: 7, p_actor: 'u-admin' })
+    expect(args.p_form_manifest).toHaveLength(1)
+    expect(await createProject(input({ copyFromProjectId: SRC }))).toEqual({ ...r, status: 'duplicate' })
+    expect(copy).toHaveBeenCalledTimes(1)
+    expect(remove).not.toHaveBeenCalled()
+  })
+  it('부분 복사와 복사 응답 유실은 이 시도의 경로를 모두 정리하고 생성 RPC를 부르지 않는다', async () => {
+    const second = { ...db.formTemplates[0], id: '00000000-0000-4000-8000-00000000ff03', form_kind: 'wbs_export_xlsx', version: 1,
+      storage_path: `ws/${WID}/p/${SRC}/wbs_export_xlsx/v1.xlsx` }
+    db.formTemplates.push(second)
+    db.projects.get(SRC)!.values['forms.wbs_export_xlsx'] = { ...db.projects.get(SRC)!.values['forms.weekly_report_pptx'] as object, template_id: second.id }
+    copy.mockImplementationOnce(async (_src, dest) => { files.add(dest); return { data: {}, error: null } })
+      .mockImplementationOnce(async (_src, dest) => { files.add(dest); throw new Error('copy response lost') })
+    expect(await createProject(input({ copyFromProjectId: SRC }))).toMatchObject({ ok: false, code: 'CONFIG_UNAVAILABLE' })
+    expect(invoke.mock.calls.filter(c => c[0] === 'create_project_with_settings')).toHaveLength(0)
+    expect(remove.mock.calls[0][0]).toHaveLength(2)
+    expect([...files]).toEqual([sourcePath])
+    expect(db.projects.size).toBe(2)
+  })
+  it('확정된 SQL 실패는 복사 파일을 지우고 새 프로젝트를 남기지 않는다', async () => {
+    mode = 'sql'
+    expect(await createProject(input({ copyFromProjectId: SRC }))).toMatchObject({ ok: false, error: '복사 원본이 변경되었습니다. 다시 시도하세요.' })
+    expect([...files]).toEqual([sourcePath])
+    expect(db.projects.size).toBe(2)
+  })
+  it.each(['lost', 'malformed'] as const)('DB 커밋 후 %s 응답은 영수증으로 성공을 확인하고 파일을 보존한다', async lost => {
+    mode = lost
+    const r = await createProject(input({ copyFromProjectId: SRC }))
+    expect(r).toMatchObject({ ok: true, status: 'applied' })
+    expect(remove).not.toHaveBeenCalled()
+    expect(files.size).toBe(2)
+    expect(invoke.mock.calls.filter(c => c[0] === 'get_project_creation_receipt')).toHaveLength(2)
+  })
+  it('영수증 조회까지 실패하면 커밋된 파일을 지우지 않고 실패를 표시한다', async () => {
+    mode = 'unknown'
+    expect(await createProject(input({ copyFromProjectId: SRC }))).toMatchObject({ ok: false, code: 'CONFIG_UNAVAILABLE' })
+    expect(remove).not.toHaveBeenCalled()
+    expect(files.size).toBe(2)
+    expect(db.projects.size).toBe(3)
+  })
+  it('동시 재전송의 다른 시도가 확정되면 자기 경로만 지우고 확정된 프로젝트를 돌려준다', async () => {
+    mode = 'race'
+    const r = await createProject(input({ copyFromProjectId: SRC }))
+    expect(r).toMatchObject({ ok: true, status: 'duplicate', projectId: '00000000-0000-4000-8000-00000000ee01' })
+    expect([...files]).toEqual([sourcePath])
+    expect(remove.mock.calls[0][0][0]).not.toContain('/p/00000000-0000-4000-8000-00000000ee01/')
+  })
+  it('응답 유실 뒤 다른 내용의 명령 영수증이 확인되면 이 시도 파일을 정리하고 COMMAND_REUSED를 돌려준다', async () => {
+    mode = 'reused'
+    expect(await createProject(input({ copyFromProjectId: SRC }))).toMatchObject({ ok: false, code: 'COMMAND_REUSED' })
+    expect([...files]).toEqual([sourcePath])
+  })
+  it('파일 목록 조회 실패와 원본 연결 손상은 생성도 복사도 하지 않는다', async () => {
+    db.failTable = 'form_templates'
+    expect(await createProject(input({ copyFromProjectId: SRC }))).toMatchObject({ ok: false })
+    db.failTable = null
+    db.formTemplates[0].storage_path = `ws/${OTHER}/p/${SRC}/weekly_report_pptx/v3.pptx`
+    expect(await createProject(input({ copyFromProjectId: SRC }))).toMatchObject({ ok: false })
+    expect(copy).not.toHaveBeenCalled()
+    expect(invoke).not.toHaveBeenCalled()
   })
 })

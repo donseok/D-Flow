@@ -8,6 +8,9 @@ import { TEMPLATE_HEADER } from '../../scripts/lib/e2e.mjs'
 import { SYNTHETIC_CONFIGS } from '../fixtures/synthetic/configs'
 import { SYNTHETIC_TEAMS } from '../fixtures/synthetic/teams'
 import { SYNTHETIC_WEEKLY_AREAS } from '../fixtures/synthetic/areas'
+import { findSentinels, LEGACY_SENTINELS } from '../fixtures/legacy-sentinels'
+import { sp4Sentinels, sp5b1Sentinels } from '../../scripts/lib/sentinels.mjs'
+import { parseIdPolicy } from '@/lib/issues/idPolicy'
 
 // 합성 게이트 러너(scripts/e2e-synthetic.mjs)의 구성값은 .mjs 라 TS 픽스처를 import 하지 못해 한 번 더 적는다 — 같은 값인지 대조한다.
 const plain = (v: unknown) => JSON.parse(JSON.stringify(v))
@@ -34,10 +37,9 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
     expect(new Set(slugs).size).toBe(3)
     for (const ws of [SYNTHETIC_R, SYNTHETIC_C, SYNTHETIC_WORKSPACE_B]) expect(String(ws.name)).toMatch(/^합성 /)
   })
-  it('아직 켜지지 않은 단계는 S3·S6·S7·S8·S10(나머지)이고 담당 SP 가 적혀 있다 — SP5 A 가 S4(일)·S5 를 켰다(D43)', () => {
-    expect(Object.keys(PENDING_STEPS)).toEqual(['S3', 'S6', 'S7', 'S8', 'S10'])
-    expect(PENDING_STEPS.S6).toBe('SP5 B1·SP5b')
-    expect(PENDING_STEPS.S10).toBe('SP5 B1·B4~SP8(나머지 부분 집합)')
+  it('아직 켜지지 않은 단계는 S7·S10(나머지)이고 담당 SP 가 적혀 있다 — SP5 A 가 S4(일)·S5 를, SP5b 가 S3-flow·S6-issue-status 를, SP5c 가 S3-fields 를, SP6 이 S8 을 켰다', () => {
+    expect(Object.keys(PENDING_STEPS)).toEqual(['S7', 'S10'])
+    expect(PENDING_STEPS.S10).toBe('SP6~SP8(나머지 부분 집합)')
     for (const owner of Object.values(PENDING_STEPS)) expect(String(owner)).toMatch(/^SP/)
   })
   it('C 만 월요일 주 시작 규칙(SP5 D28) — S1-calendar 가 설정 액션으로 주차 문서(S4(월))보다 먼저 쓴다(과제 30 이 calendar 블록으로 옮겼다)', () => {
@@ -47,6 +49,27 @@ describe('scripts/lib/synthetic.mjs ↔ tests/fixtures/synthetic/configs.ts', ()
     const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
     expect(src).not.toContain('SYNTHETIC_C.weekStart')
     expect(src.indexOf("step('S1-calendar'")).toBeLessThan(src.indexOf("'createWeeklyReport', [C.id"))
+  })
+})
+
+describe('S1-issues 합성 — R 영역별·C 연도별 발급 구성', () => {
+  it('R 은 옛 출력 센티널과 겹치지 않는 코드·이름 10개, C 는 영역 없이 두 정책 모두 파서 검증을 통과한다', () => {
+    expect(SYNTHETIC_R.issues.areas).toHaveLength(10)
+    expect(new Set(SYNTHETIC_R.issues.areas.map((a: { code: string }) => a.code)).size).toBe(10)
+    expect(SYNTHETIC_R.issues.areas.every((a: { code: string }) => /^[A-Z0-9]{1,8}$/.test(a.code))).toBe(true)
+    const outputSentinels = [...sp4Sentinels(), ...sp5b1Sentinels()]
+    expect(SYNTHETIC_R.issues.areas.flatMap((a: { name: string }) => findSentinels(a.name, outputSentinels))).toEqual([])
+    expect(SYNTHETIC_R.issues.areas.some((a: { name: string }) => (LEGACY_SENTINELS.issueAreas as readonly string[]).includes(a.name))).toBe(false)
+    expect(SYNTHETIC_C.issues.areas).toEqual([])
+    expect(parseIdPolicy(SYNTHETIC_R.issues.idPolicy)).toMatchObject({ ok: true })
+    expect(parseIdPolicy(SYNTHETIC_C.issues.idPolicy)).toMatchObject({ ok: true })
+  })
+  it('R·C 워크스페이스가 이슈 등록을 허용하되 분석 모듈은 부트스트랩 기본값에 맡긴다', () => {
+    for (const def of [SYNTHETIC_R, SYNTHETIC_C]) {
+      expect(def.config.workspace['modules.allowed']).toContain('issues')
+      expect(def.config.workspace['modules.allowed']).not.toContain('issue_analysis')
+      expect(def.config.project['modules.enabled']).not.toContain('issue_analysis')
+    }
   })
 })
 
@@ -102,13 +125,23 @@ describe('wbsRows — S2 가져오기 행(R 4단·C 3단, 담당 = 그 프로젝
 
 describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
   const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
-  it('단계 순서 — S1-create → S1-teams-areas → S1-calendar → S9 → S2 → S4(월) → S4(일) → S5 → S10 → 경계', () => {
+  it('단계 순서 — 이슈 구성 S1 과 발급 S6 이 캘린더 이후·S10 앞에 돈다', () => {
     const at = (n: string) => src.indexOf(`step('${n}'`)
-    const order = ['S1-create', 'S1-teams-areas', 'S1-calendar', 'S9-isolation', 'S2-wbs-import', 'S4-weekly-monday', 'S4-weekly-sunday',
-      'S5-calendar', 'S10-negative', 'boundary-sp4']
+    const order = ['S1-create', 'S1-teams-areas', 'S1-calendar', 'S1-issues', 'S9-isolation', 'S2-wbs-import', 'S4-weekly-monday', 'S4-weekly-sunday',
+      'S5-calendar', 'S6-issue-codes', 'S10-negative', 'boundary-sp4', 'S1-workflow', 'S6-issue-status', 'S3-flow', 'S9-workflow', 'S3-fields']
     for (const n of order) expect(at(n), n).toBeGreaterThan(-1)
     for (let i = 1; i < order.length; i++) expect(at(order[i - 1]), `${order[i - 1]} < ${order[i]}`).toBeLessThan(at(order[i]))
-    expect(at('boundary-sp4')).toBeLessThan(src.indexOf('Object.entries(PENDING_STEPS)'))
+    expect(at('S3-fields')).toBeLessThan(src.indexOf('Object.entries(PENDING_STEPS)'))
+  })
+  it('사용자 정의 필드 서버 액션 넷 — 백필·사용건수·퍼지 및 값 저장', () => {
+    for (const [name, worker] of [
+      ['getCustomFieldUsage', '/p/[projectId]/settings/page'],
+      ['backfillCustomField', '/p/[projectId]/settings/page'],
+      ['purgeCustomField', '/p/[projectId]/settings/page'],
+      ['saveCustomFieldValues', '/p/[projectId]/wbs/page'],
+    ] as const) {
+      expect(src, name).toMatch(new RegExp(`${name}: \\{[^}]*exportedName: '${name}', worker: '${esc(worker)}'`))
+    }
   })
   it('달력 쓰기는 화면과 같은 서버 액션 — 일정 화면 둘(addHoliday·setBaseDate), 달력·설정 표를 service_role 로 쓰지 않는다, 서울 관용구 0', () => {
     for (const [name, worker] of [['addHoliday', '/p/[projectId]/settings/page'], ['setBaseDate', '/p/[projectId]/settings/page']] as const) {
@@ -118,11 +151,14 @@ describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
     expect(src).not.toMatch(/seoulToday|isMondayIso/)
     expect(src).toMatch(/sp5aSentinels\(\)/)
   })
-  it('S10 은 다섯 대상과 교차 프로젝트를 본다 — 일치 규칙은 sentinels.mjs 하나(스펙 §6.4)', () => {
+  it('S10 은 이슈 화면까지 포함하고 SP5 B1 센티널과 교차 프로젝트를 본다(스펙 §6.4)', () => {
     for (const needle of ["source=sheet&format=pptx", "format=xlsx", "format=pptx", "/api/export?projectId=", "&expand=1", "/api/import/inspect", "/weekly`", "/wbs`"]) {
       expect(src, needle).toContain(needle)
     }
     expect(src).toMatch(/excludeRegistered\(sp4Sentinels\(\)/)
+    expect(src).toMatch(/excludeRegistered\(sp5b1Sentinels\(\)/)
+    expect(src).toContain("['issues', `/p/${proj.id}/issues`]")
+    expect(src).toMatch(/S10 영역 이름[\s\S]*?\.eq\('kind', 'weekly_section'\)/)
     expect(src).not.toMatch(/function findSentinels|SENTINEL_MASKS\s*=/)   // 규칙을 러너에 다시 쓰지 않는다
   })
   it('팀·영역·주간 쓰기는 화면과 같은 서버 액션 넷 — worker 는 그 액션을 쓰는 페이지', () => {
@@ -133,6 +169,16 @@ describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
       expect(src, name).toMatch(new RegExp(`${name}: \\{[^}]*exportedName: '${name}', worker: '${esc(worker)}'`))
     }
     expect(src).not.toMatch(/svc\.from\('(?:teams|project_areas|area_teams|weekly_reports|weekly_report_rows|wbs_items)'\)/)
+  })
+  it('이슈 정책·이슈 영역·등록은 설정과 이슈 화면의 서버 액션을 거친다', () => {
+    for (const [name, worker] of [
+      ['updateProjectSettings', '/p/[projectId]/settings/page'], ['upsertArea', '/p/[projectId]/settings/page'],
+      ['createIssue', '/p/[projectId]/issues/page'],
+    ] as const) expect(src, name).toMatch(new RegExp(`${name}: \\{[^}]*exportedName: '${name}', worker: '${esc(worker)}'`))
+    expect(src).toContain("set: { 'issues.id_policy': def.issues.idPolicy }")
+    expect(src).toContain("kind: 'issue_area'")
+    expect(src).toContain('code_scope')
+    expect(src).toContain('CN-${cToday.slice(0, 4)}-0001')
   })
   it('가져오기 실행은 importForm 한 곳(명령 id 필수) — 같은 명령 id 를 두 번 보낸다', () => {
     expect(src).toContain('importForm(')
@@ -157,7 +203,7 @@ describe('renderedProof — S10 ⑤ 화면이 실제로 그려졌는지(A2-4 리
 describe('e2e-synthetic.mjs — S10 ⑤ 의 그려짐 단언(W1)', () => {
   const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
   it('주간 HTML 은 활성 영역 이름, WBS HTML 은 루트 항목 이름으로 확인하고 S10 판정이 그것을 요구한다', () => {
-    expect(src).toMatch(/from\('project_areas'\)\.select\('name'\)\.eq\('project_id', proj\.id\)\.eq\('active', true\)/)
+    expect(src).toMatch(/from\('project_areas'\)\.select\('name'\)\.eq\('project_id', proj\.id\)[\s\S]*?\.eq\('kind', 'weekly_section'\)\.eq\('active', true\)/)
     expect(src).toMatch(/from\('wbs_items'\)\.select\('name'\)\.eq\('project_id', proj\.id\)\.is\('parent_id', null\)/)
     expect(src).toMatch(/renderedProof\(text, /)
     expect(src).toMatch(/s10Ok = \['R', 'C'\]\.every\(\(k\) => [^\n]*rendered\.every\(\(r\) => r\.ok\)/)

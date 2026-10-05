@@ -15,6 +15,8 @@ import { createServerClient } from '@/lib/supabase/server'
 import { fetchAllPages, type PageResult } from '@/lib/data/paging'
 import { getMyMeetings } from '@/lib/data/meetings'
 import { filterApprovable } from '@/lib/domain/approvable'
+import { loadQueueApprovals } from '@/lib/agent/approvalState'
+import type { AdminClient } from '@/lib/minutes/externalApi'
 import { effectiveModulesMany } from '@/lib/modules/effectiveMany'
 import { effectiveModules } from '@/lib/modules/effective'
 import { canSeeProject, isProjectAdmin, isProjectMember, type Actor } from '@/lib/domain/authz'
@@ -25,6 +27,10 @@ import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { expandMeetings, sortOccurrences } from '@/lib/domain/meetings'
 import { addDaysIso } from '@/lib/domain/dates'
 import { projectLifecycleStatus, type ProjectLifecycleStatus } from '@/lib/domain/project-status'
+import { DEFAULT_ISSUE_STATUSES } from '@/lib/settings/vocab'
+
+/** 이슈 범주 → 표시(SP5b — 지금까지 원 code 'open' 이 그대로 보였다). 포털은 프로젝트를 가로지르므로 범주 라벨로 그린다 */
+const issueCategoryLabel = (category: string) => DEFAULT_ISSUE_STATUSES.find((d) => d.code === category)?.label ?? category
 import { meetingHref, wbsItemHref } from '@/lib/ai/chat/deep-links'
 import { getWorkspacePrefs } from '@/app/actions/preferences'
 import { CORE_MODULES, WORKSPACE_SCOPED, type ModuleId } from '@/lib/modules/defaults'
@@ -130,7 +136,7 @@ async function issueRows(client: Db, actor: Actor, pids: string[], todays: Reado
   const seen = new Set<string>()
   return rows.flatMap((r) => (r.issues && !seen.has(r.issues.id) && seen.add(r.issues.id) ? [{
     kind: 'issue' as const, id: r.issues.id, title: r.issues.title, projectId: r.issues.project_id, projectName: r.issues.projects?.name ?? '',
-    due: r.issues.due_date, overdueDays: overdue(r.issues.due_date, todays.get(r.issues.project_id) as string), status: r.issues.status, href: `/p/${r.issues.project_id}/issues?focus=${r.issues.id}`,
+    due: r.issues.due_date, overdueDays: overdue(r.issues.due_date, todays.get(r.issues.project_id) as string), status: issueCategoryLabel(r.issues.status), href: `/p/${r.issues.project_id}/issues?focus=${r.issues.id}`,
   }] : []))
 }
 
@@ -152,11 +158,15 @@ async function approvalRows(client: Db, actor: Actor, pids: string[]): Promise<M
   type I = { id: string; parent_id: string | null; assignee_member_id: string | null; project_id: string }
   const items = (await Promise.all(chunks(treeFor).map((ids) => page<I>('결재 대기 항목 트리', (f, t) => client.from('wbs_items')
     .select('id, parent_id, assignee_member_id, project_id', { count: 'exact' }).in('project_id', ids).order('id').range(f, t))))).flat()
+  // 대기 승인 단계(SP5b S20 — 결재 배지와 같은 셈). 세션 클라이언트라 RLS 안에서만 읽는다. 판독 실패는 로그 + 현행 셈(loadQueueApprovals 의 계약)
+  const stepsByProject = new Map(await Promise.all(need.map(async (pid) => [pid, Object.fromEntries(await loadQueueApprovals(
+    client as unknown as AdminClient, pid, [...new Set(orders.filter((o) => o.project_id === pid && o.wbs_item_id !== null).map((o) => o.wbs_item_id as string))],
+  ))] as const)))
   const out: MyWorkRow[] = []
   for (const pid of need) {
     const own = actor.memberIds.get(pid)
     const viewer = { isAdmin: isProjectAdmin(actor, pid), memberIds: own ? [own] : [], userId: actor.userId }
-    for (const o of filterApprovable(orders.filter((x) => x.project_id === pid), items.filter((i) => i.project_id === pid), viewer)) {
+    for (const o of filterApprovable(orders.filter((x) => x.project_id === pid), items.filter((i) => i.project_id === pid), viewer, stepsByProject.get(pid))) {
       out.push({ kind: 'approval', id: o.id, title: o.wbs_items?.name ?? '에이전트 작업 보고', projectId: pid, projectName: o.projects?.name ?? '',
         due: null, overdueDays: null, status: '검토 대기', href: `/p/${pid}/agents` })
     }

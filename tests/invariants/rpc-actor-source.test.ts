@@ -25,8 +25,9 @@ import { walk } from './_walk'
 
 /** 마이그레이션에서 인자 이름이 정확히 p_actor 인 public 함수 — 닫힌 목록. 새 마이그레이션이 p_actor 함수를 만들면 그 과제가 같이 더한다 */
 const P_ACTOR_RPCS: ReadonlySet<string> = new Set([
-  'actor_is_project_admin', 'apply_project_settings', 'apply_workflow_event', 'apply_workspace_settings', 'convert_inherited_teams',
-  'create_project_with_settings', 'create_weekly_report', 'import_wbs_cmd', 'set_dependency_waiver', 'set_platform_admin', 'set_workspace_role',
+  'actor_is_project_admin', 'actor_is_workspace_admin', 'activate_form_template', 'apply_project_settings', 'apply_workflow_event', 'apply_workspace_settings', 'backfill_custom_field', 'convert_inherited_teams', 'custom_field_command',
+  'deactivate_form_template', 'get_project_creation_receipt',
+  'create_project_with_settings', 'create_weekly_report', 'create_team', 'ensure_team_roots', 'import_wbs_cmd', 'migrate_setting_code', 'purge_custom_field', 'set_dependency_waiver', 'set_platform_admin', 'set_workspace_role',
   'upsert_project_area', 'upsert_project_member', 'upsert_project_member_cmd',
 ])
 
@@ -43,6 +44,11 @@ const ACTOR_SOURCE_EXCEPTIONS: Readonly<Record<string, ActorException>> = {
     expr: 'x.actor',
     count: 1,
     why: '설정 명령 어댑터(두 단계) — updateWorkspaceSettings 의 가드 결과 g.actor 를 runCommand 가 받아 어댑터 rpc(admin, x) 의 x.actor 로 싣는다',
+  },
+  'src/app/actions/settings.ts#ensure_team_roots': {
+    expr: 'actor.userId',
+    count: 1,
+    why: '설정 명령 어댑터의 저장 뒤 후처리(SP5 B2 — 최상위 폴더 모드 teams) — updateWorkspaceSettings 의 가드 결과 g.actor 를 runCommand 가 afterApplied(…, actor) 로 넘긴다. RPC 가 워크스페이스 관리자를 다시 판정한다',
   },
   'src/lib/settings/write.ts#apply_project_settings': {
     expr: 'actorUserId',
@@ -72,10 +78,10 @@ const HELPER_CALLERS: Readonly<Record<string, HelperSpec>> = {
     helper: 'applyWorkflowEvent', source: '@/lib/agent/workflowEvent', field: 'actorUserId',
     callers: {
       'src/app/actions/wbsAssign.ts': {
-        count: 4,   // setWbsAssignee·assignWbsCascade 의 둘은 requireProjectAdmin 직접
+        count: 5,   // setWbsAssignee·assignWbsCascade 의 둘은 requireProjectAdmin 직접
         except: {
-          expr: 'g.actor.userId', count: 2,
-          why: 'setWbsStage·setWbsDevWorkflow 의 g 는 requireSubtreeManagerOrAdmin(lib/agent/subtreeManager — requireProjectAdmin 또는 requireProjectMember + 서브트리 관리자 판정의 actor)',
+          expr: 'g.actor.userId', count: 3,
+          why: 'setWbsStage·setWbsDevWorkflow 의 g 는 requireSubtreeManagerOrAdmin(lib/agent/subtreeManager — requireProjectAdmin 또는 requireProjectMember + 서브트리 관리자 판정의 actor). SP5b(B-23): setWbsStage 의 xx 지정·approveWbsStep 의 g 는 guardStepApproval — 대기 단계 승인자에 따라 requireProjectAdmin 또는 requireCompletionApprover(같은 파일 도우미)의 actor',
         },
       },
       'src/app/actions/agentWork.ts': {

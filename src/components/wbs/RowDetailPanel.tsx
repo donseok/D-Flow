@@ -1,4 +1,6 @@
 'use client'
+import { CustomFieldValuesEditor } from '@/components/fields/CustomFieldValuesEditor'
+import type { PredecessorGate } from '@/lib/domain/agentWork'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, X, FileText, Pencil, Plus, ChevronUp, ChevronDown, ChevronRight, Trash2, Paperclip, Upload, GitBranchPlus, GitBranch } from 'lucide-react'
@@ -11,7 +13,7 @@ import {
 } from '@/app/actions/wbs'
 import { availableSubActTeams, willDiscardActual } from '@/lib/domain/subact'
 import { canAddChild, canSplit } from '@/lib/domain/wbsAffordance'
-import { listAttachments, recordAttachment, removeAttachment, type AttachmentList } from '@/app/actions/attachments'
+import { getAttachmentUrl, listAttachments, recordAttachment, removeAttachment, type AttachmentList } from '@/app/actions/attachments'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { removeErrorKey } from '@/lib/attachments/removeErrors'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
@@ -38,6 +40,7 @@ export function RowDetailPanel({
   item, allItems = [], dependencies = [], schedule, onClose, editable = false, canAttach = false,
   canEditDeliverable = false, projectId, workspaceId = null, levelLabels, maxDepth = null,
   members = EMPTY_MEMBERS, onSelectItem, unresolvedRefs = EMPTY_REFS, timeZone,
+  predecessorGate = 'reached', approvedItemIds,
 }: {
   item: ComputedItem
   allItems?: ComputedItem[]
@@ -66,6 +69,10 @@ export function RowDetailPanel({
   unresolvedRefs?: string[]
   /** 변경 이력 시각의 시간대 — 서버가 내려준 프로젝트 calendar.timezone(계획 P8, A-4 리뷰 N7) */
   timeZone: string
+  /** 프로젝트의 선행 기준(SP5b D21) — spec 선행 판정이 claim 게이트와 같은 기준이 되게 숙주가 넘긴다. 생략은 reached(현행) */
+  predecessorGate?: PredecessorGate
+  /** approved 주문이 있는 항목 id(SP5b D21 — claim 게이트의 승인 축). agents 모듈이 꺼진 프로젝트는 숙주가 주지 않는다(= false) */
+  approvedItemIds?: readonly string[]
 }) {
   const router = useRouter()
   const { t } = useLocale()
@@ -133,6 +140,11 @@ export function RowDetailPanel({
   const subTeams = useMemo(() => availableSubActTeams(item.children, allTeamCodes), [item.children, allTeamCodes])
   const flipWarn = willDiscardActual(item.children.length, item.actualPct)
   const itemById = useMemo(() => new Map(allItems.map(candidate => [candidate.id, candidate])), [allItems])
+  // spec 선행 판정 재료(SP5b D21) — claim 게이트와 같은 입력: 단계·승인 주문(숙주가 준 맵 — agents 꺼짐이면 없음 = false)·실적·dev_workflow
+  const readinessById = useMemo(() => {
+    const approved = new Set(approvedItemIds ?? [])
+    return new Map(allItems.map(c => [c.id, { ...c, orderApproved: approved.has(c.id) }]))
+  }, [allItems, approvedItemIds])
   const incomingDependencies = useMemo(
     () => dependencies.filter(dep => dep.successorId === item.id),
     [dependencies, item.id],
@@ -146,10 +158,11 @@ export function RowDetailPanel({
     () => evaluateStartReadiness(
       { id: item.id, rolledActualPct: item.rolledActualPct, stage: item.stage ?? null },
       incomingDependencies,
-      itemById,
+      readinessById,
       unresolvedRefs,
+      predecessorGate,
     ),
-    [item.id, item.rolledActualPct, item.stage, incomingDependencies, itemById, unresolvedRefs],
+    [item.id, item.rolledActualPct, item.stage, incomingDependencies, readinessById, unresolvedRefs, predecessorGate],
   )
   const relationBadge = (dep: TaskDependency) => `${dep.type}${dep.lagDays > 0 ? ` +${dep.lagDays}` : ''}`
   const egoPredecessors = useMemo<EgoNode[]>(() => [
@@ -707,6 +720,8 @@ export function RowDetailPanel({
             </section>
           )}
 
+          <CustomFieldValuesEditor rowId={item.id} values={item.custom} canEdit={editable || canEditDeliverable} />
+
           {/* 산출물 첨부 */}
           <AttachmentSection itemId={item.id} canAttach={canAttach} projectId={projectId} workspaceId={workspaceId} />
 
@@ -802,6 +817,22 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
     } finally { setBusy(false) }
   }
 
+  // 내려받기는 클릭 때 60초 링크를 받는다(SP5 B3 과제7) — 목록에는 서명이 없다. 실패는 사전 문구로(액션 문구는 로그 몫).
+  // 실패는 그 행에 표시한다(줄 단위 실패 문구 — 글자는 ink, 위험색은 아이콘).
+  const [opening, setOpening] = useState<string | null>(null)
+  const [linkFailed, setLinkFailed] = useState<string | null>(null)
+  async function open(id: string) {
+    setOpening(id); setErr(null); setLinkFailed(null)
+    try {
+      const res = await getAttachmentUrl(itemId, id)
+      if (res.ok) window.open(res.url, '_blank', 'noopener,noreferrer')
+      else { console.error('[AttachmentSection] 내려받기 링크 실패:', res.error); setLinkFailed(id) }
+    } catch (e) {
+      console.error('[AttachmentSection] 내려받기 링크 호출 실패:', e)
+      setLinkFailed(id)
+    } finally { setOpening(null) }
+  }
+
   async function del(id: string) {
     setBusy(true); setErr(null)
     const res = await removeAttachment(id)
@@ -844,13 +875,14 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
             {list.rows.map(a => (
               <li key={a.id} className="flex items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-2.5 py-2">
                 <FileText className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
-                {list.download === 'allowed' && a.url ? (
-                  <a href={a.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[13px] text-brand hover:underline" title={a.fileName}>{a.fileName}</a>
+                {list.download === 'allowed' ? (
+                  <button type="button" onClick={() => void open(a.id)} disabled={opening === a.id}
+                    className="min-w-0 flex-1 truncate text-left text-[13px] text-brand hover:underline" title={a.fileName}>{a.fileName}</button>
                 ) : (
                   <span className="min-w-0 flex-1 truncate text-[13px] text-ink" title={a.fileName}>{a.fileName}</span>
                 )}
                 {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(a.size)}</span>}
-                {a.linkError && <span className="flex shrink-0 items-center gap-1 text-[11px] text-ink"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-delayed" />{t('wbs.attachLinkFail')}</span>}
+                {linkFailed === a.id && <span role="alert" className="flex shrink-0 items-center gap-1 text-[11px] text-ink"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-delayed" />{t('wbs.attachLinkFail')}</span>}
                 {canAttach && <button onClick={() => del(a.id)} disabled={busy} aria-label={t('wbs.deleteAttachmentAria')} className="shrink-0 text-ink-subtle transition hover:text-delayed"><Trash2 className="h-3.5 w-3.5" /></button>}
               </li>
             ))}

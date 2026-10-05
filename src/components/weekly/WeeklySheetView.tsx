@@ -31,6 +31,11 @@ import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import {
   buildWeeklyRewriteSelection, prepareApplicableWeeklyRewriteEdits, type WeeklyRewriteTarget,
 } from '@/lib/domain/weeklyRewrite'
+import type { CustomValues } from '@/lib/domain/customFields'
+import { formatCustomValue, orderedFields } from '@/lib/domain/customFields'
+import { parseCustomValues } from '@/lib/domain/customFieldValues'
+import { CustomFieldValuesEditor, useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
+import { Modal } from '@/components/ui/Modal'
 
 type CellStatus = 'saving' | 'saved' | 'error'
 const DEBOUNCE_MS = 1500
@@ -46,6 +51,7 @@ function fromRecord(r: Record<string, unknown>): WeeklySheetRow {
     id: String(r.id), reportId: String(r.report_id), areaId: String(r.area_id ?? ''),
     thisContent: String(r.this_content ?? ''), thisIssue: String(r.this_issue ?? ''),
     nextContent: String(r.next_content ?? ''), nextIssue: String(r.next_issue ?? ''),
+    custom: (r.custom as CustomValues | null) ?? null,
   }
 }
 
@@ -78,6 +84,23 @@ export function WeeklySheetView({
   const router = useRouter()
   const { toast } = useToast()
   const [rows, setRows] = useState<WeeklySheetRow[]>(initialRows)
+  const fieldScope = useCustomFieldScope()
+  const customDefs = useMemo(() => fieldScope?.defs ?? [], [fieldScope?.defs])
+  const customListDefs = useMemo(
+    () => orderedFields(customDefs).filter(d => d.active && d.show_in_list),
+    [customDefs],
+  )
+  const customFormat = useMemo(() => ({
+    locale: fieldScope?.locale ?? 'ko',
+    yes: fieldScope?.locale === 'en' ? 'Yes' : '예',
+    no: fieldScope?.locale === 'en' ? 'No' : '아니오',
+    empty: '—',
+  }), [fieldScope?.locale])
+  const [selectedCustomRowId, setSelectedCustomRowId] = useState<string | null>(null)
+  const selectedCustomRow = useMemo(
+    () => (selectedCustomRowId ? rows.find(r => r.id === selectedCustomRowId) ?? null : null),
+    [rows, selectedCustomRowId],
+  )
   const [lintOpen, setLintOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiBusy, setAiBusy] = useState(false)
@@ -751,17 +774,23 @@ export function WeeklySheetView({
               두지 않는다 — 공백 텍스트 노드가 colgroup 의 자식이 되면 hydration 오류가 난다. */}
           <table className="w-full table-fixed border-collapse bg-surface text-[13px] text-fg">
             <colgroup>
-              <col className="w-[10%]" />
-              <col className="w-[27%]" />
-              <col className="w-[19%]" />
-              <col className="w-[26%]" />
-              <col className="w-[18%]" />
+              {[
+                <col key="__area" className="w-[10%]" />,
+                <col key="__thisContent" className="w-[27%]" />,
+                <col key="__thisIssue" className="w-[19%]" />,
+                <col key="__nextContent" className="w-[26%]" />,
+                <col key="__nextIssue" className="w-[18%]" />,
+                ...customListDefs.map(d => <col key={`cf:${d.key}`} className="w-[140px]" />),
+              ]}
             </colgroup>
             <thead>
               <tr>
                 <th rowSpan={2} className={HDR}>업무영역</th>
                 <th colSpan={2} className={HDR}>금주실적({thisRange})</th>
                 <th colSpan={2} className={HDR}>차주계획({nextRange})</th>
+                {customListDefs.map(d => (
+                  <th key={d.key} rowSpan={2} className={HDR}>{d.label}</th>
+                ))}
               </tr>
               <tr>
                 <th className={HDR}>내용</th>
@@ -777,7 +806,19 @@ export function WeeklySheetView({
                 return (
                 <tr key={r.id}>
                   <td className="border border-border-input px-1 py-1.5 text-center align-middle text-[13px] font-bold text-fg">
-                    <div>{rowName}</div>
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <div>{rowName}</div>
+                      {customDefs.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCustomRowId(r.id)}
+                          className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-xs font-normal text-fg-muted hover:bg-surface-hover hover:text-fg"
+                          title="추가 정보 편집"
+                        >
+                          추가 정보
+                        </button>
+                      )}
+                    </div>
                   </td>
                   {COLS.map((c, j) => {
                     const addr: CellAddr = { rowId: r.id, col: c.key }
@@ -828,6 +869,20 @@ export function WeeklySheetView({
                       </td>
                     )
                   })}
+                  {customListDefs.map(d => {
+                    const parsed = parseCustomValues(r.custom ?? {})
+                    const text = parsed.ok ? formatCustomValue(d, parsed.value[d.key], customFormat) : '!'
+                    return (
+                      <td
+                        key={d.key}
+                        onClick={() => setSelectedCustomRowId(r.id)}
+                        className="cursor-pointer border border-border-input px-2 py-1 text-center align-middle hover:bg-surface-hover/50 text-[13px]"
+                        title={`${d.label}: ${text} (클릭하여 편집)`}
+                      >
+                        <span className="truncate">{text}</span>
+                      </td>
+                    )
+                  })}
                 </tr>
                 )
               })}
@@ -863,6 +918,22 @@ export function WeeklySheetView({
         onRetry={retryAiRewrite}
         onApply={applyAiRewrite}
       />
+      {selectedCustomRow && (
+        <Modal
+          open={!!selectedCustomRowId}
+          onClose={() => setSelectedCustomRowId(null)}
+          title={`${rowLabel(selectedCustomRow, areas)} — 추가 정보`}
+          size="md"
+        >
+          <div className="p-4">
+            <CustomFieldValuesEditor
+              rowId={selectedCustomRow.id}
+              values={selectedCustomRow.custom}
+              canEdit={canEditCells}
+            />
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

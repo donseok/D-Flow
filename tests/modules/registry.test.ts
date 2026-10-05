@@ -1,4 +1,4 @@
-// 모듈 레지스트리(정본 §3.2.1·§3.2.2, 개정 §2.7.1) — 17개 정적 목록, 적재 단언, import 방향, 설정 소유.
+// 모듈 레지스트리(정본 §3.2.1·§3.2.2, 개정 §2.7.1) — 18개 정적 목록(SP5 B1 issue_analysis 포함), 적재 단언, import 방향, 설정 소유.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { CORE, MODULES, assertModules, moduleDef } from '@/lib/modules/registry'
@@ -11,10 +11,12 @@ const byId = Object.fromEntries(MODULES.map((m) => [m.id, m]))
 const req = (id: Parameters<typeof moduleDef>[0]) => moduleDef(id).requires
 
 describe('목록', () => {
-  it('17개, MODULE_IDS 순서, 필드는 정확히 10개', () => {
+  it('18개, MODULE_IDS 순서, 필드는 정확히 10개', () => {
     expect(MODULES.map((m) => m.id)).toEqual([...MODULE_IDS])
     for (const m of MODULES) expect(Object.keys(m).sort(), m.id).toEqual(['apiPrefixes', 'botDomains', 'core', 'envAvailable', 'id', 'nav', 'requires', 'routePrefixes', 'scope', 'settings'])
-    expect(() => moduleDef('issue_analysis' as never)).toThrow()
+    // SP5 B1(개정 §4.4.2) — issue_analysis 는 등록됐고 issues 를 요구한다
+    expect(() => moduleDef('issue_analysis')).not.toThrow()
+    expect(moduleDef('issue_analysis').requires).toEqual(['issues'])
   })
   it('core·scope 가 정본 §3.2.2 표와 같다', () => {
     expect(MODULES.filter((m) => m.core).map((m) => m.id)).toEqual([...CORE_MODULES])
@@ -27,9 +29,9 @@ describe('목록', () => {
     expect(new Set(MODULES.filter((m) => !m.core && m.scope !== 'workspace').map((m) => m.id))).toEqual(PROJECT_TOGGLABLE)
     expect(new Set(MODULES.filter((m) => m.scope === 'workspace').map((m) => m.id))).toEqual(WORKSPACE_SCOPED)
   })
-  it('requires 닫힘 4건과 core 의 requires: []·envAvailable 상수 true(개정 §2.7.1)', () => {
+  it('requires 닫힘 5건(SP5 B1 issue_analysis → issues 포함)과 core 의 requires: []·envAvailable 상수 true(개정 §2.7.1)', () => {
     expect(MODULES.filter((m) => m.requires.length).map((m) => [m.id, [...m.requires]])).toEqual([
-      ['kanban', ['wbs']], ['wiki', ['minutes']], ['agents', ['wbs']], ['minutes_integration', ['minutes']],
+      ['kanban', ['wbs']], ['issue_analysis', ['issues']], ['wiki', ['minutes']], ['agents', ['wbs']], ['minutes_integration', ['minutes']],
     ])
     for (const id of CORE_MODULES) {
       expect(req(id), id).toEqual([])
@@ -77,7 +79,8 @@ describe('목록', () => {
     expect([...byId.minutes_integration.apiPrefixes]).toEqual(['/api/v1/minutes'])
     expect([...byId.chatbot.apiPrefixes]).toEqual(['/api/chat', '/api/cron/ai-index'])
     expect([...byId.usage.apiPrefixes]).toEqual(['/api/track'])
-    expect([...byId.issues.apiPrefixes]).toEqual(['/api/issue-analysis'])   // 스펙 E16 — issue_analysis 모듈은 SP5(과제 4)
+    expect([...byId.issues.apiPrefixes]).toEqual([])
+    expect([...byId.issue_analysis.apiPrefixes]).toEqual(['/api/issue-analysis'])
     expect([...byId.portfolio.routePrefixes]).toEqual(['/w/[slug]/portfolio'])   // 과제 14
     expect([...byId.usage.routePrefixes]).toEqual(['/w/[slug]/usage'])
   })
@@ -88,15 +91,24 @@ describe('목록', () => {
     expect(new Set([...claimed, 'projects', 'unknown'])).toEqual(new Set(BOT_DOMAINS))
     expect([...byId.chatbot.botDomains]).toEqual([])
   })
-  it('settings — 22정의(SP5 A calendar.*·SP3b portal.widgets·views.default 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 6·settings 16 이다', () => {
+  it('settings — 45정의(SP6 forms.* 넷·SP5c 필드 셋·SP5 달력·이슈·어휘·SP5b 흐름·SP3b portal.widgets·views.default 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 13·settings 16 다', () => {
     const owned = MODULES.flatMap((m) => m.settings.map((s) => [m.id, s.key] as const))
-    expect(owned).toHaveLength(22)
+    expect(owned).toHaveLength(45)
     for (const [mid, key] of owned) {
       const def = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS].find((d) => d.key === key)!
       expect(def.module, key).toBe(mid)
     }
-    expect(byId.wbs.settings.map((s) => s.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords', 'wbs.excel_profile', 'workflow.stage_credits', 'views.default'])
+    expect(byId.wbs.settings.map((s) => s.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords', 'wbs.excel_profile', 'workflow.stage_credits',
+      'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers', 'workflow.predecessor_gate', 'views.default', 'fields.wbs_item', 'forms.wbs_export_xlsx'])
     expect(byId.settings.settings).toHaveLength(16)
+    expect(byId.issues.settings.map(s => s.key)).toContain('fields.issue')
+    expect(byId.weekly.settings.map(s => s.key)).toEqual(['fields.weekly_row', 'forms.weekly_report_pptx', 'forms.weekly_report_xlsx'])
+    expect(byId.minutes.settings.map(s => `${s.scope}/${s.key}`)).toEqual(['workspace/minutes.attachments', 'workspace/minutes.root_folders', 'project/minutes.attachments'])
+    expect(byId.attendance.settings.map(s => s.key)).toEqual(['attendance.types'])
+    expect(byId.meetings.settings.map(s => s.key)).toEqual(['meetings.categories'])
+    expect(byId.issue_analysis.settings.map(s => s.key)).toContain('issues.sources')
+    expect(byId.issue_analysis.settings.map(s => s.key)).toContain('issues.cause_categories')
+    expect(byId.issue_analysis.settings.map(s => s.key)).toContain('forms.issue_analysis_pptx')
   })
 })
 

@@ -15,6 +15,7 @@ import { ConfigUnavailableError, type ConfigKeyError } from './errors'
 import { calendarOrError, loadProjectHolidays, projectCalendarOf, type HolidayRow } from '@/lib/calendar/load'
 import type { WorkCalendar } from '@/lib/domain/calendar'
 import { isRecord, resolveKeys, type KeyState } from './resolve'
+import type { VocabKey, VocabValues } from './vocab'
 
 export type ConfigReadClient = Pick<SupabaseClient, 'from'>
 export type { KeyState }
@@ -133,6 +134,43 @@ export async function getProjectTimezones(projectIds: readonly string[], opts?: 
     const { calendar, calendarError } = calendarOrError(() => projectCalendarOf(keys as ProjectConfig['keys'], []))
     if (!calendar) console.error('[projectConfig] 프로젝트 달력 손상 — 그 프로젝트의 오늘은 모름', { projectId: id, key: calendarError?.key })
     out.set(id, calendar ? calendar.timezone : null)
+  }
+  return out
+}
+
+/**
+ * 여러 프로젝트의 어휘 하나(SP5 B4 — 프로젝트를 가로지르는 목록: 내 회의·회의록 탐색기). getProjectTimezones 와 같은 꼴로 설정 행만 in() 으로
+ * 끝까지 읽고 키 하나만 해석한다. 행 없음(권한 밖)·values 손상·키 손상은 그 프로젝트만 null + 로그(3원칙 ①) — 호출부는 code 를 그대로 보인다
+ * (기본 라벨로 풀지 않는다). 조회 오류는 ConfigUnavailableError throw.
+ */
+export async function getProjectVocabs<K extends VocabKey>(
+  projectIds: readonly string[], key: K, opts?: { client?: ConfigReadClient },
+): Promise<Map<string, VocabValues[K] | null>> {
+  const ids = [...new Set(projectIds)]
+  const out = new Map<string, VocabValues[K] | null>()
+  if (!ids.length) return out
+  const sb = opts?.client ?? (await createServerClient())
+  let rows: TzRow[]
+  try {
+    rows = (await Promise.all(Array.from({ length: Math.ceil(ids.length / TZ_ID_CHUNK) }, (_, i) => ids.slice(i * TZ_ID_CHUNK, (i + 1) * TZ_ID_CHUNK)).map((part) =>
+      fetchAllPages<TzRow>(`프로젝트 설정(${key})`, (from, to) => sb.from('project_settings').select('project_id, values', { count: 'exact' })
+        .in('project_id', part).order('project_id').range(from, to) as unknown as PromiseLike<PageResult<TzRow>>)))).flat()
+  } catch (e) {
+    throw new ConfigUnavailableError(`프로젝트 설정(${key}) 조회 실패: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
+  }
+  const byId = new Map(rows.map((r) => [r.project_id, r]))
+  const defs = PROJECT_SETTINGS.filter((d) => d.key === key)
+  for (const id of ids) {
+    const r = byId.get(id)
+    if (!r || !isRecord(r.values)) {
+      console.error('[projectConfig] 프로젝트 어휘를 읽지 못했다', { projectId: id, key, reason: !r ? 'no-row' : 'values' })
+      out.set(id, null); continue
+    }
+    const { keys } = resolveKeys({ scope: 'project', id, values: r.values, defs })
+    const st = (keys as Record<string, KeyState<unknown>>)[key]
+    if (st && (st.status === 'set' || st.status === 'default')) { out.set(id, st.value as VocabValues[K]); continue }
+    console.error('[projectConfig] 프로젝트 어휘 손상 — 그 프로젝트는 code 를 그대로 보인다', { projectId: id, key, status: st?.status })
+    out.set(id, null)
   }
   return out
 }

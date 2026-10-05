@@ -1,5 +1,7 @@
 // WBS 실시간 반영의 순수 계층 — 채널 토픽·페이로드 해석·부분 패치. React 도 Supabase 도 모른다.
 // 구독 자체는 src/lib/hooks/useWbsRealtime.ts, DB 송신은 0098_wbs_realtime.sql.
+import { parseCustomValues } from './customFieldValues'
+import type { CustomValues } from './customFields'
 import type { DayCal } from './progress'
 import { computeNode } from './rollup'
 import type { ComputedItem } from './types'
@@ -17,6 +19,8 @@ export type WbsChangePayload = {
   actualPct: number | null
   /** 순서 판정용. broadcast 는 전송 순서를 보장하지 않는다. */
   updatedAt: string
+  /** Optional only for older server payloads; explicit {} removes purged values. */
+  custom?: CustomValues
 }
 
 /** numeric 은 경로에 따라 문자열로 실려 온다 — 수로 읽히지 않으면 null(값 없음)로 본다. */
@@ -42,12 +46,15 @@ export function parseWbsPayload(raw: unknown): WbsChangePayload | null {
   if (typeof id !== 'string' || id === '') return null
   if (typeof projectId !== 'string' || projectId === '') return null
   if (typeof updatedAt !== 'string' || updatedAt === '') return null
+  const custom = Object.prototype.hasOwnProperty.call(r, 'custom') ? parseCustomValues(r.custom) : null
+  if (custom && !custom.ok) return null
   return {
     id,
     projectId,
     stage: typeof r.stage === 'string' ? r.stage : null,
     actualPct: toNumber(r.actual_pct),
     updatedAt,
+    ...(custom?.ok ? { custom: custom.value } : {}),
   }
 }
 
@@ -66,7 +73,7 @@ function replaceNode(ns: readonly ComputedItem[], p: WbsChangePayload): Computed
   const next = ns.map(n => {
     if (n.id === p.id) {
       changed = true
-      return { ...n, stage: p.stage, actualPct: p.actualPct, updatedAt: p.updatedAt }
+      return { ...n, stage: p.stage, actualPct: p.actualPct, updatedAt: p.updatedAt, ...(p.custom === undefined ? {} : { custom: p.custom }) }
     }
     const sub = replaceNode(n.children, p)
     if (sub === null) return n
@@ -74,6 +81,14 @@ function replaceNode(ns: readonly ComputedItem[], p: WbsChangePayload): Computed
     return { ...n, children: sub }
   })
   return changed ? next : null
+}
+
+/** PG timestamps have microseconds. Date.parse alone would discard a later write in the same millisecond. */
+function timestampMicros(value: string): bigint | null {
+  const millis = Date.parse(value)
+  if (!Number.isFinite(millis)) return null
+  const fraction = /[T ]\d{2}:\d{2}:\d{2}\.(\d+)(?:Z|[+-]\d{2}(?::?\d{2})?)$/.exec(value)?.[1] ?? ''
+  return BigInt(millis) * BigInt(1000) + BigInt(fraction.slice(3, 6).padEnd(3, '0'))
 }
 
 /**
@@ -95,10 +110,10 @@ export function applyWbsChange(
   const target = findNode(tree, payload.id)
   if (target === null) return null
 
-  const held = target.updatedAt != null ? Date.parse(target.updatedAt) : Number.NaN
-  const incoming = Date.parse(payload.updatedAt)
+  const held = target.updatedAt != null ? timestampMicros(target.updatedAt) : null
+  const incoming = timestampMicros(payload.updatedAt)
   // 보유 값이 없거나 읽을 수 없으면 비교 기준이 없는 것이다 — 그때는 받아들인다(선택 필드 주석 참조).
-  if (!Number.isNaN(held) && !Number.isNaN(incoming) && incoming <= held) return null
+  if (held !== null && incoming !== null && incoming <= held) return null
 
   const replaced = replaceNode(tree, payload)
   if (replaced === null) return null

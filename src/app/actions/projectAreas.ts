@@ -14,7 +14,7 @@ import { todayIn, weekKeyOf } from '@/lib/domain/calendar'
 import { requireCalendar } from '@/lib/calendar/load'
 import { resolveTeamsForProject } from '@/lib/domain/teams'
 import {
-  ERR_AREA_CODE_IMMUTABLE, validateArea,
+  ERR_AREA_CODE_IMMUTABLE, ERR_ISSUE_AREA_CODE, validateArea,
   type AreaInput,
 } from '@/lib/domain/areas'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
@@ -46,6 +46,8 @@ const AREA_TOKENS: OwnTokenTable = {
   AREA_TEAM_SCOPE: { status: 400, code: 'INVALID_INPUT', message: ERR_TEAM_SCOPE },
   // 같은 code 의 전용 팀이 있는 공용 팀을 새로 붙일 때(*_command_receipts ⑤′ — 전환 뒤 오래된 폼). 이미 배정된 행의 재저장은 통과한다
   TEAM_SCOPE_PROJECT_OWNED: { status: 400, code: 'INVALID_INPUT', message: ERR_TEAM_SCOPE },
+  AREA_CODE_INVALID: { status: 400, code: 'INVALID_INPUT', message: ERR_ISSUE_AREA_CODE },
+  PROJECT_AREA_CODE_INVALID: { status: 400, code: 'INVALID_INPUT', message: ERR_ISSUE_AREA_CODE },
 }
 
 /**

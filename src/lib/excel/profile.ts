@@ -22,6 +22,7 @@ export interface ExcelProfile {
   }
   teamColumns: [number, string][]
   ownerMarks: Record<string, 'primary' | 'support'>
+  customColumns?: [number, string][]
 }
 
 export function validateProfile(p: unknown): { ok: true; profile: ExcelProfile } | { ok: false; error: string } {
@@ -129,12 +130,35 @@ export function validateProfile(p: unknown): { ok: true; profile: ExcelProfile }
     }
   }
 
+  // customColumns 확인 (선택 필드 — 부재 시 [] 로 정규화, 스펙 §3.6.7)
+  if (p.customColumns !== undefined) {
+    if (!Array.isArray(p.customColumns)) {
+      return { ok: false, error: 'customColumns must be an array' }
+    }
+    for (const cc of p.customColumns as unknown[]) {
+      if (!Array.isArray(cc) || cc.length !== 2) {
+        return { ok: false, error: 'customColumns must contain [number, string] tuples' }
+      }
+      if (!Number.isInteger(cc[0]) || (cc[0] as number) < 0) {
+        return { ok: false, error: 'customColumns column indices must be integers >= 0' }
+      }
+      if (typeof cc[1] !== 'string' || cc[1].trim() === '') {
+        return { ok: false, error: 'customColumns field keys must be non-empty strings' }
+      }
+    }
+  }
+
   // name 키가 부재(undefined)였다면 여기서 null 로 정규화한다 — 이후 모든 소비자(parseWithProfile 등)는
   // profile.logical.name 이 항상 number|null 이라고 믿을 수 있어야 한다(undefined 를 흘려보내지 않는다).
   const normalizedLogical = { ...(p.logical as ExcelProfile['logical']), name: (p.logical as Record<string, unknown>).name ?? null }
+  const normalizedCustomColumns: [number, string][] = (p.customColumns as [number, string][]) ?? []
   return {
     ok: true,
-    profile: { ...(p as unknown as ExcelProfile), logical: normalizedLogical as ExcelProfile['logical'] },
+    profile: {
+      ...(p as unknown as ExcelProfile),
+      logical: normalizedLogical as ExcelProfile['logical'],
+      customColumns: normalizedCustomColumns,
+    },
   }
 }
 

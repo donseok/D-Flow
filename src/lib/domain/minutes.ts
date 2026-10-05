@@ -5,31 +5,31 @@ import { SIGNED_URL_TTL_SEC } from './signedUrl'
 export const MINUTE_TITLE_MAX = 200
 export const MINUTE_BODY_MAX = 100_000          // body_md 실효 한도(자)
 export const MINUTE_BODY_FILE_MAX = 1_048_576   // 원시 .md 파일 안전망(1MB)
-export const MINUTE_ATTACHMENT_MAX = 20_971_520 // 첨부 개당 20MB(버킷 file_size_limit와 일치)
-export const MINUTE_ATTACHMENTS_MAX_COUNT = 10
+export const MINUTES_ATTACHMENT_MAX_BYTES = 20_971_520 // 첨부 개당 20MB(버킷 file_size_limit와 일치)
+export const MINUTES_ATTACHMENTS_MAX_COUNT = 10
 /** 회의록 파일 서명 URL 의 유효 시간(초) — 공용 SIGNED_URL_TTL_SEC 와 같은 값(클릭 때 발급). 발급할 때마다
  *  RLS("minutes bucket read")를 다시 검사한다 — 권한을 회수하면 새 URL 은 즉시 막히지만 이미 발급한 URL 은 이 시간까지
  *  유효하다(회수 창). 보관(archived) 상태는 발급을 막지 않는다 — 보관은 편집 잠금이지 열람 잠금이 아니다.
  *  actions/minutes.ts 는 'use server' 라 상수를 여기 둔다. */
 export const MINUTE_FILE_URL_TTL_SEC = SIGNED_URL_TTL_SEC
 
-/* ── 팀 기본 폴더(0043): 루트의 팀코드 동명 시드 폴더는 자동 편철 앵커 ── */
+/* ── 최상위 폴더(SP5 B2): 종류는 minute_folders.kind, 팀 루트의 팀은 team_id ── */
 
-/** 루트 레벨에서 예약된 이름인지 — 사용자 루트 폴더의 생성·개명이 이 이름을 점유(스쿼팅)하면
- *  팀 자동 편철이 하이재킹되므로 서버 액션에서 차단한다.
- *  teamCodes 는 그 폴더 범위의 **비활성 포함 전체 등록 팀**(teamCodesForMinuteScope) — 비활성 팀 앵커도 보호한다. */
-export function isTeamRootName(name: string, teamCodes: readonly string[]): boolean {
-  return teamCodes.includes(name.trim())
+/** 최상위 일반 폴더 이름이 그 범위의 팀 이름과 겹치는가 — 팀 루트 이름(= 팀 이름)을 선점하면 지연 생성되는 팀 루트가
+ *  이름 유일 인덱스에 막힌다(DB 가드 MINUTE_FOLDER_NAME_RESERVED 의 앞단 안내). teamNames 는 그 범위의 비활성 포함 전체 팀 이름 */
+export function isTeamRootName(name: string, teamNames: readonly string[]): boolean {
+  const n = name.trim()
+  return teamNames.some(t => t.trim() === n)
 }
 
-/** 시드 팀 루트 폴더인지(루트 + created_by null) — 개명·삭제 금지 대상.
- *  0043 이후 루트의 created_by null 은 팀 시드뿐이고, 신규 팀 추가 액션도 같은 형태로
- *  생성하므로 이름 목록 대조 없이 판정한다(팀 마스터 변화에 자동 추종).
- *  개명·삭제되면 해당 팀의 자동 편철이 소리 없이 끊긴다. */
-export function isTeamRootFolder(
-  f: Pick<MinuteFolder, 'name' | 'parentId' | 'createdBy'>,
-): boolean {
-  return f.parentId === null && f.createdBy === null
+/** 팀 루트(kind = team_root)인가 — 편철 앵커. 개명·이동·삭제는 DB 가드가 막는다(이름은 팀 개명이 따라간다) */
+export function isTeamRootFolder(f: Pick<MinuteFolder, 'kind'>): boolean {
+  return f.kind === 'team_root'
+}
+
+/** 세션이 관리할 수 없는 최상위 폴더(팀 루트·사용자 지정 루트)인가 — 끌기·개명·삭제 단추를 숨긴다 */
+export function isLockedRootFolder(f: Pick<MinuteFolder, 'kind'>): boolean {
+  return f.kind === 'team_root' || f.kind === 'custom_root'
 }
 
 /* ── 담당 하위 구분(업로드 편철): 팀 루트의 실제 하위 폴더에서 동적 유도 ── */
@@ -39,9 +39,9 @@ export function isTeamRootFolder(
 const byFolderOrder = (a: MinuteFolder, b: MinuteFolder) =>
   a.sort - b.sort || a.name.localeCompare(b.name, 'ko')
 
-/** 팀의 시드 루트 폴더 id — 시드(createdBy null) 한정, 동명 사용자 폴더 배제. */
+/** 팀(code)의 루트 폴더 id — kind = team_root 이고 그 팀 code 인 것. 범위를 가리지 않으므로 호출부가 범위로 거른 폴더를 넘긴다 */
 export function teamRootFolderIdOf(folders: MinuteFolder[], team: TeamCode): string | null {
-  return folders.find(f => f.parentId === null && f.createdBy === null && f.name === team)?.id ?? null
+  return folders.find(f => isTeamRootFolder(f) && f.teamCode === team)?.id ?? null
 }
 
 /** 팀 루트의 직계 하위 폴더 — 하위 구분의 원천. 시드·사용자 폴더를 가리지 않으므로 폴더
@@ -110,11 +110,11 @@ export function subgroupFolderId(
   return child?.id ?? rootId
 }
 
-/** 폴더 id → (팀, 하위 구분) 역해석 — 모달의 초기값. 조상 체인을 걸어 올라가(순환 가드) 시드
- *  팀 루트에 닿으면, 루트 직전에 지나온 직계 하위 폴더의 이름이 하위 구분. 팀 루트 자체에
+/** 폴더 id → (팀, 하위 구분) 역해석 — 모달의 초기값. 조상 체인을 걸어 올라가(순환 가드)
+ *  팀 루트(kind)에 닿으면, 루트 직전에 지나온 직계 하위 폴더의 이름이 하위 구분. 팀 루트 자체에
  *  편철된 경우는 하위 폴더가 없는 팀만 자기 자신이고, 하위가 있는 팀은 sub null(하위 미지정,
  *  추측 금지): 대표 폴백을 초기 선택으로 쓰면 실소속과 다른 하위가 '선택됨'으로 보이는 허위
- *  표시가 된다. 시드 체인 밖(사용자 루트 폴더 등)은 null. */
+ *  표시가 된다. 팀 루트 체인 밖(일반·지정 루트 폴더 등)은 null. */
 export function teamSubOfFolder(
   folders: MinuteFolder[], folderId: string | null,
 ): { team: TeamCode; sub: string | null } | null {
@@ -126,7 +126,8 @@ export function teamSubOfFolder(
   while (cur && !seen.has(cur.id)) {
     seen.add(cur.id)
     if (isTeamRootFolder(cur)) {
-      const team = cur.name                      // 0043 이후 루트 시드 = 팀 루트 — 폴더명이 곧 팀 코드
+      const team = cur.teamCode                  // 루트 이름은 팀 이름이다 — 팀은 team_id(조인한 code)로만 본다
+      if (!team) return null                     // 팀을 못 읽었다 — 추측하지 않는다
       if (below) return { team, sub: below.name }
       const rootId = cur.id
       const hasChildren = folders.some(f => f.parentId === rootId)

@@ -6,6 +6,8 @@ import { apiBadRequest, apiFail, apiInternalError, apiNotFound } from '@/lib/age
 import { loadGatedOrder, loadGatedOrderForUser, parseAgentActor, resolveWriteActor } from '@/lib/agent/routeShared'
 import { myMemberIds } from '@/lib/agent/assignee'
 import { ITEM_DETAIL_COLUMNS, loadDependsInfo, type DependInfo } from '@/lib/agent/depends'
+import { loadPredecessorGate } from '@/lib/agent/predecessorGate'
+import { dependencyNotMetMessage } from '@/lib/domain/agentWork'
 import { emitNotification } from '@/lib/notify/emit'
 import { applyWorkflowEvent, notifyOnReached } from '@/lib/agent/workflowEvent'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
@@ -55,15 +57,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
       const depends = item?.depends ?? []
       if (depends.length > 0) {
-        dependsInfo = await loadDependsInfo(admin, { projectId: loaded.order.project_id, depends })
-        // 충족 판정은 depends_evidence 의 reached 하나다(predecessorReached — 스펙 2026-09-15 §3.7):
+        const gate = await loadPredecessorGate(admin, loaded.order.project_id)   // SP5b D21 — 판독 실패는 throw(아래 catch 의 500, fail-closed)
+        dependsInfo = await loadDependsInfo(admin, { projectId: loaded.order.project_id, depends, gate })
+        // 충족 판정은 depends_evidence 의 reached 하나다(predecessorReachedFor — 프로젝트의 선행 기준, SP5b D21. 기본 reached 는 스펙 2026-09-15 §3.7):
         // stage ≥ im, **또는** 선행에 approved 주문이 있음(2026-08-25 — 승인이 반쪽으로 끝난 선행이 후속을
         // 영구히 막던 교착), **또는** 선행 실적 100(위임하지 않은 사람 Task). 응답에 실린 reached 와 같은
         // 값으로 막아야 스킬과 서버가 서로 다른 판정을 하지 않는다.
         const unmet = dependsInfo.filter((d) => !d.reached)
         if (unmet.length > 0) {
           return NextResponse.json({
-            error: '선행 작업이 끝나지 않았습니다(검수 대기 이상도, 승인도, 실적 100% 도 아님).', code: 'dependency_not_met',
+            error: dependencyNotMetMessage(gate), code: 'dependency_not_met',
             unmet: unmet.map((d) => ({ external_ref: d.external_ref, stage: d.stage })),
           }, { status: 403 })
         }

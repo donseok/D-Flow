@@ -1,3 +1,4 @@
+import { CustomFieldsProvider } from '@/components/fields/CustomFieldValuesEditor'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { toCalendarInput } from '@/lib/calendar/load'
 import { getProjectRoster } from '@/lib/data/members'
@@ -18,7 +19,7 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
-import { requireModule } from '@/lib/modules/gate'
+import { requireModule, moduleState } from '@/lib/modules/gate'
 import { resolveWbsView } from '@/lib/wbs/view'
 import { boardUnavailableReason } from '@/lib/wbs/boardAvailability'
 import { ViewSwitch } from '@/components/wbs/ViewSwitch'
@@ -27,6 +28,7 @@ import { WbsRealtimeRefresh } from '@/components/wbs/WbsRealtimeRefresh'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { ConfigStateNotice } from '@/components/settings/ConfigStateNotice'
 import { StatusMessage } from '@/components/ui/StatusMessage'
+import { getApprovedItemIds } from '@/lib/data/approvedItems'
 
 type ProjectRow = { id: string; name: string; description?: string | null; start_date?: string | null; end_date?: string | null }
 
@@ -74,6 +76,16 @@ export default async function WbsPage({
   const decided = resolveWbsView({ view: one('view'), focus, stored: storedPick.ok ? storedPick.value.wbs : null, boardOn: boardGate.ok })
   const admin = isProjectAdmin(actor, projectId)
   const reason = decided.notice === 'board_off' ? await boardUnavailableReason(pc.cfg) : null
+
+  const customFields = pick(pc.cfg, 'fields.wbs_item')
+  // 선행 기준·승인 주문 축(SP5b D21) — 상세 패널의 "시작 가능"이 claim 게이트와 같은 판정이 되게. 기준이 손상이면 final(엄격 — 시작 가능으로
+  // 위장하지 않는다). agents 가 꺼진 프로젝트는 주문 표를 읽지 않는다(승인 축 = false)
+  const gate = pick(pc.cfg, 'workflow.predecessor_gate')
+  // 단계 이름(SP5b W2) — 손상이면 기본 이름으로 그린다(표시 전용 — 판정에 쓰지 않는다)
+  const stageLabels = pick(pc.cfg, 'workflow.wbs_stage_labels')
+  if (!gate.ok) console.error(`[wbs] 선행 기준 손상(project=${projectId}) — final 로 판정한다`)
+  const approvedItemIds = (await moduleState({ projectId }, 'agents')) === 'on' ? await getApprovedItemIds(projectId) : []
+
   // R5: 기존 PageHero·ProjectPageShell을 유지하고 화면 소유의 주 동작만 곁에 배치한다.
   const header = <div className="flex items-center bg-surface"><div className="min-w-0 flex-1">{hero}</div>
     {decided.view !== 'board' && admin && <div className="shrink-0 pr-6"><WbsAddButton /></div>}
@@ -98,35 +110,40 @@ export default async function WbsPage({
       pinned={pinned}
       hero={header}
     >
-      {decided.view === 'board' ? <>
-        {/* 조작 화면의 done 보고를 짧은 창으로 재조회한다. 연속 이벤트는 합쳐 렌더하며 채널 구독을 중복하지 않는다. */}
-        <WbsRealtimeRefresh projectId={projectId} delayMs={1_500} maxWaitMs={5_000} jitterMs={3_000} />
-        <KanbanBoard projectId={projectId} items={items} actorView={toProjectActorView(actor, projectId)} today={today} />
-      </> : <WbsGanttSheet
-        key={projectId}
-        items={items}
-        dependencies={dependencies}
-        unresolvedDepends={unresolvedDepends}
-        calendar={toCalendarInput(calendar)}
-        today={today}
-        actorView={toProjectActorView(actor, projectId)}
-        me={me}
-        projectId={projectId}
-        projectName={project?.name ?? ''}
-        projectDescription={project?.description}
-        startDate={project?.start_date}
-        endDate={project?.end_date}
-        defaultView={decided.view === 'timeline' ? 'timeline' : 'sheet'}
-        initialCollapsed={initialCollapsed ?? undefined}
-        focusId={focus ?? null}
-        levelLabels={labels.value}
-        maxDepth={levelDepthOf(pc.cfg)}
-        milestoneKeywords={keywords.ok ? keywords.value : []}
-        initialHideDone={uiPrefs.wbsHideDone ?? false}
-        initialOutline={uiPrefs.wbsOutline ?? false}
-        initialGanttScale={uiPrefs.wbsGanttScale}
-        members={members}
-      />}
+      <CustomFieldsProvider projectId={projectId} entity="wbs_item" defs={customFields.ok ? customFields.value : null} canAdmin={isProjectAdmin(actor, projectId)} locale={locale}>
+        {decided.view === 'board' ? <>
+          {/* 조작 화면의 done 보고를 짧은 창으로 재조회한다. 연속 이벤트는 합쳐 렌더하며 채널 구독을 중복하지 않는다. */}
+          <WbsRealtimeRefresh projectId={projectId} delayMs={1_500} maxWaitMs={5_000} jitterMs={3_000} />
+          <KanbanBoard projectId={projectId} items={items} actorView={toProjectActorView(actor, projectId)} today={today} />
+        </> : <WbsGanttSheet
+          key={projectId}
+          items={items}
+          dependencies={dependencies}
+          unresolvedDepends={unresolvedDepends}
+          calendar={toCalendarInput(calendar)}
+          today={today}
+          actorView={toProjectActorView(actor, projectId)}
+          me={me}
+          projectId={projectId}
+          projectName={project?.name ?? ''}
+          projectDescription={project?.description}
+          startDate={project?.start_date}
+          endDate={project?.end_date}
+          defaultView={decided.view === 'timeline' ? 'timeline' : 'sheet'}
+          initialCollapsed={initialCollapsed ?? undefined}
+          focusId={focus ?? null}
+          levelLabels={labels.value}
+          maxDepth={levelDepthOf(pc.cfg)}
+          milestoneKeywords={keywords.ok ? keywords.value : []}
+          initialHideDone={uiPrefs.wbsHideDone ?? false}
+          initialOutline={uiPrefs.wbsOutline ?? false}
+          initialGanttScale={uiPrefs.wbsGanttScale}
+          members={members}
+          predecessorGate={gate.ok ? gate.value : 'final'}
+          approvedItemIds={approvedItemIds ?? []}
+          stageLabels={stageLabels.ok ? stageLabels.value : null}
+        />}
+      </CustomFieldsProvider>
     </ProjectPageShell>
   )
 }

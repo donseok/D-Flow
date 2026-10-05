@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import type { AttendanceRecord, AttendanceType, ProjectMember, TeamCode } from '@/lib/domain/types'
 import type { DictKey } from '@/lib/i18n/dict'
+import { activeVocab, vocabColor, vocabLabel, vocabShort, type AttendanceTypeDef } from '@/lib/settings/vocab'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes } from '@/components/app/TeamsProvider'
 import { Modal } from '@/components/ui/Modal'
@@ -17,7 +18,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { DayPopover, type DayPopoverAnchor } from '@/components/ui/DayPopover'
 import { fmtDate } from '@/components/wbs/shared'
 import {
-  ATTENDANCE_META, ATTENDANCE_TYPES, calendarDayInfo, monthMatrix, recordsByDate, weekdayColumns, type CalendarView,
+  calendarDayInfo, monthMatrix, recordsByDate, weekdayColumns, type CalendarView,
 } from '@/lib/domain/attendance'
 import { currentRuleDay } from '@/lib/domain/calendar'
 import { compareKoreanName } from '@/lib/domain/nameSort'
@@ -37,7 +38,9 @@ interface BotDeepLinkFilter {
 }
 
 /** 챗봇 딥링크(?from&to&team&type) 초기 필터 — 유효값만 채택, 아무 것도 없으면 null. */
-function readBotFilter(params: { get(name: string): string | null }, teamCodes: readonly string[]): BotDeepLinkFilter | null {
+function readBotFilter(
+  params: { get(name: string): string | null }, teamCodes: readonly string[], typeCodes: readonly string[],
+): BotDeepLinkFilter | null {
   const rawFrom = params.get('from')
   const rawTo = params.get('to')
   // 기간은 from·to가 함께 유효할 때만 적용한다(도구 조회 계약과 동일).
@@ -48,15 +51,13 @@ function readBotFilter(params: { get(name: string): string | null }, teamCodes: 
     ? (rawTeam as TeamCode)
     : null
   const rawType = params.get('type')
-  const type = rawType && (ATTENDANCE_TYPES as readonly string[]).includes(rawType)
-    ? (rawType as AttendanceType)
-    : null
+  const type = rawType && typeCodes.includes(rawType) ? rawType : null
   if (!rangeValid && !team && !type) return null
   return { from: rangeValid ? rawFrom : null, to: rangeValid ? rawTo : null, team, type }
 }
 
 export function AttendanceView({
-  projectId, records, members, initialDate, canEdit, calendar, holidayNames,
+  projectId, records, members, initialDate, canEdit, calendar, holidayNames, types,
 }: {
   projectId: string
   records: AttendanceRecord[]
@@ -67,16 +68,20 @@ export function AttendanceView({
   calendar: CalendarView
   /** 휴무·근무 예외의 이름(holidays.name) */
   holidayNames?: Readonly<Record<string, string>>
+  /** 이 프로젝트의 근태 유형(설정 attendance.types — 해석된 값) */
+  types: readonly AttendanceTypeDef[]
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
-  // 근태 타입 라벨 — 원본 상수(ATTENDANCE_META)는 로직 키로 유지하고 표시 지점에서만 매핑.
-  const typeLabel = (ty: AttendanceType) => t(`att.type.${ty}` as DictKey)
-  const typeShort = (ty: AttendanceType) => t(`att.typeShort.${ty}` as DictKey)
+  // 근태 유형 표시 — 설정 어휘(기본 라벨이면 사전 문구). 등록 선택지·범례 = 활성이면서 등록 가능한 유형.
+  const typeLabel = (ty: AttendanceType) => vocabLabel('attendance.types', types, ty, t)
+  const typeShort = (ty: AttendanceType) => vocabShort(types, ty, t)
+  const selectable = useMemo(() => activeVocab(types).filter(e => e.selectable), [types])
+  const defaultType = selectable[0]?.code ?? ''
   const searchParams = useSearchParams()
   const teamCodes = useTeamCodes()
   // 챗봇 딥링크 필터는 최초 마운트에서 한 번만 읽고, 해제 전까지 달력·목록에 적용한다.
-  const [botFilter, setBotFilter] = useState(() => readBotFilter(searchParams, teamCodes))
+  const [botFilter, setBotFilter] = useState(() => readBotFilter(searchParams, teamCodes, types.map(e => e.code)))
   const [initY, initM] = useMemo(() => initialDate.split('-').map(Number), [initialDate])
   const [year, setYear] = useState(botFilter?.from ? Number(botFilter.from.slice(0, 4)) : initY)
   const [month0, setMonth0] = useState(
@@ -97,7 +102,7 @@ export function AttendanceView({
   const [form, setForm] = useState<{ memberId: string; date: string; type: AttendanceType; note: string }>({
     memberId: members[0]?.id ?? '',
     date: initialDate,
-    type: 'work',
+    type: defaultType,
     note: '',
   })
 
@@ -160,7 +165,7 @@ export function AttendanceView({
 
   // 셀·팝오버가 공유하는 근태 칩 — canEdit일 때만 클릭/키보드로 수정 진입
   function renderRecChip(r: AttendanceRecord, onOpen?: () => void) {
-    const meta = ATTENDANCE_META[r.type]
+    const meta = vocabColor(types, r.type)
     const mem = memberMap.get(r.memberId)
     const open = canEdit ? () => { onOpen?.(); openEdit(r) } : undefined
     return (
@@ -192,7 +197,7 @@ export function AttendanceView({
 
   function openCreate() {
     setEditingId(null)
-    setForm({ memberId: members[0]?.id ?? '', date: initialDate, type: 'work', note: '' })
+    setForm({ memberId: members[0]?.id ?? '', date: initialDate, type: defaultType, note: '' })
     setFormErr(null)
     setConfirmingDelete(false)
     setOpen(true)
@@ -281,10 +286,10 @@ export function AttendanceView({
 
         {/* 범례 */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          {ATTENDANCE_TYPES.map(ty => (
-            <span key={ty} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
-              <span className={`h-2 w-2 rounded-full ${ATTENDANCE_META[ty].dot}`} />
-              {typeLabel(ty)}
+          {selectable.map(e => (
+            <span key={e.code} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
+              <span className={`h-2 w-2 rounded-full ${vocabColor(types, e.code).dot}`} />
+              {typeLabel(e.code)}
             </span>
           ))}
         </div>
@@ -377,7 +382,7 @@ export function AttendanceView({
               </thead>
               <tbody>
                 {listRows.map(r => {
-                  const meta = ATTENDANCE_META[r.type]
+                  const meta = vocabColor(types, r.type)
                   const mem = memberMap.get(r.memberId)
                   return (
                     <tr
@@ -470,9 +475,13 @@ export function AttendanceView({
                 onChange={e => setForm(f => ({ ...f, type: e.target.value as AttendanceType }))}
                 className="app-input"
               >
-                {ATTENDANCE_TYPES.map(ty => (
-                  <option key={ty} value={ty}>{typeLabel(ty)}</option>
+                {selectable.map(e => (
+                  <option key={e.code} value={e.code}>{typeLabel(e.code)}</option>
                 ))}
+                {/* 수정 중인 기록의 유형이 선택지 밖(비활성·등록 불가)이면 그 값을 보존해 보인다 — 저장 시 서버가 활성 여부를 다시 본다 */}
+                {form.type && !selectable.some(e => e.code === form.type) && (
+                  <option value={form.type}>{typeLabel(form.type)}</option>
+                )}
               </select>
             </label>
           </div>

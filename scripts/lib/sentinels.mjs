@@ -78,3 +78,10 @@ export const SP5A_SENTINELS = Object.freeze(['Asia/Seoul', '+09:00'])
 export function sp5aSentinels() {
   return [...SP5A_SENTINELS]
 }
+
+/** SP5 B1 고객 영역명·옛 이슈 코드 접두의 base64 사본 — 평문 정본은 tests/fixtures/legacy-sentinels.ts */
+export const SP5B1_SENTINELS_B64 = '6riw7KSA6rSA66asCuyGkOydteq0gOumrArsmIHsl4UK7ZKI7KeIwrfshKTqs4QK7IOd7IKw6rOE7ZqNCuyhsOyXhQrstpztlZgK7JuQ6rCAClBJLUkt'
+/** @returns {string[]} */
+export function sp5b1Sentinels() {
+  return Buffer.from(SP5B1_SENTINELS_B64, 'base64').toString('utf8').split('\n')
+}

@@ -1,0 +1,467 @@
+{
+ "_note": "SP5b I — 이슈 표시 상태 전이 골든(스펙 §6.1). TS(issueWorkflow.canTransitionCode)와 SQL(enforce_issue_workflow)이 같은 파일을 실행 결과로 대조한다. 범주 전이표는 제품 고정 11간선(resolved→on_hold 만 없음). ok=false 는 같은 code·비활성 대상·전이표 밖 셋 중 하나",
+ "defs": {
+  "default": [
+   {
+    "code": "open",
+    "label": "열림",
+    "category": "open",
+    "color": "delayed",
+    "sort": 1,
+    "active": true
+   },
+   {
+    "code": "in_progress",
+    "label": "진행중",
+    "category": "in_progress",
+    "color": "progress",
+    "sort": 2,
+    "active": true
+   },
+   {
+    "code": "resolved",
+    "label": "해결",
+    "category": "resolved",
+    "color": "done",
+    "sort": 3,
+    "active": true
+   },
+   {
+    "code": "on_hold",
+    "label": "보류",
+    "category": "on_hold",
+    "color": "neutral",
+    "sort": 4,
+    "active": true
+   }
+  ],
+  "research": [
+   {
+    "code": "intake",
+    "label": "접수",
+    "category": "open",
+    "color": "delayed",
+    "sort": 1,
+    "active": true
+   },
+   {
+    "code": "review",
+    "label": "검토",
+    "category": "open",
+    "color": "brand",
+    "sort": 2,
+    "active": true
+   },
+   {
+    "code": "client_approval",
+    "label": "고객 승인",
+    "category": "on_hold",
+    "color": "pending",
+    "sort": 3,
+    "active": true
+   },
+   {
+    "code": "execution",
+    "label": "실행",
+    "category": "in_progress",
+    "color": "progress",
+    "sort": 4,
+    "active": true
+   },
+   {
+    "code": "done",
+    "label": "종료",
+    "category": "resolved",
+    "color": "done",
+    "sort": 5,
+    "active": true
+   },
+   {
+    "code": "legacy",
+    "label": "옛 진행",
+    "category": "in_progress",
+    "color": "neutral",
+    "sort": 6,
+    "active": false
+   }
+  ]
+ },
+ "transitions": [
+  {
+   "defs": "default",
+   "from": "open",
+   "to": "open",
+   "ok": false
+  },
+  {
+   "defs": "default",
+   "from": "open",
+   "to": "in_progress",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "open",
+   "to": "resolved",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "open",
+   "to": "on_hold",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "in_progress",
+   "to": "open",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "in_progress",
+   "to": "in_progress",
+   "ok": false
+  },
+  {
+   "defs": "default",
+   "from": "in_progress",
+   "to": "resolved",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "in_progress",
+   "to": "on_hold",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "resolved",
+   "to": "open",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "resolved",
+   "to": "in_progress",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "resolved",
+   "to": "resolved",
+   "ok": false
+  },
+  {
+   "defs": "default",
+   "from": "resolved",
+   "to": "on_hold",
+   "ok": false
+  },
+  {
+   "defs": "default",
+   "from": "on_hold",
+   "to": "open",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "on_hold",
+   "to": "in_progress",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "on_hold",
+   "to": "resolved",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "from": "on_hold",
+   "to": "on_hold",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "intake",
+   "to": "intake",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "intake",
+   "to": "review",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "intake",
+   "to": "client_approval",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "intake",
+   "to": "execution",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "intake",
+   "to": "done",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "intake",
+   "to": "legacy",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "review",
+   "to": "intake",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "review",
+   "to": "review",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "review",
+   "to": "client_approval",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "review",
+   "to": "execution",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "review",
+   "to": "done",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "review",
+   "to": "legacy",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "client_approval",
+   "to": "intake",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "client_approval",
+   "to": "review",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "client_approval",
+   "to": "client_approval",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "client_approval",
+   "to": "execution",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "client_approval",
+   "to": "done",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "client_approval",
+   "to": "legacy",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "execution",
+   "to": "intake",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "execution",
+   "to": "review",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "execution",
+   "to": "client_approval",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "execution",
+   "to": "execution",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "execution",
+   "to": "done",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "execution",
+   "to": "legacy",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "done",
+   "to": "intake",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "done",
+   "to": "review",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "done",
+   "to": "client_approval",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "done",
+   "to": "execution",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "done",
+   "to": "done",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "done",
+   "to": "legacy",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "from": "legacy",
+   "to": "intake",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "legacy",
+   "to": "review",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "legacy",
+   "to": "client_approval",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "legacy",
+   "to": "execution",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "legacy",
+   "to": "done",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "from": "legacy",
+   "to": "legacy",
+   "ok": false
+  }
+ ],
+ "inserts": [
+  {
+   "defs": "default",
+   "statusCode": "open",
+   "ok": true
+  },
+  {
+   "defs": "default",
+   "statusCode": "in_progress",
+   "ok": false
+  },
+  {
+   "defs": "default",
+   "statusCode": "resolved",
+   "ok": false
+  },
+  {
+   "defs": "default",
+   "statusCode": "on_hold",
+   "ok": false
+  },
+  {
+   "defs": "default",
+   "statusCode": null,
+   "ok": true,
+   "initial": "open"
+  },
+  {
+   "defs": "research",
+   "statusCode": "intake",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "statusCode": "review",
+   "ok": true
+  },
+  {
+   "defs": "research",
+   "statusCode": "client_approval",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "statusCode": "execution",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "statusCode": "done",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "statusCode": "legacy",
+   "ok": false
+  },
+  {
+   "defs": "research",
+   "statusCode": null,
+   "ok": true,
+   "initial": "intake"
+  }
+ ]
+}

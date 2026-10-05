@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useMinuteLinks } from './minuteLinks'
 import {
@@ -10,14 +10,14 @@ import type {
   ExplorerLeaf, FolderNode, MeetingCategory, Minute, MinuteFolder,
 } from '@/lib/domain/types'
 import {
-  buildFolderTree, folderDepthOf, groupExplorerByProject, isTeamRootFolder, MINUTE_FOLDER_DEPTH_MAX,
+  buildFolderTree, folderDepthOf, groupExplorerByProject, isLockedRootFolder, isTeamRootFolder, MINUTE_FOLDER_DEPTH_MAX,
   type ExplorerProjectGroup,
 } from '@/lib/domain/minutes'
 import {
   resolveFolderDrop, resolveLeafDrop, type MinuteDropReject, type MinuteDropResult,
 } from '@/lib/domain/minutes-drop'
 import { sortMyProjectsFirst } from '@/lib/domain/projectPick'
-import { MEETING_META } from '@/lib/domain/meetings'
+import { vocabOf, vocabView, type VocabByProject } from '@/lib/settings/vocab'
 import {
   assignMinutesProject, deleteMinute, fetchMinuteDetail, moveMinuteFolder, moveMinuteToFolder,
 } from '@/app/actions/minutes'
@@ -25,7 +25,7 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
-import { useTeamSlot } from '@/components/app/TeamsProvider'
+import { TeamBar } from '@/components/minutes/TeamBar'
 import { Modal } from '@/components/ui/Modal'
 import { FolderManageModal } from './FolderManageModal'
 import { FolderPickModal } from './FolderPickModal'
@@ -84,9 +84,9 @@ const rowCls = (active: boolean) =>
  *  leaves 는 팀 탭 필터가 이미 적용된 것 — 카운트·스코프가 필터와 정합. folders 는 항상 전부. */
 export function MinutesExplorer({
   folders, leaves, favorites, onToggleFavorite, onRetryFavorites,
-  layout, currentUserId, adminWorkspaceIds = [], adminProjectIds = [], isSuperuser = false,
-  onChanged, onFolderSelect, teamCodes = [], projects = [],
-  myProjectIds = null,
+  layout, currentUserId, adminWorkspaceIds = [], isSuperuser = false,
+  onChanged, onFolderSelect, projects = [],
+  myProjectIds = null, meetingCategories,
 }: {
   folders: MinuteFolder[]
   leaves: ExplorerLeaf[]
@@ -98,19 +98,16 @@ export function MinutesExplorer({
   /** 관리자인 워크스페이스 id — 폴더 개명·이동·삭제의 폴더별 판정 근거. 서버 가드(작성자 ∨ 그 폴더
    *  워크스페이스의 관리자, 0006)를 미러한다. 프로젝트 관리자라는 사실만으로는 열리지 않는다. */
   adminWorkspaceIds?: string[]
-  /** 회의록 개별 건은 **그 회의록 프로젝트의** 관리자 기준(서버 checkOwner). 관리자인 프로젝트 id 목록. */
-  adminProjectIds?: string[]
-  /** 프로젝트 미지정(projectId null) 회의록은 isProjectAdmin(actor, null)=슈퍼유저만 — fail-closed. */
+  /** 플랫폼 관리자 — 폴더 관리 판정(모든 워크스페이스의 관리자). 회의록 개별 건은 리프의 canEdit(서버 canEditMinute — D40) */
   isSuperuser?: boolean
   onChanged: () => void
   onFolderSelect?: (folderId: string | null) => void
-  /** 루트 예약어(팀 앵커) 판정용. 여기서 훅으로 직접 읽지 않는 이유는 이 목록이 **활성** 팀이라
-   *  비활성 팀 앵커를 놓칠 수 있어서다 — 최종 판정은 전체 등록 팀을 아는 서버가 한다(fail-closed). */
-  teamCodes?: readonly string[]
   /** 카드 [수정] 이 여는 메타 모달의 프로젝트 셀렉트 옵션. 빈 배열이면 '연결 없음'만 고를 수 있다. */
   projects?: { id: string; name: string }[]
   /** 내가 멤버로 등록된 프로젝트 id — 수정 모달의 프로젝트 기본 선택 근거. */
   myProjectIds?: string[] | null
+  /** 연결 회의 프로젝트별 회의 범주(ExplorerData.meetingCategories) — 없으면 칩은 code */
+  meetingCategories?: VocabByProject<'meetings.categories'>
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
@@ -220,14 +217,9 @@ export function MinutesExplorer({
   const canManageFolder = (f: MinuteFolder) =>
     (f.createdBy !== null && f.createdBy === currentUserId)
     || isSuperuser || (f.workspaceId != null && adminWorkspaceIds.includes(f.workspaceId))
-  /** isProjectAdmin(actor, projectId) 의 클라이언트 등가식 — 슈퍼유저는 모든 프로젝트의 관리자다. */
-  const isAdminOf = (projectId: string | null | undefined) =>
-    isSuperuser || (projectId != null && adminProjectIds.includes(projectId))
-  // 서버 checkOwner 와 같은 식: 작성자 본인 또는 **그 회의록 프로젝트의** 관리자.
-  // 전역 shim(어느 프로젝트든 관리자)으로 판정하면 A 프로젝트 관리자에게 B 프로젝트 회의록의
-  // 이동·일괄지정 어포던스가 열리고 전부 서버에서 거부된다.
-  const canMoveLeaf = (l: ExplorerLeaf) =>
-    (l.createdBy !== null && l.createdBy === currentUserId) || isAdminOf(l.projectId)
+  // 이동·일괄 지정 어포던스(D40) = 서버 checkOwner 와 같은 canEditMinute — 서버가 회의록의 project_id 그대로 판정해 싣는다.
+  // 리프의 projectId 는 회의 폴백이 섞인 귀속 프로젝트라, 그것으로 판정하면 회의 프로젝트의 관리자에게 열리고 서버가 거부한다
+  const canMoveLeaf = (l: ExplorerLeaf) => l.canEdit === true
 
   const total = leaves.length
   const favCount = favorites === null
@@ -372,7 +364,11 @@ export function MinutesExplorer({
     }
     if (isUnfiledKey(target)) return null
     const f = folderById.get(item.id)
-    return f ? resolveFolderDrop(f, target === ROOT_KEY ? null : target, folders, teamCodes) : null
+    // 루트 예약어(팀 루트 이름 선점) — 같은 범위 팀 루트의 이름(= 팀 이름)으로 미리 거른다. 루트가 아직 없는 팀은 서버(전체 등록 팀)·DB 가드가 최종 판정
+    const teamNames = target === ROOT_KEY && f
+      ? folders.filter(r => isTeamRootFolder(r) && r.projectId === f.projectId && r.workspaceId === f.workspaceId).map(r => r.name)
+      : []
+    return f ? resolveFolderDrop(f, target === ROOT_KEY ? null : target, folders, teamNames) : null
   }
 
   async function handleDrop(target: string) {
@@ -465,7 +461,7 @@ export function MinutesExplorer({
     const active = scope.kind === 'folder' && scope.id === f.id
     const FolderIcon = active || isExpanded ? FolderOpen : Folder
     const drop = dropTarget(f.id)
-    const canDrag = canManageFolder(f) && !isTeamRootFolder(f)
+    const canDrag = canManageFolder(f) && !isLockedRootFolder(f)
     const dragging = drag?.kind === 'folder' && drag.id === f.id
     return (
       <li key={f.id}>
@@ -503,7 +499,7 @@ export function MinutesExplorer({
                   <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-line bg-surface p-1 shadow-[var(--shadow-md)]">
                     {/* 팀 루트 시드(편철 앵커)만 개명·삭제 불가 — 하위 폴더는 개명·삭제가
                         업로드·수정 모달의 하위 구분 옵션에 그대로 반영된다(서버 가드와 동일 기준) */}
-                    {!isTeamRootFolder(f) && (
+                    {!isLockedRootFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'rename', folder: f }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-surface-2">
                         {t('min.fold.rename')}
@@ -515,7 +511,7 @@ export function MinutesExplorer({
                         {t('min.fold.addSub')}
                       </button>
                     )}
-                    {!isTeamRootFolder(f) && (
+                    {!isLockedRootFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'delete', folder: f }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-delayed hover:bg-surface-2">
                         {t('min.fold.delete')}
@@ -644,6 +640,7 @@ export function MinutesExplorer({
   // isolate — 카드의 z-10·z-20 버튼·메뉴가 이 상자 안에서만 겨룬다. main 을 스크롤하면 그 위의 고정 필터 바(z-10, D54)를 넘지 않는다.
   // 폴더 트리(nav)는 lg 에서 고정 — 문서형 main 스크롤에서 목록과 함께 사라지지 않게 필터 바(--minutes-bar-h) 아래에 붙고, 결과보다 길면 안에서 스크롤(BB2)
   return (
+    <CategoriesCtx.Provider value={meetingCategories ?? NO_CATEGORIES}>
     <div
       data-minutes-explorer
       className="isolate flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch"
@@ -707,7 +704,7 @@ export function MinutesExplorer({
                   ? <EmptyState icon={Star} title={t('min.exp.favEmpty')} />
                   : <EmptyState title={t('min.empty.title')} description={t('min.empty.desc')} />
               ) : layout === 'grid' ? (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {shown.map(l => <MinuteCard key={l.id} {...leafItemProps(l)} />)}
                 </div>
               ) : (
@@ -780,6 +777,7 @@ export function MinutesExplorer({
       <DragGhost kind="leaf" innerRef={leafGhostRef} />
       <DragGhost kind="folder" innerRef={folderGhostRef} />
     </div>
+    </CategoriesCtx.Provider>
   )
 }
 
@@ -922,9 +920,12 @@ function LeafMenu({ open, busy, onToggle, onEdit, onMove, onArchive, canSelect, 
   )
 }
 
-function CategoryChip({ cat, t }: { cat: MeetingCategory; t: T }) {
-  const meta = MEETING_META[cat]
-  return <span className={`chip ${meta.chip}`}>{t(meta.labelKey)}</span>
+/** 회의 범주 칩 — 라벨·색은 연결 회의 프로젝트의 설정(meetings.categories). 리프 렌더러가 여럿이라 컨텍스트로 내린다 */
+const NO_CATEGORIES: VocabByProject<'meetings.categories'> = {}
+const CategoriesCtx = createContext<VocabByProject<'meetings.categories'>>(NO_CATEGORIES)
+function CategoryChip({ cat, projectId, t }: { cat: MeetingCategory; projectId: string | null | undefined; t: T }) {
+  const meta = vocabView('meetings.categories', vocabOf(useContext(CategoriesCtx), projectId), cat, t)
+  return <span className={`chip ${meta.chip}`}>{meta.label}</span>
 }
 
 /** 연결된 회의 — 상세 뷰어와 같은 문구·같은 대상(그 회의가 속한 프로젝트의 회의 달력).
@@ -967,7 +968,6 @@ function MinuteCard({
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
   const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
-  const slotOf = useTeamSlot()
   return (
     <article {...dragProps}
       className={`card relative flex flex-col gap-2 p-4 transition-shadow duration-150 hover:shadow-[var(--shadow-md)] ${
@@ -989,9 +989,7 @@ function MinuteCard({
         {canMove && <LeafMenu open={menuOpen} busy={menuBusy} onToggle={onMenuToggle}
           onEdit={onEdit} onMove={onMove} onArchive={onArchive}
           canSelect={canSelect} onSelect={onSelect} t={t} />}
-        <span className={`inline-flex shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(l.teamCode).bar}`}>
-          {l.teamCode}
-        </span>
+        <TeamBar code={l.teamCode} shape="chip" />
       </div>
       {(l.projectName || l.meetingCategory || folderName || meetingProjectId) && (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -1000,7 +998,7 @@ function MinuteCard({
               <BookOpenText aria-hidden className="h-3 w-3" />{l.projectName}
             </span>
           )}
-          {l.meetingCategory && <CategoryChip cat={l.meetingCategory} t={t} />}
+          {l.meetingCategory && <CategoryChip cat={l.meetingCategory} projectId={l.meetingProjectId} t={t} />}
           {meetingProjectId && <LinkedMeetingChip projectId={meetingProjectId} t={t} />}
           {folderName && (
             <span className="chip bg-surface-2 text-ink-muted">
@@ -1009,7 +1007,7 @@ function MinuteCard({
           )}
         </div>
       )}
-      {l.bodyPreview && <p className="line-clamp-3 text-[13px] leading-5 text-ink-muted">{l.bodyPreview}</p>}
+      {l.bodyPreview && <p className="line-clamp-3 break-words text-[13px] leading-5 text-ink-muted">{l.bodyPreview}</p>}
       <div className="mt-auto flex items-center gap-2 pt-1 text-xs text-ink-subtle">
         <span className="tabular-nums">{l.minuteDate}</span>
         {l.createdByName && <><span aria-hidden>·</span><span className="truncate">{l.createdByName}</span></>}
@@ -1030,7 +1028,6 @@ function MinuteRow({
 }: LeafItemProps) {
   const meetingProjectId = meetingLinkOf(l)
   const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
-  const slotOf = useTeamSlot()
   return (
     <li {...dragProps} className={`relative ${dragging ? 'opacity-40' : ''}`}>
       {/* 선택 모드에서는 링크를 렌더하지 않는다(카드와 같은 이유).
@@ -1047,14 +1044,12 @@ function MinuteRow({
         {selecting
           ? <SelectBox checked={selected} onToggle={() => onSelectToggle?.()} t={t} />
           : <StarButton id={l.id} fav={fav} disabled={favDisabled} onToggle={onToggle} t={t} />}
-        <span className={`inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold text-category-fg ${slotOf(l.teamCode).bar}`}>
-          {l.teamCode}
-        </span>
+        <TeamBar code={l.teamCode} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-ink">{l.title}</span>
           {l.bodyPreview && <span className="block truncate text-xs text-ink-subtle">{l.bodyPreview}</span>}
         </span>
-        {l.meetingCategory && <span className="hidden shrink-0 sm:inline-flex"><CategoryChip cat={l.meetingCategory} t={t} /></span>}
+        {l.meetingCategory && <span className="hidden shrink-0 sm:inline-flex"><CategoryChip cat={l.meetingCategory} projectId={l.meetingProjectId} t={t} /></span>}
         {meetingProjectId && (
           <span className="hidden shrink-0 sm:inline-flex">
             <LinkedMeetingChip projectId={meetingProjectId} t={t} />

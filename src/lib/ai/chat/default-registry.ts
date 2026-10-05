@@ -24,6 +24,7 @@ import {
 } from '@/lib/ai/tools'
 import { assistantIndexStatus } from '@/lib/ai/health'
 import { createToolTeamSource } from '@/lib/ai/tools/teamSource'
+import { createToolVocabSource } from '@/lib/ai/tools/vocabSource'
 import { createSupabaseCoreBotRepositories } from '@/lib/repositories/supabase'
 import type { SupabaseServerClient } from '@/lib/repositories/supabase/common'
 import { createChatToolRegistry, type ChatToolRegistry } from './registry'
@@ -42,6 +43,7 @@ async function safeIndexStatusProbe(projectId: string): Promise<{ freshness: str
 export function createDefaultChatToolRegistry(client: SupabaseServerClient): ChatToolRegistry {
   const repositories = createSupabaseCoreBotRepositories(client)
   const teams = createToolTeamSource(client)
+  const vocab = createToolVocabSource(client)
   return createChatToolRegistry([
     createFindWbsItemsTool(repositories.wbs, teams),
     createGetWbsItemDetailTool(repositories.wbs, teams),
@@ -53,7 +55,7 @@ export function createDefaultChatToolRegistry(client: SupabaseServerClient): Cha
     createListMeetingsTool(repositories.meetings),
     createGetMeetingDetailTool(repositories.meetings),
     createListMyMeetingsTool(repositories.meetings),
-    createGetAttendanceTool(repositories.attendance, teams),
+    createGetAttendanceTool(repositories.attendance, teams, vocab),
     createListAnnouncementsTool(repositories.announcements),
     createSearchAnnouncementsTool(repositories.announcements),
     createSearchMinutesTool(repositories.minutes, teams),

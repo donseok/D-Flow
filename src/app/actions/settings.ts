@@ -14,6 +14,8 @@ import { adminFor, type AdminClient } from '@/lib/supabase/adminFor'
 import { createServerClient } from '@/lib/supabase/server'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { agentsNewlyEnabled, backfillWorkspaceAgentOrders, syncAgentsModule } from '@/lib/modules/agentsSync'
+import { hasCustomFieldReindexChange, type FieldDef } from '@/lib/domain/customFields'
+import { enqueueCustomFieldsReindex } from '@/lib/ai/index/reindexCustomFields'
 import { moduleKeyRule } from '@/lib/modules/saveRule'
 import type { EditCtx, SettingDef } from '@/lib/settings/def'
 import { isRecord } from '@/lib/settings/resolve'
@@ -21,7 +23,7 @@ import { CONFIG_MESSAGES, ConfigUnavailableError, ERR_EXPLICIT_UNSET, inUseField
 import { changedKeysSince, findCommandOutcome, listHistory, type SettingsHistoryRow } from '@/lib/settings/history'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { SETTINGS_SCHEMA_VERSION, settingDef, type SettingKey, type SettingScope } from '@/lib/settings/registry'
-import { availableOf, loadProjectValidateDeps, modulesAllowedBroken, ERR_MODULES_ALLOWED_BROKEN, validateProjectConfig, validateWorkspaceConfig, workspaceAllowedOrNone, type FieldError, type ValidateResult } from '@/lib/settings/validateConfig'
+import { availableOf, creditStateOf, loadProjectValidateDeps, modulesAllowedBroken, ERR_MODULES_ALLOWED_BROKEN, validateProjectConfig, validateWorkspaceConfig, workspaceAllowedOrNone, type FieldError, type ValidateResult } from '@/lib/settings/validateConfig'
 import { getWorkspaceConfig, type WorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { listWeekKeys } from '@/lib/settings/weekKeys'
 import { commandDigestInput } from '@/lib/settings/write'
@@ -39,7 +41,7 @@ export type SettingsCommandResult =
   | { ok: false; kind: 'conflict'; code: 'CONFIG_CONFLICT'; commandId: string; error: string
       latest: { revision: number; values: Partial<Record<SettingKey, unknown>>; invalidKeys: SettingKey[] }; changedKeys: SettingKey[]; retryable: false }
   | { ok: false; kind: 'invalid'; code: InvalidCode
-      commandId: string; error: string; fieldErrors: { key: SettingKey; message: string; refCount?: number }[]; retryable: false }
+      commandId: string; error: string; fieldErrors: { key: SettingKey; message: string; refCount?: number; code?: string }[]; retryable: false }
   // appliedRevision: 저장은 됐지만 저장 뒤 동기화가 실패한 경우에만 — 편집기가 그 revision 을 기준으로 채택한다
   | { ok: false; kind: 'denied' | 'unavailable' | 'schema_ahead'; code: string; commandId: string; error: string; retryable: boolean; appliedRevision?: number }
 export type SettingsHistoryScope = { projectId: string } | { workspaceId: string }
@@ -58,7 +60,7 @@ interface ScopeAdapter {
   load: (admin: AdminClient) => Promise<Loaded>
   /** 편집 문맥(입력≠저장 키의 toStored 가 받는다) — 판독 결과에서 만든다(프로젝트 tz 의 오늘 — SP5 §4.2) */
   editCtx: (loaded: Loaded) => EditCtx
-  validate: (admin: AdminClient, next: Record<string, unknown>, loaded: Loaded, allowed: readonly ModuleId[]) => Promise<ValidateResult>
+  validate: (admin: AdminClient, next: Record<string, unknown>, loaded: Loaded, allowed: readonly ModuleId[], unset: readonly string[]) => Promise<ValidateResult>
   rpc: (admin: AdminClient, args: RpcArgs) => PromiseLike<{ data: unknown; error: DbErrorLike | null }>
   afterApplied: (admin: AdminClient, prev: Doc, set: Record<string, unknown>, actor: Actor) => Promise<{ ok: true } | { ok: false; what: string; error: string }>
   revalidate: () => void
@@ -178,7 +180,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
     if (!built.ok) return invalid(commandId, 'CONFIG_INVALID', built.fieldErrors)
     // 5. 교차 불변식
     let v: ValidateResult
-    try { v = await a.validate(admin, built.set, loaded, allowedIds) } catch (e) {
+    try { v = await a.validate(admin, built.set, loaded, allowedIds, unset) } catch (e) {
       if (e instanceof ConfigUnavailableError) return unavailableLogged(a, commandId, '교차 검증 조회', e.message)
       throw e
     }
@@ -217,7 +219,9 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
         a.revalidate()
         const recovery = a.scope === 'workspace'
           ? '같은 modules.allowed 값을 새 명령으로 다시 저장하면 백필을 재시도합니다.'
-          : '프로젝트 설정에서 agents 모듈을 끈 뒤 다시 켜세요.'
+          : after.what === 'AI 색인 갱신'
+            ? '설정을 다시 저장하면 색인 갱신을 재시도합니다.'
+            : '프로젝트 설정에서 agents 모듈을 끈 뒤 다시 켜세요.'
         return { ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, retryable: false, appliedRevision: r.revision,
           error: `설정은 revision ${r.revision} 으로 저장됐지만 ${after.what}에 실패했습니다 — ${recovery}` }
       }
@@ -275,17 +279,38 @@ function projectAdapter(projectId: string, now: Date): ScopeAdapter {
       return { scope: 'project', projectId, today: typeof tz === 'string' ? todayIn(tz, now) : '',
         loadWeekKeys: () => listWeekKeys(adminFor({ projectId }).admin, projectId) }
     },
-    validate: async (admin, next, { ws, cfg }, allowed) => validateProjectConfig(next, await loadProjectValidateDeps(admin, cfg!, ws, { allowed })),
+    validate: async (admin, next, { ws, cfg }, allowed, unset) =>
+      validateProjectConfig(next, { ...await loadProjectValidateDeps(admin, cfg!, ws, { allowed }), credit: creditStateOf(cfg!) }, unset),
     rpc: (admin, x) => admin.rpc('apply_project_settings', { p_project_id: projectId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
-    afterApplied: async (_admin, prev, set, actor) => {
-      if (!('modules.enabled' in set)) return { ok: true }
-      const prevEnabled = (stateValue(prev.keys['modules.enabled']) as ModuleId[] | undefined) ?? null
-      const next = set['modules.enabled'] as ModuleId[]
-      if (!agentsNewlyEnabled(prevEnabled, next)) return { ok: true }
-      // 저장 전 getProjectConfig 와 같은 클라이언트면 요청 캐시가 옛 modules.enabled 를 돌려줄 수 있다.
-      const r = await syncAgentsModule(adminFor({ projectId }).admin, { projectId, actorUserId: actor.userId, prevEnabled, nextEnabled: next })
-      return r.ok ? { ok: true } : { ok: false, what: '에이전트 등록 동기화', error: r.error }
+    afterApplied: async (admin, prev, set, actor) => {
+      if ('modules.enabled' in set) {
+        const prevEnabled = (stateValue(prev.keys['modules.enabled']) as ModuleId[] | undefined) ?? null
+        const next = set['modules.enabled'] as ModuleId[]
+        if (agentsNewlyEnabled(prevEnabled, next)) {
+          // 저장 전 getProjectConfig 와 같은 클라이언트면 요청 캐시가 옛 modules.enabled 를 돌려줄 수 있다.
+          const r = await syncAgentsModule(adminFor({ projectId }).admin, { projectId, actorUserId: actor.userId, prevEnabled, nextEnabled: next })
+          if (!r.ok) return { ok: false, what: '에이전트 등록 동기화', error: r.error }
+        }
+      }
+      for (const [key, entity] of [
+        ['fields.wbs_item', 'wbs_item'],
+        ['fields.issue', 'issue'],
+        ['fields.weekly_row', 'weekly_row'],
+      ] as const) {
+        if (key in set) {
+          const prevDefs = (stateValue(prev.keys[key]) as FieldDef[] | undefined) ?? []
+          const nextDefs = (set[key] as FieldDef[] | undefined) ?? []
+          if (hasCustomFieldReindexChange(prevDefs, nextDefs)) {
+            const r = await enqueueCustomFieldsReindex(admin, projectId, entity)
+            if (!r.ok) {
+              console.error('[settings] 재색인 잡 등록 실패', { projectId, entity, error: r.error })
+              return { ok: false, what: 'AI 색인 갱신', error: '색인 갱신 대기 + 재시도' }
+            }
+          }
+        }
+      }
+      return { ok: true }
     },
     revalidate: () => revalidatePath(`/p/${projectId}`, 'layout'),
   }
@@ -303,6 +328,13 @@ function workspaceAdapter(workspaceId: string): ScopeAdapter {
     rpc: (admin, x) => admin.rpc('apply_workspace_settings', { p_workspace_id: workspaceId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
     afterApplied: async (_admin, _prev, set, actor) => {
+      // 최상위 폴더 모드 → teams(SP5 B2 — D50 ③④): 루트 없는 활성 공용 팀의 루트를 만든다(멱등, 설정 행 FOR UPDATE 로 create_team 과 직렬).
+      // 둘째 트랜잭션이라 실패할 수 있다 — 저장은 성공으로 두고 로그만 남긴다. 편철·업로드의 지연 수렴(ensureTeamRoot)이 메운다
+      const roots = set['minutes.root_folders'] as { mode?: unknown } | undefined
+      if (roots?.mode === 'teams') {
+        const { error } = await adminFor({ workspaceId }).admin.rpc('ensure_team_roots', { p_actor: actor.userId, p_workspace_id: workspaceId })
+        if (error) console.error('[settings] 팀 루트 보장 실패(지연 수렴에 맡긴다)', { workspaceId, code: error.code, message: error.message })
+      }
       const allowed = set['modules.allowed'] as ModuleId[] | undefined
       if (!allowed?.includes('agents')) return { ok: true }
       // 허용 목록의 같은 값 재저장도 백필한다. RPC 적용 후 일부 프로젝트에서 실패한 경우의 복구 경로다.

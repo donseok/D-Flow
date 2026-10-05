@@ -1,0 +1,883 @@
+{
+  "defs": {
+    "text": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "text",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true
+    },
+    "multiline": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "multiline",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true
+    },
+    "number": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "number",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true
+    },
+    "date": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "date",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true
+    },
+    "boolean": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "boolean",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true
+    },
+    "select": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "select",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true,
+      "options": [
+        {
+          "code": "pending",
+          "label": "대기",
+          "sort": 0,
+          "active": true
+        },
+        {
+          "code": "pass",
+          "label": "통과",
+          "sort": 1,
+          "active": true
+        },
+        {
+          "code": "legacy",
+          "label": "과거",
+          "sort": 2,
+          "active": false
+        }
+      ]
+    },
+    "multiselect": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "multiselect",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true,
+      "options": [
+        {
+          "code": "pending",
+          "label": "대기",
+          "sort": 0,
+          "active": true
+        },
+        {
+          "code": "pass",
+          "label": "통과",
+          "sort": 1,
+          "active": true
+        },
+        {
+          "code": "legacy",
+          "label": "과거",
+          "sort": 2,
+          "active": false
+        }
+      ]
+    },
+    "decimal": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "number",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true,
+      "limits": {
+        "decimals": 4
+      }
+    },
+    "quantity": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "number",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true,
+      "limits": {
+        "min": 0,
+        "max": 100,
+        "decimals": 1,
+        "unit": "m³"
+      }
+    },
+    "short": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "text",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true,
+      "limits": {
+        "maxLength": 2
+      }
+    },
+    "multi2": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "multiselect",
+      "required": false,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true,
+      "options": [
+        {
+          "code": "pending",
+          "label": "대기",
+          "sort": 0,
+          "active": true
+        },
+        {
+          "code": "pass",
+          "label": "통과",
+          "sort": 1,
+          "active": true
+        },
+        {
+          "code": "legacy",
+          "label": "과거",
+          "sort": 2,
+          "active": false
+        }
+      ],
+      "limits": {
+        "maxItems": 2
+      }
+    },
+    "required_multi": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "multiselect",
+      "required": true,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true,
+      "options": [
+        {
+          "code": "pending",
+          "label": "대기",
+          "sort": 0,
+          "active": true
+        },
+        {
+          "code": "pass",
+          "label": "통과",
+          "sort": 1,
+          "active": true
+        },
+        {
+          "code": "legacy",
+          "label": "과거",
+          "sort": 2,
+          "active": false
+        }
+      ],
+      "default": [
+        "pending"
+      ]
+    },
+    "required_multiline": {
+      "key": "value",
+      "label": "필드",
+      "description": "",
+      "type": "multiline",
+      "required": true,
+      "editable_by": "member",
+      "show_in_list": false,
+      "searchable": true,
+      "sort": 0,
+      "active": true,
+      "default": "값"
+    }
+  },
+  "cases": [
+    {
+      "name": "text-wrong-0",
+      "def": "text",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "text-wrong-1",
+      "def": "text",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "text-wrong-2",
+      "def": "text",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "multiline-wrong-3",
+      "def": "multiline",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "multiline-wrong-4",
+      "def": "multiline",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "multiline-wrong-5",
+      "def": "multiline",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "number-wrong-6",
+      "def": "number",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "number-wrong-7",
+      "def": "number",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "number-wrong-8",
+      "def": "number",
+      "value": "12",
+      "error": "type"
+    },
+    {
+      "name": "date-wrong-9",
+      "def": "date",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "date-wrong-10",
+      "def": "date",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "date-wrong-11",
+      "def": "date",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "boolean-wrong-12",
+      "def": "boolean",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "boolean-wrong-13",
+      "def": "boolean",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "boolean-wrong-14",
+      "def": "boolean",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "select-wrong-15",
+      "def": "select",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "select-wrong-16",
+      "def": "select",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "select-wrong-17",
+      "def": "select",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "multiselect-wrong-18",
+      "def": "multiselect",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "multiselect-wrong-19",
+      "def": "multiselect",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "multiselect-wrong-20",
+      "def": "multiselect",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "decimal-wrong-21",
+      "def": "decimal",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "decimal-wrong-22",
+      "def": "decimal",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "decimal-wrong-23",
+      "def": "decimal",
+      "value": "12",
+      "error": "type"
+    },
+    {
+      "name": "quantity-wrong-24",
+      "def": "quantity",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "quantity-wrong-25",
+      "def": "quantity",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "quantity-wrong-26",
+      "def": "quantity",
+      "value": "12",
+      "error": "type"
+    },
+    {
+      "name": "short-wrong-27",
+      "def": "short",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "short-wrong-28",
+      "def": "short",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "short-wrong-29",
+      "def": "short",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "multi2-wrong-30",
+      "def": "multi2",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "multi2-wrong-31",
+      "def": "multi2",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "multi2-wrong-32",
+      "def": "multi2",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "required_multi-wrong-33",
+      "def": "required_multi",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "required_multi-wrong-34",
+      "def": "required_multi",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "required_multi-wrong-35",
+      "def": "required_multi",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "required_multiline-wrong-36",
+      "def": "required_multiline",
+      "value": null,
+      "error": "null"
+    },
+    {
+      "name": "required_multiline-wrong-37",
+      "def": "required_multiline",
+      "value": {},
+      "error": "type"
+    },
+    {
+      "name": "required_multiline-wrong-38",
+      "def": "required_multiline",
+      "value": 12,
+      "error": "type"
+    },
+    {
+      "name": "text-valid-39",
+      "def": "text",
+      "value": "hello",
+      "error": null
+    },
+    {
+      "name": "text-valid-40",
+      "def": "text",
+      "value": "한국어",
+      "error": null
+    },
+    {
+      "name": "text-valid-41",
+      "def": "text",
+      "value": "  ",
+      "error": null
+    },
+    {
+      "name": "text-valid-42",
+      "def": "text",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "error": null
+    },
+    {
+      "name": "text-empty",
+      "def": "text",
+      "value": "",
+      "error": "empty"
+    },
+    {
+      "name": "text-long",
+      "def": "text",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "error": "length"
+    },
+    {
+      "name": "text-lf",
+      "def": "text",
+      "value": "a\nb",
+      "error": "newline"
+    },
+    {
+      "name": "text-cr",
+      "def": "text",
+      "value": "a\rb",
+      "error": "newline"
+    },
+    {
+      "name": "unicode-two",
+      "def": "short",
+      "value": "😀😀",
+      "error": null
+    },
+    {
+      "name": "unicode-three",
+      "def": "short",
+      "value": "😀😀😀",
+      "error": "length"
+    },
+    {
+      "name": "multiline-valid",
+      "def": "multiline",
+      "value": "a\nb",
+      "error": null
+    },
+    {
+      "name": "multiline-empty-optional",
+      "def": "multiline",
+      "value": "",
+      "error": null
+    },
+    {
+      "name": "multiline-empty-required",
+      "def": "required_multiline",
+      "value": "",
+      "error": "empty"
+    },
+    {
+      "name": "multiline-max",
+      "def": "multiline",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "error": null
+    },
+    {
+      "name": "multiline-too-long",
+      "def": "multiline",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "error": "length"
+    },
+    {
+      "name": "integer-0",
+      "def": "number",
+      "value": 0,
+      "error": null
+    },
+    {
+      "name": "integer--1",
+      "def": "number",
+      "value": -1,
+      "error": null
+    },
+    {
+      "name": "integer-1000000000000",
+      "def": "number",
+      "value": 1000000000000,
+      "error": null
+    },
+    {
+      "name": "integer--1000000000000",
+      "def": "number",
+      "value": -1000000000000,
+      "error": null
+    },
+    {
+      "name": "huge",
+      "def": "number",
+      "value": 1000000000001,
+      "error": "number"
+    },
+    {
+      "name": "fraction-default",
+      "def": "number",
+      "value": 1.1,
+      "error": "decimals"
+    },
+    {
+      "name": "decimal-0.0001",
+      "def": "decimal",
+      "value": 0.0001,
+      "error": null
+    },
+    {
+      "name": "decimal-1.2345",
+      "def": "decimal",
+      "value": 1.2345,
+      "error": null
+    },
+    {
+      "name": "decimal-99999999999.1234",
+      "def": "decimal",
+      "value": 99999999999.1234,
+      "error": null
+    },
+    {
+      "name": "decimal-too-many",
+      "def": "decimal",
+      "value": 1e-05,
+      "error": "decimals"
+    },
+    {
+      "name": "quantity-valid",
+      "def": "quantity",
+      "value": 12.3,
+      "error": null
+    },
+    {
+      "name": "quantity-min",
+      "def": "quantity",
+      "value": -0.1,
+      "error": "range"
+    },
+    {
+      "name": "quantity-max",
+      "def": "quantity",
+      "value": 100.1,
+      "error": "range"
+    },
+    {
+      "name": "date-2024-02-29",
+      "def": "date",
+      "value": "2024-02-29",
+      "error": null
+    },
+    {
+      "name": "date-2000-02-29",
+      "def": "date",
+      "value": "2000-02-29",
+      "error": null
+    },
+    {
+      "name": "date-0099-01-01",
+      "def": "date",
+      "value": "0099-01-01",
+      "error": null
+    },
+    {
+      "name": "date-9999-12-31",
+      "def": "date",
+      "value": "9999-12-31",
+      "error": null
+    },
+    {
+      "name": "date-invalid-2023-02-29",
+      "def": "date",
+      "value": "2023-02-29",
+      "error": "date"
+    },
+    {
+      "name": "date-invalid-1900-02-29",
+      "def": "date",
+      "value": "1900-02-29",
+      "error": "date"
+    },
+    {
+      "name": "date-invalid-2024-04-31",
+      "def": "date",
+      "value": "2024-04-31",
+      "error": "date"
+    },
+    {
+      "name": "date-invalid-0000-01-01",
+      "def": "date",
+      "value": "0000-01-01",
+      "error": "date"
+    },
+    {
+      "name": "date-invalid-2024-13-01",
+      "def": "date",
+      "value": "2024-13-01",
+      "error": "date"
+    },
+    {
+      "name": "date-invalid-2024-1-01",
+      "def": "date",
+      "value": "2024-1-01",
+      "error": "date"
+    },
+    {
+      "name": "date-invalid-2024-01-01T00:00:00Z",
+      "def": "date",
+      "value": "2024-01-01T00:00:00Z",
+      "error": "date"
+    },
+    {
+      "name": "boolean-True",
+      "def": "boolean",
+      "value": true,
+      "error": null
+    },
+    {
+      "name": "boolean-False",
+      "def": "boolean",
+      "value": false,
+      "error": null
+    },
+    {
+      "name": "boolean-number",
+      "def": "boolean",
+      "value": 0,
+      "error": "type"
+    },
+    {
+      "name": "select-active",
+      "def": "select",
+      "value": "pending",
+      "error": null
+    },
+    {
+      "name": "select-unknown",
+      "def": "select",
+      "value": "gone",
+      "error": "option"
+    },
+    {
+      "name": "select-inactive-new",
+      "def": "select",
+      "value": "legacy",
+      "error": "inactive_option"
+    },
+    {
+      "name": "select-inactive-preserved",
+      "def": "select",
+      "value": "legacy",
+      "error": null,
+      "prev": "legacy"
+    },
+    {
+      "name": "select-changed-to-inactive",
+      "def": "select",
+      "value": "legacy",
+      "error": "inactive_option",
+      "prev": "pass"
+    },
+    {
+      "name": "multi-active",
+      "def": "multiselect",
+      "value": [
+        "pending",
+        "pass"
+      ],
+      "error": null
+    },
+    {
+      "name": "multi-empty",
+      "def": "multiselect",
+      "value": [],
+      "error": null
+    },
+    {
+      "name": "multi-required-empty",
+      "def": "required_multi",
+      "value": [],
+      "error": "empty"
+    },
+    {
+      "name": "multi-duplicate",
+      "def": "multiselect",
+      "value": [
+        "pending",
+        "pending"
+      ],
+      "error": "duplicate"
+    },
+    {
+      "name": "multi-unknown",
+      "def": "multiselect",
+      "value": [
+        "gone"
+      ],
+      "error": "option"
+    },
+    {
+      "name": "multi-inactive",
+      "def": "multiselect",
+      "value": [
+        "legacy"
+      ],
+      "error": "inactive_option"
+    },
+    {
+      "name": "multi-preserved",
+      "def": "multiselect",
+      "value": [
+        "legacy",
+        "pass"
+      ],
+      "error": null,
+      "prev": [
+        "legacy"
+      ]
+    },
+    {
+      "name": "multi-inactive-added",
+      "def": "multiselect",
+      "value": [
+        "legacy"
+      ],
+      "error": "inactive_option",
+      "prev": [
+        "pending"
+      ]
+    },
+    {
+      "name": "multi-reordered",
+      "def": "multiselect",
+      "value": [
+        "pass",
+        "legacy"
+      ],
+      "error": null,
+      "prev": [
+        "legacy",
+        "pass"
+      ]
+    },
+    {
+      "name": "multi-element-type",
+      "def": "multiselect",
+      "value": [
+        "pending",
+        1
+      ],
+      "error": "type"
+    },
+    {
+      "name": "multi-limit",
+      "def": "multi2",
+      "value": [
+        "pending",
+        "pass",
+        "legacy"
+      ],
+      "error": "items",
+      "prev": [
+        "legacy"
+      ]
+    }
+  ]
+}

@@ -15,6 +15,7 @@ import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
 import { pickTeamColor } from '@/lib/domain/teamColor'
 import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { failWith } from '@/lib/errors/dbFail'
+import { teamRootNameError } from '@/lib/minutes/teamRootErrors'
 
 export type TeamActionResult = { ok: true } | { ok: false; error: string }
 
@@ -22,12 +23,12 @@ export type TeamActionResult = { ok: true } | { ok: false; error: string }
 const ERR_TEAM_LOOKUP = '팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_CREATE = '팀을 만들지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_UPDATE = '팀을 수정하지 못했습니다. 잠시 후 다시 시도하세요.'
-const ERR_SEED_FOLDER = '팀은 생성됐지만 회의록 기본 폴더를 만들지 못했습니다 — 관리자에게 알리세요.'
 
 // 'use server' 모듈이라 export 하지 않는다(비동기 함수만 내보낼 수 있다). PostgREST 원문은 로그에만 남긴다.
 const ERR_TEAMS_LIST = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 
-/** 팀 추가 — teams insert + 자동 편철용 시드 루트 폴더(created_by null) 생성 + 캐시 즉시 갱신. */
+/** 팀 추가 — create_team RPC 한 트랜잭션(SP5 B2 — D50): 공용 팀 + (teams 모드면) 회의록 팀 루트. 실패하면 둘 다 없다.
+ *  공용 팀의 세션 INSERT 정책은 0024 가 지웠다 — 공용 팀은 이 길로만 생긴다(team-create-path 불변식). */
 export async function addTeam(workspaceId: string, input: string): Promise<TeamActionResult> {
   // 대상 워크스페이스가 비면 가드 전에 거부한다 — 가드는 null 을 슈퍼유저에게 통과시킨다.
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
@@ -57,28 +58,20 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
   if (max.error) return { ok: false, error: failWith('teams.add', max.error, ERR_TEAM_LOOKUP) }
   const sortOrder = Number((max.data as { sort_order?: number } | null)?.sort_order ?? -1) + 1
 
-  const ins = await admin.from('teams')
-    .insert({ code: norm.code, name: norm.code, sort_order: sortOrder, workspace_id: workspaceId, color: pickTeamColor(sortOrder) })
-  if (ins.error) return { ok: false, error: failWith('teams.add', ins.error, ERR_TEAM_CREATE) }
-
-  // 자동 편철 앵커(0043 계약): 팀코드 동명 시드 루트 폴더. 실패해도 팀은 유지하되 관리자에게
-  // 표시한다(편철은 미분류 폴백이라 치명적이진 않지만 조용히 넘기지 않는다 — 에러 3원칙).
-  // 0071 이후 project_id 로도 스코프해야 한다 — 안 하면 어느 프로젝트가 같은 이름의 프로젝트
-  // 루트 폴더를 먼저 만들었을 때 그 행을 "이미 있다"로 오인해 전역 루트 시드 생성이 스킵된다.
-  // workspace_id 도 건다(0006) — 다른 워크스페이스의 동명 루트를 "이미 있다"로 오인하지 않는다.
-  const seed = await admin.from('minute_folders')
-    .select('id').is('parent_id', null).is('created_by', null).is('project_id', null).eq('name', norm.code)
-    .eq('workspace_id', workspaceId).maybeSingle()
-  let seedError: unknown = seed.error ?? null
-  if (!seed.error && !seed.data) {
-    // 미지정 루트는 워크스페이스별이다(0006) — 트리거가 채울 부모·프로젝트가 없으니 명시한다.
-    const folder = await admin.from('minute_folders')
-      .insert({ name: norm.code, parent_id: null, created_by: null, project_id: null, workspace_id: workspaceId, sort: 100 + sortOrder })
-    if (folder.error) seedError = folder.error
+  // 팀 + 루트를 한 트랜잭션으로(루트 이름 = 팀 이름 — 새 팀은 code 를 이름으로 시작한다). RPC 가 워크스페이스 관리자를 다시 판정하고,
+  // 설정 행을 FOR SHARE 로 잡아 최상위 폴더 모드를 읽는다(custom 모드면 루트를 만들지 않는다)
+  const ins = await admin.rpc('create_team', {
+    p_actor: g.actor.userId, p_workspace_id: workspaceId, p_code: norm.code, p_name: norm.code,
+    p_color: pickTeamColor(sortOrder), p_sort_order: sortOrder,
+  })
+  if (ins.error) {
+    const rootErr = teamRootNameError(ins.error)
+    if (rootErr) return { ok: false, error: rootErr }
+    if (ins.error.code === '23505') return { ok: false, error: `'${norm.code}' 팀이 이미 존재합니다.` }   // 판정과 생성 사이의 경합
+    return { ok: false, error: failWith('teams.add', ins.error, ERR_TEAM_CREATE) }
   }
 
   revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
-  if (seedError) return { ok: false, error: failWith('teams.seedFolder', seedError, ERR_SEED_FOLDER) }
   return { ok: true }
 }
 
@@ -129,7 +122,12 @@ export async function updateTeam(
   // (조용한 no-op 금지 관례, revokeProjectInvite 와 동일).
   const upd = await admin.from('teams').update(row).eq('id', id).is('project_id', null)
     .eq('workspace_id', target.workspace_id).select('id')
-  if (upd.error) return { ok: false, error: failWith('teams.update', upd.error, ERR_TEAM_UPDATE) }
+  if (upd.error) {
+    // 개명이 회의록 팀 루트 이름 동기에서 막혔다(SP5 B2 — D52)
+    const rootErr = teamRootNameError(upd.error)
+    if (rootErr) return { ok: false, error: rootErr }
+    return { ok: false, error: failWith('teams.update', upd.error, ERR_TEAM_UPDATE) }
+  }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '전역 팀이 아니거나 존재하지 않습니다.' }
   revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
   return { ok: true }

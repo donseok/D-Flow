@@ -1,7 +1,7 @@
 // scripts/lib/e2e.mjs — e2e-local.mjs·e2e-synthetic.mjs 의 순수 조각(부작용 없음). vitest 로 고정한다.
 // 러너는 로컬 스택만 두드린다 — 대상 판정은 targets.mjs 한 곳에서 한다.
 import ExcelJS from 'exceljs'
-import { findSentinels, sp4Sentinels } from './sentinels.mjs'
+import { findSentinels, sp4Sentinels, zipTextParts } from './sentinels.mjs'
 import { classifySupabaseUrl, detectEnvTarget, parseEnvFile } from './targets.mjs'
 
 /** 새 프로젝트의 단계 라벨(SP0 done_when 1번). 행의 아웃라인 깊이와 같아야 한다. */
@@ -522,6 +522,36 @@ export function shiftDays(iso, days) {
 export function todayInTz(tz, now = new Date()) {
   if (typeof tz !== 'string' || !tz) throw new Error(`시간대가 없다: ${String(tz)}`)
   return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+}
+
+/** 저장된 분석 실행의 최소 v1 스냅샷 — PPT E2E 가 앱의 파서와 같은 코드·영역을 복원하는지 확인한다. */
+export function issueAnalysisRunFixture({ areaCode, areaName, issueId, code }) {
+  return {
+    schemaVersion: 'issue-analysis.v1', projectId: 'fixture-project', issueCount: 1, generatedAt: '2026-10-01T00:00:00.000Z',
+    areas: [{
+      areaCode, areaName, majors: [],
+      summary: {
+        totalCount: 1,
+        statusCounts: { open: 1, in_progress: 0, resolved: 0, on_hold: 0 },
+        severityCounts: { high: 1, medium: 0, low: 0 },
+        ownerDepartments: ['E2E 부서'], relatedSystems: ['E2E 시스템'],
+      },
+      issues: [{
+        id: issueId, code, majorId: null, title: 'E2E 코드 확인', body: 'E2E 분석서 코드 검증',
+        status: 'open', severity: 'high', subProcess: 'E2E 하위 프로세스', ownerDepartment: 'E2E 부서',
+        relatedSystems: ['E2E 시스템'], assigneeMemberIds: [], source: { manual: { type: 'other', detail: 'E2E 출처' }, minutes: [] },
+      }],
+      opportunities: [{ title: '코드가 보고서에 보임', description: '등록한 이슈 코드를 분석서에서 확인한다.', issueIds: [issueId] }],
+    }],
+    unclassifiedIssues: [],
+  }
+}
+
+/** PPTX 텍스트 파트에 모든 기대 문자열이 있는지 — 바이너리·미디어 파트는 검사하지 않는다. */
+export async function zipHasAll(buf, words) {
+  const text = (await zipTextParts(buf)).map((part) => part.text).join('\n')
+  const missing = words.filter((word) => !text.includes(word))
+  return { ok: missing.length === 0, missing }
 }
 
 /** 검증 전용 요일 판독 — DB 가 돌려준 날짜의 요일(0=일 … 6=토). 주 키를 만들지 않는다 @param {string} iso */

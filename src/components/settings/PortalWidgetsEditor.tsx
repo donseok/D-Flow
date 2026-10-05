@@ -2,7 +2,7 @@
 import { ConflictCompare } from './ConflictCompare'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { SettingsSaveBar } from './SettingsSaveBar'
-import { useSettingsCommand } from './useSettingsCommand'
+import { useSettingItemCommand } from './useSettingItemCommand'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { PORTAL_WIDGETS, defaultPortalWidgets, parsePortalWidgets, type PortalWidgetId, type PortalWidgetSetting } from '@/lib/portal/widgets'
 
@@ -19,7 +19,7 @@ export function PortalWidgetsEditor({ workspaceId, revision, initial, invalidRea
   workspaceId: string; revision: number; initial: PortalWidgetSetting | null; invalidReason?: string
 }) {
   const { t } = useLocale()
-  const c = useSettingsCommand<PortalWidgetSetting>({ scope: { workspaceId }, key: 'portal.widgets', revision, initial, empty: defaultPortalWidgets(), fromLatest })
+  const c = useSettingItemCommand<PortalWidgetSetting>({ scope: { workspaceId }, key: 'portal.widgets', revision, initial, empty: defaultPortalWidgets(), fromLatest })
   const label = (id: PortalWidgetId) => t(labelKeyOf.get(id)!)
   const move = (id: PortalWidgetId, step: -1 | 1) => {
     const col = columnOf.get(id)

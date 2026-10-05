@@ -2,7 +2,7 @@
 // .mjs 는 src 의 TS 를 import 하지 못하므로 비core 모듈 id 를 여기 한 번 더 적는다 —
 // tests/modules/bootstrap-ids.test.ts 가 src/lib/modules/defaults.ts 의 NON_CORE_MODULES 와 같음을 단언한다.
 export const BOOTSTRAP_MODULE_IDS = Object.freeze([
-  'kanban', 'meetings', 'weekly', 'issues', 'wiki', 'announcements', 'attendance', 'agents',
+  'kanban', 'meetings', 'weekly', 'issues', 'issue_analysis', 'wiki', 'announcements', 'attendance', 'agents',
   'minutes', 'minutes_integration', 'chatbot', 'portfolio', 'usage',
 ])
 

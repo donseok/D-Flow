@@ -1,3 +1,4 @@
+import { TEST_AREAS } from '../fixtures/issue-areas'
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
 import type {
@@ -15,13 +16,13 @@ import {
   renderIssueAnalysisPpt,
 } from '@/lib/report/issues/export'
 
-function issue(index: number, megaCode = '02'): IssueAnalysisReportIssue {
+function issue(index: number, areaCode = '02'): IssueAnalysisReportIssue {
   return {
-    id: `${megaCode}-issue-${index}`,
-    issueNo: index,
-    piIssueCode: `PI-I-${megaCode}-${String(index).padStart(2, '0')}`,
-    megaCode: megaCode as IssueAnalysisReportIssue['megaCode'],
-    megaSeq: index,
+    id: `${areaCode}-issue-${index}`,
+
+    code: `PI-I-${areaCode}-${String(index).padStart(2, '0')}`,
+    areaId: areaCode as IssueAnalysisReportIssue['areaId'],
+
     majorId: null,
     title: `자동 이슈 ${index}`,
     body: `자동 이슈 ${index} 상세 내용`,
@@ -39,18 +40,19 @@ function issue(index: number, megaCode = '02'): IssueAnalysisReportIssue {
 }
 
 function area(
-  megaCode: '00' | '02',
+  areaCode: '00' | '02',
   count: number,
   linkedIssueCount = Math.min(3, count),
 ): IssueAnalysisReportArea {
   const issues = Array.from(
     { length: count },
-    (_, index) => issue(index + 1, megaCode),
+    (_, index) => issue(index + 1, areaCode),
   )
   return {
-    megaCode,
-    megaName: megaCode === '00' ? '기준관리' : '영업',
-    megaNameEn: megaCode === '00' ? 'Master Data' : 'Sales',
+    areaId: areaCode,
+    areaCode,
+    areaName: areaCode === '00' ? '기준관리' : '영업',
+
     summary: {
       totalCount: issues.length,
       statusCounts: { open: issues.length, in_progress: 0, resolved: 0, on_hold: 0 },
@@ -60,8 +62,8 @@ function area(
     },
     issues,
     opportunities: [{
-      title: megaCode === '00' ? '기준정보 단일화' : '주문 접수·진행 통합',
-      description: megaCode === '00'
+      title: areaCode === '00' ? '기준정보 단일화' : '주문 접수·진행 통합',
+      description: areaCode === '00'
         ? '중복 기준정보를 통제한다.'
         : '다채널 주문을 표준화하고 단일 화면에서 추적한다.',
       issueIds: issues.slice(0, linkedIssueCount).map(item => item.id),
@@ -83,7 +85,7 @@ function plan(areas = [area('02', 8)]) {
     authorTeam: '운영팀',
     generatedAt: report.generatedAt,
     timeZone: 'Asia/Seoul',
-  })
+  }, TEST_AREAS)
 }
 
 async function zipText(zip: JSZip, path: string): Promise<string> {

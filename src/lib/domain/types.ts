@@ -1,5 +1,7 @@
 import type { PortalWidgetId } from '@/lib/portal/widgets'
+import type { CustomValues } from './customFields'
 import type { ThemePref } from '@/lib/theme/policy'
+import type { VocabByProject } from '@/lib/settings/vocab'
 
 /** DEPRECATED — 깊이 판정에 쓰지 않는다(진실은 parent_id 트리). 프로젝트별 레벨 라벨은 ProjectConfig.levelLabels. */
 export type Level = string
@@ -10,6 +12,8 @@ export type Status = 'not_started' | 'in_progress' | 'delayed' | 'done'
 export type DependencyType = 'FS' | 'SS'
 
 export interface WbsRow {
+  /** Optional for historical fixtures; null means a corrupt stored snapshot and must remain visibly unavailable. */
+  custom?: CustomValues | null
   id: string
   parentId: string | null
   code: string
@@ -32,6 +36,8 @@ export interface WbsRow {
   stage?: string | null
   /** 에이전트 위임(tags 에 'agent') 여부 — WBS 「단계」 컬럼 표시 조건(스펙 2026-09-15 D9). 선택 필드인 이유는 stage 와 같다. */
   agentDelegated?: boolean
+  /** 개발 워크플로 대상 — 선행 기준 final 의 실적 축 재료(SP5b D21, claim 게이트와 같은 입력). 선택 필드인 이유는 stage 와 같다 */
+  devWorkflow?: boolean
   /**
    * 개인 담당자(project_members.id, §항목1 2026-09-15). team(owners)과 별개 축 — 팀 컬럼을
    * 대체하지 않고 병존한다. stage 와 같은 이유로 선택 필드다: 필수로 올리면 WbsRow 리터럴을
@@ -95,15 +101,11 @@ export interface DeliverableAttachment {
   size: number | null
   mime: string | null
   createdAt: string
-  url?: string | null      // 서명 URL(읽기 시 생성) — 다운로드가 허락될 때만
-  linkError?: boolean      // 다운로드는 허락됐지만 서명 URL 발급에 실패
 }
 
 /* ── 근태현황 ──
- * work=정상근무 annual=연차 half=반차 quarter=반반차 sick=병가 trip=출장
- * (remote=재택 official=공가 absent=결근 은 등록 옵션에서 제외 — 과거 기록 표시용으로만 타입 유지) */
-export type AttendanceType =
-  | 'work' | 'remote' | 'annual' | 'half' | 'quarter' | 'sick' | 'trip' | 'official' | 'absent'
+ * 유형 code 는 프로젝트 설정 attendance.types(SP5 B4) — 목록·라벨·집계 분류는 설정에서 읽는다(컴파일 타임 유니언 금지). */
+export type AttendanceType = string
 export interface AttendanceRecord {
   id: string
   projectId: string
@@ -135,7 +137,8 @@ export interface Announcement {
 }
 
 /* ── 회의 (meetings) ── */
-export type MeetingCategory = 'general' | 'routine' | 'kickoff' | 'review' | 'report' | 'external'
+/** 회의 범주 code — 프로젝트 설정 meetings.categories(SP5 B4). 컴파일 타임 유니언 금지 */
+export type MeetingCategory = string
 export type MeetingRecurrence = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly'
 
 export interface Meeting {
@@ -217,6 +220,8 @@ export interface Minute {
   id: string
   minuteDate: string           // 'YYYY-MM-DD'
   teamCode: TeamCode
+  /** SP5 B2 — 담당 팀 id(code 단위 해석 결과 — minutes.team_id). 맞는 팀이 없으면 null */
+  teamId?: string | null
   title: string
   bodyMd: string               // 목록 조회에선 ''
   meetingId: string | null
@@ -248,17 +253,26 @@ export interface MinuteFolder {
   name: string
   parentId: string | null
   sort: number
-  createdBy: string | null           // null = 시드 폴더(관리자만 관리)
+  createdBy: string | null           // 작성자(계정 삭제·시스템 생성이면 null) — 폴더 종류 판정에 쓰지 않는다(kind)
   projectId: string | null           // 0076 — 귀속 프로젝트. null = 미지정
   /** 0006 — 소속 워크스페이스. 폴더 관리 판정(작성자 ∨ 그 워크스페이스 관리자)의 근거. 없으면 작성자만(fail-closed). */
   workspaceId?: string | null
+  /** SP5 B2 — 폴더 종류. 없으면 일반 폴더로 본다(루트 특권을 주지 않는 쪽). team_root·custom_root 는 세션이 바꾸거나 지우지 못한다(DB 가드) */
+  kind?: MinuteFolderKind
+  /** team_root 의 팀 id. 그 밖은 null */
+  teamId?: string | null
+  /** team_root 의 팀 code(teams 조인). 못 읽으면 null — 팀을 파생하지 않는다(fail-closed) */
+  teamCode?: string | null
 }
+export type MinuteFolderKind = 'user' | 'team_root' | 'custom_root'
 
 /** 탐색기 리프 — 목록 조회 shape 에 폴더 소속 부착. */
 export interface ExplorerLeaf {
   id: string
   minuteDate: string                 // 'YYYY-MM-DD'
   teamCode: TeamCode
+  /** SP5 B2 — 담당 팀 id(code 단위 해석 결과). 맞는 팀이 없으면 null */
+  teamId?: string | null
   title: string
   fileCount: number
   createdBy: string | null           // 이동 버튼 노출 판정(작성자 or 관리자)
@@ -272,6 +286,9 @@ export interface ExplorerLeaf {
   /** 연결 회의가 속한 프로젝트 — 회의 달력 링크 대상. 회의가 지워졌거나 볼 권한이 없으면 null 이라
    *  meetingId 만으로 링크를 만들지 않는다(상세 뷰어와 같은 fail-closed 판정). */
   meetingProjectId?: string | null
+  /** SP5 B2(D40) — 이 회의록을 고칠(이동·일괄 지정) 수 있는가. 서버가 canEditMinute(회의록의 project_id 그대로 — 회의 폴백 아님)로
+   *  판정해 싣는다. 없으면 거짓(fail-closed) */
+  canEdit?: boolean
 }
 
 export interface FolderNode {
@@ -286,6 +303,8 @@ export interface ExplorerData {
   leaves: ExplorerLeaf[]             // 전 기간 flat, 날짜 내림차순
   total: number
   truncated: boolean
+  /** 연결 회의의 프로젝트(meetingProjectId)별 회의 범주(설정 meetings.categories, SP5 B4). 없거나 null = 못 읽음 → 칩은 code */
+  meetingCategories?: VocabByProject<'meetings.categories'>
 }
 
 export interface MinuteFile {
@@ -297,6 +316,10 @@ export interface MinuteFile {
   size: number | null
   mime: string | null
   createdAt: string
+  /** 올린 계정. 계정이 지워졌으면 null(FK set null). */
+  uploadedBy?: string | null
+  /** 올린 계정의 표시 이름 — 같은 워크스페이스 공유 계정만 읽힌다(profiles_read). 못 읽으면 null. */
+  uploadedByName?: string | null
   url?: string | null          // 서명 URL(요청 시 발급)
 }
 

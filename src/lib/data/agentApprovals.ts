@@ -15,7 +15,8 @@ import { fetchAllByKeyset } from '@/lib/data/paging'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { isUuidLike } from '@/lib/domain/agentWork'
-import { filterApprovable, type ApprovalItemRow } from '@/lib/domain/approvable'
+import { filterApprovable, type ApprovalItemRow, type ApprovalStepRow } from '@/lib/domain/approvable'
+import { loadQueueApprovals } from '@/lib/agent/approvalState'
 import { myMemberIds } from '@/lib/agent/assignee'
 
 type ItemRow = ApprovalItemRow
@@ -25,8 +26,9 @@ export function countApprovable(
   orders: ReadonlyArray<{ wbs_item_id: string | null; claimed_by_user_id: string | null }>,
   items: ReadonlyArray<ItemRow>,
   viewer: { isAdmin: boolean; memberIds: readonly string[]; userId: string },
+  steps?: Readonly<Record<string, ApprovalStepRow>>,
 ): number {
-  return filterApprovable(orders, items, viewer).length
+  return filterApprovable(orders, items, viewer, steps).length
 }
 
 /** 이 프로젝트에서 내가 승인할 수 있는 결재 대기 수. 비로그인·잘못된 id 는 0. 조회 실패·잘림은 throw(호출부 — 셸 — 가 로그 + 배지 0). */
@@ -48,12 +50,15 @@ export async function getPendingApprovalCount(projectId: string): Promise<number
       return (after ? q.gt('id', after.id) : q).order('id').limit(limit)
     })
   if (rows.length === 0) return 0
-  if (isAdmin) return rows.length
+  // 대기 승인 단계(SP5b S20) — admin 단계·같은 사람 금지가 셈에 들어간다. 판독 실패는 로그 + 현행 셈(loadQueueApprovals 의 계약)
+  const steps = Object.fromEntries(await loadQueueApprovals(admin, projectId,
+    [...new Set(rows.map((r) => r.wbs_item_id).filter((x): x is string => x !== null))]))
+  if (isAdmin) return countApprovable(rows, [], { isAdmin: true, memberIds: [], userId: actor.userId }, steps)
   const memberIds = await myMemberIds(admin, { userId: actor.userId, projectId })
   if (memberIds.length === 0) return 0
   const items = await fetchAllByKeyset<ItemRow>('[approvals] 항목 트리', (r) => r.id, (after, limit) => {
     const q = admin.from('wbs_items').select('id, parent_id, assignee_member_id', { count: 'exact' }).eq('project_id', projectId)
     return (after ? q.gt('id', after.id) : q).order('id').limit(limit)
   })
-  return countApprovable(rows, items, { isAdmin: false, memberIds, userId: actor.userId })
+  return countApprovable(rows, items, { isAdmin: false, memberIds, userId: actor.userId }, steps)
 }

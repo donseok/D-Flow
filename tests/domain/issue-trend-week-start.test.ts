@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { issueTrend, type DashboardIssue } from '@/lib/domain/issueDashboard'
 
 const issue = (createdAt: string): DashboardIssue => ({
-  id: createdAt, issueNo: 1, piIssueCode: null, megaCode: null, title: 't', status: 'open', severity: 'low',
+  id: createdAt, code: 'ISS-001', areaId: null, title: 't', status: 'open', severity: 'low',
   dueDate: null, resolvedAt: null, createdAt,
 }) as DashboardIssue
 

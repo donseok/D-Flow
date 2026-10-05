@@ -44,6 +44,14 @@ export const SYNTHETIC_R = Object.freeze({
     area('DATA', '데이터', 2, [['RES', 'primary'], ['OPS', 'support']]),
     area('RUN', '운영', 3, [['OPS', 'primary']]),
   ]),
+  // SP5 B1 — 프로젝트별 영역 코드·카운터 범위
+  issues: Object.freeze({
+    idPolicy: Object.freeze({ prefix: 'RS', pattern: '{prefix}-{area}-{seq:3}', counter_scope: 'area', reset: 'never' }),
+    areas: Object.freeze([
+      ['RND', 'RND 연구'], ['OPS', 'OPS 운영'], ['QA', 'QA 검사'], ['SAF', 'SAF 안전'], ['ENV', 'ENV 환경'],
+      ['DOC', 'DOC 문서'], ['LAB', 'LAB 실험'], ['DAT', 'DAT 데이터'], ['EQP', 'EQP 장비'], ['ADM', 'ADM 관리'],
+    ].map(([code, name], i) => Object.freeze({ code, name, sortOrder: i + 1 }))),
+  }),
   // SP5 A(스펙 D43·S1·S5) — LA·월~금·일요일(기본). 잎 A 기준일 10/12 = 6/10, 잎 B 기준일 10/26 = 6/10
   calendar: calendarOf('America/Los_Angeles', [1, 2, 3, 4, 5], 'sunday', [],
     { '2026-10-12': Object.freeze({ A: 60 }), '2026-10-26': Object.freeze({ B: 60 }) }),
@@ -68,6 +76,11 @@ export const SYNTHETIC_C = Object.freeze({
     area('QUAL', QUALITY, 3, [['MEP', 'primary']]),
     area('MATL', '자재', 4, [['MEP', 'support']]),
   ]),
+  // SP5 B1 — 연도별 프로젝트 카운터, 영역 없는 등록
+  issues: Object.freeze({
+    idPolicy: Object.freeze({ prefix: 'CN', pattern: '{prefix}-{yyyy}-{seq:4}', counter_scope: 'project', reset: 'yearly' }),
+    areas: Object.freeze([]),
+  }),
   // SP5 A(스펙 D28·D43) — 베를린·월~토·월요일(SP4 S4(월) 회귀를 계속 덮는다 — S1-calendar 가 주차 문서(S4(월)) 전에 설정 액션으로 쓴다:
   // 입력은 요일 하나, 문서 0건이라 서버가 [{ day: 'monday', from: null }] 로 교체). 10/10(토) 휴무 → 잎 A 10/12 = 6/10(무시하면 7/11 = 64),
   // 10/25(일 — 베를린 DST 종료일) 근무 → 잎 B 10/26 = 8/12 = 67(토요일 근무나 일요일 근무를 하나라도 무시하면 7/11 = 64)
@@ -80,9 +93,10 @@ export const SYNTHETIC_C = Object.freeze({
 export const SYNTHETIC_WORKSPACE_B = Object.freeze({ slug: 'syn-b', name: '합성 타 워크스페이스' })
 
 /** 아직 켜지지 않은 단계 → 켜는 SP(개정 §6.5.8, 스펙 D25·SP4 §6.4·SP5 D43). 건너뜀으로 세지 않고 '미활성'으로 기록한다.
- *  SP4 A1 이 S2·S4(월)를, SP4 A2 가 S10 의 SP4 부분을, SP5 A 가 S4(일)·S5·S1 의 달력 키·S10 의 시간대 부분을 켰다 */
+ *  SP4 A1 이 S2·S4(월)를, SP4 A2 가 S10 의 SP4 부분을, SP5 A 가 S4(일)·S5·S1 의 달력 키·S10 의 시간대 부분을,
+ *  SP5b 가 S1-workflow·S3-flow(승인 단계)·S6-issue-status·S9-workflow 를, SP5c 가 S3-fields 를 켰다 */
 export const PENDING_STEPS = Object.freeze({
-  S3: 'SP5b·SP5c', S6: 'SP5 B1·SP5b', S7: 'SP8(봇)·SPU1(개인 알림)', S8: 'SP6', S10: 'SP5 B1·B4~SP8(나머지 부분 집합)',
+  S7: 'SP8(봇)·SPU1(개인 알림)', S10: 'SP6~SP8(나머지 부분 집합)',
 })
 
 /**

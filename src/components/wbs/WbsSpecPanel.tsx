@@ -498,7 +498,15 @@ function WbsAgentOrderStatus({ itemId, editable, refreshKey }: { itemId: string;
       {editable && order.status === 'reported' && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <button type="button" className="btn btn-primary h-7 px-2.5 text-xs" disabled={busy}
-            onClick={() => void run(() => approveAgentCompletion(order.id, lastCompletionId))}>{t('wbs.agentOrderApprove')}</button>
+            data-agent-approve={order.approval?.step}
+            onClick={() => void run(() => order.approval
+              ? approveAgentCompletion(order.id, lastCompletionId, order.approval.step)
+              : approveAgentCompletion(order.id, lastCompletionId))}>
+            {order.approval
+              ? t('wbs.approveStep').replace('{i}', String(order.approval.index)).replace('{n}', String(order.approval.total))
+                .replace('{label}', order.approval.label ?? t('wbs.approveStepDefault'))
+              : t('wbs.agentOrderApprove')}
+          </button>
           {rejecting ? (
             <>
               <input className="app-input h-7 w-40 text-xs" aria-label={t('wbs.agentOrderRejectNote')}

@@ -42,7 +42,8 @@ describe('중립 칩의 대체 쌍은 대비 표가 보증한다(N1)', () => {
   // WBS 접힌 행 수 배지도 1단계 행이 surface-subtle 이라 같은 이유로 neutral on surface + 장식 링(ring-border — 글자 아님)
   const SITES: [string, RegExp][] = [
     ['src/lib/domain/issues.ts', /on_hold:[^\n]*chip: 'bg-neutral-weak text-neutral'/],
-    ['src/lib/domain/issues.ts', /low:[^\n]*chip: 'bg-neutral-weak text-neutral'/],
+    // 심각도 '낮음'의 칩은 B4 부터 설정 어휘의 색 토큰(neutral) — 그 토큰의 클래스 쌍
+    ['src/lib/settings/vocab.ts', /neutral: \{[^\n]*chip: 'bg-neutral-weak text-neutral'/],
     ['src/lib/domain/announcements.ts', /expired:[^\n]*chip: 'bg-neutral-weak text-neutral'/],
     ['src/components/issues/IssueModals.tsx', /chip bg-surface text-neutral/],
     ['src/components/wbs/WbsGanttSheet.tsx', /rounded-full bg-surface px-1\.5 py-px tabular-nums text-neutral ring-1 ring-inset ring-border/],

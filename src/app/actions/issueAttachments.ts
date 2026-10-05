@@ -10,7 +10,7 @@ import {
   remainingIssueAttachmentSlots,
   type IssueAttachment,
 } from '@/lib/domain/issueAttachments'
-import { LIST_SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
+import { SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
 import { removeStoredAttachment } from '@/lib/attachments/removeStoredAttachment'
 import { requireModule } from '@/lib/modules/gate'
 import { createServerClient } from '@/lib/supabase/server'
@@ -69,7 +69,8 @@ async function requireIssueEditable(issueId: string): Promise<
 }
 
 /**
- * 이슈의 첨부 목록(서명 URL 포함, 최신순). 다운로드는 로그인 사용자 전체에 열려 있다.
+ * 이슈의 첨부 목록(메타만, 최신순). SP5 B3 과제7: 목록은 서명하지 않는다 — 내려받기는 클릭 때 getIssueAttachmentUrl 이
+ * 60초 링크를 발급한다(열어 둔 화면의 1시간짜리 링크가 권한 회수 뒤에도 살아 있던 창을 없앤다).
  *
  * 빈 배열이 아니라 에러 채널을 둔 이유: 목록 화면의 클립 배지는 getIssues 의 **별도 쿼리**에서
  * 오므로, 여기서 실패를 [] 로 뭉개면 목록은 '첨부 3개'라고 하는데 상세는 '첨부 없음'이 된다.
@@ -95,32 +96,49 @@ export async function listIssueAttachments(issueId: string): Promise<IssueAttach
     console.error('[listIssueAttachments] 첨부 조회 실패:', error.message)
     return { ok: false, error: ERR_LOOKUP }
   }
-
-  const out: IssueAttachment[] = []
-  for (const r of data ?? []) {
-    const filePath = r.file_path as string
-    const fileName = r.file_name as string
-    // 건별 호출이다 — 복수형 createSignedUrls 는 경로별로 다른 download 이름을 줄 수 없다.
-    // 빈 파일명이면 true 로 폴백해 Content-Disposition 자체는 붙게 한다(minutes.ts:715 와 같은 처리).
-    const { data: signed, error: signErr } = await sb.storage
-      .from(BUCKET)
-      .createSignedUrl(filePath, LIST_SIGNED_URL_TTL_SEC, { download: fileName || true })
-    if (signErr) {
-      // 서명 실패를 조용히 null 로 넘기면 화면에서 '링크 없음'으로 위장된다(에러 3원칙 ①).
-      console.error('[listIssueAttachments] 서명 URL 생성 실패:', filePath, signErr.message)
-    }
-    out.push({
+  return {
+    ok: true,
+    items: (data ?? []).map(r => ({
       id: r.id as string,
       issueId: r.issue_id as string,
-      fileName,
-      filePath,
+      fileName: r.file_name as string,
+      filePath: r.file_path as string,
       size: (r.size as number) ?? null,
       mime: (r.mime as string) ?? null,
       createdAt: r.created_at as string,
-      url: signed?.signedUrl ?? null,
-    })
+    })),
   }
-  return { ok: true, items: out }
+}
+
+/**
+ * 이슈 첨부 클릭 시 60초 내려받기 링크(SP5 B3 과제7). 첨부 id 와 이슈 id 를 함께 받아 그 이슈의 첨부일 때만 서명한다 —
+ * 다른 이슈의 첨부 id 를 끼워 넣어도 0행이다. 이슈 행의 프로젝트로 모듈 관문을 다시 보고, 서명은 사용자 세션이라
+ * Storage 읽기 정책을 이 순간 다시 통과한다(권한 회수 즉시 반영).
+ */
+export async function getIssueAttachmentUrl(
+  issueId: string, attachmentId: string,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  if (!(await getSession())) return { ok: false, error: '로그인 필요' }
+  const scope = await resolveProjectId('issues', issueId)
+  if (!scope.ok || !scope.projectId) return { ok: false, error: scope.ok ? ERR_LOOKUP : scope.error }
+  const mod = await requireModule({ projectId: scope.projectId }, 'issues')
+  if (!mod.ok) return { ok: false, error: mod.error }
+  const sb = await createServerClient()
+  const { data: row, error } = await sb.from('issue_attachments')
+    .select('file_path, file_name').eq('id', attachmentId).eq('issue_id', issueId).maybeSingle()
+  if (error) {
+    console.error('[getIssueAttachmentUrl] 첨부 조회 실패:', error.message)
+    return { ok: false, error: ERR_LOOKUP }
+  }
+  if (!row) return { ok: false, error: '첨부 없음' }
+  // 빈 파일명이면 true 로 폴백해 Content-Disposition 자체는 붙게 한다.
+  const { data: signed, error: signErr } = await sb.storage.from(BUCKET)
+    .createSignedUrl(row.file_path as string, SIGNED_URL_TTL_SEC, { download: (row.file_name as string) || true })
+  if (signErr || !signed?.signedUrl) {
+    console.error(`[getIssueAttachmentUrl attachment=${attachmentId}] 서명 실패:`, signErr?.message ?? 'no url')
+    return { ok: false, error: '내려받기 링크를 만들지 못했습니다. 잠시 후 다시 시도하세요.' }
+  }
+  return { ok: true, url: signed.signedUrl }
 }
 
 /**

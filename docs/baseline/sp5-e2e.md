@@ -55,3 +55,42 @@
 - 메인 스택(사용자 DB): 적용하지 않았다(D48 — §8 #13 은 main 반영 뒤 컨트롤러가 사용자에게 묻는다. #1·#2 의 답 상태: 10-02 05시 답 받음 — #1 통일·#2 전환)
 - 커밋 위생(bisect): `90ead30` → `6b36cae`, `ebea4cd` → `ce69c55`, `bafc051`·`1992edb`·`907df97`·`5a64a13` → `a9bab86` 로 건너뛴다. O2(`153d06c8`)의 `Preview-checked` 시각 19:12 는 실제 19:08~09(amend 금지 — 기록으로 정정).
 - merge 커밋 `5e5e82c1` 은 0018 번호가 둘이고(`0018_calendar`·`0018_account_preferences`) 테스트도 빨갛다 — bisect 때 `f9ad12ae` 로 건너뛴다(A 최종 리뷰 P3).
+
+# B1 — 체크포인트(과제 18) · 2026-10-03
+
+- 체크포인트 소스 HEAD `4eb5fe81` (`sp5/b1`), main 기준 `9b50d483` / 마지막 이관 `0019_calendar`; fetch·main 사용자 스택 접근 없음. 전용 `d-flow-sp4` (API 54521, DB 54522)에서 `db:reset`·`dev:bootstrap`·`settings:verify` 문제 0.
+- 마이그레이션 R 왕복: catalog 차이 0·권한 차이 0·데이터 왕복 통과; rollback smoke 20 통과. CI 등가 reset `--version 0001` 뒤 migration up 및 RLS 37 파일·550 통과. 전체 reset/bootstrap 뒤 RLS 재확인.
+- 코드 검사: `ISSUE_MEGA_AREAS`, `issue_mega_areas`, `mega_code`, `pi_issue_code` 사용 0; UI 위험 파일 변경 0; 기존 `schema-invariants` 예외 한 행 제거만. 합성 게이트 `ok:true`, 18/18; 로컬 E2E `ok:true`, 55/55. 기본 `ISS-001`, 영역별 `E2E-RND-001` → 개명 후 기존 코드 유지 → `E2E-RND-002`, 목록·분석서의 코드 표시, 분석 모듈 비활성화 시 쓰기 거부·API 404를 확인했다. 봇 호출은 외부 LLM 키 없이 단위 검사만.
+- 설정 검사: 4 프로젝트·4 워크스페이스, 문제 0. 전체 Vitest 882 files / 11,648 tests 중 11,647 통과, 기존 macOS firmlink 경로 테스트 1 실패(`tests/scripts/baseline-cli.test.ts`, `.superpowers` 허용 경로를 `/System/Volumes/Data` alias에서도 허용해야 하는 기준선). lint 0 error(기존 경고 4), typecheck 통과.
+- 눈확인: `sp5-ui.md` B1 절, 13 화면 시나리오 × 1440/390 × light/dark; calendar 오류 주입은 전용 DB에서 복구 확인. 빌드는 B1 앱 소스가 마지막 검증된 시점에 성공.
+- 종료 정리: 전용 DB reset + bootstrap(UTC) 뒤 `settings:verify` 프로젝트 0·워크스페이스 1·문제 0. 사용자 DB 적용 없음.
+- 연도 경계: 해당 없음 — 채번 연도는 UTC instant를 설정 시간대로 변환해 산출(`at time zone`); 구간 경계 판정이 아니다.
+
+# B1 — 성능(보류 — 일괄 측정)
+
+- 상태: **보류 — SP5 전체 구현 뒤 일괄 측정**(사용자 지시 2026-10-02, P16). 지금은 이슈 코드 채번·분석 진입 경로의 비용을 대상으로만 기록한다.
+- 바뀐 경로: 매 이슈 insert 의 `assign_issue_code` 트리거가 프로젝트 설정 행 `FOR SHARE`, 지정된 이슈 영역 행 `FOR KEY SHARE`, 번호 카운터 upsert 잠금을 거친다. 발급 문자열이 이미 있으면 `exists(project_id, code)` 유일 인덱스 탐색을 반복한다. 이슈 페이지와 create/update 액션은 `loadIssueEntryContext` 에서 `getProjectConfig` 와 `moduleState` 를 병렬 조회하고 정책·분류 설정·영역을 해석한다. 현재 helper 에 요청 간 캐시가 없으므로 페이지 및 액션 왕복의 측정값에 설정 조회가 포함된다.
+- 측정 대상: ① 동시 채번 100건 — 측정 전용 스크립트에서 두 연결이 같은 범위로 insert 하고 건당 지연 p95·유일성·무결번을 기록한다(기존 `issue-code-policy` 경합 케이스를 따른다). ② `/p/<pid>/issues` — 800 이슈 시드 페이지 응답. ③ `createIssue` 액션 왕복 — 같은 설정·영역으로 순차 생성한다.
+- 방법: `docs/baseline/sp4-perf.md` 의 교대 방법과 A 과제 31b 를 따른다. 기준선은 B1 직전 `main`, 후보는 `sp5-b1-done`; 둘 다 `next start`, 워밍업 3회 뒤 경로별 순차 30회 × 3 라운드, ABBA 순서, 측정 앞 1분 load < 3 기록. 두 편의 빌드·시드·`vacuum analyze` 를 맞추고 전용 스택에서 수행한다. 동시 채번용 임시 측정 스크립트는 재현 절차에 두되 커밋하지 않는다.
+- 판정: 페이지·액션 p95 는 라운드별 중앙값의 후보/기준선 비율 ≤ 1.20(D59). 동시 채번은 절대 p95(건당)와 유일·무결번 결과를 기록하되 회귀 비율 기준은 적용하지 않는다.
+- 측정 실행처: 레인 A 원장의 일괄 측정 목록과 과제 18 종료 알림. 측정 시 기준선·후보의 실제 커밋 좌표와 부하 기록을 이 절에 추가한다.
+
+
+## B1 최종 리뷰 — 2026-10-04
+
+- 대상: `sp5-b1-done` = `164ac7c0`, main 기준 `9b50d483`. 스펙 §7 B1 완료 조건과 계획의 완료 조건 표를 실제 소비처·관문·테스트·리허설 기록에 대조했다. **차단 사항 없음**. 최종 리뷰는 단일 작업자가 수행했으며 독립 리뷰어 검증은 포함하지 않는다.
+- 보안/DB: 새 회의록 RPC는 service_role 실행권만, 액션은 프로젝트 멤버·모듈 관문 뒤 원문 검증을 거쳐 가드의 actor ID를 전달한다. 영역 RPC의 행위자 재판정·설정 행 SHARE 잠금·영역 KEY SHARE 잠금·채번 카운터 직렬화·코드 불변 트리거를 확인했다. 롤백 가능 조건과 되돌릴 수 없는 데이터 이관은 사용자 DB 절차서에 명시되어 있다.
+- 소비처: 일반 등록과 분석 필드 쓰기의 모듈 관문 분리, 분석 모듈 OFF일 때 기존 메타를 보존하는 수정 계약, 코드/영역을 사용하는 목록·회의록·분석서·색인, 영역별 채번/정책 렌더 골든 표의 TS·SQL 대응을 확인했다.
+- 제한: 전체 테스트의 알려진 firmlink 실패 1건, 외부 LLM 봇 호출 미실행, 성능 측정은 사용자 지시대로 SP5 전체 구현 뒤 일괄 실행. `.github/workflows/ci.yml`은 `sp5/**` push를 대상으로 하지 않아 B1 원격 CI 실행은 없다(로컬 CI 등가 결과를 사용).
+- GitHub `origin/sp5/b1`에 체크포인트 커밋을 푸시했고 작업 트리는 깨끗하다. 태그는 로컬 유지. main 반영과 사용자 DB 적용은 별도 단계다.
+
+## B2 체크포인트 — 회의록 팀·폴더 · 2026-10-04 (Claude Cloud)
+
+- 소스: `sp5/b2`, 체크포인트 커밋 `9ad2e8e` + 묶음5 작업 트리(E2E 단계·탐색기 390 폭·팀 관리 문구), 마지막 이관 `0024_minutes_teams`. 로컬 Supabase(CLI 2.75, `supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,postgres-meta`). 사용자 DB 접근 없음.
+- 리허설: `db reset`(14:13:24 KST) → `*_minutes_teams_*` 리허설 smoke 통과 → `dev:bootstrap` → `settings:verify` 문제 0. test:rls 41 files·644 통과/skip 0.
+- 로컬 E2E(`scripts/e2e-local.mjs`, `next start` 3101, 14:48 KST): **`ok:true`, 56/56**. 새 단계 `minutes-teams`(issue-code-flow 뒤):
+  공용 팀 추가(`addTeam` → `create_team`) → 팀 루트(kind team_root·이름 = 팀 code·무프로젝트) → 폴더 없이 올린 회의록이 그 루트로 편철되고 `team_id` 가 그 팀 → 팀 개명 → 루트 이름이 따라가고 폴더 id 불변 → 탐색기에 새 이름 → 비활성 → 그 루트 아래 새 폴더 거부("비활성 팀의 폴더…")·그 팀 code 의 새 회의록 거부·루트 보존.
+- 합성 게이트: `synthetic-acceptance.md` SP5 B2 절(19/19). 눈확인: `sp5-ui.md` B2 절. 성능: `sp5-perf.md`(SP5 전체 일괄).
+- 단위 전체 통과(11,916·skip 2 — 묶음5 직전 실행, 마감 직전 재실행은 아래 effort 절), typecheck·lint(오류 0, 기존 경고 4)·build 통과.
+- 옛 링크: `?team=OPS`(code) → 해석한 팀 id 로 리다이렉트(`resolveTeamParam`)를 실화면에서 확인했다.
+- 제한: 외부 LLM 호출 없음. 자체 검토이며 독립 리뷰가 아니다. `.github/workflows/ci.yml` 은 `sp5/**` push 를 대상으로 하지 않는다(로컬 등가 결과 사용).

@@ -1,4 +1,5 @@
 import type { Status } from '@/lib/domain/types'
+import { useStageLabel } from './StageLabelsProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 
 export const STATUS: Record<Status, { label: string; chip: string; bar: string; dot: string }> = {
@@ -107,6 +108,7 @@ export function StageChip({
   stage: string | null | undefined
   t: (k: DictKey) => string
 }) {
+  const label = useStageLabel()
   if (!stage) return null
   const meta = STAGE_META[stage]
   // 모르는 값도 그린다 — 감추면 "단계 없음"으로 위장한다(에러 처리 3원칙).
@@ -115,7 +117,7 @@ export function StageChip({
       data-wbs-stage={stage}
       className={`lvl-badge ${meta ? meta.cls : STAGE_UNKNOWN_CLS}`}
       style={{ fontSize: 'var(--wbs-badge-font, 10px)', paddingInline: '3px', letterSpacing: 0 }}
-      title={meta ? t(meta.key) : stage}
+      title={meta ? label(stage, t(meta.key)) : stage}
     >
       {stage.toUpperCase()}
     </span>

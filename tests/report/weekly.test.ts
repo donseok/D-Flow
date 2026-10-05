@@ -4,6 +4,7 @@ import type { Announcement, AttendanceRecord, ComputedItem, Meeting, ProjectMemb
 import { makeRosterMember } from '../fixtures/rosterMember'
 import { calSeoulMon, calUtcSun } from '../helpers/calendarFixture'
 import { calendarOf } from '@/lib/domain/calendar'
+import { ATT_TYPES } from '../fixtures/vocab'
 
 /** 팀 마스터 대신 쓰는 테스트 지역 상수(2026-07 기준 5팀 — FIXTURE_TEAM_CODES 미러).
  *  buildWeeklyReportModel 은 teams 를 필수로 받으므로, 팀 목록에 무관한 기존 테스트는 이 래퍼로 주입한다. */
@@ -15,7 +16,7 @@ function buildWeeklyReportModel(
   opts: Partial<Parameters<typeof buildWeeklyReportModelReal>[3]> = {},
 ) {
   // 월요일·서울 — 이 파일의 기존 기대값(월~금 칸·KST 공지 경계)을 그대로 덮는다(D28 월요일 회귀). 일요일·UTC 는 아래 describe 가 따로 본다
-  return buildWeeklyReportModelReal(items, project, today, { teams: TEST_TEAMS, calendar: calSeoulMon, ...opts })
+  return buildWeeklyReportModelReal(items, project, today, { teams: TEST_TEAMS, calendar: calSeoulMon, attendanceTypes: ATT_TYPES, ...opts })
 }
 
 const meeting = (over: Partial<Meeting>): Meeting => ({
@@ -214,10 +215,22 @@ describe('buildWeeklyReportModel — 워크로드/근태', () => {
     expect(m.attendance.thisWeek.map(r => r.memberName)).toEqual(['홍길동'])
     expect(m.attendance.thisWeek[0].count).toBe(1)
   })
+  it('근태 약칭은 설정 어휘 — 바꾼 짧은 이름·새 유형을 쓰고, 유형 없이 근태를 넘기면 거부한다(SP5 B4)', () => {
+    const types = [...ATT_TYPES.map(e => (e.code === 'annual' ? { ...e, short: '휴가' } : e)),
+      { code: 'edu', label: '교육', short: '교육', color: 'brand' as const, counts_as: 'work' as const, selectable: false, sort: 10, active: true }]
+    const custom = buildWeeklyReportModel(items, project, '2026-06-30', {
+      members, attendanceTypes: types,
+      attendance: [...attendance, { id: 'a3', projectId: 'p', memberId: 'mem2', date: '2026-07-01', type: 'edu', note: null }],
+    })
+    expect(custom.attendance.thisWeek.find(r => r.memberName === '홍길동')!.perDay).toContain('휴가')
+    expect(custom.attendance.thisWeek.find(r => r.memberName === '김철수')!.perDay).toContain('교육')
+    expect(() => buildWeeklyReportModelReal(items, project, '2026-06-30', { members, attendance, teams: TEST_TEAMS, calendar: calSeoulMon }))
+      .toThrow(/attendanceTypes/)
+  })
   it('주입 팀이 결과에 반영된다 — 팀 마스터가 바뀌면 워크로드도 따라온다(하드코딩 폴백 없음)', () => {
     // 기본 5팀에 없는 팀을 주입하면 워크로드 행에 그대로 나타나야 한다(내부 상수로 되돌아가지 않음).
     const injected = buildWeeklyReportModelReal(items, project, '2026-06-30', {
-      members, attendance, teams: ['신규팀', 'PMO'], calendar: calSeoulMon,
+      members, attendance, teams: ['신규팀', 'PMO'], calendar: calSeoulMon, attendanceTypes: ATT_TYPES,
     })
     expect(injected.workload.map(w => w.name)).toEqual(['신규팀', 'PMO'])
   })

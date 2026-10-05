@@ -7,27 +7,35 @@ import { PROJECT_SETTINGS, WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 
 const file = 'docs/settings-catalog.md'
 const expectedStatus: Record<string, string> = {
+  'fields.wbs_item': 'verified', 'fields.issue': 'verified', 'fields.weekly_row': 'verified',
   'modules.allowed': 'verified', 'ai.enabled': 'verified', 'invites.allowed_domains': 'verified',
   'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'stored', 'branding.mail_from_name': 'verified',
   'navigation.menu': 'stored', 'core.level_labels': 'verified', 'core.extra_axis_label': 'stored',
-  'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'wired',
+  'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'verified', 'workflow.issue_statuses': 'verified',
   // SP5 A — 달력 셋(스펙 D44: 정의·편집·소비처·테스트 네 연결). 두 스코프가 같은 키 이름을 쓴다(워크스페이스 기본값 → 프로젝트 생성 시 복사)
   'calendar.timezone': 'verified', 'calendar.working_days': 'verified', 'calendar.week_start': 'verified',
   // SP3b UI-3 — 정의·테스트(네 연결 ①④)까지. 편집기(과제 6·7)·소비처(과제 10·14)가 붙으면 올린다
   'portal.widgets': 'wired', 'views.default': 'wired',
+  // SP5 B1 — 정의·편집·소비처·테스트 네 연결
+  'issues.id_policy': 'verified', 'issues.analysis': 'verified', 'minutes.attachments': 'verified',
+  // SP5 B4 — 어휘 다섯. 정의만 먼저(stored) — 트리거·소비처·편집기가 이어지면 verified 로 올린다
+  'attendance.types': 'verified', 'meetings.categories': 'verified', 'issues.severities': 'verified', 'issues.sources': 'verified', 'issues.cause_categories': 'verified',
+  // SP5 B2 — 최상위 폴더 모드. SQL(create_team·ensure_team_roots)·편집기·앱 소비처(편철 정규화 v2.9)·검증 네 연결
+  'minutes.root_folders': 'verified',
+  // SP5b — 흐름 다섯(+크레딧 표). 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성 S1/S3/S9-workflow(Z) 뒤 verified
+  'workflow.credit_policy': 'verified', 'workflow.wbs_stage_labels': 'verified', 'workflow.approval_steps': 'verified',
+  'workflow.approval_distinct_approvers': 'verified', 'workflow.predecessor_gate': 'verified',
+  // SP6 — 정의·parse·관리 화면 FormTemplatesManager·렌더 소비·부정 테스트 6 완료 뒤 verified
+  'forms.weekly_report_pptx': 'verified', 'forms.weekly_report_xlsx': 'verified', 'forms.issue_analysis_pptx': 'verified', 'forms.wbs_export_xlsx': 'verified',
 }
 
-/** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.
- * 그 키가 verified 로 오르기 전(과제 29)에 컴포넌트가 생기거나 위젯 이름이 실재 컴포넌트로 바뀌어야 한다 */
-const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
-  // SP5 A 과제 25 가 셋(TimezoneSelect·WorkingDaysEditor·WeekStartEditor)을 만들어 비었다(판정 J1) — 과제 29 가 빈 목록을 완료 조건으로 본다
-  // SP3b UI-3 — 키 정의(과제 2·3, U3-2)가 편집기(과제 6·7, U3-3)보다 먼저였다. 두 편집기(PortalWidgetsEditor·ViewsDefaultEditor)가 생겨 다시 비었다
-}
+/** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP6 양식 관리 화면까지 완료되어 비어 있다. */
+const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {}
 
 describe('설정 카탈로그 동기화', () => {
-  it('22정의(키 이름 19)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('45정의(키 이름 41)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(22)
+    expect(defs).toHaveLength(45)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
     for (const def of defs) {
@@ -51,7 +59,7 @@ describe('설정 카탈로그 동기화', () => {
   it('아직 없는 custom 편집 UI 는 닫힌 목록뿐이고, 그 키는 verified 가 아니며, 컴포넌트가 생기면 항목을 지운다(죽은 항목 실패)', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
     for (const [component, why] of Object.entries(PENDING_CUSTOM_WIDGETS)) {
-      expect(why, component).toMatch(/^(SP5 A|SP3b UI-3) 과제 \d+/)
+      expect(why, component).toMatch(/^(SP5 A|SP3b UI-3|SP5 (A|B1|B3)|SP5b W2|SP6 Phase S) 과제/)
       expect(existsSync(`src/components/settings/${component}.tsx`), `${component} 가 생겼다 — 이 항목을 지운다`).toBe(false)
       const users = defs.filter((d) => d.widget.kind === 'custom' && d.widget.component === component)
       expect(users.length, `${component} 를 쓰는 정의가 없다 — 죽은 항목`).toBeGreaterThan(0)
@@ -83,19 +91,10 @@ describe('설정 카탈로그 동기화', () => {
   })
 })
 
-describe('PLANNED_KEYS — SP5 의 남은 키는 체크포인트 이름으로(스펙 §1.1 정본 결정 9 행)', () => {
-  it('달력 셋은 등록돼 목록에 없고, SP5 행은 B1~B4 체크포인트를 적는다', () => {
+describe('PLANNED_KEYS — SP5 의 키는 전부 등록됐다(스펙 §1.1 정본 결정 9 행·D44)', () => {
+  it('달력 셋·B1 이슈 둘·B2 최상위 폴더·B3 첨부·B4 어휘 다섯은 등록돼 목록에 SP5 행이 없다', () => {
     expect(PLANNED_KEYS.filter((k) => k.key.startsWith('calendar.'))).toEqual([])
-    const sp5 = PLANNED_KEYS.filter((k) => k.sp.startsWith('SP5 '))
-    expect(sp5.length).toBeGreaterThan(0)
-    for (const k of sp5) expect(k.sp, k.key).toMatch(/^SP5 B[1-4]$/)
-    const where = Object.fromEntries(sp5.map((k) => [`${k.scope}/${k.key}`, k.sp]))
-    expect(where).toMatchObject({
-      'project/issues.id_policy': 'SP5 B1', 'project/issues.analysis': 'SP5 B1',
-      'workspace/minutes.attachments': 'SP5 B3', 'project/minutes.attachments': 'SP5 B3',
-      'workspace/minutes.root_folders': 'SP5 B2',
-      'project/issues.severities': 'SP5 B4', 'project/issues.cause_categories': 'SP5 B4', 'project/issues.sources': 'SP5 B4',
-      'project/attendance.types': 'SP5 B4', 'project/meetings.categories': 'SP5 B4',
-    })
+    expect(PLANNED_KEYS.filter((k) => k.key === 'issues.id_policy' || k.key === 'issues.analysis')).toEqual([])   // SP5 B1 과제 3 이 등록
+    expect(PLANNED_KEYS.filter((k) => k.sp.startsWith('SP5 '))).toEqual([])                                    // B2 가 minutes.root_folders 를 등록 — 마지막 행
   })
 })

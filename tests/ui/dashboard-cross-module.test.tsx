@@ -19,6 +19,7 @@ import { IssueQueueCard } from '@/components/dashboard/IssueQueueCard'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { dashboardProps, DASH_MEETING } from './_dashboard-fixture'
+import { MEET_CATS } from '../fixtures/vocab'
 
 const els = (node: ReactNode, out: ReactElement<Record<string, unknown>>[] = []) => {
   if (Array.isArray(node)) node.forEach((n) => els(n, out))
@@ -59,7 +60,7 @@ describe('개요 카드의 교차 모듈 표시(P20)', () => {
 })
 
 describe("회의 카드 머리 — '이 프로젝트 회의록'(D53)", () => {
-  const card = async (minutesHref: string | null) => renderToStaticMarkup((await MeetingSchedule({
+  const card = async (minutesHref: string | null) => renderToStaticMarkup((await MeetingSchedule({ categories: MEET_CATS,
     projectId: 'p1', meetings: [DASH_MEETING], exceptions: [], today: '2026-09-27', minutesHref,
   })) as ReactElement)
   it('링크가 있으면 머리 오른쪽에 그 링크, 없으면 그리지 않는다', async () => {

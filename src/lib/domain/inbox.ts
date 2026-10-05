@@ -12,6 +12,8 @@ export const NOTIFICATION_CATALOG = {
   'work.progress':       { category: 'work',   defaultOn: false, required: false },
   'work.reported':       { category: 'work',   defaultOn: true,  required: true },
   'work.approved':       { category: 'work',   defaultOn: true,  required: false },
+  // SP5b(개정 §3.3.2): 다단계 승인의 중간 단계 통과 → 다음 단계 승인 자격자에게(승인 요청류라 REQUIRED)
+  'work.approval_step':  { category: 'work',   defaultOn: true,  required: true },
   'work.rejected':       { category: 'work',   defaultOn: true,  required: true },
   'work.released':       { category: 'work',   defaultOn: true,  required: false },
   'work.revoked':        { category: 'work',   defaultOn: true,  required: false },

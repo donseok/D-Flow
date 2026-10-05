@@ -1,4 +1,4 @@
-import { predecessorReached } from './agentWork'
+import { predecessorReachedFor, type PredecessorGate } from './agentWork'
 import type { DependencyOrigin, DependencyType } from './types'
 
 /** 선행 충족 판정에 필요한 최소 정보 — ComputedItem 전체를 요구하지 않는다(순수·테스트 용이). */
@@ -8,6 +8,10 @@ export interface ReadinessTask {
   rolledActualPct: number
   /** WBS Task 단계('as'|'ip'|'im'|'xx'). spec 링크 판정에 쓴다. 없으면 stage 축은 미달로 본다. */
   stage?: string | null
+  /** SP5b D21 — spec 링크(claim 게이트 축)의 승인 주문 축. 숙주가 승인 맵을 주지 않으면(agents 모듈 꺼짐 등) false */
+  orderApproved?: boolean
+  /** SP5b D21 — 선행 기준 final 의 실적 축 재료(흐름 안 항목의 실적 100 은 충족이 아니다) */
+  devWorkflow?: boolean | null
 }
 
 export interface ReadinessLink {
@@ -38,9 +42,8 @@ export interface StartReadiness {
  *
  * **축마다 규칙이 다르다. 뭉개지 않는다.**
  *
- * - origin 'spec'(wbs.md depends): `predecessorReached` — stage im·xx 또는 실적 100(스펙 2026-09-15 §3.7).
- *   이 축은 에이전트 claim 게이트가 실제로 막는 축이므로 게이트와 **같은 함수**여야 한다. 승인된 주문 축은
- *   여기서 볼 재료가 없지만, 승인은 RPC 가 xx·100 을 함께 쓰므로 결과가 같다. 유형은 항상 FS 라 SS 분기가 없다.
+ * - origin 'spec'(wbs.md depends): `predecessorReachedFor(…, gate)` — 프로젝트의 선행 기준(SP5b D21). 이 축은 에이전트 claim 게이트가
+ *   실제로 막는 축이므로 게이트와 **같은 함수·같은 입력**(stage·승인 주문·실적·dev_workflow)이어야 한다. 유형은 항상 FS 라 SS 분기가 없다.
  * - origin 'manual'(화면에서 그은 선): 이 축은 아무것도 막지 않아 실적이 유일한 완료 신호다.
  *   - FS: 선행 실적 100%. `statusOf` 의 done 판정과 같은 원시값 비교라 99.5% 가 완료로 뒤집히지 않는다.
  *   - SS: 선행이 시작만 했으면(실적 > 0) 충족. 상태 문자열(delayed 등)은 쓰지 않는다 —
@@ -55,6 +58,8 @@ export function evaluateStartReadiness(
   links: readonly ReadinessLink[],
   predecessorById: ReadonlyMap<string, ReadinessTask>,
   unresolvedRefs: readonly string[] = [],
+  /** 프로젝트의 선행 기준(SP5b D21) — 생략은 reached(현행, 호환 규칙 S1). src 호출부는 늘 넘긴다(tests/invariants/predecessor-gate-wiring) */
+  gate: PredecessorGate = 'reached',
 ): StartReadiness {
   const byDependencyId = new Map<string, PredecessorState>()
   let waitingCount = 0
@@ -68,7 +73,10 @@ export function evaluateStartReadiness(
       continue
     }
     const satisfied = dep.origin === 'spec'
-      ? predecessorReached({ stage: predecessor.stage ?? null, actualPct: predecessor.rolledActualPct })
+      ? predecessorReachedFor({
+          stage: predecessor.stage ?? null, orderApproved: predecessor.orderApproved === true,
+          actualPct: predecessor.rolledActualPct, devWorkflow: predecessor.devWorkflow,
+        }, gate)
       : dep.type === 'SS'
         ? predecessor.rolledActualPct > 0
         : predecessor.rolledActualPct >= 100

@@ -192,7 +192,7 @@ describe('folderSubtreeIds', () => {
 
 describe('teamChildFoldersOf', () => {
   const seedRoot = (id: string, name: string, sort = 100): MinuteFolder =>
-    ({ id, name, parentId: null, sort, createdBy: null, projectId: null })
+    ({ id, name, parentId: null, sort, createdBy: null, projectId: null, kind: 'team_root', teamId: `t-${name}`, teamCode: name })
   const userFolder = (id: string, name: string, parentId: string | null, sort = 100): MinuteFolder =>
     ({ id, name, parentId, sort, createdBy: 'user-1', projectId: null })
 

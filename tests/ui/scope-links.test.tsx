@@ -31,6 +31,7 @@ import { MinuteViewer } from '@/components/minutes/MinuteViewer'
 import { WikiChangeList, WikiItemCard } from '@/components/wiki/WikiShared'
 import type { WikiItem, WikiSource } from '@/lib/data/wiki'
 import type { Minute } from '@/lib/domain/types'
+import { ANY_CATS } from '../fixtures/vocab'
 
 const ACME: ScopeValue = { workspace: { id: 'w', slug: 'acme', name: 'Acme' }, projectId: null }
 const NONE: ScopeValue = { workspace: null, projectId: null }
@@ -87,10 +88,26 @@ describe('화면 안 링크 — 클라이언트(jsdom)', () => {
   })
   afterEach(() => { act(() => root.unmount()); container.remove() })
 
+  it('MeetingDetailModal — 상세 조회 실패는 \'참석자 없음·본문 없음\'이 아니라 사유를 보인다(SP5 B2 — D39)', async () => {
+    const occ = { occurrenceId: 's:2026-09-01', seriesId: 's', occurrenceDate: '2026-09-01', projectId: 'p', title: '주간', startTime: null, endTime: null, location: null, category: 'general', isRecurring: false, attendeeCount: 0 } as const
+    h.fetchMeetingDetail.mockResolvedValue({ ok: false, error: '회의 정보를 불러오지 못했습니다.' })
+    await act(async () => {
+      root.render(<ScopeProvider value={ACME}><MeetingDetailModal open occurrence={occ} currentUserId="u1" isAdmin={false} onClose={() => {}} onEditSeries={() => {}} onChanged={() => {}} categories={ANY_CATS} /></ScopeProvider>)
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('회의 정보를 불러오지 못했습니다.')
+    h.fetchMeetingDetail.mockRejectedValue(new Error('network'))
+    await act(async () => {
+      root.render(<ScopeProvider value={ACME}><MeetingDetailModal open occurrence={{ ...occ, seriesId: 's2' }} currentUserId="u1" isAdmin={false} onClose={() => {}} onEditSeries={() => {}} onChanged={() => {}} categories={ANY_CATS} /></ScopeProvider>)
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('meet.detail.loadFailed')
+  })
+
   it('MeetingDetailModal 의 연결 회의록 링크가 /w/<s>/minutes/<id>', async () => {
     const occ = { occurrenceId: 's:2026-09-01', seriesId: 's', occurrenceDate: '2026-09-01', projectId: 'p', title: '주간', startTime: null, endTime: null, location: null, category: 'general', isRecurring: false, attendeeCount: 0 } as const
     await act(async () => {
-      root.render(<ScopeProvider value={ACME}><MeetingDetailModal open occurrence={occ} currentUserId="u1" isAdmin={false} onClose={() => {}} onEditSeries={() => {}} onChanged={() => {}} /></ScopeProvider>)
+      root.render(<ScopeProvider value={ACME}><MeetingDetailModal open occurrence={occ} currentUserId="u1" isAdmin={false} onClose={() => {}} onEditSeries={() => {}} onChanged={() => {}} categories={ANY_CATS} /></ScopeProvider>)
       await new Promise((r) => setTimeout(r, 0))
     })
     const hrefs = [...document.body.querySelectorAll('a')].map((a) => a.getAttribute('href'))

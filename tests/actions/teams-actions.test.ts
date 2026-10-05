@@ -9,6 +9,8 @@ const { db, createAdminClient, requireWorkspaceAdmin, getActor } = vi.hoisted(()
     inserted: { teams: [] as unknown[], minute_folders: [] as unknown[] },
     updated: [] as Array<{ patch: unknown; id: unknown }>,
     lookupError: null as { message: string } | null,
+    rpcError: null as { message: string; code?: string } | null,
+    rpcCalls: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   }
   /** 체이너블 최소 모의 — eq/is/order/limit 는 자기 자신, maybeSingle 은 큐 결과. */
   const table = (name: 'teams' | 'minute_folders') => {
@@ -56,7 +58,14 @@ const { db, createAdminClient, requireWorkspaceAdmin, getActor } = vi.hoisted(()
     })
     return q
   }
-  const createAdminClient = vi.fn(() => ({ from: (n: 'teams' | 'minute_folders') => table(n) }))
+  // create_team RPC(SP5 B2) — 팀 + (teams 모드) 회의록 팀 루트를 한 트랜잭션으로 만든다. 모의는 팀 행만 남긴다(루트는 RLS 테스트가 본다)
+  const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => {
+    db.rpcCalls.push({ fn, args })
+    if (db.rpcError) return { data: null, error: db.rpcError }
+    db.inserted.teams.push({ code: args.p_code, name: args.p_name, workspace_id: args.p_workspace_id, color: args.p_color, sort_order: args.p_sort_order })
+    return { data: 't-new', error: null }
+  })
+  const createAdminClient = vi.fn(() => ({ from: (n: 'teams' | 'minute_folders') => table(n), rpc }))
   return { db, createAdminClient, requireWorkspaceAdmin: vi.fn(), getActor: vi.fn() }
 })
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
@@ -90,6 +99,8 @@ describe('팀 관리 서버액션', () => {
     db.inserted.minute_folders = []
     db.updated = []
     db.lookupError = null
+    db.rpcError = null
+    db.rpcCalls = []
     createAdminClient.mockClear()
     requireWorkspaceAdmin.mockReset()
     getActor.mockReset()
@@ -264,43 +275,52 @@ describe('팀 관리 서버액션', () => {
     expect(db.inserted.teams).toHaveLength(1)
   })
 
-  it('성공: teams insert(workspace_id·color 포함) + 시드 루트 폴더 insert', async () => {
+  it('성공: create_team RPC 한 번(가드 결과의 행위자·입력 워크스페이스·color) — 폴더를 액션이 따로 만들지 않는다(SP5 B2 — D50)', async () => {
     asAdmin()
     const r = await addTeam(WS, ' 신팀 ')
     expect(r.ok).toBe(true)
-    expect(db.inserted.teams[0]).toMatchObject({ code: '신팀', name: '신팀', workspace_id: 'ws-1' })
-    expect((db.inserted.teams[0] as { color: string }).color).toMatch(/^#[0-9a-fA-F]{6}$/)
-    expect(db.inserted.minute_folders[0]).toMatchObject({ name: '신팀', parent_id: null, created_by: null })
-  })
-
-  it('동명 시드 폴더가 이미 있으면 폴더 insert 는 생략하고 성공', async () => {
-    asAdmin()
-    db.folders = [{ id: 'f1', code: undefined, name: '신팀', parent_id: null, created_by: null, workspace_id: WS }]
-    const r = await addTeam(WS, '신팀')
-    expect(r.ok).toBe(true)
+    expect(db.rpcCalls).toEqual([{ fn: 'create_team', args: expect.objectContaining({ p_actor: 'u-wsadmin', p_workspace_id: WS, p_code: '신팀', p_name: '신팀', p_sort_order: 0 }) }])
+    expect((db.rpcCalls[0].args as { p_color: string }).p_color).toMatch(/^#[0-9a-fA-F]{6}$/)
     expect(db.inserted.minute_folders).toHaveLength(0)
   })
 
-  // 0006 — 미지정 루트는 워크스페이스별이다. 다른 워크스페이스의 동명 루트를 "이미 있다"로 오인하지 않고,
-  // 새 루트에는 부모·프로젝트가 없어 트리거가 못 채우므로 workspace_id 를 명시한다.
-  it('동명 시드 폴더가 다른 워크스페이스 것이면 이 워크스페이스에 workspace_id 를 명시해 만든다', async () => {
+  it('팀 루트 이름 충돌·60자 초과는 D52 문구, 경합의 code 중복(23505)은 이미 존재, 그 밖은 고정 문구', async () => {
     asAdmin()
-    db.folders = [{ id: 'f2', name: '신팀', parent_id: null, created_by: null, workspace_id: 'ws-other' }]
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    db.rpcError = { code: '23505', message: 'TEAM_ROOT_NAME_CONFLICT' }
+    expect(await addTeam(WS, '신팀')).toMatchObject({ ok: false, error: expect.stringContaining('같은 이름의 회의록 최상위 폴더') })
+    db.rpcError = { code: '23514', message: 'TEAM_ROOT_NAME_TOO_LONG' }
+    expect(await addTeam(WS, '신팀')).toMatchObject({ ok: false, error: expect.stringContaining('60자') })
+    db.rpcError = { code: '23505', message: 'duplicate key value violates unique constraint "teams_ws_code_uidx"' }
+    expect(await addTeam(WS, '신팀')).toEqual({ ok: false, error: "'신팀' 팀이 이미 존재합니다." })
+    db.rpcError = { code: '42501', message: 'TEAM_CREATE_FORBIDDEN' }
     const r = await addTeam(WS, '신팀')
-    expect(r.ok).toBe(true)
-    expect(db.inserted.minute_folders).toHaveLength(1)
-    expect(db.inserted.minute_folders[0]).toMatchObject({ name: '신팀', parent_id: null, project_id: null, workspace_id: WS })
+    expect(r).toMatchObject({ ok: false })
+    expect(JSON.stringify(r)).not.toContain('TEAM_CREATE_FORBIDDEN')   // DB 원문은 로그에만(SP4 D21)
+    err.mockRestore()
   })
 
-  // 0071 이후 project_id 로도 스코프해야 한다 — 프로젝트 루트 폴더가 같은 이름을 먼저 선점해도
-  // 전역 루트 시드 dup-check 는 그 행을 무시하고 새로 만들어야 한다(post-0076 드리프트 회귀).
-  it('동명 폴더가 다른 프로젝트 소속이면 전역 루트 시드는 별도로 생성된다', async () => {
+  it('updateTeam: 개명이 회의록 팀 루트 이름 동기에서 막히면 D52 문구(TEAM_ROOT_NAME_CONFLICT·TOO_LONG)', async () => {
     asAdmin()
-    db.folders = [{ id: 'pf1', name: '신팀', parent_id: null, created_by: null, project_id: 'p1' }]
-    const r = await addTeam(WS, '신팀')
-    expect(r.ok).toBe(true)
-    expect(db.inserted.minute_folders).toHaveLength(1)
-    expect(db.inserted.minute_folders[0]).toMatchObject({ name: '신팀', parent_id: null, created_by: null, project_id: null })
+    db.teams = [{ id: 't1', code: 'PMO', name: 'PMO', project_id: null, workspace_id: WS }]
+    // 개명 쓰기가 23505 를 내는 경로 — 모의 update 를 한 번 바꾼다
+    const realFrom = createAdminClient.getMockImplementation()!
+    createAdminClient.mockImplementation(() => {
+      const c = realFrom()
+      return { ...c, from: (n: 'teams' | 'minute_folders') => {
+        const q = c.from(n)
+        if (n !== 'teams') return q
+        return { ...q, update: () => {
+          const upd: Record<string, unknown> = {
+            eq: () => upd, is: () => upd,
+            select: async () => ({ data: null, error: { code: '23505', message: 'TEAM_ROOT_NAME_CONFLICT' } }),
+          }
+          return upd
+        } }
+      } }
+    })
+    expect(await updateTeam('t1', { name: '운영' })).toMatchObject({ ok: false, error: expect.stringContaining('같은 이름의 회의록 최상위 폴더') })
+    createAdminClient.mockImplementation(realFrom)
   })
 
   it('updateTeam: 빈 patch 거부, 정상 patch 는 스네이크케이스로 update', async () => {

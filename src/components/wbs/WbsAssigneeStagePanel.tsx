@@ -7,7 +7,7 @@ import type { ProjectMember } from '@/lib/domain/types'
 import { useTeamCodes } from '@/components/app/TeamsProvider'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import {
-  getWbsAssigneeStage, setWbsAssignee, setWbsAssigneeCascade, setWbsStage, setWbsDevWorkflow,
+  approveWbsStep, getWbsAssigneeStage, setWbsAssignee, setWbsAssigneeCascade, setWbsStage, setWbsDevWorkflow,
 } from '@/app/actions/wbsAssign'
 import { WbsSpecPanel } from './WbsSpecPanel'
 import { AssigneeComboBox } from './AssigneeComboBox'
@@ -15,6 +15,7 @@ import { useDebouncedSave } from './useDebouncedSave'
 import { PendingSaveChip } from './PendingSaveChip'
 import type { DictKey } from '@/lib/i18n/dict'
 import { STAGE_CODES, type StageCode } from '@/lib/domain/stageLabels'
+import { useStageLabel } from './StageLabelsProvider'
 
 type Stage = StageCode
 /** 서버 확정 값이자 debounce 저장 필드 — getWbsAssigneeStage 의 반환 형태 그대로다. */
@@ -23,7 +24,11 @@ type AssigneeStage = { assigneeMemberId: string | null; stage: string | null; de
  * 서버 확정 값 + 표시 재료(위임 여부, 개발 워크플로 토글 권한). delegated·canDevWorkflow 는
  * 저장 필드가 아니라 서버가 실어 보내는 판정값이다(스펙 §3.5 의 stageLocked 과 같은 관례).
  */
-type Loaded = AssigneeStage & { delegated?: boolean; canDevWorkflow?: boolean }
+type Loaded = AssigneeStage & {
+  delegated?: boolean; canDevWorkflow?: boolean
+  /** SP5b W1 — 대기 승인 단계(유효 단계 ≥2 면 xx 직행 대신 단계 승인) */
+  approval?: { step: string; index: number; total: number; label: string | null } | null
+}
 /** 담당·단계·dev workflow 액션 반환의 합집합. count·cascadeFailed 는 cascade 계열만 실어 온다. */
 type AssigneeStageResult = {
   ok: boolean; error?: string; count?: number; cascadeFailed?: boolean; orderCreated?: boolean
@@ -68,6 +73,7 @@ export function WbsAssigneeStagePanel({
   const [devWorkflowResult, setDevWorkflowResult] = useState<number | null>(null)
   const [devWorkflowWarn, setDevWorkflowWarn] = useState(false)
   const [devWorkflowSkipped, setDevWorkflowSkipped] = useState<number | null>(null)
+  const [approving, setApproving] = useState(false)
   // 전파 체크는 저장이 실제로 나가는 순간(flush)의 값을 쓴다 — 담당을 고른 뒤 5초 안에 전파 체크를
   // 바꿔도 반영되도록. commit 클로저는 set 시점에 잡히므로 ref 로 읽는다.
   const cascadeRef = useRef(cascade)
@@ -87,6 +93,7 @@ export function WbsAssigneeStagePanel({
   // 서버 액션 + router.refresh() 가 나가 WBS 페이지 전체가 다시 렌더됐다. 마지막 변경 뒤 SAVE_DEBOUNCE_MS
   // 가 지나면(또는 패널 닫힘·항목 변경·「지금 저장」) 모아서 순서대로 저장하고 refresh 는 1회만 부른다.
   // 화면은 quick.view 로 낙관 표시하고, 실패한 필드는 대기에서 빠져 loaded(서버 확정 값)로 돌아간다.
+  const stageName = useStageLabel()   // 프로젝트의 단계 이름(SP5b W2) — 없는 칸은 사전 이름
   const quick = useDebouncedSave<AssigneeStage, AssigneeStageResult>({
     scope: itemId,
     baseline: loaded && loaded !== 'error' ? loaded : null,
@@ -153,6 +160,21 @@ export function WbsAssigneeStagePanel({
   // 개발 워크플로 토글은 관리자 전용이 아니다(2026-09-16) — 담당자·서브트리 관리자도 한다.
   // editable(관리자 전체 폼)과 별개의 축이라 서버 판정값을 그대로 쓴다.
   const canDevWorkflow = loaded !== null && loaded !== 'error' && loaded.canDevWorkflow === true
+  // SP5b W1(D18) — 승인 단계가 둘 이상이면 xx 는 단계 승인으로만 간다(서버가 approval_required 로 거부할 값을 권하지 않는다).
+  // 승인 버튼은 검수 대기(im)에서만, 승인 자격(관리자·서브트리 관리자, admin 단계는 관리자)은 액션이 다시 판정한다
+  const approval = loaded !== null && loaded !== 'error' ? loaded.approval ?? null : null
+  const multiStep = approval !== null && approval.total >= 2
+
+  async function onApproveStep() {
+    if (!approval) return
+    setErr(null); setApproving(true)
+    const r = await approveWbsStep(itemId, approval.step)
+    setApproving(false)
+    if (!r.ok) setErr(r.stale ? t('wbs.approveStepStale') : (r.error ?? t('wbs.errGeneric')))
+    const refreshed = await getWbsAssigneeStage(itemId)
+    setLoaded(refreshed ?? 'error')
+    if (r.ok) router.refresh()
+  }
 
   return (
     <div className="space-y-3">
@@ -222,19 +244,24 @@ export function WbsAssigneeStagePanel({
                       title={delegated ? t('wbs.stageLockedByOrder') : undefined}
                       className="app-input h-9 text-xs"
                     >
-                      <option value="">{t('wbs.stageNoneOption')}</option>
+                      <option value="">{stageName(null, t('wbs.stageNoneOption'))}</option>
                       {/* 개발 워크플로 단계는 최종단계의 것이다 — 상위 항목에서는 서버(setWbsStage)가
                           거절하므로 고를 수 있게 두면 화면이 거절당할 값을 권하는 꼴이 된다.
                           '미착수'는 남긴다: 이미 잘못 찍힌 값을 지울 길이 여기뿐이다. */}
-                      {!hasChildren && STAGES.map(s => <option key={s} value={s}>{t(STAGE_KEYS[s])}</option>)}
+                      {!hasChildren && STAGES.map(s => (
+                        <option key={s} value={s} disabled={s === 'xx' && multiStep && view.stage !== 'xx'}>{stageName(s, t(STAGE_KEYS[s]))}</option>
+                      ))}
                     </select>
                   ) : (
                     <p className="text-[13px] text-ink">
-                      {view.stage && STAGE_KEYS[view.stage as Stage] ? t(STAGE_KEYS[view.stage as Stage]) : t('wbs.stageNoneOption')}
+                      {view.stage && STAGE_KEYS[view.stage as Stage] ? stageName(view.stage, t(STAGE_KEYS[view.stage as Stage])) : stageName(null, t('wbs.stageNoneOption'))}
                     </p>
                   )}
                   {editable && view.devWorkflow && hasChildren && (
                     <p className="mt-1 text-[11px] text-ink-subtle">{t('wbs.stageLeafOnlyHint')}</p>
+                  )}
+                  {editable && view.devWorkflow && multiStep && !hasChildren && (
+                    <p data-stage-xx-needs-approval className="mt-1 text-[11px] text-ink-subtle">{t('wbs.stageXxNeedsApproval')}</p>
                   )}
                   {editable && view.devWorkflow && delegated && (
                     <p data-stage-locked className="mt-1 text-[11px] text-ink-subtle">{t('wbs.stageLockedByOrder')}</p>
@@ -272,6 +299,14 @@ export function WbsAssigneeStagePanel({
                   </label>
                 )}
               </div>
+
+              {approval && view.stage === 'im' && !delegated && canDevWorkflow && !quick.isPending && (
+                <button type="button" data-approve-step={approval.step} onClick={() => void onApproveStep()} disabled={approving}
+                  className="btn btn-primary h-8 px-3 text-xs">
+                  {t('wbs.approveStep').replace('{i}', String(approval.index)).replace('{n}', String(approval.total))
+                    .replace('{label}', approval.label ?? t('wbs.approveStepDefault'))}
+                </button>
+              )}
 
               {canDevWorkflow && delegated && (
                 <p data-dev-workflow-locked className="text-[11px] text-ink-subtle">

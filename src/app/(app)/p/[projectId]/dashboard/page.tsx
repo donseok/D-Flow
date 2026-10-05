@@ -1,3 +1,4 @@
+import { issueAreasOf } from '@/lib/domain/issueAreas'
 import { notFound } from 'next/navigation'
 import { toCalendarInput } from '@/lib/calendar/load'
 import { after } from 'next/server'
@@ -79,6 +80,9 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
   // 대시보드는 core.level_labels 를 쓰지 않는다. 키워드가 손상이면 마일스톤만 비우고 그 사실을 위에 보인다 — 다른 카드는 그린다.
   const keywords = pick(pc.cfg, 'core.milestone_keywords')
+  // 회의 범주·이슈 심각도(어휘) — 손상이면 키워드처럼 위에 사유를 보이고 라벨 자리에 code(다른 카드는 그린다)
+  const categories = pick(pc.cfg, 'meetings.categories')
+  const severities = pick(pc.cfg, 'issues.severities')
   // 실제 오늘(회의·이슈의 시계) = 프로젝트 tz 의 오늘 — getComputedWbs 가 이미 판독한 달력(손상이면 그 로더가 던졌다, 계획 D-22c)
   const realToday = todayIn(calendar.timezone, new Date())
   const modules = { issues: mods.has('issues'), announcements: mods.has('announcements'), meetings: mods.has('meetings') }
@@ -88,7 +92,12 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
     <ProjectPageShell hero={hero}>
       {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} kind={keywords.kind} locale={locale}
         isAdmin={canManage} settingsHref={`/p/${projectId}/settings`} />}
+      {!categories.ok && <ConfigLoadError error={categories.error} keyName={categories.key} kind={categories.kind} locale={locale}
+        isAdmin={canManage} settingsHref={`/p/${projectId}/settings`} />}
+      {!severities.ok && <ConfigLoadError error={severities.error} keyName={severities.key} kind={severities.kind} locale={locale}
+        isAdmin={canManage} settingsHref={`/p/${projectId}/settings`} />}
       <DashboardView
+        issueAreas={issueAreasOf(pc.cfg.areas.issue_area)}
         items={items}
         projectId={projectId}
         projectName={projectName}
@@ -110,6 +119,8 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
         milestoneKeywords={keywords.ok ? keywords.value : []}
         modules={modules}
         minutesHref={minutesHref}
+        meetingCategories={categories.ok ? categories.value : []}
+        issueSeverities={severities.ok ? severities.value : []}
       />
       {/* 진척률은 집계값이라 행 단위 패치가 정의되지 않는다 — 실시간 신호를 받아 재조회한다(0098). */}
       <WbsRealtimeRefresh projectId={projectId} />

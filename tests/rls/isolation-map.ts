@@ -24,8 +24,9 @@ export const A_ROW_FILTER: Record<string, string> = {
   change_logs: `t.wbs_item_id in (select id from public.wbs_items where project_id in ${AP})`,
   command_receipts: `t.workspace_id = ${A}`,
   deliverable_attachments: `t.wbs_item_id in (select id from public.wbs_items where project_id in ${AP})`,
+  form_templates: inAP,
   holidays: inAP, issue_analysis_runs: inAP, issue_assignees: inAP, issue_attachments: inAP, issue_links: inAP,
-  issue_major_processes: inAP, issue_mega_areas: 'true', issue_number_counters: inAP, issue_updates: inAP, issues: inAP,
+  issue_major_processes: inAP, issue_number_counters: inAP, issue_updates: inAP, issues: inAP,
   item_owners: `t.wbs_item_id in (select id from public.wbs_items where project_id in ${AP})`,
   llm_config: 'true', llm_profiles: 'true',
   meeting_attendees: inAP,
@@ -50,7 +51,7 @@ export const A_ROW_FILTER: Record<string, string> = {
   usage_events: `(${inAP} or t.user_id in ${A_ONLY})`,
   account_preferences: `t.user_id in ${A_ONLY}`,
   user_preferences: `t.user_id in ${A_ONLY}`,
-  user_wbs_state: inAP, wbs_embeddings: inAP, wbs_items: inAP, wbs_progress_snapshots: inAP,
+  user_wbs_state: inAP, wbs_embeddings: inAP, wbs_items: inAP, wbs_progress_snapshots: inAP, wbs_stage_approvals: inAP,
   weekly_report_rows: inAP,
   weekly_reports: inAP, wiki_change_events: inAP, wiki_feedback: inAP,
   wiki_item_relations: `t.from_item_id in (select id from public.wiki_items where project_id in ${AP})`,
@@ -63,8 +64,8 @@ export const A_ROW_FILTER: Record<string, string> = {
   workspaces: `t.id = ${A}`,
 }
 
-/** D2 — 전역 참조 데이터. 읽기는 예외(쓰기는 여전히 거부돼야 한다). 만료: SP5 */
-export const OPEN_BY_DESIGN: ReadonlySet<string> = new Set(['issue_mega_areas'])
+/** D2 — 전역 참조 데이터. 읽기는 예외(쓰기는 여전히 거부돼야 한다). SP5 B1 이 마지막 예외 issue_mega_areas 를 지웠다(이슈 영역 = 프로젝트 영역) */
+export const OPEN_BY_DESIGN: ReadonlySet<string> = new Set<string>([])
 
 /** 픽스처가 A 행을 넣지 못한 표 → 사유. 비어 있는 게 목표다 */
 export const UNFILLED: Record<string, string> = {}
@@ -91,7 +92,7 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
   { table: 'user_wbs_state', sql: `insert into public.user_wbs_state (user_id, project_id) values ($1, '${F.projects.a}')` },
   // 복사 insert 는 major_seq 를 들고 가서 assign_issue_major_seq 트리거가 RLS 전에 막는다 — seq 없이 넣어 RLS 가 판정하게 한다.
   // 탐침은 모두 $1 을 쓴다 — 안 쓰면 08P01(bind 인자 수 불일치)로 정책까지 가지 못한다(이 탐침이 그랬다, F17 에서 발견)
-  { table: 'issue_major_processes', sql: `insert into public.issue_major_processes (project_id, mega_code, name) values ('${F.projects.a}', '99', 'RLS 침입 ' || $1::text)` },
+  { table: 'issue_major_processes', sql: `insert into public.issue_major_processes (project_id, area_id, name) values ('${F.projects.a}', '00000000-0000-0000-7e57-000000001bf0', 'RLS 침입 ' || $1::text)` },
   // WITH CHECK 가 소유자 비교로 시작하는 표 — 자기 이름으로 넣어 뒤의 프로젝트·워크스페이스 판정을 태운다
   { table: 'issues', sql: `insert into public.issues (project_id, title, created_by) values ('${F.projects.a}', 'RLS 침입', $1)` },
   { table: 'meetings', sql: `insert into public.meetings (project_id, title, meeting_date, created_by) values ('${F.projects.a}', 'RLS 침입', '2026-09-01', $1)` },
@@ -117,17 +118,17 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
 export const KNOWN_LEAKS: Record<'bea' | 'ben', readonly string[]> = { bea: [], ben: [] }
 
 /**
- * authenticated 가 UPDATE 할 수 있는 열이 하나도 없는 표(0012 뒤 47개, *_weekly_areas 뒤 49개 — 영역·영역-팀, *_command_receipts 뒤 50개 — 영수증) — 전수 교차의 update 탐침이 정책을 태울 수 없다. 권한이 온전한
+ * authenticated 가 UPDATE 할 수 있는 열이 하나도 없는 표(0012 뒤 47개, *_weekly_areas 뒤 49개 — 영역·영역-팀, *_command_receipts 뒤 50개 — 영수증, *_workflow_policy 뒤 51개 — 승인 원장) — 전수 교차의 update 탐침이 정책을 태울 수 없다. 권한이 온전한
  * 벽이므로 42501(permission denied)이 기대값이다. 목록은 카탈로그(has_any_column_privilege)와 같아야 한다 — 표에 UPDATE 를 열면 여기서
  * 빼고(그때부터 탐침이 그 표의 정책을 태운다), 새 표가 UPDATE 없이 생기면 더한다.
  */
 export const UPDATE_DENIED_BY_GRANT: ReadonlySet<string> = new Set([
   'agent_lead_leases', 'agent_projects', 'agent_runners', 'agent_watchers', 'agent_work_orders', 'agent_work_reports',
-  'ai_documents', 'ai_index_jobs', 'area_teams', 'authz_commands', 'authz_events', 'change_logs', 'command_receipts', 'deliverable_attachments', 'issue_analysis_runs',
-  'issue_assignees', 'issue_attachments', 'issue_links', 'issue_major_processes', 'issue_mega_areas', 'issue_number_counters',
+  'ai_documents', 'ai_index_jobs', 'area_teams', 'authz_commands', 'authz_events', 'change_logs', 'command_receipts', 'deliverable_attachments', 'form_templates', 'issue_analysis_runs',
+  'issue_assignees', 'issue_attachments', 'issue_links', 'issue_major_processes', 'issue_number_counters',
   'minute_embeddings', 'minute_files', 'minute_highlights', 'minute_insights', 'minute_versions', 'minutes',
   'notification_events', 'notification_recipients', 'platform_admins', 'project_ai_briefs', 'project_areas', 'project_invites',
-  'project_settings', 'project_settings_history', 'usage_events', 'wbs_embeddings', 'wiki_change_events', 'wiki_feedback',
+  'project_settings', 'project_settings_history', 'usage_events', 'wbs_embeddings', 'wbs_stage_approvals', 'wiki_change_events', 'wiki_feedback',
   'wiki_item_relations', 'wiki_item_sources', 'wiki_items', 'wiki_processing_jobs', 'wiki_project_rebuild_jobs',
   'wiki_questions', 'wiki_topic_revisions', 'wiki_topics', 'workspace_settings', 'workspace_settings_history', 'workspaces',
 ])

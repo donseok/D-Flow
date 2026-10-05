@@ -15,8 +15,9 @@ import type { ProjectSettingKey, WorkspaceSettingKey } from './registry'
 import type { WorkspaceConfig } from './workspaceConfig'
 import { valueOf } from './registry'
 import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
+import { DEFAULT_CREDIT_POLICY, DEFAULT_STAGE_CREDITS, validateStageCredits, type CreditPolicy, type StageCredits } from '@/lib/domain/stageCredits'
 
-export interface FieldError { key: string; message: string; refCount?: number }
+export interface FieldError { key: string; message: string; refCount?: number; code?: string }
 export type ValidateResult = { ok: true } | { ok: false; fieldErrors: FieldError[] }
 export interface ProjectValidateDeps {
   treeMaxDepth: number | null            // 0-base. 빈 트리는 null
@@ -24,14 +25,38 @@ export interface ProjectValidateDeps {
   allowed: readonly ModuleId[]           // 워크스페이스 허용(env 무관 — 스펙 §4.1·§3.3: env 로 꺼진 모듈을 더해도 저장은 막지 않는다)
   prevEnabled: readonly ModuleId[] | null   // 저장된(또는 기본값의) modules.enabled. 생성이면 null
   allowedBroken?: boolean                // 워크스페이스 modules.allowed 가 손상(invalid) — allowed 는 빈 목록이고 거부 사유를 따로 알린다
+  /** 저장된(또는 기본값의) 크레딧 표·정책 — 손상이면 null. 둘 중 하나를 바꾸는 저장의 교차 검사(SP5b, 개정 §3.3.4)가 쓴다. 없으면 그 저장은 fail-closed */
+  credit?: { credits: StageCredits | null; policy: CreditPolicy | null }
 }
 export const ERR_MODULES_ALLOWED_BROKEN = '워크스페이스 모듈 허용 설정이 손상돼 새 모듈을 켤 수 없습니다 — 관리자에게 알리세요'
 export const ERR_VIEWS_BOARD_KANBAN_OFF = '칸반이 꺼져 있어 보드를 기본 보기로 고를 수 없습니다.'
 
 const has = <K extends string>(o: Partial<Record<K, unknown>>, k: K) => Object.prototype.hasOwnProperty.call(o, k)
 
-export function validateProjectConfig(next: Partial<Record<ProjectSettingKey, unknown>>, deps: ProjectValidateDeps): ValidateResult {
+const K_CREDITS = 'workflow.stage_credits' as const, K_POLICY = 'workflow.credit_policy' as const
+
+/**
+ * 크레딧 표 × 정책 교차 검사(SP5b 스펙 §4.4) — 둘 중 하나라도 바뀌면(set·unset) 바뀐 뒤의 두 값으로 validateStageCredits 를 돌린다.
+ * 바뀌지 않는 쪽은 저장된 값(미설정 = 기본값). 그 값이 손상이거나 알 수 없으면 거부한다(fail-closed — 손상 값과의 조합을 추측하지 않는다).
+ */
+function creditCrossErrors(next: Partial<Record<ProjectSettingKey, unknown>>, unset: readonly string[], deps: ProjectValidateDeps): FieldError[] {
+  const touched = (k: string) => has(next, k as ProjectSettingKey) || unset.includes(k)
+  if (!touched(K_CREDITS) && !touched(K_POLICY)) return []
+  const pick = <T>(k: string, dflt: T, saved: T | null | undefined): T | null =>
+    has(next, k as ProjectSettingKey) ? (next[k as ProjectSettingKey] as T) : unset.includes(k) ? dflt : (saved ?? null)
+  const policy = pick<CreditPolicy>(K_POLICY, DEFAULT_CREDIT_POLICY, deps.credit?.policy)
+  const credits = pick<StageCredits>(K_CREDITS, DEFAULT_STAGE_CREDITS, deps.credit?.credits)
+  if (policy === null) return [{ key: K_CREDITS, message: '저장된 크레딧 정책이 손상돼 크레딧 표를 검사할 수 없습니다 — 정책을 먼저 다시 저장하세요.' }]
+  if (credits === null) return [{ key: K_POLICY, message: '저장된 크레딧 표가 손상돼 정책을 바꿀 수 없습니다 — 표를 함께 저장하세요.' }]
+  const v = validateStageCredits(credits, policy)
+  if (v.ok) return []
+  const key = touched(K_CREDITS) ? K_CREDITS : K_POLICY
+  return [{ key, message: `크레딧 표가 정책(${policy.step} 단위·간격 ${policy.min_gap} 이상)을 만족하지 않습니다 — ${v.error}` }]
+}
+
+export function validateProjectConfig(next: Partial<Record<ProjectSettingKey, unknown>>, deps: ProjectValidateDeps, unset: readonly string[] = []): ValidateResult {
   const fieldErrors: FieldError[] = []
+  fieldErrors.push(...creditCrossErrors(next, unset, deps))
   if (has(next, 'core.level_labels')) {
     const labels = next['core.level_labels'] as string[]
     if (deps.treeMaxDepth != null && labels.length < deps.treeMaxDepth + 1) {
@@ -109,6 +134,15 @@ export function allowedAndAvailable(ws: WorkspaceConfig): ModuleId[] {
 export function modulesAllowedBroken(ws: WorkspaceConfig): boolean {
   const s = ws.keys['modules.allowed']
   return s.status === 'invalid' || s.status === 'required_missing'
+}
+
+/** 저장된(또는 기본값의) 크레딧 표·정책 — 손상(invalid 등)이면 null. 크레딧 교차 검사의 재료(설정 액션이 deps 에 싣는다) */
+export function creditStateOf(cfg: ProjectConfig): NonNullable<ProjectValidateDeps['credit']> {
+  const saved = <T>(k: typeof K_CREDITS | typeof K_POLICY): T | null => {
+    const st = cfg.keys[k]
+    return st.status === 'set' || st.status === 'default' ? (st.value as T) : null
+  }
+  return { credits: saved<StageCredits>(K_CREDITS), policy: saved<CreditPolicy>(K_POLICY) }
 }
 
 /** 트리 깊이 선행 조회의 쪽 크기 — PostgREST max_rows(supabase/config.toml) 이하여야 한다(tests/settings/validate-config) */

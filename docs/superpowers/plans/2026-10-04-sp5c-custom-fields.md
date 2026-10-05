@@ -1,0 +1,193 @@
+# SP5c — 사용자 정의 필드 구현 계획
+
+정본: `2026-09-27-platform-revision-configurability-design.md` §3.6·3.7·3.8·§6 SP5c. 기준 커밋 `8238de9f`(SP5b 완료), 개발 브랜치 `sp5c/custom-fields`.
+
+## 최신 작업 재확인 (2026-10-04)
+
+Claude Code의 원격 main을 확인했다. SP5 A/B1/B3/B4/B2와 SP5b P0/I/W1/W2/Z는 완료·통합됐고, 마이그레이션은 0026까지 있다. 이전 로컬 인계 문서에 적힌 첨부·어휘·회의록 팀 작업을 다시 구현하지 않는다.
+
+남은 개발은 SP5c → SP6 및 후속 로드맵이다. UI-3는 `ui/sp3-screens`에 있으며 사람 확인·통합이 남아 있다. 사용자 DB 적용(0019–0026)과 SP5b RPC 성능 증가의 수용 결정은 별도 미결 사항이다. 이 계획은 해당 결정의 승인을 의미하지 않는다.
+
+## 구현 순서
+
+- [x] F: 순수 FieldDef 파서·7종 값 검증·공통 패리티 fixture·서식·이월 선택.
+- [x] D: `0027_custom_fields.sql` + 롤백. 세 엔티티 custom/GIN/검증 트리거, WBS 멤버 열 가드, 정의 참조 검사, backfill/purge(관리자 재판정·CAS·영수증·행→설정 잠금). 정본의 옛 예약 번호 0023은 이미 사용됐으므로 실제 다음 번호 0027을 사용한다.
+- [x] S: `fields.wbs_item/issue/weekly_row` 레지스트리·로더·사용 건수·설정 편집기·관리자 명령·재색인 부수효과. DB 검증 경로를 만든 뒤 키를 활성화한다.
+- [x] V: WBS/이슈/주간 액션·타입·로더와 공통 입력/읽기 렌더러, 목록 열·필터·비활성 값 읽기 전용. 모듈 관문/actor 추적/서비스 클라이언트 감사 포함.
+- [x] X: WBS Excel 기본/프로파일 왕복·임포트 경고·로그, 주간 carryCustom 및 create_weekly_report 시드 값 연결. 동결된 에이전트 API 입출력 키는 확장하지 않는다.
+- [x] I: AI 색인 본문·정의 변경 재색인. 봇 근거 확장은 정본에 따라 SP8 뒤 이월이며 완료로 보고하지 않는다.
+- [x] Z: TS↔SQL 같은 fixture·RLS 직접 쓰기·두 연결 경합·합성 S3·UI 실제 브라우저·회귀·카탈로그/인계 갱신. 전체 구현 뒤 성능 검증, 결과와 미달은 사실대로 기록한다.
+
+각 완료 단위는 파일명을 명시해 stage하고 한국어 커밋 후 브랜치에 push한다. 스키마와 앱 코드는 분리 커밋한다. 테스트 DB는 A 전용 API 54521/DB 54522(`d-flow-sp4`)만 쓴다. 사용자 DB(54321/54322)를 리셋하지 않는다. main 통합과 사용자 DB 적용은 남은 확인 절차를 따른다.
+
+## 검증 기준
+
+정본 §3.8의 SP5c done_when 1–7을 최종 기준으로 사용한다. 순수 검증은 유효/무효/경계값과 비활성 옵션 보존을 고정하고 SQL에서 같은 JSON 표를 소비한다. 정의가 없는 기본 구성은 값 `{}`로 기존 동작을 유지한다. 키·옵션·타입·권한·동시성 제한은 앱과 DB 양쪽에서 검증한다. 새로운 기능을 연결하기 전에는 레지스트리에 미리 등록하지 않는다.
+
+## F 검증 (2026-10-04 20:41 KST)
+
+7타입 값 골든 97건과 정의/경계/이월/서식 테스트를 합쳐 127건 통과. 전체 단위 916파일 12,176건 통과 + 기존 baseline-cli firmlink 1건 실패였고, 원인은 이 작업트리의 `.superpowers` 디렉터리 부재였다. 검증 디렉터리를 준비한 뒤 해당 파일 33/33 및 필드·마이그레이션 규약 포함 165/165 재검증 통과(테스트/가드 변경 없음). 타입 검사·lint 오류 0(기존 경고 4)·프로덕션 build 통과. 필드 설정 키는 DB 계약 검증 뒤 등록하므로 기존 화면 동작은 유지된다. CI에 `sp5c/**` push를 추가했다.
+
+## D 검증 (2026-10-04 20:51 KST)
+
+전용 d-flow-sp4에서 최종 0027까지 `db:reset` 통과. 전체 RLS 44파일 856건 통과, skip 0(신규 사용자 필드 117건). 같은 JSON 97케이스의 TS↔SQL 판정 일치, JWT WBS/이슈/주간의 직접 UPDATE 권한, 관리자 키 변경/삭제, 필수 기본값, 정의 참조 제한, 두 연결 경합 4건, 데이터 있는 롤백 거부와 깨끗한 롤백→재적용을 검증했다. backfill/purge는 행→설정 잠금·CAS·actor 재판정·멱등 영수증을 사용한다. 롤백 후에도 이미 만들어진 불변 영수증은 보존한다.
+
+회귀 확인에서 빈 기본 프로젝트의 격리 수준 동작을 보존했고, SP4 주간 사후검사는 트랜잭션 안에서 SP4 열/권한 형태로 재현한다(현재 custom 권한은 SP5c 테스트에서 별도로 검사). Realtime 가시성 검사는 누적된 실제 방송 건수 대신 자신이 넣은 메시지 ID를 확인해 A=1/B=0 판정을 고정했다. 기존 테스트를 건너뛰지 않는다. 타입 검사·lint 오류 0(기존 경고 4). 마이그레이션은 앱 코드와 분리 커밋하며 사용자 DB에는 적용하지 않았다.
+
+## S 관리자 액션 검증 (2026-10-04)
+
+사용 건수 전체 키셋 조회, 기본값 일괄 채움/필수 전환, 정확한 건수 확인 후 purge 액션을 구현했다. 관리자→엔티티 모듈→입력 검증 순서와 가드 actor 전달, CAS/고정 commandId 재시도, 조회 실패 가시성을 검증한다. SQL의 새 p_actor 함수 3개를 기존 닫힌 목록에 등록하고 새 주간 조회도 열 정적 검사 대상으로 포함했다.
+
+전체 단위 917파일 중 916파일·12,198건 통과, 새 주간 소비처 목록 누락 1건을 수정한 뒤 관련 권한/불변식/액션 5파일 503건 모두 통과. 타입·lint 오류 0(기존 경고 4), 프로덕션 build 통과. 직전 DB 커밋 CI는 DB job 성공, unit job의 p_actor 목록 누락을 이 완료 단위에서 보완했다. 설정 편집기/레지스트리와 값 소비처는 별도 후속 단위이며 S 전체는 아직 완료하지 않았다.
+
+## S 설정 화면 검증 (2026-10-04 21:30 KST)
+
+`6ec37531` 관리자 액션 CI 성공(단위·DB·build). 필드 3키는 실제 DB 계약과 편집기가 준비된 뒤 등록했으며 기본값은 빈 목록이다. 설정 페이지에 WBS/이슈/주간 탭, 7타입 기본값 입력, 옵션·제한·권한·활성/목록/검색/이월 편집, 드래그/키보드 순서, 사용 건수, 필수 백필, 정확한 건수 확인 후 삭제를 연결했다. 조회 실패는 건수 0으로 대체하지 않는다. 응답 불명 시 동일 명령을 보류하고 편집을 잠근다.
+
+전체 단위 918파일: 916파일·12,219건 통과, 키 등록 전의 모듈 픽스처/소유 수 검사 2건을 현재 계약에 맞게 보완한 뒤 관련 5파일 79건 통과. 실제 브라우저에서 선택 상자 이름 문제를 발견해 명시적 접근성 이름과 회귀 검사를 더했고 UI 21건 재통과. 프로덕션 build(타입·lint 포함) 통과, lint 오류 0·기존 경고 4, 전용 DB settings:verify 4프로젝트/3워크스페이스 문제 0.
+
+Playwright 1.58.2 + 빌드한 로컬 앱 3101에서 임시 관리자/프로젝트로 저장·재조회·숫자 기본값 0·기존 행 백필/필수 전환·3탭·정확한 건수 purge를 실제 DB와 확인했다. 1440px/390px 화면 눈확인, 가로 넘침/pageerror 없음. 임시 데이터는 정리한다. 증거는 로컬 `.superpowers/sp5c/field-browser-result.json`, `fields-desktop.png`, `fields-mobile-top.png`, `fields-mobile-bottom.png`.
+
+S의 관리자 설정/레지스트리 단위는 완료했으나 필드 값 입력·목록(V), Excel/이월(X), 검색/재색인 부수효과(I), 전체 합성/성능(Z)은 남았다. 카탈로그는 아직 `stored`이며 SP5c 전체 완료로 표시하지 않는다.
+
+## V 값 저장 기반 검증 (2026-10-04)
+
+세 엔티티 공통 값 저장 액션은 멤버→모듈→입력 검증을 거쳐 세션 JWT로 기존 행 RLS를 적용한다. 전체 custom JSONB의 이전 값과 일치하는 행만 갱신해 다른 필드의 동시 변경을 덮어쓰지 않는다. 필수/비활성/관리자 전용 값의 삭제도 검사하고, DB가 재판정한 오류는 닫힌 필드 오류 코드만 화면에 반환한다. 손상된 저장 값이나 정의를 빈 값으로 대체하지 않는다.
+
+전체 단위 920파일 12,255건 모두 통과. 이후 추가한 DB 오류 코드/정보 노출 검사까지 값 도메인·액션 2파일 39건 통과. 프로덕션 build(타입·lint 포함) 통과, 오류 0·기존 경고 4. 아직 화면 소비처 연결 전인 저장 기반이며 V 전체 완료를 의미하지 않는다.
+
+## V WBS 상세 입력 연결 검증 (2026-10-04)
+
+공통 값 입력기를 WBS 상세에 연결하고 로더→계산 트리→상세까지 타입 값을 전달했다. 기존 행 편집 권한을 좁혀 사용하며 관리자 전용·비활성 값은 읽기 전용이다. 새 서버 값이 도착해도 작성 중인 내용을 유지하고, 취소 시 최신 조회 값으로 바꾼다. 저장 성공 뒤 이전 props로 되돌아가지 않으며 저장 중 이중 제출을 막는다.
+
+전체 단위 921파일 12,277건 모두 통과. 프로덕션 build·타입·lint 검사 통과. 실제 빌드 앱/전용 DB에서 WBS 값 0 조회→JWT 저장 2→다른 경로의 값 4 갱신→오래된 폼의 저장 3 충돌 차단→초안 3 유지→취소 후 최신 4 채택을 확인했다. 데스크톱 1440px/모바일 390px 눈확인, 가로 넘침/pageerror 없음. 임시 계정·프로젝트 정리. 로컬 증거 `.superpowers/sp5c/wbs-field-browser-result.json`, `wbs-fields-desktop.png`, `wbs-fields-mobile.png`.
+
+WBS 시트 추가 열·키보드 이동, 이슈/주간 입력·목록과 필터, custom 실시간 페이로드 연결 등 V 후속 작업은 남았다. X/I/Z 및 최종 성능 검증도 남았으므로 SP5c 완료로 표시하지 않는다.
+
+## V 이슈 상세 입력·직접 링크 검증 (2026-10-04)
+
+이슈 로더/도메인/상세에 공통 입력기를 연결했다. false·0·선택 목록을 보존하고 손상 값은 편집 가능한 빈 객체로 바꾸지 않는다. 멤버의 추가 정보 편집은 기존 이슈 행 RLS로 검사하며 관리자 필드는 별도로 제한한다. 이슈 값 저장에는 updated_at을 함께 갱신해 색인 신선도 판정에서 변경을 놓치지 않게 했다(주간은 제한된 열 권한을 유지하고 기존 DB touch 트리거를 사용). 입력값을 원래 값으로 되돌렸을 때 다른 키 순서를 바꿔 불필요한 저장을 켜던 문제도 보완했다.
+
+실제 브라우저에서 ?focus 직접 링크로 모달을 처음 열 때 React hydration 오류를 발견했다. 공통 Modal의 서버/첫 hydration은 포털을 생략하고 브라우저 마운트 뒤 포털과 포커스 처리를 함께 시작하도록 수정했다. 초기 열린 모달 SSR→hydration, 포커스·Escape·복원과 기존 모달 40건 통과. 전체 단위 921파일 12,279건 통과. 이후 수정 시각 보완의 액션/주간 열 검사 2파일 24건 통과, 최종 프로덕션 build·타입·lint 통과.
+
+최종 빌드의 실제 브라우저/전용 DB에서 이슈의 required false 기본값→true JWT 저장→수정 시각 증가→직접 링크 새 조회를 확인했다. 1440px/390px 눈확인, pageerror/hydration 오류·가로 넘침 0. 같은 실행에서 WBS CAS·관리 화면 백필/purge 회귀도 통과. 임시 계정·프로젝트 및 앱 3101 정리. 로컬 증거 `.superpowers/sp5c/issue-field-browser-result.json`, `issue-fields-desktop.png`, `issue-fields-mobile.png`. 등록/수정 폼·목록/필터·주간·실시간 등 V 후속 및 X/I/Z는 남았다.
+
+## V 실시간 사용자 필드 전달 검증 (2026-10-05)
+
+0028은 WBS 변경 방송에 custom 전체 스냅샷을 포함하고 이슈 custom 변경 시각을 DB에서 갱신한다. WBS에는 일반 수정 시각 트리거가 없어 custom-only 방송의 시각이 그대로였으며, 실제 채널 가입 후에도 UI가 변경을 버리는 문제를 재현했다. 0029로 WBS custom 변경 시각도 단조 증가하게 보완했다. 같은 값 쓰기는 시각/방송을 바꾸지 않고 백필·purge도 동일 경로로 전달된다. 롤백은 0029→0028→0027 순서이며 기존 값/시각/감사 기록을 보존한다.
+
+클라이언트는 custom 전체 스냅샷을 읽어 빈 객체 purge까지 반영한다. 구형 방송의 custom 생략은 기존 값을 유지하며, 손상 custom 방송은 거부한다. 시각 비교는 PostgreSQL 마이크로초를 보존해 같은 밀리초 내 변경을 놓치지 않는다.
+
+전용 A DB 0000–0029 재생 성공(10-05 03:48 KST), 전체 RLS 45파일 864/864·skip0(실시간 신규 8건), 전체 타입 검사와 실시간/마이그레이션/actor 검사 40건 통과. 앱 변경의 직전 전체 단위 921파일 12,288건 및 lint/build 통과. CI에서 발견한 UI 옵션 픽스처 타입은 44561f6e에서 수정했으며, 이후 실패한 역사적 롤백 검사는 후속 마이그레이션부터 되돌리도록 보완했다. 새 커밋 CI 결과는 별도 확인한다.
+
+실제 빌드 앱에서 private websocket 가입→작성 중 6에 서버 7 도착→초안 6 유지/저장 차단→취소 후 7→새로고침 없이 서버 9 반영을 확인했다. 실시간을 끈 별도 세션의 CAS, 이슈 false 기본값→true JWT 저장/수정 시각/직접 링크 조회, 설정 백필·필수·정확한 건수 purge도 통과. 1440/390 화면 눈확인, pageerror/가로 넘침 0. 임시 계정/프로젝트 정리. 증거 `.superpowers/sp5c/realtime-field-browser-result.json`, `wbs-fields-realtime-desktop.png`, `issue-fields-mobile.png`.
+
+등록/수정 폼·목록/필터·WBS 시트 열/키보드·주간 값 입력, X/I/Z는 남았으며 SP5c와 카탈로그 fields의 상태는 완료/verified로 바꾸지 않는다.
+
+## V 이슈 목록 사용자 필드 열·필터 (2026-10-05)
+
+활성 show_in_list 필드를 순서대로 이슈 표에 추가했다. 기본 열의 비율을 유지하며 추가 열마다 160px을 배정하고 기존 표 내부 가로 스크롤을 사용한다. 공통 서식으로 숫자·단위·날짜·참/거짓·선택 라벨을 표시하고 손상 값/설정은 빈 데이터로 위장하지 않는다. 관리자 필드도 목록에서는 기존 행 읽기 권한으로 표시한다.
+
+활성 필드 하나를 선택해 필터한다. 텍스트는 대소문자 구분 없는 포함, 숫자/날짜/참·거짓/단일 선택은 타입을 유지한 동일 값, 다중 선택은 선택한 모든 코드 포함이다. 필터의 빈 선택은 전체이며 입력의 미설정과 구분한다. false/0은 빈 조건이 아니다. 비활성 옵션도 역사적 라벨/코드로 찾을 수 있으며, 제거·비활성 필드는 숨은 필터로 남지 않는다. 필터 변경 시 첫 페이지로 이동한다. AI searchable 플래그는 목록 필터와 별개다.
+
+목록/순수 필터 10건, 설정/상세 포함 회귀 4파일 44건 통과. 전체 타입 검사·lint(오류0, 기존 경고4)·최종 프로덕션 build 통과. 실제 브라우저에서 열/예 표시→false 조건 미일치→true 조건 일치→전체 해제, 1440/390 및 모바일 표 내부 추가 열 접근을 확인했다. WBS 실제 websocket·CAS, 이슈 JWT 저장/직접 링크, 설정 백필/purge 회귀도 함께 통과. pageerror·문서 가로 넘침0, 임시 데이터 정리. 증거 `.superpowers/sp5c/issue-list-browser-result.json`, `issue-list-desktop.png`, `issue-list-mobile.png`. 등록/수정 폼·WBS 시트·주간 및 X/I/Z는 후속으로 남는다.
+
+## V 일반 이슈 등록·수정 폼 (2026-10-05)
+
+등록 문맥에 fields.issue를 포함하고 손상 정의는 폼 제공을 차단한다. 일반 등록/수정 모달에 공통 7타입 입력을 연결했다. 관리자 전용·비활성 값은 읽기 전용이며, 권한이 좁아져도 미저장 값을 저장된 값처럼 표시하지 않는다. INSERT 검증은 필수 기본값을 고려하되 공급한 키만 반환해 DB의 기본값 생성 경로를 유지한다. 관리자/비활성 필수 기본값을 멤버가 명시적으로 공급하는 행위는 허용하지 않으며, optional 기본값은 자동 입력하지 않는다. UPDATE에는 기본값을 다시 넣지 않는다.
+
+기본 정보와 custom은 기존 세션 JWT의 같은 INSERT/UPDATE에 담는다. custom을 포함한 수정은 id·project_id·기존 전체 JSONB CAS로 비교하며 0행이면 담당자 변경 전에 중단한다. 기존 작성자/관리자 전체 편집 관문과 DB의 필드 권한 재검사를 유지한다. 첨부 부분 실패 후에는 생성된 이슈를 다시 만들거나 필드 변경을 검증하지 않고 기존 첨부 재시도를 이어간다.
+
+폼은 새 custom 값이 도착해도 초안을 유지한다. 실제 브라우저에서 제목만 편집한 경우 충돌 잠금이 자동 해제되는 문제를 찾아 명시적 채택 전까지 잠금을 유지하도록 보완했다. 충돌 조회에서 서버 제목도 바뀌면 기본 정보 초안도 보존한다. 추가 정보 초안 취소는 최신 custom만 채택한다. 편집 대상을 id로 다시 조회하되 대상이 사라지면 신규 등록 폼으로 전환하지 않는다.
+
+전체 단위 924파일 12,308/12,308 통과. 새 액션/기본값/문맥/폼을 포함한 관련 검사 132건과 후속 보호 검사 25건·20건 통과. 전체 타입·최종 build 통과, lint 오류0/기존 경고4. 직전 8e4448ef GitHub CI의 test/db 모두 성공. 새 커밋 CI는 별도 확인한다.
+
+최종 빌드 앱/전용 A DB에서 일반 폼의 required false 등록→기본 정보/custom 동시 수정→서버가 제목/custom을 동시에 갱신→오래된 폼의 양쪽 변경 차단→사용자 제목/추가 정보 초안 유지→명시적 최신 custom 채택→재저장을 확인했다. 1440/390 화면 눈확인, pageerror/문서 가로 넘침0. 기존 WBS 실제 websocket/CAS·이슈 상세/목록·설정 백필/purge도 함께 통과. 임시 프로젝트/계정과 앱 3101 정리. 증거 `.superpowers/sp5c/issue-form-browser-result.json`, `issue-form-desktop.png`, `issue-form-mobile.png`.
+
+회의록 원문 연결 신규 등록은 별도 RPC가 custom 입력을 받지 않아 아직 추가 정보 입력을 노출하지 않는다. 해당 액션은 custom 공급을 명시적으로 거부해 값을 조용히 버리지 않으며 기존 DB 필수 기본값은 유지한다. 이 RPC 확장, WBS 시트 열/키보드·주간 입력, X/I/Z는 후속이다. SP5c 전체 미완료, fields 카탈로그 stored 유지. 사용자 DB/main에는 적용·통합하지 않았다.
+
+
+2026-10-05: Linked-minute custom inputs now use a service-only required-p_custom overload. SQL rechecks actor/protected keys and inserts core/custom/assignees/source in one transaction while preserving source verification and attachment retry. The form uses the guarded selected-project display permission. Dedicated reset/bootstrap, DB 869/869 and unit 12,311/12,311 passed. Browser and final lint/build evidence is recorded in baseline/sp5c-e2e.md.
+
+Remaining: WBS sheet columns/keyboard, weekly input/carry, Excel roundtrip, AI reindex and final synthetic/performance verification. SP5c remains incomplete; catalog remains stored.
+
+## V WBS 시트 사용자 정의 필드 열 (2026-10-05)
+
+WBS 간트 시트에 활성 `show_in_list` 필드를 간트 이전 위치에 추가 열(`cf:<key>`)로 연결했다.
+- CustomFieldsProvider 의 스코프를 조회해 `useCustomFieldScope()` 훅으로 열 정의 목록과 언어별 포맷터를 전달한다.
+- `show_in_list` 가 참이고 활성인 필드만 폭 140px 열로 추가되며, 열 헤더 라벨과 행 셀의 공통 서식(숫자 0, 불리언 예/아니오, 빈 값 '—', 파싱 손상 '!')을 안전하게 렌더링한다.
+- 단위 테스트 3건(`tests/ui/wbs-custom-columns.test.tsx`) 및 전체 단위 테스트 925파일 12,314건 통과, lint 오류 0(기존 경고 4), 프로덕션 빌드 통과.
+- 실제 빌드 앱 3101 + 전용 DB 브라우저 QA(`wbs-cols-browser.mjs`): 1440px 데스크톱 및 390px 모바일 화면에서 추가 열 표시, 0 및 불리언 서식 표시, show_in_list 비활성 열 미표시, 가로 넘침(overflow) 없음 및 콘솔 오류 0 검증 완료. 로컬 증거 `.superpowers/sp5c/wbs-cols-browser-result.json`, `wbs-cols-desktop.png`, `wbs-cols-mobile.png`.
+
+## V 주간 시트 사용자 정의 필드 열·편집 모달 (2026-10-05)
+
+주간 업무보고 시트에 `fields.weekly_row` 활성 `show_in_list` 필드를 추가 열로 연결하고, 행 단위 추가 정보 편집 모달을 연동했다.
+- `WeeklyPage`에서 `pick(pc.cfg, 'fields.weekly_row')`를 로드해 `<CustomFieldsProvider>`로 `<WeeklySheetView>`를 감쌌다.
+- `WeeklySheetView`에서 `useCustomFieldScope()` 훅으로 열 정의를 조회하고, `show_in_list && active` 필드들을 `<colgroup>`(공백 텍스트 노드 없는 배열 형태) 및 `<thead>`에 140px 열로 배치했다.
+- 각 행의 업무영역 칸에 필드 정의가 존재할 때 "추가 정보" 버튼을 배치하고, 추가 열 클릭 또는 버튼 클릭 시 `CustomFieldValuesEditor`를 포함한 `<Modal>`을 띄워 값 편집 및 CAS 저장을 지원했다.
+- `fromRecord` 및 `mapAreaRow`에 `custom` 필드를 매핑하고, 쿼리 열 목록(`AREA_ROW_COLS`)에 `custom`을 추가했다.
+- 단위 테스트 3건(`tests/ui/weekly-custom-columns.test.tsx`), colgroup 무공백 불변식 테스트(`tests/ui/weekly-sheet-colgroup.test.tsx`), 주간 시트 쿼리/이월 테스트(`tests/data/weeklySheet.test.ts`, `tests/data/weeklySheet-carryover.test.ts`) 포함 주간 관련 10개 테스트 파일 225건 모두 통과.
+- 프로덕션 빌드·타입 검사·lint(오류 0, 기존 경고 4) 통과.
+- 실제 빌드 앱 3101 + 전용 A DB(54521/54522) 브라우저 QA(`.superpowers/sp5c/weekly-cols-browser.mjs`): 1440px 데스크톱 및 390px 모바일 화면에서 추가 열 표시, 0 및 불리언 서식 표시, show_in_list 비활성 열 미표시, 모달 오픈 및 편집 확인, 가로 넘침 없음 및 콘솔 오류 0 검증 완료. 로컬 증거 `.superpowers/sp5c/weekly-cols-browser-result.json`, `weekly-cols-desktop.png`, `weekly-cols-mobile.png`.
+
+## X WBS 엑셀 프로파일/표준 양식 왕복 및 주간 이월 검증 (2026-10-05)
+
+- **WBS 엑셀 프로파일 및 표준 양식 사용자 정의 열 왕복 (SP5c §3.6.7)**:
+  - `ExcelProfile`에 `customColumns?: [number, string][]` 정의 및 `validateProfile` 정규화(`customColumns: []` 기본값 부여).
+  - `deriveStandardExcelProfile`: 활성 `customFields`를 `sort` 순서대로 기본 열 뒤(`base + 6 + i`)에 배치하여 `customColumns` 생성.
+  - `buildAoaWithProfile` / `buildWorkbookWithProfile`: sub-act 펼침 시 인덱스 동적 시프트, 3행 헤더 라벨 매핑, 타입별(숫자·날짜·불리언·서식 문자열) 셀 내보내기 구현.
+  - `parseWithProfile`: `cellNF: true`와 `XLSX.SSF.is_date(cellObj.z)`를 활용하여 엑셀 날짜 시리얼을 ISO `YYYY-MM-DD`로 정확히 복원, `linkByDepth`를 통해 `ImportItem`에 `custom` 레코드를 연결.
+  - `splitLeafOwners`: leaf 행 분할 시 `custom` 복사 보존.
+  - `/api/export`: 활성 `fields.wbs_item` 정의를 추출해 표준 양식 프로파일 생성 및 워크북 빌더에 주입.
+  - `/api/import/inspect` 및 `/api/import/execute`: replace 모드 시 기존 `wbs_items`의 `custom` 삭제 건수를 감지하여 `"사용자 정의 값 N건 삭제"` 경고 추가.
+  - 가져오기 마법사 프로파일 불일치 검사(`compareProfiles`)에 `customColumns` 비교 추가 및 i18n 사전(`importWizard.mismatchFieldCustomColumns`) 등록.
+- **주간 업무보고 이월 (carryCustom)**:
+  - `carryOverRows`: `carryCustom` 콜백으로 추출된 활성 `carry_over` 필드 값을 새 행에 복사(`own.custom = { ...(own.custom || {}), ...carried }`).
+  - `createWeeklyReport`: `fields.weekly_row` 설정 파싱 및 `carryCustomFields`로 이전 주차 활성 이월 필드 추출 후, 보고서 생성 완료 시 `weekly_report_rows`에 custom 값 영속화.
+- **테스트 및 검증**:
+  - `tests/excel/custom-columns-roundtrip.test.ts` (3건): 표준 양식 및 저장 프로파일 양방향 엑셀 내보내기/가져오기 왕복 검증 통과.
+  - `tests/actions/weekly-create.test.ts` (35건), `tests/domain/weekly-carry.test.ts` (24건), `tests/api/export-route.test.ts` (20건), `tests/api/import-idempotent.test.ts` (60건) 통과.
+  - 전체 단위 테스트 **927개 파일 12,325건 모두 통과 (0 실패)**.
+  - TypeScript `typecheck` 0 오류, ESLint `lint` 0 오류(기존 경고 4건), Next.js 프로덕션 `build` 성공.
+  - 커밋 `b13e65e5`로 푸시 완료.
+
+남은 작업: I(AI 색인 본문 및 정의 변경 재색인), Z(합성/최종 성능 검증). SP5c 전체 미완료, fields 카탈로그 stored 유지.
+
+## I AI 색인 본문 사용자 정의 필드 반영 및 정의 변경 시 재색인 잡 발행 (2026-10-05)
+
+- **재색인 조건 검출 및 메타데이터**:
+  - `src/lib/domain/customFields.ts`: `hasCustomFieldReindexChange(prevDefs, nextDefs)` 구현 (`reindexOn: ['label', 'searchable', 'options.label']` 대상 속성 및 선택지 명칭 변경 감지).
+  - `src/lib/settings/defs/project.ts`: `fields.wbs_item`, `fields.issue`, `fields.weekly_row` 설정 정의에 `reindexOn: ['label', 'searchable', 'options.label']` 명시.
+- **재색인 잡 큐잉**:
+  - `src/lib/ai/index/reindexCustomFields.ts`: `enqueueCustomFieldsReindex(admin, projectId, entity)` 구현. 해당 프로젝트의 엔티티 ID를 조회하여 `upsert_ai_index_jobs` RPC를 200건 단위 배치로 큐잉.
+  - `src/app/actions/settings.ts`: `afterApplied` 훅에서 세 설정 키의 `hasCustomFieldReindexChange`를 검사하여 잡 발행, 실패 시 `CONFIG_UNAVAILABLE` 및 재시도 복구 안내 반환.
+- **AI 색인 본문 반영**:
+  - `src/lib/ai/index/content.ts`: `getProjectConfig` 해석기를 통해 활성 및 `searchable` 필드 정의를 안전하게 조회(G1 불변식 준수).
+  - `loadWbsItem`, `loadIssue`, `loadWeeklyReport`: `customSearchText`로 형식화된 라벨: 값 텍스트를 각 마크다운 본문에 추가하고 `contentHash`에 반영. 주간보고 행의 경우 본문 텍스트가 없고 사용자 정의 값만 있어도 누락되지 않도록 연동.
+- **테스트 및 검증**:
+  - `tests/domain/custom-fields-reindex.test.ts` (16건), `tests/ai/index-custom-fields.test.ts` (5건), `tests/actions/settings-custom-fields-reindex.test.ts` (5건) 통과.
+  - 설정 표 읽기/쓰기 불변식(`tests/invariants/settings-writes.test.ts`, 32건) 통과.
+  - 전체 단위 테스트 **930개 파일 12,351건 모두 통과 (0 실패)**.
+  - TypeScript `typecheck` 0 오류, ESLint `lint` 0 오류(기존 경고 4건), Next.js 프로덕션 `build` 성공.
+  - 커밋 `99e6820d`로 푸시 완료.
+
+## Z 합성 게이트 S3 연결 및 카탈로그 fields verified 전이 (2026-10-05)
+
+- **합성 게이트 S3 연결**:
+  - `scripts/lib/synthetic.mjs`: `PENDING_STEPS`에서 `S3` 제거 (남은 미활성 단계: `S7`, `S8`, `S10`).
+  - `scripts/e2e-synthetic.mjs`: `ACTIONS`에 `getCustomFieldUsage`, `backfillCustomField`, `purgeCustomField`, `saveCustomFieldValues` 등록. `S9-workflow` 뒤에 `S3-fields` 단계 추가 (연구 과제 R 이슈 필수 `experiment_result` 등록·백필·새 이슈 pass 생성·무효값 거부, 건설 현장 C WBS/주간 행 `inspected_quantity` 등록·WBS 값 12.5 저장·소수점 초과 12.55 거부·주간 행 값 45.0 저장·양 프로젝트 간 필드 누출 방지 교차 검증).
+  - `tests/scripts/synthetic.test.ts`: `PENDING_STEPS` 기대 목록 갱신(35/35 통과), 실행 순서 `order`에 `S3-fields` 추가, 4개 서버 액션 선언 확인 검증.
+- **카탈로그 `verified` 전이**:
+  - `src/lib/settings/catalog-meta.ts`: `fields.wbs_item`, `fields.issue`, `fields.weekly_row` 상태를 `stored`에서 `verified`로 승격하고, 실제 소비처(컴포넌트·시트·모달·엑셀·AI 색인·마이그레이션) 및 테스트 파일 목록 매핑.
+  - `tests/settings/catalog-sync.test.ts`: `expectedStatus`에서 `fields.*`를 `verified`로 갱신 (7/7 통과).
+  - `docs/settings-catalog.md`: 자동 생성 절 갱신 완료.
+  - `tests/invariants/settings-writes.test.ts`: `scripts/e2e-synthetic.mjs`의 `project_settings` 참조 수 갱신(33 → 36) 및 근거 명시 (32/32 통과).
+- **RLS 및 전체 단위 검증**:
+  - 전용 테스트 DB(`54522`) 대상 RLS 46개 파일 869건 전수 통과 (0 실패).
+  - 전체 단위 테스트 **930개 파일 12,352건 모두 통과 (100% 통과, 0 실패)**.
+  - TypeScript `typecheck` 0 오류, ESLint `lint` 0 오류(기존 허용 경고 4건).
+  - Next.js 프로덕션 `build` 성공 (16/16 정적 페이지 컴파일 완료).
+  - SP5c 모든 완료 조건(done_when 1~7) 달성 및 SP5c 작업 완결.
+
+
+

@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronLeft, ChevronRight, CalendarDays, List, CalendarX2 } from 'lucide-react'
 import type { Meeting, MeetingException, MeetingOccurrence } from '@/lib/domain/types'
-import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Spinner } from '@/components/ui/Spinner'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { fmtDate } from '@/components/wbs/shared'
-import { expandMeetings, sortOccurrences, MEETING_META, meetingEditHref } from '@/lib/domain/meetings'
+import { expandMeetings, sortOccurrences, meetingEditHref } from '@/lib/domain/meetings'
+import { vocabOf, vocabView, type VocabByProject } from '@/lib/settings/vocab'
 import { projectColorClass } from '@/lib/domain/projectColors'
 import { MeetingCalendar } from './MeetingCalendar'
 import { monthGridRange, type CalendarView } from '@/lib/domain/attendance'
@@ -24,13 +25,15 @@ type MyMeetingsFetch = Awaited<ReturnType<typeof fetchMyMeetings>>
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export function MyMeetingsView({
-  workspaceId, initialMeetings, initialExceptions, initialFailed = false, todayIso, currentUserId,
+  workspaceId, initialMeetings, initialExceptions, initialCategories, initialFailed = false, todayIso, currentUserId,
   adminProjectIds = [], isSuperuser = false, calendar,
 }: {
   /** 화면의 워크스페이스(/w/[slug]) — 월 이동 재조회가 이 워크스페이스의 회의만 읽는다(D26) */
   workspaceId: string
   initialMeetings: Meeting[]
   initialExceptions: MeetingException[]
+  /** 프로젝트별 회의 범주(getMyMeetings 의 categories) */
+  initialCategories: VocabByProject<'meetings.categories'>
   /** 서버 첫 조회 실패 — 빈 달력 대신 경고와 재시도(M5) */
   initialFailed?: boolean
   todayIso: string
@@ -69,8 +72,8 @@ export function MyMeetingsView({
   const firstDay = currentRuleDay(calendar.weekStart, todayIso)
   const initialRange = useMemo(() => monthGridRange(initY, (initM || 1) - 1, firstDay).join('|'), [initY, initM, firstDay])
   // failed 는 range 와 한 덩어리다 — '그 범위의 조회가 실패했다'. 따로 두면 다른 달을 읽는 동안 앞 달의 실패가 남는다.
-  const [data, setData] = useState<{ meetings: Meeting[]; exceptions: MeetingException[]; range: string; failed: boolean }>(
-    { meetings: initialMeetings, exceptions: initialExceptions, range: initialRange, failed: initialFailed },
+  const [data, setData] = useState<{ meetings: Meeting[]; exceptions: MeetingException[]; categories: VocabByProject<'meetings.categories'>; range: string; failed: boolean }>(
+    { meetings: initialMeetings, exceptions: initialExceptions, categories: initialCategories, range: initialRange, failed: initialFailed },
   )
   const [reloadKey, setReloadKey] = useState(0)
   const [detailOcc, setDetailOcc] = useState<MeetingOccurrence | null>(null)
@@ -119,9 +122,9 @@ export function MyMeetingsView({
       })
       if (!alive) return
       const range = `${gridStart}|${gridEnd}`
-      if (res.ok) setData({ meetings: res.meetings, exceptions: res.exceptions, range, failed: false })
+      if (res.ok) setData({ meetings: res.meetings, exceptions: res.exceptions, categories: res.categories, range, failed: false })
       // 실패한 달에는 앞 달의 회의를 남기지 않는다 — 비우되 '회의 없음'이 아니라 경고로 보인다.
-      else setData({ meetings: [], exceptions: [], range, failed: true })
+      else setData({ meetings: [], exceptions: [], categories: {}, range, failed: true })
     })
     return () => { alive = false }
   }, [workspaceId, gridStart, gridEnd, reloadKey])
@@ -259,10 +262,15 @@ export function MyMeetingsView({
       {view === 'calendar' ? (
         // 못 읽은 달은 빈 달력으로도 그리지 않는다 — 격자를 걷으면 내용이 툴바와 경고로 줄어 스크롤이 맨 위로 돌아오므로,
         // 아래로 내려 보던 화면에서 실패해도 경고가 고정 툴바 뒤에 가려지지 않는다.
-        failed ? null : <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} projectDotClass={projectDotClass} calendar={calendar} />
+        failed ? null : <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} projectDotClass={projectDotClass} calendar={calendar} categories={data.categories} />
       ) : listRows.length === 0 ? (
-        // 못 읽은 달을 '회의 없음'으로 그리지 않는다 — 사유는 위 경고가 보인다. 읽는 중인 달(stale)도 아직 '없음'이 아니다.
-        failed || isStale ? null : <EmptyState icon={CalendarX2}
+        // 못 읽은 달을 '회의 없음'으로 그리지 않는다 — 사유는 위 경고가 보인다. 읽는 중인 달(stale)도 아직 '없음'이 아니다 —
+        // 빈 화면 대신 읽는 중임을 보인다(SP5 B2 — D39, 개정 §8.1 #22 '목록 탭 로딩')
+        failed ? null : isStale ? (
+          <div data-my-meetings-loading className="card flex items-center justify-center gap-2 py-10 text-sm text-ink-muted">
+            <Spinner className="h-4 w-4" />{t('meet.list.loading')}
+          </div>
+        ) : <EmptyState icon={CalendarX2}
           title={onlyMine ? t('meet.empty.mineTitle') : t('meet.empty.title')}
           description={onlyMine ? t('meet.empty.mineDesc') : t('meet.empty.desc')} />
       ) : (
@@ -280,7 +288,7 @@ export function MyMeetingsView({
               </thead>
               <tbody>
                 {listRows.map(o => {
-                  const meta = MEETING_META[o.category]
+                  const meta = vocabView('meetings.categories', vocabOf(data.categories, o.projectId), o.category, t)
                   return (
                     <tr key={o.occurrenceId} onClick={() => setDetailOcc(o)} role="button" tabIndex={0}
                       onKeyDown={e => { if (e.key === 'Enter') setDetailOcc(o) }}
@@ -296,7 +304,7 @@ export function MyMeetingsView({
                           </span>
                         ) : '-'}
                       </td>
-                      <td className="px-4 py-3"><span className={`chip ${meta.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{t(meta.labelKey as DictKey)}</span></td>
+                      <td className="px-4 py-3"><span className={`chip ${meta.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}</span></td>
                     </tr>
                   )
                 })}
@@ -311,7 +319,7 @@ export function MyMeetingsView({
         currentUserId={currentUserId}
         isAdmin={isSuperuser || (!!detailOcc && adminProjectIds.includes(detailOcc.projectId))}
         onClose={() => setDetailOcc(null)} onEditSeries={(m) => router.push(meetingEditHref(m.projectId, m.id, detailOcc?.occurrenceDate))}
-        onChanged={() => { setReloadKey(k => k + 1); router.refresh() }} />
+        onChanged={() => { setReloadKey(k => k + 1); router.refresh() }} categories={data.categories} />
     </div>
   )
 }

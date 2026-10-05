@@ -10,5 +10,7 @@ export function teamScopeMock(codes: readonly string[] = FIXTURE_TEAMS.filter((t
   return {
     activeTeamCodesForMinuteScope: vi.fn(async () => [...codes]),
     teamCodesForMinuteScope: vi.fn(async () => FIXTURE_TEAMS.map((t) => t.code)),
+    // SP5 B2 — 최상위 폴더명 예약어는 팀 이름(= 팀 루트 이름)
+    teamNamesForMinuteScope: vi.fn(async () => FIXTURE_TEAMS.map((t) => t.name)),
   }
 }

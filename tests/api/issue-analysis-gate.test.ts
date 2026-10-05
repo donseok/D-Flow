@@ -6,6 +6,12 @@ vi.mock('@/lib/authz', () => ({ requireProjectMember: m.requireProjectMember }))
 vi.mock('@/lib/auth', () => ({ getDisplayName: vi.fn(async () => 'alice') }))
 vi.mock('@/lib/data/issueAnalysis', () => ({ loadSavedIssueAnalysisRun: m.loadSaved }))
 vi.mock('@/lib/report/issues/export', async (orig) => ({ ...(await orig<typeof import('@/lib/report/issues/export')>()), getIssueAnalysisPptExportDiagnostic: m.diag }))
+vi.mock('@/lib/settings/projectConfig', () => ({
+  getProjectConfig: vi.fn(async () => {
+    const { ConfigUnavailableError } = await import('@/lib/settings/errors')
+    throw new ConfigUnavailableError('db')
+  }),
+}))
 import { GET } from '@/app/api/issue-analysis/route'
 import { ERR_DENIED, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
@@ -21,13 +27,13 @@ beforeEach(() => {
 // 관문 mock 값을 바꾸는 파일 — 통과 구현으로 되돌린다(공통 규칙)
 afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
-describe('/api/issue-analysis — issues 관문', () => {
-  it('issues 가 꺼지면 404 · ERR_MODULE_DISABLED 이고 저장된 실행을 읽지 않는다', async () => {
+describe('/api/issue-analysis — issue_analysis 관문', () => {
+  it('issue_analysis 가 꺼지면 404 · ERR_MODULE_DISABLED 이고 저장된 실행을 읽지 않는다', async () => {
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
     const res = await GET(req())
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ error: ERR_MODULE_DISABLED })
-    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'issues')
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'issue_analysis')
     expect(m.loadSaved).not.toHaveBeenCalled(); expect(m.diag).not.toHaveBeenCalled()
   })
   it('가드가 거부하면 관문을 부르지 않는다', async () => {
@@ -35,7 +41,12 @@ describe('/api/issue-analysis — issues 관문', () => {
     expect((await GET(req())).status).toBe(403)
     expect(requireModule).not.toHaveBeenCalled()
   })
-  it('켜져 있으면 기존 흐름(렌더러가 없으면 503)', async () => {
-    expect((await GET(req())).status).toBe(503)
+  it('켜져 있으면 관문을 지나고, 설정을 못 읽으면 503이다 — 옛 렌더러 진단은 쓰지 않는다', async () => {
+    const res = await GET(req())
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ error: '프로젝트 설정을 확인할 수 없습니다.' })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'issue_analysis')
+    expect(m.diag).not.toHaveBeenCalled()
+    expect(m.loadSaved).not.toHaveBeenCalled()
   })
 })

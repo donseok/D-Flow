@@ -1,23 +1,36 @@
-import {
-  ISSUE_MEGA_AREAS,
-  isIssueMegaCode,
-  type IssueMegaCode,
-  type IssueSourceType,
-} from '@/lib/domain/issueAnalysis'
+import type { IssueSourceType } from '@/lib/domain/issueAnalysis'
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import type { Issue, IssueSeverity, IssueStatus } from '@/lib/domain/issues'
 import type { IssueMinuteSource } from '@/lib/domain/issueMinuteSource'
+import { DEFAULT_CAUSE_CATEGORIES, DEFAULT_SOURCES, activeVocab, orderedVocab, type CauseCategoryDef, type SourceDef } from '@/lib/settings/vocab'
 
 export const ISSUE_ANALYSIS_SCHEMA_VERSION = 'issue-analysis.v1' as const
 
-/** 표준 템플릿의 원인 유형 정본(전략/규정, 프로세스, 조직, IT). */
-export const ISSUE_ANALYSIS_CAUSE_CATEGORIES = [
-  'strategy_policy',
-  'process',
-  'organization',
-  'it',
-] as const
-export type IssueAnalysisCauseCategory =
-  (typeof ISSUE_ANALYSIS_CAUSE_CATEGORIES)[number]
+/** 원인 유형 code — 프로젝트 설정 issues.cause_categories(SP5 B4, 기본 = 표준 템플릿의 전략/규정·프로세스·조직·IT). 삭제 금지·비활성만 */
+export type IssueAnalysisCauseCategory = string
+
+/**
+ * 분석 실행의 어휘 스냅샷(SP5 B4) — 원인 분류(활성, 설정 순서 = 프롬프트 선택지·정렬)와 출처(전부, 옛 이슈의 비활성 code 라벨까지).
+ * 프로젝트 어휘가 제품 기본값과 같으면 스냅샷·보고서에 싣지 않는다 — 기본 어휘 프로젝트의 입력 해시·저장 실행이 B4 이전과 같게(캐시 유지).
+ * 없는 실행(B4 이전·기본 어휘)은 DEFAULT_ISSUE_ANALYSIS_VOCAB 로 읽는다 — 당시 생성 어휘가 곧 기본값이었다.
+ */
+export interface IssueAnalysisVocab {
+  causeCategories: Array<{ code: string; label: string }>
+  sources: Array<{ code: string; label: string }>
+}
+const vocabPairs = (list: readonly { code: string; label: string }[]) => list.map(e => ({ code: e.code, label: e.label }))
+export const DEFAULT_ISSUE_ANALYSIS_VOCAB: IssueAnalysisVocab = {
+  causeCategories: vocabPairs(activeVocab(DEFAULT_CAUSE_CATEGORIES)),
+  sources: vocabPairs(orderedVocab(DEFAULT_SOURCES)),
+}
+/** 설정 두 키 → 스냅샷 어휘. 기본값과 같으면 undefined(싣지 않는다) */
+export function issueAnalysisVocabOf(
+  causeCategories: readonly CauseCategoryDef[], sources: readonly SourceDef[],
+): IssueAnalysisVocab | undefined {
+  const v: IssueAnalysisVocab = { causeCategories: vocabPairs(activeVocab(causeCategories)), sources: vocabPairs(orderedVocab(sources)) }
+  return JSON.stringify(v) === JSON.stringify(DEFAULT_ISSUE_ANALYSIS_VOCAB) ? undefined : v
+}
+export const analysisVocab = (x: { vocab?: IssueAnalysisVocab }): IssueAnalysisVocab => x.vocab ?? DEFAULT_ISSUE_ANALYSIS_VOCAB
 
 // LLM 출력과 저장 JSON의 비정상적인 팽창을 막는 계약 상한이다. PPT 페이지 분할은
 // 이 상한 안의 원문을 줄이지 않고 별도로 처리한다.
@@ -33,12 +46,12 @@ export const ISSUE_ANALYSIS_MAJOR_DEFINITION_MAX = 150
 /** 로더가 전달하는 프로젝트 전체 Major 기준정보(0062). */
 export interface IssueAnalysisMajorProcess {
   id: string
-  megaCode: IssueMegaCode
+  areaId: string
   majorSeq: number
   name: string
 }
 
-/** 영역 스냅샷/보고서 내부의 Major 표현 — megaCode는 소속 영역이 이미 말해준다. */
+/** 영역 스냅샷/보고서 내부의 Major 표현 — areaCode는 소속 영역이 이미 말해준다. */
 export interface IssueAnalysisAreaMajor {
   id: string
   majorSeq: number
@@ -54,20 +67,11 @@ export interface IssueAnalysisAreaProcessDefinitions {
  * 0055 적용 전후의 읽기 경계를 명시한다. Issue 본체에도 같은 필드가 존재하지만,
  * 보고서 순수 계층이 실제로 요구하는 분석 필드를 한 곳에서 볼 수 있게 유지한다.
  */
-export type IssueAnalysisIssueInput = Issue & {
-  megaCode: IssueMegaCode | null
-  megaSeq: number | null
-  piIssueCode: string | null
-  subProcess: string
-  ownerDepartment: string
-  relatedSystems: string[]
-  sourceType: IssueSourceType | null
-  sourceDetail: string
-}
+export type IssueAnalysisIssueInput = Issue
 
 export type IssueAnalysisMissingField =
-  | 'piIssueCode'
-  | 'megaCode'
+  | 'code'
+  | 'areaId'
   | 'body'
   | 'subProcess'
   | 'ownerDepartment'
@@ -82,8 +86,9 @@ export interface IssueAnalysisBlockedIssue {
 }
 
 export interface IssueAnalysisPreflightArea {
-  megaCode: IssueMegaCode
-  megaName: string
+  areaId: string
+  areaCode: string
+  areaName: string
   count: number
   readyCount: number
   blockedCount: number
@@ -120,10 +125,8 @@ export interface IssueAnalysisSourceSnapshot {
 /** PPT 영역 종합 표와 개선기회 근거 카드가 함께 소비하는 불변 이슈 스냅샷. */
 export interface IssueAnalysisReportIssue {
   id: string
-  issueNo: number
-  piIssueCode: string
-  megaCode: IssueMegaCode
-  megaSeq: number | null
+  code: string
+  areaId: string
   /** 0062 이전 분류 레거시 이슈는 null — 트리에서 '(미지정)'으로 표시된다. */
   majorId: string | null
   title: string
@@ -167,9 +170,9 @@ export interface IssueAnalysisIssueCauseAnalysis {
 }
 
 export interface IssueAnalysisReportArea {
-  megaCode: IssueMegaCode
-  megaName: string
-  megaNameEn: string
+  areaId: string
+  areaCode: string
+  areaName: string
   /** v2 이전 저장 실행에는 없다. 신규 실행은 processDefinitions와 항상 함께 저장한다. */
   majors?: IssueAnalysisAreaMajor[]
   processDefinitions?: IssueAnalysisAreaProcessDefinitions
@@ -193,13 +196,14 @@ export interface IssueAnalysisInputSnapshot {
       'causeAnalyses' | 'opportunities' | 'processDefinitions' | 'majors'
     > & { majors: IssueAnalysisAreaMajor[] }
   >
+  /** 기본값과 다른 프로젝트만 — issueAnalysisVocabOf */
+  vocab?: IssueAnalysisVocab
   /** Mega가 없는 레거시 이슈도 hard delete 감사 입력에서 사라지지 않게 보존한다. */
   unclassifiedIssues: Array<{
     id: string
-    issueNo: number
-    title: string
+      title: string
     body: string
-    piIssueCode: string | null
+    code: string | null
   }>
 }
 
@@ -208,6 +212,8 @@ export interface IssueAnalysisReport {
   projectId: string
   issueCount: number
   generatedAt: string
+  /** 기본값과 다른 프로젝트만(입력 스냅샷에서 옮긴다) — 없으면 DEFAULT_ISSUE_ANALYSIS_VOCAB */
+  vocab?: IssueAnalysisVocab
   areas: IssueAnalysisReportArea[]
 }
 
@@ -218,50 +224,25 @@ const EMPTY_STATUS_COUNTS = (): Record<IssueStatus, number> => ({
   on_hold: 0,
 })
 
-const EMPTY_SEVERITY_COUNTS = (): Record<IssueSeverity, number> => ({
-  high: 0,
-  medium: 0,
-  low: 0,
-})
 
 const compact = (value: unknown): string =>
   typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
 
-function issueLabel(issue: Pick<IssueAnalysisIssueInput, 'issueNo' | 'piIssueCode' | 'title'>): string {
-  const code = compact(issue.piIssueCode) || `#${issue.issueNo}`
-  return `${code} ${compact(issue.title) || '(제목 없음)'}`
+function issueLabel(issue: Pick<IssueAnalysisIssueInput, 'code' | 'title'>): string {
+  return `${compact(issue.code)} ${compact(issue.title) || '(제목 없음)'}`
+}
+function sortedAreas(areas: readonly IssueAreaRef[]): IssueAreaRef[] {
+  return [...areas].sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code))
 }
 
-function expectedPiCode(megaCode: IssueMegaCode, megaSeq: number): string {
-  return `PI-I-${megaCode}-${String(megaSeq).padStart(2, '0')}`
-}
-
-function missingForIssue(issue: IssueAnalysisIssueInput): {
+function missingForIssue(issue: IssueAnalysisIssueInput, areaRefs: readonly IssueAreaRef[]): {
   fields: IssueAnalysisMissingField[]
   reasons: string[]
 } {
   const fields: IssueAnalysisMissingField[] = []
   const reasons: string[] = []
-  const megaCode = isIssueMegaCode(issue.megaCode) ? issue.megaCode : null
-  const piCode = compact(issue.piIssueCode)
-
-  if (!megaCode) {
-    fields.push('megaCode')
-    reasons.push('Mega 영역이 지정되지 않았습니다.')
-  }
-
-  if (!piCode) {
-    fields.push('piIssueCode')
-    reasons.push('PI 이슈 ID가 체번되지 않았습니다.')
-  } else if (
-    megaCode
-    && Number.isSafeInteger(issue.megaSeq)
-    && Number(issue.megaSeq) > 0
-    && piCode !== expectedPiCode(megaCode, Number(issue.megaSeq))
-  ) {
-    fields.push('piIssueCode')
-    reasons.push('PI 이슈 ID가 Mega 영역/일련번호와 일치하지 않습니다.')
-  }
+  if (!issue.areaId || !areaRefs.some(area => area.id === issue.areaId)) { fields.push('areaId'); reasons.push('이슈 영역이 지정되지 않았거나 현재 영역 목록에 없습니다.') }
+  if (!compact(issue.code)) { fields.push('code'); reasons.push('이슈 코드가 없습니다.') }
 
   if (!compact(issue.body)) {
     fields.push('body')
@@ -288,19 +269,11 @@ function missingForIssue(issue: IssueAnalysisIssueInput): {
 }
 
 function compareIssues(a: IssueAnalysisIssueInput, b: IssueAnalysisIssueInput): number {
-  const aSeq = Number.isSafeInteger(a.megaSeq) && Number(a.megaSeq) > 0
-    ? Number(a.megaSeq)
-    : Number.POSITIVE_INFINITY
-  const bSeq = Number.isSafeInteger(b.megaSeq) && Number(b.megaSeq) > 0
-    ? Number(b.megaSeq)
-    : Number.POSITIVE_INFINITY
-  if (aSeq !== bSeq) return aSeq - bSeq
-  const codeOrder = compact(a.piIssueCode).localeCompare(compact(b.piIssueCode), 'en', {
+  const codeOrder = compact(a.code).localeCompare(compact(b.code), 'en', {
     numeric: true,
     sensitivity: 'base',
   })
   if (codeOrder !== 0) return codeOrder
-  if (a.issueNo !== b.issueNo) return a.issueNo - b.issueNo
   return a.id.localeCompare(b.id)
 }
 
@@ -310,12 +283,13 @@ function compareIssues(a: IssueAnalysisIssueInput, b: IssueAnalysisIssueInput): 
  */
 export function buildIssueAnalysisPreflight(
   issues: readonly IssueAnalysisIssueInput[],
+  areaRefs: readonly IssueAreaRef[],
 ): IssueAnalysisPreflight {
   const checks = new Map<string, ReturnType<typeof missingForIssue>>()
   const blockedIssues: IssueAnalysisBlockedIssue[] = []
 
   for (const issue of issues) {
-    const missing = missingForIssue(issue)
+    const missing = missingForIssue(issue, areaRefs)
     checks.set(issue.id, missing)
     if (missing.reasons.length) {
       blockedIssues.push({
@@ -323,17 +297,18 @@ export function buildIssueAnalysisPreflight(
         label: issueLabel(issue),
         reasons: missing.reasons,
         missingFields: missing.fields,
-        unclassified: !isIssueMegaCode(issue.megaCode),
+        unclassified: !issue.areaId,
       })
     }
   }
 
-  const areas = ISSUE_MEGA_AREAS.map(area => {
-    const members = issues.filter(issue => issue.megaCode === area.code)
+  const areas = sortedAreas(areaRefs).filter(area => area.active || issues.some(issue => issue.areaId === area.id)).map(area => {
+    const members = issues.filter(issue => issue.areaId === area.id)
     const blockedCount = members.filter(issue => (checks.get(issue.id)?.reasons.length ?? 0) > 0).length
     return {
-      megaCode: area.code,
-      megaName: area.nameKo,
+      areaId: area.id,
+      areaCode: area.code,
+      areaName: area.name,
       count: members.length,
       readyCount: members.length - blockedCount,
       blockedCount,
@@ -374,17 +349,13 @@ function snapshotMinuteSources(
 export function toIssueAnalysisReportIssue(
   issue: IssueAnalysisIssueInput,
 ): IssueAnalysisReportIssue {
-  if (!isIssueMegaCode(issue.megaCode) || !compact(issue.piIssueCode)) {
+  if (!issue.areaId || !compact(issue.code)) {
     throw new Error(`분류되지 않은 이슈는 보고서 이슈로 변환할 수 없습니다: ${issue.id}`)
   }
   return {
     id: issue.id,
-    issueNo: issue.issueNo,
-    piIssueCode: compact(issue.piIssueCode),
-    megaCode: issue.megaCode,
-    megaSeq: Number.isSafeInteger(issue.megaSeq) && Number(issue.megaSeq) > 0
-      ? Number(issue.megaSeq)
-      : null,
+    code: compact(issue.code),
+    areaId: issue.areaId,
     majorId: issue.majorId ?? null,
     title: compact(issue.title),
     body: issue.body.trim(),
@@ -404,14 +375,15 @@ export function toIssueAnalysisReportIssue(
   }
 }
 
-function buildAreaSummary(issues: readonly IssueAnalysisReportIssue[]): IssueAnalysisAreaSummary {
+function buildAreaSummary(issues: readonly IssueAnalysisReportIssue[], severityCodes: readonly string[]): IssueAnalysisAreaSummary {
   const statusCounts = EMPTY_STATUS_COUNTS()
-  const severityCounts = EMPTY_SEVERITY_COUNTS()
+  // 심각도 키 = 그 프로젝트의 심각도 code 전부(0 포함 — 기본 어휘면 B4 이전 high·medium·low 와 같은 꼴이라 입력 해시가 그대로) + 목록 밖 옛 code
+  const severityCounts: Record<IssueSeverity, number> = Object.fromEntries(severityCodes.map(code => [code, 0]))
   const ownerDepartments = new Set<string>()
   const relatedSystems = new Set<string>()
   for (const issue of issues) {
     statusCounts[issue.status] += 1
-    severityCounts[issue.severity] += 1
+    severityCounts[issue.severity] = (severityCounts[issue.severity] ?? 0) + 1
     if (issue.ownerDepartment) ownerDepartments.add(issue.ownerDepartment)
     for (const system of issue.relatedSystems) relatedSystems.add(system)
   }
@@ -428,15 +400,19 @@ function buildAreaSummary(issues: readonly IssueAnalysisReportIssue[]): IssueAna
 export function buildIssueAnalysisInputSnapshot(
   projectId: string,
   issues: readonly IssueAnalysisIssueInput[],
-  majors: readonly IssueAnalysisMajorProcess[] = [],
+  majors: readonly IssueAnalysisMajorProcess[],
+  areaRefs: readonly IssueAreaRef[],
+  /** 그 프로젝트의 심각도 code(설정 issues.severities) — 영역 요약의 0 칸 */
+  severityCodes: readonly string[],
+  vocab?: IssueAnalysisVocab,
 ): IssueAnalysisInputSnapshot {
-  const areas = ISSUE_MEGA_AREAS.map(area => {
+  const areas = sortedAreas(areaRefs).filter(area => area.active || issues.some(issue => issue.areaId === area.id)).map(area => {
     const areaIssues = issues
-      .filter(issue => issue.megaCode === area.code)
+      .filter(issue => issue.areaId === area.id)
       .sort(compareIssues)
       .map(toIssueAnalysisReportIssue)
     const areaMajors = majors
-      .filter(major => major.megaCode === area.code)
+      .filter(major => major.areaId === area.id)
       .sort((a, b) => a.majorSeq - b.majorSeq)
       .map(major => ({ id: major.id, majorSeq: major.majorSeq, name: major.name }))
     // FK가 보장하는 정합이 로드 경계에서 깨졌다면 잘못된 공식 산출물을 만들지 않는다.
@@ -444,45 +420,45 @@ export function buildIssueAnalysisInputSnapshot(
     for (const issue of areaIssues) {
       if (issue.majorId !== null && !areaMajorIds.has(issue.majorId)) {
         throw new Error(
-          `[issue-analysis] ${issue.piIssueCode} 이슈의 Major가 기준정보에 없습니다: ${issue.majorId}`,
+          `[issue-analysis] ${issue.code} 이슈의 Major가 기준정보에 없습니다: ${issue.majorId}`,
         )
       }
     }
     return {
-      megaCode: area.code,
-      megaName: area.nameKo,
-      megaNameEn: area.nameEn,
+      areaId: area.id,
+      areaCode: area.code,
+      areaName: area.name,
       majors: areaMajors,
-      summary: buildAreaSummary(areaIssues),
+      summary: buildAreaSummary(areaIssues, severityCodes),
       issues: areaIssues,
     }
   })
   const unclassifiedIssues = issues
-    .filter(issue => !isIssueMegaCode(issue.megaCode))
-    .sort((a, b) => a.issueNo - b.issueNo || a.id.localeCompare(b.id))
+    .filter(issue => !issue.areaId)
+    .sort(compareIssues)
     .map(issue => ({
       id: issue.id,
-      issueNo: issue.issueNo,
-      title: issue.title,
+        title: issue.title,
       body: issue.body,
-      piIssueCode: issue.piIssueCode,
+      code: issue.code,
     }))
   return {
     schemaVersion: ISSUE_ANALYSIS_SCHEMA_VERSION,
     projectId,
     issueCount: issues.length,
     areas,
+    ...(vocab ? { vocab } : {}),
     unclassifiedIssues,
   }
 }
 
 export function buildIssueAnalysisReport(
   snapshot: IssueAnalysisInputSnapshot,
-  opportunities: Partial<Record<IssueMegaCode, IssueAnalysisOpportunity[]>>,
+  opportunities: Partial<Record<string, IssueAnalysisOpportunity[]>>,
   generatedAt: string,
-  causeAnalyses: Partial<Record<IssueMegaCode, IssueAnalysisIssueCauseAnalysis[]>> = {},
+  causeAnalyses: Partial<Record<string, IssueAnalysisIssueCauseAnalysis[]>> = {},
   processDefinitions: Partial<
-    Record<IssueMegaCode, IssueAnalysisAreaProcessDefinitions>
+    Record<string, IssueAnalysisAreaProcessDefinitions>
   > = {},
 ): IssueAnalysisReport {
   return {
@@ -490,9 +466,10 @@ export function buildIssueAnalysisReport(
     projectId: snapshot.projectId,
     issueCount: snapshot.issueCount,
     generatedAt,
+    ...(snapshot.vocab ? { vocab: snapshot.vocab } : {}),
     areas: snapshot.areas.map(area => {
-      const areaCauseAnalyses = causeAnalyses[area.megaCode]
-      const areaProcessDefinitions = processDefinitions[area.megaCode]
+      const areaCauseAnalyses = causeAnalyses[area.areaCode]
+      const areaProcessDefinitions = processDefinitions[area.areaCode]
       return {
         ...area,
         ...(areaCauseAnalyses === undefined
@@ -511,7 +488,7 @@ export function buildIssueAnalysisReport(
                 majors: areaProcessDefinitions.majors.map(major => ({ ...major })),
               },
             }),
-        opportunities: opportunities[area.megaCode]?.map(opportunity => ({
+        opportunities: opportunities[area.areaCode]?.map(opportunity => ({
           title: opportunity.title,
           description: opportunity.description,
           issueIds: [...opportunity.issueIds],

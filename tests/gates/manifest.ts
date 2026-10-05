@@ -64,7 +64,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('agentTokens')}#revokeAgentToken`]: { ...nul('session', '계정 단위 PAT 회수'), sample: [U] },   // isUuidLike 가 세션 앞
   [`${A('agentTokens')}#listMyAgentTokens`]: nul('session', '계정 단위 PAT 목록'),
   // ── agentWork — 옛 토글 둘은 모듈을 켜는 문(P8), 승인 계열은 agents
-  [`${A('agentWork')}#approveAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U, null], adminBeforeGuard: 'loadOrderForAdmin 이 주문 행에서 프로젝트를 읽는다(service_role)' },
+  [`${A('agentWork')}#approveAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U, null], adminBeforeGuard: 'loadOrderForAdmin 이 주문 행에서 프로젝트를 읽고, SP5b 부터 대기 단계(승인자)를 읽어 가드를 고른다(service_role)' },
   [`${A('agentWork')}#rejectAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U, '사유', null], adminBeforeGuard: 'loadOrderForReview 가 주문 행에서 프로젝트를 읽는다' },
   [`${A('agentWork')}#unapproveAgentCompletion`]: { guard: 'projectAdmin', module: 'agents', sample: [U], adminBeforeGuard: 'loadOrderForReview' },
   [`${A('agentWork')}#requestAgentRework`]: { guard: 'projectAdmin', module: 'agents', sample: [U, '사유'], adminBeforeGuard: 'loadOrderForReview' },
@@ -78,6 +78,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('announcements')}#createAnnouncementFromMeeting`]: { guard: 'projectAdmin', module: ['announcements', 'meetings'], sample: [U, '2026-09-01'] },
   // ── attachments — WBS 산출물(core)
   [`${A('attachments')}#listAttachments`]: nul('session', '로그인 + 세션 RLS(wbs 산출물)'),
+  [`${A('attachments')}#getAttachmentUrl`]: nul('session', '로그인 + 항목·첨부 id 짝 + can_attach(Storage 읽기 정책과 같은 판정) — 60초 서명'),
   [`${A('attachments')}#recordAttachment`]: nul('projectMember'),
   [`${A('attachments')}#removeAttachment`]: nul('projectMember'),
   // ── attendance
@@ -104,9 +105,10 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('inviteRedeem')}#redeemInvite`]: nul('public', '초대 토큰 + 로그인 세션'),
   [`${A('inviteRedeem')}#redeemInviteWithSignup`]: nul('public', '초대 토큰 — 가입'),
   // ── issueAnalysis
-  [`${A('issueAnalysis')}#ensureIssueAnalysisAction`]: { guard: 'projectMember', module: 'issues', sample: [P, 'all'] },
+  [`${A('issueAnalysis')}#ensureIssueAnalysisAction`]: { guard: 'projectMember', module: 'issue_analysis', sample: [P, 'all'] },
   // ── issueAttachments
   [`${A('issueAttachments')}#listIssueAttachments`]: { guard: 'session', module: 'issues', note: '로그인 + 이슈 행의 프로젝트', sample: [U] },
+  [`${A('issueAttachments')}#getIssueAttachmentUrl`]: { guard: 'session', module: 'issues', note: '로그인 + 이슈 행의 프로젝트, 이슈·첨부 id 짝 — 60초 서명(세션 Storage 정책)', sample: [U, U] },
   [`${A('issueAttachments')}#recordIssueAttachment`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(requireIssueEditable)', sample: [U, { fileName: 'a.txt', filePath: 'x/a.txt', size: 1, mime: 'text/plain' }], ownerBranch: 'requireIssueEditable — issues.created_by' },
   [`${A('issueAttachments')}#removeIssueAttachment`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U], ownerBranch: 'requireIssueEditable(첨부 행의 이슈) — issues.created_by' },
   // ── issueUpdates
@@ -116,12 +118,13 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('issueUpdates')}#unarchiveIssueUpdate`]: { guard: 'projectMember', module: 'issues', sample: [U, U] },
   [`${A('issueUpdates')}#purgeIssueUpdate`]: { guard: 'projectMember', module: 'issues', sample: [U, U] },
   // ── issues
-  [`${A('issues')}#fetchIssueMajorProcesses`]: { guard: 'session', module: 'issues', note: '로그인 + 인자 프로젝트', sample: [P] },
+  [`${A('issues')}#fetchIssueEntryContext`]: { guard: 'projectMember', module: 'issues', sample: [P] },
+  [`${A('issues')}#fetchIssueMajorProcesses`]: { guard: 'session', module: 'issue_analysis', note: '로그인 + 인자 프로젝트', sample: [P] },
   [`${A('issues')}#fetchIssueProjectMembers`]: { guard: 'session', module: 'issues', note: '로그인 + 인자 프로젝트', sample: [P] },
-  [`${A('issues')}#createIssue`]: { guard: 'projectMember', module: 'issues', sample: [P, {}] },
+  [`${A('issues')}#createIssue`]: { guard: 'projectMember', module: 'issues', note: '분석 묶음이 있는 경우 checkEntry에서 issue_analysis 조건부 관문', sample: [P, {}] },
   [`${A('issues')}#prepareMinuteIssueDraft`]: { guard: 'projectMember', module: ['issues', 'minutes'], sample: [P, {}] },
   [`${A('issues')}#createIssueFromMinuteBlock`]: { guard: 'projectMember', module: ['issues', 'minutes'], sample: [P, {}, {}] },
-  [`${A('issues')}#updateIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(adminOrOwnerGate)', sample: [U, {}], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
+  [`${A('issues')}#updateIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(adminOrOwnerGate); 분석 묶음은 checkEntry에서 issue_analysis 조건부 관문', sample: [U, {}], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
   [`${A('issues')}#updateIssueProgress`]: { guard: 'projectMember', module: 'issues', sample: [U, {}] },
   [`${A('issues')}#deleteIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
   // ── llmConfig — 플랫폼
@@ -141,8 +144,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('meetings')}#deleteMeeting`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
   [`${A('meetings')}#setMeetingAttendees`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, []], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
   [`${A('meetings')}#cancelOccurrence`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, '2026-09-01'], ownerBranch: 'occurrenceGate → adminOrOwnerGate' },
-  [`${A('meetings')}#fetchMyMeetings`]: { guard: 'session', module: 'meetings', note: '내 회의 — 인자 워크스페이스(소속 확인), 행은 getMyMeetings 가 그 워크스페이스로 거른다', sample: [W, '2026-09-01', '2026-09-30'], deny: { ok: true, meetings: [], exceptions: [] }, target: 'workspace' },
-  [`${A('meetings')}#fetchMeetingDetail`]: { guard: 'session', module: 'meetings', note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: null },
+  [`${A('meetings')}#fetchMyMeetings`]: { guard: 'session', module: 'meetings', note: '내 회의 — 인자 워크스페이스(소속 확인), 행은 getMyMeetings 가 그 워크스페이스로 거른다', sample: [W, '2026-09-01', '2026-09-30'], deny: { ok: true, meetings: [], exceptions: [], categories: {} }, target: 'workspace' },
+  [`${A('meetings')}#fetchMeetingDetail`]: { guard: 'session', module: 'meetings', note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: { ok: true, detail: null } },   // 결과형(SP5 B2 — D39): 없음·거부·꺼진 모듈은 detail null, 조회 실패만 ok:false
   // ── minutes — 워크스페이스 모듈(행의 워크스페이스 / 새 회의록은 대상 / 행 없는 목록·폴더는 세션 유일 워크스페이스)
   [`${A('minutes')}#createMinute`]: { guard: 'session', module: 'minutes', note: 'requireActor — 프로젝트면 그 프로젝트, 아니면 인자 워크스페이스(소속 확인 — D26)', sample: [{ date: '2026-09-01', teamCode: 'PMO', title: 'Acme', bodyMd: '# b', projectId: null }, null, undefined, W], target: 'workspace' },
   [`${A('minutes')}#updateMinuteMeta`]: { guard: 'session', module: 'minutes', note: 'requireActor + checkOwner(행의 워크스페이스) — 관문이 입력 검증 뒤라 유효한 표본', sample: [U, { minuteDate: '2026-09-01', teamCode: 'PMO', title: 'Acme', meetingId: null }] },
@@ -155,6 +158,9 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('minutes')}#deleteMinute`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U] },
   [`${A('minutes')}#fetchMinuteDetail`]: { guard: 'session', module: 'minutes', note: '로그인 + 행', sample: [U], deny: null },
   [`${A('minutes')}#getMinuteFileUrl`]: { guard: 'session', module: 'minutes', note: '로그인 + 파일 행의 회의록(행의 워크스페이스 — /minutes/[id] 와 같은 판정)', sample: [U] },
+  [`${A('minutes')}#getMinuteFilePreviewUrl`]: { guard: 'session', module: 'minutes', note: '로그인 + 파일 행의 회의록(행의 워크스페이스) — 범위 정책·객체 MIME 의 안전 형식만 inline 서명', sample: [U] },
+  [`${A('minutes')}#fetchAttachmentPolicyForScope`]: { guard: 'session', module: 'minutes', note: '로그인 — 인자 범위(소속·프로젝트의 워크스페이스 확인, 새 회의록 모달)', sample: [{ workspaceId: W, projectId: null }], target: 'workspace' },
+  [`${A('minutes')}#fetchMinuteAttachmentPolicy`]: { guard: 'session', module: 'minutes', note: 'requireActor + requireMinuteMember(행의 범위) — 행의 범위 정책만, 클라이언트 범위 불신', sample: [U] },
   [`${A('minutes')}#getMinuteVersionFileUrl`]: { guard: 'session', module: 'minutes', note: '로그인 + 행', sample: [U, U] },
   [`${A('minutes')}#fetchProjectMeetingsLite`]: { guard: 'session', module: ['minutes', 'meetings'], note: '로그인 + 인자 프로젝트(회의록 폼의 회의 선택)', sample: [P], deny: { ok: true, meetings: [] } },
   [`${A('minutes')}#fetchMeetingMinutesLite`]: { guard: 'session', module: ['minutes', 'meetings'], note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: [] },
@@ -206,6 +212,18 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('settings')}#updateWorkspaceSettings`]: { ...nul('workspaceAdmin'), sample: [U, {}] },   // isUuidLike 가 가드 앞
   [`${A('settings')}#getSettingsCommandOutcome`]: { ...nul('session', '범위 분기 — 프로젝트 관리자·워크스페이스 관리자(내부 가드)'), sample: [{ projectId: P }, U] },   // 범위 객체가 가드 인자
   [`${A('settings')}#listSettingsHistory`]: { ...nul('session', '범위 분기 — 프로젝트 관리자·워크스페이스 관리자(내부 가드)'), sample: [{ projectId: P }] },
+  [`${A('customFieldValues')}#saveCustomFieldValues`]: { guard: 'projectMember', module: 'issues', sample: [P, 'issue', U, {}, {}] },
+  // SP5c: entity selects wbs/issues/weekly; dedicated tests deny each owner before any access.
+  [`${A('customFields')}#getCustomFieldUsage`]: { guard: 'projectAdmin', module: 'issues', sample: [P, 'issue'] },
+  [`${A('customFields')}#backfillCustomField`]: { guard: 'projectAdmin', module: 'issues', sample: [P, 'issue', {}] },
+  [`${A('customFields')}#purgeCustomField`]: { guard: 'projectAdmin', module: 'issues', sample: [P, 'issue', {}] },
+  // SP6 S2 — 표본 행의 form_kind 는 weekly_report_pptx(deny 하네스 TABLE_ROWS). 다른 종류는 그 모듈을 묻는다.
+  [`${A('formTemplates')}#prepareFormTemplateUpload`]: { guard: 'projectAdmin', module: 'weekly', sample: [P, 'weekly_report_pptx', 'weekly.pptx', 1024] },
+  [`${A('formTemplates')}#activateFormTemplate`]: { guard: 'projectAdmin', module: 'weekly', sample: [P, U, {}] },
+  [`${A('formTemplates')}#deactivateFormTemplate`]: { guard: 'projectAdmin', module: 'weekly', sample: [P, U, {}] },
+  [`${A('formTemplates')}#registerFormTemplate`]: { guard: 'projectAdmin', module: 'weekly', sample: [P, 'weekly_report_pptx', 'incoming', 'weekly.pptx'] },
+  // ── vocab(SP5 B4) — 어휘 code 이관. 모듈은 키마다(근태·회의·이슈·분석) — 표본은 근태 유형
+  [`${A('vocab')}#migrateVocabCode`]: { guard: 'projectAdmin', module: 'attendance', sample: [P, 'attendance.types', 'annual', 'work'] },
   [`${A('settingsPreview')}#previewSettingsImpact`]: { ...nul('workspaceAdmin', '설정 미리보기 — 모듈을 켜는 관리 화면이어서 모듈 관문 밖'), sample: [U, ['agents']] },
   [`${A('settingsPreview')}#previewProjectSettingsImpact`]: { ...nul('projectAdmin', '설정 미리보기 — 모듈을 켜는 관리 화면이어서 모듈 관문 밖'), sample: [P, ['agents']] },
   [`${A('settingsPreview')}#previewWeekStartChange`]: { ...nul('projectAdmin', '설정 미리보기 — 주 시작 변경 검토(D38). 설정 화면이라 모듈 관문 밖'), sample: [P, 'sunday'] },
@@ -228,6 +246,10 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('wbsAssign')}#setWbsAssignee`]: { ...nul('projectAdmin'), sample: [U, null] },   // resolveItemProjectId 의 isUuidLike 가 가드 앞
   [`${A('wbsAssign')}#setWbsAssigneeCascade`]: { ...nul('projectAdmin'), sample: [U, U] },
   [`${A('wbsAssign')}#setWbsStage`]: { ...nul('projectAdmin'), sample: [U, null] },
+  // SP5b(D19·스펙 §3.5): 주문 없는 단계 승인 — wbs 는 core 라 모듈 관문 없음. 대기 단계의 승인자에 따라 completionApprover(관리자 또는 서브트리 관리자,
+  // 자기 담당 제외)로 갈린다. 순서 = resolveProjectId → requireProjectMember → 대기 단계 판독 → 승인자 가드
+  [`${A('wbsAssign')}#approveWbsStep`]: { ...nul('projectAdmin', '대기 단계 승인자에 따라 completionApprover'), sample: [U, 'review'],
+    adminBeforeGuard: '멤버 가드 뒤 대기 단계(승인자)를 service_role 로 읽어 승인자 가드를 고른다' },
   [`${A('wbsAssign')}#setWbsDevWorkflow`]: { ...nul('projectAdmin', 'WBS 필드(core) — 주문 발행은 ensureOrder 의 두 원천 AND 가 막는다(P19)'), sample: [U, false, false] },
   [`${A('wbsAssign')}#getWbsAssigneeStage`]: { ...nul('projectMember'), sample: [U] },
   [`${A('wbsMarkdown')}#previewWbsUpload`]: nul('projectAdmin'),
@@ -278,15 +300,15 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('chat/v2/stream')}#POST`]: sess('chatbot', 'tests/ai/chat-v2-route.test.ts', '로그인 — 요청의 프로젝트 힌트(pageContext·projectId), 없으면 요청의 workspaceId(pageContext 우선, 소속 확인), 둘 다 없으면 400(D26, 과제 34). env 501 은 관문 앞, 강등 501 은 관문 뒤'),
   [`${R('cron/ai-index')}#GET`]: nul('cronSecret', 'CRON_SECRET — 잡마다 moduleState(과제 22)'),
   [`${R('cron/inbox-retention')}#GET`]: nul('cronSecret', 'CRON_SECRET — 알림함 보존(셸)'),
-  [`${R('export')}#GET`]: nul('session', '로그인 + 목록 — WBS 내보내기(core)'),
+  [`${R('export')}#GET`]: { guard: 'projectMember', module: null, note: '정본 §4.8 — requireProjectMember. wbs 는 core 라 모듈 관문은 없다. form=1 은 양식, 그 밖은 프로파일 라운드트립' },
   [`${R('import/execute')}#POST`]: nul('projectAdmin'),
   [`${R('import/inspect')}#POST`]: nul('projectAdmin'),
   [`${R('import/template')}#GET`]: nul('session', '로그인 — 정적 양식(core)'),
-  [`${R('issue-analysis')}#GET`]: { guard: 'projectMember', module: 'issues', delegatedTo: 'tests/api/issue-analysis-gate.test.ts' },
+  [`${R('issue-analysis')}#GET`]: { guard: 'projectMember', module: 'issue_analysis', delegatedTo: 'tests/api/issue-analysis-gate.test.ts' },
   [`${R('minutes/chat')}#POST`]: sess('minutes', 'tests/api/minutes-chat-route.test.ts', '로그인 — 문서 모드는 회의록 행의 워크스페이스, 보관함 모드는 요청의 workspaceId(소속 확인, 없으면 400 — D26, 과제 34). 검색도 그 워크스페이스로, 명단 밖 비공개 프로젝트 회의록·폴더는 뺀다(FA1, CC1)'),
   [`${R('minutes/export')}#GET`]: sess('minutes', 'tests/minutes/export-route.test.ts', '로그인 — ?workspaceId=(소속 확인, 없으면 400 — D26, 과제 34). 그 워크스페이스 회의록 ZIP, 명단 밖 비공개 프로젝트 회의록은 뺀다(판정 실패 503 — FA1, CC1)'),
   [`${R('prefs')}#POST`]: nul('session', '셸 개인 설정 — 안의 액션이 세션을 본다'),
-  [`${R('report')}#GET`]: sess('weekly', 'tests/api/report-route.test.ts', 'source=sheet 갈래만 weekly 관문 — 기본 갈래(WBS 보고서 모달)는 core(P4)'),
+  [`${R('report')}#GET`]: sess('weekly', 'tests/api/report-route.test.ts', '정본 §4.8 — requireProjectMember 뒤 weekly 관문. source 분기는 없다'),
   [`${R('shell')}#GET`]: nul('session', '셸 — 범위(ws 소속·볼 수 있는 프로젝트)를 먼저 거르고 안의 액션이 각자 관문을 지나 그 항목만 비운다(§4.2), 결재 배지는 projectsWithModule'),
   [`${R('nav/switch-target')}#GET`]: nul('session', '로그인 — 대상 프로젝트 숨김 판정 후 effectiveModules 로 전환 대상만 계산(읽기 전용, D41)'),
   [`${R('track')}#POST`]: sess('usage', 'tests/actions/usage-track-gate.test.ts', '로그인 claims — 경로의 프로젝트, 없으면 본문 workspaceId(소속 확인), 둘 다 없으면 400(D26, 과제 34). 꺼지면 200 skipped(P19)'),

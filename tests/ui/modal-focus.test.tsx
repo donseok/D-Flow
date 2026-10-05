@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { act, useState } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { hydrateRoot, createRoot, type Root } from 'react-dom/client'
+import { renderToString } from 'react-dom/server'
 import { Modal } from '@/components/ui/Modal'
 
 // react-dom/client의 act를 쓰려면 필요한 플래그.
@@ -84,6 +85,22 @@ describe('Modal 포커스 트랩', () => {
     act(() => root.unmount())
     container.remove()
     document.body.innerHTML = ''
+  })
+
+  it('an initially open modal hydrates without mismatch, then installs focus and Escape handling', async () => {
+    const errors: unknown[] = []
+    // The server snapshot must omit portals even when a DOM is present in the test process.
+    container.innerHTML = renderToString(<Harness />)
+    expect(container.innerHTML).toBe('')
+    await act(async () => { root = hydrateRoot(container, <Harness />, { onRecoverableError: e => errors.push(e) }) })
+    const panel = document.querySelector('[role="dialog"]')!
+    expect(panel).not.toBeNull()
+    expect(panel.contains(document.activeElement)).toBe(true)
+    expect(document.body.style.overflow).toBe('hidden')
+    expect(errors).toEqual([])
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.body.style.overflow).toBe('')
   })
 
   it('입력 중 리렌더가 일어나도 포커스가 입력 필드에 남는다', () => {

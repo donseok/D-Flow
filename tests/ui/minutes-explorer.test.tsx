@@ -29,11 +29,13 @@ import { MinutesExplorer } from '@/components/minutes/MinutesExplorer'
 import { MinutesScopeProvider } from '@/components/minutes/MinutesScopeContext'
 
 const folder = (id: string, name: string, parentId: string | null = null, sort = 100, createdBy: string | null = null): MinuteFolder =>
-  ({ id, name, parentId, sort, createdBy, projectId: null })
+  ({ id, name, parentId, sort, createdBy, projectId: null,
+    // SP5 B2 — 시드 루트(옛 created_by null)는 kind = team_root 로 표시한다
+    ...(parentId === null && createdBy === null ? { kind: 'team_root' as const, teamCode: name } : { kind: 'user' as const }) })
 const leaf = (id: string, date: string, title: string, folderId: string | null, extra: Partial<ExplorerLeaf> = {}): ExplorerLeaf => ({
   id, minuteDate: date, teamCode: 'MES', title, fileCount: 0,
   createdBy: 'u1', createdByName: '홍길동', bodyPreview: '', meetingCategory: null,
-  folderId, ...extra,
+  folderId, canEdit: true, ...extra,   // canEdit = 서버 canEditMinute(D40) — 본인 작성 표본
 })
 
 const folders = [
@@ -66,7 +68,6 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
           onToggleFavorite={onToggle} onRetryFavorites={onRetry}
           layout="grid"
           currentUserId="u1" onChanged={onChanged} onFolderSelect={onFolderSelect}
-          teamCodes={['PMO', 'MES', 'ERP']}
           {...over} />
       </MinutesScopeProvider>,
     ))
@@ -209,7 +210,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
       { ...folder('f-x', '남의 폴더', 'f-pmo', 5, 'u2'), workspaceId: 'w1' },
     ]
     const menus = () => container.querySelectorAll('button[aria-label="min.fold.menuAria"]').length
-    await mount({ folders: fs, leaves: [], adminProjectIds: ['p1'] })       // 프로젝트 관리자 — 서버가 거부하므로 숨김
+    await mount({ folders: fs, leaves: [] })       // 프로젝트 관리자(워크스페이스 관리 아님) — 서버가 거부하므로 숨김
     expect(menus()).toBe(0)
     await mount({ folders: fs, leaves: [], adminWorkspaceIds: ['w2'] })     // 다른 워크스페이스 관리자
     expect(menus()).toBe(0)
@@ -236,8 +237,8 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
     expect(onChanged).toHaveBeenCalled()
   })
 
-  it("'...' 메뉴는 작성자가 아니고 관리자도 아니면 없다", async () => {
-    await mount({ currentUserId: 'other' })
+  it("'...' 메뉴는 서버가 고칠 수 없다고 판정한 건(canEdit 거짓)에 없다", async () => {
+    await mount({ currentUserId: 'other', leaves: leaves.map(l => ({ ...l, canEdit: false })) })
     expect(container.querySelectorAll('button[aria-label="min.exp.leafMenuAria"]').length).toBe(0)
   })
 
@@ -359,7 +360,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
   })
 
   it('권한 없는 항목은 draggable=false — 리프도 폴더도', async () => {
-    await mount({ currentUserId: 'other' })
+    await mount({ currentUserId: 'other', leaves: leaves.map(l => ({ ...l, canEdit: false })) })
     expect(cardOf('APS 인터뷰').getAttribute('draggable')).not.toBe('true')
     expect(dropTarget('f-plan').getAttribute('draggable')).not.toBe('true')
   })

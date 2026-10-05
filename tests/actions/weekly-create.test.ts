@@ -274,3 +274,35 @@ describe('RPC 토큰 → 코드(D45·T6·P4) — 원문 비노출', () => {
     expect(logged(err, message)).toBe(true)
   })
 })
+
+describe('사용자 정의 필드 이월 (carryCustom)', () => {
+  it('carry_over: true 인 활성 필드만 이월되어 생성 후 weekly_report_rows 에 반영된다', async () => {
+    const eqMock2 = vi.fn().mockResolvedValue({ data: null, error: null })
+    const eqMock1 = vi.fn().mockReturnValue({ eq: eqMock2 })
+    const updateMock = vi.fn().mockReturnValue({ eq: eqMock1 })
+    const fromMock = vi.fn().mockReturnValue({ update: updateMock })
+    h.adminFor.mockReturnValue({ admin: { rpc: h.rpc, from: fromMock } })
+
+    const customDefs = [
+      { key: 'cf_keep', label: '유지필드', description: '설명', type: 'text', carry_over: true, active: true, required: false, editable_by: 'member', show_in_list: true, searchable: false, sort: 1 },
+      { key: 'cf_drop', label: '버림필드', description: '설명', type: 'text', carry_over: false, active: true, required: false, editable_by: 'member', show_in_list: true, searchable: false, sort: 2 },
+    ]
+    h.getProjectConfig.mockResolvedValue(
+      makeProjectConfig({ 'fields.weekly_row': customDefs, ...monProjectValues }, { projectId: P, areas: { weekly_section: AREAS, issue_area: [] } })
+    )
+
+    h.findCarryOverSource.mockResolvedValue(
+      source([
+        prev(A_EXP, { nextContent: '실험계획', custom: { cf_keep: '유지값', cf_drop: '버림값' } }),
+      ])
+    )
+
+    const r = await createWeeklyReport(P, '2026-09-28', true)
+    expect(r).toEqual({ ok: true, reportId: REPORT, status: 'created' })
+    expect(fromMock).toHaveBeenCalledWith('weekly_report_rows')
+    expect(updateMock).toHaveBeenCalledWith({ custom: { cf_keep: '유지값' } })
+    expect(eqMock1).toHaveBeenCalledWith('report_id', REPORT)
+    expect(eqMock2).toHaveBeenCalledWith('area_id', A_EXP)
+  })
+})
+

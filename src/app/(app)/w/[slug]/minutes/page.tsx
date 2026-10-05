@@ -1,11 +1,12 @@
 import { NotebookText } from 'lucide-react'
+import { redirect } from 'next/navigation'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { getMinuteFavorites, getMinutesExplorer, getMinutesPage } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { UUID_RE } from '@/lib/domain/validate'
-import { adminProjectIds, adminWorkspaceIdList, hasProjectRoleInWorkspace } from '@/lib/domain/authz'
+import { adminWorkspaceIdList, hasProjectRoleInWorkspace } from '@/lib/domain/authz'
 import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { getMyProjectIds } from '@/lib/data/members'
 import { getAccountPrefs } from '@/app/actions/preferences'
@@ -21,6 +22,9 @@ import { viewCalendar } from '@/lib/calendar/viewZone'
 import { calendarViewOf } from '@/lib/domain/attendance'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { projectTeams, workspaceTeams } from '@/lib/teams/source'
+import { resolveTeamParam } from '@/lib/minutes/teamResolve'
+import { wsHref } from '@/lib/workspace/paths'
 
 /** 해당 월 1일~말일 (달력 그리드 아님 — 목록은 월 단위 조회). */
 function monthRange(todayIso: string): [string, string] {
@@ -33,7 +37,7 @@ function monthRange(todayIso: string): [string, string] {
 export const metadata = { title: '회의록' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function MinutesPage({ params, searchParams }: {
-  params: Promise<{ slug: string }>; searchParams: Promise<{ project?: string | string[] }>
+  params: Promise<{ slug: string }>; searchParams: Promise<{ project?: string | string[]; team?: string | string[] }>
 }) {
   const { slug } = await params
   const scope = await loadWorkspaceScope(slug)                           // 첫 await — 비소속 404(E19)
@@ -53,13 +57,21 @@ export default async function MinutesPage({ params, searchParams }: {
     ? projects.find((p) => p.id === raw) ?? null : null
   const projectId = filterProject?.id ?? null
   const minutesScope = { workspaceId: scope.ws.id, projectId }
+  // 담당 팀 필터(SP5 B2) — ?team=<팀 id>. 선택지는 그 범위의 팀(프로젝트를 고르면 그 프로젝트의 전용 + 공용, 아니면 공용).
+  // 옛 ?team=<code> 링크는 code 단위로 한 번 해석해 id 로 리다이렉트하고, 모르는 값·범위 밖은 파라미터를 지운다(존재 은닉 — 안내 없음)
+  const scopeTeams = projectId ? await projectTeams(projectId) : await workspaceTeams(scope.ws.id)
+  const teamOptions = scopeTeams.filter((tm) => tm.active).map((tm) => ({ id: tm.id, code: tm.code, name: tm.name }))
+  const teamParam = resolveTeamParam(typeof q.team === 'string' ? q.team : Array.isArray(q.team) ? (q.team[0] ?? '') : undefined,
+    teamOptions.map((tm) => ({ ...tm, projectId: null })), { projectId: null })
+  if (teamParam.kind === 'redirect') redirect(wsHref(scope.ws.slug, 'minutes', { project: projectId, team: teamParam.id }))
+  const initialTeamId = teamParam.kind === 'id' ? teamParam.id : null
   // 트리는 기본 뷰라 거의 항상 필요하다 — 예전에는 MinutesView 가 마운트 뒤 서버액션으로 따로
   // 가져와서 "화면이 뜨고 나서 또 로딩이 도는" 왕복이 한 번 더 붙었다. 여기서 함께 싣는다.
   // prefs.minutesView 를 먼저 await 해 조건부로 부르면 안 된다 — 직렬 2단이 되고,
   // 아래 히어로 KPI(minutes.length)와 리스트/달력 전환용 월 목록까지 늦어진다.
   const [minutes, tree, favs, user, prefs, locale, myProjectIds] = await Promise.all([
-    getMinutesPage(scope.ws.id, projectId, rs, re, null),
-    getMinutesExplorer(scope.ws.id, projectId),
+    getMinutesPage(scope.ws.id, projectId, rs, re, initialTeamId),
+    getMinutesExplorer(scope.ws.id, projectId, m ?? null),
     getMinuteFavorites(scope.ws.id),
     getSession(),
     getAccountPrefs(),
@@ -98,8 +110,8 @@ export default async function MinutesPage({ params, searchParams }: {
           myProjectIds={myProjectIds}
           projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
           noProjectWorkspace={{ ok: true, workspaceId: scope.ws.id }}
-          adminProjectIds={adminProjectIds(m)} isSuperuser={m?.isSuperuser ?? false}
-          calendar={calendarViewOf(vc.calendar)} />
+          isSuperuser={m?.isSuperuser ?? false}
+          calendar={calendarViewOf(vc.calendar)} teamOptions={teamOptions} initialTeamId={initialTeamId} />
       </ProjectPageShell>
     </MinutesScopeProvider>
   )

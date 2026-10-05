@@ -6,7 +6,11 @@ const h = vi.hoisted(() => ({
   loadWorkspaceScope: vi.fn(), requireModulePage: vi.fn(async () => {}), getMinutesPage: vi.fn(async () => []), getMinutesExplorer: vi.fn(async () => ({ folders: [], leaves: [], total: 0, truncated: false })),
   getMinuteFavorites: vi.fn(async () => []), getSession: vi.fn(async () => ({ id: 'u1' })), getAccountPrefs: vi.fn(async () => ({})), listProjects: vi.fn(async (): Promise<{ id: string; name: string; workspace_id: string }[]> => []),
   getServerLocale: vi.fn(async () => 'ko'), getMyProjectIds: vi.fn(async () => []), viewProps: vi.fn(),
+  workspaceTeams: vi.fn(async (): Promise<unknown[]> => []), projectTeams: vi.fn(async (): Promise<unknown[]> => []),
+  redirect: vi.fn((url: string) => { throw new Error(`REDIRECT ${url}`) }),
 }))
+vi.mock('@/lib/teams/source', () => ({ workspaceTeams: h.workspaceTeams, projectTeams: h.projectTeams }))
+vi.mock('next/navigation', () => ({ redirect: h.redirect }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspaceScope }))
 vi.mock('@/lib/modules/pageGate', () => ({ requireModulePage: h.requireModulePage }))
 vi.mock('@/lib/data/minutes', () => ({ getMinutesPage: h.getMinutesPage, getMinutesExplorer: h.getMinutesExplorer, getMinuteFavorites: h.getMinuteFavorites }))
@@ -38,7 +42,7 @@ describe('?project= 거르기(D53)', () => {
   it('접근 가능한 그 워크스페이스 프로젝트 — 로더·뷰에 projectId, 칩과 × 링크', async () => {
     const html = await render({ project: P_IN })
     expect(h.getMinutesPage).toHaveBeenCalledWith(WS.id, P_IN, expect.any(String), expect.any(String), null)
-    expect(h.getMinutesExplorer).toHaveBeenCalledWith(WS.id, P_IN)
+    expect(h.getMinutesExplorer).toHaveBeenCalledWith(WS.id, P_IN, expect.anything())
     expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ scope: { workspaceId: WS.id, projectId: P_IN } }))
     expect(html).toContain('프로젝트: <!-- -->Apollo')
     expect(html).toContain('href="/w/acme/minutes"')
@@ -47,7 +51,7 @@ describe('?project= 거르기(D53)', () => {
     for (const p of [P_OTHER_WS, P_HIDDEN, 'x', [P_IN, P_IN]]) {
       vi.clearAllMocks()
       const html = await render({ project: p })
-      expect(h.getMinutesExplorer, String(p)).toHaveBeenCalledWith(WS.id, null)
+      expect(h.getMinutesExplorer, String(p)).toHaveBeenCalledWith(WS.id, null, expect.anything())
       expect(h.viewProps, String(p)).toHaveBeenCalledWith(expect.objectContaining({ scope: { workspaceId: WS.id, projectId: null } }))
       expect(html, String(p)).not.toContain('프로젝트:')
     }
@@ -88,5 +92,35 @@ describe('업로드 어포던스·기본 팀·즐겨찾기는 화면의 워크�
   it('즐겨찾기 첫 적재도 화면의 워크스페이스로 읽는다', async () => {
     await render({})
     expect(h.getMinuteFavorites).toHaveBeenCalledWith(WS.id)
+  })
+})
+
+describe('?team= — 담당 필터는 팀 id, 옛 code 링크는 id 로 리다이렉트(SP5 B2 — W36)', () => {
+  const T_QA = '00000000-0000-4000-8000-0000000000a1', T_QA_P = '00000000-0000-4000-8000-0000000000a2', T_OLD = '00000000-0000-4000-8000-0000000000a3'
+  const team = (id: string, code: string, projectId: string | null, active = true) =>
+    ({ id, code, name: `${code} 팀`, color: '#6b7280', sortOrder: 0, active, progressVisible: true, projectId, workspaceId: WS.id })
+  beforeEach(() => {
+    h.workspaceTeams.mockResolvedValue([team(T_QA, 'QA', null), team(T_OLD, 'OLD', null, false)])
+    h.projectTeams.mockResolvedValue([team(T_QA_P, 'QA', P_IN)])
+  })
+  it('선택지의 팀 id 면 그 팀으로 거르고 뷰에 선택지(활성 팀)·초기 팀을 넘긴다', async () => {
+    await render({ team: T_QA })
+    expect(h.getMinutesPage).toHaveBeenCalledWith(WS.id, null, expect.any(String), expect.any(String), T_QA)
+    expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ initialTeamId: T_QA, teamOptions: [{ id: T_QA, code: 'QA', name: 'QA 팀' }] }))
+  })
+  it('옛 ?team=<code> 는 그 범위의 code 단위 해석으로 id 리다이렉트 — 프로젝트를 고르면 그 프로젝트의 전용 팀', async () => {
+    await expect(render({ team: 'QA' })).rejects.toThrow(`REDIRECT /w/acme/minutes?team=${T_QA}`)
+    await expect(render({ project: P_IN, team: 'QA' })).rejects.toThrow(`REDIRECT /w/acme/minutes?project=${P_IN}&team=${T_QA_P}`)
+  })
+  it('모르는 code·선택지 밖 id(비활성 팀 포함)·빈 값은 팀 파라미터를 지운다(존재 은닉 — 안내 없음)', async () => {
+    for (const v of ['NOPE', T_OLD, T_QA_P, '']) {
+      await expect(render({ team: v }), v).rejects.toThrow('REDIRECT /w/acme/minutes')
+      await expect(render({ team: v }), v).rejects.not.toThrow('team=')
+    }
+  })
+  it('파라미터가 없으면 거르지 않는다', async () => {
+    await render({})
+    expect(h.getMinutesPage).toHaveBeenCalledWith(WS.id, null, expect.any(String), expect.any(String), null)
+    expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ initialTeamId: null }))
   })
 })

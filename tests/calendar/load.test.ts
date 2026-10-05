@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { keysetTable } from '../helpers/keysetTable'
 import {
-  calendarOrError, loadProjectHolidays, projectCalendarOf, requireCalendar, toCalendarInput, workspaceCalendarOf,
+  calendarOrError, loadProjectHolidays, projectCalendarOf, projectTimezone, requireCalendar, toCalendarInput, workspaceCalendarOf,
 } from '@/lib/calendar/load'
 import { calendarOf, isWorkingDay } from '@/lib/domain/calendar'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
@@ -54,6 +54,18 @@ describe('loadProjectHolidays', () => {
 })
 
 describe('projectCalendarOf / workspaceCalendarOf', () => {
+  it('timezone-only 소비처는 다른 달력 키가 손상돼도 timezone 을 읽는다', () => {
+    const keys = pKeys({ 'calendar.timezone': 'Asia/Seoul', 'calendar.week_start': 'broken', 'calendar.working_days': [] })
+    expect(projectTimezone({ keys })).toBe('Asia/Seoul')
+    expect(() => projectCalendarOf(keys, [])).toThrow(ConfigKeyError)
+  })
+
+  it('timezone-only 소비처도 손상 timezone 은 정확한 ConfigKeyError 로 거부하고, 누락은 UTC 기본값을 쓴다', () => {
+    const invalid = pKeys({ 'calendar.timezone': 'Asia/Seol' })
+    expect(() => projectTimezone({ keys: invalid })).toThrow(expect.objectContaining({ code: 'CONFIG_INVALID', key: 'calendar.timezone' }))
+    expect(projectTimezone({ keys: pKeys({}) })).toBe('UTC')
+  })
+
   it('키 없음 = 제품 기본값(UTC·월~금·일요일), off 는 휴무·work 는 근무', () => {
     const cal = projectCalendarOf(pKeys({}), [
       { date: '2026-10-05', name: '휴무', kind: 'off' },        // 월

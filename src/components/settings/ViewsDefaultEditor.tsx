@@ -2,7 +2,7 @@
 import { useId, useRef, type KeyboardEvent } from 'react'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { SettingsSaveBar } from './SettingsSaveBar'
-import { useSettingsCommand } from './useSettingsCommand'
+import { useSettingItemCommand } from './useSettingItemCommand'
 import { DEFAULT_VIEWS, parseViewsDefault, type ViewsDefault, type WbsView } from '@/lib/wbs/view'
 
 const OPTIONS: readonly { value: WbsView; label: string; desc: string }[] = [
@@ -22,7 +22,7 @@ export function ViewsDefaultEditor({ projectId, revision, initial, invalidReason
   /** 묶음 이름이 될 머리(h4)의 id — 있으면 aria-labelledby, 없으면 aria-label(단독 렌더) */
   labelledBy?: string
 }) {
-  const c = useSettingsCommand<ViewsDefault>({ scope: { projectId }, key: 'views.default', revision, initial, empty: DEFAULT_VIEWS, fromLatest })
+  const c = useSettingItemCommand<ViewsDefault>({ scope: { projectId }, key: 'views.default', revision, initial, empty: DEFAULT_VIEWS, fromLatest })
   const errId = useId(), descBase = useId(), offId = useId()
   const refs = useRef<(HTMLButtonElement | null)[]>([])
   const blocked = (v: WbsView) => v === 'board' && !kanbanOn

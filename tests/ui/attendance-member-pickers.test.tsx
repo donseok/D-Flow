@@ -34,6 +34,7 @@ import { AttendanceView } from '@/components/attendance/AttendanceView'
 import { makeRosterMember } from '../fixtures/rosterMember'
 import { withTeams } from '../fixtures/teams'
 import { SUNDAY_CAL } from '../fixtures/calendarView'
+import { ATT_TYPES } from '../fixtures/vocab'
 
 const MEMBERS: ProjectMember[] = [
   member('member-mes', '나메스', 'MES'),
@@ -100,8 +101,7 @@ describe('AttendanceView 멤버 선택 보기 방식', () => {
           records={[]}
           members={MEMBERS}
           initialDate="2026-08-02"
-          canEdit
-        />,
+          canEdit types={ATT_TYPES} />,
       ))
     })
   }

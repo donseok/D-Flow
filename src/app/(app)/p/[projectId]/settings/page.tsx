@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History } from 'lucide-react'
+import { Upload, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
@@ -13,9 +13,25 @@ import { projectOwnTeams, projectTeams, workspaceTeams } from '@/lib/teams/sourc
 import { areaTeamOptions } from '@/lib/domain/areas'
 import { ProjectTeamsManager } from '@/components/settings/ProjectTeamsManager'
 import { ProjectAreasManager } from '@/components/settings/ProjectAreasManager'
+import { CustomFieldsSettings } from '@/components/settings/CustomFieldsSettings'
+import { FIELD_ENTITIES, type FieldEntity, type FieldDef } from '@/lib/domain/customFields'
+import { IssuePolicyEditor } from '@/components/settings/IssuePolicyEditor'
+import { AttachmentPolicyEditor } from '@/components/settings/AttachmentPolicyEditor'
+import { FormTemplatesManager, type FormKindState } from '@/components/settings/FormTemplatesManager'
+import { FORM_SETTING_MODULE } from '@/lib/settings/defs/forms'
+import type { FormKind } from '@/lib/report/engine/types'
+import { VocabEditor } from '@/components/settings/VocabEditor'
+import type { VocabEntry, VocabKey } from '@/lib/settings/vocab'
+import type { AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
+import { moduleState, requireModule } from '@/lib/modules/gate'
+import { issueCodeYear, type IdPolicy } from '@/lib/issues/idPolicy'
+import type { IssueAnalysisSetting } from '@/lib/settings/defs/project'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
 import { MilestoneKeywordsEditor } from '@/components/settings/MilestoneKeywordsEditor'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
+import type { ProjectSettingValue } from '@/lib/settings/registry'
+import { StageLabelsEditor } from '@/components/settings/StageLabelsEditor'
+import { ApprovalStepsEditor } from '@/components/settings/ApprovalStepsEditor'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick, pickCalendar } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
@@ -36,17 +52,22 @@ import { calendarFieldOf } from '@/lib/settings/calendarField'
 import { createServerClient } from '@/lib/supabase/server'
 import { ClearExcelProfileButton } from '@/components/settings/ClearExcelProfileButton'
 import { assistantIndexStatus, type IndexStatus } from '@/lib/ai/health'
-import { t, type Locale } from '@/lib/i18n/dict'
+import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { requireModulePage } from '@/lib/modules/pageGate'
-import { requireModule } from '@/lib/modules/gate'
 import { ModuleToggleEditor } from '@/components/settings/ModuleToggleEditor'
 import { ViewsDefaultEditor } from '@/components/settings/ViewsDefaultEditor'
 import { MODULES } from '@/lib/modules/registry'
 import { PROJECT_TOGGLABLE } from '@/lib/modules/defaults'
+import { MODULE_LABEL } from '@/lib/modules/labels'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
+
+const FORM_KIND_LABEL: Record<FormKind, string> = {
+  weekly_report_pptx: '주간보고 (PPTX)', weekly_report_xlsx: '주간보고 (XLSX)',
+  issue_analysis_pptx: '이슈 분석 (PPTX)', wbs_export_xlsx: 'WBS 내보내기 (XLSX)',
+}
 
 type ProjectRow = {
   id: string
@@ -154,6 +175,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const teams = pc.ok ? await loadTeams(projectId, pc.cfg.workspaceId) : { ok: false as const }
   const labels = pc.ok ? pick(pc.cfg, 'core.level_labels') : null
   const credits = pc.ok ? pick(pc.cfg, 'workflow.stage_credits') : null
+  // 크레딧 정책(SP5b) — 손상이면 슬라이더는 기본 정책으로 시작하고 저장 때 서버 교차 검사가 막는다(손상 값과의 조합을 추측하지 않는다)
+  const creditPolicy = pc.ok ? pick(pc.cfg, 'workflow.credit_policy') : null
   // 에이전트 관문 상태는 크레딧 편집기 안내에만 쓴다. 켜기·중지는 위의 모듈 편집기가 맡는다.
   const agentsGate = await requireModule({ projectId }, 'agents')
   const agentsOn = agentsGate.ok
@@ -185,6 +208,32 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   }
   // 세 편집기의 저장 CAS(expectedRevision). 조회 실패면 편집기를 그리지 않으므로 쓰이지 않는다 — -1 은 액션이 형식 오류로 거부한다.
   const revision = pc.ok ? pc.cfg.revision : -1
+  const issuesGate = pc.ok ? await requireModule({ projectId }, 'issues') : { ok: false as const, error: 'unavailable' }
+  const analysisState = pc.ok ? await moduleState({ projectId }, 'issue_analysis') : 'unknown'
+  const issuePolicy = pc.ok ? pick(pc.cfg, 'issues.id_policy') : null
+  const issueAnalysis = pc.ok ? pick(pc.cfg, 'issues.analysis') : null
+  // 회의록 첨부 정책(SP5 B3 과제9) — 회의록은 워크스페이스 모듈이라 워크스페이스로 관문을 본다. 손상 값도 편집기를 그린다(복구 경로).
+  const minutesGate = pc.ok ? await requireModule({ workspaceId: pc.cfg.workspaceId }, 'minutes') : { ok: false as const, error: 'unavailable' }
+  const attachmentPolicy = pc.ok ? pick(pc.cfg, 'minutes.attachments') : null
+  // 용어·분류(SP5 B4 묶음4) — 모듈이 켜진 키만. 손상 값도 편집기를 그린다(복구 경로). 판정 실패(unknown)는 그리지 않는다(fail-closed)
+  const [attendanceState, meetingsState] = pc.ok
+    ? await Promise.all([moduleState({ projectId }, 'attendance'), moduleState({ projectId }, 'meetings')])
+    : ['unknown', 'unknown'] as const
+  const vocabKeys: VocabKey[] = pc.ok ? [
+    ...(attendanceState === 'on' ? ['attendance.types' as const] : []),
+    ...(meetingsState === 'on' ? ['meetings.categories' as const] : []),
+    ...(issuesGate.ok ? ['issues.severities' as const] : []),
+    ...(issuesGate.ok && analysisState === 'on' ? ['issues.sources' as const, 'issues.cause_categories' as const] : []),
+  ] : []
+  const fieldModules = pc.ok ? await Promise.all([moduleState({ projectId }, 'wbs'), moduleState({ projectId }, 'issues'), moduleState({ projectId }, 'weekly')]) : ['unknown', 'unknown', 'unknown'] as const
+  const fieldStates = pc.ok ? Object.fromEntries(FIELD_ENTITIES.map((entity, i) => {
+    const st = pc.cfg.keys[`fields.${entity}`]
+    return [entity, { enabled: fieldModules[i] === 'on', value: st.status === 'set' || st.status === 'default' ? st.value : null,
+      error: fieldModules[i] === 'unknown' ? (locale === 'ko' ? '모듈 상태를 확인하지 못했습니다.' : 'Could not determine module availability.') : st.status === 'invalid' ? st.error : undefined }]
+  })) as Record<FieldEntity, { value: readonly FieldDef[] | null; error?: string; enabled: boolean }> : null
+  const timezoneState = pc.ok ? pc.cfg.keys['calendar.timezone'] : null
+  const issueYear = timezoneState && (timezoneState.status === 'set' || timezoneState.status === 'default')
+    ? issueCodeYear(timezoneState.value, new Date()) : null
   // 달력 편집기(스펙 §5.1 A) — 달력 키가 손상이어도 편집기는 그린다(복구 경로). '오늘'(예정 전환·현재 규칙)은 tz 가 유효할 때만
   const calendarFields = pc.ok ? {
     timezone: calendarFieldOf(pc.cfg.keys['calendar.timezone']),
@@ -192,6 +241,44 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
     weekStart: calendarFieldOf(pc.cfg.keys['calendar.week_start']),
   } : null
   const calendarToday = calendarFields?.timezone.value ? todayIn(calendarFields.timezone.value, new Date()) : null
+
+  // 양식(SP6) — 모듈이 켜진 종류만. 목록 조회가 실패하면 섹션을 그리지 않는다(없음으로 위장 금지).
+  let formKinds: FormKindState[] | null = null
+  // 양식 섹션은 부가 화면이다 — 조회 중 예외도 설정 페이지 전체를 막지 않고 섹션만 그리지 않는다(로그는 남긴다).
+  try {
+    if (isAdmin && pc.ok) {
+      const kindIds = Object.keys(FORM_SETTING_MODULE) as FormKind[]
+      const states = await Promise.all(kindIds.map((k) => moduleState({ projectId }, FORM_SETTING_MODULE[k])))
+      const enabled = kindIds.filter((_, i) => states[i] === 'on')
+      if (enabled.length) {
+        const { data: rows, error: rowsErr } = await (await createServerClient()).from('form_templates')
+          .select('id, form_kind, file_name, size_bytes, version, active, created_at, placeholders')
+          .eq('project_id', projectId).in('form_kind', enabled).order('version', { ascending: false })
+        if (rowsErr) console.error('[settings] 양식 목록 조회 실패:', rowsErr.message)
+        else {
+          formKinds = enabled.map((kind) => {
+            const st = pc.cfg.keys[`forms.${kind}` as const]
+            const ok = st.status === 'set' || st.status === 'default'
+            return {
+              kind, label: FORM_KIND_LABEL[kind],
+              setting: ok ? st.value as FormKindState['setting'] : null,
+              templates: (rows ?? []).filter((r) => r.form_kind === kind).map((r) => {
+                const issues = (r.placeholders as { issues?: { severity?: string }[] } | null)?.issues ?? []
+                return {
+                  id: r.id as string, version: r.version as number, fileName: r.file_name as string, sizeBytes: r.size_bytes as number,
+                  active: !!r.active, createdAt: r.created_at as string,
+                  errors: issues.filter((i) => i.severity === 'error').length, warnings: issues.filter((i) => i.severity === 'warning').length,
+                }
+              }),
+            }
+          })
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[settings] 양식 섹션 로드 실패:', e instanceof Error ? e.message : String(e))
+    formKinds = null
+  }
 
   const assistantIndex = await assistantIndexStatus(projectId)
   const settingsHistory = await listSettingsHistory({ projectId })
@@ -209,7 +296,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
     >
       <SettingsShell items={[
         { id: 'project-general', label: '일반' }, { id: 'project-modules', label: '모듈·메뉴' },
-        ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []), { id: 'project-status', label: '상태·승인' },
+        ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []),
+        ...(isAdmin && issuesGate.ok ? [{ id: 'project-issues', label: locale === 'ko' ? '이슈' : 'Issues' }] : []),
+        ...(isAdmin && pc.ok && minutesGate.ok ? [{ id: 'project-minutes', label: locale === 'ko' ? '회의록' : 'Minutes' }] : []),
+        ...(isAdmin && vocabKeys.length ? [{ id: 'project-vocab', label: t(locale, 'settings.vocab.section') }] : []),
+        ...(isAdmin && formKinds ? [{ id: 'project-forms', label: locale === 'ko' ? '양식' : 'Forms' }] : []),
+        ...(isAdmin && pc.ok ? [{ id: 'project-fields', label: locale === 'ko' ? '추가 필드' : 'Custom fields' }] : []), { id: 'project-status', label: '상태·승인' },
         { id: 'project-calendar', label: '달력' }, { id: 'project-history', label: '기록' },
       ]}>
       <div className="space-y-5">
@@ -381,7 +473,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             const enabled = pc.cfg.keys['modules.enabled']
             const allowed = workspaceModules.keys['modules.allowed']
             const allowedIds = allowed.status === 'set' || allowed.status === 'default' ? allowed.value : []
-            const labels: Record<string, string> = { kanban: '칸반', meetings: '회의', weekly: '주간보고', issues: '이슈', wiki: '위키', announcements: '공지', attendance: '근태', agents: '에이전트', chatbot: '챗봇' }
             return <>
               {(allowed.status === 'invalid' || allowed.status === 'required_missing') &&
                 <ConfigStateNotice kind={allowed.status === 'invalid' ? 'invalid' : 'required'} locale={locale} keyName="modules.allowed"
@@ -393,7 +484,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 initialEnabled={enabled.status === 'set' || enabled.status === 'default' ? enabled.value : null}
                 invalidReason={enabled.status === 'invalid' ? enabled.error : undefined}
                 requiredMissing={enabled.status === 'required_missing'}
-                options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: labels[m.id] ?? m.id,
+                options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: MODULE_LABEL[m.id],
                   allowed: allowedIds.includes(m.id), available: m.envAvailable() }))} />
               {/* 작업 계획 기본 보기(views.default — SP3b UI-3 과제 7) — 같은 '모듈·메뉴' 범주 안 구역 */}
               <section aria-labelledby="project-views-default" data-settings-search="views.default 작업 계획 기본 보기 표 간트 보드" className="mt-8 border-t border-border pt-6">
@@ -473,6 +564,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 projectId={projectId}
                 kind="weekly_section"
                 areas={pc.cfg.areas.weekly_section}
+                locale={locale}
                 teamOptions={areaTeamOptions(teams.visible, pc.cfg.teams, pc.cfg.areas.weekly_section)}
               />
             ) : (
@@ -480,10 +572,89 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             )}
           </SectionCard>
         )}
+          {isAdmin && pc.ok && issuesGate.ok && (
+            <SectionCard searchText="issue areas code prefix pattern counter" eyebrow="ISSUES" title={t(locale, 'settings.issueAreas.title')} icon={ListTree}>
+              <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.issueAreas.desc')}</p>
+              {teams.ok ? <ProjectAreasManager projectId={projectId} kind="issue_area" areas={pc.cfg.areas.issue_area} teamOptions={areaTeamOptions(teams.visible, pc.cfg.teams, pc.cfg.areas.issue_area)} locale={locale} /> : <p role="alert" className="text-sm text-delayed">{ERR_TEAMS_UI}</p>}
+            </SectionCard>
+          )}
         </div>
+        {isAdmin && pc.ok && issuesGate.ok && <div id="project-issues" className="scroll-mt-24 space-y-5">
+          <SectionCard searchText="issues.id_policy issue code analysis policy" eyebrow="ISSUE POLICY" title={t(locale, 'settings.issues.policy.title')} icon={LayoutList}>
+            <p className="mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.issues.id_policy.desc')}</p>
+            {issuePolicy?.ok && issueAnalysis?.ok && issueYear !== null ? <IssuePolicyEditor key={`${projectId}-${revision}`} projectId={projectId} policy={issuePolicy.value as IdPolicy} revision={revision} areas={pc.cfg.areas.issue_area} year={issueYear} canEdit={canMutate} analysis={issueAnalysis.value as IssueAnalysisSetting} analysisEnabled={analysisState === 'on'} locale={locale} /> : <ConfigStateNotice kind="unavailable" locale={locale} />}
+          </SectionCard>
+        </div>}
+
+        {isAdmin && pc.ok && minutesGate.ok && attachmentPolicy && <div id="project-minutes" className="scroll-mt-24 space-y-5">
+          <SectionCard searchText="minutes.attachments 회의록 첨부 정책 용량 개수 형식 미리보기 attachment" eyebrow="MINUTES" title={t(locale, 'settings.minutes.attachments.label')} icon={Paperclip}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.minutes.attachments.desc')}</p>
+            <AttachmentPolicyEditor key={`${projectId}-${revision}`} scope={{ projectId }} revision={revision} canEdit={canMutate}
+              policy={attachmentPolicy.ok ? attachmentPolicy.value as AttachmentPolicy : null} invalid={!attachmentPolicy.ok} />
+          </SectionCard>
+        </div>}
+
+        {isAdmin && pc.ok && vocabKeys.length > 0 && <div id="project-vocab" className="scroll-mt-24 space-y-5">
+          {vocabKeys.map(key => {
+            const st = pc.cfg.keys[key]
+            const ok = st.status === 'set' || st.status === 'default'
+            return <SectionCard key={key} searchText={`${key} 용어 분류 어휘 vocabulary ${t(locale, `settings.${key}.label` as DictKey)}`} eyebrow="VOCABULARY" title={t(locale, `settings.${key}.label` as DictKey)} icon={LayoutList}>
+              <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, `settings.${key}.desc` as DictKey)}</p>
+              <VocabEditor key={`${projectId}-${key}-${revision}`} projectId={projectId} vocabKey={key} revision={revision} canEdit={canMutate}
+                value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
+            </SectionCard>
+          })}
+        </div>}
+
+        {isAdmin && pc.ok && formKinds && <div id="project-forms" className="scroll-mt-24 space-y-5">
+          <SectionCard searchText="forms 양식 템플릿 보고서 pptx xlsx 업로드 매핑 자리표시자" eyebrow="FORMS" title={locale === 'ko' ? '보고서 양식' : 'Report templates'} icon={Upload}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{locale === 'ko' ? '자체 양식 파일을 올려 활성화하면 보고서·내보내기가 그 양식으로 만들어집니다. 활성 양식이 없으면 기본 양식을 씁니다.' : 'Upload and activate your own template to use it for reports and exports. Without an active one, the default template is used.'}</p>
+            <FormTemplatesManager key={`${projectId}-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate} kinds={formKinds} />
+          </SectionCard>
+        </div>}
+
+        {isAdmin && pc.ok && fieldStates && <div id="project-fields" className="scroll-mt-24 space-y-5">
+          <SectionCard searchText="fields.wbs_item fields.issue fields.weekly_row 추가 필드 custom fields" eyebrow="CUSTOM FIELDS" title={locale === 'ko' ? '추가 필드' : 'Custom fields'} icon={LayoutList}>
+            <CustomFieldsSettings key={`${projectId}-fields-${revision}`} projectId={projectId} states={fieldStates} revision={revision} canEdit={canMutate} locale={locale} />
+          </SectionCard>
+        </div>}
 
         {/* ════ 상태·승인 ════ */}
         <div id="project-status" className="scroll-mt-24 space-y-5">
+        {/* 이슈 표시 상태(SP5b I — D1) — 이슈 모듈이 켜진 관리자만. 손상 값도 편집기를 그린다(복구 경로) */}
+        {isAdmin && pc.ok && issuesGate.ok && (() => {
+          const key = 'workflow.issue_statuses' as const
+          const st = pc.cfg.keys[key]
+          const ok = st.status === 'set' || st.status === 'default'
+          return <SectionCard searchText={`${key} 이슈 상태 범주 업무 흐름 workflow status ${t(locale, 'settings.workflow.issue_statuses.label')}`} eyebrow="WORKFLOW" title={t(locale, 'settings.workflow.issue_statuses.label')} icon={LayoutList}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.workflow.issue_statuses.desc')}</p>
+            <VocabEditor key={`${projectId}-${key}-${revision}`} projectId={projectId} vocabKey={key} revision={revision} canEdit={canMutate}
+              value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
+          </SectionCard>
+        })()}
+        {/* WBS 승인 흐름(SP5b W2 — 단계 이름·승인 단계·서로 다른 승인자·선행 기준). wbs 는 core 라 모듈 관문 없음. 손상 값도 편집기를 그린다(복구 경로) */}
+        {isAdmin && pc.ok && (() => {
+          const st = <K extends 'workflow.wbs_stage_labels' | 'workflow.approval_steps' | 'workflow.approval_distinct_approvers' | 'workflow.predecessor_gate'>(k: K) => {
+            const v = pc.cfg.keys[k]
+            return v.status === 'set' || v.status === 'default' ? v.value as ProjectSettingValue<K> : null
+          }
+          return <SectionCard searchText={`workflow.wbs_stage_labels workflow.approval_steps workflow.approval_distinct_approvers workflow.predecessor_gate 승인 단계 선행 ${t(locale, 'settings.workflow.wbsTitle')}`}
+            eyebrow="WORKFLOW" title={t(locale, 'settings.workflow.wbsTitle')} icon={LayoutList}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.workflow.wbsDesc')}</p>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-ink">{t(locale, 'settings.workflow.wbs_stage_labels.label')}</p>
+                <StageLabelsEditor key={`labels-${revision}`} projectId={projectId} value={st('workflow.wbs_stage_labels')} revision={revision} canEdit={canMutate}
+                  invalid={st('workflow.wbs_stage_labels') === null} />
+              </div>
+              <div className="space-y-2 border-t border-line pt-4">
+                <p className="text-sm font-semibold text-ink">{t(locale, 'settings.workflow.approval_steps.label')}</p>
+                <ApprovalStepsEditor key={`steps-${revision}`} projectId={projectId} steps={st('workflow.approval_steps')} distinct={st('workflow.approval_distinct_approvers')}
+                  gate={st('workflow.predecessor_gate')} revision={revision} canEdit={canMutate} />
+              </div>
+            </div>
+          </SectionCard>
+        })()}
       {/* ── 에이전트 (킬스위치) ── */}
         <SectionCard
         searchText="workflow.stage_credits 에이전트 상태 승인 크레딧"
@@ -509,7 +680,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             {/* agents 가 꺼져도 크레딧 편집기는 남는다 — 다시 켤 때 쓸 값이다(스펙 §4.4, 정본 §3.3.1) */}
             {!agentsOn && <p className="text-xs leading-5 text-pending">{t(locale, 'settings.agentsModuleOff')}</p>}
             {credits.ok
-              ? <StageCreditSlider projectId={projectId} initial={credits.value} editable={canMutate} revision={revision} />
+              ? <StageCreditSlider projectId={projectId} initial={credits.value} initialPolicy={creditPolicy?.ok ? creditPolicy.value : null} editable={canMutate} revision={revision} />
               : <ConfigLoadError error={credits.error} keyName={credits.key} kind={credits.kind} locale={locale}
                 isAdmin={canMutate} settingsHref={`/p/${projectId}/settings`} />}
           </div>

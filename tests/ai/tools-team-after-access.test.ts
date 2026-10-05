@@ -9,6 +9,7 @@ import { createFindWbsItemsTool } from '@/lib/ai/tools/wbs'
 import { createGetMemberWorkloadTool, createListMembersTool } from '@/lib/ai/tools/members'
 import type { ReadOnlyBotTool, ToolExecutionContext } from '@/lib/ai/tools/types'
 import { fixedToolTeams } from '../helpers/tool-team-source'
+import { fixedToolVocab } from '../helpers/tool-vocab-source'
 import type {
   AttendanceRepository, MemberRepository, WbsBotRepository,
 } from '@/lib/repositories/types'
@@ -29,7 +30,7 @@ const attendance: AttendanceRepository = { listRecords: vi.fn(unreachable) }
 
 const teams = fixedToolTeams(['PMO'])
 const TOOLS: Array<[string, ReadOnlyBotTool<unknown>, Record<string, unknown>]> = [
-  ['get_attendance', createGetAttendanceTool(attendance, teams), { from: '2026-09-01', to: '2026-09-26' }],
+  ['get_attendance', createGetAttendanceTool(attendance, teams, fixedToolVocab()), { from: '2026-09-01', to: '2026-09-26' }],
   ['get_kanban_view', createGetKanbanViewTool(wbs, teams), {}],
   ['find_wbs_items', createFindWbsItemsTool(wbs, teams), {}],
   ['list_members', createListMembersTool(members, teams), {}],

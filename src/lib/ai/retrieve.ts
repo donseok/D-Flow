@@ -21,10 +21,6 @@ interface RawMatch {
   similarity: number
 }
 
-/** 프로젝트 없는 검색은 거른 뒤 k 개를 남기려고 넉넉히 받는다 — 범위 밖 청크가 상위를 차지해 근거가 0 이 되지 않게 */
-const CROSS_PROJECT_OVERFETCH = 4
-const CROSS_PROJECT_MAX = 48
-
 /**
  * 질문을 임베딩해 pgvector 의미검색(match_wbs_documents)으로 관련 문서 top-K 회수.
  * scope 가 문자열이면 그 프로젝트, `{ projectIds }` 면 그 집합 안의 프로젝트(옛 챗의 프로젝트 없는 질문 — 그 워크스페이스·볼 수 있는·chatbot 켜진
@@ -48,9 +44,12 @@ export async function retrieveContext(query: string, scope: string | { projectId
     const sb = await createServerClient()
     const { data, error } = await sb.rpc('match_wbs_documents', {
       query_embedding: vecs[0],
-      match_count: allowed ? Math.min(k * CROSS_PROJECT_OVERFETCH, CROSS_PROJECT_MAX) : k,
+      // 여러 프로젝트 범위는 허용 목록을 SQL 에 넘겨 그 안에서 top-k 를 고른다(0022, 스펙 §9 ⑦) — 넉넉히 받아 거르던 방식은
+      // 다른 워크스페이스·명단 밖 청크가 상위를 차지하면 회수율이 떨어졌다. 아래 허용 목록 재확인은 이중 방어로 남긴다
+      match_count: k,
       p_project_id: projectId,
       p_kinds: null,
+      p_project_ids: allowed ? [...allowed] : null,
     })
     if (error) {
       if (isSchemaMissing(error)) {

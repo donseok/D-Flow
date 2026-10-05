@@ -23,7 +23,6 @@ export interface IssueAttachment {
   size: number | null
   mime: string | null
   createdAt: string
-  url: string | null
 }
 
 /**
