@@ -108,8 +108,6 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
   // people 은 표 단위 INSERT 가 없고 두 컬럼(workspace_id·display_name)만 열려 있다(email 은 SP4 _authz_carry ① 이 닫았다) — 그 컬럼으로
   // 넣어 people_insert(워크스페이스 판정)를 태운다
   { table: 'people', sql: `insert into public.people (display_name, workspace_id) values ('RLS 침입 ' || $1::text, '${F.ws}')` },
-  // teams — 복사 insert(첫 행 = A 공용 팀 …d0)는 wsadmin_insert_teams 를, 이 탐침은 프로젝트 팀 분기(pa_insert_project_teams)를 태운다
-  { table: 'teams', sql: `insert into public.teams (workspace_id, project_id, code, name) values ('${F.ws}', '${F.projects.a}', 'RLSX', 'RLS ' || $1::text)` },
 ]
 
 /**
@@ -119,7 +117,7 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
 export const KNOWN_LEAKS: Record<'bea' | 'ben', readonly string[]> = { bea: [], ben: [] }
 
 /**
- * authenticated 가 UPDATE 할 수 있는 열이 하나도 없는 표(0012 뒤 47개, *_weekly_areas 뒤 49개 — 영역·영역-팀, *_command_receipts 뒤 50개 — 영수증, *_workflow_policy 뒤 51개 — 승인 원장) — 전수 교차의 update 탐침이 정책을 태울 수 없다. 권한이 온전한
+ * authenticated 가 UPDATE 할 수 있는 열이 하나도 없는 표(0012 뒤 47개, *_weekly_areas 뒤 49개 — 영역·영역-팀, *_command_receipts 뒤 50개 — 영수증, *_workflow_policy 뒤 51개 — 승인 원장, 0039 뒤 52개 — teams) — 전수 교차의 update 탐침이 정책을 태울 수 없다. 권한이 온전한
  * 벽이므로 42501(permission denied)이 기대값이다. 목록은 카탈로그(has_any_column_privilege)와 같아야 한다 — 표에 UPDATE 를 열면 여기서
  * 빼고(그때부터 탐침이 그 표의 정책을 태운다), 새 표가 UPDATE 없이 생기면 더한다.
  */
@@ -129,7 +127,7 @@ export const UPDATE_DENIED_BY_GRANT: ReadonlySet<string> = new Set([
   'issue_assignees', 'issue_attachments', 'issue_links', 'issue_major_processes', 'issue_number_counters',
   'minute_embeddings', 'minute_files', 'minute_highlights', 'minute_insights', 'minute_versions', 'minutes',
   'notification_events', 'notification_recipients', 'platform_admins', 'project_ai_briefs', 'project_areas', 'project_invites',
-  'project_settings', 'project_settings_history', 'usage_events', 'wbs_embeddings', 'wbs_stage_approvals', 'wiki_change_events', 'wiki_feedback',
+  'project_settings', 'project_settings_history', 'teams', 'usage_events', 'wbs_embeddings', 'wbs_stage_approvals', 'wiki_change_events', 'wiki_feedback',
   'wiki_item_relations', 'wiki_item_sources', 'wiki_items', 'wiki_processing_jobs', 'wiki_project_rebuild_jobs',
   'wiki_questions', 'wiki_topic_revisions', 'wiki_topics', 'workspace_settings', 'workspace_settings_history', 'workspaces',
 ])

@@ -76,11 +76,11 @@ describe('H2-b 쓰지 않는 표 권한', () => {
     expect((await pool.query(DML_WITHOUT_POLICY)).rows).toEqual([])
   })
 
-  it('쓰이는 명령은 남는다 — change_logs INSERT, issue_assignees INSERT·DELETE, deliverable_attachments INSERT·DELETE, teams INSERT·UPDATE, minute_highlights INSERT·DELETE', async () => {
+  it('쓰이는 명령은 남는다 — change_logs INSERT, issue_assignees INSERT·DELETE, deliverable_attachments INSERT·DELETE, minute_highlights INSERT·DELETE', async () => {
     const pairs: Array<[string, string]> = [
       ['change_logs', 'INSERT'], ['issue_assignees', 'INSERT'], ['issue_assignees', 'DELETE'],
       ['deliverable_attachments', 'INSERT'], ['deliverable_attachments', 'DELETE'],
-      ['teams', 'INSERT'], ['teams', 'UPDATE'], ['minute_highlights', 'INSERT'], ['minute_highlights', 'DELETE'],
+      ['minute_highlights', 'INSERT'], ['minute_highlights', 'DELETE'],
     ]
     const { rows } = await pool.query<{ t: string; p: string; ok: boolean }>(
       `select x.t, x.p, has_table_privilege('authenticated', ('public.' || x.t)::regclass, x.p) as ok

@@ -241,10 +241,11 @@ describe('import_wbs_cmd — 가져오기 명령(같은 명령 2회 = 1벌)', ()
     expect(results['read committed']).toBeNull()
   })
 
-  it('옛 import_wbs 의 세션 실행은 그대로다(ⓚ) — 두 옛 함수는 INVOKER·search_path 미지정·authenticated 실행권 유지', async () => {
+  it('SP9: 옛 import_wbs·replace_wbs 의 세션 실행권은 회수되었다(0039) — 42501 거부 및 authenticated 실행권 없음', async () => {
     await asUser(pool, F.users.member, async (c) => {
-      expect((await c.query<{ n: number }>('select public.import_wbs($1, $2::jsonb, null) as n', [F.projects.a, items('RLS 옛 경로')])).rows[0].n)
-        .toBe(1)
+      const err = await pgError(c, 'select public.import_wbs($1, $2::jsonb, null)', [F.projects.a, items('RLS 옛 경로')])
+      expect(err?.code).toBe('42501')
+      expect(err?.message).toContain('permission denied for function import_wbs')
     })
     const { rows } = await pool.query(
       `select p.proname as name, has_function_privilege('authenticated', p.oid, 'EXECUTE') as ok, p.prosecdef as secdef, p.proconfig as config
@@ -252,8 +253,8 @@ describe('import_wbs_cmd — 가져오기 명령(같은 명령 2회 = 1벌)', ()
         where p.oid in ('public.import_wbs(uuid, jsonb, jsonb)'::regprocedure, 'public.replace_wbs(uuid, jsonb, jsonb)'::regprocedure)
         order by p.proname`)
     expect(rows).toEqual([
-      { name: 'import_wbs', ok: true, secdef: false, config: null },
-      { name: 'replace_wbs', ok: true, secdef: false, config: null },
+      { name: 'import_wbs', ok: false, secdef: false, config: null },
+      { name: 'replace_wbs', ok: false, secdef: false, config: null },
     ])
   })
 
@@ -350,10 +351,12 @@ describe('⑦ 사후검사 — 마이그레이션의 블록을 그대로 돌린�
   const blocks = () => (readFileSync(dir + files[0], 'utf8').match(/^do \$\$\n[\s\S]*?^end \$\$;$/gm) ?? [])
     .filter((b) => b.includes('COMMAND_RECEIPTS_POSTCHECK'))
   const POSTCHECK = { message: expect.stringContaining('COMMAND_RECEIPTS_POSTCHECK') }
+  // SP9(0039): 옛 가져오기 함수의 authenticated 실행권이 회수되었으므로(0039), 블록 안 옛 authenticated 실행권 검사 줄을 제외하고 사후검사를 실행한다 (h2-postchecks.test.ts 선례)
+  const postcheckBlock = () => blocks()[0].replace("or not has_function_privilege('authenticated', p.oid, 'EXECUTE')", '')
   /** 롤백하는 트랜잭션에서 mutate 뒤 블록을 돌려 오류를 돌려준다(통과하면 null) */
   const runAfter = (mutate: string[]) => asService(pool, async (c) => {
     for (const m of mutate) await c.query(m)
-    return pgError(c, blocks()[0])
+    return pgError(c, postcheckBlock())
   })
 
   it('파일 하나·블록 하나 — 지금 카탈로그에서는 통과한다', async () => {

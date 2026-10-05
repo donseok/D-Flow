@@ -69,12 +69,13 @@ describe('create_team — 공용 팀 생성 한 길(D19 ①·D50)', () => {
       expect((await c.query(`select count(*)::int as n from public.teams where workspace_id = $1 and code in ('RND2', 'LONG')`, [W])).rows[0].n).toBe(0)
     })
   })
-  it('세션은 공용 팀을 직접 넣지 못한다(정책 삭제) — 프로젝트 팀 정책 경로는 남는다(R1)', async () => {
+  it('세션은 공용 팀 및 프로젝트 팀을 직접 넣지 못한다(0039 쓰기 권한 회수)', async () => {
     await asService(pool, async (c) => {
       await toSession(c, F.users.wsAdmin)
       expect(await pgError(c, `insert into public.teams (workspace_id, project_id, code, name) values ($1, null, 'B2X', 'B2X')`, [F.ws]))
         .toMatchObject({ code: '42501' })
-      expect(await pgError(c, `insert into public.teams (workspace_id, project_id, code, name) values ($1, $2, 'B2P', 'B2P')`, [F.ws, F.projects.a])).toBeNull()
+      expect(await pgError(c, `insert into public.teams (workspace_id, project_id, code, name) values ($1, $2, 'B2P', 'B2P')`, [F.ws, F.projects.a]))
+        .toMatchObject({ code: '42501' })
     })
   })
 })

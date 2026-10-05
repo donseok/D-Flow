@@ -215,7 +215,7 @@ describe('워크스페이스 격리 핀 케이스(SP2 0006·0009)', () => {
     await asUser(pool, F.users.platform, async (c) => {   // 플랫폼 관리자 — 모든 워크스페이스의 공용 팀이 RLS 로 보인다
       await c.query('reset role')
       await c.query(`insert into public.teams (id, workspace_id, project_id, code, name) values ($1, $2, null, 'SHR', 'SHR')`, [B_SHARED, F.wsB])
-      await c.query('set local role authenticated')
+      // SP9(0039): import_wbs 는 service_role 전용 RPC 이므로 reset role 상태로 실행한다
       const items = [{ tempId: 't1', code: '9', name: 'RLS 임포트', owners: [{ team: 'SHR', kind: 'primary' }] }]
       expect((await c.query('select public.import_wbs($1, $2::jsonb, $3::jsonb) as n', [F.projects.bWs, JSON.stringify(items), '[]'])).rows[0].n).toBe(1)
       const { rows } = await c.query<{ team_id: string }>(

@@ -334,9 +334,14 @@ describe('⑪-a 사후검사 — 마이그레이션의 카탈로그 블록을 �
   const blocks = () => (readFileSync(dir + files[0], 'utf8').match(/^do \$\$\n[\s\S]*?^end \$\$;$/gm) ?? [])
     .filter((b) => b.includes('CALENDAR_POSTCHECK') && b.includes('⑪-a 카탈로그 블록'))
   const POSTCHECK = { message: expect.stringContaining('CALENDAR_POSTCHECK') }
+  // SP9(0039): 옛 가져오기 함수의 authenticated 실행권이 회수되었으므로(0039), 블록 안 옛 authenticated 실행권 검사 줄을 제외하고 사후검사를 실행한다 (h2-postchecks.test.ts 선례)
+  const postcheckBlock = () => blocks()[0].replace(
+    "or not has_function_privilege('authenticated', p.oid, 'EXECUTE')\n      or position('where public.holidays.kind",
+    "or position('where public.holidays.kind",
+  )
   const runAfter = (mutate: string[]) => asService(pool, async (c) => {
     for (const m of mutate) await c.query(m)
-    return pgError(c, blocks()[0])
+    return pgError(c, postcheckBlock())
   })
 
   it('파일 하나·블록 하나 — 지금 카탈로그에서는 통과한다', async () => {
@@ -358,10 +363,10 @@ describe('⑪-a 사후검사 — 마이그레이션의 카탈로그 블록을 �
     expect(await runAfter(['revoke execute on function public.usage_daily_actives(date, date, text) from authenticated'])).toMatchObject(POSTCHECK)
   })
 
-  it('settings_ref_check 를 골격으로 되돌리거나 옛 가져오기 함수의 실행권을 걷으면 멈춘다', async () => {
+  it('settings_ref_check 를 골격으로 되돌리거나 옛 가져오기 함수가 DEFINER 로 바뀌면 멈춘다', async () => {
     expect(await runAfter([`create or replace function public.settings_ref_check(p_project_id uuid, p_key text, p_old jsonb, p_new jsonb)
       returns void language plpgsql set search_path to '' as $f$ begin return; end $f$`])).toMatchObject(POSTCHECK)
-    expect(await runAfter(['revoke execute on function public.import_wbs(uuid, jsonb, jsonb) from authenticated'])).toMatchObject(POSTCHECK)
+    expect(await runAfter(['alter function public.import_wbs(uuid, jsonb, jsonb) security definer'])).toMatchObject(POSTCHECK)
   })
 })
 
