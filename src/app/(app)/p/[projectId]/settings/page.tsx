@@ -5,6 +5,7 @@ import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock
 import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
+import { ProjectSetupChecklist } from '@/components/settings/ProjectSetupChecklist'
 import { listProjects } from '@/app/actions/project'
 import { getLlmConfig } from '@/app/actions/llmConfig'
 import { getActorForView } from '@/lib/authz'
@@ -294,6 +295,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       hero={<PageHeader title={locale === 'ko' ? '프로젝트 설정' : 'Project settings'}
         meta={`${project?.name ?? t(locale, 'settings.projectFallback')} · ${scheduleLabel}`} />}
     >
+      {actor && <ProjectSetupChecklist key={`${actor.userId}:${projectId}`} projectId={projectId} userId={actor.userId} />}
       <SettingsShell items={[
         { id: 'project-general', label: '일반' }, { id: 'project-modules', label: '모듈·메뉴' },
         ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []),

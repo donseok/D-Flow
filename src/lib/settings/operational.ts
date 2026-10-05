@@ -22,6 +22,7 @@ export const OPERATIONAL_SETTINGS: readonly OperationalDef[] = [
   ...env(['NEXT_PUBLIC_APP_URL'], ['src/app/actions/meetingNotify.ts', 'src/app/actions/projectInvites.ts', 'src/app/api/v1/minutes/route.ts'], { public: true }),
   ...env(['VERCEL_PROJECT_PRODUCTION_URL'], ['src/app/actions/meetingNotify.ts']),
   ...env(['VERCEL_ENV'], ['next.config.ts']),
+  ...env(['NEXT_OUTPUT'], ['next.config.ts'], { apply: 'rebuild' }),
   ...env(['STAGING'], ['src/app/(app)/layout.tsx', 'next.config.ts']),
   ...env(['USAGE_TRACKING'], ['src/lib/domain/usageTracking.ts', 'src/app/api/track/route.ts']),
   ...env(['CRON_SECRET'], ['src/app/api/cron/ai-index/route.ts', 'src/app/api/cron/inbox-retention/route.ts', 'src/app/api/wiki/worker/route.ts'], { secret: ['CRON_SECRET'] }),

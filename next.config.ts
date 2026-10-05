@@ -4,6 +4,7 @@ const issueAnalysisTemplate =
   "./src/lib/report/assets/issue-analysis-template.pptx";
 
 const nextConfig: NextConfig = {
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   // 라우터 캐시(2026-08-18 성능 감사): 동적 페이지도 30초간 클라이언트 라우터 캐시를 재사용해
   // 방금 본 화면 재방문·뒤로가기가 왕복 0회가 된다. 서버 액션의 revalidatePath / router.refresh
   // 가 캐시를 무효화하므로 쓰기 후 신선도는 유지된다.
