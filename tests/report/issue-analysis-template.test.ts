@@ -45,7 +45,7 @@ describe('이슈 분석서 템플릿 진단', () => {
 
   it('다운로드 API와 이슈 모달 Server Action 번들에 템플릿을 모두 포함한다', async () => {
     const config = await readFile(new URL('../../next.config.ts', import.meta.url), 'utf8')
-    expect(config).toContain('"/api/issue-analysis": [issueAnalysisTemplate]')
+    expect(config).toContain('"/api/issue-analysis": ["./src/lib/report/assets/default/issue_analysis_pptx.pptx"]')
     expect(config).toContain('"/p/[projectId]/issues": [issueAnalysisTemplate]')
   })
 })

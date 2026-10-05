@@ -22,6 +22,7 @@ import { intersectEnabledWithAllowed } from '@/lib/modules/saveRule'
 import { closeRequires } from '@/lib/modules/closure'
 import { CORE, moduleDef } from '@/lib/modules/registry'
 import { PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
+import { planProjectFormCopy, copyProjectFormFiles, discardProjectFormCopy, type FormCopyPlan } from '@/lib/report/forms/copyProjectTemplates'
 import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, kindOfCode, mapDbError } from '@/lib/settings/errors'
 
 export async function listProjects() {
@@ -155,6 +156,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   const values: Record<string, unknown> = {}
   let allowed: ModuleId[]
   let candidate: ModuleId[] = settingDef('project', 'modules.enabled')!.default as ModuleId[]
+  let sourceRevision: number | null = null
   let srcWeekStart: WeekStartRule[] | null = null
   try {
     const ws = await getWorkspaceConfig(workspaceId, { client: admin })
@@ -167,6 +169,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return denied
       const src = await getProjectConfig(copyFrom, { client: admin })
       if (src.workspaceId !== workspaceId) return denied
+      sourceRevision = src.revision
       // 원본이 이 서버보다 새 세대면 거부(D29) — 모르는 키는 조용히 빠지고 세대 1 로 저장된다. 모르는 키가 없어도(기존 키의 모양만 바뀐 세대) 거부한다.
       // DB 는 원본 세대를 보지 않는다(copy_project_config 는 values 를 다루지 않는다) — 세대 2 배포를 되돌린 뒤 도는 이 코드가 막아야 한다
       if (src.schemaAhead) {
@@ -208,11 +211,80 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   values['core.level_labels'] = labels.value                        // 복사에서도 라벨은 입력값(§7.5)
   values['modules.enabled'] = initialEnabled(candidate, allowed)    // 생성 때 늘 명시 기록(§3.6)
 
-  const { data, error } = await admin.rpc('create_project_with_settings', {
+  const request = {
+    name, start_date: input.startDate || null, end_date: input.endDate || null,
+    description: input.description?.trim() || null, values, copy_from: copyFrom,
+  }
+  const lookupReceipt = async () => {
+    const receipt = await admin.rpc('get_project_creation_receipt', {
+      p_workspace_id: workspaceId, p_actor: g.actor.userId, p_command_id: input.commandId, p_request: request,
+    })
+    if (receipt.data && (!isUuidLike(receipt.data.project_id) || receipt.data.status !== 'duplicate')) {
+      throw new Error('생성 영수증 응답을 확인하지 못했습니다.')
+    }
+    return receipt
+  }
+  const finish = (r: { status: 'applied' | 'duplicate'; project_id: string }): CreateProjectResult => {
+    revalidatePath('/(app)/w/[slug]', 'layout')
+    return { ok: true, projectId: r.project_id, status: r.status }
+  }
+  let copies: FormCopyPlan | null = null
+  if (copyFrom) {
+    try {
+      copies = await planProjectFormCopy(admin, workspaceId, copyFrom, values)
+      if (copies.manifest.length) {
+        const receipt = await lookupReceipt()
+        if (receipt.error) {
+          const mapped = mapDbError(receipt.error)
+          if (mapped?.token === 'COMMAND_REUSED') return { ok: false, code: 'COMMAND_REUSED', error: mapped.message }
+          return unavailableLogged('생성 영수증 조회', ctx, receipt.error.message)
+        }
+        if (receipt.data) return finish(receipt.data)
+      }
+      await copyProjectFormFiles(admin, copies)
+    } catch (cause) {
+      if (copies) console.error('[createProject] 양식 복사 실패', { ...ctx, destinationId: copies.projectId, paths: copies.paths })
+      return unavailableLogged('양식 복사', ctx, cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+  // Spread precedes p_actor so no derived copy envelope can replace the guarded actor.
+  const invokeCreate = async () => admin.rpc('create_project_with_settings', {
+    ...(copies ? { p_destination_id: copies.projectId, p_source_revision: sourceRevision, p_form_manifest: copies.manifest } : {}),
     p_workspace_id: workspaceId, p_name: name, p_start_date: input.startDate || null, p_end_date: input.endDate || null,
     p_description: input.description?.trim() || null, p_values: values, p_copy_from: copyFrom,
     p_actor: g.actor.userId, p_command_id: input.commandId, p_schema_version: SETTINGS_SCHEMA_VERSION,
   })
+  let response: Awaited<ReturnType<typeof invokeCreate>>
+  try { response = await invokeCreate() }
+  catch (cause) { response = { data: null, error: { code: '', message: cause instanceof Error ? cause.message : String(cause) } } as typeof response }
+  const { data } = response
+  const validResult = data && isUuidLike(data.project_id) && ['applied', 'duplicate'].includes(data.status)
+  const error = response.error ?? (validResult ? null : { code: '', message: '생성 응답을 확인하지 못했습니다.' })
+  if (copies?.paths.length) {
+    try {
+      if (error && !/^[0-9A-Z]{5}$/.test(error.code ?? '')) {
+        // A transport failure does not prove rollback. Wait for the same command's receipt.
+        const receipt = await lookupReceipt()
+        if (receipt.error) {
+          const mapped = mapDbError(receipt.error)
+          if (mapped?.token === 'COMMAND_REUSED') {
+            await discardProjectFormCopy(admin, copies)
+            return { ok: false, code: 'COMMAND_REUSED', error: mapped.message }
+          }
+          console.error('[createProject] 양식 복사 결과 확인 필요', { ...ctx, destinationId: copies.projectId, paths: copies.paths })
+          return unavailableLogged('생성 결과 확인', ctx, receipt.error.message)
+        }
+        if (receipt.data) {
+          if (receipt.data.project_id !== copies.projectId) await discardProjectFormCopy(admin, copies)
+          return finish({ ...receipt.data, status: receipt.data.project_id === copies.projectId ? 'applied' : 'duplicate' })
+        }
+      }
+      if (error || data?.project_id !== copies.projectId) await discardProjectFormCopy(admin, copies)
+    } catch (cause) {
+      console.error('[createProject] 양식 복사 결과 확인 필요', { ...ctx, destinationId: copies.projectId, paths: copies.paths })
+      return unavailableLogged('양식 복사 정리/확인', ctx, cause instanceof Error ? cause.message : String(cause))
+    }
+  }
   if (error) {
     const mapped = mapDbError(error)
     if (!mapped) return unavailableLogged('생성 RPC(표에 없는 DB 오류)', ctx, `${error.code ?? ''} ${error.message}`)
@@ -225,8 +297,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       : { ok: false, code: mapped.code, error: mapped.message }
   }
   const r = data as { status: 'applied' | 'duplicate'; project_id: string }
-  revalidatePath('/(app)/w/[slug]', 'layout')
-  return { ok: true, projectId: r.project_id, status: r.status }
+  return finish(r)
 }
 
 export async function updateProject(
