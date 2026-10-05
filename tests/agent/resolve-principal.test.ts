@@ -71,6 +71,10 @@ describe('resolveAgentPrincipal', () => {
       { ...base, revoked_at: '2026-01-01T00:00:00Z' },
       { ...base, expires_at: '2020-01-01T00:00:00Z' },
       { ...base, token_hash: 'f'.repeat(64) },
+      { ...base, token_hash: hash + 'zz' },
+      { ...base, token_hash: hash + 'a' },
+      { ...base, token_hash: null },
+      { ...base, enabled: 'false' },
       null, // prefix 미존재
     ]) {
       const r = await m.resolveAgentPrincipal(req(`Bearer ${token}`), adminWith(row) as never)
@@ -102,5 +106,8 @@ describe('resolveAgentPrincipal', () => {
     expect(m.requireScope({ kind: 'legacy' }, unknownScope)).toBeNull()
     expect(m.requireScope(pat, 'work:read')).toBeNull()
     expect(m.requireScope(pat, unknownScope)?.status).toBe(403)
+    for (const scope of ['toString', 'constructor', '__proto__']) {
+      expect(m.requireScope(pat, scope as Parameters<typeof m.requireScope>[1])?.status).toBe(403)
+    }
   })
 })

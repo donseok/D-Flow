@@ -25,6 +25,20 @@ describe('agentToken 도메인', () => {
     expect(hashMatches(token, hash)).toBe(true)
     expect(hashMatches(token + 'x', hash)).toBe(false)
   })
+  it('손상된 저장 해시는 디코딩 과정에서 잘리지 않고 거절된다', () => {
+    const { token, hash } = generateAgentToken()
+    for (const stored of [hash + 'zz', hash + 'a', hash + '\n', hash + '00', hash.slice(0, -1), '', null, undefined, 123]) {
+      expect(hashMatches(token, stored as string)).toBe(false)
+    }
+    expect(hashMatches(token, hash.toUpperCase())).toBe(true)
+  })
+  it('비불리언 enabled 및 잘못된 현재 시각은 인증을 허용하지 않는다', () => {
+    const base = { enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z' }
+    for (const enabled of ['false', 'true', 1, {}, null, undefined]) {
+      expect(tokenUsable({ ...base, enabled: enabled as boolean }).ok).toBe(false)
+    }
+    expect(tokenUsable(base, new Date('invalid')).ok).toBe(false)
+  })
   it('tokenUsable — enabled → revoked → expired 순서 판정', () => {
     const now = new Date('2026-08-10T00:00:00Z')
     const base = { enabled: true, revoked_at: null, expires_at: '2026-12-31T00:00:00Z' }

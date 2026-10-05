@@ -19,9 +19,10 @@ export type TokenRowState = { enabled: boolean; revoked_at: string | null; expir
 export function tokenUsable(
   row: TokenRowState, now: Date = new Date(),
 ): { ok: true } | { ok: false; reason: 'disabled' | 'revoked' | 'expired' } {
-  if (!row.enabled) return { ok: false, reason: 'disabled' }
+  if (row.enabled !== true) return { ok: false, reason: 'disabled' }
   if (row.revoked_at) return { ok: false, reason: 'revoked' }
   const exp = Date.parse(row.expires_at)
-  if (Number.isNaN(exp) || exp <= now.getTime()) return { ok: false, reason: 'expired' }
+  const current = now.getTime()
+  if (!Number.isFinite(exp) || !Number.isFinite(current) || exp <= current) return { ok: false, reason: 'expired' }
   return { ok: true }
 }

@@ -189,14 +189,14 @@ export async function resolveAgentPrincipal(
  * 신규 발급 토큰에는 붙지 않지만 **이미 발급된 토큰에는 남아 있으므로** work:claim 요구를
  * work:report 로도 충족시킨다 — 이 수용이 없으면 옛 토큰이 그날로 끊긴다.
  */
-const LEGACY_EQUIVALENT: Record<string, readonly string[]> = { 'work:claim': ['work:report'] }
+const LEGACY_EQUIVALENT = new Map<string, readonly string[]>([['work:claim', ['work:report']]])
 
 export function requireScope(
   p: AgentPrincipal, scope: 'work:read' | 'work:claim',
 ): NextResponse | null {
   if (p.kind === 'legacy') return null
   if (p.scopes.includes(scope)) return null
-  if ((LEGACY_EQUIVALENT[scope] ?? []).some((alt) => p.scopes.includes(alt))) return null
+  if ((LEGACY_EQUIVALENT.get(scope) ?? []).some((alt) => p.scopes.includes(alt))) return null
   return apiFail(403, 'insufficient_scope', `이 작업에는 ${scope} 스코프가 필요합니다.`)
 }
 

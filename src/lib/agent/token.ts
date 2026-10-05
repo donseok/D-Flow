@@ -19,6 +19,9 @@ export function hashToken(token: string): string {
 
 /** 저장 hash 와 제공 토큰의 상수시간 비교 — 길이 노출 방지 위해 해시끼리 비교한다. */
 export function hashMatches(providedToken: string, storedHash: string): boolean {
+  // Buffer.from(..., 'hex') 는 잘못된 접미사나 홀수 자릿수를 조용히 잘라낸다.
+  // 저장된 값 전체가 SHA-256 해시일 때만 상수시간 비교를 수행한다.
+  if (typeof storedHash !== 'string' || !/^[0-9a-f]{64}$/i.test(storedHash)) return false
   const a = Buffer.from(hashToken(providedToken), 'hex')
   const b = Buffer.from(storedHash, 'hex')
   if (a.length !== b.length) return false

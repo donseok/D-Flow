@@ -17,6 +17,8 @@ const eslintConfig = [
       ".next/**",
       "out/**",
       "build/**",
+      // .gitignore와 같은 로컬 QA 산출물: 배포 소스가 아니다.
+      ".superpowers/**",
       "next-env.d.ts",
     ],
   },
