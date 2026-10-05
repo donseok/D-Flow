@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BRAND } from '@/lib/branding'
 import { actorFromUser } from '@/lib/authz'
-import { isAnyProjectAdmin, isWorkspaceMember } from '@/lib/domain/authz'
+import { isAnyProjectAdmin, isWorkspaceAdmin, isWorkspaceMember, roleIn, type Actor } from '@/lib/domain/authz'
 import { activeTeamCodesForMinuteScope } from '@/lib/minutes/teamScope'
 import { loadRootFolders } from '@/lib/minutes/rootMode'
 import type { RootFoldersSetting } from '@/lib/minutes/rootFolders'
@@ -12,10 +12,11 @@ import {
 } from '@/lib/minutes/folders'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, EXTERNAL_ID_MAX,
-  gateMinutesApi, parseFolderPathValue, parseUserEmail, resolveUserByEmail, isBatchAuthorized,
-  type AdminClient,
+  parseFolderPathValue, parseUserEmail, resolveMinutesPrincipal, resolveUserByEmail,
+  isBatchAuthorized, isMinutesWorkspaceMember, type AdminClient, type MinutesPrincipal,
 } from '@/lib/minutes/externalApi'
-import { workspacesWithModule } from '@/lib/modules/gate'
+import { credentialAllows, narrowActor } from '@/lib/authz/credentials'
+import { requireModule, workspacesWithModule } from '@/lib/modules/gate'
 
 /**
  * POST /api/v1/minutes/folder — 이미 전송된 회의록의 **일괄 재편철**. 계약 §4c(작업지시 §8).
@@ -163,9 +164,27 @@ async function processItem(
   activeTeamCodes: TeamCode[],
   /** 그 회의록 워크스페이스의 최상위 폴더 모드(SP5 B2 — v2.9). 없으면 teams */
   rootMode?: RootFoldersSetting,
+  principal?: MinutesPrincipal,
+  authz?: Actor,
 ): Promise<ItemResult> {
   const key = item.externalId
   if (!row) return { external_id: key, status: 'not_found' }
+
+  // v3 §5.2.3 ② 건별 판정: minutes_api 일 때 프로젝트 권한 또는 자격증명 불허 시 failed(forbidden_project)
+  if (principal?.kind === 'minutes_api' && authz) {
+    const isAllowed = row.project_id
+      ? credentialAllows(principal.credential, row.project_id) && roleIn(authz, row.project_id) === 'admin'
+      : isWorkspaceAdmin(authz, principal.credential.workspaceId)
+    if (!isAllowed) {
+      return {
+        external_id: key,
+        status: 'failed',
+        reason: 'forbidden_project',
+        from: folderPathOfSnapshot(snap, row.folder_id),
+      }
+    }
+  }
+
   if (row.archived_at) return { external_id: key, status: 'skipped', reason: 'archived' }
   // 봉투가 아니라 건별로 떨어지는 검증 실패(folder_path 타입·60자·team 형식)
   if (item.parseError) {
@@ -267,8 +286,13 @@ async function processItem(
 }
 
 export async function POST(req: NextRequest) {
-  const gate = gateMinutesApi(req)
-  if (gate) return gate
+  let adminClient: AdminClient | undefined
+  const getAdmin = () => {
+    if (!adminClient) adminClient = createAdminClient()
+    return adminClient
+  }
+  const principal = await resolveMinutesPrincipal(req, getAdmin)
+  if (principal instanceof NextResponse) return principal
 
   let raw: unknown
   try {
@@ -276,31 +300,44 @@ export async function POST(req: NextRequest) {
   } catch {
     return apiBadRequest('잘못된 요청입니다.')
   }
-  // 게이트 순서: gate → parseUserEmail → resolveUserByEmail → 페이로드 검증.
+  // 게이트 순서: gate → parseUserEmail → resolveUserByEmail → 계정 게이트 → 페이로드 검증.
   // 이 순서라야 또박또박의 ACTOR_EMAIL 프로브(빈 items + dry_run)가 성립한다 —
   // 계정이 불량이면 items 길이를 보기 전에 403 unknown_user 가 먼저 나온다.
   const userEmail = parseUserEmail(raw)
   if (!userEmail) return apiBadRequest('user_email이 필요합니다.')
 
   try {
-    const admin = createAdminClient()
+    const admin = getAdmin()
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
-    // 결정 §2-H — 다른 라우트의 계정 게이트는 auth.users 실재만 본다. 배치는 그 계정 명의로
-    // 폴더를 만들고 그 사람이 생성 트리의 유일한 관리자가 되므로, ACTOR_EMAIL 오타가
-    // **실재하는 다른 직원**을 가리키면 조용히 성공한다(되돌리려면 DB 직접 수정).
-    // items: [] 프로브도 이 게이트를 통과해야 하므로 오설정이 첫 호출에서 드러난다.
-    // SP2 결정 8 — 판정은 세션 경로와 같은 스냅샷(actorFromUser) + roleIn. 조회 실패는 throw → 아래 catch 의
-    // 500(권한 없음 403 으로 위장하지 않는다). 여기서는 "어딘가의 관리자인가"(워크스페이스 관리자 승계 포함)만 본다 —
-    // 대상 회의록마다의 관리자 판정은 대상을 읽은 뒤(isBatchAuthorized) 한다.
-    const authz = await actorFromUser(admin, user.id)
-    if (!isAnyProjectAdmin(authz)) {
-      return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
+
+    const baseAuthz = await actorFromUser(admin, user.id)
+    const authz = principal.kind === 'minutes_api'
+      ? narrowActor(baseAuthz, principal.credential)
+      : baseAuthz
+
+    if (principal.kind === 'minutes_api') {
+      const wid = principal.credential.workspaceId
+      const isMember = await isMinutesWorkspaceMember(admin, wid, user.id)
+      if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
+
+      const isWsAdmin = authz.workspaceRoles.get(wid) === 'admin'
+      const hasProjectAdminInWs = Array.from(authz.projectRoles.entries()).some(
+        ([pid, role]) => role === 'admin' && credentialAllows(principal.credential, pid)
+      )
+      if (!isWsAdmin && !hasProjectAdminInWs) {
+        return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
+      }
+
+      const mod = await requireModule({ workspaceId: wid }, 'minutes_integration', { client: admin })
+      if (!mod.ok) return apiModuleDisabled()
+    } else {
+      if (!isAnyProjectAdmin(authz)) {
+        return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
+      }
+      const onWs = new Set(await workspacesWithModule([...authz.workspaceRoles.keys()], 'minutes_integration', { client: admin }))
+      if (onWs.size === 0 && !authz.isSuperuser) return apiModuleDisabled()
     }
-    // 행위자의 워크스페이스 가운데 minutes_integration 이 켜진 것 — 없으면 닫는다(프로브도 — 연동 설정 오류를 첫 호출에서 드러낸다).
-    // 플랫폼 관리자는 대상 판정만 한다(P24 — 소속이 없어도 전 워크스페이스를 옮길 수 있다)
-    const onWs = new Set(await workspacesWithModule([...authz.workspaceRoles.keys()], 'minutes_integration', { client: admin }))
-    if (onWs.size === 0 && !authz.isSuperuser) return apiModuleDisabled()
 
     const parsed = parseBatchPayload(raw)
     if ('error' in parsed) return apiBadRequest(parsed.error)
@@ -336,19 +373,31 @@ export async function POST(req: NextRequest) {
     // 호출자 워크스페이스 밖 회의록은 없는 것으로 친다(not_found) — external_id 는 전역 유일이라 조회는 전역이다.
     const byExternalId = new Map<string, MinuteRow>()
     for (const r of (rowsRaw ?? []) as MinuteRow[]) {
-      if (isWorkspaceMember(authz, r.workspace_id)) byExternalId.set(r.external_id, r)
+      if (principal.kind === 'minutes_api') {
+        if (r.workspace_id === principal.credential.workspaceId && isWorkspaceMember(authz, principal.credential.workspaceId)) {
+          byExternalId.set(r.external_id, r)
+        }
+      } else {
+        if (isWorkspaceMember(authz, r.workspace_id)) {
+          byExternalId.set(r.external_id, r)
+        }
+      }
     }
-    // 대상 회의록마다 관리자 이상이어야 한다 — 하나라도 아니면 요청 전체를 거절한다(부분 이동 없음).
-    if (byExternalId.size > 0 && !isBatchAuthorized(authz, [...byExternalId.values()])) {
-      return apiFail(403, 'forbidden_role', '대상 회의록 중 관리자 권한이 없는 것이 있습니다.')
+    if (principal.kind === 'legacy') {
+      // 대상 회의록마다 관리자 이상이어야 한다 — 하나라도 아니면 요청 전체를 거절한다(부분 이동 없음).
+      if (byExternalId.size > 0 && !isBatchAuthorized(authz, [...byExternalId.values()])) {
+        return apiFail(403, 'forbidden_role', '대상 회의록 중 관리자 권한이 없는 것이 있습니다.')
+      }
+      // 대상 가운데 하나라도 꺼진 워크스페이스면 요청 전체 거절 — 부분 이동 없음(위 관리자 판정과 같은 규칙, P24)
+      const targetWs = [...new Set([...byExternalId.values()].map((r) => r.workspace_id))]
+      const onTarget = new Set(await workspacesWithModule(targetWs, 'minutes_integration', { client: admin }))
+      if (targetWs.some((w) => !onTarget.has(w))) return apiModuleDisabled()
     }
-    // 대상 가운데 하나라도 꺼진 워크스페이스면 요청 전체 거절 — 부분 이동 없음(위 관리자 판정과 같은 규칙, P24)
-    const targetWs = [...new Set([...byExternalId.values()].map((r) => r.workspace_id))]
-    const onTarget = new Set(await workspacesWithModule(targetWs, 'minutes_integration', { client: admin }))
-    if (targetWs.some((w) => !onTarget.has(w))) return apiModuleDisabled()
-    // 건별 편철의 팀 목록 — 그 회의록의 범위(프로젝트, 미지정이면 워크스페이스)의 것. 전 워크스페이스 공용 목록이면 다른
-    // 워크스페이스의 팀 루트가 활성으로 보인다. 첫 이동 전에 전부 확보한다 — 팀 원천 실패는 throw → 아래
-    // catch 의 500 이고, 몇 건을 옮긴 뒤에 터져 결과 보고 없이 끝나는 일이 없다. 같은 범위는 한 번만 읽는다(세션이 없어 service_role).
+
+    const targetWs = principal.kind === 'minutes_api'
+      ? [principal.credential.workspaceId]
+      : [...new Set([...byExternalId.values()].map((r) => r.workspace_id))]
+
     const teamCodesByMinute = new Map<string, TeamCode[]>()
     const byScope = new Map<string, Promise<TeamCode[]>>()
     for (const r of byExternalId.values()) {
@@ -357,7 +406,7 @@ export async function POST(req: NextRequest) {
       if (!byScope.has(key)) byScope.set(key, activeTeamCodesForMinuteScope(scope, { client: admin }))
       teamCodesByMinute.set(r.id, await byScope.get(key)!)
     }
-    // 워크스페이스별 최상위 폴더 모드(SP5 B2 — v2.9) — 정규화가 모드로 갈린다. 첫 이동 전에 전부 읽고, 못 읽으면 아무것도 옮기지 않는다(500)
+
     const rootModeByWs = new Map<string, RootFoldersSetting>()
     for (const w of targetWs) {
       const roots = await loadRootFolders(w, { client: admin })
@@ -371,6 +420,7 @@ export async function POST(req: NextRequest) {
       const res = await processItem(
         admin, item, row, snap, batch, user.id, row ? teamCodesByMinute.get(row.id)! : [],
         row ? rootModeByWs.get(row.workspace_id) : undefined,
+        principal, authz,
       )
       // 같은 external_id 가 한 요청에 두 번 오면 두 번째는 갱신된 위치를 봐야 한다 —
       // 안 그러면 이미 옮긴 건이 다시 moved 로 집계된다(멱등 위반).

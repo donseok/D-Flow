@@ -3,17 +3,18 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   MINUTES_ATTACHMENT_MAX_BYTES, MINUTES_ATTACHMENTS_MAX_COUNT, MINUTE_BODY_MAX,
 } from '@/lib/domain/minutes'
-import { workspaceTeams } from '@/lib/teams/source'
+import { projectTeams, workspaceTeams } from '@/lib/teams/source'
 import { activeCodes } from '@/lib/domain/teams'
 import { actorFromUser } from '@/lib/authz'
 import { canSeeProject } from '@/lib/domain/authz'
 import { fetchAllPages } from '@/lib/data/paging'
 import { BRAND } from '@/lib/branding'
-import { workspacesWithModule } from '@/lib/modules/gate'
+import { requireModule, workspacesWithModule } from '@/lib/modules/gate'
 import {
-  apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, gateMinutesApi, isUuid, MINUTES_API_MAX_REQUEST_BYTES,
-  resolveUserByEmail,
+  apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, isMinutesWorkspaceMember, isUuid, MINUTES_API_MAX_REQUEST_BYTES,
+  resolveMinutesPrincipal, resolveUserByEmail, type AdminClient,
 } from '@/lib/minutes/externalApi'
+import { credentialAllows } from '@/lib/authz/credentials'
 
 /**
  * GET /api/v1/minutes/meta?user_email=… — 구분·프로젝트(·회의) 목록 + 제한값. 계약 §5.2.
@@ -27,8 +28,13 @@ import {
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const gate = gateMinutesApi(req)
-  if (gate) return gate
+  let adminClient: AdminClient | undefined
+  const getAdmin = () => {
+    if (!adminClient) adminClient = createAdminClient()
+    return adminClient
+  }
+  const principal = await resolveMinutesPrincipal(req, getAdmin)
+  if (principal instanceof NextResponse) return principal
 
   const projectId = req.nextUrl.searchParams.get('project_id')
   if (projectId && !isUuid(projectId)) return apiBadRequest('project_id 형식이 올바르지 않습니다.')
@@ -36,47 +42,72 @@ export async function GET(req: NextRequest) {
   if (!userEmail) return apiBadRequest('user_email 이 필요합니다.')
 
   try {
-    const admin = createAdminClient()
+    const admin = getAdmin()
     // 계정·권한 조회 실패는 throw → 아래 catch 의 500(빈 목록으로 위장하지 않는다).
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
-    const actor = await actorFromUser(admin, user.id)
-    // 목록형 — minutes_integration 이 허용된 워크스페이스의 프로젝트·팀만(스펙 §4.2·§4.3). 하나도 없으면 닫는다(409)
-    const actorWs = [...new Set([...actor.workspaceRoles.keys(), ...actor.projectWorkspace.values()])]
-    const onWs = new Set(await workspacesWithModule(actorWs, 'minutes_integration', { client: admin }))
-    if (onWs.size === 0) return apiModuleDisabled()
 
-    // 후보 = 스냅샷의 프로젝트(내 워크스페이스들의 프로젝트, 플랫폼 관리자는 전부). 프로젝트 id 목록을 .in() 으로 싣지 않는다 —
-    // URL 이 프로젝트 수에 비례해 늘어 약 205개부터 게이트웨이가 414 로 거절한다(GET 목록 listScope 와 같은 이유). 워크스페이스로
-    // 좁혀 max_rows 이하 페이지로 끝까지 읽고, 응답 행은 스냅샷 키와 canSeeProject 로 한 번 더 거른다 — 필터가 빠지는 회귀가 생겨도
-    // 남의 워크스페이스 프로젝트가 실리지 않게.
-    let projects: Array<{ id: string; name: string }> = []
-    if (actor.projectWorkspace.size > 0) {
-      const workspaceIds = [...actor.workspaceRoles.keys()]
-      let rows: Array<{ id: string; name: string; is_private: boolean | null }>
-      try {
-        rows = await fetchAllPages('projects', (from, to) => {
-          const q = admin.from('projects').select('id, name, is_private', { count: 'exact' })
-          return (actor.isSuperuser ? q : q.in('workspace_id', workspaceIds)).order('name').order('id').range(from, to)
-        })
-      } catch (e) {
-        console.error('[minutes-api] 프로젝트 목록 조회 실패:', e instanceof Error ? e.message : e)
-        return apiInternalError()
-      }
-      projects = rows
-        .filter(p => actor.projectWorkspace.has(p.id) && canSeeProject(actor, p) && onWs.has(actor.projectWorkspace.get(p.id)!))
-        .map(p => ({ id: p.id, name: p.name }))
+    if (principal.kind === 'minutes_api') {
+      const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
+      if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
+      const wsMod = await requireModule({ workspaceId: principal.credential.workspaceId }, 'minutes_integration', { client: admin })
+      if (!wsMod.ok) return apiModuleDisabled()
     }
-    // 회의 목록은 볼 수 있는 프로젝트일 때만 — 다른 워크스페이스·비공개 프로젝트는 존재를 드러내지 않는다(404).
-    if (projectId && !projects.some(p => p.id === projectId)) return apiNotFound()
 
-    // 호출자가 속한 워크스페이스들의 활성 공용 팀 합집합(첫 등장 순서 유지). 세션이 없으므로 service_role 로 읽는다.
-    // 팀 원천 실패는 throw → 500.
-    const wsIds = [...actor.workspaceRoles.keys()].filter((w) => onWs.has(w))
-    const perWs = await Promise.all(wsIds.map((wid) => workspaceTeams(wid, { client: admin })))
-    const teams = [...new Set(perWs.flatMap((rows) => activeCodes(rows)))]
+    const actor = await actorFromUser(admin, user.id)
+    let projects: Array<{ id: string; name: string }> = []
+    let teams: string[] = []
+    let workspaceInfo: { id: string; slug: string; name: string } | null = null
+
+    if (principal.kind === 'minutes_api') {
+      const wsId = principal.credential.workspaceId
+      const { data: wsRow, error: wsErr } = await admin.from('workspaces').select('id, slug, name').eq('id', wsId).single()
+      if (wsErr || !wsRow) return apiInternalError()
+      workspaceInfo = { id: wsRow.id, slug: wsRow.slug, name: wsRow.name }
+
+      const { data: prjRows, error: prjErr } = await admin.from('projects').select('id, name, is_private').eq('workspace_id', wsId).order('name')
+      if (prjErr) return apiInternalError()
+      projects = ((prjRows ?? []) as Array<{ id: string; name: string; is_private: boolean | null }>)
+        .filter(p => credentialAllows(principal.credential, p.id) && canSeeProject(actor, p))
+        .map(p => ({ id: p.id, name: p.name }))
+
+      if (projectId) {
+        if (!projects.some(p => p.id === projectId)) return apiNotFound()
+        teams = activeCodes(await projectTeams(projectId, { client: admin }))
+      } else {
+        teams = activeCodes(await workspaceTeams(wsId, { client: admin }))
+      }
+    } else {
+      // 목록형 — minutes_integration 이 허용된 워크스페이스의 프로젝트·팀만(스펙 §4.2·§4.3). 하나도 없으면 닫는다(409)
+      const actorWs = [...new Set([...actor.workspaceRoles.keys(), ...actor.projectWorkspace.values()])]
+      const onWs = new Set(await workspacesWithModule(actorWs, 'minutes_integration', { client: admin }))
+      if (onWs.size === 0) return apiModuleDisabled()
+
+      if (actor.projectWorkspace.size > 0) {
+        const workspaceIds = [...actor.workspaceRoles.keys()]
+        let rows: Array<{ id: string; name: string; is_private: boolean | null }>
+        try {
+          rows = await fetchAllPages('projects', (from, to) => {
+            const q = admin.from('projects').select('id, name, is_private', { count: 'exact' })
+            return (actor.isSuperuser ? q : q.in('workspace_id', workspaceIds)).order('name').order('id').range(from, to)
+          })
+        } catch (e) {
+          console.error('[minutes-api] 프로젝트 목록 조회 실패:', e instanceof Error ? e.message : e)
+          return apiInternalError()
+        }
+        projects = rows
+          .filter(p => actor.projectWorkspace.has(p.id) && canSeeProject(actor, p) && onWs.has(actor.projectWorkspace.get(p.id)!))
+          .map(p => ({ id: p.id, name: p.name }))
+      }
+      if (projectId && !projects.some(p => p.id === projectId)) return apiNotFound()
+
+      const wsIds = [...actor.workspaceRoles.keys()].filter((w) => onWs.has(w))
+      const perWs = await Promise.all(wsIds.map((wid) => workspaceTeams(wid, { client: admin })))
+      teams = [...new Set(perWs.flatMap((rows) => activeCodes(rows)))]
+    }
 
     const body: Record<string, unknown> = {
+      ...(workspaceInfo ? { workspace: workspaceInfo } : {}),
       teams,
       projects,
       limits: {

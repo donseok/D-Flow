@@ -5,9 +5,11 @@ import { actorFromUser } from '@/lib/authz'
 import { canEditMinute } from '@/lib/domain/authz'
 import { requireModule } from '@/lib/modules/gate'
 import {
-  apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, EXTERNAL_ID_MAX, gateMinutesApi,
-  isUuid, resolveUserByEmail,
+  apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, apiProjectNotAllowed,
+  EXTERNAL_ID_MAX, isMinutesWorkspaceMember, isUuid, resolveMinutesPrincipal,
+  resolveUserByEmail, type AdminClient,
 } from '@/lib/minutes/externalApi'
+import { credentialAllows } from '@/lib/authz/credentials'
 
 /**
  * POST /api/v1/minutes/link — 수동 업로드된 기존 회의록(external_id null)에 external_id 부여(claim).
@@ -22,8 +24,13 @@ const linked = (id: string, externalId: string) =>
   NextResponse.json({ ok: true, id, action: 'linked', external_id: externalId })
 
 export async function POST(req: NextRequest) {
-  const gate = gateMinutesApi(req)
-  if (gate) return gate
+  let adminClient: AdminClient | undefined
+  const getAdmin = () => {
+    if (!adminClient) adminClient = createAdminClient()
+    return adminClient
+  }
+  const principal = await resolveMinutesPrincipal(req, getAdmin)
+  if (principal instanceof NextResponse) return principal
 
   let raw: unknown
   try {
@@ -42,9 +49,14 @@ export async function POST(req: NextRequest) {
   if (externalId.length > EXTERNAL_ID_MAX) return apiBadRequest(`external_id는 ${EXTERNAL_ID_MAX}자 이하여야 합니다.`)
 
   try {
-    const admin = createAdminClient()
+    const admin = getAdmin()
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
+
+    if (principal.kind === 'minutes_api') {
+      const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
+      if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
+    }
 
     // 권한 조회 실패는 throw → 아래 catch 의 500(권한 없음 404 로 위장하지 않는다).
     const actor = await actorFromUser(admin, user.id)
@@ -56,6 +68,16 @@ export async function POST(req: NextRequest) {
     // 자격이 없으면 없는 회의록과 같은 404 — 다른 워크스페이스 회의록의 존재·보관 여부를 드러내지 않는다.
     const row = target as { created_by: string | null; project_id: string | null; workspace_id: string } | null
     if (!row || !canEditMinute(actor, row)) return apiFail(404, 'not_found', '회의록을 찾을 수 없습니다.')
+
+    if (principal.kind === 'minutes_api') {
+      if (row.workspace_id !== principal.credential.workspaceId) {
+        return apiFail(404, 'not_found', '회의록을 찾을 수 없습니다.')
+      }
+      if (row.project_id && !credentialAllows(principal.credential, row.project_id)) {
+        return apiProjectNotAllowed()
+      }
+    }
+
     // 대상 행의 워크스페이스로 minutes_integration 판정(스펙 §4.2) — 세션이 없으니 admin 으로. 편집 자격(존재 은닉 404) 뒤·보관 409 앞
     const mod = await requireModule({ workspaceId: row.workspace_id }, 'minutes_integration', { client: admin })
     if (!mod.ok) return apiModuleDisabled()

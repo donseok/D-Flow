@@ -98,6 +98,52 @@ export const apiInternalError = (error = '서버 오류가 발생했습니다.')
 export const ERR_MINUTES_INTEGRATION_OFF = '이 워크스페이스에서 회의록 연동이 꺼져 있습니다.'
 export const apiModuleDisabled = () => apiFail(409, 'module_disabled', ERR_MINUTES_INTEGRATION_OFF)
 
+import { resolveCredential, type ResolvedCredential } from '@/lib/authz/credentials'
+
+export type MinutesPrincipal =
+  | { kind: 'legacy' }
+  | { kind: 'minutes_api'; credential: ResolvedCredential }
+
+export const ERR_PROJECT_NOT_ALLOWED = '이 자격증명으로 접근할 수 없는 프로젝트입니다.'
+export const apiProjectNotAllowed = () => apiFail(403, 'project_not_allowed', ERR_PROJECT_NOT_ALLOWED)
+
+/** SP7 §5.1.3: 회의록 v3 자격증명 리졸버. Bearer dflow_int_ 는 integration_credentials 로 해석하고 실패 시 즉시 401. */
+export async function resolveMinutesPrincipal(
+  req: Request,
+  getAdmin: () => AdminClient,
+): Promise<MinutesPrincipal | NextResponse> {
+  if (process.env.MINUTES_API_ENABLED !== 'true') return apiNotFound()
+  const header = req.headers.get('authorization')
+  const bearer = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
+
+  if (bearer?.startsWith('dflow_int_')) {
+    const cred = await resolveCredential(req, getAdmin(), 'minutes_api')
+    if (cred instanceof NextResponse) return cred
+    return { kind: 'minutes_api', credential: cred }
+  }
+
+  // Legacy path
+  if (!process.env.MINUTES_API_SECRET) return apiNotFound()
+  if (!bearer || !secretMatches(bearer, process.env.MINUTES_API_SECRET)) return apiUnauthorized()
+  return { kind: 'legacy' }
+}
+
+/** 워크스페이스 소속 여부 확인 — v3 §5.2.2 ④ (사용자가 해당 워크스페이스 멤버여야 함). */
+export async function isMinutesWorkspaceMember(
+  admin: AdminClient,
+  workspaceId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from('workspace_members')
+    .select('role')
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw new Error(`workspace_members 조회 실패: ${error.message}`)
+  return !!data
+}
+
 /** 전 라우트 공통 선두 게이트 — 실패 시 응답, 통과 시 null. */
 export function gateMinutesApi(req: Request): NextResponse | null {
   if (!minutesApiEnabled()) return apiNotFound()
