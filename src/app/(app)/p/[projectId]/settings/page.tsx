@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, CalendarDays, Settings, Shield, ListTree, CalendarRange, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip } from 'lucide-react'
+import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
