@@ -178,8 +178,8 @@ insert into public.wiki_questions (id, project_id, question) values
 insert into public.wiki_topic_revisions (id, topic_id, project_id, version_no, title, body_md, body_hash, document_kind) values
   ('00000000-0000-0000-7e57-000000001124', '00000000-0000-0000-7e57-000000001105', '00000000-0000-0000-7e57-0000000000c1', 1, 'RLS 토픽', '# RLS', 'rls-h', 'overview')
   on conflict do nothing;
-insert into public.ai_documents (id, project_id, domain, entity_type, entity_id, chunk_no, content, content_hash, href, embedding_model, chunker_version) values
-  ('00000000-0000-0000-7e57-000000001125', '00000000-0000-0000-7e57-0000000000c1', 'wbs', 'wbs_item', '00000000-0000-0000-7e57-0000000000f1', 0, 'rls', 'rls-c', '/p/x/wbs', 'rls-model', 'v1')
+insert into public.ai_documents (id, workspace_id, project_id, domain, entity_type, entity_id, chunk_no, content, content_hash, href, embedding_model, chunker_version) values
+  ('00000000-0000-0000-7e57-000000001125', '00000000-0000-0000-7e57-00000000aa01', '00000000-0000-0000-7e57-0000000000c1', 'wbs', 'wbs_item', '00000000-0000-0000-7e57-0000000000f1', 0, 'rls', 'rls-c', '/p/x/wbs', 'rls-model', 'v1')
   on conflict do nothing;
 insert into public.agent_runners (id, name, owner_user_id, token_prefix, token_hash, expires_at, project_id) values
   ('00000000-0000-0000-7e57-000000001126', 'rls', '00000000-0000-0000-7e57-0000000000a3', 'RlsAgentKey1', repeat('a',64), now() + interval '1 year', '00000000-0000-0000-7e57-0000000000c1')
@@ -195,10 +195,10 @@ insert into public.wbs_stage_approvals (id, project_id, wbs_item_id, round, step
 insert into public.project_invites (id, workspace_id, project_id, email, access_role, token_hash, created_by, expires_at) values
   ('00000000-0000-0000-7e57-000000001129', '00000000-0000-0000-7e57-00000000aa01', '00000000-0000-0000-7e57-0000000000c1', 'rls-invitee@example.com', 'member', 'rls-invite-hash', '00000000-0000-0000-7e57-0000000000a2', now() + interval '1 year')
   on conflict do nothing;
-insert into public.usage_events (id, user_id, menu_key, path, project_id) values
-  (7057001, '00000000-0000-0000-7e57-0000000000a3', 'wbs', '/p/rls/wbs', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
-insert into public.ai_index_jobs (id, job_key, operation, domain, entity_type, entity_id, project_id) values
-  (7057001, 'rls-a', 'upsert', 'wbs', 'wbs_item', 'rls', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
+insert into public.usage_events (id, workspace_id, user_id, menu_key, path, project_id) values
+  (7057001, '00000000-0000-0000-7e57-00000000aa01', '00000000-0000-0000-7e57-0000000000a3', 'wbs', '/p/rls/wbs', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
+insert into public.ai_index_jobs (id, workspace_id, job_key, operation, domain, entity_type, entity_id, project_id) values
+  (7057001, '00000000-0000-0000-7e57-00000000aa01', 'rls-a', 'upsert', 'wbs', 'wbs_item', 'rls', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.wiki_processing_jobs (id, project_id, minute_id, minute_version_id, body_hash) values
   (7057001, '00000000-0000-0000-7e57-0000000000c1', '00000000-0000-0000-7e57-000000001103', '00000000-0000-0000-7e57-000000001104', 'rls-h') on conflict do nothing;
 insert into public.llm_profiles (id, name, preset_id, provider, model) values (7057001, 'rls', 'rls', 'openai', 'rls-model') on conflict do nothing;

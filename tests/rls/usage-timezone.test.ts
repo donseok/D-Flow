@@ -12,11 +12,11 @@ afterAll(async () => { await pool?.end() })
 /** P5 의 판정 결과 — 과제 10 Step 6 이 plpgsql 대안으로 갔으면 'plpgsql' 로 바꾼다(그 사실을 커밋 ③ 메시지와 리허설 기록에 남긴다) */
 const EXPECTED_LANG = 'sql'
 const FNS = [
-  'public.usage_daily_actives(date, date, text)',
-  'public.usage_menu_ranking(date, date, text)',
-  'public.usage_sessions(date, date, text, integer)',
-  'public.usage_summary(date, date, date, text)',
-  'public.usage_user_rollup(date, date, text)',
+  'public.usage_daily_actives(date, date, text, uuid)',
+  'public.usage_menu_ranking(date, date, text, uuid)',
+  'public.usage_sessions(date, date, text, integer, uuid)',
+  'public.usage_summary(date, date, date, text, uuid)',
+  'public.usage_user_rollup(date, date, text, uuid)',
 ] as const
 const OLD = ['public.usage_daily_actives(date, date)', 'public.usage_menu_ranking(date, date)', 'public.usage_sessions(date, date, integer)',
   'public.usage_summary(date, date, date)', 'public.usage_user_rollup(date, date)']
