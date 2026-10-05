@@ -30,11 +30,12 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   can_attach: [],
   consume_project_invite: ['people', 'profiles', 'project_invites', 'project_member_teams', 'project_members', 'workspace_members'],
   convert_inherited_teams: ['teams', 'item_owners', 'project_member_teams', 'area_teams', 'project_invites', 'minutes', 'minute_folders'],
-  create_project_with_settings: ['area_teams', 'project_areas', 'project_settings', 'project_settings_history', 'projects', 'teams'],
+  create_project_with_settings: ['form_templates', 'area_teams', 'project_areas', 'project_settings', 'project_settings_history', 'projects', 'teams'],
   // SP5 B2 — 공용 팀 + (teams 모드) 회의록 팀 루트 / 루트 없는 활성 공용 팀의 루트
   create_team: ['teams', 'minute_folders'],
   create_weekly_report: ['weekly_reports', 'weekly_report_rows'],
   ensure_team_roots: ['minute_folders'],
+  get_project_creation_receipt: [], // command receipt read only; no writes
   import_wbs_cmd: ['wbs_items', 'item_owners', 'holidays', 'command_receipts'],
   purge_read_notifications: ['notification_events', 'notification_recipients'],
   set_platform_admin: ['authz_commands', 'platform_admins'],
