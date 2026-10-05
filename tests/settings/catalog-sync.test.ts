@@ -23,19 +23,12 @@ const expectedStatus: Record<string, string> = {
   // SP5b — 흐름 다섯(+크레딧 표). 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성 S1/S3/S9-workflow(Z) 뒤 verified
   'workflow.credit_policy': 'verified', 'workflow.wbs_stage_labels': 'verified', 'workflow.approval_steps': 'verified',
   'workflow.approval_distinct_approvers': 'verified', 'workflow.predecessor_gate': 'verified',
-  // SP6 S1 — 정의·parse 만. 편집기 FormsManager·렌더 소비는 뒤 단계. verified 는 Z
-  'forms.weekly_report_pptx': 'stored', 'forms.weekly_report_xlsx': 'stored', 'forms.issue_analysis_pptx': 'stored', 'forms.wbs_export_xlsx': 'stored',
+  // SP6 — 정의·parse·관리 화면 FormTemplatesManager·렌더 소비·부정 테스트 6 완료 뒤 verified
+  'forms.weekly_report_pptx': 'verified', 'forms.weekly_report_xlsx': 'verified', 'forms.issue_analysis_pptx': 'verified', 'forms.wbs_export_xlsx': 'verified',
 }
 
-/** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP5 A 의 calendar.* 는 키 정의(과제 4)가 화면 장착(과제 25·26)보다 먼저다.
- * SP5 B1 의 issues.id_policy 도 같은 꼴이다(정의 과제 3 → 편집기 IssuePolicyEditor 과제 11 → verified 과제 13).
- * 그 키가 verified 로 오르기 전(과제 29)에 컴포넌트가 생기거나 위젯 이름이 실재 컴포넌트로 바뀌어야 한다 */
-const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {
-  // SP5 A 과제 25 가 셋(TimezoneSelect·WorkingDaysEditor·WeekStartEditor)을 만들어 비었다(판정 J1) — 과제 29 가 빈 목록을 완료 조건으로 본다
-  // SP5b W1 의 둘(StageLabelsEditor·ApprovalStepsEditor)은 W2 가 만들어 비었다
-  // SP6 S1 은 정의만. 업로드·활성화 화면은 S2
-  FormsManager: 'SP6 Phase S 편집기 — 정의가 화면보다 먼저',
-}
+/** 정의는 있으나 편집 컴포넌트가 아직 없는 custom 위젯(닫힌 목록) — SP6 양식 관리 화면까지 완료되어 비어 있다. */
+const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {}
 
 describe('설정 카탈로그 동기화', () => {
   it('43정의(키 이름 39)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {

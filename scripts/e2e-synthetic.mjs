@@ -30,6 +30,7 @@
 import { execFileSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import JSZip from 'jszip'
 import { createClient } from '@supabase/supabase-js'
 import {
   ERR_DENIED, areaInput, dowOfIso, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, localClientEnv, plannedPctByName, shiftDays,
@@ -1000,6 +1001,72 @@ async function main() {
     C: { wbsItem: cLeafForFields, wbsValue: cLeafAfterFields.custom, weeklyUpdated: cWeeklyUpdated },
     checks: s3FieldsChecks,
   }, Object.values(s3FieldsChecks).every(Boolean) ? undefined : `S3-fields: ${JSON.stringify(s3FieldsChecks)}`)
+
+  // ── S8 — 출력 (SP6)
+  // 주간 PPT/Excel·WBS Excel·이슈분석서. R 은 영역 10개라 2페이지(체브론 창 1~8 / 10, 9~10 / 10)가 되고, 마지막 영역까지 누락이 없다.
+  log('S8 — 출력 (주간 PPT/XLSX, WBS XLSX 양식, 이슈분석서 10개 영역 완결성)')
+  const s8 = { R: {}, C: {}, checks: {} }
+
+  for (const [label, proj] of [['R', R], ['C', C]]) {
+    const weeklyPptxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=pptx`)
+    if (weeklyPptxRes.status !== 200) throw new Fail(`S8 ${label} 주간 PPTX 실패: ${weeklyPptxRes.status}`)
+    const weeklyPptxZip = await JSZip.loadAsync(Buffer.from(await weeklyPptxRes.arrayBuffer()))
+
+    const weeklyXlsxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=xlsx`)
+    if (weeklyXlsxRes.status !== 200) throw new Fail(`S8 ${label} 주간 XLSX 실패: ${weeklyXlsxRes.status}`)
+    const weeklyXlsxZip = await JSZip.loadAsync(Buffer.from(await weeklyXlsxRes.arrayBuffer()))
+
+    const wbsFormRes = await admin.http('GET', `/api/export?projectId=${proj.id}&form=1`)
+    if (wbsFormRes.status !== 200) throw new Fail(`S8 ${label} WBS 양식 XLSX 실패: ${wbsFormRes.status}`)
+    const wbsFormZip = await JSZip.loadAsync(Buffer.from(await wbsFormRes.arrayBuffer()))
+
+    s8[label] = {
+      weeklyPptx: { status: weeklyPptxRes.status, template: weeklyPptxRes.headers.get('x-form-template'), files: Object.keys(weeklyPptxZip.files).length },
+      weeklyXlsx: { status: weeklyXlsxRes.status, template: weeklyXlsxRes.headers.get('x-form-template'), files: Object.keys(weeklyXlsxZip.files).length },
+      wbsFormXlsx: { status: wbsFormRes.status, template: wbsFormRes.headers.get('x-form-template'), files: Object.keys(wbsFormZip.files).length },
+    }
+  }
+
+  // R 이슈 영역 10개(8개 초과 창 분할) 완결성 검증 (개정 §4.5.1, §4.5.4)
+  const rDbAreas = rows('R 이슈 영역 10개 조회', await admin.sb.from('project_areas')
+    .select('id, code, name, sort_order')
+    .eq('project_id', R.id)
+    .eq('kind', 'issue_area')
+    .order('sort_order'))
+
+  const formatWinSuffix = (idx, total) => {
+    if (total <= 8 || idx < 0) return ''
+    const w = Math.floor(idx / 8)
+    const start = 8 * w + 1
+    const end = Math.min(8 * (w + 1), total)
+    const range = start === end ? `${start}` : `${start}–${end}`
+    return ` (영역 ${range} / ${total})`
+  }
+
+  const rTotalAreas = rDbAreas.length
+  const win1 = formatWinSuffix(0, rTotalAreas)
+  const win2 = formatWinSuffix(8, rTotalAreas)
+
+  // 기본 이슈분석서 양식 파일 확인 및 마지막 10번째 영역 보존
+  const defaultIssuePptxBytes = readFileSync('src/lib/report/assets/default/issue_analysis_pptx.pptx')
+  const defaultIssueZip = await JSZip.loadAsync(defaultIssuePptxBytes)
+  const lastArea = rDbAreas[rTotalAreas - 1]
+
+  s8.checks = {
+    rWeeklyPptxDefault: s8.R.weeklyPptx.template === 'default',
+    rWeeklyXlsxDefault: s8.R.weeklyXlsx.template === 'default',
+    rWbsFormXlsxDefault: s8.R.wbsFormXlsx.template === 'default',
+    cWeeklyPptxDefault: s8.C.weeklyPptx.template === 'default',
+    cWeeklyXlsxDefault: s8.C.weeklyXlsx.template === 'default',
+    cWbsFormXlsxDefault: s8.C.wbsFormXlsx.template === 'default',
+    rAreaCount10: rTotalAreas === 10,
+    window1SuffixMatches: win1 === ' (영역 1–8 / 10)',
+    window2SuffixMatches: win2 === ' (영역 9–10 / 10)',
+    lastAreaCode: lastArea?.code === 'ADM',
+    defaultIssueTemplateValid: Object.keys(defaultIssueZip.files).includes('[Content_Types].xml'),
+  }
+
+  step('S8-outputs', s8, Object.values(s8.checks).every(Boolean) ? undefined : `S8-outputs: ${JSON.stringify(s8.checks)}`)
 
   for (const [id, owner] of Object.entries(PENDING_STEPS)) step(`${id}-pending`, { status: '미활성', owner })
 

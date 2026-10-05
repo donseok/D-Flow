@@ -28,7 +28,7 @@ describe('forms.* 등록', () => {
       expect(d.apply).toBe('immediate')
       expect([...d.impact]).toEqual(['none'])
       expect(d.sql).toBeNull()
-      expect(d.widget).toEqual({ kind: 'custom', component: 'FormsManager' })
+      expect(d.widget).toEqual({ kind: 'custom', component: 'FormTemplatesManager' })
       expect(d.parse(d.default)).toEqual({ ok: true, value: d.default })
     }
     expect(settingDef('workspace', 'forms.weekly_report_pptx')).toBeUndefined()

@@ -162,8 +162,8 @@ export function formSettingDef<const K extends FormSettingKey>(key: K, kind: For
   return defineSetting<K, FormSetting>({
     key, scope: 'project', module: FORM_SETTING_MODULE[kind], default: defaultFormSetting(kind),
     parse: (raw) => parseFormSetting(kind, raw),
-    // 편집 화면(FormsManager)은 업로드·활성화 액션(Phase S2)과 함께 둔다. 정의가 화면보다 먼저다.
-    widget: { kind: 'custom', component: 'FormsManager' },
+    // 편집 화면(FormTemplatesManager)은 업로드·활성화 액션과 함께 둔다.
+    widget: { kind: 'custom', component: 'FormTemplatesManager' },
     editor: 'project_admin', apply: 'immediate', impact: ['none'], sql: null,
   })
 }

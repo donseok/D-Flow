@@ -89,10 +89,22 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'workflow.predecessor_gate': S5BW('verified', ['src/lib/domain/agentWork.ts', 'src/lib/agent/predecessorGate.ts', 'src/lib/agent/depends.ts', 'supabase/migrations/0026_workflow_policy.sql'], ['tests/agent/predecessor-gate.test.ts', 'tests/agent/claim-gate-final.test.ts', 'tests/rls/workflow-policy.test.ts']),
   'issues.cause_categories': S5B4('verified', ['src/lib/ai/issue-analysis.ts', 'src/lib/report/issues/storedRun.ts', 'src/lib/report/issues/deckPlan.ts', 'src/app/actions/issueAnalysis.ts'], ['tests/settings/vocab.test.ts', 'tests/ai/issue-analysis.test.ts', 'tests/report/issue-analysis-stored-run.test.ts', 'tests/report/issue-analysis-vocab.test.ts']),
   // SP6 S1 — 정의·parse(형태·카탈로그 경로). 업로드·활성화·렌더 소비는 S2·V. verified 는 Z
-  'forms.weekly_report_pptx': S6('stored', ['src/lib/settings/defs/forms.ts'], ['tests/settings/forms-defs.test.ts']),
-  'forms.weekly_report_xlsx': S6('stored', ['src/lib/settings/defs/forms.ts'], ['tests/settings/forms-defs.test.ts']),
-  'forms.issue_analysis_pptx': S6('stored', ['src/lib/settings/defs/forms.ts'], ['tests/settings/forms-defs.test.ts']),
-  'forms.wbs_export_xlsx': S6('stored', ['src/lib/settings/defs/forms.ts'], ['tests/settings/forms-defs.test.ts']),
+  'forms.weekly_report_pptx': S6('verified',
+    ['src/components/settings/FormTemplatesManager.tsx', 'src/app/actions/formTemplates.ts', 'src/lib/forms/activation.ts', 'src/lib/report/forms/loadTemplate.ts', 'src/lib/report/engine/scan.ts', 'src/lib/report/engine/pptx.ts', 'src/app/api/report/route.ts'],
+    ['tests/settings/forms-defs.test.ts', 'tests/ui/form-templates-manager.test.tsx', 'tests/actions/form-templates.test.ts', 'tests/forms/activation.test.ts', 'tests/report/forms/default-assets.test.ts', 'tests/negative/form-engine-outputs.test.ts'],
+  ),
+  'forms.weekly_report_xlsx': S6('verified',
+    ['src/components/settings/FormTemplatesManager.tsx', 'src/app/actions/formTemplates.ts', 'src/lib/forms/activation.ts', 'src/lib/report/forms/loadTemplate.ts', 'src/lib/report/engine/scan.ts', 'src/lib/report/engine/xlsx.ts', 'src/app/api/report/route.ts'],
+    ['tests/settings/forms-defs.test.ts', 'tests/ui/form-templates-manager.test.tsx', 'tests/actions/form-templates.test.ts', 'tests/forms/activation.test.ts', 'tests/report/forms/default-assets.test.ts', 'tests/negative/form-engine-outputs.test.ts'],
+  ),
+  'forms.issue_analysis_pptx': S6('verified',
+    ['src/components/settings/FormTemplatesManager.tsx', 'src/app/actions/formTemplates.ts', 'src/lib/forms/activation.ts', 'src/lib/report/forms/loadTemplate.ts', 'src/lib/report/engine/scan.ts', 'src/lib/report/engine/pptx.ts', 'src/app/api/issue-analysis/route.ts'],
+    ['tests/settings/forms-defs.test.ts', 'tests/ui/form-templates-manager.test.tsx', 'tests/actions/form-templates.test.ts', 'tests/forms/activation.test.ts', 'tests/report/forms/default-assets.test.ts', 'tests/negative/form-engine-outputs.test.ts'],
+  ),
+  'forms.wbs_export_xlsx': S6('verified',
+    ['src/components/settings/FormTemplatesManager.tsx', 'src/app/actions/formTemplates.ts', 'src/lib/forms/activation.ts', 'src/lib/report/forms/loadTemplate.ts', 'src/lib/report/engine/scan.ts', 'src/lib/report/engine/xlsx.ts', 'src/app/api/export/route.ts'],
+    ['tests/settings/forms-defs.test.ts', 'tests/ui/form-templates-manager.test.tsx', 'tests/actions/form-templates.test.ts', 'tests/forms/activation.test.ts', 'tests/report/forms/default-assets.test.ts', 'tests/negative/form-engine-outputs.test.ts'],
+  ),
 }
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
