@@ -9,6 +9,7 @@ import { UUID_RE } from '@/lib/domain/validate'
 import { MINUTE_FS_MAX, MINUTE_FS_MIN } from '@/lib/minutes/fontSize'
 import { isThemePref } from '@/lib/theme/policy'
 import { isProjectsView, parseHiddenWidgets } from '@/lib/portal/prefs'
+import { NOTIFICATION_CATALOG } from '@/lib/domain/inbox'
 
 export const ACCOUNT_PREF_KEYS = [
   'theme', 'locale', 'sidebarCollapsed', 'dashSections', 'minutesView', 'minuteFontSize', 'minutesExplorerLayout',
@@ -46,7 +47,19 @@ function cleanAccountValue(key: string, v: unknown): { ok: true; value: unknown 
     case 'notif': {
       if (!isPlainObject(v)) return { ok: false }
       const e = Object.entries(v)
-      return e.length <= NOTIF_TYPES_MAX && e.every(([k, b]) => k.length <= SHORT_KEY_MAX && typeof b === 'boolean') ? { ok: true, value: v } : { ok: false }
+      if (e.length > NOTIF_TYPES_MAX || !e.every(([k, b]) => k.length <= SHORT_KEY_MAX && typeof b === 'boolean')) {
+        return { ok: false }
+      }
+      // required: true인 알림은 opt-out(false)을 차단한다 (SPU1, 개정 §4.10)
+      const cleaned: Record<string, boolean> = {}
+      for (const [k, b] of e) {
+        const cat = (NOTIFICATION_CATALOG as Record<string, { required?: boolean }>)[k]
+        if (cat?.required && b === false) {
+          continue // 끄기 시도 무시
+        }
+        cleaned[k] = b as boolean
+      }
+      return { ok: true, value: cleaned }
     }
     default: return { ok: false }
   }

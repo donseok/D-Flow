@@ -22,6 +22,7 @@ import { wbsToastText } from '@/lib/wbs/actionErrors'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes, useTeams } from '@/components/app/TeamsProvider'
 import type { DictKey } from '@/lib/i18n/dict'
+import { editSessionStore } from '@/lib/sync/editSession'
 import { KanbanCard } from './KanbanCard'
 import { ProgressPopover } from './ProgressPopover'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
@@ -84,6 +85,7 @@ export function KanbanBoard({
   const [promptState, setPromptState] = useState<{ card: ComputedItem; suggested: number } | null>(null)
   const [override, setOverride] = useState<Record<string, number>>({})
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
+  const [failedMoves, setFailedMoves] = useState<Record<string, { attemptedPct: number; prevPct: number; error: string }>>({})
   const [liveMsg, setLiveMsg] = useState('')
   // 같은 카드에 대한 commit 재진입 방지(더블클릭 등으로 두 번째 요청이 첫 번째보다 먼저 읽는 prev가
   // 이미 낙관적 override로 오염되는 것을 막는다) — 렌더와 무관한 동기 가드라 ref로 관리.
@@ -178,7 +180,7 @@ export function KanbanBoard({
   // 데이터는 있으나(items.length>0) 렌즈/빠른필터/검색으로 모든 컬럼이 걸러진 상태 — 데이터 0건과 구분해 안내한다.
   const filteredEmpty = items.length > 0 && columns.every(c => c.cards.length === 0)
 
-  // 실적% 반영 — 낙관적으로 먼저 옮기고, 실패하면 롤백 + 토스트. CAS(expectedCurrent)로 동시 편집 충돌을 감지한다.
+  // 실적% 반영 — 낙관적으로 먼저 옮기고, 실패하면 의도한 위치 보존 및 재시도 액션 제공(D6-§2-kanban).
   // prev는 원시값(반올림 금지): 반올림하면 (a) 소수 실적(예: 99.6%)에서 가드가 조기 무력화돼 카드가 100%에 영영 못 닿고,
   // (b) updateActual의 CAS가 DB 원시값과 반올림값을 비교해 오탐 충돌을 낸다.
   async function commit(card: ComputedItem, pct: number) {
@@ -186,28 +188,41 @@ export function KanbanBoard({
     if (prev === pct) return
     if (inFlightRef.current.has(card.id)) return           // 같은 카드 재진입 방지(더블클릭 등)
     inFlightRef.current.add(card.id)
-    setOverride(o => ({ ...o, [card.id]: pct }))            // 낙관적 이동
+    const sessionId = `kanban:${card.id}`
+    setOverride(o => ({ ...o, [card.id]: pct }))            // 낙관적 이동 보존
     setSavingIds(s => new Set(s).add(card.id))
+    editSessionStore.setSession(sessionId, 'kanban', card.id, 'saving')
     try {
       const res = await updateActual(card.id, pct, prev)   // CAS: expectedCurrent = 현재값
       if (!res.ok) {
-        setOverride(o => { const n = { ...o }; delete n[card.id]; return n }) // 롤백
+        // D6-§2-kanban: 실패 시 롤백으로 사라지지 않고 현재 의도 위치를 보존하여 재시도 버튼 제공
+        const errMsg = res.conflict ? t('kanban.conflict')
+          : res.code === 'actual_locked' ? t('wbs.actualLocked')
+            : res.code === 'approval_required' ? t('wbs.err.approvalRequired')
+              : wbsToastText(t, res.error, 'kanban.errChange')
+        setFailedMoves(f => ({ ...f, [card.id]: { attemptedPct: pct, prevPct: prev, error: errMsg } }))
+        editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
+          error: { kind: 'server_reject', message: errMsg },
+        })
         toast({
           title: t('kanban.saveFailedTitle'),
-          // 잠금 거부는 사유 코드로, 나머지는 액션 문구를 사전 키로 바꿔 고른다(SP4 D21) — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
-          description: res.conflict ? t('kanban.conflict')
-            : res.code === 'actual_locked' ? t('wbs.actualLocked')
-              : res.code === 'approval_required' ? t('wbs.err.approvalRequired')
-                : wbsToastText(t, res.error, 'kanban.errChange'),
+          description: errMsg,
           variant: 'error',
         })
         if (res.conflict) router.refresh()
         return
       }
+      // 성공 확정 — 실패 상태 해제 및 세션 동기화
+      setFailedMoves(f => { const n = { ...f }; delete n[card.id]; return n })
+      editSessionStore.setSession(sessionId, 'kanban', card.id, 'saved')
       setLiveMsg(`${card.name} ${pct}%`)
       router.refresh() // 성공 확정 — 새 items 도착 시 useEffect가 override 비움
     } catch {
-      setOverride(o => { const n = { ...o }; delete n[card.id]; return n })
+      const errMsg = t('kanban.saveFailedTitle') || '저장에 실패했습니다.'
+      setFailedMoves(f => ({ ...f, [card.id]: { attemptedPct: pct, prevPct: prev, error: errMsg } }))
+      editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
+        error: { kind: 'server_reject', message: errMsg },
+      })
       toast({ title: t('kanban.saveFailedTitle'), variant: 'error' })
     } finally {
       setSavingIds(s => { const n = new Set(s); n.delete(card.id); return n })
@@ -379,6 +394,15 @@ export function KanbanBoard({
                         editable={canDrag}
                         dragging={draggingId === card.id}
                         saving={savingIds.has(card.id)}
+                        failed={failedMoves[card.id] ? {
+                          error: failedMoves[card.id].error,
+                          onRetry: () => void commit(card, failedMoves[card.id].attemptedPct),
+                          onDismiss: () => {
+                            setOverride(o => { const n = { ...o }; delete n[card.id]; return n })
+                            setFailedMoves(f => { const n = { ...f }; delete n[card.id]; return n })
+                            editSessionStore.removeSession(`kanban:${card.id}`)
+                          },
+                        } : undefined}
                         onOpen={() => openInWbs(card)}
                         onStart={canDrag ? () => startCard(card) : undefined}
                         onStep={canDrag ? d => stepCard(card, d) : undefined}

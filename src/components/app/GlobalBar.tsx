@@ -6,19 +6,22 @@ import { BrandSlot, type ShellBrand } from './BrandSlot'
 import { ContextBreadcrumb, type ContextBreadcrumbProps } from './ContextBreadcrumb'
 import { NotificationBell } from './NotificationBell'
 import { AccountMenu, type ShellIdentity } from './AccountMenu'
+import { SyncStatus } from '@/components/ui/SyncStatus'
 
 /**
  * 전역 바(★10, 개정 §5.4.1·§5.4.3) — 높이 48·전체 폭·아래 1px 경계·그림자 없음. 가운데는 찾기 자리(조작 없음 — SPU2). 티커는 없다(D28).
  * 크기별 브랜드 전환은 바깥 래퍼 span 의 정적 리터럴(로고 img 에는 display 유틸 없음 — D24). STAGING 은 레이아웃이 env 로 정해 prop 으로 내린다.
  * 768 미만은 브레드크럼 대신 범위 이름 버튼(프로젝트 → 워크스페이스 이름)이 같은 드로어를 연다(§5.4.5 "상단 범위 선택 + 메뉴" — 표시 전환은 정적 래퍼).
  */
-export function GlobalBar({ scope, brand, homeHref, crumbs, identity, staging, aiButton, onOpenDrawer, workspaceSwitcher, projectSwitcher }: {
+export function GlobalBar({ scope, brand, homeHref, crumbs, identity, staging, aiButton, onOpenDrawer, workspaceSwitcher, projectSwitcher, syncStatus }: {
   scope: 'workspace' | 'project' | 'global'; brand: ShellBrand; homeHref: string; crumbs: ContextBreadcrumbProps
   identity: ShellIdentity | null; staging: boolean; aiButton?: ReactNode; onOpenDrawer(): void
   /** 워크스페이스 전환기(D4) — 768 이상 브레드크럼의 워크스페이스 자리. 그 아래 폭은 드로어 안의 같은 전환기 */
   workspaceSwitcher?: ReactNode
   /** 프로젝트 전환기(AA1) — 768 이상 브레드크럼의 프로젝트 자리(사이드바가 레일인 폭에서도 닿게). 그 아래 폭은 드로어 안의 전환기 */
   projectSwitcher?: ReactNode
+  /** 동기화 상태 표시 슬롯(SPU1). 미지정 시 기본 SyncStatus 사용 */
+  syncStatus?: ReactNode
 }) {
   const scopeName = crumbs.project?.name ?? crumbs.workspace?.name ?? null
   return (
@@ -39,6 +42,7 @@ export function GlobalBar({ scope, brand, homeHref, crumbs, identity, staging, a
       </div>
       <div data-slot="search" aria-hidden="true"></div>
       <div className="flex shrink-0 items-center gap-1.5">
+        <div data-slot="sync-status">{syncStatus ?? <SyncStatus />}</div>
         {staging && <span className="rounded-md bg-warning px-2 py-0.5 text-meta font-bold text-warning-fg">STAGING</span>}
         {aiButton && <span className="hidden lg:inline-flex">{aiButton}</span>}
         <NotificationBell />

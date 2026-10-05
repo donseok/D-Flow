@@ -162,3 +162,12 @@ export async function saveWbsCollapse(projectId: string, ids: string[]): Promise
   )
   if (error) console.error('[saveWbsCollapse] 저장 실패:', error.message)
 }
+
+/**
+ * 개인 알림 설정 저장 (SPU1, 개정 §4.10)
+ * required: true 인 알림(승인 요청 등)은 opt-out이 차단되며 계정 설정에 반영됩니다.
+ */
+export async function saveNotifPrefs(notifPatch: Record<string, boolean>): Promise<{ ok: boolean }> {
+  return saveUiPrefs({ notif: notifPatch })
+}
+

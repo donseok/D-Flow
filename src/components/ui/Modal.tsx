@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { useEscHandler, ESC_PRIORITY } from '@/lib/ui/escStack'
+import { DirtyConfirmDialog } from '@/components/ui/DirtyConfirmDialog'
 
 const subscribeMounted = () => () => {}
 const clientMounted = () => true
@@ -11,9 +13,10 @@ const serverMounted = () => false
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
-/** 접근성 모달 — Escape/백드롭 닫기 + 포커스 트랩/복원. 브라우저 alert/confirm 금지 대체. */
+/** 접근성 모달 — Escape/백드롭 닫기 + 포커스 트랩/복원. dirty 시 이탈 확인(D6-§7-exit). */
 export function Modal({
   open, onClose, title, eyebrow, children, footer, size = 'md',
+  dirty = false, dirtyConfirmTitle, dirtyConfirmDesc,
 }: {
   open: boolean
   onClose: () => void
@@ -22,9 +25,14 @@ export function Modal({
   children: ReactNode
   footer?: ReactNode
   size?: 'sm' | 'md' | 'lg'
+  /** 폼 수정 사항이 있는지 여부 (true일 경우 닫기 시 확인 다이얼로그 노출) */
+  dirty?: boolean
+  dirtyConfirmTitle?: string
+  dirtyConfirmDesc?: string
 }) {
   const { t } = useLocale()
   const panelRef = useRef<HTMLDivElement>(null)
+  const [showDirtyConfirm, setShowDirtyConfirm] = useState(false)
   // SSR and the first hydration render both omit the portal, including direct ?focus links.
   const mounted = useSyncExternalStore(subscribeMounted, clientMounted, serverMounted)
 
@@ -45,6 +53,22 @@ export function Modal({
     wasOpenRef.current = open
   }
 
+  const requestClose = () => {
+    if (dirty) {
+      setShowDirtyConfirm(true)
+    } else {
+      onCloseRef.current()
+    }
+  }
+
+  // 모달 수준의 Esc 처리: 우선순위 MODAL(10), DirtyConfirm이 떠있지 않을 때만 활성화
+  useEscHandler(
+    () => {
+      requestClose()
+    },
+    { priority: ESC_PRIORITY.MODAL, enabled: open && !showDirtyConfirm }
+  )
+
   useEffect(() => {
     if (!open || !mounted) return
     const panel = panelRef.current
@@ -63,7 +87,6 @@ export function Modal({
     if (!autoFocused) (focusables()[0] ?? panel)?.focus()
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onCloseRef.current(); return }
       if (e.key !== 'Tab') return
       const f = focusables()
       // 포커스가 트랩 밖으로 샌 경우(저장 중 disabled 전환 등) 다시 안으로 회수.
@@ -88,22 +111,38 @@ export function Modal({
   if (!open || !mounted || typeof document === 'undefined') return null
   const width = size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'
 
-  return createPortal(
-    <div className="fixed inset-0 z-(--z-modal) flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
-      {/* 등장 페이드는 배경·패널에 따로 — 바깥(조상)에 opacity 전환을 두면 전환 동안 배경의 backdrop-blur 가 꺼졌다가 끝에 켜진다 */}
-      <button className="absolute inset-0 bg-black/45 backdrop-blur-sm transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0" aria-label={t('common.close')} onClick={onClose} tabIndex={-1} />
-      <div ref={panelRef} tabIndex={-1} className={`relative z-10 w-full ${width} overflow-hidden rounded-(--radius-panel) border border-border bg-surface-raised shadow-(--shadow-modal) focus:outline-none transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0`}>
-        <div className="flex items-start justify-between gap-3 border-b border-line px-6 py-4">
-          <div className="min-w-0">
-            {eyebrow && <div className="text-meta font-semibold text-fg-muted">{eyebrow}</div>}
-            {title && <h2 className="mt-0.5 text-base font-bold tracking-tight text-ink">{title}</h2>}
+  return (
+    <>
+      {createPortal(
+        <div className="fixed inset-0 z-(--z-modal) flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
+          {/* 등장 페이드는 배경·패널에 따로 — 바깥(조상)에 opacity 전환을 두면 전환 동안 배경의 backdrop-blur 가 꺼졌다가 끝에 켜진다 */}
+          <button className="absolute inset-0 bg-black/45 backdrop-blur-sm transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0" aria-label={t('common.close')} onClick={requestClose} tabIndex={-1} />
+          <div ref={panelRef} tabIndex={-1} className={`relative z-10 w-full ${width} overflow-hidden rounded-(--radius-panel) border border-border bg-surface-raised shadow-(--shadow-modal) focus:outline-none transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0`}>
+            <div className="flex items-start justify-between gap-3 border-b border-line px-6 py-4">
+              <div className="min-w-0">
+                {eyebrow && <div className="text-meta font-semibold text-fg-muted">{eyebrow}</div>}
+                {title && <h2 className="mt-0.5 text-base font-bold tracking-tight text-ink">{title}</h2>}
+              </div>
+              <button onClick={requestClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line text-ink-muted transition hover:text-ink" aria-label={t('common.close')}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto px-6 py-5">{children}</div>
+            {footer && <div className="flex items-center justify-end gap-2 border-t border-line bg-surface-2 px-6 py-4">{footer}</div>}
           </div>
-          <button onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line text-ink-muted transition hover:text-ink" aria-label={t('common.close')}><X className="h-4 w-4" /></button>
-        </div>
-        <div className="max-h-[70vh] overflow-y-auto px-6 py-5">{children}</div>
-        {footer && <div className="flex items-center justify-end gap-2 border-t border-line bg-surface-2 px-6 py-4">{footer}</div>}
-      </div>
-    </div>,
-    document.body,
+        </div>,
+        document.body,
+      )}
+      {showDirtyConfirm && (
+        <DirtyConfirmDialog
+          open={showDirtyConfirm}
+          title={dirtyConfirmTitle}
+          description={dirtyConfirmDesc}
+          onContinue={() => setShowDirtyConfirm(false)}
+          onDiscard={() => {
+            setShowDirtyConfirm(false)
+            onCloseRef.current()
+          }}
+        />
+      )}
+    </>
   )
 }

@@ -70,6 +70,10 @@ export const commonKo = {
   'common.retry': '다시 시도',
   'common.loading': '불러오는 중…',
   'common.none': '없음',
+  'common.unsavedChanges': '저장되지 않은 변경사항',
+  'common.unsavedChangesDesc': '저장하지 않은 변경사항이 있습니다. 나가시겠습니까? 변경사항은 취소됩니다.',
+  'common.continueEditing': '계속 편집',
+  'common.discardAndLeave': '변경사항 버리기',
   // 조회 실패 알림(LoadErrorNotice) — 로더의 ERR_* 한국어 상수는 로그·시험용이고 화면에는 이 문구를 쓴다.
   'common.loadFailed.issues': '이슈를 불러오지 못했습니다.',
   'common.loadFailed.announcements': '공지를 불러오지 못했습니다.',

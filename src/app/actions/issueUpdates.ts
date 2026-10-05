@@ -438,6 +438,11 @@ export async function purgeIssueUpdate(issueId: string, updateId: string): Promi
   const row = await loadTargetRow(sb, issueId, updateId)
   if (!row.ok) return { ok: false, error: row.error }
 
+  // SPU1(SP5b 이월): 상태 변경 기록은 감사 로그 보존을 위해 완전 삭제 불가
+  if (row.kind === 'status') {
+    return { ok: false, error: '상태 변경 기록은 감사 로그 보존을 위해 삭제할 수 없습니다.' }
+  }
+
   const { data: gone, error } = await sb
     .from('issue_updates')
     .delete()

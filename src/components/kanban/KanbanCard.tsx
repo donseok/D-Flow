@@ -1,7 +1,7 @@
 'use client'
 
 import type { DragEvent, KeyboardEvent } from 'react'
-import { CalendarRange, GripVertical, Minus, Plus, Check, RotateCcw, Play, Loader2 } from 'lucide-react'
+import { CalendarRange, GripVertical, Minus, Plus, Check, RotateCcw, Play, Loader2, AlertCircle, RotateCw, X } from 'lucide-react'
 import type { ComputedItem } from '@/lib/domain/types'
 import type { DueSignal, ProgressBucket } from '@/lib/domain/kanban'
 import { ProgressBar } from '@/components/ui/ProgressBar'
@@ -9,10 +9,10 @@ import { OwnerBadges, STATUS } from '@/components/wbs/shared'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
 /** 칸반 카드 — 실행 보드용. 본문 클릭=WBS 딥링크, 진행중은 +/− 스텝퍼, 시작전=착수, 완료=재개.
- *  드래그(진행 뷰·편집권한)로 버킷 이동. 파생 상태색 액센트 + 마감 배지 + 상위 단계 breadcrumb. */
+ *  드래그(진행 뷰·편집권한)로 버킷 이동. 이동 실패 시 의도한 위치 보존 및 재시도 액션 제공(D6-§2-kanban). */
 export function KanbanCard({
   card, bucket, pathLabel, due,
-  draggable = false, dragging = false, editable = false, saving = false,
+  draggable = false, dragging = false, editable = false, saving = false, failed,
   onOpen, onStart, onStep, onComplete, onReopen, onDragStart, onDragEnd,
 }: {
   card: ComputedItem
@@ -23,6 +23,12 @@ export function KanbanCard({
   dragging?: boolean
   editable?: boolean
   saving?: boolean
+  /** 이동 실패 상태 및 재시도/취소 액션 (D6-§2-kanban) */
+  failed?: {
+    error: string
+    onRetry: () => void
+    onDismiss: () => void
+  }
   onOpen?: () => void
   onStart?: () => void
   onStep?: (delta: number) => void
@@ -53,7 +59,8 @@ export function KanbanCard({
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`group relative shrink-0 overflow-hidden rounded-xl border border-line bg-surface p-3.5 shadow-sm transition
+      className={`group relative shrink-0 overflow-hidden rounded-xl border p-3.5 shadow-sm transition
+        ${failed ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30' : 'border-line bg-surface'}
         ${draggable ? 'cursor-grab select-none hover:border-line-strong hover:shadow-md active:cursor-grabbing' : ''}
         ${dragging ? 'opacity-40' : ''}`}
     >
@@ -108,6 +115,35 @@ export function KanbanCard({
           {bucket === 'done' && onReopen && (
             <button className="btn btn-ghost h-7 px-2 text-[12px] gap-1" disabled={saving} onClick={onReopen}><RotateCcw className="h-3.5 w-3.5" />{t('kanban.reopen')}</button>
           )}
+        </div>
+      )}
+
+      {/* 이동 실패 및 재시도 액션 (D6-§2-kanban) */}
+      {failed && (
+        <div data-testid="kanban-failed-move" className="mt-2.5 rounded-lg bg-surface border border-warning/30 p-2 text-xs" onClick={stop}>
+          <div className="flex items-start gap-1.5 text-warning font-medium">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span className="leading-tight">{failed.error || '이동 저장에 실패했습니다.'}</span>
+          </div>
+          <div className="mt-2 flex items-center justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={failed.onDismiss}
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-fg-secondary hover:bg-surface-hover text-xs"
+            >
+              <X className="h-3 w-3" />
+              <span>원위치</span>
+            </button>
+            <button
+              type="button"
+              onClick={failed.onRetry}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded bg-warning text-warning-fg font-medium px-2 py-1 text-xs hover:bg-warning/90"
+            >
+              <RotateCw className={`h-3 w-3 ${saving ? 'animate-spin' : ''}`} />
+              <span>재시도</span>
+            </button>
+          </div>
         </div>
       )}
     </div>

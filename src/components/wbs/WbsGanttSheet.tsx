@@ -14,6 +14,8 @@ import { computeHideDone } from '@/lib/domain/hideDone'
 import { unsetWeightCount } from '@/lib/domain/rollup'
 import { updateActual, updateWeight, addWbsItem } from '@/app/actions/wbs'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
+import { editSessionStore } from '@/lib/sync/editSession'
+import { sheetUndoManager } from '@/lib/sync/sheetUndo'
 import { queueWbsCollapse, queueUiPref } from '@/lib/prefs/debouncedSave'
 import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyViewport } from '@/lib/hooks/useCompactViewport'
 import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
@@ -287,10 +289,23 @@ export function WbsGanttSheet({
   }
   useWbsRealtime({
     projectId,
-    onChange: payload => setItems(cur =>
-      applyWbsChange(cur, payload, { today, calendar: cal }) ?? cur),
+    onChange: payload => {
+      // 실시간 규칙 2: 편집 중인 셀의 원격 값은 초안을 덮지 않고 보관/충돌 유도
+      if (edit && edit.id === payload.id) {
+        editSessionStore.setSession(`wbs:${edit.id}:${edit.field}`, 'wbs_cell', `${edit.id}:${edit.field}`, 'conflict', {
+          error: {
+            kind: 'conflict',
+            message: `${t('wbs.toastConflict')} — 원격 값이 변경되었습니다.`,
+          },
+        })
+      }
+      setItems(cur => applyWbsChange(cur, payload, { today, calendar: cal }) ?? cur)
+    },
     // 끊긴 사이의 변경은 페이로드가 오지 않았다 — 재연결에서 한 번 받아 메운다(설계 §6-2).
-    onReconnect: () => router.refresh(),
+    onReconnect: () => {
+      router.refresh()
+      editSessionStore.setConnectionState('online')
+    },
   })
   // 담당별 분리 부모는 기본 접힘 — 첫 화면이 엑셀 원본과 같은 행 구성이 된다.
   // 계정에 저장된 접힘 상태가 있으면(initialCollapsed) 그 값을 우선한다.
@@ -969,8 +984,12 @@ export function WbsGanttSheet({
     setEditOriginal(original)
     setInvalid(false)
     lastRejected.current = null
+    editSessionStore.setSession(`wbs:${id}:${field}`, 'wbs_cell', `${id}:${field}`, 'editing')
   }
   const cancel = () => {
+    if (edit) {
+      editSessionStore.removeSession(`wbs:${edit.id}:${edit.field}`)
+    }
     setEdit(null)
     setDraft('')
     setInvalid(false)
@@ -982,6 +1001,7 @@ export function WbsGanttSheet({
   const commit = async (via: 'enter' | 'blur') => {
     if (!edit || busy) return
     const { id, field } = edit
+    const sessionId = `wbs:${id}:${field}`
     const reject = (msg: string) => {
       setInvalid(true)
       if (via === 'enter' || lastRejected.current !== draft) setToast({ kind: 'err', msg })
@@ -994,7 +1014,20 @@ export function WbsGanttSheet({
       const pct = Number(draft)
       if (Number.isNaN(pct)) return reject(t('wbs.toastNumbersOnly'))
       if (pct < 0 || pct > 100) return reject(t('wbs.toastRange'))
-      run = () => updateActual(id, pct, Number(editOriginal))
+      const prevVal = Number(editOriginal)
+      sheetUndoManager.pushPending({
+        sessionId,
+        targetId: id,
+        field: 'actual',
+        previousValue: prevVal,
+        appliedValue: pct,
+        revert: async ({ targetValue }) => {
+          const revertRes = await updateActual(id, targetValue as number, pct)
+          if (revertRes.ok) router.refresh()
+          return revertRes
+        },
+      })
+      run = () => updateActual(id, pct, prevVal)
     } else {
       // 입력은 % 기준, 저장·충돌 비교는 1기준 원본(editOriginal). 무변경 커밋은
       // %↔분수 왕복 반올림값이 재저장되지 않게 서버 호출 없이 닫는다.
@@ -1002,30 +1035,78 @@ export function WbsGanttSheet({
       if (draft.trim() === origPct) return cancel()
       const pv = draft.trim() === '' ? null : Number(draft)
       if (pv != null && (!Number.isFinite(pv) || pv < 0)) return reject(t('wbs.toastWeightMin'))
-      run = () => updateWeight(id, pv == null ? null : pv / 100, editOriginal.trim() === '' ? null : Number(editOriginal))
+      const prevVal = editOriginal.trim() === '' ? null : Number(editOriginal)
+      const nextVal = pv == null ? null : pv / 100
+      sheetUndoManager.pushPending({
+        sessionId,
+        targetId: id,
+        field: 'weight',
+        previousValue: prevVal,
+        appliedValue: nextVal,
+        revert: async ({ targetValue }) => {
+          const revertRes = await updateWeight(id, targetValue as number | null, nextVal)
+          if (revertRes.ok) router.refresh()
+          return revertRes
+        },
+      })
+      run = () => updateWeight(id, nextVal, prevVal)
     }
     setInvalid(false)
     setBusy(true)
+    editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'saving')
     try {
       const res = await run()
       if (res.ok) {
-        setToast({ kind: 'ok', msg: t('wbs.toastSaved') })
+        // D6-§8-undo: 서버 확인 뒤에만 되돌리기(Undo) 활성화
+        sheetUndoManager.confirmActive(sessionId)
+        // D6-§5-motion: 셀 저장 성공 토스트는 제거하고 조용한 헤더 SyncStatus로 흡수
+        editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'saved')
         router.refresh()
-        cancel()
+        setEdit(null)
+        setDraft('')
+        setInvalid(false)
+        lastRejected.current = null
       } else if (res.conflict) {
+        sheetUndoManager.rejectPending(sessionId)
         // 충돌: 최신 값으로 새로고침하고 안내. 닫히는 입력은 안내에 남겨 다시 칠 수 있게 한다.
+        editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'conflict', {
+          error: { kind: 'conflict', message: `${t('wbs.toastConflict')} — ${t('wbs.toastYourValue')}: ${draft}` }
+        })
         setToast({ kind: 'err', msg: `${t('wbs.toastConflict')} — ${t('wbs.toastYourValue')}: ${draft}` })
         router.refresh()
-        cancel()
+        setEdit(null)
+        setDraft('')
+        setInvalid(false)
+        lastRejected.current = null
       } else {
+        sheetUndoManager.rejectPending(sessionId)
         // 잠금 거부는 사유 코드로, 나머지는 액션 문구를 사전 키로 바꿔 고른다(SP4 D21) — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
-        setToast({ kind: 'err', msg: res.code === 'actual_locked' ? t('wbs.actualLocked') : res.code === 'approval_required' ? t('wbs.err.approvalRequired') : wbsToastText(t, res.error, 'wbs.toastSaveFail') })
+        const errMsg = res.code === 'actual_locked' ? t('wbs.actualLocked') : res.code === 'approval_required' ? t('wbs.err.approvalRequired') : wbsToastText(t, res.error, 'wbs.toastSaveFail')
+        editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'failed', {
+          error: { kind: 'server_reject', message: errMsg }
+        })
+        setToast({ kind: 'err', msg: errMsg })
         if (via === 'enter') inputRef.current?.focus()
       }
     } finally {
       setBusy(false)
     }
   }
+
+  // WBS Undo 단축키 (Ctrl+Z / Cmd+Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        // 셀 인라인 입력 중이 아닐 때만 WBS 되돌리기 실행
+        if (!edit && sheetUndoManager.canUndo()) {
+          e.preventDefault()
+          void sheetUndoManager.undo()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [edit])
   async function submitAddPhase() {
     if (!addPhase?.trim() || addBusy) return
     setAddBusy(true)

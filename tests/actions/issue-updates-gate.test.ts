@@ -527,10 +527,12 @@ describe('purgeIssueUpdate — 완전 삭제는 관리자만', () => {
     expect((await purgeIssueUpdate('i1', '11111111-1111-1111-1111-111111111111')).ok).toBe(false)
   })
 
-  it('관리자는 상태 기록도 완전 삭제할 수 있다 — 취소선만 막았지 삭제를 막은 게 아니다', async () => {
+  it('관리자여도 상태 기록(kind="status")은 완전 삭제할 수 없다 — 감사 로그 보존(SPU1)', async () => {
     asMember(); requireProjectAdmin.mockResolvedValue({ ok: true, actor: ACTOR })
     state.client = stubRowClient({ author_user_id: 'me', kind: 'status', archived_at: null }).client
-    expect((await purgeIssueUpdate('i1', '11111111-1111-1111-1111-111111111111')).ok).toBe(true)
+    const res = await purgeIssueUpdate('i1', '11111111-1111-1111-1111-111111111111')
+    expect(res.ok).toBe(false)
+    expect(res.ok === false && res.error).toContain('감사 로그 보존')
   })
 })
 
