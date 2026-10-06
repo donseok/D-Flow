@@ -337,19 +337,19 @@ export function RowDetailPanel({
           onDoubleClick={resetWidth}
           className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-brand/40 active:bg-brand/60"
         />
-        <header className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
+        <header className="flex items-start justify-between gap-3 border-b border-border/80 px-5 py-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <LevelBadge depth={item.depth} isOwnerSplit={item.isOwnerSplit} levelLabels={levelLabels} />
-              {item.code && <span className="text-[11px] font-semibold tabular-nums text-ink-subtle">{item.code}</span>}
+              {item.code && <span className="text-[11px] font-semibold tabular-nums text-fg-muted">{item.code}</span>}
             </div>
-            <h2 className="mt-1.5 break-words text-[16px] font-bold leading-snug text-ink">{item.name}</h2>
+            <h2 className="mt-1.5 break-words text-[16px] font-bold leading-snug text-fg">{item.name}</h2>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {editable && !editing && (
-              <button onClick={() => setEditing(true)} aria-label={t('common.edit')} className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-subtle transition hover:bg-surface-2 hover:text-ink"><Pencil className="h-4 w-4" /></button>
+              <button onClick={() => setEditing(true)} aria-label={t('common.edit')} className="flex h-8 w-8 items-center justify-center rounded-(--radius-control) text-fg-muted transition hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"><Pencil className="h-4 w-4" /></button>
             )}
-            <button onClick={onClose} aria-label={t('common.close')} className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-subtle transition hover:bg-surface-2 hover:text-ink"><X className="h-4 w-4" /></button>
+            <button onClick={onClose} aria-label={t('common.close')} className="flex h-8 w-8 items-center justify-center rounded-(--radius-control) text-fg-muted transition hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"><X className="h-4 w-4" /></button>
           </div>
         </header>
 
@@ -747,9 +747,9 @@ export function RowDetailPanel({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-line bg-surface-2/60 px-3 py-2.5 text-center">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-subtle">{label}</div>
-      <div className="mt-0.5 text-[15px] font-bold tabular-nums text-ink">{value}</div>
+    <div className="rounded-xl border border-border/80 bg-surface-subtle/60 px-3 py-2.5 text-center shadow-xs">
+      <div className="text-[10px] font-semibold tracking-wider text-fg-muted">{label}</div>
+      <div className="mt-0.5 text-[15px] font-bold tabular-nums text-fg">{value}</div>
     </div>
   )
 }
@@ -906,8 +906,8 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
 function DlRow({ label, children, span = false }: { label: string; children: React.ReactNode; span?: boolean }) {
   return (
     <div className={`min-w-0 ${span ? 'col-span-2' : ''}`}>
-      <dt className="text-[11px] font-semibold text-ink-muted">{label}</dt>
-      <dd className="mt-0.5 min-w-0 text-[13px] text-ink">{children}</dd>
+      <dt className="text-[11px] font-semibold text-fg-muted">{label}</dt>
+      <dd className="mt-0.5 min-w-0 text-[13px] text-fg">{children}</dd>
     </div>
   )
 }

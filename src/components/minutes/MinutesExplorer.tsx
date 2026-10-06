@@ -970,7 +970,7 @@ function MinuteCard({
   const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
   return (
     <article {...dragProps}
-      className={`card relative flex flex-col gap-2 p-4 transition-shadow duration-150 hover:shadow-[var(--shadow-md)] ${
+      className={`card relative flex flex-col gap-2 p-4 transition-all duration-150 hover:border-border-input hover:shadow-sm ${
         dragProps ? 'cursor-grab select-none active:cursor-grabbing' : ''} ${dragging ? 'opacity-40' : ''}`}>
       {/* 선택 모드에서는 링크를 렌더하지 않는다 — 고르려다 상세로 튕겨 나가면 선택 자체가 불가능하다.
           draggable=false 필수 — 앵커는 기본 draggable 이라 그대로 두면 카드 대신 링크(href)가 끌린다 */}
@@ -985,7 +985,7 @@ function MinuteCard({
         {selecting
           ? <SelectBox checked={selected} onToggle={() => onSelectToggle?.()} t={t} />
           : <StarButton id={l.id} fav={fav} disabled={favDisabled} onToggle={onToggle} t={t} />}
-        <h4 className="min-w-0 flex-1 truncate pt-0.5 text-sm font-semibold text-ink">{l.title}</h4>
+        <h4 className="min-w-0 flex-1 truncate pt-0.5 text-sm font-semibold text-fg">{l.title}</h4>
         {canMove && <LeafMenu open={menuOpen} busy={menuBusy} onToggle={onMenuToggle}
           onEdit={onEdit} onMove={onMove} onArchive={onArchive}
           canSelect={canSelect} onSelect={onSelect} t={t} />}
@@ -994,21 +994,21 @@ function MinuteCard({
       {(l.projectName || l.meetingCategory || folderName || meetingProjectId) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {l.projectName && (
-            <span className="chip bg-brand-weak text-brand">
+            <span className="chip bg-action-soft text-action font-medium">
               <BookOpenText aria-hidden className="h-3 w-3" />{l.projectName}
             </span>
           )}
           {l.meetingCategory && <CategoryChip cat={l.meetingCategory} projectId={l.meetingProjectId} t={t} />}
           {meetingProjectId && <LinkedMeetingChip projectId={meetingProjectId} t={t} />}
           {folderName && (
-            <span className="chip bg-surface-2 text-ink-muted">
+            <span className="chip bg-surface-subtle text-fg-secondary">
               <Folder aria-hidden className="h-3 w-3" />{folderName}
             </span>
           )}
         </div>
       )}
-      {l.bodyPreview && <p className="line-clamp-3 break-words text-[13px] leading-5 text-ink-muted">{l.bodyPreview}</p>}
-      <div className="mt-auto flex items-center gap-2 pt-1 text-xs text-ink-subtle">
+      {l.bodyPreview && <p className="line-clamp-3 break-words text-[13px] leading-5 text-fg-secondary">{l.bodyPreview}</p>}
+      <div className="mt-auto flex items-center gap-2 pt-1 text-xs text-fg-muted">
         <span className="tabular-nums">{l.minuteDate}</span>
         {l.createdByName && <><span aria-hidden>·</span><span className="truncate">{l.createdByName}</span></>}
         {l.fileCount > 0 && (
@@ -1039,15 +1039,15 @@ function MinuteRow({
         <button aria-hidden tabIndex={-1} onClick={onSelectToggle}
           className="absolute inset-0 cursor-pointer rounded-lg" />
       )}
-      <div className={`flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors duration-100 hover:bg-surface-2 ${
+      <div className={`flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors duration-100 hover:bg-surface-hover ${
         dragProps ? 'cursor-grab select-none active:cursor-grabbing' : ''}`}>
         {selecting
           ? <SelectBox checked={selected} onToggle={() => onSelectToggle?.()} t={t} />
           : <StarButton id={l.id} fav={fav} disabled={favDisabled} onToggle={onToggle} t={t} />}
         <TeamBar code={l.teamCode} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-ink">{l.title}</span>
-          {l.bodyPreview && <span className="block truncate text-xs text-ink-subtle">{l.bodyPreview}</span>}
+          <span className="block truncate text-sm font-medium text-fg">{l.title}</span>
+          {l.bodyPreview && <span className="block truncate text-xs text-fg-muted">{l.bodyPreview}</span>}
         </span>
         {l.meetingCategory && <span className="hidden shrink-0 sm:inline-flex"><CategoryChip cat={l.meetingCategory} projectId={l.meetingProjectId} t={t} /></span>}
         {meetingProjectId && (
@@ -1056,20 +1056,20 @@ function MinuteRow({
           </span>
         )}
         {l.projectName && (
-          <span className="chip hidden max-w-40 shrink-0 bg-brand-weak text-brand lg:inline-flex">
+          <span className="chip hidden max-w-40 shrink-0 bg-action-soft text-action font-medium lg:inline-flex">
             <BookOpenText aria-hidden className="h-3 w-3" />
             <span className="truncate">{l.projectName}</span>
           </span>
         )}
         {folderName && (
-          <span className="chip hidden shrink-0 bg-surface-2 text-ink-muted md:inline-flex">
+          <span className="chip hidden shrink-0 bg-surface-subtle text-fg-secondary md:inline-flex">
             <Folder aria-hidden className="h-3 w-3" />{folderName}
           </span>
         )}
         {canMove && <LeafMenu open={menuOpen} busy={menuBusy} onToggle={onMenuToggle}
           onEdit={onEdit} onMove={onMove} onArchive={onArchive}
           canSelect={canSelect} onSelect={onSelect} t={t} />}
-        <span className="w-20 shrink-0 text-right text-xs tabular-nums text-ink-subtle">{l.minuteDate}</span>
+        <span className="w-20 shrink-0 text-right text-xs tabular-nums text-fg-muted">{l.minuteDate}</span>
       </div>
     </li>
   )

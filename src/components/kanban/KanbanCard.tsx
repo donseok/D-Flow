@@ -81,7 +81,7 @@ export function KanbanCard({
     : undefined
 
   const dueBadge = due && (
-    <span className={`badge ${due.kind === 'overdue' ? 'bg-delayed-weak text-delayed' : 'bg-surface-2 text-ink-muted'}`}>
+    <span className={`badge ${due.kind === 'overdue' ? 'bg-delayed-weak text-delayed font-semibold' : 'bg-surface-subtle text-fg-secondary'}`}>
       {due.kind === 'overdue'
         ? `${t('kanban.overduePrefix')}${due.days}${t('kanban.overdueSuffix')}`
         : due.days === 0 ? t('kanban.ddayToday') : `${t('kanban.ddayPrefix')}${due.days}`}
@@ -93,14 +93,14 @@ export function KanbanCard({
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`group relative shrink-0 overflow-hidden rounded-xl border p-3.5 shadow-sm transition
-        ${failed ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30' : 'border-line bg-surface'}
-        ${draggable ? 'cursor-grab select-none hover:border-line-strong hover:shadow-md active:cursor-grabbing' : ''}
+      className={`group relative shrink-0 overflow-hidden rounded-xl border p-3.5 shadow-xs transition duration-(--motion-fast)
+        ${failed ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30' : 'border-border/80 bg-surface'}
+        ${draggable ? 'cursor-grab select-none hover:border-border-input hover:shadow-sm active:cursor-grabbing' : ''}
         ${dragging ? 'opacity-40' : ''}`}
     >
       <span className={`absolute inset-y-0 left-0 w-1 ${accent}`} aria-hidden />
       {draggable && (
-        <GripVertical className="pointer-events-none absolute right-2 top-2 h-3.5 w-3.5 text-ink-subtle opacity-0 transition group-hover:opacity-100" aria-hidden />
+        <GripVertical className="pointer-events-none absolute right-2 top-2 h-3.5 w-3.5 text-fg-muted opacity-0 transition group-hover:opacity-100" aria-hidden />
       )}
 
       {/* 본문(클릭=WBS 딥링크) */}
@@ -111,12 +111,12 @@ export function KanbanCard({
         aria-label={onOpen ? `${card.name} — ${t('kanban.card.actual')} ${pct}%. ${t('kanban.openInWbs')}` : undefined}
         onClick={onOpen}
         onKeyDown={openKey}
-        className={`pl-1.5 ${onOpen ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-ring rounded' : ''}`}
+        className={`pl-1.5 ${onOpen ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus rounded' : ''}`}
       >
-        {pathLabel && <p className="mb-1 truncate text-[10px] font-medium uppercase tracking-wide text-ink-subtle" title={pathLabel}>{pathLabel}</p>}
-        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-ink" title={card.name}>{card.name}</p>
+        {pathLabel && <p className="mb-1 truncate text-[10px] font-medium uppercase tracking-wide text-fg-muted" title={pathLabel}>{pathLabel}</p>}
+        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-fg" title={card.name}>{card.name}</p>
 
-        <div className="mt-2 flex items-center gap-2 text-[11px] text-ink-subtle">
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-fg-muted">
           <CalendarRange className="h-3 w-3 shrink-0" />
           <span className="tabular-nums">{card.plannedEnd ?? '—'}</span>
           {dueBadge}
@@ -124,7 +124,7 @@ export function KanbanCard({
 
         <div className="mt-3 flex items-center gap-2">
           <ProgressBar value={card.rolledActualPct} tone={accent} height="h-1.5" label={`${card.name} ${t('kanban.card.actual')}`} />
-          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-ink-muted">{pct}%</span>
+          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-fg-secondary">{pct}%</span>
         </div>
 
         <div className="mt-3 flex items-center justify-between gap-2">
@@ -135,7 +135,7 @@ export function KanbanCard({
 
       {/* 액션 행(편집 권한 · 진행 뷰 또는 흐름 뷰). 본문 클릭과 분리 위해 stopPropagation. */}
       {editable && (
-        <div className="mt-2.5 flex items-center gap-1.5 border-t border-line pt-2.5" onClick={stop}>
+        <div className="mt-2.5 flex items-center gap-1.5 border-t border-border/60 pt-2.5" onClick={stop}>
           {bucket === 'not_started' && onStart && (
             <button className="btn btn-ghost h-7 px-2 text-[12px] gap-1" disabled={saving} onClick={onStart}><Play className="h-3.5 w-3.5" />{t('kanban.start')}</button>
           )}

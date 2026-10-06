@@ -9,7 +9,7 @@ export function WidgetFrame({ id, title, workspaceId, hidden, more, tabs, childr
   more?: { href: string; label: string }; tabs?: ReactNode; children: ReactNode
 }) {
   return (
-    <section data-widget={id} aria-labelledby={`widget-${id}`} className="min-w-0 rounded-(--radius-panel) border border-border bg-surface p-4">
+    <section data-widget={id} aria-labelledby={`widget-${id}`} className="min-w-0 rounded-(--radius-panel) border border-border/80 bg-surface p-4.5 shadow-xs">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 id={`widget-${id}`} className="text-section text-fg">{title}</h2>
         {tabs}

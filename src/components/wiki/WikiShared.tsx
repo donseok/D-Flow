@@ -350,7 +350,7 @@ export function WikiItemCard({
   const owner = [item.ownerTeam, ownerName].filter(Boolean).join(' · ')
 
   return (
-    <article id={`wiki-item-${item.id}`} className="scroll-mt-6 rounded-2xl border border-line bg-surface px-4 py-4 shadow-[var(--shadow-sm)]">
+    <article id={`wiki-item-${item.id}`} className="scroll-mt-6 rounded-xl border border-border/80 bg-surface p-4 shadow-xs transition-[box-shadow,border-color] duration-(--motion-fast) hover:border-border-input hover:shadow-sm">
       <div className="flex items-start gap-3">
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${meta.iconWrap}`}>
           <Icon className="h-4 w-4" />
@@ -360,15 +360,15 @@ export function WikiItemCard({
             <span className={`chip ${meta.chip}`}>{t(locale, meta.labelKey)}</span>
             <span className={`chip ${stateChip(item)}`} title={originalStateLabel(locale, item)}>{stateLabel(locale, item)}</span>
             {item.autoUpdateLocked && (
-              <span className="chip bg-surface-2 text-ink-muted">
+              <span className="chip bg-surface-subtle text-fg-secondary">
                 <LockKeyhole className="h-3 w-3" />
                 {t(locale, 'wiki.locked')}
               </span>
             )}
           </div>
-          <p className="mt-2 text-sm font-medium leading-6 text-ink">{item.statement}</p>
+          <p className="mt-2 text-sm font-medium leading-6 text-fg">{item.statement}</p>
           {(owner || date) && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-subtle">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-muted">
               {owner && <span>{t(locale, 'wiki.ownerTeam')} · {owner}</span>}
               {date && (
                 <span className="inline-flex items-center gap-1">
@@ -462,18 +462,18 @@ export function WikiChangeList({
         return (
           <li key={change.id} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 py-3 first:pt-0 last:pb-0">
             <span className={`relative z-10 mt-1.5 h-[15px] w-[15px] rounded-full border-[4px] border-surface ${tone.dot}`} />
-            <div className="min-w-0 rounded-xl border border-line/80 bg-surface-2/55 px-3.5 py-3">
+            <div className="min-w-0 rounded-xl border border-border/70 bg-surface-subtle/60 px-3.5 py-3 shadow-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className={`chip ${tone.badge}`}>
                   <Icon className="h-3 w-3" />
                   {changeLabel(locale, change.changeType)}
                 </span>
-                <time className="text-[11px] tabular-nums text-ink-subtle">
+                <time className="text-[11px] tabular-nums text-fg-muted">
                   {formatWikiDate(change.createdAt, locale, true, timeZone)}
                 </time>
               </div>
-              {statement && <p className="mt-2 text-sm font-medium leading-5 text-ink">{statement}</p>}
-              <p className="mt-1 text-xs leading-5 text-ink-muted">
+              {statement && <p className="mt-2 text-sm font-medium leading-5 text-fg">{statement}</p>}
+              <p className="mt-1 text-xs leading-5 text-fg-secondary">
                 {change.reason ?? t(locale, 'wiki.change.noReason')}
               </p>
               {change.minuteId && (

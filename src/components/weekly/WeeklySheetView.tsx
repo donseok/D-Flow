@@ -755,7 +755,7 @@ export function WeeklySheetView({
         onLint={() => setLintOpen(true)}
       />
       <div className="isolate min-h-0 flex-1 overflow-auto">
-        <div className={`min-w-[1240px] bg-surface p-1.5 shadow-sm ring-1 ring-border ${grid.dragging === 'fill' ? 'cursor-crosshair select-none' : grid.dragging === 'select' ? 'cursor-cell select-none' : ''}`}>
+        <div className={`min-w-[1240px] rounded-(--radius-panel) bg-surface p-1.5 shadow-xs ring-1 ring-border/80 ${grid.dragging === 'fill' ? 'cursor-crosshair select-none' : grid.dragging === 'select' ? 'cursor-cell select-none' : ''}`}>
           {/* 제목 행 — 레퍼런스 시트의 B1. 자유 편집(''이면 기본 제목 합성). key로 주차 전환 시 초기화 */}
           <TitleEditor
             key={report.id}
@@ -954,12 +954,12 @@ function WeekNav({
     // 채움형(SP4 B) — main 은 스크롤하지 않고 시트 상자가 스크롤한다. 이 줄은 늘 보이고, 셀 오버레이(배지·핸들 z-30)는
     // 시트 상자의 isolate 안에 갇힌다. 좁은 화면(390)에서는 줄을 바꿔 감싼다 — main 이 닫혀 옆으로 넘친 내보내기 버튼에 닿을 길이 없다.
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-1 pt-1">
-      <div className="flex items-center gap-2">
-        <Link href={`${base}?week=${prevWeek}`} className="btn btn-ghost px-2" aria-label="이전 주">
+      <div className="flex items-center gap-1 rounded-(--radius-control) border border-border/80 bg-surface p-0.5 shadow-xs">
+        <Link href={`${base}?week=${prevWeek}`} className="btn btn-ghost h-8 w-8 p-0" aria-label="이전 주">
           <ChevronLeft className="h-4 w-4" />
         </Link>
-        <span className="min-w-40 text-center text-sm font-semibold text-ink">{weekLabel}</span>
-        <Link href={`${base}?week=${nextWeek}`} className="btn btn-ghost px-2" aria-label="다음 주">
+        <span className="min-w-36 text-center text-xs font-semibold tabular-nums text-fg">{weekLabel}</span>
+        <Link href={`${base}?week=${nextWeek}`} className="btn btn-ghost h-8 w-8 p-0" aria-label="다음 주">
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>

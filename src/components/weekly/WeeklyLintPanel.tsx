@@ -71,14 +71,14 @@ export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, canApp
             봅니다 — <code>[완료]</code> 같은 표시 뒤로 번호를 이어 쓴 경우는 한 목록으로 셉니다.
             (글머리 기호·번호 표기 통일만 시트 전체 기준)
           </p>
-          <div className="divide-y divide-line">
+          <div className="divide-y divide-border/80">
             {groups.map(g => (
               <section key={g.key} data-lint-section={g.key} className="py-2">
-                <h3 className="flex items-baseline gap-2 pb-1 text-sm font-semibold text-ink">
+                <h3 className="flex items-baseline gap-2 pb-1 text-sm font-semibold text-fg">
                   {g.label}
-                  <span className="text-xs font-normal text-ink-muted">{g.items.length}건</span>
+                  <span className="text-xs font-normal text-fg-muted">{g.items.length}건</span>
                 </h3>
-                <ul className="divide-y divide-line/60">
+                <ul className="divide-y divide-border/60">
                   {g.items.map(f => (
                     <LintItem
                       key={f.id}
@@ -113,11 +113,11 @@ function LintItem({ finding, canApply, onApply, onGo }: {
         <button
           type="button"
           onClick={onGo}
-          className="text-left text-sm font-semibold text-ink underline-offset-2 hover:underline"
+          className="text-left text-sm font-semibold text-fg underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border-focus"
         >
           {finding.title}
         </button>
-        <p className="mt-0.5 whitespace-pre-wrap break-words text-xs text-ink-muted">{finding.detail}</p>
+        <p className="mt-0.5 whitespace-pre-wrap break-words text-xs text-fg-secondary">{finding.detail}</p>
       </div>
       {/* 유사 중복은 edits 가 없다(어느 줄을 남길지는 사람의 판단) — 적용 버튼 대신 제목 클릭으로 셀에 간다. */}
       {canApply && finding.edits.length > 0 && (

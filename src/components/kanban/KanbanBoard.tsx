@@ -432,13 +432,13 @@ export function KanbanBoard({
                   aria-pressed={quick[k]}
                   title={t(group === 'bucket' ? 'kanban.qfBucketHint' : 'kanban.qfScheduleHint')}
                   onClick={() => toggleQuick(k)}
-                  className={`badge transition ${quick[k] ? 'bg-brand text-action-fg' : 'bg-surface-2 text-ink-muted hover:text-ink'}`}
+                  className={`badge transition cursor-pointer ${quick[k] ? 'bg-action text-action-fg font-semibold shadow-xs' : 'bg-surface-subtle text-fg-secondary hover:text-fg hover:bg-surface-hover'}`}
                 >{t(label)}</button>
               </Fragment>
             ))}
           </div>
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
@@ -453,24 +453,24 @@ export function KanbanBoard({
 
       {/* 조회 전용 힌트(phase·owner 뷰일 때) */}
       {(mode === 'phase' || mode === 'owner') && !readOnly && (
-        <div className="flex shrink-0 items-center gap-2 rounded-xl border border-line bg-surface-2 px-3.5 py-2 text-[12px] text-ink-subtle">
+        <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/80 bg-surface-subtle/50 px-3.5 py-2 text-[12px] text-fg-muted">
           {t('kanban.readOnlyHint')}
         </div>
       )}
 
       {/* 흐름 뷰 안내 */}
       {mode === 'flow' && !readOnly && (
-        <div className="flex shrink-0 items-center gap-2 rounded-xl border border-line bg-surface-2 px-3.5 py-2 text-[12px] text-ink-subtle">
+        <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/80 bg-surface-subtle/50 px-3.5 py-2 text-[12px] text-fg-muted">
           {t('kanban.flowReadOnlyHint')}
         </div>
       )}
 
       {/* 최초 방문 코치마크(진행 뷰) */}
       {showCoach && editable && (
-        <div className="flex shrink-0 items-start justify-between gap-3 rounded-xl border border-brand-ring bg-brand-weak px-3.5 py-2.5">
+        <div className="flex shrink-0 items-start justify-between gap-3 rounded-xl border border-action/25 bg-action-soft px-3.5 py-2.5 shadow-xs">
           <div>
-            <p className="text-[13px] font-semibold text-brand">{t('kanban.coachTitle')}</p>
-            <p className="mt-0.5 text-[12px] text-ink-muted">{t('kanban.coachDesc')}</p>
+            <p className="text-[13px] font-semibold text-action">{t('kanban.coachTitle')}</p>
+            <p className="mt-0.5 text-[12px] text-fg-secondary">{t('kanban.coachDesc')}</p>
           </div>
           <button className="btn btn-ghost btn-sm shrink-0" onClick={dismissCoach}>{t('kanban.coachDismiss')}</button>
         </div>
@@ -478,8 +478,8 @@ export function KanbanBoard({
 
       {/* 필터 결과 0건 안내(데이터 자체는 있음) */}
       {filteredEmpty && (
-        <div className="shrink-0 rounded-xl border border-dashed border-line px-4 py-3 text-center text-[12px] text-ink-subtle">
-          <span className="font-medium text-ink-muted">{t('kanban.noMatchTitle')}</span> · {t('kanban.noMatchDesc')}
+        <div className="shrink-0 rounded-xl border border-dashed border-border/80 px-4 py-3 text-center text-[12px] text-fg-muted">
+          <span className="font-medium text-fg">{t('kanban.noMatchTitle')}</span> · {t('kanban.noMatchDesc')}
         </div>
       )}
 
@@ -500,19 +500,19 @@ export function KanbanBoard({
               onDragOver={isDropZone ? e => { if (accepts) { e.preventDefault(); setDragOverKey(col.key) } } : undefined}
               onDragLeave={isDropZone ? () => setDragOverKey(k => (k === col.key ? null : k)) : undefined}
               onDrop={isDropZone ? e => handleDrop(e, col.key) : undefined}
-              className={`card flex max-h-full w-[286px] min-w-[286px] flex-col p-3 transition
-                ${active ? 'border-brand ring-2 ring-brand-ring' : ''}`}
+              className={`card flex max-h-full w-[290px] min-w-[290px] flex-col p-3 shadow-xs transition bg-surface/90
+                ${active ? 'border-action ring-2 ring-border-focus' : 'border-border/70'}`}
             >
               <header className="flex flex-col gap-1 px-1 pb-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${col.accentDot ?? 'bg-brand'}`} />
-                    <h3 className="truncate text-[13px] font-semibold text-ink" title={displayTitle}>{displayTitle}</h3>
+                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${col.accentDot ?? 'bg-action'}`} />
+                    <h3 className="truncate text-[13px] font-semibold text-fg tracking-tight" title={displayTitle}>{displayTitle}</h3>
                   </div>
-                  <span className="badge shrink-0 bg-surface-2 text-ink-muted">{col.count}</span>
+                  <span className="badge shrink-0 bg-surface-subtle text-fg-secondary font-semibold tabular-nums">{col.count}</span>
                 </div>
                 {col.subtitle && (
-                  <p className="truncate pl-4.5 text-[11px] text-ink-subtle" data-testid="kanban-col-subtitle" title={col.subtitle}>
+                  <p className="truncate pl-4.5 text-[11px] text-fg-muted" data-testid="kanban-col-subtitle" title={col.subtitle}>
                     {col.subtitle}
                   </p>
                 )}
@@ -520,7 +520,7 @@ export function KanbanBoard({
 
               <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-0.5">
                 {col.cards.length === 0 ? (
-                  <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-line py-8 text-center text-[12px] text-ink-subtle">
+                  <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border/70 py-8 text-center text-[12px] text-fg-muted">
                     {isDropZone ? t('kanban.dropHere') : t('kanban.noTasks')}
                   </div>
                 ) : (

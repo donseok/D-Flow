@@ -17,11 +17,11 @@ export function DateCell({ date, isToday, todayLabel, weekday }: {
   return (
     <div className="w-14 shrink-0">
       {isToday ? (
-        <span className="badge bg-brand text-action-fg">{todayLabel}</span>
+        <span className="badge bg-action text-action-fg font-semibold shadow-xs">{todayLabel}</span>
       ) : (
         <>
-          <div className="tabular-nums text-xs font-semibold text-ink">{date.slice(5).replace('-', '.')}</div>
-          <div className="mt-0.5 text-[10px] text-ink-subtle">{weekday}</div>
+          <div className="tabular-nums text-xs font-semibold text-fg">{date.slice(5).replace('-', '.')}</div>
+          <div className="mt-0.5 text-[10px] text-fg-muted">{weekday}</div>
         </>
       )}
     </div>
@@ -29,14 +29,14 @@ export function DateCell({ date, isToday, todayLabel, weekday }: {
 }
 
 /** 카드 우상단 건수 배지 */
-export function CountBadge({ n, unit, tone = 'bg-brand-weak text-brand' }: { n: number; unit: string; tone?: string }) {
+export function CountBadge({ n, unit, tone = 'bg-action-soft text-action font-semibold' }: { n: number; unit: string; tone?: string }) {
   return <span className={`badge ${tone}`}>{n}{unit}</span>
 }
 
 /** 카드 내부 소형 빈 상태 */
 export function MiniEmpty({ text }: { text: string }) {
   return (
-    <div className="flex items-center justify-center rounded-xl border border-dashed border-line bg-surface-2/40 px-4 py-8 text-center text-xs text-ink-subtle">
+    <div className="flex items-center justify-center rounded-xl border border-dashed border-border/80 bg-surface-subtle/40 px-4 py-8 text-center text-xs text-fg-muted">
       {text}
     </div>
   )
@@ -45,10 +45,10 @@ export function MiniEmpty({ text }: { text: string }) {
 /** 라벨+큰 숫자 스탯 타일. tone 으로 값 색상 오버라이드(예: text-done). */
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: string; tone?: string }) {
   return (
-    <div className="rounded-xl border border-line bg-surface-2/50 px-4 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">{label}</div>
-      <div className={`mt-1 text-xl font-bold tabular-nums leading-none ${tone ?? 'text-ink'}`}>{value}</div>
-      {sub && <div className="mt-1 text-[11px] text-ink-muted">{sub}</div>}
+    <div className="rounded-xl border border-border/80 bg-surface-subtle/50 px-4 py-3 shadow-xs">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-muted">{label}</div>
+      <div className={`mt-1 text-xl font-bold tabular-nums leading-none tracking-tight ${tone ?? 'text-fg'}`}>{value}</div>
+      {sub && <div className="mt-1 text-[11px] text-fg-secondary">{sub}</div>}
     </div>
   )
 }
