@@ -10,10 +10,14 @@ export function EmptyState({
   action?: ReactNode
 }) {
   return (
-    <div className="card flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
-      {Icon && <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-weak text-brand"><Icon className="h-5 w-5" /></span>}
-      <h3 className="mt-4 text-base font-semibold text-ink">{title}</h3>
-      {description && <p className="mt-1 max-w-sm text-sm leading-6 text-ink-muted">{description}</p>}
+    <div className="card flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center transition-all">
+      {Icon && (
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-action/20 bg-action-soft text-action shadow-xs ring-8 ring-action-soft/40">
+          <Icon className="h-5 w-5" />
+        </span>
+      )}
+      <h3 className="mt-4 text-section font-semibold text-fg tracking-tight">{title}</h3>
+      {description && <p className="mt-1.5 max-w-sm text-body text-fg-secondary leading-relaxed">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
     </div>
   )

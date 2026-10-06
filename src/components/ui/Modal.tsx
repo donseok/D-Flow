@@ -117,7 +117,7 @@ export function Modal({
         <div className="fixed inset-0 z-(--z-modal) flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
           {/* 등장 페이드는 배경·패널에 따로 — 바깥(조상)에 opacity 전환을 두면 전환 동안 배경의 backdrop-blur 가 꺼졌다가 끝에 켜진다 */}
           <button className="absolute inset-0 bg-black/50 backdrop-blur-md transition-opacity duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0" aria-label={t('common.close')} onClick={requestClose} tabIndex={-1} />
-          <div ref={panelRef} tabIndex={-1} className={`relative z-10 flex max-h-[calc(100dvh-2rem)] w-full ${width} flex-col overflow-hidden rounded-(--radius-panel) border border-border bg-surface-raised shadow-(--shadow-modal) focus:outline-none transition-[opacity,transform] duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0 starting:scale-95`}>
+          <div ref={panelRef} tabIndex={-1} className={`relative z-10 flex max-h-[calc(100dvh-2rem)] w-full ${width} flex-col overflow-hidden rounded-(--radius-panel) border border-border dark:border-white/10 dark:ring-1 dark:ring-white/5 bg-surface-raised shadow-(--shadow-modal) focus:outline-none transition-[opacity,transform] duration-(--motion-menu) ease-(--ease-standard) starting:opacity-0 starting:scale-95`}>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/70 px-6 py-4">
               <div className="min-w-0">
                 {eyebrow && <div className="text-meta font-semibold text-fg-muted">{eyebrow}</div>}
