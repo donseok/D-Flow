@@ -170,6 +170,19 @@ describe('validateOutDir — macOS firmlink(/System/Volumes/Data/…)도 같은 
   const same = (() => {
     try { const a = statSync(alias), b = statSync(repo); return a.dev === b.dev && a.ino === b.ino } catch { return false }
   })()
+  let createdSuperpowers = false
+  beforeAll(() => {
+    const sp = join(repo, '.superpowers')
+    if (!existsSync(sp)) {
+      mkdirSync(sp, { recursive: true })
+      createdSuperpowers = true
+    }
+  })
+  afterAll(() => {
+    if (createdSuperpowers) {
+      rmSync(join(repo, '.superpowers'), { recursive: true, force: true })
+    }
+  })
   it.skipIf(!same)('firmlink 경로·그 하위 supabase/docs 거부, .superpowers 하위는 통과', () => {
     expect(() => validateOutDir(alias, repo)).toThrow()
     expect(() => validateOutDir(join(alias, 'supabase'), repo)).toThrow()
