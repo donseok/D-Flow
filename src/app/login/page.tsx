@@ -30,14 +30,19 @@ export default function Login() {
     event.preventDefault()
     setError('')
     setLoading(true)
-    const { error: authError } = await createBrowserClient().auth.signInWithPassword({ email, password })
-    if (authError) {
-      setError('이메일 또는 비밀번호가 올바르지 않습니다.')
+    try {
+      const { error: authError } = await createBrowserClient().auth.signInWithPassword({ email, password })
+      if (authError) {
+        setError('이메일 또는 비밀번호가 올바르지 않습니다.')
+        setLoading(false)
+      } else {
+        router.push('/')
+        // 클라이언트 라우터 캐시(staleTimes.dynamic 30초)에 같은 브라우저 직전 사용자의 RSC 페이로드가 남아 있을 수 있다.
+        router.refresh()
+      }
+    } catch {
+      setError('인증 서버에 연결할 수 없습니다. 로컬 Supabase DB(Docker)가 실행 중인지 확인하세요.')
       setLoading(false)
-    } else {
-      router.push('/')
-      // 클라이언트 라우터 캐시(staleTimes.dynamic 30초)에 같은 브라우저 직전 사용자의 RSC 페이로드가 남아 있을 수 있다.
-      router.refresh()
     }
   }
 

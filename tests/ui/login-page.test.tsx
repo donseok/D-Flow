@@ -72,4 +72,11 @@ describe('로그인 화면 제출', () => {
     expect(mocks.calls).toEqual([])
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('이메일 또는 비밀번호가 올바르지 않습니다.')
   })
+
+  it('네트워크 연결 실패(서버 미실행 등) 시 크래시 없이 안내 오류를 표시한다', async () => {
+    mocks.signInWithPassword.mockRejectedValue(new TypeError('Failed to fetch'))
+    await submit()
+    expect(mocks.calls).toEqual([])
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('인증 서버에 연결할 수 없습니다')
+  })
 })
