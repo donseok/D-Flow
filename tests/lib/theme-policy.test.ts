@@ -20,9 +20,10 @@ beforeEach(() => { localStorage.clear(); setCookie(null); document.documentEleme
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('resolveTheme·isThemePref', () => {
-  it('미설정은 THEME_UNSET_DEFAULT(SP9 전 light), system 은 OS 를 따른다', () => {
-    expect(THEME_UNSET_DEFAULT).toBe('light')
-    expect(resolveTheme(null, true)).toBe('light')
+  it('미설정은 THEME_UNSET_DEFAULT(SP9 system), system 은 OS 를 따른다', () => {
+    expect(THEME_UNSET_DEFAULT).toBe('system')
+    expect(resolveTheme(null, true)).toBe('dark')
+    expect(resolveTheme(null, false)).toBe('light')
     expect(resolveTheme('system', true)).toBe('dark')
     expect(resolveTheme('system', false)).toBe('light')
     expect(resolveTheme('dark', false)).toBe('dark')
@@ -36,7 +37,10 @@ describe('resolveTheme·isThemePref', () => {
 })
 
 describe('noFlashScript — 페인트 전 규칙', () => {
-  it('미설정 → light(OS 다크여도 — SP9 전)', () => { stubOs(true); expect(runScript()).toBe('light') })
+  it('미설정 → OS 다크면 dark, OS 라이트면 light(SP9 system)', () => {
+    stubOs(true); expect(runScript()).toBe('dark')
+    stubOs(false); expect(runScript()).toBe('light')
+  })
   it('system + OS 다크 → dark', () => { stubOs(true); localStorage.setItem(THEME_KEY, 'system'); expect(runScript()).toBe('dark') })
   it('localStorage 가 던지면 쿠키를 읽는다(현행 결함)', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })

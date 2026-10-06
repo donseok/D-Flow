@@ -47,9 +47,9 @@ describe('ThemeRadioGroup', () => {
     expect(checked()).toBe('다크')
     expect(radios().filter((r) => r.tabIndex === 0)).toHaveLength(1)
   })
-  it('미설정이면 마운트 뒤 기본값(light)을 선택으로 보이되 저장하지 않는다(판정 Q23)', async () => {
+  it('미설정이면 마운트 뒤 기본값(system)을 선택으로 보이되 저장하지 않는다(판정 Q23)', async () => {
     await mount()
-    expect(checked()).toBe('라이트')
+    expect(checked()).toBe('시스템')
     expect(mocks.queueUiPref).not.toHaveBeenCalled()
     expect(localStorage.getItem('dflow-theme')).toBeNull()
   })

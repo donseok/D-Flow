@@ -4,7 +4,7 @@
 export type ThemePref = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
 export const THEME_KEY = 'dflow-theme'
-export const THEME_UNSET_DEFAULT: ThemePref = 'light'
+export const THEME_UNSET_DEFAULT: ThemePref = 'system'
 export const THEME_PREFS: readonly ThemePref[] = ['system', 'light', 'dark']
 export const isThemePref = (v: unknown): v is ThemePref => v === 'system' || v === 'light' || v === 'dark'
 
