@@ -44,9 +44,9 @@ export function StatusMessage({ kind, title, detail, action, compact = false, bl
   const alert = kind === 'permission_changed' || (blocking && kind === 'partial_error')
   const frame = compact
     ? alert
-      ? 'flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-weak/30 px-3 py-2'
-      : 'flex items-start gap-2 py-2'
-    : 'flex items-start gap-3 rounded-(--radius-panel) border border-border bg-surface p-4'
+      ? 'flex items-start gap-2.5 rounded-lg border border-danger/30 bg-danger-weak/30 px-3 py-2'
+      : 'flex items-start gap-2.5 py-2'
+    : 'flex items-start gap-3.5 rounded-(--radius-panel) border border-border bg-surface p-4 shadow-xs'
   if (kind === 'loading') {
     return (
       <div role="status" aria-busy="true" data-status-kind="loading" className={`${frame} ${compact ? 'min-h-8' : 'min-h-24'}`}>
@@ -65,9 +65,9 @@ export function StatusMessage({ kind, title, detail, action, compact = false, bl
       <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${cls}`} aria-hidden />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-fg">{title}</p>
-        {detail && <div className="mt-0.5 text-body text-fg-secondary">{detail}</div>}
+        {detail && <div className="mt-1 text-sm text-fg-secondary leading-relaxed">{detail}</div>}
         {action && (
-          <div className={compact ? 'mt-1' : 'mt-3'}>
+          <div className={compact ? 'mt-1.5' : 'mt-3'}>
             {action.href !== undefined
               ? <Link href={action.href} className={LINK_ACTION}>{action.label}</Link>
               : <button type="button" onClick={action.onSelect} className={buttonClass('ghost')}>{action.label}</button>}

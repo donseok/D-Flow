@@ -235,13 +235,13 @@ export function IssuesView({
         <button
           onClick={() => { setMineOnly(v => !v); setPage(1) }}
           aria-pressed={mineOnly}
-          className={`chip cursor-pointer border transition ${mineOnly ? 'border-brand bg-brand-weak text-brand' : 'border-line bg-surface text-ink-muted hover:text-ink'}`}
+          className={`chip cursor-pointer border transition shadow-xs ${mineOnly ? 'border-action bg-action-soft text-action font-semibold' : 'border-border bg-surface text-fg-secondary hover:text-fg hover:border-border-input'}`}
         >
           {t('issue.filter.mine')}
         </button>
         {customFields === null && <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보 설정을 읽을 수 없습니다.' : 'Custom field settings could not be read.'}</p>}
         {fieldDefs.length > 0 && <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
-          <label className="space-y-1 text-xs text-ink-muted">
+          <label className="space-y-1 text-xs text-fg-secondary">
             <span>{locale === 'ko' ? '추가 정보 필터' : 'Custom field filter'}</span>
             <select aria-label={locale === 'ko' ? '추가 정보 필터' : 'Custom field filter'} value={filterDef?.key ?? ''}
               className="app-input h-9 w-full min-w-[140px] text-xs"
@@ -292,7 +292,7 @@ export function IssuesView({
                 {listFields.map(d => <col key={d.key} style={{ width: `${16000 / (1100 + 160 * listFields.length)}%` }} />)}
               </colgroup>
               <thead>
-                <tr className="whitespace-nowrap border-b border-line bg-surface-2 text-left text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-subtle">
+                <tr className="whitespace-nowrap border-b border-border/80 bg-surface-subtle text-left text-[11px] font-semibold text-fg-muted">
                   <th className="px-2.5 py-2.5">{t('issue.col.no')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.area')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.title')}</th>
@@ -324,24 +324,24 @@ export function IssuesView({
                       role="button"
                       tabIndex={0}
                       onKeyDown={e => { if (e.key === 'Enter') setViewingId(issue.id) }}
-                      className="cursor-pointer border-b border-line/70 transition last:border-0 hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2"
+                      className="cursor-pointer border-b border-border/60 transition last:border-0 hover:bg-surface-hover focus:outline-none focus-visible:bg-surface-hover"
                     >
                       <td className="whitespace-normal break-all px-2.5 py-2.5 tabular-nums">
-                        <span className="font-semibold text-ink">{issue.code}</span>
+                        <span className="font-semibold text-fg">{issue.code}</span>
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
                         {megaArea ? (
                           <span
-                            className="inline-block max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-lg border border-brand-ring bg-brand-weak px-2 py-1 text-[11px] font-semibold text-brand"
+                            className="inline-block max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-action/20 bg-action-soft px-2 py-0.5 text-[11px] font-medium text-action"
                             title={`${megaArea.code} · ${megaArea.name}`}
                           >
                             {megaArea.code} · {megaArea.name}
                           </span>
                         ) : (
-                          <span className="text-ink-subtle">{areaLabel(undefined, issue.areaId)}</span>
+                          <span className="text-fg-muted">{areaLabel(undefined, issue.areaId)}</span>
                         )}
                       </td>
-                      <td className="whitespace-normal break-words px-2.5 py-2.5 font-medium leading-5 text-ink" title={issue.title}>
+                      <td className="whitespace-normal break-words px-2.5 py-2.5 font-medium leading-5 text-fg" title={issue.title}>
                         {issue.title}
                         {/* 첨부 배지는 제목 셀 안에 둔다(열 추가는 colgroup 폭 재배분이 따른다 — 위 주석).
                             셀에 이미 title 이 걸려 있어 배지에 자체 title 을 준다.
@@ -391,7 +391,7 @@ export function IssuesView({
           </div>
           {/* 페이징 바 — 페이지당 행 수 + 범위 + 이전/다음.
               상태 변형 display 유틸은 쓰지 않는다(globals.css unlayered 안전망에 진다). */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line bg-surface-2 px-2.5 py-2 text-xs text-ink-muted">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/80 bg-surface-subtle/50 px-3 py-2 text-xs text-fg-secondary">
             <label className="flex items-center gap-1.5">
               <span>{t('issue.page.size')}</span>
               <select

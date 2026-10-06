@@ -373,7 +373,7 @@ textarea {
 /* ------------------------------------------------------------------ */
 @layer components {
   .card {
-    @apply rounded-(--radius-panel) border border-border bg-surface;
+    @apply rounded-(--radius-panel) border border-border bg-surface shadow-xs;
   }
 
   .panel-soft {
@@ -385,13 +385,13 @@ textarea {
   }
 
   .app-input {
-    @apply h-(--control-h) w-full rounded-(--radius-control) border border-border-input bg-surface px-3 text-sm text-fg
-           outline-none transition-[color,background-color,border-color] duration-(--motion-fast) placeholder:text-fg-muted
+    @apply h-(--control-h) w-full rounded-(--radius-control) border border-border-input bg-surface px-3 text-sm text-fg shadow-xs
+           outline-none transition-[color,background-color,border-color,box-shadow] duration-(--motion-fast) placeholder:text-fg-muted
            focus:border-border-focus focus:ring-2 focus:ring-border-focus/25;
   }
   .app-textarea {
-    @apply w-full rounded-(--radius-control) border border-border-input bg-surface px-3 py-2.5 text-sm text-fg
-           outline-none transition-[color,background-color,border-color] duration-(--motion-fast) placeholder:text-fg-muted
+    @apply w-full rounded-(--radius-control) border border-border-input bg-surface px-3 py-2.5 text-sm text-fg shadow-xs
+           outline-none transition-[color,background-color,border-color,box-shadow] duration-(--motion-fast) placeholder:text-fg-muted
            focus:border-border-focus focus:ring-2 focus:ring-border-focus/25;
   }
 
@@ -540,7 +540,7 @@ textarea {
 
   /* KPI 카드 (히어로 우측 레일 / 그리드) */
   .kpi-card {
-    @apply rounded-(--radius-panel) border border-border bg-surface p-5;
+    @apply rounded-(--radius-panel) border border-border bg-surface p-5 shadow-xs transition-[border-color,box-shadow] duration-(--motion-fast) hover:border-border-input/70;
   }
 
   /* 히어로 카드 — 평면 표면(D13). 어두운 그라데이션 위 밝은 글자 전제를 버렸다 */

@@ -4,11 +4,11 @@ import type { LucideIcon } from 'lucide-react'
 type Tone = 'default' | 'brand' | 'success' | 'warning' | 'danger'
 
 const TONE: Record<Tone, { value: string; iconWrap: string }> = {
-  default: { value: 'text-fg', iconWrap: 'bg-surface-subtle text-fg-secondary' },
-  brand: { value: 'text-action', iconWrap: 'bg-action-soft text-action' },
-  success: { value: 'text-success', iconWrap: 'bg-success-weak text-success' },
-  warning: { value: 'text-warning', iconWrap: 'bg-warning-weak text-warning' },
-  danger: { value: 'text-danger', iconWrap: 'bg-danger-weak text-danger' },
+  default: { value: 'text-fg', iconWrap: 'bg-surface-subtle text-fg-secondary border border-border/50' },
+  brand: { value: 'text-action', iconWrap: 'bg-action-soft text-action border border-action/20' },
+  success: { value: 'text-success', iconWrap: 'bg-success-weak text-success border border-success/20' },
+  warning: { value: 'text-warning', iconWrap: 'bg-warning-weak text-warning border border-warning/20' },
+  danger: { value: 'text-danger', iconWrap: 'bg-danger-weak text-danger border border-danger/20' },
 }
 
 /** variant='hero' 의 아이콘 색 — 히어로가 밝은 표면이 된 뒤(SP3b UI-1)라 본색과 같다. 변형 삭제는 UI-2b 어댑터 몫 */
@@ -35,14 +35,14 @@ export function KpiCard({
 }) {
   if (variant === 'hero') {
     return (
-      <div className="rounded-(--radius-panel) border border-border bg-surface-subtle p-4">
+      <div className="rounded-(--radius-panel) border border-border bg-surface-subtle p-4 shadow-xs">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-meta font-semibold text-fg-secondary">{label}</div>
-            <div className="mt-1.5 text-kpi leading-none tabular-nums text-fg">{value}</div>
-            {sub && <div className="mt-1.5 text-xs text-fg-secondary">{sub}</div>}
+            <div className="mt-1.5 text-kpi font-semibold leading-none tabular-nums tracking-tight text-fg">{value}</div>
+            {sub && <div className="mt-1.5 text-xs text-fg-secondary leading-normal">{sub}</div>}
           </div>
-          {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-(--radius-control) border border-border bg-surface ${HERO_ICON[tone]}`}><Icon className="h-4 w-4" /></span>}
+          {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-(--radius-control) border border-border bg-surface shadow-xs ${HERO_ICON[tone]}`}><Icon className="h-4 w-4" /></span>}
         </div>
         {children}
       </div>
@@ -55,10 +55,10 @@ export function KpiCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-meta font-semibold text-fg-muted">{label}</div>
-          <div className={`mt-1.5 text-kpi leading-none tabular-nums ${tw.value}`}>{value}</div>
-          {sub && <div className="mt-1.5 text-xs text-fg-secondary">{sub}</div>}
+          <div className={`mt-1.5 text-kpi font-semibold leading-none tabular-nums tracking-tight ${tw.value}`}>{value}</div>
+          {sub && <div className="mt-1.5 text-xs text-fg-secondary leading-normal">{sub}</div>}
         </div>
-        {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tw.iconWrap}`}><Icon className="h-4 w-4" /></span>}
+        {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-xs ${tw.iconWrap}`}><Icon className="h-4 w-4" /></span>}
       </div>
       {children}
     </div>
