@@ -16,7 +16,8 @@ export function SegmentedTabs<T extends string>({
 }) {
   const pad = size === 'sm' ? 'px-2.5 py-1.5 text-[13px]' : 'px-3.5 py-2 text-sm'
   return (
-    <div className="seg" role="tablist">
+    // 좁은 화면에서 항목이 눌려 글자 단위로 줄바꿈되지 않게 한다 — 항목은 한 줄을 지키고 넘치면 줄 안에서 가로로 민다
+    <div className="seg max-w-full overflow-x-auto" role="tablist">
       {tabs.map(tab => {
         const active = tab.key === value
         const Icon = tab.icon
@@ -26,7 +27,7 @@ export function SegmentedTabs<T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(tab.key)}
-            className={`seg-item ${pad} ${active ? 'seg-item-active' : ''}`}
+            className={`seg-item shrink-0 whitespace-nowrap ${pad} ${active ? 'seg-item-active' : ''}`}
           >
             {Icon && <Icon className="h-3.5 w-3.5" />}
             {tab.label}

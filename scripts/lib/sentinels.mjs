@@ -4,9 +4,9 @@
 // tests/negative/sentinels.test.ts 가 두 사본이 같은지 대조한다. 일치 규칙은 여기 하나다 — 픽스처가 재수출한다.
 import JSZip from 'jszip'
 
-/** 정당한 복합어 — 센티널을 품지만 옛 기본값이 아니다(2026-10-01 src 실측: 사전 wbs·settings·issues, excel/template.ts,
- *  actions/wbs.ts). 닫힌 목록이다 — 늘릴 때는 그 문자열이 정당한 사전·코드 문자열이라는 실측 근거와 존재 단언을 같은 커밋에 둔다(스펙 K12) */
-export const SENTINEL_MASKS = Object.freeze(['영업일', '영업관리팀'])
+/** 정당한 복합어 — 센티널을 품지만 옛 기본값이 아니다(2026-10-01 src 실측: 사전 wbs·settings, excel/template.ts,
+ *  actions/wbs.ts. 이슈 사전의 부서 예시는 2026-10-09 업종 중립 예시로 바뀌어 그 마스크를 뺐다). 닫힌 목록이다 — 늘릴 때는 그 문자열이 정당한 사전·코드 문자열이라는 실측 근거와 존재 단언을 같은 커밋에 둔다(스펙 K12) */
+export const SENTINEL_MASKS = Object.freeze(['영업일'])
 
 const ASCII_ALNUM = /^[A-Za-z0-9]+$/
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

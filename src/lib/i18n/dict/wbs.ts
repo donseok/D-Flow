@@ -47,14 +47,14 @@ export const wbsKo = {
   'wbs.fontIncrease': '글자 크게',
   'wbs.fontReset': '기본 크기로',
   'wbs.fontCurrent': '현재 글자 크기',
-  'wbs.addPhase': 'Phase 추가',
-  'wbs.addPhaseShort': 'Phase',
+  'wbs.addPhase': '최상위 항목 추가',
+  'wbs.addPhaseShort': '최상위 항목',
   'wbs.weeklyReport': '주간보고',
   'wbs.weeklyReportTitle': '주간보고서 생성',
   'wbs.ariaFullscreen': 'WBS 전체화면 보기',
-  // 새 Phase 입력
-  'wbs.newPhasePlaceholder': '새 Phase 이름 (예: 1. 준비)',
-  'wbs.newPhaseAria': '새 Phase 이름',
+  // 새 1레벨 항목 입력 — {level} 은 그 프로젝트의 1레벨 단계 이름(core.level_labels 첫 값)
+  'wbs.newPhasePlaceholder': '새 {level} 이름 (예: 1. 준비)',
+  'wbs.newPhaseAria': '새 {level} 이름',
   'wbs.adding': '추가 중…',
   // 인라인 편집 · 토스트
   'wbs.ariaEditWeight': '가중치 편집',
@@ -72,7 +72,7 @@ export const wbsKo = {
   'wbs.approveStepStale': '승인 단계가 바뀌었습니다 — 새로 불러온 단계를 확인한 뒤 다시 승인하세요.',
   'wbs.stageXxNeedsApproval': '승인 단계가 둘 이상이라 완료는 검수 대기에서 단계 승인으로만 됩니다.',
   'wbs.actualLocked': '완료는 승인 버튼으로 처리합니다 — 에이전트 관할 작업(위임됨·작업 중·검수 대기)은 99% 까지 입력할 수 있습니다. 직접 완료하려면 위임을 끄세요.',
-  'wbs.toastPhaseAdded': 'Phase가 추가되었습니다',
+  'wbs.toastPhaseAdded': '{level} 항목을 추가했습니다',
   'wbs.toastAddFail': '추가 실패',
   'wbs.focusNotFound': '이동하려는 작업을 찾을 수 없습니다 (삭제되었거나 목록이 바뀌었습니다)',
   // 컬럼 헤더
@@ -89,7 +89,7 @@ export const wbsKo = {
   'wbs.colPlannedStart': '계획시작',
   'wbs.colPlannedEnd': '계획종료',
   'wbs.colWeight': '가중치',
-  'wbs.weightTotalTitle': '1레벨(Phase) 가중치 합계 — 100%가 아니면 배분 확인 필요',
+  'wbs.weightTotalTitle': '1레벨({level}) 가중치 합계 — 100%가 아니면 배분 확인 필요',
   'wbs.unsetWeight': '미지정 {n}개',
   'wbs.unsetWeightTitle': '가중치를 비운 항목 — 같은 형제 그룹 안에서 1(같은 몫)로 계산합니다',
   'wbs.colPlannedPct': '계획%',

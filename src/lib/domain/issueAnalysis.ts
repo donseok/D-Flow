@@ -11,7 +11,7 @@ export type IssueSourceType = string
 export const ISSUE_MAJOR_NAME_MAX = 100
 /**
  * 02.01 같은 체번 접두가 이름에 박히는 것을 막는다 — 번호 정본은 DB 체번 + formatIssueMajorCode.
- * 템플릿 표기('02.01 주문관리')를 복사해 붙이면 dedupe 키가 갈라져 같은 Major가 이중 체번된다.
+ * 템플릿 표기('02.01 신청 처리')를 복사해 붙이면 dedupe 키가 갈라져 같은 Major가 이중 체번된다.
  * 0062 테이블 check·RPC 검증과 같은 패턴을 사용한다.
  */
 export const ISSUE_MAJOR_NAME_NUMBERED_RE = /^\s*[\[({（【]?\s*\d{2}(?:\.\d{2})+/

@@ -281,6 +281,8 @@ export function WbsGanttSheet({
 }) {
   const router = useRouter()
   const { t } = useLocale()
+  // 1레벨 단계 이름 — 추가 입력·토스트·가중치 합계 툴팁·보고서 모달이 'Phase' 대신 프로젝트 설정의 이름을 쓴다(라벨 밖이면 배지 규칙 'N단')
+  const topLevelLabel = levelBadgeText(0, false, levelLabels)
   const legendTeams = useTeamCodes()
   const cal = useMemo(() => calendarOf(calendar), [calendar])
   const slotOf = useTeamSlot()
@@ -1303,7 +1305,7 @@ export function WbsGanttSheet({
     setAddBusy(true)
     const res = await addWbsItem(projectId, null, addPhase.trim())
     setAddBusy(false)
-    if (res.ok) { setAddPhase(null); setToast({ kind: 'ok', msg: t('wbs.toastPhaseAdded') }); router.refresh() }
+    if (res.ok) { setAddPhase(null); setToast({ kind: 'ok', msg: t('wbs.toastPhaseAdded').replace('{level}', topLevelLabel) }); router.refresh() }
     else setToast({ kind: 'err', msg: wbsToastText(t, res.error, 'wbs.toastAddFail') })
   }
 
@@ -1630,8 +1632,8 @@ export function WbsGanttSheet({
             value={addPhase}
             onChange={e => setAddPhase(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') submitAddPhase(); else if (e.key === 'Escape') setAddPhase(null) }}
-            placeholder={t('wbs.newPhasePlaceholder')}
-            aria-label={t('wbs.newPhaseAria')}
+            placeholder={t('wbs.newPhasePlaceholder').replace('{level}', topLevelLabel)}
+            aria-label={t('wbs.newPhaseAria').replace('{level}', topLevelLabel)}
             className="app-input h-9 flex-1 text-sm"
           />
           <button onClick={submitAddPhase} disabled={addBusy || !addPhase.trim()} className="btn btn-primary h-9 px-4 text-xs">{addBusy ? t('wbs.adding') : t('common.add')}</button>
@@ -1651,6 +1653,7 @@ export function WbsGanttSheet({
         startDate={startDate}
         endDate={endDate}
         canGenerate={isAdmin}
+        topLevelLabel={topLevelLabel}
       />
 
       {/* ── 단일 스크롤 컨테이너 ── */}
@@ -1764,7 +1767,7 @@ export function WbsGanttSheet({
                 ? undefined
                 : {
                     text: `(${rootWeightTotalPct}%)`,
-                    title: t('wbs.weightTotalTitle'),
+                    title: t('wbs.weightTotalTitle').replace('{level}', topLevelLabel),
                     warn: Math.abs(rootWeightTotalPct - 100) > 0.01,
                   },
               unsetWeights > 0

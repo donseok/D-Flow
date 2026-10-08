@@ -20,6 +20,7 @@ export function ReportButton({
   variant = 'hero',
   label = '주간 보고서',
   canGenerate,
+  topLevelLabel = null,
 }: {
   projectId: string
   items: ComputedItem[]
@@ -32,6 +33,8 @@ export function ReportButton({
   label?: string
   /** 모달 안 'AI 브리핑 생성' 버튼 노출 여부 = isProjectAdmin(actor, projectId). */
   canGenerate: boolean
+  /** 1레벨 단계 이름 — 모달에 그대로 넘긴다(없으면 모달이 중립 문구) */
+  topLevelLabel?: string | null
 }) {
   const [open, setOpen] = useState(false)
 
@@ -62,6 +65,7 @@ export function ReportButton({
         startDate={startDate}
         endDate={endDate}
         canGenerate={canGenerate}
+        topLevelLabel={topLevelLabel}
       />
     </>
   )

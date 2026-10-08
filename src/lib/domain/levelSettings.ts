@@ -3,6 +3,10 @@
 
 export const LEVEL_LABELS_MAX = 10
 
+/** 단계 이름을 주입받지 못한 호출의 폴백(옛 3단 표기) — 주간 모델·임베딩 문서가 같은 값을 쓴다. `core.level_labels` 는 생성 때 필수라
+ *  레지스트리 기본값이 없다(REQUIRED_ON_CREATE). 운영 경로는 늘 프로젝트 설정을 넘기므로 이 값은 무인자 호출(시험·집계 전용)에서만 보인다. */
+export const FALLBACK_LEVEL_LABELS: readonly string[] = ['Phase', 'Task', 'Activity']
+
 export interface LevelSettingsInput {
   labels: string[]
   /** 기존 트리의 최대 depth(0-base). 트리가 비어 있으면 null — 축소 검증을 건너뛴다. */

@@ -4,15 +4,17 @@ export const kanbanKo = {
   // 페이지 히어로/KPI
   'kanban.projectFallback': '프로젝트',
   'kanban.heroTitleSuffix': '칸반 보드',
-  'kanban.heroDesc': '작업을 Phase·담당자·상태별로 한눈에 관리하세요.',
+  'kanban.heroDesc': '작업을 최상위 단계·담당자·상태별로 한눈에 관리하세요.',
   'kanban.kpiTotalTasks': '전체 작업',
   'kanban.kpiTotalTasksSub': '말단 작업 카드',
   'kanban.kpiOfTotalPrefix': '전체 ',
   'kanban.kpiOfTotalSuffix': '건 중',
   'kanban.kpiOverallProgress': '전체 진척률',
-  'kanban.kpiOverallProgressSub': 'Phase 평균 실적',
+  'kanban.kpiOverallProgressSub': '최상위 단계 평균 실적',
   // 툴바
-  'kanban.byPhase': 'Phase별',
+  // {level} 은 그 프로젝트의 1레벨 단계 이름(core.level_labels 첫 값) — 못 받으면 topLevelFallback
+  'kanban.byPhase': '{level}별',
+  'kanban.topLevelFallback': '최상위 단계',
   'kanban.byOwner': '담당자별',
   'kanban.byStatus': '상태별',
   'kanban.searchPlaceholder': '작업명·담당자 검색',
@@ -22,7 +24,7 @@ export const kanbanKo = {
   'kanban.dropHere': '여기에 카드를 놓으세요',
   'kanban.noTasks': '작업 없음',
   'kanban.emptyTitle': '표시할 작업이 없습니다',
-  'kanban.emptyDesc': '설정에서 WBS 엑셀을 가져오면 작업이 Phase·담당자·상태별 카드로 나타납니다.',
+  'kanban.emptyDesc': '설정에서 WBS 엑셀을 가져오면 작업이 {level}·담당자·상태별 카드로 나타납니다.',
   // 에러
   'kanban.errChange': '변경에 실패했습니다.',
   // 카드 접근성

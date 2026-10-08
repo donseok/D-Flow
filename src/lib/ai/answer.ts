@@ -5,6 +5,7 @@ import { ensureProjectIndexed } from './ensure-index'
 import { generateAnswer, generateAnswerStream, type ChatMessage } from './llm'
 import { aiAvailable, type AiScope } from '@/lib/modules/aiAvailable'
 import { ASSISTANT_NAME, BRAND } from '@/lib/branding'
+import { ANSWER_LANGUAGE_RULE } from './answerLanguage'
 
 export interface AnswerInput {
   projectId: string | null
@@ -23,9 +24,10 @@ export interface AnswerResult {
 }
 
 const SYSTEM = `너는 프로젝트 관리 도구 ${BRAND.productName}의 ${ASSISTANT_NAME.ko}야.
-사용자의 프로젝트·작업(WBS) 데이터에 대해 한국어로 친근하고 간결하게 답한다.
+사용자의 프로젝트·작업(WBS) 데이터에 대해 친근하고 간결하게 답한다.
 
 규칙:
+- ${ANSWER_LANGUAGE_RULE}
 - 아래 [데이터]에 있는 사실과 숫자만 근거로 답한다. [데이터]에 없는 내용만 모른다고 말한다.
 - [데이터]에는 프로젝트 현황 요약과 '전체 작업 목록'(담당·상태·기간·진행률·산출물·업무)이 들어 있다.
   사용자가 특정 작업/담당자/일정/진행률을 물으면 이 목록에서 해당 항목을 찾아 구체적으로 답한다.

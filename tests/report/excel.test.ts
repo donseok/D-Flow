@@ -35,6 +35,15 @@ async function loadWorkbook(): Promise<ExcelJS.Workbook> {
   return wb
 }
 
+describe('buildReportWorkbook — 1레벨 단계 이름', () => {
+  it("'전체 작업' 보조 문구는 프로젝트의 1레벨 단계 이름으로 센다", async () => {
+    const model = buildWeeklyReportModel(items, project, '2026-06-30', { teams: TEST_TEAMS, calendar: calSeoulMon, levelLabels: ['단계', '작업'] })
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(await buildReportWorkbook(model))
+    expect(wb.getWorksheet('1.공정보고')!.getCell(8, 3).value).toBe(`단계 ${model.meta.phaseCount}개`)
+  })
+})
+
 describe('buildReportWorkbook — 공정율 소수 1자리 표기', () => {
   it('핵심 지표: 프로젝트 진척·계획·격차가 소수 1자리 문자열', async () => {
     const ws = (await loadWorkbook()).getWorksheet('1.공정보고')!

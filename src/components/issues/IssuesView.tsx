@@ -558,6 +558,7 @@ export function IssuesView({
         severities={severities}
         sources={sources}
         statuses={statusDefs}
+        analysisVisible={analysisVisible}
         issue={viewing}
         members={members}
         memberName={memberName}

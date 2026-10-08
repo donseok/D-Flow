@@ -61,7 +61,7 @@ export function validateParsed(v: unknown): ParsedCommand | null {
   return out
 }
 
-const PARSE_SYSTEM = `너는 WBS 명령 파서다. 사용자의 한국어 명령을 JSON 하나로만 변환한다.
+const PARSE_SYSTEM = `너는 WBS 명령 파서다. 사용자의 명령을 JSON 하나로만 변환한다.
 스키마: {"action":"set_actual|set_dates|complete","targetQuery":"작업명 표현","actualPct":숫자?,"plannedStart":"YYYY-MM-DD"?,"plannedEnd":"YYYY-MM-DD"?}
 규칙: JSON 외 텍스트 금지. 날짜는 반드시 YYYY-MM-DD (연도 불명시는 2026). 명령이 아니면 {"action":"none"}을 출력.`
 

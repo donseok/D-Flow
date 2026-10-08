@@ -7,6 +7,7 @@ import { Search, X, FolderOpen, ListTodo, ArrowRight, Loader2 } from 'lucide-rea
 import { useEscHandler, ESC_PRIORITY } from '@/lib/ui/escStack'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { searchTitles, type SearchProjectItem, type SearchWbsItem } from '@/app/actions/globalSearch'
+import { BRAND } from '@/lib/branding'
 
 export interface NavShortcut {
   id: string
@@ -368,7 +369,7 @@ export function GlobalSearchDialog({
             <span>↵ 선택</span>
             <span>ESC 닫기</span>
           </div>
-          <span>D-Flow 검색 v1</span>
+          <span>{BRAND.productName} 검색 v1</span>
         </div>
       </div>
     </div>,

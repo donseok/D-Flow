@@ -69,7 +69,7 @@ function buildProcessSheet(ws: Worksheet, model: WeeklyReportModel) {
   const ks: K[] = [
     { label: '프로젝트 진척', value: `${formatPct1(kpi.actual)}%`, sub: `계획 ${formatPct1(kpi.planned)}%`, tone: red },
     { label: '계획-실적 격차', value: `${formatPp1(kpi.variance)}%p`, sub: kpi.variance < 0 ? '미달' : '양호', tone: kpi.variance < 0 ? red : grn },
-    { label: '전체 작업', value: kpi.total, sub: `${meta.phaseCount}개 Phase`, tone: purp },
+    { label: '전체 작업', value: kpi.total, sub: `${meta.topLevelLabel} ${meta.phaseCount}개`, tone: purp },
     { label: '완료', value: kpi.done, sub: `${kpi.doneRatio}%`, tone: grn },
     { label: '진행중', value: kpi.inProgress, sub: `${kpi.inProgressRatio}%`, tone: purp },
     { label: '대기', value: kpi.notStarted, sub: '미착수', tone: purp },

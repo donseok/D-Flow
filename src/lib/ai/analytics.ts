@@ -6,6 +6,7 @@
 
 import { buildWeeklyReportModel, type WeeklyReportModel } from '@/lib/report/weekly'
 import { overallProgress } from '@/lib/domain/rollup'
+import { FALLBACK_LEVEL_LABELS } from '@/lib/domain/levelSettings'
 import type { ComputedItem, ProjectMember, Status, TeamCode } from '@/lib/domain/types'
 import type { WorkCalendar } from '@/lib/domain/calendar'
 
@@ -366,7 +367,7 @@ export function buildDocuments(
   calendar: WorkCalendar,
   teams: readonly TeamCode[],
   members: ProjectMember[] = [],
-  levelLabels: readonly string[] = ['Phase', 'Task', 'Activity'],
+  levelLabels: readonly string[] = FALLBACK_LEVEL_LABELS,
 ): EmbedDoc[] {
   const analysis = analyzeProject(items, projectName, today, calendar, teams, members)
   const docs: EmbedDoc[] = []

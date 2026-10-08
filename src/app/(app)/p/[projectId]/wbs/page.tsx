@@ -123,6 +123,7 @@ export default async function WbsPage({
             today={today}
             stageLabels={stageLabels.ok ? stageLabels.value : null}
             approvalSteps={approvalSteps.ok ? approvalSteps.value : null}
+            levelLabels={labels.value}
           />
         </> : <WbsGanttSheet
           key={projectId}

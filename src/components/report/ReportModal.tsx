@@ -48,6 +48,7 @@ export function ReportModal({
   startDate,
   endDate,
   canGenerate,
+  topLevelLabel = null,
 }: {
   open: boolean
   onClose: () => void
@@ -62,7 +63,10 @@ export function ReportModal({
    *  ensureProjectBriefAction 은 requireProjectAdmin 이라 권한이 없으면 항상 실패한다 —
    *  버튼을 남겨 두면 그 거부가 '생성 실패 — 다시 시도'로 표시돼 장애로 오인된다. */
   canGenerate: boolean
+  /** 1레벨 단계 이름(core.level_labels 첫 값) — 진척 표의 머리·제목에 쓴다. 못 받으면(설정 손상 등) 유형 중립 문구 */
+  topLevelLabel?: string | null
 }) {
+  const topLabel = topLevelLabel?.trim() || '최상위 단계'
   // '팀별 진척' 대상 = 활성 + progressVisible(팀 마스터) — 대시보드 카드와 동일 기준
   const progressTeams = useTeams().filter(tm => tm.progressVisible).map(tm => tm.code)
   const slotOf = useTeamSlot()
@@ -188,11 +192,11 @@ export function ReportModal({
   )
 
   return (
-    <Modal open={open} onClose={onClose} eyebrow="Weekly report" title="주간 보고서" size="lg" footer={footer}>
+    <Modal open={open} onClose={onClose} title="주간 보고서" size="lg" footer={footer}>
       <div className="print-area space-y-6">
         {/* ── 보고서 헤더 ── */}
         <header className="card overflow-hidden p-6">
-          <div className="eyebrow">주간 보고서 · Weekly Report</div>
+          <div className="eyebrow">주간 보고서</div>
           <h2 className="mt-2 text-2xl font-bold tracking-tight text-fg">{meta.projectName}</h2>
           {meta.description && (
             <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">{meta.description}</p>
@@ -218,8 +222,8 @@ export function ReportModal({
         {/* ── 전체 요약 KPI ── */}
         {/* 열 수는 모달 폭(672px)에 맞춘다 — 4열이면 28px 수치가 칸을 넘고 아이콘과 겹친다(U1b 수정 G4) */}
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <KpiCard label="전체 실적" value={`${kpi.actual}%`} sub="Actual progress" icon={Activity} tone="brand" />
-          <KpiCard label="전체 계획" value={`${kpi.planned}%`} sub="Planned" icon={CalendarRange} tone="default" />
+          <KpiCard label="전체 실적" value={`${kpi.actual}%`} sub="현재까지 실적" icon={Activity} tone="brand" />
+          <KpiCard label="전체 계획" value={`${kpi.planned}%`} sub="기준일 계획" icon={CalendarRange} tone="default" />
           <KpiCard
             label="계획 대비 편차"
             value={`${kpi.variance > 0 ? '+' : ''}${kpi.variance}%p`}
@@ -236,15 +240,15 @@ export function ReportModal({
           />
         </section>
 
-        {/* ── Phase별 진척 ── */}
-        <SectionCard eyebrow="By phase" title="Phase별 진척" icon={Layers}>
+        {/* ── 1레벨 단계별 진척 ── */}
+        <SectionCard title={`${topLabel}별 진척`} icon={Layers}>
           {phases.length === 0 ? (
-            <p className="text-sm text-fg-secondary">표시할 Phase가 없습니다.</p>
+            <p className="text-sm text-fg-secondary">표시할 {topLabel} 항목이 없습니다.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-meta leading-4 text-fg-muted">
-                  <th className="py-2 pr-3 font-semibold">Phase</th>
+                  <th className="py-2 pr-3 font-semibold">{topLabel}</th>
                   <th className="px-3 py-2 text-right font-semibold">계획</th>
                   <th className="px-3 py-2 text-right font-semibold">실적</th>
                   <th className="px-3 py-2 text-right font-semibold">편차</th>
@@ -274,7 +278,7 @@ export function ReportModal({
         </SectionCard>
 
         {/* ── 지연 작업 목록 ── */}
-        <SectionCard eyebrow="At risk" title="지연 작업 목록" icon={AlertTriangle}>
+        <SectionCard title="지연 작업 목록" icon={AlertTriangle}>
           {delayed.length === 0 ? (
             <p className="text-sm text-fg-secondary">현재 지연된 작업이 없습니다.</p>
           ) : (
@@ -306,7 +310,7 @@ export function ReportModal({
         </SectionCard>
 
         {/* ── 팀별 진척현황 ── */}
-        <SectionCard eyebrow="By owner" title="팀별 진척현황" icon={Users}>
+        <SectionCard title="팀별 진척현황" icon={Users}>
           <div className="space-y-4">
             {teams.map(s => (
               <div key={s.team} className="flex items-center gap-3">

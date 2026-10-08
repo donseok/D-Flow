@@ -93,9 +93,8 @@ describe('findSentinels — 일치 규칙', () => {
     for (const s of ['ERPx', 'Times New Roman', 'a\\\\nERPs', 'nERP']) expect(findSentinels(s, SP4), s).toEqual([])
   })
 
-  it('한글 센티널은 부분 문자열 — 닫힌 마스크 복합어(영업일·영업관리팀)만 먼저 지운다', () => {
+  it('한글 센티널은 부분 문자열 — 닫힌 마스크 복합어(영업일)만 먼저 지운다', () => {
     expect(findSentinels('계획 기간에 영업일이 없는 작업', SP4)).toEqual([])
-    expect(findSentinels('예: 영업관리팀', SP4)).toEqual([])
     expect(findSentinels('영업 실적과 영업일', SP4)).toEqual(['영업'])
     expect(findSentinels('물류 정리', SP4)).toEqual(['물류'])
   })
@@ -106,9 +105,8 @@ describe('findSentinels — 일치 규칙', () => {
   })
 
   it('마스크는 닫힌 목록이고 각 문자열이 src 의 정당한 문자열로 실제로 있다(낡은 마스크 금지 — 스펙 K12)', () => {
-    expect([...SENTINEL_MASKS]).toEqual(['영업일', '영업관리팀'])
+    expect([...SENTINEL_MASKS]).toEqual(['영업일'])
     expect(readFileSync(join(process.cwd(), 'src/lib/i18n/dict/wbs.ts'), 'utf8')).toContain('영업일')
-    expect(readFileSync(join(process.cwd(), 'src/lib/i18n/dict/issues.ts'), 'utf8')).toContain('영업관리팀')
   })
 })
 

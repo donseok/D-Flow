@@ -87,7 +87,7 @@ function stubModel(today: string): WeeklyReportModel {
       weekDays: ['2026-09-28'], weekDayLabels: ['월'],
       nextWeekStart: '2026-10-05', nextWeekDays: [], nextWeekDayLabels: [],
       prevWeekStart: '2026-09-21', prevWeekDays: [], prevWeekRange: 'p',
-      totalLeaves: 0, phaseCount: 0,
+      totalLeaves: 0, phaseCount: 0, topLevelLabel: 'Phase',
     },
     kpi: {
       planned: 0, actual: 0, variance: 0, total: 0, done: 0, inProgress: 0, notStarted: 0, delayed: 0,

@@ -14,6 +14,7 @@ import {
   revokeIntegrationCredential,
   type WorkspaceCredentialItem,
 } from '@/app/actions/integrations'
+import { BRAND } from '@/lib/branding'
 
 interface ProjectOption {
   id: string
@@ -551,7 +552,7 @@ export function IntegrationCredentialsManager({
                 </button>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                외부 시스템의 팀 코드와 D-Flow 팀이 다를 때 매핑을 지정합니다.
+                외부 시스템의 팀 코드와 {BRAND.productName} 팀이 다를 때 매핑을 지정합니다.
               </p>
 
               {teamMappings.length > 0 && (

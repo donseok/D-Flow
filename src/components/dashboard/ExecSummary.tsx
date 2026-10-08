@@ -20,6 +20,7 @@ export async function ExecSummary({
   items, projectId, projectName, projectDescription, startDate, endDate, today,
   milestoneKeywords,
   canGenerateBrief = false,
+  topLevelLabel = null,
 }: {
   items: ComputedItem[]
   projectId: string
@@ -32,6 +33,8 @@ export async function ExecSummary({
   milestoneKeywords: readonly string[]
   /** 보고서 모달의 AI 브리핑 인라인 생성 권한(프로젝트 관리자 이상). 기본 false = fail-closed. */
   canGenerateBrief?: boolean
+  /** 1레벨 단계 이름(core.level_labels 첫 값) — 보고서 모달의 진척 표 머리. 손상·미주입이면 null(모달이 중립 문구) */
+  topLevelLabel?: string | null
 }) {
   const locale = await getServerLocale()
   const tr = (k: DictKey) => t(locale, k)
@@ -72,7 +75,7 @@ export async function ExecSummary({
         <ReportButton
           variant="surface" label={tr('dash.exec.reportTitle')} projectId={projectId} items={items} projectName={projectName}
           projectDescription={projectDescription} today={today} startDate={startDate} endDate={endDate}
-          canGenerate={canGenerateBrief}
+          canGenerate={canGenerateBrief} topLevelLabel={topLevelLabel}
         />
       </div>
 

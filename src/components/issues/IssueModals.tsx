@@ -179,9 +179,12 @@ function megaAreaName(id: string, areas: readonly IssueAreaRef[]): string {
 
 export function IssueDetailModal({
   issue, members, memberName, canEdit, canWrite, currentUserId, isProjectAdmin, today, timeZone, areas = [], onClose, onEdit, onDelete,
-  severities, sources, statuses,
+  severities, sources, statuses, analysisVisible = true,
 }: {
   issue: Issue | null
+  /** 이슈 분석 모듈(issue_analysis)이 이 프로젝트에서 켜져 있는가 — 꺼져 있으면 분석서 칸(Major·Sub Process 등)을 그리지 않는다.
+   *  이미 값이 있는 이슈는 그대로 보인다(끄기 전 입력을 숨기지 않는다). 영역은 이슈 코드의 축이라 모듈과 무관하게 보인다 */
+  analysisVisible?: boolean
   /** 이 프로젝트의 심각도·출처(설정 어휘) */
   severities: readonly SeverityDef[]
   sources: readonly SourceDef[]
@@ -247,6 +250,7 @@ export function IssueDetailModal({
       ? `${formatIssueMajorCode(areas.find(area => area.id === issue.areaId)?.code ?? '?', issue.majorSeq)} · ${issue.majorName}`
       : issue.majorName
     : '—'
+  const showAnalysisRows = analysisVisible || !!issue && !!(issue.majorName || issue.subProcess || issue.ownerDepartment || issue.relatedSystems.length || issue.sourceDetail)
   const analysisSourceLabel = issue?.sourceType ? vocabLabel('issues.sources', sources, issue.sourceType, t) : '—'
 
   // 표시용 담당자 칩 — 가나다순, 회의 상세 참석자 칩과 같은 표기(이름 · 팀코드).
@@ -359,16 +363,16 @@ export function IssueDetailModal({
             </div>
           )}
 
-          <section className="rounded-2xl border border-border bg-surface-subtle p-4">
-            <div className="text-meta font-semibold text-fg-muted">
+          {(showAnalysisRows || issue.areaId) && <section className="rounded-2xl border border-border bg-surface-subtle p-4">
+            {showAnalysisRows && <div className="mb-3 text-meta font-semibold text-fg-muted">
               {t('issue.analysis.fieldsTitle')}
-            </div>
-            <dl className="mt-3 grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
+            </div>}
+            <dl className="grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.area')}</dt>
                 <dd className="mt-0.5 text-fg">{analysisMegaLabel}</dd>
               </div>
-              <div>
+              {showAnalysisRows && <><div>
                 <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.majorProcess')}</dt>
                 <dd className="mt-0.5 text-fg">{analysisMajorLabel}</dd>
               </div>
@@ -399,9 +403,9 @@ export function IssueDetailModal({
               <div className="sm:col-span-2">
                 <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.sourceDetail')}</dt>
                 <dd className="mt-0.5 whitespace-pre-wrap text-fg">{issue.sourceDetail || '—'}</dd>
-              </div>
+              </div></>}
             </dl>
-          </section>
+          </section>}
 
           <CustomFieldValuesEditor rowId={issue.id} values={issue.custom} canEdit={canWrite} />
 

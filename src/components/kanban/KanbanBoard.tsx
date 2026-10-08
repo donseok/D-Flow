@@ -55,6 +55,7 @@ export function KanbanBoard({
   readOnly = false,
   stageLabels = null,
   approvalSteps = null,
+  levelLabels = null,
 }: {
   projectId: string
   items: ComputedItem[]
@@ -65,9 +66,12 @@ export function KanbanBoard({
   readOnly?: boolean
   stageLabels?: Readonly<Partial<Record<string, string>>> | null
   approvalSteps?: readonly ApprovalStepDef[] | null
+  /** 프로젝트 단계 이름(core.level_labels) — 1레벨 묶음 탭·빈 화면 문구가 그 이름을 쓴다. 못 받으면 유형 중립 문구 */
+  levelLabels?: readonly string[] | null
 }) {
   const router = useRouter()
   const { t } = useLocale()
+  const topLevelLabel = levelLabels?.[0] ?? t('kanban.topLevelFallback')
   const { toast } = useToast()
   const teamCodes = useTeamCodes()
   const teams = useTeams()
@@ -415,7 +419,7 @@ export function KanbanBoard({
       <div data-kanban-board><EmptyState
         icon={Inbox}
         title={t('kanban.emptyTitle')}
-        description={t('kanban.emptyDesc')}
+        description={t('kanban.emptyDesc').replace('{level}', topLevelLabel)}
       /></div>
     )
   }
@@ -431,7 +435,7 @@ export function KanbanBoard({
           tabs={[
             { key: 'progress', label: t('kanban.byProgress'), icon: Columns3 },
             { key: 'flow', label: t('kanban.byFlow'), icon: GitBranch },
-            { key: 'phase', label: t('kanban.byPhase'), icon: Layers },
+            { key: 'phase', label: t('kanban.byPhase').replace('{level}', topLevelLabel), icon: Layers },
             { key: 'owner', label: t('kanban.byOwner'), icon: Users },
           ]}
         />

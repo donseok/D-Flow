@@ -442,6 +442,29 @@ describe('IssueFormModal 회의록 초안', () => {
     expect(document.body.textContent).not.toContain('#17')
   })
 
+  // 이슈 분석 모듈이 꺼진 프로젝트 — 상세에 분석서 칸(Major·Sub Process 등)을 그리지 않는다. 영역은 이슈 코드의 축이라 남긴다.
+  // 끄기 전에 입력한 값이 있는 이슈는 그대로 보인다(숨기면 기록이 사라진 것처럼 읽힌다).
+  it('분석 모듈이 꺼져 있으면 상세는 분석서 칸을 그리지 않는다 — 값이 있는 이슈만 그대로 보인다', async () => {
+    const detail = (current: Issue) => (
+      <IssueDetailModal areas={TEST_AREAS} timeZone="Asia/Seoul" analysisVisible={false}
+        issue={current} members={[]} memberName={() => null} canEdit={false} canWrite={false} currentUserId={null}
+        isProjectAdmin={false} today="2026-07-31" onClose={() => undefined} onEdit={() => undefined} onDelete={() => undefined}
+        severities={SEVERITIES} sources={SOURCES} />
+    )
+    const blank = { majorId: null, majorSeq: null, majorName: null, subProcess: '', ownerDepartment: '', relatedSystems: [], sourceDetail: '' }
+    await act(async () => { root.render(detail(issue(blank))) })
+    expect(document.body.textContent).toContain('issue.analysis.area')
+    expect(document.body.textContent).not.toContain('issue.analysis.fieldsTitle')
+    expect(document.body.textContent).not.toContain('issue.analysis.majorProcess')
+    expect(document.body.textContent).not.toContain('issue.analysis.subProcess')
+
+    await act(async () => { root.render(detail(issue({ ...blank, areaId: null }))) })
+    expect(document.body.textContent).not.toContain('issue.analysis.area')
+
+    await act(async () => { root.render(detail(issue())) })
+    expect(document.body.textContent).toContain('issue.analysis.majorProcess')
+  })
+
   it('기존 미분류 이슈는 편집에서 최초 Mega 분류가 가능하다', async () => {
     await act(async () => {
       root.render(

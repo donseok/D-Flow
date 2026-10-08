@@ -4,6 +4,7 @@ import type {
 } from '@/lib/domain/types'
 import { overallProgress, weightOf } from '@/lib/domain/rollup'
 import { round1 } from '@/lib/domain/format'
+import { FALLBACK_LEVEL_LABELS } from '@/lib/domain/levelSettings'
 import { expandMeetings, sortOccurrences } from '@/lib/domain/meetings'
 import {
   isoDowOf, nextWeekKey, prevWeekKey, weekDisplayDays, weekKeyOf, weekPeriodOf, ymdIn, type WorkCalendar,
@@ -46,6 +47,8 @@ export interface WeeklyMeta {
   prevWeekRange: string
   totalLeaves: number
   phaseCount: number
+  /** 1레벨 단계 이름(프로젝트 설정 core.level_labels 의 첫 값) — 보고서 문구가 'Phase' 로 박히지 않게 */
+  topLevelLabel: string
 }
 
 export interface WeeklyKpi {
@@ -300,7 +303,7 @@ export function buildWeeklyReportModel(
   },
 ): WeeklyReportModel {
   const reportTeams = opts.teams
-  const levelLabels = opts.levelLabels ?? ['Phase', 'Task', 'Activity']
+  const levelLabels = opts.levelLabels ?? FALLBACK_LEVEL_LABELS
   const roots = items
   const members = opts.members ?? []
   const attendance = opts.attendance ?? []
@@ -528,7 +531,7 @@ export function buildWeeklyReportModel(
       weekRange, nextWeekRange, weekStart, weekEnd, weekDays, weekDayLabels: dayLabelsOf(weekDays),
       nextWeekStart, nextWeekDays, nextWeekDayLabels: dayLabelsOf(nextWeekDays),
       prevWeekStart, prevWeekDays, prevWeekRange,
-      totalLeaves: total, phaseCount: roots.length,
+      totalLeaves: total, phaseCount: roots.length, topLevelLabel: levelLabels[0] ?? FALLBACK_LEVEL_LABELS[0],
     },
     kpi, phases, planActual, workload, issues, attendance: attendanceModel, meetings, announcements, wbs, dev, devOwnerSummary,
   }

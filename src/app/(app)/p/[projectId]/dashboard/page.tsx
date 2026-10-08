@@ -78,7 +78,9 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   const hero = <PageHeader title={`${projectName}${t(locale, 'dash.heroTitleSuffix')}`} />
 
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
-  // 대시보드는 core.level_labels 를 쓰지 않는다. 키워드가 손상이면 마일스톤만 비우고 그 사실을 위에 보인다 — 다른 카드는 그린다.
+  // 대시보드는 core.level_labels 를 판정에 쓰지 않는다 — 보고서 모달의 1레벨 이름(표시 전용)만 읽고, 손상이면 중립 문구로 그린다(알림 없음 — 단계 설정 화면·WBS 가 알린다).
+  // 키워드가 손상이면 마일스톤만 비우고 그 사실을 위에 보인다 — 다른 카드는 그린다.
+  const levelLabels = pick(pc.cfg, 'core.level_labels')
   const keywords = pick(pc.cfg, 'core.milestone_keywords')
   // 회의 범주·이슈 심각도(어휘) — 손상이면 키워드처럼 위에 사유를 보이고 라벨 자리에 code(다른 카드는 그린다)
   const categories = pick(pc.cfg, 'meetings.categories')
@@ -117,6 +119,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
         canManage={canManage}
         canGenerateBrief={canManage}
         milestoneKeywords={keywords.ok ? keywords.value : []}
+        topLevelLabel={levelLabels.ok ? levelLabels.value[0] ?? null : null}
         modules={modules}
         minutesHref={minutesHref}
         meetingCategories={categories.ok ? categories.value : []}

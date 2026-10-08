@@ -4,6 +4,7 @@ import type { Announcement, AttendanceRecord, ComputedItem, Meeting, ProjectMemb
 import { makeRosterMember } from '../fixtures/rosterMember'
 import { calSeoulMon, calUtcSun } from '../helpers/calendarFixture'
 import { calendarOf } from '@/lib/domain/calendar'
+import { FALLBACK_LEVEL_LABELS } from '@/lib/domain/levelSettings'
 import { ATT_TYPES } from '../fixtures/vocab'
 
 /** 팀 마스터 대신 쓰는 테스트 지역 상수(2026-07 기준 5팀 — FIXTURE_TEAM_CODES 미러).
@@ -121,6 +122,17 @@ describe('buildWeeklyReportModel — Phase', () => {
     expect(design.doneCount).toBe(0)
     expect(design.delayedCount).toBe(1)
     expect(design.gap).toBe(design.plannedPct - design.actualPct)
+  })
+})
+
+describe('buildWeeklyReportModel — 1레벨 단계 이름', () => {
+  it('프로젝트 단계 이름의 첫 값을 메타에 싣는다 — 보고서 문구가 그 이름을 쓴다', () => {
+    const m = buildWeeklyReportModel(items, project, '2026-06-30', { levelLabels: ['단계', '작업'] })
+    expect(m.meta.topLevelLabel).toBe('단계')
+  })
+  it('단계 이름을 못 받으면(무인자·빈 목록) 폴백의 첫 값이다', () => {
+    expect(buildWeeklyReportModel(items, project, '2026-06-30').meta.topLevelLabel).toBe(FALLBACK_LEVEL_LABELS[0])
+    expect(buildWeeklyReportModel(items, project, '2026-06-30', { levelLabels: [] }).meta.topLevelLabel).toBe(FALLBACK_LEVEL_LABELS[0])
   })
 })
 

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { generateAnswer, type ChatMessage } from '@/lib/ai/llm'
+import { ANSWER_LANGUAGE_RULE } from '@/lib/ai/answerLanguage'
 import { getActorViewState } from '@/lib/authz'
 import { createSupabaseAccessScopeResolver } from '@/lib/authz/accessScope'
 import { denyStatus } from '@/lib/authz/errors'
@@ -52,9 +53,10 @@ function isValidBody(body: {
   return body.sources.every(isValidSource)
 }
 
-const SUMMARY_SYSTEM = `당신은 프로젝트 기록 요약자입니다. 아래 [근거]만 사용해 질문에 한국어로 답하세요.
+const SUMMARY_SYSTEM = `당신은 프로젝트 기록 요약자입니다. 아래 [근거]만 사용해 질문에 답하세요.
+- ${ANSWER_LANGUAGE_RULE}
 - 문장마다 근거 번호를 [n] 형식으로 인용하세요.
-- 근거에 없는 내용은 지어내지 말고 "근거에서 확인되지 않습니다"라고 답하세요.
+- 근거에 없는 내용은 지어내지 말고, 근거에서 확인되지 않는다고 답하세요.
 - 3~5문장으로 간결하게 답하세요.`
 
 function buildUserMessage(query: string, sources: SummarizeSource[]): string {

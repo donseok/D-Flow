@@ -56,6 +56,7 @@ export async function DashboardView({
   canManage = false,
   canGenerateBrief = false,
   milestoneKeywords,
+  topLevelLabel = null,
   modules,
   minutesHref,
   meetingCategories,
@@ -93,6 +94,8 @@ export async function DashboardView({
   canGenerateBrief?: boolean
   /** 프로젝트 설정(project_settings)의 마일스톤 키워드 — page.tsx 가 getProjectConfig 로 주입. */
   milestoneKeywords: readonly string[]
+  /** 1레벨 단계 이름(core.level_labels 첫 값) — 보고서 모달 문구용. 손상이면 null(중립 문구로 그린다) */
+  topLevelLabel?: string | null
   /** 교차 모듈 표시(P20) — 꺼진 모듈의 카드는 그리지 않는다(실패 표시로도 남기지 않는다). 판정 실패는 page 가 core 만 = 전부 false */
   modules: { issues: boolean; announcements: boolean; meetings: boolean }
   /** 회의 카드 머리의 '이 프로젝트 회의록'(D53) — 회의록 모듈이 꺼졌거나 슬러그를 모르면 null */
@@ -151,7 +154,7 @@ export async function DashboardView({
           items={items} projectId={projectId} projectName={projectName}
           projectDescription={projectDescription} startDate={startDate} endDate={endDate}
           today={today} canGenerateBrief={canGenerateBrief}
-          milestoneKeywords={milestoneKeywords}
+          milestoneKeywords={milestoneKeywords} topLevelLabel={topLevelLabel}
         />
       ) : (
         <section className="card flex flex-wrap items-center justify-between gap-3 px-5 py-4">

@@ -78,7 +78,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
             <Info label="module" value={preview.module ?? '—'} />
             <Info
               label="부착점"
-              value={preview.mode === 'skeleton' ? '루트(Phase 층)' : `${preview.attach ?? '—'} → ${preview.attachRef ?? '해석 실패'}`}
+              value={preview.mode === 'skeleton' ? '루트(1레벨)' : `${preview.attach ?? '—'} → ${preview.attachRef ?? '해석 실패'}`}
               tone={preview.mode === 'skeleton' || preview.attachFound ? undefined : 'danger'}
             />
             <Info
