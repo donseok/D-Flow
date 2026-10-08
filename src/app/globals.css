@@ -279,6 +279,7 @@
   --z-overlay: 110;
   --z-fullscreen: 120;
   --z-modal: 150;
+  --z-modal-alert: 160;   /* 모달 위에서 묻는 확인 상자(저장 안 한 변경) — 모달 위·토스트 아래 */
   --z-toast: 200;
   --z-skip: 250;
 
