@@ -20,10 +20,10 @@ async function presentation(kind) {
   const weekly = kind === 'weekly_report_pptx'
   const title = weekly ? '{{report.project_name}} · 주간보고' : '{{summary.project_name}} · 이슈 분석'
   const subtitle = weekly ? '{{report.week_label}} | 계획 {{kpi.plan}} · 실적 {{kpi.actual}}' : '{{summary.date_label}} | 전체 {{summary.issue_count}}건'
-  const headers = weekly ? ['구분', '금주 실적', '차주 계획', '이슈'] : ['코드', '이슈', '내용', '상태']
+  const headers = weekly ? ['구분', '금주 실적', '차주 계획', '이슈'] : ['영역', '코드', '이슈', '내용', '상태']
   const cells = weekly
     ? ['{{#slide sections}}{{.name}}', '{{.this_content}}', '{{.next_content}}', '{{.this_issue}}']
-    : ['{{#slide issues}}{{.code}}', '{{.title}}', '{{.body}}', '{{.status_label}}']
+    : ['{{#slide issues}}{{.area_name}}', '{{.code}}', '{{.title}}', '{{.body}}', '{{.status_label}}']   // 영역 이름이 없으면 분석서가 어느 영역의 이슈인지 말하지 못한다
   const detail = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${shape(2, title, .5, .3, width, .6, 2600)}${shape(3, subtitle, .5, 1, width, .4, 1600)}${table(headers, cells, width)}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`
   // Copy only presentation content into a fresh OPC package; no inherited OLE/media.
   const clean = new JSZip()

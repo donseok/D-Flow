@@ -181,12 +181,16 @@ describe('GET /api/report (정본 §4.8)', () => {
     expect(h.loadProject).not.toHaveBeenCalled()
   })
 
-  it('sections 가 있는데 week 가 없으면 400', async () => {
+  // 화면의 요약 PPT·엑셀 버튼은 week 없이 부른다 — 예전엔 400 이라 기본 양식(sections 자리표시자)으로는 받아지지 않았다
+  it('sections 가 있는데 week 가 없으면 프로젝트 달력의 이번 주 시트로 만든다(200)', async () => {
     h.scan.mockResolvedValue({ placeholders: [ph('sections.name')], issues: [] })
-    h.getProjectConfig.mockResolvedValue(makeProjectConfig({}, { areas: { weekly_section: [area('a')], issue_area: [] } }))
+    const cfg = makeProjectConfig({ ...monProjectValues }, { areas: { weekly_section: [area('a')], issue_area: [] } })
+    h.getProjectConfig.mockResolvedValue(cfg)
+    const ref = weeklyReference(cfg.calendar!, '2026-10-07', null)
     const res = await GET(req('projectId=p1&format=pptx'))
-    expect(res.status).toBe(400)
-    expect(h.getWeeklySheet).not.toHaveBeenCalled()
+    expect(res.status).toBe(200)
+    expect(ref.weekStart).toBe('2026-10-05')
+    expect(h.getWeeklySheet).toHaveBeenCalledWith('p1', ref.weekStart)
   })
 
   it('sections 인데 영역이 하나도 없으면 409 설정 필요', async () => {

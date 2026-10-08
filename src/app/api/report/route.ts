@@ -74,7 +74,8 @@ export async function GET(req: NextRequest) {
       return jsonError('week(YYYY-MM-DD)가 필요합니다', 400)
     }
     if (roots.has('sections') && areas.length === 0) return jsonError('설정 필요', 409)
-    if (roots.has('sections') && !weekRaw) return jsonError('week(YYYY-MM-DD)가 필요합니다', 400)
+    // week 가 없으면 프로젝트 달력의 이번 주다(weeklyReference). 화면의 요약 PPT·엑셀 버튼은 week 없이 부른다 — 예전엔 여기서 400 이라
+    // 기본 양식(sections 자리표시자)으로는 그 버튼들이 받아지지 않았다.
 
     const project = await loadReportProject(projectId)
     if (!project) return jsonError('프로젝트를 찾을 수 없습니다.', 404)
