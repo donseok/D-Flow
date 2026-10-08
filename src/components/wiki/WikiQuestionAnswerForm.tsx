@@ -50,9 +50,9 @@ export function WikiQuestionAnswerForm({
   }
 
   return (
-    <div className="mt-3 border-t border-line pt-3">
+    <div className="mt-3 border-t border-border pt-3">
       <label className="block">
-        <span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t(locale, 'wiki.question.answerLabel')}</span>
+        <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t(locale, 'wiki.question.answerLabel')}</span>
         <textarea
           value={answer}
           onChange={(event) => setAnswer(event.target.value)}
@@ -63,7 +63,7 @@ export function WikiQuestionAnswerForm({
           placeholder={t(locale, 'wiki.question.answerPlaceholder')}
         />
       </label>
-      {error && <p className="mt-2 text-xs font-medium text-delayed" role="alert">{error}</p>}
+      {error && <p className="mt-2 text-xs font-medium text-danger" role="alert">{error}</p>}
       <div className="mt-2 flex flex-wrap gap-2">
         <button type="button" onClick={() => void submit()} disabled={busy || !answer.trim()} className="btn btn-primary h-8 px-3 text-xs">
           <Send className="h-3.5 w-3.5" aria-hidden />

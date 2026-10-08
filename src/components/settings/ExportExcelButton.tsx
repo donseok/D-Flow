@@ -28,7 +28,7 @@ export function ExportExcelButton({ projectId, layout }: { projectId: string; la
   }
   return (
     <span className="flex shrink-0 flex-wrap items-center gap-2">
-      {layout && <span className="text-xs text-ink-muted" data-export-layout={layout.kind}>{exportLayoutLabel(layout, t)}</span>}
+      {layout && <span className="text-xs text-fg-secondary" data-export-layout={layout.kind}>{exportLayoutLabel(layout, t)}</span>}
       <button type="button" onClick={run} disabled={busy} className="btn btn-ghost shrink-0" aria-label={t('settings.exportAria')}>
         <Download className="h-4 w-4" /> {busy ? t('settings.exporting') : t('settings.exportExcel')}
       </button>

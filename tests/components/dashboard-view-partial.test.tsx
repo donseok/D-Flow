@@ -216,7 +216,7 @@ describe('TrendChart — 이력 조회 실패', () => {
 
   it('실패면 합성된 실적 선을 그리지 않고 사유를 경고로 보인다', async () => {
     const out = await html(true)
-    expect(out).not.toContain('stroke-brand')
+    expect(out).not.toContain('stroke-action')
     expect(out).toContain('role="alert"')
     expect(out).toContain('진척 이력을 불러오지 못해 추세선을 그리지 않았습니다.')
     expect(out).not.toContain('실적 이력은 지금부터 기록됩니다')
@@ -224,7 +224,7 @@ describe('TrendChart — 이력 조회 실패', () => {
 
   it('정상(이력 0건)은 종전대로 실적 선 + 이력 안내', async () => {
     const out = await html(false)
-    expect(out).toContain('stroke-brand')
+    expect(out).toContain('stroke-action')
     expect(out).not.toContain('role="alert"')
     expect(out).toContain('실적 이력은 지금부터 기록됩니다')
   })

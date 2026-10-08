@@ -105,7 +105,7 @@ export function MeetingDetailModal({
               posted ? (
                 <span className="btn btn-ghost mr-auto pointer-events-none text-progress"><Check className="h-4 w-4" />{t('meet.detail.postedAsAnnouncement')}</span>
               ) : (
-                <button onClick={runPost} disabled={posting || pending} className="btn btn-ghost mr-auto text-brand hover:bg-brand-weak">
+                <button onClick={runPost} disabled={posting || pending} className="btn btn-ghost mr-auto text-action hover:bg-action-soft">
                   <Megaphone className="h-4 w-4" />{posting ? t('meet.detail.posting') : t('meet.detail.postAsAnnouncement')}
                 </button>
               )
@@ -115,7 +115,7 @@ export function MeetingDetailModal({
                 <Ban className="h-4 w-4" />{t('meet.detail.cancelOccurrence')}
               </button>
             )}
-            <button onClick={() => setConfirmDelete(true)} disabled={pending} className="btn btn-ghost text-delayed hover:bg-delayed-weak"><Trash2 className="h-4 w-4" />{t('meet.detail.deleteSeries')}</button>
+            <button onClick={() => setConfirmDelete(true)} disabled={pending} className="btn btn-ghost text-danger hover:bg-danger-weak"><Trash2 className="h-4 w-4" />{t('meet.detail.deleteSeries')}</button>
             <button onClick={() => detail && onEditSeries(detail.meeting)} disabled={pending || !detail} className="btn btn-primary"><Pencil className="h-4 w-4" />{t('meet.detail.editSeries')}</button>
           </>
         ) : (
@@ -126,25 +126,25 @@ export function MeetingDetailModal({
           <span className={`chip ${meta.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}</span>
 
           {(error || loadError) && (
-            <p role="alert" className="flex items-center gap-1.5 rounded-lg bg-delayed-weak px-3 py-2 text-xs font-medium text-delayed">
+            <p role="alert" className="flex items-center gap-1.5 rounded-lg bg-danger-weak px-3 py-2 text-xs font-medium text-danger">
               <AlertTriangle className="h-4 w-4 shrink-0" />{error || loadError?.msg || t('meet.detail.loadFailed')}
             </p>
           )}
-          <div className="flex items-center gap-2 text-ink"><CalendarDays className="h-4 w-4 text-ink-subtle" />{fmtDate(occurrence.occurrenceDate)}
-            {occurrence.isRecurring && <span className="inline-flex items-center gap-1 text-[11px] text-ink-subtle"><Repeat className="h-3 w-3" />{t('meet.recurring')}</span>}
+          <div className="flex items-center gap-2 text-fg"><CalendarDays className="h-4 w-4 text-fg-muted" />{fmtDate(occurrence.occurrenceDate)}
+            {occurrence.isRecurring && <span className="inline-flex items-center gap-1 text-[11px] text-fg-muted"><Repeat className="h-3 w-3" />{t('meet.recurring')}</span>}
           </div>
-          <div className="flex items-center gap-2 text-ink"><Clock4 className="h-4 w-4 text-ink-subtle" /><span className="tabular-nums">{timeLabel}</span></div>
-          {occurrence.location && <div className="flex items-center gap-2 text-ink"><MapPin className="h-4 w-4 text-ink-subtle" />{occurrence.location}</div>}
-          {detail?.meeting.createdByName && <div className="flex items-center gap-2 text-ink-muted"><User className="h-4 w-4 text-ink-subtle" />{t('meet.detail.createdBy')}: {detail.meeting.createdByName}</div>}
+          <div className="flex items-center gap-2 text-fg"><Clock4 className="h-4 w-4 text-fg-muted" /><span className="tabular-nums">{timeLabel}</span></div>
+          {occurrence.location && <div className="flex items-center gap-2 text-fg"><MapPin className="h-4 w-4 text-fg-muted" />{occurrence.location}</div>}
+          {detail?.meeting.createdByName && <div className="flex items-center gap-2 text-fg-secondary"><User className="h-4 w-4 text-fg-muted" />{t('meet.detail.createdBy')}: {detail.meeting.createdByName}</div>}
 
           <div>
-            <div className="mb-1.5 text-xs font-semibold text-ink-muted">{t('meet.detail.attendees')}</div>
-            {loading ? <div className="text-xs text-ink-subtle">…</div>
-              : (detail?.attendees.length ?? 0) === 0 ? <div className="text-xs text-ink-subtle">{t('meet.detail.noAttendees')}</div>
+            <div className="mb-1.5 text-xs font-semibold text-fg-secondary">{t('meet.detail.attendees')}</div>
+            {loading ? <div className="text-xs text-fg-muted">…</div>
+              : (detail?.attendees.length ?? 0) === 0 ? <div className="text-xs text-fg-muted">{t('meet.detail.noAttendees')}</div>
               : (
                 <div className="flex flex-wrap gap-1.5">
                   {detail!.attendees.map(a => (
-                    <span key={a.id} className="chip bg-surface-2 text-ink">{a.name}{a.teamCodes.length ? ` · ${a.teamCodes.join(', ')}` : ''}</span>
+                    <span key={a.id} className="chip bg-surface-subtle text-fg">{a.name}{a.teamCodes.length ? ` · ${a.teamCodes.join(', ')}` : ''}</span>
                   ))}
                 </div>
               )}
@@ -153,14 +153,14 @@ export function MeetingDetailModal({
           {/* 연결된 회의록 — 있을 때만 노출. 클릭하면 회의록 상세로 바로 이동 */}
           {minutes.length > 0 && (
             <div>
-              <div className="mb-1.5 text-xs font-semibold text-ink-muted">{t('meet.detail.linkedMinutes')}</div>
+              <div className="mb-1.5 text-xs font-semibold text-fg-secondary">{t('meet.detail.linkedMinutes')}</div>
               <ul className="space-y-1">
                 {minutes.map(mn => (
                   <li key={mn.id}>
                     <Link href={minuteLinks.minute(mn.id)} onClick={onClose}
-                      className="flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink transition hover:border-line-strong hover:bg-surface-2">
-                      <NotebookText className="h-4 w-4 shrink-0 text-brand" />
-                      <span className="shrink-0 tabular-nums text-xs text-ink-subtle">{mn.minuteDate}</span>
+                      className="flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm text-fg transition hover:border-border-input hover:bg-surface-subtle">
+                      <NotebookText className="h-4 w-4 shrink-0 text-action" />
+                      <span className="shrink-0 tabular-nums text-xs text-fg-muted">{mn.minuteDate}</span>
                       <span className="truncate">{mn.title}</span>
                     </Link>
                   </li>
@@ -170,10 +170,10 @@ export function MeetingDetailModal({
           )}
 
           <div>
-            <div className="mb-1.5 text-xs font-semibold text-ink-muted">{t('meet.detail.body')}</div>
-            {loading ? <div className="text-xs text-ink-subtle">…</div>
-              : detail?.meeting.body ? <p className="whitespace-pre-wrap text-sm leading-6 text-ink-muted">{detail.meeting.body}</p>
-              : <div className="text-xs text-ink-subtle">{t('meet.detail.noBody')}</div>}
+            <div className="mb-1.5 text-xs font-semibold text-fg-secondary">{t('meet.detail.body')}</div>
+            {loading ? <div className="text-xs text-fg-muted">…</div>
+              : detail?.meeting.body ? <p className="whitespace-pre-wrap text-sm leading-6 text-fg-secondary">{detail.meeting.body}</p>
+              : <div className="text-xs text-fg-muted">{t('meet.detail.noBody')}</div>}
           </div>
         </div>
       </Modal>
@@ -187,11 +187,11 @@ export function MeetingDetailModal({
         footer={
           <>
             <button onClick={() => setConfirmDelete(false)} disabled={pending} className="btn btn-ghost">{t('common.cancel')}</button>
-            <button onClick={runDelete} disabled={pending} className="btn bg-delayed text-danger-fg hover:brightness-105 disabled:opacity-50">{pending ? t('meet.deleting') : t('common.delete')}</button>
+            <button onClick={runDelete} disabled={pending} className="btn bg-danger text-danger-fg hover:brightness-105 disabled:opacity-50">{pending ? t('meet.deleting') : t('common.delete')}</button>
           </>
         }
       >
-        <p className="text-sm leading-6 text-ink-muted">{t('meet.delete.confirm')}</p>
+        <p className="text-sm leading-6 text-fg-secondary">{t('meet.delete.confirm')}</p>
       </Modal>
 
       <Modal
@@ -203,11 +203,11 @@ export function MeetingDetailModal({
         footer={
           <>
             <button onClick={() => setConfirmCancel(false)} disabled={pending} className="btn btn-ghost">{t('common.cancel')}</button>
-            <button onClick={runCancel} disabled={pending} className="btn bg-delayed text-danger-fg hover:brightness-105 disabled:opacity-50"><Ban className="h-4 w-4" />{t('meet.detail.cancelOccurrence')}</button>
+            <button onClick={runCancel} disabled={pending} className="btn bg-danger text-danger-fg hover:brightness-105 disabled:opacity-50"><Ban className="h-4 w-4" />{t('meet.detail.cancelOccurrence')}</button>
           </>
         }
       >
-        <p className="text-sm leading-6 text-ink-muted">{t('meet.cancelOcc.confirm')}</p>
+        <p className="text-sm leading-6 text-fg-secondary">{t('meet.cancelOcc.confirm')}</p>
       </Modal>
     </>
   )

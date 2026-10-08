@@ -18,7 +18,7 @@ export function ImportModes({ projectId, currentItemCount, timeZone }: {
   const [mode, setMode] = useState<'md' | 'xlsx'>('md')
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 rounded-xl bg-surface-2 p-1 w-fit" role="tablist">
+      <div className="flex items-center gap-1 rounded-xl bg-surface-subtle p-1 w-fit" role="tablist">
         <button
           role="tab" aria-selected={mode === 'md'} data-mode-md
           className={`btn ${mode === 'md' ? 'btn-primary' : 'btn-ghost'}`}

@@ -320,7 +320,7 @@ export function MinutesView({
             </button>
           </div>
           <div className="relative w-full sm:w-auto">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
             <input value={query}
               onChange={e => { setQuery(e.target.value); void runSearch(e.target.value, team) }}
               placeholder={t('min.search.placeholder')}
@@ -361,7 +361,7 @@ export function MinutesView({
       </div>
 
       {isSearch && minutes.length >= 100 && (
-        <p className="text-xs text-ink-subtle">{t('min.search.truncated')}</p>
+        <p className="text-xs text-fg-muted">{t('min.search.truncated')}</p>
       )}
 
       {/* 검색 결과 리스트 — 리스트 '뷰'는 폐지됐고 이 렌더는 검색 전용으로만 남는다 */}
@@ -372,15 +372,15 @@ export function MinutesView({
           <div className="space-y-4">
             {groups.map(([date, rows]) => (
               <section key={date} className="card p-3">
-                <h3 className="mb-2 px-1 text-sm font-semibold text-ink-muted">{date}</h3>
-                <ul className="divide-y divide-line/70">
+                <h3 className="mb-2 px-1 text-sm font-semibold text-fg-secondary">{date}</h3>
+                <ul className="divide-y divide-border/70">
                   {rows.map(mi => (
                     <li key={mi.id}>
                       <Link href={minuteLinks.minute(mi.id)}
-                        className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
+                        className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-subtle">
                         <TeamBar code={mi.teamCode} />
-                        <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
-                        <span className="w-24 truncate text-right text-xs text-ink-subtle">{mi.createdByName ?? ''}</span>
+                        <span className="flex-1 truncate text-sm font-medium text-fg">{mi.title}</span>
+                        <span className="w-24 truncate text-right text-xs text-fg-muted">{mi.createdByName ?? ''}</span>
                       </Link>
                     </li>
                   ))}
@@ -399,15 +399,15 @@ export function MinutesView({
             selectedDate={selectedDate} calendar={calendar} />
           {selectedDate && (
             <section className="card p-3">
-              <h3 className="mb-2 px-1 text-sm font-semibold text-ink-muted">{selectedDate}</h3>
-              <ul className="divide-y divide-line/70">
+              <h3 className="mb-2 px-1 text-sm font-semibold text-fg-secondary">{selectedDate}</h3>
+              <ul className="divide-y divide-border/70">
                 {minutes.filter(mi => mi.minuteDate === selectedDate).map(mi => (
                   <li key={mi.id}>
                     <Link href={minuteLinks.minute(mi.id)}
-                      className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2">
+                      className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-subtle">
                       <TeamBar code={mi.teamCode} />
-                      <span className="flex-1 truncate text-sm font-medium text-ink">{mi.title}</span>
-                      <span className="w-24 truncate text-right text-xs text-ink-subtle">{mi.createdByName ?? ''}</span>
+                      <span className="flex-1 truncate text-sm font-medium text-fg">{mi.title}</span>
+                      <span className="w-24 truncate text-right text-xs text-fg-muted">{mi.createdByName ?? ''}</span>
                     </Link>
                   </li>
                 ))}
@@ -428,7 +428,7 @@ export function MinutesView({
         ) : (
           <div className="space-y-2 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:gap-2 lg:space-y-0">
             {treeState.truncated && (
-              <p className="shrink-0 text-xs text-ink-subtle">
+              <p className="shrink-0 text-xs text-fg-muted">
                 {t('min.tree.truncated').replace('{n}', String(MINUTES_TREE_LIMIT))}
               </p>
             )}

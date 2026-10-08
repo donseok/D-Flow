@@ -18,7 +18,7 @@ export const UNLINKED_HINT = '로그인 계정과 연결되지 않은 사람입�
 /** 계정이 연결되지 않은 사람(외부 인력) — 권한을 받을 수 없고, 로그인해도 '나'로 이어지지 않는다. */
 function UnlinkedBadge() {
   return (
-    <span className="chip shrink-0 bg-surface-2 text-ink-muted" data-unlinked-badge title={UNLINKED_HINT}>
+    <span className="chip shrink-0 bg-surface-subtle text-fg-secondary" data-unlinked-badge title={UNLINKED_HINT}>
       <Unlink className="h-3 w-3" aria-hidden />계정 미연결
     </span>
   )
@@ -27,7 +27,7 @@ function UnlinkedBadge() {
 function NameCell({ member, children }: { member: RosterMember; children?: React.ReactNode }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
-      {children ?? <span className="font-medium text-ink">{member.name}</span>}
+      {children ?? <span className="font-medium text-fg">{member.name}</span>}
       {member.kind === 'external' && <UnlinkedBadge />}
     </span>
   )
@@ -44,24 +44,24 @@ function EffectiveRoleCell({ member, effective }: { member: RosterMember; effect
 /** 읽기 전용 행 — 비관리자 화면, 또는 관리자 행을 고칠 수 없는 프로젝트 관리자. */
 export function RosterReadRow({ member, note, effective = { kind: 'unknown' } }: { member: RosterMember; note?: string; effective?: EffectiveRoleView }) {
   return (
-    <tr className={`border-b border-line/60 align-top ${member.active ? '' : 'opacity-60'}`} data-roster-row={member.id}>
+    <tr className={`border-b border-border/60 align-top ${member.active ? '' : 'opacity-60'}`} data-roster-row={member.id}>
       <td className="py-2.5 pr-3"><NameCell member={member} /></td>
-      <td className="py-2.5 pr-3 text-ink-muted">{member.email ?? '—'}</td>
+      <td className="py-2.5 pr-3 text-fg-secondary">{member.email ?? '—'}</td>
       <td className="py-2.5 pr-3">
-        {member.teams.length === 0 ? <span className="text-ink-subtle">—</span> : (
+        {member.teams.length === 0 ? <span className="text-fg-muted">—</span> : (
           <span className="flex flex-wrap gap-1">
             {member.teams.map((t, i) => (
-              <span key={t.id} className={`chip bg-surface-2 ${i === 0 ? 'font-semibold text-ink' : 'text-ink-muted'}`}>{t.code}</span>
+              <span key={t.id} className={`chip bg-surface-subtle ${i === 0 ? 'font-semibold text-fg' : 'text-fg-secondary'}`}>{t.code}</span>
             ))}
           </span>
         )}
       </td>
-      <td className="py-2.5 pr-3 text-xs text-ink-muted">{member.roleLabel ?? '—'}</td>
-      <td className="py-2.5 pr-3 text-xs text-ink-muted">{member.title ?? '—'}</td>
-      <td className="py-2.5 pr-3 text-xs text-ink-muted">{accessRoleLabel(member.accessRole)}</td>
+      <td className="py-2.5 pr-3 text-xs text-fg-secondary">{member.roleLabel ?? '—'}</td>
+      <td className="py-2.5 pr-3 text-xs text-fg-secondary">{member.title ?? '—'}</td>
+      <td className="py-2.5 pr-3 text-xs text-fg-secondary">{accessRoleLabel(member.accessRole)}</td>
       <EffectiveRoleCell member={member} effective={effective} />
-      <td className="py-2.5 pr-3 text-xs text-ink-muted">{member.active ? '활성' : '비활성'}</td>
-      <td className="py-2.5 text-xs text-ink-subtle">{note ?? ''}</td>
+      <td className="py-2.5 pr-3 text-xs text-fg-secondary">{member.active ? '활성' : '비활성'}</td>
+      <td className="py-2.5 text-xs text-fg-muted">{note ?? ''}</td>
     </tr>
   )
 }
@@ -125,7 +125,7 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
       <tr
         id={`roster-row-${member.id}`}
         data-roster-row={member.id}
-        className={`border-b border-line/60 align-top ${draft.active ? '' : 'opacity-60'} ${highlighted ? 'bg-brand-weak/40' : ''}`}
+        className={`border-b border-border/60 align-top ${draft.active ? '' : 'opacity-60'} ${highlighted ? 'bg-action-soft/40' : ''}`}
       >
         <td className="py-2 pr-3">
           <NameCell member={member}>
@@ -133,7 +133,7 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
               disabled={pending} onChange={e => set('name', e.target.value)} />
           </NameCell>
         </td>
-        <td className="py-2 pr-3 text-ink-muted">{member.email ?? '—'}</td>
+        <td className="py-2 pr-3 text-fg-secondary">{member.email ?? '—'}</td>
         <td className="py-2 pr-3">
           <TeamMultiSelect options={options} value={draft.teamIds} label={`${who} 팀`} disabled={pending}
             onChange={ids => set('teamIds', ids)} />
@@ -157,11 +157,11 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
               {accessRoleLabel('admin')}{!unlinked && !canGrantAdmin ? ' (워크스페이스 관리자 전용)' : ''}
             </option>
           </select>
-          {unlinked && <p className="mt-1 max-w-[12rem] text-[11px] leading-4 text-ink-subtle" data-unlinked-access-hint>{UNLINKED_HINT}</p>}
+          {unlinked && <p className="mt-1 max-w-[12rem] text-[11px] leading-4 text-fg-muted" data-unlinked-access-hint>{UNLINKED_HINT}</p>}
         </td>
         <EffectiveRoleCell member={member} effective={effective} />
         <td className="py-2 pr-3">
-          <label className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
+          <label className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
             <input type="checkbox" aria-label={`${who} 활성`} checked={draft.active} disabled={pending}
               onChange={e => set('active', e.target.checked)} />
             활성
@@ -174,7 +174,7 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
             </button>
             {confirmDelete ? (
               <>
-                <button type="button" className="btn btn-ghost h-8 px-2 text-xs text-delayed" disabled={pending} onClick={remove}>삭제 확인</button>
+                <button type="button" className="btn btn-ghost h-8 px-2 text-xs text-danger" disabled={pending} onClick={remove}>삭제 확인</button>
                 <button type="button" className="btn btn-ghost h-8 px-2 text-xs" disabled={pending} onClick={() => setConfirmDelete(false)}>취소</button>
               </>
             ) : (
@@ -189,7 +189,7 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
       {error && (
         <tr data-roster-error={member.id}>
           <td colSpan={ROSTER_COLUMNS} className="pb-2 pt-0">
-            <p role="alert" className="text-xs font-medium text-delayed">{error}</p>
+            <p role="alert" className="text-xs font-medium text-danger">{error}</p>
           </td>
         </tr>
       )}

@@ -109,7 +109,7 @@ export function AssigneeComboBox({
   return (
     <div ref={rootRef} className="relative">
       <div className="relative">
-        <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-subtle" />
+        <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-muted" />
         <input
           role="combobox"
           aria-labelledby={ariaLabelledBy}
@@ -133,16 +133,16 @@ export function AssigneeComboBox({
             setQuery('')
           }}
         />
-        <ChevronDown aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-subtle" />
+        <ChevronDown aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-muted" />
       </div>
       {open && (
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-lg"
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-lg"
         >
           {options.length === 0 ? (
-            <li className="px-2 py-1.5 text-xs text-ink-subtle">{noResultsLabel}</li>
+            <li className="px-2 py-1.5 text-xs text-fg-muted">{noResultsLabel}</li>
           ) : options.map((opt, i) => (
             <li
               key={opt.id || 'unassigned'}
@@ -151,7 +151,7 @@ export function AssigneeComboBox({
               aria-selected={opt.id === (value ?? '')}
               onMouseDown={e => { e.preventDefault(); commit(opt.id) }}
               onMouseEnter={() => setActiveIndex(i)}
-              className={`cursor-pointer rounded-md px-2 py-1.5 text-xs ${i === activeIndex ? 'bg-brand-weak text-brand' : 'text-ink'}`}
+              className={`cursor-pointer rounded-md px-2 py-1.5 text-xs ${i === activeIndex ? 'bg-action-soft text-action' : 'text-fg'}`}
             >
               {opt.label}
             </li>

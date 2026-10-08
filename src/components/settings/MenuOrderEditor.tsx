@@ -110,14 +110,14 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
   }
 
   return <div className="space-y-5">
-    <p className="text-xs leading-5 text-ink-muted">그룹 안의 순서를 바꾸거나 이름을 입력하세요. 빈 이름은 기본 이름을 사용합니다.</p>
+    <p className="text-xs leading-5 text-fg-secondary">그룹 안의 순서를 바꾸거나 이름을 입력하세요. 빈 이름은 기본 이름을 사용합니다.</p>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="navigation.menu" message={invalidReason} isAdmin settingsHref="#workspace-menu" />}
-    {GROUPS.map(group => <section key={group.id} className="rounded-xl border border-line p-3">
-      <h3 className="mb-3 text-sm font-semibold text-ink">{group.label}</h3>
+    {GROUPS.map(group => <section key={group.id} className="rounded-xl border border-border p-3">
+      <h3 className="mb-3 text-sm font-semibold text-fg">{group.label}</h3>
       <div className="space-y-2">
-        {displayOrder.filter(id => NAV_GROUP_OF[id] === group.id).map((id, index, siblings) => <div key={id} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-2 p-2">
-          <span className="min-w-24 text-sm text-ink">{NAMES[id]}</span>
-          <span className="text-[11px] text-ink-subtle">{id}</span>
+        {displayOrder.filter(id => NAV_GROUP_OF[id] === group.id).map((id, index, siblings) => <div key={id} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-subtle p-2">
+          <span className="min-w-24 text-sm text-fg">{NAMES[id]}</span>
+          <span className="text-[11px] text-fg-muted">{id}</span>
           <input aria-label={`${NAMES[id]} 메뉴 이름`} className="app-input ml-auto w-36 text-sm" maxLength={20}
             placeholder={NAMES[id]} value={draft.labels[id] ?? ''} disabled={pending || !!uncertainPatch}
             onChange={event => { const value = event.target.value; setDraft(current => {

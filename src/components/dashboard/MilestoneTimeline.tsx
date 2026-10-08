@@ -7,9 +7,9 @@ import { t, type DictKey } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { CountBadge, MiniEmpty } from './bits'
 
-const MS_TONE: Record<MilestoneStatus, string> = { done: 'fill-done', overdue: 'fill-delayed', upcoming: 'fill-brand' }
+const MS_TONE: Record<MilestoneStatus, string> = { done: 'fill-success', overdue: 'fill-danger', upcoming: 'fill-action' }
 // 공지 점(0091)은 같은 톤의 테두리만 — WBS 점(채움)과 한눈에 갈린다.
-const MS_RING: Record<MilestoneStatus, string> = { done: 'stroke-done', overdue: 'stroke-delayed', upcoming: 'stroke-brand' }
+const MS_RING: Record<MilestoneStatus, string> = { done: 'stroke-success', overdue: 'stroke-danger', upcoming: 'stroke-action' }
 const W = 960, PL = 24, PR = 24
 const FS_NAME = 10, FS_SUB = 9, LH = 12
 const MAX_LINE_W = 150, MAX_LINES = 3
@@ -102,7 +102,7 @@ export async function MilestoneTimeline({ points, startDate, endDate, today }: {
       actions={<CountBadge n={points.length} unit={tr('dash.unitCount')} />}
     >
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={tr('dash.ms.title')}>
-        <line x1={PL} x2={W - PR} y1={BASE} y2={BASE} className="stroke-line" strokeWidth={2} />
+        <line x1={PL} x2={W - PR} y1={BASE} y2={BASE} className="stroke-border" strokeWidth={2} />
         {points.map((p, i) => {
           const lines = wrapped[i]
           const sub = subs[i]
@@ -123,10 +123,10 @@ export async function MilestoneTimeline({ points, startDate, endDate, today }: {
                 </circle>
               )}
               {lines.map((line, j) => (
-                <text key={j} x={lx} y={nameY(j)} textAnchor="middle" fontSize={FS_NAME} className="fill-ink font-medium">{line}</text>
+                <text key={j} x={lx} y={nameY(j)} textAnchor="middle" fontSize={FS_NAME} className="fill-fg font-medium">{line}</text>
               ))}
               <text x={lx} y={dateY} textAnchor="middle" fontSize={FS_SUB}
-                className={p.status === 'overdue' ? 'fill-delayed' : 'fill-ink-subtle'}>
+                className={p.status === 'overdue' ? 'fill-danger' : 'fill-fg-muted'}>
                 {sub}
               </text>
             </g>
@@ -134,9 +134,9 @@ export async function MilestoneTimeline({ points, startDate, endDate, today }: {
         })}
         {todayIn && (
           <g>
-            <line x1={x(today)} x2={x(today)} y1={TOP - 2} y2={H - 6} className="stroke-delayed" strokeWidth={1} strokeDasharray="2 3" />
-            <text x={todayLabelX} y={12} textAnchor="middle" fontSize={FS_SUB} className="fill-ink-subtle">{fmtDate(today)}</text>
-            <circle cx={x(today)} cy={BASE} r={5} className="fill-delayed">
+            <line x1={x(today)} x2={x(today)} y1={TOP - 2} y2={H - 6} className="stroke-danger" strokeWidth={1} strokeDasharray="2 3" />
+            <text x={todayLabelX} y={12} textAnchor="middle" fontSize={FS_SUB} className="fill-fg-muted">{fmtDate(today)}</text>
+            <circle cx={x(today)} cy={BASE} r={5} className="fill-danger">
               <title>{`${tr('dash.ms.today')} · ${fmtDate(today)}`}</title>
             </circle>
           </g>

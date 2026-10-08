@@ -28,9 +28,9 @@ export function AgentHero({ nav, projectName, title, lede, tiles, aside }: {
     <header data-agent-hero className="hero-card grid items-center gap-7 px-7 py-5 [grid-template-columns:minmax(0,1fr)_minmax(0,560px)]">
       <div className="relative z-10 min-w-0">
         {nav}
-        <p className="mt-3.5 text-[11px] font-semibold tracking-[0.12em] text-hero-ink-muted">{projectName}</p>
-        <h1 className="text-[28px] font-extrabold leading-tight tracking-tight text-hero-ink">{title}</h1>
-        <div data-agent-lede className="mt-1.5 text-[15px] text-hero-ink-muted [&_b]:text-fg [&_em]:not-italic [&_em]:text-warning">{lede}</div>
+        <p className="mt-3.5 text-[11px] font-semibold tracking-[0.12em] text-fg-secondary">{projectName}</p>
+        <h1 className="text-[28px] font-extrabold leading-tight tracking-tight text-fg">{title}</h1>
+        <div data-agent-lede className="mt-1.5 text-[15px] text-fg-secondary [&_b]:text-fg [&_em]:not-italic [&_em]:text-warning">{lede}</div>
       </div>
       <div className="relative z-10 flex min-w-0 flex-col gap-3">
         {aside}
@@ -41,7 +41,7 @@ export function AgentHero({ nav, projectName, title, lede, tiles, aside }: {
           {tiles.map(t => (
             <li key={t.key} className="rounded-(--radius-panel) border border-border bg-surface-subtle px-3 py-2.5">
               <b data-hero-tile={t.key} className="block text-2xl font-extrabold leading-none tabular-nums" style={{ color: t.valueColor ?? t.color }}>{t.value}</b>
-              <span className="mt-1.5 flex items-center gap-1.5 text-[11px] text-hero-ink-muted">
+              <span className="mt-1.5 flex items-center gap-1.5 text-[11px] text-fg-secondary">
                 <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: t.color }} />{t.label}
               </span>
             </li>

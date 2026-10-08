@@ -11,8 +11,8 @@ export const ANNOUNCEMENT_META: Record<
   AnnouncementCategory,
   { labelKey: `ann.cat.${AnnouncementCategory}`; chip: string; dot: string }
 > = {
-  general:   { labelKey: 'ann.cat.general',   chip: 'bg-brand-weak text-brand',       dot: 'bg-brand' },
-  important: { labelKey: 'ann.cat.important', chip: 'bg-delayed-weak text-delayed',   dot: 'bg-delayed' },
+  general:   { labelKey: 'ann.cat.general',   chip: 'bg-action-soft text-action',       dot: 'bg-action' },
+  important: { labelKey: 'ann.cat.important', chip: 'bg-danger-weak text-danger',   dot: 'bg-danger' },
   event:     { labelKey: 'ann.cat.event',     chip: 'bg-progress-weak text-progress', dot: 'bg-progress' },
 }
 
@@ -33,7 +33,7 @@ export const ANNOUNCEMENT_STATUS_META: Record<
   AnnouncementStatus,
   { labelKey: `ann.status.${AnnouncementStatus}`; chip: string }
 > = {
-  scheduled: { labelKey: 'ann.status.scheduled', chip: 'bg-pending-weak text-accent-warning' },
+  scheduled: { labelKey: 'ann.status.scheduled', chip: 'bg-pending-weak text-warning' },
   active:    { labelKey: 'ann.status.active',    chip: 'bg-progress-weak text-progress' },
   expired:   { labelKey: 'ann.status.expired',   chip: 'bg-neutral-weak text-neutral' },
 }

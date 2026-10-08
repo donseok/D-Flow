@@ -8,10 +8,10 @@ import { IssueStatusPill } from '@/components/ui/StatusPill'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
 const KIND_CHIP: Record<InsightKind, string> = {
-  decision: 'bg-done-weak text-done',
+  decision: 'bg-success-weak text-success',
   action: 'bg-progress-weak text-progress',
-  deadline: 'bg-accent-warning/15 text-accent-warning',
-  risk: 'bg-delayed-weak text-delayed',
+  deadline: 'bg-warning/15 text-warning',
+  risk: 'bg-danger-weak text-danger',
 }
 
 export interface PopoverState {
@@ -67,7 +67,7 @@ export function MinuteBlockPopover({
     <>
       <button className="fixed inset-0 z-[90] cursor-default" aria-label="닫기" onClick={onClose} />
       <div ref={boxRef} style={{ position: 'fixed', width: W, ...pos }}
-        className="z-[95] max-h-[calc(100vh-16px)] overflow-y-auto rounded-2xl border border-line bg-surface p-3 shadow-[var(--shadow-lg)]">
+        className="z-[95] max-h-[calc(100vh-16px)] overflow-y-auto rounded-2xl border border-border bg-surface p-3 shadow-[var(--shadow-lg)]">
         {insKinds.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
             {insKinds.map(k => (
@@ -76,14 +76,14 @@ export function MinuteBlockPopover({
           </div>
         )}
         <button onClick={onToggle} disabled={busy}
-          className={`btn h-9 w-full ${mine ? 'bg-accent-warning/15 text-accent-warning' : 'btn-ghost'}`}>
+          className={`btn h-9 w-full ${mine ? 'bg-warning/15 text-warning' : 'btn-ghost'}`}>
           <Highlighter className="h-4 w-4" />
           {mine ? t('min.hl.remove') : t('min.hl.add')}
         </button>
-        <div className="mt-2 border-t border-line pt-2">
+        <div className="mt-2 border-t border-border pt-2">
           {linkedIssues.length > 0 && (
             <div className="mb-2">
-              <p className="mb-1.5 text-[11px] font-semibold text-ink-subtle">{t('min.issue.linked')}</p>
+              <p className="mb-1.5 text-[11px] font-semibold text-fg-muted">{t('min.issue.linked')}</p>
               <div className="space-y-1.5">
                 {linkedIssues.slice(0, 2).map(issue => {
                   return (
@@ -91,13 +91,13 @@ export function MinuteBlockPopover({
                       key={issue.linkId}
                       href={`/p/${issue.projectId}/issues?focus=${encodeURIComponent(issue.issueId)}`}
                       onClick={onClose}
-                      className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 px-2.5 py-2 text-xs text-ink transition hover:border-brand/40 hover:text-brand"
+                      className="flex items-center gap-2 rounded-xl border border-border bg-surface-subtle px-2.5 py-2 text-xs text-fg transition hover:border-action/40 hover:text-action"
                     >
                                             <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium">
                           {issue.code}
                         </span>
-                        <span className="mt-0.5 block truncate text-[11px] text-ink-muted">
+                        <span className="mt-0.5 block truncate text-[11px] text-fg-secondary">
                           {issue.title}
                         </span>
                       </span>
@@ -107,7 +107,7 @@ export function MinuteBlockPopover({
                   )
                 })}
                 {linkedIssues.length > 2 && (
-                  <p className="px-1 text-[11px] text-ink-subtle">
+                  <p className="px-1 text-[11px] text-fg-muted">
                     {t('min.issue.more').replace('{n}', String(linkedIssues.length - 2))}
                   </p>
                 )}
@@ -128,11 +128,11 @@ export function MinuteBlockPopover({
           </button>
         </div>
         {names.length > 0 && (
-          <div className="mt-2 border-t border-line pt-2">
-            <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold text-ink-subtle">
+          <div className="mt-2 border-t border-border pt-2">
+            <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold text-fg-muted">
               <Users className="h-3 w-3" />{t('min.hl.people')}
             </p>
-            <p className="max-h-28 overflow-y-auto overscroll-contain text-xs leading-relaxed text-ink-muted">{names.join(', ')}</p>
+            <p className="max-h-28 overflow-y-auto overscroll-contain text-xs leading-relaxed text-fg-secondary">{names.join(', ')}</p>
           </div>
         )}
       </div>

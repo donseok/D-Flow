@@ -4,7 +4,7 @@
 export function RestDayMark({ named, mark, label }: { named: boolean; mark: string; label: string }) {
   if (named) return <span className="sr-only">{label}</span>
   return (
-    <span data-rest-mark className="text-[10px] font-medium leading-tight text-ink-subtle">
+    <span data-rest-mark className="text-[10px] font-medium leading-tight text-fg-muted">
       <span aria-hidden="true">{mark}</span>
       <span className="sr-only">{label}</span>
     </span>

@@ -149,12 +149,12 @@ export function InviteRedeemCard({ token, preview, loadError }: {
     return (
       <div className="card p-6">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-delayed-weak text-delayed">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-danger-weak text-danger">
             <AlertTriangle className="h-4.5 w-4.5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p role="alert" className="text-sm font-semibold text-ink">{loadError ?? E_INVALID_LINK}</p>
-            <p className="mt-1 text-sm leading-6 text-ink-muted">
+            <p role="alert" className="text-sm font-semibold text-fg">{loadError ?? E_INVALID_LINK}</p>
+            <p className="mt-1 text-sm leading-6 text-fg-secondary">
               초대 링크는 1회용입니다. 필요하면 프로젝트 관리자에게 다시 요청해 주세요.
             </p>
           </div>
@@ -165,13 +165,13 @@ export function InviteRedeemCard({ token, preview, loadError }: {
   }
 
   const errorLine = error
-    ? <p role="alert" className="text-sm font-medium text-delayed">{error}</p>
+    ? <p role="alert" className="text-sm font-medium text-danger">{error}</p>
     : null
 
   return (
     <div className="card p-6">
       <p className="eyebrow">초대받은 프로젝트</p>
-      <h2 className="mt-2 text-lg font-semibold text-ink">{preview.projectName || '프로젝트'}</h2>
+      <h2 className="mt-2 text-lg font-semibold text-fg">{preview.projectName || '프로젝트'}</h2>
       <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="text-fg-secondary">워크스페이스</dt><dd className="min-w-0 break-words text-fg">{preview.workspaceName ?? '—'}</dd>
         <dt className="text-fg-secondary">프로젝트</dt><dd className="min-w-0 break-words text-fg">{preview.projectName || '프로젝트'}</dd>
@@ -179,11 +179,11 @@ export function InviteRedeemCard({ token, preview, loadError }: {
         <dt className="text-fg-secondary">초대된 이메일</dt><dd className="min-w-0 break-words text-fg">{preview.maskedEmail}</dd>
       </dl>
       {preview.projectDescription && (
-        <p className="mt-1 text-sm leading-6 text-ink-muted">{preview.projectDescription}</p>
+        <p className="mt-1 text-sm leading-6 text-fg-secondary">{preview.projectDescription}</p>
       )}
       {preview.teamNames.length > 0 && (
-        <p data-invite-teams className="mt-2 text-sm leading-6 text-ink-muted">
-          합류하면 <span className="font-medium text-ink">{preview.teamNames.join(', ')}</span> 팀으로 명단에 오릅니다.
+        <p data-invite-teams className="mt-2 text-sm leading-6 text-fg-secondary">
+          합류하면 <span className="font-medium text-fg">{preview.teamNames.join(', ')}</span> 팀으로 명단에 오릅니다.
         </p>
       )}
 
@@ -191,17 +191,17 @@ export function InviteRedeemCard({ token, preview, loadError }: {
         {sessionError ? (
           /* 판정 실패 — 사유를 그대로 보여주고 폼은 띄우지 않는다(fail-closed) */
           <>
-            <p role="alert" className="text-sm font-medium text-delayed">{sessionError}</p>
+            <p role="alert" className="text-sm font-medium text-danger">{sessionError}</p>
             <Link href="/login" className="btn btn-ghost w-full">로그인 화면으로</Link>
           </>
         ) : !session ? (
-          <p className="text-sm text-ink-subtle">로그인 상태를 확인하는 중입니다…</p>
+          <p className="text-sm text-fg-muted">로그인 상태를 확인하는 중입니다…</p>
         ) : session.authed ? (
           session.emailMatches ? (
             /* 로그인 · 이메일 일치(서버 판정) */
             <>
-              <p className="text-sm leading-6 text-ink-muted">
-                <span className="font-medium text-ink">{preview.maskedEmail}</span> 계정으로 이 프로젝트에 합류합니다.
+              <p className="text-sm leading-6 text-fg-secondary">
+                <span className="font-medium text-fg">{preview.maskedEmail}</span> 계정으로 이 프로젝트에 합류합니다.
               </p>
               {errorLine}
               <button
@@ -217,8 +217,8 @@ export function InviteRedeemCard({ token, preview, loadError }: {
           ) : (
             /* 로그인 · 이메일 불일치(서버 판정) */
             <>
-              <p role="alert" className="text-sm leading-6 text-ink-muted">
-                이 초대는 <span className="font-medium text-ink">{preview.maskedEmail}</span> 님을 위한 것입니다.
+              <p role="alert" className="text-sm leading-6 text-fg-secondary">
+                이 초대는 <span className="font-medium text-fg">{preview.maskedEmail}</span> 님을 위한 것입니다.
                 해당 계정으로 로그인해 주세요.
               </p>
               <Link href="/login" className="btn btn-ghost w-full">로그인 화면으로</Link>
@@ -231,7 +231,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
                 이메일도 입력받는다. 대신 마스킹 힌트만 보여주고, 일치 판정은 서버(redeemInvite)에
                 맡긴다. 불일치면 join(true) 이 방금 만든 세션을 signOut 으로 되돌린다. */}
             <div>
-              <label htmlFor="invite-email" className="mb-1.5 block text-xs font-semibold text-ink-muted">이메일</label>
+              <label htmlFor="invite-email" className="mb-1.5 block text-xs font-semibold text-fg-secondary">이메일</label>
               <input
                 id="invite-email"
                 type="email"
@@ -241,10 +241,10 @@ export function InviteRedeemCard({ token, preview, loadError }: {
                 onChange={e => setEmail(e.target.value)}
                 required
               />
-              <p className="mt-1.5 text-xs text-ink-subtle">초대받은 주소: {preview.maskedEmail}</p>
+              <p className="mt-1.5 text-xs text-fg-muted">초대받은 주소: {preview.maskedEmail}</p>
             </div>
             <div>
-              <label htmlFor="invite-password" className="mb-1.5 block text-xs font-semibold text-ink-muted">비밀번호</label>
+              <label htmlFor="invite-password" className="mb-1.5 block text-xs font-semibold text-fg-secondary">비밀번호</label>
               <input
                 id="invite-password"
                 type="password"
@@ -265,14 +265,14 @@ export function InviteRedeemCard({ token, preview, loadError }: {
           /* 비로그인 · 계정 없음 — 가입 후 합류. 이메일 입력란은 두지 않는다(설계 P1). */
           <form onSubmit={submitSignup} className="space-y-4">
             <div>
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">이메일</span>
-              <p className="rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm text-ink-muted">
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">이메일</span>
+              <p className="rounded-xl border border-border bg-surface-subtle px-3 py-2.5 text-sm text-fg-secondary">
                 {preview.maskedEmail}
               </p>
-              <p className="mt-1.5 text-xs text-ink-subtle">초대에 지정된 주소로만 가입할 수 있습니다.</p>
+              <p className="mt-1.5 text-xs text-fg-muted">초대에 지정된 주소로만 가입할 수 있습니다.</p>
             </div>
             <div>
-              <label htmlFor="invite-name" className="mb-1.5 block text-xs font-semibold text-ink-muted">이름</label>
+              <label htmlFor="invite-name" className="mb-1.5 block text-xs font-semibold text-fg-secondary">이름</label>
               <input
                 id="invite-name"
                 type="text"
@@ -284,7 +284,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
               />
             </div>
             <div>
-              <label htmlFor="invite-new-password" className="mb-1.5 block text-xs font-semibold text-ink-muted">비밀번호</label>
+              <label htmlFor="invite-new-password" className="mb-1.5 block text-xs font-semibold text-fg-secondary">비밀번호</label>
               <input
                 id="invite-new-password"
                 type="password"
@@ -294,10 +294,10 @@ export function InviteRedeemCard({ token, preview, loadError }: {
                 onChange={e => setPassword(e.target.value)}
                 required
               />
-              <p className="mt-1.5 text-xs text-ink-subtle">8자 이상</p>
+              <p className="mt-1.5 text-xs text-fg-muted">8자 이상</p>
             </div>
             <div>
-              <label htmlFor="invite-password-confirm" className="mb-1.5 block text-xs font-semibold text-ink-muted">비밀번호 확인</label>
+              <label htmlFor="invite-password-confirm" className="mb-1.5 block text-xs font-semibold text-fg-secondary">비밀번호 확인</label>
               <input
                 id="invite-password-confirm"
                 type="password"

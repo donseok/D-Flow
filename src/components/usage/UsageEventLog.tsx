@@ -47,13 +47,13 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
 
   const translate = (k: DictKey) => t(locale, k)
   const chip = (active: boolean) =>
-    `chip ${active ? 'bg-brand text-action-fg' : 'text-ink-muted transition hover:text-ink'}`
+    `chip ${active ? 'bg-action text-action-fg' : 'text-fg-secondary transition hover:text-fg'}`
 
   return (
     <SectionCard eyebrow="ACCESS LOG" title="접속 로그" icon={ScrollText}
       actions={events.length >= limit
         ? <span className="badge bg-pending-weak text-pending">최근 {limit}건만 표시</span>
-        : <span className="badge bg-brand-weak text-brand">{events.length}건</span>}>
+        : <span className="badge bg-action-soft text-action">{events.length}건</span>}>
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
         <Link href={usageHref(base, filter, { menu: undefined })} className={chip(!filter.menu)}>전체 메뉴</Link>
         {menus.map(k => (
@@ -63,7 +63,7 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
         ))}
         {filter.user && (
           <Link href={usageHref(base, filter, { user: undefined })}
-            className="chip ml-auto bg-brand-weak text-brand transition hover:bg-brand hover:text-action-fg">
+            className="chip ml-auto bg-action-soft text-action transition hover:bg-action hover:text-action-fg">
             {names.get(filter.user) ?? '확인 불가'} <X className="ml-1 h-3 w-3" />
           </Link>
         )}
@@ -76,7 +76,7 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="border-b border-line text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+              <tr className="border-b border-border text-xs font-semibold uppercase tracking-wide text-fg-muted">
                 <th className="py-2 pr-3 text-left">시각</th>
                 <th className="py-2 pr-3 text-left">사용자</th>
                 <th className="py-2 pr-3 text-left">메뉴</th>
@@ -85,16 +85,16 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
             </thead>
             <tbody>
               {visibleEvents.map(e => (
-                <tr key={e.id} className="border-b border-line/60">
-                  <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDateTime(e.occurredAt, timeZone)}</td>
+                <tr key={e.id} className="border-b border-border/60">
+                  <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDateTime(e.occurredAt, timeZone)}</td>
                   {/* 계정 목록에 없는 id 는 이름을 지어내지 않는다. 이름 클릭 = 그 사용자로 필터. */}
-                  <td className="py-2 pr-3 text-ink">
-                    <Link href={usageHref(base, filter, { user: e.userId })} className="transition hover:text-brand hover:underline">
+                  <td className="py-2 pr-3 text-fg">
+                    <Link href={usageHref(base, filter, { user: e.userId })} className="transition hover:text-action hover:underline">
                       {names.get(e.userId) ?? '확인 불가'}
                     </Link>
                   </td>
-                  <td className="py-2 pr-3 text-ink-muted">{menuLabel(e.menuKey, translate)}</td>
-                  <td className="py-2 pr-3 font-mono text-[11px] text-ink-subtle">{e.path}</td>
+                  <td className="py-2 pr-3 text-fg-secondary">{menuLabel(e.menuKey, translate)}</td>
+                  <td className="py-2 pr-3 font-mono text-[11px] text-fg-muted">{e.path}</td>
                 </tr>
               ))}
             </tbody>
@@ -102,7 +102,7 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
         </div>
       )}
       {events.length > EVENT_PAGE_SIZE && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-xs text-ink-muted">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-fg-secondary">
           <span className="tabular-nums">
             {pageStart + 1}–{Math.min(pageStart + EVENT_PAGE_SIZE, events.length)} / {events.length}건
           </span>

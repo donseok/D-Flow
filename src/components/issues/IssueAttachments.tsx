@@ -155,7 +155,7 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
   return (
     <section>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-fg-muted">
           <Paperclip className="h-3.5 w-3.5" /> {t('issue.attach.section')}
         </div>
         {editable && remaining > 0 && !disabled && (
@@ -168,34 +168,34 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
       </div>
 
       {editable && (
-        <p className="mb-2 text-[11px] text-ink-subtle">
+        <p className="mb-2 text-[11px] text-fg-muted">
           {t('issue.attach.limit').replace('{mb}', String(MAX_MB)).replace('{n}', String(ISSUE_ATTACHMENT_MAX_COUNT))}
         </p>
       )}
       {loadFailed && (
-        <p className="mb-2 text-xs font-medium text-delayed">{t('issue.err.attachLoadFailed')}</p>
+        <p className="mb-2 text-xs font-medium text-danger">{t('issue.err.attachLoadFailed')}</p>
       )}
-      {err && <p className="mb-2 text-xs font-medium text-delayed">{err}</p>}
+      {err && <p className="mb-2 text-xs font-medium text-danger">{err}</p>}
 
       {list == null ? (
-        <p className="text-sm text-ink-subtle">{t('common.loading')}</p>
+        <p className="text-sm text-fg-muted">{t('common.loading')}</p>
       ) : total === 0 ? (
-        <p className="text-sm text-ink-subtle">{t('issue.attach.empty')}</p>
+        <p className="text-sm text-fg-muted">{t('issue.attach.empty')}</p>
       ) : (
         <ul className="space-y-1.5">
           {saved.map(a => (
-            <li key={a.id} className="flex items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-2.5 py-2">
-              <FileText className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
+            <li key={a.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface-subtle/60 px-2.5 py-2">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
               <button
                 type="button"
                 onClick={() => void openAttachment(a.id)}
                 disabled={opening === a.id}
-                className="min-w-0 flex-1 truncate text-left text-[13px] text-brand hover:underline"
+                className="min-w-0 flex-1 truncate text-left text-[13px] text-action hover:underline"
                 title={a.fileName}
               >
                 {a.fileName}
               </button>
-              {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(a.size)}</span>}
+              {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-fg-muted">{fmtSize(a.size)}</span>}
               {editable && (
                 <button
                   type="button"
@@ -203,7 +203,7 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
                   disabled={busy}
                   aria-label={t('issue.attach.remove')}
                   title={t('issue.attach.remove')}
-                  className="shrink-0 rounded p-1 text-ink-subtle hover:text-delayed"
+                  className="shrink-0 rounded p-1 text-fg-muted hover:text-danger"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -213,18 +213,18 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
           {pendingFiles.map((f, i) => (
             <li
               key={`pending-${i}-${f.name}`}
-              className="flex items-center gap-2 rounded-lg border border-dashed border-line bg-surface-2/30 px-2.5 py-2"
+              className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-surface-subtle/30 px-2.5 py-2"
             >
-              <FileText className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
-              <span className="min-w-0 flex-1 truncate text-[13px] text-ink" title={f.name}>{f.name}</span>
-              <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(f.size)}</span>
+              <FileText className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
+              <span className="min-w-0 flex-1 truncate text-[13px] text-fg" title={f.name}>{f.name}</span>
+              <span className="shrink-0 text-[11px] tabular-nums text-fg-muted">{fmtSize(f.size)}</span>
               <button
                 type="button"
                 onClick={() => dropPending(i)}
                 disabled={disabled}
                 aria-label={t('issue.attach.remove')}
                 title={t('issue.attach.remove')}
-                className="shrink-0 rounded p-1 text-ink-subtle hover:text-delayed"
+                className="shrink-0 rounded p-1 text-fg-muted hover:text-danger"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -233,7 +233,7 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
         </ul>
       )}
       {pendingFiles.length > 0 && (
-        <p className="mt-2 text-[11px] text-ink-subtle">{t('issue.attach.pending')}</p>
+        <p className="mt-2 text-[11px] text-fg-muted">{t('issue.attach.pending')}</p>
       )}
     </section>
   )

@@ -78,8 +78,8 @@ export function MinuteVersionPanel({
     return (
       <section className={embedded ? 'min-w-0' : 'card shrink-0 px-4 py-2'} aria-labelledby="minute-version-title">
         <div className="flex items-center gap-2">
-          <History className="h-4 w-4 text-brand" aria-hidden />
-          <h2 id="minute-version-title" className="text-sm font-bold text-ink">{t('min.version.title')}</h2>
+          <History className="h-4 w-4 text-action" aria-hidden />
+          <h2 id="minute-version-title" className="text-sm font-bold text-fg">{t('min.version.title')}</h2>
         </div>
         <div className="mt-2"><LoadErrorNotice message={loadError} /></div>
       </section>
@@ -114,18 +114,18 @@ export function MinuteVersionPanel({
     <li
       key={version.id}
       className={`rounded-lg border p-3 ${
-        isCurrent || isSelected ? 'border-brand/30 bg-brand-weak/40' : 'border-line bg-surface'
+        isCurrent || isSelected ? 'border-action/30 bg-action-soft/40' : 'border-border bg-surface'
       }`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         {version.viewHref ? (
-          <Link href={version.viewHref} className="inline-flex items-center gap-1.5 text-sm font-bold text-ink hover:text-brand">
-            <FileText className="h-3.5 w-3.5 text-ink-subtle" aria-hidden />
+          <Link href={version.viewHref} className="inline-flex items-center gap-1.5 text-sm font-bold text-fg hover:text-action">
+            <FileText className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
             v{version.versionNo}
           </Link>
         ) : (
-          <span className="inline-flex items-center gap-1.5 text-sm font-bold text-ink">
-            <FileText className="h-3.5 w-3.5 text-ink-subtle" aria-hidden />
+          <span className="inline-flex items-center gap-1.5 text-sm font-bold text-fg">
+            <FileText className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
             v{version.versionNo}
           </span>
         )}
@@ -136,13 +136,13 @@ export function MinuteVersionPanel({
           </span>
         )}
         {isSelected && !isCurrent && (
-          <span className="chip bg-brand-weak text-brand">{t('min.version.viewing')}</span>
+          <span className="chip bg-action-soft text-action">{t('min.version.viewing')}</span>
         )}
-        <span className="text-xs tabular-nums text-ink-subtle">
+        <span className="text-xs tabular-nums text-fg-muted">
           {versionDate(version.createdAt, locale, timeZone)}
         </span>
         {version.createdByName && (
-          <span className="text-xs text-ink-muted">{version.createdByName}</span>
+          <span className="text-xs text-fg-secondary">{version.createdByName}</span>
         )}
         {version.hasFile && onDownload && (
           <button
@@ -150,7 +150,7 @@ export function MinuteVersionPanel({
             onClick={() => download(version.id)}
             disabled={downloading}
             aria-label={`${t('min.version.downloadAria')}: ${version.fileName || t('min.version.download')}`}
-            className="ml-auto inline-flex max-w-full items-center gap-1 text-xs text-brand hover:text-brand-hover disabled:opacity-60"
+            className="ml-auto inline-flex max-w-full items-center gap-1 text-xs text-action hover:text-action-hover disabled:opacity-60"
           >
             <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span className="max-w-48 truncate">
@@ -160,10 +160,10 @@ export function MinuteVersionPanel({
         )}
       </div>
       {downloadErrors[version.id] && (
-        <p role="alert" className="mt-1 flex items-center gap-1.5 text-xs text-ink"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-delayed" />{downloadErrors[version.id]}</p>
+        <p role="alert" className="mt-1 flex items-center gap-1.5 text-xs text-fg"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-danger" />{downloadErrors[version.id]}</p>
       )}
       {!version.hasFile && (
-        <p className="mt-1 text-xs text-ink-subtle">{t('min.version.noFile')}</p>
+        <p className="mt-1 text-xs text-fg-muted">{t('min.version.noFile')}</p>
       )}
     </li>
     )
@@ -172,27 +172,27 @@ export function MinuteVersionPanel({
   return (
     <section className={embedded ? 'min-w-0' : 'card shrink-0 px-4 py-2'} aria-labelledby="minute-version-title">
       <div className="flex items-center gap-2">
-        <History className="h-4 w-4 text-brand" aria-hidden />
-        <h2 id="minute-version-title" className="text-sm font-bold text-ink">
+        <History className="h-4 w-4 text-action" aria-hidden />
+        <h2 id="minute-version-title" className="text-sm font-bold text-fg">
           {t('min.version.title')}
         </h2>
         {/* 접힘 상태에서도 '몇 번을 보고 있나'가 남아야 한다 — 없으면 기본 접힘이 위쪽 배너
             (MinuteViewer)가 계속 존재한다는 가정에 기대게 된다. 펼치면 같은 신호가 해당 버전
             항목(위 renderVersion)에 붙으므로 그때는 뺀다 — 중복 표시 방지. */}
         {collapsible && !open && selectedVersionNo != null && (
-          <span className="chip bg-brand-weak text-brand">
+          <span className="chip bg-action-soft text-action">
             v{selectedVersionNo} {t('min.version.viewing')}
           </span>
         )}
         {/* 우측 끝 고정점은 **마지막 요소** 하나뿐이다 — 토글이 있으면 토글이, 없으면(embedded)
             개수가 가져간다. 둘 다 ml-auto 면 맨텍스트 '총 2개'와 '펼치기'가 8px 간격으로 붙어
             한 덩어리로 읽힌다(MinuteInsightCard 는 왼쪽 이웃이 배경 있는 chip 이라 붙어도 구분된다). */}
-        <span className={`text-xs text-ink-subtle ${collapsible ? '' : 'ml-auto'}`}>
+        <span className={`text-xs text-fg-muted ${collapsible ? '' : 'ml-auto'}`}>
           {t('min.version.total').replace('{n}', String(ordered.length))}
         </span>
         {collapsible && (
           <button onClick={() => setOpen(o => !o)} aria-expanded={open}
-            className="ml-auto inline-flex items-center gap-1 text-xs text-ink-muted hover:text-ink">
+            className="ml-auto inline-flex items-center gap-1 text-xs text-fg-secondary hover:text-fg">
             {open
               ? <ChevronUp className="h-3.5 w-3.5" aria-hidden />
               : <ChevronDown className="h-3.5 w-3.5" aria-hidden />}
@@ -208,14 +208,14 @@ export function MinuteVersionPanel({
           MinuteInsightCard 의 펼침 영역(max-h-96 overflow-y-auto)이 이미 감싸므로 붙이지 않는다. */}
       {open && (
         <div className={collapsible ? 'mt-1 max-h-96 overflow-y-auto' : undefined}>
-          <p className="mt-1 text-xs text-ink-muted">{t('min.version.desc')}</p>
+          <p className="mt-1 text-xs text-fg-secondary">{t('min.version.desc')}</p>
 
           <ul className="mt-3 space-y-2">
             {renderVersion(current, true)}
           </ul>
 
           {previous.length > 0 && (
-            <div className="mt-3 border-t border-line pt-3">
+            <div className="mt-3 border-t border-border pt-3">
               <p className="eyebrow mb-2">{t('min.version.previous')}</p>
               <ul className="space-y-2">
                 {previous.map(version => renderVersion(version, false))}

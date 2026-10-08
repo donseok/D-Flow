@@ -15,10 +15,10 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 
 /** kind 칩 색 — 결정=done/액션=progress/기한=accent-warning/리스크=delayed (스펙 §6.2, StatusPill 패턴). */
 const KIND_CHIP: Record<InsightKind, { chip: string; dot: string }> = {
-  decision: { chip: 'bg-done-weak text-done', dot: 'bg-done' },
+  decision: { chip: 'bg-success-weak text-success', dot: 'bg-success' },
   action: { chip: 'bg-progress-weak text-progress', dot: 'bg-progress' },
-  deadline: { chip: 'bg-accent-warning/15 text-accent-warning', dot: 'bg-accent-warning' },
-  risk: { chip: 'bg-delayed-weak text-delayed', dot: 'bg-delayed' },
+  deadline: { chip: 'bg-warning/15 text-warning', dot: 'bg-warning' },
+  risk: { chip: 'bg-danger-weak text-danger', dot: 'bg-danger' },
 }
 
 export function MinuteInsightCard({
@@ -69,8 +69,8 @@ export function MinuteInsightCard({
   return (
     <div className="card shrink-0 px-4 py-2">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-brand" />
-        <span className="text-sm font-bold text-ink">{t('min.insight.title')}</span>
+        <Sparkles className="h-4 w-4 text-action" />
+        <span className="text-sm font-bold text-fg">{t('min.insight.title')}</span>
         <span className="flex flex-wrap items-center gap-1.5">
           {counts.map(([k, n]) => (
             <span key={k} className={`chip ${KIND_CHIP[k].chip}`}>
@@ -86,7 +86,7 @@ export function MinuteInsightCard({
           )}
         </span>
         <button onClick={() => setOpen(o => !o)}
-          className="ml-auto inline-flex items-center gap-1 text-xs text-ink-muted hover:text-ink">
+          className="ml-auto inline-flex items-center gap-1 text-xs text-fg-secondary hover:text-fg">
           {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           {open ? t('min.insight.collapse') : t('min.insight.expand')}
         </button>
@@ -96,25 +96,25 @@ export function MinuteInsightCard({
         <div className="mt-2 max-h-96 space-y-3 overflow-y-auto">
           <div className="space-y-2">
             {cardState === 'pending' && healState !== 'failed' && (
-              <p className="text-sm text-ink-muted">{t('min.insight.preparing')}</p>
+              <p className="text-sm text-fg-secondary">{t('min.insight.preparing')}</p>
             )}
             {cardState === 'pending' && healState === 'failed' && (
-              <p className="text-sm text-ink-muted">
+              <p className="text-sm text-fg-secondary">
                 {healError ?? t('min.insight.unavailable')}
-                <button onClick={runHeal} className="ml-2 text-brand underline underline-offset-2">
+                <button onClick={runHeal} className="ml-2 text-action underline underline-offset-2">
                   {t('min.insight.retry')}
                 </button>
               </p>
             )}
             {cardState === 'empty' && (
-              <p className="text-sm text-ink-muted">{t('min.insight.none')}</p>
+              <p className="text-sm text-fg-secondary">{t('min.insight.none')}</p>
             )}
             {cardState === 'ready' && (
               <ul className="space-y-1">
                 {INS_PRIORITY.flatMap(k => items.filter(i => i.kind === k)).map(i => (
                   <li key={i.id}>
                     <button onClick={() => onJump(i.blockIndex)}
-                      className="flex w-full items-start gap-2 rounded-lg px-1.5 py-1 text-left text-sm text-ink hover:bg-surface-2">
+                      className="flex w-full items-start gap-2 rounded-lg px-1.5 py-1 text-left text-sm text-fg hover:bg-surface-subtle">
                       <span className={`chip mt-0.5 shrink-0 ${KIND_CHIP[i.kind as InsightKind].chip}`}>
                         {t(`min.insight.kind.${i.kind as InsightKind}`)}
                       </span>
@@ -126,15 +126,15 @@ export function MinuteInsightCard({
               </ul>
             )}
             {attention.length > 0 && (
-              <div className="border-t border-line pt-2">
+              <div className="border-t border-border pt-2">
                 <p className="eyebrow mb-1">{t('min.insight.attention')}</p>
                 <ul className="space-y-1">
                   {attention.map(a => (
                     <li key={a.blockIndex}>
                       <button onClick={() => onJump(a.blockIndex)}
-                        className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-sm text-ink-muted hover:bg-surface-2">
+                        className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-sm text-fg-secondary hover:bg-surface-subtle">
                         <span className="min-w-0 flex-1 truncate">“{a.excerpt}”</span>
-                        <span className="chip shrink-0 bg-accent-warning/15 text-accent-warning">👤 {a.count}</span>
+                        <span className="chip shrink-0 bg-warning/15 text-warning">👤 {a.count}</span>
                       </button>
                     </li>
                   ))}
@@ -142,7 +142,7 @@ export function MinuteInsightCard({
               </div>
             )}
             {linkedIssues.length > 0 && (
-              <div className="border-t border-line pt-2">
+              <div className="border-t border-border pt-2">
                 <p className="eyebrow mb-1.5">{t('min.issue.linked')}</p>
                 <ul className="space-y-1.5">
                   {linkedIssues.map(issue => {
@@ -150,7 +150,7 @@ export function MinuteInsightCard({
                       <li key={issue.linkId} className="flex items-center gap-1.5">
                         <button
                           onClick={() => onJump(issue.blockIndex)}
-                          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs text-ink hover:bg-surface-2"
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs text-fg hover:bg-surface-subtle"
                         >
                           <CircleAlert className="h-3.5 w-3.5 shrink-0 text-progress" aria-hidden />
                           <span className="shrink-0 font-semibold text-progress">
@@ -158,13 +158,13 @@ export function MinuteInsightCard({
                           </span>
                           <span className="min-w-0 flex-1 truncate">{issue.title}</span>
                           <span className="shrink-0"><IssueStatusPill category={issue.status} /></span>
-                          <span className="shrink-0 text-[11px] text-brand">{t('min.issue.jump')}</span>
+                          <span className="shrink-0 text-[11px] text-action">{t('min.issue.jump')}</span>
                         </button>
                         <Link
                           href={`/p/${issue.projectId}/issues?focus=${encodeURIComponent(issue.issueId)}`}
                           title={t('min.issue.openManagement')}
                           aria-label={t('min.issue.openManagement')}
-                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-subtle hover:bg-surface-2 hover:text-brand"
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-surface-subtle hover:text-action"
                         >
                           <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                         </Link>
@@ -176,7 +176,7 @@ export function MinuteInsightCard({
             )}
           </div>
           {details && (
-            <div className="grid gap-4 border-t border-line pt-3 xl:grid-cols-2">
+            <div className="grid gap-4 border-t border-border pt-3 xl:grid-cols-2">
               {details}
             </div>
           )}

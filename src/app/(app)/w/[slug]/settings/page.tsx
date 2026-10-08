@@ -113,17 +113,17 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
               invalidReason={allowed.status === 'invalid' ? allowed.error : undefined}
               requiredMissing={allowed.status === 'required_missing'} />
           ) : null}
-          <div className="border-t border-line pt-4">
-            <h4 className="text-sm font-semibold text-ink">외부 연동 자격증명</h4>
-            <p className="mt-1 text-xs leading-5 text-ink-muted">
+          <div className="border-t border-border pt-4">
+            <h4 className="text-sm font-semibold text-fg">외부 연동 자격증명</h4>
+            <p className="mt-1 text-xs leading-5 text-fg-secondary">
               회의록 자동 등록(v3 API) 및 에이전트 워크스페이스 권한을 위한 API 토큰을 발급하고 관리합니다.
             </p>
             <div className="mt-3">
               <Link
                 href={wsHref(access.slug, 'settings/integrations')}
-                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-ink hover:bg-surface-hover hover:border-line-strong transition-colors shadow-xs"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-fg hover:bg-surface-hover hover:border-border-input transition-colors shadow-xs"
               >
-                <KeyRound className="size-3.5 text-ink-muted" />
+                <KeyRound className="size-3.5 text-fg-secondary" />
                 연동 자격증명 관리 바로가기
               </Link>
             </div>
@@ -134,26 +134,26 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         <div className="space-y-4">
           <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'invites.allowed_domains')]} />
           {/* 공용 팀은 그 워크스페이스 관리자가 연다(SP3b D22) — 이 화면은 관리자만 들어오므로(위 redirect) 링크가 튕기지 않는다. */}
-          <p className="text-sm text-ink-muted">공용 팀 기준정보는 <Link href={wsHref(access.slug, 'admin/teams')} className="font-medium text-brand underline">공용 팀 관리</Link>에서 편집합니다.</p>
+          <p className="text-sm text-fg-secondary">공용 팀 기준정보는 <Link href={wsHref(access.slug, 'admin/teams')} className="font-medium text-action underline">공용 팀 관리</Link>에서 편집합니다.</p>
         </div>
       </SectionCard>
       <SectionCard id="workspace-calendar" searchText="calendar.working_days calendar.timezone calendar.week_start 달력 시간대 근무 요일 주 시작"
         eyebrow="달력" title="시간대·근무 요일·주 시작" icon={CalendarDays}>
         <div className="space-y-3">
-          <p className="text-sm text-ink-muted">워크스페이스 화면(내 회의·회의록 등)의 오늘 날짜와 달력이 이 값을 따르고, 새 프로젝트를 만들 때 초기값으로 복사됩니다. 이미 있는 프로젝트는 바뀌지 않습니다.</p>
+          <p className="text-sm text-fg-secondary">워크스페이스 화면(내 회의·회의록 등)의 오늘 날짜와 달력이 이 값을 따르고, 새 프로젝트를 만들 때 초기값으로 복사됩니다. 이미 있는 프로젝트는 바뀌지 않습니다.</p>
           {/* 이 페이지는 워크스페이스 관리자만 들인다(access.isAdmin 아니면 redirect) — 키 정의의 editor 도 workspace_admin 이라 액션이 다시 판정한다 */}
           <CalendarSettingsPanel scope={{ workspaceId: access.id }} revision={config.revision} todayIso={calendarToday} locale={locale}
             canEdit suggestBrowserTimezone {...calendarFields} />
         </div>
       </SectionCard>
       <SectionCard id="workspace-minutes" searchText="minutes.attachments 회의록 첨부 정책 용량 개수 형식 미리보기" eyebrow="회의록" title={t(locale, 'settings.minutes.attachments.label')} icon={Paperclip}>
-        <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.minutes.attachments.desc')}</p>
+        <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.minutes.attachments.desc')}</p>
         {/* 이 페이지는 워크스페이스 관리자만 들인다 — 키 정의의 editor 도 workspace_admin 이라 액션이 다시 판정한다 */}
         <AttachmentPolicyEditor key={`${access.id}-${config.revision}`} scope={{ workspaceId: access.id }} revision={config.revision} canEdit
           policy={attPolicy} invalid={attPolicy === null} />
       </SectionCard>
       <SectionCard id="workspace-minute-roots" searchText="minutes.root_folders 회의록 최상위 폴더 팀 폴더" eyebrow="회의록 폴더" title={t(locale, 'settings.minutes.root_folders.label')} icon={FolderTree}>
-        <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.minutes.root_folders.desc')}</p>
+        <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.minutes.root_folders.desc')}</p>
         <RootFoldersEditor key={`${access.id}-${config.revision}`} workspaceId={access.id} revision={config.revision} canEdit={access.isSuperuser}
           value={rootFolders} invalid={rootFolders === null} />
       </SectionCard>
@@ -171,7 +171,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
       </SectionCard>
       {/* 보안 제한(개정 §2.9 워크스페이스 전역 키) — 로컬 초안 정책(security.local_drafts, §5.8.5). 모든 편집 화면이 이 값을 따른다 */}
       <SectionCard id="workspace-security" searchText="security.local_drafts 로컬 초안 보존 기간 보안" eyebrow="보안" title={t(locale, 'settings.security.local_drafts.label')} icon={ShieldCheck}>
-        <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.security.local_drafts.desc')}</p>
+        <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.security.local_drafts.desc')}</p>
         <LocalDraftsEditor workspaceId={access.id} revision={config.revision}
           initial={config.keys['security.local_drafts'].status === 'set' || config.keys['security.local_drafts'].status === 'default' ? config.keys['security.local_drafts'].value : null}
           invalidReason={config.keys['security.local_drafts'].status === 'invalid' ? config.keys['security.local_drafts'].error : undefined} />
@@ -179,14 +179,14 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
       <SectionCard id="workspace-history" searchText="settings history revision authz 기록 이력 설정 변경 권한 변경" eyebrow="기록" title="변경 이력" icon={History}>
         <div className="space-y-8">
           <section aria-label="설정 변경">
-            <h4 className="mb-3 text-sm font-semibold text-ink">설정 변경</h4>
+            <h4 className="mb-3 text-sm font-semibold text-fg">설정 변경</h4>
             {historyCal.ok
               ? <SettingsHistoryList scope={{ workspaceId: access.id }} initial={history} timeZone={historyCal.calendar.timezone} />
               : historyCalError}
           </section>
-          <section aria-label="권한 변경" className="border-t border-line pt-6">
-            <h4 className="mb-1 text-sm font-semibold text-ink">권한 변경</h4>
-            <p className="mb-3 text-xs text-ink-muted">누가 누구의 권한을 바꿨는지 남는 기록입니다.{access.isSuperuser ? ' 플랫폼 관리자 지정·해제도 함께 보입니다.' : ''}</p>
+          <section aria-label="권한 변경" className="border-t border-border pt-6">
+            <h4 className="mb-1 text-sm font-semibold text-fg">권한 변경</h4>
+            <p className="mb-3 text-xs text-fg-secondary">누가 누구의 권한을 바꿨는지 남는 기록입니다.{access.isSuperuser ? ' 플랫폼 관리자 지정·해제도 함께 보입니다.' : ''}</p>
             {historyCal.ok
               ? <AuthzEventsList workspaceId={access.id} initial={authzEvents} timeZone={historyCal.calendar.timezone} />
               : historyCalError}

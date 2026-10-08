@@ -35,7 +35,7 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
 
   return (
     <>
-      <ul className="divide-y divide-line">
+      <ul className="divide-y divide-border">
         {rows.map(o => {
           const meta = vocabView('meetings.categories', vocabOf(categories, o.projectId), o.category, t)
           const extra = extras[o.seriesId] ?? EMPTY_EXTRA
@@ -44,7 +44,7 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
           return (
             <li key={o.occurrenceId} onClick={() => setDetailOcc(o)} role="button" tabIndex={0}
               onKeyDown={e => { if (e.key === 'Enter') setDetailOcc(o) }}
-              className="flex cursor-pointer items-center gap-3 py-2.5 first:pt-0 last:pb-0 transition hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2">
+              className="flex cursor-pointer items-center gap-3 py-2.5 first:pt-0 last:pb-0 transition hover:bg-surface-subtle focus:outline-none focus-visible:bg-surface-subtle">
               <DateCell date={o.occurrenceDate} isToday={o.occurrenceDate === today}
                 todayLabel={t('dash.today')} weekday={t(weekdayKey(o.occurrenceDate) as DictKey)} />
               <span className={`h-2 w-2 shrink-0 rounded-full ${meta.dot}`} />
@@ -52,8 +52,8 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
                   절반이 빈다. flex-direction/grid 는 반응형 display 안전망과 무관하다. */}
               <div className="min-w-0 flex-1 md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,6fr)] md:items-center md:gap-x-4">
                 <div className="min-w-0">
-                  <div className="truncate text-[13px] font-medium text-ink" title={o.title}>{o.title}</div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-muted">
+                  <div className="truncate text-[13px] font-medium text-fg" title={o.title}>{o.title}</div>
+                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-fg-secondary">
                     {o.startTime && (
                       <span className="tabular-nums">
                         {o.startTime.slice(0, 5)}{o.endTime ? `–${o.endTime.slice(0, 5)}` : ''}
@@ -64,25 +64,25 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
                 </div>
                 <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] md:mt-0"
                   title={extra.attendees.length ? extra.attendees.join(', ') : undefined}>
-                  <Users className="h-3 w-3 shrink-0 text-ink-subtle" aria-hidden />
+                  <Users className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden />
                   {extra.attendees.length === 0 ? (
-                    <span className="text-ink-subtle">{t('dash.meet.noAttendees')}</span>
+                    <span className="text-fg-muted">{t('dash.meet.noAttendees')}</span>
                   ) : (
                     <>
-                      <span className="truncate text-ink-muted">{shownNames}</span>
+                      <span className="truncate text-fg-secondary">{shownNames}</span>
                       {moreNames > 0 && (
-                        <span className="shrink-0 text-ink-subtle">{t('dash.meet.attendeesMore').replace('{n}', String(moreNames))}</span>
+                        <span className="shrink-0 text-fg-muted">{t('dash.meet.attendeesMore').replace('{n}', String(moreNames))}</span>
                       )}
                     </>
                   )}
                 </div>
                 <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] md:mt-0"
                   title={extra.memo || undefined}>
-                  <NotebookText className="h-3 w-3 shrink-0 text-ink-subtle" aria-hidden />
+                  <NotebookText className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden />
                   {extra.memo ? (
-                    <span className="truncate text-ink-muted">{extra.memo}</span>
+                    <span className="truncate text-fg-secondary">{extra.memo}</span>
                   ) : (
-                    <span className="text-ink-subtle">{t('dash.meet.noMemo')}</span>
+                    <span className="text-fg-muted">{t('dash.meet.noMemo')}</span>
                   )}
                 </div>
               </div>

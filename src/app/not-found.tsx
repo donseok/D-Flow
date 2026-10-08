@@ -13,7 +13,7 @@ export default async function NotFound() {
           aria-hidden
         />
 
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-weak text-brand">
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-action-soft text-action">
           <Compass className="h-6 w-6" />
         </span>
 
@@ -23,8 +23,8 @@ export default async function NotFound() {
           404
         </div>
 
-        <h1 className="mt-4 text-lg font-bold tracking-tight text-ink">{t(locale, 'home.nfTitle')}</h1>
-        <p className="mt-2 text-sm leading-6 text-ink-muted">
+        <h1 className="mt-4 text-lg font-bold tracking-tight text-fg">{t(locale, 'home.nfTitle')}</h1>
+        <p className="mt-2 text-sm leading-6 text-fg-secondary">
           {t(locale, 'home.nfDesc')}
         </p>
 

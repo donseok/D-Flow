@@ -37,18 +37,18 @@ const KEY_LABEL: Record<CreditKey, DictKey> = {
 }
 /** 색 — WBS 단계 칩과 같은 계열. RW 는 단계가 아니라 반려·재작업 사건이라 범례에서 마름모다. */
 const DOT_CLS: Record<CreditKey, string> = {
-  as: 'bg-pending', ip: 'bg-progress', rw: 'bg-delayed', im: 'bg-brand', xx: 'bg-done',
+  as: 'bg-pending', ip: 'bg-progress', rw: 'bg-danger', im: 'bg-action', xx: 'bg-success',
 }
 const RING_CLS: Record<CreditKey, string> = {
-  as: 'border-pending', ip: 'border-progress', rw: 'border-delayed', im: 'border-brand', xx: 'border-done',
+  as: 'border-pending', ip: 'border-progress', rw: 'border-danger', im: 'border-action', xx: 'border-success',
 }
 const STATUS_LABEL: Record<Status, DictKey> = {
   not_started: 'settings.creditPvNotStarted', in_progress: 'settings.creditPvInProgress',
   delayed: 'settings.creditPvDelayed', done: 'settings.creditPvDone',
 }
 const STATUS_CHIP: Record<Status, string> = {
-  not_started: 'bg-surface-2 text-ink-subtle', in_progress: 'bg-progress-weak text-progress',
-  delayed: 'bg-delayed-weak text-delayed', done: 'bg-done-weak text-done',
+  not_started: 'bg-surface-subtle text-fg-muted', in_progress: 'bg-progress-weak text-progress',
+  delayed: 'bg-danger-weak text-danger', done: 'bg-success-weak text-success',
 }
 /** 눈금 — 5 마다 긋고 10 마다 숫자를 붙인다(읽기용 자 — 입력 단위·최소 간격은 프로젝트의 크레딧 정책이 정한다, SP5b). */
 const TICK = 5
@@ -199,7 +199,7 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
 
   return (
     <div data-stage-credits className="space-y-3 pt-2">
-      <div data-credit-table="default" className="rounded-[10px] border border-line bg-surface">
+      <div data-credit-table="default" className="rounded-[10px] border border-border bg-surface">
         {/* ── 슬라이더 ── */}
         <div className="relative touch-none select-none px-7 pb-[34px] pt-[50px]">
           {/* 값 — 핸들 바로 위. 핸들과 형제로 두어야 숫자를 눌러도 드래그가 걸리지 않는다. */}
@@ -208,12 +208,12 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
               <div key={key} data-credit-label={key}
                 className="pointer-events-auto absolute top-0 flex -translate-x-1/2 flex-col items-center"
                 style={{ left: `${table[key]}%` }}>
-                <span className={`text-[10px] font-semibold tracking-[0.1em] ${cursor === key ? 'text-critical' : 'text-ink-subtle'}`}>
+                <span className={`text-[10px] font-semibold tracking-[0.1em] ${cursor === key ? 'text-critical' : 'text-fg-muted'}`}>
                   {key.toUpperCase()}
                 </span>
                 {key === 'xx' ? (
                   <span data-credit-fixed="xx" title={t('settings.creditXxLocked')}
-                    className="w-[3.4em] text-center font-mono text-[15px] font-semibold tabular-nums text-ink-subtle">
+                    className="w-[3.4em] text-center font-mono text-[15px] font-semibold tabular-nums text-fg-muted">
                     100
                   </span>
                 ) : (
@@ -228,14 +228,14 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
                     onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
                     onBlur={() => commitDraft(key)}
                     onKeyDown={e => { if (e.key === 'Enter') commitDraft(key) }}
-                    className={`w-[3.4em] border-0 border-b-[1.5px] border-transparent bg-transparent p-0 text-center font-mono text-[15px] font-semibold tabular-nums outline-none hover:border-line-strong focus:border-brand ${cursor === key ? 'text-critical' : 'text-ink'}`}
+                    className={`w-[3.4em] border-0 border-b-[1.5px] border-transparent bg-transparent p-0 text-center font-mono text-[15px] font-semibold tabular-nums outline-none hover:border-border-input focus:border-action ${cursor === key ? 'text-critical' : 'text-fg'}`}
                   />
                 )}
               </div>
             ))}
           </div>
 
-          <div ref={trackRef} data-credit-track className="relative h-[3px] rounded-sm bg-line-strong">
+          <div ref={trackRef} data-credit-track className="relative h-[3px] rounded-sm bg-border-input">
             <div data-credit-fill className="absolute left-0 top-0 h-full rounded-sm bg-critical/55"
               style={{ width: `${cursorPct}%` }} aria-hidden />
 
@@ -257,7 +257,7 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
                 return (
                   <span key={key} data-credit-handle="xx" data-credit-locked="" role="img"
                     aria-label={t('settings.creditXxLocked')} title={t('settings.creditXxLocked')}
-                    className={`absolute top-1/2 grid cursor-not-allowed place-items-center border-2 shadow-sm ${isCursor ? '-ml-[7px] -mt-[7px] h-3.5 w-3.5 rotate-45 rounded-[2px] border-critical bg-critical text-critical-fg' : '-ml-2 -mt-2 h-4 w-4 rounded-full border-done bg-done text-success-fg'}`}
+                    className={`absolute top-1/2 grid cursor-not-allowed place-items-center border-2 shadow-sm ${isCursor ? '-ml-[7px] -mt-[7px] h-3.5 w-3.5 rotate-45 rounded-[2px] border-critical bg-critical text-critical-fg' : '-ml-2 -mt-2 h-4 w-4 rounded-full border-success bg-success text-success-fg'}`}
                     style={{ left: '100%' }}>
                     <LockGlyph spin={isCursor} />
                   </span>
@@ -277,7 +277,7 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
                   onPointerDown={startDrag(key)}
                   onKeyDown={onHandleKey(key)}
                   onFocus={() => setCursor(key)}
-                  className={`absolute top-1/2 touch-none border-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-brand ${isCursor ? '-ml-[7px] -mt-[7px] h-3.5 w-3.5 rotate-45 rounded-[2px] border-critical bg-critical' : `-ml-2 -mt-2 h-4 w-4 rounded-full bg-surface ${RING_CLS[key]}`} ${locked ? 'opacity-70' : 'cursor-grab active:cursor-grabbing'}`}
+                  className={`absolute top-1/2 touch-none border-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-action ${isCursor ? '-ml-[7px] -mt-[7px] h-3.5 w-3.5 rotate-45 rounded-[2px] border-critical bg-critical' : `-ml-2 -mt-2 h-4 w-4 rounded-full bg-surface ${RING_CLS[key]}`} ${locked ? 'opacity-70' : 'cursor-grab active:cursor-grabbing'}`}
                   style={{ left: `${table[key]}%` }}
                 />
               )
@@ -287,10 +287,10 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
           <div data-credit-scale className="absolute bottom-1 left-7 right-7 h-[30px]" aria-hidden>
             {SCALE_TICKS.map(v => (
               <span key={v} data-credit-tick={v} className="absolute top-0" style={{ left: `${v}%` }}>
-                <span className={`absolute -translate-x-[0.5px] w-px bg-line-strong ${v % TICK_MAJOR === 0 ? 'h-2.5' : 'h-1.5'}`} />
+                <span className={`absolute -translate-x-[0.5px] w-px bg-border-input ${v % TICK_MAJOR === 0 ? 'h-2.5' : 'h-1.5'}`} />
                 {v % TICK_MAJOR === 0 && (
                   <span data-credit-tick-label={v}
-                    className="absolute top-3.5 -translate-x-1/2 text-[11px] leading-none tabular-nums text-ink-subtle">
+                    className="absolute top-3.5 -translate-x-1/2 text-[11px] leading-none tabular-nums text-fg-muted">
                     {v}
                   </span>
                 )}
@@ -300,7 +300,7 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
         </div>
 
         {/* ── 범례 ── */}
-        <div className="flex flex-wrap gap-x-3.5 gap-y-1 px-[18px] pb-3.5 text-xs text-ink-subtle">
+        <div className="flex flex-wrap gap-x-3.5 gap-y-1 px-[18px] pb-3.5 text-xs text-fg-muted">
           {CREDIT_KEYS.map(key => (
             <span key={key} className="inline-flex items-center gap-1.5">
               <span className={`h-[9px] w-[9px] shrink-0 ${DOT_CLS[key]} ${key === 'rw' ? 'rotate-45 rounded-[2px]' : 'rounded-full'}`} aria-hidden />
@@ -310,10 +310,10 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
         </div>
 
         {/* ── 미리보기 ── */}
-        <div data-credit-preview className="flex flex-col gap-2.5 border-t border-line px-[18px] pb-3 pt-3.5">
+        <div data-credit-preview className="flex flex-col gap-2.5 border-t border-border px-[18px] pb-3 pt-3.5">
           <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
-            <h3 className="text-sm font-bold text-ink">{t('settings.creditPvTitle')}</h3>
-            <label className="ml-auto inline-flex items-center gap-1.5 text-xs text-ink-muted">
+            <h3 className="text-sm font-bold text-fg">{t('settings.creditPvTitle')}</h3>
+            <label className="ml-auto inline-flex items-center gap-1.5 text-xs text-fg-secondary">
               {t('settings.creditPvPlan')}
               <input type="number" min={0} max={100} step={policy.step} data-credit-pv-plan value={plan}
                 onChange={e => setPlan(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
@@ -327,14 +327,14 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
               <thead>
                 <tr>
                   {(['settings.creditPvColEvent', 'settings.creditPvColOrder', 'settings.creditPvColStage'] as DictKey[]).map(k => (
-                    <th key={k} className="whitespace-nowrap border-b border-line px-2.5 pb-2 pt-1 text-left text-[11px] font-semibold tracking-[0.06em] text-ink-subtle">
+                    <th key={k} className="whitespace-nowrap border-b border-border px-2.5 pb-2 pt-1 text-left text-[11px] font-semibold tracking-[0.06em] text-fg-muted">
                       {t(k)}
                     </th>
                   ))}
-                  <th className="whitespace-nowrap border-b border-line px-2.5 pb-2 pt-1 text-right text-[11px] font-semibold tracking-[0.06em] text-ink-subtle">
+                  <th className="whitespace-nowrap border-b border-border px-2.5 pb-2 pt-1 text-right text-[11px] font-semibold tracking-[0.06em] text-fg-muted">
                     {t('settings.creditPvColActual')}
                   </th>
-                  <th className="whitespace-nowrap border-b border-line px-2.5 pb-2 pt-1 text-left text-[11px] font-semibold tracking-[0.06em] text-ink-subtle">
+                  <th className="whitespace-nowrap border-b border-border px-2.5 pb-2 pt-1 text-left text-[11px] font-semibold tracking-[0.06em] text-fg-muted">
                     {t('settings.creditPvColProgress')}
                   </th>
                 </tr>
@@ -348,21 +348,21 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
                     <tr key={i} data-credit-pv-row={i} aria-selected={on} tabIndex={0}
                       onClick={() => setCursor(f.cur)}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCursor(f.cur) } }}
-                      className={`cursor-pointer ${on ? 'bg-critical-weak' : 'hover:bg-surface-2'}`}>
-                      <td className="whitespace-nowrap border-b border-line px-2.5 py-[7px] text-[13px] font-medium text-ink">
+                      className={`cursor-pointer ${on ? 'bg-critical-weak' : 'hover:bg-surface-subtle'}`}>
+                      <td className="whitespace-nowrap border-b border-border px-2.5 py-[7px] text-[13px] font-medium text-fg">
                         <span className={`mr-2 inline-block h-2 w-2 rotate-45 bg-critical ${on ? '' : 'invisible'}`} aria-hidden />
                         {t(f.ev)}
                       </td>
-                      <td className="whitespace-nowrap border-b border-line px-2.5 py-[7px] font-mono text-xs text-ink-muted">
+                      <td className="whitespace-nowrap border-b border-border px-2.5 py-[7px] font-mono text-xs text-fg-secondary">
                         {f.order}
                       </td>
-                      <td className="whitespace-nowrap border-b border-line px-2.5 py-[7px] text-[13px]">
-                        <span className={`inline-flex items-center gap-1.5 ${f.same ? 'text-ink-subtle' : 'text-ink'}`}>
+                      <td className="whitespace-nowrap border-b border-border px-2.5 py-[7px] text-[13px]">
+                        <span className={`inline-flex items-center gap-1.5 ${f.same ? 'text-fg-muted' : 'text-fg'}`}>
                           <span className={`h-2 w-2 shrink-0 rounded-full ${DOT_CLS[f.stage]}`} aria-hidden />
                           {f.stage.toUpperCase()} {t(KEY_LABEL[f.stage])}{f.same ? ` · ${t('settings.creditPvSame')}` : ''}
                         </span>
                       </td>
-                      <td data-credit-pv-actual={i} className="whitespace-nowrap border-b border-line px-2.5 py-[7px] text-right font-mono text-[13px] tabular-nums text-ink">
+                      <td data-credit-pv-actual={i} className="whitespace-nowrap border-b border-border px-2.5 py-[7px] text-right font-mono text-[13px] tabular-nums text-fg">
                         {f.cur === 'manual' ? (
                           <span className="inline-flex items-center gap-1.5">
                             <input type="number" min={0} max={99} step={policy.step} data-credit-pv-manual value={manual}
@@ -377,12 +377,12 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
                           <>
                             {actual}
                             {f.cur === 'rw' && (
-                              <span className="ml-1.5 rounded bg-delayed-weak px-1.5 text-[10px] font-semibold text-delayed">RW</span>
+                              <span className="ml-1.5 rounded bg-danger-weak px-1.5 text-[10px] font-semibold text-danger">RW</span>
                             )}
                           </>
                         )}
                       </td>
-                      <td className="whitespace-nowrap border-b border-line px-2.5 py-[7px]">
+                      <td className="whitespace-nowrap border-b border-border px-2.5 py-[7px]">
                         <span data-credit-pv-status={i} className={`inline-block rounded-full px-2 py-px text-[11px] font-semibold ${STATUS_CHIP[st]}`}>
                           {t(STATUS_LABEL[st])}
                         </span>
@@ -394,12 +394,12 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
             </table>
           </div>
 
-          <p className="text-xs leading-5 text-ink-subtle">{t('settings.creditPvHint')}</p>
+          <p className="text-xs leading-5 text-fg-muted">{t('settings.creditPvHint')}</p>
         </div>
       </div>
 
       {/* 크레딧 정책(SP5b — workflow.credit_policy): 입력 단위·이웃 최소 간격. 줄이면 반례(0/20/25/90/100) 같은 표를 저장할 수 있다 */}
-      <div data-credit-policy className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-muted">
+      <div data-credit-policy className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-fg-secondary">
         <label className="flex items-center gap-1.5">
           {t('settings.creditPolicyStep')}
           <select className="app-input h-8 w-20 text-xs" value={policy.step} disabled={locked} data-credit-policy-step
@@ -412,7 +412,7 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
           <input type="number" min={1} max={CREDIT_MIN_GAP_MAX} step={1} className="app-input h-8 w-20 text-xs" value={policy.min_gap} disabled={locked} data-credit-policy-gap
             onChange={e => { const g = Math.round(Number(e.target.value)); if (Number.isFinite(g)) { setPolicy(p => ({ ...p, min_gap: Math.min(CREDIT_MIN_GAP_MAX, Math.max(1, g)) })); setDirty(true); setSaved(false); setReviewing(false); setFieldError(null) } }} />
         </label>
-        <span className="text-[11px] text-ink-subtle">{t('settings.creditPolicyHint')}</span>
+        <span className="text-[11px] text-fg-muted">{t('settings.creditPolicyHint')}</span>
       </div>
       {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
       {error && <div data-credit-error><ConfigStateNotice kind="patch" locale={locale} message={error} /></div>}
@@ -424,14 +424,14 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
           </button>
         </SettingsSaveBar>
       ) : (
-        <p className="text-[11px] text-ink-subtle">{t('settings.creditsNoRetro')}</p>
+        <p className="text-[11px] text-fg-muted">{t('settings.creditsNoRetro')}</p>
       )}
-      {reviewing && !conflict && !uncertainPatch && <section aria-label="변경 내용 검토" className="space-y-2 rounded-lg border border-line bg-surface-2 p-3 text-sm">
-        <h3 className="font-semibold text-ink">변경 내용 검토</h3>
+      {reviewing && !conflict && !uncertainPatch && <section aria-label="변경 내용 검토" className="space-y-2 rounded-lg border border-border bg-surface-subtle p-3 text-sm">
+        <h3 className="font-semibold text-fg">변경 내용 검토</h3>
         {CREDIT_KEYS.filter(key => baseline[key] !== table[key]).map(key =>
-          <p key={key} className="text-ink-muted">{key.toUpperCase()}: {baseline[key]}% → {table[key]}%</p>)}
-        {policyChanged && <p className="text-ink-muted">{t('settings.creditPolicyStep')} {basePolicy.step} → {policy.step} · {t('settings.creditPolicyGap')} {basePolicy.min_gap} → {policy.min_gap}</p>}
-        <p className="text-ink-muted">새 크레딧은 다음 단계 전이부터 적용됩니다. 이미 기록된 실적은 바뀌지 않습니다.</p>
+          <p key={key} className="text-fg-secondary">{key.toUpperCase()}: {baseline[key]}% → {table[key]}%</p>)}
+        {policyChanged && <p className="text-fg-secondary">{t('settings.creditPolicyStep')} {basePolicy.step} → {policy.step} · {t('settings.creditPolicyGap')} {basePolicy.min_gap} → {policy.min_gap}</p>}
+        <p className="text-fg-secondary">새 크레딧은 다음 단계 전이부터 적용됩니다. 이미 기록된 실적은 바뀌지 않습니다.</p>
         <button type="button" className="btn btn-secondary" onClick={() => setReviewing(false)}>계속 수정</button>
       </section>}
       {conflict && <ConflictCompare rows={[{ key: 'workflow.stage_credits', label: '단계 실적 크레딧',
@@ -440,7 +440,7 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
       }]} latestAvailable={conflict.latest !== null}
         onMine={() => { setBase(conflict.revision); setConflict(null); setReviewing(false); setError(null) }}
         onLatest={() => { if (conflict.latest) { setTable({ ...conflict.latest.default }); setBaseline({ ...conflict.latest.default }) } setBase(conflict.revision); setDirty(false); setReviewing(false); setConflict(null); setError(null) }} />}
-      {saved && <p data-credit-saved role="status" className="text-xs text-done">{noChange ? '바뀐 값이 없습니다.' : t('settings.creditsSaved')}</p>}
+      {saved && <p data-credit-saved role="status" className="text-xs text-success">{noChange ? '바뀐 값이 없습니다.' : t('settings.creditsSaved')}</p>}
     </div>
   )
 }

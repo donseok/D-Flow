@@ -82,10 +82,10 @@ describe.each(Object.entries(CALENDARS))('%s 달력', (_name, make) => {
     expect(cell('2026-10-06').className).not.toContain('bg-weekend')  // 화
   })
 
-  it('요일 고정 색(text-delayed·text-progress)을 날짜 숫자에 쓰지 않는다', async () => {
+  it('요일 고정 색(text-danger·text-progress)을 날짜 숫자에 쓰지 않는다', async () => {
     await render(make(SUNDAY_CAL, HOLIDAY_NAMES))
     for (const d of ['2026-10-11', '2026-10-10', '2026-10-05']) {
-      expect(cell(d).innerHTML).not.toMatch(/text-delayed|text-progress/)
+      expect(cell(d).innerHTML).not.toMatch(/text-danger|text-progress/)
     }
   })
 

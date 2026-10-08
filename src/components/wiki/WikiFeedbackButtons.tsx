@@ -27,12 +27,12 @@ export function WikiFeedbackButtons({ projectId, topicId, locale }: { projectId:
   }
 
   if (submitted) {
-    return <p className="rounded-xl bg-done-weak px-3 py-2 text-xs font-medium text-done" role="status">{t(locale, 'wiki.feedback.thanks')}</p>
+    return <p className="rounded-xl bg-success-weak px-3 py-2 text-xs font-medium text-success" role="status">{t(locale, 'wiki.feedback.thanks')}</p>
   }
 
   return (
     <div>
-      <p className="text-[11px] font-semibold text-ink-muted">{t(locale, 'wiki.feedback.prompt')}</p>
+      <p className="text-[11px] font-semibold text-fg-secondary">{t(locale, 'wiki.feedback.prompt')}</p>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => void submit('helpful')} disabled={busy !== null} className="btn btn-ghost h-9 px-2 text-xs">
           <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
@@ -43,7 +43,7 @@ export function WikiFeedbackButtons({ projectId, topicId, locale }: { projectId:
           {busy === 'outdated' ? t(locale, 'wiki.feedback.saving') : t(locale, 'wiki.feedback.outdated')}
         </button>
       </div>
-      {error && <p className="mt-2 text-xs font-medium text-delayed" role="alert">{error}</p>}
+      {error && <p className="mt-2 text-xs font-medium text-danger" role="alert">{error}</p>}
     </div>
   )
 }

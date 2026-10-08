@@ -42,7 +42,7 @@ export function MiniEmpty({ text }: { text: string }) {
   )
 }
 
-/** 라벨+큰 숫자 스탯 타일. tone 으로 값 색상 오버라이드(예: text-done). */
+/** 라벨+큰 숫자 스탯 타일. tone 으로 값 색상 오버라이드(예: text-success). */
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: string; tone?: string }) {
   return (
     <div className="rounded-xl border border-border/80 bg-surface-subtle/50 px-4 py-3 shadow-xs">

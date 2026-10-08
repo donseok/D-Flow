@@ -20,11 +20,11 @@ export const VOCAB_COLORS = ['done', 'brand', 'progress', 'delayed', 'accent', '
 export type VocabColor = (typeof VOCAB_COLORS)[number]
 /** Tailwind 가 원문에서 클래스를 찾도록 리터럴로 둔다 — 조립하지 않는다. */
 export const VOCAB_COLOR_CLASS: Readonly<Record<VocabColor, { dot: string; chip: string }>> = {
-  done: { dot: 'bg-done', chip: 'bg-done-weak text-done' },
-  brand: { dot: 'bg-brand', chip: 'bg-brand-weak text-brand' },
+  done: { dot: 'bg-success', chip: 'bg-success-weak text-success' },
+  brand: { dot: 'bg-action', chip: 'bg-action-soft text-action' },
   progress: { dot: 'bg-progress', chip: 'bg-progress-weak text-progress' },
-  delayed: { dot: 'bg-delayed', chip: 'bg-delayed-weak text-delayed' },
-  accent: { dot: 'bg-accent-secondary', chip: 'bg-accent-secondary/15 text-accent-secondary' },
+  delayed: { dot: 'bg-danger', chip: 'bg-danger-weak text-danger' },
+  accent: { dot: 'bg-warning', chip: 'bg-warning/15 text-warning' },
   pending: { dot: 'bg-pending', chip: 'bg-pending-weak text-pending' },
   neutral: { dot: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' },
 }

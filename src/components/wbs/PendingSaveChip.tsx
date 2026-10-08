@@ -17,7 +17,7 @@ export function PendingSaveChip({ isPending, saving, remainingMs, onSaveNow }: {
   const { t } = useLocale()
   if (saving) {
     return (
-      <span data-pending-save="saving" role="status" className="chip bg-surface-2 text-ink-muted">
+      <span data-pending-save="saving" role="status" className="chip bg-surface-subtle text-fg-secondary">
         {t('wbs.saving')}
       </span>
     )
@@ -26,13 +26,13 @@ export function PendingSaveChip({ isPending, saving, remainingMs, onSaveNow }: {
   const seconds = Math.max(1, Math.ceil((remainingMs ?? 0) / 1000))
   return (
     <span data-pending-save="pending" role="status" className="inline-flex items-center gap-1">
-      <span className="chip inline-flex items-center gap-1 bg-brand-weak text-brand tabular-nums">
+      <span className="chip inline-flex items-center gap-1 bg-action-soft text-action tabular-nums">
         <Clock className="h-3 w-3" />
         {t('wbs.pendingSaveIn').replace('{n}', String(seconds))}
       </span>
       <button
         type="button" data-pending-save-now onClick={onSaveNow}
-        className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand transition hover:bg-brand-weak"
+        className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-action transition hover:bg-action-soft"
       >
         {t('wbs.pendingSaveNow')}
       </button>

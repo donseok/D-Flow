@@ -259,17 +259,17 @@ export function MeetingFormModal({
       <fieldset disabled={locked} className="min-w-0 border-0 p-0 disabled:opacity-60">
         <div className="space-y-4">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.title')}</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.title')}</span>
             <input value={form.title} onChange={e => set('title', e.target.value)} placeholder={t('meet.form.titlePlaceholder')} className="app-input" />
           </label>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.date')}</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.date')}</span>
               <input type="date" value={form.meetingDate} onChange={e => set('meetingDate', e.target.value)} className="app-input px-2 text-xs" />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.category')}</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.category')}</span>
               <select value={form.category} onChange={e => changeCategory(e.target.value)} className="app-input">
                 {activeVocab(categories).map(c => <option key={c.code} value={c.code}>{vocabLabel('meetings.categories', categories, c.code, t)}</option>)}
                 {/* 수정 중인 회의의 범주가 비활성이면 그 값을 보존해 보인다 — 저장 시 서버가 활성 여부를 다시 본다 */}
@@ -281,50 +281,50 @@ export function MeetingFormModal({
           </div>
 
           <div className="flex items-center gap-2">
-            <input id="allday" type="checkbox" checked={form.allDay} onChange={e => set('allDay', e.target.checked)} className="h-4 w-4 accent-[var(--color-brand)]" />
-            <label htmlFor="allday" className="text-xs font-semibold text-ink-muted">{t('meet.form.allDay')}</label>
+            <input id="allday" type="checkbox" checked={form.allDay} onChange={e => set('allDay', e.target.checked)} className="h-4 w-4 accent-[var(--color-action)]" />
+            <label htmlFor="allday" className="text-xs font-semibold text-fg-secondary">{t('meet.form.allDay')}</label>
           </div>
           {!form.allDay && (
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.start')}</span>
+                <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.start')}</span>
                 <input type="time" value={form.startTime} onChange={e => set('startTime', e.target.value)} className="app-input px-2 text-xs" />
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.end')}</span>
+                <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.end')}</span>
                 <input type="time" value={form.endTime} onChange={e => set('endTime', e.target.value)} className="app-input px-2 text-xs" />
               </label>
             </div>
           )}
 
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.location')}</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.location')}</span>
             <input value={form.location} onChange={e => set('location', e.target.value)} placeholder={t('meet.form.locationPlaceholder')} className="app-input" />
           </label>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.recurrence')}</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.recurrence')}</span>
               <select value={form.recurrence} onChange={e => set('recurrence', e.target.value as MeetingRecurrence)} className="app-input">
                 {RECURRENCE_ORDER.map(r => <option key={r} value={r}>{t(`meet.recur.${r}` as DictKey)}</option>)}
               </select>
             </label>
             {form.recurrence !== 'none' && (
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.recurrenceUntil')}</span>
+                <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.recurrenceUntil')}</span>
                 <input type="date" min={form.meetingDate} value={form.recurrenceUntil} onChange={e => set('recurrenceUntil', e.target.value)} className="app-input px-2 text-xs" />
               </label>
             )}
           </div>
           {initial && initial.recurrence !== 'none' && (
-            <p className="flex items-start gap-1.5 text-[11px] leading-5 text-ink-subtle">
+            <p className="flex items-start gap-1.5 text-[11px] leading-5 text-fg-muted">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pending" />
               {t('meet.form.ruleChangeWarn')}
             </p>
           )}
 
           <div>
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.attendees')}</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.attendees')}</span>
             <MeetingAttendeePicker members={members} selected={form.attendeeIds} onChange={ids => set('attendeeIds', ids)} />
           </div>
 
@@ -336,21 +336,21 @@ export function MeetingFormModal({
                 checked={form.notify && canNotify}
                 disabled={!canNotify}
                 onChange={e => set('notify', e.target.checked)}
-                className="h-4 w-4 accent-[var(--color-brand)] disabled:opacity-50"
+                className="h-4 w-4 accent-[var(--color-action)] disabled:opacity-50"
               />
               {/* 문구를 종류에 맞춘다 — 수정 화면에서 '회의 안내'라고 적혀 있으면
                   사용자는 새로 만든 회의를 알린다고 읽고, 실제로는 '[회의 변경]' 이 나간다. */}
-              <span className="text-xs font-semibold text-ink-muted">
+              <span className="text-xs font-semibold text-fg-secondary">
                 {t(initial ? 'meet.form.notifyUpdate' : 'meet.form.notify')}
               </span>
             </label>
             {!canNotify && (
-              <p className="mt-1 pl-6 text-[11px] text-ink-subtle">{t('meet.form.notifyNoAttendees')}</p>
+              <p className="mt-1 pl-6 text-[11px] text-fg-muted">{t('meet.form.notifyNoAttendees')}</p>
             )}
             {/* notify 블록 안에 둔다 — 이 주소들은 회의에 저장되는 값이 아니라 위 체크박스로
                 나가는 메일의 수신자에만 더해지는 값이다. 떨어져 있으면 저장되는 값처럼 읽힌다. */}
             <label className="mt-3 block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.extraEmails')}</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.extraEmails')}</span>
               <input
                 value={form.extraEmails}
                 onChange={e => set('extraEmails', e.target.value)}
@@ -362,7 +362,7 @@ export function MeetingFormModal({
                 이 값은 저장되지 않으므로 그 저장은 곧 입력의 소리 없는 폐기다 — 저장 전에 여기서 알린다.
                 입력칸을 비활성화하는 방법은 참석자 0명일 때 체크박스와 서로를 잠그는 교착이 되어 쓸 수 없다. */}
             {extraList.length > 0 && !form.notify && (
-              <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-ink-subtle">
+              <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-fg-muted">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pending" />
                 {t('meet.form.extraEmailsNotifyOff')}
               </p>
@@ -379,14 +379,14 @@ export function MeetingFormModal({
                   type="checkbox"
                   checked={form.announce}
                   onChange={e => set('announce', e.target.checked)}
-                  className="h-4 w-4 accent-[var(--color-brand)]"
+                  className="h-4 w-4 accent-[var(--color-action)]"
                 />
-                <span className="text-xs font-semibold text-ink-muted">{t('meet.form.announce')}</span>
+                <span className="text-xs font-semibold text-fg-secondary">{t('meet.form.announce')}</span>
               </label>
               {/* 상세 모달 경로는 특정 회차 위에서 누르니 범위가 자명하지만, 여기서는 시리즈를
                   만들며 체크한다 — '시리즈 전체가 공지된다'는 오해를 저장 전에 바로잡는다. */}
               {form.announce && form.recurrence !== 'none' && (
-                <p className="mt-1 flex items-start gap-1.5 pl-6 text-[11px] leading-5 text-ink-subtle">
+                <p className="mt-1 flex items-start gap-1.5 pl-6 text-[11px] leading-5 text-fg-muted">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pending" />
                   {t('meet.form.announceRecurHint')}
                 </p>
@@ -395,12 +395,12 @@ export function MeetingFormModal({
           )}
 
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('meet.form.body')}</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.body')}</span>
             <textarea value={form.body} onChange={e => set('body', e.target.value)} rows={3} placeholder={t('meet.form.bodyPlaceholder')} className="app-textarea" />
           </label>
 
           {err && (
-            <p className="flex items-center gap-1.5 rounded-lg bg-delayed-weak px-3 py-2 text-xs font-medium text-delayed">
+            <p className="flex items-center gap-1.5 rounded-lg bg-danger-weak px-3 py-2 text-xs font-medium text-danger">
               <AlertTriangle className="h-4 w-4 shrink-0" />{err}
             </p>
           )}
@@ -410,7 +410,7 @@ export function MeetingFormModal({
       {/* 잠금 대상 밖에 둔다 — fieldset 안이면 disabled:opacity-60 으로 흐려져 정작 읽어야 할 글이 안 읽힌다. */}
       {outcome?.kind === 'panel' && (
         <p className={`mt-4 flex items-start gap-1.5 rounded-lg px-3 py-2 text-xs font-medium ${
-          outcome.tone === 'error' ? 'bg-delayed-weak text-delayed' : 'bg-pending-weak text-accent-warning'
+          outcome.tone === 'error' ? 'bg-danger-weak text-danger' : 'bg-pending-weak text-warning'
         }`}>
           {outcome.tone === 'error'
             ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

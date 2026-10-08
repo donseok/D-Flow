@@ -3,20 +3,19 @@
 import { describe, expect, it } from 'vitest'
 import { readGlobals, semanticNames, srcFiles, tokenMaps } from './lib/cssTokens'
 
-/** 옛 이름 → 새 의미 토큰(25 — SP4 B 가 팀 별칭 열을 지웠다) */
-export const ALIASES: Record<string, string> = {
-  'surface-2': 'surface-subtle', line: 'border', 'line-strong': 'border-input', ink: 'fg', 'ink-muted': 'fg-secondary', 'ink-subtle': 'fg-muted',
-  brand: 'action', 'brand-hover': 'action-hover', 'brand-weak': 'action-soft', 'brand-fg': 'action-fg', 'brand-ring': 'border-focus',
-  'accent-secondary': 'warning', 'accent-ink': 'action', 'accent-warning': 'warning', done: 'success', 'done-weak': 'success-weak',
-  delayed: 'danger', 'delayed-weak': 'danger-weak', grid: 'border', 'grid-strong': 'border-input', 'sheet-head': 'surface-subtle', zebra: 'surface-zebra',
-  'hero-ink': 'fg', 'hero-ink-muted': 'fg-secondary', 'hero-line': 'border',
-}
+/** 옛 이름 → 새 의미 토큰. UI-6(2026-10-09)이 25개를 전부 개명하고 지웠다(비어 있어야 한다) — 지운 이름은 아래 DELETED_TOKENS,
+ *  개명 대응표와 0건 판정은 scripts/codemod-legacy-tokens.mjs · no-legacy-tokens.test.ts */
+export const ALIASES: Record<string, string> = {}
 /** 이행 중(@theme inline 의 hex) — 과제 10 이 사이드바 마크업과 함께 지웠다(비어 있어야 한다) */
 export const TRANSITIONAL: string[] = []
 /** 지운 이름 — 유틸(접두 뒤)·var() 어디에도 없다. 과제마다 늘어난다(Review Focus 1) */
 export const DELETED_TOKENS = ['hero-from', 'hero-via', 'hero-to', 'sheet-gutter', 'sidebar', 'sidebar-2', 'sidebar-3', 'sidebar-line', 'sidebar-ink', 'sidebar-ink-muted', 'sidebar-ink-subtle',
   // SP4 B — 팀 화면 색은 category-N 슬롯(teamColor.ts)
-  ...[1, 2, 3, 4, 5].flatMap((n) => [`team-${n}`, `team-${n}-weak`])]
+  ...[1, 2, 3, 4, 5].flatMap((n) => [`team-${n}`, `team-${n}-weak`]),
+  // UI-6 — 옛 별칭 25(의미 토큰 이름으로 개명)
+  'surface-2', 'line', 'line-strong', 'ink', 'ink-muted', 'ink-subtle', 'brand', 'brand-hover', 'brand-weak', 'brand-fg', 'brand-ring',
+  'accent-secondary', 'accent-ink', 'accent-warning', 'done', 'done-weak', 'delayed', 'delayed-weak', 'grid', 'grid-strong', 'sheet-head', 'zebra',
+  'hero-ink', 'hero-ink-muted', 'hero-line']
 /** 지운 클래스(globals.css 규칙과 src 의 사용 모두 0) — 과제 8·9·14 가 더한다 */
 export const DELETED_CLASSES = ['app-backdrop', 'kpi-tile', 'btn-accent', 'login-float-1', 'login-float-2', 'login-float-3', 'login-float-4']
 /** 지운 비색 변수(선언과 var() 사용 모두 0) — 과제 8·9·13 이 더한다 */
@@ -26,7 +25,7 @@ const UTIL = '(?:bg|text|border(?:-[xytblrse])?|ring(?:-offset)?|outline|from|vi
 describe('별칭 표(@theme inline)', () => {
   const m = tokenMaps()
   const names = semanticNames(m)
-  it('@theme inline 의 이름 = 별칭 25 + 이행 중 목록', () => {
+  it('@theme inline 의 이름 = 별칭 + 이행 중 목록(UI-6 뒤로 둘 다 비었다)', () => {
     expect(m.inline.map((d) => d.name.slice('--color-'.length)).sort()).toEqual([...Object.keys(ALIASES), ...TRANSITIONAL].sort())
   })
   it('별칭은 var(--color-<새 의미 토큰>) 하나이고 대상은 @theme 에 있다', () => {
@@ -44,7 +43,8 @@ describe('지운 이름 0건', () => {
   const css = readGlobals()
   it.each(DELETED_TOKENS)('globals.css 에 --color-%s 선언이 없다', (n) => { expect(css).not.toContain(`--color-${n}:`) })
   it('src 에 지운 토큰의 유틸·var() 가 없다', () => {
-    const re = new RegExp(`(?:${UTIL}-(?:${DELETED_TOKENS.join('|')})\\b|var\\(--color-(?:${DELETED_TOKENS.join('|')})\\))`)
+    // 앞 경계: `data-goto-done` 의 `to-done` 같은 속성 이름 조각을 유틸로 읽지 않는다(변형 `hover:`·`!` 는 통과)
+    const re = new RegExp(`(?:(?<![\\w-])${UTIL}-(?:${DELETED_TOKENS.join('|')})\\b|var\\(--color-(?:${DELETED_TOKENS.join('|')})\\))`)
     expect(srcFiles().filter(([, text]) => re.test(text)).map(([f]) => f)).toEqual([])
   })
 })

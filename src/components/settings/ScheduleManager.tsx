@@ -47,14 +47,14 @@ export function ScheduleManager({
     <div className="space-y-6">
       {/* 공정율 기준일 */}
       <div>
-        <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-          <CalendarClock className="h-4 w-4 text-brand" />{t('settings.baseDateHeading')}
+        <div className="flex items-center gap-2 text-sm font-semibold text-fg">
+          <CalendarClock className="h-4 w-4 text-action" />{t('settings.baseDateHeading')}
         </div>
-        <p className="mt-1 text-xs leading-5 text-ink-muted">
-          {t('settings.baseDateDesc1')}<strong className="text-ink">{t('settings.baseDateDescStrong')}</strong>{t('settings.baseDateDesc2')}
+        <p className="mt-1 text-xs leading-5 text-fg-secondary">
+          {t('settings.baseDateDesc1')}<strong className="text-fg">{t('settings.baseDateDescStrong')}</strong>{t('settings.baseDateDesc2')}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className={`chip ${baseDate ? 'bg-pending-weak text-accent-warning' : 'bg-brand-weak text-brand'}`}>
+          <span className={`chip ${baseDate ? 'bg-pending-weak text-warning' : 'bg-action-soft text-action'}`}>
             {baseDate ? `${t('settings.manualFixed')} · ${baseDate}` : t('settings.autoTodayChip')}
           </span>
           {canEdit && (
@@ -70,40 +70,40 @@ export function ScheduleManager({
       </div>
 
       {/* 날짜 예외 — 휴무·근무 */}
-      <div className="border-t border-line pt-5">
-        <div className="text-sm font-semibold text-ink">{t('settings.holidaysHeading')}</div>
-        <p className="mt-1 text-xs leading-5 text-ink-muted">{t('settings.holidaysDesc')} {t('settings.holidaysTotalPrefix')}{sorted.length}{t('settings.holidaysTotalSuffix')}</p>
-        <p className="mt-1 text-xs leading-5 text-ink-muted">{t('settings.holidaysNoOverlay')}</p>
-        <p className="mt-1 text-xs leading-5 text-ink-muted">{t('settings.holidaysExportNote')}</p>
+      <div className="border-t border-border pt-5">
+        <div className="text-sm font-semibold text-fg">{t('settings.holidaysHeading')}</div>
+        <p className="mt-1 text-xs leading-5 text-fg-secondary">{t('settings.holidaysDesc')} {t('settings.holidaysTotalPrefix')}{sorted.length}{t('settings.holidaysTotalSuffix')}</p>
+        <p className="mt-1 text-xs leading-5 text-fg-secondary">{t('settings.holidaysNoOverlay')}</p>
+        <p className="mt-1 text-xs leading-5 text-fg-secondary">{t('settings.holidaysExportNote')}</p>
 
         {sorted.length > 0 ? (
           <ul className="mt-3 flex flex-wrap gap-2" aria-label={t('settings.holidaysHeading')}>
             {sorted.map(h => (
-              <li key={h.date} data-holiday={h.date} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-2 py-1 pl-2.5 pr-1.5 text-xs tabular-nums text-ink">
-                <span className={`chip ${h.kind === 'work' ? 'bg-brand-weak text-brand' : 'bg-weekend text-ink-muted'}`}>
+              <li key={h.date} data-holiday={h.date} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-subtle py-1 pl-2.5 pr-1.5 text-xs tabular-nums text-fg">
+                <span className={`chip ${h.kind === 'work' ? 'bg-action-soft text-action' : 'bg-weekend text-fg-secondary'}`}>
                   {h.kind === 'work' ? t('settings.holidayKindWork') : t('settings.holidayKindOff')}
                 </span>
                 {h.date}{h.name ? ` · ${h.name}` : ''}
                 {canEdit && (
-                  <button disabled={pending} onClick={() => run(() => removeHoliday(projectId, h.date), t('settings.holidayRemoved'))} className="flex h-5 w-5 items-center justify-center rounded text-ink-subtle transition hover:bg-delayed-weak hover:text-delayed" aria-label={`${t('settings.holidayRemoveAria')}: ${h.date}`}><Trash2 className="h-3 w-3" /></button>
+                  <button disabled={pending} onClick={() => run(() => removeHoliday(projectId, h.date), t('settings.holidayRemoved'))} className="flex h-5 w-5 items-center justify-center rounded text-fg-muted transition hover:bg-danger-weak hover:text-danger" aria-label={`${t('settings.holidayRemoveAria')}: ${h.date}`}><Trash2 className="h-3 w-3" /></button>
                 )}
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-3 text-xs text-ink-subtle">{t('settings.noHolidays')}</p>
+          <p className="mt-3 text-xs text-fg-muted">{t('settings.noHolidays')}</p>
         )}
 
         {canEdit && (
           <div className="mt-3 flex flex-wrap items-end gap-2">
-            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('settings.date')}</span><input type="date" value={holDate} onChange={e => setHolDate(e.target.value)} className="app-input h-9 w-40 px-2 text-xs" /></label>
-            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('settings.holidayKind')}</span>
+            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('settings.date')}</span><input type="date" value={holDate} onChange={e => setHolDate(e.target.value)} className="app-input h-9 w-40 px-2 text-xs" /></label>
+            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('settings.holidayKind')}</span>
               <select value={holKind} onChange={e => setHolKind(e.target.value === 'work' ? 'work' : 'off')} className="app-input h-9 w-28 text-xs" aria-label={t('settings.holidayKind')}>
                 <option value="off">{t('settings.holidayKindOff')}</option>
                 <option value="work">{t('settings.holidayKindWork')}</option>
               </select>
             </label>
-            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('settings.nameOptional')}</span><input value={holName} onChange={e => setHolName(e.target.value)} placeholder={t('settings.holidayNamePlaceholder')} className="app-input h-9 w-44 text-xs" /></label>
+            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('settings.nameOptional')}</span><input value={holName} onChange={e => setHolName(e.target.value)} placeholder={t('settings.holidayNamePlaceholder')} className="app-input h-9 w-44 text-xs" /></label>
             <button disabled={pending || !holDate} onClick={() => run(() => addHoliday(projectId, holDate, holName, holKind), t('settings.holidayAdded'), () => { setHolDate(''); setHolName('') })} className="btn btn-primary h-9 px-3 text-[13px]"><Plus className="h-3.5 w-3.5" />{t('common.add')}</button>
           </div>
         )}

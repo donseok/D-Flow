@@ -21,21 +21,21 @@ export function watchLabel(w: Watcher[]): string {
 
 export function HubStatusBar({ projectId, registered, enabled, watchers, isAdmin }: Props) {
   const badge = !registered
-    ? { cls: 'bg-surface-2 text-ink-subtle', label: '아직 등록 안 됨 — 첫 위임 때 켜집니다', icon: PauseCircle }
+    ? { cls: 'bg-surface-subtle text-fg-muted', label: '아직 등록 안 됨 — 첫 위임 때 켜집니다', icon: PauseCircle }
     : enabled
-      ? { cls: 'bg-brand-weak text-brand', label: '에이전트 켜짐', icon: Bot }
-      : { cls: 'bg-pending-weak text-accent-warning', label: '에이전트 중지', icon: PauseCircle }
+      ? { cls: 'bg-action-soft text-action', label: '에이전트 켜짐', icon: Bot }
+      : { cls: 'bg-pending-weak text-warning', label: '에이전트 중지', icon: PauseCircle }
   const Icon = badge.icon
   return (
     <section aria-label="에이전트 상태" className="flex flex-wrap items-center gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className={`chip ${badge.cls}`}><Icon className="mr-1 h-3.5 w-3.5" aria-hidden />{badge.label}</span>
-        {isAdmin && !registered && <span className="text-[11px] text-ink-subtle">첫 위임 때 켜집니다</span>}
-        {isAdmin && <Link href={`/p/${projectId}/settings#project-modules`} className="text-xs font-medium text-brand underline-offset-2 hover:underline">프로젝트 설정 → 모듈·메뉴</Link>}
+        {isAdmin && !registered && <span className="text-[11px] text-fg-muted">첫 위임 때 켜집니다</span>}
+        {isAdmin && <Link href={`/p/${projectId}/settings#project-modules`} className="text-xs font-medium text-action underline-offset-2 hover:underline">프로젝트 설정 → 모듈·메뉴</Link>}
       </div>
-      <div className="flex items-center gap-3 text-[11px] text-ink-muted">
+      <div className="flex items-center gap-3 text-[11px] text-fg-secondary">
         <span title={watchLabel(watchers)}>{watchers.length ? `감시 중 · ${watchLabel(watchers)}` : '감시 없음'}</span>
-        <Link href="/account" className="text-brand underline-offset-2 hover:underline">내 토큰</Link>
+        <Link href="/account" className="text-action underline-offset-2 hover:underline">내 토큰</Link>
       </div>
     </section>
   )

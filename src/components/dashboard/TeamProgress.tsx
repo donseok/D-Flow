@@ -20,15 +20,15 @@ export function TeamProgress({ items, teams }: { items: ComputedItem[]; teams: r
       <div className="space-y-4">
         {rows.map(s => (
           <div key={s.team} className="flex items-center gap-3">
-            <span className="flex w-14 shrink-0 items-center gap-2 text-sm font-semibold text-ink">
+            <span className="flex w-14 shrink-0 items-center gap-2 text-sm font-semibold text-fg">
               <span className={`h-2 w-2 rounded-full ${teamSlotFor(s.team, teams).bar}`} />
               {s.team}
             </span>
-            <span className="w-20 shrink-0 text-xs text-ink-subtle">{s.count}개 작업</span>
+            <span className="w-20 shrink-0 text-xs text-fg-muted">{s.count}개 작업</span>
             <div className="flex-1">
               <ProgressBar value={s.pct ?? 0} tone={teamSlotFor(s.team, teams).bar} label={`${s.team} 진척 ${s.pct ?? 0}%`} />
             </div>
-            <span className="w-14 shrink-0 text-right text-sm font-semibold tabular-nums text-ink">
+            <span className="w-14 shrink-0 text-right text-sm font-semibold tabular-nums text-fg">
               {s.pct == null ? '-' : `${s.pct}%`}
             </span>
           </div>

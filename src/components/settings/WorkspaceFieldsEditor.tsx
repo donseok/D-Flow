@@ -125,12 +125,12 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
   }
 
   return <div className="space-y-4">
-    {fields.map(field => <div key={field.key} className="space-y-1.5 border-b border-line pb-4 last:border-0 last:pb-0">
+    {fields.map(field => <div key={field.key} className="space-y-1.5 border-b border-border pb-4 last:border-0 last:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <label htmlFor={`workspace-${field.key}`} className="text-sm font-semibold text-ink">{field.label}</label>
-        <span className="text-xs text-ink-subtle">{field.source} · 즉시 적용</span>
+        <label htmlFor={`workspace-${field.key}`} className="text-sm font-semibold text-fg">{field.label}</label>
+        <span className="text-xs text-fg-muted">{field.source} · 즉시 적용</span>
       </div>
-      <p className="text-xs text-ink-muted">{field.description}</p>
+      <p className="text-xs text-fg-secondary">{field.description}</p>
       {field.error && !repaired.includes(field.key) && <ConfigStateNotice kind="invalid" locale={locale} keyName={field.key}
         message={field.error} isAdmin settingsHref={`#workspace-${field.key}`} />}
       {field.kind === 'boolean' ?
@@ -142,7 +142,7 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
           <input id={`workspace-${field.key}`} className="app-input w-full text-sm" value={String(draft[field.key])}
             disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} />}
       {fieldErrors[field.key] && <ConfigStateNotice kind="field" locale={locale} message={fieldErrors[field.key]} />}
-      <p className="text-[11px] text-ink-subtle">{field.key}</p>
+      <p className="text-[11px] text-fg-muted">{field.key}</p>
     </div>)}
     {conflict && <ConflictCompare rows={changed.map(f => ({ key: f.key, label: f.label,
       mine: String(draft[f.key]), latest: conflict.invalidKeys.includes(f.key) ? '설정 손상' : String(inputValue(f, conflict.values[f.key])),

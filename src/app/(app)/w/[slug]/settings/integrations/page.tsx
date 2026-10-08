@@ -40,10 +40,10 @@ export default async function WorkspaceIntegrationsPage({
     <PageFrame
       header={
         <div className="space-y-2">
-          <div className="flex items-center gap-1.5 text-xs text-ink-muted">
+          <div className="flex items-center gap-1.5 text-xs text-fg-secondary">
             <Link
               href={wsHref(access.slug, 'settings')}
-              className="inline-flex items-center gap-1 hover:text-ink transition-colors"
+              className="inline-flex items-center gap-1 hover:text-fg transition-colors"
             >
               <ChevronLeft className="size-3.5" />
               설정으로 돌아가기

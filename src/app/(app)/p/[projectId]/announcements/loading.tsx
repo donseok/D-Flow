@@ -14,7 +14,7 @@ export default function Loading() {
       {/* 공지 리스트 */}
       <div className="card space-y-3 p-5 sm:p-6">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-start gap-3 rounded-2xl border border-line p-4">
+          <div key={i} className="flex items-start gap-3 rounded-2xl border border-border p-4">
             <Skeleton className="mt-1.5 h-2 w-2 rounded-full" />
             <div className="flex-1 space-y-2">
               <Skeleton className="h-5 w-24 rounded-full" />

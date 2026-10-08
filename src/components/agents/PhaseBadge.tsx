@@ -57,7 +57,7 @@ export function PhaseBadge({ seat, size = 'bubble' }: { seat: Pick<Seat, 'state'
         {step >= 0 && PHASE_STEPS.map((s, i) => (
           <i key={s} data-phase-dot={i <= step ? 'on' : 'off'}
             className={`block rounded-full ${i === step ? 'h-[6px] w-[6px]' : 'h-[5px] w-[5px]'}`}
-            style={{ background: i <= step ? look.color : 'color-mix(in srgb, var(--color-ink-subtle) 35%, transparent)', boxShadow: i === step ? `0 0 0 2px color-mix(in srgb, ${look.color} 30%, transparent)` : undefined }} />
+            style={{ background: i <= step ? look.color : 'color-mix(in srgb, var(--color-fg-muted) 35%, transparent)', boxShadow: i === step ? `0 0 0 2px color-mix(in srgb, ${look.color} 30%, transparent)` : undefined }} />
         ))}
       </span>
     </span>

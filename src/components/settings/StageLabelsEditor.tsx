@@ -31,10 +31,10 @@ export function StageLabelsEditor({ projectId, value, revision, canEdit, invalid
 
   return (
     <div data-stage-labels-editor className="space-y-3">
-      {invalid && <p role="alert" className="text-xs text-delayed">{t('settings.workflow.stageLabelsInvalid')}</p>}
+      {invalid && <p role="alert" className="text-xs text-danger">{t('settings.workflow.stageLabelsInvalid')}</p>}
       <div className="grid gap-2 sm:grid-cols-5">
         {STAGE_LABEL_SLOTS.map((k) => (
-          <label key={k} className="flex flex-col gap-1 text-[11px] text-ink-muted">
+          <label key={k} className="flex flex-col gap-1 text-[11px] text-fg-secondary">
             <span className="font-mono">{k === 'none' ? '—' : k}</span>
             <input className="app-input h-9 text-xs" maxLength={20} value={draft[k]} placeholder={t(DEFAULT_KEY[k])} disabled={locked}
               data-stage-label={k} aria-label={`${k} ${t(DEFAULT_KEY[k])}`}
@@ -42,10 +42,10 @@ export function StageLabelsEditor({ projectId, value, revision, canEdit, invalid
           </label>
         ))}
       </div>
-      <p className="text-[11px] text-ink-subtle">{t('settings.workflow.stageLabelsHint')}</p>
-      {!parsed.ok && <p role="alert" className="text-xs text-delayed">{parsed.error}</p>}
-      {(cmd.fieldErrors['workflow.wbs_stage_labels'] ?? cmd.error) && <p role="alert" className="text-xs text-delayed">{cmd.fieldErrors['workflow.wbs_stage_labels'] ?? cmd.error}</p>}
-      {cmd.saved && <p role="status" className="text-xs text-done">{t('settings.workflow.saved')}</p>}
+      <p className="text-[11px] text-fg-muted">{t('settings.workflow.stageLabelsHint')}</p>
+      {!parsed.ok && <p role="alert" className="text-xs text-danger">{parsed.error}</p>}
+      {(cmd.fieldErrors['workflow.wbs_stage_labels'] ?? cmd.error) && <p role="alert" className="text-xs text-danger">{cmd.fieldErrors['workflow.wbs_stage_labels'] ?? cmd.error}</p>}
+      {cmd.saved && <p role="status" className="text-xs text-success">{t('settings.workflow.saved')}</p>}
       {canEdit && (
         <button type="button" className="btn btn-primary h-8 px-3 text-xs" data-stage-labels-save disabled={locked || !dirty || !parsed.ok}
           onClick={() => Object.keys(next).length ? cmd.save({ 'workflow.wbs_stage_labels': next }) : cmd.save({}, ['workflow.wbs_stage_labels'])}>

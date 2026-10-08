@@ -31,9 +31,9 @@ export function useToast(): ToastApi {
 const AUTO_DISMISS_MS = 3500
 
 const VARIANT: Record<ToastVariant, { icon: LucideIcon; iconWrap: string }> = {
-  success: { icon: CheckCircle2, iconWrap: 'bg-done-weak text-done' },
-  error: { icon: AlertTriangle, iconWrap: 'bg-delayed-weak text-delayed' },
-  info: { icon: Info, iconWrap: 'bg-brand-weak text-brand' },
+  success: { icon: CheckCircle2, iconWrap: 'bg-success-weak text-success' },
+  error: { icon: AlertTriangle, iconWrap: 'bg-danger-weak text-danger' },
+  info: { icon: Info, iconWrap: 'bg-action-soft text-action' },
 }
 
 /** 앱을 감싸 토스트 스택을 제공한다. 우측 하단에 쌓이며 자동/수동으로 닫힌다. */
@@ -109,12 +109,12 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
         <Icon className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1 pt-0.5">
-        <div className="text-sm font-semibold text-ink">{item.title}</div>
-        {item.description && <div className="mt-0.5 text-xs leading-5 text-ink-muted">{item.description}</div>}
+        <div className="text-sm font-semibold text-fg">{item.title}</div>
+        {item.description && <div className="mt-0.5 text-xs leading-5 text-fg-secondary">{item.description}</div>}
       </div>
       <button
         onClick={onDismiss}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-subtle transition hover:bg-surface-2 hover:text-ink"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted transition hover:bg-surface-subtle hover:text-fg"
         aria-label={t('ui.toastDismiss')}
       >
         <X className="h-4 w-4" />

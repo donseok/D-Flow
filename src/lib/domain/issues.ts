@@ -92,9 +92,9 @@ export const ISSUE_STATUS_META: Record<
   IssueStatus,
   { labelKey: `issue.status.${IssueStatus}`; chip: string; dot: string }
 > = {
-  open:        { labelKey: 'issue.status.open',        chip: 'bg-delayed-weak text-delayed',   dot: 'bg-delayed' },
+  open:        { labelKey: 'issue.status.open',        chip: 'bg-danger-weak text-danger',   dot: 'bg-danger' },
   in_progress: { labelKey: 'issue.status.in_progress', chip: 'bg-progress-weak text-progress', dot: 'bg-progress' },
-  resolved:    { labelKey: 'issue.status.resolved',    chip: 'bg-done-weak text-done',         dot: 'bg-done' },
+  resolved:    { labelKey: 'issue.status.resolved',    chip: 'bg-success-weak text-success',         dot: 'bg-success' },
   on_hold:     { labelKey: 'issue.status.on_hold',     chip: 'bg-neutral-weak text-neutral',   dot: 'bg-slate-400' },
 }
 

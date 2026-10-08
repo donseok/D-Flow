@@ -78,7 +78,7 @@ describe('RowDetailPanel — 하위 항목 추가 실패 문구(사전 매핑)',
     await act(async () => add.click())
     expect(addWbsItem).toHaveBeenCalledWith('p1', 'p1-phase', 'Task A')
     // 구조 편집 절의 오류 줄(err) — 같은 패널의 다른 절(에이전트 주문 상태 등)의 오류 줄은 보지 않는다
-    return [...container.querySelectorAll('p.mt-2.font-medium.text-delayed')].map((p) => p.textContent ?? '')
+    return [...container.querySelectorAll('p.mt-2.font-medium.text-danger')].map((p) => p.textContent ?? '')
   }
 
   it('표의 문구(SUB-ACT 형제)는 영어 화면에서 그 사전 문구 — 한글 0자', async () => {

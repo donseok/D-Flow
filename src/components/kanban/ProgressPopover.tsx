@@ -28,12 +28,12 @@ export function ProgressPopover({
       size="sm"
       footer={<button className="btn btn-ghost" onClick={onClose}>{t('kanban.cancel')}</button>}
     >
-      <p className="mb-3 text-sm text-ink-muted">{t('kanban.progressDesc')}</p>
+      <p className="mb-3 text-sm text-fg-secondary">{t('kanban.progressDesc')}</p>
       <div className="flex flex-wrap gap-2">
         {PRESETS.map(p => (
           <button
             key={p}
-            className="badge bg-surface-2 text-ink hover:bg-brand-weak hover:text-brand"
+            className="badge bg-surface-subtle text-fg hover:bg-action-soft hover:text-action"
             onClick={() => onSubmit(p)}
           >{p}%</button>
         ))}

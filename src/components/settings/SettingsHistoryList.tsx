@@ -33,20 +33,20 @@ export function SettingsHistoryList({ scope, initial, timeZone }: {
   }
 
   return <div className="space-y-4">
-    {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
-    {!error && rows.length === 0 && <p className="text-sm text-ink-muted">설정 변경 기록이 없습니다.</p>}
-    {rows.length > 0 && <ol className="divide-y divide-line">
+    {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+    {!error && rows.length === 0 && <p className="text-sm text-fg-secondary">설정 변경 기록이 없습니다.</p>}
+    {rows.length > 0 && <ol className="divide-y divide-border">
       {rows.map(row => <li key={row.id} className="space-y-2 py-4 first:pt-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <strong className="text-sm text-ink">{row.key}</strong>
-          <span className="text-xs text-ink-muted">개정 {row.revision} · {formatDate(row.changedAt, timeZone)}</span>
+          <strong className="text-sm text-fg">{row.key}</strong>
+          <span className="text-xs text-fg-secondary">개정 {row.revision} · {formatDate(row.changedAt, timeZone)}</span>
         </div>
-        <p className="text-xs text-ink-muted">{row.changedByName} · {SOURCE[row.source] ?? row.source}{row.copiedFrom ? ` · 복사 원본 ${row.copiedFrom}` : ''}</p>
-        <details className="rounded-lg bg-surface-2 p-3 text-xs">
-          <summary className="cursor-pointer font-medium text-ink">변경 전 → 변경 후</summary>
+        <p className="text-xs text-fg-secondary">{row.changedByName} · {SOURCE[row.source] ?? row.source}{row.copiedFrom ? ` · 복사 원본 ${row.copiedFrom}` : ''}</p>
+        <details className="rounded-lg bg-surface-subtle p-3 text-xs">
+          <summary className="cursor-pointer font-medium text-fg">변경 전 → 변경 후</summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div><span className="text-ink-subtle">변경 전</span><pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-all text-ink">{formatValue(row.oldValue)}</pre></div>
-            <div><span className="text-ink-subtle">변경 후</span><pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-all text-ink">{formatValue(row.newValue)}</pre></div>
+            <div><span className="text-fg-muted">변경 전</span><pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-all text-fg">{formatValue(row.oldValue)}</pre></div>
+            <div><span className="text-fg-muted">변경 후</span><pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-all text-fg">{formatValue(row.newValue)}</pre></div>
           </div>
         </details>
       </li>)}

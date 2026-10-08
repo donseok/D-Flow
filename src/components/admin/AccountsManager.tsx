@@ -59,10 +59,10 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
           <div className="eyebrow">Account board</div>
-          <h2 className="mt-0.5 text-sm font-semibold text-ink">로그인 계정 · {accounts.length}개</h2>
+          <h2 className="mt-0.5 text-sm font-semibold text-fg">로그인 계정 · {accounts.length}개</h2>
         </div>
         <div className="flex items-center gap-2">
           {projects.length > 1 && (
@@ -98,7 +98,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+                <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
                   <th className="py-2 pr-3">이메일</th>
                   <th className="py-2 pr-3">이름</th>
                   <th className="py-2 pr-3">워크스페이스 역할</th>
@@ -110,18 +110,18 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
               </thead>
               <tbody>
                 {accounts.map((a) => (
-                  <tr key={a.id} data-account-row={a.id} className="border-b border-line/60">
-                    <td className="py-2.5 pr-3 font-medium text-ink">{a.email}</td>
-                    <td className="py-2.5 pr-3 text-ink-muted">{a.name ?? '—'}</td>
+                  <tr key={a.id} data-account-row={a.id} className="border-b border-border/60">
+                    <td className="py-2.5 pr-3 font-medium text-fg">{a.email}</td>
+                    <td className="py-2.5 pr-3 text-fg-secondary">{a.name ?? '—'}</td>
                     <td className="py-2.5 pr-3">
                       <WorkspaceRoleCell account={a} workspaceId={workspaceId} />
                     </td>
                     <td className="py-2.5 pr-3">
                       {/* 프로젝트 권한은 명단 행의 권한이다(0003) — 팀·역할과 한 행이라 명단 화면에서만 바꾼다. */}
                       <Link href={`/p/${projectId}/members`} title="명단 화면에서 변경" data-access-role className={`chip ${
-                        accountRole(a) === 'admin' ? 'bg-brand-weak text-brand'
+                        accountRole(a) === 'admin' ? 'bg-action-soft text-action'
                           : accountRole(a) === 'member' ? 'bg-progress-weak text-progress'
-                            : 'bg-surface-2 text-ink-subtle'
+                            : 'bg-surface-subtle text-fg-muted'
                       }`}>
                         {accountRole(a) === 'admin' ? <UserCog className="h-3 w-3" /> : accountRole(a) === 'member' ? <UserRound className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                         {ROLE_LABEL[accountRole(a)]}
@@ -132,7 +132,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                         <PlatformAdminCell account={a} isSelf={a.id === currentUserId} />
                       </td>
                     )}
-                    <td className="py-2.5 pr-3 text-ink-subtle">{a.createdAt.slice(0, 10)}</td>
+                    <td className="py-2.5 pr-3 text-fg-muted">{a.createdAt.slice(0, 10)}</td>
                     {canPlatformOps && (
                       <td className="py-2.5 pr-3">
                         <div className="flex items-center justify-end gap-1.5">
@@ -166,12 +166,12 @@ function WorkspaceRoleCell({ account, workspaceId }: { account: AccountRow; work
   const { toast } = useToast()
   const [pending, startTransition] = useTransition()
   const current = account.workspaceRole
-  if (!current) return <span className="text-ink-subtle" title="이 워크스페이스 소속이 아닌 계정입니다.">—</span>
+  if (!current) return <span className="text-fg-muted" title="이 워크스페이스 소속이 아닌 계정입니다.">—</span>
   const next: WorkspaceRole = current === 'admin' ? 'member' : 'admin'
   return (
     <button
       data-ws-role-toggle
-      className={`chip ${current === 'admin' ? 'bg-brand-weak text-brand' : 'bg-surface-2 text-ink-muted'} disabled:opacity-50`}
+      className={`chip ${current === 'admin' ? 'bg-action-soft text-action' : 'bg-surface-subtle text-fg-secondary'} disabled:opacity-50`}
       disabled={pending}
       title={`${WS_ROLE_LABEL[next]}(으)로 변경`}
       onClick={() => startTransition(async () => {
@@ -203,7 +203,7 @@ function PlatformAdminCell({ account, isSelf }: { account: AccountRow; isSelf: b
   return (
     <button
       data-platform-admin-toggle
-      className={`chip ${account.isPlatformAdmin ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'} disabled:opacity-50`}
+      className={`chip ${account.isPlatformAdmin ? 'bg-success-weak text-success' : 'bg-surface-subtle text-fg-muted'} disabled:opacity-50`}
       disabled={pending || selfLocked}
       title={selfLocked ? SELF_PLATFORM_HINT : account.isPlatformAdmin ? '플랫폼 관리자 해제' : '플랫폼 관리자 지정'}
       onClick={() => startTransition(async () => {
@@ -231,7 +231,7 @@ function PlatformAdminCell({ account, isSelf }: { account: AccountRow; isSelf: b
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{label}</span>
       {children}
     </label>
   )
@@ -334,7 +334,7 @@ function AddAccountModal({ open, onClose, projectId, workspaceId }: {
             <button type="button" onClick={() => setPassword(randomPassword())} className="btn btn-ghost shrink-0"><Wand2 className="h-4 w-4" />생성</button>
           </div>
         </Field>
-        {error && <p role="alert" className="text-sm font-medium text-delayed">{error}</p>}
+        {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
       </div>
     </Modal>
   )
@@ -382,7 +382,7 @@ function BulkAddModal({ open, onClose, projectId, workspaceId }: {
       }
     >
       <div className="space-y-4">
-        <div className="rounded-xl bg-surface-2 px-3.5 py-3 text-xs leading-5 text-ink-muted">
+        <div className="rounded-xl bg-surface-subtle px-3.5 py-3 text-xs leading-5 text-fg-secondary">
           한 줄에 하나씩, <b>이메일, 권한, 초기비번[, 이름]</b> 순서. 콤마 또는 탭 구분.<br />
           권한: <code>admin · member · viewer</code> — 선택한 프로젝트의 권한입니다(viewer = 명단 없이 조회 전용). 워크스페이스 역할은 멤버로 만들고, 플랫폼 관리자는 일괄 등록으로 지정할 수 없습니다.<br />
           예) <code>hong@company.com, member, password1, 홍길동</code>
@@ -393,23 +393,23 @@ function BulkAddModal({ open, onClose, projectId, workspaceId }: {
           onChange={(e) => setText(e.target.value)}
           placeholder={'user1@company.com, member, password1\nuser2@company.com, viewer, password2, 김철수'}
         />
-        {error && <p role="alert" className="text-sm font-medium text-delayed">{error}</p>}
+        {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
         {results && (
           <div>
-            <div className="mb-2 text-sm font-semibold text-ink">결과 — 성공 {okCount} · 실패 {failCount}</div>
-            <div className="max-h-52 overflow-y-auto rounded-xl border border-line">
+            <div className="mb-2 text-sm font-semibold text-fg">결과 — 성공 {okCount} · 실패 {failCount}</div>
+            <div className="max-h-52 overflow-y-auto rounded-xl border border-border">
               <table className="w-full text-xs">
                 <tbody>
                   {results.map((r, i) => (
-                    <tr key={i} className="border-b border-line/60 last:border-0">
-                      <td className="px-3 py-1.5 text-ink-subtle">{r.lineNo}행</td>
-                      <td className="px-3 py-1.5 text-ink">{r.email}</td>
+                    <tr key={i} className="border-b border-border/60 last:border-0">
+                      <td className="px-3 py-1.5 text-fg-muted">{r.lineNo}행</td>
+                      <td className="px-3 py-1.5 text-fg">{r.email}</td>
                       <td className="px-3 py-1.5">
                         {r.ok
-                          ? <span className="chip bg-done-weak text-done">성공</span>
-                          : <span className="chip bg-delayed-weak text-delayed" title={r.error}>실패</span>}
+                          ? <span className="chip bg-success-weak text-success">성공</span>
+                          : <span className="chip bg-danger-weak text-danger" title={r.error}>실패</span>}
                       </td>
-                      <td className="px-3 py-1.5 text-ink-muted">{r.error ?? ''}</td>
+                      <td className="px-3 py-1.5 text-fg-secondary">{r.error ?? ''}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -475,9 +475,9 @@ function ResetPasswordModal({ account, onClose }: { account: AccountRow | null; 
       <div className="space-y-4">
         {done ? (
           <>
-            <p className="text-sm text-ink-muted"><b className="text-ink">{account?.email}</b> 의 임시 비밀번호가 설정되었습니다. 아래 값을 사용자에게 전달하세요. <b className="text-ink">이 창을 닫으면 다시 볼 수 없습니다.</b></p>
-            <div className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
-              <code className="min-w-0 flex-1 truncate font-mono text-sm text-ink">{done}</code>
+            <p className="text-sm text-fg-secondary"><b className="text-fg">{account?.email}</b> 의 임시 비밀번호가 설정되었습니다. 아래 값을 사용자에게 전달하세요. <b className="text-fg">이 창을 닫으면 다시 볼 수 없습니다.</b></p>
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
+              <code className="min-w-0 flex-1 truncate font-mono text-sm text-fg">{done}</code>
               <button type="button" onClick={copy} className="btn btn-ghost btn-sm shrink-0">
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? '복사됨' : '복사'}
               </button>
@@ -485,14 +485,14 @@ function ResetPasswordModal({ account, onClose }: { account: AccountRow | null; 
           </>
         ) : (
           <>
-            <p className="text-sm text-ink-muted"><b className="text-ink">{account?.email}</b> 의 비밀번호를 임시값으로 변경합니다. 사용자는 로그인 후 본인이 변경하게 하세요.</p>
+            <p className="text-sm text-fg-secondary"><b className="text-fg">{account?.email}</b> 의 비밀번호를 임시값으로 변경합니다. 사용자는 로그인 후 본인이 변경하게 하세요.</p>
             <Field label="임시 비밀번호 (8자 이상)">
               <div className="flex gap-2">
                 <input className="app-input" value={password} onChange={(e) => setPassword(e.target.value)} />
                 <button type="button" onClick={() => setPassword(randomPassword())} className="btn btn-ghost shrink-0"><Wand2 className="h-4 w-4" />생성</button>
               </div>
             </Field>
-            {error && <p role="alert" className="text-sm font-medium text-delayed">{error}</p>}
+            {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
           </>
         )}
       </div>

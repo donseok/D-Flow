@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<Status, string> = {
   not_started: '시작전', in_progress: '진행중', delayed: '지연', done: '완료',
 }
 const STATUS_DOT: Record<Status, string> = {
-  not_started: 'bg-pending', in_progress: 'bg-progress', delayed: 'bg-delayed', done: 'bg-done',
+  not_started: 'bg-pending', in_progress: 'bg-progress', delayed: 'bg-danger', done: 'bg-success',
 }
 
 /** 말단(자식 없는) 노드 수집 — pure. */
@@ -88,7 +88,7 @@ const PROGRESS_LABEL: Record<ProgressBucket, string> = {
   not_started: '시작전', in_progress: '진행중', done: '완료',
 }
 const PROGRESS_DOT: Record<ProgressBucket, string> = {
-  not_started: 'bg-pending', in_progress: 'bg-progress', done: 'bg-done',
+  not_started: 'bg-pending', in_progress: 'bg-progress', done: 'bg-success',
 }
 
 /** 진척 3단 — 시작전(0%)/진행중(1~99%)/완료(100%). leaf.rolledActualPct 기준. */
@@ -105,10 +105,10 @@ export type FlowStageKey = (typeof FLOW_STAGE_KEYS)[number]
 
 const FLOW_STAGE_DOT: Record<FlowStageKey, string> = {
   none: 'bg-pending',
-  as: 'bg-brand',
+  as: 'bg-action',
   ip: 'bg-progress',
   im: 'bg-warning',
-  xx: 'bg-done',
+  xx: 'bg-success',
 }
 
 export function formatApprovalStepsSubtitle(steps?: readonly ApprovalStepDef[] | null): string {

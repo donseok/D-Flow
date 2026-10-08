@@ -8,7 +8,7 @@ import { fmtDate } from '@/components/wbs/shared'
 import { projectColorClass } from '@/lib/domain/projectColors'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 
-const MS_TONE: Record<MilestoneStatus, string> = { done: 'fill-done', overdue: 'fill-delayed', upcoming: 'fill-brand' }
+const MS_TONE: Record<MilestoneStatus, string> = { done: 'fill-success', overdue: 'fill-danger', upcoming: 'fill-action' }
 const W = 960, PL = 10, PR = 10, ROW_H = 26, BASE = 13
 
 /** 축 범위 안의 매월 1일 (헤더 눈금) */
@@ -72,32 +72,32 @@ export function PortfolioMilestoneBoard({ rows, milestones, today, locale }: {
             <svg viewBox={`0 0 ${W} 18`} className="h-auto w-full" aria-hidden>
               {ticks.map(d => (
                 <g key={d}>
-                  <line x1={x(d)} x2={x(d)} y1={12} y2={18} className="stroke-line" strokeWidth={1} />
-                  <text x={x(d)} y={9} textAnchor="middle" fontSize={9} className="fill-ink-subtle">
+                  <line x1={x(d)} x2={x(d)} y1={12} y2={18} className="stroke-border" strokeWidth={1} />
+                  <text x={x(d)} y={9} textAnchor="middle" fontSize={9} className="fill-fg-muted">
                     {d.slice(2, 7).replace('-', '.')}
                   </text>
                 </g>
               ))}
               {todayIn && (
-                <text x={x(today)} y={9} textAnchor="middle" fontSize={9} className="fill-delayed font-semibold">
+                <text x={x(today)} y={9} textAnchor="middle" fontSize={9} className="fill-danger font-semibold">
                   {fmtDate(today)}
                 </text>
               )}
             </svg>
           </div>
           {board.map(row => (
-            <div key={row.projectId} className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-2 border-t border-line/60">
+            <div key={row.projectId} className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-2 border-t border-border/60">
               <Link href={`/p/${row.projectId}/dashboard`}
-                className="flex min-w-0 items-center gap-1.5 py-1 text-xs font-medium text-ink hover:text-brand">
+                className="flex min-w-0 items-center gap-1.5 py-1 text-xs font-medium text-fg hover:text-action">
                 <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${projectColorClass(projectIds, row.projectId)}`} />
                 <span className="truncate">{row.name}</span>
               </Link>
               <svg viewBox={`0 0 ${W} ${ROW_H}`} className="h-auto w-full" role="img"
                 aria-label={`${row.name} ${tr('pf.ms.title')}`}>
-                <line x1={PL} x2={W - PR} y1={BASE} y2={BASE} className="stroke-line" strokeWidth={1.5} />
-                {row.startDate && <line x1={x(row.startDate)} x2={x(row.startDate)} y1={BASE - 5} y2={BASE + 5} className="stroke-line-strong" strokeWidth={1.5} />}
-                {row.endDate && <line x1={x(row.endDate)} x2={x(row.endDate)} y1={BASE - 5} y2={BASE + 5} className="stroke-line-strong" strokeWidth={1.5} />}
-                {todayIn && <line x1={x(today)} x2={x(today)} y1={2} y2={ROW_H - 2} className="stroke-delayed" strokeWidth={1} strokeDasharray="2 3" />}
+                <line x1={PL} x2={W - PR} y1={BASE} y2={BASE} className="stroke-border" strokeWidth={1.5} />
+                {row.startDate && <line x1={x(row.startDate)} x2={x(row.startDate)} y1={BASE - 5} y2={BASE + 5} className="stroke-border-input" strokeWidth={1.5} />}
+                {row.endDate && <line x1={x(row.endDate)} x2={x(row.endDate)} y1={BASE - 5} y2={BASE + 5} className="stroke-border-input" strokeWidth={1.5} />}
+                {todayIn && <line x1={x(today)} x2={x(today)} y1={2} y2={ROW_H - 2} className="stroke-danger" strokeWidth={1} strokeDasharray="2 3" />}
                 {(byProject.get(row.projectId) ?? []).map(p => (
                   <circle key={p.id} cx={x(p.date)} cy={BASE} r={4.5} className={MS_TONE[p.status]}>
                     <title>{`${p.name} · ${fmtDate(p.date)}${p.status === 'upcoming' ? ` · D-${p.dday}` : ''}`}</title>

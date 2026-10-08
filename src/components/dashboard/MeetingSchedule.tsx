@@ -68,7 +68,7 @@ export async function MeetingSchedule({ projectId, meetings, exceptions, today, 
           <MeetingScheduleList rows={rows} extras={extras} today={today} currentUserId={currentUserId} canManage={canManage}
             categories={{ [projectId]: [...categories] }} />
         )}
-        <Link href={`/p/${projectId}/meetings`} className="inline-flex items-center gap-1 text-[12px] font-medium text-brand hover:underline">
+        <Link href={`/p/${projectId}/meetings`} className="inline-flex items-center gap-1 text-[12px] font-medium text-action hover:underline">
           {tr('dash.viewAll')} <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>

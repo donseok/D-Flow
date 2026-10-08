@@ -190,23 +190,23 @@ export function MinuteAttachmentsPanel({
   return (
     <section
       aria-labelledby={`min-att-${minuteId}`}
-      className={`card shrink-0 space-y-2 px-4 py-3 ${dragOver ? 'ring-2 ring-brand' : ''}`}
+      className={`card shrink-0 space-y-2 px-4 py-3 ${dragOver ? 'ring-2 ring-action' : ''}`}
       onDragOver={canAdd ? e => { e.preventDefault(); setDragOver(true) } : undefined}
       onDragLeave={canAdd ? () => setDragOver(false) : undefined}
       onDrop={canAdd ? onDrop : undefined}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h2 id={`min-att-${minuteId}`} className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-          <Paperclip aria-hidden className="h-4 w-4 text-ink-muted" />{t('min.att.title')}
+        <h2 id={`min-att-${minuteId}`} className="flex items-center gap-1.5 text-sm font-semibold text-fg">
+          <Paperclip aria-hidden className="h-4 w-4 text-fg-secondary" />{t('min.att.title')}
         </h2>
         {pol && (
-          <span className="text-xs tabular-nums text-ink-muted">
+          <span className="text-xs tabular-nums text-fg-secondary">
             {t('min.att.usage')
               .replace('{n}', String(usage.count)).replace('{max}', String(pol.maxCount))
               .replace('{bytes}', formatBytes(usage.bytes)).replace('{total}', formatBytes(pol.maxTotalBytes))}
           </span>
         )}
-        {policy.kind === 'loading' && <span className="text-xs text-ink-subtle">{t('min.att.policyLoading')}</span>}
+        {policy.kind === 'loading' && <span className="text-xs text-fg-muted">{t('min.att.policyLoading')}</span>}
         {canAdd && (
           <label className={`btn ml-auto h-8 cursor-pointer px-2.5 text-xs ${remaining === 0 ? 'pointer-events-none opacity-50' : ''}`}
             aria-disabled={remaining === 0}>
@@ -218,7 +218,7 @@ export function MinuteAttachmentsPanel({
       </div>
 
       {pol && canManage && pol.enabled && (
-        <p className="text-xs text-ink-subtle">
+        <p className="text-xs text-fg-muted">
           {t('min.att.policyHint').replace('{size}', formatBytes(pol.maxFileBytes))}
           {pol.allowedExtensions !== null && (
             <> · {pol.allowedExtensions.length > 0
@@ -227,32 +227,32 @@ export function MinuteAttachmentsPanel({
           )}
         </p>
       )}
-      {pol && canManage && !pol.enabled && <p className="text-xs text-ink-muted">{t('min.att.disabled')}</p>}
-      {policy.kind === 'failed' && canManage && <p role="alert" className="text-xs text-delayed">{policy.error}</p>}
-      {filesError && <p role="alert" className="text-sm text-delayed">{t('min.detail.filesLoadFailed')}</p>}
+      {pol && canManage && !pol.enabled && <p className="text-xs text-fg-secondary">{t('min.att.disabled')}</p>}
+      {policy.kind === 'failed' && canManage && <p role="alert" className="text-xs text-danger">{policy.error}</p>}
+      {filesError && <p role="alert" className="text-sm text-danger">{t('min.detail.filesLoadFailed')}</p>}
 
       {!filesError && files.length === 0 && queue.length === 0 && (
-        <p className="text-xs text-ink-subtle">{canAdd ? t('min.att.drop') : t('min.att.empty')}</p>
+        <p className="text-xs text-fg-muted">{canAdd ? t('min.att.drop') : t('min.att.empty')}</p>
       )}
 
       {(files.length > 0 || queue.length > 0) && (
-        <ul className="divide-y divide-line rounded-md border border-line">
+        <ul className="divide-y divide-border rounded-md border border-border">
           {files.map(f => (
             <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-              <FileText aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
+              <FileText aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
               <button type="button" onClick={() => void onDownload(f)} disabled={busyId === f.id}
                 title={t('min.att.download')}
-                className="min-w-0 basis-[calc(100%-1.75rem)] truncate text-left text-sm font-medium text-ink hover:text-brand sm:flex-1 sm:basis-0">
+                className="min-w-0 basis-[calc(100%-1.75rem)] truncate text-left text-sm font-medium text-fg hover:text-action sm:flex-1 sm:basis-0">
                 {f.fileName}
               </button>
-              <span className="text-xs tabular-nums text-ink-muted">{formatBytes(f.size)}</span>
-              <span className="text-xs text-ink-subtle">
+              <span className="text-xs tabular-nums text-fg-secondary">{formatBytes(f.size)}</span>
+              <span className="text-xs text-fg-muted">
                 {t('min.att.by')
                   .replace('{name}', f.uploadedByName ?? t('min.att.unknownUser'))
                   .replace('{date}', fileDate(f.createdAt, locale, timeZone))}
               </span>
               <span className="flex items-center gap-1">
-                {busyId === f.id && <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin text-ink-subtle" />}
+                {busyId === f.id && <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin text-fg-muted" />}
                 {mayPreview(pol, f.fileName) && (
                   <button type="button" onClick={() => void onPreview(f)} disabled={busyId === f.id}
                     className="btn btn-ghost h-7 px-2 text-xs" aria-label={`${t('min.att.preview')} ${f.fileName}`}>
@@ -265,7 +265,7 @@ export function MinuteAttachmentsPanel({
                 </button>
                 {canManage && (confirmId === f.id ? (
                   <>
-                    <button type="button" onClick={() => void onDelete(f)} className="btn h-7 px-2 text-xs text-delayed">
+                    <button type="button" onClick={() => void onDelete(f)} className="btn h-7 px-2 text-xs text-danger">
                       {t('min.att.deleteConfirm')}
                     </button>
                     <button type="button" onClick={() => setConfirmId(null)} className="btn btn-ghost h-7 px-2 text-xs">
@@ -274,7 +274,7 @@ export function MinuteAttachmentsPanel({
                   </>
                 ) : (
                   <button type="button" onClick={() => setConfirmId(f.id)} disabled={busyId === f.id}
-                    className="btn btn-ghost h-7 px-2 text-xs text-delayed" aria-label={`${t('min.att.delete')} ${f.fileName}`}>
+                    className="btn btn-ghost h-7 px-2 text-xs text-danger" aria-label={`${t('min.att.delete')} ${f.fileName}`}>
                     <Trash2 aria-hidden className="h-3.5 w-3.5" />
                   </button>
                 ))}
@@ -284,11 +284,11 @@ export function MinuteAttachmentsPanel({
           {queue.map(q => (
             <li key={q.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
               {q.status === 'failed'
-                ? <X aria-hidden className="h-4 w-4 shrink-0 text-delayed" />
-                : <Loader2 aria-hidden className={`h-4 w-4 shrink-0 text-ink-subtle ${q.status === 'pending' ? '' : 'animate-spin'}`} />}
-              <span className="min-w-0 basis-[calc(100%-1.75rem)] truncate text-sm text-ink-muted sm:flex-1 sm:basis-0">{q.fileName}</span>
-              <span className="text-xs tabular-nums text-ink-muted">{formatBytes(q.size)}</span>
-              <span className={`text-xs ${q.status === 'failed' ? 'text-delayed' : 'text-ink-subtle'}`} role={q.status === 'failed' ? 'alert' : undefined}>
+                ? <X aria-hidden className="h-4 w-4 shrink-0 text-danger" />
+                : <Loader2 aria-hidden className={`h-4 w-4 shrink-0 text-fg-muted ${q.status === 'pending' ? '' : 'animate-spin'}`} />}
+              <span className="min-w-0 basis-[calc(100%-1.75rem)] truncate text-sm text-fg-secondary sm:flex-1 sm:basis-0">{q.fileName}</span>
+              <span className="text-xs tabular-nums text-fg-secondary">{formatBytes(q.size)}</span>
+              <span className={`text-xs ${q.status === 'failed' ? 'text-danger' : 'text-fg-muted'}`} role={q.status === 'failed' ? 'alert' : undefined}>
                 {q.status === 'failed'
                   ? (q.rejection ? t(`min.att.reject.${q.rejection}` as DictKey) : q.error ?? t('min.att.status.failed'))
                   : t(`min.att.status.${q.status}` as DictKey)}
@@ -310,7 +310,7 @@ export function MinuteAttachmentsPanel({
           ))}
         </ul>
       )}
-      {err && <p role="alert" className="text-sm text-delayed">{err}</p>}
+      {err && <p role="alert" className="text-sm text-danger">{err}</p>}
 
       <Modal open={preview !== null} onClose={closePreview} title={preview?.fileName ?? t('min.att.previewTitle')} size="lg"
         footer={preview && (
@@ -324,7 +324,7 @@ export function MinuteAttachmentsPanel({
           <img src={preview.url} alt={preview.fileName} className="mx-auto max-h-[70vh] max-w-full object-contain" />
         )}
         {preview?.kind === 'pdf' && (
-          <iframe src={preview.url} title={preview.fileName} className="h-[70vh] w-full rounded border border-line" referrerPolicy="no-referrer" />
+          <iframe src={preview.url} title={preview.fileName} className="h-[70vh] w-full rounded border border-border" referrerPolicy="no-referrer" />
         )}
       </Modal>
     </section>

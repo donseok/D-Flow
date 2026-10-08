@@ -5,19 +5,19 @@ import type { DictKey } from '@/lib/i18n/dict'
 export const STATUS: Record<Status, { label: string; chip: string; bar: string; dot: string }> = {
   not_started: { label: '시작전', chip: 'bg-pending-weak text-pending', bar: 'bg-pending', dot: 'bg-pending' },
   in_progress: { label: '진행중', chip: 'bg-progress-weak text-progress', bar: 'bg-progress', dot: 'bg-progress' },
-  delayed: { label: '지연', chip: 'bg-delayed-weak text-delayed', bar: 'bg-delayed', dot: 'bg-delayed' },
-  done: { label: '완료', chip: 'bg-done-weak text-done', bar: 'bg-done', dot: 'bg-done' },
+  delayed: { label: '지연', chip: 'bg-danger-weak text-danger', bar: 'bg-danger', dot: 'bg-danger' },
+  done: { label: '완료', chip: 'bg-success-weak text-success', bar: 'bg-success', dot: 'bg-success' },
 }
 
 /** depth(0-based) 별 배지 색 팔레트 — 옛 LEVEL 상수의 cls 를 그대로 재활용(회귀 0). depth 3+ 는 pending 재사용. */
 const DEPTH_CLASS = [
-  'bg-brand-weak text-brand',       // depth 0 (구 phase)
+  'bg-action-soft text-action',       // depth 0 (구 phase)
   'bg-progress-weak text-progress', // depth 1 (구 task)
   'bg-pending-weak text-pending',   // depth 2 (구 activity)
 ]
-const DEPTH_CLASS_FALLBACK = 'bg-surface-2 text-ink-muted' // depth 3+
+const DEPTH_CLASS_FALLBACK = 'bg-surface-subtle text-fg-secondary' // depth 3+
 /* act 하위의 담당자별 분리 항목(임포트 시 자동 생성) 전용 표기 — 일반 배지와 시각 구분 */
-const SUB_ACT = { label: 'SUB-ACT', cls: 'bg-surface-2 text-ink-muted' }
+const SUB_ACT = { label: 'SUB-ACT', cls: 'bg-surface-subtle text-fg-secondary' }
 /** 배지 텍스트 — isOwnerSplit 이면 SUB-ACT, 아니면 프로젝트 단계 라벨 원문(levelLabels[depth]), 라벨 밖 깊이는 'N단'(SP4 — 옛 축약 규칙 삭제). */
 export function levelBadgeText(depth: number, isOwnerSplit: boolean, levelLabels: readonly string[]): string {
   if (isOwnerSplit) return SUB_ACT.label
@@ -95,11 +95,11 @@ export { collectLeaves } from '@/lib/domain/tree'
 const STAGE_META: Record<string, { key: DictKey; cls: string }> = {
   as: { key: 'wbs.stageAs', cls: 'bg-pending-weak text-pending' },
   ip: { key: 'wbs.stageIp', cls: 'bg-progress-weak text-progress' },
-  im: { key: 'wbs.stageIm', cls: 'bg-brand-weak text-brand' },
-  xx: { key: 'wbs.stageXx', cls: 'bg-done-weak text-done' },
+  im: { key: 'wbs.stageIm', cls: 'bg-action-soft text-action' },
+  xx: { key: 'wbs.stageXx', cls: 'bg-success-weak text-success' },
 }
 
-const STAGE_UNKNOWN_CLS = 'bg-surface-2 text-ink-muted'
+const STAGE_UNKNOWN_CLS = 'bg-surface-subtle text-fg-secondary'
 
 export function StageChip({
   stage,

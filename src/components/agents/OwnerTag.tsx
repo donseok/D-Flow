@@ -35,8 +35,8 @@ export function teamOwnerLabel(mine: boolean, name: string | null | undefined): 
 /** 작은 명찰 — 내 것은 브랜드 바탕, 남의 것은 표면색 바탕에 이름(대비는 라이트·다크 토큰이 맞춘다). */
 export function OwnerTag({ owner, className = '' }: { owner: OwnerLabel; className?: string }) {
   const tone = owner.kind === 'mine'
-    ? 'border-brand bg-brand text-brand-fg'
-    : 'border-line-strong bg-surface text-ink'
+    ? 'border-action bg-action text-action-fg'
+    : 'border-border-input bg-surface text-fg'
   return (
     <span data-owner-tag={owner.kind} title={owner.text}
       className={`inline-block min-w-0 max-w-full truncate whitespace-nowrap rounded-full border px-1.5 py-px text-[10px] font-bold leading-[14px] ${tone} ${className}`}>

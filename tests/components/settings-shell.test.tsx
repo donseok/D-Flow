@@ -114,7 +114,7 @@ describe('SettingsSaveBar', () => {
   })
   it('저장 알림(notice)은 바 안 요약 자리에 성공 톤으로 — 있으면 요약 대신(u3-3 리뷰 P2-2)', () => {
     const on = renderToStaticMarkup(<SettingsSaveBar notice="저장했습니다." summary="변경 2개"><button type="button">저장</button></SettingsSaveBar>)
-    expect(on).toContain('text-done'); expect(on).toContain('role="status" aria-live="polite" aria-atomic="true">저장했습니다.</span>'); expect(on).not.toContain('변경 2개')
+    expect(on).toContain('text-success'); expect(on).toContain('role="status" aria-live="polite" aria-atomic="true">저장했습니다.</span>'); expect(on).not.toContain('변경 2개')
     const off = renderToStaticMarkup(<SettingsSaveBar notice={null} summary="변경 2개"><button type="button">저장</button></SettingsSaveBar>)
     expect(off).toContain('변경 2개'); expect(off).toContain('role="status" aria-live="polite" aria-atomic="true"></span>')
   })

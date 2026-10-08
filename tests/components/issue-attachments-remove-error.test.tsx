@@ -55,7 +55,7 @@ describe('IssueAttachments — 삭제 실패 문구', () => {
     await act(async () => {})
   }
   const del = () => container.querySelector(`button[aria-label="${realT(L.locale, 'issue.attach.remove')}"]`) as HTMLButtonElement
-  const line = () => [...container.querySelectorAll('p')].find(p => p.className.includes('text-delayed'))?.textContent
+  const line = () => [...container.querySelectorAll('p')].find(p => p.className.includes('text-danger'))?.textContent
 
   it.each([
     ['객체 삭제 실패', ERR_OBJECT_REMOVE, 'common.attach.objectRemoveFailed'],

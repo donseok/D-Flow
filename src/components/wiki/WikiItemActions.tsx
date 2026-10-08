@@ -101,7 +101,7 @@ export function WikiItemActions({
   }
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line/80 pt-3">
+    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border/80 pt-3">
       {availableActions(item).map((spec) => {
         const Icon = spec.icon
         return (
@@ -110,7 +110,7 @@ export function WikiItemActions({
             type="button"
             disabled={pending}
             onClick={() => run(spec)}
-            className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1 text-[11px] font-medium text-ink-muted transition hover:border-line-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-[11px] font-medium text-fg-secondary transition hover:border-border-input hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Icon className="h-3 w-3" aria-hidden />
             {running === spec.action ? t(locale, 'wiki.curate.running') : t(locale, spec.labelKey)}

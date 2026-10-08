@@ -37,9 +37,9 @@ export function MinutesCalendar({
 
   return (
     <div className="card overflow-hidden p-0">
-      <div className="grid grid-cols-7 gap-px bg-line">
+      <div className="grid grid-cols-7 gap-px bg-border">
         {columns.map(c => (
-          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-2 py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-ink' : 'font-normal text-ink-subtle'}`}>
+          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>
             {t(`att.weekday.${c.key}` as DictKey)}
           </div>
         ))}
@@ -52,8 +52,8 @@ export function MinutesCalendar({
           const isSelected = cell === selectedDate
           return (
             <button key={cell} data-date={cell} type="button" onClick={() => rows.length && onSelectDate(cell)}
-              className={`min-h-[92px] p-1.5 text-left ${working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'} ${isSelected ? 'ring-2 ring-inset ring-brand-ring' : ''} ${rows.length ? 'cursor-pointer hover:bg-surface-2' : 'cursor-default'}`}>
-              <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : working ? 'text-ink' : 'text-ink-muted'}`}>
+              className={`min-h-[92px] p-1.5 text-left ${working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'} ${isSelected ? 'ring-2 ring-inset ring-border-focus' : ''} ${rows.length ? 'cursor-pointer hover:bg-surface-subtle' : 'cursor-default'}`}>
+              <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-action text-action-fg' : working ? 'text-fg' : 'text-fg-secondary'}`}>
                 {dayNum}
               </span>
               {!working && <RestDayMark named={false} mark={t('att.restMark')} label={t('att.restDay')} />}
@@ -62,7 +62,7 @@ export function MinutesCalendar({
                   <TeamBar key={mi.id} code={mi.teamCode} shape="tag" />
                 ))}
                 {rows.length > 4 && (
-                  <span className="text-[10px] font-medium text-ink-subtle">+{rows.length - 4}</span>
+                  <span className="text-[10px] font-medium text-fg-muted">+{rows.length - 4}</span>
                 )}
               </div>
             </button>

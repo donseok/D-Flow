@@ -28,10 +28,10 @@ export function CustomFieldValuesEditor({ rowId, values, canEdit }: { rowId: str
   const scope = useContext(Context)
   if (!scope) return null
   const ko = scope.locale === 'ko'
-  if (!scope.defs) return <p role="alert" className="text-sm text-delayed">{ko ? '추가 정보 설정을 읽을 수 없습니다. 설정을 확인하세요.' : 'Custom field settings are invalid. Check project settings.'}</p>
+  if (!scope.defs) return <p role="alert" className="text-sm text-danger">{ko ? '추가 정보 설정을 읽을 수 없습니다. 설정을 확인하세요.' : 'Custom field settings are invalid. Check project settings.'}</p>
   if (!scope.defs.length) return null
   const parsed = parseCustomValues(values)
-  if (!parsed.ok) return <p role="alert" className="text-sm text-delayed">{ko ? '추가 정보를 읽을 수 없습니다. 행을 새로 조회하세요.' : 'Custom values could not be read. Reload the row.'}</p>
+  if (!parsed.ok) return <p role="alert" className="text-sm text-danger">{ko ? '추가 정보를 읽을 수 없습니다. 행을 새로 조회하세요.' : 'Custom values could not be read. Reload the row.'}</p>
   return <Editor key={rowId} scope={scope as Scope & { defs: FieldDef[] }} rowId={rowId} values={parsed.value} canEdit={canEdit} />
 }
 function Editor({ scope, rowId, values, canEdit }: { scope: Scope & { defs: FieldDef[] }; rowId: string; values: CustomValues; canEdit: boolean }) {
@@ -78,17 +78,17 @@ function Editor({ scope, rowId, values, canEdit }: { scope: Scope & { defs: Fiel
     })
   }
   if (!fields.length) return null
-  return <section aria-label={ko ? '추가 정보' : 'Custom fields'} className="space-y-3 border-t border-line pt-4">
-    <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{ko ? '추가 정보' : 'Custom fields'}</h3>
+  return <section aria-label={ko ? '추가 정보' : 'Custom fields'} className="space-y-3 border-t border-border pt-4">
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">{ko ? '추가 정보' : 'Custom fields'}</h3>
     {fields.map(def => <div key={def.key} className="min-w-0 space-y-1">
       {editable(def) ? <CustomFieldInput def={def} value={draft[def.key]} label={`${def.label}${def.required ? ' *' : ''}`} locale={scope.locale} disabled={pending} onChange={v => change(def.key, v)} />
-        : <><p className="text-xs text-ink-muted">{def.label}{!def.active ? ko ? ' (비활성)' : ' (inactive)' : ''}{def.editable_by === 'admin' && !scope.canAdmin ? ko ? ' (관리자 전용)' : ' (admin only)' : ''}</p>
-          <p className="whitespace-pre-wrap break-words text-sm text-ink">{formatCustomValue(def, draft[def.key], { locale: scope.locale, yes: ko ? '예' : 'Yes', no: ko ? '아니오' : 'No', empty: '—' })}</p></>}
-      {def.description && <p className="whitespace-pre-wrap break-words text-xs text-ink-subtle">{def.description}</p>}
-      {errors[def.key] && <p role="alert" className="text-xs text-delayed">{def.label}: {customFieldErrorText(errors[def.key], ko)}</p>}
+        : <><p className="text-xs text-fg-secondary">{def.label}{!def.active ? ko ? ' (비활성)' : ' (inactive)' : ''}{def.editable_by === 'admin' && !scope.canAdmin ? ko ? ' (관리자 전용)' : ' (admin only)' : ''}</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-fg">{formatCustomValue(def, draft[def.key], { locale: scope.locale, yes: ko ? '예' : 'Yes', no: ko ? '아니오' : 'No', empty: '—' })}</p></>}
+      {def.description && <p className="whitespace-pre-wrap break-words text-xs text-fg-muted">{def.description}</p>}
+      {errors[def.key] && <p role="alert" className="text-xs text-danger">{def.label}: {customFieldErrorText(errors[def.key], ko)}</p>}
     </div>)}
-    {stale && <p role="alert" className="text-xs text-delayed">{ko ? '행이 변경되었습니다. 작성 중인 값은 유지됩니다. 취소하면 최신 조회 값을 불러옵니다.' : 'The row changed. Your draft is preserved. Cancel to use the latest snapshot.'}</p>}
-    {message && <p role="status" className="text-xs text-ink-muted">{message}</p>}
+    {stale && <p role="alert" className="text-xs text-danger">{ko ? '행이 변경되었습니다. 작성 중인 값은 유지됩니다. 취소하면 최신 조회 값을 불러옵니다.' : 'The row changed. Your draft is preserved. Cancel to use the latest snapshot.'}</p>}
+    {message && <p role="status" className="text-xs text-fg-secondary">{message}</p>}
     {fields.some(editable) && <div className="flex flex-wrap gap-2">
       <button type="button" className="btn btn-primary h-8 px-3 text-xs" disabled={!dirty || pending || stale} onClick={save}>{pending ? ko ? '저장 중…' : 'Saving…' : ko ? '추가 정보 저장' : 'Save custom fields'}</button>
       <button type="button" className="btn btn-ghost h-8 px-3 text-xs" disabled={pending || (!dirty && !stale)} onClick={reset}>{ko ? '취소' : 'Cancel'}</button>

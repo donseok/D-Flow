@@ -44,7 +44,7 @@ function marked(content: string, query: string): ReactNode[] {
   return highlightSegments(content, query).map((segment, index) =>
     segment.hit
       ? (
-        <mark key={index} className="rounded-[3px] bg-accent-secondary/20 px-0.5 text-inherit shadow-[inset_0_-1px_0_var(--color-accent-secondary)]">
+        <mark key={index} className="rounded-[3px] bg-warning/20 px-0.5 text-inherit shadow-[inset_0_-1px_0_var(--color-warning)]">
           {segment.text}
         </mark>
       )
@@ -127,29 +127,29 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
       {/* ── 왼쪽: 결과 목록 ── */}
       <div className="min-w-0" aria-live="polite">
         {state.kind === 'idle' && (
-          <div className="rounded-2xl border border-dashed border-line-strong px-5 py-8 text-center text-sm text-ink-subtle">
+          <div className="rounded-2xl border border-dashed border-border-input px-5 py-8 text-center text-sm text-fg-muted">
             {t(locale, 'wiki.pane.placeholder')}
           </div>
         )}
 
         {state.kind === 'loading' && (
-          <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-md)]">
-            <p className="text-sm text-ink-muted">{t(locale, 'wiki.ask.working')}</p>
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-md)]">
+            <p className="text-sm text-fg-secondary">{t(locale, 'wiki.ask.working')}</p>
           </div>
         )}
 
         {state.kind === 'error' && (
-          <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-md)]">
-            <p className="text-sm text-delayed">{t(locale, 'wiki.search2.error')}</p>
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-md)]">
+            <p className="text-sm text-danger">{t(locale, 'wiki.search2.error')}</p>
           </div>
         )}
 
         {state.kind === 'done' && state.hits.length === 0 && (
-          <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-md)]">
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-md)]">
             {state.degraded && (
-              <p className="mb-2 text-sm text-ink-muted">{t(locale, 'wiki.search2.degraded')}</p>
+              <p className="mb-2 text-sm text-fg-secondary">{t(locale, 'wiki.search2.degraded')}</p>
             )}
-            <p className="text-sm text-ink-muted">{t(locale, 'wiki.search2.empty')}</p>
+            <p className="text-sm text-fg-secondary">{t(locale, 'wiki.search2.empty')}</p>
           </div>
         )}
 
@@ -165,26 +165,26 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
                       aria-current={current}
                       className={`w-full rounded-xl border bg-surface px-3.5 py-3 pr-20 text-left transition ${
                         current
-                          ? 'border-brand-ring border-l-[3px] border-l-brand shadow-[var(--shadow-sm)]'
-                          : 'border-line hover:border-line-strong hover:shadow-[var(--shadow-sm)]'
+                          ? 'border-border-focus border-l-[3px] border-l-action shadow-[var(--shadow-sm)]'
+                          : 'border-border hover:border-border-input hover:shadow-[var(--shadow-sm)]'
                       }`}
                     >
                       <span className="flex items-center gap-2">
-                        <span className="shrink-0 text-xs font-semibold text-ink-subtle">[{index + 1}]</span>
-                        <span className="chip bg-brand-weak text-brand">{sourceLabel(locale, hit.domain)}</span>
+                        <span className="shrink-0 text-xs font-semibold text-fg-muted">[{index + 1}]</span>
+                        <span className="chip bg-action-soft text-action">{sourceLabel(locale, hit.domain)}</span>
                         {hit.occurredOn && (
-                          <span className="text-[11px] text-ink-subtle">{hit.occurredOn}</span>
+                          <span className="text-[11px] text-fg-muted">{hit.occurredOn}</span>
                         )}
                       </span>
-                      <span className="mt-1 block truncate text-sm font-semibold text-ink">{hit.title}</span>
-                      <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-ink-muted">
+                      <span className="mt-1 block truncate text-sm font-semibold text-fg">{hit.title}</span>
+                      <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-fg-secondary">
                         {marked(snippetOf(hit.content, 200, query), query)}
                       </span>
                     </button>
                     {/* 버튼 안에 링크를 중첩할 수 없어 형제로 띄운다 — xl 미만에서 원문 이동의 유일한 통로(C6). */}
                     <a
                       href={hit.href}
-                      className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-brand transition hover:border-brand-ring"
+                      className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-action transition hover:border-border-focus"
                     >
                       {t(locale, 'wiki.pane.source')}
                       <ArrowRight className="h-3 w-3" aria-hidden />
@@ -200,22 +200,22 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
       {/* 검색 카드는 PageFrame 의 고정 도구 줄(pinned)이다 — 붙을 때 그 줄 바로 아래(--frame-sticky-top, D54)에 붙는다.
           스크롤 전에는 왼쪽 첫 카드와 윗변이 정확히 맞는다. */}
       <aside className="hidden min-w-0 self-start xl:sticky xl:top-(--frame-sticky-top) xl:block">
-        <div className="flex min-h-[380px] flex-col gap-3 rounded-2xl border border-line bg-surface p-5 text-ink shadow-[var(--shadow-md)]">
+        <div className="flex min-h-[380px] flex-col gap-3 rounded-2xl border border-border bg-surface p-5 text-fg shadow-[var(--shadow-md)]">
           {selectedHit
             ? (
               <>
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-muted">
                   <BookOpen className="h-3.5 w-3.5" aria-hidden />
                   {t(locale, 'wiki.pane.reading')}
                 </div>
-                <h3 className="text-base font-bold leading-6 text-ink">{selectedHit.title}</h3>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-subtle">
+                <h3 className="text-base font-bold leading-6 text-fg">{selectedHit.title}</h3>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
                   <span>{sourceLabel(locale, selectedHit.domain)}</span>
                   {selectedHit.occurredOn && <span>{selectedHit.occurredOn}</span>}
                   {selectedHit.matchedBy.length > 0 && <span>{selectedHit.matchedBy.join(' · ')}</span>}
                 </div>
-                <div className="border-t border-line" />
-                <div className="max-h-[26rem] overflow-y-auto whitespace-pre-wrap text-[13.5px] leading-7 text-ink-muted">
+                <div className="border-t border-border" />
+                <div className="max-h-[26rem] overflow-y-auto whitespace-pre-wrap text-[13.5px] leading-7 text-fg-secondary">
                   {marked(selectedHit.content, query)}
                 </div>
                 <div className="mt-auto pt-2">
@@ -228,15 +228,15 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
             )
             : (
               <>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-muted">
                   {t(locale, 'wiki.pane.guide.eyebrow')}
                 </div>
                 {state.kind === 'done' && state.hits.length > 0 && (
-                  <p className="text-sm text-ink">{t(locale, 'wiki.pane.pick')}</p>
+                  <p className="text-sm text-fg">{t(locale, 'wiki.pane.pick')}</p>
                 )}
-                <p className="text-sm leading-6 text-ink-muted">{t(locale, 'wiki.pane.guide.desc')}</p>
+                <p className="text-sm leading-6 text-fg-secondary">{t(locale, 'wiki.pane.guide.desc')}</p>
                 {corpus.kind === 'error' && (
-                  <p className="text-xs text-ink-subtle">{t(locale, 'wiki.pane.guide.statsFailed')}</p>
+                  <p className="text-xs text-fg-muted">{t(locale, 'wiki.pane.guide.statsFailed')}</p>
                 )}
                 {corpus.kind === 'done' && (
                   <div className="mt-1 flex flex-col gap-2">
@@ -244,14 +244,14 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
                       const max = Math.max(1, ...corpus.domains.map(row => row.docs))
                       return corpus.domains.filter(row => row.docs > 0).map(row => (
                         <div key={row.domain} className="flex items-center gap-2.5 text-[13px]">
-                          <span className="w-16 shrink-0 text-ink-muted">{sourceLabel(locale, row.domain)}</span>
-                          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-2">
+                          <span className="w-16 shrink-0 text-fg-secondary">{sourceLabel(locale, row.domain)}</span>
+                          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-subtle">
                             <span
-                              className="block h-full rounded-full bg-brand"
+                              className="block h-full rounded-full bg-action"
                               style={{ width: `${Math.max(4, Math.round((row.docs / max) * 100))}%` }}
                             />
                           </span>
-                          <span className="w-14 shrink-0 text-right text-xs tabular-nums text-ink-subtle">
+                          <span className="w-14 shrink-0 text-right text-xs tabular-nums text-fg-muted">
                             {t(locale, 'wiki.pane.guide.docs').replace('{n}', String(row.docs))}
                           </span>
                         </div>
@@ -278,34 +278,34 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
             type="button"
             onClick={() => void summarize(state.hits)}
             disabled={summary.kind === 'loading'}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-brand-ring bg-brand-weak px-3 text-xs font-semibold text-brand transition hover:bg-brand-weak/70 disabled:opacity-50"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border-focus bg-action-soft px-3 text-xs font-semibold text-action transition hover:bg-action-soft/70 disabled:opacity-50"
           >
             <Sparkles className="h-3.5 w-3.5" aria-hidden />
             {t(locale, 'wiki.search2.summarize')}
           </button>
-          <span className="text-xs text-ink-subtle">
+          <span className="text-xs text-fg-muted">
             {t(locale, 'wiki.search2.count').replace('{n}', String(state.hits.length))}
           </span>
         </div>
       )}
 
       {state.kind === 'done' && state.hits.length > 0 && state.degraded && (
-        <p className="px-0.5 text-xs text-ink-subtle">{t(locale, 'wiki.search2.degraded')}</p>
+        <p className="px-0.5 text-xs text-fg-muted">{t(locale, 'wiki.search2.degraded')}</p>
       )}
 
       {summary.kind === 'loading' && (
-        <div className="rounded-xl border border-line bg-surface p-3.5">
-          <p className="text-sm text-ink-muted">{t(locale, 'wiki.search2.summarizing')}</p>
+        <div className="rounded-xl border border-border bg-surface p-3.5">
+          <p className="text-sm text-fg-secondary">{t(locale, 'wiki.search2.summarizing')}</p>
         </div>
       )}
       {summary.kind === 'error' && (
-        <div className="rounded-xl border border-line bg-surface p-3.5">
-          <p className="text-sm text-delayed">{t(locale, 'wiki.search2.summarizeFailed')}</p>
+        <div className="rounded-xl border border-border bg-surface p-3.5">
+          <p className="text-sm text-danger">{t(locale, 'wiki.search2.summarizeFailed')}</p>
         </div>
       )}
       {summary.kind === 'done' && (
-        <div className="rounded-xl border border-brand-ring bg-brand-weak p-3.5">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-ink">{summary.answer}</p>
+        <div className="rounded-xl border border-border-focus bg-action-soft p-3.5">
+          <p className="whitespace-pre-wrap text-sm leading-6 text-fg">{summary.answer}</p>
         </div>
       )}
 

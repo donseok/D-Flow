@@ -149,16 +149,16 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
   }
 
   return (
-    <section className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">
+    <section className="space-y-3 rounded-2xl border border-border bg-surface-subtle p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-muted">
           <MessageSquare className="h-3.5 w-3.5" aria-hidden /> {t('issue.update.section')}
         </div>
         {archivedCount > 0 && (
           <button
             type="button"
             onClick={() => setShowArchived(v => !v)}
-            className="text-[11px] font-medium text-ink-subtle hover:text-ink"
+            className="text-[11px] font-medium text-fg-muted hover:text-fg"
           >
             {(showArchived ? t('issue.update.hideArchived') : t('issue.update.showArchived'))
               .replace('{n}', String(archivedCount))}
@@ -166,21 +166,21 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
         )}
       </div>
 
-      {loadFailed && <p className="text-xs font-medium text-delayed">{t('issue.err.updateLoadFailed')}</p>}
-      {err && <p className="text-xs font-medium text-delayed">{err}</p>}
-      {notice && <p className="text-xs font-medium text-delayed">{notice}</p>}
+      {loadFailed && <p className="text-xs font-medium text-danger">{t('issue.err.updateLoadFailed')}</p>}
+      {err && <p className="text-xs font-medium text-danger">{err}</p>}
+      {notice && <p className="text-xs font-medium text-danger">{notice}</p>}
 
       {list == null ? (
-        <p className="text-sm text-ink-subtle">{t('common.loading')}</p>
+        <p className="text-sm text-fg-muted">{t('common.loading')}</p>
       ) : shown.length === 0 ? (
-        <p className="text-sm text-ink-subtle">{t('issue.update.empty')}</p>
+        <p className="text-sm text-fg-muted">{t('issue.update.empty')}</p>
       ) : (
         <>
           {!expanded && hiddenCount > 0 && (
             <button
               type="button"
               onClick={() => setExpanded(true)}
-              className="text-[11px] font-medium text-brand hover:underline"
+              className="text-[11px] font-medium text-action hover:underline"
             >
               {t('issue.update.more').replace('{n}', String(hiddenCount))}
             </button>
@@ -194,19 +194,19 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
               return (
                 <li
                   key={u.id}
-                  className={`rounded-lg border border-line px-2.5 py-2 ${
+                  className={`rounded-lg border border-border px-2.5 py-2 ${
                     u.kind === 'status' ? 'bg-surface-subtle/40' : 'bg-surface-subtle'
                   }`}
                 >
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-subtle">
-                    <span className="font-medium text-ink-muted">{u.authorName}</span>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-fg-muted">
+                    <span className="font-medium text-fg-secondary">{u.authorName}</span>
                     <span aria-hidden>·</span>
                     <time dateTime={u.createdAt}>{fmtAt(u.createdAt, locale, timeZone)}</time>
                     {u.authorName === MIGRATED_AUTHOR_NAME && (
-                      <span className="text-[11px] text-ink-subtle">{t('issue.update.migrated')}</span>
+                      <span className="text-[11px] text-fg-muted">{t('issue.update.migrated')}</span>
                     )}
                     {u.category && (
-                      <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
+                      <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium text-fg-secondary">
                         {t(ISSUE_UPDATE_CATEGORY_META[u.category].labelKey)}
                       </span>
                     )}
@@ -216,7 +216,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                           type="button" disabled={busy}
                           onClick={() => run(() => archiveIssueUpdate(issueId, u.id))}
                           aria-label={t('issue.update.archive')} title={t('issue.update.archive')}
-                          className="rounded p-0.5 text-ink-subtle hover:text-delayed"
+                          className="rounded p-0.5 text-fg-muted hover:text-danger"
                         >
                           <CircleSlash className="h-3.5 w-3.5" aria-hidden />
                         </button>
@@ -226,7 +226,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                           type="button" disabled={busy}
                           onClick={() => run(() => unarchiveIssueUpdate(issueId, u.id))}
                           aria-label={t('issue.update.unarchive')} title={t('issue.update.unarchive')}
-                          className="rounded p-0.5 text-ink-subtle hover:text-ink"
+                          className="rounded p-0.5 text-fg-muted hover:text-fg"
                         >
                           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
                         </button>
@@ -238,7 +238,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                             if (confirmPurge(t('issue.update.purgeConfirm'))) void run(() => purgeIssueUpdate(issueId, u.id))
                           }}
                           aria-label={t('issue.update.purge')} title={t('issue.update.purge')}
-                          className="rounded p-0.5 text-ink-subtle hover:text-delayed"
+                          className="rounded p-0.5 text-fg-muted hover:text-danger"
                         >
                           <Trash2 className="h-3.5 w-3.5" aria-hidden />
                         </button>
@@ -246,7 +246,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                     </span>
                   </div>
                   {status ? (
-                    <p className="mt-1 text-[13px] text-ink-muted">
+                    <p className="mt-1 text-[13px] text-fg-secondary">
                       {t('issue.update.statusChange')
                         .replace('{from}', vocabLabel('workflow.issue_statuses', statusDefs, status.from, t))
                         .replace('{to}', vocabLabel('workflow.issue_statuses', statusDefs, status.to, t))}
@@ -254,14 +254,14 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                   ) : (
                     <p
                       className={`mt-1 whitespace-pre-wrap text-[13px] leading-5 ${
-                        archived ? 'text-ink-muted line-through decoration-ink-subtle/50' : 'text-ink'
+                        archived ? 'text-fg-secondary line-through decoration-fg-muted/50' : 'text-fg'
                       }`}
                     >
                       {u.body}
                     </p>
                   )}
                   {archived && u.archivedByName && (
-                    <p className="mt-1 text-[11px] text-ink-subtle">
+                    <p className="mt-1 text-[11px] text-fg-muted">
                       {t('issue.update.archivedBy').replace('{name}', u.archivedByName)}
                     </p>
                   )}
@@ -289,13 +289,13 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                   작성 중 본문이 사라진다(IssuesView.tsx:365 에 dirty 가드가 없다).
               인라인 목록이면 Escape 를 가로챌 필요가 없다. */}
           {mentionCandidates.length > 0 && (
-            <ul className="flex flex-wrap gap-1 rounded-lg border border-line bg-surface-subtle p-1.5">
+            <ul className="flex flex-wrap gap-1 rounded-lg border border-border bg-surface-subtle p-1.5">
               {mentionCandidates.map(m => (
                 <li key={m.id}>
                   <button
                     type="button"
                     onClick={() => pick(m)}
-                    className="rounded px-2 py-1 text-xs text-ink-muted hover:bg-surface-2 hover:text-ink"
+                    className="rounded px-2 py-1 text-xs text-fg-secondary hover:bg-surface-subtle hover:text-fg"
                   >
                     {m.name}
                   </button>
@@ -303,7 +303,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
               ))}
             </ul>
           )}
-          <p className="text-[11px] text-ink-subtle">{t('issue.update.mentionHint')}</p>
+          <p className="text-[11px] text-fg-muted">{t('issue.update.mentionHint')}</p>
           <div className="flex items-center gap-2">
             <label className="sr-only" htmlFor="issue-update-category">{t('issue.update.category')}</label>
             <select

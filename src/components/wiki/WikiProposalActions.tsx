@@ -36,7 +36,7 @@ export function WikiProposalActions({
   }
 
   return (
-    <div className="mt-3 border-t border-line/80 pt-3">
+    <div className="mt-3 border-t border-border/80 pt-3">
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => void review('accepted')} disabled={busy !== null} className="btn btn-primary h-8 px-3 text-xs">
           <Check className="h-3.5 w-3.5" aria-hidden />
@@ -47,7 +47,7 @@ export function WikiProposalActions({
           {busy === 'rejected' ? t(locale, 'wiki.proposal.reviewing') : t(locale, 'wiki.proposal.reject')}
         </button>
       </div>
-      {error && <p className="mt-2 text-xs font-medium text-delayed" role="alert">{error}</p>}
+      {error && <p className="mt-2 text-xs font-medium text-danger" role="alert">{error}</p>}
     </div>
   )
 }

@@ -123,10 +123,10 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
           <div className="eyebrow">Active LLM</div>
-          <h2 className="mt-0.5 text-sm font-semibold text-ink">서버 전역 LLM · 프로필 {profiles.length}개</h2>
+          <h2 className="mt-0.5 text-sm font-semibold text-fg">서버 전역 LLM · 프로필 {profiles.length}개</h2>
         </div>
         <button onClick={() => openModal(false)} className="btn btn-ghost" disabled={pending}>
           <Settings2 className="h-4 w-4" />프로필 관리
@@ -139,13 +139,13 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
         아래 라디오는 '저장하면 될 상태'이고 이 줄은 '지금 도는 상태'다 — 저장 후 router.refresh()
         로 갱신된다. 둘을 헷갈리지 않도록 문구를 '서버 적용 중'으로 못박는다.
       */}
-      <dl className="grid gap-x-6 gap-y-2 border-b border-line bg-surface-2 px-5 py-3.5 text-xs sm:grid-cols-2 sm:px-6">
+      <dl className="grid gap-x-6 gap-y-2 border-b border-border bg-surface-subtle px-5 py-3.5 text-xs sm:grid-cols-2 sm:px-6">
         <div className="min-w-0">
-          <dt className="font-semibold text-ink-muted">서버 적용 중 · 생성</dt>
+          <dt className="font-semibold text-fg-secondary">서버 적용 중 · 생성</dt>
           <dd className="mt-0.5 min-w-0">
-            <span className="break-all font-mono text-ink">{active.llm}</span>
-            <span className="text-ink-subtle"> · {active.provider} · {SOURCE_LABEL[active.source]}</span>
-            <span className="mt-0.5 block text-ink-subtle">
+            <span className="break-all font-mono text-fg">{active.llm}</span>
+            <span className="text-fg-muted"> · {active.provider} · {SOURCE_LABEL[active.source]}</span>
+            <span className="mt-0.5 block text-fg-muted">
               폴백 {active.llmFallbacks.length > 0
                 ? <span className="break-all font-mono">{active.llmFallbacks.join(' → ')}</span>
                 : '없음'}
@@ -153,12 +153,12 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="font-semibold text-ink-muted">서버 적용 중 · 임베딩</dt>
+          <dt className="font-semibold text-fg-secondary">서버 적용 중 · 임베딩</dt>
           <dd className="mt-0.5 min-w-0">
-            <span className="break-all font-mono text-ink">{active.embedding}</span>
-            <span className="text-ink-subtle"> · {active.embeddingDim}차원 · {active.embeddingProvider}</span>
+            <span className="break-all font-mono text-fg">{active.embedding}</span>
+            <span className="text-fg-muted"> · {active.embeddingDim}차원 · {active.embeddingProvider}</span>
             {/* 프로필은 생성만 덮는다 — 모르면 "프로필 바꿨는데 검색이 그대로"로 헤맨다. */}
-            <span className="mt-0.5 block text-ink-subtle">
+            <span className="mt-0.5 block text-fg-muted">
               {active.source === 'profile'
                 ? '프로필은 생성만 바꾼다 — 임베딩은 환경변수 그대로'
                 : '환경변수로만 설정한다'}
@@ -169,35 +169,35 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
 
       <div className="space-y-5 p-5 sm:p-6">
         <fieldset className="space-y-2.5">
-          <legend className="mb-2 text-xs font-semibold text-ink-muted">활성 LLM</legend>
+          <legend className="mb-2 text-xs font-semibold text-fg-secondary">활성 LLM</legend>
           {MODES.map((m) => {
             const active = mode === m.value
             return (
               <div key={m.value}>
                 <label
                   className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
-                    active ? 'border-brand bg-brand-weak' : 'border-line bg-surface hover:border-line-strong'
+                    active ? 'border-action bg-action-soft' : 'border-border bg-surface hover:border-border-input'
                   }`}
                 >
                   <input
                     type="radio"
                     name="llm-mode"
-                    className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-brand)]"
+                    className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-action)]"
                     value={m.value}
                     checked={active}
                     onChange={() => { setMode(m.value); setTestResult(null); setError(null) }}
                     disabled={pending}
                   />
                   <span className="min-w-0">
-                    <span className={`block text-sm font-semibold ${active ? 'text-brand' : 'text-ink'}`}>{m.label}</span>
-                    <span className="mt-0.5 block text-xs leading-5 text-ink-muted">{m.desc}</span>
+                    <span className={`block text-sm font-semibold ${active ? 'text-action' : 'text-fg'}`}>{m.label}</span>
+                    <span className="mt-0.5 block text-xs leading-5 text-fg-secondary">{m.desc}</span>
                   </span>
                 </label>
 
                 {m.value === 'profile' && (
                   <div className="mt-2 pl-4">
                     <label className="block">
-                      <span className="mb-1.5 block text-xs font-semibold text-ink-muted">사용할 프로필</span>
+                      <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">사용할 프로필</span>
                       <select
                         className="app-input"
                         value={activeId !== null ? String(activeId) : ''}
@@ -213,7 +213,7 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
                       </select>
                     </label>
                     {mode === 'profile' && selected && (
-                      <p className="mt-1.5 text-[11px] leading-4 text-ink-subtle">
+                      <p className="mt-1.5 text-[11px] leading-4 text-fg-muted">
                         {selected.provider} · {selected.base_url || '기본 엔드포인트'} · {selected.has_token ? `키 ${selected.auth_token_masked}` : '키 없음'}
                       </p>
                     )}
@@ -224,14 +224,14 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
           })}
         </fieldset>
 
-        {error && <p role="alert" className="text-sm font-medium text-delayed">{error}</p>}
+        {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
         {testResult && (
-          <p role="status" className={`text-sm leading-6 ${testResult.ok ? 'text-done' : 'text-delayed'}`}>
+          <p role="status" className={`text-sm leading-6 ${testResult.ok ? 'text-success' : 'text-danger'}`}>
             {testResult.ok ? '연결에 성공했습니다.' : `연결 실패 — ${testResult.message ?? '알 수 없는 오류'}`}
           </p>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
           {/* env 모드는 서버의 env 값으로만 판별되므로 화면에서 보낼 값이 없다 — 버튼을 숨긴다. */}
           {mode !== 'env' && (
             <button onClick={runTest} className="btn btn-ghost" disabled={pending || mode === 'none'}>

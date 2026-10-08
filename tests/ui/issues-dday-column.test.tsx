@@ -77,9 +77,9 @@ describe('IssuesView 시작일자·남은일수 열', () => {
   it('남은일수는 D-N일 / D+N일, 7일 이내와 경과는 빨강, 해결·기한 없음은 —', async () => {
     await render()
     const d5 = cellOf('D-5일')!, d20 = cellOf('D-20일')!, over3 = cellOf('D+3일')!
-    expect(d5.className).toContain('text-delayed')
-    expect(over3.className).toContain('text-delayed')
-    expect(d20.className).not.toContain('text-delayed')
+    expect(d5.className).toContain('text-danger')
+    expect(over3.className).toContain('text-danger')
+    expect(d20.className).not.toContain('text-danger')
     const resolvedRow = cellOf('해결됨')!.closest('tr')!
     expect(resolvedRow.textContent).not.toMatch(/D[-+]\d/)
   })

@@ -98,6 +98,6 @@ describe('예전 회귀 단언(유지)', () => {
     expect(readFileSync(join(process.cwd(), 'src/app/login/page.tsx'), 'utf8')).not.toMatch(/#7a6f68/i)
   })
   it('간트 주말·휴일 날짜 라벨은 반투명 위험색을 쓰지 않는다', () => {
-    expect(readFileSync(join(process.cwd(), 'src/components/wbs/WbsGanttSheet.tsx'), 'utf8')).not.toContain('text-delayed/70')
+    expect(readFileSync(join(process.cwd(), 'src/components/wbs/WbsGanttSheet.tsx'), 'utf8')).not.toContain('text-danger/70')
   })
 })

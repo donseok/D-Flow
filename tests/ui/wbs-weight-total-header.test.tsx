@@ -89,7 +89,7 @@ describe('WbsGanttSheet — 가중치 헤더 합계', () => {
   it('100%에서 벗어나면 경고 색으로 표시한다', async () => {
     await render([phase('a', 0.4), phase('b', 0.59)])
     expect(sub()?.textContent).toBe('(99%)')
-    expect(sub()?.className).toContain('text-delayed')
+    expect(sub()?.className).toContain('text-danger')
   })
 
   it('합계는 하위 레벨 가중치를 더하지 않는다 — 형제 그룹 기준이므로 루트만 센다', async () => {

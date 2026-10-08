@@ -9,16 +9,16 @@ import { useLocale } from '@/components/providers/LocaleProvider'
  *  onRetry 가 있으면 router.refresh() 대신 그것을 부른다 — 서버 컴포넌트가 아니라 클라이언트 로더가 읽은 데이터의 재시도.
  *  busy = 재시도 요청이 도는 중 — 버튼을 떼지 않고(포커스 유지) aria-disabled·aria-busy 로 알리고 누름을 무시한다.
  *  disabled 속성은 쓰지 않는다: 포커스 중인 버튼이 disabled 가 되면 포커스가 body 로 떨어진다(HTML focus fixup).
- *  글자는 text-ink — delayed 는 delayed-weak 위 3.71:1 로 본문 AA 미만이라 비텍스트 기준(3:1)인 아이콘에만 쓴다(티커 실패 칩과 같은 처리). */
+ *  글자는 text-fg — delayed 는 delayed-weak 위 3.71:1 로 본문 AA 미만이라 비텍스트 기준(3:1)인 아이콘에만 쓴다(티커 실패 칩과 같은 처리). */
 export function LoadErrorNotice({ message, retry = true, onRetry, busy = false }: {
   message: string; retry?: boolean; onRetry?: () => void; busy?: boolean
 }) {
   const router = useRouter()
   const { t } = useLocale()
   return (
-    <div role="alert" data-load-error className="flex items-center justify-between gap-3 rounded-xl bg-delayed-weak px-4 py-3 text-sm text-ink">
-      <span className="flex min-w-0 items-center gap-2 text-ink">
-        <AlertTriangle aria-hidden className="h-4 w-4 shrink-0 text-delayed" />{message}
+    <div role="alert" data-load-error className="flex items-center justify-between gap-3 rounded-xl bg-danger-weak px-4 py-3 text-sm text-fg">
+      <span className="flex min-w-0 items-center gap-2 text-fg">
+        <AlertTriangle aria-hidden className="h-4 w-4 shrink-0 text-danger" />{message}
       </span>
       {retry && (
         <button type="button" aria-disabled={busy || undefined} aria-busy={busy || undefined}

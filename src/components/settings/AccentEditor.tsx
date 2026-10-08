@@ -73,14 +73,14 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
     startTransition(async () => submit(patch))
   }
 
-  return <div className="space-y-4 border-t border-line pt-5">
+  return <div className="space-y-4 border-t border-border pt-5">
     <div>
-      <h3 className="text-sm font-semibold text-ink">강조색</h3>
-      <p className="mt-1 text-xs text-ink-muted">기준 색 하나를 입력하면 밝은 화면과 어두운 화면에 쓸 색을 계산합니다. 저장하면 화면 전체에 바로 반영됩니다.</p>
+      <h3 className="text-sm font-semibold text-fg">강조색</h3>
+      <p className="mt-1 text-xs text-fg-secondary">기준 색 하나를 입력하면 밝은 화면과 어두운 화면에 쓸 색을 계산합니다. 저장하면 화면 전체에 바로 반영됩니다.</p>
     </div>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.accent" message={invalidReason} isAdmin settingsHref="#workspace-accent" />}
     <div className="flex flex-wrap items-center gap-3">
-      <label htmlFor="workspace-accent" className="text-sm text-ink">기준 색</label>
+      <label htmlFor="workspace-accent" className="text-sm text-fg">기준 색</label>
       <input id="workspace-accent" className="app-input w-32 font-mono text-sm" value={draft ?? ''} placeholder={ACCENT_TOKENS.light.action} maxLength={7}
         disabled={pending || !!uncertainPatch} onChange={event => setDraft(event.target.value || null)} />
       <input type="color" aria-label="강조색 선택" value={/^#[0-9a-fA-F]{6}$/.test(draft ?? '') ? draft! : ACCENT_TOKENS.light.action}
@@ -91,13 +91,13 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
     {preview && !preview.ok && <ConfigStateNotice kind="field" locale="ko" message={`${preview.error} ${preview.failures.map(f => `${f.pair} ${f.contrast} (최소 ${f.min})`).join(', ')}`} />}
     {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
     {preview?.ok && <div className="grid gap-3 sm:grid-cols-2">
-      {(['light', 'dark'] as const).map(mode => <div key={mode} className="overflow-hidden rounded-xl border border-line">
+      {(['light', 'dark'] as const).map(mode => <div key={mode} className="overflow-hidden rounded-xl border border-border">
         <div className="p-4" style={{ backgroundColor: ACCENT_TOKENS[mode].surface }}>
           <span className="rounded-lg px-3 py-2 text-sm font-semibold" style={{ backgroundColor: preview.value[mode].bg, color: preview.value[mode].fg }}>
             {mode === 'light' ? '밝은 화면' : '어두운 화면'}
           </span>
         </div>
-        <p className="bg-surface-2 px-4 py-2 font-mono text-[11px] text-ink-muted">{preview.value[mode].bg} · {preview.value[mode].fg}</p>
+        <p className="bg-surface-subtle px-4 py-2 font-mono text-[11px] text-fg-secondary">{preview.value[mode].bg} · {preview.value[mode].fg}</p>
       </div>)}
     </div>}
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">

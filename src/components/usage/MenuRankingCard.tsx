@@ -18,12 +18,12 @@ export function MenuRankingCard({ ranks, locale }: { ranks: MenuRank[]; locale: 
         <ol className="space-y-2">
           {ranks.map((r, i) => (
             <li key={r.menuKey} className="flex items-center gap-3">
-              <span className="w-5 shrink-0 text-right text-[11px] tabular-nums text-ink-subtle">{i + 1}</span>
-              <span className="w-32 shrink-0 truncate text-xs text-ink">{menuLabel(r.menuKey, translate)}</span>
-              <span className="h-2 min-w-0 flex-1 rounded-full bg-surface-2">
-                <span className="block h-2 rounded-full bg-brand" style={{ width: `${barPct(r.events, max)}%` }} />
+              <span className="w-5 shrink-0 text-right text-[11px] tabular-nums text-fg-muted">{i + 1}</span>
+              <span className="w-32 shrink-0 truncate text-xs text-fg">{menuLabel(r.menuKey, translate)}</span>
+              <span className="h-2 min-w-0 flex-1 rounded-full bg-surface-subtle">
+                <span className="block h-2 rounded-full bg-action" style={{ width: `${barPct(r.events, max)}%` }} />
               </span>
-              <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-ink-muted">
+              <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-fg-secondary">
                 {r.events.toLocaleString('ko-KR')}회 · {r.activeUsers}명
               </span>
             </li>

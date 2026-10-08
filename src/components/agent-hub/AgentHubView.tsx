@@ -165,8 +165,8 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
     <>
       <HubStatusBar projectId={hub.projectId} registered={hub.registered} enabled={hub.enabled}
         watchers={hub.watchers} isAdmin={hub.viewer.isAdmin} />
-      <div className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
-        <span data-hub-stamp className={error ? 'text-accent-warning' : ''}>
+      <div className="ml-auto flex items-center gap-2 text-xs text-fg-secondary">
+        <span data-hub-stamp className={error ? 'text-warning' : ''}>
           {error ? `갱신 실패 ${hhmmss(error.at, timeZone, timeLocale)}${tzTag} · ${error.message}` : `갱신 ${hhmmss(hub.fetchedAt, timeZone, timeLocale)}${tzTag}`}
         </span>
         <button type="button" data-hub-refresh className="btn btn-ghost h-8 px-2 text-xs" onClick={() => { void refresh() }}>새로고침</button>
@@ -193,7 +193,7 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
           </div>
         )}
         {/* [RF5] 근무일을 찾지 못하면 일정 계산을 건너뛴다 — 간트와 같은 문구로 그 사유를 보인다(A-3 리뷰 P3) */}
-        {selectedItem && schedule.calendarError && <p role="status" data-hub-no-workday className="text-[12px] text-delayed">{t('wbs.noWorkday')}</p>}
+        {selectedItem && schedule.calendarError && <p role="status" data-hub-no-workday className="text-[12px] text-danger">{t('wbs.noWorkday')}</p>}
         {selectedItem && wbs.levelLabels !== null && (
           <RowDetailPanel
             item={selectedItem}

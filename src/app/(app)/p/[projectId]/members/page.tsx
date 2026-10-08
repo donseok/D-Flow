@@ -84,7 +84,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
           title={t(locale, canEdit ? 'members.sectionManage' : 'members.sectionRoster')}
           icon={canEdit ? Shield : Users}
         >
-          {canEdit && <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'members.manageHint')}</p>}
+          {canEdit && <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'members.manageHint')}</p>}
           {roster.ok ? (
             <RosterManager
               projectId={projectId}
@@ -95,10 +95,10 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
               canEdit={canEdit}
             />
           ) : (
-            <p role="alert" className="text-sm text-delayed">{roster.error}</p>
+            <p role="alert" className="text-sm text-danger">{roster.error}</p>
           )}
           {canEdit && (
-            <div className="mt-6 border-t border-line pt-5">
+            <div className="mt-6 border-t border-border pt-5">
               <ProjectInviteManager
                 projectId={projectId}
                 rows={invites?.ok ? invites.rows : []}

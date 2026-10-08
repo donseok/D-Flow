@@ -31,10 +31,10 @@ export function ShareViewer({ minuteDate, teamCode, title, bodyMd }: {
       <div className="flex w-full flex-col gap-4 px-4 py-6 sm:px-5 lg:px-7">
         <div className="card flex flex-wrap items-center gap-3 p-4">
           <BrandGlyph size={28} />
-          <span className="text-sm tabular-nums text-ink-muted">{minuteDate}</span>
+          <span className="text-sm tabular-nums text-fg-secondary">{minuteDate}</span>
           <TeamBar code={teamCode} shape="label" />
-          <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-ink">{title}</h1>
-          <span className="text-xs text-ink-subtle">{t('min.share.readonly')}</span>
+          <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-fg">{title}</h1>
+          <span className="text-xs text-fg-muted">{t('min.share.readonly')}</span>
           <MinuteFontSizeControl
             size={fs.size} onDec={fs.dec} onInc={fs.inc} onReset={fs.reset}
             canDec={fs.canDec} canInc={fs.canInc}

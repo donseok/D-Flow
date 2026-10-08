@@ -54,8 +54,8 @@ export function ApprovalStepsEditor({ projectId, steps, distinct, gate, revision
     <div data-approval-steps-editor className="space-y-4">
       <ol className="space-y-2">
         {rows.map((r, i) => (
-          <li key={i} data-approval-step={r.code || `new-${i}`} className="grid grid-cols-[2rem_1fr] items-start gap-2 rounded-lg border border-line bg-surface p-2 sm:grid-cols-[2rem_8rem_1fr_11rem_auto]">
-            <span className="pt-2 text-center text-xs font-semibold tabular-nums text-ink-subtle">{i + 1}</span>
+          <li key={i} data-approval-step={r.code || `new-${i}`} className="grid grid-cols-[2rem_1fr] items-start gap-2 rounded-lg border border-border bg-surface p-2 sm:grid-cols-[2rem_8rem_1fr_11rem_auto]">
+            <span className="pt-2 text-center text-xs font-semibold tabular-nums text-fg-muted">{i + 1}</span>
             <input className="app-input h-9 font-mono text-xs" value={r.code} disabled={locked || r.fixed} maxLength={20} aria-label={t('settings.workflow.stepCode')}
               placeholder="code" onChange={(e) => edit(i, { code: e.target.value.toLowerCase() })} />
             <input className="app-input col-span-2 h-9 text-xs sm:col-span-1" value={r.label} disabled={locked} maxLength={20} aria-label={t('settings.workflow.stepLabel')}
@@ -67,7 +67,7 @@ export function ApprovalStepsEditor({ projectId, steps, distinct, gate, revision
             <div className="col-span-2 flex gap-1 sm:col-span-1">
               <button type="button" className="btn btn-ghost h-9 px-2 text-xs" disabled={locked || i === 0} onClick={() => move(i, -1)} aria-label={t('settings.workflow.stepUp')}>↑</button>
               <button type="button" className="btn btn-ghost h-9 px-2 text-xs" disabled={locked || i === rows.length - 1} onClick={() => move(i, 1)} aria-label={t('settings.workflow.stepDown')}>↓</button>
-              <button type="button" className="btn btn-ghost h-9 px-2 text-xs text-delayed" disabled={locked || rows.length <= 1}
+              <button type="button" className="btn btn-ghost h-9 px-2 text-xs text-danger" disabled={locked || rows.length <= 1}
                 onClick={() => { setRows((rs) => rs.filter((_, j) => j !== i)); cmd.clear() }}>{t('settings.workflow.stepRemove')}</button>
             </div>
           </li>
@@ -77,30 +77,30 @@ export function ApprovalStepsEditor({ projectId, steps, distinct, gate, revision
         <button type="button" className="btn btn-ghost h-8 px-3 text-xs" disabled={locked} data-approval-step-add
           onClick={() => { setRows((rs) => [...rs, { code: '', label: '', approver: 'admin', fixed: false }]); cmd.clear() }}>{t('settings.workflow.stepAdd')}</button>
       )}
-      <p className="text-[11px] text-ink-subtle">{t('settings.workflow.stepsHint')}</p>
-      {rows.some((r) => !r.fixed && r.code !== '' && !STEP_CODE_RE.test(r.code)) && <p role="alert" className="text-xs text-delayed">{t('settings.workflow.stepCodeHint')}</p>}
-      {!parsed.ok && <p role="alert" className="text-xs text-delayed">{parsed.error}</p>}
+      <p className="text-[11px] text-fg-muted">{t('settings.workflow.stepsHint')}</p>
+      {rows.some((r) => !r.fixed && r.code !== '' && !STEP_CODE_RE.test(r.code)) && <p role="alert" className="text-xs text-danger">{t('settings.workflow.stepCodeHint')}</p>}
+      {!parsed.ok && <p role="alert" className="text-xs text-danger">{parsed.error}</p>}
 
-      <label className="flex items-center gap-2 text-xs text-ink">
-        <input type="checkbox" className="h-3.5 w-3.5 rounded border-line" checked={dist} disabled={locked} data-approval-distinct
+      <label className="flex items-center gap-2 text-xs text-fg">
+        <input type="checkbox" className="h-3.5 w-3.5 rounded border-border" checked={dist} disabled={locked} data-approval-distinct
           onChange={(e) => { setDist(e.target.checked); cmd.clear() }} />
         {t('settings.workflow.approval_distinct_approvers.label')}
       </label>
 
       <fieldset className="space-y-1">
-        <legend className="mb-1 text-xs font-semibold text-ink">{t('settings.workflow.predecessor_gate.label')}</legend>
+        <legend className="mb-1 text-xs font-semibold text-fg">{t('settings.workflow.predecessor_gate.label')}</legend>
         {PREDECESSOR_GATES.map((v) => (
-          <label key={v} className="flex items-center gap-2 text-xs text-ink">
+          <label key={v} className="flex items-center gap-2 text-xs text-fg">
             <input type="radio" name={`gate-${projectId}`} value={v} checked={g === v} disabled={locked} data-predecessor-gate={v}
               onChange={() => { setG(v); cmd.clear() }} />
             {t(GATE_KEY[v])}
           </label>
         ))}
-        <p className="text-[11px] text-ink-subtle">{t('settings.workflow.predecessor_gate.desc')}</p>
+        <p className="text-[11px] text-fg-muted">{t('settings.workflow.predecessor_gate.desc')}</p>
       </fieldset>
 
-      {err && <p role="alert" className="text-xs text-delayed" data-approval-steps-error>{err}</p>}
-      {cmd.saved && <p role="status" className="text-xs text-done">{t('settings.workflow.saved')}</p>}
+      {err && <p role="alert" className="text-xs text-danger" data-approval-steps-error>{err}</p>}
+      {cmd.saved && <p role="status" className="text-xs text-success">{t('settings.workflow.saved')}</p>}
       {canEdit && (
         <button type="button" className="btn btn-primary h-8 px-3 text-xs" data-approval-steps-save
           disabled={locked || !parsed.ok || Object.keys(set).length === 0} onClick={() => cmd.save(set)}>

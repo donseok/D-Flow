@@ -81,7 +81,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
       <ol className="space-y-1.5">
         {labels.map((label, i) => (
           <li key={i} className="flex items-center gap-2">
-            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-ink-subtle">{i + 1}단</span>
+            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-fg-muted">{i + 1}단</span>
             <input
               data-level-label
               className="app-input h-8 flex-1 text-sm"

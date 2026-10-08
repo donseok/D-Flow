@@ -127,7 +127,7 @@ export function MeetingsView({
       <div className="sticky top-(--frame-sticky-top) z-10 -mx-1 flex flex-col gap-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
           <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('meet.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
-          <div className="min-w-[116px] text-center text-base font-bold tabular-nums text-ink">
+          <div className="min-w-[116px] text-center text-base font-bold tabular-nums text-fg">
             {new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { year: 'numeric', month: locale === 'ko' ? 'numeric' : 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
           </div>
           <button onClick={() => shift(1)} className="chrome-icon" aria-label={t('meet.nextMonth')}><ChevronRight className="h-4 w-4" /></button>
@@ -157,7 +157,7 @@ export function MeetingsView({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-line bg-surface-2 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
+                <tr className="border-b border-border bg-surface-subtle text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">
                   <th className="px-4 py-3">{t('meet.col.date')}</th>
                   <th className="px-4 py-3">{t('meet.col.time')}</th>
                   <th className="px-4 py-3">{t('meet.col.title')}</th>
@@ -171,12 +171,12 @@ export function MeetingsView({
                   return (
                     <tr key={o.occurrenceId} onClick={() => setDetailOcc(o)} role="button" tabIndex={0}
                       onKeyDown={e => { if (e.key === 'Enter') setDetailOcc(o) }}
-                      className="cursor-pointer border-b border-line/70 last:border-0 transition hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2">
-                      <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-ink">{fmtDate(o.occurrenceDate)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 tabular-nums text-ink-muted">{o.startTime ?? t('meet.allDay')}</td>
-                      <td className="px-4 py-3 text-ink">{o.title}</td>
+                      className="cursor-pointer border-b border-border/70 last:border-0 transition hover:bg-surface-subtle focus:outline-none focus-visible:bg-surface-subtle">
+                      <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">{fmtDate(o.occurrenceDate)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 tabular-nums text-fg-secondary">{o.startTime ?? t('meet.allDay')}</td>
+                      <td className="px-4 py-3 text-fg">{o.title}</td>
                       <td className="px-4 py-3"><span className={`chip ${meta.chip}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}</span></td>
-                      <td className="px-4 py-3 text-ink-muted">{o.attendeeCount}</td>
+                      <td className="px-4 py-3 text-fg-secondary">{o.attendeeCount}</td>
                     </tr>
                   )
                 })}

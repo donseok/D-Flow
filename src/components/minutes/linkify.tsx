@@ -11,7 +11,7 @@ export function linkifyMinutePaths(content: string): ReactNode {
     const i = m.index ?? 0
     if (i > last) parts.push(content.slice(last, i))
     parts.push(
-      <Link key={`${i}-${m[0]}`} href={m[0]} className="font-medium text-brand underline underline-offset-2">
+      <Link key={`${i}-${m[0]}`} href={m[0]} className="font-medium text-action underline underline-offset-2">
         {m[0]}
       </Link>,
     )

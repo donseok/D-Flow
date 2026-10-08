@@ -279,7 +279,7 @@ export function GlobalSearchDialog({
                 }}
                 className={`rounded px-2 py-0.5 font-medium transition-colors ${
                   scope === 'project'
-                    ? 'bg-brand text-brand-fg'
+                    ? 'bg-action text-action-fg'
                     : 'bg-surface text-fg-secondary hover:bg-surface-hover'
                 }`}
               >
@@ -294,7 +294,7 @@ export function GlobalSearchDialog({
               }}
               className={`rounded px-2 py-0.5 font-medium transition-colors ${
                 scope === 'workspace'
-                  ? 'bg-brand text-brand-fg'
+                  ? 'bg-action text-action-fg'
                   : 'bg-surface text-fg-secondary hover:bg-surface-hover'
               }`}
             >
@@ -348,7 +348,7 @@ export function GlobalSearchDialog({
                 >
                   <div className="flex min-w-0 items-center gap-2.5">
                     {item.kind === 'nav' && <ArrowRight size={15} className="text-fg-muted shrink-0" />}
-                    {item.kind === 'project' && <FolderOpen size={15} className="text-brand shrink-0" />}
+                    {item.kind === 'project' && <FolderOpen size={15} className="text-action shrink-0" />}
                     {item.kind === 'wbs' && <ListTodo size={15} className="text-success shrink-0" />}
                     <div className="min-w-0">
                       <div className="truncate font-medium text-fg">{item.title}</div>

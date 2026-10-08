@@ -89,7 +89,7 @@ export default async function UsagePage({ params, searchParams }: {
       <PageHero eyebrow="OPERATIONS" title="사용 현황" />
       <UsageScopeChip workspaceName={scope.ws.name} />
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-ink-muted">
+        <p className="text-xs text-fg-secondary">
           최근 {period}일 · {timezone} 기준 · 원시 기록은 {USAGE_RETAIN_DAYS}일간 보관됩니다.
         </p>
         <PeriodTabs base={usageBase} filter={filter} />

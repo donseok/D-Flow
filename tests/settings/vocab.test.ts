@@ -98,7 +98,7 @@ describe('표시', () => {
     expect(vocabLabel('issues.cause_categories', defaultVocab('issues.cause_categories'), 'it', t as never)).toBe('I · IT')
   })
   it('색은 의미 토큰 클래스, 모르면 neutral', () => {
-    expect(vocabColor(defaultVocab('issues.severities'), 'high').chip).toBe('bg-delayed-weak text-delayed')
+    expect(vocabColor(defaultVocab('issues.severities'), 'high').chip).toBe('bg-danger-weak text-danger')
     expect(vocabColor(defaultVocab('issues.severities'), 'x').chip).toBe('bg-neutral-weak text-neutral')
   })
 })

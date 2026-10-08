@@ -47,14 +47,14 @@ export async function AttendanceBoard({ projectId, records, members, today, type
           <Stat label={tr('dash.att.statLeave')} value={`${s.leave}${tr('dash.unitPeople')}`}
             tone={s.leave > 0 ? 'text-progress' : undefined} />
           <Stat label={tr('dash.att.statTrip')} value={`${s.trip}${tr('dash.unitPeople')}`}
-            tone={s.trip > 0 ? 'text-accent-secondary' : undefined} />
+            tone={s.trip > 0 ? 'text-warning' : undefined} />
           <Stat label={tr('dash.att.statRemote')} value={`${s.remote}${tr('dash.unitPeople')}`}
-            tone={s.remote > 0 ? 'text-brand' : undefined} />
+            tone={s.remote > 0 ? 'text-action' : undefined} />
         </div>
         {rows.length === 0 ? (
           <MiniEmpty text={tr('dash.att.empty')} />
         ) : (
-          <ul className="divide-y divide-line">
+          <ul className="divide-y divide-border">
             {rows.map(r => {
               const meta = vocabColor(types, r.type)
               const name = nameOf.get(r.memberId) ?? tr('att.unknown')
@@ -64,8 +64,8 @@ export async function AttendanceBoard({ projectId, records, members, today, type
                     todayLabel={tr('dash.today')} weekday={tr(weekdayKey(r.date))} />
                   <span className={`h-2 w-2 shrink-0 rounded-full ${meta.dot}`} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-medium text-ink" title={name}>{name}</div>
-                    {r.note && <div className="mt-0.5 truncate text-[11px] text-ink-muted" title={r.note}>{r.note}</div>}
+                    <div className="truncate text-[13px] font-medium text-fg" title={name}>{name}</div>
+                    {r.note && <div className="mt-0.5 truncate text-[11px] text-fg-secondary" title={r.note}>{r.note}</div>}
                   </div>
                   <span className={`badge shrink-0 ${meta.chip}`}>{vocabLabel('attendance.types', types, r.type, tr)}</span>
                 </li>
@@ -73,7 +73,7 @@ export async function AttendanceBoard({ projectId, records, members, today, type
             })}
           </ul>
         )}
-        <Link href={`/p/${projectId}/attendance`} className="inline-flex items-center gap-1 text-[12px] font-medium text-brand hover:underline">
+        <Link href={`/p/${projectId}/attendance`} className="inline-flex items-center gap-1 text-[12px] font-medium text-action hover:underline">
           {tr('dash.viewAll')} <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>

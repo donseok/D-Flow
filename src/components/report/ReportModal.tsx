@@ -149,7 +149,7 @@ export function ReportModal({
       <button type="button" onClick={onClose} className="no-print btn btn-ghost">
         닫기
       </button>
-      <label className={`no-print flex items-center gap-1.5 text-xs ${aiStatus === 'fresh' ? 'text-ink-muted' : 'text-ink-subtle'}`}
+      <label className={`no-print flex items-center gap-1.5 text-xs ${aiStatus === 'fresh' ? 'text-fg-secondary' : 'text-fg-muted'}`}
         title={aiStatus === 'fresh' ? 'PPT 마지막에 AI 종합 코멘트 슬라이드를 추가합니다' : '신선한 AI 브리핑이 있어야 포함할 수 있습니다'}>
         <input type="checkbox" checked={withAi} disabled={aiStatus !== 'fresh'}
           onChange={e => setAiChecked(e.target.checked)} className="h-3.5 w-3.5 accent-(--color-action)" />
@@ -163,7 +163,7 @@ export function ReportModal({
             {aiBusy ? '생성 중…' : aiStatus === 'failed' ? '생성 실패 — 다시 시도' : 'AI 브리핑 생성'}
           </button>
         ) : (
-          <span className="no-print text-xs text-ink-subtle">AI 브리핑 생성은 프로젝트 관리자만 할 수 있습니다</span>
+          <span className="no-print text-xs text-fg-muted">AI 브리핑 생성은 프로젝트 관리자만 할 수 있습니다</span>
         )
       )}
       <a
@@ -183,7 +183,7 @@ export function ReportModal({
         {pptBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Presentation className="h-4 w-4" />}
         PPT
       </a>
-      {aiError && <span className="no-print w-full text-right text-xs text-accent-warning">{aiError}</span>}
+      {aiError && <span className="no-print w-full text-right text-xs text-warning">{aiError}</span>}
     </>
   )
 
@@ -193,24 +193,24 @@ export function ReportModal({
         {/* ── 보고서 헤더 ── */}
         <header className="card overflow-hidden p-6">
           <div className="eyebrow">주간 보고서 · Weekly Report</div>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-ink">{meta.projectName}</h2>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-fg">{meta.projectName}</h2>
           {meta.description && (
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">{meta.description}</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">{meta.description}</p>
           )}
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-ink-subtle">
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-fg-muted">
             <span>
-              생성일 <span className="font-semibold text-ink-muted">{fmtFull(meta.today)}</span>
+              생성일 <span className="font-semibold text-fg-secondary">{fmtFull(meta.today)}</span>
             </span>
             {(meta.startDate || meta.endDate) && (
               <span>
                 기간{' '}
-                <span className="font-semibold text-ink-muted">
+                <span className="font-semibold text-fg-secondary">
                   {fmtFull(meta.startDate)} ~ {fmtFull(meta.endDate)}
                 </span>
               </span>
             )}
             <span>
-              전체 작업 <span className="font-semibold text-ink-muted">{meta.totalLeaves}건</span>
+              전체 작업 <span className="font-semibold text-fg-secondary">{meta.totalLeaves}건</span>
             </span>
           </div>
         </header>
@@ -239,11 +239,11 @@ export function ReportModal({
         {/* ── Phase별 진척 ── */}
         <SectionCard eyebrow="By phase" title="Phase별 진척" icon={Layers}>
           {phases.length === 0 ? (
-            <p className="text-sm text-ink-muted">표시할 Phase가 없습니다.</p>
+            <p className="text-sm text-fg-secondary">표시할 Phase가 없습니다.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-subtle">
+                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-fg-muted">
                   <th className="py-2 pr-3 font-semibold">Phase</th>
                   <th className="px-3 py-2 text-right font-semibold">계획</th>
                   <th className="px-3 py-2 text-right font-semibold">실적</th>
@@ -253,13 +253,13 @@ export function ReportModal({
               </thead>
               <tbody>
                 {phases.map((p, i) => (
-                  <tr key={i} className="border-b border-line/70 last:border-0">
-                    <td className="max-w-0 truncate py-2.5 pr-3 font-medium text-ink" title={p.name}>
+                  <tr key={i} className="border-b border-border/70 last:border-0">
+                    <td className="max-w-0 truncate py-2.5 pr-3 font-medium text-fg" title={p.name}>
                       {p.name}
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-muted">{p.plannedPct}%</td>
-                    <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-ink">{p.actualPct}%</td>
-                    <td className={`px-3 py-2.5 text-right tabular-nums ${p.variance >= 0 ? 'text-done' : 'text-delayed'}`}>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-fg-secondary">{p.plannedPct}%</td>
+                    <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-fg">{p.actualPct}%</td>
+                    <td className={`px-3 py-2.5 text-right tabular-nums ${p.variance >= 0 ? 'text-success' : 'text-danger'}`}>
                       {p.variance > 0 ? '+' : ''}
                       {p.variance}%p
                     </td>
@@ -276,11 +276,11 @@ export function ReportModal({
         {/* ── 지연 작업 목록 ── */}
         <SectionCard eyebrow="At risk" title="지연 작업 목록" icon={AlertTriangle}>
           {delayed.length === 0 ? (
-            <p className="text-sm text-ink-muted">현재 지연된 작업이 없습니다.</p>
+            <p className="text-sm text-fg-secondary">현재 지연된 작업이 없습니다.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-subtle">
+                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-fg-muted">
                   <th className="py-2 pr-3 font-semibold">작업명</th>
                   <th className="px-3 py-2 font-semibold">담당</th>
                   <th className="px-3 py-2 text-right font-semibold">종료일</th>
@@ -289,15 +289,15 @@ export function ReportModal({
               </thead>
               <tbody>
                 {delayed.map((l, i) => (
-                  <tr key={i} className="border-b border-line/70 last:border-0">
-                    <td className="max-w-0 truncate py-2.5 pr-3 font-medium text-ink" title={l.name}>
+                  <tr key={i} className="border-b border-border/70 last:border-0">
+                    <td className="max-w-0 truncate py-2.5 pr-3 font-medium text-fg" title={l.name}>
                       {l.name}
                     </td>
                     <td className="px-3 py-2.5">
                       <OwnerBadges owners={l.owners} />
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-delayed">{fmtDate(l.plannedEnd)}</td>
-                    <td className="py-2.5 pl-3 text-right font-semibold tabular-nums text-ink">{l.actualPct}%</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-danger">{fmtDate(l.plannedEnd)}</td>
+                    <td className="py-2.5 pl-3 text-right font-semibold tabular-nums text-fg">{l.actualPct}%</td>
                   </tr>
                 ))}
               </tbody>
@@ -310,15 +310,15 @@ export function ReportModal({
           <div className="space-y-4">
             {teams.map(s => (
               <div key={s.team} className="flex items-center gap-3">
-                <span className="flex w-14 shrink-0 items-center gap-2 text-sm font-semibold text-ink">
+                <span className="flex w-14 shrink-0 items-center gap-2 text-sm font-semibold text-fg">
                   <span className={`h-2 w-2 rounded-full ${slotOf(s.team).bar}`} />
                   {s.team}
                 </span>
-                <span className="w-20 shrink-0 text-xs text-ink-subtle">{s.count}개 작업</span>
+                <span className="w-20 shrink-0 text-xs text-fg-muted">{s.count}개 작업</span>
                 <div className="flex-1">
                   <ProgressBar value={s.pct ?? 0} tone={slotOf(s.team).bar} />
                 </div>
-                <span className="w-14 shrink-0 text-right text-sm font-semibold tabular-nums text-ink">
+                <span className="w-14 shrink-0 text-right text-sm font-semibold tabular-nums text-fg">
                   {s.pct == null ? '-' : `${s.pct}%`}
                 </span>
               </div>

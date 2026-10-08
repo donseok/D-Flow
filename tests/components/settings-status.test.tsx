@@ -35,6 +35,6 @@ describe('ConfigStateNotice → StatusMessage', () => {
     }
   })
   it('옛 모양(delayed 색·임의 반경)을 쓰지 않는다 — 상태 모양은 StatusMessage 하나', () => {
-    expect(html({ kind: 'invalid', locale: 'ko' })).not.toMatch(/delayed|rounded-xl/)
+    expect(html({ kind: 'invalid', locale: 'ko' })).not.toMatch(/delayed|danger-weak|border-danger|rounded-xl/)
   })
 })

@@ -331,31 +331,31 @@ export function MinuteUploadModal({
           <button type="button" onClick={() => setFolderPickOpen(true)}
             className="app-input flex w-full items-center justify-between gap-2 text-left">
             <span className="truncate">{folderName}</span>
-            <Folder aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
+            <Folder aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
           </button>
         </label>
         <label className="block text-sm">
           <span className="mb-1 block font-medium">{t('min.form.files')}</span>
           <input type="file" multiple onChange={e => void onFiles(e)} className="app-input pt-1.5" />
-          <span className="mt-1 block text-xs text-ink-subtle">{t('min.form.filesHint')}</span>
+          <span className="mt-1 block text-xs text-fg-muted">{t('min.form.filesHint')}</span>
           {(bodyFile || attachments.length > 0) && (
-            <ul className="mt-1.5 space-y-0.5 text-xs text-ink-subtle">
+            <ul className="mt-1.5 space-y-0.5 text-xs text-fg-muted">
               {bodyFile && (
                 <li className="flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="shrink-0 rounded bg-progress-weak px-1 text-[10px] font-semibold text-accent-ink">{t('min.form.roleBody')}</span>
+                    <span className="shrink-0 rounded bg-progress-weak px-1 text-[10px] font-semibold text-action">{t('min.form.roleBody')}</span>
                     <span className="truncate">{bodyFile.name} · {bodyText.length.toLocaleString()}자</span>
                   </span>
-                  <button type="button" className="text-delayed" onClick={() => { setBodyFile(null); setBodyText('') }}>✕</button>
+                  <button type="button" className="text-danger" onClick={() => { setBodyFile(null); setBodyText('') }}>✕</button>
                 </li>
               )}
               {attachments.map((f, i) => (
                 <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="shrink-0 rounded bg-surface-2 px-1 text-[10px] font-semibold text-ink-muted">{t('min.form.roleAttach')}</span>
+                    <span className="shrink-0 rounded bg-surface-subtle px-1 text-[10px] font-semibold text-fg-secondary">{t('min.form.roleAttach')}</span>
                     <span className="truncate">{f.name}</span>
                   </span>
-                  <button type="button" className="text-delayed"
+                  <button type="button" className="text-danger"
                     onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}>✕</button>
                 </li>
               ))}
@@ -382,10 +382,10 @@ export function MinuteUploadModal({
             </select>
           </label>
         </div>
-        {meetingsFailed && <p role="alert" className="flex items-center gap-1.5 text-xs text-ink"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-delayed" />{t('min.meetingsLoadFailed')}</p>}
-        {!team && <p role="alert" className="text-sm text-delayed">먼저 팀을 등록하세요.</p>}
-        {!targetWs.ok && <p role="alert" className="text-sm text-delayed">{targetWs.error}</p>}
-        {err && <p className="text-sm text-delayed">{err}</p>}
+        {meetingsFailed && <p role="alert" className="flex items-center gap-1.5 text-xs text-fg"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-danger" />{t('min.meetingsLoadFailed')}</p>}
+        {!team && <p role="alert" className="text-sm text-danger">먼저 팀을 등록하세요.</p>}
+        {!targetWs.ok && <p role="alert" className="text-sm text-danger">{targetWs.error}</p>}
+        {err && <p className="text-sm text-danger">{err}</p>}
       </div>
       <FolderPickModal open={folderPickOpen} folders={liveFolders} scopeProjectId={projectId || null}
         onClose={() => setFolderPickOpen(false)}

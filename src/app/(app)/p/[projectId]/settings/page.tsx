@@ -85,11 +85,11 @@ type ProjectRow = {
 function assistantBadge(s: IndexStatus, locale: Locale): { label: string; cls: string } {
   switch (s.freshness) {
     case 'fresh':
-      return { label: `${t(locale, 'settings.badgeFresh')} · ${s.indexed}${t(locale, 'settings.badgeFreshUnit')}`, cls: 'bg-done-weak text-done' }
+      return { label: `${t(locale, 'settings.badgeFresh')} · ${s.indexed}${t(locale, 'settings.badgeFreshUnit')}`, cls: 'bg-success-weak text-success' }
     case 'stale':
       return { label: t(locale, 'settings.badgeStale'), cls: 'bg-pending-weak text-pending' }
     case 'schema_missing':
-      return { label: t(locale, 'settings.badgePreparing'), cls: 'bg-delayed-weak text-delayed' }
+      return { label: t(locale, 'settings.badgePreparing'), cls: 'bg-danger-weak text-danger' }
     case 'disabled':
       return { label: t(locale, 'settings.badgeDisabled'), cls: 'bg-pending-weak text-pending' }
     case 'empty':
@@ -107,7 +107,7 @@ function assistantBadge(s: IndexStatus, locale: Locale): { label: string; cls: s
  */
 async function llmBadge(locale: Locale): Promise<{ label: string; cls: string }> {
   const unknown = { label: t(locale, 'settings.llmBadgeUnknown'), cls: 'bg-pending-weak text-pending' }
-  const env = { label: t(locale, 'settings.llmBadgeEnv'), cls: 'bg-brand-weak text-brand' }
+  const env = { label: t(locale, 'settings.llmBadgeEnv'), cls: 'bg-action-soft text-action' }
   try {
     const cfg = await getLlmConfig()
     if ('error' in cfg) return unknown
@@ -115,7 +115,7 @@ async function llmBadge(locale: Locale): Promise<{ label: string; cls: string }>
     if (cfg.mode === 'profile') {
       const name = cfg.profiles.find(p => p.id === cfg.active_profile_id)?.name
       // 활성 프로필이 삭제된 dangling 상태에서 서버는 env 로 폴백한다 — 화면도 같은 값을 보여야 한다.
-      return name ? { label: `${t(locale, 'settings.llmBadgeProfilePrefix')}${name}`, cls: 'bg-done-weak text-done' } : env
+      return name ? { label: `${t(locale, 'settings.llmBadgeProfilePrefix')}${name}`, cls: 'bg-success-weak text-success' } : env
     }
     return env
   } catch (e) {
@@ -126,9 +126,9 @@ async function llmBadge(locale: Locale): Promise<{ label: string; cls: string }>
 
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 border-b border-line py-3.5 last:border-b-0 sm:flex-row sm:items-start sm:gap-4">
-      <dt className="w-32 shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-subtle sm:pt-0.5">{label}</dt>
-      <dd className="min-w-0 flex-1 text-sm leading-6 text-ink">{children}</dd>
+    <div className="flex flex-col gap-1 border-b border-border py-3.5 last:border-b-0 sm:flex-row sm:items-start sm:gap-4">
+      <dt className="w-32 shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-muted sm:pt-0.5">{label}</dt>
+      <dd className="min-w-0 flex-1 text-sm leading-6 text-fg">{children}</dd>
     </div>
   )
 }
@@ -327,7 +327,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           ) : undefined}
         >
         {workspaceLink && (
-          <Link href={`/w/${encodeURIComponent(workspaceLink.slug)}/settings`} className="mb-4 inline-flex text-sm font-medium text-brand hover:underline">
+          <Link href={`/w/${encodeURIComponent(workspaceLink.slug)}/settings`} className="mb-4 inline-flex text-sm font-medium text-action hover:underline">
             {workspaceLink.name} 워크스페이스 설정 →
           </Link>
         )}
@@ -337,7 +337,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </InfoRow>
           <InfoRow label={t(locale, 'settings.description')}>
             {project?.description?.trim() || (
-              <span className="text-ink-subtle">{t(locale, 'settings.noDescription')}</span>
+              <span className="text-fg-muted">{t(locale, 'settings.noDescription')}</span>
             )}
           </InfoRow>
           <InfoRow label={t(locale, 'settings.startDate')}>
@@ -347,7 +347,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             <span className="tabular-nums">{project?.end_date ? fmtDate(project.end_date) : t(locale, 'settings.tbd')}</span>
           </InfoRow>
         </dl>
-        {pc.ok && <div className="mt-6 border-t border-line pt-5">
+        {pc.ok && <div className="mt-6 border-t border-border pt-5">
           <MilestoneKeywordsEditor projectId={projectId} revision={pc.cfg.revision} locale={locale}
             initial={pc.cfg.keys['core.milestone_keywords'].status === 'set' || pc.cfg.keys['core.milestone_keywords'].status === 'default' ? pc.cfg.keys['core.milestone_keywords'].value : []}
             source={pc.cfg.keys['core.milestone_keywords'].status === 'set' ? '프로젝트 설정' : '제품 기본값'}
@@ -362,7 +362,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             title={locale === 'ko' ? 'WBS 단계' : 'WBS Levels'}
             icon={ListTree}
           >
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">
               {locale === 'ko'
                 ? '트리 깊이별 단계 이름입니다. 단계 수가 곧 최대 깊이이며, 기존 WBS 보다 얕게 줄일 수 없습니다. 화면 배지·보고서·엑셀 헤더가 이 이름을 씁니다.'
                 : 'Level names per tree depth. The number of levels is the max depth; you cannot shrink below the existing tree. Badges, reports and Excel headers use these names.'}
@@ -382,9 +382,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             icon={Lock}
             actions={<ProjectPrivacyToggle projectId={projectId} isPrivate={Boolean(project?.is_private)} />}
           >
-            <p className="-mt-2 text-xs leading-5 text-ink-muted">
+            <p className="-mt-2 text-xs leading-5 text-fg-secondary">
               {t(locale, 'settings.privacyDesc1')}
-              <strong className="text-ink">{t(locale, 'settings.privacyDescStrong')}</strong>
+              <strong className="text-fg">{t(locale, 'settings.privacyDescStrong')}</strong>
               {t(locale, 'settings.privacyDesc2')}
             </p>
           </SectionCard>
@@ -396,7 +396,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         title={t(locale, 'settings.importExportTitle')}
         icon={Upload}
       >
-        <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
+        <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">
           {t(locale, 'settings.importDesc')}
         </p>
         <Link href={`/p/${projectId}/import`} className="btn btn-primary">
@@ -405,15 +405,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           <ArrowUpRight className="h-4 w-4" />
         </Link>
 
-        <div className="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.exportDesc')}</p>
+        <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-5 text-fg-secondary">{t(locale, 'settings.exportDesc')}</p>
           <ExportExcelButton projectId={projectId} layout={exportLayout} />
         </div>
         {/* 저장된 엑셀 양식이 있을 때만 — 손상·깊이 부족으로 내보내기가 막힌 교착을 관리자가 푼다(Task 1b).
             설정 조회 실패면 그리지 않는다 — 있는지 모르는 양식을 비우라고 권하지 않는다. */}
         {hasProfile && (
-          <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.clearExcelProfileDesc')}</p>
+          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-5 text-fg-secondary">{t(locale, 'settings.clearExcelProfileDesc')}</p>
             <ClearExcelProfileButton projectId={projectId} revision={revision} />
           </div>
         )}
@@ -433,10 +433,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </div>
         }
       >
-        <p className="-mt-2 text-xs leading-5 text-ink-muted">
+        <p className="-mt-2 text-xs leading-5 text-fg-secondary">
           {t(locale, 'settings.assistantDesc1')}<span className="font-medium text-pending">{t(locale, 'settings.assistantDescBadge')}</span>{t(locale, 'settings.assistantDesc2')}
           <br />
-          <span className="text-ink-subtle">
+          <span className="text-fg-muted">
             {t(locale, 'settings.assistantDesc3')}
           </span>
         </p>
@@ -450,7 +450,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             icon={Cpu}
             actions={
               <div className="flex max-w-[13rem] flex-wrap items-center justify-end gap-2 sm:max-w-none">
-                <span className="badge bg-surface-2 px-2 py-1 text-ink-muted">{t(locale, 'settings.llmGlobalBadge')}</span>
+                <span className="badge bg-surface-subtle px-2 py-1 text-fg-secondary">{t(locale, 'settings.llmGlobalBadge')}</span>
                 <span className={`badge px-2 py-1 ${llm.cls}`}>{llm.label}</span>
                 <Link href="/admin/llm-config" className="btn btn-ghost shrink-0">
                   <ArrowUpRight className="h-4 w-4" /> {t(locale, 'settings.llmOpenAdmin')}
@@ -458,10 +458,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               </div>
             }
           >
-            <p className="-mt-2 text-xs leading-5 text-ink-muted">
+            <p className="-mt-2 text-xs leading-5 text-fg-secondary">
               {t(locale, 'settings.llmDesc1')}
               <br />
-              <span className="text-ink-subtle">{t(locale, 'settings.llmDesc2')}</span>
+              <span className="text-fg-muted">{t(locale, 'settings.llmDesc2')}</span>
             </p>
           </SectionCard>
         )}
@@ -511,12 +511,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             title={locale === 'ko' ? '권한' : 'Roles'}
             icon={Shield}
           >
-            <p className="-mt-2 text-xs leading-5 text-ink-muted">
+            <p className="-mt-2 text-xs leading-5 text-fg-secondary">
               {locale === 'ko'
                 ? '권한과 초대는 참여 인력 명단과 함께 팀 구성에서 관리합니다.'
                 : 'Roles and invites are managed under Members, together with the roster.'}
               {' '}
-              <Link href={`/p/${projectId}/members`} className="font-semibold text-brand hover:underline">
+              <Link href={`/p/${projectId}/members`} className="font-semibold text-action hover:underline">
                 {locale === 'ko' ? '팀 구성 열기' : 'Open Members'}
                 <ArrowUpRight className="ml-0.5 inline h-3.5 w-3.5" aria-hidden />
               </Link>
@@ -531,7 +531,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             title={locale === 'ko' ? '팀 관리' : 'Teams'}
             icon={Users}
           >
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">
               {locale === 'ko'
                 ? '이 프로젝트의 팀 목록입니다. WBS 담당·명단·칸반·보고서가 이 목록을 씁니다. 정의하지 않으면 워크스페이스 공용 팀을 상속합니다.'
                 : 'Teams for this project, used by WBS owners, roster, kanban and reports. Inherits the workspace’s shared teams until defined.'}
@@ -544,7 +544,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 hasGlobalTeams={teams.common.some(t => t.active)}
               />
             ) : (
-              <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{ERR_TEAMS_UI}</p>
+              <p role="alert" className="rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{ERR_TEAMS_UI}</p>
             )}
           </SectionCard>
         )}
@@ -556,7 +556,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             title={locale === 'ko' ? '업무영역' : 'Work areas'}
             icon={ListTree}
           >
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">
               {locale === 'ko'
                 ? '주간보고 시트의 행이 이 영역입니다. 활성 영역을 저장하면 이번 주 이후 시트에 그 영역의 행이 생기고, 비활성으로 두면 이번 주 이후 시트에서 숨겨지며 쓴 내용은 남습니다.'
                 : 'Each work area is a row of the weekly report sheet. Saving an active area adds its row to this week’s and later sheets; an inactive area is hidden from this week on and its content is kept.'}
@@ -570,27 +570,27 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 teamOptions={areaTeamOptions(teams.visible, pc.cfg.teams, pc.cfg.areas.weekly_section)}
               />
             ) : (
-              <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{ERR_TEAMS_UI}</p>
+              <p role="alert" className="rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{ERR_TEAMS_UI}</p>
             )}
           </SectionCard>
         )}
           {isAdmin && pc.ok && issuesGate.ok && (
             <SectionCard searchText="issue areas code prefix pattern counter" eyebrow="ISSUES" title={t(locale, 'settings.issueAreas.title')} icon={ListTree}>
-              <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.issueAreas.desc')}</p>
-              {teams.ok ? <ProjectAreasManager projectId={projectId} kind="issue_area" areas={pc.cfg.areas.issue_area} teamOptions={areaTeamOptions(teams.visible, pc.cfg.teams, pc.cfg.areas.issue_area)} locale={locale} /> : <p role="alert" className="text-sm text-delayed">{ERR_TEAMS_UI}</p>}
+              <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.issueAreas.desc')}</p>
+              {teams.ok ? <ProjectAreasManager projectId={projectId} kind="issue_area" areas={pc.cfg.areas.issue_area} teamOptions={areaTeamOptions(teams.visible, pc.cfg.teams, pc.cfg.areas.issue_area)} locale={locale} /> : <p role="alert" className="text-sm text-danger">{ERR_TEAMS_UI}</p>}
             </SectionCard>
           )}
         </div>
         {isAdmin && pc.ok && issuesGate.ok && <div id="project-issues" className="scroll-mt-24 space-y-5">
           <SectionCard searchText="issues.id_policy issue code analysis policy" eyebrow="ISSUE POLICY" title={t(locale, 'settings.issues.policy.title')} icon={LayoutList}>
-            <p className="mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.issues.id_policy.desc')}</p>
+            <p className="mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.issues.id_policy.desc')}</p>
             {issuePolicy?.ok && issueAnalysis?.ok && issueYear !== null ? <IssuePolicyEditor key={`${projectId}-${revision}`} projectId={projectId} policy={issuePolicy.value as IdPolicy} revision={revision} areas={pc.cfg.areas.issue_area} year={issueYear} canEdit={canMutate} analysis={issueAnalysis.value as IssueAnalysisSetting} analysisEnabled={analysisState === 'on'} locale={locale} /> : <ConfigStateNotice kind="unavailable" locale={locale} />}
           </SectionCard>
         </div>}
 
         {isAdmin && pc.ok && minutesGate.ok && attachmentPolicy && <div id="project-minutes" className="scroll-mt-24 space-y-5">
           <SectionCard searchText="minutes.attachments 회의록 첨부 정책 용량 개수 형식 미리보기 attachment" eyebrow="MINUTES" title={t(locale, 'settings.minutes.attachments.label')} icon={Paperclip}>
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.minutes.attachments.desc')}</p>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.minutes.attachments.desc')}</p>
             <AttachmentPolicyEditor key={`${projectId}-${revision}`} scope={{ projectId }} revision={revision} canEdit={canMutate}
               policy={attachmentPolicy.ok ? attachmentPolicy.value as AttachmentPolicy : null} invalid={!attachmentPolicy.ok} />
           </SectionCard>
@@ -601,7 +601,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             const st = pc.cfg.keys[key]
             const ok = st.status === 'set' || st.status === 'default'
             return <SectionCard key={key} searchText={`${key} 용어 분류 어휘 vocabulary ${t(locale, `settings.${key}.label` as DictKey)}`} eyebrow="VOCABULARY" title={t(locale, `settings.${key}.label` as DictKey)} icon={LayoutList}>
-              <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, `settings.${key}.desc` as DictKey)}</p>
+              <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, `settings.${key}.desc` as DictKey)}</p>
               <VocabEditor key={`${projectId}-${key}-${revision}`} projectId={projectId} vocabKey={key} revision={revision} canEdit={canMutate}
                 value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
             </SectionCard>
@@ -610,7 +610,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
         {isAdmin && pc.ok && formKinds && <div id="project-forms" className="scroll-mt-24 space-y-5">
           <SectionCard searchText="forms 양식 템플릿 보고서 pptx xlsx 업로드 매핑 자리표시자" eyebrow="FORMS" title={locale === 'ko' ? '보고서 양식' : 'Report templates'} icon={Upload}>
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{locale === 'ko' ? '자체 양식 파일을 올려 활성화하면 보고서·내보내기가 그 양식으로 만들어집니다. 활성 양식이 없으면 기본 양식을 씁니다.' : 'Upload and activate your own template to use it for reports and exports. Without an active one, the default template is used.'}</p>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{locale === 'ko' ? '자체 양식 파일을 올려 활성화하면 보고서·내보내기가 그 양식으로 만들어집니다. 활성 양식이 없으면 기본 양식을 씁니다.' : 'Upload and activate your own template to use it for reports and exports. Without an active one, the default template is used.'}</p>
             <FormTemplatesManager key={`${projectId}-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate} kinds={formKinds} />
           </SectionCard>
         </div>}
@@ -629,7 +629,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           const st = pc.cfg.keys[key]
           const ok = st.status === 'set' || st.status === 'default'
           return <SectionCard searchText={`${key} 이슈 상태 범주 업무 흐름 workflow status ${t(locale, 'settings.workflow.issue_statuses.label')}`} eyebrow="WORKFLOW" title={t(locale, 'settings.workflow.issue_statuses.label')} icon={LayoutList}>
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.workflow.issue_statuses.desc')}</p>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.workflow.issue_statuses.desc')}</p>
             <VocabEditor key={`${projectId}-${key}-${revision}`} projectId={projectId} vocabKey={key} revision={revision} canEdit={canMutate}
               value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
           </SectionCard>
@@ -642,15 +642,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           }
           return <SectionCard searchText={`workflow.wbs_stage_labels workflow.approval_steps workflow.approval_distinct_approvers workflow.predecessor_gate 승인 단계 선행 ${t(locale, 'settings.workflow.wbsTitle')}`}
             eyebrow="WORKFLOW" title={t(locale, 'settings.workflow.wbsTitle')} icon={LayoutList}>
-            <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">{t(locale, 'settings.workflow.wbsDesc')}</p>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.workflow.wbsDesc')}</p>
             <div className="space-y-5">
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-ink">{t(locale, 'settings.workflow.wbs_stage_labels.label')}</p>
+                <p className="text-sm font-semibold text-fg">{t(locale, 'settings.workflow.wbs_stage_labels.label')}</p>
                 <StageLabelsEditor key={`labels-${revision}`} projectId={projectId} value={st('workflow.wbs_stage_labels')} revision={revision} canEdit={canMutate}
                   invalid={st('workflow.wbs_stage_labels') === null} />
               </div>
-              <div className="space-y-2 border-t border-line pt-4">
-                <p className="text-sm font-semibold text-ink">{t(locale, 'settings.workflow.approval_steps.label')}</p>
+              <div className="space-y-2 border-t border-border pt-4">
+                <p className="text-sm font-semibold text-fg">{t(locale, 'settings.workflow.approval_steps.label')}</p>
                 <ApprovalStepsEditor key={`steps-${revision}`} projectId={projectId} steps={st('workflow.approval_steps')} distinct={st('workflow.approval_distinct_approvers')}
                   gate={st('workflow.predecessor_gate')} revision={revision} canEdit={canMutate} />
               </div>
@@ -671,14 +671,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </div>
         }
       >
-        <p className="-mt-2 text-xs leading-5 text-ink-muted">
+        <p className="-mt-2 text-xs leading-5 text-fg-secondary">
           {t(locale, 'settings.agentDesc1')}<span className="font-medium text-pending">{t(locale, 'settings.agentDescBadge')}</span>{t(locale, 'settings.agentDesc2')}
         </p>
         {/* 개발 워크플로 크레딧(스펙 2026-09-15 §5.1) — 설정 조회 실패면 그리지 않는다(잘못된 초기값으로 저장하면 표를 덮는다). */}
         {credits && (
-          <div className="mt-4 space-y-1 border-t border-line pt-4">
-            <p className="text-sm font-semibold text-ink">{t(locale, 'settings.creditsTitle')}</p>
-            <p className="text-xs leading-5 text-ink-muted">{t(locale, 'settings.creditsDesc')}</p>
+          <div className="mt-4 space-y-1 border-t border-border pt-4">
+            <p className="text-sm font-semibold text-fg">{t(locale, 'settings.creditsTitle')}</p>
+            <p className="text-xs leading-5 text-fg-secondary">{t(locale, 'settings.creditsDesc')}</p>
             {/* agents 가 꺼져도 크레딧 편집기는 남는다 — 다시 켤 때 쓸 값이다(스펙 §4.4, 정본 §3.3.1) */}
             {!agentsOn && <p className="text-xs leading-5 text-pending">{t(locale, 'settings.agentsModuleOff')}</p>}
             {credits.ok
@@ -690,37 +690,37 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         </SectionCard>
       {/* ── 프로젝트 상태 관리 (시각 전용) ── */}
         <SectionCard searchText="workflow.stage_credits 상태 정책 자동 동기화" eyebrow="STATUS POLICY" title={t(locale, 'settings.statusPolicyTitle')} icon={Settings}>
-        <p className="-mt-2 mb-4 text-xs leading-5 text-ink-muted">
+        <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">
           {t(locale, 'settings.statusPolicyDesc')}
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-brand-ring bg-brand-weak/40 p-5">
+          <div className="rounded-2xl border border-border-focus bg-action-soft/40 p-5">
             <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-weak text-brand">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-action-soft text-action">
                 <RefreshCw className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-sm font-semibold text-ink">{t(locale, 'settings.autoSyncTitle')}</p>
-                <span className="badge bg-brand-weak text-brand">{t(locale, 'settings.currentlyApplied')}</span>
+                <p className="text-sm font-semibold text-fg">{t(locale, 'settings.autoSyncTitle')}</p>
+                <span className="badge bg-action-soft text-action">{t(locale, 'settings.currentlyApplied')}</span>
               </div>
             </div>
-            <p className="mt-3 text-xs leading-5 text-ink-muted">
+            <p className="mt-3 text-xs leading-5 text-fg-secondary">
               {t(locale, 'settings.autoSyncDesc')}
             </p>
           </div>
-          <div className="rounded-2xl border border-line bg-surface-2 p-5">
+          <div className="rounded-2xl border border-border bg-surface-subtle p-5">
             <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface text-ink-muted">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface text-fg-secondary">
                 <Lock className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-sm font-semibold text-ink">{t(locale, 'settings.baseDatePolicyTitle')}</p>
+                <p className="text-sm font-semibold text-fg">{t(locale, 'settings.baseDatePolicyTitle')}</p>
                 {project?.base_date
-                  ? <span className="badge bg-pending-weak text-accent-warning">{t(locale, 'settings.manualFixed')} · {project.base_date}</span>
-                  : <span className="badge bg-brand-weak text-brand">{t(locale, 'settings.autoTodayShort')}</span>}
+                  ? <span className="badge bg-pending-weak text-warning">{t(locale, 'settings.manualFixed')} · {project.base_date}</span>
+                  : <span className="badge bg-action-soft text-action">{t(locale, 'settings.autoTodayShort')}</span>}
               </div>
             </div>
-            <p className="mt-3 text-xs leading-5 text-ink-muted">
+            <p className="mt-3 text-xs leading-5 text-fg-secondary">
               {t(locale, 'settings.baseDatePolicyDesc')}
             </p>
           </div>
@@ -743,7 +743,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         ) : (
           <ConfigStateNotice kind="unavailable" locale={locale} />
         )}
-        <div className="mt-6 border-t border-line pt-6">
+        <div className="mt-6 border-t border-border pt-6">
         {pc.ok ? (
           <ScheduleManager
             projectId={projectId}
@@ -759,10 +759,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               <Info className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-sm font-semibold text-ink">
+              <p className="text-sm font-semibold text-fg">
                 {locale === 'ko' ? '기준일·날짜 예외 정보를 불러오지 못했습니다.' : 'Could not load base date and date exceptions.'}
               </p>
-              <p className="mt-1 text-xs leading-5 text-ink-muted">
+              <p className="mt-1 text-xs leading-5 text-fg-secondary">
                 {locale === 'ko'
                   ? '일시적인 오류일 수 있습니다. 잠시 후 새로고침하세요. 이 페이지의 다른 설정(WBS 임포트 포함)은 그대로 사용할 수 있습니다.'
                   : 'This may be temporary — please refresh shortly. Other settings on this page (including WBS import) remain available.'}

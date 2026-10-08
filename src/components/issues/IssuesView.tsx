@@ -281,7 +281,7 @@ export function IssuesView({
         >
           {t('issue.filter.mine')}
         </button>
-        {customFields === null && <p role="alert" className="text-xs text-delayed">{locale === 'ko' ? '추가 정보 설정을 읽을 수 없습니다.' : 'Custom field settings could not be read.'}</p>}
+        {customFields === null && <p role="alert" className="text-xs text-danger">{locale === 'ko' ? '추가 정보 설정을 읽을 수 없습니다.' : 'Custom field settings could not be read.'}</p>}
         {fieldDefs.length > 0 && <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
           <label className="space-y-1 text-xs text-fg-secondary">
             <span>{locale === 'ko' ? '추가 정보 필터' : 'Custom field filter'}</span>
@@ -443,7 +443,7 @@ export function IssuesView({
                             unlayered 안전망에 져서 조용히 동작하지 않는다(breakpoint-safety-net 테스트가 검사). */}
                         {(issue.attachmentCount ?? 0) > 0 && (
                           <span
-                            className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-[11px] font-normal text-ink-subtle"
+                            className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-[11px] font-normal text-fg-muted"
                             title={t('issue.attach.count').replace('{n}', String(issue.attachmentCount))}
                             aria-label={t('issue.attach.count').replace('{n}', String(issue.attachmentCount))}
                           >
@@ -458,22 +458,22 @@ export function IssuesView({
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
                         <span className={`chip px-2 py-0.5 text-[11px] ${vocabView('issues.severities', severities, issue.severity, t).chip}`}>{vocabView('issues.severities', severities, issue.severity, t).label}</span>
                       </td>
-                      <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 text-ink-muted" title={assignees}>
+                      <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 text-fg-secondary" title={assignees}>
                         <span className="block truncate">{assignees}</span>
                       </td>
-                      <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums text-ink-muted">
+                      <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums text-fg-secondary">
                         {issue.startDate ?? '—'}
                       </td>
-                      <td className={`overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums ${overdue ? 'font-semibold text-delayed' : 'text-ink-muted'}`}>
+                      <td className={`overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums ${overdue ? 'font-semibold text-danger' : 'text-fg-secondary'}`}>
                         {issue.dueDate ?? '—'}
                       </td>
-                      <td className={`overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums ${isDueUrgent(daysLeft) ? 'font-semibold text-delayed' : 'text-ink-muted'}`}>
+                      <td className={`overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums ${isDueUrgent(daysLeft) ? 'font-semibold text-danger' : 'text-fg-secondary'}`}>
                         {ddayText}
                       </td>
-                      <td className="whitespace-normal break-words px-2.5 py-2.5 text-ink-muted">
+                      <td className="whitespace-normal break-words px-2.5 py-2.5 text-fg-secondary">
                         {issue.createdByName ?? '—'}
                       </td>
-                      {listFields.map(d => <td key={d.key} className="whitespace-pre-wrap break-words px-2.5 py-2.5 text-ink-muted">
+                      {listFields.map(d => <td key={d.key} className="whitespace-pre-wrap break-words px-2.5 py-2.5 text-fg-secondary">
                         {custom.ok ? formatCustomValue(d, custom.value[d.key], customFormat)
                           : <span role="status">{locale === 'ko' ? '값 확인 필요' : 'Unreadable value'}</span>}
                       </td>)}

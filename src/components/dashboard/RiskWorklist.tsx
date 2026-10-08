@@ -14,9 +14,9 @@ const ddayText = (n: number) => (n <= 0 ? '오늘 마감' : `D-${n} 임박`)
 
 // 행 스타일 — 지연=빨강 틴트, 임박=주황 틴트로 카드 안에서 즉시 구분. 뒤처짐은 기본 라인.
 const ROW_META: Record<Kind, { border: string; icon: string }> = {
-  overdue: { border: 'border-delayed/40', icon: 'text-delayed' },
-  dueSoon: { border: 'border-accent-warning/40', icon: 'text-accent-warning' },
-  behind: { border: 'border-line', icon: 'text-accent-warning' },
+  overdue: { border: 'border-danger/40', icon: 'text-danger' },
+  dueSoon: { border: 'border-warning/40', icon: 'text-warning' },
+  behind: { border: 'border-border', icon: 'text-warning' },
 }
 
 /** 실행 가능한 리스크 목록 — 요약 타일의 숫자를 실제 WBS 작업으로 연결한다.
@@ -46,8 +46,8 @@ export function RiskWorklist({ items, projectId, today }: {
 
   return (
     <SectionCard eyebrow="ACTION QUEUE" title="지금 확인할 작업(WBS)" icon={AlertTriangle}
-      actions={<span className="chip bg-delayed-weak text-delayed">지연 {risk.delayed} · 임박 {risk.dueSoon}</span>}>
-      {rows.length === 0 ? <p className="text-sm text-ink-muted">현재 즉시 조치가 필요한 작업이 없습니다.</p> : (
+      actions={<span className="chip bg-danger-weak text-danger">지연 {risk.delayed} · 임박 {risk.dueSoon}</span>}>
+      {rows.length === 0 ? <p className="text-sm text-fg-secondary">현재 즉시 조치가 필요한 작업이 없습니다.</p> : (
         <div className="space-y-2">
           {rows.map(({ item, kind, overdue, dday, gap }) => {
             const meta = ROW_META[kind]
@@ -55,13 +55,13 @@ export function RiskWorklist({ items, projectId, today }: {
             const aria = kind === 'dueSoon' ? `${item.name}, 마감 임박 ${ddayText(dday)}` : `${item.name}, ${detail}`
             return (
               <Link key={item.id} href={`/p/${projectId}/wbs?focus=${item.id}`} aria-label={aria}
-                className={`flex items-center gap-3 rounded-xl border ${meta.border} px-3 py-2.5 hover:bg-surface-2`}>
+                className={`flex items-center gap-3 rounded-xl border ${meta.border} px-3 py-2.5 hover:bg-surface-subtle`}>
                 <CalendarClock className={`h-4 w-4 shrink-0 ${meta.icon}`} />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{item.name}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{item.name}</span>
                 {kind === 'dueSoon'
-                  ? <span className="chip shrink-0 bg-accent-warning/10 font-semibold text-accent-warning">{ddayText(dday)}</span>
-                  : <span className="shrink-0 text-xs text-ink-muted">{detail}</span>}
-                {item.plannedEnd && <span className="shrink-0 text-xs text-ink-subtle">{fmtDate(item.plannedEnd)}</span>}
+                  ? <span className="chip shrink-0 bg-warning/10 font-semibold text-warning">{ddayText(dday)}</span>
+                  : <span className="shrink-0 text-xs text-fg-secondary">{detail}</span>}
+                {item.plannedEnd && <span className="shrink-0 text-xs text-fg-muted">{fmtDate(item.plannedEnd)}</span>}
               </Link>
             )
           })}

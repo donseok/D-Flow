@@ -8,7 +8,7 @@ import { visibleHighlights } from '@/lib/minutes/annotations'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
 const KIND_DOT: Record<InsightKind, string> = {
-  decision: 'bg-done', action: 'bg-progress', deadline: 'bg-accent-warning', risk: 'bg-delayed',
+  decision: 'bg-success', action: 'bg-progress', deadline: 'bg-warning', risk: 'bg-danger',
 }
 
 interface TocEntry {
@@ -69,12 +69,12 @@ export function MinuteToc({
         <li key={e.blockIndex} className="flex items-center gap-0.5">
           <button onClick={() => { onJump(e.blockIndex); onItem?.() }}
             className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[13px] transition
-              ${activeIndex === e.blockIndex ? 'bg-brand-weak font-semibold text-brand' : 'text-ink-muted hover:bg-surface-2 hover:text-ink'}`}
+              ${activeIndex === e.blockIndex ? 'bg-action-soft font-semibold text-action' : 'text-fg-secondary hover:bg-surface-subtle hover:text-fg'}`}
             style={{ paddingLeft: `${8 + (e.depth - 1) * 12}px` }}>
             <span className="min-w-0 flex-1 truncate">{e.text}</span>
             <span className="flex shrink-0 items-center gap-0.5">
               {e.kinds.map(k => <span key={k} className={`h-1.5 w-1.5 rounded-full ${KIND_DOT[k]}`} />)}
-              {e.hlCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-accent-warning" />}
+              {e.hlCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-warning" />}
             </span>
           </button>
           {e.firstIssueBlock !== null && (
@@ -105,7 +105,7 @@ export function MinuteToc({
           <div className="mb-2 flex items-center justify-between">
             <p className="eyebrow">{t('min.toc.title')}</p>
             <button onClick={() => setCollapsed(true)} title={t('min.insight.collapse')} aria-label={t('min.insight.collapse')}
-              className="text-ink-subtle hover:text-ink">
+              className="text-fg-muted hover:text-fg">
               <PanelLeftClose className="h-4 w-4" />
             </button>
           </div>
@@ -115,8 +115,8 @@ export function MinuteToc({
       {/* xl 미만: 접이식 바 — 점프 후 자동 접힘, 접힘 중 스파이 비활성(activeIndex 미표시 무해) */}
       <div className="card shrink-0 p-3 xl:hidden">
         <button onClick={() => setMobileOpen(o => !o)}
-          className="flex w-full items-center gap-2 text-sm font-semibold text-ink">
-          <List className="h-4 w-4 text-brand" />{t('min.toc.title')}
+          className="flex w-full items-center gap-2 text-sm font-semibold text-fg">
+          <List className="h-4 w-4 text-action" />{t('min.toc.title')}
           {mobileOpen ? <ChevronDown className="ml-auto h-4 w-4" /> : <ChevronRight className="ml-auto h-4 w-4" />}
         </button>
         {mobileOpen && <div className="mt-2">{list(() => setMobileOpen(false))}</div>}

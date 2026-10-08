@@ -36,7 +36,7 @@ export function MyWorkTabNav({
             aria-selected={active}
             className={`flex items-center gap-1.5 pb-2.5 text-sm font-medium border-b-2 transition-colors ${
               active
-                ? 'border-brand text-fg font-semibold'
+                ? 'border-action text-fg font-semibold'
                 : 'border-transparent text-fg-secondary hover:text-fg'
             }`}
           >

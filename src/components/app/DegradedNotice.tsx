@@ -22,10 +22,10 @@ export function DegradedNotice({
     <div
       role="alert"
       data-degraded-notice
-      className="mb-3 rounded-2xl border border-delayed/40 bg-delayed-weak/50 px-4 py-3"
+      className="mb-3 rounded-2xl border border-danger/40 bg-danger-weak/50 px-4 py-3"
     >
-      <p className="text-sm font-bold text-delayed">일부 정보를 불러오지 못했습니다</p>
-      <p className="mt-1 text-xs text-ink-muted">
+      <p className="text-sm font-bold text-danger">일부 정보를 불러오지 못했습니다</p>
+      <p className="mt-1 text-xs text-fg-secondary">
         {what} 읽지 못해 메뉴·목록이 실제와 다르게 보일 수 있습니다.
         계정이나 데이터가 바뀐 것이 아니니 잠시 뒤 새로고침하세요. 계속되면 관리자에게 알려 주세요.
       </p>

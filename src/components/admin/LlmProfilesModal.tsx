@@ -42,9 +42,9 @@ type View = 'list' | 'form' | 'delete'
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-[11px] leading-4 text-ink-subtle">{hint}</span>}
+      {hint && <span className="mt-1 block text-[11px] leading-4 text-fg-muted">{hint}</span>}
     </label>
   )
 }
@@ -204,7 +204,7 @@ export function LlmProfilesModal({
         <button
           onClick={confirmDelete}
           disabled={pending}
-          className="btn bg-delayed text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn bg-danger text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? '삭제 중…' : '삭제'}
         </button>
@@ -225,36 +225,36 @@ export function LlmProfilesModal({
       {view === 'list' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-ink-muted">등록된 프로필 {profiles.length}개 — 활성 선택은 이 창을 닫은 뒤 저장해야 적용됩니다.</p>
+            <p className="text-sm text-fg-secondary">등록된 프로필 {profiles.length}개 — 활성 선택은 이 창을 닫은 뒤 저장해야 적용됩니다.</p>
             <button onClick={() => { resetForm(null); setView('form') }} className="btn btn-primary btn-sm shrink-0" disabled={pending}>
               <Plus className="h-4 w-4" />새 프로필
             </button>
           </div>
 
-          {error && <p ref={errorRef} role="alert" className="text-sm font-medium text-delayed">{error}</p>}
+          {error && <p ref={errorRef} role="alert" className="text-sm font-medium text-danger">{error}</p>}
 
           {profiles.length === 0 ? (
             <div className="panel-soft flex flex-col items-center gap-2 px-6 py-10 text-center">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-weak text-brand"><Server className="h-5 w-5" /></span>
-              <p className="text-sm font-semibold text-ink">등록된 프로필이 없습니다</p>
-              <p className="text-xs text-ink-muted">Gemini·OpenAI·Ollama 등 접속 정보를 프로필로 저장해 두고 전환할 수 있습니다.</p>
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-action-soft text-action"><Server className="h-5 w-5" /></span>
+              <p className="text-sm font-semibold text-fg">등록된 프로필이 없습니다</p>
+              <p className="text-xs text-fg-secondary">Gemini·OpenAI·Ollama 등 접속 정보를 프로필로 저장해 두고 전환할 수 있습니다.</p>
             </div>
           ) : (
-            <ul className="divide-y divide-line rounded-2xl border border-line">
+            <ul className="divide-y divide-border rounded-2xl border border-border">
               {profiles.map((p) => (
                 <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-ink">{p.name}</span>
-                      <span className="chip bg-surface-2 text-ink-muted">{presetLabel(p.preset_id)}</span>
+                      <span className="truncate text-sm font-semibold text-fg">{p.name}</span>
+                      <span className="chip bg-surface-subtle text-fg-secondary">{presetLabel(p.preset_id)}</span>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-secondary">
                       <span className="font-mono">{p.model}</span>
                       <span className="inline-flex items-center gap-1">
                         <KeyRound className="h-3 w-3" />
-                        {p.has_token ? <code className="font-mono">{p.auth_token_masked}</code> : <span className="text-ink-subtle">키 없음</span>}
+                        {p.has_token ? <code className="font-mono">{p.auth_token_masked}</code> : <span className="text-fg-muted">키 없음</span>}
                       </span>
-                      {p.base_url && <span className="truncate font-mono text-ink-subtle">{p.base_url}</span>}
+                      {p.base_url && <span className="truncate font-mono text-fg-muted">{p.base_url}</span>}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
@@ -263,7 +263,7 @@ export function LlmProfilesModal({
                     </button>
                     <button
                       onClick={() => { setTarget(p); setError(null); setView('delete') }}
-                      className="btn btn-ghost btn-sm text-delayed"
+                      className="btn btn-ghost btn-sm text-danger"
                       disabled={pending}
                     >
                       <Trash2 className="h-3.5 w-3.5" />삭제
@@ -278,17 +278,17 @@ export function LlmProfilesModal({
 
       {view === 'delete' && (
         <div className="space-y-3">
-          <p className="text-sm leading-6 text-ink-muted">
-            <b className="text-ink">&apos;{target?.name}&apos;</b> 프로필을 삭제할까요? 이 프로필을 쓰는 설정은 해제됩니다.
+          <p className="text-sm leading-6 text-fg-secondary">
+            <b className="text-fg">&apos;{target?.name}&apos;</b> 프로필을 삭제할까요? 이 프로필을 쓰는 설정은 해제됩니다.
           </p>
-          {error && <p ref={errorRef} role="alert" className="text-sm font-medium text-delayed">{error}</p>}
+          {error && <p ref={errorRef} role="alert" className="text-sm font-medium text-danger">{error}</p>}
         </div>
       )}
 
       {view === 'form' && (
         <div className="space-y-4">
           <div>
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">프리셋</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">프리셋</span>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {LLM_PRESETS.map((p) => {
                 const active = p.id === presetId
@@ -299,7 +299,7 @@ export function LlmProfilesModal({
                     onClick={() => applyPreset(p)}
                     aria-pressed={active}
                     className={`rounded-xl border px-3 py-2.5 text-left transition ${
-                      active ? 'border-brand bg-brand-weak text-brand' : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink'
+                      active ? 'border-action bg-action-soft text-action' : 'border-border bg-surface text-fg-secondary hover:border-border-input hover:text-fg'
                     }`}
                   >
                     <span className="block text-[13px] font-semibold leading-tight">{p.label}</span>
@@ -340,7 +340,7 @@ export function LlmProfilesModal({
                 type="button"
                 onClick={() => setShowKey((v) => !v)}
                 aria-label={showKey ? 'API 키 숨기기' : 'API 키 표시'}
-                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-ink-subtle transition hover:text-ink"
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-fg-muted transition hover:text-fg"
               >
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -358,13 +358,13 @@ export function LlmProfilesModal({
               <PlugZap className="h-4 w-4" />연결 테스트
             </button>
             {testResult && (
-              <p role="status" className={`min-w-0 flex-1 text-xs leading-5 ${testResult.ok ? 'text-done' : 'text-delayed'}`}>
+              <p role="status" className={`min-w-0 flex-1 text-xs leading-5 ${testResult.ok ? 'text-success' : 'text-danger'}`}>
                 {testResult.ok ? '연결에 성공했습니다.' : `연결 실패 — ${testResult.message ?? '알 수 없는 오류'}`}
               </p>
             )}
           </div>
 
-          {error && <p ref={errorRef} role="alert" className="text-sm font-medium text-delayed">{error}</p>}
+          {error && <p ref={errorRef} role="alert" className="text-sm font-medium text-danger">{error}</p>}
         </div>
       )}
     </Modal>

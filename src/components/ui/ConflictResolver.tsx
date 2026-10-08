@@ -126,7 +126,7 @@ export function ConflictResolver({ open, target, fields, onKeepMine, onTakeLates
             {t('common.conflictTakeLatest')}
           </button>
           <button type="button" data-conflict-action="mine" disabled={busy} onClick={onKeepMine}
-            className="rounded-(--radius-control) bg-brand px-3.5 py-1.5 text-sm font-medium text-brand-fg shadow-xs transition-[color,background-color,opacity,box-shadow] duration-(--motion-fast) hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60">
+            className="rounded-(--radius-control) bg-action px-3.5 py-1.5 text-sm font-medium text-action-fg shadow-xs transition-[color,background-color,opacity,box-shadow] duration-(--motion-fast) hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60">
             {t('common.conflictKeepMine')}
           </button>
         </div>

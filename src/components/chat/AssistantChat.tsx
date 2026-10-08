@@ -642,11 +642,11 @@ export function AssistantChat() {
           <div ref={scrollRef} aria-live="polite" className="flex-1 space-y-3 overflow-y-auto bg-canvas px-4 py-4">
             {/* 프로액티브 인사이트 */}
             {ctx?.currentProject && (
-              <div className="rounded-2xl border border-brand-ring/40 bg-brand-weak/50 p-3.5">
-                <div className="flex items-center gap-1.5 text-[13px] font-semibold text-brand">
+              <div className="rounded-2xl border border-border-focus/40 bg-action-soft/50 p-3.5">
+                <div className="flex items-center gap-1.5 text-[13px] font-semibold text-action">
                   <Sparkles className="h-4 w-4" /> {t('chat.insight.title')}
                 </div>
-                <p className="mt-1.5 text-[13px] leading-5 text-ink-muted">
+                <p className="mt-1.5 text-[13px] leading-5 text-fg-secondary">
                   {ctx.weekStartCount > 0
                     ? `${t('chat.insight.weekPrefix')}${ctx.weekStartCount}${t('chat.insight.weekSuffix')}`
                     : t('chat.insight.none')}
@@ -655,7 +655,7 @@ export function AssistantChat() {
                   <button
                     onClick={() => send('이번 주 시작 작업 알려줘')}
                     disabled={loading}
-                    className="inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-action-fg transition hover:bg-action-hover disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-full bg-action px-3 py-1.5 text-xs font-medium text-action-fg transition hover:bg-action-hover disabled:opacity-50"
                   >
                     <CalendarDays className="h-3.5 w-3.5" /> {t('chat.chip.weekStartPrefix')}
                     {ctx.weekStartCount}
@@ -664,7 +664,7 @@ export function AssistantChat() {
                   <button
                     onClick={() => send('주간 요약')}
                     disabled={loading}
-                    className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:border-brand-ring hover:text-brand disabled:opacity-50"
+                    className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:border-border-focus hover:text-action disabled:opacity-50"
                   >
                     {t('chat.chip.weeklySummary')}
                   </button>
@@ -679,7 +679,7 @@ export function AssistantChat() {
                   key={q}
                   onClick={() => send(q)}
                   disabled={loading}
-                  className="rounded-full border border-line bg-surface px-3 py-1.5 text-[12.5px] text-ink-muted transition hover:border-brand-ring hover:text-brand disabled:opacity-50"
+                  className="rounded-full border border-border bg-surface px-3 py-1.5 text-[12.5px] text-fg-secondary transition hover:border-border-focus hover:text-action disabled:opacity-50"
                 >
                   {SUGGESTION_LABEL_KEY[q] ? t(SUGGESTION_LABEL_KEY[q]) : q}
                 </button>
@@ -710,7 +710,7 @@ export function AssistantChat() {
           </div>
 
           {/* 입력 */}
-          <footer className="border-t border-line bg-surface px-3 py-3">
+          <footer className="border-t border-border bg-surface px-3 py-3">
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
@@ -721,7 +721,7 @@ export function AssistantChat() {
                 rows={1}
                 placeholder={t('chat.inputPlaceholder')}
                 aria-label={t('chat.inputAria')}
-                className="max-h-32 min-h-[44px] flex-1 resize-none rounded-2xl border border-line bg-canvas px-3.5 py-3 text-sm text-ink outline-none transition placeholder:text-ink-subtle focus:border-brand focus:ring-2 focus:ring-brand-ring"
+                className="max-h-32 min-h-[44px] flex-1 resize-none rounded-2xl border border-border bg-canvas px-3.5 py-3 text-sm text-fg outline-none transition placeholder:text-fg-muted focus:border-action focus:ring-2 focus:ring-border-focus"
               />
               <button
                 onClick={() => send(input)}
@@ -759,7 +759,7 @@ export function AssistantChat() {
         >
           <RobotMascot className="h-9 w-9" label={assistantName} />
           {ctx && ctx.weekStartCount > 0 && (
-            <span className="absolute right-1 top-1 h-3 w-3 rounded-full border-2 border-surface-raised bg-brand" />
+            <span className="absolute right-1 top-1 h-3 w-3 rounded-full border-2 border-surface-raised bg-action" />
           )}
         </button>
       )}
@@ -777,7 +777,7 @@ export function AssistantChat() {
           </span>
           <span className="text-sm font-bold">{assistantName}</span>
           {/* 응답 스트리밍 중 표시점 — 접혀 있어도 진행 상황을 알 수 있게 */}
-          {loading && <span className="h-2 w-2 animate-pulse rounded-full bg-brand" />}
+          {loading && <span className="h-2 w-2 animate-pulse rounded-full bg-action" />}
           <ChevronUp className="h-4 w-4 text-fg-secondary" />
         </button>
       )}
@@ -787,7 +787,7 @@ export function AssistantChat() {
         <div
           role="dialog"
           aria-label={t('chat.dialog')}
-          className="fixed bottom-16 right-5 z-(--z-rail) flex h-[min(720px,calc(100dvh-5.25rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface"
+          className="fixed bottom-16 right-5 z-(--z-rail) flex h-[min(720px,calc(100dvh-5.25rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-border bg-surface"
           style={{ boxShadow: 'var(--shadow-xl)' }}
         >
           {panelHeader(true)}
@@ -824,27 +824,27 @@ function Bubble({
       <div
         className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
           isUser
-            ? 'rounded-br-md bg-brand text-action-fg'
-            : 'rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 text-ink'
+            ? 'rounded-br-md bg-action text-action-fg'
+            : 'rounded-bl-md border border-border-focus/30 bg-action-soft/50 text-fg'
         }`}
       >
         {content}
         {!isUser && (safeSources.length > 0 || (asOf && asOfTimezone) || truncated) && (
-          <div className="mt-2 border-t border-brand-ring/30 pt-2 text-[11px] text-ink-subtle">
+          <div className="mt-2 border-t border-border-focus/30 pt-2 text-[11px] text-fg-muted">
             {visibleSources.length > 0 && (
               <div className="flex flex-wrap gap-1.5" aria-label="답변 출처">
                 {visibleSources.map(source => (
                   <a
                     key={source.id}
                     href={source.href}
-                    className="max-w-full truncate rounded-full border border-brand-ring/40 bg-surface px-2 py-1 text-brand transition hover:border-brand hover:underline"
+                    className="max-w-full truncate rounded-full border border-border-focus/40 bg-surface px-2 py-1 text-action transition hover:border-action hover:underline"
                     title={source.excerpt ?? source.title}
                   >
                     {source.id} · {source.title}
                   </a>
                 ))}
                 {hiddenSourceCount > 0 && (
-                  <span className="rounded-full border border-brand-ring/30 px-2 py-1">
+                  <span className="rounded-full border border-border-focus/30 px-2 py-1">
                     출처 +{hiddenSourceCount}개
                   </span>
                 )}
@@ -881,18 +881,18 @@ function ProposalCard({
   const disabled = msg.proposalState !== 'pending'
   return (
     <div className="flex justify-start">
-      <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 px-3.5 py-2.5 text-[13px] leading-relaxed text-ink">
+      <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-border-focus/30 bg-action-soft/50 px-3.5 py-2.5 text-[13px] leading-relaxed text-fg">
         {p.kind === 'proposal' ? (
           <>
             <div className="font-medium">{p.target.name}</div>
-            <div className="mt-0.5 text-[12px] text-ink-muted">
+            <div className="mt-0.5 text-[12px] text-fg-secondary">
               [{p.target.phaseName}] · 담당 {p.target.ownersText}
             </div>
             <ul className="mt-1.5 space-y-0.5">
               {p.changes.map(c => (
                 <li key={c.field}>
                   {c.label}: <span className="line-through opacity-60">{c.before}</span>
-                  {' → '}<span className="font-semibold text-brand">{c.after}</span>
+                  {' → '}<span className="font-semibold text-action">{c.after}</span>
                 </li>
               ))}
             </ul>
@@ -900,20 +900,20 @@ function ProposalCard({
               <button
                 onClick={() => onApply(msg.id, p)}
                 disabled={disabled}
-                className="inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-action-fg transition hover:bg-action-hover disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-full bg-action px-3 py-1.5 text-xs font-medium text-action-fg transition hover:bg-action-hover disabled:opacity-50"
               >
                 적용
               </button>
               <button
                 onClick={() => onCancel(msg.id)}
                 disabled={disabled}
-                className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink-muted transition hover:border-brand-ring disabled:opacity-50"
+                className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-fg-secondary transition hover:border-border-focus disabled:opacity-50"
               >
                 취소
               </button>
             </div>
-            {msg.proposalState === 'applied' && <div className="mt-1.5 text-[12px] text-ink-subtle">적용됨</div>}
-            {msg.proposalState === 'cancelled' && <div className="mt-1.5 text-[12px] text-ink-subtle">취소됨</div>}
+            {msg.proposalState === 'applied' && <div className="mt-1.5 text-[12px] text-fg-muted">적용됨</div>}
+            {msg.proposalState === 'cancelled' && <div className="mt-1.5 text-[12px] text-fg-muted">취소됨</div>}
           </>
         ) : (
           <div className="flex flex-wrap gap-1.5">
@@ -922,7 +922,7 @@ function ProposalCard({
                 key={c.id}
                 onClick={() => onPick(c)}
                 disabled={disabled}
-                className="rounded-full border border-line bg-surface px-3 py-1.5 text-[12.5px] text-ink-muted transition hover:border-brand-ring hover:text-brand disabled:opacity-50"
+                className="rounded-full border border-border bg-surface px-3 py-1.5 text-[12.5px] text-fg-secondary transition hover:border-border-focus hover:text-action disabled:opacity-50"
               >
                 {c.name} <span className="opacity-60">({c.phaseName})</span>
               </button>
@@ -937,17 +937,17 @@ function ProposalCard({
 function TypingBubble({ message }: { message?: string | null }) {
   return (
     <div className="flex justify-start">
-      <div className="rounded-2xl rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 px-4 py-3">
+      <div className="rounded-2xl rounded-bl-md border border-border-focus/30 bg-action-soft/50 px-4 py-3">
         <div className="flex items-center gap-1">
           {[0, 1, 2].map(i => (
             <span
               key={i}
-              className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-subtle"
+              className="h-1.5 w-1.5 animate-bounce rounded-full bg-fg-muted"
               style={{ animationDelay: `${i * 0.15}s` }}
             />
           ))}
         </div>
-        {message && <div className="mt-1.5 max-w-64 text-[11px] text-ink-subtle">{message}</div>}
+        {message && <div className="mt-1.5 max-w-64 text-[11px] text-fg-muted">{message}</div>}
       </div>
     </div>
   )

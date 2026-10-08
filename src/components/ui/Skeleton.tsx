@@ -10,7 +10,7 @@ const SHIMMER_CSS = `
 .dflow-skeleton {
   position: relative;
   overflow: hidden;
-  background: color-mix(in srgb, var(--color-line) 70%, transparent);
+  background: color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 .dflow-skeleton::after {
   content: "";

@@ -456,7 +456,7 @@ export function KanbanBoard({
             ] as [keyof QuickFilters, DictKey, 'schedule' | 'bucket'][]).map(([k, label, group], i, arr) => (
               <Fragment key={k}>
                 {i > 0 && arr[i - 1][2] !== group && (
-                  <span aria-hidden className="h-4 w-px shrink-0 bg-grid" />
+                  <span aria-hidden className="h-4 w-px shrink-0 bg-border" />
                 )}
                 <button
                   type="button"
@@ -647,7 +647,7 @@ export function KanbanBoard({
           </div>
         }
       >
-        <p className="text-sm leading-6 text-ink-muted">{t('kanban.resetDesc')}</p>
+        <p className="text-sm leading-6 text-fg-secondary">{t('kanban.resetDesc')}</p>
       </Modal>
 
       {promptState && (

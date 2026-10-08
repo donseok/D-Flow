@@ -17,7 +17,7 @@ describe('levelBadge (§4.4 depth 기반)', () => {
     expect(levelBadgeText(0, false, ['단계', '기능'])).toBe('단계')
   })
   it('색상은 depth 기반, sub는 별도', () => {
-    expect(levelBadgeClass(0, false)).toContain('brand')
-    expect(levelBadgeClass(2, true)).toContain('surface-2')
+    expect(levelBadgeClass(0, false)).toContain('action')
+    expect(levelBadgeClass(2, true)).toContain('surface-subtle')
   })
 })

@@ -157,7 +157,7 @@ describe('RosterManager', () => {
     expect(upsertRosterMember).not.toHaveBeenCalled()
     expect(container.textContent).toContain('같은 이메일의 사람이 이미 있습니다. 목록에서 선택하세요.')
     act(() => button('alice 선택').click())
-    expect(row('m-alice').className).toContain('bg-brand-weak')
+    expect(row('m-alice').className).toContain('bg-action-soft')
   })
 
   it('삭제는 확인을 한 번 더 받고 removeRosterMember 를 부른다', async () => {

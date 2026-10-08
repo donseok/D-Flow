@@ -30,18 +30,18 @@ export function ProgressGauge({ actual, planned, variance, signal, verdictText, 
       aria-label={`${label} 실적 ${formatPct1(actual)}%, 계획 ${formatPct1(planned)}%, 편차 ${varText}, 진척 판정 ${verdictText}`}
     >
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full">
-        <circle cx={CENTER} cy={CENTER} r={R} fill="none" strokeWidth={STROKE} className="stroke-line" />
+        <circle cx={CENTER} cy={CENTER} r={R} fill="none" strokeWidth={STROKE} className="stroke-border" />
         <circle
           cx={CENTER} cy={CENTER} r={R} fill="none" strokeWidth={STROKE} strokeLinecap="round"
-          className="stroke-brand" strokeDasharray={`${dash} ${CIRC}`}
+          className="stroke-action" strokeDasharray={`${dash} ${CIRC}`}
           transform={`rotate(-90 ${CENTER} ${CENTER})`}
         />
-        <line x1={ix} y1={iy} x2={ox} y2={oy} strokeWidth={2.5} strokeLinecap="round" className="stroke-ink" />
+        <line x1={ix} y1={iy} x2={ox} y2={oy} strokeWidth={2.5} strokeLinecap="round" className="stroke-fg" />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
         <span className={`badge text-[10px] ${m.chip}`}>{verdictText}</span>
-        <span className="text-2xl font-extrabold leading-none tabular-nums text-ink">{formatPct1(actual)}%</span>
-        <span className="text-[10px] text-ink-subtle">{plannedText}</span>
+        <span className="text-2xl font-extrabold leading-none tabular-nums text-fg">{formatPct1(actual)}%</span>
+        <span className="text-[10px] text-fg-muted">{plannedText}</span>
       </div>
     </div>
   )

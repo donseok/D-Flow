@@ -113,13 +113,13 @@ export function StepBadge({ n, total, label, active, done, srText }: { n: number
       <span
         aria-hidden="true"
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-          done ? 'bg-done text-success-fg' : active ? 'bg-brand text-action-fg' : 'bg-surface-2 text-ink-subtle'
+          done ? 'bg-success text-success-fg' : active ? 'bg-action text-action-fg' : 'bg-surface-subtle text-fg-muted'
         }`}
       >
         {done ? <CheckCircle2 className="h-4 w-4" /> : n}
       </span>
       <span aria-hidden="true" className="text-meta text-fg-muted tabular-nums">{n}/{total}</span>
-      <span aria-hidden="true" className={`text-sm font-semibold ${active || done ? 'text-ink' : 'text-ink-subtle'}`}>{label}</span>
+      <span aria-hidden="true" className={`text-sm font-semibold ${active || done ? 'text-fg' : 'text-fg-muted'}`}>{label}</span>
       <span className="sr-only">{srText}</span>
     </div>
   )
@@ -127,7 +127,7 @@ export function StepBadge({ n, total, label, active, done, srText }: { n: number
 
 function radioRowClass(active: boolean): string {
   return `flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
-    active ? 'border-brand bg-brand-weak' : 'border-line bg-surface hover:border-line-strong'
+    active ? 'border-action bg-action-soft' : 'border-border bg-surface hover:border-border-input'
   }`
 }
 
@@ -373,7 +373,7 @@ export function ImportWizard({
           return (
             <li key={key} className={`flex items-center gap-3 ${i < all.length - 1 ? 'flex-1' : 'flex-none'}`} aria-current={i === at ? 'step' : undefined}>
               <StepBadge n={i + 1} total={all.length} label={t(label)} active={i === at} done={done} srText={stepSrText(t, i + 1, all.length, t(label), done)} />
-              {i < all.length - 1 && <span aria-hidden className="h-px flex-1 bg-line" />}
+              {i < all.length - 1 && <span aria-hidden className="h-px flex-1 bg-border" />}
             </li>
           )
         })}
@@ -382,30 +382,30 @@ export function ImportWizard({
       {state.step === 'select' && (
         <div className="card space-y-4 p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-ink-muted">{t('importWizard.templateDesc')}</p>
+            <p className="text-xs text-fg-secondary">{t('importWizard.templateDesc')}</p>
             <button type="button" className="btn btn-ghost shrink-0" disabled={state.busy}
               onClick={() => void downloadTemplate(toast, t('importWizard.templateFailed'), projectId)}>
               <Download className="h-4 w-4" />{t('importWizard.templateButton')}
             </button>
           </div>
-          <label className="group flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-line-strong bg-surface-2 px-6 text-center transition hover:border-brand hover:bg-brand-weak/40">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-line bg-surface text-brand shadow-sm transition group-hover:border-brand-ring">
+          <label className="group flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-border-input bg-surface-subtle px-6 text-center transition hover:border-action hover:bg-action-soft/40">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-surface text-action shadow-sm transition group-hover:border-border-focus">
               <Upload className="h-5 w-5" />
             </span>
-            <span className="mt-4 text-sm font-semibold text-ink">{state.fileName || t('importWizard.chooseExcel')}</span>
-            <span className="mt-1 text-xs leading-5 text-ink-muted">{t('importWizard.xlsxOnly')}</span>
+            <span className="mt-4 text-sm font-semibold text-fg">{state.fileName || t('importWizard.chooseExcel')}</span>
+            <span className="mt-1 text-xs leading-5 text-fg-secondary">{t('importWizard.xlsxOnly')}</span>
             <input
               type="file"
               accept=".xlsx"
               disabled={state.busy}
               onChange={onFileChange}
               aria-label={t('importWizard.chooseExcel')}
-              className="mt-4 max-w-full text-xs text-ink-muted file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-brand-weak file:px-3 file:py-2 file:font-semibold file:text-brand"
+              className="mt-4 max-w-full text-xs text-fg-secondary file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-action-soft file:px-3 file:py-2 file:font-semibold file:text-action"
             />
           </label>
 
           {state.error && (
-            <p role="alert" className="flex items-center gap-1.5 text-sm font-medium text-delayed">
+            <p role="alert" className="flex items-center gap-1.5 text-sm font-medium text-danger">
               <AlertTriangle className="h-4 w-4 shrink-0" />{state.error}
             </p>
           )}
@@ -424,14 +424,14 @@ export function ImportWizard({
           {/* Task 1b — 저장 양식으로 읽으면 열이 밀려 오류 없이 틀린 값이 쓰인다. 감지 결과로 시작하고, 저장 양식은 여기서
               직접 골라야만 쓴다(서버도 확인 플래그 없이는 409). */}
           {state.profileMismatch && (
-            <div role="alert" className="rounded-xl border border-delayed/30 bg-delayed-weak/40 p-3.5">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-delayed">
+            <div role="alert" className="rounded-xl border border-danger/30 bg-danger-weak/40 p-3.5">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-danger">
                 <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.mismatchTitle')}
               </p>
-              <p className="mt-1.5 text-xs leading-5 text-ink-muted">
+              <p className="mt-1.5 text-xs leading-5 text-fg-secondary">
                 {state.profileSource === 'saved' ? t('importWizard.mismatchUsingSaved') : t('importWizard.mismatchUsingDetected')}
               </p>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-ink-muted">
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-fg-secondary">
                 {state.profileMismatch.fields.length > 0 && (
                   <li>{t('importWizard.mismatchFieldsPrefix')}{state.profileMismatch.fields.map(f => t(MISMATCH_FIELD_LABEL_KEYS[f])).join(', ')}</li>
                 )}
@@ -454,7 +454,7 @@ export function ImportWizard({
               <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
                 <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.detectionWarningsTitle')}
               </p>
-              <ul className="mt-2 space-y-1 text-xs leading-5 text-ink-muted">
+              <ul className="mt-2 space-y-1 text-xs leading-5 text-fg-secondary">
                 {state.detection.warnings.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             </div>
@@ -464,8 +464,8 @@ export function ImportWizard({
           <div className="card space-y-6 p-6">
             {/* 리뷰 Important #2 — savedProfile 을 기본값으로 시작한 경우에도(레거시 프로젝트 +
                 새 양식 파일) 업로드 파일이 실제로 감지한 프로파일로 되돌릴 길을 열어 둔다. */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-2 px-3.5 py-2.5">
-              <p className="text-xs leading-5 text-ink-subtle">{t('importWizard.resetToDetectedDesc')}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-subtle px-3.5 py-2.5">
+              <p className="text-xs leading-5 text-fg-muted">{t('importWizard.resetToDetectedDesc')}</p>
               <button
                 type="button"
                 className="btn btn-ghost shrink-0"
@@ -479,7 +479,7 @@ export function ImportWizard({
 
             {/* ── 계층 방식 ── */}
             <fieldset className="space-y-2.5">
-              <legend className="mb-2 text-xs font-semibold text-ink-muted">{t('importWizard.hierarchyLegend')}</legend>
+              <legend className="mb-2 text-xs font-semibold text-fg-secondary">{t('importWizard.hierarchyLegend')}</legend>
               {(['columns', 'outline'] as const).map(kind => {
                 const active = profile.hierarchy.kind === kind
                 const label = kind === 'columns' ? t('importWizard.hierarchyColumns') : t('importWizard.hierarchyOutline')
@@ -489,15 +489,15 @@ export function ImportWizard({
                     <input
                       type="radio"
                       name="hierarchy-kind"
-                      className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-brand)]"
+                      className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-action)]"
                       checked={active}
                       disabled={state.busy}
                       onChange={() => updateProfile(switchHierarchyKind(profile, kind))}
                       aria-label={label}
                     />
                     <span className="min-w-0">
-                      <span className={`block text-sm font-semibold ${active ? 'text-brand' : 'text-ink'}`}>{label}</span>
-                      <span className="mt-0.5 block text-xs leading-5 text-ink-muted">{desc}</span>
+                      <span className={`block text-sm font-semibold ${active ? 'text-action' : 'text-fg'}`}>{label}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-fg-secondary">{desc}</span>
                     </span>
                   </label>
                 )
@@ -507,7 +507,7 @@ export function ImportWizard({
             {profile.hierarchy.kind === 'outline' ? (
               <div className="grid gap-3 pl-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('importWizard.outlineColumnLabel')}</span>
+                  <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('importWizard.outlineColumnLabel')}</span>
                   <select
                     className="app-input"
                     aria-label={t('importWizard.outlineColumnLabel')}
@@ -519,7 +519,7 @@ export function ImportWizard({
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('importWizard.fieldName')}</span>
+                  <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('importWizard.fieldName')}</span>
                   <select
                     className="app-input"
                     aria-label={t('importWizard.fieldName')}
@@ -533,7 +533,7 @@ export function ImportWizard({
                 </label>
               </div>
             ) : (
-              <p className="pl-4 text-xs leading-5 text-ink-subtle">
+              <p className="pl-4 text-xs leading-5 text-fg-muted">
                 {t('importWizard.columnsHint')}
                 {profile.hierarchy.columns.map(c => headers[c] || `#${c}`).join(', ')}
               </p>
@@ -541,11 +541,11 @@ export function ImportWizard({
 
             {/* ── 논리 열 ── */}
             <fieldset className="space-y-2.5">
-              <legend className="mb-2 text-xs font-semibold text-ink-muted">{t('importWizard.logicalLegend')}</legend>
+              <legend className="mb-2 text-xs font-semibold text-fg-secondary">{t('importWizard.logicalLegend')}</legend>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {LOGICAL_FIELDS.map(f => (
                   <label key={f.key} className="block">
-                    <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t(f.labelKey)}</span>
+                    <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t(f.labelKey)}</span>
                     <select
                       className="app-input"
                       aria-label={t(f.labelKey)}
@@ -563,7 +563,7 @@ export function ImportWizard({
 
             {/* ── 마크 사전 ── */}
             <fieldset className="space-y-2.5">
-              <legend className="mb-2 text-xs font-semibold text-ink-muted">{t('importWizard.marksLegend')}</legend>
+              <legend className="mb-2 text-xs font-semibold text-fg-secondary">{t('importWizard.marksLegend')}</legend>
               <div className="space-y-2">
                 {markRows.map(row => (
                   <div key={row.id} className="flex items-center gap-2">
@@ -609,7 +609,7 @@ export function ImportWizard({
 
             {/* ── 모드 ── */}
             <fieldset className="space-y-2.5">
-              <legend className="mb-2 text-xs font-semibold text-ink-muted">{t('importWizard.modeLegend')}</legend>
+              <legend className="mb-2 text-xs font-semibold text-fg-secondary">{t('importWizard.modeLegend')}</legend>
               {(['append', 'replace'] as const).map(mode => {
                 const active = state.mode === mode
                 const label = mode === 'append' ? t('importWizard.modeAppend') : t('importWizard.modeReplace')
@@ -619,15 +619,15 @@ export function ImportWizard({
                     <input
                       type="radio"
                       name="import-mode"
-                      className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-brand)]"
+                      className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-action)]"
                       checked={active}
                       disabled={state.busy}
                       onChange={() => dispatch({ type: 'modeChanged', mode })}
                       aria-label={label}
                     />
                     <span className="min-w-0">
-                      <span className={`block text-sm font-semibold ${active ? 'text-brand' : 'text-ink'}`}>{label}</span>
-                      <span className="mt-0.5 block text-xs leading-5 text-ink-muted">{desc}</span>
+                      <span className={`block text-sm font-semibold ${active ? 'text-action' : 'text-fg'}`}>{label}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-fg-secondary">{desc}</span>
                     </span>
                   </label>
                 )
@@ -635,11 +635,11 @@ export function ImportWizard({
             </fieldset>
 
             {state.mode === 'replace' && (
-              <div role="alert" className="rounded-xl border border-delayed/30 bg-delayed-weak/40 p-3.5">
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-delayed">
+              <div role="alert" className="rounded-xl border border-danger/30 bg-danger-weak/40 p-3.5">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-danger">
                   <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.replaceWarnTitle')}
                 </p>
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-ink-muted">
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-fg-secondary">
                   <li>
                     {currentItemCount !== null
                       ? <>{t('importWizard.replaceWarnDeleteCountPrefix')}{currentItemCount}{t('importWizard.replaceWarnDeleteCountSuffix')}</>
@@ -655,10 +655,10 @@ export function ImportWizard({
             {/* replace 사전 백업(D50) — 지금 트리를 '실행 전' 파일로 내려받기 시작해야 실행이 열린다. 입력(파일·양식·방식·양식 저장)이
                 바뀌면 다시 받아야 한다(백업은 그 실행 의도에 묶인다). 읽기에 실패하면 실행하지 않는다. */}
             {state.mode === 'replace' && (
-              <div data-pre-backup className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
+              <div data-pre-backup className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold text-ink">{t('importWizard.preBackupTitle')}</p>
-                  <p className="mt-0.5 text-xs leading-5 text-ink-muted">
+                  <p className="text-xs font-semibold text-fg">{t('importWizard.preBackupTitle')}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-fg-secondary">
                     {preBackupReady(state, intentKey) ? t('importWizard.preBackupDone') : t('importWizard.preBackupDesc')}
                   </p>
                 </div>
@@ -670,10 +670,10 @@ export function ImportWizard({
               </div>
             )}
 
-            <label className="flex items-center gap-2 text-sm text-ink">
+            <label className="flex items-center gap-2 text-sm text-fg">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded accent-[var(--color-brand)]"
+                className="h-4 w-4 rounded accent-[var(--color-action)]"
                 checked={state.saveProfile}
                 disabled={state.busy}
                 onChange={e => dispatch({ type: 'saveProfileChanged', saveProfile: e.target.checked })}
@@ -684,22 +684,22 @@ export function ImportWizard({
           </div>
 
           <div className="card space-y-3 p-6">
-            <h3 className="text-sm font-semibold text-ink">{t('importWizard.previewTitle')}</h3>
-            <p className="text-xs leading-5 text-ink-subtle">{t('importWizard.previewHint')}</p>
-            <div className="overflow-x-auto rounded-xl border border-line">
+            <h3 className="text-sm font-semibold text-fg">{t('importWizard.previewTitle')}</h3>
+            <p className="text-xs leading-5 text-fg-muted">{t('importWizard.previewHint')}</p>
+            <div className="overflow-x-auto rounded-xl border border-border">
               <table className="w-full min-w-[720px] border-collapse text-xs">
-                <thead className="bg-surface-2">
+                <thead className="bg-surface-subtle">
                   <tr>
-                    <th className="border-b border-line px-2 py-1.5 text-left font-semibold text-ink-muted">{t('importWizard.previewDepthCol')}</th>
+                    <th className="border-b border-border px-2 py-1.5 text-left font-semibold text-fg-secondary">{t('importWizard.previewDepthCol')}</th>
                     {mappedPreview?.columns.map(col => {
                       const badge = previewRoleLabel(col.role, t)
                       return (
                         <th
                           key={col.index}
-                          className={`border-b border-line px-2 py-1.5 text-left font-semibold ${col.role?.kind === 'hierarchy' ? 'bg-brand-weak text-brand' : 'text-ink-muted'}`}
+                          className={`border-b border-border px-2 py-1.5 text-left font-semibold ${col.role?.kind === 'hierarchy' ? 'bg-action-soft text-action' : 'text-fg-secondary'}`}
                         >
                           <div>{col.label}</div>
-                          {badge && <div className="mt-0.5 text-xs font-normal text-ink-subtle">{badge}</div>}
+                          {badge && <div className="mt-0.5 text-xs font-normal text-fg-muted">{badge}</div>}
                         </th>
                       )
                     })}
@@ -707,12 +707,12 @@ export function ImportWizard({
                 </thead>
                 <tbody>
                   {mappedPreview?.rows.map((row, ri) => (
-                    <tr key={ri} className="odd:bg-surface even:bg-surface-2/40">
-                      <td className="border-b border-line px-2 py-1.5 text-center text-ink-subtle">{row.depth === null ? '?' : row.depth}</td>
+                    <tr key={ri} className="odd:bg-surface even:bg-surface-subtle/40">
+                      <td className="border-b border-border px-2 py-1.5 text-center text-fg-muted">{row.depth === null ? '?' : row.depth}</td>
                       {mappedPreview.columns.map(col => (
                         <td
                           key={col.index}
-                          className={`border-b border-line px-2 py-1.5 text-ink ${col.role?.kind === 'hierarchy' ? 'bg-brand-weak/30' : ''}`}
+                          className={`border-b border-border px-2 py-1.5 text-fg ${col.role?.kind === 'hierarchy' ? 'bg-action-soft/30' : ''}`}
                         >
                           {String(row.cells[col.index] ?? '')}
                         </td>
@@ -725,11 +725,11 @@ export function ImportWizard({
           </div>
 
           {state.errors && state.errors.length > 0 && (
-            <div role="alert" className="rounded-xl border border-delayed/30 bg-delayed-weak/40 p-3.5">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-delayed">
+            <div role="alert" className="rounded-xl border border-danger/30 bg-danger-weak/40 p-3.5">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-danger">
                 <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.linkErrorsPrefix')}{state.errors.length}{t('importWizard.linkErrorsSuffix')}
               </p>
-              <ul className="mt-2 max-h-40 space-y-1 overflow-auto text-xs leading-5 text-ink-muted">
+              <ul className="mt-2 max-h-40 space-y-1 overflow-auto text-xs leading-5 text-fg-secondary">
                 {state.errors.map((er, i) => (
                   <li key={i}>{t('importWizard.excelRowPrefix')}{er.excelRow}{t('importWizard.excelRowSuffix')}{er.message}</li>
                 ))}
@@ -737,7 +737,7 @@ export function ImportWizard({
             </div>
           )}
           {state.error && (
-            <p role="alert" className="flex items-center gap-1.5 text-sm font-medium text-delayed">
+            <p role="alert" className="flex items-center gap-1.5 text-sm font-medium text-danger">
               <AlertTriangle className="h-4 w-4 shrink-0" />{state.error}
             </p>
           )}
@@ -756,12 +756,12 @@ export function ImportWizard({
       {state.step === 'done' && state.result && (
         <div className="card space-y-5 p-6">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-done-weak text-done">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-success-weak text-success">
               <CheckCircle2 className="h-5 w-5" />
             </span>
             <div>
-              <h2 className="text-base font-bold text-ink">{t('importWizard.doneTitle')}</h2>
-              <p className="text-sm text-ink-muted">{state.result.count}{t('importWizard.doneCountSuffix')}</p>
+              <h2 className="text-base font-bold text-fg">{t('importWizard.doneTitle')}</h2>
+              <p className="text-sm text-fg-secondary">{state.result.count}{t('importWizard.doneCountSuffix')}</p>
             </div>
           </div>
           <ImportRunSummary projectId={projectId} result={state.result} t={t} />
@@ -769,15 +769,15 @@ export function ImportWizard({
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
             <div className="panel-soft p-3">
               <dt className="eyebrow">{t('importWizard.doneMode')}</dt>
-              <dd className="mt-1 font-semibold text-ink">{state.result.mode === 'append' ? t('importWizard.modeAppend') : t('importWizard.modeReplace')}</dd>
+              <dd className="mt-1 font-semibold text-fg">{state.result.mode === 'append' ? t('importWizard.modeAppend') : t('importWizard.modeReplace')}</dd>
             </div>
             <div className="panel-soft p-3">
               <dt className="eyebrow">{t('importWizard.doneReindexed')}</dt>
-              <dd className="mt-1 font-semibold text-ink">{state.result.reindexed}</dd>
+              <dd className="mt-1 font-semibold text-fg">{state.result.reindexed}</dd>
             </div>
             <div className="panel-soft p-3">
               <dt className="eyebrow">{t('importWizard.doneProfileSaved')}</dt>
-              <dd className="mt-1 font-semibold text-ink">{state.result.profileSaved ? t('importWizard.savedYes') : t('importWizard.savedNo')}</dd>
+              <dd className="mt-1 font-semibold text-fg">{state.result.profileSaved ? t('importWizard.savedYes') : t('importWizard.savedNo')}</dd>
             </div>
           </dl>
 
@@ -786,7 +786,7 @@ export function ImportWizard({
               <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
                 <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.profileSaveFailedTitle')}
               </p>
-              <p className="mt-1 text-xs leading-5 text-ink-muted">
+              <p className="mt-1 text-xs leading-5 text-fg-secondary">
                 {t('importWizard.profileSaveFailedDesc').replace('{code}', state.result.profileSave.code)}
               </p>
             </div>
@@ -796,7 +796,7 @@ export function ImportWizard({
               <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
                 <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.doneWarningsTitle')}
               </p>
-              <ul className="mt-2 space-y-1 text-xs leading-5 text-ink-muted">
+              <ul className="mt-2 space-y-1 text-xs leading-5 text-fg-secondary">
                 {state.result.warnings.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             </div>
@@ -813,8 +813,8 @@ export function ImportWizard({
             return (
               <div className="panel-soft flex flex-wrap items-center justify-between gap-3 p-4">
                 <div>
-                  <p className="text-sm font-semibold text-ink">{t('importWizard.exportProfileTitle')}</p>
-                  <p className="mt-0.5 text-xs leading-5 text-ink-muted">
+                  <p className="text-sm font-semibold text-fg">{t('importWizard.exportProfileTitle')}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-fg-secondary">
                     {t(blocked ? 'importWizard.exportProfileUnsupported' : state.result.profileSaved ? 'importWizard.exportProfileDesc' : 'importWizard.exportLayoutDesc')}
                   </p>
                 </div>
@@ -858,26 +858,26 @@ export function ImportWizard({
           </>
         }
       >
-        <p className="text-sm leading-6 text-ink">{t('importWizard.needsTeamsDesc')}</p>
+        <p className="text-sm leading-6 text-fg">{t('importWizard.needsTeamsDesc')}</p>
         <ul className="mt-3 flex flex-wrap gap-2">
           {(state.needsTeams ?? []).map(team => (
-            <li key={team} className="badge bg-brand-weak px-2 py-1 text-brand">{team}</li>
+            <li key={team} className="badge bg-action-soft px-2 py-1 text-action">{team}</li>
           ))}
         </ul>
         {state.inheritsCommon ? (
           // 상속 프로젝트 — 등록이 공용 팀을 이 프로젝트 팀으로 전환한다(D54). 무엇이 바뀌는지 먼저 알린다
           <div data-teams-convert className="mt-3 space-y-2">
-            <p className="text-xs leading-5 text-ink-muted">
+            <p className="text-xs leading-5 text-fg-secondary">
               {t('importWizard.needsTeamsConvert')
                 .replace('{n}', String(state.commonTeams.length))
                 .replace('{teams}', (state.needsTeams ?? []).join(', '))}
             </p>
             {state.commonTeams.length > 0 && (
               <>
-                <p className="text-xs font-semibold text-ink-subtle">{t('importWizard.needsTeamsCommonTitle')}</p>
+                <p className="text-xs font-semibold text-fg-muted">{t('importWizard.needsTeamsCommonTitle')}</p>
                 <ul className="flex flex-wrap gap-2">
                   {state.commonTeams.map(team => (
-                    <li key={team.code} className="badge bg-surface-2 px-2 py-1 text-ink">
+                    <li key={team.code} className="badge bg-surface-subtle px-2 py-1 text-fg">
                       {team.name === team.code ? team.code : `${team.code} · ${team.name}`}
                     </li>
                   ))}
@@ -886,7 +886,7 @@ export function ImportWizard({
             )}
           </div>
         ) : (
-          <p className="mt-3 text-xs leading-5 text-ink-subtle">{t('importWizard.needsTeamsProjectScope')}</p>
+          <p className="mt-3 text-xs leading-5 text-fg-muted">{t('importWizard.needsTeamsProjectScope')}</p>
         )}
       </Modal>
     </div>
@@ -901,8 +901,8 @@ function SkippedHolidaysNotice({ items, t }: { items: readonly SkippedHoliday[];
       <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
         <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.holidaySkippedTitle')}
       </p>
-      <p className="mt-1 text-xs leading-5 text-ink-muted">{t('importWizard.holidaySkippedDesc')}</p>
-      <ul className="mt-2 space-y-1 text-xs leading-5 text-ink-muted">
+      <p className="mt-1 text-xs leading-5 text-fg-secondary">{t('importWizard.holidaySkippedDesc')}</p>
+      <ul className="mt-2 space-y-1 text-xs leading-5 text-fg-secondary">
         {items.map(h => <li key={h.date} className="tabular-nums">{h.date}{h.name ? ` · ${h.name}` : ''}</li>)}
       </ul>
     </div>

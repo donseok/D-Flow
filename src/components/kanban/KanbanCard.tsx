@@ -81,7 +81,7 @@ export function KanbanCard({
     : undefined
 
   const dueBadge = due && (
-    <span className={`badge ${due.kind === 'overdue' ? 'bg-delayed-weak text-delayed font-semibold' : 'bg-surface-subtle text-fg-secondary'}`}>
+    <span className={`badge ${due.kind === 'overdue' ? 'bg-danger-weak text-danger font-semibold' : 'bg-surface-subtle text-fg-secondary'}`}>
       {due.kind === 'overdue'
         ? `${t('kanban.overduePrefix')}${due.days}${t('kanban.overdueSuffix')}`
         : due.days === 0 ? t('kanban.ddayToday') : `${t('kanban.ddayPrefix')}${due.days}`}
@@ -143,7 +143,7 @@ export function KanbanCard({
             <>
               {onStep && <button className="btn btn-ghost h-7 px-2 text-[12px]" aria-label={t('kanban.decrease')} disabled={saving} onClick={() => onStep(-10)}><Minus className="h-3.5 w-3.5" /></button>}
               {onStep && <button className="btn btn-ghost h-7 px-2 text-[12px]" aria-label={t('kanban.increase')} disabled={saving} onClick={() => onStep(10)}><Plus className="h-3.5 w-3.5" /></button>}
-              {onComplete && <button className="btn btn-ghost h-7 px-2 text-[12px] gap-1 text-done" disabled={saving} onClick={onComplete}><Check className="h-3.5 w-3.5" />{t('kanban.complete')}</button>}
+              {onComplete && <button className="btn btn-ghost h-7 px-2 text-[12px] gap-1 text-success" disabled={saving} onClick={onComplete}><Check className="h-3.5 w-3.5" />{t('kanban.complete')}</button>}
             </>
           )}
           {bucket === 'done' && onReopen && (
@@ -154,7 +154,7 @@ export function KanbanCard({
           {onApprove && (
             <button
               type="button"
-              className="btn btn-ghost h-7 px-2 text-[12px] gap-1 text-brand font-medium"
+              className="btn btn-ghost h-7 px-2 text-[12px] gap-1 text-action font-medium"
               disabled={saving}
               onClick={onApprove}
               data-testid="kanban-card-approve-btn"
@@ -169,7 +169,7 @@ export function KanbanCard({
             <div className="relative ml-auto inline-block" ref={menuRef}>
               <button
                 type="button"
-                className="btn btn-ghost h-7 px-2 text-[12px] gap-1 text-ink-muted hover:text-ink"
+                className="btn btn-ghost h-7 px-2 text-[12px] gap-1 text-fg-secondary hover:text-fg"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 aria-label={`${card.name} 이동 메뉴`}
@@ -184,7 +184,7 @@ export function KanbanCard({
                 <div
                   role="menu"
                   aria-label={`${card.name} 이동 선택`}
-                  className="absolute right-0 bottom-full mb-1 z-30 min-w-[130px] rounded-xl border border-line bg-surface p-1 shadow-lg"
+                  className="absolute right-0 bottom-full mb-1 z-30 min-w-[130px] rounded-xl border border-border bg-surface p-1 shadow-lg"
                 >
                   {stageOptions && onMoveStage && stageOptions.map(opt => (
                     <button
@@ -194,7 +194,7 @@ export function KanbanCard({
                       disabled={opt.current || saving}
                       aria-current={opt.current ? 'true' : undefined}
                       className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition
-                        ${opt.current ? 'bg-surface-2 font-medium text-ink-subtle cursor-default' : 'text-ink hover:bg-surface-hover hover:text-ink'}`}
+                        ${opt.current ? 'bg-surface-subtle font-medium text-fg-muted cursor-default' : 'text-fg hover:bg-surface-hover hover:text-fg'}`}
                       onClick={() => {
                         setMenuOpen(false)
                         onMoveStage(opt.key)
@@ -202,7 +202,7 @@ export function KanbanCard({
                       data-testid={`kanban-card-move-stage-${opt.key}`}
                     >
                       <span>{opt.label}</span>
-                      {opt.current && <Check className="h-3.5 w-3.5 text-brand" />}
+                      {opt.current && <Check className="h-3.5 w-3.5 text-action" />}
                     </button>
                   ))}
                   {bucketOptions && onMoveBucket && bucketOptions.map(opt => (
@@ -213,7 +213,7 @@ export function KanbanCard({
                       disabled={opt.current || saving}
                       aria-current={opt.current ? 'true' : undefined}
                       className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition
-                        ${opt.current ? 'bg-surface-2 font-medium text-ink-subtle cursor-default' : 'text-ink hover:bg-surface-hover hover:text-ink'}`}
+                        ${opt.current ? 'bg-surface-subtle font-medium text-fg-muted cursor-default' : 'text-fg hover:bg-surface-hover hover:text-fg'}`}
                       onClick={() => {
                         setMenuOpen(false)
                         onMoveBucket(opt.key)
@@ -221,7 +221,7 @@ export function KanbanCard({
                       data-testid={`kanban-card-move-bucket-${opt.key}`}
                     >
                       <span>{opt.label}</span>
-                      {opt.current && <Check className="h-3.5 w-3.5 text-brand" />}
+                      {opt.current && <Check className="h-3.5 w-3.5 text-action" />}
                     </button>
                   ))}
                 </div>

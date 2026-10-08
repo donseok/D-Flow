@@ -384,7 +384,7 @@ export function RowDetailPanel({
           title={t('wbs.detailResize')}
           onPointerDown={startResize}
           onDoubleClick={resetWidth}
-          className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-brand/40 active:bg-brand/60"
+          className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-action/40 active:bg-action/60"
         />
         <header className="flex items-start justify-between gap-3 border-b border-border/80 px-5 py-4">
           <div className="min-w-0">
@@ -405,17 +405,17 @@ export function RowDetailPanel({
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
           {editing ? (
             <section className="space-y-3">
-              <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('wbs.fieldName')}</span>
+              <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('wbs.fieldName')}</span>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="app-input" /></label>
               <div className="grid grid-cols-2 gap-3">
-                <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('wbs.colPlannedStart')}</span>
+                <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('wbs.colPlannedStart')}</span>
                   <input type="date" value={form.start} onChange={e => setForm(f => ({ ...f, start: e.target.value }))} className="app-input px-2 text-xs" /></label>
-                <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('wbs.colPlannedEnd')}</span>
+                <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('wbs.colPlannedEnd')}</span>
                   <input type="date" value={form.end} onChange={e => setForm(f => ({ ...f, end: e.target.value }))} className="app-input px-2 text-xs" /></label>
               </div>
-              <label className="block"><span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('wbs.colDeliverable')}</span>
+              <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('wbs.colDeliverable')}</span>
                 <input value={form.deliverable} onChange={e => setForm(f => ({ ...f, deliverable: e.target.value }))} className="app-input" placeholder={t('wbs.deliverablePlaceholder')} /></label>
-              {err && <p className="text-xs font-medium text-delayed">{err}</p>}
+              {err && <p className="text-xs font-medium text-danger">{err}</p>}
               <div className="flex gap-2">
                 <button onClick={() => void saveFields()} disabled={busy} className="btn btn-primary flex-1">{busy ? t('wbs.saving') : t('common.save')}</button>
                 <button onClick={() => { setEditing(false); setErr(null) }} className="btn btn-ghost">{t('common.cancel')}</button>
@@ -430,7 +430,7 @@ export function RowDetailPanel({
               </section>
               {/* 개요 표(2026-08-28) — 아이콘 카드 4행이 세로로 44px 씩 먹던 것을 라벨·값 2열로.
                   상태도 같은 표에 넣는다: 라벨·값 쌍이라 성격이 같고, 떠 있던 한 줄이 사라진다. */}
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-y border-line/50 py-2.5">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-y border-border/50 py-2.5">
                 <DlRow label={t('wbs.colStatus')}>
                   <span className={`chip ${STATUS[item.status].chip}`}>
                     <span className={`h-1.5 w-1.5 rounded-full ${STATUS[item.status].dot}`} />
@@ -438,7 +438,7 @@ export function RowDetailPanel({
                   </span>
                 </DlRow>
                 <DlRow label={t('wbs.colOwners')}>
-                  {item.owners.length ? <OwnerBadges owners={item.owners} /> : <span className="text-ink-subtle">{t('wbs.unassigned')}</span>}
+                  {item.owners.length ? <OwnerBadges owners={item.owners} /> : <span className="text-fg-muted">{t('wbs.unassigned')}</span>}
                 </DlRow>
                 <DlRow label={t('wbs.plannedSchedule')}>
                   <span className="tabular-nums">{fmtDate(item.plannedStart)} ~ {fmtDate(item.plannedEnd)}</span>
@@ -452,7 +452,7 @@ export function RowDetailPanel({
                       <input autoFocus value={delivDraft} onChange={e => setDelivDraft(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') void saveDeliv(); if (e.key === 'Escape') { setDelivEditing(false); setDelivErr(null) } }}
                         className="app-input" placeholder={t('wbs.deliverablePlaceholder')} />
-                      {delivErr && <p className="text-xs font-medium text-delayed">{delivErr}</p>}
+                      {delivErr && <p className="text-xs font-medium text-danger">{delivErr}</p>}
                       <div className="flex gap-2">
                         <button onClick={() => void saveDeliv()} disabled={delivBusy} className="btn btn-primary h-8 px-3 text-xs">{delivBusy ? t('wbs.saving') : t('common.save')}</button>
                         <button onClick={() => { setDelivEditing(false); setDelivErr(null) }} className="btn btn-ghost h-8 px-3 text-xs">{t('common.cancel')}</button>
@@ -460,9 +460,9 @@ export function RowDetailPanel({
                     </div>
                   ) : (
                     <div className="flex items-start justify-between gap-2">
-                      {item.deliverable ? <span className="min-w-0 break-words">{item.deliverable}</span> : <span className="text-ink-subtle">{t('common.none')}</span>}
+                      {item.deliverable ? <span className="min-w-0 break-words">{item.deliverable}</span> : <span className="text-fg-muted">{t('common.none')}</span>}
                       {canEditDeliverable && (
-                        <button onClick={openDeliv} aria-label={t('common.edit')} className="shrink-0 text-ink-subtle transition hover:text-ink"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button onClick={openDeliv} aria-label={t('common.edit')} className="shrink-0 text-fg-muted transition hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                       )}
                     </div>
                   )}
@@ -479,13 +479,13 @@ export function RowDetailPanel({
           )}
 
           {!editing && (
-            <section className="rounded-xl border border-line bg-surface-2/40 p-3" aria-label={t('wbs.dependencies')}>
+            <section className="rounded-xl border border-border bg-surface-subtle/40 p-3" aria-label={t('wbs.dependencies')}>
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => setDepBodyOpen(open => !open)}
                   aria-expanded={depBodyOpen}
-                  className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-subtle transition hover:text-ink"
+                  className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-fg-muted transition hover:text-fg"
                 >
                   {depBodyOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                   <GitBranch className="h-3.5 w-3.5" /> {t('wbs.dependencies')}
@@ -493,11 +493,11 @@ export function RowDetailPanel({
                 {depBodyOpen && (
                 <div className="flex items-center gap-1.5">
                   {schedule?.critical && (
-                    <span className="rounded-full border border-delayed/35 bg-delayed-weak px-2 py-0.5 text-[10px] font-bold text-delayed">
+                    <span className="rounded-full border border-danger/35 bg-danger-weak px-2 py-0.5 text-[10px] font-bold text-danger">
                       {t('wbs.criticalPath')}
                     </span>
                   )}
-                  <div className="flex overflow-hidden rounded-md border border-line" role="group" aria-label={t('wbs.dependencies')}>
+                  <div className="flex overflow-hidden rounded-md border border-border" role="group" aria-label={t('wbs.dependencies')}>
                     {(['list', 'graph'] as const).map(mode => (
                       <button
                         key={mode}
@@ -505,7 +505,7 @@ export function RowDetailPanel({
                         onClick={() => setDepView(mode)}
                         aria-pressed={depView === mode}
                         className={`h-7 px-2 text-[11px] transition ${
-                          depView === mode ? 'bg-brand-weak font-semibold text-brand' : 'text-ink-muted hover:text-ink'
+                          depView === mode ? 'bg-action-soft font-semibold text-action' : 'text-fg-secondary hover:text-fg'
                         }`}
                       >
                         {t(mode === 'list' ? 'wbs.depViewList' : 'wbs.depViewGraph')}
@@ -550,7 +550,7 @@ export function RowDetailPanel({
                   </span>
                 )}
                 {readiness.unknownCount > 0 ? (
-                  <span className="rounded-full border border-delayed/35 bg-delayed-weak px-2 py-0.5 text-[10px] font-bold text-delayed" role="status">
+                  <span className="rounded-full border border-danger/35 bg-danger-weak px-2 py-0.5 text-[10px] font-bold text-danger" role="status">
                     {t('wbs.startUnknown').replace('{n}', String(readiness.unknownCount))}
                   </span>
                 ) : readiness.waitingCount > 0 ? (
@@ -558,7 +558,7 @@ export function RowDetailPanel({
                     {t('wbs.startBlocked').replace('{n}', String(readiness.waitingCount))}
                   </span>
                 ) : (
-                  <span className="rounded-full border border-done/35 bg-done-weak px-2 py-0.5 text-[10px] font-bold text-done" role="status">
+                  <span className="rounded-full border border-success/35 bg-success-weak px-2 py-0.5 text-[10px] font-bold text-success" role="status">
                     {t('wbs.startReady')}
                   </span>
                 )}
@@ -576,15 +576,15 @@ export function RowDetailPanel({
                     t={t}
                   />
                   {egoPredecessors.length === 0 && egoSuccessors.length === 0 && (
-                    <p className="mt-2 text-xs text-ink-subtle">{t('wbs.noPredecessors')}</p>
+                    <p className="mt-2 text-xs text-fg-muted">{t('wbs.noPredecessors')}</p>
                   )}
                 </div>
               ) : (
               <div className="mt-2 space-y-2">
                 <div>
-                  <div className="mb-1 text-[11px] font-semibold text-ink-muted">{t('wbs.predecessors')}</div>
+                  <div className="mb-1 text-[11px] font-semibold text-fg-secondary">{t('wbs.predecessors')}</div>
                   {incomingDependencies.length === 0 && unresolvedRefs.length === 0 ? (
-                    <p className="text-xs text-ink-subtle">{t('wbs.noPredecessors')}</p>
+                    <p className="text-xs text-fg-muted">{t('wbs.noPredecessors')}</p>
                   ) : (
                     <ul className="space-y-1.5">
                       {incomingDependencies.map(dep => (
@@ -623,9 +623,9 @@ export function RowDetailPanel({
                 </div>
 
                 <div>
-                  <div className="mb-1 text-[11px] font-semibold text-ink-muted">{t('wbs.successors')}</div>
+                  <div className="mb-1 text-[11px] font-semibold text-fg-secondary">{t('wbs.successors')}</div>
                   {outgoingDependencies.length === 0 ? (
-                    <p className="text-xs text-ink-subtle">{t('wbs.noSuccessors')}</p>
+                    <p className="text-xs text-fg-muted">{t('wbs.noSuccessors')}</p>
                   ) : (
                     <ul className="space-y-1.5">
                       {outgoingDependencies.map(dep => (
@@ -649,13 +649,13 @@ export function RowDetailPanel({
               )}
 
               {editable && dependencyOpen && (
-                <div className="mt-2 space-y-2 rounded-lg border border-line bg-surface p-2.5">
+                <div className="mt-2 space-y-2 rounded-lg border border-border bg-surface p-2.5">
                   {predecessorCandidates.length === 0 ? (
-                    <p className="text-xs text-ink-subtle">{t('wbs.noDependencyCandidates')}</p>
+                    <p className="text-xs text-fg-muted">{t('wbs.noDependencyCandidates')}</p>
                   ) : (
                     <>
                       <label className="block">
-                        <span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('wbs.predecessorTask')}</span>
+                        <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('wbs.predecessorTask')}</span>
                         <select value={predecessorId} onChange={e => setPredecessorId(e.target.value)} className="app-input h-9 text-xs">
                           <option value="">{t('wbs.selectTask')}</option>
                           {predecessorCandidates.map(candidate => (
@@ -665,14 +665,14 @@ export function RowDetailPanel({
                       </label>
                       <div className="grid grid-cols-[1fr_88px] gap-2">
                         <label className="block">
-                          <span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('wbs.relationType')}</span>
+                          <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('wbs.relationType')}</span>
                           <select value={dependencyType} onChange={e => setDependencyType(e.target.value as DependencyType)} className="app-input h-9 text-xs">
                             <option value="FS">{t('wbs.fsLong')}</option>
                             <option value="SS">{t('wbs.ssLong')}</option>
                           </select>
                         </label>
                         <label className="block">
-                          <span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('wbs.lagDays')}</span>
+                          <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('wbs.lagDays')}</span>
                           <input type="number" min="0" max="365" step="1" value={lagDays} onChange={e => setLagDays(e.target.value)} className="app-input h-9 text-xs" />
                         </label>
                       </div>
@@ -683,7 +683,7 @@ export function RowDetailPanel({
                   )}
                 </div>
               )}
-              {dependencyErr && <p className="mt-2 text-xs font-medium text-delayed" role="alert">{dependencyErr}</p>}
+              {dependencyErr && <p className="mt-2 text-xs font-medium text-danger" role="alert">{dependencyErr}</p>}
               </>
               )}
             </section>
@@ -691,8 +691,8 @@ export function RowDetailPanel({
 
           {/* 관리자 구조 편집 */}
           {editable && !editing && (
-            <section className="rounded-xl border border-line bg-surface-2/50 p-3">
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">{t('wbs.structureEdit')}</div>
+            <section className="rounded-xl border border-border bg-surface-subtle/50 p-3">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-muted">{t('wbs.structureEdit')}</div>
               <div className="flex flex-wrap gap-2">
                 {canChild && (
                   <button onClick={() => setAddName(addName == null ? '' : null)} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs">
@@ -706,7 +706,7 @@ export function RowDetailPanel({
                 )}
                 <button onClick={() => run(() => moveWbsItem(item.id, 'up'))} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs" aria-label={t('wbs.moveUp')}><ChevronUp className="h-3.5 w-3.5" /></button>
                 <button onClick={() => run(() => moveWbsItem(item.id, 'down'))} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs" aria-label={t('wbs.moveDown')}><ChevronDown className="h-3.5 w-3.5" /></button>
-                <button onClick={() => setConfirmDel(true)} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs text-delayed hover:bg-delayed-weak"><Trash2 className="h-3.5 w-3.5" /> {t('common.delete')}</button>
+                <button onClick={() => setConfirmDel(true)} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs text-danger hover:bg-danger-weak"><Trash2 className="h-3.5 w-3.5" /> {t('common.delete')}</button>
               </div>
               {addName != null && canChild && (
                 <div className="mt-2 space-y-2">
@@ -720,22 +720,22 @@ export function RowDetailPanel({
                 </div>
               )}
               {isAct && subOpen && (
-                <div className="mt-2 space-y-2.5 rounded-lg border border-line bg-surface px-3 py-2.5">
+                <div className="mt-2 space-y-2.5 rounded-lg border border-border bg-surface px-3 py-2.5">
                   {subTeams.length === 0 ? (
-                    <p className="text-xs text-ink-subtle">{t('wbs.subActAllTeamsUsed')}</p>
+                    <p className="text-xs text-fg-muted">{t('wbs.subActAllTeamsUsed')}</p>
                   ) : (
                     <>
                       {flipWarn && (
                         <p className="rounded-lg bg-pending-weak px-2.5 py-1.5 text-[11px] leading-snug text-pending">{t('wbs.subActLeafWarn')}</p>
                       )}
                       <div>
-                        <div className="mb-1 text-[11px] font-semibold text-ink-muted">{t('wbs.subActTeam')}</div>
+                        <div className="mb-1 text-[11px] font-semibold text-fg-secondary">{t('wbs.subActTeam')}</div>
                         <div className="flex flex-wrap gap-1.5">
                           {subTeams.map(tm => {
                             const on = subTeam === tm
                             return (
                               <button key={tm} onClick={() => setSubTeam(tm)}
-                                className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${on ? 'border-brand bg-brand-weak text-brand' : 'border-line text-ink-muted hover:bg-surface-2'}`}>
+                                className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${on ? 'border-action bg-action-soft text-action' : 'border-border text-fg-secondary hover:bg-surface-subtle'}`}>
                                 <span className={`h-1.5 w-1.5 rounded-full ${slotOf(tm).bar}`} />{tm}
                               </button>
                             )
@@ -743,11 +743,11 @@ export function RowDetailPanel({
                         </div>
                       </div>
                       <div>
-                        <div className="mb-1 text-[11px] font-semibold text-ink-muted">{t('wbs.subActKind')}</div>
-                        <div className="inline-flex rounded-lg border border-line p-0.5">
+                        <div className="mb-1 text-[11px] font-semibold text-fg-secondary">{t('wbs.subActKind')}</div>
+                        <div className="inline-flex rounded-lg border border-border p-0.5">
                           {(['primary', 'support'] as OwnerKind[]).map(k => (
                             <button key={k} onClick={() => setSubKind(k)}
-                              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${subKind === k ? 'bg-brand text-action-fg' : 'text-ink-muted hover:text-ink'}`}>
+                              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${subKind === k ? 'bg-action text-action-fg' : 'text-fg-secondary hover:text-fg'}`}>
                               {k === 'primary' ? `● ${t('wbs.ownerPrimary')}` : `△ ${t('wbs.ownerSupport')}`}
                             </button>
                           ))}
@@ -759,13 +759,13 @@ export function RowDetailPanel({
                 </div>
               )}
               {confirmDel && (
-                <div className="mt-2 flex items-center gap-2 rounded-lg bg-delayed-weak px-3 py-2 text-xs text-delayed">
+                <div className="mt-2 flex items-center gap-2 rounded-lg bg-danger-weak px-3 py-2 text-xs text-danger">
                   <span className="flex-1">{t('wbs.deleteConfirm')}</span>
-                  <button onClick={doDelete} disabled={busy} className="btn h-7 bg-delayed px-2.5 text-xs text-danger-fg">{t('common.delete')}</button>
+                  <button onClick={doDelete} disabled={busy} className="btn h-7 bg-danger px-2.5 text-xs text-danger-fg">{t('common.delete')}</button>
                   <button onClick={() => setConfirmDel(false)} className="btn btn-ghost h-7 px-2.5 text-xs">{t('common.cancel')}</button>
                 </div>
               )}
-              {err && !editing && <p className="mt-2 text-xs font-medium text-delayed">{err}</p>}
+              {err && !editing && <p className="mt-2 text-xs font-medium text-danger">{err}</p>}
             </section>
           )}
 
@@ -910,7 +910,7 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
   return (
     <section>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div ref={headingRef} tabIndex={-1} data-attach-heading className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-subtle"><Paperclip className="h-3.5 w-3.5" /> {t('wbs.attachments')}</div>
+        <div ref={headingRef} tabIndex={-1} data-attach-heading className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-fg-muted"><Paperclip className="h-3.5 w-3.5" /> {t('wbs.attachments')}</div>
         {canAttach && (
           <label className="btn btn-ghost h-7 cursor-pointer px-2.5 text-xs">
             <Upload className="h-3.5 w-3.5" /> {busy ? t('wbs.processing') : t('wbs.addFile')}
@@ -918,33 +918,33 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
           </label>
         )}
       </div>
-      {err && <p className="mb-2 text-xs font-medium text-delayed">{err}</p>}
+      {err && <p className="mb-2 text-xs font-medium text-danger">{err}</p>}
       {list == null ? (
-        <p className="text-sm text-ink-subtle">{t('common.loading')}</p>
+        <p className="text-sm text-fg-muted">{t('common.loading')}</p>
       ) : !list.ok ? (
         // 던졌든 ok:false 든 화면 문구는 사전의 한 문구 — 액션의 한국어 사유(list.error)를 영어 화면에 싣지 않는다.
         <LoadErrorNotice message={t('wbs.attachLoadFail')} onRetry={retry} busy={retrying} />
       ) : list.rows.length === 0 ? (
-        <p className="text-sm text-ink-subtle">{canAttach ? t('wbs.noAttachmentsAdd') : t('wbs.noAttachments')}</p>
+        <p className="text-sm text-fg-muted">{canAttach ? t('wbs.noAttachmentsAdd') : t('wbs.noAttachments')}</p>
       ) : (
         <>
-          {list.download === 'denied' && <p className="mb-2 text-xs text-ink-subtle">{t('wbs.attachDownloadDenied')}</p>}
+          {list.download === 'denied' && <p className="mb-2 text-xs text-fg-muted">{t('wbs.attachDownloadDenied')}</p>}
           {list.download === 'unknown' && (
             <div className="mb-2"><LoadErrorNotice message={t('wbs.attachDownloadUnknown')} onRetry={retry} busy={retrying} /></div>
           )}
           <ul className="space-y-1.5">
             {list.rows.map(a => (
-              <li key={a.id} className="flex items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-2.5 py-2">
-                <FileText className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
+              <li key={a.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface-subtle/60 px-2.5 py-2">
+                <FileText className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
                 {list.download === 'allowed' ? (
                   <button type="button" onClick={() => void open(a.id)} disabled={opening === a.id}
-                    className="min-w-0 flex-1 truncate text-left text-[13px] text-brand hover:underline" title={a.fileName}>{a.fileName}</button>
+                    className="min-w-0 flex-1 truncate text-left text-[13px] text-action hover:underline" title={a.fileName}>{a.fileName}</button>
                 ) : (
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink" title={a.fileName}>{a.fileName}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-fg" title={a.fileName}>{a.fileName}</span>
                 )}
-                {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-ink-subtle">{fmtSize(a.size)}</span>}
-                {linkFailed === a.id && <span role="alert" className="flex shrink-0 items-center gap-1 text-[11px] text-ink"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-delayed" />{t('wbs.attachLinkFail')}</span>}
-                {canAttach && <button onClick={() => del(a.id)} disabled={busy} aria-label={t('wbs.deleteAttachmentAria')} className="shrink-0 text-ink-subtle transition hover:text-delayed"><Trash2 className="h-3.5 w-3.5" /></button>}
+                {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-fg-muted">{fmtSize(a.size)}</span>}
+                {linkFailed === a.id && <span role="alert" className="flex shrink-0 items-center gap-1 text-[11px] text-fg"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-danger" />{t('wbs.attachLinkFail')}</span>}
+                {canAttach && <button onClick={() => del(a.id)} disabled={busy} aria-label={t('wbs.deleteAttachmentAria')} className="shrink-0 text-fg-muted transition hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>}
               </li>
             ))}
           </ul>
@@ -999,41 +999,41 @@ function DependencyRow({
   t: (k: DictKey) => string
 }) {
   const stateStyle: Record<PredecessorState, { label: DictKey; cls: string }> = {
-    satisfied: { label: 'wbs.depSatisfied', cls: 'border-done/35 bg-done-weak text-done' },
+    satisfied: { label: 'wbs.depSatisfied', cls: 'border-success/35 bg-success-weak text-success' },
     waiting: { label: 'wbs.depWaiting', cls: 'border-pending/35 bg-pending-weak text-pending' },
-    unknown: { label: 'wbs.depUnknown', cls: 'border-delayed/35 bg-delayed-weak text-delayed' },
+    unknown: { label: 'wbs.depUnknown', cls: 'border-danger/35 bg-danger-weak text-danger' },
   }
   const name = linked?.name ?? missingLabel ?? t('wbs.missingTask')
   const label = (
     <>
-      {linked?.code && <span className="mr-1 text-ink-subtle">{linked.code}</span>}
+      {linked?.code && <span className="mr-1 text-fg-muted">{linked.code}</span>}
       {name}
     </>
   )
   return (
-    <li className="rounded-lg border border-line bg-surface px-2.5 py-2 text-xs">
+    <li className="rounded-lg border border-border bg-surface px-2.5 py-2 text-xs">
       <div className="flex items-center gap-2">
         {linked && onOpen ? (
           <button
             type="button"
             onClick={() => onOpen(linked.id)}
-            className="min-w-0 flex-1 truncate text-left text-ink underline-offset-2 transition hover:text-brand hover:underline"
+            className="min-w-0 flex-1 truncate text-left text-fg underline-offset-2 transition hover:text-action hover:underline"
             title={`${name} — ${t('wbs.openTaskDetail')}`}
           >
             {label}
           </button>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-ink" title={name}>{label}</span>
+          <span className="min-w-0 flex-1 truncate text-fg" title={name}>{label}</span>
         )}
-        <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 font-bold text-ink-muted" title={badgeTitle}>{badge}</span>
+        <span className="shrink-0 rounded bg-surface-subtle px-1.5 py-0.5 font-bold text-fg-secondary" title={badgeTitle}>{badge}</span>
         {imported && (
-          <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold text-ink-subtle" title={t('wbs.depImportedHint')}>
+          <span className="shrink-0 rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] font-bold text-fg-muted" title={t('wbs.depImportedHint')}>
             {t('wbs.depImported')}
           </span>
         )}
         {onRemove && (
           <button type="button" onClick={onRemove} disabled={removeDisabled}
-            aria-label={t('wbs.removeDependency')} className="shrink-0 text-ink-subtle transition hover:text-delayed">
+            aria-label={t('wbs.removeDependency')} className="shrink-0 text-fg-muted transition hover:text-danger">
             <X className="h-3.5 w-3.5" />
           </button>
         )}
@@ -1042,10 +1042,10 @@ function DependencyRow({
         {linked ? (
           <>
             <StatusChip status={linked.status} />
-            <span className="tabular-nums text-[11px] text-ink-muted">{formatPct1(linked.rolledActualPct)}%</span>
+            <span className="tabular-nums text-[11px] text-fg-secondary">{formatPct1(linked.rolledActualPct)}%</span>
           </>
         ) : (
-          <span className="text-[11px] text-delayed">{t('wbs.depUnknown')}</span>
+          <span className="text-[11px] text-danger">{t('wbs.depUnknown')}</span>
         )}
         {state && (
           <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-bold ${stateStyle[state].cls}`}>

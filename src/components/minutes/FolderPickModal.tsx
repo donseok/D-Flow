@@ -31,9 +31,9 @@ export function FolderPickModal({
       <li key={n.folder.id}>
         <button onClick={() => onPick(n.folder.id)}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
-          className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg pr-2 text-left transition-colors duration-100 hover:bg-surface-2">
-          <Folder aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
-          <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{n.folder.name}</span>
+          className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg pr-2 text-left transition-colors duration-100 hover:bg-surface-subtle">
+          <Folder aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
+          <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{n.folder.name}</span>
         </button>
       </li>,
       ...rows(n.children, depth + 1),
@@ -45,9 +45,9 @@ export function FolderPickModal({
       <ul className="max-h-80 space-y-0.5 overflow-y-auto">
         <li>
           <button onClick={() => onPick(null)}
-            className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 hover:bg-surface-2">
-            <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
-            <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{t('min.fold.unfiled')}</span>
+            className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 hover:bg-surface-subtle">
+            <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
+            <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{t('min.fold.unfiled')}</span>
           </button>
         </li>
         {rows(roots, 0)}

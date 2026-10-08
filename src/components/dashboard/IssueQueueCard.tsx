@@ -8,8 +8,8 @@ import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 
 // 행 스타일 — 지연=빨강 틴트, 임박=주황 틴트(RiskWorklist ROW_META 미러).
 const ROW_META: Record<IssueQueueKind, { border: string; icon: string }> = {
-  overdue: { border: 'border-delayed/40', icon: 'text-delayed' },
-  dueSoon: { border: 'border-accent-warning/40', icon: 'text-accent-warning' },
+  overdue: { border: 'border-danger/40', icon: 'text-danger' },
+  dueSoon: { border: 'border-warning/40', icon: 'text-warning' },
 }
 
 /**
@@ -32,8 +32,8 @@ export function IssueQueueCard({ issues, projectId, today, locale, severities }:
 
   return (
     <SectionCard eyebrow="ISSUE QUEUE" title={tr('dash.issues.queueTitle')} icon={AlertTriangle}
-      actions={<span className="chip bg-delayed-weak text-delayed">{tr('dash.exec.delayed')} {q.overdueCount} · {tr('dash.exec.dueSoon')} {q.dueSoonCount}</span>}>
-      {q.rows.length === 0 ? <p className="text-sm text-ink-muted">{tr('dash.issues.queueEmpty')}</p> : (
+      actions={<span className="chip bg-danger-weak text-danger">{tr('dash.exec.delayed')} {q.overdueCount} · {tr('dash.exec.dueSoon')} {q.dueSoonCount}</span>}>
+      {q.rows.length === 0 ? <p className="text-sm text-fg-secondary">{tr('dash.issues.queueEmpty')}</p> : (
         <div className="space-y-2">
           {q.rows.map(({ issue, kind, days }) => {
             const meta = ROW_META[kind]
@@ -48,22 +48,22 @@ export function IssueQueueCard({ issues, projectId, today, locale, severities }:
             return (
               <Link key={issue.id} href={`${issuesHref}?focus=${issue.id}`}
                 aria-label={`${code} ${issue.title}, ${sevLabel}, ${detail}${due ? `, ${due}` : ''}`}
-                className={`flex items-center gap-2.5 rounded-xl border ${meta.border} px-3 py-2.5 hover:bg-surface-2`}>
+                className={`flex items-center gap-2.5 rounded-xl border ${meta.border} px-3 py-2.5 hover:bg-surface-subtle`}>
                 <CalendarClock className={`h-4 w-4 shrink-0 ${meta.icon}`} />
-                <span className="hidden shrink-0 text-[11px] font-semibold tabular-nums text-ink-subtle sm:inline">{code}</span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{issue.title}</span>
+                <span className="hidden shrink-0 text-[11px] font-semibold tabular-nums text-fg-muted sm:inline">{code}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{issue.title}</span>
                 <span className={`chip shrink-0 ${sev.chip}`}>{sevLabel}</span>
                 {kind === 'dueSoon'
-                  ? <span className="chip shrink-0 bg-accent-warning/10 font-semibold text-accent-warning">{detail}</span>
-                  : <span className="shrink-0 text-xs text-ink-muted">{detail}</span>}
-                {due && <span className="hidden shrink-0 text-xs tabular-nums text-ink-subtle sm:inline">{due}</span>}
+                  ? <span className="chip shrink-0 bg-warning/10 font-semibold text-warning">{detail}</span>
+                  : <span className="shrink-0 text-xs text-fg-secondary">{detail}</span>}
+                {due && <span className="hidden shrink-0 text-xs tabular-nums text-fg-muted sm:inline">{due}</span>}
               </Link>
             )
           })}
           {q.hiddenCount > 0 && (
-            <div className="flex items-center justify-between pt-1 text-xs text-ink-subtle">
-              <span className="chip bg-surface-2 text-ink-subtle">+{q.hiddenCount}</span>
-              <Link href={issuesHref} className="font-semibold text-brand hover:underline">{tr('dash.issues.moreInList')} →</Link>
+            <div className="flex items-center justify-between pt-1 text-xs text-fg-muted">
+              <span className="chip bg-surface-subtle text-fg-muted">+{q.hiddenCount}</span>
+              <Link href={issuesHref} className="font-semibold text-action hover:underline">{tr('dash.issues.moreInList')} →</Link>
             </div>
           )}
         </div>

@@ -63,14 +63,14 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
     >
       <div className="space-y-4">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">기존 비밀번호</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">기존 비밀번호</span>
           <input className="app-input" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" autoFocus />
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">신규 비밀번호 (6자 이상)</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">신규 비밀번호 (6자 이상)</span>
           <input className="app-input" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
         </label>
-        {error && <p role="alert" className="text-sm font-medium text-delayed">{error}</p>}
+        {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
       </div>
     </Modal>
   )

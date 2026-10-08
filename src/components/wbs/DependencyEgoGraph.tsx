@@ -41,17 +41,17 @@ export interface EgoNode {
 }
 
 const STATE_STYLE: Record<PredecessorState, { label: DictKey; cls: string }> = {
-  satisfied: { label: 'wbs.depSatisfied', cls: 'border-done/35 bg-done-weak text-done' },
+  satisfied: { label: 'wbs.depSatisfied', cls: 'border-success/35 bg-success-weak text-success' },
   waiting: { label: 'wbs.depWaiting', cls: 'border-pending/35 bg-pending-weak text-pending' },
-  unknown: { label: 'wbs.depUnknown', cls: 'border-delayed/35 bg-delayed-weak text-delayed' },
+  unknown: { label: 'wbs.depUnknown', cls: 'border-danger/35 bg-danger-weak text-danger' },
 }
 
 /** 좌측 색바 — 상태를 한눈에. StatusChip 과 같은 어휘를 쓴다. */
 const STATUS_BAR: Record<ComputedItem['status'], string> = {
-  done: 'bg-done',
+  done: 'bg-success',
   in_progress: 'bg-progress',
-  delayed: 'bg-delayed',
-  not_started: 'bg-ink-subtle/40',
+  delayed: 'bg-danger',
+  not_started: 'bg-fg-muted/40',
 }
 
 export function DependencyEgoGraph({
@@ -112,13 +112,13 @@ export function DependencyEgoGraph({
 
         <div className="flex shrink-0 items-center" style={{ width: CENTER_W, height: boardH }}>
           <div
-            className={`w-full rounded-lg border-2 bg-surface px-2.5 py-1.5 ${critical ? 'border-critical' : 'border-brand-ring'}`}
+            className={`w-full rounded-lg border-2 bg-surface px-2.5 py-1.5 ${critical ? 'border-critical' : 'border-border-focus'}`}
             style={{ height: NODE_H }}
             aria-current="true"
           >
-            <div className="truncate text-[10px] font-bold tabular-nums text-brand">{item.code}</div>
-            <div className="truncate text-xs font-semibold text-ink" title={item.name}>{item.name}</div>
-            <div className="truncate text-[10px] tabular-nums text-ink-muted">
+            <div className="truncate text-[10px] font-bold tabular-nums text-action">{item.code}</div>
+            <div className="truncate text-xs font-semibold text-fg" title={item.name}>{item.name}</div>
+            <div className="truncate text-[10px] tabular-nums text-fg-secondary">
               {formatPct1(item.rolledActualPct)}%
             </div>
           </div>
@@ -196,7 +196,7 @@ function Edges({
     >
       <defs>
         <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" markerUnits="userSpaceOnUse">
-          <path d="M0,0 L6,3 L0,6 z" fill="var(--color-ink-subtle)" />
+          <path d="M0,0 L6,3 L0,6 z" fill="var(--color-fg-muted)" />
         </marker>
       </defs>
       {from.map((y, i) => {
@@ -210,7 +210,7 @@ function Edges({
             key={i}
             d={`M 0 ${startY} H ${mid} V ${endY} H ${width}`}
             fill="none"
-            stroke="var(--color-ink-subtle)"
+            stroke="var(--color-fg-muted)"
             strokeWidth={1}
             markerEnd={`url(#${markerId})`}
           />
@@ -234,8 +234,8 @@ function Node({
 
   return (
     <div
-      className={`flex w-full items-stretch overflow-hidden rounded-lg border border-line bg-surface ${
-        canOpen ? 'cursor-pointer transition hover:border-brand-ring hover:bg-brand-weak/40' : ''
+      className={`flex w-full items-stretch overflow-hidden rounded-lg border border-border bg-surface ${
+        canOpen ? 'cursor-pointer transition hover:border-border-focus hover:bg-action-soft/40' : ''
       }`}
       style={{ height: NODE_H }}
       // 이동은 더블클릭이다 — 한 번 클릭으로 상세가 갈아끼워지면 그래프를 훑어볼 수가 없다.
@@ -246,25 +246,25 @@ function Node({
       tabIndex={canOpen ? 0 : undefined}
       title={canOpen ? `${name} — ${t('wbs.depGraphOpenHint')}` : name}
     >
-      <span className={`w-1 shrink-0 ${target ? STATUS_BAR[target.status] : 'bg-delayed'}`} aria-hidden />
+      <span className={`w-1 shrink-0 ${target ? STATUS_BAR[target.status] : 'bg-danger'}`} aria-hidden />
       <div className="min-w-0 flex-1 px-2 py-1">
         <div className="flex items-center gap-1">
-          <span className="min-w-0 truncate text-[10px] font-bold tabular-nums text-ink-subtle">
+          <span className="min-w-0 truncate text-[10px] font-bold tabular-nums text-fg-muted">
             {target?.code ?? node.fallbackLabel ?? ''}
           </span>
-          <span className="ml-auto shrink-0 rounded bg-surface-2 px-1 text-[9px] font-bold text-ink-muted">
+          <span className="ml-auto shrink-0 rounded bg-surface-subtle px-1 text-[9px] font-bold text-fg-secondary">
             {node.badge}
           </span>
         </div>
-        <div className="truncate text-[11px] text-ink">{name}</div>
+        <div className="truncate text-[11px] text-fg">{name}</div>
         <div className="flex items-center gap-1">
           {target && (
-            <span className="shrink-0 text-[10px] tabular-nums text-ink-muted">
+            <span className="shrink-0 text-[10px] tabular-nums text-fg-secondary">
               {formatPct1(target.rolledActualPct)}%
             </span>
           )}
           {node.imported && (
-            <span className="shrink-0 rounded bg-surface-2 px-1 text-[9px] font-bold text-ink-subtle">
+            <span className="shrink-0 rounded bg-surface-subtle px-1 text-[9px] font-bold text-fg-muted">
               {t('wbs.depImported')}
             </span>
           )}
@@ -284,7 +284,7 @@ function MoreChip({ count, onClick, t }: { count: number; onClick: () => void; t
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-center rounded-lg border border-dashed border-line text-[11px] text-ink-muted transition hover:border-brand-ring hover:text-brand"
+      className="flex w-full items-center justify-center rounded-lg border border-dashed border-border text-[11px] text-fg-secondary transition hover:border-border-focus hover:text-action"
       style={{ height: NODE_H }}
     >
       {t('wbs.depGraphMore').replace('{n}', String(count))}

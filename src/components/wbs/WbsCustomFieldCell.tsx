@@ -18,7 +18,7 @@ export function cellEditableField(def: FieldDef): boolean {
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-const INPUT = 'h-6 w-full min-w-0 rounded border border-brand bg-surface px-1 text-ink outline-none focus:ring-2 focus:ring-brand-ring'
+const INPUT = 'h-6 w-full min-w-0 rounded border border-action bg-surface px-1 text-fg outline-none focus:ring-2 focus:ring-border-focus'
 
 /**
  * WBS 시트의 사용자 정의 필드 셀(SP5c §3.6.9). 읽기 표시는 종전과 같고, 편집 가능한 셀은 클릭·Enter 로 들어가 Enter(또는 포커스 이탈)로
@@ -180,7 +180,7 @@ export function WbsCustomFieldCell({
       onClick={editable ? start : undefined}
       onKeyDown={editable && !editing ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); start() } } : undefined}
     >
-      {!editing ? <span className={`truncate ${current === null ? 'text-delayed' : ''}`}>{text}</span>
+      {!editing ? <span className={`truncate ${current === null ? 'text-danger' : ''}`}>{text}</span>
         : def.type === 'boolean' || def.type === 'select' ? (
           // disabled 는 포커스를 빼앗는다 — 저장 중에는 변경만 막는다
           <select {...common} className={INPUT} value={draft} onChange={e => { if (!busy) { setDraft(e.target.value); setInvalid(false) } }}>

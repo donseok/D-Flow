@@ -51,10 +51,10 @@ export function IssueTrendCard({ issues, today, weekStart, timeZone, locale }: {
 
   // 범례는 차트 아래 — SectionCard actions(shrink-0) 안에 두면 좁은 폭에서 줄바꿈 없이 헤더를 넘친다.
   const legend = (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-subtle">
-      <span className="inline-flex items-center gap-1"><span className="h-0.5 w-4 rounded-full bg-delayed" />{tr('dash.issues.backlogNow')}</span>
-      <span className="inline-flex items-center gap-1"><span className="h-0 w-4 border-t-2 border-dashed border-ink-muted" />{tr('dash.issues.trendCreated')}</span>
-      <span className="inline-flex items-center gap-1"><span className="h-0.5 w-4 rounded-full bg-done" />{tr('dash.issues.trendResolved')}</span>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-fg-muted">
+      <span className="inline-flex items-center gap-1"><span className="h-0.5 w-4 rounded-full bg-danger" />{tr('dash.issues.backlogNow')}</span>
+      <span className="inline-flex items-center gap-1"><span className="h-0 w-4 border-t-2 border-dashed border-fg-secondary" />{tr('dash.issues.trendCreated')}</span>
+      <span className="inline-flex items-center gap-1"><span className="h-0.5 w-4 rounded-full bg-success" />{tr('dash.issues.trendResolved')}</span>
     </div>
   )
 
@@ -90,27 +90,27 @@ export function IssueTrendCard({ issues, today, weekStart, timeZone, locale }: {
           <defs>
             {/* 그라데이션 stop 색은 CSS 속성으로 줘야 토큰(var)이 풀린다 — 속성값의 var() 는 브라우저마다 다르다 */}
             <linearGradient id={WASH_ID} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" style={{ stopColor: 'var(--color-delayed)', stopOpacity: 0.28 }} />
-              <stop offset="1" style={{ stopColor: 'var(--color-delayed)', stopOpacity: 0.03 }} />
+              <stop offset="0" style={{ stopColor: 'var(--color-danger)', stopOpacity: 0.28 }} />
+              <stop offset="1" style={{ stopColor: 'var(--color-danger)', stopOpacity: 0.03 }} />
             </linearGradient>
           </defs>
           {ticks.map(v => (
             <g key={v}>
-              <line x1={PL} x2={W - PR} y1={y(v)} y2={y(v)} className="stroke-line" strokeWidth={1} />
-              <text x={PL - 6} y={y(v) + 3.5} textAnchor="end" fontSize={10} className="fill-ink-subtle">{v}</text>
+              <line x1={PL} x2={W - PR} y1={y(v)} y2={y(v)} className="stroke-border" strokeWidth={1} />
+              <text x={PL - 6} y={y(v) + 3.5} textAnchor="end" fontSize={10} className="fill-fg-muted">{v}</text>
             </g>
           ))}
           <path d={`${backlogPath} L${lastX.toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`} fill={`url(#${WASH_ID})`} />
-          <path d={smoothPath(pts, 'created', x, y)} fill="none" className="stroke-ink-muted" strokeWidth={1.5} strokeDasharray="3 3" />
-          <path d={smoothPath(pts, 'resolved', x, y)} fill="none" className="stroke-done" strokeWidth={1.5} />
-          <path d={backlogPath} fill="none" className="stroke-delayed" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+          <path d={smoothPath(pts, 'created', x, y)} fill="none" className="stroke-fg-secondary" strokeWidth={1.5} strokeDasharray="3 3" />
+          <path d={smoothPath(pts, 'resolved', x, y)} fill="none" className="stroke-success" strokeWidth={1.5} />
+          <path d={backlogPath} fill="none" className="stroke-danger" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
           {/* 끝점 — 표면색 2px 링으로 선 위에서도 읽힌다. 라벨은 미해결 하나뿐이라 충돌이 없다. */}
-          <circle cx={lastX} cy={y(last.backlog)} r={4.5} className="fill-delayed stroke-surface" strokeWidth={2} />
-          <text x={lastX + 9} y={y(last.backlog) + 4} fontSize={11} fontWeight={600} className="fill-ink-muted">
+          <circle cx={lastX} cy={y(last.backlog)} r={4.5} className="fill-danger stroke-surface" strokeWidth={2} />
+          <text x={lastX + 9} y={y(last.backlog) + 4} fontSize={11} fontWeight={600} className="fill-fg-secondary">
             {tr('dash.issues.trendBacklog')} {last.backlog}
           </text>
           {xLabels.map((i, k) => (
-            <text key={i} x={x(i)} y={H - 9} fontSize={10} className="fill-ink-subtle"
+            <text key={i} x={x(i)} y={H - 9} fontSize={10} className="fill-fg-muted"
               textAnchor={k === 0 ? 'start' : k === xLabels.length - 1 ? 'end' : 'middle'}>
               {fmtDate(pts[i].weekStart)}
             </text>
@@ -118,7 +118,7 @@ export function IssueTrendCard({ issues, today, weekStart, timeZone, locale }: {
         </svg>
         </div>
         {legend}
-        <div className="mt-auto text-[11px] leading-4 text-ink-subtle">{caption}</div>
+        <div className="mt-auto text-[11px] leading-4 text-fg-muted">{caption}</div>
       </div>
     </SectionCard>
   )

@@ -28,8 +28,8 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <BrandGlyph size={48} />
           <div>
-            <h1 className="text-xl font-semibold tracking-[-0.02em] text-ink">{BRAND.productName} 프로젝트 초대</h1>
-            <p className="mt-1 text-sm text-ink-muted">초대받은 계정으로만 합류할 수 있습니다.</p>
+            <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg">{BRAND.productName} 프로젝트 초대</h1>
+            <p className="mt-1 text-sm text-fg-secondary">초대받은 계정으로만 합류할 수 있습니다.</p>
           </div>
         </div>
         <InviteRedeemCard

@@ -211,12 +211,12 @@ export function MyMeetingsView({
       <div className="sticky top-(--frame-sticky-top) z-10 -mx-1 flex flex-col gap-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
           <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('meet.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
-          <div ref={monthLabelRef} tabIndex={-1} className="min-w-[116px] text-center text-base font-bold tabular-nums text-ink">
+          <div ref={monthLabelRef} tabIndex={-1} className="min-w-[116px] text-center text-base font-bold tabular-nums text-fg">
             {new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { year: 'numeric', month: locale === 'ko' ? 'numeric' : 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
           </div>
           <button onClick={() => shift(1)} className="chrome-icon" aria-label={t('meet.nextMonth')}><ChevronRight className="h-4 w-4" /></button>
           <button onClick={() => { setYear(initY); setMonth0((initM || 1) - 1) }} className="btn btn-ghost h-10">{t('meet.today')}</button>
-          {pending && <span className="text-xs text-ink-subtle">…</span>}
+          {pending && <span className="text-xs text-fg-muted">…</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedTabs<'mine' | 'all'>
@@ -240,7 +240,7 @@ export function MyMeetingsView({
             <button
               onClick={() => setProjectFilter(null)}
               aria-pressed={activeProjectFilter === null}
-              className={`chip cursor-pointer whitespace-nowrap border transition ${activeProjectFilter === null ? 'border-brand bg-brand-weak text-brand' : 'border-line bg-surface text-ink-muted hover:text-ink'}`}
+              className={`chip cursor-pointer whitespace-nowrap border transition ${activeProjectFilter === null ? 'border-action bg-action-soft text-action' : 'border-border bg-surface text-fg-secondary hover:text-fg'}`}
             >
               {t('meet.allProjects')}
             </button>
@@ -249,7 +249,7 @@ export function MyMeetingsView({
                 key={p.projectId}
                 onClick={() => setProjectFilter(p.projectId)}
                 aria-pressed={activeProjectFilter === p.projectId}
-                className={`chip cursor-pointer whitespace-nowrap border transition ${activeProjectFilter === p.projectId ? 'border-brand bg-brand-weak text-brand' : 'border-line bg-surface text-ink-muted hover:text-ink'}`}
+                className={`chip cursor-pointer whitespace-nowrap border transition ${activeProjectFilter === p.projectId ? 'border-action bg-action-soft text-action' : 'border-border bg-surface text-fg-secondary hover:text-fg'}`}
               >
                 <span className={`inline-block size-2 rounded-full ${projectColorClass(allProjectIds, p.projectId)}`} />
                 {p.projectName}
@@ -267,7 +267,7 @@ export function MyMeetingsView({
         // 못 읽은 달을 '회의 없음'으로 그리지 않는다 — 사유는 위 경고가 보인다. 읽는 중인 달(stale)도 아직 '없음'이 아니다 —
         // 빈 화면 대신 읽는 중임을 보인다(SP5 B2 — D39, 개정 §8.1 #22 '목록 탭 로딩')
         failed ? null : isStale ? (
-          <div data-my-meetings-loading className="card flex items-center justify-center gap-2 py-10 text-sm text-ink-muted">
+          <div data-my-meetings-loading className="card flex items-center justify-center gap-2 py-10 text-sm text-fg-secondary">
             <Spinner className="h-4 w-4" />{t('meet.list.loading')}
           </div>
         ) : <EmptyState icon={CalendarX2}
@@ -278,7 +278,7 @@ export function MyMeetingsView({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-line bg-surface-2 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
+                <tr className="border-b border-border bg-surface-subtle text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">
                   <th className="px-4 py-3">{t('meet.col.date')}</th>
                   <th className="px-4 py-3">{t('meet.col.time')}</th>
                   <th className="px-4 py-3">{t('meet.col.title')}</th>
@@ -292,11 +292,11 @@ export function MyMeetingsView({
                   return (
                     <tr key={o.occurrenceId} onClick={() => setDetailOcc(o)} role="button" tabIndex={0}
                       onKeyDown={e => { if (e.key === 'Enter') setDetailOcc(o) }}
-                      className="cursor-pointer border-b border-line/70 last:border-0 transition hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2">
-                      <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-ink">{fmtDate(o.occurrenceDate)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 tabular-nums text-ink-muted">{o.startTime ?? t('meet.allDay')}</td>
-                      <td className="px-4 py-3 text-ink">{o.title}</td>
-                      <td className="px-4 py-3 text-ink-muted">
+                      className="cursor-pointer border-b border-border/70 last:border-0 transition hover:bg-surface-subtle focus:outline-none focus-visible:bg-surface-subtle">
+                      <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">{fmtDate(o.occurrenceDate)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 tabular-nums text-fg-secondary">{o.startTime ?? t('meet.allDay')}</td>
+                      <td className="px-4 py-3 text-fg">{o.title}</td>
+                      <td className="px-4 py-3 text-fg-secondary">
                         {o.projectName ? (
                           <span className="inline-flex items-center gap-1.5">
                             {projectDotClass && <span className={`inline-block size-2 shrink-0 rounded-full ${projectDotClass(o.projectId)}`} />}

@@ -21,13 +21,13 @@ export function UsageTrendChart({ series }: { series: DailyActive[] }) {
         <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="일별 활성 사용자 추이">
           {[0, max].map(g => (
             <g key={g}>
-              <line x1={PL} x2={W - PR} y1={y(g)} y2={y(g)} className="stroke-line" strokeWidth={1} />
-              <text x={PL - 6} y={y(g) + 3} textAnchor="end" fontSize={9} className="fill-ink-subtle">{g}</text>
+              <line x1={PL} x2={W - PR} y1={y(g)} y2={y(g)} className="stroke-border" strokeWidth={1} />
+              <text x={PL - 6} y={y(g) + 3} textAnchor="end" fontSize={9} className="fill-fg-muted">{g}</text>
             </g>
           ))}
-          <polyline points={points} fill="none" className="stroke-brand" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-          <text x={PL} y={H - 6} fontSize={9} className="fill-ink-subtle">{series[0]?.d ?? ''}</text>
-          <text x={W - PR} y={H - 6} textAnchor="end" fontSize={9} className="fill-ink-subtle">{series[series.length - 1]?.d ?? ''}</text>
+          <polyline points={points} fill="none" className="stroke-action" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <text x={PL} y={H - 6} fontSize={9} className="fill-fg-muted">{series[0]?.d ?? ''}</text>
+          <text x={W - PR} y={H - 6} textAnchor="end" fontSize={9} className="fill-fg-muted">{series[series.length - 1]?.d ?? ''}</text>
         </svg>
       )}
     </SectionCard>

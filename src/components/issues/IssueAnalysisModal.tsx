@@ -160,26 +160,26 @@ export function IssueAnalysisModal({
       footer={footer}
     >
       <div className="space-y-5">
-        <p className="text-sm leading-6 text-ink-muted">{t('issue.analysis.desc')}</p>
+        <p className="text-sm leading-6 text-fg-secondary">{t('issue.analysis.desc')}</p>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface-2 px-4 py-3">
-          <span className="text-xs font-medium text-ink-muted">{t('issue.analysis.scope')}</span>
-          <span className="chip bg-brand-weak text-brand">{scopeLabel}</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface-subtle px-4 py-3">
+          <span className="text-xs font-medium text-fg-secondary">{t('issue.analysis.scope')}</span>
+          <span className="chip bg-action-soft text-action">{scopeLabel}</span>
         </div>
 
         <section className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-done/30 bg-done-weak p-4">
-            <div className="text-xs font-semibold text-done">
+          <div className="rounded-2xl border border-success/30 bg-success-weak p-4">
+            <div className="text-xs font-semibold text-success">
               {t('issue.analysis.readyCount').replace('{n}', String(preflight.readyCount))}
             </div>
           </div>
           <div className={`rounded-2xl border p-4 ${
             preflight.blockedCount > 0
-              ? 'border-delayed/30 bg-delayed-weak'
-              : 'border-line bg-surface-2'
+              ? 'border-danger/30 bg-danger-weak'
+              : 'border-border bg-surface-subtle'
           }`}>
             <div className={`text-xs font-semibold ${
-              preflight.blockedCount > 0 ? 'text-delayed' : 'text-ink-muted'
+              preflight.blockedCount > 0 ? 'text-danger' : 'text-fg-secondary'
             }`}>
               {t('issue.analysis.blockedCount').replace('{n}', String(preflight.blockedCount))}
             </div>
@@ -188,12 +188,12 @@ export function IssueAnalysisModal({
 
         {populatedAreas.length > 0 && (
           <section>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
               {t('issue.analysis.area')}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {populatedAreas.map(area => (
-                <span key={area.areaCode} className="chip bg-surface-2 text-ink">
+                <span key={area.areaCode} className="chip bg-surface-subtle text-fg">
                   {area.areaCode} · {area.areaName} {area.count}
                 </span>
               ))}
@@ -202,18 +202,18 @@ export function IssueAnalysisModal({
         )}
 
         {preflight.totalCount === 0 ? (
-          <div className="flex items-start gap-2 rounded-2xl border border-line bg-surface-2 p-4 text-sm text-ink-muted">
+          <div className="flex items-start gap-2 rounded-2xl border border-border bg-surface-subtle p-4 text-sm text-fg-secondary">
             <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
             {t('issue.empty.title')}
           </div>
         ) : preflight.blockedCount === 0 ? (
-          <div className="flex items-start gap-2 rounded-2xl border border-done/30 bg-done-weak p-4 text-sm text-done">
+          <div className="flex items-start gap-2 rounded-2xl border border-success/30 bg-success-weak p-4 text-sm text-success">
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
             {t('issue.analysis.preflightOk')}
           </div>
         ) : (
-          <section className="rounded-2xl border border-delayed/30 bg-delayed-weak p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-delayed">
+          <section className="rounded-2xl border border-danger/30 bg-danger-weak p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-danger">
               <AlertTriangle className="h-4 w-4" />
               {t('issue.analysis.blockedTitle')}
             </div>
@@ -222,11 +222,11 @@ export function IssueAnalysisModal({
                 <Link
                   key={issue.id}
                   href={`/p/${encodeURIComponent(projectId)}/issues?focus=${encodeURIComponent(issue.id)}`}
-                  className="block rounded-xl border border-delayed/20 bg-surface px-3 py-2 transition hover:border-delayed/50"
+                  className="block rounded-xl border border-danger/20 bg-surface px-3 py-2 transition hover:border-danger/50"
                   onClick={onClose}
                 >
-                  <div className="text-xs font-semibold text-ink">{issue.label}</div>
-                  <div className="mt-1 text-[11px] leading-5 text-ink-muted">
+                  <div className="text-xs font-semibold text-fg">{issue.label}</div>
+                  <div className="mt-1 text-[11px] leading-5 text-fg-secondary">
                     {issue.reasons.join(' · ')}
                   </div>
                 </Link>
@@ -236,7 +236,7 @@ export function IssueAnalysisModal({
         )}
 
         {error && (
-          <div className="flex items-start gap-2 rounded-2xl border border-delayed/40 bg-delayed-weak p-4 text-sm text-delayed">
+          <div className="flex items-start gap-2 rounded-2xl border border-danger/40 bg-danger-weak p-4 text-sm text-danger">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             {error}
           </div>
@@ -245,12 +245,12 @@ export function IssueAnalysisModal({
         {result && (
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-brand" />
-              <h3 className="text-sm font-semibold text-ink">{t('issue.analysis.opportunities')}</h3>
+              <Sparkles className="h-4 w-4 text-action" />
+              <h3 className="text-sm font-semibold text-fg">{t('issue.analysis.opportunities')}</h3>
             </div>
             {result.analysis.areas.filter(area => area.opportunities.length > 0).map(area => (
-              <div key={area.areaCode} className="rounded-2xl border border-line bg-surface-2 p-4">
-                <div className="text-xs font-semibold text-ink">
+              <div key={area.areaCode} className="rounded-2xl border border-border bg-surface-subtle p-4">
+                <div className="text-xs font-semibold text-fg">
                   {area.areaCode} · {area.areaName}
                 </div>
                 <div className="mt-3 space-y-3">
@@ -259,14 +259,14 @@ export function IssueAnalysisModal({
                       .map(id => area.issues.find(issue => issue.id === id)?.code)
                       .filter((code): code is string => Boolean(code))
                     return (
-                      <article key={`${area.areaCode}-${index}`} className="rounded-xl border border-line bg-surface p-3">
-                        <div className="text-sm font-semibold text-ink">{opportunity.title}</div>
-                        <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-ink-muted">
+                      <article key={`${area.areaCode}-${index}`} className="rounded-xl border border-border bg-surface p-3">
+                        <div className="text-sm font-semibold text-fg">{opportunity.title}</div>
+                        <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-fg-secondary">
                           {opportunity.description}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-1">
                           {issueCodes.map(code => (
-                            <span key={code} className="chip bg-brand-weak text-brand">{code}</span>
+                            <span key={code} className="chip bg-action-soft text-action">{code}</span>
                           ))}
                         </div>
                       </article>

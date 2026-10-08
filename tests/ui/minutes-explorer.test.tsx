@@ -374,10 +374,10 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
   it('dragOver 하이라이트: 수락 대상은 brand, 거부 대상은 delayed', async () => {
     await mount()
     await dragOver(dropTarget('f-aps'), dropTarget('__root__'))
-    expect(dropTarget('__root__').className).toContain('ring-brand-ring')
+    expect(dropTarget('__root__').className).toContain('ring-border-focus')
     await mount()
     await dragOver(dropTarget('f-plan'), dropTarget('f-aps'))   // 자손 = 순환 거부
-    expect(dropTarget('f-aps').className).toContain('ring-delayed')
+    expect(dropTarget('f-aps').className).toContain('ring-danger')
   })
 
   it('회의록 카드의 전면 링크는 draggable=false — 카드 대신 링크가 끌리지 않게', async () => {

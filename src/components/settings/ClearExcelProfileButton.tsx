@@ -69,7 +69,7 @@ export function ClearExcelProfileButton({ projectId, revision }: { projectId: st
           </>
         }
       >
-        <p className="text-sm leading-6 text-ink-muted">{t('settings.clearExcelProfileConfirmBody')}</p>
+        <p className="text-sm leading-6 text-fg-secondary">{t('settings.clearExcelProfileConfirmBody')}</p>
       </Modal>
     </>
   )

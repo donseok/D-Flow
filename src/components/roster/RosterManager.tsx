@@ -74,7 +74,7 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
       <div className="overflow-x-auto">
         <table className="w-full min-w-[880px] text-sm">
           <thead>
-            <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+            <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
               <th className="py-2 pr-3">이름</th>
               <th className="py-2 pr-3">이메일</th>
               <th className="py-2 pr-3">팀</th>
@@ -89,7 +89,7 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={ROSTER_COLUMNS} className="py-4 text-center text-ink-subtle">
+                <td colSpan={ROSTER_COLUMNS} className="py-4 text-center text-fg-muted">
                   아직 명단에 사람이 없습니다.{canEdit ? ' 아래에서 추가하세요.' : ''}
                 </td>
               </tr>
@@ -108,9 +108,9 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
       </div>
 
       {canEdit && (
-        <form onSubmit={add} className="rounded-xl border border-line bg-surface-2/40 p-3" aria-label="사람 추가">
+        <form onSubmit={add} className="rounded-xl border border-border bg-surface-subtle/40 p-3" aria-label="사람 추가">
           <div className="flex flex-wrap items-center gap-2">
-            <UserPlus className="h-4 w-4 shrink-0 text-ink-subtle" aria-hidden />
+            <UserPlus className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
             <input className="app-input h-8 w-40 text-xs" aria-label="추가할 사람 이름" placeholder="이름" value={name}
               disabled={pending} onChange={e => { setName(e.target.value); setAddError(null); setDuplicate(null); setAdded(null) }} />
             <input className="app-input h-8 w-56 text-xs" aria-label="추가할 사람 이메일(선택)" placeholder="이메일(선택 — 없으면 외부 인력)"
@@ -119,12 +119,12 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
               {pending ? '추가 중…' : '사람 추가'}
             </button>
           </div>
-          <p className="mt-2 text-xs text-ink-subtle">
+          <p className="mt-2 text-xs text-fg-muted">
             추가한 뒤 표에서 팀·역할·권한을 정합니다. 이메일 없이 추가한 사람은 계정이 없는 외부 인력이라 권한을 줄 수 없습니다.
           </p>
-          {existingNotice && <p role="status" className="mt-2 text-xs font-medium text-ink">{existingNotice}</p>}
+          {existingNotice && <p role="status" className="mt-2 text-xs font-medium text-fg">{existingNotice}</p>}
           {addError && (
-            <p role="alert" className="mt-2 text-xs font-medium text-delayed">
+            <p role="alert" className="mt-2 text-xs font-medium text-danger">
               {addError}
               {duplicate && (
                 <button type="button" className="ml-2 underline" onClick={() => selectExisting(duplicate)}>

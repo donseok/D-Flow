@@ -12,7 +12,7 @@ export function OwnerBadges({
   nowrap?: boolean
 }) {
   const slotOf = useTeamSlot()
-  if (!owners.length) return <span className="text-ink-subtle">-</span>
+  if (!owners.length) return <span className="text-fg-muted">-</span>
   return (
     <div className={`flex items-center gap-x-1.5 gap-y-0.5 overflow-hidden ${nowrap ? 'flex-nowrap' : 'flex-wrap'}`}>
       {owners.map(o => (
@@ -28,7 +28,7 @@ export function OwnerBadges({
           >
             {o.kind === 'primary' ? '●' : '△'}
           </span>
-          <span className="text-ink-muted">{o.team}</span>
+          <span className="text-fg-secondary">{o.team}</span>
         </span>
       ))}
     </div>

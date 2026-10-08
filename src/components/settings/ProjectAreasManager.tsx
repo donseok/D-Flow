@@ -109,8 +109,8 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
 
   return (
     <section className="card overflow-hidden" data-area-editor={kind}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
-        <p className="text-sm font-semibold text-ink">{label} {rows.length}개</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
+        <p className="text-sm font-semibold text-fg">{label} {rows.length}개</p>
         <button type="button" onClick={startNew} className="btn btn-primary" disabled={pending}>
           <Plus className="h-4 w-4" />{text.new}
         </button>
@@ -118,12 +118,12 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
 
       <div className="p-5 sm:p-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-ink-subtle">{locale === 'ko' ? `아직 ${label}이 없습니다. ${text.empty}` : text.empty}</p>
+          <p className="text-sm text-fg-muted">{locale === 'ko' ? `아직 ${label}이 없습니다. ${text.empty}` : text.empty}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-ink-subtle">
+                <tr className="border-b border-border text-left text-fg-muted">
                   <th className="py-2 pr-3">{text.order}</th>
                   <th className="py-2 pr-3">{text.code}</th>
                   <th className="py-2 pr-3">{text.name}</th>
@@ -134,21 +134,21 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
               </thead>
               <tbody>
                 {rows.map(a => (
-                  <tr key={a.id} data-area-row={a.code} className={`border-b border-line/60 ${a.active ? '' : 'opacity-60'}`}>
+                  <tr key={a.id} data-area-row={a.code} className={`border-b border-border/60 ${a.active ? '' : 'opacity-60'}`}>
                     <td className="py-2.5 pr-3 tabular-nums">{a.sortOrder}</td>
-                    <td className="py-2.5 pr-3 text-xs font-semibold text-ink-muted">{a.code}</td>
-                    <td className="py-2.5 pr-3 font-medium text-ink">{a.name}</td>
+                    <td className="py-2.5 pr-3 text-xs font-semibold text-fg-secondary">{a.code}</td>
+                    <td className="py-2.5 pr-3 font-medium text-fg">{a.name}</td>
                     <td className="py-2.5 pr-3">
                       <span className="flex flex-wrap gap-1">
-                        {a.teams.length === 0 ? <span className="text-ink-subtle">—</span> : a.teams.map(t => (
-                          <span key={t.teamId} className={`chip bg-surface-2 ${t.kind === 'primary' ? 'font-semibold text-ink' : 'text-ink-muted'}`}>
+                        {a.teams.length === 0 ? <span className="text-fg-muted">—</span> : a.teams.map(t => (
+                          <span key={t.teamId} className={`chip bg-surface-subtle ${t.kind === 'primary' ? 'font-semibold text-fg' : 'text-fg-secondary'}`}>
                             {teamLabel(t.teamId)} · {TEAM_KIND_LABEL[t.kind]}
                           </span>
                         ))}
                       </span>
                     </td>
                     <td className="py-2.5 pr-3">
-                      <span className={`chip ${a.active ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'}`}>
+                      <span className={`chip ${a.active ? 'bg-success-weak text-success' : 'bg-surface-subtle text-fg-muted'}`}>
                         {a.active ? text.active : text.inactive}
                       </span>
                     </td>
@@ -167,36 +167,36 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
 
         {draft && (
           <form className="panel-soft mt-4 space-y-4 p-5" onSubmit={e => { e.preventDefault(); save() }}>
-            <p className="text-sm font-semibold text-ink">{draft.id ? `${label} ${text.edit}` : `새 ${label}`}</p>
-            {error && <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{error}</p>}
+            <p className="text-sm font-semibold text-fg">{draft.id ? `${label} ${text.edit}` : `새 ${label}`}</p>
+            {error && <p role="alert" className="rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{error}</p>}
             <div className="grid gap-3 sm:grid-cols-[10rem_1fr_6rem]">
-              <label className="flex flex-col gap-1 text-xs text-ink-muted">
+              <label className="flex flex-col gap-1 text-xs text-fg-secondary">
                 {text.code}{issueArea ? ' · 영문 대문자·숫자 1~8자' : ''}
-                <input className={`app-input ${draft.id ? 'bg-surface-2 text-ink-muted' : ''}`} value={draft.code} readOnly={!!draft.id} aria-readonly={!!draft.id}
+                <input className={`app-input ${draft.id ? 'bg-surface-subtle text-fg-secondary' : ''}`} value={draft.code} readOnly={!!draft.id} aria-readonly={!!draft.id}
                   data-area-code
                   pattern={issueArea ? ISSUE_AREA_CODE_RE.source.replace(/^\^|\$$/g, '') : undefined}
                   title={draft.id ? '코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.' : issueArea ? '이슈 코드의 {area} 자리에 들어갑니다. 만든 뒤 바꿀 수 없습니다.' : '이름으로 미리 채웁니다. 저장한 뒤에는 바꿀 수 없습니다.'}
                   onChange={e => setDraft({ ...draft, code: e.target.value, codeTouched: true })} disabled={pending} />
               </label>
-              <label className="flex flex-col gap-1 text-xs text-ink-muted">
+              <label className="flex flex-col gap-1 text-xs text-fg-secondary">
                 {text.name}
                 <input className="app-input" value={draft.name} data-area-name
                   onChange={e => setName(e.target.value)} disabled={pending} />
               </label>
-              <label className="flex flex-col gap-1 text-xs text-ink-muted">
+              <label className="flex flex-col gap-1 text-xs text-fg-secondary">
                 {text.order}
                 <input className="app-input" type="number" step={1} value={draft.sortOrder} data-area-order
                   onChange={e => setDraft({ ...draft, sortOrder: e.target.value })} disabled={pending} />
               </label>
             </div>
             <fieldset className="space-y-2">
-              <legend className="text-xs text-ink-muted">{text.teams}</legend>
+              <legend className="text-xs text-fg-secondary">{text.teams}</legend>
               {formTeams.length === 0 ? (
-                <p className="text-xs text-ink-subtle">이 프로젝트에 팀이 없습니다.</p>
+                <p className="text-xs text-fg-muted">이 프로젝트에 팀이 없습니다.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {formTeams.map(t => (
-                    <label key={t.id} className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-line px-2 py-1 text-xs ${t.active ? 'text-ink' : 'text-ink-subtle'}`}>
+                    <label key={t.id} className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs ${t.active ? 'text-fg' : 'text-fg-muted'}`}>
                       {t.active ? t.code : `${t.code}(비활성)`}
                       <select className="app-input h-7 py-0 text-xs" value={draft.teams[t.id] ?? ''} data-area-team={t.code}
                         aria-label={`${t.code} 담당 구분`}
@@ -210,19 +210,19 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
                 </div>
               )}
             </fieldset>
-            <label className="flex items-center gap-2 text-sm text-ink">
+            <label className="flex items-center gap-2 text-sm text-fg">
               <input type="checkbox" checked={draft.active} data-area-active
                 onChange={e => setDraft({ ...draft, active: e.target.checked })} disabled={pending} />
               활성
             </label>
-            {!draft.active && <p data-area-deactivate-note className="text-xs leading-5 text-ink-muted">{DEACTIVATE_NOTE}</p>}
+            {!draft.active && <p data-area-deactivate-note className="text-xs leading-5 text-fg-secondary">{DEACTIVATE_NOTE}</p>}
             <SettingsSaveBar tone="subtle">
               <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => { setDraft(null); setError(null) }}>취소</button>
               <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? '저장 중…' : '저장'}</button>
             </SettingsSaveBar>
           </form>
         )}
-        <p className="mt-3 text-xs leading-5 text-ink-subtle">
+        <p className="mt-3 text-xs leading-5 text-fg-muted">
           영역 코드는 만든 뒤 바꿀 수 없습니다. 쓰지 않는 영역은 비활성으로 두세요.
         </p>
       </div>

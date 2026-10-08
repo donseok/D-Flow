@@ -703,7 +703,7 @@ export function MinuteViewer({
       {/* 메타 헤더 — 메타·액션 단일 행(접기 없음). 좁은 폭에서만 wrap */}
       <div className="card shrink-0 space-y-2 px-4 py-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <Link href={listHref} className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
+          <Link href={listHref} className="inline-flex items-center gap-1 text-sm text-fg-secondary hover:text-fg">
             <ArrowLeft className="h-4 w-4" />{t('min.detail.back')}
           </Link>
           {/* 편철 위치 — 팀 배지와 경로를 테두리 있는 한 덩어리 칩으로 묶어 메타 행 맨 앞에 둔다.
@@ -711,33 +711,33 @@ export function MinuteViewer({
               별도 줄로 빼지 않는 이유는 90627c7 — 헤더가 두 줄로 커진다.
               표시 전용 링크 아님 — 탐색기가 아직 폴더 딥링크(?folder=)를 받지 않는다. */}
           <div className={`inline-flex min-w-0 max-w-[22rem] items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 shadow-sm ${
-            pathSegments ? 'border-line-strong bg-surface' : 'border-dashed border-line-strong bg-surface/60'}`}>
+            pathSegments ? 'border-border-input bg-surface' : 'border-dashed border-border-input bg-surface/60'}`}>
             <TeamBar code={minute.teamCode} shape="pill" />
             <nav aria-label={t('min.detail.pathAria')} title={pathTitle}
               className="flex min-w-0 items-center gap-1 text-xs">
-              <FolderOpen aria-hidden className={`h-3.5 w-3.5 shrink-0 ${pathSegments ? 'text-brand' : 'text-ink-subtle'}`} />
+              <FolderOpen aria-hidden className={`h-3.5 w-3.5 shrink-0 ${pathSegments ? 'text-action' : 'text-fg-muted'}`} />
               {pathSegments ? (
                 pathSegments.map((seg, i) => (
                   <span key={`${i}-${seg}`} className="flex min-w-0 items-center gap-1">
-                    {i > 0 && <ChevronRight aria-hidden className="h-3 w-3 shrink-0 text-ink-subtle" />}
+                    {i > 0 && <ChevronRight aria-hidden className="h-3 w-3 shrink-0 text-fg-muted" />}
                     {/* 현재 위치(마지막 칸)는 줄이지 않고 조상부터 줄인다 — 어디에 있는지가 먼저다 */}
                     <span className={i === pathSegments.length - 1
-                      ? 'max-w-[11rem] shrink-0 truncate font-semibold text-ink'
-                      : 'truncate text-ink-muted'}>
+                      ? 'max-w-[11rem] shrink-0 truncate font-semibold text-fg'
+                      : 'truncate text-fg-secondary'}>
                       {seg}
                     </span>
                   </span>
                 ))
               ) : (
                 // folderId 가 있는데 경로가 없다 = 조회 실패이거나 끊긴 체인. '미분류'로 위장하지 않는다.
-                <span className={`truncate ${minute.folderId ? 'font-medium text-delayed' : 'text-ink-subtle'}`}>
+                <span className={`truncate ${minute.folderId ? 'font-medium text-danger' : 'text-fg-muted'}`}>
                   {minute.folderId ? t('min.detail.pathUnknown') : t('min.fold.unfiled')}
                 </span>
               )}
             </nav>
           </div>
-          <span className="text-sm tabular-nums text-ink-muted">{minute.minuteDate}</span>
-          <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-ink">{minute.title}</h1>
+          <span className="text-sm tabular-nums text-fg-secondary">{minute.minuteDate}</span>
+          <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-fg">{minute.title}</h1>
 
           <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
             {bodyFile ? (
@@ -751,7 +751,7 @@ export function MinuteViewer({
             )}
             {minute.meetingId && minute.meetingProjectId && (
               <Link href={`/p/${minute.meetingProjectId}/meetings`}
-                className="inline-flex items-center gap-1 text-xs text-brand underline underline-offset-2 hover:text-brand-hover">
+                className="inline-flex items-center gap-1 text-xs text-action underline underline-offset-2 hover:text-action-hover">
                 <ExternalLink className="h-3.5 w-3.5" />{t('min.detail.linkedMeeting')}
               </Link>
             )}
@@ -765,12 +765,12 @@ export function MinuteViewer({
                   {t('min.detail.replaceBody')}
                   <input type="file" accept=".md,.markdown" className="hidden" onChange={onReplaceBody} />
                 </label>
-                <button onClick={() => setConfirmOpen(true)} className="btn h-8 px-2.5 text-xs text-delayed">
+                <button onClick={() => setConfirmOpen(true)} className="btn h-8 px-2.5 text-xs text-danger">
                   {t('min.detail.delete')}
                 </button>
               </>
             )}
-            <span className="text-xs text-ink-subtle">{minute.createdByName ?? ''}</span>
+            <span className="text-xs text-fg-muted">{minute.createdByName ?? ''}</span>
             <MinuteFontSizeControl
               size={fs.size} onDec={fs.dec} onInc={fs.inc} onReset={fs.reset}
               canDec={fs.canDec} canInc={fs.canInc}
@@ -778,13 +778,13 @@ export function MinuteViewer({
             <button onClick={() => setFocus(f => !f)}
               title={focus ? t('min.focus.off') : t('min.focus.on')}
               aria-label={focus ? t('min.focus.off') : t('min.focus.on')} aria-pressed={focus}
-              className={`inline-flex items-center gap-1 text-xs ${focus ? 'text-brand' : 'text-ink-muted hover:text-ink'}`}>
+              className={`inline-flex items-center gap-1 text-xs ${focus ? 'text-action' : 'text-fg-secondary hover:text-fg'}`}>
               {focus ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               {t('min.focus.on')}
             </button>
           </div>
         </div>
-        {err && <p className="text-sm text-delayed">{err}</p>}
+        {err && <p className="text-sm text-danger">{err}</p>}
       </div>
 
       <div className="px-4 py-2">
@@ -793,20 +793,20 @@ export function MinuteViewer({
           publicationState="saved" latestHref={currentHref} documentType="minute" />
       </div>
       {historicalVersion && (
-        <div className="card flex shrink-0 flex-wrap items-center gap-2 border-brand/30 bg-brand-weak/35 px-4 py-2">
-          <History className="h-4 w-4 text-brand" aria-hidden />
-          <p className="text-sm font-medium text-ink">
+        <div className="card flex shrink-0 flex-wrap items-center gap-2 border-action/30 bg-action-soft/35 px-4 py-2">
+          <History className="h-4 w-4 text-action" aria-hidden />
+          <p className="text-sm font-medium text-fg">
             {t('min.version.viewingBanner').replace('{n}', String(historicalVersion.versionNo))}
           </p>
-          <Link href={currentHref} className="ml-auto text-xs font-medium text-brand hover:text-brand-hover">
+          <Link href={currentHref} className="ml-auto text-xs font-medium text-action hover:text-action-hover">
             {t('min.version.backCurrent')}
           </Link>
         </div>
       )}
       {minute.archivedAt && !historicalVersion && (
-        <div className="card flex shrink-0 items-center gap-2 border-line-strong bg-surface-2 px-4 py-2">
-          <History className="h-4 w-4 text-ink-muted" aria-hidden />
-          <p className="text-sm font-medium text-ink">{t('min.archive.banner')}</p>
+        <div className="card flex shrink-0 items-center gap-2 border-border-input bg-surface-subtle px-4 py-2">
+          <History className="h-4 w-4 text-fg-secondary" aria-hidden />
+          <p className="text-sm font-medium text-fg">{t('min.archive.banner')}</p>
         </div>
       )}
 
@@ -925,9 +925,9 @@ export function MinuteViewer({
         }
       >
         <div className="space-y-3">
-          <p className="text-sm leading-6 text-ink-muted">{t('min.issue.projectDesc')}</p>
+          <p className="text-sm leading-6 text-fg-secondary">{t('min.issue.projectDesc')}</p>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('min.form.project')}</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('min.form.project')}</span>
             <select
               className="app-input"
               value={issueProjectId}
@@ -944,7 +944,7 @@ export function MinuteViewer({
               ))}
             </select>
           </label>
-          {issueProjectError && <p className="text-sm text-delayed">{issueProjectError}</p>}
+          {issueProjectError && <p className="text-sm text-danger">{issueProjectError}</p>}
         </div>
       </Modal>
 
@@ -988,12 +988,12 @@ export function MinuteViewer({
         footer={
           <div className="flex justify-end gap-2">
             <button onClick={() => setConfirmOpen(false)} className="btn">{t('common.cancel')}</button>
-            <button onClick={() => { setConfirmOpen(false); void onDelete() }} disabled={busy} className="btn text-delayed">
+            <button onClick={() => { setConfirmOpen(false); void onDelete() }} disabled={busy} className="btn text-danger">
               {t('min.detail.delete')}
             </button>
           </div>
         }>
-        <p className="text-sm text-ink">{t('min.detail.deleteConfirm')}</p>
+        <p className="text-sm text-fg">{t('min.detail.deleteConfirm')}</p>
       </Modal>
     </div>
   )

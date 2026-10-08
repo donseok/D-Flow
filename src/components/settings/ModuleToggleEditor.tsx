@@ -102,25 +102,25 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
     startTransition(async () => submit(patch))
   }
 
-  const row = (o: ProjectModuleOption) => <label key={o.id} className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+  const row = (o: ProjectModuleOption) => <label key={o.id} className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm">
     <input type="checkbox" checked={selected.includes(o.id)} disabled={pending || !!uncertainPatch} onChange={() => toggle(o.id)} />
-    <span>{o.label}</span><span className="ml-auto text-xs text-ink-subtle">{o.id}</span>
+    <span>{o.label}</span><span className="ml-auto text-xs text-fg-muted">{o.id}</span>
   </label>
 
   return <div className="space-y-4">
-    <p className="text-xs leading-5 text-ink-muted">사용할 프로젝트 모듈을 선택합니다. 꺼도 기존 데이터는 삭제되지 않습니다.</p>
+    <p className="text-xs leading-5 text-fg-secondary">사용할 프로젝트 모듈을 선택합니다. 꺼도 기존 데이터는 삭제되지 않습니다.</p>
     {needsRepair && (invalidReason || requiredMissing) && <ConfigStateNotice kind={requiredMissing ? 'required' : 'invalid'} locale={locale}
       keyName="modules.enabled" message={invalidReason} isAdmin settingsHref="#project-modules" />}
     <div className="grid gap-2 sm:grid-cols-2">{enabledRows.map(row)}</div>
-    {disabledRows.length > 0 && <details className="rounded-xl border border-line p-3">
-      <summary className="cursor-pointer text-sm font-medium text-ink">꺼진 모듈 ({disabledRows.length})</summary>
+    {disabledRows.length > 0 && <details className="rounded-xl border border-border p-3">
+      <summary className="cursor-pointer text-sm font-medium text-fg">꺼진 모듈 ({disabledRows.length})</summary>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">{disabledRows.map(row)}</div>
     </details>}
     {retained.length > 0 && <div className="rounded-xl border border-pending/30 bg-pending-weak p-3 text-xs">
       <p className="font-semibold">워크스페이스 미허용 또는 배포 비가용 — 저장값 유지</p>
       <p>{retained.map(o => o.label).join(', ')}</p>
     </div>}
-    {unavailable.length > 0 && <p className="text-xs text-ink-subtle">이 배포/계약에서 사용할 수 없는 모듈: {unavailable.map(o => o.label).join(', ')}</p>}
+    {unavailable.length > 0 && <p className="text-xs text-fg-muted">이 배포/계약에서 사용할 수 없는 모듈: {unavailable.map(o => o.label).join(', ')}</p>}
     {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
       <strong>다른 사용자가 모듈 설정을 바꿨습니다.</strong>
@@ -131,7 +131,7 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
         {conflict.enabled !== null && <button type="button" className="btn btn-ghost" onClick={() => { setSelected(conflict.enabled!); setBaseline(conflict.enabled!); setNeedsRepair(false); setBaseRevision(conflict.revision); setConflict(null) }}>최신 값 사용</button>}
       </div>
     </div>}
-    {review && <div className="space-y-1 rounded-xl border border-brand-ring bg-brand-weak/30 p-4 text-sm">
+    {review && <div className="space-y-1 rounded-xl border border-border-focus bg-action-soft/30 p-4 text-sm">
       <strong>변경 내용 검토</strong>
       <p>추가: {selected.filter(id => !baseline.includes(id)).map(label).join(', ') || '없음'}</p>
       <p>제외: {baseline.filter(id => !selected.includes(id)).map(label).join(', ') || '없음'}</p>

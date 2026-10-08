@@ -129,15 +129,15 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
 
   return (
     <div className="space-y-4">
-      <p className="text-sm leading-6 text-ink-muted">프로젝트 관리자가 켤 수 있는 모듈을 고릅니다. 허용에서 빼도 기존 데이터는 삭제되지 않습니다.</p>
+      <p className="text-sm leading-6 text-fg-secondary">프로젝트 관리자가 켤 수 있는 모듈을 고릅니다. 허용에서 빼도 기존 데이터는 삭제되지 않습니다.</p>
       {needsRepair && (invalidReason || requiredMissing) && <ConfigStateNotice kind={requiredMissing ? 'required' : 'invalid'} locale={locale}
         keyName="modules.allowed" message={invalidReason} isAdmin settingsHref="#workspace-modules" />}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {NON_CORE_MODULES.map(id => (
-          <label key={id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink">
+          <label key={id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg">
             <input type="checkbox" checked={selected.includes(id)} disabled={pending || !!uncertainPatch} onChange={() => toggle(id)} />
             <span>{LABEL[id as keyof typeof LABEL]}</span>
-            <span className="ml-auto text-[11px] text-ink-subtle">{id}</span>
+            <span className="ml-auto text-[11px] text-fg-muted">{id}</span>
           </label>
         ))}
       </div>
@@ -154,7 +154,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
         </div>
       )}
       {review && (
-        <div className="space-y-2 rounded-xl border border-brand-ring bg-brand-weak/30 p-4 text-sm">
+        <div className="space-y-2 rounded-xl border border-border-focus bg-action-soft/30 p-4 text-sm">
           <strong>변경 내용 검토</strong>
           <p>추가: {selected.filter(id => !baseline.includes(id)).map(id => LABEL[id as keyof typeof LABEL]).join(', ') || '없음'}</p>
           <p>제외: {baseline.filter(id => !selected.includes(id)).map(id => LABEL[id as keyof typeof LABEL]).join(', ') || '없음'}</p>

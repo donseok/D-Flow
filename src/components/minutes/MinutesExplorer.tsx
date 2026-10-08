@@ -77,7 +77,7 @@ const DROP_REJECT_KEY: Record<MinuteDropReject, DictKey> = {
 
 const rowCls = (active: boolean) =>
   `flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 ${
-    active ? 'bg-brand-weak font-semibold text-brand' : 'text-ink hover:bg-surface-2'}`
+    active ? 'bg-action-soft font-semibold text-action' : 'text-fg hover:bg-surface-subtle'}`
 
 /** 탐색기 v2 — 실제 폴더 디렉토리(스펙 2026-07-23-minutes-folders-design.md).
  *  데이터·즐겨찾기·레이아웃 상태는 MinutesView 소유. 여기는 선택·펼침·노출 개수·모달만 관리(비영속).
@@ -419,8 +419,8 @@ export function MinutesExplorer({
         onDrop: (e: React.DragEvent) => { e.preventDefault(); void handleDrop(target) },
       },
       cls: !over || v.kind === 'noop' ? ''
-        : v.kind === 'move' ? 'bg-brand-weak ring-2 ring-brand-ring'
-          : 'bg-delayed-weak ring-2 ring-delayed',
+        : v.kind === 'move' ? 'bg-action-soft ring-2 ring-border-focus'
+          : 'bg-danger-weak ring-2 ring-danger',
     }
   }
 
@@ -475,45 +475,45 @@ export function MinutesExplorer({
           style={{ paddingLeft: `${depth * 12}px` }}>
           {hasChildren ? (
             <button onClick={() => toggleExpand(f.id)} aria-expanded={isExpanded} aria-label={f.name}
-              className="shrink-0 rounded-md p-1 text-ink-subtle transition-colors duration-100 hover:bg-surface-2">
+              className="shrink-0 rounded-md p-1 text-fg-muted transition-colors duration-100 hover:bg-surface-subtle">
               <ChevronRight aria-hidden
                 className={`h-3.5 w-3.5 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
             </button>
           ) : <span aria-hidden className="w-[22px] shrink-0" />}
           <button onClick={() => select({ kind: 'folder', id: f.id })} className={rowCls(active)}>
-            <FolderIcon aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
+            <FolderIcon aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
             <span className="min-w-0 flex-1 truncate text-[13px]">{f.name}</span>
-            <span className="shrink-0 text-xs tabular-nums text-ink-muted">{node.totalCount}</span>
+            <span className="shrink-0 text-xs tabular-nums text-fg-secondary">{node.totalCount}</span>
           </button>
           {canManageFolder(f) && (
             <div className="relative shrink-0">
               <button onClick={() => setMenuFor(cur => (cur === f.id ? null : f.id))}
                 aria-label={t('min.fold.menuAria')} aria-expanded={menuFor === f.id}
-                className="rounded-md p-1 text-ink-subtle opacity-0 transition-opacity duration-100 hover:bg-surface-2 focus-visible:opacity-100 group-hover:opacity-100">
+                className="rounded-md p-1 text-fg-muted opacity-0 transition-opacity duration-100 hover:bg-surface-subtle focus-visible:opacity-100 group-hover:opacity-100">
                 <MoreHorizontal aria-hidden className="h-3.5 w-3.5" />
               </button>
               {menuFor === f.id && (
                 <>
                   <button aria-hidden tabIndex={-1} onClick={() => setMenuFor(null)}
                     className="fixed inset-0 z-10 cursor-default" />
-                  <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-line bg-surface p-1 shadow-[var(--shadow-md)]">
+                  <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-border bg-surface p-1 shadow-[var(--shadow-md)]">
                     {/* 팀 루트 시드(편철 앵커)만 개명·삭제 불가 — 하위 폴더는 개명·삭제가
                         업로드·수정 모달의 하위 구분 옵션에 그대로 반영된다(서버 가드와 동일 기준) */}
                     {!isLockedRootFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'rename', folder: f }) }}
-                        className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-surface-2">
+                        className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-fg hover:bg-surface-subtle">
                         {t('min.fold.rename')}
                       </button>
                     )}
                     {folderDepthOf(folders, f.id) < MINUTE_FOLDER_DEPTH_MAX && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'create', parentId: f.id }) }}
-                        className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-surface-2">
+                        className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-fg hover:bg-surface-subtle">
                         {t('min.fold.addSub')}
                       </button>
                     )}
                     {!isLockedRootFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'delete', folder: f }) }}
-                        className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-delayed hover:bg-surface-2">
+                        className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-danger hover:bg-surface-subtle">
                         {t('min.fold.delete')}
                       </button>
                     )}
@@ -550,15 +550,15 @@ export function MinutesExplorer({
       return (
         <li key={gKey}>
           <button onClick={() => toggleExpand(gKey)} aria-expanded={isExpanded} aria-label={label}
-            className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-[13px] font-semibold text-ink-muted transition-colors duration-100 hover:bg-surface-2">
+            className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-[13px] font-semibold text-fg-secondary transition-colors duration-100 hover:bg-surface-subtle">
             <ChevronRight aria-hidden
               className={`h-3.5 w-3.5 shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
-            <BookOpenText aria-hidden className="h-4 w-4 shrink-0 text-brand" />
+            <BookOpenText aria-hidden className="h-4 w-4 shrink-0 text-action" />
             <span className="min-w-0 flex-1 truncate">{label}</span>
-            <span className="shrink-0 text-xs tabular-nums text-ink-muted">{group.leaves.length}</span>
+            <span className="shrink-0 text-xs tabular-nums text-fg-secondary">{group.leaves.length}</span>
           </button>
           {isExpanded && (
-            <ul className="ml-2 mt-0.5 border-l border-line pl-1.5">
+            <ul className="ml-2 mt-0.5 border-l border-border pl-1.5">
               {groupRoots.map(r => folderRow(r, 0))}
               {/* 미분류는 예외 버킷(폴더 삭제 강등분) — 0건이면 숨김. 자동 편철(0043) 후 평시엔 비어 있다.
                   단, 현재 스코프가 이 그룹의 미분류면 마지막 1건 이동 직후에도 행을 유지한다. */}
@@ -569,9 +569,9 @@ export function MinutesExplorer({
                     <span aria-hidden className="w-[22px] shrink-0" />
                     <button onClick={() => go({ kind: 'unfiled', projectId: group.projectId })}
                       className={rowCls(isUnfiledScope)}>
-                      <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
-                      <span className="min-w-0 flex-1 truncate text-[13px] text-ink-muted">{t('min.fold.unfiled')}</span>
-                      <span className="shrink-0 text-xs tabular-nums text-ink-muted">{groupUnfiled.length}</span>
+                      <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-fg-secondary">{t('min.fold.unfiled')}</span>
+                      <span className="shrink-0 text-xs tabular-nums text-fg-secondary">{groupUnfiled.length}</span>
                     </button>
                   </div>
                 </li>
@@ -586,29 +586,29 @@ export function MinutesExplorer({
       <ul className="space-y-0.5">
         <li>
           <button onClick={() => go({ kind: 'favorites' })} className={rowCls(scope.kind === 'favorites')}>
-            <Star aria-hidden className="h-4 w-4 shrink-0 fill-accent-warning text-accent-warning" />
+            <Star aria-hidden className="h-4 w-4 shrink-0 fill-warning text-warning" />
             <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{t('min.exp.favorites')}</span>
-            <span className="shrink-0 text-xs tabular-nums text-ink-muted">{favCount ?? '–'}</span>
+            <span className="shrink-0 text-xs tabular-nums text-fg-secondary">{favCount ?? '–'}</span>
           </button>
         </li>
         <li>
           <div data-drop-target={ROOT_KEY} {...rootDrop.handlers}
             className={`flex items-center gap-0.5 rounded-lg ${rootDrop.cls}`}>
             <button onClick={() => go({ kind: 'all' })} className={rowCls(scope.kind === 'all')}>
-              <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
+              <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
               <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{t('min.exp.all')}</span>
-              <span className="shrink-0 text-xs tabular-nums text-ink-muted">{total}</span>
+              <span className="shrink-0 text-xs tabular-nums text-fg-secondary">{total}</span>
             </button>
             <button onClick={() => setManage({ mode: 'create', parentId: null })}
               aria-label={t('min.fold.new')} title={t('min.fold.new')}
-              className="shrink-0 rounded-md p-1 text-ink-subtle transition-colors duration-100 hover:bg-surface-2 hover:text-ink">
+              className="shrink-0 rounded-md p-1 text-fg-muted transition-colors duration-100 hover:bg-surface-subtle hover:text-fg">
               <FolderPlus aria-hidden className="h-4 w-4" />
               <span className="sr-only">{t('min.fold.new')}</span>
             </button>
           </div>
           {/* 탐색기 최상위 = 프로젝트 그룹(0076) — 그룹 하나(전부 미지정)뿐이면 헤더 하나 아래
               종전과 같은 플랫 트리가 보인다. */}
-          <ul className="ml-2 mt-0.5 border-l border-line pl-1.5">
+          <ul className="ml-2 mt-0.5 border-l border-border pl-1.5">
             {trees.map(groupRow)}
           </ul>
         </li>
@@ -653,8 +653,8 @@ export function MinutesExplorer({
       </nav>
       <div className="card shrink-0 p-3 lg:hidden">
         <button onClick={() => setMobileOpen(o => !o)}
-          className="flex w-full items-center gap-2 text-sm font-semibold text-ink">
-          <Folder aria-hidden className="h-4 w-4 text-brand" />{t('min.exp.folders')}
+          className="flex w-full items-center gap-2 text-sm font-semibold text-fg">
+          <Folder aria-hidden className="h-4 w-4 text-action" />{t('min.exp.folders')}
           {mobileOpen
             ? <ChevronDown aria-hidden className="ml-auto h-4 w-4" />
             : <ChevronRight aria-hidden className="ml-auto h-4 w-4" />}
@@ -672,7 +672,7 @@ export function MinutesExplorer({
               rows 가 비어도 띄운다 — 빈 폴더로 들어갔을 때 [취소]가 사라지면 빠져나올 곳이 없다. */}
           {selecting && (
             <div className="card flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-              <span className="font-medium text-ink">
+              <span className="font-medium text-fg">
                 {t('min.exp.selectedN').replace('{n}', String(selectedIds.length))}
               </span>
               <button onClick={() => setSelected(prev => {
@@ -709,7 +709,7 @@ export function MinutesExplorer({
                 </div>
               ) : (
                 <div className="card p-2">
-                  <ul className="divide-y divide-line/70">
+                  <ul className="divide-y divide-border/70">
                     {shown.map(l => <MinuteRow key={l.id} {...leafItemProps(l)} />)}
                   </ul>
                 </div>
@@ -762,15 +762,15 @@ export function MinutesExplorer({
             </button>
             <button onClick={() => void archiveMinute()} disabled={archiveBusy}
               aria-busy={archiveBusy}
-              className="btn bg-delayed text-danger-fg hover:bg-delayed disabled:cursor-not-allowed disabled:opacity-50">
+              className="btn bg-danger text-danger-fg hover:bg-danger disabled:cursor-not-allowed disabled:opacity-50">
               {t('min.detail.delete')}
             </button>
           </div>
         }>
-        <div className="space-y-2 text-sm text-ink">
+        <div className="space-y-2 text-sm text-fg">
           {archiveTarget && <p className="font-semibold">{archiveTarget.title}</p>}
           <p>{t('min.detail.deleteConfirm')}</p>
-          {archiveError && <p role="alert" className="text-delayed">{archiveError}</p>}
+          {archiveError && <p role="alert" className="text-danger">{archiveError}</p>}
         </div>
       </Modal>
 
@@ -792,8 +792,8 @@ function DragGhost({ kind, innerRef }: {
   const Icon = kind === 'leaf' ? FileText : Folder
   return (
     <div ref={innerRef} aria-hidden data-drag-ghost={kind}
-      className="pointer-events-none fixed -top-[9999px] left-0 flex w-max max-w-[200px] items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] font-medium text-ink shadow-[var(--shadow-md)]">
-      <Icon aria-hidden className="h-4 w-4 shrink-0 text-brand" />
+      className="pointer-events-none fixed -top-[9999px] left-0 flex w-max max-w-[200px] items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[13px] font-medium text-fg shadow-[var(--shadow-md)]">
+      <Icon aria-hidden className="h-4 w-4 shrink-0 text-action" />
       <span data-drag-ghost-label className="min-w-0 truncate" />
     </div>
   )
@@ -813,8 +813,8 @@ function StarButton({ id, fav, disabled, onToggle, t }: {
   return (
     <button onClick={() => onToggle(id)} disabled={disabled} aria-pressed={fav}
       aria-label={t(fav ? 'min.exp.starRemove' : 'min.exp.starAdd')}
-      className="relative z-10 shrink-0 rounded-md p-1 text-ink-subtle transition-colors duration-100 hover:bg-surface-2 hover:text-ink disabled:opacity-40">
-      <Star aria-hidden className={`h-4 w-4 ${fav ? 'fill-accent-warning text-accent-warning' : ''}`} />
+      className="relative z-10 shrink-0 rounded-md p-1 text-fg-muted transition-colors duration-100 hover:bg-surface-subtle hover:text-fg disabled:opacity-40">
+      <Star aria-hidden className={`h-4 w-4 ${fav ? 'fill-warning text-warning' : ''}`} />
     </button>
   )
 }
@@ -831,24 +831,24 @@ function ProjectAssignModal({ open, projects, count, busy, onClose, onPick, t }:
 }) {
   return (
     <Modal open={open} onClose={onClose} title={t('min.exp.assignProject')} size="sm">
-      <p className="mb-2 text-sm text-ink-muted">
+      <p className="mb-2 text-sm text-fg-secondary">
         {t('min.exp.assignDesc').replace('{n}', String(count))}
       </p>
       <ul className="max-h-80 space-y-0.5 overflow-y-auto">
         {projects.map(p => (
           <li key={p.id}>
             <button onClick={() => onPick(p.id)} disabled={busy}
-              className="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 hover:bg-surface-2 disabled:opacity-40">
-              <BookOpenText aria-hidden className="h-4 w-4 shrink-0 text-brand" />
-              <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{p.name}</span>
+              className="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 hover:bg-surface-subtle disabled:opacity-40">
+              <BookOpenText aria-hidden className="h-4 w-4 shrink-0 text-action" />
+              <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{p.name}</span>
             </button>
           </li>
         ))}
         <li>
           <button onClick={() => onPick(null)} disabled={busy}
-            className="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 hover:bg-surface-2 disabled:opacity-40">
-            <Square aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
-            <span className="min-w-0 flex-1 truncate text-[13px] text-ink-muted">{t('min.exp.assignNone')}</span>
+            className="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 hover:bg-surface-subtle disabled:opacity-40">
+            <Square aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
+            <span className="min-w-0 flex-1 truncate text-[13px] text-fg-secondary">{t('min.exp.assignNone')}</span>
           </button>
         </li>
       </ul>
@@ -861,8 +861,8 @@ function SelectBox({ checked, onToggle, t }: { checked: boolean; onToggle: () =>
   const Icon = checked ? CheckSquare : Square
   return (
     <button onClick={onToggle} role="checkbox" aria-checked={checked} aria-label={t('min.exp.selectAria')}
-      className={`relative z-20 shrink-0 rounded-md p-1 transition-colors duration-100 hover:bg-surface-2 ${
-        checked ? 'text-brand' : 'text-ink-subtle'}`}>
+      className={`relative z-20 shrink-0 rounded-md p-1 transition-colors duration-100 hover:bg-surface-subtle ${
+        checked ? 'text-action' : 'text-fg-muted'}`}>
       <Icon aria-hidden className="h-4 w-4" />
     </button>
   )
@@ -886,7 +886,7 @@ function LeafMenu({ open, busy, onToggle, onEdit, onMove, onArchive, canSelect, 
       className="relative z-20 shrink-0">
       <button onClick={onToggle} disabled={busy}
         aria-label={t('min.exp.leafMenuAria')} aria-expanded={open} aria-haspopup="menu"
-        className="rounded-md p-1 text-ink-subtle transition-colors duration-100 hover:bg-surface-2 hover:text-ink disabled:opacity-40">
+        className="rounded-md p-1 text-fg-muted transition-colors duration-100 hover:bg-surface-subtle hover:text-fg disabled:opacity-40">
         <MoreHorizontal aria-hidden className="h-4 w-4" />
       </button>
       {open && (
@@ -894,23 +894,23 @@ function LeafMenu({ open, busy, onToggle, onEdit, onMove, onArchive, canSelect, 
           {/* 바깥 클릭 닫기 — 패널보다 낮고 카드 링크보다 높아야 한다 */}
           <button aria-hidden tabIndex={-1} onClick={onToggle} className="fixed inset-0 z-20 cursor-default" />
           <div role="menu"
-            className="absolute right-0 z-30 mt-1 w-36 rounded-xl border border-line bg-surface p-1 shadow-[var(--shadow-md)]">
+            className="absolute right-0 z-30 mt-1 w-36 rounded-xl border border-border bg-surface p-1 shadow-[var(--shadow-md)]">
             <button role="menuitem" onClick={onEdit}
-              className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-surface-2">
+              className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-fg hover:bg-surface-subtle">
               {t('min.detail.edit')}
             </button>
             <button role="menuitem" onClick={onMove}
-              className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-surface-2">
+              className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-fg hover:bg-surface-subtle">
               {t('min.fold.move')}
             </button>
             {canSelect && (
               <button role="menuitem" onClick={onSelect}
-                className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-surface-2">
+                className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-fg hover:bg-surface-subtle">
                 {t('min.exp.selectMulti')}
               </button>
             )}
             <button role="menuitem" onClick={onArchive}
-              className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-delayed hover:bg-surface-2">
+              className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-danger hover:bg-surface-subtle">
               {t('min.detail.delete')}
             </button>
           </div>
@@ -935,7 +935,7 @@ function CategoryChip({ cat, projectId, t }: { cat: MeetingCategory; projectId: 
 function LinkedMeetingChip({ projectId, t }: { projectId: string; t: T }) {
   return (
     <Link draggable={false} href={`/p/${projectId}/meetings`}
-      className="chip relative z-10 bg-brand-weak text-brand underline-offset-2 hover:underline">
+      className="chip relative z-10 bg-action-soft text-action underline-offset-2 hover:underline">
       <ExternalLink aria-hidden className="h-3 w-3 shrink-0" />{t('min.detail.linkedMeeting')}
     </Link>
   )

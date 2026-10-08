@@ -54,26 +54,26 @@ export function RootFoldersEditor({ workspaceId, value, invalid = false, revisio
   }
 
   return <div className="space-y-3" data-root-folders-editor>
-    {broken && <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{t('settings.rootFolders.invalid')}</p>}
-    <p className="text-sm text-ink">
-      <span className="text-ink-muted">{t('settings.rootFolders.current')}: </span>
+    {broken && <p role="alert" className="rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{t('settings.rootFolders.invalid')}</p>}
+    <p className="text-sm text-fg">
+      <span className="text-fg-secondary">{t('settings.rootFolders.current')}: </span>
       <span className="font-medium">{isTeams || broken ? t('settings.rootFolders.teams') : t('settings.rootFolders.custom')}</span>
     </p>
     {!broken && current?.mode === 'custom' && <div>
-      <p className="text-xs text-ink-muted">{t('settings.rootFolders.names')}</p>
+      <p className="text-xs text-fg-secondary">{t('settings.rootFolders.names')}</p>
       <ul className="mt-1 flex flex-wrap gap-1.5">
-        {current.names.map(n => <li key={n} className="rounded-md bg-surface-subtle px-2 py-0.5 text-xs text-ink">{n}</li>)}
+        {current.names.map(n => <li key={n} className="rounded-md bg-surface-subtle px-2 py-0.5 text-xs text-fg">{n}</li>)}
       </ul>
     </div>}
     {!isTeams && (canEdit
       ? <div className="space-y-1">
-          <button type="button" className="btn btn-ghost border border-line" disabled={pending} onClick={toTeams}>
+          <button type="button" className="btn btn-ghost border border-border" disabled={pending} onClick={toTeams}>
             {t('settings.rootFolders.toTeams')}
           </button>
-          <p className="text-xs text-ink-subtle">{t('settings.rootFolders.toTeamsHint')}</p>
+          <p className="text-xs text-fg-muted">{t('settings.rootFolders.toTeamsHint')}</p>
         </div>
-      : <p className="text-xs text-ink-subtle">{t('settings.rootFolders.platformOnly')}</p>)}
-    {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
-    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
+      : <p className="text-xs text-fg-muted">{t('settings.rootFolders.platformOnly')}</p>)}
+    {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+    {notice && <p role="status" className="text-sm text-success">{notice}</p>}
   </div>
 }

@@ -388,10 +388,10 @@ export function WikiDocumentEditor({
         {!draftsOn && <p data-drafts-off className="text-xs text-fg-secondary">{t(locale, 'wiki.document.draftsOff')}</p>}
         {draft && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-pending/40 bg-pending-weak px-4 py-3">
-            <p className="text-xs font-medium text-ink">
+            <p className="text-xs font-medium text-fg">
               {t(locale, 'wiki.document.draftFound')}
               {draft.savedAt && (
-                <span className="ml-1.5 font-normal text-ink-muted">
+                <span className="ml-1.5 font-normal text-fg-secondary">
                   {formatWikiDate(draft.savedAt, locale, false, timeZone)}
                 </span>
               )}
@@ -409,20 +409,20 @@ export function WikiDocumentEditor({
         )}
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
           <label className="block">
-            <span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t(locale, 'wiki.document.titleLabel')}</span>
+            <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t(locale, 'wiki.document.titleLabel')}</span>
             <input autoFocus={!topic} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} className="app-input" placeholder={t(locale, 'wiki.document.titlePlaceholder')} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t(locale, 'wiki.document.kindLabel')}</span>
+            <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t(locale, 'wiki.document.kindLabel')}</span>
             <select value={kind} onChange={(event) => changeKind(event.target.value as WikiDocumentKind)} className="app-input">
               {WIKI_DOCUMENT_KINDS.map((value) => <option key={value} value={value}>{KIND_LABEL[value][locale]}</option>)}
             </select>
           </label>
         </div>
         <label className="block">
-          <span className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-ink-muted">
+          <span className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-fg-secondary">
             <span>{t(locale, 'wiki.document.bodyLabel')}</span>
-            <span className="font-normal text-ink-subtle">{t(locale, 'wiki.document.markdownHint')}</span>
+            <span className="font-normal text-fg-muted">{t(locale, 'wiki.document.markdownHint')}</span>
           </span>
           <textarea value={bodyMd} onChange={(event) => setBodyMd(event.target.value)} rows={18} className="app-textarea min-h-80 resize-y font-mono text-[13px] leading-6" placeholder={t(locale, 'wiki.document.bodyPlaceholder')} />
         </label>
@@ -434,7 +434,7 @@ export function WikiDocumentEditor({
             ? 'wiki.document.appendTemplate'
             : 'wiki.document.applyTemplate')}
         </button>
-        {message && <p role={message.tone === 'error' ? 'alert' : 'status'} className={`text-xs font-medium ${message.tone === 'error' ? 'text-delayed' : 'text-done'}`}>{message.text}</p>}
+        {message && <p role={message.tone === 'error' ? 'alert' : 'status'} className={`text-xs font-medium ${message.tone === 'error' ? 'text-danger' : 'text-success'}`}>{message.text}</p>}
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void save()} disabled={busy || !title.trim() || !bodyMd.trim()} className="btn btn-primary">
             <Save className="h-4 w-4" aria-hidden />
@@ -451,8 +451,8 @@ export function WikiDocumentEditor({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
-        <span className="chip bg-brand-weak text-brand">{KIND_LABEL[snapshot.kind][locale]}</span>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+        <span className="chip bg-action-soft text-action">{KIND_LABEL[snapshot.kind][locale]}</span>
         <div className="flex flex-wrap gap-2">
           {canVerify && snapshot.bodyMd.trim() && (
             <button type="button" onClick={() => void verify()} disabled={verifying} className="btn btn-ghost h-9 px-3 text-xs">
@@ -468,7 +468,7 @@ export function WikiDocumentEditor({
           )}
         </div>
       </div>
-      {message && <p role={message.tone === 'error' ? 'alert' : 'status'} className={`mb-3 text-xs font-medium ${message.tone === 'error' ? 'text-delayed' : 'text-done'}`}>{message.text}</p>}
+      {message && <p role={message.tone === 'error' ? 'alert' : 'status'} className={`mb-3 text-xs font-medium ${message.tone === 'error' ? 'text-danger' : 'text-success'}`}>{message.text}</p>}
       {snapshot.bodyMd.trim() ? (
         // 읽기 폭과 크기를 본문용으로 따로 잡는다. .minutes-md 는 회의록(짧은 글) 기준이라
         // 14px·폭 무제한인데, 위키 본문은 장문이라 넓은 화면에서 한 줄이 110자를 넘는다
@@ -477,7 +477,7 @@ export function WikiDocumentEditor({
         // --minutes-fs 는 globals.css 가 인라인 주입을 전제로 만든 훅이라(MinuteViewer 와
         // 같은 방식) UI 위험 파일을 건드리지 않고 본문만 키울 수 있다.
         <div
-          className="min-h-48 rounded-2xl border border-line/70 bg-surface px-4 py-4 sm:px-6 sm:py-5"
+          className="min-h-48 rounded-2xl border border-border/70 bg-surface px-4 py-4 sm:px-6 sm:py-5"
           style={{ '--minutes-fs': '15px' } as CSSProperties}
         >
           <div className="max-w-[46rem]">
@@ -485,10 +485,10 @@ export function WikiDocumentEditor({
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-line px-5 py-10 text-center">
-          <FilePlus2 className="mx-auto h-6 w-6 text-ink-subtle" aria-hidden />
-          <h3 className="mt-3 text-sm font-semibold text-ink">{t(locale, 'wiki.document.emptyTitle')}</h3>
-          <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-ink-muted">{t(locale, 'wiki.document.emptyDesc')}</p>
+        <div className="rounded-2xl border border-dashed border-border px-5 py-10 text-center">
+          <FilePlus2 className="mx-auto h-6 w-6 text-fg-muted" aria-hidden />
+          <h3 className="mt-3 text-sm font-semibold text-fg">{t(locale, 'wiki.document.emptyTitle')}</h3>
+          <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-fg-secondary">{t(locale, 'wiki.document.emptyDesc')}</p>
           {canEdit && <button type="button" onClick={() => setEditing(true)} className="btn btn-primary mt-4">{t(locale, 'wiki.document.write')}</button>}
         </div>
       )}

@@ -111,7 +111,7 @@ function ParentCheckbox({ state, count, onClick }: { state: 'all' | 'some' | 'no
   return (
     <input ref={ref} type="checkbox" data-hub-parent-toggle checked={state === 'all'}
       aria-label={`하위 ${count}건 한 번에 위임`} title={`내가 켤 수 있는 하위 리프 ${count}건을 한 번에 위임/해제합니다.`}
-      onChange={onClick} className="h-[15px] w-[15px] accent-brand" />
+      onChange={onClick} className="h-[15px] w-[15px] accent-action" />
   )
 }
 
@@ -322,11 +322,11 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
 
   const seg = (f: HubFilter, label: string) => (
     <button type="button" data-hub-filter={f} aria-pressed={filter === f} onClick={() => onFilter(f)}
-      className={`rounded-md px-2 py-1 text-xs ${filter === f ? 'bg-brand-weak text-brand' : 'text-ink-muted hover:bg-surface-2'}`}>{label}</button>
+      className={`rounded-md px-2 py-1 text-xs ${filter === f ? 'bg-action-soft text-action' : 'text-fg-secondary hover:bg-surface-subtle'}`}>{label}</button>
   )
   const tool = (on: boolean, label: string, title: string, onClick: () => void, extra?: Record<string, string>) => (
     <button type="button" aria-pressed={on} title={title} onClick={onClick} {...extra}
-      className={`rounded-md border px-2 py-1 text-[11px] ${on ? 'border-brand-ring bg-brand-weak text-brand' : 'border-line text-ink-muted hover:bg-surface-2'}`}>{label}</button>
+      className={`rounded-md border px-2 py-1 text-[11px] ${on ? 'border-border-focus bg-action-soft text-action' : 'border-border text-fg-secondary hover:bg-surface-subtle'}`}>{label}</button>
   )
 
   // 고정 열 판정 — 마지막 고정 열에만 경계 그림자를 붙인다.
@@ -345,13 +345,13 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
   let leafSeq = 0
 
   return (
-    <section aria-label="위임 표" className="rounded-xl border border-line bg-surface p-3">
+    <section aria-label="위임 표" className="rounded-xl border border-border bg-surface p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1" role="group" aria-label="표시 범위">{seg('mine', '내 담당')}{seg('all', '전체')}</div>
           {tool(onlyWait, `승인 대기만${waitCount ? ` ${waitCount}` : ''}`, '완료 보고가 올라와 승인을 기다리는 행만 봅니다', () => setOnlyWait(v => !v), { 'data-hub-only-wait': '' })}
           {(pend.isPending || pend.saving) && (
-            <span data-hub-pending className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
+            <span data-hub-pending className="inline-flex items-center gap-1 text-[11px] text-fg-secondary">
               <span data-hub-pending-count>{pend.count}건</span>
               <PendingSaveChip isPending={pend.isPending} saving={pend.saving} remainingMs={pend.remainingMs} onSaveNow={() => { void pend.flush() }} />
             </span>
@@ -363,7 +363,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
           {tool(false, '열 너비 초기화', '모든 열을 기본 폭으로 되돌립니다', resetAll)}
         </div>
       </div>
-      <p className="mb-2 text-[11px] text-ink-subtle">리프 항목의 체크가 위임(발행)입니다. 부모 체크는 내가 켤 수 있는 하위 리프를 한 번에 켭니다. 머리글 경계를 끌면 열 너비가 바뀝니다.</p>
+      <p className="mb-2 text-[11px] text-fg-muted">리프 항목의 체크가 위임(발행)입니다. 부모 체크는 내가 켤 수 있는 하위 리프를 한 번에 켭니다. 머리글 경계를 끌면 열 너비가 바뀝니다.</p>
       {notice && <p data-hub-notice role="status" className="mb-2 rounded-md bg-pending-weak px-2 py-1 text-xs text-pending">{notice}</p>}
       <div ref={boxRef} data-shift="0" onScroll={onScroll} style={boxVars} className={s.box}>
         <table className={cls(s.table, dense && s.dense)} style={{ minWidth: `${totalW}px` }}>
@@ -412,37 +412,37 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                     {r.isLeaf
                       ? <input type="checkbox" data-hub-toggle checked={checked} disabled={!r.canToggle}
                           title={!r.canToggle ? TOGGLE_DENIED_TITLE : checked ? DELEGATE_OFF_TITLE : DELEGATE_ON_TITLE} aria-label={`${r.code} 위임`}
-                          onChange={() => toggleLeaf(r)} className="h-[15px] w-[15px] accent-brand" />
+                          onChange={() => toggleLeaf(r)} className="h-[15px] w-[15px] accent-action" />
                       : (leaves.get(r.itemId)?.length ?? 0) > 0
                         ? <ParentCheckbox count={leaves.get(r.itemId)!.length} state={parentState(r)} onClick={() => toggleParent(r)} />
                         : null}
                   </td>
-                  <td className={cls(colCls('code'), 'font-mono text-[11px] text-ink-muted')}>
+                  <td className={cls(colCls('code'), 'font-mono text-[11px] text-fg-secondary')}>
                     <span className={s.trunc} title={r.code}>{r.code}</span>
                   </td>
                   <td className={colCls('name')}>
                     <span data-hub-name style={{ paddingLeft: `${r.depth * 16}px` }} className="flex min-w-0 items-center gap-1">
                       {!r.isLeaf && (
                         <button type="button" data-hub-fold aria-expanded={!folded.has(r.itemId)} aria-label={`${r.code} 접기/펼치기`}
-                          onClick={() => setFolded(s2 => setWith(s2, r.itemId, !s2.has(r.itemId)))} className="shrink-0 text-ink-subtle hover:text-ink">
+                          onClick={() => setFolded(s2 => setWith(s2, r.itemId, !s2.has(r.itemId)))} className="shrink-0 text-fg-muted hover:text-fg">
                           {folded.has(r.itemId) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                         </button>
                       )}
                       {onSelect
                         ? <button type="button" data-hub-open={r.itemId} onClick={() => onSelect(r.itemId)}
-                            title={r.name} className={cls(s.trunc, 'min-w-0 text-left hover:underline', r.isLeaf ? 'text-ink' : 'font-semibold text-ink')}>{r.name}</button>
-                        : <span className={cls(s.trunc, 'min-w-0', r.isLeaf ? 'text-ink' : 'font-semibold text-ink')} title={r.name}>{r.name}</span>}
+                            title={r.name} className={cls(s.trunc, 'min-w-0 text-left hover:underline', r.isLeaf ? 'text-fg' : 'font-semibold text-fg')}>{r.name}</button>
+                        : <span className={cls(s.trunc, 'min-w-0', r.isLeaf ? 'text-fg' : 'font-semibold text-fg')} title={r.name}>{r.name}</span>}
                       {canEditPrompt && (
                         <button type="button" data-hub-prompt-edit aria-label={`${r.code} 프롬프트 편집`} disabled={isBusy}
                           onClick={() => { setEditing(r.itemId); setDraft(r.prompt ?? '') }}
                           title={r.prompt ? `에이전트 지시문: ${r.prompt}` : '에이전트에게 덧붙일 지시문을 씁니다'}
-                          className={cls('shrink-0 hover:text-ink', r.prompt ? 'text-brand' : 'text-ink-subtle')}>
+                          className={cls('shrink-0 hover:text-fg', r.prompt ? 'text-action' : 'text-fg-muted')}>
                           <Pencil className="h-3 w-3" />
                         </button>
                       )}
                     </span>
                   </td>
-                  <td className={cls(colCls('owner'), 'text-ink-muted')}>
+                  <td className={cls(colCls('owner'), 'text-fg-secondary')}>
                     <span className={s.trunc} title={r.canManage && !r.assigneeMine ? `${r.assigneeName ?? ''} — 상위 항목 담당자로서 조정할 수 있는 항목입니다(서브트리 관리)` : r.assigneeName ?? undefined}>{r.assigneeName ?? ''}</span>
                   </td>
                   <td className={cls(colCls('state'), s.clip)}>
@@ -457,11 +457,11 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                             {STAGE_CODES.map(c => <option key={c} value={c}>{stageName(c, stageLabelKo(c))}</option>)}
                           </select>
                         : r.isLeaf && !r.milestone
-                          ? <span data-hub-stage-text className="shrink-0 text-[11px] text-ink-muted">{stageName(r.stage, stageLabelKo(r.stage))}</span>
+                          ? <span data-hub-stage-text className="shrink-0 text-[11px] text-fg-secondary">{stageName(r.stage, stageLabelKo(r.stage))}</span>
                           : null}
                       {r.order
                         ? <span className={`chip shrink-0 ${STATE_TONE[r.order.state]}`}>{STATE_LABEL[r.order.state]}</span>
-                        : <span className="shrink-0 text-ink-subtle">{NO_ORDER}</span>}
+                        : <span className="shrink-0 text-fg-muted">{NO_ORDER}</span>}
                     </span>
                   </td>
                   <td className={cls(colCls('reason'), s.clip)}>
@@ -474,8 +474,8 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                     )}
                   </td>
                   <td className={cls(colCls('agent'), s.clip)}>
-                    <span className={cls(s.trunc, 'font-mono text-[11px] text-ink-muted')} title={r.order?.agent ?? undefined}>{r.order?.agent ?? ''}</span>
-                    <span className="block text-[10px] tabular-nums text-ink-subtle">{sig}</span>
+                    <span className={cls(s.trunc, 'font-mono text-[11px] text-fg-secondary')} title={r.order?.agent ?? undefined}>{r.order?.agent ?? ''}</span>
+                    <span className="block text-[10px] tabular-nums text-fg-muted">{sig}</span>
                   </td>
                   <td className={cls(colCls('ops'), s.clip)}>
                     {ops.length > 0 && (
@@ -504,7 +504,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                   <tr key={`${r.itemId}-x`} data-hub-row-extra={r.itemId} className={s.extra}>
                     <td colSpan={9} className="pb-2 pl-8">
                       {showReason && r.waitReason && (
-                        <p data-hub-reason-text className="mb-1 text-[11px] leading-relaxed text-ink-muted">{r.waitReason.text}</p>
+                        <p data-hub-reason-text className="mb-1 text-[11px] leading-relaxed text-fg-secondary">{r.waitReason.text}</p>
                       )}
                       {editing === r.itemId && (
                         <div className="flex flex-col gap-1">
@@ -533,7 +533,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                       )}
                       {confirmOpen && (
                         <div data-hub-confirm={confirmOpen.kind} className="flex flex-col gap-1">
-                          <p className="text-[11px] leading-relaxed text-ink-muted">{OP_LABEL[confirmOpen.kind]}할까요? {OP_TITLE[confirmOpen.kind]}</p>
+                          <p className="text-[11px] leading-relaxed text-fg-secondary">{OP_LABEL[confirmOpen.kind]}할까요? {OP_TITLE[confirmOpen.kind]}</p>
                           <div className="flex gap-2">
                             <button type="button" data-hub-confirm-go disabled={isBusy}
                               onClick={() => { void runOp(r, { kind: confirmOpen.kind, orderId: confirmOpen.orderId }) }}
@@ -542,7 +542,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                           </div>
                         </div>
                       )}
-                      {err && <span data-hub-error className="block text-[11px] text-accent-warning">{err}</span>}
+                      {err && <span data-hub-error className="block text-[11px] text-warning">{err}</span>}
                       {warn && <span data-hub-warning className="block text-[11px] text-pending">{warn}</span>}
                     </td>
                   </tr>

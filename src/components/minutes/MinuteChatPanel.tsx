@@ -74,7 +74,7 @@ export function ChatBubble({ role, content, renderContent }: {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] leading-relaxed ${
-        isUser ? 'rounded-br-md bg-brand text-action-fg' : 'rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 text-ink'
+        isUser ? 'rounded-br-md bg-action text-action-fg' : 'rounded-bl-md border border-border-focus/30 bg-action-soft/50 text-fg'
       }`}>
         {!isUser && renderContent ? renderContent(content) : content}
       </div>
@@ -87,9 +87,9 @@ export function TypingBubble() {
   const { t } = useLocale()
   return (
     <div className="flex justify-start" role="status" aria-label={t('min.chat.typing')}>
-      <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-brand-ring/30 bg-brand-weak/50 px-4 py-3">
+      <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-border-focus/30 bg-action-soft/50 px-4 py-3">
         {[0, 1, 2].map(i => (
-          <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-subtle"
+          <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-fg-muted"
             style={{ animationDelay: `${i * 0.15}s` }} />
         ))}
       </div>
@@ -106,7 +106,7 @@ export function ChatComposer({ onSend, loading }: { onSend: (v: string) => void;
     onSend(value); setValue('')
   }
   return (
-    <div className="flex items-center gap-1.5 border-t border-line p-2">
+    <div className="flex items-center gap-1.5 border-t border-border p-2">
       <input value={value} onChange={e => setValue(e.target.value)}
         onCompositionStart={() => { composingRef.current = true }}
         onCompositionEnd={() => { composingRef.current = false }}
@@ -181,9 +181,9 @@ export function MinuteChatPanel({ minuteId, projects = [], workspaceId }: {
   }
   return (
     <aside className="card flex h-[560px] w-full flex-col xl:h-auto xl:w-[340px] xl:shrink-0">
-      <div className="flex items-center justify-between border-b border-line px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <span className="inline-flex items-center gap-2">
-          <Bot className="h-4 w-4 shrink-0 text-brand" />
+          <Bot className="h-4 w-4 shrink-0 text-action" />
           <SegmentedTabs<ChatScope>
             tabs={[{ key: 'doc', label: t('min.chat.scope.doc') },
                    { key: 'archive', label: t('min.chat.scope.all') }]}
@@ -191,17 +191,17 @@ export function MinuteChatPanel({ minuteId, projects = [], workspaceId }: {
         </span>
         <span className="inline-flex items-center gap-2">
           <button onClick={chat.reset} disabled={chat.loading || chat.messages.length === 0}
-            className="text-ink-subtle hover:text-ink disabled:opacity-40"
+            className="text-fg-muted hover:text-fg disabled:opacity-40"
             title={t('min.chat.reset')} aria-label={t('min.chat.reset')}>
             <RotateCcw className="h-4 w-4" />
           </button>
-          <button onClick={() => setOpen(false)} className="text-ink-subtle hover:text-ink" aria-label="close">
+          <button onClick={() => setOpen(false)} className="text-fg-muted hover:text-fg" aria-label="close">
             <X className="h-4 w-4" />
           </button>
         </span>
       </div>
       {scope === 'archive' && (
-        <div className="space-y-1.5 border-b border-line px-3 py-1.5">
+        <div className="space-y-1.5 border-b border-border px-3 py-1.5">
           <div className="overflow-x-auto">
             <SegmentedTabs<TeamKey>
               tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamCodes.map(tk => ({ key: tk, label: tk }))]}
@@ -216,7 +216,7 @@ export function MinuteChatPanel({ minuteId, projects = [], workspaceId }: {
             </div>
           )}
           {team !== 'ALL' && folders === 'error' && (
-            <p className="text-xs text-ink-subtle">{t('min.chat.folder.error')}</p>
+            <p className="text-xs text-fg-muted">{t('min.chat.folder.error')}</p>
           )}
         </div>
       )}

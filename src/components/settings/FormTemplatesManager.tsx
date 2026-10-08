@@ -130,30 +130,30 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
   }
 
   return <div className="space-y-5" data-form-templates-manager>
-    {kinds.map((state) => <section key={state.kind} className="space-y-3 rounded-lg border border-line p-3" aria-label={state.label}>
+    {kinds.map((state) => <section key={state.kind} className="space-y-3 rounded-lg border border-border p-3" aria-label={state.label}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-ink">{state.label}</h3>
-        <span className="text-xs text-ink-muted">
+        <h3 className="text-sm font-semibold text-fg">{state.label}</h3>
+        <span className="text-xs text-fg-secondary">
           {state.templates.some((t) => t.active) ? '사용자 양식 사용 중' : '기본 양식 사용 중'}
         </span>
       </div>
       {state.templates.length === 0
-        ? <p className="text-xs text-ink-muted">등록한 양식이 없습니다.</p>
-        : <ul className="divide-y divide-line text-sm">
+        ? <p className="text-xs text-fg-secondary">등록한 양식이 없습니다.</p>
+        : <ul className="divide-y divide-border text-sm">
           {state.templates.map((row) => <li key={row.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-            <span className="font-medium text-ink">v{row.version}</span>
-            <span className="min-w-0 flex-1 truncate text-ink-muted" title={row.fileName}>{row.fileName} · {formatBytes(row.sizeBytes)}</span>
-            {row.errors > 0 && <span className="text-xs text-delayed">스캔 오류 {row.errors}</span>}
-            {row.warnings > 0 && <span className="text-xs text-ink-muted">경고 {row.warnings}</span>}
-            {row.active && <span className="rounded bg-done-weak px-1.5 py-0.5 text-xs text-done">활성</span>}
+            <span className="font-medium text-fg">v{row.version}</span>
+            <span className="min-w-0 flex-1 truncate text-fg-secondary" title={row.fileName}>{row.fileName} · {formatBytes(row.sizeBytes)}</span>
+            {row.errors > 0 && <span className="text-xs text-danger">스캔 오류 {row.errors}</span>}
+            {row.warnings > 0 && <span className="text-xs text-fg-secondary">경고 {row.warnings}</span>}
+            {row.active && <span className="rounded bg-success-weak px-1.5 py-0.5 text-xs text-success">활성</span>}
             <button type="button" className="btn" disabled={locked} onClick={() => toggle(state.kind, row)}>
               {row.active ? '해제' : '활성화'}
             </button>
           </li>)}
         </ul>}
-      {unmapped?.kind === state.kind && <div className="space-y-2 rounded-lg bg-delayed-weak p-3" role="group" aria-label="미매핑 자리표시자">
-        <p className="text-xs text-delayed">아래 자리표시자를 데이터 경로에 연결하세요(예: project.name).</p>
-        {unmapped.tokens.map((token) => <label key={token} className="flex flex-col gap-1 text-xs text-ink-muted">
+      {unmapped?.kind === state.kind && <div className="space-y-2 rounded-lg bg-danger-weak p-3" role="group" aria-label="미매핑 자리표시자">
+        <p className="text-xs text-danger">아래 자리표시자를 데이터 경로에 연결하세요(예: project.name).</p>
+        {unmapped.tokens.map((token) => <label key={token} className="flex flex-col gap-1 text-xs text-fg-secondary">
           <code>{token}</code>
           <input className="app-input" aria-label={`${token} 경로`} disabled={locked || !state.setting}
             value={paths[`${state.kind}:${token}`] ?? ''}
@@ -161,15 +161,15 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
         </label>)}
         <button type="button" className="btn btn-primary" disabled={locked || !state.setting}
           onClick={() => saveMapping(state, unmapped.templateId)}>매핑 저장 후 활성화</button>
-        {!state.setting && <p className="text-xs text-delayed">양식 설정이 손상되어 매핑을 저장할 수 없습니다.</p>}
+        {!state.setting && <p className="text-xs text-danger">양식 설정이 손상되어 매핑을 저장할 수 없습니다.</p>}
       </div>}
-      <label className="flex flex-col gap-1 text-xs text-ink-muted">
+      <label className="flex flex-col gap-1 text-xs text-fg-secondary">
         새 양식 올리기 (.{FORM_FORMAT[state.kind]}, 10MB 이하)
         <input type="file" accept={`.${FORM_FORMAT[state.kind]}`} disabled={locked} aria-label={`${state.label} 파일`}
           onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) upload(state.kind, f) }} />
       </label>
     </section>)}
-    {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
-    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
+    {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+    {notice && <p role="status" className="text-sm text-success">{notice}</p>}
   </div>
 }

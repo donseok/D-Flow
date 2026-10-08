@@ -133,7 +133,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     const del = section().querySelector(`button[aria-label="${realT('en', 'wbs.deleteAttachmentAria')}"]`) as HTMLButtonElement
     await act(async () => { del.click() })
     expect(removeAttachment).toHaveBeenCalledWith('att-1')
-    const line = [...section().querySelectorAll('p')].find(p => p.className.includes('text-delayed'))!
+    const line = [...section().querySelectorAll('p')].find(p => p.className.includes('text-danger'))!
     expect(line.textContent).toBe(realT('en', key))
     expect(line.textContent).not.toMatch(/[가-힣]/)
     // 한국어 화면은 종전 문구 그대로다
@@ -144,7 +144,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     listAttachments.mockResolvedValue({ ok: true, rows: [att()], download: 'allowed' })
     await render(true)
     const del = () => section().querySelector(`button[aria-label="${ko('wbs.deleteAttachmentAria')}"]`) as HTMLButtonElement
-    const line = () => [...section().querySelectorAll('p')].find(p => p.className.includes('text-delayed'))!.textContent
+    const line = () => [...section().querySelectorAll('p')].find(p => p.className.includes('text-danger'))!.textContent
     removeAttachment.mockResolvedValue({ ok: false, error: '권한 없음' })
     await act(async () => { del().click() })
     expect(line()).toBe('권한 없음')

@@ -50,7 +50,7 @@ export function WikiRevisionRestoreButton({
         <RotateCcw className="h-3.5 w-3.5" aria-hidden />
         {busy ? t(locale, 'wiki.history.restoring') : t(locale, 'wiki.history.restore')}
       </button>
-      {error && <p className="mt-1 max-w-xs text-right text-[11px] font-medium text-delayed" role="alert">{error}</p>}
+      {error && <p className="mt-1 max-w-xs text-right text-[11px] font-medium text-danger" role="alert">{error}</p>}
     </div>
   )
 }

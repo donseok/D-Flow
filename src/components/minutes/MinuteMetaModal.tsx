@@ -155,7 +155,7 @@ export function MinuteMetaModal({
           <button type="button" onClick={() => setFolderPickOpen(true)}
             className="app-input flex w-full items-center justify-between gap-2 text-left">
             <span className="truncate">{folderName}</span>
-            <Folder aria-hidden className="h-4 w-4 shrink-0 text-ink-subtle" />
+            <Folder aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
           </button>
         </label>
         <label className="block text-sm">
@@ -178,17 +178,17 @@ export function MinuteMetaModal({
             </select>
           </label>
         </div>
-        {meetingsFailed && <p role="alert" className="flex items-center gap-1.5 text-xs text-ink"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-delayed" />{t('min.meetingsLoadFailed')}</p>}
-        {err && <p className="text-sm text-delayed">{err}</p>}
-        <div className="space-y-1.5 rounded-xl border border-line p-2.5 text-sm">
+        {meetingsFailed && <p role="alert" className="flex items-center gap-1.5 text-xs text-fg"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-danger" />{t('min.meetingsLoadFailed')}</p>}
+        {err && <p className="text-sm text-danger">{err}</p>}
+        <div className="space-y-1.5 rounded-xl border border-border p-2.5 text-sm">
           <span className="block font-medium">{t('min.ext.title')}</span>
-          <p className="truncate text-xs text-ink-subtle">{externalId ?? t('min.ext.none')}</p>
+          <p className="truncate text-xs text-fg-muted">{externalId ?? t('min.ext.none')}</p>
           {externalId && (
             extResetConfirm ? (
-              <div className="flex flex-wrap items-center gap-2 text-xs text-delayed">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-danger">
                 <span className="min-w-0 flex-1">{t('min.ext.resetConfirm')}</span>
                 <button type="button" onClick={() => void doResetExternalId()} disabled={extBusy}
-                  className="btn text-delayed">{t('min.ext.reset')}</button>
+                  className="btn text-danger">{t('min.ext.reset')}</button>
                 <button type="button" onClick={() => setExtResetConfirm(false)} className="btn">{t('common.cancel')}</button>
               </div>
             ) : (
@@ -197,7 +197,7 @@ export function MinuteMetaModal({
               </button>
             )
           )}
-          {extErr && <p className="text-xs text-delayed">{extErr}</p>}
+          {extErr && <p className="text-xs text-danger">{extErr}</p>}
         </div>
       </div>
       <FolderPickModal open={folderPickOpen} folders={folders} scopeProjectId={projectId || null}

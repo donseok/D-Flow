@@ -100,10 +100,10 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
             <Sparkles className="h-3.5 w-3.5 text-action" aria-hidden />
             {t(locale, 'wiki.ask.eyebrow')}
           </span>
-          <h2 id="wiki-search-title" className="text-lg font-bold tracking-tight text-hero-ink sm:text-xl">
+          <h2 id="wiki-search-title" className="text-lg font-bold tracking-tight text-fg sm:text-xl">
             {t(locale, 'wiki.ask.title')}
           </h2>
-          <p className="min-w-0 text-[13px] leading-5 text-hero-ink-muted">{t(locale, 'wiki.search2.idle.desc')}</p>
+          <p className="min-w-0 text-[13px] leading-5 text-fg-secondary">{t(locale, 'wiki.search2.idle.desc')}</p>
         </div>
 
         <form
@@ -112,7 +112,7 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
           onSubmit={event => { event.preventDefault(); void run(query) }}
         >
           <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" aria-hidden />
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" aria-hidden />
             <input
               type="search"
               value={query}

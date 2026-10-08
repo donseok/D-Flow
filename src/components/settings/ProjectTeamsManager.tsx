@@ -118,7 +118,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
         </>
       }
     >
-      <p className="text-sm leading-6 text-ink-muted">{confirming?.type === 'copy' ? CONVERT_WARNING : INHERITANCE_WARNING}</p>
+      <p className="text-sm leading-6 text-fg-secondary">{confirming?.type === 'copy' ? CONVERT_WARNING : INHERITANCE_WARNING}</p>
     </Modal>
   )
 
@@ -127,10 +127,10 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
       <section className="card overflow-hidden">
         <div className="p-5 sm:p-6">
           {error && (
-            <p role="alert" className="mb-3 rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{error}</p>
+            <p role="alert" className="mb-3 rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{error}</p>
           )}
           <div className="panel-soft flex flex-col gap-4 p-5">
-            <p className="text-sm leading-6 text-ink">
+            <p className="text-sm leading-6 text-fg">
               현재 워크스페이스 공용 팀을 상속 중입니다. 이 프로젝트만의 팀을 정의하면 상속이 끊깁니다.
             </p>
             <div className="flex flex-wrap gap-2">
@@ -144,7 +144,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
               </button>
             </div>
             {showAddInput && (
-              <div className="flex items-center gap-2 border-t border-line pt-4">
+              <div className="flex items-center gap-2 border-t border-border pt-4">
                 <input
                   value={newCode}
                   onChange={e => setNewCode(e.target.value)}
@@ -164,7 +164,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
               </div>
             )}
           </div>
-          <p className="mt-4 text-xs leading-5 text-ink-subtle">
+          <p className="mt-4 text-xs leading-5 text-fg-muted">
             이 팀 목록은 이 프로젝트의 WBS 담당·명단·칸반·보고서에만 적용됩니다. 회의록 보관함은 공용 팀 기준을 유지합니다.
           </p>
         </div>
@@ -175,10 +175,10 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
 
   return (
     <section className="card overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
-          <h2 className="text-base font-semibold text-ink">팀 목록</h2>
-          <p className="text-sm text-ink-muted">
+          <h2 className="text-base font-semibold text-fg">팀 목록</h2>
+          <p className="text-sm text-fg-secondary">
             이 프로젝트의 WBS 담당·명단·칸반·보고서가 이 목록을 씁니다. 비활성화하면 화면에서 숨겨지고
             기존 데이터는 보존됩니다.
           </p>
@@ -201,12 +201,12 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
 
       <div className="p-5 sm:p-6">
         {error && (
-          <p role="alert" className="mb-3 rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{error}</p>
+          <p role="alert" className="mb-3 rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{error}</p>
         )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-ink-subtle">
+              <tr className="border-b border-border text-left text-fg-muted">
                 <th className="py-2 pr-3">순서</th>
                 <th className="py-2 pr-3">팀</th>
                 <th className="py-2 pr-3">상태</th>
@@ -216,7 +216,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
             </thead>
             <tbody>
               {teams.map((t, i) => (
-                <tr key={t.id} data-team-row={t.id} className={`border-b border-line/60 ${t.active ? '' : 'opacity-60'}`}>
+                <tr key={t.id} data-team-row={t.id} className={`border-b border-border/60 ${t.active ? '' : 'opacity-60'}`}>
                   <td className="py-2.5 pr-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => move(i, -1)} disabled={pending || i === 0}
@@ -239,12 +239,12 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
                       }} />
                   </td>
                   <td className="py-2.5 pr-3">
-                    <span className={`chip ${t.active ? 'bg-done-weak text-done' : 'bg-surface-2 text-ink-subtle'}`}>
+                    <span className={`chip ${t.active ? 'bg-success-weak text-success' : 'bg-surface-subtle text-fg-muted'}`}>
                       {t.active ? '활성' : '비활성'}
                     </span>
                   </td>
                   <td className="py-2.5 pr-3">
-                    <span className={`chip ${t.progressVisible ? 'bg-brand-weak text-brand' : 'bg-surface-2 text-ink-subtle'}`}>
+                    <span className={`chip ${t.progressVisible ? 'bg-action-soft text-action' : 'bg-surface-subtle text-fg-muted'}`}>
                       {t.progressVisible ? '표시' : '숨김'}
                     </span>
                   </td>
@@ -271,7 +271,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-xs leading-5 text-ink-subtle">
+        <p className="mt-3 text-xs leading-5 text-fg-muted">
           이 팀 목록은 이 프로젝트의 WBS 담당·명단·칸반·보고서에만 적용됩니다. 회의록 보관함은 공용 팀 기준을 유지합니다.
         </p>
       </div>

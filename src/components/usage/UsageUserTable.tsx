@@ -30,11 +30,11 @@ export function UsageUserTable({ rows, days, timeZone }: { rows: UsageUserRow[];
 
   return (
     <SectionCard eyebrow="USERS" title="사용자 현황" icon={Users}
-      actions={<span className="badge bg-brand-weak text-brand">{rows.length}명</span>}>
+      actions={<span className="badge bg-action-soft text-action">{rows.length}명</span>}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[880px] text-sm">
           <thead>
-            <tr className="border-b border-line text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+            <tr className="border-b border-border text-xs font-semibold uppercase tracking-wide text-fg-muted">
               <th className="py-2 pr-3 text-left">이름</th>
               <th className="py-2 pr-3 text-left">이메일</th>
               <th className="py-2 pr-3 text-left">팀</th>
@@ -48,23 +48,23 @@ export function UsageUserTable({ rows, days, timeZone }: { rows: UsageUserRow[];
           </thead>
           <tbody>
             {visibleRows.map(r => (
-              <tr key={r.id} className="border-b border-line/60">
-                <td className="py-2 pr-3 font-medium text-ink">{r.name}</td>
-                <td className="py-2 pr-3 text-ink-muted">{r.email}</td>
-                <td className="py-2 pr-3 text-ink-muted">{r.teamCode ?? '—'}</td>
-                <td className="py-2 pr-3 text-ink-muted">{r.role ? WORKSPACE_ROLE_LABEL[r.role] : '—'}</td>
-                <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.createdAt, timeZone)}</td>
-                <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.lastSignInAt, timeZone)}</td>
-                <td className="py-2 pr-3 tabular-nums text-ink-muted">{fmtDate(r.lastActivityAt, timeZone)}</td>
-                <td className="py-2 pr-3 text-right tabular-nums text-ink">{r.events.toLocaleString('ko-KR')}</td>
-                <td className="py-2 pr-3 text-right tabular-nums text-ink">{r.activeDays}</td>
+              <tr key={r.id} className="border-b border-border/60">
+                <td className="py-2 pr-3 font-medium text-fg">{r.name}</td>
+                <td className="py-2 pr-3 text-fg-secondary">{r.email}</td>
+                <td className="py-2 pr-3 text-fg-secondary">{r.teamCode ?? '—'}</td>
+                <td className="py-2 pr-3 text-fg-secondary">{r.role ? WORKSPACE_ROLE_LABEL[r.role] : '—'}</td>
+                <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.createdAt, timeZone)}</td>
+                <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.lastSignInAt, timeZone)}</td>
+                <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.lastActivityAt, timeZone)}</td>
+                <td className="py-2 pr-3 text-right tabular-nums text-fg">{r.events.toLocaleString('ko-KR')}</td>
+                <td className="py-2 pr-3 text-right tabular-nums text-fg">{r.activeDays}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       {rows.length > USER_PAGE_SIZE && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-xs text-ink-muted">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-fg-secondary">
           <span className="tabular-nums">
             {pageStart + 1}–{Math.min(pageStart + USER_PAGE_SIZE, rows.length)} / {rows.length}명
           </span>

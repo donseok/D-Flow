@@ -48,10 +48,10 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
   return (
     <div className="card space-y-4 p-6">
       <div className="flex items-center gap-2">
-        <FileText className="h-4 w-4 text-ink-subtle" />
+        <FileText className="h-4 w-4 text-fg-muted" />
         <h3 className="text-sm font-semibold">WBS 마크다운 업로드 (wbs.md)</h3>
       </div>
-      <p className="text-xs leading-5 text-ink-subtle">
+      <p className="text-xs leading-5 text-fg-muted">
         levels 계약(N단) wbs.md 를 업로드합니다. 부착점은 파일의 attach 로 자동 판정되며,
         아래 미리보기를 확인한 뒤 적용하세요. 골격 파일(attach 없음)은 단계 정본(levels)을 시드합니다.
       </p>
@@ -62,7 +62,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
           파일 선택
           <input ref={fileRef} data-md-file type="file" accept=".md,text/markdown" className="hidden" onChange={onFile} disabled={pending} />
         </label>
-        <span className="text-xs text-ink-subtle">{fileName ?? '선택된 파일 없음 (.md)'}</span>
+        <span className="text-xs text-fg-muted">{fileName ?? '선택된 파일 없음 (.md)'}</span>
       </div>
 
       {preview && !preview.ok && (
@@ -72,7 +72,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
       )}
 
       {preview?.ok && (
-        <div data-md-preview className="space-y-3 rounded-xl border border-line bg-surface-2 p-4">
+        <div data-md-preview className="space-y-3 rounded-xl border border-border bg-surface-subtle p-4">
           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
             <Info label="종류" value={preview.mode === 'skeleton' ? '골격' : 'PL 모듈'} />
             <Info label="module" value={preview.module ?? '—'} />
@@ -91,7 +91,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
           </div>
 
           {preview.counts && (
-            <p className="text-xs text-ink-subtle">
+            <p className="text-xs text-fg-muted">
               {Object.entries(preview.counts).map(([k, v]) => `${k} ${v}`).join(' · ')}
             </p>
           )}
@@ -101,7 +101,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
               <p className="flex items-center gap-1.5 text-xs font-semibold text-danger">
                 <XCircle className="h-3.5 w-3.5" />검증 에러 {preview.errors!.length}건 — 적용 불가
               </p>
-              <ul className="mt-1.5 space-y-1 text-xs leading-5 text-ink-muted">
+              <ul className="mt-1.5 space-y-1 text-xs leading-5 text-fg-secondary">
                 {preview.errors!.map((e, i) => <li key={i}>{e}</li>)}
               </ul>
             </div>
@@ -111,7 +111,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
               <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
                 <AlertTriangle className="h-3.5 w-3.5" />경고 {preview.warnings!.length}건 (적용은 가능)
               </p>
-              <ul className="mt-1.5 space-y-1 text-xs leading-5 text-ink-muted">
+              <ul className="mt-1.5 space-y-1 text-xs leading-5 text-fg-secondary">
                 {preview.warnings!.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             </div>
@@ -157,7 +157,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
 function Info({ label, value, tone }: { label: string; value: string; tone?: 'danger' }) {
   return (
     <div>
-      <span className="text-ink-subtle">{label}</span>{' '}
+      <span className="text-fg-muted">{label}</span>{' '}
       <span className={tone === 'danger' ? 'font-semibold text-danger' : 'font-medium'}>{value}</span>
     </div>
   )

@@ -127,7 +127,7 @@ describe('IssueTrendCard', () => {
     expect(html).toMatch(/<text[^>]*>미해결 5<\/text>/)
     // 면(area) = 미해결 잔량 — 그라데이션 채움을 참조하는 닫힌 path, 등록 누적은 점선
     expect(html).toMatch(/<path d="M[^"]+ Z" fill="url\(#issue-backlog-wash\)"/)
-    expect(html).toMatch(/<path[^>]*class="stroke-ink-muted"[^>]*stroke-dasharray="3 3"/)
+    expect(html).toMatch(/<path[^>]*class="stroke-fg-secondary"[^>]*stroke-dasharray="3 3"/)
   })
 
   it('차트만 남긴다 — 이번 주 타일·주간 표는 없다(2026-08-28 사용자 요청: 깔끔하게)', () => {

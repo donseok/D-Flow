@@ -24,7 +24,7 @@ export function UsageSummary({ summary, days, sessions, timeZone }: {
         <KpiCard label={`SESSIONS ${days}D`} value={sessions.toLocaleString('ko-KR')} sub={`${SESSION_GAP_MINUTES}분 무활동 기준 유도값`} icon={Activity} />
         <KpiCard label={`VIEWS ${days}D`} value={summary.totalEvents.toLocaleString('ko-KR')} sub="화면 열람 건수" icon={MousePointerClick} />
       </div>
-      <p className="text-[11px] text-ink-subtle">
+      <p className="text-[11px] text-fg-muted">
         {summary.lastEventAt
           ? `수집 상태 · 마지막 기록 ${fmtDateTime(summary.lastEventAt, timeZone)}`
           : '수집 상태 · 아직 기록이 없습니다. 수집은 프로덕션 배포 환경에서만 동작합니다.'}

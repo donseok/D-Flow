@@ -47,7 +47,7 @@ export function BrandGlyph({ size = 40, className = '', variant = 'monogram', ch
       style={{ width: size, height: size, borderRadius: Math.round(size * 0.28), boxShadow: 'var(--shadow-sm)' }}
       aria-hidden
     >
-      <span className="flex h-full w-full items-center justify-center bg-brand font-bold text-brand-fg" style={{ fontSize: Math.round(size * 0.46) }}>
+      <span className="flex h-full w-full items-center justify-center bg-action font-bold text-action-fg" style={{ fontSize: Math.round(size * 0.46) }}>
         {choice?.kind === 'monogram' ? choice.letter : Array.from(productName)[0]}
       </span>
     </span>
@@ -57,7 +57,7 @@ export function BrandGlyph({ size = 40, className = '', variant = 'monogram', ch
 /**
  * 글리프 + 워드마크. 기본은 글리프만, `withWordmark` 로 제품명 텍스트, `tagline` 으로 한 줄 태그라인.
  * 호출부가 제품 이름(워크스페이스 브랜딩 또는 env 브랜드)·마크 유무·워크스페이스 id 를 넘긴다 — 마크는 읽기 라우트 이미지로만 그린다.
- * 워드마크 텍스트 색은 토큰(text-ink/ink-subtle)이라 라이트/다크 모두 대응.
+ * 워드마크 텍스트 색은 토큰(text-fg/ink-subtle)이라 라이트/다크 모두 대응.
  */
 export function BrandMark({
   productName,
@@ -84,11 +84,11 @@ export function BrandMark({
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
       <BrandGlyph size={size} choice={choice} productName={productName} />
       <span className="leading-tight">
-        <span className="block font-bold tracking-tight text-ink" style={{ fontSize: Math.round(size * 0.4) }}>
+        <span className="block font-bold tracking-tight text-fg" style={{ fontSize: Math.round(size * 0.4) }}>
           {productName}
         </span>
         {tagline && (
-          <span className="block text-ink-subtle" style={{ fontSize: Math.round(size * 0.26) }}>
+          <span className="block text-fg-muted" style={{ fontSize: Math.round(size * 0.26) }}>
             {/* ko 는 BRAND.tagline(env 로 교체 가능). env 한 줄은 한 언어뿐이라 en 은 번역 사전을 쓴다. */}
             {locale === 'en' ? t('brand.tagline') : BRAND.tagline}
           </span>

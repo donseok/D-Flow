@@ -37,20 +37,20 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
       <PageHeader title="내 계정" />
 
       <div className="card p-5 sm:p-6">
-        <h2 className="mt-0.5 text-sm font-semibold text-ink">프로필 정보</h2>
+        <h2 className="mt-0.5 text-sm font-semibold text-fg">프로필 정보</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
-            <UserIcon className="h-4 w-4 text-ink-subtle" />
+          <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
+            <UserIcon className="h-4 w-4 text-fg-muted" />
             <div className="min-w-0">
               <div className="text-meta text-fg-secondary">이름</div>
-              <div className="truncate text-sm text-ink">{displayName ?? '—'}</div>
+              <div className="truncate text-sm text-fg">{displayName ?? '—'}</div>
             </div>
           </div>
-          <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
-            <Mail className="h-4 w-4 text-ink-subtle" />
+          <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
+            <Mail className="h-4 w-4 text-fg-muted" />
             <div className="min-w-0">
               <div className="text-meta text-fg-secondary">이메일</div>
-              <div className="truncate text-sm text-ink">{email ?? '—'}</div>
+              <div className="truncate text-sm text-fg">{email ?? '—'}</div>
             </div>
           </div>
         </div>
@@ -60,7 +60,7 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
       </div>
 
       <div data-account-display className="card p-5 sm:p-6">
-        <h2 className="mt-0.5 text-sm font-semibold text-ink">{t('chrome.display')}</h2>
+        <h2 className="mt-0.5 text-sm font-semibold text-fg">{t('chrome.display')}</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
             <div data-account-label className="mb-2 text-meta font-semibold text-fg-secondary">{t('chrome.theme')}</div>

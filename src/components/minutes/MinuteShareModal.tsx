@@ -73,15 +73,15 @@ export function MinuteShareModal({ open, onClose, minuteId }: {
   return (
     <Modal open={open} onClose={onClose} title={t('min.share.title')} size="sm">
       {loading ? (
-        <p className="text-sm text-ink-muted">…</p>
+        <p className="text-sm text-fg-secondary">…</p>
       ) : (
         <div className="space-y-3">
-          <p className="text-sm text-ink-muted">{t('min.share.desc')}</p>
+          <p className="text-sm text-fg-secondary">{t('min.share.desc')}</p>
           <button onClick={() => void run(enabled ? 'disable' : 'enable')} disabled={busy}
             role="switch" aria-checked={enabled}
-            className={`btn w-full justify-between ${enabled ? 'border border-brand-ring bg-brand-weak text-brand' : ''}`}>
+            className={`btn w-full justify-between ${enabled ? 'border border-border-focus bg-action-soft text-action' : ''}`}>
             <span>{enabled ? t('min.share.on') : t('min.share.off')}</span>
-            <span aria-hidden className={`inline-block h-4 w-7 rounded-full p-0.5 transition ${enabled ? 'bg-brand' : 'bg-surface-2'}`}>
+            <span aria-hidden className={`inline-block h-4 w-7 rounded-full p-0.5 transition ${enabled ? 'bg-action' : 'bg-surface-subtle'}`}>
               <span className={`block h-3 w-3 rounded-full bg-white transition ${enabled ? 'translate-x-3' : ''}`} />
             </span>
           </button>
@@ -94,9 +94,9 @@ export function MinuteShareModal({ open, onClose, minuteId }: {
                   <Copy className="h-4 w-4" />{t('min.share.copy')}
                 </button>
                 {confirmRegen ? (
-                  <span className="flex min-w-0 flex-1 items-center gap-2 text-xs text-delayed">
+                  <span className="flex min-w-0 flex-1 items-center gap-2 text-xs text-danger">
                     <span className="min-w-0 flex-1">{t('min.share.regenConfirm')}</span>
-                    <button onClick={() => void run('regenerate')} disabled={busy} className="btn text-delayed">
+                    <button onClick={() => void run('regenerate')} disabled={busy} className="btn text-danger">
                       {t('min.share.regen')}
                     </button>
                     <button onClick={() => setConfirmRegen(false)} className="btn">{t('common.cancel')}</button>
@@ -109,7 +109,7 @@ export function MinuteShareModal({ open, onClose, minuteId }: {
               </div>
             </div>
           )}
-          {err && <p className="text-sm text-delayed">{err}</p>}
+          {err && <p className="text-sm text-danger">{err}</p>}
         </div>
       )}
     </Modal>

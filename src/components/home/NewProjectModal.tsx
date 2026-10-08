@@ -179,30 +179,30 @@ export function NewProjectModal({
         }
       >
         <div className="space-y-4">
-          {workspaceName && <p className="text-xs text-ink-muted">만들 워크스페이스: <strong className="text-ink">{workspaceName}</strong></p>}
-          <p className="text-sm leading-6 text-ink-muted">
+          {workspaceName && <p className="text-xs text-fg-secondary">만들 워크스페이스: <strong className="text-fg">{workspaceName}</strong></p>}
+          <p className="text-sm leading-6 text-fg-secondary">
             {t('home.newProjectDesc')}
           </p>
 
           {copyCandidates.length > 0 && <fieldset className="space-y-2">
-            <legend className="text-xs font-semibold text-ink-muted">시작 방법</legend>
-            <div className="flex flex-wrap gap-4 text-sm text-ink">
+            <legend className="text-xs font-semibold text-fg-secondary">시작 방법</legend>
+            <div className="flex flex-wrap gap-4 text-sm text-fg">
               <label className="flex items-center gap-2"><input type="radio" name="project-start-mode" checked={mode === 'blank'} onChange={() => chooseMode('blank')} />빈 값으로 시작</label>
               <label className="flex items-center gap-2"><input type="radio" name="project-start-mode" checked={mode === 'copy'} onChange={() => chooseMode('copy')} />기존 프로젝트에서 복사</label>
             </div>
           </fieldset>}
           {mode === 'copy' && <div className="space-y-2">
-            <label className="block text-xs font-semibold text-ink-muted" htmlFor="copy-source-project">복사 원본 프로젝트</label>
+            <label className="block text-xs font-semibold text-fg-secondary" htmlFor="copy-source-project">복사 원본 프로젝트</label>
             <select id="copy-source-project" className="app-input" value={copyFromProjectId} onChange={event => void chooseSource(event.target.value)}>
               <option value="">프로젝트를 선택하세요</option>
               {copyCandidates.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
-            <p className="text-xs leading-5 text-ink-muted">복사합니다: 설정 값·팀·업무영역. 복사하지 않습니다: 멤버·WBS·회의록·이슈.</p>
+            <p className="text-xs leading-5 text-fg-secondary">복사합니다: 설정 값·팀·업무영역. 복사하지 않습니다: 멤버·WBS·회의록·이슈.</p>
           </div>}
 
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">
-              {t('home.fieldName')} <span className="text-delayed">*</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">
+              {t('home.fieldName')} <span className="text-danger">*</span>
             </span>
             <input
               className="app-input"
@@ -219,8 +219,8 @@ export function NewProjectModal({
           {/* 힌트를 label 밖에 두되 입력 바로 아래 붙도록 묶는다 — 형제로 두면 space-y-4 간격이 벌어진다. */}
           <div>
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">
-                {t('home.fieldLevels')} <span aria-hidden="true" className="text-delayed">*</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">
+                {t('home.fieldLevels')} <span aria-hidden="true" className="text-danger">*</span>
               </span>
               <input
                 className="app-input"
@@ -232,11 +232,11 @@ export function NewProjectModal({
                 aria-describedby={levelsHintId}
               />
             </label>
-            <span id={levelsHintId} className="mt-1 block text-xs text-ink-subtle">{t('home.hintLevels')}</span>
+            <span id={levelsHintId} className="mt-1 block text-xs text-fg-muted">{t('home.hintLevels')}</span>
           </div>
 
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('home.fieldDesc')}</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('home.fieldDesc')}</span>
             <textarea
               className="app-textarea min-h-[84px]"
               placeholder={t('home.phDesc')}
@@ -247,17 +247,17 @@ export function NewProjectModal({
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('home.fieldStart')}</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('home.fieldStart')}</span>
               <input type="date" className="app-input px-2.5 text-sm" value={start} onChange={e => setStart(e.target.value)} />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('home.fieldEnd')}</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('home.fieldEnd')}</span>
               <input type="date" className="app-input px-2.5 text-sm" value={end} min={start || undefined} onChange={e => setEnd(e.target.value)} />
             </label>
           </div>
 
           {error && (
-            <p role="alert" className="rounded-xl border border-delayed/30 bg-delayed-weak px-3 py-2 text-xs font-medium text-delayed">{error}</p>
+            <p role="alert" className="rounded-xl border border-danger/30 bg-danger-weak px-3 py-2 text-xs font-medium text-danger">{error}</p>
           )}
         </div>
       </Modal>

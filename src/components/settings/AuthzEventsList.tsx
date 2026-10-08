@@ -31,16 +31,16 @@ export function AuthzEventsList({ workspaceId, initial, timeZone }: {
   }
 
   return <div className="space-y-4" data-authz-events>
-    {error && <p role="alert" className="text-sm text-delayed">{error}</p>}
-    {!error && rows.length === 0 && <p className="text-sm text-ink-muted">권한 변경 기록이 없습니다.</p>}
-    {rows.length > 0 && <ol className="divide-y divide-line">
+    {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+    {!error && rows.length === 0 && <p className="text-sm text-fg-secondary">권한 변경 기록이 없습니다.</p>}
+    {rows.length > 0 && <ol className="divide-y divide-border">
       {rows.map(row => <li key={row.id} className="space-y-1 py-3 first:pt-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <strong className="text-sm text-ink">{row.targetName}{row.projectName ? ` · ${row.projectName}` : ''}</strong>
-          <span className="text-xs text-ink-muted">{formatDate(row.createdAt, timeZone)}</span>
+          <strong className="text-sm text-fg">{row.targetName}{row.projectName ? ` · ${row.projectName}` : ''}</strong>
+          <span className="text-xs text-fg-secondary">{formatDate(row.createdAt, timeZone)}</span>
         </div>
-        <p className="text-sm text-ink">{row.kindLabel} · {row.summary}</p>
-        <p className="text-xs text-ink-muted">{row.actorName} · {row.causeLabel}</p>
+        <p className="text-sm text-fg">{row.kindLabel} · {row.summary}</p>
+        <p className="text-xs text-fg-secondary">{row.actorName} · {row.causeLabel}</p>
       </li>)}
     </ol>}
     <div className="flex flex-wrap gap-2">

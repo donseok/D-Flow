@@ -155,7 +155,7 @@ export async function DashboardView({
         />
       ) : (
         <section className="card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-          <p className="text-sm text-ink-muted">{tr('dash.wbsEmpty')}</p>
+          <p className="text-sm text-fg-secondary">{tr('dash.wbsEmpty')}</p>
           <Link href={`/p/${projectId}/wbs`} className="btn btn-ghost h-8 shrink-0 px-3 text-xs">
             {tr('nav.wbs')} <ArrowRight className="h-3.5 w-3.5" />
           </Link>

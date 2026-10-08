@@ -194,13 +194,13 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
     (detail.category || detail.domain || priority || detail.model || displayTags.length > 0)
 
   return (
-    <section className="rounded-xl border border-line bg-surface-2/40 p-3">
+    <section className="rounded-xl border border-border bg-surface-subtle/40 p-3">
       <div className="flex items-center justify-between gap-2">
         <button
           type="button" data-spec-body-toggle
           onClick={() => setBodyOpen(open => !open)}
           aria-expanded={bodyOpen}
-          className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-ink-subtle transition hover:text-ink"
+          className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-fg-muted transition hover:text-fg"
         >
           {bodyOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           <FileText className="h-3.5 w-3.5" /> {t('wbs.specPanelTitle')}
@@ -215,7 +215,7 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
             <button
               type="button" data-spec-edit-toggle aria-pressed={fieldsEditing} disabled={refBusy}
               onClick={() => { if (fieldsEditing) void closeFieldsEditing(); else setFieldsEditing(true) }}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-ink-subtle transition hover:bg-surface-2 hover:text-ink"
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-fg-muted transition hover:bg-surface-subtle hover:text-fg"
             >
               <Pencil className="h-3 w-3" />
               {fieldsEditing ? t('common.done') : t('common.edit')}
@@ -225,20 +225,20 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
       </div>
 
       {!bodyOpen ? null : loaded === null ? (
-        <p className="mt-2 text-xs text-ink-subtle">{t('common.loading')}</p>
+        <p className="mt-2 text-xs text-fg-muted">{t('common.loading')}</p>
       ) : loaded === 'error' ? (
-        <p className="mt-2 text-xs font-medium text-delayed">{t('wbs.specLoadFail')}</p>
+        <p className="mt-2 text-xs font-medium text-danger">{t('wbs.specLoadFail')}</p>
       ) : (
         <div className="mt-2 space-y-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            {loaded.category && <span className="chip bg-surface-2 text-ink-muted">{loaded.category}</span>}
-            {loaded.domain && <span className="chip bg-surface-2 text-ink-muted">{loaded.domain}</span>}
-            {priority && !fieldsEditing && <span className="chip bg-brand-weak text-brand">{t(PRIORITY_KEYS[priority])}</span>}
-            {loaded.model && <span className="chip bg-surface-2 text-ink-muted">{loaded.model}</span>}
+            {loaded.category && <span className="chip bg-surface-subtle text-fg-secondary">{loaded.category}</span>}
+            {loaded.domain && <span className="chip bg-surface-subtle text-fg-secondary">{loaded.domain}</span>}
+            {priority && !fieldsEditing && <span className="chip bg-action-soft text-action">{t(PRIORITY_KEYS[priority])}</span>}
+            {loaded.model && <span className="chip bg-surface-subtle text-fg-secondary">{loaded.model}</span>}
             {displayTags.map(tag => (
-              <span key={tag} className="chip border border-line text-ink-subtle">{tag}</span>
+              <span key={tag} className="chip border border-border text-fg-muted">{tag}</span>
             ))}
-            {!hasScalarBadge && <span className="text-xs text-ink-subtle">{t('wbs.specNone')}</span>}
+            {!hasScalarBadge && <span className="text-xs text-fg-muted">{t('wbs.specNone')}</span>}
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -256,7 +256,7 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
 
           {fieldsEditing && (
             <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold text-ink-muted">{t('wbs.specPriorityLabel')}</span>
+              <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('wbs.specPriorityLabel')}</span>
               <select
                 data-spec-priority value={priority ?? ''}
                 onChange={e => { setRefErr(null); quick.set('priority', (e.target.value || null) as WbsPriority | null) }}
@@ -274,18 +274,18 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
                 type="checkbox" data-spec-delegate
                 checked={delegated}
                 onChange={e => { setRefErr(null); quick.set('delegate', e.target.checked) }}
-                className="h-3.5 w-3.5 rounded border-line"
+                className="h-3.5 w-3.5 rounded border-border"
               />
-              <span className="text-xs font-semibold text-ink">{t('wbs.specAgentDelegateLabel')}</span>
-              <span className="text-[10px] text-ink-subtle">{t('wbs.specAgentDelegateHint')}</span>
+              <span className="text-xs font-semibold text-fg">{t('wbs.specAgentDelegateLabel')}</span>
+              <span className="text-[10px] text-fg-muted">{t('wbs.specAgentDelegateHint')}</span>
             </label>
           )}
           {/* 에이전트 프롬프트(0090) — 위임 신호에 덧붙이는 사용자 지시문. 비관리자에게는 값이 있을 때만 표시. */}
           {fieldsEditing ? (
             <label className="block">
-              <span className="mb-1 flex items-center justify-between text-[11px] font-semibold text-ink-muted">
+              <span className="mb-1 flex items-center justify-between text-[11px] font-semibold text-fg-secondary">
                 <span>{t('wbs.specAgentPromptLabel')}</span>
-                <span className="font-normal text-[10px] text-ink-subtle">{t('wbs.specAgentPromptHint')}</span>
+                <span className="font-normal text-[10px] text-fg-muted">{t('wbs.specAgentPromptHint')}</span>
               </span>
               <textarea
                 data-agent-prompt value={promptDraft} disabled={refBusy} rows={3}
@@ -296,26 +296,26 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
             </label>
           ) : loaded.agentPrompt ? (
             <div>
-              <div className="mb-1 text-[11px] font-semibold text-ink-muted">{t('wbs.specAgentPromptLabel')}</div>
-              <p className="whitespace-pre-wrap text-xs text-ink">{loaded.agentPrompt}</p>
+              <div className="mb-1 text-[11px] font-semibold text-fg-secondary">{t('wbs.specAgentPromptLabel')}</div>
+              <p className="whitespace-pre-wrap text-xs text-fg">{loaded.agentPrompt}</p>
             </div>
           ) : null}
-          {refErr && <p className="text-xs font-medium text-delayed" role="alert">{refErr}</p>}
+          {refErr && <p className="text-xs font-medium text-danger" role="alert">{refErr}</p>}
 
           <div>
             <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-ink-muted">{t('wbs.specAcceptanceLabel')}</span>
+              <span className="text-[11px] font-semibold text-fg-secondary">{t('wbs.specAcceptanceLabel')}</span>
               {loaded.acceptance.length > 0 && (
-                <span className="text-[10px] text-ink-subtle">{t('wbs.specAcceptanceHint')}</span>
+                <span className="text-[10px] text-fg-muted">{t('wbs.specAcceptanceHint')}</span>
               )}
             </div>
             {loaded.acceptance.length === 0 ? (
-              <p className="text-xs text-ink-subtle">{t('wbs.specAcceptanceNone')}</p>
+              <p className="text-xs text-fg-muted">{t('wbs.specAcceptanceNone')}</p>
             ) : (
               <ul className="space-y-1">
                 {loaded.acceptance.map((criterion, i) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-ink">
-                    <input type="checkbox" disabled aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-line" />
+                  <li key={i} className="flex items-start gap-2 text-xs text-fg">
+                    <input type="checkbox" disabled aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border" />
                     <span>{criterion}</span>
                   </li>
                 ))}
@@ -325,7 +325,7 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
 
           <div>
             <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-ink-muted">{t('wbs.specBodyLabel')}</span>
+              <span className="text-[11px] font-semibold text-fg-secondary">{t('wbs.specBodyLabel')}</span>
               {editable && !specEditing && (
                 <button type="button" onClick={openSpecEdit} className="btn btn-ghost h-6 px-2 text-[11px]">
                   <Pencil className="h-3 w-3" /> {t('wbs.specEditToggle')}
@@ -338,7 +338,7 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
                   autoFocus value={specDraft} onChange={e => setSpecDraft(e.target.value)}
                   rows={10} className="app-textarea font-mono text-xs" placeholder={t('wbs.specBodyPlaceholder')}
                 />
-                {specErr && <p className="text-xs font-medium text-delayed" role="alert">{specErr}</p>}
+                {specErr && <p className="text-xs font-medium text-danger" role="alert">{specErr}</p>}
                 <div className="flex gap-2">
                   <button onClick={saveSpec} disabled={specBusy} className="btn btn-primary h-8 px-3 text-xs">
                     {specBusy ? t('wbs.saving') : t('common.save')}
@@ -349,11 +349,11 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
                 </div>
               </div>
             ) : loaded.spec ? (
-              <div className="rounded-lg border border-line bg-surface p-2.5">
+              <div className="rounded-lg border border-border bg-surface p-2.5">
                 <MarkdownView content={loaded.spec} />
               </div>
             ) : (
-              <p className="text-xs text-ink-subtle">{t('wbs.specBodyEmpty')}</p>
+              <p className="text-xs text-fg-muted">{t('wbs.specBodyEmpty')}</p>
             )}
           </div>
         </div>
@@ -440,40 +440,40 @@ function WbsAgentOrderStatus({ itemId, editable, refreshKey }: { itemId: string;
   }
 
   return (
-    <div className="mt-2 rounded-lg border border-line bg-surface p-2.5">
+    <div className="mt-2 rounded-lg border border-border bg-surface p-2.5">
       <div className="flex items-center justify-between gap-2">
         <button
           type="button" data-agent-order-toggle
           onClick={() => setOpen(v => !v)}
           aria-expanded={open}
-          className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-ink-muted transition hover:text-ink"
+          className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-fg-secondary transition hover:text-fg"
         >
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           {t('wbs.agentOrderTitle')}
         </button>
         <span className="flex items-center gap-2">
           {projectId && (
-            <Link href={`/p/${projectId}/agents`} data-agent-hub-link className="text-[11px] text-brand underline-offset-2 hover:underline">에이전트 페이지</Link>
+            <Link href={`/p/${projectId}/agents`} data-agent-hub-link className="text-[11px] text-action underline-offset-2 hover:underline">에이전트 페이지</Link>
           )}
-          <span className={`chip ${order.status === 'reported' ? 'bg-brand-weak text-brand' : 'bg-surface-2 text-ink-muted'}`}>
+          <span className={`chip ${order.status === 'reported' ? 'bg-action-soft text-action' : 'bg-surface-subtle text-fg-secondary'}`}>
             {order.status === 'claimed' ? t('wbs.agentOrderClaimed') : t(ORDER_STATUS_LABEL[order.status] ?? 'wbs.agentOrderReady')}
           </span>
         </span>
       </div>
       {!open ? null : <>
       {order.status === 'claimed' && (
-        <p className="text-xs text-ink-subtle">
+        <p className="text-xs text-fg-muted">
           {order.claimed_by ?? '—'}
-          {isClaimStale(order.claimed_at) && <span className="ml-1 text-delayed">{t('wbs.agentOrderStale')}</span>}
+          {isClaimStale(order.claimed_at) && <span className="ml-1 text-danger">{t('wbs.agentOrderStale')}</span>}
           {lastReport && ` · ${lastReport.percent}%`}
         </p>
       )}
       {order.reports.length > 0 && (
         <ul className="mt-1.5 space-y-1.5">
           {order.reports.map(r => (
-            <li key={r.id} className="rounded-md border border-line/60 p-1.5 text-xs">
-              <div className="text-[10px] text-ink-subtle">{r.created_at} · {r.agent} · {r.kind} · {r.percent}%</div>
-              <p className="whitespace-pre-wrap text-ink">{r.summary}</p>
+            <li key={r.id} className="rounded-md border border-border/60 p-1.5 text-xs">
+              <div className="text-[10px] text-fg-muted">{r.created_at} · {r.agent} · {r.kind} · {r.percent}%</div>
+              <p className="whitespace-pre-wrap text-fg">{r.summary}</p>
               {r.links.length > 0 && (
                 <div className="mt-0.5 text-[10px]">
                   {t('wbs.agentOrderLinks')}: {r.links.map((l, i) => (
@@ -486,7 +486,7 @@ function WbsAgentOrderStatus({ itemId, editable, refreshKey }: { itemId: string;
         </ul>
       )}
       {priorOrders.length > 0 && (
-        <ul className="mt-1.5 space-y-0.5 border-t border-line/60 pt-1.5 text-[10px] text-ink-subtle">
+        <ul className="mt-1.5 space-y-0.5 border-t border-border/60 pt-1.5 text-[10px] text-fg-muted">
           <li className="font-semibold">{t('wbs.agentOrderPrior')} ({priorOrders.length})</li>
           {priorOrders.map(o => (
             <li key={o.id} className="tabular-nums">
@@ -537,8 +537,8 @@ function WbsAgentOrderStatus({ itemId, editable, refreshKey }: { itemId: string;
           )}
         </div>
       )}
-      {err && <p className="mt-1.5 text-xs font-medium text-delayed" role="alert">{err}</p>}
-      {warn && <p className="mt-1.5 text-xs text-ink-muted" data-agent-warning role="status">{warn}</p>}
+      {err && <p className="mt-1.5 text-xs font-medium text-danger" role="alert">{err}</p>}
+      {warn && <p className="mt-1.5 text-xs text-fg-secondary" data-agent-warning role="status">{warn}</p>}
       </>}
     </div>
   )
@@ -560,7 +560,7 @@ function RefField({
   const { t } = useLocale()
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold text-ink-muted">{label}</span>
+      <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{label}</span>
       {editable ? (
         <input
           {...(dataAttr ? { [dataAttr]: '' } : {})}
@@ -570,7 +570,7 @@ function RefField({
           className="app-input h-9 text-xs" placeholder={t('wbs.specRefPlaceholder')}
         />
       ) : (
-        <p className="text-sm text-ink">{display ?? t('wbs.specRefPlaceholder')}</p>
+        <p className="text-sm text-fg">{display ?? t('wbs.specRefPlaceholder')}</p>
       )}
     </label>
   )

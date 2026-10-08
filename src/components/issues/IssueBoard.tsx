@@ -141,7 +141,7 @@ export function IssueBoard({
                       <p className="mt-2 truncate text-xs text-fg-muted">{areaLabel(area, issue.areaId)}</p>
                       <div className="mt-2 flex items-center justify-between gap-2 text-xs text-fg-muted">
                         <span className="min-w-0 truncate">{assigneeLabel(issue) ?? t('issue.unassigned')}</span>
-                        <span className={`flex shrink-0 items-center gap-1 tabular-nums ${urgent ? 'font-semibold text-delayed' : ''}`}>
+                        <span className={`flex shrink-0 items-center gap-1 tabular-nums ${urgent ? 'font-semibold text-danger' : ''}`}>
                           <CalendarRange className="h-3 w-3" aria-hidden />
                           {issue.dueDate ?? '—'}
                         </span>

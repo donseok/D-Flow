@@ -39,18 +39,18 @@ export function ArchiveChatPanel({
     // 이 패널 안에서 여는 모달은 body 끝에 포털되어 문서 순서로 이 패널 위에 온다(같은 층).
     <div className="fixed inset-0 z-(--z-modal)" role="dialog" aria-modal="true" aria-label={t('min.chat.archive.title')}>
       <div data-backdrop className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" onClick={onClose} aria-hidden />
-      <div className="absolute bottom-3 right-3 top-3 flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-[var(--shadow-xl)] animate-[slidein_.18s_ease-out]">
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+      <div className="absolute bottom-3 right-3 top-3 flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-3xl border border-border bg-surface shadow-[var(--shadow-xl)] animate-[slidein_.18s_ease-out]">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <span className="inline-flex items-center gap-1.5 text-sm font-semibold">
-            <Bot className="h-4 w-4 text-brand" />{t('min.chat.archive.title')}
+            <Bot className="h-4 w-4 text-action" />{t('min.chat.archive.title')}
           </span>
           <span className="inline-flex items-center gap-2">
             <button onClick={reset} disabled={loading || messages.length === 0}
-              className="text-ink-subtle hover:text-ink disabled:opacity-40"
+              className="text-fg-muted hover:text-fg disabled:opacity-40"
               title={t('min.chat.reset')} aria-label={t('min.chat.reset')}>
               <RotateCcw className="h-4 w-4" />
             </button>
-            <button onClick={onClose} className="text-ink-subtle hover:text-ink" aria-label={t('common.close')}>
+            <button onClick={onClose} className="text-fg-muted hover:text-fg" aria-label={t('common.close')}>
               <X className="h-4 w-4" />
             </button>
           </span>

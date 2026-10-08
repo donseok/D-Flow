@@ -66,8 +66,8 @@ const KIND_META: Record<string, KindMeta> = {
   decision: {
     icon: CheckCircle2,
     labelKey: 'wiki.kind.decision',
-    chip: 'bg-done-weak text-done',
-    iconWrap: 'bg-done-weak text-done',
+    chip: 'bg-success-weak text-success',
+    iconWrap: 'bg-success-weak text-success',
   },
   fact: {
     icon: Info,
@@ -90,20 +90,20 @@ const KIND_META: Record<string, KindMeta> = {
   risk: {
     icon: AlertTriangle,
     labelKey: 'wiki.kind.risk',
-    chip: 'bg-delayed-weak text-delayed',
-    iconWrap: 'bg-delayed-weak text-delayed',
+    chip: 'bg-danger-weak text-danger',
+    iconWrap: 'bg-danger-weak text-danger',
   },
   constraint: {
     icon: ShieldAlert,
     labelKey: 'wiki.kind.constraint',
-    chip: 'bg-accent-warning/15 text-accent-warning',
-    iconWrap: 'bg-accent-warning/15 text-accent-warning',
+    chip: 'bg-warning/15 text-warning',
+    iconWrap: 'bg-warning/15 text-warning',
   },
   rationale: {
     icon: Lightbulb,
     labelKey: 'wiki.kind.rationale',
-    chip: 'bg-brand-weak text-brand',
-    iconWrap: 'bg-brand-weak text-brand',
+    chip: 'bg-action-soft text-action',
+    iconWrap: 'bg-action-soft text-action',
   },
 }
 
@@ -162,8 +162,8 @@ function kindMeta(kind: WikiItemKind): KindMeta {
   return KIND_META[kind] ?? {
     icon: FileText,
     labelKey: 'wiki.kind.other',
-    chip: 'bg-surface-2 text-ink-muted',
-    iconWrap: 'bg-surface-2 text-ink-muted',
+    chip: 'bg-surface-subtle text-fg-secondary',
+    iconWrap: 'bg-surface-subtle text-fg-secondary',
   }
 }
 
@@ -209,12 +209,12 @@ function stateLabel(locale: Locale, item: WikiItem): string {
 
 function stateChip(item: WikiItem): string {
   const state = displayedState(item)
-  if (isConflictedWikiItem(item)) return 'bg-delayed-weak text-delayed'
-  if (['resolved', 'done', 'confirmed'].includes(state)) return 'bg-done-weak text-done'
-  if (state === 'reversed') return 'bg-delayed-weak text-delayed'
-  if (['superseded', 'withdrawn', 'archived', 'closed'].includes(state)) return 'bg-surface-2 text-ink-subtle'
+  if (isConflictedWikiItem(item)) return 'bg-danger-weak text-danger'
+  if (['resolved', 'done', 'confirmed'].includes(state)) return 'bg-success-weak text-success'
+  if (state === 'reversed') return 'bg-danger-weak text-danger'
+  if (['superseded', 'withdrawn', 'archived', 'closed'].includes(state)) return 'bg-surface-subtle text-fg-muted'
   if (['tentative', 'proposed', 'on_hold'].includes(state)) return 'bg-pending-weak text-pending'
-  return 'bg-brand-weak text-brand'
+  return 'bg-action-soft text-action'
 }
 
 /** 위키 날짜 표기 — date-only('YYYY-MM-DD')는 변환하지 않고(UTC 로 그대로 찍기), instant 는 프로젝트 tz 로(스펙 SP5 D60, 계획 D-21d) */
@@ -291,13 +291,13 @@ export function WikiSourceLinks({
 }) {
   if (sources.length === 0) return null
   return (
-    <div className="mt-3 space-y-2 border-t border-line/80 pt-3">
+    <div className="mt-3 space-y-2 border-t border-border/80 pt-3">
       {sources.slice(0, showEvidence ? 4 : 2).map((source, index) => (
         <div key={source.id || `${source.minuteId}-${source.blockIndex ?? index}`}>
           <WikiTrackedLink
             href={sourceHref(source, minutesBase)}
             domain="minutes"
-            className="group/source inline-flex max-w-full items-center gap-1.5 text-xs font-medium text-brand hover:text-brand-hover"
+            className="group/source inline-flex max-w-full items-center gap-1.5 text-xs font-medium text-action hover:text-action-hover"
             ariaLabel={`${source.minuteTitle ?? t(locale, 'wiki.viewSource')} ${t(locale, 'wiki.viewSource')}`}
           >
             <FileText className="h-3.5 w-3.5 shrink-0" />
@@ -308,14 +308,14 @@ export function WikiSourceLinks({
             <ExternalLink className="h-3 w-3 shrink-0 opacity-60 transition group-hover/source:opacity-100" />
           </WikiTrackedLink>
           {showEvidence && source.evidenceExcerpt && (
-            <blockquote className="mt-1.5 border-l-2 border-line-strong pl-3 text-xs leading-5 text-ink-muted">
+            <blockquote className="mt-1.5 border-l-2 border-border-input pl-3 text-xs leading-5 text-fg-secondary">
               {source.evidenceExcerpt}
             </blockquote>
           )}
         </div>
       ))}
       {sources.length > (showEvidence ? 4 : 2) && (
-        <span className="text-[11px] text-ink-subtle">
+        <span className="text-[11px] text-fg-muted">
           {t(locale, 'wiki.sourceCount').replace('{n}', String(sources.length))}
         </span>
       )}
@@ -414,21 +414,21 @@ function changeLabel(locale: Locale, type: string): string {
 function changeTone(type: string): { dot: string; badge: string; icon: LucideIcon } {
   const key = normalized(type)
   if (key === 'retract') {
-    return { dot: 'bg-ink-subtle', badge: 'bg-surface-2 text-ink-subtle', icon: FileText }
+    return { dot: 'bg-fg-muted', badge: 'bg-surface-subtle text-fg-muted', icon: FileText }
   }
   if (key === 'curate') {
-    return { dot: 'bg-accent-warning', badge: 'bg-accent-warning/15 text-accent-warning', icon: UserRoundCog }
+    return { dot: 'bg-warning', badge: 'bg-warning/15 text-warning', icon: UserRoundCog }
   }
   if (['conflict', 'conflicted', 'withdrawn', 'reverse'].includes(key)) {
-    return { dot: 'bg-delayed', badge: 'bg-delayed-weak text-delayed', icon: AlertTriangle }
+    return { dot: 'bg-danger', badge: 'bg-danger-weak text-danger', icon: AlertTriangle }
   }
   if (['resolved', 'resolve', 'confirmed', 'reconfirmed', 'reaffirm'].includes(key)) {
-    return { dot: 'bg-done', badge: 'bg-done-weak text-done', icon: CheckCircle2 }
+    return { dot: 'bg-success', badge: 'bg-success-weak text-success', icon: CheckCircle2 }
   }
   if (['superseded', 'supersede', 'updated', 'refined', 'refine'].includes(key)) {
     return { dot: 'bg-progress', badge: 'bg-progress-weak text-progress', icon: Scale }
   }
-  return { dot: 'bg-brand', badge: 'bg-brand-weak text-brand', icon: Lightbulb }
+  return { dot: 'bg-action', badge: 'bg-action-soft text-action', icon: Lightbulb }
 }
 
 export function WikiChangeList({
@@ -450,11 +450,11 @@ export function WikiChangeList({
 }) {
   const visible = typeof limit === 'number' ? changes.slice(0, limit) : changes
   if (visible.length === 0) {
-    return <p className="py-5 text-center text-sm text-ink-muted">{emptyText ?? t(locale, 'wiki.noTimeline')}</p>
+    return <p className="py-5 text-center text-sm text-fg-secondary">{emptyText ?? t(locale, 'wiki.noTimeline')}</p>
   }
 
   return (
-    <ol className="relative space-y-0 before:absolute before:bottom-4 before:left-[7px] before:top-4 before:w-px before:bg-line">
+    <ol className="relative space-y-0 before:absolute before:bottom-4 before:left-[7px] before:top-4 before:w-px before:bg-border">
       {visible.map((change) => {
         const tone = changeTone(change.changeType)
         const Icon = tone.icon
@@ -480,7 +480,7 @@ export function WikiChangeList({
                 <WikiTrackedLink
                   href={changeSourceHref(change, minutesBase)}
                   domain="minutes"
-                  className="mt-2 inline-flex max-w-full items-center gap-1.5 text-[11px] font-medium text-brand hover:text-brand-hover"
+                  className="mt-2 inline-flex max-w-full items-center gap-1.5 text-[11px] font-medium text-action hover:text-action-hover"
                 >
                   <FileText className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">

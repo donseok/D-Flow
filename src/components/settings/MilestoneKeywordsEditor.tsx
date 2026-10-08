@@ -77,21 +77,21 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
 
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <label htmlFor="milestone-keywords" className="text-sm font-semibold text-ink">마일스톤 키워드</label>
-      <span className="text-xs text-ink-subtle">{repair ? '설정 손상' : source} · 즉시 적용</span>
+      <label htmlFor="milestone-keywords" className="text-sm font-semibold text-fg">마일스톤 키워드</label>
+      <span className="text-xs text-fg-muted">{repair ? '설정 손상' : source} · 즉시 적용</span>
     </div>
-    <p className="text-xs text-ink-muted">작업 이름에 포함된 단어로 대시보드의 마일스톤을 표시합니다. 비우면 마커가 표시되지 않습니다.</p>
+    <p className="text-xs text-fg-secondary">작업 이름에 포함된 단어로 대시보드의 마일스톤을 표시합니다. 비우면 마커가 표시되지 않습니다.</p>
     {repair && <ConfigStateNotice kind="invalid" locale={locale} keyName="core.milestone_keywords" message={invalidReason}
       isAdmin settingsHref="#milestone-keywords" />}
     <textarea id="milestone-keywords" className="app-textarea min-h-28 w-full text-sm" value={text}
       disabled={pending || !!uncertainPatch} onChange={event => { setText(event.target.value); setReviewing(false); setError(null); setFieldError(null); setNotice(null) }} placeholder="한 줄에 한 키워드" />
     {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
-    <p className="text-[11px] text-ink-subtle">저장 시 소문자로 바뀝니다.</p>
-    {reviewing && !conflict && !uncertainPatch && <section aria-label="변경 내용 검토" className="space-y-2 rounded-lg border border-line bg-surface-2 p-3 text-sm">
-      <h3 className="font-semibold text-ink">변경 내용 검토</h3>
-      <p className="text-ink-muted">현재: {lines(baseline).join(', ') || '없음'}</p>
-      <p className="text-ink-muted">변경: {lines(text).join(', ') || '없음'}</p>
-      <p className="text-ink-muted">저장하면 대시보드의 마일스톤 판정이 즉시 다시 계산됩니다. WBS 작업의 저장값은 바뀌지 않습니다.</p>
+    <p className="text-[11px] text-fg-muted">저장 시 소문자로 바뀝니다.</p>
+    {reviewing && !conflict && !uncertainPatch && <section aria-label="변경 내용 검토" className="space-y-2 rounded-lg border border-border bg-surface-subtle p-3 text-sm">
+      <h3 className="font-semibold text-fg">변경 내용 검토</h3>
+      <p className="text-fg-secondary">현재: {lines(baseline).join(', ') || '없음'}</p>
+      <p className="text-fg-secondary">변경: {lines(text).join(', ') || '없음'}</p>
+      <p className="text-fg-secondary">저장하면 대시보드의 마일스톤 판정이 즉시 다시 계산됩니다. WBS 작업의 저장값은 바뀌지 않습니다.</p>
       <button type="button" className="btn btn-secondary" onClick={() => setReviewing(false)}>계속 수정</button>
     </section>}
     {conflict && <ConflictCompare rows={[{ key: 'keywords', label: '마일스톤 키워드',

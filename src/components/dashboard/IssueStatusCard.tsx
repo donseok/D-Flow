@@ -31,7 +31,7 @@ function StatusDots({ counts, total }: { counts: IssueStatusCounts; total: numbe
   return (
     <div className="flex flex-wrap items-center gap-[3px]" aria-hidden>
       {dots.map((s, i) => <i key={i} data-dot={s} className={`inline-block h-[7px] w-[7px] rounded-[2px] ${ISSUE_STATUS_META[s].dot}`} />)}
-      {rest > 0 && <span className="ml-0.5 text-[10px] font-semibold text-ink-subtle">+{rest}</span>}
+      {rest > 0 && <span className="ml-0.5 text-[10px] font-semibold text-fg-muted">+{rest}</span>}
     </div>
   )
 }
@@ -60,8 +60,8 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
 
   const actions = (
     <>
-      <span className="chip bg-surface-2 text-ink-subtle">{tr('dash.issues.totalPrefix')}{kpi.total}{unit}</span>
-      <Link href={`/p/${projectId}/issues`} className="text-xs font-semibold text-brand hover:underline">
+      <span className="chip bg-surface-subtle text-fg-muted">{tr('dash.issues.totalPrefix')}{kpi.total}{unit}</span>
+      <Link href={`/p/${projectId}/issues`} className="text-xs font-semibold text-action hover:underline">
         {tr('dash.issues.open')} →
       </Link>
     </>
@@ -77,9 +77,9 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
 
   const kpis: { label: string; value: number; tone?: string }[] = [
     { label: tr('dash.issues.kpiUnresolved'), value: kpi.unresolved },
-    { label: tr('dash.issues.kpiOverdue'), value: kpi.overdue, tone: kpi.overdue > 0 ? 'text-delayed' : undefined },
-    { label: tr('dash.issues.kpiHigh'), value: kpi.highUnresolved, tone: kpi.highUnresolved > 0 ? 'text-accent-warning' : undefined },
-    { label: tr('dash.issues.kpiResolved7d'), value: kpi.resolved7d, tone: 'text-done' },
+    { label: tr('dash.issues.kpiOverdue'), value: kpi.overdue, tone: kpi.overdue > 0 ? 'text-danger' : undefined },
+    { label: tr('dash.issues.kpiHigh'), value: kpi.highUnresolved, tone: kpi.highUnresolved > 0 ? 'text-warning' : undefined },
+    { label: tr('dash.issues.kpiResolved7d'), value: kpi.resolved7d, tone: 'text-success' },
   ]
 
   return (
@@ -92,28 +92,28 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
             <div className="justify-self-center">
               <RingGauge pct={resolvedPct} size={132} stroke={12} label={`${tr('dash.issues.resolvedRate')} ${resolvedPct}%`}>
                 <div>
-                  <b className="block text-[30px] font-extrabold leading-none tracking-tight text-ink">{resolvedPct}%</b>
-                  <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">{tr('dash.issues.resolvedRate')}</span>
+                  <b className="block text-[30px] font-extrabold leading-none tracking-tight text-fg">{resolvedPct}%</b>
+                  <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-fg-muted">{tr('dash.issues.resolvedRate')}</span>
                 </div>
               </RingGauge>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {kpis.map(k => (
-                <div key={k.label} className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-line bg-surface-2/50 px-3 py-2">
-                  <span className="truncate text-[11px] text-ink-muted">{k.label}</span>
-                  <b className={`shrink-0 text-lg font-bold leading-none ${k.tone ?? 'text-ink'}`}>{k.value}</b>
+                <div key={k.label} className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border bg-surface-subtle/50 px-3 py-2">
+                  <span className="truncate text-[11px] text-fg-secondary">{k.label}</span>
+                  <b className={`shrink-0 text-lg font-bold leading-none ${k.tone ?? 'text-fg'}`}>{k.value}</b>
                 </div>
               ))}
             </div>
           </div>
-          <p className="text-[11px] text-ink-subtle">
+          <p className="text-[11px] text-fg-muted">
             {tr('dash.issues.kpiUnresolvedSub').replace('{n}', String(kpi.total))} · {tr('dash.issues.kpiResolved7d')} {fmtDate(windowStart)}–{fmtDate(today)}
           </p>
         </div>
 
         {/* Mega 업무영역별 — 미니 링 타일(8영역 코드순 고정 + 미분류는 있을 때만). 이슈 없는 영역은 흐리게. */}
         <div>
-          <div className="mb-2 flex justify-between text-[11px] text-ink-subtle">
+          <div className="mb-2 flex justify-between text-[11px] text-fg-muted">
             <span>{tr('dash.issues.byAreaRate')}</span><span>{tr('dash.issues.ringHint')}</span>
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2">
@@ -124,19 +124,19 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
               const title = empty ? `${name}: ${tr('dash.issues.noIssues')}` : `${name}: ${countsText(r.counts)}`
               return (
                 <div key={r.areaId ?? 'none'} title={title}
-                  className={`flex min-w-0 flex-col gap-1.5 rounded-xl border border-line p-2.5 ${empty ? 'opacity-60' : ''}`}>
+                  className={`flex min-w-0 flex-col gap-1.5 rounded-xl border border-border p-2.5 ${empty ? 'opacity-60' : ''}`}>
                   {/* 상태 내역은 글로도 — 점(aria-hidden)·title(호버 전용)만으론 키보드·스크린리더 경로가 없다 */}
                   {!empty && <span className="sr-only">{countsText(r.counts)}</span>}
                   <div className="flex min-w-0 items-center gap-2">
                     <RingGauge pct={r.resolvedPct} size={34} stroke={5}
                       label={r.resolvedPct === null ? `${name} ${tr('dash.issues.noIssues')}` : `${name} ${tr('dash.issues.resolvedRate')} ${r.resolvedPct}%`}>
-                      <b className="text-[9px] font-bold tracking-tighter text-ink">{r.resolvedPct === null ? '–' : `${r.resolvedPct}%`}</b>
+                      <b className="text-[9px] font-bold tracking-tighter text-fg">{r.resolvedPct === null ? '–' : `${r.resolvedPct}%`}</b>
                     </RingGauge>
                     <div className="min-w-0">
-                      <div className="truncate text-xs font-semibold text-ink">
-                        <span className="mr-1 text-[10px] font-semibold tabular-nums text-ink-subtle">{area?.code ?? '–'}</span>{name}
+                      <div className="truncate text-xs font-semibold text-fg">
+                        <span className="mr-1 text-[10px] font-semibold tabular-nums text-fg-muted">{area?.code ?? '–'}</span>{name}
                       </div>
-                      <div className="text-[11px] text-ink-subtle">
+                      <div className="text-[11px] text-fg-muted">
                         {empty ? tr('dash.issues.noIssues') : `${r.total}${unit} · ${tr('dash.issues.trendResolvedShort')} ${r.counts.resolved}`}
                       </div>
                     </div>
@@ -149,17 +149,17 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
         </div>
 
         {/* 범례 — 점 순서(ISSUE_STATUSES 고정)를 글로도 알린다(적록 색각 보강). */}
-        <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-[11px] text-ink-muted">
-          <span className="text-ink-subtle">{tr('dash.issues.legendOrder')}</span>
+        <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-[11px] text-fg-secondary">
+          <span className="text-fg-muted">{tr('dash.issues.legendOrder')}</span>
           {ISSUE_STATUSES.map(s => (
             <span key={s} className="inline-flex items-center gap-1.5">
               <span className={`h-2 w-2 rounded-[2px] ${ISSUE_STATUS_META[s].dot}`} aria-hidden />
-              <span>{statusLabel(s)}</span> <b className="font-semibold tabular-nums text-ink">{all[s]}</b>
+              <span>{statusLabel(s)}</span> <b className="font-semibold tabular-nums text-fg">{all[s]}</b>
             </span>
           ))}
         </div>
 
-        <p className="text-[11px] leading-4 text-ink-subtle">{tr('dash.issues.caption').replace('{d}', fmtDate(today))}</p>
+        <p className="text-[11px] leading-4 text-fg-muted">{tr('dash.issues.caption').replace('{d}', fmtDate(today))}</p>
       </div>
     </SectionCard>
   )

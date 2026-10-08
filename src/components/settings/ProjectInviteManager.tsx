@@ -18,9 +18,9 @@ type AccessRole = 'admin' | 'member'
 const ACCESS_LABEL: Record<AccessRole, string> = { admin: '관리자', member: '멤버' }
 
 const STATUS_CLASS: Record<InviteStatus, string> = {
-  active: 'bg-done-weak text-done',
-  redeemed: 'bg-brand-weak text-brand',
-  revoked: 'bg-surface-2 text-ink-muted',
+  active: 'bg-success-weak text-success',
+  redeemed: 'bg-action-soft text-action',
+  revoked: 'bg-surface-subtle text-fg-secondary',
   expired: 'bg-pending-weak text-pending',
 }
 
@@ -153,18 +153,18 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-semibold text-ink">초대 링크</h4>
+      <h4 className="text-sm font-semibold text-fg">초대 링크</h4>
 
-      <div className="flex items-start gap-2.5 rounded-xl border border-line bg-pending-weak px-3.5 py-3">
+      <div className="flex items-start gap-2.5 rounded-xl border border-border bg-pending-weak px-3.5 py-3">
         <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-pending" />
-        <p className="text-xs leading-5 text-ink">
+        <p className="text-xs leading-5 text-fg">
           합류한 사람은 이 프로젝트뿐 아니라 전체 회의록·WBS·이슈·근태를 조회할 수 있습니다. 신뢰할 수 있는 인원에게만 발급하세요.
         </p>
       </div>
 
       <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
         <label className="block min-w-[14rem] flex-1">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">이메일</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">이메일</span>
           <input
             type="email"
             className="app-input"
@@ -176,7 +176,7 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
           />
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">권한</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">권한</span>
           <select
             className="app-input w-36"
             aria-label="초대 권한"
@@ -189,7 +189,7 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">역할 라벨</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">역할 라벨</span>
           <input
             className="app-input w-32"
             aria-label="역할 라벨"
@@ -199,11 +199,11 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
           />
         </label>
         <div className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">팀</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">팀</span>
           <TeamMultiSelect options={teamOptions} value={teamIds} onChange={setTeamIds} label="초대 팀" />
         </div>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">유효기간(일)</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">유효기간(일)</span>
           <input
             type="number"
             className="app-input w-24"
@@ -216,17 +216,17 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
         <button type="submit" className="btn btn-primary" disabled={pending}>
           <Send className="h-4 w-4" />{pending ? '보내는 중…' : '초대 보내기'}
         </button>
-        <p className="basis-full text-xs leading-5 text-ink-subtle">
+        <p className="basis-full text-xs leading-5 text-fg-muted">
           합류하면 이 프로젝트 명단에 선택한 팀(첫 팀이 대표)으로 오릅니다. 이미 명단에 있는 사람은 기존 팀이 그대로 남고
-          이 팀이 <strong className="font-semibold text-ink-muted">더해집니다</strong>.
+          이 팀이 <strong className="font-semibold text-fg-secondary">더해집니다</strong>.
         </p>
       </form>
-      {formError && <p role="alert" className="text-sm font-medium text-delayed">{formError}</p>}
+      {formError && <p role="alert" className="text-sm font-medium text-danger">{formError}</p>}
       {issued?.url && (
-        <div data-issued-invite className="space-y-2 rounded-xl border border-line bg-surface-2/50 px-3.5 py-3">
-          <p className="text-xs leading-5 text-ink-muted">
-            <strong className="font-semibold text-ink">{issued.email}</strong> 초대 링크 —{' '}
-            <strong className="font-semibold text-ink">이 링크는 다시 볼 수 없습니다.</strong>{' '}
+        <div data-issued-invite className="space-y-2 rounded-xl border border-border bg-surface-subtle/50 px-3.5 py-3">
+          <p className="text-xs leading-5 text-fg-secondary">
+            <strong className="font-semibold text-fg">{issued.email}</strong> 초대 링크 —{' '}
+            <strong className="font-semibold text-fg">이 링크는 다시 볼 수 없습니다.</strong>{' '}
             메일이 닿지 않았으면 지금 복사해 전달하세요. 다시 보내려면 초대를 취소하고 새로 발급합니다.
           </p>
           <div className="flex items-center gap-2">
@@ -245,24 +245,24 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
               닫기
             </button>
           </div>
-          {copyError ? <p role="alert" className="text-xs font-medium text-delayed">{copyError}</p> : null}
+          {copyError ? <p role="alert" className="text-xs font-medium text-danger">{copyError}</p> : null}
         </div>
       )}
 
       {timeZone === null && (
-        <p role="status" data-invite-time-unavailable className="text-xs text-ink-muted">
+        <p role="status" data-invite-time-unavailable className="text-xs text-fg-secondary">
           만료·합류 시각을 표시하지 못했습니다 — {timeZoneError ?? '프로젝트 달력 설정을 읽지 못했습니다.'} 초대 발급·취소는 그대로 됩니다.
         </p>
       )}
       {loadError ? (
-        <p role="alert" className="text-sm font-medium text-delayed">{loadError}</p>
+        <p role="alert" className="text-sm font-medium text-danger">{loadError}</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-ink-subtle">발급한 초대가 없습니다.</p>
+        <p className="text-sm text-fg-muted">발급한 초대가 없습니다.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+              <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
                 <th className="py-2 pr-3">이메일</th>
                 <th className="py-2 pr-3">권한</th>
                 <th className="py-2 pr-3">팀</th>
@@ -274,34 +274,34 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
             </thead>
             <tbody>
               {rows.map(row => (
-                <tr key={row.id} className="border-b border-line/60 align-top">
-                  <td className="py-2.5 pr-3 font-medium text-ink">{row.email}</td>
-                  <td className="py-2.5 pr-3 text-ink-muted">
+                <tr key={row.id} className="border-b border-border/60 align-top">
+                  <td className="py-2.5 pr-3 font-medium text-fg">{row.email}</td>
+                  <td className="py-2.5 pr-3 text-fg-secondary">
                     {row.accessRole ? ACCESS_LABEL[row.accessRole] : '조회 전용'}
-                    {row.roleLabel && <span className="ml-1.5 chip bg-surface-2 text-ink-muted">{row.roleLabel}</span>}
+                    {row.roleLabel && <span className="ml-1.5 chip bg-surface-subtle text-fg-secondary">{row.roleLabel}</span>}
                   </td>
                   <td className="py-2.5 pr-3">
                     {row.teamCodes.length > 0
-                      ? <span className="chip bg-surface-2 text-ink-muted">{row.teamCodes.join(', ')}</span>
-                      : <span className="text-ink-subtle">—</span>}
+                      ? <span className="chip bg-surface-subtle text-fg-secondary">{row.teamCodes.join(', ')}</span>
+                      : <span className="text-fg-muted">—</span>}
                   </td>
                   <td className="py-2.5 pr-3">
                     <span className={`badge ${STATUS_CLASS[row.status]}`}>{inviteStatusLabel(row.status)}</span>
                   </td>
-                  <td className="py-2.5 pr-3 tabular-nums text-ink-muted">{fmtDateTime(row.expiresAt, timeZone, locale)}</td>
-                  <td className="py-2.5 pr-3 tabular-nums text-ink-muted">
-                    {row.redeemedAt ? fmtDateTime(row.redeemedAt, timeZone, locale) : <span className="text-ink-subtle">—</span>}
+                  <td className="py-2.5 pr-3 tabular-nums text-fg-secondary">{fmtDateTime(row.expiresAt, timeZone, locale)}</td>
+                  <td className="py-2.5 pr-3 tabular-nums text-fg-secondary">
+                    {row.redeemedAt ? fmtDateTime(row.redeemedAt, timeZone, locale) : <span className="text-fg-muted">—</span>}
                   </td>
                   <td className="py-2.5 pr-3">
                     {canRevoke(row.status) && (
                       <div className="flex flex-wrap items-center gap-2">
                         {/* 목록 행에는 링크가 없다(토큰 해시만 저장) — 발급 직후 위 상자에서만 복사할 수 있다. */}
                         {row.status === 'active' && (
-                          <span className="text-xs text-ink-subtle">링크는 발급 시 한 번만 표시됩니다</span>
+                          <span className="text-xs text-fg-muted">링크는 발급 시 한 번만 표시됩니다</span>
                         )}
                         <button
                           type="button"
-                          className="btn btn-ghost h-8 px-3 text-xs text-delayed"
+                          className="btn btn-ghost h-8 px-3 text-xs text-danger"
                           onClick={() => { setRowErrors(prev => ({ ...prev, [row.id]: '' })); setRevoking(row) }}
                         >
                           취소
@@ -309,7 +309,7 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
                       </div>
                     )}
                     {rowErrors[row.id] ? (
-                      <p role="alert" className="mt-1 text-xs font-medium text-delayed">{rowErrors[row.id]}</p>
+                      <p role="alert" className="mt-1 text-xs font-medium text-danger">{rowErrors[row.id]}</p>
                     ) : null}
                   </td>
                 </tr>
@@ -336,16 +336,16 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
           </>
         }
       >
-        <p className="text-sm text-ink-muted">
+        <p className="text-sm text-fg-secondary">
           이 초대를 취소할까요? 이미 합류한 사람은 영향받지 않습니다.
         </p>
         {/* 만료 행에서 '취소'는 무의미해 보인다 — 왜 눌러야 하는지 그 자리에서 말해 준다. */}
         {revoking?.status === 'expired' && (
-          <p className="mt-2 text-sm text-ink-muted">
+          <p className="mt-2 text-sm text-fg-secondary">
             만료된 초대가 남아 있는 동안에는 같은 주소로 다시 보낼 수 없습니다. 취소하면 재발급할 수 있습니다.
           </p>
         )}
-        {revoking && <p className="mt-2 text-sm font-semibold text-ink">{revoking.email}</p>}
+        {revoking && <p className="mt-2 text-sm font-semibold text-fg">{revoking.email}</p>}
       </Modal>
     </div>
   )

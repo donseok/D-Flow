@@ -30,7 +30,7 @@ export function ProjectPrivacyToggle({ projectId, isPrivate }: { projectId: stri
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className={`chip ${isPrivate ? 'bg-pending-weak text-accent-warning' : 'bg-brand-weak text-brand'}`}>
+      <span className={`chip ${isPrivate ? 'bg-pending-weak text-warning' : 'bg-action-soft text-action'}`}>
         {isPrivate
           ? <><Lock className="mr-1 h-3.5 w-3.5" aria-hidden />{t('settings.privacyPrivateChip')}</>
           : <><Globe className="mr-1 h-3.5 w-3.5" aria-hidden />{t('settings.privacyPublicChip')}</>}

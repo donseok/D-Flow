@@ -24,7 +24,7 @@ function OccurrenceChip({ o, onSelect, t, projectDotClass, categories }: {
   return (
     <button
       onClick={() => onSelect(o)}
-      className={`flex w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-[10.5px] font-medium ${meta.chip} cursor-pointer transition hover:ring-1 hover:ring-brand-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-ring`}
+      className={`flex w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-[10.5px] font-medium ${meta.chip} cursor-pointer transition hover:ring-1 hover:ring-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus`}
       title={`${timeLabel} · ${o.title}`}
     >
       {dotClass && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />}
@@ -64,9 +64,9 @@ export function MeetingCalendar({
 
   return (
     <div className="card overflow-hidden p-0">
-      <div className="grid grid-cols-7 gap-px bg-line">
+      <div className="grid grid-cols-7 gap-px bg-border">
         {columns.map(c => (
-          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-2 py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-ink' : 'font-normal text-ink-subtle'}`}>
+          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>
             {t(`att.weekday.${c.key}` as DictKey)}
           </div>
         ))}
@@ -80,11 +80,11 @@ export function MeetingCalendar({
             <div key={cell} data-date={cell} className={`min-h-[104px] p-1.5 ${info.working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'}`}>
               {/* 좁은 화면(sm 미만)은 이름이 날짜 아래 한 줄을 통째로 쓰고 줄바꿈, sm 이상은 날짜 옆 한 줄 말줄임(title 로 전체) */}
               <div className="flex flex-wrap items-center justify-between gap-x-1 px-0.5 sm:flex-nowrap">
-                <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : info.working ? 'text-ink' : 'text-ink-muted'}`}>
+                <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-action text-action-fg' : info.working ? 'text-fg' : 'text-fg-secondary'}`}>
                   {dayNum}
                 </span>
                 {info.name && (
-                  <span className="basis-full break-all text-[10px] font-medium leading-tight text-ink-subtle sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
+                  <span className="basis-full break-all text-[10px] font-medium leading-tight text-fg-muted sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
                     {info.name}
                   </span>
                 )}
@@ -100,7 +100,7 @@ export function MeetingCalendar({
                       const r = e.currentTarget.getBoundingClientRect()
                       setMore({ date: cell, rect: { top: r.top, bottom: r.bottom, left: r.left } })
                     }}
-                    className="w-full rounded-md px-1 py-0.5 text-left text-[10px] font-medium text-ink-subtle transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-ring"
+                    className="w-full rounded-md px-1 py-0.5 text-left text-[10px] font-medium text-fg-muted transition hover:bg-surface-subtle hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                   >
                     +{dayOcc.length - 3}{t('meet.moreSuffix')}
                   </button>

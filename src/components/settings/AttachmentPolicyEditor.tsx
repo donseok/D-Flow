@@ -107,44 +107,44 @@ export function AttachmentPolicyEditor({ scope, policy, invalid = false, revisio
   function change<K extends keyof Draft>(key: K, value: Draft[K]) { setDraft(prev => ({ ...prev, [key]: value })); setError(''); setNotice('') }
 
   return <div className="space-y-4" data-attachment-policy-editor>
-    {invalid && !repaired && <p role="alert" className="rounded-lg bg-delayed-weak px-3 py-2 text-sm text-delayed">{t('settings.minAtt.invalid')}</p>}
+    {invalid && !repaired && <p role="alert" className="rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{t('settings.minAtt.invalid')}</p>}
     <div className="flex flex-wrap gap-x-6 gap-y-2">
-      <label className="flex items-center gap-2 text-sm text-ink">
+      <label className="flex items-center gap-2 text-sm text-fg">
         <input type="checkbox" checked={draft.enabled} disabled={locked} onChange={e => change('enabled', e.target.checked)} />{t('settings.minAtt.enabled')}
       </label>
-      <label className="flex items-center gap-2 text-sm text-ink">
+      <label className="flex items-center gap-2 text-sm text-fg">
         <input type="checkbox" checked={draft.previewEnabled} disabled={locked} onChange={e => change('previewEnabled', e.target.checked)} />{t('settings.minAtt.preview')}
       </label>
     </div>
     <div className="grid gap-3 sm:grid-cols-3">
-      <label className="flex flex-col gap-1 text-xs text-ink-muted">{t('settings.minAtt.maxFile')}
+      <label className="flex flex-col gap-1 text-xs text-fg-secondary">{t('settings.minAtt.maxFile')}
         <input className="app-input" inputMode="decimal" aria-label={t('settings.minAtt.maxFile')} value={draft.maxFileMb} disabled={locked} onChange={e => change('maxFileMb', e.target.value)} />
       </label>
-      <label className="flex flex-col gap-1 text-xs text-ink-muted">{t('settings.minAtt.maxCount')}
+      <label className="flex flex-col gap-1 text-xs text-fg-secondary">{t('settings.minAtt.maxCount')}
         <input className="app-input" inputMode="numeric" aria-label={t('settings.minAtt.maxCount')} value={draft.maxCount} disabled={locked} onChange={e => change('maxCount', e.target.value)} />
       </label>
-      <label className="flex flex-col gap-1 text-xs text-ink-muted">{t('settings.minAtt.maxTotal')}
+      <label className="flex flex-col gap-1 text-xs text-fg-secondary">{t('settings.minAtt.maxTotal')}
         <input className="app-input" inputMode="decimal" aria-label={t('settings.minAtt.maxTotal')} value={draft.maxTotalMb} disabled={locked} onChange={e => change('maxTotalMb', e.target.value)} />
       </label>
     </div>
-    <p className="text-xs text-ink-subtle">
+    <p className="text-xs text-fg-muted">
       {t('settings.minAtt.limits').replace('{max}', formatBytes(MINUTES_ATTACHMENT_MAX_BYTES)).replace('{count}', String(MINUTES_ATTACHMENTS_MAX_COUNT))}
     </p>
     <fieldset className="space-y-2">
-      <legend className="text-xs text-ink-muted">{t('settings.minAtt.extMode')}</legend>
-      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink">
+      <legend className="text-xs text-fg-secondary">{t('settings.minAtt.extMode')}</legend>
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-fg">
         <label className="flex items-center gap-2"><input type="radio" name="min-att-ext" checked={draft.extMode === 'any'} disabled={locked} onChange={() => change('extMode', 'any')} />{t('settings.minAtt.extAny')}</label>
         <label className="flex items-center gap-2"><input type="radio" name="min-att-ext" checked={draft.extMode === 'list'} disabled={locked} onChange={() => change('extMode', 'list')} />{t('settings.minAtt.extList')}</label>
       </div>
       {draft.extMode === 'list' && <>
         <input className="app-input" aria-label={t('settings.minAtt.extList')} placeholder={t('settings.minAtt.extPlaceholder')} value={draft.extText} disabled={locked} onChange={e => change('extText', e.target.value)} />
-        {parsed.ok && parsed.value.allowedExtensions?.length === 0 && <p className="text-xs text-delayed">{t('settings.minAtt.extEmpty')}</p>}
+        {parsed.ok && parsed.value.allowedExtensions?.length === 0 && <p className="text-xs text-danger">{t('settings.minAtt.extEmpty')}</p>}
       </>}
     </fieldset>
-    <p className="text-xs text-ink-muted">{t('settings.minAtt.futureOnly')}</p>
-    {!parsed.ok && <p role="alert" className="text-sm text-delayed">{parsed.error}</p>}
-    {error && parsed.ok && <p role="alert" className="text-sm text-delayed">{error}</p>}
-    {notice && <p role="status" className="text-sm text-done">{notice}</p>}
+    <p className="text-xs text-fg-secondary">{t('settings.minAtt.futureOnly')}</p>
+    {!parsed.ok && <p role="alert" className="text-sm text-danger">{parsed.error}</p>}
+    {error && parsed.ok && <p role="alert" className="text-sm text-danger">{error}</p>}
+    {notice && <p role="status" className="text-sm text-success">{notice}</p>}
     <button type="button" className="btn btn-primary" disabled={!canEdit || pending || !dirty || !parsed.ok} onClick={save}>
       {pending ? '…' : uncertainPatch ? t('settings.minAtt.retry') : t('settings.minAtt.save')}
     </button>

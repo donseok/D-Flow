@@ -50,8 +50,8 @@ function TeamsLoadError({ title, detail }: { title: string; detail?: string }) {
       <PageHero eyebrow="ADMIN" badge={<HeroBadge>Teams</HeroBadge>} title="팀 관리"
         description="담당 팀 기준정보를 관리합니다 — 탭·필터·검증·엑셀·회의록 편철이 모두 이 목록을 따릅니다." />
       <div className="card p-6" role="alert">
-        <p className="text-sm font-semibold text-delayed">{title}</p>
-        {detail && <p className="mt-1 text-xs leading-5 text-ink-muted">{detail}</p>}
+        <p className="text-sm font-semibold text-danger">{title}</p>
+        {detail && <p className="mt-1 text-xs leading-5 text-fg-secondary">{detail}</p>}
       </div>
     </div>
   )

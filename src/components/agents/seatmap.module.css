@@ -313,16 +313,16 @@
 
 /* 공통 헤더(AgentFrame) 아래 밝은 줄로 내려온 조작부 — 다크 띠용 색을 밝은 배경용으로 다시 입힌다(2026-09-18).
    .root 밖(ProjectPageShell pinned)에 놓이므로 --sm-* 대신 전역 토큰을 쓴다. 눌림은 aria-pressed 로만 가른다. */
-.toolsLight { --sm-band-ink: var(--color-ink); --sm-band-muted: var(--color-ink-muted); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; justify-content: flex-end; }
-.toolsLight .viewSeg, .toolsLight .scope, .toolsLight .doneToggle { border-color: var(--color-line-strong); background: var(--color-surface); }
-.toolsLight .viewSeg button[aria-pressed="true"], .toolsLight .scope button[aria-pressed="true"], .toolsLight .doneToggle[aria-pressed="true"] { background: var(--color-brand-weak); color: var(--color-brand); }
-.toolsLight .viewSeg button:focus-visible, .toolsLight .scope button:focus-visible, .toolsLight .doneToggle:focus-visible { outline-color: var(--color-brand); }
-.toolsLight .allLink { color: var(--color-brand); }
+.toolsLight { --sm-band-ink: var(--color-fg); --sm-band-muted: var(--color-fg-secondary); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; justify-content: flex-end; }
+.toolsLight .viewSeg, .toolsLight .scope, .toolsLight .doneToggle { border-color: var(--color-border-input); background: var(--color-surface); }
+.toolsLight .viewSeg button[aria-pressed="true"], .toolsLight .scope button[aria-pressed="true"], .toolsLight .doneToggle[aria-pressed="true"] { background: var(--color-action-soft); color: var(--color-action); }
+.toolsLight .viewSeg button:focus-visible, .toolsLight .scope button:focus-visible, .toolsLight .doneToggle:focus-visible { outline-color: var(--color-action); }
+.toolsLight .allLink { color: var(--color-action); }
 /* 보기 전환은 왼쪽에 고정한다 — 오른쪽 정렬이면 뒤따르는 '완료 포함'(평면도 전용)이 생기고 사라질 때마다
    평면도|상태 레인|에이전트 버튼이 좌우로 밀린다(2026-09-18 사용자 지적). 나머지는 오른쪽 묶음으로. */
 .toolsLight .viewSeg { margin-right: auto; }
-.toolsLight .stamp { color: var(--color-ink-subtle); }
-.toolsLight .stampBad { color: var(--color-delayed); }
+.toolsLight .stamp { color: var(--color-fg-muted); }
+.toolsLight .stampBad { color: var(--color-danger); }
 /* 상태 레인 카드의 메타 줄 — 단계 칩 + 한 줄 요약 */
 .cardMeta { display: flex; align-items: center; gap: 6px; min-width: 0; }
 /* 에이전트 보기 말풍선(팀장 잔소리 · 팀원 보고) — 새 대사마다 아래에서 톡 튀어나온다. */
@@ -335,13 +335,13 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    내 에이전트 테두리(2026-09-19) — 명찰(OwnerTag)과 한 쌍. 다른 계정은 테두리 강조도, 흐림도 없다.
    책상의 다른 표식이 border-color(상태) · outline(선택) · inset box-shadow(반려)를 이미 쓰므로
-   바깥 box-shadow 링으로 그리고, 반려 좌석에서는 두 그림자를 합친다. --color-brand 는 라이트·다크 모두 globals 토큰.
+   바깥 box-shadow 링으로 그리고, 반려 좌석에서는 두 그림자를 합친다. --color-action 는 라이트·다크 모두 globals 토큰.
    ───────────────────────────────────────────────────────────────────────────── */
-.desk[data-owner="mine"], .card[data-owner="mine"] { box-shadow: 0 0 0 2px var(--color-brand); }
-.desk[data-owner="mine"][data-rejected="1"] { box-shadow: inset 5px 0 0 var(--sm-reject-bar), 0 0 0 2px var(--color-brand); }
-.seatRight .desk[data-owner="mine"][data-rejected="1"] { box-shadow: inset -5px 0 0 var(--sm-reject-bar), 0 0 0 2px var(--color-brand); }
+.desk[data-owner="mine"], .card[data-owner="mine"] { box-shadow: 0 0 0 2px var(--color-action); }
+.desk[data-owner="mine"][data-rejected="1"] { box-shadow: inset 5px 0 0 var(--sm-reject-bar), 0 0 0 2px var(--color-action); }
+.seatRight .desk[data-owner="mine"][data-rejected="1"] { box-shadow: inset -5px 0 0 var(--sm-reject-bar), 0 0 0 2px var(--color-action); }
 .desk[data-owner="mine"][data-selected="1"], .card[data-owner="mine"][data-selected="1"] { outline-offset: 3px; }
 /* 좁은 구역에서는 반려 표시가 왼쪽으로 통일된다(위 @container) — 내 에이전트 링과 합친 규칙도 같이 따른다. */
 @container (max-width: 620px) {
-  .seatRight .desk[data-owner="mine"][data-rejected="1"] { box-shadow: inset 5px 0 0 var(--sm-reject-bar), 0 0 0 2px var(--color-brand); }
+  .seatRight .desk[data-owner="mine"][data-rejected="1"] { box-shadow: inset 5px 0 0 var(--sm-reject-bar), 0 0 0 2px var(--color-action); }
 }

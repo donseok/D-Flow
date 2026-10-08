@@ -58,13 +58,13 @@ export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, canApp
       footer={<button type="button" className="btn btn-ghost" onClick={onClose}>닫기</button>}
     >
       {findings.length === 0 ? (
-        <p className="py-6 text-center text-sm text-ink-muted">점검할 내용이 없습니다.</p>
+        <p className="py-6 text-center text-sm text-fg-secondary">점검할 내용이 없습니다.</p>
       ) : (
         <>
           {/* 왜 다른 업무영역의 같은 문구가 안 잡히는지 매번 묻지 않도록 점검 범위를 못박되,
               글머리 기호·번호 표기만 시트 전체 기준이라는 예외까지 같이 적는다(안 적으면 그 지적이 버그로 읽힌다).
               셀 안 [머리글] 구획도 같이 적는다 — 적지 않으면 이번엔 반대로 "왜 안 잡히지?"를 묻게 된다. */}
-          <p className="pb-2 text-xs text-ink-muted">
+          <p className="pb-2 text-xs text-fg-secondary">
             점검은 업무영역 안에서만 합니다 — 서로 다른 업무영역끼리는 견주지 않습니다. 한 셀 안이라도 <code>[현장]</code> 처럼
             머리글로 갈린 구획은 서로 다른 영역으로 보아, <b>이름이 다른</b> 구획끼리는 같은 문구여도 중복으로 잡지
             않습니다. 번호도 구획마다 따로 세지만, 머리글 뒤에서 번호가 <b>1로 다시 시작할 때만</b> 새 구획으로

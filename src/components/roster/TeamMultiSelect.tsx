@@ -132,19 +132,19 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
         onClick={() => { if (open) close(false); else setOpen(true) }}
       >
         <span className="flex min-w-0 flex-1 flex-wrap gap-1">
-          {value.length === 0 ? <span className="text-ink-subtle">팀 없음</span> : value.map((id, i) => (
-            <span key={id} className={`chip bg-surface-2 ${i === 0 ? 'font-semibold text-ink' : 'text-ink-muted'}`}>
+          {value.length === 0 ? <span className="text-fg-muted">팀 없음</span> : value.map((id, i) => (
+            <span key={id} className={`chip bg-surface-subtle ${i === 0 ? 'font-semibold text-fg' : 'text-fg-secondary'}`}>
               {codeOf.get(id) ?? '?'}
             </span>
           ))}
         </span>
-        <ChevronDown aria-hidden className="h-3.5 w-3.5 shrink-0 text-ink-subtle" />
+        <ChevronDown aria-hidden className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
       </button>
       {open && pos && createPortal(
         <div ref={popRef} role="group" aria-label={label} style={pos} tabIndex={-1}
-          className="z-50 outline-none w-56 rounded-lg border border-line bg-surface p-2 shadow-lg">
+          className="z-50 outline-none w-56 rounded-lg border border-border bg-surface p-2 shadow-lg">
           {options.length === 0 ? (
-            <p className="px-1 py-1 text-xs text-ink-subtle">이 프로젝트에 팀이 없습니다.</p>
+            <p className="px-1 py-1 text-xs text-fg-muted">이 프로젝트에 팀이 없습니다.</p>
           ) : (
             <ul className="max-h-56 space-y-0.5 overflow-y-auto">
               {options.map(o => {
@@ -154,9 +154,9 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
                     <label className="flex min-w-0 flex-1 items-center gap-2">
                       <input type="checkbox" checked={checked} data-team-check={o.code}
                         onChange={() => onChange(toggleTeam(value, o.id))} />
-                      <span className="truncate text-ink">{o.code}</span>
+                      <span className="truncate text-fg">{o.code}</span>
                     </label>
-                    <label className="flex shrink-0 items-center gap-1 text-ink-subtle" title="대표 팀">
+                    <label className="flex shrink-0 items-center gap-1 text-fg-muted" title="대표 팀">
                       <input type="radio" name={`${label}-primary`} checked={value[0] === o.id} data-team-primary={o.code}
                         aria-label={`${o.code} 대표 팀`}
                         onChange={() => onChange(setPrimaryTeam(value, o.id))} />

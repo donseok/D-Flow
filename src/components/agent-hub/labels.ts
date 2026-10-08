@@ -23,12 +23,12 @@ export const STATE_LABEL: Record<HubOrderState, string> = {
 export const STATE_TONE: Record<HubOrderState, string> = {
   READY: 'bg-pending-weak text-pending',
   ACTIVE: 'bg-progress-weak text-progress',
-  STALE: 'bg-delayed-weak text-delayed',
-  OFFLINE: 'bg-surface-2 text-ink-subtle',
-  BLOCKED: 'bg-pending-weak text-accent-warning',
-  WAIT: 'bg-brand-weak text-brand',
-  REJECTED: 'bg-delayed-weak text-delayed',
-  DONE: 'bg-done-weak text-done',
+  STALE: 'bg-danger-weak text-danger',
+  OFFLINE: 'bg-surface-subtle text-fg-muted',
+  BLOCKED: 'bg-pending-weak text-warning',
+  WAIT: 'bg-action-soft text-action',
+  REJECTED: 'bg-danger-weak text-danger',
+  DONE: 'bg-success-weak text-success',
 }
 
 /**
@@ -36,14 +36,14 @@ export const STATE_TONE: Record<HubOrderState, string> = {
  * 시간이 지나면 저절로 풀린다 — 색이 그 차이를 말한다.
  */
 export const REASON_TONE: Record<WaitReasonKind, string> = {
-  dependency: 'bg-delayed-weak text-delayed',
-  agent_off: 'bg-pending-weak text-accent-warning',
+  dependency: 'bg-danger-weak text-danger',
+  agent_off: 'bg-pending-weak text-warning',
   agents_busy: 'bg-progress-weak text-progress',
   pickup: 'bg-pending-weak text-pending',
 }
 
 /** 위임이 안 된 개발 리프 — 사유 칩과 같은 자리에 같은 모양으로 둔다(사람이 체크를 켜야 풀린다). */
-export const NEEDS_DELEGATION_TONE = 'bg-pending-weak text-accent-warning'
+export const NEEDS_DELEGATION_TONE = 'bg-pending-weak text-warning'
 
 /** 주문이 없는 행의 상태 칸. */
 export const NO_ORDER = '—'

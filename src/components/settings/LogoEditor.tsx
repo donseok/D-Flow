@@ -95,11 +95,11 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
   }
 
   return <div className="space-y-4">
-    <p className="text-xs leading-5 text-ink-muted">PNG·JPEG·WebP, 256KB 이하. 업로드한 뒤 저장하면 화면에 바로 반영됩니다. 이전 파일은 삭제되지 않습니다.</p>
+    <p className="text-xs leading-5 text-fg-secondary">PNG·JPEG·WebP, 256KB 이하. 업로드한 뒤 저장하면 화면에 바로 반영됩니다. 이전 파일은 삭제되지 않습니다.</p>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.logo" message={invalidReason} isAdmin settingsHref="#workspace-general" />}
     <div className="grid gap-3 sm:grid-cols-3">
-      {BRANDING_SLOTS.map(slot => <div key={slot} className="space-y-2 rounded-xl border border-line p-3">
-        <div className="text-sm font-semibold text-ink">{LABEL[slot]}</div>
+      {BRANDING_SLOTS.map(slot => <div key={slot} className="space-y-2 rounded-xl border border-border p-3">
+        <div className="text-sm font-semibold text-fg">{LABEL[slot]}</div>
         {draft[slot] ? <>
           {draft[slot] === baseline[slot] ? <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -111,16 +111,16 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
             </>}
             <p className="text-xs text-pending">새 이미지 업로드됨 · {previews[slot] ? '저장하면 적용됩니다' : '저장 후 미리보기'}</p>
           </>}
-          <p className="break-all text-[11px] text-ink-subtle">{draft[slot]}</p>
-        </> : <p className="text-xs text-ink-muted">설정된 이미지 없음</p>}
-        <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={`${LABEL[slot]} 파일`} className="block w-full min-w-0 max-w-full text-xs text-ink-muted file:mr-2 file:rounded-lg file:border file:border-line file:bg-surface-2 file:px-2 file:py-1 file:text-xs"
+          <p className="break-all text-[11px] text-fg-muted">{draft[slot]}</p>
+        </> : <p className="text-xs text-fg-secondary">설정된 이미지 없음</p>}
+        <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={`${LABEL[slot]} 파일`} className="block w-full min-w-0 max-w-full text-xs text-fg-secondary file:mr-2 file:rounded-lg file:border file:border-border file:bg-surface-subtle file:px-2 file:py-1 file:text-xs"
           disabled={pending || !!uncertainPatch} onChange={event => {
             const picked = event.target.files?.[0]
             revoke(previews[slot]); setFiles({ ...files, [slot]: picked })
             setPreviews(current => ({ ...current, [slot]: picked ? (localPreview(picked) ?? undefined) : undefined }))
             event.target.value = ''
           }} />
-        {files[slot] && <p className="break-all text-xs text-ink-muted">선택: {files[slot].name}</p>}
+        {files[slot] && <p className="break-all text-xs text-fg-secondary">선택: {files[slot].name}</p>}
         {files[slot] && previews[slot] && draft[slot] === baseline[slot] && <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={previews[slot]} alt={`${LABEL[slot]} 선택 파일 미리보기`} className="h-16 max-w-full object-contain" />

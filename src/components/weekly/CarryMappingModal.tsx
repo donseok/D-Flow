@@ -52,7 +52,7 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
         </>
       }
     >
-      <p className="text-sm leading-6 text-ink-muted">
+      <p className="text-sm leading-6 text-fg-secondary">
         이전 주차의 차주계획에 지금은 비활성인 업무영역의 내용이 있습니다. 옮길 영역을 고르거나 &lsquo;옮기지 않음&rsquo;을 고르세요 —
         옮기지 않아도 이전 주차 시트의 내용은 그대로 남습니다.
       </p>
@@ -79,7 +79,7 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
       <ul className="mt-4 space-y-3">
         {pending.map(p => (
           <li key={p.areaId} data-carry-source={p.areaId} className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm text-ink">비활성 영역 {p.areaName} — 대기 {p.cells.length}칸</span>
+            <span className="text-sm text-fg">비활성 영역 {p.areaName} — 대기 {p.cells.length}칸</span>
             <select
               className="app-input"
               aria-label={`${p.areaName} 대기 내용을 옮길 영역`}

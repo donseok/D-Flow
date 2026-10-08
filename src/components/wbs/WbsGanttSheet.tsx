@@ -118,9 +118,9 @@ const EMPTY_MEMBERS: ProjectMember[] = []
 /* 마일스톤 기준선 색 — 간트는 초록·청록(brand/done)이 바·상태색으로 포화라 대시보드 배색(MS_TONE)과
    의도적으로 다르다. 예정=바이올렛(category-3 — 라이트 값은 옛 #7c3aed 와 같고 다크 값이 따로 있다),
    완료=phasebar 슬레이트(가라앉음·다크 자동 대응), 지연=delayed 빨강(전역 지연 경보와 일치). */
-const MS_LINE: Record<MilestoneStatus, string> = { done: 'border-phasebar', overdue: 'border-delayed', upcoming: 'border-category-3' }
+const MS_LINE: Record<MilestoneStatus, string> = { done: 'border-phasebar', overdue: 'border-danger', upcoming: 'border-category-3' }
 /** 칩은 채움과 전경을 짝으로 — 다크 채움 위 흰 글자는 1.7~3.6:1 이다(D12·판정 Q13) */
-const MS_CHIP: Record<MilestoneStatus, string> = { done: 'bg-phasebar text-phasebar-fg', overdue: 'bg-delayed text-danger-fg', upcoming: 'bg-category-3 text-category-fg' }
+const MS_CHIP: Record<MilestoneStatus, string> = { done: 'bg-phasebar text-phasebar-fg', overdue: 'bg-danger text-danger-fg', upcoming: 'bg-category-3 text-category-fg' }
 /** 막대 안 % 라벨 — STATUS[…].bar 채움의 전경 */
 const BAR_FG: Record<keyof typeof STATUS, string> = { not_started: 'text-pending-fg', in_progress: 'text-progress-fg', delayed: 'text-danger-fg', done: 'text-success-fg' }
 
@@ -1328,15 +1328,15 @@ export function WbsGanttSheet({
         else if (e.key === 'Escape') cancel()
       }}
       placeholder={current}
-      className="h-6 w-full rounded border border-brand bg-surface px-1 text-right tabular-nums text-ink outline-none focus:ring-2 focus:ring-brand-ring"
+      className="h-6 w-full rounded border border-action bg-surface px-1 text-right tabular-nums text-fg outline-none focus:ring-2 focus:ring-border-focus"
       style={{ fontSize: 'var(--wbs-cell-font, 12px)' }}
     />
   )
 
   /* ── 셀 helpers ── */
   const headBase =
-    'box-border flex h-[var(--wbs-head-h)] min-w-0 shrink-0 items-center overflow-hidden whitespace-nowrap bg-sheet-head px-2 font-semibold uppercase tracking-[0.08em] text-ink-muted border-b border-grid-strong'
-  const cellBase = 'box-border flex h-full shrink-0 items-center border-b border-grid px-2'
+    'box-border flex h-[var(--wbs-head-h)] min-w-0 shrink-0 items-center overflow-hidden whitespace-nowrap bg-surface-subtle px-2 font-semibold uppercase tracking-[0.08em] text-fg-secondary border-b border-border-input'
+  const cellBase = 'box-border flex h-full shrink-0 items-center border-b border-border px-2'
 
   const headCell = (
     col: Col,
@@ -1355,7 +1355,7 @@ export function WbsGanttSheet({
         key={col.key}
         data-wbs-col={col.key}
         data-wbs-col-kind="header"
-        className={`${headBase} ${align} ${isName ? 'freeze-edge relative' : 'border-r border-grid-strong'} ${extra}`}
+        className={`${headBase} ${align} ${isName ? 'freeze-edge relative' : 'border-r border-border-input'} ${extra}`}
         style={{
           width: col.w,
           fontSize: 'var(--wbs-head-font, 10px)',
@@ -1374,7 +1374,7 @@ export function WbsGanttSheet({
             <span
               data-wbs-head-sub={col.key}
               className={`truncate font-semibold normal-case tabular-nums tracking-normal ${
-                sub.warn ? 'text-delayed' : 'text-ink-subtle'
+                sub.warn ? 'text-danger' : 'text-fg-muted'
               }`}
             >
               {sub.text}
@@ -1396,7 +1396,7 @@ export function WbsGanttSheet({
             aria-label={t('wbs.nameColResizeTitle')}
             title={t('wbs.nameColResizeTitle')}
             onPointerDown={startNameColResize}
-            className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-brand/40 active:bg-brand/60"
+            className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-action/40 active:bg-action/60"
           />
         )}
       </div>
@@ -1442,7 +1442,7 @@ export function WbsGanttSheet({
           onClick={() => setToolbarOpen(true)}
           aria-expanded={false}
           title={t('wbs.toolbarToggleTitle')}
-          className="btn absolute right-1 top-1 z-[60] h-8 border border-line bg-surface/95 px-2.5 text-xs shadow-[var(--shadow-sm)] backdrop-blur-sm"
+          className="btn absolute right-1 top-1 z-[60] h-8 border border-border bg-surface/95 px-2.5 text-xs shadow-[var(--shadow-sm)] backdrop-blur-sm"
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
         </button>
@@ -1451,8 +1451,8 @@ export function WbsGanttSheet({
       <div data-wbs-toolbar className="card mb-1.5 flex w-full min-w-0 max-w-full shrink-0 flex-wrap items-center gap-1.5 overflow-hidden p-1.5 sm:mb-3 sm:gap-2 sm:p-2.5">
         {/* 제목 글자는 툴바 가로폭을 아껴 두 줄 줄바꿈을 막으려고 뺐다. 아이콘만 남기고 이름은 title·sr-only 로 유지 */}
         {!compact && (
-          <div className="mr-1 flex items-center px-0.5 text-sm font-semibold text-ink">
-            <span title={t('wbs.board')} className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-weak text-brand"><Icon name="grid" className="h-4 w-4" /></span>
+          <div className="mr-1 flex items-center px-0.5 text-sm font-semibold text-fg">
+            <span title={t('wbs.board')} className="flex h-8 w-8 items-center justify-center rounded-xl bg-action-soft text-action"><Icon name="grid" className="h-4 w-4" /></span>
             <span className="sr-only">{t('wbs.board')}</span>
           </div>
         )}
@@ -1464,7 +1464,7 @@ export function WbsGanttSheet({
             aria-label={t('wbs.searchAria')}
             className="app-input h-9 w-full pl-9 text-[13px] sm:w-40"
           />
-          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-subtle" />
+          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-muted" />
         </div>
         {/* 컴팩트에서 열린 툴바의 닫기 버튼 — 플로팅 버튼과 같은 토글 시맨틱 */}
         {compact && (
@@ -1474,7 +1474,7 @@ export function WbsGanttSheet({
             onClick={() => setToolbarOpen(false)}
             aria-expanded
             title={t('wbs.toolbarToggleTitle')}
-            className="btn h-9 border border-brand-ring bg-brand-weak px-3 text-xs text-brand"
+            className="btn h-9 border border-border-focus bg-action-soft px-3 text-xs text-action"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
           </button>
@@ -1497,20 +1497,20 @@ export function WbsGanttSheet({
           aria-pressed={outlineVisible}
           title={t('wbs.outlineToggleTitle')}
           className={`btn h-9 px-3 text-xs ${
-            outlineVisible ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'
+            outlineVisible ? 'border border-border-focus bg-action-soft text-action' : 'btn-ghost'
           }`}
         >
           <Hash className="h-3.5 w-3.5" />
         </button>
         {/* 간트 배율 — 일 폭 슬라이더(12~48px) */}
-        <div className="flex h-9 items-center gap-1 rounded-xl border border-line px-1.5" title={t('wbs.ganttZoomGroup')}>
+        <div className="flex h-9 items-center gap-1 rounded-xl border border-border px-1.5" title={t('wbs.ganttZoomGroup')}>
           <button
             type="button"
             data-gantt-zoom-out
             onClick={() => setGanttScale(Math.max(GANTT_DAY_MIN, dayPx - 2))}
             title={t('wbs.ganttZoomOut')}
             aria-label={t('wbs.ganttZoomOut')}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-subtle hover:bg-line hover:text-ink"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-border hover:text-fg"
           >
             <ZoomOut aria-hidden className="h-3.5 w-3.5" />
           </button>
@@ -1523,7 +1523,7 @@ export function WbsGanttSheet({
             value={dayPx}
             onChange={e => setGanttScale(Number(e.target.value))}
             aria-label={t('wbs.ganttZoomGroup')}
-            className="w-20 accent-[var(--color-brand)]"
+            className="w-20 accent-[var(--color-action)]"
           />
           <button
             type="button"
@@ -1531,7 +1531,7 @@ export function WbsGanttSheet({
             onClick={() => setGanttScale(Math.min(GANTT_DAY_MAX, dayPx + 2))}
             title={t('wbs.ganttZoomIn')}
             aria-label={t('wbs.ganttZoomIn')}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-subtle hover:bg-line hover:text-ink"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-border hover:text-fg"
           >
             <ZoomIn aria-hidden className="h-3.5 w-3.5" />
           </button>
@@ -1544,7 +1544,7 @@ export function WbsGanttSheet({
             aria-expanded={!planningColsHidden}
             title={t(planningColsHidden ? 'wbs.showPlanningColumns' : 'wbs.hidePlanningColumns')}
             className={`btn h-9 px-3 text-xs ${
-              planningColsHidden ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'
+              planningColsHidden ? 'border border-border-focus bg-action-soft text-action' : 'btn-ghost'
             }`}
           >
             <Icon name={planningColsHidden ? 'eye' : 'eyeOff'} className="h-3.5 w-3.5" />
@@ -1558,7 +1558,7 @@ export function WbsGanttSheet({
           aria-pressed={progressLensEnabled}
           title={t('wbs.progressLensTitle')}
           className={`btn h-9 px-3 text-xs ${
-            progressLensEnabled ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'
+            progressLensEnabled ? 'border border-border-focus bg-action-soft text-action' : 'btn-ghost'
           }`}
         >
           <Icon name="search" className="h-3.5 w-3.5" />
@@ -1570,7 +1570,7 @@ export function WbsGanttSheet({
           onClick={toggleHideDone}
           aria-pressed={hideDone}
           title={t('wbs.hideDoneTitle')}
-          className={`btn h-9 px-3 text-xs ${hideDone ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'}`}
+          className={`btn h-9 px-3 text-xs ${hideDone ? 'border border-border-focus bg-action-soft text-action' : 'btn-ghost'}`}
         >
           <ListChecks className="h-3.5 w-3.5" />
           {showLabels && <span data-btn-label>{t('wbs.hideDone')}</span>}
@@ -1585,13 +1585,13 @@ export function WbsGanttSheet({
           canDecrease={fontScale.canDecrease}
           canIncrease={fontScale.canIncrease}
         />
-        <button data-wbs-fullscreen-toggle onClick={() => setFullscreen(v => !v)} aria-pressed={fullscreen} title={fullscreen ? t('wbs.exitFullscreenTitle') : t('wbs.enterFullscreenTitle')} className={`btn h-9 px-3 text-xs ${fullscreen ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'}`}>
+        <button data-wbs-fullscreen-toggle onClick={() => setFullscreen(v => !v)} aria-pressed={fullscreen} title={fullscreen ? t('wbs.exitFullscreenTitle') : t('wbs.enterFullscreenTitle')} className={`btn h-9 px-3 text-xs ${fullscreen ? 'border border-border-focus bg-action-soft text-action' : 'btn-ghost'}`}>
           {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />} {showLabels && <span data-btn-label>{fullscreen ? t('wbs.viewSmaller') : t('wbs.viewLarger')}</span>}
         </button>
         {fullscreen && aiRail?.aiAvailable && (
           <button type="button" data-wbs-ai-toggle onClick={() => (aiOpen ? aiRail.close('ai') : aiRail.open('ai'))} aria-pressed={aiOpen}
             aria-label={t('chat.open')} title={t('chat.open')}
-            className={`btn h-9 px-3 text-xs ${aiOpen ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'}`}>
+            className={`btn h-9 px-3 text-xs ${aiOpen ? 'border border-border-focus bg-action-soft text-action' : 'btn-ghost'}`}>
             <Sparkles className="h-3.5 w-3.5" aria-hidden />{showLabels && <span data-btn-label>AI</span>}
           </button>
         )}
@@ -1605,7 +1605,7 @@ export function WbsGanttSheet({
             onClick={() => setShowMilestones(value => !value)}
             aria-pressed={showMilestones}
             title={t('wbs.milestonesToggleTitle')}
-            className={`btn h-9 px-3 text-xs ${showMilestones ? 'border border-brand-ring bg-brand-weak text-brand' : 'btn-ghost'}`}
+            className={`btn h-9 px-3 text-xs ${showMilestones ? 'border border-border-focus bg-action-soft text-action' : 'btn-ghost'}`}
           >
             <Flag className="h-3.5 w-3.5" />
             {showLabels && <span data-btn-label>{t('wbs.milestones')}</span>}
@@ -1686,7 +1686,7 @@ export function WbsGanttSheet({
                     <div
                       key={d}
                       data-gantt-grid="day"
-                      className="absolute top-0 box-border border-r border-grid"
+                      className="absolute top-0 box-border border-r border-border"
                       style={{
                         left: i * dayPx,
                         width: dayPx,
@@ -1705,7 +1705,7 @@ export function WbsGanttSheet({
                   <div
                     key={w.left}
                     data-gantt-grid="week"
-                    className="absolute top-0 box-border border-r border-grid"
+                    className="absolute top-0 box-border border-r border-border"
                     style={{ left: w.left, width: w.width, height: rowsH }}
                   />
                 ))}
@@ -1777,13 +1777,13 @@ export function WbsGanttSheet({
             {customListDefs.map(d => showCol(`cf:${d.key}`) && headCell(colOf(`cf:${d.key}`), d.label, 'justify-start'))}
             {/* 간트 헤더 (월/주/일 3단) */}
             <div
-              className="relative box-border h-[var(--wbs-head-h)] shrink-0 border-b-2 border-grid-strong bg-sheet-head"
+              className="relative box-border h-[var(--wbs-head-h)] shrink-0 border-b-2 border-border-input bg-surface-subtle"
               style={{ width: ganttW }}
             >
               {months.map(m => (
                 <div
                   key={m.left}
-                  className="absolute top-0 box-border flex h-5 items-center overflow-hidden border-r border-grid px-1.5 font-semibold text-ink-muted"
+                  className="absolute top-0 box-border flex h-5 items-center overflow-hidden border-r border-border px-1.5 font-semibold text-fg-secondary"
                   style={{ left: m.left, width: m.width, fontSize: 'var(--wbs-head-font, 10px)' }}
                 >
                   {m.label}
@@ -1792,7 +1792,7 @@ export function WbsGanttSheet({
               {weeks.map(w => (
                 <div
                   key={w.left}
-                  className="absolute box-border flex h-[19px] items-center gap-1 overflow-hidden border-r border-grid px-1.5 font-medium text-ink-subtle"
+                  className="absolute box-border flex h-[19px] items-center gap-1 overflow-hidden border-r border-border px-1.5 font-medium text-fg-muted"
                   style={{
                     top: 20,
                     left: w.left,
@@ -1800,7 +1800,7 @@ export function WbsGanttSheet({
                     fontSize: 'var(--wbs-timeline-font, 9.5px)',
                   }}
                 >
-                  <span className="font-semibold text-ink-muted">{w.label}</span>
+                  <span className="font-semibold text-fg-secondary">{w.label}</span>
                   <span>{w.sub}</span>
                 </div>
               ))}
@@ -1809,8 +1809,8 @@ export function WbsGanttSheet({
                 days.map((d, i) => (
                   <div
                     key={d}
-                    className={`absolute box-border overflow-hidden border-r border-grid text-center leading-[18px] ${
-                      !isWorkingDay(d, cal) ? 'font-semibold text-ink-subtle' : 'text-ink-subtle'
+                    className={`absolute box-border overflow-hidden border-r border-border text-center leading-[18px] ${
+                      !isWorkingDay(d, cal) ? 'font-semibold text-fg-muted' : 'text-fg-muted'
                     }`}
                     style={{
                       top: 39,
@@ -1859,24 +1859,24 @@ export function WbsGanttSheet({
                 : depth === 1
                   ? 'bg-surface bg-linear-to-r from-action-soft/40 to-action-soft/40'
                   : rowNo % 2 === 0
-                    ? 'bg-zebra'
+                    ? 'bg-surface-zebra'
                     : 'bg-surface'
-            // focus 플래시는 hover 와 같은 틴트(bg-brand-weak) + 좌측 브랜드 악센트 바로 강조 —
+            // focus 플래시는 hover 와 같은 틴트(bg-action-soft) + 좌측 브랜드 악센트 바로 강조 —
             // 악센트가 있어야 커서가 우연히 올라간 행(hover)과 도착 행이 구분된다.
             const progressLensActive = progressLensActiveId === n.id
             const cellBg = `${
-              isFlash || progressLensActive ? 'bg-brand-weak' : rowBg
-            } group-hover:bg-brand-weak`
+              isFlash || progressLensActive ? 'bg-action-soft' : rowBg
+            } group-hover:bg-action-soft`
             const subLabel = subActLabels.get(n.id)
             // 레벨별 타이포도 종전 그대로(depth 기준) — 배경 틴트와 한 몸으로 레벨을 식별한다.
             const nameWeight =
               depth === 0
-                ? 'font-semibold text-ink'
+                ? 'font-semibold text-fg'
                 : depth === 1
-                  ? 'font-medium text-ink'
+                  ? 'font-medium text-fg'
                   : subLabel != null
-                    ? 'text-ink-muted'
-                    : 'text-ink'
+                    ? 'text-fg-secondary'
+                    : 'text-fg'
 
             const editingWeight = edit?.id === n.id && edit.field === 'weight'
             const editingActual = edit?.id === n.id && edit.field === 'actual'
@@ -1924,13 +1924,13 @@ export function WbsGanttSheet({
                   <span
                     aria-hidden
                     data-l2-end
-                    className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-px bg-ink-subtle"
+                    className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-px bg-fg-muted"
                   />
                 )}
                 {/* # */}
                 <div
                   data-wbs-col="no"
-                  className={`${cellBase} border-r border-grid-strong justify-center tabular-nums text-ink-subtle ${cellBg}`}
+                  className={`${cellBase} border-r border-border-input justify-center tabular-nums text-fg-muted ${cellBg}`}
                   style={{ ...frozen('no'), fontSize: 'var(--wbs-index-font, 11px)' }}
                 >
                   {/* 1단계 스트립 — 루트(1단계) 소속을 10px 색 띠로(구분은 가로선보다 세로
@@ -1942,7 +1942,7 @@ export function WbsGanttSheet({
                     style={{ backgroundColor: L1_BAND[(l1Index.get(n.id) ?? 0) % L1_BAND.length] }}
                   />
                   {/* focus 도착 마커 — 동결(#) 셀 안에 두어 가로 스크롤에도 항상 보인다 */}
-                  {isFlash && <span aria-hidden data-flash-accent className="absolute inset-y-0 left-0 z-10 w-1 bg-brand" />}
+                  {isFlash && <span aria-hidden data-flash-accent className="absolute inset-y-0 left-0 z-10 w-1 bg-action" />}
                   {isAdmin && !readOnly ? (
                     <input type="checkbox" aria-label={`${n.name} 대량 수정 선택`}
                       checked={bulkSelection.has(n.id)}
@@ -1961,7 +1961,7 @@ export function WbsGanttSheet({
                 {showCol('outline') && (
                   <div
                     data-wbs-col="outline"
-                    className={`${cellBase} overflow-hidden border-r border-grid-strong tabular-nums text-ink-subtle ${cellBg}`}
+                    className={`${cellBase} overflow-hidden border-r border-border-input tabular-nums text-fg-muted ${cellBg}`}
                     style={{ ...frozen('outline'), fontSize: 'var(--wbs-index-font, 11px)' }}
                   >
                     <span className="truncate">{outlineNumbers.get(n.id)}</span>
@@ -1976,7 +1976,7 @@ export function WbsGanttSheet({
                       key={i}
                       aria-hidden
                       data-indent-guide
-                      className="pointer-events-none absolute inset-y-0 w-px bg-grid"
+                      className="pointer-events-none absolute inset-y-0 w-px bg-border"
                       style={{ left: 8 + i * 14 + 12 }}
                     />
                   ))}
@@ -1984,7 +1984,7 @@ export function WbsGanttSheet({
                     {canToggle ? (
                       <button
                         onClick={() => toggle(n.id)}
-                        className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-ink-subtle hover:bg-line hover:text-ink"
+                        className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-border hover:text-fg"
                         aria-label={isCollapsed ? t('wbs.expand') : t('wbs.collapse')}
                         aria-expanded={!isCollapsed}
                       >
@@ -2003,7 +2003,7 @@ export function WbsGanttSheet({
                         clearProgressLensSelection()
                         selectRow(n.id)
                       }}
-                      className={`truncate text-left ${nameWeight} ${isCritical ? 'font-semibold text-critical' : ''} hover:text-brand hover:underline`}
+                      className={`truncate text-left ${nameWeight} ${isCritical ? 'font-semibold text-critical' : ''} hover:text-action hover:underline`}
                       title={`${n.name} · ${
                         // 툴팁은 그 깊이의 단계 이름(설정값 levelLabels) 그대로 — 라벨 밖 깊이·sub-act 만 배지 규칙(levelBadgeText) 재사용
                         n.isOwnerSplit ? levelBadgeText(n.depth, true, levelLabels) : levelLabels[n.depth] ?? levelBadgeText(n.depth, false, levelLabels)
@@ -2011,7 +2011,7 @@ export function WbsGanttSheet({
                     >
                       {subLabel != null ? (
                         <>
-                          <span aria-hidden className="mr-1 text-ink-subtle">└</span>
+                          <span aria-hidden className="mr-1 text-fg-muted">└</span>
                           {subLabel}
                         </>
                       ) : (
@@ -2035,7 +2035,7 @@ export function WbsGanttSheet({
                 {showCol('owners') && (
                   <div
                     data-wbs-col="owners"
-                    className={`${cellBase} border-r border-grid ${cellBg}`}
+                    className={`${cellBase} border-r border-border ${cellBg}`}
                     style={{ width: W('owners') }}
                   >
                     <OwnerBadges owners={n.owners} nowrap />
@@ -2045,7 +2045,7 @@ export function WbsGanttSheet({
                 {showCol('assignee') && (
                   <div
                     data-wbs-col="assignee"
-                    className={`${cellBase} overflow-hidden border-r border-grid text-ink-muted ${cellBg}`}
+                    className={`${cellBase} overflow-hidden border-r border-border text-fg-secondary ${cellBg}`}
                     style={{ width: W('assignee') }}
                   >
                     <span className="block truncate">
@@ -2059,7 +2059,7 @@ export function WbsGanttSheet({
                 {showCol('status') && (
                   <div
                     data-wbs-col="status"
-                    className={`${cellBase} overflow-hidden border-r border-grid justify-center ${cellBg}`}
+                    className={`${cellBase} overflow-hidden border-r border-border justify-center ${cellBg}`}
                     style={{ width: W('status'), paddingInline: 4 }}
                   >
                     <span
@@ -2080,17 +2080,17 @@ export function WbsGanttSheet({
                 {showCol('stage') && (
                   <div
                     data-wbs-col="stage"
-                    className={`${cellBase} overflow-hidden border-r border-grid justify-center ${cellBg}`}
+                    className={`${cellBase} overflow-hidden border-r border-border justify-center ${cellBg}`}
                     style={{ width: W('stage'), paddingInline: 4 }}
                   >
-                    {n.stage ? <StageChip stage={n.stage} t={t} /> : <span className="text-ink-subtle">-</span>}
+                    {n.stage ? <StageChip stage={n.stage} t={t} /> : <span className="text-fg-muted">-</span>}
                   </div>
                 )}
                 {/* 산출물 */}
                 {showCol('deliverable') && (
                   <div
                     data-wbs-col="deliverable"
-                    className={`${cellBase} overflow-hidden border-r border-grid text-ink-muted ${cellBg}`}
+                    className={`${cellBase} overflow-hidden border-r border-border text-fg-secondary ${cellBg}`}
                     style={{ width: W('deliverable') }}
                   >
                     <span className="block truncate" title={n.deliverable ?? undefined}>
@@ -2102,7 +2102,7 @@ export function WbsGanttSheet({
                 {showCol('pstart') && (
                   <div
                     data-wbs-col="pstart"
-                    className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-grid justify-center tabular-nums text-ink-muted ${cellBg}`}
+                    className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-border justify-center tabular-nums text-fg-secondary ${cellBg}`}
                     style={{ width: W('pstart') }}
                   >
                     {fmtDate(n.plannedStart)}
@@ -2112,7 +2112,7 @@ export function WbsGanttSheet({
                 {showCol('pend') && (
                   <div
                     data-wbs-col="pend"
-                    className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-grid justify-center tabular-nums text-ink-muted ${cellBg}`}
+                    className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-border justify-center tabular-nums text-fg-secondary ${cellBg}`}
                     style={{ width: W('pend') }}
                   >
                     {fmtDate(n.plannedEnd)}
@@ -2121,9 +2121,9 @@ export function WbsGanttSheet({
                 {/* 가중치 — overflow-hidden: 표시 반올림을 우회하는 긴 값이 이웃 날짜 칸을 덮지 않게 */}
                 {showCol('weight') && <div
                   data-wbs-col="weight"
-                  className={`${cellBase} overflow-hidden border-r border-grid justify-end tabular-nums ${
+                  className={`${cellBase} overflow-hidden border-r border-border justify-end tabular-nums ${
                     editableW ? 'cursor-pointer' : ''
-                  } ${n.weight == null ? 'text-ink-subtle' : 'text-ink'} ${cellBg}`}
+                  } ${n.weight == null ? 'text-fg-muted' : 'text-fg'} ${cellBg}`}
                   style={{ width: W('weight') }}
                   onClick={() =>
                     editableW &&
@@ -2150,7 +2150,7 @@ export function WbsGanttSheet({
                 {showCol('pplan') && (
                 <div
                   data-wbs-col="pplan"
-                  className={`${cellBase} overflow-hidden border-r border-grid justify-end tabular-nums text-ink-muted ${cellBg}`}
+                  className={`${cellBase} overflow-hidden border-r border-border justify-end tabular-nums text-fg-secondary ${cellBg}`}
                   style={{ width: W('pplan') }}
                 >
                   {formatPct1(n.plannedPct)}%
@@ -2160,9 +2160,9 @@ export function WbsGanttSheet({
                 {showCol('pactual') && (
                 <div
                   data-wbs-col="pactual"
-                  className={`${cellBase} relative justify-end overflow-hidden border-r border-grid font-medium tabular-nums ${
+                  className={`${cellBase} relative justify-end overflow-hidden border-r border-border font-medium tabular-nums ${
                     editableA ? 'cursor-pointer' : ''
-                  } ${n.status === 'delayed' ? 'text-delayed' : 'text-ink'} ${cellBg}`}
+                  } ${n.status === 'delayed' ? 'text-danger' : 'text-fg'} ${cellBg}`}
                   style={{ width: W('pactual') }}
                   onClick={() =>
                     editableA && !editingActual && startEdit(n.id, 'actual', String(n.rolledActualPct))
@@ -2200,24 +2200,24 @@ export function WbsGanttSheet({
                 {showCol('achieve') && (
                 <div
                   data-wbs-col="achieve"
-                  className={`${cellBase} flex-col items-end justify-center gap-0.5 border-r border-grid tabular-nums ${cellBg}`}
+                  className={`${cellBase} flex-col items-end justify-center gap-0.5 border-r border-border tabular-nums ${cellBg}`}
                   style={{ width: W('achieve') }}
                 >
                   <span
                     className={`leading-none ${
                       n.achievement == null
-                        ? 'text-ink-subtle'
+                        ? 'text-fg-muted'
                         : n.achievement >= 100
-                          ? 'text-done'
+                          ? 'text-success'
                           : n.achievement >= 80
                             ? 'text-progress'
-                            : 'text-delayed'
+                            : 'text-danger'
                     }`}
                   >
                     {n.achievement == null ? '—' : `${n.achievement}%`}
                   </span>
                   {n.achievement != null && (
-                    <span className="h-1 w-full overflow-hidden rounded-full bg-line">
+                    <span className="h-1 w-full overflow-hidden rounded-full bg-border">
                       <span
                         className={`block h-full rounded-full ${STATUS[n.status].bar}`}
                         style={{ width: `${Math.min(100, n.achievement)}%` }}
@@ -2243,7 +2243,7 @@ export function WbsGanttSheet({
                       canAdmin={fieldScope?.canAdmin === true}
                       locale={fieldScope?.locale ?? 'ko'}
                       format={customFormat}
-                      className={`${cellBase} items-center justify-start border-r border-grid ${cellBg}`}
+                      className={`${cellBase} items-center justify-start border-r border-border ${cellBg}`}
                       width={W(`cf:${d.key}`)}
                       onError={msg => setToast({ kind: 'err', msg })}
                     />
@@ -2252,7 +2252,7 @@ export function WbsGanttSheet({
                 {/* 간트 셀 */}
                 <div
                   data-wbs-col="gantt"
-                  className={`relative box-border h-full shrink-0 border-b border-grid ${isFlash || progressLensActive ? 'bg-brand-weak/60' : ''} group-hover:bg-brand-weak`}
+                  className={`relative box-border h-full shrink-0 border-b border-border ${isFlash || progressLensActive ? 'bg-action-soft/60' : ''} group-hover:bg-action-soft`}
                   style={{ width: ganttW }}
                 >
                   {n.plannedStart && n.plannedEnd && (
@@ -2308,17 +2308,17 @@ export function WbsGanttSheet({
               style={{ width: 'min(560px, 100vw)' }}
               role="status"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-weak text-brand" aria-hidden>
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-action-soft text-action" aria-hidden>
                 <Icon name={items.length === 0 ? 'folder' : q ? 'search' : 'eyeOff'} />
               </span>
-              <span className="text-sm font-medium text-ink-muted">
+              <span className="text-sm font-medium text-fg-secondary">
                 {items.length === 0
                   ? t('wbs.emptyNoItems')
                   : q
                     ? `${t('wbs.noResultsPrefix')}${query.trim()}${t('wbs.noResultsSuffix')}`
                     : t('wbs.allDoneHidden')}
               </span>
-              <span className="text-[12px] text-ink-subtle">
+              <span className="text-[12px] text-fg-muted">
                 {items.length === 0 ? t('wbs.emptyNoItemsHint') : q ? t('wbs.noResultsHint') : t('wbs.allDoneHiddenHint')}
               </span>
               {items.length > 0 && !q && (
@@ -2411,7 +2411,7 @@ export function WbsGanttSheet({
 
       {/* ── 범례 — 컴팩트(세로 폰·가로 폰)에선 표 공간 확보 위해 렌더하지 않음 ── */}
       {!compact && (
-      <div data-wbs-legend className="mt-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-line/70 bg-surface/70 px-3 py-2 text-[11px] text-ink-subtle">
+      <div data-wbs-legend className="mt-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border/70 bg-surface/70 px-3 py-2 text-[11px] text-fg-muted">
         <span className="inline-flex items-center gap-2">
           {(['done', 'in_progress', 'delayed', 'not_started'] as const).map(s => (
             <span key={s} className="inline-flex items-center gap-1">
@@ -2430,15 +2430,15 @@ export function WbsGanttSheet({
           <span>{t('wbs.legendOwnerMarks')}</span>
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="h-2 w-4 rounded-full bg-plan-track ring-1 ring-grid" />
+          <span className="h-2 w-4 rounded-full bg-plan-track ring-1 ring-border" />
           {t('wbs.legendPlanned')}
           <span className="ml-1 h-2 w-4 rounded-full bg-progress" />
           {t('wbs.legendActual')}
         </span>
         {dependencies.length > 0 && (
           <span className="inline-flex items-center gap-2">
-            <span className="inline-flex items-center gap-1"><span className="w-5 border-t border-ink-subtle" />FS</span>
-            <span className="inline-flex items-center gap-1"><span className="w-5 border-t border-dashed border-ink-subtle" />SS</span>
+            <span className="inline-flex items-center gap-1"><span className="w-5 border-t border-fg-muted" />FS</span>
+            <span className="inline-flex items-center gap-1"><span className="w-5 border-t border-dashed border-fg-muted" />SS</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-4 rounded-full border-2 border-critical" />{t('wbs.criticalPath')}</span>
             <span className="inline-flex items-center gap-1"><span className="w-5 border-t-2 border-dashed border-pending" />{t('wbs.forecast')}</span>
           </span>
@@ -2458,8 +2458,8 @@ export function WbsGanttSheet({
           {t('wbs.legendHoliday')}
         </span>
         {/* [RF5] 근무일 탐색 상한 — 일정 계산만 건너뛰었다(데이터는 그대로) */}
-        {dependencySchedule.calendarError && <p role="status" className="text-[12px] text-delayed">{t('wbs.noWorkday')}</p>}
-        <span className="text-ink-muted">
+        {dependencySchedule.calendarError && <p role="status" className="text-[12px] text-danger">{t('wbs.noWorkday')}</p>}
+        <span className="text-fg-secondary">
           {timelineFocus
             ? t('wbs.legendHintTimeline')
             : isAdmin
@@ -2472,7 +2472,7 @@ export function WbsGanttSheet({
       {toast && (
         <div
           className={`fixed right-6 z-50 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${bulkSelection.size > 0 ? 'bottom-36' : 'bottom-6'} ${
-            toast.kind === 'ok' ? 'bg-done text-success-fg' : 'bg-delayed text-danger-fg'
+            toast.kind === 'ok' ? 'bg-success text-success-fg' : 'bg-danger text-danger-fg'
           }`}
           role={toast.kind === 'err' ? 'alert' : 'status'}
         >
@@ -2613,13 +2613,13 @@ function DependencyOverlay({
     >
       <defs>
         <marker id={normalMarker} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
-          <path d="M0,0 L7,3.5 L0,7 z" fill="var(--color-ink-subtle)" />
+          <path d="M0,0 L7,3.5 L0,7 z" fill="var(--color-fg-muted)" />
         </marker>
         <marker id={criticalMarker} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
           <path d="M0,0 L8,4 L0,8 z" fill="var(--color-critical)" />
         </marker>
         <marker id={cycleMarker} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-          <path d="M0,0 L8,4 L0,8 z" fill="var(--color-delayed)" />
+          <path d="M0,0 L8,4 L0,8 z" fill="var(--color-danger)" />
         </marker>
       </defs>
       {dependencies.map(dep => {
@@ -2653,7 +2653,7 @@ function DependencyOverlay({
           : Math.max(4, Math.min(sourceX, targetX) - 10)
         const critical = criticalDependencyIds.has(dep.id)
         const cycle = cycleTaskIds.has(dep.predecessorId) || cycleTaskIds.has(dep.successorId)
-        const color = cycle ? 'var(--color-delayed)' : critical ? 'var(--color-critical)' : 'var(--color-ink-subtle)'
+        const color = cycle ? 'var(--color-danger)' : critical ? 'var(--color-critical)' : 'var(--color-fg-muted)'
         const marker = cycle ? cycleMarker : critical ? criticalMarker : normalMarker
         return (
           <path
@@ -2734,7 +2734,7 @@ function Bar({
           />
           {showOutside && (
             <span
-              className={`absolute top-1/2 -translate-y-1/2 whitespace-nowrap pl-1 tabular-nums ${critical ? 'font-semibold text-critical' : 'text-ink-muted'}`}
+              className={`absolute top-1/2 -translate-y-1/2 whitespace-nowrap pl-1 tabular-nums ${critical ? 'font-semibold text-critical' : 'text-fg-secondary'}`}
               style={{ left: width, fontSize: 'var(--wbs-bar-font, 9px)' }}
             >
               {pctLabel}
@@ -2765,7 +2765,7 @@ function Bar({
         onMouseEnter={onHover ? () => onHover(true) : undefined}
         onMouseLeave={onHover ? () => onHover(false) : undefined}
       >
-        <div className={`h-full overflow-hidden rounded-full bg-plan-track ring-1 ${critical ? 'ring-2 ring-critical ring-offset-1 ring-offset-surface' : 'ring-grid'}`}>
+        <div className={`h-full overflow-hidden rounded-full bg-plan-track ring-1 ${critical ? 'ring-2 ring-critical ring-offset-1 ring-offset-surface' : 'ring-border'}`}>
           <div
             className={`h-full rounded-full ${STATUS[n.status].bar}`}
             style={{ width: `${pct}%` }}
@@ -2781,7 +2781,7 @@ function Bar({
         )}
         {showOutside && (
           <span
-            className={`absolute top-1/2 -translate-y-1/2 whitespace-nowrap pl-1 tabular-nums ${critical ? 'font-semibold text-critical' : 'text-ink-muted'}`}
+            className={`absolute top-1/2 -translate-y-1/2 whitespace-nowrap pl-1 tabular-nums ${critical ? 'font-semibold text-critical' : 'text-fg-secondary'}`}
             style={{
               left: Math.min(width, Math.max(0, width * pct / 100)),
               fontSize: 'var(--wbs-bar-font, 9px)',

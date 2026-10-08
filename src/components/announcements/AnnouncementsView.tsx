@@ -104,10 +104,10 @@ export function AnnouncementsView({
   // "단일 내부 스크롤 컨테이너" 패턴.
   return (
     <div className="card flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
           <div className="eyebrow">{t('ann.boardEyebrow')}</div>
-          <h2 className="mt-0.5 text-sm font-semibold text-ink">
+          <h2 className="mt-0.5 text-sm font-semibold text-fg">
             {t('ann.boardTitle')} · {scoped.length}{t('ann.unitCount')}
           </h2>
         </div>
@@ -210,7 +210,7 @@ function AnnouncementRow({
 
   return (
     <div
-      className={`group flex items-start gap-3 rounded-2xl border bg-surface p-4 transition-colors duration-(--motion-fast) hover:border-line-strong hover:shadow-[var(--shadow-md)] ${item.isPinned ? 'border-brand/40 bg-brand-weak/30' : 'border-line'} ${status === 'expired' ? 'opacity-60' : ''}`}
+      className={`group flex items-start gap-3 rounded-2xl border bg-surface p-4 transition-colors duration-(--motion-fast) hover:border-border-input hover:shadow-[var(--shadow-md)] ${item.isPinned ? 'border-action/40 bg-action-soft/30' : 'border-border'} ${status === 'expired' ? 'opacity-60' : ''}`}
     >
       <button onClick={onRead} className="flex min-w-0 flex-1 items-start gap-3 text-left">
         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${meta.dot}`} />
@@ -218,21 +218,21 @@ function AnnouncementRow({
           <span className="flex flex-wrap items-center gap-1.5">
             <span className={`chip ${meta.chip}`}>{t(meta.labelKey)}</span>
             {item.isPinned && (
-              <span className="chip bg-pending-weak text-accent-warning">
+              <span className="chip bg-pending-weak text-warning">
                 <Pin className="h-3 w-3" />
                 {t('ann.pinned')}
               </span>
             )}
-            {unread && <span className="chip bg-accent-secondary/15 text-accent-secondary">{t('ann.new')}</span>}
+            {unread && <span className="chip bg-warning/15 text-warning">{t('ann.new')}</span>}
             {statusMeta && <span className={`chip ${statusMeta.chip}`}>{t(statusMeta.labelKey)}</span>}
           </span>
-          <span className="mt-1.5 block truncate text-[15px] font-semibold text-ink" title={item.title}>
+          <span className="mt-1.5 block truncate text-[15px] font-semibold text-fg" title={item.title}>
             {item.title}
           </span>
           {item.body && (
-            <span className="mt-1 line-clamp-2 block text-[13px] leading-5 text-ink-muted">{item.body}</span>
+            <span className="mt-1 line-clamp-2 block text-[13px] leading-5 text-fg-secondary">{item.body}</span>
           )}
-          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums text-ink-subtle">
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums text-fg-muted">
             <span>
               {fmtDate(item.createdAt, timeZone)}
               {edited && t('ann.updatedSuffix')}
@@ -252,14 +252,14 @@ function AnnouncementRow({
           <button
             onClick={onEdit}
             aria-label={`${item.title} ${t('common.edit')}`}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-line text-ink-subtle transition hover:border-line-strong hover:text-ink"
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-border text-fg-muted transition hover:border-border-input hover:text-fg"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={onDelete}
             aria-label={`${item.title} ${t('common.delete')}`}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-line text-ink-subtle transition hover:border-delayed hover:text-delayed"
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-border text-fg-muted transition hover:border-danger hover:text-danger"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -299,7 +299,7 @@ function ReadModal({
           {canEdit && (
             <button
               onClick={onDelete}
-              className="btn bg-delayed text-danger-fg transition hover:brightness-105"
+              className="btn bg-danger text-danger-fg transition hover:brightness-105"
             >
               <Trash2 className="h-4 w-4" />
               {t('common.delete')}
@@ -322,24 +322,24 @@ function ReadModal({
           <div className="flex flex-wrap items-center gap-1.5">
             <span className={`chip ${meta.chip}`}>{t(meta.labelKey)}</span>
             {item.isPinned && (
-              <span className="chip bg-pending-weak text-accent-warning">
+              <span className="chip bg-pending-weak text-warning">
                 <Pin className="h-3 w-3" />
                 {t('ann.pinned')}
               </span>
             )}
-            <span className="text-[11px] tabular-nums text-ink-subtle">
+            <span className="text-[11px] tabular-nums text-fg-muted">
               {fmtDate(item.createdAt, timeZone)}
               {item.updatedAt !== item.createdAt && t('ann.updatedSuffix')}
             </span>
           </div>
           {item.publishFrom && item.publishTo && (
-            <div className="flex items-center gap-1.5 text-[12px] tabular-nums text-ink-muted">
-              <CalendarRange className="h-3.5 w-3.5 text-ink-subtle" />
-              <span className="font-medium text-ink-subtle">{t('ann.periodLabel')}</span>
+            <div className="flex items-center gap-1.5 text-[12px] tabular-nums text-fg-secondary">
+              <CalendarRange className="h-3.5 w-3.5 text-fg-muted" />
+              <span className="font-medium text-fg-muted">{t('ann.periodLabel')}</span>
               {item.publishFrom} ~ {item.publishTo}
             </div>
           )}
-          <p className="whitespace-pre-wrap text-sm leading-6 text-ink">{item.body || '—'}</p>
+          <p className="whitespace-pre-wrap text-sm leading-6 text-fg">{item.body || '—'}</p>
         </div>
       )}
     </Modal>
@@ -443,7 +443,7 @@ export function AnnouncementFormModal({
     >
       <div className="space-y-4">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('ann.form.title')}</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('ann.form.title')}</span>
           <input
             className="app-input"
             value={title}
@@ -456,7 +456,7 @@ export function AnnouncementFormModal({
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('ann.form.category')}</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('ann.form.category')}</span>
             <select
               className="app-input"
               value={category}
@@ -475,23 +475,23 @@ export function AnnouncementFormModal({
               type="checkbox"
               checked={isPinned}
               onChange={(e) => setIsPinned(e.target.checked)}
-              className="h-4 w-4 accent-brand"
+              className="h-4 w-4 accent-action"
             />
-            <span className="inline-flex items-center gap-1 text-sm font-medium text-ink">
-              <Pin className="h-3.5 w-3.5 text-ink-subtle" />
+            <span className="inline-flex items-center gap-1 text-sm font-medium text-fg">
+              <Pin className="h-3.5 w-3.5 text-fg-muted" />
               {t('ann.form.pin')}
             </span>
           </label>
         </div>
 
         <div>
-          <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-muted">
+          <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-fg-secondary">
             <CalendarRange className="h-3.5 w-3.5" />
             {t('ann.form.period')}
           </span>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-[11px] font-medium text-ink-subtle">{t('ann.form.publishFrom')}</span>
+              <span className="mb-1 block text-[11px] font-medium text-fg-muted">{t('ann.form.publishFrom')}</span>
               <input
                 type="date"
                 className="app-input"
@@ -501,7 +501,7 @@ export function AnnouncementFormModal({
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[11px] font-medium text-ink-subtle">{t('ann.form.publishTo')}</span>
+              <span className="mb-1 block text-[11px] font-medium text-fg-muted">{t('ann.form.publishTo')}</span>
               <input
                 type="date"
                 className="app-input"
@@ -511,7 +511,7 @@ export function AnnouncementFormModal({
               />
             </label>
           </div>
-          <p className="mt-1.5 text-[11px] leading-4 text-ink-subtle">{t('ann.form.periodHint')}</p>
+          <p className="mt-1.5 text-[11px] leading-4 text-fg-muted">{t('ann.form.periodHint')}</p>
         </div>
 
         {/* 마일스톤 표시 — 체크 시 날짜 입력이 열린다(기본값 = 게시 종료일: 행사 공지는 대개 행사일까지 게시한다).
@@ -526,16 +526,16 @@ export function AnnouncementFormModal({
                 setShowMilestone(on)
                 if (on && !milestoneDate) setMilestoneDate(publishTo || publishFrom || today)
               }}
-              className="h-4 w-4 accent-brand"
+              className="h-4 w-4 accent-action"
             />
-            <span className="inline-flex items-center gap-1 text-sm font-medium text-ink">
-              <Flag className="h-3.5 w-3.5 text-ink-subtle" />
+            <span className="inline-flex items-center gap-1 text-sm font-medium text-fg">
+              <Flag className="h-3.5 w-3.5 text-fg-muted" />
               {t('ann.form.milestone')}
             </span>
           </label>
           {showMilestone && (
             <label className="mt-2 block">
-              <span className="mb-1 block text-[11px] font-medium text-ink-subtle">{t('ann.form.milestoneDate')}</span>
+              <span className="mb-1 block text-[11px] font-medium text-fg-muted">{t('ann.form.milestoneDate')}</span>
               <input
                 type="date"
                 className="app-input"
@@ -544,11 +544,11 @@ export function AnnouncementFormModal({
               />
             </label>
           )}
-          <p className="mt-1.5 text-[11px] leading-4 text-ink-subtle">{t('ann.form.milestoneHint')}</p>
+          <p className="mt-1.5 text-[11px] leading-4 text-fg-muted">{t('ann.form.milestoneHint')}</p>
         </div>
 
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('ann.form.body')}</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('ann.form.body')}</span>
           <textarea
             className="app-textarea"
             rows={8}
@@ -559,7 +559,7 @@ export function AnnouncementFormModal({
         </label>
 
         {error && (
-          <div className="flex items-center gap-2 rounded-xl border border-delayed/40 bg-delayed-weak px-3 py-2.5 text-xs font-medium text-delayed">
+          <div className="flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-weak px-3 py-2.5 text-xs font-medium text-danger">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             {error}
           </div>
@@ -606,19 +606,19 @@ function DeleteAnnouncementModal({ item, onClose }: { item: Announcement | null;
           <button
             onClick={confirm}
             disabled={pending}
-            className="btn bg-delayed text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn bg-danger text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pending ? t('ann.deleting') : t('common.delete')}
           </button>
         </>
       }
     >
-      <p className="text-sm leading-6 text-ink-muted">
-        <strong className="text-ink">{item?.title}</strong>
+      <p className="text-sm leading-6 text-fg-secondary">
+        <strong className="text-fg">{item?.title}</strong>
         {t('ann.deleteConfirmSuffix')}
       </p>
       {error && (
-        <div className="mt-4 flex items-center gap-2 rounded-xl border border-delayed/40 bg-delayed-weak px-3 py-2.5 text-xs font-medium text-delayed">
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-weak px-3 py-2.5 text-xs font-medium text-danger">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           {error}
         </div>

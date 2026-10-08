@@ -50,9 +50,9 @@ export function WikiQuestionCreateForm({ projectId, topicId, locale }: { project
   }
 
   return (
-    <div className="mt-3 border-t border-line pt-3">
+    <div className="mt-3 border-t border-border pt-3">
       <label className="block">
-        <span className="mb-1 block text-xs font-semibold text-ink-muted">{t(locale, 'wiki.question.askLabel')}</span>
+        <span className="mb-1 block text-xs font-semibold text-fg-secondary">{t(locale, 'wiki.question.askLabel')}</span>
         <textarea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
@@ -63,7 +63,7 @@ export function WikiQuestionCreateForm({ projectId, topicId, locale }: { project
           placeholder={t(locale, 'wiki.question.askPlaceholder')}
         />
       </label>
-      {error && <p className="mt-2 text-xs font-medium text-delayed" role="alert">{error}</p>}
+      {error && <p className="mt-2 text-xs font-medium text-danger" role="alert">{error}</p>}
       <div className="mt-2 flex flex-wrap gap-2">
         <button type="button" onClick={() => void submit()} disabled={busy || !question.trim()} className="btn btn-primary h-8 px-3 text-xs" data-testid="wiki-question-submit">
           <Send className="h-3.5 w-3.5" aria-hidden />

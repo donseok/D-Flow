@@ -79,14 +79,14 @@ export function WeeklyAiRewriteModal({
         )}
 
         {busy && items.length === 0 && (
-          <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-sm text-ink-muted" aria-live="polite">
+          <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-sm text-fg-secondary" aria-live="polite">
             <LoaderCircle className="h-7 w-7 animate-spin text-action" />
             선택한 내용을 깔끔하게 다듬고 있습니다…
           </div>
         )}
 
         {!busy && items.length === 0 && !error && (
-          <p className="py-8 text-center text-sm text-ink-muted">다듬을 제안이 없습니다.</p>
+          <p className="py-8 text-center text-sm text-fg-secondary">다듬을 제안이 없습니다.</p>
         )}
 
         {items.length > 0 && (
@@ -96,9 +96,9 @@ export function WeeklyAiRewriteModal({
               const draft = drafts[key] ?? item.content
               const changed = draft !== item.original
               return (
-                <section key={key} className="rounded-2xl border border-line bg-surface-2 p-4">
+                <section key={key} className="rounded-2xl border border-border bg-surface-subtle p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <label className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink">
+                    <label className="flex min-w-0 items-center gap-2 text-sm font-semibold text-fg">
                       <input
                         type="checkbox"
                         checked={!!checked[key]}
@@ -106,14 +106,14 @@ export function WeeklyAiRewriteModal({
                         aria-label={`${item.section} ${item.label} 제안 선택`}
                       />
                       <span className="truncate">{item.section}</span>
-                      <span className="shrink-0 text-xs font-normal text-ink-muted">{item.label}</span>
+                      <span className="shrink-0 text-xs font-normal text-fg-secondary">{item.label}</span>
                     </label>
-                    {!changed && <span className="shrink-0 text-xs text-ink-muted">변경 없음</span>}
+                    {!changed && <span className="shrink-0 text-xs text-fg-secondary">변경 없음</span>}
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     <div>
-                      <div className="mb-1 text-xs font-semibold text-ink-muted">원문</div>
-                      <div className="min-h-28 whitespace-pre-wrap break-words rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink-muted">
+                      <div className="mb-1 text-xs font-semibold text-fg-secondary">원문</div>
+                      <div className="min-h-28 whitespace-pre-wrap break-words rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg-secondary">
                         {item.original}
                       </div>
                     </div>
@@ -129,7 +129,7 @@ export function WeeklyAiRewriteModal({
                           setChecked(current => ({ ...current, [key]: content !== item.original }))
                         }}
                         aria-label={`${item.section} ${item.label} AI 제안`}
-                        className="min-h-28 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-ink outline-none transition focus:border-action focus:ring-2 focus:ring-border-focus"
+                        className="min-h-28 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg outline-none transition focus:border-action focus:ring-2 focus:ring-border-focus"
                       />
                     </label>
                   </div>

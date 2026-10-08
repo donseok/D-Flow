@@ -19,11 +19,11 @@ export async function AnnouncementStrip({ projectId, announcements, today }: {
 
   return (
     <Link href={`/p/${projectId}/announcements`}
-      className="card flex items-center gap-2.5 px-4 py-3 transition hover:bg-surface-2">
+      className="card flex items-center gap-2.5 px-4 py-3 transition hover:bg-surface-subtle">
       <span className={`chip shrink-0 ${ANNOUNCEMENT_META[notice.category].chip}`}>{tr(ANNOUNCEMENT_META[notice.category].labelKey)}</span>
-      {notice.isPinned && <Pin className="h-3.5 w-3.5 shrink-0 text-accent-warning" />}
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink" title={notice.title}>{notice.title}</span>
-      <span className="shrink-0 text-[11px] text-ink-subtle">{tr('common.viewAll')}</span>
+      {notice.isPinned && <Pin className="h-3.5 w-3.5 shrink-0 text-warning" />}
+      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg" title={notice.title}>{notice.title}</span>
+      <span className="shrink-0 text-[11px] text-fg-muted">{tr('common.viewAll')}</span>
     </Link>
   )
 }

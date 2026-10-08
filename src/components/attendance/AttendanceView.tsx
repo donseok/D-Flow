@@ -175,7 +175,7 @@ export function AttendanceView({
         role={canEdit ? 'button' : undefined}
         tabIndex={canEdit ? 0 : undefined}
         onKeyDown={open ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } } : undefined}
-        className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium ${meta.chip} ${canEdit ? 'cursor-pointer hover:ring-1 hover:ring-brand-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-ring' : ''}`}
+        className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium ${meta.chip} ${canEdit ? 'cursor-pointer hover:ring-1 hover:ring-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus' : ''}`}
         title={`${mem?.name ?? '?'} · ${typeLabel(r.type)}${r.note ? ` · ${r.note}` : ''}${canEdit ? ` · ${t('att.clickToEdit')}` : ''}`}
       >
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`} />
@@ -247,7 +247,7 @@ export function AttendanceView({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2">
             <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('att.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
-            <div className="min-w-[116px] text-center text-base font-bold tabular-nums text-ink">
+            <div className="min-w-[116px] text-center text-base font-bold tabular-nums text-fg">
               {new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { year: 'numeric', month: locale === 'ko' ? 'numeric' : 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
             </div>
             <button onClick={() => shift(1)} className="chrome-icon" aria-label={t('att.nextMonth')}><ChevronRight className="h-4 w-4" /></button>
@@ -287,7 +287,7 @@ export function AttendanceView({
         {/* 범례 */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {selectable.map(e => (
-            <span key={e.code} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-muted">
+            <span key={e.code} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-fg-secondary">
               <span className={`h-2 w-2 rounded-full ${vocabColor(types, e.code).dot}`} />
               {typeLabel(e.code)}
             </span>
@@ -296,13 +296,13 @@ export function AttendanceView({
 
         {/* 챗봇 딥링크 필터 — 해제 전까지 달력·목록에 적용 (신규 문구는 dict 미보유라 locale 분기) */}
         {botFilter && (
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-ink-muted">
-            <span className="text-ink-subtle">{locale === 'en' ? `${ASSISTANT_NAME.en} filter` : `${ASSISTANT_NAME.ko} 필터`}</span>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-fg-secondary">
+            <span className="text-fg-muted">{locale === 'en' ? `${ASSISTANT_NAME.en} filter` : `${ASSISTANT_NAME.ko} 필터`}</span>
             {botFilter.from && botFilter.to && (
-              <span className="chip bg-surface-2 tabular-nums text-ink-muted">{botFilter.from} ~ {botFilter.to}</span>
+              <span className="chip bg-surface-subtle tabular-nums text-fg-secondary">{botFilter.from} ~ {botFilter.to}</span>
             )}
-            {botFilter.team && <span className="chip bg-surface-2 text-ink-muted">{botFilter.team}</span>}
-            {botFilter.type && <span className="chip bg-surface-2 text-ink-muted">{typeLabel(botFilter.type)}</span>}
+            {botFilter.team && <span className="chip bg-surface-subtle text-fg-secondary">{botFilter.team}</span>}
+            {botFilter.type && <span className="chip bg-surface-subtle text-fg-secondary">{typeLabel(botFilter.type)}</span>}
             <button onClick={() => setBotFilter(null)} className="btn btn-ghost h-7 px-2 text-[11px]">
               {locale === 'en' ? 'Clear' : '해제'}
             </button>
@@ -312,9 +312,9 @@ export function AttendanceView({
 
       {view === 'calendar' ? (
         <div className="card overflow-hidden p-0">
-          <div className="grid grid-cols-7 gap-px bg-line">
+          <div className="grid grid-cols-7 gap-px bg-border">
             {columns.map(c => (
-              <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-2 py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-ink' : 'font-normal text-ink-subtle'}`}>{t(`att.weekday.${c.key}` as DictKey)}</div>
+              <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>{t(`att.weekday.${c.key}` as DictKey)}</div>
             ))}
             {matrix.flat().map(cell => {
               const inMonth = cell.startsWith(ym)
@@ -327,11 +327,11 @@ export function AttendanceView({
                 <div key={cell} data-date={cell} className={`min-h-[96px] p-1.5 ${info.working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'}`}>
                   {/* 좁은 화면(sm 미만)은 이름이 날짜 아래 한 줄을 통째로 쓰고 줄바꿈, sm 이상은 날짜 옆 한 줄 말줄임(title 로 전체) */}
                   <div className="flex flex-wrap items-center justify-between gap-x-1 px-0.5 sm:flex-nowrap">
-                    <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-brand text-action-fg' : info.working ? 'text-ink' : 'text-ink-muted'}`}>
+                    <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-action text-action-fg' : info.working ? 'text-fg' : 'text-fg-secondary'}`}>
                       {dayNum}
                     </span>
                     {info.name && (
-                      <span className="basis-full break-all text-[10px] font-medium leading-tight text-ink-subtle sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
+                      <span className="basis-full break-all text-[10px] font-medium leading-tight text-fg-muted sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
                         {info.name}
                       </span>
                     )}
@@ -345,7 +345,7 @@ export function AttendanceView({
                           const r = e.currentTarget.getBoundingClientRect()
                           setMore({ date: cell, rect: { top: r.top, bottom: r.bottom, left: r.left } })
                         }}
-                        className="w-full rounded-md px-1 py-0.5 text-left text-[10px] font-medium text-ink-subtle transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-ring"
+                        className="w-full rounded-md px-1 py-0.5 text-left text-[10px] font-medium text-fg-muted transition hover:bg-surface-subtle hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       >
                         +{dayRecs.length - 3}{t('att.moreSuffix')}
                       </button>
@@ -372,7 +372,7 @@ export function AttendanceView({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-line bg-surface-2 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-subtle">
+                <tr className="border-b border-border bg-surface-subtle text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">
                   <th className="px-4 py-3">{t('att.col.date')}</th>
                   <th className="px-4 py-3">{t('att.col.member')}</th>
                   <th className="px-4 py-3">{t('att.col.team')}</th>
@@ -391,21 +391,21 @@ export function AttendanceView({
                       role={canEdit ? 'button' : undefined}
                       tabIndex={canEdit ? 0 : undefined}
                       onKeyDown={canEdit ? e => { if (e.key === 'Enter') openEdit(r) } : undefined}
-                      className={`border-b border-line/70 last:border-0 transition hover:bg-surface-2 ${canEdit ? 'cursor-pointer focus:outline-none focus-visible:bg-surface-2' : ''}`}
+                      className={`border-b border-border/70 last:border-0 transition hover:bg-surface-subtle ${canEdit ? 'cursor-pointer focus:outline-none focus-visible:bg-surface-subtle' : ''}`}
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-ink">{fmtDate(r.date)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">{fmtDate(r.date)}</td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-ink">{mem?.name ?? t('att.unknown')}</div>
-                        {mem?.title && <div className="text-xs text-ink-subtle">{mem.title}</div>}
+                        <div className="font-medium text-fg">{mem?.name ?? t('att.unknown')}</div>
+                        {mem?.title && <div className="text-xs text-fg-muted">{mem.title}</div>}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-ink-muted">{mem?.teams[0]?.code ?? '-'}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-fg-secondary">{mem?.teams[0]?.code ?? '-'}</td>
                       <td className="px-4 py-3">
                         <span className={`chip ${meta.chip}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
                           {typeLabel(r.type)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-ink-muted">{r.note || '-'}</td>
+                      <td className="px-4 py-3 text-fg-secondary">{r.note || '-'}</td>
                     </tr>
                   )
                 })}
@@ -424,7 +424,7 @@ export function AttendanceView({
         footer={
           <>
             {editingId && (
-              <button onClick={() => setConfirmingDelete(true)} disabled={deleting || saving} className="btn btn-ghost mr-auto text-delayed hover:bg-delayed-weak">
+              <button onClick={() => setConfirmingDelete(true)} disabled={deleting || saving} className="btn btn-ghost mr-auto text-danger hover:bg-danger-weak">
                 {deleting ? t('att.deleting') : t('common.delete')}
               </button>
             )}
@@ -436,7 +436,7 @@ export function AttendanceView({
         <div className="space-y-4">
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <label htmlFor="attendance-member" className="text-xs font-semibold text-ink-muted">
+              <label htmlFor="attendance-member" className="text-xs font-semibold text-fg-secondary">
                 {t('att.form.member')}
               </label>
               <MemberPickerViewToggle value={memberPickerView} onChange={setMemberPickerView} compact />
@@ -459,7 +459,7 @@ export function AttendanceView({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('att.form.date')}</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('att.form.date')}</span>
               <input
                 type="date"
                 value={form.date}
@@ -469,7 +469,7 @@ export function AttendanceView({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('att.form.type')}</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('att.form.type')}</span>
               <select
                 value={form.type}
                 onChange={e => setForm(f => ({ ...f, type: e.target.value as AttendanceType }))}
@@ -486,7 +486,7 @@ export function AttendanceView({
             </label>
           </div>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('att.form.note')}</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('att.form.note')}</span>
             <textarea
               value={form.note}
               onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
@@ -496,9 +496,9 @@ export function AttendanceView({
             />
           </label>
           {editingId && (
-            <p className="text-[11px] leading-5 text-ink-subtle">{t('att.form.lockedHint')}</p>
+            <p className="text-[11px] leading-5 text-fg-muted">{t('att.form.lockedHint')}</p>
           )}
-          {formErr && <p className="text-xs font-medium text-delayed">{formErr}</p>}
+          {formErr && <p className="text-xs font-medium text-danger">{formErr}</p>}
         </div>
       </Modal>
 
@@ -517,19 +517,19 @@ export function AttendanceView({
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="btn bg-delayed text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn bg-danger text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {deleting ? t('att.deleting') : t('common.delete')}
             </button>
           </>
         }
       >
-        <p className="text-sm leading-6 text-ink-muted">
+        <p className="text-sm leading-6 text-fg-secondary">
           {/* 이름·날짜가 문장 중간에 끼고 어순이 달라 t() 파라미터 치환 없이 locale 분기로 조합 */}
           {locale === 'en' ? (
-            <>Delete the {fmtDate(form.date)} attendance record for <strong className="text-ink">{memberMap.get(form.memberId)?.name ?? t('att.unknown')}</strong>? This action cannot be undone.</>
+            <>Delete the {fmtDate(form.date)} attendance record for <strong className="text-fg">{memberMap.get(form.memberId)?.name ?? t('att.unknown')}</strong>? This action cannot be undone.</>
           ) : (
-            <><strong className="text-ink">{memberMap.get(form.memberId)?.name ?? t('att.unknown')}</strong> 님의 {fmtDate(form.date)} 근태 기록을 삭제할까요? 이 작업은 되돌릴 수 없습니다.</>
+            <><strong className="text-fg">{memberMap.get(form.memberId)?.name ?? t('att.unknown')}</strong> 님의 {fmtDate(form.date)} 근태 기록을 삭제할까요? 이 작업은 되돌릴 수 없습니다.</>
           )}
         </p>
       </Modal>

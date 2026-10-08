@@ -14,10 +14,10 @@ const SIGNAL_LABEL: Record<Signal, DictKey> = {
 }
 const STATUS_CHIP: Record<ProjectLifecycleStatus, { labelKey: DictKey; chip: string; dot: string }> = {
   ready: { labelKey: 'pf.status.ready', chip: 'bg-pending-weak text-pending', dot: 'bg-pending' },
-  active: { labelKey: 'pf.status.active', chip: 'bg-brand-weak text-brand', dot: 'bg-brand' },
-  overdue: { labelKey: 'pf.status.overdue', chip: 'bg-delayed-weak text-delayed', dot: 'bg-delayed' },
-  done: { labelKey: 'pf.status.done', chip: 'bg-done-weak text-done', dot: 'bg-done' },
-  unknown: { labelKey: 'pf.status.unknown', chip: 'bg-surface-2 text-ink-muted', dot: 'bg-ink-subtle' },
+  active: { labelKey: 'pf.status.active', chip: 'bg-action-soft text-action', dot: 'bg-action' },
+  overdue: { labelKey: 'pf.status.overdue', chip: 'bg-danger-weak text-danger', dot: 'bg-danger' },
+  done: { labelKey: 'pf.status.done', chip: 'bg-success-weak text-success', dot: 'bg-success' },
+  unknown: { labelKey: 'pf.status.unknown', chip: 'bg-surface-subtle text-fg-secondary', dot: 'bg-fg-muted' },
 }
 
 const th = 'px-2 py-2 font-semibold'
@@ -39,7 +39,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] text-left text-xs">
           <thead>
-            <tr className="border-b border-line text-[10px] uppercase tracking-[0.12em] text-ink-subtle">
+            <tr className="border-b border-border text-[10px] uppercase tracking-[0.12em] text-fg-muted">
               <th className={th}>{tr('pf.col.signal')}</th>
               <th className={th}>{tr('pf.col.project')}</th>
               <th className={th}>{tr('pf.col.progress')}</th>
@@ -62,7 +62,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
               const ms = row.exec?.milestone ?? null
               const sched = row.exec?.schedule ?? null
               return (
-                <tr key={row.projectId} className="border-b border-line/60 transition hover:bg-surface-2/60">
+                <tr key={row.projectId} className="border-b border-border/60 transition hover:bg-surface-subtle/60">
                   <td className="px-2 py-2.5">
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${m.chip}`}>
@@ -71,7 +71,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                       {row.riskCount > 0 && (
                         <span
                           title={row.riskTitles.join(' · ')}
-                          className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${row.riskWorst === 'red' ? 'bg-delayed-weak text-delayed' : 'bg-pending-weak text-accent-warning'}`}
+                          className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${row.riskWorst === 'red' ? 'bg-danger-weak text-danger' : 'bg-pending-weak text-warning'}`}
                         >
                           <AlertTriangle className="h-3 w-3" aria-hidden />{row.riskCount}
                         </span>
@@ -79,7 +79,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                       {row.hygiene && !row.hygiene.clean && (
                         <span
                           title={`${tr('pf.hygiene.noOwner')} ${row.hygiene.noOwner} · ${tr('pf.hygiene.noDates')} ${row.hygiene.noDates} · ${tr('pf.hygiene.mixedWeight')} ${row.hygiene.mixedWeight}`}
-                          className="inline-flex items-center rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-subtle"
+                          className="inline-flex items-center rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold text-fg-muted"
                         >
                           {tr('pf.hygiene.label')}
                         </span>
@@ -88,43 +88,43 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                   </td>
                   <td className="max-w-[220px] px-2 py-2.5">
                     <Link href={`/p/${row.projectId}/dashboard`}
-                      className="inline-flex items-center gap-1.5 font-semibold text-ink hover:text-brand hover:underline">
-                      {row.isPrivate && <Lock className="h-3 w-3 shrink-0 text-ink-subtle" aria-label={tr('pf.private')} />}
+                      className="inline-flex items-center gap-1.5 font-semibold text-fg hover:text-action hover:underline">
+                      {row.isPrivate && <Lock className="h-3 w-3 shrink-0 text-fg-muted" aria-label={tr('pf.private')} />}
                       <span className="truncate">{row.name}</span>
                     </Link>
                     {row.baseDate && (
-                      <div className="mt-0.5 text-[10px] text-ink-subtle">{tr('pf.baseDate')} {fmtDate(row.baseDate)}</div>
+                      <div className="mt-0.5 text-[10px] text-fg-muted">{tr('pf.baseDate')} {fmtDate(row.baseDate)}</div>
                     )}
                   </td>
                   {row.degraded ? (
-                    <td colSpan={6} className="px-2 py-2.5 text-[11px] text-delayed">{tr('pf.degradedRow')}</td>
+                    <td colSpan={6} className="px-2 py-2.5 text-[11px] text-danger">{tr('pf.degradedRow')}</td>
                   ) : !row.exec ? (
                     <>
-                      <td className="px-2 py-2.5"><span className="text-ink-subtle">—</span></td>
-                      <td className="px-2 py-2.5 text-right"><span className="text-ink-subtle">—</span></td>
-                      <td className="px-2 py-2.5 text-right"><span className="text-ink-subtle">—</span></td>
-                      <td className="px-2 py-2.5"><span className="text-ink-subtle">—</span></td>
-                      <td className="px-2 py-2.5"><span className="text-ink-subtle">—</span></td>
-                      <td className="px-2 py-2.5"><span className="text-ink-subtle">—</span></td>
+                      <td className="px-2 py-2.5"><span className="text-fg-muted">—</span></td>
+                      <td className="px-2 py-2.5 text-right"><span className="text-fg-muted">—</span></td>
+                      <td className="px-2 py-2.5 text-right"><span className="text-fg-muted">—</span></td>
+                      <td className="px-2 py-2.5"><span className="text-fg-muted">—</span></td>
+                      <td className="px-2 py-2.5"><span className="text-fg-muted">—</span></td>
+                      <td className="px-2 py-2.5"><span className="text-fg-muted">—</span></td>
                     </>
                   ) : (
                     <>
                       <td className="whitespace-nowrap px-2 py-2.5 tabular-nums">
-                        <span className="font-semibold text-ink">{row.exec!.progress.actual}%</span>
-                        <span className="text-ink-subtle"> / {row.exec!.progress.planned}%</span>
+                        <span className="font-semibold text-fg">{row.exec!.progress.actual}%</span>
+                        <span className="text-fg-muted"> / {row.exec!.progress.planned}%</span>
                       </td>
-                      <td className={`whitespace-nowrap px-2 py-2.5 text-right font-semibold tabular-nums ${row.exec!.progress.variance < 0 ? 'text-delayed' : 'text-done'}`}>
+                      <td className={`whitespace-nowrap px-2 py-2.5 text-right font-semibold tabular-nums ${row.exec!.progress.variance < 0 ? 'text-danger' : 'text-success'}`}>
                         {row.exec!.progress.variance > 0 ? '+' : ''}{row.exec!.progress.variance}%p
                         {row.trendDelta != null && row.trendDelta !== 0 && (
                           <span
                             title={tr('pf.trend.tooltip')}
-                            className={`ml-1 text-[10px] font-semibold ${row.trendDelta < 0 ? 'text-delayed' : 'text-done'}`}
+                            className={`ml-1 text-[10px] font-semibold ${row.trendDelta < 0 ? 'text-danger' : 'text-success'}`}
                           >
                             {row.trendDelta < 0 ? '▼' : '▲'}{Math.abs(row.trendDelta)}
                           </span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-ink">
+                      <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-fg">
                         {row.spi != null ? row.spi.toFixed(2) : (
                           <span
                             title={tr(
@@ -132,40 +132,40 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                                 : row.exec!.schedule.label === 'none' ? 'pf.spi.none'
                                   : 'pf.spi.early',
                             )}
-                            className="text-ink-subtle"
+                            className="text-fg-muted"
                           >—</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2.5 tabular-nums">
                         {sched?.projectedEnd ? (
                           <>
-                            <span className="text-ink">{fmtDate(sched.projectedEnd)}</span>
+                            <span className="text-fg">{fmtDate(sched.projectedEnd)}</span>
                             {sched.slipDays != null && (
-                              <span className={`ml-1 text-[10px] font-semibold ${sched.slipDays > 0 ? 'text-delayed' : 'text-done'}`}>
+                              <span className={`ml-1 text-[10px] font-semibold ${sched.slipDays > 0 ? 'text-danger' : 'text-success'}`}>
                                 {sched.slipDays > 0 ? `+${sched.slipDays}` : sched.slipDays}d
                               </span>
                             )}
                           </>
-                        ) : <span className="text-ink-subtle">—</span>}
+                        ) : <span className="text-fg-muted">—</span>}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2.5 tabular-nums">
-                        <span className={row.exec!.risk.delayed > 0 ? 'font-semibold text-delayed' : 'text-ink-subtle'}>{row.exec!.risk.delayed}</span>
-                        <span className="text-ink-subtle"> · </span>
-                        <span className={row.exec!.risk.dueSoon > 0 ? 'font-semibold text-ink' : 'text-ink-subtle'}>{row.exec!.risk.dueSoon}</span>
+                        <span className={row.exec!.risk.delayed > 0 ? 'font-semibold text-danger' : 'text-fg-muted'}>{row.exec!.risk.delayed}</span>
+                        <span className="text-fg-muted"> · </span>
+                        <span className={row.exec!.risk.dueSoon > 0 ? 'font-semibold text-fg' : 'text-fg-muted'}>{row.exec!.risk.dueSoon}</span>
                       </td>
                       <td className="whitespace-nowrap px-2 py-2.5">
                         {ms?.name ? (
                           <div className="flex max-w-[180px] items-baseline gap-1">
-                            <span className={`min-w-0 truncate ${ms.overdue ? 'text-delayed' : 'text-ink'}`}>{ms.name}</span>
-                            <span className={`shrink-0 text-[10px] font-semibold tabular-nums ${ms.overdue ? 'text-delayed' : 'text-ink'}`}>
+                            <span className={`min-w-0 truncate ${ms.overdue ? 'text-danger' : 'text-fg'}`}>{ms.name}</span>
+                            <span className={`shrink-0 text-[10px] font-semibold tabular-nums ${ms.overdue ? 'text-danger' : 'text-fg'}`}>
                               {ms.dday != null && (ms.dday >= 0 ? `D-${ms.dday}` : `D+${-ms.dday}`)}
                             </span>
                           </div>
-                        ) : <span className="text-ink-subtle">—</span>}
+                        ) : <span className="text-fg-muted">—</span>}
                       </td>
                     </>
                   )}
-                  <td className="px-2 py-2.5 text-ink-muted">
+                  <td className="px-2 py-2.5 text-fg-secondary">
                     <div className="max-w-[140px] truncate">
                       {leadersDegraded ? tr('pf.leadersUnknown') : (row.leaders.join(', ') || '—')}
                     </div>
@@ -178,7 +178,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                   </td>
                   <td className="px-2 py-2.5">
                     <Link href={`/p/${row.projectId}/dashboard`} aria-label={`${row.name} 대시보드`}
-                      className="text-ink-subtle transition hover:text-brand">
+                      className="text-fg-muted transition hover:text-action">
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
                   </td>

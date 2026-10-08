@@ -62,18 +62,18 @@ export function ProjectInfoEditButton({
         }>
         <div className="space-y-4">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('settings.projectName')} *</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.projectName')} *</span>
             <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="app-input" placeholder={t('settings.projectNamePlaceholder')} />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('settings.description')}</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.description')}</span>
             <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} className="app-textarea" placeholder={t('settings.descriptionPlaceholder')} />
           </label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('settings.startDate')}</span><input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="app-input px-2 text-xs" /></label>
-            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-ink-muted">{t('settings.endDate')}</span><input type="date" value={form.end_date} min={form.start_date || undefined} onChange={e => setForm({ ...form, end_date: e.target.value })} className="app-input px-2 text-xs" /></label>
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.startDate')}</span><input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="app-input px-2 text-xs" /></label>
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.endDate')}</span><input type="date" value={form.end_date} min={form.start_date || undefined} onChange={e => setForm({ ...form, end_date: e.target.value })} className="app-input px-2 text-xs" /></label>
           </div>
-          {error && <p className="text-xs font-medium text-delayed">{error}</p>}
+          {error && <p className="text-xs font-medium text-danger">{error}</p>}
         </div>
       </Modal>
     </>
