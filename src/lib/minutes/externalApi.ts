@@ -1,4 +1,3 @@
-import { createHash, timingSafeEqual } from 'crypto'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
@@ -16,7 +15,7 @@ import { isProjectAdmin, isWorkspaceAdmin, type Actor } from '@/lib/domain/authz
 /**
  * 회의록 외부 업로드 API(/api/v1/minutes*) 공용 유틸 — 또박또박 연동.
  * 계약: docs/design/dflow-minutes-upload-api-spec.md (§3 인증, §4 upsert, §6 에러 규격).
- * 이 경로는 세션 인증이 아니라 서버 시크릿 + user_email 매칭 2계층이며, DB 접근은 전부
+ * 이 경로는 세션 인증이 아니라 연동 자격증명(integration_credentials kind='minutes_api') + user_email 매칭 2계층이며, DB 접근은 전부
  * service_role(createAdminClient)이다 — RLS insert_own_minutes 가 세션 없는 insert 를 막기 때문.
  */
 
@@ -32,9 +31,9 @@ export function isUuid(value: string): boolean {
   return UUID_RE.test(value)
 }
 
-/** env 2단 게이트 — 미설정이면 라우트 존재 자체를 숨긴다(404). worker route 관례. */
+/** 킬스위치 — 꺼져 있으면 라우트 존재 자체를 숨긴다(404). 인증은 자격증명 행이 한다(SP7 §5.1.4 — 배포 전역 시크릿은 삭제됐다). */
 export function minutesApiEnabled(): boolean {
-  return process.env.MINUTES_API_ENABLED === 'true' && !!process.env.MINUTES_API_SECRET
+  return process.env.MINUTES_API_ENABLED === 'true'
 }
 
 /**
@@ -67,23 +66,6 @@ export function isBatchAuthorized(
   return targets.every(t => t.project_id ? isProjectAdmin(actor, t.project_id) : isWorkspaceAdmin(actor, t.workspace_id))
 }
 
-/** 시크릿 비교는 길이 노출·타이밍 채널을 피하기 위해 해시 후 상수시간으로 비교한다. */
-function secretMatches(provided: string | null, expected: string): boolean {
-  if (!provided) return false
-  const a = createHash('sha256').update(provided).digest()
-  const b = createHash('sha256').update(expected).digest()
-  return timingSafeEqual(a, b)
-}
-
-/** `Authorization: Bearer <MINUTES_API_SECRET>` 검증 — 계약 §3.2 (스펙이 401을 정의: worker 선례 403과 다른 신규 결정). */
-export function verifyApiSecret(req: Request): boolean {
-  const expected = process.env.MINUTES_API_SECRET
-  if (!expected) return false
-  const header = req.headers.get('authorization')
-  const provided = header && header.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
-  return secretMatches(provided, expected)
-}
-
 export const apiNotFound = () =>
   NextResponse.json({ error: 'Not Found' }, { status: 404 })
 export const apiUnauthorized = () =>
@@ -94,38 +76,31 @@ export const apiFail = (status: number, code: string, error: string) =>
   NextResponse.json({ error, code }, { status })
 export const apiInternalError = (error = '서버 오류가 발생했습니다.') =>
   NextResponse.json({ error, code: 'internal_error' }, { status: 500 })
-/** minutes_integration 모듈이 꺼진 워크스페이스(스펙 §4.2 회의록 업로드 행) — 409 module_disabled. 킬스위치(gateMinutesApi)와 다르다: 그건 배포 전체 404 */
+/** minutes_integration 모듈이 꺼진 워크스페이스(스펙 §4.2 회의록 업로드 행) — 409 module_disabled. 킬스위치(minutesApiEnabled)와 다르다: 그건 배포 전체 404 */
 export const ERR_MINUTES_INTEGRATION_OFF = '이 워크스페이스에서 회의록 연동이 꺼져 있습니다.'
 export const apiModuleDisabled = () => apiFail(409, 'module_disabled', ERR_MINUTES_INTEGRATION_OFF)
 
 import { resolveCredential, type ResolvedCredential } from '@/lib/authz/credentials'
 
-export type MinutesPrincipal =
-  | { kind: 'legacy' }
-  | { kind: 'minutes_api'; credential: ResolvedCredential }
+/** 회의록 API 의 신원은 integration_credentials(kind='minutes_api') 행 하나뿐이다(SP7 §5.1.4 — 단일 시크릿 principal 삭제). */
+export type MinutesPrincipal = { kind: 'minutes_api'; credential: ResolvedCredential }
 
 export const ERR_PROJECT_NOT_ALLOWED = '이 자격증명으로 접근할 수 없는 프로젝트입니다.'
 export const apiProjectNotAllowed = () => apiFail(403, 'project_not_allowed', ERR_PROJECT_NOT_ALLOWED)
 
-/** SP7 §5.1.3: 회의록 v3 자격증명 리졸버. Bearer dflow_int_ 는 integration_credentials 로 해석하고 실패 시 즉시 401. */
+/** SP7 §5.1.3: 회의록 v3 자격증명 리졸버. 킬스위치 꺼짐 404 → Bearer 없음·형식 불일치·행 없음·회수·만료·해시 불일치 전부 401. */
 export async function resolveMinutesPrincipal(
   req: Request,
   getAdmin: () => AdminClient,
 ): Promise<MinutesPrincipal | NextResponse> {
-  if (process.env.MINUTES_API_ENABLED !== 'true') return apiNotFound()
+  if (!minutesApiEnabled()) return apiNotFound()
   const header = req.headers.get('authorization')
   const bearer = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
-
-  if (bearer?.startsWith('dflow_int_')) {
-    const cred = await resolveCredential(req, getAdmin(), 'minutes_api')
-    if (cred instanceof NextResponse) return cred
-    return { kind: 'minutes_api', credential: cred }
-  }
-
-  // Legacy path
-  if (!process.env.MINUTES_API_SECRET) return apiNotFound()
-  if (!bearer || !secretMatches(bearer, process.env.MINUTES_API_SECRET)) return apiUnauthorized()
-  return { kind: 'legacy' }
+  // 자격증명 형식이 아닌 Bearer 는 조회 없이 401 — service_role 클라이언트도 만들지 않는다.
+  if (!bearer?.startsWith('dflow_int_')) return apiUnauthorized()
+  const cred = await resolveCredential(req, getAdmin(), 'minutes_api')
+  if (cred instanceof NextResponse) return cred
+  return { kind: 'minutes_api', credential: cred }
 }
 
 /** 워크스페이스 소속 여부 확인 — v3 §5.2.2 ④ (사용자가 해당 워크스페이스 멤버여야 함). */
@@ -142,13 +117,6 @@ export async function isMinutesWorkspaceMember(
     .maybeSingle()
   if (error) throw new Error(`workspace_members 조회 실패: ${error.message}`)
   return !!data
-}
-
-/** 전 라우트 공통 선두 게이트 — 실패 시 응답, 통과 시 null. */
-export function gateMinutesApi(req: Request): NextResponse | null {
-  if (!minutesApiEnabled()) return apiNotFound()
-  if (!verifyApiSecret(req)) return apiUnauthorized()
-  return null
 }
 
 export interface ResolvedUser {

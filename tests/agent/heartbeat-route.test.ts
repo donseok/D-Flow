@@ -1,24 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-import { generateAgentToken } from '@/lib/agent/token'
 
 const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 
 import { POST } from '@/app/api/v1/agent/work/[id]/heartbeat/route'
-import { axes, roster, rosterRow } from '../fixtures/actorQueues'
+import { credAxes, roster, rosterRow } from '../fixtures/actorQueues'
+import { agentCredential, CRED_OWNER, ownerLookup } from '../fixtures/credentials'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
 type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
-const PAT = generateAgentToken()
-const RUNNER = {
-  id: 'r-1', kind: 'user_pat', owner_user_id: 'u-1', token_prefix: PAT.prefix, token_hash: PAT.hash,
-  project_id: null, scopes: ['work:claim'], enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z',
-}
-const ORDER = { id: O1, project_id: P1, status: 'claimed', claimed_by: 'pat-r-1', claimed_by_user_id: 'u-1', wbs_item_id: null }
+// 인증 원천은 integration_credentials(agent_runner) 행 하나다(SP7 §5.1.4) — 소유자(CRED_OWNER)가 요청의 신원.
+const RUNNER = agentCredential({ scopes: ['work:claim'] })
+const PAT = { token: RUNNER.token }
+const LEGACY_SECRET = 'legacy-secret'
+const ORDER = { id: O1, project_id: P1, status: 'claimed', claimed_by: 'pat-r-1', claimed_by_user_id: CRED_OWNER as string | null, wbs_item_id: null }
 
-/** 큐 순서(work-routes-pat.test.ts 상세 조회와 같다): agent_runners(조회, last_seen) → 주문 → agent_projects → platform_admins → project_members(명단 권한) → 주문 update */
+/** 큐 순서(work-routes-pat.test.ts 상세 조회와 같다): integration_credentials(조회, last_used) → 주문 → 권한 4축 → project_members(명단 권한) → 주문 update */
 function useAdmin(queues: Record<string, Resp[]>, calls: Record<string, unknown[]> = {}) {
   const admin = {
     from: vi.fn((table: string) => {
@@ -32,7 +31,7 @@ function useAdmin(queues: Record<string, Resp[]>, calls: Record<string, unknown[
       b.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
-    auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: { id: 'u-1', email: 'dev@example.com' } }, error: null })) } },
+    auth: { admin: { getUserById: vi.fn(ownerLookup()) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
   return admin
@@ -42,16 +41,15 @@ const post = (body: unknown, bearer = PAT.token) =>
     method: 'POST', headers: { Authorization: `Bearer ${bearer}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
   }), { params: Promise.resolve({ id: O1 }) })
 const okQueues = (order = ORDER) => ({
-  agent_runners: [{ data: RUNNER }, { data: null }],
+  integration_credentials: RUNNER.queue(),
   agent_work_orders: [{ data: order }, { data: [{ id: O1 }] }],
-  agent_projects: [{ data: { enabled: true } }],
-  ...axes([P1]),
+  ...credAxes([P1]),
   project_members: [roster(rosterRow(P1, 'member'))],
 })
 
 beforeEach(() => {
   process.env.AGENT_API_ENABLED = 'true'
-  process.env.AGENT_API_SECRET = 'legacy-secret'
+  process.env.AGENT_API_SECRET = LEGACY_SECRET // 설정돼 있어도 인증에 쓰이지 않는다(SP7)
   vi.clearAllMocks()
 })
 
@@ -149,7 +147,23 @@ describe('POST /agent/work/[id]/heartbeat', () => {
     expect((await post({ agent: 'a', phase: 'build' })).status).toBe(409)
   })
   it('403 insufficient_scope — work:read 만 있는 PAT', async () => {
-    useAdmin({ ...okQueues(), agent_runners: [{ data: { ...RUNNER, scopes: ['work:read'] } }, { data: null }] })
+    useAdmin({ ...okQueues(), integration_credentials: RUNNER.with({ scopes: ['work:read'] }).queue() })
     expect((await post({ agent: 'a', phase: 'build' })).status).toBe(403)
+  })
+  it('401 — 옛 시크릿 값 Bearer(env 에 AGENT_API_SECRET 설정, body user_email 포함)는 touch 하지 못한다', async () => {
+    const calls: Record<string, unknown[]> = {}
+    const admin = useAdmin(okQueues(), calls)
+    const res = await post({ agent: 'a', phase: 'build', user_email: 'dev@example.com' }, LEGACY_SECRET)
+    expect(res.status).toBe(401)
+    expect(admin.from).not.toHaveBeenCalled()
+    expect(calls.agent_work_orders).toBeUndefined()
+  })
+  it('403 not_claim_owner — 점유자 계정이 없는 옛 점유(claimed_by_user_id null)는 라벨이 같아도 touch 하지 못한다', async () => {
+    const calls: Record<string, unknown[]> = {}
+    useAdmin(okQueues({ ...ORDER, claimed_by: 'a', claimed_by_user_id: null }), calls)
+    const res = await post({ agent: 'a', phase: 'build' })
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('not_claim_owner')
+    expect(calls.agent_work_orders).toBeUndefined()
   })
 })

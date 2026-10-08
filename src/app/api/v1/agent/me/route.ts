@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  AGENT_CONTRACT_VERSION, agentActorFromPrincipal, agentRoleFromActor, apiFail, apiInternalError, apiNotFound,
+  AGENT_CONTRACT_VERSION, agentActorFromPrincipal, agentRoleFromActor, apiInternalError, apiNotFound,
   patProjectAllowed, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
-import { actorFromUser } from '@/lib/authz'
 import { fetchAllPages } from '@/lib/data/paging'
 import { projectsWithModule } from '@/lib/modules/gate'
 
 type Registration = { project_id: string; projects: { name: string } | Array<{ name: string }> | null }
 
-/** GET /api/v1/agent/me — whoami. 404 존재 은닉 아래의 유일한 진단 창구(계약 v2.0). PAT 전용. */
+/** GET /api/v1/agent/me — whoami. 404 존재 은닉 아래의 유일한 진단 창구(계약 v2.0). */
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
@@ -18,13 +17,10 @@ export async function GET(req: NextRequest) {
     const admin = createAdminClient()
     const principal = await resolveAgentPrincipal(req, admin)
     if (principal instanceof NextResponse) return principal
-    if (principal.kind === 'legacy') {
-      return apiFail(400, 'identity_required', '이 엔드포인트는 PAT 전용입니다.')
-    }
 
-    // SP2 §4.2 — 후보를 PAT 소유자가 볼 수 있는 프로젝트(내 워크스페이스들의 프로젝트, 플랫폼 관리자는 전부)로 좁힌다.
-    // 종전엔 전 워크스페이스의 enabled 프로젝트를 훑었다. 권한 조회 실패는 throw → catch 의 500.
-    const actor = principal.credential ? await agentActorFromPrincipal(admin, principal.userId, principal) : await actorFromUser(admin, principal.userId)
+    // SP2 §4.2·SP7 §5.1.3 — 후보를 자격증명 범위(그 워크스페이스·project_ids)로 좁힌 PAT 소유자의 스냅샷에서 읽는다.
+    // 플랫폼 관리자 승격은 없다. 권한 조회 실패는 throw → catch 의 500.
+    const actor = await agentActorFromPrincipal(admin, principal.userId, principal)
     // 프로젝트 id 목록을 .in() 으로 싣지 않는다 — URL 이 프로젝트 수에 비례해 늘어 약 205개부터 게이트웨이가 414 로 거절한다.
     // 등록 행을 projects 임베드(!inner)의 워크스페이스로 좁혀 이름까지 한 번에 읽는다(페이지로 끝까지). 플랫폼 관리자는 필터 없음.
     let regs: Array<{ projectId: string; name: string }> = []

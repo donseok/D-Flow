@@ -4,6 +4,8 @@
  * 사용: AGENT_BASE=http://localhost:3000 AGENT_SECRET=... AGENT_EMAIL=dev@example.com \
  *      AGENT_NAME=claude-cli-dev1 AGENT_PROJECT=<uuid> REPO_DIR=/path/to/repo \
  *      node scripts/agent-harness-example.mjs
+ * AGENT_SECRET 은 계정 화면에서 발급한 API 토큰(dflow_pat_…)이다 — 배포 전역 시크릿 인증은 삭제됐다(그 값은 401).
+ * AGENT_EMAIL 은 그 토큰 소유자의 이메일이어야 한다(다르면 서버가 400 identity_mismatch 로 거절한다).
  * 전제: 로컬에 claude CLI 로그인 완료. 1회 실행 = 주문 1건 처리(크론/루프는 사용자 몫).
  */
 import { execFileSync } from 'node:child_process'
@@ -24,7 +26,8 @@ async function api(path, init = {}) {
 }
 const actor = { user_email: AGENT_EMAIL, agent: AGENT_NAME }
 
-const { orders } = await api(`/agent/work?project_id=${AGENT_PROJECT}&user_email=${encodeURIComponent(AGENT_EMAIL)}`)
+// 신원은 토큰 소유자다 — 읽기 호출에 user_email 쿼리를 붙이지 않는다(옛 시크릿 호출의 신원 규칙은 삭제됐다).
+const { orders } = await api(`/agent/work?project_id=${AGENT_PROJECT}`)
 if (orders.length === 0) { console.log('ready 작업 없음'); process.exit(0) }
 const order = orders[0]
 console.log(`claim: ${order.item?.code} ${order.item?.name}`)

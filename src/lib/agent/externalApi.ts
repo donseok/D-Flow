@@ -1,9 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createHash, timingSafeEqual } from 'node:crypto'
 import type { AdminClient } from '@/lib/minutes/externalApi'
-import { parsePatPrefix, tokenUsable } from '@/lib/domain/agentToken'
-import { hashMatches } from '@/lib/agent/token'
-import { buildActor } from '@/lib/authz/buildActor'
 import { isProjectAdmin, isProjectMember, roleIn, type Actor } from '@/lib/domain/authz'
 import { requireModule } from '@/lib/modules/gate'
 import { actorFromCredential, credentialAllows, resolveCredential, type ResolvedCredential } from '@/lib/authz/credentials'
@@ -13,17 +9,9 @@ import { actorFromCredential, credentialAllows, resolveCredential, type Resolved
  * 회의록 API(src/lib/minutes/externalApi.ts) 패턴을 따르되 env 축(AGENT_API_*)만 다르다.
  * resolveUserByEmail/AdminClient 는 그 모듈에서 import 해 재사용한다(수정 금지).
  */
-/** 킬스위치는 AGENT_API_ENABLED 단독(계약 v2.0 §인증). 시크릿 존재는 레거시 분기 조건일 뿐이다. */
+/** 킬스위치는 AGENT_API_ENABLED 단독(계약 v2.0 §인증). 배포 전역 시크릿 인증은 SP7 에서 삭제됐다 — 자격증명은 integration_credentials 행뿐이다. */
 export function agentApiEnabled(): boolean {
   return process.env.AGENT_API_ENABLED === 'true'
-}
-
-/** 에이전트 API 시크릿 검증 — 길이 노출과 타이밍 채널을 피하기 위해 해시 후 상수시간 비교한다. */
-function secretMatches(provided: string | null, expected: string): boolean {
-  if (!provided) return false
-  const a = createHash('sha256').update(provided).digest()
-  const b = createHash('sha256').update(expected).digest()
-  return timingSafeEqual(a, b)
 }
 
 export const apiNotFound = () =>
@@ -37,20 +25,10 @@ export const apiFail = (status: number, code: string, error: string) =>
 export const apiInternalError = (error = '서버 오류가 발생했습니다.') =>
   NextResponse.json({ error, code: 'internal_error' }, { status: 500 })
 
-/** 전 라우트 공통 선두 게이트 — 닫힘=404(존재 은닉), 시크릿 불일치=401, 통과=null. */
-export function gateAgentApi(req: Request): NextResponse | null {
-  if (!agentApiEnabled()) return apiNotFound()
-  if (!process.env.AGENT_API_SECRET) return apiUnauthorized() // 레거시 분기 없음 — PAT 는 리졸버 라우트만
-  const header = req.headers.get('authorization')
-  const provided = header && header.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
-  if (!secretMatches(provided, process.env.AGENT_API_SECRET)) return apiUnauthorized()
-  return null
-}
-
 /** 등록·enabled 프로젝트이고 agents 모듈이 켜졌을 때만 루프가 열린다(스펙 §1.1-2, §4.4 두 원천 AND). 행 조회 실패는 404 로 위장하지 않고 throw.
  *  행을 먼저 본다 — 꺼진 행은 설정을 읽지 않는다. 모듈 판정은 세션이 없으니 admin 으로(스펙 §4.2 에이전트 API 행) */
 export async function requireAgentProject(admin: AdminClient, projectId: string, principal?: AgentPrincipal): Promise<boolean> {
-  if (principal?.kind === 'pat' && principal.credential) return (await requireModule({ projectId }, 'agents', { client: admin })).ok
+  if (principal) return (await requireModule({ projectId }, 'agents', { client: admin })).ok
   const { data, error } = await admin
     .from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle()
   if (error) throw new Error(`agent_projects 조회 실패: ${error.message}`)
@@ -59,11 +37,9 @@ export async function requireAgentProject(admin: AdminClient, projectId: string,
 }
 
 /*
- * 판정 축 — actorFromUser + roleIn: 세션 경로와 같은 판정(SP2 결정 8). 플랫폼 관리자·워크스페이스 관리자 승계·
- * 활성 명단 행 권한을 한 스냅샷(buildActor)에서 읽는다. 다른 워크스페이스 프로젝트는 roleIn 이 null 이다(존재 은닉).
- *
- * `@/lib/authz` 는 테스트 다수가 통째로 mock 하는 모듈이라, 여기서는 actorFromUser 대신 그 구현인 buildActor 를
- * 직접 부른다(actorFromUser 는 buildActor 에 그대로 위임한다 — 판정은 같다).
+ * 판정 축 — actorFromCredential + roleIn: 세션 경로와 같은 판정(SP2 결정 8)을 자격증명 범위로 좁힌 스냅샷에서 한다(SP7 §5.1.3).
+ * 워크스페이스 관리자 승계·활성 명단 행 권한은 그대로 읽되 플랫폼 관리자 승격은 없다. 자격증명의 워크스페이스·project_ids
+ * 밖 프로젝트는 roleIn 이 null 이다(존재 은닉).
  */
 
 /**
@@ -71,7 +47,7 @@ export async function requireAgentProject(admin: AdminClient, projectId: string,
  * 보안 가드이므로 조회 실패는 false(fail-closed).
  */
 export async function isAgentProjectMember(
-  admin: AdminClient, userId: string, projectId: string, principal?: AgentPrincipal,
+  admin: AdminClient, userId: string, projectId: string, principal: AgentPrincipal,
 ): Promise<boolean> {
   try {
     return isProjectMember(await agentActorFromPrincipal(admin, userId, principal), projectId)
@@ -89,7 +65,7 @@ export async function isAgentProjectMember(
  * 어느 경로로도 통과로 새지 않으므로 fail-closed 는 유지된다.
  */
 export async function isAgentProjectAdmin(
-  admin: AdminClient, userId: string, projectId: string, principal?: AgentPrincipal,
+  admin: AdminClient, userId: string, projectId: string, principal: AgentPrincipal,
 ): Promise<boolean> {
   return isProjectAdmin(await agentActorFromPrincipal(admin, userId, principal), projectId)   // throw → 라우트 try/catch 가 500(현 계약 유지)
 }
@@ -99,7 +75,7 @@ export async function isAgentProjectAdmin(
  * 보안 가드이므로 조회 실패는 null(fail-closed). 위장하지 않고 로깅한다.
  */
 export async function agentMemberRole(
-  admin: AdminClient, userId: string, projectId: string, principal?: AgentPrincipal,
+  admin: AdminClient, userId: string, projectId: string, principal: AgentPrincipal,
 ): Promise<'superuser' | 'admin' | 'member' | null> {
   try {
     return agentRoleFromActor(await agentActorFromPrincipal(admin, userId, principal), projectId)
@@ -117,99 +93,49 @@ export function agentRoleFromActor(actor: Actor, projectId: string): 'superuser'
 
 export const AGENT_CONTRACT_VERSION = '2.4'
 
-export type AgentPrincipal =
-  | { kind: 'legacy' }
-  | {
-      kind: 'pat'; runnerId: string; userId: string; userEmail: string
-      scopes: string[]; projectId: string | null; runnerKind: 'user_pat' | 'runner'
-      tokenExpiresAt: string
-      /** 발급할 때 사람이 적은 이름과 조회 키(계약 2.4). /me 가 "이 키가 무엇인지" 알려 주는 데만 쓴다. */
-      runnerName: string; tokenPrefix: string
-      /** SP7 이관 자격증명은 현재 권한을 이 범위로 좁힌다. */
-      credential?: ResolvedCredential
-    }
-
-/** 과도기 원천 구분: 새 자격증명은 반드시 workspace/project 범위로 좁힌다. */
-export async function agentActorFromPrincipal(admin: AdminClient, userId: string, principal?: AgentPrincipal): Promise<Actor> {
-  if (principal?.kind === 'pat' && principal.credential) return actorFromCredential(admin, principal.credential, userId)
-  return buildActor(admin, userId)
+/** 에이전트 API 의 신원은 integration_credentials(kind='agent_runner') 행 하나뿐이다(SP7 §5.1.4 — 레거시 시크릿 principal 삭제). */
+export type AgentPrincipal = {
+  kind: 'pat'; runnerId: string; userId: string; userEmail: string
+  scopes: string[]; projectId: string | null; runnerKind: 'user_pat' | 'runner'
+  tokenExpiresAt: string
+  /** 발급할 때 사람이 적은 이름과 조회 키(계약 2.4). /me 가 "이 키가 무엇인지" 알려 주는 데만 쓴다. */
+  runnerName: string; tokenPrefix: string
+  /** 현재 권한을 이 범위(워크스페이스·project_ids)로 좁힌다 — 필수. 자격증명 없는 principal 은 없다. */
+  credential: ResolvedCredential
 }
 
-type RunnerRow = {
-  id: string; kind: 'user_pat' | 'runner'; owner_user_id: string; name: string
-  token_prefix: string; token_hash: string; project_id: string | null
-  scopes: string[]; enabled: boolean; revoked_at: string | null; expires_at: string
+/** 항상 자격증명 범위로 좁힌 스냅샷 — 좁히지 않은 buildActor 폴백은 워크스페이스 격리를 우회하므로 두지 않는다. */
+export async function agentActorFromPrincipal(admin: AdminClient, userId: string, principal: AgentPrincipal): Promise<Actor> {
+  return actorFromCredential(admin, principal.credential, userId)
 }
 
 /**
  * 인증 리졸버 — 계약 v2.0 §인증. 반환이 NextResponse 면 그대로 응답한다.
- * 검사 순서(enabled→revoked→expires→hash)는 계약 고정. 실패 사유는 응답에서 구분하지 않는다(전부 401).
+ * 검사 순서(enabled→revoked→expires→hash)는 계약 고정이고 resolveCredential 이 지킨다. 실패 사유는 응답에서 구분하지 않는다(전부 401).
+ * 원천은 integration_credentials 하나다 — 거기 없는 prefix 는 401 이며 옛 저장소(0003 의 러너 표)로 다시 인증하지 않는다.
  */
 export async function resolveAgentPrincipal(
   req: Request, admin: AdminClient,
 ): Promise<AgentPrincipal | NextResponse> {
-  if (!agentApiEnabled()) return apiNotFound()
-  const header = req.headers.get('authorization')
-  const bearer = header && header.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
-  if (!bearer) return apiUnauthorized()
-
-  const secret = process.env.AGENT_API_SECRET
-  if (secret && secretMatches(bearer, secret)) return { kind: 'legacy' }
-
-  const prefix = parsePatPrefix(bearer)
-  if (!prefix) return apiUnauthorized()
-  // 단계적 DB/클라이언트 전환: 새 저장소에 있는 prefix는 권위 있는 원천이다.
-  // 회수·손상·조회 장애가 있으면 옛 agent_runners로 다시 인증하지 않는다.
-  const { data: migrated, error: migratedErr } = await admin.from('integration_credentials')
-    .select('id').eq('token_prefix', prefix).maybeSingle()
-  if (migratedErr) return apiUnauthorized()
-  if (migrated) {
-    const cred = await resolveCredential(req, admin, 'agent_runner')
-    if (cred instanceof NextResponse) return cred
-    if (!cred.ownerUserId) return apiUnauthorized()
-    const { data: owner, error: ownerErr } = await admin.auth.admin.getUserById(cred.ownerUserId)
-    if (ownerErr || !owner?.user?.email || owner.user.id !== cred.ownerUserId) return apiUnauthorized()
-    return {
-      kind: 'pat', runnerId: cred.id, userId: cred.ownerUserId, userEmail: owner.user.email.toLowerCase(),
-      scopes: [...cred.scopes], projectId: cred.projectIds?.length === 1 ? cred.projectIds[0] : null,
-      runnerKind: 'user_pat', tokenExpiresAt: cred.expiresAt, runnerName: cred.name, tokenPrefix: cred.tokenPrefix,
-      credential: cred,
-    }
-  }
-  const { data, error } = await admin
-    .from('agent_runners')
-    .select('id, kind, owner_user_id, name, token_prefix, token_hash, project_id, scopes, enabled, revoked_at, expires_at')
-    .eq('token_prefix', prefix).maybeSingle()
-  if (error) {
+  const cred = await resolveCredential(req, admin, 'agent_runner')
+  if (cred instanceof NextResponse) return cred
+  if (!cred.ownerUserId) return apiUnauthorized()
+  const { data: owner, error: ownerErr } = await admin.auth.admin.getUserById(cred.ownerUserId)
+  if (ownerErr || !owner?.user?.email || owner.user.id !== cred.ownerUserId) {
     // 보안 가드 조회 실패 = 거부(fail-closed). 위장하지 않고 로깅.
-    console.error('[agent-api] PAT 조회 실패(거절):', error.message)
+    console.error('[agent-api] PAT 소유자 조회 실패(거절):', ownerErr?.message ?? '이메일 없음')
     return apiUnauthorized()
   }
-  if (!data) return apiUnauthorized()
-  const row = data as RunnerRow
-  if (!tokenUsable(row).ok) return apiUnauthorized()
-  if (!hashMatches(bearer, row.token_hash)) return apiUnauthorized()
-
-  const { data: userData, error: userErr } = await admin.auth.admin.getUserById(row.owner_user_id)
-  if (userErr || !userData?.user?.email) {
-    console.error('[agent-api] PAT 소유자 조회 실패(거절):', userErr?.message ?? '이메일 없음')
-    return apiUnauthorized()
-  }
-  // last_seen_at 은 best-effort — 실패해도 요청은 통과시키되 로깅.
-  const { error: seenErr } = await admin
-    .from('agent_runners').update({ last_seen_at: new Date().toISOString() }).eq('id', row.id)
-  if (seenErr) console.error('[agent-api] last_seen_at 갱신 실패:', seenErr.message)
-
   return {
-    kind: 'pat', runnerId: row.id, userId: row.owner_user_id,
-    userEmail: userData.user.email.toLowerCase(), scopes: row.scopes ?? [],
-    projectId: row.project_id, runnerKind: row.kind, tokenExpiresAt: row.expires_at,
-    runnerName: row.name, tokenPrefix: row.token_prefix,
+    kind: 'pat', runnerId: cred.id, userId: cred.ownerUserId, userEmail: owner.user.email.toLowerCase(),
+    scopes: [...cred.scopes], projectId: cred.projectIds?.length === 1 ? cred.projectIds[0] : null,
+    runnerKind: 'user_pat', tokenExpiresAt: cred.expiresAt, runnerName: cred.name, tokenPrefix: cred.tokenPrefix,
+    credential: cred,
   }
 }
 
 /**
- * 스코프 강제 — legacy 는 스코프 개념이 없다(v1 동작). 부족 시 403 insufficient_scope.
+ * 스코프 강제 — 부족 시 403 insufficient_scope.
  *
  * `work:report` 는 **폐지된 스코프**다(2026-08-25). claim 할 수 있으면 그 결과도 적을 수 있어야
  * 사이클이 완주되는데, claim 은 원래 무제한이라 보고만 따로 막는 건 실질 방어선이 아니었다
@@ -222,15 +148,12 @@ const LEGACY_EQUIVALENT = new Map<string, readonly string[]>([['work:claim', ['w
 export function requireScope(
   p: AgentPrincipal, scope: 'work:read' | 'work:claim',
 ): NextResponse | null {
-  if (p.kind === 'legacy') return null
   if (p.scopes.includes(scope)) return null
   if ((LEGACY_EQUIVALENT.get(scope) ?? []).some((alt) => p.scopes.includes(alt))) return null
   return apiFail(403, 'insufficient_scope', `이 작업에는 ${scope} 스코프가 필요합니다.`)
 }
 
-/** PAT 의 project_id 한정 — null 이면 전 프로젝트(멤버십 게이트는 별도). */
+/** 자격증명의 project_ids 한정 — null 이면 그 워크스페이스의 전 프로젝트(워크스페이스·멤버십 게이트는 별도). */
 export function patProjectAllowed(p: AgentPrincipal, projectId: string): boolean {
-  if (p.kind === 'legacy') return true
-  if (p.credential) return credentialAllows(p.credential, projectId)
-  return p.projectId === null || p.projectId === projectId
+  return credentialAllows(p.credential, projectId)
 }

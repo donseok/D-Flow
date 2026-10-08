@@ -5,7 +5,6 @@ import {
   apiBadRequest, apiInternalError, apiNotFound, isAgentProjectMember, patProjectAllowed,
   requireAgentProject, requireScope, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
-import { resolveReader } from '@/lib/agent/routeShared'
 
 /** GET /api/v1/agent/work?project_id=[&status=] — 작업 목록 + 항목 컨텍스트. 계약: 스펙 §3.2. */
 export const dynamic = 'force-dynamic'
@@ -34,16 +33,11 @@ export async function GET(req: NextRequest) {
     const admin = createAdminClient()
     const principal = await resolveAgentPrincipal(req, admin)
     if (principal instanceof NextResponse) return principal
-    if (principal.kind === 'pat') {
-      const scopeErr = requireScope(principal, 'work:read')
-      if (scopeErr) return scopeErr
-      if (!patProjectAllowed(principal, projectId)) return apiNotFound()
-    }
-    // 레거시도 신원(user_email)을 받아 PAT 와 같은 멤버십 판정을 한다 — 시크릿만으로는 워크스페이스 경계가 없다.
-    const reader = await resolveReader(req, admin, principal)
-    if (!reader.ok) return reader.res
+    const scopeErr = requireScope(principal, 'work:read')
+    if (scopeErr) return scopeErr
+    if (!patProjectAllowed(principal, projectId)) return apiNotFound()
     if (!(await requireAgentProject(admin, projectId, principal))) return apiNotFound()
-    if (!(await isAgentProjectMember(admin, reader.userId, projectId, principal))) {
+    if (!(await isAgentProjectMember(admin, principal.userId, projectId, principal))) {
       return apiNotFound() // 비멤버 404 — 존재 은닉 관례(§2.2)
     }
 

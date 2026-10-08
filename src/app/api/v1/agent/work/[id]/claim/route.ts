@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { apiBadRequest, apiFail, apiInternalError, apiNotFound } from '@/lib/agent/externalApi'
-import { loadGatedOrder, loadGatedOrderForUser, parseAgentActor, resolveWriteActor } from '@/lib/agent/routeShared'
+import { loadGatedOrderForUser, resolveWriteActor } from '@/lib/agent/routeShared'
 import { myMemberIds } from '@/lib/agent/assignee'
 import { ITEM_DETAIL_COLUMNS, loadDependsInfo, type DependInfo } from '@/lib/agent/depends'
 import { loadPredecessorGate } from '@/lib/agent/predecessorGate'
@@ -26,9 +26,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const actor = await resolveWriteActor(req, admin, raw, 'work:claim')
     if (!actor.ok) return actor.res
 
-    const loaded = actor.principal.kind === 'pat'
-      ? await loadGatedOrderForUser(admin, id, actor.userId as string, actor.principal.userEmail, actor.principal)
-      : await loadGatedOrder(admin, id, (parseAgentActor(raw) as { userEmail: string }).userEmail)
+    const loaded = await loadGatedOrderForUser(admin, id, actor.userId, actor.principal.userEmail, actor.principal)
     if (!loaded.ok) return loaded.res
 
     // 배정 제한(①)·선행 게이트(결정 C-①)·응답 확장이 모두 쓰는 항목 상세 —
@@ -44,8 +42,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       }
       item = itemRow as ItemDetail | null
 
-      // actor 신원 — PAT 는 principal, legacy 는 loadGatedOrder 가 해석한 userId. 배정 판정은 people.user_id 하나로 한다.
-      const actorUserId = actor.principal.kind === 'pat' ? (actor.userId as string) : loaded.userId
+      // actor 신원 — 토큰 소유자(principal). 배정 판정은 people.user_id 하나로 한다.
+      const actorUserId = actor.userId
 
       const assignee = item?.assignee_member_id ?? null
       if (assignee) {
@@ -74,12 +72,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
 
     // 원자 전이(스펙 2026-09-15 §4) — 주문 ready→claimed CAS + 단계 ip + 실적 크레딧이 한 트랜잭션.
-    // 점유자 신원은 서버 유도값이다(claimed_by_user_id 는 PAT 경로에서만 — body 에서 받지 않는다).
+    // 점유자 신원은 서버 유도값이다(claimed_by_user_id 는 토큰 소유자 — body 에서 받지 않는다).
     // 항목이 지워진 주문은 RPC 가 단계·실적만 건너뛴다(skipped:'no_item') — claim 자체는 종전처럼 된다.
     const transition = await applyWorkflowEvent(admin, {
       event: 'claim', actorUserId: loaded.userId, orderId: id,
       agent: actor.agentLabel,
-      agentUserId: actor.principal.kind === 'pat' ? (actor.userId as string) : null,
+      agentUserId: actor.userId,
     })
     if (!transition.ok) {
       if (transition.conflict) {
@@ -104,8 +102,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (resumeClearErr) console.error('[agent-api] claim 뒤 재개 요청 정리 실패:', resumeClearErr.message)
 
     // claim 알림 — fire-and-forget. 본인 배정 작업 본인 claim 은 행위자 제외 규칙(emitNotification)으로 자동 무발행.
-    // actorUserId 는 legacy 도 loaded.userId 로 채운다(release/report 관례) — principal.userId 는
-    // legacy 에서 undefined 라 null 로 새면 자기제외가 비활성화되어 본인 claim 에도 알림이 간다.
+    // actorUserId 는 loaded.userId(토큰 소유자)다(release/report 관례) — null 로 새면 자기제외가 비활성화되어 본인 claim 에도 알림이 간다.
     emitNotification({
       type: 'work.claimed', projectId: loaded.order.project_id,
       actorUserId: loaded.userId,

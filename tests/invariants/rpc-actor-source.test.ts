@@ -97,13 +97,13 @@ const HELPER_CALLERS: Readonly<Record<string, HelperSpec>> = {
         },
       },
       'src/app/api/v1/agent/work/[id]/claim/route.ts': {
-        count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrder·loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
+        count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
       },
       'src/app/api/v1/agent/work/[id]/release/route.ts': {
-        count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrder·loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
+        count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
       },
       'src/app/api/v1/agent/work/[id]/report/route.ts': {
-        count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrder·loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
+        count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
       },
       'src/lib/agent/delegation.ts': {
         count: 2,

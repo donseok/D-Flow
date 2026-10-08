@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { HEARTBEAT_PHASES } from '@/lib/domain/seatState'
 import { apiBadRequest, apiFail, apiInternalError, apiNotFound } from '@/lib/agent/externalApi'
-import { loadGatedOrder, loadGatedOrderForUser, parseAgentActor, resolveWriteActor } from '@/lib/agent/routeShared'
+import { loadGatedOrderForUser, resolveWriteActor } from '@/lib/agent/routeShared'
 
 /**
  * heartbeat — 좌석표 v1 스펙 §3-2. 진행 중 주문의 "살아 있음"을 서버에 남긴다.
@@ -41,9 +41,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const admin = createAdminClient()
     const actor = await resolveWriteActor(req, admin, raw, 'work:claim')
     if (!actor.ok) return actor.res
-    const loaded = actor.principal.kind === 'pat'
-      ? await loadGatedOrderForUser(admin, id, actor.userId as string, actor.principal.userEmail, actor.principal)
-      : await loadGatedOrder(admin, id, (parseAgentActor(raw) as { userEmail: string }).userEmail)
+    const loaded = await loadGatedOrderForUser(admin, id, actor.userId, actor.principal.userEmail, actor.principal)
     if (!loaded.ok) return loaded.res
     const order = loaded.order
     // 사람이 중단한 주문(2026-09-19 중단 설계 §2) — 워커가 구분해 멈추도록 전용 코드를 준다(훅·dflow.sh exit 10).
@@ -52,14 +50,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (order.status !== 'claimed') {
       return apiFail(409, 'conflict', `heartbeat 가능한 상태가 아닙니다(현재: ${order.status}).`)
     }
-    // 소유 판정 — report 라우트와 같은 규칙(교차 소유 양방향 403).
-    if (actor.principal.kind === 'pat') {
-      if (order.claimed_by_user_id === null) return apiFail(403, 'not_claim_owner', '레거시 세션이 점유한 주문입니다.')
-      if (order.claimed_by_user_id !== actor.userId) return apiFail(403, 'not_claim_owner', '본인이 점유한 주문만 처리할 수 있습니다.')
-    } else {
-      if (order.claimed_by_user_id !== null) return apiFail(403, 'not_claim_owner', 'PAT 사용자가 점유한 주문입니다.')
-      if (order.claimed_by !== actor.agentLabel) return apiFail(403, 'not_claim_owner', '본인이 점유한 주문만 처리할 수 있습니다.')
-    }
+    // 소유 판정 — report 라우트와 같은 규칙. 점유자 계정이 없는 옛 행(claimed_by_user_id null)도 403 이다.
+    if (order.claimed_by_user_id === null) return apiFail(403, 'not_claim_owner', '레거시 세션이 점유한 주문입니다.')
+    if (order.claimed_by_user_id !== actor.userId) return apiFail(403, 'not_claim_owner', '본인이 점유한 주문만 처리할 수 있습니다.')
 
     const now = new Date().toISOString()
     // phase 를 생략하면 null — 사람이 답한 뒤 팀원의 다음 heartbeat 가 BLOCKED 를 푼다(훅은 항상 phase 를 보낸다).

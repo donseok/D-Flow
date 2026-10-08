@@ -4,18 +4,23 @@ import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/agent/externalApi', async (orig) => {
   const real = await orig<typeof import('@/lib/agent/externalApi')>()
-  // requireAgentProject 는 진짜 — 목록 케이스용으로 멤버 판정·PAT 한정만 바꾼다(mineShared 가 이 모듈에서 두 이름을 import 한다)
-  return { ...real, isAgentProjectMember: vi.fn(async () => true), patProjectAllowed: vi.fn(() => true) }
+  // requireAgentProject 는 진짜 — 목록 케이스용으로 멤버 판정·PAT 한정·소유자 스냅샷만 바꾼다(mineShared 가 이 모듈에서 세 이름을 import 한다)
+  return { ...real, isAgentProjectMember: vi.fn(async () => true), patProjectAllowed: vi.fn(() => true), agentActorFromPrincipal: vi.fn() }
 })
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
-import { requireAgentProject, isAgentProjectMember, type AgentPrincipal } from '@/lib/agent/externalApi'
+import { agentActorFromPrincipal, requireAgentProject, isAgentProjectMember } from '@/lib/agent/externalApi'
 import { accessibleProjectIds } from '@/lib/agent/mineShared'
 import { backfillProjectOrders, ensureAgentProject, ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
-import { loadGatedOrder, loadGatedOrderForUser } from '@/lib/agent/routeShared'
+import { loadGatedOrderForUser } from '@/lib/agent/routeShared'
+import type { ProjectRole } from '@/lib/domain/authz'
+import { makeActor } from '../fixtures/actor'
+import { agentCredential, agentPrincipal, CRED_OWNER, CRED_WS } from '../fixtures/credentials'
 
 const PID = '00000000-0000-0000-7e57-000000001451', P2 = '00000000-0000-0000-7e57-000000001452'
 const OFF = { ok: false as const, error: ERR_MODULE_DISABLED }
+/** 자격증명(integration_credentials 의 agent_runner 행)으로 들어온 principal — 에이전트 API 의 유일한 신원(SP7 §5.1.4) */
+const PRINCIPAL = agentPrincipal(agentCredential({ scopes: ['work:read'] }))
 
 /** agent_projects 행·wbs_items 목록·등록 목록을 주는 가짜 admin — 쓰기는 기록만 */
 function fakeAdmin(opts: { reg?: { enabled: boolean } | null; regError?: string; items?: { id: string }[]; regs?: { project_id: string }[] } = {}) {
@@ -46,6 +51,18 @@ describe('requireAgentProject — 두 원천 AND(네 조합)', () => {
     expect(await requireAgentProject(admin, PID)).toBe(expected)
     if (row) expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: admin })
     else expect(requireModule).not.toHaveBeenCalled()                     // 행이 꺼지면 설정을 읽지 않는다
+  })
+  // 위 네 조합은 principal 없이 부르는 갈래(등록 행 ∧ 모듈)다. SP7 뒤 라우트는 모두 principal 을 넘기므로 src 에 이 갈래의 호출부가 없다 —
+  // agent_projects 판독 정리(다음 조각)에서 함께 사라질 자리다. 라우트가 실제로 지나는 갈래는 아래 케이스다.
+  it('principal 이 있으면(라우트의 유일한 경로) 등록 행을 읽지 않고 agents 모듈만 본다', async () => {
+    const on = fakeAdmin({ reg: null })   // 등록 행이 없어도
+    expect(await requireAgentProject(on.admin, PID, PRINCIPAL)).toBe(true)
+    expect(on.from).not.toHaveBeenCalled()
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: on.admin })
+    vi.mocked(requireModule).mockResolvedValue(OFF)
+    const off = fakeAdmin({ reg: { enabled: true } })   // 등록 행이 켜져 있어도 모듈이 꺼지면 닫힌다
+    expect(await requireAgentProject(off.admin, PID, PRINCIPAL)).toBe(false)
+    expect(off.from).not.toHaveBeenCalled()
   })
   it('행이 없으면 false, 행 조회 오류는 throw(→ 500) — 모듈 판정 실패(→ false·404)와 응답이 다르다', async () => {
     expect(await requireAgentProject(fakeAdmin({ reg: null }).admin, PID)).toBe(false)
@@ -103,9 +120,16 @@ describe('ensureOrder — 발행 게이트', () => {
 describe('목록 — 꺼진 프로젝트의 행 생략', () => {
   it('accessibleProjectIds(work/mine 재료)는 agents 가 켜진 프로젝트만', async () => {
     vi.mocked(projectsWithModule).mockResolvedValueOnce([PID])
-    const { admin } = fakeAdmin({ regs: [{ project_id: PID }, { project_id: P2 }] })
-    expect(await accessibleProjectIds(admin, { kind: 'pat', userId: 'u', projectId: null } as never)).toEqual([PID])
+    // 후보는 소유자의 좁힌 스냅샷(멤버 프로젝트)이다 — 등록 행(agent_projects)이 아니다
+    vi.mocked(agentActorFromPrincipal).mockResolvedValue(makeActor({
+      userId: CRED_OWNER, workspaceRoles: new Map([[CRED_WS, 'member']]),
+      projectWorkspace: new Map([[PID, CRED_WS], [P2, CRED_WS]]), projectRoles: new Map<string, ProjectRole>([[PID, 'member'], [P2, 'member']]),
+    }))
+    const { admin, from } = fakeAdmin({ regs: [{ project_id: PID }, { project_id: P2 }] })
+    expect(await accessibleProjectIds(admin, PRINCIPAL)).toEqual([PID])
     expect(projectsWithModule).toHaveBeenCalledWith([PID, P2], 'agents', { client: admin })
+    expect(agentActorFromPrincipal).toHaveBeenCalledWith(admin, CRED_OWNER, PRINCIPAL)
+    expect(from).not.toHaveBeenCalledWith('agent_projects')
   })
 })
 
@@ -123,8 +147,8 @@ const V1_ROUTES = [
 // AST(MODULE_ROUTE_GATES)가 맡는다. V1_ROUTES 의 경로 문자열 11개는 deny.routes 의 delegatedStatic 확인이 이 파일에서 찾는다
 describe('v1 에이전트 핸들러 11 — 관문의 자리', () => {
   const file = (m: string) => `src/${m.slice(2)}.ts`
-  it.each(V1_ROUTES.slice(0, 8))('%s — requireAgentProject 또는 loadGatedOrder* 를 지난다(모듈 꺼짐 → 404)', (m) => {
-    expect(readFileSync(file(m), 'utf8')).toMatch(/requireAgentProject\(|loadGatedOrder(ForUser)?\(/)
+  it.each(V1_ROUTES.slice(0, 8))('%s — requireAgentProject 또는 loadGatedOrderForUser 를 지난다(모듈 꺼짐 → 404)', (m) => {
+    expect(readFileSync(file(m), 'utf8')).toMatch(/requireAgentProject\(|loadGatedOrderForUser\(/)
   })
   it('me 는 목록 거르기, work/mine 은 accessibleProjectIds(위 케이스), watch 는 자기 관문', () => {
     expect(readFileSync(file(V1_ROUTES[8]), 'utf8')).toMatch(/projectsWithModule\(/)
@@ -133,42 +157,29 @@ describe('v1 에이전트 핸들러 11 — 관문의 자리', () => {
   })
 })
 
-vi.mock('@/lib/minutes/externalApi', async (orig) => {
-  const real = await orig<typeof import('@/lib/minutes/externalApi')>()
-  return { ...real, resolveUserByEmail: vi.fn(async () => ({ id: 'u' })) }
-})
-
-describe('loadGatedOrder / loadGatedOrderForUser', () => {
-  it('Row enabled AND requireModule rejects → result 404', async () => {
+describe('loadGatedOrderForUser', () => {
+  // 옛 케이스의 전반(레거시 loadGatedOrder — 시크릿 + user_email 경로)은 함수와 함께 삭제됐다(SP7 §5.1.4). 쓰기 라우트의 주문 로드는 이 함수 하나다.
+  it('requireModule 이 거부하면 404 — 등록 행(agent_projects)이 켜져 있어도, 그 표는 읽지도 않는다', async () => {
     vi.mocked(requireModule).mockResolvedValue(OFF)
     vi.mocked(isAgentProjectMember).mockResolvedValue(true)
 
-    const admin = { from: vi.fn((table: string) => {
+    const from = vi.fn((table: string) => {
       const b: Record<string, unknown> = {}
       for (const k of ['select', 'eq', 'neq', 'in', 'order', 'limit']) b[k] = () => b
       b.maybeSingle = async () => {
-        if (table === 'users') return { data: { id: 'u' }, error: null }
         if (table === 'agent_projects') return { data: { enabled: true }, error: null }
         if (table === 'agent_work_orders') return { data: { id: 'o1', project_id: PID }, error: null }
         return { data: null, error: null }
       }
       return b
-    }) } as unknown as Parameters<typeof loadGatedOrder>[0]
+    })
+    const admin = { from } as unknown as Parameters<typeof loadGatedOrderForUser>[0]
 
-    const res1 = await loadGatedOrder(admin, 'o1', 'test@test.com')
-    expect(res1.ok).toBe(false)
-    if (!res1.ok) expect(res1.res.status).toBe(404)
+    const res = await loadGatedOrderForUser(admin, 'o1', CRED_OWNER, 'test@test.com', PRINCIPAL)
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.res.status).toBe(404)
     expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: admin })
-
-    vi.mocked(requireModule).mockClear()
-    const principal: AgentPrincipal = {
-      kind: 'pat', runnerId: 'runner-1', userId: 'u', userEmail: 'test@test.com',
-      scopes: ['work:read'], projectId: null, runnerKind: 'user_pat',
-      tokenExpiresAt: '2099-01-01T00:00:00Z', runnerName: 'test', tokenPrefix: 'test',
-    }
-    const res2 = await loadGatedOrderForUser(admin, 'o1', 'u', 'test@test.com', principal)
-    expect(res2.ok).toBe(false)
-    if (!res2.ok) expect(res2.res.status).toBe(404)
-    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: admin })
+    expect(isAgentProjectMember).toHaveBeenCalledWith(admin, CRED_OWNER, PID, PRINCIPAL)
+    expect(from).not.toHaveBeenCalledWith('agent_projects')
   })
 })

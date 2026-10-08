@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-import { generateAgentToken } from '@/lib/agent/token'
 import { ERR_LEVEL_LABELS_INVALID, toRpcNode, validateLevels, type LevelDecl } from '@/lib/agent/wbsImport'
 
 /** 계약 v2.2(nlevel) — .claude/skills/dflow-wbs-nlevel/references/wbs-nlevel-md-contract.md §import 계약 v2.2 */
@@ -154,7 +153,8 @@ vi.mock('next/server', async (orig) => {
 })
 
 import { POST as importPOST } from '@/app/api/v1/wbs/import/route'
-import { axes, roster, rosterRow } from '../fixtures/actorQueues'
+import { credAxes, roster, rosterRow } from '../fixtures/actorQueues'
+import { agentCredential, CRED_OWNER } from '../fixtures/credentials'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ERR_CONFIG_CONFLICT } from '@/lib/settings/errors'
 
@@ -176,7 +176,7 @@ function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = []) {
       return b
     }),
     rpc: vi.fn(async () => rpcQueue.shift() ?? { data: null, error: null }),
-    auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: { id: 'u-1', email: 'admin@example.com' } }, error: null })) } },
+    auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: { id: CRED_OWNER, email: 'admin@example.com' } }, error: null })) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
   return { admin, filters }
@@ -184,16 +184,10 @@ function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = []) {
 
 const PROJECT_ID = '87654321-4321-4321-4321-987654321def'
 
+/** 인증 원천은 integration_credentials(agent_runner) 행 하나다(SP7 §5.1.4) — 케이스마다 새 토큰과 그 행을 만든다. */
 function patRow() {
-  const { token, prefix, hash } = generateAgentToken()
-  return {
-    token,
-    row: {
-      id: 'runner-1', kind: 'user_pat' as const, owner_user_id: 'u-1',
-      token_prefix: prefix, token_hash: hash, project_id: null,
-      scopes: ['work:report'], enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z',
-    },
-  }
+  const cred = agentCredential({ scopes: ['work:report'] })
+  return { token: cred.token, row: cred.row }
 }
 
 function post(body: unknown, bearer: string) {
@@ -204,12 +198,11 @@ function post(body: unknown, bearer: string) {
   })
 }
 
-/** 관리자 통과 공통 큐 — agent_runners·agent_projects·platform_admins·project_members(명단 권한: 멤버 게이트 → 관리자 판정 2회) */
+/** 관리자 통과 공통 큐 — integration_credentials(조회 → last_used 갱신)·권한 4축·project_members(명단 권한: 멤버 게이트 → 관리자 판정 2회) */
 const authzQueues = () => ({
-  agent_runners: [{ data: undefined as unknown }, { data: null }],
-  agent_projects: [{ data: { enabled: true } }],
+  integration_credentials: [{ data: undefined as unknown }, { data: null }],
   project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin'))],
-  ...axes([PROJECT_ID], 2),
+  ...credAxes([PROJECT_ID], 2),
 })
 
 const SERVER_LABELS = LEVELS.map(l => l.name)
@@ -225,7 +218,7 @@ beforeEach(() => {
 describe('POST /wbs/import — v2.2 nlevel', () => {
   it('PL 업로드: attach 해석 + levels 일치 → RPC 에 p_attach_id·level_idx 실림', async () => {
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     const { admin } = useAdmin({
       ...q,
       project_members: [...q.project_members, { data: [] }], // 권한 2회 뒤 담당자 매핑
@@ -258,7 +251,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
 
   it('attach 노드 없음 → 400 attach_not_found (fail-closed, 골격 선행)', async () => {
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     useAdmin({
       ...q,
       wbs_items: [{ data: null }], // attach 해석 실패
@@ -274,7 +267,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
   it('levels 가 서버 정본과 불일치 → 400 levels_mismatch', async () => {
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'Task', 'Activity'] }))
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     useAdmin({
       ...q,
     })
@@ -290,7 +283,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': 'not-a-list' }))
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     const { admin } = useAdmin({ ...q })
     const res = await importPOST(post({
       project_id: PROJECT_ID, module: 'acme-op', levels: LEVELS, attach_ref: 'acme-skel/SYS-OP',
@@ -308,7 +301,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
   it('단계 이름이 미설정(required_missing)이면 손상이 아니라 levels_mismatch·"정본: 없음" 안내(F-3a)', async () => {
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({}))
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     const { admin } = useAdmin({ ...q })
     const res = await importPOST(post({
       project_id: PROJECT_ID, module: 'acme-op', levels: LEVELS, attach_ref: 'acme-skel/SYS-OP',
@@ -343,7 +336,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
 
   it('골격 업로드(levels, attach 없음) → core.level_labels 를 설정 내부 쓰기로 시드', async () => {
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     const { admin, filters } = useAdmin({
       ...q,
       wbs_items: [{ data: [] }], // 트리 depth 조회 — 빈 트리
@@ -355,7 +348,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
       nodes: [{ ...BASE, id: 'PH-01', kind: 'phase', title: '분석', level: 0 }],
     }, token))
     expect(res.status).toBe(200)
-    expect(write.writeProjectSettingsInternal).toHaveBeenCalledWith(expect.anything(), PROJECT_ID, { set: { 'core.level_labels': SERVER_LABELS } }, 'u-1')
+    expect(write.writeProjectSettingsInternal).toHaveBeenCalledWith(expect.anything(), PROJECT_ID, { set: { 'core.level_labels': SERVER_LABELS } }, CRED_OWNER)
     // 트리 깊이 선행 조회는 SUB-ACT·스텁을 뺀다(0012 ①·validateConfig 와 같은 규칙)
     expect(filters.wbs_items).toEqual(expect.arrayContaining([['eq', 'is_owner_split', false], ['is', 'stub_for', null]]))
     // 골격 경로는 p_attach_id 를 싣지 않는다(레거시 RPC 와 인자 호환).
@@ -366,7 +359,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
   it('[CR-7] 골격 시드는 교차 검사(validateProjectConfig)를 지난 뒤에만 쓴다 — 시드 라벨과 트리 깊이를 넘긴다', async () => {
     vcfg.calls.length = 0
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     useAdmin({ ...q, wbs_items: [{ data: [] }], project_members: [...q.project_members, { data: [] }] },
       [{ data: { upserted: 1, skipped: 0, ids: { 'acme-skel/PH-01': 'id-p' }, new_refs: [] } }])
     const res = await importPOST(post({
@@ -381,7 +374,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
 
   it('[CR-7] 교차 검사가 거부하면 400 validation_failed — 설정을 쓰지 않고 upsert 도 부르지 않는다', async () => {
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     const { admin } = useAdmin({ ...q, wbs_items: [{ data: [] }] })
     vcfg.reject = '교차 검사 거부'
     try {
@@ -400,7 +393,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
 
   it('골격 시드의 깊이 선행 조회는 쪽을 넘겨 끝까지 읽는다 — 둘째 쪽의 깊은 행이 축소 시드를 막는다(FM-17)', async () => {
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     const firstPage = Array.from({ length: 1000 }, (_, i) => ({ id: `r${i}`, parent_id: null }))
     const chain = Array.from({ length: 8 }, (_, i) => ({ id: `c${i}`, parent_id: i ? `c${i - 1}` : null }))    // 8단 — 7단 levels 보다 깊다
     const { admin } = useAdmin({ ...q, wbs_items: [{ data: firstPage }, { data: chain }] })
@@ -420,7 +413,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
     write.writeProjectSettingsInternal.mockResolvedValueOnce({ ok: false, code: 'CONFIG_CONFLICT', error: '원문 relation "project_settings" boom' })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     const { admin } = useAdmin({ ...q, wbs_items: [{ data: [] }] })
     const res = await importPOST(post({
       project_id: PROJECT_ID, module: 'acme-skel', levels: LEVELS,
@@ -438,7 +431,7 @@ describe('POST /wbs/import — v2.2 nlevel', () => {
 
   it('레거시 payload(levels 없음) → RPC 인자에 p_attach_id 없음 (v2.0 하위호환)', async () => {
     const { token, row } = patRow()
-    const q = authzQueues(); q.agent_runners[0].data = row
+    const q = authzQueues(); q.integration_credentials[0].data = row
     const { admin } = useAdmin({
       ...q,
       project_members: [...q.project_members, { data: [] }], // 권한 2회 뒤 담당자 매핑

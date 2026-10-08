@@ -3,9 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import {
-  agentActorFromPrincipal, patProjectAllowed, apiBadRequest, apiFail, apiInternalError, apiNotFound, requireScope, resolveAgentPrincipal,
+  agentActorFromPrincipal, patProjectAllowed, apiBadRequest, apiFail, apiInternalError, apiNotFound, requireScope, resolveAgentPrincipal, type AgentPrincipal,
 } from '@/lib/agent/externalApi'
-import { actorFromUser } from '@/lib/authz'
 import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { hasProjectRoleInWorkspace, isProjectMember } from '@/lib/domain/authz'
 import { projectsWithModule, requireModule } from '@/lib/modules/gate'
@@ -13,7 +12,6 @@ import { projectsWithModule, requireModule } from '@/lib/modules/gate'
 /**
  * watch — 감시자(팀장 /dflow-team · 단독 /dflow-poll) 존재 신호. 좌석표 v1 스펙 §3-3.
  * (user_id, agent) 당 1행 upsert. 살아 있음(TTL 70분)은 화면이 판정하고, stop 은 행을 지운다.
- * PAT 전용 — 레거시 시크릿은 신원이 없어 user_id 를 못 채운다.
  */
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +35,7 @@ export interface ResumeRequest {
  * 조회에 실패하면 빈 배열로 위장하지 않고 null 을 돌려준다 — 호출자는 "요청 없음"과 구별해야 한다.
  */
 async function loadResumeRequests(
-  admin: ReturnType<typeof createAdminClient>, userId: string, projectId: string | null, principal?: Extract<Awaited<ReturnType<typeof resolveAgentPrincipal>>, { kind: 'pat' }>, allowedProjectIds?: ReadonlySet<string>,
+  admin: ReturnType<typeof createAdminClient>, userId: string, projectId: string | null, principal: AgentPrincipal, allowedProjectIds: ReadonlySet<string>,
 ): Promise<ResumeRequest[] | null> {
   let q = admin
     .from('agent_work_orders')
@@ -45,16 +43,14 @@ async function loadResumeRequests(
     .eq('claimed_by_user_id', userId).eq('status', 'claimed')
     .not('resume_requested_at', 'is', null)
   if (projectId !== null) q = q.eq('project_id', projectId)
-  if (principal?.credential) {
-    q = q.eq('projects.workspace_id', principal.credential.workspaceId)
-    if (principal.credential.projectIds !== null) q = q.in('project_id', [...principal.credential.projectIds])
-  }
+  q = q.eq('projects.workspace_id', principal.credential.workspaceId)
+  if (principal.credential.projectIds !== null) q = q.in('project_id', [...principal.credential.projectIds])
   const { data, error } = await q.order('resume_requested_at', { ascending: true }).limit(RESUME_MAX)
   if (error) { console.error('[agent-api] 재개 요청 조회 실패:', error.message); return null }
   const rows = ((data ?? []) as Array<{
     id: string; project_id: string; wbs_item_id: string | null; claimed_by: string | null
     resume_requested_at: string; resume_requested_host: string | null
-  }>).filter(r => !allowedProjectIds || allowedProjectIds.has(r.project_id))
+  }>).filter(r => allowedProjectIds.has(r.project_id))
   if (rows.length === 0) return []
   // 팀장이 표로 보고할 때 TSK 코드가 있어야 사람이 어느 작업인지 안다 — 행이 소수라 한 번 더 읽는다.
   const itemIds = [...new Set(rows.map(r => r.wbs_item_id).filter((x): x is string => x !== null))]
@@ -102,12 +98,11 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient()
     const principal = await resolveAgentPrincipal(req, admin)
     if (principal instanceof NextResponse) return principal
-    if (principal.kind === 'legacy') return apiFail(400, 'identity_required', '이 엔드포인트는 PAT 전용입니다.')
     const scopeErr = requireScope(principal, 'work:claim')
     if (scopeErr) return scopeErr
     // 프로젝트 한정 PAT 는 그 프로젝트로 강제 — 다른 값을 대면 사칭 신호라 조용히 덮지 않는다.
     let projectId: string | null = bodyProject
-    if (principal.credential && bodyProject !== null && !patProjectAllowed(principal, bodyProject)) return apiNotFound()
+    if (bodyProject !== null && !patProjectAllowed(principal, bodyProject)) return apiNotFound()
     if (principal.projectId !== null) {
       if (bodyProject !== null && bodyProject !== principal.projectId) {
         return apiFail(403, 'forbidden_role', 'PAT 가 한정된 프로젝트와 다릅니다.')
@@ -116,15 +111,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (stop) {
-      let q = admin.from('agent_watchers').delete().eq('user_id', principal.userId).eq('agent', agent)
-      if (principal.credential) q = q.eq('workspace_id', principal.credential.workspaceId)
-      const { error } = await q
+      const { error } = await admin.from('agent_watchers').delete().eq('user_id', principal.userId).eq('agent', agent)
+        .eq('workspace_id', principal.credential.workspaceId)
       if (error) { console.error('[agent-api] watch stop 실패:', error.message); return apiInternalError() }
       return NextResponse.json({ ok: true, stopped: true })
     }
 
     // PAT 소유자 권한 스냅샷 — 조회 실패는 throw → 아래 catch 의 500(판정 없이 쓰지 않는다).
-    const actor = principal.credential ? await agentActorFromPrincipal(admin, principal.userId, principal) : await actorFromUser(admin, principal.userId)
+    const actor = await agentActorFromPrincipal(admin, principal.userId, principal)
     // SP2 — 감시자는 그 프로젝트 허브·좌석표에 "떠 있는 팀장"으로 보이는 쓰기다. 소유자가 그 프로젝트의 멤버 이상
     // (명단 권한·워크스페이스 관리자·플랫폼 관리자)이 아니면 없는 프로젝트와 같은 404 — 조회 전용·다른 워크스페이스 모두.
     // 프로젝트 한정 PAT 도 발급 때 워크스페이스를 확인하지 않으므로 같은 판정을 거친다.
@@ -158,11 +152,11 @@ export async function POST(req: NextRequest) {
     if (upErr) { console.error('[agent-api] watch upsert 실패:', upErr.message); return apiInternalError() }
     // 청소를 따로 두지 않는다 — 7일 넘게 조용한 행은 여기서 지운다. 실패는 로깅만.
     const { error: gcErr } = await admin
-      .from('agent_watchers').delete().eq('workspace_id', principal.credential?.workspaceId ?? workspaceId ?? actor.projectWorkspace.get(projectId!) ?? '').lt('last_seen_at', new Date(now.getTime() - STALE_ROW_MS).toISOString())
+      .from('agent_watchers').delete().eq('workspace_id', principal.credential.workspaceId).lt('last_seen_at', new Date(now.getTime() - STALE_ROW_MS).toISOString())
     if (gcErr) console.error('[agent-api] watch 오래된 행 정리 실패:', gcErr.message)
-    const loaded = await loadResumeRequests(admin, principal.userId, projectId, principal, principal.credential ? new Set([...actor.projectWorkspace.keys()].filter(pid => isProjectMember(actor, pid) && patProjectAllowed(principal, pid))) : undefined)
+    const loaded = await loadResumeRequests(admin, principal.userId, projectId, principal, new Set([...actor.projectWorkspace.keys()].filter(pid => isProjectMember(actor, pid) && patProjectAllowed(principal, pid))))
     const onIds = loaded === null ? null : new Set(await projectsWithModule(loaded.map((r) => r.project_id), 'agents', { client: admin }))
-    const resume = loaded === null ? null : loaded.filter((r) => onIds!.has(r.project_id) && (!principal.credential || (patProjectAllowed(principal, r.project_id) && isProjectMember(actor, r.project_id))))   // 목록형 — 꺼진 프로젝트의 재개 요청은 싣지 않는다
+    const resume = loaded === null ? null : loaded.filter((r) => onIds!.has(r.project_id) && patProjectAllowed(principal, r.project_id) && isProjectMember(actor, r.project_id))   // 목록형 — 꺼진 프로젝트의 재개 요청은 싣지 않는다
     return NextResponse.json({
       ok: true,
       expires_at: new Date(now.getTime() + WATCHER_TTL_MS).toISOString(),

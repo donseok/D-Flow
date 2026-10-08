@@ -1,5 +1,10 @@
 # D-Flow 에이전트 작업 API 계약 v1.0
 
+> **2026-10-08 — 시크릿 인증 삭제됨(SP7 §5.1.4)**: 이 문서가 정의하는 배포 전역 시크릿(`AGENT_API_SECRET`) 인증과 그 신원 규칙
+> (`user_email`·`400 identity_required`)은 **삭제됐다**. 그 값으로 보낸 요청은 `401 unauthorized` 다. 에이전트 API 는 토큰(PAT — 계약 v2.x,
+> `.claude/skills/dflow-work/references/api-contract.md`)으로만 인증하며 `AGENT_API_ENABLED` 는 킬스위치로만 남는다. 아래 본문은 v1 의
+> 역사 기록이다(경로·필드·응답 코드 표는 고치지 않는다).
+
 > **2026-09-26 변경(호환 깨짐 — SP2 최종 리뷰 F8)**: 읽기 엔드포인트(§3.1 목록·§3.5 상세, 그리고 `GET /api/v1/wbs/structure`)도
 > 쿼리 `user_email` 이 **필수**다. 시크릿(`AGENT_API_SECRET`)은 배포 전역이라 워크스페이스 경계가 없어, 신원 없이는 어느 워크스페이스의
 > 주문 지시·보고·WBS 트리든 읽혔다. 없으면 `400 identity_required`, 계정이 아니면 `403 unknown_user`, 그 프로젝트의 멤버 이상이 아니면
@@ -39,7 +44,7 @@
 
 ### 게이트
 
-- **필수 환경 변수**: `AGENT_API_ENABLED === 'true'` 및 `AGENT_API_SECRET` 모두 설정
+- (삭제됨 — 2026-10-08, 머리말 참조: 시크릿 게이트는 없다. 아래는 v1 기록) **필수 환경 변수**: `AGENT_API_ENABLED === 'true'` 및 `AGENT_API_SECRET` 모두 설정
   - 미설정 시 모든 엔드포인트 404 (존재 은닉)
 - **요청 헤더**: `Authorization: Bearer <AGENT_API_SECRET>`
   - 상수시간 비교. 실패 시 401

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-import { generateAgentToken } from '@/lib/agent/token'
 import {
   parseSchedule, toRpcNode, assembleSpecMarkdown,
 } from '@/lib/agent/wbsImport'
@@ -62,7 +61,8 @@ vi.mock('next/server', async (orig) => {
 })
 
 import { POST as importPOST } from '@/app/api/v1/wbs/import/route'
-import { axes, roster, rosterRow } from '../fixtures/actorQueues'
+import { credAxes, roster, rosterRow } from '../fixtures/actorQueues'
+import { agentCredential, CRED_OWNER } from '../fixtures/credentials'
 
 type Resp = { data?: unknown; error?: { message: string; code?: string } | null; count?: number | null }
 
@@ -70,7 +70,7 @@ type Resp = { data?: unknown; error?: { message: string; code?: string } | null;
  * 테이블별 큐 + rpc 큐를 갖는 admin 목.
  * .from(table) 호출 시 큐 선두를 소비 — select/maybeSingle/single/then(암묵 await) 모두 같은 응답을 본다.
  */
-function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = [], users: Array<{ id: string; email: string }> = [{ id: 'u-1', email: 'admin@example.com' }]) {
+function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = [], users: Array<{ id: string; email: string }> = [{ id: CRED_OWNER, email: 'admin@example.com' }]) {
   /** 명단(project_members) 체인별 select/eq 호출 — 권한 판정(멤버·관리자)과 담당자 매핑 조회의 필터 계약을 단언한다. */
   const rosterChains: Array<Array<[string, unknown[]]>> = []
   const admin = {
@@ -100,17 +100,16 @@ function useAdmin(queues: Record<string, Resp[]>, rpcQueue: Resp[] = [], users: 
 }
 
 const PROJECT_ID = '87654321-4321-4321-4321-987654321def'
-const OWNER = { id: 'u-1', email: 'admin@example.com' }
+const OWNER = { id: CRED_OWNER, email: 'admin@example.com' }
 
+/** 인증 원천은 integration_credentials(agent_runner) 행 하나다(SP7 §5.1.4) — 케이스마다 새 토큰과 그 행을 만든다. */
 function patRow(overrides: Partial<{ scopes: string[]; project_id: string | null; enabled: boolean; revoked_at: string | null; expires_at: string }> = {}) {
-  const { token, prefix, hash } = generateAgentToken()
-  const row = {
-    id: 'runner-1', kind: 'user_pat' as const, owner_user_id: OWNER.id,
-    token_prefix: prefix, token_hash: hash, project_id: overrides.project_id ?? null,
+  const cred = agentCredential({
+    owner_user_id: OWNER.id, project_ids: overrides.project_id ? [overrides.project_id] : null,
     scopes: overrides.scopes ?? ['work:report'], enabled: overrides.enabled ?? true,
     revoked_at: overrides.revoked_at ?? null, expires_at: overrides.expires_at ?? '2099-01-01T00:00:00Z',
-  }
-  return { token, row }
+  })
+  return { token: cred.token, row: cred.row }
 }
 
 function post(body: unknown, bearer: string) {
@@ -145,10 +144,10 @@ describe('POST /wbs/import', () => {
     // RPC 는 T-A 만 new_refs 로 보고한다(T-B 는 이미 존재하던 task 라는 픽스처) — 그런데도
     // T-B 는 dev_workflow=true·활성 주문 없음(갭)이므로 F1 갱신 루프가 이걸 잡아 발행해야 한다.
     const admin = useAdmin({
-      agent_runners: [{ data: row }, { data: null }], // 리졸버 select, last_seen_at 갱신
-      agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트 + ensureOrder 게이트 x2(T-A, T-B)
+      integration_credentials: [{ data: row }, { data: null }], // 리졸버 select, last_used_at 갱신
+      agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // ensureOrder 게이트 x2(T-A, T-B) — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
       // platform_admins·명단 권한은 각 2회 조회된다: isAgentProjectMember(비멤버 404 게이트) → 관리자 판정.
-      ...axes([PROJECT_ID], 2),
+      ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: null }, // assignee_member_id update(T-A)
@@ -181,7 +180,7 @@ describe('POST /wbs/import', () => {
     for (const gate of admin.rosterChains.slice(0, 2)) {
       expect(String(gate.find(([k]) => k === 'select')?.[1][0])).toContain('access_role, people!inner(user_id, active)')
       expect(gate).toEqual(expect.arrayContaining([
-        ['eq', ['people.user_id', 'u-1']], ['eq', ['active', true]], ['eq', ['people.active', true]],
+        ['eq', ['people.user_id', OWNER.id]], ['eq', ['active', true]], ['eq', ['people.active', true]],
       ]))
     }
     // 담당자 매핑은 이메일 정본(people.email)으로, 담당자 쓰기이므로 활성 명단 행·활성 인물만.
@@ -223,9 +222,9 @@ describe('POST /wbs/import', () => {
       nodes: [NODE({ id: 'T-A', assignee: 'a@b.c' })],
     }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
-      ...axes([PROJECT_ID], 2),
+      integration_credentials: [{ data: row }, { data: null }],
+      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-x', people: { email: 'other@example.com' } }] }], // 다른 email 만 — 매칭 실패
       wbs_items: [
         // 미매칭이므로 assignee_member_id update 는 없다 — 첫 항목이 바로 갭 후보 조회.
@@ -253,11 +252,10 @@ describe('POST /wbs/import', () => {
     const { token, row } = patRow()
     const body = { project_id: PROJECT_ID, module: 'MES', nodes: [NODE({ id: 'T-A' })] }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }],
+      integration_credentials: [{ data: row }, { data: null }],
       // platform_admins·명단 권한 2회: isAgentProjectMember(멤버 확인, 권한 있음→통과) → 관리자 판정(admin 아님→403).
       project_members: [roster(rosterRow(PROJECT_ID, 'member')), roster(rosterRow(PROJECT_ID, 'member'))],
-      ...axes([PROJECT_ID], 2),
+      ...credAxes([PROJECT_ID], 2),
     })
     const res = await importPOST(post(body, token))
     expect(res.status).toBe(403)
@@ -268,23 +266,30 @@ describe('POST /wbs/import', () => {
     const { token, row } = patRow()
     const body = { project_id: PROJECT_ID, module: 'MES', nodes: [NODE({ id: 'T-A' })] }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }],
+      integration_credentials: [{ data: row }, { data: null }],
       // isAgentProjectMember 에서만 소비 — role 행이 없으므로 여기서 404, 관리자 판정 코드까지 가지 않는다.
       project_members: [{ data: [] }],
-      ...axes([PROJECT_ID]),
+      ...credAxes([PROJECT_ID]),
     })
     const res = await importPOST(post(body, token))
     expect(res.status).toBe(404)
   })
 
-  it('legacy 호출 → 400 identity_required', async () => {
+  // 옛 케이스 'legacy 호출 → 400 identity_required' 의 후신 — 시크릿 principal 이 삭제돼 PAT 전용 안내(400) 대신 인증 실패다.
+  it('옛 시크릿 값 Bearer → 401 — env 에 AGENT_API_SECRET 이 설정돼 있어도, RPC·표에 닿지 않는다', async () => {
     process.env.AGENT_API_SECRET = 'legacy-secret'
+    const { row } = patRow()
     const body = { project_id: PROJECT_ID, module: 'MES', nodes: [NODE({ id: 'T-A' })] }
-    useAdmin({})
+    const admin = useAdmin({
+      integration_credentials: [{ data: row }, { data: null }],
+      project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin'))],
+      ...credAxes([PROJECT_ID], 2),
+    })
     const res = await importPOST(post(body, 'legacy-secret'))
-    expect(res.status).toBe(400)
-    expect((await res.json()).code).toBe('identity_required')
+    expect(res.status).toBe(401)
+    expect((await res.json()).code).toBe('unauthorized')
+    expect(admin.from).not.toHaveBeenCalled()
+    expect(admin.rpc).not.toHaveBeenCalled()
   })
 
   it('nodes 1000건 초과 → 400', async () => {
@@ -306,9 +311,8 @@ describe('POST /wbs/import', () => {
       nodes: [NODE({ id: 'T-A', assignee: 'a@b.c' })],
     }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }], // 라우트 게이트만 — ensureOrder 는 활성 주문이 있어 호출되지 않는다
-      ...axes([PROJECT_ID], 2),
+      integration_credentials: [{ data: row }, { data: null }],
+      ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [{ data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }], // 갭 후보 조회
       agent_work_orders: [{ data: [{ wbs_item_id: 'id-a' }] }], // 이미 활성 주문 존재 — 갭 아님
@@ -327,9 +331,9 @@ describe('POST /wbs/import', () => {
       nodes: [NODE({ id: 'T-A', assignee: 'a@b.c' })],
     }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
-      ...axes([PROJECT_ID], 2),
+      integration_credentials: [{ data: row }, { data: null }],
+      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }, // 갭 후보 조회
@@ -359,9 +363,9 @@ describe('POST /wbs/import', () => {
       nodes: [NODE({ id: 'T-A', assignee: 'a@b.c' })], // kind 기본값 task
     }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
-      ...axes([PROJECT_ID], 2),
+      integration_credentials: [{ data: row }, { data: null }],
+      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: null }, // assignee_member_id update
@@ -389,9 +393,8 @@ describe('POST /wbs/import', () => {
     const { token, row } = patRow()
     const body = { project_id: PROJECT_ID, module: 'MES', nodes: [NODE({ id: 'WP-01', kind: 'wp', assignee })] }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }],
-      ...axes([PROJECT_ID], 2),
+      integration_credentials: [{ data: row }, { data: null }],
+      ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: stored } }] }],
       wbs_items: [{ data: null }], // assignee_member_id update
     }, [{ data: { upserted: 1, skipped: 0, ids: { 'MES/WP-01': 'id-wp' }, new_refs: ['MES/WP-01'] } }])
@@ -407,11 +410,10 @@ describe('POST /wbs/import', () => {
       nodes: [NODE({ id: 'WP-01', kind: 'wp', assignee: 'a@b.c' })],
     }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
+      integration_credentials: [{ data: row }, { data: null }],
       // taskRefs(payload 의 kind='task' ref 집합)가 비어 ensureOrdersForPayload 가 즉시 반환한다 —
-      // wbs_items·agent_work_orders 큐가 전혀 소비되지 않으므로 agent_projects 도 라우트 게이트 1회뿐.
-      agent_projects: [{ data: { enabled: true } }],
-      ...axes([PROJECT_ID], 2),
+      // wbs_items·agent_work_orders 큐가 전혀 소비되지 않는다 — agent_projects(ensureOrder 게이트)도 읽지 않는다.
+      ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
         { data: null }, // assignee_member_id update(WP-01, kind 무관하게 assignee 매칭은 이뤄진다)
@@ -430,9 +432,9 @@ describe('POST /wbs/import', () => {
       nodes: [NODE({ id: 'T-A' })], // assignee 없음
     }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트, ensureOrder 게이트
-      ...axes([PROJECT_ID], 2),
+      integration_credentials: [{ data: row }, { data: null }],
+      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [] }], // 매칭 대상 없음 — 그래도 로스터는 로드된다
       wbs_items: [
         { data: [{ id: 'id-a', external_ref: 'MES/T-A', dev_workflow: true }] }, // 갭 후보 조회
@@ -460,9 +462,9 @@ describe('POST /wbs/import', () => {
       nodes: [NODE({ id: 'T-A' }), NODE({ id: 'T-B' })],
     }
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // 라우트 게이트 + ensureOrder 게이트(T-A 만)
-      ...axes([PROJECT_ID], 2),
+      integration_credentials: [{ data: row }, { data: null }],
+      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [] }],
       wbs_items: [
         { data: [ // 갭 후보 조회 — T-B 는 dev_workflow:false(다른 트리거가 그 사이 껐다고 가정)

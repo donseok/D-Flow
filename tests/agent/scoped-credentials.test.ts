@@ -57,7 +57,7 @@ const watch = (body: unknown) => new NextRequest('http://localhost/api/v1/agent/
 
 beforeEach(() => {
   vi.stubEnv('AGENT_API_ENABLED', 'true')
-  vi.stubEnv('AGENT_API_SECRET', 'legacy-secret')
+  vi.stubEnv('AGENT_API_SECRET', 'legacy-secret') // 설정돼 있어도 인증에 쓰이지 않는다(SP7 §5.1.4)
   h.actor.mockReset().mockResolvedValue(actor)
   vi.mocked(requireModule).mockReset().mockResolvedValue({ ok: true })
 })

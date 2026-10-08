@@ -14,7 +14,7 @@ export const MODULE_FLAG_NAMES_SCRIPT = Object.freeze([
 ])
 
 /** env:local 이 병합할 모듈 플래그 — 로컬은 모든 모듈이 가용이어야 관문(Phase B) 뒤에도 화면·E2E 가 열린다(스펙 §4.1·§9 #5).
- *  시크릿(MINUTES_API_SECRET·CRON_SECRET 등)은 넣지 않는다 — 시크릿이 없는 라우트는 지금처럼 404 로 숨는다 */
+ *  시크릿(CRON_SECRET 등)은 넣지 않는다 — 시크릿이 없는 라우트는 지금처럼 404 로 숨는다 */
 export function localModuleFlagEnv() {
   return Object.fromEntries(MODULE_FLAG_NAMES_SCRIPT.map((n) => [n, 'true']))
 }

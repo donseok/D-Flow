@@ -160,10 +160,10 @@ export const GATE_SOURCES: Readonly<Record<string, string>> = {
   requireScopedSessionModule: '@/lib/modules/scopedSession',
   projectsWithModule: '@/lib/modules/gate', workspacesWithModule: '@/lib/modules/gate', requireModulePage: '@/lib/modules/pageGate',
   requireAgentProject: '@/lib/agent/externalApi', accessibleProjectIds: '@/lib/agent/mineShared',
-  loadGatedOrder: '@/lib/agent/routeShared', loadGatedOrderForUser: '@/lib/agent/routeShared',
+  loadGatedOrderForUser: '@/lib/agent/routeShared',
 }
 /** 결과가 판정(통과/거부)이라 조건으로 봐야 하는 것 — 목록형(projectsWithModule·accessibleProjectIds)은 결과를 쓰기만 하면 된다 */
-const MUST_CHECK: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'requireScopedSessionModule', 'moduleState', 'requireAgentProject', 'loadGatedOrder', 'loadGatedOrderForUser'])
+const MUST_CHECK: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'requireScopedSessionModule', 'moduleState', 'requireAgentProject', 'loadGatedOrderForUser'])
 
 export type GateSite = {
   name: string

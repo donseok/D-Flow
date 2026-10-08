@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-import { generateAgentToken } from '@/lib/agent/token'
 
 /** GET /api/v1/wbs/structure — PL 스킬의 서버 직조회 원천(스펙 §import 계약 v2.2).
  *  levels 정본 + 얕은 노드(기본 depth≤2 = Phase·System)를 돌려준다. */
@@ -16,16 +15,15 @@ vi.mock('@/lib/settings/projectConfig', async (importOriginal) => {
 })
 
 import { GET as structureGET } from '@/app/api/v1/wbs/structure/route'
-import { axes, roster, rosterRow } from '../fixtures/actorQueues'
-import { profileEq } from '../fixtures/profiles'
+import { axes, credAxes, roster, rosterRow } from '../fixtures/actorQueues'
+import { agentCredential, ownerLookup } from '../fixtures/credentials'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ConfigUnavailableError, ERR_CONFIG_INVALID } from '@/lib/settings/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 
 const LEGACY_SECRET = 'legacy-secret'
-const PL = { id: 'u-1', email: 'pl@example.com', user_metadata: {} }
-const OUTSIDER = { id: 'u-9', email: 'outsider@example.com', user_metadata: {} }
+const PL = { email: 'pl@example.com' } // 토큰 소유자
 
 type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 
@@ -35,31 +33,25 @@ function useAdmin(queues: Record<string, Resp[]>) {
       const resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
       for (const k of ['select', 'update', 'eq', 'in', 'order', 'limit', 'range']) b[k] = () => b
-      // 레거시 신원 — resolveUserByEmail 은 profiles 를 eq('email') 로 한 건 읽는다
-      if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, [PL, OUTSIDER])
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
         Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
       return b
     }),
-    auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: { id: 'u-1', email: 'pl@example.com' } }, error: null })) } },
+    auth: { admin: { getUserById: vi.fn(ownerLookup(undefined, PL.email)) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
   return admin
 }
+/** 루프·보조 함수 안에서 부르는 별칭 — 이름이 use 로 시작하면 훅 규칙(react-hooks/rules-of-hooks)이 오탐한다. */
+const seedAdmin = useAdmin
 
 const PROJECT_ID = '87654321-4321-4321-4321-987654321def'
 
+/** 인증 원천은 integration_credentials(agent_runner) 행 하나다(SP7 §5.1.4) — 케이스마다 새 토큰과 그 행을 만든다. */
 function patRow(scopes: string[] = ['work:read']) {
-  const { token, prefix, hash } = generateAgentToken()
-  return {
-    token,
-    row: {
-      id: 'runner-1', kind: 'user_pat' as const, owner_user_id: 'u-1',
-      token_prefix: prefix, token_hash: hash, project_id: null,
-      scopes, enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z',
-    },
-  }
+  const cred = agentCredential({ scopes })
+  return { token: cred.token, row: cred.row }
 }
 
 function get(qs: string, bearer: string) {
@@ -88,10 +80,9 @@ describe('GET /wbs/structure', () => {
   it('PAT 멤버 → levels + depth≤1(기본) 노드, parent 는 external_ref 로', async () => {
     const { token, row } = patRow()
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }],
+      integration_credentials: [{ data: row }, { data: null }],
       project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
-      ...axes([PROJECT_ID]),
+      ...credAxes([PROJECT_ID]),
       wbs_items: [{ data: TREE }],
     })
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'System', 'Subsystem', 'WP', 'Activity', 'Task', 'SubTask'] }))
@@ -110,10 +101,9 @@ describe('GET /wbs/structure', () => {
   it('max_depth=2 → Subsystem 층까지 확장', async () => {
     const { token, row } = patRow()
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }],
+      integration_credentials: [{ data: row }, { data: null }],
       project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
-      ...axes([PROJECT_ID]),
+      ...credAxes([PROJECT_ID]),
       wbs_items: [{ data: TREE }],
     })
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['A', 'B', 'C'] }))
@@ -127,10 +117,9 @@ describe('GET /wbs/structure', () => {
   it('비멤버 PAT → 404 (존재 은닉)', async () => {
     const { token, row } = patRow()
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }],
+      integration_credentials: [{ data: row }, { data: null }],
       project_members: [{ data: [] }],
-      ...axes([PROJECT_ID]),
+      ...credAxes([PROJECT_ID]),
     })
     const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
     expect(res.status).toBe(404)
@@ -138,7 +127,7 @@ describe('GET /wbs/structure', () => {
 
   it('비멤버 → 404 이고 설정은 읽지 않는다(호출자의 워크스페이스 밖 프로젝트 설정을 내지 않는다)', async () => {
     const { token, row } = patRow()
-    useAdmin({ agent_runners: [{ data: row }, { data: null }], agent_projects: [{ data: { enabled: true } }], project_members: [roster()], ...axes([]) })
+    useAdmin({ integration_credentials: [{ data: row }, { data: null }], project_members: [roster()], ...axes([]) })
     const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
     expect(res.status).toBe(404)
     expect(cfg.getProjectConfig).not.toHaveBeenCalled()
@@ -148,10 +137,9 @@ describe('GET /wbs/structure', () => {
     const useMemberToken = () => {
       const { token, row } = patRow()
       useAdmin({
-        agent_runners: [{ data: row }, { data: null }],
-        agent_projects: [{ data: { enabled: true } }],
+        integration_credentials: [{ data: row }, { data: null }],
         project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
-        ...axes([PROJECT_ID]),
+        ...credAxes([PROJECT_ID]),
         wbs_items: [{ data: TREE }],
       })
       return token
@@ -170,10 +158,9 @@ describe('GET /wbs/structure', () => {
   it('단계 이름 설정이 손상(invalid)이면 null 로 합치지 않고 422 config_invalid — 원인 키는 로그(C2-F2)', async () => {
     const { token, row } = patRow()
     useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }],
+      integration_credentials: [{ data: row }, { data: null }],
       project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
-      ...axes([PROJECT_ID]),
+      ...credAxes([PROJECT_ID]),
       wbs_items: [{ data: TREE }],
     })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -192,7 +179,7 @@ describe('GET /wbs/structure', () => {
 
   it('work:read 스코프 없음 → 403 insufficient_scope', async () => {
     const { token, row } = patRow(['work:report'])
-    useAdmin({ agent_runners: [{ data: row }, { data: null }] })
+    useAdmin({ integration_credentials: [{ data: row }, { data: null }] })
     const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
     expect(res.status).toBe(403)
     expect((await res.json()).code).toBe('insufficient_scope')
@@ -204,13 +191,12 @@ describe('GET /wbs/structure', () => {
     expect(res.status).toBe(400)
   })
 
-  it('agents 모듈이 꺼지면 행이 enabled 여도 404 이고 트리를 읽지 않는다(과제 18 — 두 원천 AND)', async () => {
+  it('agents 모듈이 꺼지면 404 이고 트리를 읽지 않는다(과제 18)', async () => {
     const { token, row } = patRow()
     const admin = useAdmin({
-      agent_runners: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }],
+      integration_credentials: [{ data: row }, { data: null }],
       project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
-      ...axes([PROJECT_ID]),
+      ...credAxes([PROJECT_ID]),
       wbs_items: [{ data: TREE }],
     })
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
@@ -221,46 +207,58 @@ describe('GET /wbs/structure', () => {
   })
 })
 
-// 레거시(AGENT_API_SECRET) 읽기는 ?user_email= 필수(SP2 최종 리뷰 F8) — 시크릿은 배포 전역이라 워크스페이스 경계가 없다.
-describe('GET /wbs/structure — 레거시 시크릿 호출의 신원', () => {
+// 옛 describe 'GET /wbs/structure — 레거시 시크릿 호출의 신원' 의 후신 — 시크릿 principal 과 그 `?user_email=` 신원은 삭제됐다(SP7 §5.1.4).
+// 신원은 토큰 소유자 하나이고, 워크스페이스 경계는 자격증명이 가진다.
+describe('GET /wbs/structure — 옛 시크릿 호출은 닫히고, 신원은 토큰 소유자다', () => {
   beforeEach(() => { process.env.AGENT_API_SECRET = LEGACY_SECRET })
-
-  it('user_email 없이 시크릿만 → 400 identity_required(WBS 트리를 읽기 전에)', async () => {
-    const admin = useAdmin({ agent_projects: [{ data: { enabled: true } }], wbs_items: [{ data: TREE }] })
-    const res = await structureGET(get(`project_id=${PROJECT_ID}`, LEGACY_SECRET))
-    expect(res.status).toBe(400)
-    expect((await res.json()).code).toBe('identity_required')
-    expect(admin.from).not.toHaveBeenCalledWith('wbs_items')
+  const memberQueues = (row: unknown) => ({
+    integration_credentials: [{ data: row }, { data: null }],
+    ...credAxes([PROJECT_ID]), project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
+    wbs_items: [{ data: TREE }],
   })
 
-  it('비멤버 user_email → 404 — 다른 워크스페이스 프로젝트의 트리를 주지 않는다', async () => {
-    useAdmin({ agent_projects: [{ data: { enabled: true } }], ...axes([]), project_members: [roster()], wbs_items: [{ data: TREE }] })
-    const res = await structureGET(get(`project_id=${PROJECT_ID}&user_email=${OUTSIDER.email}`, LEGACY_SECRET))
-    expect(res.status).toBe(404)
-    expect(await res.text()).not.toContain('생산운영')
+  // 옛 케이스 'user_email 없이 시크릿만 → 400 identity_required' 와 '멤버 user_email → 200' 의 후신 — 둘 다 401 이다.
+  it('옛 시크릿 값 Bearer → 401 — env 에 AGENT_API_SECRET 이 있고 멤버 user_email 을 붙여도 WBS 트리를 읽지 못한다', async () => {
+    for (const qs of ['', `&user_email=${PL.email}`]) {
+      const admin = seedAdmin(memberQueues(patRow().row))
+      const res = await structureGET(get(`project_id=${PROJECT_ID}${qs}`, LEGACY_SECRET))
+      expect(res.status).toBe(401)
+      expect((await res.json()).code).toBe('unauthorized')
+      expect(admin.from).not.toHaveBeenCalled()
+      expect(cfg.getProjectConfig).not.toHaveBeenCalled()
+    }
   })
 
-  it('멤버 user_email → 200', async () => {
-    useAdmin({
-      agent_projects: [{ data: { enabled: true } }],
-      ...axes([PROJECT_ID]), project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
+  // 옛 케이스 '비멤버 user_email → 404' 의 후신 — 소유자가 그 프로젝트의 명단 member 여도 소속·프로젝트가 자격증명 워크스페이스 밖이면 닫힌다.
+  it('자격증명 워크스페이스 밖 프로젝트 → 404 — 명단 member 여도 다른 워크스페이스 프로젝트의 트리를 주지 않는다', async () => {
+    const { token, row } = patRow()
+    const admin = useAdmin({
+      integration_credentials: [{ data: row }, { data: null }],
+      ...axes([PROJECT_ID]), project_members: [roster(rosterRow(PROJECT_ID, 'member'))], // 소속·프로젝트가 기본 WS('ws-1')
       wbs_items: [{ data: TREE }],
     })
+    const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
+    expect(res.status).toBe(404)
+    expect(await res.text()).not.toContain('생산운영')
+    expect(admin.from).not.toHaveBeenCalledWith('wbs_items')
+    expect(cfg.getProjectConfig).not.toHaveBeenCalled()
+  })
+
+  it('멤버인 토큰 소유자 → 200(env 의 옛 시크릿 유무와 무관)', async () => {
+    const { token, row } = patRow()
+    useAdmin(memberQueues(row))
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'System'] }))
-    const res = await structureGET(get(`project_id=${PROJECT_ID}&user_email=${PL.email}`, LEGACY_SECRET))
+    const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
     expect(res.status).toBe(200)
     expect((await res.json()).max_depth).toBe(2)
   })
 
   it('응답의 max_depth 는 levelDepthOf 가 낸다 — 라우트에 규칙을 다시 쓰지 않는다(FM-10)', async () => {
-    useAdmin({
-      agent_projects: [{ data: { enabled: true } }],
-      ...axes([PROJECT_ID]), project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
-      wbs_items: [{ data: TREE }],
-    })
+    const { token, row } = patRow()
+    useAdmin(memberQueues(row))
     cfg.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['Phase', 'System'] }))
     cfg.levelDepthOf.mockReturnValueOnce(42)
-    const res = await structureGET(get(`project_id=${PROJECT_ID}&user_email=${PL.email}`, LEGACY_SECRET))
+    const res = await structureGET(get(`project_id=${PROJECT_ID}`, token))
     expect((await res.json()).max_depth).toBe(42)
     expect(cfg.levelDepthOf).toHaveBeenCalledTimes(1)
   })

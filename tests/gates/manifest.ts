@@ -305,7 +305,7 @@ const agent = (): GateEntry => ({
   guard: 'agentPrincipal', module: 'agents', delegatedTo: 'tests/modules/agents-gate.test.ts',
   delegatedStatic: '두 원천 AND — agents-gate 가 경로 문자열로 핸들러의 판정 호출을 보고, 실행은 tests/agent/{wbs-structure,me-route,watch-route} 가 본다(과제 18)',
 })
-const mapi = (delegatedTo: string): GateEntry => ({ guard: 'minutesSecret', module: 'minutes_integration', note: '배포 비밀 + user_email — 409 module_disabled', delegatedTo })
+const mapi = (delegatedTo: string): GateEntry => ({ guard: 'minutesSecret', module: 'minutes_integration', note: '연동 자격증명(integration_credentials minutes_api 행 — 옛 배포 비밀은 SP7 에서 삭제) + user_email — 409 module_disabled', delegatedTo })
 const LEGACY_CHAT = 'tests/api/chat-legacy-scope.test.ts'
 const MINUTES_EXT = 'tests/minutes/external-api.test.ts'
 

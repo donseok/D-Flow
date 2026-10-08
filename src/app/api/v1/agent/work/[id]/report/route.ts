@@ -6,7 +6,7 @@ import {
   AGENT_LINKS_MAX, validateEvidence, validateReport, isUuidLike, type AgentReportKind,
 } from '@/lib/domain/agentWork'
 import { apiBadRequest, apiFail, apiInternalError, apiNotFound } from '@/lib/agent/externalApi'
-import { loadGatedOrder, loadGatedOrderForUser, parseAgentActor, resolveWriteActor } from '@/lib/agent/routeShared'
+import { loadGatedOrderForUser, resolveWriteActor } from '@/lib/agent/routeShared'
 import { emitNotification } from '@/lib/notify/emit'
 import { personOf } from '@/lib/data/memberSelect'
 import { applyWorkflowEvent, notifyOnReached } from '@/lib/agent/workflowEvent'
@@ -52,9 +52,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const actor = await resolveWriteActor(req, admin, raw, 'work:claim')
     if (!actor.ok) return actor.res
 
-    const loaded = actor.principal.kind === 'pat'
-      ? await loadGatedOrderForUser(admin, id, actor.userId as string, actor.principal.userEmail, actor.principal)
-      : await loadGatedOrder(admin, id, (parseAgentActor(raw) as { userEmail: string }).userEmail)
+    const loaded = await loadGatedOrderForUser(admin, id, actor.userId, actor.principal.userEmail, actor.principal)
     if (!loaded.ok) return loaded.res
     const order = loaded.order
     // 보고는 점유 상태에서만. reported(승인 대기)는 판정 전 원장 동결(스펙 §6).
@@ -65,21 +63,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return apiFail(409, 'conflict', `보고 가능한 상태가 아닙니다(현재: ${order.status}).`)
     }
 
-    // 소유 판정(§2.3) — 교차 소유는 양방향 모두 403 not_claim_owner.
-    if (actor.principal.kind === 'pat') {
-      if (order.claimed_by_user_id === null) {
-        return apiFail(403, 'not_claim_owner', '레거시 세션이 점유한 주문입니다.')
-      }
-      if (order.claimed_by_user_id !== actor.userId) {
-        return apiFail(403, 'not_claim_owner', '본인이 점유한 주문만 처리할 수 있습니다.')
-      }
-    } else {
-      if (order.claimed_by_user_id !== null) {
-        return apiFail(403, 'not_claim_owner', 'PAT 사용자가 점유한 주문입니다.')
-      }
-      if (order.claimed_by !== actor.agentLabel) {
-        return apiFail(403, 'not_claim_owner', '본인이 점유한 주문만 보고할 수 있습니다.')
-      }
+    // 소유 판정(§2.3) — 점유자 계정이 없는 옛 행(claimed_by_user_id null)과 남의 점유 모두 403 not_claim_owner.
+    if (order.claimed_by_user_id === null) {
+      return apiFail(403, 'not_claim_owner', '레거시 세션이 점유한 주문입니다.')
+    }
+    if (order.claimed_by_user_id !== actor.userId) {
+      return apiFail(403, 'not_claim_owner', '본인이 점유한 주문만 처리할 수 있습니다.')
     }
 
     // 계약 v2.3(스펙 2026-09-15 §3.4) — progress 보고는 보고 행만 남긴다. 실적은 단계 전이 사건의 크레딧과
@@ -107,8 +96,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       // 경합·오류는 보고 행을 지워(고아 행 무해) 같은 내용의 재시도가 수렴하게 한다.
       const transition = await applyWorkflowEvent(admin, {
         event: 'report_completion', actorUserId: loaded.userId, orderId: id,
-        agent: actor.principal.kind === 'pat' ? null : actor.agentLabel,
-        agentUserId: actor.principal.kind === 'pat' ? (actor.userId as string) : null,
+        agent: null,
+        agentUserId: actor.userId,
       })
       if (!transition.ok) {
         const { error: cleanupErr } = await admin

@@ -28,8 +28,6 @@ export const OPERATIONAL_SETTINGS: readonly OperationalDef[] = [
   ...env(['CRON_SECRET'], ['src/app/api/cron/ai-index/route.ts', 'src/app/api/cron/inbox-retention/route.ts', 'src/app/api/wiki/worker/route.ts'], { secret: ['CRON_SECRET'] }),
   ...env(['WIKI_WORKER_SECRET'], ['src/app/api/wiki/worker/route.ts'], { secret: ['WIKI_WORKER_SECRET'] }),
   ...env(['CHAT_V2_INDEX_CRON_SECRET'], ['src/app/api/chat/index/worker/route.ts'], { secret: ['CHAT_V2_INDEX_CRON_SECRET'] }),
-  ...env(['AGENT_API_SECRET', 'MINUTES_API_SECRET'],
-    ['src/lib/agent/externalApi.ts', 'src/lib/minutes/externalApi.ts'], { secret: ['AGENT_API_SECRET', 'MINUTES_API_SECRET'] }),
   ...env(['AGENT_API_ENABLED'], ['src/lib/modules/flags.ts', 'src/lib/agent/externalApi.ts']),
   ...env(['MINUTES_API_ENABLED', 'MINUTES_FOLDER_PATH_ENABLED'], ['src/lib/modules/flags.ts', 'src/lib/minutes/externalApi.ts']),
   ...env(['WIKI_SERVICE_ENABLED', 'WIKI_WORKER_ENABLED'], ['src/lib/modules/flags.ts', 'src/lib/wiki/serviceState.ts']),

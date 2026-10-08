@@ -5,10 +5,7 @@ import {
   apiBadRequest, apiInternalError, apiNotFound, isAgentProjectMember, patProjectAllowed,
   requireAgentProject, requireScope, resolveAgentPrincipal,
 } from '@/lib/agent/externalApi'
-import { resolveReader } from '@/lib/agent/routeShared'
 import { ITEM_DETAIL_COLUMNS, loadDependsInfo, type DependInfo } from '@/lib/agent/depends'
-
-const LEGACY_ITEM_COLUMNS = 'id, code, name, biz, deliverable, planned_start, planned_end' // v1 회귀 기준선 — 확장 금지
 
 /** GET /api/v1/agent/work/{id} — 상태 폴링. 에이전트는 여기서 승인/반려·반려 사유를 읽는다(스펙 §3.4-2). */
 export const dynamic = 'force-dynamic'
@@ -20,13 +17,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const admin = createAdminClient()
     const principal = await resolveAgentPrincipal(req, admin)
     if (principal instanceof NextResponse) return principal
-    if (principal.kind === 'pat') {
-      const scopeErr = requireScope(principal, 'work:read')
-      if (scopeErr) return scopeErr
-    }
-    // 레거시도 신원(user_email)을 받는다 — 주문을 읽기 전에(시크릿만으로는 워크스페이스 경계가 없다).
-    const reader = await resolveReader(req, admin, principal)
-    if (!reader.ok) return reader.res
+    const scopeErr = requireScope(principal, 'work:read')
+    if (scopeErr) return scopeErr
 
     const { data: order, error } = await admin
       .from('agent_work_orders')
@@ -38,17 +30,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     }
     if (!order) return apiNotFound()
     const row = order as { project_id: string; claimed_at: string | null; wbs_item_id: string | null }
-    if (principal.kind === 'pat' && !patProjectAllowed(principal, row.project_id)) return apiNotFound()
+    if (!patProjectAllowed(principal, row.project_id)) return apiNotFound()
     // 미등록 프로젝트의 주문은 존재 자체를 숨긴다 — 게이트 순서상 등록 해제 뒤에도 새지 않게.
     if (!(await requireAgentProject(admin, row.project_id, principal))) return apiNotFound()
-    if (!(await isAgentProjectMember(admin, reader.userId, row.project_id, principal))) {
+    if (!(await isAgentProjectMember(admin, principal.userId, row.project_id, principal))) {
       return apiNotFound() // 비멤버 404 — 존재 은닉 관례(§2.2)
     }
 
-    // evidence 는 PAT 응답만 — depends_evidence 와 같은 규칙이다(레거시는 v1 회귀 기준선).
-    // 이게 빠져 있어서 완료 보고가 증적을 실었는지를 DB 직접 조회 없이는 못 봤다(2026-08-27).
-    const reportColumns = 'id, kind, percent, summary, links, agent, review_action, review_note, created_at'
-      + (principal.kind === 'pat' ? ', evidence' : '')
+    // evidence 를 싣는다 — 이게 빠져 있어서 완료 보고가 증적을 실었는지를 DB 직접 조회 없이는 못 봤다(2026-08-27).
+    const reportColumns = 'id, kind, percent, summary, links, agent, review_action, review_note, created_at, evidence'
     const { data: reports, error: repErr } = await admin
       .from('agent_work_reports')
       .select(reportColumns)
@@ -57,14 +47,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       console.error('[agent-api] 보고 이력 조회 실패:', repErr.message)
       return apiInternalError()
     }
-    // PAT 응답만 ITEM_DETAIL_COLUMNS 로 확장한다(클라이언트 spec.md 캐시 재료 — 결정 A).
-    // 레거시 응답은 v1 그대로 — 회귀 기준선.
-    const itemColumns = principal.kind === 'pat' ? ITEM_DETAIL_COLUMNS : LEGACY_ITEM_COLUMNS
+    // 항목은 ITEM_DETAIL_COLUMNS 로 싣는다(클라이언트 spec.md 캐시 재료 — 결정 A).
     let item: unknown = null
     if (row.wbs_item_id) {
       const { data: items, error: itemErr } = await admin
         .from('wbs_items')
-        .select(itemColumns)
+        .select(ITEM_DETAIL_COLUMNS)
         .in('id', [row.wbs_item_id])
       if (itemErr) {
         console.error('[agent-api] 항목 컨텍스트 조회 실패:', itemErr.message)
@@ -73,7 +61,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       item = (items ?? [])[0] ?? null
     }
     let dependsInfo: DependInfo[] = []
-    if (principal.kind === 'pat' && item) {
+    if (item) {
       const depends = (item as { depends?: string[] | null }).depends ?? []
       if (depends.length > 0) {
         dependsInfo = await loadDependsInfo(admin, { projectId: row.project_id, depends })
@@ -86,27 +74,24 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       last_heartbeat_at: string | null; heartbeat_phase: string | null
       resume_requested_at: string | null; resume_requested_host: string | null
     }
-    let extra: Record<string, unknown> = {}
-    if (principal.kind === 'pat') {
-      // claimed_by_user_email 은 계약 원문대로 무조건 노출한다(게이팅 없음) — 0004_ops_rls.sql
-      // read_all_members(using true)로 project_members.email 이 이미 전원 조회 가능하고 claimed_by
-      // 라벨도 무조건 노출 중이라, 여기만 게이팅해도 실질 보호는 없이 동결 계약만 이탈하게 된다.
-      let claimedByUserEmail: string | null = null
-      if (full.claimed_by_user_id) {
-        const { data: ownerData, error: ownerErr } = await admin.auth.admin.getUserById(full.claimed_by_user_id)
-        if (ownerErr || !ownerData?.user?.email) {
-          console.error('[agent-api] 점유자 이메일 조회 실패:', ownerErr?.message ?? '이메일 없음')
-        } else {
-          claimedByUserEmail = ownerData.user.email
-        }
+    // claimed_by_user_email 은 계약 원문대로 무조건 노출한다(게이팅 없음) — 0004_ops_rls.sql
+    // read_all_members(using true)로 project_members.email 이 이미 전원 조회 가능하고 claimed_by
+    // 라벨도 무조건 노출 중이라, 여기만 게이팅해도 실질 보호는 없이 동결 계약만 이탈하게 된다.
+    let claimedByUserEmail: string | null = null
+    if (full.claimed_by_user_id) {
+      const { data: ownerData, error: ownerErr } = await admin.auth.admin.getUserById(full.claimed_by_user_id)
+      if (ownerErr || !ownerData?.user?.email) {
+        console.error('[agent-api] 점유자 이메일 조회 실패:', ownerErr?.message ?? '이메일 없음')
+      } else {
+        claimedByUserEmail = ownerData.user.email
       }
-      // heartbeat 두 열은 DB·좌석표가 이미 쓰는데 API 만 감추고 있었다(2026-09-18) — 그래서 팀장은
-      // 다른 PC 팀원의 생사를 판정하지 못하고 stale(점유 후 24시간)로 대신했다. 재개 요청도 같이 싣는다.
-      extra = {
-        mine: full.claimed_by_user_id === principal.userId, claimed_by_user_email: claimedByUserEmail,
-        last_heartbeat_at: full.last_heartbeat_at, heartbeat_phase: full.heartbeat_phase,
-        resume_requested_at: full.resume_requested_at, resume_requested_host: full.resume_requested_host,
-      }
+    }
+    // heartbeat 두 열은 DB·좌석표가 이미 쓰는데 API 만 감추고 있었다(2026-09-18) — 그래서 팀장은
+    // 다른 PC 팀원의 생사를 판정하지 못하고 stale(점유 후 24시간)로 대신했다. 재개 요청도 같이 싣는다.
+    const extra = {
+      mine: full.claimed_by_user_id === principal.userId, claimed_by_user_email: claimedByUserEmail,
+      last_heartbeat_at: full.last_heartbeat_at, heartbeat_phase: full.heartbeat_phase,
+      resume_requested_at: full.resume_requested_at, resume_requested_host: full.resume_requested_host,
     }
     return NextResponse.json({
       ok: true,
@@ -116,8 +101,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         item, stale: isClaimStale(row.claimed_at), ...extra,
       },
       reports: reports ?? [],
-      // 레거시 응답은 v1 그대로(회귀 기준선) — depends_evidence 는 PAT 전용 확장.
-      ...(principal.kind === 'pat' ? { depends_evidence: dependsInfo } : {}),
+      depends_evidence: dependsInfo,
     })
   } catch (e) {
     console.error('[agent-api] 상세 처리 실패:', e instanceof Error ? e.message : e)

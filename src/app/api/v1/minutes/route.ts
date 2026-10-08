@@ -21,7 +21,6 @@ import {
 import { requireModule, workspacesWithModule } from '@/lib/modules/gate'
 import { resolveOrCreateExternalMeeting } from '@/lib/minutes/meetings'
 import { actorFromUser } from '@/lib/authz'
-import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { canEditMinute, canSeeProject, hasProjectRoleInWorkspace, isProjectMember, teamViewOf, type Actor } from '@/lib/domain/authz'
 import type { TeamCode } from '@/lib/domain/types'
 import { credentialAllows, resolveCredentialTeam } from '@/lib/authz/credentials'
@@ -124,7 +123,7 @@ const CROSS_WORKSPACE_MSG = '다른 워크스페이스의 프로젝트(회의)�
  */
 async function resolveWriteTarget(
   p: ExternalMinutePayload, ex: ExistingRow | null, meetingProjectId: string | null, authz: Actor, admin: AdminClient,
-  principal?: MinutesPrincipal,
+  principal: MinutesPrincipal,
 ): Promise<{ ok: true; target: WriteTarget } | { ok: false; response: NextResponse }> {
   let scope: MinuteScope
   const linkProjectId = p.meeting ? p.meeting.projectId : p.meetingId ? meetingProjectId : null
@@ -157,23 +156,17 @@ async function resolveWriteTarget(
       }
     }
     scope = { projectId: ex.project_id, workspaceId: ex.workspace_id }
-  } else if (principal?.kind === 'minutes_api') {
-    const defaultPid = principal.credential.defaultProjectId
-    scope = { projectId: defaultPid, workspaceId: principal.credential.workspaceId }
   } else {
-    const w = resolveSoleWorkspaceId(authz)
-    if (!w.ok) {
-      return {
-        ok: false,
-        response: apiBadRequest('프로젝트 없는 회의록은 소속 워크스페이스가 하나인 계정만 등록할 수 있습니다. meeting_id 로 프로젝트를 지정하세요.'),
-      }
-    }
-    // 세션 createMinute 과 같은 자격 — 그 워크스페이스에 역할(명단 권한 또는 워크스페이스 관리자)이 있어야 한다. 조회 전용은 프로젝트
-    // 분기와 같은 404(조회 전용이 만든 회의록은 canEditMinute 로 본인도 다시 보낼 수 없었다).
-    if (!hasProjectRoleInWorkspace(authz, w.workspaceId)) {
-      return { ok: false, response: apiFail(404, 'not_found', '프로젝트를 찾을 수 없습니다.') }
-    }
-    scope = { projectId: null, workspaceId: w.workspaceId }
+    // 새 회의록 — 범위는 자격증명 행이 정한다(기본 프로젝트, 없으면 그 워크스페이스의 프로젝트 없는 회의록).
+    // 세션 createMinute 과 같은 자격을 요구한다(SP2 최종 리뷰 AUTHZ-7): 기본 프로젝트면 그 프로젝트의 멤버 이상, 프로젝트가 없으면 그
+    // 워크스페이스의 역할(명단 권한 또는 워크스페이스 관리자). 조회 전용은 프로젝트 분기와 같은 404 다.
+    const defaultPid = principal.credential.defaultProjectId
+    const wid = principal.credential.workspaceId
+    const allowed = defaultPid
+      ? authz.projectWorkspace.get(defaultPid) === wid && isProjectMember(authz, defaultPid)
+      : hasProjectRoleInWorkspace(authz, wid)
+    if (!allowed) return { ok: false, response: apiFail(404, 'not_found', '프로젝트를 찾을 수 없습니다.') }
+    scope = { projectId: defaultPid, workspaceId: wid }
   }
 
   if (principal?.kind === 'minutes_api') {
@@ -433,8 +426,10 @@ async function insertNew(
   authz: Actor,
   /** resolveWriteTarget 이 확정한 범위 — 프로젝트는 연결할 회의의 것(없으면 null), 워크스페이스는 그 프로젝트의 것 또는 유일 소속. */
   target: WriteTarget,
-  meetingCreated?: boolean,
-  workspaceSlug?: string | null,
+  meetingCreated: boolean | undefined,
+  workspaceSlug: string | null | undefined,
+  /** 경합으로 생긴 행을 다시 판정할 때도 같은 자격증명 범위(워크스페이스·project_ids)를 본다 */
+  principal: MinutesPrincipal,
 ): Promise<NextResponse> {
   const meetingProjectId = target.scope.projectId
   // folder_path 를 받았으면 팀 루트 아래에 같은 폴더 트리를 만들어 편철하고(§3.2), 키가 아예
@@ -479,7 +474,7 @@ async function insertNew(
         // 경합으로 생긴 행도 같은 편집 자격 판정을 거친다 — 남의 external_id 로의 우회 덮어쓰기 차단.
         if (!canEditMinute(authz, racedRow)) return minuteNotFound()
         // 범위도 그 행 기준으로 다시 정한다(워크스페이스는 그 행의 것).
-        const racedTarget = await resolveWriteTarget(p, racedRow, meetingProjectId, authz, admin)
+        const racedTarget = await resolveWriteTarget(p, racedRow, meetingProjectId, authz, admin, principal)
         if (!racedTarget.ok) return racedTarget.response
         // 모듈 판정도 그 행의 워크스페이스로 다시 — 위에서 판정한 새 회의록 대상과 다를 수 있다(플랫폼 관리자의 다른 워크스페이스 행)
         const racedMod = await requireModule({ workspaceId: racedTarget.target.scope.workspaceId }, 'minutes_integration', { client: admin })
@@ -630,7 +625,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (ex) return await handleExisting(req, admin, p, ex, user, target, meetingCreated, workspaceSlug)
-    return await insertNew(req, admin, p, user, authz, target, meetingCreated, workspaceSlug)
+    return await insertNew(req, admin, p, user, authz, target, meetingCreated, workspaceSlug, principal)
   } catch (e) {
     console.error('[minutes-api] POST 처리 실패:', e instanceof Error ? e.message : e)
     return apiInternalError()

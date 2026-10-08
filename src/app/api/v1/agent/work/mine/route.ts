@@ -6,7 +6,7 @@ import {
 } from '@/lib/agent/externalApi'
 import { accessibleProjectIds, myMemberIdsAcrossProjects } from '@/lib/agent/mineShared'
 
-/** GET /api/v1/agent/work/mine — 크로스 프로젝트 "내 작업". PAT 전용(계약 v2.0). */
+/** GET /api/v1/agent/work/mine — 크로스 프로젝트 "내 작업"(계약 v2.0). */
 export const dynamic = 'force-dynamic'
 
 const SUPPORTED_SCOPES = ['available', 'claimed', 'all', 'assigned'] as const
@@ -22,7 +22,6 @@ export async function GET(req: NextRequest) {
     const admin = createAdminClient()
     const principal = await resolveAgentPrincipal(req, admin)
     if (principal instanceof NextResponse) return principal
-    if (principal.kind === 'legacy') return apiFail(400, 'identity_required', '이 엔드포인트는 PAT 전용입니다.')
     const scopeErr = requireScope(principal, 'work:read')
     if (scopeErr) return scopeErr
     if (!(SUPPORTED_SCOPES as readonly string[]).includes(scope)) {

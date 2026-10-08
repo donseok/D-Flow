@@ -13,7 +13,7 @@ import {
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, EXTERNAL_ID_MAX,
   parseFolderPathValue, parseUserEmail, resolveMinutesPrincipal, resolveUserByEmail,
-  isBatchAuthorized, isMinutesWorkspaceMember, type AdminClient, type MinutesPrincipal,
+  isMinutesWorkspaceMember, type AdminClient, type MinutesPrincipal,
 } from '@/lib/minutes/externalApi'
 import { credentialAllows, narrowActor } from '@/lib/authz/credentials'
 import { workspacesWithModule } from '@/lib/modules/gate'
@@ -384,17 +384,6 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    if (principal.kind === 'legacy') {
-      // 대상 회의록마다 관리자 이상이어야 한다 — 하나라도 아니면 요청 전체를 거절한다(부분 이동 없음).
-      if (byExternalId.size > 0 && !isBatchAuthorized(authz, [...byExternalId.values()])) {
-        return apiFail(403, 'forbidden_role', '대상 회의록 중 관리자 권한이 없는 것이 있습니다.')
-      }
-      // 대상 가운데 하나라도 꺼진 워크스페이스면 요청 전체 거절 — 부분 이동 없음(위 관리자 판정과 같은 규칙, P24)
-      const targetWs = [...new Set([...byExternalId.values()].map((r) => r.workspace_id))]
-      const onTarget = new Set(await workspacesWithModule(targetWs, 'minutes_integration', { client: admin }))
-      if (targetWs.some((w) => !onTarget.has(w))) return apiModuleDisabled()
-    }
-
     const targetWs = principal.kind === 'minutes_api'
       ? [principal.credential.workspaceId]
       : [...new Set([...byExternalId.values()].map((r) => r.workspace_id))]

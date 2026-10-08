@@ -100,8 +100,6 @@
 | `CRON_SECRET` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/api/cron/ai-index/route.ts`, `src/app/api/cron/inbox-retention/route.ts`, `src/app/api/wiki/worker/route.ts` | restart | — | — | 운영 설정 | SP3a |
 | `WIKI_WORKER_SECRET` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/api/wiki/worker/route.ts` | restart | — | — | 운영 설정 | SP3a |
 | `CHAT_V2_INDEX_CRON_SECRET` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/api/chat/index/worker/route.ts` | restart | — | — | 운영 설정 | SP3a |
-| `AGENT_API_SECRET` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/agent/externalApi.ts`, `src/lib/minutes/externalApi.ts` | restart | — | — | 운영 설정 | SP3a |
-| `MINUTES_API_SECRET` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/agent/externalApi.ts`, `src/lib/minutes/externalApi.ts` | restart | — | — | 운영 설정 | SP3a |
 | `AGENT_API_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/modules/flags.ts`, `src/lib/agent/externalApi.ts` | restart | — | — | 운영 설정 | SP3a |
 | `MINUTES_API_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/modules/flags.ts`, `src/lib/minutes/externalApi.ts` | restart | — | — | 운영 설정 | SP3a |
 | `MINUTES_FOLDER_PATH_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/modules/flags.ts`, `src/lib/minutes/externalApi.ts` | restart | — | — | 운영 설정 | SP3a |

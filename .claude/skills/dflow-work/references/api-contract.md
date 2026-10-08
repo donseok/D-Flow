@@ -73,15 +73,16 @@ stage 워크플로 재설계(마이그레이션 0082)를 계약에 반영. **엔
 
 ## 인증
 
-- `Authorization: Bearer <값>`. 값이 `AGENT_API_SECRET`과 일치 → legacy principal.
-  값이 `dflow_pat_` 접두 → PAT principal. 그 외 401.
+- `Authorization: Bearer <값>`. 값이 `dflow_pat_` 접두 → PAT principal. 그 외 401.
+  **legacy principal 은 삭제됨(2026-10-08)** — 배포 전역 시크릿(`AGENT_API_SECRET`) 인증이 없어졌다. 그 값으로 보내도 401 이고,
+  아래에 남은 legacy 서술(표의 `legacy`·`identity_required`)은 역사 기록이다(경로·필드·코드 표는 그대로 둔다). 모든 엔드포인트는 PAT 로만 부른다.
 - PAT 형식: `dflow_pat_<prefix 12자 영숫자>_<secret base64url 43자>`. DB에는 sha256(전체) hex만.
-- 킬스위치: `AGENT_API_ENABLED !== 'true'` → 전 라우트 404. 시크릿 미설정 → legacy 분기만 닫힘.
+- 킬스위치: `AGENT_API_ENABLED !== 'true'` → 전 라우트 404. (삭제됨: 시크릿 미설정 시 legacy 분기만 닫히던 동작 — legacy 분기 자체가 없다.)
 - PAT 검사 순서: enabled → revoked_at → expires_at → hash(상수시간).
 - PAT 요청 body의 `user_email`: 없으면 무시, 있는데 소유자와 다르면 400 `identity_mismatch`.
-- 스코프: `work:read`(조회) · `work:claim`(claim/release/report/import). 부족 시 403 `insufficient_scope`. legacy는 스코프 개념 없음(v1 동작).
-- legacy 읽기(GET `work`·`work/{id}`·`wbs/structure`)는 쿼리 `?user_email=` 필수(2026-09-26, 호환 깨짐) — 시크릿은 배포 전역이라
-  신원 없이는 모든 워크스페이스가 읽혔다. 누락 400 `identity_required`, 미일치 403 `unknown_user`, 비멤버 404(PAT 와 같은 판정).
+- 스코프: `work:read`(조회) · `work:claim`(claim/release/report/import). 부족 시 403 `insufficient_scope`. (삭제됨: legacy 는 스코프 개념이 없던 v1 동작.)
+- (삭제됨 — 2026-10-08) legacy 읽기(GET `work`·`work/{id}`·`wbs/structure`)의 쿼리 `?user_email=` 신원(2026-09-26 도입) — 시크릿은 배포 전역이라
+  신원 없이는 모든 워크스페이스가 읽혔다. 누락 400 `identity_required`, 미일치 403 `unknown_user`, 비멤버 404 였다. 지금은 legacy 호출 자체가 401 이다.
   `work:report` 는 폐지됐다(2026-08-25) — claim 할 수 있으면 그 결과도 적을 수 있어야 하고, claim 이 무제한이라 보고만 막는 건 방어선이 아니었다(본인 claim 건만 쓸 수 있다는 강제는 report 라우트가 한다). 신규 발급에는 없고, **옛 토큰의 `work:report` 는 `work:claim` 과 동등하게 수용**한다.
 - PAT는 `project_id` 지정 시 그 프로젝트만. 멤버십: PAT principal은 모든 조회·쓰기에서 그 프로젝트의 멤버 이상이어야 한다 — 플랫폼 관리자, 그 워크스페이스 관리자(승계), 명단 `project_members.access_role` 이 'admin'·'member' 인 사람(서버 `isProjectMember`). 아니면 404.
 

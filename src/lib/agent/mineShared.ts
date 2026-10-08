@@ -10,7 +10,7 @@ import { projectsWithModule } from '@/lib/modules/gate'
  */
 export async function accessibleProjectIds(
   admin: AdminClient,
-  principal: Extract<AgentPrincipal, { kind: 'pat' }>,
+  principal: AgentPrincipal,
 ): Promise<string[]> {
   if (principal.credential) {
     const actor = await agentActorFromPrincipal(admin, principal.userId, principal)
@@ -22,7 +22,7 @@ export async function accessibleProjectIds(
   const out: string[] = []
   for (const r of (regs ?? []) as Array<{ project_id: string }>) {
     if (!patProjectAllowed(principal, r.project_id)) continue
-    if (await isAgentProjectMember(admin, principal.userId, r.project_id)) out.push(r.project_id)
+    if (await isAgentProjectMember(admin, principal.userId, r.project_id, principal)) out.push(r.project_id)
   }
   return projectsWithModule(out, 'agents', { client: admin })   // 목록형 — agents 가 꺼진 프로젝트는 생략(스펙 §4.2)
 }

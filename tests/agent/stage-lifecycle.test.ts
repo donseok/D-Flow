@@ -5,7 +5,7 @@ import { NextRequest } from 'next/server'
  * 단계 전이 배선. 라우트(claim·완료 보고)는 원자 전이 RPC(apply_workflow_event, 0096)를 한 번 부르고
  * 단계·실적 계산은 DB 가 한다(스펙 2026-09-15 §4) — 여기서는 사건 인자·부수효과(스냅샷)·실패 처리를 본다.
  * 승인·반려 액션도 같은 RPC 를 사건만 바꿔 부른다.
- * 레거시 시크릿 경로만 사용 — agent_runners 조회를 피해 큐를 단순하게 유지한다.
+ * 신원은 자격증명(integration_credentials 의 agent_runner 행) 소유자다 — useAdmin 이 기본 자격증명 큐를 싣는다(SP7 §5.1.4).
  */
 
 const mocks = vi.hoisted(() => ({
@@ -32,32 +32,31 @@ import { POST as claimPOST } from '@/app/api/v1/agent/work/[id]/claim/route'
 import { POST as reportPOST } from '@/app/api/v1/agent/work/[id]/report/route'
 import { approveAgentCompletion, rejectAgentCompletion } from '@/app/actions/agentWork'
 import { ERR_TRANSITION_RPC } from '@/lib/agent/workflowEvent'
-import { profileEq } from '../fixtures/profiles'
-import { axes, roster, rosterRow } from '../fixtures/actorQueues'
+import { credAxes, roster, rosterRow } from '../fixtures/actorQueues'
+import { agentCredential, CRED_OWNER, ownerLookup } from '../fixtures/credentials'
 
-const SECRET = 'test-agent-secret'
+const CRED = agentCredential()
 const P1 = '11111111-1111-4111-8111-111111111111'
 const O1 = '22222222-2222-4222-8222-222222222222'
 const W1 = '33333333-3333-4333-8333-333333333333'
 const DEP_ID = '44444444-4444-4444-8444-444444444444'
 const DEP_REF = 'MES/TSK-01-00'
 const R9 = '99999999-9999-4999-8999-999999999999' // 화면이 본 최신 completion 보고
-const USER = { id: 'u-1', email: 'dev@example.com', user_metadata: {} }
+const USER = { id: CRED_OWNER, email: 'dev@example.com' } // 토큰 소유자
 
 type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 type Captured = { op: 'update' | 'insert'; payload: unknown }
 /** 전이 RPC 기본 응답 — 부수효과(스냅샷·도달 알림)가 없는 성공. 케이스마다 queues.rpc 로 덮는다. */
 const RPC_OK = { ok: true, order_status: 'claimed', stage: 'ip', actual_pct: null, stage_changed: false, actual_changed: false, reached_first: false, skipped: null }
 
-function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
+function useAdmin(queues: Record<string, Resp[]>) {
+  queues = { integration_credentials: CRED.queue(), ...queues }
   const captured: Record<string, Captured[]> = {}
   const admin = {
     from: vi.fn((table: string) => {
       const resp: Resp = (queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
       for (const k of ['select', 'delete', 'eq', 'in', 'order', 'limit', 'contains', 'range']) b[k] = () => b
-      // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
-      if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, users)
       b.update = (payload: unknown) => { (captured[table] ??= []).push({ op: 'update', payload }); return b }
       b.insert = (payload: unknown) => { (captured[table] ??= []).push({ op: 'insert', payload }); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
@@ -70,6 +69,7 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
       const resp = (queues.rpc ?? []).shift() ?? { data: RPC_OK }
       return { data: resp.data ?? null, error: resp.error ?? null }
     }),
+    auth: { admin: { getUserById: vi.fn(ownerLookup()) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
   return { admin, captured }
@@ -77,13 +77,12 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
 
 const post = (url: string, body: unknown) => new NextRequest(url, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SECRET}` },
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CRED.token}` },
   body: JSON.stringify(body),
 })
 const ctx = { params: Promise.resolve({ id: O1 }) }
 const member = () => ({
-  agent_projects: [{ data: { enabled: true } }],
-  ...axes([P1]),
+  ...credAxes([P1]),
   project_members: [roster(rosterRow(P1, 'member'))],
 })
 
@@ -96,7 +95,6 @@ const ITEM_ROW = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   process.env.AGENT_API_ENABLED = 'true'
-  process.env.AGENT_API_SECRET = SECRET
   vi.clearAllMocks()
   mocks.emitNotification.mockResolvedValue({ ok: true })
 })
@@ -111,7 +109,7 @@ describe('claim → 전이 RPC(claim 사건)', () => {
     expect(res.status).toBe(200)
     expect(admin.rpc).toHaveBeenCalledTimes(1)
     expect(admin.rpc).toHaveBeenCalledWith('apply_workflow_event', expect.objectContaining({
-      p_event: 'claim', p_order_id: O1, p_agent: 'claude-cli', p_agent_user_id: null, p_actor: USER.id,
+      p_event: 'claim', p_order_id: O1, p_agent: 'claude-cli', p_agent_user_id: USER.id, p_actor: USER.id,
     }))
     expect(captured.wbs_items).toBeUndefined()
     // 상태·점유·단계·실적은 여전히 RPC 만 쓴다. 라우트가 직접 쓰는 것은 전이가 아닌
@@ -171,14 +169,14 @@ describe('claim → 전이 RPC(claim 사건)', () => {
 
 describe('completion 보고 → 전이 RPC(report_completion 사건)', () => {
   const CLAIMED = {
-    id: O1, project_id: P1, status: 'claimed', claimed_by: 'cli-1', claimed_by_user_id: null, wbs_item_id: W1,
+    id: O1, project_id: P1, status: 'claimed', claimed_by: 'cli-1', claimed_by_user_id: USER.id, wbs_item_id: W1,
   }
   const reportBody = (kind: 'progress' | 'completion', percent: number) => ({
     user_email: USER.email, agent: 'cli-1', kind, percent, summary: '요약',
     links: [{ url: 'https://github.com/x/pr/1' }],
   })
 
-  it('completion 성공 → report_completion 사건 한 번(레거시 점유자 라벨 일치 조건), 항목을 직접 쓰지 않는다', async () => {
+  it('completion 성공 → report_completion 사건 한 번(점유자 계정 일치 조건 — 라벨은 넘기지 않는다), 항목을 직접 쓰지 않는다', async () => {
     const { admin, captured } = useAdmin({
       agent_work_orders: [{ data: CLAIMED }],
       agent_work_reports: [{ data: [{ id: 'r1' }] }],
@@ -189,7 +187,7 @@ describe('completion 보고 → 전이 RPC(report_completion 사건)', () => {
     expect(res.status).toBe(200)
     expect((await res.json()).status).toBe('reported')
     expect(admin.rpc).toHaveBeenCalledWith('apply_workflow_event', expect.objectContaining({
-      p_event: 'report_completion', p_order_id: O1, p_agent: 'cli-1', p_agent_user_id: null,
+      p_event: 'report_completion', p_order_id: O1, p_agent: null, p_agent_user_id: USER.id, p_actor: USER.id,
     }))
     expect((captured.wbs_items ?? []).filter((c) => c.op === 'update')).toHaveLength(0)
   })

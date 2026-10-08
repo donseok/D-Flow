@@ -33,13 +33,13 @@
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 npm run env:local 뒤 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 서버(A1 은 npm run dev, A2 부터 next build 뒤 npx next start -p 3101)가
 // 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
-//   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3101 MINUTES_API_ENABLED=true MINUTES_API_SECRET=<시크릿> CRON_SECRET=<시크릿> npm run dev -- -p 3101
-//   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… MINUTES_API_SECRET=<같은 시크릿> CRON_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
+//   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3101 MINUTES_API_ENABLED=true CRON_SECRET=<시크릿> npm run dev -- -p 3101
+//   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… CRON_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
 //   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] npx --yes -p playwright@1.58.2 node scripts/e2e-local.mjs
 //   (sp3b-E11 이 브라우저로 소프트 이동을 본다 — Playwright 1.58.2 를 npx 로 PATH 에 싣는다. 없으면 그 단계가 실패한다)
 // 비밀번호·시크릿은 env 로만 받고 출력하지 않는다(ana·외부 계정·carol 의 비밀번호는 실행마다 새로 만든다).
 // 결과는 stdout 에 JSON 한 덩어리. 어느 단계든 실패하면 그 자리에서 멈추고 exit 1.
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -105,9 +105,25 @@ if (!password) { console.error('✗ BOOTSTRAP_PASSWORD 가 없다 — dev:bootst
 // B 관리자 비밀번호 — 기본값을 두지 않는다(리포에 적힌 값이 로컬 계정 비밀번호가 되지 않게). 8자 미만은 createAccount 가 거부한다.
 const bPassword = process.env.E2E_B_PASSWORD
 if (!bPassword || bPassword.length < 8) { console.error('✗ E2E_B_PASSWORD 가 없거나 8자 미만이다'); process.exit(1) }
-// 외부 회의록 API 시크릿 — dev 서버를 띄울 때 준 MINUTES_API_SECRET 과 같은 값(MINUTES_API_ENABLED=true 도 필요, 없으면 라우트가 404).
-const minutesApiSecret = process.env.MINUTES_API_SECRET
-if (!minutesApiSecret) { console.error('✗ MINUTES_API_SECRET 가 없다 — dev 서버에 준 값과 같은 값을 넘긴다'); process.exit(1) }
+// 외부 회의록 API 의 자격증명은 env 시크릿이 아니라 워크스페이스별 integration_credentials(kind='minutes_api') 행이다 — 단계 18 이
+// issueMinutesToken 으로 워크스페이스마다 한 행을 만든다. dev 서버에는 MINUTES_API_ENABLED=true 만 필요하다(없으면 라우트가 404).
+/**
+ * 회의록 연동 토큰 발급(로컬 전용) — 발급 화면 대신 service_role 로 행을 넣는다. 형식은 앱의 generateCredentialToken('minutes_api')
+ * (src/lib/agent/token.ts)과 같다: dflow_int_<prefix 12자 영숫자>_<secret 43자>, DB 에는 sha256 hex 만. 평문은 반환만 하고 출력하지 않는다.
+ */
+async function issueMinutesToken(svc, workspaceId, createdBy) {
+  let prefix = ''
+  while (prefix.length < 12) prefix += randomBytes(12).toString('base64url').replace(/[^A-Za-z0-9]/g, '')
+  prefix = prefix.slice(0, 12)
+  const token = `dflow_int_${prefix}_${randomBytes(32).toString('base64url')}`
+  const { error } = await svc.from('integration_credentials').insert({
+    workspace_id: workspaceId, kind: 'minutes_api', name: `e2e-${prefix}`, token_prefix: prefix,
+    token_hash: createHash('sha256').update(token).digest('hex'), created_by: createdBy,
+    expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+  })
+  if (error) throw new Error(`회의록 연동 자격증명 발급 실패: ${error.message}`)
+  return token
+}
 const cronSecret = process.env.CRON_SECRET
 if (!cronSecret) { console.error('✗ CRON_SECRET 가 없다 — dev 서버에 준 값과 같은 값을 넘긴다'); process.exit(1) }
 
@@ -413,14 +429,24 @@ async function main() {
     ['report-xlsx', `/api/report?projectId=${A.id}&format=xlsx`, 'report.xlsx'],
     ['wbs-xlsx', `/api/export?projectId=${A.id}`, 'wbs_export.xlsx'],
   ]
+  // SP6 뒤로 주간보고 출력은 양식 엔진을 거친다 — 주간 영역이 0개인 프로젝트는 409 '설정 필요'다(영역이 있는 출력은 weekly-outputs·
+  // weekly-registered-names 단계가 본다). 이 시점의 A 는 영역이 없으므로 보고서 둘은 그 거절을, WBS 엑셀은 파일을 확인한다.
+  const reportRefusals = []
   for (const [kind, path, fallback] of exports) {
+    if (kind.startsWith('report-')) {
+      const refused = await admin.http('GET', path, { expect: 409 })
+      const body = await refused.json()
+      if (body?.error !== '설정 필요') throw new Fail(`${kind}: 영역 없는 프로젝트의 거절 문구가 다르다 — ${JSON.stringify(body)}`)
+      reportRefusals.push({ kind, status: 409 })
+      continue
+    }
     const res = await admin.http('GET', path)
     const buf = Buffer.from(await res.arrayBuffer())
     const file = join(outDir, dispositionFilename(res.headers.get('content-disposition'), fallback))
     writeFileSync(file, buf)
     summary.artifacts.push({ kind, file, bytes: buf.length, contentType: res.headers.get('content-type') })
   }
-  step('export', { files: summary.artifacts.map((a) => a.file) })
+  step('export', { files: summary.artifacts.map((a) => a.file), reportRefusals })
 
   // ── 9. 산출물 zip 의 모든 항목(XML·rels·docProps·미디어)을 UTF-8 로 풀어 흔적 검사.
   for (const a of summary.artifacts) {
@@ -730,27 +756,30 @@ async function main() {
   if (flipRows.some((r) => r.actorName === '삭제된 계정' || r.actorName === '시스템')) throw new Fail(`행위자 이름이 비었다: ${JSON.stringify(flipRows)}`)
   step('authz-events', { rows: events.map((e) => ({ id: e.id, before: e.before, after: e.after, cause: e.cause, hasCommandId: !!e.command_id })), listed: flipRows })
 
-  // ── 18. 외부 회의록 API(시크릿 + user_email) — meta 의 projects·목록의 items 가 그 사람의 워크스페이스로만 좁혀진다.
-  // A 관리자(ana)·A 에 초대된 외부 계정은 C 를 못 보고, B 관리자(bea)는 C 만 본다. 플랫폼 관리자는 전부 본다(대조 — 음성 판정이
-  // 비어 있지 않다는 근거). 모르는 이메일은 403 unknown_user, 볼 수 없는 프로젝트의 회의 목록은 404.
-  const api = async (path, expect = 200) => {
-    const res = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${minutesApiSecret}` }, redirect: 'manual' })
+  // ── 18. 외부 회의록 API(워크스페이스 자격증명 + user_email) — meta 의 projects·목록의 items 가 자격증명의 워크스페이스로만 좁혀진다.
+  // A 자격증명으로 A 관리자(ana)·A 에 초대된 외부 계정은 C 를 못 보고, B 자격증명으로 B 관리자(bea)는 C 만 본다. 플랫폼 관리자도 A 자격증명으로는
+  // A 뿐이다(승격 없음). 다른 워크스페이스의 자격증명으로는 그 사람이 403 unknown_user(그 워크스페이스의 사용자가 아님), 자격증명 형식이 아닌
+  // Bearer 는 401, 모르는 이메일은 403 unknown_user, 볼 수 없는 프로젝트의 회의 목록은 404.
+  const minutesTokenA = await issueMinutesToken(svc, wsA, me.id)
+  const minutesTokenB = await issueMinutesToken(svc, wsB, me.id)
+  const api = async (path, expect = 200, token = minutesTokenA) => {
+    const res = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${token}` }, redirect: 'manual' })
     const body = await res.json().catch(() => null)
     if (res.status !== expect) throw new Fail(`GET ${path} → ${res.status}(기대 ${expect}): ${JSON.stringify(body)?.slice(0, 300)}`)
     return body
   }
-  const meta = async (who) => {
-    const body = await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(who)}`)
+  const meta = async (who, token = minutesTokenA) => {
+    const body = await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(who)}`, 200, token)
     if (!Array.isArray(body?.projects) || !Array.isArray(body?.teams)) throw new Fail(`meta(${who}) 응답 형식: ${JSON.stringify(body)?.slice(0, 300)}`)
     return { projectIds: body.projects.map((p) => p.id), teams: body.teams }
   }
-  const listTitles = async (who) => {
-    const body = await api(`/api/v1/minutes?user_email=${encodeURIComponent(who)}&per_page=100`)
+  const listTitles = async (who, token = minutesTokenA) => {
+    const body = await api(`/api/v1/minutes?user_email=${encodeURIComponent(who)}&per_page=100`, 200, token)
     if (!Array.isArray(body?.items)) throw new Fail(`목록(${who}) 응답 형식: ${JSON.stringify(body)?.slice(0, 300)}`)
     return body.items.map((i) => i.title)
   }
   const aIds = [A.id, B.id, A2.id]
-  const metas = { ana: await meta(A_ADMIN.email), outsider: await meta(OUTSIDER.email), bea: await meta(B_ADMIN.email), platformAdmin: await meta(email) }
+  const metas = { ana: await meta(A_ADMIN.email), outsider: await meta(OUTSIDER.email), bea: await meta(B_ADMIN.email, minutesTokenB), platformAdmin: await meta(email) }
   const api18 = {
     meta: {
       ana: { projectIds: metas.ana.projectIds, leaked: leakedIds(metas.ana.projectIds, [C.id]), teams: metas.ana.teams },
@@ -758,7 +787,7 @@ async function main() {
       bea: { projectIds: metas.bea.projectIds, leaked: leakedIds(metas.bea.projectIds, aIds), teams: metas.bea.teams },
       platformAdmin: { sees: leakedIds(metas.platformAdmin.projectIds, [...aIds, C.id]).sort() },
     },
-    list: { ana: presentTexts((await listTitles(A_ADMIN.email)).join('\n'), titles), bea: presentTexts((await listTitles(B_ADMIN.email)).join('\n'), titles) },
+    list: { ana: presentTexts((await listTitles(A_ADMIN.email)).join('\n'), titles), bea: presentTexts((await listTitles(B_ADMIN.email, minutesTokenB)).join('\n'), titles) },
   }
   same('ana meta 의 B 프로젝트', api18.meta.ana.leaked, [])
   same('outsider meta 의 B 프로젝트', api18.meta.outsider.leaked, [])
@@ -768,13 +797,19 @@ async function main() {
   if (!metas.outsider.projectIds.includes(A2.id)) throw new Fail('outsider meta 에 초대받은 A2 가 없다')
   if (!metas.ana.teams.includes(WS_TEAM)) throw new Fail(`ana meta 팀에 A 공용 팀 ${WS_TEAM} 이 없다: ${metas.ana.teams}`)
   if (metas.bea.teams.includes(WS_TEAM)) throw new Fail(`bea meta 팀에 A 공용 팀 ${WS_TEAM} 이 실렸다`)
-  same('플랫폼 관리자 meta(대조 — 전 워크스페이스)', api18.meta.platformAdmin.sees, [...aIds, C.id].sort())
+  same('플랫폼 관리자 meta(A 자격증명 — A 뿐, 다른 워크스페이스로 넓어지지 않는다)', api18.meta.platformAdmin.sees, [...aIds].sort())
+  const crossWs = {
+    beaWithA: (await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(B_ADMIN.email)}`, 403))?.code,
+    anaWithB: (await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(A_ADMIN.email)}`, 403, minutesTokenB))?.code,
+    notACredential: (await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(A_ADMIN.email)}`, 401, `e2e-${randomUUID()}`))?.code,
+  }
+  same('다른 워크스페이스 자격증명·자격증명 아닌 Bearer', crossWs, { beaWithA: 'unknown_user', anaWithB: 'unknown_user', notACredential: 'unauthorized' })
   same('ana 목록의 A 회의록(대조)', api18.list.ana, titles)
   same('bea 목록의 A 회의록', api18.list.bea, [])
   const unknown = await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent('e2e-nobody@example.com')}`, 403)
   same('모르는 이메일', unknown?.code, 'unknown_user')
-  const hiddenMeetings = await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(B_ADMIN.email)}&project_id=${A2.id}`, 404)
-  step('minutes-api-scope', { ...api18, unknownUser: { status: 403, code: unknown.code }, beaMeetingsOfA2: { status: 404, body: hiddenMeetings } })
+  const hiddenMeetings = await api(`/api/v1/minutes/meta?user_email=${encodeURIComponent(B_ADMIN.email)}&project_id=${A2.id}`, 404, minutesTokenB)
+  step('minutes-api-scope', { ...api18, crossWs, unknownUser: { status: 403, code: unknown.code }, beaMeetingsOfA2: { status: 404, body: hiddenMeetings } })
 
   // ── 18b. SP4 A1(스펙 §6.3 — 단계는 이름으로 부른다, Q7). render-pages 앞이다 — 그 단계가 B 의 주간·설정 화면을 영역이 든 상태로 렌더한다.
   //    주 키는 앱이 정한다(weekKeyOf — W30): 러너는 날짜(오늘·±7일)를 넘기고 week_start 는 DB 에서 다시 읽는다. 오늘은 B 에 저장된 tz 다(SP5 A).
@@ -1228,7 +1263,7 @@ async function main() {
       const utc = await day('UTC')
       const bad = await admin.sb.rpc('usage_daily_actives', { p_from: '2026-01-13', p_to: '2026-01-16', p_timezone: 'Asia/Seol' })
       const usageHtml = await (await admin.http('GET', wsPath(wsA, 'usage'))).text()
-      usage = { la, utc, invalidCode: bad.error?.code ?? null, utcNote: usageHtml.replace(/<!-- -->/g, '').includes('UTC 기준') }   // '{timezone} 기준' 은 JSX 보간 — SSR 이 텍스트 노드 사이에 <!-- --> 를 넣는다
+      usage = { la, utc, invalidCode: bad.error?.code ?? null, tzNote: usageHtml.replace(/<!-- -->/g, '').includes(`${WORKSPACE_TZ} 기준`) }   // '{timezone} 기준' 은 JSX 보간 — SSR 이 텍스트 노드 사이에 <!-- --> 를 넣는다
     } finally {
       await svc.from('usage_events').delete().eq('id', ev.id)
     }
@@ -1246,7 +1281,7 @@ async function main() {
         portal: homeHtml.includes(annNow) && !homeHtml.includes(annLater),
         usageDays: usage.la.includes('2026-01-14') && !usage.la.includes('2026-01-15') && usage.utc.includes('2026-01-15') && !usage.utc.includes('2026-01-14'),
         usageInvalid: usage.invalidCode === '22023',
-        utcNote: usage.utcNote,
+        tzNote: usage.tzNote,   // SP8 뒤로 사용 현황은 그 워크스페이스의 시간대로 센다(예전엔 전체 합산이라 UTC 고정이었다)
       },
     }
   } finally {
@@ -1750,7 +1785,7 @@ async function main() {
   const wsToday = todayInTz(await tzOfWorkspace(wsA))   // SP5 A — 외부 회의록 날짜는 워크스페이스에 저장된 tz 의 오늘
   const uploadOff = await fetch(`${base}/api/v1/minutes`, {
     method: 'POST', redirect: 'manual',
-    headers: { authorization: `Bearer ${minutesApiSecret}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${minutesTokenA}`, 'content-type': 'application/json' },
     body: JSON.stringify({ user_email: A_ADMIN.email, date: wsToday, team: WS_TEAM, title: 'E2E 관문', body_markdown: '# 관문', external_id: externalId }),
   })
   const integration = {
@@ -1759,7 +1794,7 @@ async function main() {
     list: await api(`/api/v1/minutes?user_email=${encodeURIComponent(A_ADMIN.email)}`, 409),
     upload: { status: uploadOff.status, body: await uploadOff.json().catch(() => null) },
     createdRows: rows('업로드 행', await svc.from('minutes').select('id').eq('external_id', externalId)).length,
-    beaStillOpen: (await meta(B_ADMIN.email)).projectIds,
+    beaStillOpen: (await meta(B_ADMIN.email, minutesTokenB)).projectIds,
   }
   step('module-minutes-integration-off', integration,
     !integration.allowedBefore || integration.meta?.code !== 'module_disabled' || integration.list?.code !== 'module_disabled'
@@ -1772,7 +1807,7 @@ async function main() {
   const entityId = `e2e-${randomUUID()}`
   const [job] = rows('색인 대기 행', await svc.from('ai_index_jobs').insert({
     job_key: ['v1', A.id, 'wbs', 'wbs_item', entityId].map(encodeURIComponent).join(':'),
-    operation: 'upsert', project_id: A.id, domain: 'wbs', entity_type: 'wbs_item', entity_id: entityId,
+    operation: 'upsert', project_id: A.id, workspace_id: wsA, domain: 'wbs', entity_type: 'wbs_item', entity_id: entityId,   // workspace_id — 0036 뒤로 필수
     payload: {}, status: 'pending', run_after: new Date(Date.now() - 86_400_000).toISOString(),
   }).select('id'))
   const cron = await fetch(`${base}/api/cron/ai-index`, { headers: { authorization: `Bearer ${cronSecret}` }, redirect: 'manual' })

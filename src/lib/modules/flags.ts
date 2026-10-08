@@ -4,7 +4,7 @@ type Env = Record<string, string | undefined>
 const on = (env: Env, name: string) => env[name] === 'true'
 
 export function agentApiEnabled(env: Env = process.env): boolean { return on(env, 'AGENT_API_ENABLED') }
-/** 모듈 가용 술어 — 플래그만 본다(정본 §3.2.2). 라우트의 2단 게이트(시크릿 존재)는 src/lib/minutes/externalApi.ts 가 따로 본다 */
+/** 모듈 가용 술어 — 플래그만 본다(정본 §3.2.2). 라우트 킬스위치도 같은 플래그 하나다(SP7 — 시크릿 존재 조건은 삭제됐다) */
 export function minutesApiEnabled(env: Env = process.env): boolean { return on(env, 'MINUTES_API_ENABLED') }
 export function wikiServiceEnabled(env: Env = process.env): boolean { return on(env, 'WIKI_SERVICE_ENABLED') }
 export function wikiWorkerEnabled(env: Env = process.env): boolean { return on(env, 'WIKI_WORKER_ENABLED') }

@@ -20,16 +20,20 @@ vi.mock('next/server', async (orig) => {
 })
 
 import { POST as reportPOST } from '@/app/api/v1/agent/work/[id]/report/route'
-import { profileEq } from '../fixtures/profiles'
-import { axes, roster, rosterRow } from '../fixtures/actorQueues'
+import { credAxes, roster, rosterRow } from '../fixtures/actorQueues'
+import { agentCredential, CRED_OWNER, ownerLookup } from '../fixtures/credentials'
 
-const SECRET = 'test-agent-secret'
-const USER = { id: 'u-1', email: 'dev@example.com', user_metadata: {} }
+// 보고의 신원은 자격증명(integration_credentials 의 agent_runner 행) 소유자다(SP7 §5.1.4 — 배포 전역 시크릿과 body user_email 신원·
+// 라벨 소유 판정은 삭제됐다). 점유 소유는 claimed_by_user_id(토큰 소유자) 하나로 판정한다.
+const LEGACY_SECRET = 'test-agent-secret'
+const CRED = agentCredential()
 type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 /** 전이 RPC 기본 응답 — 부수효과(스냅샷·도달 알림)가 없는 성공. 케이스마다 queues.rpc 로 덮는다. */
 const RPC_OK = { ok: true, order_status: 'reported', stage: 'im', actual_pct: null, stage_changed: false, actual_changed: false, reached_first: false, skipped: null }
 
-function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
+/** 큐에 integration_credentials 가 없으면 유효한 자격증명(CRED)으로 인증된다 — 조회 → last_used_at 갱신 두 응답. */
+function useAdmin(queues: Record<string, Resp[]>) {
+  queues = { integration_credentials: CRED.queue(), ...queues }
   /** from(table) 마다 체인 호출(select·eq…)을 남긴다 — 알림 수신자 조회의 필터 계약을 단언한다. */
   const chains: Array<{ table: string; ops: Array<[string, unknown[]]> }> = []
   const admin = {
@@ -40,8 +44,6 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
       const rec = { table, ops: [] as Array<[string, unknown[]]> }
       chains.push(rec)
       for (const k of ['select', 'update', 'insert', 'delete', 'eq', 'in', 'limit', 'order', 'range']) b[k] = (...a: unknown[]) => { rec.ops.push([k, a]); return b }
-      // resolveUserByEmail(레거시 경로)는 profiles 를 eq('email') 로 한 건 읽는다 — 큐가 없으면 계정 fixture 에서 찾는다.
-      if (table === 'profiles' && !queues.profiles) b.eq = profileEq(b, resp, users)
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
         Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null, count: resp.count ?? null }).then(r)
@@ -51,28 +53,28 @@ function useAdmin(queues: Record<string, Resp[]>, users = [USER]) {
       const resp = (queues.rpc ?? []).shift() ?? { data: RPC_OK }
       return { data: resp.data ?? null, error: resp.error ?? null }
     }),
+    auth: { admin: { getUserById: vi.fn(ownerLookup()) } },
   }
   mocks.createAdminClient.mockReturnValue(admin)
   return admin
 }
 
-const CLAIMED = { id: ORDER_ID, project_id: PROJECT_ID, status: 'claimed', claimed_by: 'cli-1', wbs_item_id: WBS_ITEM_ID }
-const post = (body: unknown) => new NextRequest(`http://l/api/v1/agent/work/${ORDER_ID}/report`, {
+const CLAIMED = { id: ORDER_ID, project_id: PROJECT_ID, status: 'claimed', claimed_by: 'cli-1', claimed_by_user_id: CRED_OWNER as string | null, wbs_item_id: WBS_ITEM_ID }
+const post = (body: unknown, bearer: string = CRED.token) => new NextRequest(`http://l/api/v1/agent/work/${ORDER_ID}/report`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SECRET}` },
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bearer}` },
   body: JSON.stringify(body),
 })
 const BASE = { user_email: 'dev@example.com', agent: 'cli-1', summary: '요약', links: [{ url: 'https://github.com/x/pr/1' }] }
 const ctx = { params: Promise.resolve({ id: ORDER_ID }) }
 const member = () => ({
-  agent_projects: [{ data: { project_id: PROJECT_ID, enabled: true } }],
-  ...axes([PROJECT_ID]),
+  ...credAxes([PROJECT_ID]),
   project_members: [roster(rosterRow(PROJECT_ID, 'member'))],
 })
 
 beforeEach(() => {
   process.env.AGENT_API_ENABLED = 'true'
-  process.env.AGENT_API_SECRET = SECRET
+  process.env.AGENT_API_SECRET = LEGACY_SECRET // 설정돼 있어도 인증에 쓰이지 않는다(SP7)
   vi.clearAllMocks()
 })
 
@@ -123,7 +125,7 @@ describe('POST report', () => {
     expect(res.status).toBe(400)
     expect(admin.rpc).not.toHaveBeenCalled()
   })
-  it('completion — 전이 RPC 한 번으로 reported(레거시는 점유자 라벨 일치 조건)', async () => {
+  it('completion — 전이 RPC 한 번으로 reported(점유자 계정 일치 조건 — 라벨은 넘기지 않는다)', async () => {
     const admin = useAdmin({
       agent_work_orders: [{ data: CLAIMED }],
       agent_work_reports: [{ data: [{ id: 'r1' }] }],
@@ -134,7 +136,7 @@ describe('POST report', () => {
     expect((await res.json()).status).toBe('reported')
     expect(admin.rpc).toHaveBeenCalledTimes(1)
     expect(admin.rpc).toHaveBeenCalledWith('apply_workflow_event', expect.objectContaining({
-      p_event: 'report_completion', p_order_id: ORDER_ID, p_agent: 'cli-1', p_agent_user_id: null, p_actor: 'u-1',
+      p_event: 'report_completion', p_order_id: ORDER_ID, p_agent: null, p_agent_user_id: CRED_OWNER, p_actor: CRED_OWNER,
     }))
   })
   it('completion 이 실적을 바꾸고 im 에 처음 도달하면 스냅샷을 남기고 도달 알림용 항목을 읽는다', async () => {
@@ -173,10 +175,27 @@ describe('POST report', () => {
     useAdmin({ agent_work_orders: [{ data: { ...CLAIMED, status: 'reported' } }], ...member() })
     expect((await (await reportPOST(post({ ...BASE, kind: 'progress', percent: 50 }), ctx)).json()).code).toBe('conflict')
   })
-  it('타 에이전트 점유 주문에 보고 403', async () => {
-    useAdmin({ agent_work_orders: [{ data: { ...CLAIMED, claimed_by: 'other' } }], ...member() })
+  it('타 사용자 점유 주문에 보고 403 not_claim_owner — 보고 행을 남기지 않는다', async () => {
+    const admin = useAdmin({ agent_work_orders: [{ data: { ...CLAIMED, claimed_by: 'other', claimed_by_user_id: 'u-other' } }], ...member() })
     const res = await reportPOST(post({ ...BASE, kind: 'progress', percent: 50 }), ctx)
     expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('not_claim_owner')
+    expect(admin.from.mock.calls.map(c => c[0])).not.toContain('agent_work_reports')
+  })
+  // 옛 시크릿 경로는 라벨(claimed_by)이 같으면 소유로 봤다 — 그 길은 시크릿 principal 과 함께 사라졌다.
+  it('점유자 계정이 없는 옛 점유(claimed_by_user_id null)는 라벨이 같아도 보고 403 not_claim_owner', async () => {
+    const admin = useAdmin({ agent_work_orders: [{ data: { ...CLAIMED, claimed_by_user_id: null } }], ...member() })
+    const res = await reportPOST(post({ ...BASE, kind: 'progress', percent: 50 }), ctx)
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('not_claim_owner')
+    expect(admin.from.mock.calls.map(c => c[0])).not.toContain('agent_work_reports')
+  })
+  it('옛 시크릿 값 Bearer 는 401 — env 에 AGENT_API_SECRET 이 있고 body user_email 이 멤버여도 보고하지 못한다', async () => {
+    const admin = useAdmin({ agent_work_orders: [{ data: CLAIMED }], agent_work_reports: [{ data: [{ id: 'r1' }] }], ...member() })
+    const res = await reportPOST(post({ ...BASE, kind: 'completion', percent: 100 }, LEGACY_SECRET), ctx)
+    expect(res.status).toBe(401)
+    expect(admin.from).not.toHaveBeenCalled()
+    expect(admin.rpc).not.toHaveBeenCalled()
   })
   it('wbs_item 이 삭제된 주문의 progress 도 보고 행은 기록한다 — 반영할 실적이 없으니 막을 이유도 없다', async () => {
     useAdmin({
@@ -210,7 +229,7 @@ describe('POST report', () => {
   })
   it('completion insert 실패 500 — 전이 RPC 미호출', async () => {
     const admin = useAdmin({
-      agent_work_orders: [{ data: CLAIMED }], // loadGatedOrder 만
+      agent_work_orders: [{ data: CLAIMED }], // loadGatedOrderForUser 만
       agent_work_reports: [{ data: null, error: { message: 'unique violation' } }],
       ...member(),
     })

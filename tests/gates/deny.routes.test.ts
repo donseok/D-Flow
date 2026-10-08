@@ -26,7 +26,7 @@ afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleSt
 const DENY_TOKENS = ['ERR_MODULE_DISABLED', 'module_disabled', 'MODULE_DISABLED']
 /** 모듈 라우트 핸들러가 부르는 판정 — 관문 둘 + 목록형 둘 + 에이전트 두 원천 AND 헬퍼(과제 18). 원천은 _ast.GATE_SOURCES */
 const MODULE_ROUTE_GATES: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'requireScopedSessionModule', 'projectsWithModule', 'workspacesWithModule',
-  'requireAgentProject', 'loadGatedOrder', 'loadGatedOrderForUser', 'accessibleProjectIds'])
+  'requireAgentProject', 'loadGatedOrderForUser', 'accessibleProjectIds'])
 /** 세션 없는 라우트(쿠키 없음) — 판정 호출마다 { client: admin } 을 넘겨야 켜진 모듈이 닫히지 않는다(map-gates R-G3, F8) */
 const SESSIONLESS: ReadonlySet<GateEntry['guard']> = new Set(['agentPrincipal', 'minutesSecret', 'cronSecret', 'public'])
 const CLIENT_GATES: ReadonlySet<string> = new Set(['requireModule', 'requireSessionModule', 'moduleState', 'projectsWithModule', 'workspacesWithModule'])
@@ -124,7 +124,7 @@ function delegationProblems(key: string, e: GateEntry, f: string, text: string):
   const sub = file.replace(/^src\/app\//, '@/app/').replace(/\.tsx?$/, '')
   const sf = parse(f, text)
   if (e.delegatedStatic) {
-    // v1 에이전트 — 판정은 파일 밖 헬퍼(requireAgentProject·loadGatedOrder*)이고 꺼지면 404 not_found(존재 은닉)라 응답에 거부 토큰이 없다.
+    // v1 에이전트 — 판정은 파일 밖 헬퍼(requireAgentProject·loadGatedOrderForUser)이고 꺼지면 404 not_found(존재 은닉)라 응답에 거부 토큰이 없다.
     // 실행 확인은 세 라우트 테스트가 한다(note). 여기서는 경로와 코드 안의 거부 흔적(주석 제외 — 두 원천 AND 의 거부 mock)만 보고,
     // 메서드 단위 보장은 핸들러 쪽 AST 케이스(판정 원천·결과 사용·최상위 지배)가 맡는다
     if (!text.includes(`'${sub}'`)) return [`${key}: ${f} 에 경로 '${sub}' 가 없다(delegatedStatic)`]

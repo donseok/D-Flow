@@ -3,6 +3,7 @@
 // project_members·projects 를 한 번씩 읽는다(projects 는 range·count — 빌더 목은 range 를 받고 count 를 돌려줘야 한다).
 // 판정이 여러 번이면 axes(…, n) 로 n 벌을 싣는다.
 import { WS } from './actor'
+import { CRED_WS } from './credentials'
 
 type Resp = { data?: unknown; error?: { message: string } | null; count?: number | null }
 
@@ -18,12 +19,20 @@ export function roster(...rows: ReturnType<typeof rosterRow>[]): Resp {
  * project_members 를 뺀 나머지 축 n 벌 — 소속 워크스페이스 WS(role) 와 그 워크스페이스의 프로젝트들.
  * 플랫폼 관리자면 superuser: true(projects 는 필터 없이 전부 읽는다 — 같은 응답을 준다).
  */
-export function axes(projectIds: string[], n = 1, opts: { role?: 'admin' | 'member'; superuser?: boolean } = {}) {
+export function axes(projectIds: string[], n = 1, opts: { role?: 'admin' | 'member'; superuser?: boolean; ws?: string } = {}) {
   const times = <T>(v: T): T[] => Array.from({ length: n }, () => v)
+  const ws = opts.ws ?? WS
   return {
     platform_admins: times<Resp>({ data: opts.superuser ? { user_id: 'u-1' } : null }),
-    workspace_members: times<Resp>({ data: [{ workspace_id: WS, role: opts.role ?? 'member' }] }),
+    workspace_members: times<Resp>({ data: [{ workspace_id: ws, role: opts.role ?? 'member' }] }),
     // buildActor 는 projects 를 id 정렬 페이지로 읽고 count 총합으로 대조한다(fetchAllPages) — count 를 함께 싣는다.
-    projects: times<Resp>({ data: projectIds.map(id => ({ id, workspace_id: WS })), count: projectIds.length }),
+    projects: times<Resp>({ data: projectIds.map(id => ({ id, workspace_id: ws })), count: projectIds.length }),
   }
+}
+/**
+ * 자격증명 경로(에이전트 API)용 — 소속 워크스페이스가 자격증명의 워크스페이스(CRED_WS)다. narrowActor 는 자격증명 워크스페이스의
+ * 프로젝트만 남기므로, 기본 WS('ws-1') 로 실으면 어떤 프로젝트도 보이지 않는다(그건 '다른 워크스페이스 소속' 케이스에 쓴다).
+ */
+export function credAxes(projectIds: string[], n = 1, opts: { role?: 'admin' | 'member'; superuser?: boolean } = {}) {
+  return axes(projectIds, n, { ...opts, ws: CRED_WS })
 }
