@@ -240,21 +240,6 @@ export async function deleteMeeting(id: string): Promise<MeetingActionResult> {
   return { ok: true }
 }
 
-export async function setMeetingAttendees(meetingId: string, memberIds: string[]): Promise<MeetingActionResult> {
-  const gate = await adminOrOwnerGate(meetingId)
-  if (!gate.ok) return { ok: false, error: gate.error }
-  const sb = await createServerClient()
-  const { data: cur, error: curErr } = await sb.from('meetings').select('project_id, created_by').eq('id', meetingId).maybeSingle()
-  if (curErr) return { ok: false, error: ERR_LOOKUP }
-  if (!cur) return { ok: false, error: '회의를 찾을 수 없습니다.' }
-  const isOwner = (cur.created_by as string | null) === gate.userId
-  if (!gate.isAdmin && !isOwner) return { ok: false, error: '권한 없음' }
-  const attErr = await replaceAttendees(sb, meetingId, cur.project_id as string, memberIds)
-  revalidateMeetings(cur.project_id as string)
-  if (attErr) return { ok: false, error: attErr }
-  return { ok: true }
-}
-
 /** occurrenceDate 가 실제 규칙상 회차인지 검증 후 취소 예외행 insert. */
 export async function cancelOccurrence(meetingId: string, occurrenceDate: string): Promise<MeetingActionResult> {
   const gate = await occurrenceGate(meetingId, occurrenceDate)

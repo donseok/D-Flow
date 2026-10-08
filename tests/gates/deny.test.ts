@@ -119,7 +119,8 @@ describe('deny — 모듈 항목(실행)', () => {
 
 const ownerEntries = moduleEntries.filter(([, e]) => e.ownerBranch !== undefined)
 describe('deny — 작성자·주최자 분기(관리자 거부 + 모듈 끔, B5 F1-14·F1-15)', () => {
-  it('ownerBranch 항목이 있다(이슈 넷·회의 다섯)', () => { expect(ownerEntries.length).toBeGreaterThanOrEqual(9) })
+  // 회의는 넷 — 호출자가 없던 setMeetingAttendees 를 지웠다(참석자는 createMeeting·updateMeeting 이 replaceAttendees 로 쓴다)
+  it('ownerBranch 항목이 있다(이슈 넷·회의 넷)', () => { expect(ownerEntries.length).toBeGreaterThanOrEqual(8) })
   it.each(ownerEntries)('%s — 관리자가 아닌 작성자·주최자도 관문을 지나고, 모듈을 끄면 거부 값이며 쓰지 않는다', async (key, e) => {
     const fn = await load(key)
     const target = targetOf(e)

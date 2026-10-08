@@ -276,6 +276,9 @@ export const wikiKo = {
   'wiki.question.submitAnswer': '답변 등록',
   'wiki.question.answering': '등록 중…',
   'wiki.question.answerFailed': '답변을 등록하지 못했습니다.',
+  'wiki.question.askLabel': '질문',
+  'wiki.question.askPlaceholder': '이 주제에서 아직 답이 정리되지 않은 것을 적어 주세요.',
+  'wiki.question.askSubmit': '질문 등록',
 
   'wiki.topic.searchPlaceholder': '주제 검색',
   'wiki.topic.scopeLabel': '문서 범위 전환',

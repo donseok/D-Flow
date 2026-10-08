@@ -33,6 +33,7 @@ import { WikiFeedbackButtons } from './WikiFeedbackButtons'
 import { WikiProposalActions } from './WikiProposalActions'
 import { WikiTopicContext } from './WikiTopicContext'
 import { WikiQuestionAnswerForm } from './WikiQuestionAnswerForm'
+import { WikiQuestionCreateForm } from './WikiQuestionCreateForm'
 import { WikiRevisionRestoreButton } from './WikiRevisionRestoreButton'
 
 type MemoryTopic = NonNullable<WikiTopicDetailData['topic']> & {
@@ -345,6 +346,7 @@ export function WikiTopicDetail({
           <SectionCard eyebrow={t(locale, 'wiki.section.open.eyebrow')} title={t(locale, 'wiki.section.open.memoryTitle')} icon={ShieldAlert} actions={<span className="chip bg-pending-weak text-pending">{openItems.length + questions.length}</span>}>
             <p className="-mt-2 mb-3 text-xs text-ink-muted">{t(locale, 'wiki.section.open.memoryDesc')}</p>
             <OpenLoops items={openItems} questions={questions} locale={locale} projectId={projectId} topicId={topic.id} canCurate={canCurateLegacy} canAnswer={canWriteMemory} timeZone={timeZone} minutesBase={minutesBase} />
+            {canWriteMemory && <WikiQuestionCreateForm projectId={projectId} topicId={topic.id} locale={locale} />}
           </SectionCard>
         </div>
       </div>

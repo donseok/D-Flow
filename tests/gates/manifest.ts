@@ -153,7 +153,6 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('meetings')}#createMeeting`]: { guard: 'projectMember', module: 'meetings', sample: [P, {}] },
   [`${A('meetings')}#updateMeeting`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자(adminOrOwnerGate)', sample: [U, {}], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
   [`${A('meetings')}#deleteMeeting`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
-  [`${A('meetings')}#setMeetingAttendees`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, []], ownerBranch: 'adminOrOwnerGate — 주최자 비교는 호출부' },
   [`${A('meetings')}#cancelOccurrence`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, '2026-09-01'], ownerBranch: 'occurrenceGate → adminOrOwnerGate' },
   [`${A('meetings')}#fetchMyMeetings`]: { guard: 'session', module: 'meetings', note: '내 회의 — 인자 워크스페이스(소속 확인), 행은 getMyMeetings 가 그 워크스페이스로 거른다', sample: [W, '2026-09-01', '2026-09-30'], deny: { ok: true, meetings: [], exceptions: [], categories: {} }, target: 'workspace' },
   [`${A('meetings')}#fetchMeetingDetail`]: { guard: 'session', module: 'meetings', note: '로그인 + 회의 행의 프로젝트', sample: [U], deny: { ok: true, detail: null } },   // 결과형(SP5 B2 — D39): 없음·거부·꺼진 모듈은 detail null, 조회 실패만 ok:false

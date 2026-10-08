@@ -1,15 +1,18 @@
 'use client'
 // 이슈 목록 — 필터(상태·심각도·내담당) + 테이블 + ?focus= 딥링크. (KPI 3장은 사용자 요청으로 제거)
+// 보기 전환(?view=board — SPU2 이월)은 같은 필터 결과를 보드로 그리고, 목록의 다중 선택은 상태 일괄 이동(SPU3 이월)으로 간다.
 // 테이블 골격은 MeetingsView(가로 스크롤 + 행 키보드 패턴), 모달·focus 소비는 AnnouncementsView 복제.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ChevronLeft, ChevronRight, CircleAlert, Paperclip, Plus, Presentation } from 'lucide-react'
+import { ArrowRightLeft, ChevronLeft, ChevronRight, CircleAlert, Columns3, List, Paperclip, Plus, Presentation, X } from 'lucide-react'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { DeleteIssueModal, IssueDetailModal, IssueFormModal } from './IssueModals'
 import { IssueAnalysisModal } from './IssueAnalysisModal'
+import { IssueBoard } from './IssueBoard'
+import { IssueBulkMoveDialog } from './IssueBulkMoveDialog'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import {
   type IssueAreaFilter,
@@ -34,6 +37,7 @@ import type { ProjectMember } from '@/lib/domain/types'
 const PAGE_SIZES = [10, 20, 30, 'all'] as const
 type PageSize = (typeof PAGE_SIZES)[number]
 const DEFAULT_PAGE_SIZE: PageSize = 20
+type IssueViewMode = 'list' | 'board'
 
 export function IssuesView({
   issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, myMemberIdsFailed = false, today, timeZone, entryContext, entryError, severities, sources, statuses, customFields = [],
@@ -70,6 +74,22 @@ export function IssuesView({
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
+
+  // 보기(목록·보드)는 URL ?view= 가 정본이다(작업 계획의 관례) — 목록이 기본이고 값이 없거나 모르는 값이면 목록
+  const urlView: IssueViewMode = searchParams.get('view') === 'board' ? 'board' : 'list'
+  const [view, setView] = useState<IssueViewMode>(urlView)
+  useEffect(() => setView(urlView), [urlView])
+  function changeView(next: IssueViewMode) {
+    setView(next)
+    const q = new URLSearchParams(searchParams.toString())
+    if (next === 'board') q.set('view', 'board')
+    else q.delete('view')
+    const qs = q.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
+  // 일괄 상태 이동의 선택(목록 전용). 필터로 가려진 이슈는 선택돼 있어도 세지 않는다 — 보이지 않는 건을 옮기지 않는다
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkIds, setBulkIds] = useState<string[] | null>(null)
 
   const [statusFilter, setStatusFilter] = useState<IssueStatusFilter>('all')
   // 필터 두 층(SP5b §5): 범주 4탭(제품 고정) + 표시 상태 드롭다운(설정 — 한 범주에 상태가 둘 이상인 프로젝트에서만 보인다)
@@ -154,6 +174,19 @@ export function IssuesView({
     [visible, pageSize, pageStart],
   )
 
+  const selected = useMemo(() => visible.filter(i => selectedIds.has(i.id)), [visible, selectedIds])
+  const pageAllSelected = paged.length > 0 && paged.every(i => selectedIds.has(i.id))
+  function toggleSelected(id: string) {
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  }
+  function togglePage() {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      for (const i of paged) { if (pageAllSelected) next.delete(i.id); else next.add(i.id) }
+      return next
+    })
+  }
+
   const statusTabs = [
     { key: 'all' as const, label: t('issue.filter.all') },
     ...ISSUE_STATUSES.map(s => ({ key: s, label: t(`issue.status.${s}`) })),
@@ -194,6 +227,15 @@ export function IssuesView({
     <div className="space-y-4">
       {/* 툴바: 필터 + 등록 */}
       <div className="flex flex-wrap items-center gap-2">
+        <SegmentedTabs<IssueViewMode>
+          tabs={[
+            { key: 'list', label: t('issue.view.list'), icon: List },
+            { key: 'board', label: t('issue.view.board'), icon: Columns3 },
+          ]}
+          value={view}
+          onChange={changeView}
+          size="sm"
+        />
         <SegmentedTabs
           tabs={statusTabs}
           value={statusFilter}
@@ -272,8 +314,39 @@ export function IssuesView({
         )}
       </div>
 
+      {/* 선택 바 — 목록에서 한 건 이상 골랐을 때만. 조회 전용은 체크박스가 없어 이 바가 생기지 않는다 */}
+      {view === 'list' && canEdit && selected.length > 0 && (
+        <div role="region" aria-label={t('issue.bulk.title')} data-testid="issue-bulk-bar" className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-raised px-3 py-2 shadow-xs">
+          <span className="text-sm font-medium text-fg" data-testid="issue-bulk-count">{t('issue.bulk.selected').replace('{n}', String(selected.length))}</span>
+          {selected.length < visible.length && (
+            <button type="button" className="btn btn-ghost text-xs text-action" onClick={() => setSelectedIds(new Set(visible.map(i => i.id)))}>
+              {t('issue.bulk.selectAll').replace('{n}', String(visible.length))}
+            </button>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <button type="button" className="btn btn-primary inline-flex items-center gap-1.5 text-xs" onClick={() => setBulkIds(selected.map(i => i.id))} data-testid="issue-bulk-open">
+              <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />{t('issue.bulk.open')}
+            </button>
+            <button type="button" className="btn btn-ghost inline-flex items-center gap-1 text-xs" onClick={() => setSelectedIds(new Set())}>
+              <X className="h-3.5 w-3.5" aria-hidden />{t('issue.bulk.clear')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 테이블 (MeetingsView 골격) */}
-      {visible.length > 0 ? (
+      {visible.length > 0 && view === 'board' ? (
+        <IssueBoard
+          issues={visible}
+          statuses={statusDefs}
+          severities={severities}
+          areas={areas}
+          assigneeLabel={assigneeLabel}
+          today={today}
+          canMove={canEdit}
+          onOpen={setViewingId}
+        />
+      ) : visible.length > 0 ? (
         <div className="card overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="min-w-[1100px] w-full table-fixed border-collapse text-[13px]" style={listFields.length ? { minWidth: 1100 + 160 * listFields.length } : undefined}>
@@ -293,7 +366,13 @@ export function IssuesView({
               </colgroup>
               <thead>
                 <tr className="whitespace-nowrap border-b border-border/80 bg-surface-subtle text-left text-[11px] font-semibold text-fg-muted">
-                  <th className="px-2.5 py-2.5">{t('issue.col.no')}</th>
+                  <th className="px-2.5 py-2.5">
+                    {/* 선택 칸은 첫 열 안에 둔다 — 열을 더하면 colgroup 폭을 다시 나눠야 한다(위 주석) */}
+                    <span className="flex items-center gap-2">
+                      {canEdit && <input type="checkbox" className="h-4 w-4 shrink-0" checked={pageAllSelected} onChange={togglePage} aria-label={t('issue.bulk.selectPage')} data-testid="issue-select-page" />}
+                      {t('issue.col.no')}
+                    </span>
+                  </th>
                   <th className="px-2.5 py-2.5">{t('issue.col.area')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.title')}</th>
                   <th className="px-2.5 py-2.5">{t('issue.col.status')}</th>
@@ -327,7 +406,22 @@ export function IssuesView({
                       className="cursor-pointer border-b border-border/60 transition last:border-0 hover:bg-surface-hover focus:outline-none focus-visible:bg-surface-hover"
                     >
                       <td className="whitespace-normal break-all px-2.5 py-2.5 tabular-nums">
-                        <span className="font-semibold text-fg">{issue.code}</span>
+                        <span className="flex items-start gap-2">
+                          {canEdit && (
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 h-4 w-4 shrink-0"
+                              checked={selectedIds.has(issue.id)}
+                              onChange={() => toggleSelected(issue.id)}
+                              // 행 클릭·Enter(상세 열기)로 번지지 않게 한다
+                              onClick={e => e.stopPropagation()}
+                              onKeyDown={e => e.stopPropagation()}
+                              aria-label={t('issue.bulk.select').replace('{code}', issue.code)}
+                              data-testid="issue-select"
+                            />
+                          )}
+                          <span className="font-semibold text-fg">{issue.code}</span>
+                        </span>
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
                         {megaArea ? (
@@ -492,6 +586,13 @@ export function IssuesView({
       />
       <IssueFormModal entryContext={entryContext ?? undefined} canManage={isProjectAdmin} open={formOpen && (editingId === null || editing !== null)} onClose={() => setFormOpen(false)} projectId={projectId} workspaceId={workspaceId} initial={editing} members={members} />
       <DeleteIssueModal issue={deleting} onClose={() => setDeleting(null)} />
+      <IssueBulkMoveDialog
+        open={bulkIds !== null}
+        onClose={ran => { setBulkIds(null); if (ran) setSelectedIds(new Set()) }}
+        selectedIds={bulkIds ?? []}
+        issues={issues}
+        statuses={statusDefs}
+      />
       <IssueAnalysisModal
         areas={areas}
         open={analysisOpen}

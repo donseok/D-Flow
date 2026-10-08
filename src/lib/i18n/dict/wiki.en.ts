@@ -273,6 +273,9 @@ export const wikiEn: Record<keyof typeof wikiKo, string> = {
   'wiki.question.submitAnswer': 'Post answer',
   'wiki.question.answering': 'Posting…',
   'wiki.question.answerFailed': 'Could not post the answer.',
+  'wiki.question.askLabel': 'Question',
+  'wiki.question.askPlaceholder': 'Write what this topic does not answer yet.',
+  'wiki.question.askSubmit': 'Post question',
 
   'wiki.topic.searchPlaceholder': 'Search topics',
   'wiki.topic.scopeLabel': 'Change document scope',
