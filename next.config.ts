@@ -3,7 +3,15 @@ import type { NextConfig } from "next";
 const issueAnalysisTemplate =
   "./src/lib/report/assets/issue-analysis-template.pptx";
 
+// 배포 환경의 정본은 APP_ENV(production|staging|preview|development)다(정본 §5.5.2 ⑦). Vercel 은 APP_ENV 를 모르므로
+// APP_ENV 가 없을 때만 **여기 한 곳에서** VERCEL_ENV 를 읽어 빌드 env 로 옮긴다(아래 env — 빌드 때 process.env.APP_ENV 에 박힌다).
+// 다른 파일은 VERCEL_ENV 를 읽지 않는다(tests/invariants/app-env.test.ts). 자체호스트는 런타임 env 로 APP_ENV 를 준다.
+const APP_ENVS = ["production", "staging", "preview", "development"] as const;
+const mappedAppEnv = process.env.APP_ENV ? undefined : APP_ENVS.find((v) => v === process.env.VERCEL_ENV);
+const appEnv = process.env.APP_ENV ?? mappedAppEnv;
+
 const nextConfig: NextConfig = {
+  ...(mappedAppEnv ? { env: { APP_ENV: mappedAppEnv } } : {}),
   ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   // 라우터 캐시(2026-08-18 성능 감사): 동적 페이지도 30초간 클라이언트 라우터 캐시를 재사용해
   // 방금 본 화면 재방문·뒤로가기가 왕복 0회가 된다. 서버 액션의 revalidatePath / router.refresh
@@ -30,7 +38,7 @@ const nextConfig: NextConfig = {
     }
     // 프로덕션 배포에서만 Vercel Toolbar 숨김(공식 x-vercel-skip-toolbar 헤더).
     // Preview 배포의 코멘트/피드백 기능은 유지한다. (BUG-07)
-    if (process.env.VERCEL_ENV === "production") {
+    if (appEnv === "production") {
       rules.push({
         source: "/:path*",
         headers: [{ key: "x-vercel-skip-toolbar", value: "1" }],

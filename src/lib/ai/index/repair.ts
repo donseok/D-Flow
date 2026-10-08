@@ -1,7 +1,7 @@
 import { embedDocuments } from '@/lib/ai/embeddings'
 import type { SupabaseKnowledgeClient } from './pgvector'
 
-// 크론 워커(/api/chat/index/worker)와 수동 재색인(/api/wiki/reindex) 양쪽이 같은 복구
+// 크론 워커(/api/cron/ai-index 의 POST)와 수동 재색인(/api/wiki/reindex) 양쪽이 같은 복구
 // 로직을 쓴다 — 워커 라우트에서 추출(로직 중복 금지). 동작은 그대로다.
 
 interface RepairRow {

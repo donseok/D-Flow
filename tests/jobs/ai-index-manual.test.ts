@@ -19,9 +19,12 @@ vi.mock('@/lib/ai/index/moduleGate', async (original) => ({
   enabledIndexProjectIds: scope.enabledIndexProjectIds,
 }))
 
-import { POST } from '@/app/api/chat/index/worker/route'
+// 옛 /api/chat/index/worker(POST + x-cron-secret + CHAT_V2_INDEX_CRON_SECRET)의 테스트를 옮겨 왔다(SP8 — 정본 §5.5.2 ①).
+// 네 모드의 동작 단언은 그대로이고, 바뀐 것은 경로·인증 헤더(Authorization: Bearer <CRON_SECRET>)·불일치 코드(403 → 401)뿐이다.
+import { POST } from '@/app/api/cron/ai-index/route'
 
 const SECRET = 'test-cron-secret'
+const AUTH = { Authorization: `Bearer ${SECRET}` }
 
 // 관문 mock 의 값을 바꾼 케이스가 남은 Once 값을 새어 나가지 않게 되돌린다(공통 규칙 — 전역 mock 여섯 함수).
 afterEach(() => {
@@ -31,7 +34,7 @@ afterEach(() => {
 })
 
 function request(body: unknown, headers: Record<string, string> = {}): NextRequest {
-  return new NextRequest('http://localhost/api/chat/index/worker', {
+  return new NextRequest('http://localhost/api/cron/ai-index', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
@@ -103,57 +106,75 @@ function repairAdmin(options: {
   return { from, rpc: vi.fn(), updateIds, limitCalls }
 }
 
-describe('POST /api/chat/index/worker gates', () => {
+describe('POST /api/cron/ai-index gates', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
     vi.stubEnv('CHAT_V2_ENABLED', 'true')
-    vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', SECRET)
+    vi.stubEnv('CRON_SECRET', SECRET)
     scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
     mocks.createAdminClient.mockReturnValue(fakeAdmin())
   })
 
   it('hides the route entirely while the worker flag is off', async () => {
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'false')
-    const response = await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
+    const response = await POST(request({ mode: 'worker' }, AUTH))
     expect(response.status).toBe(404)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
 
   it('hides the route when no cron secret is configured, even with a header', async () => {
-    vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', '')
-    const response = await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
+    vi.stubEnv('CRON_SECRET', '')
+    const response = await POST(request({ mode: 'worker' }, AUTH))
     expect(response.status).toBe(404)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
 
-  it('rejects a wrong or missing secret with 403 before any DB access', async () => {
-    const wrong = await POST(request({ mode: 'worker' }, { 'x-cron-secret': 'wrong' }))
-    expect(wrong.status).toBe(403)
+  it('rejects a wrong or missing secret with 401 before any DB access', async () => {
+    const wrong = await POST(request({ mode: 'worker' }, { Authorization: 'Bearer wrong' }))
+    expect(wrong.status).toBe(401)
     const missing = await POST(request({ mode: 'worker' }))
-    expect(missing.status).toBe(403)
+    expect(missing.status).toBe(401)
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('옛 인증 수단(x-cron-secret 헤더·CHAT_V2_INDEX_CRON_SECRET 값)으로는 들어오지 못한다 — 401', async () => {
+    vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', 'old-worker-secret')
+    const oldHeader = await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
+    expect(oldHeader.status).toBe(401)
+    const oldSecret = await POST(request({ mode: 'worker' }, { Authorization: 'Bearer old-worker-secret' }))
+    expect(oldSecret.status).toBe(401)
+    const oldBoth = await POST(request({ mode: 'worker' }, { 'x-cron-secret': 'old-worker-secret' }))
+    expect(oldBoth.status).toBe(401)
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('배포에서 챗봇을 쓸 수 없으면(CHAT_V2_ENABLED 꺼짐) 수동 모드도 404 — 잡을 선점하지 않는다', async () => {
+    vi.stubEnv('CHAT_V2_ENABLED', 'false')
+    const response = await POST(request({ mode: 'worker' }, AUTH))
+    expect(response.status).toBe(404)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
 
   it('rejects an unknown mode, oversized batch, and missing domain for backfill', async () => {
-    const badMode = await POST(request({ mode: 'drop' }, { 'x-cron-secret': SECRET }))
+    const badMode = await POST(request({ mode: 'drop' }, AUTH))
     expect(badMode.status).toBe(400)
-    const badBatch = await POST(request({ mode: 'worker', batchSize: 10_000 }, { 'x-cron-secret': SECRET }))
+    const badBatch = await POST(request({ mode: 'worker', batchSize: 10_000 }, AUTH))
     expect(badBatch.status).toBe(400)
-    const noDomain = await POST(request({ mode: 'backfill' }, { 'x-cron-secret': SECRET }))
+    const noDomain = await POST(request({ mode: 'backfill' }, AUTH))
     expect(noDomain.status).toBe(400)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
 })
 
-describe('POST /api/chat/index/worker execution', () => {
+describe('POST /api/cron/ai-index execution', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
     vi.stubEnv('CHAT_V2_ENABLED', 'true')
-    vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', SECRET)
+    vi.stubEnv('CRON_SECRET', SECRET)
     scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
   })
 
@@ -164,7 +185,7 @@ describe('POST /api/chat/index/worker execution', () => {
     })
     mocks.createAdminClient.mockReturnValue(admin)
 
-    const response = await POST(request({ mode: 'worker', batchSize: 5 }, { 'x-cron-secret': SECRET }))
+    const response = await POST(request({ mode: 'worker', batchSize: 5 }, AUTH))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       mode: 'worker', claimed: 0, upserted: 0, deleted: 0, failed: 0, requeued: 0, skipped: 0,
@@ -175,13 +196,13 @@ describe('POST /api/chat/index/worker execution', () => {
   it('fails closed when the project scope cannot be resolved', async () => {
     mocks.createAdminClient.mockReturnValue(fakeAdmin())
     scope.enabledIndexProjectIds.mockResolvedValueOnce({ ok: false })
-    const response = await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
+    const response = await POST(request({ mode: 'worker' }, AUTH))
     expect(response.status).toBe(503)
   })
 
   it('배포에서 챗봇을 쓸 수 없으면 잡을 선점하지 않는다', async () => {
     vi.stubEnv('CHAT_V2_ENABLED', 'false')
-    const response = await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
+    const response = await POST(request({ mode: 'worker' }, AUTH))
     expect(response.status).toBe(404)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
@@ -189,7 +210,7 @@ describe('POST /api/chat/index/worker execution', () => {
   it('켜진 프로젝트 스코프를 service_role 클라이언트로 읽는다', async () => {
     const admin = fakeAdmin({ rpc: name => (name === 'claim_ai_index_jobs' ? { data: [], error: null } : { data: null, error: null }) })
     mocks.createAdminClient.mockReturnValue(admin)
-    await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
+    await POST(request({ mode: 'worker' }, AUTH))
     expect(scope.enabledIndexProjectIds).toHaveBeenCalledWith(admin)
   })
 
@@ -208,7 +229,7 @@ describe('POST /api/chat/index/worker execution', () => {
 
     const response = await POST(request(
       { mode: 'consistency', domain: 'wbs', projectId: 'p1', dryRun: true },
-      { 'x-cron-secret': SECRET },
+      AUTH,
     ))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
@@ -233,7 +254,7 @@ describe('POST /api/chat/index/worker execution', () => {
 
     const response = await POST(request(
       { mode: 'backfill', domain: 'wbs', projectId: 'p1' },
-      { 'x-cron-secret': SECRET },
+      AUTH,
     ))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
@@ -245,7 +266,7 @@ describe('POST /api/chat/index/worker execution', () => {
     mocks.createAdminClient.mockImplementation(() => {
       throw new Error('내부 연결 문자열 secret')
     })
-    const failed = await POST(request({ mode: 'worker' }, { 'x-cron-secret': SECRET }))
+    const failed = await POST(request({ mode: 'worker' }, AUTH))
     expect(failed.status).toBe(500)
     const body = await failed.json() as { error: string }
     expect(body.error).toBe('색인 워커 실행에 실패했습니다.')
@@ -264,7 +285,7 @@ describe('POST /api/chat/index/worker execution', () => {
  *  - 꺼진(모르는) 프로젝트의 변경이 RPC 인자에 **없다** (필터를 걸면 always-empty 여야 통과),
  *  - 켜진 프로젝트의 변경이 RPC 인자에 **있다** (항상 닫는 회귀도 막는다 — enqueued 가 1 이어야 한다).
  */
-describe('POST /api/chat/index/worker — 전역 열거는 켜진 것만 큐에 넣는다', () => {
+describe('POST /api/cron/ai-index — 전역 열거는 켜진 것만 큐에 넣는다', () => {
   const OFF_PROJECT = 'p2'
   /** 원본 표에 켜진 p1 과 꺼진/모르는 p2 행이 함께 있는 상태 — 전역 열거의 실패 시나리오 그대로다. */
   function twoProjectAdmin() {
@@ -297,7 +318,7 @@ describe('POST /api/chat/index/worker — 전역 열거는 켜진 것만 큐에 
     vi.unstubAllEnvs()
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
     vi.stubEnv('CHAT_V2_ENABLED', 'true')
-    vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', SECRET)
+    vi.stubEnv('CRON_SECRET', SECRET)
     // 켜진 프로젝트는 p1 하나뿐 — 꺼진 p2 가 스코프 밖이라 배치가 통째로 거절될 조건이 이미 갖춰져 있다.
     scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
   })
@@ -307,7 +328,7 @@ describe('POST /api/chat/index/worker — 전역 열거는 켜진 것만 큐에 
     const admin = twoProjectAdmin()
     mocks.createAdminClient.mockReturnValue(admin)
 
-    const response = await POST(request({ mode: 'backfill', domain: 'wbs' }, { 'x-cron-secret': SECRET }))
+    const response = await POST(request({ mode: 'backfill', domain: 'wbs' }, AUTH))
     expect(response.status).toBe(200)
     // 켜진 p1 의 변경은 들어가고(항상 닫는 회귀 방지) 꺼진 p2 는 빠진다(enqueued 0 이면 필터가 존재하지 않는다).
     await expect(response.json()).resolves.toMatchObject({ mode: 'backfill', planned: 2, enqueued: 1 })
@@ -322,7 +343,7 @@ describe('POST /api/chat/index/worker — 전역 열거는 켜진 것만 큐에 
     // dryRun:false 여야 enqueue 경로가 존재한다(참고: dryRun 면 enqueue 자체가 undefined 다).
     const response = await POST(request(
       { mode: 'consistency', domain: 'wbs', dryRun: false },
-      { 'x-cron-secret': SECRET },
+      AUTH,
     ))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
@@ -332,25 +353,25 @@ describe('POST /api/chat/index/worker — 전역 열거는 켜진 것만 큐에 
   })
 })
 
-describe('POST /api/chat/index/worker repair mode (0085 클로버 복구)', () => {
+describe('POST /api/cron/ai-index repair mode (0085 클로버 복구)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
     vi.stubEnv('CHAT_V2_ENABLED', 'true')
-    vi.stubEnv('CHAT_V2_INDEX_CRON_SECRET', SECRET)
+    vi.stubEnv('CRON_SECRET', SECRET)
     scope.enabledIndexProjectIds.mockResolvedValue({ ok: true, ids: ['p1'] })
   })
 
   it('uses the same gate as the other modes — flag off hides it, wrong secret is rejected', async () => {
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'false')
-    const hidden = await POST(request({ mode: 'repair' }, { 'x-cron-secret': SECRET }))
+    const hidden = await POST(request({ mode: 'repair' }, AUTH))
     expect(hidden.status).toBe(404)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
 
     vi.stubEnv('CHAT_V2_INDEX_WORKER_ENABLED', 'true')
-    const rejected = await POST(request({ mode: 'repair' }, { 'x-cron-secret': 'wrong' }))
-    expect(rejected.status).toBe(403)
+    const rejected = await POST(request({ mode: 'repair' }, { Authorization: 'Bearer wrong' }))
+    expect(rejected.status).toBe(401)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
 
@@ -366,7 +387,7 @@ describe('POST /api/chat/index/worker repair mode (0085 클로버 복구)', () =
     // a는 성공(벡터), b는 실패(null) — embedDocuments는 입력과 1:1 정렬로 반환한다.
     mocks.embedDocuments.mockResolvedValue([[0.1, 0.2], null])
 
-    const response = await POST(request({ mode: 'repair' }, { 'x-cron-secret': SECRET }))
+    const response = await POST(request({ mode: 'repair' }, AUTH))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       mode: 'repair', scanned: 2, repaired: 1, stillNull: 1,
@@ -379,7 +400,7 @@ describe('POST /api/chat/index/worker repair mode (0085 클로버 복구)', () =
     const admin = repairAdmin({ selectResponse: { data: [], error: null } })
     mocks.createAdminClient.mockReturnValue(admin)
 
-    const response = await POST(request({ mode: 'repair' }, { 'x-cron-secret': SECRET }))
+    const response = await POST(request({ mode: 'repair' }, AUTH))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       mode: 'repair', scanned: 0, repaired: 0, stillNull: 0,
@@ -391,8 +412,8 @@ describe('POST /api/chat/index/worker repair mode (0085 클로버 복구)', () =
     const admin = repairAdmin({ selectResponse: { data: [], error: null } })
     mocks.createAdminClient.mockReturnValue(admin)
 
-    await POST(request({ mode: 'repair', batchSize: 200 }, { 'x-cron-secret': SECRET }))
-    await POST(request({ mode: 'repair' }, { 'x-cron-secret': SECRET }))
+    await POST(request({ mode: 'repair', batchSize: 200 }, AUTH))
+    await POST(request({ mode: 'repair' }, AUTH))
     expect(admin.limitCalls).toEqual([100, 20])
   })
 
@@ -400,7 +421,7 @@ describe('POST /api/chat/index/worker repair mode (0085 클로버 복구)', () =
     const admin = repairAdmin({ selectResponse: { data: null, error: { code: '08006' } } })
     mocks.createAdminClient.mockReturnValue(admin)
 
-    const response = await POST(request({ mode: 'repair' }, { 'x-cron-secret': SECRET }))
+    const response = await POST(request({ mode: 'repair' }, AUTH))
     expect(response.status).toBe(503)
     expect(mocks.embedDocuments).not.toHaveBeenCalled()
   })
@@ -412,7 +433,7 @@ describe('POST /api/chat/index/worker repair mode (0085 클로버 복구)', () =
     mocks.createAdminClient.mockReturnValue(admin)
     mocks.embedDocuments.mockResolvedValue(null) // 키 없음
 
-    const response = await POST(request({ mode: 'repair' }, { 'x-cron-secret': SECRET }))
+    const response = await POST(request({ mode: 'repair' }, AUTH))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       mode: 'repair', scanned: 1, repaired: 0, stillNull: 1,

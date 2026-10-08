@@ -38,8 +38,8 @@
 | src/app/actions/wbsAssign.ts | 세션 가드 뒤 id 스코프 | resolveItemProjectId 로 항목의 pid 를 구해 가드한 뒤, 항목 id 와 멤버의 project_id 일치를 확인하고 쓴다 |
 | src/app/actions/wbsMarkdown.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤에 부착점·import 를 pid 로 한다. 골격 단계 이름 시드는 가드한 그 pid 로 writeProjectSettingsInternal(runWbsImport 안), PL 대조는 그 pid 로 해석기(getProjectConfig) 판독이다 |
 | src/app/actions/wbsSpec.ts | 세션 가드 뒤 id 스코프 | 항목의 pid 로 requireProjectAdmin 또는 위임 자격을 판정한 뒤, 그 항목 id 로만 update 한다 |
-| src/app/api/chat/index/worker/route.ts | 플랫폼 | cron 시크릿(x-cron-secret)으로만 들어온다. 전 프로젝트 색인 작업 큐이고 사용자에게 행을 돌려주지 않는다 |
-| src/app/api/cron/ai-index/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다. 전역 색인 큐 배치다 |
+| src/app/api/cron/ai-index/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다(잡 ai-index — 스케줄 GET·수동 POST, 옛 chat/index/worker 흡수). 전 프로젝트 색인 작업 큐이고 사용자에게 행을 돌려주지 않는다(수량 요약만) |
+| src/app/api/cron/form-templates-gc/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다(잡 form-templates-gc). form-templates 버킷의 incoming 폴더만 나열해 24시간 넘은 고아 객체를 지우는 정리 배치다. 등록된 양식(v<n>)은 읽지 않고 응답은 수량뿐이다 |
 | src/app/api/cron/inbox-retention/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다. 읽은 알림 90일 정리 RPC(전역)다 |
 | src/app/api/import/execute/route.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤 그 pid 로만 쓴다(SP4 §4.4). ① 미등록 팀은 그 pid 의 전용 팀만 만든다(ensureProjectTeams — adminFor, 워크스페이스는 가드 결과, teams_guard 가 일치 강제) ② 상속 공용 팀 전환은 convert_inherited_teams 가 행위자 등급을 다시 판정한다 ③ 공용 팀은 그 pid 의 워크스페이스 것만 읽는다(요청 범위 원천 — 세션) ④ 항목·담당·휴일·영수증은 import_wbs_cmd 가 한 트랜잭션에 쓰고 행위자 등급을 다시 판정한다(p_actor = 가드 결과) ⑤ 양식 저장은 가드한 pid 로 writeProjectSettingsInternal(설정 RPC)을 부른다 ⑥ 전용 팀이 있는 프로젝트의 미등록 code 는 등록 전에 referencedCommonTeamCodes(adminFor({ projectId }) — 그 pid 의 담당·명단 팀·영역 팀·수락 전 초대를 읽고, 후보는 그 pid 워크스페이스의 공용 팀뿐)로 그 pid 가 이미 쓰는 공용 팀인지 본다(SP4 Z4) |
 | src/app/api/track/route.ts | 플랫폼 | 세션 사용자 본인의 usage_events 에 insert 만 한다. 읽기는 슈퍼유저 전용 /usage 다 |

@@ -808,10 +808,10 @@ describe('촬영 쪽 판정 — 최종 경로·서버 빌드 id·서버 커밋·
     expect(serverCommitOf({ explicitBase: true, flagCommit: 'b4283c0', envCommit: 'def5678', head: 'abc1234' })).toEqual({ commit: 'b4283c0', source: 'flag' })
     expect(() => serverCommitOf({ explicitBase: true, flagCommit: 'not-a-sha', head: 'abc1234' })).toThrow(/형식/)
   })
-  it('env 전제(D9) — USAGE_TRACKING=on·VERCEL_ENV=production 이면 거부(프로세스 env 가 .env.local 보다 앞선다), LLM 키는 이름만', () => {
+  it('env 전제(D9) — USAGE_TRACKING=on·APP_ENV=production 이면 거부(프로세스 env 가 .env.local 보다 앞선다), LLM 키는 이름만', () => {
     expect(envPremise('A=1\n', {})).toEqual({ problems: [], llmKeys: [] })
     expect(envPremise('USAGE_TRACKING=on\n', {}).problems).toEqual([expect.stringMatching(/USAGE_TRACKING=on/)])
-    expect(envPremise('', { VERCEL_ENV: 'production' }).problems).toEqual([expect.stringMatching(/VERCEL_ENV=production/)])
+    expect(envPremise('', { APP_ENV: 'production' }).problems).toEqual([expect.stringMatching(/APP_ENV=production/)])
     expect(envPremise('USAGE_TRACKING=on\n', { USAGE_TRACKING: 'off' }).problems).toEqual([])
     const r = envPremise('GEMINI_API_KEY=secret-value\nOPENAI_API_KEY=\n', { LLM_API_KEY: 'x' })
     expect(r.llmKeys).toEqual(['GEMINI_API_KEY', 'LLM_API_KEY'])

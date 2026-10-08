@@ -29,17 +29,15 @@ function getRequest(authorization?: string): NextRequest {
 
 function postRequest(
   body: unknown = {},
-  secret?: string,
+  headers: Record<string, string> = {},
 ): NextRequest {
   return new NextRequest('http://localhost/api/wiki/worker', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(secret ? { 'x-cron-secret': secret } : {}),
-    },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
 }
+const BEARER = { authorization: `Bearer ${CRON_SECRET}` }
 
 describe('/api/wiki/worker 보호 라우트', () => {
   beforeEach(() => {
@@ -72,7 +70,7 @@ describe('/api/wiki/worker 보호 라우트', () => {
       'Bearer wrong-secret',
     ]) {
       const response = await GET(getRequest(authorization))
-      expect(response.status).toBe(403)
+      expect(response.status).toBe(401) // 403 → 401(SP8 — 잡 라우트 공통 규약)
     }
     expect(mocks.runWikiWorkerOnce).not.toHaveBeenCalled()
   })
@@ -86,30 +84,52 @@ describe('/api/wiki/worker 보호 라우트', () => {
     expect(mocks.runWikiWorkerOnce).toHaveBeenCalledWith(10)
   })
 
-  it('POST는 기존 WIKI_WORKER_SECRET x-cron-secret 인증을 유지한다', async () => {
+  // 옛 케이스 'POST는 기존 WIKI_WORKER_SECRET x-cron-secret 인증을 유지한다' 를 뒤집었다(SP8 — 정본 §5.1.4·§5.5.2 ①):
+  // 수동 POST 도 GET 과 같은 CRON_SECRET Bearer 이고, 옛 헤더·옛 시크릿 값은 401 이다. limit 전달 단언은 그대로다.
+  it('POST는 CRON_SECRET Bearer 로만 인증한다 — 옛 x-cron-secret 헤더·WIKI_WORKER_SECRET 값은 401', async () => {
     const missing = await POST(postRequest({ limit: 7 }))
-    expect(missing.status).toBe(403)
-
-    // GET용 CRON_SECRET은 수동 POST 인증에 재사용할 수 없다.
-    const cronSecret = await POST(postRequest({ limit: 7 }, CRON_SECRET))
-    expect(cronSecret.status).toBe(403)
+    expect(missing.status).toBe(401)
+    const oldHeader = await POST(postRequest({ limit: 7 }, { 'x-cron-secret': MANUAL_SECRET }))
+    expect(oldHeader.status).toBe(401)
+    const oldHeaderNewSecret = await POST(postRequest({ limit: 7 }, { 'x-cron-secret': CRON_SECRET }))
+    expect(oldHeaderNewSecret.status).toBe(401)
+    const oldSecret = await POST(postRequest({ limit: 7 }, { authorization: `Bearer ${MANUAL_SECRET}` }))
+    expect(oldSecret.status).toBe(401)
     expect(mocks.runWikiWorkerOnce).not.toHaveBeenCalled()
 
-    const response = await POST(postRequest({ limit: 7 }, MANUAL_SECRET))
+    const response = await POST(postRequest({ limit: 7 }, BEARER))
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual(RESULT)
     expect(mocks.runWikiWorkerOnce).toHaveBeenCalledTimes(1)
     expect(mocks.runWikiWorkerOnce).toHaveBeenCalledWith(7)
   })
 
+  it('POST도 worker flag 또는 CRON_SECRET이 없으면 존재를 404로 숨긴다', async () => {
+    vi.stubEnv('WIKI_WORKER_ENABLED', 'false')
+    expect((await POST(postRequest({}, BEARER))).status).toBe(404)
+    vi.stubEnv('WIKI_WORKER_ENABLED', 'true')
+    vi.stubEnv('CRON_SECRET', '')
+    expect((await POST(postRequest({}, BEARER))).status).toBe(404)
+    expect(mocks.runWikiWorkerOnce).not.toHaveBeenCalled()
+  })
+
   it('POST는 기본 limit 5와 1~20 정수 검증을 유지한다', async () => {
-    const defaultResponse = await POST(postRequest({}, MANUAL_SECRET))
+    const defaultResponse = await POST(postRequest({}, BEARER))
     expect(defaultResponse.status).toBe(200)
     expect(mocks.runWikiWorkerOnce).toHaveBeenCalledWith(5)
 
     for (const limit of [0, 21, 1.5, '5']) {
-      const response = await POST(postRequest({ limit }, MANUAL_SECRET))
+      const response = await POST(postRequest({ limit }, BEARER))
       expect(response.status).toBe(400)
+    }
+    expect(mocks.runWikiWorkerOnce).toHaveBeenCalledTimes(1)
+  })
+
+  it('POST의 mode 는 worker 하나다 — 생략·worker 는 실행, 그 밖은 400', async () => {
+    expect((await POST(postRequest({ mode: 'worker', limit: 3 }, BEARER))).status).toBe(200)
+    expect(mocks.runWikiWorkerOnce).toHaveBeenCalledWith(3)
+    for (const mode of ['repair', 'backfill', '', 1]) {
+      expect((await POST(postRequest({ mode }, BEARER))).status).toBe(400)
     }
     expect(mocks.runWikiWorkerOnce).toHaveBeenCalledTimes(1)
   })

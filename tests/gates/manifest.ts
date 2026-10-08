@@ -314,13 +314,14 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('chat/command')}#POST`]: sess('chatbot', 'tests/api/chat-command-gate.test.ts', '로그인 — 프로젝트 화면 전용(프로젝트 없으면 안내문). 함께 실은 workspaceId 는 그 프로젝트의 것이어야(과제 34)'),
   [`${R('chat/context')}#GET`]: sess('chatbot', LEGACY_CHAT, '로그인 — 프로젝트면 그 프로젝트(함께 실은 workspaceId 는 그 프로젝트의 것이어야), 아니면 요청의 workspaceId(소속 확인 — 플랫폼 관리자는 실재 확인), 둘 다 없으면 400(D26, 과제 34). ?probe=1 은 관문만(P12)'),
   [`${R('chat/health')}#GET`]: nul('superuser'),
-  [`${R('chat/index/worker')}#POST`]: nul('cronSecret', 'x-cron-secret — 잡마다 moduleState(과제 22)'),
   [`${R('chat/reindex')}#POST`]: { guard: 'projectAdmin', module: 'chatbot', delegatedTo: 'tests/api/chat-reindex.test.ts' },
   [`${R('chat')}#POST`]: sess('chatbot', LEGACY_CHAT),
   [`${R('chat/stream')}#POST`]: sess('chatbot', LEGACY_CHAT),
   [`${R('chat/v2/stream')}#POST`]: sess('chatbot', 'tests/ai/chat-v2-route.test.ts', '로그인 — 요청의 프로젝트 힌트(pageContext·projectId), 없으면 요청의 workspaceId(pageContext 우선, 소속 확인), 둘 다 없으면 400(D26, 과제 34). env 501 은 관문 앞, 강등 501 은 관문 뒤'),
-  [`${R('cron/ai-index')}#GET`]: nul('cronSecret', 'CRON_SECRET — 잡마다 moduleState(과제 22)'),
-  [`${R('cron/inbox-retention')}#GET`]: nul('cronSecret', 'CRON_SECRET — 알림함 보존(셸)'),
+  [`${R('cron/ai-index')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 ai-index) — 잡마다 moduleState(과제 22)'),
+  [`${R('cron/ai-index')}#POST`]: nul('cronSecret', 'CRON_SECRET(잡 ai-index 수동 모드 — 옛 chat/index/worker) — 잡마다 moduleState(과제 22)'),
+  [`${R('cron/form-templates-gc')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 form-templates-gc) — 양식 업로드 고아 incoming 정리(core 잡, 수량만 돌려준다)'),
+  [`${R('cron/inbox-retention')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 inbox-retention) — 알림함 보존(셸)'),
   [`${R('export')}#GET`]: { guard: 'projectMember', module: null, note: '정본 §4.8 — requireProjectMember. wbs 는 core 라 모듈 관문은 없다. form=1 은 양식, 그 밖은 프로파일 라운드트립' },
   [`${R('import/execute')}#POST`]: nul('projectAdmin'),
   [`${R('import/inspect')}#POST`]: nul('projectAdmin'),
@@ -354,15 +355,14 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('wiki/search')}#GET`]: sess('wiki', 'tests/actions/wiki-search-route.test.ts'),
   [`${R('wiki/search')}#POST`]: sess('wiki', 'tests/actions/wiki-search-route.test.ts'),
   [`${R('wiki/summarize')}#POST`]: sess('wiki', 'tests/actions/wiki-summarize-route.test.ts'),
-  [`${R('wiki/worker')}#POST`]: nul('cronSecret', 'WIKI_WORKER_SECRET — 잡마다 moduleState(과제 22)'),
-  [`${R('wiki/worker')}#GET`]: nul('cronSecret', 'CRON_SECRET — 잡마다 moduleState(과제 22)'),
+  [`${R('wiki/worker')}#POST`]: nul('cronSecret', 'CRON_SECRET(잡 wiki-worker 수동 모드) — 잡마다 moduleState(과제 22)'),
+  [`${R('wiki/worker')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 wiki-worker) — 잡마다 moduleState(과제 22)'),
 }
 
 /** 접두는 모듈을 가리키지만 라우트 단 관문이 맞지 않는 경로 — 모듈 판정을 null 로 덮는다(닫힌 목록, 사유 필수) */
 export const ROUTE_MODULE_OVERRIDES: Readonly<Record<string, string>> = {
   '/api/chat/health': '플랫폼 진단(슈퍼유저) — 대상 워크스페이스가 없다',
   '/api/wiki/reindex': '플랫폼 운영(슈퍼유저, 실제로는 챗 색인 잡 현황) — 대상 워크스페이스가 없다',
-  '/api/chat/index/worker': '워커 — 잡마다 moduleState 로 판정(D16)',
   '/api/cron/ai-index': '워커 — 잡마다 moduleState 로 판정(D16)',
   '/api/wiki/worker': '워커 — 잡마다 moduleState 로 판정(D16)',
 }
@@ -374,6 +374,7 @@ export const CORE_ROUTE_ALLOW: Readonly<Record<string, string>> = {
   '/api/shell': '셸 — 알림함·파생 알림·범위 배지 셋(검토 대기·결재 대기·공지 안읽음) 통합 조회',
   '/api/nav/switch-target': '셸 — 프로젝트 전환의 같은 모듈 유지 판정(D41)',
   '/api/cron/inbox-retention': '크론 — 알림함 보존 정리',
+  '/api/cron/form-templates-gc': '크론 — 양식 업로드의 고아 incoming 객체 정리(정본 §3.2.2 core API·§4.7.1)',
 }
 
 /** 메타데이터 라우트(icon·opengraph-image·sitemap 등 — 요청마다 서버 코드로 그린다) 닫힌 허용 목록(판정 F12). 모듈 경로 아래의 메타데이터는 모듈 데이터를

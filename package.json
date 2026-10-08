@@ -21,6 +21,7 @@
     "settings:verify": "node scripts/settings-verify.mjs",
     "accept:synthetic": "node scripts/e2e-synthetic.mjs",
     "catalog:write": "node scripts/settings-catalog.mjs",
+    "jobs:write": "node scripts/jobs-vercel-crons.mjs",
     "build": "NODE_OPTIONS=\"${NODE_OPTIONS:-} --max-old-space-size=4096\" next build",
     "start": "next start",
     "lint": "eslint",

@@ -32,7 +32,7 @@ describe('운영 설정 목록', () => {
   it('계산된 이름·환경 객체 전달은 검토한 파일에만 있다', () => {
     const allowed = new Set([
       'src/lib/mail/transport.ts', 'src/lib/settings/resolve.ts', 'src/lib/modules/flags.ts',
-      'src/lib/wiki/serviceState.ts', 'src/app/api/track/route.ts',
+      'src/lib/wiki/serviceState.ts',
     ])
     const readers = files.filter(file => /process\.env\s*(?:\[|\)|\s*[,;]|\s*:\s*|\s*\?\?)/.test(codeLines(file)))
     expect(readers.filter(file => !allowed.has(file))).toEqual([])

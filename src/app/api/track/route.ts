@@ -23,7 +23,8 @@ const MAX_PATH_LEN = 512
  * 클라이언트가 보낸 식별자를 그대로 쓰면 남의 이름으로 기록을 남길 수 있다. 워크스페이스는 mod.workspaceId를 usage_events.workspace_id에 기록한다(소속 확인 뒤).
  */
 export async function POST(req: NextRequest) {
-  if (!trackingEnabled(process.env)) {
+  // 이름을 적어 읽는다 — Vercel 에서는 next.config.ts 가 APP_ENV 를 빌드 때 이 식에 박는다(process.env 객체째 넘기면 박히지 않는다).
+  if (!trackingEnabled({ USAGE_TRACKING: process.env.USAGE_TRACKING, APP_ENV: process.env.APP_ENV })) {
     return NextResponse.json({ ok: true, skipped: 'disabled' })
   }
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// 초기 백필 러너 — 기존 /api/chat/index/worker 의 mode:'backfill' 을 호출한다.
+// 초기 백필 러너 — 잡 ai-index 의 수동 실행(POST /api/cron/ai-index)을 mode:'backfill' 로 호출한다.
+// 인증은 스케줄과 같은 CRON_SECRET(Authorization: Bearer)이다 — 서버의 CRON_SECRET 과 같은 값을 env 로 넘긴다.
 // 문서가 수천 건이면 Vercel 함수 타임아웃 안에 안 끝나므로 로컬에서 나눠 돈다.
 // content_hash 가 있어 재실행이 멱등이다 — 중단해도 다시 돌리면 된다.
 // 백필 후 analyze 를 통계를 갱신해야 한다 — 없으면 검색이 9배 느려진다(15ms → 232ms).
@@ -26,7 +27,7 @@ const flagArg = (name) => {
 }
 
 const BASE = flag('base', 'http://localhost:3000')
-const SECRET = process.env.CHAT_V2_INDEX_CRON_SECRET
+const SECRET = process.env.CRON_SECRET
 const DOMAINS = flag('domains', 'minutes,issues,wbs,announcements').split(',').filter(Boolean)
 const BATCH = Number(flag('batch', '25'))
 const PAUSE_MS = Number(flag('pause', '3000'))
@@ -55,7 +56,7 @@ function accessToken() {
 
 // 입력 검증
 if (!SECRET) {
-  console.error('✗ CHAT_V2_INDEX_CRON_SECRET 환경변수가 필요합니다.')
+  console.error('✗ CRON_SECRET 환경변수가 필요합니다(서버에 준 값과 같은 값).')
   process.exit(1)
 }
 
@@ -83,9 +84,9 @@ Pause between batches: ${PAUSE_MS}ms
 `)
 
 async function call(body) {
-  const res = await fetch(`${BASE}/api/chat/index/worker`, {
+  const res = await fetch(`${BASE}/api/cron/ai-index`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-cron-secret': SECRET },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SECRET}` },
     body: JSON.stringify(body),
   })
   if (!res.ok) {

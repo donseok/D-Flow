@@ -349,9 +349,9 @@ async function main() {
   }
 
   if (health.stalled) {
-    console.log('\n  완주시키려면 — 워커를 반복 호출한다(한 라운드가 스텝 2~3건, WIKI_WORKER_ENABLED·WIKI_WORKER_SECRET 필요):')
+    console.log('\n  완주시키려면 — 워커를 반복 호출한다(한 라운드가 스텝 2~3건, WIKI_WORKER_ENABLED·CRON_SECRET 필요):')
     console.log('    for i in $(seq 1 26); do \\')
-    console.log(`      curl -fsS -X POST -H "x-cron-secret: $WIKI_WORKER_SECRET" -d '{"limit":20}' "https://<앱 URL>/api/wiki/worker" \\`)
+    console.log(`      curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" -d '{"mode":"worker","limit":20}' "https://<앱 URL>/api/wiki/worker" \\`)
     console.log('        || true; sleep 15; done')
     console.log('  도는 동안 회의록의 프로젝트 지정을 바꾸지 말 것 — 커서가 처음으로 되감긴다.')
   }

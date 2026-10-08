@@ -8,7 +8,7 @@
 //   터미널에서 끝까지 돌린다.
 //
 // 왜 route 가 아니라 직접 호출인가:
-//   scripts/index-backfill.mjs --repair 는 /api/chat/index/worker 를 거치므로 크론
+//   scripts/index-backfill.mjs --repair 는 /api/cron/ai-index(POST)를 거치므로 크론
 //   시크릿과 서버리스 타임아웃에 묶인다. 여기서는 Supabase REST + Gemini 를 직접 부른다.
 //   임베딩 계약(모델·차원·taskType)은 src/lib/ai/embeddings.ts 와 반드시 동일하게 유지할 것 —
 //   다르면 기존 벡터와 의미 공간이 섞여 검색 품질이 조용히 무너진다.

@@ -93,13 +93,12 @@
 | `NEXT_PUBLIC_BRAND_COPYRIGHT` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/branding.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `NEXT_PUBLIC_APP_URL` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/app/actions/meetingNotify.ts`, `src/app/actions/projectInvites.ts`, `src/app/api/v1/minutes/route.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `VERCEL_PROJECT_PRODUCTION_URL` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/actions/meetingNotify.ts` | restart | — | — | 운영 설정 | SP3a |
+| `APP_ENV` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `next.config.ts`, `src/app/api/track/route.ts` | restart | — | — | 운영 설정 | SP3a |
 | `VERCEL_ENV` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `next.config.ts` | restart | — | — | 운영 설정 | SP3a |
 | `NEXT_OUTPUT` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `next.config.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `STAGING` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/(app)/layout.tsx`, `next.config.ts` | restart | — | — | 운영 설정 | SP3a |
 | `USAGE_TRACKING` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/domain/usageTracking.ts`, `src/app/api/track/route.ts` | restart | — | — | 운영 설정 | SP3a |
-| `CRON_SECRET` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/api/cron/ai-index/route.ts`, `src/app/api/cron/inbox-retention/route.ts`, `src/app/api/wiki/worker/route.ts` | restart | — | — | 운영 설정 | SP3a |
-| `WIKI_WORKER_SECRET` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/api/wiki/worker/route.ts` | restart | — | — | 운영 설정 | SP3a |
-| `CHAT_V2_INDEX_CRON_SECRET` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/api/chat/index/worker/route.ts` | restart | — | — | 운영 설정 | SP3a |
+| `CRON_SECRET` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/jobs/auth.ts` | restart | — | — | 운영 설정 | SP3a |
 | `AGENT_API_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/modules/flags.ts`, `src/lib/agent/externalApi.ts` | restart | — | — | 운영 설정 | SP3a |
 | `MINUTES_API_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/modules/flags.ts`, `src/lib/minutes/externalApi.ts` | restart | — | — | 운영 설정 | SP3a |
 | `MINUTES_FOLDER_PATH_ENABLED` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/modules/flags.ts`, `src/lib/minutes/externalApi.ts` | restart | — | — | 운영 설정 | SP3a |

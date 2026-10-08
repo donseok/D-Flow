@@ -19,7 +19,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 // 사용자 요구가 자동/매일 유지보수에서 "필요할 때 버튼으로 수동 갱신"으로 바뀌었다.
-// 크론 시크릿 라우트(/api/chat/index/worker)는 브라우저에서 부를 수 없어 이 세션 인가
+// 크론 시크릿 라우트(/api/cron/ai-index)는 브라우저에서 부를 수 없어 이 세션 인가
 // 라우트를 별도로 둔다. 조립(queue·index·loadContent)과 repair 로직은 그대로 재사용한다.
 
 const STEP_BATCH_SIZE = 8

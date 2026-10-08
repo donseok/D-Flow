@@ -681,14 +681,14 @@ export function serverCommitOf({ explicitBase, envCommit, flagCommit, head }) {
 /** LLM 키 이름(값은 다루지 않는다) — 있으면 회의록 첫 방문 self-heal 이 외부 LLM 결과를 DB 에 써 다음 실행부터 화면이 달라진다(D9) */
 export const LLM_KEYS = Object.freeze(['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'LLM_API_KEY'])
 
-/** 결정성 전제(순수, D9) — 사용 기록 수집이 켜지면(USAGE_TRACKING=on, VERCEL_ENV=production) 방문마다 기록이 쌓여 사용 현황 화면이 실행마다
+/** 결정성 전제(순수, D9) — 사용 기록 수집이 켜지면(USAGE_TRACKING=on, APP_ENV=production) 방문마다 기록이 쌓여 사용 현황 화면이 실행마다
  *  달라진다 → 거부. LLM 키는 이름만 기록. 프로세스 env 가 .env.local 보다 앞선다(Next) @param {string} envText @param {Record<string, string | undefined>} env */
 export function envPremise(envText, env) {
   const file = parseEnvFile(envText).values
   const val = (k) => String(env[k] ?? file[k] ?? '').trim()
   const problems = [
     ...(val('USAGE_TRACKING') === 'on' ? ['USAGE_TRACKING=on — 방문마다 사용 기록이 쌓여 사용 현황 화면이 실행마다 달라진다'] : []),
-    ...(val('VERCEL_ENV') === 'production' ? ['VERCEL_ENV=production — 사용 기록 수집이 켜진다(그 밖의 운영 분기도)'] : []),
+    ...(val('APP_ENV') === 'production' ? ['APP_ENV=production — 사용 기록 수집이 켜진다(그 밖의 운영 분기도)'] : []),
   ]
   return { problems, llmKeys: LLM_KEYS.filter((k) => val(k) !== '') }
 }

@@ -77,8 +77,13 @@ describe('GET /api/cron/ai-index', () => {
     expect((await GET(request('Bearer topsecret'))).status).toBe(404)
     expect(mocks.runIndexWorkerOnce).not.toHaveBeenCalled()
     // 404 는 admin 클라이언트를 만들기 **전에** 닫는다 — 플래그를 통과한 뒤 만들어도 잡을 선점하지 않는다.
-    // (chat/index/worker 라우트와 검증 세기를 맞춘다.)
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('옛 헤더(x-cron-secret)로는 들어오지 못한다 — 401', async () => {
+    const res = await GET(new NextRequest('http://localhost/api/cron/ai-index', { headers: { 'x-cron-secret': 'topsecret' } }))
+    expect(res.status).toBe(401)
+    expect(mocks.runIndexWorkerOnce).not.toHaveBeenCalled()
   })
 
   it('service_role 클라이언트와 잡별 모듈 관문을 워커에 넘긴다', async () => {
