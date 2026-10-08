@@ -71,7 +71,8 @@ describe.each(kinds)('기본 양식 %s', kind => {
       const slides = Object.keys(zip.files).filter(p => /^ppt\/slides\/slide\d+\.xml$/.test(p))
       const xml = (await Promise.all(slides.map(p => zip.file(p)!.async('string')))).join('\n')
       for (let n = 0; n < count; n++) expect(xml).toContain(kind.startsWith('weekly') ? `구분 ${n}` : `이슈 ${n}`)
-      expect(slides.length).toBe(count + 1)
+      // 주간: 표지 + 구분마다 한 장. 이슈 분석: 표지 + 영역별 종합 + 이슈마다 원인 분석 한 장(이 픽스처는 영역·개선기회 0건이라 그 장은 빠진다)
+      expect(slides.length).toBe(kind.startsWith('weekly') ? count + 1 : count + 2)
     }
   })
 })

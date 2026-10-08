@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   requireProjectMember: vi.fn(),
   loadIssueAnalysisIssues: vi.fn(),
   ensureIssueAnalysis: vi.fn(),
-  diagnoseIssueAnalysisTemplate: vi.fn(),
+  getProjectConfig: vi.fn(),
 }))
 
 vi.mock('@/lib/authz', () => ({
@@ -19,15 +19,14 @@ vi.mock('@/lib/data/issueAnalysis', () => ({
 vi.mock('@/lib/ai/issue-analysis', () => ({
   ensureIssueAnalysis: mocks.ensureIssueAnalysis,
 }))
-vi.mock('@/lib/report/issues/template', async importOriginal => {
-  const actual = await importOriginal<typeof import('@/lib/report/issues/template')>()
-  return {
-    ...actual,
-    diagnoseIssueAnalysisTemplate: mocks.diagnoseIssueAnalysisTemplate,
-  }
-})
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
 
 import { ensureIssueAnalysisAction } from '@/app/actions/issueAnalysis'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { requireModule } from '@/lib/modules/gate'
+import { defaultFormSetting } from '@/lib/settings/defs/forms'
+import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 
 const READY_MAJOR = {
   id: 'major-1',
@@ -85,11 +84,7 @@ beforeEach(() => {
     issues: [readyIssue()],
     majors: [READY_MAJOR],
   })
-  mocks.diagnoseIssueAnalysisTemplate.mockResolvedValue({
-    status: 'ready',
-    message: '사용 가능',
-    path: '/Users/internal/wbs/src/lib/report/assets/issue-analysis-template.pptx',
-  })
+  mocks.getProjectConfig.mockResolvedValue(makeProjectConfig())
 })
 
 describe('ensureIssueAnalysisAction', () => {
@@ -152,7 +147,7 @@ describe('ensureIssueAnalysisAction', () => {
     expect(mocks.ensureIssueAnalysis).not.toHaveBeenCalled()
   })
 
-  it('생성 성공 시 runId/analysis를 전달하고 서버 절대경로를 노출하지 않는다', async () => {
+  it('생성 성공 시 runId/analysis 와 다운로드 가능 판정(기본 양식)을 전달한다', async () => {
     const analysis = {
       schemaVersion: 'issue-analysis.v1',
       projectId: 'project-1',
@@ -173,16 +168,9 @@ describe('ensureIssueAnalysisAction', () => {
       state: 'generated',
       runId: 'run-1',
       analysis,
-      template: {
-        status: 'ready',
-        path: 'src/lib/report/assets/issue-analysis-template.pptx',
-      },
-      pptExport: {
-        status: 'ready',
-        code: 'PPT_EXPORT_READY',
-      },
     })
-    expect(result.template.path).not.toContain('/Users/')
+    expect(result.pptExport).toEqual({ status: 'ready', source: 'default' })
+    expect(Object.keys(result)).not.toContain('template')   // 옛 양식 파일 진단은 싣지 않는다
     expect(mocks.loadIssueAnalysisIssues).toHaveBeenCalledWith('project-1', undefined)
     expect(mocks.ensureIssueAnalysis).toHaveBeenCalledWith(
       'project-1',
@@ -268,6 +256,60 @@ describe('ensureIssueAnalysisAction', () => {
       state: 'unavailable',
       error: 'LLM 설정이 없어 이슈 분석서를 생성할 수 없습니다.',
       preflight: { readyCount: 1, blockedCount: 0 },
+    })
+  })
+
+  describe('다운로드 가능 판정(pptExport) — 저장 실행 + 양식 설정 forms.issue_analysis_pptx', () => {
+    const generated = () => mocks.ensureIssueAnalysis.mockResolvedValue({
+      state: 'ready',
+      runId: 'run-1',
+      analysis: { schemaVersion: 'issue-analysis.v1', projectId: 'project-1', issueCount: 1, generatedAt: '2026-07-31T00:00:00Z', areas: [] },
+      inputHash: 'a'.repeat(64),
+      model: 'test-model',
+    })
+
+    it('프로젝트가 올린 활성 양식이면 source 는 custom', async () => {
+      generated()
+      mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({
+        'forms.issue_analysis_pptx': { ...defaultFormSetting('issue_analysis_pptx'), template_id: '11111111-1111-4111-8111-111111111111' },
+      }))
+      expect((await ensureIssueAnalysisAction('project-1')).pptExport).toEqual({ status: 'ready', source: 'custom' })
+    })
+
+    it('양식 설정이 손상이면 분석 결과는 주되 다운로드는 닫는다', async () => {
+      generated()
+      mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'forms.issue_analysis_pptx': { template_id: 7 } }))
+      const result = await ensureIssueAnalysisAction('project-1')
+      expect(result).toMatchObject({ ok: true, runId: 'run-1' })
+      expect(result.pptExport).toEqual({ status: 'unavailable', reason: 'form_setting_invalid' })
+    })
+
+    it('설정을 읽지 못하면 모르는 상태로 닫는다(fail-closed) — 원문은 로그', async () => {
+      generated()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      mocks.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('db down'))
+      const result = await ensureIssueAnalysisAction('project-1')
+      expect(result).toMatchObject({ ok: true, runId: 'run-1' })
+      expect(result.pptExport).toEqual({ status: 'unavailable', reason: 'form_setting_unknown' })
+      expect(JSON.stringify(result)).not.toContain('db down')
+      errorSpy.mockRestore()
+    })
+
+    it('저장 실행이 없으면(생성 실패·차단) 판정을 싣지 않고 양식 설정도 읽지 않는다', async () => {
+      mocks.ensureIssueAnalysis.mockResolvedValue({ state: 'unavailable', reason: 'llm_missing', error: 'LLM 없음', inputHash: 'a'.repeat(64) })
+      const result = await ensureIssueAnalysisAction('project-1')
+      expect(result.ok).toBe(false)
+      expect(result.pptExport).toBeUndefined()
+      expect(mocks.getProjectConfig).not.toHaveBeenCalled()
+    })
+
+    it('이슈 분석 모듈이 꺼져 있으면 실행도 판정도 없다', async () => {
+      vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
+      const result = await ensureIssueAnalysisAction('project-1')
+      expect(result).toMatchObject({ ok: false, state: 'unavailable', error: ERR_MODULE_DISABLED })
+      expect(result.pptExport).toBeUndefined()
+      expect(mocks.ensureIssueAnalysis).not.toHaveBeenCalled()
+      expect(mocks.getProjectConfig).not.toHaveBeenCalled()
     })
   })
 })

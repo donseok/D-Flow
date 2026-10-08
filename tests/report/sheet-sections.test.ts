@@ -1,9 +1,12 @@
-// 시트 PPT 의 페이지 집합과 점검 묶음이 같은 키(영역 id)를 쓴다(D22), 템플릿 예시 문구가 출력에 남지 않는다(E23).
-// E23 정적 분석: 예시 문구('예시 작업 4 — …')는 weekly-template.pptx slide2 표 칸 (1,2) 에만 있고 렌더러가 그 칸을 늘 교체한다
-// (templateFill.ts renderTemplate 의 buildPage — 시트 갈래·기본 갈래·연속 슬라이드 모두). 아래 두 케이스가 실측으로 판정한다.
+// 시트 PPT 의 페이지 집합과 점검 묶음이 같은 키(영역 id)를 쓴다(D22), 양식의 예시 문구가 출력에 남지 않는다(E23).
+// E23: 출력은 양식 엔진이 제품 기본 양식(assets/default/weekly_report_pptx.pptx)을 채운 것이다 — 옛 원본 양식과 그 렌더러는 지웠다.
+// 아래 두 케이스가 시트 구분만 실은 모델·주간 모델까지 실은 모델의 렌더 결과로 판정한다.
 import { describe, expect, it } from 'vitest'
 import { buildSheetSections, sheetLineText } from '@/lib/report/sheetNarrative'
-import { fillSheetTemplate, fillWeeklyTemplate } from '@/lib/report/templateFill'
+import { readFile } from 'node:fs/promises'
+import { DEFAULT_RENDER_OPTIONS, engineFor } from '@/lib/report/engine'
+import { buildWeeklyCatalog, weeklyCatalogSections } from '@/lib/report/catalog/weeklyBuild'
+import { defaultFormAssetPath } from '@/lib/report/forms/loadTemplate'
 import { lintWeeklySheet } from '@/lib/domain/weeklyLint'
 import { areaGroupOf, visibleRows, type WeeklyArea, type WeeklySheetRow } from '@/lib/domain/weeklySheet'
 import type { NarrativeModel } from '@/lib/report/narrative'
@@ -23,7 +26,12 @@ const ROWS: WeeklySheetRow[] = [
   row('r-old', 'a-old', DUP),   // 내용 있는 비활성 — 활성 뒤 페이지
   row('r-gone', 'a-gone'),      // 내용 없는 비활성 — 페이지·점검 묶음 없음
 ]
-const META = { meta: { prevWeekRange: '9/21~9/25', weekRange: '9/28~10/2' } }
+/** /api/report 와 같은 길 — 기본 주간 양식을 카탈로그 모델로 채운다 */
+const renderDefault = async (input: Parameters<typeof buildWeeklyCatalog>[0]) =>
+  engineFor('pptx').render(
+    new Uint8Array(await readFile(defaultFormAssetPath('weekly_report_pptx'))),
+    buildWeeklyCatalog(input), {}, DEFAULT_RENDER_OPTIONS.weekly_report_pptx,
+  )
 
 describe('시트 PPT 페이지 = 보이는 행(영역 순) — 점검과 같은 묶음(D22)', () => {
   it('페이지 = 활성 영역(영역 순) → 내용 있는 비활성 영역, 내용 없는 비활성 영역·고정 구분 페이지 없음', () => {
@@ -39,24 +47,29 @@ describe('시트 PPT 페이지 = 보이는 행(영역 순) — 점검과 같은 
   })
 })
 
-describe('E23 — 템플릿 예시 문구가 출력의 텍스트 파트에 남지 않는다', () => {
+describe('E23 — 양식 예시 문구가 출력의 텍스트 파트에 남지 않는다', () => {
   // 뺄 등록 이름 없음 — 합성 영역 이름(실험·데이터·운영·구 영역)은 센티널과 같지 않다. 예시 문구는 그 안의 옛 구분명 하나로 적중한다.
   const SP4 = sentinelsFor('SP4', [])
-  const hitsIn = async (buf: Buffer) =>
+  const hitsIn = async (buf: Uint8Array) =>
     (await zipTextParts(buf)).flatMap(p => findSentinels(p.text, SP4).map(hit => `${p.name}: ${hit}`))
 
-  it('시트 갈래(fillSheetTemplate) — SP4 센티널 0건', async () => {
-    const buf = await fillSheetTemplate(buildSheetSections(ROWS, AREAS), META,
-      { labels: { left: '금주실적', right: '차주계획' }, lineFormatter: sheetLineText })
+  it('시트 구분만 실은 출력 — 페이지가 보이는 구분 순이고 SP4 센티널 0건', async () => {
+    const sections = weeklyCatalogSections(ROWS, AREAS, [])
+    expect(sections.map(s => s.name)).toEqual(buildSheetSections(ROWS, AREAS).map(s => s.section))   // 카탈로그 구분 = 시트 PPT 페이지(D22)
+    const buf = await renderDefault({ sections })
+    const slides = (await zipTextParts(buf)).filter(p => /^ppt\/slides\/slide\d+\.xml$/.test(p.name)).map(p => p.text).join('\n')
+    for (const s of sections) expect(slides, s.name).toContain(s.name)
+    expect(slides).toContain(sheetLineText('- 같은 줄'))
     expect(await hitsIn(buf)).toEqual([])
   })
 
-  it('기본 갈래(fillWeeklyTemplate) — SP4 센티널 0건', async () => {
+  it('주간 모델·서술까지 실은 출력 — SP4 센티널 0건', async () => {
     const narr: NarrativeModel = {
       prev: [{ phase: '설계', num: 1, items: ['범위 확정'] }],
       curr: [{ phase: '구축', num: 1, items: ['화면 개발'] }],
       issues: ['일정 협의'], events: ['착수 회의 (9/28)'],
     }
-    expect(await hitsIn(await fillWeeklyTemplate(narr, META))).toEqual([])
+    const buf = await renderDefault({ narrative: narr, sections: weeklyCatalogSections(ROWS, AREAS, []) })
+    expect(await hitsIn(buf)).toEqual([])
   })
 })

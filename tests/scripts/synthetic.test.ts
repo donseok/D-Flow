@@ -1,16 +1,23 @@
 import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import {
   PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent, outlineExpandUnsupported,
   expectedStoredCalendar, leafNamesOf,
 } from '../../scripts/lib/synthetic.mjs'
-import { TEMPLATE_HEADER } from '../../scripts/lib/e2e.mjs'
+import { TEMPLATE_HEADER, issueAnalysisRunOf } from '../../scripts/lib/e2e.mjs'
 import { SYNTHETIC_CONFIGS } from '../fixtures/synthetic/configs'
 import { SYNTHETIC_TEAMS } from '../fixtures/synthetic/teams'
 import { SYNTHETIC_WEEKLY_AREAS } from '../fixtures/synthetic/areas'
-import { findSentinels, LEGACY_SENTINELS } from '../fixtures/legacy-sentinels'
-import { sp4Sentinels, sp5b1Sentinels } from '../../scripts/lib/sentinels.mjs'
+import { findSentinels, LEGACY_SENTINELS, zipTextParts } from '../fixtures/legacy-sentinels'
+import { sp4Sentinels, sp5b1Sentinels, sp6Sentinels } from '../../scripts/lib/sentinels.mjs'
 import { parseIdPolicy } from '@/lib/issues/idPolicy'
+import type { IssueAreaRef } from '@/lib/domain/issueAreas'
+import { buildIssueAnalysisCatalog } from '@/lib/report/catalog/issueAnalysisBuild'
+import { DEFAULT_RENDER_OPTIONS, engineFor } from '@/lib/report/engine'
+import { defaultFormAssetPath } from '@/lib/report/forms/loadTemplate'
+import { parseStoredIssueAnalysisReport } from '@/lib/report/issues/storedRun'
+import { defaultVocab } from '@/lib/settings/vocab'
 
 // 합성 게이트 러너(scripts/e2e-synthetic.mjs)의 구성값은 .mjs 라 TS 픽스처를 import 하지 못해 한 번 더 적는다 — 같은 값인지 대조한다.
 const plain = (v: unknown) => JSON.parse(JSON.stringify(v))
@@ -280,5 +287,87 @@ describe('S1·S5 달력(SP5 A — 개정 §6.5.8 R·C 구성표)', () => {
   it('leafNamesOf — wbsRows 의 잎 둘 이름(R 4단·C 3단)', () => {
     expect(leafNamesOf(4)).toEqual(['합성 1.1.1.1', '합성 1.1.1.2'])
     expect(leafNamesOf(3)).toEqual(['합성 1.1.1', '합성 1.1.2'])
+  })
+})
+
+describe('e2e-synthetic.mjs — S8 은 출력을 받아 본문을 본다(SP6 정리)', () => {
+  const src = readFileSync('scripts/e2e-synthetic.mjs', 'utf8')
+  const s8 = src.slice(src.indexOf('// ── S8 — 출력'), src.indexOf('// ── S7 — 봇·알림'))
+  it('네 출력을 실제로 받는다 — 주간 PPT/XLSX·WBS 양식 XLSX·이슈분석서(저장 실행 픽스처)', () => {
+    expect(s8.length).toBeGreaterThan(1000)
+    for (const needle of [
+      '`/api/report?projectId=${proj.id}&format=pptx&week=${reportWeek}`', '`/api/report?projectId=${proj.id}&format=xlsx&week=${reportWeek}`',
+      '`/api/export?projectId=${proj.id}&form=1`', '`/api/issue-analysis?projectId=${R.id}&runId=${runId}`',
+      "svc.from('issue_analysis_runs').insert(", 'issueAnalysisRunOf({ projectId: R.id, areas: runAreas })', 'await zipText(res)',
+    ]) expect(s8, needle).toContain(needle)
+  })
+  it('본문에서 그 프로젝트의 값을 찾고, 다른 합성 프로젝트의 값과 센티널(SP4·SP5 B1·SP6)이 없어야 통과한다', () => {
+    expect(s8).toMatch(/view\(await s8Output\([^\n]*format=pptx[^\n]*\), expectNames\.weekly\)/)
+    expect(s8).toMatch(/view\(wbsForm, expectNames\.wbs\)/)
+    for (const needle of [
+      'missingIn(deck.text, deckAreas)', 'missingIn(deck.text, deckCodes)', 'missingIn(deck.text, deckAnalysis)', "deck.text.includes('영역별 종합 (계속)')",
+      '[sp4Sentinels(), sp5b1Sentinels(), sp6Sentinels()].flatMap((list) => excludeRegistered(list, reg.names))',
+      's8Cross(deck.text, s8RegC, [C.name, ...cIssueCodes])', 'cross: s8Cross(out.text, other, [otherProj.name])',
+      "o.template === 'default' && o.expected > 0 && o.missing.length === 0 && o.sentinels.length === 0 && o.cross.length === 0",
+    ]) expect(s8, needle).toContain(needle)
+    // 판정은 checks 전부 — 본문 대조 결과가 checks 에 들어 있다
+    expect(s8).toMatch(/rDeckAreas: ia\.missingAreas\.length === 0/)
+    expect(s8).toMatch(/rDeckIssueCodes: [^\n]*ia\.missingCodes\.length === 0/)
+    expect(s8).toMatch(/rDeckNoCross: cIssueCodes\.length > 0 && ia\.cross\.length === 0/)
+    expect(s8).toContain("step('S8-outputs', s8, Object.values(s8.checks).every(Boolean) ? undefined :")
+  })
+  it('러너가 계산한 값을 자기와 비교하는 단언·양식 파일 직접 읽기는 없다', () => {
+    expect(s8).not.toMatch(/formatWinSuffix|window\dSuffixMatches|defaultIssueTemplateValid|readFileSync|lastAreaCode/)
+    expect(src).not.toMatch(/import JSZip/)
+  })
+  it('이슈 분석 모듈은 화면과 같은 설정 액션으로 잠시 켜고 finally 에서 되돌린다 — 구성 정의(SYNTHETIC_R)는 그대로다', () => {
+    expect(s8).toMatch(/finally \{[\s\S]*updateSettings\(R, \{ 'modules\.enabled': rEnabled \}\)[\s\S]*setWsAllowed\(rWsAllowed\)[\s\S]*?\n  \}/)
+    expect(s8).toContain("'updateWorkspaceSettings'")
+    expect(s8).toMatch(/rModulesRestored: /)
+    expect(SYNTHETIC_R.config.project['modules.enabled']).not.toContain('issue_analysis')
+  })
+})
+
+describe('issueAnalysisRunOf — S8 의 저장 실행 픽스처가 앱에서 실제로 렌더된다', () => {
+  // S8 과 같은 조립: R 의 이슈 영역 10개, 실제 이슈가 있는 영역 셋(하나는 6건 — 개선기회가 5건씩 둘로 묶인다), 나머지는 실행 전용 이슈 하나
+  const refs: IssueAreaRef[] = SYNTHETIC_R.issues.areas.map((a: { code: string; name: string; sortOrder: number }) =>
+    ({ id: `area-${a.code}`, code: a.code, name: a.name, sortOrder: a.sortOrder, active: true }))
+  const real: Record<string, string[]> = { RND: ['RS-RND-001', 'RS-RND-002', 'RS-RND-003', 'RS-RND-004', 'RS-RND-005', 'RS-RND-006'], ENV: ['RS-ENV-001'], ADM: ['RS-ADM-001'] }
+  const runAreas = refs.map((a) => ({
+    code: a.code, name: a.name,
+    issues: (real[a.code] ?? [`S8-${a.code}-FIXTURE`]).map((code, i) => ({ id: `${code}-id`, code, title: i ? '' : `${code} 제목`, body: '', status: 'open', severity: 'low' })),
+  }))
+  const run = issueAnalysisRunOf({ projectId: 'p-r', areas: runAreas })
+
+  it('저장 실행 파서가 받는다 — 영역 10개·이슈 수·원인 분석·개선기회(5건씩)', () => {
+    const parsed = parseStoredIssueAnalysisReport(run, 'p-r', refs)
+    expect(parsed?.areas.map((a) => a.areaCode)).toEqual(refs.map((a) => a.code))
+    expect(parsed?.issueCount).toBe(6 + 1 + 1 + 7)
+    expect(parsed?.areas[0].opportunities.map((o) => o.issueIds.length)).toEqual([5, 1])
+    expect(parsed?.areas.every((a) => a.causeAnalyses?.length === a.issues.length)).toBe(true)
+    expect(parseStoredIssueAnalysisReport(run, 'p-other', refs)).toBeNull()   // 다른 프로젝트 id 로는 읽히지 않는다
+  })
+  it('이슈가 하나도 없으면 던진다 — 빈 실행을 만들지 않는다', () => {
+    expect(() => issueAnalysisRunOf({ projectId: 'p-r', areas: [{ code: 'RND', name: 'RND 연구', issues: [] }] })).toThrow()
+  })
+  it('기본 양식으로 렌더하면 S8 이 찾는 문자열이 본문에 있고 센티널은 없다', async () => {
+    const report = parseStoredIssueAnalysisReport(run, 'p-r', refs)
+    if (!report) throw new Error('픽스처가 파서를 지나지 못했다')
+    const model = buildIssueAnalysisCatalog({
+      report, areas: refs, projectName: '합성 research', authorName: '작성자', authorTeam: '', timeZone: 'America/Los_Angeles',
+      severities: defaultVocab('issues.severities'), sources: defaultVocab('issues.sources'),
+      causeCategories: defaultVocab('issues.cause_categories'), issueStatuses: [],
+    })
+    const bytes = await engineFor('pptx').render(
+      new Uint8Array(await readFile(defaultFormAssetPath('issue_analysis_pptx'))), model, {}, DEFAULT_RENDER_OPTIONS.issue_analysis_pptx)
+    const text = (await zipTextParts(bytes)).map((p) => p.text).join('\n')
+    const names = refs.map((a) => `${a.code} ${a.name}`)
+    const codes = runAreas.flatMap((a) => a.issues.map((x) => x.code))
+    for (const want of [
+      ...names, ...names.map((n) => `${n} · 이슈 목록`), ...codes, ...codes.map((c) => `${c} 직접 원인`), ...refs.map((a) => `${a.code} 개선기회 1`),
+      '영역별 종합 (계속)', 'RND 개선기회 2',
+    ]) expect(text, want).toContain(want)
+    expect(text).not.toContain('{{')
+    expect(findSentinels(text, [...sp4Sentinels(), ...sp5b1Sentinels(), ...sp6Sentinels()])).toEqual([])
   })
 })

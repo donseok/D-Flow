@@ -1027,7 +1027,7 @@ function ExportSummaryPptButton({ projectId }: { projectId: string }) {
   )
 }
 
-/** 주간보고 PPT — 프로젝트 PPT 양식(weekly-template.pptx: 디자인·폰트·글꼴)을 채워 다운로드.
+/** 주간보고 PPT — 프로젝트의 주간 PPT 양식(forms.weekly_report_pptx — 없으면 제품 기본 양식)을 채워 다운로드.
  *  fetch로 받아 400(빈 시트 등)을 Toast로 안내(스펙 §7). onBeforeExport로 미저장 셀을 먼저
  *  flush — false(중단)면 fetch 없이 종료. */
 function ExportPptButton({ projectId, weekStart, disabled, onBeforeExport }: {

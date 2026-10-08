@@ -1,7 +1,7 @@
 // 부정 테스트 1(스펙 D7·§6.1, 비평 반영 Q19 — SP4 계획 과제 26). 사용자 정의 팀·영역만 있는 합성 구성 셋의 주간 출력에 SP4 센티널
 // (옛 11구분명 ∪ 5팀 코드)이 0건이다. 대상 다섯: ① 기본 생성 시드(defaultWeeklyRows → seedOf — RPC p_seed 모양) ② 이월(carryOverRows)
-// ③ 시트 PPT(buildSheetSections → fillSheetTemplate 의 zip 텍스트 파트) ④ 기본 갈래 주간 보고서(buildWeeklyReportModel →
-// buildWeeklyNarrative·fillWeeklyTemplate, buildReportWorkbook 의 zip 텍스트 파트) ⑤ 봇 도구 층(get_weekly_sheet·compare_weekly_sheets 의
+// ③ 시트 PPT(weeklyCatalogSections → 기본 주간 양식 렌더의 zip 텍스트 파트) ④ 기본 갈래 주간 보고서(buildWeeklyReportModel →
+// buildWeeklyNarrative·buildWeeklyCatalog → 기본 주간 양식 렌더, buildReportWorkbook 의 zip 텍스트 파트) ⑤ 봇 도구 층(get_weekly_sheet·compare_weekly_sheets 의
 // 레코드·출처·사실 — LLM 없이 결정적. LLM 의 답은 SP8). 그 구성이 스스로 등록한 이름과 **같은** 센티널만 뺀다(sentinelsFor — 스펙 D8).
 // 대조: 옛 이름을 스스로 등록한 구성은 그 이름이 출력에 나오고 정상 동작한다 — 같은 실행에서 탐지가 공허하지 않음을 보인다.
 // 옛 이름의 평문은 tests/fixtures/legacy-sentinels.ts 에만 있다(계획 P6) — 이 파일은 그 목록에서 자리로 꺼낸다.
@@ -14,8 +14,10 @@ import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
 import type { ComputedItem } from '@/lib/domain/types'
 import { buildReportWorkbook } from '@/lib/report/excel'
 import { buildWeeklyNarrative } from '@/lib/report/narrative'
-import { buildSheetSections, sheetLineText } from '@/lib/report/sheetNarrative'
-import { fillSheetTemplate, fillWeeklyTemplate } from '@/lib/report/templateFill'
+import { readFile } from 'node:fs/promises'
+import { DEFAULT_RENDER_OPTIONS, engineFor } from '@/lib/report/engine'
+import { buildWeeklyCatalog, weeklyCatalogSections } from '@/lib/report/catalog/weeklyBuild'
+import { defaultFormAssetPath } from '@/lib/report/forms/loadTemplate'
 import { buildWeeklyReportModel } from '@/lib/report/weekly'
 import { repositoryOk, type RepositoryResult, type WeeklyRepository, type WeeklySheetSnapshot } from '@/lib/repositories/types'
 import type { ConfigArea, ConfigTeam, ProjectConfig } from '@/lib/settings/projectConfig'
@@ -37,8 +39,13 @@ interface Setup {
 const FROM_WEEK = '2026-09-21'
 const TO_WEEK = '2026-09-28'
 const TODAY = '2026-09-30'
-const META = { meta: { prevWeekRange: '9/21~9/27', weekRange: '9/28~10/4' } }
-const SHEET_OPTS = { labels: { left: '금주실적', right: '차주계획' }, lineFormatter: sheetLineText }
+/** /api/report 와 같은 길 — 제품 기본 주간 PPT 양식을 카탈로그 모델로 채운다(옛 원본 양식·렌더러는 지웠다) */
+const renderWeeklyPptx = async (input: Parameters<typeof buildWeeklyCatalog>[0]) =>
+  engineFor('pptx').render(
+    new Uint8Array(await readFile(defaultFormAssetPath('weekly_report_pptx'))),
+    buildWeeklyCatalog(input), {}, DEFAULT_RENDER_OPTIONS.weekly_report_pptx,
+  )
+const sheetPptx = (s: Setup) => renderWeeklyPptx({ sections: weeklyCatalogSections(rowsOf(s, 'r-to', TO_WEEK), s.areas, []) })
 
 const SETUPS: Setup[] = SYNTHETIC_CONFIGS.map((c) => ({
   label: c.id,
@@ -150,16 +157,17 @@ function wbsOf(s: Setup): ComputedItem[] {
   })]
 }
 
-async function reportOutputs(s: Setup): Promise<{ pptx: string; xlsx: string; leafName: string }> {
+async function reportOutputs(s: Setup): Promise<{ pptx: string; xlsx: string; leafName: string; projectName: string }> {
   const items = wbsOf(s)
   const model = buildWeeklyReportModel(
     items, { name: `Acme ${s.label}`, description: null, start_date: '2026-09-01', end_date: '2026-12-31' }, TODAY,
     { teams: s.teams.map((t) => t.code), levelLabels: s.levelLabels, generatedAt: '2026-09-30 09:00', calendar: calUtcSun },
   )
   return {
-    pptx: await zipText(await fillWeeklyTemplate(buildWeeklyNarrative(model), model)),
+    pptx: await zipText(await renderWeeklyPptx({ model, narrative: buildWeeklyNarrative(model), calendar: calUtcSun })),
     xlsx: await zipText(await buildReportWorkbook(model)),
     leafName: items[0].children[0].name,
+    projectName: model.meta.projectName,
   }
 }
 
@@ -180,14 +188,15 @@ describe.each(SETUPS.map((s) => [s.label, s] as const))('합성 구성 %s — �
   })
 
   it('③ 시트 PPT — 페이지 머리가 그 구성의 영역 이름이고 텍스트 파트에 옛 이름이 없다', async () => {
-    const text = await zipText(await fillSheetTemplate(buildSheetSections(rowsOf(s, 'r-to', TO_WEEK), s.areas), META, SHEET_OPTS))
+    const text = await zipText(await sheetPptx(s))
     for (const a of s.areas) expect(text, a.name).toContain(a.name)
     expect(findSentinels(text, sentinels)).toEqual([])
   })
 
   it('④ 기본 갈래 주간 보고서 — PPT·Excel 텍스트 파트에 옛 이름이 없다', async () => {
-    const { pptx, xlsx, leafName } = await reportOutputs(s)
+    const { pptx, xlsx, leafName, projectName } = await reportOutputs(s)
     expect(xlsx).toContain(leafName)
+    expect(pptx).toContain(projectName)   // 공허한 0건이 아니다 — 모델 값이 PPT 에 실렸다
     expect(findSentinels(pptx, sentinels)).toEqual([])
     expect(findSentinels(xlsx, sentinels)).toEqual([])
   }, 20_000)
@@ -221,9 +230,7 @@ describe('대조 — 옛 이름을 스스로 등록한 구성은 그 이름이 �
   })
 
   it('시트 PPT·기본 갈래 보고서 — 등록한 이름이 출력에 있고 그 밖의 옛 이름은 없다', async () => {
-    const sheet = await zipText(await fillSheetTemplate(
-      buildSheetSections(rowsOf(SELF_NAMED, 'r-to', TO_WEEK), SELF_NAMED.areas), META, SHEET_OPTS,
-    ))
+    const sheet = await zipText(await sheetPptx(SELF_NAMED))
     const { pptx, xlsx } = await reportOutputs(SELF_NAMED)
     expect(sheet).toContain(LEGACY_AREA)
     expect(xlsx).toContain(LEGACY_TEAM)

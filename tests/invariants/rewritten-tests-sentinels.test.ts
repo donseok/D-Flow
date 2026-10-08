@@ -56,7 +56,7 @@ const REWRITTEN_TESTS = [
   'tests/negative/weekly-outputs.test.ts',
   'tests/report/sheet-sections.test.ts',
   'tests/report/sheetNarrative.test.ts',
-  'tests/report/templateFill.test.ts',
+  'tests/report/engine/paginate.test.ts',   // SP6 정리 — 지운 templateFill.test.ts 의 분할 규칙 케이스가 옮겨 온 곳
   'tests/repositories/wbs-paging.test.ts',
   'tests/settings/errors-proto-keys.test.ts',
   'tests/ui/carry-mapping-modal.test.tsx',

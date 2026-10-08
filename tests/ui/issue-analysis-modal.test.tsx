@@ -70,36 +70,6 @@ describe('IssueAnalysisModal', () => {
     document.body.querySelectorAll('[role="dialog"]').forEach(node => node.remove())
   })
 
-  it('Major 미지정 이슈가 있으면 (미지정) 표시 예고를 보여준다', async () => {
-    await act(async () => {
-      root.render(
-        <IssueAnalysisModal areas={TEST_AREAS}
-          open
-          onClose={() => undefined}
-          projectId="project-1"
-          issues={[issue({ majorId: null })]}
-        />,
-      )
-    })
-
-    expect(document.body.textContent).toContain('issue.analysis.majorUnsetNotice')
-  })
-
-  it('모든 이슈에 Major가 지정되면 미지정 안내가 없다', async () => {
-    await act(async () => {
-      root.render(
-        <IssueAnalysisModal areas={TEST_AREAS}
-          open
-          onClose={() => undefined}
-          projectId="project-1"
-          issues={[issue({ majorId: 'major-1', majorSeq: 1, majorName: '주문관리' })]}
-        />,
-      )
-    })
-
-    expect(document.body.textContent).not.toContain('issue.analysis.majorUnsetNotice')
-  })
-
   it('필수 메타가 빠진 이슈가 있으면 생성 호출 전에 차단하고 사유를 보여준다', async () => {
     await act(async () => {
       root.render(
@@ -125,7 +95,7 @@ describe('IssueAnalysisModal', () => {
     expect(ensureIssueAnalysisAction).not.toHaveBeenCalled()
   })
 
-  it('서버 검증·AI 결과와 템플릿 차단 상태를 한 화면에 표시한다', async () => {
+  it('서버 검증·AI 결과와 양식 설정 차단 상태를 한 화면에 표시한다', async () => {
     const current = issue()
     const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const analysis = buildIssueAnalysisReport(snapshot, {
@@ -141,16 +111,7 @@ describe('IssueAnalysisModal', () => {
       runId: 'run-1',
       analysis,
       preflight: null,
-      template: {
-        status: 'missing',
-        message: '보호 해제된 표준 PPTX가 필요합니다.',
-        path: 'src/lib/report/assets/issue-analysis-template.pptx',
-      },
-      pptExport: {
-        status: 'unavailable',
-        code: 'PPT_RENDERER_UNAVAILABLE',
-        message: '배포용 PPT 생성 엔진 선택이 필요합니다.',
-      },
+      pptExport: { status: 'unavailable', reason: 'form_setting_invalid' },
     })
 
     await act(async () => {
@@ -175,10 +136,63 @@ describe('IssueAnalysisModal', () => {
     expect(ensureIssueAnalysisAction).toHaveBeenCalledWith('project-1', 'all')
     expect(document.body.textContent).toContain('주문 승인·입력 통합')
     expect(document.body.textContent).toContain('PI-I-02-01')
-    expect(document.body.textContent).toContain('보호 해제된 표준 PPTX가 필요합니다.')
+    expect(document.body.textContent).toContain('issue.analysis.exportUnavailable')
+    expect(document.body.textContent).toContain('issue.analysis.exportFormInvalid')
     const download = [...document.querySelectorAll('button')]
       .find(button => button.textContent?.includes('issue.analysis.download')) as HTMLButtonElement
     expect(download.disabled).toBe(true)
+    expect(download.title).toBe('issue.analysis.exportFormInvalid')
+    expect([...document.querySelectorAll('a')].some(link => link.href.includes('/api/issue-analysis'))).toBe(false)
+  })
+
+  it.each([
+    ['양식 설정을 확인하지 못한 실행', { status: 'unavailable', reason: 'form_setting_unknown' }],
+    ['액션이 판정을 싣지 않은 실행', undefined],
+  ] as const)('%s 은 다운로드를 닫는다(fail-closed)', async (_label, pptExport) => {
+    const current = issue()
+    const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS, TEST_SEVERITY_CODES)
+    const analysis = buildIssueAnalysisReport(snapshot, {}, '2026-07-31T10:00:00Z')
+    ensureIssueAnalysisAction.mockResolvedValue({ ok: true, state: 'ready', runId: 'run-1', analysis, preflight: null, pptExport })
+
+    await act(async () => {
+      root.render(
+        <IssueAnalysisModal areas={TEST_AREAS} open onClose={() => undefined} projectId="project-1" issues={[current]} />,
+      )
+    })
+    const generate = [...document.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('issue.analysis.generate')) as HTMLButtonElement
+    await act(async () => {
+      generate.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain('issue.analysis.exportFormUnknown')
+    const download = [...document.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('issue.analysis.download')) as HTMLButtonElement
+    expect(download.disabled).toBe(true)
+    expect([...document.querySelectorAll('a')].some(link => link.href.includes('/api/issue-analysis'))).toBe(false)
+  })
+
+  it('분석 실행이 없으면(생성 실패) 다운로드 버튼 자체가 없다', async () => {
+    const current = issue()
+    ensureIssueAnalysisAction.mockResolvedValue({ ok: false, state: 'unavailable', error: '생성 실패', preflight: null })
+
+    await act(async () => {
+      root.render(
+        <IssueAnalysisModal areas={TEST_AREAS} open onClose={() => undefined} projectId="project-1" issues={[current]} />,
+      )
+    })
+    const generate = [...document.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('issue.analysis.generate')) as HTMLButtonElement
+    await act(async () => {
+      generate.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain('생성 실패')
+    expect(document.body.textContent).not.toContain('issue.analysis.download')
   })
 
   it('선택 Mega만 사전 점검하고 같은 범위를 서버 액션에 전달한다', async () => {
@@ -236,7 +250,7 @@ describe('IssueAnalysisModal', () => {
     expect(ensureIssueAnalysisAction).toHaveBeenCalledWith('project-1', '02')
   })
 
-  it('템플릿과 렌더러가 모두 준비되면 저장 runId 다운로드 링크를 연다', async () => {
+  it('저장된 실행이 있고 양식 설정이 읽히면 저장 runId 다운로드 링크를 연다', async () => {
     const current = issue()
     const snapshot = buildIssueAnalysisInputSnapshot('project-1', [current], [], TEST_AREAS, TEST_SEVERITY_CODES)
     const analysis = buildIssueAnalysisReport(snapshot, {
@@ -252,16 +266,7 @@ describe('IssueAnalysisModal', () => {
       runId: 'run/with space',
       analysis,
       preflight: null,
-      template: {
-        status: 'ready',
-        message: '사용 가능',
-        path: 'src/lib/report/assets/issue-analysis-template.pptx',
-      },
-      pptExport: {
-        status: 'ready',
-        code: 'PPT_EXPORT_READY',
-        message: '다운로드 가능',
-      },
+      pptExport: { status: 'ready', source: 'default' },
     })
 
     await act(async () => {
@@ -287,5 +292,6 @@ describe('IssueAnalysisModal', () => {
     expect(download.href).toContain(
       '/api/issue-analysis?projectId=project%2Fwith%20space&runId=run%2Fwith%20space',
     )
+    expect(document.body.textContent).not.toContain('issue.analysis.exportUnavailable')
   })
 })

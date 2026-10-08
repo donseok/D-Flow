@@ -22,14 +22,12 @@ import {
   buildIssueAnalysisPreflight,
   type IssueAnalysisReport,
 } from '@/lib/report/issues/model'
-import type { IssueAnalysisTemplateDiagnostic } from '@/lib/report/issues/template'
-import type { IssueAnalysisPptExportDiagnostic } from '@/lib/report/issues/export'
+import type { IssueAnalysisPptExport } from '@/lib/report/forms/issueAnalysisExport'
 
 interface AnalysisResult {
   runId: string
   analysis: IssueAnalysisReport
-  template: IssueAnalysisTemplateDiagnostic
-  pptExport: IssueAnalysisPptExportDiagnostic
+  pptExport: IssueAnalysisPptExport
 }
 
 export function IssueAnalysisModal({
@@ -58,10 +56,6 @@ export function IssueAnalysisModal({
     [issues, areaFilter],
   )
   const preflight = useMemo(() => buildIssueAnalysisPreflight(scopedIssues, areas), [scopedIssues, areas])
-  const majorUnsetCount = useMemo(
-    () => scopedIssues.filter(issue => issue.areaId && !issue.majorId).length,
-    [scopedIssues],
-  )
   const populatedAreas = preflight.areas.filter(area => area.count > 0)
   const canGenerate = preflight.totalCount > 0 && preflight.blockedCount === 0
   const selectedArea = areaFilter === 'all'
@@ -92,8 +86,8 @@ export function IssueAnalysisModal({
           setResult({
             runId: response.runId,
             analysis: response.analysis,
-            template: response.template,
-            pptExport: response.pptExport,
+            // 액션이 판정을 싣지 않았으면 모르는 상태다 — 닫는다
+            pptExport: response.pptExport ?? { status: 'unavailable', reason: 'form_setting_unknown' },
           })
           return
         }
@@ -108,11 +102,13 @@ export function IssueAnalysisModal({
     })
   }
 
-  const canDownload = result?.template.status === 'ready'
-    && result.pptExport.status === 'ready'
-  const downloadTitle = result?.template.status !== 'ready'
-    ? result?.template.message
-    : result?.pptExport.message
+  // 받을 수 있는 조건: 저장된 실행(runId)이 있고 양식 설정(forms.issue_analysis_pptx)이 읽힌다. 모듈은 액션이 이미 닫았다.
+  const canDownload = result?.pptExport.status === 'ready'
+  const exportBlocked = result && result.pptExport.status === 'unavailable'
+    ? t(result.pptExport.reason === 'form_setting_invalid'
+      ? 'issue.analysis.exportFormInvalid'
+      : 'issue.analysis.exportFormUnknown')
+    : undefined
 
   const footer = (
     <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -132,7 +128,7 @@ export function IssueAnalysisModal({
           <button
             type="button"
             disabled
-            title={downloadTitle}
+            title={exportBlocked}
             className="btn btn-ghost inline-flex items-center gap-1.5 text-xs"
           >
             <Presentation className="h-3.5 w-3.5" />
@@ -239,13 +235,6 @@ export function IssueAnalysisModal({
           </section>
         )}
 
-        {majorUnsetCount > 0 && (
-          <div className="flex items-start gap-2 rounded-2xl border border-pending/35 bg-pending-weak p-4 text-xs leading-5 text-pending">
-            <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
-            {t('issue.analysis.majorUnsetNotice').replace('{n}', String(majorUnsetCount))}
-          </div>
-        )}
-
         {error && (
           <div className="flex items-start gap-2 rounded-2xl border border-delayed/40 bg-delayed-weak p-4 text-sm text-delayed">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -286,21 +275,12 @@ export function IssueAnalysisModal({
                 </div>
               </div>
             ))}
-            {result.template.status !== 'ready' && (
-              <div className="flex items-start gap-2 rounded-2xl border border-pending/35 bg-pending-weak p-4 text-xs leading-5 text-pending">
-                <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
-                  <div className="font-semibold">{t('issue.analysis.templateMissing')}</div>
-                  <div className="mt-0.5">{result.template.message}</div>
-                </div>
-              </div>
-            )}
-            {result.template.status === 'ready' && result.pptExport.status !== 'ready' && (
+            {exportBlocked && (
               <div className="flex items-start gap-2 rounded-2xl border border-pending/35 bg-pending-weak p-4 text-xs leading-5 text-pending">
                 <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
                   <div className="font-semibold">{t('issue.analysis.exportUnavailable')}</div>
-                  <div className="mt-0.5">{result.pptExport.message}</div>
+                  <div className="mt-0.5">{exportBlocked}</div>
                 </div>
               </div>
             )}

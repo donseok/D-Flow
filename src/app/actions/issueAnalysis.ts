@@ -16,15 +16,7 @@ import {
   type IssueAnalysisPreflight,
   type IssueAnalysisReport,
 } from '@/lib/report/issues/model'
-import {
-  diagnoseIssueAnalysisTemplate,
-  ISSUE_ANALYSIS_TEMPLATE_RELATIVE_PATH,
-  type IssueAnalysisTemplateDiagnostic,
-} from '@/lib/report/issues/template'
-import {
-  getIssueAnalysisPptExportDiagnostic,
-  type IssueAnalysisPptExportDiagnostic,
-} from '@/lib/report/issues/export'
+import { issueAnalysisPptExport, type IssueAnalysisPptExport } from '@/lib/report/forms/issueAnalysisExport'
 
 export interface EnsureIssueAnalysisActionResult {
   ok: boolean
@@ -33,37 +25,15 @@ export interface EnsureIssueAnalysisActionResult {
   runId?: string
   analysis?: IssueAnalysisReport
   preflight: IssueAnalysisPreflight | null
-  template: IssueAnalysisTemplateDiagnostic
-  pptExport: IssueAnalysisPptExportDiagnostic
+  /** 저장된 실행(runId)이 있을 때만 싣는다 — 그 실행을 PPT 로 받을 수 있는지(양식 설정 forms.issue_analysis_pptx) */
+  pptExport?: IssueAnalysisPptExport
 }
 
-const UNKNOWN_TEMPLATE: IssueAnalysisTemplateDiagnostic = {
-  status: 'protected',
-  code: 'TEMPLATE_PROTECTED',
-  message: '이슈 분석서 템플릿 상태를 확인하지 못했습니다.',
-  path: ISSUE_ANALYSIS_TEMPLATE_RELATIVE_PATH,
-}
-
-async function safeTemplateDiagnostic(): Promise<IssueAnalysisTemplateDiagnostic> {
-  try {
-    const diagnostic = await diagnoseIssueAnalysisTemplate()
-    // 서버의 process.cwd 절대경로는 액션 페이로드로 노출하지 않는다.
-    return { ...diagnostic, path: ISSUE_ANALYSIS_TEMPLATE_RELATIVE_PATH }
-  } catch (error) {
-    console.error(
-      '[issue-analysis] 템플릿 진단 실패:',
-      error instanceof Error ? error.message : error,
-    )
-    return UNKNOWN_TEMPLATE
-  }
-}
-
-function fromEnsureResult(
+async function fromEnsureResult(
+  projectId: string,
   result: EnsureIssueAnalysisResult,
   preflight: IssueAnalysisPreflight,
-  template: IssueAnalysisTemplateDiagnostic,
-): EnsureIssueAnalysisActionResult {
-  const pptExport = getIssueAnalysisPptExportDiagnostic()
+): Promise<EnsureIssueAnalysisActionResult> {
   if (!('reason' in result)) {
     return {
       ok: true,
@@ -71,8 +41,7 @@ function fromEnsureResult(
       runId: result.runId,
       analysis: result.analysis,
       preflight,
-      template,
-      pptExport,
+      pptExport: await issueAnalysisPptExport(projectId),
     }
   }
   return {
@@ -80,8 +49,6 @@ function fromEnsureResult(
     state: result.reason === 'preflight_failed' ? 'blocked' : 'unavailable',
     error: result.error,
     preflight,
-    template,
-    pptExport,
   }
 }
 
@@ -89,38 +56,32 @@ function fromEnsureResult(
  * 이슈 분석서 데이터 생성(버튼 온디맨드 전용).
  *
  * 프로젝트 멤버 확인 뒤 서버에서 원본을 엄격 재로드한다. 클라이언트가 보낸 이슈나 사전
- * 점검 결과는 신뢰하지 않는다. 템플릿이 아직 missing/protected여도 분석 JSON은 생성할 수
- * 있으며, 실제 PPT 렌더링 가능 여부는 template 진단으로 UI에 별도 전달한다.
+ * 점검 결과는 신뢰하지 않는다. 양식 설정이 손상돼도 분석 JSON은 생성할 수 있으며, 그 실행을
+ * PPT 로 받을 수 있는지는 pptExport 로 UI에 따로 전달한다(다운로드 경로는 /api/issue-analysis).
  */
 export async function ensureIssueAnalysisAction(
   projectId: string,
   areaFilter: IssueAreaFilter = 'all',
 ): Promise<EnsureIssueAnalysisActionResult> {
   const guard = await requireProjectMember(projectId)
-  const template = await safeTemplateDiagnostic()
-  const pptExport = getIssueAnalysisPptExportDiagnostic()
   if (!guard.ok) {
     return {
       ok: false,
       state: 'unavailable',
       error: guard.error,
       preflight: null,
-      template,
-      pptExport,
     }
   }
   const mod = await requireModule({ projectId }, 'issue_analysis')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17). 꺼지면 로더·LLM 에 닿지 않는다
-  if (!mod.ok) return { ok: false, state: 'unavailable', error: mod.error, preflight: null, template, pptExport }
+  if (!mod.ok) return { ok: false, state: 'unavailable', error: mod.error, preflight: null }
   const context = await loadIssueEntryContext(projectId)
-  if (!context.ok) return { ok: false, state: 'unavailable', error: context.error, preflight: null, template, pptExport }
+  if (!context.ok) return { ok: false, state: 'unavailable', error: context.error, preflight: null }
   if (areaFilter !== 'all' && !context.value.areas.some(area => area.id === areaFilter)) {
     return {
       ok: false,
       state: 'unavailable',
       error: '잘못된 영역 분석 범위입니다.',
       preflight: null,
-      template,
-      pptExport,
     }
   }
 
@@ -147,8 +108,6 @@ export async function ensureIssueAnalysisAction(
       state: 'unavailable',
       error: '이슈 분석 처리에 실패했습니다. 다시 시도하세요.',
       preflight: null,
-      template,
-      pptExport,
     }
   }
 
@@ -159,8 +118,6 @@ export async function ensureIssueAnalysisAction(
       state: 'blocked',
       error: '분석할 이슈가 없습니다.',
       preflight,
-      template,
-      pptExport,
     }
   }
   if (preflight.blockedCount > 0) {
@@ -169,21 +126,19 @@ export async function ensureIssueAnalysisAction(
       state: 'blocked',
       error: `필수 분석 정보가 누락된 이슈가 ${preflight.blockedCount}건 있습니다.`,
       preflight,
-      template,
-      pptExport,
     }
   }
 
   try {
     const { severities, sources, causeCategories } = context.value.vocab
     if (!causeCategories) {
-      return { ok: false, state: 'unavailable', error: '원인 분류 설정(issues.cause_categories)이 손상돼 분석서를 만들 수 없습니다. 관리자에게 설정 점검을 요청하세요.', preflight, template, pptExport }
+      return { ok: false, state: 'unavailable', error: '원인 분류 설정(issues.cause_categories)이 손상돼 분석서를 만들 수 없습니다. 관리자에게 설정 점검을 요청하세요.', preflight }
     }
     const result = await ensureIssueAnalysis(projectId, issues, majors, guard.actor.userId, context.value.areas, {
       severityCodes: orderedVocab(severities).map(e => e.code),
       analysis: issueAnalysisVocabOf(causeCategories, sources),
     })
-    return fromEnsureResult(result, preflight, template)
+    return await fromEnsureResult(projectId, result, preflight)
   } catch (error) {
     // ensure 계층은 정상적으로는 never-throw 결과를 주지만, 예기치 않은 프로그래밍/IO
     // 예외도 액션 경계를 넘어 Next 오류 페이지로 번지지 않게 명시적 unavailable로 만든다.
@@ -194,8 +149,6 @@ export async function ensureIssueAnalysisAction(
       state: 'unavailable',
       error: '이슈 분석 처리에 실패했습니다. 다시 시도하세요.',
       preflight,
-      template,
-      pptExport,
     }
   }
 }

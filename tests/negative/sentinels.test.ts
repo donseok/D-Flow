@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
-import { SP4_SENTINELS_B64, SP5A_SENTINELS, SP5B1_SENTINELS_B64, sp4Sentinels, sp5aSentinels, sp5b1Sentinels } from '../../scripts/lib/sentinels.mjs'
+import {
+  SP4_SENTINELS_B64, SP5A_SENTINELS, SP5B1_SENTINELS_B64, SP6_SENTINELS_B64, sp4Sentinels, sp5aSentinels, sp5b1Sentinels, sp6Sentinels,
+} from '../../scripts/lib/sentinels.mjs'
 import {
   LEGACY_SENTINELS, SENTINEL_MASKS, SENTINELS_BY_SP, findSentinels, isZipTextPart, sentinelsFor, zipTextParts,
 } from '../fixtures/legacy-sentinels'
@@ -34,6 +36,14 @@ describe('센티널 목록', () => {
     expect(b1).toEqual([...LEGACY_SENTINELS.issueAreas, LEGACY_SENTINELS.issueIdPrefix])
     expect(sp5b1Sentinels()).toEqual([...b1])
     expect(SP5B1_SENTINELS_B64).toBe(Buffer.from(b1.join('\n'), 'utf8').toString('base64'))
+  })
+
+  it('SP6 센티널 사본은 지운 원본 양식의 샘플 문구·방법론 용어 목록과 같다', () => {
+    const sp6 = SENTINELS_BY_SP.SP6
+    expect(sp6).toEqual([...LEGACY_SENTINELS.formSamples])
+    expect(sp6).toHaveLength(9)
+    expect(sp6Sentinels()).toEqual([...sp6])
+    expect(SP6_SENTINELS_B64).toBe(Buffer.from(sp6.join('\n'), 'utf8').toString('base64'))
   })
 
   it('런타임 코드(src)는 센티널 목록·규칙 파일을 import 하지 않는다 — 목록은 시험 도구다', () => {

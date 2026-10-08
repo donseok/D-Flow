@@ -85,3 +85,10 @@ export const SP5B1_SENTINELS_B64 = '6riw7KSA6rSA66asCuyGkOydteq0gOumrArsmIHsl4UK
 export function sp5b1Sentinels() {
   return Buffer.from(SP5B1_SENTINELS_B64, 'base64').toString('utf8').split('\n')
 }
+
+/** SP6 원본 이슈분석서 양식의 샘플 문구·방법론 용어의 base64 사본 — 평문 정본은 tests/fixtures/legacy-sentinels.ts 의 formSamples */
+export const SP6_SENTINELS_B64 = '7JiB7JeF6rSA66asCuqyrOyggSDsgrDstpwK7KO866y4IOyeheugpQrtlITroZzsoJ3tirggVEYKTWVnYQpNYWpvcgpTdWIgUHJvY2VzcwpBcy1JcwpQSS1JLQ=='
+/** @returns {string[]} */
+export function sp6Sentinels() {
+  return Buffer.from(SP6_SENTINELS_B64, 'base64').toString('utf8').split('\n')
+}

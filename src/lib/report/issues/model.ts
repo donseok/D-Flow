@@ -37,6 +37,8 @@ export const analysisVocab = (x: { vocab?: IssueAnalysisVocab }): IssueAnalysisV
 export const ISSUE_ANALYSIS_CAUSES_PER_ISSUE_MAX = 4
 export const ISSUE_ANALYSIS_DIRECT_CAUSE_MAX = 400
 export const ISSUE_ANALYSIS_ROOT_CAUSE_MAX = 800
+/** 한 개선기회에 연결할 수 있는 이슈 수의 상한(프롬프트·저장 파서의 1~5건 계약과 같은 값) */
+export const ISSUE_ANALYSIS_OPPORTUNITY_CAPACITY = 5
 
 // 프로세스 정의(트리/정의 페이지 초안)의 길이 상한 — 템플릿 박스 실측(셈플 최대
 // 3줄 ≈110자)에 여유를 둔 값이며 프롬프트·검증·저장 파서가 같은 값을 공유한다.

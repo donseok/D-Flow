@@ -7,7 +7,7 @@
 import JSZip from 'jszip'
 import { formatCatalogValue, resolveCatalogPath } from '../catalog'
 import type { CatalogModel } from '../catalog/types'
-import { splitIssueAnalysisTextForRows } from '../issues/deckPlan'
+import { splitIssueAnalysisTextForRows } from '../issues/textRows'
 import { escapeXml } from '../xml'
 import { capItems, lineCost, paginateGroups, paginateLines } from './paginate'
 import type { NarrativeGroup } from '../narrative'

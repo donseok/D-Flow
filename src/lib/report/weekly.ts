@@ -421,7 +421,7 @@ export function buildWeeklyReportModel(
   const issues: IssueRow[] = []
   if (cnt.delayed > 0) issues.push({ grade: '높음', content: `지연 작업 ${cnt.delayed}건 발생 — 조속한 조치 필요`, action: '(미작성)' })
   if (maxDelayDays > 0) issues.push({ grade: '높음', content: `최대 지연일수 ${maxDelayDays}일 — 일정 재조정 검토 필요`, action: '(미작성)' })
-  // 이슈 문구는 PPT(narrative→templateFill)·AI 어시스턴트가 그대로 인용 → 정수 기반 현상유지.
+  // 이슈 문구는 PPT(narrative→주간 카탈로그 issues)·AI 어시스턴트가 그대로 인용 → 정수 기반 현상유지.
   const actualInt = Math.round(actual)
   const plannedInt = Math.round(planned)
   if (actualInt < plannedInt) issues.push({ grade: '중간', content: `계획 대비 실적 ${plannedInt - actualInt}%p 미달`, action: '(미작성)' })

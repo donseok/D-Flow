@@ -12,6 +12,8 @@ export const LEGACY_SENTINELS = {
   issueAreas: ['기준관리', '손익관리', '영업', '품질·설계', '생산계획', '조업', '출하', '원가'],
   issueIdPrefix: 'PI-I-',
   timezone: ['Asia/Seoul', '+09:00'],
+  // SP6 — 지운 원본 이슈분석서 양식의 샘플 문구와 그 방법론 용어(양식 출력에 다시 나오면 안 된다)
+  formSamples: ['영업관리', '견적 산출', '주문 입력', '프로젝트 TF', 'Mega', 'Major', 'Sub Process', 'As-Is', 'PI-I-'],
 } as const
 
 /** SP 별 부분 집합 — 그 SP 가 걷어 낸 기본값만. 뒤 SP 가 자기 줄을 더한다(SP5: 이슈 영역·ID 접두·시간대) */
@@ -21,6 +23,8 @@ export const SENTINELS_BY_SP = {
   SP5A: Object.freeze([...LEGACY_SENTINELS.timezone]),
   // SP5 B1 — 프로젝트 이슈 영역·옛 PI 코드 접두(스펙 D8·§6.4 S10)
   SP5B1: Object.freeze([...LEGACY_SENTINELS.issueAreas, LEGACY_SENTINELS.issueIdPrefix]),
+  // SP6 — 양식 출력(기본 양식 렌더 결과·합성 게이트 S8)의 원본 샘플 문구·방법론 용어
+  SP6: Object.freeze([...LEGACY_SENTINELS.formSamples]),
 } as const satisfies Record<string, readonly string[]>
 
 /** 그 프로젝트가 스스로 등록한 영역·팀의 code·name 과 **같은** 센티널만 뺀다(포함 관계로는 빼지 않는다 — 스펙 D8) */

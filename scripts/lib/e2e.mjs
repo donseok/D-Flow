@@ -547,6 +547,56 @@ export function issueAnalysisRunFixture({ areaCode, areaName, issueId, code }) {
   }
 }
 
+/**
+ * 영역 여러 개의 저장된 분석 실행(v1) — 합성 게이트 S8 이 이슈분석서를 실제로 받아 본문을 대조할 때 넣는다. 앱의 저장 실행 파서
+ * (storedRun.ts)가 받는 모양이다: 영역 요약은 이슈에서 계산하고, 이슈마다 원인 분석 하나, 개선기회는 영역 이슈를 5건씩 묶어 전부 덮는다.
+ * 빈 제목·본문은 파서가 거부하므로 대체 문구를 넣는다. 원인 분류 code 는 그 프로젝트의 어휘에 있어야 한다(기본 어휘의 'process').
+ * @param {{ projectId: string, generatedAt?: string, causeCategory?: string,
+ *   areas: ReadonlyArray<{ code: string, name: string, issues: ReadonlyArray<{ id: string, code: string, title?: string | null, body?: string | null, status?: string, severity: string }> }> }} input
+ */
+export function issueAnalysisRunOf({ projectId, areas, generatedAt = '2026-10-01T00:00:00.000Z', causeCategory = 'process' }) {
+  const withIssues = areas.filter((a) => a.issues.length > 0)
+  if (!withIssues.length) throw new Error('분석 실행 픽스처에 이슈가 있는 영역이 없다')
+  const ko = (a, b) => a.localeCompare(b, 'ko')
+  const count = (list, keys, pick) => Object.fromEntries(keys.map((k) => [k, list.filter((x) => pick(x) === k).length]))
+  return {
+    schemaVersion: 'issue-analysis.v1', projectId, generatedAt,
+    issueCount: withIssues.reduce((n, a) => n + a.issues.length, 0),
+    areas: withIssues.map((area) => {
+      const issues = area.issues.map((issue) => ({
+        id: issue.id, code: issue.code, majorId: null,
+        title: String(issue.title ?? '').trim() || `${issue.code} 제목 없음`, body: String(issue.body ?? '').trim() || `${issue.code} 본문 없음`,
+        status: issue.status ?? 'open', severity: issue.severity,
+        subProcess: `${area.code} 절차`, ownerDepartment: `${area.code} 담당`, relatedSystems: [`${area.code} 시스템`],
+        assigneeMemberIds: [], source: { manual: { type: 'other', detail: '합성 출처' }, minutes: [] },
+      }))
+      const opportunities = []
+      for (let i = 0; i < issues.length; i += 5) {
+        opportunities.push({
+          title: `${area.code} 개선기회 ${opportunities.length + 1}`, description: `${area.name} 의 이슈를 묶어 개선한다.`,
+          issueIds: issues.slice(i, i + 5).map((x) => x.id),
+        })
+      }
+      return {
+        areaCode: area.code, areaName: area.name, majors: [],
+        summary: {
+          totalCount: issues.length,
+          statusCounts: count(issues, ['open', 'in_progress', 'resolved', 'on_hold'], (x) => x.status),
+          severityCounts: count(issues, [...new Set(issues.map((x) => x.severity))], (x) => x.severity),
+          ownerDepartments: [...new Set(issues.map((x) => x.ownerDepartment))].sort(ko),
+          relatedSystems: [...new Set(issues.flatMap((x) => x.relatedSystems))].sort(ko),
+        },
+        issues,
+        causeAnalyses: issues.map((x) => ({
+          issueId: x.id, causes: [{ category: causeCategory, directCause: `${x.code} 직접 원인`, rootCause: `${x.code} 근본 원인` }],
+        })),
+        opportunities,
+      }
+    }),
+    unclassifiedIssues: [],
+  }
+}
+
 /** PPTX 텍스트 파트에 모든 기대 문자열이 있는지 — 바이너리·미디어 파트는 검사하지 않는다. */
 export async function zipHasAll(buf, words) {
   const text = (await zipTextParts(buf)).map((part) => part.text).join('\n')

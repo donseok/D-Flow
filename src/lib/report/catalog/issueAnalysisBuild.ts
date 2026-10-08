@@ -1,6 +1,6 @@
 /**
  * 이슈 분석 카탈로그 (정본 §4.5.2·§4.5.4).
- * 로더는 loadSavedIssueAnalysisRun 한 묶음. 고정 슬라이드 삽입(§4.9)은 여기 없다.
+ * 로더는 loadSavedIssueAnalysisRun 한 묶음. 제품 고정 슬라이드(§4.9)는 넣지 않는다 — docs/baseline/sp6-issue-analysis-decision.md.
  */
 import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import type { IssueStatus } from '@/lib/domain/issues'
@@ -12,8 +12,7 @@ import {
   type SeverityDef,
   type SourceDef,
 } from '@/lib/settings/vocab'
-import { ISSUE_ANALYSIS_OPPORTUNITY_CAPACITY } from '../issues/deckPlan'
-import type { IssueAnalysisReport, IssueAnalysisReportIssue } from '../issues/model'
+import { ISSUE_ANALYSIS_OPPORTUNITY_CAPACITY, type IssueAnalysisReport, type IssueAnalysisReportIssue } from '../issues/model'
 import type {
   IssueAnalysisCatalogArea,
   IssueAnalysisCatalogCause,
@@ -61,7 +60,7 @@ function splitDetail(value: string): string[] {
   return value.split(/\r?\n|[|;]/).map(compact).filter(Boolean)
 }
 
-/** 현 deckPlan.formatDateIn 의 YY.MM.DD. 타임존은 calendar.timezone. */
+/** 표지 일자 표기 YY.MM.DD. 타임존은 calendar.timezone. */
 function dateLabel(value: string, timeZone: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) throw new Error('이슈 분석서 생성일시가 올바르지 않습니다.')
@@ -99,7 +98,7 @@ function statusFields(status: IssueStatus, statuses: readonly IssueStatusDef[]):
   return { status, status_code: status, status_label }
 }
 
-/** issueSourceLines. 원천 유형 줄은 issues.sources[].label. 회의록 줄은 제품 고정. */
+/** 원천 줄. 원천 유형 줄은 issues.sources[].label. 회의록 줄은 제품 고정. */
 function sourceLines(issue: IssueAnalysisReportIssue, sources: readonly SourceDef[]): string[] {
   const lines: string[] = []
   if (issue.source.manual) {

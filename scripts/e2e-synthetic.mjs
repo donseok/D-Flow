@@ -30,13 +30,12 @@
 import { execFileSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import JSZip from 'jszip'
 import { createClient } from '@supabase/supabase-js'
 import {
-  ERR_DENIED, areaInput, dowOfIso, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, localClientEnv, plannedPctByName, shiftDays,
+  ERR_DENIED, areaInput, dowOfIso, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, issueAnalysisRunOf, localClientEnv, plannedPctByName, shiftDays,
   storedTimezone, todayInTz, workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
-import { excludeRegistered, findSentinels, sp4Sentinels, sp5aSentinels, sp5b1Sentinels, zipTextParts } from './lib/sentinels.mjs'
+import { excludeRegistered, findSentinels, sp4Sentinels, sp5aSentinels, sp5b1Sentinels, sp6Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
 import {
   PENDING_STEPS, SYNTHETIC_C, SYNTHETIC_R, SYNTHETIC_WORKSPACE_B, areaView, expectedAreas, expectedTeams, renderedProof, teamView, wbsRows, weekRowsHaveContent, outlineExpandUnsupported,
@@ -1021,71 +1020,135 @@ async function main() {
   }, Object.values(s3FieldsChecks).every(Boolean) ? undefined : `S3-fields: ${JSON.stringify(s3FieldsChecks)}`)
 
   // ── S8 — 출력 (SP6)
-  // 주간 PPT/Excel·WBS Excel·이슈분석서. R 은 영역 10개라 2페이지(체브론 창 1~8 / 10, 9~10 / 10)가 되고, 마지막 영역까지 누락이 없다.
-  log('S8 — 출력 (주간 PPT/XLSX, WBS XLSX 양식, 이슈분석서 10개 영역 완결성)')
+  // 네 출력을 실제로 받아 본문(zip 의 텍스트 파트)을 본다 — 200 과 헤더만으로는 빈 양식도 지난다.
+  //   주간 PPT/XLSX: 그 프로젝트의 활성 주간 영역 이름 전부. WBS 양식 XLSX: 루트 항목 이름 전부와 그 프로젝트 팀(code 또는 이름) 하나 이상.
+  //   이슈분석서(R — 이슈 영역 10개. C 는 이슈 영역이 없어 분석 대상이 없다): issue_analysis 를 워크스페이스 허용·프로젝트 사용에 잠시 더하고
+  //   (화면과 같은 설정 액션) 저장 실행을 하나 넣어 받은 뒤 되돌린다. 실행은 R 의 실제 영역 10개와 영역이 있는 실제 이슈로 만들고, 이슈가 없는
+  //   영역에는 실행에만 있는 이슈 하나를 둔다(fixtureOnly — 영역 10개가 전부 실려야 영역별 종합이 행 상한 5 로 나뉜다).
+  //   출력마다 ① 그 프로젝트의 값이 있고 ② 다른 합성 프로젝트의 값(프로젝트 이름·팀 code, 분석서는 이슈 코드까지)과 센티널(SP4·SP5 B1·SP6 —
+  //   등록 이름과 같은 것만 뺀다)이 없다.
+  log('S8 — 출력 (주간 PPT/XLSX·WBS 양식 XLSX·이슈분석서 본문 대조)')
   const s8 = { R: {}, C: {}, checks: {} }
+  const s8Sentinels = (reg) => [sp4Sentinels(), sp5b1Sentinels(), sp6Sentinels()].flatMap((list) => excludeRegistered(list, reg.names))
+  const missingIn = (text, words) => words.filter((w) => !text.includes(w))
+  const s8Output = async (path) => {
+    const res = await admin.http('GET', path)
+    return { template: res.headers.get('x-form-template'), text: await zipText(res) }
+  }
+  /** 다른 합성 프로젝트의 값 — 팀 code 는 센티널과 같은 낱말 경계 규칙, 이름·코드는 부분 문자열 */
+  const s8Cross = (text, other, words) => [...findSentinels(text, other.teamCodes), ...words.filter((w) => text.includes(w))]
 
-  for (const [label, proj] of [['R', R], ['C', C]]) {
+  // 등록 이름은 지금 것으로 다시 읽는다 — S10 뒤 경계 단계가 팀·영역을 개명했다
+  const s8RegR = await registeredOf(R)
+  const s8RegC = await registeredOf(C)
+  for (const [label, proj, reg, other, otherProj] of [['R', R, s8RegR, s8RegC, C], ['C', C, s8RegC, s8RegR, R]]) {
     const reportWeek = label === 'R' ? rWeeks.w1 : weeks.w1
-    const weeklyPptxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=pptx&week=${reportWeek}`)
-    if (weeklyPptxRes.status !== 200) throw new Fail(`S8 ${label} 주간 PPTX 실패: ${weeklyPptxRes.status}`)
-    const weeklyPptxZip = await JSZip.loadAsync(Buffer.from(await weeklyPptxRes.arrayBuffer()))
-
-    const weeklyXlsxRes = await admin.http('GET', `/api/report?projectId=${proj.id}&format=xlsx&week=${reportWeek}`)
-    if (weeklyXlsxRes.status !== 200) throw new Fail(`S8 ${label} 주간 XLSX 실패: ${weeklyXlsxRes.status}`)
-    const weeklyXlsxZip = await JSZip.loadAsync(Buffer.from(await weeklyXlsxRes.arrayBuffer()))
-
-    const wbsFormRes = await admin.http('GET', `/api/export?projectId=${proj.id}&form=1`)
-    if (wbsFormRes.status !== 200) throw new Fail(`S8 ${label} WBS 양식 XLSX 실패: ${wbsFormRes.status}`)
-    const wbsFormZip = await JSZip.loadAsync(Buffer.from(await wbsFormRes.arrayBuffer()))
-
+    const expectNames = await proofNamesOf(proj)   // 지금 DB 의 활성 주간 영역 이름·루트 항목 이름(앞 단계가 개명·비활성화했다)
+    const teams = rows(`S8 ${label} 팀`, await admin.sb.from('teams').select('code, name').eq('project_id', proj.id))
+    const sentinels = s8Sentinels(reg)
+    const view = (out, want) => ({
+      template: out.template, expected: want.length, missing: missingIn(out.text, want),
+      sentinels: findSentinels(out.text, sentinels), cross: s8Cross(out.text, other, [otherProj.name]),
+    })
+    const wbsForm = await s8Output(`/api/export?projectId=${proj.id}&form=1`)
     s8[label] = {
-      weeklyPptx: { status: weeklyPptxRes.status, template: weeklyPptxRes.headers.get('x-form-template'), files: Object.keys(weeklyPptxZip.files).length },
-      weeklyXlsx: { status: weeklyXlsxRes.status, template: weeklyXlsxRes.headers.get('x-form-template'), files: Object.keys(weeklyXlsxZip.files).length },
-      wbsFormXlsx: { status: wbsFormRes.status, template: wbsFormRes.headers.get('x-form-template'), files: Object.keys(wbsFormZip.files).length },
+      weeklyPptx: view(await s8Output(`/api/report?projectId=${proj.id}&format=pptx&week=${reportWeek}`), expectNames.weekly),
+      weeklyXlsx: view(await s8Output(`/api/report?projectId=${proj.id}&format=xlsx&week=${reportWeek}`), expectNames.weekly),
+      wbsFormXlsx: {
+        ...view(wbsForm, expectNames.wbs),
+        teams: teams.filter((t) => wbsForm.text.includes(t.name) || findSentinels(wbsForm.text, [t.code]).length > 0).map((t) => t.code),
+      },
     }
   }
 
-  // R 이슈 영역 10개(8개 초과 창 분할) 완결성 검증 (개정 §4.5.1, §4.5.4)
-  const rDbAreas = rows('R 이슈 영역 10개 조회', await admin.sb.from('project_areas')
+  // 이슈분석서 — R 의 영역 10개·이슈로 만든 저장 실행을 기본 양식으로 받는다
+  const rDbAreas = rows('S8 R 이슈 영역', await admin.sb.from('project_areas')
     .select('id, code, name, sort_order')
     .eq('project_id', R.id)
     .eq('kind', 'issue_area')
     .order('sort_order'))
-
-  const formatWinSuffix = (idx, total) => {
-    if (total <= 8 || idx < 0) return ''
-    const w = Math.floor(idx / 8)
-    const start = 8 * w + 1
-    const end = Math.min(8 * (w + 1), total)
-    const range = start === end ? `${start}` : `${start}–${end}`
-    return ` (영역 ${range} / ${total})`
+  const rDbIssues = rows('S8 R 이슈', await admin.sb.from('issues')
+    .select('id, code, title, body, status, severity, area_id').eq('project_id', R.id).order('issue_no'))
+  const cIssueCodes = rows('S8 C 이슈 코드', await admin.sb.from('issues').select('code').eq('project_id', C.id)).map((x) => x.code)
+  const rSeverity = rDbIssues.find((x) => x.area_id)?.severity
+  if (!rSeverity) throw new Fail('S8 R 에 영역이 있는 이슈가 없다 — 분석 실행을 만들 수 없다')
+  const fixtureOnly = []
+  const runAreas = rDbAreas.map((a) => {
+    const own = rDbIssues.filter((x) => x.area_id === a.id)
+    if (own.length) return { code: a.code, name: a.name, issues: own }
+    const code = `S8-${a.code}-FIXTURE`
+    fixtureOnly.push(code)
+    return { code: a.code, name: a.name, issues: [{ id: randomUUID(), code, title: `${a.code} 실행 전용 이슈`, body: `${a.name} 영역이 분석서에 실리는지 본다.`, status: 'open', severity: rSeverity }] }
+  })
+  const runJson = issueAnalysisRunOf({ projectId: R.id, areas: runAreas })
+  const rWsDoc = () => readDoc(admin.sb, 'workspace_settings', 'workspace_id', wsR.id)
+  const rProjDoc = () => readDoc(admin.sb, 'project_settings', 'project_id', R.id)
+  const rWsAllowed = (await rWsDoc()).values['modules.allowed']
+  const rEnabled = (await rProjDoc()).values['modules.enabled']
+  const setWsAllowed = async (list) => {
+    await admin.http('GET', wsSettingsPage(wsR))
+    const doc = await rWsDoc()
+    return (await admin.action(wsSettingsPage(wsR), 'updateWorkspaceSettings',
+      [wsR.id, { expectedRevision: doc.revision, commandId: randomUUID(), set: { 'modules.allowed': list }, unset: [] }])).result
+  }
+  mustOk('S8 R 워크스페이스 이슈 분석 허용', await setWsAllowed([...new Set([...rWsAllowed, 'issue_analysis'])]))
+  mustOk('S8 R 이슈 분석 모듈 켜기', await updateSettings(R, { 'modules.enabled': [...new Set([...rEnabled, 'issue_analysis'])] }))
+  let deck
+  let runId = null
+  try {
+    const [run] = rows('S8 저장 분석 실행', await svc.from('issue_analysis_runs').insert({
+      project_id: R.id, input_hash: createHash('sha256').update(`${R.id}:s8:${stamp}`).digest('hex'), prompt_version: 'synthetic-s8',
+      model: 'synthetic-fixture', status: 'ready', analysis_json: runJson, input_snapshot: {}, issue_count: runJson.issueCount, created_by: me.id,
+    }).select('id'))
+    runId = run.id
+    deck = await s8Output(`/api/issue-analysis?projectId=${R.id}&runId=${runId}`)
+  } finally {
+    // 뒤 단계(S7)가 원래 구성을 보게 되돌린다 — 실행 행도 지운다
+    if (runId) await svc.from('issue_analysis_runs').delete().eq('id', runId)
+    mustOk('S8 R 이슈 분석 모듈 되돌리기', await updateSettings(R, { 'modules.enabled': rEnabled }))
+    mustOk('S8 R 워크스페이스 허용 되돌리기', await setWsAllowed(rWsAllowed))
+  }
+  const deckAreas = rDbAreas.map((a) => `${a.code} ${a.name}`)                    // 기본 양식의 '{{.code}} {{.name}}'
+  const deckCodes = runAreas.flatMap((a) => a.issues.map((x) => x.code))
+  const deckAnalysis = [...deckCodes.map((c) => `${c} 직접 원인`), ...rDbAreas.map((a) => `${a.code} 개선기회 1`)]
+  s8.R.issueAnalysis = {
+    template: deck.template, areas: rDbAreas.length, issues: deckCodes.length, fixtureOnly,
+    missingAreas: missingIn(deck.text, deckAreas),
+    missingAreaSlides: missingIn(deck.text, deckAreas.map((n) => `${n} · 이슈 목록`)),
+    missingCodes: missingIn(deck.text, deckCodes),
+    missingAnalysis: missingIn(deck.text, deckAnalysis),
+    overviewContinued: deck.text.includes('영역별 종합 (계속)'),
+    unfilled: deck.text.includes('{{'),
+    sentinels: findSentinels(deck.text, s8Sentinels(s8RegR)),
+    cross: s8Cross(deck.text, s8RegC, [C.name, ...cIssueCodes]),
+  }
+  const restored = {
+    allowed: (await rWsDoc()).values['modules.allowed'],
+    enabled: (await rProjDoc()).values['modules.enabled'],
   }
 
-  const rTotalAreas = rDbAreas.length
-  const win1 = formatWinSuffix(0, rTotalAreas)
-  const win2 = formatWinSuffix(8, rTotalAreas)
-
-  // 기본 이슈분석서 양식 파일 확인 및 마지막 10번째 영역 보존
-  const defaultIssuePptxBytes = readFileSync('src/lib/report/assets/default/issue_analysis_pptx.pptx')
-  const defaultIssueZip = await JSZip.loadAsync(defaultIssuePptxBytes)
-  const lastArea = rDbAreas[rTotalAreas - 1]
-
+  const outputOk = (o) => o.template === 'default' && o.expected > 0 && o.missing.length === 0 && o.sentinels.length === 0 && o.cross.length === 0
+  const ia = s8.R.issueAnalysis
   s8.checks = {
-    rWeeklyPptxDefault: s8.R.weeklyPptx.template === 'default',
-    rWeeklyXlsxDefault: s8.R.weeklyXlsx.template === 'default',
-    rWbsFormXlsxDefault: s8.R.wbsFormXlsx.template === 'default',
-    cWeeklyPptxDefault: s8.C.weeklyPptx.template === 'default',
-    cWeeklyXlsxDefault: s8.C.weeklyXlsx.template === 'default',
-    cWbsFormXlsxDefault: s8.C.wbsFormXlsx.template === 'default',
-    rAreaCount10: rTotalAreas === 10,
-    window1SuffixMatches: win1 === ' (영역 1–8 / 10)',
-    window2SuffixMatches: win2 === ' (영역 9–10 / 10)',
-    lastAreaCode: lastArea?.code === 'ADM',
-    defaultIssueTemplateValid: Object.keys(defaultIssueZip.files).includes('[Content_Types].xml'),
+    rWeeklyPptx: outputOk(s8.R.weeklyPptx),
+    rWeeklyXlsx: outputOk(s8.R.weeklyXlsx),
+    rWbsFormXlsx: outputOk(s8.R.wbsFormXlsx) && s8.R.wbsFormXlsx.teams.length > 0,
+    cWeeklyPptx: outputOk(s8.C.weeklyPptx),
+    cWeeklyXlsx: outputOk(s8.C.weeklyXlsx),
+    cWbsFormXlsx: outputOk(s8.C.wbsFormXlsx) && s8.C.wbsFormXlsx.teams.length > 0,
+    rAreaCount10: rDbAreas.length === 10,
+    rDeckDefault: ia.template === 'default',
+    rDeckAreas: ia.missingAreas.length === 0 && ia.missingAreaSlides.length === 0,
+    rDeckIssueCodes: deckCodes.length >= rDbAreas.length && ia.missingCodes.length === 0,
+    rDeckAnalysis: ia.missingAnalysis.length === 0,
+    rDeckOverviewContinued: ia.overviewContinued,
+    rDeckFilled: !ia.unfilled,
+    rDeckNoSentinels: ia.sentinels.length === 0,
+    rDeckNoCross: cIssueCodes.length > 0 && ia.cross.length === 0,
+    rModulesRestored: JSON.stringify(restored.allowed) === JSON.stringify(rWsAllowed) && JSON.stringify(restored.enabled) === JSON.stringify(rEnabled),
   }
 
-  step('S8-outputs', s8, Object.values(s8.checks).every(Boolean) ? undefined : `S8-outputs: ${JSON.stringify(s8.checks)}`)
+  step('S8-outputs', s8, Object.values(s8.checks).every(Boolean) ? undefined : `S8-outputs: ${JSON.stringify({ checks: s8.checks, R: s8.R, C: s8.C })}`)
 
   // ── S7 — 봇·알림 (SP8·SPU1)
   // weekly:read 팀 필터·대시보드·이슈 조회가 화면과 같은 값을 낸다. 개인 알림 opt-out 이 소급 적용되고 required 유형은 끌 수 없다.

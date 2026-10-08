@@ -23,8 +23,6 @@ const mocks = vi.hoisted(() => {
     requireProjectMember: vi.fn(),
     getDisplayName: vi.fn(),
     loadSavedIssueAnalysisRun: vi.fn(),
-    getDiagnostic: vi.fn(),
-    renderIssueAnalysisPpt: vi.fn(),
     getProjectConfig: vi.fn(),
     render: vi.fn(),
     scan: vi.fn(),
@@ -43,14 +41,6 @@ vi.mock('@/lib/data/issueAnalysis', () => ({
   loadSavedIssueAnalysisRun: mocks.loadSavedIssueAnalysisRun,
 }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
-vi.mock('@/lib/report/issues/export', async importOriginal => {
-  const actual = await importOriginal<typeof import('@/lib/report/issues/export')>()
-  return {
-    ...actual,
-    getIssueAnalysisPptExportDiagnostic: mocks.getDiagnostic,
-    renderIssueAnalysisPpt: mocks.renderIssueAnalysisPpt,
-  }
-})
 vi.mock('@/lib/report/forms/loadTemplate', () => ({
   loadFormTemplate: mocks.loadTemplate,
   FormTemplateLoadError: mocks.FormTemplateLoadError,
@@ -140,12 +130,6 @@ beforeEach(() => {
     projectName: 'Acme 프로젝트',
     report: report(),
   })
-  mocks.getDiagnostic.mockReturnValue({
-    status: 'unavailable',
-    code: 'PPT_RENDERER_UNAVAILABLE',
-    message: '배포용 PPT 생성 엔진 선택이 필요합니다.',
-  })
-  mocks.renderIssueAnalysisPpt.mockResolvedValue(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
   mocks.loadTemplate.mockResolvedValue({ bytes: new Uint8Array([1]), source: 'default' })
   mocks.scan.mockResolvedValue({ placeholders: [ph('summary.project_name')], issues: [] })
   mocks.render.mockResolvedValue(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
@@ -164,7 +148,6 @@ describe('GET /api/issue-analysis', () => {
     expect(response.status).toBe(403)
     expect(mocks.loadSavedIssueAnalysisRun).not.toHaveBeenCalled()
     expect(mocks.render).not.toHaveBeenCalled()
-    expect(mocks.renderIssueAnalysisPpt).not.toHaveBeenCalled()
   })
 
   it('데이터 루트가 있으면 저장 실행으로 양식을 렌더하고 X-Form-Template 을 붙인다', async () => {
@@ -176,8 +159,6 @@ describe('GET /api/issue-analysis', () => {
     expect(response.headers.get('content-disposition')).toContain('Acme_%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8')
     expect(mocks.loadTemplate).toHaveBeenCalledWith('project-1', 'issue_analysis_pptx', null)
     expect(mocks.loadSavedIssueAnalysisRun).toHaveBeenCalledWith('project-1', 'run-1')
-    expect(mocks.getDiagnostic).not.toHaveBeenCalled()
-    expect(mocks.renderIssueAnalysisPpt).not.toHaveBeenCalled()
     expect(mocks.render).toHaveBeenCalledWith(
       expect.any(Uint8Array),
       expect.objectContaining({

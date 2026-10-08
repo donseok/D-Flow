@@ -1,14 +1,15 @@
 // tests/negative/form-engine-outputs.test.ts
 // 부정 테스트 6(스펙 개정 §4.5.4, P4-§4, DC-08 가드).
 // 제조 단어가 없는 픽스처로 주간 PPT/XLSX·분석서 PPT·WBS 엑셀을 렌더했을 때,
-// 템플릿 샘플 토큰('예시 이슈', '예시:', 'ISS-02-', '국내영업팀', '해외영업팀', '영업 모듈', '온라인 주문 포털', '원가손익분석', '외주가공')이
+// 템플릿 샘플 토큰('예시 이슈', '예시:', 'ISS-02-', '국내영업팀', '해외영업팀', '영업 모듈', '온라인 주문 포털', '원가손익분석', '외주가공')과
+// 지운 원본 이슈분석서 양식의 샘플 문구·방법론 용어(SP6 센티널 — tests/fixtures/legacy-sentinels.ts 의 formSamples)가
 // 출력 zip 의 모든 텍스트 파트(슬라이드, 노트, docProps, rels 등)에서 0건이어야 한다.
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { engineFor, DEFAULT_RENDER_OPTIONS, type FormKind } from '@/lib/report/engine'
 import type { CatalogModel } from '@/lib/report/catalog/types'
 import { defaultFormAssetPath } from '@/lib/report/forms/loadTemplate'
-import { zipTextParts } from '../fixtures/legacy-sentinels'
+import { SENTINELS_BY_SP, findSentinels, zipTextParts } from '../fixtures/legacy-sentinels'
 
 const SAMPLE_TOKENS = [
   '예시 이슈',
@@ -82,7 +83,8 @@ function findSampleTokens(text: string): string[] {
       found.push(token)
     }
   }
-  return found
+  // 영문 낱말(Mega·Major)은 낱말 경계로, 나머지는 부분 문자열로 본다(일치 규칙은 sentinels.mjs 하나)
+  return [...found, ...findSentinels(text, SENTINELS_BY_SP.SP6)]
 }
 
 describe('부정 테스트 6 — 기본 4종 양식 출력의 템플릿 샘플 토큰 0건 검증 (스펙 §4.5.4)', () => {
@@ -116,5 +118,15 @@ describe('부정 테스트 6 — 기본 4종 양식 출력의 템플릿 샘플 �
     const allHits = parts.flatMap((p) => findSampleTokens(p.text))
     expect(allHits).toContain('온라인 주문 포털')
     expect(allHits).toContain('해외영업팀')
+  })
+
+  it('대조군 검증 — 이슈 분석서 픽스처에 원본 샘플 문구·방법론 용어가 들면 탐지된다', async () => {
+    const bytes = await readFile(defaultFormAssetPath('issue_analysis_pptx'))
+    const model = modelFor('issue_analysis_pptx', 1) as unknown as { issues: { code: string; title: string }[] }
+    const [, estimate, , , mega, , subProcess, , prefix] = SENTINELS_BY_SP.SP6
+    model.issues[0] = { ...model.issues[0], code: `${prefix}02-01`, title: `${mega} 02 ${estimate} · ${subProcess}` }
+    const result = await engineFor('pptx').render(bytes, model as unknown as CatalogModel, {}, DEFAULT_RENDER_OPTIONS.issue_analysis_pptx)
+    const allHits = (await zipTextParts(result)).flatMap((p) => findSampleTokens(p.text))
+    for (const token of [prefix, mega, estimate, subProcess]) expect(allHits).toContain(token)
   })
 })

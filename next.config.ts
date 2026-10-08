@@ -1,8 +1,5 @@
 import type { NextConfig } from "next";
 
-const issueAnalysisTemplate =
-  "./src/lib/report/assets/issue-analysis-template.pptx";
-
 // 배포 환경의 정본은 APP_ENV(production|staging|preview|development)다(정본 §5.5.2 ⑦). Vercel 은 APP_ENV 를 모르므로
 // APP_ENV 가 없을 때만 **여기 한 곳에서** VERCEL_ENV 를 읽어 빌드 env 로 옮긴다(아래 env — 빌드 때 process.env.APP_ENV 에 박힌다).
 // 다른 파일은 VERCEL_ENV 를 읽지 않는다(tests/invariants/app-env.test.ts). 자체호스트는 런타임 env 로 APP_ENV 를 준다.
@@ -23,9 +20,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/report": ["./src/lib/report/assets/default/weekly_report_*.pptx", "./src/lib/report/assets/default/weekly_report_*.xlsx"],
     "/api/export": ["./src/lib/report/assets/default/wbs_export_xlsx.xlsx"],
-    // 렌더링 API와 모달 사전 진단 Server Action은 서로 다른 함수로 배포된다.
     "/api/issue-analysis": ["./src/lib/report/assets/default/issue_analysis_pptx.pptx"],
-    "/p/[projectId]/issues": [issueAnalysisTemplate],
   },
   async headers() {
     const rules: Awaited<ReturnType<NonNullable<NextConfig["headers"]>>> = [];
