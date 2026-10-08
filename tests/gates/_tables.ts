@@ -13,7 +13,7 @@ export const MODULE_TABLE_OWNER: Readonly<Record<string, ModuleId>> = {
   wiki_topic_revisions: 'wiki', ai_documents: 'wiki', ai_index_jobs: 'wiki',
   announcements: 'announcements', announcement_seen: 'announcements',
   attendance_records: 'attendance',
-  agent_projects: 'agents', agent_runners: 'agents', agent_work_orders: 'agents', agent_work_reports: 'agents',
+  agent_work_orders: 'agents', agent_work_reports: 'agents',   // 옛 등록 표·옛 PAT 저장소는 0041 이 지웠다(src 0건은 legacy-auth-removed 가 고정)
   agent_lead_leases: 'agents', agent_watchers: 'agents',
   minutes: 'minutes', minute_folders: 'minutes', minute_files: 'minutes', minute_highlights: 'minutes',
   minute_insights: 'minutes', minute_versions: 'minutes', minute_favorites: 'minutes', minute_embeddings: 'minutes',

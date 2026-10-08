@@ -25,14 +25,9 @@ export const apiFail = (status: number, code: string, error: string) =>
 export const apiInternalError = (error = '서버 오류가 발생했습니다.') =>
   NextResponse.json({ error, code: 'internal_error' }, { status: 500 })
 
-/** 등록·enabled 프로젝트이고 agents 모듈이 켜졌을 때만 루프가 열린다(스펙 §1.1-2, §4.4 두 원천 AND). 행 조회 실패는 404 로 위장하지 않고 throw.
- *  행을 먼저 본다 — 꺼진 행은 설정을 읽지 않는다. 모듈 판정은 세션이 없으니 admin 으로(스펙 §4.2 에이전트 API 행) */
-export async function requireAgentProject(admin: AdminClient, projectId: string, principal?: AgentPrincipal): Promise<boolean> {
-  if (principal) return (await requireModule({ projectId }, 'agents', { client: admin })).ok
-  const { data, error } = await admin
-    .from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle()
-  if (error) throw new Error(`agent_projects 조회 실패: ${error.message}`)
-  if (!data || (data as { enabled: boolean }).enabled !== true) return false
+/** agents 모듈이 켜진 프로젝트에서만 루프가 열린다(스펙 §1.1-2 — 원천은 modules.enabled 하나다, SP7 에서 등록 표를 지웠다).
+ *  모듈 판정은 세션이 없으니 admin 으로(스펙 §4.2 에이전트 API 행). 판정 실패는 닫힘(requireModule 이 로그를 남긴다) */
+export async function requireAgentProject(admin: AdminClient, projectId: string): Promise<boolean> {
   return (await requireModule({ projectId }, 'agents', { client: admin })).ok
 }
 

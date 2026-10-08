@@ -25,7 +25,7 @@ describe('requireModulePage', () => {
     m.requireModule.mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
     await expect(requireModulePage({ projectId: 'p' }, 'issues')).rejects.toThrow('NEXT_NOT_FOUND')
   })
-  it('scope null 은 세션 유일 워크스페이스 판정', async () => {
+  it('scope null 은 requireSessionModule(null) 로 간다 — 범위가 없으니 core 가 아니면 닫힌다(SP7 — 소속 워크스페이스로 짐작하지 않는다)', async () => {
     m.requireSessionModule.mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
     await expect(requireModulePage(null, 'meetings')).rejects.toThrow('NEXT_NOT_FOUND')
     expect(m.requireSessionModule).toHaveBeenCalledWith(null, 'meetings')

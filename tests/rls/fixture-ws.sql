@@ -181,9 +181,8 @@ insert into public.wiki_topic_revisions (id, topic_id, project_id, version_no, t
 insert into public.ai_documents (id, workspace_id, project_id, domain, entity_type, entity_id, chunk_no, content, content_hash, href, embedding_model, chunker_version) values
   ('00000000-0000-0000-7e57-000000001125', '00000000-0000-0000-7e57-00000000aa01', '00000000-0000-0000-7e57-0000000000c1', 'wbs', 'wbs_item', '00000000-0000-0000-7e57-0000000000f1', 0, 'rls', 'rls-c', '/p/x/wbs', 'rls-model', 'v1')
   on conflict do nothing;
-insert into public.agent_runners (id, name, owner_user_id, token_prefix, token_hash, expires_at, project_id) values
-  ('00000000-0000-0000-7e57-000000001126', 'rls', '00000000-0000-0000-7e57-0000000000a3', 'RlsAgentKey1', repeat('a',64), now() + interval '1 year', '00000000-0000-0000-7e57-0000000000c1')
-  on conflict do nothing;
+-- 옛 PAT 저장소(agent_runners)·옛 등록 표(agent_projects) 픽스처는 없다 — 0041 이 두 표를 지웠다. 0035 이관을 다시 돌려 보는 케이스는
+-- 트랜잭션 안에서 표를 되만들고 행을 직접 넣는다(tests/rls/integration-credentials-migration.test.ts·drop-agent-legacy.test.ts).
 insert into public.agent_watchers (id, user_id, agent, project_id) values
   ('00000000-0000-0000-7e57-000000001127', '00000000-0000-0000-7e57-0000000000a3', 'rls-agent', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.agent_work_reports (id, work_order_id, kind, percent, summary, agent) values
@@ -205,7 +204,6 @@ insert into public.llm_profiles (id, name, preset_id, provider, model) values (7
 insert into public.llm_config (id, mode) values (1, 'env') on conflict do nothing;
 -- 복합 키 표
 insert into public.agent_lead_leases (user_id, project_id) values ('00000000-0000-0000-7e57-0000000000a3', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
-insert into public.agent_projects (project_id) values ('00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.announcement_seen (user_id, project_id) values ('00000000-0000-0000-7e57-0000000000a3', '00000000-0000-0000-7e57-0000000000c1') on conflict do nothing;
 insert into public.holidays (project_id, date) values ('00000000-0000-0000-7e57-0000000000c1', '2026-01-01') on conflict do nothing;
 insert into public.issue_assignees (issue_id, member_id, project_id) values

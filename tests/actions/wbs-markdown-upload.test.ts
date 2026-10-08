@@ -25,8 +25,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       const resp = (db.queues[table] ?? []).shift() ?? { data: null, error: null }
       const b: Record<string, unknown> = {}
       for (const k of ['select', 'eq', 'in', 'like', 'limit', 'is', 'update', 'order', 'range']) b[k] = () => b
-      // ensureAgentProject(applyWbsUpload 의 자동 활성 경로, 2026-08-24)의 insert — 결과를 안 쓰는
-      // fire-and-forget 형 호출이라 성공만 흉내낸다. 활성 여부는 agent_projects 큐로 제어한다.
+      // 업로드는 직접 insert 하지 않는다 — 에이전트 사용 여부는 agents 모듈(requireModule 전역 mock)로 제어한다(SP7 — 자동 등록 없음).
       b.insert = () => Promise.resolve({ data: null, error: null })
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) =>
@@ -220,21 +219,22 @@ describe('applyWbsUpload', () => {
   it('정상 PL — runWbsImport 에 해석된 attachRef·module·levels·노드가 넘어간다', async () => {
     db.queues = {
       wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
-      agent_projects: [{ data: { enabled: true } }], // 이미 활성 — ensureAgentProject no-op
     }
     runWbsImport.mockResolvedValue({ ok: true, upserted: 3, skipped: 0, unmatched: [], nonLeafSkipped: [], ordersCreated: 2 })
     const r = await applyWbsUpload(PID, PL_MD)
     expect(r).toMatchObject({ ok: true, upserted: 3, ordersCreated: 2 })
+    // agents 모듈이 켜져 있으면(전역 mock 통과) 꺼짐 안내가 없다 — 판정은 그 프로젝트의 agents 모듈, service_role 로
+    expect(r.agentStopped).toBeUndefined()
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: expect.anything() })
     expect(runWbsImport).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       projectId: PID, module: 'acme-qa', attachRef: 'acme-skel/SYS-QA', actorUserId: 'u-admin',
       nodes: expect.arrayContaining([expect.objectContaining({ id: 'TSK-QA-JD-01', level: 3, weight: 5 })]),
     }))
   })
 
-  it('agents 모듈이 꺼져 있으면 행이 활성이어도 agentStopped 로 알린다 — 주문 0건을 조용히 두지 않는다(과제 18)', async () => {
+  it('agents 모듈이 꺼져 있으면 agentStopped 로 알린다 — 주문 0건을 조용히 두지 않는다(과제 18. SP7 — 원천은 모듈 하나, 등록 행은 없다)', async () => {
     db.queues = {
       wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
-      agent_projects: [{ data: { enabled: true } }],
     }
     vi.mocked(requireModule).mockImplementation(async (_s, m) => (m === 'agents' ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true }))
     runWbsImport.mockResolvedValue({ ok: true, upserted: 3, skipped: 0, unmatched: [], nonLeafSkipped: [], ordersCreated: 0 })
@@ -251,7 +251,6 @@ describe('applyWbsUpload', () => {
   it('코어가 throw 한 DB 원문은 응답에 싣지 않는다 — 업로드에 실패했습니다(C2-F1)', async () => {
     db.queues = {
       wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
-      agent_projects: [{ data: { enabled: true } }],
     }
     runWbsImport.mockRejectedValue(new Error('[settings/write] 알 수 없는 DB 오류: boom'))
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -266,7 +265,6 @@ describe('applyWbsUpload', () => {
   it('코어가 설정 조회 실패(ConfigUnavailableError)로 throw 하면 ERR_CONFIG_UNAVAILABLE(F-3b)', async () => {
     db.queues = {
       wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
-      agent_projects: [{ data: { enabled: true } }],
     }
     runWbsImport.mockRejectedValue(new ConfigUnavailableError('프로젝트 설정 조회 실패: relation "x" does not exist'))
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -278,7 +276,6 @@ describe('applyWbsUpload', () => {
   it('코어 실패는 메시지 그대로 반환', async () => {
     db.queues = {
       wbs_items: [{ data: [{ external_ref: 'acme-skel/SYS-QA' }] }],
-      agent_projects: [{ data: { enabled: true } }],
     }
     runWbsImport.mockResolvedValue({ ok: false, code: 'attach_not_found', message: 'attach 노드가 없습니다' })
     const r = await applyWbsUpload(PID, PL_MD)
@@ -298,7 +295,6 @@ describe('applyWbsUpload — 담당자 매칭은 정규형으로(R1)', () => {
     runWbsImport.mockImplementation(actual.runWbsImport as never)
     const md = SKEL_MD.replace('TSK-AN-01: 분석서   w:5', `TSK-AN-01: 분석서   @${assignee} w:5`)
     db.queues = {
-      agent_projects: [{ data: { enabled: true } }],                                  // ensureAgentProject — 이미 활성
       wbs_items: [{ data: [] }, { data: null }, { data: [] }],                       // 깊이 선행 조회·담당자 반영·주문 대상(없음)
       project_members: [{ data: [{ id: 'member-1', people: { email: stored, active: true } }] }],
     }

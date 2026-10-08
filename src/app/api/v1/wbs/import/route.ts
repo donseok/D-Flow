@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     const scopeErr = requireScope(principal, 'work:claim')
     if (scopeErr) return scopeErr
     if (!patProjectAllowed(principal, projectId)) return apiNotFound()
-    if (!(await requireAgentProject(admin, projectId, principal))) return apiNotFound()
+    if (!(await requireAgentProject(admin, projectId))) return apiNotFound()
     // 비멤버는 404(존재 은닉, 계약 §인증 — "PAT principal 은 멤버십 없으면 404"). 관리자 판정보다 먼저 —
     // 아니면 완전 비멤버가 관리자 판정에서 403 forbidden_role 을 받아 "프로젝트가 존재한다"가 샌다.
     if (!(await isAgentProjectMember(admin, principal.userId, projectId, principal))) return apiNotFound()

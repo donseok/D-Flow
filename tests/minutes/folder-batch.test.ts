@@ -986,6 +986,10 @@ describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Tas
   })
 })
 
+// 삭제(SP7): tests/minutes/batch-authorized.test.ts(6 케이스) — 순수 판정 isBatchAuthorized 는 src 호출부가 없는 export 라 함수와 함께 지웠다
+// (정본 §5.1.3 — roleIn(자격증명으로 좁힌 스냅샷)이 대체). 같은 규칙은 라우트가 실제로 지나는 건별 판정으로 이 describe 가 본다:
+// 둘 중 하나만 관리자 → 그 건만 failed / 무프로젝트는 워크스페이스 관리자만 / 자격증명 범위 밖 프로젝트 → failed. 워크스페이스 관리자 승계와
+// 다른 워크스페이스(→ not_found·403)는 위 'ACTOR_EMAIL 프로브'·'판정' describe 에 있다. '빈 대상은 false' 는 라우트에서 뜻이 다르다(items: [] 는 유효한 프로브).
 describe('대상 회의록마다 관리자 판정 — 건별 forbidden_project (SP2 결정 8 · v3 §5.2.3)', () => {
   const P1 = '5a000000-0000-4000-8000-0000000000b1'
   const P2 = '5a000000-0000-4000-8000-0000000000b2'

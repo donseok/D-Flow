@@ -53,7 +53,7 @@ export async function loadGatedOrderForUser(
     console.error(`[agent-api] PAT 멤버십 거절: user=${userEmail} project=${row.project_id}`)
     return { ok: false, res: apiFail(403, 'forbidden_role', '그 프로젝트의 멤버 이상만 실행할 수 있습니다.') }
   }
-  if (!(await requireAgentProject(admin, row.project_id, principal))) return { ok: false, res: apiNotFound() }
+  if (!(await requireAgentProject(admin, row.project_id))) return { ok: false, res: apiNotFound() }
   return { ok: true, order: row, userId }
 }
 

@@ -7,7 +7,6 @@ import { projectTeams, workspaceTeams } from '@/lib/teams/source'
 import { activeCodes } from '@/lib/domain/teams'
 import { actorFromUser } from '@/lib/authz'
 import { canSeeProject } from '@/lib/domain/authz'
-import { fetchAllPages } from '@/lib/data/paging'
 import { BRAND } from '@/lib/branding'
 import { workspacesWithModule } from '@/lib/modules/gate'
 import {
@@ -47,66 +46,38 @@ export async function GET(req: NextRequest) {
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
 
-    if (principal.kind === 'minutes_api') {
-      const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
-      if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
-    }
+    // 범위는 자격증명 행의 워크스페이스 하나다(SP7 §5.1.3) — 호출자의 다른 소속 워크스페이스나 플랫폼 관리자의 전 워크스페이스로 넓히지 않는다.
+    const wsId = principal.credential.workspaceId
+    const isMember = await isMinutesWorkspaceMember(admin, wsId, user.id)
+    if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
 
     const actor = await actorFromUser(admin, user.id)
-    const candidateWs = principal.kind === 'minutes_api'
-      ? [principal.credential.workspaceId]
-      : [...new Set([...actor.workspaceRoles.keys(), ...actor.projectWorkspace.values()])]
-    const onWs = new Set(await workspacesWithModule(candidateWs, 'minutes_integration', { client: admin }))
-    if (onWs.size === 0 && (principal.kind === 'minutes_api' || !actor.isSuperuser)) return apiModuleDisabled()
+    const onWs = new Set(await workspacesWithModule([wsId], 'minutes_integration', { client: admin }))
+    if (onWs.size === 0) return apiModuleDisabled()
 
-    let projects: Array<{ id: string; name: string }> = []
-    let teams: string[] = []
-    let workspaceInfo: { id: string; slug: string; name: string } | null = null
+    const { data: wsRow, error: wsErr } = await admin.from('workspaces').select('id, slug, name').eq('id', wsId).single()
+    // 2차 필터 — 응답에 싣기 전에 행이 자격증명 워크스페이스의 것인지 다시 본다(DB 필터가 빠지는 회귀에도 남의 워크스페이스가 실리지 않게, fail-closed)
+    if (wsErr || !wsRow || wsRow.id !== wsId) return apiInternalError()
+    const workspaceInfo = { id: wsRow.id as string, slug: wsRow.slug as string, name: wsRow.name as string }
 
-    if (principal.kind === 'minutes_api') {
-      const wsId = principal.credential.workspaceId
-      const { data: wsRow, error: wsErr } = await admin.from('workspaces').select('id, slug, name').eq('id', wsId).single()
-      if (wsErr || !wsRow) return apiInternalError()
-      workspaceInfo = { id: wsRow.id, slug: wsRow.slug, name: wsRow.name }
+    const { data: prjRows, error: prjErr } = await admin.from('projects').select('id, name, is_private, workspace_id').eq('workspace_id', wsId).order('name')
+    if (prjErr) return apiInternalError()
+    // 2차 필터 — 행의 workspace_id 가 자격증명 워크스페이스이고(DB 필터와 별개로), 자격증명의 project_ids 한정 안이며, 호출자가 볼 수 있는 프로젝트만.
+    // workspace_id 가 없는(모르는) 행도 뺀다(fail-closed).
+    const projects = ((prjRows ?? []) as Array<{ id: string; name: string; is_private: boolean | null; workspace_id?: string | null }>)
+      .filter(p => p.workspace_id === wsId && credentialAllows(principal.credential, p.id) && canSeeProject(actor, p))
+      .map(p => ({ id: p.id, name: p.name }))
 
-      const { data: prjRows, error: prjErr } = await admin.from('projects').select('id, name, is_private').eq('workspace_id', wsId).order('name')
-      if (prjErr) return apiInternalError()
-      projects = ((prjRows ?? []) as Array<{ id: string; name: string; is_private: boolean | null }>)
-        .filter(p => credentialAllows(principal.credential, p.id) && canSeeProject(actor, p))
-        .map(p => ({ id: p.id, name: p.name }))
-
-      if (projectId) {
-        if (!projects.some(p => p.id === projectId)) return apiNotFound()
-        teams = activeCodes(await projectTeams(projectId, { client: admin }))
-      } else {
-        teams = activeCodes(await workspaceTeams(wsId, { client: admin }))
-      }
+    let teams: string[]
+    if (projectId) {
+      if (!projects.some(p => p.id === projectId)) return apiNotFound()
+      teams = activeCodes(await projectTeams(projectId, { client: admin }))
     } else {
-      if (actor.projectWorkspace.size > 0) {
-        const workspaceIds = [...actor.workspaceRoles.keys()]
-        let rows: Array<{ id: string; name: string; is_private: boolean | null }>
-        try {
-          rows = await fetchAllPages('projects', (from, to) => {
-            const q = admin.from('projects').select('id, name, is_private', { count: 'exact' })
-            return (actor.isSuperuser ? q : q.in('workspace_id', workspaceIds)).order('name').order('id').range(from, to)
-          })
-        } catch (e) {
-          console.error('[minutes-api] 프로젝트 목록 조회 실패:', e instanceof Error ? e.message : e)
-          return apiInternalError()
-        }
-        projects = rows
-          .filter(p => actor.projectWorkspace.has(p.id) && canSeeProject(actor, p) && onWs.has(actor.projectWorkspace.get(p.id)!))
-          .map(p => ({ id: p.id, name: p.name }))
-      }
-      if (projectId && !projects.some(p => p.id === projectId)) return apiNotFound()
-
-      const wsIds = [...actor.workspaceRoles.keys()].filter((w) => onWs.has(w))
-      const perWs = await Promise.all(wsIds.map((wid) => workspaceTeams(wid, { client: admin })))
-      teams = [...new Set(perWs.flatMap((rows) => activeCodes(rows)))]
+      teams = activeCodes(await workspaceTeams(wsId, { client: admin }))
     }
 
     const body: Record<string, unknown> = {
-      ...(workspaceInfo ? { workspace: workspaceInfo } : {}),
+      workspace: workspaceInfo,
       teams,
       projects,
       limits: {
@@ -120,10 +91,11 @@ export async function GET(req: NextRequest) {
     // 회의 목록은 프로젝트 종속 — project_id 지정 시에만 포함(계약 §5.2)
     if (projectId) {
       const { data: meetings, error: mErr } = await admin.from('meetings')
-        .select('id, title, meeting_date, category, recurrence').eq('project_id', projectId)
+        .select('id, project_id, title, meeting_date, category, recurrence').eq('project_id', projectId)
         .order('meeting_date', { ascending: false })
       if (mErr) { console.error('[minutes-api] 회의 목록 조회 실패:', mErr.message); return apiInternalError() }
-      body.meetings = ((meetings ?? []) as Record<string, unknown>[]).map(m => ({
+      // 2차 필터 — 위에서 자격증명 범위로 확인한 프로젝트의 회의만 싣는다(DB 필터와 별개, fail-closed)
+      body.meetings = ((meetings ?? []) as Record<string, unknown>[]).filter(m => m.project_id === projectId).map(m => ({
         id: m.id as string, title: m.title as string, date: m.meeting_date as string,
         // v2.5 — 또박또박 배지용. DB check 제약이 값 집합을 보장하므로 raw 전달로 충분.
         // 반복 회의는 시리즈 1행(첫 회차 date)만 나온다 — 전개하지 않는 현행 조회 유지.

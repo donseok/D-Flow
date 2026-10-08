@@ -7,7 +7,7 @@ import { requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/l
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { myMemberIds } from '@/lib/agent/assignee'
-import { backfillProjectOrders, ensureAgentProject, ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
+import { ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
 import { applyWorkflowEvent } from '@/lib/agent/workflowEvent'
 import { requireModule } from '@/lib/modules/gate'
 
@@ -61,9 +61,10 @@ export async function requireDelegationRight(itemId: string): Promise<Delegation
 /**
  * 위임 토글 본체(2026-08-24 재정의 — "위임 체크 = 발행"). 사람이 하는 결정은 이것 하나다:
  *
- * ON : tags 에 agent 추가 → 프로젝트 자동 활성(처음이면 백필) → dev_workflow ON(아니었으면) → 이 항목 주문 보장.
- *      프로젝트가 "에이전트 중지"(enabled=false) 상태면 태그는 붙이되 주문은 안 나간다 — warning 으로 알린다.
- *      멤버(비관리자)는 프로젝트가 등록·활성일 때만 ON 할 수 있다 — 등록·백필은 프로젝트 범위 부작용이라 관리자 행위다.
+ * ON : tags 에 agent 추가 → dev_workflow ON(아니었으면) → 이 항목 주문 보장.
+ *      프로젝트의 agents 모듈이 꺼져 있으면 관리자는 태그는 붙이되 주문은 안 나간다 — warning 으로 알린다.
+ *      멤버(비관리자)는 agents 모듈이 켜진 프로젝트에서만 ON 할 수 있다 — 모듈을 켜는 것은 프로젝트 설정(관리자)이다.
+ *      에이전트 사용 여부의 원천은 agents 모듈 하나다(SP7 — 등록 표와 위임 시 자동 등록·백필은 없다. 백필은 모듈을 켤 때 돈다).
  * OFF: tags 에서 agent 제거 → 이 항목의 ready·claimed 주문 취소(claimed 를 취소했으면 단계 as 로 되돌림).
  *      reported 는 결과물이 올라온 상태라 건드리지 않고 warning.
  *
@@ -78,13 +79,10 @@ export async function applyDelegation(
   const { data: row, error: readErr } = await admin
     .from('wbs_items').select('tags, dev_workflow').eq('id', itemId).single()
   if (readErr) return { ok: false, error: readErr.message }
-  if (!args.isAdmin && delegated) {
-    const { data: reg, error: regErr } = await admin.from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle()
-    if (regErr) return { ok: false, error: `등록 조회 실패: ${regErr.message}` }
-    if (!reg || (reg as { enabled: boolean }).enabled !== true) return { ok: false, error: ERR_AGENT_OFF }
-    // 두 원천 AND(스펙 §4.4) — 행이 켜져도 agents 모듈이 꺼졌으면 멤버는 켤 수 없다(관리자 경로는 아래 주문 보장이 막는다)
-    if (!(await requireModule({ projectId }, 'agents', { client: admin })).ok) return { ok: false, error: ERR_AGENT_OFF }
-  }
+  // agents 모듈 판정은 한 번 — 멤버의 ON 자격과 아래 주문 보장이 같은 값을 쓴다. 판정 실패는 꺼짐(fail-closed)
+  const agentsOn = delegated ? (await requireModule({ projectId }, 'agents', { client: admin })).ok : false
+  // 모듈이 꺼졌으면 멤버는 켤 수 없다(관리자 경로는 태그만 붙이고 아래에서 warning)
+  if (!args.isAdmin && delegated && !agentsOn) return { ok: false, error: ERR_AGENT_OFF }
   const tags: string[] = (row as { tags: string[] | null } | null)?.tags ?? []
   const alreadyDelegated = tags.includes(AGENT_TAG)
   if (alreadyDelegated !== delegated) {
@@ -99,15 +97,7 @@ export async function applyDelegation(
 
   const warnings: string[] = []
   if (delegated) {
-    // 1) 프로젝트 활성 — 처음이면 백필(활성 전에 업로드된 task 들의 주문을 여기서 채운다). 멤버 경로는 위에서 등록·활성을 확인했다.
-    const proj = await ensureAgentProject(admin, { projectId, actorUserId })
-    if (!proj.ok) return { ok: false, error: proj.error }
-    if (proj.activated) {
-      const bf = await backfillProjectOrders(admin, { projectId, actorUserId })
-      if (!bf.ok) warnings.push(bf.error)
-      else if (bf.failed.length > 0) warnings.push(`백필 중 ${bf.failed.length}건 주문 보장 실패(서버 로그 확인)`)
-    }
-    // 2) dev_workflow ON — 위임은 워크플로 도입을 함의한다(체크 이중화 해소). 이미 ON 이면 no-op.
+    // 1) dev_workflow ON — 위임은 워크플로 도입을 함의한다(체크 이중화 해소). 이미 ON 이면 no-op.
     //    setWbsDevWorkflow(관리자 가드)를 부르지 않고 같은 부수효과(이력·초기 as 전이)를 여기서 낸다 — 멤버 경로도 같은 길을 가야 한다.
     if ((row as { dev_workflow: boolean | null } | null)?.dev_workflow !== true) {
       const nowIso = new Date().toISOString()
@@ -134,13 +124,11 @@ export async function applyDelegation(
         }
       }
     }
-    // 3) 이 항목 주문 보장 — 멱등(활성 주문 있으면 skip)
-    if (proj.stopped || proj.moduleOff) {
-      warnings.push(proj.moduleOff
-        ? '이 프로젝트의 에이전트 모듈이 꺼져 있어 주문을 발행하지 않았습니다. 프로젝트 설정에서 켜면 발행됩니다.'
-        : '프로젝트가 "에이전트 중지" 상태라 주문을 발행하지 않았습니다. 프로젝트 설정의 모듈·메뉴에서 에이전트를 껐다 다시 켜면 발행됩니다.')
+    // 2) 이 항목 주문 보장 — 멱등(활성 주문 있으면 skip)
+    if (!agentsOn) {
+      warnings.push('이 프로젝트의 에이전트 모듈이 꺼져 있어 주문을 발행하지 않았습니다. 프로젝트 설정에서 켜면 발행됩니다.')
     } else {
-      const ord = await ensureOrderForWorkflowLeaf(admin, { projectId, wbsItemId: itemId, actorUserId })
+      const ord = await ensureOrderForWorkflowLeaf(admin, { projectId, wbsItemId: itemId, actorUserId, agentsOn: true })
       if (!ord.ok) return { ok: false, error: ord.error }
       if (!ord.created && ord.reason === 'not_leaf') warnings.push('리프(하위 없음) 항목만 에이전트가 집어갑니다 — 이 항목은 하위가 있어 주문이 없습니다.')
     }

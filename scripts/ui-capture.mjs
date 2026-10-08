@@ -448,8 +448,11 @@ export function seedPlan(ctx) {
   const wikiRevision = { id: id('wiki-rev:1'), topic_id: ids.topicId, project_id: pid, version_no: 1, title: '배포 절차', body_md: wikiBody, body_hash: sha256(wikiBody), document_kind: 'overview' }
   const invite = { id: id('invite:1'), workspace_id: ctx.wsA, project_id: pid, email: 'ui-invitee@example.com', access_role: 'member',
     token_hash: sha256(ids.inviteToken), created_by: ctx.users.wsAdmin, expires_at: `${plusDays(today, 7)}T00:00:00Z` }
-  const runner = { id: id('runner:1'), name: 'ui-capture-runner', owner_user_id: ctx.users.wsAdmin, token_prefix: 'uic_', token_hash: sha256(`ui-capture:${pid}:runner`),
-    expires_at: `${plusDays(today, 365)}T00:00:00Z`, project_id: pid }
+  // 에이전트 PAT — 자격증명 저장소(integration_credentials, kind='agent_runner') 한 곳이다(옛 러너 표는 0041 이 지웠다). 0035 의 이관 모양 그대로:
+  // 프로젝트 한정 토큰은 project_ids=[pid]·default_project_id=pid. prefix 는 영숫자 12자(표 제약), 소유자는 그 워크스페이스의 멤버여야 한다(가드 트리거).
+  const runner = { id: id('runner:1'), workspace_id: ctx.wsA, kind: 'agent_runner', name: 'ui-capture-runner', owner_user_id: ctx.users.wsAdmin,
+    token_prefix: sha256(`ui-capture:${pid}:runner-prefix`).slice(0, 12), token_hash: sha256(`ui-capture:${pid}:runner`), scopes: ['work:read'],
+    project_ids: [pid], default_project_id: pid, expires_at: `${plusDays(today, 365)}T00:00:00Z` }
   const body1 = ['# 설계 검토 회의', '', '## 결정', '- 배포 창은 목요일 오후로 한다', '', `${FENCE}mermaid`, 'flowchart LR', '  A[요청] --> B[검토] --> C[배포]', FENCE, '',
     '| 항목 | 담당 | 기한 |', '|---|---|---|', '| 배포 스크립트 | 개발 | 금요일 |', '', `${FENCE}ts`, "export const window = 'thu-pm'", FENCE, ''].join('\n')
   const body2 = '# 주간 점검\n\n- 지연 항목 두 건을 확인했다\n'
@@ -849,8 +852,8 @@ async function cmdSeed() {
   await insertOnce('weekly_report_rows', plan.weeklyRows, (c) => db.from('weekly_report_rows').upsert(c, once()))
   await insertOnce('wiki_topics', [plan.wikiTopic], (c) => db.from('wiki_topics').upsert(c, once()))
   await insertOnce('wiki_topic_revisions', [plan.wikiRevision], (c) => db.from('wiki_topic_revisions').upsert(c, once()))
-  await insertOnce('agent_projects', [{ project_id: pid }], (c) => db.from('agent_projects').upsert(c, once('project_id')))
-  await insertOnce('agent_runners', [plan.runner], (c) => db.from('agent_runners').upsert(c, once()))
+  // 에이전트 사용 여부는 프로젝트 설정 modules.enabled(agents)가 정한다 — 등록 행을 심지 않는다(표가 없다)
+  await insertOnce('integration_credentials', [plan.runner], (c) => db.from('integration_credentials').upsert(c, once()))
   await insertOnce('agent_work_orders', [plan.agentOrder], (c) => db.from('agent_work_orders').upsert(c, once()))   // 좌석 1(판정 Q34) — wbs_items 뒤
   await insertOnce('project_invites', [plan.invite], (c) => db.from('project_invites').upsert(c, once()))
   for (const m of plan.minutes) {

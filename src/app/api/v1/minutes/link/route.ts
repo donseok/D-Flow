@@ -53,10 +53,8 @@ export async function POST(req: NextRequest) {
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
 
-    if (principal.kind === 'minutes_api') {
-      const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
-      if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
-    }
+    const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
+    if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
 
     // 권한 조회 실패는 throw → 아래 catch 의 500(권한 없음 404 로 위장하지 않는다).
     const actor = await actorFromUser(admin, user.id)
@@ -69,13 +67,11 @@ export async function POST(req: NextRequest) {
     const row = target as { created_by: string | null; project_id: string | null; workspace_id: string } | null
     if (!row || !canEditMinute(actor, row)) return apiFail(404, 'not_found', '회의록을 찾을 수 없습니다.')
 
-    if (principal.kind === 'minutes_api') {
-      if (row.workspace_id !== principal.credential.workspaceId) {
-        return apiFail(404, 'not_found', '회의록을 찾을 수 없습니다.')
-      }
-      if (row.project_id && !credentialAllows(principal.credential, row.project_id)) {
-        return apiProjectNotAllowed()
-      }
+    if (row.workspace_id !== principal.credential.workspaceId) {
+      return apiFail(404, 'not_found', '회의록을 찾을 수 없습니다.')
+    }
+    if (row.project_id && !credentialAllows(principal.credential, row.project_id)) {
+      return apiProjectNotAllowed()
     }
 
     // 대상 행의 워크스페이스로 minutes_integration 판정(스펙 §4.2) — 세션이 없으니 admin 으로. 편집 자격(존재 은닉 404) 뒤·보관 409 앞

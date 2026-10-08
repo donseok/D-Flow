@@ -1,14 +1,14 @@
 // requireModule·requireSessionModule·moduleState·목록 두 함수(스펙 §4.1·§4.2, 판정 P1·P2·P10·P13).
 // 과제 3 뒤에는 tests/setup/module-gate.ts 가 '@/lib/modules/gate' 를 전역 mock 한다 — 여기서는 importActual 로 진짜를 쓴다.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const m = vi.hoisted(() => ({ getProjectConfig: vi.fn(), effectiveModules: vi.fn(), getActor: vi.fn() }))
+const m = vi.hoisted(() => ({ getProjectConfig: vi.fn(), effectiveModules: vi.fn(), effectiveModulesMany: vi.fn(), getActor: vi.fn() }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: m.getProjectConfig }))
 vi.mock('@/lib/modules/effective', () => ({ effectiveModules: m.effectiveModules }))
+vi.mock('@/lib/modules/effectiveMany', () => ({ effectiveModulesMany: m.effectiveModulesMany }))
 vi.mock('@/lib/authz', () => ({ getActor: m.getActor }))
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import type { ModuleId } from '@/lib/modules/defaults'
-import { makeActor } from '../fixtures/actor'
 const { requireModule, requireSessionModule, moduleState, moduleSetFor, projectsWithModule, workspacesWithModule } =
   await vi.importActual<typeof import('@/lib/modules/gate')>('@/lib/modules/gate')
 
@@ -86,38 +86,31 @@ describe('requireSessionModule — 대상 행이 없는 세션 판정(P13)', () 
     m.effectiveModules.mockResolvedValueOnce(eff())
     expect(await requireSessionModule(PID, 'issues')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
   })
-  it('없으면 행위자의 유일 워크스페이스로', async () => {
-    m.getActor.mockResolvedValue(makeActor({ userId: 'u1', workspaceRoles: new Map([[WID, 'member']]) }))
-    expect(await requireSessionModule(null, 'minutes')).toEqual({ ok: true })
-    expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID }, { client: undefined })
-  })
+  // 옮김(SP7 — resolveSoleWorkspaceId 삭제): '없으면 행위자의 유일 워크스페이스로'(통과)·'소속 0개/2개면 닫는다(R15)'·'비로그인·권한 조회 실패는 닫는다'.
+  // 범위 없는 판정은 이제 행위자의 소속을 보지 않는다 — 소속이 몇 개든·로그인했든 core 가 아니면 닫힌다(예전 통과 한 갈래가 닫힘으로 좁아졌다).
+  // 워크스페이스 범위의 통과는 requireModule({ workspaceId })(위 describe)와 requireScopedSessionModule(tests/modules/scoped-session.test.ts)이 본다.
   it.each([
+    ['소속 1개', new Map([[WID, 'member']])],
     ['소속 0개', new Map()],
     ['소속 2개', new Map([[WID, 'member'], ['00000000-0000-0000-7e57-000000001403', 'admin']])],
-  ])('%s 면 닫는다(R15)', async (_n, roles) => {
-    m.getActor.mockResolvedValue(makeActor({ userId: 'u1', workspaceRoles: roles as Map<string, 'admin' | 'member'> }))
-    expect(await requireSessionModule(null, 'minutes')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
-    expect(m.effectiveModules).not.toHaveBeenCalled()
-  })
-  it('비로그인·권한 조회 실패는 닫는다. core 만 물으면 행위자를 읽지 않고 통과한다', async () => {
-    m.getActor.mockResolvedValueOnce(null)
-    expect(await requireSessionModule(null, 'minutes')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
+  ])('projectId 가 없으면 닫는다 — %s 여도 소속에서 워크스페이스를 짐작하지 않는다(R15)', async (_n, roles) => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    m.getActor.mockRejectedValueOnce(new Error('lookup'))
+    m.getActor.mockResolvedValue({ userId: 'u1', workspaceRoles: roles })
     expect(await requireSessionModule(null, 'minutes')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
-    m.getActor.mockClear()
+    expect(await requireSessionModule(null, ['wbs', 'minutes'])).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
+    expect(m.effectiveModules).not.toHaveBeenCalled()
+    expect(m.getActor).not.toHaveBeenCalled()          // 행위자를 읽지도 않는다
+  })
+  it('core 만 물으면 범위 없이도 통과한다 — 설정도 행위자도 읽지 않는다', async () => {
     expect(await requireSessionModule(null, 'wbs')).toEqual({ ok: true })
+    expect(await requireSessionModule(null, ['dashboard', 'settings'])).toEqual({ ok: true })
     expect(m.getActor).not.toHaveBeenCalled()
+    expect(m.effectiveModules).not.toHaveBeenCalled()
   })
 })
 
-describe('requireSessionModule — 신호', () => {
-  it('행위자 조회의 Next 제어 흐름 신호(동적 사용)는 삼키지 않고 다시 던진다(F2-2)', async () => {
-    const signal = Object.assign(new Error('s'), { digest: 'DYNAMIC_SERVER_USAGE' })
-    m.getActor.mockRejectedValueOnce(signal)
-    await expect(requireSessionModule(null, 'minutes')).rejects.toBe(signal)
-  })
-})
+// 삭제(SP7): 'requireSessionModule — 신호: 행위자 조회의 Next 제어 흐름 신호는 다시 던진다(F2-2)' — 행위자 조회가 없어졌다. projectId 갈래의 신호 전파는
+// requireModule 의 신호 케이스가 본다.
 
 describe('moduleState — 워커 3값(P10)', () => {
   it("켜짐 'on', 꺼짐 'off', 설정 없음·손상 'unknown', 그 밖의 예외는 던진다", async () => {
@@ -193,6 +186,33 @@ describe('목록형(스펙 §4.2 첫 문단)', () => {
     // 세션 없는 경로(워커·v1·회의록 API)가 넘긴 client 가 프로젝트마다 해석기까지 간다
     for (const pid of [PID, P2, P3]) expect(m.getProjectConfig).toHaveBeenCalledWith(pid, { client })
     for (const pid of [PID, P2]) expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID, projectId: pid }, expect.objectContaining({ client }))
+  })
+  // SP7 — 워크스페이스를 받으면 프로젝트마다 설정을 읽지 않고 한 번에 판정한다(에이전트 API 의 me·work/mine·watch)
+  it('projectsWithModule({ workspaceId }) — effectiveModulesMany 한 번, 프로젝트별 해석기는 부르지 않는다. 입력 순서·중복 제거, 실패·미포함은 뺀다', async () => {
+    const P2 = '00000000-0000-0000-7e57-000000001404', P3 = '00000000-0000-0000-7e57-000000001405', P4 = '00000000-0000-0000-7e57-000000001407'
+    // P2: agents 꺼짐 · P3: 판정 실패(failed — sets 에 없다) · P4: 켜짐
+    m.effectiveModulesMany.mockResolvedValue({ sets: new Map([[PID, eff('agents')], [P2, eff('issues')], [P4, eff('agents', 'issues')]]), failed: [P3] })
+    expect(await projectsWithModule([P4, PID, P2, P3, PID], 'agents', { client, workspaceId: WID })).toEqual([P4, PID])
+    expect(m.effectiveModulesMany).toHaveBeenCalledTimes(1)
+    expect(m.effectiveModulesMany).toHaveBeenCalledWith(WID, [P4, PID, P2, P3], { client })
+    expect(m.getProjectConfig).not.toHaveBeenCalled()
+    expect(m.effectiveModules).not.toHaveBeenCalled()
+    // 목록은 전부 유효해야 한다(D18)
+    expect(await projectsWithModule([P4, PID], ['agents', 'issues'], { client, workspaceId: WID })).toEqual([P4])
+  })
+  it('projectsWithModule({ workspaceId }) — 워크스페이스 설정을 읽지 못하면 전부 뺀다(fail-closed, 로그). 빈 입력·core 는 읽지 않는다. Next 신호는 다시 던진다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.effectiveModulesMany.mockRejectedValueOnce(new ConfigUnavailableError('down'))
+    expect(await projectsWithModule([PID], 'agents', { client, workspaceId: WID })).toEqual([])
+    expect(err).toHaveBeenCalledWith('[projectsWithModule]', 'agents', JSON.stringify({ workspaceId: WID }), expect.stringContaining('down'))
+    m.effectiveModulesMany.mockClear()
+    expect(await projectsWithModule([], 'agents', { client, workspaceId: WID })).toEqual([])
+    expect(await projectsWithModule([PID, PID], 'wbs', { client, workspaceId: WID })).toEqual([PID])
+    expect(m.effectiveModulesMany).not.toHaveBeenCalled()
+    const signal = Object.assign(new Error('s'), { digest: 'DYNAMIC_SERVER_USAGE' })
+    m.effectiveModulesMany.mockRejectedValueOnce(signal)
+    await expect(projectsWithModule([PID], 'agents', { client, workspaceId: WID })).rejects.toBe(signal)
+    await expect(projectsWithModule([PID], [], { client, workspaceId: WID })).rejects.toThrow('[projectsWithModule]')
   })
   it('workspacesWithModule', async () => {
     const W2 = '00000000-0000-0000-7e57-000000001406'

@@ -1,4 +1,4 @@
-// 에이전트 두 원천 AND(스펙 §4.4)와 v1 에이전트 API 관문(§4.2, §7.1 agents-gate). 판정은 @/lib/modules/gate(전역 mock) — 테스트가 거부를 준다.
+// 에이전트 사용 여부의 원천은 agents 모듈 하나다(스펙 §4.4 의 두 원천 AND 는 SP7·0041 에서 끝났다 — 등록 표 agent_projects 삭제)와 v1 에이전트 API 관문(§4.2, §7.1 agents-gate). 판정은 @/lib/modules/gate(전역 mock) — 테스트가 거부를 준다.
 // v1 per-project 핸들러 8개는 requireAgentProject 한 곳을 지난다(정적 확인). 실행 확인은 각 라우트 테스트의 케이스(wbs-structure·me-route·watch-route).
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,7 +11,7 @@ import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { agentActorFromPrincipal, requireAgentProject, isAgentProjectMember } from '@/lib/agent/externalApi'
 import { accessibleProjectIds } from '@/lib/agent/mineShared'
-import { backfillProjectOrders, ensureAgentProject, ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
+import { backfillProjectOrders, ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
 import { loadGatedOrderForUser } from '@/lib/agent/routeShared'
 import type { ProjectRole } from '@/lib/domain/authz'
 import { makeActor } from '../fixtures/actor'
@@ -22,17 +22,18 @@ const OFF = { ok: false as const, error: ERR_MODULE_DISABLED }
 /** 자격증명(integration_credentials 의 agent_runner 행)으로 들어온 principal — 에이전트 API 의 유일한 신원(SP7 §5.1.4) */
 const PRINCIPAL = agentPrincipal(agentCredential({ scopes: ['work:read'] }))
 
-/** agent_projects 행·wbs_items 목록·등록 목록을 주는 가짜 admin — 쓰기는 기록만 */
-function fakeAdmin(opts: { reg?: { enabled: boolean } | null; regError?: string; items?: { id: string }[]; regs?: { project_id: string }[] } = {}) {
+/** wbs_items 목록을 주는 가짜 admin — 읽은 표는 from 으로, 쓰기는 기록만. 옛 등록 표(agent_projects)를 읽으면 켜진 행을 돌려준다 —
+ *  코드가 그 표로 되돌아가면 "모듈이 꺼져도 열린다"로 드러나게(아래 케이스들이 from 호출도 직접 본다). */
+function fakeAdmin(opts: { items?: { id: string }[] } = {}) {
   const writes: string[] = []
   const admin = {
     from: vi.fn((table: string) => {
       const b: Record<string, unknown> = {}
       for (const k of ['select', 'eq', 'neq', 'in', 'order', 'limit']) b[k] = () => b
-      b.maybeSingle = async () => (opts.regError ? { data: null, error: { message: opts.regError } } : { data: table === 'agent_projects' ? (opts.reg ?? null) : null, error: null })
+      b.maybeSingle = async () => ({ data: table === 'agent_projects' ? { enabled: true } : null, error: null })
       b.insert = async () => { writes.push(`${table}.insert`); return { error: null } }
       b.update = () => ({ eq: async () => { writes.push(`${table}.update`); return { error: null } } })
-      b.then = (res: (v: unknown) => unknown) => Promise.resolve({ data: table === 'wbs_items' ? (opts.items ?? []) : (opts.regs ?? []), error: null }).then(res)
+      b.then = (res: (v: unknown) => unknown) => Promise.resolve({ data: table === 'wbs_items' ? (opts.items ?? []) : [], error: null }).then(res)
       return b
     }),
   }
@@ -42,43 +43,37 @@ beforeEach(() => { vi.clearAllMocks(); vi.mocked(requireModule).mockReset(); vi.
 // 전역 관문 mock 을 통과 구현으로 되돌린다(공통 규칙 — 관문 mock 값을 바꾸는 파일)
 afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleState, projectsWithModule, workspacesWithModule]) vi.mocked(f).mockReset() })
 
-describe('requireAgentProject — 두 원천 AND(네 조합)', () => {
-  it.each([
-    [true, true, true], [true, false, false], [false, true, false], [false, false, false],
-  ])('행 enabled=%s · 모듈=%s → %s', async (row, mod, expected) => {
+describe('requireAgentProject — agents 모듈 하나', () => {
+  // 옮김(SP7): '두 원천 AND(네 조합)' — 행 enabled × 모듈의 네 조합 가운데 행 축이 사라졌다. "행이 꺼져 있으면/없으면 닫힘"은 "모듈이 꺼져 있으면 닫힘"으로,
+  // "행이 켜져 있어도 모듈이 꺼지면 닫힘"은 그대로 남는다(가짜 admin 의 등록 표는 늘 켜진 행을 돌려준다 — 읽으면 안 된다).
+  it.each([[true, true], [false, false]])('모듈=%s → %s. 등록 표는 읽지 않는다', async (mod, expected) => {
     if (!mod) vi.mocked(requireModule).mockResolvedValue(OFF)
-    const { admin } = fakeAdmin({ reg: { enabled: row } })
+    const { admin, from, writes } = fakeAdmin()
     expect(await requireAgentProject(admin, PID)).toBe(expected)
-    if (row) expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: admin })
-    else expect(requireModule).not.toHaveBeenCalled()                     // 행이 꺼지면 설정을 읽지 않는다
+    expect(requireModule).toHaveBeenCalledTimes(1)
+    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: admin })   // 세션이 없으니 admin 으로
+    expect(from).not.toHaveBeenCalled()
+    expect(writes).toEqual([])
   })
-  // 위 네 조합은 principal 없이 부르는 갈래(등록 행 ∧ 모듈)다. SP7 뒤 라우트는 모두 principal 을 넘기므로 src 에 이 갈래의 호출부가 없다 —
-  // agent_projects 판독 정리(다음 조각)에서 함께 사라질 자리다. 라우트가 실제로 지나는 갈래는 아래 케이스다.
-  it('principal 이 있으면(라우트의 유일한 경로) 등록 행을 읽지 않고 agents 모듈만 본다', async () => {
-    const on = fakeAdmin({ reg: null })   // 등록 행이 없어도
-    expect(await requireAgentProject(on.admin, PID, PRINCIPAL)).toBe(true)
-    expect(on.from).not.toHaveBeenCalled()
-    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: on.admin })
+  // 삭제(SP7): '행이 없으면 false, 행 조회 오류는 throw(→ 500)' — 등록 행 조회가 없다. 판정 실패는 requireModule 이 로그 뒤 닫힘으로 돌려주므로
+  // (tests/modules/gate.test.ts) 라우트 응답은 404 한 갈래다. 아래는 그 닫힘이 그대로 false 가 되는지(던지지 않는지)를 본다.
+  it('모듈 판정 실패(닫힘)는 false — 던지지 않는다(→ 404)', async () => {
     vi.mocked(requireModule).mockResolvedValue(OFF)
-    const off = fakeAdmin({ reg: { enabled: true } })   // 등록 행이 켜져 있어도 모듈이 꺼지면 닫힌다
-    expect(await requireAgentProject(off.admin, PID, PRINCIPAL)).toBe(false)
-    expect(off.from).not.toHaveBeenCalled()
-  })
-  it('행이 없으면 false, 행 조회 오류는 throw(→ 500) — 모듈 판정 실패(→ false·404)와 응답이 다르다', async () => {
-    expect(await requireAgentProject(fakeAdmin({ reg: null }).admin, PID)).toBe(false)
-    await expect(requireAgentProject(fakeAdmin({ regError: 'down' }).admin, PID)).rejects.toThrow('agent_projects 조회 실패')
+    await expect(requireAgentProject(fakeAdmin().admin, PID)).resolves.toBe(false)
   })
 })
 
 describe('ensureOrder — 발행 게이트', () => {
-  it('ensureOrderForWorkflowLeaf: 행 enabled 여도 모듈이 꺼지면 not_agent_project, agentsOn:true 면 판정을 건너뛴다', async () => {
+  it('ensureOrderForWorkflowLeaf: 모듈이 꺼지면 not_agent_project(등록 표를 읽지 않는다), agentsOn:true 면 판정을 건너뛴다', async () => {
     vi.mocked(requireModule).mockResolvedValue(OFF)
-    const { admin } = fakeAdmin({ reg: { enabled: true } })
+    const { admin, from } = fakeAdmin()
     expect(await ensureOrderForWorkflowLeaf(admin, { projectId: PID, wbsItemId: PID, actorUserId: 'u' })).toEqual({ ok: true, created: false, reason: 'not_agent_project' })
     expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: admin })
+    expect(from).not.toHaveBeenCalled()
     vi.mocked(requireModule).mockClear()
     await ensureOrderForWorkflowLeaf(admin, { projectId: PID, wbsItemId: PID, actorUserId: 'u', agentsOn: true })
     expect(requireModule).not.toHaveBeenCalled()
+    expect(from).not.toHaveBeenCalledWith('agent_projects')
   })
   it("backfillProjectOrders: 시작에서 한 번 moduleState — 'off' 면 발행 0, 'unknown' 이면 오류(조용히 0건이 되지 않게)", async () => {
     const a = fakeAdmin({ items: [{ id: 'i1' }, { id: 'i2' }] })
@@ -96,40 +91,32 @@ describe('ensureOrder — 발행 게이트', () => {
     expect(a.from).toHaveBeenCalledWith('wbs_items')
     expect(requireModule).not.toHaveBeenCalled()
   })
-  it('ensureAgentProject: 모듈이 꺼지면 moduleOff·enabled false, stopped 는 사람이 멈춘 것만. 행이 없으면 자동 생성은 남는다', async () => {
-    vi.mocked(requireModule).mockResolvedValue(OFF)
-    const f1 = fakeAdmin({ reg: { enabled: true } })
-    expect(await ensureAgentProject(f1.admin, { projectId: PID, actorUserId: 'u' }))
-      .toEqual({ ok: true, enabled: false, activated: false, stopped: false, moduleOff: true })
-    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: f1.admin })
-
-    vi.mocked(requireModule).mockClear()
-    const f2 = fakeAdmin({ reg: { enabled: false } })
-    expect(await ensureAgentProject(f2.admin, { projectId: PID, actorUserId: 'u' }))
-      .toEqual({ ok: true, enabled: false, activated: false, stopped: true, moduleOff: true })
-    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: f2.admin })
-
-    vi.mocked(requireModule).mockClear()
-    const none = fakeAdmin({ reg: null })
-    expect(await ensureAgentProject(none.admin, { projectId: PID, actorUserId: 'u' })).toEqual({ ok: true, enabled: false, activated: true, stopped: false, moduleOff: true })
-    expect(none.writes).toEqual(['agent_projects.insert'])
-    expect(requireModule).toHaveBeenCalledWith({ projectId: PID }, 'agents', { client: none.admin })
+  // 삭제(SP7): 'ensureAgentProject: 모듈이 꺼지면 moduleOff·enabled false, stopped 는 사람이 멈춘 것만. 행이 없으면 자동 생성은 남는다' —
+  // 함수(자동 등록·stopped/activated 보고)가 없어졌다. "모듈이 꺼지면 발행하지 않고 안내한다"는 호출부 테스트가 본다:
+  // tests/actions/wbs-spec-delegation-right.test.ts(위임)·tests/actions/wbs-markdown-upload.test.ts(업로드 agentStopped).
+  it("backfillProjectOrders: 'on' 이어도 등록 표를 읽거나 만들지 않는다(자동 등록 없음)", async () => {
+    const a = fakeAdmin({ items: [] })
+    vi.mocked(moduleState).mockResolvedValueOnce('on')
+    expect(await backfillProjectOrders(a.admin, { projectId: PID, actorUserId: 'u' })).toEqual({ ok: true, created: 0, failed: [] })
+    expect(a.from).not.toHaveBeenCalledWith('agent_projects')
+    expect(a.writes).toEqual([])
   })
 })
 
 describe('목록 — 꺼진 프로젝트의 행 생략', () => {
   it('accessibleProjectIds(work/mine 재료)는 agents 가 켜진 프로젝트만', async () => {
     vi.mocked(projectsWithModule).mockResolvedValueOnce([PID])
-    // 후보는 소유자의 좁힌 스냅샷(멤버 프로젝트)이다 — 등록 행(agent_projects)이 아니다
+    // 후보는 소유자의 좁힌 스냅샷(멤버 프로젝트)이다 — 등록 표는 없다. 모듈은 자격증명 워크스페이스로 한 번에 판정한다(프로젝트마다 설정을 읽지 않는다)
     vi.mocked(agentActorFromPrincipal).mockResolvedValue(makeActor({
       userId: CRED_OWNER, workspaceRoles: new Map([[CRED_WS, 'member']]),
       projectWorkspace: new Map([[PID, CRED_WS], [P2, CRED_WS]]), projectRoles: new Map<string, ProjectRole>([[PID, 'member'], [P2, 'member']]),
     }))
-    const { admin, from } = fakeAdmin({ regs: [{ project_id: PID }, { project_id: P2 }] })
+    const { admin, from } = fakeAdmin()
     expect(await accessibleProjectIds(admin, PRINCIPAL)).toEqual([PID])
-    expect(projectsWithModule).toHaveBeenCalledWith([PID, P2], 'agents', { client: admin })
+    expect(projectsWithModule).toHaveBeenCalledTimes(1)
+    expect(projectsWithModule).toHaveBeenCalledWith([PID, P2], 'agents', { client: admin, workspaceId: CRED_WS })
     expect(agentActorFromPrincipal).toHaveBeenCalledWith(admin, CRED_OWNER, PRINCIPAL)
-    expect(from).not.toHaveBeenCalledWith('agent_projects')
+    expect(from).not.toHaveBeenCalled()
   })
 })
 

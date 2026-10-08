@@ -7,13 +7,12 @@
  * authz/index.ts 에 두지 않는다(D10 — 81개 테스트가 그 모듈을 통째로 mock 한다). 단위 테스트는 tests/setup/module-gate.ts 가 통과시킨다.
  */
 import { unstable_rethrow } from 'next/navigation'
-import { getActor } from '@/lib/authz'
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
-import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import { getProjectConfig, type ConfigReadClient } from '@/lib/settings/projectConfig'
 import type { ModuleId } from './defaults'
 import { effectiveModules } from './effective'
+import { effectiveModulesMany } from './effectiveMany'
 import { CORE } from './registry'
 
 export type ModuleScope = { projectId: string } | { workspaceId: string }
@@ -59,21 +58,15 @@ export async function moduleSetFor(scope: ModuleScope, opts?: { client?: ConfigR
   }
 }
 
-/** 대상 행이 없는 세션 판정(스펙 §4.2 2행) — projectId 가 있으면 그 프로젝트, 없으면 행위자의 유일 워크스페이스. 소속 0개·2개 이상·
- *  비로그인·권한 조회 실패는 닫는다(판정 P13, 리스크 R15). 세션 경로 전용 — 세션 없는 경로는 requireModule 에 범위와 client 를 넘긴다. */
+/** 대상 행이 없는 세션 판정(스펙 §4.2 2행) — projectId 가 있으면 그 프로젝트로 판정한다. 없으면 범위를 모른다 — core 만 통과하고 나머지는
+ *  닫는다(fail-closed). 행위자의 소속 워크스페이스에서 범위를 짐작하지 않는다(SP7 — 소속이 여럿이면 엉뚱한 워크스페이스로 판정된다):
+ *  워크스페이스 범위는 호출자가 requireModule({ workspaceId }) 나 requireScopedSessionModule 로 명시한다.
+ *  세션 경로 전용 — 세션 없는 경로는 requireModule 에 범위와 client 를 넘긴다. */
 export async function requireSessionModule(projectId: string | null, moduleId: ModuleId | readonly ModuleId[]): Promise<ModuleGateResult> {
   if (projectId) return requireModule({ projectId }, moduleId)
   if (allCore(idsOf(moduleId))) return { ok: true }
-  let actor: Awaited<ReturnType<typeof getActor>>
-  try { actor = await getActor() } catch (e) {
-    unstable_rethrow(e)
-    console.error('[requireModule] 행위자 조회 실패', e instanceof Error ? e.message : e)
-    return DENIED
-  }
-  if (!actor) return DENIED
-  const sole = resolveSoleWorkspaceId(actor)
-  if (!sole.ok) return DENIED
-  return requireModule({ workspaceId: sole.workspaceId }, moduleId)
+  console.error('[requireModule] 범위 없는 세션 판정은 닫는다', idsOf(moduleId).join(','))
+  return DENIED
 }
 
 /** 워커용 3값(판정 P10) — 설정을 읽지 못하거나 모듈 키가 손상이면 'unknown'(잡을 실패로 돌려 재시도·dead_letter), 꺼짐은 'off'(skipped).
@@ -93,9 +86,27 @@ export async function moduleState(scope: ModuleScope, moduleId: ModuleId | reado
   }
 }
 
-/** 목록형 응답(스펙 §4.2 첫 문단) — 모듈이 유효한 프로젝트만, 입력 순서, 중복 제거. 판정 실패는 뺀다(requireModule 이 로그를 남긴다) */
-export async function projectsWithModule(projectIds: readonly string[], moduleId: ModuleId | readonly ModuleId[], opts?: { client?: ConfigReadClient }): Promise<string[]> {
+/** 목록형 응답(스펙 §4.2 첫 문단) — 모듈이 유효한 프로젝트만, 입력 순서, 중복 제거. 판정 실패는 뺀다(requireModule 이 로그를 남긴다).
+ *  workspaceId 를 주면 그 워크스페이스의 프로젝트들을 한 번에 판정한다(effectiveModulesMany — 워크스페이스 설정 1회 + 프로젝트 설정 in() 조각,
+ *  프로젝트마다 설정을 따로 읽지 않는다). 그 워크스페이스 소속이 아닌 프로젝트·설정을 읽지 못한 프로젝트는 빠지고, 워크스페이스 설정을 읽지
+ *  못하면 전부 빠진다(fail-closed, 로그). 결과는 프로젝트마다 requireModule 을 부른 것과 같다(tests/modules/effective-many.test.ts 동치). */
+export async function projectsWithModule(
+  projectIds: readonly string[], moduleId: ModuleId | readonly ModuleId[], opts?: { client?: ConfigReadClient; workspaceId?: string },
+): Promise<string[]> {
   const uniq = [...new Set(projectIds)]
+  if (opts?.workspaceId !== undefined) {
+    const ids = idsOf(moduleId)
+    if (ids.length === 0) throw new Error('[projectsWithModule] 모듈 id 가 비었다')
+    if (uniq.length === 0 || allCore(ids)) return uniq
+    try {
+      const { sets } = await effectiveModulesMany(opts.workspaceId, uniq, { client: opts.client })
+      return uniq.filter((pid) => { const eff = sets.get(pid); return eff !== undefined && ids.every((id) => eff.has(id)) })
+    } catch (e) {
+      unstable_rethrow(e)
+      console.error('[projectsWithModule]', ids.join(','), JSON.stringify({ workspaceId: opts.workspaceId }), e instanceof Error ? e.message : e)
+      return []
+    }
+  }
   const ok = await Promise.all(uniq.map(async (projectId) => (await requireModule({ projectId }, moduleId, opts)).ok))
   return uniq.filter((_, i) => ok[i])
 }

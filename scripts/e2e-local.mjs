@@ -1735,13 +1735,11 @@ async function main() {
       || issuesOff.issueAnalysis.body?.error !== ERR_MODULE_DISABLED || issuesOff.issueAnalysis.issueInBody
       ? `issues 관문: ${JSON.stringify(issuesOff)}` : undefined)
 
-  // 21. agent_projects 행이 켜진 채 agents 모듈만 끈 상태를 먼저 확인해 두 원천 AND 를 증명한다.
-  const agentRow = async () => rows('agent_projects', await svc.from('agent_projects').select('enabled').eq('project_id', A.id))[0]?.enabled ?? null
-  // 옛 토글(setAgentProjectEnabled)은 Phase C 에서 지워졌다 — 켜기·끄기는 모듈 편집기(modules.enabled 의 agents)가 한 길이다.
-  // 켜기는 agent_projects 행을 만들거나 enabled 로 되돌리고, 끄기는 행을 건드리지 않는다(agentsSync.ts).
+  // 21. 에이전트 사용 여부의 원천은 agents 모듈 하나다(SP7 — 옛 등록 표는 0041 이 지웠다). 모듈을 끄면 에이전트 API 가 닫히고 켜면 열린다.
+  // 켜기·끄기는 모듈 편집기(modules.enabled 의 agents)가 한 길이다. 새로 켜는 저장은 주문 백필을 돈다(agentsSync.ts).
   const withAgents = (enabled) => (enabled.includes('agents') ? enabled : [...enabled, 'agents'])
-  // 기본 modules.enabled 에 agents 가 이미 있어 그대로 저장하면 '새로 켬'이 아니라 등록 행이 안 생긴다 — 껐다 켜야 행이 만들어진다(agentsSync).
-  await setProjectModules('agents 끄기(등록 준비)', (enabled) => enabled.filter((id) => id !== 'agents'))
+  // 기본 modules.enabled 에 agents 가 이미 있다 — 껐다 켜서 '새로 켬'(백필) 경로를 한 번 지난다.
+  await setProjectModules('agents 끄기(새로 켬 준비)', (enabled) => enabled.filter((id) => id !== 'agents'))
   await setProjectModules('agents 켜기', withAgents)
   await admin.http('GET', '/account')
   const tokenResult = await admin.action('/account', 'createAgentToken', [{ name: `e2e-${randomUUID().slice(0, 8)}`, projectId: null, scopes: ['work:read'], expiresDays: 1 }])
@@ -1756,20 +1754,18 @@ async function main() {
   const agents = { tokenPrefix: tokenResult.result.prefix, meBefore: meHas(await agentApi('/api/v1/agent/me', 200)) }
   await agentApi(`/api/v1/wbs/structure?project_id=${A.id}`, 200)
   agents.enabledAfterModuleOff = await setProjectModules('agents 끄기(모듈만)', (enabled) => enabled.filter((id) => id !== 'agents'))
-  agents.rowAfterModuleOff = await agentRow()
   agents.meAfterModuleOff = meHas(await agentApi('/api/v1/agent/me', 200))
   agents.structureAfterModuleOff = { status: 404, body: await agentApi(`/api/v1/wbs/structure?project_id=${A.id}`, 404) }
   await setProjectModules('agents 다시 켜기', withAgents)
   agents.meAfterToggleOn = meHas(await agentApi('/api/v1/agent/me', 200))
   agents.enabledAfterToggleOn = (await projectModules()).enabled
   await setProjectModules('agents 끄기(모듈 편집기)', (enabled) => enabled.filter((id) => id !== 'agents'))
-  agents.rowAfterToggleOff = await agentRow()
   agents.enabledAfterToggleOff = (await projectModules()).enabled
   agents.meAfterToggleOff = meHas(await agentApi('/api/v1/agent/me', 200))
   step('module-agents-off', agents,
-    !agents.meBefore || agents.enabledAfterModuleOff.includes('agents') || agents.rowAfterModuleOff !== true || agents.meAfterModuleOff
+    !agents.meBefore || agents.enabledAfterModuleOff.includes('agents') || agents.meAfterModuleOff
       || !agents.meAfterToggleOn || !agents.enabledAfterToggleOn.includes('agents')
-      || agents.rowAfterToggleOff !== true || agents.enabledAfterToggleOff.includes('agents') || agents.meAfterToggleOff
+      || agents.enabledAfterToggleOff.includes('agents') || agents.meAfterToggleOff
       ? `agents 관문: ${JSON.stringify(agents)}` : undefined)
 
   // 22. 회의록 연동 허용을 빼면 업로드 계열 API 는 409 이고, 다른 워크스페이스는 그대로 열린다.

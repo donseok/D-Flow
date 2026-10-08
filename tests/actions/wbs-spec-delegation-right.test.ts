@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   requireProjectAdmin: vi.fn(), requireProjectMember: vi.fn(), resolveProjectId: vi.fn(),
   createAdminClient: vi.fn(), createServerClient: vi.fn(),
   myMemberIds: vi.fn(),
-  ensureAgentProject: vi.fn(), backfillProjectOrders: vi.fn(), ensureOrderForWorkflowLeaf: vi.fn(),
+  ensureOrderForWorkflowLeaf: vi.fn(),
   applyWorkflowEvent: vi.fn(), after: vi.fn(), recordProgressSnapshot: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: mocks.requireProjectAdmin, requireProjectMember: mocks.requireProjectMember, resolveProjectId: mocks.resolveProjectId }))
@@ -16,7 +16,9 @@ vi.mock('next/server', () => ({ after: mocks.after }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: mocks.recordProgressSnapshot }))
 vi.mock('@/lib/agent/assignee', () => ({ myMemberIds: mocks.myMemberIds }))
 vi.mock('@/lib/data/agentSeatmap', () => ({ DONE_WINDOW_MS: 0 }))
-vi.mock('@/lib/agent/ensureOrder', () => ({ ensureAgentProject: mocks.ensureAgentProject, backfillProjectOrders: mocks.backfillProjectOrders, ensureOrderForWorkflowLeaf: mocks.ensureOrderForWorkflowLeaf }))
+// SP7 — 위임은 자동 등록·첫 활성 백필을 하지 않는다(ensureAgentProject·backfillProjectOrders 를 부르지 않는다). 본체의 사용 여부 판정은 agents 모듈
+// (service_role — requireModule 의 { client })이고, 아래 AGENTS_OFF 가 액션 관문(세션)은 통과시킨 채 그 판정만 거부한다.
+vi.mock('@/lib/agent/ensureOrder', () => ({ ensureOrderForWorkflowLeaf: mocks.ensureOrderForWorkflowLeaf }))
 vi.mock('@/lib/agent/workflowEvent', () => ({ applyWorkflowEvent: mocks.applyWorkflowEvent }))
 
 import { ERR_AGENT_OFF, ERR_NOT_ASSIGNEE, requireDelegationRight } from '@/lib/agent/delegation'
@@ -52,6 +54,10 @@ function admin(queues: Record<string, Resp[]>) {
 
 const MEMBER = { ok: true, actor: { userId: 'member-1' } }
 const DENIED = { ok: false, error: '권한이 없습니다.' }
+/** 본체의 agents 판정(service_role)만 거부 — 액션 관문(세션, client 없음)은 통과 */
+const agentsOff = () => vi.mocked(requireModule).mockImplementation(async (_s, _m, o) => (o?.client ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true }))
+/** 본체가 agents 모듈을 service_role 로 판정한 횟수 */
+const bodyGateCalls = () => vi.mocked(requireModule).mock.calls.filter(([, m, o]) => m === 'agents' && !!o?.client)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -59,7 +65,6 @@ beforeEach(() => {
   mocks.requireProjectAdmin.mockResolvedValue(DENIED)
   mocks.requireProjectMember.mockResolvedValue(MEMBER)
   mocks.myMemberIds.mockResolvedValue(['m1'])
-  mocks.ensureAgentProject.mockResolvedValue({ ok: true, enabled: true, activated: false, stopped: false })
   mocks.ensureOrderForWorkflowLeaf.mockResolvedValue({ ok: true, created: true })
   mocks.applyWorkflowEvent.mockResolvedValue({ ok: true })
 })
@@ -111,44 +116,39 @@ describe('requireDelegationRight', () => {
 })
 
 describe('setAgentDelegation — 멤버 경로', () => {
-  it('담당자 본인 + 프로젝트 등록·활성 → 태그 붙이고 주문 보장, ensureAgentProject 호출', async () => {
-    const { captured } = admin({
+  it('담당자 본인 + agents 모듈 켜짐 → 태그 붙이고 주문 보장. 등록 표는 읽지 않고 모듈 판정은 한 번이다', async () => {
+    const { captured, calls } = admin({
       wbs_items: [{ data: { assignee_member_id: 'm1' } }, { data: { tags: [], dev_workflow: true } }, { data: [{ id: W1 }] }],
-      agent_projects: [{ data: { enabled: true } }],
+      agent_projects: [{ data: { enabled: false } }],   // 함정 — 옛 등록 표를 읽으면 꺼진 행이 나온다
     })
     const r = await setAgentDelegation(W1, true)
-    expect(r.ok).toBe(true)
+    expect(r).toEqual({ ok: true })
     expect((captured.wbs_items?.[0] as { tags: string[] }).tags).toEqual(['agent'])
-    expect(mocks.ensureAgentProject).toHaveBeenCalled()
-    expect(mocks.ensureOrderForWorkflowLeaf).toHaveBeenCalled()
+    expect(calls).not.toContain('agent_projects')
+    expect(bodyGateCalls()).toEqual([[{ projectId: P1 }, 'agents', { client: expect.anything() }]])
+    // 이미 판정한 값을 넘긴다 — 주문 보장이 모듈을 다시 읽지 않는다
+    expect(mocks.ensureOrderForWorkflowLeaf).toHaveBeenCalledWith(expect.anything(), { projectId: P1, wbsItemId: W1, actorUserId: 'member-1', agentsOn: true })
   })
-  it('담당자 본인 + 프로젝트 미등록 → ERR_AGENT_OFF, 태그 쓰기 0, ensureAgentProject 미호출', async () => {
-    const { captured } = admin({ wbs_items: [{ data: { assignee_member_id: 'm1' } }, { data: { tags: [], dev_workflow: true } }], agent_projects: [{ data: null }] })
-    expect(await setAgentDelegation(W1, true)).toEqual({ ok: false, error: ERR_AGENT_OFF })
-    expect(captured.wbs_items).toBeUndefined()
-    expect(mocks.ensureAgentProject).not.toHaveBeenCalled()
-  })
-  it('담당자 본인 + 프로젝트 중지(enabled=false) → ERR_AGENT_OFF', async () => {
-    admin({ wbs_items: [{ data: { assignee_member_id: 'm1' } }, { data: { tags: [], dev_workflow: true } }], agent_projects: [{ data: { enabled: false } }] })
-    expect(await setAgentDelegation(W1, true)).toEqual({ ok: false, error: ERR_AGENT_OFF })
-  })
-  it('담당자 본인 + 행은 활성이어도 agents 모듈이 꺼지면 ERR_AGENT_OFF — 태그 쓰기 0(과제 18, 두 원천 AND)', async () => {
-    const { captured } = admin({ wbs_items: [{ data: { assignee_member_id: 'm1' } }, { data: { tags: [], dev_workflow: true } }], agent_projects: [{ data: { enabled: true } }] })
-    // 액션 관문(세션)은 통과시키고 본체의 두 원천 판정(service_role — { client })만 거부한다
-    vi.mocked(requireModule).mockImplementation(async (_s, _m, o) => (o?.client ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true }))
+  // 옮김(SP7): '담당자 본인 + 프로젝트 미등록 → ERR_AGENT_OFF'·'프로젝트 중지(enabled=false) → ERR_AGENT_OFF'·'행은 활성이어도 모듈이 꺼지면 ERR_AGENT_OFF'
+  // 세 케이스 — 등록 행 축이 사라져 "agents 모듈이 꺼져 있으면 닫힘" 하나가 됐다. 함정으로 켜진 등록 행을 넣어 둔다(읽으면 안 된다).
+  it('담당자 본인 + agents 모듈이 꺼지면 ERR_AGENT_OFF — 태그 쓰기 0, 주문 보장 미호출(옛 등록 행이 켜져 있어도)', async () => {
+    const { captured, calls } = admin({ wbs_items: [{ data: { assignee_member_id: 'm1' } }, { data: { tags: [], dev_workflow: true } }], agent_projects: [{ data: { enabled: true } }] })
+    agentsOff()
     expect(await setAgentDelegation(W1, true)).toEqual({ ok: false, error: ERR_AGENT_OFF })
     expect(captured.wbs_items).toBeUndefined()
     expect(requireModule).toHaveBeenCalledWith({ projectId: P1 }, 'agents', { client: expect.anything() })
-    expect(mocks.ensureAgentProject).not.toHaveBeenCalled()
+    expect(calls).not.toContain('agent_projects')
+    expect(mocks.ensureOrderForWorkflowLeaf).not.toHaveBeenCalled()
   })
-  it('관리자 위임 ON — 모듈이 꺼졌으면(moduleOff) 태그는 붙이되 주문은 내지 않고 모듈 안내를 경고로(과제 18)', async () => {
+  it('관리자 위임 ON — 모듈이 꺼졌으면 태그는 붙이되 주문은 내지 않고 모듈 안내를 경고로(과제 18)', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: { userId: 'admin-1' } })
-    mocks.ensureAgentProject.mockResolvedValue({ ok: true, enabled: false, activated: false, stopped: false, moduleOff: true })
-    const { captured } = admin({ wbs_items: [{ data: { tags: [], dev_workflow: true } }, { data: [{ id: W1 }] }] })
+    agentsOff()
+    const { captured, calls } = admin({ wbs_items: [{ data: { tags: [], dev_workflow: true } }, { data: [{ id: W1 }] }] })
     const r = await setAgentDelegation(W1, true)
-    expect(r).toMatchObject({ ok: true, warning: expect.stringContaining('에이전트 모듈이 꺼져') })
+    expect(r).toEqual({ ok: true, warning: '이 프로젝트의 에이전트 모듈이 꺼져 있어 주문을 발행하지 않았습니다. 프로젝트 설정에서 켜면 발행됩니다.' })
     expect((captured.wbs_items?.[0] as { tags: string[] }).tags).toEqual(['agent'])
     expect(mocks.ensureOrderForWorkflowLeaf).not.toHaveBeenCalled()
+    expect(calls).not.toContain('agent_projects')
   })
   it('담당자 본인 해제(false)는 프로젝트 상태와 무관하게 진행 — ready 주문 취소', async () => {
     const { captured } = admin({
@@ -201,13 +201,17 @@ describe('setAgentDelegation — 멤버 경로', () => {
     expect(r.warning).toContain('단계를 착수 전(as)으로 되돌리지 못했습니다')
     expect(r.warning).toContain('전이 실패: boom')
   })
-  it('관리자 경로는 agent_projects 사전 확인 없이 ensureAgentProject 로 간다(종전 동작)', async () => {
+  // 옮김(SP7): '관리자 경로는 agent_projects 사전 확인 없이 ensureAgentProject 로 간다' — 자동 등록(ensureAgentProject)이 없어졌다.
+  // 관리자도 같은 모듈 판정 하나를 지나고, 등록 표는 읽지도 쓰지도 않는다(등록·백필 부작용 없음).
+  it('관리자 경로 — 모듈이 켜져 있으면 주문 보장으로 간다. 등록 표를 읽거나 만들지 않는다', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: { userId: 'admin-1' } })
-    const { calls } = admin({ wbs_items: [{ data: { tags: [], dev_workflow: true } }, { data: [{ id: W1 }] }] })
+    const { calls, captured } = admin({ wbs_items: [{ data: { tags: [], dev_workflow: true } }, { data: [{ id: W1 }] }] })
     const r = await setAgentDelegation(W1, true)
-    expect(r.ok).toBe(true)
-    expect(mocks.ensureAgentProject).toHaveBeenCalled()
+    expect(r).toEqual({ ok: true })
     expect(calls.filter(t => t === 'agent_projects')).toEqual([])
+    expect(captured.agent_projects).toBeUndefined()
+    expect(bodyGateCalls()).toHaveLength(1)
+    expect(mocks.ensureOrderForWorkflowLeaf).toHaveBeenCalledWith(expect.anything(), { projectId: P1, wbsItemId: W1, actorUserId: 'admin-1', agentsOn: true })
   })
   it('dev_workflow 가 꺼져 있던 리프는 켜면서 이력 1건 + 담당자 있고 단계 없으면 as 전이', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: { userId: 'admin-1' } })
@@ -224,14 +228,16 @@ describe('setAgentDelegation — 멤버 경로', () => {
     expect((captured.change_logs?.[0] as { field: string; new_value: string })).toMatchObject({ field: 'dev_workflow', new_value: 'true', wbs_item_id: W1 })
     expect(mocks.applyWorkflowEvent).toHaveBeenCalledWith(expect.anything(), { event: 'assign', actorUserId: 'admin-1', itemId: W1 })
   })
-  it('프로젝트가 중지 상태면 태그는 붙고 주문은 안 나가며 warning 에 에이전트 페이지 안내', async () => {
+  // 삭제(SP7): '프로젝트가 중지 상태면 태그는 붙고 주문은 안 나가며 warning 에 에이전트 페이지 안내' — "에이전트 중지"(등록 행 enabled=false)라는
+  // 상태가 없어졌다. 꺼짐은 모듈 하나이고 그 경고는 위 '관리자 위임 ON — 모듈이 꺼졌으면' 케이스가 문구까지 고정한다.
+  it('해제(false)는 모듈을 판정하지 않는다 — 꺼진 프로젝트에서도 위임을 걷을 수 있다', async () => {
     mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: { userId: 'admin-1' } })
-    mocks.ensureAgentProject.mockResolvedValue({ ok: true, enabled: false, activated: false, stopped: true })
-    admin({ wbs_items: [{ data: { tags: [], dev_workflow: true } }, { data: [{ id: W1 }] }] })
-    const r = await setAgentDelegation(W1, true)
+    agentsOff()
+    admin({ wbs_items: [{ data: { tags: ['agent'], dev_workflow: true } }, { data: [{ id: W1 }] }], agent_work_orders: [{ data: [] }] })
+    const r = await setAgentDelegation(W1, false)
+    expect(bodyGateCalls()).toEqual([])
+    // 액션 관문(세션)이 agents 를 닫는 것은 이 파일의 범위가 아니다 — 본체가 모듈을 읽지 않는다는 것만 본다
     expect(r.ok).toBe(true)
-    expect(r.warning).toContain('모듈·메뉴에서 에이전트를 껐다 다시 켜면')
-    expect(mocks.ensureOrderForWorkflowLeaf).not.toHaveBeenCalled()
   })
 })
 

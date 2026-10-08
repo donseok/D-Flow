@@ -145,7 +145,7 @@ describe('POST /wbs/import', () => {
     // T-B 는 dev_workflow=true·활성 주문 없음(갭)이므로 F1 갱신 루프가 이걸 잡아 발행해야 한다.
     const admin = useAdmin({
       integration_credentials: [{ data: row }, { data: null }], // 리졸버 select, last_used_at 갱신
-      agent_projects: [{ data: { enabled: true } }, { data: { enabled: true } }], // ensureOrder 게이트 x2(T-A, T-B) — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      // ensureOrder 게이트·라우트 게이트 모두 agents 모듈(requireModule — 전역 mock 통과)이다. 등록 표(agent_projects)는 없다(SP7·0041)
       // platform_admins·명단 권한은 각 2회 조회된다: isAgentProjectMember(비멤버 404 게이트) → 관리자 판정.
       ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
@@ -223,7 +223,7 @@ describe('POST /wbs/import', () => {
     }
     useAdmin({
       integration_credentials: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      // ensureOrder 게이트·라우트 게이트 모두 agents 모듈(requireModule — 전역 mock 통과)이다. 등록 표(agent_projects)는 없다(SP7·0041)
       ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-x', people: { email: 'other@example.com' } }] }], // 다른 email 만 — 매칭 실패
       wbs_items: [
@@ -332,7 +332,7 @@ describe('POST /wbs/import', () => {
     }
     useAdmin({
       integration_credentials: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      // ensureOrder 게이트·라우트 게이트 모두 agents 모듈(requireModule — 전역 mock 통과)이다. 등록 표(agent_projects)는 없다(SP7·0041)
       ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
@@ -364,7 +364,7 @@ describe('POST /wbs/import', () => {
     }
     useAdmin({
       integration_credentials: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      // ensureOrder 게이트·라우트 게이트 모두 agents 모듈(requireModule — 전역 mock 통과)이다. 등록 표(agent_projects)는 없다(SP7·0041)
       ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
@@ -412,7 +412,7 @@ describe('POST /wbs/import', () => {
     useAdmin({
       integration_credentials: [{ data: row }, { data: null }],
       // taskRefs(payload 의 kind='task' ref 집합)가 비어 ensureOrdersForPayload 가 즉시 반환한다 —
-      // wbs_items·agent_work_orders 큐가 전혀 소비되지 않는다 — agent_projects(ensureOrder 게이트)도 읽지 않는다.
+      // wbs_items·agent_work_orders 큐가 전혀 소비되지 않는다.
       ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [{ id: 'member-1', people: { email: 'a@b.c' } }] }],
       wbs_items: [
@@ -433,7 +433,7 @@ describe('POST /wbs/import', () => {
     }
     useAdmin({
       integration_credentials: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      // ensureOrder 게이트·라우트 게이트 모두 agents 모듈(requireModule — 전역 mock 통과)이다. 등록 표(agent_projects)는 없다(SP7·0041)
       ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [] }], // 매칭 대상 없음 — 그래도 로스터는 로드된다
       wbs_items: [
@@ -463,7 +463,7 @@ describe('POST /wbs/import', () => {
     }
     useAdmin({
       integration_credentials: [{ data: row }, { data: null }],
-      agent_projects: [{ data: { enabled: true } }], // ensureOrder 게이트 — 라우트 게이트는 agents 모듈(requireModule)이라 이 표를 읽지 않는다
+      // ensureOrder 게이트·라우트 게이트 모두 agents 모듈(requireModule — 전역 mock 통과)이다. 등록 표(agent_projects)는 없다(SP7·0041)
       ...credAxes([PROJECT_ID], 2),
       project_members: [roster(rosterRow(PROJECT_ID, 'admin')), roster(rosterRow(PROJECT_ID, 'admin')), { data: [] }],
       wbs_items: [

@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const scopeErr = requireScope(principal, 'work:read')
     if (scopeErr) return scopeErr
     if (!patProjectAllowed(principal, projectId)) return apiNotFound()
-    if (!(await requireAgentProject(admin, projectId, principal))) return apiNotFound()
+    if (!(await requireAgentProject(admin, projectId))) return apiNotFound()
     if (!(await isAgentProjectMember(admin, principal.userId, projectId, principal))) {
       return apiNotFound() // 비멤버 404 — 존재 은닉 관례(§2.2)
     }

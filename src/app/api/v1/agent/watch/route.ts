@@ -5,7 +5,6 @@ import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import {
   agentActorFromPrincipal, patProjectAllowed, apiBadRequest, apiFail, apiInternalError, apiNotFound, requireScope, resolveAgentPrincipal, type AgentPrincipal,
 } from '@/lib/agent/externalApi'
-import { resolveSoleWorkspaceId } from '@/lib/authz/workspace'
 import { hasProjectRoleInWorkspace, isProjectMember } from '@/lib/domain/authz'
 import { projectsWithModule, requireModule } from '@/lib/modules/gate'
 
@@ -129,10 +128,10 @@ export async function POST(req: NextRequest) {
     // 조회 전용은 프로젝트 분기와 같은 404(판정 T13-2).
     let workspaceId: string | null = null
     if (!projectId) {
-      const w = principal.credential ? { ok: true as const, workspaceId: principal.credential.workspaceId } : resolveSoleWorkspaceId(actor)
-      if (!w.ok) return apiFail(400, 'project_required', '워크스페이스가 하나가 아니면 project_id 를 지정하세요.')
-      if (!hasProjectRoleInWorkspace(actor, w.workspaceId)) return apiNotFound()
-      workspaceId = w.workspaceId
+      // 워크스페이스는 자격증명 행이 정한다(SP7 §5.1.3) — 소유자의 소속에서 짐작하지 않는다.
+      const wid = principal.credential.workspaceId
+      if (!hasProjectRoleInWorkspace(actor, wid)) return apiNotFound()
+      workspaceId = wid
     }
     // agents 관문(스펙 §4.2 에이전트 API 행) — 권한 판정 뒤·쓰기 앞. 프로젝트 감시자는 그 프로젝트, 프로젝트 없는 감시자는 그 워크스페이스에서
     // agents 가 유효해야 한다(꺼지면 없는 것과 같은 404). 두 갈래가 한 호출을 지난다. stop 은 위 — 자기 행을 지우는 정리라 관문 앞이다(P19)
@@ -155,7 +154,7 @@ export async function POST(req: NextRequest) {
       .from('agent_watchers').delete().eq('workspace_id', principal.credential.workspaceId).lt('last_seen_at', new Date(now.getTime() - STALE_ROW_MS).toISOString())
     if (gcErr) console.error('[agent-api] watch 오래된 행 정리 실패:', gcErr.message)
     const loaded = await loadResumeRequests(admin, principal.userId, projectId, principal, new Set([...actor.projectWorkspace.keys()].filter(pid => isProjectMember(actor, pid) && patProjectAllowed(principal, pid))))
-    const onIds = loaded === null ? null : new Set(await projectsWithModule(loaded.map((r) => r.project_id), 'agents', { client: admin }))
+    const onIds = loaded === null ? null : new Set(await projectsWithModule(loaded.map((r) => r.project_id), 'agents', { client: admin, workspaceId: principal.credential.workspaceId }))
     const resume = loaded === null ? null : loaded.filter((r) => onIds!.has(r.project_id) && patProjectAllowed(principal, r.project_id) && isProjectMember(actor, r.project_id))   // 목록형 — 꺼진 프로젝트의 재개 요청은 싣지 않는다
     return NextResponse.json({
       ok: true,

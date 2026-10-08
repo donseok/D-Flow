@@ -8,7 +8,8 @@ import { isUuidLike } from '@/lib/domain/agentWork'
 import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { isStageCode, type StageCode } from '@/lib/domain/stageLabels'
 import { emitNotification } from '@/lib/notify/emit'
-import { backfillProjectOrders, ensureAgentProject, ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
+import { ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
+import { requireAgentProject } from '@/lib/agent/externalApi'
 import { applyWorkflowEvent, notifyOnReached, REASON_TEXT } from '@/lib/agent/workflowEvent'
 import { loadApprovalState, notifyApprovalStep } from '@/lib/agent/approvalState'
 import { STEP_CODE_RE, type PendingApproval } from '@/lib/domain/approvalSteps'
@@ -460,7 +461,7 @@ export async function setWbsDevWorkflow(
   if (!resolved.ok) return resolved
   const g = await requireSubtreeManagerOrAdmin(itemId, resolved.projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  // 일괄(cascade)은 관리자만 — 프로젝트 자동 활성·백필·주문 일괄 취소를 끌고 오는 프로젝트 범위
+  // 일괄(cascade)은 관리자만 — 주문 일괄 발행·취소를 끌고 오는 프로젝트 범위
   // 행위라 applyDelegation 이 멤버에게 그은 선과 같은 자리에 둔다. 단건은 담당자·서브트리 관리자도 한다.
   if (cascade && !g.isAdmin) return { ok: false, error: ERR_DEV_WORKFLOW_CASCADE_ADMIN }
 
@@ -581,19 +582,10 @@ export async function setWbsDevWorkflow(
   let cascadeFailed = false
 
   if (enabled) {
-    // 프로젝트 자동 활성(2026-08-24) — dev_workflow ON 도 "에이전트에게 일을 시키는 행위"다. 처음 활성이면
-    // 백필이 이 프로젝트의 dev_workflow 리프 전부(방금 켠 것 포함)에 주문을 보장한다. 실패는 로깅만.
-    try {
-      const proj = await ensureAgentProject(admin, { projectId: resolved.projectId, actorUserId: g.actor.userId })
-      if (!proj.ok) console.error('[wbsAssign] dev_workflow ON 프로젝트 활성 실패:', proj.error)
-      else if (proj.moduleOff) console.warn('[wbsAssign] agents 모듈이 꺼져 있어 dev_workflow ON 이 주문을 발행하지 않는다:', resolved.projectId)
-      else if (proj.activated) {
-        const bf = await backfillProjectOrders(admin, { projectId: resolved.projectId, actorUserId: g.actor.userId })
-        if (!bf.ok) console.error('[wbsAssign] 백필 실패:', bf.error)
-      }
-    } catch (e) {
-      console.error('[wbsAssign] dev_workflow ON 프로젝트 활성 예외:', e)
-    }
+    // 주문 발행의 원천은 agents 모듈 하나다(SP7 — 자동 등록·첫 활성 백필은 없다. 백필은 설정에서 모듈을 켤 때 돈다).
+    // 꺼져 있으면 아래 주문 보장이 발행하지 않는다 — 조용히 0건이 되지 않게 남긴다. 판정은 한 번(리프마다 다시 읽지 않는다), 실패는 꺼짐(fail-closed).
+    const agentsOn = await requireAgentProject(admin, resolved.projectId)
+    if (!agentsOn) console.warn('[wbsAssign] agents 모듈이 꺼져 있어 dev_workflow ON 이 주문을 발행하지 않는다:', resolved.projectId)
     // ON — 리프에만 초기 as 전이(assign 사건) + 자동 주문 발행. 실패는 로깅만(본 토글 결과는 유지).
     for (const id of updatedIds) {
       if (hasChildren.has(id)) continue
@@ -608,7 +600,7 @@ export async function setWbsDevWorkflow(
       }
       try {
         const orderRes = await ensureOrderForWorkflowLeaf(admin, {
-          projectId: resolved.projectId, wbsItemId: id, actorUserId: g.actor.userId,
+          projectId: resolved.projectId, wbsItemId: id, actorUserId: g.actor.userId, agentsOn,
         })
         if (!orderRes.ok) console.error('[wbsAssign] dev_workflow ON 자동 주문 발행 실패:', orderRes.error)
       } catch (e) {

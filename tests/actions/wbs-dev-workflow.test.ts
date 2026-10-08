@@ -28,6 +28,8 @@ vi.mock('@/lib/agent/workflowEvent', () => ({ applyWorkflowEvent: mocks.applyWor
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 import { setWbsDevWorkflow } from '@/app/actions/wbsAssign'
+import { requireModule } from '@/lib/modules/gate'
+import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 
 const P1 = '11111111-1111-4111-8111-111111111111'
 const W1 = '33333333-3333-4333-8333-333333333333'
@@ -83,6 +85,8 @@ beforeEach(() => {
   mocks.resolveProjectId.mockResolvedValue({ ok: true, projectId: P1 })
   mocks.applyWorkflowEvent.mockResolvedValue({ ok: true, orderStatus: null, stage: 'as', actualPct: 0, stageChanged: true, actualChanged: false, reachedFirst: false, skipped: null })
   mocks.ensureOrderForWorkflowLeaf.mockResolvedValue({ ok: true, created: true })
+  vi.mocked(requireModule).mockReset()
+  vi.mocked(requireModule).mockResolvedValue({ ok: true })
 })
 
 describe('setWbsDevWorkflow', () => {
@@ -229,6 +233,34 @@ describe('setWbsDevWorkflow', () => {
       expect.anything(),
       expect.objectContaining({ event: 'assign', itemId: W1 }),
     )
+  })
+
+  // SP7 — ON 은 프로젝트를 자동 등록하지 않는다(옛 등록 표·첫 활성 백필 없음). 주문 발행의 원천은 agents 모듈 하나이고, 판정은 한 번 해서 리프마다 넘긴다.
+  it('ON — agents 모듈을 service_role 로 한 번 판정해 주문 보장에 넘긴다. 등록 표는 읽지도 쓰지도 않는다', async () => {
+    const { calls, captured } = admin({
+      wbs_items: [{ data: [{ id: W1, assignee_member_id: M1, stage: null }] }, { data: null }],
+      change_logs: [{ data: [{ id: 'log1' }] }],
+    })
+    expect(await setWbsDevWorkflow(W1, true, false)).toEqual({ ok: true, count: 1 })
+    const agentGates = vi.mocked(requireModule).mock.calls.filter(([, m]) => m === 'agents')
+    expect(agentGates).toEqual([[{ projectId: P1 }, 'agents', { client: expect.anything() }]])
+    expect(mocks.ensureOrderForWorkflowLeaf).toHaveBeenCalledWith(expect.anything(), { projectId: P1, wbsItemId: W1, actorUserId: 'admin-1', agentsOn: true })
+    expect(calls).not.toContain('agent_projects')
+    expect(captured.agent_projects).toBeUndefined()
+  })
+  it('ON — agents 모듈이 꺼져 있으면 dev_workflow 는 켜지되 주문 보장에 꺼짐을 넘기고 로그로 남긴다(조용한 0건 금지)', async () => {
+    vi.mocked(requireModule).mockImplementation(async (_s, m) => (m === 'agents' ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true }))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { calls } = admin({
+      wbs_items: [{ data: [{ id: W1, assignee_member_id: M1, stage: null }] }, { data: null }],
+      change_logs: [{ data: [{ id: 'log1' }] }],
+    })
+    expect(await setWbsDevWorkflow(W1, true, false)).toEqual({ ok: true, count: 1 })
+    expect(mocks.ensureOrderForWorkflowLeaf).toHaveBeenCalledWith(expect.anything(), { projectId: P1, wbsItemId: W1, actorUserId: 'admin-1', agentsOn: false })
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('agents 모듈이 꺼져 있어'), P1)
+    expect(calls).not.toContain('agent_projects')
+    warn.mockRestore()
+    vi.mocked(requireModule).mockReset()
   })
 
   it('cascade=false — 리프 판정 조회 실패 시 fail-closed: assign 전이·ensureOrder 모두 스킵(로깅만)', async () => {

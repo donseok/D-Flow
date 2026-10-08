@@ -172,14 +172,16 @@ describe('updateProjectSettings', () => {
     expect((await getProjectConfig(PID, { client: db.client() as never })).schemaAhead).toBe(true)
     expect(await updateProjectSettings(PID, patch({ expectedRevision: 2, set: { 'core.extra_axis_label': 'U' } }))).toEqual({ ok: false, kind: 'schema_ahead', code: 'CONFIG_SCHEMA_AHEAD', commandId: CMD, error: expect.any(String), retryable: false })
   })
-  it('agents 를 더하면 저장 뒤 agent_projects 를 맞추고 백필한다. 동기화 실패는 저장됨을 알리고 재시도를 권하지 않는다(FN-10)', async () => {
+  // SP7 — 등록 표(agent_projects)와 그 행 동기는 없다(0041). agents 를 더한 저장의 후속은 백필 하나다. 가짜 DB 는 그 표를 모른다(읽으면 던진다).
+  it('agents 를 더하면 저장 뒤 백필한다(등록 표를 읽거나 쓰지 않는다). 백필 실패는 저장됨을 알리고 재시도를 권하지 않는다(FN-10)', async () => {
     const r = await updateProjectSettings(PID, patch({ set: { 'modules.enabled': ['kanban', 'agents'] } }))
     expect(r).toMatchObject({ ok: true, revision: 2 })
-    expect(db.agentProjects).toEqual([{ enabled: true, project_id: PID, created_by: 'u-admin', note: '설정에서 켬' }])
+    expect(db.inserts).toEqual([])
     expect(h.backfill).toHaveBeenCalledTimes(1)
+    expect(h.backfill).toHaveBeenCalledWith(expect.anything(), { projectId: PID, actorUserId: 'u-admin' })
     expect(h.backfill.mock.calls[0][0]).not.toBe(h.adminFor.mock.results[0].value.admin)
     h.backfill.mockResolvedValue({ ok: false, error: 'bf' })
-    db.projects.get(PID)!.values['modules.enabled'] = ['kanban']; db.agentProjects = []
+    db.projects.get(PID)!.values['modules.enabled'] = ['kanban']
     h.revalidatePath.mockClear()
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const f = await updateProjectSettings(PID, patch({ expectedRevision: 2, commandId: '00000000-0000-4000-8000-00000000dd02', set: { 'modules.enabled': ['kanban', 'agents'] } }))

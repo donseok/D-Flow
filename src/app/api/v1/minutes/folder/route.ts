@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BRAND } from '@/lib/branding'
 import { actorFromUser } from '@/lib/authz'
-import { isAnyProjectAdmin, isWorkspaceAdmin, isWorkspaceMember, roleIn, type Actor } from '@/lib/domain/authz'
+import { isWorkspaceAdmin, isWorkspaceMember, roleIn, type Actor } from '@/lib/domain/authz'
 import { activeTeamCodesForMinuteScope } from '@/lib/minutes/teamScope'
 import { loadRootFolders } from '@/lib/minutes/rootMode'
 import type { RootFoldersSetting } from '@/lib/minutes/rootFolders'
@@ -163,25 +163,24 @@ async function processItem(
   /** 이 회의록 범위(프로젝트, 미지정이면 워크스페이스)의 활성 팀 — 라우트가 쓰기 전에 확보해 넘긴다. */
   activeTeamCodes: TeamCode[],
   /** 그 회의록 워크스페이스의 최상위 폴더 모드(SP5 B2 — v2.9). 없으면 teams */
-  rootMode?: RootFoldersSetting,
-  principal?: MinutesPrincipal,
-  authz?: Actor,
+  rootMode: RootFoldersSetting | undefined,
+  principal: MinutesPrincipal,
+  /** 자격증명 범위로 좁힌 호출자 스냅샷(narrowActor) */
+  authz: Actor,
 ): Promise<ItemResult> {
   const key = item.externalId
   if (!row) return { external_id: key, status: 'not_found' }
 
-  // v3 §5.2.3 ② 건별 판정: minutes_api 일 때 프로젝트 권한 또는 자격증명 불허 시 failed(forbidden_project)
-  if (principal?.kind === 'minutes_api' && authz) {
-    const isAllowed = row.project_id
-      ? credentialAllows(principal.credential, row.project_id) && roleIn(authz, row.project_id) === 'admin'
-      : isWorkspaceAdmin(authz, principal.credential.workspaceId)
-    if (!isAllowed) {
-      return {
-        external_id: key,
-        status: 'failed',
-        reason: 'forbidden_project',
-        from: folderPathOfSnapshot(snap, row.folder_id),
-      }
+  // v3 §5.2.3 ② 건별 판정: 프로젝트 권한 또는 자격증명 불허 시 failed(forbidden_project)
+  const isAllowed = row.project_id
+    ? credentialAllows(principal.credential, row.project_id) && roleIn(authz, row.project_id) === 'admin'
+    : isWorkspaceAdmin(authz, principal.credential.workspaceId)
+  if (!isAllowed) {
+    return {
+      external_id: key,
+      status: 'failed',
+      reason: 'forbidden_project',
+      from: folderPathOfSnapshot(snap, row.folder_id),
     }
   }
 
@@ -311,34 +310,23 @@ export async function POST(req: NextRequest) {
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
 
-    const baseAuthz = await actorFromUser(admin, user.id)
-    const authz = principal.kind === 'minutes_api'
-      ? narrowActor(baseAuthz, principal.credential)
-      : baseAuthz
+    // 호출자 스냅샷은 항상 자격증명 범위(그 워크스페이스·project_ids)로 좁힌다 — 플랫폼 관리자 승격은 없다(SP7 §5.1.3).
+    const wid = principal.credential.workspaceId
+    const authz = narrowActor(await actorFromUser(admin, user.id), principal.credential)
 
-    if (principal.kind === 'minutes_api') {
-      const wid = principal.credential.workspaceId
-      const isMember = await isMinutesWorkspaceMember(admin, wid, user.id)
-      if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
+    const isMember = await isMinutesWorkspaceMember(admin, wid, user.id)
+    if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
 
-      const isWsAdmin = authz.workspaceRoles.get(wid) === 'admin'
-      const hasProjectAdminInWs = Array.from(authz.projectRoles.entries()).some(
-        ([pid, role]) => role === 'admin' && credentialAllows(principal.credential, pid)
-      )
-      if (!isWsAdmin && !hasProjectAdminInWs) {
-        return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
-      }
-    } else {
-      if (!isAnyProjectAdmin(authz)) {
-        return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
-      }
+    const isWsAdmin = authz.workspaceRoles.get(wid) === 'admin'
+    const hasProjectAdminInWs = Array.from(authz.projectRoles.entries()).some(
+      ([pid, role]) => role === 'admin' && credentialAllows(principal.credential, pid)
+    )
+    if (!isWsAdmin && !hasProjectAdminInWs) {
+      return apiFail(403, 'forbidden_role', '일괄 재편철은 관리자 계정으로만 실행할 수 있습니다.')
     }
 
-    const candidateWs = principal.kind === 'minutes_api'
-      ? [principal.credential.workspaceId]
-      : [...authz.workspaceRoles.keys()]
-    const onWs = new Set(await workspacesWithModule(candidateWs, 'minutes_integration', { client: admin }))
-    if (onWs.size === 0 && (principal.kind === 'minutes_api' || !authz.isSuperuser)) return apiModuleDisabled()
+    const onWs = new Set(await workspacesWithModule([wid], 'minutes_integration', { client: admin }))
+    if (onWs.size === 0) return apiModuleDisabled()
 
     const parsed = parseBatchPayload(raw)
     if ('error' in parsed) return apiBadRequest(parsed.error)
@@ -371,22 +359,12 @@ export async function POST(req: NextRequest) {
       console.error('[minutes-api] 재편철 대상 조회 실패:', selErr.message)
       return apiInternalError()
     }
-    // 호출자 워크스페이스 밖 회의록은 없는 것으로 친다(not_found) — external_id 는 전역 유일이라 조회는 전역이다.
+    // 자격증명 워크스페이스 밖 회의록은 없는 것으로 친다(not_found) — external_id 는 전역 유일이라 조회는 전역이다.
     const byExternalId = new Map<string, MinuteRow>()
     for (const r of (rowsRaw ?? []) as MinuteRow[]) {
-      if (principal.kind === 'minutes_api') {
-        if (r.workspace_id === principal.credential.workspaceId && isWorkspaceMember(authz, principal.credential.workspaceId)) {
-          byExternalId.set(r.external_id, r)
-        }
-      } else {
-        if (isWorkspaceMember(authz, r.workspace_id)) {
-          byExternalId.set(r.external_id, r)
-        }
-      }
+      if (r.workspace_id === wid && isWorkspaceMember(authz, wid)) byExternalId.set(r.external_id, r)
     }
-    const targetWs = principal.kind === 'minutes_api'
-      ? [principal.credential.workspaceId]
-      : [...new Set([...byExternalId.values()].map((r) => r.workspace_id))]
+    const targetWs = [wid]
 
     const teamCodesByMinute = new Map<string, TeamCode[]>()
     const byScope = new Map<string, Promise<TeamCode[]>>()

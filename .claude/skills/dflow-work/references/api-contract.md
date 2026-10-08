@@ -109,7 +109,7 @@ stage 워크플로 재설계(마이그레이션 0082)를 계약에 반영. **엔
   "projects": [{ "id": "<uuid>", "name": "…", "role": "admin|member|superuser" }] }
 ```
 응답의 `contract_version`은 `src/lib/agent/externalApi.ts`의 `AGENT_CONTRACT_VERSION` 상수 값이다 — 현재 `"2.4"`. 스킬은 **major 만** 비교한다(`dflow.sh` 의 `CONTRACT_VERSION`): 서버가 minor 를 올리는 것은 additive 라 정상이고, 등호로 보면 상향 때마다 전 세션이 오경보를 본다.
-`projects`는 `agent_projects.enabled=true` ∩ 내가 멤버인 프로젝트만. 활성은 **자동**이다(2026-08-24) — WBS 항목의 "에이전트 위임" 체크·dev_workflow ON·task 가 있는 wbs.md 업로드 중 하나가 처음 일어나면 서버가 활성한다. 사람이 따로 등록하지 않는다. 설정에서 "전체 중지"한 프로젝트(enabled=false)만 은닉된다.
+`projects`는 에이전트 모듈이 켜진 프로젝트(프로젝트 설정 › 모듈·메뉴의 에이전트) ∩ 토큰 범위(워크스페이스·프로젝트 한정) ∩ 내가 멤버인 프로젝트만. 켜고 끄는 입구는 그 설정 하나다 — 새 프로젝트는 켜진 채 만들어지고, 관리자가 끈 프로젝트는 은닉된다. 따로 등록하는 단계는 없다.
 
 `GET /agent/work/mine` 200:
 ```json
@@ -157,7 +157,7 @@ stage 워크플로 재설계(마이그레이션 0082)를 계약에 반영. **엔
 
 **"dev_workflow ON인 리프에는 주문이 존재한다"** — 배정 여부는 조건이 아니다(v2.0의 "배정된 리프"에서 변경). import·배정·dev_workflow 토글 등 모든 발행 경로가 공용 함수 `ensureOrderForWorkflowLeaf`를 거치며, 게이트는 다음 순서로 고정이다:
 
-1. `agent_projects.enabled = true` — 자동 활성(위임 체크·dev_workflow ON·task 업로드가 처음이면 insert + **백필**: 그 프로젝트의 dev_workflow 리프 전부에 주문 보장). 설정에서 "전체 중지"한 프로젝트만 false 이며 되살리지 않는다
+1. 프로젝트의 에이전트 모듈이 켜져 있다(프로젝트 설정 › 모듈·메뉴) — 꺼져 있으면 발행하지 않는다. 꺼 둔 동안 쌓인 dev_workflow 리프는 모듈을 다시 켤 때 **백필**로 주문이 보장된다
 2. `dev_workflow = true`(항목 게이트)
 3. 리프(자식 없음) — 아니면 발행하지 않음
 4. 활성 주문(ready·claimed·reported) 존재 여부로 멱등 판정 — 이미 있으면 재발행하지 않음(DB 부분 유니크 인덱스가 2차 방어, 23505 경합은 no-op으로 수렴)

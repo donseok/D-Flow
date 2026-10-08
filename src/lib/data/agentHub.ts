@@ -1,4 +1,4 @@
-// 에이전트 허브 조회 — 서버 전용(service_role). 1차 5건 병렬 + 2차(감시자·살아 있는 주문의 완료 보고) 병렬.
+// 에이전트 허브 조회 — 서버 전용(service_role). 1차 4건 병렬 + 2차(감시자·살아 있는 주문의 완료 보고) 병렬.
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
 import { loadQueueApprovals } from '@/lib/agent/approvalState'
 import { loadPredecessorGate, loadStageLabelsMap } from '@/lib/agent/predecessorGate'
@@ -31,12 +31,8 @@ function toHubMember(r: Record<string, unknown>): HubMemberRow {
 
 export async function fetchAgentHubRows(admin: AdminClient, projectId: string, nowMs: number): Promise<AgentHubRows> {
   const doneSince = new Date(nowMs - DONE_WINDOW_MS).toISOString()
-  const [items, agentRow, orders, members, projects, agentsOn] = await Promise.all([
+  const [items, orders, members, projects, agentsOn] = await Promise.all([
     admin.from('wbs_items').select(HUB_ITEM_COLS).eq('project_id', projectId).then(r => must<HubItemRow[]>('항목', r)),
-    admin.from('agent_projects').select('enabled').eq('project_id', projectId).maybeSingle().then(r => {
-      if (r.error) throw new Error(`[agent-hub] 등록 조회 실패: ${r.error.message}`)
-      return r.data ? { enabled: (r.data as { enabled: boolean }).enabled === true } : null
-    }),
     admin.from('agent_work_orders').select(ORDER_COLS).eq('project_id', projectId)
       .or(`status.in.(ready,claimed,reported),and(status.eq.approved,updated_at.gte.${doneSince})`)
       .order('created_at', { ascending: false }).limit(2000).then(r => must<OrderRow[]>('주문', r)),
@@ -45,10 +41,10 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
       .then(r => must<Array<Record<string, unknown>>>('로스터', r).map(toHubMember)),
     admin.from('projects').select('id, name, workspace_id').eq('id', projectId)
       .then(r => must<Array<{ id: string; name: string; workspace_id: string }>>('프로젝트', r)),
-    // 두 원천 AND(스펙 §4.4)의 두 번째 방어선 — 허브 페이지·액션은 이미 agents 관문으로 닫혔다. 판정 실패는 꺼짐(fail-closed)
+    // 상태바의 사용 여부 = agents 모듈(유일한 원천, SP7) — 허브 페이지·액션은 이미 agents 관문으로 닫혔다. 판정 실패는 꺼짐(fail-closed)
     requireModule({ projectId }, 'agents', { client: admin }).then((r) => r.ok),
   ])
-  const agentProject = agentRow ? { enabled: agentRow.enabled && agentsOn } : null
+  const agentProject = { enabled: agentsOn }
   const project = projects[0] ?? null
   // 감시자는 이 프로젝트의 워크스페이스로 좁힌다 — 프로젝트 없는(project_id null) 감시자는 워크스페이스 단위라,
   // 필터가 없으면 다른 워크스페이스의 팀장이 이 허브에 떠 있는 것으로 보인다(SP2 §4.2). 워크스페이스를 알려면

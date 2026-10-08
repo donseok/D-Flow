@@ -202,7 +202,7 @@ describe('POST /agent/watch — 재개 요청 전달(0099)', () => {
     vi.mocked(projectsWithModule).mockResolvedValueOnce([P1])
     const body = await (await post({ agent: 'hong/mbp/lead' })).json()
     expect(body.resume_requests.map((r: { order_id: string }) => r.order_id)).toEqual([ORDER.id])
-    expect(projectsWithModule).toHaveBeenCalledWith([P1, P2], 'agents', { client: expect.anything() })
+    expect(projectsWithModule).toHaveBeenCalledWith([P1, P2], 'agents', { client: expect.anything(), workspaceId: WS })
   })
 
   it('요청이 없으면 빈 배열이다 — 항목 조회를 부르지 않는다', async () => {

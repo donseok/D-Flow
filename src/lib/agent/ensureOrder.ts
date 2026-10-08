@@ -6,7 +6,7 @@ import { moduleState, requireModule } from '@/lib/modules/gate'
 /**
  * §2.8 재정의(2026-08-13): dev_workflow ON 인 리프에는 주문이 존재한다 — 배정은 조건이 아니다.
  * 멱등: 활성 주문(ready/claimed/reported) 부분 유니크(0077)가 DB 보증, 여기는 선행조회 + 23505 수렴.
- * 발행 조건은 기존 가드 그대로: agent_projects.enabled ∧ agents 모듈(스펙 §4.4) · 리프 · 호출부가 관리자 권한 경로.
+ * 발행 조건: agents 모듈(프로젝트 설정 modules.enabled — 유일한 원천, SP7 에서 등록 표를 지웠다) · 리프 · 호출부가 관리자 권한 경로.
  * agentsOn — 호출자가 이미 모듈을 판정했으면(백필) 넘겨 리프마다의 판정을 건너뛴다.
  */
 export async function ensureOrderForWorkflowLeaf(
@@ -18,17 +18,7 @@ export async function ensureOrderForWorkflowLeaf(
 > {
   const { projectId, wbsItemId, actorUserId } = args
 
-  // Step 1: agent_projects 게이트 — enabled = true 만 발행
-  const { data: reg, error: regErr } = await admin
-    .from('agent_projects')
-    .select('enabled')
-    .eq('project_id', projectId)
-    .maybeSingle()
-  if (regErr) return { ok: false, error: `등록 조회 실패: ${regErr.message}` }
-  if (!reg || (reg as { enabled: boolean }).enabled !== true) {
-    return { ok: true, created: false, reason: 'not_agent_project' }
-  }
-  // 두 원천 AND(스펙 §4.4) — 호출자가 한 번 판정했으면(백필) 건너뛴다. 판정 실패는 발행하지 않는다(fail-closed)
+  // Step 1: agents 모듈 게이트 — 호출자가 한 번 판정했으면(백필·위임) 건너뛴다. 판정 실패는 발행하지 않는다(fail-closed)
   const agentsOn = args.agentsOn ?? (await requireModule({ projectId }, 'agents', { client: admin })).ok
   if (!agentsOn) return { ok: true, created: false, reason: 'not_agent_project' }
 
@@ -120,48 +110,8 @@ export async function ensureOrderForWorkflowLeaf(
 }
 
 /**
- * 프로젝트 자동 활성(2026-08-24 — "위임 체크 = 발행"). 사람이 /agent-ops 에서 "루프 등록"을 따로 하던
- * 단계를 없앤다: 위임 체크·dev_workflow ON·agent 태그 업로드 같은 "에이전트에게 일을 시키는 첫 행위"가
- * 곧 프로젝트 활성이다.
- *
- * - 행 없음 → insert(enabled=true), `activated:true`. 호출부는 이때 백필을 돈다.
- * - 행 있음·enabled=true → no-op.
- * - 행 있음·enabled=false → **되살리지 않는다**(`stopped:true`). 설정 페이지의 "에이전트 중지"는
- *   사람이 명시적으로 내린 킬스위치라 위임 체크가 조용히 무력화하면 안 된다. 호출부는 경고로 노출한다.
- * - moduleOff — agents 모듈이 꺼졌으면 활성해도 발행하지 않는다(두 원천 AND, 스펙 §4.4). stopped 는 사람이 멈춘 것만.
- *   enabled = 행 enabled ∧ 모듈. 모듈을 뺄 때 행은 고치지 않는다 — 자동 생성(행 없음 → insert)은 모듈이 꺼져도 남는다.
- */
-export async function ensureAgentProject(
-  admin: AdminClient,
-  args: { projectId: string; actorUserId: string },
-): Promise<{ ok: true; enabled: boolean; activated: boolean; stopped: boolean; moduleOff: boolean } | { ok: false; error: string }> {
-  const { data: reg, error: regErr } = await admin
-    .from('agent_projects').select('enabled').eq('project_id', args.projectId).maybeSingle()
-  if (regErr) return { ok: false, error: `등록 조회 실패: ${regErr.message}` }
-  const moduleOff = !(await requireModule({ projectId: args.projectId }, 'agents', { client: admin })).ok
-  if (reg) {
-    const enabled = (reg as { enabled: boolean }).enabled === true
-    return { ok: true, enabled: enabled && !moduleOff, activated: false, stopped: !enabled, moduleOff }
-  }
-  const { error: insErr } = await admin
-    .from('agent_projects')
-    .insert({ project_id: args.projectId, created_by: args.actorUserId, note: '자동 활성(위임 체크)' })
-  if (insErr) {
-    // 동시 활성 경합 — 다른 요청이 먼저 넣었다. 활성 여부를 다시 읽어 그대로 보고한다.
-    if ((insErr as { code?: string }).code === '23505') {
-      const again = await admin.from('agent_projects').select('enabled').eq('project_id', args.projectId).maybeSingle()
-      if (again.error) return { ok: false, error: `등록 재조회 실패: ${again.error.message}` }
-      const enabled = (again.data as { enabled: boolean } | null)?.enabled === true
-      return { ok: true, enabled: enabled && !moduleOff, activated: false, stopped: !enabled, moduleOff }
-    }
-    return { ok: false, error: `프로젝트 활성 실패: ${insErr.message}` }
-  }
-  return { ok: true, enabled: !moduleOff, activated: true, stopped: false, moduleOff }
-}
-
-/**
- * 소급 발행(백필) — 프로젝트가 활성되는 시점에 dev_workflow=true 항목 전부에 주문 보장을 1회 돈다.
- * 업로드가 활성보다 먼저였어도(리허설 실측 2026-08-24: orders_created 0 인 채 침묵) 주문이 존재하게.
+ * 소급 발행(백필) — agents 모듈이 켜지는 시점(설정 저장)에 dev_workflow=true 항목 전부에 주문 보장을 1회 돈다.
+ * 업로드가 모듈을 켜기보다 먼저였어도(리허설 실측 2026-08-24: orders_created 0 인 채 침묵) 주문이 존재하게.
  * 리프·활성 주문 판정은 ensureOrderForWorkflowLeaf 안에 있으므로 여기는 후보 나열만 한다.
  * 개별 실패는 모아서 돌려주고 멈추지 않는다 — 한 항목 때문에 나머지 백필이 사라지면 안 된다.
  */

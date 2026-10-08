@@ -40,10 +40,9 @@ afterEach(() => { for (const f of [requireModule, requireSessionModule, moduleSt
 const c0 = (calls: ReturnType<typeof admin>['calls'], t: string) => calls.find(x => x.table === t)!
 
 describe('fetchAgentHubRows', () => {
-  it('1차 5건(항목·등록·주문·로스터·프로젝트) 병렬 + 2차 감시자·보고, 컬럼·필터가 계약대로', async () => {
+  it('1차 4건(항목·주문·로스터·프로젝트) 병렬 + 2차 감시자·보고, 컬럼·필터가 계약대로. 등록 표(agent_projects)는 읽지 않는다(SP7)', async () => {
     const { client, calls } = admin({
       wbs_items: [{ data: [{ id: 'i1', project_id: P1, parent_id: null, code: 'T', name: 'n', sort_order: 0, milestone: false, dev_workflow: true, tags: ['agent'], assignee_member_id: null, agent_prompt: null, actual_pct: 0, stage: null }] }],
-      agent_projects: [{ data: [{ enabled: true }] }],
       agent_work_orders: [{ data: [{ id: 'o1', project_id: P1, wbs_item_id: 'i1', status: 'reported', claimed_by: 'a', claimed_by_user_id: null, claimed_at: null, created_at: 'x', updated_at: 'x', last_heartbeat_at: null, heartbeat_phase: null, heartbeat_agent: null, heartbeat_note: null }] }],
       agent_work_reports: [{ data: [{ work_order_id: 'o1', percent: 100, summary: 's', links: [], agent: 'a', review_action: null, review_note: null, created_at: 'x' }] }],
       agent_watchers: [{ data: [] }],
@@ -61,7 +60,9 @@ describe('fetchAgentHubRows', () => {
     // 이 허브에 "떠 있는 팀장"으로 보이지 않게(SP2 §4.2).
     expect(c0(calls, 'projects').select).toBe('id, name, workspace_id')
     expect(c0(calls, 'agent_watchers').filters).toContainEqual(['eq', ['workspace_id', WA]])
+    // 사용 여부 = agents 모듈(유일한 원천) — 세션이 없는 서버 조회라 admin 으로 판정한다
     expect(rows.agentProject).toEqual({ enabled: true })
+    expect(requireModule).toHaveBeenCalledWith({ projectId: P1 }, 'agents', { client })
     expect(rows.reports).toHaveLength(1)
     const c = (t: string) => calls.find(x => x.table === t)!
     expect(c('wbs_items').select).toBe('id, project_id, parent_id, code, name, sort_order, milestone, dev_workflow, tags, assignee_member_id, agent_prompt, actual_pct, stage, external_ref, depends')
@@ -76,7 +77,7 @@ describe('fetchAgentHubRows', () => {
       { id: 'm2', name: '빠진 행', user_id: 'u2', active: false },
       { id: 'm3', name: '빠진 인물', user_id: 'u3', active: false },
     ])
-    expect(calls.map(x => x.table).sort()).toEqual(['agent_projects', 'agent_watchers', 'agent_work_orders', 'agent_work_reports', 'project_members', 'projects', 'wbs_items'])
+    expect(calls.map(x => x.table).sort()).toEqual(['agent_watchers', 'agent_work_orders', 'agent_work_reports', 'project_members', 'projects', 'wbs_items'])
   })
   it('살아 있는 주문이 없으면 보고 조회를 생략한다(2차 0건)', async () => {
     const { client, calls } = admin({ agent_work_orders: [{ data: [] }], projects: [{ data: [{ id: P1, name: 'x' }] }] })
@@ -99,17 +100,22 @@ describe('fetchAgentHubRows', () => {
     const { client } = admin({ projects: [{ data: [{ id: P1, name: 'x', workspace_id: WA }] }], agent_watchers: [{ data: null, error: { message: 'wboom' } }] })
     await expect(fetchAgentHubRows(client as never, P1, NOW)).rejects.toThrow(/감시자 조회 실패: wboom/)
   })
-  it('agent_projects 가 없으면 null(미등록)', async () => {
-    const { client } = admin({ agent_projects: [{ data: [] }], projects: [{ data: [{ id: P1, name: 'x' }] }] })
+  // 옮김(SP7): 'agent_projects 가 없으면 null(미등록)' — 등록 행이 없어졌으므로 "미등록"이라는 상태가 없다. 등록 행이 하나도 없는(읽지도 않는) 프로젝트도
+  // agents 모듈이 켜져 있으면 켜짐이다. 가짜 admin 에 꺼진 등록 행을 넣어 둔다 — 코드가 그 표로 되돌아가면 enabled 가 false 로 드러난다.
+  it('등록 행이 없어도(읽지 않는다) 모듈이 켜져 있으면 agentProject.enabled 는 true — null(미등록)은 없다', async () => {
+    const { client, calls } = admin({ agent_projects: [{ data: [{ enabled: false }] }], projects: [{ data: [{ id: P1, name: 'x' }] }] })
     const rows = await fetchAgentHubRows(client as never, P1, NOW)
-    expect(rows.agentProject).toBeNull()
+    expect(rows.agentProject).toEqual({ enabled: true })
+    expect(calls.some(x => x.table === 'agent_projects')).toBe(false)
   })
-  it('행이 enabled 여도 agents 모듈이 꺼지면 agentProject.enabled 는 false — 두 원천 AND 의 두 번째 방어선(과제 18)', async () => {
-    const { client } = admin({ agent_projects: [{ data: [{ enabled: true }] }], projects: [{ data: [{ id: P1, name: 'p', workspace_id: WA }] }] })
+  // 옮김(SP7): '행이 enabled 여도 agents 모듈이 꺼지면 false — 두 원천 AND 의 두 번째 방어선' → 모듈이 꺼져 있으면 닫힘(원천 하나)
+  it('agents 모듈이 꺼지면 agentProject.enabled 는 false — 옛 등록 행이 켜져 있어도(읽지 않는다)', async () => {
+    const { client, calls } = admin({ agent_projects: [{ data: [{ enabled: true }] }], projects: [{ data: [{ id: P1, name: 'p', workspace_id: WA }] }] })
     vi.mocked(requireModule).mockResolvedValueOnce({ ok: false, error: ERR_MODULE_DISABLED })
     const rows = await fetchAgentHubRows(client as never, P1, NOW)
     expect(rows.agentProject).toEqual({ enabled: false })
     expect(requireModule).toHaveBeenCalledWith({ projectId: P1 }, 'agents', { client })
+    expect(calls.some(x => x.table === 'agent_projects')).toBe(false)
   })
 })
 

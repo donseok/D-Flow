@@ -10,7 +10,6 @@ import { ingestMinute } from '@/lib/ai/minutes-ingest'
 import { generateMinuteInsights } from '@/lib/ai/minutes-insights'
 import { enqueueAndProcessMinuteWiki, processMinuteWikiJob } from '@/lib/ai/wiki-ingest'
 import type { MeetingCategory, TeamCode } from '@/lib/domain/types'
-import { isProjectAdmin, isWorkspaceAdmin, type Actor } from '@/lib/domain/authz'
 
 /**
  * 회의록 외부 업로드 API(/api/v1/minutes*) 공용 유틸 — 또박또박 연동.
@@ -50,20 +49,6 @@ export function minutesApiEnabled(): boolean {
  */
 export function folderPathEnabled(): boolean {
   return process.env.MINUTES_FOLDER_PATH_ENABLED === 'true'
-}
-
-/**
- * 일괄 재편철(배치)의 대상 판정 — **대상 회의록마다** 관리자 이상이어야 한다(SP2 결정 8, "어느 프로젝트든
- * 관리자"가 아니다). 프로젝트가 있으면 isProjectAdmin(워크스페이스 관리자 승계 포함), 무프로젝트 회의록은 그
- * 워크스페이스의 관리자(isWorkspaceAdmin). 빈 대상은 false — 판정할 것이 없으면 통과시키지 않는다.
- *
- * 스냅샷은 호출 라우트가 actorFromUser 로 한 번 만든다(조회 실패는 라우트의 500). 순수 판정이라 IO 가 없다.
- */
-export function isBatchAuthorized(
-  actor: Actor, targets: ReadonlyArray<{ project_id: string | null; workspace_id: string }>,
-): boolean {
-  if (targets.length === 0) return false
-  return targets.every(t => t.project_id ? isProjectAdmin(actor, t.project_id) : isWorkspaceAdmin(actor, t.workspace_id))
 }
 
 export const apiNotFound = () =>

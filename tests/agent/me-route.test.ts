@@ -81,7 +81,9 @@ describe('GET /agent/me', () => {
     expect(mocks.buildActor).toHaveBeenCalledTimes(1)
     expect(mocks.buildActor).toHaveBeenCalledWith(expect.anything(), U)
     // 모듈 판정은 역할 판정 뒤다 — 조회 전용(P2)의 설정은 읽지 않는다
-    expect(projectsWithModule).toHaveBeenCalledWith([P1], 'agents', { client: expect.anything() })
+    // 자격증명 워크스페이스를 넘겨 한 번에 판정한다 — 프로젝트마다 설정을 따로 읽지 않는다(SP7)
+    expect(projectsWithModule).toHaveBeenCalledTimes(1)
+    expect(projectsWithModule).toHaveBeenCalledWith([P1], 'agents', { client: expect.anything(), workspaceId: WS })
     expect(admin.from).not.toHaveBeenCalledWith('agent_runners')
     expect(admin.from).not.toHaveBeenCalledWith('agent_projects')
   })
@@ -171,6 +173,6 @@ describe('GET /agent/me', () => {
     vi.mocked(projectsWithModule).mockResolvedValueOnce([P1])
     const body = await (await meGET(get(PAT.token))).json()
     expect(body.projects.map((p: { id: string }) => p.id)).toEqual([P1])
-    expect(projectsWithModule).toHaveBeenCalledWith([P1, P2], 'agents', { client: expect.anything() })
+    expect(projectsWithModule).toHaveBeenCalledWith([P1, P2], 'agents', { client: expect.anything(), workspaceId: WS })
   })
 })

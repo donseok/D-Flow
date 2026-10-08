@@ -11,8 +11,7 @@ const A_MINUTES = `(select id from public.minutes where project_id in ${AP} or (
 const inAP = 't.project_id in ' + AP
 
 export const A_ROW_FILTER: Record<string, string> = {
-  agent_lead_leases: inAP, agent_projects: inAP,
-  agent_runners: `(${inAP} or t.owner_user_id in ${A_ONLY})`,
+  agent_lead_leases: inAP,
   agent_watchers: `(${inAP} or t.user_id in ${A_ONLY})`,
   agent_work_orders: inAP,
   agent_work_reports: `t.work_order_id in (select id from public.agent_work_orders where project_id in ${AP})`,
@@ -117,12 +116,12 @@ export const OWN_INSERT_PROBES: ReadonlyArray<{ table: string; sql: string }> = 
 export const KNOWN_LEAKS: Record<'bea' | 'ben', readonly string[]> = { bea: [], ben: [] }
 
 /**
- * authenticated 가 UPDATE 할 수 있는 열이 하나도 없는 표(0012 뒤 47개, *_weekly_areas 뒤 49개 — 영역·영역-팀, *_command_receipts 뒤 50개 — 영수증, *_workflow_policy 뒤 51개 — 승인 원장, 0039 뒤 52개 — teams) — 전수 교차의 update 탐침이 정책을 태울 수 없다. 권한이 온전한
+ * authenticated 가 UPDATE 할 수 있는 열이 하나도 없는 표(0012 뒤 47개, *_weekly_areas 뒤 49개 — 영역·영역-팀, *_command_receipts 뒤 50개 — 영수증, *_workflow_policy 뒤 51개 — 승인 원장, 0039 뒤 52개 — teams, 0041 뒤 50개 — 옛 에이전트 등록 표·옛 PAT 저장소 삭제) — 전수 교차의 update 탐침이 정책을 태울 수 없다. 권한이 온전한
  * 벽이므로 42501(permission denied)이 기대값이다. 목록은 카탈로그(has_any_column_privilege)와 같아야 한다 — 표에 UPDATE 를 열면 여기서
  * 빼고(그때부터 탐침이 그 표의 정책을 태운다), 새 표가 UPDATE 없이 생기면 더한다.
  */
 export const UPDATE_DENIED_BY_GRANT: ReadonlySet<string> = new Set([
-  'agent_lead_leases', 'agent_projects', 'agent_runners', 'agent_watchers', 'agent_work_orders', 'agent_work_reports',
+  'agent_lead_leases', 'agent_watchers', 'agent_work_orders', 'agent_work_reports',
   'ai_documents', 'ai_index_jobs', 'area_teams', 'authz_commands', 'authz_events', 'change_logs', 'command_receipts', 'deliverable_attachments', 'form_templates', 'integration_credentials', 'issue_analysis_runs',
   'issue_assignees', 'issue_attachments', 'issue_links', 'issue_major_processes', 'issue_number_counters',
   'minute_embeddings', 'minute_files', 'minute_highlights', 'minute_insights', 'minute_versions', 'minutes',

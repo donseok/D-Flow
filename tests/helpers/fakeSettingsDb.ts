@@ -18,7 +18,8 @@ export class FakeSettingsDb {
   areas: Record<string, unknown>[] = []
   teams: Record<string, unknown>[] = []
   wbsItems: Record<string, unknown>[] = []
-  agentProjects: Record<string, unknown>[] = []
+  /** 표 직접 insert 기록(표 이름) — 설정 쓰기는 RPC 한 길이라 정상 경로에서는 빈다. 옛 등록 표(agent_projects)는 0041 이 지워 rowsOf 에도 없다(읽으면 '모르는 표') */
+  inserts: string[] = []
   weeklyReports: Record<string, unknown>[] = []
   issues: Record<string, unknown>[] = []
   /** 날짜 예외(holidays — project_id·date·name·kind). 해석기의 달력 로더가 키셋으로 읽는다(SP5 A 과제 13) */
@@ -90,7 +91,7 @@ export class FakeSettingsDb {
           range: (from: number, to: number) => { range = [from, to]; return b },
           maybeSingle: async () => { const r = run(); return r.error ? r : { data: (r.data as unknown[])[0] ?? null, error: null } },
           then: (res: (x: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(run()).then(res, rej),
-          insert: async (row: Record<string, unknown>) => { if (table === 'agent_projects') db.agentProjects.push({ enabled: true, ...row }); return { error: null } },
+          insert: async () => { db.inserts.push(table); return { error: null } },
           update: (patch: Record<string, unknown>) => ({ eq: async (col: string, val: unknown) => { for (const r of db.rowsOf(table, '*')) if (r[col] === val) Object.assign(r, patch); return { error: null } } }),
         }
         return b
@@ -148,7 +149,6 @@ export class FakeSettingsDb {
       case 'project_areas': return this.areas
       case 'teams': return this.teams
       case 'wbs_items': return this.wbsItems
-      case 'agent_projects': return this.agentProjects
       case 'weekly_reports': return this.weeklyReports
       case 'issues': return this.issues
       case 'holidays': return this.holidays

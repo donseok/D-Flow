@@ -1,6 +1,6 @@
 // 0012 설정 행 — 문서 열(values·schema_version·revision), 계정 삭제를 막지 않는 FK(스펙 D2), ⑤ 이행의 값 모양.
 // 부트스트랩 계정에 기대지 않는다: 계정·프로젝트는 트랜잭션 안에서 만들고 롤백한다.
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Pool, PoolClient } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -48,15 +48,8 @@ describe('0012 ② 문서 열과 FK', () => {
     })
   })
 
-  it('에이전트를 켠 계정을 지울 수 있다 — agent_projects.created_by 는 null 이 된다', async () => {
-    await asService(pool, async (c) => {
-      await tempUser(c)
-      await c.query('update public.agent_projects set created_by = $2 where project_id = $1', [F.projects.a, U])
-      expect(await pgError(c, 'delete from auth.users where id = $1', [U])).toBeNull()
-      expect((await c.query('select created_by from public.agent_projects where project_id = $1', [F.projects.a])).rows)
-        .toEqual([{ created_by: null }])
-    })
-  })
+  // 옮김(0041): '에이전트를 켠 계정을 지울 수 있다 — agent_projects.created_by 는 null 이 된다' — 표가 없어졌다. 그 FK(on delete set null)는 0041 롤백이
+  // 되만드는 구조의 일부라 tests/rls/drop-agent-legacy.test.ts 의 롤백 케이스가 같은 동작(계정 삭제 → null)으로 본다.
 })
 
 describe('0012 ⑤ 넓은 열 이행 — 값은 레지스트리가 저장할 모양으로 옮긴다', () => {
@@ -66,10 +59,16 @@ describe('0012 ⑤ 넓은 열 이행 — 값은 레지스트리가 저장할 모
   const SECTION_5 = MIGRATION.slice(MIGRATION.indexOf('\n-- ⑤ '))
   const PROJECT_MOVE = SECTION_5.slice(SECTION_5.indexOf('update public.project_settings s\n'), SECTION_5.indexOf('update public.workspace_settings s\n'))
     .trim().replace(/;$/, ' where s.project_id = $1')
+  // 이 문장은 옛 등록 표(agent_projects — 0041 이 지웠다)의 enabled 로 agents 를 정한다. 0012 를 그 스키마 경계에서 다시 돌리려면 뒤의 마이그레이션부터
+  // 되돌린다 — 0041 롤백(자체 begin;/commit; 은 걷는다)으로 빈 표를 케이스의 트랜잭션 안에서 되만든다(tests/rls/drop-agent-legacy.test.ts 와 같은 방식).
+  const ROLLBACK_DIR = fileURLToPath(new URL('../../supabase/rollbacks/', import.meta.url))
+  const LEGACY_TABLES = readFileSync(`${ROLLBACK_DIR}${readdirSync(ROLLBACK_DIR).find((f) => f.endsWith('_drop_agent_legacy_rollback.sql'))}`, 'utf8')
+    .replace(/^begin;[ \t]*$/m, '').replace(/^commit;[ \t]*$/m, '')
 
   it('앞뒤 공백은 떼고(라벨·추가 축 이름), 키워드는 소문자로, 빈 키워드 목록은 명시 [] 로 옮긴다', async () => {
     expect(PROJECT_MOVE).toMatch(/^update public\.project_settings s\s+set "values"/)
     await asService(pool, async (c) => {
+      await c.query(LEGACY_TABLES)
       await c.query('set local session_replication_role = replica')
       await c.query(`alter table public.project_settings
         add column level_labels text[], add column milestone_keywords text[], add column extra_axis_label text,
@@ -89,12 +88,25 @@ describe('0012 ⑤ 넓은 열 이행 — 값은 레지스트리가 저장할 모
         'select s."values" as v from public.project_settings s where s.project_id = $1', [F.projects.a])
       expect(e.v['core.milestone_keywords']).toEqual([])
       expect(e.v).not.toHaveProperty('core.extra_axis_label')
+      // agents 는 옛 등록 표에 켜진 행이 있을 때만 싣는다 — 0041 의 사전검사(켜진 행 ⇒ 설정에 agents)가 기대는 이관 규칙이다
+      expect(e.v['modules.enabled']).toEqual(expect.arrayContaining(['kanban', 'wiki']))
+      expect(e.v['modules.enabled']).not.toContain('agents')
+      const moved = async () => {
+        await c.query(`update public.project_settings set "values" = '{}' where project_id = $1`, [F.projects.a])
+        await c.query(PROJECT_MOVE, [F.projects.a])
+        return (await c.query<{ v: Record<string, unknown> }>('select s."values" as v from public.project_settings s where s.project_id = $1', [F.projects.a])).rows[0].v['modules.enabled']
+      }
+      await c.query('insert into public.agent_projects(project_id, enabled) values ($1, false)', [F.projects.a])
+      expect(await moved()).not.toContain('agents')
+      await c.query('update public.agent_projects set enabled = true where project_id = $1', [F.projects.a])
+      expect(await moved()).toContain('agents')
     })
   })
 
   it('앱의 trim 과 같은 공백을 뗀다 — 탭·줄바꿈·NBSP·BOM·전각 공백도(btrim 기본값은 공백 문자 하나뿐)', async () => {
     const pad = (v: string) => `\t ${v}\n　﻿`
     await asService(pool, async (c) => {
+      await c.query(LEGACY_TABLES)
       await c.query('set local session_replication_role = replica')
       await c.query(`alter table public.project_settings
         add column level_labels text[], add column milestone_keywords text[], add column extra_axis_label text,

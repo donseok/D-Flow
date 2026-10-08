@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireProjectAdmin } from '@/lib/authz'
+import { requireAgentProject } from '@/lib/agent/externalApi'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runWbsImport, validateLevels } from '@/lib/agent/wbsImport'
-import { ensureAgentProject } from '@/lib/agent/ensureOrder'
 import { parseWbsMarkdown, toImportNodes, validateWbsDoc, type WbsDoc } from '@/lib/wbsmd/parse'
 import { chunked } from '@/lib/ai/util'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
@@ -159,7 +159,7 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
   unmatched?: Array<{ id: string; assignee: string }>
   /** payload 의 task(input 층) 노드 수 — ordersCreated 와 대조해 "침묵 0건"을 화면이 잡는다. */
   taskCount?: number
-  /** 프로젝트가 "에이전트 중지" 상태라 주문이 안 나간 경우 — 사람이 설정에서 켜야 한다. */
+  /** 프로젝트의 agents 모듈이 꺼져 있어 주문이 안 나간 경우 — 사람이 프로젝트 설정에서 켜야 한다. */
   agentStopped?: boolean
 }> {
   const g = await requireProjectAdmin(projectId)
@@ -188,15 +188,9 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
     const cal = requireCalendar(await getProjectConfig(projectId, { client: admin }))
     const nodes = toImportNodes(doc, cal)
     const taskCount = nodes.filter(n => n.kind === 'task').length
-    // 프로젝트 자동 활성(2026-08-24) — task 가 있는 업로드는 dev_workflow 를 심으므로 "에이전트에게 일을 시키는
-    // 행위"다. 업로드 전에 활성해야 runWbsImport 안의 주문 보장이 첫 업로드부터 발행한다(종전엔 /agent-ops
-    // "루프 등록"이 먼저여야 했고, 순서가 바뀌면 주문 0건인 채 침묵했다). 중지(enabled=false)면 되살리지 않는다.
-    let agentStopped = false
-    if (taskCount > 0) {
-      const proj = await ensureAgentProject(admin, { projectId, actorUserId: g.actor.userId })
-      if (!proj.ok) return { ok: false, error: proj.error }
-      agentStopped = proj.stopped || proj.moduleOff   // 모듈이 꺼져도 주문이 나가지 않는다 — 조용히 0건이 되지 않게 같은 안내
-    }
+    // task 가 있는 업로드는 dev_workflow 를 심는다 — 주문은 agents 모듈이 켜진 프로젝트에서만 나간다(유일한 원천, SP7 — 자동 등록은 없다).
+    // 모듈이 꺼져 있으면 조용히 0건이 되지 않게 안내한다. 판정 실패는 꺼짐(fail-closed).
+    const agentStopped = taskCount > 0 && !(await requireAgentProject(admin, projectId))
     const result = await runWbsImport(admin, {
       projectId, module: module_, actorUserId: g.actor.userId,
       levels: doc.levels, attachRef, nodes,

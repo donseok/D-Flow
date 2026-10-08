@@ -129,6 +129,8 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
 - `module: null` 항목(core 액션·라우트)이 새 RPC 를 부르면 같은 커밋에서 `tests/gates/_rpc-tables.ts` 에 그 RPC 가 쓰는 표를 더한다 —
   열거 게이트(`tablesInNode`)가 `.rpc('x')` 를 그 표로 읽고, 대응이 없으면 `rpc?:x` 로 실패한다.
 - 옛 `memberships`·`project_roles` 는 0003 에서 폐기됐다(`effectiveLegacyRole` shim 도 없다).
+- 옛 `agent_projects`·`agent_runners` 는 0041 에서 폐기됐다 — 에이전트 사용 여부는 프로젝트 설정 `modules.enabled` 의 `agents` 하나, 토큰은 `integration_credentials` 다.
+  워크스페이스는 화면·자격증명 행이 명시한다: `requireSessionModule(null, …)` 은 core 만 통과하고 소속에서 워크스페이스를 짐작하지 않는다.
 - **회의록·위키·AI 브리핑은 RLS 쓰기 정책이 없다.** service_role 로 쓰기 때문에
   RLS 2차 방어선이 없고 서버 액션 가드가 유일한 관문이다. 이 계열을 손댈 때 특히 주의할 것.
 - **주간 영역·주간 문서 생성·상속 공용 팀 전환은 RLS 쓰기 정책이 없다**(SP4). 쓰기는 service_role 만 실행하는 DEFINER RPC

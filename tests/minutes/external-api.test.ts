@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
   activeTeamCodesVisibleTo: vi.fn<(view: TeamView) => string[]>(),
   // SP4 A2 — 원천 teamCodesVisibleTo 의 호출(둘째 인자 = 세션 없는 경로의 service_role)을 본다
   visibleSpy: vi.fn(),
-  // 0006 — 프로젝트 없는 신규 등록의 워크스페이스 해석(actorFromUser → resolveSoleWorkspaceId).
+  // 호출자 권한 스냅샷(actorFromUser). 워크스페이스는 자격증명 행이 정한다(SP7 — 소속에서 짐작하지 않는다).
   actorFromUser: vi.fn(),
 }))
 // 소속은 fixture 로 준다 — 실구현(buildActor)은 이 스위트의 테이블 큐를 소비해 버린다.
@@ -1715,17 +1715,59 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
     expect(json.projects).toEqual([{ id: PA, name: 'A' }])
     expect(json.projects).not.toContainEqual(expect.objectContaining({ id: PB }))
     expect(builders.projects).toHaveLength(1)
-    expect(builders.projects[0].select).toHaveBeenCalledWith('id, name, is_private')
+    expect(builders.projects[0].select).toHaveBeenCalledWith('id, name, is_private, workspace_id')
     expect(builders.projects[0].eq.mock.calls).toEqual([['workspace_id', WS]])
     expect(builders.projects[0].in).not.toHaveBeenCalled()
     expect(workspacesWithModule).toHaveBeenCalledWith([WS], 'minutes_integration', { client: admin })
     expect(mocks.actorFromUser).toHaveBeenCalledWith(expect.anything(), USER.id)
   })
 
+  // SP7 — 2차 필터(fail-closed). 응답은 DB 필터(eq workspace_id) 하나에만 기대지 않는다: 필터가 빠지거나 넓어지는 회귀로 남의 행이 돌아와도
+  // 행의 workspace_id 가 자격증명 워크스페이스가 아니면(모르는 값·없는 값 포함) 싣지 않는다.
+  it('2차 필터 — DB 가 다른 워크스페이스 프로젝트 행을 돌려줘도 싣지 않는다. workspace_id 가 없는 행도 뺀다', async () => {
+    // 호출자는 WS2 에도 속하고(beforeEach) PB 는 볼 수 있는 공개 프로젝트다 — 걸러지는 이유는 권한이 아니라 자격증명 범위다
+    useAdmin({
+      projects: [{ data: [
+        { id: PA, name: 'A', is_private: false, workspace_id: WS },
+        { id: PB, name: '남의 워크스페이스', is_private: false, workspace_id: WS2 },
+        { id: '0f000000-0000-4000-8000-0000000000e1', name: '워크스페이스 모름', is_private: false },
+        { id: '0f000000-0000-4000-8000-0000000000e2', name: '워크스페이스 null', is_private: false, workspace_id: null },
+      ] }],
+    })
+    const json = await (await META(get(q()))).json()
+    expect(json.projects).toEqual([{ id: PA, name: 'A' }])
+    expect(json.workspace.id).toBe(WS)
+  })
+  it('2차 필터 — 걸러진 프로젝트의 project_id 는 404 이고 회의를 읽지 않는다. 회의 행도 그 프로젝트 것만 싣는다', async () => {
+    const leaked = { data: [
+      { id: PA, name: 'A', is_private: false, workspace_id: WS },
+      { id: PB, name: '남의 워크스페이스', is_private: false, workspace_id: WS2 },
+    ] }
+    const a = useAdmin({ projects: [leaked] })
+    expect((await META(get(q(`&project_id=${PB}`)))).status).toBe(404)
+    expect(a.builders.meetings).toBeUndefined()
+    useAdmin({
+      projects: [leaked],
+      meetings: [{ data: [
+        { id: 'mt-1', project_id: PA, title: '내 회의', meeting_date: '2026-07-14', category: 'routine', recurrence: 'none' },
+        { id: 'mt-x', project_id: PB, title: '남의 회의', meeting_date: '2026-07-15', category: 'routine', recurrence: 'none' },
+        { id: 'mt-y', title: '프로젝트 모름', meeting_date: '2026-07-16', category: 'routine', recurrence: 'none' },
+      ] }],
+    })
+    const json = await (await META(get(q(`&project_id=${PA}`)))).json()
+    expect(json.meetings.map((m: { id: string }) => m.id)).toEqual(['mt-1'])
+  })
+  it('2차 필터 — 워크스페이스 행이 자격증명 워크스페이스의 것이 아니면 500(남의 워크스페이스 정보를 싣지 않는다)', async () => {
+    useAdmin({ workspaces: [{ data: { id: WS2, slug: 'other', name: '남의 것' } }], projects: [{ data: [] }] })
+    const res = await META(get(q()))
+    expect(res.status).toBe(500)
+    expect(JSON.stringify(await res.json())).not.toContain('남의 것')
+  })
+
   it('자격증명의 project_ids 밖 프로젝트는 볼 수 있는 프로젝트여도 싣지 않고, 그 project_id 의 회의 목록은 404', async () => {
     useCredential({ project_ids: [PA] })
     const POUT = '0f000000-0000-4000-8000-00000000000f'    // 같은 워크스페이스의 공개 프로젝트 — 자격증명 범위 밖
-    const rows = { data: [{ id: PA, name: 'A', is_private: false }, { id: POUT, name: '범위 밖', is_private: false }] }
+    const rows = { data: [{ id: PA, name: 'A', is_private: false, workspace_id: WS }, { id: POUT, name: '범위 밖', is_private: false, workspace_id: WS }] }
     useAdmin({ projects: [rows] })
     expect((await (await META(get(q()))).json()).projects).toEqual([{ id: PA, name: 'A' }])
     const { builders } = useAdmin({ projects: [rows] })
@@ -1812,7 +1854,7 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
       projects: [{ data: [{ id: PA, name: 'A', is_private: false, workspace_id: WS }], count: 1 }],
       meetings: [{
         data: [{
-          id: 'mt-1', title: '주간 정례', meeting_date: '2026-07-14',
+          id: 'mt-1', project_id: PA, title: '주간 정례', meeting_date: '2026-07-14',
           category: 'routine', recurrence: 'weekly',
         }],
       }],
@@ -1822,7 +1864,7 @@ describe('GET /api/v1/minutes/meta (§5.2)', () => {
     expect(json.meetings).toEqual([{
       id: 'mt-1', title: '주간 정례', date: '2026-07-14', category: 'routine', recurrence: 'weekly',
     }])
-    expect(builders.meetings[0].select).toHaveBeenCalledWith('id, title, meeting_date, category, recurrence')
+    expect(builders.meetings[0].select).toHaveBeenCalledWith('id, project_id, title, meeting_date, category, recurrence')
     expect(builders.meetings[0].eq).toHaveBeenCalledWith('project_id', PA)
   })
 

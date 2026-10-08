@@ -11,7 +11,6 @@ import {
 } from '@/lib/ai/wiki-ingest'
 import { activeTeamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/teamScope'
 import { teamCodesVisibleTo } from '@/lib/teams/source'
-import { validateMinuteTeam } from '@/lib/domain/minutes'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, apiProjectNotAllowed,
   isMinutesWorkspaceMember, parseMinutePayload, parseUserEmail, resolveMinutesPrincipal,
@@ -117,7 +116,7 @@ const CROSS_WORKSPACE_MSG = '다른 워크스페이스의 프로젝트(회의)�
  * 쓰기 대상 확정 — 쓰기(inline 회의 생성·폴더 생성·RPC) 전에 부른다.
  * 프로젝트는 새로 연결할 회의(inline meeting·meeting_id)가 정하고, 없으면 기존 행의 것. 워크스페이스는 기존 행이면 그 행의
  * 것이다 — 다른 워크스페이스 프로젝트로의 연결은 400(예전에는 상대 워크스페이스 트리에 폴더를 만든 뒤 0006 트리거
- * WORKSPACE_SCOPE_MISMATCH 로 500 이었다). 새 회의록이면 프로젝트의 것, 없으면 호출자의 유일 워크스페이스(전환 UI 는 SP3).
+ * WORKSPACE_SCOPE_MISMATCH 로 500 이었다). 새 회의록이면 자격증명 행의 기본 프로젝트, 없으면 자격증명 행의 워크스페이스다.
  * 담당 팀은 그 범위의 활성 팀이어야 한다 — 전 워크스페이스 공용 목록이면 다른 워크스페이스의 팀 코드가 통과한다. 목록은 팀
  * 원천(SP4 A2 — 요청 범위, 세션이 없으므로 service_role)에서 읽는다. 팀 원천 실패는 throw → 라우트 catch 의 500(빈 목록으로 위장하지 않는다).
  */
@@ -128,10 +127,8 @@ async function resolveWriteTarget(
   let scope: MinuteScope
   const linkProjectId = p.meeting ? p.meeting.projectId : p.meetingId ? meetingProjectId : null
   if (linkProjectId) {
-    if (principal?.kind === 'minutes_api') {
-      if (!credentialAllows(principal.credential, linkProjectId)) {
-        return { ok: false, response: apiProjectNotAllowed() }
-      }
+    if (!credentialAllows(principal.credential, linkProjectId)) {
+      return { ok: false, response: apiProjectNotAllowed() }
     }
     // 연결 자격(그 프로젝트의 멤버 이상)이 팀·워크스페이스 판정보다 먼저다 — 뒤에 두면 같은 워크스페이스의 비멤버가
     // 400(팀 불일치)과 404 를 갈라 비공개 프로젝트의 팀 구성을 떠볼 수 있다. meeting_id 는 호출부가 이미 같은 판정을
@@ -141,19 +138,17 @@ async function resolveWriteTarget(
     if (!linkWs || !isProjectMember(authz, linkProjectId)) {
       return { ok: false, response: apiFail(404, 'not_found', '프로젝트를 찾을 수 없습니다.') }
     }
-    if (principal?.kind === 'minutes_api' && linkWs !== principal.credential.workspaceId) {
+    if (linkWs !== principal.credential.workspaceId) {
       return { ok: false, response: apiFail(404, 'not_found', '프로젝트를 찾을 수 없습니다.') }
     }
     if (ex && linkWs !== ex.workspace_id) return { ok: false, response: apiBadRequest(CROSS_WORKSPACE_MSG) }
     scope = { projectId: linkProjectId, workspaceId: linkWs }
   } else if (ex) {
-    if (principal?.kind === 'minutes_api') {
-      if (ex.workspace_id !== principal.credential.workspaceId) {
-        return { ok: false, response: minuteNotFound() }
-      }
-      if (ex.project_id && !credentialAllows(principal.credential, ex.project_id)) {
-        return { ok: false, response: apiProjectNotAllowed() }
-      }
+    if (ex.workspace_id !== principal.credential.workspaceId) {
+      return { ok: false, response: minuteNotFound() }
+    }
+    if (ex.project_id && !credentialAllows(principal.credential, ex.project_id)) {
+      return { ok: false, response: apiProjectNotAllowed() }
     }
     scope = { projectId: ex.project_id, workspaceId: ex.workspace_id }
   } else {
@@ -169,25 +164,20 @@ async function resolveWriteTarget(
     scope = { projectId: defaultPid, workspaceId: wid }
   }
 
-  if (principal?.kind === 'minutes_api') {
-    const candidateTeams = scope.projectId
-      ? await projectTeams(scope.projectId, { client: admin })
-      : await workspaceTeams(scope.workspaceId, { client: admin })
-    const teamRes = resolveCredentialTeam(principal.credential, p.teamCode, candidateTeams)
-    if (!teamRes.ok) {
-      if (teamRes.reason === 'inactive') {
-        return { ok: false, response: apiFail(400, 'team_inactive', '비활성화된 담당 팀입니다.') }
-      }
-      return { ok: false, response: apiBadRequest('잘못된 담당입니다.') }
+  // 담당 팀은 자격증명 행의 해석(team_map·default_team_id)으로 정한다 — 그 범위의 활성 팀이어야 한다.
+  const candidateTeams = scope.projectId
+    ? await projectTeams(scope.projectId, { client: admin })
+    : await workspaceTeams(scope.workspaceId, { client: admin })
+  const teamRes = resolveCredentialTeam(principal.credential, p.teamCode, candidateTeams)
+  if (!teamRes.ok) {
+    if (teamRes.reason === 'inactive') {
+      return { ok: false, response: apiFail(400, 'team_inactive', '비활성화된 담당 팀입니다.') }
     }
-    const chosen = candidateTeams.find(t => t.id === teamRes.teamId)
-    if (chosen) {
-      p.teamCode = chosen.code as TeamCode
-    }
-  } else {
-    const activeTeamCodes = await activeTeamCodesForMinuteScope(scope, { client: admin })
-    const teamErr = validateMinuteTeam(p.teamCode, activeTeamCodes)
-    if (teamErr) return { ok: false, response: apiBadRequest(teamErr) }
+    return { ok: false, response: apiBadRequest('잘못된 담당입니다.') }
+  }
+  const chosen = candidateTeams.find(t => t.id === teamRes.teamId)
+  if (chosen) {
+    p.teamCode = chosen.code as TeamCode
   }
 
   const activeTeamCodes = await activeTeamCodesForMinuteScope(scope, { client: admin })
@@ -548,10 +538,8 @@ export async function POST(req: NextRequest) {
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
 
-    if (principal.kind === 'minutes_api') {
-      const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
-      if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
-    }
+    const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
+    if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
 
     const parsed = parseMinutePayload(raw)
     if ('error' in parsed) return apiBadRequest(parsed.error)
@@ -601,10 +589,8 @@ export async function POST(req: NextRequest) {
     }
 
     let workspaceSlug: string | null = null
-    if (principal.kind === 'minutes_api') {
-      const { data: wsRow } = await admin.from('workspaces').select('slug').eq('id', target.scope.workspaceId).maybeSingle()
-      if (wsRow) workspaceSlug = (wsRow as { slug: string }).slug
-    }
+    const { data: wsRow } = await admin.from('workspaces').select('slug').eq('id', target.scope.workspaceId).maybeSingle()
+    if (wsRow) workspaceSlug = (wsRow as { slug: string }).slug
 
     // v2.5 — skip/error/보관 분기가 회의 확보보다 먼저다. 이 분기들은 회의록을 갱신하지 않는
     // 응답이라 회의를 만들면 실패·무시 응답 뒤에 고아 회의가 남는다(409 archived 포함).
@@ -630,26 +616,6 @@ export async function POST(req: NextRequest) {
     console.error('[minutes-api] POST 처리 실패:', e instanceof Error ? e.message : e)
     return apiInternalError()
   }
-}
-
-/**
- * 목록의 호출자 스코프 — 'all'(플랫폼 관리자), 'none'(소속 워크스페이스 없음 — 볼 회의록이 없다),
- * 또는 소속 워크스페이스들 + 그 안에서 볼 수 없는 비공개 프로젝트(canSeeProject 거짓). 무프로젝트 회의록은
- * 워크스페이스 멤버에게 보인다. 프로젝트 조회 실패는 'error'(빈 목록으로 위장하지 않는다).
- */
-async function listScope(
-  admin: AdminClient, actor: Actor,
-): Promise<'all' | 'none' | 'error' | { workspaceIds: string[]; hiddenProjectIds: string[] }> {
-  if (actor.isSuperuser) return 'all'
-  const workspaceIds = [...actor.workspaceRoles.keys()]
-  if (workspaceIds.length === 0) return 'none'
-  // 내 워크스페이스들의 비공개 프로젝트만 읽는다(id 목록을 싣지 않아 URL 이 프로젝트 수에 비례해 늘지 않는다).
-  const { data, error } = await admin.from('projects').select('id, is_private')
-    .in('workspace_id', workspaceIds).eq('is_private', true)
-  if (error) { console.error('[minutes-api] 목록 비공개 프로젝트 조회 실패:', error.message); return 'error' }
-  const hiddenProjectIds = ((data ?? []) as Array<{ id: string; is_private: boolean | null }>)
-    .filter(p => !canSeeProject(actor, p)).map(p => p.id)
-  return { workspaceIds, hiddenProjectIds }
 }
 
 /** 숨길 프로젝트를 빼되 무프로젝트 회의록은 남긴다 — `not.in` 만 걸면 NULL 비교가 거짓이 돼 무프로젝트 행까지 빠진다. */
@@ -701,61 +667,40 @@ export async function GET(req: NextRequest) {
     const user = await resolveUserByEmail(admin, userEmail)
     if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
 
-    if (principal.kind === 'minutes_api') {
-      const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
-      if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
-    }
+    const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
+    if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
 
     const authz = await actorFromUser(admin, user.id)
 
-    let scope: 'all' | 'none' | 'error' | { workspaceIds: string[]; hiddenProjectIds: string[] }
-    if (principal.kind === 'minutes_api') {
-      const wsId = principal.credential.workspaceId
-      const wsMod = await requireModule({ workspaceId: wsId }, 'minutes_integration', { client: admin })
-      if (!wsMod.ok) return apiModuleDisabled()
-      const { data: prjRows, error: prjErr } = await admin.from('projects').select('id, is_private').eq('workspace_id', wsId)
-      if (prjErr) return apiInternalError()
-      const hidden: string[] = []
-      for (const prj of (prjRows ?? []) as Array<{ id: string; is_private: boolean | null }>) {
-        if (!credentialAllows(principal.credential, prj.id) || !canSeeProject(authz, prj)) {
-          hidden.push(prj.id)
-        }
+    // 목록 범위는 자격증명 행의 워크스페이스 하나다(SP7 §5.1.3) — 호출자의 소속 워크스페이스들이나 플랫폼 관리자의 전 워크스페이스로
+    // 넓히지 않는다. 그 안에서 자격증명의 project_ids 밖이거나 호출자가 볼 수 없는 프로젝트의 회의록은 숨긴다.
+    const wsId = principal.credential.workspaceId
+    const wsMod = await requireModule({ workspaceId: wsId }, 'minutes_integration', { client: admin })
+    if (!wsMod.ok) return apiModuleDisabled()
+    const { data: prjRows, error: prjErr } = await admin.from('projects').select('id, is_private').eq('workspace_id', wsId)
+    if (prjErr) return apiInternalError()
+    const hiddenProjectIds: string[] = []
+    for (const prj of (prjRows ?? []) as Array<{ id: string; is_private: boolean | null }>) {
+      if (!credentialAllows(principal.credential, prj.id) || !canSeeProject(authz, prj)) {
+        hiddenProjectIds.push(prj.id)
       }
-      scope = { workspaceIds: [wsId], hiddenProjectIds: hidden }
-    } else {
-      scope = await listScope(admin, authz)
-      if (scope === 'error') return apiInternalError()
     }
 
-    // 담당 필터는 호출자가 볼 수 있는 활성 팀으로 본다 — 소속 워크스페이스들의 공용 팀 + 목록 범위에서 숨기지 않은 프로젝트의
-    // 전용 팀, 플랫폼 관리자는 전부(teamViewOf). 전 워크스페이스 목록이면 다른 워크스페이스의 팀 코드가 통과하고, 공용 팀만
-    // 보면 프로젝트 회의록의 담당(전용 팀)이 400 이 된다. 팀 원천 실패는 throw → 아래 catch 의 500(담당 필터를 버리지 않는다).
-    const hiddenProjectIds = typeof scope === 'object' ? scope.hiddenProjectIds : []
+    // 담당 필터는 호출자가 볼 수 있는 활성 팀으로 본다 — 공용 팀 + 목록 범위에서 숨기지 않은 프로젝트의 전용 팀(teamViewOf).
+    // 공용 팀만 보면 프로젝트 회의록의 담당(전용 팀)이 400 이 된다. 팀 원천 실패는 throw → 아래 catch 의 500(담당 필터를 버리지 않는다).
     if (team && !(await teamCodesVisibleTo(teamViewOf(authz, hiddenProjectIds), { client: admin })).includes(team)) {
       return apiBadRequest('잘못된 담당입니다.')
     }
-    if (scope === 'none') return NextResponse.json({ items: [], total: 0, page, per_page: perPage })
-    // 목록형 — minutes_integration 이 허용된 워크스페이스만(스펙 §4.2). 하나도 없으면 닫는다(409). 플랫폼 관리자('all')도 허용된 것만 —
-    // 단 전부 켜져 있으면 필터를 걸지 않는다(플랫폼 관리자 '워크스페이스 필터 없이 전부' 계약 — external-api.test.ts 의 케이스, P24)
-    let candidates: string[]
-    if (scope === 'all') {
-      const { data: wsRows, error: wsErr } = await admin.from('workspaces').select('id')
-      if (wsErr) { console.error('[minutes-api] 워크스페이스 목록 조회 실패:', wsErr.message); return apiInternalError() }   // 빈 목록으로 위장하지 않는다
-      candidates = ((wsRows ?? []) as Array<{ id: string }>).map((w) => w.id)
-    } else candidates = scope.workspaceIds
-    const onWs = await workspacesWithModule(candidates, 'minutes_integration', { client: admin })
+    // 목록형 — minutes_integration 이 허용된 워크스페이스만(스펙 §4.2). 꺼져 있으면 닫는다(409).
+    const onWs = await workspacesWithModule([wsId], 'minutes_integration', { client: admin })
     if (onWs.length === 0) return apiModuleDisabled()
 
     let q = admin.from('minutes').select(
       'id, minute_date, team_code, title, external_id, archived_at, created_by_name, created_at, updated_at',
       { count: 'exact' },
     )
-    if (principal.kind === 'minutes_api') {
-      q = q.eq('workspace_id', principal.credential.workspaceId)
-    } else if (scope !== 'all' || onWs.length < candidates.length) {
-      q = q.in('workspace_id', onWs)   // 플랫폼 관리자는 꺼진 워크스페이스가 있을 때만 거른다
-    }
-    if (scope !== 'all' && scope.hiddenProjectIds.length > 0) q = q.or(hiddenProjectFilter(scope.hiddenProjectIds))
+    q = q.eq('workspace_id', wsId)
+    if (hiddenProjectIds.length > 0) q = q.or(hiddenProjectFilter(hiddenProjectIds))
     if (!includeArchived) q = q.is('archived_at', null)
     const externalId = sp.get('external_id')
     if (externalId) q = q.eq('external_id', externalId)
@@ -775,12 +720,8 @@ export async function GET(req: NextRequest) {
       // 같은 필터의 head 카운트로 total 만 채워 빈 페이지로 응답한다(500 아님).
       if (error.code === 'PGRST103') {
         let cq = admin.from('minutes').select('id', { count: 'exact', head: true })
-        if (principal.kind === 'minutes_api') {
-          cq = cq.eq('workspace_id', principal.credential.workspaceId)
-        } else if (scope !== 'all' || onWs.length < candidates.length) {
-          cq = cq.in('workspace_id', onWs)
-        }
-        if (scope !== 'all' && scope.hiddenProjectIds.length > 0) cq = cq.or(hiddenProjectFilter(scope.hiddenProjectIds))
+        cq = cq.eq('workspace_id', wsId)
+        if (hiddenProjectIds.length > 0) cq = cq.or(hiddenProjectFilter(hiddenProjectIds))
         if (!includeArchived) cq = cq.is('archived_at', null)
         if (externalId) cq = cq.eq('external_id', externalId)
         if (linked === 'true') cq = cq.not('external_id', 'is', null)

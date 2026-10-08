@@ -1,7 +1,7 @@
 // scripts/dev-bootstrap.mjs — 로컬 빈 DB 에 워크스페이스 + 플랫폼 관리자를 만든다. 로컬 전용.
 // 0003(조직 코어) 이후: memberships.team_id 전역 팀 대신 workspaces 한 개를 만들고, 그 관리자로
 // platform_admins·profiles·workspace_members·people 을 함께 채운다. 워크스페이스 선택 UI 는 SP2 몫이라
-// 여기서 만든 워크스페이스 하나가 resolveSoleWorkspaceId(§5.3)가 요구하는 "소속 정확히 1개"의 근거가 된다.
+// 여기서 만든 워크스페이스 하나가 첫 계정의 소속이다(워크스페이스는 화면·자격증명이 명시한다 — 소속 개수로 짐작하지 않는다).
 // 순서: 워크스페이스(멱등 upsert) → 계정 → profiles·platform_admins·workspace_members·people → 워크스페이스 설정(허용 모듈·시간대 — apply_workspace_settings 한 번).
 // 중간 단계가 실패하면 만든 계정을 지운다 — 고아 계정이 재실행을 막지 않게(워크스페이스는 멱등이라 그대로 둔다).
 import { randomUUID } from 'node:crypto'
