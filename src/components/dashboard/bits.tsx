@@ -17,7 +17,7 @@ export function DateCell({ date, isToday, todayLabel, weekday }: {
   return (
     <div className="w-14 shrink-0">
       {isToday ? (
-        <span className="badge bg-action text-action-fg font-semibold shadow-xs">{todayLabel}</span>
+        <span className="badge bg-action text-action-fg font-semibold">{todayLabel}</span>
       ) : (
         <>
           <div className="tabular-nums text-xs font-semibold text-fg">{date.slice(5).replace('-', '.')}</div>
@@ -45,7 +45,7 @@ export function MiniEmpty({ text }: { text: string }) {
 /** 라벨+큰 숫자 스탯 타일. tone 으로 값 색상 오버라이드(예: text-success). */
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: string; tone?: string }) {
   return (
-    <div className="rounded-xl border border-border/80 bg-surface-subtle/50 px-4 py-3 shadow-xs">
+    <div className="rounded-xl border border-border/80 bg-surface-subtle/50 px-4 py-3">
       <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-muted">{label}</div>
       <div className={`mt-1 text-xl font-bold tabular-nums leading-none tracking-tight ${tone ?? 'text-fg'}`}>{value}</div>
       {sub && <div className="mt-1 text-[11px] text-fg-secondary">{sub}</div>}

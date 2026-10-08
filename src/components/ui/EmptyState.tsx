@@ -12,7 +12,7 @@ export function EmptyState({
   return (
     <div className="card flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center transition-all">
       {Icon && (
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-action/20 bg-action-soft text-action shadow-xs ring-8 ring-action-soft/40">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-action/20 bg-action-soft text-action ring-8 ring-action-soft/40">
           <Icon className="h-5 w-5" />
         </span>
       )}

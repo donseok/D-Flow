@@ -25,7 +25,7 @@ export interface ConflictResolverProps {
 
 const FOCUSABLE = 'button:not([disabled])'
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
-const BTN = 'rounded-(--radius-control) border border-border-input bg-surface px-3.5 py-1.5 text-sm font-medium text-fg shadow-xs transition-[color,background-color,border-color,box-shadow] duration-(--motion-fast) hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60'
+const BTN = 'rounded-(--radius-control) border border-border-input bg-surface px-3.5 py-1.5 text-sm font-medium text-fg transition-[color,background-color,border-color,box-shadow] duration-(--motion-fast) hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60'
 
 /**
  * 저장 충돌 비교(개정 §5.8.1 `Editing/Saving → Conflict`, Q05). 내 값·서버의 현재 값(·편집 시작 때 값)을 나란히 보이고
@@ -126,7 +126,7 @@ export function ConflictResolver({ open, target, fields, onKeepMine, onTakeLates
             {t('common.conflictTakeLatest')}
           </button>
           <button type="button" data-conflict-action="mine" disabled={busy} onClick={onKeepMine}
-            className="rounded-(--radius-control) bg-action px-3.5 py-1.5 text-sm font-medium text-action-fg shadow-xs transition-[color,background-color,opacity,box-shadow] duration-(--motion-fast) hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60">
+            className="rounded-(--radius-control) bg-action px-3.5 py-1.5 text-sm font-medium text-action-fg transition-[color,background-color,opacity,box-shadow] duration-(--motion-fast) hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-60">
             {t('common.conflictKeepMine')}
           </button>
         </div>

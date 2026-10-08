@@ -29,7 +29,7 @@ export function Field({ label, description, error, readOnly = false, disabled = 
   const errId = `${id}-err`
   const describedBy = [description ? descId : null, error ? errId : null].filter(Boolean).join(' ') || undefined
   const className =
-    `h-(--control-h) w-full rounded-(--radius-control) border bg-surface px-3 text-control text-fg shadow-xs outline-none ` +
+    `h-(--control-h) w-full rounded-(--radius-control) border bg-surface px-3 text-control text-fg outline-none ` +
     `transition-[border-color,box-shadow,background-color] duration-(--motion-fast) placeholder:text-fg-muted ` +
     (error
       ? 'border-danger focus:border-danger focus:ring-2 focus:ring-danger/20 '

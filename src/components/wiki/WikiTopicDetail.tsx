@@ -295,9 +295,9 @@ export function WikiTopicDetail({
             <p className="mt-1.5 text-sm text-fg-secondary">{topic.ownerTeam ?? t(locale, 'wiki.noOwner')}<span className="mx-2 text-border-focus">·</span>{t(locale, 'wiki.updatedAt')} {formatWikiDate(topic.bodyUpdatedAt ?? topic.lastChangedAt, locale, false, timeZone)}</p>
           </div>
           <div className="grid shrink-0 grid-cols-3 gap-2">
-            <div className="rounded-xl border border-border/70 bg-surface-subtle px-3 py-2 text-center shadow-xs"><div className="text-lg font-bold tabular-nums text-fg">{sourceCount(items)}</div><div className="text-[10px] text-fg-muted">{t(locale, 'wiki.trust.sources')}</div></div>
-            <div className="rounded-xl border border-warning/20 bg-pending-weak px-3 py-2 text-center shadow-xs"><div className="text-lg font-bold tabular-nums text-pending">{openItems.length}</div><div className="text-[10px] text-pending">{t(locale, 'wiki.state.open')}</div></div>
-            <div className={`rounded-xl border px-3 py-2 text-center shadow-xs ${conflictCount > 0 ? 'border-danger/20 bg-danger-weak' : 'border-success/20 bg-success-weak'}`}><div className={`text-lg font-bold tabular-nums ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{conflictCount}</div><div className={`text-[10px] ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{t(locale, 'wiki.state.conflict')}</div></div>
+            <div className="rounded-xl border border-border/70 bg-surface-subtle px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-fg">{sourceCount(items)}</div><div className="text-[10px] text-fg-muted">{t(locale, 'wiki.trust.sources')}</div></div>
+            <div className="rounded-xl border border-warning/20 bg-pending-weak px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-pending">{openItems.length}</div><div className="text-[10px] text-pending">{t(locale, 'wiki.state.open')}</div></div>
+            <div className={`rounded-xl border px-3 py-2 text-center ${conflictCount > 0 ? 'border-danger/20 bg-danger-weak' : 'border-success/20 bg-success-weak'}`}><div className={`text-lg font-bold tabular-nums ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{conflictCount}</div><div className={`text-[10px] ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{t(locale, 'wiki.state.conflict')}</div></div>
           </div>
         </div>
       </section>

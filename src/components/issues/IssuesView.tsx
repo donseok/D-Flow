@@ -277,7 +277,7 @@ export function IssuesView({
         <button
           onClick={() => { setMineOnly(v => !v); setPage(1) }}
           aria-pressed={mineOnly}
-          className={`chip cursor-pointer border transition shadow-xs ${mineOnly ? 'border-action bg-action-soft text-action font-semibold' : 'border-border bg-surface text-fg-secondary hover:text-fg hover:border-border-input'}`}
+          className={`chip cursor-pointer border transition ${mineOnly ? 'border-action bg-action-soft text-action font-semibold' : 'border-border bg-surface text-fg-secondary hover:text-fg hover:border-border-input'}`}
         >
           {t('issue.filter.mine')}
         </button>
@@ -316,7 +316,7 @@ export function IssuesView({
 
       {/* 선택 바 — 목록에서 한 건 이상 골랐을 때만. 조회 전용은 체크박스가 없어 이 바가 생기지 않는다 */}
       {view === 'list' && canEdit && selected.length > 0 && (
-        <div role="region" aria-label={t('issue.bulk.title')} data-testid="issue-bulk-bar" className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-raised px-3 py-2 shadow-xs">
+        <div role="region" aria-label={t('issue.bulk.title')} data-testid="issue-bulk-bar" className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-raised px-3 py-2">
           <span className="text-sm font-medium text-fg" data-testid="issue-bulk-count">{t('issue.bulk.selected').replace('{n}', String(selected.length))}</span>
           {selected.length < visible.length && (
             <button type="button" className="btn btn-ghost text-xs text-action" onClick={() => setSelectedIds(new Set(visible.map(i => i.id)))}>

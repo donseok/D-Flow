@@ -970,7 +970,7 @@ function MinuteCard({
   const minuteHref = useMinuteLinks().minute   // 화면 안 링크의 범위(D38 ①)
   return (
     <article {...dragProps}
-      className={`card relative flex flex-col gap-2 p-4 transition-all duration-150 hover:border-border-input hover:shadow-sm ${
+      className={`card relative flex flex-col gap-2 p-4 transition-all duration-150 hover:border-border-input ${
         dragProps ? 'cursor-grab select-none active:cursor-grabbing' : ''} ${dragging ? 'opacity-40' : ''}`}>
       {/* 선택 모드에서는 링크를 렌더하지 않는다 — 고르려다 상세로 튕겨 나가면 선택 자체가 불가능하다.
           draggable=false 필수 — 앵커는 기본 draggable 이라 그대로 두면 카드 대신 링크(href)가 끌린다 */}

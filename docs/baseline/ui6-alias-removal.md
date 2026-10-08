@@ -79,3 +79,5 @@ node scripts/codemod-legacy-tokens.mjs <파일…>        # 병합으로 옛 이
 
 병렬 브랜치가 옛 이름을 새로 쓰면 `no-legacy-tokens` 와 `token-aliases`(정의되지 않은 토큰 이름) 테스트가 잡는다 — Tailwind 는 없는 유틸을
 오류 없이 버리므로 테스트가 유일한 신호다.
+
+> 위 두 검증 스크립트(`verify-legacy-token-equivalence.mjs`·`verify-legacy-token-cascade.mjs`)는 일회성이라 리포에 남기지 않았다. 재현이 필요하면 이 절의 방법으로 다시 쓴다. 코드모드(`scripts/codemod-legacy-tokens.mjs`)는 남겼다.

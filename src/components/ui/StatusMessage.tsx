@@ -46,7 +46,7 @@ export function StatusMessage({ kind, title, detail, action, compact = false, bl
     ? alert
       ? 'flex items-start gap-2.5 rounded-lg border border-danger/30 bg-danger-weak/30 px-3 py-2'
       : 'flex items-start gap-2.5 py-2'
-    : 'flex items-start gap-3.5 rounded-(--radius-panel) border border-border bg-surface p-4 shadow-xs'
+    : 'flex items-start gap-3.5 rounded-(--radius-panel) border border-border bg-surface p-4'
   if (kind === 'loading') {
     return (
       <div role="status" aria-busy="true" data-status-kind="loading" className={`${frame} ${compact ? 'min-h-8' : 'min-h-24'}`}>

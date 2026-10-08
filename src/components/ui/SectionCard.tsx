@@ -19,7 +19,7 @@ export function SectionCard({
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           {Icon && (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-action/20 bg-action-soft text-action shadow-xs">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-action/20 bg-action-soft text-action">
               <Icon className="h-4 w-4" />
             </span>
           )}

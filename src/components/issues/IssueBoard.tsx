@@ -89,7 +89,7 @@ export function IssueBoard({
             data-issue-column={col.code}
             data-column-kind={col.kind}
             aria-label={vocabLabel('workflow.issue_statuses', statuses, col.code, t)}
-            className="card flex w-[290px] min-w-[290px] flex-col border-border/70 bg-surface/90 p-3 shadow-xs"
+            className="card flex w-[290px] min-w-[290px] flex-col border-border/70 bg-surface/90 p-3"
           >
             <header className="flex flex-col gap-1 px-1 pb-3">
               <div className="flex items-center justify-between gap-2">
@@ -122,7 +122,7 @@ export function IssueBoard({
                   <article
                     key={issue.id}
                     data-issue-card={issue.id}
-                    className={`relative shrink-0 overflow-hidden rounded-xl border p-3.5 shadow-xs transition duration-(--motion-fast) ${error ? 'border-warning/80 bg-warning/5' : 'border-border/80 bg-surface'}`}
+                    className={`relative shrink-0 overflow-hidden rounded-xl border p-3.5 transition duration-(--motion-fast) ${error ? 'border-warning/80 bg-warning/5' : 'border-border/80 bg-surface'}`}
                   >
                     <span className={`absolute inset-y-0 left-0 w-1 ${dot}`} aria-hidden />
                     <div

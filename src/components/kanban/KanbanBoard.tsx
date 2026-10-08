@@ -463,7 +463,7 @@ export function KanbanBoard({
                   aria-pressed={quick[k]}
                   title={t(group === 'bucket' ? 'kanban.qfBucketHint' : 'kanban.qfScheduleHint')}
                   onClick={() => toggleQuick(k)}
-                  className={`badge transition cursor-pointer ${quick[k] ? 'bg-action text-action-fg font-semibold shadow-xs' : 'bg-surface-subtle text-fg-secondary hover:text-fg hover:bg-surface-hover'}`}
+                  className={`badge transition cursor-pointer ${quick[k] ? 'bg-action text-action-fg font-semibold' : 'bg-surface-subtle text-fg-secondary hover:text-fg hover:bg-surface-hover'}`}
                 >{t(label)}</button>
               </Fragment>
             ))}
@@ -498,7 +498,7 @@ export function KanbanBoard({
 
       {/* 최초 방문 코치마크(진행 뷰) */}
       {showCoach && editable && (
-        <div className="flex shrink-0 items-start justify-between gap-3 rounded-xl border border-action/25 bg-action-soft px-3.5 py-2.5 shadow-xs">
+        <div className="flex shrink-0 items-start justify-between gap-3 rounded-xl border border-action/25 bg-action-soft px-3.5 py-2.5">
           <div>
             <p className="text-[13px] font-semibold text-action">{t('kanban.coachTitle')}</p>
             <p className="mt-0.5 text-[12px] text-fg-secondary">{t('kanban.coachDesc')}</p>
@@ -531,7 +531,7 @@ export function KanbanBoard({
               onDragOver={isDropZone ? e => { if (accepts) { e.preventDefault(); setDragOverKey(col.key) } } : undefined}
               onDragLeave={isDropZone ? () => setDragOverKey(k => (k === col.key ? null : k)) : undefined}
               onDrop={isDropZone ? e => handleDrop(e, col.key) : undefined}
-              className={`card flex max-h-full w-[290px] min-w-[290px] flex-col p-3 shadow-xs transition bg-surface/90
+              className={`card flex max-h-full w-[290px] min-w-[290px] flex-col p-3 transition bg-surface/90
                 ${active ? 'border-action ring-2 ring-border-focus' : 'border-border/70'}`}
             >
               <header className="flex flex-col gap-1 px-1 pb-3">

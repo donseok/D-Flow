@@ -808,7 +808,7 @@ export function RowDetailPanel({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border/80 bg-surface-subtle/60 px-3 py-2.5 text-center shadow-xs">
+    <div className="rounded-xl border border-border/80 bg-surface-subtle/60 px-3 py-2.5 text-center">
       <div className="text-[10px] font-semibold tracking-wider text-fg-muted">{label}</div>
       <div className="mt-0.5 text-[15px] font-bold tabular-nums text-fg">{value}</div>
     </div>

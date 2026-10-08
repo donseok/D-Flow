@@ -35,14 +35,14 @@ export function KpiCard({
 }) {
   if (variant === 'hero') {
     return (
-      <div className="rounded-(--radius-panel) border border-border bg-surface-subtle p-4 shadow-xs">
+      <div className="rounded-(--radius-panel) border border-border bg-surface-subtle p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-meta font-semibold text-fg-secondary">{label}</div>
             <div className="mt-1.5 text-kpi font-semibold leading-none tabular-nums tracking-tight text-fg">{value}</div>
             {sub && <div className="mt-1.5 text-xs text-fg-secondary leading-normal">{sub}</div>}
           </div>
-          {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-(--radius-control) border border-border bg-surface shadow-xs ${HERO_ICON[tone]}`}><Icon className="h-4 w-4" /></span>}
+          {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-(--radius-control) border border-border bg-surface ${HERO_ICON[tone]}`}><Icon className="h-4 w-4" /></span>}
         </div>
         {children}
       </div>
@@ -58,7 +58,7 @@ export function KpiCard({
           <div className={`mt-1.5 text-kpi font-semibold leading-none tabular-nums tracking-tight ${tw.value}`}>{value}</div>
           {sub && <div className="mt-1.5 text-xs text-fg-secondary leading-normal">{sub}</div>}
         </div>
-        {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-xs ${tw.iconWrap}`}><Icon className="h-4 w-4" /></span>}
+        {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tw.iconWrap}`}><Icon className="h-4 w-4" /></span>}
       </div>
       {children}
     </div>

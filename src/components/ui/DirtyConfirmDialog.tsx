@@ -92,14 +92,14 @@ export function DirtyConfirmDialog({
             ref={continueBtnRef}
             type="button"
             onClick={onContinue}
-            className="rounded-(--radius-control) border border-border-input bg-surface px-3.5 py-1.5 text-sm font-medium text-fg shadow-xs transition-[color,background-color,border-color,box-shadow] duration-(--motion-fast) hover:bg-surface-hover hover:border-border-focus/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            className="rounded-(--radius-control) border border-border-input bg-surface px-3.5 py-1.5 text-sm font-medium text-fg transition-[color,background-color,border-color,box-shadow] duration-(--motion-fast) hover:bg-surface-hover hover:border-border-focus/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
           >
             {resolvedContinue}
           </button>
           <button
             type="button"
             onClick={onDiscard}
-            className="rounded-(--radius-control) bg-danger px-3.5 py-1.5 text-sm font-medium text-danger-fg shadow-xs transition-[color,background-color,opacity,box-shadow] duration-(--motion-fast) hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+            className="rounded-(--radius-control) bg-danger px-3.5 py-1.5 text-sm font-medium text-danger-fg transition-[color,background-color,opacity,box-shadow] duration-(--motion-fast) hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
           >
             {resolvedDiscard}
           </button>

@@ -93,9 +93,9 @@ export function KanbanCard({
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`group relative shrink-0 overflow-hidden rounded-xl border p-3.5 shadow-xs transition duration-(--motion-fast)
+      className={`group relative shrink-0 overflow-hidden rounded-xl border p-3.5 transition duration-(--motion-fast)
         ${failed ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30' : 'border-border/80 bg-surface'}
-        ${draggable ? 'cursor-grab select-none hover:border-border-input hover:shadow-sm active:cursor-grabbing' : ''}
+        ${draggable ? 'cursor-grab select-none hover:border-border-input active:cursor-grabbing' : ''}
         ${dragging ? 'opacity-40' : ''}`}
     >
       <span className={`absolute inset-y-0 left-0 w-1 ${accent}`} aria-hidden />
