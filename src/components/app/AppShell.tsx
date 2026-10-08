@@ -61,7 +61,8 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
           ? <ProjectNav groups={p.groups} pathname={pathname} workspaceHome={known ? home : null} projectSwitcher={projectSwitcher} badges={navBadges} collapsed={collapsed} onToggleCollapsed={setCollapsed} />
           : <WorkspaceNav groups={p.groups} pathname={p.scope === 'global' ? '' : pathname} slug={p.workspace.slug} projects={p.projects} favoriteIds={p.favoriteIds}
               recentIds={p.recentIds} projectsFailed={p.projectsFailed} canCreateProject={p.canEditSettings} badges={navBadges} collapsed={collapsed} onToggleCollapsed={setCollapsed} />)}
-        <main id="main-content" className="app-main flex min-w-0 flex-1 flex-col px-4 pb-4 sm:px-5 lg:px-6">
+        {/* relative — main 이 스크롤 상자이자 절대 위치의 기준이다. 기준이 아니면 본문 깊숙한 sr-only(position:absolute)가 문서 기준으로 놓여 문서 자체가 길어지고 스크롤이 둘이 된다 */}
+        <main id="main-content" className="app-main relative flex min-w-0 flex-1 flex-col px-4 pb-4 sm:px-5 lg:px-6">
           {/* 위 간격은 패딩이 아니라 자리로 — sticky 는 스크롤 상자의 패딩 안쪽에 붙어 pt 만큼 위로 내용이 비친다(D54) */}
           <div aria-hidden="true" data-main-top-gap className="h-4 shrink-0" />
           {(p.degraded || p.projectsFailed) && <div className="shrink-0"><DegradedNotice actorFailed={p.degraded} projectsFailed={p.projectsFailed} /></div>}

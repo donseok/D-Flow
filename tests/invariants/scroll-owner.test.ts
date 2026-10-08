@@ -20,6 +20,9 @@ describe('scroll-owner', () => {
     const main = readFileSync('src/components/app/AppShell.tsx', 'utf8').match(/<main[^>]*className="([^"]*)"/)?.[1] ?? ''
     expect(main).toContain('app-main'); expect(main).not.toMatch(/overflow|scrollbar/)
   })
+  it('main 은 절대 위치의 기준(relative)이다 — 아니면 본문의 sr-only 가 문서 기준으로 놓여 문서가 길어지고 스크롤이 둘이 된다', () => {
+    expect(/<main id="main-content" className="([^"]*)"/.exec(readFileSync('src/components/app/AppShell.tsx', 'utf8'))?.[1].split(' ')).toContain('relative')
+  })
   it('채움형은 닫힌 목록만(variant="fill")', () => {
     const fill = walk('src/app').filter((f) => f.endsWith('page.tsx') && /variant="fill"/.test(readFileSync(f, 'utf8')))
     expect(fill.sort()).toEqual([...FILL_PAGES].sort())
