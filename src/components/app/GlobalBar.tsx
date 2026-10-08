@@ -8,10 +8,12 @@ import { NotificationBell } from './NotificationBell'
 import { AccountMenu, type ShellIdentity } from './AccountMenu'
 import { SyncStatus } from '@/components/ui/SyncStatus'
 import { GlobalSearchDialog } from '@/components/search/GlobalSearchDialog'
+import { TOUCH_TARGET } from '@/components/ui/touchTarget'
 
 /**
  * 전역 바(★10, 개정 §5.4.1·§5.4.3) — 높이 48·전체 폭·아래 1px 경계·그림자 없음. 가운데는 ⌘K 제목 검색 슬롯(SPU2). 티커는 없다(D28).
  * 크기별 브랜드 전환은 바깥 래퍼 span 의 정적 리터럴(로고 img 에는 display 유틸 없음 — D24). STAGING 은 레이아웃이 env 로 정해 prop 으로 내린다.
+ * 찾기는 워크스페이스가 확정된 셸에만 있다(없으면 대화상자가 범위 거부만 낸다) — 640 이상은 글자 상자, 그 아래는 아이콘 버튼(둘 다 정적 리터럴 전환).
  * 768 미만은 브레드크럼 대신 범위 이름 버튼(프로젝트 → 워크스페이스 이름)이 같은 드로어를 연다(§5.4.5 "상단 범위 선택 + 메뉴" — 표시 전환은 정적 래퍼).
  */
 export function GlobalBar({
@@ -52,9 +54,11 @@ export function GlobalBar({
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const scopeName = crumbs.project?.name ?? crumbs.workspace?.name ?? null
+  const canSearch = !!workspaceId
 
   // ⌘K / Ctrl+K 단축키 리스너
   useEffect(() => {
+    if (!canSearch) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -63,7 +67,7 @@ export function GlobalBar({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [canSearch])
 
   // 워크스페이스 슬러그 및 프로젝트 ID 추출 (프롭 우선, 없으면 crumbs 해석)
   const resolvedSlug =
@@ -74,7 +78,7 @@ export function GlobalBar({
     (crumbs.project?.href ? crumbs.project.href.replace(/^\/p\//, '').split('/')[0] : undefined)
   return (
     <header className="relative z-(--z-shell) flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-3">
-      <button type="button" data-drawer-trigger onClick={onOpenDrawer} aria-label="메뉴 열기" className="rounded-(--radius-control) p-2 hover:bg-surface-hover lg:hidden"><Menu size={18} aria-hidden /></button>
+      <button type="button" data-drawer-trigger onClick={onOpenDrawer} aria-label="메뉴 열기" className={`rounded-(--radius-control) p-2 hover:bg-surface-hover lg:hidden ${TOUCH_TARGET}`}><Menu size={18} aria-hidden /></button>
       <Link href={homeHref} aria-label={`${brand.productName} 홈`} className="flex shrink-0 items-center">
         <span className="hidden lg:inline-flex"><BrandSlot brand={brand} compact={false} /></span>
         <span className="lg:hidden"><BrandSlot brand={brand} compact /></span>
@@ -88,7 +92,7 @@ export function GlobalBar({
           </button>
         )}
       </div>
-      <div data-slot="search" className="hidden sm:flex items-center">
+      {canSearch && <div data-slot="search" className="hidden sm:flex items-center">
         <button
           type="button"
           onClick={() => setSearchOpen(true)}
@@ -99,7 +103,13 @@ export function GlobalBar({
           <span className="text-meta">제목 검색...</span>
           <kbd className="ml-1.5 rounded border border-border bg-surface-subtle px-1.5 py-0.5 text-[10px] font-mono text-fg-muted">⌘K</kbd>
         </button>
-      </div>
+      </div>}
+      {canSearch && (
+        <button type="button" data-search-mobile onClick={() => setSearchOpen(true)} aria-label="제목 검색"
+          className={`shrink-0 rounded-(--radius-control) p-2 text-fg-secondary hover:bg-surface-hover hover:text-fg sm:hidden ${TOUCH_TARGET}`}>
+          <Search size={18} aria-hidden />
+        </button>
+      )}
       <div className="flex shrink-0 items-center gap-1.5">
         <div data-slot="sync-status">{syncStatus ?? <SyncStatus />}</div>
         {staging && <span className="rounded-md bg-warning px-2 py-0.5 text-meta font-bold text-warning-fg">STAGING</span>}
@@ -107,14 +117,16 @@ export function GlobalBar({
         <NotificationBell />
         <AccountMenu identity={identity} />
       </div>
-      <GlobalSearchDialog
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        workspaceId={workspaceId ?? ''}
-        workspaceSlug={resolvedSlug}
-        projectId={resolvedProjectId}
-        projectName={crumbs.project?.name ?? projectName}
-      />
+      {canSearch && (
+        <GlobalSearchDialog
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          workspaceId={workspaceId}
+          workspaceSlug={resolvedSlug}
+          projectId={resolvedProjectId}
+          projectName={crumbs.project?.name ?? projectName}
+        />
+      )}
     </header>
   )
 }

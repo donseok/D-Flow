@@ -2,7 +2,7 @@ import { listProjects } from '@/app/actions/project'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { WikiTopicDetail } from '@/components/wiki/WikiTopicDetail'
 import { getWikiTopicDetail } from '@/lib/data/wiki'
 import { t } from '@/lib/i18n/dict'
@@ -39,7 +39,7 @@ export default async function WikiTopicPage({
   const cal = pc.ok ? pickCalendar(pc.cfg) : null
   if (!cal?.ok) {
     return (
-      <ProjectPageShell hero={<PageHero title={title} />}>
+      <ProjectPageShell hero={<PageHeader title={title} />}>
         {cal ? <ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} />
           : <ConfigLoadError error={pc.ok ? '' : pc.error} locale={locale} />}
       </ProjectPageShell>
@@ -53,7 +53,7 @@ export default async function WikiTopicPage({
   const minutesBase = wsRef?.ok ? wsHref(wsRef.ws.slug, 'minutes') : undefined
 
   return (
-    <ProjectPageShell hero={<PageHero title={title} />}>
+    <ProjectPageShell hero={<PageHeader title={title} />}>
       <WikiTopicDetail
         projectId={projectId}
         data={data}

@@ -48,6 +48,31 @@ describe('/admin/ui-states', () => {
     const rejected = samples.find((s) => s.dataset.accentSample === '#e03131')!
     expect(rejected.textContent).toMatch(/hue 거리/)
   })
+  it('UI-5 표본 — 페이지 머리(일반·컴팩트)·아이콘 버튼·모달 닫기·KPI·구역 카드·빈 상태가 두 열에, 겹침(모달·충돌 비교)은 열 밖 버튼으로', async () => {
+    mocks.getActorForView.mockResolvedValue(makeSuperuser())
+    const d = await render()
+    for (const col of d.querySelectorAll('[data-showcase-column]')) {
+      for (const name of ['page-header', 'page-header-compact', 'icon-button', 'modal-close', 'kpi-cards', 'section-card', 'empty-state']) {
+        expect(col.querySelector(`[data-sample="${name}"]`), name).not.toBeNull()
+      }
+      expect(col.querySelector('[data-sample="page-header"] [data-page-header]')?.getAttribute('data-preview')).toBe('default')
+      expect(col.querySelector('[data-sample="page-header-compact"] [data-page-header]')?.className).toContain('min-h-12')
+      expect(col.querySelector('[data-sample="modal-close"] button')?.className).toContain('before:size-11')
+      expect(col.querySelector('[data-sample="icon-button"]')?.className ?? col.querySelector('[data-sample="icon-button"] button')?.className).toContain('before:size-11')
+      expect(col.querySelectorAll('[data-sample="kpi-cards"] .kpi-card').length).toBeGreaterThanOrEqual(4)
+    }
+    const overlays = d.querySelector('[data-showcase-overlays]')!
+    expect(overlays.closest('[data-showcase-column]')).toBeNull()
+    expect(overlays.querySelector('[data-sample="open-modal"]')).not.toBeNull()
+    expect(overlays.querySelector('[data-sample="open-conflict"]')).not.toBeNull()
+    expect(d.querySelector('[role="dialog"]')).toBeNull()                 // 닫힌 채로 시작한다(화면을 덮지 않는다)
+  })
+  it('화면의 h1 은 하나 — 표본 머리는 h2 로 그린다', async () => {
+    mocks.getActorForView.mockResolvedValue(makeSuperuser())
+    const d = await render()
+    expect(d.querySelectorAll('h1')).toHaveLength(1)
+    expect(d.querySelector('h1')?.textContent).toBe('컴포넌트 상태 점검')
+  })
   it('표본 문구가 페이지 상태 표식(PAGE_MARKERS — 열화·오류 경계)과 겹치지 않는다 — 겹치면 캡처·e2e 가 정상 쇼케이스를 열화로 읽는다', async () => {
     mocks.getActorForView.mockResolvedValue(makeSuperuser())
     const text = (await render()).textContent ?? ''

@@ -108,7 +108,8 @@ export function SyncStatus({ className = '', timeZone = 'UTC' }: { className?: s
         className={`flex items-center gap-1.5 text-xs text-fg-muted ${className}`}
       >
         <Check size={13} className="text-success" aria-hidden="true" />
-        <span>동기화됨{timeStr ? ` · ${timeStr}` : ''}</span>
+        {/* 좁은 화면(640 미만)에서는 표시만 남긴다 — 글자가 전역 바의 범위 이름 자리를 다 가져간다. 주의가 필요한 상태(저장 전·확인 필요·오프라인)는 글자를 그대로 둔다 */}
+        <span className="sr-only sm:not-sr-only">동기화됨{timeStr ? ` · ${timeStr}` : ''}</span>
       </div>
     )
   }

@@ -38,10 +38,23 @@ describe('activeNavItem — 활성 항목은 하나(aria-current 근거)', () =>
     expect(activeNavItem('/p/p1/wiki/topics/t1', pj)).toBe('p.wiki')
     expect(activeNavItem('/p/p1/dashboard', pj)).toBe('p.dashboard')
   })
-  it('내비에 없는 경로·범위 밖은 null(칸반은 nav 가 없다, (global) 경로는 활성 없음)', () => {
+  it('내비에 없는 경로·범위 밖은 null(칸반은 nav 가 없다, 계정 등 (global) 경로는 활성 없음)', () => {
     expect(activeNavItem('/p/p1/kanban', pj)).toBeNull()
-    expect(activeNavItem('/admin/llm-config', ws)).toBeNull()
+    expect(activeNavItem('/account', ws)).toBeNull()
+    expect(activeNavItem('/admin', ws)).toBeNull()
+    expect(activeNavItem('/admin/llm-configs', ws)).toBeNull()                    // 접두는 조각 경계까지
     expect(activeNavItem('/w/acme/nope', ws)).toBeNull()
+  })
+  it('플랫폼 운영 두 화면 — 절대 경로 항목은 범위 밖 경로의 접두로 고른다(/admin/llm-config·/admin/ui-states)', () => {
+    expect(activeNavItem('/admin/llm-config', ws)).toBe('ws.llm')
+    expect(activeNavItem('/admin/ui-states', ws)).toBe('ws.ui_states')
+    expect(activeNavItem('/admin/ui-states?x=1', ws)).toBe('ws.ui_states')
+    expect(activeNavItem('/admin/llm-config/x', ws)).toBe('ws.llm')
+    // 플랫폼 관리자가 아니면 그 항목이 내비에 없다 → 고를 것이 없다(추측하지 않는다)
+    const member = navFor({ scope: 'workspace', base: '/w/acme', effective: ALL, caps: { ...CAPS, isPlatformAdmin: false }, menu: MENU })
+    expect(activeNavItem('/admin/llm-config', member)).toBeNull()
+    // 범위 안 경로는 절대 경로 항목을 고르지 않는다
+    expect(activeNavItem('/w/acme/admin/llm-config', ws)).toBeNull()
   })
   it('모듈이 꺼져 항목이 없으면 null(추측하지 않는다)', () => {
     const off = navFor({ scope: 'project', base: '/p/p1', effective: new Set<ModuleId>(['dashboard', 'wbs', 'members', 'settings']), caps: CAPS, menu: MENU })

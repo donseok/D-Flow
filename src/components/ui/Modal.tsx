@@ -6,12 +6,23 @@ import { X } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useEscHandler, ESC_PRIORITY } from '@/lib/ui/escStack'
 import { DirtyConfirmDialog } from '@/components/ui/DirtyConfirmDialog'
+import { TOUCH_TARGET } from './touchTarget'
 
 const subscribeMounted = () => () => {}
 const clientMounted = () => true
 const serverMounted = () => false
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+
+/** 모달 머리의 닫기 — 보이는 크기 32, 누르는 영역 44(TOUCH_TARGET). 상태 점검 화면이 같은 것을 표본으로 그린다 */
+export function ModalCloseButton({ onClick, label }: { onClick?: () => void; label: string }) {
+  return (
+    <button onClick={onClick} aria-label={label}
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-(--radius-control) text-fg-secondary transition hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${TOUCH_TARGET}`}>
+      <X className="h-4 w-4" />
+    </button>
+  )
+}
 
 /** 접근성 모달 — Escape/백드롭 닫기 + 포커스 트랩/복원. dirty 시 이탈 확인(D6-§7-exit). */
 export function Modal({
@@ -123,7 +134,7 @@ export function Modal({
                 {eyebrow && <div className="text-meta font-semibold text-fg-muted">{eyebrow}</div>}
                 {title && <h2 className="mt-0.5 text-base font-semibold tracking-tight text-fg">{title}</h2>}
               </div>
-              <button onClick={requestClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-(--radius-control) text-fg-secondary transition hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus" aria-label={t('common.close')}><X className="h-4 w-4" /></button>
+              <ModalCloseButton onClick={requestClose} label={t('common.close')} />
             </div>
             <div className="min-h-0 max-h-[70vh] overflow-y-auto px-6 py-5">{children}</div>
             {footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/70 bg-surface-subtle/40 px-6 py-4">{footer}</div>}

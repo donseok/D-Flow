@@ -1,4 +1,3 @@
-import { NotebookText } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
@@ -11,8 +10,7 @@ import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { getMyProjectIds } from '@/lib/data/members'
 import { getAccountPrefs } from '@/app/actions/preferences'
 import { listProjects } from '@/app/actions/project'
-import { PageHero, HeroBadge } from '@/components/ui/PageHero'
-import { KpiCard } from '@/components/ui/KpiCard'
+import { PageHeader } from '@/components/app/PageHeader'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { MinutesView } from '@/components/minutes/MinutesView'
 import { MinutesScopeProvider } from '@/components/minutes/MinutesScopeContext'
@@ -68,7 +66,7 @@ export default async function MinutesPage({ params, searchParams }: {
   // 트리는 기본 뷰라 거의 항상 필요하다 — 예전에는 MinutesView 가 마운트 뒤 서버액션으로 따로
   // 가져와서 "화면이 뜨고 나서 또 로딩이 도는" 왕복이 한 번 더 붙었다. 여기서 함께 싣는다.
   // prefs.minutesView 를 먼저 await 해 조건부로 부르면 안 된다 — 직렬 2단이 되고,
-  // 아래 히어로 KPI(minutes.length)와 리스트/달력 전환용 월 목록까지 늦어진다.
+  // 리스트/달력 전환용 월 목록까지 늦어진다.
   const [minutes, tree, favs, user, prefs, locale, myProjectIds] = await Promise.all([
     getMinutesPage(scope.ws.id, projectId, rs, re, initialTeamId),
     getMinutesExplorer(scope.ws.id, projectId, m ?? null),
@@ -85,14 +83,7 @@ export default async function MinutesPage({ params, searchParams }: {
   return (
     <MinutesScopeProvider scope={minutesScope}>
       <ProjectPageShell
-        hero={<PageHero
-          eyebrow="MINUTES"
-          badge={<HeroBadge>Minutes</HeroBadge>}
-          title={t(locale, 'min.heroTitle')}
-          description={t(locale, 'min.heroDesc')}
-          heroKpis={<KpiCard variant="hero" label="THIS MONTH" value={minutes.length}
-            sub={t(locale, 'min.kpi.monthSub')} icon={NotebookText} tone="brand" />}
-        />}
+        hero={<PageHeader title={t(locale, 'min.heroTitle')} description={t(locale, 'min.heroDesc')} />}
         pinned={filterProject ? <MinutesProjectChip slug={scope.ws.slug} project={filterProject} /> : undefined}
       >
         {/* 세션이 없으면 프리페치를 버린다. minutes 의 RLS 는 `to authenticated`(0021:77)라

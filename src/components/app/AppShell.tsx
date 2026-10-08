@@ -34,7 +34,9 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
   const closeDrawer = useCallback(() => setDrawer(false), [])
   const known = p.workspace.slug !== ''
   const home = known ? wsHref(p.workspace.slug) : '/'
-  const activeId = p.scope === 'global' ? null : activeNavItem(pathname, p.groups)
+  // (global) 은 플랫폼 운영 두 화면만 활성 항목이 있다(절대 경로 항목). 계정 등은 없음 — 내비에는 빈 경로를 내려 아무것도 고르지 않는다
+  const activeId = activeNavItem(pathname, p.groups)
+  const navPath = p.scope === 'global' && !activeId ? '' : pathname
   const item = activeId ? p.groups.flatMap((g) => g.items).find((i) => i.id === activeId) : undefined
   const screenName = item ? (typeof item.label === 'string' ? item.label : t(item.label.key)) : null
   const projectName = p.project ? p.project.name || '프로젝트' : null
@@ -59,7 +61,7 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
       <div className="flex min-h-0 flex-1">
         {p.groups.length > 0 && (p.scope === 'project'
           ? <ProjectNav groups={p.groups} pathname={pathname} workspaceHome={known ? home : null} projectSwitcher={projectSwitcher} badges={navBadges} collapsed={collapsed} onToggleCollapsed={setCollapsed} />
-          : <WorkspaceNav groups={p.groups} pathname={p.scope === 'global' ? '' : pathname} slug={p.workspace.slug} projects={p.projects} favoriteIds={p.favoriteIds}
+          : <WorkspaceNav groups={p.groups} pathname={navPath} slug={p.workspace.slug} projects={p.projects} favoriteIds={p.favoriteIds}
               recentIds={p.recentIds} projectsFailed={p.projectsFailed} canCreateProject={p.canEditSettings} badges={navBadges} collapsed={collapsed} onToggleCollapsed={setCollapsed} />)}
         {/* relative — main 이 스크롤 상자이자 절대 위치의 기준이다. 기준이 아니면 본문 깊숙한 sr-only(position:absolute)가 문서 기준으로 놓여 문서 자체가 길어지고 스크롤이 둘이 된다 */}
         <main id="main-content" className="app-main relative flex min-w-0 flex-1 flex-col px-4 pb-4 sm:px-5 lg:px-6">
@@ -77,7 +79,7 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
         <div id="app-rail" className="contents" />
       </div>
       <MobileNavDrawer open={drawer} onClose={closeDrawer} workspaceSwitcher={wsSwitcher} groups={p.groups}
-        pathname={p.scope === 'global' ? '' : pathname} workspaceHome={p.scope === 'project' && known ? home : null} projectSwitcher={projectSwitcher} badges={navBadges} />
+        pathname={navPath} workspaceHome={p.scope === 'project' && known ? home : null} projectSwitcher={projectSwitcher} badges={navBadges} />
     </div>
   )
 }

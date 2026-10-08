@@ -3,12 +3,12 @@ import type { ReactElement, ReactNode } from 'react'
 import { makeMemberActor } from '../fixtures/actor'
 
 // 내 회의 화면(서버) — 회의 조회 실패를 '회의 0건'으로 넘기지 않는다(M5, 에러 처리 3원칙 ①).
-// 사유·재시도는 MyMeetingsView 가 그린다(initialFailed) — 여기서는 페이지가 실패를 넘기는지와, 히어로에 넘기는 KPI 값을 본다.
-// 히어로 KPI 자리는 지금 그려지지 않는다(PageHero 는 heroKpis 를 받기만 한다) — 화면이 아니라 넘긴 값(props)의 검사다.
+// 사유·재시도는 MyMeetingsView 가 그린다(initialFailed) — 여기서는 페이지가 실패를 넘기는지와, 머리(PageHeader)에 넘기는 props 를 본다.
+// 옛 히어로 KPI 자리(그려진 적 없다)는 걷었다 — 머리는 제목·설명뿐이라 실패가 '0'으로 보일 자리가 없다(넘긴 props 전체를 대조한다).
 const mocks = vi.hoisted(() => ({
   getMyMeetings: vi.fn(),
   getActorForView: vi.fn(),
-  // 셸은 받은 props 를 기록한다 — 히어로 KPI 는 props 로 검사한다.
+  // 셸은 받은 props 를 기록한다 — 머리는 props 로 검사한다.
   ProjectPageShell: vi.fn(({ children }: { hero?: ReactNode; children: ReactNode }) => <>{children}</>),
   MyMeetingsView: vi.fn<(props: Record<string, unknown>) => null>(() => null),
 }))
@@ -37,18 +37,23 @@ vi.mock('@/components/meetings/MyMeetingsView', () => ({ MyMeetingsView: mocks.M
 import MyMeetingsPage from '@/app/(app)/w/[slug]/meetings/page'
 import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
 import type { Meeting } from '@/lib/domain/types'
+import { PageHeader } from '@/components/app/PageHeader'
+import { t } from '@/lib/i18n/dict'
+
+const HEADER = { title: t('ko', 'meet.myHeroTitle'), description: t('ko', 'meet.myHeroDesc') }
 
 /** 페이지가 돌려준 트리에서 셸·뷰에 넘긴 props 를 꺼낸다(렌더하지 않고 요소만 본다). */
 async function renderPage() {
   const shell = (await MyMeetingsPage({ params: Promise.resolve({ slug: 'acme' }) })) as ReactElement<{
-    hero: ReactElement<{ heroKpis: ReactElement<{ children: ReactElement<{ value: unknown }>[] }> }>
+    hero: ReactElement<Record<string, unknown>>
     children: ReactElement<Record<string, unknown>> | unknown
   }>
-  const kpis = shell.props.hero.props.heroKpis.props.children.map(k => k.props.value)
+  expect(shell.props.hero.type).toBe(PageHeader)
+  const header = shell.props.hero.props
   const view = ([] as unknown[]).concat(shell.props.children)
     .find((c): c is ReactElement<Record<string, unknown>> => !!c && typeof c === 'object' && 'type' in c && c.type === mocks.MyMeetingsView)
   if (!view) throw new Error('MyMeetingsView 를 찾지 못했다')
-  return { kpis, viewProps: view.props }
+  return { header, viewProps: view.props }
 }
 
 const todayMeeting: Meeting = {
@@ -67,26 +72,25 @@ beforeEach(() => {
 })
 
 describe('내 회의 화면 — 회의 조회 실패', () => {
-  it('실패를 뷰에 넘기고(initialFailed) 일정은 빈 목록 — 히어로에 넘기는 KPI 값은 0 이 아니라 —(지금은 그려지지 않는 자리)', async () => {
+  it('실패를 뷰에 넘기고(initialFailed) 일정은 빈 목록 — 머리에는 수치를 싣지 않는다(제목·설명뿐)', async () => {
     mocks.getMyMeetings.mockResolvedValue({ ok: false, error: ERR_MEETINGS_LOAD })
-    const { kpis, viewProps } = await renderPage()
+    const { header, viewProps } = await renderPage()
     expect(viewProps).toMatchObject({ workspaceId: 'ws-1', initialMeetings: [], initialExceptions: [], initialFailed: true })
     expect(mocks.getMyMeetings).toHaveBeenCalledWith('ws-1', expect.any(String), expect.any(String))
-    expect(kpis).toEqual(['—', '—', '—'])
+    expect(header).toEqual(HEADER)
   })
 
-  it('정상 + 회의 0건은 실패가 아니다 — 넘기는 KPI 값은 숫자 0', async () => {
+  it('정상 + 회의 0건은 실패가 아니다 — 머리는 제목·설명 그대로', async () => {
     mocks.getMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })
-    const { kpis, viewProps } = await renderPage()
+    const { header, viewProps } = await renderPage()
     expect(viewProps).toMatchObject({ initialFailed: false })
-    expect(kpis).toEqual([0, 0, 0])
+    expect(header).toEqual(HEADER)
   })
 
-  it('정상은 읽은 회의를 그대로 넘기고 넘기는 KPI 값을 센다', async () => {
+  it('정상은 읽은 회의를 그대로 넘기고 머리는 제목·설명 그대로', async () => {
     mocks.getMyMeetings.mockResolvedValue({ ok: true, meetings: [todayMeeting], exceptions: [] })
-    const { kpis, viewProps } = await renderPage()
+    const { header, viewProps } = await renderPage()
     expect(viewProps).toMatchObject({ initialMeetings: [todayMeeting], initialFailed: false })
-    expect(kpis[0]).toBe(1)
-    expect(kpis[2]).toBe(1)
+    expect(header).toEqual(HEADER)
   })
 })

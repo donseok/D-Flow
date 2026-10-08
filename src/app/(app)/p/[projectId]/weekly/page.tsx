@@ -13,7 +13,7 @@ import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { WeeklySheetView } from '@/components/weekly/WeeklySheetView'
 import { CustomFieldsProvider } from '@/components/fields/CustomFieldValuesEditor'
@@ -42,8 +42,8 @@ export default async function WeeklyPage({
   const projectName = projects.find(p => p.id === projectId)?.name ?? ''
   // 프레즌스 신원 — 표시명 규칙은 헤더와 동일(full_name → name → 이메일 아이디)
   const me = user ? { id: user.id, name: displayNameFrom(user.user_metadata, user.email) ?? '사용자' } : null
-  // 이 화면은 구글시트 복제 룩이 주인공 — 큰 히어로 대신 콤팩트한 한 줄 헤더만 둔다(공용 PageHero).
-  const hero = <PageHero title={`${projectName} ${t(locale, 'nav.weekly')}`} />
+  // 이 화면은 구글시트 복제 룩이 주인공 — 머리는 제목 한 줄만 둔다(공용 PageHeader).
+  const hero = <PageHeader title={`${projectName} ${t(locale, 'nav.weekly')}`} />
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
   let cal: WorkCalendar
   try { cal = requireCalendar(pc.cfg) } catch (e) {

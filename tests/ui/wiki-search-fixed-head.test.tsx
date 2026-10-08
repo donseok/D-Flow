@@ -134,7 +134,7 @@ function stubViewport(width: number, height: number) {
 // 회귀: 검색창·칩이 통째로 사라졌다. 원인은 08-21 컴팩트 판정 확대 —
 // ProjectPageShell 이 폭<1280 또는 높이<800 에서 히어로 슬롯을 언마운트하는데, 이 화면은
 // 08-19 부터 검색 카드를 그 슬롯에 얹어 두었다. 검색 카드는 이 화면의 유일한 조작부라
-// 화면 크기와 무관하게 남아야 한다. 페이지 제목(PageHero h1)도 이제 모든 뷰포트에서 남는다(D18·스펙 §9 ④).
+// 화면 크기와 무관하게 남아야 한다. 페이지 제목(PageHeader h1)도 이제 모든 뷰포트에서 남는다(D18·스펙 §9 ④).
 describe('WikiSearch — 컴팩트 뷰포트에서도 검색 카드는 남는다', () => {
   let container: HTMLDivElement
   let root: Root

@@ -4,14 +4,15 @@ import type { ReactElement, ReactNode } from 'react'
 import { makeMemberActor } from '../fixtures/actor'
 
 // 회의·공지 화면 — 목록 조회 실패를 '회의 0건'·'공지 없음'으로 그리지 않는다(에러 처리 3원칙 ①).
-// 사유(LoadErrorNotice)를 보이고 KPI 는 숫자 대신 '—'.
+// 사유(LoadErrorNotice)를 보인다. 페이지 머리(PageHeader)는 제목·설명뿐이다 — 옛 히어로 KPI 자리(그려진 적 없다)를 걷어
+// 실패가 '0'으로 보일 자리가 머리에 없다(넘긴 props 전체를 대조한다).
 const PID = 'p1'
 const mocks = vi.hoisted(() => ({
   getProjectMeetingData: vi.fn(),
   getAnnouncements: vi.fn(),
   getActorForView: vi.fn(),
   getServerLocale: vi.fn(async (): Promise<'ko' | 'en'> => 'ko'),
-  // 셸은 받은 props 를 기록하고 pinned·본문만 그린다 — 히어로 KPI 는 props 로 검사한다.
+  // 셸은 받은 props 를 기록하고 pinned·본문만 그린다 — 머리는 props 로 검사한다.
   ProjectPageShell: vi.fn(({ pinned, children }: { pinned?: ReactNode; children: ReactNode }) => <>{pinned}{children}</>),
   MeetingsView: vi.fn<(props: Record<string, unknown>) => null>(() => null),
   AnnouncementsView: vi.fn<(props: Record<string, unknown>) => null>(() => null),
@@ -52,15 +53,19 @@ import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
 import { ERR_ANNOUNCEMENTS_LOAD } from '@/lib/data/announcements'
 import { registerEn, t } from '@/lib/i18n/dict'
 import { EN } from '@/lib/i18n/dict/en'
+import { PageHeader } from '@/components/app/PageHeader'
 
 registerEn(EN)
 
 const params = Promise.resolve({ projectId: PID })
-/** 셸에 넘긴 히어로의 KPI 카드 값들. */
-const kpiValues = () => {
-  const hero = mocks.ProjectPageShell.mock.calls.at(-1)![0] as unknown as { hero: ReactElement<{ heroKpis: ReactElement<{ children: ReactElement<{ value: unknown }>[] }> }> }
-  return hero.hero.props.heroKpis.props.children.map(k => k.props.value)
+/** 셸에 넘긴 머리(PageHeader)의 props 전체 — 제목·설명 말고는 없어야 한다(조회 결과에서 나온 수치가 실리지 않는다). */
+const headerProps = () => {
+  const shell = mocks.ProjectPageShell.mock.calls.at(-1)![0] as unknown as { hero: ReactElement<Record<string, unknown>> }
+  expect(shell.hero.type).toBe(PageHeader)
+  return shell.hero.props
 }
+const MEET_HEADER = { title: `Acme ${t('ko', 'meet.heroTitleSuffix')}`, description: t('ko', 'meet.heroDesc') }
+const ANN_HEADER = { title: `Acme ${t('ko', 'ann.heroTitleSuffix')}`, description: t('ko', 'ann.heroDesc') }
 
 let errSpy: ReturnType<typeof vi.spyOn>
 beforeEach(() => {
@@ -71,13 +76,13 @@ beforeEach(() => {
 afterEach(() => errSpy.mockRestore())
 
 describe('회의 화면 — 회의 조회 실패', () => {
-  it('사유를 고정 머리에 보이고, 일정은 빈 목록으로 그리되 KPI 는 —', async () => {
+  it('사유를 고정 머리에 보이고, 일정은 빈 목록으로 그리되 머리에 수치를 싣지 않는다', async () => {
     mocks.getProjectMeetingData.mockResolvedValue({ ok: false, error: ERR_MEETINGS_LOAD })
     const html = renderToStaticMarkup((await MeetingsPage({ params })) as ReactElement)
     expect(html).toContain('role="alert"')
     expect(html).toContain(t('ko', 'common.loadFailed.meetings'))
     expect(mocks.MeetingsView.mock.calls.at(-1)![0]).toMatchObject({ meetings: [], exceptions: [], loadFailed: true })
-    expect(kpiValues()).toEqual(['—', '—', '—'])
+    expect(headerProps()).toEqual(MEET_HEADER)
   })
 
   it('영어 화면이면 사유는 영어 사전 문구 — 로더의 한국어 ERR_MEETINGS_LOAD 가 새지 않는다', async () => {
@@ -88,23 +93,23 @@ describe('회의 화면 — 회의 조회 실패', () => {
     expect(html).not.toContain(ERR_MEETINGS_LOAD)
   })
 
-  it('정상은 사유 없이 회의를 넘기고 KPI 는 숫자', async () => {
+  it('정상은 사유 없이 회의를 넘기고 머리는 제목·설명 그대로', async () => {
     mocks.getProjectMeetingData.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
     const html = renderToStaticMarkup((await MeetingsPage({ params })) as ReactElement)
     expect(html).not.toContain('role="alert"')
     expect(mocks.MeetingsView.mock.calls.at(-1)![0]).toMatchObject({ loadFailed: false })
-    expect(kpiValues()).toEqual([0, 0, 0])
+    expect(headerProps()).toEqual(MEET_HEADER)
   })
 })
 
 describe('공지 화면 — 공지 조회 실패', () => {
-  it('목록 자리에 사유를 보이고(공지 없음 빈 상태를 그리지 않는다) KPI 는 —', async () => {
+  it('목록 자리에 사유를 보이고(공지 없음 빈 상태를 그리지 않는다) 머리에 수치를 싣지 않는다', async () => {
     mocks.getAnnouncements.mockResolvedValue({ ok: false, error: ERR_ANNOUNCEMENTS_LOAD })
     const html = renderToStaticMarkup((await AnnouncementsPage({ params })) as ReactElement)
     expect(html).toContain('role="alert"')
     expect(html).toContain(t('ko', 'common.loadFailed.announcements'))
     expect(mocks.AnnouncementsView).not.toHaveBeenCalled()
-    expect(kpiValues()).toEqual(['—', '—', '—'])
+    expect(headerProps()).toEqual(ANN_HEADER)
   })
 
   it('영어 화면이면 사유는 영어 사전 문구 — 로더의 한국어 ERR_ANNOUNCEMENTS_LOAD 가 새지 않는다', async () => {
@@ -115,11 +120,11 @@ describe('공지 화면 — 공지 조회 실패', () => {
     expect(html).not.toContain(ERR_ANNOUNCEMENTS_LOAD)
   })
 
-  it('정상은 사유 없이 공지를 넘기고 KPI 는 숫자', async () => {
+  it('정상은 사유 없이 공지를 넘기고 머리는 제목·설명 그대로', async () => {
     mocks.getAnnouncements.mockResolvedValue({ ok: true, rows: [] })
     const html = renderToStaticMarkup((await AnnouncementsPage({ params })) as ReactElement)
     expect(html).not.toContain('role="alert"')
     expect(mocks.AnnouncementsView.mock.calls.at(-1)![0]).toMatchObject({ announcements: [] })
-    expect(kpiValues()).toEqual([0, 0, 0])
+    expect(headerProps()).toEqual(ANN_HEADER)
   })
 })

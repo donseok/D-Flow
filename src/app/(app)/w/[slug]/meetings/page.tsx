@@ -1,13 +1,10 @@
-import { CalendarClock, CalendarCheck, CalendarRange } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { getMyMeetings } from '@/lib/data/meetings'
-import { expandMeetings, summarizeMeetings } from '@/lib/domain/meetings'
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { adminProjectIds } from '@/lib/domain/authz'
-import { PageHero, HeroBadge } from '@/components/ui/PageHero'
-import { KpiCard } from '@/components/ui/KpiCard'
+import { PageHeader } from '@/components/app/PageHeader'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { MyMeetingsView } from '@/components/meetings/MyMeetingsView'
 import { currentRuleDay, todayIn } from '@/lib/domain/calendar'
@@ -35,30 +32,14 @@ export default async function MyMeetingsPage({ params }: { params: Promise<{ slu
   ])
   const m = scope.actor
   // 회의를 못 읽었으면 달력은 빈 채로 넘기되 뷰가 사유와 재시도를 띄운다(initialFailed) — 화면에서 실패를 알리는 것은 뷰다.
-  // 히어로 KPI 자리는 지금 그려지지 않는다(PageHero 는 heroKpis 를 받기만 한다). 넘기는 값은 그 자리가 다시 그려질 때
-  // 실패가 0 으로 보이지 않게 '—'(모름)로 맞춰 둔다. 실패 로그는 로더(getMyMeetings)가 남긴다.
+  // 실패 로그는 로더(getMyMeetings)가 남긴다.
   const meetings = res.ok ? res.meetings : []
   const exceptions = res.ok ? res.exceptions : []
   const categories = res.ok ? res.categories : {}
-  const mineOcc = expandMeetings(meetings.filter(x => x.isMine), exceptions, gs, ge)
-  const { today: todayN, upcoming7d, total } = summarizeMeetings(mineOcc, today)
-  const kpi = (n: number) => (res.ok ? n : '—')
 
   return (
     <ProjectPageShell
-      hero={<PageHero
-        eyebrow="MY MEETINGS"
-        badge={<HeroBadge>My Meetings</HeroBadge>}
-        title={t(locale, 'meet.myHeroTitle')}
-        description={t(locale, 'meet.myHeroDesc')}
-        heroKpis={
-          <>
-            <KpiCard variant="hero" label="TODAY" value={kpi(todayN)} sub={t(locale, 'meet.kpi.todaySub')} icon={CalendarCheck} tone="brand" />
-            <KpiCard variant="hero" label="NEXT 7 DAYS" value={kpi(upcoming7d)} sub={t(locale, 'meet.kpi.upcomingSub')} icon={CalendarClock} tone="warning" />
-            <KpiCard variant="hero" label="THIS MONTH" value={kpi(total)} sub={t(locale, 'meet.kpi.totalSub')} icon={CalendarRange} tone="success" />
-          </>
-        }
-      />}
+      hero={<PageHeader title={t(locale, 'meet.myHeroTitle')} description={t(locale, 'meet.myHeroDesc')} />}
     >
       {/* 항목마다 프로젝트가 다른 전역 목록 — 전역 shim 대신 '내가 관리자인 프로젝트 집합'을 내려
           클라이언트가 열려 있는 회차의 프로젝트로 판정한다(서버 adminOrOwnerGate 와 같은 기준). */}

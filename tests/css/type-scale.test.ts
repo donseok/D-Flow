@@ -12,7 +12,7 @@ export const SCALE: Record<string, [size: string, lineHeight: string, weight?: s
 const SMALL_OR_CAPS = /text-\[(?:9|10|10\.5|11)px\]|\buppercase\b|tracking-\[0\.1\d?em\]|tracking-wide(?:st|r)?\b/
 /** 공용 컴포넌트 다섯(D14) */
 export const COMPONENTS: string[] = [
-  'src/components/ui/KpiCard.tsx', 'src/components/ui/SectionCard.tsx', 'src/components/ui/Modal.tsx', 'src/components/app/InboxPanel.tsx', 'src/components/ui/PageHero.tsx',
+  'src/components/ui/KpiCard.tsx', 'src/components/ui/SectionCard.tsx', 'src/components/ui/Modal.tsx', 'src/components/app/InboxPanel.tsx', 'src/components/app/PageHeader.tsx',
 ]
 
 describe('글자 크기 8단계(@theme)', () => {

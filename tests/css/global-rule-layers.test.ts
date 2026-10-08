@@ -75,8 +75,8 @@ describe('비색 토큰 값(스펙 §4.1 블록 6·D56)', () => {
     expect(body).toMatch(/box-shadow\s*:\s*var\(--shadow-freeze-edge\)/)
     expect(body).not.toMatch(/--color-fg\b/)
   })
-  it('--gradient-primary 는 두 테마 공통 고정 코발트다(판정 Q15 — .dark 가 다시 정의하지 않는다)', () => {
-    expect(val('--gradient-primary')).toBe('linear-gradient(var(--p-cobalt-600), var(--p-cobalt-600))')
+  it('--gradient-primary 는 마지막 소비처와 함께 지웠다(판정 Q15) — :root·.dark 어디에도 다시 두지 않는다', () => {
+    expect(val('--gradient-primary')).toBeUndefined()
     expect(m.dark.some((d) => d.name === '--gradient-primary')).toBe(false)
   })
 })

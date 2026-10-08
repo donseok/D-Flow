@@ -10,7 +10,7 @@ import { listProjects } from '@/app/actions/project'
 import { createServerClient } from '@/lib/supabase/server'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
-import { PageHero, HeroBadge } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { IssuesView } from '@/components/issues/IssuesView'
@@ -65,14 +65,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
   return (
     <ProjectPageShell
       pinned={roster.ok ? undefined : <RosterLoadError error={roster.error} />}
-      hero={
-        <PageHero
-          eyebrow="ISSUES"
-          badge={<HeroBadge>Issue Tracker</HeroBadge>}
-          title={`${projectName} ${t(locale, 'issue.heroTitleSuffix')}`}
-          description={t(locale, 'issue.heroDesc')}
-        />
-      }
+      hero={<PageHeader title={`${projectName} ${t(locale, 'issue.heroTitleSuffix')}`} description={t(locale, 'issue.heroDesc')} />}
     >
       <CustomFieldsProvider projectId={projectId} entity="issue" defs={customFields.ok ? customFields.value : null} canAdmin={isProjectAdmin(m, projectId)} locale={locale}>
       <IssuesView

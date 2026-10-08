@@ -179,7 +179,7 @@ describe('MyMeetingsView — 조회 실패', () => {
     expect(alertEl()).toBeNull()
   })
 
-  // 아래 셋: 서버 렌더를 다시 읽히는 목적은 화면 갱신이 아니다(PageHero 는 heroKpis 를 그리지 않는다) —
+  // 아래 셋: 서버 렌더를 다시 읽히는 목적은 화면 갱신이 아니다(페이지 머리에는 조회 결과에서 나오는 값이 없다) —
   // 실패한 서버 결과가 라우터 캐시(staleTimes.dynamic 30초)에 남아 재방문·뒤로가기 때 경고째 다시 쓰이지 않게 한다.
   it('서버 첫 조회가 실패했던 화면은 재시도가 성공하면 서버 렌더도 다시 읽힌다 — 실패한 서버 결과를 캐시에 남기지 않는다', async () => {
     mocks.fetchMyMeetings.mockResolvedValue({ ok: true, meetings: [], exceptions: [], categories: {} })

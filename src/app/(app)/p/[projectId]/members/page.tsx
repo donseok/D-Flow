@@ -1,18 +1,17 @@
 import { notFound } from 'next/navigation'
-import { Users, UserCog, Unlink, Shield } from 'lucide-react'
+import { Users, Shield } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { getWorkspaceRoleMap } from '@/lib/data/workspaceRoles'
 import { getProjectRoster } from '@/lib/data/members'
 import { getActorViewState } from '@/lib/authz'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
-import { effectiveRoleOfRow, isAdminAccessRole, isHiddenProject, isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
+import { effectiveRoleOfRow, isHiddenProject, isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
 import { projectTeams } from '@/lib/teams/source'
 import { listProjects } from '@/app/actions/project'
 import { listRoster } from '@/app/actions/roster'
 import { listProjectInvites } from '@/app/actions/projectInvites'
-import { PageHero, HeroBadge } from '@/components/ui/PageHero'
-import { KpiCard } from '@/components/ui/KpiCard'
+import { PageHeader } from '@/components/app/PageHeader'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { RosterManager } from '@/components/roster/RosterManager'
 import { ProjectInviteManager } from '@/components/settings/ProjectInviteManager'
@@ -58,25 +57,9 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
   // 읽기 실패는 던진다(오류 경계) — 빈 후보로 명단 편집을 열면 저장이 팀을 지운다
   const teamOptions = canEdit ? (await projectTeams(projectId)).filter(x => x.active).map(x => ({ id: x.id, code: x.code })) : []
 
-  const active = rows.filter(x => x.active)
-  const admins = active.filter(x => isAdminAccessRole(x.accessRole)).length
-  const unlinked = active.filter(x => x.kind === 'external').length
-
   return (
     <ProjectPageShell
-      hero={<PageHero
-        eyebrow="TEAM"
-        badge={<HeroBadge>Members</HeroBadge>}
-        title={`${projectName} ${t(locale, 'members.heroTitleSuffix')}`}
-        description={t(locale, 'members.heroDesc')}
-        heroKpis={
-          <>
-            <KpiCard variant="hero" label="TEAM SIZE" value={active.length} sub={t(locale, 'members.kpiTeamSizeSub')} icon={Users} tone="brand" />
-            <KpiCard variant="hero" label="ADMINS" value={admins} sub={t(locale, 'members.kpiAdminsSub')} icon={UserCog} tone="success" />
-            <KpiCard variant="hero" label="NO ACCOUNT" value={unlinked} sub={t(locale, 'members.kpiUnlinkedSub')} icon={Unlink} tone="default" />
-          </>
-        }
-      />}
+      hero={<PageHeader title={`${projectName} ${t(locale, 'members.heroTitleSuffix')}`} description={t(locale, 'members.heroDesc')} />}
     >
       <div className="space-y-4">
         <SectionCard

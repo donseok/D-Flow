@@ -3,7 +3,7 @@ import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton'
 export default function Loading() {
   return (
     <div className="space-y-6 pb-10" role="status" aria-label="포트폴리오를 불러오는 중">
-      {/* PageHero */}
+      {/* 페이지 머리(PageHeader) */}
       <Skeleton className="h-14 w-full rounded-2xl" />
       {/* KPI 4타일 */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

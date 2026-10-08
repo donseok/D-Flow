@@ -7,7 +7,9 @@ vi.mock('@/components/app/AccountMenu', () => ({ AccountMenu: () => <span data-a
 import { GlobalBar } from '@/components/app/GlobalBar'
 
 const brand = { productName: 'Acme', workspaceId: 'w1', hasFull: false, hasFullDark: false, hasMark: false }
-const base = { brand, homeHref: '/w/acme', identity: null, staging: false, onOpenDrawer: () => {} }
+const base = { brand, homeHref: '/w/acme', identity: null, staging: false, onOpenDrawer: () => {}, workspaceId: 'w1' }
+const wsCrumbs = { scope: 'workspace' as const, workspace: { name: 'Acme', href: '/w/acme' }, project: null, screen: '회의록' }
+const TOUCH = "before:size-11"
 describe('GlobalBar(★10, D28)', () => {
   it('티커 없음, 제목 검색 버튼 제공, 브랜드 → 워크스페이스 홈, 셸 층', () => {
     const html = renderToString(<GlobalBar {...base} scope="workspace" crumbs={{ scope: 'workspace', workspace: { name: 'Acme', href: '/w/acme' }, project: null, screen: '회의록' }} />)
@@ -54,6 +56,29 @@ describe('GlobalBar(★10, D28)', () => {
     expect(ws.match(/data-scope-button[\s\S]*?<\/button>/)?.[0]).toContain('Acme')
     const none = renderToString(<GlobalBar {...base} scope="global" crumbs={{ scope: 'global', workspace: null, project: null, screen: null }} />)
     expect(none).not.toContain('data-scope-button')
+  })
+  it('640 미만 찾기 진입점 — 워크스페이스가 있으면 아이콘 버튼(sm:hidden·접근 이름·누르는 영역 44), 글자 상자는 640 이상(hidden sm:flex)', () => {
+    const html = renderToString(<GlobalBar {...base} scope="workspace" crumbs={wsCrumbs} />)
+    const mobile = html.match(/<button[^>]*data-search-mobile[^>]*>/)?.[0] ?? ''
+    expect(mobile).toContain('aria-label="제목 검색"')
+    const cls = mobile.match(/class="([^"]*)"/)?.[1].split(/\s+/) ?? []
+    expect(cls).toContain('sm:hidden'); expect(cls).toContain(TOUCH)
+    // 한 요소에 hidden 과 sm:hidden, 컨테이너 쿼리 display 를 섞지 않는다(반응형 안전망)
+    expect(cls).not.toContain('hidden'); expect(cls.filter((c) => c.startsWith('@['))).toEqual([])
+    expect(html).toMatch(/data-slot="search" class="hidden sm:flex items-center"/)
+  })
+  it('워크스페이스가 확정되지 않은 셸에는 찾기가 없다 — 글자 상자·아이콘 버튼·대화상자 모두(눌러도 범위 거부만 뜨던 자리)', () => {
+    const { workspaceId: _omit, ...noWs } = base
+    void _omit
+    const html = renderToString(<GlobalBar {...noWs} scope="global" crumbs={{ scope: 'global', workspace: null, project: null, screen: null }} />)
+    expect(html).not.toContain('data-search-mobile'); expect(html).not.toContain('data-slot="search"'); expect(html).not.toContain('전역 검색')
+    const withWs = renderToString(<GlobalBar {...base} scope="global" crumbs={{ scope: 'global', workspace: { name: 'Acme', href: '/w/acme' }, project: null, screen: null }} />)
+    expect(withWs).toContain('data-search-mobile'); expect(withWs).toContain('data-slot="search"')
+  })
+  it('햄버거 — 보이는 크기는 그대로(p-2·18px), 누르는 영역 44(개정 §5.10.2)', () => {
+    const html = renderToString(<GlobalBar {...base} scope="workspace" crumbs={wsCrumbs} />)
+    const cls = html.match(/<button[^>]*data-drawer-trigger[^>]*class="([^"]*)"/)?.[1].split(/\s+/) ?? []
+    expect(cls).toEqual(expect.arrayContaining(['p-2', 'lg:hidden', 'relative', 'before:absolute', TOUCH]))
   })
   it('워크스페이스 전환기(D4)를 받으면 브레드크럼의 워크스페이스 자리에 둔다(링크 대신)', () => {
     const html = renderToString(<GlobalBar {...base} scope="workspace" workspaceSwitcher={<span data-ws-switcher-slot>Acme▾</span>} crumbs={{ scope: 'workspace', workspace: { name: 'Acme', href: '/w/acme' }, project: null, screen: null }} />)

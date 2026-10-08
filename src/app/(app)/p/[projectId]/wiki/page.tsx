@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { listProjectsWithState } from '@/app/actions/project'
 import { getActorViewState } from '@/lib/authz'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { WikiSearch } from '@/components/wiki/WikiSearch'
 import { WikiReindexButton } from '@/components/wiki/WikiReindexButton'
 import { t } from '@/lib/i18n/dict'
@@ -61,7 +61,7 @@ export default async function ProjectWikiPage({
       projectId={projectId}
       locale={locale}
       initialQuery={initialQuery}
-      pageHero={<PageHero title={`${projectName}${t(locale, 'wiki.heroTitleSuffix')}`} />}
+      pageHero={<PageHeader title={`${projectName}${t(locale, 'wiki.heroTitleSuffix')}`} />}
       adminSlot={isSuperuser ? <WikiReindexButton locale={locale} /> : undefined}
     />
   )

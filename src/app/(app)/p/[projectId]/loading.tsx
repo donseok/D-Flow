@@ -15,9 +15,8 @@ import { Skeleton } from '@/components/ui/Skeleton'
 export default function Loading() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-5" role="status" aria-label="화면을 불러오는 중">
-      {/* PageHero 는 제목 한 줄짜리 컴팩트 히어로(px-6 py-4 + text-lg/leading-tight) — 그 높이에 맞춰
-          로드 완료 시 세로 시프트가 없게 한다. 형제 스켈레톤의 h-[240px] 는 히어로 개편 전 값이다. */}
-      <Skeleton className="h-[54px] shrink-0 rounded-3xl" />
+      {/* 페이지 머리(PageHeader — 64, 컴팩트 48) 자리 — 그 높이에 맞춰 로드 완료 시 세로 시프트가 없게 한다 */}
+      <Skeleton className="h-16 shrink-0 rounded-3xl [@media(max-width:1279px),(max-height:799px)]:h-12" />
       <div className="min-h-0 flex-1 space-y-4">
         {/* 툴바 행 — 뷰 전환·주차 이동·필터 등 화면마다 내용은 달라도 위치는 공통 */}
         <div className="flex items-center justify-between gap-3">

@@ -1,17 +1,24 @@
 'use client'
 
-import type { CSSProperties, ReactNode } from 'react'
-import { Save, X } from 'lucide-react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
+import { FolderOpen, Inbox, ListChecks, Plus, Save, X } from 'lucide-react'
 import type { AccentDerivation, AccentSet } from '@/lib/settings/accent'
 import { StatusMessage, STATUS_KINDS, type StatusKind } from '@/components/ui/StatusMessage'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { Button } from '@/components/ui/Button'
 import { IconButton } from '@/components/ui/IconButton'
 import { Field } from '@/components/ui/Field'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { KpiCard } from '@/components/ui/KpiCard'
+import { SectionCard } from '@/components/ui/SectionCard'
+import { Modal, ModalCloseButton } from '@/components/ui/Modal'
+import { ConflictResolver } from '@/components/ui/ConflictResolver'
+import { PageHeader } from '@/components/app/PageHeader'
 
 /**
  * 컴포넌트 상태 쇼케이스(SP3b 스펙 §4.6, 개정 §5.7.3) — 라이트·다크 두 열. 다크 열 컨테이너는 .dark + data-theme-scope 라
  * 유틸이 컨테이너의 재정의를 먹는다. 옛 토큰 이름을 쓰는 컴포넌트는 넣지 않는다(옛 이름의 var() 는 :root 값을 상속한다 — 계획 판정 Q12).
+ * 겹쳐 뜨는 것(모달·충돌 비교)은 body 로 나가 열 안에 가둘 수 없다 — 열 밖 '겹침' 구역의 버튼으로 실제 테마에서 연다.
  * 포커스는 정적으로 그릴 수 없어 전역 :focus-visible 과 같은 값의 외곽선으로 흉내 낸다(진짜 포커스는 Tab 눈확인).
  */
 export type AccentSample = { name: string; hex: string; result: AccentDerivation }
@@ -88,6 +95,52 @@ function Panel({ theme, samples }: { theme: 'light' | 'dark'; samples: AccentSam
         </div>
       </Section>
 
+      <Section title="페이지 머리(개정 §5.4.4) — 일반 64~80 · 컴팩트 48">
+        <div className="space-y-2">
+          <div data-sample="page-header" className="rounded-(--radius-control) border border-dashed border-border px-3">
+            <PageHeader preview="default" title="작업 계획" description="설명 한 줄 — 컴팩트에서 가장 먼저 접힌다" meta="기준일 2026-09-01 · 주 시작 일요일"
+              secondaryActions={[<Button key="export" variant="secondary">내보내기</Button>]}
+              primaryAction={<Button variant="primary" icon={<Plus className="h-4 w-4" aria-hidden />}>작업 추가</Button>} />
+          </div>
+          <div data-sample="page-header-compact" className="rounded-(--radius-control) border border-dashed border-border px-3">
+            <PageHeader preview="compact" title="작업 계획" description="설명 한 줄 — 컴팩트에서 가장 먼저 접힌다" meta="기준일 2026-09-01 · 주 시작 일요일"
+              primaryAction={<Button variant="primary" icon={<Plus className="h-4 w-4" aria-hidden />}>작업 추가</Button>} />
+          </div>
+        </div>
+      </Section>
+
+      <Section title="아이콘 버튼 — 보이는 크기 그대로, 누르는 영역 44px">
+        <div className="flex flex-wrap items-center gap-4">
+          <IconButton data-sample="icon-button" icon={<X className="h-4 w-4" aria-hidden />} aria-label="닫기" variant="ghost" />
+          <IconButton icon={<X className="h-4 w-4" aria-hidden />} aria-label="닫기(테두리)" variant="secondary" />
+          <IconButton icon={<X className="h-4 w-4" aria-hidden />} aria-label="닫기(비활성)" variant="ghost" disabled />
+          <IconButton icon={<X className="h-4 w-4" aria-hidden />} aria-label="닫기(처리 중)" variant="ghost" busy />
+          <IconButton icon={<X className="h-4 w-4" aria-hidden />} aria-label="닫기(포커스)" variant="ghost" className={FOCUS_RING} />
+          <span data-sample="modal-close" className="inline-flex items-center gap-2 text-meta text-fg-secondary"><ModalCloseButton label="모달 닫기" />모달 닫기(32)</span>
+        </div>
+      </Section>
+
+      <Section title="카드 — KPI·구역·빈 상태">
+        <div className="space-y-3">
+          <div data-sample="kpi-cards" className="grid gap-3 sm:grid-cols-2">
+            <KpiCard label="전체" value={128} sub="이번 주 +4" icon={ListChecks} />
+            <KpiCard label="진행" value={42} sub="담당 12명" icon={ListChecks} tone="brand" />
+            <KpiCard label="완료" value={71} icon={ListChecks} tone="success" />
+            <KpiCard label="지연" value={15} sub="확인 필요" icon={ListChecks} tone="danger" />
+            <KpiCard label="모름(조회 실패)" value="—" sub="0 으로 보이지 않는다" tone="warning" />
+          </div>
+          <div data-sample="section-card">
+            <SectionCard eyebrow="일반" title="이름과 메일" icon={FolderOpen} actions={<Button variant="secondary">편집</Button>}>
+              <p className="text-body text-fg-secondary">구역 카드의 본문 자리입니다.</p>
+            </SectionCard>
+          </div>
+          <div data-sample="empty-state">
+            <EmptyState icon={Inbox} title="아직 항목이 없습니다" description="첫 항목을 만들면 여기에 보입니다."
+              action={<Button variant="primary">항목 만들기</Button>} />
+          </div>
+        </div>
+      </Section>
+
       <Section title="입력">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="이름">{(p) => <input {...p} defaultValue="" placeholder="예: 설계 검토" />}</Field>
@@ -141,11 +194,40 @@ function Panel({ theme, samples }: { theme: 'light' | 'dark'; samples: AccentSam
   )
 }
 
+const CONFLICT_FIELDS = [
+  { key: 'name', label: '작업 이름', mine: '설계 검토(2차)', latest: '설계 검토 — 보완', base: '설계 검토' },
+  { key: 'end', label: '종료일', mine: '2026-09-12', latest: '2026-09-10', base: '2026-09-10' },
+  { key: 'note', label: '비고', mine: '', latest: '외주 일정 확인 필요' },
+] as const
+
+/** 겹쳐 뜨는 표본 — body 로 나가므로 지금 화면의 테마로 뜬다(다크는 테마를 바꿔서 본다) */
+function Overlays() {
+  const [open, setOpen] = useState<'modal' | 'conflict' | null>(null)
+  const close = () => setOpen(null)
+  return (
+    <section data-showcase-overlays className="space-y-2 rounded-(--radius-panel) border border-border bg-canvas p-4">
+      <h2 className="text-section text-fg">겹침 — 모달·충돌 비교(지금 테마로 열린다)</h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button data-sample="open-modal" variant="secondary" onClick={() => setOpen('modal')}>모달 열기</Button>
+        <Button data-sample="open-conflict" variant="secondary" onClick={() => setOpen('conflict')}>충돌 비교 열기</Button>
+      </div>
+      <Modal open={open === 'modal'} onClose={close} eyebrow="표본" title="모달 — 닫기 버튼의 누르는 영역 44px"
+        footer={<><Button variant="secondary" onClick={close}>취소</Button><Button variant="primary" onClick={close}>확인</Button></>}>
+        <p className="text-body text-fg-secondary">오른쪽 위 닫기는 보이는 크기 32px, 누르는 영역 44px 입니다. Esc·바깥 누름으로도 닫힙니다.</p>
+      </Modal>
+      <ConflictResolver open={open === 'conflict'} target="P.1.2 설계 검토" fields={CONFLICT_FIELDS} onKeepMine={close} onTakeLatest={close} onContinue={close} />
+    </section>
+  )
+}
+
 export function UiStatesShowcase({ samples }: { samples: AccentSample[] }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <Panel theme="light" samples={samples} />
-      <Panel theme="dark" samples={samples} />
+    <div className="space-y-4">
+      <Overlays />
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Panel theme="light" samples={samples} />
+        <Panel theme="dark" samples={samples} />
+      </div>
     </div>
   )
 }

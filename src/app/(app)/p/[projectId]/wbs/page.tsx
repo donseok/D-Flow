@@ -12,7 +12,7 @@ import { isProjectAdmin, toProjectActorView } from '@/lib/domain/authz'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { getWbsCollapse, getAccountPrefs } from '@/app/actions/preferences'
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
@@ -61,7 +61,7 @@ export default async function WbsPage({
   const project = (projects as ProjectRow[]).find(p => p.id === projectId)
   // 프레즌스 신원 — 주간 시트와 동일하게 서버 세션에서 전달
   const me = user ? { id: user.id, name: displayNameFrom(user.user_metadata, user.email) ?? '사용자' } : null
-  const hero = <PageHero title={t(locale, 'nav.wbsGantt')} />
+  const hero = <PageHeader title={t(locale, 'nav.wbsGantt')} />
   // 설정을 못 읽거나 단계 이름이 손상이면 간트를 기본값으로 그리지 않는다(스펙 §3.5) — 트리 깊이·라벨이 틀린 채 편집하게 된다.
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
   const labels = pick(pc.cfg, 'core.level_labels')
@@ -88,9 +88,9 @@ export default async function WbsPage({
   if (!gate.ok) console.error(`[wbs] 선행 기준 손상(project=${projectId}) — final 로 판정한다`)
   const approvedItemIds = (await moduleState({ projectId }, 'agents')) === 'on' ? await getApprovedItemIds(projectId) : []
 
-  // R5: 기존 PageHero·ProjectPageShell을 유지하고 화면 소유의 주 동작만 곁에 배치한다.
-  const header = <div className="flex items-center bg-surface"><div className="min-w-0 flex-1">{hero}</div>
-    {decided.view !== 'board' && admin && <div className="shrink-0 pr-6"><WbsAddButton /></div>}
+  // R5: 기존 머리(PageHeader)·ProjectPageShell을 유지하고 화면 소유의 주 동작만 곁에 배치한다.
+  const header = <div className="flex items-center"><div className="min-w-0 flex-1">{hero}</div>
+    {decided.view !== 'board' && admin && <div className="shrink-0"><WbsAddButton /></div>}
   </div>
   const pinned = (
     <div className="flex flex-col gap-2 pb-2">

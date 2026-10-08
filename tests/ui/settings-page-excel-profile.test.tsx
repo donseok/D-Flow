@@ -36,7 +36,6 @@ vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw new Error('NEX
 vi.mock('next/link', () => ({ default: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/ui/SectionCard', () => ({ SectionCard: ({ children }: { children: ReactNode }) => children }))
-vi.mock('@/components/ui/PageHero', () => ({ PageHero: () => null, HeroBadge: () => null }))
 vi.mock('@/components/ui/KpiCard', () => ({ KpiCard: () => null }))
 vi.mock('@/components/settings/ProjectTeamsManager', () => ({ ProjectTeamsManager: () => null }))
 vi.mock('@/components/settings/ProjectAreasManager', () => ({ ProjectAreasManager: () => null }))

@@ -3,7 +3,7 @@ import { listProjects } from '@/app/actions/project'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin } from '@/lib/domain/authz'
 import { createServerClient } from '@/lib/supabase/server'
-import { PageHero, HeroBadge } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ImportModes } from '@/components/import/ImportModes'
@@ -62,14 +62,7 @@ export default async function ImportWizardPage({ params, searchParams }: {
 
   return (
     <ProjectPageShell
-      hero={
-        <PageHero
-          eyebrow="IMPORT"
-          badge={<HeroBadge>{t(locale, 'importWizard.badge')}</HeroBadge>}
-          title={`${projectName} ${t(locale, 'importWizard.heroTitleSuffix')}`}
-          description={t(locale, 'importWizard.heroDesc')}
-        />
-      }
+      hero={<PageHeader title={`${projectName} ${t(locale, 'importWizard.heroTitleSuffix')}`} description={t(locale, 'importWizard.heroDesc')} />}
     >
       {isAdmin ? (
         <div className="space-y-5">

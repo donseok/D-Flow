@@ -2,7 +2,7 @@ import { after } from 'next/server'
 import { redirect } from 'next/navigation'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canViewUsage } from '@/lib/authz/usageAccess'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { UsageScopeChip } from '@/components/usage/UsageScopeChip'
 import { PeriodTabs } from '@/components/usage/PeriodTabs'
 import { UsageSummary } from '@/components/usage/UsageSummary'
@@ -86,7 +86,7 @@ export default async function UsagePage({ params, searchParams }: {
 
   return (
     <div className="space-y-6">
-      <PageHero eyebrow="OPERATIONS" title="사용 현황" />
+      <PageHeader title="사용 현황" />
       <UsageScopeChip workspaceName={scope.ws.name} />
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-fg-secondary">

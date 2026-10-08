@@ -1,14 +1,11 @@
-import { CalendarCheck, CalendarOff, PlaneTakeoff } from 'lucide-react'
 import { getAttendanceRecords } from '@/lib/data/attendance'
 import { getProjectRoster } from '@/lib/data/members'
 import { getActorForView } from '@/lib/authz'
 import { isProjectMember } from '@/lib/domain/authz'
 import { calendarViewOf, holidayNamesOf } from '@/lib/domain/attendance'
-import { summarizeAttendance } from '@/lib/settings/vocab'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
-import { PageHero, HeroBadge } from '@/components/ui/PageHero'
-import { KpiCard } from '@/components/ui/KpiCard'
+import { PageHeader } from '@/components/app/PageHeader'
 import { AttendanceView } from '@/components/attendance/AttendanceView'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
@@ -38,24 +35,11 @@ export default async function AttendancePage({ params }: { params: Promise<{ pro
   const types = pick(pc.cfg, 'attendance.types')
   if (!types.ok) return <div className="p-6"><ConfigLoadError error={types.error} keyName={types.key} kind={types.kind} locale={locale} /></div>
   const today = todayIn(cal.calendar.timezone, new Date())
-  const s = summarizeAttendance(types.value, records)
 
   return (
     <ProjectPageShell
       pinned={roster.ok ? undefined : <RosterLoadError error={roster.error} />}
-      hero={<PageHero
-        eyebrow="ATTENDANCE"
-        badge={<HeroBadge>Attendance</HeroBadge>}
-        title={t(locale, 'att.title')}
-        description={t(locale, 'att.desc')}
-        heroKpis={
-          <>
-            <KpiCard variant="hero" label="TOTAL RECORDS" value={s.total} sub={t(locale, 'att.kpi.totalSub')} icon={CalendarCheck} />
-            <KpiCard variant="hero" label="LEAVE DAYS" value={s.leave} sub={t(locale, 'att.kpi.leaveSub')} icon={CalendarOff} tone="brand" />
-            <KpiCard variant="hero" label="BUSINESS TRIP" value={s.trip} sub={t(locale, 'att.kpi.tripSub')} icon={PlaneTakeoff} tone="warning" />
-          </>
-        }
-      />}
+      hero={<PageHeader title={t(locale, 'att.title')} description={t(locale, 'att.desc')} />}
     >
       <AttendanceView
         projectId={projectId}

@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { CheckCircle2, AlertTriangle, Info, X, type LucideIcon } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { TOUCH_TARGET } from './touchTarget'
 
 type ToastVariant = 'success' | 'error' | 'info'
 
@@ -114,7 +115,7 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
       </div>
       <button
         onClick={onDismiss}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted transition hover:bg-surface-subtle hover:text-fg"
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted transition hover:bg-surface-subtle hover:text-fg ${TOUCH_TARGET}`}
         aria-label={t('ui.toastDismiss')}
       >
         <X className="h-4 w-4" />

@@ -18,7 +18,7 @@ import { isHiddenProject, isProjectAdmin } from '@/lib/domain/authz'
 import { createServerClient } from '@/lib/supabase/server'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { DashboardView } from '@/components/dashboard/DashboardView'
 import { WbsRealtimeRefresh } from '@/components/wbs/WbsRealtimeRefresh'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
@@ -75,7 +75,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   const projectName = project?.name ?? t(locale, 'dash.heroProjectFallback')
   // 관리자 이상 — 회의 상세의 남의 회의 수정·취소와 AI 브리핑 생성이 같은 판정을 쓴다.
   const canManage = isProjectAdmin(membership, projectId)
-  const hero = <PageHero title={`${projectName}${t(locale, 'dash.heroTitleSuffix')}`} />
+  const hero = <PageHeader title={`${projectName}${t(locale, 'dash.heroTitleSuffix')}`} />
 
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
   // 대시보드는 core.level_labels 를 쓰지 않는다. 키워드가 손상이면 마일스톤만 비우고 그 사실을 위에 보인다 — 다른 카드는 그린다.

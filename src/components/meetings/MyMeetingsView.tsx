@@ -130,7 +130,7 @@ export function MyMeetingsView({
   }, [workspaceId, gridStart, gridEnd, reloadKey])
 
   // 서버 조회는 실패했는데 클라이언트 조회가 성공했으면 서버 렌더를 한 번 다시 읽힌다. 화면을 바꾸려는 것이 아니다 —
-  // 이 뷰는 initial* 를 첫 상태로만 쓰고, 히어로 KPI('—')는 PageHero 가 heroKpis 를 그리지 않아 화면에 없다.
+  // 이 뷰는 initial* 를 첫 상태로만 쓰고, 페이지 머리에는 조회 결과에서 나오는 값이 없다.
   // 목적은 라우터 캐시다: 실패한 서버 결과(initialFailed·빈 목록)가 30초(next.config 의 staleTimes.dynamic) 동안
   // 재방문·뒤로가기에 다시 쓰여, 이미 회복된 화면이 경고로 다시 뜨는 것을 막는다.
   // data.failed 는 조회가 끝났을 때만 바뀐다 — 읽는 중(stale)을 성공으로 치지 않는다.

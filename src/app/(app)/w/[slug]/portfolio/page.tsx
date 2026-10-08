@@ -6,7 +6,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { getPortfolioInputs } from '@/lib/data/portfolio'
 import { buildPortfolio } from '@/lib/domain/portfolio'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { PortfolioKpis } from '@/components/portfolio/PortfolioKpis'
 import { PortfolioTable } from '@/components/portfolio/PortfolioTable'
 import { PortfolioMilestoneBoard } from '@/components/portfolio/PortfolioMilestoneBoard'
@@ -49,7 +49,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
 
   return (
     <div className="space-y-6 pb-10">
-      <PageHero title={t(locale, 'pf.title')} />
+      <PageHeader title={t(locale, 'pf.title')} />
       {listDegraded && (
         <div className="rounded-xl border border-danger/40 bg-danger-weak px-4 py-3 text-xs font-medium text-danger">
           {t(locale, 'pf.listDegraded')}

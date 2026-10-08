@@ -40,7 +40,6 @@ vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ child
 vi.mock('@/components/ui/SectionCard', () => ({
   SectionCard: ({ children, actions }: { children: ReactNode; actions?: ReactNode }) => <>{actions}{children}</>,
 }))
-vi.mock('@/components/ui/PageHero', () => ({ PageHero: () => null, HeroBadge: () => null }))
 vi.mock('@/components/ui/KpiCard', () => ({ KpiCard: () => null }))
 vi.mock('@/components/settings/ProjectTeamsManager', () => ({ ProjectTeamsManager: mocks.ProjectTeamsManager }))
 vi.mock('@/components/settings/ProjectAreasManager', () => ({ ProjectAreasManager: mocks.ProjectAreasManager }))

@@ -4,7 +4,7 @@ import { getActorForView } from '@/lib/authz'
 import { canManageLlmConfig } from '@/lib/authz/llmConfigAccess'
 import { getLlmConfig } from '@/app/actions/llmConfig'
 import { activeModelInfo } from '@/lib/ai/health'
-import { PageHero, HeroBadge } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { LlmConfigManager } from '@/components/admin/LlmConfigManager'
 
 export const dynamic = 'force-dynamic' // 설정·프로필은 항상 최신 DB 값을 읽는다
@@ -20,12 +20,7 @@ export default async function LlmConfigAdminPage() {
 
   return (
     <div className="space-y-6">
-      <PageHero
-        eyebrow="ADMIN"
-        badge={<HeroBadge>LLM</HeroBadge>}
-        title="LLM 설정"
-        description="서버가 사용할 LLM을 프로필로 등록해 두고 재배포 없이 전환합니다."
-      />
+      <PageHeader title="LLM 설정" description="서버가 사용할 LLM을 프로필로 등록해 두고 재배포 없이 전환합니다." />
       {'error' in res ? (
         // 조회 실패를 빈 화면으로 삼키면 '선택 안함'으로 저장된 서버가 env 로 보이는 등
         // 관리자가 잘못된 상태를 사실로 착각한다 — 원인을 그대로 드러낸다.

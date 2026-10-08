@@ -17,9 +17,9 @@ export const DELETED_TOKENS = ['hero-from', 'hero-via', 'hero-to', 'sheet-gutter
   'accent-secondary', 'accent-ink', 'accent-warning', 'done', 'done-weak', 'delayed', 'delayed-weak', 'grid', 'grid-strong', 'sheet-head', 'zebra',
   'hero-ink', 'hero-ink-muted', 'hero-line']
 /** 지운 클래스(globals.css 규칙과 src 의 사용 모두 0) — 과제 8·9·14 가 더한다 */
-export const DELETED_CLASSES = ['app-backdrop', 'kpi-tile', 'btn-accent', 'login-float-1', 'login-float-2', 'login-float-3', 'login-float-4']
+export const DELETED_CLASSES = ['app-backdrop', 'kpi-tile', 'btn-accent', 'login-float-1', 'login-float-2', 'login-float-3', 'login-float-4', 'chrome-btn']
 /** 지운 비색 변수(선언과 var() 사용 모두 0) — 과제 8·9·13 이 더한다 */
-export const DELETED_VARS = ['--gradient-secondary', '--gradient-surface', '--shadow-glow', '--ring-soft', '--gradient-accent', '--color-accent-fg', '--gradient-dark']
+export const DELETED_VARS = ['--gradient-secondary', '--gradient-surface', '--shadow-glow', '--ring-soft', '--gradient-accent', '--color-accent-fg', '--gradient-dark', '--gradient-primary']
 const UTIL = '(?:bg|text|border(?:-[xytblrse])?|ring(?:-offset)?|outline|from|via|to|fill|stroke|divide|decoration|placeholder|shadow|accent|caret)'
 
 describe('별칭 표(@theme inline)', () => {

@@ -104,6 +104,21 @@ describe('AppShell', () => {
     expect(last(h.wsNav).pathname).toBe('')
     expect(last(h.globalBar).crumbs.screen).toBeNull()
   })
+  it('⑤ global 의 플랫폼 운영 두 화면 — 사이드바·드로어가 그 항목을 고르고 브레드크럼에 화면 이름이 선다', () => {
+    const platform: NavGroup[] = [...wsGroups, { group: 'ws.platform', items: [
+      { id: 'ws.llm', href: '/admin/llm-config', label: { key: 'nav.llm' as never }, icon: 'Cpu' },
+      { id: 'ws.ui_states', href: '/admin/ui-states', label: { key: 'nav.uiStates' as never }, icon: 'SwatchBook' }] }]
+    for (const [path, key] of [['/admin/llm-config', 'nav.llm'], ['/admin/ui-states', 'nav.uiStates']] as const) {
+      h.pathname = path
+      shell(base({ scope: 'global', groups: platform }))
+      expect(last(h.wsNav).pathname).toBe(path)
+      expect(last(h.drawer).pathname).toBe(path)
+      expect(last(h.globalBar).crumbs.screen).toBe(`t:${key}`)
+    }
+    h.pathname = '/account'
+    shell(base({ scope: 'global', groups: platform }))
+    expect(last(h.wsNav).pathname).toBe(''); expect(last(h.drawer).pathname).toBe(''); expect(last(h.globalBar).crumbs.screen).toBeNull()
+  })
   it('최소 셸(워크스페이스 모름) — 내비 없음, 홈은 리졸버(/), 브레드크럼 워크스페이스 없음', () => {
     h.pathname = `/p/${P1}/wbs`
     shell(base({ scope: 'project', groups: [], workspace: { id: '', slug: '', name: '' }, project: { id: P1, name: '' }, projects: [], favoriteIds: [], recentIds: [], degraded: true }))

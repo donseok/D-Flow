@@ -7,7 +7,7 @@ import { srcFiles } from './lib/cssTokens'
 
 const read = (f: string) => readFileSync(join(process.cwd(), f), 'utf8')
 const FILES = [
-  'src/components/ui/PageHero.tsx', 'src/components/home/NewProjectModal.tsx', 'src/components/agent-hub/AgentFrame.tsx',
+  'src/components/app/PageHeader.tsx', 'src/components/home/NewProjectModal.tsx', 'src/components/agent-hub/AgentFrame.tsx',
   'src/components/agent-hub/AgentTabs.tsx', 'src/components/wiki/WikiSearch.tsx', 'src/components/wiki/WikiReindexButton.tsx',
   'src/components/chat/AssistantChat.tsx', 'src/app/not-found.tsx',
   'src/components/agent-hub/AgentHubView.tsx', 'src/components/report/ReportButton.tsx', 'src/components/ui/BrandMark.tsx',

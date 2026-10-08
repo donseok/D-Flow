@@ -16,7 +16,7 @@ vi.mock('@/lib/workspace/resolve', () => ({ workspaceRefById: h.workspaceRefById
 // 시각의 tz = 프로젝트 달력(SP5) — 이 파일은 tz 를 보지 않는다
 vi.mock('@/lib/settings/pageConfig', async () => ({ loadProjectConfigForPage: vi.fn(async () => ({ ok: true, cfg: (await import('../helpers/calendarFixture')).CAL_FIELDS_UTC_SUN })) }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
-vi.mock('@/components/ui/PageHero', () => ({ PageHero: () => null }))
+vi.mock('@/components/app/PageHeader', () => ({ PageHeader: () => null }))
 vi.mock('@/components/wiki/WikiTopicDetail', () => ({ WikiTopicDetail: (p: unknown) => { h.detailProps(p); return null } }))
 
 import WikiTopicPage from '@/app/(app)/p/[projectId]/wiki/topics/[topicId]/page'

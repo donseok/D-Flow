@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { getActorForView } from '@/lib/authz'
 import { canViewUiStates } from '@/lib/authz/uiStatesAccess'
 import { deriveAccent } from '@/lib/settings/accent'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { UiStatesShowcase, type AccentSample } from '@/components/admin/UiStatesShowcase'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +23,7 @@ export default async function UiStatesPage() {
   const samples: AccentSample[] = ACCENT_SAMPLES.map(([name, hex]) => ({ name, hex, result: deriveAccent(hex) }))
   return (
     <div className="space-y-6">
-      <PageHero title="컴포넌트 상태 점검" />
+      <PageHeader title="컴포넌트 상태 점검" />
       <UiStatesShowcase samples={samples} />
     </div>
   )

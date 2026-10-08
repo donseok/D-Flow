@@ -13,11 +13,6 @@ vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('next/navigation', () => ({ redirect: h.redirect, notFound: h.notFound }))
 vi.mock('@/components/admin/AccountsManager', () => ({ AccountsManager: (p: unknown) => { h.managerProps(p); return null } }))
 vi.mock('@/components/admin/TeamsManager', () => ({ TeamsManager: () => null }))
-// PageHero 는 설명·KPI 를 클라이언트에서 펼친다 — 넘긴 값을 그대로 그려 단언이 공허하지 않게
-vi.mock('@/components/ui/PageHero', () => ({
-  PageHero: (p: { description?: React.ReactNode; heroKpis?: React.ReactNode }) => <div data-hero>{p.description}{p.heroKpis}</div>,
-  HeroBadge: () => null,
-}))
 
 import AccountsPage from '@/app/(app)/w/[slug]/admin/accounts/page'
 import TeamsPage from '@/app/(app)/w/[slug]/admin/teams/page'

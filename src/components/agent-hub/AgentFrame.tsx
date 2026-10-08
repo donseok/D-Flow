@@ -3,12 +3,12 @@
 // 탭과 화면마다 다른 조작부(tools)는 머리 아래 고정 도구 줄 한 곳에 둔다(2026-09-18 사용자 결정, D18 — 과제 32 에서 탭이 머리에서 내려왔다).
 //
 // 탭과 조작부는 화면의 유일한 조작 수단이라 늘 pinned(PageFrame 의 고정 도구 줄) 한 곳에 둔다 — 머리와 도구 줄에 탭이 두 번
-// 나오지 않는다(D18 예외). 컴팩트에선 큰 다크 띠(AgentHero) 대신 PageHero 제목만 그린다 — 모든 뷰포트에 h1 하나(조건부 렌더).
+// 나오지 않는다(D18 예외). 컴팩트에선 큰 다크 띠(AgentHero) 대신 PageHeader 제목만 그린다 — 모든 뷰포트에 h1 하나(조건부 렌더).
 // 분기는 useCompactViewport 로만 한다(반응형 display 유틸 금지 — globals.css 안전망). 첫 렌더는 데스크톱이라(D55) 컴팩트 기기의
 // 첫 페인트에 AgentHero 가 잠깐 그려진다 — 스펙 D18 이 받아들인 예외다.
 import type { ReactNode } from 'react'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
-import { PageHero } from '@/components/ui/PageHero'
+import { PageHeader } from '@/components/app/PageHeader'
 import { useCompactViewport } from '@/lib/hooks/useCompactViewport'
 import { AgentTabs, type TabTone } from './AgentTabs'
 
@@ -63,11 +63,11 @@ export function AgentFrame({ projectId, nav, projectName, title, lede, tiles, to
 }) {
   const compact = useCompactViewport()
   const navFor: HeroNav = nav ?? (tone => projectId === undefined ? null : <AgentTabs projectId={projectId} tone={tone} />)
-  // 탭은 pinned 한 곳에만 — 컴팩트에서 AgentHero 대신 PageHero 제목만(타일·막대는 조건부 렌더). 머리와 도구 줄에 탭이 두 번 나오지 않는다
+  // 탭은 pinned 한 곳에만 — 컴팩트에서 AgentHero 대신 PageHeader 제목만(타일·막대는 조건부 렌더). 머리와 도구 줄에 탭이 두 번 나오지 않는다
   const tabs = navFor('light')
   const pinned = tabs || tools ? <div data-agent-tools className="flex flex-wrap items-center gap-x-3 gap-y-2">{tabs}{tools}</div> : undefined
   return (
-    <ProjectPageShell hero={compact ? <PageHero title={title} /> : <AgentHero nav={null} projectName={projectName} title={title} lede={lede} tiles={tiles} />} pinned={pinned}>
+    <ProjectPageShell hero={compact ? <PageHeader title={title} /> : <AgentHero nav={null} projectName={projectName} title={title} lede={lede} tiles={tiles} />} pinned={pinned}>
       {children}
     </ProjectPageShell>
   )
