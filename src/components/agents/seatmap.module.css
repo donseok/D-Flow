@@ -53,9 +53,9 @@
 .floor { background: var(--sm-surface); border: 1px solid var(--sm-line-2); border-radius: 14px; padding: 14px 14px 16px; box-shadow: var(--sm-shadow); }
 .floorHead { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: start; margin-bottom: 12px; }
 .floorHead h2 { margin: 0; font-weight: 800; font-size: 19px; letter-spacing: -.01em; }
-.floorHead h2 small { font-weight: 500; font-size: 11px; color: var(--sm-ink-3); margin-left: 6px; }
+.floorHead h2 small { font-weight: 500; font-size: 12px; color: var(--sm-ink-3); margin-left: 6px; }
 .floorTools { grid-column: 1; grid-row: 2; display: flex; gap: 10px; }
-.watch { grid-column: 2; grid-row: 1 / 3; font-size: 11px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--sm-line); color: var(--sm-ink-3); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.watch { grid-column: 2; grid-row: 1 / 3; font-size: 12px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--sm-line); color: var(--sm-ink-3); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
 .watch::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #B7BFBA; }
 .watchOn { background: var(--sm-standby-soft); border-color: transparent; color: var(--sm-standby); }
 .watchOn::before { background: var(--sm-standby); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sm-standby) 25%, transparent); }
@@ -72,12 +72,12 @@
 .zoneHead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
 .zoneCode { font-family: ui-monospace, Menlo, monospace; font-weight: 600; font-size: 12px; color: var(--sm-ink-2); }
 .zoneName { font-weight: 600; font-size: 13px; }
-.zoneSum { margin-left: auto; font-size: 11px; color: var(--sm-ink-3); font-variant-numeric: tabular-nums; }
-.zoneFold { font: inherit; font-size: 11px; color: var(--sm-ink-3); background: none; border: 0; padding: 0 2px; cursor: pointer; text-decoration: underline dotted; }
+.zoneSum { margin-left: auto; font-size: 12px; color: var(--sm-ink-3); font-variant-numeric: tabular-nums; }
+.zoneFold { font: inherit; font-size: 12px; color: var(--sm-ink-3); background: none; border: 0; padding: 0 2px; cursor: pointer; text-decoration: underline dotted; }
 .zoneFold:hover { color: var(--sm-ink-2); }
 /* 접힌 구역: 아이콘 한 개 + 숫자. data-kind 로 진행 중(work) / 승인 대기(wait) / 빈 구역(empty) 을 구분한다. */
 .zoneIcons { display: flex; flex-wrap: wrap; gap: 6px; }
-.zoneIcon { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px 3px 5px; border-radius: 8px; border: 1px dashed var(--sm-line-2); background: transparent; color: var(--sm-ink-3); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; font-variant-numeric: tabular-nums; }
+.zoneIcon { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px 3px 5px; border-radius: 8px; border: 1px dashed var(--sm-line-2); background: transparent; color: var(--sm-ink-3); font: inherit; font-size: 12px; line-height: 1; cursor: pointer; font-variant-numeric: tabular-nums; }
 .zoneIcon svg { width: 14px; height: 14px; }
 .zoneIcon b { font-weight: 600; }
 .zoneIcon::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--sm-line-2); }
@@ -115,11 +115,11 @@
 .desk { position: relative; display: grid; gap: 3px; border: 1px solid var(--sm-line); border-radius: 9px; padding: 8px 9px 9px; background: var(--sm-empty); color: var(--sm-empty-ink); min-width: 0; }
 .deskId { font-family: ui-monospace, Menlo, monospace; font-weight: 600; font-size: 13px; line-height: 1.1; }
 .deskName { font-weight: 600; font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
-.deskMeta { font-size: 11px; line-height: 1.3; opacity: .82; font-variant-numeric: tabular-nums; }
+.deskMeta { font-size: 12px; line-height: 1.3; opacity: .82; font-variant-numeric: tabular-nums; }
 .bar { display: block; height: 4px; border-radius: 2px; background: rgba(0,0,0,.14); margin-top: 2px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: currentColor; opacity: .8; }
-.flag { position: absolute; top: 5px; right: 5px; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--sm-warn); color: #fff; font-family: ui-monospace, Menlo, monospace; }
-.note { font-size: 11px; line-height: 1.3; margin-top: 2px; padding: 3px 6px; border-radius: 6px; background: rgba(255,255,255,.55); color: var(--sm-ink); text-align: left; }
+.flag { position: absolute; top: 5px; right: 5px; font-size: 12px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--sm-warn); color: #fff; font-family: ui-monospace, Menlo, monospace; }
+.note { font-size: 12px; line-height: 1.3; margin-top: 2px; padding: 3px 6px; border-radius: 6px; background: rgba(255,255,255,.55); color: var(--sm-ink); text-align: left; }
 :global(.dark) .note { background: rgba(0,0,0,.35); }
 
 .desk[data-state="ACTIVE"], .desk[data-state="BLOCKED"] { background: var(--sm-active); color: var(--sm-active-ink); border-color: transparent; }
@@ -165,16 +165,16 @@
   border-radius: 999px; border: 1px solid var(--sm-line); background: transparent; color: var(--sm-ink-3); cursor: pointer; }
 .panelClose:hover { color: var(--sm-ink); border-color: var(--sm-ink-3); }
 .panelClose svg { width: 14px; height: 14px; }
-.eyebrow { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--sm-ink-3); }
+.eyebrow { font-size: 12px; color: var(--sm-ink-3); }
 .panel h3 { margin: 2px 0 0; font-family: ui-monospace, Menlo, monospace; font-weight: 600; font-size: 20px; }
 .task { margin: 2px 0 0; font-weight: 600; font-size: 15px; }
-.pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; margin-top: 8px; background: var(--sm-empty); color: var(--sm-empty-ink); }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; margin-top: 8px; background: var(--sm-empty); color: var(--sm-empty-ink); }
 .pill[data-state="ACTIVE"], .pill[data-state="BLOCKED"] { background: var(--sm-active); color: var(--sm-active-ink); }
 .pill[data-state="STALE"], .pill[data-state="OFFLINE"] { background: var(--sm-warn); color: #fff; }
 .pill[data-state="WAIT"] { background: var(--sm-wait); color: var(--sm-wait-ink); }
 .pill[data-state="REJECTED"] { background: var(--sm-reject-bar); color: #fff; }
 .ladder { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
-.ladder li { font-size: 10px; text-align: center; color: var(--sm-ink-3); }
+.ladder li { font-size: 12px; text-align: center; color: var(--sm-ink-3); }
 .ladder li::before { content: ""; display: block; height: 6px; border-radius: 3px; background: var(--sm-line-2); margin-bottom: 5px; }
 .ladder li[data-done="1"]::before { background: var(--sm-active); }
 .ladder li[data-now="1"]::before { background: var(--sm-ink); }
@@ -227,7 +227,7 @@
 /* 좌석 위 결재 바 */
 .seatOps { display: flex; gap: 4px; margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(0,0,0,.10); }
 :global(.dark) .seatOps { border-top-color: rgba(255,255,255,.14); }
-.opMini { flex: 1; font: inherit; font-size: 10.5px; font-weight: 700; line-height: 1; padding: 5px 6px; border-radius: 5px; border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; background: rgba(255,255,255,.74); color: var(--sm-ink-2); }
+.opMini { flex: 1; font: inherit; font-size: 12px; font-weight: 700; line-height: 1; padding: 5px 6px; border-radius: 5px; border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; background: rgba(255,255,255,.74); color: var(--sm-ink-2); }
 :global(.dark) .opMini { background: rgba(0,0,0,.34); }
 .opMini svg { width: 11px; height: 11px; }
 .opMini:hover { border-color: currentColor; }
@@ -257,13 +257,13 @@
 
 /* 사유 입력 — reject·rework 는 사유가 비면 서버가 거부한다 */
 .noteBox { display: grid; gap: 6px; margin-top: 10px; padding: 9px; border-radius: 8px; background: var(--sm-paper); border: 1px solid var(--sm-reject-bar); }
-.noteBox label { font-size: 11px; color: var(--sm-reject-bar); font-weight: 600; }
+.noteBox label { font-size: 12px; color: var(--sm-reject-bar); font-weight: 600; }
 .noteBox textarea { font: inherit; font-size: 12.5px; resize: vertical; min-height: 52px; border-radius: 6px; border: 1px solid var(--sm-line); background: var(--sm-surface); color: var(--sm-ink); padding: 6px 8px; width: 100%; }
 .noteRow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 /* 중단 확인 — 사유 상자와 같은 자리, 경고색 테두리 */
 .noteBox[data-confirm] { border-color: var(--sm-warn); }
 .confirmText { margin: 0; font-size: 12px; line-height: 1.5; color: var(--sm-ink-2); }
-.noteHint { font-size: 11px; color: var(--sm-ink-3); }
+.noteHint { font-size: 12px; color: var(--sm-ink-3); }
 .opError { margin: 10px 0 0; font-size: 12px; color: var(--sm-warn); font-weight: 600; border-left: 3px solid var(--sm-warn); padding-left: 9px; }
 
 /* 상태 레인 보기 — 처리하는 화면. 결재 대기와 손봐야 할 것이 먼저 온다. */
@@ -282,7 +282,7 @@
 .card .opMini { background: var(--sm-zone); }
 .cardTop { display: flex; gap: 7px; align-items: flex-start; }
 .cardTop .cardText { min-width: 0; display: grid; gap: 1px; }
-.cardZone { font-size: 10px; letter-spacing: .08em; color: var(--sm-ink-3); font-family: ui-monospace, Menlo, monospace; }
+.cardZone { font-size: 12px; color: var(--sm-ink-3); font-family: ui-monospace, Menlo, monospace; }
 .card[data-state="WAIT"] { border-left: 4px solid var(--sm-wait); }
 .card[data-state="REJECTED"] { border-left: 4px solid var(--sm-reject-bar); }
 .card[data-state="STALE"], .card[data-state="OFFLINE"], .card[data-state="BLOCKED"] { border-left: 4px solid var(--sm-warn); }

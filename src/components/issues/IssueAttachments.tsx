@@ -155,7 +155,7 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
   return (
     <section>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-fg-muted">
+        <div className="flex items-center gap-2 text-xs font-semibold text-fg-muted">
           <Paperclip className="h-3.5 w-3.5" /> {t('issue.attach.section')}
         </div>
         {editable && remaining > 0 && !disabled && (
@@ -168,7 +168,7 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
       </div>
 
       {editable && (
-        <p className="mb-2 text-[11px] text-fg-muted">
+        <p className="mb-2 text-meta text-fg-muted">
           {t('issue.attach.limit').replace('{mb}', String(MAX_MB)).replace('{n}', String(ISSUE_ATTACHMENT_MAX_COUNT))}
         </p>
       )}
@@ -195,7 +195,7 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
               >
                 {a.fileName}
               </button>
-              {a.size != null && <span className="shrink-0 text-[11px] tabular-nums text-fg-muted">{fmtSize(a.size)}</span>}
+              {a.size != null && <span className="shrink-0 text-meta tabular-nums text-fg-muted">{fmtSize(a.size)}</span>}
               {editable && (
                 <button
                   type="button"
@@ -217,7 +217,7 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
             >
               <FileText className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
               <span className="min-w-0 flex-1 truncate text-[13px] text-fg" title={f.name}>{f.name}</span>
-              <span className="shrink-0 text-[11px] tabular-nums text-fg-muted">{fmtSize(f.size)}</span>
+              <span className="shrink-0 text-meta tabular-nums text-fg-muted">{fmtSize(f.size)}</span>
               <button
                 type="button"
                 onClick={() => dropPending(i)}
@@ -233,7 +233,7 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
         </ul>
       )}
       {pendingFiles.length > 0 && (
-        <p className="mt-2 text-[11px] text-fg-muted">{t('issue.attach.pending')}</p>
+        <p className="mt-2 text-meta text-fg-muted">{t('issue.attach.pending')}</p>
       )}
     </section>
   )

@@ -40,7 +40,7 @@ export function StatusPill(props: { status: Status } | { def: StatusPillDef }) {
       <span className={`chip tabular-nums ${def.tone}`} data-status={def.id}>
         <def.Icon className="h-3 w-3 shrink-0" aria-hidden />
         {def.label}
-        {def.inactive ? <span className="text-[10px] opacity-75">{t('issue.status.inactiveBadge')}</span> : null}
+        {def.inactive ? <span className="text-meta opacity-75">{t('issue.status.inactiveBadge')}</span> : null}
       </span>
     )
   }

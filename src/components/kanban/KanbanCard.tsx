@@ -113,10 +113,10 @@ export function KanbanCard({
         onKeyDown={openKey}
         className={`pl-1.5 ${onOpen ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus rounded' : ''}`}
       >
-        {pathLabel && <p className="mb-1 truncate text-[10px] font-medium uppercase tracking-wide text-fg-muted" title={pathLabel}>{pathLabel}</p>}
+        {pathLabel && <p className="mb-1 truncate text-meta font-medium text-fg-muted" title={pathLabel}>{pathLabel}</p>}
         <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-fg" title={card.name}>{card.name}</p>
 
-        <div className="mt-2 flex items-center gap-2 text-[11px] text-fg-muted">
+        <div className="mt-2 flex items-center gap-2 text-meta text-fg-muted">
           <CalendarRange className="h-3 w-3 shrink-0" />
           <span className="tabular-nums">{card.plannedEnd ?? '—'}</span>
           {dueBadge}
@@ -124,7 +124,7 @@ export function KanbanCard({
 
         <div className="mt-3 flex items-center gap-2">
           <ProgressBar value={card.rolledActualPct} tone={accent} height="h-1.5" label={`${card.name} ${t('kanban.card.actual')}`} />
-          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-fg-secondary">{pct}%</span>
+          <span className="shrink-0 text-meta font-semibold tabular-nums text-fg-secondary">{pct}%</span>
         </div>
 
         <div className="mt-3 flex items-center justify-between gap-2">

@@ -142,7 +142,7 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
           <input id={`workspace-${field.key}`} className="app-input w-full text-sm" value={String(draft[field.key])}
             disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} />}
       {fieldErrors[field.key] && <ConfigStateNotice kind="field" locale={locale} message={fieldErrors[field.key]} />}
-      <p className="text-[11px] text-fg-muted">{field.key}</p>
+      <p className="text-meta text-fg-muted">{field.key}</p>
     </div>)}
     {conflict && <ConflictCompare rows={changed.map(f => ({ key: f.key, label: f.label,
       mine: String(draft[f.key]), latest: conflict.invalidKeys.includes(f.key) ? '설정 손상' : String(inputValue(f, conflict.values[f.key])),

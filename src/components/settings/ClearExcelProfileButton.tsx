@@ -57,7 +57,6 @@ export function ClearExcelProfileButton({ projectId, revision }: { projectId: st
       <Modal
         open={open}
         onClose={() => { if (!busy) setOpen(false) }}
-        eyebrow="EXCEL"
         title={t('settings.clearExcelProfileConfirmTitle')}
         size="sm"
         footer={

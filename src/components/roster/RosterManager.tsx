@@ -74,7 +74,7 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
       <div className="overflow-x-auto">
         <table className="w-full min-w-[880px] text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+            <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
               <th className="py-2 pr-3">이름</th>
               <th className="py-2 pr-3">이메일</th>
               <th className="py-2 pr-3">팀</th>

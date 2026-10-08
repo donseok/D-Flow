@@ -50,7 +50,7 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
     `chip ${active ? 'bg-action text-action-fg' : 'text-fg-secondary transition hover:text-fg'}`
 
   return (
-    <SectionCard eyebrow="ACCESS LOG" title="접속 로그" icon={ScrollText}
+    <SectionCard title="접속 로그" icon={ScrollText}
       actions={events.length >= limit
         ? <span className="badge bg-pending-weak text-pending">최근 {limit}건만 표시</span>
         : <span className="badge bg-action-soft text-action">{events.length}건</span>}>
@@ -76,7 +76,7 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="border-b border-border text-xs font-semibold uppercase tracking-wide text-fg-muted">
+              <tr className="border-b border-border text-xs font-semibold text-fg-muted">
                 <th className="py-2 pr-3 text-left">시각</th>
                 <th className="py-2 pr-3 text-left">사용자</th>
                 <th className="py-2 pr-3 text-left">메뉴</th>
@@ -94,7 +94,7 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
                     </Link>
                   </td>
                   <td className="py-2 pr-3 text-fg-secondary">{menuLabel(e.menuKey, translate)}</td>
-                  <td className="py-2 pr-3 font-mono text-[11px] text-fg-muted">{e.path}</td>
+                  <td className="py-2 pr-3 font-mono text-meta text-fg-muted">{e.path}</td>
                 </tr>
               ))}
             </tbody>

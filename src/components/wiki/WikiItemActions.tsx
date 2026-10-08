@@ -110,7 +110,7 @@ export function WikiItemActions({
             type="button"
             disabled={pending}
             onClick={() => run(spec)}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-[11px] font-medium text-fg-secondary transition hover:border-border-input hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-meta font-medium text-fg-secondary transition hover:border-border-input hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Icon className="h-3 w-3" aria-hidden />
             {running === spec.action ? t(locale, 'wiki.curate.running') : t(locale, spec.labelKey)}

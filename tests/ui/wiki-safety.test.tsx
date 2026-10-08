@@ -155,7 +155,11 @@ describe('Wiki 상태 표시 안전성', () => {
     )
 
     // 분류 체계를 본문보다 앞세우지 않되, 근거 항목은 하나도 유실하지 않는다.
-    const evidence = html.slice(html.indexOf('SOURCE EVIDENCE'))
+    // 근거 접이식의 머리는 제목 하나다(영문 대문자 머리글 'SOURCE EVIDENCE' 는 지웠다 — 개정 §5.5.6).
+    const evidenceAt = html.indexOf('회의에서 나온 근거')
+    expect(evidenceAt).toBeGreaterThan(-1)
+    expect(html).not.toContain('SOURCE EVIDENCE')
+    const evidence = html.slice(evidenceAt)
     expect(evidence).toContain('표시할 명시적 사실')
     expect(evidence).toContain('표시할 명시적 근거')
     expect(evidence).toContain('논의 중 잠정 사실')

@@ -83,7 +83,7 @@ export function MinuteBlockPopover({
         <div className="mt-2 border-t border-border pt-2">
           {linkedIssues.length > 0 && (
             <div className="mb-2">
-              <p className="mb-1.5 text-[11px] font-semibold text-fg-muted">{t('min.issue.linked')}</p>
+              <p className="mb-1.5 text-meta font-semibold text-fg-muted">{t('min.issue.linked')}</p>
               <div className="space-y-1.5">
                 {linkedIssues.slice(0, 2).map(issue => {
                   return (
@@ -97,7 +97,7 @@ export function MinuteBlockPopover({
                         <span className="block truncate font-medium">
                           {issue.code}
                         </span>
-                        <span className="mt-0.5 block truncate text-[11px] text-fg-secondary">
+                        <span className="mt-0.5 block truncate text-meta text-fg-secondary">
                           {issue.title}
                         </span>
                       </span>
@@ -107,7 +107,7 @@ export function MinuteBlockPopover({
                   )
                 })}
                 {linkedIssues.length > 2 && (
-                  <p className="px-1 text-[11px] text-fg-muted">
+                  <p className="px-1 text-meta text-fg-muted">
                     {t('min.issue.more').replace('{n}', String(linkedIssues.length - 2))}
                   </p>
                 )}
@@ -129,7 +129,7 @@ export function MinuteBlockPopover({
         </div>
         {names.length > 0 && (
           <div className="mt-2 border-t border-border pt-2">
-            <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold text-fg-muted">
+            <p className="mb-1 inline-flex items-center gap-1 text-meta font-semibold text-fg-muted">
               <Users className="h-3 w-3" />{t('min.hl.people')}
             </p>
             <p className="max-h-28 overflow-y-auto overscroll-contain text-xs leading-relaxed text-fg-secondary">{names.join(', ')}</p>

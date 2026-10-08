@@ -40,7 +40,7 @@ export function MemberPickerViewToggle({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.value)}
-            className={`${compact ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs'} rounded-md font-medium transition ${
+            className={`${compact ? 'px-2 py-1 text-meta' : 'px-2.5 py-1.5 text-xs'} rounded-md font-medium transition ${
               active
                 ? 'bg-action-soft text-action shadow-sm'
                 : 'text-fg-muted hover:bg-surface-subtle hover:text-fg'
@@ -149,16 +149,16 @@ export function ProjectMemberMultiPicker({
         />
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate text-sm text-fg">{member.name}</span>
-          {member.teams[0]?.code && <span className="shrink-0 text-[11px] text-fg-muted">· {member.teams[0].code}</span>}
+          {member.teams[0]?.code && <span className="shrink-0 text-meta text-fg-muted">· {member.teams[0].code}</span>}
           {badge && (
-            <span className="shrink-0 rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium text-fg-muted">
+            <span className="shrink-0 rounded-full bg-surface-subtle px-1.5 py-0.5 text-meta font-medium text-fg-muted">
               {badge}
             </span>
           )}
         </span>
         {missingEmailWarning && !member.email && (
           <span
-            className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-danger"
+            className="inline-flex shrink-0 items-center gap-1 text-meta font-medium text-danger"
             title={missingEmailWarning}
           >
             <AlertCircle className="h-3 w-3" />
@@ -178,12 +178,12 @@ export function ProjectMemberMultiPicker({
           placeholder={searchPlaceholder}
           className="w-full bg-transparent text-sm text-fg outline-none placeholder:text-fg-muted"
         />
-        <span className="shrink-0 text-[11px] font-medium text-fg-muted">
+        <span className="shrink-0 text-meta font-medium text-fg-muted">
           {selected.length}{selectedSuffix}
         </span>
       </div>
       <div className="flex items-center justify-between gap-2 border-b border-border bg-surface-subtle/40 px-3 py-1.5">
-        <span className="text-[11px] font-medium text-fg-muted">{t('ui.memberPicker.viewLabel')}</span>
+        <span className="text-meta font-medium text-fg-muted">{t('ui.memberPicker.viewLabel')}</span>
         <MemberPickerViewToggle value={view} onChange={setView} compact />
       </div>
       <div className="max-h-52 overflow-y-auto p-1.5">
@@ -193,7 +193,7 @@ export function ProjectMemberMultiPicker({
         {sections.map((section, index) => (
           <div key={section.kind === 'all' ? `all-${index}` : `category:${section.category ?? ''}`}>
             {section.kind === 'category' && (
-              <div className="sticky top-0 z-10 flex items-center justify-between bg-surface px-2 py-1.5 text-[11px] font-semibold text-fg-secondary">
+              <div className="sticky top-0 z-10 flex items-center justify-between bg-surface px-2 py-1.5 text-meta font-semibold text-fg-secondary">
                 <span>{categoryLabel(section.category, t('ui.memberPicker.unassigned'))}</span>
                 <span className="rounded-full bg-surface-subtle px-1.5 py-0.5 tabular-nums text-fg-muted">
                   {section.members.length}

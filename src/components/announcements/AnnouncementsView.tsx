@@ -232,7 +232,7 @@ function AnnouncementRow({
           {item.body && (
             <span className="mt-1 line-clamp-2 block text-[13px] leading-5 text-fg-secondary">{item.body}</span>
           )}
-          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px] tabular-nums text-fg-muted">
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 text-meta tabular-nums text-fg-muted">
             <span>
               {fmtDate(item.createdAt, timeZone)}
               {edited && t('ann.updatedSuffix')}
@@ -327,7 +327,7 @@ function ReadModal({
                 {t('ann.pinned')}
               </span>
             )}
-            <span className="text-[11px] tabular-nums text-fg-muted">
+            <span className="text-meta tabular-nums text-fg-muted">
               {fmtDate(item.createdAt, timeZone)}
               {item.updatedAt !== item.createdAt && t('ann.updatedSuffix')}
             </span>
@@ -491,7 +491,7 @@ export function AnnouncementFormModal({
           </span>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-[11px] font-medium text-fg-muted">{t('ann.form.publishFrom')}</span>
+              <span className="mb-1 block text-meta font-medium text-fg-muted">{t('ann.form.publishFrom')}</span>
               <input
                 type="date"
                 className="app-input"
@@ -501,7 +501,7 @@ export function AnnouncementFormModal({
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[11px] font-medium text-fg-muted">{t('ann.form.publishTo')}</span>
+              <span className="mb-1 block text-meta font-medium text-fg-muted">{t('ann.form.publishTo')}</span>
               <input
                 type="date"
                 className="app-input"
@@ -511,7 +511,7 @@ export function AnnouncementFormModal({
               />
             </label>
           </div>
-          <p className="mt-1.5 text-[11px] leading-4 text-fg-muted">{t('ann.form.periodHint')}</p>
+          <p className="mt-1.5 text-meta leading-4 text-fg-muted">{t('ann.form.periodHint')}</p>
         </div>
 
         {/* 마일스톤 표시 — 체크 시 날짜 입력이 열린다(기본값 = 게시 종료일: 행사 공지는 대개 행사일까지 게시한다).
@@ -535,7 +535,7 @@ export function AnnouncementFormModal({
           </label>
           {showMilestone && (
             <label className="mt-2 block">
-              <span className="mb-1 block text-[11px] font-medium text-fg-muted">{t('ann.form.milestoneDate')}</span>
+              <span className="mb-1 block text-meta font-medium text-fg-muted">{t('ann.form.milestoneDate')}</span>
               <input
                 type="date"
                 className="app-input"
@@ -544,7 +544,7 @@ export function AnnouncementFormModal({
               />
             </label>
           )}
-          <p className="mt-1.5 text-[11px] leading-4 text-fg-muted">{t('ann.form.milestoneHint')}</p>
+          <p className="mt-1.5 text-meta leading-4 text-fg-muted">{t('ann.form.milestoneHint')}</p>
         </div>
 
         <label className="block">

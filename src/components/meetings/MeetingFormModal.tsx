@@ -241,7 +241,6 @@ export function MeetingFormModal({
       // 결과 패널이 떠 있으면 회의는 이미 저장됐다. Escape·X·백드롭으로 닫아도 목록을
       // 갱신하는 onSaved 로 보내야 한다 — onClose 로 빠지면 방금 만든 회의가 목록에 없다.
       onClose={locked ? onSaved : onClose}
-      eyebrow="MEETING"
       title={initial ? t('meet.editMeeting') : t('meet.addMeeting')}
       footer={
         locked ? (
@@ -317,7 +316,7 @@ export function MeetingFormModal({
             )}
           </div>
           {initial && initial.recurrence !== 'none' && (
-            <p className="flex items-start gap-1.5 text-[11px] leading-5 text-fg-muted">
+            <p className="flex items-start gap-1.5 text-meta leading-5 text-fg-muted">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pending" />
               {t('meet.form.ruleChangeWarn')}
             </p>
@@ -345,7 +344,7 @@ export function MeetingFormModal({
               </span>
             </label>
             {!canNotify && (
-              <p className="mt-1 pl-6 text-[11px] text-fg-muted">{t('meet.form.notifyNoAttendees')}</p>
+              <p className="mt-1 pl-6 text-meta text-fg-muted">{t('meet.form.notifyNoAttendees')}</p>
             )}
             {/* notify 블록 안에 둔다 — 이 주소들은 회의에 저장되는 값이 아니라 위 체크박스로
                 나가는 메일의 수신자에만 더해지는 값이다. 떨어져 있으면 저장되는 값처럼 읽힌다. */}
@@ -362,7 +361,7 @@ export function MeetingFormModal({
                 이 값은 저장되지 않으므로 그 저장은 곧 입력의 소리 없는 폐기다 — 저장 전에 여기서 알린다.
                 입력칸을 비활성화하는 방법은 참석자 0명일 때 체크박스와 서로를 잠그는 교착이 되어 쓸 수 없다. */}
             {extraList.length > 0 && !form.notify && (
-              <p className="mt-1 flex items-start gap-1.5 text-[11px] leading-5 text-fg-muted">
+              <p className="mt-1 flex items-start gap-1.5 text-meta leading-5 text-fg-muted">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pending" />
                 {t('meet.form.extraEmailsNotifyOff')}
               </p>
@@ -386,7 +385,7 @@ export function MeetingFormModal({
               {/* 상세 모달 경로는 특정 회차 위에서 누르니 범위가 자명하지만, 여기서는 시리즈를
                   만들며 체크한다 — '시리즈 전체가 공지된다'는 오해를 저장 전에 바로잡는다. */}
               {form.announce && form.recurrence !== 'none' && (
-                <p className="mt-1 flex items-start gap-1.5 pl-6 text-[11px] leading-5 text-fg-muted">
+                <p className="mt-1 flex items-start gap-1.5 pl-6 text-meta leading-5 text-fg-muted">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-pending" />
                   {t('meet.form.announceRecurHint')}
                 </p>

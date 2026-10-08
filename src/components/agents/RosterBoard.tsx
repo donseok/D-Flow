@@ -170,7 +170,7 @@ function Desk({ desk, host, nowMs, timeZone, selected, onSelect }: {
         <span className={`flex flex-col gap-1 px-3 pb-3 pt-2 ${mine ? 'bg-action-soft' : ''}`}>
           <span className="flex items-center gap-2">
             <b className="text-sm text-fg">{desk.kind === 'lead' ? (desk.slot === 'poll' ? '단독 감시' : '팀장') : desk.label}</b>
-            <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold" style={{ color: tone.color === '#b7bfba' ? 'var(--color-fg-muted)' : tone.color }}>
+            <span className="ml-auto inline-flex items-center gap-1 text-meta font-semibold" style={{ color: tone.color === '#b7bfba' ? 'var(--color-fg-muted)' : tone.color }}>
               <i className="inline-block h-[7px] w-[7px] rounded-full" style={{ background: tone.color }} />{tone.label}
             </span>
           </span>
@@ -178,7 +178,7 @@ function Desk({ desk, host, nowMs, timeZone, selected, onSelect }: {
           <span className="flex h-4 min-w-0 items-center">{owner && <OwnerTag owner={owner} />}</span>
           <span className="line-clamp-2 min-h-[2.5em] text-xs text-fg-secondary">{deskLine(desk, host, nowMs, chatter, timeZone)}</span>
           {desk.seat && <Progress pct={desk.seat.progress} color={tone.color} />}
-          <span className="text-[11px] tabular-nums text-fg-muted">{sig ? `신호 ${ageLabel(sig, nowMs)}` : ' '}</span>
+          <span className="text-meta tabular-nums text-fg-muted">{sig ? `신호 ${ageLabel(sig, nowMs)}` : ' '}</span>
         </span>
       </button>
     </li>
@@ -215,7 +215,7 @@ function topBubble(desk: RosterDesk, host: RosterHost, nowMs: number, chatter: b
  */
 function Nameplate({ desk, size = 'sm' }: { desk: RosterDesk; size?: 'sm' | 'lg' }) {
   const pos = size === 'sm' ? 'relative' : ''
-  const text = size === 'sm' ? 'text-[11px]' : 'text-xs'
+  const text = size === 'sm' ? 'text-meta' : 'text-xs'
   if (desk.kind === 'lead') {
     return (
       <span data-nameplate="lead" className={`${pos} z-[1] inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#2f6e44] px-2.5 py-1 font-bold text-white shadow-[0_6px_14px_-8px_#1b3a26] ${text}`}>
@@ -246,10 +246,10 @@ function Nameplate({ desk, size = 'sm' }: { desk: RosterDesk; size?: 'sm' | 'lg'
       title={`${plan ? 'WBS 지정 모델(실행 보고 전)' : `실행 모델${phase ? ` · ${phase} 단계` : ''}`} · ${desk.seat?.model ?? ''}${b.tier ? ` · 등급 ${b.tier}/4 ${TIER_NAME[b.tier]}` : ''}`}
       className={`${pos} z-[1] inline-flex items-center gap-1.5 whitespace-nowrap rounded-full py-1 pl-1 pr-2 font-bold ${text} ${plan ? 'border border-dashed border-[#8A8F99] bg-[#15191fb3] text-[#d9d3cb]' : 'bg-[#15191f] text-[#f4efe7]'}`}
       style={{ boxShadow: shadow }}>
-      <span aria-hidden className={`grid h-[18px] w-[18px] place-items-center rounded-full text-[11px] leading-none text-white ${plan ? 'opacity-70' : ''}`} style={{ background: b.color }}>{b.mark}</span>
+      <span aria-hidden className={`grid h-[18px] w-[18px] place-items-center rounded-full text-meta leading-none text-white ${plan ? 'opacity-70' : ''}`} style={{ background: b.color }}>{b.mark}</span>
       <span className="font-mono tracking-tight">{b.label}</span>
       {b.tier && <TierPips tier={b.tier} color={plan ? '#b7bfba' : ring!.edge} />}
-      {plan && <span className="rounded-full bg-white/10 px-1.5 py-px text-[9px] font-semibold tracking-wide text-[#b7bfba]">지정</span>}
+      {plan && <span className="rounded-full bg-white/10 px-1.5 py-px text-meta font-semibold text-[#b7bfba]">지정</span>}
       {size === 'sm' && <i aria-hidden className={`absolute -top-[5px] left-1/2 -z-[1] h-2.5 w-2.5 -translate-x-1/2 rotate-45 ${plan ? 'bg-[#15191fb3]' : 'bg-[#15191f]'}`} />}
     </span>
   )
@@ -299,7 +299,7 @@ function SignalGauge({ at, nowMs, lead }: { at: string | null; nowMs: number; le
         : `linear-gradient(90deg,#5DB1E5 0 ${staleAt}%,#F0B068 ${staleAt}% 100%)` }}>
         <i className="absolute top-1/2 h-4 w-1 -translate-y-1/2 rounded bg-fg" style={{ left: `calc(${pos}% - 2px)` }} />
       </div>
-      <div className="mt-1 flex justify-between text-[10px] tabular-nums text-fg-muted">
+      <div className="mt-1 flex justify-between text-meta tabular-nums text-fg-muted">
         <span>0</span>{!lead && <span>5분 · 무응답</span>}<span>{lead ? '70분 · 감시 끊김' : '30분 · 끊김'}</span>
       </div>
     </div>
@@ -321,7 +321,7 @@ function Profile({ desk, host, nowMs, timeZone }: { desk: RosterDesk; host: Rost
           <Sprite character={look.character} anim={look.anim} />
         </span>
         <div className="min-w-0">
-          <p className="font-mono text-[11px] text-fg-muted">{host.label}</p>
+          <p className="font-mono text-meta text-fg-muted">{host.label}</p>
           <h2 className="text-xl font-extrabold text-fg">{title}</h2>
           {desk.raw && <p className="truncate font-mono text-xs text-fg-muted" title={desk.raw}>{desk.raw}</p>}
           {owner && <span className="mt-1 flex min-w-0"><OwnerTag owner={owner} /></span>}
@@ -331,11 +331,11 @@ function Profile({ desk, host, nowMs, timeZone }: { desk: RosterDesk; host: Rost
               {(() => {
                 const t = modelBadge(desk.seat?.model)?.tier
                 const src = desk.seat?.modelSource === 'run' ? '실행 모델' : desk.seat?.modelSource === 'plan' ? 'WBS 지정 모델' : null
-                return src ? <span className="text-[11px] font-semibold text-fg-secondary">{src}{t ? ` · 등급 ${t}/4 ${TIER_NAME[t]}` : ''}</span> : null
+                return src ? <span className="text-meta font-semibold text-fg-secondary">{src}{t ? ` · 등급 ${t}/4 ${TIER_NAME[t]}` : ''}</span> : null
               })()}
             </span>
           )}
-          <span className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+          <span className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-meta font-semibold"
             style={{ background: `color-mix(in srgb, ${tone.color} 18%, transparent)`, color: 'var(--color-fg)' }}>
             <i className="inline-block h-[7px] w-[7px] rounded-full" style={{ background: tone.color }} />{tone.label}
           </span>
@@ -344,22 +344,22 @@ function Profile({ desk, host, nowMs, timeZone }: { desk: RosterDesk; host: Rost
 
       {seat && (
         <section className="flex flex-col gap-1.5">
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-fg-muted">지금 하는 일</h3>
+          <h3 className="text-meta font-bold text-fg-muted">지금 하는 일</h3>
           <p className="text-sm font-semibold text-fg"><span className="font-mono text-fg-secondary">{seat.code}</span> {seat.name}</p>
           <Progress pct={seat.progress} color={tone.color} />
-          <p className="text-[11px] text-fg-muted">진척 {seat.progress}%{seat.heartbeatPhase ? ` · 단계 ${seat.heartbeatPhase}` : ''}</p>
+          <p className="text-meta text-fg-muted">진척 {seat.progress}%{seat.heartbeatPhase ? ` · 단계 ${seat.heartbeatPhase}` : ''}</p>
         </section>
       )}
       {seat?.state === 'BLOCKED' && (
         <section className="rounded-2xl border border-[#F0B068] bg-[color-mix(in_srgb,#F0B068_12%,var(--color-surface))] p-3">
           <h3 className="text-xs font-bold text-fg">결정이 필요합니다</h3>
           <p className="mt-1 whitespace-pre-wrap text-sm text-fg-secondary">{seat.note ?? '에이전트가 사유를 남기지 않았습니다.'}</p>
-          <p className="mt-2 text-[11px] text-fg-muted">답은 위임·승인 탭이나 에이전트 스튜디오의 이 좌석에서 합니다.</p>
+          <p className="mt-2 text-meta text-fg-muted">답은 위임·승인 탭이나 에이전트 스튜디오의 이 좌석에서 합니다.</p>
         </section>
       )}
       {desk.kind === 'lead' && desk.watcher && (
         <section className="flex flex-col gap-1 text-sm text-fg-secondary">
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-fg-muted">감시</h3>
+          <h3 className="text-meta font-bold text-fg-muted">감시</h3>
           <p>자리 {desk.watcher.busy ?? 0}/{desk.watcher.slots ?? '—'}{desk.watcher.untilLabel ? ` · ${desk.watcher.untilLabel} 까지` : ''}</p>
         </section>
       )}
@@ -371,11 +371,11 @@ function Profile({ desk, host, nowMs, timeZone }: { desk: RosterDesk; host: Rost
       )}
 
       <section className="flex flex-col gap-1.5">
-        <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-fg-muted">마지막 신호 · {signalAt(desk) ? ageLabel(signalAt(desk), nowMs) : '—'}</h3>
+        <h3 className="text-meta font-bold text-fg-muted">마지막 신호 · {signalAt(desk) ? ageLabel(signalAt(desk), nowMs) : '—'}</h3>
         <SignalGauge at={signalAt(desk)} nowMs={nowMs} lead={desk.kind === 'lead'} />
       </section>
 
-      <p className="border-t border-border pt-3 text-[11px] leading-relaxed text-fg-muted">
+      <p className="border-t border-border pt-3 text-meta leading-relaxed text-fg-muted">
         보고 이력은 작업 PC 단위까지만 남고 자리별로는 나뉘지 않습니다. heartbeat 는 이력 없이 마지막 값만 남아 처리량·가동률은 아직 보이지 않습니다.
       </p>
     </aside>

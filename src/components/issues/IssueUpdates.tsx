@@ -151,14 +151,14 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
   return (
     <section className="space-y-3 rounded-2xl border border-border bg-surface-subtle p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-muted">
+        <div className="flex items-center gap-2 text-meta font-semibold text-fg-muted">
           <MessageSquare className="h-3.5 w-3.5" aria-hidden /> {t('issue.update.section')}
         </div>
         {archivedCount > 0 && (
           <button
             type="button"
             onClick={() => setShowArchived(v => !v)}
-            className="text-[11px] font-medium text-fg-muted hover:text-fg"
+            className="text-meta font-medium text-fg-muted hover:text-fg"
           >
             {(showArchived ? t('issue.update.hideArchived') : t('issue.update.showArchived'))
               .replace('{n}', String(archivedCount))}
@@ -180,7 +180,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
             <button
               type="button"
               onClick={() => setExpanded(true)}
-              className="text-[11px] font-medium text-action hover:underline"
+              className="text-meta font-medium text-action hover:underline"
             >
               {t('issue.update.more').replace('{n}', String(hiddenCount))}
             </button>
@@ -198,15 +198,15 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                     u.kind === 'status' ? 'bg-surface-subtle/40' : 'bg-surface-subtle'
                   }`}
                 >
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-fg-muted">
+                  <div className="flex flex-wrap items-center gap-1.5 text-meta text-fg-muted">
                     <span className="font-medium text-fg-secondary">{u.authorName}</span>
                     <span aria-hidden>·</span>
                     <time dateTime={u.createdAt}>{fmtAt(u.createdAt, locale, timeZone)}</time>
                     {u.authorName === MIGRATED_AUTHOR_NAME && (
-                      <span className="text-[11px] text-fg-muted">{t('issue.update.migrated')}</span>
+                      <span className="text-meta text-fg-muted">{t('issue.update.migrated')}</span>
                     )}
                     {u.category && (
-                      <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium text-fg-secondary">
+                      <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-meta font-medium text-fg-secondary">
                         {t(ISSUE_UPDATE_CATEGORY_META[u.category].labelKey)}
                       </span>
                     )}
@@ -261,7 +261,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                     </p>
                   )}
                   {archived && u.archivedByName && (
-                    <p className="mt-1 text-[11px] text-fg-muted">
+                    <p className="mt-1 text-meta text-fg-muted">
                       {t('issue.update.archivedBy').replace('{name}', u.archivedByName)}
                     </p>
                   )}
@@ -303,7 +303,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
               ))}
             </ul>
           )}
-          <p className="text-[11px] text-fg-muted">{t('issue.update.mentionHint')}</p>
+          <p className="text-meta text-fg-muted">{t('issue.update.mentionHint')}</p>
           <div className="flex items-center gap-2">
             <label className="sr-only" htmlFor="issue-update-category">{t('issue.update.category')}</label>
             <select

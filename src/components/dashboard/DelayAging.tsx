@@ -13,8 +13,7 @@ export async function DelayAging({ aging }: { aging: AgingModel }) {
   const tr = (k: DictKey) => t(locale, k)
 
   return (
-    <SectionCard
-      eyebrow="OVERDUE AGING" title={tr('dash.aging.title')} icon={AlertTriangle}
+    <SectionCard title={tr('dash.aging.title')} icon={AlertTriangle}
       actions={<CountBadge n={aging.total} unit={tr('dash.unitCount')} tone="bg-danger-weak text-danger" />}
     >
       {aging.total === 0 ? (
@@ -38,12 +37,12 @@ export async function DelayAging({ aging }: { aging: AgingModel }) {
                 <div className="hidden w-36 shrink-0 sm:block">
                   <div className="flex items-center gap-2">
                     <div className="flex-1"><ProgressBar value={item.rolledActualPct} planned={item.plannedPct} height="h-1.5" tone="bg-danger" /></div>
-                    <span className="shrink-0 tabular-nums text-[11px] font-semibold text-danger">{item.rolledActualPct}%</span>
+                    <span className="shrink-0 tabular-nums text-meta font-semibold text-danger">{item.rolledActualPct}%</span>
                   </div>
                 </div>
                 <div className="w-24 shrink-0 text-right">
                   <div className="tabular-nums text-xs text-fg-secondary">{fmtDate(item.plannedEnd)}</div>
-                  <div className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-danger">
+                  <div className="mt-0.5 inline-flex items-center gap-1 text-meta font-semibold text-danger">
                     <span className="h-1.5 w-1.5 rounded-full bg-danger" />{overdue}{tr('dash.overdueSuffix')}
                   </div>
                 </div>

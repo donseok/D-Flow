@@ -158,7 +158,7 @@ export function MinuteInsightCard({
                           </span>
                           <span className="min-w-0 flex-1 truncate">{issue.title}</span>
                           <span className="shrink-0"><IssueStatusPill category={issue.status} /></span>
-                          <span className="shrink-0 text-[11px] text-action">{t('min.issue.jump')}</span>
+                          <span className="shrink-0 text-meta text-action">{t('min.issue.jump')}</span>
                         </button>
                         <Link
                           href={`/p/${issue.projectId}/issues?focus=${encodeURIComponent(issue.issueId)}`}

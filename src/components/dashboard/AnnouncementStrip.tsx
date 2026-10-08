@@ -23,7 +23,7 @@ export async function AnnouncementStrip({ projectId, announcements, today }: {
       <span className={`chip shrink-0 ${ANNOUNCEMENT_META[notice.category].chip}`}>{tr(ANNOUNCEMENT_META[notice.category].labelKey)}</span>
       {notice.isPinned && <Pin className="h-3.5 w-3.5 shrink-0 text-warning" />}
       <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg" title={notice.title}>{notice.title}</span>
-      <span className="shrink-0 text-[11px] text-fg-muted">{tr('common.viewAll')}</span>
+      <span className="shrink-0 text-meta text-fg-muted">{tr('common.viewAll')}</span>
     </Link>
   )
 }

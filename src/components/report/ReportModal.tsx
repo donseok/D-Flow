@@ -243,7 +243,7 @@ export function ReportModal({
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-fg-muted">
+                <tr className="border-b border-border text-left text-meta leading-4 text-fg-muted">
                   <th className="py-2 pr-3 font-semibold">Phase</th>
                   <th className="px-3 py-2 text-right font-semibold">계획</th>
                   <th className="px-3 py-2 text-right font-semibold">실적</th>
@@ -280,7 +280,7 @@ export function ReportModal({
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-fg-muted">
+                <tr className="border-b border-border text-left text-meta leading-4 text-fg-muted">
                   <th className="py-2 pr-3 font-semibold">작업명</th>
                   <th className="px-3 py-2 font-semibold">담당</th>
                   <th className="px-3 py-2 text-right font-semibold">종료일</th>

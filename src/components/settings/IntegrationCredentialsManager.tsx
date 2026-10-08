@@ -294,7 +294,7 @@ export function IntegrationCredentialsManager({
         <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <thead className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground">
                 <tr>
                   <th scope="col" className="px-4 py-3">종류 / 이름</th>
                   <th scope="col" className="px-4 py-3">접두사 (Prefix)</th>
@@ -652,12 +652,12 @@ export function IntegrationCredentialsManager({
             </div>
 
             <div>
-              <span className="block text-xs font-semibold text-muted-foreground uppercase">토큰 이름</span>
+              <span className="block text-xs font-semibold text-muted-foreground">토큰 이름</span>
               <span className="text-sm font-medium text-foreground">{issuedResult.name}</span>
             </div>
 
             <div>
-              <span className="block text-xs font-semibold text-muted-foreground uppercase mb-1">토큰 (Bearer Token)</span>
+              <span className="block text-xs font-semibold text-muted-foreground mb-1">토큰 (Bearer Token)</span>
               <div className="relative">
                 <input
                   type="text"

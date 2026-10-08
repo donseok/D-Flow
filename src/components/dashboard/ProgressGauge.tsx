@@ -39,7 +39,7 @@ export function ProgressGauge({ actual, planned, variance, signal, verdictText, 
         <line x1={ix} y1={iy} x2={ox} y2={oy} strokeWidth={2.5} strokeLinecap="round" className="stroke-fg" />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
-        <span className={`badge text-[10px] ${m.chip}`}>{verdictText}</span>
+        <span className={`badge text-meta ${m.chip}`}>{verdictText}</span>
         <span className="text-2xl font-extrabold leading-none tabular-nums text-fg">{formatPct1(actual)}%</span>
         <span className="text-[10px] text-fg-muted">{plannedText}</span>
       </div>

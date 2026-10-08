@@ -315,7 +315,7 @@ export function WikiSourceLinks({
         </div>
       ))}
       {sources.length > (showEvidence ? 4 : 2) && (
-        <span className="text-[11px] text-fg-muted">
+        <span className="text-meta text-fg-muted">
           {t(locale, 'wiki.sourceCount').replace('{n}', String(sources.length))}
         </span>
       )}
@@ -368,7 +368,7 @@ export function WikiItemCard({
           </div>
           <p className="mt-2 text-sm font-medium leading-6 text-fg">{item.statement}</p>
           {(owner || date) && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-muted">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-fg-muted">
               {owner && <span>{t(locale, 'wiki.ownerTeam')} · {owner}</span>}
               {date && (
                 <span className="inline-flex items-center gap-1">
@@ -468,7 +468,7 @@ export function WikiChangeList({
                   <Icon className="h-3 w-3" />
                   {changeLabel(locale, change.changeType)}
                 </span>
-                <time className="text-[11px] tabular-nums text-fg-muted">
+                <time className="text-meta tabular-nums text-fg-muted">
                   {formatWikiDate(change.createdAt, locale, true, timeZone)}
                 </time>
               </div>
@@ -480,7 +480,7 @@ export function WikiChangeList({
                 <WikiTrackedLink
                   href={changeSourceHref(change, minutesBase)}
                   domain="minutes"
-                  className="mt-2 inline-flex max-w-full items-center gap-1.5 text-[11px] font-medium text-action hover:text-action-hover"
+                  className="mt-2 inline-flex max-w-full items-center gap-1.5 text-meta font-medium text-action hover:text-action-hover"
                 >
                   <FileText className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">

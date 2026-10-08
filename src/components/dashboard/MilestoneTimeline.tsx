@@ -56,7 +56,7 @@ export async function MilestoneTimeline({ points, startDate, endDate, today }: {
 
   if (points.length === 0) {
     return (
-      <SectionCard eyebrow="MILESTONES" title={tr('dash.ms.title')} icon={Flag}>
+      <SectionCard title={tr('dash.ms.title')} icon={Flag}>
         <MiniEmpty text={tr('dash.ms.empty')} />
       </SectionCard>
     )
@@ -97,8 +97,7 @@ export async function MilestoneTimeline({ points, startDate, endDate, today }: {
   const todayLabelX = todayIn ? clampX(x(today), textWidth(fmtDate(today), FS_SUB) / 2) : 0
 
   return (
-    <SectionCard
-      eyebrow="MILESTONES" title={tr('dash.ms.title')} icon={Flag}
+    <SectionCard title={tr('dash.ms.title')} icon={Flag}
       actions={<CountBadge n={points.length} unit={tr('dash.unitCount')} />}
     >
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={tr('dash.ms.title')}>

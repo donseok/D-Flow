@@ -39,7 +39,7 @@ export function OwnerTag({ owner, className = '' }: { owner: OwnerLabel; classNa
     : 'border-border-input bg-surface text-fg'
   return (
     <span data-owner-tag={owner.kind} title={owner.text}
-      className={`inline-block min-w-0 max-w-full truncate whitespace-nowrap rounded-full border px-1.5 py-px text-[10px] font-bold leading-[14px] ${tone} ${className}`}>
+      className={`inline-block min-w-0 max-w-full truncate whitespace-nowrap rounded-full border px-1.5 py-px text-meta font-bold leading-[14px] ${tone} ${className}`}>
       {owner.text}
     </span>
   )

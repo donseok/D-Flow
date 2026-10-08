@@ -96,14 +96,14 @@ export function ScheduleManager({
 
         {canEdit && (
           <div className="mt-3 flex flex-wrap items-end gap-2">
-            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('settings.date')}</span><input type="date" value={holDate} onChange={e => setHolDate(e.target.value)} className="app-input h-9 w-40 px-2 text-xs" /></label>
-            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('settings.holidayKind')}</span>
+            <label className="block"><span className="mb-1 block text-meta font-semibold text-fg-secondary">{t('settings.date')}</span><input type="date" value={holDate} onChange={e => setHolDate(e.target.value)} className="app-input h-9 w-40 px-2 text-xs" /></label>
+            <label className="block"><span className="mb-1 block text-meta font-semibold text-fg-secondary">{t('settings.holidayKind')}</span>
               <select value={holKind} onChange={e => setHolKind(e.target.value === 'work' ? 'work' : 'off')} className="app-input h-9 w-28 text-xs" aria-label={t('settings.holidayKind')}>
                 <option value="off">{t('settings.holidayKindOff')}</option>
                 <option value="work">{t('settings.holidayKindWork')}</option>
               </select>
             </label>
-            <label className="block"><span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t('settings.nameOptional')}</span><input value={holName} onChange={e => setHolName(e.target.value)} placeholder={t('settings.holidayNamePlaceholder')} className="app-input h-9 w-44 text-xs" /></label>
+            <label className="block"><span className="mb-1 block text-meta font-semibold text-fg-secondary">{t('settings.nameOptional')}</span><input value={holName} onChange={e => setHolName(e.target.value)} placeholder={t('settings.holidayNamePlaceholder')} className="app-input h-9 w-44 text-xs" /></label>
             <button disabled={pending || !holDate} onClick={() => run(() => addHoliday(projectId, holDate, holName, holKind), t('settings.holidayAdded'), () => { setHolDate(''); setHolName('') })} className="btn btn-primary h-9 px-3 text-[13px]"><Plus className="h-3.5 w-3.5" />{t('common.add')}</button>
           </div>
         )}

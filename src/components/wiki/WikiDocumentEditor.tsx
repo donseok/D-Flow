@@ -409,18 +409,18 @@ export function WikiDocumentEditor({
         )}
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
           <label className="block">
-            <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t(locale, 'wiki.document.titleLabel')}</span>
+            <span className="mb-1 block text-meta font-semibold text-fg-secondary">{t(locale, 'wiki.document.titleLabel')}</span>
             <input autoFocus={!topic} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} className="app-input" placeholder={t(locale, 'wiki.document.titlePlaceholder')} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t(locale, 'wiki.document.kindLabel')}</span>
+            <span className="mb-1 block text-meta font-semibold text-fg-secondary">{t(locale, 'wiki.document.kindLabel')}</span>
             <select value={kind} onChange={(event) => changeKind(event.target.value as WikiDocumentKind)} className="app-input">
               {WIKI_DOCUMENT_KINDS.map((value) => <option key={value} value={value}>{KIND_LABEL[value][locale]}</option>)}
             </select>
           </label>
         </div>
         <label className="block">
-          <span className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold text-fg-secondary">
+          <span className="mb-1 flex flex-wrap items-center justify-between gap-2 text-meta font-semibold text-fg-secondary">
             <span>{t(locale, 'wiki.document.bodyLabel')}</span>
             <span className="font-normal text-fg-muted">{t(locale, 'wiki.document.markdownHint')}</span>
           </span>

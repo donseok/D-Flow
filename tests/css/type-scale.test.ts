@@ -1,5 +1,6 @@
 // 글자 크기 8단계와 12px 미만·uppercase 제거 범위(D14·E22). UI-1 은 공용 클래스 넷과 공용 컴포넌트 다섯만 고친다 —
 // 나머지 368건은 그 화면을 만지는 SP 가 지운다(개정 §6.1-4). 과제 15 가 COMPONENTS 를 채운다.
+// 그 나머지는 2026-10-09 에 일괄로 올렸다 — src 전체의 하한·대문자 불변식은 min-font-size.test.ts 가 지킨다(여기는 공용 클래스·컴포넌트의 토큰 단언).
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'

@@ -175,7 +175,7 @@ export function AttendanceView({
         role={canEdit ? 'button' : undefined}
         tabIndex={canEdit ? 0 : undefined}
         onKeyDown={open ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } } : undefined}
-        className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium ${meta.chip} ${canEdit ? 'cursor-pointer hover:ring-1 hover:ring-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus' : ''}`}
+        className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-meta font-medium ${meta.chip} ${canEdit ? 'cursor-pointer hover:ring-1 hover:ring-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus' : ''}`}
         title={`${mem?.name ?? '?'} · ${typeLabel(r.type)}${r.note ? ` · ${r.note}` : ''}${canEdit ? ` · ${t('att.clickToEdit')}` : ''}`}
       >
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot}`} />
@@ -287,7 +287,7 @@ export function AttendanceView({
         {/* 범례 */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {selectable.map(e => (
-            <span key={e.code} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-fg-secondary">
+            <span key={e.code} className="inline-flex items-center gap-1.5 text-meta font-medium text-fg-secondary">
               <span className={`h-2 w-2 rounded-full ${vocabColor(types, e.code).dot}`} />
               {typeLabel(e.code)}
             </span>
@@ -296,14 +296,14 @@ export function AttendanceView({
 
         {/* 챗봇 딥링크 필터 — 해제 전까지 달력·목록에 적용 (신규 문구는 dict 미보유라 locale 분기) */}
         {botFilter && (
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-fg-secondary">
+          <div className="flex flex-wrap items-center gap-1.5 text-meta font-medium text-fg-secondary">
             <span className="text-fg-muted">{locale === 'en' ? `${ASSISTANT_NAME.en} filter` : `${ASSISTANT_NAME.ko} 필터`}</span>
             {botFilter.from && botFilter.to && (
               <span className="chip bg-surface-subtle tabular-nums text-fg-secondary">{botFilter.from} ~ {botFilter.to}</span>
             )}
             {botFilter.team && <span className="chip bg-surface-subtle text-fg-secondary">{botFilter.team}</span>}
             {botFilter.type && <span className="chip bg-surface-subtle text-fg-secondary">{typeLabel(botFilter.type)}</span>}
-            <button onClick={() => setBotFilter(null)} className="btn btn-ghost h-7 px-2 text-[11px]">
+            <button onClick={() => setBotFilter(null)} className="btn btn-ghost h-7 px-2 text-meta">
               {locale === 'en' ? 'Clear' : '해제'}
             </button>
           </div>
@@ -314,7 +314,7 @@ export function AttendanceView({
         <div className="card overflow-hidden p-0">
           <div className="grid grid-cols-7 gap-px bg-border">
             {columns.map(c => (
-              <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>{t(`att.weekday.${c.key}` as DictKey)}</div>
+              <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-meta ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>{t(`att.weekday.${c.key}` as DictKey)}</div>
             ))}
             {matrix.flat().map(cell => {
               const inMonth = cell.startsWith(ym)
@@ -331,7 +331,7 @@ export function AttendanceView({
                       {dayNum}
                     </span>
                     {info.name && (
-                      <span className="basis-full break-all text-[10px] font-medium leading-tight text-fg-muted sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
+                      <span className="basis-full break-all text-meta font-medium leading-tight text-fg-muted sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
                         {info.name}
                       </span>
                     )}
@@ -345,7 +345,7 @@ export function AttendanceView({
                           const r = e.currentTarget.getBoundingClientRect()
                           setMore({ date: cell, rect: { top: r.top, bottom: r.bottom, left: r.left } })
                         }}
-                        className="w-full rounded-md px-1 py-0.5 text-left text-[10px] font-medium text-fg-muted transition hover:bg-surface-subtle hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                        className="w-full rounded-md px-1 py-0.5 text-left text-meta font-medium text-fg-muted transition hover:bg-surface-subtle hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       >
                         +{dayRecs.length - 3}{t('att.moreSuffix')}
                       </button>
@@ -372,7 +372,7 @@ export function AttendanceView({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-border bg-surface-subtle text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">
+                <tr className="border-b border-border bg-surface-subtle text-left text-meta leading-4 font-semibold text-fg-muted">
                   <th className="px-4 py-3">{t('att.col.date')}</th>
                   <th className="px-4 py-3">{t('att.col.member')}</th>
                   <th className="px-4 py-3">{t('att.col.team')}</th>
@@ -419,7 +419,6 @@ export function AttendanceView({
       <Modal
         open={open && !confirmingDelete}
         onClose={() => setOpen(false)}
-        eyebrow="ATTENDANCE"
         title={editingId ? t('att.editRecord') : t('att.addRecord')}
         footer={
           <>
@@ -496,7 +495,7 @@ export function AttendanceView({
             />
           </label>
           {editingId && (
-            <p className="text-[11px] leading-5 text-fg-muted">{t('att.form.lockedHint')}</p>
+            <p className="text-meta leading-5 text-fg-muted">{t('att.form.lockedHint')}</p>
           )}
           {formErr && <p className="text-xs font-medium text-danger">{formErr}</p>}
         </div>

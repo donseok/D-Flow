@@ -31,7 +31,7 @@ function StatusDots({ counts, total }: { counts: IssueStatusCounts; total: numbe
   return (
     <div className="flex flex-wrap items-center gap-[3px]" aria-hidden>
       {dots.map((s, i) => <i key={i} data-dot={s} className={`inline-block h-[7px] w-[7px] rounded-[2px] ${ISSUE_STATUS_META[s].dot}`} />)}
-      {rest > 0 && <span className="ml-0.5 text-[10px] font-semibold text-fg-muted">+{rest}</span>}
+      {rest > 0 && <span className="ml-0.5 text-meta font-semibold text-fg-muted">+{rest}</span>}
     </div>
   )
 }
@@ -69,7 +69,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
 
   if (issues.length === 0) {
     return (
-      <SectionCard eyebrow="ISSUES" title={tr('dash.issues.title')} icon={CircleAlert} actions={actions}>
+      <SectionCard title={tr('dash.issues.title')} icon={CircleAlert} actions={actions}>
         <MiniEmpty text={tr('dash.issues.empty')} />
       </SectionCard>
     )
@@ -83,7 +83,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
   ]
 
   return (
-    <SectionCard eyebrow="ISSUES" title={tr('dash.issues.title')} icon={CircleAlert} actions={actions}>
+    <SectionCard title={tr('dash.issues.title')} icon={CircleAlert} actions={actions}>
       <div className="space-y-5">
         {/* 히어로 — 해결률 링 + KPI 2×2. sm 미만은 링을 위에 가운데로, KPI 를 아래로 쌓는다(360px 에서 2×2 가 넘치지 않게).
             서브라인은 히어로 블록 안에 둔다 — space-y 의 margin 이 이기므로 음수 마진으로 당기지 않는다. */}
@@ -93,27 +93,27 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
               <RingGauge pct={resolvedPct} size={132} stroke={12} label={`${tr('dash.issues.resolvedRate')} ${resolvedPct}%`}>
                 <div>
                   <b className="block text-[30px] font-extrabold leading-none tracking-tight text-fg">{resolvedPct}%</b>
-                  <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-fg-muted">{tr('dash.issues.resolvedRate')}</span>
+                  <span className="mt-1 block text-meta font-semibold text-fg-muted">{tr('dash.issues.resolvedRate')}</span>
                 </div>
               </RingGauge>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {kpis.map(k => (
                 <div key={k.label} className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border bg-surface-subtle/50 px-3 py-2">
-                  <span className="truncate text-[11px] text-fg-secondary">{k.label}</span>
+                  <span className="truncate text-meta text-fg-secondary">{k.label}</span>
                   <b className={`shrink-0 text-lg font-bold leading-none ${k.tone ?? 'text-fg'}`}>{k.value}</b>
                 </div>
               ))}
             </div>
           </div>
-          <p className="text-[11px] text-fg-muted">
+          <p className="text-meta text-fg-muted">
             {tr('dash.issues.kpiUnresolvedSub').replace('{n}', String(kpi.total))} · {tr('dash.issues.kpiResolved7d')} {fmtDate(windowStart)}–{fmtDate(today)}
           </p>
         </div>
 
         {/* Mega 업무영역별 — 미니 링 타일(8영역 코드순 고정 + 미분류는 있을 때만). 이슈 없는 영역은 흐리게. */}
         <div>
-          <div className="mb-2 flex justify-between text-[11px] text-fg-muted">
+          <div className="mb-2 flex justify-between text-meta text-fg-muted">
             <span>{tr('dash.issues.byAreaRate')}</span><span>{tr('dash.issues.ringHint')}</span>
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2">
@@ -134,9 +134,9 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
                     </RingGauge>
                     <div className="min-w-0">
                       <div className="truncate text-xs font-semibold text-fg">
-                        <span className="mr-1 text-[10px] font-semibold tabular-nums text-fg-muted">{area?.code ?? '–'}</span>{name}
+                        <span className="mr-1 text-meta font-semibold tabular-nums text-fg-muted">{area?.code ?? '–'}</span>{name}
                       </div>
-                      <div className="text-[11px] text-fg-muted">
+                      <div className="text-meta text-fg-muted">
                         {empty ? tr('dash.issues.noIssues') : `${r.total}${unit} · ${tr('dash.issues.trendResolvedShort')} ${r.counts.resolved}`}
                       </div>
                     </div>
@@ -149,7 +149,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
         </div>
 
         {/* 범례 — 점 순서(ISSUE_STATUSES 고정)를 글로도 알린다(적록 색각 보강). */}
-        <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-[11px] text-fg-secondary">
+        <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-meta text-fg-secondary">
           <span className="text-fg-muted">{tr('dash.issues.legendOrder')}</span>
           {ISSUE_STATUSES.map(s => (
             <span key={s} className="inline-flex items-center gap-1.5">
@@ -159,7 +159,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
           ))}
         </div>
 
-        <p className="text-[11px] leading-4 text-fg-muted">{tr('dash.issues.caption').replace('{d}', fmtDate(today))}</p>
+        <p className="text-meta leading-4 text-fg-muted">{tr('dash.issues.caption').replace('{d}', fmtDate(today))}</p>
       </div>
     </SectionCard>
   )

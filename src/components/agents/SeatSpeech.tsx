@@ -56,9 +56,9 @@ export function ChatBubble({ kind, text, opener, color, tail = 'down', lines = 2
     : 'top-1/2 -left-[5px] -translate-y-1/2 border-b border-l'
   return (
     <span data-chat-bubble={kind} title={opener ? `${opener} ${text}` : text}
-      className={`${css.chatPop} relative rounded-2xl border px-2.5 py-1.5 text-[11px] font-semibold leading-snug break-keep shadow-[0_6px_14px_-10px_#0d1014] ${tail === 'down' ? 'mb-1.5 text-center' : 'ml-1.5 text-left'} ${className}`}
+      className={`${css.chatPop} relative rounded-2xl border px-2.5 py-1.5 text-meta font-semibold leading-snug break-keep shadow-[0_6px_14px_-10px_#0d1014] ${tail === 'down' ? 'mb-1.5 text-center' : 'ml-1.5 text-left'} ${className}`}
       style={{ background: look.bg, borderColor: look.edge, color: look.ink }}>
-      {opener && <b className={lines === 1 ? 'mr-1 text-[10px] font-extrabold' : 'block text-[10px] font-extrabold'} style={{ color }}>{opener}</b>}
+      {opener && <b className={lines === 1 ? 'mr-1 text-meta font-extrabold' : 'block text-meta font-extrabold'} style={{ color }}>{opener}</b>}
       <span className={lines === 1 ? `${opener ? 'font-medium' : ''}` : `${clamp} ${opener ? 'font-medium' : ''}`}>{text}</span>
       <i aria-hidden className={`absolute h-2.5 w-2.5 rotate-45 ${tailCls}`} style={{ background: look.bg, borderColor: look.edge }} />
     </span>

@@ -124,7 +124,7 @@ function TrustPanel({
   const StatusIcon = status.icon
 
   return (
-    <SectionCard eyebrow={t(locale, 'wiki.trust.eyebrow')} title={t(locale, 'wiki.trust.title')} icon={BadgeCheck}>
+    <SectionCard title={t(locale, 'wiki.trust.title')} icon={BadgeCheck}>
       <div className={`flex items-center gap-2 rounded-xl px-3 py-3 ${status.wrap}`}>
         <StatusIcon className="h-4 w-4 shrink-0" aria-hidden />
         <span className="text-sm font-semibold">{status.label}</span>
@@ -169,7 +169,7 @@ function OpenLoops({ items, questions, locale, projectId, topicId, canCurate, ca
         <article key={question.id} className="rounded-xl border border-border bg-surface px-4 py-3 shadow-[var(--shadow-sm)]">
           <div className="flex items-center gap-2"><CircleHelp className="h-4 w-4 text-pending" aria-hidden /><span className="chip bg-pending-weak text-pending">{t(locale, 'wiki.kind.question')}</span></div>
           <p className="mt-2 text-sm font-medium leading-6 text-fg">{question.question}</p>
-          <p className="mt-1 text-[11px] text-fg-muted">{formatWikiDate(question.createdAt, locale, false, timeZone)}</p>
+          <p className="mt-1 text-meta text-fg-muted">{formatWikiDate(question.createdAt, locale, false, timeZone)}</p>
           {canAnswer && <WikiQuestionAnswerForm projectId={projectId} topicId={topicId} questionId={question.id} locale={locale} />}
         </article>
       ))}
@@ -184,8 +184,7 @@ function EvidenceAccordion({ items, locale, projectId, canCurate, timeZone, minu
       <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 marker:hidden sm:px-6">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-action-soft text-action"><BookOpenText className="h-4 w-4" aria-hidden /></span>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-muted">{t(locale, 'wiki.evidence.eyebrow')}</div>
-          <h3 className="mt-0.5 text-sm font-semibold text-fg">{t(locale, 'wiki.evidence.title')}</h3>
+          <h3 className="text-sm font-semibold text-fg">{t(locale, 'wiki.evidence.title')}</h3>
         </div>
         <span className="chip bg-surface-subtle text-fg-secondary">{items.length}</span>
         <ChevronDown className="h-4 w-4 text-fg-muted transition group-open:rotate-180" aria-hidden />
@@ -295,16 +294,16 @@ export function WikiTopicDetail({
             <p className="mt-1.5 text-sm text-fg-secondary">{topic.ownerTeam ?? t(locale, 'wiki.noOwner')}<span className="mx-2 text-border-focus">·</span>{t(locale, 'wiki.updatedAt')} {formatWikiDate(topic.bodyUpdatedAt ?? topic.lastChangedAt, locale, false, timeZone)}</p>
           </div>
           <div className="grid shrink-0 grid-cols-3 gap-2">
-            <div className="rounded-xl border border-border/70 bg-surface-subtle px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-fg">{sourceCount(items)}</div><div className="text-[10px] text-fg-muted">{t(locale, 'wiki.trust.sources')}</div></div>
-            <div className="rounded-xl border border-warning/20 bg-pending-weak px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-pending">{openItems.length}</div><div className="text-[10px] text-pending">{t(locale, 'wiki.state.open')}</div></div>
-            <div className={`rounded-xl border px-3 py-2 text-center ${conflictCount > 0 ? 'border-danger/20 bg-danger-weak' : 'border-success/20 bg-success-weak'}`}><div className={`text-lg font-bold tabular-nums ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{conflictCount}</div><div className={`text-[10px] ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{t(locale, 'wiki.state.conflict')}</div></div>
+            <div className="rounded-xl border border-border/70 bg-surface-subtle px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-fg">{sourceCount(items)}</div><div className="text-meta text-fg-muted">{t(locale, 'wiki.trust.sources')}</div></div>
+            <div className="rounded-xl border border-warning/20 bg-pending-weak px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-pending">{openItems.length}</div><div className="text-meta text-pending">{t(locale, 'wiki.state.open')}</div></div>
+            <div className={`rounded-xl border px-3 py-2 text-center ${conflictCount > 0 ? 'border-danger/20 bg-danger-weak' : 'border-success/20 bg-success-weak'}`}><div className={`text-lg font-bold tabular-nums ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{conflictCount}</div><div className={`text-meta ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{t(locale, 'wiki.state.conflict')}</div></div>
           </div>
         </div>
       </section>
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-5">
-          <SectionCard eyebrow={t(locale, 'wiki.document.eyebrow')} title={t(locale, 'wiki.document.canonicalTitle')} icon={FileText}>
+          <SectionCard title={t(locale, 'wiki.document.canonicalTitle')} icon={FileText}>
             <WikiDocumentEditor
               key={topic.bodyUpdatedAt ?? 'empty-document'}
               projectId={projectId}
@@ -325,7 +324,7 @@ export function WikiTopicDetail({
           </SectionCard>
 
           {proposals.length > 0 && (
-            <SectionCard eyebrow={t(locale, 'wiki.proposal.eyebrow')} title={t(locale, 'wiki.proposal.title')} icon={AlertTriangle} actions={<span className="chip bg-pending-weak text-pending">{proposals.length}</span>}>
+            <SectionCard title={t(locale, 'wiki.proposal.title')} icon={AlertTriangle} actions={<span className="chip bg-pending-weak text-pending">{proposals.length}</span>}>
               <p className="-mt-2 mb-3 text-xs leading-5 text-fg-secondary">{t(locale, 'wiki.proposal.desc')}</p>
               <div className="space-y-3">
                 {proposals.map((item) => (
@@ -343,7 +342,7 @@ export function WikiTopicDetail({
 
         <div className="space-y-5 xl:sticky xl:top-(--frame-sticky-top)">
           <TrustPanel projectId={projectId} topic={topic} items={items} locale={locale} canContribute={canWriteMemory} trustState={trustState} timeZone={timeZone} />
-          <SectionCard eyebrow={t(locale, 'wiki.section.open.eyebrow')} title={t(locale, 'wiki.section.open.memoryTitle')} icon={ShieldAlert} actions={<span className="chip bg-pending-weak text-pending">{openItems.length + questions.length}</span>}>
+          <SectionCard title={t(locale, 'wiki.section.open.memoryTitle')} icon={ShieldAlert} actions={<span className="chip bg-pending-weak text-pending">{openItems.length + questions.length}</span>}>
             <p className="-mt-2 mb-3 text-xs text-fg-secondary">{t(locale, 'wiki.section.open.memoryDesc')}</p>
             <OpenLoops items={openItems} questions={questions} locale={locale} projectId={projectId} topicId={topic.id} canCurate={canCurateLegacy} canAnswer={canWriteMemory} timeZone={timeZone} minutesBase={minutesBase} />
             {canWriteMemory && <WikiQuestionCreateForm projectId={projectId} topicId={topic.id} locale={locale} />}
@@ -354,7 +353,7 @@ export function WikiTopicDetail({
       <details className="card group overflow-hidden">
         <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 marker:hidden sm:px-6">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-action-soft text-action"><GitCompareArrows className="h-4 w-4" aria-hidden /></span>
-          <div className="min-w-0 flex-1"><div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-muted">{t(locale, 'wiki.section.timeline.eyebrow')}</div><h3 className="mt-0.5 text-sm font-semibold text-fg">{t(locale, 'wiki.section.timeline.memoryTitle')}</h3></div>
+          <div className="min-w-0 flex-1"><h3 className="text-sm font-semibold text-fg">{t(locale, 'wiki.section.timeline.memoryTitle')}</h3></div>
           <span className="chip bg-surface-subtle text-fg-secondary">{data.changes.length}</span><ChevronDown className="h-4 w-4 text-fg-muted transition group-open:rotate-180" aria-hidden />
         </summary>
         <div className="border-t border-border px-5 py-5 sm:px-6">

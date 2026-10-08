@@ -41,7 +41,7 @@ export function PortfolioMilestoneBoard({ rows, milestones, today, locale }: {
 
   if (board.length === 0) {
     return (
-      <SectionCard eyebrow="MILESTONES" title={tr('pf.ms.title')} icon={Flag}>
+      <SectionCard title={tr('pf.ms.title')} icon={Flag}>
         <MiniEmpty text={tr('pf.ms.empty')} />
       </SectionCard>
     )
@@ -62,7 +62,7 @@ export function PortfolioMilestoneBoard({ rows, milestones, today, locale }: {
   const projectIds = board.map(r => r.projectId)
 
   return (
-    <SectionCard eyebrow="MILESTONES" title={tr('pf.ms.title')} icon={Flag}
+    <SectionCard title={tr('pf.ms.title')} icon={Flag}
       actions={<CountBadge n={milestones.length} unit={tr('pf.unit')} />}>
       <div className="overflow-x-auto">
         <div className="min-w-[720px]">

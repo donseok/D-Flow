@@ -847,7 +847,6 @@ export function ImportWizard({
         open={state.needsTeams !== null}
         onClose={() => dispatch({ type: 'dismissNeedsTeams' })}
         title={t('importWizard.needsTeamsTitle')}
-        eyebrow="TEAMS"
         footer={
           <>
             <button type="button" className="btn btn-ghost" onClick={() => dispatch({ type: 'dismissNeedsTeams' })}>{t('common.cancel')}</button>

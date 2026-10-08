@@ -23,7 +23,6 @@ export function ProgressPopover({
     <Modal
       open={open}
       onClose={onClose}
-      eyebrow="KANBAN"
       title={title}
       size="sm"
       footer={<button className="btn btn-ghost" onClick={onClose}>{t('kanban.cancel')}</button>}

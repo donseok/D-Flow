@@ -38,8 +38,7 @@ export async function AttendanceBoard({ projectId, records, members, today, type
   const rows = upcoming.slice(0, MAX_ROWS)
 
   return (
-    <SectionCard
-      eyebrow="ATTENDANCE" title={tr('dash.att.title')} icon={CalendarCheck}
+    <SectionCard title={tr('dash.att.title')} icon={CalendarCheck}
       actions={<CountBadge n={upcoming.length} unit={tr('dash.unitCount')} />}
     >
       <div className="space-y-4">
@@ -65,7 +64,7 @@ export async function AttendanceBoard({ projectId, records, members, today, type
                   <span className={`h-2 w-2 shrink-0 rounded-full ${meta.dot}`} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-medium text-fg" title={name}>{name}</div>
-                    {r.note && <div className="mt-0.5 truncate text-[11px] text-fg-secondary" title={r.note}>{r.note}</div>}
+                    {r.note && <div className="mt-0.5 truncate text-meta text-fg-secondary" title={r.note}>{r.note}</div>}
                   </div>
                   <span className={`badge shrink-0 ${meta.chip}`}>{vocabLabel('attendance.types', types, r.type, tr)}</span>
                 </li>

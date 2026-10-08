@@ -34,7 +34,7 @@ export function StageLabelsEditor({ projectId, value, revision, canEdit, invalid
       {invalid && <p role="alert" className="text-xs text-danger">{t('settings.workflow.stageLabelsInvalid')}</p>}
       <div className="grid gap-2 sm:grid-cols-5">
         {STAGE_LABEL_SLOTS.map((k) => (
-          <label key={k} className="flex flex-col gap-1 text-[11px] text-fg-secondary">
+          <label key={k} className="flex flex-col gap-1 text-meta text-fg-secondary">
             <span className="font-mono">{k === 'none' ? '—' : k}</span>
             <input className="app-input h-9 text-xs" maxLength={20} value={draft[k]} placeholder={t(DEFAULT_KEY[k])} disabled={locked}
               data-stage-label={k} aria-label={`${k} ${t(DEFAULT_KEY[k])}`}
@@ -42,7 +42,7 @@ export function StageLabelsEditor({ projectId, value, revision, canEdit, invalid
           </label>
         ))}
       </div>
-      <p className="text-[11px] text-fg-muted">{t('settings.workflow.stageLabelsHint')}</p>
+      <p className="text-meta text-fg-muted">{t('settings.workflow.stageLabelsHint')}</p>
       {!parsed.ok && <p role="alert" className="text-xs text-danger">{parsed.error}</p>}
       {(cmd.fieldErrors['workflow.wbs_stage_labels'] ?? cmd.error) && <p role="alert" className="text-xs text-danger">{cmd.fieldErrors['workflow.wbs_stage_labels'] ?? cmd.error}</p>}
       {cmd.saved && <p role="status" className="text-xs text-success">{t('settings.workflow.saved')}</p>}

@@ -25,7 +25,7 @@ export function MinuteFontSizeControl({
       <button type="button" onClick={onDec} disabled={!canDec}
         title={t('min.fs.decrease')} aria-label={t('min.fs.decrease')}
         className={`${btn} text-xs font-bold`}>
-        A<span className="text-[10px]">−</span>
+        A<span className="text-meta">−</span>
       </button>
       <button type="button" onClick={onReset}
         title={t('min.fs.reset')} aria-label={`${t('min.fs.current')}: ${size}px — ${t('min.fs.reset')}`}
@@ -36,7 +36,7 @@ export function MinuteFontSizeControl({
       <button type="button" onClick={onInc} disabled={!canInc}
         title={t('min.fs.increase')} aria-label={t('min.fs.increase')}
         className={`${btn} text-sm font-bold`}>
-        A<span className="text-[10px]">+</span>
+        A<span className="text-meta">+</span>
       </button>
     </div>
   )

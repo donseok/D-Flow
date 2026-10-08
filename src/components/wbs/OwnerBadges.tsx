@@ -19,7 +19,7 @@ export function OwnerBadges({
         <span
           key={o.team + o.kind}
           className={`inline-flex items-center gap-0.5 font-semibold leading-none ${nowrap ? 'shrink-0' : ''}`}
-          style={{ fontSize: 'var(--wbs-owner-font, 10.5px)' }}
+          style={{ fontSize: 'var(--wbs-owner-font, 12px)' }}
           title={o.kind === 'primary' ? `${o.team} 주관` : `${o.team} 지원`}
         >
           <span

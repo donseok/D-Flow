@@ -171,7 +171,7 @@ export function MinuteWikiImpactCard({
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {countEntries.map(change => (
             <div key={change} className="rounded-lg border border-border bg-surface px-3 py-2">
-              <p className="text-[11px] text-fg-muted">{t(countLabel(change))}</p>
+              <p className="text-meta text-fg-muted">{t(countLabel(change))}</p>
               <p className={`mt-0.5 inline-flex rounded-md px-1.5 py-0.5 text-sm font-bold tabular-nums ${COUNT_STYLE[change]}`}>
                 {counts[change]}
               </p>
@@ -212,7 +212,7 @@ export function MinuteWikiImpactCard({
       )}
 
       {processedAt && (
-        <p className="mt-2 text-right text-[11px] tabular-nums text-fg-muted">
+        <p className="mt-2 text-right text-meta tabular-nums text-fg-muted">
           {t('min.wiki.processedAt')} {processedDate(processedAt, locale, timeZone)}
         </p>
       )}

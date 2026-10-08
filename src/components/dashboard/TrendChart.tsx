@@ -19,7 +19,7 @@ export async function TrendChart({ model, today, historyFailed = false }: {
 
   if (model.empty) {
     return (
-      <SectionCard eyebrow="S-CURVE" title={tr('dash.trend.title')} icon={TrendingUp}>
+      <SectionCard title={tr('dash.trend.title')} icon={TrendingUp}>
         <MiniEmpty text={tr('dash.trend.empty')} />
       </SectionCard>
     )
@@ -34,14 +34,14 @@ export async function TrendChart({ model, today, historyFailed = false }: {
   const lastActual = actualSeries[actualSeries.length - 1]
 
   const legend = (
-    <div className="flex items-center gap-3 text-[10px] text-fg-muted">
+    <div className="flex items-center gap-3 text-meta text-fg-muted">
       <span className="inline-flex items-center gap-1"><span className="h-1.5 w-4 rounded-full bg-action" />{tr('dash.actualLabel')}</span>
       <span className="inline-flex items-center gap-1"><span className="h-0 w-4 border-t-2 border-dashed border-fg-secondary" />{tr('dash.plannedLabel')}</span>
     </div>
   )
 
   return (
-    <SectionCard eyebrow="S-CURVE" title={tr('dash.trend.title')} icon={TrendingUp} actions={legend}>
+    <SectionCard title={tr('dash.trend.title')} icon={TrendingUp} actions={legend}>
       <div className="space-y-3">
         <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={tr('dash.trend.title')}>
           {[0, 25, 50, 75, 100].map(g => (
@@ -62,8 +62,8 @@ export async function TrendChart({ model, today, historyFailed = false }: {
           <text x={W - PR} y={H - 8} textAnchor="end" fontSize={9} className="fill-fg-muted">{fmtDate(model.axisEnd)}</text>
         </svg>
         {historyFailed
-          ? <p role="alert" className="flex items-center gap-1.5 text-[11px] text-fg"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-danger" />{tr('dash.trend.historyFailed')}</p>
-          : !model.hasHistory && <div className="text-[11px] text-fg-muted">{tr('dash.trend.noHistory')}</div>}
+          ? <p role="alert" className="flex items-center gap-1.5 text-meta text-fg"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-danger" />{tr('dash.trend.historyFailed')}</p>
+          : !model.hasHistory && <div className="text-meta text-fg-muted">{tr('dash.trend.noHistory')}</div>}
       </div>
     </SectionCard>
   )

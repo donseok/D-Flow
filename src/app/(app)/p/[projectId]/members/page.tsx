@@ -63,7 +63,6 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
     >
       <div className="space-y-4">
         <SectionCard
-          eyebrow={canEdit ? 'TEAM & AUTHORIZATION' : 'TEAM'}
           title={t(locale, canEdit ? 'members.sectionManage' : 'members.sectionRoster')}
           icon={canEdit ? Shield : Users}
         >

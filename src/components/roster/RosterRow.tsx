@@ -157,7 +157,7 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
               {accessRoleLabel('admin')}{!unlinked && !canGrantAdmin ? ' (워크스페이스 관리자 전용)' : ''}
             </option>
           </select>
-          {unlinked && <p className="mt-1 max-w-[12rem] text-[11px] leading-4 text-fg-muted" data-unlinked-access-hint>{UNLINKED_HINT}</p>}
+          {unlinked && <p className="mt-1 max-w-[12rem] text-meta leading-4 text-fg-muted" data-unlinked-access-hint>{UNLINKED_HINT}</p>}
         </td>
         <EffectiveRoleCell member={member} effective={effective} />
         <td className="py-2 pr-3">

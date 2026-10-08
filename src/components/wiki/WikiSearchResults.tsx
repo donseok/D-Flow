@@ -173,7 +173,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
                         <span className="shrink-0 text-xs font-semibold text-fg-muted">[{index + 1}]</span>
                         <span className="chip bg-action-soft text-action">{sourceLabel(locale, hit.domain)}</span>
                         {hit.occurredOn && (
-                          <span className="text-[11px] text-fg-muted">{hit.occurredOn}</span>
+                          <span className="text-meta text-fg-muted">{hit.occurredOn}</span>
                         )}
                       </span>
                       <span className="mt-1 block truncate text-sm font-semibold text-fg">{hit.title}</span>
@@ -184,7 +184,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
                     {/* 버튼 안에 링크를 중첩할 수 없어 형제로 띄운다 — xl 미만에서 원문 이동의 유일한 통로(C6). */}
                     <a
                       href={hit.href}
-                      className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-action transition hover:border-border-focus"
+                      className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-meta font-medium text-action transition hover:border-border-focus"
                     >
                       {t(locale, 'wiki.pane.source')}
                       <ArrowRight className="h-3 w-3" aria-hidden />
@@ -204,7 +204,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
           {selectedHit
             ? (
               <>
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-muted">
+                <div className="flex items-center gap-2 text-meta font-semibold text-fg-muted">
                   <BookOpen className="h-3.5 w-3.5" aria-hidden />
                   {t(locale, 'wiki.pane.reading')}
                 </div>
@@ -228,7 +228,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
             )
             : (
               <>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-muted">
+                <div className="text-meta font-semibold text-fg-muted">
                   {t(locale, 'wiki.pane.guide.eyebrow')}
                 </div>
                 {state.kind === 'done' && state.hits.length > 0 && (

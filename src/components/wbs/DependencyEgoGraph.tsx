@@ -14,7 +14,10 @@ import { formatPct1 } from '@/lib/domain/format'
  * 상세 패널은 드래그로 폭이 바뀌는데, 측정 기반이면 그때마다 다시 재야 한다.
  */
 
-/** 노드 한 칸의 높이·간격. 연결선 좌표가 이 두 값에서 파생되므로 CSS 와 반드시 같이 움직인다. */
+/**
+ * 노드 한 칸의 높이·간격. 연결선 좌표가 이 두 값에서 파생되므로 CSS 와 반드시 같이 움직인다.
+ * 높이는 세 줄(12px·행간 16px)에 위아래 여백 2px 씩이 꼭 맞는 값이다 — 글자·여백을 바꾸면 같이 본다.
+ */
 const NODE_H = 56
 const NODE_GAP = 10
 const ROW_H = NODE_H + NODE_GAP
@@ -112,13 +115,13 @@ export function DependencyEgoGraph({
 
         <div className="flex shrink-0 items-center" style={{ width: CENTER_W, height: boardH }}>
           <div
-            className={`w-full rounded-lg border-2 bg-surface px-2.5 py-1.5 ${critical ? 'border-critical' : 'border-border-focus'}`}
+            className={`w-full rounded-lg border-2 bg-surface px-2.5 py-0.5 ${critical ? 'border-critical' : 'border-border-focus'}`}
             style={{ height: NODE_H }}
             aria-current="true"
           >
-            <div className="truncate text-[10px] font-bold tabular-nums text-action">{item.code}</div>
+            <div className="truncate text-meta leading-4 font-bold tabular-nums text-action">{item.code}</div>
             <div className="truncate text-xs font-semibold text-fg" title={item.name}>{item.name}</div>
-            <div className="truncate text-[10px] tabular-nums text-fg-secondary">
+            <div className="truncate text-meta leading-4 tabular-nums text-fg-secondary">
               {formatPct1(item.rolledActualPct)}%
             </div>
           </div>
@@ -143,7 +146,7 @@ export function DependencyEgoGraph({
       </div>
 
       {expanded && hiddenCount === 0 && predecessors.length + successors.length > COLLAPSE_AT && (
-        <button type="button" onClick={() => setExpanded(false)} className="btn btn-ghost mt-1 h-6 px-2 text-[10px]">
+        <button type="button" onClick={() => setExpanded(false)} className="btn btn-ghost mt-1 h-6 px-2 text-meta">
           {t('wbs.depGraphCollapse')}
         </button>
       )}
@@ -247,29 +250,29 @@ function Node({
       title={canOpen ? `${name} — ${t('wbs.depGraphOpenHint')}` : name}
     >
       <span className={`w-1 shrink-0 ${target ? STATUS_BAR[target.status] : 'bg-danger'}`} aria-hidden />
-      <div className="min-w-0 flex-1 px-2 py-1">
+      <div className="min-w-0 flex-1 px-2 py-0.5">
         <div className="flex items-center gap-1">
-          <span className="min-w-0 truncate text-[10px] font-bold tabular-nums text-fg-muted">
+          <span className="min-w-0 truncate text-meta leading-4 font-bold tabular-nums text-fg-muted">
             {target?.code ?? node.fallbackLabel ?? ''}
           </span>
-          <span className="ml-auto shrink-0 rounded bg-surface-subtle px-1 text-[9px] font-bold text-fg-secondary">
+          <span className="ml-auto shrink-0 rounded bg-surface-subtle px-1 text-meta leading-4 font-bold text-fg-secondary">
             {node.badge}
           </span>
         </div>
-        <div className="truncate text-[11px] text-fg">{name}</div>
+        <div className="truncate text-meta leading-4 text-fg">{name}</div>
         <div className="flex items-center gap-1">
           {target && (
-            <span className="shrink-0 text-[10px] tabular-nums text-fg-secondary">
+            <span className="shrink-0 text-meta leading-4 tabular-nums text-fg-secondary">
               {formatPct1(target.rolledActualPct)}%
             </span>
           )}
           {node.imported && (
-            <span className="shrink-0 rounded bg-surface-subtle px-1 text-[9px] font-bold text-fg-muted">
+            <span className="shrink-0 rounded bg-surface-subtle px-1 text-meta leading-4 font-bold text-fg-muted">
               {t('wbs.depImported')}
             </span>
           )}
           {node.state && (
-            <span className={`ml-auto shrink-0 rounded-full border px-1.5 text-[9px] font-bold ${STATE_STYLE[node.state].cls}`}>
+            <span className={`ml-auto shrink-0 rounded-full border px-1.5 text-meta leading-4 font-bold ${STATE_STYLE[node.state].cls}`}>
               {t(STATE_STYLE[node.state].label)}
             </span>
           )}
@@ -284,7 +287,7 @@ function MoreChip({ count, onClick, t }: { count: number; onClick: () => void; t
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-center rounded-lg border border-dashed border-border text-[11px] text-fg-secondary transition hover:border-border-focus hover:text-action"
+      className="flex w-full items-center justify-center rounded-lg border border-dashed border-border text-meta text-fg-secondary transition hover:border-border-focus hover:text-action"
       style={{ height: NODE_H }}
     >
       {t('wbs.depGraphMore').replace('{n}', String(count))}

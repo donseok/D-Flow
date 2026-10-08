@@ -53,7 +53,7 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
               <div className="min-w-0 flex-1 md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,6fr)] md:items-center md:gap-x-4">
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-medium text-fg" title={o.title}>{o.title}</div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-fg-secondary">
+                  <div className="mt-0.5 flex items-center gap-2 text-meta text-fg-secondary">
                     {o.startTime && (
                       <span className="tabular-nums">
                         {o.startTime.slice(0, 5)}{o.endTime ? `–${o.endTime.slice(0, 5)}` : ''}
@@ -62,7 +62,7 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
                     {o.location && <span className="truncate">{o.location}</span>}
                   </div>
                 </div>
-                <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] md:mt-0"
+                <div className="mt-1 flex min-w-0 items-center gap-1.5 text-meta md:mt-0"
                   title={extra.attendees.length ? extra.attendees.join(', ') : undefined}>
                   <Users className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden />
                   {extra.attendees.length === 0 ? (
@@ -76,7 +76,7 @@ export function MeetingScheduleList({ rows, extras, today, currentUserId = null,
                     </>
                   )}
                 </div>
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] md:mt-0"
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-meta md:mt-0"
                   title={extra.memo || undefined}>
                   <NotebookText className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden />
                   {extra.memo ? (

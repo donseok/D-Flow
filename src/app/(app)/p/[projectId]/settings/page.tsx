@@ -127,7 +127,7 @@ async function llmBadge(locale: Locale): Promise<{ label: string; cls: string }>
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1 border-b border-border py-3.5 last:border-b-0 sm:flex-row sm:items-start sm:gap-4">
-      <dt className="w-32 shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-muted sm:pt-0.5">{label}</dt>
+      <dt className="w-32 shrink-0 text-meta font-semibold text-fg-muted sm:pt-0.5">{label}</dt>
       <dd className="min-w-0 flex-1 text-sm leading-6 text-fg">{children}</dd>
     </div>
   )
@@ -313,7 +313,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {/* ── 기본 정보 ── */}
         <SectionCard
           searchText="project name description start date end date 프로젝트 이름 설명 기간 마일스톤 키워드"
-          eyebrow="CORE INFORMATION"
           title={t(locale, 'settings.coreInfoTitle')}
           icon={Info}
           actions={canMutate && project ? (
@@ -358,7 +357,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isAdmin && labels && (
           <SectionCard
             searchText="core.level_labels 단계 깊이 WBS"
-            eyebrow="WBS"
             title={locale === 'ko' ? 'WBS 단계' : 'WBS Levels'}
             icon={ListTree}
           >
@@ -377,7 +375,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isSuperuser && (
           <SectionCard
             searchText="프로젝트 공개 범위 비공개"
-            eyebrow="AUTHORIZATION"
             title={t(locale, 'settings.privacyTitle')}
             icon={Lock}
             actions={<ProjectPrivacyToggle projectId={projectId} isPrivate={Boolean(project?.is_private)} />}
@@ -392,7 +389,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       {/* ── WBS 데이터 가져오기 / 내보내기 ── */}
         <SectionCard
         searchText="wbs.excel_profile import export 데이터 가져오기 내보내기"
-        eyebrow="DATA"
         title={t(locale, 'settings.importExportTitle')}
         icon={Upload}
       >
@@ -421,7 +417,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       {/* ── AI 어시스턴트 의미검색 색인 ── */}
         <SectionCard
         searchText="ai.enabled 색인 재색인"
-        eyebrow="AI ASSISTANT"
         title={t(locale, 'settings.assistantTitle')}
         icon={Sparkles}
         actions={
@@ -445,7 +440,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isSuperuser && llm && (
           <SectionCard
             searchText="llm ai 모델 환경변수"
-            eyebrow="AI ASSISTANT"
             title={t(locale, 'settings.llmTitle')}
             icon={Cpu}
             actions={
@@ -470,7 +464,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {/* ════ 모듈·메뉴 ════ */}
         <div id="project-modules" className="scroll-mt-24 space-y-5">
         <div>
-        <SectionCard searchText="modules.enabled 모듈 메뉴 views.default 작업 계획 기본 보기" eyebrow="MODULES" title="모듈·메뉴" icon={LayoutList}>
+        <SectionCard searchText="modules.enabled 모듈 메뉴 views.default 작업 계획 기본 보기" title="모듈·메뉴" icon={LayoutList}>
           {pc.ok && workspaceModules ? (() => {
             const enabled = pc.cfg.keys['modules.enabled']
             const allowed = workspaceModules.keys['modules.allowed']
@@ -507,7 +501,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isAdmin && (
           <SectionCard
             searchText="권한 역할 멤버"
-            eyebrow="AUTHORIZATION"
             title={locale === 'ko' ? '권한' : 'Roles'}
             icon={Shield}
           >
@@ -527,7 +520,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isAdmin && (
           <SectionCard
             searchText="팀 업무영역 담당"
-            eyebrow="TEAMS"
             title={locale === 'ko' ? '팀 관리' : 'Teams'}
             icon={Users}
           >
@@ -552,7 +544,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isAdmin && pc.ok && (
           <SectionCard
             searchText="업무영역 주간보고 영역 담당 팀 weekly areas"
-            eyebrow="WORK AREAS"
             title={locale === 'ko' ? '업무영역' : 'Work areas'}
             icon={ListTree}
           >
@@ -575,21 +566,21 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           </SectionCard>
         )}
           {isAdmin && pc.ok && issuesGate.ok && (
-            <SectionCard searchText="issue areas code prefix pattern counter" eyebrow="ISSUES" title={t(locale, 'settings.issueAreas.title')} icon={ListTree}>
+            <SectionCard searchText="issue areas code prefix pattern counter" title={t(locale, 'settings.issueAreas.title')} icon={ListTree}>
               <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.issueAreas.desc')}</p>
               {teams.ok ? <ProjectAreasManager projectId={projectId} kind="issue_area" areas={pc.cfg.areas.issue_area} teamOptions={areaTeamOptions(teams.visible, pc.cfg.teams, pc.cfg.areas.issue_area)} locale={locale} /> : <p role="alert" className="text-sm text-danger">{ERR_TEAMS_UI}</p>}
             </SectionCard>
           )}
         </div>
         {isAdmin && pc.ok && issuesGate.ok && <div id="project-issues" className="scroll-mt-24 space-y-5">
-          <SectionCard searchText="issues.id_policy issue code analysis policy" eyebrow="ISSUE POLICY" title={t(locale, 'settings.issues.policy.title')} icon={LayoutList}>
+          <SectionCard searchText="issues.id_policy issue code analysis policy" title={t(locale, 'settings.issues.policy.title')} icon={LayoutList}>
             <p className="mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.issues.id_policy.desc')}</p>
             {issuePolicy?.ok && issueAnalysis?.ok && issueYear !== null ? <IssuePolicyEditor key={`${projectId}-${revision}`} projectId={projectId} policy={issuePolicy.value as IdPolicy} revision={revision} areas={pc.cfg.areas.issue_area} year={issueYear} canEdit={canMutate} analysis={issueAnalysis.value as IssueAnalysisSetting} analysisEnabled={analysisState === 'on'} locale={locale} /> : <ConfigStateNotice kind="unavailable" locale={locale} />}
           </SectionCard>
         </div>}
 
         {isAdmin && pc.ok && minutesGate.ok && attachmentPolicy && <div id="project-minutes" className="scroll-mt-24 space-y-5">
-          <SectionCard searchText="minutes.attachments 회의록 첨부 정책 용량 개수 형식 미리보기 attachment" eyebrow="MINUTES" title={t(locale, 'settings.minutes.attachments.label')} icon={Paperclip}>
+          <SectionCard searchText="minutes.attachments 회의록 첨부 정책 용량 개수 형식 미리보기 attachment" title={t(locale, 'settings.minutes.attachments.label')} icon={Paperclip}>
             <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.minutes.attachments.desc')}</p>
             <AttachmentPolicyEditor key={`${projectId}-${revision}`} scope={{ projectId }} revision={revision} canEdit={canMutate}
               policy={attachmentPolicy.ok ? attachmentPolicy.value as AttachmentPolicy : null} invalid={!attachmentPolicy.ok} />
@@ -600,7 +591,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           {vocabKeys.map(key => {
             const st = pc.cfg.keys[key]
             const ok = st.status === 'set' || st.status === 'default'
-            return <SectionCard key={key} searchText={`${key} 용어 분류 어휘 vocabulary ${t(locale, `settings.${key}.label` as DictKey)}`} eyebrow="VOCABULARY" title={t(locale, `settings.${key}.label` as DictKey)} icon={LayoutList}>
+            return <SectionCard key={key} searchText={`${key} 용어 분류 어휘 vocabulary ${t(locale, `settings.${key}.label` as DictKey)}`} title={t(locale, `settings.${key}.label` as DictKey)} icon={LayoutList}>
               <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, `settings.${key}.desc` as DictKey)}</p>
               <VocabEditor key={`${projectId}-${key}-${revision}`} projectId={projectId} vocabKey={key} revision={revision} canEdit={canMutate}
                 value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
@@ -609,14 +600,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         </div>}
 
         {isAdmin && pc.ok && formKinds && <div id="project-forms" className="scroll-mt-24 space-y-5">
-          <SectionCard searchText="forms 양식 템플릿 보고서 pptx xlsx 업로드 매핑 자리표시자" eyebrow="FORMS" title={locale === 'ko' ? '보고서 양식' : 'Report templates'} icon={Upload}>
+          <SectionCard searchText="forms 양식 템플릿 보고서 pptx xlsx 업로드 매핑 자리표시자" title={locale === 'ko' ? '보고서 양식' : 'Report templates'} icon={Upload}>
             <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{locale === 'ko' ? '자체 양식 파일을 올려 활성화하면 보고서·내보내기가 그 양식으로 만들어집니다. 활성 양식이 없으면 기본 양식을 씁니다.' : 'Upload and activate your own template to use it for reports and exports. Without an active one, the default template is used.'}</p>
             <FormTemplatesManager key={`${projectId}-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate} kinds={formKinds} />
           </SectionCard>
         </div>}
 
         {isAdmin && pc.ok && fieldStates && <div id="project-fields" className="scroll-mt-24 space-y-5">
-          <SectionCard searchText="fields.wbs_item fields.issue fields.weekly_row 추가 필드 custom fields" eyebrow="CUSTOM FIELDS" title={locale === 'ko' ? '추가 필드' : 'Custom fields'} icon={LayoutList}>
+          <SectionCard searchText="fields.wbs_item fields.issue fields.weekly_row 추가 필드 custom fields" title={locale === 'ko' ? '추가 필드' : 'Custom fields'} icon={LayoutList}>
             <CustomFieldsSettings key={`${projectId}-fields-${revision}`} projectId={projectId} states={fieldStates} revision={revision} canEdit={canMutate} locale={locale} />
           </SectionCard>
         </div>}
@@ -628,7 +619,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           const key = 'workflow.issue_statuses' as const
           const st = pc.cfg.keys[key]
           const ok = st.status === 'set' || st.status === 'default'
-          return <SectionCard searchText={`${key} 이슈 상태 범주 업무 흐름 workflow status ${t(locale, 'settings.workflow.issue_statuses.label')}`} eyebrow="WORKFLOW" title={t(locale, 'settings.workflow.issue_statuses.label')} icon={LayoutList}>
+          return <SectionCard searchText={`${key} 이슈 상태 범주 업무 흐름 workflow status ${t(locale, 'settings.workflow.issue_statuses.label')}`} title={t(locale, 'settings.workflow.issue_statuses.label')} icon={LayoutList}>
             <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.workflow.issue_statuses.desc')}</p>
             <VocabEditor key={`${projectId}-${key}-${revision}`} projectId={projectId} vocabKey={key} revision={revision} canEdit={canMutate}
               value={ok ? (st.value as readonly VocabEntry[]) : null} invalid={!ok} />
@@ -640,8 +631,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             const v = pc.cfg.keys[k]
             return v.status === 'set' || v.status === 'default' ? v.value as ProjectSettingValue<K> : null
           }
-          return <SectionCard searchText={`workflow.wbs_stage_labels workflow.approval_steps workflow.approval_distinct_approvers workflow.predecessor_gate 승인 단계 선행 ${t(locale, 'settings.workflow.wbsTitle')}`}
-            eyebrow="WORKFLOW" title={t(locale, 'settings.workflow.wbsTitle')} icon={LayoutList}>
+          return <SectionCard searchText={`workflow.wbs_stage_labels workflow.approval_steps workflow.approval_distinct_approvers workflow.predecessor_gate 승인 단계 선행 ${t(locale, 'settings.workflow.wbsTitle')}`} title={t(locale, 'settings.workflow.wbsTitle')} icon={LayoutList}>
             <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.workflow.wbsDesc')}</p>
             <div className="space-y-5">
               <div className="space-y-2">
@@ -660,7 +650,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       {/* ── 에이전트 (킬스위치) ── */}
         <SectionCard
         searchText="workflow.stage_credits 에이전트 상태 승인 크레딧"
-        eyebrow="AGENT"
         title={t(locale, 'settings.agentTitle')}
         icon={Bot}
         actions={
@@ -689,7 +678,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         )}
         </SectionCard>
       {/* ── 프로젝트 상태 관리 (시각 전용) ── */}
-        <SectionCard searchText="workflow.stage_credits 상태 정책 자동 동기화" eyebrow="STATUS POLICY" title={t(locale, 'settings.statusPolicyTitle')} icon={Settings}>
+        <SectionCard searchText="workflow.stage_credits 상태 정책 자동 동기화" title={t(locale, 'settings.statusPolicyTitle')} icon={Settings}>
         <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">
           {t(locale, 'settings.statusPolicyDesc')}
         </p>
@@ -733,7 +722,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       {/* ── 달력: 주 시작·근무 요일·시간대 + 기준일·날짜 예외 ── */}
         <SectionCard
         searchText="calendar.working_days calendar.week_start calendar.timezone 달력 기준일 주 시작 근무 요일 시간대 휴무 근무 날짜 예외"
-        eyebrow="CALENDAR"
         title={t(locale, 'settings.calendarTitle')}
         icon={CalendarDays}
       >
@@ -774,7 +762,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         </SectionCard>
         </div>
 
-        <SectionCard id="project-history" searchText="history 설정 변경 기록 이력" eyebrow="HISTORY" title="설정 변경 이력" icon={History}>
+        <SectionCard id="project-history" searchText="history 설정 변경 기록 이력" title="설정 변경 이력" icon={History}>
           {historyCal === null
             ? null /* 설정 전체를 못 읽었다 — 페이지 머리의 ConfigLoadError 가 이미 사유를 그린다 */
             : historyCal.ok

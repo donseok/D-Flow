@@ -14,7 +14,7 @@ export function UsageTrendChart({ series }: { series: DailyActive[] }) {
   const points = series.map((p, i) => `${x(i).toFixed(1)},${y(p.activeUsers).toFixed(1)}`).join(' ')
 
   return (
-    <SectionCard eyebrow="TREND" title="일별 활성 사용자" icon={TrendingUp}>
+    <SectionCard title="일별 활성 사용자" icon={TrendingUp}>
       {!hasAny ? (
         <MiniEmpty text="수집 시작 이후 데이터가 쌓입니다." />
       ) : (

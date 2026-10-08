@@ -46,11 +46,11 @@ export function WikiRevisionRestoreButton({
 
   return (
     <div className="ml-auto">
-      <button type="button" onClick={() => void restore()} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-[11px]">
+      <button type="button" onClick={() => void restore()} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-meta">
         <RotateCcw className="h-3.5 w-3.5" aria-hidden />
         {busy ? t(locale, 'wiki.history.restoring') : t(locale, 'wiki.history.restore')}
       </button>
-      {error && <p className="mt-1 max-w-xs text-right text-[11px] font-medium text-danger" role="alert">{error}</p>}
+      {error && <p className="mt-1 max-w-xs text-right text-meta font-medium text-danger" role="alert">{error}</p>}
     </div>
   )
 }

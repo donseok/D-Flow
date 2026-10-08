@@ -45,7 +45,7 @@ export function RiskWorklist({ items, projectId, today }: {
   const rows: Row[] = [...urgent, ...behind]
 
   return (
-    <SectionCard eyebrow="ACTION QUEUE" title="지금 확인할 작업(WBS)" icon={AlertTriangle}
+    <SectionCard title="지금 확인할 작업(WBS)" icon={AlertTriangle}
       actions={<span className="chip bg-danger-weak text-danger">지연 {risk.delayed} · 임박 {risk.dueSoon}</span>}>
       {rows.length === 0 ? <p className="text-sm text-fg-secondary">현재 즉시 조치가 필요한 작업이 없습니다.</p> : (
         <div className="space-y-2">

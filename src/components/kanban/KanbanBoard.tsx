@@ -543,7 +543,7 @@ export function KanbanBoard({
                   <span className="badge shrink-0 bg-surface-subtle text-fg-secondary font-semibold tabular-nums">{col.count}</span>
                 </div>
                 {col.subtitle && (
-                  <p className="truncate pl-4.5 text-[11px] text-fg-muted" data-testid="kanban-col-subtitle" title={col.subtitle}>
+                  <p className="truncate pl-4.5 text-meta text-fg-muted" data-testid="kanban-col-subtitle" title={col.subtitle}>
                     {col.subtitle}
                   </p>
                 )}
@@ -637,7 +637,6 @@ export function KanbanBoard({
       <Modal
         open={confirmCard !== null}
         onClose={() => setConfirmCard(null)}
-        eyebrow="KANBAN"
         title={t('kanban.resetTitle')}
         size="sm"
         footer={

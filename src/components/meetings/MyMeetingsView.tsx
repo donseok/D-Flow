@@ -278,7 +278,7 @@ export function MyMeetingsView({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-border bg-surface-subtle text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-fg-muted">
+                <tr className="border-b border-border bg-surface-subtle text-left text-meta leading-4 font-semibold text-fg-muted">
                   <th className="px-4 py-3">{t('meet.col.date')}</th>
                   <th className="px-4 py-3">{t('meet.col.time')}</th>
                   <th className="px-4 py-3">{t('meet.col.title')}</th>

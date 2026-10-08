@@ -13,8 +13,7 @@ export async function VarianceRanking({ entries }: { entries: VarianceEntry[] })
   const tr = (k: DictKey) => t(locale, k)
 
   return (
-    <SectionCard
-      eyebrow="CATCH-UP" title={tr('dash.rank.title')} icon={TrendingDown}
+    <SectionCard title={tr('dash.rank.title')} icon={TrendingDown}
       actions={<CountBadge n={entries.length} unit={tr('dash.unitCount')} tone="bg-pending-weak text-warning" />}
     >
       {entries.length === 0 ? (
@@ -32,7 +31,7 @@ export async function VarianceRanking({ entries }: { entries: VarianceEntry[] })
               </div>
               <div className="w-24 shrink-0 text-right">
                 <div className="tabular-nums text-xs text-fg-secondary">{fmtDate(item.plannedEnd)}</div>
-                <div className="mt-0.5 inline-flex rounded-md bg-pending-weak px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-warning">
+                <div className="mt-0.5 inline-flex rounded-md bg-pending-weak px-1.5 py-0.5 text-meta font-semibold tabular-nums text-warning">
                   −{gapPp}%p
                 </div>
               </div>

@@ -131,7 +131,7 @@ export function MeetingDetailModal({
             </p>
           )}
           <div className="flex items-center gap-2 text-fg"><CalendarDays className="h-4 w-4 text-fg-muted" />{fmtDate(occurrence.occurrenceDate)}
-            {occurrence.isRecurring && <span className="inline-flex items-center gap-1 text-[11px] text-fg-muted"><Repeat className="h-3 w-3" />{t('meet.recurring')}</span>}
+            {occurrence.isRecurring && <span className="inline-flex items-center gap-1 text-meta text-fg-muted"><Repeat className="h-3 w-3" />{t('meet.recurring')}</span>}
           </div>
           <div className="flex items-center gap-2 text-fg"><Clock4 className="h-4 w-4 text-fg-muted" /><span className="tabular-nums">{timeLabel}</span></div>
           {occurrence.location && <div className="flex items-center gap-2 text-fg"><MapPin className="h-4 w-4 text-fg-muted" />{occurrence.location}</div>}

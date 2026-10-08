@@ -28,6 +28,7 @@ export const dashboardEn: Record<keyof typeof dashboardKo, string> = {
   'dash.exec.overdue': 'Overdue',
   'dash.exec.delayed': 'Delayed',
   'dash.exec.dueSoon': 'Due soon',
+  'dash.exec.eyebrow': 'Executive Summary',
   'dash.exec.reportTitle': 'Weekly report summary (PPT)',
   'dash.trend.title': 'Progress trend',
   'dash.trend.empty': 'No schedule to draw a trend. Set the project period or WBS dates.',

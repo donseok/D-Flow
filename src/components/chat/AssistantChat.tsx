@@ -830,7 +830,7 @@ function Bubble({
       >
         {content}
         {!isUser && (safeSources.length > 0 || (asOf && asOfTimezone) || truncated) && (
-          <div className="mt-2 border-t border-border-focus/30 pt-2 text-[11px] text-fg-muted">
+          <div className="mt-2 border-t border-border-focus/30 pt-2 text-meta text-fg-muted">
             {visibleSources.length > 0 && (
               <div className="flex flex-wrap gap-1.5" aria-label="답변 출처">
                 {visibleSources.map(source => (
@@ -947,7 +947,7 @@ function TypingBubble({ message }: { message?: string | null }) {
             />
           ))}
         </div>
-        {message && <div className="mt-1.5 max-w-64 text-[11px] text-fg-muted">{message}</div>}
+        {message && <div className="mt-1.5 max-w-64 text-meta text-fg-muted">{message}</div>}
       </div>
     </div>
   )

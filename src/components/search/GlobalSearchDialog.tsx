@@ -301,7 +301,7 @@ export function GlobalSearchDialog({
               워크스페이스 전체
             </button>
           </div>
-          <span className="text-[11px] text-fg-muted">제목 검색 전용</span>
+          <span className="text-meta text-fg-muted">제목 검색 전용</span>
         </div>
 
         {/* 결과 리스트 영역 */}
@@ -362,7 +362,7 @@ export function GlobalSearchDialog({
         </div>
 
         {/* 키보드 도움말 하단 바 */}
-        <div className="flex items-center justify-between border-t border-border bg-surface-subtle/30 px-3 py-1.5 text-[11px] text-fg-muted">
+        <div className="flex items-center justify-between border-t border-border bg-surface-subtle/30 px-3 py-1.5 text-meta text-fg-muted">
           <div className="flex items-center gap-3">
             <span>↑↓ 이동</span>
             <span>↵ 선택</span>

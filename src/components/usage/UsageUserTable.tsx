@@ -29,12 +29,12 @@ export function UsageUserTable({ rows, days, timeZone }: { rows: UsageUserRow[];
   }, [pageCount])
 
   return (
-    <SectionCard eyebrow="USERS" title="사용자 현황" icon={Users}
+    <SectionCard title="사용자 현황" icon={Users}
       actions={<span className="badge bg-action-soft text-action">{rows.length}명</span>}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[880px] text-sm">
           <thead>
-            <tr className="border-b border-border text-xs font-semibold uppercase tracking-wide text-fg-muted">
+            <tr className="border-b border-border text-xs font-semibold text-fg-muted">
               <th className="py-2 pr-3 text-left">이름</th>
               <th className="py-2 pr-3 text-left">이메일</th>
               <th className="py-2 pr-3 text-left">팀</th>

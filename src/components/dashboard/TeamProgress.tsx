@@ -16,7 +16,7 @@ export function TeamProgress({ items, teams }: { items: ComputedItem[]; teams: r
   const rows = teamProgress(collectLeaves(items), progressTeams)
 
   return (
-    <SectionCard eyebrow="BY OWNER" title="팀별 진척현황" icon={Users}>
+    <SectionCard title="팀별 진척현황" icon={Users}>
       <div className="space-y-4">
         {rows.map(s => (
           <div key={s.team} className="flex items-center gap-3">

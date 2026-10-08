@@ -75,7 +75,7 @@ export function ChangeHistoryList({ logs, timeZone }: { logs: ChangeLogEntry[] |
 
   return (
     <section>
-      <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-fg-muted">
+      <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-fg-muted">
         <History className="h-3.5 w-3.5" /> {t('wbs.changeHistory')}
       </div>
       {shown == null ? (
@@ -88,20 +88,20 @@ export function ChangeHistoryList({ logs, timeZone }: { logs: ChangeLogEntry[] |
             {shown.map(log => (
               <li key={log.id} data-history-row
                 className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 py-1 text-[12px] sm:grid-cols-[8.5rem_1fr_auto]">
-                <span className="tabular-nums text-[11px] text-fg-muted">{fmtAt(log.at, timeZone)}</span>
+                <span className="tabular-nums text-meta text-fg-muted">{fmtAt(log.at, timeZone)}</span>
                 <span className="min-w-0 truncate">
                   <span className="font-semibold text-fg">{fieldLabel(log.field)}</span>
                   <span className="mx-1 text-fg-secondary line-through decoration-fg-muted/50">{value(log.field, log.oldValue)}</span>
                   <span className="text-fg-muted">→</span>
                   <span className="ml-1 font-semibold text-fg">{value(log.field, log.newValue)}</span>
                 </span>
-                <span className="col-start-2 text-[11px] text-fg-muted sm:col-start-3">{actorLabel(log.actorTeam, log.actorRole, t)}</span>
+                <span className="col-start-2 text-meta text-fg-muted sm:col-start-3">{actorLabel(log.actorTeam, log.actorRole, t)}</span>
               </li>
             ))}
           </ol>
           {hidden > 0 && (
             <button type="button" data-history-more onClick={() => setExpanded(v => !v)}
-              className="mt-1.5 text-[11px] font-medium text-fg-secondary underline-offset-2 hover:underline">
+              className="mt-1.5 text-meta font-medium text-fg-secondary underline-offset-2 hover:underline">
               {expanded ? t('wbs.historyCollapse') : t('wbs.historyExpand').replace('{n}', String(hidden))}
             </button>
           )}

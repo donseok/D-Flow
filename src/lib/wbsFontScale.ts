@@ -27,18 +27,23 @@ function cappedScaledPx(base: number, scale: WbsFontScale, maximum: number): str
   return `${Number(Math.min(base * scale / 100, maximum).toFixed(2))}px`
 }
 
-/** 표 폭은 그대로 두고 텍스트 계층만 같은 비율로 확대하는 CSS 변수 묶음. */
+/**
+ * 표 폭은 그대로 두고 텍스트 계층만 같은 비율로 확대하는 CSS 변수 묶음.
+ * 읽는 글자(셀·번호·머리·칩·배지·담당)는 100% 에서 12px 이 하한이다(개정 §5.5.6). 12px 미만은 간트 눈금(timeline·day)·
+ * 막대 안팎 퍼센트(bar)·담당 표지 도형(owner-mark)뿐이고 tests/css/min-font-size.test.ts 의 허용 목록에 적혀 있다.
+ */
 export function wbsFontScaleVariables(scale: WbsFontScale): Record<string, string> {
   return {
     '--wbs-cell-font': scaledPx(12, scale),
-    '--wbs-index-font': scaledPx(11, scale),
-    '--wbs-head-font': scaledPx(10, scale),
+    // 하한을 12px 로 올린 계층은 옛 최대값(130% 때 번호 14.3·머리 13·담당 13.65)을 상한으로 둔다 — 고정 폭 열에서 더 커지지 않게.
+    '--wbs-index-font': cappedScaledPx(12, scale, 14.3),
+    '--wbs-head-font': cappedScaledPx(12, scale, 13),
     '--wbs-timeline-font': scaledPx(9.5, scale),
     '--wbs-day-font': scaledPx(9, scale),
     // 고정 폭 상태/구분 열은 내부 패딩까지 있어 상한이 없으면 라벨 자체가 사라진다.
-    '--wbs-chip-font': cappedScaledPx(11, scale, 13),
-    '--wbs-badge-font': cappedScaledPx(10, scale, 10.5),
-    '--wbs-owner-font': scaledPx(10.5, scale),
+    '--wbs-chip-font': cappedScaledPx(12, scale, 13),
+    '--wbs-badge-font': cappedScaledPx(12, scale, 12),
+    '--wbs-owner-font': cappedScaledPx(12, scale, 13.65),
     '--wbs-owner-mark-font': scaledPx(9, scale),
     '--wbs-bar-font': scaledPx(9, scale),
   }

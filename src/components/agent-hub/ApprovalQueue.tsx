@@ -59,21 +59,21 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
     <li data-queue-card={q.orderId} className="rounded-lg border border-border bg-surface p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="min-w-0">
-          <span className="font-mono text-[11px] text-fg-secondary">{q.code}</span>
+          <span className="font-mono text-meta text-fg-secondary">{q.code}</span>
           <span className="ml-2 text-sm font-semibold text-fg">{q.name}</span>
         </div>
-        <span className="text-[11px] text-fg-muted">{q.agent} · {when(q.reportedAt, timeZone, locale)}{showTimeZone ? ` (${timeZone})` : ''} · {q.percent}%</span>
+        <span className="text-meta text-fg-muted">{q.agent} · {when(q.reportedAt, timeZone, locale)}{showTimeZone ? ` (${timeZone})` : ''} · {q.percent}%</span>
       </div>
       {/* SP5b W1 — 승인 단계가 둘 이상이면 지금 기다리는 단계를 보인다("1/2 · 내부 검토") */}
       {q.approval && q.approval.total >= 2 && (
-        <p data-queue-step={q.approval.step} className="mt-1 text-[11px] font-medium text-progress">
+        <p data-queue-step={q.approval.step} className="mt-1 text-meta font-medium text-progress">
           {t('agent.queue.step').replace('{i}', String(q.approval.index)).replace('{n}', String(q.approval.total))
             .replace('{label}', q.approval.label ?? t('wbs.approveStepDefault'))}
         </p>
       )}
       {q.summary && <p className="mt-1 whitespace-pre-wrap text-xs text-fg">{q.summary}</p>}
       {q.links.length > 0 && (
-        <ul className="mt-1 flex flex-wrap gap-2 text-[11px]">
+        <ul className="mt-1 flex flex-wrap gap-2 text-meta">
           {q.links.map((l, i) => <li key={i}><a href={l.url} target="_blank" rel="noreferrer" className="text-action underline-offset-2 hover:underline">{l.label ?? l.url}</a></li>)}
         </ul>
       )}
@@ -91,7 +91,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
               onClick={() => setRejecting(v => !v)} className="btn btn-ghost h-8 px-3 text-xs">{OP_LABEL.reject}</button>
           </div>
           {!q.canApprove && (
-            <p className="text-[10px] text-fg-muted">{t(q.canManage ? 'agent.queue.selfApprovalHint' : 'agent.queue.adminApprovesHint')}</p>
+            <p className="text-meta text-fg-muted">{t(q.canManage ? 'agent.queue.selfApprovalHint' : 'agent.queue.adminApprovesHint')}</p>
           )}
           {rejecting && (
             <div className="flex flex-col gap-1">
@@ -103,9 +103,9 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
             </div>
           )}
         </div>
-      ) : <p className="mt-2 text-[11px] text-fg-muted">승인은 관리자가 합니다.</p>}
-      {err && <p data-queue-error className="mt-1 text-[11px] text-warning">{err}</p>}
-      {warn && <p data-queue-warning className="mt-1 text-[11px] text-pending">{warn}</p>}
+      ) : <p className="mt-2 text-meta text-fg-muted">승인은 관리자가 합니다.</p>}
+      {err && <p data-queue-error className="mt-1 text-meta text-warning">{err}</p>}
+      {warn && <p data-queue-warning className="mt-1 text-meta text-pending">{warn}</p>}
     </li>
   )
 }
@@ -113,7 +113,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
 export function ApprovalQueue({ queue, ...rest }: Props) {
   return (
     <section aria-label="승인 대기" className="rounded-xl border border-border bg-surface p-3">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-fg-muted">승인 대기 {queue.length > 0 && <span className="ml-1 tabular-nums text-fg">{queue.length}</span>}</h2>
+      <h2 className="mb-2 text-xs font-semibold text-fg-muted">승인 대기 {queue.length > 0 && <span className="ml-1 tabular-nums text-fg">{queue.length}</span>}</h2>
       {queue.length === 0
         ? <p className="text-xs text-fg-secondary">승인 대기 없음</p>
         : <ul className="space-y-2">{queue.map(q => <QueueCard key={q.orderId} q={q} {...rest} />)}</ul>}

@@ -111,7 +111,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
             </>}
             <p className="text-xs text-pending">새 이미지 업로드됨 · {previews[slot] ? '저장하면 적용됩니다' : '저장 후 미리보기'}</p>
           </>}
-          <p className="break-all text-[11px] text-fg-muted">{draft[slot]}</p>
+          <p className="break-all text-meta text-fg-muted">{draft[slot]}</p>
         </> : <p className="text-xs text-fg-secondary">설정된 이미지 없음</p>}
         <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={`${LABEL[slot]} 파일`} className="block w-full min-w-0 max-w-full text-xs text-fg-secondary file:mr-2 file:rounded-lg file:border file:border-border file:bg-surface-subtle file:px-2 file:py-1 file:text-xs"
           disabled={pending || !!uncertainPatch} onChange={event => {

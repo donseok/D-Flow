@@ -7,11 +7,11 @@ import { useTeamSlot } from '@/components/app/TeamsProvider'
  * 모양 셋: cell(목록·탐색기 줄 — 고정 폭), tag(달력 칸 — 작게), pill(뷰어 머리 — 둥글게). 공유 화면처럼 공급자가 없으면 중립 색이다.
  */
 const SHAPE = {
-  cell: 'w-12 justify-center rounded-md px-1.5 py-0.5 text-[11px]',
-  tag: 'items-center rounded px-1 py-px text-[10px]',
-  pill: 'rounded-full px-2 py-0.5 text-[11px]',
-  chip: 'justify-center rounded-md px-1.5 py-0.5 text-[11px]',
-  label: 'rounded-md px-1.5 py-0.5 text-[11px]',
+  cell: 'w-12 justify-center rounded-md px-1.5 py-0.5 text-meta',
+  tag: 'items-center rounded px-1 py-px text-meta',
+  pill: 'rounded-full px-2 py-0.5 text-meta',
+  chip: 'justify-center rounded-md px-1.5 py-0.5 text-meta',
+  label: 'rounded-md px-1.5 py-0.5 text-meta',
 } as const
 
 export function TeamBar({ code, shape = 'cell', title }: { code: string; shape?: keyof typeof SHAPE; title?: string }) {

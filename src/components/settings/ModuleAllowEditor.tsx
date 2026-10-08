@@ -137,7 +137,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
           <label key={id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg">
             <input type="checkbox" checked={selected.includes(id)} disabled={pending || !!uncertainPatch} onChange={() => toggle(id)} />
             <span>{LABEL[id as keyof typeof LABEL]}</span>
-            <span className="ml-auto text-[11px] text-fg-muted">{id}</span>
+            <span className="ml-auto text-meta text-fg-muted">{id}</span>
           </label>
         ))}
       </div>

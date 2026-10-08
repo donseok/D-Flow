@@ -19,12 +19,12 @@ export function UsageSummary({ summary, days, sessions, timeZone }: {
   return (
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="TODAY" value={summary.todayUsers} sub="오늘 접속한 사용자" icon={CalendarCheck} tone="brand" />
-        <KpiCard label={`ACTIVE ${days}D`} value={summary.activeUsers} sub={`최근 ${days}일 접속 사용자`} icon={Users} tone="success" />
-        <KpiCard label={`SESSIONS ${days}D`} value={sessions.toLocaleString('ko-KR')} sub={`${SESSION_GAP_MINUTES}분 무활동 기준 유도값`} icon={Activity} />
-        <KpiCard label={`VIEWS ${days}D`} value={summary.totalEvents.toLocaleString('ko-KR')} sub="화면 열람 건수" icon={MousePointerClick} />
+        <KpiCard label="오늘" value={summary.todayUsers} sub="오늘 접속한 사용자" icon={CalendarCheck} tone="brand" />
+        <KpiCard label={`활성 ${days}일`} value={summary.activeUsers} sub={`최근 ${days}일 접속 사용자`} icon={Users} tone="success" />
+        <KpiCard label={`세션 ${days}일`} value={sessions.toLocaleString('ko-KR')} sub={`${SESSION_GAP_MINUTES}분 무활동 기준 유도값`} icon={Activity} />
+        <KpiCard label={`열람 ${days}일`} value={summary.totalEvents.toLocaleString('ko-KR')} sub="화면 열람 건수" icon={MousePointerClick} />
       </div>
-      <p className="text-[11px] text-fg-muted">
+      <p className="text-meta text-fg-muted">
         {summary.lastEventAt
           ? `수집 상태 · 마지막 기록 ${fmtDateTime(summary.lastEventAt, timeZone)}`
           : '수집 상태 · 아직 기록이 없습니다. 수집은 프로덕션 배포 환경에서만 동작합니다.'}

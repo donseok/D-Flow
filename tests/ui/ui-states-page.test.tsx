@@ -67,6 +67,15 @@ describe('/admin/ui-states', () => {
     expect(overlays.querySelector('[data-sample="open-conflict"]')).not.toBeNull()
     expect(d.querySelector('[role="dialog"]')).toBeNull()                 // 닫힌 채로 시작한다(화면을 덮지 않는다)
   })
+  it('타이포 스케일 표본 — 여덟 단계가 두 열에, 단계마다 그 크기 토큰 클래스로 그린다(가장 작은 단계는 text-meta)', async () => {
+    mocks.getActorForView.mockResolvedValue(makeSuperuser())
+    const d = await render()
+    for (const col of d.querySelectorAll('[data-showcase-column]')) {
+      const steps = [...col.querySelectorAll<HTMLElement>('[data-sample="type-scale"] [data-type-step]')]
+      expect(steps.map((s) => s.dataset.typeStep)).toEqual(['text-title', 'text-title-sm', 'text-kpi', 'text-section', 'text-doc', 'text-body', 'text-control', 'text-meta'])
+      for (const s of steps) expect(s.firstElementChild?.classList.contains(s.dataset.typeStep!), s.dataset.typeStep).toBe(true)
+    }
+  })
   it('화면의 h1 은 하나 — 표본 머리는 h2 로 그린다', async () => {
     mocks.getActorForView.mockResolvedValue(makeSuperuser())
     const d = await render()

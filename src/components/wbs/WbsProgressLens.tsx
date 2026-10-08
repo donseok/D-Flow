@@ -82,7 +82,7 @@ export function WbsProgressLens({
               data-wbs-progress-lens-pin
               onClick={onTogglePin}
               aria-pressed={pinned}
-              className={`btn h-8 shrink-0 px-2.5 text-[11px] ${
+              className={`btn h-8 shrink-0 px-2.5 text-meta ${
                 pinned ? 'border border-border-focus bg-action-soft text-action' : 'btn-ghost'
               }`}
             >
@@ -99,7 +99,7 @@ export function WbsProgressLens({
               {t(`status.${item.status}` as DictKey)}
             </span>
             <div data-lens-field="owners" className="flex items-center gap-1.5 rounded-lg bg-surface-subtle px-2 py-1">
-              <span className="text-[10px] font-medium text-fg-muted">{t('wbs.colOwners')}</span>
+              <span className="text-meta font-medium text-fg-muted">{t('wbs.colOwners')}</span>
               {item.owners.length
                 ? <OwnerBadges owners={item.owners} />
                 : <span className="text-xs text-fg-muted">{t('wbs.unassigned')}</span>}
@@ -145,7 +145,7 @@ export function WbsProgressLens({
           </div>
           <div className="mt-3 space-y-2.5">
             <div data-lens-bar="planned" className="grid grid-cols-[42px_minmax(0,1fr)] items-center gap-2">
-              <span className="text-[10px] font-semibold text-fg-muted">{t('wbs.colPlannedPct')}</span>
+              <span className="text-meta font-semibold text-fg-muted">{t('wbs.colPlannedPct')}</span>
               <ProgressBar
                 value={item.plannedPct}
                 tone="bg-fg-secondary"
@@ -154,7 +154,7 @@ export function WbsProgressLens({
               />
             </div>
             <div data-lens-bar="actual" className="grid grid-cols-[42px_minmax(0,1fr)] items-center gap-2">
-              <span className="text-[10px] font-semibold text-fg-muted">{t('wbs.colActualPct')}</span>
+              <span className="text-meta font-semibold text-fg-muted">{t('wbs.colActualPct')}</span>
               <ProgressBar
                 value={item.rolledActualPct}
                 tone={STATUS[item.status].bar}
@@ -163,7 +163,7 @@ export function WbsProgressLens({
               />
             </div>
           </div>
-          <div className="mt-2 text-right text-[10px] text-fg-muted">
+          <div className="mt-2 text-right text-meta text-fg-muted">
             {pinned ? t('wbs.progressLensPinned') : t('wbs.progressLensEscHint')}
           </div>
         </div>
@@ -187,7 +187,7 @@ function LensStat({
 }) {
   return (
     <div data-lens-field={field} className="min-w-0 rounded-lg bg-surface px-2.5 py-2">
-      <div className="truncate text-[10px] font-medium text-fg-muted">{label}</div>
+      <div className="truncate text-meta font-medium text-fg-muted">{label}</div>
       <div className={`${emphasis ? 'text-xl' : 'text-base'} mt-0.5 font-bold leading-none tabular-nums ${valueClassName}`}>
         {value}
       </div>

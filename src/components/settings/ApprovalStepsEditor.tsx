@@ -77,7 +77,7 @@ export function ApprovalStepsEditor({ projectId, steps, distinct, gate, revision
         <button type="button" className="btn btn-ghost h-8 px-3 text-xs" disabled={locked} data-approval-step-add
           onClick={() => { setRows((rs) => [...rs, { code: '', label: '', approver: 'admin', fixed: false }]); cmd.clear() }}>{t('settings.workflow.stepAdd')}</button>
       )}
-      <p className="text-[11px] text-fg-muted">{t('settings.workflow.stepsHint')}</p>
+      <p className="text-meta text-fg-muted">{t('settings.workflow.stepsHint')}</p>
       {rows.some((r) => !r.fixed && r.code !== '' && !STEP_CODE_RE.test(r.code)) && <p role="alert" className="text-xs text-danger">{t('settings.workflow.stepCodeHint')}</p>}
       {!parsed.ok && <p role="alert" className="text-xs text-danger">{parsed.error}</p>}
 
@@ -96,7 +96,7 @@ export function ApprovalStepsEditor({ projectId, steps, distinct, gate, revision
             {t(GATE_KEY[v])}
           </label>
         ))}
-        <p className="text-[11px] text-fg-muted">{t('settings.workflow.predecessor_gate.desc')}</p>
+        <p className="text-meta text-fg-muted">{t('settings.workflow.predecessor_gate.desc')}</p>
       </fieldset>
 
       {err && <p role="alert" className="text-xs text-danger" data-approval-steps-error>{err}</p>}

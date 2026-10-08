@@ -16,7 +16,7 @@ describe.each(FILES)('공휴일 라벨 — %s', (f) => {
     expect(src).toMatch(/<div className="flex flex-wrap items-center justify-between gap-x-1 px-0\.5 sm:flex-nowrap">/)
   })
   it('좁을 때 한 줄을 다 쓰고 글자 단위로 줄바꿈, 넓을 때만 말줄임', () => {
-    const cls = src.match(/<span className="([^"]*text-\[10px\][^"]*)" title=\{info\.name\}>/)?.[1] ?? ''
+    const cls = src.match(/<span className="([^"]*\btext-meta\b[^"]*)" title=\{info\.name\}>/)?.[1] ?? ''
     expect(cls).not.toBe('')
     expect(cls).toMatch(/\bbasis-full\b/)
     expect(cls).toMatch(/\bbreak-all\b/)

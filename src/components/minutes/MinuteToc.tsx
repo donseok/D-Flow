@@ -82,7 +82,7 @@ export function MinuteToc({
               onClick={() => { onJump(e.firstIssueBlock!); onItem?.() }}
               title={t('min.issue.tocJump').replace('{n}', String(e.issueCount))}
               aria-label={t('min.issue.tocJump').replace('{n}', String(e.issueCount))}
-              className="inline-flex h-6 shrink-0 items-center gap-0.5 rounded-md bg-progress-weak px-1.5 text-[10px] font-semibold text-progress hover:ring-1 hover:ring-progress/30"
+              className="inline-flex h-6 shrink-0 items-center gap-0.5 rounded-md bg-progress-weak px-1.5 text-meta font-semibold text-progress hover:ring-1 hover:ring-progress/30"
             >
               <CircleAlert className="h-3 w-3" aria-hidden />{e.issueCount}
             </button>

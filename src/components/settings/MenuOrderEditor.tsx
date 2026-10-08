@@ -117,7 +117,7 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
       <div className="space-y-2">
         {displayOrder.filter(id => NAV_GROUP_OF[id] === group.id).map((id, index, siblings) => <div key={id} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-subtle p-2">
           <span className="min-w-24 text-sm text-fg">{NAMES[id]}</span>
-          <span className="text-[11px] text-fg-muted">{id}</span>
+          <span className="text-meta text-fg-muted">{id}</span>
           <input aria-label={`${NAMES[id]} 메뉴 이름`} className="app-input ml-auto w-36 text-sm" maxLength={20}
             placeholder={NAMES[id]} value={draft.labels[id] ?? ''} disabled={pending || !!uncertainPatch}
             onChange={event => { const value = event.target.value; setDraft(current => {

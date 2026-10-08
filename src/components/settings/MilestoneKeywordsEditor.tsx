@@ -86,7 +86,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
     <textarea id="milestone-keywords" className="app-textarea min-h-28 w-full text-sm" value={text}
       disabled={pending || !!uncertainPatch} onChange={event => { setText(event.target.value); setReviewing(false); setError(null); setFieldError(null); setNotice(null) }} placeholder="한 줄에 한 키워드" />
     {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
-    <p className="text-[11px] text-fg-muted">저장 시 소문자로 바뀝니다.</p>
+    <p className="text-meta text-fg-muted">저장 시 소문자로 바뀝니다.</p>
     {reviewing && !conflict && !uncertainPatch && <section aria-label="변경 내용 검토" className="space-y-2 rounded-lg border border-border bg-surface-subtle p-3 text-sm">
       <h3 className="font-semibold text-fg">변경 내용 검토</h3>
       <p className="text-fg-secondary">현재: {lines(baseline).join(', ') || '없음'}</p>

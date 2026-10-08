@@ -188,7 +188,7 @@ export function IssueAnalysisModal({
 
         {populatedAreas.length > 0 && (
           <section>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
+            <div className="mb-2 text-meta font-semibold text-fg-muted">
               {t('issue.analysis.area')}
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -226,7 +226,7 @@ export function IssueAnalysisModal({
                   onClick={onClose}
                 >
                   <div className="text-xs font-semibold text-fg">{issue.label}</div>
-                  <div className="mt-1 text-[11px] leading-5 text-fg-secondary">
+                  <div className="mt-1 text-meta leading-5 text-fg-secondary">
                     {issue.reasons.join(' · ')}
                   </div>
                 </Link>

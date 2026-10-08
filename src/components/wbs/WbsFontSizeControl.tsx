@@ -39,7 +39,7 @@ export function WbsFontSizeControl({
         aria-label={t('wbs.fontDecrease')}
         className={`${buttonClass} text-xs`}
       >
-        A<span className="text-[10px]">−</span>
+        A<span className="text-meta">−</span>
       </button>
       <button
         type="button"
@@ -47,7 +47,7 @@ export function WbsFontSizeControl({
         onClick={onReset}
         title={t('wbs.fontReset')}
         aria-label={`${t('wbs.fontCurrent')}: ${scale}% — ${t('wbs.fontReset')}`}
-        className="inline-flex h-7 min-w-10 items-center justify-center rounded-md px-1 text-[11px] tabular-nums text-fg-secondary transition hover:bg-surface-subtle hover:text-fg"
+        className="inline-flex h-7 min-w-10 items-center justify-center rounded-md px-1 text-meta tabular-nums text-fg-secondary transition hover:bg-surface-subtle hover:text-fg"
       >
         <span aria-live="polite">{scale}%</span>
       </button>
@@ -60,7 +60,7 @@ export function WbsFontSizeControl({
         aria-label={t('wbs.fontIncrease')}
         className={`${buttonClass} text-sm`}
       >
-        A<span className="text-[10px]">+</span>
+        A<span className="text-meta">+</span>
       </button>
     </div>
   )

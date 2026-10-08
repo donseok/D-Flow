@@ -32,7 +32,7 @@ export function PendingSaveChip({ isPending, saving, remainingMs, onSaveNow }: {
       </span>
       <button
         type="button" data-pending-save-now onClick={onSaveNow}
-        className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-action transition hover:bg-action-soft"
+        className="rounded-md px-1.5 py-0.5 text-meta font-semibold text-action transition hover:bg-action-soft"
       >
         {t('wbs.pendingSaveNow')}
       </button>

@@ -213,7 +213,7 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
                       </select>
                     </label>
                     {mode === 'profile' && selected && (
-                      <p className="mt-1.5 text-[11px] leading-4 text-fg-muted">
+                      <p className="mt-1.5 text-meta leading-4 text-fg-muted">
                         {selected.provider} · {selected.base_url || '기본 엔드포인트'} · {selected.has_token ? `키 ${selected.auth_token_masked}` : '키 없음'}
                       </p>
                     )}

@@ -28,18 +28,18 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
   const tr = (k: DictKey) => t(locale, k)
   if (rows.length === 0) {
     return (
-      <SectionCard eyebrow="PORTFOLIO" title={tr('pf.table.title')} icon={Briefcase}>
+      <SectionCard title={tr('pf.table.title')} icon={Briefcase}>
         <MiniEmpty text={tr('pf.empty')} />
       </SectionCard>
     )
   }
   return (
-    <SectionCard eyebrow="PORTFOLIO" title={tr('pf.table.title')} icon={Briefcase}
+    <SectionCard title={tr('pf.table.title')} icon={Briefcase}
       actions={<CountBadge n={rows.length} unit={tr('pf.unit')} />}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] text-left text-xs">
           <thead>
-            <tr className="border-b border-border text-[10px] uppercase tracking-[0.12em] text-fg-muted">
+            <tr className="border-b border-border text-meta leading-4 text-fg-muted">
               <th className={th}>{tr('pf.col.signal')}</th>
               <th className={th}>{tr('pf.col.project')}</th>
               <th className={th}>{tr('pf.col.progress')}</th>
@@ -65,13 +65,13 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                 <tr key={row.projectId} className="border-b border-border/60 transition hover:bg-surface-subtle/60">
                   <td className="px-2 py-2.5">
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${m.chip}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-meta font-semibold ${m.chip}`}>
                         <Icon className="h-3.5 w-3.5" aria-hidden />{tr(SIGNAL_LABEL[signal])}
                       </span>
                       {row.riskCount > 0 && (
                         <span
                           title={row.riskTitles.join(' · ')}
-                          className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${row.riskWorst === 'red' ? 'bg-danger-weak text-danger' : 'bg-pending-weak text-warning'}`}
+                          className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-meta font-bold tabular-nums ${row.riskWorst === 'red' ? 'bg-danger-weak text-danger' : 'bg-pending-weak text-warning'}`}
                         >
                           <AlertTriangle className="h-3 w-3" aria-hidden />{row.riskCount}
                         </span>
@@ -79,7 +79,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                       {row.hygiene && !row.hygiene.clean && (
                         <span
                           title={`${tr('pf.hygiene.noOwner')} ${row.hygiene.noOwner} · ${tr('pf.hygiene.noDates')} ${row.hygiene.noDates} · ${tr('pf.hygiene.mixedWeight')} ${row.hygiene.mixedWeight}`}
-                          className="inline-flex items-center rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold text-fg-muted"
+                          className="inline-flex items-center rounded-full bg-surface-subtle px-1.5 py-0.5 text-meta font-semibold text-fg-muted"
                         >
                           {tr('pf.hygiene.label')}
                         </span>
@@ -93,11 +93,11 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                       <span className="truncate">{row.name}</span>
                     </Link>
                     {row.baseDate && (
-                      <div className="mt-0.5 text-[10px] text-fg-muted">{tr('pf.baseDate')} {fmtDate(row.baseDate)}</div>
+                      <div className="mt-0.5 text-meta text-fg-muted">{tr('pf.baseDate')} {fmtDate(row.baseDate)}</div>
                     )}
                   </td>
                   {row.degraded ? (
-                    <td colSpan={6} className="px-2 py-2.5 text-[11px] text-danger">{tr('pf.degradedRow')}</td>
+                    <td colSpan={6} className="px-2 py-2.5 text-meta text-danger">{tr('pf.degradedRow')}</td>
                   ) : !row.exec ? (
                     <>
                       <td className="px-2 py-2.5"><span className="text-fg-muted">—</span></td>
@@ -118,7 +118,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                         {row.trendDelta != null && row.trendDelta !== 0 && (
                           <span
                             title={tr('pf.trend.tooltip')}
-                            className={`ml-1 text-[10px] font-semibold ${row.trendDelta < 0 ? 'text-danger' : 'text-success'}`}
+                            className={`ml-1 text-meta font-semibold ${row.trendDelta < 0 ? 'text-danger' : 'text-success'}`}
                           >
                             {row.trendDelta < 0 ? '▼' : '▲'}{Math.abs(row.trendDelta)}
                           </span>
@@ -141,7 +141,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                           <>
                             <span className="text-fg">{fmtDate(sched.projectedEnd)}</span>
                             {sched.slipDays != null && (
-                              <span className={`ml-1 text-[10px] font-semibold ${sched.slipDays > 0 ? 'text-danger' : 'text-success'}`}>
+                              <span className={`ml-1 text-meta font-semibold ${sched.slipDays > 0 ? 'text-danger' : 'text-success'}`}>
                                 {sched.slipDays > 0 ? `+${sched.slipDays}` : sched.slipDays}d
                               </span>
                             )}
@@ -157,7 +157,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                         {ms?.name ? (
                           <div className="flex max-w-[180px] items-baseline gap-1">
                             <span className={`min-w-0 truncate ${ms.overdue ? 'text-danger' : 'text-fg'}`}>{ms.name}</span>
-                            <span className={`shrink-0 text-[10px] font-semibold tabular-nums ${ms.overdue ? 'text-danger' : 'text-fg'}`}>
+                            <span className={`shrink-0 text-meta font-semibold tabular-nums ${ms.overdue ? 'text-danger' : 'text-fg'}`}>
                               {ms.dday != null && (ms.dday >= 0 ? `D-${ms.dday}` : `D+${-ms.dday}`)}
                             </span>
                           </div>

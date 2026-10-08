@@ -67,7 +67,7 @@ export function DocumentVersionStatus({
         >
           {viewingVersionNo === null ? '버전 정보 없음' : `v${viewingVersionNo}`}
           {isLatest && (
-            <span className="text-[10px] text-action font-semibold ml-0.5">(최신)</span>
+            <span className="text-meta text-action font-semibold ml-0.5">(최신)</span>
           )}
         </span>
 

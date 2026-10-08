@@ -425,7 +425,7 @@ textarea {
   .minutes-md [data-hl-count] { @apply relative; }
   .minutes-md [data-hl-count]::after {
     content: '👤 ' attr(data-hl-count);
-    @apply absolute -top-2 right-1 rounded-full bg-warning px-1.5 py-0.5 text-[10px] font-bold leading-none text-warning-fg;
+    @apply absolute -top-2 right-1 rounded-full bg-warning px-1.5 py-0.5 text-meta font-bold leading-none text-warning-fg;
   }
 
   /* 이슈 연결 블록 — 본문을 다시 열어도 등록 여부가 보이고, 클릭하면 기존 블록 팝오버에서 이슈를 연다. */
@@ -436,7 +436,7 @@ textarea {
   }
   .minutes-md [data-issue-count]::before {
     content: '⚑ ' attr(data-issue-count);
-    @apply absolute -top-2 right-1 rounded-full bg-progress px-1.5 py-0.5 text-[10px] font-bold leading-none text-progress-fg;
+    @apply absolute -top-2 right-1 rounded-full bg-progress px-1.5 py-0.5 text-meta font-bold leading-none text-progress-fg;
   }
   .minutes-md [data-issue-count][data-hl-count]::before { right: 3rem; }
 

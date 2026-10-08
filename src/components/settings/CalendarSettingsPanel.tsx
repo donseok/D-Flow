@@ -169,7 +169,7 @@ export function CalendarSettingsPanel(props: {
     ? <ConfigStateNotice kind="invalid" locale={locale} keyName={k} message={s.error} isAdmin={canEdit} settingsHref={href} />
     : null
   const fieldNotice = (k: Key) => fieldErrors[k] ? <ConfigStateNotice kind="field" locale={locale} message={fieldErrors[k]} /> : null
-  const keyLine = (k: Key) => <p className="text-[11px] text-fg-muted">{k}</p>
+  const keyLine = (k: Key) => <p className="text-meta text-fg-muted">{k}</p>
   const head = (k: Key, s: CalendarFieldState<unknown>, applies: string, labelFor?: string) => (
     <div className="flex flex-wrap items-center justify-between gap-2">
       {labelFor

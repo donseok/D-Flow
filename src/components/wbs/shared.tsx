@@ -55,7 +55,7 @@ export function LevelBadge({
     <span
       className={`lvl-badge ${levelBadgeClass(depth, isOwnerSplit)}`}
       style={{
-        fontSize: 'var(--wbs-badge-font, 10px)',
+        fontSize: 'var(--wbs-badge-font, 12px)',
         ...(compact
           ? {
               maxWidth: '100%',
@@ -116,7 +116,7 @@ export function StageChip({
     <span
       data-wbs-stage={stage}
       className={`lvl-badge ${meta ? meta.cls : STAGE_UNKNOWN_CLS}`}
-      style={{ fontSize: 'var(--wbs-badge-font, 10px)', paddingInline: '3px', letterSpacing: 0 }}
+      style={{ fontSize: 'var(--wbs-badge-font, 12px)', paddingInline: '3px', letterSpacing: 0 }}
       title={meta ? label(stage, t(meta.key)) : stage}
     >
       {stage.toUpperCase()}

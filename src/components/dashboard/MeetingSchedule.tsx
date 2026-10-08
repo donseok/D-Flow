@@ -50,8 +50,7 @@ export async function MeetingSchedule({ projectId, meetings, exceptions, today, 
   const extras = buildMeetingRowExtras(seriesIds, meetings, bodies, memberNames)
 
   return (
-    <SectionCard
-      eyebrow="MEETINGS" title={tr('dash.meet.title')} icon={CalendarDays}
+    <SectionCard title={tr('dash.meet.title')} icon={CalendarDays}
       actions={
         <div className="flex items-center gap-3">
           {minutesHref && (

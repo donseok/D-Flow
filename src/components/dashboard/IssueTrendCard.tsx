@@ -51,7 +51,7 @@ export function IssueTrendCard({ issues, today, weekStart, timeZone, locale }: {
 
   // 범례는 차트 아래 — SectionCard actions(shrink-0) 안에 두면 좁은 폭에서 줄바꿈 없이 헤더를 넘친다.
   const legend = (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-fg-muted">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-fg-muted">
       <span className="inline-flex items-center gap-1"><span className="h-0.5 w-4 rounded-full bg-danger" />{tr('dash.issues.backlogNow')}</span>
       <span className="inline-flex items-center gap-1"><span className="h-0 w-4 border-t-2 border-dashed border-fg-secondary" />{tr('dash.issues.trendCreated')}</span>
       <span className="inline-flex items-center gap-1"><span className="h-0.5 w-4 rounded-full bg-success" />{tr('dash.issues.trendResolved')}</span>
@@ -60,7 +60,7 @@ export function IssueTrendCard({ issues, today, weekStart, timeZone, locale }: {
 
   if (model.empty) {
     return (
-      <SectionCard eyebrow="BACKLOG" title={tr('dash.issues.trendTitle')} icon={TrendingUp}>
+      <SectionCard title={tr('dash.issues.trendTitle')} icon={TrendingUp}>
         <MiniEmpty text={tr('dash.issues.empty')} />
       </SectionCard>
     )
@@ -82,7 +82,7 @@ export function IssueTrendCard({ issues, today, weekStart, timeZone, locale }: {
   return (
     // 카드가 그리드에서 좌측 카드 높이로 늘어나면 차트를 세로 가운데에, 캡션은 바닥에 — 빈 공간이 한쪽에 몰리지 않게.
     // SectionCard 의 children 래퍼(mt-5 div)를 flex-1 로 만드는 arbitrary variant — 래퍼 구조가 바뀌면 같이 손볼 것.
-    <SectionCard eyebrow="BACKLOG" title={tr('dash.issues.trendTitle')} icon={TrendingUp}
+    <SectionCard title={tr('dash.issues.trendTitle')} icon={TrendingUp}
       className="flex flex-col [&>div:last-child]:flex-1">
       <div className="flex h-full flex-col gap-3">
         <div className="my-auto">
@@ -118,7 +118,7 @@ export function IssueTrendCard({ issues, today, weekStart, timeZone, locale }: {
         </svg>
         </div>
         {legend}
-        <div className="mt-auto text-[11px] leading-4 text-fg-muted">{caption}</div>
+        <div className="mt-auto text-meta leading-4 text-fg-muted">{caption}</div>
       </div>
     </SectionCard>
   )

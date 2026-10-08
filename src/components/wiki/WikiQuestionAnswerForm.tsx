@@ -52,7 +52,7 @@ export function WikiQuestionAnswerForm({
   return (
     <div className="mt-3 border-t border-border pt-3">
       <label className="block">
-        <span className="mb-1 block text-[11px] font-semibold text-fg-secondary">{t(locale, 'wiki.question.answerLabel')}</span>
+        <span className="mb-1 block text-meta font-semibold text-fg-secondary">{t(locale, 'wiki.question.answerLabel')}</span>
         <textarea
           value={answer}
           onChange={(event) => setAnswer(event.target.value)}

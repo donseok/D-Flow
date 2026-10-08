@@ -21,7 +21,7 @@ export function DateCell({ date, isToday, todayLabel, weekday }: {
       ) : (
         <>
           <div className="tabular-nums text-xs font-semibold text-fg">{date.slice(5).replace('-', '.')}</div>
-          <div className="mt-0.5 text-[10px] text-fg-muted">{weekday}</div>
+          <div className="mt-0.5 text-meta text-fg-muted">{weekday}</div>
         </>
       )}
     </div>
@@ -46,9 +46,9 @@ export function MiniEmpty({ text }: { text: string }) {
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: string; tone?: string }) {
   return (
     <div className="rounded-xl border border-border/80 bg-surface-subtle/50 px-4 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-muted">{label}</div>
+      <div className="text-meta font-semibold text-fg-muted">{label}</div>
       <div className={`mt-1 text-xl font-bold tabular-nums leading-none tracking-tight ${tone ?? 'text-fg'}`}>{value}</div>
-      {sub && <div className="mt-1 text-[11px] text-fg-secondary">{sub}</div>}
+      {sub && <div className="mt-1 text-meta text-fg-secondary">{sub}</div>}
     </div>
   )
 }

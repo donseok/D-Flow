@@ -326,7 +326,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
   )
   const tool = (on: boolean, label: string, title: string, onClick: () => void, extra?: Record<string, string>) => (
     <button type="button" aria-pressed={on} title={title} onClick={onClick} {...extra}
-      className={`rounded-md border px-2 py-1 text-[11px] ${on ? 'border-border-focus bg-action-soft text-action' : 'border-border text-fg-secondary hover:bg-surface-subtle'}`}>{label}</button>
+      className={`rounded-md border px-2 py-1 text-meta ${on ? 'border-border-focus bg-action-soft text-action' : 'border-border text-fg-secondary hover:bg-surface-subtle'}`}>{label}</button>
   )
 
   // 고정 열 판정 — 마지막 고정 열에만 경계 그림자를 붙인다.
@@ -351,7 +351,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
           <div className="flex items-center gap-1" role="group" aria-label="표시 범위">{seg('mine', '내 담당')}{seg('all', '전체')}</div>
           {tool(onlyWait, `승인 대기만${waitCount ? ` ${waitCount}` : ''}`, '완료 보고가 올라와 승인을 기다리는 행만 봅니다', () => setOnlyWait(v => !v), { 'data-hub-only-wait': '' })}
           {(pend.isPending || pend.saving) && (
-            <span data-hub-pending className="inline-flex items-center gap-1 text-[11px] text-fg-secondary">
+            <span data-hub-pending className="inline-flex items-center gap-1 text-meta text-fg-secondary">
               <span data-hub-pending-count>{pend.count}건</span>
               <PendingSaveChip isPending={pend.isPending} saving={pend.saving} remainingMs={pend.remainingMs} onSaveNow={() => { void pend.flush() }} />
             </span>
@@ -363,7 +363,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
           {tool(false, '열 너비 초기화', '모든 열을 기본 폭으로 되돌립니다', resetAll)}
         </div>
       </div>
-      <p className="mb-2 text-[11px] text-fg-muted">리프 항목의 체크가 위임(발행)입니다. 부모 체크는 내가 켤 수 있는 하위 리프를 한 번에 켭니다. 머리글 경계를 끌면 열 너비가 바뀝니다.</p>
+      <p className="mb-2 text-meta text-fg-muted">리프 항목의 체크가 위임(발행)입니다. 부모 체크는 내가 켤 수 있는 하위 리프를 한 번에 켭니다. 머리글 경계를 끌면 열 너비가 바뀝니다.</p>
       {notice && <p data-hub-notice role="status" className="mb-2 rounded-md bg-pending-weak px-2 py-1 text-xs text-pending">{notice}</p>}
       <div ref={boxRef} data-shift="0" onScroll={onScroll} style={boxVars} className={s.box}>
         <table className={cls(s.table, dense && s.dense)} style={{ minWidth: `${totalW}px` }}>
@@ -417,7 +417,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                         ? <ParentCheckbox count={leaves.get(r.itemId)!.length} state={parentState(r)} onClick={() => toggleParent(r)} />
                         : null}
                   </td>
-                  <td className={cls(colCls('code'), 'font-mono text-[11px] text-fg-secondary')}>
+                  <td className={cls(colCls('code'), 'font-mono text-meta text-fg-secondary')}>
                     <span className={s.trunc} title={r.code}>{r.code}</span>
                   </td>
                   <td className={colCls('name')}>
@@ -452,12 +452,12 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                             title={r.stageLocked
                               ? '에이전트에 위임된 작업입니다. 단계는 승인·반려로 바뀝니다. 직접 바꾸려면 위임을 끄세요.'
                               : '단계 직접 조정 — 실적은 그 단계의 크레딧으로 지정됩니다'}
-                            onChange={e => changeStage(r, e.target.value)} className="app-input h-6 min-w-0 shrink py-0 text-[11px]">
+                            onChange={e => changeStage(r, e.target.value)} className="app-input h-6 min-w-0 shrink py-0 text-meta">
                             <option value="">{stageName(null, STAGE_NONE_LABEL)}</option>
                             {STAGE_CODES.map(c => <option key={c} value={c}>{stageName(c, stageLabelKo(c))}</option>)}
                           </select>
                         : r.isLeaf && !r.milestone
-                          ? <span data-hub-stage-text className="shrink-0 text-[11px] text-fg-secondary">{stageName(r.stage, stageLabelKo(r.stage))}</span>
+                          ? <span data-hub-stage-text className="shrink-0 text-meta text-fg-secondary">{stageName(r.stage, stageLabelKo(r.stage))}</span>
                           : null}
                       {r.order
                         ? <span className={`chip shrink-0 ${STATE_TONE[r.order.state]}`}>{STATE_LABEL[r.order.state]}</span>
@@ -474,8 +474,8 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                     )}
                   </td>
                   <td className={cls(colCls('agent'), s.clip)}>
-                    <span className={cls(s.trunc, 'font-mono text-[11px] text-fg-secondary')} title={r.order?.agent ?? undefined}>{r.order?.agent ?? ''}</span>
-                    <span className="block text-[10px] tabular-nums text-fg-muted">{sig}</span>
+                    <span className={cls(s.trunc, 'font-mono text-meta text-fg-secondary')} title={r.order?.agent ?? undefined}>{r.order?.agent ?? ''}</span>
+                    <span className="block text-meta tabular-nums text-fg-muted">{sig}</span>
                   </td>
                   <td className={cls(colCls('ops'), s.clip)}>
                     {ops.length > 0 && (
@@ -493,7 +493,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                                 ? { kind: 'approve', orderId, expectedReportId: r.order?.reportId ?? null }
                                 : { kind: b.kind, orderId } as HubProcessOp)
                             }}
-                            className={`btn h-6 shrink-0 whitespace-nowrap px-2 text-[11px] ${b.kind === 'approve' ? 'btn-primary' : 'btn-ghost'}`}>{OP_LABEL[b.kind]}</button>
+                            className={`btn h-6 shrink-0 whitespace-nowrap px-2 text-meta ${b.kind === 'approve' ? 'btn-primary' : 'btn-ghost'}`}>{OP_LABEL[b.kind]}</button>
                         ))}
                       </span>
                     )}
@@ -504,7 +504,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                   <tr key={`${r.itemId}-x`} data-hub-row-extra={r.itemId} className={s.extra}>
                     <td colSpan={9} className="pb-2 pl-8">
                       {showReason && r.waitReason && (
-                        <p data-hub-reason-text className="mb-1 text-[11px] leading-relaxed text-fg-secondary">{r.waitReason.text}</p>
+                        <p data-hub-reason-text className="mb-1 text-meta leading-relaxed text-fg-secondary">{r.waitReason.text}</p>
                       )}
                       {editing === r.itemId && (
                         <div className="flex flex-col gap-1">
@@ -533,7 +533,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                       )}
                       {confirmOpen && (
                         <div data-hub-confirm={confirmOpen.kind} className="flex flex-col gap-1">
-                          <p className="text-[11px] leading-relaxed text-fg-secondary">{OP_LABEL[confirmOpen.kind]}할까요? {OP_TITLE[confirmOpen.kind]}</p>
+                          <p className="text-meta leading-relaxed text-fg-secondary">{OP_LABEL[confirmOpen.kind]}할까요? {OP_TITLE[confirmOpen.kind]}</p>
                           <div className="flex gap-2">
                             <button type="button" data-hub-confirm-go disabled={isBusy}
                               onClick={() => { void runOp(r, { kind: confirmOpen.kind, orderId: confirmOpen.orderId }) }}
@@ -542,8 +542,8 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                           </div>
                         </div>
                       )}
-                      {err && <span data-hub-error className="block text-[11px] text-warning">{err}</span>}
-                      {warn && <span data-hub-warning className="block text-[11px] text-pending">{warn}</span>}
+                      {err && <span data-hub-error className="block text-meta text-warning">{err}</span>}
+                      {warn && <span data-hub-warning className="block text-meta text-pending">{warn}</span>}
                     </td>
                   </tr>
                 ) : null,

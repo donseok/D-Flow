@@ -41,7 +41,7 @@ export function PhaseBadge({ seat, size = 'bubble' }: { seat: Pick<Seat, 'state'
   const faded = seat.state === 'STALE' || seat.state === 'OFFLINE'
   const title = `${look.label}${step >= 0 ? ` 단계 (${step + 1}/4)` : ''}${faded ? ' · 마지막 보고' : ''}`
   const pill = (
-    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full font-bold leading-none ${size === 'chip' ? 'px-1.5 py-[3px] text-[10px]' : 'px-2 py-[5px] text-[11px]'}`}
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full font-bold leading-none ${size === 'chip' ? 'px-1.5 py-[3px] text-meta' : 'px-2 py-[5px] text-meta'}`}
       style={{ color: '#fff', background: look.color, boxShadow: size === 'bubble' ? `0 6px 14px -8px ${look.color}` : undefined }}>
       {look.icon}{look.label}
     </span>

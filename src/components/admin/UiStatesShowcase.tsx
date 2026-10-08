@@ -44,6 +44,18 @@ function accentStyle(set: AccentSet): CSSProperties {
   } as CSSProperties
 }
 
+/** 글자 크기 8단계(개정 §5.5.6) — 클래스 이름은 Tailwind 가 읽도록 글자 그대로 적는다. 가장 작은 글자는 보조 메타 12px 이다 */
+const TYPE_SCALE: { cls: string; name: string; spec: string }[] = [
+  { cls: 'text-title', name: '페이지 제목', spec: '24/32 · 600' },
+  { cls: 'text-title-sm', name: '페이지 제목(모바일)', spec: '22/30 · 600' },
+  { cls: 'text-kpi', name: 'KPI 숫자', spec: '28/34 · 600' },
+  { cls: 'text-section', name: '섹션 제목', spec: '16/24 · 600' },
+  { cls: 'text-doc', name: '문서 본문', spec: '16/26 · 400' },
+  { cls: 'text-body', name: '본문', spec: '14/22 · 400' },
+  { cls: 'text-control', name: '메뉴·버튼·입력', spec: '14/20 · 400~500' },
+  { cls: 'text-meta', name: '보조 메타(하한)', spec: '12/18 · 400' },
+]
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2">
@@ -117,6 +129,23 @@ function Panel({ theme, samples }: { theme: 'light' | 'dark'; samples: AccentSam
           <IconButton icon={<X className="h-4 w-4" aria-hidden />} aria-label="닫기(처리 중)" variant="ghost" busy />
           <IconButton icon={<X className="h-4 w-4" aria-hidden />} aria-label="닫기(포커스)" variant="ghost" className={FOCUS_RING} />
           <span data-sample="modal-close" className="inline-flex items-center gap-2 text-meta text-fg-secondary"><ModalCloseButton label="모달 닫기" />모달 닫기(32)</span>
+        </div>
+      </Section>
+
+      <Section title="타이포 스케일 — 여덟 단계, 하한 12px">
+        <div data-sample="type-scale" className="divide-y divide-border rounded-(--radius-control) border border-border bg-surface">
+          {TYPE_SCALE.map((row) => (
+            <div key={row.cls} data-type-step={row.cls} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2">
+              <span className={`${row.cls} min-w-0 text-fg`}>{row.name} 가나다 Abc 123</span>
+              <span className="shrink-0 text-meta tabular-nums text-fg-muted">{row.cls} · {row.spec}</span>
+            </div>
+          ))}
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+            <span className="chip bg-surface-subtle text-fg-secondary">칩 12px</span>
+            <span className="badge bg-surface-subtle text-fg-secondary">배지 12px</span>
+            <span className="lvl-badge bg-surface-subtle text-fg-secondary">단계 12px</span>
+            <span className="text-meta text-fg-muted">12px 미만은 차트 눈금·도형 안 글자·키 표시뿐이다</span>
+          </div>
         </div>
       </Section>
 

@@ -365,7 +365,7 @@ export function IssuesView({
                 {listFields.map(d => <col key={d.key} style={{ width: `${16000 / (1100 + 160 * listFields.length)}%` }} />)}
               </colgroup>
               <thead>
-                <tr className="whitespace-nowrap border-b border-border/80 bg-surface-subtle text-left text-[11px] font-semibold text-fg-muted">
+                <tr className="whitespace-nowrap border-b border-border/80 bg-surface-subtle text-left text-meta leading-4 font-semibold text-fg-muted">
                   <th className="px-2.5 py-2.5">
                     {/* 선택 칸은 첫 열 안에 둔다 — 열을 더하면 colgroup 폭을 다시 나눠야 한다(위 주석) */}
                     <span className="flex items-center gap-2">
@@ -426,7 +426,7 @@ export function IssuesView({
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
                         {megaArea ? (
                           <span
-                            className="inline-block max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-action/20 bg-action-soft px-2 py-0.5 text-[11px] font-medium text-action"
+                            className="inline-block max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-action/20 bg-action-soft px-2 py-0.5 text-meta font-medium text-action"
                             title={`${megaArea.code} · ${megaArea.name}`}
                           >
                             {megaArea.code} · {megaArea.name}
@@ -443,7 +443,7 @@ export function IssuesView({
                             unlayered 안전망에 져서 조용히 동작하지 않는다(breakpoint-safety-net 테스트가 검사). */}
                         {(issue.attachmentCount ?? 0) > 0 && (
                           <span
-                            className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-[11px] font-normal text-fg-muted"
+                            className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-meta font-normal text-fg-muted"
                             title={t('issue.attach.count').replace('{n}', String(issue.attachmentCount))}
                             aria-label={t('issue.attach.count').replace('{n}', String(issue.attachmentCount))}
                           >
@@ -456,7 +456,7 @@ export function IssuesView({
                         <IssueStatusPill category={issue.status} code={issue.statusCode} defs={statusDefs} />
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5">
-                        <span className={`chip px-2 py-0.5 text-[11px] ${vocabView('issues.severities', severities, issue.severity, t).chip}`}>{vocabView('issues.severities', severities, issue.severity, t).label}</span>
+                        <span className={`chip px-2 py-0.5 text-meta ${vocabView('issues.severities', severities, issue.severity, t).chip}`}>{vocabView('issues.severities', severities, issue.severity, t).label}</span>
                       </td>
                       <td className="overflow-hidden whitespace-nowrap px-2.5 py-2.5 text-fg-secondary" title={assignees}>
                         <span className="block truncate">{assignees}</span>

@@ -53,7 +53,7 @@ export function ProjectInfoEditButton({
       <button onClick={() => setOpen(true)} className="btn btn-ghost h-9 px-3 text-[13px]">
         <Pencil className="h-3.5 w-3.5" />{t('common.edit')}
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} eyebrow="CORE INFORMATION" title={t('settings.editInfoTitle')}
+      <Modal open={open} onClose={() => setOpen(false)} title={t('settings.editInfoTitle')}
         footer={
           <>
             <button onClick={() => setOpen(false)} className="btn btn-ghost h-9 px-4">{t('common.cancel')}</button>

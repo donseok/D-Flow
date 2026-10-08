@@ -16,7 +16,7 @@ export async function DataHygiene({ hygiene, projectId }: { hygiene: HygieneMode
   ]
 
   return (
-    <SectionCard eyebrow="DATA QUALITY" title={tr('dash.hygiene.title')} icon={ClipboardCheck}>
+    <SectionCard title={tr('dash.hygiene.title')} icon={ClipboardCheck}>
       {hygiene.clean ? (
         <div className="flex flex-col items-center gap-2 rounded-xl bg-success-weak/40 px-4 py-8 text-center">
           <CheckCircle2 className="h-6 w-6 text-success" />

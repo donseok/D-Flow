@@ -11,19 +11,19 @@ export function MenuRankingCard({ ranks, locale }: { ranks: MenuRank[]; locale: 
   const max = ranks[0]?.events ?? 0
 
   return (
-    <SectionCard eyebrow="MENUS" title="많이 쓰는 프로그램" icon={BarChart3}>
+    <SectionCard title="많이 쓰는 프로그램" icon={BarChart3}>
       {ranks.length === 0 ? (
         <MiniEmpty text="수집 시작 이후 데이터가 쌓입니다." />
       ) : (
         <ol className="space-y-2">
           {ranks.map((r, i) => (
             <li key={r.menuKey} className="flex items-center gap-3">
-              <span className="w-5 shrink-0 text-right text-[11px] tabular-nums text-fg-muted">{i + 1}</span>
+              <span className="w-5 shrink-0 text-right text-meta tabular-nums text-fg-muted">{i + 1}</span>
               <span className="w-32 shrink-0 truncate text-xs text-fg">{menuLabel(r.menuKey, translate)}</span>
               <span className="h-2 min-w-0 flex-1 rounded-full bg-surface-subtle">
                 <span className="block h-2 rounded-full bg-action" style={{ width: `${barPct(r.events, max)}%` }} />
               </span>
-              <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-fg-secondary">
+              <span className="w-28 shrink-0 text-right text-meta tabular-nums text-fg-secondary">
                 {r.events.toLocaleString('ko-KR')}회 · {r.activeUsers}명
               </span>
             </li>

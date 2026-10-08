@@ -69,7 +69,7 @@ export async function SpiPanel({ model, variance, historyFailed = false }: {
   const s = model.spiSeries
   // 같은 사유를 옆 TrendChart 가 role="alert" 로 알린다 — 여기서는 보이기만 하고 다시 읽히지 않게 한다.
   const spark = historyFailed ? (
-    <p role="status" aria-live="off" className="flex items-center gap-1.5 text-[11px] text-fg"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-danger" />{tr('dash.trend.historyFailed')}</p>
+    <p role="status" aria-live="off" className="flex items-center gap-1.5 text-meta text-fg"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-danger" />{tr('dash.trend.historyFailed')}</p>
   ) : s.length >= 2 ? (() => {
     const sx = (i: number) => 4 + (i / (s.length - 1)) * 192
     const sy = (val: number) => 4 + (1 - (Math.min(1.5, Math.max(0.5, val)) - 0.5)) * 40
@@ -83,11 +83,11 @@ export async function SpiPanel({ model, variance, historyFailed = false }: {
       </svg>
     )
   })() : (
-    <div className="flex h-12 items-center justify-center rounded-xl bg-surface-subtle/40 text-[11px] text-fg-muted">—</div>
+    <div className="flex h-12 items-center justify-center rounded-xl bg-surface-subtle/40 text-meta text-fg-muted">—</div>
   )
 
   return (
-    <SectionCard eyebrow="VELOCITY" title={tr('dash.spi.title')} icon={Gauge}>
+    <SectionCard title={tr('dash.spi.title')} icon={Gauge}>
       <div className="space-y-4">
         {gauge}
         {spark}
@@ -95,7 +95,7 @@ export async function SpiPanel({ model, variance, historyFailed = false }: {
           <Stat label={tr('dash.spi.current')} value={spi == null ? '—' : spi.toFixed(2)} tone={spiTone} />
           <Stat label={tr('dash.spi.varianceNow')} value={fmtPp(variance)} tone={SIG_TONE[progressSignal(variance)]} />
         </div>
-        <div className="text-[11px] text-fg-muted">{tr('dash.spi.hint')}</div>
+        <div className="text-meta text-fg-muted">{tr('dash.spi.hint')}</div>
       </div>
     </SectionCard>
   )

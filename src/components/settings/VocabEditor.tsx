@@ -180,7 +180,7 @@ export function VocabEditor({ projectId, vocabKey, value, invalid = false, revis
     <div className="relative overflow-x-auto">
       <table className="w-full min-w-[560px] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-[11px] font-semibold text-fg-muted">
+          <tr className="border-b border-border text-left text-meta leading-4 font-semibold text-fg-muted">
             <th className="px-2 py-2">{tr('settings.vocab.order')}</th>
             <th className="px-2 py-2">{tr('settings.vocab.code')}</th>
             <th className="px-2 py-2">{tr('settings.vocab.label')}</th>

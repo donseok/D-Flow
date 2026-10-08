@@ -36,7 +36,7 @@ export function DayPopover({ anchor, count, onClose, children }: {
       <button className="fixed inset-0 z-[90] cursor-default" aria-label={t('common.close')} onClick={onClose} />
       <div style={{ position: 'fixed', width: W, ...pos }}
         className="z-[95] overflow-hidden rounded-2xl border border-border bg-surface p-2.5 shadow-[var(--shadow-lg)]">
-        <p className="mb-1.5 px-1 text-[11px] font-semibold text-fg-muted">
+        <p className="mb-1.5 px-1 text-meta font-semibold text-fg-muted">
           {fmtDate(anchor.date)} ({t(`att.weekday.${weekdayKey}` as DictKey)}) · {count}
         </p>
         <div className="max-h-56 space-y-1 overflow-y-auto overscroll-contain">

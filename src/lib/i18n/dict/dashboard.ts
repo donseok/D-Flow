@@ -33,6 +33,7 @@ export const dashboardKo = {
   'dash.exec.overdue': '예정일 경과',
   'dash.exec.delayed': '지연',
   'dash.exec.dueSoon': '마감임박',
+  'dash.exec.eyebrow': '종합 현황',
   'dash.exec.reportTitle': '주간보고서 요약(PPT)',
   // ── 본문 재구성(2026-07-09): 트렌드/매트릭스/랭킹/타임라인/에이징/위생 ──
   'dash.trend.title': '진척현황',

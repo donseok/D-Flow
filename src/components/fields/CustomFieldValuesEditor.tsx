@@ -79,7 +79,7 @@ function Editor({ scope, rowId, values, canEdit }: { scope: Scope & { defs: Fiel
   }
   if (!fields.length) return null
   return <section aria-label={ko ? '추가 정보' : 'Custom fields'} className="space-y-3 border-t border-border pt-4">
-    <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">{ko ? '추가 정보' : 'Custom fields'}</h3>
+    <h3 className="text-xs font-semibold text-fg-secondary">{ko ? '추가 정보' : 'Custom fields'}</h3>
     {fields.map(def => <div key={def.key} className="min-w-0 space-y-1">
       {editable(def) ? <CustomFieldInput def={def} value={draft[def.key]} label={`${def.label}${def.required ? ' *' : ''}`} locale={scope.locale} disabled={pending} onChange={v => change(def.key, v)} />
         : <><p className="text-xs text-fg-secondary">{def.label}{!def.active ? ko ? ' (비활성)' : ' (inactive)' : ''}{def.editable_by === 'admin' && !scope.canAdmin ? ko ? ' (관리자 전용)' : ' (admin only)' : ''}</p>

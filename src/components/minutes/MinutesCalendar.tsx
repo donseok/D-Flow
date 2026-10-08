@@ -39,7 +39,7 @@ export function MinutesCalendar({
     <div className="card overflow-hidden p-0">
       <div className="grid grid-cols-7 gap-px bg-border">
         {columns.map(c => (
-          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>
+          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-meta ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>
             {t(`att.weekday.${c.key}` as DictKey)}
           </div>
         ))}
@@ -62,7 +62,7 @@ export function MinutesCalendar({
                   <TeamBar key={mi.id} code={mi.teamCode} shape="tag" />
                 ))}
                 {rows.length > 4 && (
-                  <span className="text-[10px] font-medium text-fg-muted">+{rows.length - 4}</span>
+                  <span className="text-meta font-medium text-fg-muted">+{rows.length - 4}</span>
                 )}
               </div>
             </button>

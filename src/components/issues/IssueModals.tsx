@@ -321,7 +321,7 @@ export function IssueDetailModal({
 
           {/* 담당자는 그리드 밖 자기 줄 — 여러 명이면 한 칸 폭으로는 줄바꿈이 겹겹이 쌓인다 */}
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{t('issue.col.assignee')}</div>
+            <div className="text-meta font-semibold text-fg-muted">{t('issue.col.assignee')}</div>
             {assigneeChips.length === 0 ? (
               <div className="mt-0.5 text-sm text-fg">{t('issue.unassigned')}</div>
             ) : (
@@ -337,15 +337,15 @@ export function IssueDetailModal({
 
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
             <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{t('issue.col.period')}</dt>
+              <dt className="text-meta font-semibold text-fg-muted">{t('issue.col.period')}</dt>
               <dd className={`mt-0.5 tabular-nums ${overdue ? 'font-semibold text-danger' : 'text-fg'}`}>{period}</dd>
             </div>
             <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{t('issue.detail.reporter')}</dt>
+              <dt className="text-meta font-semibold text-fg-muted">{t('issue.detail.reporter')}</dt>
               <dd className="mt-0.5 text-fg">{issue.createdByName ?? '—'}</dd>
             </div>
             <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
+              <dt className="text-meta font-semibold text-fg-muted">
                 {issue.resolvedAt ? t('issue.detail.resolvedAt') : t('issue.detail.createdAt')}
               </dt>
               <dd className="mt-0.5 tabular-nums text-fg">{(issue.resolvedAt ?? issue.createdAt).slice(0, 10)}</dd>
@@ -354,38 +354,38 @@ export function IssueDetailModal({
 
           {issue.body && (
             <div>
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{t('issue.detail.body')}</div>
+              <div className="mb-1 text-meta font-semibold text-fg-muted">{t('issue.detail.body')}</div>
               <p className="whitespace-pre-wrap text-sm leading-6 text-fg">{issue.body}</p>
             </div>
           )}
 
           <section className="rounded-2xl border border-border bg-surface-subtle p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
+            <div className="text-meta font-semibold text-fg-muted">
               {t('issue.analysis.fieldsTitle')}
             </div>
             <dl className="mt-3 grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-[11px] font-semibold text-fg-muted">{t('issue.analysis.area')}</dt>
+                <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.area')}</dt>
                 <dd className="mt-0.5 text-fg">{analysisMegaLabel}</dd>
               </div>
               <div>
-                <dt className="text-[11px] font-semibold text-fg-muted">{t('issue.analysis.majorProcess')}</dt>
+                <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.majorProcess')}</dt>
                 <dd className="mt-0.5 text-fg">{analysisMajorLabel}</dd>
               </div>
               <div>
-                <dt className="text-[11px] font-semibold text-fg-muted">{t('issue.analysis.subProcess')}</dt>
+                <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.subProcess')}</dt>
                 <dd className="mt-0.5 whitespace-pre-wrap text-fg">{issue.subProcess || '—'}</dd>
               </div>
               <div>
-                <dt className="text-[11px] font-semibold text-fg-muted">{t('issue.analysis.ownerDepartment')}</dt>
+                <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.ownerDepartment')}</dt>
                 <dd className="mt-0.5 text-fg">{issue.ownerDepartment || '—'}</dd>
               </div>
               <div>
-                <dt className="text-[11px] font-semibold text-fg-muted">{t('issue.analysis.sourceType')}</dt>
+                <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.sourceType')}</dt>
                 <dd className="mt-0.5 text-fg">{analysisSourceLabel}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-[11px] font-semibold text-fg-muted">{t('issue.analysis.relatedSystems')}</dt>
+                <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.relatedSystems')}</dt>
                 <dd className="mt-1.5">
                   {issue.relatedSystems.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
@@ -397,7 +397,7 @@ export function IssueDetailModal({
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-[11px] font-semibold text-fg-muted">{t('issue.analysis.sourceDetail')}</dt>
+                <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.sourceDetail')}</dt>
                 <dd className="mt-0.5 whitespace-pre-wrap text-fg">{issue.sourceDetail || '—'}</dd>
               </div>
             </dl>
@@ -407,7 +407,7 @@ export function IssueDetailModal({
 
           {issue.minuteSources.length > 0 && (
             <section>
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
+              <div className="mb-1.5 text-meta font-semibold text-fg-muted">
                 {t('issue.source.minute')}
               </div>
               <div className="space-y-2">
@@ -457,7 +457,7 @@ export function IssueDetailModal({
           />
 
           <div className="space-y-3 rounded-2xl border border-border bg-surface-subtle p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">{t('issue.detail.progress')}</div>
+            <div className="text-meta font-semibold text-fg-muted">{t('issue.detail.progress')}</div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.detail.status')}</span>
@@ -484,7 +484,7 @@ export function IssueDetailModal({
 /** 'AI 추천 일치' 안내 문구 — 세 분류 필드(mega/major/sub)가 같은 마크업을 공유한다. */
 function AiRecommendedHint({ show, text }: { show: boolean; text: string }) {
   if (!show) return null
-  return <p className="mt-1 text-[11px] leading-4 text-action">{text}</p>
+  return <p className="mt-1 text-meta leading-4 text-action">{text}</p>
 }
 
 export function IssueFormModal({
@@ -880,7 +880,7 @@ export function IssueFormModal({
             aria-label={t('issue.analysis.minuteAutoLinked')}
             className="rounded-2xl border border-border bg-surface-subtle p-4"
           >
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-muted">
+            <div className="flex flex-wrap items-center gap-1.5 text-meta font-semibold text-fg-muted">
               <FileText className="h-3.5 w-3.5" aria-hidden="true" />
               {t('issue.analysis.minuteAutoLinked')}
               {sourcePreview.label && <span className="chip bg-surface text-neutral">{sourcePreview.label}</span>}
@@ -893,12 +893,12 @@ export function IssueFormModal({
               {sourcePreview.excerpt}
             </p>
             {sourcePreview.organizedDraft && (
-              <p className="mt-2 border-t border-border pt-2 text-[11px] leading-5 text-action">
+              <p className="mt-2 border-t border-border pt-2 text-meta leading-5 text-action">
                 {t('issue.analysis.organizedDraft')}
               </p>
             )}
             {sourcePreview.classificationRecommended && (
-              <p className="mt-1 text-[11px] leading-5 text-action">
+              <p className="mt-1 text-meta leading-5 text-action">
                 {t('issue.analysis.classificationRecommended')}
               </p>
             )}
@@ -915,7 +915,7 @@ export function IssueFormModal({
         {context && (showArea || context.rules.analysis !== 'off') && <section className="space-y-3 rounded-2xl border border-border bg-surface-subtle p-4">
           <div>
             <h3 className="text-xs font-bold text-fg">{t(context.rules.analysis === 'off' ? 'issue.analysis.area' : 'issue.analysis.fieldsTitle')}</h3>
-            {context.rules.analysis !== 'off' && <p className="mt-0.5 text-[11px] leading-5 text-fg-muted">{t('issue.analysis.fieldsDesc')}</p>}
+            {context.rules.analysis !== 'off' && <p className="mt-0.5 text-meta leading-5 text-fg-muted">{t('issue.analysis.fieldsDesc')}</p>}
           </div>
           {showArea && <IssueAreaSelect areas={areas} value={areaId} onChange={setAreaId} required={areaRequired} disabled={megaLocked} canManage={canManage} projectId={projectId} />}
           <AiRecommendedHint show={matchesAiDraft(draft?.areaId, areaId)} text={t('issue.analysis.areaRecommended').replace('{code}', areas.find(a => a.id === draft?.areaId)?.code ?? '')} />
@@ -944,7 +944,7 @@ export function IssueFormModal({
                     </option>
                   ))}
               </datalist>
-              <span className="mt-1 block text-[11px] leading-4 text-fg-muted">
+              <span className="mt-1 block text-meta leading-4 text-fg-muted">
                 {t('issue.analysis.majorProcessHint')}
               </span>
               <AiRecommendedHint
@@ -988,7 +988,7 @@ export function IssueFormModal({
                 onChange={e => setRelatedSystemsText(e.target.value)}
                 placeholder={t('issue.analysis.relatedSystemsPh')}
               />
-              <span className="mt-1 block text-[11px] leading-4 text-fg-muted">{t('issue.analysis.relatedSystemsHint')}</span>
+              <span className="mt-1 block text-meta leading-4 text-fg-muted">{t('issue.analysis.relatedSystemsHint')}</span>
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.analysis.sourceType')}</span>
@@ -1006,7 +1006,7 @@ export function IssueFormModal({
                 ))}
               </select>
               {minuteSourceLocked && (
-                <p id="issue-source-locked" className="mt-1 text-[11px] leading-4 text-action">
+                <p id="issue-source-locked" className="mt-1 text-meta leading-4 text-action">
                   {t('issue.analysis.minuteAutoLinked')}
                 </p>
               )}
@@ -1060,7 +1060,7 @@ export function IssueFormModal({
           <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.form.assignee')}</span>
           <IssueAssigneePicker members={members} selected={assignees} onChange={setAssignees} />
         </div>
-        <p className="text-[11px] text-fg-muted">{t('issue.form.dueHint')}</p>
+        <p className="text-meta text-fg-muted">{t('issue.form.dueHint')}</p>
         {customEnabled && customUnreadable && <p role="alert" className="text-xs text-danger">{locale === 'ko' ? '추가 정보를 읽을 수 없습니다. 행을 새로 조회하세요.' : 'Custom values could not be read. Reload the row.'}</p>}
         {customEnabled && customReady && !customUnreadable && <CustomFieldDraft defs={customDefs} values={customDraft} base={customBase} canAdmin={customCanAdmin} creating={!isEdit} disabled={pending || createdIdRef.current !== null} locale={locale} errors={customErrors}
           onChange={(key,value)=>{setCustomDraft(prev=>{const next={...prev};if(value===undefined)delete next[key];else next[key]=value;return next});setCustomErrors({})}} />}

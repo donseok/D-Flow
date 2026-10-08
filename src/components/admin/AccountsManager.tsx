@@ -98,7 +98,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+                <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
                   <th className="py-2 pr-3">이메일</th>
                   <th className="py-2 pr-3">이름</th>
                   <th className="py-2 pr-3">워크스페이스 역할</th>

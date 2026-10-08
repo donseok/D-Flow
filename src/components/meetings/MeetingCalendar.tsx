@@ -24,7 +24,7 @@ function OccurrenceChip({ o, onSelect, t, projectDotClass, categories }: {
   return (
     <button
       onClick={() => onSelect(o)}
-      className={`flex w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-[10.5px] font-medium ${meta.chip} cursor-pointer transition hover:ring-1 hover:ring-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus`}
+      className={`flex w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-left text-meta font-medium ${meta.chip} cursor-pointer transition hover:ring-1 hover:ring-border-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus`}
       title={`${timeLabel} · ${o.title}`}
     >
       {dotClass && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />}
@@ -66,7 +66,7 @@ export function MeetingCalendar({
     <div className="card overflow-hidden p-0">
       <div className="grid grid-cols-7 gap-px bg-border">
         {columns.map(c => (
-          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-[11px] ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>
+          <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-meta ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>
             {t(`att.weekday.${c.key}` as DictKey)}
           </div>
         ))}
@@ -84,7 +84,7 @@ export function MeetingCalendar({
                   {dayNum}
                 </span>
                 {info.name && (
-                  <span className="basis-full break-all text-[10px] font-medium leading-tight text-fg-muted sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
+                  <span className="basis-full break-all text-meta font-medium leading-tight text-fg-muted sm:min-w-0 sm:basis-auto sm:truncate" title={info.name}>
                     {info.name}
                   </span>
                 )}
@@ -100,7 +100,7 @@ export function MeetingCalendar({
                       const r = e.currentTarget.getBoundingClientRect()
                       setMore({ date: cell, rect: { top: r.top, bottom: r.bottom, left: r.left } })
                     }}
-                    className="w-full rounded-md px-1 py-0.5 text-left text-[10px] font-medium text-fg-muted transition hover:bg-surface-subtle hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    className="w-full rounded-md px-1 py-0.5 text-left text-meta font-medium text-fg-muted transition hover:bg-surface-subtle hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                   >
                     +{dayOcc.length - 3}{t('meet.moreSuffix')}
                   </button>

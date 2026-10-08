@@ -32,7 +32,7 @@ export function WikiFeedbackButtons({ projectId, topicId, locale }: { projectId:
 
   return (
     <div>
-      <p className="text-[11px] font-semibold text-fg-secondary">{t(locale, 'wiki.feedback.prompt')}</p>
+      <p className="text-meta font-semibold text-fg-secondary">{t(locale, 'wiki.feedback.prompt')}</p>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => void submit('helpful')} disabled={busy !== null} className="btn btn-ghost h-9 px-2 text-xs">
           <ThumbsUp className="h-3.5 w-3.5" aria-hidden />

@@ -97,7 +97,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
             {mode === 'light' ? '밝은 화면' : '어두운 화면'}
           </span>
         </div>
-        <p className="bg-surface-subtle px-4 py-2 font-mono text-[11px] text-fg-secondary">{preview.value[mode].bg} · {preview.value[mode].fg}</p>
+        <p className="bg-surface-subtle px-4 py-2 font-mono text-meta text-fg-secondary">{preview.value[mode].bg} · {preview.value[mode].fg}</p>
       </div>)}
     </div>}
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">

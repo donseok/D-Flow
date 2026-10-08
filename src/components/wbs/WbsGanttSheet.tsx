@@ -1335,7 +1335,7 @@ export function WbsGanttSheet({
 
   /* ── 셀 helpers ── */
   const headBase =
-    'box-border flex h-[var(--wbs-head-h)] min-w-0 shrink-0 items-center overflow-hidden whitespace-nowrap bg-surface-subtle px-2 font-semibold uppercase tracking-[0.08em] text-fg-secondary border-b border-border-input'
+    'box-border flex h-[var(--wbs-head-h)] min-w-0 shrink-0 items-center overflow-hidden whitespace-nowrap bg-surface-subtle px-2 font-semibold text-fg-secondary border-b border-border-input'
   const cellBase = 'box-border flex h-full shrink-0 items-center border-b border-border px-2'
 
   const headCell = (
@@ -1358,7 +1358,7 @@ export function WbsGanttSheet({
         className={`${headBase} ${align} ${isName ? 'freeze-edge relative' : 'border-r border-border-input'} ${extra}`}
         style={{
           width: col.w,
-          fontSize: 'var(--wbs-head-font, 10px)',
+          fontSize: 'var(--wbs-head-font, 12px)',
           ...(frozen ? { position: 'sticky', left: col.sk, zIndex: 50 } : {}),
         }}
         title={sub ? `${label} — ${sub.title}` : label}
@@ -1733,7 +1733,7 @@ export function WbsGanttSheet({
                       type="button"
                       data-level-btn={lvl}
                       onClick={() => expandToLevel(lvl)}
-                      className="btn btn-ghost h-5 w-4 shrink-0 px-0 text-[9px] leading-none tabular-nums"
+                      className="btn btn-ghost h-5 w-4 shrink-0 px-0 text-meta leading-none tabular-nums"
                       title={
                         lvl === 1
                           ? t('wbs.collapseAll')
@@ -1784,7 +1784,7 @@ export function WbsGanttSheet({
                 <div
                   key={m.left}
                   className="absolute top-0 box-border flex h-5 items-center overflow-hidden border-r border-border px-1.5 font-semibold text-fg-secondary"
-                  style={{ left: m.left, width: m.width, fontSize: 'var(--wbs-head-font, 10px)' }}
+                  style={{ left: m.left, width: m.width, fontSize: 'var(--wbs-head-font, 12px)' }}
                 >
                   {m.label}
                 </div>
@@ -1931,7 +1931,7 @@ export function WbsGanttSheet({
                 <div
                   data-wbs-col="no"
                   className={`${cellBase} border-r border-border-input justify-center tabular-nums text-fg-muted ${cellBg}`}
-                  style={{ ...frozen('no'), fontSize: 'var(--wbs-index-font, 11px)' }}
+                  style={{ ...frozen('no'), fontSize: 'var(--wbs-index-font, 12px)' }}
                 >
                   {/* 1단계 스트립 — 루트(1단계) 소속을 10px 색 띠로(구분은 가로선보다 세로
                       스트립이 주도, 훨씬 두껍게 — 피드백). 동결(#) 셀 좌단이라 항상 보인다 */}
@@ -1962,7 +1962,7 @@ export function WbsGanttSheet({
                   <div
                     data-wbs-col="outline"
                     className={`${cellBase} overflow-hidden border-r border-border-input tabular-nums text-fg-muted ${cellBg}`}
-                    style={{ ...frozen('outline'), fontSize: 'var(--wbs-index-font, 11px)' }}
+                    style={{ ...frozen('outline'), fontSize: 'var(--wbs-index-font, 12px)' }}
                   >
                     <span className="truncate">{outlineNumbers.get(n.id)}</span>
                   </div>
@@ -2023,7 +2023,7 @@ export function WbsGanttSheet({
                       <span
                         data-collapsed-count
                         className="ml-1.5 shrink-0 rounded-full bg-surface px-1.5 py-px tabular-nums text-neutral ring-1 ring-inset ring-border"
-                        style={{ fontSize: 'var(--wbs-badge-font, 10px)' }}
+                        style={{ fontSize: 'var(--wbs-badge-font, 12px)' }}
                         title={t('wbs.hiddenDescendants')}
                       >
                         {descendantCounts.get(n.id) ?? 0}
@@ -2065,7 +2065,7 @@ export function WbsGanttSheet({
                     <span
                       className={`chip max-w-full overflow-hidden whitespace-nowrap ${STATUS[n.status].chip}`}
                       style={{
-                        fontSize: 'var(--wbs-chip-font, 11px)',
+                        fontSize: 'var(--wbs-chip-font, 12px)',
                         paddingInline: 4,
                       }}
                       title={t(`status.${n.status}` as DictKey)}
@@ -2411,7 +2411,7 @@ export function WbsGanttSheet({
 
       {/* ── 범례 — 컴팩트(세로 폰·가로 폰)에선 표 공간 확보 위해 렌더하지 않음 ── */}
       {!compact && (
-      <div data-wbs-legend className="mt-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border/70 bg-surface/70 px-3 py-2 text-[11px] text-fg-muted">
+      <div data-wbs-legend className="mt-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border/70 bg-surface/70 px-3 py-2 text-meta text-fg-muted">
         <span className="inline-flex items-center gap-2">
           {(['done', 'in_progress', 'delayed', 'not_started'] as const).map(s => (
             <span key={s} className="inline-flex items-center gap-1">

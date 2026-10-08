@@ -44,7 +44,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     <label className="block">
       <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-[11px] leading-4 text-fg-muted">{hint}</span>}
+      {hint && <span className="mt-1 block text-meta leading-4 text-fg-muted">{hint}</span>}
     </label>
   )
 }
@@ -303,7 +303,7 @@ export function LlmProfilesModal({
                     }`}
                   >
                     <span className="block text-[13px] font-semibold leading-tight">{p.label}</span>
-                    <span className="mt-0.5 block text-[11px] leading-4 opacity-80">{p.tokenHint}</span>
+                    <span className="mt-0.5 block text-meta leading-4 opacity-80">{p.tokenHint}</span>
                   </button>
                 )
               })}
