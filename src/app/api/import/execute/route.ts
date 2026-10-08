@@ -65,6 +65,8 @@ const ERR_TEAM_REGISTER = '팀을 등록하지 못해 가져오기를 멈췄습�
 /** replace 백업을 읽지 못함 — 잘림·읽는 사이의 변경(count 불일치)·조회 오류 모두(SP4 D18·Q5) */
 const ERR_BACKUP_FAILED = '교체 전 백업을 만들지 못해 가져오기를 멈췄습니다. 잠시 후 다시 시도하세요.'
 const ERR_IMPORT = '가져오기를 처리하지 못했습니다. 잠시 후 다시 시도하세요.'
+/** 파일의 사용자 정의 필드 값을 행 트리거(enforce_custom_fields)가 거부함 — CUSTOM_FIELD_<종류>[:키…](0040). 다시 시도해도 같으므로 422 */
+const ERR_CUSTOM_FIELD = '사용자 정의 필드 값이 올바르지 않아 가져오기를 멈췄습니다 — 파일의 사용자 정의 열(필수 값·형식·선택지)을 확인한 뒤 다시 실행하세요.'
 
 /** RPC 둘(import_wbs_cmd·convert_inherited_teams)의 자기 토큰(SP4 §4.4 #6·#8 — D45·T6). 그 밖은 rpcFailure 가 55P03(잠금 대기 상한)
  *  503 재시도·mapDbError(40P01 503)로 판정하고, 셋 다 아니면 로그 + 500 고정 문구다. 입력 토큰(IMPORT_INVALID_INPUT·
@@ -348,7 +350,14 @@ export async function POST(req: NextRequest) {
     p_actor: g.actor.userId, p_project_id: projectId, p_mode: mode, p_items: splitLeafOwners(linked.items),
     p_holidays: parsed.holidays, p_command_id: commandId,
   })
-  if (error) return rpcFail('import/execute 가져오기', error, 'IMPORT_FAILED', ERR_IMPORT)
+  if (error) {
+    // 토큰에 필드 키·사유가 붙어 자기 토큰 표(정확히 일치)로는 못 받는다. 원문은 로그로만 남긴다
+    if (typeof error.message === 'string' && error.message.startsWith('CUSTOM_FIELD_')) {
+      console.error(`[import/execute 가져오기] ${error.message} → 422`)
+      return fail(422, 'CUSTOM_FIELD_INVALID', ERR_CUSTOM_FIELD)
+    }
+    return rpcFail('import/execute 가져오기', error, 'IMPORT_FAILED', ERR_IMPORT)
+  }
   const outcome = importOutcome(data)
   if (!outcome) return fail(500, 'IMPORT_FAILED', failWith('import/execute 가져오기 결과', data, ERR_IMPORT))
 

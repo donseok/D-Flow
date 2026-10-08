@@ -588,6 +588,8 @@ describe('실패 순서(#5~#8) — 앞 단계가 실패하면 뒤 단계를 부�
     ['등급 거부', { message: 'IMPORT_FORBIDDEN', code: '42501' }, 403, 'ERR_DENIED'],
     ['프로젝트 없음', { message: 'PROJECT_NOT_FOUND', code: 'P0002' }, 404, 'ERR_MISSING'],
     ['같은 id·다른 내용', { message: 'COMMAND_REUSED', code: '23505' }, 422, 'COMMAND_REUSED'],
+    ['사용자 정의 필드 값 거부(0040)', { message: 'CUSTOM_FIELD_INVALID:note:too_long', code: '23514' }, 422, 'CUSTOM_FIELD_INVALID'],
+    ['사용자 정의 필드 모르는 키(0040)', { message: 'CUSTOM_FIELD_UNKNOWN:nope', code: '23514' }, 422, 'CUSTOM_FIELD_INVALID'],
     ['잠금 대기 상한', { message: 'canceling statement due to lock timeout', code: '55P03' }, 503, null],
     ['교착', { message: 'deadlock detected', code: '40P01' }, 503, 'CONFIG_BUSY'],
     ['격리 수준(정상 경로 밖)', { message: 'IMPORT_RECEIPT_ISOLATION', code: '25001' }, 500, 'IMPORT_FAILED'],
