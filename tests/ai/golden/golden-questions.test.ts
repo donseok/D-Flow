@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 // 봇 도구의 팀은 생성자로 받는다(SP4 A2 — ToolTeamSource). 고정 코드(FIXTURE_TEAM_CODES)로 실 DB 무관하게 만든다.
 import { fixedToolTeams } from '../../helpers/tool-team-source'
 import { fixedToolVocab } from '../../helpers/tool-vocab-source'
+import { fixedToolFields } from '../../helpers/tool-field-source'
 const toolTeams = fixedToolTeams()
 import {
   orchestrateChatV2,
@@ -52,7 +53,7 @@ function buildRegistry(options: FakeRepositoryOptions) {
   const repos = createFakeRepositories(options)
   const tools: ChatTool[] = [
     createFindWbsItemsTool(repos.wbs, toolTeams),
-    createGetWbsItemDetailTool(repos.wbs, toolTeams),
+    createGetWbsItemDetailTool(repos.wbs, toolTeams, fixedToolFields()),
     createGetWbsDependenciesTool(repos.wbs, toolTeams),
     createGetWbsChangeLogTool(repos.wbs),
     createListWbsAttachmentsTool(repos.wbs),

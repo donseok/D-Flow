@@ -47,8 +47,9 @@ import { WBS_ADD_PHASE_EVENT } from './WbsAddButton'
 import { useWbsRealtime } from '@/lib/hooks/useWbsRealtime'
 import { applyWbsChange } from '@/lib/domain/wbsRealtime'
 import { useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
-import { formatCustomValue, orderedFields } from '@/lib/domain/customFields'
+import { orderedFields } from '@/lib/domain/customFields'
 import { parseCustomValues } from '@/lib/domain/customFieldValues'
+import { WbsCustomFieldCell } from './WbsCustomFieldCell'
 
 /* ── 컬럼 메타 (좌→우). frozen=true면 sticky 동결, sk=누적 left offset ──
    구분(LevelBadge) 열은 삭제됐다(2026-08-21 개편) — 계층은 들여쓰기·타이포·1단계 스트립이
@@ -2131,21 +2132,27 @@ export function WbsGanttSheet({
                   )}
                 </div>
                 )}
-                {/* 사용자 정의 필드 열(show_in_list) — 읽기 전용, 편집은 상세 패널 */}
+                {/* 사용자 정의 필드 열(show_in_list) — 멤버 필드의 한 줄 유형은 셀에서 고친다(§3.6.9), 그 밖은 읽기 전용(편집은 상세 패널) */}
                 {customListDefs.map(d => {
                   if (!showCol(`cf:${d.key}`)) return null
                   const parsed = parseCustomValues(n.custom ?? {})
-                  const text = parsed.ok ? formatCustomValue(d, parsed.value[d.key], customFormat) : '!'
                   return (
-                    <div
+                    <WbsCustomFieldCell
                       key={`cf:${d.key}`}
-                      data-wbs-col={`cf:${d.key}`}
-                      title={parsed.ok ? text : undefined}
+                      def={d}
+                      defs={fieldScope?.defs ?? []}
+                      projectId={projectId}
+                      rowId={n.id}
+                      custom={parsed.ok ? parsed.value : null}
+                      // 상세 패널의 '추가 정보'와 같은 행 판정 — 관리자이거나 그 항목의 산출물을 고칠 수 있는 멤버
+                      canEdit={!readOnly && (isAdmin || canEditDeliverable(n, actor, projectId))}
+                      canAdmin={fieldScope?.canAdmin === true}
+                      locale={fieldScope?.locale ?? 'ko'}
+                      format={customFormat}
                       className={`${cellBase} items-center justify-start border-r border-grid ${cellBg}`}
-                      style={{ width: W(`cf:${d.key}`) }}
-                    >
-                      <span className={`truncate ${parsed.ok ? '' : 'text-delayed'}`}>{text}</span>
-                    </div>
+                      width={W(`cf:${d.key}`)}
+                      onError={msg => setToast({ kind: 'err', msg })}
+                    />
                   )
                 })}
                 {/* 간트 셀 */}

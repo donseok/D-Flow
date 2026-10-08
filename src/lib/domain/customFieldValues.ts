@@ -1,5 +1,5 @@
 /** Whole-row field edits: typed values, definition permissions and absence are checked before the JWT/CAS write. */
-import { validateCustomValue, type CustomValues, type CustomValueError, type FieldDef, type FieldValue } from './customFields'
+import { formatCustomValue, validateCustomValue, type CustomValues, type CustomValueError, type FieldDef, type FieldValue } from './customFields'
 import type { Parsed } from '@/lib/settings/def'
 const object = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const own = (v: object, k: string) => Object.prototype.hasOwnProperty.call(v, k)
@@ -63,4 +63,31 @@ export function mapCustomFieldDbError(error: { message?: string }): Record<strin
   const values: readonly FieldRowError[] = ['null', 'type', 'empty', 'newline', 'length', 'number', 'decimals', 'range', 'date', 'option', 'inactive_option', 'duplicate', 'items']
   if (hit[1] === 'INVALID') return values.includes(hit[3] as FieldRowError) ? Object.fromEntries([[hit[2], hit[3] as FieldRowError]]) : null
   return hit[3] === undefined ? Object.fromEntries([[hit[2], fixed[hit[1]]]]) : null
+}
+
+/** WBS 값 변경 이력(§3.6.7) — change_logs.field 는 `custom.<key>`. 이슈·주간 행은 필드 값 이력이 없다(비목표) */
+export const CUSTOM_LOG_PREFIX = 'custom.'
+/** 이력의 저장 표현 — 라벨·로케일 중립(선택지는 code). 문자열은 그대로, 숫자·예/아니오는 String, 다중선택은 JSON 배열. 값 없음 = null */
+export function customLogValue(v: FieldValue | undefined): string | null {
+  return v === undefined ? null : Array.isArray(v) ? JSON.stringify(v) : String(v)
+}
+/** 바뀐 키만(추가·변경·제거), key 순. 0·false 는 값이다 — 없음(null)과 구분해 남긴다 */
+export function customFieldChanges(prev: CustomValues, next: CustomValues): { field: string; old: string | null; new: string | null }[] {
+  return [...new Set([...Object.keys(prev), ...Object.keys(next)])].sort()
+    .filter(key => own(prev, key) !== own(next, key) || !same(prev[key], next[key]))
+    .map(key => ({ field: `${CUSTOM_LOG_PREFIX}${key}`, old: customLogValue(own(prev, key) ? prev[key] : undefined), new: customLogValue(own(next, key) ? next[key] : undefined) }))
+}
+/** 이력 값 표시 — 지금의 정의로 화면과 같은 서식(formatCustomValue)을 쓴다. 정의가 없거나(지운 필드) 저장 표현이 그 유형으로 읽히지 않으면 원문 */
+export function formatCustomLogValue(def: FieldDef | undefined, raw: string | null, opts: Parameters<typeof formatCustomValue>[2] = {}): string {
+  if (raw === null) return opts.empty ?? ''
+  if (!def) return raw
+  if (def.type === 'number') return raw.trim() !== '' && Number.isFinite(Number(raw)) ? formatCustomValue(def, Number(raw), opts) : raw
+  if (def.type === 'boolean') return raw === 'true' || raw === 'false' ? formatCustomValue(def, raw === 'true', opts) : raw
+  if (def.type === 'multiselect') {
+    try {
+      const codes: unknown = JSON.parse(raw)
+      return Array.isArray(codes) && codes.every(c => typeof c === 'string') ? formatCustomValue(def, codes as string[], opts) : raw
+    } catch { return raw }
+  }
+  return formatCustomValue(def, raw, opts)
 }

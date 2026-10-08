@@ -99,6 +99,7 @@ export const importWizardEn: Record<keyof typeof importWizardKo, string> = {
   'importWizard.previewRoleHierarchy': 'Hierarchy',
   'importWizard.previewRoleTeam': 'Team',
   'importWizard.previewRoleTeamDirect': 'Direct entry',
+  'importWizard.previewRoleCustom': 'Custom field',
 
   'importWizard.linkErrorsPrefix': 'Please check ',
   'importWizard.linkErrorsSuffix': ' data error(s)',

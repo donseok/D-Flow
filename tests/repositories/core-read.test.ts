@@ -78,7 +78,7 @@ describe('strict Supabase repositories', () => {
       data: [
         { id: 'row-ops', report_id: 'wr1', area_id: 'a-ops', this_content: '운영 업무', this_issue: '', next_content: '', next_issue: '', updated_at: null },
         { id: 'row-old', report_id: 'wr1', area_id: 'a-old', this_content: '', this_issue: '', next_content: '', next_issue: '', updated_at: null },
-        { id: 'row-exp', report_id: 'wr1', area_id: 'a-exp', this_content: '실험 업무', this_issue: '', next_content: '', next_issue: '', updated_at: null },
+        { id: 'row-exp', report_id: 'wr1', area_id: 'a-exp', this_content: '실험 업무', this_issue: '', next_content: '', next_issue: '', updated_at: null, custom: { qty: 0 } },
       ],
       error: null,
     })
@@ -99,12 +99,15 @@ describe('strict Supabase repositories', () => {
     expect(result.data.rows.map(r => r.id)).toEqual(['row-exp', 'row-ops'])   // 영역 순서, 내용 없는 비활성 영역 행은 숨김
     expect(result.data.rows[0]).toEqual({
       id: 'row-exp', reportId: 'wr1', areaId: 'a-exp', thisContent: '실험 업무', thisIssue: '', nextContent: '', nextIssue: '', updatedAt: null,
+      custom: { qty: 0 },   // 사용자 정의 값(SP5c §3.6.9) — 0 은 값이다
     })
+    // custom 을 읽지 못한 행(열이 없거나 객체가 아님)은 빈 객체로 풀지 않는다 — null
+    expect(result.data.rows[1].custom).toBeNull()
     expect(result.data.areas.map(a => [a.id, a.sortOrder, a.active, a.teams])).toEqual([
       ['a-ops', 2, true, [{ teamId: 't-ops', kind: 'primary' }]], ['a-exp', 1, true, []], ['a-old', 0, false, []],
     ])
     const rowSelect = String((rows.select as ReturnType<typeof vi.fn>).mock.calls[0][0])
-    expect(rowSelect).toBe('id, report_id, area_id, this_content, this_issue, next_content, next_issue, updated_at')
+    expect(rowSelect).toBe('id, report_id, area_id, this_content, this_issue, next_content, next_issue, updated_at, custom')
     expect(rowSelect).not.toMatch(/\b(section|module|sort_order)\b/)
     expect(rows.eq).toHaveBeenCalledWith('report_id', 'wr1')
     expect(rows.eq).toHaveBeenCalledWith('project_id', 'p1')

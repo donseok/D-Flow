@@ -62,6 +62,7 @@ function previewRoleLabel(role: PreviewColumnRole, t: (k: DictKey) => string): s
   if (!role) return null
   if (role.kind === 'hierarchy') return t('importWizard.previewRoleHierarchy')
   if (role.kind === 'logical') return t(LOGICAL_FIELD_LABEL_KEYS[role.field])
+  if (role.kind === 'custom') return `${t('importWizard.previewRoleCustom')}: ${role.key}`
   const teamLabel = role.team === TEAM_DIRECT_MARK ? t('importWizard.previewRoleTeamDirect') : role.team
   return `${t('importWizard.previewRoleTeam')}: ${teamLabel}`
 }

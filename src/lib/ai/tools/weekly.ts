@@ -10,6 +10,8 @@ import { areasForTeam, orderAreas, rowLabel, type WeeklyArea } from '@/lib/domai
 import type { ProjectConfig } from '@/lib/settings/projectConfig'
 import { calendarOrError, requireCalendar } from '@/lib/calendar/load'
 import { weekKeyOf, type WeekStartRule } from '@/lib/domain/calendar'
+import { customSearchLines, type FieldDef } from '@/lib/domain/customFields'
+import { pick } from '@/lib/settings/pick'
 import {
   checkProjectAccess,
   invalidArgument,
@@ -28,6 +30,10 @@ const WEEKLY_CAPABILITY = 'weekly:read' as const
 const ERR_UNKNOWN_TEAM = '알 수 없는 담당팀입니다.'
 const errNoAreasForTeam = (team: string): string =>
   `'${team}' 팀이 맡은 주간보고 영역이 없습니다 — 프로젝트 설정의 업무영역에서 담당 팀을 지정하세요.`
+
+const ERR_FIELDS_INVALID = '프로젝트의 추가 필드 설정이 손상되어 주간업무를 조회할 수 없습니다.'
+/** 사용자 정의 값을 못 읽은 행의 경고 — 값 없음으로 답하지 않는다(표시 = 로깅) */
+const WARN_CUSTOM_UNREADABLE = '일부 행의 추가 정보(사용자 정의 필드)를 읽지 못해 표시하지 않았습니다.'
 
 type SettingsReader = Pick<ProjectSettingsRepository, 'getProjectConfig'>
 
@@ -87,6 +93,8 @@ export interface WeeklySheetToolRecord {
   thisIssue: string
   nextContent: string
   nextIssue: string
+  /** 사용자 정의 필드(SP5c §3.6.9) — searchable 활성 필드의 `라벨: 값` 줄. 값이 있을 때만 싣는다 */
+  customFields?: string[]
   updatedAt: string | null
 }
 
@@ -195,19 +203,30 @@ export function createGetWeeklySheetTool(
         return [rowLabel(row, areas), row.thisContent, row.thisIssue, row.nextContent, row.nextIssue]
           .some(value => value.toLocaleLowerCase('ko-KR').includes(needle))
       })
-      const records: WeeklySheetToolRecord[] = matched.slice(0, limit).map(row => ({
-        id: row.id,
-        reportId: row.reportId,
-        projectId,
-        weekStart,
-        areaId: row.areaId,
-        section: rowLabel(row, areas),
-        thisContent: row.thisContent,
-        thisIssue: row.thisIssue,
-        nextContent: row.nextContent,
-        nextIssue: row.nextIssue,
-        updatedAt: row.updatedAt,
-      }))
+      // 필드 정의는 이미 읽은 설정에서 — 키가 손상이면 도구 실패다("필드 없음"으로 풀지 않는다). 값 서식은 화면·색인과 같은 한 벌
+      const fieldDefs = pick(wk.cfg, 'fields.weekly_row')
+      if (!fieldDefs.ok) return invalidArgument(ERR_FIELDS_INVALID)
+      const defs: readonly FieldDef[] = fieldDefs.value
+      const hasSearchable = defs.some(def => def.active && def.searchable)
+      let customUnreadable = false
+      const records: WeeklySheetToolRecord[] = matched.slice(0, limit).map(row => {
+        if (row.custom === null && hasSearchable) customUnreadable = true
+        const lines = row.custom ? customSearchLines(defs, row.custom) : []
+        return {
+          id: row.id,
+          reportId: row.reportId,
+          projectId,
+          weekStart,
+          areaId: row.areaId,
+          section: rowLabel(row, areas),
+          thisContent: row.thisContent,
+          thisIssue: row.thisIssue,
+          nextContent: row.nextContent,
+          nextIssue: row.nextIssue,
+          ...(lines.length ? { customFields: lines } : {}),
+          updatedAt: row.updatedAt,
+        }
+      })
       const reportSource: BotSource = {
         id: `weekly-report:${repoResult.data.report.id}`,
         domain: 'weekly',
@@ -223,7 +242,7 @@ export function createGetWeeklySheetTool(
       return {
         ok: true,
         result: {
-          status: truncated ? 'partial' : 'ok',
+          status: truncated || customUnreadable ? 'partial' : 'ok',
           facts: {
             reportFound: true,
             weekStart,
@@ -236,7 +255,10 @@ export function createGetWeeklySheetTool(
           sources: [reportSource, ...rowSources],
           asOf: context.now,
           truncated,
-          warnings: truncated ? [`주간업무 ${matched.length}행 중 ${records.length}행만 반환했습니다.`] : [],
+          warnings: [
+            ...(truncated ? [`주간업무 ${matched.length}행 중 ${records.length}행만 반환했습니다.`] : []),
+            ...(customUnreadable ? [WARN_CUSTOM_UNREADABLE] : []),
+          ],
         },
       }
     },

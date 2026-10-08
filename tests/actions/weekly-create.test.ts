@@ -276,11 +276,8 @@ describe('RPC 토큰 → 코드(D45·T6·P4) — 원문 비노출', () => {
 })
 
 describe('사용자 정의 필드 이월 (carryCustom)', () => {
-  it('carry_over: true 인 활성 필드만 이월되어 생성 후 weekly_report_rows 에 반영된다', async () => {
-    const eqMock2 = vi.fn().mockResolvedValue({ data: null, error: null })
-    const eqMock1 = vi.fn().mockReturnValue({ eq: eqMock2 })
-    const updateMock = vi.fn().mockReturnValue({ eq: eqMock1 })
-    const fromMock = vi.fn().mockReturnValue({ update: updateMock })
+  it('carry_over: true 인 활성 필드만 시드에 실려 RPC 한 번으로 쓰인다 — 생성 뒤 별도 UPDATE 가 없다(0043)', async () => {
+    const fromMock = vi.fn()
     h.adminFor.mockReturnValue({ admin: { rpc: h.rpc, from: fromMock } })
 
     const customDefs = [
@@ -299,10 +296,31 @@ describe('사용자 정의 필드 이월 (carryCustom)', () => {
 
     const r = await createWeeklyReport(P, '2026-09-28', true)
     expect(r).toEqual({ ok: true, reportId: REPORT, status: 'created' })
-    expect(fromMock).toHaveBeenCalledWith('weekly_report_rows')
-    expect(updateMock).toHaveBeenCalledWith({ custom: { cf_keep: '유지값' } })
-    expect(eqMock1).toHaveBeenCalledWith('report_id', REPORT)
-    expect(eqMock2).toHaveBeenCalledWith('area_id', A_EXP)
+    expect(h.rpc).toHaveBeenCalledTimes(1)
+    const seed = (h.rpc.mock.calls[0][1] as { p_seed: { area_id: string; custom?: unknown }[] }).p_seed
+    expect(seed.find((s) => s.area_id === A_EXP)?.custom).toEqual({ cf_keep: '유지값' })
+    expect(seed.filter((s) => s.area_id !== A_EXP).every((s) => !('custom' in s))).toBe(true)
+    expect(fromMock).not.toHaveBeenCalled()   // 비원자 후속 쓰기가 없다
+  })
+
+  it('행 트리거가 이월 값을 거부하면(CUSTOM_FIELD_…) 문서가 만들어지지 않았다고 답하고 원문은 싣지 않는다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.rpc.mockResolvedValue({ data: null, error: { code: '23514', message: 'CUSTOM_FIELD_INVALID:cf_keep:length' } })
+    const r = await createWeeklyReport(P, '2026-09-28', false)
+    expect(r).toMatchObject({ ok: false, code: 'FIELD_INVALID' })
+    expect(JSON.stringify(r)).not.toContain('CUSTOM_FIELD_INVALID')
+    expect(err).toHaveBeenCalled()
+    err.mockRestore()
+  })
+
+  it('필드 정의 키가 손상이면 이월하지 않고 멈춘다 — 값 없는 문서를 만들지 않는다', async () => {
+    const cfg = makeProjectConfig({ ...monProjectValues }, { projectId: P, areas: { weekly_section: AREAS, issue_area: [] } })
+    ;(cfg.keys as Record<string, unknown>)['fields.weekly_row'] = { status: 'invalid', error: '손상' }
+    h.getProjectConfig.mockResolvedValue(cfg)
+    h.findCarryOverSource.mockResolvedValue(source([prev(A_EXP, { nextContent: '실험계획', custom: { cf_keep: '유지값' } })]))
+    const r = await createWeeklyReport(P, '2026-09-28', true)
+    expect(r).toMatchObject({ ok: false, code: 'CONFIG_INVALID' })
+    expect(h.rpc).not.toHaveBeenCalled()
   })
 })
 

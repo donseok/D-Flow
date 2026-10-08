@@ -15,7 +15,8 @@ export function CustomFieldsProvider({ children, ...scope }: Scope & { children:
 /** Read-only access to the surrounding field scope (null outside a provider), for list columns. */
 export function useCustomFieldScope() { return useContext(Context) }
 const own = (v: object, k: string) => Object.prototype.hasOwnProperty.call(v, k)
-const reason = (code: FieldRowError, ko: boolean) => {
+/** 필드 오류 코드 → 사용자 문구(상세 패널·시트 셀이 같이 쓴다) */
+export const customFieldErrorText = (code: FieldRowError, ko: boolean) => {
   const messages: Partial<Record<FieldRowError, [string, string]>> = {
     required: ['필수 값을 입력하세요.', 'A value is required.'], admin_only: ['관리자만 편집할 수 있습니다.', 'Only administrators can edit this field.'],
     inactive: ['비활성 필드는 변경할 수 없습니다.', 'Inactive fields cannot be changed.'], inactive_option: ['새 비활성 옵션은 선택할 수 없습니다.', 'New inactive options cannot be selected.'],
@@ -84,7 +85,7 @@ function Editor({ scope, rowId, values, canEdit }: { scope: Scope & { defs: Fiel
         : <><p className="text-xs text-ink-muted">{def.label}{!def.active ? ko ? ' (비활성)' : ' (inactive)' : ''}{def.editable_by === 'admin' && !scope.canAdmin ? ko ? ' (관리자 전용)' : ' (admin only)' : ''}</p>
           <p className="whitespace-pre-wrap break-words text-sm text-ink">{formatCustomValue(def, draft[def.key], { locale: scope.locale, yes: ko ? '예' : 'Yes', no: ko ? '아니오' : 'No', empty: '—' })}</p></>}
       {def.description && <p className="whitespace-pre-wrap break-words text-xs text-ink-subtle">{def.description}</p>}
-      {errors[def.key] && <p role="alert" className="text-xs text-delayed">{def.label}: {reason(errors[def.key], ko)}</p>}
+      {errors[def.key] && <p role="alert" className="text-xs text-delayed">{def.label}: {customFieldErrorText(errors[def.key], ko)}</p>}
     </div>)}
     {stale && <p role="alert" className="text-xs text-delayed">{ko ? '행이 변경되었습니다. 작성 중인 값은 유지됩니다. 취소하면 최신 조회 값을 불러옵니다.' : 'The row changed. Your draft is preserved. Cancel to use the latest snapshot.'}</p>}
     {message && <p role="status" className="text-xs text-ink-muted">{message}</p>}

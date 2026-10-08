@@ -8,6 +8,9 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import { SPEC_UPDATED_TOKEN } from '@/lib/domain/wbsSpecLog'
 import type { DictKey } from '@/lib/i18n/dict'
 import { stampIn } from '@/lib/domain/calendar'
+import { useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
+import type { FieldDef } from '@/lib/domain/customFields'
+import { CUSTOM_LOG_PREFIX, formatCustomLogValue } from '@/lib/domain/customFieldValues'
 
 /** 접기 전 기본 노출 건수 — 이력은 항목당 수십 건까지 쌓이는데 패널의 주인공이 아니다. */
 export const HISTORY_COLLAPSED_COUNT = 3
@@ -54,6 +57,15 @@ function actorLabel(team: TeamCode | null, role: ChangeActorRole | null, t: Tr):
  */
 export function ChangeHistoryList({ logs, timeZone }: { logs: ChangeLogEntry[] | null; timeZone: string }) {
   const { t } = useLocale()
+  // 사용자 정의 필드 이력(field='custom.<key>')은 키가 아니라 지금의 라벨·서식으로 보인다 — 정의를 못 읽거나 지운 필드는 키·원문 그대로
+  const fieldScope = useCustomFieldScope()
+  const customDef = (field: string): FieldDef | undefined =>
+    field.startsWith(CUSTOM_LOG_PREFIX) ? fieldScope?.defs?.find(d => d.key === field.slice(CUSTOM_LOG_PREFIX.length)) : undefined
+  const customFormat = { locale: fieldScope?.locale ?? 'ko', yes: fieldScope?.locale === 'en' ? 'Yes' : '예', no: fieldScope?.locale === 'en' ? 'No' : '아니오', empty: '—' }
+  const fieldLabel = (field: string) => FIELD_KEY[field] ? t(FIELD_KEY[field])
+    : field.startsWith(CUSTOM_LOG_PREFIX) ? customDef(field)?.label ?? field.slice(CUSTOM_LOG_PREFIX.length) : field
+  const value = (field: string, v: string | null) =>
+    field.startsWith(CUSTOM_LOG_PREFIX) ? formatCustomLogValue(customDef(field), v, customFormat) : fmtValue(field, v, t)
   const [expanded, setExpanded] = useState(false)
   // 다른 항목을 열면 접힌 상태로 돌아간다 — 앞 항목에서 펼친 게 따라오면 "왜 다 보이지"가 된다.
   useEffect(() => { setExpanded(false) }, [logs])
@@ -78,10 +90,10 @@ export function ChangeHistoryList({ logs, timeZone }: { logs: ChangeLogEntry[] |
                 className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 py-1 text-[12px] sm:grid-cols-[8.5rem_1fr_auto]">
                 <span className="tabular-nums text-[11px] text-ink-subtle">{fmtAt(log.at, timeZone)}</span>
                 <span className="min-w-0 truncate">
-                  <span className="font-semibold text-ink">{FIELD_KEY[log.field] ? t(FIELD_KEY[log.field]) : log.field}</span>
-                  <span className="mx-1 text-ink-muted line-through decoration-ink-subtle/50">{fmtValue(log.field, log.oldValue, t)}</span>
+                  <span className="font-semibold text-ink">{fieldLabel(log.field)}</span>
+                  <span className="mx-1 text-ink-muted line-through decoration-ink-subtle/50">{value(log.field, log.oldValue)}</span>
                   <span className="text-ink-subtle">→</span>
-                  <span className="ml-1 font-semibold text-ink">{fmtValue(log.field, log.newValue, t)}</span>
+                  <span className="ml-1 font-semibold text-ink">{value(log.field, log.newValue)}</span>
                 </span>
                 <span className="col-start-2 text-[11px] text-ink-subtle sm:col-start-3">{actorLabel(log.actorTeam, log.actorRole, t)}</span>
               </li>

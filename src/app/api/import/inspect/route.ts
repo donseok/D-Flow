@@ -9,6 +9,7 @@ import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 import { skippedHolidaysOf } from '@/lib/domain/holidayImport'
 import { readHolidaysFromBuffer } from '@/lib/excel/parseWithProfile'
+import { withSuggestedCustomColumns } from '@/lib/excel/customColumns'
 import { createServerClient } from '@/lib/supabase/server'
 
 /**
@@ -51,6 +52,16 @@ export async function POST(req: NextRequest) {
     // 손상을 조용히 null 로만 넘기면 사실이 묻힌다 — 침묵 무시 금지. 사유는 서버 로그에(해석기도 키당 한 줄 남긴다).
     console.error('[import/inspect] 저장된 양식이 손상됨:', profileState.error)
     detection.warnings.push('저장된 프로파일이 손상됨')
+  }
+
+  // 사용자 정의 필드 열 제안(개정 §3.6.7) — 헤더가 활성 필드의 라벨(공백·대소문자 정규화) 또는 key 와 같으면 그 열을 감지 양식의
+  // customColumns 에 싣는다. 제안이 없으면 양식을 건드리지 않는다. 정의 키가 손상이면 제안 없이 경고로 알린다(저장 양식 손상과 같은 관례)
+  const fieldState = cfg.keys['fields.wbs_item']
+  if (fieldState.status === 'set' || fieldState.status === 'default') {
+    detection.profile = withSuggestedCustomColumns(detection.profile, detection.preview.headers, fieldState.value)
+  } else if (fieldState.status === 'invalid') {
+    console.error('[import/inspect] 추가 필드 설정이 손상됨:', fieldState.error)
+    detection.warnings.push('추가 필드 설정이 손상됨 — 사용자 정의 열을 제안하지 못했습니다')
   }
 
   // 저장 양식과 이 파일의 구조가 다르면 알린다(Task 1b) — 저장 양식으로 읽으면 열이 밀려 틀린 값이 쓰인다.

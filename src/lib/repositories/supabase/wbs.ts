@@ -21,6 +21,7 @@ import { fetchAllByKeyset, type PageResult } from '@/lib/data/paging'
 import { getProjectConfig as loadProjectConfig } from '@/lib/settings/projectConfig'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { calendarOrError, requireCalendar } from '@/lib/calendar/load'
+import { parseCustomValues } from '@/lib/domain/customFieldValues'
 
 type Row = Record<string, unknown>
 
@@ -28,6 +29,7 @@ const WBS_COLUMNS = [
   'id', 'project_id', 'parent_id', 'code', 'sort_order', 'name', 'biz', 'deliverable',
   'planned_start', 'planned_end', 'weight', 'actual_pct', 'updated_at', 'is_owner_split',
   'external_ref', 'depends', // wbs.md 선행을 의존성으로 합성하는 재료 — mergeSpecDepends
+  'custom', // 사용자 정의 필드 값 — 항목 상세 도구가 searchable 필드를 덧붙인다(SP5c §3.6.9)
   'item_owners(kind, teams(code))',
 ].join(', ')
 
@@ -139,7 +141,14 @@ function mapItem(row: Row, order: ReadonlyMap<string, number>): WbsRepositoryIte
     owners: mapOwners(row.item_owners, order),
     updatedAt: (row.updated_at as string | null) ?? null,
     isOwnerSplit: row.is_owner_split === true,
+    // 손상된 값은 빈 객체로 풀지 않는다 — null 로 실어 도구가 '읽지 못함'을 알린다(화면 로더 data/wbs.ts 와 같은 규약)
+    custom: customOf(row.custom),
   }
+}
+
+function customOf(raw: unknown): WbsRepositoryItem['custom'] {
+  const parsed = parseCustomValues(raw)
+  return parsed.ok ? parsed.value : null
 }
 
 function mapDependency(row: Row): TaskDependency {

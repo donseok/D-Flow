@@ -97,6 +97,7 @@ export const importWizardKo = {
   'importWizard.previewRoleHierarchy': '계층',
   'importWizard.previewRoleTeam': '팀',
   'importWizard.previewRoleTeamDirect': '직접 입력',
+  'importWizard.previewRoleCustom': '추가 필드',
 
   'importWizard.linkErrorsPrefix': '데이터 오류 ',
   'importWizard.linkErrorsSuffix': '건을 확인하세요',

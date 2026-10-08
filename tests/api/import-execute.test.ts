@@ -143,7 +143,7 @@ beforeEach(() => {
   vi.mocked(projectOwnTeams).mockResolvedValue(TEAMS)
   // 기본: 저장 양식 없음 — 구조 대조(Task 1b)를 건너뛰는 종전 경로.
   mocks.getProjectConfig.mockResolvedValue(cfgWith())
-  mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile: PROFILE, warnings: [] } })
+  mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile: PROFILE, warnings: [], preview: { headers: [], rows: [] } } })
 })
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -337,7 +337,7 @@ describe('POST /api/import/execute — 저장 양식·파일 구조 불일치', 
   // 저장 양식 = PROFILE, 업로드 파일의 감지 결과 = 시작·종료 열이 밀린 모양.
   const SHIFTED = { ...PROFILE, logical: { ...PROFILE.logical, start: 13, end: 14 } }
   const savedIs = (excelProfile: unknown) => mocks.getProjectConfig.mockResolvedValue(cfgWith(excelProfile))
-  const detectedIs = (profile: unknown) => mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile, warnings: [] } })
+  const detectedIs = (profile: unknown) => mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile, warnings: [], preview: { headers: [], rows: [] } } })
 
   it('저장 양식(내용이 같다)으로 실행 + 확인 없음 → 409 PROFILE_MISMATCH, 파싱·팀·DB 미호출', async () => {
     savedIs(PROFILE)

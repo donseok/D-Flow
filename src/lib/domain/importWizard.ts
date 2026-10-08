@@ -358,6 +358,7 @@ export type PreviewColumnRole =
   | { kind: 'hierarchy' }
   | { kind: 'logical'; field: keyof ExcelProfile['logical'] }
   | { kind: 'team'; team: string }
+  | { kind: 'custom'; key: string }
   | null
 
 export interface MappedPreviewColumn { index: number; label: string; role: PreviewColumnRole }
@@ -389,7 +390,7 @@ function computeRowDepth(row: unknown[], profile: ExcelProfile): number | null {
  *  ArrayBuffer 재업로드+`parseWithProfile` 전체 재파싱은 쓰지 않는다 — 이미 서버가 돌려준 원본
  *  10행만으로 "이 열이 무엇에 매핑됐는지" 표시하는 데는 충분하고, 값 자체는 실행 시 서버가 다시
  *  정본으로 파싱하므로 여기서 날짜/숫자 변환까지 복제할 이유가 없다(파일당 1회면 충분한 파싱을
- *  편집 키 입력마다 반복하지 않는다). 열 우선순위: 계층 > 논리 > 팀(한 열이 여러 역할과 겹치는
+ *  편집 키 입력마다 반복하지 않는다). 열 우선순위: 계층 > 논리 > 팀 > 사용자 정의 필드(한 열이 여러 역할과 겹치는
  *  건 정상 프로파일에서는 없지만, 편집 중 일시적으로 겹칠 수 있어 결정적 우선순위를 둔다). */
 export function deriveMappedPreview(headers: string[], rows: unknown[][], profile: ExcelProfile): MappedPreview {
   const maxCol = Math.max(headers.length, ...rows.map(r => r.length), 0)
@@ -402,6 +403,9 @@ export function deriveMappedPreview(headers: string[], rows: unknown[][], profil
   }
   const teamByCol = new Map<number, string>()
   for (const [col, name] of profile.teamColumns) if (!teamByCol.has(col)) teamByCol.set(col, name)
+  // 사용자 정의 필드 열(SP5c §3.6.7) — 감지가 헤더로 제안했거나 저장 양식에 든 열 → 필드 key
+  const customByCol = new Map<number, string>()
+  for (const [col, key] of profile.customColumns ?? []) if (!customByCol.has(col)) customByCol.set(col, key)
 
   const columns: MappedPreviewColumn[] = []
   for (let c = 0; c < maxCol; c++) {
@@ -409,6 +413,7 @@ export function deriveMappedPreview(headers: string[], rows: unknown[][], profil
     if (hierarchySet.has(c)) role = { kind: 'hierarchy' }
     else if (logicalByCol.has(c)) role = { kind: 'logical', field: logicalByCol.get(c)! }
     else if (teamByCol.has(c)) role = { kind: 'team', team: teamByCol.get(c)! }
+    else if (customByCol.has(c)) role = { kind: 'custom', key: customByCol.get(c)! }
     columns.push({ index: c, label: headers[c] || `#${c}`, role })
   }
 

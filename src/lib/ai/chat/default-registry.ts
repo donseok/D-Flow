@@ -25,6 +25,7 @@ import {
 import { assistantIndexStatus } from '@/lib/ai/health'
 import { createToolTeamSource } from '@/lib/ai/tools/teamSource'
 import { createToolVocabSource } from '@/lib/ai/tools/vocabSource'
+import { createToolFieldSource } from '@/lib/ai/tools/fieldSource'
 import { createSupabaseCoreBotRepositories } from '@/lib/repositories/supabase'
 import type { SupabaseServerClient } from '@/lib/repositories/supabase/common'
 import { createChatToolRegistry, type ChatToolRegistry } from './registry'
@@ -44,9 +45,10 @@ export function createDefaultChatToolRegistry(client: SupabaseServerClient): Cha
   const repositories = createSupabaseCoreBotRepositories(client)
   const teams = createToolTeamSource(client)
   const vocab = createToolVocabSource(client)
+  const fields = createToolFieldSource(client)
   return createChatToolRegistry([
     createFindWbsItemsTool(repositories.wbs, teams),
-    createGetWbsItemDetailTool(repositories.wbs, teams),
+    createGetWbsItemDetailTool(repositories.wbs, teams, fields),
     createGetWbsDependenciesTool(repositories.wbs, teams),
     createGetWbsChangeLogTool(repositories.wbs),
     createListWbsAttachmentsTool(repositories.wbs),

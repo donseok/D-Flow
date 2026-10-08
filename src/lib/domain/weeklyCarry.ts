@@ -91,11 +91,13 @@ export function carryOverRows(
   return pending.length > 0 || overflow.length > 0 ? { ok: false, pending, overflow } : { ok: true, rows }
 }
 
-/** RPC create_weekly_report 의 p_seed 모양 — 영역 id + 네 칸(snake). custom 은 싣지 않는다(SP5c) */
+/** RPC create_weekly_report 의 p_seed 모양 — 영역 id + 네 칸(snake) + 이월할 사용자 정의 값(custom — 값이 있을 때만). RPC 가 행과 같은
+ *  INSERT 에 싣고 행 트리거가 판정한다(0043 — 개정 §4.3.3, SP4 E28). 빈 custom 은 싣지 않는다(필수 필드 기본값은 트리거 몫) */
 export function seedOf(rows: readonly NewWeeklyRow[]): {
-  area_id: string; this_content: string; this_issue: string; next_content: string; next_issue: string
+  area_id: string; this_content: string; this_issue: string; next_content: string; next_issue: string; custom?: Record<string, unknown>
 }[] {
   return rows.map((r) => ({
     area_id: r.areaId, this_content: r.thisContent, this_issue: r.thisIssue, next_content: r.nextContent, next_issue: r.nextIssue,
+    ...(r.custom && Object.keys(r.custom).length > 0 ? { custom: { ...r.custom } } : {}),
   }))
 }

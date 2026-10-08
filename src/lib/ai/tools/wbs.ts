@@ -26,7 +26,9 @@ import {
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionContext, ToolExecutionResult } from './types'
 import { teamOrderMap } from '@/lib/domain/teams'
+import { customSearchLines } from '@/lib/domain/customFields'
 import type { ToolTeamSource } from './teamSource'
+import type { ToolFieldSource } from './fieldSource'
 
 const WBS_CAPABILITY = 'wbs:read' as const
 
@@ -41,6 +43,8 @@ export interface WbsToolItemRecord {
   path: string
   biz: string | null
   deliverable: string | null
+  /** 사용자 정의 필드(SP5c §3.6.9) — searchable 활성 필드의 `라벨: 값` 줄. 항목 상세 도구만, 값이 있을 때만 싣는다 */
+  customFields?: string[]
   plannedStart: string | null
   plannedEnd: string | null
   plannedPct: number
@@ -138,7 +142,7 @@ function computedSnapshot(
   }
 }
 
-function toRecord(flat: FlatItem, updatedAt: string | null): WbsToolItemRecord {
+function toRecord(flat: FlatItem, updatedAt: string | null, customFields: readonly string[] = []): WbsToolItemRecord {
   const { item, path } = flat
   return {
     id: item.id,
@@ -151,6 +155,8 @@ function toRecord(flat: FlatItem, updatedAt: string | null): WbsToolItemRecord {
     path,
     biz: item.biz,
     deliverable: item.deliverable,
+    // 업무 내용 곁에 둔다 — 결정적 답변(LLM 없음)이 레코드의 앞 필드만 보이므로 끝에 두면 잘린다
+    ...(customFields.length ? { customFields: [...customFields] } : {}),
     plannedStart: item.plannedStart,
     plannedEnd: item.plannedEnd,
     plannedPct: item.plannedPct,
@@ -291,7 +297,12 @@ export function createFindWbsItemsTool(repository: WbsRepository, teams: ToolTea
   }
 }
 
-export function createGetWbsItemDetailTool(repository: WbsRepository, teams: ToolTeamSource): ReadOnlyBotTool<WbsToolItemRecord> {
+/** 사용자 정의 값을 못 읽은 항목의 경고 — 값 없음으로 답하지 않는다(표시 = 로깅) */
+const WARN_CUSTOM_UNREADABLE = '이 작업의 추가 정보(사용자 정의 필드)를 읽지 못해 표시하지 않았습니다.'
+
+export function createGetWbsItemDetailTool(
+  repository: WbsRepository, teams: ToolTeamSource, fields: ToolFieldSource,
+): ReadOnlyBotTool<WbsToolItemRecord> {
   return {
     name: 'get_wbs_item_detail',
     requiredCapability: WBS_CAPABILITY,
@@ -312,18 +323,24 @@ export function createGetWbsItemDetailTool(repository: WbsRepository, teams: Too
       )
       const flat = snapshot.flat.find(value => value.item.id === itemId)
       if (!flat) return emptyWbsDetail(context, true)
-      const record = toRecord(flat, snapshot.updatedAtById.get(itemId) ?? null)
+      // 필드 정의는 접근 판정·항목 확인 뒤에 읽는다. 조회 실패·키 손상은 던져 도구 실패가 된다("필드 없음"으로 풀지 않는다).
+      // 값 서식은 화면·색인과 같은 한 벌(customSearchLines → formatCustomValue)이다
+      const defs = await fields.projectFields(parsed.projectId, 'wbs_item')
+      const custom = flat.item.custom
+      const customUnreadable = custom === null && defs.some(def => def.active && def.searchable)
+      const lines = custom ? customSearchLines(defs, custom) : []
+      const record = toRecord(flat, snapshot.updatedAtById.get(itemId) ?? null, lines)
       record.projectId = parsed.projectId
       return {
         ok: true,
         result: {
-          status: 'ok',
+          status: customUnreadable ? 'partial' : 'ok',
           facts: { projectFound: true, itemFound: true, calculationDate: snapshot.today },
           records: [record],
           sources: [itemSource(parsed.projectId, record)],
           asOf: context.now,
           truncated: false,
-          warnings: [],
+          warnings: customUnreadable ? [WARN_CUSTOM_UNREADABLE] : [],
         },
       }
     },

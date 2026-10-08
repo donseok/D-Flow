@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeAdminActor, makeMemberActor } from '../fixtures/actor'
 import type { FieldDef, FieldEntity } from '@/lib/domain/customFields'
-const h = vi.hoisted(() => ({ guard: vi.fn(), mod: vi.fn(), config: vi.fn(), server: vi.fn(), from: vi.fn(), update: vi.fn(), eq: vi.fn(), select: vi.fn(), single: vi.fn(), revalidate: vi.fn() }))
+const h = vi.hoisted(() => ({ guard: vi.fn(), mod: vi.fn(), config: vi.fn(), server: vi.fn(), from: vi.fn(), update: vi.fn(), eq: vi.fn(), select: vi.fn(), single: vi.fn(), insert: vi.fn(), revalidate: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectMember: h.guard }))
 vi.mock('@/lib/modules/gate', () => ({ requireModule: h.mod }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: h.config }))
@@ -13,7 +13,8 @@ const def: FieldDef = { key: 'quantity', label: 'Quantity', description: '', typ
 beforeEach(() => {
   vi.resetAllMocks(); h.guard.mockResolvedValue({ ok: true, actor: makeMemberActor(P) }); h.mod.mockResolvedValue({ ok: true })
   h.config.mockResolvedValue({ keys: Object.fromEntries(['wbs_item', 'issue', 'weekly_row'].map(e => [`fields.${e}`, { status: 'set', value: [def] }])) })
-  const q = { update: h.update, eq: h.eq, select: h.select, maybeSingle: h.single }
+  const q = { update: h.update, eq: h.eq, select: h.select, maybeSingle: h.single, insert: h.insert }
+  h.insert.mockResolvedValue({ error: null })
   for (const fn of [h.from, h.update, h.eq, h.select]) fn.mockReturnValue(q)
   h.server.mockResolvedValue({ from: h.from }); h.single.mockResolvedValue({ data: { custom: { quantity: 2 } }, error: null })
 })

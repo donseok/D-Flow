@@ -8,6 +8,7 @@ import type {
   TeamCode,
   WbsRow,
 } from '@/lib/domain/types'
+import type { CustomValues } from '@/lib/domain/customFields'
 import type { WeeklyArea } from '@/lib/domain/weeklySheet'
 import type { ProjectConfig } from '@/lib/settings/projectConfig'
 import type { WorkCalendar } from '@/lib/domain/calendar'
@@ -180,6 +181,8 @@ export interface WeeklyRepositoryRow {
   nextContent: string
   nextIssue: string
   updatedAt: string | null
+  /** 사용자 정의 필드 값(SP5c). null = 저장값을 읽지 못함(손상) — 빈 객체로 풀지 않는다. 없으면 값 없음 */
+  custom?: CustomValues | null
 }
 
 export interface WeeklySheetSnapshot {

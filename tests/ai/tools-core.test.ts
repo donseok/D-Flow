@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { calWithOff, monProjectValues } from '../helpers/calendarFixture'
 import { fixedToolTeams } from '../helpers/tool-team-source'
 import { fixedToolVocab } from '../helpers/tool-vocab-source'
+import { fixedToolFields } from '../helpers/tool-field-source'
 const toolTeams = fixedToolTeams()
 import { createGetAttendanceTool } from '@/lib/ai/tools/attendance'
 import { createListMeetingsTool } from '@/lib/ai/tools/meetings'
@@ -89,7 +90,7 @@ describe('core read tools', () => {
 
   it('also requires the domain capability, even for an allowed project', async () => {
     const repository = wbsRepository({ ok: true, data: wbsSnapshot })
-    const tool = createGetWbsItemDetailTool(repository, toolTeams)
+    const tool = createGetWbsItemDetailTool(repository, toolTeams, fixedToolFields())
 
     const result = await tool.execute(
       { projectId: 'p1', itemId: 'task-1' },

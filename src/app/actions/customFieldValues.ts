@@ -7,7 +7,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
 import { FIELD_ENTITIES, type CustomValues, type FieldEntity } from '@/lib/domain/customFields'
-import { mapCustomFieldDbError, parseCustomValues, validateCustomValues, type FieldRowError } from '@/lib/domain/customFieldValues'
+import { customFieldChanges, mapCustomFieldDbError, parseCustomValues, validateCustomValues, type FieldRowError } from '@/lib/domain/customFieldValues'
 import { isUuidLike } from '@/lib/domain/validate'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import type { ModuleId } from '@/lib/modules/defaults'
@@ -55,6 +55,17 @@ export async function saveCustomFieldValues(projectId: string, entity: FieldEnti
     if (!reply.data) return { ok: false, code: 'FIELD_CONFLICT', error: '값이나 편집 권한이 바뀌었습니다. 최신 행을 확인한 뒤 저장하세요.' }
     const saved = parseCustomValues(reply.data.custom)
     if (!saved.ok) return { ok: false, code: 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', new Error('saved row shape'), ERR) }
+    // WBS 값 변경 이력(§3.6.7) — change_logs 에 바뀐 키마다 field='custom.<key>'(현 필드 편집 관례 — actions/wbs.ts). CAS 를 통과했으므로
+    // expected 가 곧 변경 전 값이다. 이슈·주간 행은 필드 값 이력이 없다(비목표). 본 저장은 이미 성공했다 — 이력 실패로 되돌리지 않되 삼키지도 않는다
+    const before = parseCustomValues(expected)
+    const logs = entity === 'wbs_item' && before.ok ? customFieldChanges(before.value, saved.value) : []
+    if (logs.length) {
+      // 던지는 실패(전송 오류)도 여기서 받는다 — 바깥 catch 로 새면 저장된 값을 '저장하지 못했다'고 답하게 된다
+      try {
+        const { error: logErr } = await sb.from('change_logs').insert(logs.map(l => ({ user_id: g.actor.userId, wbs_item_id: rowId, field: l.field, old_value: l.old, new_value: l.new })))
+        if (logErr) console.error('[customFieldValues] 변경 이력 기록 실패:', logErr.message)
+      } catch (e) { console.error('[customFieldValues] 변경 이력 기록 실패:', e) }
+    }
     revalidatePath(`/p/${projectId}`, 'layout')
     return { ok: true, values: saved.value }
   } catch (e) { return { ok: false, code: 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', e, ERR) } }

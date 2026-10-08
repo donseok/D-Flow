@@ -140,10 +140,19 @@ describe('carryOverRows — 20,000자 넘침은 거부한다(D31·E25 — 자르
 })
 
 describe('사용자 정의 값·시드', () => {
-  it('carryCustom — 행에는 custom 이 실리고, seedOf 는 RPC 계약대로 네 칸만 유지(SP5c, 스펙 E28)', () => {
+  it('carryCustom — 행에 실린 custom 을 seedOf 가 시드에 그대로 싣는다(SP5c 0043 — 개정 §4.3.3, SP4 E28: RPC 가 같은 트랜잭션에 쓴다)', () => {
     const rows = okRows(carryOverRows([src(EXP, { nextContent: 'x' })], R, {}, () => ({ k: 1 })))
     expect(rows.find((r) => r.areaId === EXP)?.custom).toEqual({ k: 1 })
+    const seed = seedOf(rows)
+    expect(seed.find((s) => s.area_id === EXP)?.custom).toEqual({ k: 1 })
+    // 0·false 는 값이다 — 시드에서 빠지지 않는다
+    expect(seedOf([{ areaId: EXP, thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', custom: { n: 0, b: false } }])[0].custom).toEqual({ n: 0, b: false })
+  })
+
+  it('seedOf — 이월할 값이 없는 행은 custom 키를 싣지 않는다(빈 객체도 — 필수 기본값은 트리거 몫)', () => {
+    const rows = okRows(carryOverRows([src(EXP, { nextContent: 'x' })], R, {}, () => ({})))
     expect(seedOf(rows).every((s) => !('custom' in s))).toBe(true)
+    expect('custom' in seedOf([{ areaId: EXP, thisContent: '', thisIssue: '', nextContent: '', nextIssue: '', custom: {} }])[0]).toBe(false)
   })
 
   it('seedOf — RPC create_weekly_report 의 p_seed 모양(영역 id + 네 칸, snake)', () => {

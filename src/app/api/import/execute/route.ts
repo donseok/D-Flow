@@ -6,7 +6,9 @@ import { denyStatus, ERR_ANON, ERR_DENIED, ERR_MISSING } from '@/lib/authz/error
 import { validateProfile, type ExcelProfile } from '@/lib/excel/profile'
 import { parseWithProfile, linkByDepth, resolveLegacyLevelLabels } from '@/lib/excel/parseWithProfile'
 import { skippedHolidaysOf } from '@/lib/domain/holidayImport'
-import { splitLeafOwners } from '@/lib/excel/validate'
+import { splitLeafOwners, type ImportError } from '@/lib/excel/validate'
+import { checkCustomRows, withSuggestedCustomColumns } from '@/lib/excel/customColumns'
+import type { FieldDef } from '@/lib/domain/customFields'
 import { fetchAllByKeyset } from '@/lib/data/paging'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ingestProject } from '@/lib/ai/ingest'
@@ -67,6 +69,8 @@ const ERR_BACKUP_FAILED = '교체 전 백업을 만들지 못해 가져오기를
 const ERR_IMPORT = '가져오기를 처리하지 못했습니다. 잠시 후 다시 시도하세요.'
 /** 파일의 사용자 정의 필드 값을 행 트리거(enforce_custom_fields)가 거부함 — CUSTOM_FIELD_<종류>[:키…](0040). 다시 시도해도 같으므로 422 */
 const ERR_CUSTOM_FIELD = '사용자 정의 필드 값이 올바르지 않아 가져오기를 멈췄습니다 — 파일의 사용자 정의 열(필수 값·형식·선택지)을 확인한 뒤 다시 실행하세요.'
+/** 파일의 사용자 정의 필드 값이 TS 사전 검사에서 걸림 — 행 번호는 응답의 errors 에 싣는다(LINK_ERRORS 와 같은 표) */
+const ERR_CUSTOM_ROWS = '사용자 정의 필드 값에 오류가 있습니다 — 표시된 행을 고친 뒤 다시 실행하세요.'
 
 /** RPC 둘(import_wbs_cmd·convert_inherited_teams)의 자기 토큰(SP4 §4.4 #6·#8 — D45·T6). 그 밖은 rpcFailure 가 55P03(잠금 대기 상한)
  *  503 재시도·mapDbError(40P01 503)로 판정하고, 셋 다 아니면 로그 + 500 고정 문구다. 입력 토큰(IMPORT_INVALID_INPUT·
@@ -180,7 +184,12 @@ export async function POST(req: NextRequest) {
     if (usingSaved && !confirmed) {
       const detected = detectWorkbook(buf)
       if (!detected.ok) return fail(409, 'PROFILE_MISMATCH', errProfileUnverifiable(detected.error), { profileMismatch: null })
-      const profileMismatch = compareProfiles(saved, detected.result.profile)
+      // 감지 양식은 inspect 와 같은 것이어야 한다 — 필드 열 제안(§3.6.7)을 같이 싣는다(안 실으면 필드 열이 든 저장 양식이 늘 불일치다)
+      const fieldState = cfg.keys['fields.wbs_item']
+      const detectedProfile = fieldState.status === 'set' || fieldState.status === 'default'
+        ? withSuggestedCustomColumns(detected.result.profile, detected.result.preview.headers, fieldState.value)
+        : detected.result.profile
+      const profileMismatch = compareProfiles(saved, detectedProfile)
       if (profileMismatch) return fail(409, 'PROFILE_MISMATCH', ERR_PROFILE_MISMATCH, { profileMismatch })
     }
   }
@@ -188,8 +197,28 @@ export async function POST(req: NextRequest) {
   // #4 파싱·링크 — 팀 등록보다 먼저 통과시킨다: 검증에 실패하는 요청은 아무 부수효과도 남기지 않아야 한다(리뷰 Minor)
   const parsed = parseWithProfile(buf, profile)
   if (!parsed.ok) return fail(400, 'INVALID_INPUT', parsed.error)
-  const linked = linkByDepth(parsed.rows, { legacyLevelLabels: resolveLegacyLevelLabels(profile) })
-  if (!linked.ok) return fail(400, 'LINK_ERRORS', ERR_LINK, { errors: linked.errors })
+  // 사용자 정의 필드 열(개정 §3.6.7) — 셀 값을 필드 유형의 값으로 바꾸고 TS 판정(validateCustomValue)으로 미리 검사해 행 단위 오류 표에
+  // 싣는다. 관문은 그대로 DB 트리거다(#8 의 CUSTOM_FIELD_ — 정의가 그새 바뀐 경우 등). 정의 키가 손상이면 그 키의 오류로 멈춘다(정의 없음으로
+  // 풀면 값이 전부 '모르는 필드'가 된다)
+  let rows = parsed.rows
+  let customErrors: ImportError[] = []
+  if (parsed.rows.some((r) => r.custom)) {
+    let fieldDefs: readonly FieldDef[]
+    try {
+      fieldDefs = valueOf(cfg, 'fields.wbs_item')
+    } catch (e) {
+      if (e instanceof ConfigKeyError) return fail(configStatus(e.code), e.code, e.message)
+      throw e
+    }
+    const checked = checkCustomRows(parsed.rows, fieldDefs)
+    rows = checked.rows
+    customErrors = checked.errors
+  }
+  const linked = linkByDepth(rows, { legacyLevelLabels: resolveLegacyLevelLabels(profile) })
+  if (!linked.ok) {
+    return fail(400, 'LINK_ERRORS', ERR_LINK, { errors: [...linked.errors, ...customErrors].sort((a, b) => a.excelRow - b.excelRow) })
+  }
+  if (customErrors.length > 0) return fail(400, 'CUSTOM_FIELD_ERRORS', ERR_CUSTOM_ROWS, { errors: customErrors })
   // 휴일 충돌(SP5 D7·개정 §4.2.3) — RPC 는 그대로 받는다(갱신절이 work 행을 덮지 않는다 — 반환 형태 불변). 결과 화면이 그 날짜를 '건너뜀'으로
   // 보인다. 원천은 이미 읽은 해석기의 날짜 예외(cfg.holidays — 로더가 끝까지 읽었다)
   const skippedHolidays = skippedHolidaysOf(parsed.holidays, cfg.holidays)

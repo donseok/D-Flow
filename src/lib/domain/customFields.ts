@@ -175,9 +175,13 @@ export function formatCustomValue(def: FieldDef, value: FieldValue | undefined, 
   }
   return String(value)
 }
-export function customSearchText(defs: readonly FieldDef[], values: CustomValues, opts?: Parameters<typeof formatCustomValue>[2]): string {
+/** One `label: value` entry per active searchable field that has a value (a multiline value stays inside its entry). */
+export function customSearchLines(defs: readonly FieldDef[], values: CustomValues, opts?: Parameters<typeof formatCustomValue>[2]): string[] {
   return orderedFields(defs).filter(d => d.active && d.searchable && own(values, d.key))
-    .map(d => `${d.label}: ${formatCustomValue(d, values[d.key], opts)}`).join('\n')
+    .map(d => `${d.label}: ${formatCustomValue(d, values[d.key], opts)}`)
+}
+export function customSearchText(defs: readonly FieldDef[], values: CustomValues, opts?: Parameters<typeof formatCustomValue>[2]): string {
+  return customSearchLines(defs, values, opts).join('\n')
 }
 
 /**

@@ -80,6 +80,7 @@ const ERR_MAPPING_INPUT = '이월 매핑이 올바르지 않습니다. 매핑 �
 const ERR_AREAS_REQUIRED = '주간보고 영역을 먼저 설정하세요.'
 const ERR_CARRY_SOURCE = '이월 원본을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_CREATE = '주차 시트를 만들지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_CARRY_CUSTOM = '이월할 추가 정보 값이 지금의 필드 설정과 맞지 않아 주차 시트를 만들지 못했습니다. 프로젝트 설정의 추가 필드를 확인하세요.'
 const ERR_TITLE_SAVE = '제목을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_CELL_SAVE = '셀을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_SCOPE = '대상을 확인할 수 없어 저장을 중단했습니다.'
@@ -153,7 +154,6 @@ export async function createWeeklyReport(
   if (!areas.some(a => a.active)) return { ok: false, code: 'CONFIG_REQUIRED', error: ERR_AREAS_REQUIRED }
 
   let seed: ReturnType<typeof seedOf> | null = null
-  let carriedCustomRows: { areaId: string; custom: CustomValues }[] = []
   if (carryOver === true) {
     // 같은 주 문서가 이미 있으면(다른 관리자가 먼저 만들었다) 이월을 판정하지 않는다 — RPC 가 시드를 버리고 exists 를 돌려줄 문서에
     // 매핑 창을 띄우지 않는다(A1-4 리뷰 P7). 확인과 RPC 사이에 생긴 문서는 RPC 의 exists 가 그대로 받는다
@@ -173,6 +173,8 @@ export async function createWeeklyReport(
     }
     if (src && src.rows.length > 0) {
       const fieldDefsState = cfg.keys ? cfg.keys['fields.weekly_row'] : undefined
+      // 정의가 손상이면 이월할 필드를 모른다 — '이월 필드 없음'으로 풀어 값 없는 문서를 만들지 않는다(3원칙 ①)
+      if (fieldDefsState?.status === 'invalid') return { ok: false, code: 'CONFIG_INVALID', error: `${CONFIG_MESSAGES.CONFIG_INVALID} (fields.weekly_row)` }
       const fieldDefs = fieldDefsState && (fieldDefsState.status === 'set' || fieldDefsState.status === 'default') ? fieldDefsState.value : []
       const parsedDefs = parseFieldDefs('weekly_row', fieldDefs)
       const defs = parsedDefs.ok ? parsedDefs.value : []
@@ -182,10 +184,8 @@ export async function createWeeklyReport(
       }
       const carried = carryOverRows(src.rows, areas, mapping, carryFn)
       if (!carried.ok) return { ok: false, code: 'CARRY_PENDING', pending: carried.pending, overflow: carried.overflow }
+      // 이월 값(custom)은 시드에 실려 RPC 의 행 INSERT 와 한 트랜잭션에 쓰인다(0043) — 따로 쓰지 않는다
       seed = seedOf(carried.rows)
-      carriedCustomRows = carried.rows
-        .filter(r => r.custom && Object.keys(r.custom).length > 0)
-        .map(r => ({ areaId: r.areaId, custom: r.custom as CustomValues }))
     }
   }
 
@@ -194,19 +194,16 @@ export async function createWeeklyReport(
     p_actor: g.actor.userId, p_project_id: projectId, p_week_start: weekStart, p_seed: seed,
   })
   if (error) {
+    // 이월 값이 지금의 필드 정의와 맞지 않아 행 트리거(enforce_custom_fields)가 거부했다 — 문서도 만들어지지 않았다(한 트랜잭션).
+    // 토큰에 필드 키·사유가 붙어 자기 토큰 표(정확히 일치)로는 못 받으므로 표보다 먼저 본다. 원문은 로그로만
+    if (typeof error.message === 'string' && error.message.startsWith('CUSTOM_FIELD_')) {
+      return { ok: false, code: 'FIELD_INVALID', error: failWith('weekly/create', error, ERR_CARRY_CUSTOM) }
+    }
     const f = rpcFailure(error, CREATE_TOKENS)
     if (f) return { ok: false, code: f.code, error: f.message, ...(f.retryable ? { retryable: true } : {}) }
     return { ok: false, code: 'UNAVAILABLE', error: failWith('weekly/create', error, ERR_CREATE) }
   }
   const r = data as { status: 'created' | 'exists'; report_id: string }
-  if (r.status === 'created' && carriedCustomRows.length > 0) {
-    for (const item of carriedCustomRows) {
-      await admin.from('weekly_report_rows')
-        .update({ custom: item.custom })
-        .eq('report_id', r.report_id)
-        .eq('area_id', item.areaId)
-    }
-  }
   revalidateWeekly()
   return { ok: true, reportId: r.report_id, status: r.status }
 }
