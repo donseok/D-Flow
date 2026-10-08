@@ -177,7 +177,6 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
     })
     expect(rpc).toHaveBeenCalledWith('match_ai_documents', expect.objectContaining({
       p_project_ids: ['p2'],
-      p_include_global: false,
       p_domains: ['minutes'],
       p_index_version: 1,
     }))

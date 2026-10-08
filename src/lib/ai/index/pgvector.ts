@@ -350,7 +350,6 @@ export function createSupabaseKnowledgeIndex(
       query_embedding: normalized.queryEmbedding,
       match_count: normalized.candidateLimit,
       p_project_ids: normalized.projectIds,
-      p_include_global: normalized.includeGlobal,
       p_domains: normalized.domains.length ? normalized.domains : null,
       p_entity_types: normalized.entityTypes.length ? normalized.entityTypes : null,
       p_team: normalized.team,

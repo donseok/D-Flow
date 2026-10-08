@@ -84,7 +84,7 @@ describe('POST /api/wiki/search', () => {
   it('벡터 RPC 에 서버가 확정한 projectIds 만 넘긴다', async () => {
     await POST(request({ projectId: PROJECT, q: '권한', projectIds: [OTHER] }))
     expect(mocks.rpc).toHaveBeenCalledWith('match_ai_documents', expect.objectContaining({
-      p_project_ids: [PROJECT], p_include_global: false,
+      p_project_ids: [PROJECT],
     }))
   })
 

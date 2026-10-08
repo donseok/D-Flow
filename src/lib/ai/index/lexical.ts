@@ -49,7 +49,6 @@ export function createLexicalSearch(client: SupabaseKnowledgeClient) {
       p_tokens: input.tokens,
       match_count: Math.max(1, Math.min(Math.floor(input.limit), 100)),
       p_project_ids: input.projectIds,
-      p_include_global: false,
       p_domains: null,
       p_entity_types: null,
       p_index_version: CURRENT_INDEX_VERSION,

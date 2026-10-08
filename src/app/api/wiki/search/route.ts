@@ -103,7 +103,6 @@ export async function POST(request: NextRequest) {
           query_embedding: queryEmbedding,
           match_count: CANDIDATE_LIMIT,
           p_project_ids: access.projectIds,
-          p_include_global: false,
           p_domains: null,
           p_entity_types: null,
           p_team: null,
