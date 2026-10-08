@@ -10,6 +10,9 @@ import { LOCAL_DSN, assertNotForbidden, detectEnvTarget } from '../../scripts/li
 const ENV_LOCAL = fileURLToPath(new URL('../../.env.local', import.meta.url))
 const FIXTURE_SQL = fileURLToPath(new URL('./fixture.sql', import.meta.url))
 const FIXTURE_WS_SQL = fileURLToPath(new URL('./fixture-ws.sql', import.meta.url))
+const SUPABASE_CONFIG = fileURLToPath(new URL('../../supabase/config.toml', import.meta.url))
+/** 사용자 데이터가 든 DB 에 붙이는 표식 — `comment on database postgres is 'dflow:protected'`(docs/runbook-user-db-apply.md). db reset 은 지운다 */
+export const PROTECTED_DB_MARK = 'dflow:protected'
 const LOCAL_HOSTS = ['127.0.0.1', 'localhost']
 // targets.mjs 의 INVISIBLE 과 같은 집합 — URL 파서가 조용히 지우는 문자가 끼면 읽은 호스트와 접속 호스트가 갈라진다
 const INVISIBLE = /[\s\p{Cc}\p{Cf}]/u
@@ -55,8 +58,42 @@ export function localDsn(env: EnvBag = process.env): string {
   assertNotForbidden(text)
   const target = detectEnvTarget(text, {})
   if (target !== 'local') throw new Error(`RLS 하네스: .env.local 이 로컬을 가리키지 않는다(${target})`)
-  parseLocalDsn(LOCAL_DSN)
-  return LOCAL_DSN
+  const dsn = configDsn()
+  parseLocalDsn(dsn)
+  return dsn
+}
+
+/**
+ * 이 체크아웃의 supabase/config.toml [db] port 로 만든 DSN. 워크트리마다 포트를 달리 둔 전용 스택이 있으면 그쪽에 붙는다 —
+ * 예전엔 LOCAL_DSN(54322) 고정이라 전용 스택을 띄운 워크트리의 `npm run test:rls` 가 메인 스택(사용자 데이터)에 픽스처를 커밋했다.
+ * 설정 파일이 없거나 포트를 못 읽으면 LOCAL_DSN.
+ */
+export function configDsn(text?: string): string {
+  let toml = text
+  if (toml === undefined) {
+    try { toml = readFileSync(SUPABASE_CONFIG, 'utf8') } catch { return LOCAL_DSN }
+  }
+  const lines = toml.split('\n')
+  const start = lines.findIndex((l) => l.trim() === '[db]')
+  if (start < 0) return LOCAL_DSN
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex((l) => l.startsWith('['))
+  const section = (end < 0 ? rest : rest.slice(0, end)).join('\n')
+  const port = /^port\s*=\s*(\d{2,5})\s*$/m.exec(section)?.[1]
+  if (!port) return LOCAL_DSN
+  const url = new URL(LOCAL_DSN)
+  url.port = port
+  return url.toString()
+}
+
+/** 보호 표식이 붙은 DB 면 멈춘다 — 픽스처를 커밋하기 전에 부른다(fail-closed: 표식을 못 읽어도 멈춘다) */
+export async function assertNotProtected(pool: Pool): Promise<void> {
+  const { rows } = await pool.query<{ mark: string | null }>(
+    `select shobj_description(oid, 'pg_database') as mark from pg_database where datname = current_database()`)
+  if (rows.length !== 1) throw new Error('RLS 하네스: DB 표식을 읽지 못했다')
+  if (rows[0].mark?.includes(PROTECTED_DB_MARK)) {
+    throw new Error(`RLS 하네스: 이 DB 는 보호 표식(${PROTECTED_DB_MARK})이 있다 — 사용자 데이터 DB 에는 테스트 픽스처를 넣지 않는다. 전용 스택을 띄우거나 RLS_DATABASE_URL 을 준다`)
+  }
 }
 
 /** 검사를 통과한 좌표를 필드로 풀어 넘긴다 — pg 가 DSN 을 다시 해석해 검사와 다른 곳에 붙는 일이 없게. */
@@ -232,6 +269,7 @@ export const F = {
  * on conflict do nothing 은 같은 id 의 다른 행을 조용히 남기므로, 어긋난 픽스처가 정책 회귀처럼 보이지 않게 여기서 멈춘다.
  */
 export async function loadFixture(pool: Pool): Promise<void> {
+  await assertNotProtected(pool)
   const sql = readFileSync(FIXTURE_SQL, 'utf8')
   const wsSql = readFileSync(FIXTURE_WS_SQL, 'utf8')
   const c = await pool.connect()
