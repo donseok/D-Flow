@@ -666,7 +666,8 @@ async function main() {
       out.push({ target: '④', path: `/api/export?projectId=${proj.id}&form=1`, text: (await zipTextParts(formBuf)).map((p) => p.text).join('\n') })
     }
     // ⑦ 봇 컨텍스트 (SP8)
-    const ctxRes = await admin.http('GET', `/api/chat/context?projectId=${proj.id}&workspaceId=${proj.ws.id}`)
+    // chatbot 모듈이 꺼진 구성(R·C)은 관문이 404 로 닫는다 — 그때는 스캔할 본문이 없다
+    const ctxRes = await admin.http('GET', `/api/chat/context?projectId=${proj.id}&workspaceId=${proj.ws.id}`, { expect: [200, 404] })
     if (ctxRes.status === 200) {
       out.push({ target: '①', path: `/api/chat/context?projectId=${proj.id}`, text: await ctxRes.text() })
     }
@@ -1110,12 +1111,15 @@ async function main() {
   s7.checks.notifRequiredGuardedApproval = savedNotif['work.approval_step'] === undefined
 
   // 2. 봇 컨텍스트 API (/api/chat/context, SP8)
-  const rChatCtxRes = await admin.http('GET', `/api/chat/context?projectId=${R.id}&workspaceId=${wsR.id}`)
-  if (rChatCtxRes.status === 200) {
-    const rChatCtx = await rChatCtxRes.json()
-    s7.checks.chatContextOk = rChatCtx?.project?.id === R.id || rChatCtx?.projectId === R.id || typeof rChatCtx === 'object'
+  //    R 의 modules.enabled 에 chatbot 이 있으면 문맥이 그 프로젝트의 것이어야 하고, 없으면 모듈 관문이 404 로 닫아야 한다.
+  //    (예전 단언은 200 만 기대해 chatbot 없는 R 에서 러너가 멈췄고, 200 이면 `typeof === 'object'` 로 늘 참이었다)
+  const rChatbotOn = SYNTHETIC_R.config.project['modules.enabled'].includes('chatbot')
+  const rChatCtxRes = await admin.http('GET', `/api/chat/context?projectId=${R.id}&workspaceId=${wsR.id}`, { expect: [200, 404] })
+  if (rChatbotOn) {
+    const rChatCtx = rChatCtxRes.status === 200 ? await rChatCtxRes.json() : null
+    s7.checks.chatContextOk = rChatCtx?.project?.id === R.id || rChatCtx?.projectId === R.id
   } else {
-    s7.checks.chatContextOk = false
+    s7.checks.chatContextClosedWithoutModule = rChatCtxRes.status === 404
   }
 
   // 3. 주간 시트 팀 필터 (weekly:read, SP8)
