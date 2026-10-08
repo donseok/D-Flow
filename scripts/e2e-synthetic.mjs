@@ -1035,8 +1035,16 @@ async function main() {
     const res = await admin.http('GET', path)
     return { template: res.headers.get('x-form-template'), text: await zipText(res) }
   }
-  /** 다른 합성 프로젝트의 값 — 팀 code 는 센티널과 같은 낱말 경계 규칙, 이름·코드는 부분 문자열 */
-  const s8Cross = (text, other, words) => [...findSentinels(text, other.teamCodes), ...words.filter((w) => text.includes(w))]
+  /** 자기 프로젝트에 등록된 이름(팀·영역의 code·name)을 본문에서 가린다 — 긴 것부터. 등록 이름이 센티널 낱말을 품거나('품질 개명' ⊃ '품질')
+   *  상대 프로젝트의 팀 code 와 같은 글자('SAF' 영역 ↔ 'SAF' 팀)일 때 그 출현은 자기 값이지 누출이 아니다. 센티널과 같은 문자열만 빼는
+   *  excludeRegistered 로는 개명 뒤의 이름을 못 가린다. */
+  const maskOwn = (text, reg) => [...new Set(reg.names)].filter(Boolean).sort((a, b) => b.length - a.length)
+    .reduce((t, name) => t.split(name).join(' '), text)
+  /** 다른 합성 프로젝트의 값 — 팀 code 는 센티널과 같은 낱말 경계 규칙, 이름·코드는 부분 문자열. 자기 등록 이름은 가린 본문에서 찾는다 */
+  const s8Cross = (text, own, other, words) => {
+    const masked = maskOwn(text, own)
+    return [...findSentinels(masked, other.teamCodes), ...words.filter((w) => masked.includes(w))]
+  }
 
   // 등록 이름은 지금 것으로 다시 읽는다 — S10 뒤 경계 단계가 팀·영역을 개명했다
   const s8RegR = await registeredOf(R)
@@ -1048,7 +1056,7 @@ async function main() {
     const sentinels = s8Sentinels(reg)
     const view = (out, want) => ({
       template: out.template, expected: want.length, missing: missingIn(out.text, want),
-      sentinels: findSentinels(out.text, sentinels), cross: s8Cross(out.text, other, [otherProj.name]),
+      sentinels: findSentinels(maskOwn(out.text, reg), sentinels), cross: s8Cross(out.text, reg, other, [otherProj.name]),
     })
     const wbsForm = await s8Output(`/api/export?projectId=${proj.id}&form=1`)
     s8[label] = {
@@ -1119,8 +1127,8 @@ async function main() {
     missingAnalysis: missingIn(deck.text, deckAnalysis),
     overviewContinued: deck.text.includes('영역별 종합 (계속)'),
     unfilled: deck.text.includes('{{'),
-    sentinels: findSentinels(deck.text, s8Sentinels(s8RegR)),
-    cross: s8Cross(deck.text, s8RegC, [C.name, ...cIssueCodes]),
+    sentinels: findSentinels(maskOwn(deck.text, s8RegR), s8Sentinels(s8RegR)),
+    cross: s8Cross(deck.text, s8RegR, s8RegC, [C.name, ...cIssueCodes]),
   }
   const restored = {
     allowed: (await rWsDoc()).values['modules.allowed'],

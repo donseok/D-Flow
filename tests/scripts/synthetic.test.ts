@@ -307,7 +307,9 @@ describe('e2e-synthetic.mjs — S8 은 출력을 받아 본문을 본다(SP6 정
     for (const needle of [
       'missingIn(deck.text, deckAreas)', 'missingIn(deck.text, deckCodes)', 'missingIn(deck.text, deckAnalysis)', "deck.text.includes('영역별 종합 (계속)')",
       '[sp4Sentinels(), sp5b1Sentinels(), sp6Sentinels()].flatMap((list) => excludeRegistered(list, reg.names))',
-      's8Cross(deck.text, s8RegC, [C.name, ...cIssueCodes])', 'cross: s8Cross(out.text, other, [otherProj.name])',
+      's8Cross(deck.text, s8RegR, s8RegC, [C.name, ...cIssueCodes])', 'cross: s8Cross(out.text, reg, other, [otherProj.name])',
+      // 자기 등록 이름은 가린 본문에서 찾는다 — 개명 뒤 이름이 센티널 낱말을 품거나 상대 팀 code 와 같은 글자일 때의 오탐을 막는다
+      'findSentinels(maskOwn(out.text, reg), sentinels)', 'findSentinels(maskOwn(deck.text, s8RegR), s8Sentinels(s8RegR))',
       "o.template === 'default' && o.expected > 0 && o.missing.length === 0 && o.sentinels.length === 0 && o.cross.length === 0",
     ]) expect(s8, needle).toContain(needle)
     // 판정은 checks 전부 — 본문 대조 결과가 checks 에 들어 있다
