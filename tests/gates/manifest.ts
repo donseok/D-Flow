@@ -200,7 +200,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('preferences')}#saveNotifPrefs`]: nul('session', SESSION_SELF),
   // ── globalSearch — ⌘K 검색 (SPU2)
   [`${A('globalSearch')}#searchTitles`]: {
-    ...nul('session', '로그인 + 세션 RLS(제목 검색)'),
+    ...nul('session', '로그인 + 범위 재판정(워크스페이스 소속·프로젝트의 워크스페이스·비공개 숨김) + 세션 RLS(제목 검색)'),
     sample: [{ workspaceId: W, query: 'test', scope: 'workspace' }],
   },
   // ── project(A) — 설정·프로젝트 관리(core)

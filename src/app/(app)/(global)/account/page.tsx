@@ -13,7 +13,11 @@ export const dynamic = 'force-dynamic'
  * 리다이렉트하므로 여기서 별도 가드는 두지 않는다((app) 레이아웃 관례).
  */
 export default async function AccountPage() {
-  const [user, projectState, cur, acc, workspaceMemberships] = await Promise.all([getSession(), listProjectsWithState(), readCurrentWorkspace(), getAccountPrefs(), listMyWorkspaces()])
+  const [user, projectState, cur, acc, workspaceMemberships] = await Promise.all([getSession(), listProjectsWithState(), readCurrentWorkspace(),
+    // 알림 토글이 지금 값을 그린다 — 조회 실패를 기본값으로 위장하지 않는다(null 로 내려 그 절만 닫는다)
+    getAccountPrefs({ strict: true }).catch((e: unknown) => { console.error('[account] 계정 선호 조회 실패:', e); return null }),
+    listMyWorkspaces(),
+  ])
   if (!cur.ok) console.error('[account] 현재 워크스페이스 조회 실패:', cur.error)
   const ws = cur.ok ? cur.ws : null
   const wsPrefs = ws ? await getWorkspacePrefs(ws.id, { strict: true }).catch((e: unknown) => {
@@ -33,7 +37,8 @@ export default async function AccountPage() {
       currentWorkspace={ws ? { id: ws.id, name: ws.name } : null}
       currentWorkspaceError={!cur.ok || wsPrefs === null}
       startPage={wsPrefs?.startPage ?? null}
-      projectsView={acc.projectsView === 'cards' ? 'cards' : 'rows'}
+      projectsView={acc?.projectsView === 'cards' ? 'cards' : 'rows'}
+      notif={acc ? (acc.notif ?? {}) : null}
     />
   )
 }

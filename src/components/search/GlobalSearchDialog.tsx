@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { Search, X, FolderOpen, ListTodo, ArrowRight, Loader2 } from 'lucide-react'
 import { useEscHandler, ESC_PRIORITY } from '@/lib/ui/escStack'
+import { StatusMessage } from '@/components/ui/StatusMessage'
 import { searchTitles, type SearchProjectItem, type SearchWbsItem } from '@/app/actions/globalSearch'
 
 export interface NavShortcut {
@@ -65,7 +66,10 @@ export function GlobalSearchDialog({
   const [scope, setScope] = useState<'workspace' | 'project'>(projectId ? 'project' : 'workspace')
   const [projects, setProjects] = useState<SearchProjectItem[]>([])
   const [wbsItems, setWbsItems] = useState<SearchWbsItem[]>([])
-  const [searchError, setSearchError] = useState<string | null>(null)
+  // 실패(조회 오류·범위 거부)와 0건은 다른 상태다 — 0건은 서버가 답한 검색어(answered)가 지금 검색어와 같을 때만 말한다
+  const [searchError, setSearchError] = useState<{ reason: 'denied' | 'failed'; message: string } | null>(null)
+  const [answered, setAnswered] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [isPending, startTransition] = useTransition()
 
@@ -84,6 +88,7 @@ export function GlobalSearchDialog({
       setProjects([])
       setWbsItems([])
       setSearchError(null)
+      setAnswered(null)
       setSelectedIndex(0)
       setScope(projectId ? 'project' : 'workspace')
       setTimeout(() => inputRef.current?.focus(), 50)
@@ -119,31 +124,44 @@ export function GlobalSearchDialog({
       setProjects([])
       setWbsItems([])
       setSearchError(null)
+      setAnswered(null)
       return
     }
 
+    let stale = false   // 늦게 온 앞 검색어의 응답이 지금 결과를 덮지 않게
     const timer = setTimeout(() => {
       startTransition(async () => {
-        const res = await searchTitles({
-          workspaceId,
-          query: q,
-          scope,
-          projectId: scope === 'project' ? projectId : null,
-        })
+        let res: Awaited<ReturnType<typeof searchTitles>>
+        try {
+          res = await searchTitles({
+            workspaceId,
+            query: q,
+            scope,
+            projectId: scope === 'project' ? projectId : null,
+          })
+        } catch {
+          res = { ok: false, reason: 'failed', error: '검색 요청을 보내지 못했습니다. 연결을 확인하세요.' }
+        }
+        if (stale) return
         if (!res.ok) {
-          setSearchError(res.error ?? '검색 오류가 발생했습니다.')
+          setSearchError({ reason: res.reason, message: res.error })
+          setAnswered(null)
           setProjects([])
           setWbsItems([])
         } else {
           setSearchError(null)
+          setAnswered(q)
           setProjects(res.projects)
           setWbsItems(res.wbsItems)
         }
       })
     }, 180)
 
-    return () => clearTimeout(timer)
-  }, [query, scope, workspaceId, projectId])
+    return () => {
+      stale = true
+      clearTimeout(timer)
+    }
+  }, [query, scope, workspaceId, projectId, retry])
 
   // 전체 표시 결과 리스트
   const combinedItems: ResultItem[] = [
@@ -220,7 +238,7 @@ export function GlobalSearchDialog({
               setQuery(e.target.value)
               setSelectedIndex(0)
             }}
-            placeholder="제목 검색 (메뉴 이동, 프로젝트, 작업명·코드)..."
+            placeholder={scope === 'project' ? '제목 검색 (메뉴 이동, 현재 프로젝트의 작업 이름·코드)...' : '제목 검색 (메뉴 이동, 프로젝트 이름)...'}
             aria-label="제목 검색어"
             className="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-muted"
           />
@@ -289,21 +307,33 @@ export function GlobalSearchDialog({
         {/* 결과 리스트 영역 */}
         <div className="max-h-80 overflow-y-auto p-2" role="listbox">
           {searchError && (
-            <div className="p-4 text-center text-xs text-danger" role="alert">
-              {searchError}
+            <div className="px-3 pb-1" data-search-state={searchError.reason}>
+              {searchError.reason === 'failed' ? (
+                <StatusMessage
+                  compact
+                  kind="partial_error"
+                  title="검색하지 못했습니다"
+                  detail={`${searchError.message} 결과가 없는 것이 아닙니다.`}
+                  action={{ label: '다시 시도', onSelect: () => setRetry((n) => n + 1) }}
+                />
+              ) : (
+                <StatusMessage compact kind="disabled" title="이 범위에서는 검색할 수 없습니다" detail={searchError.message} />
+              )}
             </div>
           )}
 
-          {!searchError && combinedItems.length === 0 && (
-            <div className="p-8 text-center text-xs text-fg-muted">
-              {query.trim()
-                ? `‘${query.trim()}’에 대한 제목 검색 결과가 없습니다.`
-                : '검색어를 입력하세요.'}
+          {!searchError && combinedItems.length === 0 && query.trim() && answered === query.trim() && (
+            <div className="px-3" data-search-state="empty">
+              <StatusMessage
+                compact
+                kind="empty"
+                title={`‘${query.trim()}’ 제목과 일치하는 결과가 없습니다`}
+                detail={scope === 'project' ? '현재 프로젝트의 작업 이름·코드에서 찾았습니다.' : '이 워크스페이스의 프로젝트 이름에서 찾았습니다.'}
+              />
             </div>
           )}
 
-          {!searchError &&
-            combinedItems.map((item, idx) => {
+          {combinedItems.map((item, idx) => {
               const isSelected = idx === selectedIndex
               return (
                 <div

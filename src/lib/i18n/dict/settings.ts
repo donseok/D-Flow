@@ -234,6 +234,7 @@ export const settingsKo = {
   'settings.calendar.working_days.label': '근무 요일', 'settings.calendar.working_days.desc': '일정 계산·달력의 쉬는 요일 기준입니다. 이미 저장된 진척 스냅샷은 다시 계산하지 않습니다.',
   'settings.calendar.week_start.label': '주 시작 요일', 'settings.calendar.week_start.desc': '주간보고·이번 주 보기의 주 시작 요일입니다. 프로젝트에서 바꾸면 다음 주부터 적용되고 지난 주간보고는 그대로입니다.',
   'settings.calendar.week_start.sunday': '일요일', 'settings.calendar.week_start.monday': '월요일',
+  'settings.security.local_drafts.label': '로컬 초안', 'settings.security.local_drafts.desc': '편집 중인 내용을 이 브라우저에 초안으로 남길지와 보존 기간입니다. 끄면 모든 편집 화면이 초안을 저장하지도 되살리지도 않으며, 개인 설정으로 바꿀 수 없습니다.',
   'settings.portal.widgets.label': '홈 위젯', 'settings.portal.widgets.desc': '워크스페이스 홈에 보일 위젯과 열 안의 순서를 정합니다. 사람마다 위젯을 숨길 수 있습니다.',
   'settings.views.default.label': '작업 계획 기본 보기', 'settings.views.default.desc': '작업 계획을 처음 열 때의 보기(표·간트·보드)입니다. 보드는 칸반이 켜져 있을 때만 고를 수 있습니다.',
   // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11

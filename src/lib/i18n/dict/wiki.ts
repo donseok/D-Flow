@@ -230,6 +230,7 @@ export const wikiKo = {
   'wiki.document.applyTemplate': '선택한 유형의 빈 템플릿 적용',
   'wiki.document.appendTemplate': '선택한 유형의 템플릿을 아래에 붙이기',
   'wiki.document.draftFound': '저장하지 않고 닫은 초안이 있습니다.',
+  'wiki.document.draftsOff': '이 워크스페이스는 로컬 초안을 남기지 않습니다. 저장하지 않고 닫으면 쓴 내용이 사라집니다.',
   'wiki.document.draftRestore': '이어서 쓰기',
   'wiki.document.draftDiscard': '버리기',
   'wiki.document.conflictHint': '다른 사람이 먼저 저장했습니다. 작성 중이던 내용은 초안으로 남겨 뒀으니, 새로고침해 최신 내용을 확인한 뒤 이어서 쓰기로 되살리세요.',

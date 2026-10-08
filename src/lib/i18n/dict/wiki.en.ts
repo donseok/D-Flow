@@ -227,6 +227,7 @@ export const wikiEn: Record<keyof typeof wikiKo, string> = {
   'wiki.document.applyTemplate': 'Apply the empty template for this type',
   'wiki.document.appendTemplate': 'Append this type\'s template below',
   'wiki.document.draftFound': 'You have a draft that was closed without saving.',
+  'wiki.document.draftsOff': 'This workspace does not keep local drafts. Closing without saving discards what you wrote.',
   'wiki.document.draftRestore': 'Continue writing',
   'wiki.document.draftDiscard': 'Discard',
   'wiki.document.conflictHint': 'Someone else saved first. Your work is kept as a draft — refresh to see the latest version, then bring it back with Continue writing.',

@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({ ui: vi.fn(), ws: vi.fn() }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueUiPref: h.ui, queueWorkspacePref: h.ws }))
 vi.mock('@/components/account/ThemeRadioGroup', () => ({ ThemeRadioGroup: () => <div data-theme-radios /> }))
 vi.mock('@/components/account/MyTokensSection', () => ({ MyTokensSection: () => null }))
+vi.mock('@/app/actions/preferences', () => ({ saveNotifPrefs: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/components/account/ChangePasswordModal', () => ({ ChangePasswordModal: () => null }))
 vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko', setLocale: vi.fn() }) }))
 import { AccountView } from '@/components/account/AccountView'
@@ -24,7 +25,7 @@ describe('/account 구역과 선호 범위', () => {
   it('h1 하나와 프로필·화면·현재 워크스페이스·목록 보기', async () => {
     await mount()
     expect([...container.querySelectorAll('h1')].map(el => el.textContent)).toEqual(['내 계정'])
-    for (const name of ['프로필 정보', 'chrome.display', '현재 워크스페이스', '목록 보기']) expect([...container.querySelectorAll('h2')].map(el => el.textContent)).toContain(name)
+    for (const name of ['프로필 정보', 'chrome.display', '현재 워크스페이스', '목록 보기', 'account.notif.title']) expect([...container.querySelectorAll('h2')].map(el => el.textContent)).toContain(name)
   })
   it('시작 화면은 현재 워크스페이스 인자로 저장하고 기본은 홈', async () => {
     await mount()

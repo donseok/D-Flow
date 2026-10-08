@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   redirect: vi.fn((to: string): never => { throw new Error(`NEXT_REDIRECT ${to}`) }),
   calendarPanel: vi.fn<(p: Record<string, unknown>) => null>(() => null),
   widgetsEditor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
+  draftsEditor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
 }))
 vi.mock('@/lib/settings/workspacePageAccess', () => ({ workspacePageAccess: (...a: unknown[]) => h.access(...a) }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: (...a: unknown[]) => h.config(...a) }))
@@ -30,6 +31,7 @@ vi.mock('@/components/settings/LogoEditor', () => ({ LogoEditor: () => null }))
 vi.mock('@/components/settings/AccentEditor', () => ({ AccentEditor: () => null }))
 vi.mock('@/components/settings/MenuOrderEditor', () => ({ MenuOrderEditor: () => null }))
 vi.mock('@/components/settings/PortalWidgetsEditor', () => ({ PortalWidgetsEditor: (p: Record<string, unknown>) => h.widgetsEditor(p) }))
+vi.mock('@/components/settings/LocalDraftsEditor', () => ({ LocalDraftsEditor: (p: Record<string, unknown>) => h.draftsEditor(p) }))
 vi.mock('@/components/settings/SettingsHistoryList', () => ({ SettingsHistoryList: () => null }))
 vi.mock('@/components/settings/AttachmentPolicyEditor', () => ({ AttachmentPolicyEditor: (p: Record<string, unknown>) => h.attEditor(p) }))
 vi.mock('@/components/settings/RootFoldersEditor', () => ({ RootFoldersEditor: (p: Record<string, unknown>) => h.rootEditor(p) }))
@@ -74,13 +76,13 @@ describe('/w/[slug]/settings 페이지', () => {
     expect(h.config).not.toHaveBeenCalled()
   })
 
-  it('여덟 범주 목차를 스펙 순서로 낸다(달력 — SP5 과제 26, 회의록 첨부 — SP5 B3 과제 9, 회의록 폴더 — SP5 B2)', async () => {
+  it('아홉 범주 목차를 스펙 순서로 낸다(달력 — SP5 과제 26, 회의록 첨부 — SP5 B3 과제 9, 회의록 폴더 — SP5 B2, 보안 — SPU1 로컬 초안)', async () => {
     await render()
     expect(h.shell.mock.calls[0][0].items).toEqual([
       { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
       { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' },
       { id: 'workspace-minutes', label: '회의록' }, { id: 'workspace-minute-roots', label: '회의록 폴더' },
-      { id: 'workspace-menu', label: '메뉴' }, { id: 'workspace-history', label: '기록' },
+      { id: 'workspace-menu', label: '메뉴' }, { id: 'workspace-security', label: '보안' }, { id: 'workspace-history', label: '기록' },
     ])
   })
 
@@ -179,5 +181,20 @@ describe('/w/[slug]/settings 페이지', () => {
     await render()
     expect(h.widgetsEditor.mock.calls[0][0]).toMatchObject({ initial: null })
     expect(typeof h.widgetsEditor.mock.calls[0][0].invalidReason).toBe('string')
+  })
+
+  it('보안 범주의 로컬 초안 편집기 — 저장값(기본 = 허용·7일)과 revision, 손상이면 사유를 넘긴다(SPU1, 개정 §5.8.5)', async () => {
+    h.draftsEditor.mockClear()
+    const html = await render()
+    expect(html).toContain('id="workspace-security"')
+    expect(h.draftsEditor.mock.calls[0][0]).toEqual({ workspaceId: WID, revision: 7, initial: { allowed: true, retention_days: 7 }, invalidReason: undefined })
+    h.draftsEditor.mockClear()
+    h.config.mockResolvedValue(config({ 'security.local_drafts': { allowed: false, retention_days: 14 } }))
+    await render()
+    expect(h.draftsEditor.mock.calls[0][0]).toMatchObject({ initial: { allowed: false, retention_days: 14 } })
+    h.draftsEditor.mockClear()
+    h.config.mockResolvedValue(config({ 'security.local_drafts': { allowed: 'yes', retention_days: 7 } }))
+    await render()
+    expect(h.draftsEditor.mock.calls[0][0]).toMatchObject({ initial: null, invalidReason: 'allowed 는 불리언이어야 합니다.' })
   })
 })

@@ -18,6 +18,19 @@ describe('계정 페이지의 선호 원천', () => {
     expect(h.workspace).toHaveBeenCalledExactlyOnceWith(WS.id, { strict: true })
     expect(page.props).toMatchObject({ currentWorkspace: { id: WS.id, name: WS.name }, startPage: 'projects', projectsView: 'cards', currentWorkspaceError: false })
   })
+  it('계정 선호는 strict 로 읽고 알림 토글(notif)을 내린다 — 조회 실패면 null(기본값으로 그리지 않는다)', async () => {
+    h.account.mockResolvedValue({ projectsView: 'cards', notif: { 'work.assigned': false } })
+    expect((await AccountPage()).props).toMatchObject({ notif: { 'work.assigned': false } })
+    expect(h.account).toHaveBeenCalledWith({ strict: true })
+    h.account.mockResolvedValue({})
+    expect((await AccountPage()).props).toMatchObject({ notif: {} })
+    h.account.mockRejectedValue(new Error('down'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect((await AccountPage()).props).toMatchObject({ notif: null, projectsView: 'rows' })
+      expect(err).toHaveBeenCalled()
+    } finally { err.mockRestore() }
+  })
   it('소속이 없으면 워크스페이스 선호를 읽지 않는다', async () => {
     h.current.mockResolvedValue({ ok: true, ws: null })
     expect((await AccountPage()).props).toMatchObject({ currentWorkspace: null, currentWorkspaceError: false })

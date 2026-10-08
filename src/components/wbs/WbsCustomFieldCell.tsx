@@ -105,6 +105,8 @@ export function WbsCustomFieldCell({
     } finally { inFlight.current = false; setBusy(false) }
   }
   const keys = (e: React.KeyboardEvent) => {
+    // 한글 조합 중의 Enter·Esc 는 조합을 끝내는 키다 — 저장·취소로 새지 않게 한다(개정 §5.8.4, Q04. 주간 시트 useSheetGrid 와 같은 가드)
+    if (e.nativeEvent.isComposing || e.keyCode === 229) { e.stopPropagation(); return }
     if (e.key === 'Enter') { e.preventDefault(); void commit() }
     else if (e.key === 'Escape') { e.preventDefault(); close() }
     e.stopPropagation()

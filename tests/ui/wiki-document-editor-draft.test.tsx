@@ -31,8 +31,12 @@ const TOPIC = {
 const A_KEY = 'draft:v2:uA:w1:p1:wiki:t1'
 const A_OLD = 'wiki-draft:v2:uA:p1:t1'
 const WS = { id: 'w1', slug: 'acme', name: 'Acme' }
-const draftOf = (bodyMd: string) =>
-  JSON.stringify({ title: TOPIC.title, bodyMd, kind: 'overview', savedAt: '2026-09-26T00:00:00.000Z' })
+// 저장 시각은 '어제' — 고정 날짜면 보존기간(security.local_drafts.retention_days) 판정에 걸려 달력이 지나면서 깨진다
+const SAVED_AT = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+const draftOf = (bodyMd: string, savedAt: string = SAVED_AT) =>
+  JSON.stringify({ title: TOPIC.title, bodyMd, kind: 'overview', savedAt })
+const POLICY = { allowed: true, retention_days: 7 }
+const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString()
 const DEBOUNCE_WAIT_MS = 700 // 편집기 debounce(600ms)보다 길게
 
 describe('WikiDocumentEditor — 사용자별 로컬 초안', () => {
@@ -53,10 +57,10 @@ describe('WikiDocumentEditor — 사용자별 로컬 초안', () => {
     vi.restoreAllMocks()
   })
 
-  const mount = (userId: string | null, topic = TOPIC, workspace: typeof WS | null = WS) =>
+  const mount = (userId: string | null, topic = TOPIC, workspace: typeof WS | null = WS, policy = POLICY) =>
     act(async () => root.render(
       <ScopeProvider value={{ workspace, projectId: 'p1' }}>
-        <WikiDocumentEditor key={topic.bodyUpdatedAt} projectId="p1" locale="ko" topic={topic} canEdit userId={userId} timeZone="Asia/Seoul" />
+        <WikiDocumentEditor key={topic.bodyUpdatedAt} projectId="p1" locale="ko" topic={topic} canEdit userId={userId} timeZone="Asia/Seoul" draftPolicy={policy} />
       </ScopeProvider>,
     ))
   const button = (key: DictKey) =>
@@ -244,5 +248,83 @@ describe('WikiDocumentEditor — 사용자별 로컬 초안', () => {
     expect(setItem).not.toHaveBeenCalled()
     expect(err.mock.calls.filter(([m]) => m === '[wiki] 범위 없음 — 초안 저장을 끈다')).toHaveLength(1)
     expect(window.localStorage.getItem(A_OLD)).toBe(draftOf('옛 키 초안'))
+  })
+
+  describe('워크스페이스 로컬 초안 정책(security.local_drafts — 개정 §5.8.5)', () => {
+    const OFF = { allowed: false, retention_days: 7 }
+
+    it('(p-1) allowed:false 면 초안을 읽지도 쓰지도 않는다 — 배너 없음, 이미 있는 초안은 그대로 둔다', async () => {
+      window.localStorage.setItem(A_KEY, draftOf('A 의 초안'))
+      window.localStorage.setItem(A_OLD, draftOf('옛 키 초안'))
+      const getItem = vi.spyOn(Storage.prototype, 'getItem')
+      const setItem = vi.spyOn(Storage.prototype, 'setItem')
+      const removeItem = vi.spyOn(Storage.prototype, 'removeItem')
+      await mount('uA', TOPIC, WS, OFF)
+      await click('wiki.document.edit')
+      expect(hasBanner()).toBe(false)
+      expect(container.querySelector('[data-drafts-off]')?.textContent).toBe(t('ko', 'wiki.document.draftsOff'))
+
+      await typeBody('고친 본문')
+      await act(async () => { window.dispatchEvent(new Event('beforeunload')) })
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, DEBOUNCE_WAIT_MS)) })
+
+      expect(setItem).not.toHaveBeenCalled()
+      expect(getItem).not.toHaveBeenCalled()
+      expect(removeItem).not.toHaveBeenCalled()
+      getItem.mockRestore()
+      expect(window.localStorage.getItem(A_KEY)).toBe(draftOf('A 의 초안'))
+      expect(window.localStorage.getItem(A_OLD)).toBe(draftOf('옛 키 초안'))
+    })
+
+    it('(p-2) 허용이면 안내 문구가 없다', async () => {
+      await mount('uA')
+      await click('wiki.document.edit')
+      expect(container.querySelector('[data-drafts-off]')).toBeNull()
+    })
+
+    it('(p-3) 보존기간을 넘긴 초안은 되살리지 않고 지운다 — 기간 안의 초안은 뜬다', async () => {
+      window.localStorage.setItem(A_KEY, draftOf('오래된 초안', daysAgo(8)))
+      await mount('uA')
+      await click('wiki.document.edit')
+      expect(hasBanner()).toBe(false)
+      expect(window.localStorage.getItem(A_KEY)).toBeNull()
+
+      await act(async () => root.render(null))
+      window.localStorage.setItem(A_KEY, draftOf('엿새 된 초안', daysAgo(6)))
+      await mount('uA')
+      await click('wiki.document.edit')
+      expect(hasBanner()).toBe(true)
+    })
+
+    it('(p-4) 보존기간은 정책 값을 따른다 — 3일 정책에서 엿새 된 초안은 만료', async () => {
+      window.localStorage.setItem(A_KEY, draftOf('엿새 된 초안', daysAgo(6)))
+      await mount('uA', TOPIC, WS, { allowed: true, retention_days: 3 })
+      await click('wiki.document.edit')
+      expect(hasBanner()).toBe(false)
+      expect(window.localStorage.getItem(A_KEY)).toBeNull()
+    })
+
+    it('(p-5) 옛 키의 만료 초안은 새 키로 옮기지 않고 지운다', async () => {
+      window.localStorage.setItem(A_OLD, draftOf('오래된 옛 초안', daysAgo(40)))
+      await mount('uA')
+      await click('wiki.document.edit')
+      expect(hasBanner()).toBe(false)
+      expect(window.localStorage.getItem(A_KEY)).toBeNull()
+      expect(window.localStorage.getItem(A_OLD)).toBeNull()
+    })
+
+    it('(p-6) 마운트하면 이 사용자·워크스페이스의 만료 초안만 치운다 — 다른 워크스페이스·다른 사용자의 초안은 남긴다', async () => {
+      const mine = 'draft:v2:uA:w1:p1:wiki:t9'
+      const otherWs = 'draft:v2:uA:w2:p7:wiki:t9'
+      const otherUser = 'draft:v2:uB:w1:p1:wiki:t9'
+      for (const k of [mine, otherWs, otherUser]) window.localStorage.setItem(k, draftOf('오래된 초안', daysAgo(20)))
+      const fresh = 'draft:v2:uA:w1:p1:wiki:t8'
+      window.localStorage.setItem(fresh, draftOf('새 초안', daysAgo(1)))
+      await mount('uA')
+      expect(window.localStorage.getItem(mine)).toBeNull()
+      expect(window.localStorage.getItem(otherWs)).not.toBeNull()
+      expect(window.localStorage.getItem(otherUser)).not.toBeNull()
+      expect(window.localStorage.getItem(fresh)).not.toBeNull()
+    })
   })
 })

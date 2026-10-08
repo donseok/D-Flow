@@ -1,4 +1,4 @@
-// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 45키 등록(SP6 forms.* 넷, SP3b UI-3 portal.widgets·views.default 둘 포함). 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
+// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 46키 등록(SP6 forms.* 넷, SP3b UI-3 portal.widgets·views.default 둘, SPU1 security.local_drafts 포함). 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
@@ -18,9 +18,9 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 45키 — 워크스페이스 14, 프로젝트 31(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 둘)', () => {
+  it('정확히 46키 — 워크스페이스 15, 프로젝트 31(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 둘 + SPU1 security.local_drafts)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
-      'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'portal.widgets', 'minutes.attachments', 'minutes.root_folders'])
+      'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'portal.widgets', 'security.local_drafts', 'minutes.attachments', 'minutes.root_folders'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
       'wbs.excel_profile', 'modules.enabled', 'workflow.stage_credits',
       'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers', 'workflow.predecessor_gate',
@@ -40,6 +40,9 @@ describe('등록 키', () => {
     expect(row('invites.allowed_domains')).toEqual(['workspace', 'workspace_admin', 'settings', 'text_list', 'immediate', ['none']])
     expect(row('branding.accent')).toEqual(['workspace', 'workspace_admin', 'settings', 'custom', 'immediate', ['none']])
     expect(row('portal.widgets')).toEqual(['workspace', 'workspace_admin', 'settings', 'custom', 'immediate', ['none']])
+    // SPU1(개정 §2.8.1) — 로컬 초안 정책. 워크스페이스 관리자, immediate/none
+    expect(row('security.local_drafts')).toEqual(['workspace', 'workspace_admin', 'settings', 'custom', 'immediate', ['none']])
+    expect(settingDef('project', 'security.local_drafts')).toBeUndefined()
     expect(row('core.level_labels')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['none']])
     expect(row('core.milestone_keywords')).toEqual(['project', 'project_admin', 'wbs', 'text_list', 'immediate', ['recompute']])
     expect(row('modules.enabled')).toEqual(['project', 'project_admin', 'settings', 'custom', 'immediate', ['recompute']])
@@ -332,6 +335,9 @@ describe('카탈로그 메타와 사전', () => {
     expect(status('views.default')).toBe('wired')
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('portal.widgets')
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('views.default')
+    // SPU1 — security.local_drafts 는 정의·편집기·소비처(초안 저장소·위키 편집기)·테스트가 붙어 wired, 계획 목록에서 빠졌다
+    expect(status('security.local_drafts')).toBe('wired')
+    expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('security.local_drafts')
     expect(['forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'].map(status)).toEqual(Array(4).fill('verified'))
     expect(PLANNED_KEYS.map((p) => p.key).some((k) => k.startsWith('forms.'))).toBe(false)
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)

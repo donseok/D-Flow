@@ -28,6 +28,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { formatWikiDate, WikiChangeList, WikiItemCard } from './WikiShared'
 import { WikiDocumentEditor } from './WikiDocumentEditor'
+import type { LocalDraftPolicy } from '@/lib/drafts/storage'
 import { WikiFeedbackButtons } from './WikiFeedbackButtons'
 import { WikiProposalActions } from './WikiProposalActions'
 import { WikiTopicContext } from './WikiTopicContext'
@@ -208,6 +209,7 @@ export function WikiTopicDetail({
   userId,
   timeZone,
   minutesBase,
+  draftPolicy,
 }: {
   projectId: string
   data: WikiTopicDetailData
@@ -221,6 +223,8 @@ export function WikiTopicDetail({
   timeZone: string
   /** 근거·변경의 회의록 링크 기준 경로 — 페이지가 슬러그 워크스페이스로 만든 '/w/<s>/minutes'(D38 ①, 과제 35). 없으면 영구 링크 형식 */
   minutesBase?: string
+  /** 워크스페이스의 로컬 초안 정책(security.local_drafts, 개정 §5.8.5). 필수 — 페이지가 못 읽었으면 DRAFTS_OFF_POLICY 를 넘긴다 */
+  draftPolicy: LocalDraftPolicy
 }) {
   const data = rawData as MemoryTopicDetailData
   if (!data.topic) {
@@ -306,6 +310,7 @@ export function WikiTopicDetail({
               locale={locale}
               userId={userId}
               timeZone={timeZone}
+              draftPolicy={draftPolicy}
               topic={{
                 id: topic.id,
                 title: topic.title,

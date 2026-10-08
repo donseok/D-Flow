@@ -236,6 +236,7 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.calendar.working_days.label': 'Working days', 'settings.calendar.working_days.desc': 'The basis for schedule calculation and non-working days on calendars. Saved progress snapshots are not recalculated.',
   'settings.calendar.week_start.label': 'Week start', 'settings.calendar.week_start.desc': 'The first day of the week for weekly reports and this-week views. A project change applies from next week; past weekly reports stay as they are.',
   'settings.calendar.week_start.sunday': 'Sunday', 'settings.calendar.week_start.monday': 'Monday',
+  'settings.security.local_drafts.label': 'Local drafts', 'settings.security.local_drafts.desc': 'Whether in-progress edits may be kept as drafts in this browser, and for how long. When off, no editing screen saves or restores drafts, and personal settings cannot override it.',
   'settings.portal.widgets.label': 'Home widgets', 'settings.portal.widgets.desc': 'Choose which widgets appear on the workspace home and their order within each column. Each person can still hide widgets.',
   'settings.views.default.label': 'Default work plan view', 'settings.views.default.desc': 'The view the work plan opens with (sheet, timeline or board). Board needs the kanban module.',
   // SP5 B1 — issue code rule (issues.id_policy) and analysis requirement (issues.analysis). Editor in task 11

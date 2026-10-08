@@ -7,7 +7,13 @@ import {
   clearDraft,
   sweepExpiredDrafts,
   clearUserDrafts,
+  DRAFTS_OFF_POLICY,
+  isDraftExpired,
+  readDraftRaw,
+  savedAtMs,
+  writeDraftRaw,
 } from '@/lib/drafts/storage'
+import { draftKey, readDraftWithMigration } from '@/lib/drafts/wikiDrafts'
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>()
@@ -192,5 +198,87 @@ describe('local-drafts storage (개정 §5.8.5)', () => {
     const cleared = clearUserDrafts(storage, 'user-A')
     expect(cleared).toBe(1)
     expect(storage.length).toBe(1)
+  })
+
+  describe('정책 판정은 이 저장소 한 곳(security.local_drafts — 개정 §5.8.5)', () => {
+    const DAY = 24 * 60 * 60 * 1000
+    const ON = { allowed: true, retention_days: 7 }
+    const OFF = { allowed: false, retention_days: 7 }
+    const wiki = (savedAt: unknown) => JSON.stringify({ title: 't', bodyMd: 'b', kind: 'overview', savedAt })
+
+    it('allowed:false 면 getDraft 도 읽지 않는다 — 이미 있는 초안을 지우지도 않는다', () => {
+      const params = { userId: 'u1', workspaceId: 'w1', surface: 'issue', targetId: 'new' }
+      saveDraft(storage, { ...params, content: '초안' })
+      expect(getDraft(storage, { ...params, policy: OFF })).toBeNull()
+      expect(storage.length).toBe(1)
+      expect(getDraft(storage, { ...params, policy: ON })?.content).toBe('초안')
+    })
+
+    it('DRAFTS_OFF_POLICY(정책을 못 읽음)는 초안을 끈다', () => {
+      expect(DRAFTS_OFF_POLICY.allowed).toBe(false)
+      expect(writeDraftRaw(storage, 'draft:v2:u1:w1:p1:wiki:t1', wiki(new Date().toISOString()), DRAFTS_OFF_POLICY)).toBe(false)
+      expect(storage.length).toBe(0)
+    })
+
+    it('writeDraftRaw·readDraftRaw — 허용일 때만 쓰고 읽는다', () => {
+      const key = 'draft:v2:u1:w1:p1:wiki:t1'
+      const raw = wiki(new Date().toISOString())
+      expect(writeDraftRaw(storage, key, raw, OFF)).toBe(false)
+      expect(storage.getItem(key)).toBeNull()
+      expect(writeDraftRaw(storage, key, raw, ON)).toBe(true)
+      expect(readDraftRaw(storage, key, ON)).toBe(raw)
+      expect(readDraftRaw(storage, key, OFF)).toBeNull()
+      expect(storage.getItem(key)).toBe(raw)                 // 정책이 막아도 지우지 않는다
+    })
+
+    it('readDraftRaw 는 보존기간을 넘긴 초안을 지우고 null — 경계(정확히 N일)는 남긴다', () => {
+      const key = 'draft:v2:u1:w1:p1:wiki:t1'
+      const now = Date.parse('2026-10-08T00:00:00.000Z')
+      storage.setItem(key, wiki(new Date(now - 7 * DAY).toISOString()))
+      expect(readDraftRaw(storage, key, ON, now)).not.toBeNull()
+      storage.setItem(key, wiki(new Date(now - 7 * DAY - 1).toISOString()))
+      expect(readDraftRaw(storage, key, ON, now)).toBeNull()
+      expect(storage.getItem(key)).toBeNull()
+      storage.setItem(key, wiki(new Date(now - 7 * DAY - 1).toISOString()))
+      expect(readDraftRaw(storage, key, { allowed: true, retention_days: 30 }, now)).not.toBeNull()
+    })
+
+    it('저장 시각은 숫자·ISO 문자열 둘 다 읽고, 저장 시각을 모르는 값은 만료로 보지 않는다(근거 없이 지우지 않는다)', () => {
+      expect(savedAtMs(1_700_000_000_000)).toBe(1_700_000_000_000)
+      expect(savedAtMs('2026-10-01T00:00:00.000Z')).toBe(Date.parse('2026-10-01T00:00:00.000Z'))
+      for (const v of ['', 'not-a-date', null, undefined, {}, Number.NaN]) expect(savedAtMs(v)).toBeNull()
+      const now = Date.parse('2026-10-08T00:00:00.000Z')
+      expect(isDraftExpired(wiki('2026-10-07T00:00:00.000Z'), 7, now)).toBe(false)
+      expect(isDraftExpired(wiki('2026-09-30T23:59:59.999Z'), 7, now)).toBe(true)
+      expect(isDraftExpired(JSON.stringify({ content: 'x', savedAt: now - 8 * DAY }), 7, now)).toBe(true)
+      for (const raw of [wiki(''), '{not json', 'null', 'plain']) expect(isDraftExpired(raw, 7, now)).toBe(false)
+    })
+
+    it('sweepExpiredDrafts — ISO 저장 시각도 치우고, scope 를 주면 그 사용자·워크스페이스만 본다', () => {
+      const old = wiki(new Date(Date.now() - 20 * DAY).toISOString())
+      storage.setItem('draft:v2:u1:w1:p1:wiki:t1', old)
+      storage.setItem('draft:v2:u1:w2:p1:wiki:t1', old)
+      storage.setItem('draft:v2:u2:w1:p1:wiki:t1', old)
+      storage.setItem('draft:v2:u1:w1:p1:wiki:t2', wiki(new Date().toISOString()))
+      storage.setItem('draft:v2:u1:w1:p1:wiki:t3', wiki(''))          // 저장 시각 없음 — 나이를 몰라 건드리지 않는다
+      expect(sweepExpiredDrafts(storage, 7, { userId: 'u1', workspaceId: 'w1' })).toBe(1)
+      expect(storage.getItem('draft:v2:u1:w1:p1:wiki:t1')).toBeNull()
+      expect(storage.length).toBe(4)
+    })
+
+    it('위키 초안 키는 이 저장소의 키 규격으로 만든다(한 규격)', () => {
+      expect(draftKey('u1', 'w1', 'p1', 't1')).toBe(buildDraftKey({ userId: 'u1', workspaceId: 'w1', projectId: 'p1', surface: 'wiki', targetId: 't1' }))
+      expect(draftKey('u1', 'w1', 'p1', null)).toBe('draft:v2:u1:w1:p1:wiki:new')
+    })
+
+    it('옛 키 이행도 정책을 지난다 — 막히면 읽지도 옮기지도 않는다', () => {
+      const raw = wiki(new Date().toISOString())
+      storage.setItem('wiki-draft:v2:u1:p1:t1', raw)
+      expect(readDraftWithMigration(storage, 'draft:v2:u1:w1:p1:wiki:t1', 'wiki-draft:v2:u1:p1:t1', OFF)).toEqual({ draft: null, from: null })
+      expect(storage.getItem('draft:v2:u1:w1:p1:wiki:t1')).toBeNull()
+      expect(storage.getItem('wiki-draft:v2:u1:p1:t1')).toBe(raw)
+      expect(readDraftWithMigration(storage, 'draft:v2:u1:w1:p1:wiki:t1', 'wiki-draft:v2:u1:p1:t1', ON)).toEqual({ draft: raw, from: 'old' })
+      expect(storage.getItem('draft:v2:u1:w1:p1:wiki:t1')).toBe(raw)
+    })
   })
 })

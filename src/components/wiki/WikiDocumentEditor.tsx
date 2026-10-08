@@ -3,11 +3,12 @@ import { DocumentVersionStatus } from '@/components/doc/DocumentVersionStatus'
 
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { BadgeCheck, FilePlus2, Pencil, RotateCcw, Save, X } from 'lucide-react'
 import { createWikiDocument, updateWikiDocument, verifyWikiDocument } from '@/app/actions/wiki'
 import { WIKI_DOCUMENT_KINDS, type WikiDocumentKind } from '@/lib/domain/wiki'
 import { clearLegacyWikiDrafts, draftKey, legacyWikiDraftKey, readDraftWithMigration, settleLegacyDraft } from '@/lib/drafts/wikiDrafts'
+import { readDraftRaw, sweepExpiredDrafts, writeDraftRaw, type LocalDraftPolicy } from '@/lib/drafts/storage'
 import { useScope } from '@/components/app/ScopeContext'
 import type { Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
@@ -81,6 +82,8 @@ function documentKind(value: string | null | undefined): WikiDocumentKind {
  *
  * 로컬 저장이라 다른 PC 로는 따라가지 않는다. 서버 draft 는 별도 스펙이다.
  * 키는 사용자별이다(lib/drafts/wikiDrafts) — 사용자를 모르면(key null) 초안을 읽지도 쓰지도 않는다.
+ * 읽기·쓰기는 공용 초안 저장소(lib/drafts/storage)의 정책 판정을 지난다(개정 §5.8.5 — 워크스페이스 security.local_drafts):
+ * 허용하지 않으면 key 가 null 이 되어 초안 기능 전체가 꺼지고, 보존기간을 넘긴 초안은 읽을 때 지운다.
  */
 const DRAFT_DEBOUNCE_MS = 600
 
@@ -109,19 +112,19 @@ function parseDraft(raw: string | null): WikiDraft | null {
 }
 
 /** 새 키(워크스페이스 포함) → 없으면 옛 사용자별 키에서 읽어 옮긴다(D52). 옛 키는 사람이 결정할 때까지 남는다(settleLegacy) */
-function readDraft(key: string | null, legacyKey: string | null): WikiDraft | null {
+function readDraft(key: string | null, legacyKey: string | null, policy: LocalDraftPolicy): WikiDraft | null {
   if (!key) return null
   try {
-    return parseDraft(legacyKey ? readDraftWithMigration(window.localStorage, key, legacyKey).draft : window.localStorage.getItem(key))
+    return parseDraft(legacyKey ? readDraftWithMigration(window.localStorage, key, legacyKey, policy).draft : readDraftRaw(window.localStorage, key, policy))
   } catch {
     // 사파리 프라이빗 모드 등 localStorage 가 throw 하는 환경에서도 편집은 계속돼야 한다.
     return null
   }
 }
 
-function writeDraft(key: string | null, draft: WikiDraft): void {
+function writeDraft(key: string | null, draft: WikiDraft, policy: LocalDraftPolicy): void {
   if (!key) return
-  try { window.localStorage.setItem(key, JSON.stringify(draft)) } catch { /* 저장 실패는 편집을 막지 않는다 */ }
+  try { writeDraftRaw(window.localStorage, key, JSON.stringify(draft), policy) } catch { /* 저장 실패는 편집을 막지 않는다 */ }
 }
 
 function clearDraft(key: string | null): void {
@@ -138,9 +141,12 @@ export function WikiDocumentEditor({
   canVerify = false,
   onDone,
   timeZone,
+  draftPolicy: draftPolicyProp,
 }: {
   projectId: string
   locale: Locale
+  /** 워크스페이스의 로컬 초안 정책(security.local_drafts). 서버가 못 읽었으면 DRAFTS_OFF_POLICY(초안 끔) */
+  draftPolicy: LocalDraftPolicy
   /** 초안 저장 시각을 찍을 시간대(프로젝트 calendar.timezone) */
   timeZone: string
   /** 초안 키의 주인. null 이면 초안 기능을 끈다(저장·복구 모두 안 함). */
@@ -176,8 +182,13 @@ export function WikiDocumentEditor({
 
   // 초안 키(D52, 개정 §5.8.5) — 워크스페이스는 범위 컨텍스트(SSR 에도 값)에서. 범위를 모르면 워크스페이스 없는 키를 만들지 않고 초안을 끈다
   const workspaceId = useScope()?.workspace?.id ?? null
-  const storageKey = userId && workspaceId ? draftKey(userId, workspaceId, projectId, topic?.id ?? null) : null
-  const legacyKey = userId && workspaceId ? legacyWikiDraftKey(userId, projectId, topic?.id ?? null) : null
+  // 값으로 고정한다 — 부모가 같은 정책의 새 객체를 내려도 아래 effect 가 다시 돌지 않게
+  const draftPolicy = useMemo<LocalDraftPolicy>(() => ({ allowed: draftPolicyProp.allowed, retention_days: draftPolicyProp.retention_days }),
+    [draftPolicyProp.allowed, draftPolicyProp.retention_days])
+  // 정책이 초안을 막으면 키를 만들지 않는다 — 아래의 읽기·쓰기·이탈 경고가 전부 꺼진다(사용자·범위를 모를 때와 같은 길)
+  const draftsOn = draftPolicy.allowed
+  const storageKey = draftsOn && userId && workspaceId ? draftKey(userId, workspaceId, projectId, topic?.id ?? null) : null
+  const legacyKey = draftsOn && userId && workspaceId ? legacyWikiDraftKey(userId, projectId, topic?.id ?? null) : null
   // 옛 키는 사람의 결정(복구·폐기·저장·취소·새로 쓰기) 자리에서 지운다(복구 순서 — 결정 전에는 남긴다). 이번 열기가 옛 키에서
   // 읽었는지와 무관하게 지운다 — 결정 없이 닫았다 다시 열면 새 키(옛 키의 사본)에서 읽는데, 그때의 결정이 옛 키를 남기면 다음 열기에
   // 옛 키가 다시 옮겨져 버린 초안이 되살아난다(U2b-5 리뷰 수정 CC5). 없는 키를 지우는 것은 무해하다
@@ -201,6 +212,11 @@ export function WikiDocumentEditor({
   useEffect(() => {
     try { clearLegacyWikiDrafts(window.localStorage) } catch { /* 저장소를 못 쓰는 환경 */ }
   }, [])
+  // 보존기간을 넘긴 이 사용자·워크스페이스의 초안을 치운다(개정 §5.8.5 정리 — 다른 워크스페이스의 초안은 그 정책이 정한다)
+  useEffect(() => {
+    if (!draftsOn || !userId || !workspaceId) return
+    try { sweepExpiredDrafts(window.localStorage, draftPolicy.retention_days, { userId, workspaceId }) } catch { /* 저장소를 못 쓰는 환경 */ }
+  }, [draftsOn, draftPolicy, userId, workspaceId])
 
   // 열 때 남아 있는 초안을 찾아 복구 배너로 제시한다. 몰래 덮어쓰지 않는 이유는
   // 서버 본문이 그 사이 남의 편집으로 바뀌었을 수 있기 때문이다 — 선택은 사람이 한다.
@@ -208,14 +224,14 @@ export function WikiDocumentEditor({
   // 보이지 않지만 draftSettled(ref)는 바로 보인다.
   useEffect(() => {
     if (!editing || !storageKey) { setDraft(null); return }
-    const found = readDraft(storageKey, legacyKey)
+    const found = readDraft(storageKey, legacyKey, draftPolicy)
     const pending = found && found.bodyMd !== snapshot.bodyMd ? found : null
     draftSettled.current = pending === null
     // 되살릴 초안이 없으면(서버 본문과 같음·없음) 결정 자리가 오지 않는다 — 옛 키를 바로 치운다(남기면 로그아웃까지 남는다)
     if (pending === null) settleLegacy()
     setDraft(pending)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- legacyKey 는 storageKey 와 같은 입력에서 만든다
-  }, [editing, storageKey, snapshot.bodyMd])
+  }, [editing, storageKey, snapshot.bodyMd, draftPolicy])
 
   // 초안 저장 — 타이핑마다 쓰지 않도록 debounce 한다.
   useEffect(() => {
@@ -224,21 +240,21 @@ export function WikiDocumentEditor({
     draftSettled.current = true // 새로 쓰기 시작했다 — 이제 이 세션의 입력이 초안의 정본이다
     settleLegacy()
     const timer = window.setTimeout(() => {
-      writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() })
+      writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() }, draftPolicy)
     }, DRAFT_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [editing, dirty, storageKey, title, bodyMd, kind, settleLegacy])
+  }, [editing, dirty, storageKey, title, bodyMd, kind, settleLegacy, draftPolicy])
 
   // 탭을 닫거나 새로고침하는 경우엔 debounce 를 기다릴 수 없다.
   useEffect(() => {
     if (!editing || !dirty || !storageKey) return
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() })
+      writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() }, draftPolicy)
       event.preventDefault()
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [editing, dirty, storageKey, title, bodyMd, kind])
+  }, [editing, dirty, storageKey, title, bodyMd, kind, draftPolicy])
 
   function changeKind(next: WikiDocumentKind) {
     setKind(next)
@@ -311,7 +327,7 @@ export function WikiDocumentEditor({
     if (!result.ok) {
       // 충돌은 막다른 길이 아니어야 한다. 저장에 실패한 순간이 본문을 잃기 가장 쉬운
       // 지점이므로, 여기서 초안을 debounce 없이 즉시 확정해 둔다.
-      if (result.conflict) writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() })
+      if (result.conflict) writeDraft(storageKey, { title, bodyMd, kind, savedAt: new Date().toISOString() }, draftPolicy)
       setMessage({
         tone: 'error',
         text: result.conflict
@@ -369,6 +385,7 @@ export function WikiDocumentEditor({
       <div className="space-y-4">
         <DocumentVersionStatus currentVersionNo={null} viewingVersionNo={null} publicationState="draft" />
         <p className="text-xs text-fg-secondary">편집 중인 초안입니다. 저장 전까지 다른 사람에게 반영되지 않습니다.</p>
+        {!draftsOn && <p data-drafts-off className="text-xs text-fg-secondary">{t(locale, 'wiki.document.draftsOff')}</p>}
         {draft && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-pending/40 bg-pending-weak px-4 py-3">
             <p className="text-xs font-medium text-ink">

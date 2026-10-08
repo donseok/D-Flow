@@ -6,16 +6,22 @@ import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { hasWorkspaceMembership, isHiddenProject, type Actor, type HiddenProjectIds } from '@/lib/domain/authz'
 import { UUID_RE } from '@/lib/domain/validate'
 import type { UiPrefs } from '@/lib/domain/types'
+import { NOTIFICATION_CATALOG } from '@/lib/domain/inbox'
 import { RECENT_MAX, RETIRED_PREF_KEYS, mergePrefs, pushRecent, splitPrefs } from '@/lib/prefs/split'
 
 /** 계정 범위 개인 설정(account_preferences 자기 행 — SP3b D9). 비로그인·행 없음은 {}. 표시용이라 조회 실패는 로그 + {} */
-export async function getAccountPrefs(): Promise<UiPrefs> {
+export async function getAccountPrefs(opts: { strict?: boolean } = {}): Promise<UiPrefs> {
   // getSession 은 요청 단위 cache() — 레이아웃 렌더에서 다른 조회들과 세션 확인을 공유한다.
   const u = await getSession()
   if (!u) return {}
   const sb = await createServerClient()
   const { data, error } = await sb.from('account_preferences').select('prefs').eq('user_id', u.id).maybeSingle()
-  if (error) { console.error('[getAccountPrefs] 조회 실패:', error.message); return {} }
+  if (error) {
+    console.error('[getAccountPrefs] 조회 실패:', error.message)
+    // 지금 값을 보여 주고 바꾸게 하는 화면(계정의 알림 토글)은 조회 실패를 기본값으로 그리면 안 된다(getWorkspacePrefs 의 strict 와 같다)
+    if (opts.strict) throw new Error('개인 설정을 불러오지 못했습니다.')
+    return {}
+  }
   return mergePrefs((data?.prefs as Partial<UiPrefs>) ?? {}, {})
 }
 
@@ -164,10 +170,27 @@ export async function saveWbsCollapse(projectId: string, ids: string[]): Promise
 }
 
 /**
- * 개인 알림 설정 저장 (SPU1, 개정 §4.10)
- * required: true 인 알림(승인 요청 등)은 opt-out이 차단되며 계정 설정에 반영됩니다.
+ * 개인 알림 유형 토글 저장 (SPU1, 개정 §4.10) — 계정 키 `notif` 에 **부분 병합**한다(saveUiPrefs 는 키 단위로 통째 바꾸므로 여기서 자기 행의
+ * 지금 값을 읽어 합친다 — 선행 조회 실패면 중단, 원칙 ②). 카탈로그 밖 유형·불리언이 아닌 값·`required` 유형 끄기는 거부한다
+ * (splitPrefs 는 끄기 시도를 조용히 버린다 — 여기서는 화면이 실패를 알 수 있게 닫는다). 읽는 쪽은 조회 시점 필터(actions/inbox.ts)라 소급 적용된다.
  */
 export async function saveNotifPrefs(notifPatch: Record<string, boolean>): Promise<{ ok: boolean }> {
-  return saveUiPrefs({ notif: notifPatch })
+  const u = await getSession()
+  if (!u) return { ok: false }
+  if (typeof notifPatch !== 'object' || notifPatch === null || Array.isArray(notifPatch)) return { ok: false }
+  const entries = Object.entries(notifPatch)
+  if (entries.length === 0) return { ok: true }
+  for (const [type, on] of entries) {
+    const def = (NOTIFICATION_CATALOG as Record<string, { required: boolean } | undefined>)[type]
+    if (!Object.hasOwn(NOTIFICATION_CATALOG, type) || !def || typeof on !== 'boolean' || (def.required && !on)) {
+      console.error('[saveNotifPrefs] 카탈로그 밖 유형·형식 밖 값·필수 유형 끄기 — 저장하지 않는다')
+      return { ok: false }
+    }
+  }
+  const sb = await createServerClient()
+  const { data, error } = await sb.from('account_preferences').select('prefs').eq('user_id', u.id).maybeSingle()
+  if (error) { console.error('[saveNotifPrefs] 선행 조회 실패 — 저장 중단:', error.message); return { ok: false } }
+  const stored = (data?.prefs as Partial<UiPrefs> | null)?.notif
+  const current = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}
+  return saveUiPrefs({ notif: { ...current, ...notifPatch } })
 }
-

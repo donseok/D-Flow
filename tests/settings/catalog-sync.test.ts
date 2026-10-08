@@ -16,6 +16,8 @@ const expectedStatus: Record<string, string> = {
   'calendar.timezone': 'verified', 'calendar.working_days': 'verified', 'calendar.week_start': 'verified',
   // SP3b UI-3 — 정의·테스트(네 연결 ①④)까지. 편집기(과제 6·7)·소비처(과제 10·14)가 붙으면 올린다
   'portal.widgets': 'wired', 'views.default': 'wired',
+  // SPU1 — 로컬 초안 정책. 정의·편집기·소비처(초안 저장소 판정 + 위키 편집기)·테스트
+  'security.local_drafts': 'wired',
   // SP5 B1 — 정의·편집·소비처·테스트 네 연결
   'issues.id_policy': 'verified', 'issues.analysis': 'verified', 'minutes.attachments': 'verified',
   // SP5 B4 — 어휘 다섯. 정의만 먼저(stored) — 트리거·소비처·편집기가 이어지면 verified 로 올린다
@@ -33,9 +35,9 @@ const expectedStatus: Record<string, string> = {
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {}
 
 describe('설정 카탈로그 동기화', () => {
-  it('45정의(키 이름 41)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('46정의(키 이름 42)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(45)
+    expect(defs).toHaveLength(46)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
     for (const def of defs) {

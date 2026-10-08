@@ -110,6 +110,24 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
     expect(h.save).not.toHaveBeenCalled()
   })
 
+  it('한글 조합 중의 Enter·Esc 는 저장·취소로 새지 않는다 — 조합이 끝난 뒤의 Enter 만 저장한다(Q04, 개정 §5.8.4)', async () => {
+    const NOTE = def({ key: 'note', label: '비고', type: 'text', sort: 4 })
+    h.save.mockResolvedValue({ ok: true, values: { note: '검토' } })
+    await render({}, { defs: [NOTE] })
+    await click(cell('note'))
+    await type(editor('note')!, '검토')
+    const composing = (k: string, init: KeyboardEventInit) => act(async () => { editor('note')!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init })) })
+    await composing('Enter', { isComposing: true })
+    await composing('Enter', { keyCode: 229 })
+    await composing('Escape', { isComposing: true })
+    expect(h.save).not.toHaveBeenCalled()
+    expect(editor('note')).not.toBeNull()
+    expect(editor('note')!.value).toBe('검토')
+    await key(editor('note')!, 'Enter')
+    expect(h.save).toHaveBeenCalledTimes(1)
+    expect(h.save.mock.calls[0][4]).toEqual({ note: '검토' })
+  })
+
   it('값을 비우면 그 키를 뺀다(0 과 다르다). 같은 값이면 저장하지 않는다', async () => {
     await render({ qty: 0, result: 'pass' })
     await click(cell('qty'))

@@ -5,6 +5,7 @@ import { Check, KeyRound, Mail, User as UserIcon } from 'lucide-react'
 import { PageHeader } from '@/components/app/PageHeader'
 import type { UiPrefs } from '@/lib/domain/types'
 import { WorkspacePrefsSection } from './WorkspacePrefsSection'
+import { NotifPrefsSection } from './NotifPrefsSection'
 import { ChangePasswordModal } from '@/components/account/ChangePasswordModal'
 import { MyTokensSection } from '@/components/account/MyTokensSection'
 import { ThemeRadioGroup } from '@/components/account/ThemeRadioGroup'
@@ -12,10 +13,10 @@ import { rovingRadioIndex } from '@/components/account/rovingRadio'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
 /**
- * 내 계정 — 결정 D. 구획: 프로필 정보 · 비밀번호 변경 · 화면(테마 3단·언어 — SP3b UI-1, 결정 #21) · PAT 발급/관리.
+ * 내 계정 — 결정 D. 구획: 프로필 정보 · 비밀번호 변경 · 화면(테마 3단·언어 — SP3b UI-1, 결정 #21) · 알림 유형 토글(SPU1, 개정 §4.10) · PAT 발급/관리.
  * HeaderChrome 드롭다운의 비밀번호 변경 진입은 이 화면으로 이동했다(ChangePasswordModal 재사용).
  */
-export function AccountView({ email, displayName, projects, currentWorkspace = null, currentWorkspaceError = false, startPage = null, projectsView = 'rows', tokenWorkspaces = [], tokenWorkspaceError = false }: {
+export function AccountView({ email, displayName, projects, currentWorkspace = null, currentWorkspaceError = false, startPage = null, projectsView = 'rows', tokenWorkspaces = [], tokenWorkspaceError = false, notif = {} }: {
   email: string | null
   displayName: string | null
   projects: { id: string; name: string; workspace_id?: string }[]
@@ -25,6 +26,8 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
   currentWorkspaceError?: boolean
   startPage?: UiPrefs['startPage'] | null
   projectsView?: 'rows' | 'cards'
+  /** 계정 키 notif(알림 유형 → 켜짐). null = 조회 실패 — 토글을 열지 않는다 */
+  notif?: Record<string, boolean> | null
 }) {
   const [pwOpen, setPwOpen] = useState(false)
   const { t } = useLocale()
@@ -71,6 +74,8 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
       </div>
 
       <WorkspacePrefsSection key={currentWorkspace?.id ?? 'none'} currentWorkspace={currentWorkspace} currentWorkspaceError={currentWorkspaceError} startPage={startPage} projectsView={projectsView} />
+
+      <NotifPrefsSection notif={notif} />
 
       <MyTokensSection projects={projects} workspaces={tokenWorkspaces} currentWorkspaceId={currentWorkspace?.id} workspaceError={tokenWorkspaceError} />
 
