@@ -45,6 +45,37 @@ function callSites(name: string): Array<{ file: string; keys: string[] }> {
   return out
 }
 
+// 0042 가 p_workspace_id 를 필수로 만들었다(null·생략이면 AI_SEARCH_WORKSPACE_REQUIRED). 빠뜨린 호출은 런타임에야 터지고 단위 테스트는 rpc 를
+// 모킹해 초록이다 — 호출부가 키를 갖는지 여기서 고정한다. p_include_global 도 적게 한다(전역 문서를 넣는지가 호출부에서 읽히게).
+const REQUIRED_KEYS = ['p_workspace_id', 'p_project_ids', 'p_include_global'] as const
+
+describe('검색 RPC 호출부 — 워크스페이스 범위 인자를 반드시 넘긴다(0042)', () => {
+  for (const name of RPCS) {
+    it(`${name}: 최신 시그니처에 범위 인자가 있다`, () => {
+      const params = latestParams(name)
+      for (const key of REQUIRED_KEYS) expect(params, `${name} 시그니처`).toContain(key)
+    })
+    it(`${name}: src 의 모든 호출부가 p_workspace_id 를 가진다`, () => {
+      const sites = callSites(name)
+      expect(sites.length, `${name} 호출부`).toBeGreaterThan(0)
+      for (const site of sites) {
+        for (const key of REQUIRED_KEYS) expect(site.keys, `${site.file} 에 ${key} 가 없다`).toContain(key)
+      }
+    })
+    it(`${name}: 객체 리터럴이 아닌 인자로 부르는 호출부가 없다(위 검사가 못 보는 모양)`, () => {
+      let literal = 0
+      let total = 0
+      for (const file of sourceFiles(join(ROOT, 'src'))) {
+        const text = readFileSync(file, 'utf8')
+        total += [...text.matchAll(new RegExp(`\\.rpc\\(\\s*['"\`]${name}['"\`]`, 'g'))].length
+        literal += [...text.matchAll(new RegExp(`\\.rpc\\(\\s*'${name}'\\s*,\\s*\\{`, 'g'))].length
+      }
+      expect(total).toBeGreaterThan(0)
+      expect(literal, `${name} — 리터럴 인자 호출 수`).toBe(total)
+    })
+  }
+})
+
 describe('검색 RPC 호출 인자 — 최신 마이그레이션 시그니처와 같은 이름만 쓴다', () => {
   for (const name of RPCS) {
     it(name, () => {

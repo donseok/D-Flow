@@ -15,13 +15,22 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_KEYWORD_ENCODED_BYTES = 1_600
 const MAX_INT32 = 2_147_483_647
 const MAX_FLOAT4 = 3.4028235e38
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export interface KnowledgeIndexAccessScope {
   allowedProjectIds: readonly string[]
   allowGlobal?: boolean
+  /**
+   * 서버가 확정한 검색 워크스페이스. 검색은 이 값 없이는 돌지 않는다(0042 — 검색 RPC 의 p_workspace_id 필수,
+   * 전역(프로젝트 없는) 문서도 이 워크스페이스 안에서만 회수한다). 요청이 보낸 값을 그대로 넣지 않는다.
+   * 여러 워크스페이스를 도는 쓰기 전용 범위(색인 워커)는 비워 두며, 그 범위로 search 를 부르면 실패한다.
+   */
+  workspaceId?: string | null
 }
 
 export interface NormalizedSearchQuery {
+  /** 접근 범위에서 온 워크스페이스 — 요청 입력이 아니다. */
+  workspaceId: string
   text: string
   keywords: string[]
   queryEmbedding: readonly number[] | null
@@ -39,7 +48,7 @@ export interface NormalizedSearchQuery {
 
 export type SearchNormalizationResult =
   | { ok: true; query: NormalizedSearchQuery; hasAccessScope: boolean }
-  | { ok: false; reason: 'invalid_embedding' | 'invalid_date_range' | 'invalid_index_version' }
+  | { ok: false; reason: 'workspace_required' | 'invalid_embedding' | 'invalid_date_range' | 'invalid_index_version' }
 
 const SEARCH_STOPWORDS = new Set([
   '알려줘', '보여줘', '찾아줘', '검색', '내용', '관련', '대한', '있는', '뭐야', '무엇',
@@ -104,6 +113,10 @@ export function normalizeSearchQuery(
   input: SearchQuery,
   scope: KnowledgeIndexAccessScope,
 ): SearchNormalizationResult {
+  // 워크스페이스를 모르면 검색하지 않는다 — 빈 결과가 아니라 실패다(범위 미확정을 '없음'으로 위장하지 않는다).
+  const workspaceId = typeof scope.workspaceId === 'string' ? scope.workspaceId.trim() : ''
+  if (!UUID_RE.test(workspaceId)) return { ok: false, reason: 'workspace_required' }
+
   const allowed = boundedUnique(scope.allowedProjectIds, MAX_SCOPE_PROJECTS)
   const allowedSet = new Set(allowed)
   const requested = input.projectIds === undefined
@@ -147,6 +160,7 @@ export function normalizeSearchQuery(
     ok: true,
     hasAccessScope: allowed.length > 0,
     query: {
+      workspaceId,
       text: input.text.trim().slice(0, MAX_SEARCH_TEXT),
       keywords: deriveSearchKeywords(input.text, input.keywords),
       queryEmbedding: input.queryEmbedding ?? null,

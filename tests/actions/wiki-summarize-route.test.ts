@@ -33,7 +33,8 @@ function request(body: unknown): NextRequest {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getActorViewState.mockResolvedValue({ actor: { userId: 'u1' }, degraded: false })
-  mocks.resolveScope.mockResolvedValue({ ok: true, scope: { allowedProjectIds: [PROJECT] } })
+  // 실제 해석기(accessScope)는 허용 프로젝트마다 워크스페이스를 싣는다 — 검색 접근 판정은 그것 없이는 닫힌다(0042)
+  mocks.resolveScope.mockResolvedValue({ ok: true, scope: { allowedProjectIds: [PROJECT], projectWorkspace: { [PROJECT]: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } } })
   mocks.generateAnswer.mockResolvedValue('MES 권한은 팀장 승인 후 IT팀이 발급합니다. [1]')
 })
 

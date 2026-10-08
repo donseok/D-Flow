@@ -10,6 +10,8 @@ import { buildActor } from './buildActor'
  */
 export interface AccessScope {
   allowedProjectIds: string[]
+  /** allowedProjectIds 각 프로젝트의 워크스페이스 — 프로젝트 하나로 좁힌 검색의 워크스페이스 범위를 여기서 확정한다(요청 값이 아니다). */
+  projectWorkspace: Record<string, string>
   /** 소속 워크스페이스 — 프로젝트 축 없는 입력(회의록 담당 팀 등)을 호출자 범위로 좁히는 근거. */
   workspaceIds: string[]
   /** 플랫폼 관리자 — 워크스페이스 축 입력을 전 워크스페이스로 본다(멤버십 없는 관리자가 빈 범위가 되지 않게). */
@@ -69,10 +71,16 @@ export function createSupabaseAccessScopeResolver(
         const project = projects.get(pid)
         return project ? canSeeProject(actor, project) : false
       })
+      const projectWorkspace: Record<string, string> = {}
+      for (const pid of allowedProjectIds) {
+        const wid = actor.projectWorkspace.get(pid)
+        if (typeof wid === 'string' && wid.length > 0) projectWorkspace[pid] = wid
+      }
       return {
         ok: true,
         scope: {
           allowedProjectIds,
+          projectWorkspace,
           workspaceIds: [...actor.workspaceRoles.keys()],
           isSuperuser: actor.isSuperuser,
           capabilities: [...BOT_READ_CAPABILITIES],

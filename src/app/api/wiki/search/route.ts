@@ -102,7 +102,10 @@ export async function POST(request: NextRequest) {
       ? admin.rpc('match_ai_documents', {
           query_embedding: queryEmbedding,
           match_count: CANDIDATE_LIMIT,
+          // 워크스페이스는 접근 판정이 확정한 그 프로젝트의 것 — 요청 본문의 값이 아니다(0042: 필수)
+          p_workspace_id: access.workspaceId,
           p_project_ids: access.projectIds,
+          p_include_global: false,
           p_domains: null,
           p_entity_types: null,
           p_team: null,
@@ -113,13 +116,19 @@ export async function POST(request: NextRequest) {
       : Promise.resolve({ data: [], error: null }),
     // 키워드가 없으면 어휘 검색을 건너뛴다 — 빈 결과 반환
     keywords.length > 0
-      ? lexicalSearch({ tokens: keywords, projectIds: access.projectIds, limit: CANDIDATE_LIMIT })
+      ? lexicalSearch({
+          workspaceId: access.workspaceId, tokens: keywords, projectIds: access.projectIds, limit: CANDIDATE_LIMIT,
+        })
       : Promise.resolve({ ok: true, candidates: [] }),
   ])
 
   if (vectorRows.error) {
     console.error('[search] 벡터 검색 실패:', vectorRows.error)
     return NextResponse.json({ error: 'VECTOR_SEARCH_FAILED' }, { status: 503 })
+  }
+  // 범위(워크스페이스) 미확정은 일시 장애가 아니다 — degraded 로 넘기지 않고 닫는다.
+  if (!lexicalResult.ok && (lexicalResult as { ok: false; errorCode: string }).errorCode === 'SEARCH_SCOPE_UNAVAILABLE') {
+    return NextResponse.json({ error: 'ACCESS_SCOPE_UNAVAILABLE' }, { status: 503 })
   }
   if (!lexicalResult.ok) {
     // 어휘 검색 실패도 임베딩 실패처럼 degraded 로 처리한다 — 양쪽 실패만 503.

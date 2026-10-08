@@ -38,6 +38,7 @@ export interface SearchQuery {
   queryEmbedding?: readonly number[] | null
   /** Requested project subset. The adapter must intersect this with its server-resolved scope. */
   projectIds?: readonly string[]
+  /** 프로젝트 없는(전역) 문서 포함 요청. 범위가 허용할 때만, 그리고 범위의 워크스페이스 안에서만 회수된다. */
   includeGlobal?: boolean
   domains?: readonly BotDomain[]
   entityTypes?: readonly BotEntityType[]
@@ -123,6 +124,7 @@ export type KnowledgeIndexOperation =
 export type KnowledgeIndexErrorCode =
   | 'INDEX_QUERY_INVALID'
   | 'INDEX_ACCESS_DENIED'
+  | 'INDEX_SCOPE_UNAVAILABLE'
   | 'INDEX_RESULT_INVALID'
   | 'INDEX_KEYWORD_READ_FAILED'
   | 'INDEX_VECTOR_READ_FAILED'

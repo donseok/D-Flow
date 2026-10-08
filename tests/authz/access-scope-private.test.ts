@@ -75,6 +75,12 @@ describe('accessScope — 워크스페이스 경계와 비공개 프로젝트 �
     expect(res.ok && res.scope.isSuperuser).toBe(true)
     expect(res.ok && res.scope.workspaceIds).toEqual([])
   })
+  it('허용 프로젝트마다 워크스페이스를 싣는다 — 허용 밖 프로젝트의 것은 싣지 않는다(검색 범위의 원천)', async () => {
+    const member = await resolve()
+    expect(member.ok && member.scope.projectWorkspace).toEqual({ 'p-pub': 'ws-1' })
+    const platform = await resolve({ platform_admins: { data: { user_id: 'u1' }, error: null }, workspace_members: { data: [], error: null } })
+    expect(platform.ok && platform.scope.projectWorkspace).toEqual({ 'p-pub': 'ws-1', 'p-priv': 'ws-1', 'p-other': 'ws-2' })
+  })
   it('플랫폼 관리자가 아니면 isSuperuser 는 거짓', async () => {
     const res = await resolve()
     expect(res.ok && res.scope.isSuperuser).toBe(false)

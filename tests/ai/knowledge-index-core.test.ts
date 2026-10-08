@@ -14,6 +14,8 @@ import {
 } from '@/lib/ai/index/jobs'
 import type { IndexMutation, KnowledgeDocument } from '@/lib/ai/index/types'
 
+const WS = '00000000-0000-4000-8000-0000000000a1'
+
 function document(overrides: Partial<KnowledgeDocument> = {}): KnowledgeDocument {
   return {
     id: 'doc-1',
@@ -47,10 +49,11 @@ describe('KnowledgeIndex query and hybrid contracts', () => {
       includeGlobal: true,
       limit: 999,
       candidateLimit: 999,
-    }, { allowedProjectIds: allowed })
+    }, { workspaceId: WS, allowedProjectIds: allowed })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
+    expect(result.query.workspaceId).toBe(WS)
     expect(result.query.projectIds).toEqual(['p2'])
     expect(result.query.includeGlobal).toBe(false)
     expect(result.query.limit).toBe(20)
@@ -60,41 +63,56 @@ describe('KnowledgeIndex query and hybrid contracts', () => {
 
   it('rejects wrong, non-finite, zero, or float4-overflow vectors before an adapter call', () => {
     expect(normalizeSearchQuery({ text: '', queryEmbedding: [0.1] }, {
-      allowedProjectIds: ['p1'],
+      workspaceId: WS, allowedProjectIds: ['p1'],
     })).toEqual({ ok: false, reason: 'invalid_embedding' })
     expect(normalizeSearchQuery({ text: '', queryEmbedding: Array(768).fill(Number.NaN) }, {
-      allowedProjectIds: ['p1'],
+      workspaceId: WS, allowedProjectIds: ['p1'],
     })).toEqual({ ok: false, reason: 'invalid_embedding' })
     expect(normalizeSearchQuery({ text: '', queryEmbedding: Array(768).fill(0) }, {
-      allowedProjectIds: ['p1'],
+      workspaceId: WS, allowedProjectIds: ['p1'],
     })).toEqual({ ok: false, reason: 'invalid_embedding' })
     expect(normalizeSearchQuery({ text: '', queryEmbedding: Array(768).fill(Number.MAX_VALUE) }, {
-      allowedProjectIds: ['p1'],
+      workspaceId: WS, allowedProjectIds: ['p1'],
     })).toEqual({ ok: false, reason: 'invalid_embedding' })
   })
 
   it('rejects fractional or PostgreSQL-int-overflow index versions', () => {
     expect(normalizeSearchQuery({ text: 'ERP', indexVersion: 1.5 }, {
-      allowedProjectIds: ['p1'],
+      workspaceId: WS, allowedProjectIds: ['p1'],
     })).toEqual({ ok: false, reason: 'invalid_index_version' })
     expect(normalizeSearchQuery({ text: 'ERP', indexVersion: 2_147_483_648 }, {
-      allowedProjectIds: ['p1'],
+      workspaceId: WS, allowedProjectIds: ['p1'],
     })).toEqual({ ok: false, reason: 'invalid_index_version' })
   })
 
   it('rejects impossible calendar dates and bounds keyword URL input before storage', () => {
     expect(normalizeSearchQuery({ text: 'ERP', dateFrom: '2026-99-99' }, {
-      allowedProjectIds: ['p1'],
+      workspaceId: WS, allowedProjectIds: ['p1'],
     })).toEqual({ ok: false, reason: 'invalid_date_range' })
     const result = normalizeSearchQuery({
       text: '',
       keywords: Array.from({ length: 100 }, (_, index) => `${'한'.repeat(80)}${index}`),
-    }, { allowedProjectIds: ['p1'] })
+    }, { workspaceId: WS, allowedProjectIds: ['p1'] })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.query.keywords.reduce((sum, value) => sum + encodeURIComponent(value).length, 0))
         .toBeLessThanOrEqual(1_600)
     }
+  })
+
+  it('requires a server-resolved workspace before any other check — unknown scope is a failure, not an empty query', () => {
+    for (const workspaceId of [undefined, null, '', 'ws-1', `${WS}x`]) {
+      expect(normalizeSearchQuery({ text: 'ERP' }, {
+        allowedProjectIds: ['p1'], ...(workspaceId === undefined ? {} : { workspaceId }),
+      }), String(workspaceId)).toEqual({ ok: false, reason: 'workspace_required' })
+    }
+    // 워크스페이스가 없으면 다른 입력 오류보다 먼저 닫는다
+    expect(normalizeSearchQuery({ text: '', queryEmbedding: [0.1] }, { allowedProjectIds: ['p1'] }))
+      .toEqual({ ok: false, reason: 'workspace_required' })
+    const granted = normalizeSearchQuery({ text: 'ERP', includeGlobal: true }, {
+      workspaceId: WS, allowedProjectIds: ['p1'], allowGlobal: true,
+    })
+    expect(granted.ok && granted.query).toMatchObject({ workspaceId: WS, includeGlobal: true, projectIds: ['p1'] })
   })
 
   it('deduplicates the same stable chunk and boosts a keyword+vector match', () => {

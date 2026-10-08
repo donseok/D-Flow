@@ -5,6 +5,9 @@ import {
 } from '@/lib/ai/index/pgvector'
 import type { KnowledgeDocumentInput } from '@/lib/ai/index/types'
 
+const WS = '00000000-0000-4000-8000-0000000000a1'
+const OTHER_WS = '00000000-0000-4000-8000-0000000000b2'
+
 type QueryResponse = { data: unknown; error: { code?: string; status?: number } | null }
 
 function queryBuilder(response: QueryResponse) {
@@ -23,6 +26,7 @@ function queryBuilder(response: QueryResponse) {
 function rawDocument(overrides: Record<string, unknown> = {}) {
   return {
     id: 'doc-1',
+    workspace_id: WS,
     project_id: 'p1',
     domain: 'minutes',
     entity_type: 'minute_block',
@@ -92,7 +96,7 @@ function inputDocument(overrides: Partial<KnowledgeDocumentInput> = {}): Knowled
 describe('Supabase pgvector KnowledgeIndex search adapter', () => {
   it('fails closed without an allowed project scope and performs no storage call', async () => {
     const client = { from: vi.fn(), rpc: vi.fn() }
-    const index = createSupabaseKnowledgeIndex(client as never, { allowedProjectIds: [], allowGlobal: true })
+    const index = createSupabaseKnowledgeIndex(client as never, { workspaceId: WS, allowedProjectIds: [], allowGlobal: true })
 
     await expect(index.search({ text: 'ERP', keywords: ['ERP'], includeGlobal: true })).resolves.toEqual({
       ok: true,
@@ -104,7 +108,7 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
 
   it('does not query when every client-requested project is outside the server scope', async () => {
     const client = { from: vi.fn(), rpc: vi.fn() }
-    const index = createSupabaseKnowledgeIndex(client as never, { allowedProjectIds: ['p1'] })
+    const index = createSupabaseKnowledgeIndex(client as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
 
     await expect(index.search({
       text: 'ERP', keywords: ['ERP'], projectIds: ['outside'],
@@ -116,13 +120,13 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
     const empty = queryBuilder({ data: [], error: null })
     const emptyIndex = createSupabaseKnowledgeIndex({
       from: vi.fn(() => empty), rpc: vi.fn(),
-    } as never, { allowedProjectIds: ['p1'] })
+    } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
     await expect(emptyIndex.search({ text: 'ERP', keywords: ['ERP'] })).resolves.toEqual({ ok: true, data: [] })
 
     const failed = queryBuilder({ data: null, error: { code: '08006' } })
     const failedIndex = createSupabaseKnowledgeIndex({
       from: vi.fn(() => failed), rpc: vi.fn(),
-    } as never, { allowedProjectIds: ['p1'] })
+    } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
     await expect(failedIndex.search({ text: 'ERP', keywords: ['ERP'] })).resolves.toEqual({
       ok: false,
       error: { code: 'INDEX_KEYWORD_READ_FAILED', operation: 'search_keyword', retryable: true },
@@ -133,7 +137,7 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
     const query = queryBuilder({ data: [rawDocument({ project_id: 'p2' })], error: null })
     const index = createSupabaseKnowledgeIndex({
       from: vi.fn(() => query), rpc: vi.fn(),
-    } as never, { allowedProjectIds: ['p1'] })
+    } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
 
     await expect(index.search({ text: 'ERP', keywords: ['ERP'] })).resolves.toMatchObject({
       ok: false,
@@ -148,6 +152,7 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
     }))
     const from = vi.fn()
     const index = createSupabaseKnowledgeIndex({ from, rpc } as never, {
+      workspaceId: WS,
       allowedProjectIds: ['p1', 'p2'],
     })
 
@@ -176,7 +181,9 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
       }],
     })
     expect(rpc).toHaveBeenCalledWith('match_ai_documents', expect.objectContaining({
+      p_workspace_id: WS,
       p_project_ids: ['p2'],
+      p_include_global: false,
       p_domains: ['minutes'],
       p_index_version: 1,
     }))
@@ -189,7 +196,7 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
       data: [{ ...rawDocument({ project_id: 'p2' }), similarity: 0.9 }],
       error: null,
     }))
-    const index = createSupabaseKnowledgeIndex({ from: vi.fn(), rpc } as never, { allowedProjectIds: ['p1'] })
+    const index = createSupabaseKnowledgeIndex({ from: vi.fn(), rpc } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
 
     await expect(index.search({
       text: '', keywords: [], queryEmbedding: Array(768).fill(0.01),
@@ -203,7 +210,7 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
     // id+similarity만 돌려주는 옛 RPC 계약은 이제 무효 — 조용한 필드 유실 대신 실패한다.
     const rpc = vi.fn(async () => ({ data: [{ id: 'doc-1', similarity: 0.9 }], error: null }))
     const from = vi.fn()
-    const index = createSupabaseKnowledgeIndex({ from, rpc } as never, { allowedProjectIds: ['p1'] })
+    const index = createSupabaseKnowledgeIndex({ from, rpc } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
 
     await expect(index.search({
       text: '', keywords: [], queryEmbedding: Array(768).fill(0.01),
@@ -218,7 +225,7 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
     const emptyIndex = createSupabaseKnowledgeIndex({
       from: vi.fn(),
       rpc: vi.fn(async () => ({ data: [], error: null })),
-    } as never, { allowedProjectIds: ['p1'] })
+    } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
     await expect(emptyIndex.search({
       text: '', keywords: [], queryEmbedding: Array(768).fill(0.01),
     })).resolves.toEqual({ ok: true, data: [] })
@@ -226,7 +233,7 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
     const failedIndex = createSupabaseKnowledgeIndex({
       from: vi.fn(),
       rpc: vi.fn(async () => ({ data: null, error: { code: '08006' } })),
-    } as never, { allowedProjectIds: ['p1'] })
+    } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
     await expect(failedIndex.search({
       text: '', keywords: [], queryEmbedding: Array(768).fill(0.01),
     })).resolves.toEqual({
@@ -239,7 +246,7 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
     const keyword = queryBuilder({ data: [rawDocument()], error: null })
     const from = vi.fn(() => keyword)
     const rpc = vi.fn(async () => ({ data: [{ ...rawDocument(), similarity: 0.9 }], error: null }))
-    const index = createSupabaseKnowledgeIndex({ from, rpc } as never, { allowedProjectIds: ['p1'] })
+    const index = createSupabaseKnowledgeIndex({ from, rpc } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
 
     const result = await index.search({
       text: 'ERP',
@@ -263,7 +270,7 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
 
   it('rejects a malformed embedding before querying pgvector', async () => {
     const client = { from: vi.fn(), rpc: vi.fn() }
-    const index = createSupabaseKnowledgeIndex(client as never, { allowedProjectIds: ['p1'] })
+    const index = createSupabaseKnowledgeIndex(client as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
     await expect(index.search({ text: '', queryEmbedding: [0.1] })).resolves.toMatchObject({
       ok: false,
       error: { code: 'INDEX_QUERY_INVALID' },
@@ -273,12 +280,124 @@ describe('Supabase pgvector KnowledgeIndex search adapter', () => {
 
   it('rejects a zero query vector before querying pgvector', async () => {
     const client = { from: vi.fn(), rpc: vi.fn() }
-    const index = createSupabaseKnowledgeIndex(client as never, { allowedProjectIds: ['p1'] })
+    const index = createSupabaseKnowledgeIndex(client as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
     await expect(index.search({ text: '', queryEmbedding: Array(768).fill(0) })).resolves.toMatchObject({
       ok: false,
       error: { code: 'INDEX_QUERY_INVALID' },
     })
     expect(client.rpc).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('검색 범위 — 워크스페이스 필수(0042)', () => {
+  const EMBEDDING = Array(768).fill(0.01)
+
+  it('범위에 워크스페이스가 없으면 저장소를 부르지 않고 실패한다 — 빈 결과로 위장하지 않는다', async () => {
+    for (const workspaceId of [undefined, null, '', '   ', 'not-a-uuid']) {
+      const client = { from: vi.fn(), rpc: vi.fn() }
+      const index = createSupabaseKnowledgeIndex(client as never, {
+        allowedProjectIds: ['p1'], allowGlobal: true, ...(workspaceId === undefined ? {} : { workspaceId }),
+      })
+      await expect(
+        index.search({ text: 'ERP', keywords: ['ERP'], queryEmbedding: EMBEDDING, includeGlobal: true }),
+        String(workspaceId),
+      ).resolves.toEqual({
+        ok: false,
+        error: { code: 'INDEX_SCOPE_UNAVAILABLE', operation: 'search_keyword', retryable: false },
+      })
+      expect(client.from).not.toHaveBeenCalled()
+      expect(client.rpc).not.toHaveBeenCalled()
+    }
+  })
+
+  it('요청 입력으로는 워크스페이스를 바꿀 수 없다 — RPC 는 범위의 값만 받는다', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }))
+    const index = createSupabaseKnowledgeIndex({ from: vi.fn(), rpc } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
+    await index.search({
+      text: '', keywords: [], queryEmbedding: EMBEDDING,
+      ...({ workspaceId: OTHER_WS, p_workspace_id: OTHER_WS } as object),
+    })
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(rpc).toHaveBeenCalledWith('match_ai_documents', expect.objectContaining({ p_workspace_id: WS }))
+  })
+
+  it('벡터 RPC 는 늘 p_workspace_id 를 받고, p_include_global 은 요청과 범위가 둘 다 허용할 때만 참이다', async () => {
+    const cases = [
+      { allowGlobal: true, includeGlobal: true, expected: true },
+      { allowGlobal: true, includeGlobal: false, expected: false },
+      { allowGlobal: true, includeGlobal: undefined, expected: false },
+      { allowGlobal: false, includeGlobal: true, expected: false },
+      { allowGlobal: undefined, includeGlobal: true, expected: false },
+    ]
+    for (const { allowGlobal, includeGlobal, expected } of cases) {
+      const rpc = vi.fn(async () => ({ data: [], error: null }))
+      const index = createSupabaseKnowledgeIndex({ from: vi.fn(), rpc } as never, {
+        workspaceId: WS, allowedProjectIds: ['p1'], allowGlobal,
+      })
+      await index.search({ text: '', keywords: [], queryEmbedding: EMBEDDING, includeGlobal })
+      const args = (rpc.mock.calls[0] as unknown as [string, Record<string, unknown>])[1]
+      expect(args.p_workspace_id, JSON.stringify({ allowGlobal, includeGlobal })).toBe(WS)
+      expect(args.p_include_global, JSON.stringify({ allowGlobal, includeGlobal })).toBe(expected)
+      expect(args.p_project_ids).toEqual(['p1'])
+    }
+  })
+
+  it('키워드 경로는 workspace_id 로 먼저 좁힌다 — 프로젝트만 볼 때도', async () => {
+    const query = queryBuilder({ data: [rawDocument()], error: null })
+    const from = vi.fn(() => query)
+    const index = createSupabaseKnowledgeIndex({ from, rpc: vi.fn() } as never, { workspaceId: WS, allowedProjectIds: ['p1'] })
+    await expect(index.search({ text: 'ERP', keywords: ['ERP'] })).resolves.toMatchObject({ ok: true, data: [{ document: { id: 'doc-1' } }] })
+    expect(query.eq).toHaveBeenCalledWith('workspace_id', WS)
+    expect(query.in).toHaveBeenCalledWith('project_id', ['p1'])
+    expect(query.is).not.toHaveBeenCalled()
+  })
+
+  it('키워드 경로의 전역 분기(project_id is null)도 workspace_id 조건과 함께 나간다', async () => {
+    // 프로젝트 + 전역
+    const both = queryBuilder({ data: [rawDocument({ project_id: null })], error: null })
+    const bothIndex = createSupabaseKnowledgeIndex({ from: vi.fn(() => both), rpc: vi.fn() } as never, {
+      workspaceId: WS, allowedProjectIds: ['p1'], allowGlobal: true,
+    })
+    await expect(bothIndex.search({ text: 'ERP', keywords: ['ERP'], includeGlobal: true })).resolves.toMatchObject({ ok: true })
+    expect(both.eq).toHaveBeenCalledWith('workspace_id', WS)
+    expect(both.or).toHaveBeenCalledWith('project_id.in.("p1"),project_id.is.null')
+
+    // 전역만(요청 프로젝트가 전부 범위 밖)
+    const globalOnly = queryBuilder({ data: [], error: null })
+    const globalIndex = createSupabaseKnowledgeIndex({ from: vi.fn(() => globalOnly), rpc: vi.fn() } as never, {
+      workspaceId: WS, allowedProjectIds: ['p1'], allowGlobal: true,
+    })
+    await expect(globalIndex.search({ text: 'ERP', keywords: ['ERP'], projectIds: ['outside'], includeGlobal: true }))
+      .resolves.toEqual({ ok: true, data: [] })
+    expect(globalOnly.eq).toHaveBeenCalledWith('workspace_id', WS)
+    expect(globalOnly.is).toHaveBeenCalledWith('project_id', null)
+  })
+
+  it('키워드 조회가 다른 워크스페이스 행(전역 문서 포함)을 돌려주면 통째로 버린다', async () => {
+    for (const row of [
+      rawDocument({ workspace_id: OTHER_WS }),
+      rawDocument({ project_id: null, workspace_id: OTHER_WS }),
+      rawDocument({ workspace_id: undefined }),
+    ]) {
+      const query = queryBuilder({ data: [row], error: null })
+      const index = createSupabaseKnowledgeIndex({ from: vi.fn(() => query), rpc: vi.fn() } as never, {
+        workspaceId: WS, allowedProjectIds: ['p1'], allowGlobal: true,
+      })
+      await expect(index.search({ text: 'ERP', keywords: ['ERP'], includeGlobal: true })).resolves.toEqual({
+        ok: false,
+        error: { code: 'INDEX_RESULT_INVALID', operation: 'search_keyword', retryable: false },
+      })
+    }
+  })
+
+  it('워크스페이스 없는 쓰기 전용 범위(색인 워커)는 쓰기는 되고 검색만 닫힌다', async () => {
+    const rpc = vi.fn(async () => ({ data: 1, error: null }))
+    const index = createSupabaseKnowledgeIndex({ from: vi.fn(), rpc } as never, { allowedProjectIds: ['p1'], allowGlobal: true })
+    await expect(index.upsert([inputDocument()], { replaceEntityChunks: true })).resolves.toEqual({ ok: true, data: { affected: 1 } })
+    await expect(index.search({ text: 'ERP', keywords: ['ERP'] })).resolves.toMatchObject({
+      ok: false, error: { code: 'INDEX_SCOPE_UNAVAILABLE' },
+    })
   })
 })
 

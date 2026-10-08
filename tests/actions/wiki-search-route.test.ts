@@ -46,6 +46,8 @@ import { moduleState, projectsWithModule, requireModule, requireSessionModule, w
 
 const PROJECT = '11111111-1111-1111-1111-111111111111'
 const OTHER = '22222222-2222-2222-2222-222222222222'
+const WS = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const OTHER_WS = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 
 function request(body: unknown): NextRequest {
   return new NextRequest('http://localhost/api/wiki/search', {
@@ -57,7 +59,7 @@ function request(body: unknown): NextRequest {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getActorViewState.mockResolvedValue({ actor: { userId: 'u1' }, degraded: false })
-  mocks.resolveScope.mockResolvedValue({ ok: true, scope: { allowedProjectIds: [PROJECT] } })
+  mocks.resolveScope.mockResolvedValue({ ok: true, scope: { allowedProjectIds: [PROJECT], projectWorkspace: { [PROJECT]: WS } } })
   mocks.embedDocuments.mockResolvedValue([[0.1, 0.2]])
   mocks.lexical.mockResolvedValue({ ok: true, candidates: [] })
   mocks.rpc.mockResolvedValue({ data: [], error: null })
@@ -86,6 +88,42 @@ describe('POST /api/wiki/search', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('match_ai_documents', expect.objectContaining({
       p_project_ids: [PROJECT],
     }))
+  })
+
+  it('두 검색 모두 서버가 확정한 워크스페이스로 좁힌다 — 요청 본문의 워크스페이스는 쓰지 않고 전역 문서는 넣지 않는다', async () => {
+    await POST(request({ projectId: PROJECT, q: '권한', workspaceId: OTHER_WS, p_workspace_id: OTHER_WS, includeGlobal: true }))
+    expect(mocks.rpc).toHaveBeenCalledTimes(1)
+    expect(mocks.rpc).toHaveBeenCalledWith('match_ai_documents', expect.objectContaining({
+      p_workspace_id: WS, p_project_ids: [PROJECT], p_include_global: false,
+    }))
+    expect(mocks.lexical).toHaveBeenCalledTimes(1)
+    expect(mocks.lexical.mock.calls[0][0]).toMatchObject({ workspaceId: WS, projectIds: [PROJECT] })
+    expect(mocks.lexical.mock.calls[0][0].includeGlobal ?? false).toBe(false)
+  })
+
+  it('허용된 프로젝트인데 워크스페이스를 확정하지 못하면 503 ACCESS_SCOPE_UNAVAILABLE — 검색하지 않는다', async () => {
+    for (const scope of [
+      { allowedProjectIds: [PROJECT] },
+      { allowedProjectIds: [PROJECT], projectWorkspace: {} },
+      { allowedProjectIds: [PROJECT], projectWorkspace: { [OTHER]: OTHER_WS } },
+    ]) {
+      vi.clearAllMocks()
+      mocks.getActorViewState.mockResolvedValue({ actor: { userId: 'u1' }, degraded: false })
+      mocks.resolveScope.mockResolvedValue({ ok: true, scope })
+      const res = await POST(request({ projectId: PROJECT, q: '권한', workspaceId: OTHER_WS }))
+      expect(res.status, JSON.stringify(scope)).toBe(503)
+      expect(await res.json()).toEqual({ error: 'ACCESS_SCOPE_UNAVAILABLE' })
+      expect(mocks.embedDocuments).not.toHaveBeenCalled()
+      expect(mocks.rpc).not.toHaveBeenCalled()
+      expect(mocks.lexical).not.toHaveBeenCalled()
+    }
+  })
+
+  it('어휘 검색이 범위 미확정을 돌려주면 degraded 가 아니라 503 이다', async () => {
+    mocks.lexical.mockResolvedValue({ ok: false, errorCode: 'SEARCH_SCOPE_UNAVAILABLE' })
+    const res = await POST(request({ projectId: PROJECT, q: '권한' }))
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'ACCESS_SCOPE_UNAVAILABLE' })
   })
 
   it('임베딩이 실패하면 어휘 다리만으로 답하고 degraded 를 알린다', async () => {

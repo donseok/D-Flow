@@ -214,7 +214,9 @@ function applySearchFilters(
   query: SupabaseKnowledgeQuery,
   normalized: NormalizedSearchQuery,
 ): SupabaseKnowledgeQuery {
-  let filtered = applyProjectFilter(query, normalized)
+  // 워크스페이스를 먼저 건다 — 전역 분기(project_id is null)가 워크스페이스 조건 없이 나가면 service_role 클라이언트에서
+  // 남의 워크스페이스 전역 문서가 걸린다. or() 는 이 eq 와 AND 로 묶인다.
+  let filtered = applyProjectFilter(query.eq('workspace_id', normalized.workspaceId), normalized)
     .eq('index_version', normalized.indexVersion)
   if (normalized.domains.length) filtered = filtered.in('domain', normalized.domains)
   if (normalized.entityTypes.length) filtered = filtered.in('entity_type', normalized.entityTypes)
@@ -323,7 +325,7 @@ export function createSupabaseKnowledgeIndex(
 
   async function keywordSearch(normalized: NormalizedSearchQuery): Promise<KnowledgeIndexResult<HybridCandidate[]>> {
     if (!normalized.keywords.length) return { ok: true, data: [] }
-    let query = client.from('ai_documents').select(DOCUMENT_COLUMNS)
+    let query = client.from('ai_documents').select(`${DOCUMENT_COLUMNS},workspace_id`)
     query = applySearchFilters(query, normalized)
       .or(keywordOrFilter(normalized.keywords))
       .order('source_updated_at', { ascending: false, nullsFirst: false })
@@ -332,6 +334,10 @@ export function createSupabaseKnowledgeIndex(
     if (error) return queryFailure('INDEX_KEYWORD_READ_FAILED', 'search_keyword', error)
     const mapped = mapDocumentList(data, 'search_keyword')
     if (!mapped.ok) return mapped
+    // 저장소가 다른 워크스페이스 행을 돌려주면 통째로 버린다(필터 누락·모킹 오류를 조용히 통과시키지 않는다).
+    if ((data as unknown[]).some(row => !isRecord(row) || row.workspace_id !== normalized.workspaceId)) {
+      return failure('INDEX_RESULT_INVALID', 'search_keyword', false)
+    }
     if (mapped.data.some(document => !documentMatchesSearchScope(document, normalized))) {
       return failure('INDEX_RESULT_INVALID', 'search_keyword', false)
     }
@@ -349,7 +355,9 @@ export function createSupabaseKnowledgeIndex(
     const { data, error } = await client.rpc('match_ai_documents', {
       query_embedding: normalized.queryEmbedding,
       match_count: normalized.candidateLimit,
+      p_workspace_id: normalized.workspaceId,
       p_project_ids: normalized.projectIds,
+      p_include_global: normalized.includeGlobal,
       p_domains: normalized.domains.length ? normalized.domains : null,
       p_entity_types: normalized.entityTypes.length ? normalized.entityTypes : null,
       p_team: normalized.team,
@@ -379,7 +387,13 @@ export function createSupabaseKnowledgeIndex(
   return {
     async search(input: SearchQuery): Promise<KnowledgeIndexResult<SearchResult[]>> {
       const normalized = normalizeSearchQuery(input, accessScope)
-      if (!normalized.ok) return failure('INDEX_QUERY_INVALID', 'search_keyword', false)
+      if (!normalized.ok) {
+        return failure(
+          normalized.reason === 'workspace_required' ? 'INDEX_SCOPE_UNAVAILABLE' : 'INDEX_QUERY_INVALID',
+          'search_keyword',
+          false,
+        )
+      }
       // Even global reads require a non-empty server-resolved project scope.
       if (!normalized.hasAccessScope) return { ok: true, data: [] }
       if (!normalized.query.projectIds.length && !normalized.query.includeGlobal) {

@@ -17,6 +17,8 @@ const vec = (...head: number[]) => `[${[...head, ...Array(DIM - head.length).fil
 const Q = vec(1)
 const V_A = vec(0.9, 0.1)
 const V_B = vec(0.95, 0.05)
+// 0042 부터 검색 RPC 는 프로젝트 목록 없이는 0행이다(fail-closed) — 두 워크스페이스의 프로젝트를 다 넘겨 워크스페이스 인자만이 가르게 한다.
+const BOTH_PROJECTS = [F.projects.a, F.projects.bWs]
 
 describe('ai_documents 워크스페이스 스코프 격리 (SP8)', () => {
   async function seedAiDocs(c: PoolClient) {
@@ -63,14 +65,14 @@ describe('ai_documents 워크스페이스 스코프 격리 (SP8)', () => {
       await seedAiDocs(c)
       // dual 사용자는 둘 다 볼 수 있으나, p_workspace_id = ws 면 A 문서만 반환
       const resA = await c.query(`
-        select id from public.match_ai_documents($1::public.vector, 10, p_workspace_id => $2)
-      `, [Q, F.ws])
+        select id from public.match_ai_documents($1::public.vector, 10, p_workspace_id => $2, p_project_ids => $3::uuid[])
+      `, [Q, F.ws, BOTH_PROJECTS])
       expect(resA.rows.map((r) => r.id)).toEqual(['00000000-0000-0000-7e57-00000000a101'])
 
       // p_workspace_id = wsB 면 B 문서만 반환
       const resB = await c.query(`
-        select id from public.match_ai_documents($1::public.vector, 10, p_workspace_id => $2)
-      `, [Q, F.wsB])
+        select id from public.match_ai_documents($1::public.vector, 10, p_workspace_id => $2, p_project_ids => $3::uuid[])
+      `, [Q, F.wsB, BOTH_PROJECTS])
       expect(resB.rows.map((r) => r.id)).toEqual(['00000000-0000-0000-7e57-00000000b101'])
     })
   })
@@ -80,8 +82,8 @@ describe('ai_documents 워크스페이스 스코프 격리 (SP8)', () => {
     await asUser(pool, F.users.aLoose, async (c) => {
       await seedAiDocs(c)
       const res = await c.query(`
-        select id from public.match_ai_documents($1::public.vector, 10, p_workspace_id => $2)
-      `, [Q, F.wsB])
+        select id from public.match_ai_documents($1::public.vector, 10, p_workspace_id => $2, p_project_ids => $3::uuid[])
+      `, [Q, F.wsB, BOTH_PROJECTS])
       expect(res.rows).toEqual([])
     })
   })
@@ -90,8 +92,8 @@ describe('ai_documents 워크스페이스 스코프 격리 (SP8)', () => {
     await asUser(pool, F.users.dual, async (c) => {
       await seedAiDocs(c)
       const res = await c.query(`
-        select id from public.match_ai_documents_lexical(array['검색어'], 10, p_workspace_id => $1)
-      `, [F.ws])
+        select id from public.match_ai_documents_lexical(array['검색어'], 10, p_workspace_id => $1, p_project_ids => $2::uuid[])
+      `, [F.ws, BOTH_PROJECTS])
       expect(res.rows.map((r) => r.id)).toEqual(['00000000-0000-0000-7e57-00000000a101'])
     })
   })

@@ -38,11 +38,17 @@ const minuteIds = async (c: PoolClient, args: string, params: unknown[] = []) =>
     .rows.map(r => r.minute_id as string).filter(id => [MA, MA0, MB].includes(id))
 
 describe('match_minute_documents — 워크스페이스·제외 프로젝트', () => {
-  it('인자 없으면 RLS 가 보여 준 그대로(두 워크스페이스), p_workspace_id 면 그 워크스페이스만', async () => {
+  // 0042 — 워크스페이스 없이는 돌지 않는다(예전엔 null 이면 필터가 없어 RLS 가 보여 준 두 워크스페이스가 다 나왔다)
+  it('p_workspace_id 가 없으면 AI_SEARCH_WORKSPACE_REQUIRED, 주면 그 워크스페이스만', async () => {
     await asUser(pool, F.users.dual, async c => {
       await seedMinutes(c)
-      expect(await minuteIds(c, '')).toEqual([MB, MA, MA0])
+      await c.query('savepoint s')
+      expect(await pgError(c, 'select minute_id from public.match_minute_documents($1::public.vector, 10)', [Q])).toMatchObject({ code: '22023', message: 'AI_SEARCH_WORKSPACE_REQUIRED' })
+      await c.query('rollback to savepoint s')
+      expect(await pgError(c, 'select minute_id from public.match_minute_documents($1::public.vector, 10, p_workspace_id => null)', [Q])).toMatchObject({ code: '22023', message: 'AI_SEARCH_WORKSPACE_REQUIRED' })
+      await c.query('rollback to savepoint s')
       expect(await minuteIds(c, ', p_workspace_id => $2', [F.ws])).toEqual([MA, MA0])
+      expect(await minuteIds(c, ', p_workspace_id => $2', [F.wsB])).toEqual([MB])
     })
   })
   it('top-k 회수율 — match_count 1 에서도 A 범위면 A 회의록이 나온다', async () => {
@@ -50,7 +56,7 @@ describe('match_minute_documents — 워크스페이스·제외 프로젝트', (
       await seedMinutes(c)
       const top = async (extra: string, params: unknown[]) =>
         (await c.query(`select minute_id from public.match_minute_documents($1::public.vector, 1${extra})`, [Q, ...params])).rows.map(r => r.minute_id)
-      expect(await top('', [])).toEqual([MB])
+      expect(await top(', p_workspace_id => $2', [F.wsB])).toEqual([MB])
       expect(await top(', p_workspace_id => $2', [F.ws])).toEqual([MA])
     })
   })
@@ -123,10 +129,11 @@ describe('시그니처·실행권(0022 사후검증과 같은 판정)', () => {
       expect(priv.rows[0]).toEqual({ a1: false, a2: false, u1: true, u2: true })
     })
   })
-  it('옛 위치 인자 호출(4·6 인자)도 그대로 돈다 — 기본값이 끝에 붙었다', async () => {
+  it('옛 위치 인자 호출 — match_wbs_documents 4인자는 그대로 돌고, match_minute_documents 6인자(워크스페이스 없음)는 0042 뒤로 거절된다', async () => {
     await asUser(pool, F.users.dual, async c => {
       expect(await pgError(c, `select * from public.match_wbs_documents($1::public.vector, 3, null, null)`, [Q])).toBeNull()
-      expect(await pgError(c, `select * from public.match_minute_documents($1::public.vector, 3, null, null, null, null)`, [Q])).toBeNull()
+      expect(await pgError(c, `select * from public.match_minute_documents($1::public.vector, 3, null, null, null, null)`, [Q]))
+        .toMatchObject({ code: '22023', message: 'AI_SEARCH_WORKSPACE_REQUIRED' })
     })
   })
 })
