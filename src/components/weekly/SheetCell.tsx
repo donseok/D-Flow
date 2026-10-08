@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { GitCompareArrows, RefreshCw } from 'lucide-react'
 import type { CellAddr } from '@/lib/domain/sheetSelection'
 import { CELL_PEERS_MAX, presenceColor, presenceStyle, type PresencePeer } from '@/lib/domain/sheetPresence'
 
-export type CellStatus = 'saving' | 'saved' | 'error'
+/** editing = 저장 전 초안(배지 없음), conflict = 다른 사람이 먼저 바꿔 쓰지 않았다(비교 대기 — SPU1) */
+export type CellStatus = 'editing' | 'saving' | 'saved' | 'error' | 'conflict'
 /** 배치 변이 중 활성 셀에 뜨는 집계 칩(§5) — 개별 배지 대신 하나만. */
 export interface BatchChip { phase: 'saving' | 'saved' | 'error'; count: number }
 
@@ -32,6 +33,7 @@ export interface SheetCellProps {
   onChange: (v: string) => void
   onBlur: (e: React.FocusEvent) => void
   onRetry: () => void // per-cell 단건 재시도
+  onCompare: () => void // 충돌 비교 열기
   onChipRetry: () => void // 배치 재시도
   onMouseDown: (e: React.MouseEvent) => void
   onMouseEnter: () => void
@@ -143,6 +145,12 @@ export function SheetCell(p: SheetCellProps) {
             )}
           </>
         ))}
+        {/* 충돌은 배치 칩에 가리지 않는다 — 저장되지 않은 채 남은 입력이라 항상 보인다 */}
+        {p.status === 'conflict' && (
+          <button data-cell-conflict className="flex items-center gap-0.5 font-medium text-warning" onClick={p.onCompare} title="다른 사용자가 먼저 바꿨습니다 — 비교">
+            <GitCompareArrows className="h-3 w-3" aria-hidden />충돌 · 비교
+          </button>
+        )}
       </span>
     </div>
   )

@@ -142,7 +142,7 @@ export async function updateActual(
   itemId: string,
   newPct: number,
   expectedCurrent?: number | null,
-): Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' | 'approval_required' }> {
+): Promise<{ ok: boolean; error?: string; conflict?: boolean; latest?: number | null; code?: 'actual_locked' | 'approval_required' }> {
   if (!Number.isFinite(newPct) || newPct < 0 || newPct > 100) return { ok: false, error: E.range }
   // projectId 를 인자로 받지 않으므로 판정 전에 대상 행에서 읽는다 — 조회 실패는 쓰기 중단 사유.
   const found = await resolveProjectId('wbs_items', itemId)
@@ -205,8 +205,9 @@ export async function updateActual(
 
   const old = item.actual_pct
   // 낙관적 잠금: 편집 시작 시 본 값과 DB 현재값이 다르면 그새 다른 사용자가 바꾼 것.
+  // 충돌은 서버의 현재 값(latest)을 같이 돌려준다 — 화면이 내 값과 나란히 보이고 고르게 한다(개정 §5.8, Q05)
   if (expectedCurrent !== undefined && Number(old ?? 0) !== Number(expectedCurrent ?? 0)) {
-    return { ok: false, conflict: true, error: E.conflict }
+    return { ok: false, conflict: true, error: E.conflict, latest: old == null ? null : Number(old) }
   }
   if (Number(old) === newPct) return { ok: true }
   // .select() 필수 — RLS 가 행을 가리면 supabase-js 는 error 없이 0행을 돌려준다.
@@ -240,7 +241,7 @@ export async function updateWeight(
   itemId: string,
   weight: number | null,
   expectedCurrent?: number | null,
-): Promise<{ ok: boolean; error?: string; conflict?: boolean }> {
+): Promise<{ ok: boolean; error?: string; conflict?: boolean; latest?: number | null }> {
   // isFinite: Infinity는 JSON 직렬화에서 null(균등)로 둔갑해 이력과 어긋나므로 차단
   if (weight != null && (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0)) {
     return { ok: false, error: E.weightMin }
@@ -261,7 +262,7 @@ export async function updateWeight(
   if (expectedCurrent !== undefined) {
     const a = old == null ? null : Number(old)
     const b = expectedCurrent == null ? null : Number(expectedCurrent)
-    if (a !== b) return { ok: false, conflict: true, error: E.conflict }
+    if (a !== b) return { ok: false, conflict: true, error: E.conflict, latest: a }
   }
   if (Number(old ?? NaN) === Number(weight ?? NaN) && (old == null) === (weight == null)) return { ok: true }
   const { error: upErr } = await sb.from('wbs_items').update({ weight, updated_at: new Date().toISOString() }).eq('id', itemId)
@@ -275,6 +276,28 @@ export async function updateWeight(
   revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(item.project_id))
   return { ok: true }
+}
+
+/** 셀 값의 현재 서버 값 — 저장 응답을 잃었을 때(개정 §5.8.1 OutcomeUnknown, Q10) 반영 여부를 가리는 읽기다. 무조건 다시 보내지 않고
+ *  이 값과 내 값·편집 시작 값을 견준다(classifyCasOutcome). 세션 RLS 로 읽는다 — 못 읽는 행은 '없음'이 아니라 실패다. */
+export async function getWbsCellSnapshot(
+  itemId: string,
+): Promise<{ ok: true; actualPct: number | null; weight: number | null; custom: unknown } | { ok: false; error: string }> {
+  const found = await resolveProjectId('wbs_items', itemId)
+  if (!found.ok) return { ok: false, error: found.error }
+  const g = await requireProjectMember(found.projectId)
+  if (!g.ok) return { ok: false, error: g.error }
+  const sb = await createServerClient()
+  const { data, error } = await sb.from('wbs_items').select('id, actual_pct, weight, custom').eq('id', itemId).maybeSingle()
+  if (error) return { ok: false, error: failWith('wbs.getWbsCellSnapshot', error, ERR_ITEM_LOOKUP) }
+  if (!data) return { ok: false, error: E.itemMissing }
+  const row = data as { actual_pct: number | string | null; weight: number | string | null; custom: unknown }
+  return {
+    ok: true,
+    actualPct: row.actual_pct == null ? null : Number(row.actual_pct),
+    weight: row.weight == null ? null : Number(row.weight),
+    custom: row.custom ?? {},
+  }
 }
 
 /* ── 수동 WBS 트리 편집 (구조·일정) — 모두 프로젝트 관리자 이상 전용, change_logs 기록 ── */
@@ -462,11 +485,20 @@ export async function addSubAct(
   return { ok: true, id: newId }
 }
 
-/** 이름·계획일자·산출물·Biz 편집. 시작>종료 거부, 변경분만 기록. */
+type WbsFieldValues = { name?: string; plannedStart?: string | null; plannedEnd?: string | null; deliverable?: string | null; biz?: string | null }
+type WbsFieldKey = keyof WbsFieldValues
+/** 화면 값의 저장 꼴 — 이름은 다듬고, 나머지는 빈 값을 null 로(아래 patch 가 쓰는 꼴과 같다) */
+const fieldStored = (key: WbsFieldKey, v: string | null | undefined): string | null =>
+  key === 'plannedStart' || key === 'plannedEnd' ? (v || null) : key === 'name' ? (v ?? '').trim() : (v?.trim() || null)
+
+/** 이름·계획일자·산출물·Biz 편집. 시작>종료 거부, 변경분만 기록.
+ *  expected(SPU1, 개정 §5.8 — 무통보 덮어쓰기 0건): 폼을 열 때 본 값. 그새 서버 값이 달라진 칸은 — 내가 고치지 않은 칸이면 건드리지 않고
+ *  (남의 변경을 낡은 폼 값으로 되돌리지 않는다), 내가 고친 칸이면 쓰지 않고 충돌과 그 현재 값(latest)을 돌려준다. 없으면 옛 무조건 저장이다. */
 export async function updateWbsFields(
   itemId: string,
-  fields: { name?: string; plannedStart?: string | null; plannedEnd?: string | null; deliverable?: string | null; biz?: string | null },
-): Promise<{ ok: boolean; error?: string }> {
+  input: WbsFieldValues,
+  expected?: WbsFieldValues,
+): Promise<{ ok: boolean; error?: string; conflict?: boolean; latest?: WbsFieldValues }> {
   const found = await resolveProjectId('wbs_items', itemId)
   if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
@@ -480,6 +512,23 @@ export async function updateWbsFields(
     .eq('id', itemId).single()
   if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.updateWbsFields', itemErr, ERR_ITEM_LOOKUP) }
   if (!item) return { ok: false, error: '항목 없음' }
+
+  const fields: WbsFieldValues = { ...input }
+  if (expected) {
+    const current: Record<WbsFieldKey, string | null> = {
+      name: item.name, plannedStart: item.planned_start, plannedEnd: item.planned_end, deliverable: item.deliverable, biz: item.biz,
+    }
+    const latest: Record<string, string | null> = {}
+    for (const key of Object.keys(current) as WbsFieldKey[]) {
+      if (input[key] === undefined || expected[key] === undefined) continue
+      const seen = fieldStored(key, expected[key])
+      if (current[key] === seen) continue                      // 내가 본 값 그대로다
+      const mine = fieldStored(key, input[key])
+      if (mine === seen || mine === current[key]) delete fields[key]   // 내가 고치지 않은 칸(또는 이미 같은 값) — 남의 변경을 둔다
+      else latest[key] = current[key]
+    }
+    if (Object.keys(latest).length > 0) return { ok: false, conflict: true, error: E.conflict, latest: latest as WbsFieldValues }
+  }
 
   const patch: Record<string, unknown> = {}
   const logs: { field: string; old: string | null; new: string | null }[] = []
@@ -664,7 +713,9 @@ export async function removeTaskDependency(
 export async function updateDeliverable(
   itemId: string,
   deliverable: string | null,
-): Promise<{ ok: boolean; error?: string }> {
+  /** 편집을 열 때 본 값(SPU1) — 서버 값이 그새 달라졌으면 쓰지 않고 충돌과 그 값(latest)을 돌려준다 */
+  expected?: string | null,
+): Promise<{ ok: boolean; error?: string; conflict?: boolean; latest?: string | null }> {
   const found = await resolveProjectId('wbs_items', itemId)
   if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectMember(found.projectId)
@@ -684,6 +735,7 @@ export async function updateDeliverable(
   }
   const v = deliverable?.trim() || null
   if (v === item.deliverable) return { ok: true }
+  if (expected !== undefined && (expected?.trim() || null) !== item.deliverable) return { ok: false, conflict: true, error: E.conflict, latest: item.deliverable }
   const { error } = await sb.from('wbs_items').update({ deliverable: v, updated_at: new Date().toISOString() }).eq('id', itemId)
   if (error) return { ok: false, error: failWith('wbs.updateDeliverable', error, ERR_SAVE) }
   const { error: logErr } = await sb.from('change_logs').insert({ user_id: g.actor.userId, wbs_item_id: itemId, field: 'deliverable', old_value: item.deliverable, new_value: v })

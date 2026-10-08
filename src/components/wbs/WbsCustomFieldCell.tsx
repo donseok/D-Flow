@@ -2,9 +2,12 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveCustomFieldValues } from '@/app/actions/customFieldValues'
+import { getWbsCellSnapshot } from '@/app/actions/wbs'
+import { ConflictResolver } from '@/components/ui/ConflictResolver'
+import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
 import { customFieldErrorText } from '@/components/fields/CustomFieldValuesEditor'
 import { formatCustomValue, type CustomValues, type FieldDef, type FieldValue } from '@/lib/domain/customFields'
-import { validateCustomValues } from '@/lib/domain/customFieldValues'
+import { parseCustomValues, validateCustomValues } from '@/lib/domain/customFieldValues'
 import type { Locale } from '@/lib/i18n/dict'
 
 /** 셀 안에서 고칠 수 있는 유형 — 한 줄 입력으로 끝나는 것만. 여러 줄·다중 선택은 행 높이에 들어가지 않아 상세 패널에서 고친다 */
@@ -51,6 +54,10 @@ export function WbsCustomFieldCell({
   // 편집기가 닫혔다(취소·저장 끝) — 닫히며 뒤늦게 오는 blur 가 옛 값으로 다시 저장하지 않게 막는다
   const closed = useRef(true)
   const inFlight = useRef(false)
+  // 저장 충돌 비교 — ref 는 상자가 포커스를 가져갈 때의 blur 저장을 막는다
+  type Conflict = { latest: CustomValues; mine: string; latestText: string; base: string }
+  const [conflict, setConflict] = useState<Conflict | null>(null)
+  const conflictRef = useRef<Conflict | null>(null)
 
   const signature = JSON.stringify(custom)
   const current = custom === null ? null : saved && saved.from === signature ? saved.values : custom
@@ -64,51 +71,95 @@ export function WbsCustomFieldCell({
     closed.current = false
     setInvalid(false)
     setDraft(v === undefined ? '' : String(v))
+    editSessionStore.setSession(`wbs:${rowId}:cf:${def.key}`, 'wbs_cell', `${rowId}:cf:${def.key}`, 'editing')
   }
   const close = () => { closed.current = true; setDraft(null); setInvalid(false) }
+  const cancelEdit = () => { editSessionStore.removeSession(`wbs:${rowId}:cf:${def.key}`); close() }
   const typed = (raw: string): FieldValue | undefined => {
     if (raw === '') return undefined
     if (def.type === 'number') return Number(raw)
     if (def.type === 'boolean') return raw === 'true'
     return raw
   }
-  const commit = async () => {
+  const sessionId = `wbs:${rowId}:cf:${def.key}`
+  const mark = (status: 'editing' | 'saving' | 'saved' | 'failed' | 'conflict' | 'outcome_unknown') =>
+    editSessionStore.setSession(sessionId, 'wbs_cell', `${rowId}:cf:${def.key}`, status)
+  const shown = (v: FieldValue | undefined) => (v === undefined ? '' : formatCustomValue(def, v, format))
+  // rebase: 비교에서 '내 값으로 저장'을 골랐거나 다른 칸만 바뀐 행 — 그 최신 행을 기대값으로 내 칸만 얹는다
+  const commit = async (rebase?: CustomValues) => {
     if (draft === null || inFlight.current || closed.current || current === null) return
-    const next: CustomValues = { ...current }
+    if (conflictRef.current && !rebase) return   // 비교가 떠 있는 동안의 blur 는 저장이 아니다
+    const from = rebase ?? current
+    const next: CustomValues = { ...from }
     const value = typed(def.type === 'text' ? draft.trim() : draft)
     if (value === undefined) delete next[def.key]
     else next[def.key] = value
-    if (same(next, current)) { close(); return }
-    const checked = validateCustomValues(defs, next, current, canAdmin)
+    if (same(next, from)) { if (rebase) { mark('saved'); router.refresh() } else editSessionStore.removeSession(sessionId); close(); return }
+    const checked = validateCustomValues(defs, next, from, canAdmin)
     if (!checked.ok) {
       setInvalid(true)
       onError(`${def.label}: ${customFieldErrorText(checked.errors[def.key] ?? Object.values(checked.errors)[0], ko)}`)
       return
     }
+    const applied = (values: CustomValues) => { mark('saved'); setSaved({ from: signature, values }); close(); router.refresh() }
+    // 이 칸을 다른 사람이 바꿨다 — 편집기와 입력을 둔 채 비교를 연다
+    const conflicted = (latest: CustomValues) => {
+      mark('conflict')
+      const c = { latest, mine: shown(value), latestText: shown(latest[def.key]), base: shown(from[def.key]) }
+      conflictRef.current = c
+      setConflict(c)
+    }
+    // 그새 바뀐 행(latest)을 어떻게 받을지 — 이 칸으로만 가린다. 이미 내 값이면 반영된 것(앞선 내 저장의 응답만 잃었다), 이 칸이 그대로면
+    // 그 위에 내 칸만 얹어 한 번 더(다른 칸의 변경을 지킨다), 이 칸이 바뀌었으면 비교
+    const settle = (latest: CustomValues, retried: boolean): 'applied' | 'rebase' | 'conflict' => {
+      if (same(latest[def.key], value)) return 'applied'
+      if (!retried && same(latest[def.key], from[def.key])) return 'rebase'
+      return 'conflict'
+    }
     inFlight.current = true
     setBusy(true)
+    mark('saving')
+    let again: CustomValues | null = null
     try {
-      const result = await saveCustomFieldValues(projectId, 'wbs_item', rowId, current, checked.value)
+      const result = await saveCustomFieldValues(projectId, 'wbs_item', rowId, from, checked.value)
       if (!result.ok) {
+        if (result.code === 'FIELD_CONFLICT' && result.latest) {
+          const how = settle(result.latest, rebase !== undefined)
+          if (how === 'applied') applied(result.latest)
+          else if (how === 'rebase') again = result.latest
+          else conflicted(result.latest)
+          return
+        }
         onError(result.error)
-        // 충돌은 닫고 새로 읽는다 — 편집 원본을 몰래 바꿔 못 본 값을 덮지 않는다. 그 밖의 실패는 입력을 지킨다
-        if (result.code === 'FIELD_CONFLICT') { close(); router.refresh() } else setInvalid(true)
+        // 현재 값을 읽지 못한 충돌은 비교할 것이 없다 — 닫고 새로 읽는다. 그 밖의 실패는 입력을 지킨다
+        if (result.code === 'FIELD_CONFLICT') { mark('conflict'); close(); router.refresh() } else { mark('failed'); setInvalid(true) }
         return
       }
-      setSaved({ from: signature, values: result.values })
-      close()
-      router.refresh()
+      applied(result.values)
     } catch {
-      onError(ko ? '저장 응답을 확인하지 못했습니다. 최신 값을 조회해 확인하세요.' : 'The save response is unknown. Reload to verify.')
-      close()
-      router.refresh()
-    } finally { inFlight.current = false; setBusy(false) }
+      // 응답 유실(§5.8.1 OutcomeUnknown) — 실패로 단정하지 않고 서버 값을 읽어 가린다
+      mark('outcome_unknown')
+      const snap = await getWbsCellSnapshot(rowId).catch(() => null)
+      const latest = snap?.ok ? parseCustomValues(snap.custom) : null
+      if (!latest?.ok) { onError(ko ? '저장 결과를 확인하지 못했습니다. 입력은 그대로 있습니다 — 다시 저장하면 반영 여부부터 확인합니다.' : 'The save result could not be confirmed. Your input is kept — saving again checks whether it was applied first.'); setInvalid(true); return }
+      const outcome = classifyCasOutcome<FieldValue | undefined>({ mine: value, base: from[def.key], latest: latest.value[def.key] }, same)
+      if (outcome === 'applied') applied(latest.value)
+      else if (outcome === 'not_applied') { mark('failed'); setInvalid(true); onError(ko ? '저장되지 않았습니다. 입력은 그대로 있습니다 — 다시 저장하세요.' : 'Not saved. Your input is kept — save again.') }
+      else conflicted(latest.value)
+    } finally {
+      inFlight.current = false; setBusy(false)
+      if (again) void commit(again)
+    }
   }
+  const closeConflict = () => { conflictRef.current = null; setConflict(null) }
+  const keepMine = () => { const c = conflictRef.current; if (!c) return; closeConflict(); void commit(c.latest) }
+  const takeLatest = () => { closeConflict(); editSessionStore.removeSession(sessionId); close(); router.refresh() }
+  const continueEdit = () => { closeConflict(); mark('editing') }
   const keys = (e: React.KeyboardEvent) => {
     // 한글 조합 중의 Enter·Esc 는 조합을 끝내는 키다 — 저장·취소로 새지 않게 한다(개정 §5.8.4, Q04. 주간 시트 useSheetGrid 와 같은 가드)
     if (e.nativeEvent.isComposing || e.keyCode === 229) { e.stopPropagation(); return }
     if (e.key === 'Enter') { e.preventDefault(); void commit() }
-    else if (e.key === 'Escape') { e.preventDefault(); close() }
+    else if (e.key === 'Escape') { e.preventDefault(); cancelEdit() }
     e.stopPropagation()
   }
   const common = {
@@ -144,6 +195,15 @@ export function WbsCustomFieldCell({
             {...(def.type === 'number' ? { min: def.limits?.min, max: def.limits?.max, step: 10 ** -(def.limits?.decimals ?? 0) } : {})}
             value={draft} onChange={e => { setDraft(e.target.value); setInvalid(false) }} />
         )}
+      <ConflictResolver
+        open={conflict !== null}
+        target={def.label}
+        fields={conflict ? [{ key: def.key, label: def.label, mine: conflict.mine, latest: conflict.latestText, base: conflict.base }] : []}
+        onKeepMine={keepMine}
+        onTakeLatest={takeLatest}
+        onContinue={continueEdit}
+        busy={busy}
+      />
     </div>
   )
 }

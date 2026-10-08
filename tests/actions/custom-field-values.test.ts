@@ -59,6 +59,20 @@ describe('JWT field value saves', () => {
   it('an invisible/stale row is a conflict, never a successful empty update', async () => {
     h.single.mockResolvedValue({ data: null, error: null }); expect(await saveCustomFieldValues(P, 'issue', R, { quantity: 1 }, { quantity: 2 })).toMatchObject({ ok: false, code: 'FIELD_CONFLICT' }); expect(h.revalidate).not.toHaveBeenCalled()
   })
+  // SPU1(개정 §5.8, Q05): 충돌은 그 행의 현재 값을 같이 준다 — 화면이 내 값과 나란히 보이고 고르게 한다. 다시 읽기는 같은 행·같은 프로젝트로만
+  it.each([['wbs_item', 'wbs_items'], ['issue', 'issues'], ['weekly_row', 'weekly_report_rows']] as const)('%s conflict returns the current row values without writing again', async (entity, table) => {
+    h.single.mockResolvedValueOnce({ data: null, error: null }).mockResolvedValueOnce({ data: { custom: { quantity: 9 } }, error: null })
+    expect(await saveCustomFieldValues(P, entity, R, { quantity: 1 }, { quantity: 2 })).toMatchObject({ ok: false, code: 'FIELD_CONFLICT', latest: { quantity: 9 } })
+    expect(h.update).toHaveBeenCalledTimes(1); expect(h.from.mock.calls).toEqual([[table], [table]]); expect(h.select).toHaveBeenLastCalledWith('custom')
+    expect(h.eq.mock.calls.slice(3)).toEqual([['project_id', P], ['id', R]]); expect(h.revalidate).not.toHaveBeenCalled(); expect(h.insert).not.toHaveBeenCalled()
+  })
+  it('a conflict whose current row cannot be read (gone, denied, corrupt) carries no latest', async () => {
+    for (const second of [{ data: null, error: null }, { data: null, error: { message: 'private', code: '42501' } }, { data: { custom: { quantity: { bad: true } } }, error: null }]) {
+      h.single.mockResolvedValueOnce({ data: null, error: null }).mockResolvedValueOnce(second)
+      const r = await saveCustomFieldValues(P, 'issue', R, { quantity: 1 }, { quantity: 2 })
+      expect(r).toMatchObject({ ok: false, code: 'FIELD_CONFLICT' }); expect(r).not.toHaveProperty('latest'); expect(JSON.stringify(r)).not.toContain('private')
+    }
+  })
   it.each([['CUSTOM_FIELD_ADMIN_ONLY:quantity', '42501', 'ERR_DENIED'], ['CUSTOM_FIELD_SIZE', '23514', 'FIELD_INVALID'], ['CUSTOM_FIELD_INACTIVE:quantity', '23514', 'FIELD_INVALID']])('fresh DB constraint %s stays visible without details', async (message, code, expected) => {
     h.single.mockResolvedValue({ data: null, error: { message, code, details: 'private' } }); const r = await saveCustomFieldValues(P, 'issue', R, { quantity: 1 }, { quantity: 2 })
     expect(r).toMatchObject({ ok: false, code: expected }); expect(JSON.stringify(r)).not.toContain('private')

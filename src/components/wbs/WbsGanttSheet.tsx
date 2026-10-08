@@ -12,9 +12,9 @@ import type { CalendarInput } from '@/lib/calendar/load'
 import { canEditActual, canEditWeight, canEditDeliverable, canAttachDeliverable } from '@/lib/domain/permissions'
 import { computeHideDone } from '@/lib/domain/hideDone'
 import { unsetWeightCount } from '@/lib/domain/rollup'
-import { updateActual, updateWeight, addWbsItem } from '@/app/actions/wbs'
+import { updateActual, updateWeight, addWbsItem, getWbsCellSnapshot } from '@/app/actions/wbs'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
-import { editSessionStore } from '@/lib/sync/editSession'
+import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
 import { sheetUndoManager } from '@/lib/sync/sheetUndo'
 import { queueWbsCollapse, queueUiPref } from '@/lib/prefs/debouncedSave'
 import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyViewport } from '@/lib/hooks/useCompactViewport'
@@ -50,6 +50,7 @@ import { useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor
 import { orderedFields } from '@/lib/domain/customFields'
 import { parseCustomValues } from '@/lib/domain/customFieldValues'
 import { WbsCustomFieldCell } from './WbsCustomFieldCell'
+import { ConflictResolver } from '@/components/ui/ConflictResolver'
 
 /* ── 컬럼 메타 (좌→우). frozen=true면 sticky 동결, sk=누적 left offset ──
    구분(LevelBadge) 열은 삭제됐다(2026-08-21 개편) — 계층은 들여쓰기·타이포·1단계 스트립이
@@ -327,6 +328,10 @@ export function WbsGanttSheet({
     savedCollapsedRef.current = collapsed
     queueWbsCollapse(projectId, [...collapsed])
   }, [collapsed, projectId])
+  // 화면이 내려가면 편집기도 사라진다 — 끝나지 않은 셀 세션(초안·실패·충돌)이 헤더에 영영 남지 않게 걷는다. 저장 중·저장됨은 둔다
+  useEffect(() => () => {
+    editSessionStore.removeWhere(x => x.surface === 'wbs_cell' && x.status !== 'saving' && x.status !== 'saved')
+  }, [])
   // focus 진입으로 임시 펼친 조상 id — 사용자 접힘 상태(collapsed)와 분리해 계정 저장을 건드리지 않는다.
   const [forcedOpen, setForcedOpen] = useState<Set<string>>(() => new Set())
   const [flashId, setFlashId] = useState<string | null>(null) // focus 행 하이라이트(잠시 후 해제)
@@ -416,6 +421,10 @@ export function WbsGanttSheet({
   const [invalid, setInvalid] = useState(false)
   // 같은 잘못된 초안을 blur 로 다시 알리지 않기 위한 기억(Enter 는 매번 알린다).
   const lastRejected = useRef<string | null>(null)
+  // 저장 충돌 비교(개정 §5.8) — 편집기를 닫지 않고 내 값·서버 값을 나란히 보인다. ref 는 상자가 포커스를 가져갈 때의 blur 저장을 막는다
+  type CellConflict = { id: string; field: 'weight' | 'actual'; latest: number | null; target: string; label: string; mineText: string; latestText: string; baseText: string }
+  const [cellConflict, setCellConflict] = useState<CellConflict | null>(null)
+  const cellConflictRef = useRef<CellConflict | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
   useBotPageContext({
@@ -1093,10 +1102,13 @@ export function WbsGanttSheet({
     lastRejected.current = null
   }
   // 검증은 서버 호출(busy) 전에 한다 — 실패하면 편집기와 초안을 그대로 두고 알린다(입력 보존).
-  // 저장 실패(!ok, 충돌 아님)도 편집기를 유지한다. 충돌은 현행대로 닫고 새로고침한다 — 편집 원본을 몰래 바꾸면
-  // 사용자가 못 본 값을 덮어쓴다(COM-2 계약 소관).
-  const commit = async (via: 'enter' | 'blur') => {
+  // 저장 실패(!ok)도 편집기를 유지한다. 충돌은 닫지 않고 비교(ConflictResolver)로 간다(개정 §5.8, Q05) — 내 입력을 지킨 채
+  // 서버의 현재 값을 보이고, '내 값으로 저장'을 고르면 그 값을 기대값으로 한 번만 다시 쓴다. 편집 원본을 몰래 바꾸지 않는다.
+  // rebase: 비교에서 '내 값으로 저장'을 고른 재저장 — 사용자가 본 서버 값(최신)을 기대값으로 쓴다.
+  const commit = async (via: 'enter' | 'blur', rebase?: { latest: number | null }) => {
     if (!edit || busy) return
+    // 비교가 떠 있는 동안의 blur(상자가 포커스를 가져간다)는 저장이 아니다
+    if (cellConflictRef.current && !rebase) return
     const { id, field } = edit
     const sessionId = `wbs:${id}:${field}`
     const reject = (msg: string) => {
@@ -1105,13 +1117,22 @@ export function WbsGanttSheet({
       lastRejected.current = draft
       if (via === 'enter') inputRef.current?.focus()
     }
-    let run: () => Promise<{ ok: boolean; error?: string; conflict?: boolean; code?: 'actual_locked' | 'approval_required' }>
+    type SaveResult = { ok: boolean; error?: string; conflict?: boolean; latest?: number | null; code?: 'actual_locked' | 'approval_required' }
+    let run: () => Promise<SaveResult>
+    let mine: number | null
+    let base: number | null
+    // 값 CAS 의 같음 — 실적%는 null 을 0 으로 본다(서버 판정과 같다), 가중치는 null(균등)을 구분한다
+    let sameValue: (a: number | null, b: number | null) => boolean
+    let show: (v: number | null) => string
     if (field === 'actual') {
       if (draft.trim() === '') return reject(t('wbs.toastEmpty'))
       const pct = Number(draft)
       if (Number.isNaN(pct)) return reject(t('wbs.toastNumbersOnly'))
       if (pct < 0 || pct > 100) return reject(t('wbs.toastRange'))
-      const prevVal = Number(editOriginal)
+      const prevVal = rebase ? Number(rebase.latest ?? 0) : Number(editOriginal)
+      mine = pct; base = prevVal
+      sameValue = (a, b) => Number(a ?? 0) === Number(b ?? 0)
+      show = v => `${Number(v ?? 0)}%`
       sheetUndoManager.pushPending({
         sessionId,
         targetId: id,
@@ -1129,11 +1150,14 @@ export function WbsGanttSheet({
       // 입력은 % 기준, 저장·충돌 비교는 1기준 원본(editOriginal). 무변경 커밋은
       // %↔분수 왕복 반올림값이 재저장되지 않게 서버 호출 없이 닫는다.
       const origPct = editOriginal.trim() === '' ? '' : String(weightToPct(Number(editOriginal)))
-      if (draft.trim() === origPct) return cancel()
+      if (!rebase && draft.trim() === origPct) return cancel()
       const pv = draft.trim() === '' ? null : Number(draft)
       if (pv != null && (!Number.isFinite(pv) || pv < 0)) return reject(t('wbs.toastWeightMin'))
-      const prevVal = editOriginal.trim() === '' ? null : Number(editOriginal)
+      const prevVal = rebase ? rebase.latest : editOriginal.trim() === '' ? null : Number(editOriginal)
       const nextVal = pv == null ? null : pv / 100
+      mine = nextVal; base = prevVal
+      sameValue = (a, b) => (a == null || b == null ? a == null && b == null : Number(a) === Number(b))
+      show = v => (v == null ? '' : `${weightToPct(v)}%`)
       sheetUndoManager.pushPending({
         sessionId,
         targetId: id,
@@ -1148,24 +1172,74 @@ export function WbsGanttSheet({
       })
       run = () => updateWeight(id, nextVal, prevVal)
     }
+    const applied = () => {
+      // D6-§8-undo: 서버 확인 뒤에만 되돌리기(Undo) 활성화
+      sheetUndoManager.confirmActive(sessionId)
+      // D6-§5-motion: 셀 저장 성공 토스트는 제거하고 조용한 헤더 SyncStatus로 흡수
+      editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'saved')
+      router.refresh()
+      setEdit(null)
+      setDraft('')
+      setInvalid(false)
+      lastRejected.current = null
+    }
+    // 충돌 — 편집기와 초안을 둔 채 비교를 연다. 덮지도 버리지도 않는다
+    const conflicted = (latest: number | null) => {
+      sheetUndoManager.rejectPending(sessionId)
+      editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'conflict', {
+        error: { kind: 'conflict', message: `${t('wbs.toastConflict')} — ${t('wbs.toastYourValue')}: ${draft}` }
+      })
+      const next = {
+        id, field, latest,
+        target: itemById.get(id)?.name ?? '',
+        label: field === 'actual' ? t('wbs.colActualPct') : t('wbs.colWeight'),
+        mineText: show(mine), latestText: show(latest), baseText: show(base),
+      }
+      cellConflictRef.current = next
+      setCellConflict(next)
+    }
     setInvalid(false)
     setBusy(true)
     editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'saving')
     try {
-      const res = await run()
-      if (res.ok) {
-        // D6-§8-undo: 서버 확인 뒤에만 되돌리기(Undo) 활성화
-        sheetUndoManager.confirmActive(sessionId)
-        // D6-§5-motion: 셀 저장 성공 토스트는 제거하고 조용한 헤더 SyncStatus로 흡수
-        editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'saved')
-        router.refresh()
-        setEdit(null)
-        setDraft('')
-        setInvalid(false)
-        lastRejected.current = null
-      } else if (res.conflict) {
+      let res: SaveResult
+      try {
+        res = await run()
+      } catch {
+        // 응답 유실(§5.8.1 Saving → OutcomeUnknown, Q10) — 실패로 단정하지 않고, 다시 보내지도 않고, 서버 값을 읽어 가린다
+        editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'outcome_unknown', {
+          error: { kind: 'outcome_unknown', message: t('common.outcomeChecking') }
+        })
+        const snap = await getWbsCellSnapshot(id).catch(() => null)
+        if (!snap?.ok) {
+          sheetUndoManager.rejectPending(sessionId)
+          editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'outcome_unknown', {
+            error: { kind: 'outcome_unknown', message: t('common.outcomeUnknown') }
+          })
+          setToast({ kind: 'err', msg: t('common.outcomeUnknown') })
+          return
+        }
+        const latest = field === 'actual' ? snap.actualPct : snap.weight
+        const outcome = classifyCasOutcome({ mine, base, latest }, sameValue)
+        if (outcome === 'applied') return applied()
+        if (outcome === 'conflict') return conflicted(latest)
         sheetUndoManager.rejectPending(sessionId)
-        // 충돌: 최신 값으로 새로고침하고 안내. 닫히는 입력은 안내에 남겨 다시 칠 수 있게 한다.
+        editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'failed', {
+          error: { kind: 'not_applied', message: t('common.outcomeNotApplied') }
+        })
+        setToast({ kind: 'err', msg: t('common.outcomeNotApplied') })
+        if (via === 'enter') inputRef.current?.focus()
+        return
+      }
+      if (res.ok) {
+        applied()
+      } else if (res.conflict && res.latest !== undefined) {
+        // 서버 값이 이미 내 값이다 = 앞선 내 저장이 반영돼 있었다(응답만 잃었다) — 충돌이 아니다
+        if (sameValue(res.latest, mine)) applied()
+        else conflicted(res.latest)
+      } else if (res.conflict) {
+        // 서버가 현재 값을 주지 못한 충돌 — 비교할 것이 없어 알리고 새로 읽는다. 닫히는 입력은 안내에 남긴다
+        sheetUndoManager.rejectPending(sessionId)
         editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'conflict', {
           error: { kind: 'conflict', message: `${t('wbs.toastConflict')} — ${t('wbs.toastYourValue')}: ${draft}` }
         })
@@ -1188,6 +1262,26 @@ export function WbsGanttSheet({
     } finally {
       setBusy(false)
     }
+  }
+  // 비교의 세 선택(개정 §5.8.1 Conflict) — 내 값으로 저장(본 서버 값을 기대값으로 한 번) · 서버 값 받기(쓰지 않는다) · 계속 편집(입력 유지)
+  const closeCellConflict = () => { cellConflictRef.current = null; setCellConflict(null) }
+  const keepMineCell = () => {
+    const c = cellConflictRef.current
+    if (!c) return
+    closeCellConflict()
+    void commit('enter', { latest: c.latest })
+  }
+  const takeLatestCell = () => {
+    closeCellConflict()
+    cancel()
+    router.refresh()
+  }
+  const continueCellEdit = () => {
+    const c = cellConflictRef.current
+    closeCellConflict()
+    // 저장 전 초안으로 돌아간다 — 기준은 그대로라 다시 저장하면 다시 비교한다
+    if (c) editSessionStore.setSession(`wbs:${c.id}:${c.field}`, 'wbs_cell', `${c.id}:${c.field}`, 'editing')
+    inputRef.current?.focus()
   }
 
   // WBS Undo 단축키 (Ctrl+Z / Cmd+Z)
@@ -2440,6 +2534,15 @@ export function WbsGanttSheet({
           snapshotRows={bulkSnapshot.rows} members={members}
           onClose={() => setBulkSnapshot(null)} onSuccess={() => router.refresh()} />
       )}
+      <ConflictResolver
+        open={!!cellConflict}
+        target={cellConflict?.target}
+        fields={cellConflict ? [{ key: cellConflict.field, label: cellConflict.label, mine: cellConflict.mineText, latest: cellConflict.latestText, base: cellConflict.baseText }] : []}
+        onKeepMine={keepMineCell}
+        onTakeLatest={takeLatestCell}
+        onContinue={continueCellEdit}
+        busy={busy}
+      />
       {impactDialogState && (
         <GanttImpactConfirmDialog
           open={!!impactDialogState}

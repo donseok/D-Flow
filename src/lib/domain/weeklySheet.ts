@@ -28,6 +28,9 @@ export interface WeeklyCellEdit {
   rowId: string           // weekly_report_rows.id
   cellKey: WeeklyCellKey  // snake_case DB 열명(구조 열 불가침 — 내용 4열만)
   content: string         // 저장할 새 값(0~CELL_MAX)
+  /** 값 CAS 의 기대값(SPU1, 개정 §5.8) — 내가 마지막으로 확인한 서버 값. 서버의 현재 값이 이와 다르면 쓰지 않고 충돌로 돌려준다.
+   *  undo·redo 의 역명령은 "지금 서버 값 = 내가 쓴 값"을 여기에 싣는다(§5.8.6). 없으면 옛 무조건 저장이다 */
+  expected?: string
 }
 
 /** Realtime/refresh 병합(스펙 §5): dirty(`${rowId}:${cellKey}`) 셀만 로컬 유지, 나머지(영역 id 포함)는 서버 채택. */

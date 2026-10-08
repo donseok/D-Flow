@@ -33,7 +33,13 @@ export interface WeeklyActionResult {
   ok: boolean
   error?: string
   gone?: boolean // 대상 행이 이미 삭제됨 — 재시도 무의미(클라이언트가 dirty 정리·행 제거)
+  /** 기대값(expected)과 서버의 현재 값이 달랐다 — 쓰지 않았다. latest 는 그 현재 값(화면이 내 값과 나란히 보인다, 개정 §5.8) */
+  conflict?: boolean
+  latest?: string
 }
+
+/** 배치의 칸별 충돌 — 그 칸은 쓰지 않았다(같은 행의 다른 칸은 썼다). latest 는 그 칸의 서버 현재 값 */
+export interface WeeklyCellConflict { rowId: string; cellKey: WeeklyCellKey; latest: string }
 
 // 배치는 단건과 시맨틱이 반대다 — 일부 행이 사라져도 살아있는 행 저장은 성공(ok:true).
 // 그래서 단건 `gone:boolean`(저장 실패)과 혼동되지 않게 `goneRowIds:string[]`로 분리한다.
@@ -41,6 +47,7 @@ export interface WeeklyBatchResult {
   ok: boolean
   error?: string          // ok:false일 때만. 사람이 읽는 설명(고정 문구 — DB 원문은 로그로만)
   goneRowIds?: string[]   // ok:true여도 존재 가능 — 저장 시점 이미 삭제된 행(스킵됨). FE가 그 행만 정리
+  conflicts?: WeeklyCellConflict[]   // ok:true여도 존재 가능 — 기대값이 어긋나 쓰지 않은 칸(나머지 칸은 저장됐다). FE가 비교로 잇는다
 }
 
 export interface WeeklyRewriteInput {
@@ -83,6 +90,7 @@ const ERR_CREATE = '주차 시트를 만들지 못했습니다. 잠시 후 다�
 const ERR_CARRY_CUSTOM = '이월할 추가 정보 값이 지금의 필드 설정과 맞지 않아 주차 시트를 만들지 못했습니다. 프로젝트 설정의 추가 필드를 확인하세요.'
 const ERR_TITLE_SAVE = '제목을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_CELL_SAVE = '셀을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_CELL_CONFLICT = '다른 사용자가 이 칸을 먼저 바꿨습니다. 저장하지 않았습니다.'
 const ERR_SCOPE = '대상을 확인할 수 없어 저장을 중단했습니다.'
 const ERR_REWRITE_TARGET = '선택한 셀을 확인할 수 없습니다.'
 const ERR_ROW_GONE = '행이 삭제되어 저장할 수 없습니다.'
@@ -375,9 +383,56 @@ async function touchWeeklyReports(projectId: string, reportIds: Iterable<string>
   }
 }
 
-/** 셀 저장 — 열 화이트리스트 강제(last-write-wins, 스펙 §2). updated_at 은 트리거(Q13). */
+type WeeklyCasResult =
+  /** conflicts: 기대값이 어긋나 쓰지 않은 칸의 서버 현재 값. 나머지 칸은 썼다(없으면 아무것도 쓰지 않았다) */
+  | { kind: 'done'; reportId?: string; conflicts: Partial<Record<WeeklyCellKey, string>> }
+  | { kind: 'gone' }
+  | { kind: 'error'; failure: unknown }
+const CAS_ATTEMPTS = 3
+
+/**
+ * 한 행의 값 CAS 저장(SPU1, 개정 §5.8 — 무통보 덮어쓰기 0건). 기대값이 있는 칸마다 서버의 현재 값과 견줘, 다른 칸은 쓰지 않고 그 현재
+ * 값을 돌려주고 같은 칸만 쓴다. 쓰기는 읽은 `updated_at` 을 조건으로 한다(읽기와 쓰기 사이에 끼어든 변경을 0행으로 잡는다 — 긴 본문을
+ * 필터에 싣지 않는다). 0행이면 다시 읽어 가린다: 행이 없으면 gone, 값이 달라졌으면 그 칸은 충돌, 같은 행의 다른 칸만 바뀌었으면(내 다른 칸
+ * 저장 포함) 한 번 더. 세션 열 권한은 내용 네 칸뿐이라 `updated_at` 은 조건에만 쓴다(값은 트리거가 채운다 — Q13).
+ */
+async function casUpdateWeeklyRow(
+  sb: Awaited<ReturnType<typeof createServerClient>>, projectId: string, rowId: string,
+  patch: Record<string, string>, expected: Partial<Record<WeeklyCellKey, string>>,
+): Promise<WeeklyCasResult> {
+  for (let attempt = 0; attempt < CAS_ATTEMPTS; attempt++) {
+    const { data: now, error: readErr } = await sb.from('weekly_report_rows')
+      .select('id, report_id, updated_at, this_content, this_issue, next_content, next_issue')
+      .eq('id', rowId)
+      .eq('project_id', projectId)
+      .maybeSingle()
+    if (readErr) return { kind: 'error', failure: readErr }   // 쓰기 전 선행 조회 실패 = 중단(3원칙)
+    if (!now) return { kind: 'gone' }
+    const row = now as Record<string, string | null>
+    const conflicts: Partial<Record<WeeklyCellKey, string>> = {}
+    const writable: Record<string, string> = {}
+    for (const [key, content] of Object.entries(patch) as Array<[WeeklyCellKey, string]>) {
+      const want = expected[key]
+      if (want !== undefined && (row[key] ?? '') !== want) conflicts[key] = row[key] ?? ''
+      else writable[key] = content
+    }
+    if (Object.keys(writable).length === 0) return { kind: 'done', conflicts }
+    const { data, error } = await sb.from('weekly_report_rows')
+      .update(writable)    // updated_at 없음 — 트리거가 채운다(Q13)
+      .eq('id', rowId)
+      .eq('updated_at', row.updated_at as string)
+      .select('id, report_id')
+    if (error) return { kind: 'error', failure: error }
+    const written = (data as Array<{ id: string; report_id?: string }> | null)?.[0]
+    if (written) return { kind: 'done', reportId: written.report_id, conflicts }
+  }
+  return { kind: 'error', failure: new Error('weekly cell CAS: 행이 계속 바뀌어 쓰지 못했다') }
+}
+
+/** 셀 저장 — 열 화이트리스트 강제. `expected`(내가 마지막으로 확인한 서버 값)가 있으면 값 CAS 다 — 서버의 현재 값이 다르면 쓰지 않고
+ *  `conflict` 와 그 값을 돌려준다(SPU1). 없으면 옛 무조건 저장(last-write-wins, 스펙 §2). updated_at 은 트리거(Q13). */
 export async function saveWeeklyCell(
-  projectId: string, rowId: string, cellKey: string, content: string,
+  projectId: string, rowId: string, cellKey: string, content: string, expected?: string,
 ): Promise<WeeklyActionResult> {
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
@@ -391,6 +446,15 @@ export async function saveWeeklyCell(
   if (!scope.ok) return { ok: false, error: scope.error }
   // 소속이 아니면 '행 없음'과 같은 취급 — 남의 프로젝트 행의 존재를 알려 주지 않는다.
   if (!scope.areaOf.has(rowId)) return { ok: false, error: ERR_ROW_GONE, gone: true }
+  if (typeof expected === 'string') {
+    const r = await casUpdateWeeklyRow(sb, projectId, rowId, { [cellKey]: content }, { [cellKey]: expected })
+    if (r.kind === 'error') return { ok: false, error: failWith('weekly/cell', r.failure, ERR_CELL_SAVE) }
+    if (r.kind === 'gone') return { ok: false, error: ERR_ROW_GONE, gone: true }
+    const latest = r.conflicts[cellKey as WeeklyCellKey]
+    if (latest !== undefined) return { ok: false, error: ERR_CELL_CONFLICT, conflict: true, latest }
+    if (r.reportId) void touchWeeklyReports(projectId, [r.reportId])
+    return { ok: true }
+  }
   // updated_at 은 보내지 않는다 — weekly_report_rows_touch 트리거가 채우고 세션 열 권한은 내용 네 칸뿐이다(Q13 — 보내면 42501)
   const { data, error } = await sb.from('weekly_report_rows')
     .update({ [cellKey]: content })
@@ -444,6 +508,9 @@ export async function saveWeeklyCells(
   const touchedReportIds = new Set<string>()
   // 행 단위 그룹핑 — 같은 행의 여러 cellKey 는 patch 하나로 합쳐 행당 1 update 로 보낸다.
   const patches = new Map<string, Record<string, string>>()
+  // 기대값이 실린 칸(SPU1 값 CAS) — 그 행은 casUpdateWeeklyRow 로 쓴다. 기대값이 없는 칸만 있는 행은 옛 무조건 저장이다
+  const expectedOf = new Map<string, Partial<Record<WeeklyCellKey, string>>>()
+  const conflicts: WeeklyCellConflict[] = []
   for (const e of deduped.values()) {
     if (!scope.areaOf.has(e.rowId)) {
       if (!goneRowIds.includes(e.rowId)) goneRowIds.push(e.rowId)
@@ -452,6 +519,7 @@ export async function saveWeeklyCells(
     const patch = patches.get(e.rowId)
     if (patch) patch[e.cellKey] = e.content
     else patches.set(e.rowId, { [e.cellKey]: e.content })
+    if (typeof e.expected === 'string') expectedOf.set(e.rowId, { ...expectedOf.get(e.rowId), [e.cellKey]: e.expected })
   }
 
   const rows = [...patches.entries()]
@@ -461,6 +529,13 @@ export async function saveWeeklyCells(
     // unhandled rejection 없이 청크 전체가 정착한 뒤 순서대로 판정한다.
     const results = await Promise.all(chunk.map(async ([rowId, patch]) => {
       try {
+        const expected = expectedOf.get(rowId)
+        if (expected) {
+          const r = await casUpdateWeeklyRow(sb, projectId, rowId, patch, expected)
+          if (r.kind === 'error') return { rowId, failure: r.failure, gone: false }
+          if (r.kind === 'gone') return { rowId, failure: null, gone: true }
+          return { rowId, reportId: r.reportId, failure: null, gone: false, latest: r.conflicts }
+        }
         const { data, error } = await sb.from('weekly_report_rows')
           .update(patch)    // updated_at 없음 — 트리거가 채운다(Q13)
           .eq('id', rowId)
@@ -472,6 +547,10 @@ export async function saveWeeklyCells(
       }
     }))
     for (const r of results) {
+      // 기대값이 어긋난 칸 — 쓰지 않았다. 칸별 현재 값을 모아 돌려준다(전체 실패 아님 — 그 행의 다른 칸과 다른 행은 저장됐다)
+      if ('latest' in r && r.latest) {
+        for (const [cellKey, latest] of Object.entries(r.latest)) conflicts.push({ rowId: r.rowId, cellKey: cellKey as WeeklyCellKey, latest: latest ?? '' })
+      }
       // 진성 DB 에러 — 청크 경계에서 중단(비원자적, 재시도는 멱등). 원문은 로그로만(D21)
       if (r.failure !== null) return { ok: false, error: failWith('weekly/cells', r.failure, ERR_CELL_SAVE) }
       if (r.gone) goneRowIds.push(r.rowId)                            // 0행 영향(삭제된 행) — 스킵하고 계속(전체 실패 아님)
@@ -482,5 +561,5 @@ export async function saveWeeklyCells(
     void touchWeeklyReports(projectId, touchedReportIds)
   }
   // revalidate 안 함 — 행 update 하나가 그 행의 Realtime 이벤트 하나를 발생시켜 타 세션에 전파.
-  return goneRowIds.length ? { ok: true, goneRowIds } : { ok: true }
+  return { ok: true, ...(goneRowIds.length ? { goneRowIds } : {}), ...(conflicts.length ? { conflicts } : {}) }
 }

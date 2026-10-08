@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { editSessionStore } from '@/lib/sync/editSession'
+import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
 
 describe('editSessionStore', () => {
   beforeEach(() => {
@@ -66,5 +66,39 @@ describe('editSessionStore', () => {
     unsubscribe()
     editSessionStore.setSession('s-1', 'wbs', 'i-1', 'idle')
     expect(callCount).toBe(2)
+  })
+
+  it('editing(저장 전 초안)은 editingCount 로 집계되고 isFullySynced 를 내린다 — 확인 필요에는 들지 않는다', () => {
+    editSessionStore.setSession('s-1', 'wbs_cell', 'i-1', 'editing')
+    expect(editSessionStore.getSummary()).toMatchObject({ editingCount: 1, needsAttentionCount: 0, isFullySynced: false })
+    editSessionStore.removeSession('s-1')
+    expect(editSessionStore.getSummary()).toMatchObject({ editingCount: 0, isFullySynced: true })
+  })
+
+  it('removeWhere 는 고른 세션만 걷고 한 번만 통지한다. 고른 것이 없으면 통지하지 않는다', () => {
+    editSessionStore.setSession('a', 'wbs_cell', 'i-1', 'editing')
+    editSessionStore.setSession('b', 'wbs_cell', 'i-2', 'saving')
+    editSessionStore.setSession('c', 'kanban', 'i-3', 'failed')
+    let calls = 0
+    const off = editSessionStore.subscribe(() => { calls++ })
+    editSessionStore.removeWhere(x => x.surface === 'wbs_cell' && x.status !== 'saving' && x.status !== 'saved')
+    expect([editSessionStore.getSession('a'), editSessionStore.getSession('b')?.status, editSessionStore.getSession('c')?.status]).toEqual([undefined, 'saving', 'failed'])
+    expect(calls).toBe(1)
+    editSessionStore.removeWhere(() => false)
+    expect(calls).toBe(1)
+    off()
+  })
+})
+
+describe('classifyCasOutcome — 응답을 잃은 값 CAS 저장의 결과 판정(Q10)', () => {
+  it('서버 값이 내 값이면 반영됨, 편집 시작 값 그대로면 미반영, 둘 다 아니면 충돌', () => {
+    expect(classifyCasOutcome({ mine: 60, base: 50, latest: 60 })).toBe('applied')
+    expect(classifyCasOutcome({ mine: 60, base: 50, latest: 50 })).toBe('not_applied')
+    expect(classifyCasOutcome({ mine: 60, base: 50, latest: 70 })).toBe('conflict')
+  })
+  it('같음 판정을 넘겨받는다(null 과 0 을 같게 보는 실적% 등)', () => {
+    const same = (a: number | null, b: number | null) => Number(a ?? 0) === Number(b ?? 0)
+    expect(classifyCasOutcome<number | null>({ mine: 0, base: 50, latest: null }, same)).toBe('applied')
+    expect(classifyCasOutcome<number | null>({ mine: 60, base: null, latest: 0 }, same)).toBe('not_applied')
   })
 })

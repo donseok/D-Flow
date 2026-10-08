@@ -252,6 +252,7 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('wbs')}#getChangeLogs`]: nul('session', '로그인 + RLS(WBS 변경 이력)'),
   [`${A('wbs')}#updateActual`]: { ...nul('projectMember'), sample: [U, 50] },   // 0~100 검사가 가드 앞
   [`${A('wbs')}#updateWeight`]: nul('projectMember'),
+  [`${A('wbs')}#getWbsCellSnapshot`]: nul('projectMember'),   // 셀 값 재조회(SPU1 — 저장 응답 유실 때 반영 여부 확인)
   [`${A('wbs')}#addWbsItem`]: nul('projectMember'),
   [`${A('wbs')}#addSubAct`]: nul('projectMember'),
   [`${A('wbs')}#updateWbsFields`]: nul('projectMember'),

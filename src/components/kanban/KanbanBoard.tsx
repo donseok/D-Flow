@@ -20,12 +20,13 @@ import { type ApprovalStepDef, DEFAULT_STEP_CODE } from '@/lib/domain/approvalSt
 import { setWbsStage, approveWbsStep } from '@/app/actions/wbsAssign'
 import { resolveDrop } from '@/lib/domain/kanban-drop'
 import { statusOf } from '@/lib/domain/progress'
-import { updateActual } from '@/app/actions/wbs'
+import { updateActual, getWbsCellSnapshot } from '@/app/actions/wbs'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes, useTeams } from '@/components/app/TeamsProvider'
 import type { DictKey } from '@/lib/i18n/dict'
-import { editSessionStore } from '@/lib/sync/editSession'
+import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
+import { ConflictResolver } from '@/components/ui/ConflictResolver'
 import { KanbanCard } from './KanbanCard'
 import { ProgressPopover } from './ProgressPopover'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
@@ -99,6 +100,12 @@ export function KanbanBoard({
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
   const [failedMoves, setFailedMoves] = useState<Record<string, { attemptedPct: number; prevPct: number; error: string }>>({})
   const [liveMsg, setLiveMsg] = useState('')
+  // 이동 충돌 비교(개정 §5.8) — 카드는 의도한 위치에 둔 채 내 값·서버 값을 보인다
+  const [moveConflict, setMoveConflict] = useState<{ card: ComputedItem; mine: number; latest: number; base: number } | null>(null)
+  // 화면이 내려가면 실패 표시도 사라진다 — 끝나지 않은 이동 세션이 헤더에 영영 남지 않게 걷는다
+  useEffect(() => () => {
+    editSessionStore.removeWhere(x => x.surface === 'kanban' && x.status !== 'saving' && x.status !== 'saved')
+  }, [])
   // 같은 카드에 대한 commit 재진입 방지(더블클릭 등으로 두 번째 요청이 첫 번째보다 먼저 읽는 prev가
   // 이미 낙관적 override로 오염되는 것을 막는다) — 렌더와 무관한 동기 가드라 ref로 관리.
   const inFlightRef = useRef<Set<string>>(new Set())
@@ -216,51 +223,75 @@ export function KanbanBoard({
   // 실적% 반영 — 낙관적으로 먼저 옮기고, 실패하면 의도한 위치 보존 및 재시도 액션 제공(D6-§2-kanban).
   // prev는 원시값(반올림 금지): 반올림하면 (a) 소수 실적(예: 99.6%)에서 가드가 조기 무력화돼 카드가 100%에 영영 못 닿고,
   // (b) updateActual의 CAS가 DB 원시값과 반올림값을 비교해 오탐 충돌을 낸다.
-  async function commit(card: ComputedItem, pct: number) {
-    const prev = card.rolledActualPct
-    if (prev === pct) return
+  // expected: 비교에서 '내 값으로 저장'을 고른 재저장 — 사용자가 본 서버 값(최신)을 기대값으로 쓴다.
+  async function commit(card: ComputedItem, pct: number, expected?: { latest: number }) {
+    const prev = expected ? expected.latest : card.rolledActualPct
+    if (prev === pct && !expected) {
+      // 재시도인데 서버가 이미 그 값이다(그새 반영·새로고침) — 남은 실패 표시만 걷는다
+      if (failedMoves[card.id]) dismissMove(card.id)
+      return
+    }
     if (inFlightRef.current.has(card.id)) return           // 같은 카드 재진입 방지(더블클릭 등)
     inFlightRef.current.add(card.id)
     const sessionId = `kanban:${card.id}`
     setOverride(o => ({ ...o, [card.id]: pct }))            // 낙관적 이동 보존
     setSavingIds(s => new Set(s).add(card.id))
     editSessionStore.setSession(sessionId, 'kanban', card.id, 'saving')
-    try {
-      const res = await updateActual(card.id, pct, prev)   // CAS: expectedCurrent = 현재값
-      if (!res.ok) {
-        // D6-§2-kanban: 실패 시 롤백으로 사라지지 않고 현재 의도 위치를 보존하여 재시도 버튼 제공
-        const errMsg = res.conflict ? t('kanban.conflict')
-          : res.code === 'actual_locked' ? t('wbs.actualLocked')
-            : res.code === 'approval_required' ? t('wbs.err.approvalRequired')
-              : wbsToastText(t, res.error, 'kanban.errChange')
-        setFailedMoves(f => ({ ...f, [card.id]: { attemptedPct: pct, prevPct: prev, error: errMsg } }))
-        editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
-          error: { kind: 'server_reject', message: errMsg },
-        })
-        toast({
-          title: t('kanban.saveFailedTitle'),
-          description: errMsg,
-          variant: 'error',
-        })
-        if (res.conflict) router.refresh()
-        return
-      }
+    const applied = () => {
       // 성공 확정 — 실패 상태 해제 및 세션 동기화
       setFailedMoves(f => { const n = { ...f }; delete n[card.id]; return n })
       editSessionStore.setSession(sessionId, 'kanban', card.id, 'saved')
       setLiveMsg(`${card.name} ${pct}%`)
       router.refresh() // 성공 확정 — 새 items 도착 시 useEffect가 override 비움
-    } catch {
-      const errMsg = t('kanban.saveFailedTitle') || '저장에 실패했습니다.'
+    }
+    // D6-§2-kanban: 실패해도 카드는 의도한 위치에 남고 재시도·원위치를 고른다
+    const failedWith = (errMsg: string, status: 'failed' | 'outcome_unknown' = 'failed') => {
       setFailedMoves(f => ({ ...f, [card.id]: { attemptedPct: pct, prevPct: prev, error: errMsg } }))
-      editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
-        error: { kind: 'server_reject', message: errMsg },
-      })
-      toast({ title: t('kanban.saveFailedTitle'), variant: 'error' })
+      editSessionStore.setSession(sessionId, 'kanban', card.id, status, { error: { kind: status === 'failed' ? 'server_reject' : 'outcome_unknown', message: errMsg } })
+      toast({ title: t('kanban.saveFailedTitle'), description: errMsg, variant: 'error' })
+    }
+    // 그새 다른 사람이 바꿨다(개정 §5.8, Q05) — 카드는 의도한 위치에 둔 채 내 값·서버 값을 나란히 보이고 고르게 한다
+    const conflicted = (latest: number) => {
+      setFailedMoves(f => ({ ...f, [card.id]: { attemptedPct: pct, prevPct: prev, error: t('kanban.conflict') } }))
+      editSessionStore.setSession(sessionId, 'kanban', card.id, 'conflict', { error: { kind: 'conflict', message: t('kanban.conflict') } })
+      setMoveConflict({ card, mine: pct, latest, base: prev })
+    }
+    const sameValue = (a: number | null, b: number | null) => Number(a ?? 0) === Number(b ?? 0)
+    try {
+      let res: Awaited<ReturnType<typeof updateActual>>
+      try {
+        res = await updateActual(card.id, pct, prev)   // CAS: expectedCurrent = 현재값
+      } catch {
+        // 응답 유실(§5.8.1 OutcomeUnknown, Q10) — 실패로 단정하지 않고, 다시 보내지도 않고, 서버 값을 읽어 가린다
+        editSessionStore.setSession(sessionId, 'kanban', card.id, 'outcome_unknown')
+        const snap = await getWbsCellSnapshot(card.id).catch(() => null)
+        if (!snap?.ok) return failedWith(t('common.outcomeUnknown'), 'outcome_unknown')
+        const outcome = classifyCasOutcome<number | null>({ mine: pct, base: prev, latest: snap.actualPct }, sameValue)
+        if (outcome === 'applied') return applied()
+        if (outcome === 'conflict') return conflicted(Number(snap.actualPct ?? 0))
+        return failedWith(t('common.outcomeNotApplied'))
+      }
+      if (res.ok) return applied()
+      if (res.conflict && res.latest !== undefined) {
+        // 서버 값이 이미 내 값이다 = 앞선 내 이동이 반영돼 있었다(응답만 잃었다) — 충돌이 아니다
+        if (sameValue(res.latest, pct)) return applied()
+        return conflicted(Number(res.latest ?? 0))
+      }
+      const errMsg = res.conflict ? t('kanban.conflict')
+        : res.code === 'actual_locked' ? t('wbs.actualLocked')
+          : res.code === 'approval_required' ? t('wbs.err.approvalRequired')
+            : wbsToastText(t, res.error, 'kanban.errChange')
+      failedWith(errMsg)
+      if (res.conflict) router.refresh()
     } finally {
       setSavingIds(s => { const n = new Set(s); n.delete(card.id); return n })
       inFlightRef.current.delete(card.id)
     }
+  }
+  const dismissMove = (cardId: string) => {
+    setOverride(o => { const n = { ...o }; delete n[cardId]; return n })
+    setFailedMoves(f => { const n = { ...f }; delete n[cardId]; return n })
+    editSessionStore.removeSession(`kanban:${cardId}`)
   }
 
   async function handleMoveStage(card: ComputedItem, nextStageKey: FlowStageKey) {
@@ -567,12 +598,9 @@ export function KanbanBoard({
                         saving={savingIds.has(card.id)}
                         failed={failedMoves[card.id] ? {
                           error: failedMoves[card.id].error,
-                          onRetry: () => void commit(card, failedMoves[card.id].attemptedPct),
-                          onDismiss: () => {
-                            setOverride(o => { const n = { ...o }; delete n[card.id]; return n })
-                            setFailedMoves(f => { const n = { ...f }; delete n[card.id]; return n })
-                            editSessionStore.removeSession(`kanban:${card.id}`)
-                          },
+                          // 그려진 카드는 낙관 이동이 입혀져 있다(실적% = 의도한 값) — 기준은 서버가 준 원본 값이어야 재시도가 실제로 나간다
+                          onRetry: () => void commit(rawLeafById.get(card.id) ?? card, failedMoves[card.id].attemptedPct),
+                          onDismiss: () => dismissMove(card.id),
                         } : undefined}
                         onOpen={() => openInWbs(card)}
                         onStart={canDrag ? () => startCard(card) : undefined}
@@ -597,6 +625,14 @@ export function KanbanBoard({
 
       {/* 스크린리더 진행률 변경 확정 안내 — 시각적으로는 숨김 */}
       <div aria-live="polite" className="sr-only">{liveMsg}</div>
+      <ConflictResolver
+        open={!!moveConflict}
+        target={moveConflict?.card.name}
+        fields={moveConflict ? [{ key: 'actual', label: t('wbs.colActualPct'), mine: `${moveConflict.mine}%`, latest: `${moveConflict.latest}%`, base: `${moveConflict.base}%` }] : []}
+        onKeepMine={() => { const c = moveConflict; if (!c) return; setMoveConflict(null); void commit(c.card, c.mine, { latest: c.latest }) }}
+        onTakeLatest={() => { const c = moveConflict; if (!c) return; setMoveConflict(null); dismissMove(c.card.id); router.refresh() }}
+        onContinue={() => setMoveConflict(null)}
+      />
 
       <Modal
         open={confirmCard !== null}

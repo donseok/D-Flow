@@ -59,6 +59,38 @@ describe('SyncStatus component', () => {
     expect(container.textContent).toContain('연결 끊김')
   })
 
+  // SPU1 완료 조건(개정 §5.8.3): '동기화됨'은 미저장·실패·대기 명령이 0 일 때만 보인다
+  it.each([
+    ['editing', '저장 전 변경 1'], ['saving', '저장 중...'], ['failed', '확인 필요 1'], ['conflict', '확인 필요 1'], ['outcome_unknown', '확인 필요 1'],
+  ] as const)('%s 세션이 하나라도 있으면 "동기화됨"이 아니다 — 저장된 다른 세션이 있어도', async (status, text) => {
+    editSessionStore.setSession('done', 'wbs_cell', 'i-0', 'saved')
+    editSessionStore.setSession('s-1', 'wbs_cell', 'i-1', status)
+    await mount()
+    expect(container.textContent).not.toContain('동기화됨')
+    expect(container.textContent).toContain(text)
+  })
+
+  it('남은 세션이 끝나면(저장됨·취소) 그때 "동기화됨"으로 돌아온다', async () => {
+    editSessionStore.setSession('s-1', 'weekly_cell', 'r1:this_content', 'editing')
+    editSessionStore.setSession('s-2', 'kanban', 'c1', 'failed')
+    await mount()
+    expect(container.textContent).toContain('확인 필요 1')
+    await act(async () => { editSessionStore.removeSession('s-2') })
+    expect(container.textContent).toContain('저장 전 변경 1')
+    await act(async () => { editSessionStore.setSession('s-1', 'weekly_cell', 'r1:this_content', 'saved') })
+    expect(container.textContent).toContain('동기화됨')
+  })
+
+  it('연결이 돌아와도 초안·실패가 남아 있으면 "동기화됨"으로 바꾸지 않는다', async () => {
+    editSessionStore.setSession('s-1', 'wbs_cell', 'i-1', 'editing')
+    editSessionStore.setConnectionState('offline')
+    await mount()
+    expect(container.textContent).toContain('연결 끊김')
+    await act(async () => { editSessionStore.setConnectionState('online') })
+    expect(container.textContent).not.toContain('동기화됨')
+    expect(container.textContent).toContain('저장 전 변경 1')
+  })
+
   it('동기화 완료 상태이고 저장 시각이 있으면 "동기화됨"을 표시한다', async () => {
     editSessionStore.setSession('s-1', 'wbs', 'i-1', 'saved')
     await mount()

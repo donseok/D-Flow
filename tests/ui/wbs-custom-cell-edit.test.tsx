@@ -8,8 +8,8 @@ import { toProjectActorView, type Actor, type ProjectActorView } from '@/lib/dom
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const h = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn() }))
-vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWeight: vi.fn(), addWbsItem: vi.fn() }))
+const h = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn(), snapshot: vi.fn() }))
+vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWeight: vi.fn(), addWbsItem: vi.fn(), getWbsCellSnapshot: h.snapshot }))
 vi.mock('@/app/actions/customFieldValues', () => ({ saveCustomFieldValues: h.save }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (key: string) => key }) }))
@@ -153,7 +153,9 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
     expect(cell('result').textContent).toBe('합격')
   })
 
-  it('CAS 충돌은 덮지 않는다 — 알리고 편집기를 닫은 뒤 새로 읽는다. 화면 값은 서버 값 그대로다', async () => {
+  // SPU1(개정 §5.8): 충돌의 계약이 '닫고 새로 읽기'에서 '입력을 둔 채 비교'로 바뀌었다(아래 "충돌 비교" 묶음). 이 케이스는 서버가 그 행의
+  // 현재 값을 돌려주지 못한 충돌(행 삭제·권한 회수 — latest 없음)만 고정한다: 비교할 것이 없으니 알리고 새로 읽는다. 쓰지는 않는다.
+  it('현재 값을 읽지 못한 CAS 충돌(latest 없음)은 덮지 않는다 — 알리고 편집기를 닫은 뒤 새로 읽는다. 화면 값은 서버 값 그대로다', async () => {
     await render({ qty: 1 })
     await click(cell('qty'))
     await type(editor('qty')!, '7')
@@ -225,6 +227,118 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
     expect(h.save).toHaveBeenCalledWith(P, 'wbs_item', 'a1', { qty: 1, grade: 'A' }, { qty: 2, grade: 'A' })
     await click(cell('grade'))
     expect(editor('grade')).toBeNull()
+  })
+
+  describe('충돌 비교와 응답 유실(SPU1 — 개정 §5.8, Q05·Q10)', () => {
+    const dialog = () => document.querySelector<HTMLElement>('[data-testid="conflict-resolver"]')
+    const choose = (action: 'mine' | 'latest' | 'continue') => act(async () => dialog()!.querySelector<HTMLButtonElement>(`[data-conflict-action="${action}"]`)!.click())
+    const values = () => (['mine', 'latest', 'base'] as const).map(w => dialog()!.querySelector(`[data-conflict-value="${w}"]`)?.textContent)
+    const CONFLICT = { ok: false, code: 'FIELD_CONFLICT', error: '값이나 편집 권한이 바뀌었습니다.' }
+    /** A 가 수량 1 → 7 을 치고 Enter */
+    async function typeSeven(custom: unknown = { qty: 1, result: 'pass' }) {
+      await render(custom)
+      await click(cell('qty'))
+      await type(editor('qty')!, '7')
+      await key(editor('qty')!, 'Enter')
+    }
+
+    it('Q05 — 이 칸을 다른 사람이 9 로 바꿨으면 저장하지 않고 비교를 띄운다. 편집기와 내 입력 7 은 그대로다', async () => {
+      h.save.mockResolvedValue({ ...CONFLICT, latest: { qty: 9, result: 'pass' } })
+      await typeSeven()
+      expect(h.save).toHaveBeenCalledTimes(1)
+      expect(values()).toEqual(['7', '9', '1'])
+      expect(editor('qty')?.value).toBe('7')
+      expect(h.refresh).not.toHaveBeenCalled()
+    })
+
+    it('Q05 — 내 값으로 저장: 본 최신 행을 기대값으로 내 칸만 얹어 한 번 쓴다(다른 칸의 변경은 지킨다)', async () => {
+      h.save.mockResolvedValueOnce({ ...CONFLICT, latest: { qty: 9, result: 'old' } })
+      await typeSeven()
+      h.save.mockResolvedValueOnce({ ok: true, values: { qty: 7, result: 'old' } })
+      await choose('mine')
+      expect(h.save).toHaveBeenCalledTimes(2)
+      expect(h.save).toHaveBeenLastCalledWith(P, 'wbs_item', 'a1', { qty: 9, result: 'old' }, { qty: 7, result: 'old' })
+      expect(dialog()).toBeNull()
+      expect(editor('qty')).toBeNull()
+      expect(cell('qty').textContent).toBe('7')
+    })
+
+    it('Q05 — 서버 값 받기는 쓰지 않는다. 계속 편집은 쓰지 않고 입력을 남긴다', async () => {
+      h.save.mockResolvedValue({ ...CONFLICT, latest: { qty: 9, result: 'pass' } })
+      await typeSeven()
+      await choose('continue')
+      expect(h.save).toHaveBeenCalledTimes(1)
+      expect(editor('qty')?.value).toBe('7')
+      await key(editor('qty')!, 'Enter')       // 다시 저장 — 기준은 그대로(1)라 다시 비교한다
+      expect(h.save).toHaveBeenCalledTimes(2)
+      expect(h.save.mock.calls[1][3]).toEqual({ qty: 1, result: 'pass' })
+      await choose('latest')
+      expect(h.save).toHaveBeenCalledTimes(2)
+      expect(editor('qty')).toBeNull()
+      expect(cell('qty').textContent).toBe('1')   // 서버 스냅샷이 올 때까지 화면은 받은 값 그대로
+      expect(h.refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('다른 칸만 바뀐 행은 비교 없이 그 변경 위에 내 칸만 얹어 한 번 더 저장한다 — 남의 변경을 덮지 않는다', async () => {
+      h.save.mockResolvedValueOnce({ ...CONFLICT, latest: { qty: 1, result: 'old', grade: 'B' } })
+        .mockResolvedValueOnce({ ok: true, values: { qty: 7, result: 'old', grade: 'B' } })
+      await typeSeven()
+      expect(dialog()).toBeNull()
+      expect(h.save).toHaveBeenCalledTimes(2)
+      expect(h.save).toHaveBeenLastCalledWith(P, 'wbs_item', 'a1', { qty: 1, result: 'old', grade: 'B' }, { qty: 7, result: 'old', grade: 'B' })
+      expect(cell('qty').textContent).toBe('7')
+    })
+
+    it('얹어 다시 저장한 것도 충돌하면 더 돌지 않고 비교로 간다', async () => {
+      h.save.mockResolvedValueOnce({ ...CONFLICT, latest: { qty: 1, result: 'old' } })
+        .mockResolvedValueOnce({ ...CONFLICT, latest: { qty: 1, result: 'pass', grade: 'C' } })
+      await typeSeven()
+      expect(h.save).toHaveBeenCalledTimes(2)
+      expect(values()).toEqual(['7', '1', '1'])
+    })
+
+    it('충돌인데 이 칸이 이미 내 값이면(앞선 내 저장이 반영돼 있었다) 다시 쓰지 않고 저장됨으로 닫는다', async () => {
+      h.save.mockResolvedValue({ ...CONFLICT, latest: { result: 'pass', qty: 7 } })
+      await typeSeven()
+      expect(h.save).toHaveBeenCalledTimes(1)
+      expect(dialog()).toBeNull()
+      expect(cell('qty').textContent).toBe('7')
+    })
+
+    it('Q10 — 응답을 잃었고 서버의 이 칸이 내 값이면 반영된 것이다. 다시 보내지 않는다', async () => {
+      h.save.mockRejectedValue(new Error('network'))
+      h.snapshot.mockResolvedValue({ ok: true, actualPct: 0, weight: 1, custom: { result: 'pass', qty: 7 } })
+      await typeSeven()
+      expect(h.save).toHaveBeenCalledTimes(1)
+      expect(h.snapshot).toHaveBeenCalledWith('a1')
+      expect(editor('qty')).toBeNull()
+      expect(cell('qty').textContent).toBe('7')
+    })
+
+    it('Q10 — 응답을 잃었고 서버의 이 칸이 그대로면 미반영이다. 입력을 지키고 알린다', async () => {
+      h.save.mockRejectedValue(new Error('network'))
+      h.snapshot.mockResolvedValue({ ok: true, actualPct: 0, weight: 1, custom: { qty: 1, result: 'pass' } })
+      await typeSeven()
+      expect(h.save).toHaveBeenCalledTimes(1)
+      expect(editor('qty')?.value).toBe('7')
+      expect(editor('qty')?.getAttribute('aria-invalid')).toBe('true')
+      expect(container.textContent).toContain('저장되지 않았습니다')
+    })
+
+    it('Q10 — 응답을 잃었고 이 칸이 제3의 값이면 비교로, 결과 조회도 실패하면 입력을 지킨 채 알린다', async () => {
+      h.save.mockRejectedValue(new Error('network'))
+      h.snapshot.mockResolvedValueOnce({ ok: true, actualPct: 0, weight: 1, custom: { qty: 9, result: 'pass' } })
+      await typeSeven()
+      expect(values()).toEqual(['7', '9', '1'])
+      await choose('latest')
+      h.snapshot.mockRejectedValueOnce(new Error('network'))
+      await click(cell('qty'))
+      await type(editor('qty')!, '7')
+      await key(editor('qty')!, 'Enter')
+      expect(h.save).toHaveBeenCalledTimes(2)
+      expect(editor('qty')?.value).toBe('7')
+      expect(container.textContent).toContain('저장 결과를 확인하지 못했습니다')
+    })
   })
 
   it('읽지 못한 값(손상)은 경고 표식만 — 편집으로 덮지 못한다', async () => {

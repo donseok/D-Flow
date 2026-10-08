@@ -15,6 +15,7 @@ import { availableSubActTeams, willDiscardActual } from '@/lib/domain/subact'
 import { canAddChild, canSplit } from '@/lib/domain/wbsAffordance'
 import { getAttachmentUrl, listAttachments, recordAttachment, removeAttachment, type AttachmentList } from '@/app/actions/attachments'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
+import { ConflictResolver } from '@/components/ui/ConflictResolver'
 import { removeErrorKey } from '@/lib/attachments/removeErrors'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
 import { createBrowserClient } from '@/lib/supabase/client'
@@ -111,9 +112,17 @@ export function RowDetailPanel({
   const [lagDays, setLagDays] = useState('0')
   const [dependencyBusy, setDependencyBusy] = useState(false)
   const [dependencyErr, setDependencyErr] = useState<string | null>(null)
-  const [form, setForm] = useState({
-    name: item.name, start: item.plannedStart ?? '', end: item.plannedEnd ?? '', deliverable: item.deliverable ?? '',
-  })
+  type FieldForm = { name: string; start: string; end: string; deliverable: string }
+  const formOf = (): FieldForm => ({ name: item.name, start: item.plannedStart ?? '', end: item.plannedEnd ?? '', deliverable: item.deliverable ?? '' })
+  const [form, setForm] = useState<FieldForm>(formOf)
+  // 저장 충돌(SPU1, 개정 §5.8) — formBase 는 폼이 서버 값과 맞춰진 때의 값(저장의 기대값). 편집 중에 서버 값이 바뀌어도 폼을 닫거나 덮지 않고,
+  // 저장할 때 서버가 가려 준 충돌을 비교(ConflictResolver)로 보인다. delivBase 는 산출물 인라인 편집의 같은 것.
+  const [formBase, setFormBase] = useState<FieldForm>(formOf)
+  const [fieldConflict, setFieldConflict] = useState<Partial<FieldForm> | null>(null)
+  const [delivBase, setDelivBase] = useState<string | null>(null)
+  const [delivConflict, setDelivConflict] = useState<{ latest: string | null } | null>(null)
+  const editingRef = useRef(false)
+  editingRef.current = editing
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -121,14 +130,23 @@ export function RowDetailPanel({
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // 다른 항목으로 바뀌면 편집 상태를 모두 접는다. 같은 항목의 값이 바뀐 것(내 저장·남의 저장·새로고침)으로는 접지 않는다 —
+  // 접으면 치던 입력이 말없이 사라진다(SPU1 — 조용히 버리지 않는다).
   useEffect(() => {
-    let alive = true
-    setLogs(null)
     setEditing(false); setConfirmDel(false); setAddName(null); setErr(null)
     setSubOpen(false); setSubTeam(null); setSubKind('primary')
     setDelivEditing(false); setDelivErr(null)
+    setFieldConflict(null); setDelivConflict(null)
     setDependencyOpen(false); setPredecessorId(''); setDependencyType('FS'); setLagDays('0'); setDependencyErr(null)
-    setForm({ name: item.name, start: item.plannedStart ?? '', end: item.plannedEnd ?? '', deliverable: item.deliverable ?? '' })
+  }, [item.id])
+  useEffect(() => {
+    let alive = true
+    setLogs(null)
+    // 편집 중이 아니면 폼과 기대값을 서버 값에 맞춘다. 편집 중이면 둘 다 그대로 — 저장 때 서버가 어긋난 칸을 가린다
+    if (!editingRef.current) {
+      const next = { name: item.name, start: item.plannedStart ?? '', end: item.plannedEnd ?? '', deliverable: item.deliverable ?? '' }
+      setForm(next); setFormBase(next)
+    }
     getChangeLogs(item.id).then(r => { if (alive) setLogs(r) }).catch(() => { if (alive) setLogs([]) })
     return () => { alive = false }
   }, [item.id, item.name, item.plannedStart, item.plannedEnd, item.deliverable])
@@ -231,23 +249,54 @@ export function RowDetailPanel({
     router.refresh()
   }
 
-  const saveFields = () =>
-    run(() => updateWbsFields(item.id, {
+  const openEdit = () => { const next = formOf(); setForm(next); setFormBase(next); setErr(null); setEditing(true) }
+  // base: 비교에서 '내 값으로 저장'을 고른 재저장 — 사용자가 본 서버 값(최신)을 기대값으로 쓴다
+  async function saveFields(base: FieldForm = formBase) {
+    setBusy(true); setErr(null)
+    const res = await updateWbsFields(item.id, {
       name: form.name,
       plannedStart: form.start || null,
       plannedEnd: form.end || null,
       deliverable: form.deliverable || null,
-    }), () => setEditing(false))
-
-  const openDeliv = () => { setDelivDraft(item.deliverable ?? ''); setDelivErr(null); setDelivEditing(true) }
-  async function saveDeliv() {
-    setDelivBusy(true); setDelivErr(null)
-    const res = await updateDeliverable(item.id, delivDraft.trim() || null)
-    setDelivBusy(false)
-    if (!res.ok) { setDelivErr(res.error ?? t('wbs.errGeneric')); return }
-    setDelivEditing(false)
-    router.refresh()
+    }, { name: base.name, plannedStart: base.start || null, plannedEnd: base.end || null, deliverable: base.deliverable || null })
+    setBusy(false)
+    if (res.ok) { setEditing(false); router.refresh(); return }
+    if (res.conflict && res.latest) {
+      // 충돌 — 폼과 입력을 둔 채 어긋난 칸만 비교로 보인다
+      const l = res.latest
+      setFieldConflict({
+        ...(l.name !== undefined ? { name: l.name } : {}), ...(l.plannedStart !== undefined ? { start: l.plannedStart ?? '' } : {}),
+        ...(l.plannedEnd !== undefined ? { end: l.plannedEnd ?? '' } : {}), ...(l.deliverable !== undefined ? { deliverable: l.deliverable ?? '' } : {}),
+      })
+      return
+    }
+    setErr(res.error ?? t('wbs.errGeneric'))
   }
+  const keepMineFields = () => {
+    if (!fieldConflict) return
+    const base = { ...formBase, ...fieldConflict }
+    setFormBase(base); setFieldConflict(null)
+    void saveFields(base)
+  }
+  const takeLatestFields = () => { setFieldConflict(null); setEditing(false); setErr(null); router.refresh() }
+
+  const openDeliv = () => { setDelivDraft(item.deliverable ?? ''); setDelivBase(item.deliverable ?? null); setDelivErr(null); setDelivEditing(true) }
+  async function saveDeliv(base: string | null = delivBase) {
+    setDelivBusy(true); setDelivErr(null)
+    const res = await updateDeliverable(item.id, delivDraft.trim() || null, base)
+    setDelivBusy(false)
+    if (res.ok) { setDelivEditing(false); router.refresh(); return }
+    if (res.conflict && res.latest !== undefined) { setDelivConflict({ latest: res.latest }); return }
+    setDelivErr(res.error ?? t('wbs.errGeneric'))
+  }
+  const keepMineDeliv = () => {
+    if (!delivConflict) return
+    const base = delivConflict.latest
+    setDelivBase(base); setDelivConflict(null)
+    void saveDeliv(base)
+  }
+  const takeLatestDeliv = () => { setDelivConflict(null); setDelivEditing(false); setDelivErr(null); router.refresh() }
+  const FIELD_LABEL: Record<keyof FieldForm, DictKey> = { name: 'wbs.fieldName', start: 'wbs.colPlannedStart', end: 'wbs.colPlannedEnd', deliverable: 'wbs.colDeliverable' }
 
   const addChild = () => {
     if (!canChild || !addName?.trim()) return
@@ -347,7 +396,7 @@ export function RowDetailPanel({
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {editable && !editing && (
-              <button onClick={() => setEditing(true)} aria-label={t('common.edit')} className="flex h-8 w-8 items-center justify-center rounded-(--radius-control) text-fg-muted transition hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"><Pencil className="h-4 w-4" /></button>
+              <button onClick={openEdit} aria-label={t('common.edit')} className="flex h-8 w-8 items-center justify-center rounded-(--radius-control) text-fg-muted transition hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"><Pencil className="h-4 w-4" /></button>
             )}
             <button onClick={onClose} aria-label={t('common.close')} className="flex h-8 w-8 items-center justify-center rounded-(--radius-control) text-fg-muted transition hover:bg-surface-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"><X className="h-4 w-4" /></button>
           </div>
@@ -368,7 +417,7 @@ export function RowDetailPanel({
                 <input value={form.deliverable} onChange={e => setForm(f => ({ ...f, deliverable: e.target.value }))} className="app-input" placeholder={t('wbs.deliverablePlaceholder')} /></label>
               {err && <p className="text-xs font-medium text-delayed">{err}</p>}
               <div className="flex gap-2">
-                <button onClick={saveFields} disabled={busy} className="btn btn-primary flex-1">{busy ? t('wbs.saving') : t('common.save')}</button>
+                <button onClick={() => void saveFields()} disabled={busy} className="btn btn-primary flex-1">{busy ? t('wbs.saving') : t('common.save')}</button>
                 <button onClick={() => { setEditing(false); setErr(null) }} className="btn btn-ghost">{t('common.cancel')}</button>
               </div>
             </section>
@@ -401,11 +450,11 @@ export function RowDetailPanel({
                   {delivEditing ? (
                     <div className="space-y-2 py-0.5">
                       <input autoFocus value={delivDraft} onChange={e => setDelivDraft(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveDeliv(); if (e.key === 'Escape') { setDelivEditing(false); setDelivErr(null) } }}
+                        onKeyDown={e => { if (e.key === 'Enter') void saveDeliv(); if (e.key === 'Escape') { setDelivEditing(false); setDelivErr(null) } }}
                         className="app-input" placeholder={t('wbs.deliverablePlaceholder')} />
                       {delivErr && <p className="text-xs font-medium text-delayed">{delivErr}</p>}
                       <div className="flex gap-2">
-                        <button onClick={saveDeliv} disabled={delivBusy} className="btn btn-primary h-8 px-3 text-xs">{delivBusy ? t('wbs.saving') : t('common.save')}</button>
+                        <button onClick={() => void saveDeliv()} disabled={delivBusy} className="btn btn-primary h-8 px-3 text-xs">{delivBusy ? t('wbs.saving') : t('common.save')}</button>
                         <button onClick={() => { setDelivEditing(false); setDelivErr(null) }} className="btn btn-ghost h-8 px-3 text-xs">{t('common.cancel')}</button>
                       </div>
                     </div>
@@ -728,6 +777,18 @@ export function RowDetailPanel({
           {/* 변경 이력 */}
           <ChangeHistoryList logs={logs} timeZone={timeZone} />
         </div>
+        <ConflictResolver
+          open={!!fieldConflict}
+          target={item.name}
+          fields={fieldConflict ? (Object.keys(fieldConflict) as Array<keyof FieldForm>).map(k => ({ key: k, label: t(FIELD_LABEL[k]), mine: form[k], latest: fieldConflict[k] ?? '', base: formBase[k] })) : []}
+          onKeepMine={keepMineFields} onTakeLatest={takeLatestFields} onContinue={() => setFieldConflict(null)} busy={busy}
+        />
+        <ConflictResolver
+          open={!!delivConflict}
+          target={item.name}
+          fields={delivConflict ? [{ key: 'deliverable', label: t('wbs.colDeliverable'), mine: delivDraft.trim(), latest: delivConflict.latest ?? '', base: delivBase ?? '' }] : []}
+          onKeepMine={keepMineDeliv} onTakeLatest={takeLatestDeliv} onContinue={() => setDelivConflict(null)} busy={delivBusy}
+        />
       </>
   )
   const title = `${item.name} ${t('wbs.detailSuffix')}`

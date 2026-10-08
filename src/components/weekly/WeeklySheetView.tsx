@@ -11,7 +11,7 @@ import {
   type WeeklyArea, type WeeklySheetRow, type WeeklyCellKey, type WeeklyCellEdit,
 } from '@/lib/domain/weeklySheet'
 import { type CellAddr } from '@/lib/domain/sheetSelection'
-import { emptyUndo, pushUndo, undo as undoOp, redo as redoOp, type UndoState } from '@/lib/domain/sheetUndo'
+import { dropUndoCells, emptyUndo, pushUndo, undo as undoOp, redo as redoOp, type UndoState } from '@/lib/domain/sheetUndo'
 import {
   createWeeklyReport, prepareWeeklyCellRewrite, saveWeeklyCell, saveWeeklyCells, saveWeeklyTitle,
   type WeeklyActionResult, type WeeklyBatchResult, type WeeklyRewriteInput,
@@ -26,7 +26,9 @@ import { WeeklyAiRewriteModal, type WeeklyAiRewriteItem } from './WeeklyAiRewrit
 import { CarryMappingModal, mergeCarrySources } from './CarryMappingModal'
 import type { CarryMapping, CarryOverflow, CarryPending } from '@/lib/domain/weeklyCarry'
 import { usePresence } from './usePresence'
-import { SheetCell, type BatchChip } from './SheetCell'
+import { SheetCell, type BatchChip, type CellStatus } from './SheetCell'
+import { ConflictResolver } from '@/components/ui/ConflictResolver'
+import { editSessionStore, type EditStatus } from '@/lib/sync/editSession'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import {
   buildWeeklyRewriteSelection, prepareApplicableWeeklyRewriteEdits, type WeeklyRewriteTarget,
@@ -37,7 +39,8 @@ import { parseCustomValues } from '@/lib/domain/customFieldValues'
 import { CustomFieldValuesEditor, useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
 import { Modal } from '@/components/ui/Modal'
 
-type CellStatus = 'saving' | 'saved' | 'error'
+/** 헤더 동기화 표시(§5.8.3)로 올리는 셀 상태 — error 는 실패, 응답을 잃은 저장은 outcome_unknown */
+const SESSION_STATUS: Record<CellStatus, EditStatus> = { editing: 'editing', saving: 'saving', saved: 'saved', error: 'failed', conflict: 'conflict' }
 const DEBOUNCE_MS = 1500
 const CELL_MAX = WEEKLY_CELL_MAX // 셀 1개 상한(도메인 단일 출처) — 배치 로컬 클램프용
 const BATCH_MAX = 500    // 한 배치 최대 edit 수(BE와 동일) — 사전 검사용
@@ -113,6 +116,18 @@ export function WeeklySheetView({
   const dirtyRef = useRef<Set<string>>(new Set())
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const retriedRef = useRef<Set<string>>(new Set())
+  // ── 값 CAS(SPU1, 개정 §5.8 — 무통보 덮어쓰기 0건) ──
+  // baseRef: 칸이 dirty 가 될 때의 값 = 내가 마지막으로 확인한 서버 값. 저장은 이것을 기대값으로 보낸다(다르면 서버가 쓰지 않는다).
+  // conflictRef: 충돌한 칸의 서버 현재 값(비교 대기). 정하기 전에는 그 칸을 다시 보내지 않는다 — 입력은 dirty 로 남는다.
+  // sentRef: 그 칸에 내가 보낸 값들(확인돼 깨끗해질 때까지). '충돌'로 돌아온 서버 값이 이 가운데 하나면 남의 변경이 아니라 내 앞선 저장이다
+  //   — 응답을 잃은 저장(Q10)이나 겹쳐 나간 단건·배치가 먼저 반영된 것이라 비교 없이 그 위에서 이어 쓴다.
+  // unknownRef: 응답을 잃은 칸(헤더에 '확인 필요'로 올린다). cellFlightRef: 단건 저장이 가는 중인 칸 — 겹쳐 보내지 않는다(응답 처리가 이어 보낸다).
+  const baseRef = useRef<Map<string, string>>(new Map())
+  const conflictRef = useRef<Map<string, string>>(new Map())
+  const sentRef = useRef<Map<string, Set<string>>>(new Map())
+  const unknownRef = useRef<Set<string>>(new Set())
+  const cellFlightRef = useRef<Set<string>>(new Set())
+  const [conflictQueue, setConflictQueue] = useState<string[]>([])   // 비교 상자에 띄울 칸(앞이 지금 보이는 것)
   const rowsRef = useRef(rows)
   rowsRef.current = rows
   const areasRef = useRef(areas)
@@ -154,9 +169,14 @@ export function WeeklySheetView({
       const k = `${rowId}:${key}`
       dirtyRef.current.delete(k)
       retriedRef.current.delete(k)
+      baseRef.current.delete(k)
+      conflictRef.current.delete(k)
+      sentRef.current.delete(k)
+      unknownRef.current.delete(k)
       const t = timersRef.current.get(k)
       if (t) { clearTimeout(t); timersRef.current.delete(k) }
     }
+    setConflictQueue(q => (q.some(k => k.startsWith(`${rowId}:`)) ? q.filter(k => !k.startsWith(`${rowId}:`)) : q))
     setStatus(s => {
       if (!WEEKLY_CELL_KEYS.some(key => `${rowId}:${key}` in s)) return s
       const next = { ...s }
@@ -231,6 +251,33 @@ export function WeeklySheetView({
     return () => { sb.removeChannel(channel) }
   }, [reportId, router, cleanupRowKeys])
 
+  // 칸을 dirty 로 — 처음 dirty 가 되는 순간의 값(= 서버에서 받은 값)을 기대값으로 잡아 둔다. 낙관 적용보다 먼저 부른다.
+  const markDirty = useCallback((k: string, current: string) => {
+    if (!dirtyRef.current.has(k)) baseRef.current.set(k, current)
+    dirtyRef.current.add(k)
+  }, [])
+  // 충돌 — 쓰지 않았다. 입력은 dirty 로 둔 채(실시간 값이 덮지 않는다) 비교 상자를 띄우고, 그 칸의 되돌리기 이력을 버린다(§5.8.6)
+  const raiseConflict = useCallback((k: string, latest: string) => {
+    conflictRef.current.set(k, latest)
+    unknownRef.current.delete(k)
+    retriedRef.current.delete(k)
+    undoRef.current = dropUndoCells(undoRef.current, new Set([k]))
+    setStatus(s => ({ ...s, [k]: 'conflict' }))
+    setConflictQueue(q => (q.includes(k) ? q : [...q, k]))
+  }, [])
+  const noteSent = useCallback((k: string, value: string) => {
+    const set = sentRef.current.get(k)
+    if (set) set.add(value)
+    else sentRef.current.set(k, new Set([value]))
+  }, [])
+  /** 충돌 응답을 가린다 — 서버 값이 이미 내 값이면 반영된 것, 내가 앞서 보낸 값이면 그 위에서 이어 쓴다, 아니면 진짜 충돌 */
+  const settleConflict = useCallback((k: string, latest: string, sent: string): 'applied' | 'rebased' | 'conflict' => {
+    if (latest === sent) { unknownRef.current.delete(k); return 'applied' }
+    if (sentRef.current.get(k)?.has(latest)) { unknownRef.current.delete(k); baseRef.current.set(k, latest); return 'rebased' }
+    raiseConflict(k, latest)
+    return 'conflict'
+  }, [raiseConflict])
+
   const commit = useCallback((rowId: string, key: WeeklyCellKey) => {
     if (!canEditCells) return // 조회 전용 — 서버도 거부하지만 저장 배지를 띄우고 실패하는 왕복을 만들지 않는다
     const k = `${rowId}:${key}`
@@ -239,17 +286,37 @@ export function WeeklySheetView({
     const row = rowsRef.current.find(r => r.id === rowId)
     if (!row) { cleanupRowKeys(rowId); return } // 삭제된 행 — dirty 잔류 시 PPT flush가 영구 차단됨
     if (!dirtyRef.current.has(k)) return
+    if (conflictRef.current.has(k)) return // 비교에서 정하기 전에는 다시 보내지 않는다(입력은 남아 있다)
+    // 그 칸의 단건 저장이 가는 중이면 겹쳐 보내지 않는다 — 같은 기대값의 두 저장은 뒤엣것이 앞엣것과 충돌한다. 응답 처리가 달라진 값을 이어 보낸다
+    if (cellFlightRef.current.has(k)) return
     const sent = row[CELL_FIELD[key]]
+    const expected = baseRef.current.get(k)
+    cellFlightRef.current.add(k)
+    noteSent(k, sent)
     setStatus(s => ({ ...s, [k]: 'saving' }))
     // .catch: 오프라인·전송 계층 예외를 ok:false로 흡수 → 아래 error/재시도 경로로 합류(미포착 시 dirty·상태 영구 잔류, F2).
-    saveWeeklyCell(projectId, rowId, key, sent)
-      .catch((): WeeklyActionResult => ({ ok: false, error: '네트워크 오류로 저장하지 못했습니다.' }))
+    // 응답을 잃은 저장은 반영됐을 수도 있다 — 보낸 값을 적어 두고, 재시도(같은 기대값의 CAS)가 그 값을 만나면 반영으로 가린다(Q10).
+    saveWeeklyCell(projectId, rowId, key, sent, expected)
+      .catch((): WeeklyActionResult => { unknownRef.current.add(k); return { ok: false, error: '네트워크 오류로 저장하지 못했습니다.' } })
       .then(res => {
+      cellFlightRef.current.delete(k)
       const now = rowsRef.current.find(r => r.id === rowId)?.[CELL_FIELD[key]]
+      const saved = () => {
+        retriedRef.current.delete(k)
+        unknownRef.current.delete(k)
+        if (now === sent) { dirtyRef.current.delete(k); baseRef.current.delete(k); sentRef.current.delete(k); setStatus(s => ({ ...s, [k]: 'saved' })) }
+        else { baseRef.current.set(k, sent); commit(rowId, key) } // 전송 중 재수정 — dirty 유지한 채 재저장(기대값은 방금 쓴 값)
+      }
       if (!res.ok) {
         if (res.gone) { // 서버가 '행 삭제됨' 확정 — 재시도 대신 로컬 행·상태 정리
           cleanupRowKeys(rowId)
           setRows(rs => rs.filter(r => r.id !== rowId))
+          return
+        }
+        if (res.conflict) {
+          const how = settleConflict(k, res.latest ?? '', sent)
+          if (how === 'applied') saved()
+          else if (how === 'rebased') commit(rowId, key)
           return
         }
         setStatus(s => ({ ...s, [k]: 'error' }))
@@ -261,16 +328,19 @@ export function WeeklySheetView({
         } else toast({ title: '저장 실패', description: res.error, variant: 'error' })
         return
       }
-      retriedRef.current.delete(k)
-      if (now === sent) { dirtyRef.current.delete(k); setStatus(s => ({ ...s, [k]: 'saved' })) }
-      else commit(rowId, key) // 전송 중 재수정 — dirty 유지한 채 재저장
+      saved()
     })
-  }, [projectId, toast, cleanupRowKeys, canEditCells])
+  }, [projectId, toast, cleanupRowKeys, canEditCells, settleConflict, noteSent])
 
   // PPT 내보내기 직전 미저장 셀 flush — export fetch와 blur commit이 경합하면 서버가
   // 저장 전 스냅샷으로 PPT를 만들 수 있다. 남은 dirty 키를 즉시 commit(디바운스 우회)하고
   // 전부 저장될 때까지 폴링. 5초를 넘기면 중단(false)하고 안내 — 불완전 PPT 방지가 목적.
   const flushPendingSaves = useCallback((): Promise<boolean> => {
+    // 충돌한 칸은 정하기 전에 저장되지 않는다 — 기다려도 끝나지 않으니 바로 알린다
+    if (conflictRef.current.size) {
+      toast({ title: '내보내기 중단', description: '다른 사용자가 먼저 바꾼 셀이 있습니다. 비교에서 정한 뒤 다시 내보내 주세요.', variant: 'error' })
+      return Promise.resolve(false)
+    }
     for (const k of dirtyRef.current) {
       const [rowId, key] = k.split(':') as [string, WeeklyCellKey]
       commit(rowId, key)
@@ -294,7 +364,9 @@ export function WeeklySheetView({
   const onCellChange = (rowId: string, key: WeeklyCellKey, value: string) => {
     if (!canEditCells) return // 조회 전용 — 로컬 값도 바꾸지 않는다(저장되지 않은 편집이 남으면 화면이 거짓말을 한다)
     const k = `${rowId}:${key}`
-    dirtyRef.current.add(k)
+    markDirty(k, rowsRef.current.find(r => r.id === rowId)?.[CELL_FIELD[key]] ?? '')
+    // 저장 전 초안 — 헤더가 '동기화됨'을 보이지 않게 한다(§5.8.3). 충돌 표시는 지우지 않는다
+    setStatus(s => (s[k] === 'editing' || s[k] === 'conflict' ? s : { ...s, [k]: 'editing' }))
     setRows(rs => rs.map(r => (r.id === rowId ? { ...r, [CELL_FIELD[key]]: value } : r)))
     const prev = timersRef.current.get(k)
     if (prev) clearTimeout(prev)
@@ -332,7 +404,7 @@ export function WeeklySheetView({
     const out: WeeklyCellEdit[] = []
     for (const e of edits) {
       const k = `${e.rowId}:${e.cellKey}`
-      if (!dirtyRef.current.has(k)) continue
+      if (!dirtyRef.current.has(k) || conflictRef.current.has(k)) continue
       const row = rowsRef.current.find(r => r.id === e.rowId)
       if (!row) continue
       out.push({ rowId: e.rowId, cellKey: e.cellKey, content: row[CELL_FIELD[e.cellKey]] })
@@ -370,7 +442,13 @@ export function WeeklySheetView({
       retriedRef.current.delete(k)
     }
     // ② dirty 마킹(반드시 ③ 낙관 적용보다 먼저 — 인바운드 Realtime 클로버링 방지, 회귀 #2)
-    for (const e of edits) dirtyRef.current.add(`${e.rowId}:${e.cellKey}`)
+    // 기대값: 보통은 처음 dirty 가 될 때의 값. undo·redo 의 역명령은 "지금 서버 값 = 내가 쓴 값"을 싣고 온다(§5.8.6) — 그것이 이긴다.
+    // 사용자가 새 값을 넣는 배치는 그 칸의 미결 충돌 위에 쓰는 것이 아니다 — 충돌은 비교에서만 푼다(여기서는 그 칸을 보내지 않는다).
+    for (const e of edits) {
+      const k = `${e.rowId}:${e.cellKey}`
+      if (e.expected !== undefined) { baseRef.current.set(k, e.expected); dirtyRef.current.add(k) }
+      else markDirty(k, rowsRef.current.find(r => r.id === e.rowId)?.[CELL_FIELD[e.cellKey]] ?? '')
+    }
     // ③ 로컬 rows 낙관 적용 + status 'saving'(textarea 자동 높이는 value 변화로 재계산, 회귀 #7)
     setRows(rs => rs.map(r => {
       const mine = edits.filter(e => e.rowId === r.id)
@@ -379,7 +457,7 @@ export function WeeklySheetView({
       for (const e of mine) next[CELL_FIELD[e.cellKey]] = e.content
       return next
     }))
-    setStatus(s => { const n = { ...s }; for (const e of edits) n[`${e.rowId}:${e.cellKey}`] = 'saving'; return n })
+    setStatus(s => { const n = { ...s }; for (const e of edits) { const k = `${e.rowId}:${e.cellKey}`; if (!conflictRef.current.has(k)) n[k] = 'saving' } return n })
     // ④ undo 스택 push(undoable만 — undo/redo 유발 배치는 생략, 계약 §2-④)
     if (opts.undoable && before.length) {
       const keys = new Set(before.map(b => `${b.rowId}:${b.cellKey}`))
@@ -399,12 +477,19 @@ export function WeeklySheetView({
       batchInFlightRef.current = Math.max(0, batchInFlightRef.current - 1)
       if (batchInFlightRef.current === 0 && batchShowTimerRef.current) { clearTimeout(batchShowTimerRef.current); batchShowTimerRef.current = null }
     }
-    const send = (sendEdits: WeeklyCellEdit[], attempt: number) => {
+    const send = (rawEdits: WeeklyCellEdit[], attempt: number) => {
+      // 미결 충돌 칸은 보내지 않는다. 기대값은 보내는 순간의 baseRef(재시도는 그 사이 확인된 값을 다시 읽는다)
+      const sendEdits = rawEdits
+        .filter(e => !conflictRef.current.has(`${e.rowId}:${e.cellKey}`))
+        .map(e => ({ rowId: e.rowId, cellKey: e.cellKey, content: e.content, expected: baseRef.current.get(`${e.rowId}:${e.cellKey}`) }))
+      if (sendEdits.length === 0) { settle(); setBatchChip(null); if (batchInFlightRef.current === 0) setBatchActive(false); return }
       const sent = new Map(sendEdits.map(e => [`${e.rowId}:${e.cellKey}`, e.content]))
+      for (const [k, sv] of sent) noteSent(k, sv)
       // .catch: 오프라인·전송 계층 예외를 ok:false로 흡수 → 실패 경로(재시도·에러 칩)로 합류. 미포착 시
       // batchInFlightRef 미복귀·batchActive 영구 true·dirty 영구 잔류로 flush가 매번 타임아웃(F2).
+      // 응답을 잃은 배치는 반영됐을 수도 있다 — 보낸 값을 적어 두고 재시도의 CAS 가 그 값을 만나면 반영으로 가린다(Q10).
       saveWeeklyCells(projectId, sendEdits)
-        .catch((): WeeklyBatchResult => ({ ok: false, error: '네트워크 오류로 저장하지 못했습니다.' }))
+        .catch((): WeeklyBatchResult => { for (const k of sent.keys()) unknownRef.current.add(k); return { ok: false, error: '네트워크 오류로 저장하지 못했습니다.' } })
         .then(res => {
           // ⑥ 응답 처리
           if (res.ok) {
@@ -413,15 +498,28 @@ export function WeeklySheetView({
             const gone = new Set(res.goneRowIds ?? [])
             for (const g of gone) cleanupRowKeys(g)
             if (gone.size) setRows(rs => rs.filter(r => !gone.has(r.id)))
+            // 기대값이 어긋나 쓰지 않은 칸 — 가려서(반영됨·내 앞선 저장 위·진짜 충돌) 잇는다. 나머지 칸은 저장됐다
+            const unsaved = new Set<string>()
+            for (const c of res.conflicts ?? []) {
+              const k = `${c.rowId}:${c.cellKey}`
+              const sv = sent.get(k)
+              if (sv === undefined) continue
+              const how = settleConflict(k, c.latest, sv)
+              if (how === 'applied') continue
+              unsaved.add(k)
+              if (how === 'rebased') timersRef.current.set(k, setTimeout(() => commit(c.rowId, c.cellKey), 0))
+            }
             for (const [k, sv] of sent) {
               const [rowId, key] = k.split(':') as [string, WeeklyCellKey]
-              if (gone.has(rowId)) continue
+              if (gone.has(rowId) || unsaved.has(k)) continue
+              unknownRef.current.delete(k)
               const now = rowsRef.current.find(r => r.id === rowId)?.[CELL_FIELD[key]]
-              if (now === sv) { dirtyRef.current.delete(k); setStatus(s => ({ ...s, [k]: 'saved' })) }
-              // 다르면(비행 중 재편집) dirty 유지 — per-cell 타이머가 마저 저장(단건 commit과 동형)
+              if (now === sv) { dirtyRef.current.delete(k); baseRef.current.delete(k); sentRef.current.delete(k); setStatus(s => ({ ...s, [k]: 'saved' })) }
+              else baseRef.current.set(k, sv)
+              // 다르면(비행 중 재편집) dirty 유지 — per-cell 타이머가 마저 저장(단건 commit과 동형). 기대값은 방금 쓴 값
             }
             if (batchInFlightRef.current === 0) {
-              setBatchChip({ phase: 'saved', count: sendEdits.length }) // 저장됨 최소 800ms 유지 후 정리
+              setBatchChip({ phase: 'saved', count: sendEdits.length - unsaved.size }) // 저장됨 최소 800ms 유지 후 정리
               setTimeout(() => {
                 setBatchChip(c => (c && c.phase === 'saved' ? null : c))
                 if (batchInFlightRef.current === 0) setBatchActive(false)
@@ -446,7 +544,7 @@ export function WeeklySheetView({
         })
     }
     send(edits, 0)
-  }, [projectId, toast, cleanupRowKeys, rebuildForRetry, canEditCells])
+  }, [projectId, toast, cleanupRowKeys, rebuildForRetry, canEditCells, markDirty, settleConflict, commit, noteSent])
 
   const retryBatch = useCallback(() => {
     const failed = lastFailedBatchRef.current
@@ -458,20 +556,79 @@ export function WeeklySheetView({
     runBatch(next, { undoable: false }) // 재시도는 새 undo 엔트리를 만들지 않음
   }, [runBatch, rebuildForRetry])
 
+  // 되돌리기(§5.8.6, 결정 35) — 낙관 기록은 그대로 두되 서버가 확인한 배치만 되돌린다(칸이 아직 dirty 면 저장·충돌 대기 중이다).
+  // 역명령은 "지금 서버 값 = 내가 쓴 값"을 기대값으로 싣는 CAS 다 — 그새 다른 사람이 바꿨으면 덮지 않고 충돌(비교)로 간다.
+  const confirmed = useCallback((cells: WeeklyCellEdit[]): boolean => {
+    if (!cells.some(e => dirtyRef.current.has(`${e.rowId}:${e.cellKey}`))) return true
+    toast({ title: '아직 되돌릴 수 없습니다', description: '저장이 끝난 뒤 다시 시도하세요.', variant: 'info' })
+    return false
+  }, [toast])
+  const inverse = (apply: WeeklyCellEdit[], written: WeeklyCellEdit[]): WeeklyCellEdit[] => {
+    const mine = new Map(written.map(e => [`${e.rowId}:${e.cellKey}`, e.content]))
+    return apply.map(e => ({ ...e, expected: mine.get(`${e.rowId}:${e.cellKey}`) }))
+  }
   const requestUndo = useCallback((): boolean => {
+    const top = undoRef.current.past.at(-1)
+    if (!top || !confirmed(top.after)) return false
     const r = undoOp(undoRef.current)
     if (!r) return false
     undoRef.current = r.state
-    runBatch(r.apply, { undoable: false })
+    runBatch(inverse(r.apply, top.after), { undoable: false })
     return true
-  }, [runBatch])
+  }, [runBatch, confirmed])
   const requestRedo = useCallback((): boolean => {
+    const top = undoRef.current.future.at(-1)
+    if (!top || !confirmed(top.before)) return false
     const r = redoOp(undoRef.current)
     if (!r) return false
     undoRef.current = r.state
-    runBatch(r.apply, { undoable: false })
+    runBatch(inverse(r.apply, top.before), { undoable: false })
     return true
-  }, [runBatch])
+  }, [runBatch, confirmed])
+
+  // 비교의 세 선택(§5.8.1 Conflict) — 내 값으로 저장(본 서버 값을 기대값으로 한 번) · 서버 값 받기(쓰지 않는다) · 계속 편집(입력 유지, 표시는 남는다)
+  const conflictKey = conflictQueue[0] ?? null
+  const dequeue = (k: string) => setConflictQueue(q => q.filter(x => x !== k))
+  const keepMine = (k: string) => {
+    const latest = conflictRef.current.get(k)
+    if (latest === undefined) { dequeue(k); return }
+    const [rowId, key] = k.split(':') as [string, WeeklyCellKey]
+    conflictRef.current.delete(k)
+    baseRef.current.set(k, latest)
+    dequeue(k)
+    commit(rowId, key)
+  }
+  const takeLatest = (k: string) => {
+    const latest = conflictRef.current.get(k)
+    const [rowId, key] = k.split(':') as [string, WeeklyCellKey]
+    conflictRef.current.delete(k)
+    dequeue(k)
+    if (latest === undefined) return
+    const t = timersRef.current.get(k); if (t) { clearTimeout(t); timersRef.current.delete(k) }
+    dirtyRef.current.delete(k)
+    baseRef.current.delete(k)
+    sentRef.current.delete(k)
+    setRows(rs => rs.map(r => (r.id === rowId ? { ...r, [CELL_FIELD[key]]: latest } : r)))
+    setStatus(s => { if (!(k in s)) return s; const n = { ...s }; delete n[k]; return n })
+    router.refresh() // dirty 인 동안 막아 둔 실시간 값이 더 있었을 수 있다 — 서버 값을 다시 받는다
+  }
+  const openCompare = (k: string) => { if (conflictRef.current.has(k)) setConflictQueue(q => [k, ...q.filter(x => x !== k)]) }
+
+  // 셀 상태를 헤더 동기화 표시로 올린다(§5.8.3 — 미저장·저장 중·실패·충돌이 있으면 '동기화됨'이 아니다). 사라진 칸은 걷는다
+  const syncedStatusRef = useRef<Record<string, CellStatus>>({})
+  useEffect(() => {
+    const prev = syncedStatusRef.current
+    for (const [k, st] of Object.entries(status)) {
+      if (prev[k] === st) continue
+      const state: EditStatus = st === 'error' && unknownRef.current.has(k) ? 'outcome_unknown' : SESSION_STATUS[st]
+      editSessionStore.setSession(`weekly:${k}`, 'weekly_cell', k, state)
+    }
+    for (const k of Object.keys(prev)) if (!(k in status)) editSessionStore.removeSession(`weekly:${k}`)
+    syncedStatusRef.current = status
+  }, [status])
+  useEffect(() => () => {
+    editSessionStore.removeWhere(x => x.surface === 'weekly_cell' && x.status !== 'saving' && x.status !== 'saved')
+  }, [])
 
   // 편집 세션 진입 — baseline/wasDirty 스냅샷(Esc 복원·undo push 판정용). 덮어쓰기 초기화는 훅이 담당.
   const beginEdit = useCallback((addr: CellAddr) => {
@@ -493,13 +650,14 @@ export function WeeklySheetView({
         // 로컬 원값 복원 + 서버 재영속화(AC3.2). 편집 세션 중 1.5s 디바운스 commit이 이미 입력값을 서버에
         // 저장했을 수 있고, 그러면 자기 Realtime 에코가 dirty 없음으로 입력값을 재채택해 취소가 무효화된다.
         setRows(rs => rs.map(r => (r.id === addr.rowId ? { ...r, [CELL_FIELD[addr.col]]: sess.baseline } : r)))
-        dirtyRef.current.add(k) // 재영속화 우선 — wasDirty=false여도 dirty를 지우지 않는다
+        markDirty(k, cur) // 재영속화 우선 — wasDirty=false여도 dirty를 지우지 않는다. 기대값은 지금 값(그새 저장됐다면 서버가 가진 값)
         const t = timersRef.current.get(k); if (t) clearTimeout(t)
         // 0ms 지연: 위 setRows 플러시 후 rowsRef가 baseline을 반영한 다음 commit이 그 값을 전송하게 하는 장치.
         // 서버에 저장분이 없어도 동일 값 멱등 재저장 1회라 무해.
         timersRef.current.set(k, setTimeout(() => commit(addr.rowId, addr.col), 0))
       } else if (!sess.wasDirty) { // 변경 없음 + 진입 시 clean → dirty/타이머/상태 흔적 제거(회귀 #12)
         dirtyRef.current.delete(k)
+        baseRef.current.delete(k)
         const t = timersRef.current.get(k); if (t) { clearTimeout(t); timersRef.current.delete(k) }
         setStatus(s => { if (!(k in s)) return s; const n = { ...s }; delete n[k]; return n })
       }
@@ -512,7 +670,7 @@ export function WeeklySheetView({
       })
     }
     commit(addr.rowId, addr.col) // 디바운스 우회 즉시 저장
-  }, [commit])
+  }, [commit, markDirty])
 
   const handleCellBlur = useCallback((addr: CellAddr) => {
     const k = `${addr.rowId}:${addr.col}`
@@ -853,6 +1011,7 @@ export function WeeklySheetView({
                           onChange={v => onCellChange(r.id, c.key, v)}
                           onBlur={e => { handleCellBlur(addr); grid.onCellBlurEvent(e) }}
                           onRetry={() => commit(r.id, c.key)}
+                          onCompare={() => openCompare(`${r.id}:${c.key}`)}
                           onChipRetry={retryBatch}
                           onMouseDown={e => grid.onCellMouseDown(e, addr)}
                           onMouseEnter={() => grid.onCellMouseEnter(addr)}
@@ -918,6 +1077,24 @@ export function WeeklySheetView({
         onRetry={retryAiRewrite}
         onApply={applyAiRewrite}
       />
+      {(() => {
+        // 저장 충돌 비교(개정 §5.8, Q05) — 내 입력은 칸에 그대로 있고, 서버의 현재 값과 나란히 보인다
+        const k = conflictKey
+        const [rowId, key] = (k ?? ':').split(':') as [string, WeeklyCellKey]
+        const row = k ? rows.find(r => r.id === rowId) : undefined
+        const latest = k ? conflictRef.current.get(k) : undefined
+        const open = !!k && !!row && latest !== undefined
+        return (
+          <ConflictResolver
+            open={open}
+            target={row ? rowLabel(row, areas) : undefined}
+            fields={open ? [{ key, label: WEEKLY_CELL_LABEL[key], mine: row![CELL_FIELD[key]], latest: latest!, base: baseRef.current.get(k!) }] : []}
+            onKeepMine={() => k && keepMine(k)}
+            onTakeLatest={() => k && takeLatest(k)}
+            onContinue={() => k && dequeue(k)}
+          />
+        )
+      })()}
       {selectedCustomRow && (
         <Modal
           open={!!selectedCustomRowId}

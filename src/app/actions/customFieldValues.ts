@@ -15,7 +15,8 @@ const MODULES: Record<FieldEntity, ModuleId> = { wbs_item: 'wbs', issue: 'issues
 const entityOk = (v: unknown): v is FieldEntity => typeof v === 'string' && (FIELD_ENTITIES as readonly string[]).includes(v)
 const ERR = '추가 정보를 저장하지 못했습니다. 최신 값을 확인한 뒤 다시 시도하세요.'
 const INVALID = '추가 정보의 입력값과 편집 권한을 확인하세요.'
-export type CustomFieldSaveResult = { ok: true; values: CustomValues } | { ok: false; code: string; error: string; fieldErrors?: Record<string, FieldRowError> }
+/** latest: FIELD_CONFLICT 때 그 행의 현재 custom(읽혔을 때만) — 화면이 내 값과 나란히 보이고 고르게 한다(개정 §5.8, Q05) */
+export type CustomFieldSaveResult = { ok: true; values: CustomValues } | { ok: false; code: string; error: string; fieldErrors?: Record<string, FieldRowError>; latest?: CustomValues }
 const TOKENS: OwnTokenTable = {
   CUSTOM_FIELD_ADMIN_ONLY: { status: 403, code: 'ERR_DENIED', message: '관리자만 편집할 수 있는 필드가 있습니다.' },
   CUSTOM_FIELD_INACTIVE: { status: 422, code: 'FIELD_INVALID', message: '비활성 필드의 값은 변경하거나 지울 수 없습니다.' },
@@ -52,7 +53,18 @@ export async function saveCustomFieldValues(projectId: string, entity: FieldEnti
       const fieldErrors = mapCustomFieldDbError(reply.error)
       return { ok: false, code: reply.error.code === '42501' ? 'ERR_DENIED' : mapped?.code ?? 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', reply.error, mapped?.message ?? ERR), ...(fieldErrors ? { fieldErrors } : {}) }
     }
-    if (!reply.data) return { ok: false, code: 'FIELD_CONFLICT', error: '값이나 편집 권한이 바뀌었습니다. 최신 행을 확인한 뒤 저장하세요.' }
+    if (!reply.data) {
+      // 0행 = 그새 값이 바뀌었거나(충돌) 행·권한이 사라졌다. 현재 값을 읽어 같이 돌려준다 — 못 읽으면 latest 없이(화면은 새로 읽는다)
+      const conflict = { ok: false as const, code: 'FIELD_CONFLICT', error: '값이나 편집 권한이 바뀌었습니다. 최신 행을 확인한 뒤 저장하세요.' }
+      const now = entity === 'wbs_item'
+        ? await sb.from('wbs_items').select('custom').eq('project_id', projectId).eq('id', rowId).maybeSingle()
+        : entity === 'issue'
+          ? await sb.from('issues').select('custom').eq('project_id', projectId).eq('id', rowId).maybeSingle()
+          : await sb.from('weekly_report_rows').select('custom').eq('project_id', projectId).eq('id', rowId).maybeSingle()
+      if (now.error || !now.data) return conflict
+      const latest = parseCustomValues(now.data.custom ?? {})
+      return latest.ok ? { ...conflict, latest: latest.value } : conflict
+    }
     const saved = parseCustomValues(reply.data.custom)
     if (!saved.ok) return { ok: false, code: 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', new Error('saved row shape'), ERR) }
     // WBS 값 변경 이력(§3.6.7) — change_logs 에 바뀐 키마다 field='custom.<key>'(현 필드 편집 관례 — actions/wbs.ts). CAS 를 통과했으므로

@@ -74,6 +74,18 @@ export const commonKo = {
   'common.unsavedChangesDesc': '저장하지 않은 변경사항이 있습니다. 나가시겠습니까? 변경사항은 취소됩니다.',
   'common.continueEditing': '계속 편집',
   'common.discardAndLeave': '변경사항 버리기',
+  // 저장 충돌 비교(ConflictResolver, 개정 §5.8) — 조용히 덮지도 버리지도 않는다
+  'common.conflictTitle': '다른 사용자가 먼저 바꿨습니다',
+  'common.conflictDesc': '입력한 값은 그대로 있습니다. 서버의 현재 값과 비교한 뒤 고르세요.',
+  'common.conflictMine': '내 값',
+  'common.conflictLatest': '서버의 현재 값',
+  'common.conflictBase': '편집을 시작할 때 값',
+  'common.conflictEmpty': '(비어 있음)',
+  'common.conflictKeepMine': '내 값으로 저장',
+  'common.conflictTakeLatest': '서버 값 받기',
+  'common.outcomeChecking': '저장 결과를 확인하고 있습니다',
+  'common.outcomeUnknown': '저장 결과를 확인하지 못했습니다. 입력은 그대로 있습니다 — 다시 저장하면 반영 여부부터 확인합니다.',
+  'common.outcomeNotApplied': '저장되지 않았습니다. 입력은 그대로 있습니다 — 다시 저장하세요.',
   // 조회 실패 알림(LoadErrorNotice) — 로더의 ERR_* 한국어 상수는 로그·시험용이고 화면에는 이 문구를 쓴다.
   'common.loadFailed.issues': '이슈를 불러오지 못했습니다.',
   'common.loadFailed.announcements': '공지를 불러오지 못했습니다.',

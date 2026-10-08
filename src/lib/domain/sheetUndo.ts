@@ -35,3 +35,11 @@ export function redo(state: UndoState): { state: UndoState; apply: WeeklyCellEdi
     apply: batch.after,
   }
 }
+
+/** 충돌·실패한 칸이 든 배치를 이력에서 버린다(개정 §5.8.6 "실패·충돌이면 항목을 버린다") — 그 칸의 서버 값은 더 이상 내가 쓴 값이 아니라
+ *  되돌리기의 기준이 사라졌다. keys 는 `${rowId}:${cellKey}`. 바뀐 것이 없으면 같은 객체를 돌려준다. */
+export function dropUndoCells(state: UndoState, keys: ReadonlySet<string>): UndoState {
+  const touches = (b: UndoBatch) => b.after.some(e => keys.has(`${e.rowId}:${e.cellKey}`)) || b.before.some(e => keys.has(`${e.rowId}:${e.cellKey}`))
+  if (!state.past.some(touches) && !state.future.some(touches)) return state
+  return { past: state.past.filter(b => !touches(b)), future: state.future.filter(b => !touches(b)) }
+}
