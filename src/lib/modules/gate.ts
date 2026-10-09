@@ -7,7 +7,7 @@
  * authz/index.ts 에 두지 않는다(D10 — 81개 테스트가 그 모듈을 통째로 mock 한다). 단위 테스트는 tests/setup/module-gate.ts 가 통과시킨다.
  */
 import { unstable_rethrow } from 'next/navigation'
-import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { guardFail, type GuardFailure } from '@/lib/authz/errors'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import { getProjectConfig, type ConfigReadClient } from '@/lib/settings/projectConfig'
 import type { ModuleId } from './defaults'
@@ -16,10 +16,10 @@ import { effectiveModulesMany } from './effectiveMany'
 import { CORE } from './registry'
 
 export type ModuleScope = { projectId: string } | { workspaceId: string }
-export type ModuleGateResult = { ok: true } | { ok: false; error: string }
+export type ModuleGateResult = { ok: true } | GuardFailure
 export type ModuleState = 'on' | 'off' | 'unknown'
 
-const DENIED: ModuleGateResult = { ok: false, error: ERR_MODULE_DISABLED }
+const DENIED: ModuleGateResult = guardFail('module_disabled')
 const idsOf = (m: ModuleId | readonly ModuleId[]): readonly ModuleId[] => (typeof m === 'string' ? [m] : m)
 const allCore = (ids: readonly ModuleId[]) => ids.every((id) => CORE.has(id))
 

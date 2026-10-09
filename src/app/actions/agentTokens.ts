@@ -9,6 +9,7 @@ import { requireModule } from '@/lib/modules/gate'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { serverTranslator } from '@/lib/i18n/server'
 import { fill } from '@/lib/i18n/translate'
+import { denied } from '@/lib/i18n/serverText'
 
 /**
  * PAT 발급·관리 — 계약 v2.0. 발급도 킬스위치(AGENT_API_ENABLED) 뒤(§2.1).
@@ -61,7 +62,7 @@ export async function createAgentToken(input: {
   if (!rows || rows.length !== 1 || typeof rows[0].workspace_id !== 'string' || !rows[0].workspace_id) return { ok: false, error: t('srv.agentTokens.selectOneWorkspaceBelong') }
   const workspaceId = rows[0].workspace_id as string
   const gate = await requireModule({ workspaceId }, 'agents', { client: admin })
-  if (!gate.ok) return gate
+  if (!gate.ok) return denied(gate, t)
   // DB 트리거가 프로젝트 소속과 현재 소유자 멤버십을 다시 검사한다.
   const allowedProjects = projectIds === null ? null : [...new Set(projectIds)]
   const { token, prefix, hash } = generateAgentToken()

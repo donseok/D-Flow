@@ -8,6 +8,8 @@ import { runWbsImport, validateLevels } from '@/lib/agent/wbsImport'
 import { parseWbsMarkdown, toImportNodes, validateWbsDoc, type WbsDoc } from '@/lib/wbsmd/parse'
 import { chunked } from '@/lib/ai/util'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { productNameFor } from '@/lib/settings/displayBranding'
+import type { Actor } from '@/lib/domain/authz'
 import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { ERR_LEVEL_LABELS_INVALID } from '@/lib/agent/wbsImport'
 import { requireCalendar } from '@/lib/calendar/load'
@@ -54,14 +56,20 @@ export type WbsUploadPreview = {
 
 type Admin = ReturnType<typeof createAdminClient>
 
+/** 검증 오류문이 가리키는 제품 이름 — 그 프로젝트의 워크스페이스가 정한 값(branding.product_name). 워크스페이스는 폼 값이 아니라 가드 결과
+ *  (actor.projectWorkspace)에서 얻는다 — 다른 워크스페이스의 이름을 고를 길이 없다. 대응이 없으면(미존재 프로젝트를 통과한 플랫폼 관리자) 배포 기본 이름. */
+function uploadProductName(actor: Actor, projectId: string): Promise<string> {
+  return productNameFor(actor.projectWorkspace?.get(projectId) ?? null)
+}
+
 /** 파싱 + 구조·본문 검증 — 미리보기·적용이 공유하는 앞단. */
-function parseAndValidate(t: ServerTranslate, md: string): { doc: WbsDoc; role: 'pl' | 'skeleton'; errors: string[]; warnings: string[]; counts: Record<string, number> } {
+function parseAndValidate(t: ServerTranslate, md: string, productName: string): { doc: WbsDoc; role: 'pl' | 'skeleton'; errors: string[]; warnings: string[]; counts: Record<string, number> } {
   const doc = parseWbsMarkdown(md)
   const role: 'pl' | 'skeleton' = doc.front.attach ? 'pl' : 'skeleton'
   const errors: string[] = []
   const lv = validateLevels(doc.levels)
   if ('error' in lv) errors.push(fill(t('err.levelsValidationFailed'), { error: libText(t, lv.error) }))
-  const v = validateWbsDoc(doc, role)
+  const v = validateWbsDoc(doc, role, productName)
   errors.push(...v.errors)
   return { doc, role, errors, warnings: v.warnings, counts: v.counts }
 }
@@ -83,10 +91,10 @@ async function resolveAttachRef(admin: Admin, projectId: string, attach: string)
 export async function previewWbsUpload(projectId: string, md: string): Promise<WbsUploadPreview> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
 
   try {
-    const { doc, role, errors, warnings, counts } = parseAndValidate(t, md)
+    const { doc, role, errors, warnings, counts } = parseAndValidate(t, md, await uploadProductName(g.actor, projectId))
     const admin = createAdminClient()
 
     // attach 자동 판정 (PL 만)
@@ -169,11 +177,11 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
 }> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
 
   try {
     // 클라이언트 미리보기를 신뢰하지 않는다 — 전 과정 재검증(fail-closed).
-    const { doc, role, errors } = parseAndValidate(t, md)
+    const { doc, role, errors } = parseAndValidate(t, md, await uploadProductName(g.actor, projectId))
     if (errors.length > 0) return { ok: false, error: fill(t('srv.wbsMarkdown.validationErrors'), { length: errors.length, v: errors.slice(0, 3).join(' / ') }) }
     const module_ = doc.front.module ?? ''
     if (!/^[A-Za-z0-9_-]{1,32}$/.test(module_)) return { ok: false, error: t('err.moduleFormatNotValid') }

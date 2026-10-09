@@ -7,6 +7,8 @@ import { denyStatus } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { decideSearchAccess } from '@/lib/domain/searchAccess'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 // 검색 결과 발췌 나열만으로는 "답변이 부족하다"(사용자 피드백) — 화면에 이미 떠 있는
 // 결과를 그대로 근거로 넘겨 LLM 1회로 한 문단 답변을 만든다(스펙 §4 "요약 버튼", 온디맨드).
@@ -65,6 +67,7 @@ function buildUserMessage(query: string, sources: SummarizeSource[]): string {
 }
 
 export async function POST(request: NextRequest) {
+  const t = await serverTranslator()
   // getActorViewState() 는 { actor, degraded } 를 반환한다 — 조회 실패(degraded)를
   // 인증 실패(401)로 위장하지 않는다(에러 처리 3원칙).
   const { actor, degraded } = await getActorViewState()
@@ -92,7 +95,7 @@ export async function POST(request: NextRequest) {
   if (!access.ok) return NextResponse.json({ error: access.reason }, { status: access.status })
   // wiki 관문 — 접근 판정이 확정한 한 프로젝트로(decideSearchAccess 는 요청 하나만 넘긴다)
   const mod = await requireModule({ projectId: access.projectIds[0] }, 'wiki')
-  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
+  if (!mod.ok) return NextResponse.json({ error: libText(t, mod.error) }, { status: denyStatus(mod) })
 
   const messages: ChatMessage[] = [{ role: 'user', content: buildUserMessage(body.q, body.sources) }]
   const answer = await generateAnswer(SUMMARY_SYSTEM, messages)

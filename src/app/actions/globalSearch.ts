@@ -60,9 +60,9 @@ export async function searchTitles(params?: {
   let actor: Actor | null
   try { actor = await getActor() } catch (e) {
     console.error('[searchTitles] 권한 조회 실패:', e instanceof Error ? e.message : e)
-    return { ok: false, reason: 'failed', error: ERR_LOOKUP }
+    return { ok: false, reason: 'failed', error: libText(t, ERR_LOOKUP) }
   }
-  if (!actor) return denied(ERR_ANON)
+  if (!actor) return denied(libText(t, ERR_ANON))
 
   const q = typeof params?.query === 'string' ? params.query.trim() : ''
   if (!params || !q) return EMPTY
@@ -71,19 +71,19 @@ export async function searchTitles(params?: {
   if (!escaped) return EMPTY
 
   const rawWs: unknown = params.workspaceId
-  if (!absent(rawWs) && (typeof rawWs !== 'string' || !SAFE_ID_RE.test(rawWs))) return denied(ERR_MISSING)
+  if (!absent(rawWs) && (typeof rawWs !== 'string' || !SAFE_ID_RE.test(rawWs))) return denied(libText(t, ERR_MISSING))
   const wid = absent(rawWs) ? null : (rawWs as string)
 
   if (params.scope === 'project') {
     const pid = params.projectId
-    if (typeof pid !== 'string' || !SAFE_ID_RE.test(pid)) return denied(ERR_MISSING)
+    if (typeof pid !== 'string' || !SAFE_ID_RE.test(pid)) return denied(libText(t, ERR_MISSING))
     const projectWs = actor.projectWorkspace.get(pid)
-    if (projectWs === undefined || (wid !== null && projectWs !== wid)) return denied(ERR_MISSING)   // 타 워크스페이스·미존재 — 존재 은닉
+    if (projectWs === undefined || (wid !== null && projectWs !== wid)) return denied(libText(t, ERR_MISSING))   // 타 워크스페이스·미존재 — 존재 은닉
     return searchWbs(actor, pid, escaped)
   }
-  if (params.scope !== 'workspace') return denied(ERR_MISSING)
+  if (params.scope !== 'workspace') return denied(libText(t, ERR_MISSING))
   if (wid === null) return denied(libText(t, ERR_WORKSPACE_REQUIRED))
-  if (workspaceRoleIn(actor, wid) === null) return denied(ERR_MISSING)                                // 비소속 — 존재 은닉
+  if (workspaceRoleIn(actor, wid) === null) return denied(libText(t, ERR_MISSING))                                // 비소속 — 존재 은닉
   return searchProjects(actor, wid, escaped)
 }
 
@@ -131,7 +131,7 @@ async function searchWbs(actor: Actor, projectId: string, pattern: string): Prom
       console.error('[searchTitles] 프로젝트 조회 실패:', projectError.message)
       return failed(t)
     }
-    if (!project || !canSeeProject(actor, project as { id: string; is_private: boolean | null })) return denied(ERR_MISSING)
+    if (!project || !canSeeProject(actor, project as { id: string; is_private: boolean | null })) return denied(libText(t, ERR_MISSING))
 
     const { data, error } = await supabase
       .from('wbs_items')

@@ -11,6 +11,7 @@ import { fetchAllByKeyset } from '@/lib/data/paging'
 import { isUuidLike } from '@/lib/domain/validate'
 import { failWith } from '@/lib/errors/dbFail'
 import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 export type WbsBackupResult =
   | { ok: true; backup: { rows: unknown[]; generatedAt: string } }
@@ -23,7 +24,7 @@ export async function getWbsBackup(projectId: string): Promise<WbsBackupResult> 
   const t = await serverTranslator()
   if (typeof projectId !== 'string' || !isUuidLike(projectId)) return { ok: false, code: 'INVALID_INPUT', error: t(ERR_INVALID) }
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, code: 'DENIED', error: g.error }
+  if (!g.ok) return { ok: false, code: 'DENIED', error: libText(t, g.error) }
   try {
     const sb = await createServerClient()
     const rows = await fetchAllByKeyset<Record<string, unknown>>('wbs_items 사전 백업', (r) => String(r.id), (after, limit) => {

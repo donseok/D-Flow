@@ -16,6 +16,7 @@ import { SETTINGS_SCHEMA_VERSION, settingDef } from '@/lib/settings/registry'
 import { checkWorkspaceCreate, type WorkspaceCreateField, type WorkspaceCreateInputCode } from '@/lib/workspace/createInput'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 export interface PlatformWorkspaceRow {
   id: string
@@ -43,7 +44,7 @@ const FORBIDDEN = '42501'
 export async function listPlatformWorkspaces(): Promise<PlatformWorkspaceListResult> {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const admin = createAdminClient()
   try {
     const [workspaces, members, projects] = await Promise.all([
@@ -117,8 +118,9 @@ function createFailure(error: { code?: string; message: string }): PlatformWorks
  * 예전의 "만든 행을 지우는 보상"은 그 삭제가 실패하면 관리자 없는 워크스페이스가 남았다). slug 중복·첫 관리자 없음·등급은 RPC 가 다시 판정한다.
  */
 export async function createPlatformWorkspace(input: unknown): Promise<PlatformWorkspaceCreateResult> {
+  const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { ok: false, code: 'denied', field: null, error: g.error }
+  if (!g.ok) return { ok: false, code: 'denied', field: null, error: libText(t, g.error) }
   const checked = checkWorkspaceCreate(input)
   if (!checked.ok) return { ok: false, code: checked.code, field: checked.field }
   const { name, slug, adminEmail, modules, timezone, inviteDomains } = checked.value

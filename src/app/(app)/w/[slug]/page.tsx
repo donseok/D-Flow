@@ -15,6 +15,7 @@ import { wsHref } from '@/lib/workspace/paths'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { translatorFor } from '@/lib/i18n/translate'
+import { failureTextIn } from '@/lib/i18n/serverText'
 import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { StatusMessage } from '@/components/ui/StatusMessage'
@@ -71,13 +72,15 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
   const slots = visibleWidgets({ setting: cfg.ok ? cfg.value : defaultPortalWidgets(), hidden, moduleUnion: mods.ok ? mods.union : null, reviewer })
   const tab: HomeTab = rawTab === 'mine' || (rawTab === 'review' && reviewer === true) ? rawTab : 'all'
   const want = new Set([...slots.main, ...slots.side].filter((s) => s.state === 'show').map((s) => s.id))
+  // 로더(lib)의 실패 문구는 한국어 고정 문구다 — 위젯에 싣기 전에 화면 언어로 바꾼다(성공 결과는 그대로)
+  const loc = <R,>(p: Promise<R>): Promise<R> => p.then((r) => failureTextIn(locale, r))
   const data: WidgetData = {}                                                     // 보일 위젯의 로더만 — 꺼진·숨긴·판정 못 한 위젯의 원천은 읽지 않는다
-  if (want.has('my_work')) data.my_work = safe(getMyWork(ws.id, actor, { kinds: TAB_KINDS[tab], limit: 20, now }), t(locale, 'portal.widget.my_work'), locale)
-  if (want.has('projects')) data.projects = safe(getProjectRows(ws.id, actor, { status: 'active', limit: 20, now, t: translatorFor(locale) }), t(locale, 'portal.widget.projects'), locale)
-  if (want.has('review')) data.review = safe(getReviewRows(ws.id, actor, { limit: 20, now }), t(locale, 'portal.widget.review'), locale)
-  if (want.has('upcoming')) data.upcoming = safe(getUpcomingMeetings(ws.id, actor, { limit: 5, now }), t(locale, 'portal.widget.upcoming'), locale)
-  if (want.has('recent_docs')) data.recent_docs = safe(getRecentDocuments(ws.id, actor, { limit: 5 }), t(locale, 'portal.widget.recent_docs'), locale)
-  if (want.has('announcements')) data.announcements = safe(getWorkspaceAnnouncements(ws.id, actor, { limit: 5, now }), t(locale, 'portal.widget.announcements'), locale)
+  if (want.has('my_work')) data.my_work = safe(loc(getMyWork(ws.id, actor, { kinds: TAB_KINDS[tab], limit: 20, now })), t(locale, 'portal.widget.my_work'), locale)
+  if (want.has('projects')) data.projects = safe(loc(getProjectRows(ws.id, actor, { status: 'active', limit: 20, now, t: translatorFor(locale) })), t(locale, 'portal.widget.projects'), locale)
+  if (want.has('review')) data.review = safe(loc(getReviewRows(ws.id, actor, { limit: 20, now })), t(locale, 'portal.widget.review'), locale)
+  if (want.has('upcoming')) data.upcoming = safe(loc(getUpcomingMeetings(ws.id, actor, { limit: 5, now })), t(locale, 'portal.widget.upcoming'), locale)
+  if (want.has('recent_docs')) data.recent_docs = safe(loc(getRecentDocuments(ws.id, actor, { limit: 5 })), t(locale, 'portal.widget.recent_docs'), locale)
+  if (want.has('announcements')) data.announcements = safe(loc(getWorkspaceAnnouncements(ws.id, actor, { limit: 5, now })), t(locale, 'portal.widget.announcements'), locale)
   const labelOf = new Map(PORTAL_WIDGETS.map((w) => [w.id, w.labelKey]))
   const ctx: WidgetCtx = { slug: ws.slug, workspaceId: ws.id, locale, hidden, tab, reviewTab: reviewer === true, data, title: (id) => t(locale, labelOf.get(id)!) }
   const settingsAction = isWorkspaceAdmin(actor, ws.id) ? { label: t(locale, 'pages.home.toSettings'), href: `${wsHref(ws.slug, 'settings')}#workspace-menu` } : undefined

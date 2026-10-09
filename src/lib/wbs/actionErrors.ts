@@ -2,7 +2,7 @@
 // 서버 전용 코드가 없는 모듈이라 클라이언트가 import 한다. 액션은 한국어 문구를 돌려주고(계약 { ok, error } 유지), 화면은 그리는 자리에서
 // 사전 문구를 고른다 — 받은 문구를 그대로 그리면 영어 화면에 한국어가 뜬다. 표에 없는 문구는 null — 화면의 일반 키로 떨어진다.
 import type { DictKey } from '@/lib/i18n/dict'
-import { ERR_ANON, ERR_DENIED, ERR_LOOKUP, ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { guardCodeOf, type GuardCode } from '@/lib/authz/errors'
 
 export const WBS_ACTION_ERRORS = {
   range: '0~100 범위',
@@ -25,15 +25,18 @@ export const WBS_ACTION_ERRORS = {
   approvalRequired: '이 프로젝트는 승인 단계가 둘 이상이라 완료(100%)는 단계 승인으로만 됩니다 — 99% 까지 입력할 수 있습니다.',
 } as const
 
-const KEY: Readonly<Record<string, DictKey>> = {
-  ...Object.fromEntries(Object.entries(WBS_ACTION_ERRORS).map(([k, msg]) => [msg, `wbs.err.${k}` as DictKey])),
-  [ERR_ANON]: 'wbs.err.anon', [ERR_DENIED]: 'wbs.err.denied', [ERR_LOOKUP]: 'wbs.err.lookup',
-  [ERR_MISSING]: 'wbs.err.missing', [ERR_MODULE_DISABLED]: 'wbs.err.moduleOff',
+const KEY: Readonly<Record<string, DictKey>> = Object.fromEntries(Object.entries(WBS_ACTION_ERRORS).map(([k, msg]) => [msg, `wbs.err.${k}` as DictKey]))
+/** 가드·관문 거부는 문구가 아니라 코드로 알아본다 — 액션이 그 문구를 화면 언어로 번역해 돌려줘도(i18n 4차) 같은 사전 문구를 고른다 */
+const GUARD_KEY: Readonly<Record<GuardCode, DictKey>> = {
+  anon: 'wbs.err.anon', denied: 'wbs.err.denied', lookup: 'wbs.err.lookup', missing: 'wbs.err.missing', module_disabled: 'wbs.err.moduleOff',
 }
 
 /** 액션 문구 → 사전 키. 표 밖(동적 문구·원문·프로토타입 이름)이면 null */
 export function wbsErrorKey(error: string | undefined): DictKey | null {
-  return error && Object.hasOwn(KEY, error) ? KEY[error] : null
+  if (!error) return null
+  if (Object.hasOwn(KEY, error)) return KEY[error]
+  const guard = guardCodeOf(error)
+  return guard ? GUARD_KEY[guard] : null
 }
 
 /** 토스트 문구 — 표에 있으면 그 사전 문구, 없으면 그 화면의 일반 키 */

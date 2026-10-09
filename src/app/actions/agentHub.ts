@@ -28,9 +28,9 @@ export async function refreshAgentHub(projectId: string): Promise<{ ok: true; hu
   const t = await serverTranslator()
   if (!isUuidLike(projectId)) return { ok: false, error: t(ERR_BAD) }
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId }, 'agents')                    // 스펙 §4.2 — 가드 뒤·본문 앞(P17)
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   try {
     return { ok: true, hub: await getAgentHub(projectId, { userId: g.actor.userId, isAdmin: isProjectAdmin(g.actor, projectId) }, undefined, await serverTranslator()) }
   } catch (e) {
@@ -71,9 +71,9 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
     return { ok: false, error: t(ERR_BAD) }
   }
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId }, 'agents')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const isAdmin = isProjectAdmin(g.actor, projectId)
   const wanted = new Map<string, boolean>()
   for (const c of changes) wanted.set(c.itemId, c.delegated)
@@ -288,9 +288,9 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
   // 본인·서브트리 관리자"로 판정한다(2026-09-14 담당자 본인, 2026-09-15 트랙 B 서브트리 관리자).
   // 중단·재개 요청은 아래서 별도로 좁힌다 — 남의 PC 러너를 세우거나 되살리는 관리 행위라 일반 멤버에겐 안 연다.
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId }, 'agents')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const isAdmin = isProjectAdmin(g.actor, projectId)
   const admin = createAdminClient()
 

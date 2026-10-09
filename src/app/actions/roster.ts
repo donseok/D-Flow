@@ -136,7 +136,7 @@ async function callUpsert(
 export async function upsertRosterMember(projectId: string, input: RosterInput): Promise<RosterActionResult> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
   const name = normalizeName(input?.name)
   if (!name) return { ok: false, error: tr(ERR_NAME) }
   const personId = input.personId ?? null
@@ -173,9 +173,9 @@ export async function removeRosterMember(memberId: string): Promise<{ ok: true }
   const found = await resolveProjectId('project_members', memberId)
   if (!found.ok) return { ok: false, error: libText(tr, found.error) }
   const projectId = found.projectId
-  if (!projectId) return { ok: false, error: ERR_MISSING }
+  if (!projectId) return { ok: false, error: libText(tr, ERR_MISSING) }
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
 
   const records = await memberHasRecords(createAdminClient(), memberId)
   if (!records.ok) return { ok: false, error: tr(ERR_ROSTER_LOOKUP) }
@@ -197,7 +197,7 @@ export async function listRoster(
 ): Promise<{ ok: true; rows: RosterMember[] } | { ok: false; error: string }> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
   const { data, error } = await createAdminClient()
     .from('project_members').select(ROSTER_SELECT).eq('project_id', projectId)
     .order('sort_order').order('created_at')

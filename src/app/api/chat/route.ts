@@ -4,6 +4,7 @@ import { legacyChatProjectGate } from '@/lib/ai/legacyChatGate'
 import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { answerQuestion, sanitizeHistory } from '@/lib/ai/answer'
 import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (gate) return gate
   // 옛 챗도 chatbot 관문(스펙 §4.2 챗 위젯 행) — 프로젝트 없는 전체 질문은 요청의 워크스페이스(셸 범위, 소속 확인 — D26). 둘 다 없으면 400
   const mod = await requireScopedSessionModule({ projectId, workspaceId: body.workspaceId }, 'chatbot')
-  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: mod.status })
+  if (!mod.ok) return NextResponse.json({ error: libText(t, mod.error) }, { status: mod.status })
 
   try {
     const result = await answerQuestion({ projectId, workspaceId: mod.workspaceId, message, history })   // 답의 원천·AI 판정도 그 범위(CC2·CC3)

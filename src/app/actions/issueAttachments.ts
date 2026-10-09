@@ -44,7 +44,7 @@ async function requireIssueEditable(issueId: string): Promise<
   // 컬럼을 채울 수 없으므로 '권한 없음'이 아니라 중단한다.
   if (!found.projectId) {
     console.error('[issueAttachments] 이슈의 프로젝트를 확정하지 못했습니다:', issueId)
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   const projectId = found.projectId
 
@@ -60,15 +60,15 @@ async function requireIssueEditable(issueId: string): Promise<
     const { data, error } = await sb.from('issues').select('created_by').eq('id', issueId).maybeSingle()
     if (error) {
       console.error('[issueAttachments] 이슈 작성자 조회 실패:', error.message)
-      return { ok: false, error: ERR_LOOKUP }
+      return { ok: false, error: libText(t, ERR_LOOKUP) }
     }
     if (!data) return { ok: false, error: t('err.issueNotFound') }
-    if ((data.created_by as string | null) !== actor.userId) return { ok: false, error: ERR_DENIED }
+    if ((data.created_by as string | null) !== actor.userId) return { ok: false, error: libText(t, ERR_DENIED) }
     pass = { ok: true, projectId, userId: actor.userId }
   }
   // 모듈 관문(스펙 §4.2) — 관리자·작성자 두 성공을 모아 한 번 판정한다
   const mod = await requireModule({ projectId }, 'issues')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   return pass
 }
 
@@ -81,15 +81,16 @@ async function requireIssueEditable(issueId: string): Promise<
  * 사용자는 파일이 소실됐다고 읽는다(에러 3원칙 ①).
  */
 export async function listIssueAttachments(issueId: string): Promise<IssueAttachmentList> {
+  const t = await serverTranslator()
   if (!(await getSession())) {
     console.error('[listIssueAttachments] 비로그인 호출')
-    return { ok: false, error: ERR_ANON }
+    return { ok: false, error: libText(t, ERR_ANON) }
   }
   // 모듈 관문(스펙 §4.2) — 이슈 행의 프로젝트로 판정한다
   const scope = await resolveProjectId('issues', issueId)
-  if (!scope.ok || !scope.projectId) return { ok: false, error: scope.ok ? ERR_LOOKUP : scope.error }
+  if (!scope.ok || !scope.projectId) return { ok: false, error: libText(t, scope.ok ? ERR_LOOKUP : scope.error) }
   const mod = await requireModule({ projectId: scope.projectId }, 'issues')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('issue_attachments')
@@ -98,7 +99,7 @@ export async function listIssueAttachments(issueId: string): Promise<IssueAttach
     .order('created_at', { ascending: false })
   if (error) {
     console.error('[listIssueAttachments] 첨부 조회 실패:', error.message)
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   return {
     ok: true,
@@ -123,17 +124,17 @@ export async function getIssueAttachmentUrl(
   issueId: string, attachmentId: string,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const t = await serverTranslator()
-  if (!(await getSession())) return { ok: false, error: ERR_ANON }
+  if (!(await getSession())) return { ok: false, error: libText(t, ERR_ANON) }
   const scope = await resolveProjectId('issues', issueId)
-  if (!scope.ok || !scope.projectId) return { ok: false, error: scope.ok ? ERR_LOOKUP : scope.error }
+  if (!scope.ok || !scope.projectId) return { ok: false, error: libText(t, scope.ok ? ERR_LOOKUP : scope.error) }
   const mod = await requireModule({ projectId: scope.projectId }, 'issues')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const sb = await createServerClient()
   const { data: row, error } = await sb.from('issue_attachments')
     .select('file_path, file_name').eq('id', attachmentId).eq('issue_id', issueId).maybeSingle()
   if (error) {
     console.error('[getIssueAttachmentUrl] 첨부 조회 실패:', error.message)
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   if (!row) return { ok: false, error: t('err.noAttachment') }
   // 빈 파일명이면 true 로 폴백해 Content-Disposition 자체는 붙게 한다.
@@ -156,7 +157,7 @@ export async function recordIssueAttachment(
 ): Promise<{ ok: boolean; error?: string }> {
   const t = await serverTranslator()
   const g = await requireIssueEditable(issueId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
 
   const sb = await createServerClient()
   // 경로 검증의 scope 는 클라이언트 입력이 아니라 DB — 게이트가 이슈 행에서 확정한 프로젝트의 워크스페이스다.
@@ -166,7 +167,7 @@ export async function recordIssueAttachment(
   const workspaceId = (proj as { workspace_id?: string } | null)?.workspace_id
   if (projErr || !workspaceId) {
     console.error('[recordIssueAttachment] 프로젝트 워크스페이스 조회 실패:', projErr?.message ?? 'no row')
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   // 이게 없으면 편집 권한이 있는 이슈 하나로 임의 경로의 객체를 메타에 꽂을 수 있다.
   if (!isIssueAttachmentPathValid({ workspaceId, projectId: g.projectId }, issueId, file.filePath)) {
@@ -181,7 +182,7 @@ export async function recordIssueAttachment(
   if (countErr || !existing) {
     // 개수를 모르면 통과시키지 않는다(쓰기 전 선행 조회 실패는 중단).
     console.error('[recordIssueAttachment] 기존 첨부 개수 조회 실패:', countErr?.message)
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   if (remainingIssueAttachmentSlots(existing.length) < 1) {
     return { ok: false, error: fill(t('srv.issueAttachments.upAttachmentsAllowedPerIssue'), { issueAttachmentMaxCount: ISSUE_ATTACHMENT_MAX_COUNT }) }
@@ -211,12 +212,12 @@ export async function removeIssueAttachment(id: string): Promise<{ ok: boolean; 
     .from('issue_attachments').select('id, file_path, issue_id').eq('id', id).maybeSingle()
   if (attErr) {
     console.error('[removeIssueAttachment] 첨부 조회 실패:', attErr.message)
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   if (!att) return { ok: false, error: t('err.noAttachment') }
 
   const g = await requireIssueEditable(att.issue_id as string)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
 
   // Storage 를 먼저 지운다 — 반대로 하면 메타를 잃은 객체를 다시 찾을 수 없다. 객체가 이미 없으면 메타만 지우고,
   // 남아 있으면(삭제 권한 불일치) 메타를 남긴다(0011 H2-g 존재 확인 RPC).

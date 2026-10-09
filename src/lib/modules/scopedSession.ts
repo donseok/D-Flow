@@ -63,7 +63,7 @@ export async function requireScopedSessionModule(
       if (a.actor.projectWorkspace.get(projectId) !== wid) return MISSING()
     }
     const r = await requireModule({ projectId }, moduleId)
-    return r.ok ? { ok: true, workspaceId: wid } : fail(r.error, denyStatus(r.error))
+    return r.ok ? { ok: true, workspaceId: wid } : fail(r.error, denyStatus(r))
   }
 
   if (wid === null) return fail(ERR_WORKSPACE_REQUIRED, 400)
@@ -72,5 +72,5 @@ export async function requireScopedSessionModule(
   const ws = await workspaceFor(a.actor, wid)
   if (!ws.ok) return ws.result
   const r = await requireModule({ workspaceId: ws.id }, moduleId)
-  return r.ok ? { ok: true, workspaceId: ws.id } : fail(r.error, denyStatus(r.error))
+  return r.ok ? { ok: true, workspaceId: ws.id } : fail(r.error, denyStatus(r))
 }

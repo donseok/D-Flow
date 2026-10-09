@@ -31,7 +31,7 @@ import type { KeyState } from '@/lib/settings/resolve'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerDictKey, ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill, textBy } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
+import { libText, libMessages } from '@/lib/i18n/serverText'
 
 export interface SettingsPatch {
   expectedRevision: number
@@ -71,12 +71,14 @@ interface ScopeAdapter {
 }
 
 const INVALID_CODES: readonly string[] = ['CONFIG_INVALID', 'CONFIG_UNKNOWN_KEY', 'CONFIG_IN_USE', 'CONFIG_MODULE_NOT_ALLOWED'] satisfies InvalidCode[]
+/** fieldErrors 의 문구는 여기서 한 번 더 화면 언어로 푼다(교차 검증 validateConfig 의 값이 낀 문구 — 이미 번역된 문구는 그대로다) */
 const invalid = (t: ServerTranslate, commandId: string, code: InvalidCode, fieldErrors: FieldError[], error?: string): SettingsCommandResult =>
-  ({ ok: false, kind: 'invalid', code, commandId, error: error ?? configText(t, CONFIG_MESSAGES[code]), fieldErrors: fieldErrors as { key: SettingKey; message: string; refCount?: number }[], retryable: false })
+  ({ ok: false, kind: 'invalid', code, commandId, error: error ?? configText(t, CONFIG_MESSAGES[code]), fieldErrors: libMessages(t, fieldErrors) as { key: SettingKey; message: string; refCount?: number }[], retryable: false })
 const unavailable = (commandId: string, error: string): SettingsCommandResult =>
   ({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, error, retryable: true })
-const denied = (commandId: string, error: string): SettingsCommandResult =>
-  ({ ok: false, kind: 'denied', code: error, commandId, error, retryable: false })
+/** code 는 종전 그대로 가드 문구(한국어 원문 — 화면은 guardCodeOf 로 읽는다), error 만 요청의 화면 언어 */
+const denied = (t: ServerTranslate, commandId: string, error: string): SettingsCommandResult =>
+  ({ ok: false, kind: 'denied', code: error, commandId, error: libText(t, error), retryable: false })
 
 function stateValue(s: KeyState<unknown> | undefined): unknown {
   return s && (s.status === 'set' || s.status === 'default') ? s.value : undefined
@@ -162,7 +164,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
   if (overlap.length) return invalid(t, commandId, 'CONFIG_INVALID', overlap.map((key) => ({ key, message: t('srv.settings.bothSetUnset') })))
   // 늘 명시 키(core.level_labels·modules.enabled) — 미설정이면 필수 키 부재이거나 기본값(토글 전부)이 켜진 것으로 풀려 저장 검사·동기화가 갈린다
   for (const key of unset) if (defs.get(key)!.explicit) return invalid(t, commandId, 'CONFIG_INVALID', [{ key, message: configText(t, ERR_EXPLICIT_UNSET) }])
-  for (const def of defs.values()) if (!canEditSetting(a.scope, def.editor, actor)) return denied(commandId, ERR_DENIED)
+  for (const def of defs.values()) if (!canEditSetting(a.scope, def.editor, actor)) return denied(t, commandId, ERR_DENIED)
 
   // 3~6 — 재기준 때 한 번 더 돈다. expected 는 첫 시도에 클라이언트 값, 재기준에 방금 읽은 최신 revision
   const attempt = async (admin: AdminClient, expected: number, rebased: boolean): Promise<Attempt> => {
@@ -203,7 +205,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
       const mapped = mapDbError(error, t)
       if (!mapped) throw new Error(`[settings] 알 수 없는 DB 오류: ${error.message}`)      // 표에 없는 토큰은 드러낸다(500)
       if (mapped.code === 'CONFIG_CONFLICT') return { retry: true }
-      if (mapped.code === 'ERR_DENIED') return denied(commandId, mapped.message)
+      if (mapped.code === 'ERR_DENIED') return denied(t, commandId, mapped.message)
       if (mapped.code === 'CONFIG_INVALID') return invalid(t, commandId, 'CONFIG_INVALID', mapped.fieldKey ? [{ key: mapped.fieldKey, message: mapped.message }] : [], mapped.message)
       const k = kindOfCode(mapped.code)
       if (k.kind === 'unavailable' || k.kind === 'schema_ahead') {
@@ -359,7 +361,7 @@ export async function updateProjectSettings(projectId: string, patch: SettingsPa
   const commandId = typeof patch?.commandId === 'string' ? patch.commandId : ''
   if (typeof projectId !== 'string' || !isUuidLike(projectId)) return invalid(t, commandId, 'CONFIG_INVALID', [], `${configText(t, CONFIG_MESSAGES.CONFIG_INVALID)}: projectId`)
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return denied(commandId, g.error)
+  if (!g.ok) return denied(t, commandId, g.error)
   const now = new Date()                                         // 진입에서 한 번(계획 P8)
   return runCommand(projectAdapter(t, projectId, now), g.actor, patch)
 }
@@ -369,7 +371,7 @@ export async function updateWorkspaceSettings(workspaceId: string, patch: Settin
   const commandId = typeof patch?.commandId === 'string' ? patch.commandId : ''
   if (typeof workspaceId !== 'string' || !isUuidLike(workspaceId)) return invalid(t, commandId, 'CONFIG_INVALID', [], `${configText(t, CONFIG_MESSAGES.CONFIG_INVALID)}: workspaceId`)
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return denied(commandId, g.error)
+  if (!g.ok) return denied(t, commandId, g.error)
   return runCommand(workspaceAdapter(t, workspaceId), g.actor, patch)
 }
 
@@ -383,7 +385,7 @@ async function guardScope(scope: SettingsHistoryScope) {
 export async function getSettingsCommandOutcome(scope: SettingsHistoryScope, commandId: string): Promise<SettingsOutcomeResult> {
   const t = await serverTranslator()
   const g = await guardScope(scope)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   // 명령 id 는 늘 uuid 다 — 다른 모양은 조회할 것도 없이 "모름"(다시 보내면 RPC 가 판정한다)
   if (typeof commandId !== 'string' || !isUuidLike(commandId)) return { ok: true, outcome: { status: 'unknown' } }
   const sb = await createServerClient()
@@ -395,7 +397,7 @@ export async function getSettingsCommandOutcome(scope: SettingsHistoryScope, com
 export async function listSettingsHistory(scope: SettingsHistoryScope, opts?: { limit?: number; before?: number }): Promise<SettingsHistoryResult> {
   const t = await serverTranslator()
   const g = await guardScope(scope)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const sb = await createServerClient()
   const r = await listHistory(sb, scope, opts)
   if (!r.ok) { console.error('[settings] 이력 조회 실패', { scope, cause: r.error }); return { ok: false, error: t(ERR_HISTORY) } }

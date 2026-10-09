@@ -12,7 +12,7 @@ import { applyDelegation, requireDelegationRight, type AgentDelegationResult } f
 import { requireModule } from '@/lib/modules/gate'
 import { serverTranslator } from '@/lib/i18n/server'
 import { ERR_MISSING } from '@/lib/authz/errors'
-import { libText } from '@/lib/i18n/serverText'
+import { libText, failureText } from '@/lib/i18n/serverText'
 // 결과 타입은 명세 패널 등 화면이 이 모듈에서 import 한다 — 본체를 옮겨도 계약 위치는 유지(타입 재export 는 런타임에 없다).
 export type { AgentDelegationResult } from '@/lib/agent/delegation'
 
@@ -62,7 +62,7 @@ async function loadItemProject(itemId: string): Promise<
   if (!isUuidLike(itemId)) return { ok: false, error: t('err.invalidRequest') }
   const resolved = await resolveProjectId('wbs_items', itemId)
   if (!resolved.ok) return { ok: false, error: libText(t, resolved.error) }
-  if (resolved.projectId === null) return { ok: false, error: ERR_MISSING }
+  if (resolved.projectId === null) return { ok: false, error: libText(t, ERR_MISSING) }
   return { ok: true, projectId: resolved.projectId }
 }
 
@@ -133,7 +133,7 @@ export async function updateWbsSpec(itemId: string, spec: string): Promise<{ ok:
   const loaded = await loadItemProject(itemId)
   if (!loaded.ok) return loaded
   const g = await requireProjectAdmin(loaded.projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const admin = createAdminClient()
   const { data: updated, error } = await admin
     .from('wbs_items').update({ spec, updated_at: new Date().toISOString() })
@@ -169,7 +169,7 @@ export async function updateWbsSpecFields(
   const loaded = await loadItemProject(itemId)
   if (!loaded.ok) return loaded
   const g = await requireProjectAdmin(loaded.projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const admin = createAdminClient()
   const { data: updated, error } = await admin
     .from('wbs_items').update(patch).eq('id', itemId).select('id')
@@ -201,7 +201,7 @@ export async function updateAgentPrompt(
   const right = await requireDelegationRight(itemId)
   if (!right.ok) return { ok: false, error: libText(t, right.error) }
   const mod = await requireModule({ projectId: right.projectId }, 'agents')   // 스펙 §4.2 — 항목의 프로젝트(가드가 확정)로
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const admin = createAdminClient()
   const { data: updated, error } = await admin
     .from('wbs_items')
@@ -226,12 +226,12 @@ export async function setAgentDelegation(
   const right = await requireDelegationRight(itemId)
   if (!right.ok) return { ok: false, error: libText(t, right.error) }
   const mod = await requireModule({ projectId: right.projectId }, 'agents')   // 스펙 §4.2 — 항목의 프로젝트(가드가 확정)로
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const r = await applyDelegation(createAdminClient(), {
     itemId, projectId: right.projectId, delegated, actorUserId: right.actor.userId, isAdmin: right.isAdmin,
   })
   if (r.ok) revalidatePath(`/p/${right.projectId}`, 'layout')
   // 해제가 진행 중 작업을 멈추고 단계를 as 로 되돌려 실적이 바뀌었으면 진척 스냅샷을 남긴다(wbsAssign 과 같은 규칙).
   if (r.ok && r.actualChanged) after(() => recordProgressSnapshot(right.projectId))
-  return r
+  return failureText(t, r)
 }

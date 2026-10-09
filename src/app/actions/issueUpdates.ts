@@ -60,14 +60,14 @@ async function requireIssueMember(issueId: string): Promise<
   // 컬럼을 채울 수 없으므로 '권한 없음'이 아니라 중단한다(에러 3원칙 ②).
   if (!found.projectId) {
     console.error('[issueUpdates] 이슈의 프로젝트를 확정하지 못했습니다:', issueId)
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   const projectId = found.projectId
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   // 모듈 관문(스펙 §4.2)은 관리자 판정보다 앞 — 꺼진 모듈에 관리자 판정 왕복을 쓰지 않는다
   const mod = await requireModule({ projectId }, 'issues')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const admin = await requireProjectAdmin(projectId)
   return { ok: true, projectId, userId: g.actor.userId, isAdmin: admin.ok }
 }
@@ -109,7 +109,7 @@ async function syncResolutionNoteMirror(
     .limit(1)
   if (error) {
     console.error('[issueUpdates] 미러 재계산용 조회 실패:', error.message)
-    return ERR_LOOKUP
+    return libText(t, ERR_LOOKUP)
   }
   const latest = (data?.[0]?.body as string | undefined) ?? ''
 
@@ -154,15 +154,16 @@ function mapRow(r: Record<string, unknown>): IssueUpdate {
  * 조치도 안 했다"고 읽는다. 조치 이력이 사라진 것처럼 보이는 것이 최악이다(에러 3원칙 ①).
  */
 export async function listIssueUpdates(issueId: string): Promise<IssueUpdateListResult> {
+  const t = await serverTranslator()
   if (!(await getSession())) {
     console.error('[listIssueUpdates] 비로그인 호출')
-    return { ok: false, error: ERR_ANON }
+    return { ok: false, error: libText(t, ERR_ANON) }
   }
   // 모듈 관문(스펙 §4.2) — 이슈 행의 프로젝트로 판정한다
   const scope = await resolveProjectId('issues', issueId)
-  if (!scope.ok || !scope.projectId) return { ok: false, error: scope.ok ? ERR_LOOKUP : scope.error }
+  if (!scope.ok || !scope.projectId) return { ok: false, error: libText(t, scope.ok ? ERR_LOOKUP : scope.error) }
   const mod = await requireModule({ projectId: scope.projectId }, 'issues')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('issue_updates')
@@ -172,7 +173,7 @@ export async function listIssueUpdates(issueId: string): Promise<IssueUpdateList
     .order('id', { ascending: true })
   if (error) {
     console.error('[listIssueUpdates] 이력 조회 실패:', error.message)
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   return { ok: true, items: (data ?? []).map(mapRow) }
 }
@@ -184,7 +185,7 @@ export async function addIssueUpdate(
 ): Promise<IssueUpdateResult> {
   const t = await serverTranslator()
   const g = await requireIssueMember(issueId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
 
   const body = input.body.trim()
   if (body.length === 0) return { ok: false, error: t('srv.issueUpdates.enterContent') }
@@ -203,7 +204,7 @@ export async function addIssueUpdate(
   }
 
   const user = await getSession()
-  if (!user) return { ok: false, error: ERR_ANON }
+  if (!user) return { ok: false, error: libText(t, ERR_ANON) }
 
   const sb = await createServerClient()
 
@@ -220,7 +221,7 @@ export async function addIssueUpdate(
       .eq('people.active', true)
     if (error) {
       console.error('[addIssueUpdate] 멘션 대상 검증 실패:', error.message)
-      return { ok: false, error: ERR_LOOKUP }
+      return { ok: false, error: libText(t, ERR_LOOKUP) }
     }
     mentioned = (data ?? []).map((r: { id: string }) => r.id)
   }
@@ -341,7 +342,7 @@ async function loadTargetRow(
     .maybeSingle()
   if (error) {
     console.error('[issueUpdates] 대상 이력 조회 실패:', error.message)
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   if (!data) return { ok: false, error: t('srv.issueUpdates.updateNotFound') }
   return {
@@ -356,9 +357,9 @@ async function loadTargetRow(
 export async function archiveIssueUpdate(issueId: string, updateId: string): Promise<IssueUpdateResult> {
   const t = await serverTranslator()
   const g = await requireIssueMember(issueId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const user = await getSession()
-  if (!user) return { ok: false, error: ERR_ANON }
+  if (!user) return { ok: false, error: libText(t, ERR_ANON) }
 
   const sb = await createServerClient()
   const row = await loadTargetRow(sb, issueId, updateId)
@@ -367,7 +368,7 @@ export async function archiveIssueUpdate(issueId: string, updateId: string): Pro
   // 스스로 지울 수 있으면 남길 값어치가 없다. UI 는 버튼을 숨기지만 관문은 여기다.
   if (row.kind !== 'note') return { ok: false, error: t('srv.issueUpdates.statusChangeRecordsCannotStruck') }
   if (!canArchiveUpdate({ authorUserId: row.authorUserId }, g.userId, g.isAdmin)) {
-    return { ok: false, error: ERR_DENIED }
+    return { ok: false, error: libText(t, ERR_DENIED) }
   }
   if (row.archivedAt !== null) return { ok: false, error: t('srv.issueUpdates.updateAlreadyStruckOut') }
 
@@ -406,7 +407,7 @@ export async function archiveIssueUpdate(issueId: string, updateId: string): Pro
 export async function unarchiveIssueUpdate(issueId: string, updateId: string): Promise<IssueUpdateResult> {
   const t = await serverTranslator()
   const g = await requireIssueMember(issueId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
 
   const sb = await createServerClient()
   const row = await loadTargetRow(sb, issueId, updateId)
@@ -415,7 +416,7 @@ export async function unarchiveIssueUpdate(issueId: string, updateId: string): P
   // 스스로 지울 수 있으면 남길 값어치가 없다. UI 는 버튼을 숨기지만 관문은 여기다.
   if (row.kind !== 'note') return { ok: false, error: t('srv.issueUpdates.statusChangeRecordsCannotStruck') }
   if (!canArchiveUpdate({ authorUserId: row.authorUserId }, g.userId, g.isAdmin)) {
-    return { ok: false, error: ERR_DENIED }
+    return { ok: false, error: libText(t, ERR_DENIED) }
   }
   if (row.archivedAt === null) return { ok: false, error: t('srv.issueUpdates.updateNotStruckOut') }
 
@@ -444,8 +445,8 @@ export async function unarchiveIssueUpdate(issueId: string, updateId: string): P
 export async function purgeIssueUpdate(issueId: string, updateId: string): Promise<IssueUpdateResult> {
   const t = await serverTranslator()
   const g = await requireIssueMember(issueId)
-  if (!g.ok) return { ok: false, error: g.error }
-  if (!canPurgeUpdate(g.isAdmin)) return { ok: false, error: ERR_DENIED }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!canPurgeUpdate(g.isAdmin)) return { ok: false, error: libText(t, ERR_DENIED) }
 
   const sb = await createServerClient()
   const row = await loadTargetRow(sb, issueId, updateId)

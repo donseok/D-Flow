@@ -213,7 +213,9 @@ export function parseWbsMarkdown(md: string): WbsDoc {
 
 export type WbsValidation = { ok: boolean; errors: string[]; warnings: string[]; counts: Record<string, number> }
 
-export function validateWbsDoc(doc: WbsDoc, role: 'pl' | 'skeleton'): WbsValidation {
+/** productName — 오류문이 '정본'으로 가리키는 제품 이름. 순수 파서라 설정을 읽지 않는다: 호출부(업로드 액션)가 그 프로젝트의 워크스페이스 값
+ *  (branding.product_name)을 넘기고, 넘기지 않으면 배포 기본 이름이다. */
+export function validateWbsDoc(doc: WbsDoc, role: 'pl' | 'skeleton', productName: string = BRAND.productName): WbsValidation {
   const errors = [...doc.problems]
   const warnings: string[] = []
   const { levels, nodes, front } = doc
@@ -261,9 +263,9 @@ export function validateWbsDoc(doc: WbsDoc, role: 'pl' | 'skeleton'): WbsValidat
       errors.push(`${n.id}: attach 지점(${attachMinLevel}층) 이하 층은 최상위에 올 수 없다.`)
     }
     if (n.checked && lv.progress !== 'checklist') {
-      errors.push(`${n.id}: 상태는 항상 [ ] — [x] 는 checklist 층 전용(전이 정본은 ${BRAND.productName}).`)
+      errors.push(`${n.id}: 상태는 항상 [ ] — [x] 는 checklist 층 전용(전이 정본은 ${productName}).`)
     }
-    if (/\d+\s*%/.test(n.title)) errors.push(`${n.id}: 제목에 실적 % 금지 — 진도의 정본은 ${BRAND.productName}.`)
+    if (/\d+\s*%/.test(n.title)) errors.push(`${n.id}: 제목에 실적 % 금지 — 진도의 정본은 ${productName}.`)
     if (lv.progress === 'checklist') {
       if (children.get(n.id)?.length) errors.push(`${n.id}: checklist 층은 leaf 전용 — 자식 금지.`)
       const p = n.parent ? byId.get(n.parent) : undefined

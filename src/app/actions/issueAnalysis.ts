@@ -73,12 +73,12 @@ export async function ensureIssueAnalysisAction(
     return {
       ok: false,
       state: 'unavailable',
-      error: guard.error,
+      error: libText(t, guard.error),
       preflight: null,
     }
   }
   const mod = await requireModule({ projectId }, 'issue_analysis')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17). 꺼지면 로더·LLM 에 닿지 않는다
-  if (!mod.ok) return { ok: false, state: 'unavailable', error: mod.error, preflight: null }
+  if (!mod.ok) return { ok: false, state: 'unavailable', error: libText(t, mod.error), preflight: null }
   const context = await loadIssueEntryContext(projectId)
   if (!context.ok) return { ok: false, state: 'unavailable', error: libText(t, context.error), preflight: null }
   if (areaFilter !== 'all' && !context.value.areas.some(area => area.id === areaFilter)) {

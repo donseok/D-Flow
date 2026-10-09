@@ -33,11 +33,11 @@ export type MigrateVocabResult = { ok: true; moved: number } | { ok: false; erro
 export async function migrateVocabCode(projectId: string, key: string, from: string, to: string): Promise<MigrateVocabResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const moduleId = typeof key === 'string' ? MIGRATABLE[key as VocabKey] : undefined
   if (!moduleId) return { ok: false, error: t(ERR_INPUT) }
   const mod = await requireModule({ projectId }, moduleId)                     // 가드 뒤·입력 검증 앞(P17)
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   if (typeof from !== 'string' || typeof to !== 'string' || !VOCAB_CODE_RE.test(from) || !VOCAB_CODE_RE.test(to) || from === to) {
     return { ok: false, error: t(ERR_INPUT) }
   }

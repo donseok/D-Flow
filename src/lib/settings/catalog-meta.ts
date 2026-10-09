@@ -33,19 +33,22 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
   'invites.allowed_domains': A('verified', ['src/lib/data/inviteDomains.ts'], ['tests/settings/workspace-config.test.ts', 'tests/domain/invites.test.ts']),
-  // stored 유지(2026-10-09 배선 뒤에도) — 셸(모노그램·aria)·세 범위의 탭 제목(워크스페이스·프로젝트 레이아웃의 generateMetadata, 전역 범위는 셸이 그리는
-  // 현재 워크스페이스)·전역 검색 대화상자의 문구·초대 메일·내보내기 파일·외부 회의록 API 의 오류문(인증 뒤 — 자격증명의 워크스페이스)·AI 프롬프트 가운데
-  // 옛 챗(answer)과 회의록 Q&A(문서·보관함)는 저장값을 쓴다. 간트 영향 확인 문구·연동 안내는 제품 이름을 빼서 소비처가 아니게 됐다.
-  // 남은 소비처(배포 env 의 이름을 쓴다): 주간 브리핑 프롬프트(src/lib/ai/brief.ts — 프로젝트 id 만 받아 워크스페이스를 한 번 더 풀어야 한다),
-  // 챗 v2 합성 프롬프트(src/lib/ai/chat/orchestrator.ts — 합성 입력에 확인된 워크스페이스가 없다), wbs.md 검증 오류문(src/lib/wbsmd/parse.ts — 순수 파서).
-  // 공개 화면(로그인·초대·루트 오류)과 인증 전 API 오류의 env 이름은 의도다(워크스페이스를 모른다)
-  'branding.product_name': A('stored',
+  // wired(2026-10-10) — 워크스페이스를 아는 모든 소비처가 저장값을 쓴다: 셸(모노그램·aria)·세 범위의 탭 제목(워크스페이스·프로젝트 레이아웃의
+  // generateMetadata, 전역 범위는 셸이 그리는 현재 워크스페이스)·전역 검색 대화상자의 문구·초대 메일·내보내기 파일·외부 회의록 API 의 오류문(인증 뒤 —
+  // 자격증명의 워크스페이스)·AI 프롬프트 넷(옛 챗 answer, 회의록 Q&A 문서·보관함, 주간 브리핑 — 프로젝트 행에서 워크스페이스를 풀어 읽는다,
+  // 챗 v2 합성 — 라우트가 접근 범위·관문으로 확인한 워크스페이스의 이름을 합성 입력에 싣는다)·wbs.md 검증 오류문(순수 파서가 이름을 인자로 받고
+  // 업로드 액션이 가드 결과의 워크스페이스로 읽어 넘긴다). 주간 브리핑은 프로젝트가 공유하는 캐시 문서라 이름을 바꾼 뒤의 반영은 다음 생성부터다
+  // (캐시 키·해시에 넣지 않은 까닭은 src/lib/ai/brief.ts 의 weeklySystem 주석). 간트 영향 확인 문구·연동 안내는 제품 이름을 빼서 소비처가 아니다.
+  // 공개 화면(로그인·초대·루트 오류)과 인증 전 API 오류의 env 이름은 의도다(워크스페이스를 모른다).
+  // verified 까지 남은 것: 화면 눈확인(이름을 바꾼 워크스페이스의 브리핑·챗 답변), 두 워크스페이스를 오가는 합성 게이트 단계
+  'branding.product_name': A('wired',
     ['src/lib/settings/displayBranding.ts', 'src/lib/shell/loadShell.ts', 'src/components/app/BrandSlot.tsx', 'src/components/ui/BrandMark.tsx', 'src/app/(app)/w/[slug]/layout.tsx',
       'src/app/(app)/p/[projectId]/layout.tsx', 'src/app/(app)/(global)/layout.tsx', 'src/components/search/GlobalSearchDialog.tsx', 'src/app/actions/projectInvites.ts',
-      'src/lib/minutes/externalApi.ts', 'src/lib/ai/answer.ts', 'src/lib/ai/minutes-answer.ts'],
+      'src/lib/minutes/externalApi.ts', 'src/lib/ai/answer.ts', 'src/lib/ai/minutes-answer.ts', 'src/lib/ai/brief.ts', 'src/lib/ai/chat/orchestrator.ts',
+      'src/app/api/chat/v2/stream/route.ts', 'src/lib/wbsmd/parse.ts', 'src/app/actions/wbsMarkdown.ts'],
     ['tests/settings/display-branding.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/app/w-layout.test.tsx', 'tests/actions/project-invites-gate.test.ts', 'tests/components/workspace-fields-editor.test.tsx',
       'tests/shell/scope-branding.test.tsx', 'tests/shell/global-bar-search.test.tsx', 'tests/ui/global-search.test.tsx', 'tests/api/minutes-error-product-name.test.ts',
-      'tests/ai/legacy-chat-workspace-scope.test.ts', 'tests/ai/minutes-answer-product-name.test.ts']),
+      'tests/ai/legacy-chat-workspace-scope.test.ts', 'tests/ai/minutes-answer-product-name.test.ts', 'tests/ai/product-name-remaining.test.ts']),
   // wired(2026-10-09) — 세 범위의 셸 로고와 세 범위의 탭 아이콘이 저장값을 쓴다(읽기 라우트는 소속·현재 슬롯만 낸다). 전역 범위(/account·/admin)는
   // 주소가 워크스페이스를 정하지 않아 셸이 그리는 현재 워크스페이스(readCurrentWorkspace — 쿠키 힌트를 소속으로 다시 본 값, 없으면 첫 소속)의 마크를 쓴다.
   // 근거 테스트: scope-branding '(global) 탭 제목·아이콘'(양성·격리·소속 없음), w-layout, scope-layouts(셸 슬롯).

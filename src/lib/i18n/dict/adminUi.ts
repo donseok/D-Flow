@@ -112,6 +112,11 @@ export const adminUiKo = {
   // components/roster/RosterManager.tsx
   'roster.adminRowLocked': '관리자 행은 워크스페이스 관리자만 수정할 수 있습니다.',
   'roster.addedExisting': '기존 인물 {name}을(를) 추가했습니다.',
+  // 저장 전 초안 검증(lib/domain/roster.ts 의 문구와 같은 글자 — rosterDraftErrorText 가 문구로 키를 찾는다)
+  'roster.err.nameRequired': '이름을 입력하세요.',
+  'roster.err.emailFormat': '올바른 이메일 형식이 아닙니다.',
+  'roster.err.accessNeedsEmail': '권한을 주려면 이메일(계정)이 필요합니다.',
+  'roster.err.duplicateEmail': '같은 이메일의 사람이 이미 있습니다. 목록에서 선택하세요.',
   'roster.col.name': '이름',
   'roster.col.email': '이메일',
   'roster.col.teams': '팀',

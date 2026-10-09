@@ -268,11 +268,11 @@ describe('requireSuperuser', () => {
   })
   it('워크스페이스 관리자·프로젝트 관리자는 거부', async () => {
     stubDb({ ...WS_ADMIN, roster: [row('p1', 'admin')] })
-    expect(await requireSuperuser()).toEqual({ ok: false, error: ERR_DENIED })
+    expect(await requireSuperuser()).toEqual({ ok: false, error: ERR_DENIED, code: 'denied' })
   })
   it('비로그인은 로그인 필요', async () => {
     mockClient.auth.getClaims.mockResolvedValue({ data: null })
-    expect(await requireSuperuser()).toEqual({ ok: false, error: ERR_ANON })
+    expect(await requireSuperuser()).toEqual({ ok: false, error: ERR_ANON, code: 'anon' })
   })
 })
 
@@ -293,33 +293,33 @@ describe('requireProjectAdmin / requireProjectMember', () => {
 
   it('멤버는 admin 가드에서 거부, member 가드는 통과', async () => {
     stubDb({ ...WS_MEMBER, roster: [row('p1', 'member')] })
-    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_DENIED })
+    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_DENIED, code: 'denied' })
     stubDb({ ...WS_MEMBER, roster: [row('p1', 'member')] })
     expect((await requireProjectMember('p1')).ok).toBe(true)
   })
 
   it('(f) 같은 워크스페이스의 조회 전용(viewer)은 권한 없음', async () => {
     stubDb({ ...WS_MEMBER, roster: [row('p1', null)] })
-    expect(await requireProjectMember('p1')).toEqual({ ok: false, error: ERR_DENIED })
+    expect(await requireProjectMember('p1')).toEqual({ ok: false, error: ERR_DENIED, code: 'denied' })
     stubDb({ ...WS_MEMBER })
-    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_DENIED })
+    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_DENIED, code: 'denied' })
   })
 
   it('다른 프로젝트 관리자는 거부 — 프로젝트 스코프', async () => {
     stubDb({ ...WS_MEMBER, roster: [row('p1', 'admin')] })
-    expect(await requireProjectAdmin('p2')).toEqual({ ok: false, error: ERR_DENIED })
+    expect(await requireProjectAdmin('p2')).toEqual({ ok: false, error: ERR_DENIED, code: 'denied' })
   })
 
   it('(e) 내 워크스페이스에 없는 pid 는 대상 없음(존재 은닉) — admin·member 가드 모두', async () => {
     stubDb({ ...WS_ADMIN, roster: [row('p1', 'admin')] })
-    expect(await requireProjectMember('px')).toEqual({ ok: false, error: ERR_MISSING })
+    expect(await requireProjectMember('px')).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
     stubDb({ ...WS_ADMIN, roster: [row('p1', 'admin')] })
-    expect(await requireProjectAdmin('px')).toEqual({ ok: false, error: ERR_MISSING })
+    expect(await requireProjectAdmin('px')).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
   })
 
   it('pid null 은 플랫폼 관리자 외 권한 없음(fail-closed) — 존재 은닉이 아니다', async () => {
     stubDb({ ...WS_ADMIN })
-    expect(await requireProjectAdmin(null)).toEqual({ ok: false, error: ERR_DENIED })
+    expect(await requireProjectAdmin(null)).toEqual({ ok: false, error: ERR_DENIED, code: 'denied' })
     stubDb({ platformAdmin: true })
     expect((await requireProjectAdmin(null)).ok).toBe(true)
   })
@@ -331,26 +331,26 @@ describe('requireProjectAdmin / requireProjectMember', () => {
 
   it('(g) 조회 실패는 통과시키지 않고 사유를 구분해 돌려준다', async () => {
     stubDb({ ...WS_MEMBER, errorOn: 'project_members' })
-    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_LOOKUP })
+    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_LOOKUP, code: 'lookup' })
     stubDb({ ...WS_MEMBER, errorOn: 'projects' })
-    expect(await requireProjectMember('p1')).toEqual({ ok: false, error: ERR_LOOKUP })
+    expect(await requireProjectMember('p1')).toEqual({ ok: false, error: ERR_LOOKUP, code: 'lookup' })
   })
 })
 
 describe('requireWorkspaceAdmin', () => {
   it('비로그인은 로그인 필요', async () => {
     mockClient.auth.getClaims.mockResolvedValue({ data: null })
-    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_ANON })
+    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_ANON, code: 'anon' })
   })
   it('비소속 워크스페이스·null 은 대상 없음(존재 은닉)', async () => {
     stubDb({ ...WS_ADMIN })
-    expect(await requireWorkspaceAdmin('w9')).toEqual({ ok: false, error: ERR_MISSING })
+    expect(await requireWorkspaceAdmin('w9')).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
     stubDb({ ...WS_ADMIN })
-    expect(await requireWorkspaceAdmin(null)).toEqual({ ok: false, error: ERR_MISSING })
+    expect(await requireWorkspaceAdmin(null)).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
   })
   it('워크스페이스 멤버는 권한 없음 — 명단 관리자여도', async () => {
     stubDb({ ...WS_MEMBER, roster: [row('p1', 'admin')] })
-    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_DENIED })
+    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_DENIED, code: 'denied' })
   })
   it('워크스페이스 관리자는 통과', async () => {
     stubDb({ ...WS_ADMIN })
@@ -363,7 +363,7 @@ describe('requireWorkspaceAdmin', () => {
   })
   it('권한 조회 실패는 ERR_LOOKUP', async () => {
     stubDb({ ...WS_ADMIN, errorOn: 'workspace_members' })
-    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_LOOKUP })
+    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_LOOKUP, code: 'lookup' })
   })
 })
 
@@ -386,7 +386,7 @@ describe('resolveScope / resolveProjectId', () => {
   it('행이 없으면 대상을 찾을 수 없음', async () => {
     stubRow({ data: null, error: null })
     expect(await resolveProjectId('meetings', 'm1')).toEqual({
-      ok: false, error: '대상을 찾을 수 없습니다.',
+      ok: false, error: '대상을 찾을 수 없습니다.', code: 'missing',
     })
   })
 
@@ -395,7 +395,7 @@ describe('resolveScope / resolveProjectId', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     stubRow({ data: null, error: { message: 'boom' } })
     expect(await resolveProjectId('meetings', 'm1')).toEqual({
-      ok: false, error: '권한을 확인할 수 없어 중단했습니다.',
+      ok: false, error: '권한을 확인할 수 없어 중단했습니다.', code: 'lookup',
     })
     expect(ERR_LOOKUP).not.toBe(ERR_MISSING)
     spy.mockRestore()

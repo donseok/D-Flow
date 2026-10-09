@@ -115,10 +115,10 @@ export async function prepareFormTemplateUpload(
 ): Promise<FormPrepareResult> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
   if (!isFormKind(formKind)) return { ok: false, error: tr(ERR_INPUT) }
   const mod = await requireModule({ projectId }, FORM_SETTING_MODULE[formKind])
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(tr, mod.error) }
   if (extensionOf(fileName) !== FORM_FORMAT[formKind]) return { ok: false, error: tr(ERR_EXT) }
   if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > FORM_TEMPLATE_MAX_BYTES) return { ok: false, error: tr(ERR_SIZE) }
   const workspaceId = g.actor.projectWorkspace.get(projectId)
@@ -151,13 +151,13 @@ async function activeCustomKeys(projectId: string, kind: FormKind): Promise<{ ok
 export async function activateFormTemplate(projectId: string, templateId: string, command: FormCommand): Promise<FormCommandResult> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: g.error, retryable: false }
+  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: libText(tr, g.error), retryable: false }
   if (!isUuidLike(templateId)) return { ok: false, code: 'CONFIG_INVALID', error: tr(ERR_INPUT), retryable: false }
   const loaded = await loadTemplate(projectId, templateId)
   if (!loaded.ok) return { ok: false, code: loaded.error === tr(ERR_NOT_FOUND) ? 'ERR_NOT_FOUND' : 'CONFIG_UNAVAILABLE', error: libText(tr, loaded.error), retryable: loaded.error !== tr(ERR_NOT_FOUND) }
   const kind = loaded.row.form_kind as FormKind
   const mod = await requireModule({ projectId }, FORM_SETTING_MODULE[kind])
-  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: mod.error, retryable: false }
+  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: libText(tr, mod.error), retryable: false }
   if (!validCommand(command)) return { ok: false, code: 'CONFIG_INVALID', error: tr(ERR_INPUT), retryable: false }
   const ready = await activeCustomKeys(projectId, kind)
   if (!ready.ok) return { ok: false, code: 'CONFIG_UNAVAILABLE', error: libText(tr, ready.error), retryable: ready.error !== tr(ERR_SETTING) && ready.error !== tr(ERR_SCHEMA) && ready.error !== tr(ERR_FIELDS) }
@@ -182,13 +182,13 @@ export async function activateFormTemplate(projectId: string, templateId: string
 export async function deactivateFormTemplate(projectId: string, templateId: string, command: FormCommand): Promise<FormCommandResult> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: g.error, retryable: false }
+  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: libText(tr, g.error), retryable: false }
   if (!isUuidLike(templateId)) return { ok: false, code: 'CONFIG_INVALID', error: tr(ERR_INPUT), retryable: false }
   const loaded = await loadTemplate(projectId, templateId)
   if (!loaded.ok) return { ok: false, code: loaded.error === tr(ERR_NOT_FOUND) ? 'ERR_NOT_FOUND' : 'CONFIG_UNAVAILABLE', error: libText(tr, loaded.error), retryable: loaded.error !== tr(ERR_NOT_FOUND) }
   const kind = loaded.row.form_kind as FormKind
   const mod = await requireModule({ projectId }, FORM_SETTING_MODULE[kind])
-  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: mod.error, retryable: false }
+  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: libText(tr, mod.error), retryable: false }
   if (!validCommand(command)) return { ok: false, code: 'CONFIG_INVALID', error: tr(ERR_INPUT), retryable: false }
   const { admin } = adminFor({ projectId })
   const { data, error } = await admin.rpc('deactivate_form_template', {
@@ -234,10 +234,10 @@ export async function registerFormTemplate(
 ): Promise<FormRegisterResult> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
   if (!isFormKind(formKind)) return { ok: false, code: 'CONFIG_INVALID', error: tr(ERR_INPUT) }
   const mod = await requireModule({ projectId }, FORM_SETTING_MODULE[formKind])
-  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: mod.error }
+  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: libText(tr, mod.error) }
   const workspaceId = g.actor.projectWorkspace.get(projectId)
   if (!workspaceId) return { ok: false, code: 'CONFIG_INVALID', error: tr(ERR_WORKSPACE) }
   if (extensionOf(fileName) !== FORM_FORMAT[formKind] || !incomingMatches(workspaceId, projectId, formKind, incomingPath)) {

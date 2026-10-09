@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { guardCodeOf } from '@/lib/authz/errors'
 import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { trackingEnabled, usageEventDimensionsMissing } from '@/lib/domain/usageTracking'
 import { extractProjectId, normalizeUsagePath, resolveMenuKey } from '@/lib/domain/usageMenu'
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   const projectId = extractProjectId(path)
   const mod = await requireScopedSessionModule({ projectId, workspaceId: body?.workspaceId }, 'usage')
   if (!mod.ok) {
-    return mod.error === ERR_MODULE_DISABLED
+    return guardCodeOf(mod) === 'module_disabled'
       ? NextResponse.json({ ok: true, skipped: 'module_disabled' })
       : NextResponse.json({ error: mod.error }, { status: mod.status })
   }

@@ -15,6 +15,7 @@ import {
 } from '@/lib/domain/wiki'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { libText } from '@/lib/i18n/serverText'
 
 export interface WikiActionResult {
   ok: boolean
@@ -121,9 +122,9 @@ export async function createWikiDocument(args: {
 }): Promise<WikiDocumentActionResult> {
   const t = await serverTranslator()
   const gate = await requireProjectMember(args.projectId)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')                  // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const title = args.title.trim()
   if (!textWithin(title, WIKI_TITLE_MAX) || args.bodyMd.length > WIKI_BODY_MAX) {
     return { ok: false, error: t('srv.wiki.checkLengthTitleBody') }
@@ -167,9 +168,9 @@ export async function updateWikiDocument(args: {
   // 권한 가드가 먼저다. 대상 결합 조회를 앞에 두면, 읽기 범위를 좁히는 날 비권한자에게
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const target = await topicBelongsToProject(args.topicId, args.projectId)
   if (!target.ok) return target
   const title = args.title.trim()
@@ -216,9 +217,9 @@ export async function verifyWikiDocument(args: {
   // 권한 가드가 먼저다. 대상 결합 조회를 앞에 두면, 읽기 범위를 좁히는 날 비권한자에게
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const target = await topicBelongsToProject(args.topicId, args.projectId)
   if (!target.ok) return target
   const reviewDays = args.reviewDays ?? 90
@@ -257,9 +258,9 @@ export async function restoreWikiDocumentRevision(args: {
   // 권한 가드가 먼저다. 대상 결합 조회를 앞에 두면, 읽기 범위를 좁히는 날 비권한자에게
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const target = await topicBelongsToProject(args.topicId, args.projectId)
   if (!target.ok) return target
   const sb = await createServerClient()
@@ -296,9 +297,9 @@ export async function createWikiQuestion(args: {
 }): Promise<WikiActionResult & { questionId?: string }> {
   const t = await serverTranslator()
   const gate = await requireProjectMember(args.projectId)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const question = args.question.trim()
   if (!textWithin(question, WIKI_QUESTION_MAX)) {
     return { ok: false, error: t('srv.wiki.enterQuestionWithin2000') }
@@ -326,9 +327,9 @@ export async function answerWikiQuestion(args: {
 }): Promise<WikiActionResult> {
   const t = await serverTranslator()
   const gate = await requireProjectMember(args.projectId)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const answer = args.answerMd.trim()
   if (!textWithin(answer, WIKI_ANSWER_MAX)) {
     return { ok: false, error: t('srv.wiki.enterAnswerWithin20000') }
@@ -361,9 +362,9 @@ export async function reviewWikiItem(args: {
 }): Promise<WikiActionResult> {
   const t = await serverTranslator()
   const gate = await requireProjectAdmin(args.projectId)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const sb = await createServerClient()
   const { data: item, error: targetError } = await sb.from('wiki_items')
     .select('id').eq('id', args.itemId).eq('project_id', args.projectId).maybeSingle()
@@ -395,9 +396,9 @@ export async function submitWikiFeedback(args: {
   // 권한 가드가 먼저다. 대상 결합 조회를 앞에 두면, 읽기 범위를 좁히는 날 비권한자에게
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const target = await topicBelongsToProject(args.topicId, args.projectId)
   if (!target.ok) return target
   if (!['helpful', 'outdated'].includes(args.kind)) {
@@ -438,9 +439,9 @@ export async function curateWikiItem(args: {
 }): Promise<WikiActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(args.projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   if (!(WIKI_CURATE_ACTIONS as readonly string[]).includes(args.action)) {
     return { ok: false, error: t('srv.wiki.unknownAction') }
   }
@@ -478,9 +479,9 @@ export async function mergeWikiTopics(args: {
 }): Promise<WikiActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(args.projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   if (args.sourceTopicId === args.targetTopicId) {
     return { ok: false, error: t('srv.wiki.selectDifferentTopics') }
   }

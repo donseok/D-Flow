@@ -154,7 +154,7 @@ export async function listProjectInvites(
 ): Promise<{ ok: true; rows: InviteRow[] } | { ok: false; error: string }> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
 
   let admin: AdminClient
   try {
@@ -209,7 +209,7 @@ export async function createProjectInvite(
   // 모든 초대는 프로젝트 관리자 가드를 먼저 — 타 워크스페이스·미존재 프로젝트의 존재 은닉(404)이 여기서 끝난다.
   const accessRole = input?.accessRole ?? null
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
   // 관리자 초대는 관리자 슬롯을 여는 경로 — 프로젝트 관리자 가드만으로 열리면 '관리자가 관리자를 늘린다'.
   // 그 프로젝트가 속한 워크스페이스의 관리자만 발급한다(위 가드를 통과했으니 projectWorkspace 에 키가 있다).
   if (isAdminAccessRole(accessRole)) {
@@ -416,7 +416,7 @@ export async function revokeProjectInvite(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
 
   let admin: AdminClient
   try {

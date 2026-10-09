@@ -9,6 +9,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { isUuidLike } from '@/lib/domain/validate'
 import { failWith } from '@/lib/errors/dbFail'
 import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 export interface ImportReceiptView {
   commandId: string
@@ -40,7 +41,7 @@ export async function getImportReceipt(projectId: string, commandId: string): Pr
     return { ok: false, error: t(ERR_INVALID) }
   }
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const sb = await createServerClient()
   const { data, error } = await sb.from('command_receipts')
     .select('command_id, result, created_at')

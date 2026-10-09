@@ -40,6 +40,19 @@ export const ERR_ACCESS_NEEDS_EMAIL = '권한을 주려면 이메일(계정)이 
 /** 같은 워크스페이스에 같은 이메일의 인물이 있다 — people (workspace_id, email) 유일(rosterWriteError 와 같은 문구). */
 export const ERR_DUPLICATE_EMAIL = '같은 이메일의 사람이 이미 있습니다. 목록에서 선택하세요.'
 
+export const ERR_NAME_REQUIRED = '이름을 입력하세요.'
+export const ERR_EMAIL_FORMAT = '올바른 이메일 형식이 아닙니다.'
+
+/** 화면이 저장 전에 직접 띄우는 초안 검증 문구 → 화면용 사전 키(ko 값은 같은 글자). 액션이 돌려준 문구(이미 화면 언어)는 표에 없어 그대로 보인다 */
+const DRAFT_ERROR_KEY: Readonly<Record<string, 'roster.err.nameRequired' | 'roster.err.emailFormat' | 'roster.err.accessNeedsEmail' | 'roster.err.duplicateEmail'>> = {
+  [ERR_NAME_REQUIRED]: 'roster.err.nameRequired', [ERR_EMAIL_FORMAT]: 'roster.err.emailFormat',
+  [ERR_ACCESS_NEEDS_EMAIL]: 'roster.err.accessNeedsEmail', [ERR_DUPLICATE_EMAIL]: 'roster.err.duplicateEmail',
+}
+/** 초안 검증 문구를 화면 언어로 — `t` 는 화면의 번역 함수(useLocale().t). 표 밖 문구는 받은 그대로 */
+export function rosterDraftErrorText(t: (key: (typeof DRAFT_ERROR_KEY)[string]) => string, message: string): string {
+  return Object.hasOwn(DRAFT_ERROR_KEY, message) ? t(DRAFT_ERROR_KEY[message]) : message
+}
+
 export function emptyDraft(): RosterDraft {
   return { personId: null, name: '', email: '', accessRole: null, roleLabel: '', title: '', teamIds: [], active: true }
 }
@@ -55,12 +68,12 @@ const trimOrNull = (v: string): string | null => v.trim() || null
 
 export function validateDraft(d: RosterDraft): { ok: true; input: RosterInput } | { ok: false; error: string } {
   const name = d.name.trim()
-  if (!name) return { ok: false, error: '이름을 입력하세요.' }
+  if (!name) return { ok: false, error: ERR_NAME_REQUIRED }
   const raw = d.email.trim()
   // 편집(personId 있음)은 저장된 이메일을 다시 검증하지 않는다 — 이메일 칸은 읽기 전용이고 id 분기의 RPC 는 email 을 쓰지 않는다.
   // 정규형이 안 되는 기존 행(x@acme.123 등)도 이름·권한·팀을 고칠 수 있어야 한다(R2). 새 인물만 정규형으로 검증한다(P-1).
   const email = d.personId ? (raw || null) : raw ? canonicalEmail(raw) : null
-  if (raw && !email) return { ok: false, error: '올바른 이메일 형식이 아닙니다.' }
+  if (raw && !email) return { ok: false, error: ERR_EMAIL_FORMAT }
   if (d.accessRole !== null && !email) return { ok: false, error: ERR_ACCESS_NEEDS_EMAIL }
   return {
     ok: true,

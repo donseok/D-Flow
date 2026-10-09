@@ -80,7 +80,7 @@ function assignableTeamIds(cfg: ProjectConfig, areaId: string | undefined): Set<
 export async function upsertArea(projectId: string, input: AreaInput): Promise<UpsertAreaResult> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, code: g.error, error: g.error }
+  if (!g.ok) return { ok: false, code: g.error, error: libText(tr, g.error) }
   // 서버 액션 입력은 타입을 믿지 않는다.
   if (!input || typeof input.code !== 'string' || typeof input.name !== 'string'
       || typeof input.active !== 'boolean' || !Array.isArray(input.teams)

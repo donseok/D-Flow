@@ -11,6 +11,7 @@ import { wikiAskTokens } from '@/lib/domain/wikiAsk'
 import type { BotSource } from '@/lib/ai/chat/protocol'
 import type { WikiKnowledgeRecord } from '@/lib/repositories/types'
 import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 export const dynamic = 'force-dynamic'
 
@@ -279,7 +280,7 @@ export async function POST(req: NextRequest) {
   }
   // wiki 관문 — 스코프가 허용한 그 프로젝트로(권한 판정 뒤, 저장소 조회 앞)
   const mod = await requireModule({ projectId }, 'wiki')
-  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
+  if (!mod.ok) return NextResponse.json({ error: libText(t, mod.error) }, { status: denyStatus(mod) })
 
   const repository = createSupabaseWikiRepository(sb)
   const kind = kindFromQuestion(question)

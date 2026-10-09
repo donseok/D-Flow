@@ -8,12 +8,13 @@ import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { updateProjectSettings } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
-import { ERR_ANON, ERR_DENIED, ERR_LOOKUP } from '@/lib/authz/errors'
+import { guardCodeOf, type GuardCode } from '@/lib/authz/errors'
 import type { DictKey } from '@/lib/i18n/dict'
 
 /** 액션 사유 → 토스트 설명 사전 키. 가드 문구만 알아보고 나머지(저장 실패 등)는 일반 문구 — 액션의 한국어를 날것으로 싣지 않는다. */
-const GUARD_KEY: Record<string, DictKey> = { [ERR_DENIED]: 'common.err.denied', [ERR_ANON]: 'common.err.signIn', [ERR_LOOKUP]: 'common.err.lookup' }
-const failureKey = (error: string | undefined): DictKey => (error && Object.hasOwn(GUARD_KEY, error) ? GUARD_KEY[error] : 'common.err.tryAgain')
+const GUARD_KEY: Partial<Record<GuardCode, DictKey>> = { denied: 'common.err.denied', anon: 'common.err.signIn', lookup: 'common.err.lookup' }
+/** 가드 거부는 코드로 알아본다(guardCodeOf — 한국어·영어 문구 모두 같은 코드로 읽는다) */
+const failureKey = (error: string | undefined): DictKey => { const code = guardCodeOf(error); return (code && GUARD_KEY[code]) ?? 'common.err.tryAgain' }
 
 /** 저장된 엑셀 양식 비우기(Task 1b) — 손상된 양식(내보내기 422)·WBS 보다 얕은 양식(400)으로 막힌 내보내기를 푼다.
  *  비우기는 설정 액션의 unset 이다. 되돌리려면 마법사에서 다시 저장해야 하므로 확인 모달을 거친다. 실패 사유는 토스트로. */

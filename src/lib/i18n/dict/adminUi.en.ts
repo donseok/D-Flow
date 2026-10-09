@@ -113,6 +113,10 @@ export const adminUiEn: Record<keyof typeof adminUiKo, string> = {
   // components/roster/RosterManager.tsx
   'roster.adminRowLocked': 'Only workspace admins can edit admin rows.',
   'roster.addedExisting': 'Added existing person {name}.',
+  'roster.err.nameRequired': 'Enter a name.',
+  'roster.err.emailFormat': 'The email format is not valid.',
+  'roster.err.accessNeedsEmail': 'An email (account) is required to grant access.',
+  'roster.err.duplicateEmail': 'A person with the same email already exists. Select them from the list.',
   'roster.col.name': 'Name',
   'roster.col.email': 'Email',
   'roster.col.teams': 'Teams',

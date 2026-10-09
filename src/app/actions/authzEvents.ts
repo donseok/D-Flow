@@ -8,6 +8,7 @@ import { serverTranslator } from '@/lib/i18n/server'
 import type { Translate } from '@/lib/i18n/translate'
 import { adminFor } from '@/lib/supabase/adminFor'
 import { createServerClient } from '@/lib/supabase/server'
+import { libText } from '@/lib/i18n/serverText'
 
 export interface AuthzEventView {
   id: number
@@ -55,7 +56,7 @@ export async function listAuthzEvents(workspaceId: string, opts?: { limit?: numb
   const t = await serverTranslator()
   if (typeof workspaceId !== 'string' || !isUuidLike(workspaceId)) return { ok: false, error: t('err.workspaceIdNotValid') }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const sb = await createServerClient()
   const r = await listAuthzEventRows(sb, { workspaceId, includePlatform: g.actor.isSuperuser, limit: opts?.limit, before: opts?.before })
   if (!r.ok) { console.error('[authz events] 이력 조회 실패', { workspaceId, cause: r.error }); return { ok: false, error: t(ERR_LOAD) } }

@@ -64,10 +64,10 @@ export async function notifyMeetingSaved(
   const g = await requireProjectAdmin(found.projectId)
   let actor: Awaited<ReturnType<typeof getActor>> = null
   try { actor = g.ok ? g.actor : await getActor() } catch { actor = null }
-  if (!g.ok && !actor) return { ok: false, error: g.error, ...NONE }
-  if (!found.projectId) return { ok: false, error: ERR_LOOKUP, ...NONE }
+  if (!g.ok && !actor) return { ok: false, error: libText(tr, g.error), ...NONE }
+  if (!found.projectId) return { ok: false, error: libText(tr, ERR_LOOKUP), ...NONE }
   const mod = await requireModule({ projectId: found.projectId }, 'meetings')   // 스펙 §4.2 — 가드 뒤·입력 검증·발송 앞(P17)
-  if (!mod.ok) return { ok: false, error: mod.error, ...NONE }
+  if (!mod.ok) return { ok: false, error: libText(tr, mod.error), ...NONE }
 
   // 서버 액션 인자는 클라이언트가 임의로 만든다 — 타입과 개수를 여기서 다시 못박는다.
   const extras = Array.isArray(extraEmails)
@@ -85,11 +85,11 @@ export async function notifyMeetingSaved(
 
   // 남의 회의 ID 로 메일을 반복 발송하는 통로를 막는 유일한 지점.
   const isOwner = meeting.createdBy === actor?.userId
-  if (!g.ok && !isOwner) return { ok: false, error: ERR_DENIED, ...NONE }
+  if (!g.ok && !isOwner) return { ok: false, error: libText(tr, ERR_DENIED), ...NONE }
 
   // Reply-To·작성자 이름 폴백에 필요한 계정 정보는 Actor 에 없다(이메일은 auth.users 소관).
   const user = await getSession()
-  if (!user) return { ok: false, error: ERR_ANON, ...NONE }
+  if (!user) return { ok: false, error: libText(tr, ERR_ANON), ...NONE }
 
   const { valid, skipped } = classifyRecipients(attendees, extras)
   // 빈 To 로 SMTP 를 때리면 계정 평판만 깎인다.

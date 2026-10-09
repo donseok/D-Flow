@@ -2,7 +2,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
-import { ERR_LOOKUP, ERR_ANON, ERR_DENIED } from '@/lib/authz/errors'
+import { ERR_LOOKUP, ERR_ANON, ERR_DENIED, guardCodeOf } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import { isWorkspaceMember, type Actor } from '@/lib/domain/authz'
@@ -16,7 +16,7 @@ import type { Meeting, MeetingCategory, MeetingRecurrence } from '@/lib/domain/t
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
+import { libText, failureText } from '@/lib/i18n/serverText'
 
 export interface MeetingInput {
   title: string
@@ -94,18 +94,18 @@ async function adminOrOwnerGate(meetingId: string): Promise<OwnerGate> {
   const t = await serverTranslator()
   const found = await resolveProjectId('meetings', meetingId)
   if (!found.ok) return { ok: false, error: libText(t, found.error) }
-  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // meetings.project_id 는 not null — 풀지 못하면 중단(3원칙 ②)
+  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }          // meetings.project_id 는 not null — 풀지 못하면 중단(3원칙 ②)
   const g = await requireProjectAdmin(found.projectId)
   let pass: OwnerGate
   if (g.ok) pass = { ok: true, isAdmin: true, userId: g.actor.userId }
   else {
     let actor: Awaited<ReturnType<typeof getActor>> = null
     try { actor = await getActor() } catch { actor = null }
-    if (!actor) return { ok: false, error: g.error }
+    if (!actor) return { ok: false, error: libText(t, g.error) }
     pass = { ok: true, isAdmin: false, userId: actor.userId }
   }
   const mod = await requireModule({ projectId: found.projectId }, 'meetings')   // 스펙 §4.2 — 작성자 판정은 호출부가 한다(관문은 그 전)
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   return pass
 }
 
@@ -143,16 +143,16 @@ async function replaceAttendees(sb: Awaited<ReturnType<typeof createServerClient
 export async function createMeeting(projectId: string, input: MeetingInput): Promise<MeetingActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId }, 'meetings')                  // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const err = validate(t, input)
   if (err) return { ok: false, error: err }
   const catErr = await checkProjectVocab(projectId, 'meetings.categories', input.category)
   if (catErr) return { ok: false, error: catErr }
 
   const user = await getSession()
-  if (!user) return { ok: false, error: ERR_ANON }
+  if (!user) return { ok: false, error: libText(t, ERR_ANON) }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('meetings')
@@ -188,7 +188,7 @@ export async function createMeeting(projectId: string, input: MeetingInput): Pro
 export async function updateMeeting(id: string, input: MeetingInput): Promise<MeetingActionResult> {
   const t = await serverTranslator()
   const gate = await adminOrOwnerGate(id)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const err = validate(t, input)
   if (err) return { ok: false, error: err }
 
@@ -199,10 +199,10 @@ export async function updateMeeting(id: string, input: MeetingInput): Promise<Me
     .select('project_id, created_by, meeting_date, recurrence, recurrence_until, category')
     .eq('id', id)
     .maybeSingle()
-  if (curErr) return { ok: false, error: ERR_LOOKUP } // 소유권 판정의 입력이다 — 실패를 '없음'으로 위장하지 않는다
+  if (curErr) return { ok: false, error: libText(t, ERR_LOOKUP) } // 소유권 판정의 입력이다 — 실패를 '없음'으로 위장하지 않는다
   if (!cur) return { ok: false, error: t('err.meetingNotFound') }
   const isOwner = (cur.created_by as string | null) === gate.userId
-  if (!gate.isAdmin && !isOwner) return { ok: false, error: ERR_DENIED }
+  if (!gate.isAdmin && !isOwner) return { ok: false, error: libText(t, ERR_DENIED) }
   const projectId = cur.project_id as string
   // 범주를 그대로 두는 수정은 비활성 범주여도 통과(트리거와 같은 규칙)
   const catErr = await checkProjectVocab(projectId, 'meetings.categories', input.category, (cur.category as string | null) ?? null)
@@ -237,13 +237,13 @@ export async function updateMeeting(id: string, input: MeetingInput): Promise<Me
 export async function deleteMeeting(id: string): Promise<MeetingActionResult> {
   const t = await serverTranslator()
   const gate = await adminOrOwnerGate(id)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   const sb = await createServerClient()
   const { data: cur, error: curErr } = await sb.from('meetings').select('project_id, created_by').eq('id', id).maybeSingle()
-  if (curErr) return { ok: false, error: ERR_LOOKUP }
+  if (curErr) return { ok: false, error: libText(t, ERR_LOOKUP) }
   if (!cur) return { ok: false, error: t('err.meetingNotFound') }
   const isOwner = (cur.created_by as string | null) === gate.userId
-  if (!gate.isAdmin && !isOwner) return { ok: false, error: ERR_DENIED }
+  if (!gate.isAdmin && !isOwner) return { ok: false, error: libText(t, ERR_DENIED) }
 
   const { error } = await sb.from('meetings').delete().eq('id', id).select('id').single()
   if (error) return { ok: false, error: error.message }
@@ -269,7 +269,7 @@ type Gate = { ok: true; sb: Awaited<ReturnType<typeof createServerClient>>; proj
 async function occurrenceGate(meetingId: string, occurrenceDate: string): Promise<Gate> {
   const t = await serverTranslator()
   const gate = await adminOrOwnerGate(meetingId)
-  if (!gate.ok) return { ok: false, error: gate.error }
+  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
   if (!DATE_RE.test(occurrenceDate)) return { ok: false, error: t('err.invalidDate') }
   const sb = await createServerClient()
   const { data: r, error: rErr } = await sb
@@ -277,10 +277,10 @@ async function occurrenceGate(meetingId: string, occurrenceDate: string): Promis
     .select('project_id, created_by, title, meeting_date, start_time, end_time, location, category, recurrence, recurrence_until, created_by_name, created_at, updated_at')
     .eq('id', meetingId)
     .maybeSingle()
-  if (rErr) return { ok: false, error: ERR_LOOKUP }
+  if (rErr) return { ok: false, error: libText(t, ERR_LOOKUP) }
   if (!r) return { ok: false, error: t('err.meetingNotFound') }
   const isOwner = (r.created_by as string | null) === gate.userId
-  if (!gate.isAdmin && !isOwner) return { ok: false, error: ERR_DENIED }
+  if (!gate.isAdmin && !isOwner) return { ok: false, error: libText(t, ERR_DENIED) }
   if (r.recurrence === 'none') return { ok: false, error: t('srv.meetings.onlyRepeatingMeetingsCanCancel') }
   // 규칙상 실제 회차인지 검증 — 해당 날짜만 전개해 매칭
   const meeting = {
@@ -314,7 +314,7 @@ export async function fetchMyMeetings(
   if (typeof workspaceId !== 'string' || !workspaceId || (actor?.isSuperuser && !SAFE_ID_RE.test(workspaceId)) || !isWorkspaceMember(actor, workspaceId)) return { ok: true, meetings: [], exceptions: [], categories: {} }
   const mod = await requireModule({ workspaceId }, 'meetings')
   if (!mod.ok) return { ok: true, meetings: [], exceptions: [], categories: {} }
-  return getMyMeetings(workspaceId, gridStartIso, gridEndIso)
+  return failureText(t, await getMyMeetings(workspaceId, gridStartIso, gridEndIso))
 }
 
 /** 상세 모달에서 호출하는 얇은 래퍼 — getMeetingDetail(서버 전용)을 세션 게이트 후 위임.
@@ -326,9 +326,9 @@ export async function fetchMeetingDetail(id: string): Promise<MeetingDetailResul
   if (!user) return none
   // 모듈 관문(스펙 §4.2) — 회의 행의 프로젝트로 판정한다. 범위 조회 실패는 실패, 없음·거부는 '없음'
   const scope = await resolveProjectId('meetings', id)
-  if (!scope.ok) return scope.error === ERR_LOOKUP ? { ok: false, error: libText(t, ERR_MEETING_DETAIL) } : none
+  if (!scope.ok) return guardCodeOf(scope) === 'lookup' ? { ok: false, error: libText(t, ERR_MEETING_DETAIL) } : none
   if (!scope.projectId) return none
   const mod = await requireModule({ projectId: scope.projectId }, 'meetings')
   if (!mod.ok) return none
-  return getMeetingDetail(id)
+  return failureText(t, await getMeetingDetail(id))
 }

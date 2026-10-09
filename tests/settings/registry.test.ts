@@ -327,9 +327,9 @@ describe('카탈로그 메타와 사전', () => {
     expect(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.mail_from_name', 'core.level_labels', 'core.milestone_keywords', 'modules.enabled', 'wbs.excel_profile']
       .map(status)).toEqual(Array(8).fill('verified'))
     // 2026-10-09 재점검 — 강조색은 세 범위 셸이 모두 저장값을 싣는다(wired). 같은 날 끊긴 자리를 이어 로고(전역 범위의 탭 아이콘)와 메뉴(전역 검색)도
-    // wired. 제품 이름은 저장값을 안 읽는 프롬프트 둘(주간 브리핑·챗 v2 합성)과 wbs.md 오류문이 남아 stored
+    // wired. 제품 이름은 2026-10-10 에 남은 소비처 셋(주간 브리핑·챗 v2 합성 프롬프트, wbs.md 오류문)을 이어 wired
     // (제품 이름: 프로젝트·전역 탭 제목 등 / 로고: 전역 범위 탭 아이콘 / 메뉴: 전역 검색의 메뉴 목록 — catalog-meta 의 각 행 주석)
-    expect(['branding.product_name', 'branding.logo', 'navigation.menu'].map(status)).toEqual(['stored', 'wired', 'wired'])
+    expect(['branding.product_name', 'branding.logo', 'navigation.menu'].map(status)).toEqual(['wired', 'wired', 'wired'])
     expect(status('branding.accent')).toBe('wired')
     // 추가 축 이름 — 편집기(설정 화면)·표시 소비처(WBS 화면·가져오기 마법사·엑셀 머리와 감지 별칭)·테스트가 붙어 wired
     expect(status('core.extra_axis_label')).toBe('wired')

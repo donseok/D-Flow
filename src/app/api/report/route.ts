@@ -33,6 +33,7 @@ import { weeklyReference } from '@/lib/report/forms/reference'
 import type { CatalogModel } from '@/lib/report/catalog/types'
 import type { WeeklyReportModel } from '@/lib/report/weekly'
 import { serverTranslator } from '@/lib/i18n/server'
+import { guardText } from '@/lib/i18n/serverText'
 
 // 양식 zip 읽기(fs·Storage)는 Node 전용.
 export const runtime = 'nodejs'
@@ -56,9 +57,9 @@ export async function GET(req: NextRequest) {
   if (format !== 'xlsx' && format !== 'pptx') return jsonError(t('srv.api.report.formatMustXlsxPptx'), 400)
 
   const guard = await requireProjectMember(projectId)
-  if (!guard.ok) return jsonError(guard.error, denyStatus(guard.error))
+  if (!guard.ok) return jsonError(guardText(t, guard), denyStatus(guard))
   const mod = await requireModule({ projectId }, 'weekly')
-  if (!mod.ok) return jsonError(mod.error, denyStatus(mod.error))
+  if (!mod.ok) return jsonError(guardText(t, mod), denyStatus(mod))
 
   const kind: FormKind = format === 'pptx' ? 'weekly_report_pptx' : 'weekly_report_xlsx'
   const weekRaw = req.nextUrl.searchParams.get('week')

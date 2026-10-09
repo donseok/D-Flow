@@ -107,12 +107,14 @@ describe('서버 문구 — 액션·내부 API 의 error·message·warning·noti
   })
 })
 
-/** 문구 자리에 감싸지 않고 와도 되는 lib 상수의 출처 — 코드 겸용 문구(가드 결과: denyStatus·화면이 문구로 비교)와 화면이 문구 → 키 표로 직접 고르는 문구 */
-const RAW_CONST_SOURCES: ReadonlySet<string> = new Set(['@/lib/authz/errors', '@/lib/wbs/actionErrors', '@/lib/attachments/removeErrors'])
+/** 문구 자리에 감싸지 않고 와도 되는 lib 상수의 출처 — 화면이 문구 → 키 표로 직접 고르는 문구. 가드 결과(@/lib/authz/errors)는 4차부터 예외가 아니다(libText·guardText 로 감싼다) */
+const RAW_CONST_SOURCES: ReadonlySet<string> = new Set(['@/lib/wbs/actionErrors', '@/lib/attachments/removeErrors'])
 /** 표에 상수를 그대로 실어 두고 쓰는 자리에서 푸는 곳(닫힌 목록) */
 const RAW_CONST_ALLOW: Readonly<Record<string, { why: string; names: readonly string[] }>> = {
-  'src/app/actions/projectAreas.ts': { why: 'AREA_TOKENS 표의 message — 응답에 실을 때 libText(tr, f.message) 로 푼다', names: ['ERR_AREA_CODE_IMMUTABLE', 'ERR_ISSUE_AREA_CODE'] },
-  'src/app/api/import/execute/route.ts': { why: 'RPC_TOKENS 표의 message — rpcFail 이 configText 로 풀어 넘긴다', names: ['ERR_COMMAND_REUSED'] },
+  'src/app/actions/projectAreas.ts': { why: 'AREA_TOKENS 표의 message — 응답에 실을 때 libText(tr, f.message) 로 푼다. 가드 문구는 rpcFailure·tokenTable 이 guardTextBy 로 푼다', names: ['ERR_AREA_CODE_IMMUTABLE', 'ERR_ISSUE_AREA_CODE', 'ERR_DENIED', 'ERR_MISSING'] },
+  'src/app/api/import/execute/route.ts': { why: 'RPC_TOKENS 표의 message — rpcFail 이 configText 로, 가드 문구는 rpcFailure(err, own, tr) 가 guardTextBy 로 풀어 넘긴다', names: ['ERR_COMMAND_REUSED', 'ERR_DENIED', 'ERR_MISSING'] },
+  'src/app/actions/projectTeams.ts': { why: 'CONVERT_TOKENS 표의 가드 문구 — rpcFailure(err, own, t) 가 guardTextBy 로 푼다', names: ['ERR_DENIED', 'ERR_MISSING'] },
+  'src/app/actions/weekly.ts': { why: 'CREATE_TOKENS 표의 가드 문구 — rpcFailure(err, own, tr) 가 guardTextBy 로 푼다', names: ['ERR_DENIED', 'ERR_MISSING'] },
 }
 
 /** 문구 속성의 값으로 감싸지 않은 채 오는 lib 의 대문자 상수(`ERR_X`·`REASON_TEXT.x`) — [이름, 출처] */
@@ -185,10 +187,11 @@ describe('lib 고정 문구 — 상수는 한국어 그대로, 화면에 내보�
     expect(gone, gone.join('\n')).toEqual([])
   })
 
-  it('libText 는 표에 있는 문구를 요청의 언어로 바꾸고, 없는 문구·가드 결과·빈 값은 그대로 둔다', () => {
+  it('libText 는 표에 있는 문구(가드 결과 포함)를 요청의 언어로 바꾸고, 없는 문구·빈 값은 그대로 둔다', () => {
     expect(libText(en, ERR_TRANSITION_RPC)).not.toMatch(HANGUL)
     expect(libText(serverKoTranslate, ERR_TRANSITION_RPC)).toBe(ERR_TRANSITION_RPC)
-    expect(libText(en, ERR_DENIED)).toBe(ERR_DENIED)          // 가드 결과는 코드 겸용 — 옮기지 않는다
+    expect(libText(en, ERR_DENIED)).toBe('No permission')     // 가드 결과도 푼다(4차 — 비교는 guardCodeOf 로 옮겨졌다)
+    expect(libText(serverKoTranslate, ERR_DENIED)).toBe(ERR_DENIED)
     expect(libText(en, 'duplicate key value')).toBe('duplicate key value')
     expect(libText(en, null)).toBeNull()
     expect(libText(en, undefined)).toBeUndefined()
@@ -214,7 +217,8 @@ describe('lib 고정 문구 — 상수는 한국어 그대로, 화면에 내보�
     expect(mapDbError(busy)?.message).toBe(CONFIG_MESSAGES.CONFIG_BUSY)
     expect(mapDbError(busy, en)?.message).not.toMatch(HANGUL)
     expect(mapDbError({ message: 'WEEKLY_AREAS_REQUIRED: x' }, en)?.message).not.toMatch(HANGUL)
-    expect(mapDbError({ message: 'WORKFLOW_COLUMNS_RPC_ONLY' }, en)?.message).toBe(ERR_DENIED)   // 가드 문구는 그대로
+    expect(mapDbError({ message: 'WORKFLOW_COLUMNS_RPC_ONLY' }, en)?.message).toBe('No permission')   // 가드 문구도 화면 언어로(4차)
+    expect(mapDbError({ message: 'WORKFLOW_COLUMNS_RPC_ONLY' })?.message).toBe(ERR_DENIED)
   })
 })
 
@@ -270,5 +274,53 @@ describe('서버 사전 — 클라이언트 번들에 실리지 않고, ko·en �
     const detail = JSON.stringify({ key: 'attendance.types', code: 'x', count: 3, reason: 'removed' })
     expect(inUseFieldErrors(detail)[0].message).toMatch(HANGUL)
     expect(inUseFieldErrors(detail, serverTranslatorFor('en'))[0].message).not.toMatch(HANGUL)
+  })
+})
+
+describe('값이 끼는 lib 문구 — 틀(srv.libt.*)로 싣고, 내보낼 때 받은 문구를 틀에 맞춰 요청의 언어로 옮긴다(i18n 4차)', () => {
+  const en = serverTranslatorFor('en')
+  const SLOT = /\{(\w+)\}/g
+  const templates = (Object.entries(SERVER_KO) as [keyof typeof SERVER_KO, string][]).filter(([k]) => k.startsWith('srv.libt.'))
+  const sample = (template: string, vars: Record<string, string>) => template.replace(SLOT, (m, name: string) => vars[name] ?? m)
+  const varsOf = (template: string) => Object.fromEntries([...new Set([...template.matchAll(SLOT)].map(m => m[1]))].map((name, i) => [name, `v${i + 1}x`]))
+
+  it('틀마다 값 자리가 있고, ko·en 의 값 자리 이름이 같다', () => {
+    expect(templates.length).toBeGreaterThan(80)
+    for (const [key, ko] of templates) {
+      const names = (s: string) => [...new Set([...s.matchAll(SLOT)].map(m => m[1]))].sort()
+      expect(names(ko).length, key).toBeGreaterThan(0)
+      expect(names(SERVER_EN[key]), key).toEqual(names(ko))
+    }
+  })
+
+  it('틀의 글자 조각은 lib 원문에 그대로 있다(lib 문구를 고치면 틀도 같이 고친다 — 어긋나면 영어 화면에 한국어가 샌다)', () => {
+    const flat = walk(join(ROOT, 'src/lib'), undefined, /\.tsx?$/).filter(f => !f.includes('/i18n/dict/')).map(f => readFileSync(f, 'utf8')).filter(s => HANGUL.test(s)).join('\n').replace(/\\'/g, "'")
+    const gone: string[] = []
+    for (const [key, ko] of templates) for (const piece of ko.split(SLOT).filter((_, i) => i % 2 === 0)) {
+      if (piece.trim().length >= 2 && !flat.includes(piece)) gone.push(`${key}: ${piece}`)
+    }
+    expect(gone, gone.join('\n')).toEqual([])
+  })
+
+  it('틀로 만든 문구는 한국어 로캘에서 한 글자도 바뀌지 않고, 영어 로캘에서는 같은 값이 낀 영어 틀이 된다(틀끼리 가로채지 않는다)', () => {
+    const wrong: string[] = []
+    for (const [key, ko] of templates) {
+      const vars = varsOf(ko)
+      const message = sample(ko, vars)
+      if (libText(serverKoTranslate, message) !== message) wrong.push(`${key}: ko 가 바뀜 — ${libText(serverKoTranslate, message)}`)
+      const out = libText(en, message)
+      if (out !== sample(SERVER_EN[key], vars)) wrong.push(`${key}: en 이 다름 — ${out}`)
+      if (HANGUL.test(out)) wrong.push(`${key}: en 에 한글 — ${out}`)
+    }
+    expect(wrong, wrong.join('\n')).toEqual([])
+  })
+
+  it('낀 값이 다시 lib 문구면 그것도 푼다 — 틀에 없는 문구·DB 원문은 그대로', () => {
+    const inner = SERVER_KO['srv.lib.customFields.fieldListCanHoldUp']
+    const outer = sample(SERVER_KO['srv.libt.customFields.defaultValueInvalid'], { key: 'budget', error: inner })
+    expect(libText(en, outer)).toBe(`budget: the default value is invalid (${SERVER_EN['srv.lib.customFields.fieldListCanHoldUp']}).`)
+    expect(libText(serverKoTranslate, outer)).toBe(outer)
+    expect(libText(en, 'duplicate key value violates unique constraint "x"')).toBe('duplicate key value violates unique constraint "x"')
+    expect(libText(en, '틀에 없는 한국어 문장입니다.')).toBe('틀에 없는 한국어 문장입니다.')
   })
 })

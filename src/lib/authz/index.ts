@@ -6,11 +6,12 @@ import { buildActor } from './buildActor'
 import { readScope, type ProjectScopedTable, type ScopeResult } from './scope'
 // 사유 문자열과 HTTP 매핑(denyStatus)의 정본은 순수 모듈 ./errors 다 — 이 모듈은 테스트
 // 37곳이 통째로 vi.mock 하므로, 라우트가 여기서 denyStatus 를 가져가면 모킹 문맥에서 터진다.
-import { ERR_LOOKUP, ERR_DENIED, ERR_ANON, ERR_MISSING } from './errors'
+import { guardFail, type GuardFailure } from './errors'
 
 export type { Actor, ProjectRole, ProjectScopedTable, ScopeResult }
 
-export type GuardResult = { ok: true; actor: Actor } | { ok: false; error: string }
+/** 실패에는 구분 코드(`code` — 선택 필드)가 실린다. 비교는 `guardCodeOf(g)`(./errors)로, 화면에 내보낼 문구는 `denied(g, t)`(i18n/serverText)로 */
+export type GuardResult = { ok: true; actor: Actor } | GuardFailure
 
 /**
  * 로그인 사용자의 권한 스냅샷을 조립한다. 비로그인은 null.
@@ -97,9 +98,9 @@ async function actorOrError(): Promise<GuardResult> {
   try {
     actor = await getActor()
   } catch {
-    return { ok: false, error: ERR_LOOKUP }
+    return guardFail('lookup')
   }
-  if (!actor) return { ok: false, error: ERR_ANON }
+  if (!actor) return guardFail('anon')
   return { ok: true, actor }
 }
 
@@ -107,31 +108,31 @@ async function actorOrError(): Promise<GuardResult> {
 export async function requireSuperuser(): Promise<GuardResult> {
   const r = await actorOrError()
   if (!r.ok) return r
-  return r.actor.isSuperuser ? r : { ok: false, error: ERR_DENIED }
+  return r.actor.isSuperuser ? r : guardFail('denied')
 }
 
 /** 해당 프로젝트의 관리자 이상(워크스페이스 관리자 승계 포함). 타 워크스페이스·미존재는 ERR_MISSING(404). */
 export async function requireProjectAdmin(projectId: string | null): Promise<GuardResult> {
   const r = await actorOrError(); if (!r.ok) return r
   const role = roleIn(r.actor, projectId)
-  if (role === null) return { ok: false, error: ERR_MISSING }     // 타 워크스페이스·미존재 — 존재 은닉(404)
-  return role === 'superuser' || role === 'admin' ? r : { ok: false, error: ERR_DENIED }
+  if (role === null) return guardFail('missing')     // 타 워크스페이스·미존재 — 존재 은닉(404)
+  return role === 'superuser' || role === 'admin' ? r : guardFail('denied')
 }
 
 /** 해당 프로젝트의 멤버 이상. 타 워크스페이스·미존재는 ERR_MISSING(404). */
 export async function requireProjectMember(projectId: string | null): Promise<GuardResult> {
   const r = await actorOrError(); if (!r.ok) return r
   const role = roleIn(r.actor, projectId)
-  if (role === null) return { ok: false, error: ERR_MISSING }     // 타 워크스페이스·미존재 — 존재 은닉(404)
-  return role === 'superuser' || role === 'admin' || role === 'member' ? r : { ok: false, error: ERR_DENIED }
+  if (role === null) return guardFail('missing')     // 타 워크스페이스·미존재 — 존재 은닉(404)
+  return role === 'superuser' || role === 'admin' || role === 'member' ? r : guardFail('denied')
 }
 
 /** 워크스페이스 관리(프로젝트 생성·공용 팀·계정·워크스페이스 역할). 비소속은 ERR_MISSING(404), 멤버는 ERR_DENIED. */
 export async function requireWorkspaceAdmin(workspaceId: string | null): Promise<GuardResult> {
   const r = await actorOrError(); if (!r.ok) return r
   const v = workspaceAdminVerdict(r.actor, workspaceId)
-  if (v === 'missing') return { ok: false, error: ERR_MISSING }  // 비소속 워크스페이스 — 존재 은닉(404)
-  return v === 'ok' ? r : { ok: false, error: ERR_DENIED }
+  if (v === 'missing') return guardFail('missing')  // 비소속 워크스페이스 — 존재 은닉(404)
+  return v === 'ok' ? r : guardFail('denied')
 }
 
 /**
@@ -146,7 +147,7 @@ export async function resolveScope(table: ProjectScopedTable, id: string): Promi
 /** 기존 호출부 호환용 — resolveScope 의 프로젝트만. 실패 사유(ERR_LOOKUP·ERR_MISSING)는 그대로 넘긴다. */
 export async function resolveProjectId(
   table: ProjectScopedTable, id: string,
-): Promise<{ ok: true; projectId: string | null } | { ok: false; error: string }> {
+): Promise<{ ok: true; projectId: string | null } | GuardFailure> {
   const r = await resolveScope(table, id)
   return r.ok ? { ok: true, projectId: r.projectId } : r
 }

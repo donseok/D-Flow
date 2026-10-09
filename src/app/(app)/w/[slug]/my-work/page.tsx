@@ -12,6 +12,7 @@ import { buttonClass } from '@/components/ui/buttonStyles'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { translatorFor } from '@/lib/i18n/translate'
+import { failureTextIn } from '@/lib/i18n/serverText'
 
 /** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '내 업무') */
 export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.myWork') } } // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
@@ -45,12 +46,12 @@ export default async function MyWorkPage({
 
   const res =
     scope.actor && tab !== 'inbox'
-      ? await getMyWork(scope.ws.id, scope.actor, {
+      ? failureTextIn(locale, await getMyWork(scope.ws.id, scope.actor, {
           kinds: kinds.length ? kinds : undefined,
           cursor,
           limit: 50,
           dueToday,
-        })
+        }))   // 로더의 실패 문구(lib 고정 문구)는 화면 언어로
       : null
 
   let reviewCount: number | undefined

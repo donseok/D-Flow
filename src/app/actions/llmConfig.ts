@@ -7,6 +7,7 @@ import { normalizeBaseUrl } from '@/lib/ai/endpoints'
 import { errMsg } from '@/lib/domain/format'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { libText } from '@/lib/i18n/serverText'
 
 export type LlmMode = 'env' | 'profile' | 'none'
 
@@ -133,7 +134,7 @@ function translateWriteError(t: ServerTranslate, err: { code?: string; message: 
 export async function listLlmProfiles(): Promise<{ profiles: LlmProfileMasked[] } | { error: string }> {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { error: g.error }
+  if (!g.ok) return { error: libText(t, g.error) }
   const sb = await createServerClient()
   const { data, error } = await sb.from('llm_profiles').select(PROFILE_COLUMNS).order('name')
   // 조회 실패를 빈 목록으로 폴백하면 '프로필이 하나도 없음'과 구별되지 않고,
@@ -147,7 +148,7 @@ export async function createLlmProfile(
 ): Promise<{ profile: LlmProfileMasked } | { error: string }> {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { error: g.error }
+  if (!g.ok) return { error: libText(t, g.error) }
   const invalid = validateProfile(t, input)
   if (invalid) return { error: invalid }
 
@@ -178,7 +179,7 @@ export async function updateLlmProfile(
 ): Promise<{ profile: LlmProfileMasked } | { error: string }> {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { error: g.error }
+  if (!g.ok) return { error: libText(t, g.error) }
   const invalid = validateProfile(t, input)
   if (invalid) return { error: invalid }
 
@@ -212,7 +213,7 @@ export async function updateLlmProfile(
 export async function deleteLlmProfile(id: number): Promise<ActionOk | { error: string }> {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { error: g.error }
+  if (!g.ok) return { error: libText(t, g.error) }
   const sb = await createServerClient()
   const { error } = await sb.from('llm_profiles').delete().eq('id', id)
   if (error) return { error: error.message }
@@ -228,7 +229,7 @@ export async function getLlmConfig(): Promise<
 > {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { error: g.error }
+  if (!g.ok) return { error: libText(t, g.error) }
   const sb = await createServerClient()
   const [cfgRes, listRes] = await Promise.all([
     sb.from('llm_config').select('mode, active_profile_id').eq('id', 1).maybeSingle(),
@@ -262,7 +263,7 @@ export async function saveLlmConfig(input: {
 }): Promise<ActionOk | { error: string }> {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { error: g.error }
+  if (!g.ok) return { error: libText(t, g.error) }
   if (input?.mode !== 'env' && input?.mode !== 'profile' && input?.mode !== 'none') {
     return { error: t('srv.llmConfig.settingsNotValid') }
   }
@@ -321,7 +322,7 @@ export async function testLlmConnection(
 ): Promise<{ success: boolean; error?: string }> {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { success: false, error: g.error }
+  if (!g.ok) return { success: false, error: libText(t, g.error) }
   if (input?.provider !== 'gemini' && input?.provider !== 'openai') {
     return { success: false, error: t('srv.llmConfig.providerNotValid') }
   }

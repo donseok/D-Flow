@@ -242,8 +242,8 @@ export async function createAccount(input: AccountInput & { workspaceId: string 
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED) }
   // 계정 생성은 그 워크스페이스의 관리자(SP2 §4.1 — SP1 까지는 슈퍼유저 전용).
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
-  if (input.projectId && !projectInWorkspace(g.actor, input.projectId, workspaceId)) return { ok: false, error: ERR_MISSING }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (input.projectId && !projectInWorkspace(g.actor, input.projectId, workspaceId)) return { ok: false, error: libText(t, ERR_MISSING) }
   const res = await createOne(createAdminClient(), workspaceId, input, g.actor.userId)
   if (res.ok) {
     revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
@@ -259,8 +259,8 @@ export async function bulkCreateAccounts(
   const t = await serverTranslator()
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED), results: [] }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error, results: [] }
-  if (projectId && !projectInWorkspace(g.actor, projectId, workspaceId)) return { ok: false, error: ERR_MISSING, results: [] }
+  if (!g.ok) return { ok: false, error: libText(t, g.error), results: [] }
+  if (projectId && !projectInWorkspace(g.actor, projectId, workspaceId)) return { ok: false, error: libText(t, ERR_MISSING), results: [] }
   const lines = parseBulkAccounts(typeof text === 'string' ? text : '')
   if (lines.length === 0) return { ok: false, error: t('srv.accounts.noRowsProcess'), results: [] }
 
@@ -290,8 +290,8 @@ const RESET_DENIED: Record<Exclude<PasswordResetVerdict, 'ok'>, ServerDictKey | 
   target_admin: 'srv.accounts.onlyPlatformAdminCanReset',
   platform_only: 'srv.accounts.onlyPlatformAdminCanReset2',
 }
-/** 표의 값을 문구로 — 사전 키는 요청의 화면 언어로, ERR_DENIED(가드 결과와 같은 코드 겸용 문구)는 그대로 */
-const deniedText = (t: ServerTranslate, v: ServerDictKey | typeof ERR_DENIED): string => v === ERR_DENIED ? v : t(v)
+/** 표의 값을 문구로 — 사전 키도, ERR_DENIED(가드 결과와 같은 문구 — `err.guard.denied`)도 요청의 화면 언어로 */
+const deniedText = (t: ServerTranslate, v: ServerDictKey | typeof ERR_DENIED): string => v === ERR_DENIED ? libText(t, v) : t(v)
 const REMOVE_DENIED: Record<Exclude<MemberRemovalVerdict, 'ok'>, ServerDictKey | typeof ERR_DENIED> = {
   self: 'srv.accounts.cannotRemoveYourselfWorkspace',
   denied: ERR_DENIED,
@@ -322,8 +322,8 @@ export async function resetPassword(workspaceId: string, userId: string, passwor
   const t = await serverTranslator()
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED) }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
-  if (typeof userId !== 'string' || !UUID_RE.test(userId)) return { ok: false, error: ERR_MISSING }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (typeof userId !== 'string' || !UUID_RE.test(userId)) return { ok: false, error: libText(t, ERR_MISSING) }
   if (!isValidPassword(password)) return { ok: false, error: t('err.passwordMustLeast8Characters') }
   const admin = createAdminClient()
   let target
@@ -343,7 +343,7 @@ export async function resetPassword(workspaceId: string, userId: string, passwor
   if (recErr) {
     const denied = authzCommandError(recErr.message)
     if (denied) return { ok: false, error: denied }
-    if (recErr.message.includes('PASSWORD_RESET_TARGET_NOT_FOUND')) return { ok: false, error: ERR_MISSING }
+    if (recErr.message.includes('PASSWORD_RESET_TARGET_NOT_FOUND')) return { ok: false, error: libText(t, ERR_MISSING) }
     console.error(`[resetPassword user=${userId}] 기록 실패:`, recErr.message)
     return { ok: false, error: t(ERR_RESET) }
   }
@@ -403,8 +403,8 @@ export async function previewWorkspaceMemberRemoval(
   const t = await serverTranslator()
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED) }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
-  if (typeof userId !== 'string' || !UUID_RE.test(userId)) return { ok: false, error: ERR_MISSING }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (typeof userId !== 'string' || !UUID_RE.test(userId)) return { ok: false, error: libText(t, ERR_MISSING) }
   const admin = createAdminClient()
   try {
     const verdict = memberRemovalVerdict(g.actor, workspaceId, { userId, workspaceRole: await targetWorkspaceRole(admin, workspaceId, userId) })
@@ -441,8 +441,8 @@ export async function removeWorkspaceMember(
   const t = await serverTranslator()
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED) }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
-  if (typeof userId !== 'string' || !UUID_RE.test(userId)) return { ok: false, error: ERR_MISSING }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (typeof userId !== 'string' || !UUID_RE.test(userId)) return { ok: false, error: libText(t, ERR_MISSING) }
   const admin = createAdminClient()
   let verdict: MemberRemovalVerdict
   try {
@@ -486,7 +486,7 @@ export async function removeWorkspaceMember(
 export async function setPlatformAdmin(userId: string, value: boolean): Promise<AccountActionResult> {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   // 본인 해제는 다른 슈퍼유저가 한다 — 한 번의 클릭으로 자기 관리 화면에서 잠기는 사고를 막는다(마지막 한 명 검사와 별개).
   if (!value && userId === g.actor.userId) return { ok: false, error: t(ERR_SELF_PLATFORM) }
   if (typeof value !== 'boolean') return { ok: false, error: t('srv.accounts.assignmentValueNotValid') }
@@ -528,7 +528,7 @@ export async function setWorkspaceRole(
   const t = await serverTranslator()
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED) }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   if (!isWorkspaceRole(role)) return { ok: false, error: t(ERR_WS_ROLE) }
   const { data, error } = await createAdminClient().rpc('set_workspace_role', {
     p_actor: g.actor.userId, p_workspace_id: workspaceId, p_target: userId, p_role: role, p_command_id: newAuthzCommandId(),
@@ -566,7 +566,7 @@ export async function listAccounts(
   const t = await serverTranslator()
   const deny = (error: string) => {
     console.error('[listAccounts] 게이트 거부:', error, 'projectId=', projectId)
-    return { ok: false as const, error }
+    return { ok: false as const, error: libText(t, error) }   // 로그는 원문(한국어), 응답은 화면 언어
   }
   const pg = await requireProjectMember(projectId)
   if (!pg.ok) return deny(pg.error)

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { jsonError } from '@/lib/api/http'
-import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { guardCodeOf } from '@/lib/authz/errors'
+import { guardText } from '@/lib/i18n/serverText'
 import { getSession } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import { createDefaultChatToolRegistry } from '@/lib/ai/chat/default-registry'
@@ -19,7 +20,8 @@ import { planningSignals, projectHint, routeChatRequest, type RouteAttendanceTyp
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { pick } from '@/lib/settings/pick'
 import { teamViewOfScope } from '@/lib/domain/authz'
-import { chatPlannerEnabled, chatV2Enabled } from '@/lib/modules/flags'
+import { chatLlmSynthesisEnabled, chatPlannerEnabled, chatV2Enabled } from '@/lib/modules/flags'
+import { productNameFor } from '@/lib/settings/displayBranding'
 import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { projectTeams, visibleTeams } from '@/lib/teams/source'
 import { DEFAULT_REQUEST_CALENDAR, resolveMemberWorkspacesCalendar, resolveRequestCalendar } from '@/lib/calendar/load'
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
     projectId: chatProjectHint(request),
     workspaceId: request.pageContext?.workspaceId ?? request.workspaceId,
   }, 'chatbot')
-  if (!mod.ok) return jsonError(mod.error, mod.status, mod.error === ERR_MODULE_DISABLED ? 'MODULE_DISABLED' : SCOPE_CODE[mod.status] ?? 'SCOPE_UNAVAILABLE')
+  if (!mod.ok) return jsonError(guardText(tr, mod.error), mod.status, guardCodeOf(mod) === 'module_disabled' ? 'MODULE_DISABLED' : SCOPE_CODE[mod.status] ?? 'SCOPE_UNAVAILABLE')
   const now = new Date()
   // 종류(tools·legacy·command) 판정 전용 — 인자는 쓰지 않는다. 도구 경로는 아래에서 요청 범위 달력으로 다시 라우팅한다
   const plannedRoute = routeChatRequest(request, now, DEFAULT_REQUEST_CALENDAR)
@@ -189,11 +191,17 @@ export async function POST(req: NextRequest) {
     plan = validated.plan
   }
 
+  // 합성 프롬프트의 제품 이름 — 확인된 워크스페이스의 설정값(branding.product_name). 프로젝트 요청은 접근 범위가 확인한 그 프로젝트의 워크스페이스,
+  // 프로젝트 없는 요청은 관문이 소속을 확인한 워크스페이스다(요청 본문의 값을 그대로 믿지 않는다). 합성을 쓰지 않으면 읽지 않는다.
+  const brandWorkspaceId = scope.projectId ? (scopeResolution.scope.projectWorkspace[scope.projectId] ?? null) : mod.workspaceId
+  const productName = chatLlmSynthesisEnabled() ? await productNameFor(brandWorkspaceId) : undefined
+
   const events = orchestrateChatV2(request, {
     requestId: id,
     registry,
     now,
     route,
+    ...(productName ? { productName } : {}),
     ...(plan ? { plan } : {}),
     context: {
       userId: user.id,

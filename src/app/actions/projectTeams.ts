@@ -27,7 +27,7 @@ import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
+import { libText, failureText } from '@/lib/i18n/serverText'
 
 /** notice — 성공했지만 사용자에게 알릴 것(코드 변경 뒤 엑셀 양식을 맞추지 못했다 등) */
 export type ProjectTeamActionResult = { ok: true; notice?: string } | { ok: false; error: string }
@@ -46,7 +46,7 @@ const ERR_COMMON_IN_USE = (t: ServerTranslate, code: string) =>
 export async function addProjectTeam(projectId: string, name: string, code?: string | null): Promise<ProjectTeamActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   // 예약어는 그 프로젝트의 단계 이름·추가 축 이름까지(D38) — 설정을 못 읽으면 만들지 않는다(쓰기 전 선행 조회 실패는 중단, 3원칙 ②)
   let reserved: string[]
   try {
@@ -57,7 +57,7 @@ export async function addProjectTeam(projectId: string, name: string, code?: str
     return { ok: false, error: t('srv.projectTeams.couldNotVerifyProjectSettings') }
   }
   const norm = checkNewTeam({ name, code, reserved })
-  if (!norm.ok) return norm
+  if (!norm.ok) return failureText(t, norm)
   // requireProjectAdmin 이 통과했으면 roleIn 이 이미 projectWorkspace 에서 이 프로젝트를 찾은 뒤다
   // (domain/authz.ts roleIn ④) — 여기서 다시 없을 수 없다. projects 테이블을 별도 조회하지 않는다
   // (이 액션은 teams 테이블만 만진다는 계약, project-teams-actions.test.ts 의 fromCalls 가드).
@@ -109,7 +109,7 @@ export async function updateProjectTeam(
 ): Promise<ProjectTeamActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const admin = createAdminClient()
   // 순서 맞바꾸기(위·아래 단추) — 두 행을 한 액션에서 바꾸고 둘째가 실패하면 첫 행을 되돌린다(lib/teams/swapOrder)
   if (patch.swapOrderWith !== undefined) {
@@ -149,7 +149,7 @@ export async function updateProjectTeam(
     const self = siblings.find((s) => s.id === teamId)
     if (!self) return { ok: false, error: t('srv.projectTeams.teamDoesNotBelongProject') }
     const checked = checkTeamRename({ name: patch.name, selfId: teamId, selfCode: self.code, siblings, reserved })
-    if (!checked.ok) return checked
+    if (!checked.ok) return failureText(t, checked)
     row.name = checked.name
     renamed = checked.name !== self.name
   }
@@ -185,7 +185,7 @@ const CONVERT_TOKENS: OwnTokenTable = {
 export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const { data, error } = await createAdminClient().rpc('convert_inherited_teams', { p_actor: g.actor.userId, p_project_id: projectId })
   if (error) {
     const f = rpcFailure(error, CONVERT_TOKENS, t)
@@ -209,7 +209,7 @@ export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamAct
 export async function changeProjectTeamCode(projectId: string, teamId: string, code: string): Promise<ProjectTeamActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   if (typeof teamId !== 'string' || !teamId) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
   let reserved: string[]
   try {
@@ -227,7 +227,7 @@ export async function changeProjectTeamCode(projectId: string, teamId: string, c
   const self = siblings.find((s) => s.id === teamId)
   if (!self) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
   const checked = checkTeamCodeChange({ code, selfId: teamId, siblings, reserved })
-  if (!checked.ok) return checked
+  if (!checked.ok) return failureText(t, checked)
   if (checked.unchanged) return { ok: false, error: t('err.sameCurrentCode') }
   // 이 프로젝트가 이미 쓰는 공용 팀과 같은 낱말의 code 로는 바꾸지 않는다(팀 추가와 같은 판정 — 대소문자·전각·개명 이름까지). 정확히 같은 code 는
   // DB 도 막지만(TEAM_CODE_SCOPE_CONFLICT) 낱말 겹침은 앱만 본다. 선행 조회 실패는 중단한다(3원칙 ②)
@@ -262,7 +262,7 @@ export type ProjectTeamMergeResult = { ok: true; summary: TeamMergeSummary } | {
 export async function previewProjectTeamMerge(projectId: string, sourceId: string, targetId: string): Promise<ProjectTeamMergePreviewResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   if (typeof sourceId !== 'string' || !sourceId || typeof targetId !== 'string' || !targetId) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
   if (sourceId === targetId) return { ok: false, error: libText(t, ERR_TEAM_MERGE_SAME) }
   const admin = createAdminClient()
@@ -284,7 +284,7 @@ export async function previewProjectTeamMerge(projectId: string, sourceId: strin
 export async function mergeProjectTeams(projectId: string, sourceId: string, targetId: string): Promise<ProjectTeamMergeResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   if (typeof sourceId !== 'string' || !sourceId || typeof targetId !== 'string' || !targetId) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
   if (sourceId === targetId) return { ok: false, error: libText(t, ERR_TEAM_MERGE_SAME) }
   const admin = createAdminClient()

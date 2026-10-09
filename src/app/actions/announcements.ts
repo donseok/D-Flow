@@ -36,10 +36,11 @@ export async function createAnnouncement(
   projectId: string,
   input: AnnouncementInput,
 ): Promise<AnnouncementActionResult> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId }, 'announcements')             // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const err = validateAnnouncementInput(input)
   if (err) return { ok: false, error: err }
 
@@ -78,10 +79,10 @@ export async function updateAnnouncement(
   const found = await resolveProjectId('announcements', id)
   if (!found.ok) return { ok: false, error: libText(t, found.error) }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: g.error }
-  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
   const mod = await requireModule({ projectId: found.projectId }, 'announcements')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const err = validateAnnouncementInput(input)
   if (err) return { ok: false, error: err }
 
@@ -112,10 +113,10 @@ export async function deleteAnnouncement(id: string): Promise<AnnouncementAction
   const found = await resolveProjectId('announcements', id)
   if (!found.ok) return { ok: false, error: libText(t, found.error) }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: g.error }
-  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }
   const mod = await requireModule({ projectId: found.projectId }, 'announcements')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
 
   const sb = await createServerClient()
   const { data, error } = await sb
@@ -172,9 +173,9 @@ export async function markAnnouncementsSeen(
 ): Promise<AnnouncementActionResult> {
   const t = await serverTranslator()
   const user = await getSession()
-  if (!user) return { ok: false, error: ERR_ANON }
+  if (!user) return { ok: false, error: libText(t, ERR_ANON) }
   const mod = await requireModule({ projectId }, 'announcements')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const micros = typeof seenAt === 'string' ? isoMicros(seenAt) : null
   if (micros === null) return { ok: false, error: t('srv.announcements.invalidTime') }
   // 미래 시각 방지(클라이언트 값 신뢰 금지) — now 로 클램프. 과거 시각은 µs 그대로 둔다(DB created_at 과 같은 정밀도)
@@ -243,10 +244,10 @@ export async function createAnnouncementFromMeeting(
   const found = await resolveProjectId('meetings', meetingId)
   if (!found.ok) return { ok: false, error: libText(t, found.error) }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: g.error }
-  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }
   const mod = await requireModule({ projectId: found.projectId }, ['announcements', 'meetings'])   // 회의 → 공지 — 둘 다 켜져야
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   if (!DATE_RE.test(occurrenceDate)) return { ok: false, error: t('err.invalidDate') }
 
   const sb = await createServerClient()

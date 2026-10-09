@@ -11,6 +11,7 @@ import { failWith, rpcFailure, tokenTable, type OwnTokenKeys } from '@/lib/error
 import type { ModuleId } from '@/lib/modules/defaults'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { libText } from '@/lib/i18n/serverText'
 
 const MODULES: Record<FieldEntity, ModuleId> = { wbs_item: 'wbs', issue: 'issues', weekly_row: 'weekly' }
 const entityOk = (v: unknown): v is FieldEntity => typeof v === 'string' && (FIELD_ENTITIES as readonly string[]).includes(v)
@@ -55,9 +56,9 @@ function failure(t: ServerTranslate, error: Parameters<typeof rpcFailure>[0]): F
 export async function getCustomFieldUsage(projectId: string, entity: FieldEntity): Promise<FieldUsageResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId }, owner(entity))
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   if (!entityOk(entity)) return { ok: false, error: t(ERR_INPUT) }
   const { admin } = adminFor({ projectId })
   try {
@@ -84,9 +85,9 @@ export async function getCustomFieldUsage(projectId: string, entity: FieldEntity
 export async function backfillCustomField(projectId: string, entity: FieldEntity, input: FieldCommandInput & { value: FieldValue }): Promise<FieldCommandResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: g.error, retryable: false }
+  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: libText(t, g.error), retryable: false }
   const mod = await requireModule({ projectId }, owner(entity))
-  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: mod.error, retryable: false }
+  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: libText(t, mod.error), retryable: false }
   if (!entityOk(entity) || !validInput(input) || !basicValue(input.value)) return invalid(t)
   const { admin } = adminFor({ projectId })
   try {
@@ -103,9 +104,9 @@ export async function backfillCustomField(projectId: string, entity: FieldEntity
 export async function purgeCustomField(projectId: string, entity: FieldEntity, input: FieldCommandInput & { expectedCount: number }): Promise<FieldCommandResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: g.error, retryable: false }
+  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: libText(t, g.error), retryable: false }
   const mod = await requireModule({ projectId }, owner(entity))
-  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: mod.error, retryable: false }
+  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: libText(t, mod.error), retryable: false }
   if (!entityOk(entity) || !validInput(input) || !Number.isSafeInteger(input.expectedCount) || input.expectedCount < 0) return invalid(t)
   const { admin } = adminFor({ projectId })
   try {

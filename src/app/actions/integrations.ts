@@ -8,6 +8,7 @@ import { generateCredentialToken } from '@/lib/agent/token'
 import { UUID_RE } from '@/lib/domain/validate'
 import { serverTranslator } from '@/lib/i18n/server'
 import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 const MAX_EXPIRES_DAYS = 365
 const NAME_RE = /^[A-Za-z0-9가-힣][A-Za-z0-9가-힣 ._-]{0,63}$/
@@ -56,7 +57,7 @@ export async function createMinutesApiCredential(input: {
   }
 
   const guard = await requireWorkspaceAdmin(input.workspaceId)
-  if (!guard.ok) return { ok: false, error: guard.error }
+  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
 
   const admin = createAdminClient()
   const modGate = await requireModule({ workspaceId: input.workspaceId }, 'minutes_integration', { client: admin })
@@ -151,7 +152,7 @@ export async function revokeIntegrationCredential(
   }
 
   const guard = await requireWorkspaceAdmin(workspaceId)
-  if (!guard.ok) return { ok: false, error: guard.error }
+  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
 
   if (!credentialId || typeof credentialId !== 'string' || !UUID_RE.test(credentialId)) {
     return { ok: false, error: t('err.invalidRequest') }
@@ -183,7 +184,7 @@ export async function listWorkspaceCredentials(
   }
 
   const guard = await requireWorkspaceAdmin(workspaceId)
-  if (!guard.ok) return { ok: false, error: guard.error }
+  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
 
   const admin = createAdminClient()
   const { data, error } = await admin.from('integration_credentials')

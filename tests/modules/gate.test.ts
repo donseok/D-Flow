@@ -37,12 +37,12 @@ describe('requireModule', () => {
   })
   it('꺼짐은 ERR_MODULE_DISABLED — 로그를 남기지 않는다(요청마다 쌓이지 않게)', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(await requireModule({ projectId: PID }, 'wiki')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
+    expect(await requireModule({ projectId: PID }, 'wiki')).toEqual({ ok: false, error: ERR_MODULE_DISABLED, code: 'module_disabled' })
     expect(err).not.toHaveBeenCalled()
   })
   it('목록은 전부 유효해야 통과한다(D18)', async () => {
     expect(await requireModule({ projectId: PID }, ['issues', 'minutes'])).toEqual({ ok: true })
-    expect(await requireModule({ projectId: PID }, ['issues', 'wiki'])).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
+    expect(await requireModule({ projectId: PID }, ['issues', 'wiki'])).toEqual({ ok: false, error: ERR_MODULE_DISABLED, code: 'module_disabled' })
   })
   it('요청이 전부 core 면 설정을 읽지 않고 통과한다(P2 — 설정 조회 실패가 core 화면의 오류 상태를 404 로 덮지 않는다)', async () => {
     m.getProjectConfig.mockRejectedValue(new ConfigUnavailableError('down'))
@@ -57,7 +57,7 @@ describe('requireModule', () => {
   ])('예외(%s)는 [requireModule] 로그 뒤 닫힌다(fail-closed)', async (_n, e) => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     m.effectiveModules.mockRejectedValue(e)
-    expect(await requireModule({ projectId: PID }, 'issues')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
+    expect(await requireModule({ projectId: PID }, 'issues')).toEqual({ ok: false, error: ERR_MODULE_DISABLED, code: 'module_disabled' })
     expect(err.mock.calls[0][0]).toBe('[requireModule]')
     expect(err.mock.calls[0], '판정 범위를 로그에 싣는다(F2-3)').toContain(JSON.stringify({ projectId: PID }))
   })
@@ -84,7 +84,7 @@ describe('requireSessionModule — 대상 행이 없는 세션 판정(P13)', () 
     expect(m.getProjectConfig).toHaveBeenCalledWith(PID, { client: undefined })
     expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: WID, projectId: PID }, expect.objectContaining({ client: undefined }))
     m.effectiveModules.mockResolvedValueOnce(eff())
-    expect(await requireSessionModule(PID, 'issues')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
+    expect(await requireSessionModule(PID, 'issues')).toEqual({ ok: false, error: ERR_MODULE_DISABLED, code: 'module_disabled' })
   })
   // 옮김(SP7 — resolveSoleWorkspaceId 삭제): '없으면 행위자의 유일 워크스페이스로'(통과)·'소속 0개/2개면 닫는다(R15)'·'비로그인·권한 조회 실패는 닫는다'.
   // 범위 없는 판정은 이제 행위자의 소속을 보지 않는다 — 소속이 몇 개든·로그인했든 core 가 아니면 닫힌다(예전 통과 한 갈래가 닫힘으로 좁아졌다).
@@ -96,8 +96,8 @@ describe('requireSessionModule — 대상 행이 없는 세션 판정(P13)', () 
   ])('projectId 가 없으면 닫는다 — %s 여도 소속에서 워크스페이스를 짐작하지 않는다(R15)', async (_n, roles) => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     m.getActor.mockResolvedValue({ userId: 'u1', workspaceRoles: roles })
-    expect(await requireSessionModule(null, 'minutes')).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
-    expect(await requireSessionModule(null, ['wbs', 'minutes'])).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
+    expect(await requireSessionModule(null, 'minutes')).toEqual({ ok: false, error: ERR_MODULE_DISABLED, code: 'module_disabled' })
+    expect(await requireSessionModule(null, ['wbs', 'minutes'])).toEqual({ ok: false, error: ERR_MODULE_DISABLED, code: 'module_disabled' })
     expect(m.effectiveModules).not.toHaveBeenCalled()
     expect(m.getActor).not.toHaveBeenCalled()          // 행위자를 읽지도 않는다
   })

@@ -19,7 +19,7 @@ import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
 import { ERR_MISSING } from '@/lib/authz/errors'
-import { libText } from '@/lib/i18n/serverText'
+import { libText, failureText } from '@/lib/i18n/serverText'
 
 /**
  * 에이전트 작업 루프 UI 서버 액션 — 스펙 §5. 2026-08-24: 전용 관제 화면(/agent-ops)을 없애고
@@ -36,8 +36,9 @@ type ActionResult = { ok: boolean; error?: string; warning?: string; stale?: tru
 
 /** 승인 계열의 agents 관문(스펙 §4.2) — 가드를 지난 주문의 프로젝트로 판정한다. */
 async function withAgents<T extends { ok: true }>(projectId: string, pass: T): Promise<T | { ok: false; error: string }> {
+  const t = await serverTranslator()
   const mod = await requireModule({ projectId }, 'agents')
-  return mod.ok ? pass : { ok: false, error: mod.error }
+  return mod.ok ? pass : { ok: false, error: libText(t, mod.error) }
 }
 
 /**
@@ -60,16 +61,16 @@ async function loadOrderForAdmin(orderId: string): Promise<
   const row = order as { id: string; project_id: string; status: string; wbs_item_id: string | null; claimed_by_user_id: string | null }
   if (row.wbs_item_id === null) {
     const g = await requireProjectAdmin(row.project_id)
-    if (!g.ok) return { ok: false, error: g.error }
+    if (!g.ok) return { ok: false, error: libText(t, g.error) }
     return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: g.actor.userId }, pending: null })
   }
   // SP5b(D18): 대기 단계의 승인자가 가드를 고른다 — admin 단계는 프로젝트 관리자만, subtree_or_admin 은 현행 승인 가드(자기 승인 금지 포함).
   // 판독 실패·설정 손상은 거부(fail-closed)
   const st = await loadApprovalState(admin, row.wbs_item_id, row.project_id)
-  if (!st.ok) return st
+  if (!st.ok) return failureText(t, st)
   if (st.pending.approver === 'admin') {
     const g = await requireProjectAdmin(row.project_id)
-    if (!g.ok) return { ok: false, error: g.error }
+    if (!g.ok) return { ok: false, error: libText(t, g.error) }
     return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: g.actor.userId }, pending: st.pending })
   }
   const right = await requireCompletionApprover(row.wbs_item_id, row.project_id, { claimedByUserId: row.claimed_by_user_id })
@@ -101,7 +102,7 @@ async function loadOrderForReview(orderId: string): Promise<
   const row = order as { id: string; project_id: string; status: string; wbs_item_id: string | null }
   if (row.wbs_item_id === null) {
     const g = await requireProjectAdmin(row.project_id)
-    if (!g.ok) return { ok: false, error: g.error }
+    if (!g.ok) return { ok: false, error: libText(t, g.error) }
     return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: g.actor.userId } })
   }
   const right = await requireDelegationRight(row.wbs_item_id)
@@ -378,10 +379,10 @@ export async function getAgentOrderForItem(itemId: string): Promise<
   const sb = await createServerClient()
   const { data: item, error: itemErr } = await sb.from('wbs_items').select('project_id').eq('id', itemId).maybeSingle()
   if (itemErr) return { ok: false, error: fill(t('err.couldNotLoadItems'), { message: itemErr.message }) }
-  if (!item) return { ok: false, error: ERR_MISSING }
+  if (!item) return { ok: false, error: libText(t, ERR_MISSING) }
   const projectId = (item as { project_id: string }).project_id
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId }, 'agents')
   if (!mod.ok) return { ok: true, order: null, priorOrders: [], projectId }   // 명세 패널은 core 화면 — 오류 대신 '주문 없음'(P19)
 

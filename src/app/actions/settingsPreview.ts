@@ -24,8 +24,8 @@ export type SettingsImpactResult =
 export async function previewSettingsImpact(workspaceId: string, next: ModuleId[]): Promise<SettingsImpactResult> {
   const t = await serverTranslator()
   const guard = await requireWorkspaceAdmin(workspaceId)
-  if (!guard.ok) return { ok: false, error: guard.error }
-  if (!guard.actor.isSuperuser) return { ok: false, error: ERR_DENIED }
+  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
+  if (!guard.actor.isSuperuser) return { ok: false, error: libText(t, ERR_DENIED) }
   if (!isUuidLike(workspaceId)) return { ok: false, error: t('err.workspaceIdNotValid') }
   const parsed = parseModuleList(next, NON_CORE_MODULES)
   if (!parsed.ok) return { ok: false, error: libText(t, parsed.error) }
@@ -49,7 +49,7 @@ export type ProjectSettingsImpactResult =
 export async function previewProjectSettingsImpact(projectId: string, next: ModuleId[]): Promise<ProjectSettingsImpactResult> {
   const t = await serverTranslator()
   const guard = await requireProjectAdmin(projectId)
-  if (!guard.ok) return { ok: false, error: guard.error }
+  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
   if (!isUuidLike(projectId)) return { ok: false, error: t('srv.settingsPreview.projectIdNotValid') }
   const parsed = parseModuleList(next, [...PROJECT_TOGGLABLE])
   if (!parsed.ok) return { ok: false, error: libText(t, parsed.error) }
@@ -72,7 +72,7 @@ export type WeekStartPreviewResult = { ok: true; preview: WeekStartPreview } | {
 export async function previewWeekStartChange(projectId: string, day: WeekStartDay): Promise<WeekStartPreviewResult> {
   const t = await serverTranslator()
   const guard = await requireProjectAdmin(projectId)
-  if (!guard.ok) return { ok: false, error: guard.error }
+  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
   if (!isUuidLike(projectId)) return { ok: false, error: t('srv.settingsPreview.projectIdNotValid') }
   const parsed = parseWeekStartDay(day)
   if (!parsed.ok) return { ok: false, error: libText(t, parsed.error) }

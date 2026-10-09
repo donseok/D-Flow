@@ -6,7 +6,7 @@ import { upsertRosterMember, removeRosterMember } from '@/app/actions/roster'
 import type { EffectiveRoleView } from '@/lib/domain/authz'
 import type { RosterMember } from '@/lib/data/memberSelect'
 import {
-  accessRoleLabelKey, draftFromMember, isDraftDirty, validateDraft, type AccessRole, type RosterDraft,
+  accessRoleLabelKey, draftFromMember, isDraftDirty, rosterDraftErrorText, validateDraft, type AccessRole, type RosterDraft,
 } from '@/lib/domain/roster'
 import { TeamMultiSelect, type TeamOption } from './TeamMultiSelect'
 import { useTeamLabel } from '@/components/app/TeamsProvider'
@@ -107,7 +107,7 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
 
   function save() {
     const v = validateDraft(draft)
-    if (!v.ok) { setError(v.error); return }
+    if (!v.ok) { setError(rosterDraftErrorText(tr, v.error)); return }
     startTransition(async () => {
       const res = await upsertRosterMember(projectId, v.input)
       if (!res.ok) { setError(res.error); return }

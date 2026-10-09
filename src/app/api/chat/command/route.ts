@@ -6,6 +6,7 @@ import { getComputedWbs } from '@/lib/data/wbs'
 import { runCommandPipeline } from '@/lib/ai/commands/pipeline'
 import { todayIn } from '@/lib/domain/calendar'
 import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   if (gate) return gate
   // chatbot 관문(스펙 §4.2 챗 위젯 행) — 명령은 프로젝트 화면 전용이라 그 프로젝트로(워크스페이스를 함께 실으면 그 프로젝트의 것이어야 한다)
   const mod = await requireScopedSessionModule({ projectId, workspaceId: body.workspaceId }, 'chatbot')
-  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: mod.status })
+  if (!mod.ok) return NextResponse.json({ error: libText(t, mod.error) }, { status: mod.status })
 
   const { items, calendar } = await getComputedWbs(projectId)
   // 말한 날짜("8월 20일")의 연도는 그 프로젝트 tz 의 실제 오늘에서 — 공정율 기준일(base_date)은 과거로 고정될 수 있어 쓰지 않는다

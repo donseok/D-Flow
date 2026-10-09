@@ -24,7 +24,7 @@ import { teamRootNameError } from '@/lib/minutes/teamRootErrors'
 import { enqueueTeamRenameIndexChange } from '@/lib/ai/index/enqueueChange'
 import { serverTranslator } from '@/lib/i18n/server'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
+import { libText, failureText } from '@/lib/i18n/serverText'
 
 /** notice — 성공했지만 사용자에게 알릴 것(코드 변경 뒤 엑셀 양식을 맞추지 못한 프로젝트가 있다 등) */
 export type TeamActionResult = { ok: true; notice?: string } | { ok: false; error: string }
@@ -48,10 +48,10 @@ export async function addTeam(workspaceId: string, name: string, code?: string |
   // 대상 워크스페이스가 비면 가드 전에 거부한다 — 가드는 null 을 슈퍼유저에게 통과시킨다.
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED) }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   // 공용 팀은 여러 프로젝트에 걸려 단계 이름이 하나로 정해지지 않는다 — 엑셀 머리 낱말만 예약어로 본다(SP4 D38·K14)
   const norm = checkNewTeam({ name, code, reserved: EXCEL_HEADER_WORDS })
-  if (!norm.ok) return norm
+  if (!norm.ok) return failureText(t, norm)
   const admin = createAdminClient()
 
   // 0071: 전역·프로젝트 행이 같은 code 를 가질 수 있다. 이 화면은 전역 행만 다루므로
@@ -105,21 +105,21 @@ export async function updateTeam(
   try {
     actor = await getActor()
   } catch {
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
-  if (!actor) return { ok: false, error: ERR_ANON }
+  if (!actor) return { ok: false, error: libText(t, ERR_ANON) }
   // 판정 대상 워크스페이스는 행에서 읽는다(id 만 받는 액션). 쓰기 전 선행 조회라 실패는 중단(3원칙 ②),
   // 없거나 프로젝트 팀(0071 — 프로젝트 관리 화면 몫)이면 이 화면의 대상이 아니다(존재 은닉).
   const admin = createAdminClient()
   const found = await admin.from('teams').select('workspace_id, project_id').eq('id', id).maybeSingle()
   if (found.error) {
     console.error('[teams] 수정 대상 조회 실패:', found.error.message)
-    return { ok: false, error: ERR_LOOKUP }
+    return { ok: false, error: libText(t, ERR_LOOKUP) }
   }
   const target = found.data as { workspace_id: string | null; project_id: string | null } | null
-  if (!target || target.project_id !== null || !target.workspace_id) return { ok: false, error: ERR_MISSING }
+  if (!target || target.project_id !== null || !target.workspace_id) return { ok: false, error: libText(t, ERR_MISSING) }
   const g = await requireWorkspaceAdmin(target.workspace_id)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   if (patch.swapOrderWith !== undefined) {
     if (typeof patch.swapOrderWith !== 'string' || !patch.swapOrderWith) return { ok: false, error: t(ERR_TEAM_NOT_COMMON) }
     const sw = await swapTeamOrder(admin, { workspaceId: target.workspace_id, projectId: null }, id, patch.swapOrderWith)
@@ -150,7 +150,7 @@ export async function updateTeam(
     const self = siblings.find((s) => s.id === id)
     if (!self) return { ok: false, error: t('srv.teams.notSharedTeamDoesNot') }
     const checked = checkTeamRename({ name: patch.name, selfId: id, selfCode: self.code, siblings, reserved: EXCEL_HEADER_WORDS })
-    if (!checked.ok) return checked
+    if (!checked.ok) return failureText(t, checked)
     row.name = checked.name
     renamed = checked.name !== self.name
   }
@@ -190,7 +190,7 @@ export async function listTeamsAdmin(workspaceId: string): Promise<
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) {
     console.error('[teams] 관리 목록 거부:', g.error)
-    return { ok: false, error: g.error }
+    return { ok: false, error: libText(t, g.error) }
   }
   // 스코프를 정한 service_role 클라이언트 — 아래 필터가 쓰는 workspaceId 가 가드가 판정한 그 값이다.
   const { admin } = adminFor({ workspaceId })
@@ -227,7 +227,7 @@ export async function changeTeamCode(workspaceId: string, teamId: string, code: 
   const t = await serverTranslator()
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED) }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   if (typeof teamId !== 'string' || !teamId) return { ok: false, error: t(ERR_TEAM_NOT_COMMON) }
   const admin = createAdminClient()
   // 쓰기 전 선행 조회 — 실패는 중단(3원칙 ②). 가드가 판정한 그 워크스페이스의 공용 팀만 본다
@@ -237,7 +237,7 @@ export async function changeTeamCode(workspaceId: string, teamId: string, code: 
   const self = siblings.find((s) => s.id === teamId)
   if (!self) return { ok: false, error: t(ERR_TEAM_NOT_COMMON) }
   const checked = checkTeamCodeChange({ code, selfId: teamId, siblings, reserved: EXCEL_HEADER_WORDS })
-  if (!checked.ok) return checked
+  if (!checked.ok) return failureText(t, checked)
   if (checked.unchanged) return { ok: false, error: t('err.sameCurrentCode') }
   const res = await admin.rpc('change_team_code', { p_actor: g.actor.userId, p_team_id: teamId, p_code: checked.code })
   if (res.error) {
@@ -262,7 +262,7 @@ export async function previewTeamMerge(workspaceId: string, sourceId: string, ta
   const t = await serverTranslator()
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED) }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   if (typeof sourceId !== 'string' || !sourceId || typeof targetId !== 'string' || !targetId) return { ok: false, error: t(ERR_TEAM_NOT_COMMON) }
   if (sourceId === targetId) return { ok: false, error: libText(t, ERR_TEAM_MERGE_SAME) }
   const admin = createAdminClient()
@@ -286,7 +286,7 @@ export async function mergeTeams(workspaceId: string, sourceId: string, targetId
   const t = await serverTranslator()
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, error: libText(t, ERR_WORKSPACE_REQUIRED) }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   if (typeof sourceId !== 'string' || !sourceId || typeof targetId !== 'string' || !targetId) return { ok: false, error: t(ERR_TEAM_NOT_COMMON) }
   if (sourceId === targetId) return { ok: false, error: libText(t, ERR_TEAM_MERGE_SAME) }
   const admin = createAdminClient()

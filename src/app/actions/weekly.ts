@@ -140,9 +140,9 @@ export async function createWeeklyReport(
   const tr = await serverTranslator()
   // 회차(주차 문서) 생성은 시트의 구조를 만드는 일이라 관리자 몫 — 셀 편집(멤버)과 급이 다르다.
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, code: g.error, error: g.error }
+  if (!g.ok) return { ok: false, code: g.error, error: libText(tr, g.error) }
   const mod = await requireModule({ projectId }, 'weekly')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
-  if (!mod.ok) return { ok: false, code: mod.error, error: mod.error }
+  if (!mod.ok) return { ok: false, code: mod.error, error: libText(tr, mod.error) }
   if (typeof weekStartIso !== 'string' || !isValidIsoDate(weekStartIso)) return { ok: false, code: 'INVALID_INPUT', error: tr(ERR_WEEK_INPUT) }
   if (mapping !== undefined && !isCarryMappingShape(mapping)) return { ok: false, code: 'INVALID_INPUT', error: tr(ERR_MAPPING_INPUT) }
 
@@ -231,9 +231,9 @@ export async function saveWeeklyTitle(
 ): Promise<WeeklyActionResult> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
   const mod = await requireModule({ projectId }, 'weekly')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(tr, mod.error) }
   const t = title.trim()
   if (t.length > TITLE_MAX) return { ok: false, error: fill(tr('err.titleMustCharactersFewer'), { titleMax: TITLE_MAX }) }
   if (expected !== undefined && (typeof expected !== 'string' || expected.length > TITLE_MAX)) return { ok: false, error: tr('err.invalidRequest') }
@@ -297,9 +297,9 @@ export async function prepareWeeklyCellRewrite(
 ): Promise<WeeklyRewriteResult> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
   const mod = await requireModule({ projectId }, 'weekly')                    // 입력 검증 앞 — AI 판정(aiAvailable)은 그대로 뒤에 있다
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(tr, mod.error) }
   if (!Array.isArray(inputs) || inputs.length === 0)
     return { ok: false, error: tr('srv.weekly.nothingPolish') }
   if (inputs.length > WEEKLY_REWRITE_MAX_CELLS)
@@ -467,9 +467,9 @@ export async function saveWeeklyCell(
 ): Promise<WeeklyActionResult> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
   const mod = await requireModule({ projectId }, 'weekly')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(tr, mod.error) }
   if (!isWeeklyCellKey(cellKey)) return { ok: false, error: tr('srv.weekly.invalidCell') }
   if (content.length > CELL_MAX) return { ok: false, error: fill(tr('srv.weekly.contentMustCharactersFewer'), { cellMax: CELL_MAX }) }
 
@@ -517,9 +517,9 @@ export async function saveWeeklyCells(
 ): Promise<WeeklyBatchResult> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
   const mod = await requireModule({ projectId }, 'weekly')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(tr, mod.error) }
   if (edits.length === 0) return { ok: true }                                             // no-op — DB 접근 없음
   if (edits.length > BATCH_MAX) return { ok: false, error: tr('srv.weekly.tooManyCellsSaveOnce') } // dedupe 전 원본 길이 기준
   for (const e of edits) {

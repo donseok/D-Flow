@@ -17,9 +17,9 @@ export async function upsertAttendance(
   const t = await serverTranslator()
   if (!input.memberId || !input.date) return { ok: false, error: t('srv.attendance.memberDateRequired') }
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
   const mod = await requireModule({ projectId }, 'attendance')                 // 스펙 §4.2 — 가드 뒤(가드 앞 필수값 검사는 그대로)
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
   const sb = await createServerClient()
   // 대상 멤버가 **이 프로젝트 로스터** 소속인지 확인한다. 없으면 남의 프로젝트 멤버 id 로
   // 이 프로젝트 근태 행을 만들 수 있고(로스터 읽기는 전면 개방이라 id 확보가 쉽다),
@@ -62,10 +62,10 @@ export async function removeAttendance(recordId: string): Promise<{ ok: boolean;
   const found = await resolveProjectId('attendance_records', recordId)
   if (!found.ok) return { ok: false, error: libText(t, found.error) }
   const g = await requireProjectMember(found.projectId)
-  if (!g.ok) return { ok: false, error: g.error }
-  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
+  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
   const mod = await requireModule({ projectId: found.projectId }, 'attendance')
-  if (!mod.ok) return { ok: false, error: mod.error }
+  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
 
   const sb = await createServerClient()
   const { error } = await sb.from('attendance_records').delete().eq('id', recordId)

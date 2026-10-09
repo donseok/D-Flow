@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   const t = await serverTranslator()
   // 크론 시크릿이 아니라 세션 인가다 — 브라우저에서 부르는 버튼이라서다.
   const guard = await requireSuperuser()
-  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: denyStatus(guard.error, 503) })
+  if (!guard.ok) return NextResponse.json({ error: libText(t, guard.error) }, { status: denyStatus(guard, 503) })
 
   const raw = await req.json().catch(() => null)
   const action = parseAction(raw)

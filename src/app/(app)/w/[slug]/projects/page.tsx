@@ -17,6 +17,7 @@ import { ProjectsToolbar } from '@/components/portal/ProjectsToolbar'
 import { wsHref } from '@/lib/workspace/paths'
 import { getServerLocale } from '@/lib/i18n/server'
 import { translatorFor } from '@/lib/i18n/translate'
+import { failureTextIn } from '@/lib/i18n/serverText'
 import { t } from '@/lib/i18n/dict'
 import { buttonClass } from '@/components/ui/buttonStyles'
 const STATUSES = ['ready', 'active', 'overdue', 'done', 'unknown'] as const
@@ -37,7 +38,8 @@ export default async function ProjectsPage({ params, searchParams }: {
   const status = (STATUSES as readonly string[]).includes(sp.status ?? '') ? sp.status as (typeof STATUSES)[number] : undefined
   const q = sp.q?.trim() || undefined, favoritesOnly = sp.fav === '1'
   const [res, acc, wsPrefs] = await Promise.all([
-    getProjectRows(ws.id, actor, { q, status, favoritesOnly, cursor: sp.cursor ?? null, limit: 50, t: translatorFor(locale) }),
+    // 로더의 실패 문구(lib 고정 문구)는 화면 언어로
+    getProjectRows(ws.id, actor, { q, status, favoritesOnly, cursor: sp.cursor ?? null, limit: 50, t: translatorFor(locale) }).then((r) => failureTextIn(locale, r)),
     getAccountPrefs(),
     getWorkspacePrefs(ws.id, { strict: true }).catch((e: unknown) => { console.error('[projects] 즐겨찾기 조회 실패', e); return null }),
   ])

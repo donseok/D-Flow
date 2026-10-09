@@ -41,12 +41,12 @@ describe('readScope', () => {
   it('(c) 조회 실패는 ERR_LOOKUP', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { db } = fakeDb({ data: null, error: { message: 'boom' } })
-    expect(await readScope(db, 'meetings', 'm1', 't')).toEqual({ ok: false, error: ERR_LOOKUP })
+    expect(await readScope(db, 'meetings', 'm1', 't')).toEqual({ ok: false, error: ERR_LOOKUP, code: 'lookup' })
   })
 
   it('(d) 행이 없으면 ERR_MISSING', async () => {
     const { db } = fakeDb({ data: null, error: null })
-    expect(await readScope(db, 'meetings', 'm1', 't')).toEqual({ ok: false, error: ERR_MISSING })
+    expect(await readScope(db, 'meetings', 'm1', 't')).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
   })
 
   it.each([
@@ -57,7 +57,7 @@ describe('readScope', () => {
   ] as const)('(e) 워크스페이스를 확정하지 못하면 ERR_LOOKUP(fail-closed) — %s', async (_n, table, data) => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { db } = fakeDb({ data, error: null })
-    expect(await readScope(db, table, 'r1', 't')).toEqual({ ok: false, error: ERR_LOOKUP })
+    expect(await readScope(db, table, 'r1', 't')).toEqual({ ok: false, error: ERR_LOOKUP, code: 'lookup' })
   })
 })
 

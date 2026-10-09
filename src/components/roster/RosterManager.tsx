@@ -6,7 +6,7 @@ import { UserPlus } from 'lucide-react'
 import { upsertRosterMember } from '@/app/actions/roster'
 import type { RosterMember } from '@/lib/data/memberSelect'
 import { isAdminAccessRole, type EffectiveRoleView, type ProjectActorView } from '@/lib/domain/authz'
-import { canGrantAdmin, emptyDraft, ERR_DUPLICATE_EMAIL, findRosterByEmail, validateDraft } from '@/lib/domain/roster'
+import { canGrantAdmin, emptyDraft, ERR_DUPLICATE_EMAIL, findRosterByEmail, rosterDraftErrorText, validateDraft } from '@/lib/domain/roster'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import { RosterEditRow, RosterReadRow, ROSTER_COLUMNS } from './RosterRow'
 import type { TeamOption } from './TeamMultiSelect'
@@ -47,10 +47,10 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
     e.preventDefault()
     setAddError(null); setDuplicate(null); setAdded(null)
     const v = validateDraft({ ...emptyDraft(), name, email })
-    if (!v.ok) { setAddError(v.error); return }
+    if (!v.ok) { setAddError(rosterDraftErrorText(tr, v.error)); return }
     // 같은 이메일이 이미 명단에 있으면 RPC 는 그 사람의 행을 찾아 덮어쓴다 — 새 사람으로 오해하지 않게 먼저 막고 그 행으로 안내한다.
     const dup = findRosterByEmail(rows, email)
-    if (dup) { setAddError(ERR_DUPLICATE_EMAIL); setDuplicate(dup); return }
+    if (dup) { setAddError(rosterDraftErrorText(tr, ERR_DUPLICATE_EMAIL)); setDuplicate(dup); return }
     startTransition(async () => {
       const res = await upsertRosterMember(projectId, v.input)
       if (!res.ok) { setAddError(res.error); return }
