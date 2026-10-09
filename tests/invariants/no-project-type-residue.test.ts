@@ -145,3 +145,18 @@ describe('{level} 치환자 — 부르는 자리가 모두 치환한다', () => 
     expect(misses, misses.join('\n')).toEqual([])
   })
 })
+
+// 특정 방법론의 낱말 — 기본 어휘(이슈 출처·원인 분류)가 한 방법론의 용어(As-Is/To-Be, S·P·O·I 머리글자)를 전제하고 있었다.
+// 조직이 그 용어를 쓰려면 설정에서 라벨을 바꾸면 된다 — 제품 기본값과 화면 문구에는 두지 않는다.
+describe('방법론 전용 낱말 — src 의 문구·기본값에 없다', () => {
+  const METHOD_WORD = /As-Is|To-Be|\b[SPOI] · /
+  it('리터럴에 없다', () => {
+    expect(hitsOf(METHOD_WORD, ALL, {})).toEqual([])
+  })
+  it('검사식은 그 낱말만 잡는다', () => {
+    expect(METHOD_WORD.test("'As-Is 분석'")).toBe(true)
+    expect(METHOD_WORD.test("'P · 프로세스'")).toBe(true)
+    expect(METHOD_WORD.test("'WBS · 간트'")).toBe(false)
+    expect(METHOD_WORD.test("'SPI · 편차'")).toBe(false)
+  })
+})

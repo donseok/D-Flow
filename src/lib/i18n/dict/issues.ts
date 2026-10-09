@@ -96,7 +96,7 @@ export const issuesKo = {
   'issue.source.type.minutes': '회의록',
   'issue.source.type.interview': '인터뷰',
   'issue.source.type.deliverable': '산출물',
-  'issue.source.type.as_is_analysis': 'As-Is 분석',
+  'issue.source.type.as_is_analysis': '현황 분석',
   'issue.source.type.data_analysis': '데이터 분석',
   'issue.source.type.other': '기타',
   'issue.analysis.open': '이슈 분석서 작성',

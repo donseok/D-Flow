@@ -82,15 +82,15 @@ export const DEFAULT_SOURCES: readonly SourceDef[] = [
   { code: 'minutes', label: '회의록', sort: 1, active: true },
   { code: 'interview', label: '인터뷰', sort: 2, active: true },
   { code: 'deliverable', label: '산출물', sort: 3, active: true },
-  { code: 'as_is_analysis', label: 'As-Is 분석', sort: 4, active: true },
+  { code: 'as_is_analysis', label: '현황 분석', sort: 4, active: true },
   { code: 'data_analysis', label: '데이터 분석', sort: 5, active: true },
   { code: 'other', label: '기타', sort: 6, active: true },
 ]
 export const DEFAULT_CAUSE_CATEGORIES: readonly CauseCategoryDef[] = [
-  { code: 'strategy_policy', label: 'S · 전략/규정', sort: 1, active: true },
-  { code: 'process', label: 'P · 프로세스', sort: 2, active: true },
-  { code: 'organization', label: 'O · 조직', sort: 3, active: true },
-  { code: 'it', label: 'I · IT', sort: 4, active: true },
+  { code: 'strategy_policy', label: '전략/규정', sort: 1, active: true },
+  { code: 'process', label: '프로세스', sort: 2, active: true },
+  { code: 'organization', label: '조직', sort: 3, active: true },
+  { code: 'it', label: 'IT', sort: 4, active: true },
 ]
 /** 현 칩 색 그대로(스펙 D2 — 화면 회귀 0): open=delayed·in_progress=progress·resolved=done·on_hold=neutral. 라벨은 사전 issue.status.* 와 같다 */
 export const DEFAULT_ISSUE_STATUSES: readonly IssueStatusDef[] = [

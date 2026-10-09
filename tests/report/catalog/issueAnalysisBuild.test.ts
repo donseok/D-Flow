@@ -99,7 +99,7 @@ describe('buildIssueAnalysisCatalog (정본 §4.5.2)', () => {
     expect(row.source_lines[0]).toBe('현장 인터뷰')
     expect(row.causes[0]).toEqual({
       category: 'process',
-      category_label: 'P · 프로세스',
+      category_label: '프로세스',
       direct_cause: '절차가 없다.',
       root_cause: '추가 확인 필요',
     })

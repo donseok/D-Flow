@@ -97,7 +97,7 @@ export const issuesEn: Record<keyof typeof issuesKo, string> = {
   'issue.source.type.minutes': 'Meeting minutes',
   'issue.source.type.interview': 'Interview',
   'issue.source.type.deliverable': 'Deliverable',
-  'issue.source.type.as_is_analysis': 'As-Is analysis',
+  'issue.source.type.as_is_analysis': 'Current-state analysis',
   'issue.source.type.data_analysis': 'Data analysis',
   'issue.source.type.other': 'Other',
   'issue.analysis.open': 'Create issue analysis report',

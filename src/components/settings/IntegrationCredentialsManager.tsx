@@ -563,7 +563,7 @@ export function IntegrationCredentialsManager({
                         type="text"
                         value={m.code}
                         onChange={e => handleUpdateMapping(idx, 'code', e.target.value)}
-                        placeholder="외부 팀 코드 (예: ERP_DEV)"
+                        placeholder="외부 팀 코드 (예: TEAM_A)"
                         className="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                       <span className="text-muted-foreground text-xs">→</span>

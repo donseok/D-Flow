@@ -95,7 +95,7 @@ describe('표시', () => {
     const renamed = list.map(e => e.code === 'routine' ? { ...e, label: '주간 회의' } : e)
     expect(vocabLabel('meetings.categories', renamed, 'routine', t as never)).toBe('주간 회의')
     expect(vocabLabel('meetings.categories', list, 'gone', t as never)).toBe('gone')
-    expect(vocabLabel('issues.cause_categories', defaultVocab('issues.cause_categories'), 'it', t as never)).toBe('I · IT')
+    expect(vocabLabel('issues.cause_categories', defaultVocab('issues.cause_categories'), 'it', t as never)).toBe('IT')
   })
   it('색은 의미 토큰 클래스, 모르면 neutral', () => {
     expect(vocabColor(defaultVocab('issues.severities'), 'high').chip).toBe('bg-danger-weak text-danger')
