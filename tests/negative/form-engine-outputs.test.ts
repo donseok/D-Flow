@@ -68,7 +68,8 @@ function modelFor(kind: FormKind, count: number): CatalogModel {
     delete model.project
     delete model.report
     delete model.wbs_items
-    model.areas = []
+    // 기본 양식의 반복은 전부 영역 아래다 — 같은 이슈 배열을 한 영역에 싣는다
+    model.areas = count ? [{ code: 'RS', name: '연구 영역', summary: { total_count: count }, issues: model.issues, opportunities: [] }] : []
   } else {
     delete model.report
     delete model.summary

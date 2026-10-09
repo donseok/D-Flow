@@ -19,7 +19,8 @@ const slideXml = body => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?
 
 // 이슈 분석서의 표 — 열 너비가 다르고 여러 열이라 가는 테두리와 머리 행 채움을 둔다.
 const edges = ['L', 'R', 'T', 'B'].map(side => `<a:ln${side} w="6350" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:srgbClr val="C5CEDA"/></a:solidFill><a:prstDash val="solid"/></a:ln${side}>`).join('')
-const gridRow = (cells, height, head = false) => `<a:tr h="${emu(height)}">${cells.map(t => `<a:tc><a:txBody><a:bodyPr wrap="square"/><a:lstStyle/>${paragraph(t, 1100, { bold: head })}</a:txBody><a:tcPr marL="72000" marR="72000" marT="54000" marB="54000">${edges}${head ? '<a:solidFill><a:srgbClr val="E8EEF5"/></a:solidFill>' : '<a:noFill/>'}</a:tcPr></a:tc>`).join('')}</a:tr>`
+/** 셀 값이 배열이면 문단 여러 개다(셀 안 {{#items}} 블록은 문단 단위). */
+const gridRow = (cells, height, head = false) => `<a:tr h="${emu(height)}">${cells.map(t => `<a:tc><a:txBody><a:bodyPr wrap="square"/><a:lstStyle/>${[t].flat().map(line => paragraph(line, 1100, { bold: head })).join('')}</a:txBody><a:tcPr marL="72000" marR="72000" marT="54000" marB="54000">${edges}${head ? '<a:solidFill><a:srgbClr val="E8EEF5"/></a:solidFill>' : '<a:noFill/>'}</a:tcPr></a:tc>`).join('')}</a:tr>`
 /** rows: [cells, height, head?][] — 머리 행·고정 행·{{#rows}} 행을 위에서 아래로. */
 const grid = (id, y, widths, rows) => `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Table ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${emu(.5)}" y="${emu(y)}"/><a:ext cx="${emu(widths.reduce((a, b) => a + b, 0))}" cy="${emu(rows.reduce((a, r) => a + r[1], 0))}"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr firstRow="1"/><a:tblGrid>${widths.map(w => `<a:gridCol w="${emu(w)}"/>`).join('')}</a:tblGrid>${rows.map(r => gridRow(...r)).join('')}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`
 
@@ -40,7 +41,8 @@ function weeklySlides(width) {
 }
 
 /**
- * 이슈 분석서: 표지 → 영역별 종합 → 영역별 이슈 목록 → 이슈별 원인 분석 → 개선기회.
+ * 이슈 분석서: 표지 → 영역별 종합 → 영역별 이슈 목록 → 영역별 원인 분석 → 영역별 개선기회.
+ * 영역마다 한 장이고 이슈·개선기회가 행이다 — 이슈의 원인들·개선기회의 연결 이슈들은 그 행의 셀 안 {{#items}} 문단이다.
  * 긴 본문·원인은 {{#rows}} 행에 두어 엔진의 넘침 분할(행 수·셀 줄 수)을 탄다.
  */
 function issueAnalysisSlides(width) {
@@ -56,14 +58,13 @@ function issueAnalysisSlides(width) {
     [['코드', '이슈', '내용', '심각도', '상태', '주관 부서'], .4, true],
     [['{{#rows .issues}}{{.code}}', '{{.title}}', '{{.body}}', '{{.severity_label}}', '{{.status_label}}', '{{.owner_department}}{{/rows}}'], .8],
   ])}${page}`
-  const causes = `${heading('{{#slide issues}}{{.code}} · 원인 분석 {{slide.continuation}}', '{{.title}}')}${shape(5, '{{.area_code}} {{.area_name}} | 심각도 {{.severity_label}} · 상태 {{.status_label}}', .5, 1.35, width, .3, 1100)}${grid(4, 1.8, [1.6, 4.1, 4.13], [
-    [['원인 분류', '직접 원인', '근본 원인'], .4, true],
-    [['{{#rows .causes}}{{.category_label}}', '{{.direct_cause}}', '{{.root_cause}}{{/rows}}'], .8],
+  const causes = `${heading('{{#slide areas}}{{.code}} {{.name}} · 원인 분석 {{slide.continuation}}', `전체 {{.summary.total_count}}건 | ${status}`)}${grid(4, 1.6, [1.1, 2.6, 6.13], [
+    [['코드', '이슈', '원인 — [분류] 직접 원인 / 근본 원인'], .4, true],
+    [['{{#rows .issues}}{{.code}}', '{{.title}}', ['{{#items .causes}}[{{.category_label}}] {{.direct_cause}}', '근본 원인: {{.root_cause}}{{/items}}{{/rows}}']], .8],
   ])}${page}`
-  const opportunities = `${heading('{{#slide opportunities}}개선기회 {{.no}} · {{.title}} {{slide.continuation}}', '{{.area_code}} {{.area_name}}')}${grid(4, 1.6, [1.9, 7.93], [
-    [['구분', '내용'], .4, true],
-    [['개선 방향', '{{.description}}'], .8],
-    [['{{#rows .issues}}연결 이슈 {{.code}}', '{{.title}}{{/rows}}'], .5],
+  const opportunities = `${heading('{{#slide areas}}{{.code}} {{.name}} · 개선기회 {{slide.continuation}}', '전체 {{.summary.total_count}}건의 이슈를 묶은 개선 방향')}${grid(4, 1.6, [.7, 2.6, 3.7, 2.83], [
+    [['번호', '개선기회', '개선 방향', '연결 이슈'], .4, true],
+    [['{{#rows .opportunities}}{{.no}}', '{{.title}}', '{{.description}}', '{{#items .issues}}{{.code}} {{.title}}{{/items}}{{/rows}}'], .8],
   ])}${page}`
   return [cover, overview, areaIssues, causes, opportunities].map(slideXml)
 }

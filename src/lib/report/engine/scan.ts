@@ -2,7 +2,7 @@
  * FormEngine.scan (정본 §4.3.1·§4.4.1·§4.4.2·§4.7.2).
  * pptx 는 slideN.xml 의 a:p 만, xlsx 는 워크시트 셀 값(문자열·리치텍스트)만.
  * 카탈로그·매핑 판정(UNKNOWN_TOKEN·TYPE_MISMATCH·RECOMMENDED_MISSING)은 활성화가 한다.
- * 여기의 TYPE_MISMATCH 는 {{#items}} 3단뿐이다(§4.4.5).
+ * 여기의 TYPE_MISMATCH 는 깊이 초과 둘뿐이다 — {{#items}} 3단(§4.4.5), {{#rows}} 행 안의 {{#rows}}(§4.4.3).
  */
 import JSZip from 'jszip'
 import { parseTokenBody } from './scanner'
@@ -19,7 +19,7 @@ const SHAPE_TAGS = new Set(['p:sp', 'p:grpSp', 'p:graphicFrame', 'p:pic', 'p:cxn
 const SLIDE_FILE = /^ppt\/slides\/slide(\d+)\.xml$/
 const SHEET_FILE = /^xl\/worksheets\/sheet(\d+)\.xml$/
 
-type StackEntry = { token: string; kind: 'rows' | 'items' | 'slide'; row?: number }
+type StackEntry = { token: string; kind: 'rows' | 'items' | 'slide'; row?: number; table?: number }
 
 function decodeXml(s: string): string {
   return s
@@ -38,7 +38,7 @@ function attr(raw: string, name: string): string | undefined {
 }
 
 interface Run { text: string }
-interface Para { runs: Run[]; location: PlaceholderLocation; row?: number }
+interface Para { runs: Run[]; location: PlaceholderLocation; row?: number; table?: number }
 
 function scanParagraph(
   runs: readonly Run[],
@@ -46,6 +46,7 @@ function scanParagraph(
   stack: StackEntry[],
   row: number | undefined,
   inTable: boolean,
+  table?: number,
 ): { placeholders: Placeholder[]; issues: ScanIssue[] } {
   const placeholders: Placeholder[] = []
   const issues: ScanIssue[] = []
@@ -101,6 +102,15 @@ function scanParagraph(
           location, token: parsed.token,
         })
       }
+      // 반복 단위는 행 하나다(§4.4.3). 열린 {{#rows}} 의 행에 또 여는 것은 뜻이 정해지지 않은 중첩이라 받지 않는다 —
+      // 행 안의 목록은 셀의 {{#items}} 로 편다. 같은 표의 같은 행만 본다({{/rows}} 를 생략한 옆 표의 행은 중첩이 아니다).
+      if (parsed.kind === 'rows' && stack.some((s) => s.kind === 'rows' && s.row === row && s.table === table)) {
+        issues.push({
+          code: 'TYPE_MISMATCH', severity: 'error',
+          message: `'${parsed.token}' nests {{#rows}} inside another {{#rows}} row; use {{#items}} in a cell instead`,
+          location, token: parsed.token,
+        })
+      }
       if (parsed.kind === 'slide' && stack.some((s) => s.kind === 'slide')) {
         issues.push({
           code: 'MULTIPLE_SLIDE_BLOCKS', severity: 'error',
@@ -133,7 +143,7 @@ function scanParagraph(
       }
       placeholders.push(placeholder)
       if (parsed.kind === 'rows' || parsed.kind === 'items' || parsed.kind === 'slide') {
-        stack.push({ token: parsed.token, kind: parsed.kind, row })
+        stack.push({ token: parsed.token, kind: parsed.kind, row, table })
       }
     }
     pos = closeIdx + 2
@@ -180,7 +190,8 @@ function scanPptxSlide(xml: string, slide: number, relXml: string | undefined, i
   const placeholders: Placeholder[] = []
   const stack: StackEntry[] = []
   const shapeIds: (string | undefined)[] = []
-  const tables: { row: number; col: number; rowVert: boolean }[] = []
+  const tables: { id: number; row: number; col: number; rowVert: boolean }[] = []
+  let tableSeq = 0
   let inTx = false
   let inP = false
   let inT = false
@@ -190,6 +201,7 @@ function scanPptxSlide(xml: string, slide: number, relXml: string | undefined, i
   let txParas: Para[] = []
   let txShape: string | undefined
   let txTable: { row: number; col: number } | undefined
+  let txTableId: number | undefined
 
   const flushText = () => {
     if (!inT) return
@@ -210,7 +222,7 @@ function scanPptxSlide(xml: string, slide: number, relXml: string | undefined, i
     flushText()
     inT = false
     const row = txTable?.row
-    txParas.push({ runs, location: locationFor(paraIndex), row })
+    txParas.push({ runs, location: locationFor(paraIndex), row, table: txTable ? txTableId : undefined })
     runs = []
     inP = false
   }
@@ -218,7 +230,7 @@ function scanPptxSlide(xml: string, slide: number, relXml: string | undefined, i
   const finishTx = () => {
     finishParagraph()
     for (const para of txParas) {
-      const found = scanParagraph(para.runs, para.location, stack, para.row, !!txTable)
+      const found = scanParagraph(para.runs, para.location, stack, para.row, !!txTable, para.table)
       placeholders.push(...found.placeholders)
       issues.push(...found.issues)
     }
@@ -234,7 +246,7 @@ function scanPptxSlide(xml: string, slide: number, relXml: string | undefined, i
       if (name === 'p:cNvPr' && shapeIds.length && shapeIds[shapeIds.length - 1] === undefined) {
         shapeIds[shapeIds.length - 1] = attr(attrs, 'id')
       }
-      if (name === 'a:tbl') tables.push({ row: -1, col: -1, rowVert: false })
+      if (name === 'a:tbl') tables.push({ id: tableSeq++, row: -1, col: -1, rowVert: false })
       if (name === 'a:tr' && tables.length) {
         const t = tables[tables.length - 1]
         t.row += 1
@@ -256,6 +268,7 @@ function scanPptxSlide(xml: string, slide: number, relXml: string | undefined, i
         txShape = shapeIds[shapeIds.length - 1]
         const t = tables[tables.length - 1]
         txTable = t && t.row >= 0 && t.col >= 0 ? { row: t.row, col: t.col } : undefined
+        txTableId = t?.id
       }
       if (name === 'a:p' && inTx) {
         finishParagraph()

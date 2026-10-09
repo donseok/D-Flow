@@ -21,7 +21,11 @@ const data = (count: number) => ({
 function modelFor(kind: FormKind, count: number): CatalogModel {
   const model = data(count) as unknown as Record<string, unknown>
   if (kind.startsWith('weekly')) { delete model.project; delete model.summary; delete model.wbs_items }
-  else if (kind.startsWith('issue')) { delete model.project; delete model.report; delete model.wbs_items; model.areas = [] }
+  else if (kind.startsWith('issue')) {
+    delete model.project; delete model.report; delete model.wbs_items
+    // 기본 양식의 반복은 전부 영역 아래다 — 이슈를 한 영역에 싣는다(이슈가 없으면 영역도 없다)
+    model.areas = count ? [{ code: 'A1', name: '검증 영역', summary: { total_count: count }, issues: model.issues, opportunities: [] }] : []
+  }
   else { delete model.report; delete model.summary }
   return model as unknown as CatalogModel
 }
@@ -71,8 +75,9 @@ describe.each(kinds)('기본 양식 %s', kind => {
       const slides = Object.keys(zip.files).filter(p => /^ppt\/slides\/slide\d+\.xml$/.test(p))
       const xml = (await Promise.all(slides.map(p => zip.file(p)!.async('string')))).join('\n')
       for (let n = 0; n < count; n++) expect(xml).toContain(kind.startsWith('weekly') ? `구분 ${n}` : `이슈 ${n}`)
-      // 주간: 표지 + 구분마다 한 장. 이슈 분석: 표지 + 영역별 종합 + 이슈마다 원인 분석 한 장(이 픽스처는 영역·개선기회 0건이라 그 장은 빠진다)
-      expect(slides.length).toBe(kind.startsWith('weekly') ? count + 1 : count + 2)
+      // 주간: 표지 + 구분마다 한 장. 이슈 분석: 표지 + 영역별 종합 + 영역 하나의 이슈 목록·원인 분석(행 상한 5 로 이어지는 장)·개선기회 한 장
+      const perArea = Math.ceil(count / DEFAULT_RENDER_OPTIONS[kind].max_rows_per_slide)
+      expect(slides.length).toBe(kind.startsWith('weekly') ? count + 1 : 2 + (count ? perArea * 2 + 1 : 0))
     }
   })
 })

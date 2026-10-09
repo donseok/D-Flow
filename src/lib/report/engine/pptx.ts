@@ -353,9 +353,15 @@ class Renderer {
     const texts = cells.map((cell) => this.cellText(cell, child))
     const budget = this.options.max_lines_per_cell
     if (!texts.some((value) => visualLines(value) > budget)) return [{ item, literals: null, suffix: '' }]
-    const chunks = texts.map((value) => (
-      visualLines(value) > budget ? splitIssueAnalysisTextForRows(value, FULLWIDTH_PER_LINE, budget) : [value]
-    ))
+    const chunks = texts.map((value, index) => {
+      if (visualLines(value) <= budget) return [value]
+      if (!hasItemsBlock(cells[index])) return splitIssueAnalysisTextForRows(value, FULLWIDTH_PER_LINE, budget)
+      // 셀 안 목록은 문단(항목 줄) 경계에서 나눈다 — 표 밖 {{#items}} 의 paginateLines 와 같은 규칙이라 항목 한 줄이
+      // 두 행에 찢기지 않는다. 한 문단이 혼자 예산을 넘을 때만 그 문단을 글자 단위로 더 나눈다.
+      return paginateLines(value.split('\n'), budget).map((lines) => lines.join('\n')).flatMap((page) => (
+        visualLines(page) > budget ? splitIssueAnalysisTextForRows(page, FULLWIDTH_PER_LINE, budget) : [page]
+      ))
+    })
     const count = Math.max(1, ...chunks.map((chunk) => chunk.length))
     if (count <= 1) return [{ item, literals: null, suffix: '' }]
     return Array.from({ length: count }, (_, index) => ({
@@ -366,11 +372,22 @@ class Renderer {
   }
 
   private cellText(cell: string, ctx: Ctx): string {
+    // 셀 안 {{#items}}(§4.4.3)는 렌더와 같은 길로 펼친 문단을 잰다. 토큰만 지우고 재면 안쪽 항목의 필드를
+    // 행 항목에서 찾다 멈추고, 넘침 조각(literals)에 안쪽 목록이 실리지도 않는다. {{#items}} 가 없는 셀은 아래 옛 길 그대로다.
+    if (hasItemsBlock(cell)) {
+      return paragraphSpans(this.renderFragment(cell, ctx))
+        .map((para) => parseParagraph(para.xml).runs.map((run) => run.text).join(''))
+        .join('\n')
+    }
     const paras = paragraphSpans(cell)
     return paras.map((para) => fillPlain(parseParagraph(para.xml).runs.map((run) => run.text).join(''), (token, path) => this.text(token, path, ctx))).join('\n')
   }
 }
 
+
+function hasItemsBlock(xml: string): boolean {
+  return /\{\{#items[ \t]/.test(xml)
+}
 
 function insideBlock(ctx: Ctx): boolean {
   return ctx.scope.some((token) => token.startsWith('{{#items') || token.startsWith('{{#rows'))

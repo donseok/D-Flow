@@ -1,5 +1,5 @@
 // /api/issue-analysis 가 제품 기본 양식으로 끝까지 도는지(정본 §4.8) — 양식 로드·스캔·카탈로그·엔진은 실물이고, 세션·DB 만 대역이다.
-// 저장된 분석 실행(영역·이슈·원인·개선기회)이 표지 → 영역별 종합 → 이슈 목록 → 원인 분석 → 개선기회 장에 실린다.
+// 저장된 분석 실행(영역·이슈·원인·개선기회)이 표지 → 영역별 종합 → 이슈 목록 → 원인 분석 → 개선기회 장에 실린다(뒤 셋은 영역마다 한 장).
 import { TEST_AREAS, TEST_SEVERITY_CODES } from '../fixtures/issue-areas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
@@ -103,27 +103,27 @@ describe('GET /api/issue-analysis — 제품 기본 양식', () => {
     expect(text).toContain('작성 작성자 갑')
     for (const area of [AREA_A, AREA_B]) {
       expect(text, area.name).toContain(`${area.code} ${area.name}`)
-      expect(text).toContain(`${area.code} ${area.name} · 이슈 목록`)
+      for (const page of ['이슈 목록', '원인 분석', '개선기회']) expect(text).toContain(`${area.code} ${area.name} · ${page}`)
     }
-    for (const code of ['ISS-001', 'ISS-002', 'ISS-003']) expect(text).toContain(`${code} · 원인 분석`)
+    expect(text.split(' · 원인 분석').length - 1).toBe(2)   // 이슈 3건이 영역 2장에 행으로 실린다
     for (const value of [
       '승인 요청 3건이 제때 전달되지 않는다.', '운영 1팀', '결재 시스템',
-      '승인 경로가 문서에만 있다.', '책임자를 정한 규정이 없다.', '알림이 꺼져 있다.', '추가 확인 필요', '인수인계 절차가 없다.',
-      '개선기회 1 · 승인 흐름 일원화', '요청과 알림을 한 화면에서 처리한다.', '연결 이슈 ISS-001', '연결 이슈 ISS-002', '연결 이슈 ISS-003',
+      '승인 경로가 문서에만 있다.', '근본 원인: 책임자를 정한 규정이 없다.', '알림이 꺼져 있다.', '근본 원인: 추가 확인 필요', '근본 원인: 인수인계 절차가 없다.',
+      '승인 흐름 일원화', '요청과 알림을 한 화면에서 처리한다.', 'ISS-001 검토 지연 1', 'ISS-002 검토 지연 2', 'ISS-003 검토 지연 3',
     ]) expect(text, value).toContain(value)
     expect(text).not.toContain('{{')
     expect((await zipTextParts(bytes)).flatMap((p) => findSentinels(p.text, SENTINELS_BY_SP.SP6))).toEqual([])
   })
 
-  it('원인 분석이 없는 옛 저장 실행도 200 이다 — 원인 표는 머리 행만 남고 나머지 장은 그대로다', async () => {
+  it('원인 분석이 없는 옛 저장 실행도 200 이다 — 원인 분석 장은 이슈 행에 빈 원인 칸으로 남고 나머지 장은 그대로다', async () => {
     mocks.loadSavedIssueAnalysisRun.mockResolvedValue(savedRun(false))
     const response = await GET(request())
     expect(response.status).toBe(200)
     const text = await slideText(new Uint8Array(await response.arrayBuffer()))
-    expect(text).toContain('ISS-003 · 원인 분석')
-    expect(text).toContain('원인 분류')
+    expect(text).toContain(`${AREA_B.code} ${AREA_B.name} · 원인 분석`)
     expect(text).not.toContain('승인 경로가 문서에만 있다.')
-    expect(text).toContain('개선기회 1 · 인수인계 표준화')
+    expect(text).not.toContain('근본 원인:')
+    expect(text).toContain('인수인계 표준화')
     expect(text).not.toContain('{{')
   })
 
