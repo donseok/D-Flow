@@ -89,6 +89,7 @@ const ERR_CARRY_SOURCE = '이월 원본을 불러오지 못했습니다. 잠시 
 const ERR_CREATE = '주차 시트를 만들지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_CARRY_CUSTOM = '이월할 추가 정보 값이 지금의 필드 설정과 맞지 않아 주차 시트를 만들지 못했습니다. 프로젝트 설정의 추가 필드를 확인하세요.'
 const ERR_TITLE_SAVE = '제목을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_TITLE_CONFLICT = '다른 사용자가 제목을 먼저 바꿨습니다. 저장하지 않았습니다.'
 const ERR_CELL_SAVE = '셀을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_CELL_CONFLICT = '다른 사용자가 이 칸을 먼저 바꿨습니다. 저장하지 않았습니다.'
 const ERR_SCOPE = '대상을 확인할 수 없어 저장을 중단했습니다.'
@@ -216,9 +217,11 @@ export async function createWeeklyReport(
   return { ok: true, reportId: r.report_id, status: r.status }
 }
 
-/** 시트 제목 저장 — ''이면 화면이 기본 제목(프로젝트명+주차)을 합성한다. */
+/** 시트 제목 저장 — ''이면 화면이 기본 제목(프로젝트명+주차)을 합성한다.
+ *  expected(SPU1, 개정 §5.8 — 무통보 덮어쓰기 0건): 편집을 시작할 때 본 제목(저장 꼴 — 기본 제목이면 ''). 있으면 그 값을 조건으로 쓰고,
+ *  0행이면 다시 읽어 가린다 — 그새 다른 사람이 바꿨으면 쓰지 않고 `conflict` 와 그 제목(latest)을 돌려준다. 없으면 옛 무조건 저장이다. */
 export async function saveWeeklyTitle(
-  projectId: string, reportId: string, title: string,
+  projectId: string, reportId: string, title: string, expected?: string,
 ): Promise<WeeklyActionResult> {
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
@@ -226,16 +229,31 @@ export async function saveWeeklyTitle(
   if (!mod.ok) return { ok: false, error: mod.error }
   const t = title.trim()
   if (t.length > TITLE_MAX) return { ok: false, error: `제목은 ${TITLE_MAX}자 이하여야 합니다.` }
+  if (expected !== undefined && (typeof expected !== 'string' || expected.length > TITLE_MAX)) return { ok: false, error: '잘못된 요청입니다.' }
 
   const sb = await createServerClient()
   // 대상 회차가 판정 기준 프로젝트의 것인지 쿼리에 못 박는다 — 미결합 reportId 로 쓰면 A 의 멤버가 B 의 회차 제목을 고칠 수 있다.
   // updated_at 은 보내지 않는다 — before update 트리거(weekly_reports_touch)가 채우고 세션 열 권한은 title 뿐이다(Q13 — 보내면 42501).
-  const { data, error } = await sb.from('weekly_reports')
+  let q = sb.from('weekly_reports')
     .update({ title: t })
     .eq('id', reportId).eq('project_id', projectId)
-    .select('id')
+  // 값 CAS — 내가 본 제목일 때만 쓴다(title 은 NOT NULL, 기본 ''). 읽고 견준 뒤 쓰는 것보다 사이가 없다
+  if (expected !== undefined) q = q.eq('title', expected)
+  const { data, error } = await q.select('id')
   if (error) return { ok: false, error: failWith('weekly/title', error, ERR_TITLE_SAVE) }
-  if (!data || data.length === 0) return { ok: false, error: '대상 회차를 찾을 수 없습니다.' }
+  if (!data || data.length === 0) {
+    if (expected === undefined) return { ok: false, error: '대상 회차를 찾을 수 없습니다.' }
+    // 0행 — 회차가 없거나 제목이 그새 달라졌다. 다시 읽어 가린다(읽기 실패를 '충돌 없음'으로도 '회차 없음'으로도 읽지 않는다 — 3원칙)
+    const { data: now, error: readErr } = await sb.from('weekly_reports')
+      .select('id, title')
+      .eq('id', reportId).eq('project_id', projectId)
+      .maybeSingle()
+    if (readErr) return { ok: false, error: failWith('weekly/title', readErr, ERR_TITLE_SAVE) }
+    if (!now) return { ok: false, error: '대상 회차를 찾을 수 없습니다.' }
+    const latest = ((now as { title: string | null }).title ?? '')
+    if (latest !== t) return { ok: false, error: ERR_TITLE_CONFLICT, conflict: true, latest }
+    return { ok: true }   // 이미 같은 제목이다(다른 사람이 같은 값으로, 또는 응답을 잃은 내 앞선 저장) — 덮을 것이 없다
+  }
   revalidateWeekly()
   return { ok: true }
 }

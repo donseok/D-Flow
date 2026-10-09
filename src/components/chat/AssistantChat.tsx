@@ -23,6 +23,7 @@ import type {
   ConversationStateV1,
 } from '@/lib/ai/chat/protocol'
 import { updateActual, updateWbsFields } from '@/app/actions/wbs'
+import { applyCommandProposal } from '@/lib/ai/commands/apply'
 
 type Role = 'user' | 'assistant'
 interface Msg {
@@ -538,16 +539,16 @@ export function AssistantChat() {
           setMessages(prev => prev.map(m => (m.id === msgId ? { ...m, proposalState: state } : m)))
         const say = (content: string) =>
           setMessages(prev => [...prev, { id: nextId(), role: 'assistant', content }])
-        // 원시 params 사용 — 표시 문자열('80%', '미정') 역파싱 금지
-        const result = p.params.actualPct !== undefined
-          ? await updateActual(p.target.id, p.params.actualPct, p.target.currentActual)
-          : await updateWbsFields(p.target.id, {
-              ...(p.params.plannedStart !== undefined ? { plannedStart: p.params.plannedStart } : {}),
-              ...(p.params.plannedEnd !== undefined ? { plannedEnd: p.params.plannedEnd } : {}),
-            })
+        // 원시 params·기대값(제안을 만들 때 본 값)은 applyCommandProposal 이 싣는다 — 확인을 누르는 사이 바뀐 값을 덮지 않는다(SPU1, 개정 §5.8)
+        const result = await applyCommandProposal(p, { updateActual, updateWbsFields })
         if (result.ok) {
           mark('applied')
           say(`✓ 변경했어요. ${p.target.name} — ${p.changes.map(c => `${c.label} ${c.after}`).join(', ')}`)
+          router.refresh()
+        } else if (result.conflict) {
+          // 제안이 낡았다 — 쓰지 않았다. 서버의 현재 값을 말해 주고 화면을 다시 읽는다(낡은 제안은 닫아 다시 누를 수 없게 한다)
+          mark('cancelled')
+          say(`적용하지 않았어요 — 제안을 만든 뒤 다른 사용자가 ${p.target.name} 의 값을 바꿨어요${result.latestText ? ` (지금: ${result.latestText})` : ''}. 최신 값을 확인하고 다시 요청해 주세요.`)
           router.refresh()
         } else {
           mark('cancelled')

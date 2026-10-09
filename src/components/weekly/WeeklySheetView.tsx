@@ -920,12 +920,15 @@ export function WeeklySheetView({
             initial={report.title}
             fallback={`▣ 주간업무보고 - ${projectName}(${weekTitle})`}
             readOnly={!canEditCells}
-            onSave={async t => {
-              const res = await saveWeeklyTitle(projectId, report.id, t)
+            onSave={async (t, expected) => {
+              const res = await saveWeeklyTitle(projectId, report.id, t, expected)
+              // 그새 다른 사람이 제목을 바꿨다 — 실패 토스트가 아니라 비교로 잇는다(SPU1, 개정 §5.8)
+              if (res.conflict && res.latest !== undefined) return { conflict: res.latest }
               if (!res.ok) { toast({ title: '제목 저장 실패', description: res.error, variant: 'error' }); return false }
               router.refresh()
               return true
             }}
+            onReload={() => router.refresh()}
           />
           {/* 업무영역 1단(영역마다 1행) + 내용 4열. 행 구조 편집은 없다 — 영역 추가·비활성은 프로젝트 설정의 업무영역에서. */}
           {/* 열 폭: 업무영역 10% · 금주 내용 27% · 금주 이슈 19% · 차주 내용 26% · 차주 이슈 18%(합 100). colgroup 안에는 주석·공백을
@@ -1235,17 +1238,35 @@ function ExportPptButton({ projectId, weekStart, disabled, onBeforeExport }: {
 /** 시트 제목 편집기 — 레퍼런스 B1 룩(볼드·검정)의 borderless input. blur 시 변경분만 저장.
  *  기본 제목과 같은 값은 ''로 저장해 주차가 바뀌어도 기본 제목이 자연히 따라오게 한다.
  *  savedRef는 저장 '성공' 후에만 전진 — 실패 시 같은 값 blur로 재시도가 가능해야 한다(리뷰 확정).
- *  서버 제목 변경(타 사용자)은 router.refresh로 내려온 initial을 비포커스 상태에서만 채택. */
-function TitleEditor({ initial, fallback, readOnly, onSave }: {
-  initial: string; fallback: string; readOnly: boolean; onSave: (title: string) => Promise<boolean>
+ *  서버 제목 변경(타 사용자)은 router.refresh로 내려온 initial을 비포커스 상태에서만 채택.
+ *  저장은 내가 마지막으로 확인한 서버 제목(savedRef)을 기대값으로 싣는다(SPU1, 개정 §5.8) — 그새 남이 바꿨으면 서버가 쓰지 않고, 여기서
+ *  비교(ConflictResolver)를 띄운다. 입력은 그대로 둔다. */
+function TitleEditor({ initial, fallback, readOnly, onSave, onReload }: {
+  initial: string; fallback: string; readOnly: boolean
+  /** expected — 저장 꼴의 기대값(기본 제목이면 ''). 충돌이면 서버의 현재 제목(저장 꼴)을 돌려준다 */
+  onSave: (title: string, expected: string) => Promise<boolean | { conflict: string }>
+  /** '서버 값 받기' 뒤 화면을 다시 읽는다 */
+  onReload?: () => void
 }) {
   const [v, setV] = useState(initial || fallback)
   const savedRef = useRef(initial || fallback)
   const focusedRef = useRef(false)
+  const [conflict, setConflict] = useState<{ mine: string; latest: string; base: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  // 비교가 떠 있는 동안은 입력이 포커스를 잃어도 편집 중이다 — 내려온 서버 제목으로 입력을 덮지 않는다
+  const conflictOpenRef = useRef(false)
+  conflictOpenRef.current = conflict !== null
   useEffect(() => {
     const server = initial || fallback
-    if (!focusedRef.current && server !== savedRef.current) { savedRef.current = server; setV(server) }
+    if (!focusedRef.current && !conflictOpenRef.current && server !== savedRef.current) { savedRef.current = server; setV(server) }
   }, [initial, fallback])
+  const stored = (shown: string) => (shown === fallback ? '' : shown)
+  /** next(화면 꼴)를 저장한다 — 기대값은 savedRef(내가 확인한 서버 제목). 충돌이면 비교를 연다 */
+  const save = async (next: string) => {
+    const res = await onSave(stored(next), stored(savedRef.current))
+    if (res === true) { savedRef.current = next; return }
+    if (res !== false) setConflict({ mine: next, latest: res.conflict || fallback, base: savedRef.current })
+  }
   const onBlur = async () => {
     focusedRef.current = false
     if (readOnly) return // saveWeeklyTitle 은 requireProjectMember — 조회 전용은 저장 시도조차 하지 않는다
@@ -1253,14 +1274,38 @@ function TitleEditor({ initial, fallback, readOnly, onSave }: {
     if (t === '') setV(fallback)
     const next = t === '' || t === fallback ? fallback : t
     if (next === savedRef.current) return
-    if (await onSave(next === fallback ? '' : next)) savedRef.current = next
+    await save(next)
+  }
+  /** 내 값으로 저장 — 방금 본 서버 제목을 기대값으로 한 번만 다시 쓴다(또 어긋나면 비교가 새 값으로 다시 열린다) */
+  const keepMine = async () => {
+    if (!conflict) return
+    const { mine, latest } = conflict
+    savedRef.current = latest
+    setConflict(null); setBusy(true)
+    await save(mine)
+    setBusy(false)
+  }
+  /** 서버 값 받기 — 쓰지 않고 입력을 서버 제목으로 바꾼다 */
+  const takeLatest = () => {
+    if (!conflict) return
+    savedRef.current = conflict.latest
+    setV(conflict.latest)
+    setConflict(null)
+    onReload?.()
   }
   return (
-    <input
-      value={v} onChange={e => setV(e.target.value)} onBlur={onBlur}
-      onFocus={() => { focusedRef.current = true }}
-      readOnly={readOnly} maxLength={200} aria-label="시트 제목"
-      className="w-full border-0 bg-surface px-0.5 pb-1.5 pt-0.5 text-[15px] font-extrabold text-fg outline-none placeholder:text-fg-muted focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-border-focus"
-    />
+    <>
+      <input
+        value={v} onChange={e => setV(e.target.value)} onBlur={onBlur}
+        onFocus={() => { focusedRef.current = true }}
+        readOnly={readOnly} maxLength={200} aria-label="시트 제목"
+        className="w-full border-0 bg-surface px-0.5 pb-1.5 pt-0.5 text-[15px] font-extrabold text-fg outline-none placeholder:text-fg-muted focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-border-focus"
+      />
+      <ConflictResolver
+        open={!!conflict}
+        fields={conflict ? [{ key: 'title', label: '시트 제목', mine: conflict.mine, latest: conflict.latest, base: conflict.base }] : []}
+        onKeepMine={() => void keepMine()} onTakeLatest={takeLatest} onContinue={() => setConflict(null)} busy={busy}
+      />
+    </>
   )
 }

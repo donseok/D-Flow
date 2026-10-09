@@ -18,6 +18,7 @@ import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 import { ConflictResolver } from '@/components/ui/ConflictResolver'
 import { removeErrorKey } from '@/lib/attachments/removeErrors'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
+import { moveExpectation } from '@/lib/wbs/moveExpectation'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { makeStoragePath } from '@/lib/domain/storagePath'
 import { stampedFileName } from '@/lib/domain/minutes'
@@ -310,6 +311,16 @@ export function RowDetailPanel({
     run(() => addSubAct(item.id, subTeam, subKind), () => { setSubOpen(false); setSubTeam(null); setSubKind('primary') })
   }
   const doDelete = () => run(() => deleteWbsItem(item.id), () => onClose())
+  // 순서 이동은 내가 본 자리(부모·sort_order·맞바꿀 이웃)를 싣는다(SPU1, 개정 §5.8). 그새 남이 순서를 바꿨으면 서버가 옮기지 않는다 —
+  // 비교할 '값'이 없는 조작이라 알리고 다시 읽는다(낡은 화면에서 한 번 더 누르면 엉뚱한 이웃과 바뀐다)
+  async function move(dir: 'up' | 'down') {
+    setBusy(true); setErr(null)
+    const res = await moveWbsItem(item.id, dir, moveExpectation(item, allItems, dir))
+    setBusy(false)
+    if (!res.ok && !res.conflict) { setErr(res.error ?? t('wbs.errGeneric')); return }
+    if (res.conflict) setErr(t('common.changedMeanwhile'))
+    router.refresh()
+  }
 
   async function addDependency() {
     const lag = Number(lagDays)
@@ -320,7 +331,9 @@ export function RowDetailPanel({
     setDependencyBusy(true); setDependencyErr(null)
     const result = await addTaskDependency(projectId, predecessorId, item.id, dependencyType, lag)
     setDependencyBusy(false)
-    if (!result.ok) { setDependencyErr(result.error ?? t('wbs.errGeneric')); return }
+    if (!result.ok && !result.conflict) { setDependencyErr(result.error ?? t('wbs.errGeneric')); return }
+    // 그새 다른 사람이 같은 연결을 이었다 — 실패가 아니다. 알리고 다시 읽어 그 연결을 보인다(SPU1)
+    if (result.conflict) setDependencyErr(t('common.changedMeanwhile'))
     setDependencyOpen(false); setPredecessorId(''); setLagDays('0')
     router.refresh()
   }
@@ -329,7 +342,9 @@ export function RowDetailPanel({
     setDependencyBusy(true); setDependencyErr(null)
     const result = await removeTaskDependency(id)
     setDependencyBusy(false)
-    if (!result.ok) { setDependencyErr(result.error ?? t('wbs.errGeneric')); return }
+    if (!result.ok && !result.conflict) { setDependencyErr(result.error ?? t('wbs.errGeneric')); return }
+    // 이미 지워진 연결 — 알리고 다시 읽어 목록에서 걷는다(SPU1)
+    if (result.conflict) setDependencyErr(t('common.changedMeanwhile'))
     router.refresh()
   }
 
@@ -706,8 +721,8 @@ export function RowDetailPanel({
                     <GitBranchPlus className="h-3.5 w-3.5" /> {t('wbs.addSubAct')}
                   </button>
                 )}
-                <button onClick={() => run(() => moveWbsItem(item.id, 'up'))} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs" aria-label={t('wbs.moveUp')}><ChevronUp className="h-3.5 w-3.5" /></button>
-                <button onClick={() => run(() => moveWbsItem(item.id, 'down'))} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs" aria-label={t('wbs.moveDown')}><ChevronDown className="h-3.5 w-3.5" /></button>
+                <button onClick={() => void move('up')} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs" aria-label={t('wbs.moveUp')}><ChevronUp className="h-3.5 w-3.5" /></button>
+                <button onClick={() => void move('down')} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs" aria-label={t('wbs.moveDown')}><ChevronDown className="h-3.5 w-3.5" /></button>
                 <button onClick={() => setConfirmDel(true)} disabled={busy} className="btn btn-ghost h-8 px-2.5 text-xs text-danger hover:bg-danger-weak"><Trash2 className="h-3.5 w-3.5" /> {t('common.delete')}</button>
               </div>
               {addName != null && canChild && (

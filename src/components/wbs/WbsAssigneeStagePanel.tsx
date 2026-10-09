@@ -13,6 +13,7 @@ import { WbsSpecPanel } from './WbsSpecPanel'
 import { AssigneeComboBox } from './AssigneeComboBox'
 import { useDebouncedSave } from './useDebouncedSave'
 import { PendingSaveChip } from './PendingSaveChip'
+import { ConflictResolver } from '@/components/ui/ConflictResolver'
 import type { DictKey } from '@/lib/i18n/dict'
 import { STAGE_CODES, type StageCode } from '@/lib/domain/stageLabels'
 import { useStageLabel } from './StageLabelsProvider'
@@ -32,6 +33,8 @@ type Loaded = AssigneeStage & {
 /** 담당·단계·dev workflow 액션 반환의 합집합. count·cascadeFailed 는 cascade 계열만 실어 온다. */
 type AssigneeStageResult = {
   ok: boolean; error?: string; count?: number; cascadeFailed?: boolean; orderCreated?: boolean
+  /** 담당자 값 CAS 의 충돌(SPU1) — 쓰지 않았다. latest 는 서버의 현재 담당자(명단 id, null=미지정) */
+  conflict?: boolean; latest?: string | null
   /** 일괄 OFF 에서 위임 때문에 대상에서 빠진 항목 수(setWbsDevWorkflow). */
   skippedDelegated?: number
 }
@@ -74,6 +77,12 @@ export function WbsAssigneeStagePanel({
   const [devWorkflowWarn, setDevWorkflowWarn] = useState(false)
   const [devWorkflowSkipped, setDevWorkflowSkipped] = useState<number | null>(null)
   const [approving, setApproving] = useState(false)
+  // 담당자 저장 충돌(SPU1, 개정 §5.8) — 내가 고른 값·서버의 현재 값·패널을 열 때 본 값. 조용히 덮지도 버리지도 않고 비교로 잇는다.
+  const [assigneeConflict, setAssigneeConflict] = useState<{ mine: string | null; latest: string | null; base: string | null } | null>(null)
+  const [conflictBusy, setConflictBusy] = useState(false)
+  // debounce 훅의 실패 콜백은 문구만 받는다 — 충돌은 저장 thunk 가 여기 적어 두고 onFailed 가 꺼내 비교를 띄운다
+  // (분리 flush 는 onFailed 를 부르지 않는다 — 남은 메모가 다른 항목의 실패에 붙지 않게 항목 id 를 같이 적고 저장마다 새로 쓴다)
+  const conflictNoteRef = useRef<{ itemId: string; mine: string | null; latest: string | null; base: string | null } | null>(null)
   // 전파 체크는 저장이 실제로 나가는 순간(flush)의 값을 쓴다 — 담당을 고른 뒤 5초 안에 전파 체크를
   // 바꿔도 반영되도록. commit 클로저는 set 시점에 잡히므로 ref 로 읽는다.
   const cascadeRef = useRef(cascade)
@@ -85,6 +94,7 @@ export function WbsAssigneeStagePanel({
     let alive = true
     setLoaded(null)
     setErr(null)
+    setAssigneeConflict(null)
     getWbsAssigneeStage(itemId).then(r => { if (alive) setLoaded(r ?? 'error') })
     return () => { alive = false }
   }, [itemId])
@@ -94,13 +104,21 @@ export function WbsAssigneeStagePanel({
   // 가 지나면(또는 패널 닫힘·항목 변경·「지금 저장」) 모아서 순서대로 저장하고 refresh 는 1회만 부른다.
   // 화면은 quick.view 로 낙관 표시하고, 실패한 필드는 대기에서 빠져 loaded(서버 확정 값)로 돌아간다.
   const stageName = useStageLabel()   // 프로젝트의 단계 이름(SP5b W2) — 없는 칸은 사전 이름
+  /** 담당자 저장 — base 는 내가 본 서버 값(기대값). 전파 체크는 저장이 나가는 순간의 값을 쓴다 */
+  const saveAssignee = (memberId: string | null, base: string | null) => (hasChildren && cascadeRef.current && memberId !== null)
+    ? setWbsAssigneeCascade(itemId, memberId, base)
+    : setWbsAssignee(itemId, memberId, undefined, base)
+  // 훅은 set 시점의 commit 을 잡아 둔다 — 그때의 loaded 가 곧 사용자가 보고 고른 값이다
+  const seenAssignee = loaded && loaded !== 'error' ? loaded.assigneeMemberId : null
   const quick = useDebouncedSave<AssigneeStage, AssigneeStageResult>({
     scope: itemId,
     baseline: loaded && loaded !== 'error' ? loaded : null,
     commit: {
-      assigneeMemberId: memberId => (hasChildren && cascadeRef.current && memberId !== null)
-        ? setWbsAssigneeCascade(itemId, memberId)
-        : setWbsAssignee(itemId, memberId),
+      assigneeMemberId: async memberId => {
+        const res: AssigneeStageResult = await saveAssignee(memberId, seenAssignee)
+        conflictNoteRef.current = res.conflict ? { itemId, mine: memberId, latest: res.latest ?? null, base: seenAssignee } : null
+        return res
+      },
       stage: stage => setWbsStage(itemId, stage as Stage | null),
       // OFF 는 ready 주문 취소를 동반하는 서버 동작(브리프) — 확인 모달 없이 실행하고 결과 문구로만
       // 알린다(브라우저 confirm() 은 자동화를 막아 세션 규칙상 금지).
@@ -124,6 +142,14 @@ export function WbsAssigneeStagePanel({
       }
     },
     onFailed: (key, value, error) => {
+      const note = key === 'assigneeMemberId' ? conflictNoteRef.current : null
+      if (note && note.itemId === itemId) {
+        // 충돌 — 오류 문구 대신 비교를 띄운다. 기준(loaded)은 서버의 현재 값으로 옮겨 화면이 낡은 담당자를 보이지 않게 한다
+        conflictNoteRef.current = null
+        setLoaded(prev => (prev && prev !== 'error' ? { ...prev, assigneeMemberId: note.latest } : prev))
+        setAssigneeConflict(note)
+        return
+      }
       const usedCascade = key === 'assigneeMemberId' && hasChildren && cascadeRef.current && value !== null
       setErr(error || (usedCascade ? t('wbs.assigneeCascadeFail') : t('wbs.errGeneric')))
     },
@@ -153,6 +179,32 @@ export function WbsAssigneeStagePanel({
   }
 
   const memberName = (id: string | null) => id ? members.find(m => m.id === id)?.name ?? id : null
+  /** 비교에서 '내 값으로 저장' — 방금 본 서버 값(latest)을 기대값으로 한 번만 다시 쓴다. 또 어긋나면 비교를 새 값으로 다시 연다 */
+  async function keepMineAssignee() {
+    if (!assigneeConflict) return
+    const { mine, latest } = assigneeConflict
+    setConflictBusy(true); setErr(null)
+    const res: AssigneeStageResult = await saveAssignee(mine, latest)
+    setConflictBusy(false)
+    if (res.conflict) {
+      setLoaded(prev => (prev && prev !== 'error' ? { ...prev, assigneeMemberId: res.latest ?? null } : prev))
+      setAssigneeConflict({ mine, latest: res.latest ?? null, base: latest })
+      return
+    }
+    setAssigneeConflict(null)
+    if (!res.ok) { setErr(res.error || t('wbs.errGeneric')); return }
+    if (typeof res.count === 'number' && res.count > 0) setCascadeResult(res.count)
+    if (res.cascadeFailed) setCascadeWarn(true)
+    setLoaded((await getWbsAssigneeStage(itemId)) ?? 'error')   // 배정은 단계도 바꿀 수 있다 — 통째로 다시 읽는다(onFlushed 와 같은 이유)
+    router.refresh()
+  }
+  /** 비교에서 '서버 값 받기' — 쓰지 않고 다시 읽는다 */
+  async function takeLatestAssignee() {
+    setAssigneeConflict(null)
+    setLoaded((await getWbsAssigneeStage(itemId)) ?? 'error')
+    router.refresh()
+  }
+  const assigneeText = (id: string | null) => memberName(id) ?? t('wbs.assigneeUnassignedOption')
   // 낙관 표시값 — 대기 중인 변경이 있으면 그 값, 없으면 서버 확정 값. loaded 가 객체일 때만 쓰인다.
   const view: AssigneeStage = quick.view ?? { assigneeMemberId: null, stage: null, devWorkflow: false }
   // 위임된 작업은 단계를 승인·반려로만 바꾼다(잠금). 위임 없이 reported 주문만 남은 드문 경우는 서버 거부 문구가 드러낸다.
@@ -348,6 +400,15 @@ export function WbsAssigneeStagePanel({
       {/* 선행·후행 항목 — 명세에서 분리한 독립 섹션(실행 순서 축). */}
 
       <WbsSpecPanel itemId={itemId} editable={editable} />
+      <ConflictResolver
+        open={!!assigneeConflict}
+        fields={assigneeConflict ? [{
+          key: 'assignee', label: t('wbs.assigneeLabel'),
+          mine: assigneeText(assigneeConflict.mine), latest: assigneeText(assigneeConflict.latest), base: assigneeText(assigneeConflict.base),
+        }] : []}
+        onKeepMine={() => void keepMineAssignee()} onTakeLatest={() => void takeLatestAssignee()}
+        onContinue={() => setAssigneeConflict(null)} busy={conflictBusy}
+      />
     </div>
   )
 }

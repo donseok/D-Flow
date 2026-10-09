@@ -80,6 +80,7 @@ export const commonEn: Record<keyof typeof commonKo, string> = {
   'common.conflictEmpty': '(empty)',
   'common.conflictKeepMine': 'Save my value',
   'common.conflictTakeLatest': 'Use server value',
+  'common.changedMeanwhile': 'This changed in the meantime — reloaded the latest',
   'common.outcomeChecking': 'Checking the save result',
   'common.outcomeUnknown': 'The save result could not be confirmed. Your input is kept — saving again checks whether it was applied first.',
   'common.outcomeNotApplied': 'Not saved. Your input is kept — save again.',

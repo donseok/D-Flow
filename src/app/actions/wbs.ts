@@ -2,6 +2,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
+import { ERR_MISSING } from '@/lib/authz/errors'
 import { isProjectAdmin } from '@/lib/domain/authz'
 import { actorTeamIdsFor } from '@/lib/domain/permissions'
 import { revalidatePath } from 'next/cache'
@@ -134,6 +135,10 @@ const ERR_ADD = E.add
 const ERR_DELETE = '삭제하지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_MOVE = '순서를 바꾸지 못했습니다 — 잠시 후 다시 시도하세요.'
 const ERR_MOVE_DENIED = '순서 변경 실패: 저장 권한이 없습니다(관리자만 가능)'
+// "그새 바뀜"(SPU1, 개정 §5.8) — 값 비교가 어울리지 않는 조작(순서·의존성)이 conflict 와 함께 싣는 문구. 화면은 사전 문구로 알리고 다시 읽는다.
+const ERR_MOVE_STALE = '그새 다른 사용자가 순서를 바꿨습니다. 옮기지 않았습니다 — 최신 순서를 확인하세요.'
+const ERR_DEP_EXISTS = '이미 연결된 선행 작업입니다'
+const ERR_DEP_GONE = '이미 삭제된 연결입니다.'
 
 /** 실적% 입력 — 말단(자식 없는) 항목만. level 은 보지 않는다: 롤업(computeNode)이 자식 유무로
  *  말단을 판정하므로, 자식 없는 Task/Phase 도 자기 actual_pct 가 그대로 상위로 올라간다.
@@ -574,14 +579,16 @@ export async function updateWbsFields(
   return { ok: true }
 }
 
-/** 선행→후행 작업 의존성 추가 — 기준 계획은 바꾸지 않고 예상 일정 계산에 사용한다. */
+/** 선행→후행 작업 의존성 추가 — 기준 계획은 바꾸지 않고 예상 일정 계산에 사용한다.
+ *  같은 연결이 이미 있으면(화면이 연 뒤 다른 사람이 먼저 이었다) 다시 쓰지 않고 conflict 로 알린다(SPU1, 개정 §5.8) — 값을 덮는 조작이 아니라
+ *  기대값 대조 대신 DB 유일 제약(23505)이 가린다. 화면은 실패로 그리지 않고 다시 읽어 그 연결을 보인다. */
 export async function addTaskDependency(
   projectId: string,
   predecessorId: string,
   successorId: string,
   type: DependencyType,
   lagDays = 0,
-): Promise<{ ok: boolean; error?: string; id?: string }> {
+): Promise<{ ok: boolean; error?: string; id?: string; conflict?: boolean }> {
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   if (!projectId || !predecessorId || !successorId) return { ok: false, error: '연결할 작업을 선택하세요' }
@@ -656,7 +663,7 @@ export async function addTaskDependency(
     })
     .select('id')
     .single()
-  if (error?.code === '23505') return { ok: false, error: '이미 연결된 선행 작업입니다' }
+  if (error?.code === '23505') return { ok: false, conflict: true, error: ERR_DEP_EXISTS }
   if (error) return { ok: false, error: failWith('wbs.addTaskDependency', error, ERR_ADD) }
 
   const { error: logErr } = await sb.from('change_logs').insert({
@@ -671,12 +678,15 @@ export async function addTaskDependency(
   return { ok: true, id: inserted.id as string }
 }
 
-/** 작업 의존성 삭제 — 프로젝트 관리자 이상 전용. */
+/** 작업 의존성 삭제 — 프로젝트 관리자 이상 전용.
+ *  이미 지워진 연결이면(화면이 연 뒤 다른 사람이 먼저 지웠다) 실패로 위장하지 않고 conflict 로 알린다(SPU1, 개정 §5.8) — 화면이 다시 읽는다.
+ *  조회 실패(ERR_LOOKUP)는 '없음'으로 읽지 않는다. */
 export async function removeTaskDependency(
   dependencyId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; conflict?: boolean }> {
   const found = await resolveProjectId('task_dependencies', dependencyId)
-  if (!found.ok) return { ok: false, error: found.error }
+  // 행이 없다(또는 RLS 가 가린다) — 볼 수 없는 사람에게도 같은 답이라 존재를 흘리지 않는다
+  if (!found.ok) return found.error === ERR_MISSING ? { ok: false, conflict: true, error: ERR_DEP_GONE } : { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
@@ -685,7 +695,7 @@ export async function removeTaskDependency(
     .select('id, project_id, predecessor_id, successor_id, dependency_type, lag_days')
     .eq('id', dependencyId)
     .single()
-  if (findErr?.code === 'PGRST116') return { ok: false, error: '의존성을 찾을 수 없습니다' }
+  if (findErr?.code === 'PGRST116') return { ok: false, conflict: true, error: ERR_DEP_GONE }   // 소속 확인과 이 읽기 사이에 지워졌다
   if (findErr || !dependency) return { ok: false, error: failWith('wbs.removeTaskDependency', findErr ?? '의존성 없음', ERR_DEP_LOOKUP) }
 
   const { data: deleted, error } = await sb
@@ -694,7 +704,12 @@ export async function removeTaskDependency(
     .eq('id', dependencyId)
     .select('id')
   if (error) return { ok: false, error: failWith('wbs.removeTaskDependency', error, ERR_DELETE) }
-  if (!deleted?.length) return { ok: false, error: '삭제 권한이 없습니다' }
+  if (!deleted?.length) {
+    // 0행은 둘 중 하나다 — 읽기와 삭제 사이에 남이 지웠거나(그새 바뀜), RLS 가 막았거나. 다시 읽어 가린다(읽기 실패는 어느 쪽으로도 단정하지 않는다)
+    const { data: still, error: stillErr } = await sb.from('task_dependencies').select('id').eq('id', dependencyId).maybeSingle()
+    if (stillErr) return { ok: false, error: failWith('wbs.removeTaskDependency', stillErr, ERR_DEP_LOOKUP) }
+    return still ? { ok: false, error: '삭제 권한이 없습니다' } : { ok: false, conflict: true, error: ERR_DEP_GONE }
+  }
 
   const { error: logErr } = await sb.from('change_logs').insert({
     user_id: g.actor.userId,
@@ -764,12 +779,24 @@ export async function deleteWbsItem(itemId: string): Promise<{ ok: boolean; erro
   return { ok: true }
 }
 
-/** 형제 내 순서 이동(위/아래) — 인접 형제와 sort_order 교환. */
-export async function moveWbsItem(itemId: string, dir: 'up' | 'down'): Promise<{ ok: boolean; error?: string }> {
+/** 화면이 본 항목의 자리 — 부모·자기 sort_order·맞바꿀 이웃(sort_order 순서의 바로 위/아래, 경계면 null). 전부 기존 열이다 */
+type WbsMoveExpected = { parentId: string | null; sortOrder: number; neighborId?: string | null }
+type WbsMoveResult = { ok: boolean; error?: string; conflict?: boolean; latest?: { parentId: string | null; sortOrder: number; neighborId: string | null } }
+
+/** 형제 내 순서 이동(위/아래) — 인접 형제와 sort_order 교환.
+ *  expected(SPU1, 개정 §5.8 — 무통보 덮어쓰기 0건): 화면이 본 자리. 그새 이 항목이 옮겨졌거나(부모·sort_order) 맞바꿀 이웃이 달라졌으면
+ *  옮기지 않고 conflict 와 서버의 현재 자리(latest)를 돌려준다 — 낡은 화면의 '위로'가 남이 정리한 순서를 뒤섞지 않는다. 교환의 두 update 도
+ *  읽은 sort_order 를 조건으로 써 읽기와 쓰기 사이의 끼어들기를 0행으로 잡는다. 없으면 옛 무조건 교환이다. */
+export async function moveWbsItem(itemId: string, dir: 'up' | 'down', expected?: WbsMoveExpected): Promise<WbsMoveResult> {
   const found = await resolveProjectId('wbs_items', itemId)
   if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
   if (!g.ok) return { ok: false, error: g.error }
+  if (expected !== undefined && (
+    typeof expected !== 'object' || expected === null || !Number.isFinite(Number(expected.sortOrder))
+    || (expected.parentId !== null && typeof expected.parentId !== 'string')
+    || (expected.neighborId != null && typeof expected.neighborId !== 'string')
+  )) return { ok: false, error: '잘못된 요청입니다.' }
   const sb = await createServerClient()
   const { data: item, error: itemErr } = await sb.from('wbs_items').select('id, project_id, parent_id, sort_order').eq('id', itemId).single()
   if (itemErr && itemErr.code !== 'PGRST116') return { ok: false, error: failWith('wbs.moveWbsItem', itemErr, ERR_ITEM_LOOKUP) }
@@ -778,22 +805,40 @@ export async function moveWbsItem(itemId: string, dir: 'up' | 'down'): Promise<{
   q = item.parent_id ? q.eq('parent_id', item.parent_id) : q.is('parent_id', null)
   // 형제 조회 실패를 빈 목록으로 폴백하면 idx=-1 이 되어 "경계라 무시"(ok:true) 경로로 빠진다 —
   // 아무것도 안 하고 이동 성공으로 위장하게 되므로 실패를 그대로 알린다.
-  const { data: sibs, error: sibErr } = await q.order('sort_order', { ascending: true })
+  // 같은 sort_order 는 id 로 가른다 — 화면(moveExpectation)이 같은 규칙으로 이웃을 고르므로 동률에서도 본 이웃과 서버의 이웃이 같다.
+  const { data: sibs, error: sibErr } = await q.order('sort_order', { ascending: true }).order('id', { ascending: true })
   if (sibErr || !sibs) return { ok: false, error: failWith('wbs.moveWbsItem', sibErr ?? '형제 목록 없음', ERR_SIBLING_LOOKUP) }
   const arr = sibs
   const idx = arr.findIndex(s => s.id === itemId)
   const swapIdx = dir === 'up' ? idx - 1 : idx + 1
-  if (idx < 0 || swapIdx < 0 || swapIdx >= arr.length) return { ok: true } // 경계는 무시
-  const a = arr[idx], b = arr[swapIdx]
+  const neighbor = idx < 0 || swapIdx < 0 || swapIdx >= arr.length ? null : arr[swapIdx]
+  const stale = (): WbsMoveResult => ({
+    ok: false, conflict: true, error: ERR_MOVE_STALE,
+    latest: { parentId: (item.parent_id as string | null) ?? null, sortOrder: Number(item.sort_order), neighborId: (neighbor?.id as string | undefined) ?? null },
+  })
+  if (expected && (
+    ((item.parent_id as string | null) ?? null) !== expected.parentId || Number(item.sort_order) !== Number(expected.sortOrder)
+    || (expected.neighborId !== undefined && ((neighbor?.id as string | undefined) ?? null) !== expected.neighborId)
+  )) return stale()
+  if (!neighbor) return { ok: true } // 경계는 무시
+  const a = arr[idx], b = neighbor
+  /** 조건부 교환이 0행일 때 — 그 행을 다시 읽어 '그새 바뀜'(conflict)과 RLS 차단을 가린다. 읽기 실패는 어느 쪽으로도 단정하지 않는다 */
+  const zeroRows = async (row: { id: unknown; sort_order: unknown }): Promise<WbsMoveResult> => {
+    if (!expected) return { ok: false, error: ERR_MOVE_DENIED }
+    const { data: now, error: nowErr } = await sb.from('wbs_items').select('id, sort_order').eq('id', row.id as string).maybeSingle()
+    if (nowErr) return { ok: false, error: failWith('wbs.moveWbsItem', nowErr, ERR_ITEM_LOOKUP) }
+    return !now || Number(now.sort_order) !== Number(row.sort_order) ? stale() : { ok: false, error: ERR_MOVE_DENIED }
+  }
   // 교환은 두 번의 update — 트랜잭션이 아니라 한쪽만 성공하면 sort_order 가 중복된 채 커밋된다.
   // .select('id') 필수: RLS 차단은 error 없이 0행으로 오므로 0행도 실패로 잡아야 한다.
-  const { data: movedA, error: swapAErr } = await sb
-    .from('wbs_items').update({ sort_order: b.sort_order }).eq('id', a.id).select('id')
-  if (swapAErr || !movedA?.length) {
-    return { ok: false, error: (swapAErr ? failWith('wbs.moveWbsItem', swapAErr, ERR_MOVE) : ERR_MOVE_DENIED) }
-  }
-  const { data: movedB, error: swapBErr } = await sb
-    .from('wbs_items').update({ sort_order: a.sort_order }).eq('id', b.id).select('id')
+  let upA = sb.from('wbs_items').update({ sort_order: b.sort_order }).eq('id', a.id)
+  if (expected) upA = upA.eq('sort_order', a.sort_order)
+  const { data: movedA, error: swapAErr } = await upA.select('id')
+  if (swapAErr) return { ok: false, error: failWith('wbs.moveWbsItem', swapAErr, ERR_MOVE) }
+  if (!movedA?.length) return zeroRows(a)
+  let upB = sb.from('wbs_items').update({ sort_order: a.sort_order }).eq('id', b.id)
+  if (expected) upB = upB.eq('sort_order', b.sort_order)
+  const { data: movedB, error: swapBErr } = await upB.select('id')
   if (swapBErr || !movedB?.length) {
     // a 만 바뀌어 두 형제의 sort_order 가 중복된 상태 — '실패'라고 알리려면 데이터도 원래대로 돌려놔야 한다.
     // 보상마저 실패하면 중복이 남으므로(정렬이 흔들림) 원인을 반드시 로그에 남긴다.
@@ -805,7 +850,7 @@ export async function moveWbsItem(itemId: string, dir: 'up' | 'down'): Promise<{
         rollbackErr?.message ?? '0행(RLS 차단 추정)',
       )
     }
-    return { ok: false, error: (swapBErr ? failWith('wbs.moveWbsItem', swapBErr, ERR_MOVE) : ERR_MOVE_DENIED) }
+    return swapBErr ? { ok: false, error: failWith('wbs.moveWbsItem', swapBErr, ERR_MOVE) } : zeroRows(b)
   }
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }

@@ -83,6 +83,8 @@ export const commonKo = {
   'common.conflictEmpty': '(비어 있음)',
   'common.conflictKeepMine': '내 값으로 저장',
   'common.conflictTakeLatest': '서버 값 받기',
+  // 비교할 값이 없는 조작(순서 이동·의존성 연결)의 충돌 — 쓰지 않고 다시 읽었다
+  'common.changedMeanwhile': '그새 바뀌었습니다 — 최신으로 다시 그렸습니다',
   'common.outcomeChecking': '저장 결과를 확인하고 있습니다',
   'common.outcomeUnknown': '저장 결과를 확인하지 못했습니다. 입력은 그대로 있습니다 — 다시 저장하면 반영 여부부터 확인합니다.',
   'common.outcomeNotApplied': '저장되지 않았습니다. 입력은 그대로 있습니다 — 다시 저장하세요.',

@@ -32,6 +32,8 @@ import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/a
  */
 const ERR_DEV_WORKFLOW_CASCADE_ADMIN = '하위 일괄 적용은 프로젝트 관리자만 할 수 있습니다.'
 const ERR_DEV_WORKFLOW_DELEGATED = '에이전트에 위임된 작업입니다. 위임을 먼저 끄십시오.'
+const ERR_ASSIGNEE_CONFLICT = '다른 사용자가 담당자를 먼저 바꿨습니다. 저장하지 않았습니다.'
+const ERR_ASSIGNEE_RECHECK = '담당자를 다시 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
 
 type LoadedItem = {
   id: string; project_id: string; parent_id: string | null; name: string
@@ -71,9 +73,28 @@ async function loadItem(itemId: string): Promise<
   return { ok: true, item: data as LoadedItem }
 }
 
+/** 기대 담당자(expectedAssignee)의 모양 — null(미지정) 또는 명단 행 id. 생략(undefined)은 대조하지 않는다 */
+const isExpectedAssignee = (v: unknown): v is string | null | undefined => v === undefined || v === null || (typeof v === 'string' && isUuidLike(v))
+
+/** 담당자 값 CAS 의 0행 — 그 사이 다른 사람이 담당을 바꿨는지 다시 읽어 가린다(SPU1). 읽기 실패는 충돌로도 성공으로도 읽지 않는다 */
+async function assigneeConflict(
+  admin: ReturnType<typeof createAdminClient>, itemId: string,
+): Promise<{ ok: false; error: string; conflict?: true; latest?: string | null }> {
+  const { data, error } = await admin.from('wbs_items').select('id, assignee_member_id').eq('id', itemId).maybeSingle()
+  if (error) { console.error('[wbsAssign.cas] 담당자 재조회 실패:', error.message); return { ok: false, error: ERR_ASSIGNEE_RECHECK } }
+  if (!data) return { ok: false, error: '갱신 대상 없음' }
+  return { ok: false, conflict: true, error: ERR_ASSIGNEE_CONFLICT, latest: (data as { assignee_member_id: string | null }).assignee_member_id ?? null }
+}
+
+/**
+ * 담당자 지정·해제.
+ * expectedAssignee(SPU1, 개정 §5.8 — 무통보 덮어쓰기 0건): 패널을 열 때 본 담당자(null=미지정). 서버의 담당자가 그새 달라졌으면 쓰지 않고
+ * conflict 와 그 현재 값(latest)을 돌려준다. 쓰기도 그 값을 조건으로 해 읽기와 쓰기 사이의 끼어들기를 0행으로 잡는다. 생략하면 옛 무조건 저장이다.
+ * expectedUpdatedAt 은 일괄 변경의 revision CAS(행 전체) — 둘은 따로 쓴다.
+ */
 export async function setWbsAssignee(
-  itemId: string, memberId: string | null, expectedUpdatedAt?: string | null,
-): Promise<{ ok: boolean; error?: string; orderCreated?: boolean; conflict?: boolean }> {
+  itemId: string, memberId: string | null, expectedUpdatedAt?: string | null, expectedAssignee?: string | null,
+): Promise<{ ok: boolean; error?: string; orderCreated?: boolean; conflict?: boolean; latest?: string | null }> {
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
   const g = await requireProjectAdmin(resolved.projectId)
@@ -97,6 +118,11 @@ export async function setWbsAssignee(
       return { ok: false, error: '이 프로젝트의 로스터 멤버가 아닙니다.' }
     }
   }
+  if (!isExpectedAssignee(expectedAssignee)) return { ok: false, error: '잘못된 요청입니다.' }
+  // 값 CAS — 내가 본 담당자와 서버의 담당자가 다르면 그새 다른 사람이 바꾼 것이다. 이미 내가 고른 값이면 덮을 것이 없다(위에서 성공으로 답했다)
+  if (expectedAssignee !== undefined && (item.assignee_member_id ?? null) !== expectedAssignee && (item.assignee_member_id ?? null) !== memberId) {
+    return { ok: false, conflict: true, error: ERR_ASSIGNEE_CONFLICT, latest: item.assignee_member_id ?? null }
+  }
   if (expectedUpdatedAt !== undefined) {
     const { data, error } = await admin.rpc('apply_wbs_bulk_item', {
       p_project_id: item.project_id, p_actor: g.actor.userId, p_item_id: itemId,
@@ -106,12 +132,15 @@ export async function setWbsAssignee(
     if (data?.ok !== true) return { ok: false, conflict: data?.reason === 'conflict', error: data?.reason === 'conflict' ? '다른 사용자가 수정했습니다. 최신 내용을 확인해 주세요.' : '담당자 변경 값을 확인해 주세요.' }
     if ((item.assignee_member_id ?? null) === memberId) return { ok: true }
   } else {
-    const { data: updated, error } = await admin
+    let q = admin
       .from('wbs_items')
       .update({ assignee_member_id: memberId, updated_at: new Date().toISOString() })
-      .eq('id', itemId).select('id')
+      .eq('id', itemId)
+    // 위 대조와 이 쓰기 사이에 바뀐 담당자는 조건이 0행으로 잡는다 — 조건은 방금 읽은 값이다(본 값과 같거나, 이미 내 값이다)
+    if (expectedAssignee !== undefined) q = item.assignee_member_id === null ? q.is('assignee_member_id', null) : q.eq('assignee_member_id', item.assignee_member_id)
+    const { data: updated, error } = await q.select('id')
     if (error) return { ok: false, error: error.message }
-    if (!updated || updated.length === 0) return { ok: false, error: '갱신 대상 없음' }
+    if (!updated || updated.length === 0) return expectedAssignee !== undefined ? assigneeConflict(admin, itemId) : { ok: false, error: '갱신 대상 없음' }
   }
   revalidatePath(`/p/${item.project_id}`, 'layout')
   // 배정↔as 전이(스펙 2026-09-15 §3.4) — RPC 가 dev_workflow·리프·현재 stage 를 판정한다(배정은 stage 가 null
@@ -186,12 +215,14 @@ type TreeRow = { id: string; parent_id: string | null; name: string; assignee_me
  */
 export async function setWbsAssigneeCascade(
   itemId: string, memberId: string,
-): Promise<{ ok: boolean; error?: string; count?: number; cascadeFailed?: boolean }> {
+  /** 패널을 열 때 본 이 항목의 담당자(SPU1) — 서버 값이 그새 달라졌으면 본인·하위 어느 것도 쓰지 않고 충돌과 그 값(latest)을 돌려준다 */
+  expectedAssignee?: string | null,
+): Promise<{ ok: boolean; error?: string; count?: number; cascadeFailed?: boolean; conflict?: boolean; latest?: string | null }> {
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
   const g = await requireProjectAdmin(resolved.projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  if (!isUuidLike(memberId)) return { ok: false, error: '잘못된 요청입니다.' }
+  if (!isUuidLike(memberId) || !isExpectedAssignee(expectedAssignee)) return { ok: false, error: '잘못된 요청입니다.' }
 
   const admin = createAdminClient()
   // 쓰기 선행조회 — 활성 로스터·활성 인물 실재 + 프로젝트 일치(setWbsAssignee와 동일한 1차 방어선).
@@ -243,20 +274,27 @@ export async function setWbsAssigneeCascade(
     .filter(r => r.id !== itemId && r.assignee_member_id === null)
     .map(r => r.id)
   const rootNeedsUpdate = root.assignee_member_id !== memberId
+  // 값 CAS(SPU1) — 본인 항목의 담당자가 내가 본 값이 아니면(이미 내가 고른 값인 경우는 덮을 것이 없다) 하위까지 통째로 멈춘다
+  if (expectedAssignee !== undefined && rootNeedsUpdate && (root.assignee_member_id ?? null) !== expectedAssignee) {
+    return { ok: false, conflict: true, error: ERR_ASSIGNEE_CONFLICT, latest: root.assignee_member_id ?? null }
+  }
 
   if (!rootNeedsUpdate && descendantCandidateIds.length === 0) return { ok: true, count: 0 }
 
   const nowIso = new Date().toISOString()
   const updatedIds: string[] = []
 
-  // 본인 — 단건 액션(setWbsAssignee)과 동일한 무조건 갱신. 조건부 하위 UPDATE 와 분리한다.
+  // 본인 — 단건 액션(setWbsAssignee)과 동일한 갱신(기대값이 없으면 무조건, 있으면 읽은 값을 조건으로). 조건부 하위 UPDATE 와 분리한다.
   if (rootNeedsUpdate) {
-    const { data: updatedRoot, error: rootErr } = await admin
+    let rootUpdate = admin
       .from('wbs_items')
       .update({ assignee_member_id: memberId, updated_at: nowIso })
       .eq('id', itemId)
-      .select('id')
+    if (expectedAssignee !== undefined) rootUpdate = root.assignee_member_id === null ? rootUpdate.is('assignee_member_id', null) : rootUpdate.eq('assignee_member_id', root.assignee_member_id)
+    const { data: updatedRoot, error: rootErr } = await rootUpdate.select('id')
     if (rootErr) return { ok: false, error: rootErr.message }
+    // 트리를 읽은 뒤 남이 본인 항목의 담당을 바꿨다 — 하위에 손대기 전에 멈춘다
+    if (expectedAssignee !== undefined && !(updatedRoot ?? []).length) return assigneeConflict(admin, itemId)
     for (const r of (updatedRoot ?? []) as { id: string }[]) updatedIds.push(r.id)
   }
 

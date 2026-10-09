@@ -251,10 +251,71 @@ describe('WbsAssigneeStagePanel', () => {
     expect(setWbsAssignee).not.toHaveBeenCalled()
     expect(getWbsAssigneeStage).toHaveBeenCalledTimes(1)
     await elapse()
-    expect(setWbsAssignee).toHaveBeenCalledWith('item-1', null)
+    // 4번째 인자 = 패널을 열 때 본 담당자(값 CAS 의 기대값, SPU1). 3번째(expectedUpdatedAt)는 일괄 변경 전용이라 비운다
+    expect(setWbsAssignee).toHaveBeenCalledWith('item-1', null, undefined, 'm-1')
     expect(getWbsAssigneeStage).toHaveBeenCalledTimes(2)
     expect(stageSelect().value).toBe('as')
     expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  describe('담당자 저장 충돌(SPU1 — 개정 §5.8)', () => {
+    const dialog = () => document.querySelector<HTMLElement>('[data-testid="conflict-resolver"]')
+    const values = () => (['mine', 'latest', 'base'] as const).map(w => dialog()!.querySelector(`[data-conflict-value="${w}"]`)?.textContent)
+    const choose = (action: 'mine' | 'latest' | 'continue') => act(async () => { dialog()!.querySelector<HTMLButtonElement>(`[data-conflict-action="${action}"]`)!.click() })
+    /** m-1 이 담당인 항목을 열어 '미지정'을 고르고 저장을 내보낸다 — 서버는 그새 m-2 로 바뀌었다고 답한다 */
+    async function unassignIntoConflict() {
+      await mount({ resolved: { assigneeMemberId: 'm-1', stage: null, devWorkflow: true } })
+      setWbsAssignee.mockResolvedValueOnce({ ok: false, conflict: true, error: '서버 문구', latest: 'm-2' } as never)
+      const input = container.querySelector('input[role="combobox"]') as HTMLInputElement
+      await act(async () => { input.focus() })
+      const option = [...container.querySelectorAll('[role="option"]')].find(o => o.textContent === 'wbs.assigneeUnassignedOption') as HTMLElement
+      await act(async () => { option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) })
+      await elapse()
+    }
+
+    it('충돌이면 오류 문구가 아니라 비교를 띄운다 — 내 값·서버의 현재 값·열 때 본 값. 다시 읽지 않는다', async () => {
+      await unassignIntoConflict()
+      expect(values()).toEqual(['wbs.assigneeUnassignedOption', 'm-2', 'm-1'])
+      expect(container.textContent).not.toContain('서버 문구')
+      expect(refresh).not.toHaveBeenCalled()
+    })
+
+    it('내 값으로 저장 — 방금 본 서버 값(m-2)을 기대값으로 한 번만 다시 쓴다', async () => {
+      await unassignIntoConflict()
+      await choose('mine')
+      expect(setWbsAssignee).toHaveBeenCalledTimes(2)
+      expect(setWbsAssignee).toHaveBeenLastCalledWith('item-1', null, undefined, 'm-2')
+      expect(dialog()).toBeNull()
+      expect(refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('서버 값 받기 — 쓰지 않고 다시 읽는다. 계속 편집 — 쓰지도 다시 읽지도 않는다', async () => {
+      await unassignIntoConflict()
+      await choose('continue')
+      expect(dialog()).toBeNull()
+      expect(setWbsAssignee).toHaveBeenCalledTimes(1)
+      expect(refresh).not.toHaveBeenCalled()
+      act(() => root.unmount()); root = createRoot(container)
+      await unassignIntoConflict()
+      const reads = getWbsAssigneeStage.mock.calls.length
+      await choose('latest')
+      expect(setWbsAssignee).toHaveBeenCalledTimes(2)   // 두 번의 첫 저장뿐 — 받기는 쓰지 않는다
+      expect(getWbsAssigneeStage.mock.calls.length).toBe(reads + 1)
+      expect(refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('하위 일괄 적용도 본 값을 싣는다', async () => {
+      members.push({ id: 'm-9', projectId: 'p1', personId: 'pp-9', name: '담당 후보', email: null, userId: null, kind: 'account', accessRole: 'member', roleLabel: null, title: null, active: true, sortOrder: 1, createdAt: '2026-01-01', teams: [], hasAccount: true })
+      try {
+        await mount({ hasChildren: true, resolved: { assigneeMemberId: 'm-1', stage: null, devWorkflow: true } })
+        const input = container.querySelector('input[role="combobox"]') as HTMLInputElement
+        await act(async () => { input.focus() })
+        const option = [...container.querySelectorAll('[role="option"]')].find(o => o.textContent?.includes('담당 후보')) as HTMLElement
+        await act(async () => { option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) })
+        await elapse()
+        expect(setWbsAssigneeCascade).toHaveBeenCalledWith('item-1', 'm-9', 'm-1')
+      } finally { members.length = 0 }
+    })
   })
 
   it('(g) 패널이 닫히면(언마운트) 대기 중인 변경을 기다리지 않고 저장한다', async () => {
