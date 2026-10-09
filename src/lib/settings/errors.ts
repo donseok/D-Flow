@@ -6,6 +6,9 @@
  * (COPY_TARGET_NOT_EMPTY·SETTINGS_ROW_REQUIRED·SETTINGS_ACTOR_REQUIRED·COMMAND_ID_REQUIRED·*_ISOLATION·HISTORY_IMMUTABLE)은 그래서 없다.
  */
 import { ERR_DENIED } from '@/lib/authz/errors'
+// 서버 사전은 타입으로만 안다 — 이 모듈은 클라이언트(ConfigStateNotice)도 가져오므로 값으로 끌어오면 서버 문구가 번들에 실린다
+import type { ServerDictKey, ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill, textBy } from '@/lib/i18n/translate'
 
 export type ConfigCode =
   | 'CONFIG_CONFLICT' | 'CONFIG_INVALID' | 'CONFIG_UNKNOWN_KEY' | 'CONFIG_REQUIRED' | 'CONFIG_IN_USE'
@@ -77,23 +80,31 @@ type Row = { code: ConfigCode | 'ERR_DENIED'; message: string }
 const ERR_ISSUE_TRANSITION = '이 상태로는 옮길 수 없습니다.'
 const ERR_FIELD_VALUE = '필드 값이 올바르지 않습니다.'
 /** 개정 §2.3.4 DB 토큰 표 — 뒤 SP 의 토큰도 지금 싣는다(그 SP 가 문구를 다듬는다) */
+const ERR_COPY_CHANGED = '복사 원본이 변경되었습니다. 다시 시도하세요.'
+const ERR_COPY_INPUT = '원본 양식 연결을 확인하세요.'
+const ERR_COPY_MISSING = '양식 파일 복사를 확인하지 못했습니다. 다시 시도하세요.'
+const ERR_COPY_REQUIRED = '양식 복사를 지원하는 버전에서 다시 시도하세요.'
+const ERR_CATEGORY_MISMATCH = '같은 범주의 상태로만 옮길 수 있습니다.'
+const ERR_APPROVAL_REQUIRED = '승인 단계를 거쳐야 완료할 수 있습니다.'
+const ERR_WEEK_KEY = '주차 시작일이 프로젝트의 주 시작 규칙과 맞지 않습니다.'
+const ERR_AREAS_REQUIRED = '주간보고 영역을 먼저 설정하세요.'
 const TOKENS: Readonly<Record<string, Row>> = {
   SETTINGS_REVISION_CONFLICT: { code: 'CONFIG_CONFLICT', message: ERR_CONFIG_CONFLICT },
   SETTINGS_SCHEMA_AHEAD: { code: 'CONFIG_SCHEMA_AHEAD', message: ERR_CONFIG_SCHEMA_AHEAD },
   SETTINGS_REVISION_OVERFLOW: { code: 'CONFIG_SCHEMA_AHEAD', message: ERR_CONFIG_SCHEMA_AHEAD },
   SETTINGS_ROW_MISSING: { code: 'CONFIG_UNAVAILABLE', message: ERR_CONFIG_UNAVAILABLE },
   SETTINGS_CODE_IN_USE: { code: 'CONFIG_IN_USE', message: ERR_CONFIG_IN_USE },
-  FORM_TEMPLATE_COPY_CHANGED: { code: 'CONFIG_UNAVAILABLE', message: '복사 원본이 변경되었습니다. 다시 시도하세요.' },
-  FORM_TEMPLATE_COPY_INPUT: { code: 'CONFIG_INVALID', message: '원본 양식 연결을 확인하세요.' },
-  FORM_TEMPLATE_COPY_MISSING: { code: 'CONFIG_UNAVAILABLE', message: '양식 파일 복사를 확인하지 못했습니다. 다시 시도하세요.' },
-  FORM_TEMPLATE_COPY_REQUIRED: { code: 'CONFIG_UNAVAILABLE', message: '양식 복사를 지원하는 버전에서 다시 시도하세요.' },
+  FORM_TEMPLATE_COPY_CHANGED: { code: 'CONFIG_UNAVAILABLE', message: ERR_COPY_CHANGED },
+  FORM_TEMPLATE_COPY_INPUT: { code: 'CONFIG_INVALID', message: ERR_COPY_INPUT },
+  FORM_TEMPLATE_COPY_MISSING: { code: 'CONFIG_UNAVAILABLE', message: ERR_COPY_MISSING },
+  FORM_TEMPLATE_COPY_REQUIRED: { code: 'CONFIG_UNAVAILABLE', message: ERR_COPY_REQUIRED },
   FORM_MAPPING_IN_USE: { code: 'CONFIG_IN_USE', message: ERR_CONFIG_IN_USE },
   CONFIG_INVALID: { code: 'CONFIG_INVALID', message: ERR_CONFIG_INVALID },
   PROJECT_VOCAB_INACTIVE: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },
   ISSUE_STATUS_INACTIVE: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },
   ISSUE_STATUS_UNKNOWN: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },               // SP5b — 개정 :541 "미존재 code"
   ISSUE_RESOLVED_AT_DERIVED: { code: 'CONFIG_INVALID', message: ERR_ISSUE_TRANSITION },    // SP5b D4 — 해결일은 트리거만 정한다
-  SETTINGS_CODE_CATEGORY_MISMATCH: { code: 'CONFIG_INVALID', message: '같은 범주의 상태로만 옮길 수 있습니다.' },   // SP5b D3
+  SETTINGS_CODE_CATEGORY_MISMATCH: { code: 'CONFIG_INVALID', message: ERR_CATEGORY_MISMATCH },   // SP5b D3
   CUSTOM_FIELD_INACTIVE: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },
   CUSTOM_FIELD_UNKNOWN: { code: 'CONFIG_STALE', message: ERR_CONFIG_STALE },
   ISSUE_TRANSITION_DENIED: { code: 'CONFIG_INVALID', message: ERR_ISSUE_TRANSITION },
@@ -104,24 +115,54 @@ const TOKENS: Readonly<Record<string, Row>> = {
   CUSTOM_FIELD_REQUIRED: { code: 'CONFIG_INVALID', message: ERR_FIELD_VALUE },
   CUSTOM_FIELD_ADMIN_ONLY: { code: 'ERR_DENIED', message: ERR_DENIED },
   WORKFLOW_ACTUAL_LOCKED: { code: 'ERR_DENIED', message: ERR_DENIED },
-  WORKFLOW_APPROVAL_REQUIRED: { code: 'ERR_DENIED', message: '승인 단계를 거쳐야 완료할 수 있습니다.' },
+  WORKFLOW_APPROVAL_REQUIRED: { code: 'ERR_DENIED', message: ERR_APPROVAL_REQUIRED },
   WORKFLOW_COLUMNS_RPC_ONLY: { code: 'ERR_DENIED', message: ERR_DENIED },
-  WEEK_KEY_INVALID: { code: 'CONFIG_INVALID', message: '주차 시작일이 프로젝트의 주 시작 규칙과 맞지 않습니다.' },
-  WEEKLY_AREAS_REQUIRED: { code: 'CONFIG_REQUIRED', message: '주간보고 영역을 먼저 설정하세요.' },
+  WEEK_KEY_INVALID: { code: 'CONFIG_INVALID', message: ERR_WEEK_KEY },
+  WEEKLY_AREAS_REQUIRED: { code: 'CONFIG_REQUIRED', message: ERR_AREAS_REQUIRED },
   COMMAND_REUSED: { code: 'CONFIG_INVALID', message: ERR_COMMAND_REUSED },
   COPY_SOURCE_FORBIDDEN: { code: 'ERR_DENIED', message: ERR_DENIED },
 }
 
 /** DB 오류 → 코드·상태·문구. 표에 없으면 null(호출부가 로깅 + 500). 교착(40P01)만 토큰이 아니라 SQLSTATE 로 잡는다 */
-export function mapDbError(err: DbErrorLike): MappedDbError | null {
+/** 고정 문구 → 사전 키 — 문구가 코드 겸용(화면·테스트가 문구로 비교)이라 상수는 한국어로 두고, 화면에 내보내는 자리에서 `configText(t, 문구)` 로 푼다. */
+export const CONFIG_TEXT_KEY: Readonly<Record<string, ServerDictKey>> = {
+  [ERR_CONFIG_CONFLICT]: 'err.config.conflict',
+  [ERR_CONFIG_INVALID]: 'err.config.invalid',
+  [ERR_CONFIG_UNKNOWN_KEY]: 'err.config.unknownKey',
+  [ERR_CONFIG_REQUIRED]: 'err.config.required',
+  [ERR_CONFIG_IN_USE]: 'err.config.inUse',
+  [ERR_CONFIG_MODULE_NOT_ALLOWED]: 'err.config.moduleNotAllowed',
+  [ERR_CONFIG_SCHEMA_AHEAD]: 'err.config.schemaAhead',
+  [ERR_CONFIG_UNAVAILABLE]: 'err.config.unavailable',
+  [ERR_CONFIG_BUSY]: 'err.config.busy',
+  [ERR_CONFIG_STALE]: 'err.config.stale',
+  [ERR_EXPLICIT_UNSET]: 'err.config.explicitUnset',
+  [ERR_COMMAND_REUSED]: 'err.config.commandReused',
+  [ERR_ISSUE_TRANSITION]: 'err.config.issueTransition',
+  [ERR_FIELD_VALUE]: 'err.config.fieldValue',
+  [ERR_COPY_CHANGED]: 'err.config.copyChanged',
+  [ERR_COPY_INPUT]: 'err.config.copyInput',
+  [ERR_COPY_MISSING]: 'err.config.copyMissing',
+  [ERR_COPY_REQUIRED]: 'err.config.copyRequired',
+  [ERR_CATEGORY_MISMATCH]: 'err.config.categoryMismatch',
+  [ERR_APPROVAL_REQUIRED]: 'err.config.approvalRequired',
+  [ERR_WEEK_KEY]: 'err.config.weekKey',
+  [ERR_AREAS_REQUIRED]: 'err.config.areasRequired',
+}
+/** 설정 계열 고정 문구를 요청의 화면 언어로 — 표에 없는 문구(키 이름이 붙은 문구 등)는 받은 그대로 */
+export const configText = (t: ServerTranslate, message: string): string => textBy(t, CONFIG_TEXT_KEY, message)
+
+/** t(서버 번역 함수)를 넘기면 message 가 그 언어다(화면에 내보내는 액션·라우트). 넘기지 않으면 종전 한국어 — code·status·token 은 언어와 무관하다 */
+export function mapDbError(err: DbErrorLike, t?: ServerTranslate): MappedDbError | null {
+  const say = (message: string): string => t ? configText(t, message) : message
   const detail = err.details ?? null
-  if (err.code === '40P01') return { code: 'CONFIG_BUSY', status: 503, message: ERR_CONFIG_BUSY, token: '40P01', fieldKey: null, detail }
+  if (err.code === '40P01') return { code: 'CONFIG_BUSY', status: 503, message: say(ERR_CONFIG_BUSY), token: '40P01', fieldKey: null, detail }
   const token = dbToken(err.message)
   const row = Object.hasOwn(TOKENS, token) ? TOKENS[token] : undefined   // 프로토타입 이름('constructor' 등)은 표의 값이 아니다(SP4 A2 P11)
   if (!row) return null
   const fieldKey = token === 'CONFIG_INVALID' ? ((err.message ?? '').split(':')[1]?.trim() || null) : null
   const status = row.code === 'ERR_DENIED' ? 403 : STATUS[row.code]
-  return { code: row.code, status, message: row.message, token, fieldKey, detail }
+  return { code: row.code, status, message: say(row.message), token, fieldKey, detail }
 }
 
 /** 설정 조회 실패·설정 행 부재 — 기본값으로 채우지 않고 전체를 멈춘다(개정 §2.5 failed) */
@@ -149,14 +190,26 @@ export class ConfigKeyError extends Error {
  * SETTINGS_CODE_IN_USE 의 detail(JSON) → 키별 문구(SP5 D53 — [RF3]). calendar.week_start 는 막는 주차(최대 20)를 싣는다.
  * 모르는 모양이면 빈 목록 — 호출부가 일반 CONFIG_IN_USE 문구를 쓴다. 순수(throw 없음)
  */
-export function inUseFieldErrors(detail: string | null): { key: string; message: string; refCount?: number; code?: string }[] {
+/** 사용 중 거부 문구의 한국어 틀 — t 를 넘기지 않을 때의 폴백이다. 같은 키가 서버 사전에 같은 글자로 있다(불변식이 대조한다) */
+export const IN_USE_KO = {
+  'err.config.inUse.weeks': '이미 만든 주간보고({weeks})가 새 주 시작 규칙과 맞지 않아 저장할 수 없습니다.',
+  'err.config.inUse.removed': '\'{code}\' 을(를) 쓰는 기록이 {n}건 있어 지울 수 없습니다. 다른 항목으로 옮긴 뒤 지우세요.',
+  'err.config.inUse.category': '\'{code}\' 상태의 이슈가 {n}건 있어 범주를 바꿀 수 없습니다. 새 상태를 만들어 이슈를 옮긴 뒤 바꾸세요.',
+  'err.config.inUse.countsAs': '\'{code}\' 을(를) 쓰는 기록이 {n}건 있어 집계 분류를 바꿀 수 없습니다. 새 항목을 만들어 옮긴 뒤 바꾸세요.',
+  'err.config.inUse.pendingRound': '\'{code}\' 단계로 검수 중인 항목이 {n}건 있어 지울 수 없습니다. 그 검수가 끝난 뒤 지우세요.',
+  'err.config.inUse.approverWiden': '\'{code}\' 단계 승인을 기다리는 항목이 {n}건 있어 승인자를 넓힐 수 없습니다. 그 승인이 끝난 뒤 바꾸세요.',
+} as const
+type InUseTranslate = (key: keyof typeof IN_USE_KO) => string
+const inUseKo: InUseTranslate = (key) => IN_USE_KO[key]
+
+export function inUseFieldErrors(detail: string | null, t: InUseTranslate = inUseKo): { key: string; message: string; refCount?: number; code?: string }[] {
   if (!detail) return []
   let d: unknown
   try { d = JSON.parse(detail) } catch { return [] }
   if (typeof d !== 'object' || d === null || Array.isArray(d)) return []
   const o = d as Record<string, unknown>
   if (o.key === 'calendar.week_start' && Array.isArray(o.weeks) && o.weeks.length > 0 && o.weeks.every((w) => typeof w === 'string')) {
-    return [{ key: 'calendar.week_start', message: `이미 만든 주간보고(${(o.weeks as string[]).join(', ')})가 새 주 시작 규칙과 맞지 않아 저장할 수 없습니다.` }]
+    return [{ key: 'calendar.week_start', message: t('err.config.inUse.weeks').replace('{weeks}', () => (o.weeks as string[]).join(', ')) }]
   }
   // 어휘(SP5 B4 — 0023): 지운 code·집계 분류를 바꾼 근태 유형의 참조 건수. 화면이 '다른 항목으로 옮긴 뒤 삭제'를 연다
   // SP5b I — 이슈 표시 상태의 범주 변경(reason 'category')도 같은 꼴: 이슈가 있는 상태의 범주는 바꿀 수 없다(과거 집계 의미 보존)
@@ -164,10 +217,10 @@ export function inUseFieldErrors(detail: string | null): { key: string; message:
       && (o.reason === 'removed' || o.reason === 'counts_as' || o.reason === 'category')) {
     const n = Number(o.count)
     const message = o.reason === 'removed'
-      ? `'${o.code}' 을(를) 쓰는 기록이 ${n}건 있어 지울 수 없습니다. 다른 항목으로 옮긴 뒤 지우세요.`
+      ? fill(t('err.config.inUse.removed'), { code: o.code, n })
       : o.reason === 'category'
-        ? `'${o.code}' 상태의 이슈가 ${n}건 있어 범주를 바꿀 수 없습니다. 새 상태를 만들어 이슈를 옮긴 뒤 바꾸세요.`
-        : `'${o.code}' 을(를) 쓰는 기록이 ${n}건 있어 집계 분류를 바꿀 수 없습니다. 새 항목을 만들어 옮긴 뒤 바꾸세요.`
+        ? fill(t('err.config.inUse.category'), { code: o.code, n })
+        : fill(t('err.config.inUse.countsAs'), { code: o.code, n })
     return [{ key: o.key, message, refCount: n, code: o.code }]
   }
   // SP5b W1 — 승인 단계(settings_ref_check): 대기 라운드의 스냅샷 단계 삭제, 대기 단계의 승인자 넓히기(admin → subtree_or_admin)
@@ -175,9 +228,9 @@ export function inUseFieldErrors(detail: string | null): { key: string; message:
       && (o.reason === 'pending_round' || o.reason === 'approver_widen')) {
     const n = Number(o.count)
     const message = o.reason === 'pending_round'
-      ? `'${o.code}' 단계로 검수 중인 항목이 ${n}건 있어 지울 수 없습니다. 그 검수가 끝난 뒤 지우세요.`
-      : `'${o.code}' 단계 승인을 기다리는 항목이 ${n}건 있어 승인자를 넓힐 수 없습니다. 그 승인이 끝난 뒤 바꾸세요.`
+      ? fill(t('err.config.inUse.pendingRound'), { code: o.code, n })
+      : fill(t('err.config.inUse.approverWiden'), { code: o.code, n })
     return [{ key: o.key, message, refCount: n, code: o.code }]
   }
-  return typeof o.key === 'string' ? [{ key: o.key, message: ERR_CONFIG_IN_USE }] : []
+  return typeof o.key === 'string' ? [{ key: o.key, message: ERR_CONFIG_IN_USE }] : []   // 고정 문구 — 화면에 내보내는 호출부가 configText 로 푼다
 }

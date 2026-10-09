@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, resolveProjectId } from '@/lib/authz'
-import { ERR_LOOKUP } from '@/lib/authz/errors'
+import { ERR_LOOKUP, ERR_DENIED, ERR_ANON } from '@/lib/authz/errors'
 import {
   ISSUE_ATTACHMENT_MAX_COUNT,
   isIssueAttachmentPathValid,
@@ -14,6 +14,9 @@ import { SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
 import { removeStoredAttachment } from '@/lib/attachments/removeStoredAttachment'
 import { requireModule } from '@/lib/modules/gate'
 import { createServerClient } from '@/lib/supabase/server'
+import { serverTranslator } from '@/lib/i18n/server'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 const BUCKET = 'issue-attachments'
 
@@ -34,8 +37,9 @@ export type IssueAttachmentList =
 async function requireIssueEditable(issueId: string): Promise<
   { ok: true; projectId: string; userId: string } | { ok: false; error: string }
 > {
+  const t = await serverTranslator()
   const found = await resolveProjectId('issues', issueId)
-  if (!found.ok) return { ok: false, error: found.error }
+  if (!found.ok) return { ok: false, error: libText(t, found.error) }
   // issues.project_id 는 not null 이지만 타입이 nullable 이다. null 이면 첨부의 not null
   // 컬럼을 채울 수 없으므로 '권한 없음'이 아니라 중단한다.
   if (!found.projectId) {
@@ -50,7 +54,7 @@ async function requireIssueEditable(issueId: string): Promise<
   else {
     let actor: Awaited<ReturnType<typeof getActor>> = null
     try { actor = await getActor() } catch { actor = null }
-    if (!actor) return { ok: false, error: admin.error }
+    if (!actor) return { ok: false, error: libText(t, admin.error) }
 
     const sb = await createServerClient()
     const { data, error } = await sb.from('issues').select('created_by').eq('id', issueId).maybeSingle()
@@ -58,8 +62,8 @@ async function requireIssueEditable(issueId: string): Promise<
       console.error('[issueAttachments] 이슈 작성자 조회 실패:', error.message)
       return { ok: false, error: ERR_LOOKUP }
     }
-    if (!data) return { ok: false, error: '이슈를 찾을 수 없습니다.' }
-    if ((data.created_by as string | null) !== actor.userId) return { ok: false, error: '권한 없음' }
+    if (!data) return { ok: false, error: t('err.issueNotFound') }
+    if ((data.created_by as string | null) !== actor.userId) return { ok: false, error: ERR_DENIED }
     pass = { ok: true, projectId, userId: actor.userId }
   }
   // 모듈 관문(스펙 §4.2) — 관리자·작성자 두 성공을 모아 한 번 판정한다
@@ -79,7 +83,7 @@ async function requireIssueEditable(issueId: string): Promise<
 export async function listIssueAttachments(issueId: string): Promise<IssueAttachmentList> {
   if (!(await getSession())) {
     console.error('[listIssueAttachments] 비로그인 호출')
-    return { ok: false, error: '로그인 필요' }
+    return { ok: false, error: ERR_ANON }
   }
   // 모듈 관문(스펙 §4.2) — 이슈 행의 프로젝트로 판정한다
   const scope = await resolveProjectId('issues', issueId)
@@ -118,7 +122,8 @@ export async function listIssueAttachments(issueId: string): Promise<IssueAttach
 export async function getIssueAttachmentUrl(
   issueId: string, attachmentId: string,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  if (!(await getSession())) return { ok: false, error: '로그인 필요' }
+  const t = await serverTranslator()
+  if (!(await getSession())) return { ok: false, error: ERR_ANON }
   const scope = await resolveProjectId('issues', issueId)
   if (!scope.ok || !scope.projectId) return { ok: false, error: scope.ok ? ERR_LOOKUP : scope.error }
   const mod = await requireModule({ projectId: scope.projectId }, 'issues')
@@ -130,13 +135,13 @@ export async function getIssueAttachmentUrl(
     console.error('[getIssueAttachmentUrl] 첨부 조회 실패:', error.message)
     return { ok: false, error: ERR_LOOKUP }
   }
-  if (!row) return { ok: false, error: '첨부 없음' }
+  if (!row) return { ok: false, error: t('err.noAttachment') }
   // 빈 파일명이면 true 로 폴백해 Content-Disposition 자체는 붙게 한다.
   const { data: signed, error: signErr } = await sb.storage.from(BUCKET)
     .createSignedUrl(row.file_path as string, SIGNED_URL_TTL_SEC, { download: (row.file_name as string) || true })
   if (signErr || !signed?.signedUrl) {
     console.error(`[getIssueAttachmentUrl attachment=${attachmentId}] 서명 실패:`, signErr?.message ?? 'no url')
-    return { ok: false, error: '내려받기 링크를 만들지 못했습니다. 잠시 후 다시 시도하세요.' }
+    return { ok: false, error: t('err.couldNotCreateDownloadLink') }
   }
   return { ok: true, url: signed.signedUrl }
 }
@@ -149,6 +154,7 @@ export async function recordIssueAttachment(
   issueId: string,
   file: { fileName: string; filePath: string; size: number; mime: string },
 ): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   const g = await requireIssueEditable(issueId)
   if (!g.ok) return { ok: false, error: g.error }
 
@@ -164,10 +170,10 @@ export async function recordIssueAttachment(
   }
   // 이게 없으면 편집 권한이 있는 이슈 하나로 임의 경로의 객체를 메타에 꽂을 수 있다.
   if (!isIssueAttachmentPathValid({ workspaceId, projectId: g.projectId }, issueId, file.filePath)) {
-    return { ok: false, error: '첨부 경로가 올바르지 않습니다.' }
+    return { ok: false, error: t('srv.issueAttachments.attachmentPathNotValid') }
   }
   if (!isIssueAttachmentSizeAllowed(file.size)) {
-    return { ok: false, error: '파일 크기가 상한을 넘었습니다.' }
+    return { ok: false, error: t('srv.issueAttachments.fileSizeExceedsLimit') }
   }
 
   const { data: existing, error: countErr } = await sb
@@ -178,7 +184,7 @@ export async function recordIssueAttachment(
     return { ok: false, error: ERR_LOOKUP }
   }
   if (remainingIssueAttachmentSlots(existing.length) < 1) {
-    return { ok: false, error: `첨부는 이슈당 ${ISSUE_ATTACHMENT_MAX_COUNT}개까지입니다.` }
+    return { ok: false, error: fill(t('srv.issueAttachments.upAttachmentsAllowedPerIssue'), { issueAttachmentMaxCount: ISSUE_ATTACHMENT_MAX_COUNT }) }
   }
 
   // project_id 는 클라이언트가 보내는 값이 아니라 게이트가 이슈에서 확정한 값이다.
@@ -198,6 +204,7 @@ export async function recordIssueAttachment(
 
 /** 첨부 삭제(Storage 객체 + 메타). */
 export async function removeIssueAttachment(id: string): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   const sb = await createServerClient()
   // 어느 이슈의 첨부인지 모르면 권한을 판정할 수 없다 — 조회 실패를 '없음'으로 위장하지 않는다.
   const { data: att, error: attErr } = await sb
@@ -206,7 +213,7 @@ export async function removeIssueAttachment(id: string): Promise<{ ok: boolean; 
     console.error('[removeIssueAttachment] 첨부 조회 실패:', attErr.message)
     return { ok: false, error: ERR_LOOKUP }
   }
-  if (!att) return { ok: false, error: '첨부 없음' }
+  if (!att) return { ok: false, error: t('err.noAttachment') }
 
   const g = await requireIssueEditable(att.issue_id as string)
   if (!g.ok) return { ok: false, error: g.error }

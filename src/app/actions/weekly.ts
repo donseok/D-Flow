@@ -17,7 +17,7 @@ import {
 import { isUuidLike, isValidIsoDate } from '@/lib/domain/validate'
 import { findCarryOverSource, findWeeklyReportId } from '@/lib/data/weeklySheet'
 import { getProjectConfig, type ConfigArea } from '@/lib/settings/projectConfig'
-import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import { generateAnswer } from '@/lib/ai/llm'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
@@ -29,6 +29,9 @@ import {
 } from '@/lib/ai/weekly-rewrite'
 import { carryCustomFields, parseFieldDefs, type CustomValues } from '@/lib/domain/customFields'
 import { parseCustomValues } from '@/lib/domain/customFieldValues'
+import { serverTranslator } from '@/lib/i18n/server'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 export interface WeeklyActionResult {
   ok: boolean
@@ -82,22 +85,22 @@ const weeklyRewriteInFlight = new Map<string, Promise<string | null>>()
 const weeklyRewriteLastAttempt = new Map<string, number>()
 
 // 고정 문구(D21 — DB 원문은 failWith 가 서버 로그로만 남긴다)
-const ERR_WEEK_INPUT = '주차 시작일이 올바르지 않습니다.'
-const ERR_MAPPING_INPUT = '이월 매핑이 올바르지 않습니다. 매핑 창을 다시 열어 고르세요.'
+const ERR_WEEK_INPUT = 'srv.weekly.weekStartDateNotValid'
+const ERR_MAPPING_INPUT = 'srv.weekly.carryOverMappingNotValid'
 /** 영역 0개 — RPC 토큰 WEEKLY_AREAS_REQUIRED 의 표 문구(settings/errors)와 같다. weekly-create 테스트가 둘을 맞댄다 */
-const ERR_AREAS_REQUIRED = '주간보고 영역을 먼저 설정하세요.'
-const ERR_CARRY_SOURCE = '이월 원본을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
-const ERR_CREATE = '주차 시트를 만들지 못했습니다. 잠시 후 다시 시도하세요.'
-const ERR_CARRY_CUSTOM = '이월할 추가 정보 값이 지금의 필드 설정과 맞지 않아 주차 시트를 만들지 못했습니다. 프로젝트 설정의 추가 필드를 확인하세요.'
-const ERR_TITLE_SAVE = '제목을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
-const ERR_TITLE_CONFLICT = '다른 사용자가 제목을 먼저 바꿨습니다. 저장하지 않았습니다.'
-const ERR_CELL_SAVE = '셀을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
-const ERR_CELL_CONFLICT = '다른 사용자가 이 칸을 먼저 바꿨습니다. 저장하지 않았습니다.'
-const ERR_SCOPE = '대상을 확인할 수 없어 저장을 중단했습니다.'
-const ERR_REWRITE_TARGET = '선택한 셀을 확인할 수 없습니다.'
-const ERR_ROW_GONE = '행이 삭제되어 저장할 수 없습니다.'
+const ERR_AREAS_REQUIRED = 'err.setUpWeeklyReportAreas'
+const ERR_CARRY_SOURCE = 'srv.weekly.couldNotLoadCarryOver'
+const ERR_CREATE = 'srv.weekly.couldNotCreateWeekSheet'
+const ERR_CARRY_CUSTOM = 'srv.weekly.customFieldValuesCarryOver'
+const ERR_TITLE_SAVE = 'srv.weekly.couldNotSaveTitle'
+const ERR_TITLE_CONFLICT = 'srv.weekly.anotherUserChangedTitleFirst'
+const ERR_CELL_SAVE = 'srv.weekly.couldNotSaveCell'
+const ERR_CELL_CONFLICT = 'srv.weekly.anotherUserChangedCellFirst'
+const ERR_SCOPE = 'srv.weekly.couldNotVerifyTargetSave'
+const ERR_REWRITE_TARGET = 'srv.weekly.couldNotVerifySelectedCell'
+const ERR_ROW_GONE = 'srv.weekly.rowDeletedCannotSaved'
 
-/** create_weekly_report 의 자기 토큰(P4·D45). 그 밖은 rpcFailure 가 55P03·mapDbError(40P01·WEEKLY_AREAS_REQUIRED)로 판정하고,
+/** create_weekly_report 의 자기 토큰(P4·D45). 그 밖은 rpcFailure 가 55P03·mapDbError(40P01·WEEKLY_AREAS_REQUIRED, tr)로 판정하고,
  *  셋 다 아니면 failWith 로그 + 고정 문구다 — 격리(WEEKLY_ISOLATION 25001)와 입력 토큰(WEEKLY_INVALID_INPUT·WEEKLY_SEED_INVALID 22023)은
  *  정상 경로에서 나지 않으므로(액션이 RPC 앞에서 주 날짜·매핑을 거르고 시드는 carryOverRows 가 만든다) 표에 넣지 않는다(T6) */
 const CREATE_TOKENS: OwnTokenTable = {
@@ -134,20 +137,21 @@ function isCarryMappingShape(v: unknown): v is CarryMapping {
 export async function createWeeklyReport(
   projectId: string, weekStartIso: string, carryOver: boolean, mapping?: CarryMapping,
 ): Promise<CreateWeeklyResult> {
+  const tr = await serverTranslator()
   // 회차(주차 문서) 생성은 시트의 구조를 만드는 일이라 관리자 몫 — 셀 편집(멤버)과 급이 다르다.
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, code: g.error, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
   if (!mod.ok) return { ok: false, code: mod.error, error: mod.error }
-  if (typeof weekStartIso !== 'string' || !isValidIsoDate(weekStartIso)) return { ok: false, code: 'INVALID_INPUT', error: ERR_WEEK_INPUT }
-  if (mapping !== undefined && !isCarryMappingShape(mapping)) return { ok: false, code: 'INVALID_INPUT', error: ERR_MAPPING_INPUT }
+  if (typeof weekStartIso !== 'string' || !isValidIsoDate(weekStartIso)) return { ok: false, code: 'INVALID_INPUT', error: tr(ERR_WEEK_INPUT) }
+  if (mapping !== undefined && !isCarryMappingShape(mapping)) return { ok: false, code: 'INVALID_INPUT', error: tr(ERR_MAPPING_INPUT) }
 
   let cfg: Awaited<ReturnType<typeof getProjectConfig>>
   try {
     cfg = await getProjectConfig(projectId)
   } catch (e) {
     if (e instanceof ConfigUnavailableError) {
-      return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('weekly/create', e, ERR_CONFIG_UNAVAILABLE), retryable: true }
+      return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('weekly/create', e, configText(tr, ERR_CONFIG_UNAVAILABLE)), retryable: true }
     }
     throw e
   }
@@ -156,12 +160,12 @@ export async function createWeeklyReport(
     // 주 키는 그 프로젝트 규칙의 키(SP5 P9) — 트리거(WEEK_KEY_INVALID)는 마지막 방어다(D8)
     weekStart = weekKeyOf(requireCalendar(cfg).weekStart, weekStartIso)
   } catch (e) {
-    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: `${CONFIG_MESSAGES[e.code]} (${e.key})` }
+    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: `${configText(tr, CONFIG_MESSAGES[e.code])} (${e.key})` }
     throw e
   }
   const areas: ConfigArea[] = cfg.areas.weekly_section
   // 활성 영역 0개 — RPC 도 WEEKLY_AREAS_REQUIRED 로 막지만 부르기 전에 같은 문구로 답한다(임의 구분을 만들지 않는다, W1)
-  if (!areas.some(a => a.active)) return { ok: false, code: 'CONFIG_REQUIRED', error: ERR_AREAS_REQUIRED }
+  if (!areas.some(a => a.active)) return { ok: false, code: 'CONFIG_REQUIRED', error: tr(ERR_AREAS_REQUIRED) }
 
   let seed: ReturnType<typeof seedOf> | null = null
   if (carryOver === true) {
@@ -171,20 +175,20 @@ export async function createWeeklyReport(
     try {
       existing = await findWeeklyReportId(projectId, weekStart)
     } catch (e) {
-      return { ok: false, code: 'CARRY_SOURCE_UNAVAILABLE', error: failWith('weekly/create', e, ERR_CARRY_SOURCE), retryable: true }
+      return { ok: false, code: 'CARRY_SOURCE_UNAVAILABLE', error: failWith('weekly/create', e, tr(ERR_CARRY_SOURCE)), retryable: true }
     }
     let src: Awaited<ReturnType<typeof findCarryOverSource>> = null
     if (existing === null) {
       try {
         src = await findCarryOverSource(projectId, weekStart)
       } catch (e) {
-        return { ok: false, code: 'CARRY_SOURCE_UNAVAILABLE', error: failWith('weekly/create', e, ERR_CARRY_SOURCE), retryable: true }
+        return { ok: false, code: 'CARRY_SOURCE_UNAVAILABLE', error: failWith('weekly/create', e, tr(ERR_CARRY_SOURCE)), retryable: true }
       }
     }
     if (src && src.rows.length > 0) {
       const fieldDefsState = cfg.keys ? cfg.keys['fields.weekly_row'] : undefined
       // 정의가 손상이면 이월할 필드를 모른다 — '이월 필드 없음'으로 풀어 값 없는 문서를 만들지 않는다(3원칙 ①)
-      if (fieldDefsState?.status === 'invalid') return { ok: false, code: 'CONFIG_INVALID', error: `${CONFIG_MESSAGES.CONFIG_INVALID} (fields.weekly_row)` }
+      if (fieldDefsState?.status === 'invalid') return { ok: false, code: 'CONFIG_INVALID', error: `${configText(tr, CONFIG_MESSAGES.CONFIG_INVALID)} (fields.weekly_row)` }
       const fieldDefs = fieldDefsState && (fieldDefsState.status === 'set' || fieldDefsState.status === 'default') ? fieldDefsState.value : []
       const parsedDefs = parseFieldDefs('weekly_row', fieldDefs)
       const defs = parsedDefs.ok ? parsedDefs.value : []
@@ -207,11 +211,11 @@ export async function createWeeklyReport(
     // 이월 값이 지금의 필드 정의와 맞지 않아 행 트리거(enforce_custom_fields)가 거부했다 — 문서도 만들어지지 않았다(한 트랜잭션).
     // 토큰에 필드 키·사유가 붙어 자기 토큰 표(정확히 일치)로는 못 받으므로 표보다 먼저 본다. 원문은 로그로만
     if (typeof error.message === 'string' && error.message.startsWith('CUSTOM_FIELD_')) {
-      return { ok: false, code: 'FIELD_INVALID', error: failWith('weekly/create', error, ERR_CARRY_CUSTOM) }
+      return { ok: false, code: 'FIELD_INVALID', error: failWith('weekly/create', error, tr(ERR_CARRY_CUSTOM)) }
     }
-    const f = rpcFailure(error, CREATE_TOKENS)
+    const f = rpcFailure(error, CREATE_TOKENS, tr)
     if (f) return { ok: false, code: f.code, error: f.message, ...(f.retryable ? { retryable: true } : {}) }
-    return { ok: false, code: 'UNAVAILABLE', error: failWith('weekly/create', error, ERR_CREATE) }
+    return { ok: false, code: 'UNAVAILABLE', error: failWith('weekly/create', error, tr(ERR_CREATE)) }
   }
   const r = data as { status: 'created' | 'exists'; report_id: string }
   await enqueueIndexChange({ domain: 'weekly', projectId, entityId: r.report_id })
@@ -225,13 +229,14 @@ export async function createWeeklyReport(
 export async function saveWeeklyTitle(
   projectId: string, reportId: string, title: string, expected?: string,
 ): Promise<WeeklyActionResult> {
+  const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')
   if (!mod.ok) return { ok: false, error: mod.error }
   const t = title.trim()
-  if (t.length > TITLE_MAX) return { ok: false, error: `제목은 ${TITLE_MAX}자 이하여야 합니다.` }
-  if (expected !== undefined && (typeof expected !== 'string' || expected.length > TITLE_MAX)) return { ok: false, error: '잘못된 요청입니다.' }
+  if (t.length > TITLE_MAX) return { ok: false, error: fill(tr('err.titleMustCharactersFewer'), { titleMax: TITLE_MAX }) }
+  if (expected !== undefined && (typeof expected !== 'string' || expected.length > TITLE_MAX)) return { ok: false, error: tr('err.invalidRequest') }
 
   const sb = await createServerClient()
   // 대상 회차가 판정 기준 프로젝트의 것인지 쿼리에 못 박는다 — 미결합 reportId 로 쓰면 A 의 멤버가 B 의 회차 제목을 고칠 수 있다.
@@ -242,18 +247,18 @@ export async function saveWeeklyTitle(
   // 값 CAS — 내가 본 제목일 때만 쓴다(title 은 NOT NULL, 기본 ''). 읽고 견준 뒤 쓰는 것보다 사이가 없다
   if (expected !== undefined) q = q.eq('title', expected)
   const { data, error } = await q.select('id')
-  if (error) return { ok: false, error: failWith('weekly/title', error, ERR_TITLE_SAVE) }
+  if (error) return { ok: false, error: failWith('weekly/title', error, tr(ERR_TITLE_SAVE)) }
   if (!data || data.length === 0) {
-    if (expected === undefined) return { ok: false, error: '대상 회차를 찾을 수 없습니다.' }
+    if (expected === undefined) return { ok: false, error: tr('srv.weekly.targetWeekNotFound') }
     // 0행 — 회차가 없거나 제목이 그새 달라졌다. 다시 읽어 가린다(읽기 실패를 '충돌 없음'으로도 '회차 없음'으로도 읽지 않는다 — 3원칙)
     const { data: now, error: readErr } = await sb.from('weekly_reports')
       .select('id, title')
       .eq('id', reportId).eq('project_id', projectId)
       .maybeSingle()
-    if (readErr) return { ok: false, error: failWith('weekly/title', readErr, ERR_TITLE_SAVE) }
-    if (!now) return { ok: false, error: '대상 회차를 찾을 수 없습니다.' }
+    if (readErr) return { ok: false, error: failWith('weekly/title', readErr, tr(ERR_TITLE_SAVE)) }
+    if (!now) return { ok: false, error: tr('srv.weekly.targetWeekNotFound') }
     const latest = ((now as { title: string | null }).title ?? '')
-    if (latest !== t) return { ok: false, error: ERR_TITLE_CONFLICT, conflict: true, latest }
+    if (latest !== t) return { ok: false, error: tr(ERR_TITLE_CONFLICT), conflict: true, latest }
     return { ok: true }   // 이미 같은 제목이다(다른 사람이 같은 값으로, 또는 응답을 잃은 내 앞선 저장) — 덮을 것이 없다
   }
   await enqueueIndexChange({ domain: 'weekly', projectId, entityId: reportId })
@@ -269,13 +274,14 @@ export async function saveWeeklyTitle(
 async function rowAreasInProject(
   sb: Awaited<ReturnType<typeof createServerClient>>, projectId: string, rowIds: string[],
 ): Promise<{ ok: true; areaOf: Map<string, string> } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   const { data, error } = await sb.from('weekly_report_rows')
     .select('id, area_id')
     .in('id', rowIds)
     .eq('project_id', projectId)
   if (error) {
     console.error('[weekly] 대상 행 소속 확인 실패:', error.message)
-    return { ok: false, error: ERR_SCOPE }
+    return { ok: false, error: tr(ERR_SCOPE) }
   }
   return { ok: true, areaOf: new Map((data ?? []).map(r => [r.id as string, r.area_id as string])) }
 }
@@ -289,43 +295,44 @@ export async function prepareWeeklyCellRewrite(
   projectId: string,
   inputs: WeeklyRewriteInput[],
 ): Promise<WeeklyRewriteResult> {
+  const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')                    // 입력 검증 앞 — AI 판정(aiAvailable)은 그대로 뒤에 있다
   if (!mod.ok) return { ok: false, error: mod.error }
   if (!Array.isArray(inputs) || inputs.length === 0)
-    return { ok: false, error: '다듬을 내용이 없습니다.' }
+    return { ok: false, error: tr('srv.weekly.nothingPolish') }
   if (inputs.length > WEEKLY_REWRITE_MAX_CELLS)
-    return { ok: false, error: `한 번에 최대 ${WEEKLY_REWRITE_MAX_CELLS}개 셀까지 다듬을 수 있습니다.` }
+    return { ok: false, error: fill(tr('srv.weekly.upCellsCanPolishedOnce'), { weeklyRewriteMaxCells: WEEKLY_REWRITE_MAX_CELLS }) }
 
   const addresses = new Set<string>()
   let totalChars = 0
   for (const input of inputs) {
     if (!input || typeof input.rowId !== 'string' || !input.rowId)
-      return { ok: false, error: '잘못된 대상이 포함되어 있습니다.' }
+      return { ok: false, error: tr('srv.weekly.invalidTargetIncluded') }
     if (!isWeeklyCellKey(input.cellKey))
-      return { ok: false, error: '잘못된 셀이 포함되어 있습니다.' }
+      return { ok: false, error: tr('srv.weekly.invalidCellIncluded') }
     if (typeof input.content !== 'string' || !input.content.trim())
-      return { ok: false, error: '빈 셀은 AI로 다듬을 수 없습니다.' }
+      return { ok: false, error: tr('srv.weekly.emptyCellsCannotPolishedAi') }
     if (input.content.length > CELL_MAX)
-      return { ok: false, error: `내용은 ${CELL_MAX}자 이하여야 합니다.` }
+      return { ok: false, error: fill(tr('srv.weekly.contentMustCharactersFewer'), { cellMax: CELL_MAX }) }
     const address = `${input.rowId}:${input.cellKey}`
     if (addresses.has(address))
-      return { ok: false, error: '같은 셀이 중복으로 선택되었습니다.' }
+      return { ok: false, error: tr('srv.weekly.sameCellSelectedMoreOnce') }
     addresses.add(address)
     totalChars += input.content.length
   }
   if (totalChars > WEEKLY_REWRITE_MAX_TOTAL_CHARS)
-    return { ok: false, error: '선택한 내용이 너무 깁니다. 범위를 나눠 다시 시도해 주세요.' }
+    return { ok: false, error: tr('srv.weekly.selectedContentTooLong') }
 
   const sb = await createServerClient()
   const rowIds = [...new Set(inputs.map(input => input.rowId))]
   const scope = await rowAreasInProject(sb, projectId, rowIds)
-  if (!scope.ok) return { ok: false, error: scope.error }
+  if (!scope.ok) return { ok: false, error: libText(tr, scope.error) }
   if (rowIds.some(rowId => !scope.areaOf.has(rowId)))
-    return { ok: false, error: ERR_REWRITE_TARGET }
+    return { ok: false, error: tr(ERR_REWRITE_TARGET) }
   if (!(await aiAvailable({ projectId }, { module: 'weekly' })))
-    return { ok: false, error: 'AI 를 사용할 수 없습니다. 관리자에게 AI 설정을 요청해 주세요.' }
+    return { ok: false, error: tr('srv.weekly.aiNotAvailable') }
 
   // 라벨 = 영역 이름(비활성이면 표지) — 행의 area_id 와 그 프로젝트의 주간 영역으로(지운 section·module 열을 읽지 않는다, Q35)
   const { data: areaRows, error: areaError } = await sb.from('project_areas')
@@ -334,7 +341,7 @@ export async function prepareWeeklyCellRewrite(
     .eq('kind', 'weekly_section')
   if (areaError || !areaRows) {
     if (areaError) console.error('[weekly] AI 재작성 대상 영역 조회 실패:', areaError.message)
-    return { ok: false, error: ERR_REWRITE_TARGET }
+    return { ok: false, error: tr(ERR_REWRITE_TARGET) }
   }
   const areas = areaRows as { id: string; name: string; active: boolean }[]
   const promptCells = inputs.map((input, index) => ({
@@ -353,7 +360,7 @@ export async function prepareWeeklyCellRewrite(
   } else {
     const now = Date.now()
     if (now - (weeklyRewriteLastAttempt.get(gateKey) ?? 0) < WEEKLY_REWRITE_COOLDOWN_MS)
-      return { ok: false, error: 'AI 요청이 너무 빠릅니다. 잠시 후 다시 시도해 주세요.' }
+      return { ok: false, error: tr('srv.weekly.aiRequestsTooFrequent') }
     rememberWeeklyRewriteAttempt(gateKey, now)
     const pending = generateAnswer(
       WEEKLY_REWRITE_SYSTEM_PROMPT,
@@ -375,10 +382,10 @@ export async function prepareWeeklyCellRewrite(
     }
   }
   if (!raw)
-    return { ok: false, error: 'AI가 내용을 다듬지 못했습니다. 잠시 후 다시 시도해 주세요.' }
+    return { ok: false, error: tr('srv.weekly.aiCouldNotPolishContent') }
   const rewritten = parseWeeklyRewriteResponse(raw, promptCells)
   if (!rewritten)
-    return { ok: false, error: 'AI 응답을 확인하지 못했습니다. 원문은 변경되지 않았습니다.' }
+    return { ok: false, error: tr('srv.weekly.couldNotVerifyAiResponse') }
 
   return {
     ok: true,
@@ -458,24 +465,25 @@ async function casUpdateWeeklyRow(
 export async function saveWeeklyCell(
   projectId: string, rowId: string, cellKey: string, content: string, expected?: string,
 ): Promise<WeeklyActionResult> {
+  const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')
   if (!mod.ok) return { ok: false, error: mod.error }
-  if (!isWeeklyCellKey(cellKey)) return { ok: false, error: '잘못된 셀입니다.' }
-  if (content.length > CELL_MAX) return { ok: false, error: `내용은 ${CELL_MAX}자 이하여야 합니다.` }
+  if (!isWeeklyCellKey(cellKey)) return { ok: false, error: tr('srv.weekly.invalidCell') }
+  if (content.length > CELL_MAX) return { ok: false, error: fill(tr('srv.weekly.contentMustCharactersFewer'), { cellMax: CELL_MAX }) }
 
   const sb = await createServerClient()
   const scope = await rowAreasInProject(sb, projectId, [rowId])
-  if (!scope.ok) return { ok: false, error: scope.error }
+  if (!scope.ok) return { ok: false, error: libText(tr, scope.error) }
   // 소속이 아니면 '행 없음'과 같은 취급 — 남의 프로젝트 행의 존재를 알려 주지 않는다.
-  if (!scope.areaOf.has(rowId)) return { ok: false, error: ERR_ROW_GONE, gone: true }
+  if (!scope.areaOf.has(rowId)) return { ok: false, error: tr(ERR_ROW_GONE), gone: true }
   if (typeof expected === 'string') {
     const r = await casUpdateWeeklyRow(sb, projectId, rowId, { [cellKey]: content }, { [cellKey]: expected })
-    if (r.kind === 'error') return { ok: false, error: failWith('weekly/cell', r.failure, ERR_CELL_SAVE) }
-    if (r.kind === 'gone') return { ok: false, error: ERR_ROW_GONE, gone: true }
+    if (r.kind === 'error') return { ok: false, error: failWith('weekly/cell', r.failure, tr(ERR_CELL_SAVE)) }
+    if (r.kind === 'gone') return { ok: false, error: tr(ERR_ROW_GONE), gone: true }
     const latest = r.conflicts[cellKey as WeeklyCellKey]
-    if (latest !== undefined) return { ok: false, error: ERR_CELL_CONFLICT, conflict: true, latest }
+    if (latest !== undefined) return { ok: false, error: tr(ERR_CELL_CONFLICT), conflict: true, latest }
     if (r.reportId) void touchWeeklyReports(projectId, [r.reportId])
     return { ok: true }
   }
@@ -484,8 +492,8 @@ export async function saveWeeklyCell(
     .update({ [cellKey]: content })
     .eq('id', rowId)
     .select('id, report_id')
-  if (error) return { ok: false, error: failWith('weekly/cell', error, ERR_CELL_SAVE) }
-  if (!data || data.length === 0) return { ok: false, error: ERR_ROW_GONE, gone: true }
+  if (error) return { ok: false, error: failWith('weekly/cell', error, tr(ERR_CELL_SAVE)) }
+  if (!data || data.length === 0) return { ok: false, error: tr(ERR_ROW_GONE), gone: true }
   const reportId = (data[0] as { id: string; report_id?: string })?.report_id
   if (reportId) {
     void touchWeeklyReports(projectId, [reportId])
@@ -507,16 +515,17 @@ export async function saveWeeklyCells(
   projectId: string,          // 권한 판정 기준·소속 확인(행의 project_id)
   edits: WeeklyCellEdit[],
 ): Promise<WeeklyBatchResult> {
+  const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')
   if (!mod.ok) return { ok: false, error: mod.error }
   if (edits.length === 0) return { ok: true }                                             // no-op — DB 접근 없음
-  if (edits.length > BATCH_MAX) return { ok: false, error: '한 번에 저장할 수 있는 셀 수를 초과했습니다.' } // dedupe 전 원본 길이 기준
+  if (edits.length > BATCH_MAX) return { ok: false, error: tr('srv.weekly.tooManyCellsSaveOnce') } // dedupe 전 원본 길이 기준
   for (const e of edits) {
-    if (!isWeeklyCellKey(e.cellKey)) return { ok: false, error: '잘못된 셀입니다.' }        // 구조 필드 차단(D1)
-    if (e.content.length > CELL_MAX) return { ok: false, error: `내용은 ${CELL_MAX}자 이하여야 합니다.` }
-    if (!e.rowId) return { ok: false, error: '잘못된 대상입니다.' }
+    if (!isWeeklyCellKey(e.cellKey)) return { ok: false, error: tr('srv.weekly.invalidCell') }        // 구조 필드 차단(D1)
+    if (e.content.length > CELL_MAX) return { ok: false, error: fill(tr('srv.weekly.contentMustCharactersFewer'), { cellMax: CELL_MAX }) }
+    if (!e.rowId) return { ok: false, error: tr('srv.weekly.invalidTarget') }
   }
 
   // 방어적 dedupe — 같은 `${rowId}:${cellKey}`는 마지막이 이겨(last-wins) 적용값을 결정적으로.
@@ -527,7 +536,7 @@ export async function saveWeeklyCells(
   // 배치 전체의 소속을 한 번에 확인한다(건별 왕복 회피). 소속 아닌 행은 삭제된 행과
   // 같은 취급으로 goneRowIds 에 넣어 스킵 — 부분 실패 시맨틱을 유지한다.
   const scope = await rowAreasInProject(sb, projectId, [...new Set([...deduped.values()].map(e => e.rowId))])
-  if (!scope.ok) return { ok: false, error: scope.error }
+  if (!scope.ok) return { ok: false, error: libText(tr, scope.error) }
   const goneRowIds: string[] = []
   const touchedReportIds = new Set<string>()
   // 행 단위 그룹핑 — 같은 행의 여러 cellKey 는 patch 하나로 합쳐 행당 1 update 로 보낸다.
@@ -576,7 +585,7 @@ export async function saveWeeklyCells(
         for (const [cellKey, latest] of Object.entries(r.latest)) conflicts.push({ rowId: r.rowId, cellKey: cellKey as WeeklyCellKey, latest: latest ?? '' })
       }
       // 진성 DB 에러 — 청크 경계에서 중단(비원자적, 재시도는 멱등). 원문은 로그로만(D21)
-      if (r.failure !== null) return { ok: false, error: failWith('weekly/cells', r.failure, ERR_CELL_SAVE) }
+      if (r.failure !== null) return { ok: false, error: failWith('weekly/cells', r.failure, tr(ERR_CELL_SAVE)) }
       if (r.gone) goneRowIds.push(r.rowId)                            // 0행 영향(삭제된 행) — 스킵하고 계속(전체 실패 아님)
       else if (r.reportId) touchedReportIds.add(r.reportId)
     }

@@ -8,15 +8,19 @@ import { runWbsImport, validateLevels } from '@/lib/agent/wbsImport'
 import { parseWbsMarkdown, toImportNodes, validateWbsDoc, type WbsDoc } from '@/lib/wbsmd/parse'
 import { chunked } from '@/lib/ai/util'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
-import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { ERR_LEVEL_LABELS_INVALID } from '@/lib/agent/wbsImport'
 import { requireCalendar } from '@/lib/calendar/load'
 import { CalendarError } from '@/lib/domain/calendar'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 /** 달력 실패의 사용자 문구 — 손상 키(키 이름이 든 고정 문구)·근무일 없음(3,660일 상한 — 고정 문구). 그 밖은 null(호출부의 고정 문구) */
-function calendarFailureText(e: unknown): string | null {
-  if (e instanceof ConfigKeyError) return `${CONFIG_MESSAGES[e.code]} (${e.key})`
-  if (e instanceof CalendarError) return '근무일을 찾지 못해 시작일을 계산할 수 없습니다 — 프로젝트 설정의 근무 요일·휴무 예외를 확인하세요.'
+function calendarFailureText(t: ServerTranslate, e: unknown): string | null {
+  if (e instanceof ConfigKeyError) return `${configText(t, CONFIG_MESSAGES[e.code])} (${e.key})`
+  if (e instanceof CalendarError) return t('srv.wbsMarkdown.noWorkingDayFoundStart')
   return null
 }
 
@@ -51,12 +55,12 @@ export type WbsUploadPreview = {
 type Admin = ReturnType<typeof createAdminClient>
 
 /** 파싱 + 구조·본문 검증 — 미리보기·적용이 공유하는 앞단. */
-function parseAndValidate(md: string): { doc: WbsDoc; role: 'pl' | 'skeleton'; errors: string[]; warnings: string[]; counts: Record<string, number> } {
+function parseAndValidate(t: ServerTranslate, md: string): { doc: WbsDoc; role: 'pl' | 'skeleton'; errors: string[]; warnings: string[]; counts: Record<string, number> } {
   const doc = parseWbsMarkdown(md)
   const role: 'pl' | 'skeleton' = doc.front.attach ? 'pl' : 'skeleton'
   const errors: string[] = []
   const lv = validateLevels(doc.levels)
-  if ('error' in lv) errors.push(`levels 검증 실패: ${lv.error}`)
+  if ('error' in lv) errors.push(fill(t('err.levelsValidationFailed'), { error: libText(t, lv.error) }))
   const v = validateWbsDoc(doc, role)
   errors.push(...v.errors)
   return { doc, role, errors, warnings: v.warnings, counts: v.counts }
@@ -77,11 +81,12 @@ async function resolveAttachRef(admin: Admin, projectId: string, attach: string)
 }
 
 export async function previewWbsUpload(projectId: string, md: string): Promise<WbsUploadPreview> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
 
   try {
-    const { doc, role, errors, warnings, counts } = parseAndValidate(md)
+    const { doc, role, errors, warnings, counts } = parseAndValidate(t, md)
     const admin = createAdminClient()
 
     // attach 자동 판정 (PL 만)
@@ -91,8 +96,8 @@ export async function previewWbsUpload(projectId: string, md: string): Promise<W
       const r = await resolveAttachRef(admin, projectId, doc.front.attach)
       attachRef = r.ref
       attachFound = r.ref !== null
-      if (r.ambiguous) errors.push(`attach 부착점이 모호합니다(같은 ID 가 여러 모듈에 있음): ${doc.front.attach}`)
-      else if (!attachFound) errors.push(`attach 노드가 서버에 없습니다: ${doc.front.attach} — 골격을 먼저 업로드하세요.`)
+      if (r.ambiguous) errors.push(fill(t('srv.wbsMarkdown.attachPointAmbiguous'), { attach: doc.front.attach }))
+      else if (!attachFound) errors.push(fill(t('srv.wbsMarkdown.attachNodeDoesNotExist'), { attach: doc.front.attach }))
     }
 
     // levels 정합 (PL: 정본 대조 / 골격: 시드 예정)
@@ -109,7 +114,7 @@ export async function previewWbsUpload(projectId: string, md: string): Promise<W
       // 손상(invalid)은 '정본 없음'과 다르다 — 파일이 아니라 설정을 고쳐야 한다(3원칙 ①)
       if (state.status === 'invalid') errors.push(ERR_LEVEL_LABELS_INVALID)
       else if (levelsStatus === 'mismatch') {
-        errors.push(`levels 가 프로젝트 정본과 다릅니다 (정본: ${serverLevels?.join('>') ?? '없음'}) — 골격의 levels 를 다시 복사하세요.`)
+        errors.push(t('srv.wbsMarkdown.levelsMismatch').replace('{levels}', () => serverLevels?.join('>') ?? t('common.none')))
       }
     }
 
@@ -149,7 +154,7 @@ export async function previewWbsUpload(projectId: string, md: string): Promise<W
   } catch (e) {
     // 원인(DB 원문 포함)은 로그에만 — 화면에는 고정 문구
     console.error('[wbs-md] 미리보기 실패:', e)
-    return { ok: false, error: calendarFailureText(e) ?? (e instanceof ConfigUnavailableError ? ERR_CONFIG_UNAVAILABLE : '미리보기에 실패했습니다.') }
+    return { ok: false, error: calendarFailureText(t, e) ?? (e instanceof ConfigUnavailableError ? configText(t, ERR_CONFIG_UNAVAILABLE) : t('srv.wbsMarkdown.couldNotBuildPreview')) }
   }
 }
 
@@ -162,15 +167,16 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
   /** 프로젝트의 agents 모듈이 꺼져 있어 주문이 안 나간 경우 — 사람이 프로젝트 설정에서 켜야 한다. */
   agentStopped?: boolean
 }> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
 
   try {
     // 클라이언트 미리보기를 신뢰하지 않는다 — 전 과정 재검증(fail-closed).
-    const { doc, role, errors } = parseAndValidate(md)
-    if (errors.length > 0) return { ok: false, error: `검증 실패 ${errors.length}건: ${errors.slice(0, 3).join(' / ')}` }
+    const { doc, role, errors } = parseAndValidate(t, md)
+    if (errors.length > 0) return { ok: false, error: fill(t('srv.wbsMarkdown.validationErrors'), { length: errors.length, v: errors.slice(0, 3).join(' / ') }) }
     const module_ = doc.front.module ?? ''
-    if (!/^[A-Za-z0-9_-]{1,32}$/.test(module_)) return { ok: false, error: 'module 형식이 올바르지 않습니다.' }
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(module_)) return { ok: false, error: t('err.moduleFormatNotValid') }
 
     const admin = createAdminClient()
     let attachRef: string | null = null
@@ -178,8 +184,8 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
       const r = await resolveAttachRef(admin, projectId, doc.front.attach)
       if (!r.ref) {
         return { ok: false, error: r.ambiguous
-          ? `attach 부착점이 모호합니다: ${doc.front.attach}`
-          : `attach 노드가 서버에 없습니다: ${doc.front.attach} — 골격을 먼저 업로드하세요.` }
+          ? fill(t('srv.wbsMarkdown.attachPointAmbiguous2'), { attach: doc.front.attach })
+          : fill(t('srv.wbsMarkdown.attachNodeDoesNotExist'), { attach: doc.front.attach }) }
       }
       attachRef = r.ref
     }
@@ -205,6 +211,6 @@ export async function applyWbsUpload(projectId: string, md: string): Promise<{
   } catch (e) {
     // 원인(DB 원문 포함)은 로그에만 — 화면에는 고정 문구
     console.error('[wbs-md] 적용 실패:', e)
-    return { ok: false, error: calendarFailureText(e) ?? (e instanceof ConfigUnavailableError ? ERR_CONFIG_UNAVAILABLE : '업로드에 실패했습니다.') }
+    return { ok: false, error: calendarFailureText(t, e) ?? (e instanceof ConfigUnavailableError ? configText(t, ERR_CONFIG_UNAVAILABLE) : t('srv.wbsMarkdown.uploadFailed')) }
   }
 }

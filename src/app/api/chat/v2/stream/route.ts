@@ -25,6 +25,7 @@ import { projectTeams, visibleTeams } from '@/lib/teams/source'
 import { DEFAULT_REQUEST_CALENDAR, resolveMemberWorkspacesCalendar, resolveRequestCalendar } from '@/lib/calendar/load'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import type { RequestCalendar } from '@/lib/domain/calendar'
+import { serverTranslator } from '@/lib/i18n/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,27 +53,28 @@ function requestId(): string {
 
 /** Read-only NDJSON endpoint. Existing /api/chat and /api/chat/stream remain untouched. */
 export async function POST(req: NextRequest) {
+  const tr = await serverTranslator()
   // Explicit kill switch used by the client to fall back to the legacy text stream.
   if (!chatV2Enabled()) {
-    return jsonError('새 챗봇 스트림이 비활성화되어 있습니다.', 501, 'CHAT_V2_DISABLED')
+    return jsonError(tr('srv.api.chatV2Stream.newChatbotStreamDisabled'), 501, 'CHAT_V2_DISABLED')
   }
 
   const user = await getSession()
-  if (!user) return jsonError('인증이 필요합니다.', 401, 'UNAUTHENTICATED')
+  if (!user) return jsonError(tr('err.authenticationRequired'), 401, 'UNAUTHENTICATED')
 
   // sanitize는 파싱 이후에야 상한을 적용하므로, 파싱 전 선언 크기로 리소스 소모형
   // 요청을 차단한다(리뷰 M-5). 256KB는 정상 상한(메시지 2k + 히스토리 12×4k자 한글
   // UTF-8 ≈ 150KB)에 여유를 둔 값이다.
   const contentLength = Number(req.headers.get('content-length') ?? 0)
   if (contentLength > MAX_REQUEST_BYTES) {
-    return jsonError('요청 본문이 너무 큽니다.', 413, 'PAYLOAD_TOO_LARGE')
+    return jsonError(tr('srv.api.chatV2Stream.requestBodyTooLarge'), 413, 'PAYLOAD_TOO_LARGE')
   }
 
   let raw: unknown
   try {
     raw = await req.json()
   } catch {
-    return jsonError('잘못된 JSON 요청입니다.', 400, 'INVALID_JSON')
+    return jsonError(tr('srv.api.chatV2Stream.invalidJsonRequest'), 400, 'INVALID_JSON')
   }
   const parsed = sanitizeChatRequestV2(raw)
   if (!parsed.ok) return jsonError(parsed.error.message, parsed.error.status, parsed.error.code)
@@ -101,7 +103,7 @@ export async function POST(req: NextRequest) {
     && chatPlannerEnabled()
     && shouldAttemptPlan(planningSignals(request))
   if (plannedRoute.kind === 'legacy' && !plannerEligible) {
-    return jsonError('기본 답변 경로로 전환합니다.', 501, 'CHAT_V2_UNSUPPORTED')
+    return jsonError(tr('srv.api.chatV2Stream.switchingDefaultAnswerPath'), 501, 'CHAT_V2_UNSUPPORTED')
   }
 
   // 봇은 읽기 전용이고 실제 권한은 아래 capabilities + allowedProjectIds 가 결정한다. 그 스코프는
@@ -111,7 +113,7 @@ export async function POST(req: NextRequest) {
   const scopeResolution = await createSupabaseAccessScopeResolver(sb).resolve(user.id)
   if (!scopeResolution.ok) {
     console.error('[chat-v2] 프로젝트 접근 범위 조회 실패:', scopeResolution.detail ?? scopeResolution.code)
-    return jsonError('프로젝트 접근 범위를 확인하지 못했습니다.', 503, 'ACCESS_SCOPE_UNAVAILABLE')
+    return jsonError(tr('err.couldNotVerifyProjectAccess'), 503, 'ACCESS_SCOPE_UNAVAILABLE')
   }
   const { allowedProjectIds, workspaceIds, isSuperuser, capabilities } = scopeResolution.scope
   const scope = validateChatProjectScope(request, allowedProjectIds)
@@ -125,7 +127,7 @@ export async function POST(req: NextRequest) {
     if (e instanceof ConfigKeyError) return jsonError(e.message, 422, 'CALENDAR_INVALID')
     if (e instanceof ConfigUnavailableError) {
       console.error('[chat-v2] 요청 범위 달력 조회 실패:', e.message)
-      return jsonError('프로젝트 달력을 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'CALENDAR_UNAVAILABLE')
+      return jsonError(tr('srv.api.chatV2Stream.couldNotVerifyProjectCalendar'), 503, 'CALENDAR_UNAVAILABLE')
     }
     throw e
   }
@@ -144,7 +146,7 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       // 팀 원천 실패 — 빈 목록으로 폴백하면 팀 질문이 필터 없이 조용히 답해진다(3원칙).
       console.error('[chat-v2] 팀 목록 조회 실패:', e instanceof Error ? e.message : e)
-      return jsonError('팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'TEAMS_UNAVAILABLE')
+      return jsonError(tr('err.couldNotVerifyTeam'), 503, 'TEAMS_UNAVAILABLE')
     }
     // 근태 유형 = 그 프로젝트 설정 라벨(SP5 B4 D46). 못 읽으면 제품 기본 라벨로 라우팅하고(도구가 그 프로젝트 목록으로 다시 거른다) 로그를 남긴다
     let attendanceTypes: RouteAttendanceType[] | undefined
@@ -170,7 +172,7 @@ export async function POST(req: NextRequest) {
     // 워크스페이스 모듈 설정 조회 실패 — 그 워크스페이스만 빼고 답하면 팀 가시 범위의 전제가 깨져 담당 필터가 조용히 좁아진다(X2)
     if (!(e instanceof ChatToolGateUnavailableError)) throw e
     console.error('[chat-v2] 모듈 설정 조회 실패:', e.message, e.cause instanceof Error ? e.cause.message : e.cause)
-    return jsonError('봇 설정을 확인하지 못했습니다. 잠시 후 다시 시도하세요.', 503, 'MODULES_UNAVAILABLE')
+    return jsonError(tr('srv.api.chatV2Stream.couldNotVerifyBotSettings'), 503, 'MODULES_UNAVAILABLE')
   }
   const registry = gated.registry
 
@@ -182,7 +184,7 @@ export async function POST(req: NextRequest) {
     const validated = validateToolPlan(rawPlan, { allowedTools, allowedProjectIds })
     if (!validated.ok) {
       console.warn('[chat-v2] 플래너 계획 기각 → 레거시 폴백:', validated.code)
-      return jsonError('기본 답변 경로로 전환합니다.', 501, 'CHAT_V2_UNSUPPORTED')
+      return jsonError(tr('srv.api.chatV2Stream.switchingDefaultAnswerPath'), 501, 'CHAT_V2_UNSUPPORTED')
     }
     plan = validated.plan
   }

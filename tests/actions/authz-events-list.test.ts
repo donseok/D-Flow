@@ -10,7 +10,8 @@ import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { ERR_DENIED } from '@/lib/authz/errors'
 import { registerEn } from '@/lib/i18n/dict'
 import { EN } from '@/lib/i18n/dict/en'
-import { koTranslate, translatorFor } from '@/lib/i18n/translate'
+// serverTranslator 의 대역 — 실제와 같은 서버 번역 함수(서버 전용 키도 푼다)
+import { serverKoTranslate as koTranslate, serverTranslatorFor as translatorFor } from '@/lib/i18n/serverDict'
 
 registerEn(EN)
 

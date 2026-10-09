@@ -13,6 +13,8 @@ import {
   isAllowedInviteDomain, isInviteToken, inviteStatus, maskEmail, normalizeInviteEmail,
   validateSignupInput, type InviteStatus, type SignupInput,
 } from '@/lib/domain/invites'
+import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 type AccessRole = 'admin' | 'member'
@@ -22,13 +24,13 @@ type AccessRole = 'admin' | 'member'
 // 합류의 쓰기(소비·프로필·인물·워크스페이스 소속·명단·팀)는 전부 RPC consume_project_invite 한 트랜잭션이다 —
 // 앱 계층에 흩뿌리면 부분 실패가 "소비된 초대 + 소속 없음" 을 남긴다.
 // 사용자 문구는 계약서 §8 원문. 원시 Postgres/Supabase 메시지는 노출하지 않는다.
-const E_NOT_FOUND = '초대를 찾을 수 없습니다.'
-const E_UNUSABLE = '만료되었거나 사용할 수 없는 초대입니다.'
-const E_LOOKUP = '초대를 확인할 수 없어 중단했습니다.'
-const E_PERSON_LINKED = '이 이메일의 인물이 이미 다른 계정에 연결돼 있습니다. 관리자에게 문의해 주세요.'
+const E_NOT_FOUND = 'srv.inviteRedeem.inviteNotFound'
+const E_UNUSABLE = 'srv.inviteRedeem.inviteExpiredCannotUsed'
+const E_LOOKUP = 'err.couldNotVerifyInviteRequest'
+const E_PERSON_LINKED = 'srv.inviteRedeem.personEmailAlreadyLinkedAnother'
 /** 초대의 team_ids 는 FK 가 없다 — 발급 뒤 팀이 지워지면 트리거(PROJECT_MEMBER_TEAM_SCOPE)가 거부한다. 링크로는 고칠 수 없다. */
-const E_INVITE_TEAM_GONE = '초대에 담긴 팀을 더 이상 쓸 수 없습니다. 관리자에게 초대 재발급을 요청해 주세요.'
-const E_SIGNUP_FAILED = '가입 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+const E_INVITE_TEAM_GONE = 'srv.inviteRedeem.teamInviteCanNoLonger'
+const E_SIGNUP_FAILED = 'srv.inviteRedeem.couldNotCompleteSignUp'
 /** 비활성 인물·명단 행은 초대로 되살리지 않는다(0008 INVITE_INACTIVE) — 비활성화는 관리자의 결정이다. */
 const E_INACTIVE = PERSON_INACTIVE
 
@@ -39,19 +41,21 @@ const E_INACTIVE = PERSON_INACTIVE
  * 판정 자체가 실패하면(요청 헤더를 읽지 못함) 닫는다 — 조회 실패 문구로(fail-closed).
  */
 async function attemptsExhausted(): Promise<string | null> {
+  const tr = await serverTranslator()
   try {
     return (await rateLimited('inviteToken')) > 0 ? t(await getServerLocale(), 'rateLimit.tooMany') : null
   } catch (e) {
     console.error('[inviteRedeem] 요청 제한을 판정하지 못했다:', e instanceof Error ? e.message : e)
-    return E_LOOKUP
+    return tr(E_LOOKUP)
   }
 }
 /** 틀린 토큰 한 번을 세고 '없음'을 돌려준다. 세지 못해도 응답은 같다(로그만). */
 async function missedToken(): Promise<{ ok: false; error: string }> {
+  const tr = await serverTranslator()
   try { await noteRateFailure('inviteToken') } catch (e) {
     console.error('[inviteRedeem] 요청 제한 기록 실패:', e instanceof Error ? e.message : e)
   }
-  return { ok: false, error: E_NOT_FOUND }
+  return { ok: false, error: tr(E_NOT_FOUND) }
 }
 
 /**
@@ -64,9 +68,10 @@ async function missedToken(): Promise<{ ok: false; error: string }> {
 async function domainStillAllowed(
   admin: AdminClient, workspaceId: string, rawEmail: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   const loaded = await loadInviteDomains(admin, workspaceId)
-  if (!loaded.ok) return { ok: false, error: E_LOOKUP }
-  return isAllowedInviteDomain(normalizeInviteEmail(rawEmail), loaded.domains) ? { ok: true } : { ok: false, error: E_UNUSABLE }
+  if (!loaded.ok) return { ok: false, error: tr(E_LOOKUP) }
+  return isAllowedInviteDomain(normalizeInviteEmail(rawEmail), loaded.domains) ? { ok: true } : { ok: false, error: tr(E_UNUSABLE) }
 }
 
 interface InviteRowRaw {
@@ -94,12 +99,13 @@ interface ConsumedInvite {
 async function loadInvite<T>(
   admin: AdminClient, token: string, cols: string = INVITE_COLS,
 ): Promise<{ ok: true; invite: T } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   const { data, error } = await admin
     .from('project_invites').select(cols).eq('token_hash', hashInviteToken(token)).maybeSingle()
   if (error) {
     // 토큰은 로그에 남기지 않는다.
     console.error('[inviteRedeem] 초대 조회 실패:', error.message)
-    return { ok: false, error: E_LOOKUP }
+    return { ok: false, error: tr(E_LOOKUP) }
   }
   if (!data) return missedToken()
   return { ok: true, invite: data as unknown as T }
@@ -109,11 +115,12 @@ async function loadInvite<T>(
 async function currentUser(): Promise<
   { ok: true; user: Awaited<ReturnType<typeof getSession>> } | { ok: false; error: string }
 > {
+  const tr = await serverTranslator()
   try {
     return { ok: true, user: await getSession() }
   } catch (e) {
     console.error('[inviteRedeem] 세션 확인 실패:', e instanceof Error ? e.message : e)
-    return { ok: false, error: E_LOOKUP }
+    return { ok: false, error: tr(E_LOOKUP) }
   }
 }
 
@@ -124,20 +131,21 @@ async function currentUser(): Promise<
 async function consumeInvite(
   admin: AdminClient, token: string, email: string, userId: string,
 ): Promise<{ ok: true; row: ConsumedInvite } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   const { data, error } = await admin.rpc('consume_project_invite', {
     p_token_hash: hashInviteToken(token), p_email: email, p_user: userId,
   })
   if (error) {
     console.error('[inviteRedeem] 초대 소비 실패:', error.message)
     // 같은 이메일의 인물이 다른 계정에 이미 연결돼 있다 — 사용자가 고칠 수 없고 관리자가 풀어야 한다.
-    if (error.message.includes('PROJECT_INVITE_PERSON_LINKED')) return { ok: false, error: E_PERSON_LINKED }
-    if (error.message.includes('PROJECT_MEMBER_TEAM_SCOPE')) return { ok: false, error: E_INVITE_TEAM_GONE }
+    if (error.message.includes('PROJECT_INVITE_PERSON_LINKED')) return { ok: false, error: tr(E_PERSON_LINKED) }
+    if (error.message.includes('PROJECT_MEMBER_TEAM_SCOPE')) return { ok: false, error: tr(E_INVITE_TEAM_GONE) }
     // 명단 트리거가 던진 나머지 토큰(워크스페이스 불일치·계정 없는 권한·비활성 INVITE_INACTIVE 등)은 명단 문구로. 모르는 오류(연결 등)만 조회 실패 문구.
-    return { ok: false, error: rosterTokenError(error.message) ?? E_LOOKUP }
+    return { ok: false, error: libText(tr, rosterTokenError(error.message)) ?? tr(E_LOOKUP) }
   }
   const rows = (data ?? []) as ConsumedInvite[]
   // 0행 = 만료·취소·이미 사용·이메일 불일치. 어느 쪽인지 알려주지 않는다(초대 존재 탐침 차단).
-  if (rows.length === 0) return { ok: false, error: E_UNUSABLE }
+  if (rows.length === 0) return { ok: false, error: tr(E_UNUSABLE) }
   return { ok: true, row: rows[0] }
 }
 
@@ -212,6 +220,7 @@ interface PreviewRowRaw {
 export async function getInvitePreview(
   token: string,
 ): Promise<{ ok: true; preview: InvitePreview } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   const limited = await attemptsExhausted()
   if (limited) return { ok: false, error: limited }
   if (!isInviteToken(token)) return missedToken()
@@ -250,7 +259,7 @@ export async function getInvitePreview(
     .from('profiles').select('user_id').eq('email', normalizeInviteEmail(row.email)).maybeSingle()
   if (profileErr) {
     console.error('[inviteRedeem] 계정 유무 조회 실패:', profileErr.message)
-    return { ok: false, error: E_LOOKUP }
+    return { ok: false, error: tr(E_LOOKUP) }
   }
 
   // team_ids(uuid[])는 임베드할 FK 가 없다 — 이름으로 푼다. 실패를 '팀 없는 초대'로 위장하지 않는다.
@@ -261,7 +270,7 @@ export async function getInvitePreview(
     const { data: teams, error: teamsErr } = await admin.from('teams').select('id, name').in('id', teamIds)
     if (teamsErr || !teams) {
       console.error('[inviteRedeem] 팀 조회 실패:', teamsErr?.message ?? 'unknown')
-      return { ok: false, error: E_LOOKUP }
+      return { ok: false, error: tr(E_LOOKUP) }
     }
     const nameBy = new Map((teams as Array<{ id: string; name: string }>).map(t => [t.id, t.name]))
     teamNames = teamIds.flatMap(id => (nameBy.has(id) ? [nameBy.get(id)!] : []))
@@ -293,11 +302,12 @@ export async function getInvitePreview(
 export async function getInviteSessionState(
   token: string,
 ): Promise<{ ok: true; authed: boolean; emailMatches: boolean } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   const limited = await attemptsExhausted()
   if (limited) return { ok: false, error: limited }
   if (!isInviteToken(token)) return missedToken()
   const s = await currentUser()
-  if (!s.ok) return { ok: false, error: s.error }
+  if (!s.ok) return { ok: false, error: libText(tr, s.error) }
   // 비로그인 호출자에게는 초대 이메일에 관한 어떤 정보도 주지 않는다 — 조회조차 하지 않는다.
   if (!s.user) return { ok: true, authed: false, emailMatches: false }
 
@@ -320,13 +330,14 @@ function accessRank(r: AccessRole | null): number {
 /** 로그인 사용자 합류. 세션 이메일이 초대 이메일과 다르면 소비 전에 거부한다. */
 export async function redeemInvite(
   token: string,
-): Promise<{ ok: true; projectId: string; alreadyMember: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; projectId: string; alreadyMember: boolean } | { ok: false; error: string; code?: 'other_account' }> {
+  const tr = await serverTranslator()
   const limited = await attemptsExhausted()
   if (limited) return { ok: false, error: limited }
   if (!isInviteToken(token)) return missedToken()
   const s = await currentUser()
-  if (!s.ok) return { ok: false, error: s.error }
-  if (!s.user) return { ok: false, error: '로그인이 필요합니다.' }
+  if (!s.ok) return { ok: false, error: libText(tr, s.error) }
+  if (!s.user) return { ok: false, error: tr('common.err.signIn') }
   const user = s.user
 
   const admin = createAdminClient()
@@ -340,7 +351,8 @@ export async function redeemInvite(
 
   const sessionEmail = normalizeInviteEmail(user.email ?? '')
   if (!sessionEmail || sessionEmail !== normalizeInviteEmail(invite.email)) {
-    return { ok: false, error: '이 초대는 다른 이메일 주소를 위한 것입니다. 초대받은 계정으로 로그인해 주세요.' }
+    // code: 화면이 '다른 계정' 분기(방금 만든 세션 되돌리기)를 문구가 아니라 이 값으로 고른다 — 문구는 화면 언어를 따른다
+    return { ok: false, error: tr('srv.inviteRedeem.inviteDifferentEmailAddress'), code: 'other_account' }
   }
 
   // 이미 같거나 높은 권한이 있으면 초대를 태우지 않는다 — 1회용이라 태워도 얻을 것이 없고, 링크만 소모된다.
@@ -353,10 +365,10 @@ export async function redeemInvite(
     .maybeSingle()
   if (existingErr) {
     console.error('[redeemInvite] 기존 권한 조회 실패:', existingErr.message)
-    return { ok: false, error: E_LOOKUP }
+    return { ok: false, error: tr(E_LOOKUP) }
   }
   const pe = personOf(existing)
-  if (existing && (!existing.active || !pe?.active)) return { ok: false, error: E_INACTIVE }
+  if (existing && (!existing.active || !pe?.active)) return { ok: false, error: libText(tr, E_INACTIVE) }
   const current = existing ? (existing.access_role as AccessRole | null) : null
   if (current && accessRank(current) >= accessRank(invite.access_role)) {
     return { ok: true, projectId: invite.project_id, alreadyMember: true }
@@ -376,15 +388,16 @@ export async function redeemInvite(
 export async function redeemInviteWithSignup(
   token: string, input: SignupInput,
 ): Promise<{ ok: true; projectId: string; email: string } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   const limited = await attemptsExhausted()
   if (limited) return { ok: false, error: limited }
   if (!isInviteToken(token)) return missedToken()
   const s = await currentUser()
-  if (!s.ok) return { ok: false, error: s.error }
-  if (s.user) return { ok: false, error: '이미 로그인되어 있습니다.' }
+  if (!s.ok) return { ok: false, error: libText(tr, s.error) }
+  if (s.user) return { ok: false, error: tr('srv.inviteRedeem.alreadySigned') }
 
   const valid = validateSignupInput(input)
-  if (!valid.ok) return { ok: false, error: valid.error }
+  if (!valid.ok) return { ok: false, error: libText(tr, valid.error) }
   const name = input.name.trim()
 
   const admin = createAdminClient()
@@ -396,7 +409,7 @@ export async function redeemInviteWithSignup(
     { expiresAt: invite.expires_at, revokedAt: invite.revoked_at, redeemedAt: invite.redeemed_at },
     new Date(),
   )
-  if (status !== 'active') return { ok: false, error: E_UNUSABLE }
+  if (status !== 'active') return { ok: false, error: tr(E_UNUSABLE) }
 
   // 허용 도메인 재검사 — domainStillAllowed 주석 참조. 계정 생성 전에 막는다.
   const domain = await domainStillAllowed(admin, invite.workspace_id, invite.email)
@@ -411,7 +424,7 @@ export async function redeemInviteWithSignup(
   })
   if (createErr || !created?.user) {
     // 원인을 구분해 주면 '이 주소에 계정이 있는가'를 되묻는 탐침이 된다.
-    return { ok: false, error: '이미 가입된 계정이거나 입력값을 확인해 주세요.' }
+    return { ok: false, error: tr('srv.inviteRedeem.accountMayAlreadyExistCheck') }
   }
   const userId = created.user.id
 
@@ -421,7 +434,7 @@ export async function redeemInviteWithSignup(
   if (profileErr) {
     console.error('[redeemInviteWithSignup] 프로필 저장 실패:', profileErr.message)
     await rollbackSignup(admin, userId, null)
-    return { ok: false, error: E_SIGNUP_FAILED }
+    return { ok: false, error: tr(E_SIGNUP_FAILED) }
   }
 
   const consumed = await consumeInvite(admin, token, email, userId)

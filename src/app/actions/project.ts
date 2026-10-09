@@ -23,7 +23,11 @@ import { closeRequires } from '@/lib/modules/closure'
 import { CORE, moduleDef } from '@/lib/modules/registry'
 import { PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
 import { planProjectFormCopy, copyProjectFormFiles, discardProjectFormCopy, type FormCopyPlan } from '@/lib/report/forms/copyProjectTemplates'
-import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, kindOfCode, mapDbError } from '@/lib/settings/errors'
+import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, kindOfCode, mapDbError } from '@/lib/settings/errors'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 export async function listProjects() {
   return (await listProjectsWithState()).projects
@@ -77,8 +81,8 @@ export type CreateProjectResult =
 const invalidInput = (message: string, fieldErrors?: { key: string; message: string }[]): CreateProjectResult =>
   ({ ok: false, code: 'CONFIG_INVALID', error: message, ...(fieldErrors ? { fieldErrors } : {}) })
 /** 프로젝트 관리 쓰기의 DB 오류 — 원문은 failWith 가 로그로만(SP4 B 최종 리뷰 관찰 — D21) */
-const ERR_PROJECT_LOOKUP = '프로젝트를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.'
-const ERR_PROJECT_SAVE = '프로젝트를 저장하지 못했습니다. 잠시 뒤 다시 시도하세요.'
+const ERR_PROJECT_LOOKUP = 'srv.project.couldNotLoadProject'
+const ERR_PROJECT_SAVE = 'srv.project.couldNotSaveProject'
 const denied: CreateProjectResult = { ok: false, code: ERR_DENIED, error: ERR_DENIED }
 export type CopySourceResult =
   | { ok: true; levelLabels: string[] }
@@ -86,38 +90,39 @@ export type CopySourceResult =
 
 /** 복사 선택 직후 원본을 검증해 단계 라벨과 손상 키를 화면에 보여준다. 생성 시에도 다시 검증한다. */
 export async function getProjectCopySource(workspaceId: string, projectId: string): Promise<CopySourceResult> {
-  if (!workspaceId || !isUuidLike(projectId)) return { ok: false, error: CONFIG_MESSAGES.CONFIG_INVALID }
+  const t = await serverTranslator()
+  if (!workspaceId || !isUuidLike(projectId)) return { ok: false, error: configText(t, CONFIG_MESSAGES.CONFIG_INVALID) }
   const guard = await requireWorkspaceAdmin(workspaceId)
   if (!guard.ok) return { ok: false, error: guard.error }
   const { admin } = adminFor({ workspaceId })
   const owner = await admin.from('projects').select('workspace_id').eq('id', projectId).maybeSingle()
   if (owner.error) {
     console.error('[getProjectCopySource] 원본 조회 실패', { workspaceId, projectId, cause: owner.error.message })
-    return { ok: false, error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE }
+    return { ok: false, error: configText(t, CONFIG_MESSAGES.CONFIG_UNAVAILABLE) }
   }
   if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return { ok: false, error: ERR_DENIED }
   try {
     const source = await getProjectConfig(projectId, { client: admin })
     if (source.workspaceId !== workspaceId) return { ok: false, error: ERR_DENIED }
-    if (source.schemaAhead) return { ok: false, error: '원본 프로젝트의 설정이 이 서버보다 새 버전이라 복사할 수 없습니다.',
-      fieldErrors: source.unknownKeys.map(key => ({ key, message: '이 서버가 모르는 설정 항목입니다.' })) }
+    if (source.schemaAhead) return { ok: false, error: t('srv.project.sourceProjectSSettingsNewer'),
+      fieldErrors: source.unknownKeys.map(key => ({ key, message: t('srv.project.serverDoesNotKnowSetting') })) }
     const broken = PROJECT_SETTINGS.flatMap(def => {
       const state = source.keys[def.key]
-      return state.status === 'invalid' ? [{ key: def.key, message: state.error }] : []
+      return state.status === 'invalid' ? [{ key: def.key, message: libText(t, state.error) }] : []
     })
-    if (broken.length) return { ok: false, error: '원본 프로젝트의 설정이 손상되어 복사할 수 없습니다.', fieldErrors: broken }
+    if (broken.length) return { ok: false, error: t('srv.project.sourceProjectSSettingsCorrupted'), fieldErrors: broken }
     const labels = source.keys['core.level_labels']
     return { ok: true, levelLabels: labels.status === 'set' || labels.status === 'default' ? labels.value : [] }
   } catch (error) {
     if (!(error instanceof ConfigUnavailableError)) throw error
     console.error('[getProjectCopySource] 설정 조회 실패', { workspaceId, projectId, cause: error.message })
-    return { ok: false, error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE }
+    return { ok: false, error: configText(t, CONFIG_MESSAGES.CONFIG_UNAVAILABLE) }
   }
 }
 /** 원인(DB 원문 포함)은 로그로, 사용자에게는 고정 문구만 — 표시 = 로깅(설정 액션의 unavailableLogged 와 같은 태도) */
-function unavailableLogged(what: string, ctx: { workspaceId: string; copyFrom: string | null; commandId: string }, cause: string): CreateProjectResult {
+function unavailableLogged(t: ServerTranslate, what: string, ctx: { workspaceId: string; copyFrom: string | null; commandId: string }, cause: string): CreateProjectResult {
   console.error(`[createProject] ${what} 실패`, { ...ctx, cause })
-  return { ok: false, code: 'CONFIG_UNAVAILABLE', error: CONFIG_MESSAGES.CONFIG_UNAVAILABLE }
+  return { ok: false, code: 'CONFIG_UNAVAILABLE', error: configText(t, CONFIG_MESSAGES.CONFIG_UNAVAILABLE) }
 }
 
 /** 생성 시점의 modules.enabled — 후보 ∩ 워크스페이스 허용에서 requires 가 빠진 것을 뺀다. 자동 추가는 없다.
@@ -135,21 +140,22 @@ function initialEnabled(candidate: readonly ModuleId[], allowed: readonly Module
  * throw 하지 않는다 — 프로덕션 빌드는 서버 액션의 throw 문구를 클라이언트에 주지 않는다.
  */
 export async function createProject(input: CreateProjectInput): Promise<CreateProjectResult> {
+  const t = await serverTranslator()
   const { workspaceId } = input ?? {}
   // 대상 워크스페이스가 비면 가드 전에 거부한다 — 가드는 null 을 슈퍼유저에게 통과시킨다.
-  if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: ERR_WORKSPACE_REQUIRED, error: ERR_WORKSPACE_REQUIRED }
+  if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: libText(t, ERR_WORKSPACE_REQUIRED), error: libText(t, ERR_WORKSPACE_REQUIRED) }
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, code: g.error, error: g.error }
-  if (typeof input.commandId !== 'string' || !isUuidLike(input.commandId)) return invalidInput(`${CONFIG_MESSAGES.CONFIG_INVALID}: 요청 번호`)
+  if (typeof input.commandId !== 'string' || !isUuidLike(input.commandId)) return invalidInput(fill(t('srv.project.requestId'), { configInvalid: configText(t, CONFIG_MESSAGES.CONFIG_INVALID) }))
   const name = typeof input.name === 'string' ? input.name.trim() : ''
-  if (!name) return invalidInput('프로젝트명을 입력하세요.')
+  if (!name) return invalidInput(t('srv.project.enterProjectName'))
   // 한쪽만 있어도 형식·실재를 본다 — 그냥 넘기면 RPC 의 22008(표에 없는 토큰)이 '설정을 불러오지 못해'로 나간다
-  if ([input.startDate, input.endDate].some((d) => d && (typeof d !== 'string' || !isValidIsoDate(d)))) return invalidInput('날짜 형식이 올바르지 않습니다.')
-  if (!isValidDateRange(input.startDate || null, input.endDate || null)) return invalidInput('종료일은 시작일보다 빠를 수 없습니다.')
+  if ([input.startDate, input.endDate].some((d) => d && (typeof d !== 'string' || !isValidIsoDate(d)))) return invalidInput(t('err.dateFormatNotValid'))
+  if (!isValidDateRange(input.startDate || null, input.endDate || null)) return invalidInput(t('srv.project.endDateCannotEarlierStart'))
   const labels = settingDef('project', 'core.level_labels')!.parse(input.levelLabels)
-  if (!labels.ok) return invalidInput(CONFIG_MESSAGES.CONFIG_INVALID, [{ key: 'core.level_labels', message: labels.error }])
+  if (!labels.ok) return invalidInput(configText(t, CONFIG_MESSAGES.CONFIG_INVALID), [{ key: 'core.level_labels', message: libText(t, labels.error) }])
   const copyFrom = input.copyFromProjectId ?? null
-  if (copyFrom !== null && (typeof copyFrom !== 'string' || !isUuidLike(copyFrom))) return invalidInput(`${CONFIG_MESSAGES.CONFIG_INVALID}: copyFromProjectId`)
+  if (copyFrom !== null && (typeof copyFrom !== 'string' || !isUuidLike(copyFrom))) return invalidInput(`${configText(t, CONFIG_MESSAGES.CONFIG_INVALID)}: copyFromProjectId`)
 
   const { admin } = adminFor({ workspaceId })
   const ctx = { workspaceId, copyFrom, commandId: input.commandId }
@@ -165,7 +171,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       // 원본이 없거나 다른 워크스페이스면 똑같이 ERR_DENIED — 프로젝트 id 의 존재를 구분할 수 없게 한다.
       // RPC 도 막지만(COPY_SOURCE_FORBIDDEN) 값을 읽어 넘기기 전에 여기서 끊는다. 조회 실패는 '없음'이 아니다(3원칙 ①).
       const owner = await admin.from('projects').select('workspace_id').eq('id', copyFrom).maybeSingle()
-      if (owner.error) return unavailableLogged('복사 원본 조회', ctx, owner.error.message)
+      if (owner.error) return unavailableLogged(t, '복사 원본 조회', ctx, owner.error.message)
       if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return denied
       const src = await getProjectConfig(copyFrom, { client: admin })
       if (src.workspaceId !== workspaceId) return denied
@@ -173,17 +179,17 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       // 원본이 이 서버보다 새 세대면 거부(D29) — 모르는 키는 조용히 빠지고 세대 1 로 저장된다. 모르는 키가 없어도(기존 키의 모양만 바뀐 세대) 거부한다.
       // DB 는 원본 세대를 보지 않는다(copy_project_config 는 values 를 다루지 않는다) — 세대 2 배포를 되돌린 뒤 도는 이 코드가 막아야 한다
       if (src.schemaAhead) {
-        return invalidInput('원본 프로젝트의 설정이 이 서버보다 새 버전이라 복사할 수 없습니다.', src.unknownKeys.length
-          ? src.unknownKeys.map((key) => ({ key, message: '이 서버가 모르는 설정 항목입니다.' }))
-          : [{ key: 'schema_version', message: `원본 설정은 세대 ${src.schemaVersion} 이고 이 서버는 세대 ${SETTINGS_SCHEMA_VERSION} 까지 읽습니다.` }])
+        return invalidInput(t('srv.project.sourceProjectSSettingsNewer'), src.unknownKeys.length
+          ? src.unknownKeys.map((key) => ({ key, message: t('srv.project.serverDoesNotKnowSetting') }))
+          : [{ key: 'schema_version', message: fill(t('srv.project.sourceSettingsGenerationServerReads'), { schemaVersion: src.schemaVersion, settingsSchemaVersion: SETTINGS_SCHEMA_VERSION }) }])
       }
       const broken: { key: string; message: string }[] = []
       for (const def of PROJECT_SETTINGS) {
         const s = src.keys[def.key]
-        if (s.status === 'invalid') broken.push({ key: def.key, message: s.error })
+        if (s.status === 'invalid') broken.push({ key: def.key, message: libText(t, s.error) })
         else if (s.status === 'set') values[def.key] = s.value
       }
-      if (broken.length) return invalidInput('원본 프로젝트의 설정이 손상되어 복사할 수 없습니다.', broken)
+      if (broken.length) return invalidInput(t('srv.project.sourceProjectSSettingsCorrupted'), broken)
       const sw = src.keys['calendar.week_start']
       srcWeekStart = sw.status === 'set' || sw.status === 'default' ? sw.value : null
       const srcEnabled = src.keys['modules.enabled']
@@ -198,12 +204,12 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       values[def.key] = def.seedFrom.map ? def.seedFrom.map(wsValue) : wsValue
     }
   } catch (e) {
-    if (e instanceof ConfigUnavailableError) return unavailableLogged('설정 판독', ctx, e.message)
+    if (e instanceof ConfigUnavailableError) return unavailableLogged(t, '설정 판독', ctx, e.message)
     // 키 손상(지금은 워크스페이스 modules.allowed 뿐) — throw 대신 결과(스펙 §3.3·§2.1). core 만 켠 채 만들지 않는다:
     // 비core 가 전부 빠진 modules.enabled 가 명시 기록되는 조용한 갈림이 된다
     if (e instanceof ConfigKeyError) {
       console.error('[createProject] 설정 키 손상', { ...ctx, key: e.key, code: e.code })
-      const message = e.key === 'modules.allowed' ? ERR_MODULES_ALLOWED_BROKEN : `${CONFIG_MESSAGES[e.code]} (${e.key})`
+      const message = e.key === 'modules.allowed' ? libText(t, ERR_MODULES_ALLOWED_BROKEN) : `${configText(t, CONFIG_MESSAGES[e.code])} (${e.key})`
       return invalidInput(message, [{ key: e.key, message }])
     }
     throw e
@@ -235,16 +241,16 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       if (copies.manifest.length) {
         const receipt = await lookupReceipt()
         if (receipt.error) {
-          const mapped = mapDbError(receipt.error)
+          const mapped = mapDbError(receipt.error, t)
           if (mapped?.token === 'COMMAND_REUSED') return { ok: false, code: 'COMMAND_REUSED', error: mapped.message }
-          return unavailableLogged('생성 영수증 조회', ctx, receipt.error.message)
+          return unavailableLogged(t, '생성 영수증 조회', ctx, receipt.error.message)
         }
         if (receipt.data) return finish(receipt.data)
       }
       await copyProjectFormFiles(admin, copies)
     } catch (cause) {
       if (copies) console.error('[createProject] 양식 복사 실패', { ...ctx, destinationId: copies.projectId, paths: copies.paths })
-      return unavailableLogged('양식 복사', ctx, cause instanceof Error ? cause.message : String(cause))
+      return unavailableLogged(t, '양식 복사', ctx, cause instanceof Error ? cause.message : String(cause))
     }
   }
   // Spread precedes p_actor so no derived copy envelope can replace the guarded actor.
@@ -258,24 +264,24 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   try { response = await invokeCreate() }
   catch (cause) {
     console.error('[createProject] 생성 RPC 전송 실패', { ...ctx, cause: cause instanceof Error ? cause.message : String(cause) })
-    response = { data: null, error: { code: '', message: '생성 요청이 전달되지 못했습니다.' } } as typeof response
+    response = { data: null, error: { code: '', message: t('srv.project.createRequestNotDelivered') } } as typeof response
   }
   const { data } = response
   const validResult = data && isUuidLike(data.project_id) && ['applied', 'duplicate'].includes(data.status)
-  const error = response.error ?? (validResult ? null : { code: '', message: '생성 응답을 확인하지 못했습니다.' })
+  const error = response.error ?? (validResult ? null : { code: '', message: t('srv.project.couldNotVerifyCreateResponse') })
   if (copies?.paths.length) {
     try {
       if (error && !/^[0-9A-Z]{5}$/.test(error.code ?? '')) {
         // A transport failure does not prove rollback. Wait for the same command's receipt.
         const receipt = await lookupReceipt()
         if (receipt.error) {
-          const mapped = mapDbError(receipt.error)
+          const mapped = mapDbError(receipt.error, t)
           if (mapped?.token === 'COMMAND_REUSED') {
             await discardProjectFormCopy(admin, copies)
             return { ok: false, code: 'COMMAND_REUSED', error: mapped.message }
           }
           console.error('[createProject] 양식 복사 결과 확인 필요', { ...ctx, destinationId: copies.projectId, paths: copies.paths })
-          return unavailableLogged('생성 결과 확인', ctx, receipt.error.message)
+          return unavailableLogged(t, '생성 결과 확인', ctx, receipt.error.message)
         }
         if (receipt.data) {
           if (receipt.data.project_id !== copies.projectId) await discardProjectFormCopy(admin, copies)
@@ -285,12 +291,12 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       if (error || data?.project_id !== copies.projectId) await discardProjectFormCopy(admin, copies)
     } catch (cause) {
       console.error('[createProject] 양식 복사 결과 확인 필요', { ...ctx, destinationId: copies.projectId, paths: copies.paths })
-      return unavailableLogged('양식 복사 정리/확인', ctx, cause instanceof Error ? cause.message : String(cause))
+      return unavailableLogged(t, '양식 복사 정리/확인', ctx, cause instanceof Error ? cause.message : String(cause))
     }
   }
   if (error) {
-    const mapped = mapDbError(error)
-    if (!mapped) return unavailableLogged('생성 RPC(표에 없는 DB 오류)', ctx, `${error.code ?? ''} ${error.message}`)
+    const mapped = mapDbError(error, t)
+    if (!mapped) return unavailableLogged(t, '생성 RPC(표에 없는 DB 오류)', ctx, `${error.code ?? ''} ${error.message}`)
     // 같은 요청 번호에 다른 내용 — 모달이 새 번호를 발급하도록 코드를 따로 준다(문구는 표의 고정 문구)
     if (mapped.token === 'COMMAND_REUSED') return { ok: false, code: 'COMMAND_REUSED', error: mapped.message }
     const k = kindOfCode(mapped.code)
@@ -307,11 +313,12 @@ export async function updateProject(
   projectId: string,
   fields: { name?: string; description?: string | null; start_date?: string | null; end_date?: string | null },
 ): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const patch: Record<string, unknown> = {}
   if (fields.name !== undefined) {
-    if (!fields.name.trim()) return { ok: false, error: '프로젝트명을 입력하세요' }
+    if (!fields.name.trim()) return { ok: false, error: t('srv.project.enterProjectName2') }
     patch.name = fields.name.trim()
   }
   if (fields.description !== undefined) patch.description = fields.description?.trim() || null
@@ -326,15 +333,15 @@ export async function updateProject(
     if (start === undefined || end === undefined) {
       const { data: cur, error: curErr } = await sb.from('projects').select('start_date,end_date').eq('id', projectId).single()
       // 현재값 조회 실패 시 검증 불가 — 통과시키지 않고 저장을 중단한다.
-      if (curErr) return { ok: false, error: failWith('updateProject', curErr, ERR_PROJECT_LOOKUP) }
-      if (!cur) return { ok: false, error: '프로젝트를 찾을 수 없습니다.' }
+      if (curErr) return { ok: false, error: failWith('updateProject', curErr, t(ERR_PROJECT_LOOKUP)) }
+      if (!cur) return { ok: false, error: t('err.projectNotFound') }
       if (start === undefined) start = (cur.start_date as string | null) ?? null
       if (end === undefined) end = (cur.end_date as string | null) ?? null
     }
-    if (!isValidDateRange(start, end)) return { ok: false, error: '종료일은 시작일보다 빠를 수 없습니다.' }
+    if (!isValidDateRange(start, end)) return { ok: false, error: t('srv.project.endDateCannotEarlierStart') }
   }
   const { error } = await sb.from('projects').update(patch).eq('id', projectId)
-  if (error) return { ok: false, error: failWith('updateProject', error, ERR_PROJECT_SAVE) }
+  if (error) return { ok: false, error: failWith('updateProject', error, t(ERR_PROJECT_SAVE)) }
   revalidatePath('/(app)/w/[slug]', 'layout')
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
@@ -346,13 +353,14 @@ export async function updateProject(
  * 좁혀졌고, 비공개 프로젝트도 워크스페이스 관리자에게는 보이므로(canSeeProject) 관리자가 잠가도 조직 차원에서 사라지지 않는다.
  */
 export async function setProjectPrivacy(projectId: string, isPrivate: boolean): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   // projects 의 RLS update 정책과 무관하게 동작해야 하는 관리 쓰기 — admin client 로 쓰고
   // 가드(프로젝트 관리자)가 유일한 관문임을 명시한다(fail-closed). id 는 가드가 판정한 그 프로젝트다.
   const admin = createAdminClient()
   const { error } = await admin.from('projects').update({ is_private: isPrivate }).eq('id', projectId)
-  if (error) return { ok: false, error: failWith('setProjectPrivacy', error, ERR_PROJECT_SAVE) }
+  if (error) return { ok: false, error: failWith('setProjectPrivacy', error, t(ERR_PROJECT_SAVE)) }
   revalidatePath('/(app)/w/[slug]', 'layout')
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
@@ -360,19 +368,20 @@ export async function setProjectPrivacy(projectId: string, isPrivate: boolean): 
 
 /** 공정율 기준일 설정. null이면 자동(오늘). 진척 산정 전체에 영향. */
 export async function setBaseDate(projectId: string, baseDate: string | null): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const { error } = await sb.from('projects').update({ base_date: baseDate || null }).eq('id', projectId)
-  if (error) return { ok: false, error: failWith('setBaseDate', error, ERR_PROJECT_SAVE) }
+  if (error) return { ok: false, error: failWith('setBaseDate', error, t(ERR_PROJECT_SAVE)) }
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }
 
 export type HolidayWriteResult = { ok: true } | { ok: false; error: string }
-const ERR_HOLIDAY_INPUT = '날짜와 종류(휴무·근무)를 확인하세요.'
-const ERR_HOLIDAY_SAVE = '날짜 예외를 저장하지 못했습니다. 잠시 뒤 다시 시도하세요.'
-const ERR_HOLIDAY_REMOVE = '날짜 예외를 지우지 못했습니다. 잠시 뒤 다시 시도하세요.'
+const ERR_HOLIDAY_INPUT = 'srv.project.checkDateKind'
+const ERR_HOLIDAY_SAVE = 'srv.project.couldNotSaveDateException'
+const ERR_HOLIDAY_REMOVE = 'srv.project.couldNotDeleteDateException'
 
 /**
  * 날짜 예외(스펙 D7) — kind 'off'(휴무)·'work'(비근무 요일의 근무). 쓰기 길은 지금처럼 세션 클라이언트 + RLS admin_write_holidays(관리자)이고
@@ -380,25 +389,27 @@ const ERR_HOLIDAY_REMOVE = '날짜 예외를 지우지 못했습니다. 잠시 �
  * 결과형이다(SP5 과제 25) — 예전의 throw 는 DB 원문을 화면 토스트까지 실었다(SP4 failWith 규칙).
  */
 export async function addHoliday(projectId: string, date: string, name: string, kind: 'off' | 'work'): Promise<HolidayWriteResult> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  if (typeof date !== 'string' || !isValidIsoDate(date) || (kind !== 'off' && kind !== 'work')) return { ok: false, error: ERR_HOLIDAY_INPUT }
+  if (typeof date !== 'string' || !isValidIsoDate(date) || (kind !== 'off' && kind !== 'work')) return { ok: false, error: t(ERR_HOLIDAY_INPUT) }
   const label = typeof name === 'string' ? name.trim() : ''
   const sb = await createServerClient()
   const { error } = await sb.from('holidays').upsert({ project_id: projectId, date, name: label, kind }, { onConflict: 'project_id,date' })
-  if (error) return { ok: false, error: failWith('addHoliday', error, ERR_HOLIDAY_SAVE) }
+  if (error) return { ok: false, error: failWith('addHoliday', error, t(ERR_HOLIDAY_SAVE)) }
   revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(projectId))
   return { ok: true }
 }
 
 export async function removeHoliday(projectId: string, date: string): Promise<HolidayWriteResult> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  if (typeof date !== 'string' || !isValidIsoDate(date)) return { ok: false, error: ERR_HOLIDAY_INPUT }
+  if (typeof date !== 'string' || !isValidIsoDate(date)) return { ok: false, error: t(ERR_HOLIDAY_INPUT) }
   const sb = await createServerClient()
   const { error } = await sb.from('holidays').delete().eq('project_id', projectId).eq('date', date)
-  if (error) return { ok: false, error: failWith('removeHoliday', error, ERR_HOLIDAY_REMOVE) }
+  if (error) return { ok: false, error: failWith('removeHoliday', error, t(ERR_HOLIDAY_REMOVE)) }
   revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(projectId))
   return { ok: true }

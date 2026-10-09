@@ -2,7 +2,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
-import { ERR_LOOKUP } from '@/lib/authz/errors'
+import { ERR_LOOKUP, ERR_ANON, ERR_DENIED } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import { isWorkspaceMember, type Actor } from '@/lib/domain/authz'
@@ -13,6 +13,10 @@ import { checkProjectVocab, vocabWriteFailure } from '@/lib/settings/vocabGuard'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { SAFE_ID_RE } from '@/lib/domain/validate'
 import type { Meeting, MeetingCategory, MeetingRecurrence } from '@/lib/domain/types'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 export interface MeetingInput {
   title: string
@@ -39,23 +43,23 @@ const LOCATION_MAX = 200
 const TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
-function validate(input: MeetingInput): string | null {
+function validate(t: ServerTranslate, input: MeetingInput): string | null {
   const title = input.title.trim()
-  if (!title) return '제목을 입력하세요.'
-  if (title.length > TITLE_MAX) return `제목은 ${TITLE_MAX}자 이하여야 합니다.`
-  if (!DATE_RE.test(input.meetingDate)) return '날짜 형식이 올바르지 않습니다.'
-  if (input.startTime !== null && !TIME_RE.test(input.startTime)) return '시작 시각 형식이 올바르지 않습니다.'
-  if (input.endTime !== null && !TIME_RE.test(input.endTime)) return '종료 시각 형식이 올바르지 않습니다.'
-  if (input.endTime !== null && input.startTime === null) return '종료 시각만 입력할 수 없습니다.'
-  if (input.startTime && input.endTime && input.endTime <= input.startTime) return '종료 시각은 시작 시각보다 뒤여야 합니다.'
-  if (input.body.length > BODY_MAX) return `회의록은 ${BODY_MAX}자 이하여야 합니다.`
-  if (input.location && input.location.length > LOCATION_MAX) return `장소는 ${LOCATION_MAX}자 이하여야 합니다.`
-  if (typeof input.category !== 'string' || !input.category) return '잘못된 카테고리입니다.'   // 활성 여부는 checkProjectVocab(설정 meetings.categories)
-  if (!RECURRENCE_ORDER.includes(input.recurrence)) return '잘못된 반복 옵션입니다.'
-  if (input.recurrence === 'none' && input.recurrenceUntil !== null) return '반복 없음에는 종료일을 둘 수 없습니다.'
+  if (!title) return t('err.enterTitle')
+  if (title.length > TITLE_MAX) return fill(t('err.titleMustCharactersFewer'), { titleMax: TITLE_MAX })
+  if (!DATE_RE.test(input.meetingDate)) return t('err.dateFormatNotValid')
+  if (input.startTime !== null && !TIME_RE.test(input.startTime)) return t('srv.meetings.startTimeFormatNotValid')
+  if (input.endTime !== null && !TIME_RE.test(input.endTime)) return t('srv.meetings.endTimeFormatNotValid')
+  if (input.endTime !== null && input.startTime === null) return t('srv.meetings.endTimeCannotEnteredAlone')
+  if (input.startTime && input.endTime && input.endTime <= input.startTime) return t('srv.meetings.endTimeMustAfterStart')
+  if (input.body.length > BODY_MAX) return fill(t('srv.meetings.minutesMustCharactersFewer'), { bodyMax: BODY_MAX })
+  if (input.location && input.location.length > LOCATION_MAX) return fill(t('srv.meetings.locationMustCharactersFewer'), { locationMax: LOCATION_MAX })
+  if (typeof input.category !== 'string' || !input.category) return t('err.invalidCategory')   // 활성 여부는 checkProjectVocab(설정 meetings.categories)
+  if (!RECURRENCE_ORDER.includes(input.recurrence)) return t('srv.meetings.invalidRepeatOption')
+  if (input.recurrence === 'none' && input.recurrenceUntil !== null) return t('srv.meetings.endDateCannotSetWhen')
   if (input.recurrence !== 'none') {
-    if (!input.recurrenceUntil || !DATE_RE.test(input.recurrenceUntil)) return '반복 종료일을 입력하세요.'
-    if (input.recurrenceUntil < input.meetingDate) return '반복 종료일은 시작일 이후여야 합니다.'
+    if (!input.recurrenceUntil || !DATE_RE.test(input.recurrenceUntil)) return t('srv.meetings.enterRepeatEndDate')
+    if (input.recurrenceUntil < input.meetingDate) return t('srv.meetings.repeatEndDateMustAfter')
   }
   return null
 }
@@ -87,8 +91,9 @@ function revalidateMeetings(projectId: string) {
  */
 type OwnerGate = { ok: true; isAdmin: boolean; userId: string } | { ok: false; error: string }
 async function adminOrOwnerGate(meetingId: string): Promise<OwnerGate> {
+  const t = await serverTranslator()
   const found = await resolveProjectId('meetings', meetingId)
-  if (!found.ok) return { ok: false, error: found.error }
+  if (!found.ok) return { ok: false, error: libText(t, found.error) }
   if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // meetings.project_id 는 not null — 풀지 못하면 중단(3원칙 ②)
   const g = await requireProjectAdmin(found.projectId)
   let pass: OwnerGate
@@ -136,17 +141,18 @@ async function replaceAttendees(sb: Awaited<ReturnType<typeof createServerClient
 }
 
 export async function createMeeting(projectId: string, input: MeetingInput): Promise<MeetingActionResult> {
+  const t = await serverTranslator()
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'meetings')                  // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
   if (!mod.ok) return { ok: false, error: mod.error }
-  const err = validate(input)
+  const err = validate(t, input)
   if (err) return { ok: false, error: err }
   const catErr = await checkProjectVocab(projectId, 'meetings.categories', input.category)
   if (catErr) return { ok: false, error: catErr }
 
   const user = await getSession()
-  if (!user) return { ok: false, error: '로그인 필요' }
+  if (!user) return { ok: false, error: ERR_ANON }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('meetings')
@@ -170,7 +176,7 @@ export async function createMeeting(projectId: string, input: MeetingInput): Pro
     if (rbErr) {
       console.error('[createMeeting] 참석자 저장 실패 후 회의 롤백 실패(고아 회의 잔존):', rbErr.message)
       revalidateMeetings(projectId)
-      return { ok: false, error: `참석자 저장에 실패했습니다(${attErr}). 회의가 생성됐을 수 있으니 목록을 확인하세요.` }
+      return { ok: false, error: fill(t('srv.meetings.couldNotSaveAttendees'), { attErr }) }
     }
     return { ok: false, error: attErr }
   }
@@ -180,9 +186,10 @@ export async function createMeeting(projectId: string, input: MeetingInput): Pro
 }
 
 export async function updateMeeting(id: string, input: MeetingInput): Promise<MeetingActionResult> {
+  const t = await serverTranslator()
   const gate = await adminOrOwnerGate(id)
   if (!gate.ok) return { ok: false, error: gate.error }
-  const err = validate(input)
+  const err = validate(t, input)
   if (err) return { ok: false, error: err }
 
   const sb = await createServerClient()
@@ -193,9 +200,9 @@ export async function updateMeeting(id: string, input: MeetingInput): Promise<Me
     .eq('id', id)
     .maybeSingle()
   if (curErr) return { ok: false, error: ERR_LOOKUP } // 소유권 판정의 입력이다 — 실패를 '없음'으로 위장하지 않는다
-  if (!cur) return { ok: false, error: '회의를 찾을 수 없습니다.' }
+  if (!cur) return { ok: false, error: t('err.meetingNotFound') }
   const isOwner = (cur.created_by as string | null) === gate.userId
-  if (!gate.isAdmin && !isOwner) return { ok: false, error: '권한 없음' }
+  if (!gate.isAdmin && !isOwner) return { ok: false, error: ERR_DENIED }
   const projectId = cur.project_id as string
   // 범주를 그대로 두는 수정은 비활성 범주여도 통과(트리거와 같은 규칙)
   const catErr = await checkProjectVocab(projectId, 'meetings.categories', input.category, (cur.category as string | null) ?? null)
@@ -228,14 +235,15 @@ export async function updateMeeting(id: string, input: MeetingInput): Promise<Me
 }
 
 export async function deleteMeeting(id: string): Promise<MeetingActionResult> {
+  const t = await serverTranslator()
   const gate = await adminOrOwnerGate(id)
   if (!gate.ok) return { ok: false, error: gate.error }
   const sb = await createServerClient()
   const { data: cur, error: curErr } = await sb.from('meetings').select('project_id, created_by').eq('id', id).maybeSingle()
   if (curErr) return { ok: false, error: ERR_LOOKUP }
-  if (!cur) return { ok: false, error: '회의를 찾을 수 없습니다.' }
+  if (!cur) return { ok: false, error: t('err.meetingNotFound') }
   const isOwner = (cur.created_by as string | null) === gate.userId
-  if (!gate.isAdmin && !isOwner) return { ok: false, error: '권한 없음' }
+  if (!gate.isAdmin && !isOwner) return { ok: false, error: ERR_DENIED }
 
   const { error } = await sb.from('meetings').delete().eq('id', id).select('id').single()
   if (error) return { ok: false, error: error.message }
@@ -259,9 +267,10 @@ export async function cancelOccurrence(meetingId: string, occurrenceDate: string
 
 type Gate = { ok: true; sb: Awaited<ReturnType<typeof createServerClient>>; projectId: string } | { ok: false; error: string }
 async function occurrenceGate(meetingId: string, occurrenceDate: string): Promise<Gate> {
+  const t = await serverTranslator()
   const gate = await adminOrOwnerGate(meetingId)
   if (!gate.ok) return { ok: false, error: gate.error }
-  if (!DATE_RE.test(occurrenceDate)) return { ok: false, error: '잘못된 날짜입니다.' }
+  if (!DATE_RE.test(occurrenceDate)) return { ok: false, error: t('err.invalidDate') }
   const sb = await createServerClient()
   const { data: r, error: rErr } = await sb
     .from('meetings')
@@ -269,10 +278,10 @@ async function occurrenceGate(meetingId: string, occurrenceDate: string): Promis
     .eq('id', meetingId)
     .maybeSingle()
   if (rErr) return { ok: false, error: ERR_LOOKUP }
-  if (!r) return { ok: false, error: '회의를 찾을 수 없습니다.' }
+  if (!r) return { ok: false, error: t('err.meetingNotFound') }
   const isOwner = (r.created_by as string | null) === gate.userId
-  if (!gate.isAdmin && !isOwner) return { ok: false, error: '권한 없음' }
-  if (r.recurrence === 'none') return { ok: false, error: '반복 회의만 회차를 취소할 수 있습니다.' }
+  if (!gate.isAdmin && !isOwner) return { ok: false, error: ERR_DENIED }
+  if (r.recurrence === 'none') return { ok: false, error: t('srv.meetings.onlyRepeatingMeetingsCanCancel') }
   // 규칙상 실제 회차인지 검증 — 해당 날짜만 전개해 매칭
   const meeting = {
     id: meetingId, projectId: r.project_id as string, title: r.title as string,
@@ -284,7 +293,7 @@ async function occurrenceGate(meetingId: string, occurrenceDate: string): Promis
     updatedAt: r.updated_at as string, attendeeIds: [],
   } satisfies Meeting
   const occ = expandMeetings([meeting], [], occurrenceDate, occurrenceDate)
-  if (!occ.some(o => o.occurrenceDate === occurrenceDate)) return { ok: false, error: '해당 날짜는 이 회의의 회차가 아닙니다.' }
+  if (!occ.some(o => o.occurrenceDate === occurrenceDate)) return { ok: false, error: t('err.dateNotOccurrenceMeeting') }
   return { ok: true, sb, projectId: r.project_id as string }
 }
 
@@ -296,10 +305,11 @@ export async function fetchMyMeetings(
   gridStartIso: string,
   gridEndIso: string,
 ): Promise<MyMeetingsResult> {
+  const t = await serverTranslator()
   const user = await getSession()
   if (!user) return { ok: true, meetings: [], exceptions: [], categories: {} }
   let actor: Actor | null
-  try { actor = await getActor() } catch { return { ok: false, error: ERR_MEETINGS_LOAD } }
+  try { actor = await getActor() } catch { return { ok: false, error: libText(t, ERR_MEETINGS_LOAD) } }
   // 플랫폼 관리자는 소속과 무관하게 참이라 임의 문자열이 관문 로그·설정 조회 오류에 실린다 — 그 입력만 모양(SAFE_ID_RE)을 먼저 본다(FA3)
   if (typeof workspaceId !== 'string' || !workspaceId || (actor?.isSuperuser && !SAFE_ID_RE.test(workspaceId)) || !isWorkspaceMember(actor, workspaceId)) return { ok: true, meetings: [], exceptions: [], categories: {} }
   const mod = await requireModule({ workspaceId }, 'meetings')
@@ -310,12 +320,13 @@ export async function fetchMyMeetings(
 /** 상세 모달에서 호출하는 얇은 래퍼 — getMeetingDetail(서버 전용)을 세션 게이트 후 위임.
  *  결과형(SP5 B2 — D39): 없음·거부·꺼진 모듈은 detail null(존재 은닉), 범위 조회 실패·상세 조회 실패는 ok:false(모달이 사유를 보인다) */
 export async function fetchMeetingDetail(id: string): Promise<MeetingDetailResult> {
+  const t = await serverTranslator()
   const none: MeetingDetailResult = { ok: true, detail: null }
   const user = await getSession()
   if (!user) return none
   // 모듈 관문(스펙 §4.2) — 회의 행의 프로젝트로 판정한다. 범위 조회 실패는 실패, 없음·거부는 '없음'
   const scope = await resolveProjectId('meetings', id)
-  if (!scope.ok) return scope.error === ERR_LOOKUP ? { ok: false, error: ERR_MEETING_DETAIL } : none
+  if (!scope.ok) return scope.error === ERR_LOOKUP ? { ok: false, error: libText(t, ERR_MEETING_DETAIL) } : none
   if (!scope.projectId) return none
   const mod = await requireModule({ projectId: scope.projectId }, 'meetings')
   if (!mod.ok) return none

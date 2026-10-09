@@ -7,6 +7,8 @@ import { agentApiEnabled } from '@/lib/agent/externalApi'
 import { generateAgentToken } from '@/lib/agent/token'
 import { requireModule } from '@/lib/modules/gate'
 import { isUuidLike } from '@/lib/domain/agentWork'
+import { serverTranslator } from '@/lib/i18n/server'
+import { fill } from '@/lib/i18n/translate'
 
 /**
  * PAT 발급·관리 — 계약 v2.0. 발급도 킬스위치(AGENT_API_ENABLED) 뒤(§2.1).
@@ -32,30 +34,31 @@ async function sessionUserId(): Promise<string | null> {
 export async function createAgentToken(input: {
   name: string; workspaceId?: string; projectIds?: string[] | null; projectId?: string | null; scopes: string[]; expiresDays: number
 }): Promise<{ ok: true; token: string; prefix: string } | { ok: false; error: string }> {
-  if (!agentApiEnabled()) return { ok: false, error: '에이전트 API가 꺼져 있어 발급할 수 없습니다.' }
+  const t = await serverTranslator()
+  if (!agentApiEnabled()) return { ok: false, error: t('srv.agentTokens.agentApiOffTokensCannot') }
   const uid = await sessionUserId()
-  if (!uid) return { ok: false, error: '로그인이 필요합니다.' }
-  if (!input || typeof input.name !== 'string' || !Array.isArray(input.scopes)) return { ok: false, error: '잘못된 요청입니다.' }
+  if (!uid) return { ok: false, error: t('common.err.signIn') }
+  if (!input || typeof input.name !== 'string' || !Array.isArray(input.scopes)) return { ok: false, error: t('err.invalidRequest') }
   const name = input.name.trim()
-  if (!NAME_RE.test(name)) return { ok: false, error: '이름 형식이 올바르지 않습니다(64자 이내).' }
-  if (input.workspaceId !== undefined && (typeof input.workspaceId !== 'string' || !isUuidLike(input.workspaceId))) return { ok: false, error: '잘못된 워크스페이스입니다.' }
+  if (!NAME_RE.test(name)) return { ok: false, error: t('srv.agentTokens.nameFormatNotValid') }
+  if (input.workspaceId !== undefined && (typeof input.workspaceId !== 'string' || !isUuidLike(input.workspaceId))) return { ok: false, error: t('err.invalidWorkspace') }
   const projectIds = input.projectIds !== undefined ? input.projectIds : input.projectId ? [input.projectId] : null
-  if (projectIds !== null && (!Array.isArray(projectIds) || projectIds.length === 0 || projectIds.some(id => typeof id !== 'string' || !isUuidLike(id)))) return { ok: false, error: '잘못된 프로젝트입니다.' }
-  if (input.scopes.length === 0) return { ok: false, error: '스코프를 1개 이상 선택하세요.' }
+  if (projectIds !== null && (!Array.isArray(projectIds) || projectIds.length === 0 || projectIds.some(id => typeof id !== 'string' || !isUuidLike(id)))) return { ok: false, error: t('srv.agentTokens.invalidProject') }
+  if (input.scopes.length === 0) return { ok: false, error: t('srv.agentTokens.selectLeastOneScope') }
   for (const s of input.scopes) {
-    if (!SELF_ISSUE_SCOPES.has(s)) return { ok: false, error: `${s}는 알 수 없는 스코프입니다.` }
+    if (!SELF_ISSUE_SCOPES.has(s)) return { ok: false, error: fill(t('srv.agentTokens.notKnownScope'), { s }) }
   }
   const days = input.expiresDays
   if (!Number.isInteger(days) || days < 1 || days > MAX_EXPIRES_DAYS) {
-    return { ok: false, error: `만료는 1~${MAX_EXPIRES_DAYS}일입니다.` }
+    return { ok: false, error: fill(t('srv.agentTokens.expiryMust1Days'), { maxExpiresDays: MAX_EXPIRES_DAYS }) }
   }
 
   const admin = createAdminClient()
   let workspaceMemberships = admin.from('workspace_members').select('workspace_id').eq('user_id', uid)
   if (input.workspaceId) workspaceMemberships = workspaceMemberships.eq('workspace_id', input.workspaceId)
   const { data: rows, error: membershipErr } = await workspaceMemberships.limit(2)
-  if (membershipErr) return { ok: false, error: '워크스페이스 소속을 확인할 수 없습니다.' }
-  if (!rows || rows.length !== 1 || typeof rows[0].workspace_id !== 'string' || !rows[0].workspace_id) return { ok: false, error: '소속 워크스페이스를 하나 선택하세요.' }
+  if (membershipErr) return { ok: false, error: t('srv.agentTokens.couldNotVerifyWorkspaceMembership') }
+  if (!rows || rows.length !== 1 || typeof rows[0].workspace_id !== 'string' || !rows[0].workspace_id) return { ok: false, error: t('srv.agentTokens.selectOneWorkspaceBelong') }
   const workspaceId = rows[0].workspace_id as string
   const gate = await requireModule({ workspaceId }, 'agents', { client: admin })
   if (!gate.ok) return gate
@@ -69,24 +72,25 @@ export async function createAgentToken(input: {
   }).select('id')
   if (error) {
     // unique(owner_user_id, name) 충돌 등 — DB 메시지를 위장하지 않는다(표시=로깅).
-    return { ok: false, error: `발급 실패: ${error.message}` }
+    return { ok: false, error: fill(t('srv.agentTokens.couldNotIssueToken'), { message: error.message }) }
   }
-  if (!data || data.length === 0) return { ok: false, error: '발급 실패(0행)' }
+  if (!data || data.length === 0) return { ok: false, error: t('srv.agentTokens.couldNotIssueToken2') }
   revalidatePath('/account')
   return { ok: true, token, prefix } // 평문은 이 응답이 유일하다 — 저장·로깅 금지.
 }
 
 export async function revokeAgentToken(runnerId: string): Promise<{ ok: boolean; error?: string }> {
-  if (!isUuidLike(runnerId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isUuidLike(runnerId)) return { ok: false, error: t('err.invalidRequest') }
   const uid = await sessionUserId()
-  if (!uid) return { ok: false, error: '로그인이 필요합니다.' }
+  if (!uid) return { ok: false, error: t('common.err.signIn') }
   const admin = createAdminClient()
   const { data, error } = await admin.from('integration_credentials')
     .update({ revoked_at: new Date().toISOString(), enabled: false })
     .eq('id', runnerId).eq('owner_user_id', uid).eq('kind', 'agent_runner') // 본인 소유만 — 소유자 한정이 곧 권한 판정
     .select('id')
   if (error) return { ok: false, error: error.message }
-  if (!data || data.length === 0) return { ok: false, error: '대상 토큰이 없습니다.' }
+  if (!data || data.length === 0) return { ok: false, error: t('srv.agentTokens.tokenNotFound') }
   revalidatePath('/account')
   return { ok: true }
 }
@@ -95,8 +99,9 @@ export async function listMyAgentTokens(): Promise<
   | { ok: true; tokens: Array<{ id: string; name: string; token_prefix: string; scopes: string[]; workspace_id: string; project_ids: string[] | null; project_id: string | null; expires_at: string; revoked_at: string | null; last_seen_at: string | null }> }
   | { ok: false; error: string }
 > {
+  const t = await serverTranslator()
   const uid = await sessionUserId()
-  if (!uid) return { ok: false, error: '로그인이 필요합니다.' }
+  if (!uid) return { ok: false, error: t('common.err.signIn') }
   const admin = createAdminClient()
   // token_hash 는 어떤 경로로도 반환하지 않는다.
   const { data, error } = await admin.from('integration_credentials')

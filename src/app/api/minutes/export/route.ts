@@ -16,6 +16,7 @@ import {
   utf8ByteLength,
   type MinuteExportRow,
 } from '@/lib/minutes/export'
+import { serverTranslator } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -110,13 +111,14 @@ async function loadAllMinutes(cutoffIso: string, workspaceId: string, hidden: Re
 /** 로그인 사용자가 그 워크스페이스의 회의록 화면에서 볼 수 있는 회의록 본문을 분석용 ZIP으로 받는다(?workspaceId= — 회의록 화면의 슬러그 워크스페이스).
  *  명단 밖 비공개 프로젝트의 회의록은 회의록 목록·검색과 같이 뺀다(FA1, CC1) — 그 판정이 실패하면 ZIP 을 만들지 않는다(503). */
 export async function GET(req: NextRequest) {
-  if (!(await getSession())) return jsonError('인증이 필요합니다.', 401)
+  const t = await serverTranslator()
+  if (!(await getSession())) return jsonError(t('err.authenticationRequired'), 401)
   // 대상 행이 없는 ZIP — 요청의 워크스페이스(소속 확인, D26)로 minutes 관문. 없으면 400(추측하지 않는다). 첫 DB 접근 앞.
   // 브랜딩·행 거르기 모두 그 워크스페이스 — 두 워크스페이스 소속자의 ZIP 에 다른 워크스페이스 회의록이 섞이지 않는다.
   const g = await requireScopedSessionModule({ projectId: null, workspaceId: req.nextUrl.searchParams.get('workspaceId') }, 'minutes')
   if (!g.ok) return jsonError(g.error, g.status)
   const workspaceId = g.workspaceId
-  if (!workspaceId) return jsonError('워크스페이스를 확인할 수 없습니다.', 400)   // 프로젝트 없는 판정의 통과는 늘 워크스페이스를 낸다
+  if (!workspaceId) return jsonError(t('err.couldNotVerifyWorkspace'), 400)   // 프로젝트 없는 판정의 통과는 늘 워크스페이스를 낸다
   const { productName } = await loadDisplayBranding(workspaceId)
   // 파일명 날짜의 tz = 내보내기 범위(그 워크스페이스)의 달력(SP5 계획 D-22d). 못 읽거나 손상이면 고정 문구로 멈춘다
   let timeZone: string
@@ -125,7 +127,7 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     if (e instanceof ConfigUnavailableError) {
       console.error('[minutes-export] 워크스페이스 설정 조회 실패:', e.message)
-      return jsonError('워크스페이스 설정을 확인할 수 없습니다.', 503)
+      return jsonError(t('srv.api.minutesExport.couldNotVerifyWorkspaceSettings'), 503)
     }
     if (e instanceof ConfigKeyError) return jsonError(e.message, configStatus(e.code), e.code)
     throw e
@@ -134,13 +136,13 @@ export async function GET(req: NextRequest) {
   // 비공개 숨김 판정 — 실패하면 막는다(fail-closed, FA1). 숨길 것을 못 숨긴 ZIP 을 내보내느니 내려받기를 닫는다. 원인은 getHiddenProjectIds 가 로그로 남긴다
   let hidden: ReadonlySet<string>
   try { hidden = await getHiddenProjectIds() } catch {
-    return jsonError('비공개 프로젝트 판정을 하지 못해 내려받기를 멈췄습니다. 잠시 후 다시 시도해 주세요.', 503)
+    return jsonError(t('srv.api.minutesExport.couldNotDeterminePrivateProjects'), 503)
   }
 
   const exportedAt = new Date()
   try {
     const rows = await loadAllMinutes(exportedAt.toISOString(), workspaceId, hidden)
-    if (rows.length === 0) return jsonError('내려받을 회의록이 없습니다.', 404)
+    if (rows.length === 0) return jsonError(t('srv.api.minutesExport.noMinutesDownload'), 404)
 
     const { zip } = createMinutesExportArchive(rows, exportedAt, productName)
     // 결과 Buffer를 한 번 더 만들지 않고 압축 결과를 스트림으로 응답한다.
@@ -165,11 +167,11 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.name === 'MinutesExportTooLargeError') {
       return jsonError(
-        '전체 회의록 용량이 너무 큽니다. 담당·기간별 내보내기 기능으로 나누어야 합니다.',
+        t('srv.api.minutesExport.totalMinutesSizeTooLarge'),
         413,
       )
     }
     console.error('[minutes/export] 일괄 다운로드 실패:', error instanceof Error ? error.message : error)
-    return jsonError('회의록 묶음을 만드는 중 오류가 발생했습니다.', 500)
+    return jsonError(t('srv.api.minutesExport.errorOccurredWhileBuildingMinutes'), 500)
   }
 }

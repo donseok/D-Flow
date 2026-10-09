@@ -15,6 +15,8 @@ import { rosterWriteError, ROSTER_WRITE_FAILED, ROSTER_HAS_RECORDS } from '@/lib
 import { ROSTER_SELECT, mapRosterRows, type RosterMember } from '@/lib/data/memberSelect'
 import { projectTeams } from '@/lib/teams/source'
 import type { AccessRole, RosterInput } from '@/lib/domain/roster'
+import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 // 입력 계약은 도메인(순수 계층)이 정본이다 — 화면의 검증(validateDraft)과 이 액션이 같은 타입을 본다.
@@ -22,16 +24,16 @@ export type { RosterInput } from '@/lib/domain/roster'
 
 export type RosterActionResult = { ok: true; memberId: string } | { ok: false; error: string }
 
-const ERR_NAME = '이름을 입력하세요.'
-const ERR_EMAIL = '올바른 이메일 형식이 아닙니다.'
-const ERR_ACCESS = '알 수 없는 권한입니다.'
+const ERR_NAME = 'err.enterName'
+const ERR_EMAIL = 'err.emailFormatNotValid'
+const ERR_ACCESS = 'err.unknownRole'
 /** 모양이 틀린 id — RPC 안의 uuid 캐스트(22P02)까지 가면 '다시 시도하세요' 로 보이지만 다시 해도 안 되는 입력이다. */
-const ERR_BAD_REQUEST = '잘못된 요청입니다.'
-const ERR_ROSTER_LOOKUP = '명단 정보를 확인할 수 없어 중단했습니다.'
-const ERR_ROSTER_LIST = '명단을 불러오지 못했습니다.'
-const ERR_TEAM = '이 프로젝트에서 고를 수 있는 팀이 아닙니다.'
+const ERR_BAD_REQUEST = 'err.invalidRequest'
+const ERR_ROSTER_LOOKUP = 'err.couldNotVerifyRosterRequest'
+const ERR_ROSTER_LIST = 'err.couldNotLoadRoster'
+const ERR_TEAM = 'srv.roster.teamCannotSelectedProject'
 /** 행이 있는데(resolveProjectId 가 찾았다) 삭제가 0행 = RLS 가 막았다 — 관리자 행은 워크스페이스 관리자만(admin_write_member_rows). */
-const ERR_REMOVE_ADMIN_ROW = '관리자 권한이 있는 사람은 워크스페이스 관리자만 명단에서 삭제할 수 있습니다.'
+const ERR_REMOVE_ADMIN_ROW = 'srv.roster.onlyWorkspaceAdminCanDelete'
 
 const trimOrNull = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
@@ -90,13 +92,14 @@ async function memberHasRecords(admin: AdminClient, memberId: string): Promise<{
 async function checkRosterTeams(
   admin: AdminClient, projectId: string, personId: string | null, teamIds: readonly string[],
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   if (teamIds.length === 0) return { ok: true }
   const allowed = new Set<string>()
   try {
     for (const t of await projectTeams(projectId)) if (t.active) allowed.add(t.id)
   } catch (e) {
     console.error('[roster] 팀 조회 실패:', e instanceof Error ? e.message : e)
-    return { ok: false, error: ERR_ROSTER_LOOKUP }
+    return { ok: false, error: tr(ERR_ROSTER_LOOKUP) }
   }
   if (teamIds.every(id => allowed.has(id))) return { ok: true }
   if (personId) {
@@ -104,11 +107,11 @@ async function checkRosterTeams(
       .select('project_member_teams(team_id)').eq('project_id', projectId).eq('person_id', personId).maybeSingle()
     if (error) {
       console.error('[roster] 기존 팀 소속 조회 실패:', error.message)
-      return { ok: false, error: ERR_ROSTER_LOOKUP }
+      return { ok: false, error: tr(ERR_ROSTER_LOOKUP) }
     }
     for (const r of ((data as { project_member_teams?: { team_id: string }[] } | null)?.project_member_teams ?? [])) allowed.add(r.team_id)
   }
-  return teamIds.every(id => allowed.has(id)) ? { ok: true } : { ok: false, error: ERR_TEAM }
+  return teamIds.every(id => allowed.has(id)) ? { ok: true } : { ok: false, error: tr(ERR_TEAM) }
 }
 
 /** RPC 한 번. 성공하면 명단 화면을 다시 그린다. */
@@ -116,37 +119,39 @@ async function callUpsert(
   admin: AdminClient, actorId: string, projectId: string,
   person: Record<string, unknown>, member: Record<string, unknown>, teamIds: string[] | null,
 ): Promise<RosterActionResult> {
+  const tr = await serverTranslator()
   const { data, error } = await admin.rpc('upsert_project_member_cmd', {
     p_command_id: newAuthzCommandId(), p_actor: actorId, p_project_id: projectId, p_person: person, p_member: member, p_team_ids: teamIds,
   })
-  if (error) return { ok: false, error: rosterWriteError(error) }
+  if (error) return { ok: false, error: libText(tr, rosterWriteError(error)) }
   const result = parseAuthzResult(data)
   if (!result?.memberId) {
     console.error('[roster] upsert_project_member_cmd 가 member_id 를 돌려주지 않았다:', data)
-    return { ok: false, error: ROSTER_WRITE_FAILED }
+    return { ok: false, error: libText(tr, ROSTER_WRITE_FAILED) }
   }
   revalidatePath(`/p/${projectId}/members`)
   return { ok: true, memberId: result.memberId }
 }
 
 export async function upsertRosterMember(projectId: string, input: RosterInput): Promise<RosterActionResult> {
+  const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const name = normalizeName(input?.name)
-  if (!name) return { ok: false, error: ERR_NAME }
+  if (!name) return { ok: false, error: tr(ERR_NAME) }
   const personId = input.personId ?? null
-  if (personId !== null && (typeof personId !== 'string' || !isUuidLike(personId))) return { ok: false, error: ERR_BAD_REQUEST }
+  if (personId !== null && (typeof personId !== 'string' || !isUuidLike(personId))) return { ok: false, error: tr(ERR_BAD_REQUEST) }
   // 편집(personId 있음)은 이메일을 검증하지도 보내지도 않는다 — id 분기의 RPC 는 email 을 쓰지 않고, 정규형이 안 되는 기존 행
   // (x@acme.123 등)의 이름·권한·팀 편집이 막히면 안 된다(R2). 새 인물만 정규형으로 검증해 보낸다(P-1).
   let person: Record<string, unknown> = { id: personId, display_name: name }
   if (!personId) {
     const email = normalizeEmail(input.email)
-    if (!email.ok) return { ok: false, error: ERR_EMAIL }
+    if (!email.ok) return { ok: false, error: tr(ERR_EMAIL) }
     person = { display_name: name, email: email.email }
   }
-  if (!isAccessRoleOrNull(input.accessRole)) return { ok: false, error: ERR_ACCESS }
-  if (!isTeamIdList(input.teamIds)) return { ok: false, error: ERR_BAD_REQUEST }
-  if (input.active !== undefined && typeof input.active !== 'boolean') return { ok: false, error: '활성 여부가 올바르지 않습니다.' }
+  if (!isAccessRoleOrNull(input.accessRole)) return { ok: false, error: tr(ERR_ACCESS) }
+  if (!isTeamIdList(input.teamIds)) return { ok: false, error: tr(ERR_BAD_REQUEST) }
+  if (input.active !== undefined && typeof input.active !== 'boolean') return { ok: false, error: tr('srv.roster.activeValueNotValid') }
 
   const member: Record<string, unknown> = {
     access_role: input.accessRole, role_label: trimOrNull(input.roleLabel), title: trimOrNull(input.title),
@@ -164,24 +169,25 @@ export async function upsertRosterMember(projectId: string, input: RosterInput):
  * (MEMBER_DEPENDANTS). 검사와 삭제 사이의 경합은 남는다 — 그 창에서 생긴 기록은 FK 규칙대로 지워지거나 비워진다.
  */
 export async function removeRosterMember(memberId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   const found = await resolveProjectId('project_members', memberId)
-  if (!found.ok) return { ok: false, error: found.error }
+  if (!found.ok) return { ok: false, error: libText(tr, found.error) }
   const projectId = found.projectId
   if (!projectId) return { ok: false, error: ERR_MISSING }
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
 
   const records = await memberHasRecords(createAdminClient(), memberId)
-  if (!records.ok) return { ok: false, error: ERR_ROSTER_LOOKUP }
-  if (records.has) return { ok: false, error: ROSTER_HAS_RECORDS }
+  if (!records.ok) return { ok: false, error: tr(ERR_ROSTER_LOOKUP) }
+  if (records.has) return { ok: false, error: libText(tr, ROSTER_HAS_RECORDS) }
 
   // service_role 로 지우면 '관리자 행은 워크스페이스 관리자만' 이 뚫린다(RPC 는 같은 규칙을 본문에서 본다).
   // 세션 경로로 지워 RLS 두 정책이 판정하게 하고, 영향 행 수로 거부를 드러낸다.
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('project_members').delete().eq('id', memberId).eq('project_id', projectId).select('id')
-  if (error) return { ok: false, error: rosterWriteError(error) }
-  if (!data || data.length === 0) return { ok: false, error: ERR_REMOVE_ADMIN_ROW }
+  if (error) return { ok: false, error: libText(tr, rosterWriteError(error)) }
+  if (!data || data.length === 0) return { ok: false, error: tr(ERR_REMOVE_ADMIN_ROW) }
   revalidatePath(`/p/${projectId}/members`)
   return { ok: true }
 }
@@ -189,6 +195,7 @@ export async function removeRosterMember(memberId: string): Promise<{ ok: true }
 export async function listRoster(
   projectId: string,
 ): Promise<{ ok: true; rows: RosterMember[] } | { ok: false; error: string }> {
+  const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const { data, error } = await createAdminClient()
@@ -197,7 +204,7 @@ export async function listRoster(
   // 조회 실패를 '명단 0명' 으로 위장하지 않는다 — 관리자가 같은 사람을 다시 넣게 만든다.
   if (error || !data) {
     console.error('[listRoster] 조회 실패:', error?.message ?? 'unknown')
-    return { ok: false, error: ERR_ROSTER_LIST }
+    return { ok: false, error: tr(ERR_ROSTER_LIST) }
   }
   return { ok: true, rows: mapRosterRows(data) }
 }

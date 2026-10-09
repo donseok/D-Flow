@@ -10,6 +10,9 @@ import { isUuidLike } from '@/lib/domain/agentWork'
 import { SPEC_UPDATED_TOKEN } from '@/lib/domain/wbsSpecLog'
 import { applyDelegation, requireDelegationRight, type AgentDelegationResult } from '@/lib/agent/delegation'
 import { requireModule } from '@/lib/modules/gate'
+import { serverTranslator } from '@/lib/i18n/server'
+import { ERR_MISSING } from '@/lib/authz/errors'
+import { libText } from '@/lib/i18n/serverText'
 // 결과 타입은 명세 패널 등 화면이 이 모듈에서 import 한다 — 본체를 옮겨도 계약 위치는 유지(타입 재export 는 런타임에 없다).
 export type { AgentDelegationResult } from '@/lib/agent/delegation'
 
@@ -55,10 +58,11 @@ async function loadItemProject(itemId: string): Promise<
   | { ok: true; projectId: string }
   | { ok: false; error: string }
 > {
-  if (!isUuidLike(itemId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isUuidLike(itemId)) return { ok: false, error: t('err.invalidRequest') }
   const resolved = await resolveProjectId('wbs_items', itemId)
-  if (!resolved.ok) return { ok: false, error: resolved.error }
-  if (resolved.projectId === null) return { ok: false, error: '대상을 찾을 수 없습니다.' }
+  if (!resolved.ok) return { ok: false, error: libText(t, resolved.error) }
+  if (resolved.projectId === null) return { ok: false, error: ERR_MISSING }
   return { ok: true, projectId: resolved.projectId }
 }
 
@@ -122,9 +126,10 @@ export async function getWbsSpec(itemId: string): Promise<WbsSpecDetail | null> 
 }
 
 export async function updateWbsSpec(itemId: string, spec: string): Promise<{ ok: boolean; error?: string }> {
-  if (!isUuidLike(itemId)) return { ok: false, error: '잘못된 요청입니다.' }
-  if (typeof spec !== 'string') return { ok: false, error: '잘못된 요청입니다.' }
-  if (spec.length > SPEC_MAX) return { ok: false, error: '명세가 너무 큽니다(1MB 상한).' }
+  const t = await serverTranslator()
+  if (!isUuidLike(itemId)) return { ok: false, error: t('err.invalidRequest') }
+  if (typeof spec !== 'string') return { ok: false, error: t('err.invalidRequest') }
+  if (spec.length > SPEC_MAX) return { ok: false, error: t('srv.wbsSpec.specTooLarge') }
   const loaded = await loadItemProject(itemId)
   if (!loaded.ok) return loaded
   const g = await requireProjectAdmin(loaded.projectId)
@@ -134,7 +139,7 @@ export async function updateWbsSpec(itemId: string, spec: string): Promise<{ ok:
     .from('wbs_items').update({ spec, updated_at: new Date().toISOString() })
     .eq('id', itemId).select('id')
   if (error) return { ok: false, error: error.message }
-  if (!updated || updated.length === 0) return { ok: false, error: '갱신 대상 없음' }
+  if (!updated || updated.length === 0) return { ok: false, error: t('err.nothingUpdate') }
   const { error: logErr } = await admin.from('change_logs').insert({
     // 본문 전문을 로그에 넣지 않는다 — 크기·노이즈. 값은 로케일 중립 토큰(SPEC_UPDATED_TOKEN) —
     // 리터럴 한국어 문자열을 저장하면 en 사용자 이력에도 그대로 노출된다(리뷰 라운드 1).
@@ -151,15 +156,16 @@ export async function updateWbsSpecFields(
   itemId: string,
   fields: { prd_ref?: string | null; entry_point?: string | null; priority?: WbsPriority | null },
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!isUuidLike(itemId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isUuidLike(itemId)) return { ok: false, error: t('err.invalidRequest') }
   if (fields.priority !== undefined && fields.priority !== null && !PRIORITY_LABELS.has(fields.priority)) {
-    return { ok: false, error: '허용되지 않는 우선순위입니다.' }
+    return { ok: false, error: t('srv.wbsSpec.priorityNotAllowed') }
   }
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if ('prd_ref' in fields) patch.prd_ref = fields.prd_ref
   if ('entry_point' in fields) patch.entry_point = fields.entry_point
   if ('priority' in fields) patch.priority = fields.priority
-  if (Object.keys(patch).length === 1) return { ok: false, error: '갱신할 필드가 없습니다.' }
+  if (Object.keys(patch).length === 1) return { ok: false, error: t('srv.wbsSpec.noFieldsUpdate') }
   const loaded = await loadItemProject(itemId)
   if (!loaded.ok) return loaded
   const g = await requireProjectAdmin(loaded.projectId)
@@ -168,7 +174,7 @@ export async function updateWbsSpecFields(
   const { data: updated, error } = await admin
     .from('wbs_items').update(patch).eq('id', itemId).select('id')
   if (error) return { ok: false, error: error.message }
-  if (!updated || updated.length === 0) return { ok: false, error: '갱신 대상 없음' }
+  if (!updated || updated.length === 0) return { ok: false, error: t('err.nothingUpdate') }
   revalidatePath(`/p/${loaded.projectId}`, 'layout')
   return { ok: true }
 }
@@ -187,12 +193,13 @@ export async function updateAgentPrompt(
   itemId: string,
   raw: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (typeof raw !== 'string') return { ok: false, error: '잘못된 요청입니다.' }
-  if (raw.length > AGENT_PROMPT_MAX) return { ok: false, error: '프롬프트가 너무 큽니다(16KB 상한).' }
-  if (!isUuidLike(itemId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (typeof raw !== 'string') return { ok: false, error: t('err.invalidRequest') }
+  if (raw.length > AGENT_PROMPT_MAX) return { ok: false, error: t('srv.wbsSpec.promptTooLarge') }
+  if (!isUuidLike(itemId)) return { ok: false, error: t('err.invalidRequest') }
   // 자격은 위임 토글과 같다(허브 스펙 §3) — 관리자 또는 담당자 본인.
   const right = await requireDelegationRight(itemId)
-  if (!right.ok) return { ok: false, error: right.error }
+  if (!right.ok) return { ok: false, error: libText(t, right.error) }
   const mod = await requireModule({ projectId: right.projectId }, 'agents')   // 스펙 §4.2 — 항목의 프로젝트(가드가 확정)로
   if (!mod.ok) return { ok: false, error: mod.error }
   const admin = createAdminClient()
@@ -201,7 +208,7 @@ export async function updateAgentPrompt(
     .update({ agent_prompt: raw.trim() || null, updated_at: new Date().toISOString() })
     .eq('id', itemId).select('id')
   if (error) return { ok: false, error: error.message }
-  if (!updated || updated.length === 0) return { ok: false, error: '갱신 대상 없음' }
+  if (!updated || updated.length === 0) return { ok: false, error: t('err.nothingUpdate') }
   revalidatePath(`/p/${right.projectId}`, 'layout')
   return { ok: true }
 }
@@ -214,9 +221,10 @@ export async function setAgentDelegation(
   itemId: string,
   delegated: boolean,
 ): Promise<AgentDelegationResult> {
-  if (!isUuidLike(itemId) || typeof delegated !== 'boolean') return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isUuidLike(itemId) || typeof delegated !== 'boolean') return { ok: false, error: t('err.invalidRequest') }
   const right = await requireDelegationRight(itemId)
-  if (!right.ok) return { ok: false, error: right.error }
+  if (!right.ok) return { ok: false, error: libText(t, right.error) }
   const mod = await requireModule({ projectId: right.projectId }, 'agents')   // 스펙 §4.2 — 항목의 프로젝트(가드가 확정)로
   if (!mod.ok) return { ok: false, error: mod.error }
   const r = await applyDelegation(createAdminClient(), {

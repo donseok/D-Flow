@@ -20,7 +20,7 @@ import { firstNewCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
 import { detectWorkbook } from '@/lib/excel/detect'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import {
-  CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_COMMAND_REUSED, ERR_CONFIG_UNAVAILABLE, configStatus, type ConfigCode,
+  CONFIG_MESSAGES, configText, ConfigKeyError, ConfigUnavailableError, ERR_COMMAND_REUSED, ERR_CONFIG_UNAVAILABLE, configStatus, type ConfigCode,
   type DbErrorLike,
 } from '@/lib/settings/errors'
 import { valueOf } from '@/lib/settings/registry'
@@ -32,46 +32,47 @@ import { ensureProjectTeams } from '@/lib/teams/register'
 import { referencedCommonTeamCodes } from '@/lib/teams/referencedCommon'
 import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 import { TeamsUnavailableError, projectOwnTeams, projectTeams } from '@/lib/teams/source'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill } from '@/lib/i18n/translate'
 
 /** replace 모드가 백업하지 않는 부수 효과를 명시 경고한다(B2 리뷰 이월).
  *  change_logs 는 wbs_items 의 on delete cascade 로 함께 지워지고(Q1 결정 — 백업은 트리뿐),
  *  holidays 는 replace_wbs 가 delete 하지 않고 upsert 만 한다(갱신되되 잔존 항목이 남을 수 있음). */
-const REPLACE_WARNINGS = [
-  '변경 이력(change_logs)은 백업에 포함되지 않으며 교체 시 함께 삭제되어 복구할 수 없습니다.',
-  '휴일은 삭제되지 않고 갱신만 됩니다.',
-]
+const REPLACE_WARNINGS = [   // 사전 키 — 응답에 실을 때 요청의 언어로 푼다
+  'srv.api.importExecute.changeHistory',
+  'srv.api.importExecute.holidaysNotDeletedOnlyUpdated',
+] as const
 /** 같은 명령 id 의 재전송이 이미 적용된 replace 를 만났다 — 이번 응답에는 백업이 없다(SP4 §4.4 #9·D50·K9) */
 const DUPLICATE_REPLACE_WARNING =
-  '이 실행은 이미 적용되어 있었습니다 — 교체 전 백업은 처음 응답에만 실렸습니다. 실행 전에 받은 백업 파일을 쓰세요.'
+  'srv.api.importExecute.runHadAlreadyApplied'
 
 type ImportMode = 'append' | 'replace'
 
 // 고정 문구 — DB 원문은 응답에 싣지 않는다(SP4 §4.7 — 원문은 failWith 가 로그로만)
-const ERR_INPUT_MISSING = '파일/프로젝트/프로파일 누락'
-const ERR_MODE = "mode는 'append' 또는 'replace' 여야 합니다"
-const ERR_PROJECT_ID = '프로젝트 식별자 형식이 올바르지 않습니다'
-const ERR_COMMAND_ID = '요청 번호(commandId)가 없거나 형식이 올바르지 않습니다 — 화면을 새로 고친 뒤 다시 실행하세요.'
-const ERR_PROFILE_JSON = '프로파일 JSON 형식이 올바르지 않습니다'
-const ERR_PROJECT_CONFIG = '프로젝트 설정을 확인할 수 없습니다.'
-const ERR_PROFILE_MISMATCH =
-  '저장된 엑셀 양식과 이 파일의 열 구조가 다릅니다 — 저장 양식으로 읽으면 값이 다른 열에서 읽힙니다. ' +
-  '감지 결과로 가져오거나, 마법사에서 "저장된 양식 사용"을 직접 고른 뒤 실행하세요.'
-const errProfileUnverifiable = (detail: string) =>
-  `파일 구조를 감지하지 못해 저장된 엑셀 양식과 대조할 수 없습니다: ${detail} — 저장 양식으로 읽으려면 확인 후 다시 실행하세요.`
-const ERR_LINK = '파일의 계층 구조에 오류가 있습니다 — 표시된 행을 고친 뒤 다시 실행하세요.'
-const ERR_RECEIPT = '이전 실행 기록을 확인하지 못해 중단했습니다. 잠시 후 다시 시도하세요.'
-const ERR_TEAMS = '팀 목록을 확인하지 못해 중단했습니다. 잠시 후 다시 시도하세요.'
-const ERR_NEEDS_TEAMS = '등록되지 않은 팀이 있습니다 — 등록할지 확인한 뒤 다시 실행하세요.'
-const ERR_TEAM_CODE = '팀 이름으로 쓸 수 없는 담당 팀이 있습니다 — 파일의 팀 이름을 고친 뒤 다시 실행하세요.'
-const ERR_TEAM_CONVERT = '공용 팀을 이 프로젝트의 팀으로 전환하지 못해 가져오기를 멈췄습니다. 잠시 후 다시 시도하세요.'
-const ERR_TEAM_REGISTER = '팀을 등록하지 못해 가져오기를 멈췄습니다. 잠시 후 다시 시도하세요.'
+const ERR_INPUT_MISSING = 'srv.api.importExecute.fileProjectProfileMissing'
+const ERR_MODE = 'srv.api.importExecute.modeMustAppendReplace'
+const ERR_PROJECT_ID = 'err.projectIdentifierFormatNotValid'
+const ERR_COMMAND_ID = 'srv.api.importExecute.requestId'
+const ERR_PROFILE_JSON = 'srv.api.importExecute.profileJsonFormatNotValid'
+const ERR_PROJECT_CONFIG = 'err.couldNotVerifyProjectSettings'
+const ERR_PROFILE_MISMATCH = 'srv.api.importExecute.profileMismatch'
+const errProfileUnverifiable = (tr: ServerTranslate, detail: string) =>
+  fill(tr('srv.api.importExecute.fileStructureCouldNotDetected'), { detail })
+const ERR_LINK = 'srv.api.importExecute.fileSHierarchyErrors'
+const ERR_RECEIPT = 'srv.api.importExecute.couldNotVerifyPreviousRun'
+const ERR_TEAMS = 'srv.api.importExecute.couldNotVerifyTeamList'
+const ERR_NEEDS_TEAMS = 'srv.api.importExecute.someTeamsNotRegistered'
+const ERR_TEAM_CODE = 'srv.api.importExecute.someOwningTeamsCannotUsed'
+const ERR_TEAM_CONVERT = 'srv.api.importExecute.couldNotConvertSharedTeams'
+const ERR_TEAM_REGISTER = 'srv.api.importExecute.couldNotRegisterTeamsImport'
 /** replace 백업을 읽지 못함 — 잘림·읽는 사이의 변경(count 불일치)·조회 오류 모두(SP4 D18·Q5) */
-const ERR_BACKUP_FAILED = '교체 전 백업을 만들지 못해 가져오기를 멈췄습니다. 잠시 후 다시 시도하세요.'
-const ERR_IMPORT = '가져오기를 처리하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_BACKUP_FAILED = 'srv.api.importExecute.couldNotCreatePreReplace'
+const ERR_IMPORT = 'srv.api.importExecute.couldNotProcessImport'
 /** 파일의 사용자 정의 필드 값을 행 트리거(enforce_custom_fields)가 거부함 — CUSTOM_FIELD_<종류>[:키…](0040). 다시 시도해도 같으므로 422 */
-const ERR_CUSTOM_FIELD = '사용자 정의 필드 값이 올바르지 않아 가져오기를 멈췄습니다 — 파일의 사용자 정의 열(필수 값·형식·선택지)을 확인한 뒤 다시 실행하세요.'
+const ERR_CUSTOM_FIELD = 'srv.api.importExecute.customFieldValuesNotValid'
 /** 파일의 사용자 정의 필드 값이 TS 사전 검사에서 걸림 — 행 번호는 응답의 errors 에 싣는다(LINK_ERRORS 와 같은 표) */
-const ERR_CUSTOM_ROWS = '사용자 정의 필드 값에 오류가 있습니다 — 표시된 행을 고친 뒤 다시 실행하세요.'
+const ERR_CUSTOM_ROWS = 'srv.api.importExecute.customFieldValuesErrors'
 
 /** RPC 둘(import_wbs_cmd·convert_inherited_teams)의 자기 토큰(SP4 §4.4 #6·#8 — D45·T6). 그 밖은 rpcFailure 가 55P03(잠금 대기 상한)
  *  503 재시도·mapDbError(40P01 503)로 판정하고, 셋 다 아니면 로그 + 500 고정 문구다. 입력 토큰(IMPORT_INVALID_INPUT·
@@ -98,8 +99,8 @@ function guardCode(error: string): string {
 }
 
 /** RPC 오류 → 자기 표·55P03·mapDbError 의 판정(rpcFailure — 계획 P4). 셋 다 아니면 로그 + 500 고정 문구(원문은 failWith 가 로그로만) */
-function rpcFail(tag: string, err: DbErrorLike, fallbackCode: string, fallback: string): NextResponse {
-  const f = rpcFailure(err, RPC_TOKENS)
+function rpcFail(tr: ServerTranslate, tag: string, err: DbErrorLike, fallbackCode: string, fallback: string): NextResponse {
+  const f = rpcFailure(err, { ...RPC_TOKENS, COMMAND_REUSED: { ...RPC_TOKENS.COMMAND_REUSED, message: configText(tr, ERR_COMMAND_REUSED) } }, tr)
   if (f) {
     if (f.status >= 500) console.error(`[${tag}] ${f.token} → ${f.status}`)
     return fail(f.status, f.code, f.message)
@@ -127,6 +128,7 @@ function activeCommon(teams: readonly Team[]): { code: string; name: string }[] 
  * 상속하던 프로젝트는 먼저 전환한다(D4·D54). 판정 대상 프로젝트가 본문에 있어 폼을 먼저 읽는다 — 파싱·DB 접근은 가드 통과 후에만 한다.
  */
 export async function POST(req: NextRequest) {
+  const tr = await serverTranslator()
   // #1 폼·입력 검증 — 가드보다 먼저(agent-loop 교훈: 비 UUID 를 그대로 흘리면 가드·쿼리가 엉뚱한 에러로 새어나간다)
   const form = await req.formData()
   const file = form.get('file') as File | null
@@ -137,11 +139,11 @@ export async function POST(req: NextRequest) {
   const saveProfile = form.get('saveProfile') === 'true'
   const registerTeams = form.get('registerTeams') === 'true'
 
-  if (!file || !projectId || !profileRaw) return fail(400, 'INVALID_INPUT', ERR_INPUT_MISSING)
-  if (mode !== 'append' && mode !== 'replace') return fail(400, 'INVALID_INPUT', ERR_MODE)
-  if (!isUuidLike(projectId)) return fail(400, 'INVALID_INPUT', ERR_PROJECT_ID)
+  if (!file || !projectId || !profileRaw) return fail(400, 'INVALID_INPUT', tr(ERR_INPUT_MISSING))
+  if (mode !== 'append' && mode !== 'replace') return fail(400, 'INVALID_INPUT', tr(ERR_MODE))
+  if (!isUuidLike(projectId)) return fail(400, 'INVALID_INPUT', tr(ERR_PROJECT_ID))
   // 명령 id 는 마법사가 실행 의도마다 뽑는다 — 없으면 재전송을 한 벌로 묶을 수 없다
-  if (!isUuidLike(commandId)) return fail(400, 'COMMAND_ID_REQUIRED', ERR_COMMAND_ID)
+  if (!isUuidLike(commandId)) return fail(400, 'COMMAND_ID_REQUIRED', tr(ERR_COMMAND_ID))
 
   // #2 가드 — 401·403·404(타 워크스페이스·미존재 — 존재 은닉), 그 밖(권한 조회 실패)은 서버 사정이라 500
   const g = await requireProjectAdmin(projectId)
@@ -152,7 +154,7 @@ export async function POST(req: NextRequest) {
   try {
     profileJson = JSON.parse(profileRaw)
   } catch {
-    return fail(400, 'INVALID_INPUT', ERR_PROFILE_JSON)
+    return fail(400, 'INVALID_INPUT', tr(ERR_PROFILE_JSON))
   }
   const validated = validateProfile(profileJson)
   if (!validated.ok) return fail(400, 'INVALID_INPUT', validated.error)
@@ -173,7 +175,7 @@ export async function POST(req: NextRequest) {
   try {
     cfg = await getProjectConfig(projectId)
   } catch (e) {
-    if (e instanceof ConfigUnavailableError) return fail(503, 'CONFIG_UNAVAILABLE', failWith('import/execute 설정 조회', e, ERR_PROJECT_CONFIG))
+    if (e instanceof ConfigUnavailableError) return fail(503, 'CONFIG_UNAVAILABLE', failWith('import/execute 설정 조회', e, tr(ERR_PROJECT_CONFIG)))
     throw e
   }
   // 손상된(invalid) 저장 양식은 inspect 가 null 로 돌려줘 클라이언트가 쓸 수 없다 — 대조 대상이 아니다(손상 경고는 inspect 가 싣는다).
@@ -186,14 +188,14 @@ export async function POST(req: NextRequest) {
       // inspect 와 같은 별칭으로 본다(추가 축 이름) — 다르면 그 이름으로 낸 파일이 늘 불일치다
       const extraAxisState = cfg.keys['core.extra_axis_label']
       const detected = detectWorkbook(buf, { extraAxisLabel: extraAxisState.status === 'set' ? extraAxisState.value : null })
-      if (!detected.ok) return fail(409, 'PROFILE_MISMATCH', errProfileUnverifiable(detected.error), { profileMismatch: null })
+      if (!detected.ok) return fail(409, 'PROFILE_MISMATCH', errProfileUnverifiable(tr, detected.error), { profileMismatch: null })
       // 감지 양식은 inspect 와 같은 것이어야 한다 — 필드 열 제안(§3.6.7)을 같이 싣는다(안 실으면 필드 열이 든 저장 양식이 늘 불일치다)
       const fieldState = cfg.keys['fields.wbs_item']
       const detectedProfile = fieldState.status === 'set' || fieldState.status === 'default'
         ? withSuggestedCustomColumns(detected.result.profile, detected.result.preview.headers, fieldState.value)
         : detected.result.profile
       const profileMismatch = compareProfiles(saved, detectedProfile)
-      if (profileMismatch) return fail(409, 'PROFILE_MISMATCH', ERR_PROFILE_MISMATCH, { profileMismatch })
+      if (profileMismatch) return fail(409, 'PROFILE_MISMATCH', tr(ERR_PROFILE_MISMATCH), { profileMismatch })
     }
   }
 
@@ -219,9 +221,9 @@ export async function POST(req: NextRequest) {
   }
   const linked = linkByDepth(rows, { legacyLevelLabels: resolveLegacyLevelLabels(profile) })
   if (!linked.ok) {
-    return fail(400, 'LINK_ERRORS', ERR_LINK, { errors: [...linked.errors, ...customErrors].sort((a, b) => a.excelRow - b.excelRow) })
+    return fail(400, 'LINK_ERRORS', tr(ERR_LINK), { errors: [...linked.errors, ...customErrors].sort((a, b) => a.excelRow - b.excelRow) })
   }
-  if (customErrors.length > 0) return fail(400, 'CUSTOM_FIELD_ERRORS', ERR_CUSTOM_ROWS, { errors: customErrors })
+  if (customErrors.length > 0) return fail(400, 'CUSTOM_FIELD_ERRORS', tr(ERR_CUSTOM_ROWS), { errors: customErrors })
   // 휴일 충돌(SP5 D7·개정 §4.2.3) — RPC 는 그대로 받는다(갱신절이 work 행을 덮지 않는다 — 반환 형태 불변). 결과 화면이 그 날짜를 '건너뜀'으로
   // 보인다. 원천은 이미 읽은 해석기의 날짜 예외(cfg.holidays — 로더가 끝까지 읽었다)
   const skippedHolidays = skippedHolidaysOf(parsed.holidays, cfg.holidays)
@@ -231,7 +233,7 @@ export async function POST(req: NextRequest) {
   const sb = await createServerClient()
   const receipt = await sb.from('command_receipts').select('command_id')
     .eq('actor', g.actor.userId).eq('command_id', commandId).eq('kind', 'wbs_import').maybeSingle()
-  if (receipt.error) return fail(503, 'RECEIPT_UNAVAILABLE', failWith('import/execute 영수증 확인', receipt.error, ERR_RECEIPT))
+  if (receipt.error) return fail(503, 'RECEIPT_UNAVAILABLE', failWith('import/execute 영수증 확인', receipt.error, tr(ERR_RECEIPT)))
   const replayed = receipt.data !== null
 
   const admin = createAdminClient()
@@ -244,7 +246,7 @@ export async function POST(req: NextRequest) {
     try {
       teamSets = await Promise.all([projectTeams(projectId), projectOwnTeams(projectId)])
     } catch (e) {
-      if (e instanceof TeamsUnavailableError) return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 팀 조회', e, ERR_TEAMS))
+      if (e instanceof TeamsUnavailableError) return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 팀 조회', e, tr(ERR_TEAMS)))
       throw e
     }
     const [teams, ownTeams] = teamSets
@@ -268,7 +270,7 @@ export async function POST(req: NextRequest) {
       try {
         referenced = await referencedCommonTeamCodes({ projectId, workspaceId: wsOfProject }, unknownTeams)
       } catch (e) {
-        return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 공용 팀 참조 조회', e, ERR_TEAMS))
+        return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 공용 팀 참조 조회', e, tr(ERR_TEAMS)))
       }
       // 참조 중인 공용 팀과 대소문자·전각·개명 이름만 다른 code 는 겹침(A2-2 리뷰 보안 P3) — 전용 팀으로 만들면 같은 낱말의 두 팀으로 갈라진다
       for (const t of unknownTeams) {
@@ -290,7 +292,7 @@ export async function POST(req: NextRequest) {
       // 이름 검사는 409 판정·전환 앞이다(A1-5 R1) — 쓸 수 없는 이름이 든 요청은 registerTeams 와 무관하게 400 이고 부수효과가 없다.
       // 되돌릴 수 없는 공용 팀 전환이 거절된 요청 뒤에 남지 않고, 409 확인 창에는 등록할 수 있는 이름만 오른다
       const named = validateNewTeamCodes(unknownTeams, reserved)
-      if (!named.ok) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: named.team })
+      if (!named.ok) return fail(400, 'INVALID_TEAM_CODE', tr(ERR_TEAM_CODE), { team: named.team })
       // 이 프로젝트 팀(상속이면 전환이 복사할 공용 팀)의 code·이름(개명 포함)과 대소문자·전각만 다른 새 code 도 같은 자리에서 거부한다
       // (개명 규칙의 대칭 — A2-1 리뷰 정확성 P3). 전환 앞이라 거절이 전환을 남기지 않는다
       // 한 파일 안의 새 code 끼리(ab·AB)도 같은 규칙으로 본다(A2-2 리뷰 보안 P3). 응답은 겹친 팀을 싣는다 — 'ops' 가 왜 안 되는지 보이게
@@ -302,7 +304,7 @@ export async function POST(req: NextRequest) {
       const consent = inheritsCommon ? convertConsentToken(teams, unknownTeams) : null
       const consented = !inheritsCommon || String(form.get('convertToken') ?? '') === consent
       if (!registerTeams || !consented) {
-        return fail(409, 'NEEDS_TEAMS', ERR_NEEDS_TEAMS, {
+        return fail(409, 'NEEDS_TEAMS', tr(ERR_NEEDS_TEAMS), {
           needsTeams: unknownTeams, inheritsCommon, commonTeams: inheritsCommon ? activeCommon(teams) : [], convertToken: consent,
         })
       }
@@ -314,7 +316,7 @@ export async function POST(req: NextRequest) {
       if (inheritsCommon) {
         // 전환 뒤에는 파일의 팀 전부를 전용 팀으로 맞추므로(아래 R2) 그 이름도 전환 앞에서 검사한다 — 검사 실패가 전환을 남기지 않는다
         const all = validateNewTeamCodes(fileTeams, reserved)
-        if (!all.ok) return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: all.team })
+        if (!all.ok) return fail(400, 'INVALID_TEAM_CODE', tr(ERR_TEAM_CODE), { team: all.team })
         // 전환(convert_inherited_teams)은 활성 공용 팀과 이 프로젝트가 참조 중인 비활성 공용 팀만 복사한다. 파일이 가리키는 비활성 공용 팀은
         // 참조 여부를 읽어(정확히 같은 팀이 참조될 때만 복사) 복사되지 않는 code — 전환 뒤 새로 만드는 code — 를 가른다(A2-3 리뷰 보안·정확성
         // P3 — X4). 그 code 는 복사될 팀과의 키 겹침을 전환 앞에서 본다(겹침 판정이 전환 뒤 400 이 되어 되돌릴 수 없는 전환만 남지 않게).
@@ -326,7 +328,7 @@ export async function POST(req: NextRequest) {
             const refs = await referencedCommonTeamCodes({ projectId, workspaceId }, inactiveKnown)
             referencedInactive = new Set(inactiveKnown.filter((t) => refs.get(t) === t))
           } catch (e) {
-            return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 비활성 공용 팀 참조 조회', e, ERR_TEAMS))
+            return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 비활성 공용 팀 참조 조회', e, tr(ERR_TEAMS)))
           }
         }
         copiedCodes = fileTeams.filter((t) => teams.some((x) => x.code === t && x.active) || referencedInactive.has(t))
@@ -338,10 +340,10 @@ export async function POST(req: NextRequest) {
         // 첫 전용 팀이 생기면 상속하던 공용 팀이 그 프로젝트 화면에서 사라진다 — 먼저 같은 code·이름·색의 전용 팀으로 바꾸고
         // 그 프로젝트 안의 참조(담당·명단 팀·영역 팀·수락 전 초대)를 옮긴다(D54). converted·already 모두 성공이다
         const conv = await admin.rpc('convert_inherited_teams', { p_actor: g.actor.userId, p_project_id: projectId })
-        if (conv.error) return rpcFail('import/execute 팀 전환', conv.error, 'TEAM_CONVERT_FAILED', ERR_TEAM_CONVERT)
+        if (conv.error) return rpcFail(tr, 'import/execute 팀 전환', conv.error, 'TEAM_CONVERT_FAILED', tr(ERR_TEAM_CONVERT))
         const status = (conv.data as { status?: unknown } | null)?.status
         if (status !== 'converted' && status !== 'already') {
-          return fail(500, 'TEAM_CONVERT_FAILED', failWith('import/execute 팀 전환 결과', conv.data, ERR_TEAM_CONVERT))
+          return fail(500, 'TEAM_CONVERT_FAILED', failWith('import/execute 팀 전환 결과', conv.data, tr(ERR_TEAM_CONVERT)))
         }
       }
       // R2 — 전환을 부른 요청은 대조를 전환 뒤 상태로 다시 한다: 파일의 팀 code 전부를 전용 팀으로 맞춘다(이미 있는 전용 팀은 existing).
@@ -354,8 +356,8 @@ export async function POST(req: NextRequest) {
         ? await ensureProjectTeams({ projectId, workspaceId }, fileTeams, reserved, { copiedCodes })
         : await ensureProjectTeams({ projectId, workspaceId }, unknownTeams, reserved)
       if (!ensured.ok) {
-        if (ensured.code === 'INVALID_TEAM_CODE') return fail(400, 'INVALID_TEAM_CODE', ERR_TEAM_CODE, { team: ensured.team })
-        return fail(500, 'TEAM_REGISTER_FAILED', ERR_TEAM_REGISTER)
+        if (ensured.code === 'INVALID_TEAM_CODE') return fail(400, 'INVALID_TEAM_CODE', tr(ERR_TEAM_CODE), { team: ensured.team })
+        return fail(500, 'TEAM_REGISTER_FAILED', tr(ERR_TEAM_REGISTER))
       }
       registered.push(...ensured.created, ...ensured.existing)
     }
@@ -373,7 +375,7 @@ export async function POST(req: NextRequest) {
       })
       backup = { rows, generatedAt: new Date().toISOString() }
     } catch (e) {
-      return fail(500, 'BACKUP_FAILED', failWith('import/execute replace 백업', e, ERR_BACKUP_FAILED))
+      return fail(500, 'BACKUP_FAILED', failWith('import/execute replace 백업', e, tr(ERR_BACKUP_FAILED)))
     }
   }
 
@@ -386,12 +388,12 @@ export async function POST(req: NextRequest) {
     // 토큰에 필드 키·사유가 붙어 자기 토큰 표(정확히 일치)로는 못 받는다. 원문은 로그로만 남긴다
     if (typeof error.message === 'string' && error.message.startsWith('CUSTOM_FIELD_')) {
       console.error(`[import/execute 가져오기] ${error.message} → 422`)
-      return fail(422, 'CUSTOM_FIELD_INVALID', ERR_CUSTOM_FIELD)
+      return fail(422, 'CUSTOM_FIELD_INVALID', tr(ERR_CUSTOM_FIELD))
     }
-    return rpcFail('import/execute 가져오기', error, 'IMPORT_FAILED', ERR_IMPORT)
+    return rpcFail(tr, 'import/execute 가져오기', error, 'IMPORT_FAILED', tr(ERR_IMPORT))
   }
   const outcome = importOutcome(data)
-  if (!outcome) return fail(500, 'IMPORT_FAILED', failWith('import/execute 가져오기 결과', data, ERR_IMPORT))
+  if (!outcome) return fail(500, 'IMPORT_FAILED', failWith('import/execute 가져오기 결과', data, tr(ERR_IMPORT)))
   // 가져온 트리를 다시 색인한다(같은 명령의 재전송은 이미 넣었다). 교체로 사라진 항목의 색인은 정합성 검사가 지운다
   if (outcome.kind !== 'duplicate') await enqueueProjectIndexChange(projectId, 'wbs')
 
@@ -403,11 +405,11 @@ export async function POST(req: NextRequest) {
       (r) => r.custom && typeof r.custom === 'object' && Object.keys(r.custom as object).length > 0,
     ).length
     if (customCount > 0) {
-      customDeletedWarnings.push(`사용자 정의 값 ${customCount}건 삭제`)
+      customDeletedWarnings.push(fill(tr('err.customValuesDeleted'), { customCount }))
     }
   }
   if (duplicate) backup = undefined
-  const warnings = outcome.mode === 'replace' ? (duplicate ? [DUPLICATE_REPLACE_WARNING] : [...REPLACE_WARNINGS, ...customDeletedWarnings]) : []
+  const warnings = outcome.mode === 'replace' ? (duplicate ? [tr(DUPLICATE_REPLACE_WARNING)] : [...REPLACE_WARNINGS.map(key => tr(key)), ...customDeletedWarnings]) : []
 
   // #10 양식 저장(W5, 설정의 별도 명령) — 중복이어도 요청이면 다시 돈다(같은 값이면 changed: 0). 실패해도 가져오기는 성공이고 사유를
   // 응답의 profileSave 경고로 싣는다(로그만 남기고 삼키지 않는다 — 3원칙 ①). 저장 전 교차 검증(양식의 팀 열 ⊆ 프로젝트 팀 —
@@ -420,15 +422,15 @@ export async function POST(req: NextRequest) {
     const checked = validateProjectConfig({ 'wbs.excel_profile': profile }, { treeMaxDepth: null, teamCodes, allowed: [], prevEnabled: null })
     if (!checked.ok) {
       console.error('[import/execute] 양식 저장 교차 검증 실패:', checked.fieldErrors)
-      profileSave = { ok: false, code: 'CONFIG_INVALID', error: CONFIG_MESSAGES.CONFIG_INVALID }
+      profileSave = { ok: false, code: 'CONFIG_INVALID', error: configText(tr, CONFIG_MESSAGES.CONFIG_INVALID) }
     } else {
       // 표에 없는 DB 오류는 throw 한다 — 가져오기는 이미 끝났으므로 500 으로 바꾸지 않고 같은 경고로 싣는다(원문은 failWith 가 로그로)
       const w = await writeProjectSettingsInternal(admin, projectId, { set: { 'wbs.excel_profile': profile } }, g.actor.userId)
-        .catch((e: unknown) => ({ ok: false as const, code: 'CONFIG_UNAVAILABLE' as const, error: failWith('import/execute 양식 저장', e, ERR_CONFIG_UNAVAILABLE) }))
+        .catch((e: unknown) => ({ ok: false as const, code: 'CONFIG_UNAVAILABLE' as const, error: failWith('import/execute 양식 저장', e, configText(tr, ERR_CONFIG_UNAVAILABLE)) }))
       if (w.ok) profileSaved = true
       else {
         console.error('[import/execute] 프로파일 저장 실패:', w.code, w.error)
-        profileSave = { ok: false, code: w.code, error: Object.hasOwn(CONFIG_MESSAGES, w.code) ? CONFIG_MESSAGES[w.code as ConfigCode] : ERR_CONFIG_UNAVAILABLE }
+        profileSave = { ok: false, code: w.code, error: configText(tr, Object.hasOwn(CONFIG_MESSAGES, w.code) ? CONFIG_MESSAGES[w.code as ConfigCode] : ERR_CONFIG_UNAVAILABLE) }
       }
     }
   }

@@ -244,6 +244,7 @@ describe('redeemInvite — 로그인 사용자 합류', () => {
     expect(res).toEqual({
       ok: false,
       error: '이 초대는 다른 이메일 주소를 위한 것입니다. 초대받은 계정으로 로그인해 주세요.',
+      code: 'other_account',   // 화면은 문구가 아니라 이 값으로 분기한다(문구는 화면 언어를 따른다)
     })
     expect(spies.rpc).not.toHaveBeenCalled()
   })

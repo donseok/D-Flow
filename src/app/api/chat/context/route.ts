@@ -3,11 +3,13 @@ import { getSession } from '@/lib/auth'
 import { legacyChatProjectGate } from '@/lib/ai/legacyChatGate'
 import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { buildBotContext } from '@/lib/ai/knowledge'
+import { serverTranslator } from '@/lib/i18n/server'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  if (!(await getSession())) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
+  const t = await serverTranslator()
+  if (!(await getSession())) return NextResponse.json({ error: t('err.authenticationRequired') }, { status: 401 })
 
   const raw = req.nextUrl.searchParams.get('projectId')
   const projectId = raw && raw !== 'null' && raw !== 'undefined' ? raw : null
@@ -25,6 +27,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(ctx)
   } catch (e) {
     console.error('[assistant] /api/chat/context 오류:', e)
-    return NextResponse.json({ error: '컨텍스트 로드에 실패했습니다.' }, { status: 500 })
+    return NextResponse.json({ error: t('srv.api.chatContext.couldNotLoadContext') }, { status: 500 })
   }
 }

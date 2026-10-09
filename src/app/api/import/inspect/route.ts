@@ -11,19 +11,23 @@ import { skippedHolidaysOf } from '@/lib/domain/holidayImport'
 import { readHolidaysFromBuffer } from '@/lib/excel/parseWithProfile'
 import { withSuggestedCustomColumns } from '@/lib/excel/customColumns'
 import { createServerClient } from '@/lib/supabase/server'
+import { serverTranslator } from '@/lib/i18n/server'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 /**
  * 임포트 마법사 1단계 — 업로드된 워크북을 감지만 하고 아무것도 쓰지 않는다(§6.2, DB 쓰기 0).
  * 판정 대상 프로젝트가 본문에 있어 폼을 먼저 읽는다 — 파싱·DB 접근은 가드 통과 후에만 한다.
  */
 export async function POST(req: NextRequest) {
+  const t = await serverTranslator()
   const form = await req.formData()
   const file = form.get('file') as File | null
   const projectId = String(form.get('projectId') ?? '')
-  if (!file || !projectId) return NextResponse.json({ error: '파일/프로젝트 누락' }, { status: 400 })
+  if (!file || !projectId) return NextResponse.json({ error: t('srv.api.importInspect.fileProjectMissing') }, { status: 400 })
   // agent-loop 교훈 — 비 UUID 를 그대로 흘리면 가드·쿼리가 엉뚱한 에러로 새어나간다. 가드보다 먼저 막는다.
   if (!isUuidLike(projectId)) {
-    return NextResponse.json({ error: '프로젝트 식별자 형식이 올바르지 않습니다' }, { status: 400 })
+    return NextResponse.json({ error: t('err.projectIdentifierFormatNotValid') }, { status: 400 })
   }
 
   const g = await requireProjectAdmin(projectId)
@@ -32,12 +36,12 @@ export async function POST(req: NextRequest) {
 
   const buf = await file.arrayBuffer()
   let detected = detectWorkbook(buf)
-  if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
+  if (!detected.ok) return NextResponse.json({ error: libText(t, detected.error) }, { status: 400 })
 
   let cfg: ProjectConfig
   try { cfg = await getProjectConfig(projectId) } catch (e) {
     // 3원칙 — 조회 실패를 기본값(savedProfile:null)으로 위장하지 않는다. 본문은 고정 문구, PostgREST 사유는 서버 로그에만.
-    if (e instanceof ConfigUnavailableError) { console.error('[import/inspect] 프로젝트 설정 조회 실패:', e.message); return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 }) }
+    if (e instanceof ConfigUnavailableError) { console.error('[import/inspect] 프로젝트 설정 조회 실패:', e.message); return NextResponse.json({ error: t('err.couldNotVerifyProjectSettings') }, { status: 503 }) }
     throw e
   }
 
@@ -46,7 +50,7 @@ export async function POST(req: NextRequest) {
   const extraAxisState = cfg.keys['core.extra_axis_label']
   if (extraAxisState.status === 'set' && extraAxisState.value) {
     detected = detectWorkbook(buf, { extraAxisLabel: extraAxisState.value })
-    if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
+    if (!detected.ok) return NextResponse.json({ error: libText(t, detected.error) }, { status: 400 })
   }
 
   // 감지 결과를 그대로 반환에 쓰되, warnings 는 아래서 덧붙일 수 있어 얕은 복제로 원본 배열을 보존한다.
@@ -59,7 +63,7 @@ export async function POST(req: NextRequest) {
   else if (profileState.status === 'invalid') {
     // 손상을 조용히 null 로만 넘기면 사실이 묻힌다 — 침묵 무시 금지. 사유는 서버 로그에(해석기도 키당 한 줄 남긴다).
     console.error('[import/inspect] 저장된 양식이 손상됨:', profileState.error)
-    detection.warnings.push('저장된 프로파일이 손상됨')
+    detection.warnings.push(t('srv.api.importInspect.savedProfileCorrupted'))
   }
 
   // 사용자 정의 필드 열 제안(개정 §3.6.7) — 헤더가 활성 필드의 라벨(공백·대소문자 정규화) 또는 key 와 같으면 그 열을 감지 양식의
@@ -69,7 +73,7 @@ export async function POST(req: NextRequest) {
     detection.profile = withSuggestedCustomColumns(detection.profile, detection.preview.headers, fieldState.value)
   } else if (fieldState.status === 'invalid') {
     console.error('[import/inspect] 추가 필드 설정이 손상됨:', fieldState.error)
-    detection.warnings.push('추가 필드 설정이 손상됨 — 사용자 정의 열을 제안하지 못했습니다')
+    detection.warnings.push(t('srv.api.importInspect.customFieldSettingsCorrupted'))
   }
 
   // 저장 양식과 이 파일의 구조가 다르면 알린다(Task 1b) — 저장 양식으로 읽으면 열이 밀려 틀린 값이 쓰인다.
@@ -89,7 +93,7 @@ export async function POST(req: NextRequest) {
       .eq('project_id', projectId)
       .neq('custom', '{}')
     if (customCount && customCount > 0) {
-      detection.warnings.push(`사용자 정의 값 ${customCount}건 삭제`)
+      detection.warnings.push(fill(t('err.customValuesDeleted'), { customCount }))
     }
   } catch {
     // 테스트 환경 또는 세션 없는 조회 등 실패 시에는 기존 감지 결과 보존

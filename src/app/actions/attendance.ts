@@ -6,13 +6,16 @@ import { requireModule } from '@/lib/modules/gate'
 import { revalidatePath } from 'next/cache'
 import type { AttendanceType } from '@/lib/domain/types'
 import { checkProjectVocab, vocabWriteFailure } from '@/lib/settings/vocabGuard'
+import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 /** member_id+date 유니크 충돌 시 갱신(upsert). 해당 프로젝트 멤버 이상만 허용. */
 export async function upsertAttendance(
   projectId: string,
   input: { memberId: string; date: string; type: AttendanceType; note?: string | null },
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!input.memberId || !input.date) return { ok: false, error: '멤버와 날짜는 필수입니다' }
+  const t = await serverTranslator()
+  if (!input.memberId || !input.date) return { ok: false, error: t('srv.attendance.memberDateRequired') }
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'attendance')                 // 스펙 §4.2 — 가드 뒤(가드 앞 필수값 검사는 그대로)
@@ -27,9 +30,9 @@ export async function upsertAttendance(
     .eq('id', input.memberId).eq('project_id', projectId).eq('active', true).eq('people.active', true).maybeSingle()
   if (memberErr) {
     console.error('[upsertAttendance] 로스터 확인 실패:', memberErr.message)
-    return { ok: false, error: '대상 멤버를 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: t('srv.attendance.couldNotVerifyMemberRequest') }
   }
-  if (!member) return { ok: false, error: '이 프로젝트의 멤버가 아닙니다.' }
+  if (!member) return { ok: false, error: t('srv.attendance.notMemberProject') }
   // 유형 = 이 프로젝트의 활성 근태 유형(설정 attendance.types, B4). 경합은 DB 트리거가 닫는다
   const typeErr = await checkProjectVocab(projectId, 'attendance.types', input.type)
   if (typeErr) return { ok: false, error: typeErr }
@@ -53,10 +56,11 @@ export async function upsertAttendance(
 
 /** 근태 기록 삭제. 해당 기록이 속한 프로젝트의 멤버 이상만 허용. */
 export async function removeAttendance(recordId: string): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   // 어느 프로젝트 기록인지 모르면 권한을 판정할 수 없다 — 조회를 게이트 앞에 두고,
   // 조회 실패는 '기록 없음'으로 위장하지 않고 그대로 중단한다(fail-closed).
   const found = await resolveProjectId('attendance_records', recordId)
-  if (!found.ok) return { ok: false, error: found.error }
+  if (!found.ok) return { ok: false, error: libText(t, found.error) }
   const g = await requireProjectMember(found.projectId)
   if (!g.ok) return { ok: false, error: g.error }
   if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)

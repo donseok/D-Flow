@@ -10,6 +10,7 @@ import { ilikeOrPattern } from '@/lib/domain/minutes'
 import { wikiAskTokens } from '@/lib/domain/wikiAsk'
 import type { BotSource } from '@/lib/ai/chat/protocol'
 import type { WikiKnowledgeRecord } from '@/lib/repositories/types'
+import { serverTranslator } from '@/lib/i18n/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -253,27 +254,28 @@ function knowledgeStatus(record: WikiKnowledgeRecord): string {
 
 /** Chat v2가 비활성인 환경에서도 출처 있는 현재 지식을 돌려주는 결정형 Ask 폴백. */
 export async function POST(req: NextRequest) {
+  const t = await serverTranslator()
   const length = Number(req.headers.get('content-length') ?? 0)
   if (length > MAX_REQUEST_BYTES) {
-    return NextResponse.json({ error: '요청이 너무 큽니다.' }, { status: 413 })
+    return NextResponse.json({ error: t('srv.api.wikiAsk.requestTooLarge') }, { status: 413 })
   }
   const user = await getSession()
-  if (!user) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: t('err.authenticationRequired') }, { status: 401 })
 
   const body = await req.json().catch(() => null) as { projectId?: unknown; question?: unknown } | null
   const projectId = typeof body?.projectId === 'string' ? body.projectId.trim() : ''
   const question = typeof body?.question === 'string' ? body.question.trim() : ''
   if (!projectId || !question || question.length > MAX_QUESTION) {
-    return NextResponse.json({ error: '프로젝트와 질문을 확인해 주세요.' }, { status: 400 })
+    return NextResponse.json({ error: t('srv.api.wikiAsk.checkProjectQuestion') }, { status: 400 })
   }
 
   const sb = await createServerClient()
   const scope = await createSupabaseAccessScopeResolver(sb).resolve(user.id)
   if (!scope.ok) {
-    return NextResponse.json({ error: '프로젝트 접근 범위를 확인하지 못했습니다.' }, { status: 503 })
+    return NextResponse.json({ error: t('err.couldNotVerifyProjectAccess') }, { status: 503 })
   }
   if (!scope.scope.allowedProjectIds.includes(projectId)) {
-    return NextResponse.json({ error: '이 프로젝트를 조회할 수 없습니다.' }, { status: 403 })
+    return NextResponse.json({ error: t('srv.api.wikiAsk.projectCannotViewed') }, { status: 403 })
   }
   // wiki 관문 — 스코프가 허용한 그 프로젝트로(권한 판정 뒤, 저장소 조회 앞)
   const mod = await requireModule({ projectId }, 'wiki')
@@ -311,7 +313,7 @@ export async function POST(req: NextRequest) {
   ])
   const failed = results.find(result => !result.ok)
   if (failed && !failed.ok) {
-    return NextResponse.json({ error: '프로젝트 Wiki를 조회하지 못했습니다.' }, { status: 503 })
+    return NextResponse.json({ error: t('srv.api.wikiAsk.couldNotQueryProjectWiki') }, { status: 503 })
   }
 
   const byId = new Map<string, WikiKnowledgeRecord>()

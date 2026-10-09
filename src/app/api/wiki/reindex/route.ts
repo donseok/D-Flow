@@ -15,6 +15,8 @@ import {
   runRepairOnce,
   type SupabaseKnowledgeClient,
 } from '@/lib/ai/index'
+import { serverTranslator } from '@/lib/i18n/server'
+import { libText } from '@/lib/i18n/serverText'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,13 +44,14 @@ async function loadAccessScope(
 }
 
 export async function POST(req: NextRequest) {
+  const t = await serverTranslator()
   // 크론 시크릿이 아니라 세션 인가다 — 브라우저에서 부르는 버튼이라서다.
   const guard = await requireSuperuser()
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: denyStatus(guard.error, 503) })
 
   const raw = await req.json().catch(() => null)
   const action = parseAction(raw)
-  if (!action) return NextResponse.json({ error: '알 수 없는 action 입니다.' }, { status: 400 })
+  if (!action) return NextResponse.json({ error: t('srv.api.wikiReindex.unknownAction') }, { status: 400 })
 
   const admin = createAdminClient()
 
@@ -65,7 +68,7 @@ export async function POST(req: NextRequest) {
       const results = [pending, deadLetter, docs, chunks, embedded]
       // 조회 실패를 0건으로 위장하지 않는다(에러 처리 3원칙) — count 가 null 이면 실패다.
       if (results.some(r => r.error || typeof r.count !== 'number')) {
-        return NextResponse.json({ error: '색인 현황을 조회하지 못했습니다.' }, { status: 503 })
+        return NextResponse.json({ error: t('srv.api.wikiReindex.couldNotQueryIndexStatus') }, { status: 503 })
       }
       return NextResponse.json({
         pending: pending.count, deadLetter: deadLetter.count,
@@ -77,17 +80,17 @@ export async function POST(req: NextRequest) {
 
     if (action === 'repair') {
       const result = await runRepairOnce(scopedAdmin, REPAIR_LIMIT)
-      if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status })
+      if ('error' in result) return NextResponse.json({ error: libText(t, result.error) }, { status: result.status })
       return NextResponse.json(result)
     }
 
     // 정본 §3.2.7 규칙 2 — status·repair 는 위에서 처리하므로 배포 플래그가 꺼져도 남는다.
     if (!moduleDef('chatbot').envAvailable()) {
-      return NextResponse.json({ error: '이 배포에서는 챗봇 색인을 쓸 수 없습니다.' }, { status: 404 })
+      return NextResponse.json({ error: t('srv.api.wikiReindex.chatbotIndexingNotAvailableDeployment') }, { status: 404 })
     }
     // enqueue/step 은 프로젝트 스코프가 필요하다 — 워커 라우트와 동일하게 조립.
     const accessScope = await loadAccessScope(admin)
-    if (!accessScope) return NextResponse.json({ error: '프로젝트 범위를 확인하지 못했습니다.' }, { status: 503 })
+    if (!accessScope) return NextResponse.json({ error: t('err.couldNotVerifyProjectScope') }, { status: 503 })
     const queue = createSupabaseIndexJobQueue(scopedAdmin, accessScope)
     const gate = createIndexJobModuleGate(admin)
 
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
         })
         // 도메인 하나라도 조회/큐잉이 실패하면 부분 합계를 성공으로 위장하지 않는다.
         if (summary.listErrorCode || summary.enqueueErrorCode) {
-          return NextResponse.json({ error: '색인 대상을 큐에 넣지 못했습니다.' }, { status: 503 })
+          return NextResponse.json({ error: t('srv.api.wikiReindex.couldNotEnqueueIndexTargets') }, { status: 503 })
         }
         enqueued += summary.enqueued
       }
@@ -119,6 +122,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(summary)
   } catch (e) {
     console.error('[wiki] /api/wiki/reindex 오류:', e)
-    return NextResponse.json({ error: '재색인 작업에 실패했습니다.' }, { status: 500 })
+    return NextResponse.json({ error: t('srv.api.wikiReindex.reindexJobFailed') }, { status: 500 })
   }
 }

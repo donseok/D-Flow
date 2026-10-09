@@ -7,6 +7,9 @@ import { ERR_ANON, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { canSeeProject, workspaceRoleIn, type Actor } from '@/lib/domain/authz'
 import { SAFE_ID_RE } from '@/lib/domain/validate'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { libText } from '@/lib/i18n/serverText'
 
 export interface SearchProjectItem {
   type: 'project'
@@ -24,7 +27,7 @@ export interface SearchWbsItem {
   href: string
 }
 
-const ERR_SEARCH_FAILED = '검색하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_SEARCH_FAILED = 'srv.globalSearch.couldNotSearch'
 
 /** 실패와 0건을 가른다 — 0건은 ok:true 에 빈 배열, 조회 오류·범위 거부는 ok:false(빈 결과로 위장하지 않는다) */
 export type GlobalSearchResponse =
@@ -35,7 +38,7 @@ const PROJECT_LIMIT = 10
 const WBS_LIMIT = 20
 const EMPTY: GlobalSearchResponse = { ok: true, projects: [], wbsItems: [] }
 const denied = (error: string): GlobalSearchResponse => ({ ok: false, reason: 'denied', error })
-const failed = (): GlobalSearchResponse => ({ ok: false, reason: 'failed', error: ERR_SEARCH_FAILED })
+const failed = (t: ServerTranslate): GlobalSearchResponse => ({ ok: false, reason: 'failed', error: t(ERR_SEARCH_FAILED) })
 const absent = (v: unknown) => v === undefined || v === null || v === ''
 
 /**
@@ -53,6 +56,7 @@ export async function searchTitles(params?: {
   scope: 'workspace' | 'project'
   projectId?: string | null
 }): Promise<GlobalSearchResponse> {
+  const t = await serverTranslator()
   let actor: Actor | null
   try { actor = await getActor() } catch (e) {
     console.error('[searchTitles] 권한 조회 실패:', e instanceof Error ? e.message : e)
@@ -78,12 +82,13 @@ export async function searchTitles(params?: {
     return searchWbs(actor, pid, escaped)
   }
   if (params.scope !== 'workspace') return denied(ERR_MISSING)
-  if (wid === null) return denied(ERR_WORKSPACE_REQUIRED)
+  if (wid === null) return denied(libText(t, ERR_WORKSPACE_REQUIRED))
   if (workspaceRoleIn(actor, wid) === null) return denied(ERR_MISSING)                                // 비소속 — 존재 은닉
   return searchProjects(actor, wid, escaped)
 }
 
 async function searchProjects(actor: Actor, workspaceId: string, pattern: string): Promise<GlobalSearchResponse> {
+  const t = await serverTranslator()
   try {
     const supabase = await createServerClient()
     // 비공개를 거른 뒤에도 PROJECT_LIMIT 를 채우도록 넉넉히 읽는다
@@ -96,7 +101,7 @@ async function searchProjects(actor: Actor, workspaceId: string, pattern: string
       .limit(PROJECT_LIMIT * 5)
     if (error) {
       console.error('[searchTitles] projects 조회 실패:', error.message)
-      return failed()
+      return failed(t)
     }
     const rows = (data ?? []) as Array<{ id: string; name: string; is_private: boolean | null }>
     const projects = rows.filter((p) => canSeeProject(actor, p)).slice(0, PROJECT_LIMIT).map((p): SearchProjectItem => ({
@@ -108,11 +113,12 @@ async function searchProjects(actor: Actor, workspaceId: string, pattern: string
     return { ok: true, projects, wbsItems: [] }
   } catch (e) {
     console.error('[searchTitles] projects 예외:', e instanceof Error ? e.message : e)
-    return failed()
+    return failed(t)
   }
 }
 
 async function searchWbs(actor: Actor, projectId: string, pattern: string): Promise<GlobalSearchResponse> {
+  const t = await serverTranslator()
   try {
     const supabase = await createServerClient()
     // 선행 조회 — 비공개 판정. 실패하면 중단한다(막는다)
@@ -123,7 +129,7 @@ async function searchWbs(actor: Actor, projectId: string, pattern: string): Prom
       .maybeSingle()
     if (projectError) {
       console.error('[searchTitles] 프로젝트 조회 실패:', projectError.message)
-      return failed()
+      return failed(t)
     }
     if (!project || !canSeeProject(actor, project as { id: string; is_private: boolean | null })) return denied(ERR_MISSING)
 
@@ -136,7 +142,7 @@ async function searchWbs(actor: Actor, projectId: string, pattern: string): Prom
       .limit(WBS_LIMIT)
     if (error) {
       console.error('[searchTitles] wbs_items 조회 실패:', error.message)
-      return failed()
+      return failed(t)
     }
     const rows = (data ?? []) as Array<{ id: string; code: string; name: string; project_id: string }>
     const wbsItems = rows.filter((w) => w.project_id === projectId).map((w): SearchWbsItem => ({
@@ -150,6 +156,6 @@ async function searchWbs(actor: Actor, projectId: string, pattern: string): Prom
     return { ok: true, projects: [], wbsItems }
   } catch (e) {
     console.error('[searchTitles] wbs_items 예외:', e instanceof Error ? e.message : e)
-    return failed()
+    return failed(t)
   }
 }

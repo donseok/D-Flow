@@ -6,6 +6,8 @@ import { requireWorkspaceAdmin } from '@/lib/authz'
 import { requireModule } from '@/lib/modules/gate'
 import { generateCredentialToken } from '@/lib/agent/token'
 import { UUID_RE } from '@/lib/domain/validate'
+import { serverTranslator } from '@/lib/i18n/server'
+import { fill } from '@/lib/i18n/translate'
 
 const MAX_EXPIRES_DAYS = 365
 const NAME_RE = /^[A-Za-z0-9가-힣][A-Za-z0-9가-힣 ._-]{0,63}$/
@@ -48,8 +50,9 @@ export async function createMinutesApiCredential(input: {
   teamMap?: Record<string, string>
   expiresDays: number
 }): Promise<{ ok: true; token: string; prefix: string } | { ok: false; error: string }> {
+  const t = await serverTranslator()
   if (!input || !isWorkspaceId(input.workspaceId)) {
-    return { ok: false, error: '잘못된 워크스페이스입니다.' }
+    return { ok: false, error: t('err.invalidWorkspace') }
   }
 
   const guard = await requireWorkspaceAdmin(input.workspaceId)
@@ -57,16 +60,16 @@ export async function createMinutesApiCredential(input: {
 
   const admin = createAdminClient()
   const modGate = await requireModule({ workspaceId: input.workspaceId }, 'minutes_integration', { client: admin })
-  if (!modGate.ok) return { ok: false, error: '이 워크스페이스에서 회의록 연동이 꺼져 있습니다.' }
+  if (!modGate.ok) return { ok: false, error: t('err.minutesIntegrationOffWorkspace') }
 
-  if (typeof input.name !== 'string') return { ok: false, error: '이름을 입력하세요.' }
+  if (typeof input.name !== 'string') return { ok: false, error: t('err.enterName') }
   const trimmedName = input.name.trim()
-  if (!NAME_RE.test(trimmedName)) return { ok: false, error: '이름 형식이 올바르지 않습니다(1~64자).' }
+  if (!NAME_RE.test(trimmedName)) return { ok: false, error: t('srv.integrations.nameFormatNotValid') }
 
   let projectIds: string[] | null = null
   if (input.projectIds !== undefined && input.projectIds !== null) {
     if (!Array.isArray(input.projectIds) || input.projectIds.some(id => typeof id !== 'string' || !UUID_RE.test(id))) {
-      return { ok: false, error: '프로젝트 형식이 올바르지 않습니다.' }
+      return { ok: false, error: t('srv.integrations.projectFormatNotValid') }
     }
     projectIds = input.projectIds.length > 0 ? [...new Set(input.projectIds)] : null
   }
@@ -74,10 +77,10 @@ export async function createMinutesApiCredential(input: {
   let defaultProjectId: string | null = null
   if (input.defaultProjectId) {
     if (typeof input.defaultProjectId !== 'string' || !UUID_RE.test(input.defaultProjectId)) {
-      return { ok: false, error: '기본 프로젝트 형식이 올바르지 않습니다.' }
+      return { ok: false, error: t('srv.integrations.defaultProjectFormatNotValid') }
     }
     if (projectIds !== null && !projectIds.includes(input.defaultProjectId)) {
-      return { ok: false, error: '기본 프로젝트는 허용된 프로젝트 목록에 포함되어야 합니다.' }
+      return { ok: false, error: t('srv.integrations.defaultProjectMustAllowedProject') }
     }
     defaultProjectId = input.defaultProjectId
   }
@@ -85,7 +88,7 @@ export async function createMinutesApiCredential(input: {
   let defaultTeamId: string | null = null
   if (input.defaultTeamId) {
     if (typeof input.defaultTeamId !== 'string' || !UUID_RE.test(input.defaultTeamId)) {
-      return { ok: false, error: '기본 팀 형식이 올바르지 않습니다.' }
+      return { ok: false, error: t('srv.integrations.defaultTeamFormatNotValid') }
     }
     defaultTeamId = input.defaultTeamId
   }
@@ -96,7 +99,7 @@ export async function createMinutesApiCredential(input: {
       const code = key.trim()
       if (!code) continue
       if (typeof val !== 'string' || !UUID_RE.test(val)) {
-        return { ok: false, error: `팀 매핑(${code})의 팀 ID 형식이 올바르지 않습니다.` }
+        return { ok: false, error: fill(t('srv.integrations.teamIdFormatTeamMapping'), { code }) }
       }
       teamMap[code] = val
     }
@@ -104,7 +107,7 @@ export async function createMinutesApiCredential(input: {
 
   const days = input.expiresDays
   if (!Number.isInteger(days) || days < 1 || days > MAX_EXPIRES_DAYS) {
-    return { ok: false, error: `만료 기간은 1~${MAX_EXPIRES_DAYS}일입니다.` }
+    return { ok: false, error: fill(t('srv.integrations.expiryPeriodMust1Days'), { maxExpiresDays: MAX_EXPIRES_DAYS }) }
   }
 
   const { token, prefix, hash } = generateCredentialToken('minutes_api')
@@ -127,9 +130,9 @@ export async function createMinutesApiCredential(input: {
   }).select('id')
 
   if (error) {
-    return { ok: false, error: `자격증명 발급 실패: ${error.message}` }
+    return { ok: false, error: fill(t('srv.integrations.couldNotIssueCredential'), { message: error.message }) }
   }
-  if (!data || data.length === 0) return { ok: false, error: '자격증명 발급 실패(0행 반환)' }
+  if (!data || data.length === 0) return { ok: false, error: t('srv.integrations.couldNotIssueCredential2') }
 
   revalidatePath('/w/[slug]/settings/integrations', 'page')
   return { ok: true, token, prefix }
@@ -142,15 +145,16 @@ export async function revokeIntegrationCredential(
   credentialId: string,
   workspaceId: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   if (!isWorkspaceId(workspaceId)) {
-    return { ok: false, error: '잘못된 요청입니다.' }
+    return { ok: false, error: t('err.invalidRequest') }
   }
 
   const guard = await requireWorkspaceAdmin(workspaceId)
   if (!guard.ok) return { ok: false, error: guard.error }
 
   if (!credentialId || typeof credentialId !== 'string' || !UUID_RE.test(credentialId)) {
-    return { ok: false, error: '잘못된 요청입니다.' }
+    return { ok: false, error: t('err.invalidRequest') }
   }
 
   const admin = createAdminClient()
@@ -161,7 +165,7 @@ export async function revokeIntegrationCredential(
     .select('id')
 
   if (error) return { ok: false, error: error.message }
-  if (!data || data.length === 0) return { ok: false, error: '대상 자격증명을 찾을 수 없습니다.' }
+  if (!data || data.length === 0) return { ok: false, error: t('srv.integrations.credentialNotFound') }
 
   revalidatePath('/w/[slug]/settings/integrations', 'page')
   return { ok: true }
@@ -173,8 +177,9 @@ export async function revokeIntegrationCredential(
 export async function listWorkspaceCredentials(
   workspaceId: string,
 ): Promise<{ ok: true; credentials: WorkspaceCredentialItem[] } | { ok: false; error: string }> {
+  const t = await serverTranslator()
   if (!isWorkspaceId(workspaceId)) {
-    return { ok: false, error: '잘못된 워크스페이스입니다.' }
+    return { ok: false, error: t('err.invalidWorkspace') }
   }
 
   const guard = await requireWorkspaceAdmin(workspaceId)

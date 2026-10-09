@@ -15,19 +15,20 @@ import { UUID_RE } from '@/lib/domain/validate'
  * 없으면 전체 좌석표(/w/[slug]/agents): 인자 workspaceId 에 역할(canViewAgents) → 그 워크스페이스 층만(D21·D26).
  */
 export async function refreshSeatmap(scope: SeatmapScope = 'mine', projectId?: string, workspaceId?: string): Promise<{ ok: true; seatmap: Seatmap } | { ok: false; error: string }> {
+  const t = await serverTranslator()
   const actor = await getActorForView()
-  if (!actor) return { ok: false, error: '권한이 없습니다.' }
-  if (!SEATMAP_SCOPES.includes(scope)) return { ok: false, error: '범위 값이 잘못됐습니다.' } // 액션 인자는 클라이언트 입력이다
+  if (!actor) return { ok: false, error: t('common.err.denied') }
+  if (!SEATMAP_SCOPES.includes(scope)) return { ok: false, error: t('srv.agentSeatmap.scopeValueNotValid') } // 액션 인자는 클라이언트 입력이다
   const opts: SeatmapOptions = {}
   if (projectId !== undefined) {
-    if (typeof projectId !== 'string' || !UUID_RE.test(projectId)) return { ok: false, error: '프로젝트 값이 잘못됐습니다.' }
-    if (!isProjectMember(actor, projectId)) return { ok: false, error: '권한이 없습니다.' }
+    if (typeof projectId !== 'string' || !UUID_RE.test(projectId)) return { ok: false, error: t('srv.agentSeatmap.projectValueNotValid') }
+    if (!isProjectMember(actor, projectId)) return { ok: false, error: t('common.err.denied') }
     opts.projectId = projectId
   } else {
     // 전체 좌석표 — 인자 워크스페이스(D26). 소속·역할이 없으면 존재를 드러내지 않고 같은 문구. 플랫폼 관리자는 canViewAgents 가 어떤
     // 값이든 통과시켜 형식 밖 값이 설정 조회(22P02)까지 가 로그에 실리므로 형식을 먼저 본다(U2a-4 리뷰 T5). 그 밖의 사람은 소속 맵 조회에서 끝난다
     if (typeof workspaceId !== 'string' || (actor.isSuperuser && !UUID_RE.test(workspaceId)) || !canViewAgents(actor, workspaceId)) {
-      return { ok: false, error: '권한이 없습니다.' }
+      return { ok: false, error: t('common.err.denied') }
     }
     opts.workspaceId = workspaceId
   }
@@ -40,6 +41,6 @@ export async function refreshSeatmap(scope: SeatmapScope = 'mine', projectId?: s
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('[seatmap] 재조회 실패:', msg)
-    return { ok: false, error: '좌석표 재조회에 실패했습니다.' }
+    return { ok: false, error: t('srv.agentSeatmap.couldNotReloadSeatMap') }
   }
 }

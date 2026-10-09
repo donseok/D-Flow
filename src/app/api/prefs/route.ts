@@ -16,6 +16,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { saveUiPrefs, saveWbsCollapse } from '@/app/actions/preferences'
 import type { UiPrefs } from '@/lib/domain/types'
+import { serverTranslator } from '@/lib/i18n/server'
 
 type Body = {
   prefs?: Partial<UiPrefs>
@@ -26,9 +27,10 @@ type Body = {
 }
 
 /** 개인 설정 저장 거부의 단일 응답 문구 — 사유별로 나누지 않는다(W10) */
-const PREFS_DENIED = '설정을 저장하지 못했습니다'
+const PREFS_DENIED = 'srv.api.prefs.couldNotSaveSettings'
 
 export async function POST(req: NextRequest) {
+  const t = await serverTranslator()
   const ct = req.headers.get('content-type') ?? ''
   if (!/^application\/json(\s*;|$)/i.test(ct.trim())) return NextResponse.json({ ok: false }, { status: 415 })
   let body: Body
@@ -49,6 +51,6 @@ export async function POST(req: NextRequest) {
   if (wc && typeof wc.projectId === 'string' && Array.isArray(wc.ids) && wc.ids.every(x => typeof x === 'string')) {
     await saveWbsCollapse(wc.projectId, wc.ids)
   }
-  if (denied) return NextResponse.json({ ok: false, error: PREFS_DENIED }, { status: 403 })
+  if (denied) return NextResponse.json({ ok: false, error: t(PREFS_DENIED) }, { status: 403 })
   return NextResponse.json({ ok: true })
 }

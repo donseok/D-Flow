@@ -19,7 +19,7 @@ import { enqueueCustomFieldsReindex } from '@/lib/ai/index/reindexCustomFields'
 import { moduleKeyRule } from '@/lib/modules/saveRule'
 import type { EditCtx, SettingDef } from '@/lib/settings/def'
 import { isRecord } from '@/lib/settings/resolve'
-import { CONFIG_MESSAGES, ConfigUnavailableError, ERR_EXPLICIT_UNSET, inUseFieldErrors, kindOfCode, mapDbError, type DbErrorLike } from '@/lib/settings/errors'
+import { configText, CONFIG_MESSAGES, ConfigUnavailableError, ERR_EXPLICIT_UNSET, inUseFieldErrors, kindOfCode, mapDbError, type DbErrorLike } from '@/lib/settings/errors'
 import { changedKeysSince, findCommandOutcome, listHistory, type SettingsHistoryRow } from '@/lib/settings/history'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { SETTINGS_SCHEMA_VERSION, settingDef, type SettingKey, type SettingScope } from '@/lib/settings/registry'
@@ -28,6 +28,10 @@ import { getWorkspaceConfig, type WorkspaceConfig } from '@/lib/settings/workspa
 import { listWeekKeys } from '@/lib/settings/weekKeys'
 import { commandDigestInput } from '@/lib/settings/write'
 import type { KeyState } from '@/lib/settings/resolve'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerDictKey, ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill, textBy } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 export interface SettingsPatch {
   expectedRevision: number
@@ -67,8 +71,8 @@ interface ScopeAdapter {
 }
 
 const INVALID_CODES: readonly string[] = ['CONFIG_INVALID', 'CONFIG_UNKNOWN_KEY', 'CONFIG_IN_USE', 'CONFIG_MODULE_NOT_ALLOWED'] satisfies InvalidCode[]
-const invalid = (commandId: string, code: InvalidCode, fieldErrors: FieldError[], error?: string): SettingsCommandResult =>
-  ({ ok: false, kind: 'invalid', code, commandId, error: error ?? CONFIG_MESSAGES[code], fieldErrors: fieldErrors as { key: SettingKey; message: string; refCount?: number }[], retryable: false })
+const invalid = (t: ServerTranslate, commandId: string, code: InvalidCode, fieldErrors: FieldError[], error?: string): SettingsCommandResult =>
+  ({ ok: false, kind: 'invalid', code, commandId, error: error ?? configText(t, CONFIG_MESSAGES[code]), fieldErrors: fieldErrors as { key: SettingKey; message: string; refCount?: number }[], retryable: false })
 const unavailable = (commandId: string, error: string): SettingsCommandResult =>
   ({ ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, error, retryable: true })
 const denied = (commandId: string, error: string): SettingsCommandResult =>
@@ -92,9 +96,9 @@ function rpcOutcome(data: unknown): { status: 'applied' | 'duplicate'; revision:
   throw new SettingsRpcShapeError(data)
 }
 /** 실패의 원인(DB 원문 포함)은 로그로, 사용자에게는 고정 문구(+ DB 가 아닌 짧은 문맥)만 — 표시 = 로깅 */
-function unavailableLogged(a: ScopeAdapter, commandId: string, what: string, cause: string, context?: string): SettingsCommandResult {
+function unavailableLogged(t: ServerTranslate, a: ScopeAdapter, commandId: string, what: string, cause: string, context?: string): SettingsCommandResult {
   console.error(`[settings] ${what} 실패`, { scope: a.history, commandId, cause })
-  return unavailable(commandId, context ? `${CONFIG_MESSAGES.CONFIG_UNAVAILABLE} (${context})` : CONFIG_MESSAGES.CONFIG_UNAVAILABLE)
+  return unavailable(commandId, context ? `${configText(t, CONFIG_MESSAGES.CONFIG_UNAVAILABLE)} (${context})` : configText(t, CONFIG_MESSAGES.CONFIG_UNAVAILABLE))
 }
 function patchShapeOk(p: SettingsPatch): boolean {
   return typeof p === 'object' && p !== null && Number.isInteger(p.expectedRevision) && p.expectedRevision >= 0
@@ -103,8 +107,9 @@ function patchShapeOk(p: SettingsPatch): boolean {
 }
 /** 해석기 판독 — 설정 행 부재·조회 실패는 unavailable 결과로(원인은 로그에만) */
 async function loadOrUnavailable(a: ScopeAdapter, admin: AdminClient, commandId: string): Promise<Loaded | SettingsCommandResult> {
+  const t = await serverTranslator()
   try { return await a.load(admin) } catch (e) {
-    if (e instanceof ConfigUnavailableError) return unavailableLogged(a, commandId, '설정 판독', e.message)
+    if (e instanceof ConfigUnavailableError) return unavailableLogged(t, a, commandId, '설정 판독', e.message)
     throw e
   }
 }
@@ -112,6 +117,7 @@ async function loadOrUnavailable(a: ScopeAdapter, admin: AdminClient, commandId:
 /** 저장 형태 만들기(4단계) — edit 가 있으면 parseInput → toStored, 그다음 모두 parse. 하나라도 실패하면 전체 거부 */
 async function buildStored(defs: Map<string, SettingDef>, rawSet: Record<string, unknown>, prevDoc: Doc, ctx: EditCtx)
   : Promise<{ ok: true; set: Record<string, unknown> } | { ok: false; fieldErrors: FieldError[] }> {
+  const t = await serverTranslator()
   const set: Record<string, unknown> = {}
   const fieldErrors: FieldError[] = []
   for (const [key, raw] of Object.entries(rawSet)) {
@@ -119,23 +125,28 @@ async function buildStored(defs: Map<string, SettingDef>, rawSet: Record<string,
     let stored: unknown = raw
     if (def.edit) {
       const input = def.edit.parseInput(raw)
-      if (!input.ok) { fieldErrors.push({ key, message: input.error }); continue }
+      if (!input.ok) { fieldErrors.push({ key, message: libText(t, input.error) }); continue }
       const s = await def.edit.toStored(stateValue(prevDoc.keys[key]), input.value, ctx)
-      if (!s.ok) { fieldErrors.push({ key, message: s.error }); continue }
+      if (!s.ok) { fieldErrors.push({ key, message: libText(t, s.error) }); continue }
       stored = s.value
     }
     const p = def.parse(stored)
-    if (!p.ok) { fieldErrors.push({ key, message: p.error }); continue }
+    if (!p.ok) { fieldErrors.push({ key, message: libText(t, p.error) }); continue }
     set[key] = p.value
   }
   return fieldErrors.length ? { ok: false, fieldErrors } : { ok: true, set }
 }
 
+/** 저장 뒤 동기화의 이름(afterApplied 의 what — 로그와 분기에 쓰는 한국어 그대로) → 화면 문구의 사전 키 */
+const AFTER_WHAT_KEY: Readonly<Record<string, ServerDictKey>> = {
+  '에이전트 등록 동기화': 'srv.settings.what.agentSync', 'AI 색인 갱신': 'srv.settings.what.aiIndex', '에이전트 주문 백필': 'srv.settings.what.agentBackfill',
+}
 type Attempt = SettingsCommandResult | { retry: true }
 
 async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): Promise<SettingsCommandResult> {
+  const t = await serverTranslator()
   const commandId = typeof patch?.commandId === 'string' ? patch.commandId : ''
-  if (!patchShapeOk(patch)) return invalid(commandId, 'CONFIG_INVALID', [], `${CONFIG_MESSAGES.CONFIG_INVALID}: 요청 형식`)
+  if (!patchShapeOk(patch)) return invalid(t, commandId, 'CONFIG_INVALID', [], fill(t('srv.settings.requestFormat'), { configInvalid: configText(t, CONFIG_MESSAGES.CONFIG_INVALID) }))
   // 2. 키 정의·editor 등급
   const unset = [...new Set(patch.unset)].sort()
   const keys = [...new Set([...Object.keys(patch.set), ...unset])]
@@ -143,14 +154,14 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
   const unknown: FieldError[] = []
   for (const key of keys) {
     const def: SettingDef | undefined = a.scope === 'project' ? settingDef('project', key) : settingDef('workspace', key)
-    if (!def) unknown.push({ key, message: '등록되지 않은 설정 키입니다.' })
+    if (!def) unknown.push({ key, message: t('srv.settings.settingKeyNotRegistered') })
     else defs.set(key, def)
   }
-  if (unknown.length) return invalid(commandId, 'CONFIG_UNKNOWN_KEY', unknown)
+  if (unknown.length) return invalid(t, commandId, 'CONFIG_UNKNOWN_KEY', unknown)
   const overlap = unset.filter((k) => Object.prototype.hasOwnProperty.call(patch.set, k))
-  if (overlap.length) return invalid(commandId, 'CONFIG_INVALID', overlap.map((key) => ({ key, message: 'set 과 unset 에 같이 있습니다.' })))
+  if (overlap.length) return invalid(t, commandId, 'CONFIG_INVALID', overlap.map((key) => ({ key, message: t('srv.settings.bothSetUnset') })))
   // 늘 명시 키(core.level_labels·modules.enabled) — 미설정이면 필수 키 부재이거나 기본값(토글 전부)이 켜진 것으로 풀려 저장 검사·동기화가 갈린다
-  for (const key of unset) if (defs.get(key)!.explicit) return invalid(commandId, 'CONFIG_INVALID', [{ key, message: ERR_EXPLICIT_UNSET }])
+  for (const key of unset) if (defs.get(key)!.explicit) return invalid(t, commandId, 'CONFIG_INVALID', [{ key, message: configText(t, ERR_EXPLICIT_UNSET) }])
   for (const def of defs.values()) if (!canEditSetting(a.scope, def.editor, actor)) return denied(commandId, ERR_DENIED)
 
   // 3~6 — 재기준 때 한 번 더 돈다. expected 는 첫 시도에 클라이언트 값, 재기준에 방금 읽은 최신 revision
@@ -158,42 +169,42 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
     const loaded = await loadOrUnavailable(a, admin, commandId)
     if ('ok' in loaded) return loaded
     const { doc, ws, cfg } = loaded
-    if (doc.schemaAhead) return { ok: false, kind: 'schema_ahead', code: 'CONFIG_SCHEMA_AHEAD', commandId, error: CONFIG_MESSAGES.CONFIG_SCHEMA_AHEAD, retryable: false }
+    if (doc.schemaAhead) return { ok: false, kind: 'schema_ahead', code: 'CONFIG_SCHEMA_AHEAD', commandId, error: configText(t, CONFIG_MESSAGES.CONFIG_SCHEMA_AHEAD), retryable: false }
     // 3. 소유 모듈 규칙 — modules.allowed 가 손상이면 빈 집합(fail-closed: core 키만 저장 가능 — 그 안에 modules.allowed 자체가 있어 복구 경로는 남는다).
     // 소유 모듈 규칙만 env 가용을 본다(개정 §2.7.3). modules.enabled 의 허용 검사(5단계)는 워크스페이스 허용 그대로다(스펙 §4.1 — env 는 저장을 막지 않는다)
     const allowedIds = workspaceAllowedOrNone(ws)
     const allowed: ReadonlySet<ModuleId> = new Set(availableOf(allowedIds))
-    const notAllowedMessage = modulesAllowedBroken(ws) ? ERR_MODULES_ALLOWED_BROKEN : '이 워크스페이스나 배포에서 사용할 수 없는 모듈의 설정입니다'
+    const notAllowedMessage = modulesAllowedBroken(ws) ? libText(t, ERR_MODULES_ALLOWED_BROKEN) : t('srv.settings.settingBelongsModuleNotAvailable')
     const enabled = cfg ? new Set((stateValue(cfg.keys['modules.enabled']) as ModuleId[] | undefined) ?? []) : null
     const notAllowed: FieldError[] = []
     for (const [key, def] of defs) {
       if (moduleKeyRule({ module: def.module, allowed, enabled }) === 'not_allowed') notAllowed.push({ key, message: `${notAllowedMessage}: ${def.module}` })
     }
-    if (notAllowed.length) return invalid(commandId, 'CONFIG_MODULE_NOT_ALLOWED', notAllowed)
+    if (notAllowed.length) return invalid(t, commandId, 'CONFIG_MODULE_NOT_ALLOWED', notAllowed)
     // 4. 저장 형태
     let built: Awaited<ReturnType<typeof buildStored>>
     try { built = await buildStored(defs, patch.set as Record<string, unknown>, doc, a.editCtx(loaded)) } catch (e) {
       // toStored 의 선행 판독(주간보고 주 키) 실패 — 0건으로 위장하지 않고 중단한다(3원칙 ②)
-      if (e instanceof ConfigUnavailableError) return unavailableLogged(a, commandId, '저장 형태 판독', e.message)
+      if (e instanceof ConfigUnavailableError) return unavailableLogged(t, a, commandId, '저장 형태 판독', e.message)
       throw e
     }
-    if (!built.ok) return invalid(commandId, 'CONFIG_INVALID', built.fieldErrors)
+    if (!built.ok) return invalid(t, commandId, 'CONFIG_INVALID', built.fieldErrors)
     // 5. 교차 불변식
     let v: ValidateResult
     try { v = await a.validate(admin, built.set, loaded, allowedIds, unset) } catch (e) {
-      if (e instanceof ConfigUnavailableError) return unavailableLogged(a, commandId, '교차 검증 조회', e.message)
+      if (e instanceof ConfigUnavailableError) return unavailableLogged(t, a, commandId, '교차 검증 조회', e.message)
       throw e
     }
-    if (!v.ok) return invalid(commandId, 'CONFIG_INVALID', v.fieldErrors)
+    if (!v.ok) return invalid(t, commandId, 'CONFIG_INVALID', v.fieldErrors)
     // 6. RPC
     const digest = commandDigestInput(built.set, unset)
     const { data, error } = await a.rpc(admin, { expectedRevision: expected, commandId, set: digest.set, unset: digest.unset, actor: actor.userId })
     if (error) {
-      const mapped = mapDbError(error)
+      const mapped = mapDbError(error, t)
       if (!mapped) throw new Error(`[settings] 알 수 없는 DB 오류: ${error.message}`)      // 표에 없는 토큰은 드러낸다(500)
       if (mapped.code === 'CONFIG_CONFLICT') return { retry: true }
       if (mapped.code === 'ERR_DENIED') return denied(commandId, mapped.message)
-      if (mapped.code === 'CONFIG_INVALID') return invalid(commandId, 'CONFIG_INVALID', mapped.fieldKey ? [{ key: mapped.fieldKey, message: mapped.message }] : [], mapped.message)
+      if (mapped.code === 'CONFIG_INVALID') return invalid(t, commandId, 'CONFIG_INVALID', mapped.fieldKey ? [{ key: mapped.fieldKey, message: mapped.message }] : [], mapped.message)
       const k = kindOfCode(mapped.code)
       if (k.kind === 'unavailable' || k.kind === 'schema_ahead') {
         console.error('[settings] RPC 거부', { scope: a.history, commandId, token: mapped.token })     // 교착·배포 엇갈림 — 문구는 맞아도 횟수·명령 id 는 로그에만
@@ -203,10 +214,10 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
         if (mapped.code === 'CONFIG_IN_USE') {
           // 참조 검사(settings_ref_check)의 detail 을 키 오류로 — calendar.week_start 는 막는 주차를 보인다(SP5 D53·[RF3]).
           // 그 토큰에만 — 다른 사용 중 토큰(FORM_MAPPING_IN_USE 등)의 detail 은 이 모양의 약속이 없다(K7)
-          const fe = mapped.token === 'SETTINGS_CODE_IN_USE' ? inUseFieldErrors(mapped.detail) : []
-          return invalid(commandId, 'CONFIG_IN_USE', fe, fe[0]?.message ?? mapped.message)
+          const fe = mapped.token === 'SETTINGS_CODE_IN_USE' ? inUseFieldErrors(mapped.detail, t).map(f => ({ ...f, message: configText(t, f.message) })) : []
+          return invalid(t, commandId, 'CONFIG_IN_USE', fe, fe[0]?.message ?? mapped.message)
         }
-        return invalid(commandId, mapped.code as InvalidCode, [], mapped.message)
+        return invalid(t, commandId, mapped.code as InvalidCode, [], mapped.message)
       }
       throw new Error(`[settings] 설정 RPC 가 낼 수 없는 오류: ${mapped.token}`)
     }
@@ -217,13 +228,10 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
         // 저장은 됐다 — 재시도로는 동기화가 다시 돌지 않는다(같은 id 는 duplicate, 새 id 는 prev 에 이미 있어 '새로 켬'이 아니다). 계획 과제 11 과 다른 편차(retryable:false)
         console.error('[settings] 저장 뒤 동기화 실패', { scope: a.history, commandId, cause: after.error })
         a.revalidate()
-        const recovery = a.scope === 'workspace'
-          ? '같은 modules.allowed 값을 새 명령으로 다시 저장하면 백필을 재시도합니다.'
-          : after.what === 'AI 색인 갱신'
-            ? '설정을 다시 저장하면 색인 갱신을 재시도합니다.'
-            : '프로젝트 설정에서 agents 모듈을 끈 뒤 다시 켜세요.'
+        const recovery = t(a.scope === 'workspace' ? 'srv.settings.recovery.workspace'
+          : after.what === 'AI 색인 갱신' ? 'srv.settings.recovery.aiIndex' : 'srv.settings.recovery.agents')
         return { ok: false, kind: 'unavailable', code: 'CONFIG_UNAVAILABLE', commandId, retryable: false, appliedRevision: r.revision,
-          error: `설정은 revision ${r.revision} 으로 저장됐지만 ${after.what}에 실패했습니다 — ${recovery}` }
+          error: fill(t('srv.settings.settingsSavedRevisionButFailed'), { revision: r.revision, what: textBy(t, AFTER_WHAT_KEY, after.what), recovery }) }
       }
     }
     a.revalidate()
@@ -240,7 +248,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
     const loaded = await loadOrUnavailable(a, admin, commandId)
     if ('ok' in loaded) return loaded
     const changed = await changedKeysSince(admin, a.history, patch.expectedRevision)
-    if (!changed.ok) return unavailableLogged(a, commandId, '변경 이력 판독', changed.error)
+    if (!changed.ok) return unavailableLogged(t, a, commandId, '변경 이력 판독', changed.error)
     return { loaded, changedKeys: changed.keys, truncated: changed.truncated }
   }
   const conflict = (r: { loaded: Loaded; changedKeys: string[] }): SettingsCommandResult => {
@@ -251,7 +259,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
       if (s && (s.status === 'invalid' || s.status === 'required_missing')) invalidKeys.push(k as SettingKey)
       else values[k as SettingKey] = stateValue(s)
     }
-    return { ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId, error: CONFIG_MESSAGES.CONFIG_CONFLICT,
+    return { ok: false, kind: 'conflict', code: 'CONFIG_CONFLICT', commandId, error: configText(t, CONFIG_MESSAGES.CONFIG_CONFLICT),
       latest: { revision: r.loaded.doc.revision, values, invalidKeys }, changedKeys: r.changedKeys as SettingKey[], retryable: false }
   }
   const latest = await readLatest()
@@ -264,7 +272,7 @@ async function runCommand(a: ScopeAdapter, actor: Actor, patch: SettingsPatch): 
   return 'ok' in after ? after : conflict(after)
 }
 
-function projectAdapter(projectId: string, now: Date): ScopeAdapter {
+function projectAdapter(t: ServerTranslate, projectId: string, now: Date): ScopeAdapter {
   return {
     scope: 'project', history: { projectId },
     admin: () => adminFor({ projectId }).admin,
@@ -290,7 +298,7 @@ function projectAdapter(projectId: string, now: Date): ScopeAdapter {
         if (agentsNewlyEnabled(prevEnabled, next)) {
           // 저장 전 getProjectConfig 와 같은 클라이언트면 요청 캐시가 옛 modules.enabled 를 돌려줄 수 있다.
           const r = await syncAgentsModule(adminFor({ projectId }).admin, { projectId, actorUserId: actor.userId, prevEnabled, nextEnabled: next })
-          if (!r.ok) return { ok: false, what: '에이전트 등록 동기화', error: r.error }
+          if (!r.ok) return { ok: false, what: '에이전트 등록 동기화', error: libText(t, r.error) }
         }
       }
       for (const [key, entity] of [
@@ -304,8 +312,8 @@ function projectAdapter(projectId: string, now: Date): ScopeAdapter {
           if (hasCustomFieldReindexChange(prevDefs, nextDefs)) {
             const r = await enqueueCustomFieldsReindex(admin, projectId, entity)
             if (!r.ok) {
-              console.error('[settings] 재색인 잡 등록 실패', { projectId, entity, error: r.error })
-              return { ok: false, what: 'AI 색인 갱신', error: '색인 갱신 대기 + 재시도' }
+              console.error('[settings] 재색인 잡 등록 실패', { projectId, entity, error: libText(t, r.error) })
+              return { ok: false, what: 'AI 색인 갱신', error: t('srv.settings.waitingIndexRefreshRetry') }
             }
           }
         }
@@ -315,7 +323,7 @@ function projectAdapter(projectId: string, now: Date): ScopeAdapter {
     revalidate: () => revalidatePath(`/p/${projectId}`, 'layout'),
   }
 }
-function workspaceAdapter(workspaceId: string): ScopeAdapter {
+function workspaceAdapter(t: ServerTranslate, workspaceId: string): ScopeAdapter {
   return {
     scope: 'workspace', history: { workspaceId },
     admin: () => adminFor({ workspaceId }).admin,
@@ -340,30 +348,32 @@ function workspaceAdapter(workspaceId: string): ScopeAdapter {
       // 허용 목록의 같은 값 재저장도 백필한다. RPC 적용 후 일부 프로젝트에서 실패한 경우의 복구 경로다.
       // 저장 전 getWorkspaceConfig 와 다른 클라이언트로 모듈 판정 캐시를 새로 읽는다.
       const r = await backfillWorkspaceAgentOrders(adminFor({ workspaceId }).admin, { workspaceId, actorUserId: actor.userId })
-      return r.ok ? { ok: true } : { ok: false, what: '에이전트 주문 백필', error: r.error }
+      return r.ok ? { ok: true } : { ok: false, what: '에이전트 주문 백필', error: libText(t, r.error) }
     },
     revalidate: () => revalidatePath('/', 'layout'),      // 워크스페이스 전역 키는 /p/* 에도 적용된다
   }
 }
 
 export async function updateProjectSettings(projectId: string, patch: SettingsPatch): Promise<SettingsCommandResult> {
+  const t = await serverTranslator()
   const commandId = typeof patch?.commandId === 'string' ? patch.commandId : ''
-  if (typeof projectId !== 'string' || !isUuidLike(projectId)) return invalid(commandId, 'CONFIG_INVALID', [], `${CONFIG_MESSAGES.CONFIG_INVALID}: projectId`)
+  if (typeof projectId !== 'string' || !isUuidLike(projectId)) return invalid(t, commandId, 'CONFIG_INVALID', [], `${configText(t, CONFIG_MESSAGES.CONFIG_INVALID)}: projectId`)
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return denied(commandId, g.error)
   const now = new Date()                                         // 진입에서 한 번(계획 P8)
-  return runCommand(projectAdapter(projectId, now), g.actor, patch)
+  return runCommand(projectAdapter(t, projectId, now), g.actor, patch)
 }
 
 export async function updateWorkspaceSettings(workspaceId: string, patch: SettingsPatch): Promise<SettingsCommandResult> {
+  const t = await serverTranslator()
   const commandId = typeof patch?.commandId === 'string' ? patch.commandId : ''
-  if (typeof workspaceId !== 'string' || !isUuidLike(workspaceId)) return invalid(commandId, 'CONFIG_INVALID', [], `${CONFIG_MESSAGES.CONFIG_INVALID}: workspaceId`)
+  if (typeof workspaceId !== 'string' || !isUuidLike(workspaceId)) return invalid(t, commandId, 'CONFIG_INVALID', [], `${configText(t, CONFIG_MESSAGES.CONFIG_INVALID)}: workspaceId`)
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return denied(commandId, g.error)
-  return runCommand(workspaceAdapter(workspaceId), g.actor, patch)
+  return runCommand(workspaceAdapter(t, workspaceId), g.actor, patch)
 }
 
-const ERR_HISTORY = '설정 이력을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.'
+const ERR_HISTORY = 'srv.settings.couldNotLoadSettingsHistory'
 
 async function guardScope(scope: SettingsHistoryScope) {
   return 'projectId' in scope ? requireProjectAdmin(scope.projectId) : requireWorkspaceAdmin(scope.workspaceId)
@@ -371,22 +381,24 @@ async function guardScope(scope: SettingsHistoryScope) {
 
 /** 결과 불명 뒤 재조회 — 자기 명령만. 세션 클라이언트로 읽는다(D24) */
 export async function getSettingsCommandOutcome(scope: SettingsHistoryScope, commandId: string): Promise<SettingsOutcomeResult> {
+  const t = await serverTranslator()
   const g = await guardScope(scope)
   if (!g.ok) return { ok: false, error: g.error }
   // 명령 id 는 늘 uuid 다 — 다른 모양은 조회할 것도 없이 "모름"(다시 보내면 RPC 가 판정한다)
   if (typeof commandId !== 'string' || !isUuidLike(commandId)) return { ok: true, outcome: { status: 'unknown' } }
   const sb = await createServerClient()
   const r = await findCommandOutcome(sb, scope, commandId, g.actor.userId)
-  if (!r.ok) { console.error('[settings] 명령 결과 조회 실패', { scope, commandId, cause: r.error }); return { ok: false, error: ERR_HISTORY } }
+  if (!r.ok) { console.error('[settings] 명령 결과 조회 실패', { scope, commandId, cause: r.error }); return { ok: false, error: t(ERR_HISTORY) } }
   return r
 }
 
 export async function listSettingsHistory(scope: SettingsHistoryScope, opts?: { limit?: number; before?: number }): Promise<SettingsHistoryResult> {
+  const t = await serverTranslator()
   const g = await guardScope(scope)
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const r = await listHistory(sb, scope, opts)
-  if (!r.ok) { console.error('[settings] 이력 조회 실패', { scope, cause: r.error }); return { ok: false, error: ERR_HISTORY } }
+  if (!r.ok) { console.error('[settings] 이력 조회 실패', { scope, cause: r.error }); return { ok: false, error: t(ERR_HISTORY) } }
   const ids = [...new Set(r.rows.map(row => row.changedBy).filter((id): id is string => id !== null))]
   let names: Map<string, string> | null = new Map()
   if (ids.length) {
@@ -396,13 +408,13 @@ export async function listSettingsHistory(scope: SettingsHistoryScope, opts?: { 
       const { data, error } = await adminFor(scope).admin.from('profiles').select('user_id, display_name').in('user_id', ids)
       if (error) throw error
       names = new Map(((data ?? []) as { user_id: string; display_name: string | null }[])
-        .map(row => [row.user_id, row.display_name?.trim() || '이름 없음']))
+        .map(row => [row.user_id, row.display_name?.trim() || t('srv.settings.noName')]))
     } catch (error) {
       console.error('[settings] 이력 작성자 조회 실패', { scope, cause: error })
       names = null
     }
   }
   return { ...r, rows: r.rows.map(row => ({ ...row,
-    changedByName: row.changedBy === null ? '시스템' : names === null ? '이름 확인 불가' : names.get(row.changedBy) ?? '삭제된 계정',
+    changedByName: row.changedBy === null ? t('srv.settings.system') : names === null ? t('srv.settings.nameUnavailable') : names.get(row.changedBy) ?? t('srv.settings.deletedAccount'),
   })) }
 }

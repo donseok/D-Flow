@@ -7,6 +7,8 @@ import { collectLeaves } from '@/components/wbs/shared'
 import type { ComputedItem, UiPrefs } from '@/lib/domain/types'
 import { getActor } from '@/lib/authz'
 import { hasWorkspaceMembership } from '@/lib/domain/authz'
+import { serverTranslator } from '@/lib/i18n/server'
+import { fill } from '@/lib/i18n/translate'
 
 export type NotificationItem = {
   id: string
@@ -40,6 +42,7 @@ function diffDays(from: string, to: string): number {
 
 /** 활성 프로젝트의 알림 피드 — 지연 작업 + 마감 임박(7일 내) 작업. count는 안읽음 수. */
 export async function getNotifications(projectId: string): Promise<{ items: NotificationItem[]; count: number }> {
+  const t = await serverTranslator()
   const user = await getSession()
   if (!user) return { items: [], count: 0 }
   const { items, today } = await getComputedWbs(projectId)
@@ -54,8 +57,8 @@ export async function getNotifications(projectId: string): Promise<{ items: Noti
       severity: 'danger' as const,
       title: l.name,
       detail: l.plannedEnd
-        ? `${diffDays(l.plannedEnd, today)}일 지연 · 실적 ${Math.round(l.rolledActualPct)}%`
-        : `실적 ${Math.round(l.rolledActualPct)}%`,
+        ? fill(t('srv.notifications.daysLateProgress'), { diffDays: diffDays(l.plannedEnd, today), rolledActualPct: l.rolledActualPct })
+        : fill(t('srv.notifications.progress'), { rolledActualPct: l.rolledActualPct }),
     }))
 
   const dueSoon: Omit<NotificationItem, 'read'>[] = leaves
@@ -66,7 +69,7 @@ export async function getNotifications(projectId: string): Promise<{ items: Noti
       type: 'due_soon' as const,
       severity: 'warning' as const,
       title: l.name,
-      detail: `D-${diffDays(today, l.plannedEnd!)} · ${l.plannedEnd} 마감`,
+      detail: fill(t('srv.notifications.dDue'), { diffDays: diffDays(today, l.plannedEnd!), plannedEnd: l.plannedEnd! }),
     }))
 
   // 읽음 상태 병합 — '모두 읽음' 시점의 id 목록(prefs.notifRead[projectId])과 대조.

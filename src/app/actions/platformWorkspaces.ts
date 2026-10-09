@@ -15,6 +15,7 @@ import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { SETTINGS_SCHEMA_VERSION, settingDef } from '@/lib/settings/registry'
 import { checkWorkspaceCreate, type WorkspaceCreateField, type WorkspaceCreateInputCode } from '@/lib/workspace/createInput'
 import type { ModuleId } from '@/lib/modules/defaults'
+import { serverTranslator } from '@/lib/i18n/server'
 
 export interface PlatformWorkspaceRow {
   id: string
@@ -35,11 +36,12 @@ export type PlatformWorkspaceCreateResult =
   | { ok: true; workspace: { id: string; slug: string; name: string } }
   | { ok: false; code: PlatformWorkspaceCreateCode; field: WorkspaceCreateField | null; error?: string }
 
-const ERR_LIST = '워크스페이스 목록을 불러오지 못했습니다.'
+const ERR_LIST = 'srv.platformWorkspaces.couldNotLoadWorkspaceList'
 const FORBIDDEN = '42501'
 
 /** 모든 워크스페이스(플랫폼 관리자 전용). 멤버·프로젝트 수는 행을 끝까지 읽어 센다(fetchAllPages — 서버 상한에 잘린 수를 사실처럼 내지 않는다) */
 export async function listPlatformWorkspaces(): Promise<PlatformWorkspaceListResult> {
+  const t = await serverTranslator()
   const g = await requireSuperuser()
   if (!g.ok) return { ok: false, error: g.error }
   const admin = createAdminClient()
@@ -77,7 +79,7 @@ export async function listPlatformWorkspaces(): Promise<PlatformWorkspaceListRes
       })),
     }
   } catch (e) {
-    return { ok: false, error: failWith('platformWorkspaces', e, ERR_LIST) }
+    return { ok: false, error: failWith('platformWorkspaces', e, t(ERR_LIST)) }
   }
 }
 

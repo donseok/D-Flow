@@ -4,10 +4,12 @@ import { isUuidLike } from '@/lib/domain/validate'
 import { buildWbsTemplateWorkbook } from '@/lib/excel/template'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
+import { serverTranslator } from '@/lib/i18n/server'
 
 /** wbs.xlsx 양식 다운로드 — 안내문의 제품명은 프로젝트 워크스페이스 설정을 따른다. */
 export async function GET(request: Request) {
-  if (!(await getSession())) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
+  const t = await serverTranslator()
+  if (!(await getSession())) return NextResponse.json({ error: t('err.authenticationRequired') }, { status: 401 })
   const projectId = new URL(request.url).searchParams.get('projectId')
   let productName: string | undefined
   if (projectId && isUuidLike(projectId)) {

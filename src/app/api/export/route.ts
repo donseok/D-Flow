@@ -24,17 +24,22 @@ import { loadReportProject } from '@/lib/report/forms/project'
 import { catalogRoots } from '@/lib/report/forms/roots'
 import { requireCalendar } from '@/lib/calendar/load'
 import type { ProjectSettingValue } from '@/lib/settings/registry'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 // 손상 안내는 설정 화면의 '저장된 양식 비우기'로 — 마법사 재저장은 가져오기를 다시 해야 해서, 막힌 파일로 덮어쓸 위험이 있다.
-const errProfileCorrupt = (detail: string) => `저장된 엑셀 양식이 손상되었습니다: ${detail} — 설정 화면의 "저장된 양식 비우기"로 양식을 비우세요.`
-const ERR_TEAMS = '프로젝트 팀을 확인할 수 없습니다.'
-const ERR_BUILD = '엑셀 파일을 만들지 못했습니다.'
+const errProfileCorrupt = (t: ServerTranslate, detail: string) => fill(t('srv.api.export.savedExcelTemplateCorrupted'), { detail })
+const ERR_TEAMS = 'err.couldNotVerifyProjectTeams'
+const ERR_BUILD = 'srv.api.export.couldNotBuildExcelFile'
 
 // 프로파일 라운드트립(form 없음·expand)은 그대로다(정본 §4.8). 가드는 requireProjectMember.
 // form=1 만 wbs_export_xlsx 양식 렌더. wbs 는 core 라 requireModule 은 두지 않는다.
 export async function GET(req: NextRequest) {
+  const t = await serverTranslator()
   const projectId = req.nextUrl.searchParams.get('projectId')
-  if (!projectId) return NextResponse.json({ error: '프로젝트 누락' }, { status: 400 })
+  if (!projectId) return NextResponse.json({ error: t('err.projectMissing') }, { status: 400 })
   const guard = await requireProjectMember(projectId)
   if (!guard.ok) return jsonError(guard.error, denyStatus(guard.error))
   if (req.nextUrl.searchParams.get('form') === '1') return exportForm(projectId)
@@ -44,14 +49,14 @@ export async function GET(req: NextRequest) {
   const { projects, degraded } = await listProjectsWithState()
   const project = (projects as { id: string; name: string }[]).find(p => p.id === projectId)
   if (!project) {
-    if (degraded) return NextResponse.json({ error: '프로젝트 목록을 확인할 수 없습니다.' }, { status: 500 })
-    return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 })
+    if (degraded) return NextResponse.json({ error: t('err.couldNotVerifyProjectList') }, { status: 500 })
+    return NextResponse.json({ error: t('err.projectNotFound') }, { status: 404 })
   }
   const name = project.name
   let cfg: ProjectConfig
   try { cfg = await getProjectConfig(projectId) } catch (e) {
     // 3원칙 — 조회 실패를 '양식 없음'이나 기본 라벨로 위장하지 않는다. 본문은 고정 문구 — 사유는 서버 로그에만.
-    if (e instanceof ConfigUnavailableError) { console.error('[export] 프로젝트 설정 조회 실패:', e.message); return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 }) }
+    if (e instanceof ConfigUnavailableError) { console.error('[export] 프로젝트 설정 조회 실패:', e.message); return NextResponse.json({ error: t('err.couldNotVerifyProjectSettings') }, { status: 503 }) }
     throw e
   }
   // 본문에 기계 코드(code)를 싣는다 — 422·409 가 단계 이름 손상·부재(CONFIG_*)와 양식 손상(PROFILE_CORRUPT) 두 뜻을 갖는다(exportFailureKey).
@@ -71,7 +76,7 @@ export async function GET(req: NextRequest) {
   const profileState = cfg.keys['wbs.excel_profile']
   if (profileState.status === 'invalid') {
     console.error('[export] 저장된 양식이 손상됨:', profileState.error)
-    return NextResponse.json({ error: errProfileCorrupt(profileState.error), code: 'PROFILE_CORRUPT' }, { status: 422 })
+    return NextResponse.json({ error: errProfileCorrupt(t, profileState.error), code: 'PROFILE_CORRUPT' }, { status: 422 })
   }
   const saved = profileState.status === 'set' && profileState.value !== null ? profileState.value : null
 
@@ -86,7 +91,7 @@ export async function GET(req: NextRequest) {
     if (failed) return failed
     if (!(e instanceof TeamsUnavailableError)) throw e
     console.error('[export] 프로젝트 팀 조회 실패(WBS):', e.message, e.cause)
-    return NextResponse.json({ error: ERR_TEAMS, code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
+    return NextResponse.json({ error: t(ERR_TEAMS), code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
   }
   const { items } = wbs
   const hol = exportHolidayRows(cfg.holidays)    // 휴무만·이름 유지(SP5 D7 — Excel 왕복은 off 만). 원천은 해석기의 날짜 예외
@@ -110,7 +115,7 @@ export async function GET(req: NextRequest) {
     } catch (e) {
       if (!(e instanceof TeamsUnavailableError)) throw e
       console.error('[export] 프로젝트 팀 조회 실패:', e.message, e.cause)
-      return NextResponse.json({ error: ERR_TEAMS, code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
+      return NextResponse.json({ error: t(ERR_TEAMS), code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
     }
     layout = 'standard'
   }
@@ -129,10 +134,10 @@ export async function GET(req: NextRequest) {
   if (!built.ok) {
     if (layout === 'standard') {
       console.error('[export] 표준 양식 생성 거부(결함):', built.error)
-      return NextResponse.json({ error: ERR_BUILD }, { status: 500 })
+      return NextResponse.json({ error: t(ERR_BUILD) }, { status: 500 })
     }
     // 저장 양식의 명시적 미지원(아웃라인+펼침)·양식보다 깊은 WBS — 무증상 오파싱 대신 400 과 사유.
-    return NextResponse.json({ error: built.error }, { status: 400 })
+    return NextResponse.json({ error: libText(t, built.error) }, { status: 400 })
   }
   // 파일명 날짜 = 그 프로젝트 tz 의 오늘(SP5 계획 D-22d) — getComputedWbs 가 이미 판독한 달력
   const today = todayIn(wbs.calendar.timezone, new Date())
@@ -152,6 +157,7 @@ const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 /** 양식 출력 (정본 §4.8 form=1). 프로파일 라운드트립은 이 함수를 타지 않는다. */
 async function exportForm(projectId: string): Promise<NextResponse> {
+  const t = await serverTranslator()
   try {
     const cfg = await getProjectConfig(projectId)
     const setting = valueOf(cfg, 'forms.wbs_export_xlsx')
@@ -160,7 +166,7 @@ async function exportForm(projectId: string): Promise<NextResponse> {
     const scanned = await scanFormTemplate(loaded.bytes, FORM_FORMAT.wbs_export_xlsx)
     const roots = catalogRoots(scanned.placeholders, setting.mapping)
     const project = await loadReportProject(projectId)
-    if (!project) return jsonError('프로젝트를 찾을 수 없습니다.', 404)
+    if (!project) return jsonError(t('err.projectNotFound'), 404)
 
     const needsItems = roots.has('wbs_items') || roots.has('kpi') || roots.has('holidays')
     const levelLabels = roots.has('wbs_items') || usesLevelLabels(scanned.placeholders, setting.mapping)
@@ -175,7 +181,7 @@ async function exportForm(projectId: string): Promise<NextResponse> {
         if (failed) return failed
         if (!(error instanceof TeamsUnavailableError)) throw error
         console.error('[export] 프로젝트 팀 조회 실패(WBS):', error.message, error.cause)
-        return NextResponse.json({ error: ERR_TEAMS, code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
+        return NextResponse.json({ error: t(ERR_TEAMS), code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
       }
     }
     let teams: { code: string; name: string; color: string }[] | undefined
@@ -185,7 +191,7 @@ async function exportForm(projectId: string): Promise<NextResponse> {
       } catch (error) {
         if (!(error instanceof TeamsUnavailableError)) throw error
         console.error('[export] 프로젝트 팀 조회 실패:', error.message, error.cause)
-        return NextResponse.json({ error: ERR_TEAMS, code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
+        return NextResponse.json({ error: t(ERR_TEAMS), code: 'TEAMS_UNAVAILABLE' }, { status: 503 })
       }
     }
     const fieldKeys = roots.has('custom') ? activeFieldKeys(valueOf(cfg, 'fields.wbs_item')) : []
@@ -226,7 +232,7 @@ async function exportForm(projectId: string): Promise<NextResponse> {
     const failed = configFailureResponse(error, 'export(form)')
     if (failed) return failed
     console.error('[export] 양식 출력 실패', error instanceof Error ? error.message : error)
-    return jsonError('엑셀 파일을 만들지 못했습니다.', 500)
+    return jsonError(t('srv.api.export.couldNotBuildExcelFile'), 500)
   }
 }
 

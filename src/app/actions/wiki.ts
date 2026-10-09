@@ -13,6 +13,8 @@ import {
   type WikiCurateAction,
   type WikiDocumentKind,
 } from '@/lib/domain/wiki'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
 
 export interface WikiActionResult {
   ok: boolean
@@ -40,48 +42,48 @@ const REASON_MAX = 500
  * 이전 시그니처에서는 아래 PGRST202 분기가 한 번도 매치되지 않아, 마이그레이션 미적용
  * 환경에서 원인 안내 대신 일반 실패 문구가 나갔다.
  */
-function friendlyError(error: { code?: string; message?: string } | string | undefined): string {
+function friendlyError(t: ServerTranslate, error: { code?: string; message?: string } | string | undefined): string {
   const { code, message } = typeof error === 'string'
     ? { code: undefined, message: error }
     : { code: error?.code, message: error?.message }
   // PGRST202 = RPC 스키마 캐시 미존재, 42883 = undefined_function. 마이그레이션 미적용을
   // 원인 그대로 알린다. 다른 분기보다 먼저 본다 — 이 경우 message 는 사용자에게 의미 없다.
   if (code === 'PGRST202' || code === '42883') {
-    return 'Wiki 정리 기능이 아직 이 환경에 배포되지 않았습니다.'
+    return t('srv.wiki.wikiCleanupFeatureNotDeployed')
   }
-  if (!message) return 'Wiki 정리에 실패했습니다.'
+  if (!message) return t('srv.wiki.wikiCleanupFailed')
   if (message.includes('WIKI_CURATE_FORBIDDEN') || message.includes('WIKI_MERGE_FORBIDDEN')) {
-    return '권한이 없습니다.'
+    return t('common.err.denied')
   }
   if (message.includes('WIKI_CURATE_INVALID_TRANSITION')) {
-    return '현재 상태에서는 할 수 없는 작업입니다. 화면을 새로고침한 뒤 다시 시도하세요.'
+    return t('srv.wiki.actionNotPossibleCurrentState')
   }
   if (message.includes('WIKI_ITEM_NOT_FOUND') || message.includes('WIKI_TOPIC_NOT_FOUND')) {
-    return '대상을 찾을 수 없습니다. 이미 정리되었을 수 있습니다.'
+    return t('srv.wiki.targetNotFound')
   }
   if (message.includes('WIKI_MERGE_CROSS_PROJECT') || message.includes('WIKI_MERGE_SAME_TOPIC')) {
-    return '같은 프로젝트의 서로 다른 주제만 병합할 수 있습니다.'
+    return t('srv.wiki.onlyDifferentTopicsSameProject')
   }
   if (message.includes('WIKI_CURATE_NO_LIVE_SOURCE')) {
-    return '원문 근거가 모두 철회된 항목이라 되돌릴 수 없습니다. 회의록이 보관되었거나 다른 프로젝트로 옮겨졌는지 확인하세요.'
+    return t('srv.wiki.allSourceEvidenceItemWithdrawn')
   }
   if (message.includes('WIKI_DOCUMENT_EDIT_CONFLICT')) {
-    return '다른 사람이 먼저 저장했습니다. 최신 내용을 확인한 뒤 다시 시도하세요.'
+    return t('srv.wiki.someoneElseSavedFirst')
   }
   if (message.includes('WIKI_DOCUMENT_FORBIDDEN') || message.includes('WIKI_QUESTION_FORBIDDEN')) {
-    return '이 프로젝트의 구성원만 지식을 편집할 수 있습니다.'
+    return t('srv.wiki.onlyMembersProjectCanEdit')
   }
   if (message.includes('WIKI_DOCUMENT_PARENT_INVALID')) {
-    return '같은 프로젝트의 문서만 상위 문서로 지정할 수 있습니다.'
+    return t('srv.wiki.onlyDocumentSameProjectCan')
   }
   if (message.includes('WIKI_DOCUMENT_INVALID') || message.includes('WIKI_QUESTION_INVALID')) {
-    return '입력 내용을 확인해 주세요.'
+    return t('srv.wiki.checkInput')
   }
   // code 가 비어 오는 경로(래핑된 예외 등)를 위한 보조 판정.
   if (message.includes('PGRST202') || message.includes('does not exist')) {
-    return 'Wiki 정리 기능이 아직 이 환경에 배포되지 않았습니다.'
+    return t('srv.wiki.wikiCleanupFeatureNotDeployed')
   }
-  return 'Wiki 정리에 실패했습니다.'
+  return t('srv.wiki.wikiCleanupFailed')
 }
 
 function validDocumentKind(value: string): value is WikiDocumentKind {
@@ -96,16 +98,17 @@ async function topicBelongsToProject(
   topicId: string,
   projectId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const t = await serverTranslator()
   const sb = await createServerClient()
   const { data, error } = await sb.from('wiki_topics')
     .select('id').eq('id', topicId).eq('project_id', projectId).maybeSingle()
   if (error) {
     console.error('[wiki] 문서 소속 확인 실패:', error.message)
-    return { ok: false, error: '대상을 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: t('srv.wiki.couldNotVerifyTargetRequest') }
   }
   return data
     ? { ok: true }
-    : { ok: false, error: '대상을 찾을 수 없습니다. 이미 변경되었을 수 있습니다.' }
+    : { ok: false, error: t('srv.wiki.targetNotFound2') }
 }
 
 /** 사람이 관리하는 정본 문서를 만든다. AI 항목과 원문 근거는 별도 층으로 그대로 남는다. */
@@ -116,16 +119,17 @@ export async function createWikiDocument(args: {
   documentKind: WikiDocumentKind
   parentId?: string | null
 }): Promise<WikiDocumentActionResult> {
+  const t = await serverTranslator()
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')                  // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
   if (!mod.ok) return { ok: false, error: mod.error }
   const title = args.title.trim()
   if (!textWithin(title, WIKI_TITLE_MAX) || args.bodyMd.length > WIKI_BODY_MAX) {
-    return { ok: false, error: '제목과 본문 길이를 확인해 주세요.' }
+    return { ok: false, error: t('srv.wiki.checkLengthTitleBody') }
   }
   if (!validDocumentKind(args.documentKind)) {
-    return { ok: false, error: '알 수 없는 문서 유형입니다.' }
+    return { ok: false, error: t('srv.wiki.unknownDocumentType') }
   }
 
   const sb = await createServerClient()
@@ -138,14 +142,14 @@ export async function createWikiDocument(args: {
   })
   if (error) {
     console.error('[wiki] 문서 생성 실패:', error.message)
-    return { ok: false, error: friendlyError(error) }
+    return { ok: false, error: friendlyError(t, error) }
   }
   const topicId = typeof data === 'string'
     ? data
     : data && typeof data === 'object' && 'id' in data && typeof data.id === 'string'
       ? data.id
       : null
-  if (!topicId) return { ok: false, error: '문서를 만들었지만 새 문서 주소를 확인하지 못했습니다.' }
+  if (!topicId) return { ok: false, error: t('srv.wiki.documentCreatedButAddressCould') }
   revalidatePath(`/p/${args.projectId}/wiki`)
   return { ok: true, topicId }
 }
@@ -159,6 +163,7 @@ export async function updateWikiDocument(args: {
   documentKind: WikiDocumentKind
   expectedUpdatedAt?: string | null
 }): Promise<WikiDocumentActionResult> {
+  const t = await serverTranslator()
   // 권한 가드가 먼저다. 대상 결합 조회를 앞에 두면, 읽기 범위를 좁히는 날 비권한자에게
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
@@ -169,10 +174,10 @@ export async function updateWikiDocument(args: {
   if (!target.ok) return target
   const title = args.title.trim()
   if (!textWithin(title, WIKI_TITLE_MAX) || args.bodyMd.length > WIKI_BODY_MAX) {
-    return { ok: false, error: '제목과 본문 길이를 확인해 주세요.' }
+    return { ok: false, error: t('srv.wiki.checkLengthTitleBody') }
   }
   if (!validDocumentKind(args.documentKind)) {
-    return { ok: false, error: '알 수 없는 문서 유형입니다.' }
+    return { ok: false, error: t('srv.wiki.unknownDocumentType') }
   }
 
   const sb = await createServerClient()
@@ -186,7 +191,7 @@ export async function updateWikiDocument(args: {
   if (error) {
     console.error('[wiki] 문서 저장 실패:', error.message)
     const conflict = error.message.includes('WIKI_DOCUMENT_EDIT_CONFLICT')
-    return { ok: false, error: friendlyError(error), conflict }
+    return { ok: false, error: friendlyError(t, error), conflict }
   }
   const row = Array.isArray(data) ? data[0] : data
   const updatedAt = row && typeof row === 'object' && typeof row.body_updated_at === 'string'
@@ -207,6 +212,7 @@ export async function verifyWikiDocument(args: {
   reviewDays?: number
   expectedUpdatedAt?: string | null
 }): Promise<WikiDocumentActionResult> {
+  const t = await serverTranslator()
   // 권한 가드가 먼저다. 대상 결합 조회를 앞에 두면, 읽기 범위를 좁히는 날 비권한자에게
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
@@ -217,7 +223,7 @@ export async function verifyWikiDocument(args: {
   if (!target.ok) return target
   const reviewDays = args.reviewDays ?? 90
   if (!Number.isInteger(reviewDays) || reviewDays < 1 || reviewDays > 365) {
-    return { ok: false, error: '검토 주기는 1~365일이어야 합니다.' }
+    return { ok: false, error: t('srv.wiki.reviewCycleMust1365') }
   }
   const sb = await createServerClient()
   const { data, error } = await sb.rpc('verify_wiki_document', {
@@ -227,7 +233,7 @@ export async function verifyWikiDocument(args: {
   })
   if (error) {
     console.error('[wiki] 문서 검증 실패:', error.message)
-    return { ok: false, error: friendlyError(error) }
+    return { ok: false, error: friendlyError(t, error) }
   }
   const row = Array.isArray(data) ? data[0] : data
   revalidatePath(`/p/${args.projectId}/wiki`)
@@ -247,6 +253,7 @@ export async function restoreWikiDocumentRevision(args: {
   revisionId: string
   expectedUpdatedAt?: string | null
 }): Promise<WikiDocumentActionResult> {
+  const t = await serverTranslator()
   // 권한 가드가 먼저다. 대상 결합 조회를 앞에 두면, 읽기 범위를 좁히는 날 비권한자에게
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
@@ -264,7 +271,7 @@ export async function restoreWikiDocumentRevision(args: {
   if (error) {
     console.error('[wiki] 문서 이력 복원 실패:', error.message)
     const conflict = error.message.includes('WIKI_DOCUMENT_EDIT_CONFLICT')
-    return { ok: false, error: friendlyError(error), conflict }
+    return { ok: false, error: friendlyError(t, error), conflict }
   }
   const row = Array.isArray(data) ? data[0] : data
   revalidatePath(`/p/${args.projectId}/wiki`)
@@ -287,13 +294,14 @@ export async function createWikiQuestion(args: {
   question: string
   topicId?: string | null
 }): Promise<WikiActionResult & { questionId?: string }> {
+  const t = await serverTranslator()
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
   if (!mod.ok) return { ok: false, error: mod.error }
   const question = args.question.trim()
   if (!textWithin(question, WIKI_QUESTION_MAX)) {
-    return { ok: false, error: '질문을 2,000자 이내로 입력해 주세요.' }
+    return { ok: false, error: t('srv.wiki.enterQuestionWithin2000') }
   }
   const sb = await createServerClient()
   const { data, error } = await sb.rpc('create_wiki_question', {
@@ -303,7 +311,7 @@ export async function createWikiQuestion(args: {
   })
   if (error) {
     console.error('[wiki] 질문 등록 실패:', error.message)
-    return { ok: false, error: friendlyError(error) }
+    return { ok: false, error: friendlyError(t, error) }
   }
   const questionId = typeof data === 'string' ? data : undefined
   revalidatePath(`/p/${args.projectId}/wiki`)
@@ -316,20 +324,21 @@ export async function answerWikiQuestion(args: {
   answerMd: string
   topicId?: string | null
 }): Promise<WikiActionResult> {
+  const t = await serverTranslator()
   const gate = await requireProjectMember(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
   if (!mod.ok) return { ok: false, error: mod.error }
   const answer = args.answerMd.trim()
   if (!textWithin(answer, WIKI_ANSWER_MAX)) {
-    return { ok: false, error: '답변을 20,000자 이내로 입력해 주세요.' }
+    return { ok: false, error: t('srv.wiki.enterAnswerWithin20000') }
   }
   const sb = await createServerClient()
   const { data: question, error: targetError } = await sb.from('wiki_questions')
     .select('id').eq('id', args.questionId).eq('project_id', args.projectId).maybeSingle()
   if (targetError || !question) {
     if (targetError) console.error('[wiki] 질문 소속 확인 실패:', targetError.message)
-    return { ok: false, error: targetError ? '대상을 확인할 수 없어 중단했습니다.' : '질문을 찾을 수 없습니다.' }
+    return { ok: false, error: targetError ? t('srv.wiki.couldNotVerifyTargetRequest') : t('srv.wiki.questionNotFound') }
   }
   const { error } = await sb.rpc('answer_wiki_question', {
     p_question_id: args.questionId,
@@ -338,7 +347,7 @@ export async function answerWikiQuestion(args: {
   })
   if (error) {
     console.error('[wiki] 질문 답변 실패:', error.message)
-    return { ok: false, error: friendlyError(error) }
+    return { ok: false, error: friendlyError(t, error) }
   }
   revalidatePath(`/p/${args.projectId}/wiki`)
   return { ok: true }
@@ -350,6 +359,7 @@ export async function reviewWikiItem(args: {
   itemId: string
   reviewState: 'accepted' | 'rejected' | 'pending'
 }): Promise<WikiActionResult> {
+  const t = await serverTranslator()
   const gate = await requireProjectAdmin(args.projectId)
   if (!gate.ok) return { ok: false, error: gate.error }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
@@ -359,7 +369,7 @@ export async function reviewWikiItem(args: {
     .select('id').eq('id', args.itemId).eq('project_id', args.projectId).maybeSingle()
   if (targetError || !item) {
     if (targetError) console.error('[wiki] 제안 소속 확인 실패:', targetError.message)
-    return { ok: false, error: targetError ? '대상을 확인할 수 없어 중단했습니다.' : '제안을 찾을 수 없습니다.' }
+    return { ok: false, error: targetError ? t('srv.wiki.couldNotVerifyTargetRequest') : t('srv.wiki.suggestionNotFound') }
   }
   const { error } = await sb.rpc('review_wiki_item', {
     p_item_id: args.itemId,
@@ -367,7 +377,7 @@ export async function reviewWikiItem(args: {
   })
   if (error) {
     console.error('[wiki] 제안 검토 실패:', error.message)
-    return { ok: false, error: friendlyError(error) }
+    return { ok: false, error: friendlyError(t, error) }
   }
   revalidatePath(`/p/${args.projectId}/wiki`)
   revalidatePath(`/p/${args.projectId}/wiki/topics/${args.topicId}`)
@@ -381,6 +391,7 @@ export async function submitWikiFeedback(args: {
   kind: 'helpful' | 'outdated'
   comment?: string | null
 }): Promise<WikiActionResult & { feedbackId?: string }> {
+  const t = await serverTranslator()
   // 권한 가드가 먼저다. 대상 결합 조회를 앞에 두면, 읽기 범위를 좁히는 날 비권한자에게
   // '권한 없음' 대신 '대상을 찾을 수 없습니다'가 나가 존재 여부가 샌다(fail-closed 역전).
   const gate = await requireProjectMember(args.projectId)
@@ -390,11 +401,11 @@ export async function submitWikiFeedback(args: {
   const target = await topicBelongsToProject(args.topicId, args.projectId)
   if (!target.ok) return target
   if (!['helpful', 'outdated'].includes(args.kind)) {
-    return { ok: false, error: '알 수 없는 피드백 유형입니다.' }
+    return { ok: false, error: t('srv.wiki.unknownFeedbackType') }
   }
   const comment = args.comment?.trim() || null
   if (comment && comment.length > 500) {
-    return { ok: false, error: '의견은 500자 이내로 입력해 주세요.' }
+    return { ok: false, error: t('srv.wiki.enterCommentWithin500Characters') }
   }
   const sb = await createServerClient()
   const { data, error } = await sb.rpc('submit_wiki_feedback', {
@@ -404,7 +415,7 @@ export async function submitWikiFeedback(args: {
   })
   if (error) {
     console.error('[wiki] 피드백 등록 실패:', error.message)
-    return { ok: false, error: friendlyError(error) }
+    return { ok: false, error: friendlyError(t, error) }
   }
   const feedbackId = typeof data === 'string' ? data : undefined
   revalidatePath(`/p/${args.projectId}/wiki`)
@@ -425,12 +436,13 @@ export async function curateWikiItem(args: {
   action: WikiCurateAction
   reason?: string
 }): Promise<WikiActionResult> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(args.projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
   if (!mod.ok) return { ok: false, error: mod.error }
   if (!(WIKI_CURATE_ACTIONS as readonly string[]).includes(args.action)) {
-    return { ok: false, error: '알 수 없는 작업입니다.' }
+    return { ok: false, error: t('srv.wiki.unknownAction') }
   }
 
   const sb = await createServerClient()
@@ -439,9 +451,9 @@ export async function curateWikiItem(args: {
     .from('wiki_items').select('id').eq('id', args.itemId).eq('project_id', args.projectId).maybeSingle()
   if (itemErr) {
     console.error('[wiki] 대상 항목 소속 확인 실패:', itemErr.message)
-    return { ok: false, error: '대상을 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: t('srv.wiki.couldNotVerifyTargetRequest') }
   }
-  if (!item) return { ok: false, error: '대상을 찾을 수 없습니다. 이미 정리되었을 수 있습니다.' }
+  if (!item) return { ok: false, error: t('srv.wiki.targetNotFound') }
 
   const { error } = await sb.rpc('curate_wiki_item', {
     p_item_id: args.itemId,
@@ -450,7 +462,7 @@ export async function curateWikiItem(args: {
   })
   if (error) {
     console.error('[wiki] 항목 큐레이션 실패:', error.message)
-    return { ok: false, error: friendlyError(error) }
+    return { ok: false, error: friendlyError(t, error) }
   }
 
   revalidatePath(`/p/${args.projectId}/wiki`)
@@ -464,12 +476,13 @@ export async function mergeWikiTopics(args: {
   sourceTopicId: string
   targetTopicId: string
 }): Promise<WikiActionResult> {
+  const t = await serverTranslator()
   const g = await requireProjectAdmin(args.projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId: args.projectId }, 'wiki')
   if (!mod.ok) return { ok: false, error: mod.error }
   if (args.sourceTopicId === args.targetTopicId) {
-    return { ok: false, error: '서로 다른 주제를 선택하세요.' }
+    return { ok: false, error: t('srv.wiki.selectDifferentTopics') }
   }
 
   const sb = await createServerClient()
@@ -480,17 +493,17 @@ export async function mergeWikiTopics(args: {
     .in('id', [args.sourceTopicId, args.targetTopicId]).eq('project_id', args.projectId)
   if (topicErr) {
     console.error('[wiki] 대상 주제 소속 확인 실패:', topicErr.message)
-    return { ok: false, error: '대상을 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: t('srv.wiki.couldNotVerifyTargetRequest') }
   }
   if (!topics || topics.length !== 2) {
-    return { ok: false, error: '같은 프로젝트의 서로 다른 주제만 병합할 수 있습니다.' }
+    return { ok: false, error: t('srv.wiki.onlyDifferentTopicsSameProject') }
   }
   // 0079부터 문서는 append-only revision을 가진 정본이다. 기존 merge RPC는 source 행을
   // 삭제하므로 문서 병합은 이력 보존 전략 없이 수행할 수 없다. AI 주제끼리만 허용한다.
   if ((topics as Array<{ body_md?: string | null; origin?: string | null }>).some((topic) => (
     topic.origin === 'manual' || topic.body_md?.trim()
   ))) {
-    return { ok: false, error: '사람이 작성한 문서는 병합할 수 없습니다. 문서 내용을 옮긴 뒤 주제를 정리해 주세요.' }
+    return { ok: false, error: t('srv.wiki.documentsWrittenPeopleCannotMerged') }
   }
 
   const { error } = await sb.rpc('merge_wiki_topics', {
@@ -499,7 +512,7 @@ export async function mergeWikiTopics(args: {
   })
   if (error) {
     console.error('[wiki] 주제 병합 실패:', error.message)
-    return { ok: false, error: friendlyError(error) }
+    return { ok: false, error: friendlyError(t, error) }
   }
 
   revalidatePath(`/p/${args.projectId}/wiki`)

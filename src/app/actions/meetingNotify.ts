@@ -1,7 +1,7 @@
 'use server'
 import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, resolveProjectId } from '@/lib/authz'
-import { ERR_LOOKUP } from '@/lib/authz/errors'
+import { ERR_LOOKUP, ERR_DENIED, ERR_ANON } from '@/lib/authz/errors'
 import { getMeetingDetail } from '@/lib/data/meetings'
 import { requireModule } from '@/lib/modules/gate'
 import { classifyRecipients, MAX_EXTRA_EMAILS } from '@/lib/mail/recipients'
@@ -18,6 +18,10 @@ import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import type { MeetingNotifyResult } from '@/lib/mail/outcome'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 const NONE = { sentTo: [] as string[], skipped: [] as MeetingNotifyResult['skipped'] }
 
@@ -30,13 +34,13 @@ function resolveAppUrl(): string | null {
 }
 
 /** SMTP 원문 에러에는 계정·호스트 정보가 섞인다. 사용자에게는 사유만 전한다. */
-function toUserMessage(e: unknown): string {
+function toUserMessage(tr: ServerTranslate, e: unknown): string {
   const code = (e as { code?: string } | null)?.code
-  if (code === 'EAUTH') return '메일 계정 인증에 실패했습니다. 관리자에게 문의하세요.'
+  if (code === 'EAUTH') return tr('err.mailAccountAuthenticationFailed')
   if (code === 'ETIMEDOUT' || code === 'ESOCKET' || code === 'ECONNECTION') {
-    return '메일 서버에 연결하지 못했습니다.'
+    return tr('err.couldNotConnectMailServer')
   }
-  return '메일 발송 중 오류가 발생했습니다.'
+  return tr('err.errorOccurredWhileSendingMail')
 }
 
 /**
@@ -53,9 +57,10 @@ export async function notifyMeetingSaved(
   kind: InviteKind,
   extraEmails: string[] = [],
 ): Promise<MeetingNotifyResult> {
+  const tr = await serverTranslator()
   // 발송 대상 회의의 프로젝트를 먼저 확정한다 — 관리자 판정의 기준이 그 프로젝트다.
   const found = await resolveProjectId('meetings', meetingId)
-  if (!found.ok) return { ok: false, error: found.error, ...NONE }
+  if (!found.ok) return { ok: false, error: libText(tr, found.error), ...NONE }
   const g = await requireProjectAdmin(found.projectId)
   let actor: Awaited<ReturnType<typeof getActor>> = null
   try { actor = g.ok ? g.actor : await getActor() } catch { actor = null }
@@ -69,22 +74,22 @@ export async function notifyMeetingSaved(
     ? extraEmails.filter((e): e is string => typeof e === 'string')
     : []
   if (extras.length > MAX_EXTRA_EMAILS) {
-    return { ok: false, error: `추가 수신 이메일은 최대 ${MAX_EXTRA_EMAILS}개까지 입력할 수 있습니다.`, ...NONE }
+    return { ok: false, error: fill(tr('srv.meetingNotify.upExtraRecipientEmailsCan'), { maxExtraEmails: MAX_EXTRA_EMAILS }), ...NONE }
   }
 
   const res = await getMeetingDetail(meetingId)
   // 조회 실패를 '회의 없음'으로 보이지 않는다 — 다시 시도할 수 있는 실패다(SP5 B2 — D39)
-  if (!res.ok) return { ok: false, error: res.error, ...NONE }
-  if (!res.detail) return { ok: false, error: '회의를 찾을 수 없습니다.', ...NONE }
+  if (!res.ok) return { ok: false, error: libText(tr, res.error), ...NONE }
+  if (!res.detail) return { ok: false, error: tr('err.meetingNotFound'), ...NONE }
   const { meeting, attendees } = res.detail
 
   // 남의 회의 ID 로 메일을 반복 발송하는 통로를 막는 유일한 지점.
   const isOwner = meeting.createdBy === actor?.userId
-  if (!g.ok && !isOwner) return { ok: false, error: '권한 없음', ...NONE }
+  if (!g.ok && !isOwner) return { ok: false, error: ERR_DENIED, ...NONE }
 
   // Reply-To·작성자 이름 폴백에 필요한 계정 정보는 Actor 에 없다(이메일은 auth.users 소관).
   const user = await getSession()
-  if (!user) return { ok: false, error: '로그인 필요', ...NONE }
+  if (!user) return { ok: false, error: ERR_ANON, ...NONE }
 
   const { valid, skipped } = classifyRecipients(attendees, extras)
   // 빈 To 로 SMTP 를 때리면 계정 평판만 깎인다.
@@ -101,7 +106,7 @@ export async function notifyMeetingSaved(
     fromName = (await loadDisplayBranding(project.workspaceId)).mailFromName
   } catch (error) { console.error('[notifyMeetingSaved] 브랜딩·범주 조회 실패:', error) }
   const transport = getTransport(fromName)
-  if (!transport.ok) return { ok: false, error: transport.error, sentTo: [], skipped }
+  if (!transport.ok) return { ok: false, error: libText(tr, transport.error), sentTo: [], skipped }
 
   const { subject, html, text } = renderMeetingInvite({
     kind,
@@ -136,6 +141,6 @@ export async function notifyMeetingSaved(
     }
   } catch (e) {
     console.error(`[notifyMeetingSaved:${kind}] 발송 실패:`, e)
-    return { ok: false, error: toUserMessage(e), sentTo: [], skipped }
+    return { ok: false, error: toUserMessage(tr, e), sentTo: [], skipped }
   }
 }

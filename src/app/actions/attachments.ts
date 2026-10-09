@@ -9,6 +9,9 @@ import { SIGNED_URL_TTL_SEC } from '@/lib/domain/signedUrl'
 import { removeStoredAttachment } from '@/lib/attachments/removeStoredAttachment'
 import { revalidatePath } from 'next/cache'
 import type { DeliverableAttachment } from '@/lib/domain/types'
+import { serverTranslator } from '@/lib/i18n/server'
+import { ERR_LOOKUP, ERR_DENIED, ERR_ANON } from '@/lib/authz/errors'
+import { libText } from '@/lib/i18n/serverText'
 
 const BUCKET = 'deliverables'
 
@@ -19,8 +22,9 @@ const BUCKET = 'deliverables'
 async function requireAttachPermission(itemId: string): Promise<
   { ok: true; projectId: string | null; userId: string } | { ok: false; error: string }
 > {
+  const t = await serverTranslator()
   const found = await resolveProjectId('wbs_items', itemId)
-  if (!found.ok) return { ok: false, error: found.error }
+  if (!found.ok) return { ok: false, error: libText(t, found.error) }
   const g = await requireProjectMember(found.projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const granted = { ok: true, projectId: found.projectId, userId: g.actor.userId } as const
@@ -30,10 +34,10 @@ async function requireAttachPermission(itemId: string): Promise<
   const { data: owners, error: ownErr } = await sb.from('item_owners').select('team_id').eq('wbs_item_id', itemId)
   if (ownErr || !owners) {
     console.error('[attachments] 담당 팀 조회 실패:', ownErr?.message)
-    return { ok: false, error: '권한을 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: ERR_LOOKUP }
   }
   const myTeamIds = actorTeamIdsFor(g.actor, found.projectId ?? '')
-  if (!owners.some(o => myTeamIds.includes(o.team_id as string))) return { ok: false, error: '권한 없음' }
+  if (!owners.some(o => myTeamIds.includes(o.team_id as string))) return { ok: false, error: ERR_DENIED }
   return granted
 }
 
@@ -42,7 +46,7 @@ export type AttachmentList =
   | { ok: true; rows: DeliverableAttachment[]; download: AttachmentDownload }
   | { ok: false; error: string }
 
-const ERR_LIST = '첨부 목록을 불러오지 못했습니다.'
+const ERR_LIST = 'err.couldNotLoadAttachments'
 
 /**
  * 항목의 첨부 목록(최신순)과 다운로드 판정. 목록은 그 항목을 읽을 수 있으면 보이고(RLS), 다운로드 가능 여부는 Storage 읽기 정책과
@@ -52,9 +56,10 @@ const ERR_LIST = '첨부 목록을 불러오지 못했습니다.'
  * 조회 실패를 빈 목록으로 위장하지 않는다(3원칙 ①). 판정 오류는 unknown 으로 두고 내려받기를 열지 않는다(fail-closed).
  */
 export async function listAttachments(itemId: string): Promise<AttachmentList> {
+  const t = await serverTranslator()
   if (!(await getSession())) {
     console.error('[listAttachments] 비로그인 호출')
-    return { ok: false, error: ERR_LIST }
+    return { ok: false, error: t(ERR_LIST) }
   }
   const sb = await createServerClient()
   const { data, error } = await sb
@@ -64,7 +69,7 @@ export async function listAttachments(itemId: string): Promise<AttachmentList> {
     .order('created_at', { ascending: false })
   if (error) {
     console.error('[listAttachments] 첨부 조회 실패:', error.message)
-    return { ok: false, error: ERR_LIST }
+    return { ok: false, error: t(ERR_LIST) }
   }
   const { data: can, error: canErr } = await sb.rpc('can_attach', { item: itemId })
   if (canErr) console.error('[listAttachments] 다운로드 권한 판정 실패 — 내려받기를 열지 않는다:', canErr.message)
@@ -85,7 +90,7 @@ export async function listAttachments(itemId: string): Promise<AttachmentList> {
 }
 
 export type AttachmentUrlResult = { ok: true; url: string } | { ok: false; error: string }
-const ERR_LINK = '내려받기 링크를 만들지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_LINK = 'err.couldNotCreateDownloadLink'
 
 /**
  * 산출물 첨부 클릭 시 60초 내려받기 링크(SP5 B3 과제7). 첨부 id 와 항목 id 를 함께 받아 그 항목의 첨부일 때만 서명한다 —
@@ -93,26 +98,27 @@ const ERR_LINK = '내려받기 링크를 만들지 못했습니다. 잠시 후 �
  * 서명도 사용자 세션이라 Storage 정책을 한 번 더 통과한다.
  */
 export async function getAttachmentUrl(itemId: string, attachmentId: string): Promise<AttachmentUrlResult> {
-  if (!(await getSession())) return { ok: false, error: '로그인 필요' }
+  const t = await serverTranslator()
+  if (!(await getSession())) return { ok: false, error: ERR_ANON }
   const sb = await createServerClient()
   const { data: row, error } = await sb.from('deliverable_attachments')
     .select('file_path, file_name').eq('id', attachmentId).eq('wbs_item_id', itemId).maybeSingle()
   if (error) {
     console.error('[getAttachmentUrl] 첨부 조회 실패:', error.message)
-    return { ok: false, error: ERR_LIST }
+    return { ok: false, error: t(ERR_LIST) }
   }
-  if (!row) return { ok: false, error: '첨부 없음' }
+  if (!row) return { ok: false, error: t('err.noAttachment') }
   const { data: can, error: canErr } = await sb.rpc('can_attach', { item: itemId })
   if (canErr) {
     console.error('[getAttachmentUrl] 다운로드 권한 판정 실패:', canErr.message)
-    return { ok: false, error: '권한을 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: ERR_LOOKUP }
   }
-  if (can !== true) return { ok: false, error: '권한 없음' }
+  if (can !== true) return { ok: false, error: ERR_DENIED }
   const { data: signed, error: signErr } = await sb.storage.from(BUCKET)
     .createSignedUrl(row.file_path as string, SIGNED_URL_TTL_SEC, { download: (row.file_name as string) || true })
   if (signErr || !signed?.signedUrl) {
     console.error(`[getAttachmentUrl attachment=${attachmentId}] 서명 실패:`, signErr?.message ?? 'no url')
-    return { ok: false, error: ERR_LINK }
+    return { ok: false, error: t(ERR_LINK) }
   }
   return { ok: true, url: signed.signedUrl }
 }
@@ -122,6 +128,7 @@ export async function recordAttachment(
   itemId: string,
   file: { fileName: string; filePath: string; size: number; mime: string },
 ): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   const g = await requireAttachPermission(itemId)
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
@@ -130,17 +137,17 @@ export async function recordAttachment(
   // 워크스페이스를 모르면 검증할 수 없으므로 중단한다(쓰기 전 선행 조회 실패는 중단).
   if (!g.projectId) {
     console.error('[recordAttachment] 항목의 프로젝트를 확정하지 못했습니다:', itemId)
-    return { ok: false, error: '권한을 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: ERR_LOOKUP }
   }
   const { data: proj, error: projErr } = await sb
     .from('projects').select('workspace_id').eq('id', g.projectId).maybeSingle()
   const workspaceId = (proj as { workspace_id?: string } | null)?.workspace_id
   if (projErr || !workspaceId) {
     console.error('[recordAttachment] 프로젝트 워크스페이스 조회 실패:', projErr?.message ?? 'no row')
-    return { ok: false, error: '권한을 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: ERR_LOOKUP }
   }
   if (!isDeliverablePathValid({ workspaceId, projectId: g.projectId }, itemId, file.filePath)) {
-    return { ok: false, error: '잘못된 파일 경로입니다.' }
+    return { ok: false, error: t('err.invalidFilePath') }
   }
   const { error } = await sb.from('deliverable_attachments').insert({
     wbs_item_id: itemId, file_name: file.fileName, file_path: file.filePath,
@@ -153,15 +160,16 @@ export async function recordAttachment(
 
 /** 첨부 삭제(Storage 객체 + 메타). */
 export async function removeAttachment(id: string): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   const sb = await createServerClient()
   // 어느 항목의 첨부인지 모르면 권한을 판정할 수 없다 — 조회 실패는 '없음'으로 위장하지 않고 중단한다.
   const { data: att, error: attErr } = await sb
     .from('deliverable_attachments').select('id, file_path, wbs_item_id').eq('id', id).maybeSingle()
   if (attErr) {
     console.error('[removeAttachment] 첨부 조회 실패:', attErr.message)
-    return { ok: false, error: '권한을 확인할 수 없어 중단했습니다.' }
+    return { ok: false, error: ERR_LOOKUP }
   }
-  if (!att) return { ok: false, error: '첨부 없음' }
+  if (!att) return { ok: false, error: t('err.noAttachment') }
   const g = await requireAttachPermission(att.wbs_item_id as string)
   if (!g.ok) return { ok: false, error: g.error }
   // 객체 삭제 → 행 삭제. 객체가 이미 없으면 행만 지우고, 남아 있으면(삭제 권한 불일치) 행을 남긴다(0011 H2-g 존재 확인 RPC).

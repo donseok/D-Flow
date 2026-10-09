@@ -5,6 +5,8 @@ import { createServerClient } from '@/lib/supabase/server'
 import { refreshLlmOverride } from '@/lib/ai/llm-override'
 import { normalizeBaseUrl } from '@/lib/ai/endpoints'
 import { errMsg } from '@/lib/domain/format'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
 
 export type LlmMode = 'env' | 'profile' | 'none'
 
@@ -50,7 +52,7 @@ export interface ActionOk {
   warning?: string
 }
 
-const REFRESH_WARNING = '저장은 됐지만 즉시 반영에 실패했습니다 — 최대 1분 내 자동 반영됩니다.'
+const REFRESH_WARNING = 'srv.llmConfig.savedButCouldNotApplied'
 const CONFIG_PATH = '/admin/llm-config'
 /** auth_token 은 select 하지만 응답에는 마스킹만 싣는다(아래 toMasked). */
 const PROFILE_COLUMNS =
@@ -114,37 +116,39 @@ function normNumber(v: number | undefined | null): number | null {
 }
 
 /** §7 검증표. 통과면 null, 실패면 사용자 문구. */
-function validateProfile(input: LlmProfileInput): string | null {
-  if (!input?.name?.trim()) return '프로필 이름을 입력하세요'
-  if (!input?.model?.trim()) return '모델을 입력하세요'
-  if (input.provider !== 'gemini' && input.provider !== 'openai') return '유효하지 않은 provider입니다'
-  if (!input.preset_id?.trim()) return '프리셋을 선택하세요'
+function validateProfile(t: ServerTranslate, input: LlmProfileInput): string | null {
+  if (!input?.name?.trim()) return t('srv.llmConfig.enterProfileName')
+  if (!input?.model?.trim()) return t('srv.llmConfig.enterModel')
+  if (input.provider !== 'gemini' && input.provider !== 'openai') return t('srv.llmConfig.providerNotValid')
+  if (!input.preset_id?.trim()) return t('srv.llmConfig.selectPreset')
   return null
 }
 
 /** name unique 위반(23505)만 사용자 문구로 번역하고, 나머지는 원문을 그대로 드러낸다(조용한 실패 금지). */
-function translateWriteError(err: { code?: string; message: string }): string {
-  if (err.code === '23505') return '이미 같은 이름의 프로필이 있습니다'
+function translateWriteError(t: ServerTranslate, err: { code?: string; message: string }): string {
+  if (err.code === '23505') return t('srv.llmConfig.profileSameNameAlreadyExists')
   return err.message
 }
 
 export async function listLlmProfiles(): Promise<{ profiles: LlmProfileMasked[] } | { error: string }> {
+  const t = await serverTranslator()
   const g = await requireSuperuser()
   if (!g.ok) return { error: g.error }
   const sb = await createServerClient()
   const { data, error } = await sb.from('llm_profiles').select(PROFILE_COLUMNS).order('name')
   // 조회 실패를 빈 목록으로 폴백하면 '프로필이 하나도 없음'과 구별되지 않고,
   // 관리자가 같은 이름으로 다시 만들다 23505 로 튕긴다 — 실패는 그대로 표시한다.
-  if (error) return { error: '프로필 목록을 불러오지 못했습니다: ' + error.message }
+  if (error) return { error: t('srv.llmConfig.profilesLoadFailed').replace('{message}', () => error.message) }
   return { profiles: ((data ?? []) as unknown as ProfileRow[]).map(toMasked) }
 }
 
 export async function createLlmProfile(
   input: LlmProfileInput,
 ): Promise<{ profile: LlmProfileMasked } | { error: string }> {
+  const t = await serverTranslator()
   const g = await requireSuperuser()
   if (!g.ok) return { error: g.error }
-  const invalid = validateProfile(input)
+  const invalid = validateProfile(t, input)
   if (invalid) return { error: invalid }
 
   const sb = await createServerClient()
@@ -163,7 +167,7 @@ export async function createLlmProfile(
     })
     .select(PROFILE_COLUMNS)
     .single()
-  if (error) return { error: translateWriteError(error) }
+  if (error) return { error: translateWriteError(t, error) }
   revalidatePath(CONFIG_PATH)
   return { profile: toMasked(data as unknown as ProfileRow) }
 }
@@ -172,9 +176,10 @@ export async function updateLlmProfile(
   id: number,
   input: LlmProfileInput,
 ): Promise<{ profile: LlmProfileMasked } | { error: string }> {
+  const t = await serverTranslator()
   const g = await requireSuperuser()
   if (!g.ok) return { error: g.error }
-  const invalid = validateProfile(input)
+  const invalid = validateProfile(t, input)
   if (invalid) return { error: invalid }
 
   const payload: Record<string, unknown> = {
@@ -199,12 +204,13 @@ export async function updateLlmProfile(
     .eq('id', id)
     .select(PROFILE_COLUMNS)
     .single()
-  if (error) return { error: translateWriteError(error) }
+  if (error) return { error: translateWriteError(t, error) }
   revalidatePath(CONFIG_PATH)
   return { profile: toMasked(data as unknown as ProfileRow) }
 }
 
 export async function deleteLlmProfile(id: number): Promise<ActionOk | { error: string }> {
+  const t = await serverTranslator()
   const g = await requireSuperuser()
   if (!g.ok) return { error: g.error }
   const sb = await createServerClient()
@@ -214,12 +220,13 @@ export async function deleteLlmProfile(id: number): Promise<ActionOk | { error: 
   // TTL(60초) 동안 계속 쓰지 않도록 즉시 재로딩한다.
   const applied = await refreshLlmOverride()
   revalidatePath(CONFIG_PATH)
-  return applied ? { ok: true } : { ok: true, warning: REFRESH_WARNING }
+  return applied ? { ok: true } : { ok: true, warning: t(REFRESH_WARNING) }
 }
 
 export async function getLlmConfig(): Promise<
   { mode: LlmMode; active_profile_id: number | null; profiles: LlmProfileMasked[] } | { error: string }
 > {
+  const t = await serverTranslator()
   const g = await requireSuperuser()
   if (!g.ok) return { error: g.error }
   const sb = await createServerClient()
@@ -229,8 +236,8 @@ export async function getLlmConfig(): Promise<
   ])
   // 설정 행을 못 읽었는데 'env'로 폴백하면 '선택 안함'으로 저장해 둔 서버가 화면상 env 로 보이고,
   // 그 상태로 저장 버튼을 누르면 의도치 않게 LLM 이 다시 열린다 — 실패는 화면에 드러낸다.
-  if (cfgRes.error) return { error: 'LLM 설정을 불러오지 못했습니다: ' + cfgRes.error.message }
-  if (listRes.error) return { error: '프로필 목록을 불러오지 못했습니다: ' + listRes.error.message }
+  if (cfgRes.error) return { error: t('srv.llmConfig.configLoadFailed').replace('{message}', () => cfgRes.error.message) }
+  if (listRes.error) return { error: t('srv.llmConfig.profilesLoadFailed').replace('{message}', () => listRes.error.message) }
 
   const row = cfgRes.data as { mode?: string; active_profile_id?: number | null } | null
   const profiles = ((listRes.data ?? []) as unknown as ProfileRow[]).map(toMasked)
@@ -253,17 +260,18 @@ export async function saveLlmConfig(input: {
   mode: LlmMode
   active_profile_id?: number | null
 }): Promise<ActionOk | { error: string }> {
+  const t = await serverTranslator()
   const g = await requireSuperuser()
   if (!g.ok) return { error: g.error }
   if (input?.mode !== 'env' && input?.mode !== 'profile' && input?.mode !== 'none') {
-    return { error: '유효하지 않은 설정입니다' }
+    return { error: t('srv.llmConfig.settingsNotValid') }
   }
 
   const sb = await createServerClient()
   let activeProfileId: number | null = null
   if (input.mode === 'profile') {
     if (input.active_profile_id === null || input.active_profile_id === undefined) {
-      return { error: '유효하지 않은 프로필입니다' }
+      return { error: t('srv.llmConfig.profileNotValid') }
     }
     const { data, error } = await sb
       .from('llm_profiles')
@@ -272,8 +280,8 @@ export async function saveLlmConfig(input: {
       .maybeSingle()
     // 쓰기 직전의 존재 확인 — 조회가 깨졌을 때 '없음'으로 취급하면 정상 프로필이 반려되고,
     // 통과시키면 dangling 참조가 저장된다. 둘 다 나쁘므로 원인을 밝혀 중단한다.
-    if (error) return { error: '프로필을 확인할 수 없어 저장을 중단했습니다: ' + error.message }
-    if (!data) return { error: '유효하지 않은 프로필입니다' }
+    if (error) return { error: t('srv.llmConfig.profileCheckFailed').replace('{message}', () => error.message) }
+    if (!data) return { error: t('srv.llmConfig.profileNotValid') }
     activeProfileId = Number(input.active_profile_id)
   }
 
@@ -292,7 +300,7 @@ export async function saveLlmConfig(input: {
   // 저장 즉시 반영(안 하면 이 인스턴스도 TTL 만료까지 옛 설정으로 LLM 을 호출한다).
   const applied = await refreshLlmOverride()
   revalidatePath(CONFIG_PATH)
-  return applied ? { ok: true } : { ok: true, warning: REFRESH_WARNING }
+  return applied ? { ok: true } : { ok: true, warning: t(REFRESH_WARNING) }
 }
 
 /** 응답 본문/에러에 키가 에코될 수 있으므로 입력 토큰 문자열을 마스킹하고 길이도 제한한다. */
@@ -311,13 +319,14 @@ function redact(text: string, token: string | null): string {
 export async function testLlmConnection(
   input: TestLlmInput,
 ): Promise<{ success: boolean; error?: string }> {
+  const t = await serverTranslator()
   const g = await requireSuperuser()
   if (!g.ok) return { success: false, error: g.error }
   if (input?.provider !== 'gemini' && input?.provider !== 'openai') {
-    return { success: false, error: '유효하지 않은 provider입니다' }
+    return { success: false, error: t('srv.llmConfig.providerNotValid') }
   }
   const model = input.model?.trim()
-  if (!model) return { success: false, error: '모델을 입력하세요' }
+  if (!model) return { success: false, error: t('srv.llmConfig.enterModel') }
 
   let token = input.auth_token?.trim() || null
   // 편집 중 키를 다시 입력하지 않아도 테스트되도록 저장된 키로 폴백(관리자 세션이라 RLS 로 읽힌다).
@@ -328,7 +337,7 @@ export async function testLlmConnection(
       .select('auth_token')
       .eq('id', input.profile_id)
       .maybeSingle()
-    if (error) return { success: false, error: '저장된 키를 확인할 수 없습니다: ' + error.message }
+    if (error) return { success: false, error: t('srv.llmConfig.savedKeyCheckFailed').replace('{message}', () => error.message) }
     token = ((data?.auth_token as string | null) ?? null) || null
   }
 
@@ -370,7 +379,7 @@ export async function testLlmConnection(
     return { success: false, error: `${label} ${res.status}: ${redact(body, token)}` }
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
-      return { success: false, error: '연결 시간이 초과되었습니다(10초)' }
+      return { success: false, error: t('srv.llmConfig.connectionTimedOut') }
     }
     return { success: false, error: redact(errMsg(e), token) }
   } finally {

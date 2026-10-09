@@ -3,22 +3,24 @@ import { getSession } from '@/lib/auth'
 import { legacyChatProjectGate } from '@/lib/ai/legacyChatGate'
 import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { answerQuestion, sanitizeHistory } from '@/lib/ai/answer'
+import { serverTranslator } from '@/lib/i18n/server'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  if (!(await getSession())) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
+  const t = await serverTranslator()
+  if (!(await getSession())) return NextResponse.json({ error: t('err.authenticationRequired') }, { status: 401 })
 
   let body: { projectId?: unknown; workspaceId?: unknown; message?: unknown; history?: unknown }
   try {
     body = await req.json()
   } catch {
-    return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 })
+    return NextResponse.json({ error: t('err.invalidRequest') }, { status: 400 })
   }
 
   const message = typeof body.message === 'string' ? body.message.trim() : ''
-  if (!message) return NextResponse.json({ error: '질문을 입력하세요.' }, { status: 400 })
-  if (message.length > 2000) return NextResponse.json({ error: '질문이 너무 깁니다.' }, { status: 400 })
+  if (!message) return NextResponse.json({ error: t('err.enterQuestion') }, { status: 400 })
+  if (message.length > 2000) return NextResponse.json({ error: t('err.questionTooLong') }, { status: 400 })
 
   const projectId = typeof body.projectId === 'string' && body.projectId ? body.projectId : null
   const history = sanitizeHistory(body.history)
@@ -34,6 +36,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result)
   } catch (e) {
     console.error('[assistant] /api/chat 오류:', e)
-    return NextResponse.json({ error: '답변 생성 중 오류가 발생했습니다.' }, { status: 500 })
+    return NextResponse.json({ error: t('err.errorOccurredWhileGeneratingAnswer') }, { status: 500 })
   }
 }

@@ -27,7 +27,6 @@ const ALLOW: Readonly<Record<string, { why: string; max: number }>> = {
   'src/components/import/ImportWizard.tsx': { why: '내려받기 파일 이름(wbs-양식.xlsx)', max: 1 },
   // ── 글자가 아니라 값(비교·대응 표의 키) ──
   'src/components/kanban/KanbanBoard.tsx': { why: '도메인이 만드는 한국어 컬럼 제목 → 사전 키 대응 표의 키(COLUMN_TITLE_KEY)', max: 9 },
-  'src/components/invite/InviteRedeemCard.tsx': { why: '서버 액션 오류 문구와의 비교값(E_OTHER_ACCOUNT — 서버 오류 문구는 3차)', max: 1 },
   'src/app/(app)/p/[projectId]/settings/page.tsx': { why: '설정 검색 색인 낱말(searchText — 화면에 보이지 않는다, ko·en 낱말 혼합)', max: 22 },
   'src/app/(app)/w/[slug]/settings/page.tsx': { why: '설정 검색 색인 낱말(searchText — 화면에 보이지 않는다, ko·en 낱말 혼합)', max: 9 },
   // ── 번역하지 않는 글자 ──

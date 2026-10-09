@@ -2,6 +2,7 @@
 // 에이전트 허브 액션 — 재조회와 위임 묶음 저장. 판정은 authz 가드로만, 본체는 src/lib/agent/delegation.ts.
 import { requireProjectMember } from '@/lib/authz'
 import { serverTranslator } from '@/lib/i18n/server'
+import { fill } from '@/lib/i18n/translate'
 import { requireModule } from '@/lib/modules/gate'
 import { isProjectAdmin } from '@/lib/domain/authz'
 import { isUuidLike, resumeHostFromClaimLabel } from '@/lib/domain/agentWork'
@@ -18,12 +19,14 @@ import { approveAgentCompletion, rejectAgentCompletion, requestAgentRework, unap
 import { setWbsStage } from '@/app/actions/wbsAssign'
 import type { AgentHub } from '@/lib/domain/agentHub'
 import { STAGE_CODES as DOMAIN_STAGE_CODES, type StageCode } from '@/lib/domain/stageLabels'
+import { libText } from '@/lib/i18n/serverText'
 
-const ERR_BAD = '잘못된 요청입니다.'
+const ERR_BAD = 'err.invalidRequest'
 const BULK_MAX = 200
 
 export async function refreshAgentHub(projectId: string): Promise<{ ok: true; hub: AgentHub } | { ok: false; error: string }> {
-  if (!isUuidLike(projectId)) return { ok: false, error: ERR_BAD }
+  const t = await serverTranslator()
+  if (!isUuidLike(projectId)) return { ok: false, error: t(ERR_BAD) }
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'agents')                    // 스펙 §4.2 — 가드 뒤·본문 앞(P17)
@@ -33,7 +36,7 @@ export async function refreshAgentHub(projectId: string): Promise<{ ok: true; hu
   } catch (e) {
     // 상세는 로그에, 화면에는 고정 문구 — 조회 실패를 빈 화면으로 위장하지 않되 내부 오류 문자열을 흘리지 않는다.
     console.error('[agentHub] 재조회 실패:', e instanceof Error ? e.message : e)
-    return { ok: false, error: '에이전트 현황 재조회에 실패했습니다.' }
+    return { ok: false, error: t('srv.agentHub.couldNotReloadAgentStatus') }
   }
 }
 
@@ -62,9 +65,10 @@ export type HubDelegationsResult =
  * 같은 항목이 여러 번 오면 마지막 값만 적용한다. 다른 프로젝트 항목이 섞이면 묶음 전체를 거부한다.
  */
 export async function applyHubDelegations(projectId: string, changes: HubDelegationChange[]): Promise<HubDelegationsResult> {
+  const t = await serverTranslator()
   if (!isUuidLike(projectId) || !Array.isArray(changes) || changes.length === 0 || changes.length > BULK_MAX
     || !changes.every(c => c != null && typeof c === 'object' && isUuidLike(c.itemId) && typeof c.delegated === 'boolean')) {
-    return { ok: false, error: ERR_BAD }
+    return { ok: false, error: t(ERR_BAD) }
   }
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
@@ -77,9 +81,9 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
 
   const admin = createAdminClient()
   const { data, error } = await admin.from('wbs_items').select('id, assignee_member_id').eq('project_id', projectId).in('id', ids)
-  if (error) return { ok: false, error: `항목 조회 실패: ${error.message}` }
+  if (error) return { ok: false, error: fill(t('err.couldNotLoadItems'), { message: error.message }) }
   const items = new Map(((data ?? []) as { id: string; assignee_member_id: string | null }[]).map(i => [i.id, i]))
-  if (items.size !== ids.length) return { ok: false, error: '이 프로젝트의 항목이 아닌 것이 있습니다.' }
+  if (items.size !== ids.length) return { ok: false, error: t('srv.agentHub.someItemsDoNotBelong') }
 
   // 멤버(비관리자)는 담당자 본인 항목만 — 로스터 판정은 묶음당 1회. 조회 실패는 거부(fail-closed).
   let mine: Set<string> | null = null
@@ -88,7 +92,7 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
       mine = new Set(await myMemberIds(admin, { userId: g.actor.userId, projectId }))
     } catch (e) {
       console.error('[agentHub] 담당자 판정 실패:', e instanceof Error ? e.message : e)
-      return { ok: false, error: '담당자 판정에 실패했습니다.' }
+      return { ok: false, error: t('err.couldNotDetermineAssignee') }
     }
   }
 
@@ -97,11 +101,11 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
   let actualChanged = false
   for (const itemId of ids) {
     const assignee = items.get(itemId)?.assignee_member_id ?? null
-    if (mine && !(assignee && mine.has(assignee))) { failed.push({ itemId, error: ERR_NOT_ASSIGNEE }); continue }
+    if (mine && !(assignee && mine.has(assignee))) { failed.push({ itemId, error: libText(t, ERR_NOT_ASSIGNEE) }); continue }
     const r = await applyDelegation(admin, {
       itemId, projectId, delegated: wanted.get(itemId) as boolean, actorUserId: g.actor.userId, isAdmin,
     })
-    if (!r.ok) failed.push({ itemId, error: r.error ?? '실패' })
+    if (!r.ok) failed.push({ itemId, error: r.error ?? t('srv.agentHub.failed') })
     else if (r.warning) warnings.push({ itemId, warning: r.warning })
     if (r.ok && r.actualChanged) actualChanged = true
   }
@@ -114,7 +118,7 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
   } catch (e) {
     // 저장은 끝났다. 재조회만 실패했음을 분명히 알려 클라이언트가 대기분을 되돌리지 않게 한다(표시 = 로깅).
     console.error('[agentHub] 저장 뒤 재조회 실패:', e instanceof Error ? e.message : e)
-    return { ok: true, hub: null, hubError: '변경은 저장됐지만 현황 재조회에 실패했습니다. 새로고침을 누르세요.', failed, warnings }
+    return { ok: true, hub: null, hubError: t('srv.agentHub.changeSavedButStatusCould'), failed, warnings }
   }
 }
 
@@ -188,20 +192,21 @@ function isProcessOp(op: unknown): op is HubProcessOp {
 async function stopOrderByAdmin(
   admin: AdminClient, orderId: string, actorUserId: string, projectId: string, isAdmin: boolean,
 ): Promise<{ ok: boolean; error?: string; warning?: string }> {
+  const t = await serverTranslator()
   const { data, error } = await admin
     .from('agent_work_orders').select('id, project_id, wbs_item_id, status').eq('id', orderId).maybeSingle()
-  if (error) return { ok: false, error: `주문 조회 실패: ${error.message}` }
+  if (error) return { ok: false, error: fill(t('err.couldNotLoadOrder'), { message: error.message }) }
   const order = data as { id: string; project_id: string; wbs_item_id: string | null; status: string } | null
-  if (!order) return { ok: false, error: '주문 없음' }
-  if (order.status !== 'claimed') return { ok: false, error: `중단할 수 있는 상태가 아닙니다(${order.status}).` }
+  if (!order) return { ok: false, error: t('err.orderNotFound') }
+  if (order.status !== 'claimed') return { ok: false, error: fill(t('srv.agentHub.orderCannotStoppedState'), { status: order.status }) }
 
   let warning: string | undefined
   if (order.wbs_item_id) {
     const r = await applyDelegation(admin, { itemId: order.wbs_item_id, projectId, delegated: false, actorUserId, isAdmin })
-    if (!r.ok) return { ok: false, error: r.error ?? '중단에 실패했습니다.' }
+    if (!r.ok) return { ok: false, error: r.error ?? t('srv.agentHub.couldNotStopWork') }
     // 위임 해제는 항목 단위라, 그 사이 이 주문이 보고(reported)로 넘어갔으면 이 주문은 멈추지 않았다 — 성공으로 덮지 않는다.
     if (!(r.cancelledClaimedIds ?? []).includes(orderId)) {
-      return { ok: false, error: '상태가 바뀌어 작업을 중단하지 못했습니다 — 위임은 해제됐습니다. 새로고침 후 확인하세요.' }
+      return { ok: false, error: t('srv.agentHub.stateChangedWorkNotStopped') }
     }
     warning = r.warning
     // 허브 액션은 페이지 재렌더를 싣지 않는다(응답의 hub 로 갱신) — 실적이 바뀌었으면 진척 스냅샷만 남긴다.
@@ -212,9 +217,9 @@ async function stopOrderByAdmin(
       .update({ status: 'cancelled', claimed_by: null, claimed_by_user_id: null, claimed_at: null, updated_at: new Date().toISOString() })
       .eq('id', orderId).eq('status', 'claimed')
       .select('id')
-    if (upErr) return { ok: false, error: `주문 취소 실패: ${upErr.message}` }
+    if (upErr) return { ok: false, error: fill(t('err.couldNotCancelOrder'), { message: upErr.message }) }
     if (!updated || (updated as unknown[]).length === 0) {
-      return { ok: false, error: '상태가 바뀌어 작업을 중단하지 못했습니다. 다시 시도하세요.' }
+      return { ok: false, error: t('srv.agentHub.stateChangedWorkNotStopped2') }
     }
   }
 
@@ -251,31 +256,33 @@ async function stopOrderByAdmin(
 async function requestResumeOnOrder(
   admin: AdminClient, orderId: string, actorUserId: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  const t = await serverTranslator()
   const { data, error } = await admin
     .from('agent_work_orders').select('id, status, claimed_by').eq('id', orderId).maybeSingle()
-  if (error) return { ok: false, error: `주문 조회 실패: ${error.message}` }
+  if (error) return { ok: false, error: fill(t('err.couldNotLoadOrder'), { message: error.message }) }
   const order = data as { id: string; status: string; claimed_by: string | null } | null
-  if (!order) return { ok: false, error: '주문 없음' }
-  if (order.status !== 'claimed') return { ok: false, error: `재개를 요청할 수 있는 상태가 아닙니다(${order.status}).` }
+  if (!order) return { ok: false, error: t('err.orderNotFound') }
+  if (order.status !== 'claimed') return { ok: false, error: fill(t('srv.agentHub.resumeCannotRequestedState'), { status: order.status }) }
   // 호스트는 서버가 점유 라벨에서 파생한다 — 클라이언트가 보낸 값을 믿으면 엉뚱한 PC 가 집어 간다.
   const host = resumeHostFromClaimLabel(order.claimed_by)
   if (!host) {
-    return { ok: false, error: '점유 라벨에서 이어받을 PC 를 읽지 못했습니다 — 중단한 뒤 다시 위임하세요.' }
+    return { ok: false, error: t('srv.agentHub.couldNotReadPcResume') }
   }
   const { data: updated, error: upErr } = await admin
     .from('agent_work_orders')
     .update({ resume_requested_at: new Date().toISOString(), resume_requested_by: actorUserId, resume_requested_host: host })
     .eq('id', orderId).eq('status', 'claimed')
     .select('id')
-  if (upErr) return { ok: false, error: `재개 요청 기록 실패: ${upErr.message}` }
+  if (upErr) return { ok: false, error: fill(t('srv.agentHub.couldNotRecordResumeRequest'), { message: upErr.message }) }
   if (!updated || (updated as unknown[]).length === 0) {
-    return { ok: false, error: '상태가 바뀌어 재개를 요청하지 못했습니다. 다시 시도하세요.' }
+    return { ok: false, error: t('srv.agentHub.stateChangedResumeNotRequested') }
   }
   return { ok: true }
 }
 
 export async function runHubProcessOp(projectId: string, op: HubProcessOp): Promise<HubProcessResult> {
-  if (!isUuidLike(projectId) || !isProcessOp(op)) return { ok: false, error: ERR_BAD }
+  const t = await serverTranslator()
+  if (!isUuidLike(projectId) || !isProcessOp(op)) return { ok: false, error: t(ERR_BAD) }
   // 멤버 이상이면 문을 연다 — 승인·단계는 내부 액션(loadOrderForAdmin·setWbsStage)이 "관리자 또는
   // 서브트리 관리자"로, 반려·승인 취소·재작업 요청은 내부 액션(loadOrderForReview)이 "관리자·담당자
   // 본인·서브트리 관리자"로 판정한다(2026-09-14 담당자 본인, 2026-09-15 트랙 B 서브트리 관리자).
@@ -293,12 +300,12 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
   let orderItemId: string | null = null
   if (op.kind === 'stage') {
     const { data, error } = await admin.from('wbs_items').select('project_id').eq('id', op.itemId).maybeSingle()
-    if (error) return { ok: false, error: `항목 조회 실패: ${error.message}` }
-    if (!data || (data as { project_id: string }).project_id !== projectId) return { ok: false, error: '이 프로젝트의 항목이 아닙니다.' }
+    if (error) return { ok: false, error: fill(t('err.couldNotLoadItems'), { message: error.message }) }
+    if (!data || (data as { project_id: string }).project_id !== projectId) return { ok: false, error: t('srv.agentHub.itemDoesNotBelongProject') }
   } else {
     const { data, error } = await admin.from('agent_work_orders').select('project_id, wbs_item_id').eq('id', op.orderId).maybeSingle()
-    if (error) return { ok: false, error: `주문 조회 실패: ${error.message}` }
-    if (!data || (data as { project_id: string }).project_id !== projectId) return { ok: false, error: '이 프로젝트의 주문이 아닙니다.' }
+    if (error) return { ok: false, error: fill(t('err.couldNotLoadOrder'), { message: error.message }) }
+    if (!data || (data as { project_id: string }).project_id !== projectId) return { ok: false, error: t('srv.agentHub.orderDoesNotBelongProject') }
     orderItemId = (data as { wbs_item_id: string | null }).wbs_item_id
   }
 
@@ -308,8 +315,8 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
   if ((op.kind === 'stop' || op.kind === 'resume') && !isAdmin) {
     // 문구는 op 마다 통째로 둔다 — 조사를 붙여 만들면 "재개 요청는" 같은 말이 나온다.
     const [adminOnly, subtreeOnly] = op.kind === 'stop'
-      ? ['중단은 관리자만 할 수 있습니다.', '중단은 관리자 또는 서브트리 관리자만 할 수 있습니다.']
-      : ['재개 요청은 관리자만 할 수 있습니다.', '재개 요청은 관리자 또는 서브트리 관리자만 할 수 있습니다.']
+      ? [t('srv.agentHub.onlyAdminCanStopWork'), t('srv.agentHub.onlyAdminSubtreeAdminCan')]
+      : [t('srv.agentHub.onlyAdminCanRequestResume'), t('srv.agentHub.onlyAdminSubtreeAdminCan2')]
     if (!orderItemId) return { ok: false, error: adminOnly }
     const subtree = await requireSubtreeManagerOrAdmin(orderItemId, projectId)
     if (!subtree.ok) return { ok: false, error: subtreeOnly }
@@ -327,17 +334,17 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
     // expectedStage 는 있을 때만 넘긴다(옛 호출은 두 인자 그대로). 단계 충돌은 이 화면의 stale(다시 읽기)로 접는다 — 비교 화면이 없는 표다
     case 'stage': {
       const sr = op.expectedStage !== undefined ? await setWbsStage(op.itemId, op.stage, undefined, undefined, op.expectedStage) : await setWbsStage(op.itemId, op.stage)
-      r = sr.conflict ? { ok: false, error: sr.error, stale: true } : sr
+      r = sr.conflict ? { ok: false, error: libText(t, sr.error), stale: true } : sr
       break
     }
   }
-  if (!r.ok) return { ok: false, error: r.error ?? '처리에 실패했습니다.', ...(r.stale ? { stale: true as const } : {}) }
+  if (!r.ok) return { ok: false, error: r.error ?? t('srv.agentHub.couldNotProcessRequest'), ...(r.stale ? { stale: true as const } : {}) }
   const warning = r.warning ? { warning: r.warning } : {}
   try {
     const hub = await getAgentHub(projectId, { userId: g.actor.userId, isAdmin }, undefined, await serverTranslator())
     return { ok: true, hub, ...warning }
   } catch (e) {
     console.error('[agentHub] 조정 뒤 재조회 실패:', e instanceof Error ? e.message : e)
-    return { ok: true, hub: null, hubError: '처리는 됐지만 현황 재조회에 실패했습니다. 새로고침을 누르세요.', ...warning }
+    return { ok: true, hub: null, hubError: t('srv.agentHub.requestProcessedButStatusCould'), ...warning }
   }
 }

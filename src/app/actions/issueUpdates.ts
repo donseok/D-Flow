@@ -9,7 +9,7 @@
 import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
-import { ERR_LOOKUP } from '@/lib/authz/errors'
+import { ERR_LOOKUP, ERR_ANON, ERR_DENIED } from '@/lib/authz/errors'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { requireModule } from '@/lib/modules/gate'
 import { emitNotification } from '@/lib/notify/emit'
@@ -24,6 +24,9 @@ import {
   type IssueUpdateKind,
 } from '@/lib/domain/issueUpdates'
 import { createServerClient } from '@/lib/supabase/server'
+import { serverTranslator } from '@/lib/i18n/server'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 export type IssueUpdateListResult =
   | { ok: true; items: IssueUpdate[] }
@@ -50,8 +53,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 async function requireIssueMember(issueId: string): Promise<
   { ok: true; projectId: string; userId: string; isAdmin: boolean } | { ok: false; error: string }
 > {
+  const t = await serverTranslator()
   const found = await resolveProjectId('issues', issueId)
-  if (!found.ok) return { ok: false, error: found.error }
+  if (!found.ok) return { ok: false, error: libText(t, found.error) }
   // issues.project_id 는 not null 이지만 타입이 nullable 이다. null 이면 이력의 not null
   // 컬럼을 채울 수 없으므로 '권한 없음'이 아니라 중단한다(에러 3원칙 ②).
   if (!found.projectId) {
@@ -93,6 +97,7 @@ async function syncResolutionNoteMirror(
   sb: Awaited<ReturnType<typeof createServerClient>>,
   issueId: string,
 ): Promise<string | null> {
+  const t = await serverTranslator()
   const { data, error } = await sb
     .from('issue_updates')
     .select('body')
@@ -119,7 +124,7 @@ async function syncResolutionNoteMirror(
   }
   if (!updated?.length) {
     console.error('[issueUpdates] 미러 갱신이 0행입니다:', issueId)
-    return '이슈를 찾을 수 없습니다.'
+    return t('err.issueNotFound')
   }
   // 해결 메모는 색인 본문에 든다 — 범위(프로젝트)는 행에서 읽는다
   await enqueueIndexChange({ domain: 'issues', entityId: issueId })
@@ -151,7 +156,7 @@ function mapRow(r: Record<string, unknown>): IssueUpdate {
 export async function listIssueUpdates(issueId: string): Promise<IssueUpdateListResult> {
   if (!(await getSession())) {
     console.error('[listIssueUpdates] 비로그인 호출')
-    return { ok: false, error: '로그인 필요' }
+    return { ok: false, error: ERR_ANON }
   }
   // 모듈 관문(스펙 §4.2) — 이슈 행의 프로젝트로 판정한다
   const scope = await resolveProjectId('issues', issueId)
@@ -177,27 +182,28 @@ export async function addIssueUpdate(
   issueId: string,
   input: { body: string; category: IssueUpdateCategory | null; mentionedMemberIds: string[] },
 ): Promise<IssueUpdateResult> {
+  const t = await serverTranslator()
   const g = await requireIssueMember(issueId)
   if (!g.ok) return { ok: false, error: g.error }
 
   const body = input.body.trim()
-  if (body.length === 0) return { ok: false, error: '내용을 입력하세요.' }
+  if (body.length === 0) return { ok: false, error: t('srv.issueUpdates.enterContent') }
   if (body.length > ISSUE_UPDATE_BODY_MAX) {
-    return { ok: false, error: `내용은 ${ISSUE_UPDATE_BODY_MAX}자 이하여야 합니다.` }
+    return { ok: false, error: fill(t('srv.issueUpdates.contentMustCharactersFewer'), { issueUpdateBodyMax: ISSUE_UPDATE_BODY_MAX }) }
   }
   if (input.category !== null && !isIssueUpdateCategory(input.category)) {
-    return { ok: false, error: '알 수 없는 분류입니다.' }
+    return { ok: false, error: t('srv.issueUpdates.unknownCategory') }
   }
   if (!Array.isArray(input.mentionedMemberIds)
       || input.mentionedMemberIds.some(id => typeof id !== 'string' || !UUID_RE.test(id))) {
-    return { ok: false, error: '멘션 대상이 올바르지 않습니다.' }
+    return { ok: false, error: t('srv.issueUpdates.mentionTargetNotValid') }
   }
   if (input.mentionedMemberIds.length > MENTIONS_MAX) {
-    return { ok: false, error: `멘션은 한 번에 ${MENTIONS_MAX}명까지입니다.` }
+    return { ok: false, error: fill(t('srv.issueUpdates.upPeopleCanMentionedOnce'), { mentionsMax: MENTIONS_MAX }) }
   }
 
   const user = await getSession()
-  if (!user) return { ok: false, error: '로그인 필요' }
+  if (!user) return { ok: false, error: ERR_ANON }
 
   const sb = await createServerClient()
 
@@ -235,7 +241,7 @@ export async function addIssueUpdate(
   if (error) return { ok: false, error: error.message }
   if (!inserted) {
     console.error('[addIssueUpdate] 이력 INSERT 가 0행입니다:', issueId)
-    return { ok: false, error: '이력 저장에 실패했습니다.' }
+    return { ok: false, error: t('srv.issueUpdates.couldNotSaveUpdate') }
   }
   const updateId = inserted.id as string
 
@@ -247,13 +253,13 @@ export async function addIssueUpdate(
     .from('issues').select('title').eq('id', issueId).maybeSingle()
   if (issueErr) {
     console.error('[addIssueUpdate] 알림용 이슈 제목 조회 실패:', issueErr.message)
-    notifyErr = '알림 발송에 실패했습니다.'
+    notifyErr = t('srv.issueUpdates.couldNotSendNotification')
   }
   const { data: assignees, error: asgErr } = await sb
     .from('issue_assignees').select('member_id').eq('issue_id', issueId)
   if (asgErr) {
     console.error('[addIssueUpdate] 알림용 담당자 조회 실패:', asgErr.message)
-    notifyErr = '알림 발송에 실패했습니다.'
+    notifyErr = t('srv.issueUpdates.couldNotSendNotification')
   }
   const recipients = (assignees ?? []).map((a: { member_id: string }) => a.member_id)
   // 멘션이 담당자보다 우선한다 — 두 알림을 다 받으면 중복이다.
@@ -280,7 +286,7 @@ export async function addIssueUpdate(
         recipientMemberIds: assigneeOnly,
         dedupeKey: `issue.update:${issueId}:${updateId}`,
       })
-      if (!emitted.ok) failed.push('담당자')
+      if (!emitted.ok) failed.push(t('err.assignee'))
     }
     if (mentioned.length > 0) {
       const emitted = await emitNotification({
@@ -297,18 +303,18 @@ export async function addIssueUpdate(
         recipientMemberIds: mentioned,
         dedupeKey: `issue.mention:${issueId}:${updateId}`,
       })
-      if (!emitted.ok) failed.push('멘션')
+      if (!emitted.ok) failed.push(t('srv.issueUpdates.mention'))
     }
-    if (failed.length > 0) notifyErr = `${failed.join('·')} 알림 발송에 실패했습니다.`
+    if (failed.length > 0) notifyErr = fill(t('srv.issueUpdates.couldNotSendNotification2'), { failed: failed.join('·') })
   }
 
   const mirrorErr = await syncResolutionNoteMirror(sb, issueId)
   revalidatePath(`/p/${g.projectId}/issues`)
   const partial = [
-    mirrorErr ? `요약 반영에 실패했습니다(${mirrorErr})` : null,
+    mirrorErr ? fill(t('srv.issueUpdates.couldNotApplySummary'), { mirrorErr }) : null,
     notifyErr,
   ].filter(Boolean).join(' ')
-  if (partial) return { ok: true, partial: `이력은 저장됐습니다. ${partial}` }
+  if (partial) return { ok: true, partial: fill(t('srv.issueUpdates.updateSaved'), { partial }) }
   return { ok: true }
 }
 
@@ -321,9 +327,10 @@ async function loadTargetRow(
   { ok: true; kind: IssueUpdateKind; authorUserId: string | null; archivedAt: string | null }
   | { ok: false; error: string }
 > {
+  const t = await serverTranslator()
   // uuid 모양을 미리 거른다 — 안 그러면 addIssueUpdate 의 멘션 id 와 같은 이유로
   // Postgres 가 22P02 를 던지고 '권한을 확인할 수 없어 중단했습니다' 로 둔갑한다.
-  if (!UUID_RE.test(updateId)) return { ok: false, error: '이력을 찾을 수 없습니다.' }
+  if (!UUID_RE.test(updateId)) return { ok: false, error: t('srv.issueUpdates.updateNotFound') }
   // issue_id 를 함께 조건에 넣는 이유: 호출자가 남의 이슈의 이력 id 를 보내도
   // 이 이슈의 권한으로 처리되지 않게 한다(게이트는 issueId 기준으로 통과했다).
   const { data, error } = await sb
@@ -336,7 +343,7 @@ async function loadTargetRow(
     console.error('[issueUpdates] 대상 이력 조회 실패:', error.message)
     return { ok: false, error: ERR_LOOKUP }
   }
-  if (!data) return { ok: false, error: '이력을 찾을 수 없습니다.' }
+  if (!data) return { ok: false, error: t('srv.issueUpdates.updateNotFound') }
   return {
     ok: true,
     kind: data.kind as IssueUpdateKind,
@@ -347,21 +354,22 @@ async function loadTargetRow(
 
 /** 취소선 처리 — 내용은 남기고 지웠다는 사실만 표시한다. */
 export async function archiveIssueUpdate(issueId: string, updateId: string): Promise<IssueUpdateResult> {
+  const t = await serverTranslator()
   const g = await requireIssueMember(issueId)
   if (!g.ok) return { ok: false, error: g.error }
   const user = await getSession()
-  if (!user) return { ok: false, error: '로그인 필요' }
+  if (!user) return { ok: false, error: ERR_ANON }
 
   const sb = await createServerClient()
   const row = await loadTargetRow(sb, issueId, updateId)
-  if (!row.ok) return { ok: false, error: row.error }
+  if (!row.ok) return { ok: false, error: libText(t, row.error) }
   // 상태 자동 기록은 사람이 쓴 글이 아니라 감사 흔적이다. 상태를 바꾼 본인이 그 기록을
   // 스스로 지울 수 있으면 남길 값어치가 없다. UI 는 버튼을 숨기지만 관문은 여기다.
-  if (row.kind !== 'note') return { ok: false, error: '상태 변경 기록은 취소선 대상이 아닙니다.' }
+  if (row.kind !== 'note') return { ok: false, error: t('srv.issueUpdates.statusChangeRecordsCannotStruck') }
   if (!canArchiveUpdate({ authorUserId: row.authorUserId }, g.userId, g.isAdmin)) {
-    return { ok: false, error: '권한 없음' }
+    return { ok: false, error: ERR_DENIED }
   }
-  if (row.archivedAt !== null) return { ok: false, error: '이미 취소선 처리된 이력입니다.' }
+  if (row.archivedAt !== null) return { ok: false, error: t('srv.issueUpdates.updateAlreadyStruckOut') }
 
   // CAS + .select() — RLS 거부·경합으로 0행이어도 supabase-js 는 error 를 주지 않는다.
   // issue_id 도 조건에 넣는다 — purgeIssueUpdate 와 같은 이중 방어. 오늘은 issue_id 가
@@ -382,12 +390,12 @@ export async function archiveIssueUpdate(issueId: string, updateId: string): Pro
   if (error) return { ok: false, error: error.message }
   if (!updated?.length) {
     console.error('[archiveIssueUpdate] 취소선 UPDATE 가 0행입니다:', updateId)
-    return { ok: false, error: '다른 사용자가 먼저 처리했습니다. 새로고침 후 다시 시도하세요.' }
+    return { ok: false, error: t('srv.issueUpdates.anotherUserHandledFirst') }
   }
 
   const mirrorErr = await syncResolutionNoteMirror(sb, issueId)
   revalidatePath(`/p/${g.projectId}/issues`)
-  if (mirrorErr) return { ok: true, partial: `취소선은 처리됐지만 요약 반영에 실패했습니다(${mirrorErr}).` }
+  if (mirrorErr) return { ok: true, partial: fill(t('srv.issueUpdates.struckOutButSummaryCould'), { mirrorErr }) }
   return { ok: true }
 }
 
@@ -396,19 +404,20 @@ export async function archiveIssueUpdate(issueId: string, updateId: string): Pro
  * (WikiItemActions.tsx:33-36 의 규칙).
  */
 export async function unarchiveIssueUpdate(issueId: string, updateId: string): Promise<IssueUpdateResult> {
+  const t = await serverTranslator()
   const g = await requireIssueMember(issueId)
   if (!g.ok) return { ok: false, error: g.error }
 
   const sb = await createServerClient()
   const row = await loadTargetRow(sb, issueId, updateId)
-  if (!row.ok) return { ok: false, error: row.error }
+  if (!row.ok) return { ok: false, error: libText(t, row.error) }
   // 상태 자동 기록은 사람이 쓴 글이 아니라 감사 흔적이다. 상태를 바꾼 본인이 그 기록을
   // 스스로 지울 수 있으면 남길 값어치가 없다. UI 는 버튼을 숨기지만 관문은 여기다.
-  if (row.kind !== 'note') return { ok: false, error: '상태 변경 기록은 취소선 대상이 아닙니다.' }
+  if (row.kind !== 'note') return { ok: false, error: t('srv.issueUpdates.statusChangeRecordsCannotStruck') }
   if (!canArchiveUpdate({ authorUserId: row.authorUserId }, g.userId, g.isAdmin)) {
-    return { ok: false, error: '권한 없음' }
+    return { ok: false, error: ERR_DENIED }
   }
-  if (row.archivedAt === null) return { ok: false, error: '취소선이 그어진 이력이 아닙니다.' }
+  if (row.archivedAt === null) return { ok: false, error: t('srv.issueUpdates.updateNotStruckOut') }
 
   // 셋을 한꺼번에 NULL 로 — 0087 의 with check 가 "전부 NULL 이거나, 본인이 그은 것"만 통과시킨다.
   // issue_id 도 조건에 넣는다 — archiveIssueUpdate 와 같은 이중 방어(purgeIssueUpdate 참조).
@@ -422,28 +431,29 @@ export async function unarchiveIssueUpdate(issueId: string, updateId: string): P
   if (error) return { ok: false, error: error.message }
   if (!updated?.length) {
     console.error('[unarchiveIssueUpdate] 되돌리기 UPDATE 가 0행입니다:', updateId)
-    return { ok: false, error: '다른 사용자가 먼저 처리했습니다. 새로고침 후 다시 시도하세요.' }
+    return { ok: false, error: t('srv.issueUpdates.anotherUserHandledFirst') }
   }
 
   const mirrorErr = await syncResolutionNoteMirror(sb, issueId)
   revalidatePath(`/p/${g.projectId}/issues`)
-  if (mirrorErr) return { ok: true, partial: `되돌렸지만 요약 반영에 실패했습니다(${mirrorErr}).` }
+  if (mirrorErr) return { ok: true, partial: fill(t('srv.issueUpdates.restoredButSummaryCouldNot'), { mirrorErr }) }
   return { ok: true }
 }
 
 /** 완전 삭제 — 프로젝트 관리자만. 되돌릴 수 없다. */
 export async function purgeIssueUpdate(issueId: string, updateId: string): Promise<IssueUpdateResult> {
+  const t = await serverTranslator()
   const g = await requireIssueMember(issueId)
   if (!g.ok) return { ok: false, error: g.error }
-  if (!canPurgeUpdate(g.isAdmin)) return { ok: false, error: '권한 없음' }
+  if (!canPurgeUpdate(g.isAdmin)) return { ok: false, error: ERR_DENIED }
 
   const sb = await createServerClient()
   const row = await loadTargetRow(sb, issueId, updateId)
-  if (!row.ok) return { ok: false, error: row.error }
+  if (!row.ok) return { ok: false, error: libText(t, row.error) }
 
   // SPU1(SP5b 이월): 상태 변경 기록은 감사 로그 보존을 위해 완전 삭제 불가
   if (row.kind === 'status') {
-    return { ok: false, error: '상태 변경 기록은 감사 로그 보존을 위해 삭제할 수 없습니다.' }
+    return { ok: false, error: t('srv.issueUpdates.statusChangeRecordsCannotDeleted') }
   }
 
   const { data: gone, error } = await sb
@@ -455,11 +465,11 @@ export async function purgeIssueUpdate(issueId: string, updateId: string): Promi
   if (error) return { ok: false, error: error.message }
   if (!gone?.length) {
     console.error('[purgeIssueUpdate] DELETE 가 0행입니다:', updateId)
-    return { ok: false, error: '삭제에 실패했습니다.' }
+    return { ok: false, error: t('srv.issueUpdates.couldNotDelete') }
   }
 
   const mirrorErr = await syncResolutionNoteMirror(sb, issueId)
   revalidatePath(`/p/${g.projectId}/issues`)
-  if (mirrorErr) return { ok: true, partial: `삭제했지만 요약 반영에 실패했습니다(${mirrorErr}).` }
+  if (mirrorErr) return { ok: true, partial: fill(t('srv.issueUpdates.deletedButSummaryCouldNot'), { mirrorErr }) }
   return { ok: true }
 }

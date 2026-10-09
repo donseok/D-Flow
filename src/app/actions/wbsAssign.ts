@@ -16,6 +16,11 @@ import { STEP_CODE_RE, type PendingApproval } from '@/lib/domain/approvalSteps'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { after } from 'next/server'
 import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/agent/subtreeManager'
+import { serverTranslator } from '@/lib/i18n/server'
+import { fill } from '@/lib/i18n/translate'
+import { ERR_MISSING } from '@/lib/authz/errors'
+import { WBS_ACTION_ERRORS } from '@/lib/wbs/actionErrors'
+import { libText } from '@/lib/i18n/serverText'
 
 /**
  * WBS 담당자(로스터 축)·단계(stage) 갱신 — §2.5. 배정 권한은 프로젝트 관리자.
@@ -30,11 +35,11 @@ import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/a
  * 개발 워크플로 토글 거부 문구 — 'use server' 모듈은 export 가 전부 async 함수여야 하므로
  * (그렇지 않으면 클라이언트가 부를 수 있는 액션으로 취급된다) 내보내지 않고 안에 둔다.
  */
-const ERR_DEV_WORKFLOW_CASCADE_ADMIN = '하위 일괄 적용은 프로젝트 관리자만 할 수 있습니다.'
-const ERR_DEV_WORKFLOW_DELEGATED = '에이전트에 위임된 작업입니다. 위임을 먼저 끄십시오.'
-const ERR_ASSIGNEE_CONFLICT = '다른 사용자가 담당자를 먼저 바꿨습니다. 저장하지 않았습니다.'
-const ERR_STAGE_CONFLICT = '다른 사용자가 단계를 먼저 바꿨습니다. 저장하지 않았습니다.'
-const ERR_ASSIGNEE_RECHECK = '담당자를 다시 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
+const ERR_DEV_WORKFLOW_CASCADE_ADMIN = 'srv.wbsAssign.onlyProjectAdminCanApply'
+const ERR_DEV_WORKFLOW_DELEGATED = 'srv.wbsAssign.taskDelegatedAgent'
+const ERR_ASSIGNEE_CONFLICT = 'srv.wbsAssign.anotherUserChangedAssigneeFirst'
+const ERR_STAGE_CONFLICT = 'srv.wbsAssign.anotherUserChangedStageFirst'
+const ERR_ASSIGNEE_RECHECK = 'srv.wbsAssign.couldNotVerifyAssigneeAgain'
 
 type LoadedItem = {
   id: string; project_id: string; parent_id: string | null; name: string
@@ -51,10 +56,11 @@ async function resolveItemProjectId(itemId: string): Promise<
   | { ok: true; projectId: string }
   | { ok: false; error: string }
 > {
-  if (!isUuidLike(itemId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isUuidLike(itemId)) return { ok: false, error: t('err.invalidRequest') }
   const resolved = await resolveProjectId('wbs_items', itemId)
-  if (!resolved.ok) return { ok: false, error: resolved.error }
-  if (resolved.projectId === null) return { ok: false, error: '대상을 찾을 수 없습니다.' }
+  if (!resolved.ok) return { ok: false, error: libText(t, resolved.error) }
+  if (resolved.projectId === null) return { ok: false, error: ERR_MISSING }
   return { ok: true, projectId: resolved.projectId }
 }
 
@@ -63,14 +69,15 @@ async function loadItem(itemId: string): Promise<
   | { ok: true; item: LoadedItem }
   | { ok: false; error: string }
 > {
-  if (!isUuidLike(itemId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isUuidLike(itemId)) return { ok: false, error: t('err.invalidRequest') }
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('wbs_items')
     .select('id, project_id, parent_id, name, assignee_member_id, external_ref')
     .eq('id', itemId).maybeSingle()
-  if (error) return { ok: false, error: `항목 조회 실패: ${error.message}` }
-  if (!data) return { ok: false, error: '항목 없음' }
+  if (error) return { ok: false, error: fill(t('err.couldNotLoadItems'), { message: error.message }) }
+  if (!data) return { ok: false, error: WBS_ACTION_ERRORS.itemMissing }
   return { ok: true, item: data as LoadedItem }
 }
 
@@ -81,10 +88,11 @@ const isExpectedAssignee = (v: unknown): v is string | null | undefined => v ===
 async function assigneeConflict(
   admin: ReturnType<typeof createAdminClient>, itemId: string,
 ): Promise<{ ok: false; error: string; conflict?: true; latest?: string | null }> {
+  const t = await serverTranslator()
   const { data, error } = await admin.from('wbs_items').select('id, assignee_member_id').eq('id', itemId).maybeSingle()
-  if (error) { console.error('[wbsAssign.cas] 담당자 재조회 실패:', error.message); return { ok: false, error: ERR_ASSIGNEE_RECHECK } }
-  if (!data) return { ok: false, error: '갱신 대상 없음' }
-  return { ok: false, conflict: true, error: ERR_ASSIGNEE_CONFLICT, latest: (data as { assignee_member_id: string | null }).assignee_member_id ?? null }
+  if (error) { console.error('[wbsAssign.cas] 담당자 재조회 실패:', error.message); return { ok: false, error: t(ERR_ASSIGNEE_RECHECK) } }
+  if (!data) return { ok: false, error: t('err.nothingUpdate') }
+  return { ok: false, conflict: true, error: t(ERR_ASSIGNEE_CONFLICT), latest: (data as { assignee_member_id: string | null }).assignee_member_id ?? null }
 }
 
 /**
@@ -96,6 +104,7 @@ async function assigneeConflict(
 export async function setWbsAssignee(
   itemId: string, memberId: string | null, expectedUpdatedAt?: string | null, expectedAssignee?: string | null,
 ): Promise<{ ok: boolean; error?: string; orderCreated?: boolean; conflict?: boolean; latest?: string | null }> {
+  const t = await serverTranslator()
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
   const g = await requireProjectAdmin(resolved.projectId)
@@ -109,28 +118,28 @@ export async function setWbsAssignee(
   if (expectedUpdatedAt === undefined && (item.assignee_member_id ?? null) === memberId) return { ok: true }
   const admin = createAdminClient()
   if (memberId !== null) {
-    if (!isUuidLike(memberId)) return { ok: false, error: '잘못된 요청입니다.' }
+    if (!isUuidLike(memberId)) return { ok: false, error: t('err.invalidRequest') }
     // 쓰기 선행조회 — 활성 로스터·활성 인물 실재 + 프로젝트 일치(복합 FK 가 2차 방어선, 여기가 1차).
     const { data: mem, error: memErr } = await admin
       .from('project_members').select('id, project_id, people!inner(active)')
       .eq('id', memberId).eq('active', true).eq('people.active', true).maybeSingle()
-    if (memErr) return { ok: false, error: `멤버 조회 실패: ${memErr.message}` }
+    if (memErr) return { ok: false, error: fill(t('srv.wbsAssign.couldNotLoadMember'), { message: memErr.message }) }
     if (!mem || (mem as { project_id: string }).project_id !== item.project_id) {
-      return { ok: false, error: '이 프로젝트의 로스터 멤버가 아닙니다.' }
+      return { ok: false, error: t('srv.wbsAssign.notRosterMemberProject') }
     }
   }
-  if (!isExpectedAssignee(expectedAssignee)) return { ok: false, error: '잘못된 요청입니다.' }
+  if (!isExpectedAssignee(expectedAssignee)) return { ok: false, error: t('err.invalidRequest') }
   // 값 CAS — 내가 본 담당자와 서버의 담당자가 다르면 그새 다른 사람이 바꾼 것이다. 이미 내가 고른 값이면 덮을 것이 없다(위에서 성공으로 답했다)
   if (expectedAssignee !== undefined && (item.assignee_member_id ?? null) !== expectedAssignee && (item.assignee_member_id ?? null) !== memberId) {
-    return { ok: false, conflict: true, error: ERR_ASSIGNEE_CONFLICT, latest: item.assignee_member_id ?? null }
+    return { ok: false, conflict: true, error: t(ERR_ASSIGNEE_CONFLICT), latest: item.assignee_member_id ?? null }
   }
   if (expectedUpdatedAt !== undefined) {
     const { data, error } = await admin.rpc('apply_wbs_bulk_item', {
       p_project_id: item.project_id, p_actor: g.actor.userId, p_item_id: itemId,
       p_expected_updated_at: expectedUpdatedAt, p_patch: { assignee_member_id: memberId },
     })
-    if (error) { console.error('[wbsAssign.cas]', error); return { ok: false, error: '담당자를 저장하지 못했습니다. 다시 시도해 주세요.' } }
-    if (data?.ok !== true) return { ok: false, conflict: data?.reason === 'conflict', error: data?.reason === 'conflict' ? '다른 사용자가 수정했습니다. 최신 내용을 확인해 주세요.' : '담당자 변경 값을 확인해 주세요.' }
+    if (error) { console.error('[wbsAssign.cas]', error); return { ok: false, error: t('srv.wbsAssign.couldNotSaveAssignee') } }
+    if (data?.ok !== true) return { ok: false, conflict: data?.reason === 'conflict', error: data?.reason === 'conflict' ? t('srv.wbsAssign.anotherUserMadeChanges') : t('srv.wbsAssign.checkAssigneeChangeValue') }
     if ((item.assignee_member_id ?? null) === memberId) return { ok: true }
   } else {
     let q = admin
@@ -141,7 +150,7 @@ export async function setWbsAssignee(
     if (expectedAssignee !== undefined) q = item.assignee_member_id === null ? q.is('assignee_member_id', null) : q.eq('assignee_member_id', item.assignee_member_id)
     const { data: updated, error } = await q.select('id')
     if (error) return { ok: false, error: error.message }
-    if (!updated || updated.length === 0) return expectedAssignee !== undefined ? assigneeConflict(admin, itemId) : { ok: false, error: '갱신 대상 없음' }
+    if (!updated || updated.length === 0) return expectedAssignee !== undefined ? assigneeConflict(admin, itemId) : { ok: false, error: t('err.nothingUpdate') }
   }
   revalidatePath(`/p/${item.project_id}`, 'layout')
   // 배정↔as 전이(스펙 2026-09-15 §3.4) — RPC 가 dev_workflow·리프·현재 stage 를 판정한다(배정은 stage 가 null
@@ -219,20 +228,21 @@ export async function setWbsAssigneeCascade(
   /** 패널을 열 때 본 이 항목의 담당자(SPU1) — 서버 값이 그새 달라졌으면 본인·하위 어느 것도 쓰지 않고 충돌과 그 값(latest)을 돌려준다 */
   expectedAssignee?: string | null,
 ): Promise<{ ok: boolean; error?: string; count?: number; cascadeFailed?: boolean; conflict?: boolean; latest?: string | null }> {
+  const t = await serverTranslator()
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
   const g = await requireProjectAdmin(resolved.projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  if (!isUuidLike(memberId) || !isExpectedAssignee(expectedAssignee)) return { ok: false, error: '잘못된 요청입니다.' }
+  if (!isUuidLike(memberId) || !isExpectedAssignee(expectedAssignee)) return { ok: false, error: t('err.invalidRequest') }
 
   const admin = createAdminClient()
   // 쓰기 선행조회 — 활성 로스터·활성 인물 실재 + 프로젝트 일치(setWbsAssignee와 동일한 1차 방어선).
   const { data: mem, error: memErr } = await admin
     .from('project_members').select('id, project_id, people!inner(active)')
     .eq('id', memberId).eq('active', true).eq('people.active', true).maybeSingle()
-  if (memErr) return { ok: false, error: `멤버 조회 실패: ${memErr.message}` }
+  if (memErr) return { ok: false, error: fill(t('srv.wbsAssign.couldNotLoadMember'), { message: memErr.message }) }
   if (!mem || (mem as { project_id: string }).project_id !== resolved.projectId) {
-    return { ok: false, error: '이 프로젝트의 로스터 멤버가 아닙니다.' }
+    return { ok: false, error: t('srv.wbsAssign.notRosterMemberProject') }
   }
 
   // 하위 트리 조회 실패 시 중단(3원칙 ②) — 부분 적용 강행 금지.
@@ -240,11 +250,11 @@ export async function setWbsAssigneeCascade(
     .from('wbs_items')
     .select('id, parent_id, name, assignee_member_id')
     .eq('project_id', resolved.projectId)
-  if (treeErr) return { ok: false, error: `하위 항목 조회 실패: ${treeErr.message}` }
+  if (treeErr) return { ok: false, error: fill(t('srv.wbsAssign.couldNotLoadChildItems'), { message: treeErr.message }) }
   const rows = (allItems ?? []) as TreeRow[]
   const byId = new Map(rows.map(r => [r.id, r]))
   const root = byId.get(itemId)
-  if (!root) return { ok: false, error: '항목 없음' }
+  if (!root) return { ok: false, error: WBS_ACTION_ERRORS.itemMissing }
 
   const childrenOf = new Map<string, TreeRow[]>()
   const hasChildren = new Set<string>()
@@ -277,7 +287,7 @@ export async function setWbsAssigneeCascade(
   const rootNeedsUpdate = root.assignee_member_id !== memberId
   // 값 CAS(SPU1) — 본인 항목의 담당자가 내가 본 값이 아니면(이미 내가 고른 값인 경우는 덮을 것이 없다) 하위까지 통째로 멈춘다
   if (expectedAssignee !== undefined && rootNeedsUpdate && (root.assignee_member_id ?? null) !== expectedAssignee) {
-    return { ok: false, conflict: true, error: ERR_ASSIGNEE_CONFLICT, latest: root.assignee_member_id ?? null }
+    return { ok: false, conflict: true, error: t(ERR_ASSIGNEE_CONFLICT), latest: root.assignee_member_id ?? null }
   }
 
   if (!rootNeedsUpdate && descendantCandidateIds.length === 0) return { ok: true, count: 0 }
@@ -393,22 +403,23 @@ export async function setWbsStage(
    *  서버 값이 그새 달라졌으면 쓰지 않고 conflict 와 현재 단계(latest)를 돌려준다. expectedUpdatedAt(일괄 변경의 행 revision)과는 따로 쓴다 */
   expectedStage?: StageCode | null,
 ): Promise<{ ok: boolean; error?: string; stale?: true; conflict?: true; latest?: string | null }> {
-  if (stage !== null && !isStageCode(stage)) return { ok: false, error: '허용되지 않는 단계입니다.' }
-  if (expectedStage !== undefined && expectedStage !== null && !isStageCode(expectedStage)) return { ok: false, error: '잘못된 요청입니다.' }
-  if (expectedStep != null && (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep))) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (stage !== null && !isStageCode(stage)) return { ok: false, error: t('err.stageNotAllowed') }
+  if (expectedStage !== undefined && expectedStage !== null && !isStageCode(expectedStage)) return { ok: false, error: t('err.invalidRequest') }
+  if (expectedStep != null && (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep))) return { ok: false, error: t('err.invalidRequest') }
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
   // SP5b(D18·§8 #3): xx 지정은 승인과 같은 판정 — 대기 단계의 승인자 가드(admin 단계는 관리자만, 그 밖은 자기 승인 금지가 붙은 승인 가드).
   // 유효 단계가 둘 이상이면 RPC 가 approval_required 로 거부한다(im 으로 올린 뒤 단계 승인으로만 xx)
   const g = stage === 'xx' ? await guardStepApproval(itemId, resolved.projectId) : await requireSubtreeManagerOrAdmin(itemId, resolved.projectId)
   if (!g.ok) return { ok: false, error: g.error }
-  if (expectedStep != null && 'pending' in g && g.pending.step !== expectedStep) return { ok: false, stale: true, error: REASON_TEXT.approval_stale }
+  if (expectedStep != null && 'pending' in g && g.pending.step !== expectedStep) return { ok: false, stale: true, error: libText(t, REASON_TEXT.approval_stale) }
   const admin = createAdminClient()
   const tr = await applyWorkflowEvent(admin, { event: 'set_stage', actorUserId: g.actor.userId, itemId, stage, expectedStep, expectedUpdatedAt, expectedStage,
     projectId: expectedUpdatedAt !== undefined || expectedStage !== undefined ? resolved.projectId : undefined })
   // 단계 값 대조가 어긋났다(latestStage 는 0048 래퍼만 싣는다) — 주문 상태 충돌 같은 다른 conflict 는 아래 stale 그대로
-  if (!tr.ok && tr.conflict && tr.latestStage !== undefined) return { ok: false, conflict: true, error: ERR_STAGE_CONFLICT, latest: tr.latestStage }
-  if (!tr.ok) return tr.reason === 'approval_stale' || tr.conflict ? { ok: false, stale: true, error: tr.error } : { ok: false, error: tr.error }
+  if (!tr.ok && tr.conflict && tr.latestStage !== undefined) return { ok: false, conflict: true, error: t(ERR_STAGE_CONFLICT), latest: tr.latestStage }
+  if (!tr.ok) return tr.reason === 'approval_stale' || tr.conflict ? { ok: false, stale: true, error: libText(t, tr.error) } : { ok: false, error: libText(t, tr.error) }
   revalidatePath(`/p/${resolved.projectId}`, 'layout')
   if (tr.actualChanged) after(() => recordProgressSnapshot(resolved.projectId))
   // §2.10 — im·xx 에 "처음" 도달할 때만 후행 알림(재설정·역전이는 RPC 의 reachedFirst 가 거른다).
@@ -424,8 +435,9 @@ export async function setWbsStage(
 async function guardStepApproval(itemId: string, projectId: string): Promise<
   { ok: true; actor: { userId: string }; pending: PendingApproval } | { ok: false; error: string }
 > {
+  const t = await serverTranslator()
   const m = await requireProjectMember(projectId)
-  if (!m.ok) return { ok: false, error: m.error }
+  if (!m.ok) return { ok: false, error: libText(t, m.error) }
   const st = await loadApprovalState(createAdminClient(), itemId, projectId)
   if (!st.ok) return st
   if (st.pending.approver === 'admin') {
@@ -444,15 +456,16 @@ async function guardStepApproval(itemId: string, projectId: string): Promise<
  * expectedStep 은 필수다 — 화면이 본 대기 단계와 RPC 가 설정 FOR SHARE 아래에서 대조한다(S6).
  */
 export async function approveWbsStep(itemId: string, expectedStep: string): Promise<{ ok: boolean; error?: string; stale?: true; remaining?: number }> {
-  if (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep)) return { ok: false, error: t('err.invalidRequest') }
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
   const g = await guardStepApproval(itemId, resolved.projectId)
   if (!g.ok) return g
-  if (g.pending.step !== expectedStep) return { ok: false, stale: true, error: REASON_TEXT.approval_stale }
+  if (g.pending.step !== expectedStep) return { ok: false, stale: true, error: libText(t, REASON_TEXT.approval_stale) }
   const admin = createAdminClient()
   const tr = await applyWorkflowEvent(admin, { event: 'approve_step', actorUserId: g.actor.userId, itemId, expectedStep })
-  if (!tr.ok) return tr.reason === 'approval_stale' || tr.conflict ? { ok: false, stale: true, error: tr.error } : { ok: false, error: tr.error }
+  if (!tr.ok) return tr.reason === 'approval_stale' || tr.conflict ? { ok: false, stale: true, error: libText(t, tr.error) } : { ok: false, error: libText(t, tr.error) }
   revalidatePath(`/p/${resolved.projectId}`, 'layout')
   if (tr.actualChanged) after(() => recordProgressSnapshot(resolved.projectId))
   if (tr.reachedFirst) await notifyOnReached(admin, itemId, g.actor.userId)
@@ -507,13 +520,14 @@ type DevWorkflowUpdatedRow = { id: string; assignee_member_id: string | null; st
 export async function setWbsDevWorkflow(
   itemId: string, enabled: boolean, cascade: boolean,
 ): Promise<{ ok: boolean; error?: string; count?: number; cascadeFailed?: boolean; skippedDelegated?: number }> {
+  const t = await serverTranslator()
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
   const g = await requireSubtreeManagerOrAdmin(itemId, resolved.projectId)
   if (!g.ok) return { ok: false, error: g.error }
   // 일괄(cascade)은 관리자만 — 주문 일괄 발행·취소를 끌고 오는 프로젝트 범위
   // 행위라 applyDelegation 이 멤버에게 그은 선과 같은 자리에 둔다. 단건은 담당자·서브트리 관리자도 한다.
-  if (cascade && !g.isAdmin) return { ok: false, error: ERR_DEV_WORKFLOW_CASCADE_ADMIN }
+  if (cascade && !g.isAdmin) return { ok: false, error: t(ERR_DEV_WORKFLOW_CASCADE_ADMIN) }
 
   const admin = createAdminClient()
   const nowIso = new Date().toISOString()
@@ -524,9 +538,9 @@ export async function setWbsDevWorkflow(
   if (!enabled && !cascade) {
     const { data: tagRow, error: tagErr } = await admin
       .from('wbs_items').select('tags').eq('id', itemId).maybeSingle()
-    if (tagErr) return { ok: false, error: `위임 확인 실패: ${tagErr.message}` }
+    if (tagErr) return { ok: false, error: fill(t('srv.wbsAssign.couldNotVerifyDelegation'), { message: tagErr.message }) }
     const tags = ((tagRow as { tags: string[] | null } | null)?.tags ?? [])
-    if (tags.includes(AGENT_TAG)) return { ok: false, error: ERR_DEV_WORKFLOW_DELEGATED }
+    if (tags.includes(AGENT_TAG)) return { ok: false, error: t(ERR_DEV_WORKFLOW_DELEGATED) }
   }
 
   const updatedIds: string[] = []
@@ -564,11 +578,11 @@ export async function setWbsDevWorkflow(
       .from('wbs_items')
       .select('id, parent_id, tags')
       .eq('project_id', resolved.projectId)
-    if (treeErr) return { ok: false, error: `하위 항목 조회 실패: ${treeErr.message}` }
+    if (treeErr) return { ok: false, error: fill(t('srv.wbsAssign.couldNotLoadChildItems'), { message: treeErr.message }) }
     const rows = (allItems ?? []) as { id: string; parent_id: string | null; tags: string[] | null }[]
     const byId = new Map(rows.map(r => [r.id, r]))
     const root = byId.get(itemId)
-    if (!root) return { ok: false, error: '항목 없음' }
+    if (!root) return { ok: false, error: WBS_ACTION_ERRORS.itemMissing }
 
     const childrenOf = new Map<string, typeof rows>()
     for (const r of rows) {
@@ -712,7 +726,7 @@ export async function getWbsAssigneeStage(
   const [read, perm] = await Promise.all([
     sb.from('wbs_items').select('assignee_member_id, stage, dev_workflow, tags').eq('id', itemId).maybeSingle(),
     projectId === null
-      ? Promise.resolve({ ok: false as const, error: '대상을 찾을 수 없습니다.' })
+      ? Promise.resolve({ ok: false as const, error: ERR_MISSING })
       : requireSubtreeManagerOrAdmin(itemId, projectId),
   ])
   const { data, error } = read

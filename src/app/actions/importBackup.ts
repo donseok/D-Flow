@@ -10,16 +10,18 @@ import { createServerClient } from '@/lib/supabase/server'
 import { fetchAllByKeyset } from '@/lib/data/paging'
 import { isUuidLike } from '@/lib/domain/validate'
 import { failWith } from '@/lib/errors/dbFail'
+import { serverTranslator } from '@/lib/i18n/server'
 
 export type WbsBackupResult =
   | { ok: true; backup: { rows: unknown[]; generatedAt: string } }
   | { ok: false; code: string; error: string }
 
-const ERR_INVALID = '잘못된 요청입니다.'
-const ERR_BACKUP = '지금 WBS 를 백업하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_INVALID = 'err.invalidRequest'
+const ERR_BACKUP = 'srv.importBackup.couldNotBackUpWbs'
 
 export async function getWbsBackup(projectId: string): Promise<WbsBackupResult> {
-  if (typeof projectId !== 'string' || !isUuidLike(projectId)) return { ok: false, code: 'INVALID_INPUT', error: ERR_INVALID }
+  const t = await serverTranslator()
+  if (typeof projectId !== 'string' || !isUuidLike(projectId)) return { ok: false, code: 'INVALID_INPUT', error: t(ERR_INVALID) }
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, code: 'DENIED', error: g.error }
   try {
@@ -30,6 +32,6 @@ export async function getWbsBackup(projectId: string): Promise<WbsBackupResult> 
     })
     return { ok: true, backup: { rows, generatedAt: new Date().toISOString() } }
   } catch (e) {
-    return { ok: false, code: 'BACKUP_UNAVAILABLE', error: failWith('import-backup', e, ERR_BACKUP) }
+    return { ok: false, code: 'BACKUP_UNAVAILABLE', error: failWith('import-backup', e, t(ERR_BACKUP)) }
   }
 }

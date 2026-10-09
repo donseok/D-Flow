@@ -32,6 +32,7 @@ import { catalogRoots, needsWeeklyModel } from '@/lib/report/forms/roots'
 import { weeklyReference } from '@/lib/report/forms/reference'
 import type { CatalogModel } from '@/lib/report/catalog/types'
 import type { WeeklyReportModel } from '@/lib/report/weekly'
+import { serverTranslator } from '@/lib/i18n/server'
 
 // 양식 zip 읽기(fs·Storage)는 Node 전용.
 export const runtime = 'nodejs'
@@ -41,17 +42,18 @@ const MIME = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 } as const
 
-const AI_STALE = 'AI 브리핑이 없거나 최신이 아닙니다. 리포트 화면의 AI 브리핑 생성 버튼으로 먼저 생성하세요.'
+const AI_STALE = 'srv.api.report.aiBriefingMissingOutDate'
 
 /**
  * 주간 양식 출력 (정본 §4.8). source 분기는 없다.
  * format 이 weekly_report_pptx|xlsx 를 고르고, 활성 양식 또는 기본 파일을 engine.render 한다.
  */
 export async function GET(req: NextRequest) {
+  const t = await serverTranslator()
   const projectId = req.nextUrl.searchParams.get('projectId')
   const format = req.nextUrl.searchParams.get('format')
-  if (!projectId) return jsonError('프로젝트 누락', 400)
-  if (format !== 'xlsx' && format !== 'pptx') return jsonError('format은 xlsx 또는 pptx여야 합니다', 400)
+  if (!projectId) return jsonError(t('err.projectMissing'), 400)
+  if (format !== 'xlsx' && format !== 'pptx') return jsonError(t('srv.api.report.formatMustXlsxPptx'), 400)
 
   const guard = await requireProjectMember(projectId)
   if (!guard.ok) return jsonError(guard.error, denyStatus(guard.error))
@@ -71,14 +73,14 @@ export async function GET(req: NextRequest) {
     const roots = catalogRoots(scanned.placeholders, setting.mapping)
     const areas = cfg.areas.weekly_section
     if (weekRaw && (!/^\d{4}-\d{2}-\d{2}$/.test(weekRaw) || !isValidIsoDate(weekRaw))) {
-      return jsonError('week(YYYY-MM-DD)가 필요합니다', 400)
+      return jsonError(t('srv.api.report.weekYyyyMmDdRequired'), 400)
     }
-    if (roots.has('sections') && areas.length === 0) return jsonError('설정 필요', 409)
+    if (roots.has('sections') && areas.length === 0) return jsonError(t('srv.api.report.setupRequired'), 409)
     // week 가 없으면 프로젝트 달력의 이번 주다(weeklyReference). 화면의 요약 PPT·엑셀 버튼은 week 없이 부른다 — 예전엔 여기서 400 이라
     // 기본 양식(sections 자리표시자)으로는 그 버튼들이 받아지지 않았다.
 
     const project = await loadReportProject(projectId)
-    if (!project) return jsonError('프로젝트를 찾을 수 없습니다.', 404)
+    if (!project) return jsonError(t('err.projectNotFound'), 404)
 
     const wantsModel = needsWeeklyModel(roots)
     const wbs = wantsModel || roots.has('sections') ? await getComputedWbs(projectId) : null
@@ -138,7 +140,7 @@ export async function GET(req: NextRequest) {
     const failed = configFailureResponse(error, 'report')
     if (failed) return failed
     console.error('[report] 보고서 생성 실패', error instanceof Error ? error.message : error)
-    return jsonError('보고서를 만들지 못했습니다.', 500)
+    return jsonError(t('srv.api.report.couldNotBuildReport'), 500)
   }
 }
 
@@ -158,6 +160,7 @@ async function loadWeeklyModel(
   today: string,
   wbs: Awaited<ReturnType<typeof getComputedWbs>>,
 ): Promise<{ ok: true; model: WeeklyReportModel } | { ok: false; res: NextResponse }> {
+  const t = await serverTranslator()
   const [roster, attendance, meetRes, annRes, teamsRes] = await Promise.all([
     getProjectRoster(projectId),
     getAttendanceRecords(projectId),
@@ -167,7 +170,7 @@ async function loadWeeklyModel(
   ])
   if (!teamsRes.ok) {
     console.error('[report] 프로젝트 팀 조회 실패:', { projectId }, teamsRes.e)
-    return { ok: false, res: jsonError('프로젝트 팀을 확인할 수 없습니다.', 503) }
+    return { ok: false, res: jsonError(t('err.couldNotVerifyProjectTeams'), 503) }
   }
   if (!roster.ok) {
     console.error(`[report] 명단 조회 실패로 보고서를 만들지 않는다: project=${projectId}`)
@@ -211,17 +214,18 @@ async function loadFreshBrief(
   projectId: string,
   timeZone: string,
 ): Promise<{ ok: true; extra: ReturnType<typeof briefToExtraSlide> } | { ok: false; res: NextResponse }> {
+  const t = await serverTranslator()
   let src: Awaited<ReturnType<typeof loadProjectFacts>>
   try {
     src = await loadProjectFacts(projectId)
   } catch (error) {
     console.error('[report] AI 브리핑 근거 조회 실패:', { projectId }, error)
-    return { ok: false, res: jsonError('AI 브리핑 근거를 불러오지 못했습니다.', 503) }
+    return { ok: false, res: jsonError(t('srv.api.report.couldNotLoadAiBriefing'), 503) }
   }
   const facts = src ? buildBriefFacts(src) : null
   const row = facts ? await getAiBrief(projectId, 'weekly', facts.todayWbs) : null
   const fresh = !!row && !!facts && row.status === 'ready' && row.inputHash === briefFactsHash(facts)
-  if (!fresh || !row) return { ok: false, res: jsonError(AI_STALE, 409) }
+  if (!fresh || !row) return { ok: false, res: jsonError(t(AI_STALE), 409) }
   const stamp = stampIn(timeZone, row.updatedAt || new Date())
   return { ok: true, extra: briefToExtraSlide({ headline: row.headline, bodyMd: row.bodyMd }, stamp) }
 }

@@ -15,6 +15,11 @@ import { requireDelegationRight } from '@/lib/agent/delegation'
 import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/agent/subtreeManager'
 import { loadApprovalState, notifyApprovalStep } from '@/lib/agent/approvalState'
 import { STEP_CODE_RE, type PendingApproval } from '@/lib/domain/approvalSteps'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill } from '@/lib/i18n/translate'
+import { ERR_MISSING } from '@/lib/authz/errors'
+import { libText } from '@/lib/i18n/serverText'
 
 /**
  * 에이전트 작업 루프 UI 서버 액션 — 스펙 §5. 2026-08-24: 전용 관제 화면(/agent-ops)을 없애고
@@ -45,12 +50,13 @@ async function loadOrderForAdmin(orderId: string): Promise<
   | { ok: true; order: { id: string; project_id: string; status: string; wbs_item_id: string | null; claimed_by_user_id: string | null }; actor: { userId: string }; pending: PendingApproval | null }
   | { ok: false; error: string }
 > {
-  if (!isUuidLike(orderId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isUuidLike(orderId)) return { ok: false, error: t('err.invalidRequest') }
   const admin = createAdminClient()
   const { data: order, error } = await admin
     .from('agent_work_orders').select('id, project_id, status, wbs_item_id, claimed_by_user_id').eq('id', orderId).maybeSingle()
-  if (error) return { ok: false, error: `주문 조회 실패: ${error.message}` }
-  if (!order) return { ok: false, error: '주문 없음' }
+  if (error) return { ok: false, error: fill(t('err.couldNotLoadOrder'), { message: error.message }) }
+  if (!order) return { ok: false, error: t('err.orderNotFound') }
   const row = order as { id: string; project_id: string; status: string; wbs_item_id: string | null; claimed_by_user_id: string | null }
   if (row.wbs_item_id === null) {
     const g = await requireProjectAdmin(row.project_id)
@@ -67,7 +73,7 @@ async function loadOrderForAdmin(orderId: string): Promise<
     return withAgents(row.project_id, { ok: true as const, order: row, actor: { userId: g.actor.userId }, pending: st.pending })
   }
   const right = await requireCompletionApprover(row.wbs_item_id, row.project_id, { claimedByUserId: row.claimed_by_user_id })
-  if (!right.ok) return { ok: false, error: right.error }
+  if (!right.ok) return { ok: false, error: libText(t, right.error) }
   return withAgents(row.project_id, { ok: true as const, order: row, actor: right.actor, pending: st.pending })
 }
 
@@ -85,12 +91,13 @@ async function loadOrderForReview(orderId: string): Promise<
   | { ok: true; order: { id: string; project_id: string; status: string; wbs_item_id: string | null }; actor: { userId: string } }
   | { ok: false; error: string }
 > {
-  if (!isUuidLike(orderId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isUuidLike(orderId)) return { ok: false, error: t('err.invalidRequest') }
   const admin = createAdminClient()
   const { data: order, error } = await admin
     .from('agent_work_orders').select('id, project_id, status, wbs_item_id').eq('id', orderId).maybeSingle()
-  if (error) return { ok: false, error: `주문 조회 실패: ${error.message}` }
-  if (!order) return { ok: false, error: '주문 없음' }
+  if (error) return { ok: false, error: fill(t('err.couldNotLoadOrder'), { message: error.message }) }
+  if (!order) return { ok: false, error: t('err.orderNotFound') }
   const row = order as { id: string; project_id: string; status: string; wbs_item_id: string | null }
   if (row.wbs_item_id === null) {
     const g = await requireProjectAdmin(row.project_id)
@@ -102,7 +109,7 @@ async function loadOrderForReview(orderId: string): Promise<
   // 관리자도 리프 담당자 본인도 아니다 — 서브트리 관리자인지 추가로 본다. 최종 거부는
   // requireDelegationRight 의 사유를 그대로 쓴다(ERR_NOT_ASSIGNEE — 기존 계약·테스트 유지).
   const subtree = await requireSubtreeManagerOrAdmin(row.wbs_item_id, row.project_id)
-  if (!subtree.ok) return { ok: false, error: right.error }
+  if (!subtree.ok) return { ok: false, error: libText(t, right.error) }
   return withAgents(row.project_id, { ok: true as const, order: row, actor: subtree.actor })
 }
 
@@ -144,10 +151,10 @@ async function notifyReviewResult(
 }
 
 /** 주문 사건이 단계·실적을 건너뛴 사유가 있으면 사람용 경고로. 사유가 무엇이든 알린다 — 종전 경로에서 'parent' 를 빠뜨려 반쪽 상태가 무음으로 끝난 적이 있다. */
-function skippedWarning(skipped: WorkflowSkipped | null): string | undefined {
+function skippedWarning(t: ServerTranslate, skipped: WorkflowSkipped | null): string | undefined {
   if (!skipped) return undefined
   // 모르는 사유도 무음으로 끝내지 않는다 — RPC 가 새 사유를 돌려줘도 여기서 걸리게.
-  return SKIPPED_WARN[skipped] ?? `처리는 됐지만 단계·실적을 바꾸지 않았습니다(${skipped}) — 확인하세요.`
+  return libText(t, SKIPPED_WARN[skipped]) ?? fill(t('srv.agentWork.requestProcessedButStageProgress'), { skipped })
 }
 
 /** 전이 뒤 공통 부수효과 — 화면 갱신, 실적이 바뀌었으면 진척 스냅샷, im·xx 첫 도달이면 후행 알림. 실패는 로깅만. */
@@ -168,10 +175,11 @@ async function afterTransition(
 async function latestCompletionReportId(
   admin: AdminClient, orderId: string,
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string }> {
+  const t = await serverTranslator()
   const { data, error } = await admin
     .from('agent_work_reports').select('id').eq('work_order_id', orderId).eq('kind', 'completion')
     .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle()
-  if (error) return { ok: false, error: `보고 조회 실패: ${error.message}` }
+  if (error) return { ok: false, error: fill(t('srv.agentWork.couldNotLoadReport'), { message: error.message }) }
   return { ok: true, id: (data as { id: string } | null)?.id ?? null }
 }
 
@@ -184,9 +192,10 @@ function isExpectedReportId(v: unknown): v is string | null {
 async function checkReportFresh(
   admin: AdminClient, orderId: string, expectedReportId: string | null,
 ): Promise<{ ok: true; reportId: string | null } | { ok: false; error: string; stale?: true }> {
+  const t = await serverTranslator()
   const latest = await latestCompletionReportId(admin, orderId)
   if (!latest.ok) return latest
-  if (latest.id !== expectedReportId) return { ok: false, stale: true, error: ERR_REPORT_STALE }
+  if (latest.id !== expectedReportId) return { ok: false, stale: true, error: libText(t, ERR_REPORT_STALE) }
   return { ok: true, reportId: latest.id }
 }
 
@@ -220,15 +229,16 @@ async function recordReviewOn(admin: AdminClient, reportId: string | null, patch
  * loadOrderForAdmin 이 이미 확정했고, 실적은 사람이 치는 값이 아니라 승인 사건의 크레딧이다.
  */
 export async function approveAgentCompletion(orderId: string, expectedReportId: string | null, expectedStep?: string | null): Promise<ActionResult> {
-  if (!isExpectedReportId(expectedReportId)) return { ok: false, error: '잘못된 요청입니다.' }
-  if (expectedStep != null && (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep))) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isExpectedReportId(expectedReportId)) return { ok: false, error: t('err.invalidRequest') }
+  if (expectedStep != null && (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep))) return { ok: false, error: t('err.invalidRequest') }
   const loaded = await loadOrderForAdmin(orderId)
   if (!loaded.ok) return loaded
   const { order, actor, pending } = loaded
-  if (order.status !== 'reported') return { ok: false, error: `승인 가능한 상태가 아닙니다(${order.status}).` }
-  if (!order.wbs_item_id) return { ok: false, error: 'WBS 항목이 삭제된 주문입니다. 취소로 정리하세요.' }
+  if (order.status !== 'reported') return { ok: false, error: fill(t('srv.agentWork.orderCannotApprovedState'), { status: order.status }) }
+  if (!order.wbs_item_id) return { ok: false, error: t('srv.agentWork.wbsItemOrderDeleted') }
   // 화면이 본 단계가 지금 대기 단계가 아니면 쓰기 전에 돌려보낸다 — RPC 가 같은 대조를 설정 FOR SHARE 아래에서 다시 한다
-  if (expectedStep != null && pending && pending.step !== expectedStep) return { ok: false, stale: true, error: REASON_TEXT.approval_stale }
+  if (expectedStep != null && pending && pending.step !== expectedStep) return { ok: false, stale: true, error: libText(t, REASON_TEXT.approval_stale) }
 
   const admin = createAdminClient()
   // RPC 가 주문 행 잠금 아래에서 같은 보고 id 를 다시 대조한다(0011 H2-i) — 이 대조와 전이 사이의 재보고도 stale 로 막힌다.
@@ -236,9 +246,9 @@ export async function approveAgentCompletion(orderId: string, expectedReportId: 
   if (!fresh.ok) return fresh
   const transition = await applyWorkflowEvent(admin, { event: 'approve', actorUserId: actor.userId, orderId, expectedReportId, expectedStep })
   if (!transition.ok) {
-    if (transition.stale) return { ok: false, stale: true, error: ERR_REPORT_STALE }
-    if (transition.reason === 'approval_stale') return { ok: false, stale: true, error: transition.error }
-    return { ok: false, error: transition.conflict ? '상태가 바뀌어 승인하지 못했습니다. 다시 시도하세요.' : transition.error }
+    if (transition.stale) return { ok: false, stale: true, error: libText(t, ERR_REPORT_STALE) }
+    if (transition.reason === 'approval_stale') return { ok: false, stale: true, error: libText(t, transition.error) }
+    return { ok: false, error: transition.conflict ? t('srv.agentWork.stateChangedApprovalNotApplied') : transition.error }
   }
   // 중간 단계(SP5b): 주문은 reported·단계 im 그대로 — 검토 기록(review_action)은 마지막 단계에서만 쓴다. 다음 단계 승인 자격자에게 알린다
   if (transition.approval && transition.approval.remaining > 0) {
@@ -253,20 +263,21 @@ export async function approveAgentCompletion(orderId: string, expectedReportId: 
   await recordReviewOn(admin, fresh.reportId, { review_action: 'approve', reviewed_by: actor.userId, reviewed_at: new Date().toISOString() }, '승인')
   await notifyReviewResult(admin, order, 'work.approved', actor.userId)
   await afterTransition(admin, { projectId: order.project_id, itemId: order.wbs_item_id, actorUserId: actor.userId, transition })
-  const warning = skippedWarning(transition.skipped)
+  const warning = skippedWarning(t, transition.skipped)
   return warning ? { ok: true, warning } : { ok: true }
 }
 
 /** 반려 — 원자 전이. reported→claimed CAS + 단계 ip + 실적 표.rw(반려·재작업 크레딧 — 작업은 했으므로 claim 보다 높다, 스펙 D4). */
 export async function rejectAgentCompletion(orderId: string, note: string, expectedReportId: string | null): Promise<ActionResult> {
-  if (!isExpectedReportId(expectedReportId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isExpectedReportId(expectedReportId)) return { ok: false, error: t('err.invalidRequest') }
   const trimmed = note.trim()
-  if (!trimmed) return { ok: false, error: '반려 사유가 필요합니다.' }
+  if (!trimmed) return { ok: false, error: t('srv.agentWork.rejectionReasonRequired') }
   const loaded = await loadOrderForReview(orderId)
   if (!loaded.ok) return loaded
   const { order, actor } = loaded
   if (order.status !== 'reported') {
-    return { ok: false, error: `반려 가능한 상태가 아닙니다(${order.status}).` }
+    return { ok: false, error: fill(t('srv.agentWork.orderCannotRejectedState'), { status: order.status }) }
   }
   const admin = createAdminClient()
   // RPC 가 주문 행 잠금 아래에서 같은 보고 id 를 다시 대조한다(0011 H2-i) — 이 대조와 전이 사이의 재보고도 stale 로 막힌다.
@@ -274,13 +285,13 @@ export async function rejectAgentCompletion(orderId: string, note: string, expec
   if (!fresh.ok) return fresh
   const transition = await applyWorkflowEvent(admin, { event: 'reject', actorUserId: actor.userId, orderId, expectedReportId })
   if (!transition.ok) {
-    if (transition.stale) return { ok: false, stale: true, error: ERR_REPORT_STALE }
-    return { ok: false, error: transition.conflict ? '상태가 바뀌어 반려하지 못했습니다.' : transition.error }
+    if (transition.stale) return { ok: false, stale: true, error: libText(t, ERR_REPORT_STALE) }
+    return { ok: false, error: transition.conflict ? t('srv.agentWork.stateChangedRejectionNotApplied') : transition.error }
   }
   await recordReviewOn(admin, fresh.reportId, { review_action: 'reject', reviewed_by: actor.userId, reviewed_at: new Date().toISOString(), review_note: trimmed }, '반려')
   await notifyReviewResult(admin, order, 'work.rejected', actor.userId)
   await afterTransition(admin, { projectId: order.project_id, itemId: order.wbs_item_id, actorUserId: actor.userId, transition })
-  const warning = skippedWarning(transition.skipped)
+  const warning = skippedWarning(t, transition.skipped)
   return warning ? { ok: true, warning } : { ok: true }
 }
 
@@ -297,18 +308,19 @@ async function unapproveOrder(
   orderId: string,
   opts: { to: 'reported' | 'claimed'; note: string | null; detail: string },
 ): Promise<ActionResult> {
+  const t = await serverTranslator()
   const loaded = await loadOrderForReview(orderId)
   if (!loaded.ok) return loaded
   const { order, actor } = loaded
-  if (order.status !== 'approved') return { ok: false, error: `승인을 무를 수 있는 상태가 아닙니다(${order.status}).` }
-  if (!order.wbs_item_id) return { ok: false, error: 'WBS 항목이 삭제된 주문입니다. 취소로 정리하세요.' }
+  if (order.status !== 'approved') return { ok: false, error: fill(t('srv.agentWork.approvalCannotUndoneState'), { status: order.status }) }
+  if (!order.wbs_item_id) return { ok: false, error: t('srv.agentWork.wbsItemOrderDeleted') }
 
   const admin = createAdminClient()
   const transition = await applyWorkflowEvent(admin, {
     event: opts.to === 'reported' ? 'unapprove' : 'rework', actorUserId: actor.userId, orderId,
   })
   if (!transition.ok) {
-    return { ok: false, error: transition.conflict ? '상태가 바뀌어 처리하지 못했습니다. 다시 시도하세요.' : transition.error }
+    return { ok: false, error: transition.conflict ? t('err.stateChangedRequestNotProcessed') : transition.error }
   }
   // 재작업은 반려로 남긴다(사유 보존) — review_action 은 CHECK 로 approve|reject 뿐이고,
   // 에이전트 쪽 반려 감지가 이 값을 본다. 승인 취소는 "아직 검토 안 함"으로 되돌린다.
@@ -318,7 +330,7 @@ async function unapproveOrder(
   await recordReview(admin, orderId, reviewPatch, '되감기')
   await notifyReviewResult(admin, order, 'work.rejected', actor.userId, opts.detail)
   await afterTransition(admin, { projectId: order.project_id, itemId: order.wbs_item_id, actorUserId: actor.userId, transition })
-  const warning = skippedWarning(transition.skipped)
+  const warning = skippedWarning(t, transition.skipped)
   return warning ? { ok: true, warning } : { ok: true }
 }
 
@@ -329,8 +341,9 @@ export async function unapproveAgentCompletion(orderId: string): Promise<ActionR
 
 /** 재작업 요청 — 에이전트에게 되돌린다(claimed). 반려와 같은 착지점이라 에이전트 쪽 감지가 그대로 동작한다. */
 export async function requestAgentRework(orderId: string, note: string): Promise<ActionResult> {
+  const t = await serverTranslator()
   const trimmed = note.trim()
-  if (!trimmed) return { ok: false, error: '재작업 사유가 필요합니다.' }
+  if (!trimmed) return { ok: false, error: t('srv.agentWork.reworkReasonRequired') }
   return unapproveOrder(orderId, { to: 'claimed', note: trimmed, detail: '재작업이 요청되었습니다' })
 }
 
@@ -360,11 +373,12 @@ export async function getAgentOrderForItem(itemId: string): Promise<
   | { ok: true; order: AgentOrderStatus | null; priorOrders: AgentOrderBrief[]; projectId: string }
   | { ok: false; error: string }
 > {
-  if (!isUuidLike(itemId)) return { ok: false, error: '잘못된 요청입니다.' }
+  const t = await serverTranslator()
+  if (!isUuidLike(itemId)) return { ok: false, error: t('err.invalidRequest') }
   const sb = await createServerClient()
   const { data: item, error: itemErr } = await sb.from('wbs_items').select('project_id').eq('id', itemId).maybeSingle()
-  if (itemErr) return { ok: false, error: `항목 조회 실패: ${itemErr.message}` }
-  if (!item) return { ok: false, error: '대상을 찾을 수 없습니다.' }
+  if (itemErr) return { ok: false, error: fill(t('err.couldNotLoadItems'), { message: itemErr.message }) }
+  if (!item) return { ok: false, error: ERR_MISSING }
   const projectId = (item as { project_id: string }).project_id
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, error: g.error }
@@ -379,7 +393,7 @@ export async function getAgentOrderForItem(itemId: string): Promise<
     .select('id, status, claimed_by, claimed_at, updated_at')
     .eq('wbs_item_id', itemId)
     .order('updated_at', { ascending: false })
-  if (ordErr) return { ok: false, error: `주문 조회 실패: ${ordErr.message}` }
+  if (ordErr) return { ok: false, error: fill(t('err.couldNotLoadOrder'), { message: ordErr.message }) }
   const rows = (orders ?? []) as Array<{
     id: string; status: string; claimed_by: string | null; claimed_at: string | null; updated_at: string
   }>
@@ -394,7 +408,7 @@ export async function getAgentOrderForItem(itemId: string): Promise<
     .eq('work_order_id', row.id)
     // created_at 이 같으면 id 순 — 명세 패널이 고르는 마지막 completion 이 서버의 최신(latestCompletionReportId)과 같다.
     .order('created_at', { ascending: true }).order('id', { ascending: true })
-  if (repErr) return { ok: false, error: `보고 조회 실패: ${repErr.message}` }
+  if (repErr) return { ok: false, error: fill(t('srv.agentWork.couldNotLoadReport'), { message: repErr.message }) }
   // 결재 대기면 대기 승인 단계(SP5b) — 둘 이상일 때만 싣는다(1단계는 expectedStep 생략이 계약이고 기존 반환 형태를 지킨다).
   // 판독 실패는 로그 + 생략(버튼은 그대로 — 서버가 approval_stale 로 다시 판정한다)
   let approval: AgentOrderStatus['approval']

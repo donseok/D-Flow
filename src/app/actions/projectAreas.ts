@@ -18,35 +18,39 @@ import {
   type AreaInput,
 } from '@/lib/domain/areas'
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
-import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
-import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
+import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
+import { failWith, rpcFailure, tokenTable, type OwnTokenKeys } from '@/lib/errors/dbFail'
 import { enqueueWeeklyAreaIndexChange } from '@/lib/ai/index/enqueueChange'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { fill } from '@/lib/i18n/translate'
+import { libText } from '@/lib/i18n/serverText'
 
 /** 저장 결과 — rowsAdded 는 RPC 가 이번 주 이후 문서에 새로 만든 주간 행 수(비활성·이슈 영역은 0) */
 export type UpsertAreaResult =
   | { ok: true; id: string; status: 'created' | 'updated'; rowsAdded: number }
   | { ok: false; code: string; error: string; retryable?: boolean }
 
-const ERR_BAD_REQUEST = '잘못된 요청입니다.'
-const ERR_NOT_FOUND = '이 프로젝트의 영역이 아니거나 존재하지 않습니다.'
-const ERR_TEAM_SCOPE = '이 프로젝트에서 쓸 수 없는 팀입니다.'
-const ERR_KIND_IMMUTABLE = '영역 종류는 바꿀 수 없습니다.'
-const ERR_PROJECT_IMMUTABLE = '다른 프로젝트의 영역으로 옮길 수 없습니다.'
-const ERR_SAVE = '영역을 저장하지 못했습니다. 잠시 후 다시 시도하세요.'
-const dupCode = (code: string) => `'${code}' 코드가 이미 있습니다.`
+const ERR_BAD_REQUEST = 'err.invalidRequest'
+const ERR_NOT_FOUND = 'srv.projectAreas.areaDoesNotBelongProject'
+const ERR_TEAM_SCOPE = 'err.teamCannotUsedProject'
+const ERR_KIND_IMMUTABLE = 'srv.projectAreas.areaKindCannotChanged'
+const ERR_PROJECT_IMMUTABLE = 'srv.projectAreas.areaCannotMovedAnotherProject'
+const ERR_SAVE = 'srv.projectAreas.couldNotSaveArea'
+const dupCode = (tr: ServerTranslate, code: string) => fill(tr('err.codeAlreadyExists'), { code })
 
 /** upsert_project_area 의 자기 토큰(D45 — 재검토 T6). 입력 토큰 AREA_INVALID_INPUT(22023)은 넣지 않는다 — 모양 검사·validateArea 가
  *  RPC 앞에서 같은 것을 거르므로 나면 결함이다(failWith 로그 + 일반 문구). 40P01·55P03 은 rpcFailure 가 503 재시도로 판정한다 */
-const AREA_TOKENS: OwnTokenTable = {
+const AREA_TOKENS: OwnTokenKeys = {
   AREA_FORBIDDEN: { status: 403, code: 'ERR_DENIED', message: ERR_DENIED },
   PROJECT_NOT_FOUND: { status: 404, code: 'ERR_MISSING', message: ERR_MISSING },
-  AREA_NOT_FOUND: { status: 404, code: 'ERR_MISSING', message: ERR_NOT_FOUND },
-  PROJECT_AREA_KIND_IMMUTABLE: { status: 400, code: 'INVALID_INPUT', message: ERR_KIND_IMMUTABLE },
+  AREA_NOT_FOUND: { status: 404, code: 'ERR_MISSING', key: ERR_NOT_FOUND },
+  PROJECT_AREA_KIND_IMMUTABLE: { status: 400, code: 'INVALID_INPUT', key: ERR_KIND_IMMUTABLE },
   PROJECT_AREA_CODE_IMMUTABLE: { status: 400, code: 'INVALID_INPUT', message: ERR_AREA_CODE_IMMUTABLE },
-  PROJECT_AREA_PROJECT_IMMUTABLE: { status: 400, code: 'INVALID_INPUT', message: ERR_PROJECT_IMMUTABLE },
-  AREA_TEAM_SCOPE: { status: 400, code: 'INVALID_INPUT', message: ERR_TEAM_SCOPE },
+  PROJECT_AREA_PROJECT_IMMUTABLE: { status: 400, code: 'INVALID_INPUT', key: ERR_PROJECT_IMMUTABLE },
+  AREA_TEAM_SCOPE: { status: 400, code: 'INVALID_INPUT', key: ERR_TEAM_SCOPE },
   // 같은 code 의 전용 팀이 있는 공용 팀을 새로 붙일 때(*_command_receipts ⑤′ — 전환 뒤 오래된 폼). 이미 배정된 행의 재저장은 통과한다
-  TEAM_SCOPE_PROJECT_OWNED: { status: 400, code: 'INVALID_INPUT', message: ERR_TEAM_SCOPE },
+  TEAM_SCOPE_PROJECT_OWNED: { status: 400, code: 'INVALID_INPUT', key: ERR_TEAM_SCOPE },
   AREA_CODE_INVALID: { status: 400, code: 'INVALID_INPUT', message: ERR_ISSUE_AREA_CODE },
   PROJECT_AREA_CODE_INVALID: { status: 400, code: 'INVALID_INPUT', message: ERR_ISSUE_AREA_CODE },
 }
@@ -74,6 +78,7 @@ function assignableTeamIds(cfg: ProjectConfig, areaId: string | undefined): Set<
  * 이번 주 키(SP5 D34). 이슈 영역(kind issue_area)도 같은 길이다(SP5 — RPC 가 그 종류에는 행을 만들지 않는다).
  */
 export async function upsertArea(projectId: string, input: AreaInput): Promise<UpsertAreaResult> {
+  const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, code: g.error, error: g.error }
   // 서버 액션 입력은 타입을 믿지 않는다.
@@ -81,10 +86,10 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
       || typeof input.active !== 'boolean' || !Array.isArray(input.teams)
       || (input.id !== undefined && (typeof input.id !== 'string' || !isUuidLike(input.id)))
       || !input.teams.every(t => t && typeof t.teamId === 'string' && isUuidLike(t.teamId))) {
-    return { ok: false, code: 'INVALID_INPUT', error: ERR_BAD_REQUEST }
+    return { ok: false, code: 'INVALID_INPUT', error: tr(ERR_BAD_REQUEST) }
   }
   const v = validateArea(input, [])
-  if (!v.ok) return { ok: false, code: 'INVALID_INPUT', error: v.error }
+  if (!v.ok) return { ok: false, code: 'INVALID_INPUT', error: libText(tr, v.error) }
   const a = v.value
 
   let cfg: ProjectConfig
@@ -92,7 +97,7 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
     cfg = await getProjectConfig(projectId)
   } catch (e) {
     if (e instanceof ConfigUnavailableError) {
-      return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('areas/upsert', e, ERR_CONFIG_UNAVAILABLE), retryable: true }
+      return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('areas/upsert', e, configText(tr, ERR_CONFIG_UNAVAILABLE)), retryable: true }
     }
     throw e
   }
@@ -102,11 +107,11 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
     const cal = requireCalendar(cfg)
     fromWeek = weekKeyOf(cal.weekStart, todayIn(cal.timezone, new Date()))
   } catch (e) {
-    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: `${CONFIG_MESSAGES[e.code]} (${e.key})` }
+    if (e instanceof ConfigKeyError) return { ok: false, code: 'CONFIG_INVALID', error: `${configText(tr, CONFIG_MESSAGES[e.code])} (${e.key})` }
     throw e
   }
   const allowed = assignableTeamIds(cfg, a.id)
-  if (a.teams.some(t => !allowed.has(t.teamId))) return { ok: false, code: 'INVALID_INPUT', error: ERR_TEAM_SCOPE }
+  if (a.teams.some(t => !allowed.has(t.teamId))) return { ok: false, code: 'INVALID_INPUT', error: tr(ERR_TEAM_SCOPE) }
 
   const { admin } = adminFor({ projectId })
   const { data, error } = await admin.rpc('upsert_project_area', {
@@ -117,10 +122,10 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
     p_from_week: fromWeek,
   })
   if (error) {
-    const f = rpcFailure(error, AREA_TOKENS)
-    if (f) return { ok: false, code: f.code, error: f.message, ...(f.retryable ? { retryable: true } : {}) }
-    if (error.code === '23505') return { ok: false, code: 'INVALID_INPUT', error: dupCode(a.code) }
-    return { ok: false, code: 'UNAVAILABLE', error: failWith('areas/upsert', error, ERR_SAVE) }
+    const f = rpcFailure(error, tokenTable(AREA_TOKENS, tr), tr)
+    if (f) return { ok: false, code: f.code, error: libText(tr, f.message), ...(f.retryable ? { retryable: true } : {}) }
+    if (error.code === '23505') return { ok: false, code: 'INVALID_INPUT', error: dupCode(tr, a.code) }
+    return { ok: false, code: 'UNAVAILABLE', error: failWith('areas/upsert', error, tr(ERR_SAVE)) }
   }
   const r = data as { status: 'created' | 'updated'; area_id: string; rows_added: number }
   // 주간 영역의 이름이 바뀌면 그 영역의 행이 든 주간 문서의 색인 본문(행 머리의 영역 이름)이 낡는다 — 그 문서들을 다시 색인한다.

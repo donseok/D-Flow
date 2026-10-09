@@ -22,7 +22,7 @@ export interface AuthzEventView {
 }
 export type AuthzEventsResult = { ok: true; rows: AuthzEventView[]; nextBefore: number | null } | { ok: false; error: string }
 
-const ERR_LOAD = '권한 변경 이력을 불러오지 못했습니다.'
+const ERR_LOAD = 'srv.authzEvents.couldNotLoadPermissionChange'
 
 type Named = Map<string, string> | null     // null = 조회 실패(삭제된 계정과 구분한다)
 
@@ -51,15 +51,15 @@ async function lookup(table: 'profiles' | 'people' | 'projects', admin: ReturnTy
 }
 
 export async function listAuthzEvents(workspaceId: string, opts?: { limit?: number; before?: number }): Promise<AuthzEventsResult> {
-  if (typeof workspaceId !== 'string' || !isUuidLike(workspaceId)) return { ok: false, error: '워크스페이스 id가 올바르지 않습니다.' }
+  // 오류 문구와 목록에 보이는 글자(종류·원인·요약·이름 자리 대체)는 요청의 화면 언어를 따른다 — 요청 범위 밖(단위 테스트)에서는 한국어
+  const t = await serverTranslator()
+  if (typeof workspaceId !== 'string' || !isUuidLike(workspaceId)) return { ok: false, error: t('err.workspaceIdNotValid') }
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const r = await listAuthzEventRows(sb, { workspaceId, includePlatform: g.actor.isSuperuser, limit: opts?.limit, before: opts?.before })
-  if (!r.ok) { console.error('[authz events] 이력 조회 실패', { workspaceId, cause: r.error }); return { ok: false, error: ERR_LOAD } }
+  if (!r.ok) { console.error('[authz events] 이력 조회 실패', { workspaceId, cause: r.error }); return { ok: false, error: t(ERR_LOAD) } }
 
-  // 목록에 보이는 글자(종류·원인·요약·이름 자리 대체)는 요청의 화면 언어를 따른다 — 요청 범위 밖(단위 테스트)에서는 한국어
-  const t = await serverTranslator()
   const nameUnknown = t('authz.who.unavailable')
   const { admin } = adminFor({ workspaceId })
   const uniq = (xs: (string | null)[]) => [...new Set(xs.filter((x): x is string => x !== null))]

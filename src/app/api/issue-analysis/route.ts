@@ -20,6 +20,7 @@ import {
   buildIssueAnalysisFilename,
 } from '@/lib/report/issues/export'
 import type { CatalogModel } from '@/lib/report/catalog/types'
+import { serverTranslator } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,9 +32,10 @@ export const dynamic = 'force-dynamic'
  * 제품 고정 슬라이드 삽입(§4.9)은 방식(A/B)과 테마 색이 아직 스파이크라 여기서 끼우지 않는다.
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  const t = await serverTranslator()
   const projectId = req.nextUrl.searchParams.get('projectId')?.trim() ?? ''
   const runId = req.nextUrl.searchParams.get('runId')?.trim() ?? ''
-  if (!projectId || !runId) return jsonError('projectId와 runId가 필요합니다.', 400)
+  if (!projectId || !runId) return jsonError(t('srv.api.issueAnalysis.projectidRunidRequired'), 400)
 
   const guard = await requireProjectMember(projectId)
   if (!guard.ok) return jsonError(guard.error, denyStatus(guard.error))
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     let filename = 'issue-analysis.pptx'
     if (needsIssueAnalysisRun(roots)) {
       const saved = await loadSavedIssueAnalysisRun(projectId, runId)
-      if (!saved) return jsonError('저장된 이슈 분석 실행을 찾을 수 없습니다.', 404)
+      if (!saved) return jsonError(t('srv.api.issueAnalysis.savedIssueAnalysisRunNot'), 404)
       if (roots.has('custom')) valueOf(cfg, 'fields.issue')
       const authorName = (await getDisplayName())?.trim() || '작성자'
       const tz = requireCalendar(cfg).timezone
@@ -101,6 +103,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       '[issue-analysis] PPT 다운로드 실패:',
       error instanceof Error ? error.message : error,
     )
-    return jsonError('이슈 분석서 PPT를 생성하지 못했습니다.', 500)
+    return jsonError(t('srv.api.issueAnalysis.couldNotGenerateIssueAnalysis'), 500)
   }
 }

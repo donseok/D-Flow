@@ -14,9 +14,6 @@ import {
 } from '@/app/actions/inviteRedeem'
 
 const E_INVALID_LINK_KEY = 'invite.err.invalidLink' satisfies DictKey
-// inviteRedeem.ts 의 E5 원문. 액션 모듈은 'use server' 라 async 함수 외에는 export 할 수 없어
-// 상수를 공유하지 못한다 — 문자열로 대조하므로 서버 문구를 바꾸면 여기도 함께 바꿀 것.
-const E_OTHER_ACCOUNT = '이 초대는 다른 이메일 주소를 위한 것입니다. 초대받은 계정으로 로그인해 주세요.'
 // 세션 판정 실패(네트워크 등)는 화면 언어를 따르는 사전 문구 — 상태에는 키를 담고 그릴 때 푼다(서버가 준 사유는 그대로 담긴다)
 const E_SESSION_CHECK_KEY = 'invite.err.sessionCheck' satisfies DictKey
 
@@ -96,7 +93,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
     const res = await redeemInvite(token)
     if (!res.ok) {
       // 서버 로그아웃이 실패·던져도 로컬 세션은 지운다(endSession — 로그아웃 경로는 하나, AA8)
-      if (signOutOnMismatch && res.error === E_OTHER_ACCOUNT) await endSession()
+      if (signOutOnMismatch && res.code === 'other_account') await endSession()   // 서버 문구는 화면 언어를 따른다 — 사유는 code 로 본다
       setError(res.error)
       return
     }

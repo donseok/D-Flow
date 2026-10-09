@@ -10,36 +10,38 @@ import { FIELD_ENTITIES, type CustomValues, type FieldEntity } from '@/lib/domai
 import { customFieldChanges, mapCustomFieldDbError, parseCustomValues, validateCustomValues, type FieldRowError } from '@/lib/domain/customFieldValues'
 import { isUuidLike } from '@/lib/domain/validate'
 import { enqueueIndexChange, enqueueWeeklyRowIndexChange } from '@/lib/ai/index/enqueueChange'
-import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
+import { failWith, rpcFailure, tokenTable, type OwnTokenKeys } from '@/lib/errors/dbFail'
 import type { ModuleId } from '@/lib/modules/defaults'
+import { serverTranslator } from '@/lib/i18n/server'
 const MODULES: Record<FieldEntity, ModuleId> = { wbs_item: 'wbs', issue: 'issues', weekly_row: 'weekly' }
 const entityOk = (v: unknown): v is FieldEntity => typeof v === 'string' && (FIELD_ENTITIES as readonly string[]).includes(v)
-const ERR = '추가 정보를 저장하지 못했습니다. 최신 값을 확인한 뒤 다시 시도하세요.'
-const INVALID = '추가 정보의 입력값과 편집 권한을 확인하세요.'
+const ERR = 'srv.customFieldValues.couldNotSaveCustomFields'
+const INVALID = 'srv.customFieldValues.checkCustomFieldValuesEdit'
 /** latest: FIELD_CONFLICT 때 그 행의 현재 custom(읽혔을 때만) — 화면이 내 값과 나란히 보이고 고르게 한다(개정 §5.8, Q05) */
 export type CustomFieldSaveResult = { ok: true; values: CustomValues } | { ok: false; code: string; error: string; fieldErrors?: Record<string, FieldRowError>; latest?: CustomValues }
-const TOKENS: OwnTokenTable = {
-  CUSTOM_FIELD_ADMIN_ONLY: { status: 403, code: 'ERR_DENIED', message: '관리자만 편집할 수 있는 필드가 있습니다.' },
-  CUSTOM_FIELD_INACTIVE: { status: 422, code: 'FIELD_INVALID', message: '비활성 필드의 값은 변경하거나 지울 수 없습니다.' },
-  CUSTOM_FIELD_REQUIRED: { status: 422, code: 'FIELD_INVALID', message: '필수 필드의 값을 입력하세요.' },
-  CUSTOM_FIELD_INVALID: { status: 422, code: 'FIELD_INVALID', message: INVALID },
-  CUSTOM_FIELD_UNKNOWN: { status: 422, code: 'FIELD_INVALID', message: '필드 정의가 변경되었습니다. 최신 설정과 값을 확인하세요.' },
-  CUSTOM_FIELD_NULL: { status: 422, code: 'FIELD_INVALID', message: INVALID },
-  CUSTOM_FIELD_SHAPE: { status: 422, code: 'FIELD_INVALID', message: INVALID },
-  CUSTOM_FIELD_SIZE: { status: 422, code: 'FIELD_INVALID', message: '한 행의 추가 정보는 최대 16KB입니다.' },
+const TOKENS: OwnTokenKeys = {
+  CUSTOM_FIELD_ADMIN_ONLY: { status: 403, code: 'ERR_DENIED', key: 'srv.customFieldValues.someFieldsCanEditedOnly' },
+  CUSTOM_FIELD_INACTIVE: { status: 422, code: 'FIELD_INVALID', key: 'srv.customFieldValues.valuesInactiveFieldsCannotChanged' },
+  CUSTOM_FIELD_REQUIRED: { status: 422, code: 'FIELD_INVALID', key: 'srv.customFieldValues.enterValueRequiredFields' },
+  CUSTOM_FIELD_INVALID: { status: 422, code: 'FIELD_INVALID', key: INVALID },
+  CUSTOM_FIELD_UNKNOWN: { status: 422, code: 'FIELD_INVALID', key: 'srv.customFieldValues.fieldDefinitionsChanged' },
+  CUSTOM_FIELD_NULL: { status: 422, code: 'FIELD_INVALID', key: INVALID },
+  CUSTOM_FIELD_SHAPE: { status: 422, code: 'FIELD_INVALID', key: INVALID },
+  CUSTOM_FIELD_SIZE: { status: 422, code: 'FIELD_INVALID', key: 'srv.customFieldValues.customFieldsOneRowCan' },
 }
 /** Session JWT only. Full JSONB compare-and-swap prevents a stale form from overwriting a changed admin/other field. */
 export async function saveCustomFieldValues(projectId: string, entity: FieldEntity, rowId: string, expected: unknown, next: unknown): Promise<CustomFieldSaveResult> {
+  const t = await serverTranslator()
   const g = await requireProjectMember(projectId)
   if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: g.error }
   const mod = await requireModule({ projectId }, entityOk(entity) ? MODULES[entity] : 'wbs')
   if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: mod.error }
-  if (!entityOk(entity) || !isUuidLike(rowId) || !parseCustomValues(expected).ok) return { ok: false, code: 'FIELD_INVALID', error: INVALID }
+  if (!entityOk(entity) || !isUuidLike(rowId) || !parseCustomValues(expected).ok) return { ok: false, code: 'FIELD_INVALID', error: t(INVALID) }
   try {
     const cfg = await getProjectConfig(projectId)
     const defs = valueOf(cfg, `fields.${entity}`)
     const checked = validateCustomValues(defs, next, expected, isProjectAdmin(g.actor, projectId))
-    if (!checked.ok) return { ok: false, code: 'FIELD_INVALID', error: INVALID, fieldErrors: checked.errors }
+    if (!checked.ok) return { ok: false, code: 'FIELD_INVALID', error: t(INVALID), fieldErrors: checked.errors }
     const sb = await createServerClient()
     const old = JSON.stringify(expected)
     const patch = { custom: checked.value }
@@ -50,13 +52,13 @@ export async function saveCustomFieldValues(projectId: string, entity: FieldEnti
         ? await sb.from('issues').update({ ...patch, updated_at: new Date().toISOString() }).eq('project_id', projectId).eq('id', rowId).eq('custom', old).select('custom').maybeSingle()
         : await sb.from('weekly_report_rows').update(patch).eq('project_id', projectId).eq('id', rowId).eq('custom', old).select('custom').maybeSingle()
     if (reply.error) {
-      const mapped = rpcFailure(reply.error, TOKENS)
+      const mapped = rpcFailure(reply.error, tokenTable(TOKENS, t), t)
       const fieldErrors = mapCustomFieldDbError(reply.error)
-      return { ok: false, code: reply.error.code === '42501' ? 'ERR_DENIED' : mapped?.code ?? 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', reply.error, mapped?.message ?? ERR), ...(fieldErrors ? { fieldErrors } : {}) }
+      return { ok: false, code: reply.error.code === '42501' ? 'ERR_DENIED' : mapped?.code ?? 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', reply.error, mapped?.message ?? t(ERR)), ...(fieldErrors ? { fieldErrors } : {}) }
     }
     if (!reply.data) {
       // 0행 = 그새 값이 바뀌었거나(충돌) 행·권한이 사라졌다. 현재 값을 읽어 같이 돌려준다 — 못 읽으면 latest 없이(화면은 새로 읽는다)
-      const conflict = { ok: false as const, code: 'FIELD_CONFLICT', error: '값이나 편집 권한이 바뀌었습니다. 최신 행을 확인한 뒤 저장하세요.' }
+      const conflict = { ok: false as const, code: 'FIELD_CONFLICT', error: t('srv.customFieldValues.valuesEditPermissionsChanged') }
       const now = entity === 'wbs_item'
         ? await sb.from('wbs_items').select('custom').eq('project_id', projectId).eq('id', rowId).maybeSingle()
         : entity === 'issue'
@@ -67,7 +69,7 @@ export async function saveCustomFieldValues(projectId: string, entity: FieldEnti
       return latest.ok ? { ...conflict, latest: latest.value } : conflict
     }
     const saved = parseCustomValues(reply.data.custom)
-    if (!saved.ok) return { ok: false, code: 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', new Error('saved row shape'), ERR) }
+    if (!saved.ok) return { ok: false, code: 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', new Error('saved row shape'), t(ERR)) }
     // WBS 값 변경 이력(§3.6.7) — change_logs 에 바뀐 키마다 field='custom.<key>'(현 필드 편집 관례 — actions/wbs.ts). CAS 를 통과했으므로
     // expected 가 곧 변경 전 값이다. 이슈·주간 행은 필드 값 이력이 없다(비목표). 본 저장은 이미 성공했다 — 이력 실패로 되돌리지 않되 삼키지도 않는다
     const before = parseCustomValues(expected)
@@ -85,5 +87,5 @@ export async function saveCustomFieldValues(projectId: string, entity: FieldEnti
       : enqueueIndexChange({ domain: entity === 'wbs_item' ? 'wbs' : 'issues', projectId, entityId: rowId }))
     revalidatePath(`/p/${projectId}`, 'layout')
     return { ok: true, values: saved.value }
-  } catch (e) { return { ok: false, code: 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', e, ERR) } }
+  } catch (e) { return { ok: false, code: 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', e, t(ERR)) } }
 }

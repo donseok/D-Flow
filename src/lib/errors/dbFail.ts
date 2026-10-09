@@ -2,7 +2,8 @@
  *    고정 문구만 싣는다. 토큰은 기존 dbToken·mapDbError(src/lib/settings/errors.ts)를 그대로 쓰고 그 표는 늘리지 않는다 — SP3a 규칙:
  *    정상 경로에서 나올 수 없는 토큰(입력 토큰·COMMAND_ID_REQUIRED·*_ISOLATION)은 어느 표에도 없어 null 이고, 호출부가 failWith 로
  *    로그 + 고정 문구(500)를 낸다. SP4 의 새 정상 경로 토큰(PROJECT_NOT_FOUND 404·*_FORBIDDEN 403 등)은 호출부 자기 표다. ── */
-import { ERR_CONFIG_BUSY, dbToken, kindOfCode, mapDbError, type DbErrorLike } from '@/lib/settings/errors'
+import { ERR_CONFIG_BUSY, configText, dbToken, kindOfCode, mapDbError, type DbErrorLike } from '@/lib/settings/errors'
+import type { ServerDictKey, ServerTranslate } from '@/lib/i18n/serverDict'   // 타입만 — 서버 사전을 값으로 끌어오지 않는다
 
 /** 호출부 자기 토큰 표 — 키는 토큰(메시지의 ':' 앞 첫 낱말). SQLSTATE 로만 알 수 있는 정상 경로는 호출부가 rpcFailure 앞에서 err.code 로 거른다 */
 export type OwnTokenTable = Readonly<Record<string, { status: number; code: string; message: string }>>
@@ -23,14 +24,21 @@ export function failWith(tag: string, err: unknown, message: string): string {
  * WEEKLY_AREAS_REQUIRED 409·COMMAND_REUSED 422 …, 재시도 여부는 SP3a kindOfCode). 셋 다 아니면 null — 호출부가 failWith 로
  * 로그 + 고정 문구. 결과에 원문을 싣지 않는다.
  */
-export function rpcFailure(err: DbErrorLike, own: OwnTokenTable): RpcFailure | null {
+/** 사전 키로 적는 호출부 표 — 화면에 내보내는 문구는 key, 코드 겸용 문구(가드 결과 ERR_DENIED 등)는 message 로 그대로 둔다 */
+export type OwnTokenKeys = Readonly<Record<string, { status: number; code: string } & ({ key: ServerDictKey } | { message: string })>>
+/** 키 표를 요청의 화면 언어로 푼 문구 표 — rpcFailure 에 넘긴다 */
+export function tokenTable(own: OwnTokenKeys, t: ServerTranslate): OwnTokenTable {
+  return Object.fromEntries(Object.entries(own).map(([token, row]) => [token, { status: row.status, code: row.code, message: 'key' in row ? t(row.key) : row.message }]))
+}
+
+export function rpcFailure(err: DbErrorLike, own: OwnTokenTable, t?: ServerTranslate): RpcFailure | null {
   const token = dbToken(err.message)
   if (Object.hasOwn(own, token)) {
     const row = own[token]
     return { status: row.status, code: row.code, message: row.message, retryable: row.status === 503, token }
   }
-  if (err.code === LOCK_TIMEOUT) return { status: 503, code: 'CONFIG_BUSY', message: ERR_CONFIG_BUSY, retryable: true, token: LOCK_TIMEOUT }
-  const mapped = mapDbError(err)
+  if (err.code === LOCK_TIMEOUT) return { status: 503, code: 'CONFIG_BUSY', message: t ? configText(t, ERR_CONFIG_BUSY) : ERR_CONFIG_BUSY, retryable: true, token: LOCK_TIMEOUT }
+  const mapped = mapDbError(err, t)
   // mapDbError 가 프로토타입 이름을 걸러낸다(SP4 A2) — 아래 typeof 는 상태 없는 값에 대한 두 번째 방어다
   if (!mapped || typeof mapped.status !== 'number') return null
   return { status: mapped.status, code: mapped.code, message: mapped.message, retryable: kindOfCode(mapped.code).retryable, token: mapped.token }

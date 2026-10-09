@@ -15,3 +15,8 @@ export const translatorFor = (locale: Locale): Translate => (key) => t(locale, k
 export function fill(template: string, vars: Readonly<Record<string, string | number>>): string {
   return template.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m))
 }
+
+/** 고정 문구(코드 겸용 상수) → 요청의 화면 언어. 표는 문구 → 사전 키(src/lib/wbs/actionErrors.ts 의 KEY 꼴)이고, 표에 없는 문구(원문·동적 문구)는 받은 그대로다. */
+export function textBy<K extends string>(t: (key: K) => string, table: Readonly<Record<string, K>>, message: string): string {
+  return Object.hasOwn(table, message) ? t(table[message]) : message
+}

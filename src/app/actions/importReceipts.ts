@@ -8,6 +8,7 @@ import { requireProjectAdmin } from '@/lib/authz'
 import { createServerClient } from '@/lib/supabase/server'
 import { isUuidLike } from '@/lib/domain/validate'
 import { failWith } from '@/lib/errors/dbFail'
+import { serverTranslator } from '@/lib/i18n/server'
 
 export interface ImportReceiptView {
   commandId: string
@@ -17,8 +18,8 @@ export interface ImportReceiptView {
 }
 export type ImportReceiptResult = { ok: true; receipt: ImportReceiptView | null } | { ok: false; error: string }
 
-const ERR_INVALID = '잘못된 요청입니다.'
-const ERR_RECEIPT = '실행 기록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_INVALID = 'err.invalidRequest'
+const ERR_RECEIPT = 'srv.importReceipts.couldNotLoadRunHistory'
 
 type ReceiptRecord = { command_id: unknown; result: unknown; created_at: unknown }
 
@@ -33,9 +34,10 @@ function toView(row: ReceiptRecord): ImportReceiptView | null {
 }
 
 export async function getImportReceipt(projectId: string, commandId: string): Promise<ImportReceiptResult> {
+  const t = await serverTranslator()
   // 입력은 타입을 믿지 않는다 — uuid 가 아닌 id 는 질의(22P02)까지 가지 않게 가드 앞에서 거른다
   if (typeof projectId !== 'string' || typeof commandId !== 'string' || !isUuidLike(projectId) || !isUuidLike(commandId)) {
-    return { ok: false, error: ERR_INVALID }
+    return { ok: false, error: t(ERR_INVALID) }
   }
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
@@ -47,9 +49,9 @@ export async function getImportReceipt(projectId: string, commandId: string): Pr
     .eq('kind', 'wbs_import')
     .eq('project_id', projectId)
     .maybeSingle()
-  if (error) return { ok: false, error: failWith('import-receipt', error, ERR_RECEIPT) }
+  if (error) return { ok: false, error: failWith('import-receipt', error, t(ERR_RECEIPT)) }
   if (!data) return { ok: true, receipt: null }
   const view = toView(data as ReceiptRecord)
-  if (!view) return { ok: false, error: failWith('import-receipt', new Error(`영수증 요약의 모양이 기대와 다릅니다: ${commandId}`), ERR_RECEIPT) }
+  if (!view) return { ok: false, error: failWith('import-receipt', new Error(`영수증 요약의 모양이 기대와 다릅니다: ${commandId}`), t(ERR_RECEIPT)) }
   return { ok: true, receipt: view }
 }
