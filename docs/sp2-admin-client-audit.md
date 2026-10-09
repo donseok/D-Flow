@@ -40,6 +40,7 @@
 | src/app/actions/wbsSpec.ts | 세션 가드 뒤 id 스코프 | 항목의 pid 로 requireProjectAdmin 또는 위임 자격을 판정한 뒤, 그 항목 id 로만 update 한다 |
 | src/app/api/cron/ai-index/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다(잡 ai-index — 스케줄 GET·수동 POST, 옛 chat/index/worker 흡수). 전 프로젝트 색인 작업 큐이고 사용자에게 행을 돌려주지 않는다(수량 요약만) |
 | src/app/api/cron/form-templates-gc/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다(잡 form-templates-gc). form-templates 버킷의 incoming 폴더만 나열해 24시간 넘은 고아 객체를 지우는 정리 배치다. 등록된 양식(v<n>)은 읽지 않고 응답은 수량뿐이다 |
+| src/app/api/cron/minutes-attachments-gc/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다(잡 minutes-attachments-gc). minutes 버킷의 minute-files 세그먼트만 나열해 어느 행도 가리키지 않는 24시간 넘은 고아 객체와 미정리 톰스톤(지운 첨부)의 객체를 지우고 `purged_at` 을 적는 정리 배치다(수동 스크립트 `npm run minutes:sweep` 과 같은 함수). 본문(minutes 세그먼트)·과거 버전 원본은 읽지 않고 응답은 수량뿐이다 |
 | src/app/api/cron/inbox-retention/route.ts | 플랫폼 | CRON_SECRET 으로만 들어온다. 읽은 알림 90일 정리 RPC(전역)다 |
 | src/app/api/import/execute/route.ts | 세션 가드 뒤 id 스코프 | requireProjectAdmin(pid) 뒤 그 pid 로만 쓴다(SP4 §4.4). ① 미등록 팀은 그 pid 의 전용 팀만 만든다(ensureProjectTeams — adminFor, 워크스페이스는 가드 결과, teams_guard 가 일치 강제) ② 상속 공용 팀 전환은 convert_inherited_teams 가 행위자 등급을 다시 판정한다 ③ 공용 팀은 그 pid 의 워크스페이스 것만 읽는다(요청 범위 원천 — 세션) ④ 항목·담당·휴일·영수증은 import_wbs_cmd 가 한 트랜잭션에 쓰고 행위자 등급을 다시 판정한다(p_actor = 가드 결과) ⑤ 양식 저장은 가드한 pid 로 writeProjectSettingsInternal(설정 RPC)을 부른다 ⑥ 전용 팀이 있는 프로젝트의 미등록 code 는 등록 전에 referencedCommonTeamCodes(adminFor({ projectId }) — 그 pid 의 담당·명단 팀·영역 팀·수락 전 초대를 읽고, 후보는 그 pid 워크스페이스의 공용 팀뿐)로 그 pid 가 이미 쓰는 공용 팀인지 본다(SP4 Z4) |
 | src/app/api/track/route.ts | 플랫폼 | 세션 사용자 본인의 usage_events 에 insert 만 한다. 읽기는 슈퍼유저 전용 /usage 다 |
@@ -66,6 +67,7 @@
 | src/lib/agent/subtreeManager.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 myMemberIds·isSubtreeManager 를 pid·itemId 로 판정한다 |
 | src/lib/ai/brief.ts | 세션 가드 뒤 id 스코프 | 호출부(프로젝트 화면·가드된 액션)의 projectId 로 project_ai_briefs 를 읽고 쓴다. RLS 쓰기 정책이 없어 가드가 유일한 관문이다 |
 | src/lib/ai/ensure-index.ts | 세션 가드 뒤 id 스코프 | 호출부(레거시 챗 /api/chat·/api/chat/stream — legacyChatProjectGate 가 볼 수 있는 프로젝트만 통과시킨다, 최종 리뷰 F7)가 가드한 projectId 로 wbs_embeddings 수를 세고 색인한다. 색인 자체는 ingestProject 의 RLS 관문 뒤에만 쓴다 |
+| src/lib/ai/index/enqueueChange.ts | 세션 가드 뒤 id 스코프 | 증분 색인 등록(SP8). 색인 대상을 쓰는 액션·라우트가 가드·모듈 관문·쓰기 성공 뒤에 넘긴 projectId·엔티티 id 로 ai_index_jobs 에 잡을 넣는다(등록 RPC upsert_ai_index_jobs — service_role 전용). 넣기 전에 그 프로젝트·워크스페이스의 chatbot 모듈을 판정하고(꺼짐·모름은 넣지 않는다), 회의록은 id 로 범위(project_id·workspace_id)만 읽는다. 배포에서 챗봇을 쓸 수 없으면 클라이언트를 만들지 않는다. 사용자에게 행을 돌려주지 않는다 |
 | src/lib/ai/health.ts | 플랫폼 | assistantHealth 는 전역 스키마·RPC 프로빙이라 행을 노출하지 않는다. assistantIndexStatus 는 projectId 로 카운트만 한다 |
 | src/lib/ai/ingest.ts | 세션 가드 뒤 id 스코프 | 호출부(reindex·import/execute·reindexProjectAction 은 requireProjectAdmin, 자가 치유는 레거시 챗 관문)가 가드한 projectId 로 쓴다. 쓰기 전에 RLS 로 프로젝트 행을 확인한다(getProjectName — 볼 수 없으면 throw, 최종 리뷰 F7 심층 방어). 그 뒤에만 그 프로젝트의 팀(요청 범위 원천 projectTeams — 세션)을 읽고 wbs_embeddings 를 upsert·stale 삭제한다 |
 | src/lib/ai/issue-analysis.ts | 세션 가드 뒤 id 스코프 | 호출부가 가드한 projectId 로 issue_analysis_runs 를 읽고 쓴다 |

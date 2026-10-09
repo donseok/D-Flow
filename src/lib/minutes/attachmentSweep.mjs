@@ -1,4 +1,6 @@
-// scripts/lib/attachmentSweep.mjs — 회의록 첨부 청소(SP5 B3 과제10)의 순수 판정. 부작용 없음 — vitest 로 검증한다.
+// 회의록 첨부 청소(SP5 B3 과제10)의 순수 판정. 부작용 없음 — vitest 로 검증한다.
+// .mjs 인 까닭: 수동 스크립트(scripts/minutes/sweep-attachments.mjs)와 스케줄 잡(/api/cron/minutes-attachments-gc)이 같은 판정을 쓴다 —
+// 스크립트는 src 의 TS 를 import 하지 못하므로 둘이 함께 읽을 수 있는 형식으로 둔다(판정을 두 벌로 적지 않는다).
 //
 // 대상은 minutes 버킷의 minute-files 세그먼트뿐이다(ws/<wid>/p/<pid|_>/minute-files/<minute>/<파일>). 본문(minutes 세그먼트)과
 // 과거 버전 원본은 어떤 경우에도 후보가 아니다 — 버전 경로는 세그먼트와 무관하게 참조로 친다(WORM 근거).

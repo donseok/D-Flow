@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth'
 import { requireProjectAdmin, resolveProjectId } from '@/lib/authz'
 import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import { revalidatePath } from 'next/cache'
 import { expandMeetings } from '@/lib/domain/meetings'
 import { composeAnnouncementFromMeeting, isoMicros, validateAnnouncementInput, type AnnouncementInput } from '@/lib/domain/announcements'
@@ -54,9 +55,10 @@ export async function createAnnouncement(
       milestone_date: input.milestoneDate,
       created_by: g.actor.userId,
     })
-    .select('created_at')
+    .select('id, created_at')
     .single()
   if (error) return { ok: false, error: error.message }
+  await enqueueIndexChange({ domain: 'announcements', projectId, entityId: (data?.id as string | undefined) ?? '' })
   // 작성자 본인에게 방금 쓴 공지가 '안읽음'(NEW 칩·배지)으로 잡히지 않도록 워터마크 전진
   if (data?.created_at) {
     await advanceSeenWatermark(projectId, g.actor.userId, data.created_at as string)
@@ -97,6 +99,7 @@ export async function updateAnnouncement(
     .select('project_id')
     .single()
   if (error) return { ok: false, error: error.message }
+  await enqueueIndexChange({ domain: 'announcements', projectId: found.projectId, entityId: id })
   if (data?.project_id) revalidateAnnouncements(data.project_id as string)
   return { ok: true }
 }
@@ -118,6 +121,7 @@ export async function deleteAnnouncement(id: string): Promise<AnnouncementAction
     .select('project_id')
     .single()
   if (error) return { ok: false, error: error.message }
+  await enqueueIndexChange({ domain: 'announcements', projectId: found.projectId, entityId: id, operation: 'delete' })
   if (data?.project_id) revalidateAnnouncements(data.project_id as string)
   return { ok: true }
 }
@@ -286,9 +290,10 @@ export async function createAnnouncementFromMeeting(
       publish_to: input.publishTo,
       created_by: g.actor.userId,
     })
-    .select('created_at')
+    .select('id, created_at')
     .single()
   if (error) return { ok: false, error: error.message }
+  await enqueueIndexChange({ domain: 'announcements', projectId, entityId: (data?.id as string | undefined) ?? '' })
   if (data?.created_at) {
     await advanceSeenWatermark(projectId, g.actor.userId, data.created_at as string)
   }

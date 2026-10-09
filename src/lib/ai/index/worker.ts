@@ -112,7 +112,7 @@ async function processJob(deps: IndexWorkerDeps, job: ClaimedIndexJob, now: Date
       return completeJob(deps, job)
     }
 
-    const upserted = await deps.index.upsert(loaded.data.documents, { replaceEntityChunks: true })
+    const upserted = await deps.index.upsert(loaded.data.documents, { replaceEntityChunks: true, workspaceId: job.workspaceId ?? null })
     if (!upserted.ok) return failJob(deps, job, upserted.error.code, now)
     return completeJob(deps, job, 'upserted')
   } catch (e) {

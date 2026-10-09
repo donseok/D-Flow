@@ -7,6 +7,7 @@ import { isProjectAdmin } from '@/lib/domain/authz'
 import { actorTeamIdsFor } from '@/lib/domain/permissions'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import type { DependencyType, OwnerKind, TeamCode } from '@/lib/domain/types'
 import { personOf, primaryTeamCode } from '@/lib/data/memberSelect'
@@ -237,6 +238,7 @@ export async function updateActual(
     old_value: old == null ? null : String(old), new_value: String(newPct),
   })
   if (logInsErr) console.error('[updateActual] 변경 이력 기록 실패:', logInsErr.message)
+  await enqueueIndexChange({ domain: 'wbs', projectId: item.project_id, entityId: itemId })
   revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(item.project_id))
   return { ok: true }
@@ -378,6 +380,7 @@ export async function addWbsItem(
   if (error) return { ok: false, error: failWith('wbs.addWbsItem', error, ERR_ADD) }
   const { error: logInsErr } = await sb.from('change_logs').insert({ user_id: g.actor.userId, wbs_item_id: data.id, field: 'created', old_value: null, new_value: trimmedName })
   if (logInsErr) console.error('[addWbsItem] 변경 이력 기록 실패:', logInsErr.message) // 항목 생성은 성공 — 이력만 유실
+  await enqueueIndexChange({ domain: 'wbs', projectId: projectId, entityId: data.id as string })
   // 부모가 방금 말단에서 롤업 부모로 바뀌었다면 남아 있던 직접 입력 실적%를 정리(sibs 는 위에서 검증된 실제 형제 목록).
   if (parentId && sibs.length === 0) await discardRolledUpActual(sb, parentId, projectId, g.actor.userId)
   revalidatePath('/(app)/p/[projectId]', 'layout')
@@ -483,6 +486,7 @@ export async function addSubAct(
 
   const { error: logInsErr } = await sb.from('change_logs').insert({ user_id: g.actor.userId, wbs_item_id: newId, field: 'created', old_value: null, new_value: name })
   if (logInsErr) console.error('[addSubAct] 변경 이력 기록 실패:', logInsErr.message) // SUB-ACT 생성은 성공 — 이력만 유실
+  await enqueueIndexChange({ domain: 'wbs', projectId: act.project_id as string, entityId: newId })
   // 첫 SUB-ACT 면 ACT 가 방금 롤업 부모가 된 것 — 직접 입력돼 있던 실적%를 정리(sibIds 는 위에서 검증된 실제 형제 목록).
   if (sibIds.length === 0) await discardRolledUpActual(sb, actId, act.project_id as string, g.actor.userId)
   revalidatePath('/(app)/p/[projectId]', 'layout')
@@ -570,6 +574,7 @@ export async function updateWbsFields(
   patch.updated_at = new Date().toISOString()
   const { error } = await sb.from('wbs_items').update(patch).eq('id', itemId)
   if (error) return { ok: false, error: failWith('wbs.updateWbsFields', error, ERR_SAVE) }
+  await enqueueIndexChange({ domain: 'wbs', projectId: item.project_id, entityId: itemId })
   if (logs.length) {
     const { error: logInsErr } = await sb.from('change_logs').insert(logs.map(l => ({ user_id: g.actor.userId, wbs_item_id: itemId, field: l.field, old_value: l.old, new_value: l.new })))
     if (logInsErr) console.error('[updateWbsFields] 변경 이력 기록 실패:', logInsErr.message) // 본 저장은 성공 — 이력만 유실
@@ -753,6 +758,7 @@ export async function updateDeliverable(
   if (expected !== undefined && (expected?.trim() || null) !== item.deliverable) return { ok: false, conflict: true, error: E.conflict, latest: item.deliverable }
   const { error } = await sb.from('wbs_items').update({ deliverable: v, updated_at: new Date().toISOString() }).eq('id', itemId)
   if (error) return { ok: false, error: failWith('wbs.updateDeliverable', error, ERR_SAVE) }
+  await enqueueIndexChange({ domain: 'wbs', projectId: item.project_id, entityId: itemId })
   const { error: logErr } = await sb.from('change_logs').insert({ user_id: g.actor.userId, wbs_item_id: itemId, field: 'deliverable', old_value: item.deliverable, new_value: v })
   if (logErr) console.error('[updateDeliverable] 변경 이력 기록 실패:', logErr.message) // 본 저장은 성공 — 이력만 유실
   revalidatePath('/(app)/p/[projectId]', 'layout')
@@ -774,6 +780,7 @@ export async function deleteWbsItem(itemId: string): Promise<{ ok: boolean; erro
   const sb = await createServerClient()
   const { error } = await sb.from('wbs_items').delete().eq('id', itemId)
   if (error) return { ok: false, error: failWith('wbs.deleteWbsItem', error, ERR_DELETE) }
+  await enqueueIndexChange({ domain: 'wbs', projectId: projectId, entityId: itemId, operation: 'delete' })
   revalidatePath('/(app)/p/[projectId]', 'layout')
   after(() => recordProgressSnapshot(projectId))
   return { ok: true }

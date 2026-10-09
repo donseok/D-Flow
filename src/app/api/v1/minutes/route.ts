@@ -1,5 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { enqueueMinuteIndexChange } from '@/lib/ai/index/enqueueChange'
 import { BRAND } from '@/lib/branding'
 import { folderPathOf, refileMinuteAfterProjectChange, resolveFolderPath } from '@/lib/minutes/folders'
 import { loadRootFolders } from '@/lib/minutes/rootMode'
@@ -339,6 +340,7 @@ async function handleExisting(
     if (error?.message?.includes('WORKSPACE_SCOPE_MISMATCH')) return apiBadRequest(CROSS_WORKSPACE_MSG)
     return apiInternalError()
   }
+  await enqueueMinuteIndexChange(existing.id)
   const committed = committedRaw as unknown as {
     version_id: string
     wiki_rebuild_required: boolean
@@ -482,6 +484,7 @@ async function insertNew(
     updated_at: string
     wiki_rebuild_required: boolean
   }
+  await enqueueMinuteIndexChange(created.minute_id)
   const wikiJobId = await enqueueMinuteWikiProcessing({
     projectId: meetingProjectId,
     minuteId: created.minute_id,

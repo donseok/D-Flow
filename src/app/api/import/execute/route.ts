@@ -12,6 +12,7 @@ import type { FieldDef } from '@/lib/domain/customFields'
 import { fetchAllByKeyset } from '@/lib/data/paging'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { ingestProject } from '@/lib/ai/ingest'
+import { enqueueProjectIndexChange } from '@/lib/ai/index/enqueueChange'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 import { reservedTeamNames, validateNewTeamCodes, type Team } from '@/lib/domain/teams'
@@ -391,6 +392,8 @@ export async function POST(req: NextRequest) {
   }
   const outcome = importOutcome(data)
   if (!outcome) return fail(500, 'IMPORT_FAILED', failWith('import/execute 가져오기 결과', data, ERR_IMPORT))
+  // 가져온 트리를 다시 색인한다(같은 명령의 재전송은 이미 넣었다). 교체로 사라진 항목의 색인은 정합성 검사가 지운다
+  if (outcome.kind !== 'duplicate') await enqueueProjectIndexChange(projectId, 'wbs')
 
   // #9 결과 종류 — duplicate 는 저장된 결과(건수·모드)다. 백업은 싣지 않는다(이번에 읽었어도 이미 교체된 트리다 — D50·K9)
   const duplicate = outcome.kind === 'duplicate'

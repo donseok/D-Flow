@@ -1,4 +1,5 @@
 import { chunked } from '@/lib/ai/util'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import { treeMaxDepth, validateLevelSettings } from '@/lib/domain/levelSettings'
 import type { AdminClient } from '@/lib/minutes/externalApi'
 import { CONFIG_MESSAGES, ERR_CONFIG_UNAVAILABLE, type ConfigCode } from '@/lib/settings/errors'
@@ -275,6 +276,7 @@ export async function runWbsImport(
     return { ok: false, code: 'apply_failed', message: `업로드 실패: ${rpcErr.message}` }
   }
   const out = rpcOut as { upserted: number; skipped: number; ids: Record<string, string>; new_refs: string[] }
+  await enqueueIndexChange(Object.values(out.ids ?? {}).map((entityId) => ({ domain: 'wbs' as const, projectId, entityId })))
 
   const post = await applyAssigneesAndOrders(admin, {
     projectId, actorUserId, module: module_,

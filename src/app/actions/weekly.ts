@@ -22,6 +22,7 @@ import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import { generateAnswer } from '@/lib/ai/llm'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { requireModule } from '@/lib/modules/gate'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import {
   buildWeeklyRewritePrompt, parseWeeklyRewriteResponse, WEEKLY_REWRITE_MAX_CELLS,
   WEEKLY_REWRITE_MAX_TOTAL_CHARS, WEEKLY_REWRITE_SYSTEM_PROMPT,
@@ -213,6 +214,7 @@ export async function createWeeklyReport(
     return { ok: false, code: 'UNAVAILABLE', error: failWith('weekly/create', error, ERR_CREATE) }
   }
   const r = data as { status: 'created' | 'exists'; report_id: string }
+  await enqueueIndexChange({ domain: 'weekly', projectId, entityId: r.report_id })
   revalidateWeekly()
   return { ok: true, reportId: r.report_id, status: r.status }
 }
@@ -254,6 +256,7 @@ export async function saveWeeklyTitle(
     if (latest !== t) return { ok: false, error: ERR_TITLE_CONFLICT, conflict: true, latest }
     return { ok: true }   // 이미 같은 제목이다(다른 사람이 같은 값으로, 또는 응답을 잃은 내 앞선 저장) — 덮을 것이 없다
   }
+  await enqueueIndexChange({ domain: 'weekly', projectId, entityId: reportId })
   revalidateWeekly()
   return { ok: true }
 }
@@ -391,6 +394,9 @@ export async function prepareWeeklyCellRewrite(
 async function touchWeeklyReports(projectId: string, reportIds: Iterable<string>): Promise<void> {
   const ids = [...new Set(reportIds)].filter(Boolean)
   if (ids.length === 0) return
+  // 셀이 바뀐 주간 문서를 다시 색인한다(SP4 이월 — 셀 저장은 문서 행을 건드리지 않아 색인이 변경을 못 봤다). 호출부가 이 함수를 기다리지 않으므로
+  // 첫 await 앞에서 부른다 — 등록 예약(after)이 요청 범위 안에서 걸린다.
+  void enqueueIndexChange(ids.map((entityId) => ({ domain: 'weekly' as const, projectId, entityId })))
   try {
     const { admin } = adminFor({ projectId })
     await admin.from('weekly_reports')

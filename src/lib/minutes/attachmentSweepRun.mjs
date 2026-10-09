@@ -1,5 +1,6 @@
-// scripts/lib/attachmentSweepRun.mjs — 청소 잡의 실행부(SP5 B3 과제10). 클라이언트를 받아 읽기 → 판정 → (apply 면) 삭제한다.
-// 대상 가드·env 는 호출자(scripts/minutes/sweep-attachments.mjs) 몫이다. 가짜 클라이언트로 시험한다(tests/scripts/attachment-sweep-run.test.ts).
+// 청소 잡의 실행부(SP5 B3 과제10). 클라이언트를 받아 읽기 → 판정 → (apply 면) 삭제한다.
+// 호출자는 둘이다 — 수동 스크립트(scripts/minutes/sweep-attachments.mjs — 대상 가드·env 는 그쪽 몫, 기본 dry-run)와
+// 스케줄 잡(src/app/api/cron/minutes-attachments-gc/route.ts — 인증은 authorizeJob, 항상 apply). 가짜 클라이언트로 시험한다(tests/scripts/attachment-sweep-run.test.ts).
 import { GRACE_MS, planSweep, safePathLabel, stillOrphan } from './attachmentSweep.mjs'
 
 const BUCKET = 'minutes'

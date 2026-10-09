@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { GRACE_MS } from '../../scripts/lib/attachmentSweep.mjs'
-import { runSweep } from '../../scripts/lib/attachmentSweepRun.mjs'
+import { GRACE_MS } from '../../src/lib/minutes/attachmentSweep.mjs'
+import { runSweep } from '../../src/lib/minutes/attachmentSweepRun.mjs'
 
 // SP5 B3 과제10 — 청소 잡 실행부를 가짜 클라이언트(메모리 버킷·표)로 돈다. 실제 DB 리허설은 로컬 Supabase 에서 사람이 한다.
 const W = 'aaaaaaaa-1111-4111-8111-111111111111'

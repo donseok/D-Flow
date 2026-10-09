@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth'
 import { getActor, requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
 import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import { isWorkspaceMember, type Actor } from '@/lib/domain/authz'
 import { revalidatePath } from 'next/cache'
 import { ERR_MEETING_DETAIL, ERR_MEETINGS_LOAD, getMyMeetings, getMeetingDetail, type MeetingDetailResult, type MyMeetingsResult } from '@/lib/data/meetings'
@@ -173,6 +174,7 @@ export async function createMeeting(projectId: string, input: MeetingInput): Pro
     }
     return { ok: false, error: attErr }
   }
+  await enqueueIndexChange({ domain: 'meetings', projectId, entityId: meetingId })
   revalidateMeetings(projectId)
   return { ok: true, id: meetingId }
 }
@@ -217,6 +219,7 @@ export async function updateMeeting(id: string, input: MeetingInput): Promise<Me
     if (exErr) return { ok: false, error: exErr.message }
   }
 
+  await enqueueIndexChange({ domain: 'meetings', projectId, entityId: id })
   const attErr = await replaceAttendees(sb, id, projectId, input.attendeeIds)
   // 회의 본문 수정은 이미 커밋됨 — 참석자 저장이 실패해도 변경분이 반영되도록 revalidate 후 에러 보고.
   revalidateMeetings(projectId)
@@ -236,6 +239,7 @@ export async function deleteMeeting(id: string): Promise<MeetingActionResult> {
 
   const { error } = await sb.from('meetings').delete().eq('id', id).select('id').single()
   if (error) return { ok: false, error: error.message }
+  await enqueueIndexChange({ domain: 'meetings', projectId: cur.project_id as string, entityId: id, operation: 'delete' })
   revalidateMeetings(cur.project_id as string)
   return { ok: true }
 }

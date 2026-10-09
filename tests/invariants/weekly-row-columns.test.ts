@@ -18,6 +18,7 @@ const WEEKLY_ROW_FILES = [
   'src/app/actions/customFieldValues.ts', // SP5c session CAS update: custom only
   'src/app/actions/customFields.ts', // SP5c admin usage preview: id/custom only, project-scoped keyset query
   'src/lib/ai/index/content.ts',
+  'src/lib/ai/index/enqueueChange.ts', // SP8 증분 색인: 행 → 주간 문서 id(report_id)만, 프로젝트로 좁힌 조회
   'src/lib/data/weeklySheet.ts',
   'src/lib/repositories/supabase/weekly.ts',
 ] as const

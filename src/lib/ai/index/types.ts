@@ -66,6 +66,11 @@ export type IndexJobPayload = Record<string, IndexJobPayloadValue>
 export interface IndexMutation {
   operation: 'upsert' | 'delete'
   projectId: string | null
+  /**
+   * 잡 행의 워크스페이스(0036 `ai_index_jobs.workspace_id`). 프로젝트가 있으면 등록 RPC 가 프로젝트에서 채우므로 생략해도 된다.
+   * 프로젝트가 없는 변경은 반드시 준다 — 없으면 RPC 가 AI_INDEX_JOB_SCOPE_REQUIRED 로 거부한다(0038).
+   */
+  workspaceId?: string | null
   domain: BotDomain
   entityType: BotEntityType
   entityId: string
@@ -154,7 +159,8 @@ export interface KnowledgeIndex {
   search(query: SearchQuery): Promise<KnowledgeIndexResult<SearchResult[]>>
   upsert(
     documents: readonly KnowledgeDocumentInput[],
-    options?: { replaceEntityChunks?: boolean },
+    /** workspaceId — 프로젝트 없는 문서(워크스페이스 공용 회의록)의 범위. 프로젝트가 있으면 DB 가 프로젝트에서 구하므로 없어도 된다 */
+    options?: { replaceEntityChunks?: boolean; workspaceId?: string | null },
   ): Promise<KnowledgeIndexResult<IndexMutationSummary>>
   delete(selector: IndexDeleteSelector): Promise<KnowledgeIndexResult<IndexMutationSummary>>
   health(): Promise<KnowledgeIndexResult<KnowledgeIndexHealth>>

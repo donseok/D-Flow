@@ -26,6 +26,7 @@ import {
 import type { ExplorerData, Minute, MinuteFolder, TeamCode } from '@/lib/domain/types'
 import { getProjectMeetingData } from '@/lib/data/meetings'
 import { ingestMinute } from '@/lib/ai/minutes-ingest'
+import { enqueueMinuteIndexChange } from '@/lib/ai/index/enqueueChange'
 import { splitMinuteBlocks, isMarkableBlock, fnv1a64 } from '@/lib/minutes/blocks'
 import { ensureMinuteInsights, generateMinuteInsights } from '@/lib/ai/minutes-insights'
 import { rematchHighlights, type HighlightRow } from '@/lib/minutes/rematch'
@@ -368,6 +369,8 @@ export async function createMinute(
     // RPC 영문 상수(0006 MINUTE_FOLDER_WORKSPACE_MISMATCH 등)는 사용자 문구로, 그 밖은 종전처럼 원문 그대로.
     return { ok: false, error: rpcErrorMessage(createError?.message, createError?.message ?? '회의록 생성에 실패했습니다.') }
   }
+  // 제목·본문이 색인 본문이다 — 범위(프로젝트·워크스페이스)는 등록 도우미가 행에서 정한다
+  await enqueueMinuteIndexChange((createdRaw as { minute_id?: string }).minute_id ?? '')
   const created = createdRaw as unknown as {
     minute_id: string
     version_id: string
@@ -777,6 +780,7 @@ export async function replaceMinuteBody(
     console.error('[replaceMinuteBody] 원자 커밋 실패:', commitError?.message ?? 'no row')
     return { ok: false, error: rpcErrorMessage(commitError?.message, '새 버전 저장에 실패했습니다.') }
   }
+  await enqueueMinuteIndexChange(id)
   const committed = committedRaw as unknown as {
     version_id: string
     wiki_rebuild_required: boolean
@@ -902,6 +906,7 @@ export async function recordMinuteFile(
       console.error(`[recordMinuteFile minute=${minuteId}] 원본 버전 커밋 실패:`, commitError?.message ?? 'no row')
       return { ok: false, error: rpcErrorMessage(commitError?.message, '원본 버전 기록에 실패했습니다.') }
     }
+    await enqueueMinuteIndexChange(minuteId)
     const committed = committedRaw as unknown as {
       version_id: string
       wiki_rebuild_required: boolean

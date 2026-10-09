@@ -649,8 +649,11 @@ describe('runWikiWorkerOnce lease와 force 경합', () => {
     mocks.hasLLM.mockReturnValue(true)
     mocks.generateAnswer.mockResolvedValue('{"items":[]}')
 
+    // 워커는 재구성 후보 프로젝트를 먼저 읽고(워크스페이스끼리 번갈아 — SP8) 프로젝트마다 한 단계씩 돌린다
     const workerAdmin = {
-      from: vi.fn(() => queryBuilder({ data: [] })),
+      from: vi.fn((table: string) => queryBuilder({
+        data: table === 'wiki_project_rebuild_jobs' ? [{ project_id: 'project-1', projects: { workspace_id: 'ws-1' } }] : [],
+      })),
       rpc: vi.fn(),
     }
     const projectAdmins = [1, 2].map((index) => ({
@@ -833,7 +836,8 @@ describe('runWikiWorkerOnce lease와 force 경합', () => {
     mocks.createAdminClient.mockReturnValue(admin)
 
     await expect(runWikiWorkerOnce(5)).resolves.toEqual({ attempted: 0, completed: 0 })
-    expect(admin.from).toHaveBeenCalledTimes(2)
+    // 선점 만료 목록 · 재구성 후보 · 대기 잡 후보
+    expect(admin.from).toHaveBeenCalledTimes(3)
   })
 })
 

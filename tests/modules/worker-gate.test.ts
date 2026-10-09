@@ -126,6 +126,15 @@ describe('색인 잡의 범위와 skipped 쓰기', () => {
     expect(await createIndexJobModuleGate(fakeDb() as never).state(job({ projectId: null, domain: 'wbs' }))).toBe('unknown')
   })
 
+  it('프로젝트 없는 회의록 밖의 잡은 그 행의 워크스페이스로 판정한다 — 워크스페이스도 없을 때만 unknown', async () => {
+    const db = fakeDb()
+    vi.mocked(moduleState).mockResolvedValue('off')
+    const g = createIndexJobModuleGate(db as never)
+    expect(await g.state(job({ projectId: null, workspaceId: W, domain: 'meetings', entityType: 'meeting' }))).toBe('off')
+    expect(moduleState).toHaveBeenCalledWith({ workspaceId: W }, 'chatbot', { client: db })
+    expect(await g.state(job({ projectId: null, workspaceId: null, domain: 'meetings', entityType: 'meeting' }))).toBe('unknown')
+  })
+
   it('skipped 는 id 와 running 상태를 함께 조건으로 쓴다', async () => {
     const db = fakeDb()
     expect(await createIndexJobModuleGate(db as never).skip(job())).toBe(true)

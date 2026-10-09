@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GRACE_MS, isMinuteFilesPath, planSweep, safePathLabel, stillOrphan } from '../../scripts/lib/attachmentSweep.mjs'
+import { GRACE_MS, isMinuteFilesPath, planSweep, safePathLabel, stillOrphan } from '../../src/lib/minutes/attachmentSweep.mjs'
 
 // SP5 B3 과제10 — 회의록 첨부 청소의 순수 판정. 본문·과거 버전 객체는 대상 0, 유예 경계, 중복, 톰스톤 재시도.
 const W = 'aaaaaaaa-1111-4111-8111-111111111111'

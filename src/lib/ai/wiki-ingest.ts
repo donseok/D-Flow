@@ -9,6 +9,7 @@ import { CONFIG_UNAVAILABLE_ERROR, gateWikiJob } from '@/lib/ai/index/moduleGate
 import { wikiServiceEnabled } from '@/lib/modules/flags'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { projectTeams } from '@/lib/teams/source'
+import { interleaveByWorkspace, workspaceOfEmbed } from './wiki-fairness'
 import { activeCodes } from '@/lib/domain/teams'
 import {
   fnv1a64, isMarkableBlock, splitMinuteBlocks, type MinuteBlock,
@@ -1270,27 +1271,105 @@ export async function runWikiWorkerOnce(limit = 5): Promise<{
   let completed = 0
   // 철회 복구가 일반 단건 ingest보다 우선이다. 한 step이 한 LLM 호출 이하라 실행시간은
   // bounded하고, SQL keyset cursor가 500건을 넘는 프로젝트도 다음 cron에서 이어간다.
-  while (attempted < boundedLimit) {
-    const projectStep = await processWikiProjectRebuildStep()
-    if (!projectStep.attempted) break
-    attempted += 1
-    if (projectStep.completed) completed += 1
+  // 재구성 중인 프로젝트를 워크스페이스끼리 번갈아 한 단계씩 돌린다 — 회의록이 많은 프로젝트 하나가 실행의 몫을 다 쓰지 못한다.
+  const rebuildTargets = await listRebuildTargets(admin, now)
+  // 한 프로젝트의 단계가 던져도 다른 워크스페이스의 차례는 돈다. 던진 오류는 끝에서 다시 던져 실패를 감추지 않는다(라우트는 500).
+  let firstError: unknown = null
+  if (rebuildTargets === null) {
+    // 후보를 읽지 못했다 — 옛 전역 선점(RPC 가 후보를 고른다)으로 돈다. 공정성만 없고 처리는 같다.
+    while (attempted < boundedLimit) {
+      const projectStep = await processWikiProjectRebuildStep()
+      if (!projectStep.attempted) break
+      attempted += 1
+      if (projectStep.completed) completed += 1
+    }
+  } else {
+    let active = rebuildTargets
+    while (attempted < boundedLimit && active.length > 0) {
+      const next: typeof active = []
+      for (const target of active) {
+        if (attempted >= boundedLimit) break
+        try {
+          const projectStep = await processWikiProjectRebuildStep(target.projectId)
+          if (!projectStep.attempted) continue
+          attempted += 1
+          if (projectStep.completed) completed += 1
+          // 커서가 나아갔고 끝나지 않았으면 다음 바퀴에 이어간다. 걸린 회의록 잡이 backoff 면 이번 실행에서는 양보한다.
+          if (projectStep.completed && !projectStep.finished) next.push(target)
+        } catch (error) {
+          console.error('[wiki] 프로젝트 재구성 단계 실패(다른 프로젝트는 계속):', safeJobError(error))
+          firstError ??= error
+        }
+      }
+      active = next
+    }
   }
 
   const remaining = boundedLimit - attempted
-  if (remaining === 0) return { attempted, completed }
+  if (remaining > 0) {
+    const jobIds = await listPendingJobIds(admin, now, remaining)
+    for (const jobId of jobIds) {
+      if (await processMinuteWikiJob(jobId)) completed += 1
+    }
+    attempted += jobIds.length
+  }
+  if (firstError) throw firstError
+  return { attempted, completed }
+}
 
-  const { data, error } = await admin.from('wiki_processing_jobs')
-    .select('id')
-    .eq('status', 'pending')
+const WIKI_CANDIDATE_WINDOW = 100
+const WIKI_CANDIDATE_PASSES = 5
+
+/**
+ * 재구성 후보 프로젝트(대기 중이거나 선점이 남은 것 — 실제 선점 가능 여부는 claim RPC 가 DB 시각으로 판정한다)를 워크스페이스끼리
+ * 번갈아 세운 목록. 읽지 못하면 null(호출부가 옛 전역 선점으로 돈다).
+ */
+async function listRebuildTargets(
+  admin: ReturnType<typeof createAdminClient>, now: string,
+): Promise<Array<{ projectId: string; workspaceId: string | null }> | null> {
+  const { data, error } = await admin.from('wiki_project_rebuild_jobs')
+    .select('project_id, projects!inner(workspace_id)')
+    .in('status', ['pending', 'running'])
     .lte('run_after', now)
     .order('run_after', { ascending: true })
-    .limit(remaining)
-  if (error) throw new Error(`JOB_LIST:${error.code ?? 'UNKNOWN'}`)
-  for (const row of data ?? []) {
-    if (await processMinuteWikiJob(row.id as number)) completed += 1
+    .order('updated_at', { ascending: true })
+    .limit(WIKI_CANDIDATE_WINDOW)
+  if (error) {
+    console.error('[wiki] 재구성 후보 조회 실패 — 전역 선점으로 돈다:', error.code ?? 'UNKNOWN')
+    return null
   }
-  return { attempted: attempted + (data?.length ?? 0), completed }
+  return interleaveByWorkspace(((data ?? []) as Array<{ project_id: string; projects: unknown }>)
+    .map((row) => ({ projectId: row.project_id, workspaceId: workspaceOfEmbed(row.projects) })))
+}
+
+/**
+ * 대기 중인 회의록 잡을 워크스페이스끼리 번갈아 limit 건 고른다. 한 창(WINDOW)이 한두 워크스페이스로 가득 차면 그 워크스페이스를
+ * 빼고 다시 읽어, 큐가 아무리 깊어도 뒤에 선 워크스페이스의 잡이 후보에 든다. 첫 조회 실패는 던진다(조회 실패를 "잡 없음"으로 읽지 않는다).
+ */
+async function listPendingJobIds(admin: ReturnType<typeof createAdminClient>, now: string, limit: number): Promise<number[]> {
+  const candidates: Array<{ id: number; workspaceId: string | null }> = []
+  const seen: string[] = []
+  for (let pass = 0; pass < WIKI_CANDIDATE_PASSES; pass += 1) {
+    let query = admin.from('wiki_processing_jobs')
+      .select('id, projects!inner(workspace_id)')
+      .eq('status', 'pending')
+      .lte('run_after', now)
+    if (seen.length > 0) query = query.not('projects.workspace_id', 'in', `(${seen.join(',')})`)
+    const { data, error } = await query.order('run_after', { ascending: true }).limit(WIKI_CANDIDATE_WINDOW)
+    if (error) {
+      if (pass === 0) throw new Error(`JOB_LIST:${error.code ?? 'UNKNOWN'}`)
+      console.error('[wiki] 뒤 워크스페이스의 대기 잡 조회 실패 — 읽은 후보로만 돈다:', error.code ?? 'UNKNOWN')
+      break
+    }
+    const rows = ((data ?? []) as Array<{ id: number; projects: unknown }>)
+      .map((row) => ({ id: row.id, workspaceId: workspaceOfEmbed(row.projects) }))
+    candidates.push(...rows)
+    const fresh = [...new Set(rows.map((row) => row.workspaceId).filter((id): id is string => id !== null && !seen.includes(id)))]
+    seen.push(...fresh)
+    // 창이 차지 않았으면 대기분을 다 본 것이다. 이미 limit 개의 워크스페이스를 봤으면 더 읽을 까닭이 없다.
+    if (rows.length < WIKI_CANDIDATE_WINDOW || fresh.length === 0 || seen.length >= limit) break
+  }
+  return interleaveByWorkspace(candidates).slice(0, limit).map((candidate) => candidate.id)
 }
 
 export async function enqueueAndProcessMinuteWiki(args: {

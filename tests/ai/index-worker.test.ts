@@ -108,7 +108,7 @@ describe('runIndexWorkerOnce', () => {
 
     const summary = await runIndexWorkerOnce({ moduleGate: ON_GATE, queue, index, loadContent: loaderWithDocuments })
 
-    expect(index.upsert).toHaveBeenCalledWith([expect.objectContaining({ entityId: 'w1' })], { replaceEntityChunks: true })
+    expect(index.upsert).toHaveBeenCalledWith([expect.objectContaining({ entityId: 'w1' })], { replaceEntityChunks: true, workspaceId: null })
     expect(queue.complete).toHaveBeenCalledWith({ id: 7, generation: 3 })
     expect(summary).toEqual({ claimed: 1, upserted: 1, deleted: 0, failed: 0, requeued: 0, skipped: 0 })
   })

@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache'
 import type { AdminClient, ExternalMeetingInput, ResolvedUser } from '@/lib/minutes/externalApi'
 import { isProjectMember, type Actor } from '@/lib/domain/authz'
 import { activeVocab } from '@/lib/settings/vocab'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import { loadProjectVocab, vocabCodeError, vocabWriteFailure } from '@/lib/settings/vocabGuard'
 
 /** 생략된 범주의 기본값 — 'general'(v2.5 계약)이 활성이면 그것, 아니면 첫 활성 범주(SP5 B4) */
@@ -89,6 +90,7 @@ export async function resolveOrCreateExternalMeeting(
     if (vocab) return { ok: false, status: 503, code: 'retry', error: vocab }
     return fail500
   }
+  await enqueueIndexChange({ domain: 'meetings', projectId: m.projectId, entityId: created.id as string })
   // 내부 회의 화면 캐시 갱신 — actions/meetings.ts revalidateMeetings 와 동일 경로.
   revalidatePath(`/p/${m.projectId}/meetings`)
   revalidatePath('/(app)/w/[slug]/meetings', 'page')

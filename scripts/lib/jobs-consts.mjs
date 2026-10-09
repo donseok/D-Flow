@@ -6,6 +6,7 @@
 export const JOB_SCHEDULES = Object.freeze([
   Object.freeze({ id: 'inbox-retention', path: '/api/cron/inbox-retention', schedule: '0 19 * * *' }),
   Object.freeze({ id: 'form-templates-gc', path: '/api/cron/form-templates-gc', schedule: '30 19 * * *' }),
+  Object.freeze({ id: 'minutes-attachments-gc', path: '/api/cron/minutes-attachments-gc', schedule: '0 20 * * *' }),
   Object.freeze({ id: 'ai-index', path: '/api/cron/ai-index', schedule: '0 18 * * *' }),
   Object.freeze({ id: 'wiki-worker', path: '/api/wiki/worker', schedule: '30 18 * * *' }),
 ])

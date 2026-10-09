@@ -321,6 +321,7 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('cron/ai-index')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 ai-index) — 잡마다 moduleState(과제 22)'),
   [`${R('cron/ai-index')}#POST`]: nul('cronSecret', 'CRON_SECRET(잡 ai-index 수동 모드 — 옛 chat/index/worker) — 잡마다 moduleState(과제 22)'),
   [`${R('cron/form-templates-gc')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 form-templates-gc) — 양식 업로드 고아 incoming 정리(core 잡, 수량만 돌려준다)'),
+  [`${R('cron/minutes-attachments-gc')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 minutes-attachments-gc) — 회의록 첨부 청소(고아 객체·미정리 톰스톤. core 잡, 수량만 돌려준다)'),
   [`${R('cron/inbox-retention')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 inbox-retention) — 알림함 보존(셸)'),
   [`${R('export')}#GET`]: { guard: 'projectMember', module: null, note: '정본 §4.8 — requireProjectMember. wbs 는 core 라 모듈 관문은 없다. form=1 은 양식, 그 밖은 프로파일 라운드트립' },
   [`${R('import/execute')}#POST`]: nul('projectAdmin'),
@@ -374,6 +375,7 @@ export const CORE_ROUTE_ALLOW: Readonly<Record<string, string>> = {
   '/api/shell': '셸 — 알림함·파생 알림·범위 배지 셋(검토 대기·결재 대기·공지 안읽음) 통합 조회',
   '/api/nav/switch-target': '셸 — 프로젝트 전환의 같은 모듈 유지 판정(D41)',
   '/api/cron/inbox-retention': '크론 — 알림함 보존 정리',
+  '/api/cron/minutes-attachments-gc': '크론 — 회의록 첨부의 고아 객체·미정리 톰스톤 정리(SP5 D26 — 판정은 수동 스크립트와 같은 함수)',
   '/api/cron/form-templates-gc': '크론 — 양식 업로드의 고아 incoming 객체 정리(정본 §3.2.2 core API·§4.7.1)',
 }
 

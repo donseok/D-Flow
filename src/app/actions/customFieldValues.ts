@@ -9,6 +9,7 @@ import { valueOf } from '@/lib/settings/registry'
 import { FIELD_ENTITIES, type CustomValues, type FieldEntity } from '@/lib/domain/customFields'
 import { customFieldChanges, mapCustomFieldDbError, parseCustomValues, validateCustomValues, type FieldRowError } from '@/lib/domain/customFieldValues'
 import { isUuidLike } from '@/lib/domain/validate'
+import { enqueueIndexChange, enqueueWeeklyRowIndexChange } from '@/lib/ai/index/enqueueChange'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import type { ModuleId } from '@/lib/modules/defaults'
 const MODULES: Record<FieldEntity, ModuleId> = { wbs_item: 'wbs', issue: 'issues', weekly_row: 'weekly' }
@@ -78,6 +79,10 @@ export async function saveCustomFieldValues(projectId: string, entity: FieldEnti
         if (logErr) console.error('[customFieldValues] 변경 이력 기록 실패:', logErr.message)
       } catch (e) { console.error('[customFieldValues] 변경 이력 기록 실패:', e) }
     }
+    // 검색 가능한 추가 정보는 색인 본문에 든다 — 주간 행은 그 행의 주간 문서를 다시 색인한다
+    await (entity === 'weekly_row'
+      ? enqueueWeeklyRowIndexChange(projectId, [rowId])
+      : enqueueIndexChange({ domain: entity === 'wbs_item' ? 'wbs' : 'issues', projectId, entityId: rowId }))
     revalidatePath(`/p/${projectId}`, 'layout')
     return { ok: true, values: saved.value }
   } catch (e) { return { ok: false, code: 'FIELD_UNAVAILABLE', error: failWith('customFieldValues', e, ERR) } }

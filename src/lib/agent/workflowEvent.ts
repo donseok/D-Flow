@@ -2,6 +2,7 @@ import type { AdminClient } from '@/lib/minutes/externalApi'
 import { notifySuccessorsOnReached } from '@/lib/agent/stageTransition'
 import { ERR_REPORT_STALE } from '@/lib/domain/agentWork'
 import { UUID_RE } from '@/lib/domain/validate'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 
 /**
  * 원자 전이 RPC apply_workflow_event 의 앱 층 입구(스펙 2026-09-15 §4, 마이그레이션 0096). 주문 CAS·단계·
@@ -107,6 +108,8 @@ export async function applyWorkflowEvent(admin: AdminClient, args: WorkflowEvent
     const fail: WorkflowEventFail = { ok: false, conflict, reason, orderStatus, error: REASON_TEXT[reason] ?? `전이 실패(${reason})` }
     return r.stale === true ? { ...fail, stale: true } : fail
   }
+  // 단계 전이가 실적%를 바꿨으면 그 항목을 다시 색인한다(진행률은 색인 본문에 든다). 주문만 아는 사건(itemId 없음)은 정합성 검사가 메운다.
+  if (r.actual_changed === true && args.itemId) await enqueueIndexChange({ domain: 'wbs', entityId: args.itemId })
   return {
     ok: true, orderStatus,
     stage: typeof r.stage === 'string' ? r.stage : null,

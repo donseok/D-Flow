@@ -14,6 +14,10 @@
       "schedule": "30 19 * * *"
     },
     {
+      "path": "/api/cron/minutes-attachments-gc",
+      "schedule": "0 20 * * *"
+    },
+    {
       "path": "/api/cron/ai-index",
       "schedule": "0 18 * * *"
     },

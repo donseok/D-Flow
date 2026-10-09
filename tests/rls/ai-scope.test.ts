@@ -170,3 +170,13 @@ describe('usage_events 워크스페이스 스코프 격리 (SP8)', () => {
     })
   })
 })
+
+// 0047 — 옛 8인자 정의가 남아 있으면 8개 인자 호출이 두 정의에 모두 맞아 거부된다(워커의 모든 upsert 가 실패했다)
+describe('replace_ai_document_chunks 는 정의가 하나다', () => {
+  it('정의 하나 · authenticated 실행권 없음', async () => {
+    const rows = (await pool.query(`select pronargs, has_function_privilege('authenticated', oid, 'execute') as authed,
+      has_function_privilege('service_role', oid, 'execute') as service
+      from pg_proc where pronamespace = 'public'::regnamespace and proname = 'replace_ai_document_chunks'`)).rows
+    expect(rows).toEqual([{ pronargs: 9, authed: false, service: true }])
+  })
+})

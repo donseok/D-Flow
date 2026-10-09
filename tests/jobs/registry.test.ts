@@ -28,7 +28,7 @@ afterEach(() => { vi.unstubAllEnvs() })
 
 describe('잡 레지스트리', () => {
   it('항목은 다섯 필드를 갖추고 id·path 가 유일하다', () => {
-    expect(jobs.map((j) => j.id)).toEqual(['inbox-retention', 'form-templates-gc', 'ai-index', 'wiki-worker'])
+    expect(jobs.map((j) => j.id)).toEqual(['inbox-retention', 'form-templates-gc', 'minutes-attachments-gc', 'ai-index', 'wiki-worker'])
     expect(new Set(jobs.map((j) => j.path)).size).toBe(jobs.length)
     for (const j of jobs) {
       expect(j.path, j.id).toMatch(/^\/api\/[a-z0-9/-]+$/)
@@ -43,7 +43,7 @@ describe('잡 레지스트리', () => {
 
   it('수동 모드는 스펙 표와 같다 — ai-index 넷, wiki-worker 하나, core 잡은 없음', () => {
     expect(Object.fromEntries(jobs.map((j) => [j.id, [...j.manualModes]]))).toEqual({
-      'inbox-retention': [], 'form-templates-gc': [],
+      'inbox-retention': [], 'form-templates-gc': [], 'minutes-attachments-gc': [],
       'ai-index': ['worker', 'consistency', 'backfill', 'repair'], 'wiki-worker': ['worker'],
     })
   })
@@ -52,6 +52,7 @@ describe('잡 레지스트리', () => {
     for (const name of ['CHAT_V2_INDEX_WORKER_ENABLED', 'CHAT_V2_ENABLED', 'WIKI_WORKER_ENABLED', 'WIKI_SERVICE_ENABLED']) vi.stubEnv(name, '')
     expect(jobDef('inbox-retention').envAvailable()).toBe(true)
     expect(jobDef('form-templates-gc').envAvailable()).toBe(true)
+    expect(jobDef('minutes-attachments-gc').envAvailable()).toBe(true)
     expect(jobDef('ai-index').envAvailable()).toBe(false)
     expect(jobDef('wiki-worker').envAvailable()).toBe(false)
 

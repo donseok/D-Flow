@@ -31,6 +31,9 @@ export const JOBS = [
   { id: 'inbox-retention', path: '/api/cron/inbox-retention', schedule: '0 19 * * *', module: null, envAvailable: always, manualModes: [] },
   // 양식 업로드의 고아 incoming 객체 정리(정본 §4.7.1) — 유예가 24시간이라 하루 1회면 충분하다. 04:30 KST
   { id: 'form-templates-gc', path: '/api/cron/form-templates-gc', schedule: '30 19 * * *', module: null, envAvailable: always, manualModes: [] },
+  // 회의록 첨부 청소(SP5 D26) — 고아 minute-files 객체(유예 24시간)와 미정리 톰스톤. 판정은 수동 스크립트(npm run minutes:sweep)와 같은 함수다. 05:00 KST.
+  // core 잡으로 둔다: 지울 대상은 어느 행도 가리키지 않는 객체와 사용자가 이미 지운 첨부뿐이라, 모듈을 끈 워크스페이스에서도 계속 치워야 한다(form-templates-gc 와 같은 꼴)
+  { id: 'minutes-attachments-gc', path: '/api/cron/minutes-attachments-gc', schedule: '0 20 * * *', module: null, envAvailable: always, manualModes: [] },
   // AI 색인 큐 소비 — 03:00 KST. 배포에서 챗봇을 쓸 수 없으면 잡을 선점하지 않는다(선점하면 잡마다 off → skipped 로 소모된다, D16)
   { id: 'ai-index', path: '/api/cron/ai-index', schedule: '0 18 * * *', module: 'chatbot',
     envAvailable: () => chatIndexWorkerEnabled() && moduleDef('chatbot').envAvailable(),

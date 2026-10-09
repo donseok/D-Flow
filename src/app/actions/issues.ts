@@ -48,6 +48,7 @@ import type { ProjectMember } from '@/lib/domain/types'
 import { generateAnswer } from '@/lib/ai/llm'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { requireModule } from '@/lib/modules/gate'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import {
   MINUTE_ISSUE_DRAFT_SYSTEM_PROMPT,
   buildFallbackMinuteIssueDraft,
@@ -729,6 +730,7 @@ export async function createIssue(projectId: string, input: IssueInput): Promise
     }
     return { ok: false, error: assignErr }
   }
+  await enqueueIndexChange({ domain: 'issues', projectId: projectId, entityId: issueId })
   revalidateIssues(projectId)
   return {
     ok: true,
@@ -1005,6 +1007,7 @@ export async function createIssueFromMinuteBlock(
     issue_id: string
     code: string
   }
+  await enqueueIndexChange({ domain: 'issues', projectId: projectId, entityId: row.issue_id })
   await emitNotification({
     type: 'issue.assigned', projectId, actorUserId: user.id,
     entityType: 'issue', entityId: row.issue_id,
@@ -1096,6 +1099,7 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
   const { data: updated, error } = value.custom !== undefined ? await query.maybeSingle() : await query.single()
   if (!error && !updated) return { ok: false, conflict: true, error: '추가 정보가 변경되었습니다. 최신 값을 확인한 뒤 다시 저장하세요.' }
   if (error) return { ok: false, error: issueWriteFailure(error) }
+  await enqueueIndexChange({ domain: 'issues', projectId: cur.project_id as string, entityId: issueId })
   // 본문 수정은 이미 커밋됨 — 담당자 교체가 실패해도 변경분이 보이도록 revalidate 후 에러 보고(회의 관례).
   const assignErr = await replaceAssignees(sb, issueId, cur.project_id as string, input.assigneeMemberIds,
     { issueTitle: value.title, actorUserId: gate.userId })
@@ -1176,6 +1180,7 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
     if (error) return { ok: false, error: issueWriteFailure(error) }
     if (!updated?.length) return { ok: false, error: '이슈가 삭제되어 저장할 수 없습니다.' }
   }
+  await enqueueIndexChange({ domain: 'issues', projectId: cur.project_id as string, entityId: issueId })
   // 상태 변경 이력(issue_updates kind='status')은 DB 트리거(record_issue_status_change)가 같은 트랜잭션에서 남긴다(SP5b D5) —
   // 직접 PATCH·이관도 같은 이력을 남기고, 이력만 빠지는 반쪽 저장이 없다.
 
@@ -1220,6 +1225,7 @@ export async function deleteIssue(issueId: string): Promise<IssueActionResult> {
 
   const { error } = await sb.from('issues').delete().eq('id', issueId).select('id').single()
   if (error) return { ok: false, error: issueWriteFailure(error) }
+  await enqueueIndexChange({ domain: 'issues', projectId: cur.project_id as string, entityId: issueId, operation: 'delete' })
 
   if (paths.length > 0) {
     // remove() 는 아무것도 지우지 못해도 error 가 null 이라 성공을 판정할 수 없다.

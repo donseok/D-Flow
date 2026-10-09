@@ -13,6 +13,7 @@ import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { requireModule } from '@/lib/modules/gate'
 import { emitNotification } from '@/lib/notify/emit'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import {
   canArchiveUpdate,
   canPurgeUpdate,
@@ -120,6 +121,8 @@ async function syncResolutionNoteMirror(
     console.error('[issueUpdates] 미러 갱신이 0행입니다:', issueId)
     return '이슈를 찾을 수 없습니다.'
   }
+  // 해결 메모는 색인 본문에 든다 — 범위(프로젝트)는 행에서 읽는다
+  await enqueueIndexChange({ domain: 'issues', entityId: issueId })
   return null
 }
 

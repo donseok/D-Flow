@@ -2,7 +2,7 @@
 // 회의록 첨부 청소 잡(SP5 B3 과제10, D23) — ① 고아 minute-files 객체 ② 미정리 톰스톤(객체 삭제 실패분)을 정리한다.
 //
 // 기본은 dry-run(읽기만 하고 무엇을 할지 보고). --apply 일 때만 지운다.
-// 대상은 minutes 버킷의 minute-files 세그먼트뿐 — 본문(minutes 세그먼트)·과거 버전 원본은 판정(scripts/lib/attachmentSweep.mjs)에서 0건이다.
+// 대상은 minutes 버킷의 minute-files 세그먼트뿐 — 본문(minutes 세그먼트)·과거 버전 원본은 판정(src/lib/minutes/attachmentSweep.mjs)에서 0건이다.
 // 읽기(버킷 전체 목록·minute_files·minute_versions 전 페이지)가 하나라도 실패하면 아무것도 지우지 않고 멈춘다.
 // 로그에는 파일 이름을 싣지 않는다(회의록 id 까지만 — safePathLabel).
 //
@@ -11,14 +11,15 @@
 //   node scripts/minutes/sweep-attachments.mjs --target local --apply
 //   node scripts/minutes/sweep-attachments.mjs --target staging|prod [--apply]   # .env.local.<target> 와 STAGING_REF/PROD_REF 필요
 //
-// 스케줄 배선(크론)은 첫 배포 SP 의 몫이다 — 지금은 사람이 돌린다.
+// 스케줄 실행은 잡 `minutes-attachments-gc`(src/lib/jobs/registry.ts — 하루 1회, 같은 runSweep 을 apply 로 부른다)가 맡는다.
+// 이 스크립트는 dry-run 점검과 수동 실행용이다.
 
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import {
   assertNotForbidden, classifySupabaseUrl, localAdminEnv, parseEnvFile, resolveTarget,
 } from '../lib/targets.mjs'
-import { runSweep } from '../lib/attachmentSweepRun.mjs'
+import { runSweep } from '../../src/lib/minutes/attachmentSweepRun.mjs'
 
 const args = process.argv.slice(2)
 const flagValue = name => {

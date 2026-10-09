@@ -3,7 +3,8 @@ import { addDaysIso } from '@/lib/domain/dates'
 import { todayIn, type RequestCalendar } from '@/lib/domain/calendar'
 import { dateAnchors, inclusiveRange, weekRefOf } from './calendarAnchors'
 import { classifyIntent } from '@/lib/ai/intent'
-import type { CoreBotToolName } from '@/lib/ai/tools/types'
+import { BOT_READ_CAPABILITIES, type CoreBotToolName } from '@/lib/ai/tools/types'
+import { MODULES } from '@/lib/modules/registry'
 import { DEFAULT_ATTENDANCE_TYPES, type AttendanceTypeDef } from '@/lib/settings/vocab'
 import type {
   BotDomain,
@@ -62,13 +63,13 @@ export type DeterministicRoute =
       statusMessage: string
     }
 
-/** v2가 직접 처리하는 읽기 도메인의 단일 원천(리뷰 M-3). 라우팅 필터·문맥 승격·후속 대화 상속이 전부 이 집합에서 파생된다. */
-const V2_READ_DOMAINS = [
-  'wbs', 'weekly', 'meetings', 'attendance',
-  'announcements', 'minutes', 'wiki', 'kanban', 'dashboard', 'members', 'settings',
-] as const
-
-type V2ReadDomain = (typeof V2_READ_DOMAINS)[number]
+/**
+ * v2가 직접 처리하는 읽기 도메인의 단일 원천(리뷰 M-3). 라우팅 필터·문맥 승격·후속 대화 상속이 전부 이 집합에서 파생된다.
+ * 목록을 손으로 적지 않는다(개정 §4.8 '도메인') — 모듈 레지스트리의 botDomains 가운데 읽기 도구(capability)가 있는 것이다.
+ * 도구가 아직 없는 도메인(지금은 issues)은 모듈에 적혀 있어도 여기 들지 않아 기본 답변 경로로 간다.
+ */
+const TOOL_DOMAINS: ReadonlySet<string> = new Set(BOT_READ_CAPABILITIES.map((capability) => capability.slice(0, capability.indexOf(':'))))
+export const V2_READ_DOMAINS: readonly BotDomain[] = MODULES.flatMap((module) => module.botDomains).filter((domain) => TOOL_DOMAINS.has(domain))
 
 const V2_READ_DOMAIN_SET: ReadonlySet<BotDomain> = new Set<BotDomain>(V2_READ_DOMAINS)
 
@@ -705,7 +706,7 @@ export function routeChatRequest(input: ChatRequestV2, now: Date, calendar: Requ
   const conversational = conversationDomains(input)
   const hasProject = Boolean(projectHint(input))
   const domains = uniq(explicit.length ? explicit : contextual ? [contextual] : conversational)
-    .filter((d): d is V2ReadDomain => V2_READ_DOMAIN_SET.has(d))
+    .filter((d) => V2_READ_DOMAIN_SET.has(d))
     // Wiki는 프로젝트 지식이라 프로젝트 없이는 조회 자체가 불가능하다. 전역 화면에서
     // "결정 사항" 같은 표현만으로 wiki가 붙으면, 예전에 회의록 전역 검색으로 답하던 질문이
     // 갑자기 "프로젝트를 선택하세요"로 막힌다 — 프로젝트가 없으면 wiki는 후보에서 뺀다.

@@ -5,7 +5,7 @@ import type { ClaimedIndexJob, IndexMutation } from './types'
 export const MODULE_DISABLED_ERROR = 'module_disabled'
 export const CONFIG_UNAVAILABLE_ERROR = 'CONFIG_UNAVAILABLE'
 
-export type IndexJobRef = Pick<IndexMutation, 'projectId' | 'domain' | 'entityId'> & { jobKey?: string }
+export type IndexJobRef = Pick<IndexMutation, 'projectId' | 'workspaceId' | 'domain' | 'entityId'> & { jobKey?: string }
 
 export interface IndexJobModuleGate {
   state(job: IndexJobRef): Promise<ModuleState>
@@ -17,6 +17,8 @@ export function createIndexJobModuleGate(db: ConfigReadClient): IndexJobModuleGa
     async state(job) {
       if (job.projectId) return moduleState({ projectId: job.projectId }, 'chatbot', { client: db })
       if (job.domain !== 'minutes') {
+        // 프로젝트 없는 잡은 그 행의 워크스페이스로 판정한다(0036 — 잡 행이 워크스페이스를 갖고 있다). 그것도 없으면 범위를 모른다.
+        if (job.workspaceId) return moduleState({ workspaceId: job.workspaceId }, 'chatbot', { client: db })
         console.error(`[index-worker] 프로젝트 없는 ${job.domain} 잡 — 판정할 범위가 없다(job ${job.jobKey ?? job.entityId})`)
         return 'unknown'
       }

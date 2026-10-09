@@ -458,6 +458,7 @@ export function createSupabaseKnowledgeIndex(
             p_source_updated_at: first.updatedAt,
             p_indexed_at: indexedAt,
             p_documents: group.map(document => documentWriteRow(document, indexedAt)),
+            p_workspace_id: upsertOptions.workspaceId ?? null,
           })
           if (error) return queryFailure('INDEX_UPSERT_FAILED', 'upsert', error)
           if (typeof data !== 'number' || !Number.isInteger(data) || data < 0 || data > group.length) {
@@ -557,6 +558,8 @@ function mapClaimedIndexJob(value: unknown): ClaimedIndexJob | null {
     jobKey: value.job_key as string,
     operation: value.operation,
     projectId,
+    // 0036 이후 not null 이지만 형이 어긋나도 잡을 버리지 않는다 — 없으면 프로젝트 없는 잡의 모듈 판정이 모름(unknown)이 될 뿐이다
+    workspaceId: asNullableString(value.workspace_id) ?? null,
     domain: domain as BotDomain,
     entityType: entityType as BotEntityType,
     entityId: value.entity_id as string,
@@ -606,6 +609,8 @@ export function createSupabaseIndexJobQueue(
         job_key: indexJobKey(mutation),
         operation: mutation.operation,
         project_id: mutation.projectId,
+        // 프로젝트 없는 잡은 워크스페이스가 있어야 등록된다(0038). 프로젝트가 있으면 RPC 가 프로젝트에서 채우고, 준 값이 다르면 거부한다
+        ...(mutation.workspaceId ? { workspace_id: mutation.workspaceId } : {}),
         domain: mutation.domain,
         entity_type: mutation.entityType,
         entity_id: mutation.entityId,

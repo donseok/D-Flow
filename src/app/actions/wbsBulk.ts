@@ -10,6 +10,7 @@ import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { setWbsStage, setWbsAssignee } from '@/app/actions/wbsAssign'
 import { isStageCode } from '@/lib/domain/stageLabels'
 import { isUuidLike } from '@/lib/domain/validate'
+import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 
 import type { WbsBulkChanges, WbsBulkTarget, WbsBulkSnapshotRow, WbsBulkFailedItem, WbsBulkResult } from '@/lib/domain/wbsBulk'
 export type { BulkFieldMode, WbsBulkChanges, WbsBulkTarget, WbsBulkSnapshotRow, WbsBulkFailedItem, WbsBulkResult } from '@/lib/domain/wbsBulk'
@@ -117,6 +118,7 @@ async function updateWbsItems(projectId: string, itemIds: string[], changes: Wbs
       result.failed.push({ itemId: target.id, reason: 'unknown', message: '저장하지 못했습니다. 다시 시도해 주세요.' })
     }
   }
+  if (result.succeeded.length) await enqueueIndexChange(result.succeeded.map((entityId) => ({ domain: 'wbs' as const, projectId, entityId })))
   result.ok = !result.failed.length
   if (recordSnapshot && result.succeeded.length) { revalidatePath('/(app)/p/[projectId]', 'layout'); after(() => recordProgressSnapshot(projectId)) }
   return result

@@ -30,6 +30,7 @@ HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js
 |---|---|---|---|---|
 | `inbox-retention` | `GET /api/cron/inbox-retention` | `0 19 * * *` | 항상 | 없음 |
 | `form-templates-gc` | `GET /api/cron/form-templates-gc` | `30 19 * * *` | 항상 | 없음 |
+| `minutes-attachments-gc` | `GET /api/cron/minutes-attachments-gc` | `0 20 * * *` | 항상 | 없음(dry-run 점검은 `npm run minutes:sweep -- --target local`) |
 | `ai-index` | `GET /api/cron/ai-index` | `0 18 * * *` | `CHAT_V2_INDEX_WORKER_ENABLED=true` 그리고 `CHAT_V2_ENABLED=true` | `worker`·`consistency`·`backfill`·`repair` |
 | `wiki-worker` | `GET /api/wiki/worker` | `30 18 * * *` | `WIKI_WORKER_ENABLED=true` | `worker` |
 
@@ -56,6 +57,7 @@ cron 예(`/etc/cron.d/dflow`, 서버 시간대가 UTC 일 때 — 시크릿을 �
 # /etc/dflow/curl-job.conf (chmod 600):  header = "Authorization: Bearer <CRON_SECRET>"
 0 19 * * *   dflow  curl -fsS -K /etc/dflow/curl-job.conf http://127.0.0.1:3000/api/cron/inbox-retention
 30 19 * * *  dflow  curl -fsS -K /etc/dflow/curl-job.conf http://127.0.0.1:3000/api/cron/form-templates-gc
+0 20 * * *   dflow  curl -fsS -K /etc/dflow/curl-job.conf http://127.0.0.1:3000/api/cron/minutes-attachments-gc
 */10 * * * * dflow  curl -fsS -K /etc/dflow/curl-job.conf http://127.0.0.1:3000/api/cron/ai-index
 */10 * * * * dflow  curl -fsS -K /etc/dflow/curl-job.conf http://127.0.0.1:3000/api/wiki/worker
 ```
