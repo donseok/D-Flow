@@ -1,5 +1,6 @@
 import { moduleState, projectsWithModule, workspacesWithModule, type ModuleState } from '@/lib/modules/gate'
 import type { ConfigReadClient } from '@/lib/settings/projectConfig'
+import { fetchAllPages, type PageResult } from '@/lib/data/paging'
 import type { ClaimedIndexJob, IndexMutation } from './types'
 
 export const MODULE_DISABLED_ERROR = 'module_disabled'
@@ -85,23 +86,33 @@ export async function gateWikiJob(db: ConfigReadClient, target: WikiJobTarget): 
   return 'skipped'
 }
 
-/** 워커 접근 스코프는 켜진 워크스페이스의 켜진 프로젝트만 포함한다. */
+/**
+ * 워커 접근 스코프는 켜진 워크스페이스의 켜진 프로젝트만 포함한다. 목록은 끝까지 읽는다(fetchAllPages — 쪽 넘김 + count 대조):
+ * 앞에서 자르면 잘린 뒤쪽 프로젝트의 잡이 "범위 밖"(INDEX_ACCESS_DENIED)으로 실패한다 — 조용한 절단은 접근 없음으로 위장된 조회 누락이다.
+ * 어느 조회든 실패·잘림이면 { ok: false } — 일부만 읽은 범위로 워커를 돌리지 않는다.
+ */
 export async function enabledIndexProjectIds(db: ConfigReadClient): Promise<{ ok: true; ids: string[] } | { ok: false }> {
-  const workspaces = await db.from('workspaces').select('id')
-  if (workspaces.error || !Array.isArray(workspaces.data)) {
-    console.error('[index-worker] 워크스페이스 조회 실패:', workspaces.error?.message ?? '결과 없음')
+  type IdPage = PromiseLike<PageResult<{ id: string }>>
+  let workspaceIds: string[]
+  try {
+    workspaceIds = (await fetchAllPages<{ id: string }>('워크스페이스', (from, to) =>
+      db.from('workspaces').select('id', { count: 'exact' }).order('id').range(from, to) as unknown as IdPage)).map((workspace) => workspace.id)
+  } catch (e) {
+    console.error('[index-worker] 워크스페이스 조회 실패:', e instanceof Error ? e.message : e)
     return { ok: false }
   }
-  const enabledWorkspaces = await workspacesWithModule(
-    (workspaces.data as Array<{ id: string }>).map((workspace) => workspace.id), 'chatbot', { client: db },
-  )
+  const enabledWorkspaces = await workspacesWithModule(workspaceIds, 'chatbot', { client: db })
   const perWorkspace = await Promise.all(enabledWorkspaces.map(async (workspaceId) => {
-    const projects = await db.from('projects').select('id').eq('workspace_id', workspaceId).limit(100)
-    if (projects.error || !Array.isArray(projects.data)) {
-      console.error('[index-worker] 프로젝트 조회 실패:', workspaceId, projects.error?.message ?? '결과 없음')
+    let projectIds: string[]
+    try {
+      projectIds = (await fetchAllPages<{ id: string }>('프로젝트', (from, to) =>
+        db.from('projects').select('id', { count: 'exact' }).eq('workspace_id', workspaceId).order('id').range(from, to) as unknown as IdPage))
+        .map((project) => project.id)
+    } catch (e) {
+      console.error('[index-worker] 프로젝트 조회 실패:', workspaceId, e instanceof Error ? e.message : e)
       return null
     }
-    return projectsWithModule((projects.data as Array<{ id: string }>).map((project) => project.id), 'chatbot', { client: db })
+    return projectsWithModule(projectIds, 'chatbot', { client: db })
   }))
   if (perWorkspace.some((ids) => ids === null)) return { ok: false }
   return { ok: true, ids: (perWorkspace as string[][]).flat() }

@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { fixedToolTeams } from '../../helpers/tool-team-source'
 import { fixedToolVocab } from '../../helpers/tool-vocab-source'
 import { fixedToolFields } from '../../helpers/tool-field-source'
+import { fixedToolLevels } from '../../helpers/tool-level-source'
 const toolTeams = fixedToolTeams()
 import {
   orchestrateChatV2,
@@ -52,8 +53,8 @@ import { GOLDEN_CASES } from './cases'
 function buildRegistry(options: FakeRepositoryOptions) {
   const repos = createFakeRepositories(options)
   const tools: ChatTool[] = [
-    createFindWbsItemsTool(repos.wbs, toolTeams),
-    createGetWbsItemDetailTool(repos.wbs, toolTeams, fixedToolFields()),
+    createFindWbsItemsTool(repos.wbs, toolTeams, fixedToolLevels()),
+    createGetWbsItemDetailTool(repos.wbs, toolTeams, fixedToolFields(), fixedToolLevels()),
     createGetWbsDependenciesTool(repos.wbs, toolTeams),
     createGetWbsChangeLogTool(repos.wbs),
     createListWbsAttachmentsTool(repos.wbs),

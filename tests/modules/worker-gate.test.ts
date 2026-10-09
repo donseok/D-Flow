@@ -10,6 +10,7 @@ import {
   type IndexJobModuleGate,
 } from '@/lib/ai/index/moduleGate'
 import type { ClaimedIndexJob, IndexJobWorkerQueue, KnowledgeIndex } from '@/lib/ai/index/types'
+import { createSupabaseIndexJobQueue, createSupabasePgvectorKnowledgeIndex } from '@/lib/ai/index/pgvector'
 import { processMinuteWikiJob, processWikiProjectRebuildStep } from '@/lib/ai/wiki-ingest'
 
 const P = '00000000-0000-0000-7e57-000000001471'
@@ -186,43 +187,88 @@ describe('색인 잡의 범위와 skipped 쓰기', () => {
 })
 
 describe('워커 접근 스코프', () => {
-  function scopeDb(options: { workspacesError?: unknown; projectsError?: unknown } = {}) {
-    const queried: Array<[string, number]> = []
+  /** 워크스페이스·프로젝트 목록 읽기(select·eq·order·range + count)만 흉내 낸다. maxRows 는 서버가 한 응답에 담는 상한(PostgREST max_rows),
+   *  countOff 는 count 를 실제 행 수와 어긋나게 한다(읽는 중 변경·잘림) */
+  function scopeDb(options: {
+    workspacesError?: unknown; projectsError?: unknown; projects?: Record<string, string[]>; maxRows?: number; countOff?: number
+  } = {}) {
+    const projects = options.projects ?? { w1: ['p1', 'p2'], w2: ['p3'] }
+    const ranges: Array<[string, number, number]> = []
     const from = vi.fn((table: string) => {
       let workspaceId = ''
       const builder: Record<string, unknown> = {}
       builder.select = () => builder
       builder.eq = (_column: string, value: string) => { workspaceId = value; return builder }
-      builder.limit = (count: number) => { queried.push([workspaceId, count]); return builder }
-      builder.then = (resolve: (value: unknown) => unknown) => Promise.resolve(table === 'workspaces'
-        ? { data: options.workspacesError ? null : [{ id: 'w1' }, { id: 'w2' }], error: options.workspacesError ?? null }
-        : { data: options.projectsError ? null : workspaceId === 'w1' ? [{ id: 'p1' }, { id: 'p2' }] : [{ id: 'p3' }],
-            error: options.projectsError ?? null }).then(resolve)
+      builder.order = () => builder
+      builder.range = async (start: number, end: number) => {
+        ranges.push([table === 'workspaces' ? 'workspaces' : workspaceId, start, end])
+        const error = table === 'workspaces' ? options.workspacesError : options.projectsError
+        if (error) return { data: null, error, count: null }
+        const all = table === 'workspaces' ? ['w1', 'w2'] : (projects[workspaceId] ?? [])
+        const page = all.slice(start, Math.min(end + 1, start + (options.maxRows ?? Infinity)))
+        return { data: page.map((id) => ({ id })), error: null, count: all.length + (table === 'projects' ? options.countOff ?? 0 : 0) }
+      }
       return builder
     })
-    return { from, queried }
+    return { from, ranges }
   }
+  const manyIds = (n: number) => Array.from({ length: n }, (_, i) => `p${String(i + 1).padStart(3, '0')}`)
 
   it('꺼진 워크스페이스는 프로젝트를 읽지 않고 켜진 프로젝트만 스코프에 넣는다', async () => {
     const db = scopeDb()
     vi.mocked(workspacesWithModule).mockResolvedValueOnce(['w1'])
     vi.mocked(projectsWithModule).mockResolvedValueOnce(['p2'])
     expect(await enabledIndexProjectIds(db as never)).toEqual({ ok: true, ids: ['p2'] })
-    expect(db.queried).toEqual([['w1', 100]])
+    expect(db.ranges.map(([scope]) => scope)).toEqual(['workspaces', 'w1'])
     expect(workspacesWithModule).toHaveBeenCalledWith(['w1', 'w2'], 'chatbot', { client: db })
     expect(projectsWithModule).toHaveBeenCalledWith(['p1', 'p2'], 'chatbot', { client: db })
   })
 
-  it('두 워크스페이스는 각각 100개 상한으로 읽는다', async () => {
+  it('두 워크스페이스의 프로젝트를 각각 읽어 합친다', async () => {
     const db = scopeDb()
     expect(await enabledIndexProjectIds(db as never)).toEqual({ ok: true, ids: ['p1', 'p2', 'p3'] })
-    expect(db.queried).toEqual([['w1', 100], ['w2', 100]])
+    expect(db.ranges.map(([scope]) => scope).sort()).toEqual(['w1', 'w2', 'workspaces'])
+  })
+
+  it('워크스페이스의 프로젝트가 100개를 넘어도 끝까지 읽는다 — 서버가 한 응답을 100행에서 잘라도 쪽을 넘긴다', async () => {
+    const ids = manyIds(250)
+    const db = scopeDb({ projects: { w1: ids, w2: [] }, maxRows: 100 })
+    const scope = await enabledIndexProjectIds(db as never)
+    expect(scope).toEqual({ ok: true, ids })
+    expect(db.ranges.filter(([s]) => s === 'w1').map(([, start]) => start)).toEqual([0, 100, 200])
+  })
+
+  it('100개 초과 범위에서 뒤쪽 프로젝트의 잡이 통과한다 — 등록·색인 반영 모두 범위 밖(INDEX_ACCESS_DENIED)으로 실패하지 않는다', async () => {
+    const ids = manyIds(150)
+    const scope = await enabledIndexProjectIds(scopeDb({ projects: { w1: ids, w2: [] } }) as never)
+    if (!scope.ok) throw new Error('scope')
+    const last = ids[ids.length - 1]
+    const accessScope = { allowedProjectIds: scope.ids, allowGlobal: true }
+    const rpc = vi.fn(async (name: string) => (name === 'upsert_ai_index_jobs' ? { data: 1, error: null } : { data: 0, error: null }))
+    const client = { from: vi.fn(), rpc }
+    const enqueued = await createSupabaseIndexJobQueue(client as never, accessScope)
+      .enqueue([{ operation: 'upsert', projectId: last, domain: 'wbs', entityType: 'wbs_item', entityId: 'w1' }])
+    expect(enqueued).toMatchObject({ ok: true })
+    expect(rpc).toHaveBeenCalledWith('upsert_ai_index_jobs', expect.anything())
+    const index = createSupabasePgvectorKnowledgeIndex(client as never, accessScope)
+    // 빈 청크 목록의 삭제는 범위 판정만 지나면 저장소를 건드리지 않고 끝난다 — 판정만 본다
+    const selector = { domain: 'wbs' as const, entityType: 'wbs_item' as const, entityId: 'w1', indexVersion: 1, chunkNos: [] }
+    expect(await index.delete({ ...selector, projectId: last })).toEqual({ ok: true, data: { affected: 0 } })
+    // 범위 밖 프로젝트는 여전히 막힌다
+    const outside = await index.delete({ ...selector, projectId: 'p-outside' })
+    expect(outside).toMatchObject({ ok: false, error: { code: 'INDEX_ACCESS_DENIED' } })
   })
 
   it('워크스페이스 또는 프로젝트 조회 실패를 빈 스코프로 위장하지 않는다', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await enabledIndexProjectIds(scopeDb({ workspacesError: { message: 'down' } }) as never)).toEqual({ ok: false })
     expect(await enabledIndexProjectIds(scopeDb({ projectsError: { message: 'down' } }) as never)).toEqual({ ok: false })
+  })
+
+  it('다 읽은 행 수가 총합과 어긋나면(잘림·읽는 중 변경) 일부만 읽은 범위를 돌려주지 않는다', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await enabledIndexProjectIds(scopeDb({ countOff: 5 }) as never)).toEqual({ ok: false })
+    expect(log).toHaveBeenCalled()
   })
 })
 

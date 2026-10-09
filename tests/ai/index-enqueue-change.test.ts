@@ -13,7 +13,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 vi.mock('@/lib/modules/gate', () => ({ moduleState: mocks.moduleState, projectsWithModule: vi.fn(), workspacesWithModule: vi.fn() }))
 
 import {
-  enqueueIndexChange, enqueueMinuteIndexChange, enqueueProjectIndexChange, enqueueWeeklyRowIndexChange,
+  enqueueIndexChange, enqueueMinuteIndexChange, enqueueProjectIndexChange, enqueueWeeklyAreaIndexChange, enqueueWeeklyRowIndexChange,
 } from '@/lib/ai/index/enqueueChange'
 
 const P = '11111111-1111-4111-8111-111111111111'
@@ -70,6 +70,7 @@ describe('enqueueIndexChange', () => {
     await enqueueMinuteIndexChange('m1')
     await enqueueWeeklyRowIndexChange(P, ['r1'])
     await enqueueProjectIndexChange(P, 'wbs')
+    await enqueueWeeklyAreaIndexChange(P, 'area-1')
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
     expect(mocks.after).not.toHaveBeenCalled()
   })
@@ -187,6 +188,27 @@ describe('회의록·주간 행·프로젝트 전체', () => {
     mocks.createAdminClient.mockReturnValue(a)
     await enqueueWeeklyRowIndexChange(P, ['r1', 'r2', 'r3'])
     expect(a.jobs.map((j) => [j.domain, j.entity_type, j.entity_id])).toEqual([['weekly', 'weekly_report', 'rep1']])
+  })
+
+  it('주간 영역 개명 — 그 영역의 행이 든 주간 문서만, 문서당 한 번 넣는다(다른 영역·다른 프로젝트의 문서는 넣지 않는다)', async () => {
+    const a = admin({ rows: { weekly_report_rows: [
+      { id: 'r1', project_id: P, area_id: 'area-1', report_id: 'rep1' }, { id: 'r2', project_id: P, area_id: 'area-1', report_id: 'rep2' },
+      { id: 'r3', project_id: P, area_id: 'area-1', report_id: 'rep1' }, { id: 'r4', project_id: P, area_id: 'area-2', report_id: 'rep3' },
+      { id: 'r5', project_id: P2, area_id: 'area-1', report_id: 'other' },
+    ] } })
+    mocks.createAdminClient.mockReturnValue(a)
+    await enqueueWeeklyAreaIndexChange(P, 'area-1')
+    expect(a.jobs.map((j) => [j.domain, j.entity_type, j.entity_id, j.operation])).toEqual([
+      ['weekly', 'weekly_report', 'rep1', 'upsert'], ['weekly', 'weekly_report', 'rep2', 'upsert'],
+    ])
+  })
+
+  it('주간 영역 개명 — 행 조회가 실패해도 던지지 않고 로그만 남긴다', async () => {
+    const a = admin({ readError: 'down' })
+    mocks.createAdminClient.mockReturnValue(a)
+    await expect(enqueueWeeklyAreaIndexChange(P, 'area-1')).resolves.toBeUndefined()
+    expect(a.rpc).not.toHaveBeenCalled()
+    expect(errors).toHaveBeenCalled()
   })
 
   it('프로젝트 전체 — 그 프로젝트의 원본 id 를 전부 넣는다', async () => {

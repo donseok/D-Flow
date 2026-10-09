@@ -4,6 +4,7 @@ import { calWithOff, monProjectValues } from '../helpers/calendarFixture'
 import { fixedToolTeams } from '../helpers/tool-team-source'
 import { fixedToolVocab } from '../helpers/tool-vocab-source'
 import { fixedToolFields } from '../helpers/tool-field-source'
+import { fixedToolLevels } from '../helpers/tool-level-source'
 const toolTeams = fixedToolTeams()
 import { createGetAttendanceTool } from '@/lib/ai/tools/attendance'
 import { createListMeetingsTool } from '@/lib/ai/tools/meetings'
@@ -78,7 +79,7 @@ function wbsRepository(result: ReturnType<WbsRepository['getProjectSnapshot']> e
 describe('core read tools', () => {
   it('fails closed before repository access when project scope is not allowed', async () => {
     const repository = wbsRepository({ ok: true, data: wbsSnapshot })
-    const tool = createFindWbsItemsTool(repository, toolTeams)
+    const tool = createFindWbsItemsTool(repository, toolTeams, fixedToolLevels())
     const deniedContext = { ...context, allowedProjectIds: [] }
 
     await expect(tool.execute({ projectId: 'p1', query: 'ERP' }, deniedContext)).resolves.toMatchObject({
@@ -90,7 +91,7 @@ describe('core read tools', () => {
 
   it('also requires the domain capability, even for an allowed project', async () => {
     const repository = wbsRepository({ ok: true, data: wbsSnapshot })
-    const tool = createGetWbsItemDetailTool(repository, toolTeams, fixedToolFields())
+    const tool = createGetWbsItemDetailTool(repository, toolTeams, fixedToolFields(), fixedToolLevels())
 
     const result = await tool.execute(
       { projectId: 'p1', itemId: 'task-1' },
@@ -131,7 +132,7 @@ describe('core read tools', () => {
     }
 
     const results = await Promise.all([
-      createFindWbsItemsTool(rogueWbs, toolTeams).execute({ projectId: 'p1' }, context),
+      createFindWbsItemsTool(rogueWbs, toolTeams, fixedToolLevels()).execute({ projectId: 'p1' }, context),
       createGetWeeklySheetTool(rogueWeekly, weeklySettingsUnused).execute(
         { projectId: 'p1', weekStart: '2026-07-20' }, context,
       ),
@@ -149,7 +150,7 @@ describe('core read tools', () => {
 
   it('returns WBS hierarchy/detail and dependency forecasts with source links', async () => {
     const repository = wbsRepository({ ok: true, data: wbsSnapshot })
-    const find = await createFindWbsItemsTool(repository, toolTeams).execute(
+    const find = await createFindWbsItemsTool(repository, toolTeams, fixedToolLevels()).execute(
       { projectId: 'p1', query: 'ERP', team: 'ERP' }, context,
     )
     expect(find.ok && find.result.records).toHaveLength(2)
@@ -172,7 +173,7 @@ describe('core read tools', () => {
 
   it('filters WBS items by overlap, start, and end schedule semantics', async () => {
     const repository = wbsRepository(repositoryOk(wbsSnapshot))
-    const tool = createFindWbsItemsTool(repository, toolTeams)
+    const tool = createFindWbsItemsTool(repository, toolTeams, fixedToolLevels())
 
     const [overlap, starts, ends] = await Promise.all([
       tool.execute({
@@ -200,7 +201,7 @@ describe('core read tools', () => {
 
   it('rejects partial, invalid, or unscoped WBS schedule arguments', async () => {
     const repository = wbsRepository(repositoryOk(wbsSnapshot))
-    const tool = createFindWbsItemsTool(repository, toolTeams)
+    const tool = createFindWbsItemsTool(repository, toolTeams, fixedToolLevels())
 
     const results = await Promise.all([
       tool.execute({ projectId: 'p1', from: '2026-07-22' }, context),

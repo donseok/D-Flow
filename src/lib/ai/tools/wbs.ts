@@ -29,6 +29,7 @@ import { teamOrderMap } from '@/lib/domain/teams'
 import { customSearchLines } from '@/lib/domain/customFields'
 import type { ToolTeamSource } from './teamSource'
 import type { ToolFieldSource } from './fieldSource'
+import type { ToolLevelSource } from './levelSource'
 
 const WBS_CAPABILITY = 'wbs:read' as const
 
@@ -38,6 +39,9 @@ export interface WbsToolItemRecord {
   parentId: string | null
   // Task 3에서 ComputedItem['level'] 필드가 제거될 예정이라 리터럴로 독립시켰다(depth에서 재생성).
   level: 'phase' | 'task' | 'activity'
+  /** 그 깊이의 단계 이름(이 프로젝트의 설정 core.level_labels) — 결정적 답변이 깊이 키 대신 이 이름을 보인다. 이름을 못 구했거나
+   *  단계 수보다 깊은 항목이면 싣지 않는다(마지막 이름을 빌려 쓰지 않는다 — 그 깊이의 이름이 아니다) */
+  levelLabel?: string
   code: string
   name: string
   path: string
@@ -142,14 +146,19 @@ function computedSnapshot(
   }
 }
 
-function toRecord(flat: FlatItem, updatedAt: string | null, customFields: readonly string[] = []): WbsToolItemRecord {
+function toRecord(
+  flat: FlatItem, updatedAt: string | null, customFields: readonly string[] = [], levelLabels: readonly string[] | null = null,
+): WbsToolItemRecord {
   const { item, path } = flat
+  const levelLabel = levelLabels?.[item.depth]
   return {
     id: item.id,
     projectId: (item as ComputedItem & { projectId?: string }).projectId ?? '',
     parentId: item.parentId,
     // enum 키를 depth에서 재생성(클램프) — orchestrator의 DISPLAY_ENUMS가 동일하게 렌더해 출력 바이트 불변.
     level: (['phase', 'task', 'activity'] as const)[Math.min(item.depth, 2)],
+    // level 바로 곁에 둔다 — orchestrator 가 <필드>Label 짝을 level 자리에서 대신 보인다
+    ...(levelLabel ? { levelLabel } : {}),
     code: item.code,
     name: item.name,
     path,
@@ -166,6 +175,17 @@ function toRecord(flat: FlatItem, updatedAt: string | null, customFields: readon
     owners: item.owners,
     childIds: item.children.map(child => child.id),
     updatedAt,
+  }
+}
+
+/**
+ * 그 프로젝트의 단계 이름(설정 core.level_labels). 못 읽으면 null — 이름 없이 깊이 키만 싣고(결정적 답변은 깊이 표기로 폴백) 사유를 로그에 남긴다.
+ * 접근 판정·프로젝트 확인 뒤에만 부른다.
+ */
+async function levelLabelsOf(levels: ToolLevelSource, projectId: string): Promise<readonly string[] | null> {
+  try { return await levels.projectLevelLabels(projectId) } catch (e) {
+    console.error('[bot-tool] 단계 이름 조회 실패 — 라벨 없이 싣는다', { projectId, error: e instanceof Error ? e.message : String(e) })
+    return null
   }
 }
 
@@ -189,7 +209,9 @@ function loadArgs(args: unknown): { projectId: string; raw: Record<string, unkno
   return projectId ? { projectId, raw: args } : null
 }
 
-export function createFindWbsItemsTool(repository: WbsRepository, teams: ToolTeamSource): ReadOnlyBotTool<WbsToolItemRecord> {
+export function createFindWbsItemsTool(
+  repository: WbsRepository, teams: ToolTeamSource, levels: ToolLevelSource,
+): ReadOnlyBotTool<WbsToolItemRecord> {
   return {
     name: 'find_wbs_items',
     requiredCapability: WBS_CAPABILITY,
@@ -269,8 +291,10 @@ export function createFindWbsItemsTool(repository: WbsRepository, teams: ToolTea
           .some(value => String(value).toLocaleLowerCase('ko-KR').includes(needle))
       })
       const selected = matches.slice(0, limit)
+      // 돌려줄 항목이 있을 때만 읽는다
+      const levelLabels = selected.length ? await levelLabelsOf(levels, parsed.projectId) : null
       const records = selected.map(flat => {
-        const record = toRecord(flat, snapshot.updatedAtById.get(flat.item.id) ?? null)
+        const record = toRecord(flat, snapshot.updatedAtById.get(flat.item.id) ?? null, [], levelLabels)
         record.projectId = parsed.projectId
         return record
       })
@@ -301,7 +325,7 @@ export function createFindWbsItemsTool(repository: WbsRepository, teams: ToolTea
 const WARN_CUSTOM_UNREADABLE = '이 작업의 추가 정보(사용자 정의 필드)를 읽지 못해 표시하지 않았습니다.'
 
 export function createGetWbsItemDetailTool(
-  repository: WbsRepository, teams: ToolTeamSource, fields: ToolFieldSource,
+  repository: WbsRepository, teams: ToolTeamSource, fields: ToolFieldSource, levels: ToolLevelSource,
 ): ReadOnlyBotTool<WbsToolItemRecord> {
   return {
     name: 'get_wbs_item_detail',
@@ -329,7 +353,7 @@ export function createGetWbsItemDetailTool(
       const custom = flat.item.custom
       const customUnreadable = custom === null && defs.some(def => def.active && def.searchable)
       const lines = custom ? customSearchLines(defs, custom) : []
-      const record = toRecord(flat, snapshot.updatedAtById.get(itemId) ?? null, lines)
+      const record = toRecord(flat, snapshot.updatedAtById.get(itemId) ?? null, lines, await levelLabelsOf(levels, parsed.projectId))
       record.projectId = parsed.projectId
       return {
         ok: true,

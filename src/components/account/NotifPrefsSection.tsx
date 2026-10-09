@@ -5,6 +5,7 @@ import { saveNotifPrefs } from '@/app/actions/preferences'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { NOTIFICATION_CATALOG, isTypeEnabled, type NotificationCategory, type NotificationType } from '@/lib/domain/inbox'
+import type { WorkspaceNotifyOff } from '@/lib/notify/workspaceOff'
 
 const TYPES = Object.keys(NOTIFICATION_CATALOG) as NotificationType[]
 const CATEGORIES: readonly NotificationCategory[] = ['work', 'issue', 'meeting', 'announce', 'system']
@@ -13,8 +14,9 @@ const CATEGORIES: readonly NotificationCategory[] = ['work', 'issue', 'meeting',
  * 개인 알림 유형 토글(SPU1, 개정 §4.10) — 계정 키 `notif`. 유형·기본값·필수 여부는 NOTIFICATION_CATALOG 가 정본이고, 켜짐 판정은 알림함과 같은
  * isTypeEnabled 다(조회 시점 필터라 끄면 이미 받은 알림도 숨는다). `required` 유형은 켜진 채 비활성이다. 누르면 그 유형만 바로 저장하고,
  * 실패하면 값을 되돌리고 알린다(성공처럼 보이지 않게). notif 가 null 이면 조회 실패 — 기본값으로 그리지 않는다.
+ * workspaceOff 는 소속 워크스페이스가 정책(notify.policy)으로 끈 유형이다 — 안내만 하고 토글은 그대로 둔다(정책이 다시 켜지면 개인 설정이 적용된다).
  */
-export function NotifPrefsSection({ notif }: { notif: Record<string, boolean> | null }) {
+export function NotifPrefsSection({ notif, workspaceOff = {} }: { notif: Record<string, boolean> | null; workspaceOff?: WorkspaceNotifyOff }) {
   const { t } = useLocale()
   const [prefs, setPrefs] = useState<Record<string, boolean>>(notif ?? {})
   const [saving, setSaving] = useState<ReadonlySet<NotificationType>>(new Set())
@@ -46,6 +48,7 @@ export function NotifPrefsSection({ notif }: { notif: Record<string, boolean> | 
         <>
           <p className="mt-1 text-meta text-fg-secondary">{t('account.notif.desc')}</p>
           <p data-notif-required-reason className="mt-1 text-meta text-fg-secondary">{t('account.notif.requiredReason')}</p>
+          {Object.keys(workspaceOff).length > 0 && <p data-notif-ws-off-note className="mt-1 text-meta text-fg-secondary">{t('account.notif.wsOff.note')}</p>}
           {failed && <div className="mt-3"><StatusMessage kind="partial_error" compact blocking title={t('account.notif.saveFailed')} detail={t('account.notif.saveFailedDetail')} /></div>}
           {CATEGORIES.map((category) => {
             const types = TYPES.filter((type) => NOTIFICATION_CATALOG[type].category === category)
@@ -58,11 +61,17 @@ export function NotifPrefsSection({ notif }: { notif: Record<string, boolean> | 
                     const required = NOTIFICATION_CATALOG[type].required
                     const on = isTypeEnabled(prefs, type)
                     const label = t(`account.notif.type.${type}`)
+                    const wsOff = workspaceOff[type]
                     return (
                       <li key={type} className="flex items-center gap-2 rounded-(--radius-control) bg-surface-subtle p-2">
                         <span className="min-w-0 flex-1 text-sm text-fg">
                           {label}
                           {required && <span className="ml-2 text-meta text-fg-secondary">{t('account.notif.required')}</span>}
+                          {wsOff && (
+                            <span data-notif-ws-off={type} className="mt-0.5 block text-meta text-fg-secondary">
+                              {wsOff.all ? t('account.notif.wsOff.all') : `${t('account.notif.wsOff.some')} ${wsOff.names.join(', ')}`}
+                            </span>
+                          )}
                         </span>
                         <button type="button" role="switch" aria-checked={on} aria-label={label} data-notif-type={type}
                           disabled={required || saving.has(type)} onClick={() => { void toggle(type) }}

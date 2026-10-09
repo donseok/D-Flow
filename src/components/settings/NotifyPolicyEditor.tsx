@@ -14,7 +14,8 @@ const fromLatest = (v: unknown) => { const p = parseNotifyPolicy(v ?? DEFAULT_NO
 
 /**
  * 관리자 알림 정책(notify.policy — 개정 §4.10·§2.8.1) — 유형마다 발행 스위치 하나. 끈 유형은 이 워크스페이스에서 발행되지 않는다(emit 관문).
- * 유형·범주·필수 여부와 그 이름은 개인 토글(/account NotifPrefsSection)과 같은 원천(NOTIFICATION_CATALOG·account.notif.* 사전)이다.
+ * 유형·범주·필수 여부는 개인 토글(/account NotifPrefsSection)과 같은 원천(NOTIFICATION_CATALOG)이다. 범주 이름도 같은 사전(account.notif.category.*)이지만
+ * 유형 이름은 정책용(settings.notify.policy.type.*)을 쓴다 — 개인 토글 문구는 받는 사람 시점("나에게 배정됨")이라 발행을 정하는 화면에 맞지 않는다.
  * `required` 유형은 켜진 채 비활성 — 서버 parse 도 거부한다. 저장 규약은 useSettingItemCommand(expectedRevision CAS·409 비교·결과 불명 재확인).
  */
 export function NotifyPolicyEditor({ workspaceId, revision, initial, invalidReason }: {
@@ -25,7 +26,7 @@ export function NotifyPolicyEditor({ workspaceId, revision, initial, invalidReas
     scope: { workspaceId }, key: 'notify.policy', revision, initial: initial && disabledOnly(initial), empty: { ...DEFAULT_NOTIFY_POLICY }, fromLatest,
   })
   const off = c.pending || c.uncertain
-  const label = (type: NotificationType) => t(`account.notif.type.${type}`)
+  const label = (type: NotificationType) => t(`settings.notify.policy.type.${type}`)
   const toggle = (type: NotificationType) => {
     if (NOTIFICATION_CATALOG[type].required) return
     const next: NotifyPolicy = { ...c.draft }

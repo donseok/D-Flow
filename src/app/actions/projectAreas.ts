@@ -20,6 +20,7 @@ import {
 import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
+import { enqueueWeeklyAreaIndexChange } from '@/lib/ai/index/enqueueChange'
 
 /** 저장 결과 — rowsAdded 는 RPC 가 이번 주 이후 문서에 새로 만든 주간 행 수(비활성·이슈 영역은 0) */
 export type UpsertAreaResult =
@@ -122,6 +123,11 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
     return { ok: false, code: 'UNAVAILABLE', error: failWith('areas/upsert', error, ERR_SAVE) }
   }
   const r = data as { status: 'created' | 'updated'; area_id: string; rows_added: number }
+  // 주간 영역의 이름이 바뀌면 그 영역의 행이 든 주간 문서의 색인 본문(행 머리의 영역 이름)이 낡는다 — 그 문서들을 다시 색인한다.
+  // 이전 이름은 RPC 앞에서 읽은 설정이다: 그 사이 다른 창이 같은 영역의 이름을 바꿨다면 여기서는 "안 바뀜"으로 보일 수 있다(그 창의 저장이
+  // 자기 몫의 재색인을 건다 — 두 저장이 엇갈려 마지막 이름이 색인에 안 실리는 좁은 틈은 남는다). 이슈 영역은 주간 색인 본문에 없다.
+  const before = a.kind === 'weekly_section' && a.id ? cfg.areas.weekly_section.find(x => x.id === a.id) : undefined
+  if (r.status === 'updated' && before && before.name !== a.name) await enqueueWeeklyAreaIndexChange(projectId, r.area_id)
   revalidatePath('/(app)/p/[projectId]/settings', 'page')
   revalidatePath('/(app)/p/[projectId]/weekly', 'page')
   return { ok: true, id: r.area_id, status: r.status, rowsAdded: Number(r.rows_added) || 0 }

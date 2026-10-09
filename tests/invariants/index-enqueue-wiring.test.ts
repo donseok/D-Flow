@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
-const HELPERS = ['enqueueIndexChange', 'enqueueMinuteIndexChange', 'enqueueWeeklyRowIndexChange', 'enqueueProjectIndexChange'] as const
+const HELPERS = ['enqueueIndexChange', 'enqueueMinuteIndexChange', 'enqueueWeeklyRowIndexChange', 'enqueueWeeklyAreaIndexChange', 'enqueueProjectIndexChange'] as const
 const HELPER_FILE = 'src/lib/ai/index/enqueueChange.ts'
 
 /** 파일 → 등록을 부르는 함수(최상위 선언 이름)와 그 횟수 */
@@ -18,6 +18,8 @@ const WIRED: Readonly<Record<string, Readonly<Record<string, number>>>> = {
   'src/app/actions/issueUpdates.ts': { syncResolutionNoteMirror: 1 },
   'src/app/actions/customFieldValues.ts': { saveCustomFieldValues: 2 },
   'src/app/actions/weekly.ts': { createWeeklyReport: 1, saveWeeklyTitle: 1, touchWeeklyReports: 1 },
+  // 주간 영역 개명 — 그 영역의 행이 든 주간 문서의 본문(영역 이름)이 낡는다
+  'src/app/actions/projectAreas.ts': { upsertArea: 1 },
   'src/app/actions/wbs.ts': { updateActual: 1, addWbsItem: 1, addSubAct: 1, updateWbsFields: 1, updateDeliverable: 1, deleteWbsItem: 1 },
   'src/app/actions/wbsBulk.ts': { updateWbsItems: 1 },
   'src/lib/agent/workflowEvent.ts': { applyWorkflowEvent: 1 },

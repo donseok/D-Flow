@@ -259,11 +259,14 @@ function documentWriteRow(document: KnowledgeDocumentInput, indexedAt: string): 
   }
 }
 
+/**
+ * 쓰기(색인 반영·삭제·잡 등록)의 범위 판정. 허용 목록을 앞에서 자르지 않는다 — 워커의 범위는 켜진 프로젝트 전부라 100개를 넘을 수 있고,
+ * 자르면 뒤쪽 프로젝트의 잡이 범위 밖(INDEX_ACCESS_DENIED)으로 실패한다. 검색의 범위 상한(MAX_SCOPE_PROJECTS)은 질의 크기 한도라 별개다.
+ */
 function canAccessProject(projectId: string | null, scope: KnowledgeIndexAccessScope): boolean {
   const allowedProjectIds = scope.allowedProjectIds
     .map(id => id.trim())
     .filter(Boolean)
-    .slice(0, 100)
   if (allowedProjectIds.length === 0) return false
   return projectId === null
     ? Boolean(scope.allowGlobal)

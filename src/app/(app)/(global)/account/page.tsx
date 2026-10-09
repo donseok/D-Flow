@@ -5,6 +5,7 @@ import { AccountView } from '@/components/account/AccountView'
 import { listMyWorkspaces } from '@/lib/workspace/list'
 import { readCurrentWorkspace } from '@/lib/workspace/current'
 import { getAccountPrefs, getWorkspacePrefs } from '@/app/actions/preferences'
+import { loadWorkspaceNotifyOff } from '@/lib/notify/workspaceOff'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,8 @@ export default async function AccountPage() {
     console.error('[account] 워크스페이스 선호 조회 실패:', e)
     return null
   }) : {}
+  // 소속 워크스페이스가 정책으로 끈 알림 유형 — 소속 목록을 못 읽었으면 표시하지 않는다(목록 조회가 이미 로그를 남겼다)
+  const workspaceOff = workspaceMemberships.ok ? await loadWorkspaceNotifyOff(workspaceMemberships.rows) : {}
   const email = user?.email ?? null
   const displayName = user ? displayNameFrom(user.user_metadata, user.email) : null
 
@@ -39,6 +42,7 @@ export default async function AccountPage() {
       startPage={wsPrefs?.startPage ?? null}
       projectsView={acc?.projectsView === 'cards' ? 'cards' : 'rows'}
       notif={acc ? (acc.notif ?? {}) : null}
+      workspaceOff={workspaceOff}
     />
   )
 }

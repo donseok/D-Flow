@@ -13,6 +13,10 @@ export const accountKo = {
   'account.notif.loadFailedDetail': '지금 켜짐·꺼짐을 알 수 없어 바꿀 수 없습니다. 새로고침해 다시 시도하세요.',
   'account.notif.saveFailed': '알림 설정을 저장하지 못했습니다',
   'account.notif.saveFailedDetail': '바꾸려던 값은 적용되지 않았습니다. 다시 시도하세요.',
+  // 소속 워크스페이스가 정책으로 끈 유형의 안내(토글은 그대로 조작된다)
+  'account.notif.wsOff.all': '워크스페이스에서 꺼짐',
+  'account.notif.wsOff.some': '일부 워크스페이스에서 꺼짐:',
+  'account.notif.wsOff.note': '워크스페이스에서 꺼진 유형은 내 설정과 무관하게 발행되지 않습니다. 워크스페이스가 다시 켜면 여기서 고른 값이 적용됩니다.',
   'account.notif.category.work': '작업',
   'account.notif.category.issue': '이슈',
   'account.notif.category.meeting': '회의',

@@ -14,12 +14,13 @@ import { NotifPrefsSection } from '@/components/account/NotifPrefsSection'
 import { NOTIFICATION_CATALOG, type NotificationType } from '@/lib/domain/inbox'
 import { KO } from '@/lib/i18n/dict/ko'
 import { accountEn } from '@/lib/i18n/dict/account.en'
+import type { WorkspaceNotifyOff } from '@/lib/notify/workspaceOff'
 
 const TYPES = Object.keys(NOTIFICATION_CATALOG) as NotificationType[]
 let container: HTMLDivElement, root: Root
 beforeEach(() => { h.save.mockReset(); h.save.mockResolvedValue({ ok: true }); container = document.createElement('div'); document.body.append(container); root = createRoot(container) })
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks() })
-const mount = async (notif: Record<string, boolean> | null = {}) => { await act(async () => root.render(<NotifPrefsSection notif={notif} />)) }
+const mount = async (notif: Record<string, boolean> | null = {}, workspaceOff?: WorkspaceNotifyOff) => { await act(async () => root.render(<NotifPrefsSection notif={notif} workspaceOff={workspaceOff} />)) }
 const sw = (type: string) => container.querySelector<HTMLButtonElement>(`[role="switch"][data-notif-type="${type}"]`)!
 
 describe('/account 알림 유형 토글(SPU1, 개정 §4.10)', () => {
@@ -86,6 +87,24 @@ describe('/account 알림 유형 토글(SPU1, 개정 §4.10)', () => {
     expect(sw('issue.assigned').disabled).toBe(false)
     await act(async () => { done({ ok: true }) })
     expect(sw('issue.status').disabled).toBe(false)
+  })
+  it('워크스페이스가 끈 유형을 토글 옆에 알린다 — 전부 끔은 한 줄, 일부 끔은 이름까지. 토글은 그대로 조작된다', async () => {
+    await mount({}, { 'issue.update': { all: true, names: ['Alpha', 'Beta'] }, 'work.claimed': { all: false, names: ['Beta'] } })
+    const off = (type: string) => container.querySelector(`[data-notif-ws-off="${type}"]`)
+    expect(off('issue.update')?.textContent).toBe('워크스페이스에서 꺼짐')
+    expect(off('work.claimed')?.textContent).toBe('일부 워크스페이스에서 꺼짐: Beta')
+    expect(container.querySelectorAll('[data-notif-ws-off]').length).toBe(2)
+    expect(container.querySelector('[data-notif-ws-off-note]')?.textContent).toBe(KO['account.notif.wsOff.note'])
+    expect(sw('issue.update').disabled).toBe(false)
+    expect(sw('issue.update').getAttribute('aria-checked')).toBe('true')
+    await act(async () => sw('issue.update').click())
+    expect(h.save.mock.calls).toEqual([[{ 'issue.update': false }]])
+    for (const k of ['all', 'some', 'note']) expect((accountEn as Record<string, string>)[`account.notif.wsOff.${k}`], k).toBeTruthy()
+  })
+  it('끈 워크스페이스가 없으면 안내를 그리지 않는다', async () => {
+    await mount()
+    expect(container.querySelector('[data-notif-ws-off]')).toBeNull()
+    expect(container.querySelector('[data-notif-ws-off-note]')).toBeNull()
   })
   it('조회 실패(null)면 토글을 열지 않고 상태로 알린다 — 기본값으로 그리지 않는다', async () => {
     await mount(null)

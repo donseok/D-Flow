@@ -157,7 +157,8 @@ const DISPLAY_LABELS: Readonly<Record<string, string>> = {
 }
 
 const DISPLAY_ENUMS: Readonly<Record<string, string>> = {
-  // WBS 도구의 level 은 깊이를 셋으로 접은 키다(프로젝트 단계 이름을 싣지 않는다) — 이름을 지어내지 않고 깊이로 적는다(라벨 밖 깊이 표기 'N단'과 같은 꼴)
+  // WBS 도구의 level 은 깊이를 셋으로 접은 키다. 도구가 그 곁에 프로젝트의 단계 이름(levelLabel)을 실으면 displayValue 가 그 이름을 먼저 쓴다.
+  // 아래는 이름을 못 실은 결과(설정 조회 실패·단계 수보다 깊은 항목)의 폴백 — 이름을 지어내지 않고 깊이로 적는다(라벨 밖 깊이 표기 'N단'과 같은 꼴)
   phase: '1단', task: '2단', activity: '3단 이하', subtask: 'Sub-task',
   not_started: '미착수', in_progress: '진행 중', delayed: '지연', done: '완료',
   // 근태 유형·회의 범주는 도구가 code 곁에 그 프로젝트의 설정 이름(typeLabel·categoryLabel)을 싣는다 — displayValue 가 그 이름을 먼저 쓴다.

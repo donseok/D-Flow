@@ -22,12 +22,12 @@ const saveBtn = () => document.querySelector<HTMLButtonElement>('[data-notify-sa
 beforeEach(() => { h.update.mockReset(); h.outcome.mockReset(); h.refresh.mockReset() })
 
 describe('NotifyPolicyEditor', () => {
-  it('카탈로그의 모든 유형이 한 번씩 나오고(개인 토글과 같은 이름), 기본값 {} 은 전부 켜짐 — 바뀐 것이 없으면 저장하지 않는다', () => {
+  it('카탈로그의 모든 유형이 한 번씩 나오고(정책용 이름), 기본값 {} 은 전부 켜짐 — 바뀐 것이 없으면 저장하지 않는다', () => {
     render(<NotifyPolicyEditor workspaceId={WS} revision={3} initial={{}} />)
     expect([...document.querySelectorAll('[role="switch"]')].map((el) => el.getAttribute('data-notify-type')).sort()).toEqual([...TYPES].sort())
     for (const type of TYPES) {
       expect(sw(type).getAttribute('aria-checked'), type).toBe('true')
-      expect(sw(type).getAttribute('aria-label')).toBe((KO as Record<string, string>)[`account.notif.type.${type}`])
+      expect(sw(type).getAttribute('aria-label')).toBe((KO as Record<string, string>)[`settings.notify.policy.type.${type}`])
     }
     expect(saveBtn().disabled).toBe(true)
     expect(saveBtn().textContent).toBe('알림 정책 저장')
@@ -92,8 +92,8 @@ describe('NotifyPolicyEditor', () => {
     fireEvent.click(sw('issue.update'))
     fireEvent.click(saveBtn())
     await waitFor(() => expect(screen.getByText('최신 값 사용')).toBeTruthy())
-    expect(screen.getByText(`끔: ${KO['account.notif.type.issue.update']}`)).toBeTruthy()
-    expect(screen.getByText(`끔: ${KO['account.notif.type.work.claimed']}`)).toBeTruthy()
+    expect(screen.getByText(`끔: ${KO['settings.notify.policy.type.issue.update']}`)).toBeTruthy()
+    expect(screen.getByText(`끔: ${KO['settings.notify.policy.type.work.claimed']}`)).toBeTruthy()
     expect(saveBtn().disabled).toBe(true)
     fireEvent.click(screen.getByText('최신 값 사용'))
     expect(sw('work.claimed').getAttribute('aria-checked')).toBe('false')
@@ -117,6 +117,22 @@ describe('NotifyPolicyEditor', () => {
     fireEvent.click(saveBtn())
     await waitFor(() => expect(h.update).toHaveBeenCalledTimes(1))
     expect(h.update.mock.calls[0][1].set).toEqual({ 'notify.policy': {} })
+  })
+  it('카탈로그의 모든 유형에 정책용 이름이 ko·en 둘 다 있고, 받는 사람 시점 문구("나에게"·"me")가 아니다', () => {
+    for (const type of TYPES) {
+      const key = `settings.notify.policy.type.${type}`
+      const ko = (KO as Record<string, string>)[key]
+      const en = (settingsEn as Record<string, string>)[key]
+      expect(ko, key).toBeTruthy()
+      expect(en, key).toBeTruthy()
+      expect(ko, key).not.toMatch(/나에게|나를|내가/)
+      expect(en, key).not.toMatch(/\b(me|my|I)\b/)
+    }
+    // 카탈로그에서 빠진 유형의 문구가 사전에 남지 않는다
+    const prefix = 'settings.notify.policy.type.'
+    for (const dict of [KO as Record<string, string>, settingsEn as Record<string, string>]) {
+      expect(Object.keys(dict).filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length)).sort()).toEqual([...TYPES].sort())
+    }
   })
   it('편집기 문구는 ko·en 사전에 둘 다 있다', () => {
     for (const k of ['label', 'desc', 'requiredReason', 'personalNote', 'allOn', 'offList', 'corrupted', 'save', 'saveRetry']) {

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const h = vi.hoisted(() => ({ current: vi.fn(), account: vi.fn(), workspace: vi.fn() }))
+const h = vi.hoisted(() => ({ current: vi.fn(), account: vi.fn(), workspace: vi.fn(), memberships: vi.fn(), wsOff: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getSession: async () => null }))
 vi.mock('@/app/actions/project', () => ({ listProjectsWithState: async () => ({ projects: [], degraded: false }) }))
-vi.mock('@/lib/workspace/list', () => ({ listMyWorkspaces: async () => ({ ok: true, rows: [] }) }))
+vi.mock('@/lib/workspace/list', () => ({ listMyWorkspaces: h.memberships }))
+vi.mock('@/lib/notify/workspaceOff', () => ({ loadWorkspaceNotifyOff: h.wsOff }))
 vi.mock('@/lib/workspace/current', () => ({ readCurrentWorkspace: h.current }))
 vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: h.account, getWorkspacePrefs: h.workspace }))
 vi.mock('@/components/account/AccountView', () => ({ AccountView: () => null }))
@@ -10,6 +11,7 @@ import AccountPage from '@/app/(app)/(global)/account/page'
 const WS = { id: 'ws-a', slug: 'alpha', name: 'Alpha' }
 beforeEach(() => {
   for (const fn of Object.values(h)) fn.mockReset()
+  h.memberships.mockResolvedValue({ ok: true, rows: [] }); h.wsOff.mockResolvedValue({})
   h.current.mockResolvedValue({ ok: true, ws: WS }); h.account.mockResolvedValue({ projectsView: 'cards' }); h.workspace.mockResolvedValue({ startPage: 'projects' })
 })
 describe('계정 페이지의 선호 원천', () => {
@@ -30,6 +32,17 @@ describe('계정 페이지의 선호 원천', () => {
       expect((await AccountPage()).props).toMatchObject({ notif: null, projectsView: 'rows' })
       expect(err).toHaveBeenCalled()
     } finally { err.mockRestore() }
+  })
+  it('소속 워크스페이스들의 알림 정책 요약을 내린다 — 소속 목록을 못 읽으면 읽지 않고 빈 요약', async () => {
+    const rows = [{ id: 'ws-a', slug: 'alpha', name: 'Alpha', role: 'member', joinedAt: 't1' }, { id: 'ws-b', slug: 'beta', name: 'Beta', role: 'member', joinedAt: 't2' }]
+    h.memberships.mockResolvedValue({ ok: true, rows })
+    h.wsOff.mockResolvedValue({ 'issue.update': { all: false, names: ['Beta'] } })
+    expect((await AccountPage()).props).toMatchObject({ workspaceOff: { 'issue.update': { all: false, names: ['Beta'] } } })
+    expect(h.wsOff).toHaveBeenCalledExactlyOnceWith(rows)
+    h.wsOff.mockClear()
+    h.memberships.mockResolvedValue({ ok: false, error: 'down' })
+    expect((await AccountPage()).props).toMatchObject({ workspaceOff: {}, tokenWorkspaceError: true })
+    expect(h.wsOff).not.toHaveBeenCalled()
   })
   it('소속이 없으면 워크스페이스 선호를 읽지 않는다', async () => {
     h.current.mockResolvedValue({ ok: true, ws: null })

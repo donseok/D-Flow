@@ -484,6 +484,10 @@ type DevWorkflowUpdatedRow = { id: string; assignee_member_id: string | null; st
  * 실어 보내 반환(select)으로만 집계한다(setWbsAssigneeCascade 의 TOCTOU 방어와 같은 이유:
  * 이미 같은 값인 행을 건드렸다고 보고하지 않는다).
  *
+ * 값 대조(SPU1 §5.8)의 기대값 인자는 두지 않는다 — 열이 두 값뿐이라 "서버 값 ≠ 화면이 본 값"은 곧 "서버 값 = 고른 값"이고, 그 경우는
+ * 위 `.neq` 조건이 같은 문장 안에서 0행으로 거른다(count 0). 단계 지정의 규칙(서버가 이미 내가 고른 값이면 충돌이 아니라 저장된 것)과
+ * 같은 결과라 기대값을 받아도 달라지는 답이 없다. 일괄의 하위 항목은 화면이 값을 본 적이 없어 대조할 기대값 자체가 없다.
+ *
  * change_logs 는 루트 1건만 남긴다(일괄 이력 폭주 방지) — old/new 는 문자열 'false'/'true'.
  * `.neq` 필터를 통과한 행은 전부 이전 값이 `!enabled` 였다는 뜻이라 방향에 관계없이 도출된다.
  *

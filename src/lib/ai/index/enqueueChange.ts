@@ -78,6 +78,42 @@ export async function enqueueWeeklyRowIndexChange(projectId: string, rowIds: rea
   })
 }
 
+/**
+ * 주간 영역의 이름 변경 — 색인 본문은 행마다 영역 이름을 머리(`## <이름>`)로 적으므로 그 영역의 행이 있는 주간 문서가 모두 낡는다.
+ * 그 행들에서 문서 id 를 읽어 한 번에 다시 색인한다(문서당 그 영역의 행은 하나라 행 수 = 문서 수 — 주차가 쌓여도 PAGE 씩 끝까지 읽고
+ * 등록은 BATCH 씩 묶는다. 상한은 두지 않는다). 내용이 빈 행의 문서도 넣는다 — 본문에 그 이름이 없을 뿐 다시 색인해도 결과는 같다.
+ * 문서 행(updated_at)은 건드리지 않으므로 여기서 빠진 문서는 consistency 모드가 알아채지 못한다 — 실패는 로그로만 남는다.
+ */
+export async function enqueueWeeklyAreaIndexChange(projectId: string, areaId: string): Promise<void> {
+  if (!projectId || !areaId || !indexEnqueueAvailable()) return
+  await schedule(async () => {
+    try {
+      const admin = createAdminClient()
+      const seen = new Set<string>()
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await admin.from('weekly_report_rows').select('id, report_id')
+          .eq('project_id', projectId).eq('area_id', areaId).order('id').range(from, from + PAGE - 1)
+        if (error) {
+          console.error('[assistant] 색인 변경 등록 — 영역의 주간 문서 조회 실패(무시하고 계속):', error.message)
+          return
+        }
+        const rows = (data ?? []) as { report_id: string | null }[]
+        // 쪽 경계를 넘어 같은 문서가 다시 나와도 한 번만 넣는다
+        const reportIds: string[] = []
+        for (const { report_id: id } of rows) {
+          if (!id || seen.has(id)) continue
+          seen.add(id)
+          reportIds.push(id)
+        }
+        await enqueueNow(reportIds.map((entityId) => ({ domain: 'weekly' as const, projectId, entityId })))
+        if (rows.length < PAGE) return
+      }
+    } catch (e) {
+      console.error('[assistant] 색인 변경 등록 예외(무시하고 계속):', e instanceof Error ? e.message : e)
+    }
+  })
+}
+
 /** 프로젝트의 한 도메인 전체(가져오기처럼 무엇이 바뀌었는지 건별로 알 수 없는 쓰기) — 그 프로젝트의 원본 id 를 읽어 전부 다시 색인한다. */
 export async function enqueueProjectIndexChange(projectId: string, domain: Exclude<IndexBackfillDomain, 'minutes'>): Promise<void> {
   if (!projectId || !indexEnqueueAvailable()) return

@@ -4,12 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // 담당 영역 저장(스펙 §4.1.3·§4.1.8·D45·D51) — 가드 → 입력 모양 → validateArea → 팀 범위(설정에서 읽은 프로젝트 팀 ∪ 그 영역의 기존 배정)
 // → RPC upsert_project_area 한 길. 표를 직접 쓰지 않고(D27 — 세션 쓰기 정책이 없다) DB 원문을 응답에 싣지 않는다(D21).
 const h = vi.hoisted(() => ({
-  requireProjectAdmin: vi.fn(), getProjectConfig: vi.fn(), rpc: vi.fn(), adminFor: vi.fn(), revalidatePath: vi.fn(),
+  requireProjectAdmin: vi.fn(), getProjectConfig: vi.fn(), rpc: vi.fn(), adminFor: vi.fn(), revalidatePath: vi.fn(), reindexArea: vi.fn(),
 }))
 vi.mock('next/cache', () => ({ revalidatePath: h.revalidatePath }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: h.requireProjectAdmin }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: h.getProjectConfig }))
 vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: h.adminFor }))
+vi.mock('@/lib/ai/index/enqueueChange', () => ({ enqueueWeeklyAreaIndexChange: h.reindexArea }))
 
 import * as areaActions from '@/app/actions/projectAreas'
 import { ERR_AREA_CODE_IMMUTABLE, type AreaInput } from '@/lib/domain/areas'
@@ -202,6 +203,40 @@ describe('RPC 한 길(D22·D51)', () => {
     vi.setSystemTime(new Date('2026-10-04T06:00:00Z'))
     await upsertArea(P, NEW_AREA)
     expect(h.rpc.mock.calls[0][1]).toMatchObject({ p_from_week: '2026-09-27' })
+  })
+})
+
+describe('주간 영역 개명 뒤 재색인 — 이름이 실제로 바뀐 저장만', () => {
+  const updated = () => h.rpc.mockResolvedValue({ data: { status: 'updated', area_id: A_EXP, rows_added: 0 }, error: null })
+  it('기존 주간 영역의 이름이 바뀌면 그 영역의 주간 문서를 다시 색인한다(다듬은 이름으로 견준다)', async () => {
+    updated()
+    expect((await upsertArea(P, { ...EXP_EDIT, name: ' 시험 ' })).ok).toBe(true)
+    expect(h.reindexArea).toHaveBeenCalledExactlyOnceWith(P, A_EXP)
+  })
+  it('이름이 그대로면(비활성화·팀·순서만 바뀜, 앞뒤 공백만 다름) 다시 색인하지 않는다', async () => {
+    updated()
+    expect((await upsertArea(P, EXP_EDIT)).ok).toBe(true)
+    expect((await upsertArea(P, { ...EXP_EDIT, name: ' 실험 ', sortOrder: 9 })).ok).toBe(true)
+    expect(h.reindexArea).not.toHaveBeenCalled()
+  })
+  it('새 영역은 다시 색인하지 않는다 — 그 이름이 든 문서가 아직 없다', async () => {
+    expect((await upsertArea(P, NEW_AREA)).ok).toBe(true)
+    expect(h.reindexArea).not.toHaveBeenCalled()
+  })
+  it('이슈 영역의 개명은 주간 색인과 무관하다', async () => {
+    const ISSUE: ConfigArea = { id: NEW_ID, kind: 'issue_area', code: 'SAFE', name: '안전', sortOrder: 1, active: true, teams: [] }
+    h.getProjectConfig.mockResolvedValue(makeProjectConfig({ ...monProjectValues, 'calendar.timezone': 'Asia/Seoul' }, {
+      projectId: P, workspaceId: 'ws-synthetic', teams: [...OWN, ...COMMON], areas: { weekly_section: [EXP_AREA], issue_area: [ISSUE] },
+    }))
+    h.rpc.mockResolvedValue({ data: { status: 'updated', area_id: NEW_ID, rows_added: 0 }, error: null })
+    expect((await upsertArea(P, { id: NEW_ID, kind: 'issue_area', code: 'SAFE', name: '안전 점검', sortOrder: 1, active: true, teams: [] })).ok).toBe(true)
+    expect(h.reindexArea).not.toHaveBeenCalled()
+  })
+  it('저장이 실패하면 다시 색인하지 않는다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.rpc.mockResolvedValue({ data: null, error: { code: 'XX000', message: 'boom' } })
+    expect((await upsertArea(P, { ...EXP_EDIT, name: '시험' })).ok).toBe(false)
+    expect(h.reindexArea).not.toHaveBeenCalled()
   })
 })
 

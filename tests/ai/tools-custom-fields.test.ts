@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { calWithOff, monProjectValues } from '../helpers/calendarFixture'
 import { fixedToolTeams } from '../helpers/tool-team-source'
 import { fixedToolFields } from '../helpers/tool-field-source'
+import { fixedToolLevels } from '../helpers/tool-level-source'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { createFindWbsItemsTool, createGetWbsItemDetailTool, type WbsToolItemRecord } from '@/lib/ai/tools/wbs'
 import { createGetWeeklySheetTool, type WeeklySheetToolRecord } from '@/lib/ai/tools/weekly'
@@ -43,7 +44,7 @@ const wbsRepo = (snapshot: WbsProjectSnapshot) => ({ getProjectSnapshot: vi.fn(a
 const VALUES = { qty: 12.5, result: 'old', done: false, memo: '보이지 않아야 한다', legacy: '비활성 값' }
 
 async function detail(snapshot: WbsProjectSnapshot, fields = fixedToolFields({ wbs_item: DEFS })) {
-  const r = await createGetWbsItemDetailTool(wbsRepo(snapshot), fixedToolTeams(), fields).execute({ projectId: 'p1', itemId: 'task-1' }, context)
+  const r = await createGetWbsItemDetailTool(wbsRepo(snapshot), fixedToolTeams(), fields, fixedToolLevels()).execute({ projectId: 'p1', itemId: 'task-1' }, context)
   if (!r.ok) throw new Error(`도구 실패: ${r.error.code}`)
   return r.result
 }
@@ -85,7 +86,7 @@ describe('get_wbs_item_detail — 사용자 정의 필드', () => {
   })
 
   it('정의 조회 실패는 도구 실패다 — "필드 없음"으로 답하지 않는다', async () => {
-    const tool = createGetWbsItemDetailTool(wbsRepo(wbsSnapshot(VALUES)), fixedToolTeams(), fixedToolFields({}, { throwOn: 'wbs_item' }))
+    const tool = createGetWbsItemDetailTool(wbsRepo(wbsSnapshot(VALUES)), fixedToolTeams(), fixedToolFields({}, { throwOn: 'wbs_item' }), fixedToolLevels())
     await expect(tool.execute({ projectId: 'p1', itemId: 'task-1' }, context)).rejects.toThrow('fields down')
   })
 
@@ -101,7 +102,7 @@ describe('get_wbs_item_detail — 사용자 정의 필드', () => {
   it('필드 정의는 접근 판정·항목 확인 뒤에만 읽는다', async () => {
     const fields = fixedToolFields({ wbs_item: DEFS })
     const repo = wbsRepo(wbsSnapshot(VALUES))
-    const tool = createGetWbsItemDetailTool(repo, fixedToolTeams(), fields)
+    const tool = createGetWbsItemDetailTool(repo, fixedToolTeams(), fields, fixedToolLevels())
     expect(await tool.execute({ projectId: 'p1', itemId: 'task-1' }, { ...context, allowedProjectIds: [] })).toMatchObject({ ok: false, error: { code: 'ACCESS_DENIED' } })
     expect(await tool.execute({ projectId: 'p1', itemId: 'task-1' }, { ...context, capabilities: [] })).toMatchObject({ ok: false, error: { code: 'ACCESS_DENIED' } })
     expect(await tool.execute({ projectId: 'p1', itemId: 'nope' }, context)).toMatchObject({ ok: true, result: { facts: { itemFound: false } } })
@@ -111,7 +112,7 @@ describe('get_wbs_item_detail — 사용자 정의 필드', () => {
   })
 
   it('목록 도구(find_wbs_items)는 필드를 덧붙이지 않는다 — 덧붙임은 항목 상세뿐이다', async () => {
-    const r = await createFindWbsItemsTool(wbsRepo(wbsSnapshot(VALUES)), fixedToolTeams()).execute({ projectId: 'p1', query: '타설' }, context)
+    const r = await createFindWbsItemsTool(wbsRepo(wbsSnapshot(VALUES)), fixedToolTeams(), fixedToolLevels()).execute({ projectId: 'p1', query: '타설' }, context)
     if (!r.ok) throw new Error('도구 실패')
     expect(r.result.records).toHaveLength(1)
     expect(JSON.stringify(r.result)).not.toContain('검측 수량')
