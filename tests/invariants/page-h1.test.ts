@@ -14,6 +14,7 @@ const ALLOW: Record<string, number> = {
   'src/components/minutes/ShareViewer.tsx': 1,
   'src/app/page.tsx': 1,                                 // 루트 리졸버의 조회 오류 화면(셸 밖 — 제품 이름이 머리)
   'src/app/login/page.tsx': 1,
+  'src/components/login/AuthCard.tsx': 1,               // 재설정 메일 요청·새 비밀번호 설정(/login/forgot·/login/reset)의 틀 — 화면마다 하나
   'src/app/invite/[token]/page.tsx': 1,
   'src/app/not-found.tsx': 1,
   'src/components/errors/StandaloneError.tsx': 1,       // 셸 밖 오류 화면(src/app/error.tsx·global-error.tsx 가 같이 쓴다 — 한 화면에 하나)

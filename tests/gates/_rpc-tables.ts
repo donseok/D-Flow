@@ -45,6 +45,10 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   // 팀 병합 — 원본 팀의 참조를 대상 팀으로 옮기고 원본을 비활성으로
   merge_teams: ['item_owners', 'project_member_teams', 'area_teams', 'project_invites', 'minutes', 'minute_folders', 'integration_credentials', 'teams'],
   purge_read_notifications: ['notification_events', 'notification_recipients'],
+  // 0053 — 관리자가 한 비밀번호 재설정의 기록 1행
+  record_password_reset: ['authz_events'],
+  // 0053 — 소속 삭제 + 수락 전 초대 회수 + 소유 토큰 닫기(명단 권한 null·이력은 트리거가 쓴다 — 규칙: 트리거 제외)
+  remove_workspace_member: ['workspace_members', 'project_invites', 'integration_credentials'],
   set_platform_admin: ['authz_commands', 'platform_admins'],
   set_workspace_role: ['authz_commands', 'workspace_members'],
   team_reference_counts: [], // 병합 미리보기 — 건수만 읽는다

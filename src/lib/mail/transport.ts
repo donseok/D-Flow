@@ -67,6 +67,14 @@ export function resolveSmtpSettings(env: Record<string, string | undefined>):
 }
 
 /**
+ * 이 배포가 메일을 보내도록 구성됐는가 — 보내기 전에 화면이 길을 열지 닫을지 정할 때 쓴다(비밀번호 재설정 링크 등).
+ * 잘못된 설정(invalid)은 구성되지 않은 것으로 본다: 보내면 실패할 길을 열어 두지 않는다. 사유는 getTransport 가 보낼 때 로그에 남긴다.
+ */
+export function mailConfigured(): boolean {
+  return resolveSmtpSettings(process.env).ok
+}
+
+/**
  * SMTP 트랜스포트 — 공급자 중립(회사 SMTP·Gmail·로컬 inbucket 모두 env 로). 설정이 없거나 잘못되면 **throw 하지 않고**
  * ok:false 를 낸다 — 로컬·Preview 에서 화면을 죽이지 않기 위해서다. `from` 은 이 모듈이 소유한다(호출자가 바꿀 수 없다).
  * env 는 호출 시점에 읽는다(fromName.ts 와 같은 관례). 오류의 키 이름은 서버 로그에만 — 반환 문구는 사용자에게 그대로 뜬다.

@@ -10,7 +10,7 @@ import { StatusMessage } from '@/components/ui/StatusMessage'
 import type { DictKey } from '@/lib/i18n/dict'
 import { NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
 import { MODULE_LABEL } from '@/lib/modules/labels'
-import { checkWorkspaceCreate, type WorkspaceCreateField } from '@/lib/workspace/createInput'
+import { checkWorkspaceCreate, splitDomainsInput, suggestedInviteDomain, type WorkspaceCreateField } from '@/lib/workspace/createInput'
 import { wsHref } from '@/lib/workspace/paths'
 
 /** '{n}' 꼴 자리 채우기 — 사전 문구의 수·이름 */
@@ -41,6 +41,11 @@ export function WorkspacesManager({ rows, accountsHref }: {
   const [timezone, setTimezone] = useState('')
   useEffect(() => { setTimezone((cur) => cur || browserTimezone()) }, [])
   const [modules, setModules] = useState<ModuleId[]>([...NON_CORE_MODULES])
+  // 초대 허용 도메인(선택) — 비우면 초대가 막힌 채로 시작한다(정책 기본값). 첫 관리자 이메일의 도메인은 제안만 한다: 자동으로 채우지 않는다
+  // (공용 메일 도메인이 조용히 허용 범위가 되지 않게 — 사람이 눌러 넣는다)
+  const [domains, setDomains] = useState('')
+  const domainSuggestion = suggestedInviteDomain(adminEmail)
+  const showSuggestion = domainSuggestion !== null && !splitDomainsInput(domains).map((d) => d.toLowerCase().replace(/^@/, '')).includes(domainSuggestion)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [created, setCreated] = useState<{ slug: string; name: string } | null>(null)
   const [pending, startTransition] = useTransition()
@@ -52,7 +57,7 @@ export function WorkspacesManager({ rows, accountsHref }: {
   function submit(event: React.FormEvent) {
     event.preventDefault()
     setCreated(null)
-    const input = { name, slug, adminEmail, timezone, modules }
+    const input = { name, slug, adminEmail, timezone, modules, inviteDomains: splitDomainsInput(domains) }
     const checked = checkWorkspaceCreate(input)
     if (!checked.ok) { setFailure({ code: checked.code, field: checked.field }); return }
     setFailure(null)
@@ -61,7 +66,7 @@ export function WorkspacesManager({ rows, accountsHref }: {
         const res = await createPlatformWorkspace(input)
         if (!res.ok) { setFailure({ code: res.code, field: res.field }); return }
         setCreated({ slug: res.workspace.slug, name: res.workspace.name })
-        setName(''); setSlug(''); setAdminEmail('')
+        setName(''); setSlug(''); setAdminEmail(''); setDomains('')
         router.refresh()
       } catch (e) {
         // 네트워크·서버 오류 — 원문은 콘솔에만, 화면에는 고정 문구
@@ -144,6 +149,17 @@ export function WorkspacesManager({ rows, accountsHref }: {
             <Field label={t('platform.ws.fieldTimezone')} description={t('platform.ws.timezoneHint')} error={fieldError('timezone')}>
               {(c) => <input {...c} value={timezone} onChange={(e) => setTimezone(e.target.value)} autoComplete="off" spellCheck={false} />}
             </Field>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Field label={t('platform.ws.fieldDomains')} description={t('platform.ws.domainsHint')} error={fieldError('inviteDomains')}>
+                {(c) => <input {...c} data-invite-domains value={domains} onChange={(e) => setDomains(e.target.value)} placeholder="example.com" autoComplete="off" autoCapitalize="none" spellCheck={false} />}
+              </Field>
+              {showSuggestion && (
+                <button type="button" data-domain-suggest className="btn btn-ghost h-8 px-3 text-xs"
+                  onClick={() => setDomains((cur) => [...splitDomainsInput(cur), domainSuggestion].join(', '))}>
+                  {fill(t('platform.ws.domainsSuggest'), { domain: domainSuggestion })}
+                </button>
+              )}
+            </div>
           </div>
 
           <fieldset className="space-y-2">

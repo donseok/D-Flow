@@ -20,6 +20,7 @@ import { inboxKo } from './inbox'
 import { accountKo } from './account'
 import { portfolioKo } from './portfolio'
 import { platformKo } from './platform'
+import { authKo } from './auth'
 
 export const KO = {
   ...commonKo,
@@ -42,4 +43,5 @@ export const KO = {
   ...accountKo,
   ...portfolioKo,
   ...platformKo,
+  ...authKo,
 } as const

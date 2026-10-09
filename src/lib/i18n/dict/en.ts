@@ -22,6 +22,7 @@ import { inboxEn } from './inbox.en'
 import { accountEn } from './account.en'
 import { portfolioEn } from './portfolio.en'
 import { platformEn } from './platform.en'
+import { authEn } from './auth.en'
 
 export const EN: Record<DictKey, string> = {
   ...commonEn,
@@ -44,4 +45,5 @@ export const EN: Record<DictKey, string> = {
   ...accountEn,
   ...portfolioEn,
   ...platformEn,
+  ...authEn,
 }

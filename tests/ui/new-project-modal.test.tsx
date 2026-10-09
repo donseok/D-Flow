@@ -13,10 +13,11 @@ const mocks = vi.hoisted(() => ({
   getProjectCopySource: vi.fn(),
   refresh: vi.fn(),
   replace: vi.fn(),
+  push: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: mocks.refresh, replace: mocks.replace }),
+  useRouter: () => ({ push: mocks.push, refresh: mocks.refresh, replace: mocks.replace }),
 }))
 vi.mock('@/app/actions/project', () => ({
   createProject: mocks.createProject,
@@ -42,6 +43,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     mocks.createProject.mockReset()
     mocks.getProjectCopySource.mockReset()
     mocks.refresh.mockReset()
+    mocks.push.mockReset()
     mocks.replace.mockReset()
   })
 
@@ -157,6 +159,37 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     }))
   })
 
+  it('만든 뒤 목록에 머물지 않는다 — 새 프로젝트의 설정 화면(준비 체크리스트)으로 가고 라우터 캐시를 새로 고친다', async () => {
+    mocks.createProject.mockResolvedValue({ ok: true, projectId: 'p-new', status: 'applied' })
+    window.history.replaceState(null, '', '/w/acme/projects?new=1')
+    openModal()
+    act(() => setValue(document.querySelector<HTMLInputElement>('input[placeholder="home.phName"]')!, '신규 프로젝트'))
+    act(() => setValue(document.querySelector<HTMLInputElement>('input[placeholder="home.phLevels"]')!, '단계, 작업'))
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[role="dialog"] button.btn-primary')!.click()
+      await Promise.resolve()
+    })
+    expect(mocks.push).toHaveBeenCalledWith('/p/p-new/settings')
+    expect(mocks.refresh).toHaveBeenCalledTimes(1)
+    expect(mocks.push.mock.invocationCallOrder[0]).toBeLessThan(mocks.refresh.mock.invocationCallOrder[0])
+    // 이동과 겹치는 주소 정리(replace)를 하지 않는다 — 겹치면 목록으로 되돌아온다
+    expect(mocks.replace).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('같은 요청의 재전송(duplicate)도 그 프로젝트로 간다', async () => {
+    mocks.createProject.mockResolvedValue({ ok: true, projectId: 'p-dup', status: 'duplicate' })
+    openModal()
+    act(() => setValue(document.querySelector<HTMLInputElement>('input[placeholder="home.phName"]')!, '신규 프로젝트'))
+    act(() => setValue(document.querySelector<HTMLInputElement>('input[placeholder="home.phLevels"]')!, '단계, 작업'))
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[role="dialog"] button.btn-primary')!.click()
+      await Promise.resolve()
+    })
+    expect(mocks.push).toHaveBeenCalledWith('/p/p-dup/settings')
+  })
+
   it('결과가 실패면 그 문구를 보여주고 모달을 닫지 않는다', async () => {
     mocks.createProject.mockResolvedValue({ ok: false, code: 'CONFIG_INVALID', error: '실패 문구' })
     openModal()
@@ -175,6 +208,7 @@ describe('NewProjectModal — 단계 라벨 클라이언트 사전검증', () =>
     expect(document.querySelector('[role="alert"]')?.textContent).toBe('실패 문구')          // 알림 역할로 읽힌다(FM-16)
     expect(document.querySelector('input[placeholder="home.phName"]')).not.toBeNull()
     expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(mocks.push).not.toHaveBeenCalled()
   })
 
   async function fillAndSubmit(name: string) {

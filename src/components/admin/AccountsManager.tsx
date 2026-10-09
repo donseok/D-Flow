@@ -5,19 +5,26 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useScope } from '@/components/app/ScopeContext'
 import { wsHref } from '@/lib/workspace/paths'
-import { UserPlus, Upload, KeyRound, UserCog, ShieldCheck, UserRound, Wand2, Copy, Check, Eye } from 'lucide-react'
+import { UserPlus, Upload, KeyRound, UserCog, ShieldCheck, UserRound, UserMinus, Wand2, Copy, Check, Eye } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ui/Toast'
 import {
-  createAccount, bulkCreateAccounts, resetPassword, setPlatformAdmin, setWorkspaceRole,
-  type AccountRow, type BulkResultRow,
+  createAccount, bulkCreateAccounts, previewWorkspaceMemberRemoval, removeWorkspaceMember, resetPassword, setPlatformAdmin, setWorkspaceRole,
+  type AccountRow, type BulkResultRow, type MemberRemovalPreview,
 } from '@/app/actions/accounts'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { StatusMessage } from '@/components/ui/StatusMessage'
+import { buttonClass } from '@/components/ui/buttonStyles'
+import type { DictKey } from '@/lib/i18n/dict'
 import { ACCOUNT_ROLES, type AccountRole } from '@/lib/domain/accounts'
 import { isValidEmail } from '@/lib/domain/validate'
 
 // accounts.ts 의 ERR_SELF_PLATFORM 원문('use server' 모듈이라 상수를 공유하지 못한다 — 바꾸면 둘 다).
 const SELF_PLATFORM_HINT = '본인의 플랫폼 관리자 권한은 스스로 해제할 수 없습니다. 다른 슈퍼유저에게 요청하세요.'
+
+/** '{n}' 꼴 자리 채우기 — 사전 문구의 수·이름 */
+const fill = (text: string, vars: Record<string, string | number>) => text.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m))
 
 const ROLE_LABEL: Record<AccountRole, string> = { admin: '관리자', member: '멤버', viewer: '조회' }
 
@@ -45,8 +52,9 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
   /** 그 프로젝트의 워크스페이스 — 워크스페이스 등급 열·변경과 새 계정(단건·일괄) 소속의 대상 */
   workspaceId: string
   projects: { id: string; name: string }[]
-  /** 플랫폼 관리자만 true — 플랫폼 전용 조작(비밀번호 재설정·플랫폼 관리자 지정)을 그린다(SP3b D22). 액션 가드는 그대로 requireSuperuser.
-   *  워크스페이스 관리자가 이 화면을 열게 되며, 눌러도 거부될 버튼을 보이지 않게 한다 */
+  /** 플랫폼 관리자만 true — 플랫폼 전용 조작(플랫폼 관리자 지정)을 그린다(SP3b D22). 액션 가드는 그대로 requireSuperuser.
+   *  워크스페이스 관리자가 이 화면을 열게 되며, 눌러도 거부될 버튼을 보이지 않게 한다. 비밀번호 재설정·워크스페이스에서 제거는 행마다
+   *  판정이 갈려(row.passwordReset·row.removal) 누구에게나 그리되, 안 되는 행은 잠그고 사유를 툴팁으로 보인다 */
   canPlatformOps: boolean
   /** 보는 사람 — 본인 행의 플랫폼 관리자 해제를 막는다(서버 액션도 거부). */
   currentUserId: string
@@ -56,6 +64,8 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
   const [addOpen, setAddOpen] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [resetting, setResetting] = useState<AccountRow | null>(null)
+  const [removing, setRemoving] = useState<AccountRow | null>(null)
+  const { t } = useLocale()
 
   return (
     <div className="card overflow-hidden">
@@ -95,7 +105,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[880px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
                   <th className="py-2 pr-3">이메일</th>
@@ -104,7 +114,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                   <th className="py-2 pr-3">이 프로젝트 권한</th>
                   {canPlatformOps && <th className="py-2 pr-3">플랫폼 관리자</th>}
                   <th className="py-2 pr-3">생성일</th>
-                  {canPlatformOps && <th className="py-2 pr-3 text-right">작업</th>}
+                  <th className="py-2 pr-3 text-right">{t('wsAccounts.colActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -132,15 +142,29 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                       </td>
                     )}
                     <td className="py-2.5 pr-3 text-fg-muted">{a.createdAt.slice(0, 10)}</td>
-                    {canPlatformOps && (
-                      <td className="py-2.5 pr-3">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button onClick={() => setResetting(a)} className="btn btn-ghost btn-sm" title="비밀번호 리셋">
-                            <KeyRound className="h-3.5 w-3.5" />비번 리셋
-                          </button>
-                        </div>
-                      </td>
-                    )}
+                    <td className="py-2.5 pr-3">
+                      {/* 안 되는 행은 버튼을 숨기지 않고 잠근다 — 왜 안 되는지(사유 툴팁)가 "버튼이 없다"보다 낫다. 서버 액션이 다시 판정한다 */}
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          data-reset-password
+                          onClick={() => setResetting(a)}
+                          className="btn btn-ghost btn-sm disabled:opacity-50"
+                          disabled={a.passwordReset !== 'ok'}
+                          title={a.passwordReset === 'ok' ? t('wsAccounts.reset') : t(`wsAccounts.reset.${a.passwordReset}` as DictKey)}
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />{t('wsAccounts.reset')}
+                        </button>
+                        <button
+                          data-remove-member
+                          onClick={() => setRemoving(a)}
+                          className="btn btn-ghost btn-sm disabled:opacity-50"
+                          disabled={a.removal !== 'ok'}
+                          title={a.removal === 'ok' ? t('wsAccounts.remove') : t(`wsAccounts.remove.${a.removal}` as DictKey)}
+                        >
+                          <UserMinus className="h-3.5 w-3.5" />{t('wsAccounts.remove')}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -151,7 +175,8 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
 
       <AddAccountModal open={addOpen} onClose={() => setAddOpen(false)} projectId={projectId} workspaceId={workspaceId} />
       <BulkAddModal open={bulkOpen} onClose={() => setBulkOpen(false)} projectId={projectId} workspaceId={workspaceId} />
-      {canPlatformOps && <ResetPasswordModal account={resetting} onClose={() => setResetting(null)} />}
+      <ResetPasswordModal account={resetting} workspaceId={workspaceId} onClose={() => setResetting(null)} />
+      <RemoveMemberModal account={removing} workspaceId={workspaceId} onClose={() => setRemoving(null)} />
     </div>
   )
 }
@@ -421,7 +446,7 @@ function BulkAddModal({ open, onClose, projectId, workspaceId }: {
   )
 }
 
-function ResetPasswordModal({ account, onClose }: { account: AccountRow | null; onClose: () => void }) {
+function ResetPasswordModal({ account, workspaceId, onClose }: { account: AccountRow | null; workspaceId: string; onClose: () => void }) {
   const { toast } = useToast()
   const [password, setPassword] = useState('')
   const [done, setDone] = useState<string | null>(null) // 적용 완료된 임시 비밀번호 — 전달용으로 유지
@@ -439,7 +464,7 @@ function ResetPasswordModal({ account, onClose }: { account: AccountRow | null; 
     if (password.length < 8) { setError('임시 비밀번호는 8자 이상이어야 합니다.'); return }
     startTransition(async () => {
       try {
-        const res = await resetPassword(account.id, password)
+        const res = await resetPassword(workspaceId, account.id, password)
         if (res.ok) {
           setDone(password) // 모달을 닫지 않고 값을 유지 — 전달 전 소실 방지
           toast({ title: '비밀번호를 리셋했습니다.', variant: 'success' })
@@ -494,6 +519,93 @@ function ResetPasswordModal({ account, onClose }: { account: AccountRow | null; 
             {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
           </>
         )}
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * "워크스페이스에서 제거" 확인 — 열리면 영향(권한이 회수될 프로젝트 수·회수될 초대·닫힐 토큰)을 먼저 읽어 보여 주고, 읽은 뒤에만 확인을 연다.
+ * 미리보기를 못 읽으면 확인도 잠근다 — 무엇이 바뀌는지 모르는 채로 누르게 하지 않는다(조회 실패를 "영향 없음"으로 그리지 않는다).
+ * 수치는 안내다: 제거는 서버(RPC)가 같은 범위를 다시 재서 한 트랜잭션으로 한다.
+ */
+function RemoveMemberModal({ account, workspaceId, onClose }: { account: AccountRow | null; workspaceId: string; onClose: () => void }) {
+  const router = useRouter()
+  const { toast } = useToast()
+  const { t } = useLocale()
+  const [preview, setPreview] = useState<MemberRemovalPreview | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+  const accountId = account?.id ?? null
+
+  useEffect(() => {
+    setPreview(null); setError(null)
+    if (!accountId) return
+    let alive = true
+    previewWorkspaceMemberRemoval(workspaceId, accountId)
+      .then((res) => {
+        if (!alive) return
+        if (res.ok) setPreview(res.preview)
+        else setError(res.error)
+      })
+      .catch(() => { if (alive) setError(t('wsAccounts.requestFailed')) })
+    return () => { alive = false }
+    // t 는 로캘이 바뀔 때만 달라진다 — 그때 미리보기를 다시 읽을 이유가 없다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, workspaceId])
+
+  function submit() {
+    if (!account || !preview) return
+    startTransition(async () => {
+      try {
+        const res = await removeWorkspaceMember(workspaceId, account.id)
+        if (res.ok) {
+          toast({ title: t('wsAccounts.remove.done'), description: account.email, variant: 'success' })
+          onClose(); router.refresh()
+        } else {
+          setError(res.error ?? t('wsAccounts.remove.failed'))
+          // 거부는 이 표가 낡았다는 신호일 수 있다(그 사이 등급이 바뀌었거나 이미 빠졌다) — 다시 읽는다
+          router.refresh()
+        }
+      } catch {
+        setError(t('wsAccounts.requestFailed'))
+      }
+    })
+  }
+
+  const lines = preview ? [
+    preview.projects > 0 ? fill(t('wsAccounts.remove.previewProjects'), { n: preview.projects }) : null,
+    preview.invites > 0 ? fill(t('wsAccounts.remove.previewInvites'), { n: preview.invites }) : null,
+    preview.tokens > 0 ? fill(t('wsAccounts.remove.previewTokens'), { n: preview.tokens }) : null,
+  ].filter((l): l is string => l !== null) : []
+
+  return (
+    <Modal
+      open={!!account} onClose={onClose} title={t('wsAccounts.remove.title')}
+      footer={
+        <>
+          <button onClick={onClose} className="btn btn-ghost" disabled={pending}>{t('wsAccounts.remove.cancel')}</button>
+          <button data-remove-confirm onClick={submit} className={buttonClass('danger')} disabled={pending || !preview}>
+            {pending ? t('wsAccounts.remove.pending') : t('wsAccounts.remove.confirm')}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-fg-secondary">{fill(t('wsAccounts.remove.body'), { email: account?.email ?? '' })}</p>
+        {preview ? (
+          <div data-remove-preview className="rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
+            <p className="text-xs font-semibold text-fg-secondary">{t('wsAccounts.remove.previewTitle')}</p>
+            {lines.length > 0
+              ? <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-fg">{lines.map((l) => <li key={l}>{l}</li>)}</ul>
+              : <p className="mt-1.5 text-sm text-fg">{t('wsAccounts.remove.previewNone')}</p>}
+          </div>
+        ) : error ? null : (
+          <p className="text-sm text-fg-muted">{t('wsAccounts.remove.previewLoading')}</p>
+        )}
+        {error && (preview
+          ? <p role="alert" className="text-sm font-medium text-danger">{error}</p>
+          : <StatusMessage kind="partial_error" title={t('wsAccounts.remove.previewFailed')} detail={error} />)}
       </div>
     </Modal>
   )

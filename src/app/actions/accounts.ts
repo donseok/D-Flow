@@ -1,10 +1,12 @@
 'use server'
-// 계정 관리 — 생성·워크스페이스 등급·목록은 그 워크스페이스의 관리자, 비밀번호 초기화·플랫폼 관리자 지정은 슈퍼유저 전용
-// (SP2 §4.1·D1 — 계정 비밀번호는 여러 워크스페이스에 걸친 전역 자원). 0003 이후 계정 = auth.users + profiles + workspace_members + people(연결),
+// 계정 관리 — 생성·워크스페이스 등급·목록·워크스페이스에서 제거는 그 워크스페이스의 관리자, 플랫폼 관리자 지정은 슈퍼유저 전용.
+// 비밀번호 재설정은 그 워크스페이스의 관리자에게 열되 대상의 범위로 좁힌다(계정 비밀번호는 여러 워크스페이스에 걸친 전역 자원 — SP2 §4.1·D1:
+// 다른 워크스페이스에도 속한 계정·관리자 계정은 플랫폼 관리자만. 판정은 domain/authz 의 passwordResetVerdict). 0003 이후 계정 = auth.users + profiles + workspace_members + people(연결),
 // 프로젝트 권한 = 명단 행 access_role(RPC upsert_project_member_cmd 로만 쓴다). 옛 전역 소속·프로젝트 역할 표는 0003 에서 폐지됐다.
 import { revalidatePath } from 'next/cache'
 import { requireProjectMember, requireSuperuser, requireWorkspaceAdmin } from '@/lib/authz'
-import { ERR_MISSING } from '@/lib/authz/errors'
+import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
+import { loadAccountTargets } from '@/lib/authz/accountsAccess'
 import { authzCommandError, newAuthzCommandId, parseAuthzResult } from '@/lib/authz/commands'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -14,7 +16,10 @@ import { canonicalEmail } from '@/lib/domain/email'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { isValidPassword, parseBulkAccounts } from '@/lib/domain/accounts'
 import { rosterWriteError } from '@/lib/domain/rosterErrors'
-import { ACCESS_ROLE, WORKSPACE_ROLE } from '@/lib/domain/authz'
+import {
+  ACCESS_ROLE, WORKSPACE_ROLE, memberRemovalVerdict, passwordResetVerdict,
+  type MemberRemovalVerdict, type PasswordResetVerdict,
+} from '@/lib/domain/authz'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 type WorkspaceRole = 'admin' | 'member'
@@ -31,6 +36,10 @@ export interface AccountRow {
   /** 조회 대상 프로젝트의 권한(활성 명단 행의 access_role). null = 조회 전용. */
   accessRole: AccessRole | null
   createdAt: string
+  /** 이 행의 비밀번호를 보는 사람이 재설정할 수 있는가 — 'ok' 밖은 사유(화면이 버튼을 잠그고 툴팁으로 보인다). 서버 액션이 다시 판정한다. */
+  passwordReset: PasswordResetVerdict
+  /** 이 행을 보는 사람이 워크스페이스에서 뺄 수 있는가 — 같은 꼴. 마지막 관리자 여부는 여기 없다(DB 가 판정). */
+  removal: MemberRemovalVerdict
 }
 
 export interface AccountInput {
@@ -266,51 +275,187 @@ export async function bulkCreateAccounts(
   return { ok: true, results }
 }
 
-/**
- * 대상 계정이 나보다 높거나 같은 등급이면 슈퍼유저만 손댈 수 있다.
- *
- * 이 검사가 없으면 어느 한 프로젝트의 관리자가 **상위 등급 계정의 비밀번호를 초기화해
- * 그 계정으로 로그인**할 수 있고, 관리자 슬롯 규칙이 통째로 우회된다. 등급 경계는 계정 조작
- * 경로에서도 지켜져야 한다. 현 게이트(슈퍼유저 전용)에서는 단락 통과 — 정책이 다시 느슨해질 때를 위한 것이다.
- *
- * 조회 실패는 거부다 — '관리자가 아니다'로 폴백하면 가드가 그 순간 사라진다.
- */
-async function assertCanTouchAccount(
-  admin: AdminClient, targetUserId: string, callerIsSuperuser: boolean,
-): Promise<AccountActionResult> {
-  if (callerIsSuperuser) return { ok: true }
+/** 판정 사유 → 액션 오류 문구. platform_only 는 세 원인을 한 문구로 묶는다(순수 판정의 주석 — 남의 등급·다른 소속을 알리지 않는다). */
+const RESET_DENIED: Record<Exclude<PasswordResetVerdict, 'ok'>, string> = {
+  self: '본인의 비밀번호는 계정 화면의 "비밀번호 변경"에서 바꾸세요.',
+  denied: ERR_DENIED,
+  not_member: '이 워크스페이스에 소속되지 않은 계정입니다.',
+  target_admin: '관리자 계정의 비밀번호는 플랫폼 관리자만 재설정할 수 있습니다.',
+  platform_only: '이 계정의 비밀번호는 플랫폼 관리자만 재설정할 수 있습니다.',
+}
+const REMOVE_DENIED: Record<Exclude<MemberRemovalVerdict, 'ok'>, string> = {
+  self: '본인은 워크스페이스에서 제거할 수 없습니다.',
+  denied: ERR_DENIED,
+  not_member: '이 워크스페이스에 소속되지 않은 계정입니다.',
+  target_admin: '관리자는 플랫폼 관리자만 제거할 수 있습니다. 먼저 멤버로 바꾼 뒤 제거하세요.',
+}
+const ERR_RESET = '비밀번호를 재설정하지 못했습니다.'
+const ERR_REMOVE = '워크스페이스에서 제거하지 못했습니다.'
 
-  const [platform, wsAdmin, projectAdmin] = await Promise.all([
-    admin.from('platform_admins').select('user_id').eq('user_id', targetUserId).maybeSingle(),
-    admin.from('workspace_members').select('workspace_id').eq('user_id', targetUserId).eq('role', WORKSPACE_ROLE.admin).limit(1),
-    admin.from('project_members').select('id, people!inner(user_id)')
-      .eq('people.user_id', targetUserId).eq('access_role', ACCESS_ROLE.admin).limit(1),
-  ])
-  if (platform.error || wsAdmin.error || projectAdmin.error || !wsAdmin.data || !projectAdmin.data) {
-    console.error('[assertCanTouchAccount] 대상 등급 조회 실패:',
-      platform.error?.message ?? wsAdmin.error?.message ?? projectAdmin.error?.message ?? 'unknown')
+/**
+ * 비밀번호 재설정 — 그 워크스페이스의 관리자(플랫폼 관리자 포함). 그 계정으로 로그인할 수 있게 만드는 조작이라 관문이 셋이다:
+ * ① 가드 ② 순수 판정 passwordResetVerdict(대상의 **모든** 소속을 service_role 로 읽어 — 다른 워크스페이스에도 속한 계정·관리자·플랫폼 관리자는
+ * 플랫폼 관리자만) ③ RPC record_password_reset 의 같은 재판정. ③ 은 누가 누구를 재설정했는지 권한 변경 이력(authz_events)에 남긴다.
+ * 순서는 기록 → 변경이다: 두 저장소(Postgres·GoTrue)라 한 트랜잭션이 될 수 없고, 기록 없는 재설정보다 재설정 없는 기록이 낫다
+ * (변경이 실패하면 그 사실을 로그에 남긴다 — 이력 행은 지울 수 없다).
+ * 조회 실패는 거부다 — '관리자가 아니다'·'다른 소속 없음'으로 폴백하면 경계가 그 순간 사라진다.
+ */
+export async function resetPassword(workspaceId: string, userId: string, password: string): Promise<AccountActionResult> {
+  if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
+  const g = await requireWorkspaceAdmin(workspaceId)
+  if (!g.ok) return { ok: false, error: g.error }
+  if (typeof userId !== 'string' || !UUID_RE.test(userId)) return { ok: false, error: ERR_MISSING }
+  if (!isValidPassword(password)) return { ok: false, error: '비밀번호는 8자 이상이어야 합니다.' }
+  const admin = createAdminClient()
+  let target
+  try {
+    target = (await loadAccountTargets(admin, [userId])).get(userId)
+  } catch (e) {
+    console.error('[resetPassword] 대상 등급 조회 실패:', e instanceof Error ? e.message : String(e))
     return { ok: false, error: ERR_LOOKUP }
   }
-  if (platform.data) return { ok: false, error: '슈퍼유저 계정은 슈퍼유저만 변경할 수 있습니다.' }
-  // 관리자끼리도 서로의 계정을 만지지 못하게 한다 — 동급 탈취로 권한 경계가 흐려진다.
-  if (wsAdmin.data.length > 0 || projectAdmin.data.length > 0) {
-    return { ok: false, error: '관리자 계정은 슈퍼유저만 변경할 수 있습니다.' }
+  if (!target) return { ok: false, error: ERR_LOOKUP }
+  const verdict = passwordResetVerdict(g.actor, workspaceId, target)
+  if (verdict !== 'ok') return { ok: false, error: RESET_DENIED[verdict] }
+
+  const { data, error: recErr } = await admin.rpc('record_password_reset', {
+    p_actor: g.actor.userId, p_workspace_id: workspaceId, p_target: userId, p_command_id: newAuthzCommandId(),
+  })
+  if (recErr) {
+    const denied = authzCommandError(recErr.message)
+    if (denied) return { ok: false, error: denied }
+    if (recErr.message.includes('PASSWORD_RESET_TARGET_NOT_FOUND')) return { ok: false, error: ERR_MISSING }
+    console.error(`[resetPassword user=${userId}] 기록 실패:`, recErr.message)
+    return { ok: false, error: ERR_RESET }
+  }
+  if (!parseAuthzResult(data)) {
+    console.error(`[resetPassword user=${userId}] RPC 결과를 읽지 못했다:`, data)
+    return { ok: false, error: ERR_RESET }
+  }
+  const { error } = await admin.auth.admin.updateUserById(userId, { password })
+  if (error) {
+    // 이력에는 재설정이 남았는데 비밀번호는 그대로다 — 다시 시도하면 기록이 한 줄 더 생긴다. GoTrue 원문은 화면에 내지 않는다
+    console.error(`[resetPassword user=${userId}] 기록은 남겼으나 비밀번호 변경 실패:`, error.message)
+    return { ok: false, error: ERR_RESET }
   }
   return { ok: true }
 }
 
-export async function resetPassword(userId: string, password: string): Promise<AccountActionResult> {
-  const g = await requireSuperuser()
+export interface MemberRemovalPreview {
+  /** 권한(관리자·멤버)이 회수될 프로젝트 수 — 명단 행은 남고 조회 전용이 된다 */
+  projects: number
+  /** 회수될 수락 전 초대 수 */
+  invites: number
+  /** 닫힐 에이전트 토큰 수 */
+  tokens: number
+}
+
+/** 그 워크스페이스에서 이 계정에 걸린 것 — 인물 id 들과 초대가 나갔을 주소들. 미리보기 전용(제거 RPC 는 같은 범위를 SQL 로 다시 잰다). */
+async function removalScope(admin: AdminClient, workspaceId: string, userId: string): Promise<{ personIds: string[]; emails: string[] }> {
+  const [people, profile] = await Promise.all([
+    admin.from('people').select('id, email').eq('workspace_id', workspaceId).eq('user_id', userId),
+    admin.from('profiles').select('email').eq('user_id', userId).maybeSingle(),
+  ])
+  if (people.error || !people.data) throw new Error(`인물 조회 실패: ${people.error?.message ?? 'unknown'}`)
+  if (profile.error) throw new Error(`프로필 조회 실패: ${profile.error.message}`)
+  const rows = people.data as Array<{ id: string; email: string | null }>
+  const emails = new Set<string>()
+  for (const r of rows) if (r.email) emails.add(r.email)
+  const own = (profile.data as { email: string | null } | null)?.email
+  if (own) emails.add(own.trim().toLowerCase())
+  return { personIds: rows.map(r => r.id), emails: [...emails] }
+}
+
+/** 판정에 쓸 대상의 그 워크스페이스 등급. 조회 실패는 throw(호출부가 중단한다). */
+async function targetWorkspaceRole(admin: AdminClient, workspaceId: string, userId: string): Promise<WorkspaceRole | null> {
+  const { data, error } = await admin.from('workspace_members').select('role')
+    .eq('workspace_id', workspaceId).eq('user_id', userId).maybeSingle()
+  if (error) throw new Error(`소속 조회 실패: ${error.message}`)
+  return (data as { role: WorkspaceRole } | null)?.role ?? null
+}
+
+/**
+ * "워크스페이스에서 제거"의 영향 미리보기 — 확인 창이 보여 준다. 제거와 같은 가드·같은 판정을 거친다(뺄 수 없는 대상의 수치를 내지 않는다).
+ * 세는 범위는 그 워크스페이스뿐이다. 조회 실패를 0건으로 돌려주지 않는다 — "영향 없음"으로 읽혀 확인을 누르게 된다.
+ */
+export async function previewWorkspaceMemberRemoval(
+  workspaceId: string, userId: string,
+): Promise<{ ok: true; preview: MemberRemovalPreview } | { ok: false; error: string }> {
+  if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
+  const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error }
-  if (!isValidPassword(password)) return { ok: false, error: '비밀번호는 8자 이상이어야 합니다.' }
+  if (typeof userId !== 'string' || !UUID_RE.test(userId)) return { ok: false, error: ERR_MISSING }
   const admin = createAdminClient()
-  // 비밀번호 초기화는 그 계정으로 로그인할 수 있게 만드는 조작이다 —
-  // 게이트가 슈퍼유저 전용이 된 뒤에도 등급 경계 검사는 남긴다.
-  const allowed = await assertCanTouchAccount(admin, userId, g.actor.isSuperuser)
-  if (!allowed.ok) return allowed
-  const { error } = await admin.auth.admin.updateUserById(userId, { password })
-  if (error) return { ok: false, error: error.message }
-  return { ok: true }
+  try {
+    const verdict = memberRemovalVerdict(g.actor, workspaceId, { userId, workspaceRole: await targetWorkspaceRole(admin, workspaceId, userId) })
+    if (verdict !== 'ok') return { ok: false, error: REMOVE_DENIED[verdict] }
+    const scope = await removalScope(admin, workspaceId, userId)
+    const [roster, invites, tokens] = await Promise.all([
+      scope.personIds.length === 0 ? { count: 0, error: null }
+        : admin.from('project_members').select('id', { count: 'exact', head: true })
+          .in('person_id', scope.personIds).not('access_role', 'is', null),
+      scope.emails.length === 0 ? { count: 0, error: null }
+        : admin.from('project_invites').select('id', { count: 'exact', head: true })
+          .eq('workspace_id', workspaceId).in('email', scope.emails).is('redeemed_at', null).is('revoked_at', null),
+      admin.from('integration_credentials').select('id', { count: 'exact', head: true })
+        .eq('workspace_id', workspaceId).eq('owner_user_id', userId).is('revoked_at', null),
+    ])
+    const bad = [roster, invites, tokens].find(r => r.error || typeof r.count !== 'number')
+    if (bad) throw new Error(`영향 범위 조회 실패: ${bad.error?.message ?? '행 수 없음'}`)
+    return { ok: true, preview: { projects: roster.count!, invites: invites.count!, tokens: tokens.count! } }
+  } catch (e) {
+    console.error(`[previewWorkspaceMemberRemoval user=${userId}]`, e instanceof Error ? e.message : String(e))
+    return { ok: false, error: ERR_LOOKUP }
+  }
+}
+
+/**
+ * 워크스페이스에서 멤버 제거 — 그 워크스페이스의 관리자(플랫폼 관리자 포함). 소속 행 삭제 + 그 워크스페이스 명단 권한 회수(명단 행·담당·이력은 남는다)
+ * + 수락 전 초대 회수 + 그 사람 소유 에이전트 토큰 닫기를 RPC remove_workspace_member(0053)가 한 트랜잭션으로 한다. RPC 가 등급을 다시 판정한다.
+ * 계정 자체(로그인·프로필)와 다른 워크스페이스의 소속은 건드리지 않는다. 마지막 관리자는 DB 트리거가 거부한다(앱이 먼저 세지 않는다).
+ * 선행 조회(대상 등급)가 실패하면 중단한다.
+ */
+export async function removeWorkspaceMember(
+  workspaceId: string, userId: string,
+): Promise<AccountActionResult & { removed?: MemberRemovalPreview }> {
+  if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
+  const g = await requireWorkspaceAdmin(workspaceId)
+  if (!g.ok) return { ok: false, error: g.error }
+  if (typeof userId !== 'string' || !UUID_RE.test(userId)) return { ok: false, error: ERR_MISSING }
+  const admin = createAdminClient()
+  let verdict: MemberRemovalVerdict
+  try {
+    verdict = memberRemovalVerdict(g.actor, workspaceId, { userId, workspaceRole: await targetWorkspaceRole(admin, workspaceId, userId) })
+  } catch (e) {
+    console.error(`[removeWorkspaceMember user=${userId}]`, e instanceof Error ? e.message : String(e))
+    return { ok: false, error: ERR_LOOKUP }
+  }
+  if (verdict !== 'ok') return { ok: false, error: REMOVE_DENIED[verdict] }
+
+  const { data, error } = await admin.rpc('remove_workspace_member', {
+    p_actor: g.actor.userId, p_workspace_id: workspaceId, p_target: userId, p_command_id: newAuthzCommandId(),
+  })
+  if (error) {
+    if (error.message.includes('WORKSPACE_LAST_ADMIN')) {
+      return { ok: false, error: '워크스페이스의 마지막 관리자는 제거할 수 없습니다. 다른 관리자를 먼저 지정하세요.' }
+    }
+    if (error.message.includes('WORKSPACE_MEMBER_SELF_REMOVE')) return { ok: false, error: REMOVE_DENIED.self }
+    if (error.message.includes('WORKSPACE_MEMBER_ADMIN_FORBIDDEN')) return { ok: false, error: REMOVE_DENIED.target_admin }
+    const denied = authzCommandError(error.message)
+    if (denied) return { ok: false, error: denied }
+    console.error(`[removeWorkspaceMember user=${userId}] 제거 실패:`, error.message)
+    return { ok: false, error: ERR_REMOVE }
+  }
+  const result = parseAuthzResult(data)
+  if (!result) {
+    console.error(`[removeWorkspaceMember user=${userId}] RPC 결과를 읽지 못했다:`, data)
+    return { ok: false, error: ERR_REMOVE }
+  }
+  // 0행 = 그 사이 이미 빠졌다. 조용한 no-op 을 성공으로 보고하지 않는다
+  if (result.matched === 0) return { ok: false, error: REMOVE_DENIED.not_member }
+  revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
+  const n = (k: string) => { const v = (data as Record<string, unknown>)[k]; return typeof v === 'number' ? v : 0 }
+  return { ok: true, removed: { projects: n('revoked_projects'), invites: n('revoked_invites'), tokens: n('revoked_credentials') } }
 }
 
 /**
@@ -442,6 +587,13 @@ export async function listAccounts(
   // profiles 는 플랫폼 전체다. 그 워크스페이스 소속·이 프로젝트 명단 계정만 보인다 — 다른 워크스페이스 사람의 이메일이 새지 않게(SP2 격리).
   // 플랫폼 관리자도 같다: 이 목록은 /w/<slug>/admin/accounts(그 워크스페이스 화면)의 것이다(SP3b D21·D22, U2a-4 리뷰 T4).
   const visible = profiles.filter(p => wsRoleBy.has(p.userId) || accessBy.has(p.userId))
+  // 행별 조작 판정의 입력 — 보이는 계정들의 모든 소속(다른 워크스페이스 포함). 판정 결과만 행에 싣는다(소속 자체는 내리지 않는다).
+  let targets
+  try {
+    targets = await loadAccountTargets(admin, visible.map(p => p.userId))
+  } catch (e) {
+    return fail('계정 등급', e instanceof Error ? e.message : String(e))
+  }
   const rows = visible
     .map<AccountRow>(p => ({
       id: p.userId,
@@ -452,6 +604,8 @@ export async function listAccounts(
       isPlatformAdmin: g.actor.isSuperuser && platformIds.has(p.userId),
       accessRole: accessBy.get(p.userId) ?? null,
       createdAt: p.createdAt,
+      passwordReset: passwordResetVerdict(g.actor, workspaceId, targets.get(p.userId)!),
+      removal: memberRemovalVerdict(g.actor, workspaceId, { userId: p.userId, workspaceRole: wsRoleBy.get(p.userId) ?? null }),
     }))
     // 계정 표에 '이름' 열이 있으므로 이름 가나다순으로 보여준다. 같은 이름 안에서는 이메일순.
     .sort((a, b) => compareKoreanName(a.name, b.name) || a.email.localeCompare(b.email))

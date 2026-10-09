@@ -24,6 +24,8 @@ vi.mock('@/lib/authz', () => ({
 vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams }))
 vi.mock('@/lib/data/members', () => ({ getProjectRoster: mocks.getProjectRoster }))
 vi.mock('@/app/actions/roster', () => ({ listRoster: mocks.listRoster }))
+// 초대 허용 도메인 사전 안내(워크스페이스 설정 조회)는 이 파일의 관심사가 아니다 — 안내 없이 그린다
+vi.mock('@/lib/data/inviteDomainNotice', () => ({ loadInviteDomainNotice: vi.fn(async () => null) }))
 vi.mock('@/app/actions/projectInvites', () => ({ listProjectInvites: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))

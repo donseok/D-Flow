@@ -94,7 +94,7 @@ async function removeWorkspace(admin: AdminClient, workspaceId: string): Promise
 }
 
 /**
- * 워크스페이스 생성 — 행 + 첫 관리자 멤버십 + 그 관리자의 인물 행 + 허용 모듈(·시간대) 설정.
+ * 워크스페이스 생성 — 행 + 첫 관리자 멤버십 + 그 관리자의 인물 행 + 허용 모듈(·시간대·초대 허용 도메인) 설정.
  * 순서: ① 입력 검증 ② 첫 관리자 계정 확인(없으면 아무것도 만들지 않는다 — 계정을 여기서 만들지 않는다) ③ slug 중복 확인
  * ④ 워크스페이스 행 ⑤ 멤버십 ⑥ 인물 ⑦ 설정(RPC 한 길 — 이력이 생기는 마지막 단계). ⑤~⑦ 이 실패하면 ④ 를 지운다(removeWorkspace).
  */
@@ -103,7 +103,7 @@ export async function createPlatformWorkspace(input: unknown): Promise<PlatformW
   if (!g.ok) return { ok: false, code: 'denied', field: null, error: g.error }
   const checked = checkWorkspaceCreate(input)
   if (!checked.ok) return { ok: false, code: checked.code, field: checked.field }
-  const { name, slug, adminEmail, modules, timezone } = checked.value
+  const { name, slug, adminEmail, modules, timezone, inviteDomains } = checked.value
   const actorId = g.actor.userId
   const admin = createAdminClient()
 
@@ -150,6 +150,8 @@ export async function createPlatformWorkspace(input: unknown): Promise<PlatformW
   // ⑦ 설정 — 허용 모듈은 늘 명시로 적는다(빈 배열 = core 만). 시간대는 줬을 때만(비우면 제품 기본값 — 설정 화면이 브라우저 시간대를 제안한다)
   const set: Record<string, unknown> = { 'modules.allowed': modules }
   if (timezone) set['calendar.timezone'] = timezone
+  // 초대 허용 도메인 — 생성 폼에서 명시로 적었을 때만. 적지 않으면 미설정으로 남는다(정책 기본값은 초대 불가 — 첫 초대 전에 워크스페이스 설정에서 정한다)
+  if (inviteDomains) set['invites.allowed_domains'] = inviteDomains
   let written: Awaited<ReturnType<typeof writeWorkspaceSettingsInternal>>
   try {
     written = await writeWorkspaceSettingsInternal(admin, workspaceId, { set }, actorId)

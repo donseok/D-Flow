@@ -18,6 +18,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 
 import {
   createAccount, bulkCreateAccounts, resetPassword, listAccounts, setPlatformAdmin, setWorkspaceRole,
+  previewWorkspaceMemberRemoval, removeWorkspaceMember,
   type AccountInput,
 } from '@/app/actions/accounts'
 import { isProjectMember, roleIn, workspaceAdminVerdict, type Actor } from '@/lib/domain/authz'
@@ -26,6 +27,8 @@ import { makeActor, makeSuperuser, WS } from '../fixtures/actor'
 
 const DENIED = { ok: false as const, error: '권한 없음' }
 const P1 = 'p1'
+/** 계정 조작의 대상 id — 액션이 uuid 꼴을 먼저 본다 */
+const T = '00000000-0000-4000-8000-0000000000a1'
 const WS_B = 'ws-b'
 const SU = makeSuperuser({ userId: 'u-su', workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[P1, WS]]) })
 const WS_ADMIN = makeActor({ userId: 'u-wsa', workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[P1, WS]]) })
@@ -165,77 +168,20 @@ describe('계정 서버액션 권한 게이트', () => {
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
-  it('프로젝트 관리자도 resetPassword 거부 — 계정 조작은 슈퍼유저 전용', async () => {
-    requireSuperuser.mockResolvedValue(DENIED)
-    expect(await resetPassword('u-superuser', 'password1')).toEqual(DENIED)
+  it('resetPassword: 멤버는 거부, 다른 워크스페이스 관리자는 존재 은닉 — 가드는 그 워크스페이스의 관리자', async () => {
+    signedInAs(WS_MEMBER)
+    expect(await resetPassword(WS, T, 'password1')).toEqual({ ok: false, error: ERR_DENIED })
+    signedInAs(OTHER_WS_ADMIN)
+    expect(await resetPassword(WS, T, 'password1')).toEqual({ ok: false, error: ERR_MISSING })
+    expect(requireWorkspaceAdmin).toHaveBeenCalledWith(WS)
+    expect(requireSuperuser).not.toHaveBeenCalled()
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
-  /** 게이트가 느슨해진 뒤(비슈퍼유저 액터)의 등급 경계 — 대상의 세 축을 모의한다. */
-  function touchClient(o: { platform?: Result; wsAdmin?: Result; projectAdmin?: Result } = {}) {
-    const q = {
-      platform_admins: chain(o.platform ?? { data: null, error: null }),
-      workspace_members: chain(o.wsAdmin ?? { data: [], error: null }),
-      project_members: chain(o.projectAdmin ?? { data: [], error: null }),
-    }
-    const updateUserById = vi.fn(async () => ({ error: null }))
-    createAdminClient.mockReturnValue({
-      from: vi.fn((t: keyof typeof q) => q[t]),
-      auth: { admin: { updateUserById } },
-    } as never)
-    return { q, updateUserById }
-  }
-  const RELAXED = { ok: true, actor: makeActor({ userId: 'u-admin', isSuperuser: false }) }
-
-  it('비슈퍼유저는 플랫폼 관리자 계정을 만질 수 없다', async () => {
-    requireSuperuser.mockResolvedValue(RELAXED)
-    const c = touchClient({ platform: { data: { user_id: 'u-t' }, error: null } })
-    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: false, error: '슈퍼유저 계정은 슈퍼유저만 변경할 수 있습니다.' })
-    expect(c.q.platform_admins.eq).toHaveBeenCalledWith('user_id', 'u-t')
-    expect(c.updateUserById).not.toHaveBeenCalled()
-  })
-
-  it('비슈퍼유저는 어느 프로젝트든 관리자인 계정·워크스페이스 관리자 계정을 만질 수 없다', async () => {
-    requireSuperuser.mockResolvedValue(RELAXED)
-    const c = touchClient({ projectAdmin: { data: [{ id: 'm-1' }], error: null } })
-    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: false, error: '관리자 계정은 슈퍼유저만 변경할 수 있습니다.' })
-    // 명단 권한은 인물을 거쳐 계정에 붙는다 — 임베드 필터 모양을 고정한다.
-    expect(c.q.project_members.select).toHaveBeenCalledWith('id, people!inner(user_id)')
-    expect(c.q.project_members.eq).toHaveBeenCalledWith('people.user_id', 'u-t')
-    expect(c.q.project_members.eq).toHaveBeenCalledWith('access_role', 'admin')
-    expect(c.updateUserById).not.toHaveBeenCalled()
-
-    const w = touchClient({ wsAdmin: { data: [{ workspace_id: WS }], error: null } })
-    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: false, error: '관리자 계정은 슈퍼유저만 변경할 수 있습니다.' })
-    expect(w.q.workspace_members.eq).toHaveBeenCalledWith('role', 'admin')
-    expect(w.updateUserById).not.toHaveBeenCalled()
-  })
-
-  it('비슈퍼유저라도 일반 계정은 초기화할 수 있다', async () => {
-    requireSuperuser.mockResolvedValue(RELAXED)
-    const c = touchClient()
-    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: true })
-    expect(c.updateUserById).toHaveBeenCalledWith('u-t', { password: 'password1' })
-  })
-
-  it('대상 등급 조회가 하나라도 실패하면 거부한다 — "관리자 아님" 폴백 금지', async () => {
-    requireSuperuser.mockResolvedValue(RELAXED)
-    const c = touchClient({ wsAdmin: { data: null, error: { message: 'boom' } } })
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(await resetPassword('u-t', 'password1')).toEqual({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
-    spy.mockRestore()
-    expect(c.updateUserById).not.toHaveBeenCalled()
-  })
-
-  it('슈퍼유저는 누구의 비밀번호든 초기화할 수 있다', async () => {
-    requireSuperuser.mockResolvedValue({ ok: true, actor: SU })
-    const updateUserById = vi.fn(async () => ({ error: null }))
-    createAdminClient.mockReturnValue({
-      from: vi.fn(() => { throw new Error('슈퍼유저는 등급 조회 없이 통과한다') }),
-      auth: { admin: { updateUserById } },
-    } as never)
-    expect(await resetPassword('u-superuser', 'password1')).toEqual({ ok: true })
-    expect(updateUserById).toHaveBeenCalledWith('u-superuser', { password: 'password1' })
+  it('resetPassword: 워크스페이스 id 가 없으면 가드 전에 거부한다(null 은 플랫폼 관리자에게 통과하는 값이다)', async () => {
+    signedInAs(SU)
+    expect(await resetPassword('', T, 'password1')).toEqual({ ok: false, error: '워크스페이스를 지정해야 합니다.' })
+    expect(requireWorkspaceAdmin).not.toHaveBeenCalled()
   })
 
   it('listAccounts 는 권한 거부를 빈 배열로 위장하지 않는다 — 멤버는 거부, 다른 워크스페이스 관리자는 존재 은닉', async () => {
@@ -250,9 +196,19 @@ describe('계정 서버액션 권한 게이트', () => {
   })
 
   it('권한 조회 실패는 resetPassword 를 중단한다 — 관대한 폴백 금지', async () => {
-    requireSuperuser.mockResolvedValue({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
-    expect(await resetPassword('u1', 'password1'))
+    requireWorkspaceAdmin.mockResolvedValue({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+    expect(await resetPassword(WS, T, 'password1'))
       .toEqual({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('previewWorkspaceMemberRemoval·removeWorkspaceMember: 멤버는 거부, 다른 워크스페이스 관리자는 존재 은닉', async () => {
+    for (const run of [() => previewWorkspaceMemberRemoval(WS, T), () => removeWorkspaceMember(WS, T)]) {
+      signedInAs(WS_MEMBER)
+      expect(await run()).toEqual({ ok: false, error: ERR_DENIED })
+      signedInAs(OTHER_WS_ADMIN)
+      expect(await run()).toEqual({ ok: false, error: ERR_MISSING })
+    }
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
@@ -617,7 +573,7 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
           })
         }
         if (t === 'platform_admins') return chain({ data: [{ user_id: 'u1' }], error: null })
-        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', role: 'admin' }, { user_id: 'u2', role: 'member' }], error: null })
+        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', workspace_id: WS, role: 'admin' }, { user_id: 'u2', workspace_id: WS, role: 'member' }], count: 2, error: null })
         if (t === 'project_members') {
           return chain({ data: [{ access_role: 'member', active: true, people: { user_id: 'u2', active: true } }], error: null })
         }
@@ -629,8 +585,9 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
       ok: true,
       workspaceId: WS,
       rows: [
-        { id: 'u1', email: 'kim@example.com', name: '김관리', workspaceRole: 'admin', isPlatformAdmin: true, accessRole: null, createdAt: '2026-09-01T00:00:00Z' },
-        { id: 'u2', email: 'lee@example.com', name: '이멤버', workspaceRole: 'member', isPlatformAdmin: false, accessRole: 'member', createdAt: '2026-09-02T00:00:00Z' },
+        // 행별 조작 판정(SU = u-su): 플랫폼 관리자는 본인 말고 누구든 재설정·제거할 수 있다
+        { id: 'u1', email: 'kim@example.com', name: '김관리', workspaceRole: 'admin', isPlatformAdmin: true, accessRole: null, createdAt: '2026-09-01T00:00:00Z', passwordReset: 'ok', removal: 'ok' },
+        { id: 'u2', email: 'lee@example.com', name: '이멤버', workspaceRole: 'member', isPlatformAdmin: false, accessRole: 'member', createdAt: '2026-09-02T00:00:00Z', passwordReset: 'ok', removal: 'ok' },
       ],
     })
   })
@@ -664,7 +621,7 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
           })
         }
         if (t === 'platform_admins') return chain({ data: [], error: null })
-        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', role: 'admin' }], error: null })
+        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', workspace_id: WS, role: 'admin' }], count: 1, error: null })
         if (t === 'project_members') return chain({ data: [], error: null })
         throw new Error('예상치 못한 테이블 접근: ' + t)
       }),
@@ -680,7 +637,7 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
       from: vi.fn((t: string) => {
         if (t === 'profiles') return chain({ data: [{ user_id: 'u1', email: 'kim@example.com', display_name: '김관리', created_at: '2026-09-01T00:00:00Z' }], count: 1, error: null })
         if (t === 'platform_admins') return chain({ data: [{ user_id: 'u1' }], error: null })
-        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', role: 'admin' }], error: null })
+        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', workspace_id: WS, role: 'admin' }], count: 1, error: null })
         if (t === 'project_members') return chain({ data: [], error: null })
         throw new Error('예상치 못한 테이블 접근: ' + t)
       }),
@@ -705,12 +662,216 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
           })
         }
         if (t === 'platform_admins') return chain({ data: [{ user_id: 'u-b' }], error: null })
-        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', role: 'admin' }], error: null })
+        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', workspace_id: WS, role: 'admin' }], count: 1, error: null })
         if (t === 'project_members') return chain({ data: [{ access_role: 'member', active: true, people: { user_id: 'u-r', active: true } }], error: null })
         throw new Error('예상치 못한 테이블 접근: ' + t)
       }),
     } as never)
     const res = await listAccounts(P1)
     expect(res.ok && res.rows.map(r => r.id)).toEqual(['u1', 'u-r'])
+  })
+})
+
+/** 대상 등급 축(loadAccountTargets)·영향 범위 조회와 RPC·GoTrue 를 흉내 낸다. memberships = 대상의 모든 소속 */
+function opsClient(o: {
+  platform?: boolean; memberships?: Array<[string, 'admin' | 'member']>; membershipErr?: Result['error']
+  rpc?: Result; updateErr?: { message: string } | null
+  roleHere?: Result; counts?: { roster?: Result; invites?: Result; tokens?: Result }
+  people?: Result; profile?: Result
+} = {}) {
+  const members = (o.memberships ?? [[WS, 'member']]).map(([workspace_id, role]) => ({ user_id: T, workspace_id, role }))
+  const q = {
+    platform_admins: chain({ data: o.platform ? [{ user_id: T }] : [], error: null }),
+    // 같은 표를 두 용도로 읽는다: 대상의 모든 소속(끝까지 — count) / 그 워크스페이스의 등급 한 행(maybeSingle)
+    workspace_members: (() => {
+      const c = chain(o.membershipErr ? { data: null, error: o.membershipErr } : { data: members, count: members.length, error: null })
+      c.maybeSingle = vi.fn(async () => o.roleHere ?? { data: { role: members.find(m => m.workspace_id === WS)?.role ?? null }, error: null }) as never
+      return c
+    })(),
+    people: chain(o.people ?? { data: [{ id: 'pe-1', email: 't@example.com' }], error: null }),
+    profiles: chain(o.profile ?? { data: { email: 'T@Example.com' }, error: null }),
+    project_members: chain(o.counts?.roster ?? { count: 2, error: null }),
+    project_invites: chain(o.counts?.invites ?? { count: 1, error: null }),
+    integration_credentials: chain(o.counts?.tokens ?? { count: 0, error: null }),
+  }
+  const rpc = vi.fn(async () => o.rpc ?? { data: { status: 'applied', matched: 1 }, error: null })
+  const updateUserById = vi.fn(async () => ({ error: o.updateErr ?? null }))
+  createAdminClient.mockReturnValue({
+    from: vi.fn((t: keyof typeof q) => { if (!(t in q)) throw new Error('예상치 못한 테이블 접근: ' + t); return q[t] }),
+    rpc, auth: { admin: { updateUserById } },
+  } as never)
+  return { q, rpc, updateUserById }
+}
+
+describe('resetPassword — 가드 뒤의 대상 범위 판정·기록·변경 순서', () => {
+  const DENY_PLATFORM = { ok: false, error: '이 계정의 비밀번호는 플랫폼 관리자만 재설정할 수 있습니다.' }
+
+  it('워크스페이스 관리자는 자기 워크스페이스의 일반 멤버를 재설정한다 — 기록 RPC(p_actor = 가드 결과) 뒤에 비밀번호를 바꾼다', async () => {
+    signedInAs(WS_ADMIN)
+    const c = opsClient()
+    expect(await resetPassword(WS, T, 'password1')).toEqual({ ok: true })
+    expect(c.rpc).toHaveBeenCalledWith('record_password_reset', {
+      p_actor: 'u-wsa', p_workspace_id: WS, p_target: T, p_command_id: expect.any(String),
+    })
+    expect(c.updateUserById).toHaveBeenCalledWith(T, { password: 'password1' })
+    expect(c.rpc.mock.invocationCallOrder[0]).toBeLessThan(c.updateUserById.mock.invocationCallOrder[0])
+    // 대상의 등급 축은 그 계정 id 로만 읽는다(전 워크스페이스 — 워크스페이스로 좁히면 다른 소속이 안 보인다)
+    expect(c.q.workspace_members.in).toHaveBeenCalledWith('user_id', [T])
+    expect(c.q.workspace_members.eq).not.toHaveBeenCalledWith('workspace_id', WS)
+  })
+
+  it.each([
+    ['플랫폼 관리자 계정', { platform: true }, DENY_PLATFORM],
+    ['다른 워크스페이스에도 속한 계정', { memberships: [[WS, 'member'], [WS_B, 'member']] as Array<[string, 'admin' | 'member']> }, DENY_PLATFORM],
+    ['다른 워크스페이스의 관리자', { memberships: [[WS, 'member'], [WS_B, 'admin']] as Array<[string, 'admin' | 'member']> }, DENY_PLATFORM],
+    ['이 워크스페이스의 관리자', { memberships: [[WS, 'admin']] as Array<[string, 'admin' | 'member']> },
+      { ok: false, error: '관리자 계정의 비밀번호는 플랫폼 관리자만 재설정할 수 있습니다.' }],
+    ['이 워크스페이스 소속이 아닌 계정', { memberships: [] as Array<[string, 'admin' | 'member']> },
+      { ok: false, error: '이 워크스페이스에 소속되지 않은 계정입니다.' }],
+  ])('워크스페이스 관리자는 %s 을(를) 재설정하지 못한다 — 기록도 변경도 없다', async (_n, opts, want) => {
+    signedInAs(WS_ADMIN)
+    const c = opsClient(opts)
+    expect(await resetPassword(WS, T, 'password1')).toEqual(want)
+    expect(c.rpc).not.toHaveBeenCalled()
+    expect(c.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('본인은 이 길로 재설정하지 못한다 — 플랫폼 관리자도', async () => {
+    const SELF = '00000000-0000-4000-8000-0000000000b1'
+    signedInAs(makeSuperuser({ userId: SELF, workspaceRoles: new Map([[WS, 'admin']]) }))
+    const c = opsClient()
+    expect(await resetPassword(WS, SELF, 'password1'))
+      .toEqual({ ok: false, error: '본인의 비밀번호는 계정 화면의 "비밀번호 변경"에서 바꾸세요.' })
+    expect(c.rpc).not.toHaveBeenCalled()
+    expect(c.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('플랫폼 관리자는 관리자·다른 워크스페이스 소속 계정도 재설정한다', async () => {
+    signedInAs(SU)
+    const c = opsClient({ platform: true, memberships: [[WS, 'admin'], [WS_B, 'admin']] })
+    expect(await resetPassword(WS, T, 'password1')).toEqual({ ok: true })
+    expect(c.rpc).toHaveBeenCalledWith('record_password_reset', expect.objectContaining({ p_actor: 'u-su', p_target: T }))
+    expect(c.updateUserById).toHaveBeenCalledWith(T, { password: 'password1' })
+  })
+
+  it('대상 등급 조회가 실패하면 거부한다 — "다른 소속 없음" 폴백 금지', async () => {
+    signedInAs(WS_ADMIN)
+    const c = opsClient({ membershipErr: { message: 'boom' } })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await resetPassword(WS, T, 'password1')).toEqual({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+    expect(c.rpc).not.toHaveBeenCalled()
+    expect(c.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('기록 RPC 가 거부하면(그 사이 등급이 바뀜) 비밀번호를 바꾸지 않는다', async () => {
+    signedInAs(WS_ADMIN)
+    const c = opsClient({ rpc: { data: null, error: { message: 'AUTHZ_FORBIDDEN' } } })
+    expect(await resetPassword(WS, T, 'password1')).toEqual({ ok: false, error: ERR_DENIED })
+    expect(c.updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('기록 RPC 의 그 밖의 실패·모르는 결과도 변경 전에 멈춘다 — 원문은 화면에 내지 않는다', async () => {
+    signedInAs(WS_ADMIN)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let c = opsClient({ rpc: { data: null, error: { message: 'relation "x" does not exist' } } })
+    expect(await resetPassword(WS, T, 'password1')).toEqual({ ok: false, error: '비밀번호를 재설정하지 못했습니다.' })
+    expect(c.updateUserById).not.toHaveBeenCalled()
+    c = opsClient({ rpc: { data: { odd: true }, error: null } })
+    expect(await resetPassword(WS, T, 'password1')).toEqual({ ok: false, error: '비밀번호를 재설정하지 못했습니다.' })
+    expect(c.updateUserById).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('비밀번호 변경이 실패하면 오류 — GoTrue 원문은 로그에만', async () => {
+    signedInAs(WS_ADMIN)
+    opsClient({ updateErr: { message: 'internal: db host 10.0.0.1' } })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await resetPassword(WS, T, 'password1')).toEqual({ ok: false, error: '비밀번호를 재설정하지 못했습니다.' })
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('입력 검증 — uuid 가 아닌 대상·짧은 비밀번호는 조회 전에 거부', async () => {
+    signedInAs(WS_ADMIN)
+    expect(await resetPassword(WS, 'u-t', 'password1')).toEqual({ ok: false, error: ERR_MISSING })
+    expect(await resetPassword(WS, T, 'short')).toEqual({ ok: false, error: '비밀번호는 8자 이상이어야 합니다.' })
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+})
+
+describe('워크스페이스에서 제거 — 미리보기와 RPC 한 길', () => {
+  it('미리보기: 그 워크스페이스의 권한 있는 명단 행·수락 전 초대·열린 토큰 수', async () => {
+    signedInAs(WS_ADMIN)
+    const c = opsClient()
+    expect(await previewWorkspaceMemberRemoval(WS, T)).toEqual({ ok: true, preview: { projects: 2, invites: 1, tokens: 0 } })
+    expect(c.q.people.eq).toHaveBeenCalledWith('workspace_id', WS)
+    expect(c.q.project_members.in).toHaveBeenCalledWith('person_id', ['pe-1'])
+    expect(c.q.project_invites.eq).toHaveBeenCalledWith('workspace_id', WS)
+    expect(c.q.project_invites.in).toHaveBeenCalledWith('email', ['t@example.com'])   // 인물·프로필 주소(소문자)를 합쳐 중복 없이
+    expect(c.q.integration_credentials.eq).toHaveBeenCalledWith('owner_user_id', T)
+    expect(c.rpc).not.toHaveBeenCalled()
+  })
+
+  it('미리보기: 어느 조회든 실패하면 0건으로 위장하지 않는다', async () => {
+    signedInAs(WS_ADMIN)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    opsClient({ counts: { invites: { count: null, error: { message: 'boom' } } } })
+    expect(await previewWorkspaceMemberRemoval(WS, T)).toEqual({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+    opsClient({ people: { data: null, error: { message: 'boom' } } })
+    expect(await previewWorkspaceMemberRemoval(WS, T)).toEqual({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+    spy.mockRestore()
+  })
+
+  it('제거: RPC 에 행위자(가드 결과)·워크스페이스·대상·명령 id 를 넘기고 회수된 수를 돌려준다', async () => {
+    signedInAs(WS_ADMIN)
+    const c = opsClient({ rpc: { data: { status: 'applied', matched: 1, revoked_projects: 3, revoked_invites: 1, revoked_credentials: 2 }, error: null } })
+    expect(await removeWorkspaceMember(WS, T)).toEqual({ ok: true, removed: { projects: 3, invites: 1, tokens: 2 } })
+    expect(c.rpc).toHaveBeenCalledWith('remove_workspace_member', {
+      p_actor: 'u-wsa', p_workspace_id: WS, p_target: T, p_command_id: expect.any(String),
+    })
+  })
+
+  it('본인·이 워크스페이스의 다른 관리자(플랫폼 관리자가 아닌 행위자)·소속 아닌 계정은 RPC 전에 거부', async () => {
+    const SELF = '00000000-0000-4000-8000-0000000000b2'
+    signedInAs(makeActor({ userId: SELF, workspaceRoles: new Map([[WS, 'admin']]) }))
+    let c = opsClient()
+    expect(await removeWorkspaceMember(WS, SELF)).toEqual({ ok: false, error: '본인은 워크스페이스에서 제거할 수 없습니다.' })
+    expect(c.rpc).not.toHaveBeenCalled()
+    signedInAs(WS_ADMIN)
+    c = opsClient({ memberships: [[WS, 'admin']] })
+    expect(await removeWorkspaceMember(WS, T))
+      .toEqual({ ok: false, error: '관리자는 플랫폼 관리자만 제거할 수 있습니다. 먼저 멤버로 바꾼 뒤 제거하세요.' })
+    expect(await previewWorkspaceMemberRemoval(WS, T))
+      .toEqual({ ok: false, error: '관리자는 플랫폼 관리자만 제거할 수 있습니다. 먼저 멤버로 바꾼 뒤 제거하세요.' })
+    expect(c.rpc).not.toHaveBeenCalled()
+    c = opsClient({ memberships: [] })
+    expect(await removeWorkspaceMember(WS, T)).toEqual({ ok: false, error: '이 워크스페이스에 소속되지 않은 계정입니다.' })
+    expect(c.rpc).not.toHaveBeenCalled()
+  })
+
+  it('플랫폼 관리자는 관리자도 제거한다 — 마지막 관리자면 DB 가 거부한 문구를 돌려준다', async () => {
+    signedInAs(SU)
+    let c = opsClient({ memberships: [[WS, 'admin']] })
+    expect(await removeWorkspaceMember(WS, T)).toMatchObject({ ok: true })
+    expect(c.rpc).toHaveBeenCalledWith('remove_workspace_member', expect.objectContaining({ p_actor: 'u-su' }))
+    c = opsClient({ memberships: [[WS, 'admin']], rpc: { data: null, error: { message: 'WORKSPACE_LAST_ADMIN' } } })
+    expect(await removeWorkspaceMember(WS, T))
+      .toEqual({ ok: false, error: '워크스페이스의 마지막 관리자는 제거할 수 없습니다. 다른 관리자를 먼저 지정하세요.' })
+  })
+
+  it('선행 조회(대상 등급) 실패는 중단, RPC 의 거부·0행·모르는 실패는 성공으로 보고하지 않는다', async () => {
+    signedInAs(WS_ADMIN)
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let c = opsClient({ roleHere: { data: null, error: { message: 'boom' } } })
+    expect(await removeWorkspaceMember(WS, T)).toEqual({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+    expect(c.rpc).not.toHaveBeenCalled()
+    c = opsClient({ rpc: { data: null, error: { message: 'AUTHZ_FORBIDDEN' } } })
+    expect(await removeWorkspaceMember(WS, T)).toEqual({ ok: false, error: ERR_DENIED })
+    c = opsClient({ rpc: { data: { status: 'applied', matched: 0 }, error: null } })
+    expect(await removeWorkspaceMember(WS, T)).toEqual({ ok: false, error: '이 워크스페이스에 소속되지 않은 계정입니다.' })
+    c = opsClient({ rpc: { data: null, error: { message: 'deadlock detected' } } })
+    expect(await removeWorkspaceMember(WS, T)).toEqual({ ok: false, error: '워크스페이스에서 제거하지 못했습니다.' })
+    spy.mockRestore()
   })
 })

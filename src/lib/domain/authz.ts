@@ -112,6 +112,58 @@ export function workspaceAdminVerdict(actor: Actor, workspaceId: string | null):
   return r === 'admin' ? 'ok' : 'denied'
 }
 /**
+ * 계정 조작(비밀번호 재설정·워크스페이스에서 제거)의 대상 — 판정에 필요한 축만. 호출부(src/lib/authz/accountsAccess.ts)가 service_role 로 읽어 채운다.
+ * workspaceRoles 는 대상의 **모든** 워크스페이스 소속이다(행위자가 보지 못하는 워크스페이스 포함) — 그래서 판정 결과만 화면에 내리고 이 값은 내리지 않는다.
+ */
+export interface AccountTarget {
+  userId: string
+  isPlatformAdmin: boolean
+  workspaceRoles: ReadonlyMap<string, WorkspaceRole>
+}
+/**
+ * 비밀번호 재설정 판정. 'ok' 밖은 전부 거부다.
+ *  - self: 자기 자신 — "내 비밀번호 변경"(기존 비밀번호 재확인)으로 한다. 플랫폼 관리자도.
+ *  - denied: 행위자가 그 워크스페이스의 관리자가 아니다(가드가 먼저 막는다 — 여기는 두 번째 확인).
+ *  - not_member: 대상이 그 워크스페이스 소속이 아니다(명단에만 남은 계정 등).
+ *  - target_admin: 대상이 그 워크스페이스의 관리자다(화면에 이미 보이는 사실).
+ *  - platform_only: 대상이 플랫폼 관리자이거나, 다른 워크스페이스의 관리자이거나, 행위자가 관리자가 아닌 워크스페이스에도 속해 있다.
+ *    셋을 한 사유로 묶는다 — 갈라 보이면 워크스페이스 관리자가 남의 플랫폼 등급·다른 워크스페이스 소속을 알게 된다.
+ * 비밀번호 재설정은 그 계정으로 로그인할 수 있게 만드는 조작이다 — 대상이 닿는 범위가 행위자가 이미 관리하는 범위 안일 때만 연다.
+ * 프로젝트 관리자(명단 admin)인 대상은 막지 않는다: 워크스페이스 관리자는 그 워크스페이스 모든 프로젝트의 관리자를 승계하므로 더 얻는 것이 없다.
+ * SQL 쪽 짝은 record_password_reset(0053)이다 — 규칙을 바꾸면 둘 다.
+ */
+export type PasswordResetVerdict = 'ok' | 'self' | 'denied' | 'not_member' | 'target_admin' | 'platform_only'
+export function passwordResetVerdict(actor: Actor, workspaceId: string, target: AccountTarget): PasswordResetVerdict {
+  if (target.userId === actor.userId) return 'self'
+  if (actor.isSuperuser) return 'ok'
+  if (actor.workspaceRoles.get(workspaceId) !== 'admin') return 'denied'
+  const here = target.workspaceRoles.get(workspaceId)
+  if (here === undefined) return 'not_member'
+  if (here === 'admin') return 'target_admin'
+  if (target.isPlatformAdmin) return 'platform_only'
+  for (const [wid, role] of target.workspaceRoles) {
+    if (role === 'admin' || actor.workspaceRoles.get(wid) !== 'admin') return 'platform_only'
+  }
+  return 'ok'
+}
+/**
+ * 워크스페이스에서 멤버를 빼는 판정. 'ok' 밖은 전부 거부다. 마지막 관리자 보호는 DB 트리거(workspace_members_keep_last_admin)가 한다 —
+ * 앱이 먼저 세면 두 관리자가 서로를 동시에 뺄 때 둘 다 통과한다(setWorkspaceRole 관례).
+ *  - self: 자기 자신(나가기는 이 길이 아니다) · denied: 행위자가 그 워크스페이스의 관리자가 아니다 · not_member: 뺄 소속이 없다
+ *  - target_admin: 대상이 그 워크스페이스의 관리자이고 행위자가 플랫폼 관리자가 아니다 — 먼저 멤버로 강등한 뒤 뺀다(강등도 이력에 남는다).
+ * SQL 쪽 짝은 remove_workspace_member(0053)이다.
+ */
+export type MemberRemovalVerdict = 'ok' | 'self' | 'denied' | 'not_member' | 'target_admin'
+export function memberRemovalVerdict(
+  actor: Actor, workspaceId: string, target: { userId: string; workspaceRole: WorkspaceRole | null },
+): MemberRemovalVerdict {
+  if (target.userId === actor.userId) return 'self'
+  if (!isWorkspaceAdmin(actor, workspaceId)) return 'denied'
+  if (target.workspaceRole === null) return 'not_member'
+  if (target.workspaceRole === 'admin' && !actor.isSuperuser) return 'target_admin'
+  return 'ok'
+}
+/**
  * 실제 소속(workspace_members 행이 있다) — 플랫폼 관리자 승계 없음. 본인 기록(개인 설정·방문·현재 워크스페이스 쿠키)을 쓸지 정할 때(U2b-3 보안 리뷰 AA6).
  * 범위(UI-2b 최종 보안 리뷰 P3 → GG7): 이 규칙이 닫는 것은 **워크스페이스 단위 본인 기록**뿐이다 — 현재 워크스페이스 쿠키·최근 방문·워크스페이스
  * 개인 설정(user_preferences)·알림 읽음. 프로젝트 단위 화면 상태(WBS 접힘 user_wbs_state·공지 읽음 워터마크 announcement_seen)와 사용 기록

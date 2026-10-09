@@ -2482,6 +2482,15 @@ export function WbsGanttSheet({
                   {t('wbs.showDone')}
                 </button>
               )}
+              {/* 항목이 하나도 없을 때의 다음 행동 — 쓸 수 있는 사람(관리자·읽기 전용 아님)에게만. 추가는 최상위 항목 입력을 열고, 가져오기는 그 화면으로 간다 */}
+              {items.length === 0 && isAdmin && !readOnly && (
+                <span data-wbs-empty-actions className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                  <button type="button" onClick={() => setAddPhase('')} className="btn btn-primary h-8 px-3 text-xs">
+                    {t('wbs.emptyAddTask')}
+                  </button>
+                  <a href={`/p/${projectId}/import`} className="btn btn-ghost h-8 px-3 text-xs">{t('wbs.emptyImportExcel')}</a>
+                </span>
+              )}
             </div>
           )}
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Check, Copy, Send, ShieldAlert } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamLabel } from '@/components/app/TeamsProvider'
 import { TeamMultiSelect, type TeamOption } from '@/components/roster/TeamMultiSelect'
 import {
@@ -54,7 +55,7 @@ function fmtDateTime(iso: string, timeZone: string | null, locale = 'ko-KR'): st
  * 목록 조회가 실패했으면 loadError 로 받아 그 사실을 드러낸다: '초대 0건'으로 보이면
  * 관리자가 같은 주소로 다시 발급하다 중복 제약에 이유 없이 막힌다.
  */
-export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, actorView, timeZone, timeZoneError = null, locale }: {
+export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, actorView, timeZone, timeZoneError = null, locale, domainNotice = null }: {
   projectId: string
   rows: InviteRow[]
   loadError: string | null
@@ -68,10 +69,14 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
   timeZoneError?: string | null
   /** 시각 포맷의 locale — 없으면 'ko-KR' */
   locale?: string
+  /** 초대 허용 도메인이 비어 있다(지금 보내면 어떤 주소든 거부된다) — 거부되기 전에 미리 알린다. settingsHref 는 워크스페이스 관리자에게만
+   *  (그 설정을 고칠 수 있는 사람) 싣고, 아니면 null 이라 관리자에게 요청하라고 안내한다. 도메인이 있거나 읽지 못했으면 prop 자체가 null */
+  domainNotice?: { settingsHref: string | null } | null
 }) {
   const router = useRouter()
   const { toast } = useToast()
   const teamLabelOf = useTeamLabel()
+  const { t } = useLocale()
   // 관리자 초대는 그 프로젝트 워크스페이스의 관리자만 — createProjectInvite 의 워크스페이스 관리자 가드(SP2)와 같은 판정.
   const canInviteAdmin = canGrantAdmin(actorView)
   const [email, setEmail] = useState('')
@@ -163,6 +168,23 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
           합류한 사람은 이 프로젝트뿐 아니라 전체 회의록·WBS·이슈·근태를 조회할 수 있습니다. 신뢰할 수 있는 인원에게만 발급하세요.
         </p>
       </div>
+
+      {domainNotice && (
+        <div role="status" data-invite-domain-notice className="flex items-start gap-2.5 rounded-xl border border-border bg-warning-weak px-3.5 py-3">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+          <p className="text-xs leading-5 text-fg">
+            {t(domainNotice.settingsHref ? 'members.invite.noDomainsAdmin' : 'members.invite.noDomainsAsk')}
+            {domainNotice.settingsHref && (
+              <>
+                {' '}
+                <a href={domainNotice.settingsHref} className="font-semibold text-action underline underline-offset-2 hover:text-action-hover">
+                  {t('members.invite.openWorkspaceSettings')}
+                </a>
+              </>
+            )}
+          </p>
+        </div>
+      )}
 
       <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
         <label className="block min-w-[14rem] flex-1">

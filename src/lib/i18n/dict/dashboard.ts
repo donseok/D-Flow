@@ -11,7 +11,8 @@ export const dashboardKo = {
   'dash.unitDays': '일',
   // 빈 상태
   'dash.emptyTitle': '분석할 WBS 데이터가 없습니다',
-  'dash.emptyDesc': '설정에서 WBS 엑셀을 가져오면 진행률·팀별 현황·지연 작업을 자동으로 분석합니다.',
+  'dash.emptyDesc': '작업 계획에서 작업을 직접 추가하거나 엑셀로 가져오면 진행률·팀별 현황·지연 작업을 자동으로 분석합니다.',
+  'dash.emptyGoWbs': '작업 계획으로 가기',
   'dash.wbsEmpty': 'WBS 가 아직 없습니다 — WBS 화면에서 추가하거나 가져오세요.',
   // 프로젝트 일정
   'dash.actualLabel': '실적',

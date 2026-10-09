@@ -170,7 +170,9 @@ export const wbsKo = {
   'wbs.openTaskDetail': '이 작업의 상세 보기',
   // 빈 상태
   'wbs.emptyNoItems': '작업 항목이 없습니다',
-  'wbs.emptyNoItemsHint': 'WBS 엑셀을 업로드하면 작업이 표시됩니다.',
+  'wbs.emptyNoItemsHint': '작업을 직접 추가하거나 엑셀로 가져오면 여기에 표시됩니다.',
+  'wbs.emptyAddTask': '작업 추가',
+  'wbs.emptyImportExcel': '엑셀로 가져오기',
   'wbs.noResultsPrefix': '‘',
   'wbs.noResultsSuffix': '’에 대한 결과가 없습니다',
   'wbs.noResultsHint': '검색어를 바꾸거나 지워보세요.',

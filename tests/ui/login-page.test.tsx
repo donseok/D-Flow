@@ -10,6 +10,7 @@ import { createRoot, type Root } from 'react-dom/client'
 const mocks = vi.hoisted(() => ({
   calls: [] as string[],
   signInWithPassword: vi.fn(),
+  locale: 'ko' as 'ko' | 'en',
 }))
 
 vi.mock('next/navigation', () => ({
@@ -23,7 +24,19 @@ vi.mock('@/lib/supabase/client', () => ({
   createBrowserClient: () => ({ auth: { signInWithPassword: mocks.signInWithPassword } }),
 }))
 
+vi.mock('next/link', () => ({
+  default: ({ children, href, ...rest }: { children: React.ReactNode; href: string }) => <a href={href} {...rest}>{children}</a>,
+}))
+// 사전 문구로 확인한다(공급자 없는 기본 t 는 키를 돌려준다). 로캘은 케이스가 고른다
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const dict = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
+  const { EN } = await vi.importActual<typeof import('@/lib/i18n/dict/en')>('@/lib/i18n/dict/en')
+  dict.registerEn(EN)
+  return { useLocale: () => ({ locale: mocks.locale, setLocale: () => {}, t: (k: Parameters<typeof dict.t>[1]) => dict.t(mocks.locale, k) }) }
+})
+
 import Login from '@/app/login/page'
+import { LoginEnvProvider, type LoginEnv } from '@/components/login/LoginEnv'
 
 function setValue(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
@@ -38,6 +51,8 @@ describe('로그인 화면 제출', () => {
   beforeEach(() => {
     mocks.calls.length = 0
     mocks.signInWithPassword.mockReset()
+    mocks.locale = 'ko'
+    window.location.hash = ''
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -48,8 +63,12 @@ describe('로그인 화면 제출', () => {
     container.remove()
   })
 
-  async function submit() {
-    await act(async () => root.render(<Login />))
+  /** env 를 주지 않으면 공급자 없는 기본값(메일 재설정 없음·배포 화면)으로 그린다 */
+  async function renderLogin(env?: LoginEnv) {
+    await act(async () => root.render(env ? <LoginEnvProvider value={env}><Login /></LoginEnvProvider> : <Login />))
+  }
+  async function submit(env?: LoginEnv) {
+    await renderLogin(env)
     await act(async () => {
       setValue(container.querySelector<HTMLInputElement>('#email')!, 'alice@example.com')
       setValue(container.querySelector<HTMLInputElement>('#password')!, 'pw')
@@ -73,10 +92,79 @@ describe('로그인 화면 제출', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('이메일 또는 비밀번호가 올바르지 않습니다.')
   })
 
-  it('네트워크 연결 실패(서버 미실행 등) 시 크래시 없이 안내 오류를 표시한다', async () => {
+  it('네트워크 연결 실패 시 크래시 없이 안내 오류를 표시한다 — 배포 화면에는 개발자용 문구(로컬 DB·Docker)가 없다', async () => {
     mocks.signInWithPassword.mockRejectedValue(new TypeError('Failed to fetch'))
     await submit()
     expect(mocks.calls).toEqual([])
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('인증 서버에 연결할 수 없습니다')
+    const text = container.querySelector('[role="alert"]')?.textContent ?? ''
+    expect(text).toBe('인증 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.')
+    expect(text).not.toMatch(/Supabase|Docker|로컬/)
+  })
+
+  it('로컬 개발에서만 로컬 DB 확인 안내를 덧붙인다', async () => {
+    mocks.signInWithPassword.mockRejectedValue(new TypeError('Failed to fetch'))
+    await submit({ mailReset: false, localDev: true })
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toBe('인증 서버에 연결할 수 없습니다. 로컬 Supabase DB(Docker)가 실행 중인지 확인하세요.')
+  })
+})
+
+describe('로그인 화면 — 비밀번호 분실 안내와 문구의 로캘', () => {
+  let container: HTMLDivElement
+  let root: Root
+  beforeEach(() => {
+    mocks.calls.length = 0
+    mocks.locale = 'ko'
+    window.location.hash = ''
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    window.location.hash = ''
+  })
+  const render = (env?: LoginEnv) => act(async () => root.render(env ? <LoginEnvProvider value={env}><Login /></LoginEnvProvider> : <Login />))
+
+  it('메일을 보내지 않는 배포: 재설정 링크가 없고 "관리자에게 문의" 안내가 그대로다', async () => {
+    await render({ mailReset: false, localDev: false })
+    expect(container.querySelector('[data-forgot-link]')).toBeNull()
+    expect(container.textContent).toContain('아이디(이메일) 또는 비밀번호를 잊으셨다면 관리자에게 문의하세요.')
+  })
+
+  it('메일 재설정이 되는 배포: "비밀번호를 잊으셨나요?" 가 /login/forgot 으로 가고, 안내는 아이디 분실만 말한다', async () => {
+    await render({ mailReset: true, localDev: false })
+    const link = container.querySelector<HTMLAnchorElement>('[data-forgot-link]')!
+    expect(link.textContent).toBe('비밀번호를 잊으셨나요?')
+    expect(link.getAttribute('href')).toBe('/login/forgot')
+    expect(container.textContent).toContain('아이디(이메일)를 잊으셨다면 관리자에게 문의하세요.')
+    expect(container.textContent).not.toContain('또는 비밀번호를 잊으셨다면')
+  })
+
+  it('소개·폼 문구는 로캘을 따른다 — 영어 화면에 한국어 고정 문구가 남지 않는다', async () => {
+    mocks.locale = 'en'
+    await render({ mailReset: true, localDev: false })
+    const text = container.textContent ?? ''
+    for (const s of ['Plans, schedules and teams in one flow.', 'Sign in with your email and password.', 'Forgot your password?', 'Sign in']) expect(text).toContain(s)
+    for (const s of ['작업분류체계', '일정 관리', '팀 협업', '로그인하세요', '관리자에게 문의']) expect(text).not.toContain(s)
+    expect(container.querySelector('label[for="email"]')?.textContent).toBe('Email')
+  })
+
+  it('재설정 링크가 이 화면으로 떨어지면 조각을 그대로 들고 새 비밀번호 화면으로 넘긴다', async () => {
+    window.location.hash = '#access_token=at&refresh_token=rt&type=recovery'
+    await render()
+    expect(mocks.calls).toEqual(['replace:/login/reset#access_token=at&refresh_token=rt&type=recovery'])
+  })
+
+  it('재설정 링크의 실패(만료)도 넘긴다 — 다른 조각·빈 조각은 넘기지 않는다', async () => {
+    window.location.hash = '#error=access_denied&error_code=otp_expired'
+    await render()
+    expect(mocks.calls).toEqual(['replace:/login/reset#error=access_denied&error_code=otp_expired'])
+    mocks.calls.length = 0
+    act(() => root.unmount()); root = createRoot(container)
+    window.location.hash = '#access_token=at&refresh_token=rt&type=magiclink'
+    await render()
+    expect(mocks.calls).toEqual([])
   })
 })

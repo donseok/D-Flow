@@ -21,6 +21,12 @@ vi.mock('@/app/actions/projectInvites', () => ({
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast }) }))
+// 사전 문구로 확인한다 — 공급자 없는 기본 t 는 키를 돌려준다
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
+  const api = { locale: 'ko' as const, setLocale: () => {}, t: (k: Parameters<typeof t>[1]) => t('ko', k) }
+  return { useLocale: () => api }
+})
 
 import { ProjectInviteManager } from '@/components/settings/ProjectInviteManager'
 
@@ -62,11 +68,37 @@ describe('ProjectInviteManager', () => {
     container.remove()
   })
 
-  function render(rows: InviteRow[] = [], actorView: ProjectActorView | null = WS_ADMIN) {
+  function render(rows: InviteRow[] = [], actorView: ProjectActorView | null = WS_ADMIN, domainNotice: { settingsHref: string | null } | null = null) {
     act(() => {
-      root.render(<ProjectInviteManager projectId="p-1" rows={rows} loadError={null} teamOptions={TEAMS} actorView={actorView} timeZone="Asia/Seoul" />)
+      root.render(<ProjectInviteManager projectId="p-1" rows={rows} loadError={null} teamOptions={TEAMS} actorView={actorView} timeZone="Asia/Seoul"
+        domainNotice={domainNotice} />)
     })
   }
+
+  describe('초대 허용 도메인 사전 안내(첫 사용 흐름)', () => {
+    const notice = () => container.querySelector('[data-invite-domain-notice]')
+    it('도메인이 있으면(안내 없음) 아무것도 그리지 않는다', () => {
+      render()
+      expect(notice()).toBeNull()
+    })
+    it('비어 있고 워크스페이스 관리자면 — 거부되기 전에 알리고 워크스페이스 설정의 초대 절로 가는 링크를 준다', () => {
+      render([], WS_ADMIN, { settingsHref: '/w/acme/settings#workspace-invites' })
+      expect(notice()!.getAttribute('role')).toBe('status')
+      expect(notice()!.textContent).toContain('초대 허용 도메인이 비어 있어 지금은 초대를 보낼 수 없습니다.')
+      const link = notice()!.querySelector('a')!
+      expect(link.textContent).toBe('워크스페이스 설정 열기')
+      expect(link.getAttribute('href')).toBe('/w/acme/settings#workspace-invites')
+    })
+    it('비어 있지만 그 설정을 고칠 수 없는 사람(프로젝트 관리자)에게는 링크 없이 요청하라고 안내한다', () => {
+      render([], PROJECT_ADMIN, { settingsHref: null })
+      expect(notice()!.textContent).toContain('워크스페이스 관리자에게 초대 허용 도메인 설정을 요청하세요.')
+      expect(notice()!.querySelector('a')).toBeNull()
+    })
+    it('안내가 떠도 폼은 그대로 둔다 — 판정은 서버가 한다(다른 탭에서 방금 고쳤을 수 있다)', () => {
+      render([], WS_ADMIN, { settingsHref: '/w/acme/settings#workspace-invites' })
+      expect(container.querySelector<HTMLButtonElement>('form button[type="submit"]')!.disabled).toBe(false)
+    })
+  })
   const byLabel = <T extends HTMLElement>(label: string) => container.querySelector<T>(`[aria-label="${label}"]`)!
   function typeInto(el: HTMLInputElement, value: string) {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!

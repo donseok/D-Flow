@@ -4,6 +4,8 @@
   "routes": [
     { "key": "root", "path": "/", "file": "page.tsx", "grade": "member", "tags": ["W"], "since": "b4283c0", "expectFinal": "/w/{wsSlug}", "baseFinal": "/w/{wsSlug}" },
     { "key": "login", "path": "/login", "file": "login/page.tsx", "grade": "public", "tags": ["O"], "since": "b4283c0" },
+    { "key": "login-forgot", "path": "/login/forgot", "file": "login/forgot/page.tsx", "grade": "public", "tags": ["O"], "since": "C" },
+    { "key": "login-reset", "path": "/login/reset", "file": "login/reset/page.tsx", "grade": "public", "tags": ["O"], "since": "C" },
     { "key": "invite", "path": "/invite/{inviteToken}", "file": "invite/[token]/page.tsx", "grade": "public", "tags": ["O"], "since": "b4283c0" },
     { "key": "share", "path": "/share/minutes/{shareToken}", "file": "share/minutes/[token]/page.tsx", "grade": "public", "tags": ["O"], "since": "b4283c0" },
     { "key": "projects", "path": "/projects", "file": "(app)/projects/page.tsx", "grade": "member", "tags": ["W"], "since": "b4283c0", "until": "UI-2b", "expectFinal": "/w/{wsSlug}/projects", "baseFinal": "/projects" },

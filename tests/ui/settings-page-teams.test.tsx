@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   ReindexButton: vi.fn<(props: Record<string, unknown>) => null>(() => null),
 }))
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
+// 준비 체크리스트의 단계 로더(건수 조회 — 세션·service_role)는 이 파일의 관심사가 아니다. 체크리스트 없이 그린다
+vi.mock('@/lib/data/projectSetup', () => ({ loadProjectSetupSteps: vi.fn(async () => null) }))
 vi.mock('@/lib/authz', () => ({ getActorForView: vi.fn(async () => makeAdminActor('p1')), getActorViewState: async () => ({ actor: makeAdminActor('p1'), degraded: false }) }))
 // GG1 — 프로젝트 페이지 관문(requireModulePage)이 화면 숨김을 다시 판정한다(getActorViewState + 비공개 숨김 집합). 이 파일은 비공개를 다루지 않는다 — 빈 집합
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))

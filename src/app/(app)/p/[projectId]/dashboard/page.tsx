@@ -23,6 +23,8 @@ import { DashboardView } from '@/components/dashboard/DashboardView'
 import { WbsRealtimeRefresh } from '@/components/wbs/WbsRealtimeRefresh'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
+import { ProjectSetupChecklist } from '@/components/settings/ProjectSetupChecklist'
+import { loadProjectSetupSteps } from '@/lib/data/projectSetup'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { moduleSetFor } from '@/lib/modules/gate'
 import { workspaceRefById } from '@/lib/workspace/resolve'
@@ -90,8 +92,18 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   const modules = { issues: mods.has('issues'), announcements: mods.has('announcements'), meetings: mods.has('meetings') }
   const minutesHref = mods.has('minutes') && wsRef?.ok ? wsHref(wsRef.ws.slug, 'minutes', { project: projectId }) : null
 
+  // 준비 체크리스트의 한 줄 배너(첫 사용 흐름) — 프로젝트 관리자에게만. 단계 상태는 설정 화면과 같은 로더·같은 판정이다(전제: 관리자 확인 뒤).
+  // 작업 계획 항목 수는 방금 읽은 트리의 최상위 수로 넘긴다(1개 이상인지만 본다). 남은 단계가 없거나 사용자가 닫았으면 배너가 스스로 숨는다
+  const setupSteps = canManage && membership ? await loadProjectSetupSteps(pc.cfg, {
+    project: project ? { name: project.name ?? null, startDate: project.start_date ?? null, endDate: project.end_date ?? null } : null,
+    weeklyEnabled: mods.has('weekly'),
+    wbsItems: items.length,
+  }) : null
+
   return (
     <ProjectPageShell hero={hero}>
+      {setupSteps && membership && <ProjectSetupChecklist key={`${membership.userId}:${projectId}`} variant="banner"
+        projectId={projectId} userId={membership.userId} steps={setupSteps} />}
       {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} kind={keywords.kind} locale={locale}
         isAdmin={canManage} settingsHref={`/p/${projectId}/settings`} />}
       {!categories.ok && <ConfigLoadError error={categories.error} keyName={categories.key} kind={categories.kind} locale={locale}

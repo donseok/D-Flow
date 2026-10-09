@@ -12,4 +12,7 @@ export const membersEn: Record<keyof typeof membersKo, string> = {
   'members.sectionManage': 'Roster & access',
   'members.sectionRoster': 'Participants',
   'members.manageHint': 'One row per person. A person can belong to several teams; the primary team comes first. Access (none/member/admin) is set on the same row, and each row is saved on its own. People with records cannot be removed — mark them inactive instead.',
+  'members.invite.noDomainsAdmin': 'Invites cannot be sent right now because no invite domains are allowed. Set the email domains to invite in workspace settings first.',
+  'members.invite.noDomainsAsk': 'Invites cannot be sent right now because no invite domains are allowed. Ask a workspace admin to set the allowed invite domains.',
+  'members.invite.openWorkspaceSettings': 'Open workspace settings',
 }

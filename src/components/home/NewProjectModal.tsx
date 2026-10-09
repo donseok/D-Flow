@@ -143,10 +143,13 @@ export function NewProjectModal({
         setError(r.fieldErrors?.length ? `${r.error} (${r.fieldErrors.map(field => field.key).join(', ')})` : r.error)
         return
       }
-      router.refresh()
+      // 만든 뒤 목록에 머물면 다음에 무엇을 할지 보이지 않는다 — 새 프로젝트의 설정 화면(준비 체크리스트가 맨 위)으로 간다.
+      // 이동이 화면을 바꾸므로 `?new=1` 은 따로 걷지 않는다(걷는 replace 가 이동과 겹치면 목록으로 되돌아온다).
+      // refresh 는 사이드바·전환기의 프로젝트 목록(라우터 캐시)에 새 프로젝트가 보이게 한다.
       setOpen(false)
       reset()
-      dropNewQuery()
+      router.push(`/p/${r.projectId}/settings`)
+      router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('home.errCreateFailed'))
     } finally {

@@ -91,9 +91,9 @@
 | `NEXT_PUBLIC_BRAND_NAME` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/branding.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `NEXT_PUBLIC_BRAND_TAGLINE` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/branding.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `NEXT_PUBLIC_BRAND_COPYRIGHT` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/branding.ts` | rebuild | — | — | 운영 설정 | SP3a |
-| `NEXT_PUBLIC_APP_URL` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/app/actions/meetingNotify.ts`, `src/app/actions/projectInvites.ts`, `src/app/api/v1/minutes/route.ts` | rebuild | — | — | 운영 설정 | SP3a |
+| `NEXT_PUBLIC_APP_URL` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/app/actions/meetingNotify.ts`, `src/app/actions/projectInvites.ts`, `src/app/actions/passwordReset.ts`, `src/app/api/v1/minutes/route.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `VERCEL_PROJECT_PRODUCTION_URL` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/actions/meetingNotify.ts` | restart | — | — | 운영 설정 | SP3a |
-| `APP_ENV` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `next.config.ts`, `src/app/api/track/route.ts` | restart | — | — | 운영 설정 | SP3a |
+| `APP_ENV` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `next.config.ts`, `src/app/api/track/route.ts`, `src/app/login/layout.tsx`, `src/app/actions/passwordReset.ts` | restart | — | — | 운영 설정 | SP3a |
 | `VERCEL_ENV` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `next.config.ts` | restart | — | — | 운영 설정 | SP3a |
 | `NEXT_OUTPUT` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `next.config.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `STAGING` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/app/(app)/layout.tsx`, `next.config.ts` | restart | — | — | 운영 설정 | SP3a |

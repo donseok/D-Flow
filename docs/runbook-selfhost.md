@@ -91,6 +91,15 @@ PROD_REF=<Supabase API 호스트 이름> BOOTSTRAP_SUPABASE_URL=https://<Supabas
 **미검증**: 원격이 아직 없어 이 스크립트를 실제 대상에 돌려 보지 못했다. 자동 테스트가 덮는 것은 인자·대상 해석(금지 대상 거부 포함)·멱등 판정·입력 검증뿐이다
 (`tests/scripts/bootstrap-remote.test.ts`). 첫 실행은 스테이징에서 하고 결과를 이 절에 기록한다.
 
+## 비밀번호 재설정 메일
+
+로그인 화면의 "비밀번호를 잊으셨나요?"는 **앱의 메일 발송 설정(SMTP_*)이 있을 때만** 보인다(없으면 "관리자에게 문의" 안내 그대로). 재설정 메일 자체는 앱이 아니라 Supabase Auth 가 보내므로, 켜려면 두 곳을 같이 맞춘다.
+
+- Supabase Auth 의 SMTP: 클라우드는 대시보드 Authentication → Emails → SMTP Settings, 자체호스트는 GoTrue 의 `GOTRUE_SMTP_*`. 기본 내장 발송기는 시간당 발송 수가 매우 적어 운영에 쓸 수 없다.
+- 돌아올 주소: Auth 의 Site URL 을 `NEXT_PUBLIC_APP_URL` 과 같은 호스트로 두거나 Redirect URLs 에 `<NEXT_PUBLIC_APP_URL>/login/reset` 을 더한다. 맞지 않으면 링크가 Site URL 로 돌아오고, 로그인 화면이 재설정 조각을 알아보고 새 비밀번호 화면으로 넘긴다(같은 호스트일 때만).
+- 요청 제한은 Auth 의 발송 제한(`rate_limit.email_sent`, 같은 주소 재요청 간격)에 기댄다. 앱 계층의 요청 제한은 없다.
+- 로컬 개발은 SMTP 설정 없이도 링크가 보인다 — 로컬 Supabase 가 인증 메일을 자기 메일함(inbucket — `supabase status` 의 Mailpit/Inbucket 주소)으로 받는다.
+
 ## 헬스체크
 
 `GET /api/health` — 인증 없이 친다. 로드밸런서·가동 감시·systemd 의 생존 확인에 쓴다. 응답은 캐시되지 않는다(`Cache-Control: no-store`).

@@ -6,6 +6,7 @@ import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
 import { ProjectSetupChecklist } from '@/components/settings/ProjectSetupChecklist'
+import { loadProjectSetupSteps } from '@/lib/data/projectSetup'
 import { listProjects } from '@/app/actions/project'
 import { getLlmConfig } from '@/app/actions/llmConfig'
 import { getActorForView } from '@/lib/authz'
@@ -284,6 +285,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
     formKinds = null
   }
 
+  // 준비 체크리스트(첫 사용 흐름)의 단계 상태 — 이 화면은 위에서 프로젝트 관리자임을 확인했다(로더의 전제). 설정은 이미 읽은 해석기 결과를 넘긴다.
+  // 주간보고가 꺼져 있으면(판정 실패 포함 — fieldModules 의 'unknown') 업무영역 단계는 내지 않는다
+  const setupSteps = pc.ok ? await loadProjectSetupSteps(pc.cfg, {
+    project: project ? { name: project.name ?? null, startDate: project.start_date ?? null, endDate: project.end_date ?? null } : null,
+    weeklyEnabled: fieldModules[2] === 'on',
+  }) : null
   const assistantIndex = await assistantIndexStatus(projectId)
   const settingsHistory = await listSettingsHistory({ projectId })
 
@@ -298,7 +305,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
       hero={<PageHeader title={locale === 'ko' ? '프로젝트 설정' : 'Project settings'}
         meta={`${project?.name ?? t(locale, 'settings.projectFallback')} · ${scheduleLabel}`} />}
     >
-      {actor && <ProjectSetupChecklist key={`${actor.userId}:${projectId}`} projectId={projectId} userId={actor.userId} />}
+      {/* 준비 체크리스트 — 단계의 완료는 실제 상태(setupSteps). 설정을 못 읽었으면 그리지 않는다(아래 편집기 자리의 오류 상태가 알린다) */}
+      {actor && setupSteps && <ProjectSetupChecklist key={`${actor.userId}:${projectId}`} projectId={projectId} userId={actor.userId} steps={setupSteps} />}
       <SettingsShell items={[
         { id: 'project-general', label: '일반' }, { id: 'project-modules', label: '모듈·메뉴' },
         ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []),

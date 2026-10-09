@@ -16,4 +16,8 @@ export const membersKo = {
   'members.sectionManage': '명단 · 권한',
   'members.sectionRoster': '참여자 명단',
   'members.manageHint': '한 사람이 한 행입니다. 팀은 여러 개를 고를 수 있고 대표 팀이 맨 앞에 옵니다. 권한(없음/멤버/관리자)도 같은 행에서 정하고, 행마다 저장합니다. 기록이 있어 삭제할 수 없는 사람은 비활성으로 바꾸세요.',
+  // 초대 칸의 사전 안내 — 초대 허용 도메인이 비어 있어 지금은 어떤 주소든 거부된다(첫 사용 흐름)
+  'members.invite.noDomainsAdmin': '초대 허용 도메인이 비어 있어 지금은 초대를 보낼 수 없습니다. 워크스페이스 설정에서 초대할 이메일 도메인을 먼저 정하세요.',
+  'members.invite.noDomainsAsk': '초대 허용 도메인이 비어 있어 지금은 초대를 보낼 수 없습니다. 워크스페이스 관리자에게 초대 허용 도메인 설정을 요청하세요.',
+  'members.invite.openWorkspaceSettings': '워크스페이스 설정 열기',
 } as const

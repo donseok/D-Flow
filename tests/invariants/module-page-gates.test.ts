@@ -14,6 +14,8 @@ const APP = 'src/app'
 /** 닫힌 제외 목록(스펙 §4.2 끝 문단) — 사유 필수. Phase C 가 (app)/w/[slug]/settings/** 를 더한다 */
 const EXCLUDED: Record<string, string> = {
   'src/app/login/page.tsx': '로그인 전 — 워크스페이스 미확정',
+  'src/app/login/forgot/page.tsx': '로그인 전 — 비밀번호 재설정 메일 요청(워크스페이스 미확정)',
+  'src/app/login/reset/page.tsx': '로그인 전 — 재설정 링크로 새 비밀번호 설정(워크스페이스 미확정)',
   'src/app/invite/[token]/page.tsx': '초대 토큰 — 로그인 전·워크스페이스 미확정',
   'src/app/page.tsx': '리졸버 — 쿠키·소속으로 redirect',
   'src/app/(app)/(global)/account/page.tsx': '계정 단위(개인 토큰 포함) — 모듈 밖',

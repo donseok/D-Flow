@@ -47,7 +47,9 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   // ── accounts(D) — 플랫폼·워크스페이스 관리
   [`${A('accounts')}#createAccount`]: { ...nul('workspaceAdmin'), sample: [{ workspaceId: U }] },   // 빈 workspaceId 는 가드 앞(isWorkspaceIdInput)에서 막힌다
   [`${A('accounts')}#bulkCreateAccounts`]: { ...nul('workspaceAdmin'), sample: [U, '', ''] },   // typeof workspaceId 가 가드 앞
-  [`${A('accounts')}#resetPassword`]: nul('superuser'),
+  [`${A('accounts')}#resetPassword`]: { ...nul('workspaceAdmin'), sample: [U, U, 'password1'] },   // 빈 workspaceId 는 가드 앞
+  [`${A('accounts')}#previewWorkspaceMemberRemoval`]: { ...nul('workspaceAdmin'), sample: [U, U] },
+  [`${A('accounts')}#removeWorkspaceMember`]: { ...nul('workspaceAdmin'), sample: [U, U] },
   [`${A('accounts')}#setPlatformAdmin`]: nul('superuser'),
   [`${A('accounts')}#setWorkspaceRole`]: { ...nul('workspaceAdmin'), sample: [U, U, 'member'] },
   [`${A('accounts')}#listAccounts`]: nul('workspaceAdmin'),
@@ -138,6 +140,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('issues')}#updateIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(adminOrOwnerGate); 분석 묶음은 checkEntry에서 issue_analysis 조건부 관문', sample: [U, {}], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
   [`${A('issues')}#updateIssueProgress`]: { guard: 'projectMember', module: 'issues', sample: [U, {}] },
   [`${A('issues')}#deleteIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
+  // ── passwordReset — 비밀번호 분실(로그인 전 화면)
+  [`${A('passwordReset')}#requestPasswordReset`]: nul('public', '로그인 전 — 재설정 메일 요청. 계정 존재 여부와 무관하게 같은 응답이고 표를 읽지 않는다(인증 서버 호출만)'),
   // ── platformWorkspaces — 플랫폼(워크스페이스 목록·생성, 개정 §5.3.2)
   [`${A('platformWorkspaces')}#listPlatformWorkspaces`]: nul('superuser'),
   [`${A('platformWorkspaces')}#createPlatformWorkspace`]: nul('superuser'),

@@ -19,6 +19,7 @@ import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pickCalendar } from '@/lib/settings/pick'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { loadInviteDomainNotice } from '@/lib/data/inviteDomainNotice'
 
 export default async function MembersPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
@@ -39,11 +40,14 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
   // 초대 조회 실패가 명단 본체를 막으면 안 된다(섹션 안 에러 문구로 흡수).
   // 초대 만료·합류 시각의 tz = 프로젝트 달력(초대 칸은 관리자만 보므로 그때만 읽는다). 실패는 초대 칸에만 사유를 그린다.
   const wid = m?.projectWorkspace.get(projectId) ?? null
-  const [roster, invites, pc, wsRoles] = await Promise.all([
+  const [roster, invites, pc, wsRoles, inviteDomainNotice] = await Promise.all([
     canEdit ? listRoster(projectId) : getProjectRoster(projectId),
     canEdit ? listProjectInvites(projectId) : null,
     canEdit ? loadProjectConfigForPage(projectId) : null,
     wid ? getWorkspaceRoleMap(wid) : Promise.resolve({ ok: false as const, error: '워크스페이스 권한을 확인하지 못했습니다' }),
+    // 초대 허용 도메인이 비어 있으면(새 워크스페이스의 기본 상태) 발급이 전부 거부된다 — 거부되기 전에 초대 칸에 미리 알린다.
+    // 초대 칸은 관리자만 보므로 그때만 읽는다. 읽지 못하면 null(안내 없음 — 로더가 로그를 남긴다)
+    canEdit ? loadInviteDomainNotice(m, wid) : null,
   ])
   // 초대 발급·취소는 달력과 무관하다 — 달력 손상·설정 조회 실패는 시각 칸만 사유로 둔다(A-4 리뷰 N6)
   const inviteCal = pc?.ok ? pickCalendar(pc.cfg) : null
@@ -89,6 +93,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
                 actorView={toProjectActorView(m, projectId)}
                 timeZone={inviteTz}
                 timeZoneError={inviteTzError}
+                domainNotice={inviteDomainNotice}
               />
             </div>
           )}

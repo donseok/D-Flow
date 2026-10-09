@@ -6,6 +6,11 @@ describe('describeAuthzChange — 권한 변경 한 줄 요약', () => {
     expect(describeAuthzChange('platform_admin', null, { granted: true, granted_by: 'u1' })).toBe('지정')
     expect(describeAuthzChange('platform_admin', { granted: true }, null)).toBe('해제')
   })
+  it('비밀번호 재설정(0053): 관리자가 재설정 — 모르는 모양은 지어내지 않는다', () => {
+    expect(describeAuthzChange('password_reset', null, { reset: true })).toBe('관리자가 재설정')
+    expect(describeAuthzChange('password_reset', null, { reset: false })).toBe('변경 내용을 읽지 못했습니다')
+    expect(describeAuthzChange('password_reset', { reset: true }, null)).toBe('변경 내용을 읽지 못했습니다')
+  })
   it('워크스페이스 등급: 소속 추가·등급 변경·소속 제거', () => {
     expect(describeAuthzChange('workspace_role', null, { role: 'member', invited_by: 'u1' })).toBe('소속 추가 (멤버)')
     expect(describeAuthzChange('workspace_role', { role: 'member' }, { role: 'admin' })).toBe('멤버 → 관리자')
@@ -59,6 +64,7 @@ describe('describeAuthzChange — 권한 변경 한 줄 요약', () => {
     expect(AUTHZ_KIND_LABEL.platform_admin).toBe('플랫폼 관리자')
     expect(AUTHZ_KIND_LABEL.workspace_role).toBe('워크스페이스 등급')
     expect(AUTHZ_KIND_LABEL.project_access).toBe('프로젝트 권한')
+    expect(AUTHZ_KIND_LABEL.password_reset).toBe('비밀번호')
     expect(AUTHZ_CAUSE_LABEL.direct).toBe('직접 변경')
     expect(AUTHZ_CAUSE_LABEL.cascade).toBe('연쇄(소속 변경)')
     expect(AUTHZ_CAUSE_LABEL.parent_deleted).toBe('상위 삭제')

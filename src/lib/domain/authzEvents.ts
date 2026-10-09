@@ -5,13 +5,15 @@
 //                   active 는 SP4 부터 실린다 — 그 전 기록에는 없고 그때는 권한 칸만 읽는다. 부여·회수 기록의 active 가 false 면
 //                   `부여 (멤버, 비활성)` 처럼 꼬리를 붙인다(비활성 행 — 권한이 생기지 않았거나 이미 정지돼 있었다)
 //   project_access  {person_active}                              — 인물의 비활성·재활성(SP4) — 그 인물의 권한 있는 명단 행마다 한 기록
+//   password_reset  {reset: true}                                — 관리자가 한 비밀번호 재설정(0053 record_password_reset). before 없음. 권한이 바뀐 것은
+//                   아니지만 "그 계정으로 로그인할 수 있게 만든" 조작이라 같은 이력에 남긴다. 비밀번호 값은 어디에도 없다
 // 문구는 이 모듈의 한국어 상수다 — 소비 경로(actions/authzEvents.ts 의 summary)가 한국어 표시 문자열 계약이라 사전 키로 내지 않는다(스펙 §3.4 T11).
 // 모르는 모양은 지어내지 않는다 — 읽을 수 있는 값만 쓰고 아니면 그대로 알린다(3원칙: 모르면 unknown).
-export type AuthzEventKind = 'platform_admin' | 'workspace_role' | 'project_access'
+export type AuthzEventKind = 'platform_admin' | 'workspace_role' | 'project_access' | 'password_reset'
 export type AuthzEventCause = 'direct' | 'cascade' | 'parent_deleted'
 
 export const AUTHZ_KIND_LABEL: Record<AuthzEventKind, string> = {
-  platform_admin: '플랫폼 관리자', workspace_role: '워크스페이스 등급', project_access: '프로젝트 권한',
+  platform_admin: '플랫폼 관리자', workspace_role: '워크스페이스 등급', project_access: '프로젝트 권한', password_reset: '비밀번호',
 }
 export const AUTHZ_CAUSE_LABEL: Record<AuthzEventCause, string> = {
   direct: '직접 변경', cascade: '연쇄(소속 변경)', parent_deleted: '상위 삭제',
@@ -69,6 +71,7 @@ export function describeAuthzChange(kind: AuthzEventKind, before: unknown, after
     if (a === null && b?.granted === true) return '해제'
     return UNREADABLE
   }
+  if (kind === 'password_reset') return b === null && a?.reset === true ? '관리자가 재설정' : UNREADABLE
   if (kind === 'project_access' && ((b !== null && 'person_active' in b) || (a !== null && 'person_active' in a))) {
     return describePersonActive(b, a)
   }

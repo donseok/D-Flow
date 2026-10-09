@@ -101,11 +101,12 @@ describe('WorkspacesManager — 생성 폼', () => {
     const inputs = [...form.querySelectorAll<HTMLInputElement>('input:not([type="checkbox"])')]
     const boxes = [...form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
     const submit = () => { act(() => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }) }
-    return { container, form, name: inputs[0], slug: inputs[1], email: inputs[2], tz: inputs[3], boxes, submit }
+    return { container, form, name: inputs[0], slug: inputs[1], email: inputs[2], tz: inputs[3], domains: inputs[4], boxes, submit }
   }
-  it('필드 — 이름·주소·첫 관리자 이메일·시간대, 허용 모듈은 비core 전부가 기본으로 켜져 있다', () => {
+  it('필드 — 이름·주소·첫 관리자 이메일·시간대·초대 허용 도메인(선택), 허용 모듈은 비core 전부가 기본으로 켜져 있다', () => {
     const f = setup()
-    expect([...f.form.querySelectorAll('label[for]')].map((l) => l.textContent)).toEqual(['이름', '주소(slug)', '첫 관리자 이메일', '시간대'])
+    expect([...f.form.querySelectorAll('label[for]')].map((l) => l.textContent)).toEqual(['이름', '주소(slug)', '첫 관리자 이메일', '시간대', '초대 허용 도메인 (선택)'])
+    expect(f.domains.value).toBe('')                             // 비워 둔 채 시작한다 — 정책 기본값(초대 불가)을 폼이 바꾸지 않는다
     expect(f.boxes).toHaveLength(NON_CORE_MODULES.length)
     expect(f.boxes.every((b) => b.checked)).toBe(true)
     expect(f.email.value).toBe('')                               // 비우면 만드는 사람 자신(안내 문구)
@@ -127,13 +128,41 @@ describe('WorkspacesManager — 생성 폼', () => {
     f.submit()
     await flush()
     expect(mocks.createPlatformWorkspace).toHaveBeenCalledExactlyOnceWith({
-      name: '새 조직', slug: 'new-org', adminEmail: 'owner@example.com', timezone: 'Asia/Tokyo', modules: NON_CORE_MODULES.slice(1),
+      name: '새 조직', slug: 'new-org', adminEmail: 'owner@example.com', timezone: 'Asia/Tokyo', modules: NON_CORE_MODULES.slice(1), inviteDomains: [],
     })
     const status = f.form.querySelector('p[role="status"]')!
     expect(status.textContent).toContain('새 조직 워크스페이스를 만들었습니다.')
     expect(status.querySelector('a')!.getAttribute('href')).toBe('/w/new-org')
     expect(mocks.refresh).toHaveBeenCalledOnce()
     expect(f.name.value).toBe('')
+  })
+  it('초대 허용 도메인 — 첫 관리자 이메일의 도메인을 제안만 한다(자동으로 채우지 않는다). 누르면 들어가고, 이미 있으면 제안이 사라진다', () => {
+    const f = setup()
+    const suggest = () => f.form.querySelector<HTMLButtonElement>('[data-domain-suggest]')
+    expect(suggest()).toBeNull()                                 // 이메일이 없으면 제안도 없다
+    setValue(f.email, 'Owner@Example.com')
+    expect(f.domains.value).toBe('')                             // 자동으로 채우지 않는다
+    expect(suggest()!.textContent).toBe('제안: example.com 넣기')
+    fireEvent.click(suggest()!)
+    expect(f.domains.value).toBe('example.com')
+    expect(suggest()).toBeNull()
+    setValue(f.domains, 'partner.co.kr')
+    fireEvent.click(suggest()!)
+    expect(f.domains.value).toBe('partner.co.kr, example.com')   // 적어 둔 것을 지우지 않고 덧붙인다
+  })
+  it('초대 허용 도메인 — 적은 값은 나눠서 목록으로 넘기고, 형식 밖이면 서버를 부르지 않고 그 필드에 사유를 보인다', async () => {
+    mocks.createPlatformWorkspace.mockResolvedValue({ ok: true, workspace: { id: 'w9', slug: 'new-org', name: '새 조직' } })
+    const f = setup()
+    setValue(f.name, '새 조직'); setValue(f.slug, 'new-org'); setValue(f.tz, ''); setValue(f.domains, '*, example.com')
+    f.submit()
+    expect(mocks.createPlatformWorkspace).not.toHaveBeenCalled()
+    expect(f.domains.getAttribute('aria-invalid')).toBe('true')
+    expect(f.form.textContent).toContain('도메인 형식이 올바르지 않습니다.')
+    setValue(f.domains, 'example.com  partner.co.kr')
+    f.submit()
+    await flush()
+    expect(mocks.createPlatformWorkspace.mock.calls[0][0]).toMatchObject({ inviteDomains: ['example.com', 'partner.co.kr'] })
+    expect(f.domains.value).toBe('')                             // 성공하면 비운다
   })
   it('모두 해제 → 빈 배열(core 만)을 넘긴다', async () => {
     mocks.createPlatformWorkspace.mockResolvedValue({ ok: true, workspace: { id: 'w9', slug: 'core-only', name: 'x' } })

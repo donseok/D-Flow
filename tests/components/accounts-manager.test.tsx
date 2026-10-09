@@ -14,8 +14,16 @@ const setPlatformAdmin = vi.fn<(...a: unknown[]) => Promise<Res>>(async () => ({
 const refresh = vi.fn()
 const toast = vi.fn()
 
+const resetPassword = vi.fn<(...a: unknown[]) => Promise<Res>>(async () => ({ ok: true }))
+type Preview = { ok: true; preview: { projects: number; invites: number; tokens: number } } | { ok: false; error: string }
+const previewWorkspaceMemberRemoval = vi.fn<(...a: unknown[]) => Promise<Preview>>(async () => ({ ok: true, preview: { projects: 2, invites: 1, tokens: 0 } }))
+const removeWorkspaceMember = vi.fn<(...a: unknown[]) => Promise<Res>>(async () => ({ ok: true }))
+
 vi.mock('@/app/actions/accounts', () => ({
-  createAccount: vi.fn(), bulkCreateAccounts: vi.fn(), resetPassword: vi.fn(),
+  createAccount: vi.fn(), bulkCreateAccounts: vi.fn(),
+  resetPassword: (...a: unknown[]) => resetPassword(...a),
+  previewWorkspaceMemberRemoval: (...a: unknown[]) => previewWorkspaceMemberRemoval(...a),
+  removeWorkspaceMember: (...a: unknown[]) => removeWorkspaceMember(...a),
   setWorkspaceRole: (...a: unknown[]) => setWorkspaceRole(...a),
   setPlatformAdmin: (...a: unknown[]) => setPlatformAdmin(...a),
 }))
@@ -26,13 +34,19 @@ vi.mock('next/link', () => ({
   ),
 }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast }) }))
+// 사전 문구로 확인한다 — 공급자 없는 기본 t 는 키를 그대로 돌려준다
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
+  const api = { locale: 'ko' as const, setLocale: () => {}, t: (k: Parameters<typeof t>[1]) => t('ko', k) }
+  return { useLocale: () => api }
+})
 
 import { AccountsManager } from '@/components/admin/AccountsManager'
 
 function account(over: Partial<AccountRow> = {}): AccountRow {
   return {
     id: 'u-alice', email: 'alice@example.com', name: 'alice', workspaceRole: 'member',
-    isPlatformAdmin: false, accessRole: 'member', createdAt: '2026-09-01T00:00:00Z', ...over,
+    isPlatformAdmin: false, accessRole: 'member', createdAt: '2026-09-01T00:00:00Z', passwordReset: 'ok', removal: 'ok', ...over,
   }
 }
 const BOB = account({ id: 'u-bob', email: 'bob@example.com', name: 'bob', workspaceRole: 'admin', isPlatformAdmin: true, accessRole: null })
@@ -75,16 +89,118 @@ describe('AccountsManager', () => {
     expect(hs.some(h => h.includes('팀'))).toBe(false)
   })
 
-  it('플랫폼 조작(플랫폼 관리자 열·비번 리셋)은 플랫폼 관리자에게만 그린다 — 워크스페이스 관리자에게는 거부될 버튼을 보이지 않는다(D22)', () => {
+  it('플랫폼 조작(플랫폼 관리자 열)은 플랫폼 관리자에게만 그린다 — 행 작업(비밀번호 재설정·제거)은 워크스페이스 관리자에게도 그린다(D22)', () => {
     render(undefined, false)
     expect(headers()).not.toContain('플랫폼 관리자')
-    expect(headers()).not.toContain('작업')
+    expect(headers()).toContain('작업')
     expect(container.querySelector('[data-platform-admin-toggle]')).toBeNull()
-    expect(container.textContent).not.toContain('비번 리셋')
+    expect(row('u-alice').textContent).toContain('비밀번호 재설정')
+    expect(row('u-alice').textContent).toContain('워크스페이스에서 제거')
     act(() => root.unmount()); root = createRoot(container)
     render()
-    expect(headers()).toContain('작업')
-    expect(row('u-alice').textContent).toContain('비번 리셋')
+    expect(headers()).toContain('플랫폼 관리자')
+    expect(row('u-alice').textContent).toContain('비밀번호 재설정')
+  })
+
+  describe('행 작업 — 서버가 내린 판정(passwordReset·removal)대로 열고 잠근다', () => {
+    const reset = (id: string) => row(id).querySelector<HTMLButtonElement>('[data-reset-password]')!
+    const remove = (id: string) => row(id).querySelector<HTMLButtonElement>('[data-remove-member]')!
+    const flush = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+    const modalButton = (text: string) => Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.trim() === text)!
+
+    beforeEach(() => {
+      resetPassword.mockClear(); resetPassword.mockResolvedValue({ ok: true })
+      previewWorkspaceMemberRemoval.mockClear()
+      previewWorkspaceMemberRemoval.mockResolvedValue({ ok: true, preview: { projects: 2, invites: 1, tokens: 0 } })
+      removeWorkspaceMember.mockClear(); removeWorkspaceMember.mockResolvedValue({ ok: true })
+    })
+
+    it.each([
+      ['self', '본인의 비밀번호는 계정 화면의 "비밀번호 변경"에서 바꿉니다.'],
+      ['target_admin', '관리자 계정의 비밀번호는 플랫폼 관리자만 재설정할 수 있습니다.'],
+      ['platform_only', '이 계정의 비밀번호는 플랫폼 관리자만 재설정할 수 있습니다.'],
+      ['not_member', '이 워크스페이스 소속이 아닌 계정입니다.'],
+    ] as const)('비밀번호 재설정: %s 인 행은 잠기고 사유가 툴팁이다', async (verdict, reason) => {
+      render([account({ passwordReset: verdict })], false)
+      expect(reset('u-alice').disabled).toBe(true)
+      expect(reset('u-alice').title).toBe(reason)
+      await click(reset('u-alice'))
+      expect(document.body.textContent).not.toContain('임시 비밀번호')
+    })
+
+    it('비밀번호 재설정: 열린 행은 resetPassword(workspaceId, userId, 임시값) 을 부르고 값을 한 번 보여 준다', async () => {
+      render([account()], false)
+      expect(reset('u-alice').disabled).toBe(false)
+      await click(reset('u-alice'))
+      await click(modalButton('리셋'))
+      await flush()
+      expect(resetPassword).toHaveBeenCalledTimes(1)
+      const [ws, uid, pw] = resetPassword.mock.calls[0] as [string, string, string]
+      expect([ws, uid]).toEqual(['ws-1', 'u-alice'])
+      expect(pw.length).toBeGreaterThanOrEqual(8)
+      expect(document.body.textContent).toContain('이 창을 닫으면 다시 볼 수 없습니다.')
+      expect(document.body.textContent).toContain(pw)
+    })
+
+    it.each([
+      ['self', '본인은 제거할 수 없습니다.'],
+      ['target_admin', '관리자는 플랫폼 관리자만 제거할 수 있습니다. 먼저 멤버로 바꾼 뒤 제거하세요.'],
+      ['not_member', '이 워크스페이스 소속이 아닌 계정입니다.'],
+    ] as const)('제거: %s 인 행은 잠기고 사유가 툴팁이다', async (verdict, reason) => {
+      render([account({ removal: verdict })], false)
+      expect(remove('u-alice').disabled).toBe(true)
+      expect(remove('u-alice').title).toBe(reason)
+      await click(remove('u-alice'))
+      expect(previewWorkspaceMemberRemoval).not.toHaveBeenCalled()
+    })
+
+    it('제거: 확인 창이 영향(프로젝트 수·초대)을 먼저 보이고, 확인하면 removeWorkspaceMember 를 부른 뒤 표를 다시 읽는다', async () => {
+      render([account()], false)
+      await click(remove('u-alice'))
+      await flush()
+      expect(previewWorkspaceMemberRemoval).toHaveBeenCalledWith('ws-1', 'u-alice')
+      const preview = document.body.querySelector('[data-remove-preview]')!
+      expect(preview.textContent).toContain('프로젝트 2개의 권한이 회수됩니다')
+      expect(preview.textContent).toContain('수락 전 초대 1건이 회수됩니다.')
+      expect(preview.textContent).not.toContain('에이전트 토큰')   // 0건은 줄을 내지 않는다
+      expect(removeWorkspaceMember).not.toHaveBeenCalled()
+      await click(document.body.querySelector('[data-remove-confirm]')!)
+      await flush()
+      expect(removeWorkspaceMember).toHaveBeenCalledWith('ws-1', 'u-alice')
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: '워크스페이스에서 제거했습니다.', variant: 'success' }))
+      expect(refresh).toHaveBeenCalled()
+    })
+
+    it('제거: 회수할 것이 없으면 그렇게 말한다', async () => {
+      previewWorkspaceMemberRemoval.mockResolvedValue({ ok: true, preview: { projects: 0, invites: 0, tokens: 0 } })
+      render([account()], false)
+      await click(remove('u-alice'))
+      await flush()
+      expect(document.body.querySelector('[data-remove-preview]')!.textContent).toContain('소속만 빠집니다.')
+    })
+
+    it('제거: 미리보기를 못 읽으면 확인을 열지 않는다 — "영향 없음"으로 그리지 않는다', async () => {
+      previewWorkspaceMemberRemoval.mockResolvedValue({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
+      render([account()], false)
+      await click(remove('u-alice'))
+      await flush()
+      expect(document.body.querySelector('[data-remove-preview]')).toBeNull()
+      expect(document.body.textContent).toContain('영향 범위를 확인하지 못했습니다')
+      expect(document.body.textContent).toContain('권한을 확인할 수 없어 중단했습니다.')
+      expect(document.body.querySelector<HTMLButtonElement>('[data-remove-confirm]')!.disabled).toBe(true)
+    })
+
+    it('제거: 서버가 거부하면(마지막 관리자 등) 문구를 창에 보이고 닫지 않는다', async () => {
+      const msg = '워크스페이스의 마지막 관리자는 제거할 수 없습니다. 다른 관리자를 먼저 지정하세요.'
+      removeWorkspaceMember.mockResolvedValue({ ok: false, error: msg })
+      render([account()], false)
+      await click(remove('u-alice'))
+      await flush()
+      await click(document.body.querySelector('[data-remove-confirm]')!)
+      await flush()
+      expect(document.body.textContent).toContain(msg)
+      expect(document.body.querySelector('[data-remove-confirm]')).not.toBeNull()
+    })
   })
 
   it('워크스페이스 역할 토글은 반대 등급으로 setWorkspaceRole(workspaceId, userId, role) 을 부른다', async () => {

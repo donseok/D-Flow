@@ -90,6 +90,25 @@ describe('createPlatformWorkspace', () => {
     expect(calls.find((c) => c.table === 'workspace_members')!.payload).toMatchObject({ user_id: ACTOR, role: 'admin' })
     expect(mocks.writeWorkspaceSettingsInternal.mock.calls[0][2]).toEqual({ set: { 'modules.allowed': [...NON_CORE_MODULES] } })
   })
+  it('초대 허용 도메인을 적으면 생성 때 그 설정으로 쓴다(정규화된 목록) — 같은 내부 쓰기 한 번', async () => {
+    fakeAdmin(happy())
+    expect(await createPlatformWorkspace({ ...input, modules: ['kanban'], inviteDomains: ['Example.com', '@partner.co.kr'] })).toMatchObject({ ok: true })
+    expect(mocks.writeWorkspaceSettingsInternal).toHaveBeenCalledTimes(1)
+    expect(mocks.writeWorkspaceSettingsInternal.mock.calls[0][2])
+      .toEqual({ set: { 'modules.allowed': ['kanban'], 'invites.allowed_domains': ['example.com', 'partner.co.kr'] } })
+  })
+  it('초대 허용 도메인을 비우면 그 키를 쓰지 않는다 — 정책 기본값(초대 불가)·배포 기본값을 그대로 둔다', async () => {
+    fakeAdmin(happy())
+    await createPlatformWorkspace({ ...input, modules: ['kanban'], inviteDomains: [] })
+    expect(mocks.writeWorkspaceSettingsInternal.mock.calls[0][2]).toEqual({ set: { 'modules.allowed': ['kanban'] } })
+  })
+  it('도메인 형식 밖이면 아무것도 만들지 않는다 — 그 필드의 사유로 거부', async () => {
+    const { calls } = fakeAdmin(happy())
+    expect(await createPlatformWorkspace({ ...input, inviteDomains: ['*', 'example.com'] }))
+      .toEqual({ ok: false, code: 'domains_invalid', field: 'inviteDomains' })
+    expect(calls).toEqual([])
+    expect(mocks.writeWorkspaceSettingsInternal).not.toHaveBeenCalled()
+  })
   it('허용 모듈을 모두 끄면 빈 배열을 명시로 적는다(core 만)', async () => {
     fakeAdmin(happy())
     await createPlatformWorkspace({ ...input, modules: [] })

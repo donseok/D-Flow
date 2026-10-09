@@ -20,7 +20,8 @@
 | 파일 | 분류 | 근거 |
 |---|---|---|
 | src/app/(app)/w/[slug]/settings/integrations/page.tsx | 세션 가드 뒤 id 스코프 | workspacePageAccess(wid) 로 워크스페이스 관리자 이상을 확인한 뒤 그 wid 로 연동 자격증명을 조회한다 |
-| src/app/actions/accounts.ts | 세션 가드 뒤 id 스코프 | create·bulk·setWorkspaceRole·listAccounts 는 requireWorkspaceAdmin(wid) 뒤에 그 wid(listAccounts 는 pid)로 좁힌다. resetPassword·setPlatformAdmin 은 requireSuperuser(플랫폼 11곳)이다. assertCanTouchAccount 는 전역으로 둔다(D1 계정 전역, 컨트롤러 판정 a35) |
+| src/app/actions/accounts.ts | 세션 가드 뒤 id 스코프 | create·bulk·setWorkspaceRole·listAccounts·removeWorkspaceMember·previewWorkspaceMemberRemoval 는 requireWorkspaceAdmin(wid) 뒤에 그 wid(listAccounts 는 pid)로 좁힌다. resetPassword 도 requireWorkspaceAdmin(wid) 뒤 — 대상의 등급 축만은 전역으로 읽는다(loadAccountTargets: 다른 워크스페이스 소속까지 봐야 경계를 가른다, D1 계정 전역). setPlatformAdmin 은 requireSuperuser 다 |
+| src/lib/authz/accountsAccess.ts | 세션 가드 뒤 id 스코프 | 형만 import 한다. loadAccountTargets 는 넘겨받은 계정 id 들의 platform_admins·workspace_members 를 전 워크스페이스에서 읽는다(계정 조작 판정의 입력 — 값은 서버 안에서만 쓰고 판정 결과만 내린다). 호출부는 requireWorkspaceAdmin 뒤의 resetPassword·listAccounts 둘 |
 | src/app/actions/agentHub.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤. 항목·주문은 id 로 읽고 project_id === pid 인지 다시 확인한 뒤에 쓴다 |
 | src/app/actions/agentTokens.ts | 세션 가드 뒤 id 스코프 | 세션 사용자 = owner_user_id 로만 발급·폐기·목록 처리한다. PAT 의 project_id 는 쓰는 시점에 라우트가 멤버십으로 판정한다 |
 | src/app/actions/agentWork.ts | 세션 가드 뒤 id 스코프 | 주문 행의 project_id 로 requireProjectAdmin 또는 서브트리 관리자를 판정한 뒤, 그 주문·항목 id 로만 쓴다 · 옛 토글의 modules.enabled 내부 쓰기(D41, SP3a Phase B — Phase C 가 지운다) |
@@ -109,7 +110,7 @@
 
 바꾸지 않은 것:
 - `api/v1/agent/watch`: 스펙이 짚은 누설은 `agent_watchers.workspace_id` 가 없다는 것이었고, 0006·Task 3 이 채웠다. 필터 없는 쿼리로는 7일 GC 하나가 남는데, 행 내용을 읽지 않는 전역 정리라서 그대로 둔다. 본문 project_id 의 멤버십 판정 누락은 별개 문제로 "남은 경계" 3 에 적었고 Task 13 이 닫았다.
-- `actions/accounts.ts` `assertCanTouchAccount`: 컨트롤러 판정 a35 에 따라 워크스페이스로 좁히지 않았다. 유일한 호출부가 플랫폼 전용 `resetPassword` 이고, 계정은 전역이다(D1).
+- `actions/accounts.ts` `assertCanTouchAccount`: 컨트롤러 판정 a35 에 따라 워크스페이스로 좁히지 않았다. 유일한 호출부가 플랫폼 전용 `resetPassword` 이고, 계정은 전역이다(D1). (계정 수명주기 작업에서 `resetPassword` 가 워크스페이스 관리자에게 열리며 이 함수는 `loadAccountTargets` + 순수 판정 `passwordResetVerdict` 로 바뀌었다 — 대상의 등급 축을 전역으로 읽는 것은 같다.)
 
 ## 남은 경계(이 태스크 범위 밖 — 후속)
 

@@ -116,7 +116,11 @@ export async function DashboardView({
     !hasWbs && emptyOrOff(modules.issues, issues) && emptyOrOff(modules.announcements, announcements)
     && emptyOrOff(modules.meetings, meetings)
   ) {
-    return <EmptyState icon={BarChart3} title={tr('dash.emptyTitle')} description={tr('dash.emptyDesc')} />
+    // 빈 화면에서 다음 행동을 고를 수 있게 작업 계획으로 가는 버튼을 둔다 — 추가·가져오기 권한은 그 화면이 가른다(조회 전용은 표만 본다)
+    return (
+      <EmptyState icon={BarChart3} title={tr('dash.emptyTitle')} description={tr('dash.emptyDesc')}
+        action={<Link href={`/p/${projectId}/wbs`} data-dash-empty-wbs className="btn btn-primary">{tr('dash.emptyGoWbs')} <ArrowRight className="h-4 w-4" /></Link>} />
+    )
   }
 
   // 팀(요청 범위 원천 — 페이지의 설정 조회와 같은 요청 캐시)은 WBS 가 있을 때만 읽는다 — 팀별 진척·하위 활동 정렬 키 외에는 쓰지 않는다.

@@ -1,47 +1,138 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Check, ChevronRight, CircleDashed, HelpCircle, SkipForward, X } from 'lucide-react'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { setupProgress, setupStepHref, type SetupStep, type SetupStepId } from '@/lib/domain/projectSetup'
+import type { DictKey } from '@/lib/i18n/dict'
 
-const STEPS = [
-  { title: '기본 정보', detail: '프로젝트 이름·기간과 단계 이름을 확인하세요.', href: '#project-general' },
-  { title: '사용 기능', detail: '프로젝트에서 사용할 기능을 선택하세요.', href: '#project-modules' },
-  { title: '달력·업무 규칙', detail: '시간대·근무 요일과 상태·승인 규칙을 확인하세요.', href: '#project-calendar' },
-  { title: '첫 데이터', detail: '작업 계획에서 첫 작업을 추가하거나 엑셀을 가져오세요.', href: 'wbs' },
-] as const
+/** '{n}' 꼴 자리 채우기 — 사전 문구의 수·이름 */
+const fill = (text: string, vars: Record<string, string | number>) => text.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m))
 
-/** 진행 표시만 이 브라우저에 저장한다. 실제 설정 저장은 각 편집기의 기존 경로를 따른다. */
-export function ProjectSetupChecklist({ projectId, userId }: { projectId: string; userId: string }) {
-  const key = `project-setup:v1:${userId}:${projectId}`
-  const [step, setStep] = useState(0)
-  const [hidden, setHidden] = useState(false)
+type Saved = { skipped: string[]; hidden: boolean }
+const EMPTY: Saved = { skipped: [], hidden: false }
+
+/** 브라우저에 둔 사용자 선택(건너뛴 단계·닫음) — 모르는 모양은 빈 값으로 읽는다. 완료 여부는 여기 없다(서버 상태가 정본) */
+function parseSaved(raw: string | null): Saved {
+  if (!raw) return EMPTY
+  const v: unknown = JSON.parse(raw)
+  if (typeof v !== 'object' || v === null) return EMPTY
+  const o = v as Record<string, unknown>
+  return {
+    skipped: Array.isArray(o.skipped) ? o.skipped.filter((x): x is string => typeof x === 'string') : [],
+    hidden: o.hidden === true,
+  }
+}
+
+/**
+ * 프로젝트 준비 체크리스트(첫 사용 흐름). 단계의 완료는 서버가 실제 상태로 판정해 내린다(steps — domain/projectSetup, 설정은 해석기).
+ * 이 컴포넌트가 브라우저에 저장하는 것은 사용자의 선택 둘뿐이다: 건너뛴 단계와 닫음. 서버 상태가 완료인 단계는 건너뛰기 표시보다 우선한다.
+ *  - panel(설정 화면 맨 위): 단계 목록 — 상태·해당 설정으로 가는 링크·건너뛰기. 닫으면 다시 여는 버튼 하나만 남는다.
+ *  - banner(개요 화면 맨 위, 프로젝트 관리자에게만): 접힌 한 줄 — 진행·다음 단계·전체 보기·닫기. 남은 단계가 없거나 닫았으면 아무것도 그리지 않는다.
+ * 저장 키는 계정·프로젝트별이다(v2 — 옛 v1 은 "몇 번째 단계까지 확인했나"라 뜻이 달라 읽지 않는다).
+ */
+export function ProjectSetupChecklist({ projectId, userId, steps, variant = 'panel' }: {
+  projectId: string
+  userId: string
+  steps: readonly SetupStep[]
+  variant?: 'panel' | 'banner'
+}) {
+  const { t } = useLocale()
+  const key = `project-setup:v2:${userId}:${projectId}`
+  const [saved, setSaved] = useState<Saved>(EMPTY)
+  // 저장값을 읽기 전에는 배너를 그리지 않는다 — 닫은 사람에게 배너가 한 번 번쩍이지 않게(패널은 읽기 전에도 목록을 그린다)
+  const [ready, setReady] = useState(false)
   const [storageError, setStorageError] = useState(false)
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(key) ?? 'null')
-      if (saved && Number.isInteger(saved.step) && saved.step >= 0 && saved.step <= STEPS.length) {
-        setStep(saved.step); setHidden(saved.hidden === true)
-      }
-    } catch { setStorageError(true) }
+    try { setSaved(parseSaved(localStorage.getItem(key))) } catch { setStorageError(true) }
+    setReady(true)
   }, [key])
-  const save = (next: number, hide: boolean) => {
-    setStep(next); setHidden(hide)
-    try { localStorage.setItem(key, JSON.stringify({ step: next, hidden: hide })); setStorageError(false) }
-    catch { setStorageError(true) }
+  const save = (next: Saved) => {
+    setSaved(next)
+    try { localStorage.setItem(key, JSON.stringify(next)); setStorageError(false) } catch { setStorageError(true) }
   }
-  if (hidden) return <button className="btn btn-ghost" onClick={() => save(step, false)}>준비 체크리스트 이어하기</button>
-  const current = STEPS[step]
-  return <section aria-label="프로젝트 준비" className="rounded-(--radius-panel) border border-border bg-surface p-4 space-y-3">
-    <h2 className="text-base font-semibold text-fg">프로젝트 준비 체크리스트</h2>
-    <p className="text-sm text-fg-secondary">{current ? `${step + 1} / ${STEPS.length} · ${current.title}` : '준비 항목을 모두 확인했습니다.'}</p>
-    {current && <><p className="text-sm text-fg-secondary">{current.detail}</p>
-      <a className="btn btn-ghost" href={current.href.startsWith('#') ? current.href : `/p/${projectId}/${current.href}`}>설정·작업 열기</a></>}
-    <div className="flex flex-wrap gap-2">
-      {step > 0 && <button className="btn btn-ghost" onClick={() => save(step - 1, false)}>이전</button>}
-      {current && <button className="btn btn-primary" onClick={() => save(step + 1, false)}>확인했어요 · 다음</button>}
-      <button className="btn btn-ghost" onClick={() => save(step, true)}>{current ? '나중에 이어하기' : '닫기'}</button>
-      {!current && <button className="btn btn-ghost" onClick={() => save(0, false)}>처음부터 확인</button>}
-    </div>
-    <p className="text-xs text-fg-muted">진행 위치는 이 계정·프로젝트별로 현재 브라우저에 저장됩니다. 체크리스트의 확인 버튼은 설정을 저장하지 않습니다.</p>
-    {storageError && <p role="alert" className="text-sm text-warning">이 브라우저에서 진행 위치를 저장할 수 없습니다.</p>}
-  </section>
+
+  const skipped = new Set(saved.skipped)
+  const progress = setupProgress(steps, skipped)
+  const title = (id: SetupStepId) => t(`setup.step.${id}` as DictKey)
+  const toggleSkip = (id: SetupStepId) =>
+    save({ ...saved, skipped: skipped.has(id) ? saved.skipped.filter((x) => x !== id) : [...saved.skipped, id] })
+
+  if (variant === 'banner') {
+    if (!ready || saved.hidden || progress.next === null) return null
+    return (
+      <section aria-label={t('setup.banner.label')} data-setup-banner
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-(--radius-panel) border border-border bg-surface px-4 py-2.5 text-sm">
+        <span className="font-semibold text-fg">{t('setup.banner.label')}</span>
+        <span className="tabular-nums text-fg-secondary">{fill(t('setup.progress'), { done: progress.done, total: progress.total })}</span>
+        <a href={setupStepHref(projectId, progress.next)} data-setup-next
+          className="inline-flex min-w-0 items-center gap-1 font-semibold text-action underline underline-offset-2 hover:text-action-hover">
+          <span className="truncate">{fill(t('setup.banner.next'), { step: title(progress.next) })}</span>
+          <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+        </a>
+        <span className="ml-auto flex items-center gap-1">
+          <a href={`/p/${projectId}/settings`} className="btn btn-ghost h-8 px-3 text-xs">{t('setup.banner.all')}</a>
+          <button type="button" onClick={() => save({ ...saved, hidden: true })} className="btn btn-ghost h-8 px-3 text-xs"
+            aria-label={t('setup.banner.dismiss')} title={t('setup.banner.dismiss')}>
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </span>
+      </section>
+    )
+  }
+
+  if (saved.hidden) {
+    return (
+      <button type="button" className="btn btn-ghost" onClick={() => save({ ...saved, hidden: false })}>
+        {t('setup.show')} · {fill(t('setup.progress'), { done: progress.done, total: progress.total })}
+      </button>
+    )
+  }
+  const allDone = progress.done === progress.total
+  return (
+    <section aria-label={t('setup.title')} data-setup-panel className="space-y-3 rounded-(--radius-panel) border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-fg">
+          {t('setup.title')} <span className="ml-1 text-sm font-medium tabular-nums text-fg-secondary">{fill(t('setup.progress'), { done: progress.done, total: progress.total })}</span>
+        </h2>
+        <button type="button" className="btn btn-ghost h-8 px-3 text-xs" onClick={() => save({ ...saved, hidden: true })}>{t('setup.hide')}</button>
+      </div>
+      <p className="text-sm text-fg-secondary">{allDone ? t('setup.allDone') : progress.settled ? t('setup.allSettled') : t('setup.lead')}</p>
+      <ol className="divide-y divide-border">
+        {steps.map((step) => {
+          const isSkipped = step.state !== 'done' && skipped.has(step.id)
+          const view = step.state === 'done' ? 'done' : step.state === 'unknown' ? 'unknown' : isSkipped ? 'skipped' : 'todo'
+          const Icon = view === 'done' ? Check : view === 'unknown' ? HelpCircle : view === 'skipped' ? SkipForward : CircleDashed
+          const tone = view === 'done' ? 'text-success' : view === 'unknown' ? 'text-warning' : view === 'skipped' ? 'text-fg-muted' : 'text-action'
+          return (
+            <li key={step.id} data-setup-step={step.id} data-setup-state={view} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5">
+              <Icon className={`h-4 w-4 shrink-0 ${tone}`} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm font-semibold ${view === 'done' || view === 'skipped' ? 'text-fg-secondary' : 'text-fg'}`}>
+                  {title(step.id)}
+                  <span className={`ml-2 text-xs font-medium ${tone}`}>{t(`setup.state.${view}` as DictKey)}</span>
+                </p>
+                <p className="text-xs leading-5 text-fg-muted">
+                  {view === 'unknown' ? t('setup.unknownHint') : t(`setup.step.${step.id}.desc` as DictKey)}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <a href={setupStepHref(projectId, step.id)} className="btn btn-ghost h-8 px-3 text-xs" aria-label={fill(t('setup.openLabel'), { step: title(step.id) })}>
+                  {t('setup.open')}
+                </a>
+                {step.state === 'todo' && (
+                  <button type="button" className="btn btn-ghost h-8 px-3 text-xs" onClick={() => toggleSkip(step.id)}
+                    aria-label={fill(t(isSkipped ? 'setup.unskipLabel' : 'setup.skipLabel'), { step: title(step.id) })}>
+                    {t(isSkipped ? 'setup.unskip' : 'setup.skip')}
+                  </button>
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+      <p className="text-xs text-fg-muted">{t('setup.storageNote')}</p>
+      {storageError && <p role="alert" className="text-sm text-warning">{t('setup.storageError')}</p>}
+    </section>
+  )
 }

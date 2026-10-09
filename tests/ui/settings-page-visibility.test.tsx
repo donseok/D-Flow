@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
 }))
 // 팀 원천은 요청 범위 원천(SP4 §4.2.1) — 기본 픽스처 팀이면 팀 절·업무영역 편집기가 그려진다
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
+// 준비 체크리스트의 단계 로더(건수 조회 — 세션·service_role)는 이 파일의 관심사가 아니다. 체크리스트 없이 그린다
+vi.mock('@/lib/data/projectSetup', () => ({ loadProjectSetupSteps: vi.fn(async () => null) }))
 vi.mock('@/lib/authz', () => ({ getActorForView: () => h.actor(), getActorViewState: async () => ({ actor: await h.actor(), degraded: false }) }))
 // GG1 — 프로젝트 페이지 관문(requireModulePage)이 화면 숨김을 다시 판정한다(getActorViewState + 비공개 숨김 집합). 이 파일은 비공개를 다루지 않는다 — 빈 집합
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
