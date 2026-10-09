@@ -7,10 +7,13 @@ import { previewWbsPaste, type WbsPasteField, type WbsPasteOperation } from '@/l
 
 const LABELS: Record<WbsPasteField, string> = { deliverable: '산출물', plannedStart: '시작일', plannedEnd: '종료일', biz: '업무 분류' }
 
-export function WbsPasteDialog({ projectId, rows, columns, initialText = '', onClose, onSuccess }: {
+export function WbsPasteDialog({ projectId, rows, columns, initialText = '', extraAxisLabel = null, onClose, onSuccess }: {
   projectId: string; rows: WbsBulkSnapshotRow[]; columns: WbsPasteField[]; initialText?: string
+  /** 프로젝트의 추가 축 이름(core.extra_axis_label) — null 은 기본 문구 */
+  extraAxisLabel?: string | null
   onClose: () => void; onSuccess: () => void
 }) {
+  const labelOf = (field: WbsPasteField) => field === 'biz' && extraAxisLabel ? extraAxisLabel : LABELS[field]
   const [text, setText] = useState(initialText)
   const [startField, setStartField] = useState(columns[0] ?? 'deliverable')
   const [result, setResult] = useState<WbsBulkResult | null>(null)
@@ -53,14 +56,14 @@ export function WbsPasteDialog({ projectId, rows, columns, initialText = '', onC
     <div className="space-y-4" data-testid="wbs-paste-dialog">
       <p className="text-sm text-fg-secondary">선택된 {rows.length}개 표시 행에 적용합니다. 숨긴 열·필터 제외 행은 대상에 포함하지 않습니다. 빈 셀은 값을 지웁니다.</p>
       {!retryOperations && !result && <>
-        <label className="block text-sm">시작 열<select className="app-input mt-1" value={startField} onChange={e => setStartField(e.target.value as WbsPasteField)}>{columns.map(field => <option key={field} value={field}>{LABELS[field]}</option>)}</select></label>
+        <label className="block text-sm">시작 열<select className="app-input mt-1" value={startField} onChange={e => setStartField(e.target.value as WbsPasteField)}>{columns.map(field => <option key={field} value={field}>{labelOf(field)}</option>)}</select></label>
         <label className="block text-sm">표 내용<textarea className="app-textarea mt-1 min-h-32" value={text} onChange={e => setText(e.target.value)} placeholder="엑셀에서 복사한 셀을 붙여넣으세요." /></label>
       </>}
       {(preview.error || error) && <p role="alert" className="rounded-lg border border-danger bg-danger-weak p-3 text-sm text-danger">{preview.error ?? error}</p>}
       {preview.rows.length > 0 && <div className="max-h-64 overflow-auto rounded-lg border border-border">
         <table className="w-full text-left text-xs"><thead className="bg-surface-subtle"><tr><th className="p-2">작업</th><th className="p-2">변경 내용 (현재 → 변경)</th></tr></thead>
           <tbody>{preview.rows.map(row => <tr key={row.target.id} className="border-t border-border"><td className="p-2">{row.name}</td><td className="p-2">{Object.entries(row.changes).map(([field, value]) => <div key={field}>
-            {LABELS[field as WbsPasteField]}: {reviewRows.find(item => item.id === row.target.id)?.[field as WbsPasteField] ?? '비어 있음'} → {value.mode === 'set' ? value.value : '값 비우기'}
+            {labelOf(field as WbsPasteField)}: {reviewRows.find(item => item.id === row.target.id)?.[field as WbsPasteField] ?? '비어 있음'} → {value.mode === 'set' ? value.value : '값 비우기'}
           </div>)}</td></tr>)}</tbody>
         </table>
       </div>}

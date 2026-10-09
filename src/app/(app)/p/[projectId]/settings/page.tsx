@@ -28,6 +28,7 @@ import { moduleState, requireModule } from '@/lib/modules/gate'
 import { issueCodeYear, type IdPolicy } from '@/lib/issues/idPolicy'
 import type { IssueAnalysisSetting } from '@/lib/settings/defs/project'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
+import { ExtraAxisLabelEditor } from '@/components/settings/ExtraAxisLabelEditor'
 import { MilestoneKeywordsEditor } from '@/components/settings/MilestoneKeywordsEditor'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
 import type { ProjectSettingValue } from '@/lib/settings/registry'
@@ -175,6 +176,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 팀 원천(D19) — 해석기와 같은 조회라 설정 조회가 실패하면 팀도 읽을 수 없다. 그때는 머리의 오류 상태와 팀 절의 안내만 그린다
   const teams = pc.ok ? await loadTeams(projectId, pc.cfg.workspaceId) : { ok: false as const }
   const labels = pc.ok ? pick(pc.cfg, 'core.level_labels') : null
+  // 추가 축 이름 — 손상 값도 편집기를 그린다(복구 경로)
+  const extraAxisState = pc.ok ? pc.cfg.keys['core.extra_axis_label'] : null
   const credits = pc.ok ? pick(pc.cfg, 'workflow.stage_credits') : null
   // 크레딧 정책(SP5b) — 손상이면 슬라이더는 기본 정책으로 시작하고 저장 때 서버 교차 검사가 막는다(손상 값과의 조합을 추측하지 않는다)
   const creditPolicy = pc.ok ? pick(pc.cfg, 'workflow.credit_policy') : null
@@ -369,6 +372,13 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               ? <LevelSettingsManager projectId={projectId} levelLabels={labels.value} revision={revision} />
               : <ConfigLoadError error={labels.error} keyName={labels.key} kind={labels.kind} locale={locale}
                 isAdmin={canMutate} settingsHref={`/p/${projectId}/settings`} />}
+          </SectionCard>
+        )}
+      {/* ── 추가 축 이름 (관리자) — 단계 이름 곁의 '작업 구조의 이름'. 손상 값도 편집기를 그린다(복구 경로) ── */}
+        {isAdmin && extraAxisState && (
+          <SectionCard searchText="core.extra_axis_label 추가 축 업무 분류 WBS" title={t(locale, 'settings.core.extra_axis_label.label')} icon={ListTree}>
+            <ExtraAxisLabelEditor key={`axis-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate}
+              value={extraAxisState.status === 'set' ? extraAxisState.value : null} invalid={extraAxisState.status === 'invalid'} />
           </SectionCard>
         )}
       {/* ── 공개 범위 (슈퍼유저 전용) — 관리자에게도 열지 않는다(전역 가시성 정책은 전역 등급이 쥔다) ── */}

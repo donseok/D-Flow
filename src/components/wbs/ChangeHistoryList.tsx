@@ -55,14 +55,19 @@ function actorLabel(team: TeamCode | null, role: ChangeActorRole | null, t: Tr):
  * 쌓여 상세 패널의 절반 이상을 먹었다. RowDetailPanel 에서 떼어낸 이유는 두 가지다:
  * 그 파일이 700줄을 넘었고, 이 블록만 따로 테스트하려면 패널 전체를 모킹해야 했다.
  */
-export function ChangeHistoryList({ logs, timeZone }: { logs: ChangeLogEntry[] | null; timeZone: string }) {
+export function ChangeHistoryList({ logs, timeZone, extraAxisLabel = null }: {
+  logs: ChangeLogEntry[] | null; timeZone: string
+  /** 프로젝트의 추가 축 이름(core.extra_axis_label) — biz 칸의 이름. null 은 사전 기본 문구 */
+  extraAxisLabel?: string | null
+}) {
   const { t } = useLocale()
   // 사용자 정의 필드 이력(field='custom.<key>')은 키가 아니라 지금의 라벨·서식으로 보인다 — 정의를 못 읽거나 지운 필드는 키·원문 그대로
   const fieldScope = useCustomFieldScope()
   const customDef = (field: string): FieldDef | undefined =>
     field.startsWith(CUSTOM_LOG_PREFIX) ? fieldScope?.defs?.find(d => d.key === field.slice(CUSTOM_LOG_PREFIX.length)) : undefined
   const customFormat = { locale: fieldScope?.locale ?? 'ko', yes: fieldScope?.locale === 'en' ? 'Yes' : '예', no: fieldScope?.locale === 'en' ? 'No' : '아니오', empty: '—' }
-  const fieldLabel = (field: string) => FIELD_KEY[field] ? t(FIELD_KEY[field])
+  const fieldLabel = (field: string) => field === 'biz' && extraAxisLabel ? extraAxisLabel
+    : FIELD_KEY[field] ? t(FIELD_KEY[field])
     : field.startsWith(CUSTOM_LOG_PREFIX) ? customDef(field)?.label ?? field.slice(CUSTOM_LOG_PREFIX.length) : field
   const value = (field: string, v: string | null) =>
     field.startsWith(CUSTOM_LOG_PREFIX) ? formatCustomLogValue(customDef(field), v, customFormat) : fmtValue(field, v, t)

@@ -4,6 +4,7 @@ import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { legacyChatProjectGate } from '@/lib/ai/legacyChatGate'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { runCommandPipeline } from '@/lib/ai/commands/pipeline'
+import { todayIn } from '@/lib/domain/calendar'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,8 @@ export async function POST(req: NextRequest) {
   const mod = await requireScopedSessionModule({ projectId, workspaceId: body.workspaceId }, 'chatbot')
   if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: mod.status })
 
-  const { items } = await getComputedWbs(projectId)
-  const proposal = await runCommandPipeline(message, items, targetId)
+  const { items, calendar } = await getComputedWbs(projectId)
+  // 말한 날짜("8월 20일")의 연도는 그 프로젝트 tz 의 실제 오늘에서 — 공정율 기준일(base_date)은 과거로 고정될 수 있어 쓰지 않는다
+  const proposal = await runCommandPipeline(message, items, todayIn(calendar.timezone, new Date()), targetId)
   return NextResponse.json(proposal)
 }

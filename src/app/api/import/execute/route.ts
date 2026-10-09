@@ -182,7 +182,9 @@ export async function POST(req: NextRequest) {
     const usingSaved = form.get('useSavedProfile') === 'true' || compareProfiles(saved, profile) === null
     const confirmed = form.get('confirmProfileMismatch') === 'true'
     if (usingSaved && !confirmed) {
-      const detected = detectWorkbook(buf)
+      // inspect 와 같은 별칭으로 본다(추가 축 이름) — 다르면 그 이름으로 낸 파일이 늘 불일치다
+      const extraAxisState = cfg.keys['core.extra_axis_label']
+      const detected = detectWorkbook(buf, { extraAxisLabel: extraAxisState.status === 'set' ? extraAxisState.value : null })
       if (!detected.ok) return fail(409, 'PROFILE_MISMATCH', errProfileUnverifiable(detected.error), { profileMismatch: null })
       // 감지 양식은 inspect 와 같은 것이어야 한다 — 필드 열 제안(§3.6.7)을 같이 싣는다(안 실으면 필드 열이 든 저장 양식이 늘 불일치다)
       const fieldState = cfg.keys['fields.wbs_item']

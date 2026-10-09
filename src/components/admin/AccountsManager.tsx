@@ -61,8 +61,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
-          <div className="eyebrow">Account board</div>
-          <h2 className="mt-0.5 text-sm font-semibold text-fg">로그인 계정 · {accounts.length}개</h2>
+          <h2 className="text-sm font-semibold text-fg">로그인 계정 · {accounts.length}개</h2>
         </div>
         <div className="flex items-center gap-2">
           {projects.length > 1 && (
@@ -305,7 +304,7 @@ function AddAccountModal({ open, onClose, projectId, workspaceId }: {
 
   return (
     <Modal
-      open={open} onClose={onClose} eyebrow="New account" title="계정 추가"
+      open={open} onClose={onClose} title="계정 추가"
       footer={
         <>
           <button onClick={onClose} className="btn btn-ghost" disabled={pending}>취소</button>
@@ -373,7 +372,7 @@ function BulkAddModal({ open, onClose, projectId, workspaceId }: {
 
   return (
     <Modal
-      open={open} onClose={onClose} eyebrow="Bulk create" title="일괄 추가" size="lg"
+      open={open} onClose={onClose} title="일괄 추가" size="lg"
       footer={
         <>
           <button onClick={onClose} className="btn btn-ghost" disabled={pending}>닫기</button>
@@ -460,7 +459,7 @@ function ResetPasswordModal({ account, onClose }: { account: AccountRow | null; 
 
   return (
     <Modal
-      open={!!account} onClose={onClose} eyebrow="Reset password" title="비밀번호 리셋"
+      open={!!account} onClose={onClose} title="비밀번호 리셋"
       footer={
         done ? (
           <button onClick={onClose} className="btn btn-primary">닫기</button>

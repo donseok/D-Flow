@@ -91,7 +91,8 @@ describe('설정 페이지 — 표시 조건(스펙 §5.1·§9 #7·#8·#9)', () 
     expect(issueProps).toMatchObject({ kind: 'issue_area', locale: 'ko' })
     expect((issueProps?.areas as Array<{ code: string; kind: string }>).map(a => [a.code, a.kind])).toEqual([['ISS', 'issue_area']])
     expect(html).toContain('id="project-issues"')
-    expect(html).not.toContain('core.extra_axis_label')
+    // 추가 축 이름 편집기 — 표시 소비(WBS 화면·엑셀 머리)가 붙어 관리자에게 열었다
+    expect(html).toContain('data-extra-axis-editor')
   })
   it('워크스페이스 설정 링크는 그 워크스페이스를 관리할 수 있을 때만 보인다', async () => {
     expect(await render()).not.toContain('워크스페이스 설정 →')

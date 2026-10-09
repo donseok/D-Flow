@@ -101,10 +101,12 @@ export function buildAoaWithProfile(
     levelLabels: readonly string[]
     deep?: 'fold' | 'reject'
     customFieldDefs?: readonly FieldDef[]
+    /** 프로젝트의 추가 축 이름(core.extra_axis_label) — 그 열의 머리. 없으면 기본 낱말(HEADER.extraAxis). 감지기도 같은 값을 별칭으로 받아야 왕복한다 */
+    extraAxisLabel?: string | null
   },
   projectName = 'WBS',
 ): { ok: true; aoa: unknown[][] } | { ok: false; error: string } {
-  const { expandSubActs, levelLabels, deep = 'reject', customFieldDefs } = opts
+  const { expandSubActs, levelLabels, deep = 'reject', customFieldDefs, extraAxisLabel } = opts
 
   if (profile.hierarchy.kind === 'outline' && expandSubActs) {
     return { ok: false, error: '아웃라인 양식의 펼침 익스포트는 아직 지원되지 않습니다' }
@@ -187,7 +189,7 @@ export function buildAoaWithProfile(
   const header3 = new Array(maxCol + 5).fill('')
   if (hierColsOut) hierColsOut.forEach((c, i) => { header3[c] = hierarchyLabel(i, levelLabels) })
   else if (outlineColOut != null) header3[outlineColOut] = HEADER.code
-  if (extraAxisCol != null) header3[extraAxisCol] = HEADER.extraAxis
+  if (extraAxisCol != null) header3[extraAxisCol] = extraAxisLabel || HEADER.extraAxis
   if (codeCol != null) header3[codeCol] = HEADER.code
   if (nameCol != null) header3[nameCol] = HEADER.name
   teamCols.forEach(([c, label]) => { header3[c] = label })
@@ -317,6 +319,8 @@ export function buildWorkbookWithProfile(
     levelLabels: readonly string[]
     deep?: 'fold' | 'reject'
     customFieldDefs?: readonly FieldDef[]
+    /** 프로젝트의 추가 축 이름(core.extra_axis_label) — 그 열의 머리. 없으면 기본 낱말(HEADER.extraAxis). 감지기도 같은 값을 별칭으로 받아야 왕복한다 */
+    extraAxisLabel?: string | null
   },
   projectName = 'WBS',
 ): { ok: true; buffer: ArrayBuffer } | { ok: false; error: string } {

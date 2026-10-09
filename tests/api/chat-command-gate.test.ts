@@ -16,7 +16,7 @@ import { moduleState, projectsWithModule, requireModule, requireSessionModule, w
 const post = (body: unknown) => new NextRequest('http://l/api/chat/command', { method: 'POST', body: JSON.stringify(body) })
 beforeEach(() => {
   vi.clearAllMocks()
-  m.getSession.mockResolvedValue({ id: 'u1' }); m.getComputedWbs.mockResolvedValue({ items: [] }); m.run.mockResolvedValue({ kind: 'noop' })
+  m.getSession.mockResolvedValue({ id: 'u1' }); m.getComputedWbs.mockResolvedValue({ items: [], calendar: { timezone: 'UTC' } }); m.run.mockResolvedValue({ kind: 'noop' })
   m.listProjectsWithState.mockResolvedValue({ projects: [{ id: 'p1' }], degraded: false })
 })
 // 관문 mock 값을 바꾸는 파일 — 전역 통과 구현으로 되돌린다(공통 규칙)

@@ -30,6 +30,13 @@ const FIELD_LABELS: Record<keyof ExcelProfile['logical'], string> = {
 
 const ALL_ALIASES: string[] = Object.values(LOGICAL_ALIASES).flat().map(a => a.trim().toLowerCase())
 
+/** 프로젝트의 추가 축 이름(core.extra_axis_label)을 그 열의 별칭에 더한다 — 내보내기가 그 이름으로 머리를 쓰므로(exportWithProfile) 같이 알아야
+ *  왕복한다. 기존 낱말은 그대로 둔다(설정을 바꾸기 전에 낸 파일·남의 양식). 맨 앞에 둬 완전일치에서 먼저 잡힌다. */
+function withExtraAxisAlias(aliases: readonly string[], extraAxisLabel: string | null): string[] {
+  const label = extraAxisLabel?.trim().toLowerCase()
+  return label && !aliases.includes(label) ? [label, ...aliases] : [...aliases]
+}
+
 function isBlankCell(v: unknown): boolean {
   return v === undefined || v === null || (typeof v === 'string' && v.trim() === '')
 }
@@ -49,7 +56,8 @@ export function pickSheets(sheetNames: string[]): { workSheetName: string; holid
 }
 
 /* ── 규칙 2: 헤더 행 — 상위 10행을 별칭 사전 히트 수로 스코어링. 동점·0점이면 tie=true. ── */
-export function detectHeaderRow(aoa: unknown[][], maxScan = 10): { row: number; score: number; tie: boolean } {
+export function detectHeaderRow(aoa: unknown[][], maxScan = 10, extraAxisLabel: string | null = null): { row: number; score: number; tie: boolean } {
+  const known = withExtraAxisAlias(ALL_ALIASES, extraAxisLabel)
   const n = Math.min(maxScan, aoa.length)
   if (n === 0) return { row: 0, score: 0, tie: false }
   const scores: number[] = []
@@ -58,7 +66,7 @@ export function detectHeaderRow(aoa: unknown[][], maxScan = 10): { row: number; 
     let score = 0
     for (const cell of row) {
       const s = cellText(cell).toLowerCase()
-      if (s && ALL_ALIASES.includes(s)) score++
+      if (s && known.includes(s)) score++
     }
     scores.push(score)
   }
@@ -139,6 +147,7 @@ const MIN_PARTIAL_ALIAS_LEN = 3
 export function detectLogicalColumns(
   headerLabels: string[],
   excluded: ReadonlySet<number> = new Set(),
+  extraAxisLabel: string | null = null,
 ): { logical: ExcelProfile['logical']; warnings: string[]; partialMatchCount: number } {
   const lower = headerLabels.map(v => v.toLowerCase())
   const warnings: string[] = []
@@ -148,7 +157,8 @@ export function detectLogicalColumns(
   let partialMatchCount = 0
 
   for (const field of fields) {
-    const aliases = LOGICAL_ALIASES[field].map(a => a.trim().toLowerCase())
+    const own = LOGICAL_ALIASES[field].map(a => a.trim().toLowerCase())
+    const aliases = field === 'extraAxis' ? withExtraAxisAlias(own, extraAxisLabel) : own
     let found = -1
     for (let c = 0; c < lower.length; c++) {
       if (claimed.has(c) || !lower[c]) continue
@@ -220,7 +230,8 @@ export function detectTeamColumns(
 }
 
 /* ── 조립 ── */
-export function detectWorkbook(buf: ArrayBuffer): { ok: true; result: DetectionResult } | { ok: false; error: string } {
+export function detectWorkbook(buf: ArrayBuffer, opts: { extraAxisLabel?: string | null } = {}): { ok: true; result: DetectionResult } | { ok: false; error: string } {
+  const extraAxisLabel = opts.extraAxisLabel ?? null
   let wb: XLSX.WorkBook
   try {
     wb = XLSX.read(buf, { type: 'array', cellDates: false })
@@ -238,7 +249,7 @@ export function detectWorkbook(buf: ArrayBuffer): { ok: true; result: DetectionR
   const warnings: string[] = []
 
   // 규칙 2
-  const headerRes = detectHeaderRow(aoa)
+  const headerRes = detectHeaderRow(aoa, 10, extraAxisLabel)
   const headerUnclear = headerRes.tie || headerRes.score === 0
   const headerRow = headerUnclear ? 0 : headerRes.row
   if (headerUnclear) warnings.push('헤더 행을 확실히 찾지 못했습니다 — 0행으로 가정합니다')
@@ -271,7 +282,7 @@ export function detectWorkbook(buf: ArrayBuffer): { ok: true; result: DetectionR
   const logicalExcluded = hierarchy.kind === 'columns' ? hierarchyColumns : new Set<number>()
 
   // 규칙 5
-  const logicalRes = detectLogicalColumns(headerLabels, logicalExcluded)
+  const logicalRes = detectLogicalColumns(headerLabels, logicalExcluded, extraAxisLabel)
   warnings.push(...logicalRes.warnings)
 
   // name 열은 outline 계층에서만 유효하다(columns 계층은 계층 열 자체가 이름의 출처 — 리뷰 픽스).

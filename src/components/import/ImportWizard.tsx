@@ -137,7 +137,7 @@ function radioRowClass(active: boolean): string {
  * 실행은 실행 의도의 명령 id 를 싣는다(SP4 §4.4) — 같은 의도의 재시도는 같은 id 라 서버가 이미 적용했으면 duplicate 로 받는다.
  */
 export function ImportWizard({
-  projectId, currentItemCount, timeZone,
+  projectId, currentItemCount, timeZone, extraAxisLabel = null,
 }: {
   projectId: string
   /** 그 프로젝트 달력의 tz(백업 파일 이름의 날짜 — SP5 P8: 서버가 내린다, 기본값 없음). null = 달력을 못 읽음(서버 로그) — 날짜 없는 이름 */
@@ -145,10 +145,14 @@ export function ImportWizard({
   /** replace 경고에 실제 삭제 건수를 싣기 위한 값(리뷰 Important #1) — 서버 조회 실패 시 null 로
    *  degrade 되어 온다(page.tsx 가 표시=로깅). null 이면 건수 없는 일반 경고 문구로 대체한다. */
   currentItemCount: number | null
+  /** 프로젝트의 추가 축 이름(core.extra_axis_label) — 그 열의 이름. null 은 사전 기본 문구 */
+  extraAxisLabel?: string | null
 }) {
   const router = useRouter()
   const { toast } = useToast()
-  const { t } = useLocale()
+  const { t: dictT } = useLocale()
+  // 추가 축 열의 이름만 프로젝트 설정을 따른다 — 나머지는 사전 그대로
+  const t = (k: DictKey) => k === 'importWizard.fieldExtraAxis' && extraAxisLabel ? extraAxisLabel : dictT(k)
   const [state, dispatch] = useReducer(reducer, initialWizardState)
   const [markRows, setMarkRows] = useState<MarkRow[]>([])
   const [exportBusy, setExportBusy] = useState(false)

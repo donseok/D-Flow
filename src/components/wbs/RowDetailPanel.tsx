@@ -41,7 +41,7 @@ export function RowDetailPanel({
   item, allItems = [], dependencies = [], schedule, onClose, editable = false, canAttach = false,
   canEditDeliverable = false, projectId, workspaceId = null, levelLabels, maxDepth = null,
   members = EMPTY_MEMBERS, onSelectItem, unresolvedRefs = EMPTY_REFS, timeZone,
-  predecessorGate = 'reached', approvedItemIds,
+  predecessorGate = 'reached', approvedItemIds, extraAxisLabel = null,
 }: {
   item: ComputedItem
   allItems?: ComputedItem[]
@@ -57,6 +57,8 @@ export function RowDetailPanel({
   workspaceId?: string | null
   /** 프로젝트별 depth 라벨(§7.3 ProjectConfig) — 상위(WbsGanttSheet)가 서버 페이지에서 받아 전파. */
   levelLabels: string[]
+  /** 프로젝트의 추가 축 이름(core.extra_axis_label) — 변경 이력의 그 칸 이름. null 은 사전 기본 문구 */
+  extraAxisLabel?: string | null
   /** 프로젝트별 최대 깊이(§7.3 ProjectConfig, null=무제한) — 자식 추가 어포던스 판정(canAddChild)에 사용. */
   maxDepth?: number | null
   /** 프로젝트 로스터 — 담당·단계 섹션(WbsAssigneeStagePanel)의 담당자 셀렉트 데이터 소스(§2.5). */
@@ -775,7 +777,7 @@ export function RowDetailPanel({
           <AttachmentSection itemId={item.id} canAttach={canAttach} projectId={projectId} workspaceId={workspaceId} />
 
           {/* 변경 이력 */}
-          <ChangeHistoryList logs={logs} timeZone={timeZone} />
+          <ChangeHistoryList logs={logs} timeZone={timeZone} extraAxisLabel={extraAxisLabel} />
         </div>
         <ConflictResolver
           open={!!fieldConflict}

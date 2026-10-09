@@ -104,7 +104,6 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
     <Modal
       open={!!confirming}
       onClose={() => { if (!pending) setConfirming(null) }}
-      eyebrow="Teams"
       title={confirming?.type === 'copy' ? '공용 팀을 이 프로젝트 팀으로 전환' : '공용 팀 상속 종료'}
       size="sm"
       footer={

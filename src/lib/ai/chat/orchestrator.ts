@@ -160,6 +160,8 @@ const DISPLAY_ENUMS: Readonly<Record<string, string>> = {
   // WBS 도구의 level 은 깊이를 셋으로 접은 키다(프로젝트 단계 이름을 싣지 않는다) — 이름을 지어내지 않고 깊이로 적는다(라벨 밖 깊이 표기 'N단'과 같은 꼴)
   phase: '1단', task: '2단', activity: '3단 이하', subtask: 'Sub-task',
   not_started: '미착수', in_progress: '진행 중', delayed: '지연', done: '완료',
+  // 근태 유형·회의 범주는 도구가 code 곁에 그 프로젝트의 설정 이름(typeLabel·categoryLabel)을 싣는다 — displayValue 가 그 이름을 먼저 쓴다.
+  // 아래 두 줄은 이름을 못 실은 결과(어휘 조회 실패 등)의 폴백 사본이다
   annual: '연차', half: '반차', quarter: '반반차', sick: '병가', trip: '출장',
   remote: '재택', official: '공가', absent: '결근', work: '정상 근무',
   general: '일반', routine: '정기', kickoff: '착수', review: '검토', report: '보고', external: '외부',
@@ -219,17 +221,24 @@ function displayValue(value: unknown, timeZone: string, key?: string): string {
   if (Array.isArray(value)) return value.map(item => displayValue(item, timeZone, key)).join(', ')
   if (typeof value === 'object' && value) {
     // 레코드 표시는 정보가 있는 필드만: null·false·내부 갱신시각은 나열 노이즈다.
-    const entries = Object.entries(value as Record<string, unknown>)
+    // 도구가 code 곁에 실은 표시 이름(<필드>Label — 그 프로젝트의 설정 어휘)은 code 자리에서 대신 보이고, 따로 나열하지 않는다
+    const source = value as Record<string, unknown>
+    const pairedLabel = (field: string): string | null => {
+      const label = source[`${field}Label`]
+      return typeof source[field] === 'string' && typeof label === 'string' && label ? label : null
+    }
+    const entries = Object.entries(source)
       .filter(([field, v]) =>
         v !== undefined && v !== null && v !== false
         && field !== 'sortOrder' && field !== 'updatedAt'
-        && !/(?:^id$|ids$|id$)/i.test(field))
+        && !/(?:^id$|ids$|id$)/i.test(field)
+        && !(field.endsWith('Label') && pairedLabel(field.slice(0, -'Label'.length)) !== null))
     const titleKey = RECORD_TITLE_KEYS.find(candidate => entries.some(([field]) => field === candidate))
     const title = titleKey ? entries.find(([field]) => field === titleKey) : undefined
     const rest = entries
       .filter(([field]) => field !== titleKey)
       .slice(0, 12)
-      .map(([field, v]) => `${DISPLAY_LABELS[field] ?? field}: ${displayValue(v, timeZone, field)}`)
+      .map(([field, v]) => `${DISPLAY_LABELS[field] ?? field}: ${pairedLabel(field) ?? displayValue(v, timeZone, field)}`)
     return [...(title ? [displayValue(title[1], timeZone, title[0])] : []), ...rest].join(' · ')
   }
   return String(value)

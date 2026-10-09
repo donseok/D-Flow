@@ -39,6 +39,8 @@ export interface WbsBulkEditDialogProps {
   allItemIdsSnapshot?: string[]
   snapshotRows?: WbsBulkSnapshotRow[]
   members?: ProjectMember[]
+  /** 프로젝트의 추가 축 이름(core.extra_axis_label) — null 은 기본 문구 */
+  extraAxisLabel?: string | null
   onSuccess?: () => void
 }
 
@@ -53,6 +55,7 @@ export function WbsBulkEditDialog({
   onSuccess,
   snapshotRows = [],
   members = [],
+  extraAxisLabel = null,
 }: WbsBulkEditDialogProps) {
   const stageLabel = useStageLabel()
   const dialogId = useId()
@@ -435,9 +438,9 @@ export function WbsBulkEditDialog({
                   }
                 />
 
-                {/* 4. 업무 분류 */}
+                {/* 4. 업무 분류 — 이름은 프로젝트의 추가 축 이름을 따른다 */}
                 <FieldRow
-                  label="업무 분류"
+                  label={extraAxisLabel ?? '업무 분류'}
                   isMixed={activeRows.length ? mixed("biz") : isMixedBiz}
                   mode={bizMode}
                   onModeChange={setBizMode}

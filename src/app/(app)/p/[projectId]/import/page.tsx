@@ -13,7 +13,7 @@ import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
-import { pickCalendar } from '@/lib/settings/pick'
+import { pick, pickCalendar } from '@/lib/settings/pick'
 
 /** replace 경고 문구에 실제 삭제 건수를 싣기 위한 조회(리뷰 Important #1). 조회 실패는
  *  표시=로깅 원칙대로 로그만 남기고 null 로 degrade — 마법사는 숫자 없는 문구로 계속 동작한다. */
@@ -39,6 +39,15 @@ async function projectTimezone(projectId: string): Promise<string | null> {
   return null
 }
 
+/** 추가 축 이름(core.extra_axis_label) — 마법사의 그 열 이름. 비었거나 못 읽으면 null(사전 기본 문구 — 표시 전용이라 마법사는 막지 않는다) */
+async function projectExtraAxisLabel(projectId: string): Promise<string | null> {
+  const pc = await loadProjectConfigForPage(projectId)
+  const label = pc.ok ? pick(pc.cfg, 'core.extra_axis_label') : null
+  if (label?.ok) return label.value
+  console.error('[import] 추가 축 이름을 읽지 못해 기본 문구로 그린다:', { projectId })
+  return null
+}
+
 /**
  * 임포트 마법사 진입 페이지(§6.2) — 서버는 프로젝트 실재·권한 확인만 하고, 감지·실행은 전부
  * 클라이언트가 `/api/import/inspect`·`/api/import/execute` 를 직접 호출한다(서버 임시 저장 없음).
@@ -59,6 +68,7 @@ export default async function ImportWizardPage({ params, searchParams }: {
   const receiptState = isAdmin ? await receiptStateOf(receipt, (id) => getImportReceipt(projectId, id)) : null
   // 실행 시각·백업 파일 날짜의 tz = 프로젝트 달력(SP5). 관리자(마법사를 그릴 때)만 읽고, 못 읽으면 시각 '—'·날짜 없는 파일 이름(로그) — 마법사는 막지 않는다
   const projectTz = isAdmin ? await projectTimezone(projectId) : null
+  const extraAxisLabel = isAdmin ? await projectExtraAxisLabel(projectId) : null
 
   return (
     <ProjectPageShell
@@ -67,7 +77,7 @@ export default async function ImportWizardPage({ params, searchParams }: {
       {isAdmin ? (
         <div className="space-y-5">
           {receiptState && <ImportReceiptPanel state={receiptState} locale={locale} timeZone={projectTz} />}
-          <ImportModes projectId={projectId} currentItemCount={currentItemCount} timeZone={projectTz} />
+          <ImportModes projectId={projectId} currentItemCount={currentItemCount} timeZone={projectTz} extraAxisLabel={extraAxisLabel} />
         </div>
       ) : (
         <EmptyState

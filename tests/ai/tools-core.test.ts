@@ -135,7 +135,7 @@ describe('core read tools', () => {
       createGetWeeklySheetTool(rogueWeekly, weeklySettingsUnused).execute(
         { projectId: 'p1', weekStart: '2026-07-20' }, context,
       ),
-      createListMeetingsTool(rogueMeetings).execute(
+      createListMeetingsTool(rogueMeetings, fixedToolVocab()).execute(
         { projectId: 'p1', from: '2026-07-20', to: '2026-07-20' }, context,
       ),
       createGetAttendanceTool(rogueAttendance, toolTeams, fixedToolVocab()).execute(
@@ -253,7 +253,7 @@ describe('core read tools', () => {
       })),
       getMeetingDetail: vi.fn(),
     }
-    const result = await createListMeetingsTool(repository).execute(
+    const result = await createListMeetingsTool(repository, fixedToolVocab()).execute(
       { projectId: 'p1', from: '2026-07-20', to: '2026-08-03' }, context,
     )
 

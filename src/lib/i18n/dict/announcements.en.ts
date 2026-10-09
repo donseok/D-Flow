@@ -9,7 +9,6 @@ export const announcementsEn: Record<keyof typeof announcementsKo, string> = {
   'ann.kpi.totalSub': 'All announcements',
   'ann.kpi.pinnedSub': 'Pinned on top',
   'ann.kpi.recentSub': 'Posted in last 7 days',
-  'ann.boardEyebrow': 'Notice board',
   'ann.boardTitle': 'Announcements',
   'ann.unitCount': '',
   'ann.write': 'New announcement',

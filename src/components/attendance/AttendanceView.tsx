@@ -506,7 +506,6 @@ export function AttendanceView({
         open={open && confirmingDelete}
         onClose={() => { if (!deleting) setConfirmingDelete(false) }}
         size="sm"
-        eyebrow="Remove attendance"
         title={t('att.deleteTitle')}
         footer={
           <>

@@ -53,6 +53,7 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
   // 선행 기준·승인 주문 축(SP5b D21) — 상세 패널의 spec 선행 판정이 claim 게이트와 같게. 기준이 손상이면 final(엄격). 이 화면은 agents 가 켜져 있다
   const gate = pick(pc.cfg, 'workflow.predecessor_gate')
   const stageLabels = pick(pc.cfg, 'workflow.wbs_stage_labels')   // 단계 이름(SP5b W2) — 손상이면 기본 이름
+  const extraAxis = pick(pc.cfg, 'core.extra_axis_label')   // 추가 축 이름 — 손상이면 기본 문구(표시 전용)
   if (!gate.ok) console.error(`[agents] 선행 기준 손상(project=${projectId}) — final 로 판정한다`)
   const approvedItemIds = await getApprovedItemIds(projectId)
   const timeZone = wbsData ? wbsData.calendar.timezone : DEFAULT_REQUEST_CALENDAR.timezone
@@ -64,6 +65,7 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
     today: wbsData?.today ?? todayIn(timeZone, new Date()),
     calendarError: wbsRes.ok ? null : { error: wbsRes.error.message, key: wbsRes.error.key },
     levelLabels: labels.ok ? labels.value : null,
+    extraAxisLabel: extraAxis.ok ? extraAxis.value : null,
     levelsError: labels.ok ? null : { error: labels.error, key: labels.key },
     maxDepth: labels.ok ? levelDepthOf(pc.cfg) : null,
     members: roster.ok ? roster.rows : [],

@@ -40,6 +40,8 @@ export type HubWbsBundle = {
   today: string
   /** 단계 이름 — null 이면 손상·부재다. 상세 패널만 쓰므로 허브는 그리고 패널 자리에 levelsError 를 띄운다(개정 §2.5) */
   levelLabels: string[] | null
+  /** 추가 축 이름(core.extra_axis_label) — 상세 패널의 변경 이력이 쓴다. null 은 기본 문구 */
+  extraAxisLabel?: string | null
   levelsError: { error: string; key: string } | null
   /** 달력 손상(A-4 리뷰 N3) — 상세 패널 데이터를 계산할 수 없다. 허브는 그리고 패널 자리에 이 사유를 띄운다(FN-8). 정상이면 null */
   calendarError: { error: string; key: string } | null
@@ -210,6 +212,7 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
             projectId={hub.projectId}
             workspaceId={wbs.actorView?.workspaceId ?? null}
             levelLabels={wbs.levelLabels}
+            extraAxisLabel={wbs.extraAxisLabel}
             maxDepth={wbs.maxDepth}
             members={wbs.members}
             predecessorGate={wbs.predecessorGate}

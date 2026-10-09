@@ -154,7 +154,6 @@ export function IssueAnalysisModal({
     <Modal
       open={open}
       onClose={() => { if (!pending) onClose() }}
-      eyebrow="Issue analysis"
       title={t('issue.analysis.title')}
       size="lg"
       footer={footer}

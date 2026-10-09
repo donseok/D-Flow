@@ -61,6 +61,11 @@ export async function GET(req: NextRequest) {
     throw e
   }
 
+  // 추가 축 열의 머리(core.extra_axis_label) — 비었거나 손상이면 기본 낱말로 낸다(표시 전용 — 내보내기를 막지 않는다. 감지기는 기본 낱말을 늘 안다)
+  const extraAxisState = cfg.keys['core.extra_axis_label']
+  if (extraAxisState.status === 'invalid') console.error('[export] 추가 축 이름 손상 — 기본 머리로 낸다:', extraAxisState.error)
+  const extraAxisLabel = extraAxisState.status === 'set' ? extraAxisState.value : null
+
   const expand = req.nextUrl.searchParams.get('expand') === '1'
   // 저장 양식의 판정은 해석기의 키 상태로 한다 — set 이면 이미 validateProfile 을 통과한 값이다. 손상은 오류로 알린다(폴백 없음).
   const profileState = cfg.keys['wbs.excel_profile']
@@ -119,6 +124,7 @@ export async function GET(req: NextRequest) {
     levelLabels,
     deep: layout === 'standard' ? 'fold' : 'reject',
     ...(customFieldDefs.length > 0 ? { customFieldDefs } : {}),
+    ...(extraAxisLabel ? { extraAxisLabel } : {}),
   }, name)
   if (!built.ok) {
     if (layout === 'standard') {

@@ -106,8 +106,7 @@ export function AnnouncementsView({
     <div className="card flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
-          <div className="eyebrow">{t('ann.boardEyebrow')}</div>
-          <h2 className="mt-0.5 text-sm font-semibold text-fg">
+          <h2 className="text-sm font-semibold text-fg">
             {t('ann.boardTitle')} · {scoped.length}{t('ann.unitCount')}
           </h2>
         </div>
@@ -291,7 +290,7 @@ function ReadModal({
     <Modal
       open={!!item}
       onClose={onClose}
-      eyebrow="Announcement"
+      eyebrow={t('nav.announcements')}
       title={item?.title ?? ''}
       size="lg"
       footer={
@@ -427,7 +426,6 @@ export function AnnouncementFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      eyebrow={isEdit ? 'Edit announcement' : 'New announcement'}
       title={isEdit ? t('ann.edit') : t('ann.write')}
       size="lg"
       footer={
@@ -596,7 +594,6 @@ function DeleteAnnouncementModal({ item, onClose }: { item: Announcement | null;
     <Modal
       open={!!item}
       onClose={onClose}
-      eyebrow="Delete announcement"
       title={t('ann.deleteTitle')}
       footer={
         <>

@@ -127,8 +127,7 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
     <div className="card w-full min-w-0 max-w-full overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
-          <div className="eyebrow">Agent access</div>
-          <h2 className="mt-0.5 text-sm font-semibold text-fg">개인 액세스 토큰(PAT)</h2>
+          <h2 className="text-sm font-semibold text-fg">개인 액세스 토큰(PAT)</h2>
         </div>
       </div>
 
@@ -258,7 +257,7 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
       </div>
 
       <Modal
-        open={!!revoking} onClose={() => setRevoking(null)} eyebrow="Revoke token" title="토큰 폐기"
+        open={!!revoking} onClose={() => setRevoking(null)} title="토큰 폐기"
         footer={
           <>
             <button onClick={() => setRevoking(null)} className="btn btn-ghost" disabled={revokeBusy}>취소</button>

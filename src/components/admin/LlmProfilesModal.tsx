@@ -193,7 +193,6 @@ export function LlmProfilesModal({
   }
 
   const title = view === 'delete' ? '프로필 삭제' : view === 'form' ? (editing ? '프로필 편집' : '새 프로필') : 'LLM 프로필 관리'
-  const eyebrow = view === 'delete' ? 'Delete profile' : view === 'form' ? 'Profile form' : 'LLM profiles'
 
   // 삭제 확인은 별도 모달을 겹치지 않고 같은 모달의 뷰로 처리한다
   // (모달 중첩 시 앞 모달의 포커스 트랩이 Tab 을 다시 낚아채므로).
@@ -221,7 +220,7 @@ export function LlmProfilesModal({
     )
 
   return (
-    <Modal open={open} onClose={onClose} eyebrow={eyebrow} title={title} size="lg" footer={footer}>
+    <Modal open={open} onClose={onClose} title={title} size="lg" footer={footer}>
       {view === 'list' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">

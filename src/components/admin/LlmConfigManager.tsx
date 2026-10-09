@@ -125,8 +125,7 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
-          <div className="eyebrow">Active LLM</div>
-          <h2 className="mt-0.5 text-sm font-semibold text-fg">서버 전역 LLM · 프로필 {profiles.length}개</h2>
+          <h2 className="text-sm font-semibold text-fg">서버 전역 LLM · 프로필 {profiles.length}개</h2>
         </div>
         <button onClick={() => openModal(false)} className="btn btn-ghost" disabled={pending}>
           <Settings2 className="h-4 w-4" />프로필 관리

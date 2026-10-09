@@ -323,8 +323,10 @@ describe('카탈로그 메타와 사전', () => {
     // wbs.excel_profile 은 SP4 A2 가 verified 로 올렸다(표준 레이아웃·한 경로 내보내기·표기 — catalog-meta.ts 의 그 행)
     expect(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.mail_from_name', 'core.level_labels', 'core.milestone_keywords', 'modules.enabled', 'wbs.excel_profile']
       .map(status)).toEqual(Array(8).fill('verified'))
-    expect(['branding.product_name', 'branding.logo', 'branding.accent', 'navigation.menu', 'core.extra_axis_label'].map(status))
-      .toEqual(Array(5).fill('stored'))
+    expect(['branding.product_name', 'branding.logo', 'branding.accent', 'navigation.menu'].map(status))
+      .toEqual(Array(4).fill('stored'))
+    // 추가 축 이름 — 편집기(설정 화면)·표시 소비처(WBS 화면·가져오기 마법사·엑셀 머리와 감지 별칭)·테스트가 붙어 wired
+    expect(status('core.extra_axis_label')).toBe('wired')
     // SP5b Z — 크레딧 표와 흐름 다섯은 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성(Z) 뒤 verified
     expect(['workflow.stage_credits', 'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers',
       'workflow.predecessor_gate'].map(status)).toEqual(Array(6).fill('verified'))

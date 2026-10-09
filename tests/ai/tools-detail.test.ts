@@ -23,6 +23,7 @@ import {
 } from '@/lib/repositories/types'
 import type { ConfigArea, ConfigTeam, ProjectConfig } from '@/lib/settings/projectConfig'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { fixedToolVocab } from '../helpers/tool-vocab-source'
 import { SYNTHETIC_TEAMS } from '../fixtures/synthetic/teams'
 import { SYNTHETIC_WEEKLY_AREAS } from '../fixtures/synthetic/areas'
 
@@ -289,7 +290,7 @@ describe('menu-detail read tools', () => {
     const repository: MyMeetingRepository = {
       listMyMeetings: vi.fn(async () => repositoryOk(snapshot)),
     }
-    const result = await createListMyMeetingsTool(repository).execute({
+    const result = await createListMyMeetingsTool(repository, fixedToolVocab()).execute({
       from: '2026-07-20', to: '2026-08-03', limit: 20,
     }, context)
 
@@ -309,7 +310,7 @@ describe('menu-detail read tools', () => {
 
   it('fails closed before a personal-meeting repository call when capability is absent', async () => {
     const repository: MyMeetingRepository = { listMyMeetings: vi.fn() }
-    const result = await createListMyMeetingsTool(repository).execute({
+    const result = await createListMyMeetingsTool(repository, fixedToolVocab()).execute({
       from: '2026-07-20', to: '2026-07-26',
     }, { ...context, capabilities: [] })
     expect(result).toMatchObject({ ok: false, error: { code: 'ACCESS_DENIED' } })

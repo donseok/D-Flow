@@ -78,6 +78,9 @@ export default async function WbsPage({
   const reason = decided.notice === 'board_off' ? await boardUnavailableReason(pc.cfg) : null
 
   const customFields = pick(pc.cfg, 'fields.wbs_item')
+  // 추가 축 이름(core.extra_axis_label) — 비었거나 손상이면 화면이 기본 문구로 그린다(표시 전용 — 판정에 쓰지 않는다)
+  const extraAxis = pick(pc.cfg, 'core.extra_axis_label')
+  if (!extraAxis.ok) console.error(`[wbs] 추가 축 이름 손상(project=${projectId}) — 기본 문구로 그린다`)
   // 선행 기준·승인 주문 축(SP5b D21) — 상세 패널의 "시작 가능"이 claim 게이트와 같은 판정이 되게. 기준이 손상이면 final(엄격 — 시작 가능으로
   // 위장하지 않는다). agents 가 꺼진 프로젝트는 주문 표를 읽지 않는다(승인 축 = false)
   const gate = pick(pc.cfg, 'workflow.predecessor_gate')
@@ -143,6 +146,7 @@ export default async function WbsPage({
           initialCollapsed={initialCollapsed ?? undefined}
           focusId={focus ?? null}
           levelLabels={labels.value}
+          extraAxisLabel={extraAxis.ok ? extraAxis.value : null}
           maxDepth={levelDepthOf(pc.cfg)}
           milestoneKeywords={keywords.ok ? keywords.value : []}
           initialHideDone={uiPrefs.wbsHideDone ?? false}

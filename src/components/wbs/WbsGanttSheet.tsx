@@ -223,6 +223,7 @@ export function WbsGanttSheet({
   initialGanttScale,
   focusId = null,
   levelLabels,
+  extraAxisLabel = null,
   maxDepth = null,
   milestoneKeywords = EMPTY_MILESTONE_KEYWORDS,
   members = EMPTY_MEMBERS,
@@ -266,6 +267,8 @@ export function WbsGanttSheet({
   focusId?: string | null
   /** 프로젝트별 depth 라벨(§7.3 ProjectConfig) — 서버 페이지가 getProjectConfig 로 로드해 주입. */
   levelLabels: string[]
+  /** 프로젝트의 추가 축 이름(core.extra_axis_label) — 일괄 편집·붙여넣기·변경 이력의 그 칸 이름. null 은 화면마다의 기본 문구 */
+  extraAxisLabel?: string | null
   /** 프로젝트별 최대 깊이(§7.3 ProjectConfig, null=무제한) — RowDetailPanel 자식추가 어포던스 판정에 전파. */
   maxDepth?: number | null
   /** 프로젝트별 마일스톤 키워드(§7.4 ProjectConfig) — 빈 배열이면 마커 0건이 정답(설정 부재 신호, 폴백 금지). */
@@ -2497,6 +2500,7 @@ export function WbsGanttSheet({
           projectId={projectId}
           workspaceId={actorView?.workspaceId ?? null}
           levelLabels={levelLabels}
+          extraAxisLabel={extraAxisLabel}
           maxDepth={maxDepth}
           members={members}
           onSelectItem={selectLinkedItem}
@@ -2528,13 +2532,13 @@ export function WbsGanttSheet({
             setBulkSnapshot({ rows: snapshot.rows, selectedIds })
           }} />
       )}
-      {pasteSnapshot && <WbsPasteDialog projectId={projectId} rows={pasteSnapshot.rows} columns={pasteSnapshot.columns}
+      {pasteSnapshot && <WbsPasteDialog projectId={projectId} rows={pasteSnapshot.rows} columns={pasteSnapshot.columns} extraAxisLabel={extraAxisLabel}
         onClose={() => setPasteSnapshot(null)} onSuccess={() => router.refresh()} />}
       {bulkSnapshot && (
         <WbsBulkEditDialog open projectId={projectId}
           selectedItems={bulkSnapshot.rows.filter(row => bulkSnapshot.selectedIds.includes(row.id))}
           totalCount={bulkSnapshot.rows.length} allItemIdsSnapshot={bulkSnapshot.rows.map(row => row.id)}
-          snapshotRows={bulkSnapshot.rows} members={members}
+          snapshotRows={bulkSnapshot.rows} members={members} extraAxisLabel={extraAxisLabel}
           onClose={() => setBulkSnapshot(null)} onSuccess={() => router.refresh()} />
       )}
       <ConflictResolver

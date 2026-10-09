@@ -11,10 +11,12 @@ import { buildProposal } from './propose'
 export async function runCommandPipeline(
   message: string,
   items: ComputedItem[],
+  /** 그 프로젝트 tz 의 오늘(YYYY-MM-DD) — 연도를 말하지 않은 날짜를 파서가 이 해로 푼다 */
+  today: string,
   targetId?: string,
 ): Promise<CommandProposal> {
   if (!isCommandUtterance(message)) return { kind: 'not_command' }
-  const cmd = await parseCommand(message)
+  const cmd = await parseCommand(message, today)
   if (!cmd) {
     return {
       kind: 'error',

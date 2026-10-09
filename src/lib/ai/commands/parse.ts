@@ -61,14 +61,21 @@ export function validateParsed(v: unknown): ParsedCommand | null {
   return out
 }
 
-const PARSE_SYSTEM = `너는 WBS 명령 파서다. 사용자의 명령을 JSON 하나로만 변환한다.
+/**
+ * 파서 프롬프트 — 연도를 상수로 박지 않고 호출 시점의 '오늘'(프로젝트 tz, YYYY-MM-DD)에서 얻는다. 해가 바뀌어도 "8월 20일"이 그 해로 풀린다.
+ * 오늘 전체를 함께 실어 모델이 연도 말고 다른 기준을 지어내지 않게 한다.
+ */
+export function parseSystemPrompt(today: string): string {
+  return `너는 WBS 명령 파서다. 사용자의 명령을 JSON 하나로만 변환한다.
 스키마: {"action":"set_actual|set_dates|complete","targetQuery":"작업명 표현","actualPct":숫자?,"plannedStart":"YYYY-MM-DD"?,"plannedEnd":"YYYY-MM-DD"?}
-규칙: JSON 외 텍스트 금지. 날짜는 반드시 YYYY-MM-DD (연도 불명시는 2026). 명령이 아니면 {"action":"none"}을 출력.`
+규칙: JSON 외 텍스트 금지. 날짜는 반드시 YYYY-MM-DD (오늘은 ${today} — 연도 불명시는 ${today.slice(0, 4)}). 명령이 아니면 {"action":"none"}을 출력.`
+}
 
-export async function parseCommand(raw: string): Promise<ParsedCommand | null> {
+/** today — 그 프로젝트 tz 의 오늘(YYYY-MM-DD). 호출부(라우트)가 한 번 만들어 넘긴다 */
+export async function parseCommand(raw: string, today: string): Promise<ParsedCommand | null> {
   const det = parseDeterministic(raw)
   if (det) return det
-  const text = await generateAnswer(PARSE_SYSTEM, [{ role: 'user', content: raw.trim() }])
+  const text = await generateAnswer(parseSystemPrompt(today), [{ role: 'user', content: raw.trim() }])
   if (!text) return null
   return validateParsed(extractJson(text))
 }

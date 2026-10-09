@@ -164,7 +164,6 @@ export function NewProjectModal({
       <Modal
         open={open}
         onClose={close}
-        eyebrow="Workspace dialog"
         title={t('common.newProject')}
         footer={
           <>

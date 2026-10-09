@@ -53,7 +53,7 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
 
   return (
     <Modal
-      open={open} onClose={onClose} eyebrow="Security" title="비밀번호 변경"
+      open={open} onClose={onClose} title="비밀번호 변경"
       footer={
         <>
           <button onClick={onClose} className="btn btn-ghost" disabled={pending}>취소</button>

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (!g.ok) return NextResponse.json({ error: g.error }, { status: denyStatus(g.error) })
 
   const buf = await file.arrayBuffer()
-  const detected = detectWorkbook(buf)
+  let detected = detectWorkbook(buf)
   if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
 
   let cfg: ProjectConfig
@@ -39,6 +39,14 @@ export async function POST(req: NextRequest) {
     // 3원칙 — 조회 실패를 기본값(savedProfile:null)으로 위장하지 않는다. 본문은 고정 문구, PostgREST 사유는 서버 로그에만.
     if (e instanceof ConfigUnavailableError) { console.error('[import/inspect] 프로젝트 설정 조회 실패:', e.message); return NextResponse.json({ error: '프로젝트 설정을 확인할 수 없습니다.' }, { status: 503 }) }
     throw e
+  }
+
+  // 추가 축 이름(core.extra_axis_label)이 있으면 그 이름을 그 열의 머리 별칭으로 더해 다시 감지한다(내보내기가 그 이름으로 머리를 쓴다).
+  // 읽을 수 없는 파일은 위에서 설정 조회 없이 400 으로 끝난다 — 이름이 없거나 손상이면 첫 감지 그대로
+  const extraAxisState = cfg.keys['core.extra_axis_label']
+  if (extraAxisState.status === 'set' && extraAxisState.value) {
+    detected = detectWorkbook(buf, { extraAxisLabel: extraAxisState.value })
+    if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
   }
 
   // 감지 결과를 그대로 반환에 쓰되, warnings 는 아래서 덧붙일 수 있어 얕은 복제로 원본 배열을 보존한다.

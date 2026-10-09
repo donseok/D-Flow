@@ -1,5 +1,5 @@
 import { meetingHref, myMeetingHref } from '@/lib/ai/chat/deep-links'
-import { VOCAB_CODE_RE } from '@/lib/settings/vocab'
+import { VOCAB_CODE_RE, vocabLabel, type VocabValues } from '@/lib/settings/vocab'
 import { expandMeetings, sortOccurrences, summarizeMeetings } from '@/lib/domain/meetings'
 import type { MeetingCategory, MeetingRecurrence, TeamCode } from '@/lib/domain/types'
 import type {
@@ -22,6 +22,7 @@ import {
   validDateRange,
 } from './common'
 import type { BotSource, ReadOnlyBotTool, ToolExecutionContext, ToolExecutionResult } from './types'
+import type { ToolVocabSource } from './vocabSource'
 
 const MEETINGS_CAPABILITY = 'meetings:read' as const
 const MAX_MEETING_BODY = 12_000
@@ -36,6 +37,8 @@ export interface MeetingOccurrenceToolRecord {
   endTime: string | null
   location: string | null
   category: MeetingCategory
+  /** 그 범주의 표시 이름(그 프로젝트의 설정 어휘 meetings.categories) — 결정적 답변이 code 대신 이 이름을 보인다. 어휘를 못 읽으면 없다 */
+  categoryLabel?: string
   isRecurring: boolean
   attendeeCount: number
 }
@@ -50,6 +53,8 @@ export interface MeetingDetailToolRecord {
   endTime: string | null
   location: string | null
   category: MeetingCategory
+  /** 그 범주의 표시 이름(설정 어휘) — 어휘를 못 읽으면 없다 */
+  categoryLabel?: string
   recurrence: MeetingRecurrence
   recurrenceUntil: string | null
   body: string
@@ -95,8 +100,28 @@ function meetingSource(
   }
 }
 
+/**
+ * 회의 범주의 표시 이름 찾기 — 결과의 code 곁에 그 프로젝트의 설정 어휘(meetings.categories) 라벨을 싣는다. 접근 판정 뒤에만 부른다.
+ * 표시 전용이라 어휘를 못 읽은 프로젝트는 라벨 없이 둔다(도구를 실패시키지 않는다 — 사유는 로그, 답변은 code 쪽 표기로 남는다).
+ */
+async function meetingCategoryLabels(
+  vocab: ToolVocabSource, projectIds: readonly string[],
+): Promise<(projectId: string, code: string) => { categoryLabel?: string }> {
+  const lists = new Map<string, VocabValues['meetings.categories']>()
+  await Promise.all([...new Set(projectIds)].map(async id => {
+    try { lists.set(id, await vocab.projectVocab(id, 'meetings.categories')) } catch (e) {
+      console.error('[bot-tool] 회의 범주 어휘 조회 실패 — 라벨 없이 싣는다', { projectId: id, error: e instanceof Error ? e.message : String(e) })
+    }
+  }))
+  return (projectId, code) => {
+    const list = lists.get(projectId)
+    return list ? { categoryLabel: vocabLabel('meetings.categories', list, code) } : {}
+  }
+}
+
 export function createListMeetingsTool(
   repository: MeetingRepository,
+  vocab: ToolVocabSource,
 ): ReadOnlyBotTool<MeetingOccurrenceToolRecord> {
   return {
     name: 'list_meetings',
@@ -135,7 +160,9 @@ export function createListMeetingsTool(
             .filter(Boolean)
             .some(value => String(value).toLocaleLowerCase('ko-KR').includes(needle))
         })
+      const labelOf = await meetingCategoryLabels(vocab, [projectId])
       const records: MeetingOccurrenceToolRecord[] = all.slice(0, limit)
+        .map(occurrence => ({ ...occurrence, ...labelOf(projectId, occurrence.category) }))
       const truncated = all.length > records.length
       const summary = summarizeMeetings(all, requestToday(context.now, context.timezone))
       return {
@@ -170,6 +197,7 @@ export function createListMeetingsTool(
 
 export function createGetMeetingDetailTool(
   repository: MeetingRepository,
+  vocab: ToolVocabSource,
 ): ReadOnlyBotTool<MeetingDetailToolRecord> {
   return {
     name: 'get_meeting_detail',
@@ -207,6 +235,7 @@ export function createGetMeetingDetailTool(
 
       const bodyTruncated = meeting.body.length > MAX_MEETING_BODY
       const body = bodyTruncated ? meeting.body.slice(0, MAX_MEETING_BODY) : meeting.body
+      const labelOf = await meetingCategoryLabels(vocab, [projectId])
       const record: MeetingDetailToolRecord = {
         id: meeting.id,
         projectId,
@@ -217,6 +246,7 @@ export function createGetMeetingDetailTool(
         endTime: meeting.endTime,
         location: meeting.location,
         category: meeting.category,
+        ...labelOf(projectId, meeting.category),
         recurrence: meeting.recurrence,
         recurrenceUntil: meeting.recurrenceUntil,
         body,
@@ -261,6 +291,7 @@ function emptyMeetingDetail(
 
 export function createListMyMeetingsTool(
   repository: MyMeetingRepository,
+  vocab: ToolVocabSource,
 ): ReadOnlyBotTool<MyMeetingOccurrenceToolRecord> {
   return {
     name: 'list_my_meetings',
@@ -340,7 +371,9 @@ export function createListMyMeetingsTool(
           .filter((value): value is string => typeof value === 'string')
           .some(value => value.toLocaleLowerCase('ko-KR').includes(needle))
       })
-      const records: MyMeetingOccurrenceToolRecord[] = all.slice(0, limit).flatMap(occurrence => {
+      const shown = all.slice(0, limit)
+      const labelOf = await meetingCategoryLabels(vocab, shown.map(occurrence => occurrence.projectId))
+      const records: MyMeetingOccurrenceToolRecord[] = shown.flatMap(occurrence => {
         const meeting = byId.get(occurrence.seriesId)
         if (!meeting) return []
         return [{
@@ -353,6 +386,7 @@ export function createListMyMeetingsTool(
           endTime: occurrence.endTime,
           location: occurrence.location,
           category: occurrence.category,
+          ...labelOf(occurrence.projectId, occurrence.category),
           isRecurring: occurrence.isRecurring,
           attendeeCount: occurrence.attendeeCount,
           projectName: meeting.projectName ?? null,

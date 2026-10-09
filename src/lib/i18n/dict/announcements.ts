@@ -7,7 +7,6 @@ export const announcementsKo = {
   'ann.kpi.totalSub': '전체 공지',
   'ann.kpi.pinnedSub': '상단 고정',
   'ann.kpi.recentSub': '최근 7일 등록',
-  'ann.boardEyebrow': 'Notice board',
   'ann.boardTitle': '공지 목록',
   'ann.unitCount': '건',
   'ann.write': '공지 작성',

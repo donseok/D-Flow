@@ -31,6 +31,8 @@ export interface AttendanceToolRecord {
   teamCodes: TeamCode[]
   date: string
   type: AttendanceType
+  /** 그 유형의 표시 이름(이 프로젝트의 설정 어휘 attendance.types) — 결정적 답변이 code 대신 이 이름을 보인다. 목록 밖 code 는 code 그대로 */
+  typeLabel: string
 }
 
 function parseTypes(value: unknown): AttendanceType[] | null | undefined {
@@ -92,6 +94,7 @@ export function createGetAttendanceTool(
       const ordered = [...matched].sort((a, b) =>
         a.date.localeCompare(b.date) || compareKoreanName(a.memberName, b.memberName))
       const records: AttendanceToolRecord[] = ordered.slice(0, limit)
+        .map(record => ({ ...record, typeLabel: vocabLabel('attendance.types', typeDefs, record.type) }))
       const summaryInput: AttendanceRecord[] = matched.map(record => ({
         id: record.id,
         projectId: record.projectId,
@@ -114,7 +117,7 @@ export function createGetAttendanceTool(
         entityType: 'attendance_record',
         entityId: record.id,
         projectId,
-        title: `${record.date} ${record.memberName} · ${vocabLabel('attendance.types', typeDefs, record.type)}`,
+        title: `${record.date} ${record.memberName} · ${record.typeLabel}`,
         href,
         updatedAt: null,
       }))

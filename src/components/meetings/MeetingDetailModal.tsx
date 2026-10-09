@@ -182,7 +182,6 @@ export function MeetingDetailModal({
         open={open && confirmDelete}
         onClose={() => { if (!pending) setConfirmDelete(false) }}
         size="sm"
-        eyebrow="Delete meeting"
         title={t('meet.delete.title')}
         footer={
           <>
@@ -198,7 +197,6 @@ export function MeetingDetailModal({
         open={open && confirmCancel}
         onClose={() => { if (!pending) setConfirmCancel(false) }}
         size="sm"
-        eyebrow="Cancel occurrence"
         title={t('meet.cancelOcc.title')}
         footer={
           <>

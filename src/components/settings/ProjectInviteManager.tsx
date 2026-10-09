@@ -322,7 +322,6 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
       <Modal
         open={!!revoking}
         onClose={() => { if (!revokePending) setRevoking(null) }}
-        eyebrow="Invite"
         title="초대 취소"
         size="sm"
         footer={
