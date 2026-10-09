@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip } from 'lucide-react'
+import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip, FolderInput } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
@@ -19,6 +19,7 @@ import { CustomFieldsSettings } from '@/components/settings/CustomFieldsSettings
 import { FIELD_ENTITIES, type FieldEntity, type FieldDef } from '@/lib/domain/customFields'
 import { IssuePolicyEditor } from '@/components/settings/IssuePolicyEditor'
 import { AttachmentPolicyEditor } from '@/components/settings/AttachmentPolicyEditor'
+import { MinutesAutoFileEditor } from '@/components/settings/MinutesAutoFileEditor'
 import { FormTemplatesManager, type FormKindState } from '@/components/settings/FormTemplatesManager'
 import { FORM_SETTING_MODULE } from '@/lib/settings/defs/forms'
 import type { FormKind } from '@/lib/report/engine/types'
@@ -220,6 +221,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // 회의록 첨부 정책(SP5 B3 과제9) — 회의록은 워크스페이스 모듈이라 워크스페이스로 관문을 본다. 손상 값도 편집기를 그린다(복구 경로).
   const minutesGate = pc.ok ? await requireModule({ workspaceId: pc.cfg.workspaceId }, 'minutes') : { ok: false as const, error: 'unavailable' }
   const attachmentPolicy = pc.ok ? pick(pc.cfg, 'minutes.attachments') : null
+  // 외부 업로드의 폴더 자동 편철(minutes.auto_file_by_path) — 같은 '회의록' 범주. 손상 값도 스위치를 그린다(다시 저장해 고친다)
+  const autoFile = pc.ok ? pick(pc.cfg, 'minutes.auto_file_by_path') : null
   // 용어·분류(SP5 B4 묶음4) — 모듈이 켜진 키만. 손상 값도 편집기를 그린다(복구 경로). 판정 실패(unknown)는 그리지 않는다(fail-closed)
   const [attendanceState, meetingsState] = pc.ok
     ? await Promise.all([moduleState({ projectId }, 'attendance'), moduleState({ projectId }, 'meetings')])
@@ -603,6 +606,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             <AttachmentPolicyEditor key={`${projectId}-${revision}`} scope={{ projectId }} revision={revision} canEdit={canMutate}
               policy={attachmentPolicy.ok ? attachmentPolicy.value as AttachmentPolicy : null} invalid={!attachmentPolicy.ok} />
           </SectionCard>
+          {autoFile && <SectionCard searchText="minutes.auto_file_by_path 회의록 외부 업로드 폴더 자동 정리 편철 folder path upload" title={t(locale, 'settings.minutes.auto_file_by_path.label')} icon={FolderInput}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.minutes.auto_file_by_path.desc')}</p>
+            <MinutesAutoFileEditor key={`${projectId}-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate}
+              value={autoFile.ok ? autoFile.value as boolean : null} invalid={!autoFile.ok} />
+          </SectionCard>}
         </div>}
 
         {isAdmin && pc.ok && vocabKeys.length > 0 && <div id="project-vocab" className="scroll-mt-24 space-y-5">

@@ -54,7 +54,6 @@ export const platformEn: Record<keyof typeof platformKo, string> = {
   'platform.ws.err.denied': 'Only platform admins can create workspaces.',
   'platform.ws.err.lookup_failed': 'Required information could not be read, so nothing was created. Try again in a moment.',
   'platform.ws.err.create_failed': 'The workspace could not be created. Partial changes were rolled back. Try again in a moment.',
-  'platform.ws.err.cleanup_failed': 'Creating the workspace failed and the partial changes could not be rolled back. Check the remaining row in the list together with the server log.',
   'platform.ws.err.unknown': 'The request could not be processed. Try again in a moment.',
   'platform.noWs.title': 'You do not belong to any workspace',
   'platform.noWs.inviteHint': 'Ask a workspace admin for an invitation. Opening the invitation link adds you to the workspace.',

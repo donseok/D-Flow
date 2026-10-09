@@ -21,6 +21,8 @@ vi.mock('@/components/app/AppShell', () => ({ AppShell: (p: { children: React.Re
 
 import WorkspaceLayout from '@/app/(app)/w/[slug]/layout'
 import { BRAND } from '@/lib/branding'
+import { deriveAccent } from '@/lib/settings/accent'
+import { accentStyle } from '@/lib/settings/accentCss'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import { WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 import { resolveKeys } from '@/lib/settings/resolve'
@@ -88,6 +90,23 @@ describe('/w/[slug] 레이아웃 — 셸', () => {
     const p = h.shellProps.mock.calls[0][0]
     expect(p.configDegraded).toBe(false)
     expect(p.brand).toEqual({ productName: 'Acme Flow', workspaceId: WS.id, hasFull: true, hasFullDark: false, hasMark: true })
+  })
+  it('저장된 강조색(branding.accent)을 셸의 스타일로 싣는다 — 라이트(:root) 뒤 다크(.dark), action 계열 변수. 지우면(null) 빈 문자열', async () => {
+    const d = deriveAccent('#0f766e')
+    if (!d.ok) throw new Error(`표본 색이 파생 검사에 걸렸다: ${d.error}`)
+    h.getWorkspaceConfig.mockResolvedValue(cfg({ 'branding.accent': d.value }))
+    renderToString(await run())
+    const p = h.shellProps.mock.calls[0][0]
+    expect(p.configDegraded).toBe(false)
+    expect(p.accentCss).toBe(accentStyle(d.value))
+    expect(p.accentCss).toMatch(/^:root\{--color-action:#[0-9a-f]{6};.*\}\.dark\{--color-action:#[0-9a-f]{6};.*\}$/)
+    expect(p.accentCss).toContain(`--color-action:${d.value.light.bg}`)
+    expect(p.accentCss).toContain(`--color-border-focus:${d.value.dark.focus}`)
+    // 저장값을 지운 워크스페이스는 제품 기본색 — 스타일 블록이 없다
+    h.shellProps.mockClear()
+    h.getWorkspaceConfig.mockResolvedValue(cfg({ 'branding.accent': null }))
+    renderToString(await run())
+    expect(h.shellProps.mock.calls[0][0].accentCss).toBe('')
   })
   it('W14 — 즐겨찾기·최근 방문은 현재 워크스페이스의 가시 프로젝트로 거른다(다른 워크스페이스·숨김 id 는 빠진다)', async () => {
     h.listWorkspaceProjects.mockResolvedValue({ ok: true, rows: [{ id: P1, name: '하나', status: 'active', isAdmin: false }, { id: P2, name: '둘', status: 'active', isAdmin: false }] })

@@ -39,6 +39,8 @@ vi.mock('@/lib/modules/gate', () => ({
   workspacesWithModule: mocks.workspacesWithModule,
 }))
 vi.mock('@/lib/minutes/rootMode', () => ({ loadRootFolders: mocks.loadRootFolders }))
+// 자동 편철 설정(minutes.auto_file_by_path) — 이 스위트는 켠 상태(제품 기본값)로 본다
+vi.mock('@/lib/minutes/autoFile', () => ({ loadAutoFileByPath: vi.fn(async () => ({ ok: true, value: true })) }))
 vi.mock('@/lib/minutes/teamScope', () => ({
   activeTeamCodesForMinuteScope: mocks.activeTeamCodesForMinuteScope,
 }))

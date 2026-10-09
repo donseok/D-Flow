@@ -269,6 +269,14 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.views.default.label': 'Default work plan view', 'settings.views.default.desc': 'The view the work plan opens with (sheet, timeline or board). Board needs the kanban module.',
   // SP5 B1 — issue code rule (issues.id_policy) and analysis requirement (issues.analysis). Editor in task 11
   'settings.minutes.attachments.label': 'Minute attachment policy', 'settings.minutes.attachments.desc': 'Limits size, count, extensions, and previews for new attachments. Existing files are kept; workspace values are copied once to new projects.',
+  // File uploaded minutes by the folder path the integration sends (minutes.auto_file_by_path)
+  'settings.minutes.auto_file_by_path.label': 'Auto-file external uploads',
+  'settings.minutes.auto_file_by_path.desc': 'Files uploaded minutes into the folder path the integration sends with them. Applies to uploads from now on; minutes already filed are not moved. Bulk re-filing requests work regardless of this setting.',
+  'settings.minutes.auto_file_by_path.switch': 'File by the folder path sent',
+  'settings.minutes.auto_file_by_path.on': 'On', 'settings.minutes.auto_file_by_path.off': 'Off',
+  'settings.minutes.auto_file_by_path.onHint': 'Sending the same minutes again moves them to the folder path sent that time, including minutes you moved here by hand.',
+  'settings.minutes.auto_file_by_path.offHint': 'Uploads are treated as if no folder path was sent. New minutes go to the owning team folder, and minutes sent again stay where they are.',
+  'settings.minutes.auto_file_by_path.invalid': 'The stored value could not be read, so folder paths are ignored for now. Pick a value and save again.',
   // SP5 B2 — minute root folder mode (D21 — the screen shows teams only; custom is set by platform admins through the settings RPC)
   'settings.minutes.root_folders.label': 'Minute root folders', 'settings.minutes.root_folders.desc': 'Keeps one top-level folder per team in the minutes explorer. Creating a team creates its folder, and renaming a team renames the folder.',
   'settings.rootFolders.teams': 'Per-team folders', 'settings.rootFolders.custom': 'Named folders (external sync only)',

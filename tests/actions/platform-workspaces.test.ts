@@ -1,23 +1,23 @@
-// 플랫폼 관리 — 워크스페이스 목록·생성 액션. 가드(requireSuperuser)·입력 검증·slug 중복·첫 관리자 없음·보상(만든 행 삭제)·설정은 RPC 한 길.
+// 플랫폼 관리 — 워크스페이스 목록·생성 액션. 가드(requireSuperuser)·입력 검증·첫 관리자 없음·생성은 RPC 한 번(create_workspace_with_admin — 0054)·사유 매핑.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  requireSuperuser: vi.fn(), createAdminClient: vi.fn(), writeWorkspaceSettingsInternal: vi.fn(), getWorkspaceConfig: vi.fn(), revalidatePath: vi.fn(),
+  requireSuperuser: vi.fn(), createAdminClient: vi.fn(), getWorkspaceConfig: vi.fn(), revalidatePath: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({ requireSuperuser: mocks.requireSuperuser }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
-vi.mock('@/lib/settings/write', () => ({ writeWorkspaceSettingsInternal: mocks.writeWorkspaceSettingsInternal }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: mocks.getWorkspaceConfig }))
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }))
 
 import { createPlatformWorkspace, listPlatformWorkspaces } from '@/app/actions/platformWorkspaces'
 import { NON_CORE_MODULES } from '@/lib/modules/defaults'
+import { SETTINGS_SCHEMA_VERSION } from '@/lib/settings/registry'
 
 const ACTOR = 'u-platform'
 type Result = { data?: unknown; error?: { message: string; code?: string } | null; count?: number | null }
-type Call = { table: string; op: 'select' | 'insert' | 'delete'; payload?: unknown; filters: [string, unknown][] }
+type Call = { table: string; op: 'select' | 'insert' | 'delete' | 'rpc'; payload?: unknown; filters: [string, unknown][] }
 
-/** 표·동작별로 응답을 정하는 가짜 service_role 클라이언트 — 부른 순서를 calls 에 남긴다 */
+/** 표·동작별로 응답을 정하는 가짜 service_role 클라이언트 — 부른 순서를 calls 에 남긴다(RPC 는 table 에 이름, payload 에 인자) */
 function fakeAdmin(respond: (c: Call) => Result) {
   const calls: Call[] = []
   const from = (table: string) => {
@@ -33,27 +33,32 @@ function fakeAdmin(respond: (c: Call) => Result) {
     }
     return q
   }
-  const admin = { from }
+  const rpc = (name: string, args: unknown) => {
+    const call: Call = { table: name, op: 'rpc', payload: args, filters: [] }
+    calls.push(call)
+    return Promise.resolve({ data: null, error: null, ...respond(call) })
+  }
+  const admin = { from, rpc }
   mocks.createAdminClient.mockReturnValue(admin)
   return { admin, calls }
 }
-const OWNER = { user_id: 'u-owner', email: 'owner@example.com', display_name: '오너' }
-const SELF = { user_id: ACTOR, email: 'me@example.com', display_name: '나' }
+const OWNER = { user_id: 'u-owner' }
+const SELF = { user_id: ACTOR }
 /** 정상 경로의 응답 — 덮어쓸 것만 over 로 */
 const happy = (over: (c: Call) => Result | undefined = () => undefined) => (c: Call): Result => {
   const o = over(c)
   if (o) return o
   if (c.table === 'profiles') return { data: c.filters[0][0] === 'email' ? OWNER : SELF }
-  if (c.table === 'workspaces' && c.op === 'select') return { data: null }
-  if (c.table === 'workspaces' && c.op === 'insert') return { data: { id: 'ws-new' } }
+  if (c.op === 'rpc') return { data: { status: 'applied', workspace_id: 'ws-new', revision: 1 } }
   return {}
 }
 const input = { name: '새 조직', slug: 'new-org', adminEmail: 'owner@example.com' }
+const rpcOf = (calls: Call[]) => calls.filter((c) => c.op === 'rpc')
+const valuesOf = (calls: Call[]) => (rpcOf(calls)[0].payload as { p_values: Record<string, unknown> }).p_values
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.requireSuperuser.mockResolvedValue({ ok: true, actor: { userId: ACTOR, isSuperuser: true } })
-  mocks.writeWorkspaceSettingsInternal.mockResolvedValue({ ok: true, status: 'applied', revision: 2, commandId: 'c' })
 })
 
 describe('createPlatformWorkspace', () => {
@@ -68,56 +73,55 @@ describe('createPlatformWorkspace', () => {
     expect(calls).toEqual([])
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
   })
-  it('정상 — 워크스페이스·관리자 멤버십·인물을 만들고 설정은 내부 쓰기(RPC 한 길)로 적는다', async () => {
-    const { admin, calls } = fakeAdmin(happy())
+  it('정상 — 첫 관리자 계정을 읽고 생성 RPC 한 번. 표에 직접 쓰지 않고, 행위자는 가드 결과의 userId', async () => {
+    const { calls } = fakeAdmin(happy())
     const res = await createPlatformWorkspace({ ...input, modules: ['kanban', 'wiki'], timezone: 'Asia/Tokyo' })
     expect(res).toEqual({ ok: true, workspace: { id: 'ws-new', slug: 'new-org', name: '새 조직' } })
-    const writes = calls.filter((c) => c.op !== 'select')
-    expect(writes.map((c) => `${c.op}:${c.table}`)).toEqual(['insert:workspaces', 'insert:workspace_members', 'insert:people'])
-    expect(writes[0].payload).toEqual({ slug: 'new-org', name: '새 조직', created_by: ACTOR })
-    expect(writes[1].payload).toEqual({ workspace_id: 'ws-new', user_id: 'u-owner', role: 'admin', invited_by: ACTOR })
-    expect(writes[2].payload).toEqual({ workspace_id: 'ws-new', email: 'owner@example.com', display_name: '오너', user_id: 'u-owner' })
-    // 설정 표를 직접 쓰지 않는다 — 내부 쓰기 함수 한 번, 행위자는 가드 결과의 userId
-    expect(calls.some((c) => c.table.includes('settings'))).toBe(false)
-    expect(mocks.writeWorkspaceSettingsInternal).toHaveBeenCalledExactlyOnceWith(admin, 'ws-new',
-      { set: { 'modules.allowed': ['kanban', 'wiki'], 'calendar.timezone': 'Asia/Tokyo' } }, ACTOR)
+    // 쓰기는 RPC 하나뿐 — 워크스페이스·멤버십·인물·설정 표를 액션이 직접 만지지 않는다(보상 삭제도 없다)
+    expect(calls.map((c) => `${c.op}:${c.table}`)).toEqual(['select:profiles', 'rpc:create_workspace_with_admin'])
+    const args = rpcOf(calls)[0].payload as Record<string, unknown>
+    expect(args).toMatchObject({
+      p_actor: ACTOR, p_slug: 'new-org', p_name: '새 조직', p_admin_user_id: 'u-owner', p_schema_version: SETTINGS_SCHEMA_VERSION,
+    })
+    expect(args.p_command_id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(args.p_values).toMatchObject({ 'calendar.timezone': 'Asia/Tokyo' })
+    expect([...(args.p_values as Record<string, string[]>)['modules.allowed']].sort()).toEqual(['kanban', 'wiki'])
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/', 'layout')
   })
   it('기본값 — 이메일을 비우면 만드는 사람이 첫 관리자, 허용 모듈은 비core 전부, 시간대는 쓰지 않는다', async () => {
     const { calls } = fakeAdmin(happy())
     expect(await createPlatformWorkspace({ name: '조직', slug: 'org' })).toMatchObject({ ok: true })
     expect(calls[0]).toMatchObject({ table: 'profiles', filters: [['user_id', ACTOR]] })
-    expect(calls.find((c) => c.table === 'workspace_members')!.payload).toMatchObject({ user_id: ACTOR, role: 'admin' })
-    expect(mocks.writeWorkspaceSettingsInternal.mock.calls[0][2]).toEqual({ set: { 'modules.allowed': [...NON_CORE_MODULES] } })
+    expect(rpcOf(calls)[0].payload).toMatchObject({ p_admin_user_id: ACTOR })
+    expect(Object.keys(valuesOf(calls))).toEqual(['modules.allowed'])
+    expect([...(valuesOf(calls)['modules.allowed'] as string[])].sort()).toEqual([...NON_CORE_MODULES].sort())
   })
-  it('초대 허용 도메인을 적으면 생성 때 그 설정으로 쓴다(정규화된 목록) — 같은 내부 쓰기 한 번', async () => {
-    fakeAdmin(happy())
+  it('초대 허용 도메인을 적으면 생성 때 그 설정으로 쓴다(정규화된 목록) — 같은 RPC 한 번', async () => {
+    const { calls } = fakeAdmin(happy())
     expect(await createPlatformWorkspace({ ...input, modules: ['kanban'], inviteDomains: ['Example.com', '@partner.co.kr'] })).toMatchObject({ ok: true })
-    expect(mocks.writeWorkspaceSettingsInternal).toHaveBeenCalledTimes(1)
-    expect(mocks.writeWorkspaceSettingsInternal.mock.calls[0][2])
-      .toEqual({ set: { 'modules.allowed': ['kanban'], 'invites.allowed_domains': ['example.com', 'partner.co.kr'] } })
+    expect(rpcOf(calls)).toHaveLength(1)
+    expect(valuesOf(calls)).toEqual({ 'modules.allowed': ['kanban'], 'invites.allowed_domains': ['example.com', 'partner.co.kr'] })
   })
   it('초대 허용 도메인을 비우면 그 키를 쓰지 않는다 — 정책 기본값(초대 불가)·배포 기본값을 그대로 둔다', async () => {
-    fakeAdmin(happy())
+    const { calls } = fakeAdmin(happy())
     await createPlatformWorkspace({ ...input, modules: ['kanban'], inviteDomains: [] })
-    expect(mocks.writeWorkspaceSettingsInternal.mock.calls[0][2]).toEqual({ set: { 'modules.allowed': ['kanban'] } })
+    expect(valuesOf(calls)).toEqual({ 'modules.allowed': ['kanban'] })
   })
   it('도메인 형식 밖이면 아무것도 만들지 않는다 — 그 필드의 사유로 거부', async () => {
     const { calls } = fakeAdmin(happy())
     expect(await createPlatformWorkspace({ ...input, inviteDomains: ['*', 'example.com'] }))
       .toEqual({ ok: false, code: 'domains_invalid', field: 'inviteDomains' })
     expect(calls).toEqual([])
-    expect(mocks.writeWorkspaceSettingsInternal).not.toHaveBeenCalled()
   })
   it('허용 모듈을 모두 끄면 빈 배열을 명시로 적는다(core 만)', async () => {
-    fakeAdmin(happy())
+    const { calls } = fakeAdmin(happy())
     await createPlatformWorkspace({ ...input, modules: [] })
-    expect(mocks.writeWorkspaceSettingsInternal.mock.calls[0][2]).toEqual({ set: { 'modules.allowed': [] } })
+    expect(valuesOf(calls)).toEqual({ 'modules.allowed': [] })
   })
-  it('첫 관리자 계정이 없으면 거부 — 워크스페이스를 만들지 않는다(계정을 여기서 만들지 않는다)', async () => {
+  it('첫 관리자 계정이 없으면 거부 — RPC 를 부르지 않는다(계정을 여기서 만들지 않는다)', async () => {
     const { calls } = fakeAdmin(happy((c) => (c.table === 'profiles' ? { data: null } : undefined)))
     expect(await createPlatformWorkspace(input)).toEqual({ ok: false, code: 'admin_not_found', field: 'adminEmail' })
-    expect(calls.filter((c) => c.op !== 'select')).toEqual([])
+    expect(rpcOf(calls)).toEqual([])
   })
   it('첫 관리자 조회 실패는 "없음"으로 바꾸지 않고 멈춘다 — 쓰기 0건, 원문은 응답에 없다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -125,64 +129,41 @@ describe('createPlatformWorkspace', () => {
     const res = await createPlatformWorkspace(input)
     expect(res).toEqual({ ok: false, code: 'lookup_failed', field: 'adminEmail' })
     expect(JSON.stringify(res)).not.toContain('boom')
-    expect(calls.filter((c) => c.op !== 'select')).toEqual([])
-    spy.mockRestore()
-  })
-  it('slug 중복 — 사전 조회에서 걸리면 만들지 않는다', async () => {
-    const { calls } = fakeAdmin(happy((c) => (c.table === 'workspaces' && c.op === 'select' ? { data: { id: 'ws-old' } } : undefined)))
-    expect(await createPlatformWorkspace(input)).toEqual({ ok: false, code: 'slug_taken', field: 'slug' })
-    expect(calls.filter((c) => c.op !== 'select')).toEqual([])
-  })
-  it('slug 중복 — 사전 조회를 지난 경합은 유니크 위반(23505)이 잡는다', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    fakeAdmin(happy((c) => (c.table === 'workspaces' && c.op === 'insert' ? { data: null, error: { message: 'duplicate key', code: '23505' } } : undefined)))
-    expect(await createPlatformWorkspace(input)).toEqual({ ok: false, code: 'slug_taken', field: 'slug' })
-    expect(mocks.writeWorkspaceSettingsInternal).not.toHaveBeenCalled()
-    spy.mockRestore()
-  })
-  it('slug 조회 실패는 중단 — 쓰기 전 선행 조회가 실패하면 만들지 않는다', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { calls } = fakeAdmin(happy((c) => (c.table === 'workspaces' && c.op === 'select' ? { error: { message: 'down' } } : undefined)))
-    expect(await createPlatformWorkspace(input)).toEqual({ ok: false, code: 'lookup_failed', field: 'slug' })
-    expect(calls.filter((c) => c.op !== 'select')).toEqual([])
+    expect(rpcOf(calls)).toEqual([])
     spy.mockRestore()
   })
   it.each([
-    ['멤버십', (c: Call) => c.table === 'workspace_members'],
-    ['인물', (c: Call) => c.table === 'people'],
-  ])('보상 — %s 저장이 실패하면 만든 워크스페이스를 지우고 create_failed', async (_name, failing) => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { calls } = fakeAdmin(happy((c) => (c.op === 'insert' && failing(c) ? { error: { message: 'insert boom' } } : undefined)))
-    const res = await createPlatformWorkspace(input)
-    expect(res).toEqual({ ok: false, code: 'create_failed', field: null })
-    expect(JSON.stringify(res)).not.toContain('boom')
-    expect(calls.at(-1)).toMatchObject({ table: 'workspaces', op: 'delete', filters: [['id', 'ws-new']] })
-    expect(mocks.writeWorkspaceSettingsInternal).not.toHaveBeenCalled()
+    ['slug 중복(사전 조회 없이 RPC 의 유니크 판정이 사유를 낸다)', { code: '23505', message: 'WORKSPACE_SLUG_TAKEN' }, { ok: false, code: 'slug_taken', field: 'slug' }],
+    ['조회와 RPC 사이에 첫 관리자 계정이 사라짐', { code: 'P0002', message: 'WORKSPACE_ADMIN_NOT_FOUND' }, { ok: false, code: 'admin_not_found', field: 'adminEmail' }],
+    ['RPC 의 등급 재판정이 거부(가드 뒤 플랫폼 관리자에서 빠짐)', { code: '42501', message: 'AUTHZ_FORBIDDEN' }, { ok: false, code: 'denied', field: null }],
+  ])('RPC 사유 매핑 — %s', async (_name, error, want) => {
+    const { calls } = fakeAdmin(happy((c) => (c.op === 'rpc' ? { data: null, error } : undefined)))
+    expect(await createPlatformWorkspace(input)).toEqual(want)
+    // 실패는 곧 아무것도 남지 않음이다 — 되돌릴 것이 없으므로 보상 호출도 없다
+    expect(calls.filter((c) => c.op === 'delete' || c.op === 'insert')).toEqual([])
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
-    spy.mockRestore()
   })
-  it('보상 — 설정 저장이 거부(ok:false)되거나 던져도 워크스페이스를 지운다', async () => {
+  it('표에 없는 RPC 오류는 create_failed — 원문은 로그로만, 보상 삭제를 시도하지 않는다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    for (const fail of [
-      () => mocks.writeWorkspaceSettingsInternal.mockResolvedValueOnce({ ok: false, code: 'CONFIG_INVALID', error: 'x' }),
-      () => mocks.writeWorkspaceSettingsInternal.mockRejectedValueOnce(new Error('알 수 없는 DB 오류')),
+    for (const error of [
+      { code: '23514', message: 'new row for relation "people" violates check constraint boom' },
+      { code: '42501', message: 'permission denied for function create_workspace_with_admin boom' },   // 실행권 문제는 '권한 없음'이 아니라 배포 문제다
+      { code: 'P0001', message: 'SETTINGS_ROW_MISSING boom' },
     ]) {
-      const { calls } = fakeAdmin(happy())
-      fail()
-      expect(await createPlatformWorkspace(input)).toEqual({ ok: false, code: 'create_failed', field: null })
-      expect(calls.at(-1)).toMatchObject({ table: 'workspaces', op: 'delete', filters: [['id', 'ws-new']] })
+      const { calls } = fakeAdmin(happy((c) => (c.op === 'rpc' ? { data: null, error } : undefined)))
+      const res = await createPlatformWorkspace(input)
+      expect(res).toEqual({ ok: false, code: 'create_failed', field: null })
+      expect(JSON.stringify(res)).not.toContain('boom')
+      expect(calls.map((c) => c.op)).toEqual(['select', 'rpc'])
     }
+    expect(spy).toHaveBeenCalled()
     spy.mockRestore()
   })
-  it('보상의 한계 — 삭제까지 실패하면 cleanup_failed 로 알리고 로그에 id 를 남긴다', async () => {
+  it('RPC 가 성공했는데 워크스페이스 id 가 없으면 성공으로 위장하지 않는다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    fakeAdmin(happy((c) => {
-      if (c.table === 'people' && c.op === 'insert') return { error: { message: 'x' } }
-      if (c.table === 'workspaces' && c.op === 'delete') return { error: { message: 'delete blocked' } }
-      return undefined
-    }))
-    expect(await createPlatformWorkspace(input)).toEqual({ ok: false, code: 'cleanup_failed', field: null })
-    expect(spy.mock.calls.some((c) => String(c[0]).includes('workspace_id=ws-new'))).toBe(true)
+    fakeAdmin(happy((c) => (c.op === 'rpc' ? { data: { status: 'applied' } } : undefined)))
+    expect(await createPlatformWorkspace(input)).toEqual({ ok: false, code: 'create_failed', field: null })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
     spy.mockRestore()
   })
 })

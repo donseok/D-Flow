@@ -110,7 +110,7 @@ describe('H2-d 소속 회수 = 권한 소멸', () => {
 
   it('role 열의 UPDATE 도 정책이 가른다 — B 관리자(bea)·A 평멤버 본인(cy)은 A 소속 행(cy)의 role 을 올리지 못한다(값 그대로)', async () => {
     // 0011 뒤 authenticated 에 남은 UPDATE 는 role 열뿐이라 격리 스캔의 `set workspace_id = workspace_id` 탐침은 열 권한(42501)에서 멈추고
-    // 정책(workspace_members_write)까지 가지 않는다 — 정책을 태우는 쓰기는 role 뿐이므로 여기서 본다. WHERE 가 있는 UPDATE 는 읽기 정책도
+    // 정책(workspace_members_update — 0054 가 FOR ALL 을 나눴다)까지 가지 않는다 — 정책을 태우는 쓰기는 role 뿐이므로 여기서 본다. WHERE 가 있는 UPDATE 는 읽기 정책도
     // 거쳐 bea 에게는 A 행이 가려져 UPDATE 정책과 무관하게 0행이다 — WHERE 없는 UPDATE 로 UPDATE 정책만 태우고 A 의 cy 행을 postgres 로 본다
     for (const uid of [F.users.bAdmin, F.users.aLoose]) {
       await asUser(pool, uid, async (c) => {

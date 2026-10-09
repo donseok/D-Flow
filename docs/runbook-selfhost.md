@@ -100,6 +100,25 @@ PROD_REF=<Supabase API 호스트 이름> BOOTSTRAP_SUPABASE_URL=https://<Supabas
 - 요청 제한은 Auth 의 발송 제한(`rate_limit.email_sent`, 같은 주소 재요청 간격)에 기댄다. 앱 계층의 요청 제한은 없다.
 - 로컬 개발은 SMTP 설정 없이도 링크가 보인다 — 로컬 Supabase 가 인증 메일을 자기 메일함(inbucket — `supabase status` 의 Mailpit/Inbucket 주소)으로 받는다.
 
+## 회의록 외부 업로드의 폴더 자동 정리
+
+외부 업로드(`POST /api/v1/minutes`)가 요청의 `folder_path` 대로 회의록을 폴더에 넣을지는 **프로젝트 설정** `minutes.auto_file_by_path`
+(프로젝트 설정 화면 '회의록' 범주, 기본 **켬**)가 정한다. 예전에는 배포 env `MINUTES_FOLDER_PATH_ENABLED=true` 일 때만 켜졌다.
+
+우선순위(위가 이긴다):
+
+1. 배포 env `MINUTES_FOLDER_PATH_ENABLED=false`(정확히 이 값) — 배포 전체에서 끈다. 운영자 차단 스위치로 한 단계만 남긴 호환 장치다.
+2. 그 프로젝트의 설정 값(저장값이 없으면 기본 켬).
+3. 프로젝트에 속하지 않은 회의록은 설정할 프로젝트가 없다 — 켬.
+
+- env 를 비우거나 `true` 로 두면 "켬"이 아니라 "설정을 따른다"는 뜻이다. **env 를 지정하지 않고 쓰던 배포는 이 판부터 기본이 켬으로 바뀐다** —
+  연동 프로그램이 이미 `folder_path` 를 보내고 있었다면 다음 업로드·재전송부터 그 경로로 회의록이 들어가고, 폴더에 넣지 않은 회의의 재전송(`[]`)은
+  여기서 손으로 옮겨 둔 회의록을 팀 폴더로 되돌린다. 원하지 않으면 올리기 전에 env 를 `false` 로 두거나 그 프로젝트의 설정을 끈다.
+- 끄면 `folder_path` 를 받지 않은 것처럼 다룬다(형식 검사도 하지 않는다). 이미 옮겨진 회의록은 되돌아가지 않는다.
+- 일괄 재정리(`POST /api/v1/minutes/folder`)와 보관 상태 조회는 이 설정·env 와 무관하게 동작한다.
+- 설정을 읽지 못하면 업로드는 500 으로 멈춘다(편철 여부를 추측하지 않는다). 저장값이 손상이면 편철하지 않는 쪽으로 동작하고 서버 로그에 남는다.
+- 계약 문서: `docs/design/dflow-minutes-upload-api-spec.md` §4.8.
+
 ## 헬스체크
 
 `GET /api/health` — 인증 없이 친다. 로드밸런서·가동 감시·systemd 의 생존 확인에 쓴다. 응답은 캐시되지 않는다(`Cache-Control: no-store`).

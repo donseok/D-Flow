@@ -39,6 +39,8 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   // SP5 B2 — 공용 팀 + (teams 모드) 회의록 팀 루트 / 루트 없는 활성 공용 팀의 루트
   create_team: ['teams', 'minute_folders'],
   create_weekly_report: ['weekly_reports', 'weekly_report_rows'],
+  // 0054 — 워크스페이스 행·첫 관리자 멤버십·인물 + 설정 값(안에서 apply_workspace_settings 를 부른다 — 그 함수의 표를 함께 적는다. 설정 행 생성·권한 이력은 트리거)
+  create_workspace_with_admin: ['workspaces', 'workspace_members', 'people', 'workspace_settings', 'workspace_settings_history'],
   ensure_team_roots: ['minute_folders'],
   get_project_creation_receipt: [], // command receipt read only; no writes
   import_wbs_cmd: ['wbs_items', 'item_owners', 'holidays', 'command_receipts'],

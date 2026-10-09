@@ -1,4 +1,4 @@
-// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 47키 등록(SP6 forms.* 넷, SP3b UI-3 portal.widgets·views.default 둘, SPU1 security.local_drafts, SP8 notify.policy 포함). 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
+// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 48키 등록(SP7 minutes.auto_file_by_path, SP6 forms.* 넷, SP3b UI-3 portal.widgets·views.default 둘, SPU1 security.local_drafts, SP8 notify.policy 포함). 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
@@ -18,7 +18,7 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 47키 — 워크스페이스 16, 프로젝트 31(SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 둘 + SPU1 security.local_drafts + SP8 notify.policy)', () => {
+  it('정확히 48키 — 워크스페이스 16, 프로젝트 32(SP7 minutes.auto_file_by_path + SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 둘 + SPU1 security.local_drafts + SP8 notify.policy)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
       'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'portal.widgets', 'security.local_drafts', 'notify.policy', 'minutes.attachments', 'minutes.root_folders'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
@@ -26,7 +26,7 @@ describe('등록 키', () => {
       'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers', 'workflow.predecessor_gate',
       'calendar.timezone', 'calendar.working_days', 'calendar.week_start',
       'views.default',
-      'issues.id_policy', 'issues.analysis', 'minutes.attachments',
+      'issues.id_policy', 'issues.analysis', 'minutes.attachments', 'minutes.auto_file_by_path',
       'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses', 'fields.wbs_item', 'fields.issue', 'fields.weekly_row',
       'forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'])
     for (const k of ['agents.stage_workflow', 'core.stage_credits']) {
@@ -320,14 +320,16 @@ describe('G0-4 — 등록하지 않는 네 선언이 형 검사를 통과하고 
 })
 
 describe('카탈로그 메타와 사전', () => {
-  it('등록 키마다 메타가 있고 마감 상태가 §3.6 표와 같다. 미등록 네 키는 PLANNED_KEYS 에 있다', () => {
+  it('등록 키마다 메타가 있고 마감 상태가 §3.6 표와 같다. 미등록 키(PLANNED_KEYS)는 남지 않았다', () => {
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(KEYS)].sort())
     const status = (k: string) => CATALOG_META[k as keyof typeof CATALOG_META].status
     // wbs.excel_profile 은 SP4 A2 가 verified 로 올렸다(표준 레이아웃·한 경로 내보내기·표기 — catalog-meta.ts 의 그 행)
     expect(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.mail_from_name', 'core.level_labels', 'core.milestone_keywords', 'modules.enabled', 'wbs.excel_profile']
       .map(status)).toEqual(Array(8).fill('verified'))
-    expect(['branding.product_name', 'branding.logo', 'branding.accent', 'navigation.menu'].map(status))
-      .toEqual(Array(4).fill('stored'))
+    // 2026-10-09 재점검 — 강조색은 세 범위 셸이 모두 저장값을 싣는다(wired). 나머지 셋은 저장값을 안 읽는 표면이 남아 stored
+    // (제품 이름: 프로젝트·전역 탭 제목 등 / 로고: 전역 범위 탭 아이콘 / 메뉴: 전역 검색의 메뉴 목록 — catalog-meta 의 각 행 주석)
+    expect(['branding.product_name', 'branding.logo', 'navigation.menu'].map(status)).toEqual(Array(3).fill('stored'))
+    expect(status('branding.accent')).toBe('wired')
     // 추가 축 이름 — 편집기(설정 화면)·표시 소비처(WBS 화면·가져오기 마법사·엑셀 머리와 감지 별칭)·테스트가 붙어 wired
     expect(status('core.extra_axis_label')).toBe('wired')
     // SP5b Z — 크레딧 표와 흐름 다섯은 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성(Z) 뒤 verified
@@ -349,6 +351,9 @@ describe('카탈로그 메타와 사전', () => {
     expect(['forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'].map(status)).toEqual(Array(4).fill('verified'))
     expect(PLANNED_KEYS.map((p) => p.key).some((k) => k.startsWith('forms.'))).toBe(false)
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)
+    // SP7 — minutes.auto_file_by_path 는 정의·편집기·소비처(외부 업로드 라우트)·테스트가 붙어 wired. 마지막 예정 키였다 — 목록이 비었다
+    expect(status('minutes.auto_file_by_path')).toBe('wired')
+    expect(PLANNED_KEYS).toEqual([])
   })
   it('키마다 라벨·설명 사전 키가 ko·en 둘 다 있다', () => {
     for (const k of KEYS) {

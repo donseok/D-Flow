@@ -36,19 +36,22 @@ export function minutesApiEnabled(): boolean {
 }
 
 /**
- * W25(결정 §2-A) — `POST /minutes` 의 folder_path 편철 전환 스위치.
+ * W25(결정 §2-A) — `POST /minutes` 의 folder_path 편철을 배포 전체에서 끄는 운영자 차단 스위치.
+ *
+ * 편철 여부의 정본은 프로젝트 설정 `minutes.auto_file_by_path`(기본 true)다 — 판독은 lib/minutes/autoFile.ts.
+ * 이 env 는 한 단계 호환으로 남긴다: **명시적으로 `false` 일 때만** 의미가 있고 설정보다 먼저 이긴다(배포 전체 끔).
+ * 없거나 `true` 면 설정을 따른다(예전에는 `true` 일 때만 켜졌다 — 기본이 꺼짐에서 켜짐으로 뒤집혔다. 계약 §4.8).
  *
  * 꺼져 있으면 `folder_path` 를 **키 부재와 완전히 동일하게** 취급한다(검증 400 조차 내지 않는다).
- * 즉 R1 배포는 `POST /minutes` 동작을 1비트도 바꾸지 않는다.
  *
- * 왜 필요한가: 진짜 위험은 W3(등록 편철)가 아니라 **W5(재전송 폴더 동기화)** 다.
+ * 왜 스위치가 필요한가: 진짜 위험은 W3(등록 편철)가 아니라 **W5(재전송 폴더 동기화)** 다.
  * folder_path 가 실려 오기 시작하면 재전송 1건마다 D-Flow 위치가 덮이고, 또박또박에서 폴더에
  * 안 들어 있는 회의는 `[]` 를 보내므로 **사람이 정리해 둔 편철이 팀 루트로 평평화**된다.
  * `overwrite_manual` 은 배치에만 걸리는 플래그라 이 경로를 못 막는다.
- * 배치(W6)와 보관 상태 노출(W24)은 이 플래그와 **무관하게 항상 활성**이다.
+ * 배치(W6)와 보관 상태 노출(W24)은 이 스위치·설정과 **무관하게 항상 활성**이다.
  */
-export function folderPathEnabled(): boolean {
-  return process.env.MINUTES_FOLDER_PATH_ENABLED === 'true'
+export function folderPathKillSwitch(): boolean {
+  return process.env.MINUTES_FOLDER_PATH_ENABLED === 'false'
 }
 
 export const apiNotFound = () =>
@@ -180,6 +183,8 @@ export interface ExternalMinutePayload {
    * 뺀 조작만 영영 전파되지 않는다.
    */
   folderPathProvided: boolean
+  /** 요청에 실린 folder_path 원문(키 부재·배포 차단 스위치면 undefined) — 검증 전이다. 쓰기 대상의 설정을 안 뒤 settleFolderPath 가 위 두 칸을 채운다 */
+  folderPathRaw: unknown
   onConflict: 'replace' | 'skip' | 'error'
 }
 
@@ -313,15 +318,10 @@ export function parseMinutePayload(raw: unknown): { payload: ExternalMinutePaylo
   // §3.1 3값 규약 — 키 부재(=구버전 또박또박, 기존 동작) / [](=팀 루트) / 경로.
   // 명시적 null 은 배열이 아니므로 400 — 3값 규약에 없는 값을 조용히 '키 부재'로 뭉개면
   // 구버전 폴백과 구분이 사라진다.
-  let folderPath: string[] | null = null
-  // W25 — 플래그가 꺼져 있으면 키 부재와 동일. 검증도 하지 않으므로 61자 폴더명이 섞인
-  // 회의가 오늘처럼 정상 전송된다(플래그 없이 W1 만 먼저 내면 열리는 회귀 창을 막는다).
-  const folderPathProvided = folderPathEnabled() && b.folder_path !== undefined
-  if (folderPathProvided) {
-    const parsedPath = parseFolderPathValue(b.folder_path)
-    if (!parsedPath.ok) return { error: parsedPath.error }
-    folderPath = parsedPath.path
-  }
+  // W25 — 여기서는 키가 실렸는지만 본다. 편철 여부는 프로젝트 설정(minutes.auto_file_by_path)이라 쓰기 대상이 정해진 뒤에야 알 수 있고,
+  // 꺼져 있으면 검증조차 하지 않아야 하므로(61자 폴더명이 섞인 회의가 400 으로 깨지는 회귀 창을 막는다) 검증도 그때 한다(settleFolderPath).
+  // 배포 차단 스위치(env false)는 설정보다 먼저다 — 키를 읽기 전에 버린다.
+  const folderPathRaw: unknown = folderPathKillSwitch() ? undefined : b.folder_path
 
   const err = validateMinuteFields({
     minuteDate: b.date, teamCode: team, title: b.title, bodyMd: b.body_markdown, meetingId,
@@ -332,9 +332,25 @@ export function parseMinutePayload(raw: unknown): { payload: ExternalMinutePaylo
     payload: {
       minuteDate: b.date, teamCode: team, teamProvided, title: b.title.trim(),
       bodyMd: b.body_markdown, externalId, meetingId, meetingIdProvided,
-      meetingProvided, meeting, folderPath, folderPathProvided, onConflict,
+      meetingProvided, meeting, folderPath: null, folderPathProvided: false, folderPathRaw, onConflict,
     },
   }
+}
+
+/**
+ * folder_path 의 확정 — 쓰기 대상(프로젝트)의 자동 편철 설정을 안 뒤에 부른다(계약 §4.5-10 · §4.8).
+ * 꺼져 있으면 키 부재와 완전히 같다(검증하지 않는다). 켜져 있으면 그때 형식을 검증한다(§3.1 3값 규약 — 400).
+ * 같은 요청에서 대상이 다시 정해지면(경합으로 생긴 행) 원문에서 다시 판정한다 — 그래서 원문(folderPathRaw)을 지니고 있다.
+ */
+export function settleFolderPath(p: ExternalMinutePayload, autoFileEnabled: boolean): { ok: true } | { ok: false; error: string } {
+  p.folderPath = null
+  p.folderPathProvided = false
+  if (!autoFileEnabled || p.folderPathRaw === undefined) return { ok: true }
+  const parsed = parseFolderPathValue(p.folderPathRaw)
+  if (!parsed.ok) return { ok: false, error: parsed.error }
+  p.folderPath = parsed.path
+  p.folderPathProvided = true
+  return { ok: true }
 }
 
 /**

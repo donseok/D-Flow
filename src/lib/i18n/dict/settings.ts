@@ -267,6 +267,14 @@ export const settingsKo = {
   'settings.views.default.label': '작업 계획 기본 보기', 'settings.views.default.desc': '작업 계획을 처음 열 때의 보기(표·간트·보드)입니다. 보드는 칸반이 켜져 있을 때만 고를 수 있습니다.',
   // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11
   'settings.minutes.attachments.label': '회의록 첨부 정책', 'settings.minutes.attachments.desc': '새 첨부의 용량·개수·형식과 미리보기를 정합니다. 기존 파일은 지우지 않으며 워크스페이스 값은 새 프로젝트에 한 번 복사됩니다.',
+  // 외부 업로드의 폴더 자동 편철(minutes.auto_file_by_path)
+  'settings.minutes.auto_file_by_path.label': '외부 업로드 폴더 자동 정리',
+  'settings.minutes.auto_file_by_path.desc': '연동 프로그램이 회의록과 함께 보낸 폴더 경로대로 회의록을 폴더에 넣습니다. 바꾼 뒤의 업로드부터 적용되고 이미 정리된 회의록은 옮기지 않습니다. 폴더 일괄 재정리 요청은 이 설정과 무관하게 동작합니다.',
+  'settings.minutes.auto_file_by_path.switch': '보낸 폴더 경로대로 넣기',
+  'settings.minutes.auto_file_by_path.on': '켜짐', 'settings.minutes.auto_file_by_path.off': '꺼짐',
+  'settings.minutes.auto_file_by_path.onHint': '같은 회의록을 다시 보내면 그때의 폴더 경로로 위치가 바뀝니다. 여기서 직접 옮겨 둔 회의록도 다시 보낸 경로를 따릅니다.',
+  'settings.minutes.auto_file_by_path.offHint': '폴더 경로를 받지 않은 것처럼 다룹니다. 새 회의록은 담당 팀 폴더에 들어가고, 다시 보낸 회의록은 지금 위치에 그대로 있습니다.',
+  'settings.minutes.auto_file_by_path.invalid': '저장된 값을 읽지 못해 지금은 폴더 경로를 받지 않습니다. 값을 골라 다시 저장하세요.',
   // SP5 B2 — 회의록 최상위 폴더 모드(D21 — 화면은 teams 만, custom 은 플랫폼 관리자가 설정 RPC 로만)
   'settings.minutes.root_folders.label': '회의록 최상위 폴더', 'settings.minutes.root_folders.desc': '회의록 탐색기의 최상위 폴더를 팀마다 하나씩 둡니다. 팀을 만들면 그 팀의 폴더가 생기고, 팀 이름을 바꾸면 폴더 이름이 따라갑니다.',
   'settings.rootFolders.teams': '팀별 폴더', 'settings.rootFolders.custom': '지정 이름 폴더(외부 연동 전용)',

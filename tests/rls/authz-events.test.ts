@@ -96,18 +96,22 @@ describe('0012 ⑩-1 기록 — 세 종류의 변경마다 1행', () => {
 })
 
 describe('0012 ⑩-1 행위자와 원인', () => {
-  it('세션의 변경은 그 세션 사용자가 행위자다 — 등급 변경·삭제, 그리고 삭제가 일으킨 명단 권한 회수(cascade)', async () => {
+  // 0054 — 세션은 소속을 직접 지우지 못한다. 삭제와 그 연쇄(명단 권한 회수)의 행위자는 제거 RPC 가 넘긴 p_actor 다
+  it('세션의 등급 변경은 그 세션 사용자가 행위자다. 세션의 직접 삭제는 42501 로 기록도 남기지 않고, 제거 RPC 의 삭제·명단 권한 회수(cascade)는 RPC 의 행위자·명령 id 로 남는다', async () => {
+    const CMD = '00000000-0000-4000-8000-000000005470'
     await asService(pool, async (c) => {
       await tempAccount(c)
       const m = await mark(c)
       await toSession(c, F.users.wsAdmin)
       await c.query(`update public.workspace_members set role = 'admin' where workspace_id = $1 and user_id = $2`, [F.ws, U])
-      await c.query('delete from public.workspace_members where workspace_id = $1 and user_id = $2', [F.ws, U])
+      expect(await pgError(c, 'delete from public.workspace_members where workspace_id = $1 and user_id = $2', [F.ws, U])).toMatchObject(DENIED)
       await toServer(c)
-      expect((await since(c, m)).map((e) => [e.kind, e.cause, e.before, e.after, e.actor_user_id])).toEqual([
-        ['workspace_role', 'direct', { role: 'member' }, { role: 'admin' }, F.users.wsAdmin],
-        ['workspace_role', 'direct', { role: 'admin' }, null, F.users.wsAdmin],
-        ['project_access', 'cascade', { access_role: 'member', active: true }, { access_role: null, active: true }, F.users.wsAdmin],
+      // 관리자가 된 U 를 빼는 것은 플랫폼 관리자만(0053 등급 경계)
+      await c.query('select public.remove_workspace_member($1, $2, $3, $4)', [F.users.platform, F.ws, U, CMD])
+      expect((await since(c, m)).map((e) => [e.kind, e.cause, e.before, e.after, e.actor_user_id, e.command_id])).toEqual([
+        ['workspace_role', 'direct', { role: 'member' }, { role: 'admin' }, F.users.wsAdmin, null],
+        ['workspace_role', 'direct', { role: 'admin' }, null, F.users.platform, CMD],
+        ['project_access', 'cascade', { access_role: 'member', active: true }, { access_role: null, active: true }, F.users.platform, CMD],
       ])
     })
   })

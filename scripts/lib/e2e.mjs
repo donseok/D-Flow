@@ -945,3 +945,121 @@ export function teamSlotVerdict(html) {
     neutral: (text.match(/(?<![\w-])(?:text|bg)-neutral(?![\w-])/g) ?? []).length,
   }
 }
+
+// ── 재점검 보강 흐름(e2e-local.mjs 의 끝 — sp3b- 단계 뒤): 팀 코드 변경·병합, 팀 없는 회의록, 알림 정책, 충돌 비교, 워크스페이스 생성,
+//    계정 수명주기, 헬스체크·보안 헤더, 회의록 공유 링크, (선택) 색인·위키 워커. 앞 단계의 픽스처(소속 수·모듈 상태)를 건드리지 않게 맨 뒤에 둔다.
+
+/** 제거·비밀번호 재설정의 대상 계정 — 워크스페이스 A 의 멤버이자 프로젝트 A 의 멤버로 만든다(소속은 A 하나) */
+export const LEAVER = Object.freeze({ email: 'e2e-leaver@example.com', name: 'leaver' })
+/** 켜고 끄는 알림 유형 — 필수가 아니고 한 번의 담당 지정으로 발행되는 가장 싼 유형 */
+export const NOTIFY_PROBE_TYPE = 'work.assigned'
+/** 충돌 비교 대화상자의 표지와 '서버 값 받기' 단추 이름(ko — 러너 계정의 기본 언어) */
+export const CONFLICT_DIALOG = '[data-testid="conflict-resolver"]'
+export const CONFLICT_TAKE_LATEST = '서버 값 받기'
+/** 주간 시트의 제목 입력 */
+export const WEEKLY_TITLE_INPUT = 'input[aria-label="시트 제목"]'
+/** 회의록 목록의 "팀 없음" 필터 값과 그 탭의 이름 */
+export const NO_TEAM_FILTER = 'none'
+export const NO_TEAM_LABEL = '팀 없음'
+
+/**
+ * 재점검 보강 단계의 이름·코드 — 실행마다 달라지는 꼬리(stamp 의 끝 네 자리)를 붙여 같은 DB 에서 다시 돌려도 겹치지 않는다.
+ * 팀 코드는 영문 대문자·숫자만 쓴다(팀 코드 규칙).
+ * @param {string} stamp 숫자 12자리(yyyymmddhhmm)
+ */
+export function recheckNames(stamp) {
+  const tail = String(stamp).slice(-4)
+  if (!/^\d{4}$/.test(tail)) throw new Error(`stamp 의 끝 네 자리가 숫자가 아니다: ${stamp}`)
+  return {
+    teams: {
+      source: { name: `E2E 원본팀 ${tail}`, code: `TS${tail}` },
+      target: { name: `E2E 대상팀 ${tail}`, code: `TD${tail}` },
+      /** 원본 팀의 바꿀 코드 */
+      renamedCode: `TX${tail}`,
+    },
+    minutes: { team: `E2E-TEAM-${stamp}`, noTeam: `E2E-NOTEAM-${stamp}` },
+    weeklyTitle: { theirs: `E2E 서버 제목 ${tail}`, mine: `E2E 내 제목 ${tail}` },
+    workspace: { name: `E2E 새 워크스페이스 ${tail}`, slug: `e2e-new-${stamp}` },
+  }
+}
+
+/** updateMinuteMeta 의 둘째 인자(본문을 뺀 MinuteInput) — 팀만 바꾼다. 빈 문자열이 "팀 없음"이다
+ *  @param {{ date: string, title: string, teamCode: string, projectId?: string | null }} p */
+export function minuteMetaPatch({ date, title, teamCode, projectId = null }) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`회의록 날짜 형식이 아니다: ${date}`)
+  return { minuteDate: date, teamCode, title, meetingId: null, projectId, meetingOccurrenceDate: null }
+}
+
+/** 워크스페이스 알림 정책 값 — 그 유형 하나를 끄거나 켠다(다른 유형은 적지 않는다 = 기본)
+ *  @param {string} type @param {boolean} enabled */
+export function notifyPolicyOf(type, enabled) {
+  return { [type]: { enabled } }
+}
+
+/** 설정 패치 — 값이 undefined 면 키를 지운다(원래 저장값이 없던 상태로 되돌릴 때)
+ *  @param {string} key @param {unknown} value */
+export function settingPatch(key, value) {
+  return value === undefined ? { set: {}, unset: [key] } : { set: { [key]: value }, unset: [] }
+}
+
+/**
+ * /login 응답의 보안 헤더 판정(순수) — next.config.ts 의 headers() 가 전 경로에 싣는 것. HSTS 는 프로덕션에서만이라 로컬에서는 보지 않는다.
+ * @param {{ get(name: string): string | null }} headers @returns {string[]} 문제 목록
+ */
+export function securityHeaderProblems(headers) {
+  const p = []
+  const want = (name, test, hint) => {
+    const v = headers.get(name)
+    if (v === null) p.push(`${name} 헤더가 없다`)
+    else if (!test(v)) p.push(`${name} = ${JSON.stringify(v.slice(0, 80))} (${hint})`)
+  }
+  want('x-content-type-options', (v) => v.toLowerCase() === 'nosniff', 'nosniff 여야 한다')
+  want('x-frame-options', (v) => v.toUpperCase() === 'DENY', 'DENY 여야 한다')
+  want('referrer-policy', (v) => v === 'strict-origin-when-cross-origin', 'strict-origin-when-cross-origin 이어야 한다')
+  want('permissions-policy', (v) => ['camera=()', 'microphone=()', 'geolocation=()'].every((x) => v.includes(x)), '카메라·마이크·위치를 닫아야 한다')
+  // 강제하는 CSP 는 프레임 차단 한 지시어, 자원 정책은 보고 전용이다
+  want('content-security-policy', (v) => v.includes("frame-ancestors 'none'"), "frame-ancestors 'none' 이 있어야 한다")
+  want('content-security-policy-report-only', (v) => v.includes("default-src 'self'") && v.includes("object-src 'none'"), "default-src 'self'·object-src 'none' 이 있어야 한다")
+  return p
+}
+
+/** 헬스체크 응답 판정(순수) — 얕은 점검은 { ok: true } 만(DB 칸 없음), 깊은 점검(시크릿 있음)은 db: 'ok'. 캐시하지 않는다
+ *  @param {{ status: number, body: any, cacheControl: string | null }} res @param {'shallow' | 'deep'} kind @returns {string[]} */
+export function healthProblems(res, kind) {
+  const p = []
+  if (res.status !== 200) p.push(`상태 ${res.status} ≠ 200`)
+  if (res.body?.ok !== true) p.push(`ok = ${JSON.stringify(res.body?.ok)}`)
+  if (kind === 'shallow' && res.body && 'db' in res.body) p.push('시크릿 없는 요청이 DB 점검을 일으켰다(db 칸이 있다)')
+  if (kind === 'deep' && res.body?.db !== 'ok') p.push(`db = ${JSON.stringify(res.body?.db)} (깊은 점검이 돌지 않았다)`)
+  if (!(res.cacheControl ?? '').includes('no-store')) p.push(`Cache-Control = ${JSON.stringify(res.cacheControl)} (no-store 여야 한다)`)
+  return p
+}
+
+/** 워커 단계를 돌릴지 — 서버가 색인·위키 워커 플래그로 떠 있을 때만 켠다(E2E_WORKERS=1). 그 밖에는 건너뛴다(실패로 세지 않는다)
+ *  @param {Record<string, string | undefined>} env */
+export function workersEnabled(env) {
+  return env.E2E_WORKERS === '1'
+}
+
+/**
+ * 워커 세 잡의 응답 판정(순수). 404 는 그 잡의 플래그가 꺼진 서버라는 뜻이라 어떤 env 가 필요한지를 문제에 적는다.
+ * 색인: 200·failed 0·문서가 쌓였다(실행 뒤 1건 이상이고 줄지 않았다). 위키: 200·처리 수가 숫자. 첨부 청소: 200·ok.
+ * @param {{ index: { status: number, body: any }, wiki: { status: number, body: any }, gc: { status: number, body: any }, docsBefore: number, docsAfter: number }} r
+ * @returns {string[]}
+ */
+export function workerProblems({ index, wiki, gc, docsBefore, docsAfter }) {
+  const p = []
+  if (index.status === 404) p.push('색인 워커 404 — 서버에 CHAT_V2_ENABLED=true·CHAT_V2_INDEX_WORKER_ENABLED=true 가 필요하다')
+  else if (index.status !== 200) p.push(`색인 워커 상태 ${index.status}`)
+  else {
+    if (index.body?.failed !== 0) p.push(`색인 워커 failed = ${JSON.stringify(index.body?.failed)} (0 이어야 한다)`)
+    if (!(docsAfter > 0)) p.push(`색인 문서가 없다(실행 뒤 ${docsAfter}건)`)
+    if (docsAfter < docsBefore) p.push(`색인 문서가 줄었다(${docsBefore} → ${docsAfter})`)
+  }
+  if (wiki.status === 404) p.push('위키 워커 404 — 서버에 WIKI_WORKER_ENABLED=true(와 처리하려면 WIKI_SERVICE_ENABLED=true)가 필요하다')
+  else if (wiki.status !== 200) p.push(`위키 워커 상태 ${wiki.status}`)
+  else if (typeof wiki.body?.attempted !== 'number' || typeof wiki.body?.completed !== 'number') p.push(`위키 워커 응답 형식: ${JSON.stringify(wiki.body)?.slice(0, 120)}`)
+  if (gc.status !== 200) p.push(`첨부 청소 상태 ${gc.status}${gc.body?.error ? `(${gc.body.error})` : ''}`)
+  else if (gc.body?.ok !== true) p.push(`첨부 청소 응답: ${JSON.stringify(gc.body)?.slice(0, 120)}`)
+  return p
+}

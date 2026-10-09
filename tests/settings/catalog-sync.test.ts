@@ -9,7 +9,7 @@ const file = 'docs/settings-catalog.md'
 const expectedStatus: Record<string, string> = {
   'fields.wbs_item': 'verified', 'fields.issue': 'verified', 'fields.weekly_row': 'verified',
   'modules.allowed': 'verified', 'ai.enabled': 'verified', 'invites.allowed_domains': 'verified',
-  'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'stored', 'branding.mail_from_name': 'verified',
+  'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'wired', 'branding.mail_from_name': 'verified',
   'navigation.menu': 'stored', 'core.level_labels': 'verified', 'core.extra_axis_label': 'wired',
   'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'verified', 'workflow.issue_statuses': 'verified',
   // SP5 A — 달력 셋(스펙 D44: 정의·편집·소비처·테스트 네 연결). 두 스코프가 같은 키 이름을 쓴다(워크스페이스 기본값 → 프로젝트 생성 시 복사)
@@ -26,6 +26,8 @@ const expectedStatus: Record<string, string> = {
   'attendance.types': 'verified', 'meetings.categories': 'verified', 'issues.severities': 'verified', 'issues.sources': 'verified', 'issues.cause_categories': 'verified',
   // SP5 B2 — 최상위 폴더 모드. SQL(create_team·ensure_team_roots)·편집기·앱 소비처(편철 정규화 v2.9)·검증 네 연결
   'minutes.root_folders': 'verified',
+  // 정본 §3.3 — 외부 업로드의 자동 편철(env 의 설정화). 정의·편집기·소비처(업로드 라우트)·테스트. 편집 화면 눈확인·업로드 완주 전이라 wired
+  'minutes.auto_file_by_path': 'wired',
   // SP5b — 흐름 다섯(+크레딧 표). 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성 S1/S3/S9-workflow(Z) 뒤 verified
   'workflow.credit_policy': 'verified', 'workflow.wbs_stage_labels': 'verified', 'workflow.approval_steps': 'verified',
   'workflow.approval_distinct_approvers': 'verified', 'workflow.predecessor_gate': 'verified',
@@ -37,9 +39,9 @@ const expectedStatus: Record<string, string> = {
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {}
 
 describe('설정 카탈로그 동기화', () => {
-  it('47정의(키 이름 43)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('48정의(키 이름 44)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(47)
+    expect(defs).toHaveLength(48)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
     for (const def of defs) {

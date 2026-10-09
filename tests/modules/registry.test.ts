@@ -91,9 +91,9 @@ describe('목록', () => {
     expect(new Set([...claimed, 'projects', 'unknown'])).toEqual(new Set(BOT_DOMAINS))
     expect([...byId.chatbot.botDomains]).toEqual([])
   })
-  it('settings — 47정의(SP6 forms.* 넷·SP5c 필드 셋·SP5 달력·이슈·어휘·SP5b 흐름·SP3b portal.widgets·views.default·SPU1 security.local_drafts·SP8 notify.policy 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 13·settings 18 이다', () => {
+  it('settings — 48정의(SP7 minutes.auto_file_by_path·SP6 forms.* 넷·SP5c 필드 셋·SP5 달력·이슈·어휘·SP5b 흐름·SP3b portal.widgets·views.default·SPU1 security.local_drafts·SP8 notify.policy 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 13·settings 18 이다', () => {
     const owned = MODULES.flatMap((m) => m.settings.map((s) => [m.id, s.key] as const))
-    expect(owned).toHaveLength(47)
+    expect(owned).toHaveLength(48)
     for (const [mid, key] of owned) {
       const def = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS].find((d) => d.key === key)!
       expect(def.module, key).toBe(mid)
@@ -105,7 +105,7 @@ describe('목록', () => {
     expect(byId.settings.settings.map(s => `${s.scope}/${s.key}`)).toContain('workspace/notify.policy')
     expect(byId.issues.settings.map(s => s.key)).toContain('fields.issue')
     expect(byId.weekly.settings.map(s => s.key)).toEqual(['fields.weekly_row', 'forms.weekly_report_pptx', 'forms.weekly_report_xlsx'])
-    expect(byId.minutes.settings.map(s => `${s.scope}/${s.key}`)).toEqual(['workspace/minutes.attachments', 'workspace/minutes.root_folders', 'project/minutes.attachments'])
+    expect(byId.minutes.settings.map(s => `${s.scope}/${s.key}`)).toEqual(['workspace/minutes.attachments', 'workspace/minutes.root_folders', 'project/minutes.attachments', 'project/minutes.auto_file_by_path'])
     expect(byId.attendance.settings.map(s => s.key)).toEqual(['attendance.types'])
     expect(byId.meetings.settings.map(s => s.key)).toEqual(['meetings.categories'])
     expect(byId.issue_analysis.settings.map(s => s.key)).toContain('issues.sources')

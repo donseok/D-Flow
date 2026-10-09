@@ -30,13 +30,20 @@
 //        과거·과도기 URL 이 같은 문서), calendar-tz(워크스페이스 Pago Pago 와 프로젝트 Kiritimati 시간대 검증, 끝에 tz 복귀),
 //        calendar-workday(토요일 근무 예외 → 의존성 연결·계획%, 예외 없는 토요일로 옮기면 거부). 기존 주간 단계의 키는 일요일(워크스페이스 기본값 복사 —
 //        SP5 D5)이고 러너의 '오늘'은 그 범위에 저장된 tz 다.
+//   재점검 보강(sp3b- 단계 뒤 — 앞 단계의 소속 수·모듈 상태를 건드리지 않게 맨 끝): team-code-merge(공용 팀을 이름·코드 따로 만들고 코드를 바꾸면
+//        그 팀 회의록의 사본 코드가 따라가고, 다른 팀으로 합치면 원본은 비활성·회의록 담당은 대상 팀), minutes-no-team(팀 없이 등록 → 목록의 "팀 없음" →
+//        팀 지정 → 해제), notify-policy(작업 배정 알림을 끄면 이벤트 행이 생기지 않고 켜면 생긴다), conflict-compare(두 브라우저 컨텍스트의 주간 제목
+//        충돌 → 비교 → 서버 값 받기), workspace-create(/admin/workspaces 에서 만들고 진입 — 0054 의 생성 RPC), account-lifecycle(비밀번호 재설정의
+//        기록, 세션의 소속 직접 삭제 거부, 제거 뒤 권한 회수), health-headers(/api/health·/login 보안 헤더), minutes-share-link(발급 → 비로그인 열림 →
+//        회수 뒤 닫힘), workers(선택 — E2E_WORKERS=1 일 때만. 서버가 CHAT_V2_ENABLED·CHAT_V2_INDEX_WORKER_ENABLED·WIKI_SERVICE_ENABLED·
+//        WIKI_WORKER_ENABLED 로 떠 있어야 한다. 꺼져 있으면 건너뜀으로 기록하고 실패로 세지 않는다).
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 npm run env:local 뒤 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 서버(A1 은 npm run dev, A2 부터 next build 뒤 npx next start -p 3101)가
 // 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
 //   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3101 MINUTES_API_ENABLED=true CRON_SECRET=<시크릿> npm run dev -- -p 3101
 //   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… CRON_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
-//   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] npx --yes -p playwright@1.58.2 node scripts/e2e-local.mjs
-//   (sp3b-E11 이 브라우저로 소프트 이동을 본다 — Playwright 1.58.2 를 npx 로 PATH 에 싣는다. 없으면 그 단계가 실패한다)
+//   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] [E2E_WORKERS=1] npx --yes -p playwright@1.58.2 node scripts/e2e-local.mjs
+//   (sp3b-E11 과 conflict-compare 가 브라우저를 쓴다 — Playwright 1.58.2 를 npx 로 PATH 에 싣는다. 없으면 그 단계가 실패한다)
 // 비밀번호·시크릿은 env 로만 받고 출력하지 않는다(ana·외부 계정·carol 의 비밀번호는 실행마다 새로 만든다).
 // 결과는 stdout 에 JSON 한 덩어리. 어느 단계든 실패하면 그 자리에서 멈추고 exit 1.
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
@@ -68,6 +75,10 @@ import { BOOTSTRAP_MODULE_IDS } from './lib/bootstrap-modules.mjs'
 import { SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
 import { localAdminEnv } from './lib/targets.mjs'
 import { kanbanBoardRendered, parseE2eSelection, runSelectedE2e } from './lib/e2e-selection.mjs'
+import {
+  CONFLICT_DIALOG, CONFLICT_TAKE_LATEST, LEAVER, NOTIFY_PROBE_TYPE, NO_TEAM_FILTER, NO_TEAM_LABEL, WEEKLY_TITLE_INPUT,
+  healthProblems, minuteMetaPatch, notifyPolicyOf, recheckNames, securityHeaderProblems, settingPatch, workerProblems, workersEnabled,
+} from './lib/e2e.mjs'
 
 // --only sp3b-E3: 레인 B 캡처 시드·3201만 사용한다. 전체 러너의 비밀번호/외부 API 시크릿을 요구하지 않는다.
 try {
@@ -168,6 +179,14 @@ const ACTIONS = {
   addWbsItem: { filename: 'src/app/actions/wbs.ts', exportedName: 'addWbsItem', worker: '/p/[projectId]/wbs/page' },
   updateWbsFields: { filename: 'src/app/actions/wbs.ts', exportedName: 'updateWbsFields', worker: '/p/[projectId]/wbs/page' },
   addTaskDependency: { filename: 'src/app/actions/wbs.ts', exportedName: 'addTaskDependency', worker: '/p/[projectId]/wbs/page' },
+  // 재점검 보강 — 공용 팀 관리 화면의 코드 바꾸기·합치기, 회의록 상세의 메타·공유 모달, 플랫폼 관리의 워크스페이스 만들기, 계정 관리의 제거·재설정
+  changeTeamCode: { filename: 'src/app/actions/teams.ts', exportedName: 'changeTeamCode', worker: '/w/[slug]/admin/teams/page' },
+  mergeTeams: { filename: 'src/app/actions/teams.ts', exportedName: 'mergeTeams', worker: '/w/[slug]/admin/teams/page' },
+  updateMinuteMeta: { filename: 'src/app/actions/minutes.ts', exportedName: 'updateMinuteMeta', worker: '/w/[slug]/minutes/[id]/page' },
+  setMinuteShare: { filename: 'src/app/actions/minutes.ts', exportedName: 'setMinuteShare', worker: '/w/[slug]/minutes/[id]/page' },
+  createPlatformWorkspace: { filename: 'src/app/actions/platformWorkspaces.ts', exportedName: 'createPlatformWorkspace', worker: '/admin/workspaces/page' },
+  removeWorkspaceMember: { filename: 'src/app/actions/accounts.ts', exportedName: 'removeWorkspaceMember', worker: '/w/[slug]/admin/accounts/page' },
+  resetPassword: { filename: 'src/app/actions/accounts.ts', exportedName: 'resetPassword', worker: '/w/[slug]/admin/accounts/page' },
 }
 
 const summary = { base, email, outDir, steps: [], artifacts: [] }
@@ -2018,6 +2037,406 @@ async function main() {
     p.push(...shellBadgeVerdict(await shell(bea, `ws=${wsA}&project=${A.id}`), 'hidden').map((x) => `bea@A: ${x}`))
     p.push(...shellBadgeVerdict(await shell(bea, `ws=${wsB}&project=${C.id}`), 'own').map((x) => `bea@B: ${x}`))
     sp3b('E10', { what: '비소속 배지 — bea 의 A 범위 /api/shell 은 세 배지 모두 null, 자기 B 는 숫자' }, p)
+  }
+
+  // ── 25. 재점검 보강 — 최근 추가분의 완주. 앞 단계의 픽스처를 그대로 쓰고(A·B·C, ana·bea·duo·carol, 플랫폼 관리자) 맨 끝에 둔다:
+  //    여기서 플랫폼 관리자의 소속이 둘이 되고(새 워크스페이스의 첫 관리자) A 의 팀·회의록이 늘어, 앞에 두면 sp3b- 단계의 전제(소속 수·목록)가 깨진다.
+  //    DB 확인은 앞 단계와 같은 두 길뿐이다 — 세션 클라이언트(RLS)와 service_role 클라이언트(localAdminEnv 가 로컬로 판정한 주소).
+  const rc = recheckNames(stamp)
+  const allOk = (checks) => Object.values(checks).every(Boolean)
+  /** 조건이 참이 될 때까지 기다린다(브라우저의 저장이 서버에 닿는 시간) — 끝내 거짓이면 null */
+  const until = async (probe, ms = 15_000) => {
+    for (const end = Date.now() + ms; ;) {
+      const v = await probe()
+      if (v) return v
+      if (Date.now() > end) return null
+      await new Promise((r) => setTimeout(r, 300))
+    }
+  }
+  /** 워크스페이스 설정 문서(값·revision) — 읽기만 한다. 쓰기는 늘 설정 액션·생성 액션이다 */
+  const wsSettingsOf = async (workspaceId) => {
+    const doc = rows('워크스페이스 설정', await svc.from('workspace_settings').select('values, revision').eq('workspace_id', workspaceId).single())
+    return { values: doc.values, revision: Number(doc.revision) }
+  }
+  /** 권한 변경 이력(최신 먼저) — 읽기만 한다. 행은 권한 RPC 안에서만 생긴다 */
+  const authzRowsOf = async (filter) => rows('권한 이력', await filter(svc.from('authz_events')
+    .select('id, kind, workspace_id, target_user_id, before, after, cause, actor_user_id, command_id')).order('id', { ascending: false }))
+
+  // 25a. team-code-merge — 공용 팀을 이름·코드 따로 만든다(addTeam 의 셋째 인자) → 원본 팀 담당의 회의록 → 코드 바꾸기(change_team_code — 그 팀
+  //      회의록의 사본 열이 같은 트랜잭션에서 따라간다) → 대상 팀으로 합치기(merge_teams — 원본은 비활성, 회의록 담당은 대상 팀으로, 원본을 가리키는 것 0).
+  {
+    const teamsPage = wsPath(wsA, 'admin/teams')
+    const teamOf = async (id) => rows('공용 팀', await svc.from('teams').select('id, code, name, active').eq('id', id))[0]
+    const teamByCode = async (code) => {
+      const found = rows(`공용 팀(${code})`, await svc.from('teams').select('id, code, name, active').eq('workspace_id', wsA).is('project_id', null).eq('code', code))
+      if (found.length !== 1) throw new Fail(`공용 팀 ${code} 가 ${found.length}건`)
+      return found[0]
+    }
+    await admin.http('GET', teamsPage)
+    for (const t of [rc.teams.source, rc.teams.target]) {
+      mustOk(`addTeam(${t.code})`, (await admin.action(teamsPage, 'addTeam', [wsA, t.name, t.code])).result)
+    }
+    const src = await teamByCode(rc.teams.source.code)
+    const dst = await teamByCode(rc.teams.target.code)
+    await ana.http('GET', wsPath(wsA, 'minutes'))
+    const teamMinute = mustOk('createMinute(원본 팀)', (await ana.action(wsPath(wsA, 'minutes'), 'createMinute', [
+      minuteInput({ date: meetingDate, teamCode: rc.teams.source.code, title: rc.minutes.team, bodyMd: `# ${rc.minutes.team}\n`, projectId: null }), null, null, wsA,
+    ])).result)
+    const minuteTeam = async () => {
+      const [row] = rows('팀 회의록', await svc.from('minutes').select('team_id, team_code').eq('id', teamMinute.id))
+      return row ?? null
+    }
+    const minuteAtCreate = await minuteTeam()
+    const changed = (await admin.action(teamsPage, 'changeTeamCode', [wsA, src.id, rc.teams.renamedCode])).result
+    const srcAfterCode = await teamOf(src.id)
+    const minuteAfterCode = await minuteTeam()
+    const sameCode = (await admin.action(teamsPage, 'changeTeamCode', [wsA, src.id, rc.teams.renamedCode])).result
+    const merged = (await admin.action(teamsPage, 'mergeTeams', [wsA, src.id, dst.id])).result
+    const srcAfterMerge = await teamOf(src.id)
+    const dstAfterMerge = await teamOf(dst.id)
+    const minuteAfterMerge = await minuteTeam()
+    const mergedAgain = (await admin.action(teamsPage, 'mergeTeams', [wsA, dst.id, dst.id])).result
+    const checks = {
+      // 이름과 코드가 따로 저장됐다(예전에는 한 입력이 둘 다였다)
+      nameAndCodeSeparate: src.name === rc.teams.source.name && src.code === rc.teams.source.code && src.name !== src.code
+        && dst.name === rc.teams.target.name && dst.code === rc.teams.target.code,
+      minuteOwnedBySource: minuteAtCreate?.team_id === src.id && minuteAtCreate?.team_code === rc.teams.source.code,
+      codeChanged: changed?.ok === true && srcAfterCode?.code === rc.teams.renamedCode && srcAfterCode?.name === rc.teams.source.name && srcAfterCode?.active === true,
+      minuteCodeFollowed: minuteAfterCode?.team_id === src.id && minuteAfterCode?.team_code === rc.teams.renamedCode,
+      sameCodeRejected: sameCode?.ok === false,
+      merged: merged?.ok === true && merged.summary?.moved?.minutes >= 1 && merged.summary?.sourceRefsLeft === 0,
+      sourceInactive: srcAfterMerge?.active === false && dstAfterMerge?.active === true,
+      minuteMovedToTarget: minuteAfterMerge?.team_id === dst.id && minuteAfterMerge?.team_code === rc.teams.target.code,
+      selfMergeRejected: mergedAgain?.ok === false,
+    }
+    step('team-code-merge', {
+      source: { id: src.id, name: src.name, code: [rc.teams.source.code, rc.teams.renamedCode] }, target: { id: dst.id, name: dst.name, code: dst.code },
+      minuteId: teamMinute.id, minute: { atCreate: minuteAtCreate, afterCode: minuteAfterCode, afterMerge: minuteAfterMerge },
+      results: { changed, sameCode, merged, mergedAgain }, checks,
+    }, allOk(checks) ? undefined : `팀 코드 변경·병합: ${JSON.stringify({ checks, changed, merged, minuteAfterCode, minuteAfterMerge })}`)
+  }
+
+  // 25b. minutes-no-team — 팀 없이 등록(담당 빈 값 — 0052) → 목록의 "팀 없음" 탭 → 팀 지정(상세 화면의 메타 모달이 부르는 updateMinuteMeta) → 해제.
+  {
+    const listPage = wsPath(wsA, 'minutes')
+    await ana.http('GET', listPage)
+    const created = mustOk('createMinute(팀 없음)', (await ana.action(listPage, 'createMinute', [
+      minuteInput({ date: meetingDate, teamCode: '', title: rc.minutes.noTeam, bodyMd: `# ${rc.minutes.noTeam}\n`, projectId: null }), null, null, wsA,
+    ])).result)
+    const teamOfMinute = async () => {
+      const [row] = rows('팀 없는 회의록', await svc.from('minutes').select('team_id, team_code, folder_id, workspace_id, project_id').eq('id', created.id))
+      return row ?? null
+    }
+    const atCreate = await teamOfMinute()
+    const noTeamHtml = await (await ana.http('GET', `${listPage}?team=${NO_TEAM_FILTER}`)).text()
+    const [opsTeam] = rows(`공용 팀(${WS_TEAM})`, await svc.from('teams').select('id, code, active').eq('workspace_id', wsA).is('project_id', null).eq('code', WS_TEAM))
+    if (!opsTeam?.active) throw new Fail(`팀 지정에 쓸 공용 팀 ${WS_TEAM} 이 없거나 비활성이다`)
+    const detail = `${listPage}/${created.id}`
+    await ana.http('GET', detail)
+    const patch = (teamCode) => minuteMetaPatch({ date: meetingDate, title: rc.minutes.noTeam, teamCode })
+    const assigned = (await ana.action(detail, 'updateMinuteMeta', [created.id, patch(WS_TEAM)])).result
+    const afterAssign = await teamOfMinute()
+    const teamHtml = await (await ana.http('GET', `${listPage}?team=${opsTeam.id}`)).text()
+    const cleared = (await ana.action(detail, 'updateMinuteMeta', [created.id, patch('')])).result
+    const afterClear = await teamOfMinute()
+    const unknownTeam = (await ana.action(detail, 'updateMinuteMeta', [created.id, patch(`ZZ${stamp.slice(-4)}`)])).result
+    const checks = {
+      createdWithoutTeam: atCreate?.team_id === null && atCreate?.team_code === '' && atCreate?.workspace_id === wsA && atCreate?.project_id === null,
+      listedUnderNoTeam: noTeamHtml.includes(rc.minutes.noTeam) && noTeamHtml.includes(NO_TEAM_LABEL),
+      assigned: assigned?.ok === true && afterAssign?.team_id === opsTeam.id && afterAssign?.team_code === WS_TEAM,
+      listedUnderTeam: teamHtml.includes(rc.minutes.noTeam),
+      cleared: cleared?.ok === true && afterClear?.team_id === null && afterClear?.team_code === '',
+      // 없는 팀 코드는 "팀 없음"으로 삼키지 않고 거부한다
+      unknownTeamRejected: unknownTeam?.ok === false,
+    }
+    step('minutes-no-team', { minuteId: created.id, team: { id: opsTeam.id, code: WS_TEAM }, rows: { atCreate, afterAssign, afterClear },
+      results: { assigned, cleared, unknownTeam }, checks },
+    allOk(checks) ? undefined : `팀 없는 회의록: ${JSON.stringify({ checks, atCreate, afterAssign, afterClear, assigned, cleared })}`)
+  }
+
+  // 25c. notify-policy — 워크스페이스가 작업 배정 알림을 끄면(설정 액션) 담당 지정이 이벤트·수신자 행을 하나도 만들지 않고, 다시 켜면 만든다.
+  //      대상은 프로젝트 A 의 리프(단계 6 의 것)와 계정이 있는 멤버 carol — 행위자(플랫폼 관리자)와 다른 사람이어야 수신자가 생긴다.
+  {
+    const settingsPage = `/w/${encodeURIComponent(slugA)}/settings`
+    const wbsPage = `/p/${A.id}/wbs`
+    const key = 'notify.policy'
+    const stored = (await wsSettingsOf(wsA)).values[key]   // 없으면 undefined — 끝에 그 상태로 되돌린다
+    const setPolicy = async (value) => {
+      await admin.http('GET', settingsPage)
+      const { revision } = await wsSettingsOf(wsA)
+      return mustOk('updateWorkspaceSettings(알림 정책)', (await admin.action(settingsPage, 'updateWorkspaceSettings',
+        [wsA, { expectedRevision: revision, commandId: randomUUID(), ...settingPatch(key, value) }])).result)
+    }
+    const events = async () => rows('알림 이벤트', await svc.from('notification_events').select('id').eq('type', NOTIFY_PROBE_TYPE).eq('entity_id', leaf.id)).map((e) => e.id)
+    const recipientsOf = async (ids) => (ids.length === 0 ? []
+      : rows('알림 수신자', await svc.from('notification_recipients').select('event_id, member_id, user_id').in('event_id', ids)))
+    const assigneeOf = async () => rows('리프 담당', await svc.from('wbs_items').select('assignee_member_id').eq('id', leaf.id).single()).assignee_member_id
+    await admin.http('GET', wbsPage)
+    const assign = async (memberId) => mustOk(`setWbsAssignee(${memberId ? '지정' : '해제'})`, (await admin.action(wbsPage, 'setWbsAssignee', [leaf.id, memberId])).result)
+    const originalAssignee = await assigneeOf()
+    const [carolUser] = rows('carol 계정', await svc.from('profiles').select('user_id').eq('email', INVITEE.email))
+    let offNew = [], onNew = [], onRecipients = [], offStored, restored = false
+    try {
+      await assign(null)                                   // 같은 담당자 재지정은 발행하지 않는다 — 빈 상태에서 시작한다
+      const before = await events()
+      await setPolicy(notifyPolicyOf(NOTIFY_PROBE_TYPE, false))
+      offStored = (await wsSettingsOf(wsA)).values[key]
+      await assign(carolMemberId)
+      offNew = (await events()).filter((id) => !before.includes(id))
+      await assign(null)
+      await setPolicy(notifyPolicyOf(NOTIFY_PROBE_TYPE, true))
+      await assign(carolMemberId)
+      onNew = (await events()).filter((id) => !before.includes(id))
+      onRecipients = await recipientsOf(onNew)
+    } finally {
+      // 설정과 담당을 시작 상태로 — 실패해도 되돌린다(뒤 단계와 다시 돌리는 사람이 같은 바닥에서 시작하게)
+      const now = (await wsSettingsOf(wsA)).values[key]
+      if (JSON.stringify(now) !== JSON.stringify(stored)) await setPolicy(stored)
+      if ((await assigneeOf()) !== originalAssignee) await assign(originalAssignee)
+      restored = JSON.stringify((await wsSettingsOf(wsA)).values[key]) === JSON.stringify(stored) && (await assigneeOf()) === originalAssignee
+    }
+    const checks = {
+      policyStored: JSON.stringify(offStored) === JSON.stringify(notifyPolicyOf(NOTIFY_PROBE_TYPE, false)),
+      offNoEvent: offNew.length === 0,
+      onOneEvent: onNew.length === 1,
+      onRecipientIsCarol: onRecipients.length === 1 && onRecipients[0].member_id === carolMemberId && onRecipients[0].user_id === carolUser?.user_id,
+      restored,
+    }
+    step('notify-policy', { type: NOTIFY_PROBE_TYPE, itemId: leaf.id, recipientMemberId: carolMemberId, events: { off: offNew.length, on: onNew.length },
+      recipients: onRecipients.length, checks },
+    allOk(checks) ? undefined : `알림 정책: ${JSON.stringify({ checks, off: offNew.length, on: onNew.length, onRecipients })}`)
+  }
+
+  // 25d. conflict-compare — 같은 주간 시트를 두 브라우저 컨텍스트(같은 계정)로 연다. 첫 컨텍스트가 제목 칸에 들어가 있는 동안 둘째가 제목을 저장하고,
+  //      첫 컨텍스트가 다른 제목으로 나오면 서버가 쓰지 않고 비교(내 값·서버 값)를 띄운다 → "서버 값 받기" → 입력은 서버 제목, DB 는 둘째의 값 그대로.
+  //      프로젝트 B 는 단계 weekly-carry-mapping 이 이번 주 문서를 만들어 뒀고 플랫폼 관리자는 그 멤버다.
+  {
+    const p = []
+    const detail = { titles: rc.weeklyTitle, dialogText: null, shownAfter: null, storedAfter: null, pageErrors: 0 }
+    const titleRows = async (title) => rows('주간 제목', await svc.from('weekly_reports').select('id, title').eq('project_id', B.id).eq('title', title))
+    try {
+      const { loadPlaywright } = await import('./ui-capture.mjs')
+      const { chromium } = await loadPlaywright()
+      const browser = await chromium.launch()
+      try {
+        const errs = []
+        const open = async () => {
+          const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+          await ctx.addCookies([...admin.jar].map(([name, value]) => ({ name, value, url: origin })))
+          const page = await ctx.newPage()
+          page.on('pageerror', (e) => errs.push(String(e)))
+          await page.goto(`${origin}/p/${B.id}/weekly`, { waitUntil: 'networkidle' })
+          return page
+        }
+        const first = await open()
+        const mineInput = first.locator(WEEKLY_TITLE_INPUT).first()
+        if ((await mineInput.count()) === 0) p.push('첫 컨텍스트에 시트 제목 입력이 없다(이번 주 문서가 열리지 않았다)')
+        else {
+          // 칸에 들어가 둔다 — 편집 중인 입력은 내려온 서버 제목으로 바뀌지 않는다(그래서 나올 때 기대값이 옛 제목이다)
+          await mineInput.click()
+          const second = await open()
+          const theirsInput = second.locator(WEEKLY_TITLE_INPUT).first()
+          await theirsInput.fill(rc.weeklyTitle.theirs)
+          await theirsInput.blur()
+          const saved = await until(async () => ((await titleRows(rc.weeklyTitle.theirs)).length === 1 ? true : null))
+          if (!saved) p.push('둘째 컨텍스트의 제목이 저장되지 않았다')
+          else {
+            await mineInput.fill(rc.weeklyTitle.mine)
+            await mineInput.blur()
+            const dialog = first.locator(CONFLICT_DIALOG)
+            try { await dialog.waitFor({ state: 'visible', timeout: 15_000 }) } catch { p.push('비교 대화상자가 뜨지 않았다(충돌이 조용히 덮였거나 저장이 거부되지 않았다)') }
+            if ((await dialog.count()) > 0) {
+              detail.dialogText = (await dialog.innerText()).replace(/\s+/g, ' ').slice(0, 300)
+              if (!detail.dialogText.includes(rc.weeklyTitle.mine)) p.push('비교에 내 값이 없다')
+              if (!detail.dialogText.includes(rc.weeklyTitle.theirs)) p.push('비교에 서버 값이 없다')
+              // 비교가 떠 있는 동안 서버는 그대로다 — 내 값이 저장되지 않았다
+              if ((await titleRows(rc.weeklyTitle.mine)).length !== 0) p.push('비교를 고르기도 전에 내 값이 저장됐다')
+              await dialog.getByRole('button', { name: CONFLICT_TAKE_LATEST }).click()
+              try { await dialog.waitFor({ state: 'hidden', timeout: 10_000 }) } catch { p.push('서버 값 받기 뒤에도 비교가 닫히지 않았다') }
+              detail.shownAfter = await mineInput.inputValue()
+              if (detail.shownAfter !== rc.weeklyTitle.theirs) p.push(`입력이 서버 제목이 아니다: ${JSON.stringify(detail.shownAfter)}`)
+            }
+          }
+          const [mineStored, theirsStored] = [await titleRows(rc.weeklyTitle.mine), await titleRows(rc.weeklyTitle.theirs)]
+          detail.storedAfter = { mine: mineStored.length, theirs: theirsStored.length }
+          if (mineStored.length !== 0 || theirsStored.length !== 1) p.push(`저장된 제목이 둘째의 값 하나가 아니다: ${JSON.stringify(detail.storedAfter)}`)
+        }
+        detail.pageErrors = errs.length
+        if (errs.length) p.push(`페이지 오류 ${errs.length}`)
+      } finally { await browser.close() }
+    } catch (e) { p.push(`브라우저: ${e instanceof Error ? e.message : String(e)}`) }
+    step('conflict-compare', { what: '주간 제목 충돌 → 비교 → 서버 값 받기(쓰지 않는다)', projectId: B.id, ...detail, problems: p }, p.length ? p.join(' · ') : undefined)
+  }
+
+  // 25e. workspace-create — 플랫폼 관리 화면(/admin/workspaces)의 createPlatformWorkspace. 워크스페이스·첫 관리자 멤버십·인물·설정이 한 번에 생기고
+  //      (0054 의 생성 RPC — 설정 값은 그 안에서 설정 RPC 가 쓴다), 같은 slug 는 다시 못 쓰고 반쪽 행이 남지 않는다. 만든 뒤 그 워크스페이스로 들어간다.
+  //      플랫폼 관리자가 아닌 ana 에게 이 화면은 없다(404).
+  let newWs
+  {
+    const page = '/admin/workspaces'
+    const modules = ['kanban', 'wiki']
+    const before = rows('워크스페이스 수', await svc.from('workspaces').select('id')).length
+    await admin.http('GET', page)
+    const made = (await admin.action(page, 'createPlatformWorkspace', [{ name: rc.workspace.name, slug: rc.workspace.slug, modules }])).result
+    if (!made?.ok) throw new Fail(`createPlatformWorkspace 실패: ${JSON.stringify(made)}`)
+    const found = rows('새 워크스페이스', await svc.from('workspaces').select('id, slug, name, created_by').eq('slug', rc.workspace.slug))
+    if (found.length !== 1) throw new Fail(`새 워크스페이스 ${rc.workspace.slug} 가 ${found.length}건`)
+    newWs = found[0]
+    slugOf.set(newWs.id, newWs.slug)
+    const members = rows('새 워크스페이스 소속', await svc.from('workspace_members').select('user_id, role, invited_by').eq('workspace_id', newWs.id))
+    const people = rows('새 워크스페이스 인물', await svc.from('people').select('user_id, email').eq('workspace_id', newWs.id))
+    const settings = await wsSettingsOf(newWs.id)
+    const joined = await authzRowsOf((q) => q.eq('workspace_id', newWs.id).eq('kind', 'workspace_role'))
+    const dup = (await admin.action(page, 'createPlatformWorkspace', [{ name: `${rc.workspace.name} 2`, slug: rc.workspace.slug, modules }])).result
+    const after = rows('워크스페이스 수', await svc.from('workspaces').select('id')).length
+    const listHtml = await (await admin.http('GET', page)).text()
+    const home = await raw(admin, wsPath(newWs.id))
+    const projectsPage = await raw(admin, wsPath(newWs.id, 'projects'))
+    const anaView = await raw(ana, page, { follow: true })
+    const checks = {
+      created: made.workspace?.id === newWs.id && newWs.name === rc.workspace.name && newWs.created_by === me.id,
+      firstAdminIsCreator: JSON.stringify(members) === JSON.stringify([{ user_id: me.id, role: 'admin', invited_by: me.id }]),
+      person: people.length === 1 && people[0].user_id === me.id && people[0].email === email,
+      modulesStored: JSON.stringify([...(settings.values['modules.allowed'] ?? [])].sort()) === JSON.stringify([...modules].sort()) && settings.revision === 1,
+      joinRecorded: joined.length === 1 && joined[0].actor_user_id === me.id && joined[0].target_user_id === me.id && !!joined[0].command_id
+        && JSON.stringify(joined[0].after) === JSON.stringify({ role: 'admin', invited_by: me.id }),
+      // 같은 slug 는 사유 코드로 거부되고 워크스페이스는 하나만 늘었다(반쪽 행 없음)
+      slugTaken: dup?.ok === false && dup.code === 'slug_taken' && dup.field === 'slug' && after === before + 1,
+      listed: listHtml.includes(rc.workspace.slug) && listHtml.includes(rc.workspace.name),
+      entered: home.status === 200 && !notFoundRendered(home.html) && home.html.includes(rc.workspace.name) && projectsPage.status === 200,
+      hiddenFromWorkspaceAdmin: hiddenVerdict(anaView, [rc.workspace.name]).length === 0,
+    }
+    step('workspace-create', { workspace: { id: newWs.id, slug: newWs.slug, name: newWs.name }, members, modules: settings.values['modules.allowed'],
+      revision: settings.revision, duplicate: dup, status: { home: home.status, projects: projectsPage.status, ana: anaView.status }, checks },
+    allOk(checks) ? undefined : `워크스페이스 생성: ${JSON.stringify({ checks, members, people, settings, dup, home: home.status, ana: anaView.status })}`)
+  }
+
+  // 25f. account-lifecycle — 새 계정 leaver(A 멤버·프로젝트 A 멤버)로 ① 관리자의 비밀번호 재설정이 권한 변경 이력에 남고 새 비밀번호로만 로그인된다
+  //      ② 세션(워크스페이스 관리자 ana)의 소속 직접 삭제는 거부된다(0054 — 초대·토큰 회수 없이 소속만 빠지는 길을 닫았다)
+  //      ③ 제거(remove_workspace_member)는 소속을 지우고 그 워크스페이스의 명단 권한을 회수한다 — 그 사람의 세션으로 프로젝트·워크스페이스 화면이 닫힌다.
+  {
+    const accountsPage = wsPath(wsA, 'admin/accounts')
+    const firstPassword = `E2E-${randomUUID()}`
+    const nextPassword = `E2E-${randomUUID()}`
+    await admin.http('GET', accountsPage)
+    mustOk(`createAccount(${LEAVER.name})`, (await admin.action(accountsPage, 'createAccount', [{
+      workspaceId: wsA, email: LEAVER.email, password: firstPassword, name: LEAVER.name, workspaceRole: 'member', projectId: A.id, accessRole: 'member',
+    }])).result)
+    const lv = await membershipOf(LEAVER.email)
+    const accessOf = async () => rows('leaver 명단', await svc.from('project_members').select('access_role, people!inner(user_id)').eq('project_id', A.id).eq('people.user_id', lv.userId))
+      .map((r) => r.access_role)
+    const accessBefore = await accessOf()
+    // ① 비밀번호 재설정 — 기록이 먼저, 변경이 다음이다
+    const reset = (await admin.action(accountsPage, 'resetPassword', [wsA, lv.userId, nextPassword])).result
+    const resetRows = await authzRowsOf((q) => q.eq('kind', 'password_reset').eq('workspace_id', wsA).eq('target_user_id', lv.userId))
+    const leaver = session('leaver')
+    await leaver.login(LEAVER.email, nextPassword)
+    const oldLogin = await session('leaver-old').sb.auth.signInWithPassword({ email: LEAVER.email, password: firstPassword })
+    const pageBefore = await raw(leaver, `/p/${A.id}/dashboard`)
+    // ② 세션의 직접 삭제 — 워크스페이스 관리자여도 권한에서 막힌다
+    const direct = await ana.sb.from('workspace_members').delete().eq('workspace_id', wsA).eq('user_id', lv.userId).select('user_id')
+    const afterDirect = await membershipOf(LEAVER.email)
+    // ③ 제거 — 계정 관리 화면이 부르는 액션(ana 는 A 의 관리자, 대상은 멤버)
+    await ana.http('GET', accountsPage)
+    const removed = (await ana.action(accountsPage, 'removeWorkspaceMember', [wsA, lv.userId])).result
+    const afterRemove = await membershipOf(LEAVER.email)
+    const accessAfter = await accessOf()
+    const leftRows = await authzRowsOf((q) => q.eq('kind', 'workspace_role').eq('workspace_id', wsA).eq('target_user_id', lv.userId))
+    const pageAfter = await raw(leaver, `/p/${A.id}/dashboard`, { follow: true })
+    const wsAfter = await raw(leaver, wsPath(wsA), { follow: true })
+    const removedAgain = (await ana.action(accountsPage, 'removeWorkspaceMember', [wsA, lv.userId])).result
+    const checks = {
+      joined: JSON.stringify(lv.memberships) === JSON.stringify([{ workspace_id: wsA, role: 'member' }]) && JSON.stringify(accessBefore) === JSON.stringify(['member']),
+      resetRecorded: reset?.ok === true && resetRows.length === 1 && resetRows[0].actor_user_id === me.id && resetRows[0].cause === 'direct'
+        && !!resetRows[0].command_id && JSON.stringify(resetRows[0].after) === JSON.stringify({ reset: true }),
+      newPasswordOnly: !!oldLogin.error && pageBefore.status === 200,
+      directDeleteDenied: direct.error?.code === '42501' && afterDirect.memberships.length === 1,
+      removed: removed?.ok === true && removed.removed?.projects >= 1 && afterRemove.memberships.length === 0,
+      accessRevoked: JSON.stringify(accessAfter) === JSON.stringify([null]),
+      removalRecorded: leftRows[0]?.actor_user_id === anaWs.userId && leftRows[0]?.after === null && JSON.stringify(leftRows[0]?.before) === JSON.stringify({ role: 'member' }) && !!leftRows[0]?.command_id,
+      projectClosed: hiddenVerdict(pageAfter, [A.name]).length === 0,
+      workspaceClosed: hiddenVerdict(wsAfter, [A.name]).length === 0,
+      // 이미 빠진 사람을 다시 빼는 요청은 조용한 성공이 아니다
+      secondRemovalRejected: removedAgain?.ok === false,
+    }
+    step('account-lifecycle', {
+      userId: lv.userId, reset: { ok: reset?.ok ?? null, rows: resetRows.length }, directDelete: direct.error ? { code: direct.error.code } : 'ok',
+      removed, access: { before: accessBefore, after: accessAfter }, memberships: { before: lv.memberships.length, after: afterRemove.memberships.length },
+      status: { projectBefore: pageBefore.status, projectAfter: pageAfter.status, workspaceAfter: wsAfter.status }, checks,
+    }, allOk(checks) ? undefined : `계정 수명주기: ${JSON.stringify({ checks, reset, removed, direct: direct.error?.code ?? 'ok', accessAfter, resetRows: resetRows.length })}`)
+  }
+
+  // 25g. health-headers — 무인증 헬스체크(얕은 점검은 DB 를 건드리지 않고, 깊은 점검은 잡 시크릿이 맞을 때만)와 /login 응답의 보안 헤더.
+  {
+    const health = async (query, headers = {}) => {
+      const res = await fetch(`${base}/api/health${query}`, { headers, redirect: 'manual' })
+      return { status: res.status, body: await res.json().catch(() => null), cacheControl: res.headers.get('cache-control') }
+    }
+    const shallow = await health('')
+    const deepNoSecret = await health('?deep=1')
+    const deep = await health('?deep=1', { authorization: `Bearer ${cronSecret}` })
+    const login = await fetch(`${base}/login`, { redirect: 'manual' })
+    const problems = [
+      ...healthProblems(shallow, 'shallow').map((x) => `얕은 점검: ${x}`),
+      ...healthProblems(deepNoSecret, 'shallow').map((x) => `시크릿 없는 깊은 점검: ${x}`),
+      ...healthProblems(deep, 'deep').map((x) => `깊은 점검: ${x}`),
+      ...(login.status === 200 ? [] : [`/login 상태 ${login.status}`]),
+      ...securityHeaderProblems(login.headers).map((x) => `/login: ${x}`),
+    ]
+    step('health-headers', { health: { shallow: shallow.body, deepNoSecret: deepNoSecret.body, deep: deep.body }, loginStatus: login.status,
+      hsts: login.headers.get('strict-transport-security'), problems }, problems.length ? problems.join(' · ') : undefined)
+  }
+
+  // 25h. minutes-share-link — 회의록 상세의 공유 모달이 부르는 setMinuteShare. 켜면 로그인하지 않은 요청으로 열리고(제목이 본문에 있다), 끄면 같은
+  //      주소가 닫힌다. 토큰은 결과에 남기지 않는다(길이만) — 주소가 곧 열람 권한이다. 대상은 A 의 프로젝트 없는 회의록(단계 16, 작성자 ana).
+  {
+    const target = minutes[1]
+    const detail = `${wsPath(wsA, 'minutes')}/${target.minuteId}`
+    const anon = async (token) => {
+      const res = await fetch(`${origin}/share/minutes/${token}`, { redirect: 'manual' })
+      return { status: res.status, html: res.status >= 300 && res.status < 400 ? '' : await res.text() }
+    }
+    await ana.http('GET', detail)
+    const on = (await ana.action(detail, 'setMinuteShare', [target.minuteId, 'enable'])).result
+    if (!on?.ok || typeof on.token !== 'string' || !on.token) throw new Fail(`공유 켜기 실패: ${JSON.stringify({ ok: on?.ok ?? null, enabled: on?.enabled ?? null, error: on?.error ?? null })}`)
+    const opened = await anon(on.token)
+    const off = (await ana.action(detail, 'setMinuteShare', [target.minuteId, 'disable'])).result
+    const closed = await anon(on.token)
+    const bogus = await anon(randomUUID())
+    const [stored] = rows('공유 상태', await svc.from('minutes').select('share_enabled').eq('id', target.minuteId))
+    const checks = {
+      enabled: on.enabled === true,
+      openedWithoutLogin: opened.status === 200 && !notFoundRendered(opened.html) && opened.html.includes(target.title),
+      disabled: off?.ok === true && off.enabled === false && stored?.share_enabled === false,
+      closedAfterRevoke: hiddenVerdict(closed, [target.title]).length === 0,
+      unknownTokenClosed: hiddenVerdict(bogus, [target.title]).length === 0,
+    }
+    step('minutes-share-link', { minuteId: target.minuteId, tokenLength: on.token.length, status: { opened: opened.status, closed: closed.status, bogus: bogus.status }, checks },
+      allOk(checks) ? undefined : `회의록 공유 링크: ${JSON.stringify({ checks, status: { opened: opened.status, closed: closed.status, bogus: bogus.status } })}`)
+  }
+
+  // 25i. workers(선택) — 색인 워커·위키 워커·첨부 청소 잡을 한 번씩 친다. 서버가 그 플래그로 떠 있어야 하므로 E2E_WORKERS=1 일 때만 돈다.
+  //      꺼져 있으면 건너뜀으로 기록한다(실패로 세지 않는다). 색인은 failed 0 이고 문서가 쌓여 있어야 한다(임베딩 키가 있는 서버).
+  if (!workersEnabled(process.env)) {
+    step('workers', { skipped: true, reason: 'E2E_WORKERS=1 이 아니다 — 색인·위키 워커 단계를 건너뛴다(실패로 세지 않는다)' })
+  } else {
+    const job = async (path) => {
+      const res = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${cronSecret}` }, redirect: 'manual' })
+      return { status: res.status, body: await res.json().catch(() => null) }
+    }
+    const docCount = async () => {
+      const { count, error } = await svc.from('ai_documents').select('id', { count: 'exact', head: true })
+      if (error || typeof count !== 'number') throw new Fail(`색인 문서 수 조회 실패: ${error?.message ?? '행 수 없음'}`)
+      return count
+    }
+    const docsBefore = await docCount()
+    const index = await job('/api/cron/ai-index')
+    const docsAfter = await docCount()
+    const wiki = await job('/api/wiki/worker')
+    const gc = await job('/api/cron/minutes-attachments-gc')
+    const problems = workerProblems({ index, wiki, gc, docsBefore, docsAfter })
+    step('workers', { skipped: false, index: { status: index.status, body: index.body }, documents: { before: docsBefore, after: docsAfter },
+      wiki: { status: wiki.status, body: wiki.body }, gc: { status: gc.status, body: gc.body }, problems }, problems.length ? problems.join(' · ') : undefined)
   }
 }
 

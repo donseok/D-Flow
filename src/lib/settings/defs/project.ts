@@ -252,6 +252,14 @@ export const PROJECT_DEFS = [
     sql: { readers: ['minute_files_attachment_guard'] },
     seedFrom: { key: 'minutes.attachments' },
   }),
+  // 외부 업로드(/api/v1/minutes)의 folder_path 자동 편철(정본 §3.3 — 배포 env MINUTES_FOLDER_PATH_ENABLED 의 설정화). 기본은 켬:
+  // 새 플랫폼에는 제목 접두 시절의 자료가 없다. 끄면 그 프로젝트의 업로드는 folder_path 를 키 부재와 같게 다룬다(팀 루트·기존 위치 유지).
+  // env 가 명시적으로 false 면 이 값보다 먼저 이긴다(배포 전체 차단 — lib/minutes/autoFile.ts). 일괄 재편철(POST /minutes/folder)은 이 값과 무관하다
+  defineSetting<'minutes.auto_file_by_path', boolean>({
+    key: 'minutes.auto_file_by_path', scope: 'project', module: 'minutes', default: true,
+    parse: (raw) => (typeof raw === 'boolean' ? { ok: true, value: raw } : fail('참/거짓이어야 합니다.')),
+    widget: { kind: 'boolean' }, editor: 'project_admin', apply: 'immediate', impact: ['future_only'], sql: null,
+  }),
   vocabDef('attendance.types', 'attendance', ['enforce_project_vocab', 'settings_ref_check']),
   vocabDef('meetings.categories', 'meetings', ['enforce_project_vocab', 'settings_ref_check']),
   vocabDef('issues.severities', 'issues', ['enforce_project_vocab', 'settings_ref_check']),

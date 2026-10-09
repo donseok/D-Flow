@@ -62,6 +62,8 @@ vi.mock('@/lib/teams/source', () => ({
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 // 최상위 폴더 모드(SP5 B2) — 기본 teams(v2.8 그대로). custom 분기는 아래 v2.9 절이 바꾼다
 vi.mock('@/lib/minutes/rootMode', () => ({ loadRootFolders: vi.fn(async () => ({ ok: true, value: { mode: 'teams' } })) }))
+// 자동 편철 설정(minutes.auto_file_by_path) — 기본은 켬(제품 기본값). 끈 프로젝트·판독 실패는 전용 describe 가 바꾼다
+vi.mock('@/lib/minutes/autoFile', () => ({ loadAutoFileByPath: vi.fn(async () => ({ ok: true, value: true })) }))
 // inline meeting 헬퍼(minutes/meetings.ts)가 revalidatePath 를 호출한다 — vitest(요청 스코프 밖)
 // 에서는 throw 하므로 after() 와 같은 이유로 목킹한다.
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }))
@@ -90,6 +92,7 @@ import { CRED_WS, minutesCredential, type CredentialRow, type TestCredential } f
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { moduleState, projectsWithModule, requireModule, requireSessionModule, workspacesWithModule } from '@/lib/modules/gate'
 import { loadRootFolders } from '@/lib/minutes/rootMode'
+import { loadAutoFileByPath } from '@/lib/minutes/autoFile'
 
 // SP7 §5.1.4 — 인증 원천은 integration_credentials(kind='minutes_api') 행 하나뿐이다. 이 스위트의 기본 호출자는 CRED_WS 에 묶인
 // 자격증명(전 프로젝트)으로 들어오고, actor fixture 의 소속 워크스페이스도 그 워크스페이스다(공용 fixture 의 'ws-1' 은 UUID 가 아니라
@@ -321,9 +324,11 @@ beforeEach(() => {
   }))
   // 킬스위치만 켠다 — 옛 시크릿(MINUTES_API_SECRET)은 설정하지 않는다(SP7: 인증에 쓰이지 않는다)
   vi.stubEnv('MINUTES_API_ENABLED', 'true')
-  // W25 — folder_path 편철 스위치. 이 스위트는 켠 상태를 기본으로 검증하고,
-  // 끈 상태(R1 배포 형상)는 전용 describe 에서 따로 본다.
+  // W25 — folder_path 편철. 정본은 프로젝트 설정(위 autoFile 목 — 기본 켬)이고 env 는 명시 false 일 때만 배포 전체를 끄는 차단 스위치다.
+  // 이 스위트는 켠 상태를 기본으로 검증하고, 끈 상태(env 차단·프로젝트 설정)는 전용 describe 에서 따로 본다.
   vi.stubEnv('MINUTES_FOLDER_PATH_ENABLED', 'true')
+  vi.mocked(loadAutoFileByPath).mockReset()
+  vi.mocked(loadAutoFileByPath).mockResolvedValue({ ok: true, value: true })
   // 후처리 rematch 래퍼의 env 가드가 확실히 잠기도록(하이라이트 경로는 이 스위트 범위 밖)
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', '')
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '')
@@ -1186,6 +1191,87 @@ describe('편철 기준 트리 — 회의록 프로젝트 스코프 (0076 · Tas
     expect(builders.minutes[1].eq).toHaveBeenCalledWith('folder_id', 'f-old-root')
     // refile 의 activeTeamCodes 는 **새** 프로젝트 스코프여야 한다(옛 프로젝트가 아니다).
     expect(mocks.activeTeamCodesForProject).toHaveBeenCalledWith(PROJECT_UUID)
+  })
+})
+
+describe('minutes.auto_file_by_path — 프로젝트 설정이 편철 여부를 정한다(env 는 명시 false 일 때만 이긴다)', () => {
+  const created = { id: 'm-1', created_at: '2026-07-27T01:00:00+00:00', updated_at: '2026-07-27T01:00:00+00:00' }
+  const pmoRoot = { id: 'f-pmo', name: 'PMO', parent_id: null, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, workspace_id: WS }
+  const queue = () => ({ minutes: [{ data: null }, { data: created }], minute_folders: [{ data: [pmoRoot] }] })
+
+  it('설정은 쓰기 대상의 프로젝트로 읽는다 — 프로젝트 없는 새 회의록은 null(제품 기본값), 회의에 연결하면 그 회의의 프로젝트', async () => {
+    useAdmin(queue())
+    expect((await POST(post({ ...payload, folder_path: [] }))).status).toBe(201)
+    expect(vi.mocked(loadAutoFileByPath).mock.calls.map((c) => c[0])).toEqual([null])
+    vi.mocked(loadAutoFileByPath).mockClear()
+    useAdmin({ ...queue(), meetings: [{ data: { id: MEETING_UUID, project_id: PROJECT_UUID } }] })
+    await POST(post({ ...payload, meeting_id: MEETING_UUID, folder_path: [] }))
+    expect(vi.mocked(loadAutoFileByPath).mock.calls.map((c) => c[0])).toEqual([PROJECT_UUID])
+  })
+
+  it('env 가 없어도(예전 기본 꺼짐) 설정이 켜져 있으면 편철한다 — 기본값이 뒤집혔다', async () => {
+    vi.stubEnv('MINUTES_FOLDER_PATH_ENABLED', '')
+    const { admin } = useAdmin({ minutes: [{ data: null }, { data: created }], minute_folders: [{ data: [pmoRoot, { id: 'f-q', name: '품질', parent_id: 'f-pmo', created_by: 'u-9', workspace_id: WS }] }] })
+    const res = await POST(post({ ...payload, folder_path: ['PMO', '품질'] }))
+    expect(res.status).toBe(201)
+    expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({ p_folder_id: 'f-q' }))
+  })
+
+  it('설정이 꺼진 프로젝트 — folder_path 를 키 부재와 같게 무시하고 팀 루트로 편철한다(에코는 실제 위치)', async () => {
+    vi.mocked(loadAutoFileByPath).mockResolvedValue({ ok: true, value: false })
+    const { admin } = useAdmin(queue())
+    const res = await POST(post({ ...payload, folder_path: ['PMO', '품질', '주간정례'] }))
+    expect(res.status).toBe(201)
+    expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({ p_folder_id: 'f-pmo' }))
+    expect(await res.json()).toMatchObject({ folder_id: 'f-pmo', folder_path: ['PMO'] })
+  })
+
+  it('설정이 꺼진 프로젝트 — 검증 400 조차 내지 않는다(61자 폴더명·배열 아님)', async () => {
+    vi.mocked(loadAutoFileByPath).mockResolvedValue({ ok: true, value: false })
+    useAdmin(queue())
+    expect((await POST(post({ ...payload, folder_path: ['PMO', '가'.repeat(61)] }))).status).toBe(201)
+    useAdmin(queue())
+    expect((await POST(post({ ...payload, folder_path: 'not-an-array' }))).status).toBe(201)
+  })
+
+  it('설정이 꺼진 프로젝트 — 재전송(replace)의 폴더 갱신이 일어나지 않는다', async () => {
+    vi.mocked(loadAutoFileByPath).mockResolvedValue({ ok: true, value: false })
+    const { admin } = useAdmin({
+      minutes: [
+        { data: { ...existingRow, folder_id: 'f-old' } },
+        { data: { id: 'm-1', created_at: existingRow.created_at, updated_at: '2026-07-27T02:00:00+00:00' } },
+      ],
+      minute_folders: [{ data: [{ ...pmoRoot, id: 'f-old' }] }],
+    })
+    const res = await POST(post({ ...payload, folder_path: [] }))
+    expect(res.status).toBe(200)
+    const call = admin.rpc.mock.calls.find(c => c[0] === 'commit_minute_body_version')!
+    expect((call[1] as { p_metadata: Record<string, unknown> }).p_metadata).not.toHaveProperty('folder_id')
+  })
+
+  it('설정이 켜진 프로젝트 — 형식 오류는 400 이고 아무것도 쓰지 않는다(회의도 만들지 않는다)', async () => {
+    const { admin } = useAdmin({ minutes: [{ data: null }] })
+    const res = await POST(post({ ...payload, folder_path: 'not-an-array' }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('validation_failed')
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+
+  it('설정을 읽지 못하면 500 — 편철 여부를 추측해 쓰지 않는다', async () => {
+    vi.mocked(loadAutoFileByPath).mockResolvedValue({ ok: false })
+    const { admin } = useAdmin({ minutes: [{ data: null }] })
+    const res = await POST(post({ ...payload, folder_path: ['PMO'] }))
+    expect(res.status).toBe(500)
+    expect(admin.rpc).not.toHaveBeenCalled()
+  })
+
+  it('env 가 명시 false 면 설정이 켜져 있어도 배포 전체에서 끈다(운영자 차단 스위치가 먼저)', async () => {
+    vi.stubEnv('MINUTES_FOLDER_PATH_ENABLED', 'false')
+    vi.mocked(loadAutoFileByPath).mockResolvedValue({ ok: true, value: true })
+    const { admin } = useAdmin(queue())
+    const res = await POST(post({ ...payload, folder_path: ['PMO', '가'.repeat(61)] }))
+    expect(res.status).toBe(201)
+    expect(admin.rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({ p_folder_id: 'f-pmo' }))
   })
 })
 

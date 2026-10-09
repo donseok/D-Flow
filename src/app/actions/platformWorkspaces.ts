@@ -1,20 +1,20 @@
 'use server'
 // 플랫폼 관리 — 워크스페이스 목록·생성(개정 §5.3.1·§5.3.2, §2.2 "새 워크스페이스의 허용 모듈은 플랫폼 관리자가 고른다").
 // 지금까지 워크스페이스는 scripts/dev-bootstrap.mjs 와 E2E 스크립트의 service_role insert 로만 생겼다 — 이 액션이 앱 안의 첫 생성 경로다.
+// 생성은 create_workspace_with_admin RPC 한 번이다(0054 — 등급을 RPC 안에서 다시 판정한다. 액션 가드와 두 관문).
 // 두 액션 모두 requireSuperuser(플랫폼 가드 닫힌 목록 — tests/invariants/platform-guards.test.ts). 워크스페이스가 아직 없거나 전부를 보는 화면이라
 // 스코프를 정할 id 가 없다 → service_role 클라이언트를 직접 만든다(docs/sp2-admin-client-audit.md '플랫폼').
 // DB 오류 원문은 로그로만 남기고 응답에는 사유 코드와 고정 문구만 싣는다(문구는 화면이 사전에서 고른다).
+import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { requireSuperuser } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchAllPages } from '@/lib/data/paging'
 import { failWith } from '@/lib/errors/dbFail'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
-import { writeWorkspaceSettingsInternal } from '@/lib/settings/write'
+import { SETTINGS_SCHEMA_VERSION, settingDef } from '@/lib/settings/registry'
 import { checkWorkspaceCreate, type WorkspaceCreateField, type WorkspaceCreateInputCode } from '@/lib/workspace/createInput'
 import type { ModuleId } from '@/lib/modules/defaults'
-
-type AdminClient = ReturnType<typeof createAdminClient>
 
 export interface PlatformWorkspaceRow {
   id: string
@@ -30,13 +30,13 @@ export type PlatformWorkspaceListResult = { ok: true; rows: PlatformWorkspaceRow
 
 /** 생성 거부 사유 — 입력 검증 코드 + 서버만 아는 사유. 문구는 사전(platform.ws.err.<code>) */
 export type PlatformWorkspaceCreateCode =
-  | WorkspaceCreateInputCode | 'denied' | 'slug_taken' | 'admin_not_found' | 'lookup_failed' | 'create_failed' | 'cleanup_failed'
+  | WorkspaceCreateInputCode | 'denied' | 'slug_taken' | 'admin_not_found' | 'lookup_failed' | 'create_failed'
 export type PlatformWorkspaceCreateResult =
   | { ok: true; workspace: { id: string; slug: string; name: string } }
   | { ok: false; code: PlatformWorkspaceCreateCode; field: WorkspaceCreateField | null; error?: string }
 
 const ERR_LIST = '워크스페이스 목록을 불러오지 못했습니다.'
-const UNIQUE_VIOLATION = '23505'
+const FORBIDDEN = '42501'
 
 /** 모든 워크스페이스(플랫폼 관리자 전용). 멤버·프로젝트 수는 행을 끝까지 읽어 센다(fetchAllPages — 서버 상한에 잘린 수를 사실처럼 내지 않는다) */
 export async function listPlatformWorkspaces(): Promise<PlatformWorkspaceListResult> {
@@ -82,21 +82,37 @@ export async function listPlatformWorkspaces(): Promise<PlatformWorkspaceListRes
 }
 
 /**
- * 만든 워크스페이스를 되돌린다(보상). 멤버십·인물·설정 행은 FK cascade 로 함께 사라진다(0003·0012).
- * 한계: 이 삭제 자체가 실패하면 관리자 없는 워크스페이스 행이 남는다 — 목록 화면에 멤버 0 으로 보이고 같은 slug 재시도는 '이미 사용 중'이 된다.
- * 그때는 cleanup_failed 로 알리고 로그에 id 를 남긴다. 한 문장으로 묶으려면 DEFINER RPC(create_workspace_with_admin)가 필요하다 —
- * 이 작업은 스키마를 바꾸지 않으므로 순서(설정 쓰기를 맨 뒤에)와 보상으로 둔다.
+ * 설정 값을 레지스트리의 parse 로 저장 형태로 바꾼다 — 설정 RPC 는 값을 검사하지 않는다(검사는 앱의 레지스트리 한 곳).
+ * 모르는 키·검사에 걸린 값이 하나라도 있으면 null 을 돌려주고 호출부는 아무것도 만들지 않는다(원인은 로그로).
  */
-async function removeWorkspace(admin: AdminClient, workspaceId: string): Promise<boolean> {
-  const { error } = await admin.from('workspaces').delete().eq('id', workspaceId)
-  if (error) console.error(`[createPlatformWorkspace] 보상 삭제 실패(workspace_id=${workspaceId}):`, error.message)
-  return !error
+function parseWorkspaceValues(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const values: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    const def = settingDef('workspace', key)
+    const parsed = def?.parse(value)
+    if (!parsed?.ok) {
+      console.error('[createPlatformWorkspace] 설정 값 검사 실패', { key, cause: parsed ? parsed.error : '모르는 키' })
+      return null
+    }
+    values[key] = parsed.value
+  }
+  return values
+}
+
+/** 생성 RPC 의 사유 토큰 → 응답 코드. 표에 없는 오류는 create_failed(원문은 로그로만) */
+function createFailure(error: { code?: string; message: string }): PlatformWorkspaceCreateResult {
+  if (error.message.includes('WORKSPACE_SLUG_TAKEN')) return { ok: false, code: 'slug_taken', field: 'slug' }
+  if (error.message.includes('WORKSPACE_ADMIN_NOT_FOUND')) return { ok: false, code: 'admin_not_found', field: 'adminEmail' }
+  if (error.code === FORBIDDEN && error.message.includes('AUTHZ_FORBIDDEN')) return { ok: false, code: 'denied', field: null }
+  console.error('[createPlatformWorkspace] 워크스페이스 생성 실패:', error.code ?? '', error.message)
+  return { ok: false, code: 'create_failed', field: null }
 }
 
 /**
  * 워크스페이스 생성 — 행 + 첫 관리자 멤버십 + 그 관리자의 인물 행 + 허용 모듈(·시간대·초대 허용 도메인) 설정.
- * 순서: ① 입력 검증 ② 첫 관리자 계정 확인(없으면 아무것도 만들지 않는다 — 계정을 여기서 만들지 않는다) ③ slug 중복 확인
- * ④ 워크스페이스 행 ⑤ 멤버십 ⑥ 인물 ⑦ 설정(RPC 한 길 — 이력이 생기는 마지막 단계). ⑤~⑦ 이 실패하면 ④ 를 지운다(removeWorkspace).
+ * 순서: ① 입력 검증 ② 첫 관리자 계정 확인(이메일 → 계정 id. 없으면 아무것도 만들지 않는다 — 계정을 여기서 만들지 않는다)
+ * ③ 설정 값 검사(레지스트리 parse) ④ create_workspace_with_admin RPC 한 번(0054 — 네 쓰기가 한 트랜잭션이라 실패하면 아무것도 남지 않는다.
+ * 예전의 "만든 행을 지우는 보상"은 그 삭제가 실패하면 관리자 없는 워크스페이스가 남았다). slug 중복·첫 관리자 없음·등급은 RPC 가 다시 판정한다.
  */
 export async function createPlatformWorkspace(input: unknown): Promise<PlatformWorkspaceCreateResult> {
   const g = await requireSuperuser()
@@ -104,61 +120,37 @@ export async function createPlatformWorkspace(input: unknown): Promise<PlatformW
   const checked = checkWorkspaceCreate(input)
   if (!checked.ok) return { ok: false, code: checked.code, field: checked.field }
   const { name, slug, adminEmail, modules, timezone, inviteDomains } = checked.value
-  const actorId = g.actor.userId
   const admin = createAdminClient()
 
   // ② 첫 관리자 — 이메일을 주면 그 계정, 비우면 만드는 사람 자신. 조회 실패는 '없음'으로 바꾸지 않고 멈춘다
-  const profileQuery = admin.from('profiles').select('user_id, email, display_name')
-  const { data: profile, error: profileErr } = await (adminEmail ? profileQuery.eq('email', adminEmail) : profileQuery.eq('user_id', actorId)).maybeSingle()
+  const profileQuery = admin.from('profiles').select('user_id')
+  const { data: profile, error: profileErr } = await (adminEmail ? profileQuery.eq('email', adminEmail) : profileQuery.eq('user_id', g.actor.userId)).maybeSingle()
   if (profileErr) {
     console.error('[createPlatformWorkspace] 첫 관리자 계정 조회 실패:', profileErr.message)
     return { ok: false, code: 'lookup_failed', field: 'adminEmail' }
   }
   if (!profile) return { ok: false, code: 'admin_not_found', field: 'adminEmail' }
-  const owner = profile as { user_id: string; email: string; display_name: string }
 
-  // ③ slug 중복 — 사람이 읽을 사유를 먼저 낸다. 경합은 ④ 의 유니크 위반이 최종 판정이다
-  const { data: taken, error: takenErr } = await admin.from('workspaces').select('id').eq('slug', slug).maybeSingle()
-  if (takenErr) {
-    console.error('[createPlatformWorkspace] slug 조회 실패:', takenErr.message)
-    return { ok: false, code: 'lookup_failed', field: 'slug' }
-  }
-  if (taken) return { ok: false, code: 'slug_taken', field: 'slug' }
-
-  // ④ 워크스페이스 행 — 설정 행은 트리거가 만든다(0012 ensure_workspace_settings_row)
-  const { data: created, error: createErr } = await admin.from('workspaces').insert({ slug, name, created_by: actorId }).select('id').single()
-  if (createErr || !created) {
-    if (createErr?.code === UNIQUE_VIOLATION) return { ok: false, code: 'slug_taken', field: 'slug' }
-    console.error('[createPlatformWorkspace] 워크스페이스 저장 실패:', createErr?.message ?? '행 없음')
-    return { ok: false, code: 'create_failed', field: null }
-  }
-  const workspaceId = (created as { id: string }).id
-  const undo = async (step: string, cause: unknown): Promise<PlatformWorkspaceCreateResult> => {
-    console.error(`[createPlatformWorkspace] ${step} 실패 — 워크스페이스를 되돌린다:`, cause)
-    return { ok: false, code: (await removeWorkspace(admin, workspaceId)) ? 'create_failed' : 'cleanup_failed', field: null }
-  }
-
-  // ⑤ 첫 관리자 멤버십 — 관리자 없는 워크스페이스는 설정·초대를 할 사람이 없다
-  const { error: memberErr } = await admin.from('workspace_members').insert({ workspace_id: workspaceId, user_id: owner.user_id, role: 'admin', invited_by: actorId })
-  if (memberErr) return undo('멤버십 저장', memberErr.message)
-
-  // ⑥ 인물 원장 — 새 워크스페이스라 같은 이메일의 기존 인물이 없다(조회 없이 insert). 명단·담당자 지정이 이 행을 가리킨다
-  // 인물 이름은 앞뒤 공백이 없어야 한다(0003 people.display_name check) — 프로필 쪽 check 는 '비지 않음'뿐이라 여기서 다듬는다
-  const { error: personErr } = await admin.from('people').insert({ workspace_id: workspaceId, email: owner.email, display_name: owner.display_name.trim(), user_id: owner.user_id })
-  if (personErr) return undo('인물 저장', personErr.message)
-
-  // ⑦ 설정 — 허용 모듈은 늘 명시로 적는다(빈 배열 = core 만). 시간대는 줬을 때만(비우면 제품 기본값 — 설정 화면이 브라우저 시간대를 제안한다)
+  // ③ 설정 — 허용 모듈은 늘 명시로 적는다(빈 배열 = core 만). 시간대는 줬을 때만(비우면 제품 기본값 — 설정 화면이 브라우저 시간대를 제안한다)
   const set: Record<string, unknown> = { 'modules.allowed': modules }
   if (timezone) set['calendar.timezone'] = timezone
   // 초대 허용 도메인 — 생성 폼에서 명시로 적었을 때만. 적지 않으면 미설정으로 남는다(정책 기본값은 초대 불가 — 첫 초대 전에 워크스페이스 설정에서 정한다)
   if (inviteDomains) set['invites.allowed_domains'] = inviteDomains
-  let written: Awaited<ReturnType<typeof writeWorkspaceSettingsInternal>>
-  try {
-    written = await writeWorkspaceSettingsInternal(admin, workspaceId, { set }, actorId)
-  } catch (e) {
-    return undo('설정 저장', e instanceof Error ? e.message : e)
+  const values = parseWorkspaceValues(set)
+  if (!values) return { ok: false, code: 'create_failed', field: null }
+
+  // ④ 한 트랜잭션 — 워크스페이스·멤버십·인물·설정(설정 값은 RPC 안에서 apply_workspace_settings 가 쓴다 — 설정 쓰기 한 길)
+  const { data, error } = await admin.rpc('create_workspace_with_admin', {
+    p_actor: g.actor.userId, p_slug: slug, p_name: name, p_admin_user_id: (profile as { user_id: string }).user_id,
+    p_values: values, p_command_id: randomUUID(), p_schema_version: SETTINGS_SCHEMA_VERSION,
+  })
+  if (error) return createFailure(error)
+  const workspaceId = (data as { workspace_id?: string } | null)?.workspace_id
+  if (!workspaceId) {
+    // 성공인데 id 가 없다 — 만든 것을 '없음'으로 위장하지 않는다(목록 화면에서 확인하게 실패로 알린다)
+    console.error('[createPlatformWorkspace] RPC 가 워크스페이스 id 를 돌려주지 않았다')
+    return { ok: false, code: 'create_failed', field: null }
   }
-  if (!written.ok) return undo('설정 저장', `${written.code}: ${written.error}`)
 
   // 목록 화면과, 만든 사람이 첫 관리자일 때 바뀌는 전환기 목록(레이아웃 데이터)을 함께 새로 읽게 한다
   revalidatePath('/', 'layout')

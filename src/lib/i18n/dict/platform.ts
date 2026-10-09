@@ -56,7 +56,6 @@ export const platformKo = {
   'platform.ws.err.denied': '플랫폼 관리자만 워크스페이스를 만들 수 있습니다.',
   'platform.ws.err.lookup_failed': '확인에 필요한 정보를 읽지 못해 만들지 않았습니다. 잠시 뒤 다시 시도하세요.',
   'platform.ws.err.create_failed': '워크스페이스를 만들지 못했습니다. 만들던 내용은 되돌렸습니다. 잠시 뒤 다시 시도하세요.',
-  'platform.ws.err.cleanup_failed': '워크스페이스를 만들다 실패했고 되돌리지도 못했습니다. 목록에 남은 행을 서버 로그와 함께 확인하세요.',
   'platform.ws.err.unknown': '요청을 처리하지 못했습니다. 잠시 뒤 다시 시도하세요.',
   // 소속 0 화면(/)
   'platform.noWs.title': '소속된 워크스페이스가 없습니다',

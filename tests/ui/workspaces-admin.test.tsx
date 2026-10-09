@@ -200,11 +200,10 @@ describe('WorkspacesManager — 생성 폼', () => {
     expect(g.form.textContent).toContain('그 이메일의 계정이 없습니다')
     expect(g.form.querySelector('a')).toBeNull()
   })
-  it('필드에 묶이지 않는 실패(생성 실패·보상 실패·요청 예외)는 알림 영역에 고정 문구로', async () => {
+  it('필드에 묶이지 않는 실패(생성 실패·요청 예외)는 알림 영역에 고정 문구로', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     for (const [arrange, text] of [
       [() => mocks.createPlatformWorkspace.mockResolvedValueOnce({ ok: false, code: 'create_failed', field: null }), '워크스페이스를 만들지 못했습니다'],
-      [() => mocks.createPlatformWorkspace.mockResolvedValueOnce({ ok: false, code: 'cleanup_failed', field: null }), '되돌리지도 못했습니다'],
       [() => mocks.createPlatformWorkspace.mockRejectedValueOnce(new Error('fetch failed: internal-host')), '요청을 처리하지 못했습니다'],
     ] as const) {
       arrange()

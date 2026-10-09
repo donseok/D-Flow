@@ -1037,3 +1037,152 @@ describe('sp3b-E3 — 칸반 스텁(D36, 스펙 §8.3 E3)', () => {
     expect(KANBAN_BOARD_MARK).toBe('data-kanban-board')       // 과제 14 가 KanbanBoard 루트에 다는 표지와 캡처 행 p-wbs-board 의 기대 선택자
   })
 })
+
+// ── 재점검 보강(러너 끝의 아홉 단계) — 순수 조각과 러너의 모양 ────────────────────────────────────────────────────
+import {
+  CONFLICT_DIALOG, CONFLICT_TAKE_LATEST, LEAVER, NOTIFY_PROBE_TYPE, NO_TEAM_FILTER as E2E_NO_TEAM_FILTER, NO_TEAM_LABEL, WEEKLY_TITLE_INPUT,
+  healthProblems, minuteMetaPatch, notifyPolicyOf, recheckNames, securityHeaderProblems, settingPatch, workerProblems, workersEnabled,
+} from '../../scripts/lib/e2e.mjs'
+import { NO_TEAM_FILTER as APP_NO_TEAM_FILTER } from '@/lib/minutes/teamResolve'
+import { NO_TEAM } from '@/lib/domain/minutes'
+import { NOTIFICATION_CATALOG } from '@/lib/domain/inbox'
+import { parseNotifyPolicy } from '@/lib/settings/defs/notify'
+import { buildSecurityHeaders } from '@/lib/http/securityHeaders'
+import { checkWorkspaceCreate } from '@/lib/workspace/createInput'
+import { commonKo } from '@/lib/i18n/dict/common'
+import { minutesKo } from '@/lib/i18n/dict/minutes'
+
+describe('재점검 보강 — 순수 조각', () => {
+  const STAMP = '202610091234'
+  it('recheckNames — 실행마다 다른 꼬리, 팀 코드는 앱의 코드 규칙을 통과하고 서로 다르다', () => {
+    const n = recheckNames(STAMP)
+    const codes = [n.teams.source.code, n.teams.target.code, n.teams.renamedCode]
+    expect(codes).toEqual(['TS1234', 'TD1234', 'TX1234'])
+    expect(new Set(codes).size).toBe(3)
+    for (const c of codes) expect(normalizeNewTeamCode(c, EXCEL_HEADER_WORDS, '팀 코드'), c).toEqual({ ok: true, code: c })
+    // 이름과 코드는 다른 값이다 — "이름·코드 분리"를 보려면 같으면 안 된다
+    expect(n.teams.source.name).not.toBe(n.teams.source.code)
+    expect(new Set([n.minutes.team, n.minutes.noTeam, n.weeklyTitle.mine, n.weeklyTitle.theirs]).size).toBe(4)
+    expect(recheckNames('202610099999').teams.source.code).toBe('TS9999')
+    expect(() => recheckNames('abc')).toThrow(/stamp/)
+  })
+  it('recheckNames — 새 워크스페이스의 이름·slug 는 생성 입력 검사를 통과한다(첫 관리자는 만드는 사람)', () => {
+    const n = recheckNames(STAMP)
+    const checked = checkWorkspaceCreate({ name: n.workspace.name, slug: n.workspace.slug, modules: ['kanban', 'wiki'] })
+    expect(checked).toMatchObject({ ok: true, value: { slug: 'e2e-new-202610091234', adminEmail: null } })
+  })
+  it('minuteMetaPatch — 본문 없는 메타 입력이고 빈 팀 코드가 "팀 없음"이다(앱의 NO_TEAM)', () => {
+    const p = minuteMetaPatch({ date: '2026-10-09', title: '제목', teamCode: '' })
+    expect(p).toEqual({ minuteDate: '2026-10-09', teamCode: NO_TEAM, title: '제목', meetingId: null, projectId: null, meetingOccurrenceDate: null })
+    expect(p).not.toHaveProperty('bodyMd')
+    expect(validateMinuteFields({ ...p, bodyMd: '' })).toBeNull()
+    expect(() => minuteMetaPatch({ date: '10/09', title: 'x', teamCode: '' })).toThrow(/날짜/)
+  })
+  it('"팀 없음" 필터 값·탭 이름과 충돌 비교의 단추 이름은 앱의 것과 같다', () => {
+    expect(E2E_NO_TEAM_FILTER).toBe(APP_NO_TEAM_FILTER)
+    expect(NO_TEAM_LABEL).toBe(minutesKo['min.team.none'])
+    expect(CONFLICT_TAKE_LATEST).toBe(commonKo['common.conflictTakeLatest'])
+    const resolver = readFileSync('src/components/ui/ConflictResolver.tsx', 'utf8')
+    expect(resolver).toContain(`data-testid="${/data-testid="([^"]+)"/.exec(CONFLICT_DIALOG)![1]}"`)
+    expect(readFileSync('src/components/weekly/WeeklySheetView.tsx', 'utf8')).toContain(`aria-label="${/aria-label="([^"]+)"/.exec(WEEKLY_TITLE_INPUT)![1]}"`)
+  })
+  it('알림 정책 값 — 끌 수 있는(필수가 아닌) 유형이고 레지스트리 parse 를 그대로 통과한다. settingPatch 는 undefined 면 키를 지운다', () => {
+    expect(NOTIFICATION_CATALOG[NOTIFY_PROBE_TYPE as keyof typeof NOTIFICATION_CATALOG]).toMatchObject({ required: false })
+    for (const on of [true, false]) {
+      const value = notifyPolicyOf(NOTIFY_PROBE_TYPE, on)
+      expect(parseNotifyPolicy(value)).toEqual({ ok: true, value })   // 저장 형태가 입력과 같다 — 러너가 저장값을 입력과 대조한다
+    }
+    expect(settingPatch('notify.policy', { a: 1 })).toEqual({ set: { 'notify.policy': { a: 1 } }, unset: [] })
+    expect(settingPatch('notify.policy', undefined)).toEqual({ set: {}, unset: ['notify.policy'] })
+    expect(settingDef('workspace', 'notify.policy')?.explicit).toBeUndefined()   // 지울 수 있는 키여야 되돌리기가 된다
+  })
+  it('securityHeaderProblems — 앱이 실제로 싣는 헤더 구성을 통과하고, 빠지거나 약해지면 그 헤더를 짚는다', () => {
+    const rule = buildSecurityHeaders({ appEnv: 'development', dev: false, supabaseUrl: 'http://127.0.0.1:54521' }).at(-1)!
+    const of = (pairs: { key: string; value: string }[]) => new Headers(pairs.map((h) => [h.key, h.value] as [string, string]))
+    expect(securityHeaderProblems(of(rule.headers))).toEqual([])
+    expect(securityHeaderProblems(new Headers()).map((x) => x.split(' ')[0])).toEqual([
+      'x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'content-security-policy', 'content-security-policy-report-only'])
+    const weak = rule.headers.map((h) => (h.key === 'X-Frame-Options' ? { ...h, value: 'SAMEORIGIN' } : h.key === 'Content-Security-Policy' ? { ...h, value: "default-src 'self'" } : h))
+    expect(securityHeaderProblems(of(weak)).map((x) => x.split(' ')[0])).toEqual(['x-frame-options', 'content-security-policy'])
+  })
+  it('healthProblems — 얕은 점검은 DB 칸이 없어야 하고 깊은 점검은 db ok, 둘 다 no-store', () => {
+    const ok = { status: 200, body: { ok: true }, cacheControl: 'no-store, max-age=0' }
+    expect(healthProblems(ok, 'shallow')).toEqual([])
+    expect(healthProblems({ ...ok, body: { ok: true, db: 'ok' } }, 'deep')).toEqual([])
+    expect(healthProblems({ ...ok, body: { ok: true, db: 'ok' } }, 'shallow')).toHaveLength(1)   // 익명 요청이 DB 조회를 일으켰다
+    expect(healthProblems(ok, 'deep')).toHaveLength(1)                                            // 시크릿을 줬는데 깊은 점검이 안 돌았다
+    expect(healthProblems({ status: 503, body: { ok: false, db: 'unavailable' }, cacheControl: null }, 'deep')).toHaveLength(4)
+  })
+  it('workersEnabled — 정확히 1 일 때만. workerProblems — 404 는 필요한 env 를 짚고, failed·문서 수·응답 형식을 본다', () => {
+    expect([workersEnabled({ E2E_WORKERS: '1' }), workersEnabled({ E2E_WORKERS: 'true' }), workersEnabled({})]).toEqual([true, false, false])
+    const good = {
+      index: { status: 200, body: { ok: true, claimed: 3, failed: 0 } }, wiki: { status: 200, body: { attempted: 0, completed: 0 } },
+      gc: { status: 200, body: { ok: true, failed: 0 } }, docsBefore: 2, docsAfter: 5,
+    }
+    expect(workerProblems(good)).toEqual([])
+    const off = workerProblems({ ...good, index: { status: 404, body: null }, wiki: { status: 404, body: null } })
+    expect(off).toHaveLength(2)
+    expect(off[0]).toContain('CHAT_V2_INDEX_WORKER_ENABLED'); expect(off[1]).toContain('WIKI_WORKER_ENABLED')
+    expect(workerProblems({ ...good, index: { status: 200, body: { failed: 2 } } })).toEqual(['색인 워커 failed = 2 (0 이어야 한다)'])
+    expect(workerProblems({ ...good, docsBefore: 0, docsAfter: 0 })).toEqual(['색인 문서가 없다(실행 뒤 0건)'])
+    expect(workerProblems({ ...good, docsBefore: 9, docsAfter: 5 })).toEqual(['색인 문서가 줄었다(9 → 5)'])
+    expect(workerProblems({ ...good, wiki: { status: 200, body: { error: 'x' } } })).toHaveLength(1)
+    expect(workerProblems({ ...good, gc: { status: 500, body: { error: 'REMOVE_FAILED' } } })).toEqual(['첨부 청소 상태 500(REMOVE_FAILED)'])
+  })
+  it('제거 대상 계정은 다른 픽스처 계정과 겹치지 않는 예약 도메인 주소다', () => {
+    expect(isValidEmail(LEAVER.email)).toBe(true)
+    expect(LEAVER.email.endsWith('@example.com')).toBe(true)
+    expect([A_ADMIN.email, B_ADMIN.email, OUTSIDER.email, INVITEE.email]).not.toContain(LEAVER.email)
+  })
+})
+
+describe('e2e-local.mjs — 재점검 보강 단계', () => {
+  const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+  const at = (n: string) => src.indexOf(`step('${n}'`)
+  const ADDED = ['team-code-merge', 'minutes-no-team', 'notify-policy', 'conflict-compare', 'workspace-create', 'account-lifecycle', 'health-headers', 'minutes-share-link', 'workers']
+  it('아홉 단계가 이름으로 있고 sp3b- 단계 뒤에 그 순서로 있다(앞 단계의 소속 수·모듈 상태를 건드리지 않는다)', () => {
+    const lastSp3b = src.lastIndexOf("sp3b('E10'")
+    expect(lastSp3b).toBeGreaterThan(-1)
+    let prev = lastSp3b
+    for (const n of ADDED) {
+      expect(at(n), n).toBeGreaterThan(prev)
+      prev = at(n)
+    }
+  })
+  it('새 액션 일곱은 그 액션을 쓰는 화면(worker)에 묶여 있고, 그 파일이 실제로 내보낸다', () => {
+    for (const [name, file, worker, client] of [
+      ['changeTeamCode', 'teams.ts', '/w/[slug]/admin/teams/page', 'src/components/admin/TeamsManager.tsx'],
+      ['mergeTeams', 'teams.ts', '/w/[slug]/admin/teams/page', 'src/components/admin/TeamsManager.tsx'],
+      ['updateMinuteMeta', 'minutes.ts', '/w/[slug]/minutes/[id]/page', 'src/components/minutes/MinuteMetaModal.tsx'],
+      ['setMinuteShare', 'minutes.ts', '/w/[slug]/minutes/[id]/page', 'src/components/minutes/MinuteShareModal.tsx'],
+      ['createPlatformWorkspace', 'platformWorkspaces.ts', '/admin/workspaces/page', 'src/components/admin/WorkspacesManager.tsx'],
+      ['removeWorkspaceMember', 'accounts.ts', '/w/[slug]/admin/accounts/page', 'src/components/admin/AccountsManager.tsx'],
+      ['resetPassword', 'accounts.ts', '/w/[slug]/admin/accounts/page', 'src/components/admin/AccountsManager.tsx'],
+    ] as const) {
+      expect(src, name).toContain(`${name}: { filename: 'src/app/actions/${file}', exportedName: '${name}', worker: '${worker}' }`)
+      expect(readFileSync(`src/app/actions/${file}`, 'utf8'), name).toMatch(new RegExp(`^export async function ${name}\\(`, 'm'))
+      // 그 화면의 클라이언트 컴포넌트가 실제로 그 액션을 부른다(번들에 실려야 매니페스트에 id 가 생긴다)
+      expect(readFileSync(client, 'utf8'), `${client} ← ${name}`).toMatch(new RegExp(`\\b${name}\\b`))
+    }
+    // 회의록 상세 화면이 메타·공유 모달을 싣는다
+    const viewer = readFileSync('src/components/minutes/MinuteViewer.tsx', 'utf8')
+    expect(viewer).toContain('MinuteMetaModal'); expect(viewer).toContain('MinuteShareModal')
+  })
+  it('DB 는 앞 단계와 같은 두 클라이언트로만 본다 — 접속 문자열·pg·고정 포트로 붙는 새 길이 없다', () => {
+    expect(src).not.toMatch(/from 'pg'|LOCAL_DSN|postgres(ql)?:\/\//)
+    expect(src).not.toMatch(/\b5432[0-9]\b|\b5452[0-9]\b/)
+    expect(src.match(/createClient\(/g)).toHaveLength(1)          // service_role 클라이언트는 하나(localAdminEnv 가 로컬로 판정한 주소)
+    expect(src).toContain('localAdminEnv(envText)')
+  })
+  it('워커 단계는 E2E_WORKERS 가 아니면 건너뜀으로 기록한다(실패 문구 없이) — 토큰·비밀번호는 결과에 남기지 않는다', () => {
+    expect(src).toMatch(/if \(!workersEnabled\(process\.env\)\) \{\s+step\('workers', \{ skipped: true, reason: [^}]+\}\)/)
+    expect(src).toContain('tokenLength: on.token.length')
+    expect(src).not.toMatch(/step\('minutes-share-link',[^\n]*on\.token[^.]/)
+    expect(src).not.toMatch(/step\('account-lifecycle',[\s\S]{0,400}(firstPassword|nextPassword)/)
+  })
+  it('세션의 소속 직접 삭제 거부(0054)와 제거 RPC 경로를 둘 다 본다', () => {
+    expect(src).toMatch(/ana\.sb\.from\('workspace_members'\)\.delete\(\)/)
+    expect(src).toContain("direct.error?.code === '42501'")
+    expect(src).toContain("'removeWorkspaceMember', [wsA, lv.userId]")
+  })
+})

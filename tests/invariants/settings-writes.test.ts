@@ -2,7 +2,7 @@
 // 설정 쓰기는 RPC 한 길이다:
 //   G1 표 이름은 허용 파일에만 있고, 허용 파일마다 표 참조 수를 고정한다(어떤 모양이든 새 사용은 목록 갱신을 강제한다).
 //   G2 그 접근은 읽기(select)뿐이다. G3 설정 RPC 는 닫힌 파일에서 리터럴 이름으로만, 파일마다 정해진 횟수만 부른다.
-//   G4 가드 없는 쓰기 경로(write 모듈·writeProjectSettingsInternal·writeWorkspaceSettingsInternal·그 통과 함수 runWbsImport)는 import·언급하는 파일, 파일별 호출 수,
+//   G4 가드 없는 쓰기 경로(write 모듈·writeProjectSettingsInternal·그 통과 함수 runWbsImport)는 import·언급하는 파일, 파일별 호출 수,
 //      export 이름 집합(default 포함)을 닫고, 설정 액션 파일(settings.ts)의 진입점 export 도 고정한다.
 //   G5 검사는 파일 원문에 한다 — 주석 속 이름도 적중이다(Phase A 의 공용 codeLines 는 문자열 속 '//'·'/*' 뒤 코드를 가렸다. Phase B 과제 1 이 고쳤어도 원문 검사는 둔다).
 //   G6 대상은 src·scripts(와 생기면 supabase/functions)의 js·ts 전부, 그리고 src·scripts 의 json·sh·sql(표 이름 단어만 본다).
@@ -23,7 +23,8 @@ import { describe, expect, it } from 'vitest'
 import { codeLines, walk } from './_walk'
 
 const TABLES = ['project_settings', 'workspace_settings', 'project_settings_history', 'workspace_settings_history', 'authz_events'] as const
-const RPCS = ['apply_project_settings', 'apply_workspace_settings', 'create_project_with_settings'] as const
+// create_workspace_with_admin(0054) 은 설정 표를 직접 쓰지 않고 안에서 apply_workspace_settings 를 부르지만, 가드 없이 워크스페이스 설정의 첫 값을 적는 길이라 같은 게이트에 둔다
+const RPCS = ['apply_project_settings', 'apply_workspace_settings', 'create_project_with_settings', 'create_workspace_with_admin'] as const
 const T = TABLES.join('|')
 const P = RPCS.join('|')
 
@@ -65,8 +66,6 @@ const EXPORT_STAR = /^export\s+\*/m
 const EXPORT_DEFAULT = /^export\s+default\b/m
 const INTERNAL_WRITE = /\bwriteProjectSettingsInternal\b/
 const INTERNAL_WRITE_CALL = /\bwriteProjectSettingsInternal\s*(?:\?\.)?\s*\(/g
-const WORKSPACE_WRITE = /\bwriteWorkspaceSettingsInternal\b/
-const WORKSPACE_WRITE_CALL = /\bwriteWorkspaceSettingsInternal\s*(?:\?\.)?\s*\(/g
 const RUN_WBS_IMPORT = /\brunWbsImport\b/
 const PROFILE_SWAP = /\bswapExcelProfileTeamCode\b/
 const PROFILE_SWAP_CALL = /\bswapExcelProfileTeamCode\s*(?:\?\.)?\s*\(/g
@@ -77,12 +76,12 @@ const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
   'src/lib/settings/projectConfig.ts': { tables: ['project_settings'], refs: 3, why: '해석기 — 유일한 읽기 경로(한 프로젝트의 load + 여러 프로젝트의 시간대 getProjectTimezones — SP5 과제 32 + 여러 프로젝트의 어휘 getProjectVocabs — SP5 B4, select 만)' },
   'src/lib/settings/workspaceConfig.ts': { tables: ['workspace_settings'], refs: 1, why: '해석기 — 유일한 읽기 경로' },
   'src/lib/modules/effectiveMany.ts': { tables: ['project_settings'], refs: 1, why: '여러 프로젝트의 모듈 판정(SP3b D39) — values 를 in() 끝까지 select 로 읽어 해석기의 resolveKeys 로 판정(쓰기 없음, effectiveModules 와 동치 테스트)' },
-  'src/lib/settings/write.ts': { tables: ['project_settings', 'workspace_settings'], refs: 4, why: 'revision 판독 뒤 RPC — 프로젝트·워크스페이스 내부 쓰기 각 한 곳(머리 주석의 백틱 이름 둘도 원문 검사라 센다)' },
+  'src/lib/settings/write.ts': { tables: ['project_settings'], refs: 2, why: 'revision 판독 뒤 RPC — 프로젝트 내부 쓰기 한 곳(머리 주석의 백틱 이름 하나도 원문 검사라 센다). 워크스페이스 쪽은 0054 에서 생성 RPC 로 옮겼다' },
   'src/lib/settings/history.ts': { tables: ['project_settings_history', 'workspace_settings_history'], refs: 5, why: '이력 읽기(D24·SP4 D48 의 latestKeyChange) — tableOf 가 이름을 고르고 from(table).select 만 한다' },
   'scripts/settings-verify.check.ts': { tables: ['project_settings', 'workspace_settings'], refs: 2, why: '전 행을 해석기로 검사 — pg SQL 읽기' },
   'scripts/dev-bootstrap.mjs': { tables: ['workspace_settings'], refs: 2, why: 'revision 판독 뒤 apply_workspace_settings(나머지 1은 롤백 이름표 문자열)' },
   'scripts/bootstrap-remote.mjs': { tables: ['workspace_settings'], refs: 2, why: '원격 첫 부트스트랩 — dev-bootstrap 과 같은 꼴: revision 판독 뒤 apply_workspace_settings(나머지 1은 롤백 이름표 문자열)' },
-  'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings', 'authz_events'], refs: 22, why: '결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독, SP3a D 의 권한 이력 읽기(select 한 곳), SP3b E7 의 모듈 토글 expectedRevision 판독(읽기 한 곳 — 쓰기는 updateProjectSettings 액션, 브랜치 전용 e2e-sp3b 에서 과제 39 가 옮김). SP5 A 과제 31 — 저장된 tz 판독 둘(tzOfProject·tzOfWorkspace)·달력 단계의 revision·저장값 다시 읽기 둘(setProject·storedOf)·calendar-tz 의 워크스페이스 tz 전·후 판독과 revision 판독 셋(모두 select — 쓰기는 설정 액션). SP5 B1 issue-code-flow 의 설정 snapshot·새 revision 재조회·이전 값 복원 판독 셋(모두 select — 쓰기는 updateProjectSettings 액션). SP5b I issue-status-flow 의 새 프로젝트 revision 판독 하나, SP5b W1 workflow-approval 의 revision·modules.enabled 판독 둘(모두 select — 쓰기는 설정 액션)' },
+  'scripts/e2e-local.mjs': { tables: ['project_settings', 'project_settings_history', 'workspace_settings', 'authz_events'], refs: 24, why: '재점검 보강(맨 끝 단계들) — 워크스페이스 설정 문서 판독 도우미 하나(wsSettingsOf — notify-policy 의 revision·값, workspace-create 의 새 워크스페이스 값. 쓰기는 설정 액션·생성 액션)와 권한 이력 판독 도우미 하나(authzRowsOf — 비밀번호 재설정·가입·제거 기록 확인, select 만). 그 앞: 결과 확인 읽기, B 의 revision 판독 뒤 apply_workspace_settings, SP3a B 의 A 설정·워크스페이스 revision 판독, SP3a D 의 권한 이력 읽기(select 한 곳), SP3b E7 의 모듈 토글 expectedRevision 판독(읽기 한 곳 — 쓰기는 updateProjectSettings 액션, 브랜치 전용 e2e-sp3b 에서 과제 39 가 옮김). SP5 A 과제 31 — 저장된 tz 판독 둘(tzOfProject·tzOfWorkspace)·달력 단계의 revision·저장값 다시 읽기 둘(setProject·storedOf)·calendar-tz 의 워크스페이스 tz 전·후 판독과 revision 판독 셋(모두 select — 쓰기는 설정 액션). SP5 B1 issue-code-flow 의 설정 snapshot·새 revision 재조회·이전 값 복원 판독 셋(모두 select — 쓰기는 updateProjectSettings 액션). SP5b I issue-status-flow 의 새 프로젝트 revision 판독 하나, SP5b W1 workflow-approval 의 revision·modules.enabled 판독 둘(모두 select — 쓰기는 설정 액션)' },
   'scripts/ui-capture.mjs': { tables: ['workspace_settings'], refs: 1, why: '캡처 시드 — 워크스페이스 설정 시드 한 길(B 허용 모듈·A 초대 허용 도메인)의 revision 판독 뒤 apply_workspace_settings(로컬 전용, SP3b UI-0)' },
   'scripts/e2e-synthetic.mjs': { tables: ['project_settings', 'workspace_settings', 'project_settings_history', 'workspace_settings_history'], refs: 38, why: '합성 게이트(마감) — 설정은 화면과 같은 서버 액션으로 넣고 여기서는 결과·이력·격리를 읽는다. 워크스페이스 시드(허용 모듈)만 apply_workspace_settings. SP4 A1 S2 — wbs.excel_profile 이력 건수(project_settings_history 읽기 한 곳, readHistory 경유 select)·S10 경계 행렬의 빈 프로젝트 모듈. SP5 A 과제 30 — S1-calendar 의 revision 판독·다시 읽기 넷(두 설정 표 각 둘)·projectToday 의 저장된 tz 읽기 하나(모두 select). SP5 B1 S1-issues·S6-issue-codes 설정 확인 select 둘(쓰기 없음). SP5 B4 S1-vocab 의 revision·값 판독 select 하나(쓰기는 updateProjectSettings 액션). SP5b Z — S1-workflow·S9-workflow 의 revision 판독(updateSettings)·R 다시 읽기·C 의 workflow 키 확인 select 셋(쓰기는 updateProjectSettings 액션). SP5c Z — S3-fields 의 백필용 revision 판독 및 R·C 최종 설정 격리 확인 select 셋(모두 select — 쓰기는 설정 액션 및 backfillCustomField RPC) SP6 정리 — S8 이 이슈 분석 모듈을 잠시 켰다 되돌릴 때 두 설정 문서의 값·revision 을 읽는 도우미 둘(쓰기는 화면과 같은 설정 액션)' },
   'src/lib/authz/events.ts': { tables: ['authz_events'], refs: 1, why: '권한 이력 읽기(Phase D) — select 만, from 리터럴 하나(쓰기는 권한 RPC 안의 트리거)' },
@@ -90,7 +89,8 @@ const ALLOW: Record<string, { tables: string[]; refs: number; why: string }> = {
 
 /** 설정 RPC(개정 §2.11 ⑦) → 부르는 파일·리터럴 .rpc( 호출 수·사유. 새 호출은 그 가드를 확인한 뒤 수를 올린다. 권한 RPC 는 이 게이트 밖이다 */
 const RPC_ALLOW: Record<string, { rpcs: (typeof RPCS)[number][]; calls: number; why: string }> = {
-  'src/lib/settings/write.ts': { rpcs: ['apply_project_settings', 'apply_workspace_settings'], calls: 2, why: '서버 내부 쓰기 두 함수 — 프로젝트(W5 양식 저장·W6 골격 단계 이름)·워크스페이스(플랫폼 관리자의 워크스페이스 생성이 적는 첫 값)' },
+  'src/lib/settings/write.ts': { rpcs: ['apply_project_settings'], calls: 1, why: '서버 내부 쓰기 — 프로젝트(W5 양식 저장·W6 골격 단계 이름)' },
+  'src/app/actions/platformWorkspaces.ts': { rpcs: ['create_workspace_with_admin'], calls: 1, why: 'createPlatformWorkspace — requireSuperuser 뒤 생성 한 번(RPC 가 플랫폼 관리자를 다시 판정하고, 설정 값은 그 안의 apply_workspace_settings 가 쓴다)' },
   'src/app/actions/settings.ts': { rpcs: ['apply_project_settings', 'apply_workspace_settings'], calls: 2, why: '설정 액션 — 범위 어댑터 둘, 가드 requireProjectAdmin(:286)·requireWorkspaceAdmin(:294) 뒤' },
   'src/app/actions/project.ts': { rpcs: ['create_project_with_settings'], calls: 1, why: 'createProject — requireWorkspaceAdmin 뒤 생성·복사' },
   'scripts/dev-bootstrap.mjs': { rpcs: ['apply_workspace_settings'], calls: 1, why: '부트스트랩 워크스페이스의 modules.allowed(로컬 전용)' },
@@ -110,11 +110,10 @@ const RPC_DYNAMIC_ALLOW: Record<string, { count: number; why: string }> = {
 const WRITE_FILE = 'src/lib/settings/write.ts'
 const WRITE_MODULE = 'src/lib/settings/write'
 /** write 모듈의 export 이름(default 포함) — 래퍼 export 가 늘면 그 호출자가 아래 목록 밖으로 샌다 */
-const WRITE_EXPORTS = ['InternalWriteResult', 'SettingsChange', 'commandDigestInput', 'writeProjectSettingsInternal', 'writeWorkspaceSettingsInternal']
+const WRITE_EXPORTS = ['InternalWriteResult', 'SettingsChange', 'commandDigestInput', 'writeProjectSettingsInternal']
 /** write 모듈을 값으로 import 하는 파일(import type 은 부를 수 없어 뺀다) */
 const WRITE_IMPORTERS: Record<string, string> = {
   'src/app/actions/settings.ts': 'commandDigestInput(명령 요약의 입력 모양)만 쓴다 — 아래 INTERNAL_WRITE_CALLERS 에 없으므로 writeProjectSettingsInternal 을 언급하면 실패한다',
-  'src/app/actions/platformWorkspaces.ts': 'createPlatformWorkspace — requireSuperuser 뒤 방금 만든 워크스페이스 id 로 writeWorkspaceSettingsInternal(허용 모듈·시간대의 첫 값). 호출부는 WORKSPACE_WRITE_CALLERS 가 닫는다',
   'src/app/api/import/execute/route.ts': 'W5 양식 저장 — #2 가드 requireProjectAdmin(pid) 뒤 #10 양식 저장에서 그 pid·actor 로 writeProjectSettingsInternal(줄 번호 대신 라우트의 단계 이름 — 줄이 밀려도 낡지 않게)',
   'src/lib/agent/wbsImport.ts': 'W6 골격 단계 이름(:231) — 가드 없는 통과 함수 runWbsImport 안이다. 가드는 그 호출부가 하고 RUN_WBS_IMPORT_CALLERS 가 호출부를 닫는다',
   'src/lib/teams/excelProfileCode.ts': '팀 코드 변경 뒤 엑셀 양식의 팀 열 치환 — 가드 없는 통과 함수 swapExcelProfileTeamCode 안이다. 가드는 그 호출부가 하고 PROFILE_SWAP_CALLERS 가 호출부를 닫는다',
@@ -124,10 +123,6 @@ const INTERNAL_WRITE_CALLERS: Record<string, { calls: number; why: string }> = {
   'src/app/api/import/execute/route.ts': { calls: 1, why: 'W5 — #2 가드 requireProjectAdmin 뒤 #10 양식 저장' },
   'src/lib/agent/wbsImport.ts': { calls: 1, why: 'W6 — runWbsImport 골격 분기 :231(가드는 RUN_WBS_IMPORT_CALLERS)' },
   'src/lib/teams/excelProfileCode.ts': { calls: 1, why: '팀 코드 변경 뒤 wbs.excel_profile 의 팀 열 code 치환(가드는 PROFILE_SWAP_CALLERS)' },
-}
-/** writeWorkspaceSettingsInternal(가드 없음 — 워크스페이스 설정을 쓴다)을 언급하는 파일(정의 제외)과 호출 수 */
-const WORKSPACE_WRITE_CALLERS: Record<string, { calls: number; why: string }> = {
-  'src/app/actions/platformWorkspaces.ts': { calls: 1, why: 'createPlatformWorkspace — requireSuperuser 뒤, 그 호출이 방금 만든 워크스페이스 하나' },
 }
 const PROFILE_SWAP_FILE = 'src/lib/teams/excelProfileCode.ts'
 /** swapExcelProfileTeamCode(가드 없음 — wbs.excel_profile 을 쓴다)를 부르는 파일·호출 수와 그 가드 */
@@ -199,8 +194,6 @@ interface Scan {
   exports: string[]          // G4 export 이름
   internalWrite: boolean     // G4 writeProjectSettingsInternal 언급
   internalCalls: number
-  workspaceWrite: boolean    // G4 writeWorkspaceSettingsInternal 언급
-  workspaceWriteCalls: number
   runWbsImport: boolean      // G4 runWbsImport 언급
   runCalls: number
   profileSwap: boolean       // G4 swapExcelProfileTeamCode 언급
@@ -211,7 +204,7 @@ const DATA = /\.(json|sh|sql)$/
 /** 게이트 본체 — 파일 하나의 원문을 판정한다(자기 검사가 같은 함수에 공격 모양을 먹인다) */
 function scan(file: string, text: string): Scan {
   const s: Scan = { tables: new Set(), refs: 0, writes: [], exprFroms: [], rpcs: new Set(), rpcCalls: 0, rpcDynamic: [], bypass: [], valueImports: new Set(),
-    exports: [], internalWrite: false, internalCalls: 0, workspaceWrite: false, workspaceWriteCalls: 0, runWbsImport: false, runCalls: 0, profileSwap: false, profileSwapCalls: 0 }
+    exports: [], internalWrite: false, internalCalls: 0, runWbsImport: false, runCalls: 0, profileSwap: false, profileSwapCalls: 0 }
   const ref = (name: string) => { s.tables.add(name); s.refs++ }
   if (DATA.test(file)) {   // json·sh·sql — 표 이름 단어만
     for (const m of text.matchAll(TABLE_WORD)) ref(m[1])
@@ -249,8 +242,6 @@ function scan(file: string, text: string): Scan {
   }
   s.internalWrite = file !== WRITE_FILE && INTERNAL_WRITE.test(text)
   s.internalCalls = countOf(text, INTERNAL_WRITE_CALL)
-  s.workspaceWrite = file !== WRITE_FILE && WORKSPACE_WRITE.test(text)
-  s.workspaceWriteCalls = countOf(text, WORKSPACE_WRITE_CALL)
   s.runWbsImport = file !== WBS_IMPORT_FILE && RUN_WBS_IMPORT.test(text)
   s.runCalls = countOf(text, RUN_WBS_IMPORT_CALL)
   s.profileSwap = file !== PROFILE_SWAP_FILE && PROFILE_SWAP.test(text)
@@ -296,8 +287,6 @@ function verdicts(scans: ReadonlyMap<string, Scan>) {
     G4writeExports: sameExports(WRITE_FILE, scans.get(WRITE_FILE)?.exports, WRITE_EXPORTS),
     G4internal: closedList(all.filter(([, s]) => s.internalWrite).map(([f]) => f), Object.keys(INTERNAL_WRITE_CALLERS)),
     G4internalCalls: sameCounts(numbers(INTERNAL_WRITE_CALLERS, 'calls'), (f) => scans.get(f)?.internalCalls),
-    G4workspaceWrite: closedList(all.filter(([, s]) => s.workspaceWrite).map(([f]) => f), Object.keys(WORKSPACE_WRITE_CALLERS)),
-    G4workspaceWriteCalls: sameCounts(numbers(WORKSPACE_WRITE_CALLERS, 'calls'), (f) => scans.get(f)?.workspaceWriteCalls),
     G4runners: closedList(all.filter(([, s]) => s.runWbsImport).map(([f]) => f), Object.keys(RUN_WBS_IMPORT_CALLERS)),
     G4runnerCalls: sameCounts(numbers(RUN_WBS_IMPORT_CALLERS, 'calls'), (f) => scans.get(f)?.runCalls),
     G4swappers: closedList(all.filter(([, s]) => s.profileSwap).map(([f]) => f), Object.keys(PROFILE_SWAP_CALLERS)),
@@ -371,8 +360,6 @@ describe('settings-writes', () => {
     expect(tree.G4writeExports).toEqual([])
     expect(tree.G4internal).toEqual([])
     expect(tree.G4internalCalls).toEqual([])
-    expect(tree.G4workspaceWrite).toEqual([])
-    expect(tree.G4workspaceWriteCalls).toEqual([])
     expect(tree.G4runners).toEqual([])
     expect(tree.G4runnerCalls).toEqual([])
     expect(tree.G4wbsExports).toEqual([])
@@ -440,10 +427,10 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     expect(scan('src/lib/domain/lines.json', '{ "a": "project settings" }').tables.size).toBe(0)     // 대조
   })
   it('G1 허용 파일의 표 참조 수 — 모양과 무관하게 새 사용은 목록 갱신을 강제한다(attack m-B)', () => {
-    // write.ts 의 기준 참조는 넷(머리 주석의 백틱 이름 둘 + revision 판독 둘) — 거기에 새 사용 한 줄을 더하면 수가 오른다
-    const writeBase = "// `project_settings` `workspace_settings`\nconst { data } = await admin.from('project_settings').select('revision')\nconst w = await admin.from('workspace_settings').select('revision')"
+    // write.ts 의 기준 참조는 둘(머리 주석의 백틱 이름 하나 + revision 판독 하나) — 거기에 새 사용 한 줄을 더하면 수가 오른다
+    const writeBase = "// `project_settings`\nconst { data } = await admin.from('project_settings').select('revision')"
     expect(judge([[WRITE_FILE, writeBase]]).G1refs.filter((l) => l.startsWith(WRITE_FILE))).toEqual([])     // 대조
-    expect(judge([[WRITE_FILE, `${writeBase}\nawait casUpdate(admin, 'project_settings', id, rev)`]]).G1refs).toContain(`${WRITE_FILE}: 실측 5 / 목록 4`)
+    expect(judge([[WRITE_FILE, `${writeBase}\nawait casUpdate(admin, 'project_settings', id, rev)`]]).G1refs).toContain(`${WRITE_FILE}: 실측 3 / 목록 2`)
     // e2e-local 의 참조(목록 수 — SP5 A 과제 31 에서 +7, SP3b E7 판독 +1) + 새 헬퍼 한 줄 → 수가 올라 실패한다. 기준 줄 수는 목록에서 읽는다(목록을 고칠 때 이 표본이 따라온다)
     const e2eN = ALLOW['scripts/e2e-local.mjs'].refs
     const e2eTables = ["'project_settings'", "'project_settings_history'", "'workspace_settings'", "'authz_events'"]
@@ -520,7 +507,7 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     expect(judge([['src/lib/settings/evil.ts', "const w = await import('./write')"]]).G4writeImporters).toContain('목록 밖: src/lib/settings/evil.ts')
     expect(judge([['src/lib/agent/evil.ts', "import * as w from '../settings/write'"]]).G4writeImporters).toContain('목록 밖: src/lib/agent/evil.ts')
     expect(judge([['src/lib/x.ts', "import type { SettingsChange } from '@/lib/settings/write'"]]).G4writeImporters).not.toContain('목록 밖: src/lib/x.ts')   // 대조
-    const base = "export async function writeProjectSettingsInternal() {}\nexport async function writeWorkspaceSettingsInternal() {}\nexport function commandDigestInput() {}\nexport interface SettingsChange {}\nexport type InternalWriteResult = unknown\n"
+    const base = "export async function writeProjectSettingsInternal() {}\nexport function commandDigestInput() {}\nexport interface SettingsChange {}\nexport type InternalWriteResult = unknown\n"
     const wrapper = `${base}export const writeLevelLabelsInternal = (admin, pid, labels) => writeProjectSettingsInternal(admin, pid, { set: { 'core.level_labels': labels } }, null)`
     expect(judge([[WRITE_FILE, wrapper]]).G4writeExports).toEqual([`${WRITE_FILE} export 목록 밖: writeLevelLabelsInternal`])
     const anon = `${base}export default async function (admin, pid, labels) { return writeProjectSettingsInternal(admin, pid, { set: { 'core.level_labels': labels } }, null) }`
@@ -540,17 +527,6 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     expect(judge([[SETTINGS_ACTIONS_FILE, settings]]).G4internal).toContain(`목록 밖: ${SETTINGS_ACTIONS_FILE}`)
     const execute = "writeProjectSettingsInternal(admin, projectId, a, g.actor.userId)\nexport async function PUT(req) { return writeProjectSettingsInternal(createAdminClient(), id, b, null) }"
     expect(judge([['src/app/api/import/execute/route.ts', execute]]).G4internalCalls).toContain('src/app/api/import/execute/route.ts: 실측 2 / 목록 1')
-  })
-  it('G4 writeWorkspaceSettingsInternal — 언급은 생성 액션 하나뿐, 호출 수 고정(가드 없는 새 호출부·목록 파일 안의 새 호출은 실패)', () => {
-    const CALLER = 'src/app/actions/platformWorkspaces.ts'
-    const one = "import { writeWorkspaceSettingsInternal } from '@/lib/settings/write'\nawait writeWorkspaceSettingsInternal(admin, wid, { set }, g.actor.userId)"
-    const ok = judge([[CALLER, one]])
-    expect([ok.G4workspaceWrite, ok.G4workspaceWriteCalls]).toEqual([[], []])     // 대조
-    const evil = judge([[CALLER, one], ['src/app/actions/evil.ts', "import { writeWorkspaceSettingsInternal as w } from '@/lib/settings/write'\nawait w(admin, wid, { set }, null)"]])
-    expect(evil.G4workspaceWrite).toEqual(['목록 밖: src/app/actions/evil.ts'])
-    expect(evil.G4writeImporters).toContain('목록 밖: src/app/actions/evil.ts')
-    expect(judge([[CALLER, `${one}\nawait writeWorkspaceSettingsInternal(admin, other, { set }, null)`]]).G4workspaceWriteCalls).toEqual([`${CALLER}: 실측 2 / 목록 1`])
-    expect(judge([]).G4workspaceWrite).toEqual([`죽은 항목: ${CALLER}`])
   })
   it('G4 swapExcelProfileTeamCode — 가드 없는 새 호출부·목록 파일 안의 새 호출은 실패(팀 코드 변경 뒤 엑셀 양식 치환의 통과 함수)', () => {
     const evil = "import { swapExcelProfileTeamCode } from '@/lib/teams/excelProfileCode'\nawait swapExcelProfileTeamCode(admin, scope, codes, userId)"
@@ -587,9 +563,7 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     expect([empty.G4writeExports, empty.G4wbsExports, empty.G4settingsExports]).toEqual([[`${WRITE_FILE}: 파일 없음`], [`${WBS_IMPORT_FILE}: 파일 없음`], [`${SETTINGS_ACTIONS_FILE}: 파일 없음`]])
     // 파일은 있고 목록의 export 가 사라진 방향(죽은 항목)
     const dead = judge([[WRITE_FILE, 'export function commandDigestInput() {}\nexport interface SettingsChange {}\nexport type InternalWriteResult = unknown']]).G4writeExports
-    expect(dead).toEqual([`${WRITE_FILE} export 죽은 항목: writeProjectSettingsInternal`, `${WRITE_FILE} export 죽은 항목: writeWorkspaceSettingsInternal`])
-    expect(empty.G4workspaceWrite).toEqual(Object.keys(WORKSPACE_WRITE_CALLERS).map((f) => `죽은 항목: ${f}`))
-    expect(empty.G4workspaceWriteCalls).toHaveLength(Object.keys(WORKSPACE_WRITE_CALLERS).length)
+    expect(dead).toEqual([`${WRITE_FILE} export 죽은 항목: writeProjectSettingsInternal`])
     expect(empty.G1stale).toHaveLength(Object.keys(ALLOW).length)
     expect(empty.RPCstale).toHaveLength(Object.keys(RPC_ALLOW).length)
     expect([empty.G1refs, empty.RPCcalls, empty.G4internalCalls, empty.G4runnerCalls].map((l) => l.length))
@@ -646,7 +620,7 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
       [evil, "import { PS } from '@/lib/settings/projectConfig'\nawait admin.from(PS).update({ values: {} })"]])
     expect(quiet(exported, PC)).toEqual([])
     // 못 잡음: 허용 파일 안 기존 참조를 대괄호 접근 쓰기로 바꾸기(참조 수 그대로)
-    expect(quiet(judge([[WRITE_FILE, "// `project_settings` `workspace_settings`\nawait admin['from']('project_settings').update({ values: {} })\nawait admin['from']('workspace_settings').update({ values: {} })"]]), WRITE_FILE)).toEqual([])
+    expect(quiet(judge([[WRITE_FILE, "// `project_settings`\nawait admin['from']('project_settings').update({ values: {} })"]]), WRITE_FILE)).toEqual([])
     // 못 잡음: 이중 보간·join·줄 이음·process.env
     for (const code of ["const KIND = 'settings'\nawait admin.from(`${scope}_${KIND}`).update({})", "await admin.from(['project', 'settings'].join('_')).update({})",
       "await admin.from('project_\\\nsettings').update({})", 'await admin.from(process.env.SETTINGS_TABLE!).update({})']) {

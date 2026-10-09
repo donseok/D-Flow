@@ -27,7 +27,7 @@ import { walk } from './_walk'
 const P_ACTOR_RPCS: ReadonlySet<string> = new Set([
   'actor_is_project_admin', 'actor_is_workspace_admin', 'activate_form_template', 'apply_project_settings', 'apply_wbs_bulk_item', 'apply_workflow_event', 'apply_workflow_event_cas', 'apply_workflow_event_stage_cas', 'apply_workspace_settings', 'backfill_custom_field', 'change_team_code', 'convert_inherited_teams', 'custom_field_command',
   'deactivate_form_template', 'get_project_creation_receipt',
-  'create_project_with_settings', 'create_weekly_report', 'create_team', 'ensure_team_roots', 'import_wbs_cmd', 'merge_teams', 'migrate_setting_code', 'purge_custom_field', 'record_password_reset', 'remove_workspace_member', 'set_dependency_waiver', 'set_platform_admin', 'set_workspace_role',
+  'create_project_with_settings', 'create_weekly_report', 'create_team', 'create_workspace_with_admin', 'ensure_team_roots', 'import_wbs_cmd', 'merge_teams', 'migrate_setting_code', 'purge_custom_field', 'record_password_reset', 'remove_workspace_member', 'set_dependency_waiver', 'set_platform_admin', 'set_workspace_role',
   'upsert_project_area', 'upsert_project_member', 'upsert_project_member_cmd',
 ])
 
@@ -54,11 +54,6 @@ const ACTOR_SOURCE_EXCEPTIONS: Readonly<Record<string, ActorException>> = {
     expr: 'actorUserId',
     count: 1,
     why: '서버 내부 쓰기 writeProjectSettingsInternal — 가져오기 라우트(가드 결과)와 에이전트 경로(lib/agent/wbsImport.ts)의 행위자를 함께 받는 라이브러리 도우미',
-  },
-  'src/lib/settings/write.ts#apply_workspace_settings': {
-    expr: 'actorUserId',
-    count: 1,
-    why: '서버 내부 쓰기 writeWorkspaceSettingsInternal — 호출부는 createPlatformWorkspace 하나이고 requireSuperuser 결과의 g.actor.userId 를 넘긴다(호출부는 settings-writes 의 WORKSPACE_WRITE_CALLERS 가 닫는다)',
   },
   'src/lib/agent/workflowEvent.ts#apply_workflow_event': {
     expr: 'args.actorUserId',

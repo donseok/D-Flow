@@ -66,11 +66,25 @@ describe('H2-e access_granted_*', () => {
     })
   })
 
-  it('세션이 소속을 지우면(④ 트리거가 명단 권한 회수) 부여자 = 소속을 지운 세션 사용자', async () => {
+  // 0054 — 세션은 소속을 직접 지우지 못한다(권한·정책 회수). 소속 삭제의 정식 길은 remove_workspace_member(0053, service_role)다
+  it('세션의 소속 직접 삭제는 42501 — 명단 권한·부여자는 그대로다', async () => {
     await asUser(pool, F.users.wsAdmin, async (c) => {
-      expect(await pgError(c, 'delete from public.workspace_members where workspace_id = $1 and user_id = $2', [F.ws, F.users.dual])).toBeNull()
-      const r = await c.query('select access_role as r, access_granted_by as by from public.project_members where id = $1', [F.members.danaA])
-      expect(r.rows).toEqual([{ r: null, by: F.users.wsAdmin }])
+      const before = await c.query('select access_role as r, access_granted_by as by from public.project_members where id = $1', [F.members.danaA])
+      expect(await pgError(c, 'delete from public.workspace_members where workspace_id = $1 and user_id = $2', [F.ws, F.users.dual]))
+        .toMatchObject({ code: '42501', message: expect.stringContaining('permission denied for table workspace_members') })
+      const after = await c.query('select access_role as r, access_granted_by as by from public.project_members where id = $1', [F.members.danaA])
+      expect(after.rows).toEqual(before.rows)
+      expect(after.rows[0].r).not.toBeNull()
+    })
+  })
+
+  it('제거 RPC 가 소속을 지우면(④ 트리거가 명단 권한 회수) 권한이 null 이 된다 — service 경로라 부여자 도장은 세션 사용자로 바뀌지 않는다', async () => {
+    await asService(pool, async (c) => {
+      const before = await c.query<{ by: string | null }>('select access_granted_by as by from public.project_members where id = $1', [F.members.danaA])
+      expect(await pgError(c, 'select public.remove_workspace_member($1, $2, $3, $4)',
+        [F.users.wsAdmin, F.ws, F.users.dual, '00000000-0000-4000-8000-000000005471'])).toBeNull()
+      const r = await c.query<{ r: string | null; by: string | null }>('select access_role as r, access_granted_by as by from public.project_members where id = $1', [F.members.danaA])
+      expect(r.rows).toEqual([{ r: null, by: before.rows[0].by }])
     })
   })
 

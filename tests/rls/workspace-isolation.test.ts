@@ -217,8 +217,11 @@ describe('워크스페이스 전수 교차(SP2 §5.1)', () => {
 
   it('민감도 — 열 권한만 있는 표(workspace_members)의 쓰기 정책을 열면 고친 탐침이 잡는다. PK 탐침은 권한에서 멈춰 못 잡았다', async () => {
     await asService(pool, async (c) => {
-      await c.query('drop policy workspace_members_write on public.workspace_members')
-      await c.query('create policy workspace_members_write on public.workspace_members for all to authenticated using (true) with check (true)')
+      // 0054 뒤 쓰기 정책은 INSERT·UPDATE 둘로 나뉘었다(FOR ALL 은 없다) — role 열 탐침이 태우는 것은 UPDATE 정책이다.
+      // 옛 FOR ALL 을 열면 읽기도 함께 열렸다. 지금은 UPDATE 정책만 열면 WHERE 가 읽기 정책에 가려 0행이므로, 같은 누설 모양(읽기 + 쓰기)을 둘 다 열어 만든다
+      await c.query('drop policy workspace_members_update on public.workspace_members')
+      await c.query('create policy workspace_members_update on public.workspace_members for update to authenticated using (true) with check (true)')
+      await c.query('create policy rls_probe_members_read on public.workspace_members for select to authenticated using (true)')
       await c.query('set local role authenticated')
       await c.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: F.users.bAdmin, role: 'authenticated' })])
       const key = `(${F.ws},${F.users.aLoose})`

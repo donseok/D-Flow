@@ -4,6 +4,7 @@ import { enqueueMinuteIndexChange } from '@/lib/ai/index/enqueueChange'
 import { BRAND } from '@/lib/branding'
 import { folderPathOf, refileMinuteAfterProjectChange, resolveFolderPath } from '@/lib/minutes/folders'
 import { loadRootFolders } from '@/lib/minutes/rootMode'
+import { loadAutoFileByPath } from '@/lib/minutes/autoFile'
 import type { RootFoldersSetting } from '@/lib/minutes/rootFolders'
 import { fnv1a64 } from '@/lib/minutes/blocks'
 import {
@@ -14,7 +15,7 @@ import { activeTeamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/t
 import { visibleTeamIdsMatching } from '@/lib/teams/source'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, apiProjectNotAllowed,
-  isMinutesWorkspaceMember, parseMinutePayload, parseUserEmail, resolveMinutesPrincipal,
+  isMinutesWorkspaceMember, parseMinutePayload, parseUserEmail, resolveMinutesPrincipal, settleFolderPath,
   resolveUserByEmail, runMinutePostProcessing, type AdminClient, type ExternalMinutePayload,
   type MinutesPrincipal, type ResolvedUser,
 } from '@/lib/minutes/externalApi'
@@ -109,6 +110,8 @@ interface WriteTarget {
   activeTeamCodes: TeamCode[]
   /** 그 워크스페이스의 최상위 폴더 모드(SP5 B2) */
   rootMode: RootFoldersSetting
+  /** folder_path 자동 편철 여부 — 그 프로젝트의 설정 minutes.auto_file_by_path(배포 차단 스위치가 먼저, 프로젝트가 없으면 제품 기본값) */
+  autoFileByPath: boolean
 }
 
 /** 회의록의 워크스페이스는 바뀌지 않는다 — 다른 워크스페이스 프로젝트의 회의로 옮기는 요청의 400 문구. */
@@ -192,7 +195,10 @@ async function resolveWriteTarget(
   // 최상위 폴더 모드(SP5 B2 — 계약 v2.9) — 편철 정규화가 모드로 갈리므로 못 읽으면 쓰지 않는다(새 오류 code 없이 500 — Q6)
   const roots = await loadRootFolders(scope.workspaceId, { client: admin })
   if (!roots.ok) return { ok: false, response: apiInternalError() }
-  return { ok: true, target: { scope, activeTeamCodes, rootMode: roots.value } }
+  // 자동 편철 여부 — 꺼져 있으면 folder_path 가 키 부재와 같아진다. 못 읽으면 추측하지 않는다(재전송이 사람이 정리한 위치를 덮을 수 있다 — 500)
+  const autoFile = await loadAutoFileByPath(scope.projectId, { client: admin })
+  if (!autoFile.ok) return { ok: false, response: apiInternalError() }
+  return { ok: true, target: { scope, activeTeamCodes, rootMode: roots.value, autoFileByPath: autoFile.value } }
 }
 
 /**
@@ -490,6 +496,9 @@ async function insertNew(
         // 모듈 판정도 그 행의 워크스페이스로 다시 — 위에서 판정한 새 회의록 대상과 다를 수 있다(플랫폼 관리자의 다른 워크스페이스 행)
         const racedMod = await requireModule({ workspaceId: racedTarget.target.scope.workspaceId }, 'minutes_integration', { client: admin })
         if (!racedMod.ok) return apiModuleDisabled()
+        // 편철 여부도 그 행의 프로젝트 설정으로 다시 확정한다(원문에서 — 위 대상과 프로젝트가 다를 수 있다)
+        const racedPath = settleFolderPath(p, racedTarget.target.autoFileByPath)
+        if (!racedPath.ok) return apiBadRequest(racedPath.error)
         return handleExisting(req, admin, p, racedRow, user, racedTarget.target, meetingCreated)
       }
     }
@@ -609,6 +618,10 @@ export async function POST(req: NextRequest) {
       const prjMod = await requireModule({ projectId: target.scope.projectId }, 'minutes_integration', { client: admin })
       if (!prjMod.ok) return apiModuleDisabled()
     }
+    // folder_path 확정 — 편철 여부가 프로젝트 설정이라 대상이 정해진 여기서 한다(계약 §4.8). 꺼져 있으면 검증하지 않고 키 부재로 합류하고,
+    // 켜져 있으면 형식 오류는 400 이다. 보관·skip 분기·회의 확보·폴더·RPC 어느 것보다 앞이라 400 뒤에 고아 회의가 남지 않는다
+    const settled = settleFolderPath(p, target.autoFileByPath)
+    if (!settled.ok) return apiBadRequest(settled.error)
 
     let workspaceSlug: string | null = null
     const { data: wsRow } = await admin.from('workspaces').select('slug').eq('id', target.scope.workspaceId).maybeSingle()
