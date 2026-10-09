@@ -56,7 +56,8 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
       {p.accentCss && <style>{p.accentCss}</style>}
       <GlobalBar scope={p.scope} brand={p.brand} homeHref={home} identity={p.identity} staging={env.staging} aiButton={aiButton ?? undefined}
         onOpenDrawer={() => setDrawer(true)} workspaceSwitcher={wsSwitcher ?? undefined} projectSwitcher={projectCrumb ?? undefined}
-        workspaceId={known ? p.workspace.id : undefined} workspaceSlug={known ? p.workspace.slug : undefined} projectId={p.project?.id} projectName={projectName ?? undefined}
+        workspaceId={known ? p.workspace.id : undefined} projectId={p.project?.id} projectName={projectName ?? undefined}
+        searchNav={{ workspace: p.workspaceGroups, project: p.scope === 'project' ? p.groups : null }}
         crumbs={{ scope: p.scope, workspace: known ? { name: p.workspace.name, href: home } : null, project: p.project && projectName ? { name: projectName, href: `/p/${p.project.id}/dashboard` } : null, screen: screenName }} />
       <div className="flex min-h-0 flex-1">
         {p.groups.length > 0 && (p.scope === 'project'

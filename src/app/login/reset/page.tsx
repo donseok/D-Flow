@@ -20,6 +20,11 @@ type Phase = 'checking' | 'ready' | 'expired' | 'invalid' | 'done'
  * 재설정 토큰 없이 열면 폼을 보이지 않는다 — 이미 로그인한 사람이 이 주소로 "현재 비밀번호 확인 없는 변경"을 하지 못하게
  * (그 길은 계정 화면의 비밀번호 변경이고 현재 비밀번호를 다시 묻는다).
  * 비밀번호 규칙은 관리자 재설정·계정 생성과 같은 함수(isValidPassword — 8자 이상)다.
+ * ④ 바꾼 뒤 이 사용자의 **다른** 세션을 끊는다(signOut scope 'others' — 방금 만든 세션은 남긴다). 재설정은 "누가 내 계정을 쓰고 있다"의 대응이기도 해서
+ * 옛 비밀번호로 열린 세션이 남으면 안 된다. 인증 서버도 비밀번호 변경 때 다른 세션을 지우지만(버전에 기대는 동작) 여기서 명시로 한 번 더 한다.
+ * 끊지 못해도 재설정은 성공이다(비밀번호는 이미 바뀌었다) — 완료 화면이 그 사실을 알린다.
+ * 한계: 끊기는 것은 갱신 토큰이다. 이미 발급된 access token 은 미들웨어가 서명만 로컬 검증(getClaims·JWKS)하므로 만료(Auth 의 jwt_expiry — 기본 1시간)
+ * 전까지는 다른 기기에서 계속 통과한다(docs/runbook-selfhost.md '비밀번호 재설정 뒤의 세션').
  */
 export default function ResetPassword() {
   const { t } = useLocale()
@@ -29,6 +34,8 @@ export default function ResetPassword() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  // 다른 세션을 끊지 못했다 — 완료 화면에서 알린다(재설정 자체는 성공)
+  const [othersLeft, setOthersLeft] = useState(false)
   // 개발 모드의 이중 실행에서 두 번째 실행은 이미 지운 조각을 본다 — 한 번만 읽는다
   const read = useRef(false)
 
@@ -56,7 +63,17 @@ export default function ResetPassword() {
     setPending(true)
     try {
       const { error: updateError } = await createBrowserClient().auth.updateUser({ password })
-      if (!updateError) { setPhase('done'); return }
+      if (!updateError) {
+        try {
+          const { error: signOutError } = await createBrowserClient().auth.signOut({ scope: 'others' })
+          if (signOutError) { console.error('[reset] 다른 세션을 끊지 못했다:', signOutError.message); setOthersLeft(true) }
+        } catch (e) {
+          console.error('[reset] 다른 세션을 끊지 못했다:', e instanceof Error ? e.message : String(e))
+          setOthersLeft(true)
+        }
+        setPhase('done')
+        return
+      }
       // 인증 서버의 원문은 화면에 내지 않는다 — 사용자가 고칠 수 있는 것(쓸 수 없는 비밀번호)과 링크 문제만 가른다
       const code = (updateError as { code?: string }).code ?? ''
       if (code === 'same_password' || code === 'weak_password') setError(t('reset.err.rejected'))
@@ -92,6 +109,7 @@ export default function ResetPassword() {
         <div data-reset-state="done" className="space-y-4">
           <p role="status" className="text-section text-fg">{t('reset.doneTitle')}</p>
           <p className="text-body text-fg-secondary">{t('reset.done')}</p>
+          {othersLeft && <StatusMessage kind="partial_error" title={t('reset.othersLeftTitle')} detail={t('reset.othersLeft')} />}
           {/* 같은 브라우저의 직전 사용자 화면이 라우터 캐시에 남아 있을 수 있다 — 로그인과 같이 새로 고친다 */}
           <button type="button" className="btn btn-primary h-11 w-full" onClick={() => { router.push('/'); router.refresh() }}>
             {t('reset.continue')}

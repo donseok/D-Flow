@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   requestPasswordReset: vi.fn<(email: string) => Promise<ReqResult>>(),
   setSession: vi.fn(),
   updateUser: vi.fn(),
+  signOut: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -22,7 +23,7 @@ vi.mock('next/link', () => ({
 }))
 vi.mock('@/app/actions/passwordReset', () => ({ requestPasswordReset: (email: string) => mocks.requestPasswordReset(email) }))
 vi.mock('@/lib/supabase/client', () => ({
-  createBrowserClient: () => ({ auth: { setSession: mocks.setSession, updateUser: mocks.updateUser } }),
+  createBrowserClient: () => ({ auth: { setSession: mocks.setSession, updateUser: mocks.updateUser, signOut: mocks.signOut } }),
 }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
@@ -47,6 +48,7 @@ beforeEach(() => {
   mocks.requestPasswordReset.mockReset(); mocks.requestPasswordReset.mockResolvedValue({ ok: true })
   mocks.setSession.mockReset(); mocks.setSession.mockResolvedValue({ data: {}, error: null })
   mocks.updateUser.mockReset(); mocks.updateUser.mockResolvedValue({ data: {}, error: null })
+  mocks.signOut.mockReset(); mocks.signOut.mockResolvedValue({ error: null })
   window.history.replaceState(null, '', '/login/reset')
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -158,6 +160,42 @@ describe('새 비밀번호 설정(/login/reset)', () => {
     expect(text()).toContain('비밀번호를 바꿨습니다')
     await act(async () => { container.querySelector<HTMLButtonElement>('[data-reset-state="done"] button')!.click() })
     expect(mocks.calls).toEqual(['push:/', 'refresh'])
+  })
+
+  it('성공하면 이 사용자의 다른 세션만 끊는다(scope others) — 방금 만든 세션은 남는다', async () => {
+    window.history.replaceState(null, '', `/login/reset${HASH}`)
+    await render()
+    await fill('new-password-1')
+    expect(mocks.signOut).toHaveBeenCalledTimes(1)
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: 'others' })
+    // 변경이 먼저다 — 바꾸기 전에 끊으면 옛 비밀번호로 다시 들어온다
+    expect(mocks.updateUser.mock.invocationCallOrder[0]).toBeLessThan(mocks.signOut.mock.invocationCallOrder[0])
+    expect(text()).not.toContain('기존 로그인 세션을 끊지 못했습니다')
+  })
+
+  it('다른 세션을 끊지 못해도 재설정은 성공이다 — 완료 화면이 그 사실을 알리고 로그를 남긴다(오류 반환·던짐 둘 다)', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      for (const fail of [() => mocks.signOut.mockResolvedValue({ error: { message: 'boom' } }), () => mocks.signOut.mockRejectedValue(new Error('network'))]) {
+        act(() => root.unmount()); root = createRoot(container)
+        log.mockClear(); fail()
+        window.history.replaceState(null, '', `/login/reset${HASH}`)
+        await render()
+        await fill('new-password-1')
+        expect(state()).toBe('done')
+        expect(text()).toContain('비밀번호를 바꿨습니다')
+        expect(text()).toContain('기존 로그인 세션을 끊지 못했습니다')
+        expect(log).toHaveBeenCalledTimes(1)
+      }
+    } finally { log.mockRestore() }
+  })
+
+  it('변경이 실패하면 세션을 끊지 않는다', async () => {
+    window.history.replaceState(null, '', `/login/reset${HASH}`)
+    await render()
+    mocks.updateUser.mockResolvedValue({ data: null, error: { name: 'AuthApiError', code: 'unexpected_failure', message: 'x' } })
+    await fill('new-password-1')
+    expect(mocks.signOut).not.toHaveBeenCalled()
   })
 
   it('검증: 8자 미만·두 값 불일치는 인증 서버에 보내지 않는다(계정 생성·관리자 재설정과 같은 규칙)', async () => {

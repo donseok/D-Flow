@@ -2,16 +2,20 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { Modal } from '@/components/ui/Modal'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { useToast } from '@/components/ui/Toast'
+import { isValidPassword } from '@/lib/domain/accounts'
 import { createBrowserClient } from '@/lib/supabase/client'
 
 /**
  * 로그인한 본인의 비밀번호 변경 — 기존/신규 두 칸만. 저장 시 즉시 적용.
  * 기존 비밀번호 재확인(signInWithPassword) 후 updateUser 로 변경. 이메일은 현재 세션에서 조회.
- * 신규 비밀번호 최소 6자(Supabase Auth 정책 하한 — 그 이하는 API로 설정 불가). 갱신주기/강제변경 없음.
+ * 신규 비밀번호 규칙은 관리자 재설정·계정 생성·메일 재설정과 같은 함수(isValidPassword — 8자 이상)다 — 길마다 하한이 다르면
+ * 한 길에서 받은 비밀번호가 다른 길에서 거절된다. 갱신주기/강제변경 없음.
  */
 export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast()
+  const { t } = useLocale()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -25,7 +29,7 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
   function submit() {
     setError(null)
     if (!current) { setError('기존 비밀번호를 입력하세요.'); return }
-    if (next.length < 6) { setError('신규 비밀번호는 6자 이상이어야 합니다.'); return }
+    if (!isValidPassword(next)) { setError(t('account.pw.err.tooShort')); return }
     startTransition(async () => {
       try {
         const sb = createBrowserClient()
@@ -67,7 +71,7 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
           <input className="app-input" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" autoFocus />
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">신규 비밀번호 (6자 이상)</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('account.pw.newLabel')}</span>
           <input className="app-input" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
         </label>
         {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}

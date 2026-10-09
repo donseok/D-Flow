@@ -8,6 +8,7 @@ import { UUID_RE } from '@/lib/domain/validate'
 import { buildActor } from './buildActor'
 import { requireModule } from '@/lib/modules/gate'
 import { agentApiEnabled, minutesApiEnabled } from '@/lib/modules/flags'
+import { noteRateFailureFor, rateLimitedFor, rateLimitedResponse } from '@/lib/http/rateLimit'
 
 export type { CredentialKind } from '@/lib/agent/token'
 
@@ -123,14 +124,19 @@ function resolvedRow(value: unknown, kind: CredentialKind, prefix: string): Reso
   }
 }
 
-/** §5.1.3: 킬스위치 → Bearer → 조회 → enabled/revoked/expires → hash. 실패 사유는 전부 401. */
+/** §5.1.3: 킬스위치 → Bearer → 조회 → enabled/revoked/expires → hash. 실패 사유는 전부 401.
+ *  요청 제한(src/lib/http/rateLimit.ts 'apiCredential'): 같은 IP 의 인증 실패가 한도를 채우면 토큰을 **확인하지 않고** 429 + Retry-After 다
+ *  (확인한 뒤 가르면 429/200 의 차이가 토큰의 유효 여부를 드러낸다). 세는 것은 토큰이 틀린 실패뿐이다 — 성공과 조회 장애는 세지 않는다. */
 export async function resolveCredential(req: Request, admin: Db, kind: CredentialKind): Promise<ResolvedCredential | NextResponse> {
   if (kind !== 'agent_runner' && kind !== 'minutes_api') return unauthorized()
   if (!(kind === 'minutes_api' ? minutesApiEnabled() : agentApiEnabled())) return unavailable()
+  const wait = rateLimitedFor('apiCredential', req.headers)
+  if (wait > 0) return rateLimitedResponse(wait)
+  const denied = () => { noteRateFailureFor('apiCredential', req.headers); return unauthorized() }
   const header = req.headers.get('authorization')
   const bearer = header?.startsWith('Bearer ') ? header.slice(7) : null
   const prefix = bearer ? parseCredentialPrefix(bearer, kind) : null
-  if (!bearer || !prefix) return unauthorized()
+  if (!bearer || !prefix) return denied()
   let cred: ResolvedCredential
   try {
     const { data, error } = await admin.from('integration_credentials')
@@ -143,7 +149,7 @@ export async function resolveCredential(req: Request, admin: Db, kind: Credentia
     const row = data as Record<string, unknown> | null
     if (!row || typeof row.enabled !== 'boolean' || !(row.revoked_at === null || typeof row.revoked_at === 'string') ||
       typeof row.expires_at !== 'string' || !tokenUsable({ enabled: row.enabled, revoked_at: row.revoked_at, expires_at: row.expires_at }).ok ||
-      !hashMatches(bearer, row.token_hash as string)) return unauthorized()
+      !hashMatches(bearer, row.token_hash as string)) return denied()
     const resolved = resolvedRow(row, kind, prefix)
     if (!resolved) return unauthorized()
     cred = resolved

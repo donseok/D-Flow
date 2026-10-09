@@ -4,7 +4,8 @@ import { retrieveContext, type Match } from './retrieve'
 import { ensureProjectIndexed } from './ensure-index'
 import { generateAnswer, generateAnswerStream, type ChatMessage } from './llm'
 import { aiAvailable, type AiScope } from '@/lib/modules/aiAvailable'
-import { ASSISTANT_NAME, BRAND } from '@/lib/branding'
+import { ASSISTANT_NAME } from '@/lib/branding'
+import { productNameFor } from '@/lib/settings/displayBranding'
 import { ANSWER_LANGUAGE_RULE } from './answerLanguage'
 
 export interface AnswerInput {
@@ -23,7 +24,10 @@ export interface AnswerResult {
   sources: { kind: string; refId: string | null; similarity: number }[]
 }
 
-const SYSTEM = `너는 프로젝트 관리 도구 ${BRAND.productName}의 ${ASSISTANT_NAME.ko}야.
+/** 시스템 프롬프트 — 제품 이름은 질문 범위의 워크스페이스가 정한 값(branding.product_name)이다. 라우트 관문이 소속을 확인한 workspaceId 가
+ *  있을 때만 그 값을 읽고(productNameFor), 없으면 배포 기본 이름이다. 이름이 다른 워크스페이스는 프롬프트 머리가 달라진다 — 공급자 쪽
+ *  프롬프트 접두 캐시는 워크스페이스별로 갈린다(앱에는 이 프롬프트를 키로 쓰는 캐시가 없다). */
+const systemFor = (productName: string) => `너는 프로젝트 관리 도구 ${productName}의 ${ASSISTANT_NAME.ko}야.
 사용자의 프로젝트·작업(WBS) 데이터에 대해 친근하고 간결하게 답한다.
 
 규칙:
@@ -86,7 +90,7 @@ export async function answerQuestion(input: AnswerInput): Promise<AnswerResult> 
 
   const llmConfigured = await aiAvailable(aiScopeOf(input), { module: 'chatbot' })
   if (llmConfigured) {
-    const system = `${SYSTEM}\n\n[데이터]\n${buildDataBlock(knowledge, matches)}`
+    const system = `${systemFor(await productNameFor(input.workspaceId))}\n\n[데이터]\n${buildDataBlock(knowledge, matches)}`
     const llm = await generateAnswer(system, [...trimHistory(input.history), { role: 'user', content: message }])
     if (llm) return { answer: llm, intent, usedLLM: true, sources }
   }
@@ -159,7 +163,7 @@ export async function streamAnswer(input: AnswerInput): Promise<ReadableStream<U
   const fallback = (degraded = false) => deterministicAnswer(knowledge, matches, intent, degraded)
 
   if (await aiAvailable(aiScopeOf(input), { module: 'chatbot' })) {
-    const system = `${SYSTEM}\n\n[데이터]\n${buildDataBlock(knowledge, matches)}`
+    const system = `${systemFor(await productNameFor(input.workspaceId))}\n\n[데이터]\n${buildDataBlock(knowledge, matches)}`
     const iter = await generateAnswerStream(system, [...trimHistory(input.history), { role: 'user', content: message }])
     if (iter) {
       return new ReadableStream<Uint8Array>({

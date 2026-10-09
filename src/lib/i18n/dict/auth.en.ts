@@ -35,6 +35,7 @@ export const authEn: Record<keyof typeof authKo, string> = {
   'forgot.back': 'Back to sign in',
   'forgot.err.invalid_email': 'Enter a valid email address.',
   'forgot.err.unavailable': 'This deployment cannot reset passwords by email. Contact your administrator.',
+  'forgot.err.rate_limited': 'Too many requests. Please try again shortly.',
   'forgot.err.failed': 'The request could not be processed. Please try again shortly.',
   'forgot.unavailableTitle': 'Email reset is not available',
   'reset.title': 'Set a new password',
@@ -55,5 +56,7 @@ export const authEn: Record<keyof typeof authKo, string> = {
   'reset.requestAgain': 'Get a new reset email',
   'reset.doneTitle': 'Password changed',
   'reset.done': 'You are signed in with the new password.',
+  'reset.othersLeftTitle': 'Could not end your other sessions',
+  'reset.othersLeft': 'Your password was changed, but sign-ins on other devices may remain active. Change the password once more from the account page or tell your administrator.',
   'reset.continue': 'Go to the start page',
 }

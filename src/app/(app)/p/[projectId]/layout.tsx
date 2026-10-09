@@ -7,7 +7,7 @@ import { isHiddenProject } from '@/lib/domain/authz'
 import { workspaceRefById } from '@/lib/workspace/resolve'
 import { listMyWorkspaces } from '@/lib/workspace/list'
 import { loadShell, minimalShell } from '@/lib/shell/loadShell'
-import { workspaceIconHref } from '@/lib/settings/displayBranding'
+import { displayBranding, workspaceIconHref } from '@/lib/settings/displayBranding'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { projectTeams } from '@/lib/teams/source'
 import { activeTeamsForLayout } from '@/lib/teams/layoutTeams'
@@ -20,8 +20,10 @@ import type { Team } from '@/lib/domain/teams'
 type Params = Promise<{ projectId: string }>
 
 /**
- * /p/* 는 그 프로젝트의 워크스페이스 마크(★8). 숨김 프로젝트(명단 밖 비공개 포함)는 아이콘도 내지 않는다(존재 은닉). 비공개 판정 실패도 내지 않는다 —
- * 판정자는 쿼리 오류만 로그하므로 여기서도 남기고(원칙 ①), Next 제어 신호는 삼키지 않는다(HH3)
+ * /p/* 는 그 프로젝트의 워크스페이스 마크(★8)와 제품 이름(branding.product_name — 제목 '{화면} | {제품}'. 워크스페이스 범위의 템플릿과 같은 값을
+ * 쓴다. 워크스페이스·프로젝트 이름은 넣지 않는다 — 이 함수는 이름을 읽는 조회를 하지 않는다). 숨김 프로젝트(명단 밖 비공개 포함)는 아이콘도 제목도
+ * 내지 않는다(존재 은닉 — 루트의 배포 기본 제목이 나온다). 비공개 판정 실패도 내지 않는다 — 판정자는 쿼리 오류만 로그하므로 여기서도 남기고(원칙 ①),
+ * Next 제어 신호는 삼키지 않는다(HH3). 브랜딩이 손상(invalid)이면 displayBranding 이 배포 기본 이름으로 내린다
  */
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const hiddenOrNull = getHiddenProjectIds().catch((e: unknown) => {
@@ -33,8 +35,11 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   if (!actor || !hidden || isHiddenProject(actor, projectId, hidden)) return {}
   const wid = actor.projectWorkspace.get(projectId)
   if (!wid) return {}
-  try { const icon = workspaceIconHref(await getWorkspaceConfig(wid)); return icon ? { icons: { icon } } : {} }
-  catch (e) { console.error('[project layout] 아이콘 판독 실패:', e instanceof Error ? e.message : e); return {} }
+  try {
+    const config = await getWorkspaceConfig(wid)
+    const icon = workspaceIconHref(config), { productName } = displayBranding(config)
+    return { title: { template: `%s | ${productName}`, default: productName }, ...(icon ? { icons: { icon } } : {}) }
+  } catch (e) { console.error('[project layout] 브랜딩 판독 실패:', e instanceof Error ? e.message : e); return {} }
 }
 
 /**

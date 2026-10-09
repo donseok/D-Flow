@@ -242,7 +242,8 @@ describe('/api/minutes/chat — minutes 모듈 관문(과제 20)', () => {
     const res = await POST(doc('m-1'))
     expect(res.status).toBe(200)
     expect(requireModule).toHaveBeenCalledWith({ workspaceId: 'ws-a' }, 'minutes')
-    expect(mocks.streamDocAnswer).toHaveBeenCalledWith(expect.objectContaining({ minuteId: 'm-1' }))
+    // 그 회의록의 워크스페이스를 함께 넘긴다 — 프롬프트의 제품 이름(branding.product_name)이 그 워크스페이스 값이 되게
+    expect(mocks.streamDocAnswer).toHaveBeenCalledWith(expect.objectContaining({ minuteId: 'm-1', workspaceId: 'ws-a' }))
   })
   // DD1(CC 재리뷰 P3-1) — 명단 밖 비공개 프로젝트의 회의록 본문을 문서 Q&A 근거로 내보내지 않는다(목록·보관함과 같은 숨김 — FA1)
   it('문서 모드: 행의 프로젝트가 명단 밖 비공개면 모듈 판정 전에 404(없는 회의록과 같은 응답) — 답을 만들지 않는다', async () => {

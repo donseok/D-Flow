@@ -7,46 +7,30 @@ import { Search, X, FolderOpen, ListTodo, ArrowRight, Loader2 } from 'lucide-rea
 import { useEscHandler, ESC_PRIORITY } from '@/lib/ui/escStack'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { searchTitles, type SearchProjectItem, type SearchWbsItem } from '@/app/actions/globalSearch'
-import { BRAND } from '@/lib/branding'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { NavGroup } from '@/lib/nav/registry'
 
-export interface NavShortcut {
-  id: string
-  title: string
-  category: string
-  href: string
+/** 검색 대화상자가 보일 메뉴 — 사이드 내비와 같은 navFor 결과다(저장한 순서·이름 navigation.menu, 모듈·권한으로 걸러진 항목).
+ *  손으로 적은 목록을 두지 않는다: 꺼진 모듈·권한 없는 화면이 검색에만 뜨거나, 바꾼 메뉴 이름이 검색에서만 옛 이름으로 남는다. */
+export interface SearchNav {
+  workspace: readonly NavGroup[]
+  /** 프로젝트 범위의 셸에서만 — 그 밖에서는 null */
+  project: readonly NavGroup[] | null
 }
 
 export interface GlobalSearchDialogProps {
   open: boolean
   onClose: () => void
   workspaceId: string
-  workspaceSlug: string
   projectId?: string | null
   projectName?: string | null
+  nav: SearchNav
+  /** 그 워크스페이스의 제품 이름(branding.product_name) — 셸의 브랜드와 같은 값 */
+  productName: string
 }
 
-const WS_NAV_ITEMS: Omit<NavShortcut, 'href'>[] = [
-  { id: 'home', title: '홈', category: '이동' },
-  { id: 'my-work', title: '내 업무', category: '이동' },
-  { id: 'projects', title: '전체 프로젝트', category: '이동' },
-  { id: 'meetings', title: '회의 일정', category: '이동' },
-  { id: 'minutes', title: '회의록', category: '이동' },
-  { id: 'agents', title: '에이전트 현황', category: '이동' },
-  { id: 'portfolio', title: '포트폴리오', category: '이동' },
-  { id: 'settings', title: '워크스페이스 설정', category: '설정' },
-]
-
-const PROJECT_NAV_ITEMS: Omit<NavShortcut, 'href'>[] = [
-  { id: 'dashboard', title: '개요', category: '이동' },
-  { id: 'wbs', title: '작업 계획 (WBS)', category: '이동' },
-  { id: 'issues', title: '이슈', category: '이동' },
-  { id: 'weekly', title: '주간보고', category: '이동' },
-  { id: 'meetings', title: '회의', category: '이동' },
-  { id: 'wiki', title: '위키', category: '이동' },
-  { id: 'announcements', title: '공지사항', category: '이동' },
-  { id: 'members', title: '팀 구성', category: '이동' },
-  { id: 'settings', title: '프로젝트 설정', category: '설정' },
-]
+/** 설정 화면만 갈래 이름이 다르다(옛 고정 목록과 같은 표기) */
+const SETTINGS_ITEMS: ReadonlySet<string> = new Set(['ws.settings', 'p.settings'])
 
 type ResultItem =
   | { kind: 'nav'; id: string; title: string; subtitle: string; href: string }
@@ -57,11 +41,13 @@ export function GlobalSearchDialog({
   open,
   onClose,
   workspaceId,
-  workspaceSlug,
   projectId,
   projectName,
+  nav,
+  productName,
 }: GlobalSearchDialogProps) {
   const router = useRouter()
+  const { t } = useLocale()
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<'workspace' | 'project'>(projectId ? 'project' : 'workspace')
@@ -96,27 +82,19 @@ export function GlobalSearchDialog({
     }
   }, [open, projectId])
 
-  // 네비게이션 바로가기 항목 생성
-  const allNavItems: ResultItem[] = (
-    scope === 'project' && projectId
-      ? PROJECT_NAV_ITEMS.map((item) => ({
-          kind: 'nav' as const,
-          id: `nav-${item.id}`,
-          title: item.title,
-          subtitle: `${projectName ?? '프로젝트'} · ${item.category}`,
-          href: `/p/${encodeURIComponent(projectId)}/${item.id}`,
-        }))
-      : WS_NAV_ITEMS.map((item) => ({
-          kind: 'nav' as const,
-          id: `nav-${item.id}`,
-          title: item.title,
-          subtitle: `워크스페이스 · ${item.category}`,
-          href: item.id === 'home' ? `/w/${encodeURIComponent(workspaceSlug)}` : `/w/${encodeURIComponent(workspaceSlug)}/${item.id}`,
-        }))
-  ).filter((item) => {
-    if (!query.trim()) return true
-    return item.title.toLowerCase().includes(query.trim().toLowerCase())
-  })
+  // 네비게이션 바로가기 항목 — 셸이 내려 준 메뉴(navFor)를 그대로 편다: 순서·이름·주소 모두 사이드 내비와 같다
+  const inProject = scope === 'project' && !!projectId && nav.project !== null
+  const needle = query.trim().toLowerCase()
+  const allNavItems: ResultItem[] = (inProject ? nav.project ?? [] : nav.workspace)
+    .flatMap((g) => g.items)
+    .map((item) => ({
+      kind: 'nav' as const,
+      id: `nav-${item.id}`,
+      title: typeof item.label === 'string' ? item.label : t(item.label.key),
+      subtitle: `${inProject ? projectName ?? '프로젝트' : '워크스페이스'} · ${SETTINGS_ITEMS.has(item.id) ? '설정' : '이동'}`,
+      href: item.href,
+    }))
+    .filter((item) => !needle || item.title.toLowerCase().includes(needle))
 
   // 검색 트리거 (디바운스)
   useEffect(() => {
@@ -369,7 +347,7 @@ export function GlobalSearchDialog({
             <span>↵ 선택</span>
             <span>ESC 닫기</span>
           </div>
-          <span>{BRAND.productName} 검색 v1</span>
+          <span>{productName} 검색 v1</span>
         </div>
       </div>
     </div>,

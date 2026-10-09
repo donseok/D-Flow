@@ -1,8 +1,11 @@
+import type { Metadata } from 'next'
 import { getActorViewState } from '@/lib/authz'
 import { getDisplayName } from '@/lib/auth'
 import { readCurrentWorkspace } from '@/lib/workspace/current'
 import { listMyWorkspaces } from '@/lib/workspace/list'
 import { loadShell, minimalShell } from '@/lib/shell/loadShell'
+import { displayBranding, workspaceIconHref } from '@/lib/settings/displayBranding'
+import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { workspaceTeams } from '@/lib/teams/source'
 import { activeTeamsForLayout } from '@/lib/teams/layoutTeams'
 import { AppShell } from '@/components/app/AppShell'
@@ -10,6 +13,22 @@ import { ScopeProvider } from '@/components/app/ScopeContext'
 import { ShellScope } from '@/components/app/ShellScope'
 import { TeamsProvider } from '@/components/app/TeamsProvider'
 import type { Team } from '@/lib/domain/teams'
+
+/**
+ * 전역 범위(/account·/admin/*)의 탭 제목·아이콘 — 주소가 워크스페이스를 정하지 않으므로 규칙을 둔다: **셸이 그리는 워크스페이스와 같은 것**
+ * (readCurrentWorkspace — 쿠키 힌트를 소속으로 다시 본 값, 없으면 첫 소속)의 branding.product_name·branding.logo 를 쓴다. 전역 화면의 셸 로고가
+ * 이미 그 워크스페이스의 것이라 탭만 배포 기본이면 한 화면에 두 브랜드가 선다. 소속이 없거나 조회·설정 판독이 실패하면 아무것도 내지 않는다
+ * (루트의 배포 기본 제목·아이콘). 소속을 다시 본 값만 쓰므로 소속이 아닌 워크스페이스의 이름·마크는 실리지 않는다.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const cur = await readCurrentWorkspace()
+    if (!cur.ok || !cur.ws) return {}
+    const config = await getWorkspaceConfig(cur.ws.id)
+    const icon = workspaceIconHref(config), { productName } = displayBranding(config)
+    return { title: { template: `%s | ${productName}`, default: productName }, ...(icon ? { icons: { icon } } : {}) }
+  } catch (e) { console.error('[global layout] 브랜딩 판독 실패:', e instanceof Error ? e.message : e); return {} }
+}
 
 /**
  * (global) — 슬러그 없는 화면(/account·/admin/llm-config·/admin/ui-states). 쿠키 워크스페이스(dflow-ws)의 내비를 그리되 활성 항목이 없다(개정 §5.3.1).

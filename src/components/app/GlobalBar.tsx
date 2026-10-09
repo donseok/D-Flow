@@ -7,7 +7,7 @@ import { ContextBreadcrumb, type ContextBreadcrumbProps } from './ContextBreadcr
 import { NotificationBell } from './NotificationBell'
 import { AccountMenu, type ShellIdentity } from './AccountMenu'
 import { SyncStatus } from '@/components/ui/SyncStatus'
-import { GlobalSearchDialog } from '@/components/search/GlobalSearchDialog'
+import { GlobalSearchDialog, type SearchNav } from '@/components/search/GlobalSearchDialog'
 import { TOUCH_TARGET } from '@/components/ui/touchTarget'
 
 /**
@@ -29,9 +29,9 @@ export function GlobalBar({
   projectSwitcher,
   syncStatus,
   workspaceId,
-  workspaceSlug,
   projectId,
   projectName,
+  searchNav,
 }: {
   scope: 'workspace' | 'project' | 'global'
   brand: ShellBrand
@@ -48,9 +48,10 @@ export function GlobalBar({
   /** 동기화 상태 표시 슬롯(SPU1). 미지정 시 기본 SyncStatus 사용 */
   syncStatus?: ReactNode
   workspaceId?: string
-  workspaceSlug?: string
   projectId?: string
   projectName?: string
+  /** 검색 대화상자의 메뉴 — 사이드 내비와 같은 해석 결과(navigation.menu). 없으면 메뉴 없이 제목 검색만 */
+  searchNav?: SearchNav
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const scopeName = crumbs.project?.name ?? crumbs.workspace?.name ?? null
@@ -69,10 +70,7 @@ export function GlobalBar({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [canSearch])
 
-  // 워크스페이스 슬러그 및 프로젝트 ID 추출 (프롭 우선, 없으면 crumbs 해석)
-  const resolvedSlug =
-    workspaceSlug ??
-    (crumbs.workspace?.href ? crumbs.workspace.href.replace(/^\/w\//, '').split('/')[0] : '')
+  // 프로젝트 ID 추출 (프롭 우선, 없으면 crumbs 해석)
   const resolvedProjectId =
     projectId ??
     (crumbs.project?.href ? crumbs.project.href.replace(/^\/p\//, '').split('/')[0] : undefined)
@@ -122,9 +120,10 @@ export function GlobalBar({
           open={searchOpen}
           onClose={() => setSearchOpen(false)}
           workspaceId={workspaceId}
-          workspaceSlug={resolvedSlug}
           projectId={resolvedProjectId}
           projectName={crumbs.project?.name ?? projectName}
+          nav={searchNav ?? { workspace: [], project: null }}
+          productName={brand.productName}
         />
       )}
     </header>

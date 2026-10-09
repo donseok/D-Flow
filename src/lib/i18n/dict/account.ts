@@ -71,4 +71,7 @@ export const accountKo = {
   'wsAccounts.remove.done': '워크스페이스에서 제거했습니다.',
   'wsAccounts.remove.failed': '제거하지 못했습니다',
   'wsAccounts.requestFailed': '요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.',
+  // 계정 화면의 비밀번호 변경(ChangePasswordModal) — 하한은 공용 isValidPassword(8자)와 같다
+  'account.pw.newLabel': '신규 비밀번호 (8자 이상)',
+  'account.pw.err.tooShort': '신규 비밀번호는 8자 이상이어야 합니다.',
 }

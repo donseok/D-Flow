@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { BRAND } from '@/lib/branding'
 import { actorFromUser } from '@/lib/authz'
 import { canEditMinute } from '@/lib/domain/authz'
 import { requireModule } from '@/lib/modules/gate'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, apiProjectNotAllowed,
-  EXTERNAL_ID_MAX, isMinutesWorkspaceMember, isUuid, resolveMinutesPrincipal,
+  EXTERNAL_ID_MAX, isMinutesWorkspaceMember, isUuid, apiProductName, resolveMinutesPrincipal,
   resolveUserByEmail, type AdminClient,
 } from '@/lib/minutes/externalApi'
 import { credentialAllows } from '@/lib/authz/credentials'
@@ -51,7 +50,7 @@ export async function POST(req: NextRequest) {
   try {
     const admin = getAdmin()
     const user = await resolveUserByEmail(admin, userEmail)
-    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
+    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${await apiProductName(admin, principal.credential.workspaceId)} 사용자가 없습니다.`)
 
     const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
     if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')

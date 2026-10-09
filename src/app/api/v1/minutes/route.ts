@@ -1,7 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { enqueueMinuteIndexChange } from '@/lib/ai/index/enqueueChange'
-import { BRAND } from '@/lib/branding'
 import { folderPathOf, refileMinuteAfterProjectChange, resolveFolderPath } from '@/lib/minutes/folders'
 import { loadRootFolders } from '@/lib/minutes/rootMode'
 import { loadAutoFileByPath } from '@/lib/minutes/autoFile'
@@ -15,7 +14,7 @@ import { activeTeamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/t
 import { visibleTeamIdsMatching } from '@/lib/teams/source'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, apiProjectNotAllowed,
-  isMinutesWorkspaceMember, parseMinutePayload, parseUserEmail, resolveMinutesPrincipal, settleFolderPath,
+  isMinutesWorkspaceMember, parseMinutePayload, parseUserEmail, apiProductName, resolveMinutesPrincipal, settleFolderPath,
   resolveUserByEmail, runMinutePostProcessing, type AdminClient, type ExternalMinutePayload,
   type MinutesPrincipal, type ResolvedUser,
 } from '@/lib/minutes/externalApi'
@@ -357,7 +356,7 @@ async function handleExisting(
     // 계약 v2.4 ⑨ — 비활성 팀은 메타 갱신 RPC 가 t.active 를 요구해 반드시 실패한다.
     // 500 으로 두면 또박또박에서 원인 불명 장애로 보인다.
     if (error?.message?.includes('MINUTE_TEAM_INVALID')) {
-      return apiFail(400, 'team_inactive', `비활성 팀(${p.teamCode})입니다. ${BRAND.productName}에서 팀을 활성화한 뒤 다시 시도하세요.`)
+      return apiFail(400, 'team_inactive', `비활성 팀(${p.teamCode})입니다. ${await apiProductName(admin, target.scope.workspaceId)}에서 팀을 활성화한 뒤 다시 시도하세요.`)
     }
     // 0006 트리거 — resolveWriteTarget 이 쓰기 전에 같은 판정을 하므로 경합(판정과 커밋 사이 회의 이동)에서만 닿는다.
     if (error?.message?.includes('WORKSPACE_SCOPE_MISMATCH')) return apiBadRequest(CROSS_WORKSPACE_MSG)
@@ -567,7 +566,7 @@ export async function POST(req: NextRequest) {
   try {
     const admin = getAdmin()
     const user = await resolveUserByEmail(admin, userEmail)
-    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
+    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${await apiProductName(admin, principal.credential.workspaceId)} 사용자가 없습니다.`)
 
     const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
     if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')
@@ -700,7 +699,7 @@ export async function GET(req: NextRequest) {
     const admin = getAdmin()
     // 계정·권한 조회 실패는 throw → 아래 catch 의 500(빈 목록으로 위장하지 않는다).
     const user = await resolveUserByEmail(admin, userEmail)
-    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
+    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${await apiProductName(admin, principal.credential.workspaceId)} 사용자가 없습니다.`)
 
     const isMember = await isMinutesWorkspaceMember(admin, principal.credential.workspaceId, user.id)
     if (!isMember) return apiFail(403, 'unknown_user', '해당 워크스페이스의 사용자가 아닙니다.')

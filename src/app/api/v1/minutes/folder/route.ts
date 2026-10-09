@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { BRAND } from '@/lib/branding'
 import { actorFromUser } from '@/lib/authz'
 import { isWorkspaceAdmin, isWorkspaceMember, roleIn, type Actor } from '@/lib/domain/authz'
 import { activeTeamCodesForMinuteScope } from '@/lib/minutes/teamScope'
@@ -12,7 +11,7 @@ import {
 } from '@/lib/minutes/folders'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, EXTERNAL_ID_MAX,
-  parseFolderPathValue, parseUserEmail, resolveMinutesPrincipal, resolveUserByEmail,
+  parseFolderPathValue, parseUserEmail, apiProductName, resolveMinutesPrincipal, resolveUserByEmail,
   isMinutesWorkspaceMember, type AdminClient, type MinutesPrincipal,
 } from '@/lib/minutes/externalApi'
 import { credentialAllows, narrowActor } from '@/lib/authz/credentials'
@@ -308,7 +307,7 @@ export async function POST(req: NextRequest) {
   try {
     const admin = getAdmin()
     const user = await resolveUserByEmail(admin, userEmail)
-    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
+    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${await apiProductName(admin, principal.credential.workspaceId)} 사용자가 없습니다.`)
 
     // 호출자 스냅샷은 항상 자격증명 범위(그 워크스페이스·project_ids)로 좁힌다 — 플랫폼 관리자 승격은 없다(SP7 §5.1.3).
     const wid = principal.credential.workspaceId

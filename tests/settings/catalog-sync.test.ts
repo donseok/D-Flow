@@ -9,8 +9,8 @@ const file = 'docs/settings-catalog.md'
 const expectedStatus: Record<string, string> = {
   'fields.wbs_item': 'verified', 'fields.issue': 'verified', 'fields.weekly_row': 'verified',
   'modules.allowed': 'verified', 'ai.enabled': 'verified', 'invites.allowed_domains': 'verified',
-  'branding.product_name': 'stored', 'branding.logo': 'stored', 'branding.accent': 'wired', 'branding.mail_from_name': 'verified',
-  'navigation.menu': 'stored', 'core.level_labels': 'verified', 'core.extra_axis_label': 'wired',
+  'branding.product_name': 'stored', 'branding.logo': 'wired', 'branding.accent': 'wired', 'branding.mail_from_name': 'verified',
+  'navigation.menu': 'wired', 'core.level_labels': 'verified', 'core.extra_axis_label': 'wired',
   'core.milestone_keywords': 'verified', 'wbs.excel_profile': 'verified', 'modules.enabled': 'verified', 'workflow.stage_credits': 'verified', 'workflow.issue_statuses': 'verified',
   // SP5 A — 달력 셋(스펙 D44: 정의·편집·소비처·테스트 네 연결). 두 스코프가 같은 키 이름을 쓴다(워크스페이스 기본값 → 프로젝트 생성 시 복사)
   'calendar.timezone': 'verified', 'calendar.working_days': 'verified', 'calendar.week_start': 'verified',

@@ -9,10 +9,11 @@ import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { ilikeOrPattern } from '@/lib/domain/minutes'
 import type { TeamCode } from '@/lib/domain/types'
-import { BRAND } from '@/lib/branding'
+import { productNameFor } from '@/lib/settings/displayBranding'
 import { ANSWER_LANGUAGE_RULE } from './answerLanguage'
 
-const DOC_SYSTEM = `너는 ${BRAND.productName} 의 회의록 어시스턴트야. 아래 [회의록] 본문만 근거로 간결하게 답한다.
+/** 제품 이름은 그 회의록·보관함의 워크스페이스가 정한 값(branding.product_name) — 라우트가 관문에서 확인한 workspaceId 로 읽는다(productNameFor) */
+const docSystem = (productName: string) => `너는 ${productName} 의 회의록 어시스턴트야. 아래 [회의록] 본문만 근거로 간결하게 답한다.
 규칙:
 - ${ANSWER_LANGUAGE_RULE}
 - [회의록]에 없는 내용은 모른다고 말한다. 임의로 지어내지 않는다.
@@ -20,7 +21,7 @@ const DOC_SYSTEM = `너는 ${BRAND.productName} 의 회의록 어시스턴트야
 - 날짜·숫자·담당자는 본문 표기를 그대로 사용한다.
 - 핵심부터, 군더더기 없이.`
 
-const ARCHIVE_SYSTEM = `너는 ${BRAND.productName} 의 회의록 보관함 어시스턴트야. 아래 [검색된 회의록]과 [키워드 정확 일치]만 근거로 답한다.
+const archiveSystem = (productName: string) => `너는 ${productName} 의 회의록 보관함 어시스턴트야. 아래 [검색된 회의록]과 [키워드 정확 일치]만 근거로 답한다.
 규칙:
 - ${ANSWER_LANGUAGE_RULE}
 - 근거에 없는 내용은 모른다고 말한다.
@@ -93,6 +94,8 @@ function llmOrFallbackStream(
 /** 문서 모드 — 열려 있는 회의록 전문 주입. 회의록 없음/미접근 시 null. */
 export async function streamDocAnswer(input: {
   minuteId: string; message: string; history: ChatMessage[]
+  /** 그 회의록의 워크스페이스(라우트의 resolveScope 결과) — 프롬프트의 제품 이름에만 쓴다. 없으면 배포 기본 이름 */
+  workspaceId?: string | null
 }): Promise<ReadableStream<Uint8Array> | null> {
   const sb = await createServerClient() // RLS 적용
   const { data: r } = await sb.from('minutes')
@@ -102,7 +105,9 @@ export async function streamDocAnswer(input: {
     .maybeSingle()
   if (!r) return null
 
-  const system = `${DOC_SYSTEM}\n\n[회의록] ${minuteHead({ minuteDate: r.minute_date as string, teamCode: r.team_code as string, title: r.title as string })}\n${r.body_md as string}`
+  // AI 를 쓰지 않으면 프롬프트를 보내지 않는다 — 그때는 제품 이름을 읽으러 가지 않는다(productNameFor(null) = 배포 기본, 조회 없음)
+  const useLLM = await aiAvailable({ minuteId: input.minuteId }, { module: 'minutes' })
+  const system = `${docSystem(await productNameFor(useLLM ? input.workspaceId : null))}\n\n[회의록] ${minuteHead({ minuteDate: r.minute_date as string, teamCode: r.team_code as string, title: r.title as string })}\n${r.body_md as string}`
   // 폴백: 문서 내 키워드 일치 줄 발췌
   const keywords = extractSearchKeywords(input.message)
   const lines = (r.body_md as string).split('\n')
@@ -112,7 +117,7 @@ export async function streamDocAnswer(input: {
   const fallback = hits.length
     ? `문서에서 일치하는 줄이에요:\n${hits.map(h => `• ${h.trim()}`).join('\n')}`
     : 'AI 응답을 사용할 수 없어요. 본문을 직접 확인해 주세요.'
-  return llmOrFallbackStream(system, input.history, input.message, fallback, '', await aiAvailable({ minuteId: input.minuteId }, { module: 'minutes' }))
+  return llmOrFallbackStream(system, input.history, input.message, fallback, '', useLLM)
 }
 
 /** 보관함 모드 — 벡터 검색 + 키워드 정확 일치, 출처 부기. 검색·AI 판정은 그 워크스페이스로(D26 — 라우트가 소속을 확인한 값).
@@ -198,7 +203,8 @@ export async function streamArchiveAnswer(input: {
     blocks.push(`[검색된 회의록]\n${matches
       .map(m => `[회의록: ${minuteHead(m)}]\n${m.content}`).join('\n---\n')}`)
   }
-  const system = `${ARCHIVE_SYSTEM}\n\n${blocks.length ? blocks.join('\n\n') : '[검색된 회의록]\n(없음)'}`
+  const useLLM = await aiAvailable({ workspaceId: input.workspaceId }, { module: 'minutes' })
+  const system = `${archiveSystem(await productNameFor(useLLM ? input.workspaceId : null))}\n\n${blocks.length ? blocks.join('\n\n') : '[검색된 회의록]\n(없음)'}`
 
   // 4) 폴백 + 출처
   const sourceRows = [...keywordRows, ...matches]
@@ -206,5 +212,5 @@ export async function streamArchiveAnswer(input: {
   const fallback = sourceRows.length
     ? `관련 회의록이에요:\n${[...new Set(sourceRows.map(r => `• ${minuteHead(r)}`))].join('\n')}`
     : '관련 회의록을 찾지 못했어요. 담당·기간 필터를 넓히거나 다른 표현으로 물어보세요.'
-  return llmOrFallbackStream(system, input.history, input.message, fallback, footer, await aiAvailable({ workspaceId: input.workspaceId }, { module: 'minutes' }))
+  return llmOrFallbackStream(system, input.history, input.message, fallback, footer, useLLM)
 }

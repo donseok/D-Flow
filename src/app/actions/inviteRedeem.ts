@@ -4,6 +4,9 @@ import { getSession } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadInviteDomains } from '@/lib/data/inviteDomains'
 import { personOf } from '@/lib/data/memberSelect'
+import { noteRateFailure, rateLimited } from '@/lib/http/rateLimit'
+import { t } from '@/lib/i18n/dict'
+import { getServerLocale } from '@/lib/i18n/server'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
 import { PERSON_INACTIVE, rosterTokenError } from '@/lib/domain/rosterErrors'
 import {
@@ -28,6 +31,28 @@ const E_INVITE_TEAM_GONE = '초대에 담긴 팀을 더 이상 쓸 수 없습니
 const E_SIGNUP_FAILED = '가입 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'
 /** 비활성 인물·명단 행은 초대로 되살리지 않는다(0008 INVITE_INACTIVE) — 비활성화는 관리자의 결정이다. */
 const E_INACTIVE = PERSON_INACTIVE
+
+/**
+ * 요청 제한(src/lib/http/rateLimit.ts 'inviteToken') — 같은 IP 가 없는 초대 토큰을 한도만큼 대면 그 IP 의 초대 확인·수락을 창이 끝날 때까지
+ * 닫는다. 공개 액션 넷이 모두 **토큰을 보기 전에** 부른다: 막힌 동안에는 맞는 토큰도 같은 문구로 거절해 토큰의 유효 여부를 더 드러내지 않는다.
+ * 세는 것은 토큰이 틀린 실패뿐이다(형식이 아닌 토큰·없는 초대 — missedToken). 만료·취소·조회 장애는 세지 않는다.
+ * 판정 자체가 실패하면(요청 헤더를 읽지 못함) 닫는다 — 조회 실패 문구로(fail-closed).
+ */
+async function attemptsExhausted(): Promise<string | null> {
+  try {
+    return (await rateLimited('inviteToken')) > 0 ? t(await getServerLocale(), 'rateLimit.tooMany') : null
+  } catch (e) {
+    console.error('[inviteRedeem] 요청 제한을 판정하지 못했다:', e instanceof Error ? e.message : e)
+    return E_LOOKUP
+  }
+}
+/** 틀린 토큰 한 번을 세고 '없음'을 돌려준다. 세지 못해도 응답은 같다(로그만). */
+async function missedToken(): Promise<{ ok: false; error: string }> {
+  try { await noteRateFailure('inviteToken') } catch (e) {
+    console.error('[inviteRedeem] 요청 제한 기록 실패:', e instanceof Error ? e.message : e)
+  }
+  return { ok: false, error: E_NOT_FOUND }
+}
 
 /**
  * 허용 도메인 재검사. 발급(createProjectInvite)이 통과시켰어도 그것은 발급 시점의 스냅샷일
@@ -76,7 +101,7 @@ async function loadInvite<T>(
     console.error('[inviteRedeem] 초대 조회 실패:', error.message)
     return { ok: false, error: E_LOOKUP }
   }
-  if (!data) return { ok: false, error: E_NOT_FOUND }
+  if (!data) return missedToken()
   return { ok: true, invite: data as unknown as T }
 }
 
@@ -187,7 +212,9 @@ interface PreviewRowRaw {
 export async function getInvitePreview(
   token: string,
 ): Promise<{ ok: true; preview: InvitePreview } | { ok: false; error: string }> {
-  if (!isInviteToken(token)) return { ok: false, error: E_NOT_FOUND }
+  const limited = await attemptsExhausted()
+  if (limited) return { ok: false, error: limited }
+  if (!isInviteToken(token)) return missedToken()
   const admin = createAdminClient()
   // 반환 컬럼 화이트리스트 — projects name/description, workspaces name, 초대 access_role만. 비활성은 상태만 반환한다.
   const found = await loadInvite<PreviewRowRaw>(
@@ -266,7 +293,9 @@ export async function getInvitePreview(
 export async function getInviteSessionState(
   token: string,
 ): Promise<{ ok: true; authed: boolean; emailMatches: boolean } | { ok: false; error: string }> {
-  if (!isInviteToken(token)) return { ok: false, error: E_NOT_FOUND }
+  const limited = await attemptsExhausted()
+  if (limited) return { ok: false, error: limited }
+  if (!isInviteToken(token)) return missedToken()
   const s = await currentUser()
   if (!s.ok) return { ok: false, error: s.error }
   // 비로그인 호출자에게는 초대 이메일에 관한 어떤 정보도 주지 않는다 — 조회조차 하지 않는다.
@@ -292,7 +321,9 @@ function accessRank(r: AccessRole | null): number {
 export async function redeemInvite(
   token: string,
 ): Promise<{ ok: true; projectId: string; alreadyMember: boolean } | { ok: false; error: string }> {
-  if (!isInviteToken(token)) return { ok: false, error: E_NOT_FOUND }
+  const limited = await attemptsExhausted()
+  if (limited) return { ok: false, error: limited }
+  if (!isInviteToken(token)) return missedToken()
   const s = await currentUser()
   if (!s.ok) return { ok: false, error: s.error }
   if (!s.user) return { ok: false, error: '로그인이 필요합니다.' }
@@ -345,7 +376,9 @@ export async function redeemInvite(
 export async function redeemInviteWithSignup(
   token: string, input: SignupInput,
 ): Promise<{ ok: true; projectId: string; email: string } | { ok: false; error: string }> {
-  if (!isInviteToken(token)) return { ok: false, error: E_NOT_FOUND }
+  const limited = await attemptsExhausted()
+  if (limited) return { ok: false, error: limited }
+  if (!isInviteToken(token)) return missedToken()
   const s = await currentUser()
   if (!s.ok) return { ok: false, error: s.error }
   if (s.user) return { ok: false, error: '이미 로그인되어 있습니다.' }

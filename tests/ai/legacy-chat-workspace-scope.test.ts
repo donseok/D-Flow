@@ -64,6 +64,12 @@ const VECTOR = [
   chunk(P_PRIV, '비공개 작업 — 결제 모듈 이관'),
 ]
 const AI = { [W_A]: true, [W_B]: false } as Record<string, boolean>
+/** 워크스페이스가 정한 제품 이름(branding.product_name) — 프롬프트 머리에 그 워크스페이스의 값이 실린다 */
+const PRODUCT = { [W_A]: 'Acme Flow', [W_B]: 'Beta PM' } as Record<string, string>
+const wsConfig = (wid: string, ai = AI[wid] ?? false) => ({ workspaceId: wid, keys: {
+  'ai.enabled': { status: 'set', value: ai },
+  'branding.product_name': { status: 'set', value: PRODUCT[wid] ?? 'D-Flow' }, 'branding.mail_from_name': { status: 'default', value: null },
+} })
 async function readAll(stream: ReadableStream<Uint8Array>): Promise<string> {
   const reader = stream.getReader(), dec = new TextDecoder()
   let out = ''
@@ -75,7 +81,7 @@ beforeEach(() => {
   m.hasLLM.mockReturnValue(false)
   m.rpc.mockResolvedValue({ data: VECTOR, error: null })
   m.getActor.mockResolvedValue(makeActor({ workspaceRoles: new Map([[W_A, 'member'], [W_B, 'member']]) }))
-  m.getWorkspaceConfig.mockImplementation(async (wid: string) => ({ workspaceId: wid, keys: { 'ai.enabled': { status: 'set', value: AI[wid] ?? false } } }))
+  m.getWorkspaceConfig.mockImplementation(async (wid: string) => wsConfig(wid))
   m.getProjectConfig.mockImplementation(async (pid: string) => ({ projectId: pid, workspaceId: pid === PB ? W_B : W_A }))
   m.effectiveModules.mockResolvedValue(new Set(['chatbot']))
   vi.mocked(projectsWithModule).mockImplementation(async (ids: readonly string[]) => [...new Set(ids)].filter((id) => id !== PA_OFF))
@@ -142,7 +148,8 @@ describe('CC3 — AI 사용 판정은 요청 범위(그 워크스페이스, 프�
     m.generateAnswer.mockResolvedValue('LLM 답')
     const r = await answerQuestion({ projectId: null, workspaceId: W_A, message: '전체 프로젝트 현황 알려줘', history: [] })
     expect(r).toMatchObject({ usedLLM: true, answer: 'LLM 답' })
-    expect(m.getWorkspaceConfig.mock.calls.map((c) => c[0])).toEqual([W_A])
+    // AI 판정과 프롬프트의 제품 이름(branding.product_name) 둘 다 그 워크스페이스의 설정을 읽는다 — 다른 워크스페이스는 읽지 않는다
+    expect([...new Set(m.getWorkspaceConfig.mock.calls.map((c) => c[0]))]).toEqual([W_A])
   })
 
   it('A 에만 소속된 플랫폼 관리자가 비소속 B(ai 꺼짐)에서 물으면 LLM 에 보내지 않는다 — A 설정으로 판정하지 않는다', async () => {
@@ -163,5 +170,34 @@ describe('CC3 — AI 사용 판정은 요청 범위(그 워크스페이스, 프�
     const r = await answerQuestion({ projectId: PB, workspaceId: null, message: '지연된 작업 알려줘', history: [] })
     expect(r.usedLLM).toBe(false)   // PB 는 B(ai 꺼짐)
     expect(m.getProjectConfig).toHaveBeenCalledWith(PB, expect.anything())
+  })
+})
+
+describe('프롬프트의 제품 이름 — 질문 범위의 워크스페이스가 정한 값(branding.product_name)', () => {
+  const system = () => String(m.generateAnswer.mock.calls.at(-1)?.[0] ?? '')
+  beforeEach(() => { m.hasLLM.mockReturnValue(true); m.generateAnswer.mockResolvedValue('LLM 답') })
+
+  it('워크스페이스 질문 — 그 워크스페이스의 이름이 실린다(일괄·스트림 둘 다)', async () => {
+    await answerQuestion({ projectId: null, workspaceId: W_A, message: '전체 프로젝트 현황 알려줘', history: [] })
+    expect(system()).toContain('프로젝트 관리 도구 Acme Flow의')
+    m.generateAnswerStream.mockResolvedValue((async function* () { yield 'LLM 답' })())
+    await readAll(await streamAnswer({ projectId: null, workspaceId: W_A, message: '전체 프로젝트 현황 알려줘', history: [] }))
+    expect(String(m.generateAnswerStream.mock.calls.at(-1)?.[0])).toContain('프로젝트 관리 도구 Acme Flow의')
+  })
+
+  it('격리 — B 에서 물으면 B 의 이름만 실린다(A 의 이름·A 의 설정 조회가 없다)', async () => {
+    m.getWorkspaceConfig.mockImplementation(async (wid: string) => wsConfig(wid, true))
+    await answerQuestion({ projectId: null, workspaceId: W_B, message: '전체 프로젝트 현황 알려줘', history: [] })
+    expect(system()).toContain('프로젝트 관리 도구 Beta PM의')
+    expect(system()).not.toContain('Acme Flow')
+    expect(m.getWorkspaceConfig.mock.calls.every((c) => c[0] === W_B)).toBe(true)
+  })
+
+  it('프로젝트 질문 — 관문이 확인한 워크스페이스가 함께 오면 그 이름, 오지 않으면 배포 기본 이름(짐작하지 않는다)', async () => {
+    await answerQuestion({ projectId: PA_ON, workspaceId: W_A, message: '지연된 작업 알려줘', history: [] })
+    expect(system()).toContain('프로젝트 관리 도구 Acme Flow의')
+    await answerQuestion({ projectId: PA_ON, workspaceId: null, message: '지연된 작업 알려줘', history: [] })
+    expect(system()).toContain('프로젝트 관리 도구 D-Flow의')
+    expect(system()).not.toContain('Acme Flow')
   })
 })

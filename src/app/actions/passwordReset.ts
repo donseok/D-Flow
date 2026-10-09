@@ -3,9 +3,10 @@
 // 메일은 Supabase Auth 가 보낸다(resetPasswordForEmail). 링크를 열면 새 비밀번호 화면(/login/reset)으로 돌아온다.
 import { passwordResetMailAvailable } from '@/lib/auth/passwordResetMail'
 import { canonicalEmail } from '@/lib/domain/email'
+import { consumeRate } from '@/lib/http/rateLimit'
 import { createAuthMailClient } from '@/lib/supabase/server'
 
-export type PasswordResetRequestResult = { ok: true } | { ok: false; code: 'invalid_email' | 'unavailable' }
+export type PasswordResetRequestResult = { ok: true } | { ok: false; code: 'invalid_email' | 'unavailable' | 'rate_limited' }
 
 /**
  * 링크가 돌아올 주소. NEXT_PUBLIC_APP_URL 이 있을 때만 적는다 — 요청의 Host 헤더로 만들면 헤더를 꾸민 요청이 남의 메일에 엉뚱한 호스트의
@@ -21,13 +22,22 @@ function resetRedirect(): string | undefined {
  * 재설정 메일 요청. **계정이 있는지 알리지 않는다** — 주소 형식이 맞으면 결과와 무관하게 늘 같은 응답이다. 인증 서버의 오류(같은 주소의
  * 연속 요청 제한은 계정이 있을 때만 걸린다)를 돌려주면 그 차이가 곧 가입 여부다. 오류는 서버 로그에만 남긴다(주소는 적지 않는다).
  * 메일을 보내지 않는 배포에서는 화면이 링크를 숨기고, 액션도 같은 판정으로 닫는다(링크만 숨기고 길을 열어 두지 않는다).
- * 남용 방지는 인증 서버의 발송 제한에 기댄다 — 앱 계층의 요청 제한은 없다(화면은 연속 제출만 막는다).
+ * 남용 방지는 둘이다: 인증 서버의 발송 제한(같은 주소의 연속 요청)과 앱의 요청 제한(같은 IP 의 요청 수 — src/lib/http/rateLimit.ts
+ * 'passwordResetRequest'). 뒤쪽은 주소가 아니라 IP 만 보므로 막혔다는 응답(rate_limited)이 가입 여부를 드러내지 않는다 — 그래서 성공·실패를
+ * 가르지 않고 인증 서버로 가는 요청을 모두 센다. 형식이 틀린 주소는 세지 않는다(메일이 나가지 않는다).
  */
 export async function requestPasswordReset(email: string): Promise<PasswordResetRequestResult> {
   // 이름을 적어 읽는다 — next.config.ts 가 APP_ENV 를 빌드 때 이 식에 박는다
   if (!passwordResetMailAvailable({ APP_ENV: process.env.APP_ENV, NODE_ENV: process.env.NODE_ENV })) return { ok: false, code: 'unavailable' }
   const address = typeof email === 'string' ? canonicalEmail(email) : null
   if (!address) return { ok: false, code: 'invalid_email' }
+  try {
+    if ((await consumeRate('passwordResetRequest')) > 0) return { ok: false, code: 'rate_limited' }
+  } catch (e) {
+    // 요청 헤더를 읽지 못했다 — 제한을 걸 수 없으면 보내지 않는다(fail-closed)
+    console.error('[requestPasswordReset] 요청 제한을 판정하지 못했다:', e instanceof Error ? e.name : 'unknown')
+    return { ok: false, code: 'rate_limited' }
+  }
   try {
     const redirectTo = resetRedirect()
     const { error } = await createAuthMailClient().auth.resetPasswordForEmail(address, redirectTo ? { redirectTo } : undefined)

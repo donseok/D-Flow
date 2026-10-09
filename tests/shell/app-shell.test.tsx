@@ -31,7 +31,7 @@ const P1 = '00000000-0000-0000-7e57-000000001762', P2 = '00000000-0000-0000-7e57
 const wsGroups: NavGroup[] = [{ group: 'ws.main', items: [{ id: 'ws.home', href: '/w/acme', label: { key: 'nav.home' as never }, icon: 'House' }, { id: 'ws.minutes', href: '/w/acme/minutes', label: '회의 기록', icon: 'FileText' }] }]
 const pGroups: NavGroup[] = [{ group: 'p.overview', items: [{ id: 'p.dashboard', href: `/p/${P1}/dashboard`, label: { key: 'nav.dashboard' as never }, icon: 'LayoutDashboard' }] }]
 const base = (over: Partial<ShellProps> = {}): ShellProps => ({
-  scope: 'workspace', base: '/w/acme', groups: wsGroups, workspace: WS, workspaces: [], viewingAsPlatformAdmin: false,
+  scope: 'workspace', base: '/w/acme', groups: wsGroups, workspaceGroups: wsGroups, workspace: WS, workspaces: [], viewingAsPlatformAdmin: false,
   project: null, projects: [{ id: P1, name: '하나', status: 'active', isAdmin: false }, { id: P2, name: '둘', status: 'active', isAdmin: false }],
   projectsFailed: false, favoriteIds: [P2], recentIds: [P1],
   identity: { displayName: 'alice', roleLabel: '멤버', teamCodes: null },
@@ -87,6 +87,11 @@ describe('AppShell', () => {
     expect(bar.workspaceSwitcher).toBeTruthy()                                   // 데스크톱 전환기 자리(D4) — 드로어에도 같은 것
     expect(last(h.drawer).workspaceSwitcher).toBeTruthy()
   })
+  it('전역 검색에 내리는 메뉴 — 워크스페이스 범위는 워크스페이스 메뉴만(프로젝트 null), 제품 이름은 셸의 브랜드 그대로', () => {
+    shell(base({ brand: { productName: 'Acme Flow', workspaceId: WS.id, hasFull: false, hasFullDark: false, hasMark: false } }))
+    expect(last(h.globalBar).searchNav).toEqual({ workspace: wsGroups, project: null })
+    expect(last(h.globalBar).brand.productName).toBe('Acme Flow')
+  })
   it('⑤ 프로젝트 범위 — ProjectNav + ProjectSwitcher, 배지 null 은 그대로 null(0 으로 위장하지 않는다)', () => {
     h.pathname = `/p/${P1}/dashboard`
     shell(base({ scope: 'project', base: `/p/${P1}`, groups: pGroups, project: { id: P1, name: '하나' } }))
@@ -95,6 +100,9 @@ describe('AppShell', () => {
     expect(last(h.pNav).workspaceHome).toBe('/w/acme')
     expect(last(h.pSwitcher)).toEqual(expect.objectContaining({ currentProjectId: P1, favoriteIds: [P2], recentIds: [P1], projectsFailed: false }))
     expect(last(h.globalBar).crumbs).toEqual({ scope: 'project', workspace: { name: 'Acme', href: '/w/acme' }, project: { name: '하나', href: `/p/${P1}/dashboard` }, screen: 't:nav.dashboard' })
+    // 전역 검색(⌘K)에는 사이드 내비와 같은 해석 결과를 내린다 — 프로젝트 범위는 두 메뉴(프로젝트·워크스페이스), 제품 이름은 셸의 브랜드
+    expect(last(h.globalBar).searchNav).toEqual({ workspace: wsGroups, project: pGroups })
+    expect(last(h.globalBar).brand.productName).toBe('D-Flow')
     expect(last(h.globalBar).projectSwitcher).toBeTruthy()          // AA1 — 브레드크럼 프로젝트 칸의 전환기
     expect(typeof last(h.pNav).onToggleCollapsed).toBe('function')     // AA2 — 접기 토글이 계정 키 setter 를 받는다
   })

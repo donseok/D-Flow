@@ -101,4 +101,5 @@ export const commonEn: Record<keyof typeof commonKo, string> = {
   'status.in_progress': 'In progress',
   'status.delayed': 'Delayed',
   'status.done': 'Done',
+  'rateLimit.tooMany': 'Too many requests. Please try again shortly.',
 }

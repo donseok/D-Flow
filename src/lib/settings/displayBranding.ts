@@ -28,3 +28,11 @@ export async function loadDisplayBranding(workspaceId: string, client?: ConfigRe
     return { productName: BRAND.productName, mailFromName: BRAND.productName }
   }
 }
+
+/**
+ * 제품 이름 한 값 — 워크스페이스가 정해진 자리는 그 워크스페이스의 설정값, 정해지지 않은 자리(null)는 배포 기본(BRAND).
+ * AI 프롬프트처럼 "워크스페이스를 알면 쓰고 모르면 기본"인 호출부가 분기를 되풀이하지 않게 둔다. 판독 실패는 loadDisplayBranding 이 기본으로 내린다.
+ */
+export async function productNameFor(workspaceId: string | null | undefined, client?: ConfigReadClient): Promise<string> {
+  return workspaceId ? (await loadDisplayBranding(workspaceId, client)).productName : BRAND.productName
+}

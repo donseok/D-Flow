@@ -33,17 +33,26 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'modules.allowed': A('verified', ['src/lib/modules/effective.ts', 'src/lib/settings/validateConfig.ts'], ['tests/modules/effective.test.ts', 'tests/settings/config-lifecycle.test.ts']),
   'ai.enabled': A('verified', ['src/lib/modules/aiAvailable.ts'], ['tests/modules/effective.test.ts']),
   'invites.allowed_domains': A('verified', ['src/lib/data/inviteDomains.ts'], ['tests/settings/workspace-config.test.ts', 'tests/domain/invites.test.ts']),
-  // stored 유지 — 셸(모노그램·aria)·워크스페이스 탭 제목·초대 메일·내보내기 파일은 저장값을 쓴다. 남은 소비처: 프로젝트·전역 범위의 탭 제목
-  // (범위 레이아웃의 generateMetadata 가 제목을 내지 않아 배포 env 의 이름이 나온다), 전역 검색 대화상자·간트 영향 확인 문구·연동 안내의 이름,
-  // 외부 API 오류 문구, AI 프롬프트. 공개 화면(로그인·초대·루트 오류)의 env 이름은 의도다(워크스페이스를 모르는 화면)
+  // stored 유지(2026-10-09 배선 뒤에도) — 셸(모노그램·aria)·세 범위의 탭 제목(워크스페이스·프로젝트 레이아웃의 generateMetadata, 전역 범위는 셸이 그리는
+  // 현재 워크스페이스)·전역 검색 대화상자의 문구·초대 메일·내보내기 파일·외부 회의록 API 의 오류문(인증 뒤 — 자격증명의 워크스페이스)·AI 프롬프트 가운데
+  // 옛 챗(answer)과 회의록 Q&A(문서·보관함)는 저장값을 쓴다. 간트 영향 확인 문구·연동 안내는 제품 이름을 빼서 소비처가 아니게 됐다.
+  // 남은 소비처(배포 env 의 이름을 쓴다): 주간 브리핑 프롬프트(src/lib/ai/brief.ts — 프로젝트 id 만 받아 워크스페이스를 한 번 더 풀어야 한다),
+  // 챗 v2 합성 프롬프트(src/lib/ai/chat/orchestrator.ts — 합성 입력에 확인된 워크스페이스가 없다), wbs.md 검증 오류문(src/lib/wbsmd/parse.ts — 순수 파서).
+  // 공개 화면(로그인·초대·루트 오류)과 인증 전 API 오류의 env 이름은 의도다(워크스페이스를 모른다)
   'branding.product_name': A('stored',
-    ['src/lib/settings/displayBranding.ts', 'src/lib/shell/loadShell.ts', 'src/components/app/BrandSlot.tsx', 'src/components/ui/BrandMark.tsx', 'src/app/(app)/w/[slug]/layout.tsx', 'src/app/actions/projectInvites.ts'],
-    ['tests/settings/display-branding.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/app/w-layout.test.tsx', 'tests/actions/project-invites-gate.test.ts', 'tests/components/workspace-fields-editor.test.tsx']),
-  // stored 유지 — 세 범위의 셸 로고와 워크스페이스·프로젝트 범위의 탭 아이콘은 저장값을 쓴다(읽기 라우트는 소속·현재 슬롯만 낸다).
-  // 남은 소비처: 전역 범위(/account·/admin)의 탭 아이콘 — 그 레이아웃에 generateMetadata 가 없어 루트 아이콘이 나온다
-  'branding.logo': A('stored',
-    ['src/app/api/brand/[workspaceId]/[slot]/route.ts', 'src/lib/shell/loadShell.ts', 'src/components/app/BrandSlot.tsx', 'src/components/ui/BrandMark.tsx', 'src/app/(app)/w/[slug]/layout.tsx', 'src/app/(app)/p/[projectId]/layout.tsx'],
-    ['tests/settings/logo-upload.test.ts', 'tests/api/brand-route.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/shell/brand.test.tsx', 'tests/app/w-layout.test.tsx', 'tests/settings/validate-config.test.ts']),
+    ['src/lib/settings/displayBranding.ts', 'src/lib/shell/loadShell.ts', 'src/components/app/BrandSlot.tsx', 'src/components/ui/BrandMark.tsx', 'src/app/(app)/w/[slug]/layout.tsx',
+      'src/app/(app)/p/[projectId]/layout.tsx', 'src/app/(app)/(global)/layout.tsx', 'src/components/search/GlobalSearchDialog.tsx', 'src/app/actions/projectInvites.ts',
+      'src/lib/minutes/externalApi.ts', 'src/lib/ai/answer.ts', 'src/lib/ai/minutes-answer.ts'],
+    ['tests/settings/display-branding.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/app/w-layout.test.tsx', 'tests/actions/project-invites-gate.test.ts', 'tests/components/workspace-fields-editor.test.tsx',
+      'tests/shell/scope-branding.test.tsx', 'tests/shell/global-bar-search.test.tsx', 'tests/ui/global-search.test.tsx', 'tests/api/minutes-error-product-name.test.ts',
+      'tests/ai/legacy-chat-workspace-scope.test.ts', 'tests/ai/minutes-answer-product-name.test.ts']),
+  // wired(2026-10-09) — 세 범위의 셸 로고와 세 범위의 탭 아이콘이 저장값을 쓴다(읽기 라우트는 소속·현재 슬롯만 낸다). 전역 범위(/account·/admin)는
+  // 주소가 워크스페이스를 정하지 않아 셸이 그리는 현재 워크스페이스(readCurrentWorkspace — 쿠키 힌트를 소속으로 다시 본 값, 없으면 첫 소속)의 마크를 쓴다.
+  // 근거 테스트: scope-branding '(global) 탭 제목·아이콘'(양성·격리·소속 없음), w-layout, scope-layouts(셸 슬롯).
+  // verified 까지 남은 것: 화면 눈확인(탭 아이콘은 단위 테스트로 그려지는 것을 볼 수 없다), 두 워크스페이스를 오가는 합성 게이트 단계
+  'branding.logo': A('wired',
+    ['src/app/api/brand/[workspaceId]/[slot]/route.ts', 'src/lib/shell/loadShell.ts', 'src/components/app/BrandSlot.tsx', 'src/components/ui/BrandMark.tsx', 'src/app/(app)/w/[slug]/layout.tsx', 'src/app/(app)/p/[projectId]/layout.tsx', 'src/app/(app)/(global)/layout.tsx'],
+    ['tests/settings/logo-upload.test.ts', 'tests/api/brand-route.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/shell/brand.test.tsx', 'tests/app/w-layout.test.tsx', 'tests/settings/validate-config.test.ts', 'tests/shell/scope-branding.test.tsx']),
   // wired(2026-10-09) — 저장(hex → 파생 세트) → loadShell 이 스타일 문자열로(accentStyle) → 세 범위 레이아웃이 모두 loadShell 을 거쳐 AppShell 이
   // <style> 한 블록으로 싣는다(action 계열 변수 여섯, 라이트·다크). 근거 테스트: scope-layouts '저장된 강조색(branding.accent)을 셸의 스타일로 싣는다',
   // brand '두 세트 열두 값이 모두 소문자 hex 면 :root 다음 .dark', app-shell 'accent 는 <style> 한 블록', config-lifecycle '저장된 accent 가 red;} 나
@@ -53,10 +62,14 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     ['src/components/settings/AccentEditor.tsx', 'src/lib/shell/loadShell.ts', 'src/lib/settings/accentCss.ts', 'src/components/app/AppShell.tsx'],
     ['tests/settings/accent.test.ts', 'tests/shell/brand.test.tsx', 'tests/shell/scope-layouts.test.tsx', 'tests/shell/app-shell.test.tsx', 'tests/settings/config-lifecycle.test.ts', 'tests/components/accent-editor.test.tsx']),
   'branding.mail_from_name': A('verified', ['src/lib/mail/fromName.ts', 'src/lib/settings/displayBranding.ts'], ['tests/settings/display-branding.test.ts']),
-  // stored 유지 — 사이드 내비(워크스페이스·프로젝트)·모바일 서랍·브레드크럼은 navFor 로 저장한 순서·이름을 쓴다(nav-consumption 이 네 표면을 고정).
-  // 남은 소비처: 전역 검색(⌘K)의 메뉴 목록이 고정 제목·순서다(개정 §5 가 navFor 소비처로 꼽은 자리 — 셸 컴포넌트를 거쳐 그룹을 내려야 한다)
-  'navigation.menu': A('stored', ['src/components/settings/MenuOrderEditor.tsx', 'src/lib/shell/loadShell.ts', 'src/lib/nav/registry.ts'],
-    ['tests/settings/registry.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/nav/nav-for.test.ts', 'tests/shell/nav-consumption.test.tsx', 'tests/components/menu-order-editor.test.tsx']),
+  // wired(2026-10-09) — 사이드 내비(워크스페이스·프로젝트)·모바일 서랍·브레드크럼·전역 검색(⌘K)이 모두 navFor 의 결과를 쓴다. 검색은 손으로 적은
+  // 목록을 버리고 셸이 내린 두 메뉴(프로젝트 범위의 groups 와 워크스페이스 층의 workspaceGroups)를 그대로 편다 — 저장한 순서·이름, 모듈·권한으로
+  // 걸러진 항목, 같은 주소. 근거 테스트: nav-consumption(네 표면), global-search '메뉴·제품 이름은 셸이 내려 준 워크스페이스의 값이다',
+  // scope-branding 'loadShell.workspaceGroups'(양성·격리), global-bar-search, app-shell(searchNav).
+  // verified 까지 남은 것: 화면 눈확인, 두 워크스페이스의 메뉴가 서로의 검색에 실리지 않는다는 합성 게이트 단계. 사용 현황 키·봇 경로는 메뉴 이름을 쓰지 않는다
+  'navigation.menu': A('wired', ['src/components/settings/MenuOrderEditor.tsx', 'src/lib/shell/loadShell.ts', 'src/lib/nav/registry.ts', 'src/components/app/AppShell.tsx', 'src/components/search/GlobalSearchDialog.tsx'],
+    ['tests/settings/registry.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/nav/nav-for.test.ts', 'tests/shell/nav-consumption.test.tsx', 'tests/components/menu-order-editor.test.tsx',
+      'tests/ui/global-search.test.tsx', 'tests/shell/scope-branding.test.tsx', 'tests/shell/global-bar-search.test.tsx', 'tests/shell/app-shell.test.tsx']),
   'core.level_labels': A('verified', ['src/app/api/v1/wbs/structure/route.ts', 'src/lib/agent/wbsImport.ts'], ['tests/settings/project-config.test.ts', 'tests/settings/create-project.test.ts']),
   // SP4 A2 — 팀 예약어 파생(reservedTeamNames — 팀 추가·개명·가져오기 등록)이 읽는다. 표시 소비도 붙었다: 편집기(설정 화면 '일반' 범주)·
   // WBS 화면(일괄 편집·붙여넣기·변경 이력)·가져오기 마법사·엑셀 머리(내보내기)와 그 머리의 감지 별칭(inspect·execute). 화면 눈확인 전이라 wired.

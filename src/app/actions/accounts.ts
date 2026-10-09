@@ -299,6 +299,15 @@ const ERR_REMOVE = '워크스페이스에서 제거하지 못했습니다.'
  * 순서는 기록 → 변경이다: 두 저장소(Postgres·GoTrue)라 한 트랜잭션이 될 수 없고, 기록 없는 재설정보다 재설정 없는 기록이 낫다
  * (변경이 실패하면 그 사실을 로그에 남긴다 — 이력 행은 지울 수 없다).
  * 조회 실패는 거부다 — '관리자가 아니다'·'다른 소속 없음'으로 폴백하면 경계가 그 순간 사라진다.
+ *
+ * 대상의 기존 세션: 이 액션은 따로 끊는 호출을 하지 않는다. 설치된 auth-js(2.108)의 admin.signOut(jwt, scope) 은 **대상 본인의 access token** 을 받는
+ * 시그니처뿐이고(관리자가 가질 수 없다), 사용자 id 로 세션을 지우는 admin API 는 없다. 새 비밀번호로 대신 로그인해 토큰을 얻는 길은 대상의
+ * 마지막 로그인 시각(사용 현황이 읽는다)을 관리자의 조작으로 덮어써 택하지 않았다. 대신 인증 서버가 한다 — GoTrue 의 관리자 비밀번호 변경
+ * (PUT /admin/users/:id)은 같은 트랜잭션에서 그 사용자의 세션·갱신 토큰을 모두 지운다(supabase/auth internal/models/user.go 의 UpdatePassword(tx, nil) →
+ * Logout). 즉 updateUserById 의 성공이 곧 전체 세션 무효화이고, 실패하면 비밀번호도 그대로다(따로 알릴 "절반 성공"이 없다).
+ * 한계 둘: ① 이 보장은 인증 서버 버전에 기댄다(앱이 확인할 수단이 없다 — 세션 표는 PostgREST 에 노출되지 않는다). 배포 점검에서 한 번 눈으로 확인한다
+ * ② 지워지는 것은 갱신 토큰이다. 이미 발급된 access token 은 미들웨어·가드가 서명만 로컬 검증(getClaims·JWKS)하므로 만료(jwt_expiry — 기본 1시간)
+ * 전까지 통과한다(docs/runbook-selfhost.md '비밀번호 재설정 뒤의 세션').
  */
 export async function resetPassword(workspaceId: string, userId: string, password: string): Promise<AccountActionResult> {
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED }

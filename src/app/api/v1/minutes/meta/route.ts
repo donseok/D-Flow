@@ -7,11 +7,10 @@ import { projectTeams, workspaceTeams } from '@/lib/teams/source'
 import { activeCodes } from '@/lib/domain/teams'
 import { actorFromUser } from '@/lib/authz'
 import { canSeeProject } from '@/lib/domain/authz'
-import { BRAND } from '@/lib/branding'
 import { workspacesWithModule } from '@/lib/modules/gate'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, isMinutesWorkspaceMember, isUuid, MINUTES_API_MAX_REQUEST_BYTES,
-  resolveMinutesPrincipal, resolveUserByEmail, type AdminClient,
+  apiProductName, resolveMinutesPrincipal, resolveUserByEmail, type AdminClient,
 } from '@/lib/minutes/externalApi'
 import { credentialAllows } from '@/lib/authz/credentials'
 
@@ -44,7 +43,7 @@ export async function GET(req: NextRequest) {
     const admin = getAdmin()
     // 계정·권한 조회 실패는 throw → 아래 catch 의 500(빈 목록으로 위장하지 않는다).
     const user = await resolveUserByEmail(admin, userEmail)
-    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${BRAND.productName} 사용자가 없습니다.`)
+    if (!user) return apiFail(403, 'unknown_user', `해당 이메일의 ${await apiProductName(admin, principal.credential.workspaceId)} 사용자가 없습니다.`)
 
     // 범위는 자격증명 행의 워크스페이스 하나다(SP7 §5.1.3) — 호출자의 다른 소속 워크스페이스나 플랫폼 관리자의 전 워크스페이스로 넓히지 않는다.
     const wsId = principal.credential.workspaceId

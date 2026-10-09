@@ -26,7 +26,27 @@ vi.mock('@/app/actions/globalSearch', () => ({
   }),
 }))
 
-import { GlobalSearchDialog } from '@/components/search/GlobalSearchDialog'
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
+  const api = { locale: 'ko' as const, setLocale: () => {}, t: (k: Parameters<typeof t>[1]) => t('ko', k) }
+  return { useLocale: () => api }
+})
+
+import { GlobalSearchDialog, type GlobalSearchDialogProps } from '@/components/search/GlobalSearchDialog'
+import { MODULE_IDS } from '@/lib/modules/defaults'
+import { navFor, type NavCaps } from '@/lib/nav/registry'
+import type { NavMenuSetting } from '@/lib/settings/registry'
+
+// 검색 대화상자의 메뉴는 셸이 내려 준 navFor 결과다 — 테스트도 같은 함수로 만든다(손으로 적은 목록을 두지 않는다)
+const CAPS: NavCaps = { isPlatformAdmin: false, isWorkspaceAdmin: true, isProjectAdmin: true, canViewUsage: false, canViewPortfolio: true, canCreateProject: true }
+const navOf = (menu: NavMenuSetting = { order: [], labels: {} }, project = false): GlobalSearchDialogProps['nav'] => {
+  const effective = new Set(MODULE_IDS)
+  return {
+    workspace: navFor({ scope: 'workspace', base: '/w/workspace-alpha', effective, caps: CAPS, menu }),
+    project: project ? navFor({ scope: 'project', base: '/p/p-1', effective, caps: CAPS, menu }) : null,
+  }
+}
+const BASE = { workspaceId: 'ws-1', nav: navOf(), productName: 'D-Flow' }
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -62,8 +82,7 @@ describe('GlobalSearchDialog 컴포넌트 (⌘K 검색 & 네비게이션)', () =
         <GlobalSearchDialog
           open={false}
           onClose={() => {}}
-          workspaceId="ws-1"
-          workspaceSlug="workspace-alpha"
+          {...BASE}
         />
       )
     })
@@ -77,8 +96,7 @@ describe('GlobalSearchDialog 컴포넌트 (⌘K 검색 & 네비게이션)', () =
         <GlobalSearchDialog
           open={true}
           onClose={() => {}}
-          workspaceId="ws-1"
-          workspaceSlug="workspace-alpha"
+          {...BASE}
         />
       )
     })
@@ -106,8 +124,7 @@ describe('GlobalSearchDialog 컴포넌트 (⌘K 검색 & 네비게이션)', () =
         <GlobalSearchDialog
           open={true}
           onClose={handleClose}
-          workspaceId="ws-1"
-          workspaceSlug="workspace-alpha"
+          {...BASE}
         />
       )
     })
@@ -127,8 +144,7 @@ describe('GlobalSearchDialog 컴포넌트 (⌘K 검색 & 네비게이션)', () =
         <GlobalSearchDialog
           open={true}
           onClose={() => {}}
-          workspaceId="ws-1"
-          workspaceSlug="workspace-alpha"
+          {...BASE}
         />
       )
     })
@@ -156,7 +172,7 @@ describe('GlobalSearchDialog 컴포넌트 (⌘K 검색 & 네비게이션)', () =
   it('프로젝트 화면에서는 현재 프로젝트 범위로 WBS 를 찾는다', async () => {
     vi.useFakeTimers()
     await act(async () => {
-      root.render(<GlobalSearchDialog open={true} onClose={() => {}} workspaceId="ws-1" workspaceSlug="workspace-alpha" projectId="p-1" projectName="알파" />)
+      root.render(<GlobalSearchDialog open={true} onClose={() => {}} {...BASE} nav={navOf(undefined, true)} projectId="p-1" projectName="알파" />)
     })
     await type('Alpha')
     expect(searchCalls.at(-1)).toMatchObject({ workspaceId: 'ws-1', scope: 'project', projectId: 'p-1' })
@@ -168,7 +184,7 @@ describe('GlobalSearchDialog 컴포넌트 (⌘K 검색 & 네비게이션)', () =
     const open = async () => {
       vi.useFakeTimers()
       await act(async () => {
-        root.render(<GlobalSearchDialog open={true} onClose={() => {}} workspaceId="ws-1" workspaceSlug="workspace-alpha" />)
+        root.render(<GlobalSearchDialog open={true} onClose={() => {}} {...BASE} />)
       })
     }
     afterEach(() => { vi.useRealTimers() })
@@ -238,8 +254,7 @@ describe('GlobalSearchDialog 컴포넌트 (⌘K 검색 & 네비게이션)', () =
         <GlobalSearchDialog
           open={true}
           onClose={handleClose}
-          workspaceId="ws-1"
-          workspaceSlug="workspace-alpha"
+          {...BASE}
         />
       )
     })
@@ -253,5 +268,58 @@ describe('GlobalSearchDialog 컴포넌트 (⌘K 검색 & 네비게이션)', () =
 
     expect(handleClose).toHaveBeenCalled()
     expect(mockPush).toHaveBeenCalled()
+  })
+  describe('메뉴·제품 이름은 셸이 내려 준 워크스페이스의 값이다(navigation.menu·branding.product_name)', () => {
+    const titles = () => [...document.querySelectorAll('[role="option"]')].map((o) => o.querySelector('.font-medium')?.textContent ?? '')
+    const render = async (props: Partial<GlobalSearchDialogProps>) => {
+      await act(async () => { root.render(<GlobalSearchDialog open={true} onClose={() => {}} {...BASE} {...props} />) })
+    }
+
+    it('저장한 이름과 순서가 검색 목록에 실린다 — 사이드 내비와 같은 주소로 간다', async () => {
+      const menu: NavMenuSetting = { order: ['ws.projects', 'ws.home'], labels: { 'ws.projects': '과제 목록' } }
+      await render({ nav: navOf(menu) })
+      const list = titles()
+      expect(list.slice(0, 2)).toEqual(['과제 목록', '홈'])
+      expect(list).not.toContain('전체 프로젝트')
+      await act(async () => { (document.querySelector('[role="option"]') as HTMLElement).click() })
+      expect(mockPush).toHaveBeenCalledWith('/w/workspace-alpha/projects')
+    })
+
+    it('바꾼 이름으로 걸러진다 — 옛 이름으로는 찾지 못한다', async () => {
+      vi.useFakeTimers()
+      await render({ nav: navOf({ order: [], labels: { 'ws.projects': '과제 목록' } }) })
+      await type('과제')
+      expect(titles()).toEqual(['과제 목록'])
+      await type('전체 프로젝트')
+      expect(titles()).toEqual([])
+      vi.useRealTimers()
+    })
+
+    it('셸이 내리지 않은 항목은 없다 — 꺼진 모듈·권한 없는 화면이 검색에만 뜨지 않는다', async () => {
+      const nav = { workspace: navFor({ scope: 'workspace', base: '/w/workspace-alpha', effective: new Set(), caps: { ...CAPS, isWorkspaceAdmin: false, canViewPortfolio: false }, menu: { order: [], labels: {} } }), project: null }
+      await render({ nav })
+      expect(titles()).toEqual(['홈', '내 업무', '전체 프로젝트'])
+    })
+
+    it('프로젝트 범위에서는 프로젝트 메뉴, 범위를 워크스페이스로 바꾸면 워크스페이스 메뉴', async () => {
+      const menu: NavMenuSetting = { order: [], labels: { 'p.wbs': '공정표', 'ws.home': '시작' } }
+      await render({ nav: navOf(menu, true), projectId: 'p-1', projectName: '알파' })
+      expect(titles()).toContain('공정표')
+      expect(titles()).not.toContain('시작')
+      const wsChip = [...document.querySelectorAll('button')].find((b) => b.textContent === '워크스페이스 전체')!
+      await act(async () => { wsChip.click() })
+      expect(titles()).toContain('시작')
+      expect(titles()).not.toContain('공정표')
+    })
+
+    it('제품 이름은 받은 값만 쓴다 — 다른 워크스페이스의 이름·배포 기본 이름이 섞이지 않는다', async () => {
+      await render({ productName: 'Acme Flow' })
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Acme Flow 검색')
+      await render({ productName: 'Beta PM' })
+      const text = document.querySelector('[role="dialog"]')?.textContent ?? ''
+      expect(text).toContain('Beta PM 검색')
+      expect(text).not.toContain('Acme Flow')
+      expect(text).not.toContain('D-Flow')
+    })
   })
 })

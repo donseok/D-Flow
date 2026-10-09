@@ -70,4 +70,6 @@ export const accountEn: Record<keyof typeof accountKo, string> = {
   'wsAccounts.remove.done': 'Removed from the workspace.',
   'wsAccounts.remove.failed': 'Could not remove',
   'wsAccounts.requestFailed': 'Something went wrong while processing the request. Please try again shortly.',
+  'account.pw.newLabel': 'New password (8 or more characters)',
+  'account.pw.err.tooShort': 'The new password must be at least 8 characters.',
 }

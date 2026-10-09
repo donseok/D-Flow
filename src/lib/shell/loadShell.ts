@@ -29,6 +29,9 @@ import type { ShellIdentity } from '@/components/app/AccountMenu'
 export type ShellScopeKind = 'workspace' | 'project' | 'global'
 export interface ShellProps {
   scope: ShellScopeKind; base: string; groups: NavGroup[]
+  /** 워크스페이스 층의 메뉴(같은 navFor 결과) — 전역 검색(⌘K)의 '워크스페이스 전체' 범위가 쓴다. 워크스페이스·전역 범위에서는 groups 와 같은 값이고,
+   *  프로젝트 범위에서는 따로 계산한다(사이드 내비는 프로젝트 메뉴만 그리지만 검색은 두 범위를 오간다). 워크스페이스를 모르면 빈 배열 */
+  workspaceGroups: NavGroup[]
   workspace: WorkspaceRef; workspaces: MyWorkspace[]; viewingAsPlatformAdmin: boolean
   project: { id: string; name: string } | null; projects: ShellProject[]; projectsFailed: boolean
   favoriteIds: string[]; recentIds: string[]
@@ -47,9 +50,13 @@ export async function loadShell(input: {
   const projectId = scope === 'project' ? input.projectId ?? null : null
   let configDegraded = false
   const fail = (what: string, e: unknown) => { configDegraded = true; console.error('[shell] 설정 읽기 실패 — 기본으로 그린다', what, ws.id, msg(e)) }
-  const [configR, effR, listR, prefs] = await Promise.all([
+  const [configR, effR, wsEffR, listR, prefs] = await Promise.all([
     getWorkspaceConfig(ws.id).then((c) => ({ ok: true as const, c }), (e: unknown) => ({ ok: false as const, e })),
     effectiveModules({ workspaceId: ws.id, ...(projectId ? { projectId } : {}) }).then((s) => ({ ok: true as const, s }), (e: unknown) => ({ ok: false as const, e })),
+    // 프로젝트 범위에서만 — 검색 대화상자의 워크스페이스 메뉴용. 워크스페이스 설정은 위 조회와 요청 캐시를 나눠 왕복이 늘지 않는다
+    projectId
+      ? effectiveModules({ workspaceId: ws.id }).then((s) => ({ ok: true as const, s }), (e: unknown) => ({ ok: false as const, e }))
+      : Promise.resolve(null),
     listWorkspaceProjects(ws.id, actor),
     getWorkspacePrefs(ws.id),
   ])
@@ -73,13 +80,22 @@ export async function loadShell(input: {
   const caps = navCapsFor(actor, { workspaceId: ws.id, projectId })
   const base = scope === 'project' && projectId ? `/p/${projectId}` : `/w/${encodeURIComponent(ws.slug)}`
   const groups = navFor({ scope: scope === 'project' ? 'project' : 'workspace', base, effective, caps, menu })
+  let workspaceGroups = groups
+  if (wsEffR) {
+    let wsEffective: ReadonlySet<ModuleId> = CORE
+    if (wsEffR.ok) wsEffective = wsEffR.s; else fail('modules(워크스페이스 층)', wsEffR.e)
+    workspaceGroups = navFor({
+      scope: 'workspace', base: `/w/${encodeURIComponent(ws.slug)}`, effective: wsEffective,
+      caps: navCapsFor(actor, { workspaceId: ws.id, projectId: null }), menu,
+    })
+  }
   const projects = listR.ok ? listR.rows : []
   if (!listR.ok) console.error('[shell] 프로젝트 목록 실패 — 전환기·즐겨찾기 없이 그리고 실패를 알린다', ws.id)
   const visible = new Set(projects.map((p) => p.id))
   const favoriteIds = (prefs.favoriteProjectIds ?? []).filter((id) => visible.has(id))
   const recentIds = (prefs.recentProjects ?? []).map((r) => r.id).filter((id) => visible.has(id))
   return {
-    scope, base, groups, workspace: ws, workspaces: input.workspaces, viewingAsPlatformAdmin: input.viewingAsPlatformAdmin,
+    scope, base, groups, workspaceGroups, workspace: ws, workspaces: input.workspaces, viewingAsPlatformAdmin: input.viewingAsPlatformAdmin,
     project: projectId ? { id: projectId, name: projects.find((p) => p.id === projectId)?.name ?? '' } : null,
     projects, projectsFailed: !listR.ok, favoriteIds, recentIds,
     identity: { displayName: input.userName, roleLabel: scopeRoleLabel(actor, { workspaceId: ws.id, projectId }, degraded), teamCodes: actor ? identityTeamCodes(actor, ws.id) : null, teamLabels: actor ? identityTeamLabels(actor, ws.id) : null },
@@ -91,7 +107,7 @@ export async function loadShell(input: {
 /** 워크스페이스를 모를 때(프로젝트 범위 열화·(global) 소속 0)의 최소 셸 — 조회 없음. 내비 없이 전역 바·계정 메뉴·열화 알림만 */
 export function minimalShell(input: { scope: ShellScopeKind; projectId: string | null; workspaces: MyWorkspace[]; userName: string | null; degraded: boolean }): ShellProps {
   return {
-    scope: input.scope, base: '/', groups: [], workspace: { id: '', slug: '', name: '' }, workspaces: input.workspaces, viewingAsPlatformAdmin: false,
+    scope: input.scope, base: '/', groups: [], workspaceGroups: [], workspace: { id: '', slug: '', name: '' }, workspaces: input.workspaces, viewingAsPlatformAdmin: false,
     project: input.projectId ? { id: input.projectId, name: '' } : null, projects: [], projectsFailed: false, favoriteIds: [], recentIds: [],
     identity: { displayName: input.userName, roleLabel: input.degraded ? '확인 불가' : '조회', teamCodes: null, teamLabels: null },
     brand: { productName: BRAND.productName, workspaceId: null, hasFull: false, hasFullDark: false, hasMark: false },

@@ -111,4 +111,6 @@ export const commonKo = {
   'status.delayed': '지연',
   'status.done': '완료',
   // 전역 화면의 기준 시간대(SP5 A — 다중 소속에서 소속 달력을 쓰지 못해 제품 기본값으로 계산할 때, A-5 리뷰 O2)
+  // 요청 제한(src/lib/http/rateLimit.ts) — 로그인 없이 닿는 화면·액션이 막혔을 때. 토큰·계정에 대해 아무것도 말하지 않는다
+  'rateLimit.tooMany': '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
 } as const

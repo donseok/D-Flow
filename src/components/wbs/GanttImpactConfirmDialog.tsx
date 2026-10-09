@@ -209,7 +209,7 @@ export function GanttImpactConfirmDialog({
 
           {impacts.unverified > 0 && (impacts.predecessors.length > 0 || impacts.successors.length > 0) && <p role="alert" className="text-warning">연결된 {impacts.unverified}개 작업의 일정 정보가 부족해 영향을 확인할 수 없습니다.</p>}
           <p className="text-xs text-fg-muted bg-surface-subtle/50 p-2.5 rounded-lg border border-border/40">
-            * D-Flow는 자동 후속 이동(전파)을 하지 않으며, 작업 일정을 개별적으로 보존합니다.
+            * 자동 후속 이동(전파)을 하지 않으며, 작업 일정을 개별적으로 보존합니다.
           </p>
         </div>
 

@@ -1,3 +1,5 @@
+import { loadDisplayBranding } from '@/lib/settings/displayBranding'
+import { noteRateFailureFor, rateLimitedFor, rateLimitedResponse } from '@/lib/http/rateLimit'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
@@ -76,6 +78,17 @@ export type MinutesPrincipal = { kind: 'minutes_api'; credential: ResolvedCreden
 export const ERR_PROJECT_NOT_ALLOWED = '이 자격증명으로 접근할 수 없는 프로젝트입니다.'
 export const apiProjectNotAllowed = () => apiFail(403, 'project_not_allowed', ERR_PROJECT_NOT_ALLOWED)
 
+/**
+ * 오류문에 싣는 제품 이름 — 자격증명이 묶인 워크스페이스의 설정값(branding.product_name)이다. 외부 시스템의 사용자가 보는 문구라 그 워크스페이스가
+ * 정한 이름이어야 한다(배포 기본 이름이 나오면 "어느 제품의 사용자가 없다는 것인지"가 고객이 아는 이름과 어긋난다).
+ * 인증이 끝난 뒤(워크스페이스가 정해진 뒤)의 오류에만 쓴다 — 인증 전 오류(401·404)는 워크스페이스를 몰라 제품 이름을 싣지 않는다.
+ * 세션이 없는 경로라 admin 으로 읽는다. 설정 판독이 실패·손상이면 배포 기본 이름으로 내린다(loadDisplayBranding 이 로그를 남긴다 — 오류문 하나 때문에
+ * 원래 오류를 500 으로 바꾸지 않는다).
+ */
+export async function apiProductName(admin: AdminClient, workspaceId: string): Promise<string> {
+  return (await loadDisplayBranding(workspaceId, admin)).productName
+}
+
 /** SP7 §5.1.3: 회의록 v3 자격증명 리졸버. 킬스위치 꺼짐 404 → Bearer 없음·형식 불일치·행 없음·회수·만료·해시 불일치 전부 401. */
 export async function resolveMinutesPrincipal(
   req: Request,
@@ -84,8 +97,11 @@ export async function resolveMinutesPrincipal(
   if (!minutesApiEnabled()) return apiNotFound()
   const header = req.headers.get('authorization')
   const bearer = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
+  // 요청 제한 — 막힌 IP 는 형식 검사 앞에서 429(resolveCredential 과 같은 통 'apiCredential'). 아래 조기 401 도 실패로 센다
+  const wait = rateLimitedFor('apiCredential', req.headers)
+  if (wait > 0) return rateLimitedResponse(wait)
   // 자격증명 형식이 아닌 Bearer 는 조회 없이 401 — service_role 클라이언트도 만들지 않는다.
-  if (!bearer?.startsWith('dflow_int_')) return apiUnauthorized()
+  if (!bearer?.startsWith('dflow_int_')) { noteRateFailureFor('apiCredential', req.headers); return apiUnauthorized() }
   const cred = await resolveCredential(req, getAdmin(), 'minutes_api')
   if (cred instanceof NextResponse) return cred
   return { kind: 'minutes_api', credential: cred }

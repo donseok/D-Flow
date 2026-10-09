@@ -42,8 +42,8 @@ const SYNC_BEFORE = new Set(['redirect', 'notFound', 'isProjectMember', 'isProje
 const PRE_GATE: Record<string, { calls: string[]; selects?: string[]; why: string }> = {
   'src/app/(app)/w/[slug]/minutes/[id]/page.tsx': { calls: ['getMinuteDetail', 'test'], why: '대상 행의 워크스페이스(스펙 §4.2 2행) — react cache 라 뒤 묶음이 다시 읽지 않는다. test 는 형식 밖 id 를 조회 전에 404 로 보내는 UUID_RE.test(순수, U2a-3 리뷰 V1)' },
   'src/app/share/minutes/[token]/page.tsx': {
-    calls: ['isShareToken', 'serviceRoleConfigured', 'createAdminClient'], selects: ['workspace_id'],
-    why: '토큰 형식·env 가드 뒤 토큰 행의 workspace_id 한 열(본문은 관문 뒤)',
+    calls: ['isShareToken', 'serviceRoleConfigured', 'createAdminClient', 'rateLimited', 'noteRateFailure', 't'], selects: ['workspace_id'],
+    why: '토큰 형식·env 가드 뒤 토큰 행의 workspace_id 한 열(본문은 관문 뒤). rateLimited·noteRateFailure 는 요청 제한(메모리 카운터 — 데이터 로더가 아니다)이고 t 는 그 안내 문구다 — 토큰을 보기 전에 판정해야 한다',
   },
 }
 

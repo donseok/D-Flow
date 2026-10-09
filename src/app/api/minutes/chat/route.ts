@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       }
       const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
       if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod.error) })
-      const stream = await streamDocAnswer({ minuteId, message, history })
+      const stream = await streamDocAnswer({ minuteId, message, history, workspaceId: s.workspaceId })
       if (!stream) return NextResponse.json({ error: '회의록을 찾을 수 없습니다.' }, { status: 404 })
       return new Response(stream, { headers })
     }

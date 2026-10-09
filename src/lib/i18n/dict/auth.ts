@@ -37,6 +37,7 @@ export const authKo = {
   'forgot.back': '로그인으로 돌아가기',
   'forgot.err.invalid_email': '올바른 이메일을 입력하세요.',
   'forgot.err.unavailable': '이 배포에서는 메일로 비밀번호를 재설정할 수 없습니다. 관리자에게 문의하세요.',
+  'forgot.err.rate_limited': '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
   'forgot.err.failed': '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
   'forgot.unavailableTitle': '메일로 재설정할 수 없습니다',
   // 새 비밀번호 설정(/login/reset)
@@ -58,5 +59,8 @@ export const authKo = {
   'reset.requestAgain': '재설정 메일 다시 받기',
   'reset.doneTitle': '비밀번호를 바꿨습니다',
   'reset.done': '새 비밀번호로 로그인됐습니다.',
+  // 다른 기기의 세션을 끊지 못했을 때만(재설정은 성공)
+  'reset.othersLeftTitle': '기존 로그인 세션을 끊지 못했습니다',
+  'reset.othersLeft': '비밀번호는 바뀌었지만 다른 기기에 남은 로그인이 유지될 수 있습니다. 계정 화면에서 비밀번호를 한 번 더 바꾸거나 관리자에게 알려 주세요.',
   'reset.continue': '시작 화면으로',
 }
