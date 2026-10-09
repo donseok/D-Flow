@@ -19,6 +19,7 @@ import { importWizardKo } from './importWizard'
 import { inboxKo } from './inbox'
 import { accountKo } from './account'
 import { portfolioKo } from './portfolio'
+import { platformKo } from './platform'
 
 export const KO = {
   ...commonKo,
@@ -40,4 +41,5 @@ export const KO = {
   ...inboxKo,
   ...accountKo,
   ...portfolioKo,
+  ...platformKo,
 } as const

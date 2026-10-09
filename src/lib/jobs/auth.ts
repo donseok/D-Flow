@@ -27,3 +27,15 @@ export function authorizeJob(req: Request, id: JobId): Response | null {
   }
   return null
 }
+
+/**
+ * 잡이 아닌 운영 경로(헬스체크의 깊은 점검 — /api/health?deep=1)가 같은 시크릿을 본다. 통과면 true.
+ * 시크릿 미설정·헤더 없음·불일치는 모두 false 다 — 호출부는 거부 응답을 내지 않고 얕은 응답으로 내려간다(무인증 경로라 존재를 숨길 것이 없다).
+ * CRON_SECRET 을 읽는 src 파일을 이 파일 하나로 두려고 여기 있다(tests/invariants/job-auth.test.ts ②).
+ */
+export function hasCronBearer(req: Request): boolean {
+  const secret = process.env.CRON_SECRET
+  if (!secret) return false
+  const header = req.headers.get('authorization')
+  return secretMatches(header?.startsWith('Bearer ') ? header.slice(7) : null, secret)
+}

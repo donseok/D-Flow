@@ -16,6 +16,7 @@ const ALLOW: Record<string, number> = {
   'src/app/login/page.tsx': 1,
   'src/app/invite/[token]/page.tsx': 1,
   'src/app/not-found.tsx': 1,
+  'src/components/errors/StandaloneError.tsx': 1,       // 셸 밖 오류 화면(src/app/error.tsx·global-error.tsx 가 같이 쓴다 — 한 화면에 하나)
 }
 describe('page-h1', () => {
   it('<h1 은 허용 목록 파일에만, 개수 그대로', () => {

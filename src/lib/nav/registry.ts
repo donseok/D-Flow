@@ -2,7 +2,7 @@
  * 메뉴 모델(개정 §5.3.5, 스펙 §4.5) — 순수. 권한은 판정하지 않고 caps 로 받는다(판정은 domain/authz·authz/** 두 곳 규칙).
  * 모듈 항목 = 레지스트리의 nav(그 층의 모듈이 effective 에 있고 NAV_NEEDS 의 caps 를 가질 때), 셸 항목 = SHELL_NAV(needs 가 null 이거나 caps[needs]).
  * 그룹 안 순서 = navigation.menu.order(적힌 것이 적힌 순서로 앞, 나머지는 레지스트리 order), 라벨 = labels(없으면 { key }).
- * 빈 그룹은 내지 않는다. 그룹 순서는 NAV_GROUPS. href = base + '/' + segment('' 면 base, '/' 로 시작하면 절대 경로 — 플랫폼 두 항목).
+ * 빈 그룹은 내지 않는다. 그룹 순서는 NAV_GROUPS. href = base + '/' + segment('' 면 base, '/' 로 시작하면 절대 경로 — 플랫폼 항목 셋).
  * 숨김 설정은 없다 — 항목이 사라지는 길은 모듈 비활성과 caps 뿐이고 모듈 비활성은 requireModule 이 서버에서 막는다(메뉴와 서버 판정이 같은 원천).
  * 소비(Sidebar·HeaderChrome·모바일 드로어·브레드크럼·⌘K·사용 현황 키·봇 경로)는 SP3b 다(스펙 §10). p.agents 처럼 href ≠ 활성 접두인 항목의
  * 활성 판정은 소비처가 segment 첫 조각으로 파생한다.
@@ -34,6 +34,8 @@ export const SHELL_NAV: readonly ShellNavEntry[] = [
   { id: 'ws.members', labelKey: 'nav.wsMembers', icon: 'UserCog', segment: 'admin/accounts', group: 'ws.ops', order: 30, scope: 'workspace', needs: 'isWorkspaceAdmin' },
   { id: 'ws.teams', labelKey: 'nav.wsTeams', icon: 'Users', segment: 'admin/teams', group: 'ws.ops', order: 40, scope: 'workspace', needs: 'isWorkspaceAdmin' },
   { id: 'ws.settings', labelKey: 'nav.settings', icon: 'Settings', segment: 'settings', group: 'ws.ops', order: 50, scope: 'workspace', needs: 'isWorkspaceAdmin' },
+  // 워크스페이스 목록·생성(개정 §5.3.2) — 아이콘은 표(navIcons)에 이미 있는 이름을 쓴다(프로젝트 층의 개요와 같은 그림이지만 워크스페이스 층 메뉴에는 하나뿐이다)
+  { id: 'ws.workspaces', labelKey: 'nav.workspaces', icon: 'LayoutDashboard', segment: '/admin/workspaces', group: 'ws.platform', order: 5, scope: 'workspace', needs: 'isPlatformAdmin' },
   { id: 'ws.llm', labelKey: 'nav.llm', icon: 'Cpu', segment: '/admin/llm-config', group: 'ws.platform', order: 10, scope: 'workspace', needs: 'isPlatformAdmin' },
   { id: 'ws.ui_states', labelKey: 'nav.uiStates', icon: 'SwatchBook', segment: '/admin/ui-states', group: 'ws.platform', order: 20, scope: 'workspace', needs: 'isPlatformAdmin' },
 ]

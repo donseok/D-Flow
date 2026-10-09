@@ -52,7 +52,7 @@ export const USAGE_KEY_OF: Readonly<Record<NavItemId, string>> = {
   'ws.home': 'ws-home', 'ws.my_work': 'my-work', 'ws.projects': 'projects',
   'ws.meetings': 'my-meetings', 'ws.minutes': 'minutes', 'ws.agents': 'seatmap',
   'ws.portfolio': 'portfolio', 'ws.usage': 'usage', 'ws.members': 'admin-accounts', 'ws.teams': 'admin-teams', 'ws.settings': 'settings',
-  'ws.llm': 'admin-llm', 'ws.ui_states': 'unknown',                  // 플랫폼 진단 화면 — 집계 키를 늘리지 않는다(새 키는 둘뿐, 스펙 §5.7)
+  'ws.workspaces': 'unknown', 'ws.llm': 'admin-llm', 'ws.ui_states': 'unknown',                  // 플랫폼 진단 화면 — 집계 키를 늘리지 않는다(새 키는 둘뿐, 스펙 §5.7)
   'p.dashboard': 'dashboard', 'p.wbs': 'wbs', 'p.issues': 'issues', 'p.weekly': 'weekly',
   'p.meetings': 'meetings', 'p.wiki': 'wiki', 'p.announcements': 'announcements',
   'p.members': 'members', 'p.attendance': 'attendance', 'p.agents': 'agents', 'p.settings': 'settings',

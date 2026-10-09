@@ -36,7 +36,7 @@ export const OPERATIONAL_SETTINGS: readonly OperationalDef[] = [
   ['src/lib/ai/provider.ts', 'src/lib/ai/llm.ts', 'src/lib/ai/similarity.ts'],
   { secret: ['LLM_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'] }),
   ...env(['NEXT_PUBLIC_SUPABASE_URL'],
-    ['src/lib/supabase/client.ts', 'src/lib/supabase/server.ts', 'src/lib/supabase/env.ts', 'src/middleware.ts'], { public: true }),
+    ['src/lib/supabase/client.ts', 'src/lib/supabase/server.ts', 'src/lib/supabase/env.ts', 'src/middleware.ts', 'next.config.ts'], { public: true }),
   ...env(['NEXT_PUBLIC_SUPABASE_ANON_KEY'],
     ['src/lib/supabase/client.ts', 'src/lib/supabase/server.ts', 'src/middleware.ts'], { public: true }),
   ...env(['SUPABASE_SERVICE_ROLE_KEY'], ['src/lib/supabase/env.ts'], { secret: ['SUPABASE_SERVICE_ROLE_KEY'] }),

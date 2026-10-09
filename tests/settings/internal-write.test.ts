@@ -90,3 +90,73 @@ describe('writeProjectSettingsInternal', () => {
     expect(commandDigestInput({ b: 1 }, ['z', 'a', 'z'])).toEqual({ set: { b: 1 }, unset: ['a', 'z'] })
   })
 })
+
+// 워크스페이스 쪽 내부 쓰기 — 플랫폼 관리자의 워크스페이스 생성이 첫 값(허용 모듈·시간대)을 적는 한 길. 프로젝트 쪽과 같은 순서다.
+describe('writeWorkspaceSettingsInternal', () => {
+  const WID = '00000000-0000-4000-8000-00000000bb01'
+  function fakeWs(revisions: (number | 'error')[], rpcResults: RpcResult[]) {
+    const tables: string[] = []
+    const rpcCalls: { name: string; args: Record<string, unknown> }[] = []
+    const admin = {
+      from: (table: string) => {
+        tables.push(table)
+        const b: Record<string, unknown> = {}
+        b.select = () => b; b.eq = () => b
+        b.maybeSingle = async () => {
+          const r = revisions.shift()
+          if (r === 'error') return { data: null, error: { message: 'db down: secret-host' } }
+          return r === undefined ? { data: null, error: null } : { data: { revision: r }, error: null }
+        }
+        return b
+      },
+      rpc: async (name: string, args: Record<string, unknown>) => { rpcCalls.push({ name, args }); return rpcResults.shift() ?? { data: null, error: { message: 'no more results' } } },
+    }
+    return { admin: admin as never, tables, rpcCalls }
+  }
+  it('parse 를 거친 값으로 apply_workspace_settings 를 부른다 — source internal, 읽은 revision 으로 CAS', async () => {
+    const { writeWorkspaceSettingsInternal } = await import('@/lib/settings/write')
+    const { admin, tables, rpcCalls } = fakeWs([1], [applied(2)])
+    const r = await writeWorkspaceSettingsInternal(admin, WID, { set: { 'modules.allowed': ['wiki', 'kanban'], 'calendar.timezone': 'Asia/Tokyo' } }, ACTOR)
+    expect(r).toMatchObject({ ok: true, status: 'applied', revision: 2 })
+    expect(tables).toEqual(['workspace_settings'])
+    expect(rpcCalls).toHaveLength(1)
+    expect(rpcCalls[0].name).toBe('apply_workspace_settings')
+    expect(rpcCalls[0].args).toMatchObject({ p_workspace_id: WID, p_expected_revision: 1, p_unset: [], p_actor: ACTOR, p_schema_version: 1, p_source: 'internal' })
+    expect((rpcCalls[0].args.p_set as Record<string, unknown>)['calendar.timezone']).toBe('Asia/Tokyo')
+    expect([...(rpcCalls[0].args.p_set as Record<string, string[]>)['modules.allowed']].sort()).toEqual(['kanban', 'wiki'])
+  })
+  it('빈 허용 모듈(core 만)도 명시 값으로 적는다', async () => {
+    const { writeWorkspaceSettingsInternal } = await import('@/lib/settings/write')
+    const { admin, rpcCalls } = fakeWs([1], [applied(2)])
+    expect(await writeWorkspaceSettingsInternal(admin, WID, { set: { 'modules.allowed': [] } }, ACTOR)).toMatchObject({ ok: true })
+    expect(rpcCalls[0].args.p_set).toEqual({ 'modules.allowed': [] })
+  })
+  it('모르는 키·프로젝트 층 키·parse 실패는 RPC 를 부르지 않는다', async () => {
+    const { writeWorkspaceSettingsInternal } = await import('@/lib/settings/write')
+    const a = fakeWs([1], [])
+    expect(await writeWorkspaceSettingsInternal(a.admin, WID, { set: { 'nope.key': 1 } }, ACTOR)).toMatchObject({ ok: false, code: 'CONFIG_UNKNOWN_KEY' })
+    expect(await writeWorkspaceSettingsInternal(a.admin, WID, { set: { 'core.level_labels': ['A'] } }, ACTOR)).toMatchObject({ ok: false, code: 'CONFIG_UNKNOWN_KEY' })
+    expect(await writeWorkspaceSettingsInternal(a.admin, WID, { set: { 'modules.allowed': ['wbs'] } }, ACTOR)).toMatchObject({ ok: false, code: 'CONFIG_INVALID', fieldErrors: [{ key: 'modules.allowed' }] })
+    expect(a.rpcCalls).toHaveLength(0)
+    expect(a.tables).toEqual([])
+  })
+  it('충돌이면 한 번만 다시 읽어 같은 commandId 로 재시도한다', async () => {
+    const { writeWorkspaceSettingsInternal } = await import('@/lib/settings/write')
+    const a = fakeWs([1, 2], [conflict(2), applied(3)])
+    expect(await writeWorkspaceSettingsInternal(a.admin, WID, { set: { 'modules.allowed': [] } }, ACTOR)).toMatchObject({ ok: true, revision: 3 })
+    expect(a.rpcCalls.map((c) => c.args.p_expected_revision)).toEqual([1, 2])
+    expect(a.rpcCalls[0].args.p_command_id).toBe(a.rpcCalls[1].args.p_command_id)
+  })
+  it('revision 판독 실패·설정 행 없음은 CONFIG_UNAVAILABLE — 원문은 결과에 없다, RPC 없음', async () => {
+    const { writeWorkspaceSettingsInternal } = await import('@/lib/settings/write')
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const down = fakeWs(['error'], [])
+    const r = await writeWorkspaceSettingsInternal(down.admin, WID, { set: { 'modules.allowed': [] } }, ACTOR)
+    expect(r).toEqual({ ok: false, code: 'CONFIG_UNAVAILABLE', error: ERR_CONFIG_UNAVAILABLE })
+    expect(JSON.stringify(r)).not.toContain('secret-host')
+    const missing = fakeWs([], [])
+    expect(await writeWorkspaceSettingsInternal(missing.admin, WID, { set: { 'modules.allowed': [] } }, ACTOR)).toMatchObject({ ok: false, code: 'CONFIG_UNAVAILABLE' })
+    expect(down.rpcCalls.length + missing.rpcCalls.length).toBe(0)
+    spy.mockRestore()
+  })
+})

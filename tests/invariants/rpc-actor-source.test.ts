@@ -55,6 +55,11 @@ const ACTOR_SOURCE_EXCEPTIONS: Readonly<Record<string, ActorException>> = {
     count: 1,
     why: '서버 내부 쓰기 writeProjectSettingsInternal — 가져오기 라우트(가드 결과)와 에이전트 경로(lib/agent/wbsImport.ts)의 행위자를 함께 받는 라이브러리 도우미',
   },
+  'src/lib/settings/write.ts#apply_workspace_settings': {
+    expr: 'actorUserId',
+    count: 1,
+    why: '서버 내부 쓰기 writeWorkspaceSettingsInternal — 호출부는 createPlatformWorkspace 하나이고 requireSuperuser 결과의 g.actor.userId 를 넘긴다(호출부는 settings-writes 의 WORKSPACE_WRITE_CALLERS 가 닫는다)',
+  },
   'src/lib/agent/workflowEvent.ts#apply_workflow_event': {
     expr: 'args.actorUserId',
     count: 1,

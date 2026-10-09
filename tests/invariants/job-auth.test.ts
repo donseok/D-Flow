@@ -54,6 +54,8 @@ describe('배포 환경 — APP_ENV 가 정본', () => {
   it('사용 기록 수집·툴바 헤더는 APP_ENV 를 본다', () => {
     expect(readFileSync('src/lib/domain/usageTracking.ts', 'utf8')).toMatch(/env\.APP_ENV === 'production'/)
     expect(readFileSync('src/app/api/track/route.ts', 'utf8')).toContain('APP_ENV: process.env.APP_ENV')
-    expect(readFileSync('next.config.ts', 'utf8')).toMatch(/appEnv === "production"/)
+    // 헤더 구성은 순수 함수로 옮겼다 — 설정 파일은 APP_ENV 에서 온 appEnv 를 넘기고, 함수가 그 값으로 툴바 헤더를 정한다
+    expect(readFileSync('next.config.ts', 'utf8')).toMatch(/buildSecurityHeaders\(\{\s*appEnv,/)
+    expect(readFileSync('src/lib/http/securityHeaders.ts', 'utf8')).toMatch(/env\.appEnv === 'production'\) rules\.push\(\{ source: ALL, headers: \[\{ key: 'x-vercel-skip-toolbar'/)
   })
 })

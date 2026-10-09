@@ -50,6 +50,7 @@ describe('activeNavItem — 활성 항목은 하나(aria-current 근거)', () =>
     expect(activeNavItem('/admin/ui-states', ws)).toBe('ws.ui_states')
     expect(activeNavItem('/admin/ui-states?x=1', ws)).toBe('ws.ui_states')
     expect(activeNavItem('/admin/llm-config/x', ws)).toBe('ws.llm')
+    expect(activeNavItem('/admin/workspaces', ws)).toBe('ws.workspaces')
     // 플랫폼 관리자가 아니면 그 항목이 내비에 없다 → 고를 것이 없다(추측하지 않는다)
     const member = navFor({ scope: 'workspace', base: '/w/acme', effective: ALL, caps: { ...CAPS, isPlatformAdmin: false }, menu: MENU })
     expect(activeNavItem('/admin/llm-config', member)).toBeNull()

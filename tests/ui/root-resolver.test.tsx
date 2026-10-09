@@ -6,6 +6,14 @@ vi.mock('@/lib/workspace/current', () => ({ readCurrentWorkspace: h.readCurrentW
 vi.mock('@/app/actions/preferences', () => ({ getWorkspacePrefs: h.getWorkspacePrefs }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: h.getActorViewState }))
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
+// 소속 0 화면의 문구는 사전에서 온다 — 로캘은 루트가 쿠키에서 읽어 넘긴다(여기서는 바꿔 끼운다)
+const loc = vi.hoisted(() => ({ value: 'ko' as 'ko' | 'en' }))
+vi.mock('@/lib/i18n/server', async () => {
+  const { registerEn } = await import('@/lib/i18n/dict')
+  const { EN } = await import('@/lib/i18n/dict/en')
+  registerEn(EN)
+  return { getServerLocale: async () => loc.value }
+})
 // 루트는 비공개 판정 catch 에서 unstable_rethrow 를 부른다(HH3) — 원본을 두고 redirect·useRouter 만 바꾼다
 vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), redirect: h.redirect, useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }))
 
@@ -58,15 +66,39 @@ describe('루트 리졸버', () => {
     h.getWorkspacePrefs.mockResolvedValue({ startPage: 'last_project', recentProjects: [{ id: P1, at: 'c' }] })
     await expect(Root()).rejects.toThrow('NEXT_REDIRECT:/w/acme')
   })
-  it('소속 0 — 소속 없음 화면(h1·초대 안내·로그아웃), 플랫폼 관리자에게는 LLM 설정 링크', async () => {
+  it('소속 0 — 소속 없음 화면(h1·초대 요청 안내·로그아웃). 일반 사용자에게는 만들기·플랫폼 링크가 없다', async () => {
     h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: null })
     const html = renderToString(await Root())
     expect(html).toMatch(/<h1[^>]*>소속된 워크스페이스가 없습니다<\/h1>/)
+    expect(html).toContain('관리자에게 초대를 요청하세요')
     expect(html).toContain('초대 링크')
     expect(html).toContain('로그아웃')
     expect(html).not.toContain('/admin/llm-config')
+    expect(html).not.toContain('/admin/workspaces')
+    expect(html).not.toContain('워크스페이스 만들기')
+    expect(html).not.toMatch(/준비 중|SP9/)
+  })
+  it('소속 0 — 플랫폼 관리자에게는 "워크스페이스 만들기"(/admin/workspaces)와 LLM 설정 링크, 준비 중 문구 없음', async () => {
+    h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: null })
     h.getActorViewState.mockResolvedValue({ actor: makeSuperuser({ workspaceRoles: new Map() }), degraded: false })
-    expect(renderToString(await Root())).toContain('href="/admin/llm-config"')
+    const html = renderToString(await Root())
+    expect(html).toMatch(/<a[^>]*href="\/admin\/workspaces#create"[^>]*>워크스페이스 만들기<\/a>/)
+    expect(html).toContain('href="/admin/llm-config"')
+    expect(html).not.toMatch(/준비 중|SP9/)
+  })
+  it('소속 0 — 권한 조회 열화(actor null)면 플랫폼 링크를 보이지 않는다(fail-closed)', async () => {
+    h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: null })
+    h.getActorViewState.mockResolvedValue({ actor: null, degraded: true })
+    expect(renderToString(await Root())).not.toContain('/admin/workspaces')
+  })
+  it('소속 0 — 영어 로캘이면 영어 문구', async () => {
+    loc.value = 'en'
+    h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: null })
+    h.getActorViewState.mockResolvedValue({ actor: makeSuperuser({ workspaceRoles: new Map() }), degraded: false })
+    const html = renderToString(await Root())
+    loc.value = 'ko'
+    expect(html).toMatch(/<h1[^>]*>You do not belong to any workspace<\/h1>/)
+    expect(html).toContain('Create a workspace')
   })
   it('조회 오류는 소속 없음으로 위장하지 않는다 — 화면 전체 부분 실패', async () => {
     h.readCurrentWorkspace.mockResolvedValue({ ok: false, error: 'down' })

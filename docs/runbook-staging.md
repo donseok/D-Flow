@@ -74,6 +74,12 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 지금 그 절차의 옛 기록은 `docs/superpowers/**`에만 있고, 원본 리포의 기록일 뿐 이 리포의
 실행 절차가 아니다.
 
+원격 DB 에 마이그레이션을 적용한 직후에는 로그인할 계정이 없다. 첫 플랫폼 관리자와 첫 워크스페이스는
+`npm run remote:bootstrap -- --target staging`(운영은 `--target prod`)으로 만든다 — `STAGING_REF`/`PROD_REF` 로 대상을
+해석하고(`scripts/lib/targets.mjs`, 금지 ref 는 우회 불가), 플랫폼 관리자가 이미 있으면 아무것도 하지 않는다.
+비밀값 취급·자체호스트 주소 지정·미검증 범위는 `docs/runbook-selfhost.md` "첫 부트스트랩" 절에 있다.
+로컬의 `npm run dev:bootstrap` 은 `.env.local` 이 로컬일 때만 도는 별개 경로다.
+
 ---
 
 ## 참고
@@ -81,6 +87,8 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 | 항목 | 문서 · 경로 |
 |---|---|
 | 프로덕션 롤백(원격 생긴 뒤) | `docs/runbook-rollback.md` |
+| 백업·복구 | `docs/runbook-backup.md` |
+| 첫 부트스트랩·헬스체크·오류 참조 ID | `docs/runbook-selfhost.md` |
 | 포크 정책·금지 DB ref | `docs/fork-policy.md` |
 | pre-push 훅 (G1-G5) | `.githooks/pre-push` |
 | 로컬 개발 규칙 정본 | `CLAUDE.md` |

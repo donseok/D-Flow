@@ -136,22 +136,25 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
 - **주간 영역·주간 문서 생성·상속 공용 팀 전환은 RLS 쓰기 정책이 없다**(SP4). 쓰기는 service_role 만 실행하는 DEFINER RPC
   (`upsert_project_area`·`create_weekly_report`·`convert_inherited_teams`)이고, RLS 대신 **RPC 안에서 행위자 등급을 다시
   판정한다**(`actor_is_project_admin(p_actor, …)` — 액션 가드와 두 관문). 세션의 영역·주간 구조 쓰기 길은 닫혀 있다(열 권한은 주간 행 네 칸·문서 제목뿐).
-  **WBS 가져오기**의 앱 경로도 같은 꼴의 `import_wbs_cmd`(DEFINER·service_role, 등급 재판정·영수증·멱등)지만, 옛 `import_wbs`·`replace_wbs`·`import_wbs_upsert(uuid, jsonb, uuid)`(에이전트 가져오기 — 0000 기준선, 0006 은 public·anon 만 회수) 는
-  INVOKER 로 **authenticated 실행권이 남아 있다** — 세션의 프로젝트 관리자는 PostgREST 로 직접 가져올 수 있고(RLS `wbs_items`·`item_owners`·
-  `holidays` 쓰기 정책이 관문, 영수증·사전 백업·전환 없음), 그 실행권 회수는 SP4 스펙 §9 의 이월(SP9 출시 점검)이다. "가져오기는 RPC 한 길"로 가정하지 않는다.
+  **WBS 가져오기**의 앱 경로도 같은 꼴의 `import_wbs_cmd`(DEFINER·service_role, 등급 재판정·영수증·멱등)다. 옛 `import_wbs`·`replace_wbs`·`import_wbs_upsert(uuid, jsonb, uuid)`(에이전트 가져오기 — 0000 기준선의 INVOKER 함수)의
+  **authenticated 실행권은 0039(`authz_legacy_cleanup`)가 회수했다** — service_role 만 실행한다(0006 이 public·anon 을, 0039 가 authenticated 를 회수. 0040 의 사후 검사가 다시 확인한다).
+  세션이 PostgREST 로 직접 가져오던 길은 닫혔다. 함수 자체는 남아 있고(`import_wbs_cmd` 가 안에서 부르고, 에이전트 경로가 `import_wbs_upsert` 를 쓴다) 영수증·사전 백업·전환은 `import_wbs_cmd` 쪽에만 있다.
+- **`teams` 표는 세션 쓰기 권한이 없다**(0039 — INSERT·UPDATE·DELETE 회수, 쓰기 정책 삭제. 읽기만 남는다). 팀 쓰기는 서버 액션의 service_role 뿐이고, 공용 팀 생성(`create_team`, 0024)·
+  코드 변경(`change_team_code`, 0050)·병합(`merge_teams`, 0051)은 service_role 만 실행하는 DEFINER RPC 가 **행위자 등급을 다시 판정한다**(공용 팀은 `actor_is_workspace_admin`,
+  프로젝트 전용 팀은 `actor_is_project_admin`). 프로젝트 전용 팀 생성과 이름·정렬·활성 갱신은 RPC 없이 액션이 직접 쓴다 — 그 길은 액션 가드가 유일한 관문이다.
 - **WBS 흐름 다섯 열(`stage`·`review_round`·`review_steps`·`dev_workflow`·`tags`)은 RPC 전용이다**(SP5b, 0026 `guard_workflow_columns`).
   JWT 세션의 쓰기는 관리자도 42501 `WORKFLOW_COLUMNS_RPC_ONLY`(INSERT 는 흐름이 꺼진 빈 행만) — 앱 쓰기는 service_role 의 `apply_workflow_event`
   (9인자 `p_expected_step`·DEFINER) 한 길이고, 승인 판정은 액션 가드(`guardStepApproval` — 대기 단계의 승인자가 admin 이면 `requireProjectAdmin`,
   아니면 자기 승인 금지가 붙은 승인 가드)와 RPC 안의 `actor_is_project_admin` 재판정 두 관문이다. 사람의 xx 지정(`setWbsStage(…,'xx')`)도 같은 판정을 거친다.
-  유효 단계가 둘 이상·위임·점유 항목의 `actual_pct=100` 은 `guard_workflow_actual` 이 JWT 경로에서 막는다. 위 옛 가져오기 RPC(`import_wbs` 등 INVOKER)의
-  JWT 직접 호출은 흐름 열이 있는 행에서 이 가드에 걸린다(42501) — 실행권 회수는 그대로 SP9 이월이다.
+  유효 단계가 둘 이상·위임·점유 항목의 `actual_pct=100` 은 `guard_workflow_actual` 이 JWT 경로에서 막는다. 위 옛 가져오기 RPC(`import_wbs` 등 INVOKER)는
+  0039 뒤로 JWT 가 실행할 수 없다(실행권 회수) — 이 가드는 그와 별개로 흐름 열을 지킨다.
 - `p_actor` 를 받는 RPC 에는 **가드 결과의 `actor.userId` 만** 넘긴다(`const g = await require*(…)` → `g.actor.userId`, 같은 파일 도우미로
   넘기면 한 단계까지 추적). 그 밖의 출처(에이전트 토큰 행위자 등)는 `tests/invariants/rpc-actor-source.test.ts` 의 닫힌 목록에 사유와 함께 적는다.
 - 사용 현황(`/usage`)은 슈퍼유저 전용 — `canViewUsage()` 와 `0000_baseline.sql` 의 `read_usage_events` 정책이 쌍이다.
 - **설정 쓰기는 RPC 한 길이다**(`apply_project_settings`·`apply_workspace_settings`·`create_project_with_settings`, 0012). 설정 4표(`project_settings`·`workspace_settings`·두 이력)와 `authz_events` 의 이름은 허용 파일에만 두고 그 접근은 읽기(select)뿐이다 — 읽기는 `src/lib/settings/{projectConfig,workspaceConfig}.ts`(해석기)·`src/lib/settings/history.ts`(이력), 쓰기는 `src/app/actions/settings.ts`·`src/app/actions/project.ts`(`createProject` 의 `create_project_with_settings`)·`src/lib/settings/write.ts`(가드 없는 내부 쓰기 — 호출자 닫힘). `tests/invariants/settings-writes.test.ts` 가 src·scripts 원문에서 허용 파일 밖의 표 이름(리터럴·조립 조각·scripts 의 SQL·REST), 허용 파일 안의 쓰기, 리터럴이 아닌 RPC 이름, 내부 쓰기 호출자를 잡는다(의도적 난독화는 못 잡는다). 액션 가드가 유일한 관문이다(RPC 는 등급을 보지 않는다).
 - 위 규칙의 전체 설계는 `docs/superpowers/specs/2026-09-23-generic-platform-design.md` §2(조직·권한 모델),
   SP1 구현 결정은 `docs/superpowers/specs/2026-09-24-sp1-org-core-design.md` 에 있다.
-- 워크스페이스 관리 가드는 `requireWorkspaceAdmin(wid)` — `requireSuperuser` 는 플랫폼 11곳(`tests/invariants/platform-guards.test.ts`)뿐이다. service_role 클라이언트를 새로 만들면 `docs/sp2-admin-client-audit.md` 에 분류를 적는다.
+- 워크스페이스 관리 가드는 `requireWorkspaceAdmin(wid)` — `requireSuperuser` 는 플랫폼 13곳(`tests/invariants/platform-guards.test.ts` — SP2 의 11곳 + 워크스페이스 목록·생성 `src/app/actions/platformWorkspaces.ts` 둘)뿐이다. service_role 클라이언트를 새로 만들면 `docs/sp2-admin-client-audit.md` 에 분류를 적는다.
 
 ## 에러 처리 3원칙
 
@@ -168,6 +171,7 @@ npm run db:start          # 로컬 Supabase 기동(Docker)
 npm run db:reset          # 기준선+마이그레이션+seed 재적용 — 스키마 변경 검증
 npm run env:local         # supabase status 결과로 .env.local 생성
 npm run dev:bootstrap     # 첫 슈퍼유저 생성(db:reset 뒤에도 다시)
+npm run remote:bootstrap -- --target staging|prod   # 원격 생긴 뒤. 빈 원격 DB 의 첫 플랫폼 관리자·첫 워크스페이스(이미 있으면 아무것도 안 함 — docs/runbook-selfhost.md)
 npm run settings:verify   # 로컬 DB 의 설정 값이 레지스트리를 통과하는지(리허설·체크포인트)
 npm run dev
 npm run build

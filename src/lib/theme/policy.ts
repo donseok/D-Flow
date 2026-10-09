@@ -1,6 +1,6 @@
 // 테마 정책(SP3b 스펙 D10·§4.2, 계획 판정 Q23) — 선호(system|light|dark|null)와 해석값(light|dark)을 가른다.
 // no-flash 스크립트 문자열·ThemeProvider·PrefsSync 가 같은 상수와 규칙을 쓴다. 서버·클라이언트가 함께 import 한다('use client'·server-only 없음).
-// 미설정(null)의 해석은 THEME_UNSET_DEFAULT 하나가 정한다 — SP9 가 'system' 으로 바꾼다(E16). 고른 값만 저장한다(백필 없음).
+// 미설정(null)의 해석은 THEME_UNSET_DEFAULT 하나가 정한다 — 지금 값은 'system'(OS 설정을 따른다, E16). 고른 값만 저장한다(백필 없음).
 export type ThemePref = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
 export const THEME_KEY = 'dflow-theme'

@@ -20,7 +20,7 @@ const NAMES: Record<NavItemId, string> = {
   'ws.home': '홈', 'ws.my_work': '내 작업', 'ws.projects': '프로젝트',
   'ws.meetings': '회의', 'ws.minutes': '회의록', 'ws.agents': '에이전트',
   'ws.portfolio': '포트폴리오', 'ws.usage': '사용 현황', 'ws.members': '구성원', 'ws.teams': '팀', 'ws.settings': '설정',
-  'ws.llm': 'LLM 설정', 'ws.ui_states': '화면 상태',
+  'ws.workspaces': '워크스페이스 관리', 'ws.llm': 'LLM 설정', 'ws.ui_states': '화면 상태',
   'p.dashboard': '대시보드', 'p.wbs': 'WBS', 'p.issues': '이슈', 'p.weekly': '주간보고',
   'p.meetings': '회의', 'p.wiki': '위키', 'p.announcements': '공지',
   'p.members': '구성원', 'p.attendance': '근태', 'p.agents': '에이전트', 'p.settings': '설정',

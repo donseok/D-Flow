@@ -30,10 +30,10 @@ beforeEach(() => {
 afterEach(() => { process.env = { ...saved } })
 
 describe('navFor — 순수 함수: 레지스트리 전수 대조', () => {
-  it('셸 8 ∪ 모듈 nav 16 = NAV_ITEM_IDS 24, 중복 없음, 그룹·층 일치', () => {
+  it('셸 9 ∪ 모듈 nav 16 = NAV_ITEM_IDS 25, 중복 없음, 그룹·층 일치', () => {
     const all = [...SHELL_NAV.map((s) => s.id), ...moduleNav.map((x) => x.e.id)]
-    expect(all).toHaveLength(24)
-    expect(new Set(all).size).toBe(24)
+    expect(all).toHaveLength(25)
+    expect(new Set(all).size).toBe(25)
     expect([...all].sort()).toEqual([...NAV_ITEM_IDS].sort())
     for (const s of SHELL_NAV) { expect(s.group).toBe(NAV_GROUP_OF[s.id]); expect(s.id.startsWith(s.scope === 'workspace' ? 'ws.' : 'p.'), s.id).toBe(true) }
     for (const { e } of moduleNav) expect(e.group, e.id).toBe(NAV_GROUP_OF[e.id])
@@ -77,7 +77,7 @@ describe.each(SYNTHETIC_CONFIGS)('navFor — 순수 함수: 합성 구성 $id', 
       const id = MODULES.find((x) => x.id === m)!.nav!.workspace!.id
       expect(got.includes(id), `${c.id} ${id}`).toBe(effective.has(m))
     }
-    for (const shell of ['ws.home', 'ws.my_work', 'ws.projects', 'ws.members', 'ws.teams', 'ws.settings', 'ws.llm', 'ws.ui_states'] as const) expect(got).toContain(shell)
+    for (const shell of ['ws.home', 'ws.my_work', 'ws.projects', 'ws.members', 'ws.teams', 'ws.settings', 'ws.workspaces', 'ws.llm', 'ws.ui_states'] as const) expect(got).toContain(shell)
   })
 })
 
@@ -96,7 +96,7 @@ describe('navFor — 순수 함수: caps', () => {
   it('isWorkspaceAdmin 은 멤버·팀·설정을, isPlatformAdmin 은 플랫폼 그룹을 연다', () => {
     const m = navFor({ scope: 'workspace', base: '/w/acme', effective: CORE, caps: { ...NONE, isWorkspaceAdmin: true, isPlatformAdmin: true }, menu: EMPTY_MENU })
     expect(m.find((g) => g.group === 'ws.ops')!.items.map((i) => i.id)).toEqual(['ws.members', 'ws.teams', 'ws.settings'])
-    expect(m.find((g) => g.group === 'ws.platform')!.items.map((i) => i.id)).toEqual(['ws.llm', 'ws.ui_states'])
+    expect(m.find((g) => g.group === 'ws.platform')!.items.map((i) => i.id)).toEqual(['ws.workspaces', 'ws.llm', 'ws.ui_states'])
   })
   it('항상 보이는 항목 — effective = core 만·caps 없음이면 ws.main 셋과 p.dashboard·p.wbs·p.members. isProjectAdmin 이면 p.settings', () => {
     expect(ids(navFor({ scope: 'workspace', base: '/w/acme', effective: CORE, caps: NONE, menu: EMPTY_MENU }))).toEqual(['ws.home', 'ws.my_work', 'ws.projects'])
@@ -108,7 +108,7 @@ describe('navFor — 순수 함수: caps', () => {
     ['canViewPortfolio', ['ws.portfolio']],
     ['canViewUsage', ['ws.usage']],
     ['isWorkspaceAdmin', ['ws.members', 'ws.teams', 'ws.settings']],
-    ['isPlatformAdmin', ['ws.llm', 'ws.ui_states']],
+    ['isPlatformAdmin', ['ws.workspaces', 'ws.llm', 'ws.ui_states']],
     ['isProjectAdmin', []],
     ['canCreateProject', []],
   ] as const)('%s 하나만 켜면 스펙 §4.5 표의 그 항목만 더 보인다', (cap, extra) => {

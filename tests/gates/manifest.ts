@@ -138,6 +138,9 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('issues')}#updateIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자(adminOrOwnerGate); 분석 묶음은 checkEntry에서 issue_analysis 조건부 관문', sample: [U, {}], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
   [`${A('issues')}#updateIssueProgress`]: { guard: 'projectMember', module: 'issues', sample: [U, {}] },
   [`${A('issues')}#deleteIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
+  // ── platformWorkspaces — 플랫폼(워크스페이스 목록·생성, 개정 §5.3.2)
+  [`${A('platformWorkspaces')}#listPlatformWorkspaces`]: nul('superuser'),
+  [`${A('platformWorkspaces')}#createPlatformWorkspace`]: nul('superuser'),
   // ── llmConfig — 플랫폼
   [`${A('llmConfig')}#maskToken`]: nul('public', '순수 문자열 가림 — 서버 액션으로 노출된 순수 함수(데이터 없음)'),
   [`${A('llmConfig')}#listLlmProfiles`]: nul('superuser'),
@@ -331,6 +334,7 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('cron/minutes-attachments-gc')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 minutes-attachments-gc) — 회의록 첨부 청소(고아 객체·미정리 톰스톤. core 잡, 수량만 돌려준다)'),
   [`${R('cron/inbox-retention')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 inbox-retention) — 알림함 보존(셸)'),
   [`${R('export')}#GET`]: { guard: 'projectMember', module: null, note: '정본 §4.8 — requireProjectMember. wbs 는 core 라 모듈 관문은 없다. form=1 은 양식, 그 밖은 프로파일 라운드트립' },
+  [`${R('health')}#GET`]: nul('public', '헬스체크 — 무인증 생존 신호({ ok: true })만. ?deep=1 의 DB 한 줄 조회는 CRON_SECRET Bearer 가 맞을 때만(없으면 얕은 응답). 행·오류 문구를 돌려주지 않는다'),
   [`${R('import/execute')}#POST`]: nul('projectAdmin'),
   [`${R('import/inspect')}#POST`]: nul('projectAdmin'),
   [`${R('import/template')}#GET`]: nul('session', '로그인 — 정적 양식(core)'),
@@ -378,6 +382,7 @@ export const ROUTE_MODULE_OVERRIDES: Readonly<Record<string, string>> = {
 /** 어느 모듈의 apiPrefixes 에도 걸리지 않는 셸·크론 경로(스펙 §4.3 닫힌 목록). Phase C 가 /api/brand 를 더한다 */
 export const CORE_ROUTE_ALLOW: Readonly<Record<string, string>> = {
   '/api/brand/[workspaceId]/[slot]': '브랜딩 설정의 현재 로고 — 비공개 버킷, 소속 판정',
+  '/api/health': '운영 — 헬스체크(무인증 생존 신호, 깊은 점검은 CRON_SECRET)',
   '/api/prefs': '셸 — 개인 UI 설정',
   '/api/shell': '셸 — 알림함·파생 알림·범위 배지 셋(검토 대기·결재 대기·공지 안읽음) 통합 조회',
   '/api/nav/switch-target': '셸 — 프로젝트 전환의 같은 모듈 유지 판정(D41)',

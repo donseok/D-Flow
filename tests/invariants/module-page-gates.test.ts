@@ -21,6 +21,7 @@ const EXCLUDED: Record<string, string> = {
   'src/app/(app)/(global)/admin/llm-config/page.tsx': '플랫폼 관리 — 모듈 밖',
   'src/app/(app)/w/[slug]/admin/teams/page.tsx': '셸 — 모듈 밖(워크스페이스 관리)',
   'src/app/(app)/(global)/admin/ui-states/page.tsx': '플랫폼 진단 — 모듈 밖(SP3b D16)',
+  'src/app/(app)/(global)/admin/workspaces/page.tsx': '플랫폼 관리(워크스페이스 목록·생성) — 모듈 밖',
   'src/app/(app)/w/[slug]/projects/page.tsx': '셸(프로젝트 목록)',
   'src/app/(app)/w/[slug]/settings/page.tsx': '워크스페이스 관리 화면 — 모듈을 허용하는 문이어서 자기 모듈 관문 밖(§5.2)',
   'src/app/(app)/w/[slug]/settings/integrations/page.tsx': '워크스페이스 연동 자격증명 관리 — 모듈 밖',

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { buildSecurityHeaders } from "./src/lib/http/securityHeaders";
 
 // 배포 환경의 정본은 APP_ENV(production|staging|preview|development)다(정본 §5.5.2 ⑦). Vercel 은 APP_ENV 를 모르므로
 // APP_ENV 가 없을 때만 **여기 한 곳에서** VERCEL_ENV 를 읽어 빌드 env 로 옮긴다(아래 env — 빌드 때 process.env.APP_ENV 에 박힌다).
@@ -23,23 +24,13 @@ const nextConfig: NextConfig = {
     "/api/issue-analysis": ["./src/lib/report/assets/default/issue_analysis_pptx.pptx"],
   },
   async headers() {
-    const rules: Awaited<ReturnType<NonNullable<NextConfig["headers"]>>> = [];
-    // 스테이징은 검색엔진에 노출하지 않는다 (스펙 §5 — STAGING=1 은 스테이징 배포에만 설정).
-    if (process.env.STAGING === "1") {
-      rules.push({
-        source: "/:path*",
-        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
-      });
-    }
-    // 프로덕션 배포에서만 Vercel Toolbar 숨김(공식 x-vercel-skip-toolbar 헤더).
-    // Preview 배포의 코멘트/피드백 기능은 유지한다. (BUG-07)
-    if (appEnv === "production") {
-      rules.push({
-        source: "/:path*",
-        headers: [{ key: "x-vercel-skip-toolbar", value: "1" }],
-      });
-    }
-    return rules;
+    // 보안 헤더·보고 전용 CSP·기존 두 규칙(스테이징 noindex, 프로덕션 툴바 숨김)의 구성은 순수 함수 한 곳이다(단위 테스트가 정책을 고정한다).
+    return buildSecurityHeaders({
+      appEnv,
+      staging: process.env.STAGING,
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      dev: process.env.NODE_ENV === "development",
+    });
   },
 };
 

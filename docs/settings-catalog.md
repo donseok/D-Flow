@@ -121,7 +121,7 @@
 | `GEMINI_EMBED_MODEL` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/ai/provider.ts`, `src/lib/ai/llm.ts`, `src/lib/ai/similarity.ts` | restart | — | — | 운영 설정 | SP3a |
 | `GEMINI_FALLBACK_MODELS` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/ai/provider.ts`, `src/lib/ai/llm.ts`, `src/lib/ai/similarity.ts` | restart | — | — | 운영 설정 | SP3a |
 | `ASSISTANT_MIN_SIMILARITY` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/ai/provider.ts`, `src/lib/ai/llm.ts`, `src/lib/ai/similarity.ts` | restart | — | — | 운영 설정 | SP3a |
-| `NEXT_PUBLIC_SUPABASE_URL` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`, `src/lib/supabase/env.ts`, `src/middleware.ts` | rebuild | — | — | 운영 설정 | SP3a |
+| `NEXT_PUBLIC_SUPABASE_URL` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`, `src/lib/supabase/env.ts`, `src/middleware.ts`, `next.config.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 플랫폼 | 운영자 | 배포 환경 | env_public | 운영자 설정 | 배포 점검 | `src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`, `src/middleware.ts` | rebuild | — | — | 운영 설정 | SP3a |
 | `SUPABASE_SERVICE_ROLE_KEY` | 플랫폼 | 운영자 | 배포 환경 | env | 운영자 설정 | 배포 점검 | `src/lib/supabase/env.ts` | restart | — | — | 운영 설정 | SP3a |
 | `table:llm_config` | 플랫폼 | 플랫폼 관리자 | `/admin/llm-config` | DB 표 | 운영자 설정 | 관리 화면·DB | `src/lib/ai/llm-override.ts` | immediate | — | — | 운영 설정 | SP3a |

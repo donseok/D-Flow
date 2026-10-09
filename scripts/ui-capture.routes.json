@@ -52,6 +52,7 @@
       "hide": ["[aria-label=\"표시 범위\"] + div"] },
     { "key": "p-settings", "path": "/p/{pid}/settings", "file": "(app)/p/[projectId]/settings/page.tsx", "grade": "wsAdmin", "tags": ["P", "S"], "since": "b4283c0" },
     { "key": "admin-ui-states", "path": "/admin/ui-states", "file": "(app)/(global)/admin/ui-states/page.tsx", "grade": "platformAdmin", "tags": [], "since": "UI-1" },
+    { "key": "admin-workspaces", "path": "/admin/workspaces", "file": "(app)/(global)/admin/workspaces/page.tsx", "grade": "platformAdmin", "tags": [], "since": "C" },
     { "key": "not-found", "path": "/ui-capture-missing", "grade": "member", "tags": [], "since": "UI-1" },
     { "key": "mobile-menu", "path": "/w/{wsSlug}/projects", "grade": "member", "tags": [], "since": "UI-1", "click": "[aria-label=\"메뉴 열기\"]" },
     { "key": "account-popover", "path": "/w/{wsSlug}/projects", "grade": "member", "tags": [], "since": "UI-1", "click": "[data-account-trigger]" },
