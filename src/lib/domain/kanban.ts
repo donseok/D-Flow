@@ -1,5 +1,6 @@
 import type { ComputedItem, Status, TeamCode } from '@/lib/domain/types'
 import { teamSlotFor, type TeamColorRef } from '@/lib/domain/teamColor'
+import { teamLabelLookup } from '@/lib/domain/teamLabel'
 import {
   stageLabelKo,
 } from '@/lib/domain/stageLabels'
@@ -45,8 +46,11 @@ export function groupByPhase(items: ComputedItem[]): KanbanColumn[] {
 
 /** 담당자별 — 활성 팀 컬럼 + 미배정. leaf는 primary 담당팀마다 들어가고,
  *  primary가 없거나 전부 컬럼 밖 팀(비활성 등)이면 미배정으로 흡수한다(카드 유실 금지).
- *  colorTeams = 화면 색 슬롯을 정할 팀(SP4 D3 — 화면은 그 범위의 활성 팀, 봇 도구는 넘기지 않는다 = 중립) */
-export function groupByOwner(items: ComputedItem[], teams: readonly TeamCode[], colorTeams: readonly TeamColorRef[] = []): KanbanColumn[] {
+ *  colorTeams = 화면 색 슬롯·열 머리 이름을 정할 팀(SP4 D3 — 화면은 그 범위의 활성 팀, 봇 도구는 넘기지 않는다 = 중립 색·code 머리).
+ *  열의 key 는 code 그대로다(드롭·필터·봇 반환 키) — 머리 글자(title)만 팀 이름이다 */
+export function groupByOwner(
+  items: ComputedItem[], teams: readonly TeamCode[], colorTeams: readonly (TeamColorRef & { name?: string })[] = [],
+): KanbanColumn[] {
   const leaves = leavesOf(items)
   const buckets: Record<string, ComputedItem[]> = { 미배정: [] }
   for (const team of teams) buckets[team] = []
@@ -56,8 +60,9 @@ export function groupByOwner(items: ComputedItem[], teams: readonly TeamCode[], 
     if (known.length === 0) buckets['미배정'].push(leaf)
     else known.forEach(team => buckets[team].push(leaf))
   }
+  const labelOf = teamLabelLookup(colorTeams.map((t) => ({ code: t.code, name: t.name ?? t.code })))
   const cols: KanbanColumn[] = teams.map(team => ({
-    key: team, title: team, count: buckets[team].length, cards: buckets[team], accentDot: teamSlotFor(team, colorTeams).bar,
+    key: team, title: labelOf(team), count: buckets[team].length, cards: buckets[team], accentDot: teamSlotFor(team, colorTeams).bar,
   }))
   cols.push({ key: '미배정', title: '미배정', count: buckets['미배정'].length, cards: buckets['미배정'], accentDot: 'bg-pending' })
   return cols

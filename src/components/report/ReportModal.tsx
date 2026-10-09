@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useTeamSlot, useTeams } from '@/components/app/TeamsProvider'
+import { useTeamLabel, useTeamSlot, useTeams } from '@/components/app/TeamsProvider'
 import {
   Activity,
   AlertTriangle,
@@ -70,6 +70,7 @@ export function ReportModal({
   // '팀별 진척' 대상 = 활성 + progressVisible(팀 마스터) — 대시보드 카드와 동일 기준
   const progressTeams = useTeams().filter(tm => tm.progressVisible).map(tm => tm.code)
   const slotOf = useTeamSlot()
+  const teamLabelOf = useTeamLabel()   // 팀별 표의 글자는 팀 이름 — 모델의 키(team)는 code 그대로
   const model = buildReportModel(
     items,
     { name: projectName, description: projectDescription, start_date: startDate, end_date: endDate },
@@ -314,12 +315,12 @@ export function ReportModal({
           <div className="space-y-4">
             {teams.map(s => (
               <div key={s.team} className="flex items-center gap-3">
-                <span className="flex w-14 shrink-0 items-center gap-2 text-sm font-semibold text-fg">
-                  <span className={`h-2 w-2 rounded-full ${slotOf(s.team).bar}`} />
-                  {s.team}
+                <span className="flex w-24 shrink-0 items-center gap-2 text-sm font-semibold text-fg sm:w-36" title={teamLabelOf(s.team)}>
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${slotOf(s.team).bar}`} />
+                  <span className="truncate">{teamLabelOf(s.team)}</span>
                 </span>
                 <span className="w-20 shrink-0 text-xs text-fg-muted">{s.count}개 작업</span>
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <ProgressBar value={s.pct ?? 0} tone={slotOf(s.team).bar} />
                 </div>
                 <span className="w-14 shrink-0 text-right text-sm font-semibold tabular-nums text-fg">

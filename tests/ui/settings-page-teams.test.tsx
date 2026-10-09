@@ -133,7 +133,8 @@ describe('설정 화면 — 업무영역 편집기(스펙 §4.1.8·D26)', () => 
     expect(mocks.ProjectAreasManager).toHaveBeenCalledTimes(2)
     expect(mocks.ProjectAreasManager.mock.calls.find(([props]) => props.kind === 'weekly_section')?.[0]).toEqual({
       projectId: 'p1', kind: 'weekly_section', areas: [AREA], locale: 'ko',
-      teamOptions: [{ id: 't-res', code: 'RES', active: true }, { id: 't-arc', code: 'ARC', active: false }, { id: 't-old', code: 'OLD', active: false }],
+      // 이름도 싣는다 — 영역 편집기가 팀을 code 가 아니라 이름으로 보인다
+      teamOptions: [{ id: 't-res', code: 'RES', active: true, name: 'RES' }, { id: 't-arc', code: 'ARC', active: false, name: 'ARC' }, { id: 't-old', code: 'OLD', active: false, name: 'OLD' }],
     })
     expect(mocks.ProjectAreasManager.mock.calls.find(([props]) => props.kind === 'issue_area')?.[0]).toMatchObject({
       projectId: 'p1', kind: 'issue_area', areas: [],

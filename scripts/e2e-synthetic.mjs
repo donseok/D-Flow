@@ -229,7 +229,7 @@ async function main() {
   })
 
   // ── S1 추가(SP4 A1 — 스펙 §6.4 S1·D40) — 팀(addProjectTeam)·주간 영역과 담당 팀(upsertArea)을 설정 화면과 같은 액션으로 더하고 다시 읽는다.
-  //    팀 이름은 code 와 같다(addProjectTeam 은 이름을 받지 않는다 — 개명은 A2·B, D37). 픽스처의 팀 이름은 그 뒤 몫이다.
+  //    팀 이름은 code 와 같다(addProjectTeam 에 코드를 따로 주지 않으면 이름에서 만든다 — 여기 값은 20자 이하라 그대로다. 개명은 S10 뒤 경계 단계).
   const teamsAndAreas = async (label, proj, def) => {
     await admin.http('GET', `/p/${proj.id}/settings`)
     for (const code of def.teams) {

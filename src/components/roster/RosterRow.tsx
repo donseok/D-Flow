@@ -9,6 +9,7 @@ import {
   accessRoleLabel, draftFromMember, isDraftDirty, validateDraft, type AccessRole, type RosterDraft,
 } from '@/lib/domain/roster'
 import { TeamMultiSelect, type TeamOption } from './TeamMultiSelect'
+import { useTeamLabel } from '@/components/app/TeamsProvider'
 
 export const ROSTER_COLUMNS = 9
 
@@ -43,6 +44,7 @@ function EffectiveRoleCell({ member, effective }: { member: RosterMember; effect
 
 /** 읽기 전용 행 — 비관리자 화면, 또는 관리자 행을 고칠 수 없는 프로젝트 관리자. */
 export function RosterReadRow({ member, note, effective = { kind: 'unknown' } }: { member: RosterMember; note?: string; effective?: EffectiveRoleView }) {
+  const teamLabelOf = useTeamLabel()   // 칩 글자는 팀 이름(범위 밖·비활성 팀은 code 그대로)
   return (
     <tr className={`border-b border-border/60 align-top ${member.active ? '' : 'opacity-60'}`} data-roster-row={member.id}>
       <td className="py-2.5 pr-3"><NameCell member={member} /></td>
@@ -51,7 +53,7 @@ export function RosterReadRow({ member, note, effective = { kind: 'unknown' } }:
         {member.teams.length === 0 ? <span className="text-fg-muted">—</span> : (
           <span className="flex flex-wrap gap-1">
             {member.teams.map((t, i) => (
-              <span key={t.id} className={`chip bg-surface-subtle ${i === 0 ? 'font-semibold text-fg' : 'text-fg-secondary'}`}>{t.code}</span>
+              <span key={t.id} title={teamLabelOf(t.code)} className={`chip max-w-[12rem] truncate bg-surface-subtle ${i === 0 ? 'font-semibold text-fg' : 'text-fg-secondary'}`}>{teamLabelOf(t.code)}</span>
             ))}
           </span>
         )}

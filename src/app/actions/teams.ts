@@ -10,12 +10,13 @@ import { ERR_ANON, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { adminFor } from '@/lib/supabase/adminFor'
-import { normalizeNewTeamCode } from '@/lib/domain/teams'
 import { EXCEL_HEADER_WORDS } from '@/lib/excel/headerWords'
-import { pickTeamColor } from '@/lib/domain/teamColor'
-import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
+import { pickTeamColor, teamColorOfSlot } from '@/lib/domain/teamColor'
+import { checkNewTeam, checkTeamRename, newTeamCodeClash, newTeamNameClash, teamCodeClashError } from '@/lib/domain/teamName'
+import { ERR_TEAM_ORDER_STALE, swapTeamOrder } from '@/lib/teams/swapOrder'
 import { failWith } from '@/lib/errors/dbFail'
 import { teamRootNameError } from '@/lib/minutes/teamRootErrors'
+import { enqueueTeamRenameIndexChange } from '@/lib/ai/index/enqueueChange'
 
 export type TeamActionResult = { ok: true } | { ok: false; error: string }
 
@@ -23,19 +24,23 @@ export type TeamActionResult = { ok: true } | { ok: false; error: string }
 const ERR_TEAM_LOOKUP = '팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_CREATE = '팀을 만들지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_UPDATE = '팀을 수정하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_TEAM_COLOR = '고를 수 없는 색입니다.'
+const ERR_TEAM_NOT_COMMON = '전역 팀이 아니거나 존재하지 않습니다.'
 
 // 'use server' 모듈이라 export 하지 않는다(비동기 함수만 내보낼 수 있다). PostgREST 원문은 로그에만 남긴다.
 const ERR_TEAMS_LIST = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 
 /** 팀 추가 — create_team RPC 한 트랜잭션(SP5 B2 — D50): 공용 팀 + (teams 모드면) 회의록 팀 루트. 실패하면 둘 다 없다.
- *  공용 팀의 세션 INSERT 정책은 0024 가 지웠다 — 공용 팀은 이 길로만 생긴다(team-create-path 불변식). */
-export async function addTeam(workspaceId: string, input: string): Promise<TeamActionResult> {
+ *  공용 팀의 세션 INSERT 정책은 0024 가 지웠다 — 공용 팀은 이 길로만 생긴다(team-create-path 불변식).
+ *  이름(바꿀 수 있다)과 코드(바꿀 수 없는 식별자 — 엑셀·가져오기·필터)를 따로 받는다. 코드를 비우면 이름에서 만든 기본값
+ *  (defaultTeamCode — 화면이 미리 보여 준 그 값)이다. 예전에는 한 입력이 둘 다였다 — 이름의 오타가 영구 코드가 됐다. */
+export async function addTeam(workspaceId: string, name: string, code?: string | null): Promise<TeamActionResult> {
   // 대상 워크스페이스가 비면 가드 전에 거부한다 — 가드는 null 을 슈퍼유저에게 통과시킨다.
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, error: ERR_WORKSPACE_REQUIRED }
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return { ok: false, error: g.error }
   // 공용 팀은 여러 프로젝트에 걸려 단계 이름이 하나로 정해지지 않는다 — 엑셀 머리 낱말만 예약어로 본다(SP4 D38·K14)
-  const norm = normalizeNewTeamCode(input, EXCEL_HEADER_WORDS)
+  const norm = checkNewTeam({ name, code, reserved: EXCEL_HEADER_WORDS })
   if (!norm.ok) return norm
   const admin = createAdminClient()
 
@@ -50,6 +55,9 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
   if (siblings.some((s) => s.code === norm.code)) return { ok: false, error: `'${norm.code}' 팀이 이미 존재합니다.` }
   const clash = newTeamCodeClash(norm.code, siblings)
   if (clash) return { ok: false, error: teamCodeClashError(norm.code, clash) }
+  // 이름도 같은 범위 다른 팀의 code·이름과 겹치면 거부한다 — 개명(checkTeamRename)과 같은 규칙
+  const nameClash = newTeamNameClash(norm.name, norm.code, siblings)
+  if (nameClash) return { ok: false, error: teamCodeClashError(norm.name, nameClash) }
 
   // 정렬 순번도 워크스페이스별로 잰다 — 안 그러면 다른 워크스페이스의 순번을 이어받는다.
   const max = await admin.from('teams')
@@ -58,10 +66,10 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
   if (max.error) return { ok: false, error: failWith('teams.add', max.error, ERR_TEAM_LOOKUP) }
   const sortOrder = Number((max.data as { sort_order?: number } | null)?.sort_order ?? -1) + 1
 
-  // 팀 + 루트를 한 트랜잭션으로(루트 이름 = 팀 이름 — 새 팀은 code 를 이름으로 시작한다). RPC 가 워크스페이스 관리자를 다시 판정하고,
+  // 팀 + 루트를 한 트랜잭션으로(루트 이름 = 팀 이름). RPC 가 워크스페이스 관리자를 다시 판정하고,
   // 설정 행을 FOR SHARE 로 잡아 최상위 폴더 모드를 읽는다(custom 모드면 루트를 만들지 않는다)
   const ins = await admin.rpc('create_team', {
-    p_actor: g.actor.userId, p_workspace_id: workspaceId, p_code: norm.code, p_name: norm.code,
+    p_actor: g.actor.userId, p_workspace_id: workspaceId, p_code: norm.code, p_name: norm.name,
     p_color: pickTeamColor(sortOrder), p_sort_order: sortOrder,
   })
   if (ins.error) {
@@ -75,10 +83,11 @@ export async function addTeam(workspaceId: string, input: string): Promise<TeamA
   return { ok: true }
 }
 
-/** 활성/진척현황 표시/정렬 변경. */
+/** 활성/진척현황 표시/정렬/이름/색 변경. colorSlot 은 테마 슬롯 번호(1~8 — 임의 hex 는 받지 않는다), swapOrderWith 는 순서를 맞바꿀
+ *  같은 워크스페이스 공용 팀의 id(위·아래 단추 — 두 행을 한 액션에서 바꾸고 실패하면 되돌린다, lib/teams/swapOrder). */
 export async function updateTeam(
   id: string,
-  patch: { active?: boolean; progressVisible?: boolean; sortOrder?: number; name?: string },
+  patch: { active?: boolean; progressVisible?: boolean; sortOrder?: number; name?: string; colorSlot?: number; swapOrderWith?: string },
 ): Promise<TeamActionResult> {
   // 인증을 행 조회보다 먼저 — 비로그인 호출자가 ERR_MISSING(없는 id)과 ERR_ANON(있는 id)으로 팀 id 존재를 가려내지 못하게.
   let actor
@@ -100,10 +109,28 @@ export async function updateTeam(
   if (!target || target.project_id !== null || !target.workspace_id) return { ok: false, error: ERR_MISSING }
   const g = await requireWorkspaceAdmin(target.workspace_id)
   if (!g.ok) return { ok: false, error: g.error }
+  if (patch.swapOrderWith !== undefined) {
+    if (typeof patch.swapOrderWith !== 'string' || !patch.swapOrderWith) return { ok: false, error: ERR_TEAM_NOT_COMMON }
+    const sw = await swapTeamOrder(admin, { workspaceId: target.workspace_id, projectId: null }, id, patch.swapOrderWith)
+    if (!sw.ok) {
+      if (sw.kind === 'missing') return { ok: false, error: ERR_TEAM_NOT_COMMON }
+      if (sw.kind === 'stale') return { ok: false, error: ERR_TEAM_ORDER_STALE }
+      return { ok: false, error: failWith('teams.swapOrder', sw.cause, ERR_TEAM_UPDATE) }
+    }
+    revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
+    return { ok: true }
+  }
   const row: Record<string, unknown> = {}
+  let renamed = false
   if (typeof patch.active === 'boolean') row.active = patch.active
   if (typeof patch.progressVisible === 'boolean') row.progress_visible = patch.progressVisible
   if (typeof patch.sortOrder === 'number' && Number.isInteger(patch.sortOrder)) row.sort_order = patch.sortOrder
+  if (patch.colorSlot !== undefined) {
+    // 색은 테마 슬롯으로만 고른다 — 슬롯의 팔레트 hex 를 기존 color 열에 저장하고 화면이 그 자리로 슬롯을 되찾는다(teamSlotIndex)
+    const color = teamColorOfSlot(patch.colorSlot)
+    if (!color) return { ok: false, error: ERR_TEAM_COLOR }
+    row.color = color
+  }
   if (patch.name !== undefined) {
     // 개명(D37) — 공용 팀은 머리 낱말만 예약어(여러 프로젝트에 걸려 단계 이름이 하나로 정해지지 않는다 — K14), 겹침은 그 워크스페이스 공용 팀끼리
     const sib = await admin.from('teams').select('id, code, name').is('project_id', null).eq('workspace_id', target.workspace_id)
@@ -114,6 +141,7 @@ export async function updateTeam(
     const checked = checkTeamRename({ name: patch.name, selfId: id, selfCode: self.code, siblings, reserved: EXCEL_HEADER_WORDS })
     if (!checked.ok) return checked
     row.name = checked.name
+    renamed = checked.name !== self.name
   }
   if (Object.keys(row).length === 0) return { ok: false, error: '변경할 항목이 없습니다.' }
   // .is('project_id', null)·.eq('workspace_id') 를 함께 건다 — 가드가 판정한 그 워크스페이스의 공용 행만 만진다
@@ -129,6 +157,8 @@ export async function updateTeam(
     return { ok: false, error: failWith('teams.update', upd.error, ERR_TEAM_UPDATE) }
   }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '전역 팀이 아니거나 존재하지 않습니다.' }
+  // 색인 본문은 팀을 이름으로 적는다 — 이름이 바뀌었으면 그 팀의 작업·회의록을 다시 색인한다(실패는 개명을 막지 않는다)
+  if (renamed) await enqueueTeamRenameIndexChange(id)
   revalidatePath('/(app)/w/[slug]/admin/teams', 'page')
   return { ok: true }
 }

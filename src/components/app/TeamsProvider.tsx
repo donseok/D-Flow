@@ -4,6 +4,7 @@
 import { createContext, useCallback, useContext, useMemo } from 'react'
 import { activeCodes, type Team } from '@/lib/domain/teams'
 import { teamSlotFor, type TeamSlotStyle } from '@/lib/domain/teamColor'
+import { teamLabelLookup } from '@/lib/domain/teamLabel'
 import type { TeamCode } from '@/lib/domain/types'
 
 const TeamsContext = createContext<readonly Team[]>([])
@@ -31,4 +32,11 @@ export function useTeamCodes(): readonly TeamCode[] {
 export function useTeamSlot(): (code: string) => TeamSlotStyle {
   const teams = useTeams()
   return useCallback((code: string) => teamSlotFor(code, teams), [teams])
+}
+
+/** 팀 code → 화면 라벨(팀 이름 — 같은 이름이 둘이면 `이름 (code)`). 화면이 바꿀 수 없는 code 대신 이름을 그리게 한다.
+ *  이 범위의 활성 팀으로 찾고 없으면(비활성 팀 담당·공급자가 없는 공유 화면) code 그대로다 — 색 슬롯(useTeamSlot)과 같은 목록 */
+export function useTeamLabel(): (code: string) => string {
+  const teams = useTeams()
+  return useMemo(() => teamLabelLookup(teams), [teams])
 }

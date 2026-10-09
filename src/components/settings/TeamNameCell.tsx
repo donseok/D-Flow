@@ -1,17 +1,15 @@
 'use client'
-// 팀 이름 칸(SP4 D37·D52, 계획 P8) — 표시 이름 + (이름이 코드와 다르면) 코드 보조 글씨 + 연필 버튼 → 그 행 안 입력(Enter 저장·Esc 취소).
-// 코드는 바뀌지 않는다(엑셀·필터·봇이 쓰는 식별자). 화면은 공백만 거르고 길이·예약어·겹침은 서버 문구를 그 칸 아래 role="alert" 로 보인다.
+// 팀 이름 칸(SP4 D37·D52, 계획 P8) — 표시 이름 + 연필 버튼 → 그 행 안 입력(Enter 저장·Esc 취소). 긴 이름은 줄이고 title 로 전부 보인다.
+// 코드는 바뀌지 않는다(엑셀·필터·봇이 쓰는 식별자) — 표의 코드 열(관리 화면)이 따로 보인다. 화면은 공백만 거르고 길이·예약어·겹침은 서버 문구를 그 칸 아래 role="alert" 로 보인다.
 // 입력에 maxLength 를 두지 않는다 — 40자를 넘는 붙여넣기가 조용히 잘린 채 저장되지 않고 서버의 길이 문구로 거부되게(B-2 리뷰 P3. 서버는
 // NFKC 뒤 코드 포인트로 센다 — 화면이 UTF-16 으로 따로 세면 두 기준이 어긋난다).
 import { useEffect, useId, useRef, useState } from 'react'
 import { Check, Pencil, X } from 'lucide-react'
 
-export function TeamNameCell({ team, disabled, onRename, chip }: {
+export function TeamNameCell({ team, disabled, onRename }: {
   team: { id: string; code: string; name: string }
   disabled: boolean
   onRename: (name: string) => Promise<{ ok: boolean; error?: string }>
-  /** 팀 색 견본(#15 — teamSlot(row).chip). 없으면 코드를 칩 없이 쓴다 */
-  chip?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(team.name)
@@ -43,14 +41,11 @@ export function TeamNameCell({ team, disabled, onRename, chip }: {
       savingRef.current = false; setSaving(false)
     }
   }
-  const codeLabel = chip ? <span className={`chip ${chip}`}>{team.code}</span> : <span className="text-meta text-fg-muted">{team.code}</span>
 
   if (!editing) {
     return (
-      <div className="flex items-center gap-2">
-        {chip && codeLabel}
-        <span className="font-medium text-fg">{team.name}</span>
-        {!chip && team.name !== team.code && codeLabel}
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="max-w-[16rem] truncate font-medium text-fg" title={team.name}>{team.name}</span>
         <button ref={triggerRef} type="button" className="btn btn-ghost btn-sm" disabled={disabled} data-team-rename={team.id}
           aria-label={`${team.name} 이름 바꾸기`} onClick={() => { setValue(team.name); setError(null); setEditing(true) }}>
           <Pencil className="h-3.5 w-3.5" />
@@ -61,7 +56,6 @@ export function TeamNameCell({ team, disabled, onRename, chip }: {
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
-        {chip && codeLabel}
         {/* 저장 중 잠금은 disabled 가 아니라 readOnly+aria-busy — disabled 는 포커스를 body 로 떨어뜨린다(focus fixup, B-4 리뷰 I2) */}
         <input ref={inputRef} data-team-rename-input className="app-input w-40" value={value} autoFocus readOnly={saving}
           aria-busy={saving || undefined} aria-label={`${team.code} 팀 새 이름`} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}

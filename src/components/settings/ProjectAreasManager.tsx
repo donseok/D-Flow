@@ -12,6 +12,7 @@ import { upsertArea } from '@/app/actions/projectAreas'
 import { orderAreas } from '@/lib/domain/weeklySheet'
 import { ISSUE_AREA_CODE_RE } from '@/lib/domain/issueAreas'
 import type { AreaTeamKind, AreaTeamOption } from '@/lib/domain/areas'
+import { teamLabel } from '@/lib/domain/teamLabel'
 import type { ConfigArea } from '@/lib/settings/projectConfig'
 import type { Locale } from '@/lib/i18n/dict'
 import { useToast } from '@/components/ui/Toast'
@@ -53,10 +54,12 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
   const issueArea = kind === 'issue_area'
   const text = locale === 'ko' ? { new: '새 영역', code: '코드', name: '이름', order: '순서', teams: '담당 팀', status: '상태', action: '작업', active: '활성', inactive: '비활성', edit: '편집', empty: issueArea ? '이슈 영역을 추가할 수 있습니다.' : '영역을 하나 이상 저장해야 주간보고를 시작할 수 있습니다.' } : { new: 'New area', code: 'Code', name: 'Name', order: 'Order', teams: 'Teams', status: 'Status', action: 'Actions', active: 'Active', inactive: 'Inactive', edit: 'Edit', empty: issueArea ? 'Add issue areas when needed.' : 'Add at least one area to start weekly reporting.' }
   const teamOf = new Map(teamOptions.map(t => [t.id, t]))
-  const teamLabel = (id: string) => {
+  // 글자는 팀 이름(같은 이름이 둘이면 `이름 (code)`) — 선택자(data-area-team)와 저장 값은 code·id 그대로
+  const nameOf = (t: AreaTeamOption) => teamLabel({ code: t.code, name: t.name ?? t.code }, teamOptions.map(o => ({ code: o.code, name: o.name ?? o.code })))
+  const teamText = (t: AreaTeamOption) => (t.active ? nameOf(t) : `${nameOf(t)}(비활성)`)
+  const teamLabelOfId = (id: string) => {
     const t = teamOf.get(id)
-    if (!t) return '알 수 없는 팀'
-    return t.active ? t.code : `${t.code}(비활성)`
+    return t ? teamText(t) : '알 수 없는 팀'
   }
 
   function startNew() {
@@ -142,7 +145,7 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
                       <span className="flex flex-wrap gap-1">
                         {a.teams.length === 0 ? <span className="text-fg-muted">—</span> : a.teams.map(t => (
                           <span key={t.teamId} className={`chip bg-surface-subtle ${t.kind === 'primary' ? 'font-semibold text-fg' : 'text-fg-secondary'}`}>
-                            {teamLabel(t.teamId)} · {TEAM_KIND_LABEL[t.kind]}
+                            {teamLabelOfId(t.teamId)} · {TEAM_KIND_LABEL[t.kind]}
                           </span>
                         ))}
                       </span>
@@ -197,9 +200,9 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
                 <div className="flex flex-wrap gap-2">
                   {formTeams.map(t => (
                     <label key={t.id} className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs ${t.active ? 'text-fg' : 'text-fg-muted'}`}>
-                      {t.active ? t.code : `${t.code}(비활성)`}
+                      <span className="max-w-[12rem] truncate" title={teamText(t)}>{teamText(t)}</span>
                       <select className="app-input h-7 py-0 text-xs" value={draft.teams[t.id] ?? ''} data-area-team={t.code}
-                        aria-label={`${t.code} 담당 구분`}
+                        aria-label={`${nameOf(t)} 담당 구분`}
                         onChange={e => setTeam(t.id, e.target.value as AreaTeamKind | '')} disabled={pending}>
                         <option value="">—</option>
                         <option value="primary">{TEAM_KIND_LABEL.primary}</option>

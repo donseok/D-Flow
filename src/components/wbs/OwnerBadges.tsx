@@ -1,8 +1,9 @@
 'use client'
 // 담당 표지(●주관·△지원) — 서버 컴포넌트(개요의 DelayAging·VarianceRanking)도 그리므로 클라이언트 경계로 둔다(SP4 P2):
-// 팀 색은 범위 레이아웃의 TeamsProvider 에서 온다(useTeamSlot — 목록 밖 팀은 중립). shared.tsx 가 다시 내보낸다.
+// 팀 색·이름은 범위 레이아웃의 TeamsProvider 에서 온다(useTeamSlot·useTeamLabel — 목록 밖 팀은 중립 색·code 그대로). shared.tsx 가 다시 내보낸다.
+// 글자는 팀 이름이다(code 는 바꿀 수 없어 이름을 바꿔도 옛 글자가 남는다) — 긴 이름은 줄이고 title 로 전부 보인다.
 import type { ComputedItem } from '@/lib/domain/types'
-import { useTeamSlot } from '@/components/app/TeamsProvider'
+import { useTeamLabel, useTeamSlot } from '@/components/app/TeamsProvider'
 
 export function OwnerBadges({
   owners,
@@ -12,23 +13,24 @@ export function OwnerBadges({
   nowrap?: boolean
 }) {
   const slotOf = useTeamSlot()
+  const labelOf = useTeamLabel()
   if (!owners.length) return <span className="text-fg-muted">-</span>
   return (
     <div className={`flex items-center gap-x-1.5 gap-y-0.5 overflow-hidden ${nowrap ? 'flex-nowrap' : 'flex-wrap'}`}>
       {owners.map(o => (
         <span
           key={o.team + o.kind}
-          className={`inline-flex items-center gap-0.5 font-semibold leading-none ${nowrap ? 'shrink-0' : ''}`}
+          className={`inline-flex min-w-0 max-w-full items-center gap-0.5 font-semibold leading-none ${nowrap ? 'shrink-0' : ''}`}
           style={{ fontSize: 'var(--wbs-owner-font, 12px)' }}
-          title={o.kind === 'primary' ? `${o.team} 주관` : `${o.team} 지원`}
+          title={o.kind === 'primary' ? `${labelOf(o.team)} 주관` : `${labelOf(o.team)} 지원`}
         >
           <span
-            className={`${slotOf(o.team).fg} ${o.kind === 'support' ? 'opacity-60' : ''} leading-none`}
+            className={`${slotOf(o.team).fg} ${o.kind === 'support' ? 'opacity-60' : ''} shrink-0 leading-none`}
             style={{ fontSize: 'var(--wbs-owner-mark-font, 9px)' }}
           >
             {o.kind === 'primary' ? '●' : '△'}
           </span>
-          <span className="text-fg-secondary">{o.team}</span>
+          <span className="max-w-[10rem] truncate text-fg-secondary">{labelOf(o.team)}</span>
         </span>
       ))}
     </div>

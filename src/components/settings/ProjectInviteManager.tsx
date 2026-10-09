@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Check, Copy, Send, ShieldAlert } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
+import { useTeamLabel } from '@/components/app/TeamsProvider'
 import { TeamMultiSelect, type TeamOption } from '@/components/roster/TeamMultiSelect'
 import {
   createProjectInvite, revokeProjectInvite, type InviteRow,
@@ -70,6 +71,7 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  const teamLabelOf = useTeamLabel()
   // 관리자 초대는 그 프로젝트 워크스페이스의 관리자만 — createProjectInvite 의 워크스페이스 관리자 가드(SP2)와 같은 판정.
   const canInviteAdmin = canGrantAdmin(actorView)
   const [email, setEmail] = useState('')
@@ -282,7 +284,7 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
                   </td>
                   <td className="py-2.5 pr-3">
                     {row.teamCodes.length > 0
-                      ? <span className="chip bg-surface-subtle text-fg-secondary">{row.teamCodes.join(', ')}</span>
+                      ? <span className="chip bg-surface-subtle text-fg-secondary">{row.teamCodes.map(teamLabelOf).join(', ')}</span>
                       : <span className="text-fg-muted">—</span>}
                   </td>
                   <td className="py-2.5 pr-3">

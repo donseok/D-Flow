@@ -178,7 +178,7 @@ export async function DashboardView({
           </div>
 
           {/* 팀별 진척 — 실행 큐로 내려가기 전에 팀 단위 진행 현황을 한눈에 */}
-          <TeamProgress items={items} teams={teams} />
+          <TeamProgress items={items} teams={teams} locale={locale} teamSettingsHref={canManage ? `/p/${projectId}/settings#project-team` : null} />
         </>
       )}
 

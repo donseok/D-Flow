@@ -1,12 +1,21 @@
 // 팀 색 순수 도메인 — JSX 없음. 칸반(도메인)·WBS·멤버 화면이 같은 슬롯을 쓴다.
 
-/** 생성 순 배정용 팔레트(`pickTeamColor`) — 값은 테마 `category-1..5` 의 라이트 값과 같다.
- *  화면은 이 hex 를 그리지 않고 팔레트 자리로 슬롯을 고른다(`teamSlot` — SP4 D3). */
-export const TEAM_PALETTE = ['#4f46e5', '#0276a8', '#7c3aed', '#a65b00', '#0f766e'] as const
+/** 팀 색 팔레트 — 저장 값(teams.color hex)과 화면 슬롯(category-1..8)의 대응표. 값은 테마 `category-N` 의 라이트 값과 같다.
+ *  생성 순 자동 배정(`pickTeamColor`)과 관리 화면의 색 선택(`teamColorOfSlot`)이 이 표의 값만 저장한다 — 임의 hex 는 저장하지 않는다
+ *  (다크 대비가 서지 않는다). 화면은 이 hex 를 그리지 않고 팔레트 자리로 슬롯을 고른다(`teamSlot` — SP4 D3). */
+export const TEAM_PALETTE = ['#4f46e5', '#0276a8', '#7c3aed', '#a65b00', '#0f766e', '#9d3b8c', '#5b6b00', '#3f5f7a'] as const
 
-/** 정렬순번으로 팔레트에서 색을 고른다 — 순번이 팔레트 길이를 넘으면 순환. */
+/** 고를 수 있는 슬롯 번호(1~8) — 팔레트 자리 + 1 */
+export const TEAM_SLOT_COUNT = TEAM_PALETTE.length
+
+/** 정렬순번으로 팔레트에서 색을 고른다 — 순번이 팔레트 길이를 넘으면 순환(아홉째 팀부터 겹친다). */
 export function pickTeamColor(sortOrder: number): string {
   return TEAM_PALETTE[((sortOrder % TEAM_PALETTE.length) + TEAM_PALETTE.length) % TEAM_PALETTE.length]
+}
+
+/** 슬롯 번호(1~8) → 저장할 hex. 범위 밖·정수가 아니면 null(호출부가 거부한다 — 가까운 값으로 고쳐 저장하지 않는다) */
+export function teamColorOfSlot(slot: unknown): string | null {
+  return typeof slot === 'number' && Number.isInteger(slot) && slot >= 1 && slot <= TEAM_PALETTE.length ? TEAM_PALETTE[slot - 1] : null
 }
 
 /** 팀 화면 색 슬롯(SP4 D3) — 다크 짝이 있는 테마 토큰 category-1..8. 저장 hex 를 inline 으로 그리지 않는다(다크 대비). */
@@ -35,7 +44,7 @@ function stableHash(s: string): number {
   return h
 }
 
-/** 1~8 — 저장 색이 TEAM_PALETTE 의 i 번째면 i+1(생성 순 배정 pickTeamColor 그대로라 워크스페이스 앞 다섯 팀이 서로 다르다),
+/** 1~8 — 저장 색이 TEAM_PALETTE 의 i 번째면 i+1(생성 순 배정 pickTeamColor·색 선택 그대로라 워크스페이스 앞 여덟 팀이 서로 다르다),
  *  팔레트 밖(DB 기본값 #6b7280·직접 SQL)이면 팀 id 의 안정 해시. 전환 RPC 는 색을 그대로 복사하므로 전환한 팀의 슬롯도 그대로다 */
 export function teamSlotIndex(team: { id: string; color: string }): number {
   const i = (TEAM_PALETTE as readonly string[]).indexOf(String(team.color ?? '').trim().toLowerCase())

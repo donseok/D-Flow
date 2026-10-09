@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { AlertCircle, Search } from 'lucide-react'
-import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamLabel } from '@/components/app/TeamsProvider'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import {
   buildMemberPickerSections,
@@ -54,8 +54,9 @@ export function MemberPickerViewToggle({
   )
 }
 
-function categoryLabel(category: TeamCode | null, unassignedLabel: string): string {
-  return category ?? unassignedLabel
+/** 묶음 머리 — 팀 이름(묶는 키는 code 그대로). 팀이 없으면 미지정 문구 */
+function categoryLabel(category: TeamCode | null, unassignedLabel: string, teamLabelOf: (code: string) => string): string {
+  return category ? teamLabelOf(category) : unassignedLabel
 }
 
 export function MemberSelectOptions({
@@ -71,6 +72,7 @@ export function MemberSelectOptions({
   selectedId?: string | null
 }) {
   const { t } = useLocale()
+  const teamLabelOf = useTeamLabel()
   const sections = buildMemberPickerSections(members, {
     view, categoryOrder, selectedIds: selectedId ? [selectedId] : [],
   })
@@ -90,7 +92,7 @@ export function MemberSelectOptions({
       {sections.map(section => section.kind === 'category' && (
         <optgroup
           key={`category:${section.category ?? ''}`}
-          label={`${categoryLabel(section.category, t('ui.memberPicker.unassigned'))} (${section.members.length})`}
+          label={`${categoryLabel(section.category, t('ui.memberPicker.unassigned'), teamLabelOf)} (${section.members.length})`}
         >
           {section.members.map(option)}
         </optgroup>
@@ -117,6 +119,7 @@ export function ProjectMemberMultiPicker({
 }) {
   const { t } = useLocale()
   const categoryOrder = useTeamCodes()
+  const teamLabelOf = useTeamLabel()
   const [query, setQuery] = useState('')
   const [view, setView] = useState<MemberPickerView>('name')
   const selectedSet = useMemo(() => new Set(selected), [selected])
@@ -149,7 +152,7 @@ export function ProjectMemberMultiPicker({
         />
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate text-sm text-fg">{member.name}</span>
-          {member.teams[0]?.code && <span className="shrink-0 text-meta text-fg-muted">· {member.teams[0].code}</span>}
+          {member.teams[0]?.code && <span className="max-w-[8rem] shrink-0 truncate text-meta text-fg-muted" title={teamLabelOf(member.teams[0].code)}>· {teamLabelOf(member.teams[0].code)}</span>}
           {badge && (
             <span className="shrink-0 rounded-full bg-surface-subtle px-1.5 py-0.5 text-meta font-medium text-fg-muted">
               {badge}
@@ -194,7 +197,7 @@ export function ProjectMemberMultiPicker({
           <div key={section.kind === 'all' ? `all-${index}` : `category:${section.category ?? ''}`}>
             {section.kind === 'category' && (
               <div className="sticky top-0 z-10 flex items-center justify-between bg-surface px-2 py-1.5 text-meta font-semibold text-fg-secondary">
-                <span>{categoryLabel(section.category, t('ui.memberPicker.unassigned'))}</span>
+                <span>{categoryLabel(section.category, t('ui.memberPicker.unassigned'), teamLabelOf)}</span>
                 <span className="rounded-full bg-surface-subtle px-1.5 py-0.5 tabular-nums text-fg-muted">
                   {section.members.length}
                 </span>

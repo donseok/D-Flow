@@ -114,6 +114,57 @@ export async function enqueueWeeklyAreaIndexChange(projectId: string, areaId: st
   })
 }
 
+/** 팀 개명 한 번에 다시 색인하는 문서 수의 상한(도메인마다) — 공용 팀은 그 워크스페이스 모든 프로젝트의 작업·회의록에 걸린다 */
+export const TEAM_RENAME_REINDEX_MAX = 5000
+
+/**
+ * 팀 이름 변경 — 색인 본문이 팀을 `이름 (code)` 로 적으므로(content.ts 의 담당팀·팀 줄) 그 팀이 담당인 WBS 항목과 그 팀의 회의록이 낡는다.
+ * 담당 행(item_owners.team_id)과 회의록(minutes.team_id)에서 id 를 읽어 다시 색인한다. 범위(프로젝트·워크스페이스)는 원본 행에서 읽는다
+ * (공용 팀은 여러 프로젝트에 걸린다 — withScope). 보관한 회의록도 넣는다 — 로더가 원본 상태를 보고 지운다(결과는 같다).
+ * 상한: 도메인마다 TEAM_RENAME_REINDEX_MAX 건까지만 넣는다(id 순 앞쪽). 넘는 문서는 옛 이름으로 남고, 상한에 닿으면 경고 로그 한 줄이 남는다 —
+ * 원본 행(updated_at)은 건드리지 않으므로 consistency 모드가 알아채지 못하고, 그 문서가 다음에 바뀔 때 새 이름으로 다시 색인된다.
+ * code 는 본문에 그대로 있어 code 로 묻는 검색은 그사이에도 맞는다. 실패는 로그로만 남는다(개명을 막지 않는다).
+ */
+export async function enqueueTeamRenameIndexChange(teamId: string): Promise<void> {
+  if (!teamId || !indexEnqueueAvailable()) return
+  await schedule(async () => {
+    try {
+      const admin = createAdminClient()
+      const sources = [
+        { domain: 'wbs' as const, table: 'item_owners', column: 'wbs_item_id' },
+        { domain: 'minutes' as const, table: 'minutes', column: 'id' },
+      ]
+      for (const { domain, table, column } of sources) {
+        const seen = new Set<string>()
+        for (let from = 0; ; from += PAGE) {
+          const { data, error } = await admin.from(table).select(column).eq('team_id', teamId).order(column).range(from, from + PAGE - 1)
+          if (error) {
+            console.error(`[assistant] 색인 변경 등록 — 팀의 ${domain} 목록 조회 실패(무시하고 계속):`, error.message)
+            break
+          }
+          const rows = (data ?? []) as unknown as Array<Record<string, string | null>>
+          // 한 항목에 같은 팀의 담당 행이 둘(주관·지원)일 수 있다 — 한 번만 넣는다
+          const ids: string[] = []
+          for (const row of rows) {
+            const id = row[column]
+            if (!id || seen.has(id) || seen.size >= TEAM_RENAME_REINDEX_MAX) continue
+            seen.add(id)
+            ids.push(id)
+          }
+          await enqueueNow(ids.map((entityId) => ({ domain, entityId })))
+          if (rows.length < PAGE) break
+          if (seen.size >= TEAM_RENAME_REINDEX_MAX) {
+            console.warn(`[assistant] 팀 개명 재색인 — ${domain} 이 상한(${TEAM_RENAME_REINDEX_MAX}건)에 닿았다. 더 있으면 나머지는 옛 이름으로 남는다:`, teamId)
+            break
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[assistant] 색인 변경 등록 예외(무시하고 계속):', e instanceof Error ? e.message : e)
+    }
+  })
+}
+
 /** 프로젝트의 한 도메인 전체(가져오기처럼 무엇이 바뀌었는지 건별로 알 수 없는 쓰기) — 그 프로젝트의 원본 id 를 읽어 전부 다시 색인한다. */
 export async function enqueueProjectIndexChange(projectId: string, domain: Exclude<IndexBackfillDomain, 'minutes'>): Promise<void> {
   if (!projectId || !indexEnqueueAvailable()) return

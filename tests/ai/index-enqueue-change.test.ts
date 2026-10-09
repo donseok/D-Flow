@@ -13,7 +13,8 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 vi.mock('@/lib/modules/gate', () => ({ moduleState: mocks.moduleState, projectsWithModule: vi.fn(), workspacesWithModule: vi.fn() }))
 
 import {
-  enqueueIndexChange, enqueueMinuteIndexChange, enqueueProjectIndexChange, enqueueWeeklyAreaIndexChange, enqueueWeeklyRowIndexChange,
+  enqueueIndexChange, enqueueMinuteIndexChange, enqueueProjectIndexChange, enqueueTeamRenameIndexChange, enqueueWeeklyAreaIndexChange, enqueueWeeklyRowIndexChange,
+  TEAM_RENAME_REINDEX_MAX,
 } from '@/lib/ai/index/enqueueChange'
 
 const P = '11111111-1111-4111-8111-111111111111'
@@ -71,6 +72,7 @@ describe('enqueueIndexChange', () => {
     await enqueueWeeklyRowIndexChange(P, ['r1'])
     await enqueueProjectIndexChange(P, 'wbs')
     await enqueueWeeklyAreaIndexChange(P, 'area-1')
+    await enqueueTeamRenameIndexChange('team-1')
     expect(mocks.createAdminClient).not.toHaveBeenCalled()
     expect(mocks.after).not.toHaveBeenCalled()
   })
@@ -208,6 +210,48 @@ describe('회의록·주간 행·프로젝트 전체', () => {
     mocks.createAdminClient.mockReturnValue(a)
     await expect(enqueueWeeklyAreaIndexChange(P, 'area-1')).resolves.toBeUndefined()
     expect(a.rpc).not.toHaveBeenCalled()
+    expect(errors).toHaveBeenCalled()
+  })
+
+  it('팀 개명 — 그 팀이 담당인 WBS 항목(항목당 한 번)과 그 팀의 회의록을 넣는다. 범위는 원본 행에서 읽는다(공용 팀은 여러 프로젝트에 걸린다)', async () => {
+    const a = admin({ rows: {
+      item_owners: [
+        { wbs_item_id: 'w1', team_id: 'team-1', kind: 'primary' }, { wbs_item_id: 'w1', team_id: 'team-1', kind: 'support' },
+        { wbs_item_id: 'w2', team_id: 'team-1', kind: 'support' }, { wbs_item_id: 'w3', team_id: 'team-2', kind: 'primary' },
+      ],
+      wbs_items: [{ id: 'w1', project_id: P }, { id: 'w2', project_id: P2 }, { id: 'w3', project_id: P }],
+      minutes: [
+        { id: 'm1', team_id: 'team-1', project_id: P, workspace_id: W, meetings: null },
+        { id: 'm2', team_id: 'team-2', project_id: P, workspace_id: W, meetings: null },
+      ],
+    } })
+    mocks.createAdminClient.mockReturnValue(a)
+    await enqueueTeamRenameIndexChange('team-1')
+    expect(a.jobs.map((j) => [j.domain, j.entity_type, j.entity_id, j.project_id, j.operation])).toEqual([
+      ['wbs', 'wbs_item', 'w1', P, 'upsert'], ['wbs', 'wbs_item', 'w2', P2, 'upsert'], ['minutes', 'minute', 'm1', P, 'upsert'],
+    ])
+  })
+
+  it('팀 개명 — 상한(도메인마다)까지만 넣고 넘으면 경고를 남긴다. 한 도메인의 조회가 실패해도 다른 도메인은 넣고, 던지지 않는다', async () => {
+    const many = Array.from({ length: TEAM_RENAME_REINDEX_MAX + 1000 }, (_, i) => ({ wbs_item_id: `w${i}`, team_id: 'team-1' }))
+    const a = admin({ rows: { item_owners: many, wbs_items: many.map((r) => ({ id: r.wbs_item_id, project_id: P })), minutes: [] } })
+    // 이 모의의 range 는 쪽을 자르지 않는다 — 쪽 크기만큼씩 돌려주게 덮는다
+    const from = a.from
+    a.from = vi.fn((table: string) => {
+      const b = from(table) as Record<string, unknown>
+      if (table !== 'item_owners') return b
+      return { ...b, select: () => ({ eq: () => ({ order: () => ({ range: async (lo: number, hi: number) => ({ data: many.slice(lo, hi + 1), error: null }) }) }) }) }
+    }) as typeof a.from
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mocks.createAdminClient.mockReturnValue(a)
+    await enqueueTeamRenameIndexChange('team-1')
+    expect(a.jobs.filter((j) => j.domain === 'wbs')).toHaveLength(TEAM_RENAME_REINDEX_MAX)
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('상한'))).toBe(true)
+
+    const failing = admin({ readError: 'down' })
+    mocks.createAdminClient.mockReturnValue(failing)
+    await expect(enqueueTeamRenameIndexChange('team-1')).resolves.toBeUndefined()
+    expect(failing.rpc).not.toHaveBeenCalled()
     expect(errors).toHaveBeenCalled()
   })
 

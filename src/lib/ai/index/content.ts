@@ -16,6 +16,7 @@ import {
 import { rowLabel, visibleRows, type WeeklyArea } from '@/lib/domain/weeklySheet'
 import { customSearchText, type CustomValues, type FieldDef, type FieldEntity } from '@/lib/domain/customFields'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
+import { teamNameWithCode } from '@/lib/domain/teamLabel'
 
 export const CURRENT_INDEX_VERSION = 1
 export const INDEX_CHUNKER_VERSION = 'md1500-v1'
@@ -104,13 +105,15 @@ function primaryOwnerTeam(raw: unknown): string | null {
   return null
 }
 
+/** 담당팀 줄 — 팀을 `이름 (code)` 로 적는다(이름이 code 와 같으면 한 번만). 화면이 팀 이름을 보이므로 이름으로 묻는 검색이 맞아야 하고,
+ *  code 로 묻는 검색(엑셀·옛 표기)도 그대로 맞는다. 팀 이름이 바뀌면 enqueueTeamRenameIndexChange 가 이 문서를 다시 색인한다 */
 function ownerLine(raw: unknown): string | null {
   if (!Array.isArray(raw)) return null
   const teams = raw.flatMap(value => {
     if (!value || typeof value !== 'object') return []
     const row = value as Row
-    const team = nestedOne(row.teams as { code?: unknown } | { code?: unknown }[] | null)
-    return typeof team?.code === 'string' ? [team.code] : []
+    const team = nestedOne(row.teams as { code?: unknown; name?: unknown } | { code?: unknown; name?: unknown }[] | null)
+    return typeof team?.code === 'string' ? [teamNameWithCode(team.code, typeof team.name === 'string' ? team.name : null)] : []
   })
   return teams.length ? `담당팀: ${[...new Set(teams)].join(', ')}` : null
 }
@@ -137,7 +140,7 @@ async function loadSearchableCustomDefs(
 async function loadWbsItem(client: SupabaseKnowledgeClient, job: ClaimedIndexJob): Promise<IndexContentLoadResult> {
   const [wbsResult, customDefs] = await Promise.all([
     client.from('wbs_items')
-      .select('id, project_id, code, name, biz, deliverable, planned_start, planned_end, actual_pct, updated_at, custom, item_owners(kind, teams(code))')
+      .select('id, project_id, code, name, biz, deliverable, planned_start, planned_end, actual_pct, updated_at, custom, item_owners(kind, teams(code, name))')
       .eq('id', job.entityId)
       .maybeSingle(),
     loadSearchableCustomDefs(client, job.projectId, 'wbs_item'),
@@ -368,7 +371,7 @@ async function loadIssue(client: SupabaseKnowledgeClient, job: ClaimedIndexJob):
 async function loadMinute(client: SupabaseKnowledgeClient, job: ClaimedIndexJob): Promise<IndexContentLoadResult> {
   // created_by(계정)·created_by_name(실명)·file_path(Storage 경로)는 select 자체에서 제외한다.
   const { data, error } = await client.from('minutes')
-    .select('id, minute_date, team_code, title, body_md, project_id, archived_at, created_at, updated_at, meetings(project_id)')
+    .select('id, minute_date, team_code, title, body_md, project_id, archived_at, created_at, updated_at, meetings(project_id), team:teams(name)')
     .eq('id', job.entityId)
     .maybeSingle()
   if (error) return readError('MINUTE_DETAIL_READ_FAILED', error)
@@ -383,10 +386,13 @@ async function loadMinute(client: SupabaseKnowledgeClient, job: ClaimedIndexJob)
   if (minuteProjectId !== job.projectId) return scopeMismatch()
 
   const minuteDate = safeDate(row.minute_date)
+  // 팀 줄은 `이름 (code)` — 이름은 지금의 팀(minutes.team_id)에서, code 는 회의록의 사본 열에서. 팀이 지워졌으면(team_id null) code 만
+  const minuteTeam = nestedOne(row.team as { name?: unknown } | { name?: unknown }[] | null)
+  const minuteTeamName = typeof minuteTeam?.name === 'string' ? minuteTeam.name : null
   const text = joinLines([
     `# 회의록 ${str(row.title) ?? ''}`.trim(),
     minuteDate ? `일자: ${minuteDate}` : null,
-    str(row.team_code) ? `팀: ${str(row.team_code)}` : null,
+    str(row.team_code) ? `팀: ${teamNameWithCode(str(row.team_code)!, minuteTeamName)}` : null,
     str(row.body_md),
   ])
   return {

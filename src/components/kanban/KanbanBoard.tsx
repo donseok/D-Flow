@@ -23,7 +23,7 @@ import { statusOf } from '@/lib/domain/progress'
 import { updateActual, getWbsCellSnapshot } from '@/app/actions/wbs'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes, useTeams } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamLabel, useTeams } from '@/components/app/TeamsProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
 import { ConflictResolver } from '@/components/ui/ConflictResolver'
@@ -75,6 +75,7 @@ export function KanbanBoard({
   const { toast } = useToast()
   const teamCodes = useTeamCodes()
   const teams = useTeams()
+  const teamLabelOf = useTeamLabel()
   const searchParams = useSearchParams()
   // 묶음 기준은 ?group(D36). ?view는 작업 계획 보기(sheet·timeline·board)다.
   const group = searchParams.get('group')
@@ -215,11 +216,11 @@ export function KanbanBoard({
     return baseColumns.map(col => {
       let cards = lensCards(col.cards, lens, myTeams)
       cards = applyQuickFilters(cards, quick, today)
-      if (q) cards = cards.filter(card => `${card.name} ${card.code} ${card.owners.map(o => o.team).join(' ')}`.toLowerCase().includes(q))
+      if (q) cards = cards.filter(card => `${card.name} ${card.code} ${card.owners.map(o => `${o.team} ${teamLabelOf(o.team)}`).join(' ')}`.toLowerCase().includes(q))
       cards = sortCards(cards, today)
       return { ...col, cards, count: cards.length }
     })
-  }, [baseColumns, lens, quick, query, myTeams, today])
+  }, [baseColumns, lens, quick, query, myTeams, today, teamLabelOf])
 
   // 데이터는 있으나(items.length>0) 렌즈/빠른필터/검색으로 모든 컬럼이 걸러진 상태 — 데이터 0건과 구분해 안내한다.
   const filteredEmpty = items.length > 0 && columns.every(c => c.cards.length === 0)

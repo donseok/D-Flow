@@ -151,14 +151,14 @@ describe('MinutesView 트리 뷰 배선', () => {
     expect(container.textContent).toContain('주간회의')
   })
 
-  it('같은 code 의 팀이 둘이면 탭 라벨에 이름을 붙여 가르고, 보관함 챗에는 고른 팀의 code 를 넘긴다(SP5 B2)', async () => {
+  it('탭 라벨은 팀 이름 — 같은 code 의 팀이 둘이어도 이름으로 가르고, 보관함 챗에는 고른 팀의 code 를 넘긴다(SP5 B2)', async () => {
     await act(async () => root.render(withTeams(
       <MinutesView calendar={SUNDAY_CAL} scope={{ workspaceId: 'ws-1', projectId: 'p1' }} initialMinutes={[]} todayIso="2026-07-17" initialView="calendar"
         projects={[]} currentUserId="u1" canEdit teamOptions={[{ id: 't-qa', code: 'QA', name: '품질(공용)' }, { id: 't-qa-p', code: 'QA', name: '품질(전용)' }]}
         initialTeamId="t-qa-p" />,
     )))
-    expect(tabByText('QA · 품질(전용)')!.getAttribute('aria-selected')).toBe('true')
-    expect(tabByText('QA · 품질(공용)')).toBeTruthy()
+    expect(tabByText('품질(전용)')!.getAttribute('aria-selected')).toBe('true')
+    expect(tabByText('품질(공용)')).toBeTruthy()
     expect((chatProps.mock.calls.at(-1)![0] as { team: string | null }).team).toBe('QA')
   })
 

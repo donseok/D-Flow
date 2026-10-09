@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({ getProjectConfig: vi.fn(), createServerClient: vi.
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: h.getProjectConfig }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.createServerClient }))
 
-import { TeamsUnavailableError, projectOwnTeams, projectTeams, teamCodesVisibleTo, visibleTeams, workspaceTeams } from '@/lib/teams/source'
+import { TeamsUnavailableError, projectOwnTeams, projectTeams, teamCodesVisibleTo, visibleTeamIdsMatching, visibleTeams, workspaceTeams } from '@/lib/teams/source'
 import { keysetTable } from '../helpers/keysetTable'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import type { ConfigTeam } from '@/lib/settings/projectConfig'
@@ -209,6 +209,18 @@ describe('visibleTeams·teamCodesVisibleTo — 가시 범위(스펙 §4.2.1), �
     const rows = Array.from({ length: 4 }, (_, i) => trow(`t${i}`, `T${i}`, WA, null))
     const moving = keysetTeams(rows, { maxRows: 2, afterFirst: (r) => [...r, trow('t9', 'T9', WA, null)] })
     await expect(teamCodesVisibleTo({ all: true }, { client: moving.client as never })).rejects.toBeInstanceOf(TeamsUnavailableError)
+  })
+  it('visibleTeamIdsMatching — 담당 필터 값(code·이름)에 맞는 가시 팀의 id 전부: 같은 code 의 공용·전용 팀을 모두 담고, 범위 밖 팀은 뺀다', async () => {
+    // trow 의 이름은 `<code> 팀` 이다. 같은 code RES 가 공용(t1)·전용(t3)·다른 워크스페이스(t2)에 있다
+    const table = keysetTable([trow('t1', 'RES', WA, null), trow('t2', 'RES', WB, null), trow('t3', 'RES', WA, P1), trow('t4', 'CIV', WA, null), trow('t5', 'ARC', WA, null, false)])
+    const client = { from: () => table.make() } as never
+    const view = { all: false as const, workspaceIds: [WA], projectIds: [P1] }
+    expect((await visibleTeamIdsMatching(view, 'RES', { client })).sort()).toEqual(['t1', 't3'])
+    expect(await visibleTeamIdsMatching(view, 'CIV 팀', { client })).toEqual(['t4'])
+    // 맞는 팀이 없으면 빈 목록(호출부가 400·폴백을 정한다) — 비활성 팀·대소문자만 다른 값도 맞지 않는다
+    for (const key of ['ARC', 'res', 'NOPE', '']) expect(await visibleTeamIdsMatching(view, key, { client }), key).toEqual([])
+    // 조회 실패는 빈 목록이 아니라 오류다
+    await expect(visibleTeamIdsMatching({ all: true }, 'RES', { client: keysetTeams([], { error: 'db down' }).client as never })).rejects.toBeInstanceOf(TeamsUnavailableError)
   })
   it('비활성은 질의에서 거른다(eq active true) — 클라이언트를 넘기지 않으면 세션 클라이언트', async () => {
     const { client } = keysetTeams([trow('t1', 'RES', WA, null)])

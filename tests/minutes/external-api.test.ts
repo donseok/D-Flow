@@ -47,6 +47,11 @@ vi.mock('@/lib/minutes/teamScope', () => ({
 }))
 vi.mock('@/lib/teams/source', () => ({
   teamCodesVisibleTo: async (view: TeamView, opts?: unknown) => { mocks.visibleSpy(view, opts); return mocks.activeTeamCodesVisibleTo(view) },
+  // GET 의 담당 필터(팀 id 집합) — 가시 팀 code 에 맞으면 그 팀 id(`t-<code>`), 아니면 빈 목록. 이름 대조는 도메인 테스트(teamIdsMatching)가 본다
+  visibleTeamIdsMatching: async (view: TeamView, key: string, opts?: unknown) => {
+    mocks.visibleSpy(view, opts)
+    return (mocks.activeTeamCodesVisibleTo(view) as string[]).includes(key) ? [`t-${key}`] : []
+  },
   workspaceTeams: async (workspaceId: string) => (mocks.activeTeamCodesForWorkspace(workspaceId) as string[]).map((code, i) => ({
     id: `t-${code}`, code, name: code, color: '#6b7280', sortOrder: i, active: true, progressVisible: true, projectId: null, workspaceId })),
   // 자격증명 경로의 담당 팀 해석(resolveCredentialTeam)은 범위의 팀 행을 읽는다 — 프로젝트 범위는 프로젝트 활성 팀 목록에서 만든다
@@ -1595,6 +1600,9 @@ describe('GET /api/v1/minutes (§5.1, §9.6 ⑪)', () => {
     expect((await GET(get('/api/v1/minutes?user_email=lead%40example.com&team=OPS'))).status).toBe(200)
     expect(mocks.activeTeamCodesVisibleTo).toHaveBeenCalled()
     expect(mocks.visibleSpy).toHaveBeenCalledWith(expect.anything(), { client: fake.admin })
+    // 화면의 담당 필터와 같은 기준 — 사본 열 team_code 문자열이 아니라 그 값에 맞는 팀의 id 집합으로 거른다
+    expect(fake.builders.minutes[0].in).toHaveBeenCalledWith('team_id', ['t-OPS'])
+    expect(fake.builders.minutes[0].eq).not.toHaveBeenCalledWith('team_code', expect.anything())
   })
 
   it('[RF2] GET 의 가시 팀 조회가 실패하면 500 — 담당 필터를 버리고 목록을 내지 않는다', async () => {

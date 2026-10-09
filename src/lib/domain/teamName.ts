@@ -2,6 +2,7 @@
 // 무시해 code·name 을 찾으므로(§4.2.2) 'ops' 와 'OPS' 를 두 팀 이름으로 두면 둘 다 모호해져 사람이 팀을 부를 수 없다. DB 제약은 없다 —
 // 동시 개명 경합과 범위가 다른 팀끼리의 겹침은 봇의 모호 거부가 맡는다(스펙 §10 K14).
 import { isHeaderWordMatch } from '@/lib/excel/headerWords'
+import { normalizeNewTeamCode, TEAM_CODE_MAX } from './teams'
 
 export const TEAM_NAME_MAX = 40
 
@@ -46,4 +47,45 @@ export function firstNewCodeClash(codes: readonly string[], siblings: readonly {
     if (!seen.some((s) => s.code === code)) seen.push({ code, name: code })
   }
   return null
+}
+
+/** 이름에서 만든 기본 code — 코드 칸을 비웠을 때 저장되는 값이자 화면이 미리 보여 주는 값(같은 함수라 어긋나지 않는다).
+ *  이름 그대로(앞뒤 공백만 걷는다)이고 code 상한(20자 — normalizeNewTeamCode 와 같은 UTF-16 길이)을 넘으면 글자 단위로 자른다.
+ *  code 는 만든 뒤 바꿀 수 없다 — 그래서 화면이 이 값을 보이고 고치게 한다 */
+export function defaultTeamCode(name: string): string {
+  let out = ''
+  for (const ch of name.trim()) {
+    if (out.length + ch.length > TEAM_CODE_MAX) break
+    out += ch
+  }
+  return out.trim()
+}
+
+/** 새 팀의 이름·코드 검증(관리 화면의 팀 추가) — 이름은 개명과 같은 규칙(NFKC·40자·예약어), 코드는 normalizeNewTeamCode(trim·20자·예약어).
+ *  코드를 비우면 이름에서 만든 기본값(defaultTeamCode). 이름을 먼저 본다 — 둘이 같은 값일 때 문구가 "팀 이름" 이다.
+ *  겹침(DB 대조)은 액션이 한다 — code 는 newTeamCodeClash, 이름은 newTeamNameClash */
+export function checkNewTeam(input: { name: unknown; code?: unknown; reserved: readonly string[] }):
+  { ok: true; name: string; code: string } | { ok: false; error: string } {
+  if (typeof input.name !== 'string') return { ok: false, error: '팀 이름을 입력하세요.' }
+  if (input.code !== undefined && input.code !== null && typeof input.code !== 'string') return { ok: false, error: '팀 코드가 올바르지 않습니다.' }
+  const name = normalizeTeamName(input.name)
+  if (!name) return { ok: false, error: '팀 이름을 입력하세요.' }
+  if ([...name].length > TEAM_NAME_MAX) return { ok: false, error: `팀 이름은 ${TEAM_NAME_MAX}자 이하여야 합니다.` }
+  if (input.reserved.some((w) => isHeaderWordMatch(w, name))) {
+    return { ok: false, error: `'${name}'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다.` }
+  }
+  const given = typeof input.code === 'string' ? input.code.trim() : ''
+  // 기본값은 입력한 이름 그대로에서 만든다(NFKC 로 바꾼 이름이 아니라) — 코드를 따로 적지 않던 때와 같은 값이 저장된다
+  const norm = normalizeNewTeamCode(given || defaultTeamCode(input.name), input.reserved, '팀 코드')
+  if (!norm.ok) return norm
+  return { ok: true, name, code: norm.code }
+}
+
+/** 새 팀의 이름이 같은 범위 다른 팀의 code·이름과 겹치는가 — 개명 규칙(checkTeamRename)과 같은 판정. 이름이 자기 code 와 같은 낱말이면
+ *  code 쪽 판정(newTeamCodeClash·"이미 있음")이 이미 봤으므로 보지 않는다. 겹치면 그 팀의 code, 아니면 null */
+export function newTeamNameClash(name: string, code: string, siblings: readonly { code: string; name: string }[]): string | null {
+  const key = teamNameKey(name)
+  if (key === teamNameKey(code)) return null
+  const hit = siblings.find((s) => teamNameKey(s.code) === key || teamNameKey(s.name) === key)
+  return hit ? hit.code : null
 }

@@ -38,7 +38,7 @@ import { ReportModal } from '@/components/report/ReportModal'
 import { usePagePresence } from '@/components/app/usePagePresence'
 import { PresenceStrip } from '@/components/app/PresenceStrip'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes, useTeamSlot } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamLabel, useTeamSlot } from '@/components/app/TeamsProvider'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import { useRightRailOptional } from '@/components/app/RightRail'
 import type { DictKey } from '@/lib/i18n/dict'
@@ -289,6 +289,7 @@ export function WbsGanttSheet({
   const legendTeams = useTeamCodes()
   const cal = useMemo(() => calendarOf(calendar), [calendar])
   const slotOf = useTeamSlot()
+  const teamLabelOf = useTeamLabel()   // 범례 글자는 팀 이름(code 는 key 로만)
   /* 실시간 반영(0098) — 서버가 준 트리를 상태로 미러링하고 broadcast 가 오면 그 행만 갈아끼운다.
      조상 롤업은 applyWbsChange 가 computeNode 를 다시 돌려 낸다: 리프만 고치면 공정율·달성률·
      상태가 낡은 채 남아 화면이 조용히 틀린 숫자를 보여준다.
@@ -2428,9 +2429,9 @@ export function WbsGanttSheet({
         </span>
         <span className="inline-flex items-center gap-2">
           {legendTeams.map(t => (
-            <span key={t} className="inline-flex items-center gap-0.5">
-              <span className={`${slotOf(t).fg} text-[9px]`}>●</span>
-              {t}
+            <span key={t} className="inline-flex min-w-0 max-w-[12rem] items-center gap-0.5" title={teamLabelOf(t)}>
+              <span className={`${slotOf(t).fg} shrink-0 text-[9px]`}>●</span>
+              <span className="truncate">{teamLabelOf(t)}</span>
             </span>
           ))}
           <span>{t('wbs.legendOwnerMarks')}</span>

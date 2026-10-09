@@ -11,7 +11,8 @@ import { MINUTES_TREE_LIMIT } from '@/lib/domain/minutes'
 import { fetchMinutesRange, fetchMinutesSearch, fetchMinutesExplorer, fetchMinuteFavorites, toggleMinuteFavorite } from '@/app/actions/minutes'
 import { queueUiPref } from '@/lib/prefs/debouncedSave'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { TeamBar } from '@/components/minutes/TeamBar'
+import { TeamBar, TeamBarLabelsProvider } from '@/components/minutes/TeamBar'
+import { teamLabel } from '@/lib/domain/teamLabel'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { CardSkeleton } from '@/components/ui/Skeleton'
@@ -91,11 +92,14 @@ export function MinutesView({
     ro.observe(bar)
     return () => { ro.disconnect(); view.style.setProperty('--minutes-bar-h', '0px') }
   }, [])
-  // 같은 code 의 팀이 둘이면(공용·전용) 이름을 붙여 가른다
-  const teamTabs = useMemo(() => teamOptions.map(tm => ({
-    key: tm.id,
-    label: teamOptions.filter(o => o.code === tm.code).length > 1 ? `${tm.code} · ${tm.name}` : tm.code,
-  })), [teamOptions])
+  // 탭 글자는 팀 이름 — 같은 이름의 팀이 둘이면 `이름 (code)` 로 가른다(공용 도우미 teamLabel). 키는 팀 id 그대로
+  const teamTabs = useMemo(() => teamOptions.map(tm => ({ key: tm.id, label: teamLabel(tm, teamOptions) })), [teamOptions])
+  // 목록·달력·탐색기의 팀 막대가 같은 이름을 쓴다 — 고른 프로젝트의 전용 팀은 워크스페이스 범위 공급자에 없다
+  const teamBarLabel = useMemo(() => {
+    const byCode = new Map<string, string>()
+    for (const tm of teamOptions) if (!byCode.has(tm.code)) byCode.set(tm.code, teamLabel(tm, teamOptions))
+    return (code: string) => byCode.get(code)
+  }, [teamOptions])
   const [initY, initM] = useMemo(() => todayIso.split('-').map(Number), [todayIso])
   const [year, setYear] = useState(initY)
   const [month0, setMonth0] = useState((initM || 1) - 1)
@@ -294,6 +298,7 @@ export function MinutesView({
   const explorerFolders: MinuteFolder[] = typeof treeState === 'object' ? treeState.folders : []
 
   return (
+    <TeamBarLabelsProvider value={teamBarLabel}>
     <div
       ref={viewRef}
       data-minutes-view
@@ -472,5 +477,6 @@ export function MinutesView({
         to={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[1]} />
       {void locale}
     </div>
+    </TeamBarLabelsProvider>
   )
 }

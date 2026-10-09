@@ -38,7 +38,9 @@ describe('strict Supabase minutes repository', () => {
       ],
       error: null,
     })
-    const from = vi.fn(() => query)
+    // 담당 필터는 팀 표에서 그 값(code·이름)에 맞는 팀을 먼저 읽는다 — 여기서는 맞는 팀이 없다(옛 회의록의 사본 열 폴백)
+    const teams = queryBuilder({ data: [], error: null })
+    const from = vi.fn((table: string) => (table === 'teams' ? teams : query))
     const repository = createSupabaseMinutesRepository({ from } as never)
 
     const result = await repository.searchMinutes({
@@ -75,6 +77,63 @@ describe('strict Supabase minutes repository', () => {
     for (const method of ['insert', 'upsert', 'update', 'delete']) {
       expect(query[method]).not.toHaveBeenCalled()
     }
+  })
+
+  it('담당 필터 — 값(code 또는 이름)에 맞는 팀의 id 집합으로 거른다(화면의 minutes.team_id 와 같은 기준). 사본 열 team_code 로는 거르지 않는다', async () => {
+    const query = queryBuilder({ data: [minuteRow()], error: null })
+    const byCode = queryBuilder({ data: [{ id: 't-pub', code: 'TEAM_A', name: '기획팀' }, { id: 't-own', code: 'TEAM_A', name: '기획팀(전용)' }], error: null })
+    const byName = queryBuilder({ data: [], error: null })
+    const teamQueries = [byCode, byName]
+    const from = vi.fn((table: string) => (table === 'teams' ? teamQueries.shift()! : query))
+    const repository = createSupabaseMinutesRepository({ from } as never)
+
+    const result = await repository.searchMinutes({ query: null, team: 'TEAM_A', projectId: null, from: null, to: null, limit: 20 })
+    expect(result.ok).toBe(true)
+    // 팀 표는 활성 팀을 code 로 한 번, 이름으로 한 번 읽는다(or() 에 사용자 문자열을 넣지 않는다)
+    expect(byCode.eq).toHaveBeenCalledWith('active', true)
+    expect(byCode.eq).toHaveBeenCalledWith('code', 'TEAM_A')
+    expect(byName.eq).toHaveBeenCalledWith('name', 'TEAM_A')
+    expect(byCode.or).not.toHaveBeenCalled()
+    expect(query.in).toHaveBeenCalledWith('team_id', ['t-pub', 't-own'])
+    expect(query.eq).not.toHaveBeenCalledWith('team_code', expect.anything())
+  })
+
+  it('담당 필터 — 이름으로 준 값도 같은 팀의 회의록을 찾는다(개명한 팀을 이름으로 부른다)', async () => {
+    const query = queryBuilder({ data: [], error: null })
+    const teamQueries = [queryBuilder({ data: [], error: null }), queryBuilder({ data: [{ id: 't-pub', code: 'TEAM_A', name: '기획팀' }], error: null })]
+    const repository = createSupabaseMinutesRepository({ from: vi.fn((table: string) => (table === 'teams' ? teamQueries.shift()! : query)) } as never)
+
+    await repository.searchMinutes({ query: null, team: '기획팀', projectId: null, from: null, to: null, limit: 20 })
+    expect(query.in).toHaveBeenCalledWith('team_id', ['t-pub'])
+  })
+
+  it('담당 필터 폴백 — 맞는 팀이 없으면 예전처럼 team_code 문자열로 거른다(팀 행이 지워진 옛 회의록을 잃지 않는다)', async () => {
+    const query = queryBuilder({ data: [minuteRow({ team_code: 'GONE' })], error: null })
+    const teams = queryBuilder({ data: [], error: null })
+    const repository = createSupabaseMinutesRepository({ from: vi.fn((table: string) => (table === 'teams' ? teams : query)) } as never)
+
+    const result = await repository.searchMinutes({ query: null, team: 'GONE', projectId: null, from: null, to: null, limit: 20 })
+    expect(result).toMatchObject({ ok: true, data: { records: [{ teamCode: 'GONE' }] } })
+    expect(query.eq).toHaveBeenCalledWith('team_code', 'GONE')
+    expect(query.in).not.toHaveBeenCalledWith('team_id', expect.anything())
+  })
+
+  it('담당 필터 — 팀 조회가 실패하면 폴백하지 않고 오류다(실패를 "맞는 팀 없음"으로 읽지 않는다). 회의록은 읽지 않는다', async () => {
+    const query = queryBuilder({ data: [], error: null })
+    const teams = queryBuilder({ data: null, error: { code: '08006' } })
+    const from = vi.fn((table: string) => (table === 'teams' ? teams : query))
+    const repository = createSupabaseMinutesRepository({ from } as never)
+
+    await expect(repository.searchMinutes({ query: null, team: 'TEAM_A', projectId: null, from: null, to: null, limit: 20 }))
+      .resolves.toEqual({ ok: false, errorCode: 'MINUTES_READ_FAILED', retryable: true })
+    expect(from).not.toHaveBeenCalledWith('minutes')
+  })
+
+  it('담당 필터가 없으면 팀 표를 읽지 않는다', async () => {
+    const from = vi.fn(() => queryBuilder({ data: [], error: null }))
+    await createSupabaseMinutesRepository({ from } as never).searchMinutes({ query: null, team: null, projectId: null, from: null, to: null, limit: 20 })
+    expect(from).toHaveBeenCalledTimes(1)
+    expect(from).toHaveBeenCalledWith('minutes')
   })
 
   it('keeps valid zero rows successful and uses a left join without a project filter', async () => {

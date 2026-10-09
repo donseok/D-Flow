@@ -6,6 +6,7 @@ import { useMinuteLinks } from '@/components/minutes/minuteLinks'
 import { CalendarDays, Clock4, MapPin, Repeat, Trash2, Pencil, Ban, User, AlertTriangle, NotebookText, Megaphone, Check } from 'lucide-react'
 import type { Meeting, MeetingAttendeeInfo, MeetingOccurrence } from '@/lib/domain/types'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { useTeamLabel } from '@/components/app/TeamsProvider'
 import { Modal } from '@/components/ui/Modal'
 import { fmtDate } from '@/components/wbs/shared'
 import { canEditMeeting } from '@/lib/domain/meetings'
@@ -32,6 +33,7 @@ export function MeetingDetailModal({
   categories: VocabByProject<'meetings.categories'>
 }) {
   const { t } = useLocale()
+  const teamLabelOf = useTeamLabel()
   const minuteLinks = useMinuteLinks()   // 화면 안 링크의 범위(D38 ①) — 없으면 옛 형식(스텁이 행의 워크스페이스로, D6)
   const [detail, setDetail] = useState<{ meeting: Meeting; attendees: MeetingAttendeeInfo[] } | null>(null)
   const [minutes, setMinutes] = useState<LinkedMinute[]>([])
@@ -144,7 +146,7 @@ export function MeetingDetailModal({
               : (
                 <div className="flex flex-wrap gap-1.5">
                   {detail!.attendees.map(a => (
-                    <span key={a.id} className="chip bg-surface-subtle text-fg">{a.name}{a.teamCodes.length ? ` · ${a.teamCodes.join(', ')}` : ''}</span>
+                    <span key={a.id} className="chip bg-surface-subtle text-fg">{a.name}{a.teamCodes.length ? ` · ${a.teamCodes.map(teamLabelOf).join(', ')}` : ''}</span>
                   ))}
                 </div>
               )}

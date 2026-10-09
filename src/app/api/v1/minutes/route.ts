@@ -11,7 +11,7 @@ import {
   rebuildProjectWikiFromActiveMinutes,
 } from '@/lib/ai/wiki-ingest'
 import { activeTeamCodesForMinuteScope, type MinuteScope } from '@/lib/minutes/teamScope'
-import { teamCodesVisibleTo } from '@/lib/teams/source'
+import { visibleTeamIdsMatching } from '@/lib/teams/source'
 import {
   apiBadRequest, apiFail, apiInternalError, apiModuleDisabled, apiNotFound, apiProjectNotAllowed,
   isMinutesWorkspaceMember, parseMinutePayload, parseUserEmail, resolveMinutesPrincipal,
@@ -691,9 +691,11 @@ export async function GET(req: NextRequest) {
 
     // 담당 필터는 호출자가 볼 수 있는 활성 팀으로 본다 — 공용 팀 + 목록 범위에서 숨기지 않은 프로젝트의 전용 팀(teamViewOf).
     // 공용 팀만 보면 프로젝트 회의록의 담당(전용 팀)이 400 이 된다. 팀 원천 실패는 throw → 아래 catch 의 500(담당 필터를 버리지 않는다).
-    if (team && !(await teamCodesVisibleTo(teamViewOf(authz, hiddenProjectIds), { client: admin })).includes(team)) {
-      return apiBadRequest('잘못된 담당입니다.')
-    }
+    // 값은 팀 code 또는 이름이고, 그 값에 맞는 팀의 id 집합(같은 code 의 공용·전용 팀 모두)으로 거른다 — 화면의 담당 필터(minutes.team_id)와
+    // 같은 기준이다. 예전에는 사본 열 team_code 문자열로 걸러 화면과 기준이 달랐다. 맞는 팀이 없으면 지금처럼 400(요청·응답 꼴은 그대로).
+    // team_id 가 빈 옛 회의록(담당 팀 행이 지워진 것)은 이 필터에 걸리지 않는다 — 화면의 담당 필터와 같다(사본 열은 2단계에서 다룬다).
+    const teamIds = team ? await visibleTeamIdsMatching(teamViewOf(authz, hiddenProjectIds), team, { client: admin }) : null
+    if (teamIds && teamIds.length === 0) return apiBadRequest('잘못된 담당입니다.')
     // 목록형 — minutes_integration 이 허용된 워크스페이스만(스펙 §4.2). 꺼져 있으면 닫는다(409).
     const onWs = await workspacesWithModule([wsId], 'minutes_integration', { client: admin })
     if (onWs.length === 0) return apiModuleDisabled()
@@ -709,7 +711,7 @@ export async function GET(req: NextRequest) {
     if (externalId) q = q.eq('external_id', externalId)
     if (linked === 'true') q = q.not('external_id', 'is', null)
     if (linked === 'false') q = q.is('external_id', null)
-    if (team) q = q.eq('team_code', team)
+    if (teamIds) q = q.in('team_id', teamIds)
     if (dateFrom) q = q.gte('minute_date', dateFrom)
     if (dateTo) q = q.lte('minute_date', dateTo)
 
@@ -729,7 +731,7 @@ export async function GET(req: NextRequest) {
         if (externalId) cq = cq.eq('external_id', externalId)
         if (linked === 'true') cq = cq.not('external_id', 'is', null)
         if (linked === 'false') cq = cq.is('external_id', null)
-        if (team) cq = cq.eq('team_code', team)
+        if (teamIds) cq = cq.in('team_id', teamIds)
         if (dateFrom) cq = cq.gte('minute_date', dateFrom)
         if (dateTo) cq = cq.lte('minute_date', dateTo)
         const { count: totalCount, error: cntErr } = await cq

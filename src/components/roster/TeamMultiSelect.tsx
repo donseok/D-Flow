@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { setPrimaryTeam, toggleTeam } from '@/lib/domain/roster'
+import { useTeamLabel } from '@/components/app/TeamsProvider'
 
 export interface TeamOption { id: string; code: string }
 
@@ -53,6 +54,8 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
   const popRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const codeOf = new Map(options.map(o => [o.id, o.code]))
+  // 글자는 팀 이름(범위 공급자 — 목록 밖 팀은 code 그대로). 값은 팀 id, data-* 선택자는 code 그대로
+  const teamLabelOf = useTeamLabel()
 
   useEffect(() => {
     if (!open) return
@@ -134,7 +137,7 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
         <span className="flex min-w-0 flex-1 flex-wrap gap-1">
           {value.length === 0 ? <span className="text-fg-muted">팀 없음</span> : value.map((id, i) => (
             <span key={id} className={`chip bg-surface-subtle ${i === 0 ? 'font-semibold text-fg' : 'text-fg-secondary'}`}>
-              {codeOf.get(id) ?? '?'}
+              {codeOf.has(id) ? teamLabelOf(codeOf.get(id)!) : '?'}
             </span>
           ))}
         </span>
@@ -154,11 +157,11 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
                     <label className="flex min-w-0 flex-1 items-center gap-2">
                       <input type="checkbox" checked={checked} data-team-check={o.code}
                         onChange={() => onChange(toggleTeam(value, o.id))} />
-                      <span className="truncate text-fg">{o.code}</span>
+                      <span className="truncate text-fg" title={teamLabelOf(o.code)}>{teamLabelOf(o.code)}</span>
                     </label>
                     <label className="flex shrink-0 items-center gap-1 text-fg-muted" title="대표 팀">
                       <input type="radio" name={`${label}-primary`} checked={value[0] === o.id} data-team-primary={o.code}
-                        aria-label={`${o.code} 대표 팀`}
+                        aria-label={`${teamLabelOf(o.code)} 대표 팀`}
                         onChange={() => onChange(setPrimaryTeam(value, o.id))} />
                       대표
                     </label>

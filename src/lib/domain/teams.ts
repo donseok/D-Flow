@@ -40,18 +40,19 @@ export function reservedTeamNames(input: { levelLabels: readonly string[]; extra
   return [...new Set([...EXCEL_HEADER_WORDS, ...input.levelLabels, ...(input.extraAxisLabel ? [input.extraAxisLabel] : [])])]
 }
 
-const TEAM_CODE_MAX = 20
+export const TEAM_CODE_MAX = 20
 
 /** 팀 추가 입력 검증 — 중복 검사는 액션(DB 대조)에서. reserved 는 호출부가 reservedTeamNames 로 파생해 넘긴다(공용 팀은 EXCEL_HEADER_WORDS).
- *  예약어 비교는 감지기와 같게 대소문자·전각·공백을 무시한다. */
+ *  예약어 비교는 감지기와 같게 대소문자·전각·공백을 무시한다. what 은 오류 문구의 낱말이다 — 가져오기는 엑셀의 값이 이름이자 code 라
+ *  '팀 이름'(기본), 관리 화면의 코드 칸은 '팀 코드'(checkNewTeam). */
 export function normalizeNewTeamCode(
-  input: string, reserved: readonly string[],
+  input: string, reserved: readonly string[], what: '팀 이름' | '팀 코드' = '팀 이름',
 ): { ok: true; code: string } | { ok: false; error: string } {
   const code = input.trim()
-  if (!code) return { ok: false, error: '팀 이름을 입력하세요.' }
-  if (code.length > TEAM_CODE_MAX) return { ok: false, error: `팀 이름은 ${TEAM_CODE_MAX}자 이하여야 합니다.` }
+  if (!code) return { ok: false, error: `${what === '팀 코드' ? '팀 코드를' : '팀 이름을'} 입력하세요.` }
+  if (code.length > TEAM_CODE_MAX) return { ok: false, error: `${what === '팀 코드' ? '팀 코드는' : '팀 이름은'} ${TEAM_CODE_MAX}자 이하여야 합니다.` }
   if (reserved.some((w) => isHeaderWordMatch(w, code))) {
-    return { ok: false, error: `'${code}'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다.` }
+    return { ok: false, error: `'${code}'는 엑셀 양식 예약어라 ${what === '팀 코드' ? '팀 코드로' : '팀 이름으로'} 쓸 수 없습니다.` }
   }
   return { ok: true, code }
 }
@@ -86,13 +87,27 @@ export function resolveTeamsForProject(all: readonly Team[], projectId: string, 
  *  view 는 domain/authz 의 teamViewOf·teamViewOfScope 만 만든다(전부를 여는 뷰는 플랫폼 관리자 판정과 한 곳에).
  *  프로젝트에 연결된 회의록의 담당은 그 프로젝트 팀이라, 소속 워크스페이스의 공용 팀만으로는 전용 팀 코드가 빠진다. */
 export function teamsVisibleTo(all: readonly Team[], view: TeamView): Team[] {
+  const seen = new Set<string>()
+  return teamsInView(all, view).filter((t) => (seen.has(t.code) ? false : (seen.add(t.code), true)))
+}
+
+/** teamsVisibleTo 에서 "같은 code 는 첫 것만" 을 뺀 것 — 조회자가 볼 수 있는 활성 팀 전부(activeCodes 순). 같은 code 의 공용·전용 팀이
+ *  모두 남는다: 회의록 담당 필터가 code·이름으로 받은 값을 팀 id 집합으로 바꿀 때 쓴다(teamIdsMatching) */
+export function teamsInView(all: readonly Team[], view: TeamView): Team[] {
   const ws = view.all ? null : new Set(view.workspaceIds)
   const ps = view.all ? null : new Set(view.projectIds)
-  const seen = new Set<string>()
   return all
     .filter((t) => t.active && (view.all || (t.projectId === null ? ws!.has(t.workspaceId) : ps!.has(t.projectId))))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code, 'ko'))
-    .filter((t) => (seen.has(t.code) ? false : (seen.add(t.code), true)))
+}
+
+/** 담당 필터 값(code 또는 이름) → 그 값에 맞는 팀 id 전부(중복 없음). code 는 정확히, 이름은 앞뒤 공백만 걷고 정확히 대조한다(대소문자를
+ *  구분한다 — code 대조와 같은 규칙). teams 는 그 범위에서 보이는 팀이다(teamsInView·RLS 로 좁힌 행). 화면의 담당 필터(minutes.team_id)와
+ *  같은 기준으로 거르기 위한 것 — code 문자열(minutes.team_code 사본)로 거르면 이름으로 준 값이 맞지 않는다 */
+export function teamIdsMatching(teams: readonly Pick<Team, 'id' | 'code' | 'name'>[], key: string): string[] {
+  const k = key.trim()
+  if (!k) return []
+  return [...new Set(teams.filter((t) => t.code === k || t.name.trim() === k).map((t) => t.id))]
 }
 
 /** teamsVisibleTo 의 code — 같은 규칙(SP4 A2 에서 행 판정 위로 옮겼다. 결과는 옛 정의와 같다) */

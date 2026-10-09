@@ -28,7 +28,7 @@ import { LevelBadge, OwnerBadges, STATUS, StatusChip, fmtDate } from './shared'
 import { WbsAssigneeStagePanel } from './WbsAssigneeStagePanel'
 import { ChangeHistoryList } from './ChangeHistoryList'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes, useTeamSlot } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamLabel, useTeamSlot } from '@/components/app/TeamsProvider'
 import { RightRail, useRightRailOptional, useShellSidebarWidth, useRailMode } from '@/components/app/RightRail'
 import { INSPECTOR_WIDTH, clampInspectorWidth, inspectorRailWidth } from '@/lib/wbs/inspectorWidth'
 import type { DictKey } from '@/lib/i18n/dict'
@@ -82,6 +82,7 @@ export function RowDetailPanel({
   const { t } = useLocale()
   const allTeamCodes = useTeamCodes()
   const slotOf = useTeamSlot()
+  const teamLabelOf = useTeamLabel()
   const rail = useRightRailOptional()
   const sidebarWidth = useShellSidebarWidth()
   const railMode = useRailMode(sidebarWidth, { sync: true })
@@ -752,8 +753,9 @@ export function RowDetailPanel({
                             const on = subTeam === tm
                             return (
                               <button key={tm} onClick={() => setSubTeam(tm)}
-                                className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${on ? 'border-action bg-action-soft text-action' : 'border-border text-fg-secondary hover:bg-surface-subtle'}`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${slotOf(tm).bar}`} />{tm}
+                                title={teamLabelOf(tm)}
+                                className={`inline-flex max-w-full items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${on ? 'border-action bg-action-soft text-action' : 'border-border text-fg-secondary hover:bg-surface-subtle'}`}>
+                                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${slotOf(tm).bar}`} /><span className="truncate">{teamLabelOf(tm)}</span>
                               </button>
                             )
                           })}

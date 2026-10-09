@@ -1,4 +1,5 @@
 import { ilikeOrPattern } from '@/lib/domain/minutes'
+import { teamIdsMatching } from '@/lib/domain/teams'
 import type { TeamCode } from '@/lib/domain/types'
 import {
   repositoryError,
@@ -44,6 +45,21 @@ function mapMinute(row: Row): MinuteRepositoryRecord {
 export function createSupabaseMinutesRepository(client: SupabaseServerClient): MinutesRepository {
   return {
     async searchMinutes({ query, team, projectId, from, to, limit }) {
+      // 담당 필터는 팀 id 로 건다(화면의 담당 필터 minutes.team_id 와 같은 기준) — 값(code 또는 이름)에 맞는, 이 클라이언트가 볼 수 있는
+      // 활성 팀을 먼저 읽는다(RLS 가 범위다 — 도구가 그 범위의 팀인지는 앞에서 검증했다). 두 번 읽는 이유는 or() 필터에 사용자 문자열을
+      // 넣지 않기 위해서다(eq 는 값 전체를 한 인자로 보낸다).
+      // 폴백: 맞는 팀이 하나도 없으면 예전처럼 사본 열 team_code 문자열로 거른다 — 담당 팀 행이 지워져 team_id 가 빈 옛 회의록,
+      // 팀 표를 읽을 수 없는 범위의 호출이 결과를 통째로 잃지 않게. 팀 조회 실패는 폴백하지 않고 오류다(실패를 "없음"으로 읽지 않는다).
+      let teamIds: string[] = []
+      if (team) {
+        const [byCode, byName] = await Promise.all([
+          client.from('teams').select('id, code, name').eq('active', true).eq('code', team),
+          client.from('teams').select('id, code, name').eq('active', true).eq('name', team),
+        ])
+        const failed = byCode.error ?? byName.error
+        if (failed) return repositoryError('MINUTES_READ_FAILED', isRetryableReadError(failed))
+        teamIds = teamIdsMatching([...(byCode.data ?? []), ...(byName.data ?? [])] as { id: string; code: string; name: string }[], team)
+      }
       // 프로젝트 필터는 meeting 역참조가 있어야 성립 — inner 조인이라 회의 미연결 회의록은 제외된다.
       const relation = projectId ? 'meetings!inner(project_id)' : 'meetings(project_id)'
       let request = client
@@ -54,7 +70,7 @@ export function createSupabaseMinutesRepository(client: SupabaseServerClient): M
         const pattern = ilikeOrPattern(query)
         request = request.or(`title.ilike.${pattern},body_md.ilike.${pattern}`)
       }
-      if (team) request = request.eq('team_code', team)
+      if (team) request = teamIds.length > 0 ? request.in('team_id', teamIds) : request.eq('team_code', team)
       if (projectId) request = request.eq('meetings.project_id', projectId)
       if (from) request = request.gte('minute_date', from)
       if (to) request = request.lte('minute_date', to)

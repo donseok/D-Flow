@@ -9,7 +9,7 @@ import type { AttendanceRecord, AttendanceType, ProjectMember, TeamCode } from '
 import type { DictKey } from '@/lib/i18n/dict'
 import { activeVocab, vocabColor, vocabLabel, vocabShort, type AttendanceTypeDef } from '@/lib/settings/vocab'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamLabel } from '@/components/app/TeamsProvider'
 import { Modal } from '@/components/ui/Modal'
 import { ASSISTANT_NAME } from '@/lib/branding'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
@@ -80,6 +80,7 @@ export function AttendanceView({
   const defaultType = selectable[0]?.code ?? ''
   const searchParams = useSearchParams()
   const teamCodes = useTeamCodes()
+  const teamLabelOf = useTeamLabel()   // 표·필터 칩의 팀 글자는 이름 — ?team= 값과 대조는 code 그대로
   // 챗봇 딥링크 필터는 최초 마운트에서 한 번만 읽고, 해제 전까지 달력·목록에 적용한다.
   const [botFilter, setBotFilter] = useState(() => readBotFilter(searchParams, teamCodes, types.map(e => e.code)))
   const [initY, initM] = useMemo(() => initialDate.split('-').map(Number), [initialDate])
@@ -301,7 +302,7 @@ export function AttendanceView({
             {botFilter.from && botFilter.to && (
               <span className="chip bg-surface-subtle tabular-nums text-fg-secondary">{botFilter.from} ~ {botFilter.to}</span>
             )}
-            {botFilter.team && <span className="chip bg-surface-subtle text-fg-secondary">{botFilter.team}</span>}
+            {botFilter.team && <span className="chip bg-surface-subtle text-fg-secondary">{teamLabelOf(botFilter.team)}</span>}
             {botFilter.type && <span className="chip bg-surface-subtle text-fg-secondary">{typeLabel(botFilter.type)}</span>}
             <button onClick={() => setBotFilter(null)} className="btn btn-ghost h-7 px-2 text-meta">
               {locale === 'en' ? 'Clear' : '해제'}
@@ -398,7 +399,7 @@ export function AttendanceView({
                         <div className="font-medium text-fg">{mem?.name ?? t('att.unknown')}</div>
                         {mem?.title && <div className="text-xs text-fg-muted">{mem.title}</div>}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-fg-secondary">{mem?.teams[0]?.code ?? '-'}</td>
+                      <td className="max-w-[12rem] truncate px-4 py-3 text-fg-secondary" title={mem?.teams[0]?.code ? teamLabelOf(mem.teams[0].code) : undefined}>{mem?.teams[0]?.code ? teamLabelOf(mem.teams[0].code) : '-'}</td>
                       <td className="px-4 py-3">
                         <span className={`chip ${meta.chip}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />

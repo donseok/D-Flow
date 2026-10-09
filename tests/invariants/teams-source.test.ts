@@ -9,7 +9,7 @@ const CWD = process.cwd()
 /** 옛 모듈 경로 — 이 파일 자신이 스펙 §7 B 의 grep 0건 검사에 걸리지 않게 조각으로 만든다 */
 const OLD_MODULE = ['teams', 'master'].join('/')
 const OLD_REF = new RegExp(`['"\`][^'"\`]*\\b${OLD_MODULE.replace('/', '\\/')}\\b`)
-export const SOURCE_EXPORTS: readonly string[] = ['TeamsUnavailableError', 'projectOwnTeams', 'projectTeams', 'teamCodesVisibleTo', 'visibleTeams', 'workspaceTeams']
+export const SOURCE_EXPORTS: readonly string[] = ['TeamsUnavailableError', 'projectOwnTeams', 'projectTeams', 'teamCodesVisibleTo', 'visibleTeamIdsMatching', 'visibleTeams', 'workspaceTeams']
 const REMOVED = ['teamsSync', 'activeTeamCodesSync', 'isRegisteredTeamCode', 'isActiveTeamCode', 'refreshTeams', 'activeTeamsForWorkspaces'] as const
 const CALL = new RegExp(`\\b(?:${REMOVED.join('|')})\\s*\\(`)
 /** 전 워크스페이스 가시 범위({ all: true })를 만들 수 있는 유일한 파일 — 플랫폼 관리자 판정(teamViewOfScope) */

@@ -4,11 +4,14 @@
 // 삭제 버튼은 의도적으로 없다: 비활성화가 삭제(데이터 보존, 사용자 결정 2026-07-24).
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, Power } from 'lucide-react'
+import { ArrowDown, ArrowUp, Eye, EyeOff, Power, Users } from 'lucide-react'
 import { addTeam, updateTeam } from '@/app/actions/teams'
 import { useToast } from '@/components/ui/Toast'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { TeamNameCell } from '@/components/settings/TeamNameCell'
-import { teamSlot } from '@/lib/domain/teamColor'
+import { TeamAddForm, EMPTY_TEAM_DRAFT, type TeamDraft } from '@/components/settings/TeamAddForm'
+import { TeamColorPicker } from '@/components/settings/TeamColorPicker'
 
 export interface AdminTeamRow {
   id: string
@@ -27,7 +30,8 @@ export function TeamsManager({ teams, workspaceId }: {
 }) {
   const router = useRouter()
   const { toast } = useToast()
-  const [newCode, setNewCode] = useState('')
+  const { t: tr } = useLocale()
+  const [draft, setDraft] = useState<TeamDraft>(EMPTY_TEAM_DRAFT)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -41,24 +45,23 @@ export function TeamsManager({ teams, workspaceId }: {
   }
 
   function submitAdd() {
-    const code = newCode.trim()
-    if (!code) { setError('팀 이름을 입력하세요.'); return }
+    const name = draft.name.trim()
+    if (!name) { setError('팀 이름을 입력하세요.'); return }
+    // 코드 칸이 비면 넘기지 않는다 — 액션이 이름에서 기본 코드를 만든다(화면이 미리 보인 값과 같은 함수)
+    const code = draft.code.trim() || null
     run(async () => {
-      const r = await addTeam(workspaceId, code)
-      if (r.ok) { setNewCode(''); toast({ title: `'${code}' 팀을 추가했습니다.`, variant: 'success' }) }
+      const r = await addTeam(workspaceId, name, code)
+      if (r.ok) { setDraft(EMPTY_TEAM_DRAFT); toast({ title: `'${name}' 팀을 추가했습니다.`, variant: 'success' }) }
       return r
     })
   }
 
-  /** 정렬 스왑 — 인접 행과 sortOrder 교환(2건 update). */
+  /** 정렬 스왑 — 인접 행과 순번을 맞바꾼다. 한 액션이 두 행을 바꾸고 둘째가 실패하면 첫 행을 되돌린다(옛 화면은 액션 두 번이라
+   *  사이에 실패하면 두 팀이 같은 순번으로 남았다). */
   function move(idx: number, dir: -1 | 1) {
     const a = teams[idx], b = teams[idx + dir]
     if (!a || !b) return
-    run(async () => {
-      const r1 = await updateTeam(a.id, { sortOrder: b.sortOrder })
-      if (!r1.ok) return r1
-      return updateTeam(b.id, { sortOrder: a.sortOrder })
-    })
+    run(() => updateTeam(a.id, { swapOrderWith: b.id }))
   }
 
   return (
@@ -71,32 +74,24 @@ export function TeamsManager({ teams, workspaceId }: {
             숨겨지고 기존 데이터는 보존됩니다.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            value={newCode}
-            onChange={e => setNewCode(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') submitAdd() }}
-            placeholder="새 팀 이름"
-            maxLength={20}
-            className="app-input w-40"
-            disabled={pending}
-          />
-          <button onClick={submitAdd} className="btn btn-primary" disabled={pending}>
-            <Plus className="h-4 w-4" />팀 추가
-          </button>
-        </div>
+        <TeamAddForm value={draft} onChange={setDraft} onSubmit={submitAdd} pending={pending} />
       </div>
 
       <div className="p-5 sm:p-6">
         {error && (
           <p role="alert" className="mb-3 rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{error}</p>
         )}
+        {teams.length === 0 ? (
+          <EmptyState icon={Users} title={tr('settings.teams.emptyTitle')} description={tr('settings.teams.emptyDescCommon')} />
+        ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
+          <table className="w-full min-w-[680px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-fg-muted">
                 <th className="py-2 pr-3">순서</th>
-                <th className="py-2 pr-3">팀</th>
+                <th className="px-2.5 py-2">{tr('settings.teams.colColor')}</th>
+                <th className="py-2 pr-3">{tr('settings.teams.colName')}</th>
+                <th className="py-2 pr-3">{tr('settings.teams.colCode')}</th>
                 <th className="py-2 pr-3">상태</th>
                 <th className="py-2 pr-3">팀별 진척현황</th>
                 <th className="py-2 pr-3 text-right">작업</th>
@@ -108,22 +103,33 @@ export function TeamsManager({ teams, workspaceId }: {
                   <td className="py-2.5 pr-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => move(i, -1)} disabled={pending || i === 0}
-                        className="btn btn-ghost btn-sm" aria-label={`${t.code} 위로`}>
+                        className="btn btn-ghost btn-sm" aria-label={`${t.name} 위로`}>
                         <ArrowUp className="h-3.5 w-3.5" />
                       </button>
                       <button onClick={() => move(i, 1)} disabled={pending || i === teams.length - 1}
-                        className="btn btn-ghost btn-sm" aria-label={`${t.code} 아래로`}>
+                        className="btn btn-ghost btn-sm" aria-label={`${t.name} 아래로`}>
                         <ArrowDown className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </td>
+                  <td className="px-2.5 py-2.5">
+                    <TeamColorPicker team={t} disabled={pending}
+                      onPick={(slot) => run(async () => {
+                        const r = await updateTeam(t.id, { colorSlot: slot })
+                        if (r.ok) toast({ title: tr('settings.teams.colorSaved').replace('{name}', t.name), variant: 'success' })
+                        return r
+                      })} />
+                  </td>
                   <td className="py-2.5 pr-3">
-                    <TeamNameCell team={t} disabled={pending} chip={teamSlot(t).chip}
+                    <TeamNameCell team={t} disabled={pending}
                       onRename={async (name) => {
                         const r = await updateTeam(t.id, { name })
-                        if (r.ok) { toast({ title: `'${t.code}' 팀 이름을 '${name}'(으)로 바꿨습니다.`, variant: 'success' }); router.refresh() }
+                        if (r.ok) { toast({ title: `'${t.name}' 팀 이름을 '${name}'(으)로 바꿨습니다.`, variant: 'success' }); router.refresh() }
                         return r
                       }} />
+                  </td>
+                  <td className="py-2.5 pr-3">
+                    <span data-team-code className="font-mono text-xs text-fg-secondary" title={tr('settings.teams.codeTitle')}>{t.code}</span>
                   </td>
                   <td className="py-2.5 pr-3">
                     <span className={`chip ${t.active ? 'bg-success-weak text-success' : 'bg-surface-subtle text-fg-muted'}`}>
@@ -158,9 +164,11 @@ export function TeamsManager({ teams, workspaceId }: {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-xs text-fg-muted">
+        )}
+        <p className="mt-3 text-xs leading-5 text-fg-muted">
+          {tr('settings.teams.codeExplain')}{' '}
           팀 추가 시 회의록 보관함에 그 팀의 최상위 폴더(자동 편철 앵커)가 함께 생성됩니다. 이름을 바꾸면
-          그 폴더 이름도 따라 바뀌고, 팀 코드(엑셀·필터·봇이 쓰는 식별자)는 그대로입니다.
+          그 폴더 이름도 따라 바뀝니다.
         </p>
       </div>
     </section>

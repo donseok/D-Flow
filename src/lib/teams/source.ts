@@ -10,7 +10,7 @@ import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
 import { fetchAllByKeyset } from '@/lib/data/paging'
 import type { TeamView } from '@/lib/domain/authz'
-import { resolveTeamsForProject, teamsVisibleTo, type Team } from '@/lib/domain/teams'
+import { resolveTeamsForProject, teamIdsMatching, teamsInView, teamsVisibleTo, type Team } from '@/lib/domain/teams'
 import type { TeamCode } from '@/lib/domain/types'
 import { getProjectConfig, type ConfigReadClient, type ProjectConfig } from '@/lib/settings/projectConfig'
 
@@ -102,6 +102,17 @@ export function workspaceTeams(workspaceId: string, opts?: SourceOpts): Promise<
  *  읽고, 봇 범위의 모듈 좁히기도 프로젝트 ⊆ 워크스페이스 허용) — 워크스페이스를 모르는 범위(프로젝트만)만 프로젝트 id 로 좁힌다.
  *  플랫폼 관리자(view.all)는 전부다. 조회 실패·잘림·읽는 사이 변경은 TeamsUnavailableError(빈 목록으로 위장하지 않는다). */
 export async function visibleTeams(view: TeamView, opts?: SourceOpts): Promise<Team[]> {
+  return teamsVisibleTo(await loadTeamsInView(view, opts), view)
+}
+
+/** 담당 필터 값(code 또는 이름)에 맞는 가시 범위 활성 팀의 id — 같은 code 의 공용·전용 팀을 모두 담는다(visibleTeams 는 code 마다 하나).
+ *  외부 회의록 GET 의 ?team= 이 화면과 같은 기준(minutes.team_id)으로 거르게 한다. 맞는 팀이 없으면 빈 목록. 실패는 TeamsUnavailableError */
+export async function visibleTeamIdsMatching(view: TeamView, key: string, opts?: SourceOpts): Promise<string[]> {
+  return teamIdsMatching(teamsInView(await loadTeamsInView(view, opts), view), key)
+}
+
+/** 가시 범위 질의(위 visibleTeams 주석의 좁히기) — 판정 전의 활성 팀 행. 프로젝트 판정·code 중복 제거는 호출부의 순수 함수가 한다 */
+async function loadTeamsInView(view: TeamView, opts?: SourceOpts): Promise<Team[]> {
   let scope: { col: 'workspace_id' | 'project_id'; ids: string[] } | null = null
   if (!view.all) {
     const ws = [...view.workspaceIds]
@@ -116,7 +127,7 @@ export async function visibleTeams(view: TeamView, opts?: SourceOpts): Promise<T
       const q = scope ? base.in(scope.col, scope.ids) : base
       return (after ? q.gt('id', String(after.id)) : q).order('id').limit(limit)
     })
-    return teamsVisibleTo(teamsFromRows(rows), view)
+    return teamsFromRows(rows)
   } catch (e) {
     throw new TeamsUnavailableError('볼 수 있는 팀 목록을 불러오지 못했습니다.', { cause: e })
   }

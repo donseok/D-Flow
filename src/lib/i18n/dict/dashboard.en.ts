@@ -105,4 +105,8 @@ export const dashboardEn: Record<keyof typeof dashboardKo, string> = {
   'dash.issues.dueToday': 'Due today',
   'dash.issues.ddaySuffix': ' due',
   'dash.issues.moreInList': 'See all in issues',
+  // Team progress — when there are no teams
+  'dash.teamProgress.emptyTitle': 'No teams to show',
+  'dash.teamProgress.emptyDesc': 'Add a team to see progress by team here. Teams are created under “Teams” in project settings (teams hidden from progress are not listed).',
+  'dash.teamProgress.emptyAction': 'Add a team',
 }

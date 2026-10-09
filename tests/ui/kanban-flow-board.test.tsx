@@ -36,6 +36,7 @@ vi.mock('@/components/providers/LocaleProvider', () => ({
 vi.mock('@/components/app/TeamsProvider', () => ({
   useTeamCodes: () => ['PMO', 'DEV'],
   useTeams: () => [],
+  useTeamLabel: () => (c: string) => c,
   useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }),
 }))
 vi.mock('@/components/chat/BotPageContextProvider', () => ({

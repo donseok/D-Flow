@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Bot, RotateCcw, Send, X } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { useTeamCodes } from '@/components/app/TeamsProvider'
+import { useTeamCodes, useTeamLabel } from '@/components/app/TeamsProvider'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { fetchMinuteFoldersLite } from '@/app/actions/minutes'
 import { isTeamRootFolder, teamChildFoldersOf } from '@/lib/domain/minutes'
@@ -133,6 +133,7 @@ export function MinuteChatPanel({ minuteId, projects = [], workspaceId }: {
   const folderWs = useMinutesScope()?.workspaceId ?? workspaceId
   const { t } = useLocale()
   const teamCodes = useTeamCodes()
+  const teamLabelOf = useTeamLabel()   // 탭 글자는 팀 이름 — 키(필터 값)는 code 그대로
   const [open, setOpen] = useState(true)
   const [scope, setScope] = useState<ChatScope>('doc')
   const [team, setTeam] = useState<TeamKey>('ALL')
@@ -204,7 +205,7 @@ export function MinuteChatPanel({ minuteId, projects = [], workspaceId }: {
         <div className="space-y-1.5 border-b border-border px-3 py-1.5">
           <div className="overflow-x-auto">
             <SegmentedTabs<TeamKey>
-              tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamCodes.map(tk => ({ key: tk, label: tk }))]}
+              tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamCodes.map(tk => ({ key: tk, label: teamLabelOf(tk) }))]}
               value={team} onChange={tk => { setTeam(tk); setFolderId(null) }} size="sm" />
           </div>
           {subFolders.length > 0 && (

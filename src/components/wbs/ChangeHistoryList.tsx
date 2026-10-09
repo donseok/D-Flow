@@ -5,6 +5,7 @@ import type { ChangeActorRole, ChangeLogEntry } from '@/app/actions/wbs'
 import type { TeamCode } from '@/lib/domain/types'
 import { formatWeightPct } from '@/lib/domain/format'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { useTeamLabel } from '@/components/app/TeamsProvider'
 import { SPEC_UPDATED_TOKEN } from '@/lib/domain/wbsSpecLog'
 import type { DictKey } from '@/lib/i18n/dict'
 import { stampIn } from '@/lib/domain/calendar'
@@ -44,10 +45,12 @@ function fmtAt(iso: string, timeZone: string): string {
   return stampIn(timeZone, d).replace(/-/g, '.')
 }
 
-function actorLabel(team: TeamCode | null, role: ChangeActorRole | null, t: Tr): string {
+/** 저장 값(actorTeam)은 그때의 팀 code 다 — 글자만 지금의 팀 이름으로 보인다(목록 밖 팀은 code 그대로) */
+function actorLabel(team: TeamCode | null, role: ChangeActorRole | null, t: Tr, teamLabelOf: (code: string) => string): string {
   const r = role ? t(ROLE_KEY[role]) : null
-  if (team && r) return `${team} · ${r}`
-  return r ?? team ?? t('wbs.unknownActor')
+  const tm = team ? teamLabelOf(team) : null
+  if (tm && r) return `${tm} · ${r}`
+  return r ?? tm ?? t('wbs.unknownActor')
 }
 
 /**
@@ -61,6 +64,7 @@ export function ChangeHistoryList({ logs, timeZone, extraAxisLabel = null }: {
   extraAxisLabel?: string | null
 }) {
   const { t } = useLocale()
+  const teamLabelOf = useTeamLabel()
   // 사용자 정의 필드 이력(field='custom.<key>')은 키가 아니라 지금의 라벨·서식으로 보인다 — 정의를 못 읽거나 지운 필드는 키·원문 그대로
   const fieldScope = useCustomFieldScope()
   const customDef = (field: string): FieldDef | undefined =>
@@ -100,7 +104,7 @@ export function ChangeHistoryList({ logs, timeZone, extraAxisLabel = null }: {
                   <span className="text-fg-muted">→</span>
                   <span className="ml-1 font-semibold text-fg">{value(log.field, log.newValue)}</span>
                 </span>
-                <span className="col-start-2 text-meta text-fg-muted sm:col-start-3">{actorLabel(log.actorTeam, log.actorRole, t)}</span>
+                <span className="col-start-2 text-meta text-fg-muted sm:col-start-3">{actorLabel(log.actorTeam, log.actorRole, t, teamLabelOf)}</span>
               </li>
             ))}
           </ol>

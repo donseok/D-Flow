@@ -113,4 +113,8 @@ export const dashboardKo = {
   'dash.issues.dueToday': '오늘 마감',
   'dash.issues.ddaySuffix': ' 임박',
   'dash.issues.moreInList': '이슈관리에서 보기',
+  // 팀별 진척현황 — 팀이 없을 때
+  'dash.teamProgress.emptyTitle': '표시할 팀이 없습니다',
+  'dash.teamProgress.emptyDesc': '팀을 추가하면 팀별 진척이 여기에 보입니다. 팀은 프로젝트 설정의 「팀 관리」에서 만듭니다(진척현황에서 숨긴 팀은 나오지 않습니다).',
+  'dash.teamProgress.emptyAction': '팀 추가하러 가기',
 } as const

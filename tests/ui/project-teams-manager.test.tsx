@@ -22,9 +22,10 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({ toast: mocks.toast }),
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (key: string) => key }),
-}))
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  return { useLocale: () => ({ locale: 'ko', t: (key: string) => t('ko', key as Parameters<typeof t>[1]) }) }
+})
 vi.mock('@/app/actions/projectTeams', () => ({
   addProjectTeam: mocks.addProjectTeam,
   updateProjectTeam: mocks.updateProjectTeam,
@@ -104,7 +105,7 @@ describe('ProjectTeamsManager', () => {
     mocks.addProjectTeam.mockResolvedValue({ ok: true })
     await act(async () => continueBtn.click())
 
-    expect(mocks.addProjectTeam).toHaveBeenCalledWith('p1', '신팀')
+    expect(mocks.addProjectTeam).toHaveBeenCalledWith('p1', '신팀', null)   // 코드 칸을 비웠다 — 서버가 이름에서 만든다
   })
 
   it('이미 프로젝트 팀이 정의돼 있으면(inherited=false) 경고 없이 곧장 추가한다', async () => {
@@ -127,6 +128,6 @@ describe('ProjectTeamsManager', () => {
 
     // 경고 모달 없이 즉시 호출된다.
     expect(document.body.textContent).not.toContain('공용 팀 상속 종료')
-    expect(mocks.addProjectTeam).toHaveBeenCalledWith('p1', '추가팀')
+    expect(mocks.addProjectTeam).toHaveBeenCalledWith('p1', '추가팀', null)
   })
 })

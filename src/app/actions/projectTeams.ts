@@ -7,14 +7,16 @@
 import { revalidatePath } from 'next/cache'
 import { requireProjectAdmin } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { normalizeNewTeamCode, reservedTeamNames } from '@/lib/domain/teams'
+import { reservedTeamNames } from '@/lib/domain/teams'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
-import { pickTeamColor } from '@/lib/domain/teamColor'
-import { checkTeamRename, newTeamCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
+import { pickTeamColor, teamColorOfSlot } from '@/lib/domain/teamColor'
+import { checkNewTeam, checkTeamRename, newTeamCodeClash, newTeamNameClash, teamCodeClashError } from '@/lib/domain/teamName'
+import { ERR_TEAM_ORDER_STALE, swapTeamOrder } from '@/lib/teams/swapOrder'
 import { referencedCommonTeamCodes } from '@/lib/teams/referencedCommon'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import { teamRootNameError } from '@/lib/minutes/teamRootErrors'
+import { enqueueTeamRenameIndexChange } from '@/lib/ai/index/enqueueChange'
 import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 
 export type ProjectTeamActionResult = { ok: true } | { ok: false; error: string }
@@ -23,11 +25,14 @@ export type ProjectTeamActionResult = { ok: true } | { ok: false; error: string 
 const ERR_TEAM_LOOKUP = '팀 정보를 확인하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_CREATE = '팀을 만들지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_TEAM_UPDATE = '팀을 수정하지 못했습니다. 잠시 후 다시 시도하세요.'
+const ERR_TEAM_COLOR = '고를 수 없는 색입니다.'
+const ERR_TEAM_NOT_OWN = '이 프로젝트의 팀이 아니거나 존재하지 않습니다.'
 const ERR_TEAM_COPY = '공용 팀을 전환하지 못했습니다. 잠시 후 다시 시도하세요.'
 const ERR_COMMON_IN_USE = (code: string) =>
   `이 프로젝트가 공용 팀 '${code}'를 이미 쓰고 있어 같은 코드의 프로젝트 팀을 만들지 않았습니다 — 만들면 담당·명단이 두 팀으로 갈라집니다.`
 
-export async function addProjectTeam(projectId: string, input: string): Promise<ProjectTeamActionResult> {
+/** 전용 팀 추가 — 이름(바꿀 수 있다)과 코드(바꿀 수 없는 식별자)를 따로 받는다. 코드를 비우면 이름에서 만든 기본값(defaultTeamCode) */
+export async function addProjectTeam(projectId: string, name: string, code?: string | null): Promise<ProjectTeamActionResult> {
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   // 예약어는 그 프로젝트의 단계 이름·추가 축 이름까지(D38) — 설정을 못 읽으면 만들지 않는다(쓰기 전 선행 조회 실패는 중단, 3원칙 ②)
@@ -39,7 +44,7 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
     console.error('[projectTeams] 예약어 판정용 설정 조회 실패:', e instanceof Error ? e.message : e)
     return { ok: false, error: '프로젝트 설정을 확인할 수 없어 팀을 만들지 않았습니다. 잠시 후 다시 시도하세요.' }
   }
-  const norm = normalizeNewTeamCode(input, reserved)
+  const norm = checkNewTeam({ name, code, reserved })
   if (!norm.ok) return norm
   // requireProjectAdmin 이 통과했으면 roleIn 이 이미 projectWorkspace 에서 이 프로젝트를 찾은 뒤다
   // (domain/authz.ts roleIn ④) — 여기서 다시 없을 수 없다. projects 테이블을 별도 조회하지 않는다
@@ -56,6 +61,9 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
   if (siblings.some((s) => s.code === norm.code)) return { ok: false, error: `'${norm.code}' 팀이 이미 이 프로젝트에 있습니다.` }
   const clash = newTeamCodeClash(norm.code, siblings)
   if (clash) return { ok: false, error: teamCodeClashError(norm.code, clash) }
+  // 이름도 같은 프로젝트 다른 팀의 code·이름과 겹치면 거부한다 — 개명(checkTeamRename)과 같은 규칙
+  const nameClash = newTeamNameClash(norm.name, norm.code, siblings)
+  if (nameClash) return { ok: false, error: teamCodeClashError(norm.name, nameClash) }
   // 이 프로젝트가 이미 쓰는 공용 팀과 같은 code 의 전용 팀은 만들지 않는다(A2-1 리뷰 보안 P3 — 가져오기 Z4 와 같은 판정). 만들면 기존 공용
   // 참조(담당·명단·영역·초대)와 같은 code·다른 id 가 된다(D4 분열). 판정 조회 실패는 쓰기 전 선행 조회 실패라 중단한다(3원칙 ②)
   // 대소문자·전각·개명 이름만 다른 참조 중인 공용 팀도 겹침으로 거부한다(A2-2 리뷰 보안 P3 — 전용 qa 가 공용 QA 참조와 갈라진다)
@@ -76,7 +84,7 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
   const sortOrder = Number((max.data as { sort_order?: number } | null)?.sort_order ?? -1) + 1
 
   const ins = await admin.from('teams')
-    .insert({ code: norm.code, name: norm.code, sort_order: sortOrder, project_id: projectId, workspace_id: workspaceId, color: pickTeamColor(sortOrder) })
+    .insert({ code: norm.code, name: norm.name, sort_order: sortOrder, project_id: projectId, workspace_id: workspaceId, color: pickTeamColor(sortOrder) })
   if (ins.error) return { ok: false, error: failWith('projectTeams.add', ins.error, ERR_TEAM_CREATE) }
 
   revalidatePath('/(app)/p/[projectId]', 'layout')
@@ -85,15 +93,34 @@ export async function addProjectTeam(projectId: string, input: string): Promise<
 
 export async function updateProjectTeam(
   projectId: string, teamId: string,
-  patch: { active?: boolean; progressVisible?: boolean; sortOrder?: number; name?: string },
+  patch: { active?: boolean; progressVisible?: boolean; sortOrder?: number; name?: string; colorSlot?: number; swapOrderWith?: string },
 ): Promise<ProjectTeamActionResult> {
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   const admin = createAdminClient()
+  // 순서 맞바꾸기(위·아래 단추) — 두 행을 한 액션에서 바꾸고 둘째가 실패하면 첫 행을 되돌린다(lib/teams/swapOrder)
+  if (patch.swapOrderWith !== undefined) {
+    if (typeof patch.swapOrderWith !== 'string' || !patch.swapOrderWith) return { ok: false, error: ERR_TEAM_NOT_OWN }
+    const sw = await swapTeamOrder(admin, { projectId }, teamId, patch.swapOrderWith)
+    if (!sw.ok) {
+      if (sw.kind === 'missing') return { ok: false, error: ERR_TEAM_NOT_OWN }
+      if (sw.kind === 'stale') return { ok: false, error: ERR_TEAM_ORDER_STALE }
+      return { ok: false, error: failWith('projectTeams.swapOrder', sw.cause, ERR_TEAM_UPDATE) }
+    }
+    revalidatePath('/(app)/p/[projectId]', 'layout')
+    return { ok: true }
+  }
   const row: Record<string, unknown> = {}
+  let renamed = false
   if (typeof patch.active === 'boolean') row.active = patch.active
   if (typeof patch.progressVisible === 'boolean') row.progress_visible = patch.progressVisible
   if (typeof patch.sortOrder === 'number' && Number.isInteger(patch.sortOrder)) row.sort_order = patch.sortOrder
+  if (patch.colorSlot !== undefined) {
+    // 색은 테마 슬롯으로만 고른다(임의 hex 금지 — 다크 대비). 저장은 그 슬롯의 팔레트 hex(teamSlotIndex 가 되찾는다)
+    const color = teamColorOfSlot(patch.colorSlot)
+    if (!color) return { ok: false, error: ERR_TEAM_COLOR }
+    row.color = color
+  }
   if (patch.name !== undefined) {
     // 개명(D37) — code 는 그대로. 예약어는 그 프로젝트의 단계 이름까지, 겹침은 그 프로젝트 전용 팀끼리. 선행 조회 실패는 중단(3원칙 ②)
     let reserved: string[]
@@ -111,6 +138,7 @@ export async function updateProjectTeam(
     const checked = checkTeamRename({ name: patch.name, selfId: teamId, selfCode: self.code, siblings, reserved })
     if (!checked.ok) return checked
     row.name = checked.name
+    renamed = checked.name !== self.name
   }
   if (Object.keys(row).length === 0) return { ok: false, error: '변경할 항목이 없습니다.' }
   // .eq('project_id') 를 함께 건다 — 관리자 가드가 통과한 프로젝트의 행만 만진다(전역 행 오수정 차단).
@@ -124,6 +152,8 @@ export async function updateProjectTeam(
     return { ok: false, error: failWith('projectTeams.update', upd.error, ERR_TEAM_UPDATE) }
   }
   if (!upd.data || upd.data.length === 0) return { ok: false, error: '이 프로젝트의 팀이 아니거나 존재하지 않습니다.' }
+  // 색인 본문은 팀을 이름으로 적는다 — 이름이 바뀌었으면 그 팀의 작업·회의록을 다시 색인한다(실패는 개명을 막지 않는다)
+  if (renamed) await enqueueTeamRenameIndexChange(teamId)
   revalidatePath('/(app)/p/[projectId]', 'layout')
   return { ok: true }
 }

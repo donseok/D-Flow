@@ -55,7 +55,7 @@ export function validateArea(
 export const ERR_AREA_CODE_IMMUTABLE = '영역 코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.'
 
 /** 영역 편집기의 팀 선택지 — active=false 인 팀은 이미 배정된 영역에서만 보인다(해제할 수 있게). 새로 고를 수는 없다. */
-export interface AreaTeamOption { id: string; code: string; active: boolean }
+export interface AreaTeamOption { id: string; code: string; active: boolean; /** 표시 이름 — 화면 글자(없으면 code) */ name?: string }
 
 /**
  * 주간 영역 편집기의 팀 선택지(SP4 §4.1.8) — 그 프로젝트 팀(projectTeams 규칙, 비활성 포함 — 편집기가 활성만 새로 고르게 거른다)
@@ -64,19 +64,21 @@ export interface AreaTeamOption { id: string; code: string; active: boolean }
  * (그 워크스페이스 공용 ∪ 그 프로젝트 전용)에서 찾고, 거기도 없으면 뺀다(표는 '알 수 없는 팀'으로 보인다).
  */
 export function areaTeamOptions(
-  projectTeams: readonly Pick<Team, 'id' | 'code' | 'active'>[],
-  knownTeams: readonly { id: string; code: string }[],
+  projectTeams: readonly (Pick<Team, 'id' | 'code' | 'active'> & { name?: string })[],
+  knownTeams: readonly { id: string; code: string; name?: string }[],
   areas: readonly { teams: readonly { teamId: string }[] }[],
 ): AreaTeamOption[] {
-  const out: AreaTeamOption[] = projectTeams.map(t => ({ id: t.id, code: t.code, active: t.active }))
+  // 이름은 원천이 줄 때만 싣는다(화면 글자 — 없으면 code 로 그린다)
+  const named = (name: string | undefined) => (name !== undefined ? { name } : {})
+  const out: AreaTeamOption[] = projectTeams.map(t => ({ id: t.id, code: t.code, active: t.active, ...named(t.name) }))
   const seen = new Set(out.map(t => t.id))
-  const codeOf = new Map(knownTeams.map(t => [t.id, t.code]))
+  const knownOf = new Map(knownTeams.map(t => [t.id, t]))
   for (const a of areas) {
     for (const { teamId } of a.teams) {
       if (seen.has(teamId)) continue
       seen.add(teamId)
-      const code = codeOf.get(teamId)
-      if (code !== undefined) out.push({ id: teamId, code, active: false })
+      const known = knownOf.get(teamId)
+      if (known !== undefined) out.push({ id: teamId, code: known.code, active: false, ...named(known.name) })
     }
   }
   return out
