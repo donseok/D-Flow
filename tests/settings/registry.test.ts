@@ -11,7 +11,7 @@ import {
 } from '@/lib/settings/registry'
 import { DEFAULT_MILESTONE_KEYWORDS, parseLevelLabels, parseStageCredits } from '@/lib/settings/defs/project'
 import { normalizeDomain, parseAllowedDomainsSetting } from '@/lib/settings/defs/workspace'
-import { CATALOG_META, PLANNED_KEYS } from '@/lib/settings/catalog-meta'
+import { CATALOG_META, E2E_EVIDENCE, PLANNED_KEYS, baseStatusOf } from '@/lib/settings/catalog-meta'
 import { DEFAULT_STAGE_CREDITS } from '@/lib/domain/stageCredits'
 
 const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[]
@@ -323,37 +323,40 @@ describe('카탈로그 메타와 사전', () => {
   it('등록 키마다 메타가 있고 마감 상태가 §3.6 표와 같다. 미등록 키(PLANNED_KEYS)는 남지 않았다', () => {
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(KEYS)].sort())
     const status = (k: string) => CATALOG_META[k as keyof typeof CATALOG_META].status
+    // 2026-10-10 — 소비처가 다 이어진(wired) 키는 설정 → 화면 → 격리 → 원복을 완주한 E2E 단계가 근거로 붙어야 verified 다(catalog-meta 의 E2E_EVIDENCE —
+    // 키마다 한 줄). 근거 줄이 없으면 wired 그대로다. 아래 주석의 'wired' 는 그 기준 상태를 말한다
+    const wiredOrEvidenced = (k: string) => (k in E2E_EVIDENCE ? 'verified' : 'wired')
+    const expectWired = (k: string) => { expect(baseStatusOf(k as keyof typeof CATALOG_META), k).toBe('wired'); expect(status(k), k).toBe(wiredOrEvidenced(k)) }
     // wbs.excel_profile 은 SP4 A2 가 verified 로 올렸다(표준 레이아웃·한 경로 내보내기·표기 — catalog-meta.ts 의 그 행)
     expect(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.mail_from_name', 'core.level_labels', 'core.milestone_keywords', 'modules.enabled', 'wbs.excel_profile']
       .map(status)).toEqual(Array(8).fill('verified'))
     // 2026-10-09 재점검 — 강조색은 세 범위 셸이 모두 저장값을 싣는다(wired). 같은 날 끊긴 자리를 이어 로고(전역 범위의 탭 아이콘)와 메뉴(전역 검색)도
     // wired. 제품 이름은 2026-10-10 에 남은 소비처 셋(주간 브리핑·챗 v2 합성 프롬프트, wbs.md 오류문)을 이어 wired
     // (제품 이름: 프로젝트·전역 탭 제목 등 / 로고: 전역 범위 탭 아이콘 / 메뉴: 전역 검색의 메뉴 목록 — catalog-meta 의 각 행 주석)
-    expect(['branding.product_name', 'branding.logo', 'navigation.menu'].map(status)).toEqual(['wired', 'wired', 'wired'])
-    expect(status('branding.accent')).toBe('wired')
+    for (const k of ['branding.product_name', 'branding.logo', 'navigation.menu', 'branding.accent']) expectWired(k)
     // 추가 축 이름 — 편집기(설정 화면)·표시 소비처(WBS 화면·가져오기 마법사·엑셀 머리와 감지 별칭)·테스트가 붙어 wired
-    expect(status('core.extra_axis_label')).toBe('wired')
+    expectWired('core.extra_axis_label')
     // SP5b Z — 크레딧 표와 흐름 다섯은 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성(Z) 뒤 verified
     expect(['workflow.stage_credits', 'workflow.credit_policy', 'workflow.wbs_stage_labels', 'workflow.approval_steps', 'workflow.approval_distinct_approvers',
       'workflow.predecessor_gate'].map(status)).toEqual(Array(6).fill('verified'))
     // SP5 A 과제 29 — 달력 셋은 정의·편집·소비처·테스트 네 연결이 끝나 verified(스펙 D44)
     expect(['calendar.timezone', 'calendar.working_days', 'calendar.week_start'].map(status)).toEqual(Array(3).fill('verified'))
     // SP3b UI-3 — portal.widgets 는 소비처(과제 10 홈 v1)까지 네 연결이라 wired, views.default도 작업 계획 소비처(과제 14)까지 wired
-    expect(status('portal.widgets')).toBe('wired')
-    expect(status('views.default')).toBe('wired')
+    expectWired('portal.widgets')
+    expectWired('views.default')
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('portal.widgets')
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('views.default')
     // SPU1 — security.local_drafts 는 정의·편집기·소비처(초안 저장소·위키 편집기)·테스트가 붙어 wired, 계획 목록에서 빠졌다
-    expect(status('security.local_drafts')).toBe('wired')
+    expectWired('security.local_drafts')
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('security.local_drafts')
     // SP8 — notify.policy 는 정의·편집기·발행 관문(emit)·테스트가 붙어 wired, 계획 목록에서 빠졌다
-    expect(status('notify.policy')).toBe('wired')
+    expectWired('notify.policy')
     expect(PLANNED_KEYS.map((p) => p.key)).not.toContain('notify.policy')
     expect(['forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'].map(status)).toEqual(Array(4).fill('verified'))
     expect(PLANNED_KEYS.map((p) => p.key).some((k) => k.startsWith('forms.'))).toBe(false)
     expect(PLANNED_KEYS.some((p) => KEYS.includes(p.key))).toBe(false)
     // SP7 — minutes.auto_file_by_path 는 정의·편집기·소비처(외부 업로드 라우트)·테스트가 붙어 wired. 마지막 예정 키였다 — 목록이 비었다
-    expect(status('minutes.auto_file_by_path')).toBe('wired')
+    expectWired('minutes.auto_file_by_path')
     expect(PLANNED_KEYS).toEqual([])
   })
   it('키마다 라벨·설명 사전 키가 ko·en 둘 다 있다', () => {

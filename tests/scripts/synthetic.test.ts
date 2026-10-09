@@ -138,6 +138,20 @@ describe('e2e-synthetic.mjs — SP4 A1 단계(S1 추가·S2·S4(월))', () => {
     for (let i = 1; i < order.length; i++) expect(at(order[i - 1]), `${order[i - 1]} < ${order[i]}`).toBeLessThan(at(order[i]))
     expect(at('S7-bot-notifications')).toBeLessThan(src.indexOf('Object.entries(PENDING_STEPS)'))
   })
+  it('S7b(알림 정책의 두 워크스페이스 격리)는 S7 뒤·대기 단계 기록 앞에 있고, 담당 지정은 작업 계획 화면의 액션이며 정책은 끝에 되돌린다', () => {
+    const at = (n: string) => src.indexOf(`step('${n}'`)
+    expect(at('S7b-notify-isolation')).toBeGreaterThan(at('S7-bot-notifications'))
+    expect(at('S7b-notify-isolation')).toBeLessThan(src.indexOf('Object.entries(PENDING_STEPS)'))
+    expect(src).toContain("setWbsAssignee: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsAssignee', worker: '/p/[projectId]/wbs/page' }")
+    expect(readFileSync('src/app/actions/wbsAssign.ts', 'utf8')).toMatch(/^export async function setWbsAssignee\(/m)
+    const s7b = src.slice(src.indexOf('// ── S7b'), src.indexOf('Object.entries(PENDING_STEPS)'))
+    // 정책은 설정 화면의 액션으로만 쓴다(R 워크스페이스 하나) — C 의 설정은 건드리지 않는다
+    expect(s7b.match(/'updateWorkspaceSettings',/g)).toHaveLength(1)
+    expect(s7b).toContain('[wsR.id, { expectedRevision: doc.revision')
+    expect(s7b).not.toMatch(/wsC\.id, \{ expectedRevision/)
+    expect(s7b).toMatch(/finally \{[\s\S]*await setRPolicy\(stored\)/)
+    expect(s7b).toContain('...notifyIsolationChecks({')
+  })
   it('사용자 정의 필드 및 개인 알림 서버 액션 — 백필·사용건수·퍼지 및 값·알림 설정 저장', () => {
     for (const [name, worker] of [
       ['getCustomFieldUsage', '/p/[projectId]/settings/page'],

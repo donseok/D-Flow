@@ -37,12 +37,17 @@
 //        기록, 세션의 소속 직접 삭제 거부, 제거 뒤 권한 회수), health-headers(/api/health·/login 보안 헤더), minutes-share-link(발급 → 비로그인 열림 →
 //        회수 뒤 닫힘), workers(선택 — E2E_WORKERS=1 일 때만. 서버가 CHAT_V2_ENABLED·CHAT_V2_INDEX_WORKER_ENABLED·WIKI_SERVICE_ENABLED·
 //        WIKI_WORKER_ENABLED 로 떠 있어야 한다. 꺼져 있으면 건너뜀으로 기록하고 실패로 세지 않는다).
+//   설정 반영 완주(맨 끝 — setting- 단계): 설정 한 키를 설정 화면의 액션으로 바꾸고 그 값이 화면·동작에 나타나는지, 다른 워크스페이스(프로젝트 키는
+//        다른 프로젝트)에는 나타나지 않는지 본 뒤 되돌린다. setting-extra-axis(작업 계획·가져오기 마법사·엑셀 머리·다시 감지), setting-views-default
+//        (첫 진입 보기), setting-portal-widgets(홈 위젯), setting-product-name(세 범위 탭 제목), setting-accent(셸 스타일 블록), setting-logo
+//        (탭 아이콘·읽기 라우트), setting-menu(사이드 내비 순서·이름), setting-auto-file(외부 업로드의 folder_path 편철), setting-local-drafts
+//        (선택 — E2E_WIKI=1 이고 서버가 WIKI_SERVICE_ENABLED=true 일 때만. 위키 편집기에 내려가는 초안 정책). 알림 정책의 격리는 합성 게이트 S7b.
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 npm run env:local 뒤 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 서버(A1 은 npm run dev, A2 부터 next build 뒤 npx next start -p 3101)가
 // 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
 //   INVITE_ALLOWED_DOMAINS=example.com NEXT_PUBLIC_APP_URL=http://localhost:3101 MINUTES_API_ENABLED=true CRON_SECRET=<시크릿> npm run dev -- -p 3101
 //   BOOTSTRAP_PASSWORD=… E2E_B_PASSWORD=… CRON_SECRET=<같은 시크릿> [BOOTSTRAP_EMAIL=admin@example.com] \
-//   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] [E2E_WORKERS=1] npx --yes -p playwright@1.58.2 node scripts/e2e-local.mjs
+//   [E2E_BASE_URL=http://localhost:3101(기본값)] [E2E_OUT_DIR=<산출물 폴더>] [E2E_WORKERS=1] [E2E_WIKI=1] npx --yes -p playwright@1.58.2 node scripts/e2e-local.mjs
 //   (sp3b-E11 과 conflict-compare 가 브라우저를 쓴다 — Playwright 1.58.2 를 npx 로 PATH 에 싣는다. 없으면 그 단계가 실패한다)
 // 비밀번호·시크릿은 env 로만 받고 출력하지 않는다(ana·외부 계정·carol 의 비밀번호는 실행마다 새로 만든다).
 // 결과는 stdout 에 JSON 한 덩어리. 어느 단계든 실패하면 그 자리에서 멈추고 exit 1.
@@ -78,6 +83,10 @@ import { kanbanBoardRendered, parseE2eSelection, runSelectedE2e } from './lib/e2
 import {
   CONFLICT_DIALOG, CONFLICT_TAKE_LATEST, LEAVER, NOTIFY_PROBE_TYPE, NO_TEAM_FILTER, NO_TEAM_LABEL, WEEKLY_TITLE_INPUT,
   healthProblems, minuteMetaPatch, notifyPolicyOf, recheckNames, securityHeaderProblems, settingPatch, workerProblems, workersEnabled,
+} from './lib/e2e.mjs'
+import {
+  ACCENT_PROBE, PORTAL_PROBE_WIDGET, TINY_PNG_BASE64, WIKI_PROBE_KIND, accentRootOf, brandMarkPath, canonicalJson, draftPoliciesOf, filedUnder, iconHrefsOf, navItemsOf,
+  navMenuProbe, navMenuProblems, portalWidgetsOff, productInTitle, settingProbeNames, titlesOf, widgetIdsOf, wikiStepEnabled,
 } from './lib/e2e.mjs'
 
 // --only sp3b-E3: 레인 B 캡처 시드·3201만 사용한다. 전체 러너의 비밀번호/외부 API 시크릿을 요구하지 않는다.
@@ -2437,6 +2446,323 @@ async function main() {
     const problems = workerProblems({ index, wiki, gc, docsBefore, docsAfter })
     step('workers', { skipped: false, index: { status: index.status, body: index.body }, documents: { before: docsBefore, after: docsAfter },
       wiki: { status: wiki.status, body: wiki.body }, gc: { status: gc.status, body: gc.body }, problems }, problems.length ? problems.join(' · ') : undefined)
+  }
+
+  // ── 26. 설정 반영 완주 — 카탈로그에서 wired 로 남아 있던 키마다 "설정 값을 바꾼다 → 그 값이 화면·동작에 나타난다 → 다른 워크스페이스
+  //    (프로젝트 키는 다른 프로젝트)에는 나타나지 않는다 → 되돌린다" 를 한 단계로 본다(단계 이름 setting-<키>). 이 단계들이 카탈로그 상태 verified 의
+  //    근거다(src/lib/settings/catalog-meta.ts 의 E2E_EVIDENCE — 단계 이름을 바꾸면 그 표도 바꾼다). 알림 정책의 두 워크스페이스 격리는
+  //    합성 게이트의 S7b 가 본다. 맨 끝에 둔다: 앞 단계의 설정값·소속 수·모듈 상태를 전제하는 단계가 뒤에 없고, 각 단계가 자기 값을 되돌린다.
+  //    쓰기는 설정 화면이 부르는 액션(updateWorkspaceSettings·updateProjectSettings — 플랫폼 관리자), 읽기는 그 범위의 보통 계정이 여는 화면이다
+  //    (두 워크스페이스에 모두 속한 duo, A 관리자 ana, B 관리자 bea). 워크스페이스 A = 바꾸는 쪽, B = 그대로여야 하는 쪽.
+  const sp = settingProbeNames(stamp)
+  /** 프로젝트 설정 문서(값·revision) — 읽기만 한다. 쓰기는 늘 설정 액션이다 */
+  const projectSettingsOf = async (projectId) => {
+    const doc = rows('프로젝트 설정', await svc.from('project_settings').select('values, revision').eq('project_id', projectId).single())
+    return { values: doc.values, revision: Number(doc.revision) }
+  }
+  /** 한 키를 설정 화면과 같은 액션으로 쓴다 — 값이 undefined 면 키를 지운다(저장값이 없던 상태로) */
+  const workspaceKey = (workspaceId, key) => ({
+    key, read: () => wsSettingsOf(workspaceId),
+    put: async (value) => {
+      const page = wsPath(workspaceId, 'settings')
+      await admin.http('GET', page)
+      const { revision } = await wsSettingsOf(workspaceId)
+      return mustOk(`updateWorkspaceSettings(${key})`, (await admin.action(page, 'updateWorkspaceSettings',
+        [workspaceId, { expectedRevision: revision, commandId: randomUUID(), ...settingPatch(key, value) }])).result)
+    },
+  })
+  const projectKey = (projectId, key) => ({
+    key, read: () => projectSettingsOf(projectId),
+    put: async (value) => {
+      const page = `/p/${projectId}/settings`
+      await admin.http('GET', page)
+      const { revision } = await projectSettingsOf(projectId)
+      return mustOk(`updateProjectSettings(${key})`, (await admin.action(page, 'updateProjectSettings',
+        [projectId, { expectedRevision: revision, commandId: randomUUID(), ...settingPatch(key, value) }])).result)
+    },
+  })
+  /**
+   * 값을 넣고 probe 를 돌린 뒤 저장값을 시작 상태로 되돌린다 — probe 가 던져도 되돌린다(뒤 단계와 다시 돌리는 사람이 같은 바닥에서 시작하게).
+   * toInput: 저장 형태와 입력 형태가 다른 키(강조색 — 입력은 hex 하나, 저장은 파생 세트)의 되돌리기 입력.
+   */
+  const withSetting = async (target, value, probe, { toInput = (stored) => stored } = {}) => {
+    const stored = (await target.read()).values[target.key]
+    let out, restored = false
+    try {
+      await target.put(value)
+      out = await probe((await target.read()).values[target.key])
+    } finally {
+      const now = (await target.read()).values[target.key]
+      if (canonicalJson(now) !== canonicalJson(stored)) await target.put(toInput(stored))
+      restored = canonicalJson((await target.read()).values[target.key]) === canonicalJson(stored)
+    }
+    return { out, restored }
+  }
+  const settingStep = (name, key, detail, checks) => step(name, { key, ...detail, checks },
+    allOk(checks) ? undefined : `${key}: ${JSON.stringify({ checks, ...detail }).slice(0, 1500)}`)
+  /** 화면 한 장(상태·본문) — 열려야 하는 화면이라 200 이 아니면 그 자리에서 멈춘다(빈 본문으로 '없음'을 판정하지 않는다) */
+  const screenOf = async (who, path, extra = {}) => {
+    const res = await raw(who, path, { extra })
+    if (res.status !== 200) throw new Fail(`[${who.label}] GET ${path} → ${res.status}(설정 반영을 볼 화면이 열리지 않는다)`)
+    return res.html
+  }
+  // 범위마다 한 장씩: 워크스페이스 범위(/w/<slug>/…)·프로젝트 범위(/p/<id>/…)·전역 범위(/account — 쿠키가 가리키는 소속 워크스페이스)
+  const shellPages = async (side) => (side === 'A'
+    ? { workspace: await screenOf(duo, wsPath(wsA, 'projects')), project: await screenOf(ana, `/p/${A.id}/dashboard`), global: await screenOf(duo, '/account', { 'dflow-ws': slugA }) }
+    : { workspace: await screenOf(duo, wsPath(wsB, 'projects')), project: await screenOf(bea, `/p/${C.id}/dashboard`), global: await screenOf(duo, '/account', { 'dflow-ws': OTHER_WORKSPACE.slug }) })
+  const everyScope = (pages, test) => Object.fromEntries(Object.entries(pages).map(([scope, html]) => [scope, test(html)]))
+  const allTrue = (o) => Object.values(o).every((v) => v === true)
+
+  // 26a. setting-extra-axis — core.extra_axis_label(프로젝트 N). 작업 계획 화면과 가져오기 마법사에 그 이름이 실리고, 엑셀 내보내기의 그 열 머리가
+  //      그 이름이며, 그 파일을 다시 감지시키면 그 열이 추가 축으로 잡힌다. 같은 파일을 이름이 없는 프로젝트(B)로 감지시키면 그 열을 못 찾는다
+  //      (별칭이 그 프로젝트의 설정에서만 온다). B 의 화면에는 그 이름이 없다.
+  {
+    const target = projectKey(N.id, 'core.extra_axis_label')
+    const has = async (projectId, seg) => (await screenOf(admin, `/p/${projectId}/${seg}`)).includes(sp.axis)
+    const exported = async () => {
+      const buf = Buffer.from(await (await admin.http('GET', `/api/export?projectId=${N.id}`)).arrayBuffer())
+      return { buf, head: (await zipTextParts(buf)).some((part) => part.text.includes(sp.axis)) }
+    }
+    /** 그 프로젝트의 감지가 잡은 추가 축 열(0 부터) — 못 찾으면 null, 파일을 못 읽으면 'unreadable' */
+    const detectedAxis = async (buf, projectId) => {
+      const res = await admin.http('POST', '/api/import/inspect', { body: inspectForm({ file: buf, fileName: 'wbs-axis.xlsx', projectId }), expect: [200, 400] })
+      return res.status === 200 ? (await res.json()).detection?.profile?.logical?.extraAxis ?? null : 'unreadable'
+    }
+    const before = { wbs: await has(N.id, 'wbs'), exportHead: (await exported()).head }
+    const { out, restored } = await withSetting(target, sp.axis, async (stored) => {
+      const file = await exported()
+      writeFileSync(join(outDir, 'wbs-n-extra-axis.xlsx'), file.buf)
+      return {
+        stored, wbs: await has(N.id, 'wbs'), wizard: await has(N.id, 'import'), exportHead: file.head,
+        detectedHere: await detectedAxis(file.buf, N.id), detectedElsewhere: await detectedAxis(file.buf, B.id),
+        otherWbs: await has(B.id, 'wbs'), otherWizard: await has(B.id, 'import'),
+      }
+    })
+    const after = { wbs: await has(N.id, 'wbs'), exportHead: (await exported()).head }
+    settingStep('setting-extra-axis', target.key, { projectId: N.id, otherProjectId: B.id, label: sp.axis, before, during: out, after }, {
+      cleanStart: !before.wbs && !before.exportHead,
+      stored: out.stored === sp.axis,
+      shownOnWbs: out.wbs, shownOnImportWizard: out.wizard, exportHeader: out.exportHead,
+      roundTripDetected: Number.isInteger(out.detectedHere),
+      otherProjectDoesNotDetect: out.detectedElsewhere === null,
+      otherProjectClean: !out.otherWbs && !out.otherWizard,
+      restored: restored && !after.wbs && !after.exportHead,
+    })
+  }
+
+  // 26b. setting-views-default — views.default(프로젝트 N). 주소에 보기를 적지 않은 첫 진입이 보드로 열리고, 주소의 보기(sheet)가 설정을 이기며,
+  //      다른 프로젝트(B)의 첫 진입은 표 그대로다. 개인 설정은 이 판정에 끼지 않는다(주소 → 이 설정 → 표).
+  {
+    const target = projectKey(N.id, 'views.default')
+    const board = async (projectId, query = '') => kanbanBoardRendered(await screenOf(admin, `/p/${projectId}/wbs${query}`))
+    const before = await board(N.id)
+    const { out, restored } = await withSetting(target, { wbs: 'board' }, async (stored) => ({
+      stored, first: await board(N.id), explicitSheet: await board(N.id, '?view=sheet'), other: await board(B.id),
+    }))
+    const after = await board(N.id)
+    settingStep('setting-views-default', target.key, { projectId: N.id, otherProjectId: B.id, before, during: out, after }, {
+      cleanStart: before === false,
+      stored: canonicalJson(out.stored) === canonicalJson({ wbs: 'board' }),
+      firstEntryIsBoard: out.first === true,
+      urlBeatsSetting: out.explicitSheet === false,
+      otherProjectStaysSheet: out.other === false,
+      restored: restored && after === false,
+    })
+  }
+
+  // 26c. setting-portal-widgets — portal.widgets(워크스페이스 A). 위젯 하나를 끄면 A 의 홈에서 그 위젯만 사라지고(다른 위젯은 그대로),
+  //      같은 계정(duo)이 여는 B 의 홈에는 남는다. duo 는 개인 숨김이 없는 계정이다(개인 숨김은 이 설정과 다른 층).
+  {
+    const target = workspaceKey(wsA, 'portal.widgets')
+    const widgets = async (workspaceId) => widgetIdsOf(await screenOf(duo, wsPath(workspaceId)))
+    const before = { a: await widgets(wsA), b: await widgets(wsB) }
+    const { out, restored } = await withSetting(target, portalWidgetsOff(PORTAL_PROBE_WIDGET), async (stored) => ({
+      stored, a: await widgets(wsA), b: await widgets(wsB),
+    }))
+    const after = await widgets(wsA)
+    settingStep('setting-portal-widgets', target.key, { widget: PORTAL_PROBE_WIDGET, before, during: { a: out.a, b: out.b }, after }, {
+      cleanStart: before.a.includes(PORTAL_PROBE_WIDGET) && before.b.includes(PORTAL_PROBE_WIDGET),
+      stored: canonicalJson(out.stored) === canonicalJson(portalWidgetsOff(PORTAL_PROBE_WIDGET)),
+      goneFromHome: !out.a.includes(PORTAL_PROBE_WIDGET),
+      othersKept: JSON.stringify(out.a) === JSON.stringify(before.a.filter((id) => id !== PORTAL_PROBE_WIDGET)),
+      otherWorkspaceKeeps: JSON.stringify(out.b) === JSON.stringify(before.b),
+      restored: restored && JSON.stringify(after) === JSON.stringify(before.a),
+    })
+  }
+
+  // 26d. setting-product-name — branding.product_name(워크스페이스 A). 세 범위(워크스페이스·프로젝트·전역)의 탭 제목이 그 이름으로 끝나고,
+  //      B 의 세 화면에는 그 글자가 어디에도 없다(제목·셸의 aria·RSC 페이로드 전부).
+  {
+    const target = workspaceKey(wsA, 'branding.product_name')
+    const before = everyScope(await shellPages('A'), (html) => html.includes(sp.product))
+    const { out, restored } = await withSetting(target, sp.product, async (stored) => {
+      const a = await shellPages('A'), b = await shellPages('B')
+      return { stored, titled: everyScope(a, (html) => productInTitle(html, sp.product)), titles: everyScope(a, (html) => titlesOf(html)[0] ?? null),
+        leaked: everyScope(b, (html) => html.includes(sp.product)) }
+    })
+    const after = everyScope(await shellPages('A'), (html) => html.includes(sp.product))
+    settingStep('setting-product-name', target.key, { productName: sp.product, before, during: out, after }, {
+      cleanStart: !Object.values(before).some(Boolean),
+      stored: out.stored === sp.product,
+      titleInEveryScope: allTrue(out.titled),
+      otherWorkspaceClean: !Object.values(out.leaked).some(Boolean),
+      restored: restored && !Object.values(after).some(Boolean),
+    })
+  }
+
+  // 26e. setting-accent — branding.accent(워크스페이스 A). 입력은 hex 하나, 저장은 파생 세트다. A 의 세 범위 셸이 그 세트의 스타일 블록을 싣고
+  //      (:root 의 action 배경 = 저장된 라이트 세트의 bg), B 의 셸에는 강조색 블록이 없다(제품 기본색).
+  {
+    const target = workspaceKey(wsA, 'branding.accent')
+    const before = { a: everyScope(await shellPages('A'), accentRootOf), b: everyScope(await shellPages('B'), accentRootOf) }
+    const { out, restored } = await withSetting(target, ACCENT_PROBE, async (stored) => ({
+      stored: { base: stored?.base ?? null, lightBg: stored?.light?.bg ?? null },
+      a: everyScope(await shellPages('A'), accentRootOf), b: everyScope(await shellPages('B'), accentRootOf),
+    }), { toInput: (stored) => (stored === undefined || stored === null ? stored : stored.base) })
+    const after = everyScope(await shellPages('A'), accentRootOf)
+    settingStep('setting-accent', target.key, { input: ACCENT_PROBE, before, during: out, after }, {
+      storedDerived: out.stored.base?.toLowerCase() === ACCENT_PROBE && /^#[0-9a-f]{6}$/.test(out.stored.lightBg ?? ''),
+      styleInEveryScope: Object.values(out.a).every((v) => v !== null && v === out.stored.lightBg),
+      changedFromBefore: Object.entries(out.a).every(([scope, v]) => v !== before.a[scope]),
+      otherWorkspaceUnchanged: JSON.stringify(out.b) === JSON.stringify(before.b) && Object.values(out.b).every((v) => v !== out.stored.lightBg),
+      restored: restored && JSON.stringify(after) === JSON.stringify(before.a),
+    })
+  }
+
+  // 26f. setting-logo — branding.logo(워크스페이스 A)의 마크 슬롯. 파일은 service_role 로 올린다(업로드 액션은 파일 인자라 이 러너의 액션 호출로
+  //      부르지 못한다 — 형식 검사는 단위 테스트 logo-upload 가 본다). 설정 값은 설정 액션으로 쓴다. A 의 세 범위 탭 아이콘이 읽기 라우트를 가리키고
+  //      그 라우트가 올린 바이트를 그대로 돌려주며, B 의 화면에는 로고 주소가 없고 B 관리자에게 A 의 로고 라우트는 404 다.
+  {
+    const target = workspaceKey(wsA, 'branding.logo')
+    const bytes = Buffer.from(TINY_PNG_BASE64, 'base64')
+    const objectPath = brandMarkPath(wsA, createHash('sha256').update(bytes).digest('hex'))
+    const href = `/api/brand/${wsA}/mark`
+    const up = await svc.storage.from('branding').upload(objectPath, bytes, { contentType: 'image/png', upsert: true })
+    if (up.error) throw new Fail(`로고 픽스처 업로드 실패: ${up.error.message}`)
+    const icons = (pages) => everyScope(pages, (html) => iconHrefsOf(html).filter((h) => h.startsWith('/api/brand/')))
+    const anyBrand = (pages) => everyScope(pages, (html) => html.includes('/api/brand/'))
+    const before = { a: anyBrand(await shellPages('A')), b: anyBrand(await shellPages('B')) }
+    let removed = false
+    const run = await (async () => {
+      try {
+        return await withSetting(target, { full: null, full_dark: null, mark: objectPath }, async (stored) => {
+          const served = await raw(duo, href)
+          const servedBytes = served.status === 200 ? Buffer.from(await (await fetch(origin + href, {
+            headers: { cookie: cookieHeader([...duo.jar].map(([name, value]) => ({ name, value }))) } })).arrayBuffer()) : null
+          return {
+            stored, a: icons(await shellPages('A')), b: anyBrand(await shellPages('B')),
+            served: { status: served.status, type: served.headers.get('content-type'), sameBytes: servedBytes ? servedBytes.equals(bytes) : false },
+            outsider: (await raw(bea, href)).status, otherSlot: (await raw(duo, `/api/brand/${wsA}/full`)).status,
+          }
+        })
+      } finally {
+        // 픽스처 객체를 치운다 — 설정을 되돌린 뒤라 가리키는 값이 없다
+        removed = !(await svc.storage.from('branding').remove([objectPath])).error
+      }
+    })()
+    const { out, restored } = run
+    const after = anyBrand(await shellPages('A'))
+    settingStep('setting-logo', target.key, { slot: 'mark', href, before, during: out, after, fixtureRemoved: removed }, {
+      cleanStart: !Object.values(before.a).some(Boolean) && !Object.values(before.b).some(Boolean),
+      stored: out.stored?.mark === objectPath,
+      iconInEveryScope: Object.values(out.a).every((hrefs) => hrefs.includes(href)),
+      servedToMember: out.served.status === 200 && out.served.type === 'image/png' && out.served.sameBytes,
+      emptySlotIs404: out.otherSlot === 404,
+      otherWorkspaceClean: !Object.values(out.b).some(Boolean),
+      nonMemberIs404: out.outsider === 404,
+      restored: restored && !Object.values(after).some(Boolean) && removed,
+    })
+  }
+
+  // 26g. setting-menu — navigation.menu(워크스페이스 A). 사이드 내비의 주 그룹 순서가 뒤집히고(프로젝트가 홈보다 앞) 그 항목의 이름이 바뀐다.
+  //      같은 계정(duo)이 여는 B 의 내비는 순서·이름 그대로다. 전역 범위(/account)도 쿠키가 가리키는 워크스페이스의 메뉴를 그린다.
+  //      전역 검색(⌘K)은 같은 navFor 결과(셸의 groups·workspaceGroups)를 받아 그린다 — 대화상자를 열어 보는 것은 단위 테스트(global-search)가 맡는다.
+  {
+    const target = workspaceKey(wsA, 'navigation.menu')
+    const value = navMenuProbe(sp.menuLabel)
+    const nav = async (side) => ({
+      workspace: navItemsOf(await screenOf(duo, wsPath(side === 'A' ? wsA : wsB, 'projects'))),
+      global: navItemsOf(await screenOf(duo, '/account', { 'dflow-ws': side === 'A' ? slugA : OTHER_WORKSPACE.slug })),
+    })
+    const problems = (navs, applied) => Object.entries(navs).flatMap(([scope, items]) => navMenuProblems(items, sp.menuLabel, applied).map((x) => `${scope}: ${x}`))
+    const before = problems(await nav('A'), false)
+    const { out, restored } = await withSetting(target, value, async (stored) => {
+      const a = await nav('A'), b = await nav('B')
+      return { stored, a: problems(a, true), b: problems(b, false), order: a.workspace.slice(0, 4).map((i) => i.id), otherOrder: b.workspace.slice(0, 4).map((i) => i.id) }
+    })
+    const after = problems(await nav('A'), false)
+    settingStep('setting-menu', target.key, { value, before, during: out, after }, {
+      cleanStart: before.length === 0,
+      stored: canonicalJson(out.stored) === canonicalJson(value),
+      orderAndLabelApplied: out.a.length === 0,
+      otherWorkspaceUnchanged: out.b.length === 0,
+      restored: restored && after.length === 0,
+    })
+  }
+
+  // 26h. setting-auto-file — minutes.auto_file_by_path(워크스페이스 B 의 프로젝트 C — A 는 단계 22 가 회의록 연동을 닫아 두었다). 외부 업로드 API 로
+  //      folder_path 를 보내면 켜진(기본) 프로젝트에서는 그 폴더로 편철되고, 끈 프로젝트에서는 폴더가 만들어지지 않고 팀 루트(키 부재와 같은 자리)로 간다.
+  //      같은 워크스페이스의 다른 프로젝트(C2 — 이 단계가 만든다)는 켜진 채라 같은 요청이 편철된다. 프로젝트는 회의 연결(meeting.project_id)이 정한다.
+  {
+    const C2 = await createProject(admin, wsB, 'C2')
+    const target = projectKey(C.id, 'minutes.auto_file_by_path')
+    const date = todayInTz(await tzOfWorkspace(wsB))
+    const send = async (projectId, folder) => {
+      const res = await fetch(`${base}/api/v1/minutes`, {
+        method: 'POST', redirect: 'manual',
+        headers: { authorization: `Bearer ${minutesTokenB}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ user_email: B_ADMIN.email, date, team: SP3B_B_TEAM, title: `E2E 자동 편철 ${folder}`, body_markdown: `# ${folder}\n`,
+          external_id: `e2e:${randomUUID()}`, meeting: { project_id: projectId, title: sp.meeting, date }, folder_path: [folder] }),
+      })
+      const body = await res.json().catch(() => null)
+      return { status: res.status, code: body?.code ?? null, error: body?.error ?? null, folderPath: body?.folder_path ?? null, pathStatus: body?.folder_path_status ?? null, filed: filedUnder(body, folder) }
+    }
+    const folderRows = async (name) => rows(`폴더(${name})`, await svc.from('minute_folders').select('id').eq('name', name)).length
+    const onDefault = await send(C.id, sp.folders.on)
+    const { out, restored } = await withSetting(target, false, async (stored) => ({
+      stored, off: await send(C.id, sp.folders.off), offFolders: await folderRows(sp.folders.off),
+      other: await send(C2.id, sp.folders.other), otherFolders: await folderRows(sp.folders.other),
+    }))
+    const onAgain = await send(C.id, `${sp.folders.on} 2`)
+    settingStep('setting-auto-file', target.key, { projectId: C.id, otherProjectId: C2.id, onDefault, during: out, onAgain }, {
+      filedWhenOn: onDefault.status === 201 && onDefault.filed && (await folderRows(sp.folders.on)) === 1,
+      stored: out.stored === false,
+      notFiledWhenOff: out.off.status === 201 && !out.off.filed && out.offFolders === 0,
+      otherProjectStillFiles: out.other.status === 201 && out.other.filed && out.otherFolders === 1,
+      filedAgainAfterRestore: restored && onAgain.status === 201 && onAgain.filed,
+    })
+  }
+
+  // 26i. setting-local-drafts(선택) — security.local_drafts(워크스페이스 A). 초안을 쓰는 표면은 위키 편집기 하나이고, 서버가 읽은 정책이 그 편집기의
+  //      prop 으로 내려간다. A 에서 끄면 A 프로젝트의 위키 문서 화면이 allowed:false 를 받고, B 프로젝트의 화면은 켜진 채다.
+  //      위키 화면은 서버가 WIKI_SERVICE_ENABLED=true 로 떠 있어야 열리므로 E2E_WIKI=1 일 때만 돈다(아니면 건너뜀으로 기록 — 이 키의 승격 근거가 되지 못한다).
+  //      문서 픽스처는 화면의 문서 만들기가 부르는 RPC(create_wiki_document)를 그 프로젝트 멤버의 세션으로 부른다.
+  if (!wikiStepEnabled(process.env)) {
+    step('setting-local-drafts', { key: 'security.local_drafts', skipped: true, reason: 'E2E_WIKI=1 이 아니다 — 위키 화면(WIKI_SERVICE_ENABLED=true 서버)이 필요한 단계를 건너뛴다(실패로 세지 않는다)' })
+  } else {
+    const target = workspaceKey(wsA, 'security.local_drafts')
+    const topicOf = async (who, projectId) => {
+      const { data, error } = await who.sb.rpc('create_wiki_document', {
+        p_project_id: projectId, p_title: sp.wikiTitle, p_body_md: `# ${sp.wikiTitle}\n`, p_document_kind: WIKI_PROBE_KIND, p_parent_id: null })
+      const id = typeof data === 'string' ? data : data?.id
+      if (error || typeof id !== 'string') throw new Fail(`위키 문서 픽스처 실패(${who.label}): ${error?.message ?? JSON.stringify(data)}`)
+      return id
+    }
+    const topicA = await topicOf(ana, A.id), topicB = await topicOf(bea, C.id)
+    const policy = async (who, projectId, topicId) => draftPoliciesOf(await screenOf(who, `/p/${projectId}/wiki/topics/${topicId}`))
+    const before = { a: await policy(ana, A.id, topicA), b: await policy(bea, C.id, topicB) }
+    const off = { allowed: false, retention_days: 7 }
+    const { out, restored } = await withSetting(target, off, async (stored) => ({
+      stored, a: await policy(ana, A.id, topicA), b: await policy(bea, C.id, topicB),
+    }))
+    const after = await policy(ana, A.id, topicA)
+    settingStep('setting-local-drafts', target.key, { skipped: false, topics: { a: topicA, b: topicB }, before, during: out, after }, {
+      cleanStart: before.a.length === 1 && before.a[0].allowed === true && before.b.length === 1 && before.b[0].allowed === true,
+      stored: canonicalJson(out.stored) === canonicalJson(off),
+      draftsOffOnScreen: out.a.length === 1 && out.a[0].allowed === false,
+      otherWorkspaceStillOn: JSON.stringify(out.b) === JSON.stringify(before.b),
+      restored: restored && JSON.stringify(after) === JSON.stringify(before.a),
+    })
   }
 }
 

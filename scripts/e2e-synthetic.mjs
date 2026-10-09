@@ -21,6 +21,8 @@
 //        S10-negative 에 이슈 화면을 더하고 옛 영역명·PI-I- 센티널을 센다(이슈 이름·코드 그려짐도 증명).
 //   SP5b(스펙 D24): S1-workflow(R 이슈 5상태·승인 단계 둘·선행 final·크레딧 정책 {5,5}), S6-issue-status(R 5상태 흐름), S3-flow(R 2단계·C 1단계 승인),
 //        S9-workflow(R 상태 비활성·단계 개명 뒤 C 의 설정·이슈·WBS 엑셀 불변).
+//   S7b(notify.policy 격리): R 워크스페이스가 작업 배정 알림을 끄면 R 의 담당 지정은 이벤트 0행, 같은 순간 C 의 담당 지정은 1행·수신자가 C 의 멤버,
+//        다시 켜면 R 도 발행한다. 끝에 정책·담당을 되돌린다(카탈로그 notify.policy 의 verified 근거).
 //   S3(필드)·S7·S8·S10 의 나머지: '미활성(담당 SP)' 으로 기록한다(D25) — 건너뜀으로 세지 않는다. 그 단계가 켜지는 SP 가 이 러너에 더한다.
 // 설정은 service_role 로 넣지 않는다(워크스페이스 행 셋과 그 허용 모듈 시드만 로컬 픽스처 — 생성 화면은 SP3). 실행 전후 src·DB 스키마(supabase/migrations 등)에
 // 미커밋 변경이 없어야 한다 — 합성 게이트는 소스를 고치지 않고 통과해야 한다(config.toml 의 로컬 포트 오버라이드는 제외, 대신 전후 diff 가 같아야 한다).
@@ -33,7 +35,7 @@ import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import {
   ERR_DENIED, areaInput, dowOfIso, e2eBaseUrl, fillWbsWorkbook, importForm, importResultView, inspectForm, issueAnalysisRunOf, localClientEnv, plannedPctByName, shiftDays,
-  storedTimezone, todayInTz, workspaceAdminAccountInput,
+  storedTimezone, todayInTz, workspaceAdminAccountInput, NOTIFY_PROBE_TYPE, notifyIsolationChecks, notifyPolicyOf, settingPatch,
 } from './lib/e2e.mjs'
 import { excludeRegistered, findSentinels, sp4Sentinels, sp5aSentinels, sp5b1Sentinels, sp6Sentinels, zipTextParts } from './lib/sentinels.mjs'
 import { createSessionFactory } from './lib/e2e-session.mjs'
@@ -94,6 +96,8 @@ const ACTIONS = {
   saveCustomFieldValues: { filename: 'src/app/actions/customFieldValues.ts', exportedName: 'saveCustomFieldValues', worker: '/p/[projectId]/wbs/page' },
   // SPU1/SP9 — 개인 알림 설정 opt-out 및 계정 설정 저장
   saveUiPrefs: { filename: 'src/app/actions/preferences.ts', exportedName: 'saveUiPrefs', worker: '/w/[slug]/settings/page' },
+  // S7b — 작업 계획 화면의 담당 지정(알림 정책 격리)
+  setWbsAssignee: { filename: 'src/app/actions/wbsAssign.ts', exportedName: 'setWbsAssignee', worker: '/p/[projectId]/wbs/page' },
 }
 const session = createSessionFactory({ env, base, manifestPath: MANIFEST, actions: ACTIONS, Fail })
 
@@ -1209,6 +1213,79 @@ async function main() {
 
   const s7Ok = Object.values(s7.checks).every(Boolean)
   step('S7-bot-notifications', s7, s7Ok ? undefined : `S7 봇·알림: ${JSON.stringify(s7.checks)}`)
+
+  // ── S7b — 알림 정책의 두 워크스페이스 격리(notify.policy — 개정 §4.10, 카탈로그 상태 verified 의 근거)
+  // R 워크스페이스가 작업 배정 알림을 끄면 R 의 담당 지정은 이벤트·수신자 행을 하나도 만들지 않고, 같은 순간 C 의 담당 지정은 그대로 발행한다
+  // (정책이 워크스페이스를 넘지 않는다). 다시 켜면 R 도 발행한다. 설정은 설정 화면의 액션으로, 담당 지정은 작업 계획 화면의 액션으로 한다.
+  // 수신자는 행위자(플랫폼 관리자)와 다른 계정이어야 생기므로 워크스페이스마다 프로젝트 멤버 계정을 하나 만든다. 대상 리프는 마지막 리프 —
+  // 앞 단계(S3-flow)가 첫 리프의 흐름을 끝까지 밀어 두었다. 끝에 정책과 담당을 시작 상태로 되돌린다.
+  log('S7b — 알림 정책 격리 (R 에서 끈 유형은 R 만 조용하고 C 는 그대로 발행한다)')
+  {
+    const notifyKey = 'notify.policy'
+    const memberOf = async (label, ws, proj) => {
+      const addr = `syn-${label.toLowerCase()}-notify-${stamp}@example.com`
+      await admin.http('GET', wsHref(ws, 'admin/accounts'))
+      mustOk(`${label} 알림 수신 계정`, (await admin.action(wsHref(ws, 'admin/accounts'), 'createAccount', [{
+        workspaceId: ws.id, email: addr, password: `Syn-${randomUUID()}`, name: `합성 ${label} 알림 수신`, workspaceRole: 'member', projectId: proj.id, accessRole: 'member',
+      }])).result)
+      const found = rows(`${label} 수신 멤버`, await svc.from('project_members').select('id, people!inner(email)').eq('project_id', proj.id).eq('people.email', addr))
+      if (found.length !== 1) throw new Fail(`${label} 수신 멤버가 ${found.length}건`)
+      return found[0].id
+    }
+    const lastLeafOf = async (proj) => {
+      const items = rows('리프', await admin.sb.from('wbs_items').select('id, parent_id').eq('project_id', proj.id).order('sort_order'))
+      const parents = new Set(items.map((i) => i.parent_id).filter(Boolean))
+      const leaves = items.filter((i) => !parents.has(i.id))
+      if (!leaves.length) throw new Fail(`${proj.name} 에 리프가 없다`)
+      return leaves[leaves.length - 1].id
+    }
+    const eventsOf = async (leafId) => rows('알림 이벤트', await svc.from('notification_events').select('id').eq('type', NOTIFY_PROBE_TYPE).eq('entity_id', leafId)).map((e) => e.id)
+    const recipientsOf = async (ids) => (ids.length === 0 ? [] : rows('알림 수신자', await svc.from('notification_recipients').select('event_id, member_id').in('event_id', ids)))
+    const assigneeOf = async (leafId) => rows('리프 담당', await admin.sb.from('wbs_items').select('assignee_member_id').eq('id', leafId).single()).assignee_member_id
+    const assign = async (proj, leafId, memberId) => {
+      await admin.http('GET', `/p/${proj.id}/wbs`)
+      return mustOk(`setWbsAssignee(${proj.name}, ${memberId ? '지정' : '해제'})`, (await admin.action(`/p/${proj.id}/wbs`, 'setWbsAssignee', [leafId, memberId])).result)
+    }
+    const setRPolicy = async (value) => {
+      await admin.http('GET', wsSettingsPage(wsR))
+      const doc = await rWsDoc()
+      return mustOk('R 알림 정책', (await admin.action(wsSettingsPage(wsR), 'updateWorkspaceSettings',
+        [wsR.id, { expectedRevision: doc.revision, commandId: randomUUID(), ...settingPatch(notifyKey, value) }])).result)
+    }
+    const [rMember, cMember] = [await memberOf('R', wsR, R), await memberOf('C', wsC, C)]
+    const [rLeaf, cLeaf] = [await lastLeafOf(R), await lastLeafOf(C)]
+    const stored = (await rWsDoc()).values[notifyKey]   // 없으면 undefined — 끝에 그 상태로 되돌린다
+    const original = { r: await assigneeOf(rLeaf), c: await assigneeOf(cLeaf) }
+    const fresh = async (leafId, before) => (await eventsOf(leafId)).filter((id) => !before.includes(id))
+    let offNew = [], otherNew = [], otherRecipients = [], onAgainNew = [], offStored, restored = false
+    try {
+      await assign(R, rLeaf, null); await assign(C, cLeaf, null)   // 같은 담당자 재지정은 발행하지 않는다 — 빈 상태에서 시작한다
+      const before = { r: await eventsOf(rLeaf), c: await eventsOf(cLeaf) }
+      await setRPolicy(notifyPolicyOf(NOTIFY_PROBE_TYPE, false))
+      offStored = (await rWsDoc()).values[notifyKey]
+      await assign(R, rLeaf, rMember); await assign(C, cLeaf, cMember)
+      offNew = await fresh(rLeaf, before.r)
+      otherNew = await fresh(cLeaf, before.c)
+      otherRecipients = await recipientsOf(otherNew)
+      await assign(R, rLeaf, null)
+      await setRPolicy(notifyPolicyOf(NOTIFY_PROBE_TYPE, true))
+      await assign(R, rLeaf, rMember)
+      onAgainNew = await fresh(rLeaf, before.r)
+    } finally {
+      // 실패해도 되돌린다 — 정책이 꺼진 채 남으면 이 DB 로 다시 돌리는 실행의 알림 단언이 조용히 달라진다
+      if (canonical((await rWsDoc()).values[notifyKey]) !== canonical(stored)) await setRPolicy(stored)
+      if ((await assigneeOf(rLeaf)) !== original.r) await assign(R, rLeaf, original.r)
+      if ((await assigneeOf(cLeaf)) !== original.c) await assign(C, cLeaf, original.c)
+      restored = canonical((await rWsDoc()).values[notifyKey]) === canonical(stored) && (await assigneeOf(rLeaf)) === original.r && (await assigneeOf(cLeaf)) === original.c
+    }
+    const checks = {
+      policyStored: canonical(offStored) === canonical(notifyPolicyOf(NOTIFY_PROBE_TYPE, false)),
+      ...notifyIsolationChecks({ offNew: offNew.length, otherNew: otherNew.length, otherRecipients, otherMemberId: cMember, onAgainNew: onAgainNew.length, restored }),
+    }
+    step('S7b-notify-isolation', { type: NOTIFY_PROBE_TYPE, R: { leaf: rLeaf, member: rMember, off: offNew.length, onAgain: onAgainNew.length },
+      C: { leaf: cLeaf, member: cMember, events: otherNew.length, recipients: otherRecipients.length }, checks },
+    Object.values(checks).every(Boolean) ? undefined : `S7b 알림 정책 격리: ${JSON.stringify({ checks, off: offNew.length, other: otherNew.length, onAgain: onAgainNew.length })}`)
+  }
 
   for (const [id, owner] of Object.entries(PENDING_STEPS)) step(`${id}-pending`, { status: '미활성', owner })
 

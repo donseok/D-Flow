@@ -1206,3 +1206,189 @@ describe('e2e-local.mjs — 재점검 보강 단계', () => {
     expect(src).toContain("'removeWorkspaceMember', [wsA, lv.userId]")
   })
 })
+
+// ── 설정 반영 완주(e2e-local 의 setting- 단계 · e2e-synthetic 의 S7b) — 러너는 .mjs 라 앱 상수를 import 하지 못한다. 러너가 적어 둔 값·표지가
+//    앱의 것과 같은지, 판정 함수가 앱이 실제로 내는 모양을 읽는지 여기서 맞댄다(카탈로그 상태 verified 의 근거 단계다 — catalog-meta 의 E2E_EVIDENCE).
+import {
+  ACCENT_PROBE, MENU_PROBE_ORDER, PORTAL_PROBE_WIDGET, PORTAL_WIDGET_ORDER, TINY_PNG_BASE64, WIKI_PROBE_KIND, accentRootOf, brandMarkPath, canonicalJson,
+  draftPoliciesOf, filedUnder, iconHrefsOf, navItemsOf, navMenuProbe, navMenuProblems, notifyIsolationChecks, portalWidgetsOff, productInTitle,
+  settingProbeNames, titlesOf, widgetIdsOf, wikiStepEnabled,
+} from '../../scripts/lib/e2e.mjs'
+import { PORTAL_WIDGETS, PORTAL_WIDGET_IDS, parsePortalWidgets, visibleWidgets, type PortalWidgetSetting } from '@/lib/portal/widgets'
+import { SHELL_NAV, navFor } from '@/lib/nav/registry'
+import { deriveAccent, parseAccentInput } from '@/lib/settings/accent'
+import { accentStyle } from '@/lib/settings/accentCss'
+import { WIKI_DOCUMENT_KINDS } from '@/lib/domain/wiki'
+import { BRANDING_BUCKET, BRANDING_MAX_BYTES, parseBrandingPath } from '@/lib/settings/brandingPath'
+import { DEFAULT_LOCAL_DRAFTS, parseLocalDraftsSetting } from '@/lib/settings/defs/security'
+import { parseViewsDefault, resolveWbsView } from '@/lib/wbs/view'
+import { E2E_EVIDENCE } from '@/lib/settings/catalog-meta'
+
+describe('설정 반영 완주 — 확인용 값은 앱의 설정 정의를 그대로 통과한다', () => {
+  const sp = settingProbeNames('202610100930')
+  it('이름 셋은 실행 꼬리가 붙고 각 키의 길이 상한 안이며 parse 뒤에도 같은 글자다(화면에서 그 글자로 찾는다)', () => {
+    expect([sp.axis, sp.product, sp.menuLabel]).toEqual(['확인용 축 0930', '확인용 제품 0930', '확인용 메뉴 0930'])
+    expect(settingDef('project', 'core.extra_axis_label')!.parse(sp.axis)).toEqual({ ok: true, value: sp.axis })
+    expect(settingDef('workspace', 'branding.product_name')!.parse(sp.product)).toEqual({ ok: true, value: sp.product })
+    expect(settingDef('workspace', 'navigation.menu')!.parse(navMenuProbe(sp.menuLabel))).toEqual({ ok: true, value: navMenuProbe(sp.menuLabel) })
+    expect(new Set(Object.values(sp.folders)).size).toBe(3)
+    for (const name of Object.values(sp.folders)) expect(name.length).toBeLessThanOrEqual(60)   // 폴더 이름 상한(minute_folders_name_check)
+    expect(() => settingProbeNames('abc')).toThrow(/stamp/)
+  })
+  it('홈 위젯 — 순서는 레지스트리와 같고, 끄는 위젯은 모듈·검토자 조건이 없어 늘 보이는 것이며, 끈 값은 그 위젯만 감춘다', () => {
+    expect([...PORTAL_WIDGET_ORDER]).toEqual([...PORTAL_WIDGET_IDS])
+    expect(PORTAL_WIDGETS.find((w) => w.id === PORTAL_PROBE_WIDGET)).toMatchObject({ module: null, needs: null })
+    const value = portalWidgetsOff(PORTAL_PROBE_WIDGET) as PortalWidgetSetting   // .mjs 의 반환은 문자열 id — 앱의 형으로 좁힌다(값은 아래 parse 가 검사)
+    expect(parsePortalWidgets(value)).toEqual({ ok: true, value })      // 저장 형태가 입력과 같다 — 러너가 저장값을 입력과 대조한다
+    const shown = visibleWidgets({ setting: value, hidden: [], moduleUnion: new Set(), reviewer: false })
+    expect([...shown.main, ...shown.side].map((s) => s.id)).not.toContain(PORTAL_PROBE_WIDGET)
+    expect(() => portalWidgetsOff('nope')).toThrow(/모르는 홈 위젯/)
+  })
+  it('메뉴 — 두 항목은 조건 없는 워크스페이스 주 그룹 항목이고 기본은 홈이 앞이다. 확인용 값은 그 순서를 뒤집고 첫 항목의 이름을 바꾼다', () => {
+    const [first, second] = MENU_PROBE_ORDER.map((id) => SHELL_NAV.find((s) => s.id === id)!)
+    for (const e of [first, second]) expect(e).toMatchObject({ group: 'ws.main', scope: 'workspace', needs: null })
+    expect(second.order).toBeLessThan(first.order)
+    const caps = { isPlatformAdmin: false, isWorkspaceAdmin: false, isProjectAdmin: false, canViewUsage: false, canViewPortfolio: false, canCreateProject: false }
+    type Menu = Parameters<typeof navFor>[0]['menu']
+    const probeMenu = navMenuProbe(sp.menuLabel) as Menu
+    const main = (menu: Menu) => navFor({ scope: 'workspace', base: '/w/x', effective: new Set(), caps, menu })[0].items
+    const html = (items: ReturnType<typeof main>) => items.map((i) =>
+      `<a href="${i.href}" data-nav-item="${i.id}" aria-label="${typeof i.label === 'string' ? i.label : '기본'}" class="x">`).join('')
+    expect(navMenuProblems(navItemsOf(html(main({ order: [], labels: {} }))), sp.menuLabel, false)).toEqual([])
+    expect(navMenuProblems(navItemsOf(html(main(probeMenu))), sp.menuLabel, true)).toEqual([])
+    // 반영되지 않았는데 반영을 기대하면(또는 그 반대면) 순서·이름을 각각 짚는다
+    expect(navMenuProblems(navItemsOf(html(main({ order: [], labels: {} }))), sp.menuLabel, true)).toHaveLength(2)
+    expect(navMenuProblems(navItemsOf(html(main(probeMenu))), sp.menuLabel, false)).toHaveLength(2)
+    expect(navMenuProblems([], sp.menuLabel, true)).toHaveLength(1)
+    // 내비 표지는 NavList 가 실제로 내는 속성이다
+    const navList = readFileSync('src/components/app/NavList.tsx', 'utf8')
+    expect(navList).toContain('data-nav-item={i.id}')
+    expect(navList).toContain('aria-label={shown ? `${label} ${shown}` : label}')
+  })
+  it('navItemsOf — 문서 순서·id 마다 첫 것, 배지가 붙은 이름도 그대로 읽는다', () => {
+    const html = '<a href="/a" data-nav-item="ws.home" aria-label="홈" class="x"><a data-nav-item="ws.my_work" aria-current="page" aria-label="내 업무 3">'
+      + '<a href="/b">무관</a><a data-nav-item="ws.home" aria-label="서랍의 홈">'
+    expect(navItemsOf(html)).toEqual([{ id: 'ws.home', label: '홈' }, { id: 'ws.my_work', label: '내 업무 3' }])
+  })
+  it('강조색 — 확인용 hex 는 입력 검사와 파생을 통과하고, 판독은 앱이 싣는 스타일 블록의 첫 값(라이트 세트의 배경)을 읽는다', () => {
+    expect(parseAccentInput(ACCENT_PROBE)).toEqual({ ok: true, value: ACCENT_PROBE })
+    const derived = deriveAccent(ACCENT_PROBE)
+    if (!derived.ok) throw new Error(`확인용 강조색이 파생을 통과하지 못한다: ${derived.error} ${JSON.stringify(derived.failures)}`)
+    expect(derived.value.base.toLowerCase()).toBe(ACCENT_PROBE)
+    const css = accentStyle(derived.value)
+    expect(css).not.toBe('')
+    expect(accentRootOf(`<head><style nonce="n">${css}</style></head>`)).toBe(derived.value.light.bg)
+    expect(accentRootOf('<head><style>:root{--color-bg:#ffffff}</style></head>')).toBeNull()   // 강조색 블록이 없으면 제품 기본색
+  })
+  it('탭 제목 — 세 범위의 틀(… | 제품)과 제목 없는 화면(제품만)을 읽고, 다른 이름이면 아니다. 아이콘 링크는 rel=icon 의 주소만', () => {
+    const html = `<html><head><title>프로젝트 · 기본 워크스페이스 | ${sp.product}</title><link rel="stylesheet" href="/a.css"/>`
+      + '<link rel="icon" href="/api/brand/w1/mark"/><link rel="icon" href="/icon.svg?a=1&amp;b=2" type="image/svg+xml"/></head></html>'
+    expect(titlesOf(html)).toEqual([`프로젝트 · 기본 워크스페이스 | ${sp.product}`])
+    expect(productInTitle(html, sp.product)).toBe(true)
+    expect(productInTitle(`<title>${sp.product}</title>`, sp.product)).toBe(true)
+    expect(productInTitle('<title>프로젝트 · 기본 워크스페이스 | D-Flow</title>', sp.product)).toBe(false)
+    expect(productInTitle('<p>제목 없음</p>', sp.product)).toBe(false)
+    expect(titlesOf('<title>A &amp; B</title>')).toEqual(['A & B'])
+    expect(iconHrefsOf(html)).toEqual(['/api/brand/w1/mark', '/icon.svg?a=1&b=2'])
+  })
+  it('로고 픽스처 — 경로는 앱의 규약(판독기 통과·마크 슬롯·png)이고 파일은 PNG 이며 상한보다 작다. 버킷 이름도 앱의 것이다', () => {
+    const ws = '11111111-2222-4333-8444-555555555555'
+    const parsed = parseBrandingPath(brandMarkPath(ws, 'ab'.repeat(32)))
+    expect(parsed).toEqual({ ok: true, value: { workspaceId: ws, slot: 'mark', hash: 'ab'.repeat(8), ext: 'png' } })
+    expect(() => brandMarkPath(ws, 'xyz')).toThrow(/sha256/)
+    const bytes = Buffer.from(TINY_PNG_BASE64, 'base64')
+    expect([...bytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    expect(bytes.length).toBeLessThan(BRANDING_MAX_BYTES)
+    expect(readFileSync('scripts/e2e-local.mjs', 'utf8')).toContain(`svc.storage.from('${BRANDING_BUCKET}').upload(objectPath, bytes`)
+  })
+  it('홈 위젯 판독 — WidgetFrame 의 section[data-widget] 을 문서 순서로, 중복 없이', () => {
+    expect(readFileSync('src/components/portal/WidgetFrame.tsx', 'utf8')).toContain('<section data-widget={id}')
+    expect(widgetIdsOf('<section data-widget="my_work" aria-labelledby="widget-my_work"><section class="x" data-widget="projects"><section data-widget="my_work">'))
+      .toEqual(['my_work', 'projects'])
+    expect(widgetIdsOf('<div data-widget="projects">')).toEqual([])
+  })
+  it('기본 보기 — 확인용 값은 정의를 통과하고, 주소에 보기가 없으면 설정이, 있으면 주소가 이긴다(러너의 두 단언과 같은 규칙)', () => {
+    expect(parseViewsDefault({ wbs: 'board' })).toEqual({ ok: true, value: { wbs: 'board' } })
+    expect(resolveWbsView({ stored: 'board', boardOn: true }).view).toBe('board')
+    expect(resolveWbsView({ view: 'sheet', stored: 'board', boardOn: true }).view).toBe('sheet')
+  })
+  it('초안 정책 판독 — RSC 페이로드의 두 꼴(따옴표 그대로·\\" 로 실린 꼴)에서 같은 값을 읽고, 값이 갈리면 둘 다 낸다. 끈 값은 정의를 통과한다', () => {
+    const off = { allowed: false, retention_days: DEFAULT_LOCAL_DRAFTS.retention_days }
+    expect(parseLocalDraftsSetting(off)).toEqual({ ok: true, value: off })
+    expect(DEFAULT_LOCAL_DRAFTS.allowed).toBe(true)                       // 러너의 시작 전제(켜짐)
+    expect(readFileSync('scripts/e2e-local.mjs', 'utf8')).toContain(`const off = { allowed: false, retention_days: ${DEFAULT_LOCAL_DRAFTS.retention_days} }`)
+    const plain = `"draftPolicy":${JSON.stringify(off)},"topic":{"id":"t"}`
+    const escaped = JSON.stringify(plain).slice(1, -1)
+    expect(draftPoliciesOf(`<script>self.__next_f.push([1,"${escaped}"])</script>`)).toEqual([off])
+    expect(draftPoliciesOf(plain)).toEqual([off])
+    expect(draftPoliciesOf(`${plain} "draftPolicy":${JSON.stringify(DEFAULT_LOCAL_DRAFTS)}`)).toEqual([off, DEFAULT_LOCAL_DRAFTS])
+    expect(draftPoliciesOf('<p>편집기 없음</p>')).toEqual([])
+    // 그 prop 은 위키 문서 화면이 편집기로 내려보낸다
+    expect(readFileSync('src/components/wiki/WikiTopicDetail.tsx', 'utf8')).toContain('draftPolicy={draftPolicy}')
+    expect(WIKI_DOCUMENT_KINDS as readonly string[]).toContain(WIKI_PROBE_KIND)
+    expect([wikiStepEnabled({ E2E_WIKI: '1' }), wikiStepEnabled({ E2E_WIKI: 'true' }), wikiStepEnabled({})]).toEqual([true, false, false])
+  })
+  it('자동 편철 — 기본값은 켬이고 지울 수 있는 키다. 편철 판정은 응답의 folder_path 에 그 폴더가 있는지다', () => {
+    const def = settingDef('project', 'minutes.auto_file_by_path')!
+    expect(def.default).toBe(true)
+    expect(def.explicit).toBeUndefined()
+    expect(def.parse(false)).toEqual({ ok: true, value: false })
+    expect(filedUnder({ folder_path: ['OPS', sp.folders.on] }, sp.folders.on)).toBe(true)
+    expect(filedUnder({ folder_path: ['OPS'] }, sp.folders.off)).toBe(false)     // 꺼져 있으면 팀 루트(키 부재와 같은 자리)
+    expect(filedUnder({ folder_path: null }, sp.folders.off)).toBe(false)
+    expect(filedUnder(null, sp.folders.off)).toBe(false)
+  })
+  it('알림 정책 격리 판정 — 끈 쪽 0건·그대로 둔 쪽 1건(수신자가 그 멤버)·다시 켠 뒤 1건·원복이 모두여야 통과한다', () => {
+    const good = { offNew: 0, otherNew: 1, otherRecipients: [{ member_id: 'm-c' }], otherMemberId: 'm-c', onAgainNew: 1, restored: true }
+    expect(Object.values(notifyIsolationChecks(good)).every(Boolean)).toBe(true)
+    const failing = (over: Partial<typeof good>) => Object.entries(notifyIsolationChecks({ ...good, ...over })).filter(([, v]) => !v).map(([k]) => k)
+    expect(failing({ offNew: 1 })).toEqual(['offWorkspaceSilent'])                 // 끈 워크스페이스가 발행했다
+    expect(failing({ otherNew: 0 })).toEqual(['otherWorkspaceStillEmits'])         // 다른 워크스페이스까지 조용해졌다(정책이 샜다)
+    expect(failing({ otherRecipients: [{ member_id: 'm-r' }] })).toEqual(['otherRecipientIsItsMember'])
+    expect(failing({ onAgainNew: 0 })).toEqual(['onAgainEmits'])
+    expect(failing({ restored: false })).toEqual(['restored'])
+  })
+  it('canonicalJson — 키 순서와 무관하게 같고 배열 순서는 가른다. undefined 는 undefined(저장값이 없던 상태끼리 같다)', () => {
+    expect(canonicalJson({ b: 1, a: { d: 2, c: 3 } })).toBe(canonicalJson({ a: { c: 3, d: 2 }, b: 1 }))
+    expect(canonicalJson([1, 2])).not.toBe(canonicalJson([2, 1]))
+    expect(canonicalJson(undefined)).toBeUndefined()
+  })
+})
+
+describe('e2e-local.mjs — 설정 반영 완주 단계', () => {
+  const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+  const at = (n: string) => src.indexOf(`settingStep('${n}'`)
+  const STEPS = ['setting-extra-axis', 'setting-views-default', 'setting-portal-widgets', 'setting-product-name', 'setting-accent', 'setting-logo',
+    'setting-menu', 'setting-auto-file', 'setting-local-drafts']
+  it('아홉 단계가 이름으로 있고 재점검 보강(workers) 뒤에 그 순서로 있다 — 앞 단계의 설정값·소속 수를 전제하는 단계가 뒤에 없다', () => {
+    let prev = src.lastIndexOf("step('workers'")
+    expect(prev).toBeGreaterThan(-1)
+    for (const n of STEPS) {
+      expect(at(n), n).toBeGreaterThan(prev)
+      prev = at(n)
+    }
+  })
+  it('카탈로그의 E2E 근거가 가리키는 로컬 단계는 모두 이 목록에 있다(이름을 바꾸면 근거 표가 따라와야 한다)', () => {
+    const local = Object.values(E2E_EVIDENCE).filter((e) => e.script === 'scripts/e2e-local.mjs').map((e) => e.step).sort()
+    expect(local.every((s) => STEPS.includes(s))).toBe(true)
+    expect(new Set(local).size).toBe(local.length)
+  })
+  it('쓰기는 설정 화면의 두 액션뿐이고 값은 끝에 되돌린다 — 설정 RPC 를 직접 부르는 새 길이 없다', () => {
+    const section = src.slice(src.indexOf('// ── 26. 설정 반영 완주'))
+    expect(section).not.toMatch(/\.rpc\('apply_(workspace|project)_settings'/)
+    expect(section.match(/'updateWorkspaceSettings',/g)).toHaveLength(1)
+    expect(section.match(/'updateProjectSettings',/g)).toHaveLength(1)
+    // 단계마다 withSetting(넣고 → 보고 → finally 에서 되돌린다)을 지난다. 되돌림 여부(restored)가 단언에 든다
+    expect(section.match(/await withSetting\(target, /g)).toHaveLength(STEPS.length)
+    expect(section).toMatch(/finally \{\s+const now = \(await target\.read\(\)\)\.values\[target\.key\]/)
+    expect(section.match(/\brestored: restored && /g)!.length + section.match(/filedAgainAfterRestore: restored && /g)!.length).toBe(STEPS.length)
+  })
+  it('위키 화면이 필요한 단계는 E2E_WIKI 가 아니면 건너뜀으로 기록한다(실패 문구 없이) — 건너뛴 실행은 승격 근거가 아니다', () => {
+    expect(src).toMatch(/if \(!wikiStepEnabled\(process\.env\)\) \{\s+step\('setting-local-drafts', \{ key: 'security\.local_drafts', skipped: true, reason: [^}]+\}\)/)
+  })
+  it('격리의 대조군은 다른 워크스페이스(워크스페이스 키)·다른 프로젝트(프로젝트 키)다', () => {
+    const section = src.slice(src.indexOf('// ── 26. 설정 반영 완주'))
+    for (const check of ['otherProjectClean', 'otherProjectStaysSheet', 'otherWorkspaceKeeps', 'otherWorkspaceClean', 'otherWorkspaceUnchanged', 'nonMemberIs404',
+      'otherProjectStillFiles', 'otherWorkspaceStillOn']) expect(section, check).toContain(`${check}:`)
+  })
+})

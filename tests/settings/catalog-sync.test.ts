@@ -1,11 +1,12 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { CATALOG_META, PLANNED_KEYS } from '@/lib/settings/catalog-meta'
+import { CATALOG_META, E2E_EVIDENCE, PLANNED_KEYS, baseStatusOf } from '@/lib/settings/catalog-meta'
 import { catalogAutoSections, replaceCatalogAutoSections } from '@/lib/settings/catalogDoc'
 import { OPERATIONAL_SETTINGS } from '@/lib/settings/operational'
 import { PROJECT_SETTINGS, WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 
 const file = 'docs/settings-catalog.md'
+// E2E 근거를 얹기 전의 상태(catalog-meta 의 BASE_META). wired 인 키는 E2E_EVIDENCE 에 줄이 있을 때만 verified 로 올라간다 — 아래 'E2E 근거' 테스트
 const expectedStatus: Record<string, string> = {
   'fields.wbs_item': 'verified', 'fields.issue': 'verified', 'fields.weekly_row': 'verified',
   'modules.allowed': 'verified', 'ai.enabled': 'verified', 'invites.allowed_domains': 'verified',
@@ -26,7 +27,7 @@ const expectedStatus: Record<string, string> = {
   'attendance.types': 'verified', 'meetings.categories': 'verified', 'issues.severities': 'verified', 'issues.sources': 'verified', 'issues.cause_categories': 'verified',
   // SP5 B2 — 최상위 폴더 모드. SQL(create_team·ensure_team_roots)·편집기·앱 소비처(편철 정규화 v2.9)·검증 네 연결
   'minutes.root_folders': 'verified',
-  // 정본 §3.3 — 외부 업로드의 자동 편철(env 의 설정화). 정의·편집기·소비처(업로드 라우트)·테스트. 편집 화면 눈확인·업로드 완주 전이라 wired
+  // 정본 §3.3 — 외부 업로드의 자동 편철(env 의 설정화). 정의·편집기·소비처(업로드 라우트)·테스트 — 기준 wired, 업로드 완주(E2E setting-auto-file)가 근거
   'minutes.auto_file_by_path': 'wired',
   // SP5b — 흐름 다섯(+크레딧 표). 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성 S1/S3/S9-workflow(Z) 뒤 verified
   'workflow.credit_policy': 'verified', 'workflow.wbs_stage_labels': 'verified', 'workflow.approval_steps': 'verified',
@@ -43,12 +44,36 @@ describe('설정 카탈로그 동기화', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
     expect(defs).toHaveLength(48)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
-    expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(expectedStatus)
+    expect(Object.fromEntries(defs.map(def => [def.key, baseStatusOf(def.key)]))).toEqual(expectedStatus)
+    // 내보내는 상태 = 기준 상태에 E2E 근거를 얹은 것 — wired 이고 근거 줄이 있는 키만 verified 다(그 밖의 키는 기준 그대로)
+    expect(Object.fromEntries(defs.map(def => [def.key, CATALOG_META[def.key].status]))).toEqual(Object.fromEntries(
+      Object.entries(expectedStatus).map(([key, status]) => [key, status === 'wired' && key in E2E_EVIDENCE ? 'verified' : status])))
     for (const def of defs) {
       const meta = CATALOG_META[def.key]
       if (meta.status === 'verified') expect(meta.tests.length, def.key).toBeGreaterThan(0)
       for (const path of [...meta.consumers, ...meta.tests]) expect(existsSync(path), `${def.key}: ${path}`).toBe(true)
     }
+  })
+
+  it('E2E 근거 — 승격은 wired 인 키만, 근거 단계가 그 스크립트에 이름으로 실재하고, 근거 스크립트가 테스트 칸에 적힌다(한 줄 = 한 키)', () => {
+    const wired = Object.entries(expectedStatus).filter(([, status]) => status === 'wired').map(([key]) => key).sort()
+    // 닫힌 목록 — wired 로 남아 있던 열 키. 근거 줄은 이 안에서만 온다(stored 를 E2E 한 단계로 건너뛰어 올리지 않는다)
+    expect(wired).toEqual(['branding.accent', 'branding.logo', 'branding.product_name', 'core.extra_axis_label', 'minutes.auto_file_by_path',
+      'navigation.menu', 'notify.policy', 'portal.widgets', 'security.local_drafts', 'views.default'])
+    const steps = new Set<string>()
+    for (const [key, evidence] of Object.entries(E2E_EVIDENCE)) {
+      expect(wired, key).toContain(key)
+      expect(['scripts/e2e-local.mjs', 'scripts/e2e-synthetic.mjs'], key).toContain(evidence.script)
+      expect(readFileSync(evidence.script, 'utf8'), `${key}: ${evidence.step}`).toMatch(new RegExp(`(settingStep|step)\\('${evidence.step}'`))
+      const meta = CATALOG_META[key as keyof typeof CATALOG_META]
+      expect(meta.status, key).toBe('verified')
+      expect(meta.tests, key).toContain(evidence.script)
+      expect(meta.tests.filter((t) => t.startsWith('tests/')).length, `${key}: 단위·RLS 테스트 없이 E2E 만으로 올리지 않는다`).toBeGreaterThan(0)
+      expect(steps.has(evidence.step), `${evidence.step} 가 두 키의 근거다 — 한 단계가 깨지면 한 키만 되돌릴 수 있어야 한다`).toBe(false)
+      steps.add(evidence.step)
+    }
+    // 근거 줄을 지운 키는 기준 상태(wired) 그대로다 — 줄 하나가 그 키 하나만 움직인다
+    for (const key of wired) if (!(key in E2E_EVIDENCE)) expect(CATALOG_META[key as keyof typeof CATALOG_META].status, key).toBe('wired')
   })
 
   it('custom 편집 UI(widget.component)는 src/components/settings 에 실재하는 컴포넌트다 — 카탈로그의 편집 UI 칸이 상태(verified)를 반박하지 않게', () => {

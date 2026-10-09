@@ -2,6 +2,8 @@
 // 소비처는 설정값을 실제로 읽거나 표시하는 대표 진입점이다. 뒤 SP 가 소비를 배선하면 이 목록과 상태를 함께 갱신한다.
 // 상태의 뜻(개정 §2.10): stored = 권한 있는 편집으로 검증·저장·재조회된다 / wired = 모든 소비처가 저장값을 쓴다 / verified = 격리와 기존 데이터·동시성·오류
 // 검증까지 끝났다. 아래 stored·wired 행의 주석은 "왜 아직 그 상태인가"(남은 소비처·남은 확인)를 적는다 — 2026-10-09 재점검이 코드로 다시 확인했다.
+// 2026-10-10: 아래 표(BASE_META)의 wired 는 "E2E 완주 전의 상태"다. 실제 서버에서 설정 → 화면·동작 → 격리 → 원복을 완주한 키는 파일 끝의
+// E2E_EVIDENCE 한 줄이 verified 로 올린다 — 내보내는 CATALOG_META 가 그 결과다(키마다 한 줄이라 단계가 깨진 키만 그 줄을 지워 되돌린다).
 import type { SettingKey, SettingScope } from './registry'
 
 export type CatalogStatus = 'planned' | 'stored' | 'wired' | 'verified'
@@ -17,7 +19,7 @@ const S5BW = (status: CatalogStatus, consumers: string[], tests: string[]): Cata
 const S5BI = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5b I' })
 const S5C = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP5c' })
 const S6 = (status: CatalogStatus, consumers: string[], tests: string[]): CatalogMeta => ({ consumers, tests, status, sp: 'SP6' })
-export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
+const BASE_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'fields.wbs_item': S5C('verified',
     ['src/components/settings/CustomFieldsSettings.tsx', 'src/components/fields/CustomFieldValuesEditor.tsx', 'src/components/wbs/RowDetailPanel.tsx', 'src/components/wbs/WbsGanttSheet.tsx', 'src/lib/excel/exportWithProfile.ts', 'src/lib/excel/parseWithProfile.ts', 'src/lib/ai/index/content.ts', 'supabase/migrations/0027_custom_fields.sql'],
     ['tests/domain/custom-fields.test.ts', 'tests/rls/custom-fields.test.ts', 'tests/ui/custom-fields-settings.test.tsx', 'tests/ui/wbs-custom-columns.test.tsx', 'tests/excel/custom-columns-roundtrip.test.ts', 'tests/ai/index-custom-fields.test.ts'],
@@ -40,7 +42,8 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // 업로드 액션이 가드 결과의 워크스페이스로 읽어 넘긴다). 주간 브리핑은 프로젝트가 공유하는 캐시 문서라 이름을 바꾼 뒤의 반영은 다음 생성부터다
   // (캐시 키·해시에 넣지 않은 까닭은 src/lib/ai/brief.ts 의 weeklySystem 주석). 간트 영향 확인 문구·연동 안내는 제품 이름을 빼서 소비처가 아니다.
   // 공개 화면(로그인·초대·루트 오류)과 인증 전 API 오류의 env 이름은 의도다(워크스페이스를 모른다).
-  // verified 까지 남은 것: 화면 눈확인(이름을 바꾼 워크스페이스의 브리핑·챗 답변), 두 워크스페이스를 오가는 합성 게이트 단계
+  // 격리 완주: 로컬 E2E setting-product-name(세 범위의 탭 제목이 그 이름, 다른 워크스페이스의 세 화면에는 그 글자가 없다). AI 프롬프트의 이름(브리핑·챗 답변)은
+  // 모델 호출이 필요해 E2E 가 보지 않는다 — 프롬프트에 실리는 것까지를 단위 테스트(product-name-remaining 등)가 고정한다
   'branding.product_name': A('wired',
     ['src/lib/settings/displayBranding.ts', 'src/lib/shell/loadShell.ts', 'src/components/app/BrandSlot.tsx', 'src/components/ui/BrandMark.tsx', 'src/app/(app)/w/[slug]/layout.tsx',
       'src/app/(app)/p/[projectId]/layout.tsx', 'src/app/(app)/(global)/layout.tsx', 'src/components/search/GlobalSearchDialog.tsx', 'src/app/actions/projectInvites.ts',
@@ -52,7 +55,8 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // wired(2026-10-09) — 세 범위의 셸 로고와 세 범위의 탭 아이콘이 저장값을 쓴다(읽기 라우트는 소속·현재 슬롯만 낸다). 전역 범위(/account·/admin)는
   // 주소가 워크스페이스를 정하지 않아 셸이 그리는 현재 워크스페이스(readCurrentWorkspace — 쿠키 힌트를 소속으로 다시 본 값, 없으면 첫 소속)의 마크를 쓴다.
   // 근거 테스트: scope-branding '(global) 탭 제목·아이콘'(양성·격리·소속 없음), w-layout, scope-layouts(셸 슬롯).
-  // verified 까지 남은 것: 화면 눈확인(탭 아이콘은 단위 테스트로 그려지는 것을 볼 수 없다), 두 워크스페이스를 오가는 합성 게이트 단계
+  // 격리 완주: 로컬 E2E setting-logo(세 범위의 탭 아이콘 링크가 읽기 라우트를 가리키고 그 라우트가 올린 바이트를 image/png 로 돌려준다, 다른 워크스페이스
+  // 화면에는 로고 주소가 없고 비소속에게는 404). 업로드 액션(파일 인자)은 E2E 가 부르지 못해 픽스처로 올린다 — 형식 검사는 logo-upload 가 고정한다
   'branding.logo': A('wired',
     ['src/app/api/brand/[workspaceId]/[slot]/route.ts', 'src/lib/shell/loadShell.ts', 'src/components/app/BrandSlot.tsx', 'src/components/ui/BrandMark.tsx', 'src/app/(app)/w/[slug]/layout.tsx', 'src/app/(app)/p/[projectId]/layout.tsx', 'src/app/(app)/(global)/layout.tsx'],
     ['tests/settings/logo-upload.test.ts', 'tests/api/brand-route.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/shell/brand.test.tsx', 'tests/app/w-layout.test.tsx', 'tests/settings/validate-config.test.ts', 'tests/shell/scope-branding.test.tsx']),
@@ -60,7 +64,7 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // <style> 한 블록으로 싣는다(action 계열 변수 여섯, 라이트·다크). 근거 테스트: scope-layouts '저장된 강조색(branding.accent)을 셸의 스타일로 싣는다',
   // brand '두 세트 열두 값이 모두 소문자 hex 면 :root 다음 .dark', app-shell 'accent 는 <style> 한 블록', config-lifecycle '저장된 accent 가 red;} 나
   // </style> 이면 읽기에서 invalid 다', accent-editor(409 뒤 새 명령 id). 공개 화면은 워크스페이스를 몰라 제품 기본색이다(의도).
-  // verified 까지 남은 것: 두 워크스페이스의 색이 서로의 화면에 실리지 않는다는 격리 검증(합성 게이트에 이 키의 단계가 없다)
+  // 격리 완주: 로컬 E2E setting-accent(세 범위 셸의 :root action 배경 = 저장된 라이트 세트, 다른 워크스페이스 셸에는 강조색 블록이 없다)
   'branding.accent': A('wired',
     ['src/components/settings/AccentEditor.tsx', 'src/lib/shell/loadShell.ts', 'src/lib/settings/accentCss.ts', 'src/components/app/AppShell.tsx'],
     ['tests/settings/accent.test.ts', 'tests/shell/brand.test.tsx', 'tests/shell/scope-layouts.test.tsx', 'tests/shell/app-shell.test.tsx', 'tests/settings/config-lifecycle.test.ts', 'tests/components/accent-editor.test.tsx']),
@@ -69,15 +73,17 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // 목록을 버리고 셸이 내린 두 메뉴(프로젝트 범위의 groups 와 워크스페이스 층의 workspaceGroups)를 그대로 편다 — 저장한 순서·이름, 모듈·권한으로
   // 걸러진 항목, 같은 주소. 근거 테스트: nav-consumption(네 표면), global-search '메뉴·제품 이름은 셸이 내려 준 워크스페이스의 값이다',
   // scope-branding 'loadShell.workspaceGroups'(양성·격리), global-bar-search, app-shell(searchNav).
-  // verified 까지 남은 것: 화면 눈확인, 두 워크스페이스의 메뉴가 서로의 검색에 실리지 않는다는 합성 게이트 단계. 사용 현황 키·봇 경로는 메뉴 이름을 쓰지 않는다
+  // 격리 완주: 로컬 E2E setting-menu(워크스페이스·전역 범위 사이드 내비의 순서·이름, 같은 계정이 여는 다른 워크스페이스의 내비는 그대로). 전역 검색(⌘K)은
+  // 같은 navFor 결과를 받는다 — 대화상자를 여는 것은 단위 테스트(global-search)가 맡는다. 사용 현황 키·봇 경로는 메뉴 이름을 쓰지 않는다
   'navigation.menu': A('wired', ['src/components/settings/MenuOrderEditor.tsx', 'src/lib/shell/loadShell.ts', 'src/lib/nav/registry.ts', 'src/components/app/AppShell.tsx', 'src/components/search/GlobalSearchDialog.tsx'],
     ['tests/settings/registry.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/nav/nav-for.test.ts', 'tests/shell/nav-consumption.test.tsx', 'tests/components/menu-order-editor.test.tsx',
       'tests/ui/global-search.test.tsx', 'tests/shell/scope-branding.test.tsx', 'tests/shell/global-bar-search.test.tsx', 'tests/shell/app-shell.test.tsx']),
   'core.level_labels': A('verified', ['src/app/api/v1/wbs/structure/route.ts', 'src/lib/agent/wbsImport.ts'], ['tests/settings/project-config.test.ts', 'tests/settings/create-project.test.ts']),
   // SP4 A2 — 팀 예약어 파생(reservedTeamNames — 팀 추가·개명·가져오기 등록)이 읽는다. 표시 소비도 붙었다: 편집기(설정 화면 '일반' 범주)·
   // WBS 화면(일괄 편집·붙여넣기·변경 이력)·가져오기 마법사·엑셀 머리(내보내기)와 그 머리의 감지 별칭(inspect·execute). 화면 눈확인 전이라 wired.
-  // 2026-10-09 재점검: 격리(project-isolation·rls/settings-isolation)·동시성(rls/settings-cas)은 이 키로 시험돼 있다. verified 까지 남은 것 —
-  // 화면 눈확인 기록(docs/baseline 에 없다), 가져오기 마법사·일괄 편집·붙여넣기의 이름 치환을 고정한 테스트, 봇 답변의 고정 이름을 포함할지의 결정
+  // 2026-10-09 재점검: 격리(project-isolation·rls/settings-isolation)·동시성(rls/settings-cas)은 이 키로 시험돼 있다.
+  // 화면 완주: 로컬 E2E setting-extra-axis(작업 계획 화면·가져오기 마법사에 그 이름, 엑셀 머리, 그 파일의 재감지, 다른 프로젝트는 감지·표시 없음).
+  // 일괄 편집·붙여넣기 대화상자 안의 문구는 열어 보지 않는다(같은 prop — extra-axis-label 단위 테스트). 봇 답변의 고정 이름은 이 키의 범위 밖으로 둔다(미결정)
   'core.extra_axis_label': A('wired',
     ['src/app/(app)/p/[projectId]/settings/page.tsx', 'src/app/(app)/p/[projectId]/wbs/page.tsx', 'src/app/(app)/p/[projectId]/agents/page.tsx', 'src/app/(app)/p/[projectId]/import/page.tsx',
       'src/app/api/export/route.ts', 'src/app/api/import/inspect/route.ts', 'src/app/api/import/execute/route.ts', 'src/app/actions/projectTeams.ts'],
@@ -112,22 +118,25 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     ['tests/rls/week-start-transition.test.ts', 'tests/report/week.test.ts', 'tests/ai/bot-week-rules.test.ts', 'tests/actions/settings-week-start.test.ts'],
   ),
   // SP3b UI-3 과제 2·6·10 — 네 연결(정의·편집기 PortalWidgetsEditor·소비처 홈 v1 페이지와 노출 식·테스트) 완료.
-  // 2026-10-09 재점검: 소비처는 홈 하나이고 끊긴 자리가 없다(partial-failure 가 끔·순서·판독 실패를 고정). verified 까지 남은 것 —
-  // UI-3 화면 확인(docs/baseline/sp3b-ui.md 에 대기 중), 두 워크스페이스의 설정이 다른 홈 렌더(격리) 검증
+  // 2026-10-09 재점검: 소비처는 홈 하나이고 끊긴 자리가 없다(partial-failure 가 끔·순서·판독 실패를 고정).
+  // 격리 완주: 로컬 E2E setting-portal-widgets(끈 위젯만 홈에서 사라지고 같은 계정이 여는 다른 워크스페이스 홈에는 남는다).
+  // UI-3 의 사용자 화면 확인(docs/baseline/sp3b-ui.md — 대기 중)은 별도 UI 게이트다 — 이 상태가 그 기록을 대신하지 않는다
   'portal.widgets': { consumers: ['src/app/(app)/w/[slug]/page.tsx', 'src/lib/portal/widgets.ts', 'src/components/settings/PortalWidgetsEditor.tsx'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts', 'tests/settings/portal-widgets-editor.test.tsx', 'tests/portal/partial-failure.test.tsx'], status: 'wired', sp: 'SP3b' },
   // SPU1(개정 §5.8.5) — 정의·편집기 LocalDraftsEditor·소비처(초안 저장소의 정책 판정 + 위키 편집기)·테스트. 다른 편집 표면이 초안을 쓰게 되면 같은 저장소를 지난다
-  // SP8(개정 §4.10) — 정의·편집기·발행 관문(emit)·테스트. 합성 S7b(두 워크스페이스 격리)가 붙으면 verified.
+  // SP8(개정 §4.10) — 정의·편집기·발행 관문(emit)·테스트. 합성 S7b(두 워크스페이스 격리)가 근거다(E2E_EVIDENCE).
   // 2026-10-09 재점검: 발행은 emit 한 곳이고 꺼진 유형은 이벤트·수신자 행을 쓰지 않는다(notify-emit '꺼진 유형은 발행하지 않는다',
   // '한 워크스페이스의 정책은 다른 워크스페이스의 발행을 막지 않는다' — 단위 격리). 계정 화면은 워크스페이스가 끈 유형을 표시한다(workspaceOff).
-  // 남은 것은 그대로 합성 S7b — 합성 게이트에 알림 단계가 아직 없다(로컬 E2E 의 notify-policy 단계는 한 워크스페이스의 끔·켬만 본다)
+  // 격리 완주: 합성 게이트 S7b-notify-isolation(R 에서 끄면 R 은 이벤트 0행·C 는 그대로 발행, 다시 켜면 R 도 발행). 로컬 E2E 의 notify-policy 는 한 워크스페이스의 끔·켬
   'notify.policy': { consumers: ['src/lib/notify/policy.ts', 'src/lib/notify/emit.ts', 'src/components/settings/NotifyPolicyEditor.tsx', 'src/lib/notify/workspaceOff.ts'], tests: ['tests/settings/notify-policy-def.test.ts', 'tests/lib/notify-emit.test.ts', 'tests/lib/notify-policy.test.ts', 'tests/settings/notify-policy-editor.test.tsx', 'tests/lib/notify-workspace-off.test.ts'], status: 'wired', sp: 'SP8' },
   // 2026-10-09 재점검(security.local_drafts): 초안을 쓰는 표면은 위키 편집기 하나이고 정책 판독은 fail-closed 다(drafts/policy '설정 조회 실패·손상 값·
-  // 워크스페이스 모름은 초안을 끈다'). verified 까지 남은 것 — 화면 눈확인 기록, 서버 판독의 두 워크스페이스 비교(격리) 검증
+  // 워크스페이스 모름은 초안을 끈다').
+  // 격리 완주: 로컬 E2E setting-local-drafts(끈 워크스페이스의 위키 문서 화면에 allowed:false 가 내려가고 다른 워크스페이스는 켜진 채). 위키 화면이 필요해
+  // E2E_WIKI=1(서버 WIKI_SERVICE_ENABLED=true)일 때만 돈다 — 건너뛴 실행은 근거가 아니다. 브라우저 저장소에 실제로 쓰지 않는 것은 단위 테스트(local-drafts)
   'security.local_drafts': { consumers: ['src/lib/drafts/storage.ts', 'src/lib/drafts/policy.ts', 'src/components/wiki/WikiDocumentEditor.tsx', 'src/app/(app)/p/[projectId]/wiki/topics/[topicId]/page.tsx', 'src/components/settings/LocalDraftsEditor.tsx'], tests: ['tests/settings/security-drafts.test.ts', 'tests/drafts/local-drafts.test.ts', 'tests/drafts/policy.test.ts', 'tests/settings/local-drafts-editor.test.tsx', 'tests/ui/wiki-document-editor-draft.test.tsx'], status: 'wired', sp: 'SPU1' },
   // SP3b UI-3 과제 3·7·14 — 정의·보드 교차 검사·편집기·소비처·테스트. 소비처는 작업 계획 화면의 첫 보기다(wbs/page → resolveWbsView:
   // 주소의 보기 → 이 설정 → 표. view-switch 'URL → 설정 → 표'·'기본 보기 손상은 표 + 설정 알림'이 고정). 밀도는 이 키의 범위가 아니다(D43).
-  // 2026-10-09 재점검: verified 까지 남은 것 — UI-3 화면 확인(docs/baseline/sp3b-ui.md 의 "기본 보드 저장 후 재진입" 표본이 대기 중),
-  // 두 프로젝트(보드·표)의 값이 섞이지 않는다는 격리 검증
+  // 격리 완주: 로컬 E2E setting-views-default(첫 진입이 보드, 주소의 보기가 설정을 이긴다, 다른 프로젝트는 표 그대로).
+  // UI-3 의 사용자 화면 확인(docs/baseline/sp3b-ui.md 의 "기본 보드 저장 후 재진입" 표본 — 대기 중)은 별도 UI 게이트다
   'views.default': { consumers: ['src/lib/settings/defs/project.ts', 'src/lib/settings/validateConfig.ts', 'src/components/settings/ViewsDefaultEditor.tsx', 'src/app/(app)/p/[projectId]/wbs/page.tsx', 'src/lib/wbs/view.ts'], tests: ['tests/settings/views-default-def.test.ts', 'tests/settings/views-default-editor.test.tsx', 'tests/wbs/view-switch.test.tsx'], status: 'wired', sp: 'SP3b' },
   // SP5 B1 — 정의·편집·소비처·검증이 이어졌다(스펙 D44)
   'issues.id_policy': S5B1('verified', ['src/lib/issues/context.ts', 'src/app/actions/issues.ts', 'src/components/settings/IssuePolicyEditor.tsx'], ['tests/issues/id-policy.test.ts', 'tests/rls/issue-code-policy.test.ts', 'tests/ui/issue-policy-editor.test.tsx']),
@@ -135,7 +144,8 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   'minutes.attachments': S5B3('verified', ['src/lib/minutes/resolveAttachmentPolicy.ts', 'src/app/actions/minutes.ts', 'src/components/settings/AttachmentPolicyEditor.tsx'], ['tests/minutes/attachment-policy.test.ts', 'tests/rls/minute-attachments-policy.test.ts', 'tests/ui/attachment-policy-editor.test.tsx']),
   // 정본 §3.3 — 배포 env(MINUTES_FOLDER_PATH_ENABLED)의 설정화. 정의·편집기(MinutesAutoFileEditor — 프로젝트 설정 '회의록' 범주)·소비처
   // (외부 업로드 라우트가 쓰기 대상의 프로젝트 값으로 folder_path 를 받을지 정한다 — autoFile.ts, env 가 명시 false 면 배포 전체 끔)·테스트.
-  // 편집 화면 눈확인과 업로드 완주(E2E) 전이라 wired
+  // 업로드 완주: 로컬 E2E setting-auto-file(켠 프로젝트는 folder_path 로 편철, 끈 프로젝트는 폴더를 만들지 않는다, 같은 워크스페이스의 다른 프로젝트는 켜진 채).
+  // 편집기 화면은 단위 테스트(minutes-auto-file-editor)가 고정한다
   'minutes.auto_file_by_path': { consumers: ['src/lib/minutes/autoFile.ts', 'src/lib/minutes/externalApi.ts', 'src/app/api/v1/minutes/route.ts', 'src/components/settings/MinutesAutoFileEditor.tsx'], tests: ['tests/minutes/auto-file.test.ts', 'tests/minutes/external-api.test.ts', 'tests/settings/minutes-auto-file-editor.test.tsx', 'tests/settings/registry.test.ts'], status: 'wired', sp: 'SP7' },
   // SP5 B2 — create_team·ensure_team_roots(SQL)가 모드를 읽고, 외부 업로드·배치·재편철의 경로 정규화가 모드별로 갈린다(v2.9 — rootMode·folders).
   // 정의·편집(teams 되돌리기 — 플랫폼 관리자)·소비처·테스트 네 연결로 verified. 화면은 teams 만(D21)
@@ -171,6 +181,41 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     ['tests/settings/forms-defs.test.ts', 'tests/ui/form-templates-manager.test.tsx', 'tests/actions/form-templates.test.ts', 'tests/forms/activation.test.ts', 'tests/report/forms/default-assets.test.ts', 'tests/negative/form-engine-outputs.test.ts'],
   ),
 }
+
+export interface E2eEvidence { script: string; step: string }
+/**
+ * E2E 근거 — verified 는 격리와 기존 데이터·동시성·오류 검증까지다(개정 §2.10). 아래 키들은 메타의 단위·RLS 테스트에 더해, 실제 서버에서
+ * "설정을 바꾼다 → 화면·동작에 나타난다 → 다른 워크스페이스(프로젝트 키는 다른 프로젝트)에는 나타나지 않는다 → 되돌린다" 를 완주한 단계가 격리의 근거다.
+ * **키마다 한 줄** — 그 단계가 통과하지 못했으면 그 줄만 지운다(그 키는 BASE_META 의 wired 로 돌아가고, 문서는
+ * `CATALOG_WRITE=1 npx vitest run tests/settings/catalog-sync.test.ts` 로 다시 맞춘다). 단계가 그 스크립트에 실재하는지는 catalog-sync 가 본다 —
+ * 단계 이름을 바꾸면 이 표도 같이 바꾼다. 건너뜀으로 기록된 단계(setting-local-drafts 는 E2E_WIKI=1 일 때만 돈다)는 근거가 아니다.
+ */
+export const E2E_EVIDENCE: Readonly<Partial<Record<SettingKey, E2eEvidence>>> = {
+  'core.extra_axis_label': { script: 'scripts/e2e-local.mjs', step: 'setting-extra-axis' },
+  'views.default': { script: 'scripts/e2e-local.mjs', step: 'setting-views-default' },
+  'portal.widgets': { script: 'scripts/e2e-local.mjs', step: 'setting-portal-widgets' },
+  'branding.product_name': { script: 'scripts/e2e-local.mjs', step: 'setting-product-name' },
+  'branding.accent': { script: 'scripts/e2e-local.mjs', step: 'setting-accent' },
+  'branding.logo': { script: 'scripts/e2e-local.mjs', step: 'setting-logo' },
+  'navigation.menu': { script: 'scripts/e2e-local.mjs', step: 'setting-menu' },
+  'minutes.auto_file_by_path': { script: 'scripts/e2e-local.mjs', step: 'setting-auto-file' },
+  'security.local_drafts': { script: 'scripts/e2e-local.mjs', step: 'setting-local-drafts' },
+  'notify.policy': { script: 'scripts/e2e-synthetic.mjs', step: 'S7b-notify-isolation' },
+}
+
+/** 승격은 wired 에서만 — 소비처가 다 이어지지 않은 키(stored)를 E2E 한 단계로 건너뛰어 올리지 않는다. 근거 스크립트는 테스트 칸에 함께 적힌다 */
+function withEvidence(key: SettingKey, meta: CatalogMeta): CatalogMeta {
+  const evidence = E2E_EVIDENCE[key]
+  if (!evidence || meta.status !== 'wired') return meta
+  return { ...meta, status: 'verified', tests: meta.tests.includes(evidence.script) ? meta.tests : [...meta.tests, evidence.script] }
+}
+
+export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = Object.fromEntries(
+  (Object.entries(BASE_META) as [SettingKey, CatalogMeta][]).map(([key, meta]) => [key, withEvidence(key, meta)]),
+) as Record<SettingKey, CatalogMeta>
+
+/** E2E 근거를 얹기 전의 상태 — 테스트가 "승격은 wired 에서만, 근거가 있는 키만"을 고정할 때 쓴다 */
+export const baseStatusOf = (key: SettingKey): CatalogStatus => BASE_META[key].status
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
 export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: string; shape: string }[] = []

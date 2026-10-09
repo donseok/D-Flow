@@ -1068,3 +1068,169 @@ export function workerProblems({ index, wiki, gc, docsBefore, docsAfter }) {
   else if (gc.body?.ok !== true) p.push(`첨부 청소 응답: ${JSON.stringify(gc.body)?.slice(0, 120)}`)
   return p
 }
+
+// ── 설정 반영 완주(e2e-local.mjs 의 setting- 단계, e2e-synthetic.mjs 의 S7b) — "설정 값을 바꾼다 → 그 값이 화면·동작에 나타난다 →
+//    다른 워크스페이스(프로젝트 키는 다른 프로젝트)에는 나타나지 않는다 → 되돌린다" 를 키마다 한 단계로 본다. 카탈로그 상태 verified 의 근거
+//    (src/lib/settings/catalog-meta.ts 의 E2E_EVIDENCE)가 이 단계 이름을 가리킨다 — 이름을 바꾸면 그 표도 같이 바꾼다.
+
+/** 강조색 입력(hex 하나) — 제품 기본 코발트와 눈에 띄게 다른 색. 앱의 파생(deriveAccent)이 받아 주는 값인지는 테스트가 고정한다 */
+export const ACCENT_PROBE = '#6d28d9'
+/** 끄고 켜 볼 홈 위젯 — 모듈·검토자 조건이 없어 누구의 홈에나 늘 보이는 것 */
+export const PORTAL_PROBE_WIDGET = 'projects'
+/** 홈 위젯 id 의 레지스트리 순서 — src/lib/portal/widgets.ts 의 PORTAL_WIDGET_IDS 와 같아야 한다(테스트가 대조) */
+export const PORTAL_WIDGET_ORDER = Object.freeze(['my_work', 'projects', 'review', 'upcoming', 'recent_docs', 'announcements'])
+/** 메뉴 순서 확인 — 워크스페이스 주 그룹에서 기본은 홈이 프로젝트보다 앞이다. 이 순서를 뒤집고 앞 항목의 이름을 바꾼다 */
+export const MENU_PROBE_ORDER = Object.freeze(['ws.projects', 'ws.home'])
+/** 초안 정책 확인용 위키 문서의 종류 — 앱이 아는 문서 종류여야 한다(테스트가 대조) */
+export const WIKI_PROBE_KIND = 'reference'
+/** 1×1 투명 PNG — 로고(마크) 슬롯에 올려 탭 아이콘·읽기 라우트를 본다. 크기 상한(로고 256KB)보다 한참 작다 */
+export const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+
+/**
+ * 설정 단계의 확인용 값 — 실행마다 달라지는 꼬리를 붙여, 화면에 그 글자가 있으면 "이번 실행이 넣은 설정값"임이 갈린다(중립 이름).
+ * 추가 축 이름은 20자, 제품 이름은 40자, 메뉴 이름은 20자가 상한이다.
+ * @param {string} stamp 숫자 12자리(yyyymmddhhmm)
+ */
+export function settingProbeNames(stamp) {
+  const tail = String(stamp).slice(-4)
+  if (!/^\d{4}$/.test(tail)) throw new Error(`stamp 의 끝 네 자리가 숫자가 아니다: ${stamp}`)
+  return {
+    axis: `확인용 축 ${tail}`,
+    product: `확인용 제품 ${tail}`,
+    menuLabel: `확인용 메뉴 ${tail}`,
+    folders: { on: `확인용 폴더 켬 ${tail}`, off: `확인용 폴더 끔 ${tail}`, other: `확인용 폴더 대조 ${tail}` },
+    meeting: `E2E 자동 편철 회의 ${tail}`,
+    wikiTitle: `E2E 초안 정책 문서 ${tail}`,
+  }
+}
+
+/** 홈 위젯 설정 값 — 그 위젯 하나만 끄고 나머지는 레지스트리 순서로 켠다 @param {string} offId */
+export function portalWidgetsOff(offId) {
+  if (!PORTAL_WIDGET_ORDER.includes(offId)) throw new Error(`모르는 홈 위젯이다: ${offId}`)
+  return PORTAL_WIDGET_ORDER.map((id) => ({ id, enabled: id !== offId }))
+}
+
+/** 메뉴 설정 값 — MENU_PROBE_ORDER 순서로 앞에 두고 첫 항목의 이름을 바꾼다 @param {string} label */
+export function navMenuProbe(label) {
+  return { order: [...MENU_PROBE_ORDER], labels: { [MENU_PROBE_ORDER[0]]: label } }
+}
+
+/** 응답 HTML 의 <title> 글자 전부(문서 순서, 기본 엔티티만 푼다) — 스트리밍 메타데이터는 본문 쪽에 실릴 수 있어 첫 것만 보지 않는다 @param {string} html */
+export function titlesOf(html) {
+  const decode = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, '&')
+  return [...String(html).matchAll(/<title\b[^>]*>([^<]*)<\/title>/gi)].map((m) => decode(m[1]).trim())
+}
+
+/** 탭 제목이 그 제품 이름으로 끝나는가 — 세 범위의 제목 틀이 모두 '… | <제품>' 이고, 화면 제목이 없으면 제품 이름만이다 @param {string} html @param {string} name */
+export function productInTitle(html, name) {
+  return titlesOf(html).some((t) => t === name || t.endsWith(` | ${name}`))
+}
+
+/** 셸이 실은 강조색 블록의 첫 값(라이트 세트의 action 배경) — 없으면 null(제품 기본색). accentCss.ts 의 출력 꼴과 같다(테스트가 대조) @param {string} html */
+export function accentRootOf(html) {
+  return /:root\{--color-action:(#[0-9a-f]{6});/.exec(String(html))?.[1] ?? null
+}
+
+/** 문서 머리의 아이콘 링크 주소들 — <link rel="icon" …> 의 href @param {string} html @returns {string[]} */
+export function iconHrefsOf(html) {
+  const out = []
+  for (const [tag] of String(html).matchAll(/<link\b[^>]*>/gi)) {
+    if (!/\brel="(?:shortcut )?icon"/i.test(tag)) continue
+    const href = /\bhref="([^"]*)"/i.exec(tag)?.[1]
+    if (href) out.push(href.replace(/&amp;/g, '&'))
+  }
+  return out
+}
+
+/** 사이드 내비에 그려진 항목(문서 순서, id 마다 첫 것) — NavList 의 a[data-nav-item] 와 그 aria-label(= 표시 이름, 배지 수가 뒤에 붙을 수 있다)
+ *  @param {string} html @returns {{ id: string, label: string }[]} */
+export function navItemsOf(html) {
+  const out = [], seen = new Set()
+  for (const [tag] of String(html).matchAll(/<a\b[^>]*>/gi)) {
+    const id = /\bdata-nav-item="([^"]+)"/.exec(tag)?.[1]
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push({ id, label: /\baria-label="([^"]*)"/.exec(tag)?.[1] ?? '' })
+  }
+  return out
+}
+
+/**
+ * 메뉴 설정이 내비에 반영됐는가(순수) — MENU_PROBE_ORDER 의 두 항목이 모두 있고 첫 항목이 둘째보다 앞이며 첫 항목의 이름이 label 로 시작한다.
+ * expectApplied=false 면 반대: 둘째(홈)가 앞이고 어느 항목 이름에도 label 이 없다(다른 워크스페이스·되돌린 뒤).
+ * @param {{ id: string, label: string }[]} items @param {string} label @param {boolean} expectApplied @returns {string[]} 문제 목록
+ */
+export function navMenuProblems(items, label, expectApplied) {
+  const [first, second] = MENU_PROBE_ORDER
+  const at = (id) => items.findIndex((i) => i.id === id)
+  if (at(first) < 0 || at(second) < 0) return [`내비에 ${first}·${second} 가 없다(그려진 항목 ${items.map((i) => i.id).join(',') || '없음'})`]
+  const p = []
+  const applied = at(first) < at(second)
+  if (applied !== expectApplied) p.push(expectApplied ? `${first} 가 ${second} 보다 뒤다(순서 미반영)` : `${first} 가 ${second} 보다 앞이다(다른 범위의 순서가 실렸다)`)
+  const named = items.some((i) => i.label.includes(label))
+  if (expectApplied && !items[at(first)].label.startsWith(label)) p.push(`${first} 의 이름이 ${JSON.stringify(items[at(first)].label)} 다(이름 미반영)`)
+  if (!expectApplied && named) p.push(`내비에 이름 ${JSON.stringify(label)} 이 실렸다`)
+  return p
+}
+
+/** 홈에 그려진 위젯 id(문서 순서, 중복 없이) — WidgetFrame 의 section[data-widget] @param {string} html @returns {string[]} */
+export function widgetIdsOf(html) {
+  return [...new Set([...String(html).matchAll(/<section\b[^>]*\bdata-widget="([^"]+)"/gi)].map((m) => m[1]))]
+}
+
+/**
+ * 화면에 내려간 로컬 초안 정책(위키 편집기의 draftPolicy prop) — RSC 페이로드에서 읽는다(따옴표가 \" 로 실린 꼴과 그대로인 꼴 둘 다).
+ * 서로 다른 값마다 하나씩 돌려준다 — 한 화면이면 정확히 하나여야 한다(0 이면 편집기가 그려지지 않은 것).
+ * @param {string} html @returns {{ allowed: boolean, retention_days: number }[]}
+ */
+export function draftPoliciesOf(html) {
+  const seen = new Map()
+  for (const [, body] of String(html).matchAll(/draftPolicy\\?":\{([^{}]*)\}/g)) {
+    const allowed = /allowed\\?":(true|false)/.exec(body)?.[1]
+    const days = /retention_days\\?":(\d+)/.exec(body)?.[1]
+    if (allowed === undefined || days === undefined) continue
+    const v = { allowed: allowed === 'true', retention_days: Number(days) }
+    seen.set(JSON.stringify(v), v)
+  }
+  return [...seen.values()]
+}
+
+/** 외부 업로드 응답이 그 폴더로 편철됐다고 말하는가 — folder_path(팀 루트부터의 경로)에 그 폴더 이름이 있다 @param {any} body @param {string} segment */
+export function filedUnder(body, segment) {
+  return Array.isArray(body?.folder_path) && body.folder_path.includes(segment)
+}
+
+/** 위키 화면 단계를 돌릴지 — 서버가 WIKI_SERVICE_ENABLED=true 로 떠 있을 때만 켠다(E2E_WIKI=1). 그 밖에는 건너뛴다(실패로 세지 않는다)
+ *  @param {Record<string, string | undefined>} env */
+export function wikiStepEnabled(env) {
+  return env.E2E_WIKI === '1'
+}
+
+/**
+ * 알림 정책의 두 워크스페이스 격리 판정(순수, 합성 S7b) — 끈 워크스페이스는 이벤트 0, 그대로 둔 워크스페이스는 1건·수신자가 그 멤버,
+ * 다시 켠 뒤에는 끈 쪽도 1건이다. 건수는 "이 단계가 일으킨 새 이벤트"다.
+ * @param {{ offNew: number, otherNew: number, otherRecipients: { member_id: string }[], otherMemberId: string, onAgainNew: number, restored: boolean }} r
+ * @returns {Record<string, boolean>}
+ */
+export function notifyIsolationChecks({ offNew, otherNew, otherRecipients, otherMemberId, onAgainNew, restored }) {
+  return {
+    offWorkspaceSilent: offNew === 0,
+    otherWorkspaceStillEmits: otherNew === 1,
+    otherRecipientIsItsMember: otherRecipients.length === 1 && otherRecipients[0].member_id === otherMemberId,
+    onAgainEmits: onAgainNew === 1,
+    restored: restored === true,
+  }
+}
+
+/** 로고(마크) 객체 경로 — 앱의 규약 ws/<워크스페이스>/branding/<슬롯>-<sha256 앞 16자>.<확장자>(brandingPath.ts — 테스트가 그 판독기로 대조)
+ *  @param {string} workspaceId @param {string} sha256Hex 파일 내용의 sha256(hex) */
+export function brandMarkPath(workspaceId, sha256Hex) {
+  if (!/^[0-9a-f]{64}$/.test(sha256Hex)) throw new Error('sha256 hex 64자가 아니다')
+  return `ws/${workspaceId}/branding/mark-${sha256Hex.slice(0, 16)}.png`
+}
+
+/** 키 순서를 정렬한 JSON — 저장값(jsonb 는 키를 제 순서로 돌려준다)을 입력값과 비교할 때 쓴다. 배열 순서는 그대로다 @param {unknown} v */
+export function canonicalJson(v) {
+  return JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x)
+    ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x))
+}
