@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// /admin/workspaces(개정 §5.3.2) — 플랫폼 관리자만(나머지·열화 = 404). 목록(이름·slug·멤버·프로젝트·만든 날·허용 모듈·이동)과 생성 폼.
+// /admin/workspaces(개정 §5.3.2) — 플랫폼 관리자만(나머지·열화 = 404). 목록(이름·slug·멤버·프로젝트·만든 날·허용 모듈·이동)과 생성 폼,
+// 행 작업(이름 바꾸기·삭제 — 0055)과 워크스페이스 설정 '일반'의 이름 편집.
 import { act, type ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -11,10 +12,14 @@ import type { PlatformWorkspaceRow } from '@/app/actions/platformWorkspaces'
 
 const mocks = vi.hoisted(() => ({
   getActorForView: vi.fn(), listPlatformWorkspaces: vi.fn(), createPlatformWorkspace: vi.fn(), readCurrentWorkspace: vi.fn(),
+  renameWorkspace: vi.fn(), deletePlatformWorkspace: vi.fn(),
   notFound: vi.fn(() => { throw new Error('NEXT_HTTP_ERROR_FALLBACK;404') }), refresh: vi.fn(),
 }))
 vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
-vi.mock('@/app/actions/platformWorkspaces', () => ({ listPlatformWorkspaces: mocks.listPlatformWorkspaces, createPlatformWorkspace: mocks.createPlatformWorkspace }))
+vi.mock('@/app/actions/platformWorkspaces', () => ({
+  listPlatformWorkspaces: mocks.listPlatformWorkspaces, createPlatformWorkspace: mocks.createPlatformWorkspace,
+  renameWorkspace: mocks.renameWorkspace, deletePlatformWorkspace: mocks.deletePlatformWorkspace,
+}))
 vi.mock('@/lib/workspace/current', () => ({ readCurrentWorkspace: mocks.readCurrentWorkspace }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound, useRouter: () => ({ refresh: mocks.refresh }) }))
@@ -23,6 +28,7 @@ vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ lo
 
 import WorkspacesAdminPage from '@/app/(app)/(global)/admin/workspaces/page'
 import { WorkspacesManager } from '@/components/admin/WorkspacesManager'
+import { WorkspaceNameEditor } from '@/components/settings/WorkspaceNameEditor'
 
 const ROWS: PlatformWorkspaceRow[] = [
   { id: 'w1', slug: 'alpha', name: '알파', createdAt: '2026-09-01T03:00:00Z', memberCount: 12, projectCount: 3, allowedModules: [...NON_CORE_MODULES] },
@@ -216,5 +222,177 @@ describe('WorkspacesManager — 생성 폼', () => {
       expect(f.form.textContent).not.toContain('internal-host')
     }
     spy.mockRestore()
+  })
+})
+
+describe('WorkspacesManager — 행 작업: 이름 바꾸기', () => {
+  const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')
+  const open = (slug: string) => {
+    const { container } = render(<WorkspacesManager rows={ROWS} accountsHref={null} />)
+    fireEvent.click(container.querySelector(`[data-workspace-row="${slug}"] [data-workspace-rename]`)!)
+    return { container, input: dialog()!.querySelector<HTMLInputElement>('[data-rename-input]')!, confirm: dialog()!.querySelector<HTMLButtonElement>('[data-rename-confirm]')! }
+  }
+  it('행마다 이름 바꾸기·삭제 단추 — 이름이 든 라벨', () => {
+    const { container } = render(<WorkspacesManager rows={ROWS} accountsHref={null} />)
+    const row = container.querySelector('[data-workspace-row="gamma"]')!
+    expect(row.querySelector('[data-workspace-rename]')!.getAttribute('aria-label')).toBe('감마 워크스페이스 이름 바꾸기')
+    expect(row.querySelector('[data-workspace-delete]')!.getAttribute('aria-label')).toBe('감마 워크스페이스 삭제')
+    expect(dialog()).toBeNull()
+  })
+  it('대화상자 — 지금 이름이 채워져 있고, 주소는 바뀌지 않는다고 알린다', () => {
+    const f = open('beta')
+    expect(f.input.value).toBe('베타')
+    expect(dialog()!.textContent).toContain('주소(beta)는 바뀌지 않습니다')
+  })
+  it('저장 — 다듬은 이름으로 액션을 부르고, 성공하면 닫고 알림·새로 고침', async () => {
+    mocks.renameWorkspace.mockResolvedValue({ ok: true, name: '베타 2', unchanged: false })
+    const f = open('beta')
+    setValue(f.input, '  베타 2 ')
+    fireEvent.click(f.confirm)
+    await flush()
+    expect(mocks.renameWorkspace).toHaveBeenCalledExactlyOnceWith('w2', '베타 2')
+    expect(dialog()).toBeNull()
+    expect(f.container.querySelector('[data-workspace-row-notice]')!.textContent).toBe('워크스페이스 이름을 바꿨습니다: 베타 2')
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+  })
+  it('화면 검증 — 비우면 서버를 부르지 않고 사유를 보인다. 이름이 그대로면 부르지 않고 닫는다', () => {
+    const f = open('beta')
+    setValue(f.input, '   ')
+    fireEvent.click(f.confirm)
+    expect(mocks.renameWorkspace).not.toHaveBeenCalled()
+    expect(f.input.getAttribute('aria-invalid')).toBe('true')
+    expect(dialog()!.textContent).toContain('이름을 입력하세요.')
+    setValue(f.input, '베타')
+    fireEvent.click(f.confirm)
+    expect(mocks.renameWorkspace).not.toHaveBeenCalled()
+    expect(dialog()).toBeNull()
+  })
+  it('거부 — 대화상자를 닫지 않고 사유를 보인다(이름 변경의 권한 문구는 생성의 것과 다르다)', async () => {
+    mocks.renameWorkspace.mockResolvedValue({ ok: false, code: 'denied' })
+    const f = open('beta')
+    setValue(f.input, '베타 2')
+    fireEvent.click(f.confirm)
+    await flush()
+    expect(dialog()!.textContent).toContain('이 워크스페이스의 관리자만 이름을 바꿀 수 있습니다.')
+    expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe('WorkspacesManager — 행 작업: 삭제', () => {
+  const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')
+  const open = (slug: string) => {
+    const { container } = render(<WorkspacesManager rows={ROWS} accountsHref={null} />)
+    fireEvent.click(container.querySelector(`[data-workspace-row="${slug}"] [data-workspace-delete]`)!)
+    return { container, input: dialog()!.querySelector<HTMLInputElement>('[data-delete-slug]')!, confirm: () => dialog()!.querySelector<HTMLButtonElement>('[data-delete-confirm]')! }
+  }
+  it('대화상자 — 대상·되돌릴 수 없음·삭제 조건을 알리고, 주소를 직접 적기 전에는 확정 단추가 잠겨 있다', () => {
+    const f = open('beta')
+    const text = dialog()!.textContent!
+    expect(dialog()!.querySelector('[data-delete-target]')!.textContent).toBe('베타 (beta)')
+    expect(text).toContain('삭제는 되돌릴 수 없습니다')
+    expect(text).toContain('비어 있는 워크스페이스만 삭제됩니다')
+    expect(f.input.value).toBe('')
+    expect(f.confirm().disabled).toBe(true)
+  })
+  it('적은 주소가 한 글자라도 다르면 잠긴 채다 — 대소문자·앞뒤 공백을 맞춰 주지 않는다', () => {
+    const f = open('beta')
+    for (const typed of ['bet', 'Beta', ' beta', 'beta ', 'alpha']) {
+      setValue(f.input, typed)
+      expect(f.confirm().disabled, typed).toBe(true)
+    }
+    fireEvent.click(f.confirm())
+    expect(mocks.deletePlatformWorkspace).not.toHaveBeenCalled()
+    setValue(f.input, 'beta')
+    expect(f.confirm().disabled).toBe(false)
+  })
+  it('확정 — 그 워크스페이스 id 와 적은 주소로 액션을 부르고, 성공하면 닫고 알림·새로 고침', async () => {
+    mocks.deletePlatformWorkspace.mockResolvedValue({ ok: true, workspace: { slug: 'beta', name: '베타' } })
+    const f = open('beta')
+    setValue(f.input, 'beta')
+    fireEvent.click(f.confirm())
+    await flush()
+    expect(mocks.deletePlatformWorkspace).toHaveBeenCalledExactlyOnceWith('w2', 'beta')
+    expect(dialog()).toBeNull()
+    expect(f.container.querySelector('[data-workspace-row-notice]')!.textContent).toBe('워크스페이스를 삭제했습니다: 베타')
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+  })
+  it('비어 있지 않으면 닫지 않고 남은 것을 항목별로 보인다 — 모르는 표는 이름과 함께', async () => {
+    mocks.deletePlatformWorkspace.mockResolvedValue({
+      ok: false, code: 'not_empty',
+      remaining: [{ key: 'projects', count: 3 }, { key: 'members', count: 11 }, { key: 'minutes', count: 5 }, { key: 'other', count: 2, table: 'zz_new' }],
+    })
+    const f = open('alpha')
+    setValue(f.input, 'alpha')
+    fireEvent.click(f.confirm())
+    await flush()
+    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe('비어 있지 않아 삭제하지 않았습니다.')
+    expect([...dialog()!.querySelectorAll('[data-delete-remaining] li')].map((li) => li.textContent))
+      .toEqual(['프로젝트 3개', '다른 멤버 11명', '회의록 5건', '그 밖의 자료 2건 (zz_new)'])
+    expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(f.container.querySelector('[data-workspace-row-notice]')).toBeNull()
+  })
+  it.each([
+    ['slug_mismatch', '입력한 주소가 이 워크스페이스의 주소와 다릅니다. 삭제하지 않았습니다.'],
+    ['denied', '플랫폼 관리자만 워크스페이스를 삭제할 수 있습니다.'],
+    ['delete_failed', '워크스페이스를 삭제하지 못했습니다. 아무것도 지워지지 않았습니다. 잠시 뒤 다시 시도하세요.'],
+  ])('거부 %s — 사유를 보이고 남은 것 목록은 그리지 않는다', async (code, message) => {
+    mocks.deletePlatformWorkspace.mockResolvedValue({ ok: false, code })
+    const f = open('beta')
+    setValue(f.input, 'beta')
+    fireEvent.click(f.confirm())
+    await flush()
+    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe(message)
+    expect(dialog()!.querySelector('[data-delete-remaining]')).toBeNull()
+  })
+  it('요청 자체가 실패하면 고정 문구 — 닫지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.deletePlatformWorkspace.mockRejectedValue(new Error('network down'))
+    const f = open('beta')
+    setValue(f.input, 'beta')
+    fireEvent.click(f.confirm())
+    await flush()
+    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe('요청을 처리하지 못했습니다. 잠시 뒤 다시 시도하세요.')
+    spy.mockRestore()
+  })
+})
+
+describe("WorkspaceNameEditor — 워크스페이스 설정 '일반'의 이름", () => {
+  const setup = () => {
+    const { container } = render(<WorkspaceNameEditor workspaceId="w1" slug="alpha" initialName="알파" />)
+    const form = container.querySelector('[data-workspace-name-editor]') as HTMLFormElement
+    const submit = () => { act(() => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }) }
+    return { form, input: form.querySelector('input')!, button: form.querySelector<HTMLButtonElement>('button[type="submit"]')!, submit }
+  }
+  it('지금 이름이 채워져 있고 주소는 바뀌지 않는다고 알린다 — 바꾸기 전에는 저장이 잠겨 있다', () => {
+    const f = setup()
+    expect(f.input.value).toBe('알파')
+    expect(f.form.textContent).toContain('주소(alpha)는 바뀌지 않습니다')
+    expect(f.button.disabled).toBe(true)
+  })
+  it('저장 — 다듬은 이름으로 액션을 부르고, 성공하면 알림·새로 고침', async () => {
+    mocks.renameWorkspace.mockResolvedValue({ ok: true, name: '알파 연구소', unchanged: false })
+    const f = setup()
+    setValue(f.input, ' 알파 연구소 ')
+    expect(f.button.disabled).toBe(false)
+    f.submit()
+    await flush()
+    expect(mocks.renameWorkspace).toHaveBeenCalledExactlyOnceWith('w1', '알파 연구소')
+    expect(f.form.querySelector('[role="status"]')!.textContent).toBe('이름을 저장했습니다.')
+    expect(f.input.value).toBe('알파 연구소')
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+  })
+  it('검증·거부 — 비우면 서버를 부르지 않고, 거부되면 사유를 보이고 입력은 그대로 둔다', async () => {
+    const f = setup()
+    setValue(f.input, '   ')
+    f.submit()
+    expect(mocks.renameWorkspace).not.toHaveBeenCalled()
+    expect(f.form.textContent).toContain('이름을 입력하세요.')
+    mocks.renameWorkspace.mockResolvedValue({ ok: false, code: 'rename_failed' })
+    setValue(f.input, '알파 2')
+    f.submit()
+    await flush()
+    expect(f.form.textContent).toContain('이름을 바꾸지 못했습니다. 잠시 뒤 다시 시도하세요.')
+    expect(f.input.value).toBe('알파 2')
+    expect(mocks.refresh).not.toHaveBeenCalled()
   })
 })

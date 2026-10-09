@@ -350,6 +350,7 @@ export const wbsEn: Record<keyof typeof wbsKo, string> = {
   'wbs.bulk.edit': 'Bulk edit',
   'wbs.bulk.paste': 'Paste',
   'wbs.bulk.clear': 'Clear selection',
+  'wbs.bulk.clearedLive': 'Selection cleared',
   'wbs.bulk.reloadFail': 'Couldn\'t load the latest content. Please try again.',
   'wbs.bulk.modeClear': 'Clear value',
   'wbs.paste.title': 'Review WBS paste',

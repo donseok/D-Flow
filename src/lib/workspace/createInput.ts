@@ -34,13 +34,22 @@ export type WorkspaceCreateCheck =
 const bad = (code: WorkspaceCreateInputCode, field: WorkspaceCreateField | null): WorkspaceCreateCheck => ({ ok: false, code, field })
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
+export type WorkspaceNameCheck = { ok: true; name: string } | { ok: false; code: 'name_required' | 'name_too_long' }
+/** 워크스페이스 이름 — 다듬은 1~80자의 한 줄. 만들 때와 이름을 바꿀 때 같은 규칙이다(rename_workspace RPC 도 같은 식으로 다시 본다) */
+export function checkWorkspaceName(raw: unknown): WorkspaceNameCheck {
+  if (typeof raw !== 'string') return { ok: false, code: 'name_required' }
+  const name = raw.trim()
+  if (!name) return { ok: false, code: 'name_required' }
+  if (name.length > WORKSPACE_NAME_MAX || /[\r\n\t]/.test(name)) return { ok: false, code: 'name_too_long' }
+  return { ok: true, name }
+}
+
 /** modules 를 생략하면 비core 전부(dev-bootstrap 의 기본값과 같다), 빈 배열은 core 만. 순서는 레지스트리 순으로 정규화한다 */
 export function checkWorkspaceCreate(raw: unknown): WorkspaceCreateCheck {
   if (!isRecord(raw)) return bad('input_invalid', null)
-  if (typeof raw.name !== 'string') return bad('name_required', 'name')
-  const name = raw.name.trim()
-  if (!name) return bad('name_required', 'name')
-  if (name.length > WORKSPACE_NAME_MAX || /[\r\n\t]/.test(name)) return bad('name_too_long', 'name')
+  const named = checkWorkspaceName(raw.name)
+  if (!named.ok) return bad(named.code, 'name')
+  const name = named.name
   // slug 는 다듬지 않는다 — 대문자·공백을 조용히 고치면 사용자가 적은 주소와 만들어진 주소가 달라진다
   if (typeof raw.slug !== 'string' || !SLUG_RE.test(raw.slug)) return bad('slug_invalid', 'slug')
 

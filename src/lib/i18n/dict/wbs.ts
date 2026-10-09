@@ -370,6 +370,7 @@ export const wbsKo = {
   'wbs.bulk.edit': '대량 수정',
   'wbs.bulk.paste': '붙여넣기',
   'wbs.bulk.clear': '선택 해제',
+  'wbs.bulk.clearedLive': '선택을 해제했습니다',
   'wbs.bulk.reloadFail': '최신 내용을 불러오지 못했습니다. 다시 시도해 주세요.',
   'wbs.bulk.modeClear': '값 비우기',
   'wbs.paste.title': 'WBS 붙여넣기 검토',

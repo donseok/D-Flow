@@ -1,15 +1,16 @@
-// 플랫폼 관리 — 워크스페이스 목록·생성 액션. 가드(requireSuperuser)·입력 검증·첫 관리자 없음·생성은 RPC 한 번(create_workspace_with_admin — 0054)·사유 매핑.
+// 플랫폼 관리 — 워크스페이스 목록·생성·이름 변경·삭제 액션. 이름 변경은 requireWorkspaceAdmin·rename_workspace, 삭제는 requireSuperuser·delete_empty_workspace(0055).
+// 목록·생성: 가드(requireSuperuser)·입력 검증·첫 관리자 없음·생성은 RPC 한 번(create_workspace_with_admin — 0054)·사유 매핑.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  requireSuperuser: vi.fn(), createAdminClient: vi.fn(), getWorkspaceConfig: vi.fn(), revalidatePath: vi.fn(),
+  requireSuperuser: vi.fn(), requireWorkspaceAdmin: vi.fn(), createAdminClient: vi.fn(), getWorkspaceConfig: vi.fn(), revalidatePath: vi.fn(),
 }))
-vi.mock('@/lib/authz', () => ({ requireSuperuser: mocks.requireSuperuser }))
+vi.mock('@/lib/authz', () => ({ requireSuperuser: mocks.requireSuperuser, requireWorkspaceAdmin: mocks.requireWorkspaceAdmin }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: mocks.getWorkspaceConfig }))
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }))
 
-import { createPlatformWorkspace, listPlatformWorkspaces } from '@/app/actions/platformWorkspaces'
+import { createPlatformWorkspace, deletePlatformWorkspace, listPlatformWorkspaces, renameWorkspace } from '@/app/actions/platformWorkspaces'
 import { NON_CORE_MODULES } from '@/lib/modules/defaults'
 import { SETTINGS_SCHEMA_VERSION } from '@/lib/settings/registry'
 
@@ -59,6 +60,7 @@ const valuesOf = (calls: Call[]) => (rpcOf(calls)[0].payload as { p_values: Reco
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.requireSuperuser.mockResolvedValue({ ok: true, actor: { userId: ACTOR, isSuperuser: true } })
+  mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: true, actor: { userId: 'u-ws-admin', isSuperuser: false } })
 })
 
 describe('createPlatformWorkspace', () => {
@@ -217,6 +219,135 @@ describe('listPlatformWorkspaces', () => {
     let n = 0
     fakeAdmin((c) => (c.table === 'workspace_members' ? (n++ === 0 ? { data: [{ workspace_id: 'w1' }], count: 5 } : { data: [], count: 5 }) : rows(c)))
     expect(await listPlatformWorkspaces()).toMatchObject({ ok: false })
+    spy.mockRestore()
+  })
+})
+
+describe('renameWorkspace', () => {
+  const WS = 'ws-1'
+  it('그 워크스페이스의 관리자 가드 — 거부되면 service_role 클라이언트를 만들지 않는다', async () => {
+    mocks.requireWorkspaceAdmin.mockResolvedValue({ ok: false, error: '권한 없음' })
+    expect(await renameWorkspace(WS, '새 이름')).toEqual({ ok: false, code: 'denied', error: '권한 없음' })
+    expect(mocks.requireWorkspaceAdmin).toHaveBeenCalledExactlyOnceWith(WS)
+    expect(mocks.requireSuperuser).not.toHaveBeenCalled()
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+  it('워크스페이스 id 가 없으면 가드도 부르지 않는다', async () => {
+    expect(await renameWorkspace('', '새 이름')).toEqual({ ok: false, code: 'not_found' })
+    expect(await renameWorkspace(undefined as never, '새 이름')).toEqual({ ok: false, code: 'not_found' })
+    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
+  })
+  it('이름 검증은 가드 뒤, DB 앞 — 비었거나 80자를 넘거나 줄바꿈이 있으면 RPC 를 부르지 않는다', async () => {
+    const { calls } = fakeAdmin(() => ({}))
+    expect(await renameWorkspace(WS, '   ')).toEqual({ ok: false, code: 'name_required' })
+    expect(await renameWorkspace(WS, 7 as never)).toEqual({ ok: false, code: 'name_required' })
+    expect(await renameWorkspace(WS, 'a'.repeat(81))).toEqual({ ok: false, code: 'name_too_long' })
+    expect(await renameWorkspace(WS, '두\n줄')).toEqual({ ok: false, code: 'name_too_long' })
+    expect(mocks.requireWorkspaceAdmin).toHaveBeenCalledTimes(4)
+    expect(calls).toEqual([])
+  })
+  it('정상 — RPC 한 번(다듬은 이름, 행위자는 가드 결과의 userId). 표에 직접 쓰지 않고, 레이아웃 데이터까지 새로 읽게 한다', async () => {
+    const { calls } = fakeAdmin(() => ({ data: { status: 'applied', name: '새 이름', previous: '옛 이름' } }))
+    expect(await renameWorkspace(WS, '  새 이름 ')).toEqual({ ok: true, name: '새 이름', unchanged: false })
+    expect(calls).toEqual([{ table: 'rename_workspace', op: 'rpc', filters: [], payload: { p_actor: 'u-ws-admin', p_workspace_id: WS, p_name: '새 이름' } }])
+    expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith('/', 'layout')
+  })
+  it('같은 이름이면 unchanged — 다시 읽게 하지 않는다', async () => {
+    fakeAdmin(() => ({ data: { status: 'unchanged', name: '같은 이름' } }))
+    expect(await renameWorkspace(WS, '같은 이름')).toEqual({ ok: true, name: '같은 이름', unchanged: true })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+  it.each([
+    [{ code: 'P0002', message: 'WORKSPACE_NOT_FOUND' }, 'not_found'],
+    [{ code: '22023', message: 'WORKSPACE_NAME_INVALID' }, 'name_too_long'],
+    [{ code: '42501', message: 'AUTHZ_FORBIDDEN' }, 'denied'],
+    [{ code: '42501', message: 'permission denied for function rename_workspace' }, 'rename_failed'],
+    [{ code: 'XX000', message: 'relation "public.workspaces" is broken' }, 'rename_failed'],
+  ])('RPC 오류 %o → %s — 원문은 응답에 없다', async (error, code) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fakeAdmin(() => ({ error }))
+    const res = await renameWorkspace(WS, '새 이름')
+    expect(res).toEqual({ ok: false, code })
+    expect(JSON.stringify(res)).not.toContain('relation')
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+  it('RPC 가 성공했는데 결과를 읽지 못하면 성공으로 위장하지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const data of [null, {}, { status: 'applied' }, { status: 'weird', name: 'x' }]) {
+      fakeAdmin(() => ({ data }))
+      expect(await renameWorkspace(WS, '새 이름'), JSON.stringify(data)).toEqual({ ok: false, code: 'rename_failed' })
+    }
+    spy.mockRestore()
+  })
+})
+
+describe('deletePlatformWorkspace', () => {
+  const WS = 'ws-9'
+  it('플랫폼 관리자가 아니면 거부 — 그 워크스페이스의 관리자 가드로 열지 않는다', async () => {
+    mocks.requireSuperuser.mockResolvedValue({ ok: false, error: '권한 없음' })
+    expect(await deletePlatformWorkspace(WS, 'empty-org')).toEqual({ ok: false, code: 'denied', error: '권한 없음' })
+    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+  it('확인 slug 가 형식 밖이면 DB 에 묻지 않는다 — 다듬어 맞춰 주지 않는다', async () => {
+    const { calls } = fakeAdmin(() => ({}))
+    for (const slug of ['', ' empty-org', 'Empty-Org', 'empty org', null, undefined]) {
+      expect(await deletePlatformWorkspace(WS, slug as never), String(slug)).toEqual({ ok: false, code: 'slug_mismatch' })
+    }
+    expect(await deletePlatformWorkspace('', 'empty-org')).toEqual({ ok: false, code: 'not_found' })
+    expect(calls).toEqual([])
+  })
+  it('정상 — RPC 한 번(적은 slug 그대로, 행위자는 가드 결과의 userId). 표를 직접 지우지 않는다', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const { calls } = fakeAdmin(() => ({ data: { status: 'deleted', slug: 'empty-org', name: '빈 조직', removed: { workspace_settings: 1 } } }))
+    expect(await deletePlatformWorkspace(WS, 'empty-org')).toEqual({ ok: true, workspace: { slug: 'empty-org', name: '빈 조직' } })
+    expect(calls).toEqual([{ table: 'delete_empty_workspace', op: 'rpc', filters: [], payload: { p_actor: ACTOR, p_workspace_id: WS, p_expected_slug: 'empty-org' } }])
+    expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith('/', 'layout')
+    // 서버 로그에 흔적 — 이름·주소는 싣지 않는다
+    expect(info).toHaveBeenCalledOnce()
+    expect(JSON.stringify(info.mock.calls[0])).not.toContain('빈 조직')
+    info.mockRestore()
+  })
+  it('비어 있지 않으면 not_empty 와 남은 것 — 아무것도 새로 읽게 하지 않는다', async () => {
+    fakeAdmin(() => ({ data: { status: 'blocked', slug: 'busy', name: '바쁜 조직', remaining: { projects: 3, workspace_members: 2, zz_new: 1 } } }))
+    expect(await deletePlatformWorkspace(WS, 'busy')).toEqual({
+      ok: false, code: 'not_empty',
+      remaining: [{ key: 'projects', count: 3 }, { key: 'members', count: 2 }, { key: 'other', count: 1, table: 'zz_new' }],
+    })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+  it('거부인데 남은 것을 읽지 못하면 "남은 것 없음"으로 그리지 않고 실패', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const remaining of [undefined, {}, { projects: 'many' }, []]) {
+      fakeAdmin(() => ({ data: { status: 'blocked', remaining } }))
+      expect(await deletePlatformWorkspace(WS, 'busy'), JSON.stringify(remaining)).toEqual({ ok: false, code: 'delete_failed' })
+    }
+    spy.mockRestore()
+  })
+  it.each([
+    [{ code: '22023', message: 'WORKSPACE_SLUG_MISMATCH' }, 'slug_mismatch'],
+    [{ code: 'P0002', message: 'WORKSPACE_NOT_FOUND' }, 'not_found'],
+    [{ code: '23503', message: 'WORKSPACE_DELETE_REFERENCED' }, 'referenced'],
+    [{ code: '42501', message: 'AUTHZ_FORBIDDEN' }, 'denied'],
+    [{ code: '0A000', message: 'WORKSPACE_DELETE_UNKNOWN_REFERENCE' }, 'delete_failed'],
+    [{ code: '22P02', message: 'invalid input syntax for type uuid: "ws-9"' }, 'delete_failed'],
+  ])('RPC 오류 %o → %s — 원문은 응답에 없다', async (error, code) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fakeAdmin(() => ({ error }))
+    const res = await deletePlatformWorkspace(WS, 'empty-org')
+    expect(res).toEqual({ ok: false, code })
+    expect(JSON.stringify(res)).not.toContain('uuid')
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+  it('RPC 가 성공했는데 결과 형태가 어긋나면 삭제됐다고 하지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const data of [null, {}, { status: 'deleted' }, { status: 'applied', slug: 'a', name: 'b' }]) {
+      fakeAdmin(() => ({ data }))
+      expect(await deletePlatformWorkspace(WS, 'empty-org'), JSON.stringify(data)).toEqual({ ok: false, code: 'delete_failed' })
+    }
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
     spy.mockRestore()
   })
 })

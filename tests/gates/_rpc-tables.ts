@@ -41,6 +41,9 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   create_weekly_report: ['weekly_reports', 'weekly_report_rows'],
   // 0054 — 워크스페이스 행·첫 관리자 멤버십·인물 + 설정 값(안에서 apply_workspace_settings 를 부른다 — 그 함수의 표를 함께 적는다. 설정 행 생성·권한 이력은 트리거)
   create_workspace_with_admin: ['workspaces', 'workspace_members', 'people', 'workspace_settings', 'workspace_settings_history'],
+  // 0055 — 빈 워크스페이스 삭제. 본문이 쓰는 표는 workspaces 하나다(부속 행은 FK 캐스케이드·권한 이력은 삭제 트리거 — 규칙: 트리거 제외).
+  // 모듈 표를 포함해 닫힌 목록 밖의 참조 표에 행이 있으면 RPC 가 지우지 않고 거부한다
+  delete_empty_workspace: ['workspaces'],
   ensure_team_roots: ['minute_folders'],
   get_project_creation_receipt: [], // command receipt read only; no writes
   import_wbs_cmd: ['wbs_items', 'item_owners', 'holidays', 'command_receipts'],
@@ -51,6 +54,8 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   record_password_reset: ['authz_events'],
   // 0053 — 소속 삭제 + 수락 전 초대 회수 + 소유 토큰 닫기(명단 권한 null·이력은 트리거가 쓴다 — 규칙: 트리거 제외)
   remove_workspace_member: ['workspace_members', 'project_invites', 'integration_credentials'],
+  // 0055 — 워크스페이스 이름(행의 name 한 칸)
+  rename_workspace: ['workspaces'],
   set_platform_admin: ['authz_commands', 'platform_admins'],
   set_workspace_role: ['authz_commands', 'workspace_members'],
   team_reference_counts: [], // 병합 미리보기 — 건수만 읽는다

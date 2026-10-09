@@ -1,7 +1,7 @@
 // 워크스페이스 생성 입력의 순수 검증 — 서버 액션과 생성 폼이 같은 함수를 쓴다(dev-bootstrap 과 같은 규칙).
 import { describe, expect, it } from 'vitest'
 import { NON_CORE_MODULES } from '@/lib/modules/defaults'
-import { checkWorkspaceCreate, splitDomainsInput, suggestedInviteDomain } from '@/lib/workspace/createInput'
+import { checkWorkspaceCreate, splitDomainsInput, suggestedInviteDomain, checkWorkspaceName } from '@/lib/workspace/createInput'
 
 const base = { name: '새 조직', slug: 'new-org' }
 
@@ -73,5 +73,16 @@ describe('생성 폼의 도메인 입력 도우미', () => {
     expect(suggestedInviteDomain('owner@')).toBeNull()
     expect(suggestedInviteDomain('')).toBeNull()
     expect(suggestedInviteDomain('not-an-email')).toBeNull()
+  })
+})
+
+describe('checkWorkspaceName — 만들 때와 이름을 바꿀 때 같은 규칙', () => {
+  it('다듬은 1~80자의 한 줄', () => {
+    expect(checkWorkspaceName('  새 조직  ')).toEqual({ ok: true, name: '새 조직' })
+    expect(checkWorkspaceName('가'.repeat(80))).toEqual({ ok: true, name: '가'.repeat(80) })
+  })
+  it('문자열이 아니거나 비면 name_required, 80자를 넘거나 줄바꿈·탭이 있으면 name_too_long', () => {
+    for (const raw of [undefined, null, 7, '', '   ']) expect(checkWorkspaceName(raw), String(raw)).toEqual({ ok: false, code: 'name_required' })
+    for (const raw of ['가'.repeat(81), '두\n줄', '탭\t이름', '줄\r바꿈']) expect(checkWorkspaceName(raw), JSON.stringify(raw)).toEqual({ ok: false, code: 'name_too_long' })
   })
 })

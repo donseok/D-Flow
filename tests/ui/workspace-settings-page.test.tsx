@@ -29,6 +29,9 @@ vi.mock('@/components/settings/SettingsShell', () => ({ SettingsShell: (p: { ite
 vi.mock('@/components/settings/ModuleAllowEditor', () => ({ ModuleAllowEditor: h.allowEditor }))
 vi.mock('@/components/settings/WorkspaceFieldsEditor', () => ({ WorkspaceFieldsEditor: () => null }))
 vi.mock('@/components/settings/LogoEditor', () => ({ LogoEditor: () => null }))
+vi.mock('@/components/settings/WorkspaceNameEditor', () => ({
+  WorkspaceNameEditor: (p: { workspaceId: string; slug: string; initialName: string }) => <div data-name-editor={`${p.workspaceId}|${p.slug}|${p.initialName}`} />,
+}))
 vi.mock('@/components/settings/AccentEditor', () => ({ AccentEditor: () => null }))
 vi.mock('@/components/settings/MenuOrderEditor', () => ({ MenuOrderEditor: () => null }))
 vi.mock('@/components/settings/PortalWidgetsEditor', () => ({ PortalWidgetsEditor: (p: Record<string, unknown>) => h.widgetsEditor(p) }))
@@ -138,6 +141,13 @@ describe('/w/[slug]/settings 페이지', () => {
     await render()
     expect(h.allowEditor).toHaveBeenCalledTimes(1)
     expect(h.allowEditor.mock.calls[0][0]).toMatchObject({ workspaceId: WID, revision: 7 })
+  })
+
+  it("'일반' 범주에 워크스페이스 이름 편집기 — 그 워크스페이스의 id·주소·지금 이름을 넘긴다(0055. 설정 키가 아니라 행의 이름이다)", async () => {
+    const html = await render()
+    expect(html).toContain(`data-name-editor="${WID}|alpha|Alpha"`)
+    expect(html.indexOf('data-name-editor')).toBeGreaterThan(html.indexOf('id="workspace-general"'))
+    expect(html.indexOf('data-name-editor')).toBeLessThan(html.indexOf('id="workspace-modules"'))
   })
 
   it('공용 팀 링크는 그 워크스페이스의 관리 화면으로 — 워크스페이스 관리자에게도 연다(SP3b D22)', async () => {

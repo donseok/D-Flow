@@ -12,6 +12,7 @@ import { NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
 import { MODULE_LABEL_KEY } from '@/lib/modules/labels'
 import { checkWorkspaceCreate, splitDomainsInput, suggestedInviteDomain, type WorkspaceCreateField } from '@/lib/workspace/createInput'
 import { wsHref } from '@/lib/workspace/paths'
+import { DeleteWorkspaceDialog, RenameWorkspaceDialog } from './WorkspaceRowDialogs'
 
 /** '{n}' 꼴 자리 채우기 — 사전 문구의 수·이름 */
 const fill = (text: string, vars: Record<string, string | number>) => text.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m))
@@ -49,6 +50,11 @@ export function WorkspacesManager({ rows, accountsHref }: {
   const [failure, setFailure] = useState<Failure | null>(null)
   const [created, setCreated] = useState<{ slug: string; name: string } | null>(null)
   const [pending, startTransition] = useTransition()
+  // 행 작업(이름 바꾸기·삭제) — 대화상자는 한 번에 하나. 결과 한 줄은 목록 아래에 남긴다(대화상자는 닫힌 뒤다)
+  const [dialog, setDialog] = useState<{ kind: 'rename' | 'delete'; row: PlatformWorkspaceRow } | null>(null)
+  const [rowNotice, setRowNotice] = useState<string | null>(null)
+  const closeDialog = () => setDialog(null)
+  const rowDone = (text: string) => { setDialog(null); setRowNotice(text); router.refresh() }
 
   const errorText = (f: Failure) => t(`platform.ws.err.${f.code}` as DictKey)
   const fieldError = (field: WorkspaceCreateField) => (failure?.field === field ? errorText(failure) : null)
@@ -94,7 +100,7 @@ export function WorkspacesManager({ rows, accountsHref }: {
             <StatusMessage kind="empty" title={t('platform.ws.emptyTitle')} detail={t('platform.ws.emptyDesc')} />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
+              <table className="w-full min-w-[820px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
                     <th className="py-2 pr-3">{t('platform.ws.colName')}</th>
@@ -119,8 +125,16 @@ export function WorkspacesManager({ rows, accountsHref }: {
                         {moduleSummary(w.allowedModules)}
                       </td>
                       <td className="py-2.5 pr-3 text-right">
-                        <Link href={wsHref(w.slug)} aria-label={fill(t('platform.ws.openLabel'), { name: w.name })}
-                          className="font-semibold text-action hover:underline">{t('platform.ws.open')}</Link>
+                        <span className="inline-flex items-center gap-3 whitespace-nowrap">
+                          <Link href={wsHref(w.slug)} aria-label={fill(t('platform.ws.openLabel'), { name: w.name })}
+                            className="font-semibold text-action hover:underline">{t('platform.ws.open')}</Link>
+                          <button type="button" data-workspace-rename aria-label={fill(t('platform.ws.renameLabel'), { name: w.name })}
+                            onClick={() => { setRowNotice(null); setDialog({ kind: 'rename', row: w }) }}
+                            className="font-semibold text-action hover:underline">{t('platform.ws.rename')}</button>
+                          <button type="button" data-workspace-delete aria-label={fill(t('platform.ws.deleteLabel'), { name: w.name })}
+                            onClick={() => { setRowNotice(null); setDialog({ kind: 'delete', row: w }) }}
+                            className="font-semibold text-danger hover:underline">{t('common.delete')}</button>
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -128,8 +142,17 @@ export function WorkspacesManager({ rows, accountsHref }: {
               </table>
             </div>
           )}
+          {rowNotice && <p role="status" data-workspace-row-notice className="mt-4 text-sm text-fg">{rowNotice}</p>}
         </div>
       </section>
+      {dialog?.kind === 'rename' && (
+        <RenameWorkspaceDialog key={dialog.row.id} workspace={dialog.row} onClose={closeDialog}
+          onRenamed={(name) => rowDone(fill(t('platform.ws.renamed'), { name }))} />
+      )}
+      {dialog?.kind === 'delete' && (
+        <DeleteWorkspaceDialog key={dialog.row.id} workspace={dialog.row} onClose={closeDialog}
+          onDeleted={(name) => rowDone(fill(t('platform.ws.deleted'), { name }))} />
+      )}
 
       <section className="card overflow-hidden" id="create" data-workspace-create>
         <div className="border-b border-border px-5 py-4 sm:px-6">

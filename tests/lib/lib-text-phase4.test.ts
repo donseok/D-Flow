@@ -18,6 +18,9 @@ import { serverKoTranslate, serverTranslatorFor } from '@/lib/i18n/serverDict'
 import { failureText, failureTextIn, libMessages, libText } from '@/lib/i18n/serverText'
 import { settingDef } from '@/lib/settings/registry'
 import { vocabCodeError } from '@/lib/settings/vocabGuard'
+import { parseApprovalSteps } from '@/lib/domain/approvalSteps'
+import { parseWbsMarkdown, validateWbsDoc } from '@/lib/wbsmd/parse'
+import { SERVER_EN, SERVER_KO } from '@/lib/i18n/serverDict'
 import type { FieldDef } from '@/lib/domain/customFields'
 
 const en = serverTranslatorFor('en')
@@ -91,6 +94,79 @@ describe('도메인 검증 문구', () => {
     if (r.ok) return
     expect(libText(serverKoTranslate, r.error)).toBe(r.error)
     expect(libText(en, r.error)).toBe(`'${word}' is a reserved word of the Excel template and cannot be used as a team name.`)
+  })
+})
+
+describe('wbs.md 올리기의 검증 문구(src/lib/wbsmd/parse.ts) — 진짜 파서가 만든 문구로', () => {
+  const LEVELS = `levels:
+  - { name: Phase, prefix: PH, progress: rollup, owner: pmo, upload: false }
+  - { name: System, prefix: SYS, progress: rollup, owner: pmo, upload: false }
+  - { name: Pack, prefix: WP, progress: rollup }
+  - { name: Task, prefix: TSK, progress: input }
+  - { name: Check, prefix: CHK, progress: checklist, optional: true }
+`
+  // 한 파일에 규칙 위반을 모았다 — 미선언 접두어(헤딩·항목), ID 없는 항목·마일스톤, 골격 층·attach 지점 위, 순번 역행, 필수층 건너뜀,
+  // [x]·제목의 %, checklist 의 자식·부모, rollup 잎, 없는 depends·credit, ID 중복
+  const BAD = `---
+attach: PH-1/SYS-A
+${LEVELS}---
+## XX-1: undeclared heading
+## SYS-B: skeleton level in body
+## WP-A: empty pack
+## WP-B: pack
+- [ ] CHK-9: checklist under a pack
+- [ ] no id here
+- [M] milestone without id
+- [ ] YY-1: undeclared item
+- [x] TSK-1: done 50%   credit:nope
+  - depends: TSK-404
+  - [ ] TSK-2: nested task
+  - [ ] CHK-1: check
+    - [ ] CHK-2: child of a check
+- [ ] TSK-1: duplicate
+## SYS-C: another
+- [ ] TSK-3: skips the pack level
+`
+  const messages = (): string[] => {
+    const bad = validateWbsDoc(parseWbsMarkdown(BAD), 'pl', 'Planner')
+    const noLevels = validateWbsDoc(parseWbsMarkdown('# title\n'), 'skeleton', 'Planner')
+    const noAttach = validateWbsDoc(parseWbsMarkdown(`---\n${LEVELS}---\n`), 'pl', 'Planner')
+    return [...bad.errors, ...bad.warnings, ...noLevels.errors, ...noAttach.errors]
+  }
+
+  it('한국어 로캘은 한 글자도 바뀌지 않고, 영어 로캘에는 한글이 없다 — ID·제품 이름 같은 낀 값은 그대로', () => {
+    const all = messages()
+    expect(all.length).toBeGreaterThan(15)
+    for (const m of all) {
+      expect(m).toMatch(HANGUL)
+      expect(libText(serverKoTranslate, m)).toBe(m)
+      expect(libText(en, m), m).not.toMatch(HANGUL)
+    }
+    const out = all.map((m) => libText(en, m))
+    expect(out).toContain('Duplicate ID: TSK-1')
+    expect(out).toContain('TSK-1: the title must not contain an actual % — progress is recorded in Planner.')
+    expect(out).toContain('TSK-1: depends target not found (in this file): TSK-404')
+    expect(out).toContain('A checklist item needs an ID: "no id here"')
+  })
+
+  it('파서의 문구 틀을 빠짐없이 지난다 — 사전에 실린 틀마다 실제로 만들어진 문구가 있다(틀이 lib 와 어긋나면 여기서 빠진다)', () => {
+    const out = messages().map((m) => libText(en, m))
+    const keys = (Object.keys(SERVER_KO) as (keyof typeof SERVER_KO)[]).filter((k) => k.startsWith('srv.lib.parse.') || k.startsWith('srv.libt.parse.'))
+    expect(keys.length).toBe(18)
+    const shape = (template: string) => new RegExp(`^${template.split(/\{\w+\}/).map((piece) => piece.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s\\S]+')}$`)
+    const unused = keys.filter((k) => !out.some((m) => shape(SERVER_EN[k]).test(m)))
+    expect(unused, unused.join('\n')).toEqual([])
+  })
+})
+
+describe('승인 단계의 승인자 문구(approvalSteps) — 값 사이의 접속어까지 옮긴다', () => {
+  it("'A 또는 B' → 'A or B'. 승인자 값(코드)은 그대로", () => {
+    const r = parseApprovalSteps([{ code: 'review', label: null, approver: 'nobody' }])
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.error).toBe('1번째 단계 승인자는 subtree_or_admin 또는 admin 여야 합니다.')
+    expect(libText(serverKoTranslate, r.error)).toBe(r.error)
+    expect(libText(en, r.error)).toBe('The approver of step 1 must be subtree_or_admin or admin.')
   })
 })
 

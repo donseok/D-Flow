@@ -310,6 +310,131 @@ describe('WBS 표 — 키보드 이동·편집', () => {
     })
   })
 
+  describe('행 범위 선택(Shift+↑↓·Shift+Space·Ctrl+A·Esc) — 체크박스·대량 작업 바와 같은 상태', () => {
+    const selected = () => [...grid().querySelectorAll<HTMLElement>('[data-row-id][aria-selected="true"]')].map(r => r.dataset.rowId)
+    const checked = () => [...grid().querySelectorAll<HTMLInputElement>('[data-row-id] input[type="checkbox"]')].filter(b => b.checked).length
+    const barCount = () => document.querySelector('[data-testid="wbs-bulk-selected-count"]')?.textContent ?? null
+    const live = () => container.querySelector('[data-wbs-selection-live]')?.textContent
+    const SHIFT = { shiftKey: true }
+
+    it('Shift+↓↓↑ — 기준 행부터 늘리고 줄인다. 포커스는 같은 열로 따라가고 체크박스·대량 작업 바·낭독이 같은 수를 본다', async () => {
+      await mount()
+      expect(grid().getAttribute('aria-multiselectable')).toBe('true')
+      await focus('t1', 'weight')
+      const ev = await press('ArrowDown', SHIFT)
+      expect(ev.defaultPrevented).toBe(true)
+      expect(selected()).toEqual(['t1', 't2'])
+      await press('ArrowDown', SHIFT)
+      expect(selected()).toEqual(['t1', 't2', 'a1'])
+      expect(focused()).toBe('a1:weight')
+      await press('ArrowUp', SHIFT)
+      expect(selected()).toEqual(['t1', 't2'])
+      expect(focused()).toBe('t2:weight')
+      expect(checked()).toBe(2)
+      expect(barCount()).toBe('2')
+      expect(live()).toBe('2wbs.bulk.selectedSuffix')
+    })
+
+    it('기준을 지나 위로 넘어가면 반대쪽으로 늘어난다', async () => {
+      await mount()
+      await focus('t2', 'name')
+      await press('ArrowDown', SHIFT)
+      await press('ArrowUp', SHIFT)
+      await press('ArrowUp', SHIFT)
+      expect(selected()).toEqual(['t1', 't2'])
+    })
+
+    it('접힌 행의 자손은 건너뛴다 — 보이는 행만 고른다', async () => {
+      await mount()
+      await focus('t2', 'name')
+      await press('ArrowLeft')   // t2 접기 → a1 이 사라진다
+      expect(rowIds()).toEqual(['p1', 't1', 't2', 'p2'])
+      await press('ArrowDown', SHIFT)
+      expect(selected()).toEqual(['t2', 'p2'])
+      await press('ArrowRight')  // 다시 펴도 a1 은 고르지 않았다
+      expect(selected()).toEqual(['t2', 'p2'])
+    })
+
+    it('방향키로 떠났다가 다시 Shift 를 누르면 그 행이 새 기준이다 — 앞서 고른 행은 남는다', async () => {
+      await mount()
+      await focus('p1', 'name')
+      await press('ArrowDown', SHIFT)
+      await press('ArrowDown')
+      await press('ArrowDown')
+      expect(focused()).toBe('a1:name')
+      await press('ArrowDown', SHIFT)
+      expect(selected()).toEqual(['p1', 't1', 'a1', 'p2'])
+    })
+
+    it('Shift+Space — 마지막으로 뒤집은 행부터 지금 행까지. 가중치 칸에서도 편집에 들어가지 않는다', async () => {
+      await mount()
+      await focus('t1', 'name')
+      await press(' ')
+      await focus('p2', 'weight')
+      const ev = await press(' ', SHIFT)
+      expect(ev.defaultPrevented).toBe(true)
+      expect(selected()).toEqual(['t1', 't2', 'a1', 'p2'])
+      expect(container.querySelector('input[type="number"]')).toBeNull()
+    })
+
+    it('Ctrl+A·⌘+A — 보이는 행 전체, Esc — 선택 해제(고른 행이 있을 때만 먹는다)', async () => {
+      await mount()
+      await focus('t1', 'name')
+      const idle = await press('Escape')
+      expect(idle.defaultPrevented).toBe(false)
+      const all = await press('a', { ctrlKey: true })
+      expect(all.defaultPrevented).toBe(true)
+      expect(selected()).toEqual(['p1', 't1', 't2', 'a1', 'p2'])
+      expect(barCount()).toBe('5')
+      const esc = await press('Escape')
+      expect(esc.defaultPrevented).toBe(true)
+      expect(selected()).toEqual([])
+      expect(barCount()).toBeNull()
+      expect(live()).toBe('wbs.bulk.clearedLive')
+      expect(focused()).toBe('t1:name')
+      await press('a', { metaKey: true })
+      expect(selected()).toHaveLength(5)
+    })
+
+    it('Esc 로 선택을 풀 때 전체 화면은 닫히지 않는다 — 한 번에 한 겹', async () => {
+      await mount()
+      await act(async () => container.querySelector<HTMLElement>('[data-wbs-fullscreen-toggle]')!.click())
+      await focus('t1', 'name')
+      await press(' ')
+      await press('Escape')
+      expect(selected()).toEqual([])
+      expect(container.querySelector('[data-wbs-fullscreen-toggle]')!.getAttribute('aria-pressed')).toBe('true')
+      await press('Escape')
+      expect(container.querySelector('[data-wbs-fullscreen-toggle]')!.getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('편집 중에는 가로채지 않는다 — Ctrl+A·Shift+↓ 는 입력의 것이고, Esc 는 편집만 취소한다', async () => {
+      await mount()
+      await focus('t1', 'name')
+      await press(' ')
+      await focus('p1', 'weight')
+      await press('Enter')
+      const input = editorOf('p1', 'weight')!
+      expect(document.activeElement).toBe(input)
+      expect((await press('a', { ctrlKey: true })).defaultPrevented).toBe(false)
+      expect((await press('ArrowDown', SHIFT)).defaultPrevented).toBe(false)
+      expect(selected()).toEqual(['t1'])
+      await press('Escape')
+      expect(editorOf('p1', 'weight')).toBeNull()
+      expect(selected()).toEqual(['t1'])
+    })
+
+    it('범위를 고른 뒤에도 방향키 이동은 다시 그리지 않는다 — 기준은 상태가 아니라 ref 다', async () => {
+      await mount()
+      await focus('p2', 'name')
+      await press('ArrowDown', SHIFT)
+      expect(selected()).toEqual(['p2'])
+      const before = commits
+      await press('ArrowDown')
+      expect(commits).toBe(before)
+    })
+  })
+
   describe('조회 전용', () => {
     it.each([['명단 밖(조회)', { actorView: null }], ['읽기 전용 시트', { readOnly: true }]] as const)('%s — 이동은 되고 편집 진입·행 선택은 안 된다', async (_n, opts) => {
       await mount(opts)
@@ -325,6 +450,12 @@ describe('WBS 표 — 키보드 이동·편집', () => {
       expect(container.querySelector('input[type="number"]')).toBeNull()
       await focus('t1', 'name')
       await press(' ')
+      // 행 범위 키도 가로채지 않는다 — 고를 수 없는 화면에서는 종전처럼 아무 일도 없다
+      for (const [k, init] of [['ArrowDown', { shiftKey: true }], [' ', { shiftKey: true }], ['a', { ctrlKey: true }]] as const) await press(k, init)
+      expect((await press('ArrowDown', { shiftKey: true })).defaultPrevented).toBe(false)
+      expect((await press('a', { ctrlKey: true })).defaultPrevented).toBe(false)
+      expect(focused()).toBe('t1:name')
+      expect(grid().hasAttribute('aria-multiselectable')).toBe(false)
       expect(grid().querySelector('[aria-selected="true"]')).toBeNull()
       expect(h.updateActual).not.toHaveBeenCalled()
       expect(h.updateWeight).not.toHaveBeenCalled()

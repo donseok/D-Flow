@@ -27,7 +27,7 @@ import { walk } from './_walk'
 const P_ACTOR_RPCS: ReadonlySet<string> = new Set([
   'actor_is_project_admin', 'actor_is_workspace_admin', 'activate_form_template', 'apply_project_settings', 'apply_wbs_bulk_item', 'apply_workflow_event', 'apply_workflow_event_cas', 'apply_workflow_event_stage_cas', 'apply_workspace_settings', 'backfill_custom_field', 'change_team_code', 'convert_inherited_teams', 'custom_field_command',
   'deactivate_form_template', 'get_project_creation_receipt',
-  'create_project_with_settings', 'create_weekly_report', 'create_team', 'create_workspace_with_admin', 'ensure_team_roots', 'import_wbs_cmd', 'merge_teams', 'migrate_setting_code', 'purge_custom_field', 'record_password_reset', 'remove_workspace_member', 'set_dependency_waiver', 'set_platform_admin', 'set_workspace_role',
+  'create_project_with_settings', 'create_weekly_report', 'create_team', 'create_workspace_with_admin', 'delete_empty_workspace', 'ensure_team_roots', 'import_wbs_cmd', 'merge_teams', 'migrate_setting_code', 'purge_custom_field', 'record_password_reset', 'remove_workspace_member', 'rename_workspace', 'set_dependency_waiver', 'set_platform_admin', 'set_workspace_role',
   'upsert_project_area', 'upsert_project_member', 'upsert_project_member_cmd',
 ])
 

@@ -20,6 +20,7 @@ import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { AuthzEventsList } from '@/components/settings/AuthzEventsList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
 import { WorkspaceFieldsEditor, type WorkspaceField, type SimpleWorkspaceKey } from '@/components/settings/WorkspaceFieldsEditor'
+import { WorkspaceNameEditor } from '@/components/settings/WorkspaceNameEditor'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
@@ -93,8 +94,10 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         { id: 'workspace-invites', label: t(locale, 'pages.wsSettings.nav.invites') }, { id: 'workspace-calendar', label: t(locale, 'pages.settingsNav.calendar') }, { id: 'workspace-minutes', label: t(locale, 'pages.settingsNav.minutes') }, { id: 'workspace-minute-roots', label: t(locale, 'pages.wsSettings.nav.minuteRoots') }, { id: 'workspace-menu', label: t(locale, 'pages.wsSettings.nav.menu') }, { id: 'workspace-notify', label: t(locale, 'pages.wsSettings.nav.notify') }, { id: 'workspace-security', label: t(locale, 'pages.wsSettings.nav.security') },
         { id: 'workspace-history', label: t(locale, 'pages.settingsNav.history') },
       ]}>
-      <SectionCard id="workspace-general" searchText="branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow={t(locale, 'pages.settingsNav.general')} title={t(locale, 'pages.wsSettings.generalTitle')} icon={Palette}>
+      <SectionCard id="workspace-general" searchText="workspace name branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow={t(locale, 'pages.settingsNav.general')} title={t(locale, 'pages.wsSettings.generalTitle')} icon={Palette}>
         <div className="space-y-6">
+          {/* 워크스페이스 이름 — 설정 키가 아니라 워크스페이스 행의 이름이다(0055 rename_workspace). 주소(slug)는 바뀌지 않는다 */}
+          <WorkspaceNameEditor key={access.name} workspaceId={access.id} slug={access.slug} initialName={access.name} />
           <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale}
             fields={[field(config, 'branding.product_name', locale), field(config, 'branding.mail_from_name', locale)]} />
           <LogoEditor workspaceId={access.id} revision={config.revision}

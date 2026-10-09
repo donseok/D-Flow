@@ -70,8 +70,9 @@ function parseAndValidate(t: ServerTranslate, md: string, productName: string): 
   const lv = validateLevels(doc.levels)
   if ('error' in lv) errors.push(fill(t('err.levelsValidationFailed'), { error: libText(t, lv.error) }))
   const v = validateWbsDoc(doc, role, productName)
-  errors.push(...v.errors)
-  return { doc, role, errors, warnings: v.warnings, counts: v.counts }
+  // 파서(순수 lib)의 검증 문구는 한국어로 만들어진다 — 화면에 싣는 이 자리에서 요청의 언어로 푼다(틀 역조회, 한국어 로캘은 글자 그대로)
+  errors.push(...v.errors.map(e => libText(t, e)))
+  return { doc, role, errors, warnings: v.warnings.map(w => libText(t, w)), counts: v.counts }
 }
 
 /** attach 경로 표기(PH-03/SYS-OP)의 마지막 세그먼트를 full external_ref 로 해석.

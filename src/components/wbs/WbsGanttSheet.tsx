@@ -51,7 +51,7 @@ import { orderedFields } from '@/lib/domain/customFields'
 import { parseCustomValues } from '@/lib/domain/customFieldValues'
 import { WbsCustomFieldCell } from './WbsCustomFieldCell'
 import { ConflictResolver } from '@/components/ui/ConflictResolver'
-import { editMove, gridKeyAction, gridModel, type GridCoord } from '@/lib/domain/wbsGridNav'
+import { editMove, extendRowRange, gridKeyAction, gridModel, shiftRowRange, type GridCoord, type RowRangeAnchor } from '@/lib/domain/wbsGridNav'
 import { useWbsGridNav, WBS_CELL_ATTR } from './useWbsGridNav'
 
 /* ── 컬럼 메타 (좌→우). frozen=true면 sticky 동결, sk=누적 left offset ──
@@ -1386,6 +1386,29 @@ export function WbsGanttSheet({
 
   /* ── 표 키보드(탐색 모드) — 표 래퍼 하나에서 받는다. 이동은 DOM 포커스만 옮기고 상태를 건드리지 않는다 ── */
   const canSelectRows = isAdmin && !readOnly
+  /* 행 범위 선택(Shift+↑↓·Shift+Space) — 선택 자체는 체크박스·대량 작업 바와 같은 bulkSelection 하나다. 범위의 기준만 ref 에 둔다
+     (기준이 바뀐다고 다시 그릴 것은 없다). 셀 범위(개정 §5.9.2 의 직사각형 선택)는 다른 상태이고 아직 없다. */
+  const rangeAnchorRef = useRef<RowRangeAnchor | null>(null)
+  /** 한 행의 선택을 뒤집거나(checked 생략) 정한다 — 그 행이 다음 범위의 기준이 된다 */
+  const setRowSelected = (id: string, checked?: boolean) => {
+    const next = new Set(bulkSelection)
+    if (checked ?? !next.has(id)) next.add(id)
+    else next.delete(id)
+    rangeAnchorRef.current = { rowId: id, base: next, head: id }
+    setBulkSelection(next)
+  }
+  const clearRowSelection = () => { rangeAnchorRef.current = null; setBulkSelection(new Set()) }
+  const selectAllRows = () => { rangeAnchorRef.current = null; setBulkSelection(new Set(flatRows.map(row => row.id))) }
+  const bulkSelectedCount = canSelectRows ? flatRows.reduce((sum, row) => sum + (bulkSelection.has(row.id) ? 1 : 0), 0) : 0
+  // 선택 수의 낭독 — 대량 작업 바는 0개일 때 사라져 라이브 영역이 될 수 없다. 늘 있는 숨은 영역에 글자만 바꿔 쓴다(다시 그리지 않는다)
+  const selectionLiveRef = useRef<HTMLParagraphElement | null>(null)
+  const announcedCountRef = useRef(0)
+  useEffect(() => {
+    const el = selectionLiveRef.current
+    if (!el || announcedCountRef.current === bulkSelectedCount) return
+    announcedCountRef.current = bulkSelectedCount
+    el.textContent = bulkSelectedCount > 0 ? `${bulkSelectedCount}${t('wbs.bulk.selectedSuffix')}` : t('wbs.bulk.clearedLive')
+  }, [bulkSelectedCount, t])
   /** 그 칸의 편집 진입 — 편집할 수 있는 칸·권한일 때만. seed 가 있으면(숫자 키) 그 글자로 초안을 시작한다. 들어갔으면 true */
   const enterCellEdit = (at: GridCoord, seed?: string): boolean => {
     const n = itemById.get(at.rowId)
@@ -1412,11 +1435,36 @@ export function WbsGanttSheet({
     const sc = timelineScrollRef.current
     const pageRows = sc ? Math.floor(sc.clientHeight / ROW_H) - 2 : 10
     const action = gridKeyAction(gridNav, at, e.key, { ctrl: e.ctrlKey || e.metaKey, alt: e.altKey, shift: e.shiftKey }, pageRows)
+    if (action?.kind === 'range') {
+      // 행을 고를 수 없는 화면(조회 전용)에서는 가로채지 않는다 — 종전처럼 아무 일도 없다
+      if (!canSelectRows) return
+      e.preventDefault()
+      const r = shiftRowRange(gridNav, bulkSelection, rangeAnchorRef.current, at.rowId, action.to.rowId)
+      rangeAnchorRef.current = r.anchor
+      setBulkSelection(r.selection)
+      focusCell(action.to)
+      return
+    }
     if (action) {
       e.preventDefault()
       if (action.kind === 'toggle') toggle(action.rowId)
       else focusCell(action.to)
       return
+    }
+    if (canSelectRows && !e.altKey) {
+      // Ctrl/⌘+A = 보이는 행 전체(대량 작업 바의 '전체 선택'과 같다). 편집기 안의 키는 위에서 이미 돌려보냈다 — 입력의 전체 선택은 그대로다
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault()
+        selectAllRows()
+        return
+      }
+      // Esc = 선택 해제. 고른 행이 있을 때만 먹는다 — 없으면 전체 화면·돋보기의 Esc(document 리스너)로 넘어간다
+      if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey && !e.shiftKey && bulkSelectedCount > 0) {
+        e.preventDefault()
+        e.stopPropagation()
+        clearRowSelection()
+        return
+      }
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return
     // 칸 안의 버튼·체크박스에 포커스가 있으면 Enter·Space 는 그 컨트롤의 것이다(마우스로 누른 뒤)
@@ -1440,16 +1488,17 @@ export function WbsGanttSheet({
     if (e.key === ' ') {
       if (onControl) return
       e.preventDefault()   // 표가 스크롤되지 않게
+      // Shift+Space = 기준 행(마지막으로 뒤집은 행·범위의 시작)부터 이 행까지. 어느 열에서든 — 편집에 들어가지 않는다
+      if (e.shiftKey) {
+        if (!canSelectRows) return
+        const r = extendRowRange(gridNav, bulkSelection, rangeAnchorRef.current, at.rowId, at.rowId)
+        rangeAnchorRef.current = r.anchor
+        setBulkSelection(r.selection)
+        return
+      }
       if (enterCellEdit(at)) return
       // 식별 열(번호·개요 번호·작업명)에서는 행 선택 — 체크박스와 같은 상태다
-      if (canSelectRows && (at.col === 'no' || at.col === 'outline' || at.col === 'name')) {
-        setBulkSelection(current => {
-          const next = new Set(current)
-          if (next.has(at.rowId)) next.delete(at.rowId)
-          else next.add(at.rowId)
-          return next
-        })
-      }
+      if (canSelectRows && (at.col === 'no' || at.col === 'outline' || at.col === 'name')) setRowSelected(at.rowId)
       return
     }
     // 숫자 키로 바로 편집 — 그 숫자가 초안의 첫 글자가 된다(가중치·실적%)
@@ -1852,6 +1901,7 @@ export function WbsGanttSheet({
             aria-label={t('wbs.gridLabel')}
             aria-rowcount={flatRows.length + 1}
             aria-colcount={visibleCols.length + 1}
+            aria-multiselectable={canSelectRows || undefined}
             data-wbs-grid
             onKeyDown={onGridKeyDown}
             onFocusCapture={grid.onFocusCapture}
@@ -2099,15 +2149,7 @@ export function WbsGanttSheet({
                   {isAdmin && !readOnly ? (
                     <input type="checkbox" tabIndex={-1} aria-label={t('wbs.bulk.rowSelectAria').replace('{name}', n.name)}
                       checked={bulkSelection.has(n.id)}
-                      onChange={e => {
-                        const checked = e.currentTarget.checked
-                        setBulkSelection(current => {
-                          const next = new Set(current)
-                          if (checked) next.add(n.id)
-                          else next.delete(n.id)
-                          return next
-                        })
-                      }} />
+                      onChange={e => setRowSelected(n.id, e.currentTarget.checked)} />
                   ) : rowNo}
                 </div>
                 {/* 개요 번호(토글) — 저장 code 아님, 트리 위치 파생 */}
@@ -2669,11 +2711,12 @@ export function WbsGanttSheet({
         />
       )}
 
+      {canSelectRows && <p ref={selectionLiveRef} role="status" aria-live="polite" data-wbs-selection-live className="sr-only" />}
       {isAdmin && !readOnly && (
-        <WbsBulkBar selectedCount={flatRows.filter(row => bulkSelection.has(row.id)).length}
+        <WbsBulkBar selectedCount={bulkSelectedCount}
           totalCount={flatRows.length}
-          onClearSelection={() => setBulkSelection(new Set())}
-          onSelectAll={() => setBulkSelection(new Set(flatRows.map(row => row.id)))}
+          onClearSelection={clearRowSelection}
+          onSelectAll={selectAllRows}
           isAllSelected={flatRows.length > 0 && flatRows.every(row => bulkSelection.has(row.id))}
           onOpenPaste={async () => {
             const fields: Array<[string, WbsPasteField]> = [['deliverable', 'deliverable'], ['pstart', 'plannedStart'], ['pend', 'plannedEnd']]

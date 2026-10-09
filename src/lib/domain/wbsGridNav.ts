@@ -28,14 +28,18 @@ export function gridModel(rows: readonly GridRow[], cols: readonly string[], tre
 
 export interface GridKeyMods { ctrl: boolean; alt: boolean; shift: boolean }
 
-/** 키 하나의 결과 — 포커스 이동(제자리도 move 다: 경계에서 눌러도 키는 표가 먹는다) 또는 그 행 접기·펴기 */
-export type GridKeyAction = { kind: 'move'; to: GridCoord } | { kind: 'toggle'; rowId: string }
+/**
+ * 키 하나의 결과 — 포커스 이동(제자리도 move 다: 경계에서 눌러도 키는 표가 먹는다), 그 행 접기·펴기,
+ * 또는 행 범위 선택을 늘리고 줄이며 옮기기(range — Shift+↑↓. 선택을 쓸 수 없는 화면이면 호출부가 가로채지 않는다)
+ */
+export type GridKeyAction = { kind: 'move'; to: GridCoord } | { kind: 'toggle'; rowId: string } | { kind: 'range'; to: GridCoord }
 
 const clamp = (n: number, max: number) => Math.max(0, Math.min(max, n))
 
 /**
  * 탐색 모드의 이동 키 → 동작. 이동 키가 아니거나 표가 가로채면 안 되는 조합이면 null(호출부는 기본 동작을 막지 않는다).
- * - 방향키: 한 칸. 수식키가 붙으면 null — Alt/⌘+←→ 는 브라우저의 뒤로·앞으로이고, Shift+방향키(범위 선택 — 개정 §5.9.2)는 아직 없다.
+ * - 방향키: 한 칸. 수식키가 붙으면 null — Alt/⌘+←→ 는 브라우저의 뒤로·앞으로다. 예외는 Shift+↑↓(다른 수식키 없이): 행 범위 선택(range).
+ *   Shift+←→ 는 null 이다 — 셀 범위(개정 §5.9.2 의 직사각형 선택)는 아직 없다.
  * - 트리 열의 →: 접힌 행이면 편다(포커스는 그대로). 그 밖에는 오른쪽 칸 — 펼쳐진 부모에서도 오른쪽으로 나갈 수 있어야 한다(첫 자식은 ↓).
  * - 트리 열의 ←: 펼쳐진 행이면 접는다. 그 밖(잎·이미 접힌 행)에는 보이는 부모 행으로, 부모가 없으면(루트) 왼쪽 칸.
  * - Home/End: 그 행의 처음/끝 칸, Ctrl·⌘ 와 함께면 표의 처음/끝 칸. PageUp/PageDown: pageRows 만큼 위/아래 같은 열.
@@ -49,8 +53,12 @@ export function gridKeyAction(m: GridModel, cur: GridCoord, key: string, mods: G
   const at = (ri: number, ci: number): GridKeyAction => ({ kind: 'move', to: { rowId: m.rows[clamp(ri, lastRow)].id, col: m.cols[clamp(ci, lastCol)] } })
   const plain = !mods.ctrl && !mods.alt && !mods.shift
   switch (key) {
-    case 'ArrowUp': return plain ? at(r - 1, c) : null
-    case 'ArrowDown': return plain ? at(r + 1, c) : null
+    case 'ArrowUp':
+    case 'ArrowDown': {
+      const next = at(r + (key === 'ArrowUp' ? -1 : 1), c)
+      if (plain) return next
+      return mods.shift && !mods.ctrl && !mods.alt && next.kind === 'move' ? { kind: 'range', to: next.to } : null
+    }
     case 'ArrowRight': {
       if (!plain) return null
       const row = m.rows[r]
@@ -83,6 +91,45 @@ export function editMove(m: GridModel, cur: GridCoord, dir: 'down' | 'up' | 'rig
   const dr = dir === 'down' ? 1 : dir === 'up' ? -1 : 0
   const dc = dir === 'right' ? 1 : dir === 'left' ? -1 : 0
   return { rowId: m.rows[clamp(r + dr, m.rows.length - 1)].id, col: m.cols[clamp(c + dc, m.cols.length - 1)] }
+}
+
+/**
+ * 행 범위 선택의 기준. rowId = Shift 를 처음 누른 행(또는 마지막으로 Space·체크박스로 뒤집은 행), base = 그때의 선택 —
+ * 범위를 줄여도 base 의 행은 남는다. head = 범위가 마지막으로 닿은 행(포커스가 다른 길로 떠났는지 가리는 데 쓴다).
+ */
+export interface RowRangeAnchor { rowId: string; base: ReadonlySet<string>; head: string }
+
+/** 두 행 사이(양 끝 포함)의 보이는 행 id — 접힌 행의 자손·필터 밖 행은 모델에 없으므로 범위에도 없다. 어느 쪽이든 보이지 않으면 빈 목록 */
+export function rowRange(m: GridModel, fromId: string, toId: string): string[] {
+  const a = m.rowIndex.get(fromId)
+  const b = m.rowIndex.get(toId)
+  if (a === undefined || b === undefined) return []
+  const out: string[] = []
+  for (let i = Math.min(a, b); i <= Math.max(a, b); i++) out.push(m.rows[i].id)
+  return out
+}
+
+/**
+ * 기준 행부터 to 까지를 선택한다 — 결과 선택 = 기준의 base ∪ 범위(그래서 범위를 줄이면 빠진 행이 풀리고, 먼저 골라 둔 행은 남는다).
+ * 기준이 없거나 기준 행이 더는 보이지 않으면 start 에서 새로 잡는다(base = 지금 선택).
+ */
+export function extendRowRange(
+  m: GridModel, selection: ReadonlySet<string>, anchor: RowRangeAnchor | null, start: string, to: string,
+): { selection: Set<string>; anchor: RowRangeAnchor } {
+  const from = anchor && m.rowIndex.has(anchor.rowId) ? anchor : { rowId: start, base: selection, head: start }
+  const next = new Set(from.base)
+  for (const id of rowRange(m, from.rowId, to)) next.add(id)
+  return { selection: next, anchor: { rowId: from.rowId, base: from.base, head: to } }
+}
+
+/**
+ * Shift+↑↓ 한 번 — cur(지금 포커스 행)에서 to 로. 기준은 "Shift 를 처음 누른 행"이다: 직전 범위의 끝(head)이 cur 가 아니면
+ * (그 사이 포커스가 방향키·마우스로 옮겨 갔다) 이어 가지 않고 cur 에서 새로 시작한다.
+ */
+export function shiftRowRange(
+  m: GridModel, selection: ReadonlySet<string>, anchor: RowRangeAnchor | null, cur: string, to: string,
+): { selection: Set<string>; anchor: RowRangeAnchor } {
+  return extendRowRange(m, selection, anchor && anchor.head === cur ? anchor : null, cur, to)
 }
 
 /**
