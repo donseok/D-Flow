@@ -20,3 +20,15 @@ describe('UsageUserTable — 역할 열(워크스페이스 역할 어휘)', () =
     expect(html).not.toMatch(/팀 편집자|pmo_admin|team_editor/)
   })
 })
+
+describe('UsageUserTable — 팀 열은 팀 이름', () => {
+  it('teamLabel 이 있으면 이름, 없으면 code, 둘 다 없으면 —', () => {
+    const rows = [
+      { ...row('alice', 'member'), teamCode: 'OPS·QA', teamLabel: '운영·품질' },
+      { ...row('bob', 'member'), teamCode: 'ERP' },
+      row('carol', null),
+    ]
+    const c = cells(renderToStaticMarkup(<UsageUserTable rows={rows} days={30} timeZone="Asia/Seoul" />))
+    expect([c[2], c[11], c[20]]).toEqual(['운영·품질', 'ERP', '—'])
+  })
+})

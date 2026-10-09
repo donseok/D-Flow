@@ -67,6 +67,15 @@ export function primaryTeamCode(links: unknown): string | null {
   return teams[0]?.code ?? null
 }
 
+/** `project_member_teams(is_primary, teams(code, name))` 임베드의 대표 팀 — primaryTeamCode 와 같은 팀, 표시용 이름을 함께 준다.
+ *  이름이 비었거나 select 에 없으면 name 은 code 다(화면이 code 로 보인다). */
+export function primaryTeamRef(links: unknown): { code: string; name: string } | null {
+  const teams = ((links ?? []) as Array<{ is_primary?: boolean; teams?: One<{ code?: string; name?: string | null }> }>)
+    .flatMap(l => { const t = one(l.teams ?? null); return t?.code ? [{ code: t.code, name: t.name?.trim() || t.code, isPrimary: Boolean(l.is_primary) }] : [] })
+    .sort(byPrimaryThenCode)
+  return teams[0] ? { code: teams[0].code, name: teams[0].name } : null
+}
+
 export function toRosterMember(r: Record<string, unknown>): RosterMember {
   const pe = personOf(r) as { display_name: string; email?: string | null; user_id: string | null; kind: 'account' | 'external'; active: boolean } | null
   if (!pe) throw new Error('ROSTER_SELECT 결과에 people 이 없다 — !inner 조인 누락')

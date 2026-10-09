@@ -1,4 +1,4 @@
-// 범위 레이아웃이 TeamsProvider 로 내리는 활성 팀(SP4 계획 P3) — 실패는 로그 + 빈 목록(셸·복구 화면 유지), Next 제어 신호는 다시 던진다.
+// 범위 레이아웃이 TeamsProvider 로 내리는 팀(SP4 계획 P3 — 비활성 포함: 라벨 해석용, 활성 거르기는 TeamsProvider 의 훅) — 실패는 로그 + 빈 목록(셸·복구 화면 유지), Next 제어 신호는 다시 던진다.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { activeTeamsForLayout } from '@/lib/teams/layoutTeams'
 import { teamRows } from '../helpers/teams-source-mock'
@@ -6,10 +6,11 @@ import { teamRows } from '../helpers/teams-source-mock'
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('activeTeamsForLayout', () => {
-  it('활성 팀만 — 순서는 원천 그대로, 이름·색이 실린다(Q23)', async () => {
+  it('비활성 팀도 내린다(라벨 해석용) — 순서는 원천 그대로, 이름·색이 실린다(Q23)', async () => {
     const rows = [...teamRows(['RES', 'OPS']), ...teamRows(['OLD'], { active: false })]
     const got = await activeTeamsForLayout(async () => rows, 't')
-    expect(got.map((t) => t.code)).toEqual(['RES', 'OPS'])
+    expect(got.map((t) => t.code)).toEqual(['RES', 'OPS', 'OLD'])
+    expect(got.filter((t) => t.active).map((t) => t.code)).toEqual(['RES', 'OPS'])
     expect(got[0]).toMatchObject({ name: 'RES', color: '#6b7280' })
   })
   it('[RF2] 원천 실패(TeamsUnavailableError 류)는 로그 + 빈 목록 — 레이아웃이 던지지 않는다', async () => {

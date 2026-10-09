@@ -52,6 +52,8 @@ export const wbsKo = {
   'wbs.weeklyReport': '주간보고',
   'wbs.weeklyReportTitle': '주간보고서 생성',
   'wbs.ariaFullscreen': 'WBS 전체화면 보기',
+  // 표(treegrid)의 이름 — 화면 낭독기가 표에 들어설 때 읽는다. 조작법은 방향키 이동·Enter 편집(개정 §5.9.2)
+  'wbs.gridLabel': '작업 계획 표 — 방향키로 이동, Enter 로 편집',
   // 새 1레벨 항목 입력 — {level} 은 그 프로젝트의 1레벨 단계 이름(core.level_labels 첫 값)
   'wbs.newPhasePlaceholder': '새 {level} 이름 (예: 1. 준비)',
   'wbs.newPhaseAria': '새 {level} 이름',

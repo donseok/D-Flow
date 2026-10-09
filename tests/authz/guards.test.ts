@@ -115,7 +115,8 @@ describe('getActor — 4축 조립', () => {
     stubDb({ ...WS_MEMBER, roster: [row('p1', 'member', [['QA', false], ['개발', true]])] })
     const a = await getActor()
     expect(a?.rosterTeams.get('p1')?.teamCodes).toHaveLength(2)
-    expect(a?.rosterTeams.get('p1')).toEqual({ teamIds: ['t-개발', 't-QA'], teamCodes: ['개발', 'QA'] })
+    // teamNames 는 표시 전용 — 임베드에 이름이 없으면 code 다
+    expect(a?.rosterTeams.get('p1')).toEqual({ teamIds: ['t-개발', 't-QA'], teamCodes: ['개발', 'QA'], teamNames: ['개발', 'QA'] })
     expect(a?.memberIds.get('p1')).toBe('m-p1')
     expect(a?.rosterTeams.get('p2')).toBeUndefined()
   })
@@ -158,7 +159,19 @@ describe('getActor — 4축 조립', () => {
     ]
     stubDb({ ...WS_MEMBER, roster: [r] })
     const a = await getActor()
-    expect(a?.rosterTeams.get('p1')).toEqual({ teamIds: ['t-erp'], teamCodes: ['ERP'] })
+    expect(a?.rosterTeams.get('p1')).toEqual({ teamIds: ['t-erp'], teamCodes: ['ERP'], teamNames: ['ERP'] })
+  })
+
+  it('팀 이름을 teamCodes 와 같은 순서로 싣는다(표시 전용) — 빈 이름은 code, 순서·식별은 code 그대로', async () => {
+    const r = row('p1', 'member')
+    r.project_member_teams = [
+      { team_id: 't-qa', is_primary: false, teams: { code: 'QA', name: '품질' } as unknown as { code: string } },
+      { team_id: 't-dev', is_primary: true, teams: { code: 'DEV', name: '개발' } as unknown as { code: string } },
+      { team_id: 't-ops', is_primary: false, teams: { code: 'OPS', name: '  ' } as unknown as { code: string } },
+    ]
+    stubDb({ ...WS_MEMBER, roster: [r] })
+    const a = await getActor()
+    expect(a?.rosterTeams.get('p1')).toEqual({ teamIds: ['t-dev', 't-ops', 't-qa'], teamCodes: ['DEV', 'OPS', 'QA'], teamNames: ['개발', 'OPS', '품질'] })
   })
 
   // 조회 실패를 '역할 없음'으로 폴백하면 가드가 조용히 전원을 거부하거나(운영 마비)
@@ -186,7 +199,7 @@ describe('getActor — 4축 조립', () => {
     // .eq('people.user_id') 가 행 필터가 되려면 people 임베드가 !inner 여야 한다 — 빠지면 admin 경로에서 전원의 명단 행이 섞인다.
     const pmSelect = String(callsOn('project_members', 'select')[0]?.[0])
     expect(pmSelect).toMatch(/people!inner\(/)
-    expect(pmSelect).toMatch(/project_member_teams\([^)]*teams\(code\)/)
+    expect(pmSelect).toMatch(/project_member_teams\([^)]*teams\(code, name\)/)
   })
 
   // ④ 명단 축은 user_id 만으로 걸러지므로 ② 워크스페이스 축을 기다리지 않는다 — ③ projects 만 2단계.

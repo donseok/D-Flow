@@ -35,8 +35,9 @@ export interface Actor {
   projectRoles: ReadonlyMap<string, ProjectRole>
   /** projectId → 내 project_members.id. */
   memberIds: ReadonlyMap<string, string>
-  /** projectId → 내 팀 전부(project_member_teams). 대표 팀이 첫 원소. */
-  rosterTeams: ReadonlyMap<string, { teamIds: readonly string[]; teamCodes: readonly string[] }>
+  /** projectId → 내 팀 전부(project_member_teams). 대표 팀이 첫 원소.
+   *  teamNames 는 teamCodes 와 같은 순서의 팀 이름 — 표시 전용이다(계정 메뉴의 소속). 판정·대조에는 쓰지 않는다. 없으면 code 로 보인다. */
+  rosterTeams: ReadonlyMap<string, { teamIds: readonly string[]; teamCodes: readonly string[]; teamNames?: readonly string[] }>
 }
 
 /** 워크스페이스 관리자 승계와 명단 역할을 한 판정자로 계산한다(D37). */

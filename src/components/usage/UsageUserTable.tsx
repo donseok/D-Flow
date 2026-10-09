@@ -51,7 +51,7 @@ export function UsageUserTable({ rows, days, timeZone }: { rows: UsageUserRow[];
               <tr key={r.id} className="border-b border-border/60">
                 <td className="py-2 pr-3 font-medium text-fg">{r.name}</td>
                 <td className="py-2 pr-3 text-fg-secondary">{r.email}</td>
-                <td className="py-2 pr-3 text-fg-secondary">{r.teamCode ?? '—'}</td>
+                <td className="py-2 pr-3 text-fg-secondary">{r.teamLabel ?? r.teamCode ?? '—'}</td>
                 <td className="py-2 pr-3 text-fg-secondary">{r.role ? WORKSPACE_ROLE_LABEL[r.role] : '—'}</td>
                 <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.createdAt, timeZone)}</td>
                 <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.lastSignInAt, timeZone)}</td>

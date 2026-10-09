@@ -51,7 +51,7 @@ function fixture(): ComputedItem[] {
   return [item({ id: 'p1', name: '1. 준비', children: [loneTask, rollupTask] })]
 }
 
-/** 실적% 셀은 편집 가능할 때만 role=button + title=wbs.editActualTitle 을 갖는다. */
+/** 실적% 셀은 편집 가능할 때만 title=wbs.editActualTitle 을 갖는다(aria-readonly=false — 표의 gridcell 이라 role 은 늘 gridcell). */
 function actualCells(c: HTMLElement) {
   return [...c.querySelectorAll<HTMLElement>('[title="wbs.editActualTitle"]')]
 }
@@ -92,7 +92,8 @@ describe('WbsGanttSheet — 단독 Task 실적% 입력', () => {
     await mount(pmo)
     const cell = [...container.querySelectorAll<HTMLElement>('.group.relative.z-10')][1]
       .querySelector<HTMLElement>('[title="wbs.editActualTitle"]')!
-    expect(cell.getAttribute('role')).toBe('button')
+    expect(cell.getAttribute('role')).toBe('gridcell')
+    expect(cell.getAttribute('aria-readonly')).toBe('false')
 
     await act(async () => cell.click())
     const input = container.querySelector<HTMLInputElement>('input[aria-label="wbs.ariaEditActual"]')

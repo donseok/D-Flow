@@ -85,6 +85,22 @@ describe('getUsageDirectory — profiles·platform_admins·workspace_members·�
     expect(from.mock.calls.map(c => c[0])).not.toContain('memberships')
   })
 
+  it('팀 이름을 함께 준다(teamLabel — 표시용). 이름이 없는 팀은 code, 그 사람의 팀 안에서 이름이 겹치면 `이름 (code)`', async () => {
+    mocks.getActor.mockResolvedValue(makeSuperuser())
+    const { from } = setup({ ...OK_TABLES, project_members: { data: [
+      { people: { user_id: 'u-alice' }, project_member_teams: [{ is_primary: true, teams: { code: 'MES', name: '제조' } }] },
+      { people: { user_id: 'u-alice' }, project_member_teams: [{ is_primary: true, teams: { code: 'ERP', name: '' } }] },
+      { people: { user_id: 'u-bob' }, project_member_teams: [{ is_primary: true, teams: { code: 'QA', name: '품질' } }] },
+      { people: { user_id: 'u-bob' }, project_member_teams: [{ is_primary: true, teams: [{ code: 'QC', name: '품질' }] }] },
+    ], error: null } })
+    const by = new Map((await getUsageDirectory()).map(r => [r.id, r]))
+    expect(by.get('u-alice')).toMatchObject({ teamCode: 'ERP·MES', teamLabel: '제조·ERP' })
+    expect(by.get('u-bob')).toMatchObject({ teamCode: 'QA·QC', teamLabel: '품질 (QA)·품질 (QC)' })
+    expect(by.get('u-root')).toMatchObject({ teamCode: null, teamLabel: null })
+    const pm = from.mock.results[from.mock.calls.findIndex(c => c[0] === 'project_members')].value as Record<string, ReturnType<typeof vi.fn>>
+    expect(String(pm.select.mock.calls[0][0])).toContain('teams(code, name)')
+  })
+
   it('명단 조회는 활성 행·활성 인물만(buildActor 의 명단 팀과 같은 축)', async () => {
     mocks.getActor.mockResolvedValue(makeSuperuser())
     const { from } = setup(OK_TABLES)

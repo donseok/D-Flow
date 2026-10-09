@@ -26,7 +26,7 @@ const INPUT = 'h-6 w-full min-w-0 rounded border border-action bg-surface px-1 t
  * 값을 먼저 바꿨으면 덮지 않고 알린 뒤 새로 읽는다.
  */
 export function WbsCustomFieldCell({
-  def, defs, projectId, rowId, custom, canEdit, canAdmin, locale, format, className, width, onError,
+  def, defs, projectId, rowId, custom, canEdit, canAdmin, locale, format, className, width, onError, grid,
 }: {
   def: FieldDef
   /** 그 엔티티의 정의 전부 — 행 전체 검증(필수·권한)에 쓴다 */
@@ -43,6 +43,9 @@ export function WbsCustomFieldCell({
   className: string
   width: number
   onError: (message: string) => void
+  /** 표(treegrid)의 한 칸으로 그릴 때 — 탭 정지는 표가 한 칸만 두므로(roving) 이 칸은 늘 tabIndex -1 이고, 현재 칸의 0 은 표가 DOM 에 쓴다.
+   *  onClosed: 키보드로 편집기가 닫힌 뒤 포커스가 갈 곳(Enter = 아래, Tab = 오른쪽, Shift+Tab = 왼쪽, Esc·비교 = 그 칸). 없으면 종전의 단독 버튼 칸 */
+  grid?: { colIndex: number; onClosed: (move: 'down' | 'right' | 'left' | 'self') => void }
 }) {
   const router = useRouter()
   const ko = locale === 'ko'
@@ -58,6 +61,8 @@ export function WbsCustomFieldCell({
   type Conflict = { latest: CustomValues; mine: string; latestText: string; base: string }
   const [conflict, setConflict] = useState<Conflict | null>(null)
   const conflictRef = useRef<Conflict | null>(null)
+  // 편집기가 닫히면 포커스를 어디로 보낼지 — 키보드로 닫을 때만 정한다(blur 로 닫히면 사용자가 이미 다른 곳을 눌렀다)
+  const afterClose = useRef<'down' | 'right' | 'left' | 'self' | null>(null)
 
   const signature = JSON.stringify(custom)
   const current = custom === null ? null : saved && saved.from === signature ? saved.values : custom
@@ -73,7 +78,13 @@ export function WbsCustomFieldCell({
     setDraft(v === undefined ? '' : String(v))
     editSessionStore.setSession(`wbs:${rowId}:cf:${def.key}`, 'wbs_cell', `${rowId}:cf:${def.key}`, 'editing')
   }
-  const close = () => { closed.current = true; setDraft(null); setInvalid(false) }
+  const close = () => {
+    closed.current = true; setDraft(null); setInvalid(false)
+    const move = afterClose.current
+    afterClose.current = null
+    // closed 를 먼저 세웠으므로 포커스가 옮겨 가며 오는 blur 는 다시 저장하지 않는다
+    if (move) grid?.onClosed(move)
+  }
   const cancelEdit = () => { editSessionStore.removeSession(`wbs:${rowId}:cf:${def.key}`); close() }
   const typed = (raw: string): FieldValue | undefined => {
     if (raw === '') return undefined
@@ -97,6 +108,7 @@ export function WbsCustomFieldCell({
     if (same(next, from)) { if (rebase) { mark('saved'); router.refresh() } else editSessionStore.removeSession(sessionId); close(); return }
     const checked = validateCustomValues(defs, next, from, canAdmin)
     if (!checked.ok) {
+      afterClose.current = null   // 편집기에 남는다 — 뒤의 blur 닫힘이 포커스를 옮기지 않게
       setInvalid(true)
       onError(`${def.label}: ${customFieldErrorText(checked.errors[def.key] ?? Object.values(checked.errors)[0], ko)}`)
       return
@@ -104,6 +116,7 @@ export function WbsCustomFieldCell({
     const applied = (values: CustomValues) => { mark('saved'); setSaved({ from: signature, values }); close(); router.refresh() }
     // 이 칸을 다른 사람이 바꿨다 — 편집기와 입력을 둔 채 비교를 연다
     const conflicted = (latest: CustomValues) => {
+      afterClose.current = 'self'   // 비교에서 어느 쪽을 고르든 닫히면 그 칸으로 돌아온다
       mark('conflict')
       const c = { latest, mine: shown(value), latestText: shown(latest[def.key]), base: shown(from[def.key]) }
       conflictRef.current = c
@@ -132,7 +145,7 @@ export function WbsCustomFieldCell({
         }
         onError(result.error)
         // 현재 값을 읽지 못한 충돌은 비교할 것이 없다 — 닫고 새로 읽는다. 그 밖의 실패는 입력을 지킨다
-        if (result.code === 'FIELD_CONFLICT') { mark('conflict'); close(); router.refresh() } else { mark('failed'); setInvalid(true) }
+        if (result.code === 'FIELD_CONFLICT') { if (afterClose.current) afterClose.current = 'self'; mark('conflict'); close(); router.refresh() } else { mark('failed'); setInvalid(true) }
         return
       }
       applied(result.values)
@@ -148,18 +161,23 @@ export function WbsCustomFieldCell({
       else conflicted(latest.value)
     } finally {
       inFlight.current = false; setBusy(false)
+      // 닫히지 않았고 비교도 아니면(거부·확인 실패) 편집기에 남는다 — 맡아 둔 이동을 버린다
+      if (!closed.current && !conflictRef.current && !again) afterClose.current = null
       if (again) void commit(again)
     }
   }
   const closeConflict = () => { conflictRef.current = null; setConflict(null) }
   const keepMine = () => { const c = conflictRef.current; if (!c) return; closeConflict(); void commit(c.latest) }
   const takeLatest = () => { closeConflict(); editSessionStore.removeSession(sessionId); close(); router.refresh() }
-  const continueEdit = () => { closeConflict(); mark('editing') }
+  const continueEdit = () => { closeConflict(); afterClose.current = null; mark('editing') }
   const keys = (e: React.KeyboardEvent) => {
     // 한글 조합 중의 Enter·Esc 는 조합을 끝내는 키다 — 저장·취소로 새지 않게 한다(개정 §5.8.4, Q04. 주간 시트 useSheetGrid 와 같은 가드)
     if (e.nativeEvent.isComposing || e.keyCode === 229) { e.stopPropagation(); return }
-    if (e.key === 'Enter') { e.preventDefault(); void commit() }
-    else if (e.key === 'Escape') { e.preventDefault(); cancelEdit() }
+    // 표 안에서는 Enter = 확정 후 아래 칸, Tab/Shift+Tab = 확정 후 오른쪽/왼쪽 칸, Esc = 취소하고 그 칸(개정 §5.9.2 편집 모드).
+    // 표 밖(grid 없음)의 Tab 은 종전처럼 브라우저의 것이다(포커스 이탈 = 저장)
+    if (e.key === 'Enter') { e.preventDefault(); afterClose.current = grid ? 'down' : null; void commit() }
+    else if (e.key === 'Tab' && grid) { e.preventDefault(); afterClose.current = e.shiftKey ? 'left' : 'right'; void commit() }
+    else if (e.key === 'Escape') { e.preventDefault(); afterClose.current = grid ? 'self' : null; cancelEdit() }
     e.stopPropagation()
   }
   const common = {
@@ -174,11 +192,13 @@ export function WbsCustomFieldCell({
       data-wbs-col={`cf:${def.key}`}
       title={editing || current === null ? undefined : text}
       className={`${className} ${editable && !editing ? 'cursor-pointer' : ''}`}
-      style={{ width }}
-      role={editable && !editing ? 'button' : undefined}
-      tabIndex={editable && !editing ? 0 : undefined}
+      // 표 칸의 포커스 링은 안쪽으로(아래 행·동결 열에 잘리지 않게 — WbsGanttSheet 의 CELL_FOCUS 와 같은 값)
+      style={grid ? { width, outlineOffset: -2 } : { width }}
+      {...(grid
+        ? { role: 'gridcell', 'aria-colindex': grid.colIndex, 'aria-readonly': !editable, tabIndex: -1, 'data-wbs-cell': '', 'data-wbs-editable': editable ? '' : undefined }
+        : { role: editable && !editing ? 'button' : undefined, tabIndex: editable && !editing ? 0 : undefined })}
       onClick={editable ? start : undefined}
-      onKeyDown={editable && !editing ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); start() } } : undefined}
+      onKeyDown={editable && !editing ? e => { if (e.key === 'Enter' || e.key === ' ' || (grid && e.key === 'F2')) { e.preventDefault(); start() } } : undefined}
     >
       {!editing ? <span className={`truncate ${current === null ? 'text-danger' : ''}`}>{text}</span>
         : def.type === 'boolean' || def.type === 'select' ? (

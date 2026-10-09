@@ -27,6 +27,19 @@ describe('AccountMenu(★10)', () => {
     fireEvent.click(screen.getByText('chrome.logout').closest('button')!)
     expect(h.signOut).toHaveBeenCalledTimes(1)
   })
+  it('소속은 팀 이름(teamLabels)으로 보인다 — code 가 아니다. 여럿이면 첫 이름 외 n-1, 전체는 title', () => {
+    render(<AccountMenu identity={{ displayName: 'alice', roleLabel: '멤버', teamCodes: ['OPS', 'QA'], teamLabels: ['운영', '품질'] }} />)
+    fireEvent.click(screen.getByRole('button', { name: /alice/ }))
+    const sub = document.querySelector('[data-profile-subtitle]')!
+    expect(sub.textContent).toBe('멤버 · 운영 외 1')
+    expect(sub.getAttribute('title')).toBe('운영, 품질')
+    expect(sub.textContent).not.toContain('OPS')
+  })
+  it('teamLabels 가 없으면(옛 호출부) code 로 보인다', () => {
+    render(<AccountMenu identity={{ displayName: 'alice', roleLabel: '멤버', teamCodes: ['ERP'] }} />)
+    fireEvent.click(screen.getByRole('button', { name: /alice/ }))
+    expect(document.querySelector('[data-profile-subtitle]')!.textContent).toBe('멤버 · ERP')
+  })
   it('팀 모름(null)은 미지정이라 주장하지 않는다', () => {
     render(<AccountMenu identity={{ displayName: 'alice', roleLabel: '멤버', teamCodes: null }} />)
     fireEvent.click(screen.getByRole('button', { name: /alice/ }))

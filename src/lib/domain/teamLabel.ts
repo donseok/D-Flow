@@ -24,6 +24,19 @@ export function teamLabelLookup(teams: readonly TeamLabelRef[]): (code: string) 
   return (code: string) => byCode.get(code) ?? code
 }
 
+/** code → 표시 라벨, 비활성 팀까지. 활성 팀의 라벨은 teamLabelLookup(active) 그대로다 — 비활성 팀의 이름이 선택지·필터에 보이는
+ *  활성 팀의 글자를 바꾸지 않게(겹침은 활성끼리만 본다). 활성에 없는 code 만 비활성 팀에서 찾고, 그 라벨은 활성·비활성 전체와 겹침을
+ *  본다(지금 쓰는 팀과 같은 이름의 옛 팀은 `이름 (code)`). 같은 code 가 활성·비활성에 다 있으면 활성이 이긴다. */
+export function teamLabelLookupWithInactive(active: readonly TeamLabelRef[], inactive: readonly TeamLabelRef[]): (code: string) => string {
+  const activeLabel = teamLabelLookup(active)
+  if (inactive.length === 0) return activeLabel
+  const activeCodes = new Set(active.map((t) => t.code))
+  const all = [...active, ...inactive]
+  const inactiveLabel = new Map<string, string>()
+  for (const t of inactive) if (!activeCodes.has(t.code) && !inactiveLabel.has(t.code)) inactiveLabel.set(t.code, teamLabel(t, all))
+  return (code: string) => (activeCodes.has(code) ? activeLabel(code) : inactiveLabel.get(code) ?? code)
+}
+
 /** 색인 본문·봇 문맥의 팀 표기 — `이름 (code)`. code 를 함께 적어 code 로 묻는 검색(엑셀·옛 문서의 표기)도 계속 맞는다.
  *  이름이 code 와 같거나 없으면 한 번만 적는다 */
 export function teamNameWithCode(code: string, name: string | null | undefined): string {

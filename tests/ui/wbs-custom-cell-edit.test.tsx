@@ -86,7 +86,9 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
 
   it('클릭으로 들어가 Enter 로 저장 — 행의 custom 전체를 CAS 기준으로 넘기고 다른 키는 그대로 둔다', async () => {
     await render({ qty: 0, result: 'pass', grade: 'A' })
-    expect(cell('qty').getAttribute('role')).toBe('button')
+    // 표의 한 칸(gridcell)이다 — 고칠 수 있는 칸은 aria-readonly=false(옛 표지는 role=button 이었다. 탭 정지가 표에 하나뿐이 되면서 바뀜)
+    expect(cell('qty').getAttribute('role')).toBe('gridcell')
+    expect(cell('qty').getAttribute('aria-readonly')).toBe('false')
     await click(cell('qty'))
     expect(editor('qty')?.value).toBe('0')
     await type(editor('qty')!, '5')
@@ -192,7 +194,7 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
   it('관리자 전용 필드·여러 줄 필드는 관리자에게도 셀에서 읽기 전용이다(편집은 상세 패널)', async () => {
     await render({ grade: 'A', memo: '메모' })
     for (const k of ['grade', 'memo']) {
-      expect(cell(k).getAttribute('role')).toBeNull()
+      expect(cell(k).getAttribute('aria-readonly')).toBe('true')
       await click(cell(k))
       expect(editor(k)).toBeNull()
     }
@@ -209,7 +211,7 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
     await render({ qty: 1 }, { actorView: viewOfActor(makeMemberActor(P)), canAdmin: false })   // 팀이 없는 멤버 — 이 항목의 담당이 아니다
     await click(cell('qty'))
     expect(editor('qty')).toBeNull()
-    expect(cell('qty').getAttribute('role')).toBeNull()
+    expect(cell('qty').getAttribute('aria-readonly')).toBe('true')
     expect(h.save).not.toHaveBeenCalled()
   })
 

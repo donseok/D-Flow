@@ -1,5 +1,6 @@
-// 팀 주입(V16, SP4 D19·Q23 겹침) — (app)/layout 은 TeamsProvider 를 그리지 않고, 범위 레이아웃이 그 범위의 활성 팀을 싣는다.
-// w/[slug]·(global) = workspaceTeams(wid) 의 활성, p/[projectId] = projectTeams(pid) 의 활성(요청 범위 원천 — SP4 B).
+// 팀 주입(V16, SP4 D19·Q23 겹침) — (app)/layout 은 TeamsProvider 를 그리지 않고, 범위 레이아웃이 그 범위의 팀을 싣는다.
+// w/[slug]·(global) = workspaceTeams(wid), p/[projectId] = projectTeams(pid)(요청 범위 원천 — SP4 B). 비활성 팀도 실린다 — 라벨 해석용이고
+// 선택지·필터를 활성으로 거르는 것은 TeamsProvider 의 훅이다(tests/ui/teams-provider.test.tsx).
 // 열화(actor null)면 [] — 팀을 읽지 않는다. 팀 원천이 throw 하면 로그 + [] (설정·임포트 같은 복구 화면까지 오류가 되지 않게).
 import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -43,7 +44,8 @@ import ProjectLayout from '@/app/(app)/p/[projectId]/layout'
 import GlobalLayout from '@/app/(app)/(global)/layout'
 
 const member = () => makeActor({ workspaceRoles: new Map([[WA, 'member'], [WB, 'member']]), projectWorkspace: new Map([[PA, WA]]), projectRoles: new Map([[PA, 'member']]) })
-const codes = () => (h.teams.mock.calls.at(-1)?.[0] as Team[]).map((t) => t.code)
+const codes = () => (h.teams.mock.calls.at(-1)?.[0] as Team[]).filter((t) => t.active).map((t) => t.code)
+const inactiveCodes = () => (h.teams.mock.calls.at(-1)?.[0] as Team[]).filter((t) => !t.active).map((t) => t.code)
 const layouts = {
   workspace: async () => renderToString(await WorkspaceLayout({ children: 'page', params: Promise.resolve({ slug: 'acme' }) })),
   project: async () => renderToString(await ProjectLayout({ children: 'page', params: Promise.resolve({ projectId: PA }) })),
@@ -61,15 +63,17 @@ describe('범위 레이아웃 팀 주입(V16)', () => {
   it('(app)/layout 은 TeamsProvider 를 그리지 않는다', () => {
     expect(readFileSync('src/app/(app)/layout.tsx', 'utf8')).not.toContain('TeamsProvider')
   })
-  it('w/[slug] — 그 워크스페이스의 활성 공용 팀만(다른 워크스페이스·비활성·프로젝트 전용 없음)', async () => {
+  it('w/[slug] — 그 워크스페이스의 공용 팀만(다른 워크스페이스·프로젝트 전용 없음). 비활성 팀은 라벨 해석용으로 함께 실린다', async () => {
     await layouts.workspace()
     expect(h.workspaceTeams).toHaveBeenCalledWith(WA)
     expect(codes()).toEqual(['PMO'])
+    expect(inactiveCodes()).toEqual(['휴면'])
   })
-  it('p/[projectId] — 그 프로젝트의 팀 중 활성만', async () => {
+  it('p/[projectId] — 그 프로젝트의 팀(비활성은 라벨 해석용)', async () => {
     await layouts.project()
     expect(h.projectTeams).toHaveBeenCalledWith(PA)
     expect(codes().sort()).toEqual(['A전용', 'PMO'])
+    expect(inactiveCodes().sort()).toEqual(['A전용휴면', '휴면'])
   })
   it('(global) — 쿠키 워크스페이스의 활성 공용 팀', async () => {
     await layouts.global()

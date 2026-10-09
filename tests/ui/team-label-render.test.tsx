@@ -27,10 +27,10 @@ function Label({ code }: { code: string }) {
 }
 
 describe('useTeamLabel — 범위 공급자의 활성 팀으로 code 를 이름으로', () => {
-  it('활성 팀은 이름, 비활성·목록 밖·공급자 없음은 code 그대로', () => {
+  it('활성 팀은 이름, 비활성 팀도 이름(라벨 해석용으로 내려온다), 목록 밖·공급자 없음은 code 그대로', () => {
     const html = (code: string) => renderToStaticMarkup(<TeamsProvider teams={teams}><Label code={code} /></TeamsProvider>)
     expect(html('TEAM_A')).toBe('<span>기획팀</span>')
-    expect(html('OLD')).toBe('<span>OLD</span>')
+    expect(html('OLD')).toBe('<span>옛 이름</span>')
     expect(html('GONE')).toBe('<span>GONE</span>')
     expect(renderToStaticMarkup(<Label code="TEAM_A" />)).toBe('<span>TEAM_A</span>')
   })

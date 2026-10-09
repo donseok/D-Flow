@@ -51,6 +51,7 @@ export const wbsEn: Record<keyof typeof wbsKo, string> = {
   'wbs.weeklyReport': 'Report',
   'wbs.weeklyReportTitle': 'Generate weekly report',
   'wbs.ariaFullscreen': 'WBS full-screen view',
+  'wbs.gridLabel': 'Work plan grid — arrow keys to move, Enter to edit',
   'wbs.newPhasePlaceholder': 'New {level} name (e.g. 1. Prepare)',
   'wbs.newPhaseAria': 'New {level} name',
   'wbs.adding': 'Adding…',

@@ -34,6 +34,8 @@ export interface AccountRecord {
   email: string
   name: string
   teamCode: string | null
+  /** teamCode 와 같은 팀들의 표시 글자(팀 이름을 가나다순 · 로 이은 것) — 표시 전용. 없으면 화면이 teamCode 를 쓴다. */
+  teamLabel?: string | null
   /** 플랫폼 관리자·어느 워크스페이스든 관리자면 admin, 워크스페이스 멤버면 member, 소속 없음은 null. */
   role: WorkspaceRole | null
   createdAt: string

@@ -8,7 +8,8 @@ import { identityTeamLabel } from '@/lib/domain/identityTeams'
 import { signOutAndClear } from '@/lib/auth/signOut'
 import { usePopover } from './usePopover'
 
-export interface ShellIdentity { displayName: string | null; roleLabel: string; teamCodes: string[] | null }
+/** teamLabels 는 teamCodes 의 표시 글자(팀 이름) — 없으면(옛 호출부) code 로 보인다. 식별은 teamCodes 다 */
+export interface ShellIdentity { displayName: string | null; roleLabel: string; teamCodes: string[] | null; teamLabels?: string[] | null }
 
 /** 계정 팝오버(★10, D28) — 관리 링크는 내비의 '운영'·'플랫폼 운영' 그룹으로 옮겼으므로 없다. 로그아웃은 signOutAndClear 하나(W16).
  *  테마 라디오·머리를 담으므로 menu 가 아니라 비모달 dialog 다(알림 벨과 같은 꼴 — 첫 항목 초점·Esc·바깥 클릭은 usePopover) */
@@ -17,7 +18,7 @@ export function AccountMenu({ identity }: { identity: ShellIdentity | null }) {
   const { open, setOpen, triggerRef, panelRef } = usePopover()
   const role = identity?.roleLabel ?? '게스트'
   const name = identity?.displayName?.trim() || null
-  const teams = identity?.teamCodes ?? null
+  const teams = identity?.teamLabels ?? identity?.teamCodes ?? null
   // 팀 모름(null)은 '—' 도 적지 않는다 — 미지정이라고 주장하지 않는다
   const sub = teams?.length ? `${role} · ${identityTeamLabel(teams)}` : role
   return (

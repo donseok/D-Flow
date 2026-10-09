@@ -19,7 +19,7 @@ export async function buildActor(db: Db, userId: string): Promise<Actor> {
     db.from('workspace_members').select('workspace_id, role').eq('user_id', userId),
     // people 임베드는 반드시 !inner — 아니면 .eq('people.user_id') 가 임베드만 거르고 명단 행은 전부 돌아온다(admin 경로에서 전원 합산).
     db.from('project_members')
-      .select('id, project_id, access_role, people!inner(user_id, active), project_member_teams(team_id, is_primary, teams(code))')
+      .select('id, project_id, access_role, people!inner(user_id, active), project_member_teams(team_id, is_primary, teams(code, name))')
       .eq('people.user_id', userId).eq('people.active', true).eq('active', true),
   ])
   if (pa.error) fail('platform_admins', pa.error.message)
@@ -50,7 +50,7 @@ export async function buildActor(db: Db, userId: string): Promise<Actor> {
   for (const p of projects) projectWorkspace.set(p.id, p.workspace_id)
   const projectRoles = new Map<string, ProjectRole>()
   const memberIds = new Map<string, string>()
-  const rosterTeams = new Map<string, { teamIds: string[]; teamCodes: string[] }>()
+  const rosterTeams = new Map<string, { teamIds: string[]; teamCodes: string[]; teamNames: string[] }>()
   for (const row of pm.data! as Array<Record<string, unknown>>) {
     const pid = row.project_id as string
     // 소속 워크스페이스 밖 프로젝트의 명단 행은 버린다 — 소속을 잃은 뒤 남은 행이 projectRoles 로 들어가면 isAnyProjectAdmin·
@@ -60,11 +60,13 @@ export async function buildActor(db: Db, userId: string): Promise<Actor> {
     memberIds.set(pid, row.id as string)
     if (row.access_role) projectRoles.set(pid, row.access_role as ProjectRole)
     // 대표 팀 먼저, 나머지는 code 사전순 — 임베드 응답 순서(물리 순서)에 기대지 않아 primaryTeamCode 가 결정적이다.
-    const links = ((row.project_member_teams ?? []) as Array<{ team_id: string; is_primary: boolean; teams: { code: string } | { code: string }[] | null }>)
-      .map(l => ({ id: l.team_id, code: (Array.isArray(l.teams) ? l.teams[0]?.code : l.teams?.code) ?? null, primary: l.is_primary }))
-      .filter((l): l is { id: string; code: string; primary: boolean } => !!l.code)
+    // name 은 표시 전용(계정 메뉴의 소속) — 정렬·판정은 code 그대로다. 이름이 없으면 code 로 보이게 code 를 싣는다.
+    type TeamEmbed = { code: string; name?: string | null }
+    const links = ((row.project_member_teams ?? []) as Array<{ team_id: string; is_primary: boolean; teams: TeamEmbed | TeamEmbed[] | null }>)
+      .map(l => { const t = Array.isArray(l.teams) ? l.teams[0] : l.teams; return { id: l.team_id, code: t?.code ?? null, name: t?.name ?? null, primary: l.is_primary } })
+      .filter((l): l is { id: string; code: string; name: string | null; primary: boolean } => !!l.code)
       .sort((a, b) => Number(b.primary) - Number(a.primary) || a.code.localeCompare(b.code))
-    if (links.length) rosterTeams.set(pid, { teamIds: links.map(l => l.id), teamCodes: links.map(l => l.code) })
+    if (links.length) rosterTeams.set(pid, { teamIds: links.map(l => l.id), teamCodes: links.map(l => l.code), teamNames: links.map(l => l.name?.trim() || l.code) })
   }
   return { userId, isSuperuser, workspaceRoles, projectWorkspace, projectRoles, memberIds, rosterTeams }
 }

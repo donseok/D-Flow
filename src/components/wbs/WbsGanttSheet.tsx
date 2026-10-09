@@ -51,6 +51,8 @@ import { orderedFields } from '@/lib/domain/customFields'
 import { parseCustomValues } from '@/lib/domain/customFieldValues'
 import { WbsCustomFieldCell } from './WbsCustomFieldCell'
 import { ConflictResolver } from '@/components/ui/ConflictResolver'
+import { editMove, gridKeyAction, gridModel, type GridCoord } from '@/lib/domain/wbsGridNav'
+import { useWbsGridNav, WBS_CELL_ATTR } from './useWbsGridNav'
 
 /* ── 컬럼 메타 (좌→우). frozen=true면 sticky 동결, sk=누적 left offset ──
    구분(LevelBadge) 열은 삭제됐다(2026-08-21 개편) — 계층은 들여쓰기·타이포·1단계 스트립이
@@ -109,6 +111,11 @@ const NAME_COL_STORAGE_KEY = 'wbs.nameColWidth'
    과거 rowsH 가 36 으로 하드코딩돼 실제 40px 행과 어긋나면서, 아래쪽 행들의 타임라인 격자·
    주말/공휴일 밴드·붉은 기준일선이 끝까지 그려지지 않던 버그가 있었다. 반드시 함께 움직여야 한다. */
 const ROW_H = 40
+/* 셀 포커스 링 — 전역 :focus-visible 외곽선(2px + 바깥 2px)을 그대로 쓰되 offset 만 안쪽으로 당긴다. 바깥으로 나간 링은 아래 행(뒤에 그려진다)과
+   sticky 동결 열에 잘린다(개정 §5.5.5 "sticky 경계가 focus 링을 가리지 않는다"). 전역 규칙이 @layer 밖이라 유틸 클래스로는 못 이기므로 인라인이다. */
+const CELL_FOCUS: React.CSSProperties = { outlineOffset: -2 }
+/* 인라인 편집 필드 → 그 칸의 열 key */
+const EDIT_COL = { weight: 'weight', actual: 'pactual' } as const
 const EMPTY_DEPENDENCIES: TaskDependency[] = []
 // 매 렌더 새 리터럴을 만들면 하위 memo 가 매번 깨진다 — 모듈 상수로 고정.
 const EMPTY_UNRESOLVED: Record<string, string[]> = {}
@@ -875,6 +882,26 @@ export function WbsGanttSheet({
   const progressLensItem = progressLensActiveId ? itemById.get(progressLensActiveId) ?? null : null
   const rowIndex = useMemo(() => new Map(flatRows.map((item, index) => [item.id, index])), [flatRows])
 
+  /* ── 키보드 이동(개정 §5.9.2) — 보이는 행·열만 모델에 넣는다(접힘·완료 숨김·검색·열 숨김이 그대로 반영된다).
+     검색 중에는 접힘이 화면에 반영되지 않으므로(전부 펼쳐 보인다) 접기·펴기 키를 끈다. 포커스 좌표는 훅의 ref 에 있다 — 상태가 아니다. */
+  const parentById = useMemo(() => new Map(allFlatItems.map(n => [n.id, n.parentId])), [allFlatItems])
+  const gridNav = useMemo(
+    () => gridModel(
+      flatRows.map(n => ({ id: n.id, parentId: n.parentId, expandable: !matchKeep && n.children.length > 0, expanded: !effCollapsed.has(n.id) })),
+      visibleCols.map(c => c.key),
+      'name',
+    ),
+    [flatRows, visibleCols, matchKeep, effCollapsed],
+  )
+  const grid = useWbsGridNav({ model: gridNav, parentOf: id => parentById.get(id), scrollerRef: timelineScrollRef })
+  const { setActive: setActiveCell, focusCell } = grid
+  // 딥링크 도착 행(위 flash 효과가 행에 포커스를 준다) — 탭 정지도 그 행으로 옮겨, 표를 나갔다 들어와도 그 행에서 이어 간다
+  useEffect(() => {
+    if (flashId) setActiveCell({ rowId: flashId, col: 'name' })
+  }, [flashId, setActiveCell])
+  // 편집기가 닫힌 뒤 포커스가 갈 칸 — Enter 는 아래, Tab 은 옆, Esc 는 제자리. 편집기가 DOM 에서 빠진 다음(레이아웃 효과)에 옮긴다
+  const pendingFocusRef = useRef<GridCoord | null>(null)
+
   const clearProgressLensSelection = () => {
     setProgressLensPreviewId(null)
     setProgressLensPinnedId(null)
@@ -1098,9 +1125,11 @@ export function WbsGanttSheet({
     lastRejected.current = null
     editSessionStore.setSession(`wbs:${id}:${field}`, 'wbs_cell', `${id}:${field}`, 'editing')
   }
-  const cancel = () => {
+  // refocus: 키보드로 닫을 때 포커스가 갈 칸(Esc = 그 칸, 무변경 Enter·Tab = 다음 칸). 마우스·blur 로 닫을 때는 포커스를 가져오지 않는다
+  const cancel = (refocus?: GridCoord | 'self') => {
     if (edit) {
       editSessionStore.removeSession(`wbs:${edit.id}:${edit.field}`)
+      if (refocus) pendingFocusRef.current = refocus === 'self' ? { rowId: edit.id, col: EDIT_COL[edit.field] } : refocus
     }
     setEdit(null)
     setDraft('')
@@ -1111,12 +1140,16 @@ export function WbsGanttSheet({
   // 저장 실패(!ok)도 편집기를 유지한다. 충돌은 닫지 않고 비교(ConflictResolver)로 간다(개정 §5.8, Q05) — 내 입력을 지킨 채
   // 서버의 현재 값을 보이고, '내 값으로 저장'을 고르면 그 값을 기대값으로 한 번만 다시 쓴다. 편집 원본을 몰래 바꾸지 않는다.
   // rebase: 비교에서 '내 값으로 저장'을 고른 재저장 — 사용자가 본 서버 값(최신)을 기대값으로 쓴다.
-  const commit = async (via: 'enter' | 'blur', rebase?: { latest: number | null }) => {
+  // move: 키보드 확정(Enter·Tab) 뒤 옮겨 갈 방향 — 저장이 반영돼 편집기가 닫힐 때만 옮긴다(검증 실패·충돌·거부는 편집기에 남는다)
+  const commit = async (via: 'enter' | 'blur', rebase?: { latest: number | null }, move?: 'down' | 'right' | 'left') => {
     if (!edit || busy) return
     // 비교가 떠 있는 동안의 blur(상자가 포커스를 가져간다)는 저장이 아니다
     if (cellConflictRef.current && !rebase) return
     const { id, field } = edit
     const sessionId = `wbs:${id}:${field}`
+    const here: GridCoord = { rowId: id, col: EDIT_COL[field] }
+    // 키보드로 닫히면 포커스를 표에 남긴다(다음 칸 또는 그 칸) — blur 로 닫히면 사용자가 이미 다른 곳을 눌렀다
+    const after: GridCoord | undefined = via === 'enter' ? (move ? editMove(gridNav, here, move) : here) : undefined
     const reject = (msg: string) => {
       setInvalid(true)
       if (via === 'enter' || lastRejected.current !== draft) setToast({ kind: 'err', msg })
@@ -1156,7 +1189,7 @@ export function WbsGanttSheet({
       // 입력은 % 기준, 저장·충돌 비교는 1기준 원본(editOriginal). 무변경 커밋은
       // %↔분수 왕복 반올림값이 재저장되지 않게 서버 호출 없이 닫는다.
       const origPct = editOriginal.trim() === '' ? '' : String(weightToPct(Number(editOriginal)))
-      if (!rebase && draft.trim() === origPct) return cancel()
+      if (!rebase && draft.trim() === origPct) return cancel(after)
       const pv = draft.trim() === '' ? null : Number(draft)
       if (pv != null && (!Number.isFinite(pv) || pv < 0)) return reject(t('wbs.toastWeightMin'))
       const prevVal = rebase ? rebase.latest : editOriginal.trim() === '' ? null : Number(editOriginal)
@@ -1184,6 +1217,7 @@ export function WbsGanttSheet({
       // D6-§5-motion: 셀 저장 성공 토스트는 제거하고 조용한 헤더 SyncStatus로 흡수
       editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'saved')
       router.refresh()
+      if (after) pendingFocusRef.current = after
       setEdit(null)
       setDraft('')
       setInvalid(false)
@@ -1251,6 +1285,7 @@ export function WbsGanttSheet({
         })
         setToast({ kind: 'err', msg: `${t('wbs.toastConflict')} — ${t('wbs.toastYourValue')}: ${draft}` })
         router.refresh()
+        if (via === 'enter') pendingFocusRef.current = here
         setEdit(null)
         setDraft('')
         setInvalid(false)
@@ -1279,7 +1314,7 @@ export function WbsGanttSheet({
   }
   const takeLatestCell = () => {
     closeCellConflict()
-    cancel()
+    cancel('self')
     router.refresh()
   }
   const continueCellEdit = () => {
@@ -1289,6 +1324,14 @@ export function WbsGanttSheet({
     if (c) editSessionStore.setSession(`wbs:${c.id}:${c.field}`, 'wbs_cell', `${c.id}:${c.field}`, 'editing')
     inputRef.current?.focus()
   }
+
+  // 편집기가 닫혔으면 맡아 둔 칸으로 포커스를 돌려준다 — 닫힌 입력과 함께 포커스가 문서로 떨어지지 않게
+  useLayoutEffect(() => {
+    if (edit) return
+    const to = pendingFocusRef.current
+    pendingFocusRef.current = null
+    if (to) focusCell(to)
+  }, [edit, focusCell])
 
   // WBS Undo 단축키 (Ctrl+Z / Cmd+Z)
   useEffect(() => {
@@ -1330,14 +1373,95 @@ export function WbsGanttSheet({
       }}
       onBlur={() => void commit('blur')}
       onKeyDown={e => {
-        if (e.key === 'Enter') void commit('enter')
-        else if (e.key === 'Escape') cancel()
+        // Enter = 확정 후 아래 칸, Tab/Shift+Tab = 확정 후 오른쪽/왼쪽 칸, Esc = 취소하고 그 칸으로(개정 §5.9.2 편집 모드). 방향키는 입력의 것이다
+        if (e.key === 'Enter') void commit('enter', undefined, 'down')
+        else if (e.key === 'Tab') { e.preventDefault(); void commit('enter', undefined, e.shiftKey ? 'left' : 'right') }
+        else if (e.key === 'Escape') cancel('self')
       }}
       placeholder={current}
       className="h-6 w-full rounded border border-action bg-surface px-1 text-right tabular-nums text-fg outline-none focus:ring-2 focus:ring-border-focus"
       style={{ fontSize: 'var(--wbs-cell-font, 12px)' }}
     />
   )
+
+  /* ── 표 키보드(탐색 모드) — 표 래퍼 하나에서 받는다. 이동은 DOM 포커스만 옮기고 상태를 건드리지 않는다 ── */
+  const canSelectRows = isAdmin && !readOnly
+  /** 그 칸의 편집 진입 — 편집할 수 있는 칸·권한일 때만. seed 가 있으면(숫자 키) 그 글자로 초안을 시작한다. 들어갔으면 true */
+  const enterCellEdit = (at: GridCoord, seed?: string): boolean => {
+    const n = itemById.get(at.rowId)
+    if (!n) return false
+    if (at.col === 'weight' && canEditW) {
+      const original = n.weight == null ? '' : String(n.weight)
+      startEdit(n.id, 'weight', seed ?? (n.weight == null ? '' : String(weightToPct(n.weight))), original)
+      return true
+    }
+    if (at.col === 'pactual' && canEditActual(n, actor, projectId) && !readOnly) {
+      startEdit(n.id, 'actual', seed ?? String(n.rolledActualPct), String(n.rolledActualPct))
+      return true
+    }
+    return false
+  }
+  const onGridKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // 한글 조합 중의 키는 조합의 것이다(개정 §5.8.4, Q04)
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return
+    const target = e.target as HTMLElement
+    // 편집기 안의 키는 편집기가 처리한다(방향키 = 커서). 체크박스는 편집기가 아니다 — 거기서도 방향키로 옮겨 갈 수 있다
+    if (target.closest('input:not([type="checkbox"]),select,textarea,[contenteditable="true"]')) return
+    const at = grid.coordOf(target)
+    if (!at) return
+    const sc = timelineScrollRef.current
+    const pageRows = sc ? Math.floor(sc.clientHeight / ROW_H) - 2 : 10
+    const action = gridKeyAction(gridNav, at, e.key, { ctrl: e.ctrlKey || e.metaKey, alt: e.altKey, shift: e.shiftKey }, pageRows)
+    if (action) {
+      e.preventDefault()
+      if (action.kind === 'toggle') toggle(action.rowId)
+      else focusCell(action.to)
+      return
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return
+    // 칸 안의 버튼·체크박스에 포커스가 있으면 Enter·Space 는 그 컨트롤의 것이다(마우스로 누른 뒤)
+    const onControl = target.closest('button,a,input') !== null
+    // 사용자 정의 필드 칸은 편집 진입을 스스로 처리한다(WbsCustomFieldCell — Enter·F2·Space). 고칠 수 없는 칸의 Space 가 표를 스크롤하지 않게만 막는다
+    if (at.col.startsWith('cf:')) {
+      if (e.key === ' ' && !onControl) e.preventDefault()
+      return
+    }
+    if (e.key === 'Enter' || e.key === 'F2') {
+      if (onControl && e.key === 'Enter') return
+      if (enterCellEdit(at)) e.preventDefault()
+      else if (e.key === 'Enter' && at.col === 'name') {
+        // 작업명은 셀에서 고치지 않는다 — 이름 버튼과 같은 동작(상세 패널)
+        e.preventDefault()
+        clearProgressLensSelection()
+        selectRow(at.rowId)
+      }
+      return
+    }
+    if (e.key === ' ') {
+      if (onControl) return
+      e.preventDefault()   // 표가 스크롤되지 않게
+      if (enterCellEdit(at)) return
+      // 식별 열(번호·개요 번호·작업명)에서는 행 선택 — 체크박스와 같은 상태다
+      if (canSelectRows && (at.col === 'no' || at.col === 'outline' || at.col === 'name')) {
+        setBulkSelection(current => {
+          const next = new Set(current)
+          if (next.has(at.rowId)) next.delete(at.rowId)
+          else next.add(at.rowId)
+          return next
+        })
+      }
+      return
+    }
+    // 숫자 키로 바로 편집 — 그 숫자가 초안의 첫 글자가 된다(가중치·실적%)
+    if (!onControl && !e.shiftKey && /^[0-9]$/.test(e.key) && enterCellEdit(at, e.key)) e.preventDefault()
+  }
+  /** 본문 셀 공통 속성 — 탭 정지는 표 전체에서 한 칸뿐이다(roving). 여기서는 늘 -1 이고 현재 칸의 0 은 useWbsGridNav 가 DOM 에 쓴다 */
+  const gridCell = (key: string) => ({
+    role: 'gridcell' as const,
+    'aria-colindex': (gridNav.colIndex.get(key) ?? 0) + 1,
+    tabIndex: -1,
+    [WBS_CELL_ATTR]: '',
+  })
 
   /* ── 셀 helpers ── */
   const headBase =
@@ -1359,6 +1483,8 @@ export function WbsGanttSheet({
     return (
       <div
         key={col.key}
+        role="columnheader"
+        aria-colindex={(gridNav.colIndex.get(col.key) ?? 0) + 1}
         data-wbs-col={col.key}
         data-wbs-col-kind="header"
         className={`${headBase} ${align} ${isName ? 'freeze-edge relative' : 'border-r border-border-input'} ${extra}`}
@@ -1718,8 +1844,20 @@ export function WbsGanttSheet({
                 ))}
           </div>
 
+          {/* 표(treegrid) — 머리 행과 본문 행만 담는다(배경 격자·오버레이·빈 상태는 바깥 형제). 위치를 잡지 않는 블록이라 행의 z 층·sticky 는
+              종전과 같은 스크롤 컨테이너 기준이다. 키보드는 여기 한 곳에서 받는다(개정 §5.9.2): 본문의 탭 정지는 한 칸, 방향키로 옮긴다 */}
+          <div
+            ref={grid.gridRef}
+            role="treegrid"
+            aria-label={t('wbs.gridLabel')}
+            aria-rowcount={flatRows.length + 1}
+            aria-colcount={visibleCols.length + 1}
+            data-wbs-grid
+            onKeyDown={onGridKeyDown}
+            onFocusCapture={grid.onFocusCapture}
+          >
           {/* 헤더 행 (sticky top) */}
-          <div className="sticky top-0 z-40 flex w-max">
+          <div role="row" aria-rowindex={1} className="sticky top-0 z-40 flex w-max">
             {headCell(colOf('no'), '#', 'justify-center')}
             {showCol('outline') && headCell(colOf('outline'), t('wbs.colOutline'), 'justify-start')}
             {headCell(
@@ -1782,8 +1920,10 @@ export function WbsGanttSheet({
             {showCol('pactual') && headCell(colOf('pactual'), t('wbs.colActualPct'), 'justify-end')}
             {showCol('achieve') && headCell(colOf('achieve'), t('wbs.colAchievement'), 'justify-center')}
             {customListDefs.map(d => showCol(`cf:${d.key}`) && headCell(colOf(`cf:${d.key}`), d.label, 'justify-start'))}
-            {/* 간트 헤더 (월/주/일 3단) */}
+            {/* 간트 헤더 (월/주/일 3단) — 표의 마지막 열. 키보드 이동 대상은 아니다(막대 조작은 마우스·상세 패널의 날짜) */}
             <div
+              role="columnheader"
+              aria-colindex={visibleCols.length + 1}
               className="relative box-border h-[var(--wbs-head-h)] shrink-0 border-b-2 border-border-input bg-surface-subtle"
               style={{ width: ganttW }}
             >
@@ -1893,12 +2033,17 @@ export function WbsGanttSheet({
 
             const frozen = (key: string, z = 20): React.CSSProperties => {
               const c = colOf(key)
-              return { width: c.w, position: 'sticky', left: c.sk, zIndex: z }
+              return { ...CELL_FOCUS, width: c.w, position: 'sticky', left: c.sk, zIndex: z }
             }
 
             return (
               <div
                 key={n.id}
+                role="row"
+                aria-rowindex={rowNo + 1}
+                aria-level={depth + 1}
+                aria-expanded={hasChildren ? !isCollapsed : undefined}
+                aria-selected={canSelectRows ? bulkSelection.has(n.id) : undefined}
                 data-row-id={n.id}
                 data-flash={isFlash ? 'true' : undefined}
                 data-lens-active={progressLensActive ? 'true' : undefined}
@@ -1910,7 +2055,7 @@ export function WbsGanttSheet({
                 onClick={e => {
                   if (!progressLensEnabled) return
                   const target = e.target as HTMLElement
-                  if (target.closest('button,input,select,textarea,a,[role="button"]')) return
+                  if (target.closest('button,input,select,textarea,a,[role="button"],[data-wbs-editable]')) return
                   setProgressLensPreviewId(n.id)
                   setProgressLensPinnedId(current => (current === n.id ? null : n.id))
                 }}
@@ -1936,6 +2081,7 @@ export function WbsGanttSheet({
                 )}
                 {/* # */}
                 <div
+                  {...gridCell('no')}
                   data-wbs-col="no"
                   className={`${cellBase} border-r border-border-input justify-center tabular-nums text-fg-muted ${cellBg}`}
                   style={{ ...frozen('no'), fontSize: 'var(--wbs-index-font, 12px)' }}
@@ -1951,7 +2097,7 @@ export function WbsGanttSheet({
                   {/* focus 도착 마커 — 동결(#) 셀 안에 두어 가로 스크롤에도 항상 보인다 */}
                   {isFlash && <span aria-hidden data-flash-accent className="absolute inset-y-0 left-0 z-10 w-1 bg-action" />}
                   {isAdmin && !readOnly ? (
-                    <input type="checkbox" aria-label={`${n.name} 대량 수정 선택`}
+                    <input type="checkbox" tabIndex={-1} aria-label={`${n.name} 대량 수정 선택`}
                       checked={bulkSelection.has(n.id)}
                       onChange={e => {
                         const checked = e.currentTarget.checked
@@ -1967,6 +2113,7 @@ export function WbsGanttSheet({
                 {/* 개요 번호(토글) — 저장 code 아님, 트리 위치 파생 */}
                 {showCol('outline') && (
                   <div
+                    {...gridCell('outline')}
                     data-wbs-col="outline"
                     className={`${cellBase} overflow-hidden border-r border-border-input tabular-nums text-fg-muted ${cellBg}`}
                     style={{ ...frozen('outline'), fontSize: 'var(--wbs-index-font, 12px)' }}
@@ -1975,7 +2122,7 @@ export function WbsGanttSheet({
                   </div>
                 )}
                 {/* 작업명 */}
-                <div data-wbs-col="name" className={`${cellBase} freeze-edge relative ${cellBg}`} style={frozen('name')}>
+                <div {...gridCell('name')} data-wbs-col="name" className={`${cellBase} freeze-edge relative ${cellBg}`} style={frozen('name')}>
                   {/* 들여쓰기 가이드 — 조상 깊이마다 세로선. 행마다 같은 x에 그려져 열처럼 이어진다.
                       left = 셀 패딩(px-2=8) + 조상 들여쓰기(i*14) + 토글 아이콘 중심(12). */}
                   {Array.from({ length: depth }, (_, i) => (
@@ -1990,6 +2137,7 @@ export function WbsGanttSheet({
                   <div className="flex min-w-0 items-center" style={{ paddingLeft: depth * 14 }}>
                     {canToggle ? (
                       <button
+                        tabIndex={-1}
                         onClick={() => toggle(n.id)}
                         className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-border hover:text-fg"
                         aria-label={isCollapsed ? t('wbs.expand') : t('wbs.collapse')}
@@ -2006,6 +2154,7 @@ export function WbsGanttSheet({
                     )}
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={() => {
                         clearProgressLensSelection()
                         selectRow(n.id)
@@ -2041,9 +2190,10 @@ export function WbsGanttSheet({
                 {/* 담당 */}
                 {showCol('owners') && (
                   <div
+                    {...gridCell('owners')}
                     data-wbs-col="owners"
                     className={`${cellBase} border-r border-border ${cellBg}`}
-                    style={{ width: W('owners') }}
+                    style={{ ...CELL_FOCUS, width: W('owners') }}
                   >
                     <OwnerBadges owners={n.owners} nowrap />
                   </div>
@@ -2051,9 +2201,10 @@ export function WbsGanttSheet({
                 {/* 담당자 — 개인. team(담당팀)과 별개 축, 지정된 프로젝트에만 열이 뜬다(hasAssignee). */}
                 {showCol('assignee') && (
                   <div
+                    {...gridCell('assignee')}
                     data-wbs-col="assignee"
                     className={`${cellBase} overflow-hidden border-r border-border text-fg-secondary ${cellBg}`}
-                    style={{ width: W('assignee') }}
+                    style={{ ...CELL_FOCUS, width: W('assignee') }}
                   >
                     <span className="block truncate">
                       {!n.assigneeMemberId
@@ -2065,9 +2216,10 @@ export function WbsGanttSheet({
                 {/* 진척(파생 상태) */}
                 {showCol('status') && (
                   <div
+                    {...gridCell('status')}
                     data-wbs-col="status"
                     className={`${cellBase} overflow-hidden border-r border-border justify-center ${cellBg}`}
-                    style={{ width: W('status'), paddingInline: 4 }}
+                    style={{ ...CELL_FOCUS, width: W('status'), paddingInline: 4 }}
                   >
                     <span
                       className={`chip max-w-full overflow-hidden whitespace-nowrap ${STATUS[n.status].chip}`}
@@ -2086,9 +2238,10 @@ export function WbsGanttSheet({
                 {/* 단계 — 위임 1건 이상인 프로젝트에만 뜬다(D9). 칩은 코드 대문자·라벨 title(§3.2), 미지정은 -. */}
                 {showCol('stage') && (
                   <div
+                    {...gridCell('stage')}
                     data-wbs-col="stage"
                     className={`${cellBase} overflow-hidden border-r border-border justify-center ${cellBg}`}
-                    style={{ width: W('stage'), paddingInline: 4 }}
+                    style={{ ...CELL_FOCUS, width: W('stage'), paddingInline: 4 }}
                   >
                     {n.stage ? <StageChip stage={n.stage} t={t} /> : <span className="text-fg-muted">-</span>}
                   </div>
@@ -2096,9 +2249,10 @@ export function WbsGanttSheet({
                 {/* 산출물 */}
                 {showCol('deliverable') && (
                   <div
+                    {...gridCell('deliverable')}
                     data-wbs-col="deliverable"
                     className={`${cellBase} overflow-hidden border-r border-border text-fg-secondary ${cellBg}`}
-                    style={{ width: W('deliverable') }}
+                    style={{ ...CELL_FOCUS, width: W('deliverable') }}
                   >
                     <span className="block truncate" title={n.deliverable ?? undefined}>
                       {n.deliverable ?? '-'}
@@ -2108,9 +2262,10 @@ export function WbsGanttSheet({
                 {/* 계획시작 */}
                 {showCol('pstart') && (
                   <div
+                    {...gridCell('pstart')}
                     data-wbs-col="pstart"
                     className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-border justify-center tabular-nums text-fg-secondary ${cellBg}`}
-                    style={{ width: W('pstart') }}
+                    style={{ ...CELL_FOCUS, width: W('pstart') }}
                   >
                     {fmtDate(n.plannedStart)}
                   </div>
@@ -2118,36 +2273,29 @@ export function WbsGanttSheet({
                 {/* 계획종료 */}
                 {showCol('pend') && (
                   <div
+                    {...gridCell('pend')}
                     data-wbs-col="pend"
                     className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-border justify-center tabular-nums text-fg-secondary ${cellBg}`}
-                    style={{ width: W('pend') }}
+                    style={{ ...CELL_FOCUS, width: W('pend') }}
                   >
                     {fmtDate(n.plannedEnd)}
                   </div>
                 )}
                 {/* 가중치 — overflow-hidden: 표시 반올림을 우회하는 긴 값이 이웃 날짜 칸을 덮지 않게 */}
                 {showCol('weight') && <div
+                  {...gridCell('weight')}
+                  aria-readonly={!editableW}
+                  data-wbs-editable={editableW ? '' : undefined}
                   data-wbs-col="weight"
                   className={`${cellBase} overflow-hidden border-r border-border justify-end tabular-nums ${
                     editableW ? 'cursor-pointer' : ''
                   } ${n.weight == null ? 'text-fg-muted' : 'text-fg'} ${cellBg}`}
-                  style={{ width: W('weight') }}
+                  style={{ ...CELL_FOCUS, width: W('weight') }}
+                  // 키보드 진입(Enter·F2·Space·숫자)은 표의 onGridKeyDown 이 같은 startEdit 로 한다
                   onClick={() =>
                     editableW &&
                     !editingWeight &&
                     startEdit(n.id, 'weight', n.weight == null ? '' : String(weightToPct(n.weight)), n.weight == null ? '' : String(n.weight))
-                  }
-                  role={editableW ? 'button' : undefined}
-                  tabIndex={editableW ? 0 : undefined}
-                  onKeyDown={
-                    editableW
-                      ? e => {
-                          if ((e.key === 'Enter' || e.key === ' ') && !editingWeight) {
-                            e.preventDefault()
-                            startEdit(n.id, 'weight', n.weight == null ? '' : String(weightToPct(n.weight)), n.weight == null ? '' : String(n.weight))
-                          }
-                        }
-                      : undefined
                   }
                   title={editableW ? t('wbs.editWeightTitle') : undefined}
                 >
@@ -2156,9 +2304,10 @@ export function WbsGanttSheet({
                 {/* 계획% */}
                 {showCol('pplan') && (
                 <div
+                  {...gridCell('pplan')}
                   data-wbs-col="pplan"
                   className={`${cellBase} overflow-hidden border-r border-border justify-end tabular-nums text-fg-secondary ${cellBg}`}
-                  style={{ width: W('pplan') }}
+                  style={{ ...CELL_FOCUS, width: W('pplan') }}
                 >
                   {formatPct1(n.plannedPct)}%
                 </div>
@@ -2166,25 +2315,16 @@ export function WbsGanttSheet({
                 {/* 실적% (데이터바) */}
                 {showCol('pactual') && (
                 <div
+                  {...gridCell('pactual')}
+                  aria-readonly={!editableA}
+                  data-wbs-editable={editableA ? '' : undefined}
                   data-wbs-col="pactual"
                   className={`${cellBase} relative justify-end overflow-hidden border-r border-border font-medium tabular-nums ${
                     editableA ? 'cursor-pointer' : ''
                   } ${n.status === 'delayed' ? 'text-danger' : 'text-fg'} ${cellBg}`}
-                  style={{ width: W('pactual') }}
+                  style={{ ...CELL_FOCUS, width: W('pactual') }}
                   onClick={() =>
                     editableA && !editingActual && startEdit(n.id, 'actual', String(n.rolledActualPct))
-                  }
-                  role={editableA ? 'button' : undefined}
-                  tabIndex={editableA ? 0 : undefined}
-                  onKeyDown={
-                    editableA
-                      ? e => {
-                          if ((e.key === 'Enter' || e.key === ' ') && !editingActual) {
-                            e.preventDefault()
-                            startEdit(n.id, 'actual', String(n.rolledActualPct))
-                          }
-                        }
-                      : undefined
                   }
                   title={
                     editableA ? t('wbs.editActualTitle') : hasChildren ? t('wbs.autoRollupTitle') : undefined
@@ -2206,9 +2346,10 @@ export function WbsGanttSheet({
                 {/* 달성율 (미니바) */}
                 {showCol('achieve') && (
                 <div
+                  {...gridCell('achieve')}
                   data-wbs-col="achieve"
                   className={`${cellBase} flex-col items-end justify-center gap-0.5 border-r border-border tabular-nums ${cellBg}`}
-                  style={{ width: W('achieve') }}
+                  style={{ ...CELL_FOCUS, width: W('achieve') }}
                 >
                   <span
                     className={`leading-none ${
@@ -2253,11 +2394,18 @@ export function WbsGanttSheet({
                       className={`${cellBase} items-center justify-start border-r border-border ${cellBg}`}
                       width={W(`cf:${d.key}`)}
                       onError={msg => setToast({ kind: 'err', msg })}
+                      grid={{
+                        colIndex: (gridNav.colIndex.get(`cf:${d.key}`) ?? 0) + 1,
+                        // 편집기가 닫힌 뒤의 포커스 — 확정이면 다음 칸, 취소면 그 칸(가중치·실적% 편집기와 같은 규칙)
+                        onClosed: move => { focusCell(move === 'self' ? { rowId: n.id, col: `cf:${d.key}` } : editMove(gridNav, { rowId: n.id, col: `cf:${d.key}` }, move)) },
+                      }}
                     />
                   )
                 })}
                 {/* 간트 셀 */}
                 <div
+                  role="gridcell"
+                  aria-colindex={visibleCols.length + 1}
                   data-wbs-col="gantt"
                   className={`relative box-border h-full shrink-0 border-b border-border ${isFlash || progressLensActive ? 'bg-action-soft/60' : ''} group-hover:bg-action-soft`}
                   style={{ width: ganttW }}
@@ -2290,6 +2438,7 @@ export function WbsGanttSheet({
               </div>
             )
           })}
+          </div>
 
           {activeDependencies.length > 0 && rowsH > 0 && (
             <DependencyOverlay

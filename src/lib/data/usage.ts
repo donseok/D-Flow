@@ -5,7 +5,8 @@ import { canViewUsage } from '@/lib/authz/usageAccess'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { isWorkspaceAdminRole, type WorkspaceRole } from '@/lib/domain/authz'
 import { compareKoreanName } from '@/lib/domain/nameSort'
-import { personOf, primaryTeamCode } from '@/lib/data/memberSelect'
+import { personOf, primaryTeamRef } from '@/lib/data/memberSelect'
+import { teamLabel } from '@/lib/domain/teamLabel'
 import { usageEventDimensionsMissing } from '@/lib/domain/usageTracking'
 import { zonedMidnightUtc } from '@/lib/domain/calendar'
 import {
@@ -182,7 +183,7 @@ export async function getUsageDirectory(): Promise<AccountRecord[]> {
     admin.from('workspace_members').select('user_id, role'),
     // 명단 팀 — buildActor 의 rosterTeams 와 같은 축(활성 행·활성 인물). 행마다 대표 팀 하나를 쓴다.
     admin.from('project_members')
-      .select('people!inner(user_id, active), project_member_teams(is_primary, teams(code))')
+      .select('people!inner(user_id, active), project_member_teams(is_primary, teams(code, name))')
       .eq('active', true)
       .eq('people.active', true),
   ])
@@ -205,23 +206,28 @@ export async function getUsageDirectory(): Promise<AccountRecord[]> {
     if (isWorkspaceAdminRole(r.role)) wsRole.set(r.user_id, 'admin')
     else if (!wsRole.has(r.user_id)) wsRole.set(r.user_id, 'member')
   }
-  const teamsByUser = new Map<string, Set<string>>()
+  // code → 이름. 같은 code 의 팀이 여럿이면(공용·전용) 먼저 읽힌 이름 — 한 사람의 열에 code 는 한 번만 나온다.
+  const teamsByUser = new Map<string, Map<string, string>>()
   for (const r of roster.data as Array<Record<string, unknown>>) {
     const uid = personOf(r)?.user_id
-    const code = primaryTeamCode(r.project_member_teams)
-    if (!uid || !code) continue
-    const set = teamsByUser.get(uid) ?? new Set<string>()
-    set.add(code)
-    teamsByUser.set(uid, set)
+    const team = primaryTeamRef(r.project_member_teams)
+    if (!uid || !team) continue
+    const byCode = teamsByUser.get(uid) ?? new Map<string, string>()
+    if (!byCode.has(team.code)) byCode.set(team.code, team.name)
+    teamsByUser.set(uid, byCode)
   }
 
   return users.map<AccountRecord>(u => {
-    const teams = [...(teamsByUser.get(u.id) ?? [])].sort(compareKoreanName)
+    const refs = [...(teamsByUser.get(u.id) ?? [])].map(([code, name]) => ({ code, name }))
+    const teams = refs.map(r => r.code).sort(compareKoreanName)
+    // 화면의 팀 글자는 이름이다 — 그 사람의 팀 안에서 이름이 겹치면 `이름 (code)` 로 가른다(teamLabel 규칙)
+    const labels = [...new Set(refs.map(r => teamLabel(r, refs)))].sort(compareKoreanName)
     return {
       id: u.id,
       email: u.email,
       name: nameByUser.get(u.id) ?? displayNameFrom(u.meta, u.email) ?? u.email,
       teamCode: teams.length ? teams.join('·') : null,
+      teamLabel: labels.length ? labels.join('·') : null,
       role: platformAdmins.has(u.id) ? 'admin' : wsRole.get(u.id) ?? null,
       createdAt: u.created_at,
       lastSignInAt: u.last_sign_in_at,
