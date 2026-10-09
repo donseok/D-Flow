@@ -1,4 +1,4 @@
-// 워크스페이스 키 15개(SP5 A 의 calendar.* 셋, B3 의 minutes.attachments, B2 의 minutes.root_folders, SP3b UI-3 의 portal.widgets, SPU1 의 security.local_drafts 포함)(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
+// 워크스페이스 키 16개(SP5 A 의 calendar.* 셋, B3 의 minutes.attachments, B2 의 minutes.root_folders, SP3b UI-3 의 portal.widgets, SPU1 의 security.local_drafts, SP8 의 notify.policy 포함)(스펙 §3.6 표, 개정 §2.8.1). 소유 모듈은 전부 core settings(D12). 값 형태의 정본은 개정 §2.8.1.
 import { DEFAULT_ATTACHMENT_POLICY, parseAttachmentPolicy, type AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
 import { DEFAULT_ROOT_FOLDERS, parseRootFolders, type RootFoldersSetting } from '@/lib/minutes/rootFolders'
 import { defineSetting, type Parsed, type SettingDef } from '../def'
@@ -10,6 +10,7 @@ import { toAsciiHostname } from '@/lib/domain/hostname'
 import { ANY_DOMAIN } from '@/lib/domain/invites'
 import { defaultPortalWidgets, parsePortalWidgets, type PortalWidgetSetting } from '@/lib/portal/widgets'
 import { SECURITY_LOCAL_DRAFTS_DEF } from './security'
+import { NOTIFY_POLICY_DEF } from './notify'
 import { DEFAULT_TIMEZONE, DEFAULT_WORKING_DAYS, parseTimezone, parseWeekStartDay, parseWorkingDays, type IsoDow, type WeekStartDay } from '@/lib/domain/calendar'
 
 export type ModulesList = ModuleId[]
@@ -199,6 +200,8 @@ export const WORKSPACE_DEFS = [
   }),
   // SPU1(개정 §5.8.5) — 로컬 초안 허용·보존기간. 정의는 defs/security.ts, 판정은 src/lib/drafts/storage.ts 한 곳
   SECURITY_LOCAL_DRAFTS_DEF,
+  // SP8(개정 §4.10) — 관리자 알림 정책. 정의는 defs/notify.ts, 판정은 src/lib/notify/emit.ts 의 발행 관문 한 곳
+  NOTIFY_POLICY_DEF,
   // SP5 B3(D24): 프로젝트는 생성 때 복사, 기존 프로젝트는 제품 기본값. 실시간 상속 없음.
   defineSetting<'minutes.attachments', AttachmentPolicy>({
     key: 'minutes.attachments', scope: 'workspace', module: 'minutes', default: { ...DEFAULT_ATTACHMENT_POLICY },

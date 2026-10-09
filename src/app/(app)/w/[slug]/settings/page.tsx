@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Settings2, Palette, Mail, Menu, History, CalendarDays, Paperclip, FolderTree, KeyRound, ShieldCheck } from 'lucide-react'
+import { Settings2, Palette, Mail, Menu, History, CalendarDays, Paperclip, FolderTree, KeyRound, ShieldCheck, Bell } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
@@ -15,6 +15,7 @@ import { AccentEditor } from '@/components/settings/AccentEditor'
 import { MenuOrderEditor } from '@/components/settings/MenuOrderEditor'
 import { PortalWidgetsEditor } from '@/components/settings/PortalWidgetsEditor'
 import { LocalDraftsEditor } from '@/components/settings/LocalDraftsEditor'
+import { NotifyPolicyEditor } from '@/components/settings/NotifyPolicyEditor'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { AuthzEventsList } from '@/components/settings/AuthzEventsList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
@@ -88,7 +89,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
     <PageFrame header={<PageHeader title={pageTitle} meta={access.name} />}>
       <SettingsShell items={[
         { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
-        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-minutes', label: '회의록' }, { id: 'workspace-minute-roots', label: '회의록 폴더' }, { id: 'workspace-menu', label: '메뉴' }, { id: 'workspace-security', label: '보안' },
+        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-minutes', label: '회의록' }, { id: 'workspace-minute-roots', label: '회의록 폴더' }, { id: 'workspace-menu', label: '메뉴' }, { id: 'workspace-notify', label: '알림' }, { id: 'workspace-security', label: '보안' },
         { id: 'workspace-history', label: '기록' },
       ]}>
       <SectionCard id="workspace-general" searchText="branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow="일반" title="이름과 메일" icon={Palette}>
@@ -168,6 +169,13 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
             initial={config.keys['portal.widgets'].status === 'set' || config.keys['portal.widgets'].status === 'default' ? config.keys['portal.widgets'].value : null}
             invalidReason={config.keys['portal.widgets'].status === 'invalid' ? config.keys['portal.widgets'].error : undefined} />
         </section>
+      </SectionCard>
+      {/* 관리자 알림 정책(notify.policy — 개정 §4.10). 끈 유형은 이 워크스페이스에서 발행되지 않는다. 개인 토글(/account)은 그 뒤 조회 시점 필터 */}
+      <SectionCard id="workspace-notify" searchText="notify.policy 알림 정책 알림 유형 발행" eyebrow="알림" title={t(locale, 'settings.notify.policy.label')} icon={Bell}>
+        <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.notify.policy.desc')}</p>
+        <NotifyPolicyEditor workspaceId={access.id} revision={config.revision}
+          initial={config.keys['notify.policy'].status === 'set' || config.keys['notify.policy'].status === 'default' ? config.keys['notify.policy'].value : null}
+          invalidReason={config.keys['notify.policy'].status === 'invalid' ? config.keys['notify.policy'].error : undefined} />
       </SectionCard>
       {/* 보안 제한(개정 §2.9 워크스페이스 전역 키) — 로컬 초안 정책(security.local_drafts, §5.8.5). 모든 편집 화면이 이 값을 따른다 */}
       <SectionCard id="workspace-security" searchText="security.local_drafts 로컬 초안 보존 기간 보안" eyebrow="보안" title={t(locale, 'settings.security.local_drafts.label')} icon={ShieldCheck}>

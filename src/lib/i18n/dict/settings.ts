@@ -236,6 +236,12 @@ export const settingsKo = {
   'settings.calendar.week_start.label': '주 시작 요일', 'settings.calendar.week_start.desc': '주간보고·이번 주 보기의 주 시작 요일입니다. 프로젝트에서 바꾸면 다음 주부터 적용되고 지난 주간보고는 그대로입니다.',
   'settings.calendar.week_start.sunday': '일요일', 'settings.calendar.week_start.monday': '월요일',
   'settings.security.local_drafts.label': '로컬 초안', 'settings.security.local_drafts.desc': '편집 중인 내용을 이 브라우저에 초안으로 남길지와 보존 기간입니다. 끄면 모든 편집 화면이 초안을 저장하지도 되살리지도 않으며, 개인 설정으로 바꿀 수 없습니다.',
+  // SP8(개정 §4.10) — 관리자 알림 정책. 유형·범주 이름은 account.notif.* 를 같이 쓴다(개인 토글과 한 원천)
+  'settings.notify.policy.label': '알림 정책', 'settings.notify.policy.desc': '이 워크스페이스에서 발행할 알림 유형을 정합니다. 끈 유형은 누구에게도 발행되지 않습니다. 이미 발행된 알림은 그대로 남고, 바꾼 뒤의 알림부터 적용됩니다.',
+  'settings.notify.policy.requiredReason': '승인 요청·반려 알림은 놓치면 업무가 멈추므로 워크스페이스에서도 끌 수 없습니다.',
+  'settings.notify.policy.personalNote': '켜 둔 유형은 각 사람이 계정 화면에서 따로 숨길 수 있습니다.',
+  'settings.notify.policy.allOn': '모든 유형 발행', 'settings.notify.policy.offList': '끔:', 'settings.notify.policy.corrupted': '설정 손상',
+  'settings.notify.policy.save': '알림 정책 저장', 'settings.notify.policy.saveRetry': '저장 결과 확인 및 재시도',
   'settings.portal.widgets.label': '홈 위젯', 'settings.portal.widgets.desc': '워크스페이스 홈에 보일 위젯과 열 안의 순서를 정합니다. 사람마다 위젯을 숨길 수 있습니다.',
   'settings.views.default.label': '작업 계획 기본 보기', 'settings.views.default.desc': '작업 계획을 처음 열 때의 보기(표·간트·보드)입니다. 보드는 칸반이 켜져 있을 때만 고를 수 있습니다.',
   // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11

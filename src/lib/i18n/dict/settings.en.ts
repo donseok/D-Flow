@@ -238,6 +238,12 @@ export const settingsEn: Record<keyof typeof settingsKo, string> = {
   'settings.calendar.week_start.label': 'Week start', 'settings.calendar.week_start.desc': 'The first day of the week for weekly reports and this-week views. A project change applies from next week; past weekly reports stay as they are.',
   'settings.calendar.week_start.sunday': 'Sunday', 'settings.calendar.week_start.monday': 'Monday',
   'settings.security.local_drafts.label': 'Local drafts', 'settings.security.local_drafts.desc': 'Whether in-progress edits may be kept as drafts in this browser, and for how long. When off, no editing screen saves or restores drafts, and personal settings cannot override it.',
+  // SP8 (revision §4.10) — admin notification policy. Type and category names reuse account.notif.* (one source with the personal toggles)
+  'settings.notify.policy.label': 'Notification policy', 'settings.notify.policy.desc': 'Choose which notification types this workspace sends. A type that is off is sent to no one. Notifications already sent stay; the change applies to notifications sent afterwards.',
+  'settings.notify.policy.requiredReason': 'Approval requests and rejections cannot be turned off, even for the workspace, because missing them blocks work.',
+  'settings.notify.policy.personalNote': 'Each person can still hide a type that is on from their account page.',
+  'settings.notify.policy.allOn': 'All types are sent', 'settings.notify.policy.offList': 'Off:', 'settings.notify.policy.corrupted': 'Invalid setting',
+  'settings.notify.policy.save': 'Save notification policy', 'settings.notify.policy.saveRetry': 'Check the result and retry',
   'settings.portal.widgets.label': 'Home widgets', 'settings.portal.widgets.desc': 'Choose which widgets appear on the workspace home and their order within each column. Each person can still hide widgets.',
   'settings.views.default.label': 'Default work plan view', 'settings.views.default.desc': 'The view the work plan opens with (sheet, timeline or board). Board needs the kanban module.',
   // SP5 B1 — issue code rule (issues.id_policy) and analysis requirement (issues.analysis). Editor in task 11

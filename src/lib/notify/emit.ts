@@ -2,6 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { personOf } from '@/lib/data/memberSelect'
 import { NOTIFICATION_CATALOG, type NotificationType } from '@/lib/domain/inbox'
+import { notifyPolicyAllows } from './policy'
 
 export type EmitInput = {
   type: NotificationType
@@ -16,12 +17,17 @@ export type EmitInput = {
   recipientUserIds?: string[]
   dedupeKey?: string
 }
-export type EmitResult = { ok: boolean; deduped?: boolean; recipients?: number }
+/** suppressed — 워크스페이스 알림 정책(notify.policy)이 끈 유형이라 발행하지 않았다(실패가 아니다) */
+export type EmitResult = { ok: boolean; deduped?: boolean; recipients?: number; suppressed?: boolean }
 
 export async function emitNotification(input: EmitInput): Promise<EmitResult> {
   try {
     const admin = createAdminClient()
     const actor = input.actorUserId ?? null
+
+    // 0) 워크스페이스 알림 정책(notify.policy, 개정 §4.10) — 끈 유형은 이벤트·수신자 행을 하나도 쓰지 않는다. 필수 유형은 늘 지난다.
+    //    정책을 못 읽으면 발행한다(로그는 policy.ts) — 알림 유실보다 과발행이 낫다.
+    if (!(await notifyPolicyAllows(admin, input))) return { ok: true, recipients: 0, suppressed: true }
 
     // 1) 수신자 해석 — member_id → people.user_id 스냅샷(발행 시점 링크). 미링크(user_id null)도
     //    행은 남긴다: 멱등 키·감사 근거. 배지·피드는 user_id 기준이라 링크 전에는 보이지 않는다.

@@ -75,6 +75,8 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // SP3b UI-3 과제 2·6·10 — 네 연결(정의·편집기 PortalWidgetsEditor·소비처 홈 v1 페이지와 노출 식·테스트) 완료
   'portal.widgets': { consumers: ['src/app/(app)/w/[slug]/page.tsx', 'src/lib/portal/widgets.ts', 'src/components/settings/PortalWidgetsEditor.tsx'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts', 'tests/settings/portal-widgets-editor.test.tsx', 'tests/portal/partial-failure.test.tsx'], status: 'wired', sp: 'SP3b' },
   // SPU1(개정 §5.8.5) — 정의·편집기 LocalDraftsEditor·소비처(초안 저장소의 정책 판정 + 위키 편집기)·테스트. 다른 편집 표면이 초안을 쓰게 되면 같은 저장소를 지난다
+  // SP8(개정 §4.10) — 정의·편집기·발행 관문(emit)·테스트. 합성 S7b(두 워크스페이스 격리)가 붙으면 verified
+  'notify.policy': { consumers: ['src/lib/notify/policy.ts', 'src/lib/notify/emit.ts', 'src/components/settings/NotifyPolicyEditor.tsx'], tests: ['tests/settings/notify-policy-def.test.ts', 'tests/lib/notify-emit.test.ts', 'tests/lib/notify-policy.test.ts', 'tests/settings/notify-policy-editor.test.tsx'], status: 'wired', sp: 'SP8' },
   'security.local_drafts': { consumers: ['src/lib/drafts/storage.ts', 'src/lib/drafts/policy.ts', 'src/components/wiki/WikiDocumentEditor.tsx', 'src/app/(app)/p/[projectId]/wiki/topics/[topicId]/page.tsx', 'src/components/settings/LocalDraftsEditor.tsx'], tests: ['tests/settings/security-drafts.test.ts', 'tests/drafts/local-drafts.test.ts', 'tests/drafts/policy.test.ts', 'tests/settings/local-drafts-editor.test.tsx', 'tests/ui/wiki-document-editor-draft.test.tsx'], status: 'wired', sp: 'SPU1' },
   // SP3b UI-3 과제 3·7 — 정의·보드 교차 검사·편집기·테스트(네 연결 ①②④). 소비처(과제 14 작업 계획 보기 결정)가 붙으면 올린다
   'views.default': { consumers: ['src/lib/settings/defs/project.ts', 'src/lib/settings/validateConfig.ts', 'src/components/settings/ViewsDefaultEditor.tsx', 'src/app/(app)/p/[projectId]/wbs/page.tsx'], tests: ['tests/settings/views-default-def.test.ts', 'tests/settings/views-default-editor.test.tsx', 'tests/wbs/view-switch.test.tsx'], status: 'wired', sp: 'SP3b' },
@@ -119,7 +121,6 @@ export const CATALOG_META: Readonly<Record<SettingKey, CatalogMeta>> = {
 
 /** 카탈로그에만 있고 레지스트리에는 없는 키(개정 §2.6.1 "등록 시점") — 등록하는 SP 가 이 목록에서 빼고 defs 에 넣는다 */
 export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: string; shape: string }[] = [
-  { key: 'notify.policy', scope: 'workspace', sp: 'SP8', shape: '{ [type]: { enabled: boolean } }' },
   { key: 'minutes.auto_file_by_path', scope: 'project', sp: 'SP7', shape: 'boolean' },
 ]
 
