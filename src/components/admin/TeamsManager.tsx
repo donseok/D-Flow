@@ -4,14 +4,16 @@
 // 삭제 버튼은 의도적으로 없다: 비활성화가 삭제(데이터 보존, 사용자 결정 2026-07-24).
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowDown, ArrowUp, Eye, EyeOff, Power, Users } from 'lucide-react'
-import { addTeam, updateTeam } from '@/app/actions/teams'
+import { ArrowDown, ArrowUp, Eye, EyeOff, Merge, Power, Users } from 'lucide-react'
+import { addTeam, changeTeamCode, mergeTeams, previewTeamMerge, updateTeam } from '@/app/actions/teams'
 import { useToast } from '@/components/ui/Toast'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { TeamNameCell } from '@/components/settings/TeamNameCell'
 import { TeamAddForm, EMPTY_TEAM_DRAFT, type TeamDraft } from '@/components/settings/TeamAddForm'
 import { TeamColorPicker } from '@/components/settings/TeamColorPicker'
+import { TeamCodeCell } from '@/components/settings/TeamCodeCell'
+import { TeamMergeDialog } from '@/components/settings/TeamMergeDialog'
 
 export interface AdminTeamRow {
   id: string
@@ -34,6 +36,8 @@ export function TeamsManager({ teams, workspaceId }: {
   const [draft, setDraft] = useState<TeamDraft>(EMPTY_TEAM_DRAFT)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  // 합치기 모달의 원본 팀 — 한 번에 한 팀만
+  const [merging, setMerging] = useState<AdminTeamRow | null>(null)
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null)
@@ -85,7 +89,7 @@ export function TeamsManager({ teams, workspaceId }: {
           <EmptyState icon={Users} title={tr('settings.teams.emptyTitle')} description={tr('settings.teams.emptyDescCommon')} />
         ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[680px] text-sm">
+          <table className="w-full min-w-[760px] whitespace-nowrap text-sm">
             <thead>
               <tr className="border-b border-border text-left text-fg-muted">
                 <th className="py-2 pr-3">순서</th>
@@ -129,7 +133,17 @@ export function TeamsManager({ teams, workspaceId }: {
                       }} />
                   </td>
                   <td className="py-2.5 pr-3">
-                    <span data-team-code className="font-mono text-xs text-fg-secondary" title={tr('settings.teams.codeTitle')}>{t.code}</span>
+                    <TeamCodeCell team={t} disabled={pending}
+                      onChange={async (code) => {
+                        const r = await changeTeamCode(workspaceId, t.id, code)
+                        if (r.ok) {
+                          toast({ title: tr('settings.teams.codeSaved').replace('{name}', t.name).replace('{code}', code), variant: 'success' })
+                          // 코드는 바뀌었고 엑셀 양식만 못 맞춘 경우 — 서버 문구를 한 번 더 알린다
+                          if (r.notice) toast({ title: r.notice, variant: 'info' })
+                          router.refresh()
+                        }
+                        return r
+                      }} />
                   </td>
                   <td className="py-2.5 pr-3">
                     <span className={`chip ${t.active ? 'bg-success-weak text-success' : 'bg-surface-subtle text-fg-muted'}`}>
@@ -157,6 +171,12 @@ export function TeamsManager({ teams, workspaceId }: {
                         <Power className="h-3.5 w-3.5" />
                         {t.active ? '비활성화' : '활성화'}
                       </button>
+                      <button onClick={() => { setError(null); setMerging(t) }} data-team-merge-open={t.id}
+                        className="btn btn-ghost btn-sm" disabled={pending} title={tr('settings.teams.mergeDialogTitle')}
+                        aria-label={tr('settings.teams.mergeAction').replace('{name}', t.name)}>
+                        <Merge className="h-3.5 w-3.5" />
+                        {tr('settings.teams.merge')}
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -171,6 +191,15 @@ export function TeamsManager({ teams, workspaceId }: {
           그 폴더 이름도 따라 바뀝니다.
         </p>
       </div>
+      <TeamMergeDialog source={merging} teams={teams} onClose={() => setMerging(null)}
+        onPreview={(targetId) => previewTeamMerge(workspaceId, merging!.id, targetId)}
+        onMerge={(targetId) => mergeTeams(workspaceId, merging!.id, targetId)}
+        onMerged={(target, summary) => {
+          const renamed = summary.foldersRenamed > 0 ? ` ${tr('settings.teams.mergeDoneRenamed').replace('{n}', String(summary.foldersRenamed))}` : ''
+          toast({ title: tr('settings.teams.mergeDone').replace('{source}', merging!.name).replace('{target}', target.name) + renamed, variant: 'success' })
+          setMerging(null)
+          router.refresh()
+        }} />
     </section>
   )
 }

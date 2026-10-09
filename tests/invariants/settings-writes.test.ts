@@ -66,6 +66,8 @@ const EXPORT_DEFAULT = /^export\s+default\b/m
 const INTERNAL_WRITE = /\bwriteProjectSettingsInternal\b/
 const INTERNAL_WRITE_CALL = /\bwriteProjectSettingsInternal\s*(?:\?\.)?\s*\(/g
 const RUN_WBS_IMPORT = /\brunWbsImport\b/
+const PROFILE_SWAP = /\bswapExcelProfileTeamCode\b/
+const PROFILE_SWAP_CALL = /\bswapExcelProfileTeamCode\s*(?:\?\.)?\s*\(/g
 const RUN_WBS_IMPORT_CALL = /\brunWbsImport\s*(?:\?\.)?\s*\(/g
 
 /** 파일 → 허용 표·표 참조 수(리터럴·조각·임베드·SQL 참조의 합)와 사유(G1). 접근은 읽기뿐이다(G2) */
@@ -110,11 +112,19 @@ const WRITE_IMPORTERS: Record<string, string> = {
   'src/app/actions/settings.ts': 'commandDigestInput(명령 요약의 입력 모양)만 쓴다 — 아래 INTERNAL_WRITE_CALLERS 에 없으므로 writeProjectSettingsInternal 을 언급하면 실패한다',
   'src/app/api/import/execute/route.ts': 'W5 양식 저장 — #2 가드 requireProjectAdmin(pid) 뒤 #10 양식 저장에서 그 pid·actor 로 writeProjectSettingsInternal(줄 번호 대신 라우트의 단계 이름 — 줄이 밀려도 낡지 않게)',
   'src/lib/agent/wbsImport.ts': 'W6 골격 단계 이름(:231) — 가드 없는 통과 함수 runWbsImport 안이다. 가드는 그 호출부가 하고 RUN_WBS_IMPORT_CALLERS 가 호출부를 닫는다',
+  'src/lib/teams/excelProfileCode.ts': '팀 코드 변경 뒤 엑셀 양식의 팀 열 치환 — 가드 없는 통과 함수 swapExcelProfileTeamCode 안이다. 가드는 그 호출부가 하고 PROFILE_SWAP_CALLERS 가 호출부를 닫는다',
 }
 /** writeProjectSettingsInternal 을 언급하는 파일(정의 제외)과 호출 수 — import 기준과 함께 둔다(가져오는 이름·지정자 모양과 무관하게 문다) */
 const INTERNAL_WRITE_CALLERS: Record<string, { calls: number; why: string }> = {
   'src/app/api/import/execute/route.ts': { calls: 1, why: 'W5 — #2 가드 requireProjectAdmin 뒤 #10 양식 저장' },
   'src/lib/agent/wbsImport.ts': { calls: 1, why: 'W6 — runWbsImport 골격 분기 :231(가드는 RUN_WBS_IMPORT_CALLERS)' },
+  'src/lib/teams/excelProfileCode.ts': { calls: 1, why: '팀 코드 변경 뒤 wbs.excel_profile 의 팀 열 code 치환(가드는 PROFILE_SWAP_CALLERS)' },
+}
+const PROFILE_SWAP_FILE = 'src/lib/teams/excelProfileCode.ts'
+/** swapExcelProfileTeamCode(가드 없음 — wbs.excel_profile 을 쓴다)를 부르는 파일·호출 수와 그 가드 */
+const PROFILE_SWAP_CALLERS: Record<string, { calls: number; why: string }> = {
+  'src/app/actions/teams.ts': { calls: 1, why: 'changeTeamCode — requireWorkspaceAdmin(wid) 와 change_team_code RPC(등급 재판정) 성공 뒤, 그 wid 의 상속 프로젝트들' },
+  'src/app/actions/projectTeams.ts': { calls: 1, why: 'changeProjectTeamCode — requireProjectAdmin(pid) 와 change_team_code RPC(등급 재판정) 성공 뒤, 그 pid 하나' },
 }
 const WBS_IMPORT_FILE = 'src/lib/agent/wbsImport.ts'
 /** wbsImport 모듈의 export 이름(default 포함) — runWbsImport 를 감싸는 새 export 가 생기면 그 호출자가 아래 목록 밖으로 샌다 */
@@ -182,13 +192,15 @@ interface Scan {
   internalCalls: number
   runWbsImport: boolean      // G4 runWbsImport 언급
   runCalls: number
+  profileSwap: boolean       // G4 swapExcelProfileTeamCode 언급
+  profileSwapCalls: number
 }
 const DATA = /\.(json|sh|sql)$/
 
 /** 게이트 본체 — 파일 하나의 원문을 판정한다(자기 검사가 같은 함수에 공격 모양을 먹인다) */
 function scan(file: string, text: string): Scan {
   const s: Scan = { tables: new Set(), refs: 0, writes: [], exprFroms: [], rpcs: new Set(), rpcCalls: 0, rpcDynamic: [], bypass: [], valueImports: new Set(),
-    exports: [], internalWrite: false, internalCalls: 0, runWbsImport: false, runCalls: 0 }
+    exports: [], internalWrite: false, internalCalls: 0, runWbsImport: false, runCalls: 0, profileSwap: false, profileSwapCalls: 0 }
   const ref = (name: string) => { s.tables.add(name); s.refs++ }
   if (DATA.test(file)) {   // json·sh·sql — 표 이름 단어만
     for (const m of text.matchAll(TABLE_WORD)) ref(m[1])
@@ -228,6 +240,8 @@ function scan(file: string, text: string): Scan {
   s.internalCalls = countOf(text, INTERNAL_WRITE_CALL)
   s.runWbsImport = file !== WBS_IMPORT_FILE && RUN_WBS_IMPORT.test(text)
   s.runCalls = countOf(text, RUN_WBS_IMPORT_CALL)
+  s.profileSwap = file !== PROFILE_SWAP_FILE && PROFILE_SWAP.test(text)
+  s.profileSwapCalls = countOf(text, PROFILE_SWAP_CALL)
   return s
 }
 
@@ -271,6 +285,8 @@ function verdicts(scans: ReadonlyMap<string, Scan>) {
     G4internalCalls: sameCounts(numbers(INTERNAL_WRITE_CALLERS, 'calls'), (f) => scans.get(f)?.internalCalls),
     G4runners: closedList(all.filter(([, s]) => s.runWbsImport).map(([f]) => f), Object.keys(RUN_WBS_IMPORT_CALLERS)),
     G4runnerCalls: sameCounts(numbers(RUN_WBS_IMPORT_CALLERS, 'calls'), (f) => scans.get(f)?.runCalls),
+    G4swappers: closedList(all.filter(([, s]) => s.profileSwap).map(([f]) => f), Object.keys(PROFILE_SWAP_CALLERS)),
+    G4swapperCalls: sameCounts(numbers(PROFILE_SWAP_CALLERS, 'calls'), (f) => scans.get(f)?.profileSwapCalls),
     G4wbsExports: sameExports(WBS_IMPORT_FILE, scans.get(WBS_IMPORT_FILE)?.exports, WBS_IMPORT_EXPORTS),
     G4settingsExports: sameExports(SETTINGS_ACTIONS_FILE, scans.get(SETTINGS_ACTIONS_FILE)?.exports, SETTINGS_ACTIONS_EXPORTS),
     G6: all.flatMap(([f, s]) => s.bypass.map((w) => `${f}:${w}`)),
@@ -505,6 +521,13 @@ describe('게이트 자기 검사 — 적대 탐색의 모양(gate-attack·rerev
     expect(judge([[SETTINGS_ACTIONS_FILE, settings]]).G4internal).toContain(`목록 밖: ${SETTINGS_ACTIONS_FILE}`)
     const execute = "writeProjectSettingsInternal(admin, projectId, a, g.actor.userId)\nexport async function PUT(req) { return writeProjectSettingsInternal(createAdminClient(), id, b, null) }"
     expect(judge([['src/app/api/import/execute/route.ts', execute]]).G4internalCalls).toContain('src/app/api/import/execute/route.ts: 실측 2 / 목록 1')
+  })
+  it('G4 swapExcelProfileTeamCode — 가드 없는 새 호출부·목록 파일 안의 새 호출은 실패(팀 코드 변경 뒤 엑셀 양식 치환의 통과 함수)', () => {
+    const evil = "import { swapExcelProfileTeamCode } from '@/lib/teams/excelProfileCode'\nawait swapExcelProfileTeamCode(admin, scope, codes, userId)"
+    expect(judge([['src/app/actions/project.ts', evil]]).G4swappers).toContain('목록 밖: src/app/actions/project.ts')
+    const twice = "await swapExcelProfileTeamCode(admin, a, b, g.actor.userId)\nexport async function again(wid) { return swapExcelProfileTeamCode(createAdminClient(), { workspaceId: wid, projectId: null }, c, null) }"
+    expect(judge([['src/app/actions/teams.ts', twice]]).G4swapperCalls).toContain('src/app/actions/teams.ts: 실측 2 / 목록 1')
+    expect(judge([]).G4swappers).toEqual(Object.keys(PROFILE_SWAP_CALLERS).map((f) => `죽은 항목: ${f}`))
   })
   it('G4 runWbsImport — 가드 없는 새 호출부·목록 파일 안의 새 호출·default·래퍼 export 는 실패(I-2·I-A·I-B ①②)', () => {
     const evil = "import { runWbsImport } from '@/lib/agent/wbsImport'\nawait runWbsImport(adminFor({ projectId }).admin, { projectId, module: 'core', actorUserId, levels, attachRef: null, nodes: [] })"

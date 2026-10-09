@@ -219,6 +219,9 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('projectTeams')}#addProjectTeam`]: nul('projectAdmin'),
   [`${A('projectTeams')}#updateProjectTeam`]: nul('projectAdmin'),
   [`${A('projectTeams')}#copyGlobalTeams`]: nul('projectAdmin'),
+  [`${A('projectTeams')}#changeProjectTeamCode`]: nul('projectAdmin'),
+  [`${A('projectTeams')}#previewProjectTeamMerge`]: nul('projectAdmin'),
+  [`${A('projectTeams')}#mergeProjectTeams`]: nul('projectAdmin'),
   // ── roster(D) — members(core)
   [`${A('roster')}#upsertRosterMember`]: nul('projectAdmin'),
   [`${A('roster')}#removeRosterMember`]: nul('projectAdmin'),
@@ -247,6 +250,10 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('teams')}#addTeam`]: { ...nul('workspaceAdmin'), sample: [U, 'T'] },   // typeof workspaceId 가 가드 앞
   [`${A('teams')}#updateTeam`]: { ...nul('workspaceAdmin'), adminBeforeGuard: '인증 뒤 teams 행에서 대상 워크스페이스를 읽는다(service_role) — 등급 가드는 그 뒤' },
   [`${A('teams')}#listTeamsAdmin`]: { ...nul('workspaceAdmin'), sample: [U] },
+  // 코드 변경·병합(팀 유연화 2단계) — typeof workspaceId 가 가드 앞이라 표본을 둔다
+  [`${A('teams')}#changeTeamCode`]: { ...nul('workspaceAdmin'), sample: [U, U, 'T'] },
+  [`${A('teams')}#previewTeamMerge`]: { ...nul('workspaceAdmin'), sample: [U, U, P] },
+  [`${A('teams')}#mergeTeams`]: { ...nul('workspaceAdmin'), sample: [U, U, P] },
   // ── wbs·wbsAssign·wbsMarkdown·wbsSpec — WBS(core). 위임·프롬프트 둘만 agents
   [`${A('wbs')}#getChangeLogs`]: nul('session', '로그인 + RLS(WBS 변경 이력)'),
   [`${A('wbs')}#updateActual`]: { ...nul('projectMember'), sample: [U, 50] },   // 0~100 검사가 가드 앞

@@ -51,7 +51,7 @@ export function firstNewCodeClash(codes: readonly string[], siblings: readonly {
 
 /** 이름에서 만든 기본 code — 코드 칸을 비웠을 때 저장되는 값이자 화면이 미리 보여 주는 값(같은 함수라 어긋나지 않는다).
  *  이름 그대로(앞뒤 공백만 걷는다)이고 code 상한(20자 — normalizeNewTeamCode 와 같은 UTF-16 길이)을 넘으면 글자 단위로 자른다.
- *  code 는 만든 뒤 바꿀 수 없다 — 그래서 화면이 이 값을 보이고 고치게 한다 */
+ *  code 는 엑셀·가져오기가 쓰는 식별자라 나중에 바꾸면 옛 파일과 어긋난다 — 그래서 화면이 이 값을 보이고 고치게 한다 */
 export function defaultTeamCode(name: string): string {
   let out = ''
   for (const ch of name.trim()) {
@@ -88,4 +88,24 @@ export function newTeamNameClash(name: string, code: string, siblings: readonly 
   if (key === teamNameKey(code)) return null
   const hit = siblings.find((s) => teamNameKey(s.code) === key || teamNameKey(s.name) === key)
   return hit ? hit.code : null
+}
+
+/** 코드 바꾸기 검증(팀 유연화 2단계 — change_team_code RPC 의 앞단). 형식·예약어는 새 팀의 코드와 같은 규칙(normalizeNewTeamCode)이고,
+ *  겹침은 같은 범위의 **다른** 팀과만 본다 — 자기 이름과 같은 낱말은 겹침이 아니다(코드를 이름에 맞추는 것이 흔한 쓰임이다).
+ *  유일성의 최종 판정은 DB 다(TEAM_CODE_TAKEN) — 여기서는 사람이 읽을 문구를 먼저 낸다. siblings 는 그 범위의 팀 전부(자기 포함, 비활성 포함) */
+export function checkTeamCodeChange(input: {
+  code: unknown; selfId: string
+  siblings: readonly { id: string; code: string; name: string }[]
+  reserved: readonly string[]
+}): { ok: true; code: string; unchanged: boolean } | { ok: false; error: string } {
+  if (typeof input.code !== 'string') return { ok: false, error: '팀 코드를 입력하세요.' }
+  const norm = normalizeNewTeamCode(input.code, input.reserved, '팀 코드')
+  if (!norm.ok) return norm
+  const self = input.siblings.find((s) => s.id === input.selfId)
+  if (self && self.code === norm.code) return { ok: true, code: norm.code, unchanged: true }
+  const others = input.siblings.filter((s) => s.id !== input.selfId)
+  if (others.some((s) => s.code === norm.code)) return { ok: false, error: `'${norm.code}' 코드를 쓰는 팀이 이미 있습니다.` }
+  const clash = newTeamCodeClash(norm.code, others)
+  if (clash) return { ok: false, error: teamCodeClashError(norm.code, clash) }
+  return { ok: true, code: norm.code, unchanged: false }
 }

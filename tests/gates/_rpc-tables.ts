@@ -31,6 +31,8 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   apply_workflow_event_stage_cas: ['wbs_items', 'agent_work_orders', 'change_logs', 'wbs_stage_approvals'],
   apply_workspace_settings: ['workspace_settings', 'workspace_settings_history'],
   can_attach: [],
+  // 팀 유연화 2단계 — 코드 변경은 팀 행과 그 팀 회의록의 사본 열(team_code)
+  change_team_code: ['teams', 'minutes'],
   consume_project_invite: ['people', 'profiles', 'project_invites', 'project_member_teams', 'project_members', 'workspace_members'],
   convert_inherited_teams: ['teams', 'item_owners', 'project_member_teams', 'area_teams', 'project_invites', 'minutes', 'minute_folders'],
   create_project_with_settings: ['form_templates', 'area_teams', 'project_areas', 'project_settings', 'project_settings_history', 'projects', 'teams'],
@@ -40,9 +42,12 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   ensure_team_roots: ['minute_folders'],
   get_project_creation_receipt: [], // command receipt read only; no writes
   import_wbs_cmd: ['wbs_items', 'item_owners', 'holidays', 'command_receipts'],
+  // 팀 병합 — 원본 팀의 참조를 대상 팀으로 옮기고 원본을 비활성으로
+  merge_teams: ['item_owners', 'project_member_teams', 'area_teams', 'project_invites', 'minutes', 'minute_folders', 'integration_credentials', 'teams'],
   purge_read_notifications: ['notification_events', 'notification_recipients'],
   set_platform_admin: ['authz_commands', 'platform_admins'],
   set_workspace_role: ['authz_commands', 'workspace_members'],
+  team_reference_counts: [], // 병합 미리보기 — 건수만 읽는다
   upsert_project_area: ['project_areas', 'area_teams', 'weekly_report_rows'],
   upsert_project_member_cmd: ['authz_commands', 'people', 'project_member_teams', 'project_members'],
 }

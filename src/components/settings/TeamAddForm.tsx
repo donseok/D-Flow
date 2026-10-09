@@ -1,6 +1,6 @@
 'use client'
 // 팀 추가 입력(공용 팀·프로젝트 팀 관리 화면 공용) — 이름(필수)과 코드(선택)를 따로 받는다. 예전에는 한 칸이 이름이자 코드라 이름의
-// 오타가 바꿀 수 없는 코드로 남았다. 코드를 비우면 이름에서 만든 기본값(defaultTeamCode — 액션이 저장하는 그 함수)을 아래 줄에 미리 보인다.
+// 오타가 그대로 코드로 남았다. 코드를 비우면 이름에서 만든 기본값(defaultTeamCode — 액션이 저장하는 그 함수)을 아래 줄에 미리 보인다.
 // 길이·예약어·겹침 판정은 서버가 한다(화면은 공백만 거른다 — TeamNameCell 과 같은 분담). 값은 부모가 든다(성공하면 부모가 비운다).
 import { Plus } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'

@@ -43,8 +43,10 @@ describe('#15 공용 팀 관리 — 개명 입력·팀 색 견본', () => {
     expect(q(`[data-team-row="${OPS.id}"] [data-team-code]`)!.textContent).toBe('OPS')
     expect(q(`[data-team-row="${OPS.id}"] [data-team-color].bg-category-1`)).not.toBeNull()
     expect(q(`[data-team-row="${RES.id}"] [data-team-color].bg-category-2`)).not.toBeNull()
-    // 코드가 무엇인지 화면이 설명한다 — 가져오기·엑셀의 식별자이고 바꿀 수 없다
-    expect(container.textContent).toContain('가져오기·엑셀에서 쓰는 식별자(바꿀 수 없음)')
+    // 코드가 무엇인지 화면이 설명한다 — 가져오기·엑셀의 식별자이고, 바꾸면 이미 내보낸 파일과 어긋난다(2단계에서 바꿀 수 있게 됐다)
+    expect(container.textContent).toContain('코드는 가져오기·엑셀에서 쓰는 식별자입니다')
+    expect(container.textContent).toContain('이미 내보낸 엑셀 파일의 팀 열은 옛 코드로 남습니다')
+    expect(container.textContent).not.toContain('바꿀 수 없음')
     expect(container.textContent).not.toContain('지원하지 않습니다')
   })
   it('[RF5] 공백뿐이면 화면이 막는다 — 액션을 부르지 않는다', async () => {
@@ -194,7 +196,7 @@ describe('팀 추가 — 이름과 코드를 따로 받는다', () => {
   it('코드를 비우면 이름에서 만든 기본 코드를 미리 보이고, 액션에는 코드를 넘기지 않는다(서버가 같은 함수로 만든다)', async () => {
     h.addTeam.mockResolvedValue({ ok: true })
     await render(<TeamsManager teams={[OPS]} workspaceId={WS} />)
-    expect(q('[data-team-add-hint]')!.textContent).toContain('만든 뒤에는 바꿀 수 없습니다')
+    expect(q('[data-team-add-hint]')!.textContent).toContain('비우면 이름에서 만듭니다')
     type(q<HTMLInputElement>('[data-team-add-name]')!, ' 기획팀 ')
     await act(async () => {})
     expect(q('[data-team-add-hint]')!.textContent).toContain('저장될 코드: 기획팀')

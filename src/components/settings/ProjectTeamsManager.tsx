@@ -5,14 +5,18 @@
 // 삭제 버튼은 없다: 비활성화가 삭제(공용 팀과 동일 관례).
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Plus, Power } from 'lucide-react'
-import { addProjectTeam, copyGlobalTeams, updateProjectTeam } from '@/app/actions/projectTeams'
+import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Merge, Plus, Power } from 'lucide-react'
+import {
+  addProjectTeam, changeProjectTeamCode, copyGlobalTeams, mergeProjectTeams, previewProjectTeamMerge, updateProjectTeam,
+} from '@/app/actions/projectTeams'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { TeamNameCell } from '@/components/settings/TeamNameCell'
 import { TeamAddForm, EMPTY_TEAM_DRAFT, type TeamDraft } from '@/components/settings/TeamAddForm'
 import { TeamColorPicker } from '@/components/settings/TeamColorPicker'
+import { TeamCodeCell } from '@/components/settings/TeamCodeCell'
+import { TeamMergeDialog } from '@/components/settings/TeamMergeDialog'
 
 /** admin/TeamsManager.tsx 의 AdminTeamRow 와 형태가 같지만 별개 선언이다 — 액션·문구가
  *  프로젝트 스코프로 갈라져 있어 import 로 묶으면 오히려 결합이 생긴다(브리프 지시). */
@@ -51,6 +55,8 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
   // 상속 안내 패널에서 '빈 목록에서 시작'을 눌렀을 때만 추가 입력을 드러낸다.
   const [showAddInput, setShowAddInput] = useState(false)
   const [confirming, setConfirming] = useState<PendingAction | null>(null)
+  // 합치기 모달의 원본 팀 — 한 번에 한 팀만
+  const [merging, setMerging] = useState<AdminTeamRow | null>(null)
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null)
@@ -178,7 +184,7 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
           <p role="alert" className="mb-3 rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{error}</p>
         )}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[680px] text-sm">
+          <table className="w-full min-w-[760px] whitespace-nowrap text-sm">
             <thead>
               <tr className="border-b border-border text-left text-fg-muted">
                 <th className="py-2 pr-3">순서</th>
@@ -222,7 +228,17 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
                       }} />
                   </td>
                   <td className="py-2.5 pr-3">
-                    <span data-team-code className="font-mono text-xs text-fg-secondary" title={tr('settings.teams.codeTitle')}>{t.code}</span>
+                    <TeamCodeCell team={t} disabled={pending}
+                      onChange={async (code) => {
+                        const r = await changeProjectTeamCode(projectId, t.id, code)
+                        if (r.ok) {
+                          toast({ title: tr('settings.teams.codeSaved').replace('{name}', t.name).replace('{code}', code), variant: 'success' })
+                          // 코드는 바뀌었고 엑셀 양식만 못 맞춘 경우 — 서버 문구를 한 번 더 알린다
+                          if (r.notice) toast({ title: r.notice, variant: 'info' })
+                          router.refresh()
+                        }
+                        return r
+                      }} />
                   </td>
                   <td className="py-2.5 pr-3">
                     <span className={`chip ${t.active ? 'bg-success-weak text-success' : 'bg-surface-subtle text-fg-muted'}`}>
@@ -250,6 +266,12 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
                         <Power className="h-3.5 w-3.5" />
                         {t.active ? '비활성화' : '활성화'}
                       </button>
+                      <button onClick={() => { setError(null); setMerging(t) }} data-team-merge-open={t.id}
+                        className="btn btn-ghost btn-sm" disabled={pending} title={tr('settings.teams.mergeDialogTitle')}
+                        aria-label={tr('settings.teams.mergeAction').replace('{name}', t.name)}>
+                        <Merge className="h-3.5 w-3.5" />
+                        {tr('settings.teams.merge')}
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -259,6 +281,15 @@ export function ProjectTeamsManager({ projectId, teams, inherited, hasGlobalTeam
         </div>
         <p className="mt-3 text-xs leading-5 text-fg-muted">{tr('settings.teams.codeExplain')} {tr('settings.teams.projectScopeNote')}</p>
       </div>
+      <TeamMergeDialog source={merging} teams={teams} onClose={() => setMerging(null)}
+        onPreview={(targetId) => previewProjectTeamMerge(projectId, merging!.id, targetId)}
+        onMerge={(targetId) => mergeProjectTeams(projectId, merging!.id, targetId)}
+        onMerged={(target, summary) => {
+          const renamed = summary.foldersRenamed > 0 ? ` ${tr('settings.teams.mergeDoneRenamed').replace('{n}', String(summary.foldersRenamed))}` : ''
+          toast({ title: tr('settings.teams.mergeDone').replace('{source}', merging!.name).replace('{target}', target.name) + renamed, variant: 'success' })
+          setMerging(null)
+          router.refresh()
+        }} />
     </section>
   )
 }
