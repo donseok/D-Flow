@@ -9,6 +9,7 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pickCalendar } from '@/lib/settings/pick'
 import { getServerLocale } from '@/lib/i18n/server'
+import { translatorFor } from '@/lib/i18n/translate'
 
 export const dynamic = 'force-dynamic' // 좌석은 항상 최신이어야 한다
 
@@ -25,7 +26,7 @@ export default async function ProjectOfficePage({ params }: { params: Promise<{ 
   if (!UUID_RE.test(projectId)) notFound()
   // 조회 실패는 throw → Next 의 error 경계가 받는다. 빈 스튜디오로 위장하지 않는다.
   const [office, pc, locale] = await Promise.all([
-    getProjectOffice(actor, projectId, Date.now(), 'all'), // 기본은 전체(2026-09-19)
+    getProjectOffice(actor, projectId, Date.now(), 'all', translatorFor(await getServerLocale())), // 기본은 전체(2026-09-19)
     loadProjectConfigForPage(projectId),
     getServerLocale(),
   ])

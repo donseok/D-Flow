@@ -11,7 +11,8 @@ import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: '연동 자격증명' }
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '연동 자격증명') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'pages.integrations.title') } }
 
 export default async function WorkspaceIntegrationsPage({
   params,

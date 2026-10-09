@@ -10,6 +10,7 @@ import { WIKI_DOCUMENT_KINDS, type WikiDocumentKind } from '@/lib/domain/wiki'
 import { clearLegacyWikiDrafts, draftKey, legacyWikiDraftKey, readDraftWithMigration, settleLegacyDraft } from '@/lib/drafts/wikiDrafts'
 import { readDraftRaw, sweepExpiredDrafts, writeDraftRaw, type LocalDraftPolicy } from '@/lib/drafts/storage'
 import { useScope } from '@/components/app/ScopeContext'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import { formatWikiDate } from './WikiShared'
@@ -156,6 +157,7 @@ export function WikiDocumentEditor({
   canVerify?: boolean
   onDone?: () => void
 }) {
+  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const router = useRouter()
   const [snapshot, setSnapshot] = useState({
     title: topic?.title ?? '',

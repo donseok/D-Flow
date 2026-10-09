@@ -1,5 +1,6 @@
 'use client'
 import { StatusMessage } from '@/components/ui/StatusMessage'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 /**
  * 범위 레이아웃 안의 페이지 오류(D2) — 셸은 남고 main 자리에 뜬다. 표지 문구는 E2E PAGE_MARKERS 의 error-boundary('화면을 불러오지 못했습니다')와 같다.
@@ -10,13 +11,14 @@ import { StatusMessage } from '@/components/ui/StatusMessage'
  * StatusMessage 는 자기 영역을 만들지 않는다(announce=false) — 두 영역이면 오류 순간에 연달아 두 번 낭독된다(U2b-5 리뷰 수정 CC6).
  */
 export function ScopeError({ reset }: { reset: () => void }) {
+  const { t } = useLocale()
   return (
     <div data-scope-error className="flex min-h-[420px] flex-col items-center justify-center">
       <div role="alert" className="flex flex-col items-center gap-3">
-        <h1 className="text-title text-fg">화면을 불러오지 못했습니다</h1>
-        <StatusMessage kind="partial_error" blocking announce={false} title="잠시 후 다시 시도해 주세요."
-          detail="문제가 계속되면 관리자에게 문의하세요."
-          action={{ label: '다시 시도', onSelect: reset }} />
+        <h1 className="text-title text-fg">{t('error.title')}</h1>
+        <StatusMessage kind="partial_error" blocking announce={false} title={t('error.retryHint')}
+          detail={t('error.contactHint')}
+          action={{ label: t('error.retry'), onSelect: reset }} />
       </div>
     </div>
   )

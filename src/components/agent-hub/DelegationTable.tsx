@@ -399,7 +399,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
               const isBusy = busy.has(r.itemId)
               const err = rowErr.get(r.itemId), warn = rowWarn.get(r.itemId)
               const canEditPrompt = r.canToggle
-              const sig = r.order?.lastSignalAt ? ageLabel(r.order.lastSignalAt, nowMs) : ''
+              const sig = r.order?.lastSignalAt ? ageLabel(r.order.lastSignalAt, nowMs, t) : ''
               const stageShown = stageOpt.has(r.itemId) ? stageOpt.get(r.itemId) ?? null : r.stage
               // 단계 select 는 관리자 또는 서브트리 관리자. 조정 버튼은 관리자 + 담당자 본인 + 서브트리
               // 관리자가 볼 수 있고, 버튼별 who 로 다시 거른다(트랙 B, 2026-09-15).

@@ -28,46 +28,46 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
 
   function submit() {
     setError(null)
-    if (!current) { setError('기존 비밀번호를 입력하세요.'); return }
+    if (!current) { setError(t('account.pw.err.currentRequired')); return }
     if (!isValidPassword(next)) { setError(t('account.pw.err.tooShort')); return }
     startTransition(async () => {
       try {
         const sb = createBrowserClient()
         const { data } = await sb.auth.getUser()
         const email = data.user?.email
-        if (!email) { setError('세션을 확인할 수 없습니다. 다시 로그인해 주세요.'); return }
+        if (!email) { setError(t('account.pw.err.noSession')); return }
         // 기존 비밀번호 재확인(같은 사용자 재로그인 — 세션 유지)
         const { error: reauth } = await sb.auth.signInWithPassword({ email, password: current })
         if (reauth) {
           const code = (reauth as { code?: string }).code
           setError(code === 'invalid_credentials'
-            ? '기존 비밀번호가 올바르지 않습니다.'
-            : `기존 비밀번호 확인에 실패했습니다: ${reauth.message}`)
+            ? t('account.pw.err.currentWrong')
+            : t('account.pw.err.reauthFailed').replace('{message}', () => String(reauth.message)))
           return
         }
         const { error: updErr } = await sb.auth.updateUser({ password: next })
         if (updErr) { setError(updErr.message); return }
-        toast({ title: '비밀번호가 변경되었습니다.', variant: 'success' })
+        toast({ title: t('account.pw.changed'), variant: 'success' })
         onClose()
       } catch {
-        setError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+        setError(t('wsAccounts.requestFailed'))
       }
     })
   }
 
   return (
     <Modal
-      open={open} onClose={onClose} title="비밀번호 변경"
+      open={open} onClose={onClose} title={t('account.pw.change')}
       footer={
         <>
-          <button onClick={onClose} className="btn btn-ghost" disabled={pending}>취소</button>
-          <button onClick={submit} className="btn btn-primary" disabled={pending}>{pending ? '변경 중…' : '변경'}</button>
+          <button onClick={onClose} className="btn btn-ghost" disabled={pending}>{t('common.cancel')}</button>
+          <button onClick={submit} className="btn btn-primary" disabled={pending}>{pending ? t('account.pw.changing') : t('account.pw.submit')}</button>
         </>
       }
     >
       <div className="space-y-4">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">기존 비밀번호</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('account.pw.currentLabel')}</span>
           <input className="app-input" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" autoFocus />
         </label>
         <label className="block">

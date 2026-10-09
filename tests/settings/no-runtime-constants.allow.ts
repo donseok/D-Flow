@@ -34,9 +34,8 @@ export const PATTERNS: Record<RuntimeConstantPattern, RegExp> = {
 export const ALLOW: Record<string, { patterns: RuntimeConstantPattern[]; removedBy: 'SP5' | 'SP5b' | 'SP6' | 'never' }> = {
   // 어휘(근태 유형·회의 범주·이슈 심각도 — SP5 B4 묶음3 이 0 으로 — 허용 항목 없음 = 영구 가드)
   // 시간대·고정 오프셋(SP5 Phase A calendar.timezone) — 과제 32 로 0(허용 항목 없음 — 영구 가드, no-runtime-constants.test.ts)
-  // SP5b — 정의 파일과 "설정에 없는 칸" 의 폴백 자리만(소비처는 W2 가 설정으로 바꿨다). 지울 SP 가 없는 고정 허용('never') — 이 넷 밖으로 늘지 않는다
+  // SP5b — 정의 파일과 "설정에 없는 칸" 의 폴백 자리만(소비처는 W2 가 설정으로 바꿨다). 지울 SP 가 없는 고정 허용('never') — 이 셋 밖으로 늘지 않는다(waitReason 은 i18n 2차에서 사전 wbs.stage* 로 읽게 돼 빠졌다)
   'src/lib/domain/stageLabels.ts': { patterns: ['STAGE_LABEL_KO', 'STAGE_NONE_LABEL_KO'], removedBy: 'never' },
-  'src/lib/domain/waitReason.ts': { patterns: ['STAGE_LABEL_KO'], removedBy: 'never' },
   'src/components/agent-hub/labels.ts': { patterns: ['STAGE_NONE_LABEL_KO'], removedBy: 'never' },
   'src/lib/domain/stageCredits.ts': { patterns: ['CREDIT_STEP', 'CREDIT_GAP'], removedBy: 'never' },
 }

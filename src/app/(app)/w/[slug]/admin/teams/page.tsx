@@ -9,7 +9,8 @@ import { t, type Locale } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
 
 export const dynamic = 'force-dynamic' // 기준정보는 항상 최신 조회(관리 직후 반영)
-export const metadata = { title: '공용 팀' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '공용 팀') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.wsTeams') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function TeamsAdminPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

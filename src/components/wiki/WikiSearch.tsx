@@ -5,6 +5,7 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { WikiSearchResults } from './WikiSearchResults'
 import { useWikiSearchQuery } from './useWikiSearchQuery'
 import { toSearchViewState, type SearchViewState } from '@/lib/domain/searchView'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 
 // 사용자가 지정한 옛 WikiAskPanel 디자인의 추천 칩과 같은 자리 — 문구만 검색용으로 바꿨다.
@@ -19,6 +20,7 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
   /** 히어로 카드 우상단 빈 공간에 앉힐 관리 도구(색인 갱신 스트립). 슈퍼유저에게만 내려온다. */
   adminSlot?: ReactNode
 }) {
+  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const [query, setQuery] = useWikiSearchQuery(initialQuery)
   const [state, setState] = useState<SearchViewState>({ kind: 'idle' })
   // 제출된 질의 — 입력창의 실시간 값과 분리한다. WikiSearchResults 에 그대로 내려가

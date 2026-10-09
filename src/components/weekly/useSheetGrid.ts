@@ -9,8 +9,10 @@ import {
 import { serializeTsv, parseTsv } from '@/lib/domain/sheetClipboard'
 import { isNewlineChord } from '@/lib/domain/sheetChords'
 import { type WeeklyCellKey, type WeeklyCellEdit } from '@/lib/domain/weeklySheet'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { fill } from '@/lib/i18n/translate'
 
-/** aria-live 방송용 열 라벨(§7). */
+/** aria-live 방송용 열 라벨(§7) — 주간 4열 이름은 제품 고정이라 화면 언어를 따르지 않는다(개정 §2.9). */
 const COL_LABEL: Record<WeeklyCellKey, string> = {
   this_content: '금주실적 내용', this_issue: '금주 이슈·이벤트',
   next_content: '차주계획 내용', next_issue: '차주 이슈·이벤트',
@@ -89,6 +91,10 @@ export function useSheetGrid({
   rowsRef.current = rows
   const rowIdsRef = useRef(rowIds)
   rowIdsRef.current = rowIds
+  // 문구는 화면 언어를 따른다 — ref 로 읽어 효과·콜백의 의존성을 늘리지 않는다(언어가 바뀌었다고 선택을 다시 낭독하지 않게)
+  const { t: translate } = useLocale()
+  const tRef = useRef(translate)
+  tRef.current = translate
 
   const first: CellAddr = { rowId: rowIds[0] ?? '', col: CONTENT_COLS[0] }
   const [sel, setSel] = useState<SelectionState>({ active: first, anchor: first, editing: false })
@@ -118,7 +124,8 @@ export function useSheetGrid({
     if (!r) return
     const rowsN = r.bottom - r.top + 1
     const colsN = r.right - r.left + 1
-    setLive(rowsN * colsN <= 1 ? `셀 선택: ${COL_LABEL[sel.active.col]}` : `${rowsN}행 × ${colsN}열 선택`)
+    const t = tRef.current
+    setLive(rowsN * colsN <= 1 ? fill(t('weekly.grid.cellSelected'), { col: COL_LABEL[sel.active.col] }) : fill(t('weekly.grid.rangeSelected'), { rows: rowsN, cols: colsN }))
   }, [sel.active, sel.anchor, enabled])
 
   // 활성 셀 실 포커스(Design B). 사용자 상호작용(armed) 후에만 — 초기 마운트/리렌더가 포커스를 앗지 않게.
@@ -150,7 +157,7 @@ export function useSheetGrid({
     const edits = clearEdits(rowsRef.current, rowIdsRef.current, r)
     if (edits.length === 0) return // 이미 빈 셀만 — no-op(AC5.4)
     runBatch(edits, { undoable: true })
-    setLive(`${edits.length}개 셀 지움`)
+    setLive(fill(tRef.current('weekly.grid.cleared'), { n: edits.length }))
   }, [runBatch, readOnly])
 
   const doPasteText = useCallback((text: string, anchor: CellAddr) => {
@@ -159,14 +166,15 @@ export function useSheetGrid({
     const { edits, clippedRows, clippedCols } = pasteEdits(rowIdsRef.current, anchor, values)
     // 시트는 업무영역마다 1행이라 행을 늘릴 수단이 없다 — 실행 가능한 대안(위쪽 행부터
     // 붙여넣기 / 셀 안에서 줄바꿈)을 안내한다. 행 수는 실제 시트에서 읽는다 — 영역이 늘 때마다 안내문이 거짓말을 하지 않게.
-    const rowsMsg = `${clippedRows}개 행이 시트 범위를 넘어 붙여넣지 못했습니다. 시트는 업무영역 ${rowIdsRef.current.length}행입니다 — 위쪽 행에서 시작하거나, 한 업무영역에 여러 항목을 넣으려면 셀 안에서 Alt+Enter로 줄을 나눠 주세요.`
+    const t = tRef.current
+    const rowsMsg = fill(t('weekly.grid.pasteRowsClipped'), { n: clippedRows, rows: rowIdsRef.current.length })
     if (clippedRows > 0 && clippedCols > 0) {
-      toast({ title: '붙여넣기 일부 생략', variant: 'info',
-        description: `${rowsMsg} 내용 4개 열을 넘는 오른쪽 데이터는 붙여넣지 않았습니다.` })
+      toast({ title: t('weekly.grid.pastePartial'), variant: 'info',
+        description: `${rowsMsg} ${t('weekly.grid.pasteColsClipped')}` })
     } else if (clippedRows > 0) {
-      toast({ title: '붙여넣기 일부 생략', variant: 'info', description: rowsMsg })
+      toast({ title: t('weekly.grid.pastePartial'), variant: 'info', description: rowsMsg })
     } else if (clippedCols > 0) {
-      toast({ title: '붙여넣기 일부 생략', variant: 'info', description: '내용 4개 열을 넘는 오른쪽 데이터는 붙여넣지 않았습니다.' })
+      toast({ title: t('weekly.grid.pastePartial'), variant: 'info', description: t('weekly.grid.pasteColsClipped') })
     }
     if (edits.length === 0) return
     runBatch(edits, { undoable: true })
@@ -184,7 +192,7 @@ export function useSheetGrid({
       }
       setSel({ active: endAddr, anchor, editing: false })
     }
-    setLive(`${edits.length}개 셀 붙여넣음`)
+    setLive(fill(t('weekly.grid.pasted'), { n: edits.length }))
   }, [runBatch, toast, readOnly])
 
   const doFill = useCallback((source: GridRect, target: GridRect) => {
@@ -197,7 +205,7 @@ export function useSheetGrid({
     const anchorAddr: CellAddr = { rowId: ids[target.top], col: CONTENT_COLS[target.left] }
     const activeAddr: CellAddr = { rowId: ids[target.bottom], col: CONTENT_COLS[target.right] }
     setSel({ active: activeAddr, anchor: anchorAddr, editing: false })
-    setLive(`${edits.length}개 셀 채움`)
+    setLive(fill(tRef.current('weekly.grid.filled'), { n: edits.length }))
   }, [runBatch, readOnly])
 
   // ── 드래그(select/fill) 전역 종료 리스너 ── (doFill 정의 후 배선 — mouseup에 최신 fillPreview 반영)
@@ -239,7 +247,7 @@ export function useSheetGrid({
     if (selRef.current.editing) return
     e.preventDefault()
     const text = e.clipboardData.getData('text/plain')
-    if (!text) { toast({ title: '붙여넣기 실패', description: '클립보드를 읽지 못했습니다. 브라우저 권한을 확인해 주세요.', variant: 'error' }); return }
+    if (!text) { toast({ title: tRef.current('weekly.grid.pasteFailed'), description: tRef.current('weekly.grid.clipboardFailed'), variant: 'error' }); return }
     // 앵커 = 선택 범위 좌상단(구글시트 동일) — 드래그 방향(active 위치)과 무관.
     const ids = rowIdsRef.current
     const r = rectFromAddrs(ids, selRef.current.anchor, selRef.current.active)
@@ -407,8 +415,8 @@ export function useSheetGrid({
     }
 
     // ── 탐색 모드 ──
-    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (readOnly) return; if (e.shiftKey) { if (requestRedo()) setLive('다시 실행') } else if (requestUndo()) setLive('실행 취소'); return }
-    if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); if (readOnly) return; if (requestRedo()) setLive('다시 실행'); return }
+    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (readOnly) return; if (e.shiftKey) { if (requestRedo()) setLive(tRef.current('weekly.grid.redo')) } else if (requestUndo()) setLive(tRef.current('weekly.grid.undo')); return }
+    if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); if (readOnly) return; if (requestRedo()) setLive(tRef.current('weekly.grid.redo')); return }
     // Ctrl/Cmd+C·X·V는 preventDefault하지 않음 → 네이티브 copy/cut/paste 이벤트가 onCellCopy/Cut/Paste로 처리.
     if (mod && 'cxv'.includes(e.key.toLowerCase())) return
     if (mod && (e.key === 'a' || e.key === 'A')) { // 전체 내용 셀 선택(v1)

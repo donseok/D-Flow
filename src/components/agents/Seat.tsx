@@ -23,9 +23,9 @@ export const STATE_LABEL: Record<SeatState, DictKey> = {
 export function seatMetaLine(seat: Seat, nowMs: number, t: Translate): string {
   const who = seat.agent ?? '—'
   switch (seat.state) {
-    case 'ACTIVE': case 'REJECTED': return `${who} · ${ageLabel(seat.lastSignalAt, nowMs)}`
-    case 'STALE': return fill(t('agents.meta.stale'), { who, age: ageLabel(seat.lastSignalAt, nowMs) })
-    case 'OFFLINE': return fill(t('agents.meta.offline'), { step: seat.phase, age: ageLabel(seat.lastSignalAt, nowMs) })
+    case 'ACTIVE': case 'REJECTED': return `${who} · ${ageLabel(seat.lastSignalAt, nowMs, t)}`
+    case 'STALE': return fill(t('agents.meta.stale'), { who, age: ageLabel(seat.lastSignalAt, nowMs, t) })
+    case 'OFFLINE': return fill(t('agents.meta.offline'), { step: seat.phase, age: ageLabel(seat.lastSignalAt, nowMs, t) })
     case 'BLOCKED': return fill(t('agents.meta.blocked'), { who })
     case 'WAIT': return t('agents.state.wait')
     case 'READY': return seat.waitReason?.label ?? t('agents.meta.notStarted') // 짧은 라벨만 — 전문은 상세 패널(착수 대기 사유 스펙 §4)

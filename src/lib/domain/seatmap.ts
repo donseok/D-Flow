@@ -6,6 +6,7 @@ import {
   type AnimName, type CharacterName, type OrderStatus, type Phase, type SeatState,
 } from './seatState'
 import { deriveWaitReason, type PredecessorLike, type WaitReason } from './waitReason'
+import { fill, koTranslate, type Translate } from '@/lib/i18n/translate'
 
 export interface OrderRow {
   id: string; project_id: string; wbs_item_id: string | null; status: OrderStatus
@@ -167,12 +168,13 @@ export function isLaterReport(a: { id: string; created_at: string }, b: { id: st
 const WORK_STATES: readonly SeatState[] = ['ACTIVE', 'STALE', 'REJECTED', 'BLOCKED']
 const ATTENTION_ORDER: readonly SeatState[] = ['BLOCKED', 'STALE', 'OFFLINE', 'REJECTED']
 
-export function ageLabel(fromIso: string | null, nowMs: number): string {
+/** 경과 시간 표기('42초 전'). t 는 화면이 넘기는 번역 함수 — 없으면 한국어(종전 출력 그대로) */
+export function ageLabel(fromIso: string | null, nowMs: number, t: Translate = koTranslate): string {
   if (!fromIso) return '—'
   const sec = Math.max(0, Math.floor((nowMs - Date.parse(fromIso)) / 1000))
-  if (sec < 60) return `${sec}초 전`
-  if (sec < 3600) return `${Math.floor(sec / 60)}분 전`
-  return `${Math.floor(sec / 3600)}시간 ${Math.floor((sec % 3600) / 60)}분 전`
+  if (sec < 60) return fill(t('age.seconds'), { n: sec })
+  if (sec < 3600) return fill(t('age.minutes'), { n: Math.floor(sec / 60) })
+  return fill(t('age.hours'), { h: Math.floor(sec / 3600), m: Math.floor((sec % 3600) / 60) })
 }
 
 /** 주문별 가장 늦은 보고 행. */
@@ -246,16 +248,18 @@ function pickModel(o: OrderRow, item: ItemRow | undefined): { model: string | nu
   return plan ? { model: plan, modelSource: 'plan' } : { model: null, modelSource: null }
 }
 
-function attentionWhy(s: Seat, nowMs: number): string {
-  if (s.state === 'BLOCKED') return s.note ?? '결정 필요'
+function attentionWhy(s: Seat, nowMs: number, t: Translate): string {
+  if (s.state === 'BLOCKED') return s.note ?? t('attn.blocked')
   // 재개 요청이 걸렸으면 사람이 할 일은 끝났다는 것까지 밴드에서 읽혀야 한다(다시 누르지 않도록).
-  const resume = s.resumeRequestedAt ? ' · 재개 요청됨' : ''
-  if (s.state === 'STALE') return `무응답 ${ageLabel(s.lastSignalAt, nowMs)}${resume}`
-  if (s.state === 'OFFLINE') return `끊김 ${ageLabel(s.lastSignalAt, nowMs)}${resume}`
-  return s.reviewNote ? `반려 · ${s.reviewNote}` : '반려 · 재작업'
+  const resume = s.resumeRequestedAt ? t('attn.resumeRequested') : ''
+  if (s.state === 'STALE') return `${fill(t('attn.stale'), { age: ageLabel(s.lastSignalAt, nowMs, t) })}${resume}`
+  if (s.state === 'OFFLINE') return `${fill(t('attn.offline'), { age: ageLabel(s.lastSignalAt, nowMs, t) })}${resume}`
+  return s.reviewNote ? fill(t('attn.rejectedNote'), { note: s.reviewNote }) : t('attn.rejected')
 }
 
-export function assembleSeatmap(rows: SeatmapRows, nowMs: number, opts: { mine?: MineFilter; viewer?: SeatmapViewer } = {}): Seatmap {
+/** opts.t — 화면에 그대로 보이는 문구(착수 대기 사유·주의 띠 사유)의 번역 함수. 없으면 한국어 */
+export function assembleSeatmap(rows: SeatmapRows, nowMs: number, opts: { mine?: MineFilter; viewer?: SeatmapViewer; t?: Translate } = {}): Seatmap {
+  const t = opts.t ?? koTranslate
   const mine = opts.mine
   const itemById0 = new Map(rows.items.map(i => [i.id, i]))
   // 대상은 에이전트 위임(agent 태그) 항목의 주문뿐 — dev_workflow 리프마다 주문이 생기므로 사람이 하는 작업의 주문도 테이블엔 있다.
@@ -324,10 +328,11 @@ export function assembleSeatmap(rows: SeatmapRows, nowMs: number, opts: { mine?:
         depends: item.depends ?? null,
         predecessorByRef: ref => predByKey.get(`${o.project_id}\u0000${ref}`),
         // 담당자 id 는 있는데 로스터 행이 없으면 계정 미연결과 같은 취급(어느 PAT 도 담당자로 인정되지 않는다).
-        assignee: item.assignee_member_id ? { name: m?.name ?? '(로스터에 없음)', user_id: m?.user_id ?? null } : null,
+        assignee: item.assignee_member_id ? { name: m?.name ?? t('wait.notOnRoster'), user_id: m?.user_id ?? null } : null,
         watchers: watchersOf(o.project_id),
         gate: rows.gates?.[o.project_id] ?? 'reached',
         stageLabels: rows.stageLabels?.[o.project_id],
+        t,
       })
       // 선행 대기는 빈자리가 아니다 — 올 사람이 정해져 있고 앞 작업만 기다린다. 실루엣으로 그린다(안 A).
       if (seat.waitReason?.kind === 'dependency') seat.anim = 'waiting'
@@ -382,7 +387,7 @@ export function assembleSeatmap(rows: SeatmapRows, nowMs: number, opts: { mine?:
     else if (s.state === 'WAIT') counters.idle++
     else counters.offline++
     if (ATTENTION_ORDER.includes(s.state)) {
-      attention.push({ orderId: s.orderId, id8: s.id8, floorName: f.name, code: s.code, name: s.name, state: s.state, why: attentionWhy(s, nowMs) })
+      attention.push({ orderId: s.orderId, id8: s.id8, floorName: f.name, code: s.code, name: s.name, state: s.state, why: attentionWhy(s, nowMs, t) })
     }
   }
   attention.sort((a, b) => ATTENTION_ORDER.indexOf(a.state) - ATTENTION_ORDER.indexOf(b.state))

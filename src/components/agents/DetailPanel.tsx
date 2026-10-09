@@ -86,13 +86,13 @@ export function DetailPanel({ seat, floorName = '', zoneLabel = '', nowMs, busy,
       <dl className={css.facts}>
         <dt>{t('agents.detail.agent')}</dt><dd>{seat.agent ?? '—'}</dd>
         <dt>{t('agents.detail.progress')}</dt><dd>{seat.progress}%</dd>
-        <dt>{t('agents.detail.lastSignal')}</dt><dd className={hbBad ? css.factBad : ''}>{showSignal ? ageLabel(seat.lastSignalAt, nowMs) : '—'}</dd>
-        <dt>heartbeat</dt><dd>{seat.heartbeatAt ? `${ageLabel(seat.heartbeatAt, nowMs)} · ${seat.heartbeatPhase ?? '—'}` : t('agents.detail.noHeartbeat')}</dd>
+        <dt>{t('agents.detail.lastSignal')}</dt><dd className={hbBad ? css.factBad : ''}>{showSignal ? ageLabel(seat.lastSignalAt, nowMs, t) : '—'}</dd>
+        <dt>heartbeat</dt><dd>{seat.heartbeatAt ? `${ageLabel(seat.heartbeatAt, nowMs, t)} · ${seat.heartbeatPhase ?? '—'}` : t('agents.detail.noHeartbeat')}</dd>
         {seat.resumeRequestedAt && (
           <>
             <dt>{t('agents.detail.resumeRequested')}</dt>
             <dd data-resume-requested="">
-              {fill(t('agents.detail.resumeBy'), { age: ageLabel(seat.resumeRequestedAt, nowMs), host: seat.resumeRequestedHost ?? t('agents.detail.hostUnknown') })}
+              {fill(t('agents.detail.resumeBy'), { age: ageLabel(seat.resumeRequestedAt, nowMs, t), host: seat.resumeRequestedHost ?? t('agents.detail.hostUnknown') })}
             </dd>
           </>
         )}

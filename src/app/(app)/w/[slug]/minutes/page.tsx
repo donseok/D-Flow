@@ -32,7 +32,8 @@ function monthRange(todayIso: string): [string, string] {
   return [`${y}-${mm}-01`, `${y}-${mm}-${String(last).padStart(2, '0')}`]
 }
 
-export const metadata = { title: '회의록' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '회의록') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.minutes') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function MinutesPage({ params, searchParams }: {
   params: Promise<{ slug: string }>; searchParams: Promise<{ project?: string | string[]; team?: string | string[] }>

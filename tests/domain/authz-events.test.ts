@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { describeAuthzChange, AUTHZ_CAUSE_LABEL, AUTHZ_KIND_LABEL } from '@/lib/domain/authzEvents'
+import { describeAuthzChange, authzCauseLabel, authzKindLabel, AUTHZ_CAUSE_LABEL, AUTHZ_KIND_LABEL } from '@/lib/domain/authzEvents'
+import { registerEn } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+import { translatorFor } from '@/lib/i18n/translate'
+
+registerEn(EN)
+const en = translatorFor('en')
 
 describe('describeAuthzChange — 권한 변경 한 줄 요약', () => {
   it('플랫폼 관리자: 지정과 해제', () => {
@@ -68,5 +74,36 @@ describe('describeAuthzChange — 권한 변경 한 줄 요약', () => {
     expect(AUTHZ_CAUSE_LABEL.direct).toBe('직접 변경')
     expect(AUTHZ_CAUSE_LABEL.cascade).toBe('연쇄(소속 변경)')
     expect(AUTHZ_CAUSE_LABEL.parent_deleted).toBe('상위 삭제')
+  })
+})
+
+describe('영어 번역 함수를 넘기면 라벨·요약이 영어다(넘기지 않으면 위의 한국어 그대로)', () => {
+  it('종류·원인 라벨', () => {
+    expect(authzKindLabel('platform_admin', en)).toBe('Platform admin')
+    expect(authzKindLabel('workspace_role', en)).toBe('Workspace role')
+    expect(authzKindLabel('project_access', en)).toBe('Project access')
+    expect(authzKindLabel('password_reset', en)).toBe('Password')
+    expect(authzCauseLabel('direct', en)).toBe('Direct change')
+    expect(authzCauseLabel('cascade', en)).toBe('Cascade (membership change)')
+    expect(authzCauseLabel('parent_deleted', en)).toBe('Parent deleted')
+    expect(authzKindLabel('project_access')).toBe(AUTHZ_KIND_LABEL.project_access)
+    expect(authzCauseLabel('cascade')).toBe(AUTHZ_CAUSE_LABEL.cascade)
+  })
+  it('요약 — 역할 이름은 기존 role.* 키를 따르고, 모르는 역할 값은 원문 그대로다', () => {
+    expect(describeAuthzChange('platform_admin', null, { granted: true }, en)).toBe('Assigned')
+    expect(describeAuthzChange('platform_admin', { granted: true }, null, en)).toBe('Removed')
+    expect(describeAuthzChange('password_reset', null, { reset: true }, en)).toBe('Reset by an admin')
+    expect(describeAuthzChange('workspace_role', null, { role: 'member' }, en)).toBe('Added to workspace (Member)')
+    expect(describeAuthzChange('workspace_role', { role: 'admin' }, null, en)).toBe('Removed from workspace (Admin)')
+    expect(describeAuthzChange('workspace_role', { role: 'member' }, { role: 'admin' }, en)).toBe('Member → Admin')
+    expect(describeAuthzChange('workspace_role', { role: 'owner' }, { role: 'admin' }, en)).toBe('owner → Admin')
+    expect(describeAuthzChange('project_access', { access_role: 'admin' }, null, en)).toBe('Revoked (Admin)')
+    expect(describeAuthzChange('project_access', null, { access_role: 'member', active: false }, en)).toBe('Granted (Member, inactive)')
+    expect(describeAuthzChange('project_access', { access_role: 'admin', active: true }, { access_role: 'admin', active: false }, en)).toBe('Deactivated (Admin)')
+    expect(describeAuthzChange('project_access', { access_role: 'member', active: false }, { access_role: 'admin', active: true }, en)).toBe('Member → Admin · Reactivated')
+    expect(describeAuthzChange('project_access', { access_role: 'admin', active: true }, { access_role: null, active: true }, en)).toBe('Revoked (Admin)')
+    expect(describeAuthzChange('project_access', { person_active: true }, { person_active: false }, en)).toBe('Person deactivated (access suspended)')
+    expect(describeAuthzChange('project_access', { person_active: false }, { person_active: true }, en)).toBe('Person reactivated')
+    expect(describeAuthzChange('platform_admin', { x: 1 }, { y: 2 }, en)).toBe('Could not read this change')
   })
 })

@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { PlugZap, Save, Settings2 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { DictKey } from '@/lib/i18n/dict'
 import { LlmProfilesModal } from '@/components/admin/LlmProfilesModal'
 import {
   saveLlmConfig, testLlmConnection,
@@ -27,23 +29,24 @@ export interface ActiveModels {
   embeddingDim: number
 }
 
-const SOURCE_LABEL: Record<ActiveModels['source'], string> = {
-  env: '환경변수 기본값',
-  profile: 'DB 프로필',
-  none: '선택 안함 — 생성 차단됨',
+const SOURCE_LABEL_KEY: Record<ActiveModels['source'], DictKey> = {
+  env: 'llm.source.env',
+  profile: 'llm.source.profile',
+  none: 'llm.source.none',
 }
 
 const NEW_PROFILE = '__new__' // 드롭다운 마지막 항목 — 값이 아니라 "생성 폼 열기" 트리거
 
-const MODES: { value: LlmMode; label: string; desc: string }[] = [
-  { value: 'env', label: '환경변수 기본값', desc: '배포 env 설정(AI_PROVIDER 등)을 그대로 사용합니다.' },
-  { value: 'profile', label: '프로필 선택', desc: '등록해 둔 프로필 하나를 서버 전역 LLM 으로 사용합니다.' },
-  { value: 'none', label: '선택 안함', desc: 'LLM 기능(요약·브리프·답변 등)을 실행하지 않습니다.' },
+const MODES: { value: LlmMode; labelKey: DictKey; descKey: DictKey }[] = [
+  { value: 'env', labelKey: 'llm.mode.env', descKey: 'llm.mode.envDesc' },
+  { value: 'profile', labelKey: 'llm.mode.profile', descKey: 'llm.mode.profileDesc' },
+  { value: 'none', labelKey: 'llm.mode.none', descKey: 'llm.mode.noneDesc' },
 ]
 
 export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitial; active: ActiveModels }) {
   const router = useRouter()
   const { toast } = useToast()
+  const { t } = useLocale()
 
   const [mode, setMode] = useState<LlmMode>(initial.mode)
   const [activeId, setActiveId] = useState<number | null>(initial.active_profile_id)
@@ -82,7 +85,7 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
   }
 
   function runTest() {
-    if (!selected) { setError('테스트할 프로필을 선택하세요'); return }
+    if (!selected) { setError(t('llm.err.pickToTest')); return }
     setError(null)
     setTestResult(null)
     startTransition(async () => {
@@ -95,28 +98,30 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
         })
         setTestResult({ ok: res.success, message: res.error })
       } catch {
-        setTestResult({ ok: false, message: '요청 처리 중 오류가 발생했습니다.' })
+        setTestResult({ ok: false, message: t('wsAccounts.requestFailedShort') })
       }
     })
   }
 
   function save() {
     setError(null)
-    if (mode === 'profile' && activeId === null) { setError('사용할 프로필을 선택하세요'); return }
+    if (mode === 'profile' && activeId === null) { setError(t('llm.err.pickToUse')); return }
     startTransition(async () => {
       try {
+        const modeKey = MODES.find((m) => m.value === mode)?.labelKey
+        const modeLabel = modeKey ? t(modeKey) : undefined
         const res = await saveLlmConfig({ mode, active_profile_id: mode === 'profile' ? activeId : null })
         if ('error' in res) { setError(res.error); return }
         // 저장은 됐는데 런타임 캐시 갱신이 실패한 경우까지 '성공'으로 뭉뚱그리면,
         // 관리자가 '선택 안함'을 저장하고도 최대 1분간 LLM 이 도는 것을 모른 채 넘어간다.
         toast(
           res.warning
-            ? { title: 'LLM 설정을 저장했습니다.', description: res.warning, variant: 'info' }
-            : { title: 'LLM 설정을 저장했습니다.', description: MODES.find((m) => m.value === mode)?.label, variant: 'success' },
+            ? { title: t('llm.saved'), description: res.warning, variant: 'info' }
+            : { title: t('llm.saved'), description: modeLabel, variant: 'success' },
         )
         router.refresh()
       } catch {
-        setError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+        setError(t('wsAccounts.requestFailed'))
       }
     })
   }
@@ -125,10 +130,10 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
-          <h2 className="text-sm font-semibold text-fg">서버 전역 LLM · 프로필 {profiles.length}개</h2>
+          <h2 className="text-sm font-semibold text-fg">{t('llm.title').replace('{n}', String(profiles.length))}</h2>
         </div>
         <button onClick={() => openModal(false)} className="btn btn-ghost" disabled={pending}>
-          <Settings2 className="h-4 w-4" />프로필 관리
+          <Settings2 className="h-4 w-4" />{t('llm.manageProfiles')}
         </button>
       </div>
 
@@ -140,27 +145,27 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
       */}
       <dl className="grid gap-x-6 gap-y-2 border-b border-border bg-surface-subtle px-5 py-3.5 text-xs sm:grid-cols-2 sm:px-6">
         <div className="min-w-0">
-          <dt className="font-semibold text-fg-secondary">서버 적용 중 · 생성</dt>
+          <dt className="font-semibold text-fg-secondary">{t('llm.active.generation')}</dt>
           <dd className="mt-0.5 min-w-0">
             <span className="break-all font-mono text-fg">{active.llm}</span>
-            <span className="text-fg-muted"> · {active.provider} · {SOURCE_LABEL[active.source]}</span>
+            <span className="text-fg-muted"> · {active.provider} · {t(SOURCE_LABEL_KEY[active.source])}</span>
             <span className="mt-0.5 block text-fg-muted">
-              폴백 {active.llmFallbacks.length > 0
+              {t('llm.fallback')}{active.llmFallbacks.length > 0
                 ? <span className="break-all font-mono">{active.llmFallbacks.join(' → ')}</span>
-                : '없음'}
+                : t('llm.none')}
             </span>
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="font-semibold text-fg-secondary">서버 적용 중 · 임베딩</dt>
+          <dt className="font-semibold text-fg-secondary">{t('llm.active.embedding')}</dt>
           <dd className="mt-0.5 min-w-0">
             <span className="break-all font-mono text-fg">{active.embedding}</span>
-            <span className="text-fg-muted"> · {active.embeddingDim}차원 · {active.embeddingProvider}</span>
+            <span className="text-fg-muted"> · {active.embeddingDim}{t('llm.dimUnit')}{active.embeddingProvider}</span>
             {/* 프로필은 생성만 덮는다 — 모르면 "프로필 바꿨는데 검색이 그대로"로 헤맨다. */}
             <span className="mt-0.5 block text-fg-muted">
               {active.source === 'profile'
-                ? '프로필은 생성만 바꾼다 — 임베딩은 환경변수 그대로'
-                : '환경변수로만 설정한다'}
+                ? t('llm.embeddingNote.profile')
+                : t('llm.embeddingNote.env')}
             </span>
           </dd>
         </div>
@@ -168,7 +173,7 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
 
       <div className="space-y-5 p-5 sm:p-6">
         <fieldset className="space-y-2.5">
-          <legend className="mb-2 text-xs font-semibold text-fg-secondary">활성 LLM</legend>
+          <legend className="mb-2 text-xs font-semibold text-fg-secondary">{t('llm.activeTitle')}</legend>
           {MODES.map((m) => {
             const active = mode === m.value
             return (
@@ -188,32 +193,32 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
                     disabled={pending}
                   />
                   <span className="min-w-0">
-                    <span className={`block text-sm font-semibold ${active ? 'text-action' : 'text-fg'}`}>{m.label}</span>
-                    <span className="mt-0.5 block text-xs leading-5 text-fg-secondary">{m.desc}</span>
+                    <span className={`block text-sm font-semibold ${active ? 'text-action' : 'text-fg'}`}>{t(m.labelKey)}</span>
+                    <span className="mt-0.5 block text-xs leading-5 text-fg-secondary">{t(m.descKey)}</span>
                   </span>
                 </label>
 
                 {m.value === 'profile' && (
                   <div className="mt-2 pl-4">
                     <label className="block">
-                      <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">사용할 프로필</span>
+                      <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('llm.profileToUse')}</span>
                       <select
                         className="app-input"
                         value={activeId !== null ? String(activeId) : ''}
                         onChange={(e) => onSelectProfile(e.target.value)}
                         disabled={pending || mode !== 'profile'}
-                        aria-label="사용할 LLM 프로필"
+                        aria-label={t('llm.profileToUseAria')}
                       >
-                        <option value="">프로필을 선택하세요</option>
+                        <option value="">{t('llm.selectProfile')}</option>
                         {profiles.map((p) => (
                           <option key={p.id} value={String(p.id)}>{p.name} — {p.model}</option>
                         ))}
-                        <option value={NEW_PROFILE}>＋ 새 프로필 만들기…</option>
+                        <option value={NEW_PROFILE}>{t('llm.newProfileOption')}</option>
                       </select>
                     </label>
                     {mode === 'profile' && selected && (
                       <p className="mt-1.5 text-meta leading-4 text-fg-muted">
-                        {selected.provider} · {selected.base_url || '기본 엔드포인트'} · {selected.has_token ? `키 ${selected.auth_token_masked}` : '키 없음'}
+                        {selected.provider} · {selected.base_url || t('llm.defaultEndpoint')} · {selected.has_token ? t('llm.keyMasked').replace('{mask}', () => String(selected.auth_token_masked)) : t('llm.noKey')}
                       </p>
                     )}
                   </div>
@@ -226,7 +231,7 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
         {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
         {testResult && (
           <p role="status" className={`text-sm leading-6 ${testResult.ok ? 'text-success' : 'text-danger'}`}>
-            {testResult.ok ? '연결에 성공했습니다.' : `연결 실패 — ${testResult.message ?? '알 수 없는 오류'}`}
+            {testResult.ok ? t('llm.testOk') : t('llm.testFailed').replace('{message}', () => testResult.message ?? t('chat.cmd.unknownError'))}
           </p>
         )}
 
@@ -234,11 +239,11 @@ export function LlmConfigManager({ initial, active }: { initial: LlmConfigInitia
           {/* env 모드는 서버의 env 값으로만 판별되므로 화면에서 보낼 값이 없다 — 버튼을 숨긴다. */}
           {mode !== 'env' && (
             <button onClick={runTest} className="btn btn-ghost" disabled={pending || mode === 'none'}>
-              <PlugZap className="h-4 w-4" />연결 테스트
+              <PlugZap className="h-4 w-4" />{t('llm.test')}
             </button>
           )}
           <button onClick={save} className="btn btn-primary" disabled={pending}>
-            <Save className="h-4 w-4" />{pending ? '저장 중…' : '저장'}
+            <Save className="h-4 w-4" />{pending ? t('llm.saving') : t('common.save')}
           </button>
         </div>
       </div>

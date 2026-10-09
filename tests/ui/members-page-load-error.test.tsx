@@ -21,6 +21,7 @@ vi.mock('@/lib/data/inviteDomainNotice', () => ({ loadInviteDomainNotice: vi.fn(
 vi.mock('@/app/actions/projectInvites', () => ({ listProjectInvites: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme' }]) }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['common.save', 'common.cancel'] }))
 // 초대 칸의 tz = 프로젝트 달력(SP5 과제 21) — 해석기만 바꿔 끼운다
 vi.mock('@/lib/settings/pageConfig', () => ({ loadProjectConfigForPage: mocks.loadProjectConfigForPage }))
 vi.mock('@/lib/teams/source', () => ({ projectTeams: async () => [] }))

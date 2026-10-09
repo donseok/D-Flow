@@ -8,7 +8,7 @@ import type React from 'react'
 import type { Seatmap } from '@/lib/domain/seatmap'
 import { ageLabel } from '@/lib/domain/seatmap'
 import { pickCharacter, STALE_MS, OFFLINE_MS, type AnimName, type CharacterName } from '@/lib/domain/seatState'
-import { assembleRoster, modelBadge, TIER_NAME, type ModelTier, type Roster, type RosterDesk, type RosterHost } from '@/lib/domain/agentRoster'
+import { assembleRoster, modelBadge, TIER_NAME_KEY, type ModelTier, type Roster, type RosterDesk, type RosterHost } from '@/lib/domain/agentRoster'
 import type { HeroTile } from '@/components/agent-hub/AgentFrame'
 import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -126,8 +126,8 @@ function HostCard({ host, nowMs, timeZone, selectedKey, onSelect }: {
     ? t('agents.roster.hostUnknown')
     : w
       ? (w.untilLabel
-        ? fill(t('agents.roster.hostWatchingUntil'), { age: ageLabel(w.lastSeenAt, nowMs), until: w.untilLabel })
-        : fill(t('agents.roster.hostWatching'), { age: ageLabel(w.lastSeenAt, nowMs) }))
+        ? fill(t('agents.roster.hostWatchingUntil'), { age: ageLabel(w.lastSeenAt, nowMs, t), until: w.untilLabel })
+        : fill(t('agents.roster.hostWatching'), { age: ageLabel(w.lastSeenAt, nowMs, t) }))
       : t('agents.roster.hostNoWatcher')
   // 팀(작업 PC 행) 명찰 — 팀장 계정이 먼저고, 팀장이 없는 행은 앉아 있는 에이전트의 계정을 쓴다.
   const teamOwner = teamOwnerLabel(host.mine, w?.ownerName ?? host.desks.find(d => d.seat?.agentOwnerName)?.seat?.agentOwnerName ?? null, t)
@@ -186,7 +186,7 @@ function Desk({ desk, host, nowMs, timeZone, selected, onSelect }: {
           <span className="flex h-4 min-w-0 items-center">{owner && <OwnerTag owner={owner} />}</span>
           <span className="line-clamp-2 min-h-[2.5em] text-xs text-fg-secondary">{deskLine(desk, host, nowMs, chatter, timeZone, t)}</span>
           {desk.seat && <Progress pct={desk.seat.progress} color={tone.color} />}
-          <span className="text-meta tabular-nums text-fg-muted">{sig ? fill(t('agents.roster.signal'), { age: ageLabel(sig, nowMs) }) : ' '}</span>
+          <span className="text-meta tabular-nums text-fg-muted">{sig ? fill(t('agents.roster.signal'), { age: ageLabel(sig, nowMs, t) }) : ' '}</span>
         </span>
       </button>
     </li>
@@ -253,7 +253,7 @@ function Nameplate({ desk, size = 'sm' }: { desk: RosterDesk; size?: 'sm' | 'lg'
   const head = plan ? t('agents.model.planBeforeRun') : stepKey ? fill(t('agents.model.runStep'), { step: t(stepKey) }) : t('agents.model.run')
   return (
     <span data-nameplate={b.vendor} data-tier={b.tier ?? undefined} data-model-source={plan ? 'plan' : 'run'}
-      title={`${head} · ${desk.seat?.model ?? ''}${b.tier ? ` · ${fill(t('agents.model.tier'), { tier: b.tier, name: TIER_NAME[b.tier] })}` : ''}`}
+      title={`${head} · ${desk.seat?.model ?? ''}${b.tier ? ` · ${fill(t('agents.model.tier'), { tier: b.tier, name: t(TIER_NAME_KEY[b.tier]) })}` : ''}`}
       className={`${pos} z-[1] inline-flex items-center gap-1.5 whitespace-nowrap rounded-full py-1 pl-1 pr-2 font-bold ${text} ${plan ? 'border border-dashed border-[#8A8F99] bg-[#15191fb3] text-[#d9d3cb]' : 'bg-[#15191f] text-[#f4efe7]'}`}
       style={{ boxShadow: shadow }}>
       <span aria-hidden className={`grid h-[18px] w-[18px] place-items-center rounded-full text-meta leading-none text-white ${plan ? 'opacity-70' : ''}`} style={{ background: b.color }}>{b.mark}</span>
@@ -283,7 +283,7 @@ function TierPips({ tier, color }: { tier: ModelTier; color: string }) {
   const { t } = useLocale()
   const filled = 5 - tier
   return (
-    <span aria-label={fill(t('agents.model.tier'), { tier, name: TIER_NAME[tier] })} className="ml-0.5 inline-flex items-end gap-[2px]">
+    <span aria-label={fill(t('agents.model.tier'), { tier, name: t(TIER_NAME_KEY[tier]) })} className="ml-0.5 inline-flex items-end gap-[2px]">
       {[0, 1, 2, 3].map(i => (
         <i key={i} className="block w-[3px] rounded-[1px]" style={{ height: 5 + i * 2, background: i < filled ? color : '#ffffff26' }} />
       ))}
@@ -348,7 +348,7 @@ function Profile({ desk, host, nowMs, timeZone }: { desk: RosterDesk; host: Rost
               {(() => {
                 const tier = modelBadge(desk.seat?.model)?.tier
                 const src = desk.seat?.modelSource === 'run' ? t('agents.model.run') : desk.seat?.modelSource === 'plan' ? t('agents.model.plan') : null
-                return src ? <span className="text-meta font-semibold text-fg-secondary">{src}{tier ? ` · ${fill(t('agents.model.tier'), { tier, name: TIER_NAME[tier] })}` : ''}</span> : null
+                return src ? <span className="text-meta font-semibold text-fg-secondary">{src}{tier ? ` · ${fill(t('agents.model.tier'), { tier, name: t(TIER_NAME_KEY[tier]) })}` : ''}</span> : null
               })()}
             </span>
           )}
@@ -393,7 +393,7 @@ function Profile({ desk, host, nowMs, timeZone }: { desk: RosterDesk; host: Rost
       )}
 
       <section className="flex flex-col gap-1.5">
-        <h3 className="text-meta font-bold text-fg-muted">{fill(t('agents.roster.lastSignal'), { age: signalAt(desk) ? ageLabel(signalAt(desk), nowMs) : '—' })}</h3>
+        <h3 className="text-meta font-bold text-fg-muted">{fill(t('agents.roster.lastSignal'), { age: signalAt(desk) ? ageLabel(signalAt(desk), nowMs, t) : '—' })}</h3>
         <SignalGauge at={signalAt(desk)} nowMs={nowMs} lead={desk.kind === 'lead'} />
       </section>
 

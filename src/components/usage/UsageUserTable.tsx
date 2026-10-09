@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Users } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 import type { UsageUserRow } from '@/lib/domain/usage'
-import { WORKSPACE_ROLE_LABEL } from '@/lib/domain/authz'
+import { WORKSPACE_ROLE_LABEL_KEY } from '@/lib/domain/authz'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { Locale } from '@/lib/i18n/dict'
 import { intlLocale } from '@/lib/i18n/format'
@@ -56,7 +56,7 @@ export function UsageUserTable({ rows, days, timeZone }: { rows: UsageUserRow[];
                 <td className="py-2 pr-3 font-medium text-fg">{r.name}</td>
                 <td className="py-2 pr-3 text-fg-secondary">{r.email}</td>
                 <td className="py-2 pr-3 text-fg-secondary">{r.teamLabel ?? r.teamCode ?? '—'}</td>
-                <td className="py-2 pr-3 text-fg-secondary">{r.role ? WORKSPACE_ROLE_LABEL[r.role] : '—'}</td>
+                <td className="py-2 pr-3 text-fg-secondary">{r.role ? t(WORKSPACE_ROLE_LABEL_KEY[r.role]) : '—'}</td>
                 <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.createdAt, timeZone, locale)}</td>
                 <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.lastSignInAt, timeZone, locale)}</td>
                 <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.lastActivityAt, timeZone, locale)}</td>

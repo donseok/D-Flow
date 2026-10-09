@@ -64,7 +64,7 @@ import { ModuleToggleEditor } from '@/components/settings/ModuleToggleEditor'
 import { ViewsDefaultEditor } from '@/components/settings/ViewsDefaultEditor'
 import { MODULES } from '@/lib/modules/registry'
 import { PROJECT_TOGGLABLE } from '@/lib/modules/defaults'
-import { MODULE_LABEL } from '@/lib/modules/labels'
+import { MODULE_LABEL_KEY } from '@/lib/modules/labels'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
 
@@ -499,7 +499,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                 initialEnabled={enabled.status === 'set' || enabled.status === 'default' ? enabled.value : null}
                 invalidReason={enabled.status === 'invalid' ? enabled.error : undefined}
                 requiredMissing={enabled.status === 'required_missing'}
-                options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: MODULE_LABEL[m.id],
+                options={MODULES.filter(m => PROJECT_TOGGLABLE.has(m.id)).map(m => ({ id: m.id, label: t(locale, MODULE_LABEL_KEY[m.id]),
                   allowed: allowedIds.includes(m.id), available: m.envAvailable() }))} />
               {/* 작업 계획 기본 보기(views.default — SP3b UI-3 과제 7) — 같은 '모듈·메뉴' 범주 안 구역 */}
               <section aria-labelledby="project-views-default" data-settings-search="views.default 작업 계획 기본 보기 표 간트 보드" className="mt-8 border-t border-border pt-6">

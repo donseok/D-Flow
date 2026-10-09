@@ -13,7 +13,8 @@ import { viewCalendar } from '@/lib/calendar/viewZone'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
-export const metadata = { title: '회의 일정' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '회의 일정') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.myMeetings') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function MyMeetingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

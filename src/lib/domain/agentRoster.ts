@@ -132,6 +132,8 @@ export type ModelVendor = 'claude' | 'openai' | 'gemini' | 'grok' | 'llama' | 'm
 /** 등급 — 제조사마다 자기 라인업 안에서 4단계(1 최상위 · 2 상위 · 3 표준 · 4 경량). 판정 근거가 없으면 null. */
 export type ModelTier = 1 | 2 | 3 | 4
 export const TIER_NAME: Record<ModelTier, string> = { 1: '최상위', 2: '상위', 3: '표준', 4: '경량' }
+/** 화면용 사전 키 — 화면은 `t(TIER_NAME_KEY[tier])` 로 그린다(로캘을 따른다). ko 문구는 TIER_NAME 과 같다 */
+export const TIER_NAME_KEY = { 1: 'agents.tier.1', 2: 'agents.tier.2', 3: 'agents.tier.3', 4: 'agents.tier.4' } as const satisfies Record<ModelTier, string>
 export interface ModelBadge { vendor: ModelVendor; label: string; color: string; mark: string; tier: ModelTier | null }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()

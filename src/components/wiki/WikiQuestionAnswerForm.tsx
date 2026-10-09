@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MessageSquareReply, Send, X } from 'lucide-react'
 import { answerWikiQuestion } from '@/app/actions/wiki'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import type { Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 
@@ -18,6 +19,7 @@ export function WikiQuestionAnswerForm({
   questionId: string
   locale: Locale
 }) {
+  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [answer, setAnswer] = useState('')

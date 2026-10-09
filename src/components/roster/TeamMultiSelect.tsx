@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { setPrimaryTeam, toggleTeam } from '@/lib/domain/roster'
 import { useTeamLabel } from '@/components/app/TeamsProvider'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export interface TeamOption { id: string; code: string }
 
@@ -56,6 +57,7 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
   const codeOf = new Map(options.map(o => [o.id, o.code]))
   // 글자는 팀 이름(범위 공급자 — 목록 밖 팀은 code 그대로). 값은 팀 id, data-* 선택자는 code 그대로
   const teamLabelOf = useTeamLabel()
+  const { t: tr } = useLocale()
 
   useEffect(() => {
     if (!open) return
@@ -135,7 +137,7 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
         onClick={() => { if (open) close(false); else setOpen(true) }}
       >
         <span className="flex min-w-0 flex-1 flex-wrap gap-1">
-          {value.length === 0 ? <span className="text-fg-muted">팀 없음</span> : value.map((id, i) => (
+          {value.length === 0 ? <span className="text-fg-muted">{tr('roster.team.none')}</span> : value.map((id, i) => (
             <span key={id} className={`chip bg-surface-subtle ${i === 0 ? 'font-semibold text-fg' : 'text-fg-secondary'}`}>
               {codeOf.has(id) ? teamLabelOf(codeOf.get(id)!) : '?'}
             </span>
@@ -147,7 +149,7 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
         <div ref={popRef} role="group" aria-label={label} style={pos} tabIndex={-1}
           className="z-50 outline-none w-56 rounded-lg border border-border bg-surface p-2 shadow-lg">
           {options.length === 0 ? (
-            <p className="px-1 py-1 text-xs text-fg-muted">이 프로젝트에 팀이 없습니다.</p>
+            <p className="px-1 py-1 text-xs text-fg-muted">{tr('roster.team.noOptions')}</p>
           ) : (
             <ul className="max-h-56 space-y-0.5 overflow-y-auto">
               {options.map(o => {
@@ -159,11 +161,11 @@ export function TeamMultiSelect({ options, value, onChange, label, disabled = fa
                         onChange={() => onChange(toggleTeam(value, o.id))} />
                       <span className="truncate text-fg" title={teamLabelOf(o.code)}>{teamLabelOf(o.code)}</span>
                     </label>
-                    <label className="flex shrink-0 items-center gap-1 text-fg-muted" title="대표 팀">
+                    <label className="flex shrink-0 items-center gap-1 text-fg-muted" title={tr('roster.team.primary')}>
                       <input type="radio" name={`${label}-primary`} checked={value[0] === o.id} data-team-primary={o.code}
-                        aria-label={`${teamLabelOf(o.code)} 대표 팀`}
+                        aria-label={tr('roster.team.primaryOf').replace('{team}', () => String(teamLabelOf(o.code)))}
                         onChange={() => onChange(setPrimaryTeam(value, o.id))} />
-                      대표
+                      {tr('roster.team.primaryShort')}
                     </label>
                   </li>
                 )

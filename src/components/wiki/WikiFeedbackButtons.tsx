@@ -3,11 +3,13 @@
 import { useState } from 'react'
 import { ClockAlert, ThumbsUp } from 'lucide-react'
 import { submitWikiFeedback } from '@/app/actions/wiki'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import type { Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import { trackWikiEvent } from './wikiAnalytics'
 
 export function WikiFeedbackButtons({ projectId, topicId, locale }: { projectId: string; topicId: string; locale: Locale }) {
+  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const [busy, setBusy] = useState<'helpful' | 'outdated' | null>(null)
   const [submitted, setSubmitted] = useState<'helpful' | 'outdated' | null>(null)
   const [error, setError] = useState<string | null>(null)

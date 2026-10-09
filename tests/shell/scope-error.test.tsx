@@ -3,6 +3,7 @@
 // h1 은 하나(스펙 §9 ④), 표지 문구는 E2E PAGE_MARKERS 의 error-boundary 와 같다.
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render } from './_dom'
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).koLocale())
 import { ScopeError } from '@/components/app/ScopeError'
 
 describe('ScopeError', () => {

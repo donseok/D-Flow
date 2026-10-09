@@ -21,16 +21,16 @@ import { ACCOUNT_ROLES, type AccountRole } from '@/lib/domain/accounts'
 import { isValidEmail } from '@/lib/domain/validate'
 
 // accounts.ts 의 ERR_SELF_PLATFORM 원문('use server' 모듈이라 상수를 공유하지 못한다 — 바꾸면 둘 다).
-const SELF_PLATFORM_HINT = '본인의 플랫폼 관리자 권한은 스스로 해제할 수 없습니다. 다른 슈퍼유저에게 요청하세요.'
+const SELF_PLATFORM_HINT_KEY = 'wsAccounts.selfPlatformHint' satisfies DictKey
 
 /** '{n}' 꼴 자리 채우기 — 사전 문구의 수·이름 */
 const fill = (text: string, vars: Record<string, string | number>) => text.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m))
 
-const ROLE_LABEL: Record<AccountRole, string> = { admin: '관리자', member: '멤버', viewer: '조회' }
+const ROLE_LABEL_KEY: Record<AccountRole, DictKey> = { admin: 'wsAccounts.role.admin', member: 'wsAccounts.role.member', viewer: 'wsAccounts.role.viewer' }
 
 /** 워크스페이스 등급 — 계정의 전역 축(옛 계정 팀은 0003 에서 폐지). */
 type WorkspaceRole = 'admin' | 'member'
-const WS_ROLE_LABEL: Record<WorkspaceRole, string> = { admin: '관리자', member: '멤버' }
+const WS_ROLE_LABEL_KEY: Record<WorkspaceRole, DictKey> = { admin: 'wsAccounts.role.admin', member: 'wsAccounts.role.member' }
 
 /** 이 프로젝트 권한 — 명단 행 access_role, 없으면 조회 전용. */
 function accountRole(a: AccountRow): AccountRole {
@@ -71,7 +71,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
-          <h2 className="text-sm font-semibold text-fg">로그인 계정 · {accounts.length}개</h2>
+          <h2 className="text-sm font-semibold text-fg">{t('wsAccounts.count').replace('{n}', String(accounts.length))}</h2>
         </div>
         <div className="flex items-center gap-2">
           {projects.length > 1 && (
@@ -81,16 +81,16 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
               onChange={(e) => router.push(scope?.workspace
                 ? wsHref(scope.workspace.slug, 'admin/accounts', { project: e.target.value })
                 : `/admin/accounts?project=${encodeURIComponent(e.target.value)}`)}
-              title="권한 표시·부여 대상 프로젝트"
+              title={t('wsAccounts.projectPicker')}
             >
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
           <button onClick={() => setBulkOpen(true)} className="btn btn-ghost">
-            <Upload className="h-4 w-4" />일괄 추가
+            <Upload className="h-4 w-4" />{t('wsAccounts.bulkAdd')}
           </button>
           <button onClick={() => setAddOpen(true)} className="btn btn-primary">
-            <UserPlus className="h-4 w-4" />계정 추가
+            <UserPlus className="h-4 w-4" />{t('wsAccounts.add')}
           </button>
         </div>
       </div>
@@ -99,21 +99,21 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
         {accounts.length === 0 ? (
           <EmptyState
             icon={UserRound}
-            title="계정이 없습니다"
-            description="계정 추가 또는 일괄 추가로 로그인 계정을 만드세요."
-            action={<button onClick={() => setAddOpen(true)} className="btn btn-primary"><UserPlus className="h-4 w-4" />계정 추가</button>}
+            title={t('wsAccounts.empty')}
+            description={t('wsAccounts.emptyDesc')}
+            action={<button onClick={() => setAddOpen(true)} className="btn btn-primary"><UserPlus className="h-4 w-4" />{t('wsAccounts.add')}</button>}
           />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[880px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
-                  <th className="py-2 pr-3">이메일</th>
-                  <th className="py-2 pr-3">이름</th>
-                  <th className="py-2 pr-3">워크스페이스 역할</th>
-                  <th className="py-2 pr-3">이 프로젝트 권한</th>
-                  {canPlatformOps && <th className="py-2 pr-3">플랫폼 관리자</th>}
-                  <th className="py-2 pr-3">생성일</th>
+                  <th className="py-2 pr-3">{t('wsAccounts.colEmail')}</th>
+                  <th className="py-2 pr-3">{t('wsAccounts.colName')}</th>
+                  <th className="py-2 pr-3">{t('wsAccounts.colWsRole')}</th>
+                  <th className="py-2 pr-3">{t('wsAccounts.colProjectAccess')}</th>
+                  {canPlatformOps && <th className="py-2 pr-3">{t('wsAccounts.platformAdmin')}</th>}
+                  <th className="py-2 pr-3">{t('wsAccounts.colCreated')}</th>
                   <th className="py-2 pr-3 text-right">{t('wsAccounts.colActions')}</th>
                 </tr>
               </thead>
@@ -127,13 +127,13 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                     </td>
                     <td className="py-2.5 pr-3">
                       {/* 프로젝트 권한은 명단 행의 권한이다(0003) — 팀·역할과 한 행이라 명단 화면에서만 바꾼다. */}
-                      <Link href={`/p/${projectId}/members`} title="명단 화면에서 변경" data-access-role className={`chip ${
+                      <Link href={`/p/${projectId}/members`} title={t('wsAccounts.changeOnRoster')} data-access-role className={`chip ${
                         accountRole(a) === 'admin' ? 'bg-action-soft text-action'
                           : accountRole(a) === 'member' ? 'bg-progress-weak text-progress'
                             : 'bg-surface-subtle text-fg-muted'
                       }`}>
                         {accountRole(a) === 'admin' ? <UserCog className="h-3 w-3" /> : accountRole(a) === 'member' ? <UserRound className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                        {ROLE_LABEL[accountRole(a)]}
+                        {t(ROLE_LABEL_KEY[accountRole(a)])}
                       </Link>
                     </td>
                     {canPlatformOps && (
@@ -187,32 +187,33 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
  */
 function WorkspaceRoleCell({ account, workspaceId }: { account: AccountRow; workspaceId: string }) {
   const router = useRouter()
+  const { t } = useLocale()
   const { toast } = useToast()
   const [pending, startTransition] = useTransition()
   const current = account.workspaceRole
-  if (!current) return <span className="text-fg-muted" title="이 워크스페이스 소속이 아닌 계정입니다.">—</span>
+  if (!current) return <span className="text-fg-muted" title={t('wsAccounts.reset.not_member')}>—</span>
   const next: WorkspaceRole = current === 'admin' ? 'member' : 'admin'
   return (
     <button
       data-ws-role-toggle
       className={`chip ${current === 'admin' ? 'bg-action-soft text-action' : 'bg-surface-subtle text-fg-secondary'} disabled:opacity-50`}
       disabled={pending}
-      title={`${WS_ROLE_LABEL[next]}(으)로 변경`}
+      title={t('wsAccounts.role.changeTo').replace('{role}', () => t(WS_ROLE_LABEL_KEY[next]))}
       onClick={() => startTransition(async () => {
         try {
           const res = await setWorkspaceRole(workspaceId, account.id, next)
           if (res.ok) {
-            toast({ title: `워크스페이스 ${WS_ROLE_LABEL[next]}(으)로 변경했습니다.`, description: account.email, variant: 'success' })
+            toast({ title: t('wsAccounts.role.changed').replace('{role}', () => t(WS_ROLE_LABEL_KEY[next])), description: account.email, variant: 'success' })
             router.refresh()
           } else {
-            toast({ title: '변경 실패', description: res.error, variant: 'error' })
+            toast({ title: t('wsAccounts.changeFailed'), description: res.error, variant: 'error' })
           }
         } catch {
-          toast({ title: '변경 실패', description: '요청 처리 중 오류가 발생했습니다.', variant: 'error' })
+          toast({ title: t('wsAccounts.changeFailed'), description: t('wsAccounts.requestFailedShort'), variant: 'error' })
         }
       })}
     >
-      {current === 'admin' ? <UserCog className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}{WS_ROLE_LABEL[current]}
+      {current === 'admin' ? <UserCog className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}{t(WS_ROLE_LABEL_KEY[current])}
     </button>
   )
 }
@@ -220,6 +221,7 @@ function WorkspaceRoleCell({ account, workspaceId }: { account: AccountRow; work
 /** 플랫폼 관리자(슈퍼유저) 토글 — 열 자체를 슈퍼유저에게만 렌더링한다(어포던스는 편의, 서버 액션이 재검증). */
 function PlatformAdminCell({ account, isSelf }: { account: AccountRow; isSelf: boolean }) {
   const router = useRouter()
+  const { t } = useLocale()
   const { toast } = useToast()
   const [pending, startTransition] = useTransition()
   const selfLocked = isSelf && account.isPlatformAdmin
@@ -229,25 +231,25 @@ function PlatformAdminCell({ account, isSelf }: { account: AccountRow; isSelf: b
       data-platform-admin-toggle
       className={`chip ${account.isPlatformAdmin ? 'bg-success-weak text-success' : 'bg-surface-subtle text-fg-muted'} disabled:opacity-50`}
       disabled={pending || selfLocked}
-      title={selfLocked ? SELF_PLATFORM_HINT : account.isPlatformAdmin ? '플랫폼 관리자 해제' : '플랫폼 관리자 지정'}
+      title={selfLocked ? t(SELF_PLATFORM_HINT_KEY) : account.isPlatformAdmin ? t('wsAccounts.platform.unset') : t('wsAccounts.platform.set')}
       onClick={() => startTransition(async () => {
         try {
           const res = await setPlatformAdmin(account.id, !account.isPlatformAdmin)
           if (res.ok) {
-            toast({ title: account.isPlatformAdmin ? '플랫폼 관리자를 해제했습니다.' : '플랫폼 관리자로 지정했습니다.', description: account.email, variant: 'success' })
+            toast({ title: account.isPlatformAdmin ? t('wsAccounts.platform.unsetDone') : t('wsAccounts.platform.setDone'), description: account.email, variant: 'success' })
             router.refresh()
           } else {
-            toast({ title: '변경 실패', description: res.error, variant: 'error' })
+            toast({ title: t('wsAccounts.changeFailed'), description: res.error, variant: 'error' })
             // 거부는 이 표가 낡았다는 신호다(다른 슈퍼유저가 먼저 해제했거나 마지막 한 명이 됐다) — 다시 읽지 않으면
             // 칩은 그대로이고 누를 때마다 같은 거부가 돌아온다. 액션은 실패 때 revalidatePath 를 하지 않는다.
             router.refresh()
           }
         } catch {
-          toast({ title: '변경 실패', description: '요청 처리 중 오류가 발생했습니다.', variant: 'error' })
+          toast({ title: t('wsAccounts.changeFailed'), description: t('wsAccounts.requestFailedShort'), variant: 'error' })
         }
       })}
     >
-      <ShieldCheck className="h-3 w-3" />{account.isPlatformAdmin ? '플랫폼 관리자' : '지정'}
+      <ShieldCheck className="h-3 w-3" />{account.isPlatformAdmin ? t('wsAccounts.platformAdmin') : t('wsAccounts.platform.assign')}
     </button>
   )
 }
@@ -267,9 +269,10 @@ function RoleSelect({ value, onChange }: {
   value: AccountRole
   onChange: (r: AccountRole) => void
 }) {
+  const { t } = useLocale()
   return (
     <select className="app-input" value={value} onChange={(e) => onChange(e.target.value as AccountRole)}>
-      {ACCOUNT_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+      {ACCOUNT_ROLES.map((r) => <option key={r} value={r}>{t(ROLE_LABEL_KEY[r])}</option>)}
     </select>
   )
 }
@@ -279,9 +282,10 @@ function WorkspaceRoleSelect({ value, onChange }: {
   value: WorkspaceRole
   onChange: (r: WorkspaceRole) => void
 }) {
+  const { t } = useLocale()
   return (
     <select className="app-input" value={value} onChange={(e) => onChange(e.target.value as WorkspaceRole)}>
-      {(['member', 'admin'] as const).map((r) => <option key={r} value={r}>{WS_ROLE_LABEL[r]}</option>)}
+      {(['member', 'admin'] as const).map((r) => <option key={r} value={r}>{t(WS_ROLE_LABEL_KEY[r])}</option>)}
     </select>
   )
 }
@@ -291,6 +295,7 @@ function AddAccountModal({ open, onClose, projectId, workspaceId }: {
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  const { t } = useLocale()
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [wsRole, setWsRole] = useState<WorkspaceRole>('member')
@@ -307,8 +312,8 @@ function AddAccountModal({ open, onClose, projectId, workspaceId }: {
 
   function submit() {
     setError(null)
-    if (!isValidEmail(email)) { setError('올바른 이메일을 입력하세요.'); return }
-    if (password.length < 8) { setError('초기 비밀번호는 8자 이상이어야 합니다.'); return }
+    if (!isValidEmail(email)) { setError(t('wsAccounts.err.email')); return }
+    if (password.length < 8) { setError(t('wsAccounts.err.initialPw')); return }
     startTransition(async () => {
       try {
         const res = await createAccount({
@@ -316,46 +321,46 @@ function AddAccountModal({ open, onClose, projectId, workspaceId }: {
           projectId, accessRole: role === 'viewer' ? null : role, workspaceId,
         })
         if (res.ok) {
-          toast({ title: '계정을 만들었습니다.', description: email.trim(), variant: 'success' })
+          toast({ title: t('wsAccounts.created'), description: email.trim(), variant: 'success' })
           onClose(); router.refresh()
         } else {
-          setError(res.error ?? '생성 실패')
+          setError(res.error ?? t('wsAccounts.createFailed'))
         }
       } catch {
-        setError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+        setError(t('wsAccounts.requestFailed'))
       }
     })
   }
 
   return (
     <Modal
-      open={open} onClose={onClose} title="계정 추가"
+      open={open} onClose={onClose} title={t('wsAccounts.add')}
       footer={
         <>
-          <button onClick={onClose} className="btn btn-ghost" disabled={pending}>취소</button>
-          <button onClick={submit} className="btn btn-primary" disabled={pending}>{pending ? '생성 중…' : '계정 만들기'}</button>
+          <button onClick={onClose} className="btn btn-ghost" disabled={pending}>{t('common.cancel')}</button>
+          <button onClick={submit} className="btn btn-primary" disabled={pending}>{pending ? t('wsAccounts.creating') : t('wsAccounts.create')}</button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="이메일 (로그인 아이디)">
+        <Field label={t('wsAccounts.field.email')}>
           <input className="app-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@company.com" autoFocus />
         </Field>
-        <Field label="이름 (선택)">
-          <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="홍길동" />
+        <Field label={t('wsAccounts.field.name')}>
+          <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('wsAccounts.field.namePlaceholder')} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="워크스페이스 역할">
+          <Field label={t('wsAccounts.colWsRole')}>
             <WorkspaceRoleSelect value={wsRole} onChange={setWsRole} />
           </Field>
-          <Field label="이 프로젝트 권한">
+          <Field label={t('wsAccounts.colProjectAccess')}>
             <RoleSelect value={role} onChange={setRole} />
           </Field>
         </div>
-        <Field label="초기 비밀번호 (8자 이상)">
+        <Field label={t('wsAccounts.field.initialPw')}>
           <div className="flex gap-2">
-            <input className="app-input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="초기 비밀번호" />
-            <button type="button" onClick={() => setPassword(randomPassword())} className="btn btn-ghost shrink-0"><Wand2 className="h-4 w-4" />생성</button>
+            <input className="app-input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('wsAccounts.field.initialPwPlaceholder')} />
+            <button type="button" onClick={() => setPassword(randomPassword())} className="btn btn-ghost shrink-0"><Wand2 className="h-4 w-4" />{t('wsAccounts.generate')}</button>
           </div>
         </Field>
         {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
@@ -368,6 +373,7 @@ function BulkAddModal({ open, onClose, projectId, workspaceId }: {
   open: boolean; onClose: () => void; projectId: string; workspaceId: string
 }) {
   const router = useRouter()
+  const { t } = useLocale()
   const [text, setText] = useState('')
   const [results, setResults] = useState<BulkResultRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -383,11 +389,11 @@ function BulkAddModal({ open, onClose, projectId, workspaceId }: {
     startTransition(async () => {
       try {
         const res = await bulkCreateAccounts(workspaceId, text, projectId)
-        if (!res.ok) { setError(res.error ?? '처리 실패'); return }
+        if (!res.ok) { setError(res.error ?? t('wsAccounts.bulk.failed')); return }
         setResults(res.results)
         router.refresh() // 성공분을 목록에 반영
       } catch {
-        setError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+        setError(t('wsAccounts.requestFailed'))
       }
     })
   }
@@ -397,41 +403,41 @@ function BulkAddModal({ open, onClose, projectId, workspaceId }: {
 
   return (
     <Modal
-      open={open} onClose={onClose} title="일괄 추가" size="lg"
+      open={open} onClose={onClose} title={t('wsAccounts.bulkAdd')} size="lg"
       footer={
         <>
-          <button onClick={onClose} className="btn btn-ghost" disabled={pending}>닫기</button>
-          <button onClick={submit} className="btn btn-primary" disabled={pending || !text.trim()}>{pending ? '처리 중…' : '일괄 생성'}</button>
+          <button onClick={onClose} className="btn btn-ghost" disabled={pending}>{t('common.close')}</button>
+          <button onClick={submit} className="btn btn-primary" disabled={pending || !text.trim()}>{pending ? t('wsAccounts.bulk.pending') : t('wsAccounts.bulk.run')}</button>
         </>
       }
     >
       <div className="space-y-4">
         <div className="rounded-xl bg-surface-subtle px-3.5 py-3 text-xs leading-5 text-fg-secondary">
-          한 줄에 하나씩, <b>이메일, 권한, 초기비번[, 이름]</b> 순서. 콤마 또는 탭 구분.<br />
-          권한: <code>admin · member · viewer</code> — 선택한 프로젝트의 권한입니다(viewer = 명단 없이 조회 전용). 워크스페이스 역할은 멤버로 만들고, 플랫폼 관리자는 일괄 등록으로 지정할 수 없습니다.<br />
-          예) <code>hong@company.com, member, password1, 홍길동</code>
+          {t('wsAccounts.bulk.help1')}<b>{t('wsAccounts.bulk.helpFormat')}</b>{t('wsAccounts.bulk.help2')}<br />
+          {t('wsAccounts.bulk.accessLabel')}<code>admin · member · viewer</code>{t('wsAccounts.bulk.accessNote')}<br />
+          {t('wsAccounts.bulk.exampleLabel')}<code>{t('wsAccounts.bulk.example')}</code>
         </div>
         <textarea
           className="app-input min-h-[160px] font-mono text-[13px]"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={'user1@company.com, member, password1\nuser2@company.com, viewer, password2, 김철수'}
+          placeholder={t('wsAccounts.bulk.placeholder')}
         />
         {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
         {results && (
           <div>
-            <div className="mb-2 text-sm font-semibold text-fg">결과 — 성공 {okCount} · 실패 {failCount}</div>
+            <div className="mb-2 text-sm font-semibold text-fg">{t('wsAccounts.bulk.resultOk')}{okCount}{t('wsAccounts.bulk.resultFail')}{failCount}</div>
             <div className="max-h-52 overflow-y-auto rounded-xl border border-border">
               <table className="w-full text-xs">
                 <tbody>
                   {results.map((r, i) => (
                     <tr key={i} className="border-b border-border/60 last:border-0">
-                      <td className="px-3 py-1.5 text-fg-muted">{r.lineNo}행</td>
+                      <td className="px-3 py-1.5 text-fg-muted">{t('wsAccounts.bulk.lineNo').replace('{n}', String(r.lineNo))}</td>
                       <td className="px-3 py-1.5 text-fg">{r.email}</td>
                       <td className="px-3 py-1.5">
                         {r.ok
-                          ? <span className="chip bg-success-weak text-success">성공</span>
-                          : <span className="chip bg-danger-weak text-danger" title={r.error}>실패</span>}
+                          ? <span className="chip bg-success-weak text-success">{t('wsAccounts.bulk.ok')}</span>
+                          : <span className="chip bg-danger-weak text-danger" title={r.error}>{t('wsAccounts.bulk.fail')}</span>}
                       </td>
                       <td className="px-3 py-1.5 text-fg-secondary">{r.error ?? ''}</td>
                     </tr>
@@ -448,6 +454,7 @@ function BulkAddModal({ open, onClose, projectId, workspaceId }: {
 
 function ResetPasswordModal({ account, workspaceId, onClose }: { account: AccountRow | null; workspaceId: string; onClose: () => void }) {
   const { toast } = useToast()
+  const { t } = useLocale()
   const [password, setPassword] = useState('')
   const [done, setDone] = useState<string | null>(null) // 적용 완료된 임시 비밀번호 — 전달용으로 유지
   const [copied, setCopied] = useState(false)
@@ -461,18 +468,18 @@ function ResetPasswordModal({ account, workspaceId, onClose }: { account: Accoun
   function submit() {
     setError(null)
     if (!account) return
-    if (password.length < 8) { setError('임시 비밀번호는 8자 이상이어야 합니다.'); return }
+    if (password.length < 8) { setError(t('wsAccounts.err.tempPw')); return }
     startTransition(async () => {
       try {
         const res = await resetPassword(workspaceId, account.id, password)
         if (res.ok) {
           setDone(password) // 모달을 닫지 않고 값을 유지 — 전달 전 소실 방지
-          toast({ title: '비밀번호를 리셋했습니다.', variant: 'success' })
+          toast({ title: t('wsAccounts.resetDone'), variant: 'success' })
         } else {
-          setError(res.error ?? '리셋 실패')
+          setError(res.error ?? t('wsAccounts.resetFailed'))
         }
       } catch {
-        setError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+        setError(t('wsAccounts.requestFailed'))
       }
     })
   }
@@ -484,14 +491,14 @@ function ResetPasswordModal({ account, workspaceId, onClose }: { account: Accoun
 
   return (
     <Modal
-      open={!!account} onClose={onClose} title="비밀번호 리셋"
+      open={!!account} onClose={onClose} title={t('wsAccounts.resetTitle')}
       footer={
         done ? (
-          <button onClick={onClose} className="btn btn-primary">닫기</button>
+          <button onClick={onClose} className="btn btn-primary">{t('common.close')}</button>
         ) : (
           <>
-            <button onClick={onClose} className="btn btn-ghost" disabled={pending}>취소</button>
-            <button onClick={submit} className="btn btn-primary" disabled={pending}>{pending ? '적용 중…' : '리셋'}</button>
+            <button onClick={onClose} className="btn btn-ghost" disabled={pending}>{t('common.cancel')}</button>
+            <button onClick={submit} className="btn btn-primary" disabled={pending}>{pending ? t('wsAccounts.applying') : t('wsAccounts.resetRun')}</button>
           </>
         )
       }
@@ -499,21 +506,21 @@ function ResetPasswordModal({ account, workspaceId, onClose }: { account: Accoun
       <div className="space-y-4">
         {done ? (
           <>
-            <p className="text-sm text-fg-secondary"><b className="text-fg">{account?.email}</b> 의 임시 비밀번호가 설정되었습니다. 아래 값을 사용자에게 전달하세요. <b className="text-fg">이 창을 닫으면 다시 볼 수 없습니다.</b></p>
+            <p className="text-sm text-fg-secondary"><b className="text-fg">{account?.email}</b>{t('wsAccounts.resetDoneBody')}<b className="text-fg">{t('wsAccounts.resetOnce')}</b></p>
             <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
               <code className="min-w-0 flex-1 truncate font-mono text-sm text-fg">{done}</code>
               <button type="button" onClick={copy} className="btn btn-ghost btn-sm shrink-0">
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? '복사됨' : '복사'}
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? t('account.pat.copied') : t('account.pat.copy')}
               </button>
             </div>
           </>
         ) : (
           <>
-            <p className="text-sm text-fg-secondary"><b className="text-fg">{account?.email}</b> 의 비밀번호를 임시값으로 변경합니다. 사용자는 로그인 후 본인이 변경하게 하세요.</p>
-            <Field label="임시 비밀번호 (8자 이상)">
+            <p className="text-sm text-fg-secondary"><b className="text-fg">{account?.email}</b>{t('wsAccounts.resetBody')}</p>
+            <Field label={t('wsAccounts.field.tempPw')}>
               <div className="flex gap-2">
                 <input className="app-input" value={password} onChange={(e) => setPassword(e.target.value)} />
-                <button type="button" onClick={() => setPassword(randomPassword())} className="btn btn-ghost shrink-0"><Wand2 className="h-4 w-4" />생성</button>
+                <button type="button" onClick={() => setPassword(randomPassword())} className="btn btn-ghost shrink-0"><Wand2 className="h-4 w-4" />{t('wsAccounts.generate')}</button>
               </div>
             </Field>
             {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}

@@ -11,8 +11,10 @@ import { StatusMessage } from '@/components/ui/StatusMessage'
 import { buttonClass } from '@/components/ui/buttonStyles'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
+import { translatorFor } from '@/lib/i18n/translate'
 
-export const metadata = { title: '내 업무' } // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '내 업무') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.myWork') } } // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 const isKind = (k: string): k is MyWorkKind => (MY_WORK_KINDS as readonly string[]).includes(k)
 
 /**
@@ -54,7 +56,7 @@ export default async function MyWorkPage({
   let reviewCount: number | undefined
   if (scope.actor && typeof getPortalSummary === 'function') {
     try {
-      const summary = await getPortalSummary(scope.ws.id, scope.actor)
+      const summary = await getPortalSummary(scope.ws.id, scope.actor, { t: translatorFor(locale) })
       if (summary?.review?.ok) reviewCount = summary.review.count
     } catch {}
   }

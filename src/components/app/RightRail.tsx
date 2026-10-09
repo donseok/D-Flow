@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { SIDEBAR_STORAGE_KEY, SIDEBAR_TOGGLE_EVENT } from './sidebarState'
 import { focusablesIn, trapTab } from './focusTrap'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export const RAIL_WIDTH = 400
 export const RAIL_MIN_MAIN = 720
@@ -108,6 +109,7 @@ export function RightRail({ occupant, title, onClose, sidebarWidth, width = RAIL
   occupant: RailOccupant; title: string; onClose(): void; sidebarWidth?: number; width?: number; header?: ReactNode; children: ReactNode
 }) {
   // 첫 커밋에 모드·자리를 정해 본문을 바로 붙인다 — 한 커밋 늦으면 부모(AssistantChat)의 입력 초점·맨 아래 스크롤 효과가 빈 ref 를 본다(Z6)
+  const { t } = useLocale()
   const host = useRailHost({ sync: true })
   const shellSidebarWidth = useShellSidebarWidth()
   const mode = useRailMode(sidebarWidth ?? shellSidebarWidth, { sync: true })
@@ -127,7 +129,7 @@ export function RightRail({ occupant, title, onClose, sidebarWidth, width = RAIL
   const head = header === undefined ? (
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
       <h2 className="text-section text-fg">{title}</h2>
-      <button type="button" aria-label="닫기" onClick={onClose} className="rounded-(--radius-control) p-2 hover:bg-surface-hover"><X size={16} aria-hidden /></button>
+      <button type="button" aria-label={t('common.close')} onClick={onClose} className="rounded-(--radius-control) p-2 hover:bg-surface-hover"><X size={16} aria-hidden /></button>
     </div>
   ) : header
   const widthStyle = { '--rail-w': `${width}px` } as React.CSSProperties

@@ -3,7 +3,9 @@
 import { requireWorkspaceAdmin } from '@/lib/authz'
 import { listAuthzEventRows } from '@/lib/authz/events'
 import { isUuidLike } from '@/lib/domain/validate'
-import { AUTHZ_CAUSE_LABEL, AUTHZ_KIND_LABEL, describeAuthzChange, type AuthzEventKind } from '@/lib/domain/authzEvents'
+import { authzCauseLabel, authzKindLabel, describeAuthzChange, type AuthzEventKind } from '@/lib/domain/authzEvents'
+import { serverTranslator } from '@/lib/i18n/server'
+import type { Translate } from '@/lib/i18n/translate'
 import { adminFor } from '@/lib/supabase/adminFor'
 import { createServerClient } from '@/lib/supabase/server'
 
@@ -21,27 +23,27 @@ export interface AuthzEventView {
 export type AuthzEventsResult = { ok: true; rows: AuthzEventView[]; nextBefore: number | null } | { ok: false; error: string }
 
 const ERR_LOAD = '권한 변경 이력을 불러오지 못했습니다.'
-const NAME_UNKNOWN = '이름 확인 불가'
 
 type Named = Map<string, string> | null     // null = 조회 실패(삭제된 계정과 구분한다)
 
 /** 이름 조회는 이력 행에 나온 id 만, 이 워크스페이스로 좁혀서 한다. 실패하면 null — '삭제된 계정'으로 위장하지 않는다. */
-async function lookup(table: 'profiles' | 'people' | 'projects', admin: ReturnType<typeof adminFor>['admin'], ids: string[], workspaceId: string): Promise<Named> {
+async function lookup(table: 'profiles' | 'people' | 'projects', admin: ReturnType<typeof adminFor>['admin'], ids: string[], workspaceId: string, t: Translate): Promise<Named> {
   if (ids.length === 0) return new Map()
+  const unnamed = t('authz.who.unnamed')
   try {
     if (table === 'profiles') {
       const { data, error } = await admin.from('profiles').select('user_id, display_name').in('user_id', ids)
       if (error) throw error
-      return new Map(((data ?? []) as { user_id: string; display_name: string | null }[]).map(r => [r.user_id, r.display_name?.trim() || '이름 없음']))
+      return new Map(((data ?? []) as { user_id: string; display_name: string | null }[]).map(r => [r.user_id, r.display_name?.trim() || unnamed]))
     }
     if (table === 'people') {
       const { data, error } = await admin.from('people').select('id, display_name').eq('workspace_id', workspaceId).in('id', ids)
       if (error) throw error
-      return new Map(((data ?? []) as { id: string; display_name: string | null }[]).map(r => [r.id, r.display_name?.trim() || '이름 없음']))
+      return new Map(((data ?? []) as { id: string; display_name: string | null }[]).map(r => [r.id, r.display_name?.trim() || unnamed]))
     }
     const { data, error } = await admin.from('projects').select('id, name').eq('workspace_id', workspaceId).in('id', ids)
     if (error) throw error
-    return new Map(((data ?? []) as { id: string; name: string | null }[]).map(r => [r.id, r.name?.trim() || '이름 없음']))
+    return new Map(((data ?? []) as { id: string; name: string | null }[]).map(r => [r.id, r.name?.trim() || unnamed]))
   } catch (error) {
     console.error('[authz events] 이름 조회 실패', { table, workspaceId, cause: error })
     return null
@@ -56,24 +58,27 @@ export async function listAuthzEvents(workspaceId: string, opts?: { limit?: numb
   const r = await listAuthzEventRows(sb, { workspaceId, includePlatform: g.actor.isSuperuser, limit: opts?.limit, before: opts?.before })
   if (!r.ok) { console.error('[authz events] 이력 조회 실패', { workspaceId, cause: r.error }); return { ok: false, error: ERR_LOAD } }
 
+  // 목록에 보이는 글자(종류·원인·요약·이름 자리 대체)는 요청의 화면 언어를 따른다 — 요청 범위 밖(단위 테스트)에서는 한국어
+  const t = await serverTranslator()
+  const nameUnknown = t('authz.who.unavailable')
   const { admin } = adminFor({ workspaceId })
   const uniq = (xs: (string | null)[]) => [...new Set(xs.filter((x): x is string => x !== null))]
   const [users, people, projects] = await Promise.all([
-    lookup('profiles', admin, uniq(r.rows.flatMap(row => [row.actorUserId, row.targetUserId])), workspaceId),
-    lookup('people', admin, uniq(r.rows.map(row => row.targetPersonId)), workspaceId),
-    lookup('projects', admin, uniq(r.rows.map(row => row.projectId)), workspaceId),
+    lookup('profiles', admin, uniq(r.rows.flatMap(row => [row.actorUserId, row.targetUserId])), workspaceId, t),
+    lookup('people', admin, uniq(r.rows.map(row => row.targetPersonId)), workspaceId, t),
+    lookup('projects', admin, uniq(r.rows.map(row => row.projectId)), workspaceId, t),
   ])
-  const user = (id: string | null, none: string) => id === null ? none : users === null ? NAME_UNKNOWN : users.get(id) ?? '삭제된 계정'
+  const user = (id: string | null, none: string) => id === null ? none : users === null ? nameUnknown : users.get(id) ?? t('authz.who.deletedAccount')
   return {
     ok: true, nextBefore: r.nextBefore,
     rows: r.rows.map(row => ({
-      id: row.id, kind: row.kind, kindLabel: AUTHZ_KIND_LABEL[row.kind],
-      summary: describeAuthzChange(row.kind, row.before, row.after), causeLabel: AUTHZ_CAUSE_LABEL[row.cause],
-      actorName: user(row.actorUserId, '시스템'),
+      id: row.id, kind: row.kind, kindLabel: authzKindLabel(row.kind, t),
+      summary: describeAuthzChange(row.kind, row.before, row.after, t), causeLabel: authzCauseLabel(row.cause, t),
+      actorName: user(row.actorUserId, t('authz.who.system')),
       // 계정 없는 인물(명단에만 있는 사람)은 인물 이름이 대상이다
       targetName: row.targetUserId !== null ? user(row.targetUserId, '') : row.targetPersonId !== null
-        ? (people === null ? NAME_UNKNOWN : people.get(row.targetPersonId) ?? '삭제된 인물') : '—',
-      projectName: row.projectId === null ? null : projects === null ? NAME_UNKNOWN : projects.get(row.projectId) ?? '삭제된 프로젝트',
+        ? (people === null ? nameUnknown : people.get(row.targetPersonId) ?? t('authz.who.deletedPerson')) : '—',
+      projectName: row.projectId === null ? null : projects === null ? nameUnknown : projects.get(row.projectId) ?? t('authz.who.deletedProject'),
       createdAt: row.createdAt,
     })),
   }

@@ -4,7 +4,7 @@
 // AA5(충실도 리뷰 P3-7) — 레일 바깥은 이름 없는 <aside>(complementary 랜드마크)가 아니라 <div>, 랜드마크는 이름 있는 <nav> 하나.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render } from './_dom'
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale())
 import { SideRail } from '@/components/app/NavList'
 import { renderToString } from 'react-dom/server'
 

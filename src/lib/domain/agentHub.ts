@@ -3,6 +3,7 @@
 import { deriveSeatState, isWatcherAlive, lastSignalMs, type OrderStatus, type SeatState } from './seatState'
 import { AGENT_TAG, canApproveCompletion, isLaterReport, isSubtreeManagerOf, type OrderRow, type Watcher, type WatcherRow } from './seatmap'
 import { deriveWaitReason, type WaitReason } from './waitReason'
+import { koTranslate, type Translate } from '@/lib/i18n/translate'
 import { stageLockedForHuman, type PredecessorGate } from './agentWork'
 
 export interface HubItemRow {
@@ -150,7 +151,8 @@ function stepMaterials(step: HubStepApproval | undefined, viewerId: string) {
   return step ? { pendingStepApprover: step.approver, approvedThisRound: step.distinct && step.approvedBy.includes(viewerId) } : {}
 }
 
-export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubViewer): AgentHub {
+/** t — 화면에 그대로 보이는 착수 대기 사유의 번역 함수. 없으면 한국어 */
+export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubViewer, t: Translate = koTranslate): AgentHub {
   const memberIds = myMemberIdsOf(rows.members, viewer)
   const mine = new Set(memberIds)
   const memberName = new Map(rows.members.map(m => [m.id, m.name]))
@@ -212,10 +214,11 @@ export function assembleAgentHub(rows: AgentHubRows, nowMs: number, viewer: HubV
           depends: item.depends,
           predecessorByRef: ref => { const p = byRef.get(ref); return p ? { external_ref: ref, code: p.code, name: p.name, stage: p.stage, order_approved: approved.has(p.id), actual_pct: p.actual_pct, dev_workflow: p.dev_workflow } : undefined },
           // 담당자 id 는 있는데 로스터 행이 없으면 계정 미연결과 같은 취급(seatmap.ts 와 같은 규칙).
-          assignee: item.assignee_member_id ? { name: assigneeMember?.name ?? '(로스터에 없음)', user_id: assigneeMember?.user_id ?? null } : null,
+          assignee: item.assignee_member_id ? { name: assigneeMember?.name ?? t('wait.notOnRoster'), user_id: assigneeMember?.user_id ?? null } : null,
           watchers: hubWatchers,
           gate: rows.gate ?? 'reached',
           stageLabels: rows.stageLabels,
+          t,
         })
       : null
     if (waitReason !== null && (waitReason.kind === 'dependency' || waitReason.kind === 'agent_off')) counters.stuck++

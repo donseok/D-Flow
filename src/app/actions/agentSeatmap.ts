@@ -1,6 +1,7 @@
 'use server'
 
 import { getActorForView } from '@/lib/authz'
+import { serverTranslator } from '@/lib/i18n/server'
 import { canViewAgents } from '@/lib/authz/agentsAccess'
 import { isProjectMember } from '@/lib/domain/authz'
 import { requireModule } from '@/lib/modules/gate'
@@ -35,7 +36,7 @@ export async function refreshSeatmap(scope: SeatmapScope = 'mine', projectId?: s
   const mod = opts.projectId ? await requireModule({ projectId: opts.projectId }, 'agents') : await requireModule({ workspaceId: opts.workspaceId! }, 'agents')
   if (!mod.ok) return { ok: false, error: mod.error }
   try {
-    return { ok: true, seatmap: await getSeatmap(actor, Date.now(), scope, opts) }
+    return { ok: true, seatmap: await getSeatmap(actor, Date.now(), scope, { ...opts, t: await serverTranslator() }) }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('[seatmap] 재조회 실패:', msg)

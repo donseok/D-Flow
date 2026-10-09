@@ -1,6 +1,7 @@
 'use client'
 
 import { avatarLabel, presenceStyle } from '@/lib/domain/sheetPresence'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 /** 겹쳐 보여줄 아바타 상한 — 초과분은 +N 원으로 축약. */
 const MAX_AVATARS = 5
@@ -12,11 +13,12 @@ export function PresenceStrip({ online, meId }: {
   online: { userId: string; name: string }[]
   meId?: string | null
 }) {
+  const { t } = useLocale()
   if (online.length === 0) return null
   return (
-    <div className="flex items-center" title={`함께 보는 중: ${online.map(o => o.name).join(', ')}`}>
+    <div className="flex items-center" title={t('shell.presence.title').replace('{names}', () => online.map(o => o.name).join(', '))}>
       {online.slice(0, MAX_AVATARS).map(o => (
-        <span key={o.userId} title={o.userId === meId ? `${o.name} (나)` : o.name}
+        <span key={o.userId} title={o.userId === meId ? t('shell.presence.me').replace('{name}', () => o.name) : o.name}
           className="-ml-1.5 flex h-7 w-7 select-none items-center justify-center rounded-full text-[10px] font-bold ring-2 ring-canvas first:ml-0"
           style={presenceStyle(o.userId)}>
           {avatarLabel(o.name)}

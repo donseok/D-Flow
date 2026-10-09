@@ -18,8 +18,8 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }))
 import { WorkspaceFieldsEditor, type WorkspaceField } from '@/components/settings/WorkspaceFieldsEditor'
 
 const general: WorkspaceField[] = [
-  { key: 'branding.product_name', label: '제품 이름', description: '', kind: 'text', value: 'D-Flow', source: '제품 기본값' },
-  { key: 'branding.mail_from_name', label: '메일 발신 이름', description: '', kind: 'text', value: '', source: '제품 기본값' },
+  { key: 'branding.product_name', label: '제품 이름', description: '', kind: 'text', value: 'D-Flow', source: 'product' },
+  { key: 'branding.mail_from_name', label: '메일 발신 이름', description: '', kind: 'text', value: '', source: 'product' },
 ]
 
 describe('WorkspaceFieldsEditor', () => {
@@ -111,7 +111,7 @@ describe('WorkspaceFieldsEditor', () => {
   })
 
   it('손상된 키는 새 값을 넣으면 복구 패치에 포함한다', async () => {
-    render([{ key: 'branding.mail_from_name', label: '메일 발신 이름', description: '', kind: 'text', value: '', source: '설정 손상', error: '제어 문자' }])
+    render([{ key: 'branding.mail_from_name', label: '메일 발신 이름', description: '', kind: 'text', value: '', source: 'corrupted', error: '제어 문자' }])
     expect(host.querySelector('[data-config-state="invalid"]')?.textContent).toContain('제어 문자')
     change('branding.mail_from_name', 'Team'); await click('저장')
     expect(update).toHaveBeenCalledWith('ws', expect.objectContaining({ set: { 'branding.mail_from_name': 'Team' } }))

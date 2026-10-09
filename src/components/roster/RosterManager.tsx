@@ -10,8 +10,10 @@ import { canGrantAdmin, emptyDraft, ERR_DUPLICATE_EMAIL, findRosterByEmail, vali
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import { RosterEditRow, RosterReadRow, ROSTER_COLUMNS } from './RosterRow'
 import type { TeamOption } from './TeamMultiSelect'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { DictKey } from '@/lib/i18n/dict'
 
-const ADMIN_ROW_LOCKED = '관리자 행은 워크스페이스 관리자만 수정할 수 있습니다.'
+const ADMIN_ROW_LOCKED_KEY = 'roster.adminRowLocked' satisfies DictKey
 
 /**
  * 명단 관리 — 행 = 사람(people), 한 사람에 여러 팀·대표 팀·역할 라벨·직함·권한(없음/멤버/관리자)·활성.
@@ -29,6 +31,7 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
   canEdit: boolean
 }) {
   const router = useRouter()
+  const { t: tr } = useLocale()
   const grantAdmin = canGrantAdmin(actorView)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -61,7 +64,7 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
   // 새로고침된 명단에서 방금 추가한 행의 저장된 이름이 입력과 다르면, 새 사람이 아니라 기존 인물이 올라왔다는 사실을 알린다.
   const addedRow = added ? rows.find(r => r.id === added.memberId) ?? null : null
   const existingNotice = addedRow && addedRow.name !== added?.typedName
-    ? `기존 인물 ${addedRow.name}을(를) 추가했습니다.` : null
+    ? tr('roster.addedExisting').replace('{name}', () => String(addedRow.name)) : null
 
   function selectExisting(m: RosterMember) {
     setHighlightId(m.id)
@@ -75,29 +78,29 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
         <table className="w-full min-w-[880px] text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
-              <th className="py-2 pr-3">이름</th>
-              <th className="py-2 pr-3">이메일</th>
-              <th className="py-2 pr-3">팀</th>
-              <th className="py-2 pr-3">역할 라벨</th>
-              <th className="py-2 pr-3">직함</th>
-              <th className="py-2 pr-3">권한</th>
-              <th className="py-2 pr-3">실효 역할</th>
-              <th className="py-2 pr-3">상태</th>
-              <th className="relative py-2"><span className="sr-only">작업</span></th>
+              <th className="py-2 pr-3">{tr('roster.col.name')}</th>
+              <th className="py-2 pr-3">{tr('roster.col.email')}</th>
+              <th className="py-2 pr-3">{tr('roster.col.teams')}</th>
+              <th className="py-2 pr-3">{tr('roster.col.roleLabel')}</th>
+              <th className="py-2 pr-3">{tr('roster.col.title')}</th>
+              <th className="py-2 pr-3">{tr('roster.col.access')}</th>
+              <th className="py-2 pr-3">{tr('roster.col.effective')}</th>
+              <th className="py-2 pr-3">{tr('roster.col.status')}</th>
+              <th className="relative py-2"><span className="sr-only">{tr('roster.col.actions')}</span></th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
                 <td colSpan={ROSTER_COLUMNS} className="py-4 text-center text-fg-muted">
-                  아직 명단에 사람이 없습니다.{canEdit ? ' 아래에서 추가하세요.' : ''}
+                  {tr('roster.empty')}{canEdit ? tr('roster.emptyAddHint') : ''}
                 </td>
               </tr>
             )}
             {rows.map(m => {
               if (!canEdit) return <RosterReadRow key={m.id} member={m} effective={effectiveRoles[m.id] ?? { kind: 'unknown' }} />
               // 관리자 행은 표시 필드까지 워크스페이스 관리자만 고친다(RPC PROJECT_MEMBER_ADMIN_SLOT·RLS admin_write_member_rows).
-              if (isAdminAccessRole(m.accessRole) && !grantAdmin) return <RosterReadRow key={m.id} member={m} effective={effectiveRoles[m.id] ?? { kind: 'unknown' }} note={ADMIN_ROW_LOCKED} />
+              if (isAdminAccessRole(m.accessRole) && !grantAdmin) return <RosterReadRow key={m.id} member={m} effective={effectiveRoles[m.id] ?? { kind: 'unknown' }} note={tr(ADMIN_ROW_LOCKED_KEY)} />
               return (
                 <RosterEditRow key={m.id} projectId={projectId} member={m} effective={effectiveRoles[m.id] ?? { kind: 'unknown' }} teamOptions={teamOptions}
                   canGrantAdmin={grantAdmin} highlighted={highlightId === m.id} onChanged={() => router.refresh()} />
@@ -108,19 +111,19 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
       </div>
 
       {canEdit && (
-        <form onSubmit={add} className="rounded-xl border border-border bg-surface-subtle/40 p-3" aria-label="사람 추가">
+        <form onSubmit={add} className="rounded-xl border border-border bg-surface-subtle/40 p-3" aria-label={tr('roster.add')}>
           <div className="flex flex-wrap items-center gap-2">
             <UserPlus className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
-            <input className="app-input h-8 w-40 text-xs" aria-label="추가할 사람 이름" placeholder="이름" value={name}
+            <input className="app-input h-8 w-40 text-xs" aria-label={tr('roster.add.nameLabel')} placeholder={tr('roster.col.name')} value={name}
               disabled={pending} onChange={e => { setName(e.target.value); setAddError(null); setDuplicate(null); setAdded(null) }} />
-            <input className="app-input h-8 w-56 text-xs" aria-label="추가할 사람 이메일(선택)" placeholder="이메일(선택 — 없으면 외부 인력)"
+            <input className="app-input h-8 w-56 text-xs" aria-label={tr('roster.add.emailLabel')} placeholder={tr('roster.add.emailPlaceholder')}
               value={email} disabled={pending} onChange={e => { setEmail(e.target.value); setAddError(null); setDuplicate(null); setAdded(null) }} />
             <button type="submit" className="btn btn-primary h-8 px-3 text-xs" disabled={pending}>
-              {pending ? '추가 중…' : '사람 추가'}
+              {pending ? tr('roster.adding') : tr('roster.add')}
             </button>
           </div>
           <p className="mt-2 text-xs text-fg-muted">
-            추가한 뒤 표에서 팀·역할·권한을 정합니다. 이메일 없이 추가한 사람은 계정이 없는 외부 인력이라 권한을 줄 수 없습니다.
+            {tr('roster.add.note')}
           </p>
           {existingNotice && <p role="status" className="mt-2 text-xs font-medium text-fg">{existingNotice}</p>}
           {addError && (
@@ -128,7 +131,7 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
               {addError}
               {duplicate && (
                 <button type="button" className="ml-2 underline" onClick={() => selectExisting(duplicate)}>
-                  {duplicate.name} 선택
+                  {duplicate.name}{tr('roster.selectSuffix')}
                 </button>
               )}
             </p>

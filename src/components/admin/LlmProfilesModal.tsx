@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { Eye, EyeOff, KeyRound, Pencil, PlugZap, Plus, Server, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { DictKey } from '@/lib/i18n/dict'
 import {
   createLlmProfile, deleteLlmProfile, listLlmProfiles, testLlmConnection, updateLlmProfile,
   type LlmProfileInput, type LlmProfileMasked,
@@ -13,10 +15,12 @@ type Provider = 'gemini' | 'openai'
 export interface LlmPreset {
   id: string
   label: string
+  /** 번역하는 이름(고유명이 아닌 프리셋) — 있으면 label 대신 사전에서 읽는다 */
+  labelKey?: DictKey
   provider: Provider
   /** 프리셋이 자동으로 채우는 base_url. 빈값 = 제공자 기본 엔드포인트(서버가 해석) */
   baseUrl: string
-  tokenHint: string
+  tokenHintKey: DictKey
 }
 
 /**
@@ -25,16 +29,17 @@ export interface LlmPreset {
  * 전부 openai + base_url 조합으로 커버한다.
  */
 export const LLM_PRESETS: readonly LlmPreset[] = [
-  { id: 'gemini', label: 'Google Gemini', provider: 'gemini', baseUrl: '', tokenHint: 'API 키 필요' },
-  { id: 'openai', label: 'OpenAI', provider: 'openai', baseUrl: '', tokenHint: 'API 키 필요' },
-  { id: 'ollama', label: 'Ollama', provider: 'openai', baseUrl: 'http://localhost:11434/v1', tokenHint: '키 불필요' },
-  { id: 'lmstudio', label: 'LM Studio', provider: 'openai', baseUrl: 'http://localhost:1234/v1', tokenHint: '키 불필요' },
-  { id: 'custom', label: '직접 입력 (OpenAI 호환)', provider: 'openai', baseUrl: '', tokenHint: '키 선택' },
+  { id: 'gemini', label: 'Google Gemini', provider: 'gemini', baseUrl: '', tokenHintKey: 'llm.preset.keyRequired' },
+  { id: 'openai', label: 'OpenAI', provider: 'openai', baseUrl: '', tokenHintKey: 'llm.preset.keyRequired' },
+  { id: 'ollama', label: 'Ollama', provider: 'openai', baseUrl: 'http://localhost:11434/v1', tokenHintKey: 'llm.preset.keyNotNeeded' },
+  { id: 'lmstudio', label: 'LM Studio', provider: 'openai', baseUrl: 'http://localhost:1234/v1', tokenHintKey: 'llm.preset.keyNotNeeded' },
+  { id: 'custom', label: 'custom', labelKey: 'llm.preset.custom', provider: 'openai', baseUrl: '', tokenHintKey: 'llm.preset.keyOptional' },
 ]
 
 /** 저장된 preset_id 의 표시 라벨. 미등록 값(수동 삽입 등)은 원문을 그대로 보여준다. */
-export function presetLabel(id: string): string {
-  return LLM_PRESETS.find((p) => p.id === id)?.label ?? id
+export function presetLabel(id: string, t: (k: DictKey) => string): string {
+  const p = LLM_PRESETS.find((x) => x.id === id)
+  return p ? (p.labelKey ? t(p.labelKey) : p.label) : id
 }
 
 type View = 'list' | 'form' | 'delete'
@@ -60,6 +65,7 @@ export function LlmProfilesModal({
   /** 열릴 때 곧바로 생성 폼으로 진입('＋ 새 프로필 만들기…' 경로) */
   startInCreate?: boolean
 }) {
+  const { t } = useLocale()
   const [view, setView] = useState<View>('list')
   const [editing, setEditing] = useState<LlmProfileMasked | null>(null)
   const [target, setTarget] = useState<LlmProfileMasked | null>(null) // 삭제 대상
@@ -139,8 +145,8 @@ export function LlmProfilesModal({
 
   function submitForm() {
     setError(null)
-    if (!name.trim()) { setError('프로필 이름을 입력하세요'); return }
-    if (!model.trim()) { setError('모델을 입력하세요'); return }
+    if (!name.trim()) { setError(t('llm.profile.err.name')); return }
+    if (!model.trim()) { setError(t('llm.profile.err.model')); return }
     const input = buildInput()
     startTransition(async () => {
       try {
@@ -150,7 +156,7 @@ export function LlmProfilesModal({
         if (listError) { setError(listError); return }
         setView('list')
       } catch {
-        setError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+        setError(t('wsAccounts.requestFailed'))
       }
     })
   }
@@ -170,7 +176,7 @@ export function LlmProfilesModal({
         })
         setTestResult({ ok: res.success, message: res.error })
       } catch {
-        setTestResult({ ok: false, message: '요청 처리 중 오류가 발생했습니다.' })
+        setTestResult({ ok: false, message: t('wsAccounts.requestFailedShort') })
       }
     })
   }
@@ -187,36 +193,36 @@ export function LlmProfilesModal({
         setTarget(null)
         setView('list')
       } catch {
-        setError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+        setError(t('wsAccounts.requestFailed'))
       }
     })
   }
 
-  const title = view === 'delete' ? '프로필 삭제' : view === 'form' ? (editing ? '프로필 편집' : '새 프로필') : 'LLM 프로필 관리'
+  const title = view === 'delete' ? t('llm.profile.deleteTitle') : view === 'form' ? (editing ? t('llm.profile.editTitle') : t('llm.profile.newTitle')) : t('llm.profile.manageTitle')
 
   // 삭제 확인은 별도 모달을 겹치지 않고 같은 모달의 뷰로 처리한다
   // (모달 중첩 시 앞 모달의 포커스 트랩이 Tab 을 다시 낚아채므로).
   const footer =
     view === 'delete' ? (
       <>
-        <button onClick={() => { setTarget(null); setView('list') }} className="btn btn-ghost" disabled={pending}>취소</button>
+        <button onClick={() => { setTarget(null); setView('list') }} className="btn btn-ghost" disabled={pending}>{t('common.cancel')}</button>
         <button
           onClick={confirmDelete}
           disabled={pending}
           className="btn bg-danger text-danger-fg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {pending ? '삭제 중…' : '삭제'}
+          {pending ? t('llm.profile.deleting') : t('common.delete')}
         </button>
       </>
     ) : view === 'form' ? (
       <>
-        <button onClick={() => setView('list')} className="btn btn-ghost" disabled={pending}>목록으로</button>
+        <button onClick={() => setView('list')} className="btn btn-ghost" disabled={pending}>{t('llm.profile.backToList')}</button>
         <button onClick={submitForm} className="btn btn-primary" disabled={pending}>
-          {pending ? '저장 중…' : editing ? '변경 저장' : '프로필 만들기'}
+          {pending ? t('llm.saving') : editing ? t('llm.profile.saveChanges') : t('llm.profile.create')}
         </button>
       </>
     ) : (
-      <button onClick={onClose} className="btn btn-ghost" disabled={pending}>닫기</button>
+      <button onClick={onClose} className="btn btn-ghost" disabled={pending}>{t('common.close')}</button>
     )
 
   return (
@@ -224,9 +230,9 @@ export function LlmProfilesModal({
       {view === 'list' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-fg-secondary">등록된 프로필 {profiles.length}개 — 활성 선택은 이 창을 닫은 뒤 저장해야 적용됩니다.</p>
+            <p className="text-sm text-fg-secondary">{t('llm.profile.count').replace('{n}', String(profiles.length))}</p>
             <button onClick={() => { resetForm(null); setView('form') }} className="btn btn-primary btn-sm shrink-0" disabled={pending}>
-              <Plus className="h-4 w-4" />새 프로필
+              <Plus className="h-4 w-4" />{t('llm.profile.newTitle')}
             </button>
           </div>
 
@@ -235,8 +241,8 @@ export function LlmProfilesModal({
           {profiles.length === 0 ? (
             <div className="panel-soft flex flex-col items-center gap-2 px-6 py-10 text-center">
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-action-soft text-action"><Server className="h-5 w-5" /></span>
-              <p className="text-sm font-semibold text-fg">등록된 프로필이 없습니다</p>
-              <p className="text-xs text-fg-secondary">Gemini·OpenAI·Ollama 등 접속 정보를 프로필로 저장해 두고 전환할 수 있습니다.</p>
+              <p className="text-sm font-semibold text-fg">{t('llm.profile.empty')}</p>
+              <p className="text-xs text-fg-secondary">{t('llm.profile.emptyDesc')}</p>
             </div>
           ) : (
             <ul className="divide-y divide-border rounded-2xl border border-border">
@@ -245,27 +251,27 @@ export function LlmProfilesModal({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-sm font-semibold text-fg">{p.name}</span>
-                      <span className="chip bg-surface-subtle text-fg-secondary">{presetLabel(p.preset_id)}</span>
+                      <span className="chip bg-surface-subtle text-fg-secondary">{presetLabel(p.preset_id, t)}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-secondary">
                       <span className="font-mono">{p.model}</span>
                       <span className="inline-flex items-center gap-1">
                         <KeyRound className="h-3 w-3" />
-                        {p.has_token ? <code className="font-mono">{p.auth_token_masked}</code> : <span className="text-fg-muted">키 없음</span>}
+                        {p.has_token ? <code className="font-mono">{p.auth_token_masked}</code> : <span className="text-fg-muted">{t('llm.profile.noKey')}</span>}
                       </span>
                       {p.base_url && <span className="truncate font-mono text-fg-muted">{p.base_url}</span>}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <button onClick={() => { resetForm(p); setView('form') }} className="btn btn-ghost btn-sm" disabled={pending}>
-                      <Pencil className="h-3.5 w-3.5" />편집
+                      <Pencil className="h-3.5 w-3.5" />{t('common.edit')}
                     </button>
                     <button
                       onClick={() => { setTarget(p); setError(null); setView('delete') }}
                       className="btn btn-ghost btn-sm text-danger"
                       disabled={pending}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />삭제
+                      <Trash2 className="h-3.5 w-3.5" />{t('common.delete')}
                     </button>
                   </div>
                 </li>
@@ -278,7 +284,7 @@ export function LlmProfilesModal({
       {view === 'delete' && (
         <div className="space-y-3">
           <p className="text-sm leading-6 text-fg-secondary">
-            <b className="text-fg">&apos;{target?.name}&apos;</b> 프로필을 삭제할까요? 이 프로필을 쓰는 설정은 해제됩니다.
+            <b className="text-fg">&apos;{target?.name}&apos;</b>{t('llm.profile.deleteConfirm')}
           </p>
           {error && <p ref={errorRef} role="alert" className="text-sm font-medium text-danger">{error}</p>}
         </div>
@@ -287,7 +293,7 @@ export function LlmProfilesModal({
       {view === 'form' && (
         <div className="space-y-4">
           <div>
-            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">프리셋</span>
+            <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('llm.profile.preset')}</span>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {LLM_PRESETS.map((p) => {
                 const active = p.id === presetId
@@ -301,30 +307,30 @@ export function LlmProfilesModal({
                       active ? 'border-action bg-action-soft text-action' : 'border-border bg-surface text-fg-secondary hover:border-border-input hover:text-fg'
                     }`}
                   >
-                    <span className="block text-[13px] font-semibold leading-tight">{p.label}</span>
-                    <span className="mt-0.5 block text-meta leading-4 opacity-80">{p.tokenHint}</span>
+                    <span className="block text-[13px] font-semibold leading-tight">{p.labelKey ? t(p.labelKey) : p.label}</span>
+                    <span className="mt-0.5 block text-meta leading-4 opacity-80">{t(p.tokenHintKey)}</span>
                   </button>
                 )
               })}
             </div>
           </div>
 
-          <Field label="이름 (필수)">
-            <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예) 사내 Gemini" />
+          <Field label={t('llm.profile.name')}>
+            <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('llm.profile.namePlaceholder')} />
           </Field>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="모델 (필수)">
+            <Field label={t('llm.profile.model')}>
               <input className="app-input font-mono" value={model} onChange={(e) => setModel(e.target.value)} placeholder="gemini-3.7-flash" />
             </Field>
-            <Field label="Base URL (선택)" hint="비우면 제공자 기본 엔드포인트를 사용합니다.">
+            <Field label={t('llm.profile.baseUrl')} hint={t('llm.profile.baseUrlHint')}>
               <input className="app-input font-mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="http://localhost:11434/v1" />
             </Field>
           </div>
 
           <Field
-            label="API 키"
-            hint={editing?.has_token ? `현재: ${editing.auth_token_masked} — 비워두면 기존 키 유지` : '키가 필요 없는 서버(Ollama·LM Studio)는 비워 두세요.'}
+            label={t('llm.profile.apiKey')}
+            hint={editing?.has_token ? t('llm.profile.keyKeepHint').replace('{mask}', () => String(editing.auth_token_masked)) : t('llm.profile.keyEmptyHint')}
           >
             <div className="relative">
               <input
@@ -338,7 +344,7 @@ export function LlmProfilesModal({
               <button
                 type="button"
                 onClick={() => setShowKey((v) => !v)}
-                aria-label={showKey ? 'API 키 숨기기' : 'API 키 표시'}
+                aria-label={showKey ? t('llm.profile.hideKey') : t('llm.profile.showKey')}
                 className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-fg-muted transition hover:text-fg"
               >
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -348,17 +354,17 @@ export function LlmProfilesModal({
 
           {/* 최대 입력 토큰은 런타임이 읽는 곳이 없어(프롬프트 크기 제어 미구현) 노출하지 않는다 —
               저장은 되는데 아무 효과가 없는 설정을 관리자에게 보여주지 않기 위함. 컬럼은 유지. */}
-          <Field label="최대 출력 토큰 (선택)" hint="비우면 모델 기본값(Gemini 4096)을 사용합니다.">
-            <input className="app-input" type="number" min={0} value={maxOut} onChange={(e) => setMaxOut(e.target.value)} placeholder="미지정" />
+          <Field label={t('llm.profile.maxTokens')} hint={t('llm.profile.maxTokensHint')}>
+            <input className="app-input" type="number" min={0} value={maxOut} onChange={(e) => setMaxOut(e.target.value)} placeholder={t('llm.profile.unset')} />
           </Field>
 
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" onClick={runTest} className="btn btn-ghost" disabled={pending || !model.trim()}>
-              <PlugZap className="h-4 w-4" />연결 테스트
+              <PlugZap className="h-4 w-4" />{t('llm.test')}
             </button>
             {testResult && (
               <p role="status" className={`min-w-0 flex-1 text-xs leading-5 ${testResult.ok ? 'text-success' : 'text-danger'}`}>
-                {testResult.ok ? '연결에 성공했습니다.' : `연결 실패 — ${testResult.message ?? '알 수 없는 오류'}`}
+                {testResult.ok ? t('llm.testOk') : t('llm.testFailed').replace('{message}', () => testResult.message ?? t('chat.cmd.unknownError'))}
               </p>
             )}
           </div>

@@ -7,15 +7,18 @@ import { AlertTriangle, LogIn, ShieldCheck, UserPlus } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { endSession } from '@/lib/auth/signOut'
 import { useToast } from '@/components/ui/Toast'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { DictKey } from '@/lib/i18n/dict'
 import {
   getInviteSessionState, redeemInvite, redeemInviteWithSignup, type InvitePreview,
 } from '@/app/actions/inviteRedeem'
 
-const E_INVALID_LINK = '만료되었거나 유효하지 않은 초대 링크입니다.'
+const E_INVALID_LINK_KEY = 'invite.err.invalidLink' satisfies DictKey
 // inviteRedeem.ts 의 E5 원문. 액션 모듈은 'use server' 라 async 함수 외에는 export 할 수 없어
 // 상수를 공유하지 못한다 — 문자열로 대조하므로 서버 문구를 바꾸면 여기도 함께 바꿀 것.
 const E_OTHER_ACCOUNT = '이 초대는 다른 이메일 주소를 위한 것입니다. 초대받은 계정으로 로그인해 주세요.'
-const E_SESSION_CHECK = '로그인 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+// 세션 판정 실패(네트워크 등)는 화면 언어를 따르는 사전 문구 — 상태에는 키를 담고 그릴 때 푼다(서버가 준 사유는 그대로 담긴다)
+const E_SESSION_CHECK_KEY = 'invite.err.sessionCheck' satisfies DictKey
 
 /** 서버가 내려주는 화면 분기용 세션 상태. 이메일 원문도 마스킹도 여기로 오지 않는다. */
 interface SessionState { authed: boolean; emailMatches: boolean }
@@ -39,6 +42,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  const { t } = useLocale()
   const [session, setSession] = useState<SessionState | null>(null)
   const [sessionError, setSessionError] = useState('')
   const [name, setName] = useState('')
@@ -64,7 +68,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
       })
       .catch((e) => {
         console.error('[invite] 세션 상태 확인 실패:', e instanceof Error ? e.message : e)
-        if (alive) setSessionError(E_SESSION_CHECK)
+        if (alive) setSessionError(E_SESSION_CHECK_KEY)
       })
     return () => { alive = false }
   }, [token, isActive])
@@ -75,7 +79,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
       try {
         await work()
       } catch {
-        setError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+        setError(t('wsAccounts.requestFailed'))
       } finally {
         setBusy(false)
       }
@@ -97,7 +101,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
       return
     }
     toast({
-      title: res.alreadyMember ? '이미 합류한 프로젝트입니다.' : '프로젝트에 합류했습니다.',
+      title: res.alreadyMember ? t('invite.alreadyJoined') : t('invite.joined'),
       variant: 'success',
     })
     router.push(`/p/${res.projectId}/dashboard`)
@@ -109,7 +113,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
     event.preventDefault()
     setError('')
     // 서버 왕복 전에 거른다 — 실패가 확실한 제출로 1회용 초대를 건드리지 않는다.
-    if (password !== confirmation) { setError('비밀번호가 일치하지 않습니다.'); return }
+    if (password !== confirmation) { setError(t('invite.err.mismatch')); return }
     run(async () => {
       const res = await redeemInviteWithSignup(token, { name, password, passwordConfirmation: confirmation })
       if (!res.ok) { setError(res.error); return }
@@ -118,11 +122,11 @@ export function InviteRedeemCard({ token, preview, loadError }: {
         .signInWithPassword({ email: res.email, password })
       if (signInError) {
         // 가입·합류는 이미 끝났다. 자동 로그인만 실패한 것이므로 로그인 화면으로 보낸다.
-        toast({ title: '가입이 완료됐습니다. 로그인 화면에서 로그인해 주세요.', variant: 'info' })
+        toast({ title: t('invite.signupDoneLogin'), variant: 'info' })
         router.push('/login')
         return
       }
-      toast({ title: '프로젝트에 합류했습니다.', variant: 'success' })
+      toast({ title: t('invite.joined'), variant: 'success' })
       router.push(`/p/${res.projectId}/dashboard`)
       router.refresh()
     })
@@ -136,7 +140,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
     run(async () => {
       const { error: signInError } = await createBrowserClient().auth
         .signInWithPassword({ email: email.trim(), password })
-      if (signInError) { setError('이메일 또는 비밀번호가 올바르지 않습니다.'); return }
+      if (signInError) { setError(t('login.err.credentials')); return }
       await join(true)
     })
   }
@@ -153,13 +157,13 @@ export function InviteRedeemCard({ token, preview, loadError }: {
             <AlertTriangle className="h-4.5 w-4.5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p role="alert" className="text-sm font-semibold text-fg">{loadError ?? E_INVALID_LINK}</p>
+            <p role="alert" className="text-sm font-semibold text-fg">{loadError ?? t(E_INVALID_LINK_KEY)}</p>
             <p className="mt-1 text-sm leading-6 text-fg-secondary">
-              초대 링크는 1회용입니다. 필요하면 프로젝트 관리자에게 다시 요청해 주세요.
+              {t('invite.oneTime')}
             </p>
           </div>
         </div>
-        <Link href="/login" className="btn btn-ghost mt-5 w-full">로그인 화면으로</Link>
+        <Link href="/login" className="btn btn-ghost mt-5 w-full">{t('invite.toLogin')}</Link>
       </div>
     )
   }
@@ -170,20 +174,20 @@ export function InviteRedeemCard({ token, preview, loadError }: {
 
   return (
     <div className="card p-6">
-      <p className="eyebrow">초대받은 프로젝트</p>
-      <h2 className="mt-2 text-lg font-semibold text-fg">{preview.projectName || '프로젝트'}</h2>
+      <p className="eyebrow">{t('invite.eyebrow')}</p>
+      <h2 className="mt-2 text-lg font-semibold text-fg">{preview.projectName || t('invite.projectFallback')}</h2>
       <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-        <dt className="text-fg-secondary">워크스페이스</dt><dd className="min-w-0 break-words text-fg">{preview.workspaceName ?? '—'}</dd>
-        <dt className="text-fg-secondary">프로젝트</dt><dd className="min-w-0 break-words text-fg">{preview.projectName || '프로젝트'}</dd>
-        <dt className="text-fg-secondary">받을 권한</dt><dd className="text-fg">{preview.accessRole === 'admin' ? '관리자' : preview.accessRole === 'member' ? '멤버' : '조회 전용'}</dd>
-        <dt className="text-fg-secondary">초대된 이메일</dt><dd className="min-w-0 break-words text-fg">{preview.maskedEmail}</dd>
+        <dt className="text-fg-secondary">{t('invite.workspace')}</dt><dd className="min-w-0 break-words text-fg">{preview.workspaceName ?? '—'}</dd>
+        <dt className="text-fg-secondary">{t('invite.project')}</dt><dd className="min-w-0 break-words text-fg">{preview.projectName || t('invite.projectFallback')}</dd>
+        <dt className="text-fg-secondary">{t('invite.accessLabel')}</dt><dd className="text-fg">{preview.accessRole === 'admin' ? t('roster.effective.admin') : preview.accessRole === 'member' ? t('roster.effective.member') : t('roster.effective.viewer')}</dd>
+        <dt className="text-fg-secondary">{t('invite.invitedEmail')}</dt><dd className="min-w-0 break-words text-fg">{preview.maskedEmail}</dd>
       </dl>
       {preview.projectDescription && (
         <p className="mt-1 text-sm leading-6 text-fg-secondary">{preview.projectDescription}</p>
       )}
       {preview.teamNames.length > 0 && (
         <p data-invite-teams className="mt-2 text-sm leading-6 text-fg-secondary">
-          합류하면 <span className="font-medium text-fg">{preview.teamNames.join(', ')}</span> 팀으로 명단에 오릅니다.
+          {t('invite.teamsBefore')}<span className="font-medium text-fg">{preview.teamNames.join(', ')}</span>{t('invite.teamsAfter')}
         </p>
       )}
 
@@ -191,17 +195,17 @@ export function InviteRedeemCard({ token, preview, loadError }: {
         {sessionError ? (
           /* 판정 실패 — 사유를 그대로 보여주고 폼은 띄우지 않는다(fail-closed) */
           <>
-            <p role="alert" className="text-sm font-medium text-danger">{sessionError}</p>
-            <Link href="/login" className="btn btn-ghost w-full">로그인 화면으로</Link>
+            <p role="alert" className="text-sm font-medium text-danger">{sessionError === E_SESSION_CHECK_KEY ? t(E_SESSION_CHECK_KEY) : sessionError}</p>
+            <Link href="/login" className="btn btn-ghost w-full">{t('invite.toLogin')}</Link>
           </>
         ) : !session ? (
-          <p className="text-sm text-fg-muted">로그인 상태를 확인하는 중입니다…</p>
+          <p className="text-sm text-fg-muted">{t('invite.checkingSession')}</p>
         ) : session.authed ? (
           session.emailMatches ? (
             /* 로그인 · 이메일 일치(서버 판정) */
             <>
               <p className="text-sm leading-6 text-fg-secondary">
-                <span className="font-medium text-fg">{preview.maskedEmail}</span> 계정으로 이 프로젝트에 합류합니다.
+                <span className="font-medium text-fg">{preview.maskedEmail}</span>{t('invite.joinAs')}
               </p>
               {errorLine}
               <button
@@ -211,17 +215,16 @@ export function InviteRedeemCard({ token, preview, loadError }: {
                 onClick={() => { setError(''); run(() => join()) }}
               >
                 <ShieldCheck className="h-4 w-4" />
-                {busy ? '처리 중…' : '합류하기'}
+                {busy ? t('invite.busy') : t('invite.join')}
               </button>
             </>
           ) : (
             /* 로그인 · 이메일 불일치(서버 판정) */
             <>
               <p role="alert" className="text-sm leading-6 text-fg-secondary">
-                이 초대는 <span className="font-medium text-fg">{preview.maskedEmail}</span> 님을 위한 것입니다.
-                해당 계정으로 로그인해 주세요.
+                {t('invite.otherBefore')}<span className="font-medium text-fg">{preview.maskedEmail}</span>{t('invite.otherAfter')}
               </p>
-              <Link href="/login" className="btn btn-ghost w-full">로그인 화면으로</Link>
+              <Link href="/login" className="btn btn-ghost w-full">{t('invite.toLogin')}</Link>
             </>
           )
         ) : preview.accountExists ? (
@@ -231,7 +234,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
                 이메일도 입력받는다. 대신 마스킹 힌트만 보여주고, 일치 판정은 서버(redeemInvite)에
                 맡긴다. 불일치면 join(true) 이 방금 만든 세션을 signOut 으로 되돌린다. */}
             <div>
-              <label htmlFor="invite-email" className="mb-1.5 block text-xs font-semibold text-fg-secondary">이메일</label>
+              <label htmlFor="invite-email" className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('login.email')}</label>
               <input
                 id="invite-email"
                 type="email"
@@ -241,10 +244,10 @@ export function InviteRedeemCard({ token, preview, loadError }: {
                 onChange={e => setEmail(e.target.value)}
                 required
               />
-              <p className="mt-1.5 text-xs text-fg-muted">초대받은 주소: {preview.maskedEmail}</p>
+              <p className="mt-1.5 text-xs text-fg-muted">{t('invite.invitedAddress')}{preview.maskedEmail}</p>
             </div>
             <div>
-              <label htmlFor="invite-password" className="mb-1.5 block text-xs font-semibold text-fg-secondary">비밀번호</label>
+              <label htmlFor="invite-password" className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('login.password')}</label>
               <input
                 id="invite-password"
                 type="password"
@@ -258,21 +261,21 @@ export function InviteRedeemCard({ token, preview, loadError }: {
             {errorLine}
             <button type="submit" className="btn btn-primary w-full" disabled={busy}>
               <LogIn className="h-4 w-4" />
-              {busy ? '처리 중…' : '로그인하고 합류하기'}
+              {busy ? t('invite.busy') : t('invite.signInAndJoin')}
             </button>
           </form>
         ) : (
           /* 비로그인 · 계정 없음 — 가입 후 합류. 이메일 입력란은 두지 않는다(설계 P1). */
           <form onSubmit={submitSignup} className="space-y-4">
             <div>
-              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">이메일</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('login.email')}</span>
               <p className="rounded-xl border border-border bg-surface-subtle px-3 py-2.5 text-sm text-fg-secondary">
                 {preview.maskedEmail}
               </p>
-              <p className="mt-1.5 text-xs text-fg-muted">초대에 지정된 주소로만 가입할 수 있습니다.</p>
+              <p className="mt-1.5 text-xs text-fg-muted">{t('invite.signupNote')}</p>
             </div>
             <div>
-              <label htmlFor="invite-name" className="mb-1.5 block text-xs font-semibold text-fg-secondary">이름</label>
+              <label htmlFor="invite-name" className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('invite.name')}</label>
               <input
                 id="invite-name"
                 type="text"
@@ -284,7 +287,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
               />
             </div>
             <div>
-              <label htmlFor="invite-new-password" className="mb-1.5 block text-xs font-semibold text-fg-secondary">비밀번호</label>
+              <label htmlFor="invite-new-password" className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('login.password')}</label>
               <input
                 id="invite-new-password"
                 type="password"
@@ -294,10 +297,10 @@ export function InviteRedeemCard({ token, preview, loadError }: {
                 onChange={e => setPassword(e.target.value)}
                 required
               />
-              <p className="mt-1.5 text-xs text-fg-muted">8자 이상</p>
+              <p className="mt-1.5 text-xs text-fg-muted">{t('invite.pwHint')}</p>
             </div>
             <div>
-              <label htmlFor="invite-password-confirm" className="mb-1.5 block text-xs font-semibold text-fg-secondary">비밀번호 확인</label>
+              <label htmlFor="invite-password-confirm" className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('invite.pwConfirm')}</label>
               <input
                 id="invite-password-confirm"
                 type="password"
@@ -311,7 +314,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
             {errorLine}
             <button type="submit" className="btn btn-primary w-full" disabled={busy}>
               <UserPlus className="h-4 w-4" />
-              {busy ? '처리 중…' : '가입하고 합류하기'}
+              {busy ? t('invite.busy') : t('invite.signupAndJoin')}
             </button>
           </form>
         )}

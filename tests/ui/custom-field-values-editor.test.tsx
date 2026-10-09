@@ -3,6 +3,10 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FieldDef } from '@/lib/domain/customFields'
+// 필드 문구는 사전에서 온다(locale prop) — 영어 표를 등록해 영어 글자를 그대로 단언한다
+import { registerEn } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+registerEn(EN)
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const h = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh }) }))

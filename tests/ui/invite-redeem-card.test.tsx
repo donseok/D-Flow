@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
 }))
 
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['login.email', 'login.password', 'login.err.credentials', 'wsAccounts.requestFailed'] }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
 }))

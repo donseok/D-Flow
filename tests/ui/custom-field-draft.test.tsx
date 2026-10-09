@@ -4,6 +4,10 @@ import { createRoot } from 'react-dom/client'
 import { expect, it, vi } from 'vitest'
 import { CustomFieldDraft } from '@/components/fields/CustomFieldDraft'
 import type { FieldDef } from '@/lib/domain/customFields'
+// 필드 문구는 사전에서 온다(locale prop) — 영어 표를 등록해 영어 글자를 그대로 단언한다
+import { registerEn } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+registerEn(EN)
 ;(globalThis as Record<string,unknown>).IS_REACT_ACT_ENVIRONMENT=true
 it('a parent form displays protected stored/default values without presenting an unsaved draft as stored after permission narrowing',()=>{
   const c=document.createElement('div');document.body.append(c);const root=createRoot(c)

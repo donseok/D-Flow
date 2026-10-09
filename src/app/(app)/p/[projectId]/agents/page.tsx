@@ -11,6 +11,7 @@ import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick } from '@/lib/settings/pick'
 import { levelDepthOf } from '@/lib/settings/projectConfig'
 import { getServerLocale } from '@/lib/i18n/server'
+import { translatorFor } from '@/lib/i18n/translate'
 import { getProjectRoster } from '@/lib/data/members'
 import { AgentHubView } from '@/components/agent-hub/AgentHubView'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
@@ -30,7 +31,7 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
   await requireModulePage({ projectId }, 'agents')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   // 조회 실패는 throw → Next 의 error 경계가 받는다. 빈 허브로 위장하지 않는다.
   const [hub, wbsRes, pc, roster, locale] = await Promise.all([
-    getAgentHub(projectId, { userId: actor.userId, isAdmin: isProjectAdmin(actor, projectId) }),
+    getAgentHub(projectId, { userId: actor.userId, isAdmin: isProjectAdmin(actor, projectId) }, undefined, translatorFor(await getServerLocale())),
     // 달력 손상(ConfigKeyError)은 결과로 받는다 — 허브(킬스위치·승인 큐·위임)는 그리고 상세 패널 자리에만 사유(FN-8, A-4 리뷰 N3).
     // 그 밖의 실패(조회 실패·팀 원천)는 던진다 — error 경계(빈 허브로 위장하지 않는다)
     getComputedWbs(projectId).then(

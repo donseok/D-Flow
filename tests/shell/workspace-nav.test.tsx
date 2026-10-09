@@ -1,6 +1,6 @@
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['pages.accounts.projectsFailed'] }))
 import { WorkspaceNav } from '@/components/app/WorkspaceNav'
 import { ProjectNav } from '@/components/app/ProjectNav'
 import { navFor } from '@/lib/nav/registry'

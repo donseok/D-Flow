@@ -10,15 +10,17 @@ import { getWorkspacePrefs } from '@/app/actions/preferences'
 import { NoWorkspaceView } from '@/components/workspace/NoWorkspaceView'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { getServerLocale } from '@/lib/i18n/server'
+import { t } from '@/lib/i18n/dict'
 
 /** 루트 리졸버(D44, §5.3) — 현재 워크스페이스(쿠키 → 첫 소속)의 시작 화면으로. 소속 0 은 안내, 조회 오류는 오류 화면(위장 금지) */
 export default async function Root() {
   const [cur, { actor }] = await Promise.all([readCurrentWorkspace(), getActorViewState()])
   if (!cur.ok) {
+    const locale = await getServerLocale()
     return (
       <main className="mx-auto flex min-h-dvh max-w-[560px] flex-col justify-center gap-4 px-4">
         <h1 className="text-title text-fg">{BRAND.productName}</h1>
-        <StatusMessage kind="partial_error" blocking title="워크스페이스 정보를 불러오지 못했습니다" detail="잠시 뒤 새로고침하세요. 계속되면 관리자에게 알려 주세요." />
+        <StatusMessage kind="partial_error" blocking title={t(locale, 'root.wsLoadFailed')} detail={t(locale, 'root.wsLoadFailedDetail')} />
       </main>
     )
   }

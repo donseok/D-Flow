@@ -14,6 +14,7 @@ import { isProjectAdmin, isWorkspaceAdmin } from '@/lib/domain/authz'
 import { wsHref } from '@/lib/workspace/paths'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
+import { translatorFor } from '@/lib/i18n/translate'
 import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { StatusMessage } from '@/components/ui/StatusMessage'
@@ -22,7 +23,8 @@ import { WidgetSlotView, safe, type HomeTab, type WidgetCtx, type WidgetData } f
 import { HiddenWidgetsProvider } from '@/components/portal/HiddenWidgetsProvider'
 import { ShowHiddenWidgets } from '@/components/portal/ShowHiddenWidgets'
 
-export const metadata = { title: '홈' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '홈') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.home') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 const TAB_KINDS: Record<HomeTab, MyWorkKind[] | undefined> = { all: undefined, mine: ['wbs', 'issue'], review: ['approval'] }
 
 /**
@@ -60,7 +62,7 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
     }),
     getWorkspacePrefs(ws.id, { strict: true }).catch(() => null),
     workspaceModuleSets(ws.id, actor),
-    getPortalSummary(ws.id, actor, { now }),
+    getPortalSummary(ws.id, actor, { now, t: translatorFor(locale) }),
   ])
   // 검토자(W11·R9 ①) — 합집합을 못 읽으면 관리자 여부는 '모름'(null). 검토 대기 수는 요약과 같은 원천(왕복이 늘지 않는다)
   const adminOfAgentsProject = mods.ok ? [...mods.sets].some(([pid, s]) => s.has('agents') && isProjectAdmin(actor, pid)) : null
@@ -71,7 +73,7 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
   const want = new Set([...slots.main, ...slots.side].filter((s) => s.state === 'show').map((s) => s.id))
   const data: WidgetData = {}                                                     // 보일 위젯의 로더만 — 꺼진·숨긴·판정 못 한 위젯의 원천은 읽지 않는다
   if (want.has('my_work')) data.my_work = safe(getMyWork(ws.id, actor, { kinds: TAB_KINDS[tab], limit: 20, now }), t(locale, 'portal.widget.my_work'), locale)
-  if (want.has('projects')) data.projects = safe(getProjectRows(ws.id, actor, { status: 'active', limit: 20, now }), t(locale, 'portal.widget.projects'), locale)
+  if (want.has('projects')) data.projects = safe(getProjectRows(ws.id, actor, { status: 'active', limit: 20, now, t: translatorFor(locale) }), t(locale, 'portal.widget.projects'), locale)
   if (want.has('review')) data.review = safe(getReviewRows(ws.id, actor, { limit: 20, now }), t(locale, 'portal.widget.review'), locale)
   if (want.has('upcoming')) data.upcoming = safe(getUpcomingMeetings(ws.id, actor, { limit: 5, now }), t(locale, 'portal.widget.upcoming'), locale)
   if (want.has('recent_docs')) data.recent_docs = safe(getRecentDocuments(ws.id, actor, { limit: 5 }), t(locale, 'portal.widget.recent_docs'), locale)

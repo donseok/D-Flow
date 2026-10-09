@@ -93,7 +93,7 @@ export function NewProjectModal({
       setLevels(result.levelLabels.join(', '))
       setSourceReady(true)
     } catch {
-      if (request === sourceRequest.current) setError('복사 원본 설정을 불러오지 못했습니다.')
+      if (request === sourceRequest.current) setError(t('home.newProject.copySourceFailed'))
     }
   }
 
@@ -181,25 +181,25 @@ export function NewProjectModal({
         }
       >
         <div className="space-y-4">
-          {workspaceName && <p className="text-xs text-fg-secondary">만들 워크스페이스: <strong className="text-fg">{workspaceName}</strong></p>}
+          {workspaceName && <p className="text-xs text-fg-secondary">{t('home.newProject.targetWorkspace')}<strong className="text-fg">{workspaceName}</strong></p>}
           <p className="text-sm leading-6 text-fg-secondary">
             {t('home.newProjectDesc')}
           </p>
 
           {copyCandidates.length > 0 && <fieldset className="space-y-2">
-            <legend className="text-xs font-semibold text-fg-secondary">시작 방법</legend>
+            <legend className="text-xs font-semibold text-fg-secondary">{t('home.newProject.startMode')}</legend>
             <div className="flex flex-wrap gap-4 text-sm text-fg">
-              <label className="flex items-center gap-2"><input type="radio" name="project-start-mode" checked={mode === 'blank'} onChange={() => chooseMode('blank')} />빈 값으로 시작</label>
-              <label className="flex items-center gap-2"><input type="radio" name="project-start-mode" checked={mode === 'copy'} onChange={() => chooseMode('copy')} />기존 프로젝트에서 복사</label>
+              <label className="flex items-center gap-2"><input type="radio" name="project-start-mode" checked={mode === 'blank'} onChange={() => chooseMode('blank')} />{t('home.newProject.startEmpty')}</label>
+              <label className="flex items-center gap-2"><input type="radio" name="project-start-mode" checked={mode === 'copy'} onChange={() => chooseMode('copy')} />{t('home.newProject.startCopy')}</label>
             </div>
           </fieldset>}
           {mode === 'copy' && <div className="space-y-2">
-            <label className="block text-xs font-semibold text-fg-secondary" htmlFor="copy-source-project">복사 원본 프로젝트</label>
+            <label className="block text-xs font-semibold text-fg-secondary" htmlFor="copy-source-project">{t('home.newProject.copySource')}</label>
             <select id="copy-source-project" className="app-input" value={copyFromProjectId} onChange={event => void chooseSource(event.target.value)}>
-              <option value="">프로젝트를 선택하세요</option>
+              <option value="">{t('home.newProject.selectProject')}</option>
               {copyCandidates.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
-            <p className="text-xs leading-5 text-fg-secondary">복사합니다: 설정 값·팀·업무영역. 복사하지 않습니다: 멤버·WBS·회의록·이슈.</p>
+            <p className="text-xs leading-5 text-fg-secondary">{t('home.newProject.copyNote')}</p>
           </div>}
 
           <label className="block">

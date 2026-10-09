@@ -8,6 +8,7 @@ import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
 import { customFieldErrorText } from '@/components/fields/CustomFieldValuesEditor'
 import { formatCustomValue, type CustomValues, type FieldDef, type FieldValue } from '@/lib/domain/customFields'
 import { parseCustomValues, validateCustomValues } from '@/lib/domain/customFieldValues'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
 
 /** 셀 안에서 고칠 수 있는 유형 — 한 줄 입력으로 끝나는 것만. 여러 줄·다중 선택은 행 높이에 들어가지 않아 상세 패널에서 고친다 */
@@ -47,6 +48,7 @@ export function WbsCustomFieldCell({
    *  onClosed: 키보드로 편집기가 닫힌 뒤 포커스가 갈 곳(Enter = 아래, Tab = 오른쪽, Shift+Tab = 왼쪽, Esc·비교 = 그 칸). 없으면 종전의 단독 버튼 칸 */
   grid?: { colIndex: number; onClosed: (move: 'down' | 'right' | 'left' | 'self') => void }
 }) {
+  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const router = useRouter()
   // 문구는 필드 범위의 locale(prop)로 읽는다 — 셀의 값 서식(format)과 같은 말이 되게
   const tr = (k: DictKey) => translate(locale, k)
@@ -111,7 +113,7 @@ export function WbsCustomFieldCell({
     if (!checked.ok) {
       afterClose.current = null   // 편집기에 남는다 — 뒤의 blur 닫힘이 포커스를 옮기지 않게
       setInvalid(true)
-      onError(`${def.label}: ${customFieldErrorText(checked.errors[def.key] ?? Object.values(checked.errors)[0], locale === 'ko')}`)
+      onError(`${def.label}: ${customFieldErrorText(checked.errors[def.key] ?? Object.values(checked.errors)[0], locale)}`)
       return
     }
     const applied = (values: CustomValues) => { mark('saved'); setSaved({ from: signature, values }); close(); router.refresh() }

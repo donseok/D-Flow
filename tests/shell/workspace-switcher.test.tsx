@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from './_dom'
 const h = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['nav.workspace'] }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: h.push, refresh: vi.fn() }) }))
 import { WorkspaceSwitcher } from '@/components/app/WorkspaceSwitcher'
 

@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from './_dom'
 const h = vi.hoisted(() => ({ signOut: vi.fn(async () => {}) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }))
 vi.mock('@/components/account/ThemeRadioGroup', () => ({ ThemeRadioGroup: () => <div data-theme-radio /> }))
 vi.mock('@/lib/auth/signOut', () => ({ signOutAndClear: h.signOut }))

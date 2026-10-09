@@ -264,7 +264,7 @@ export const settingsUiEn: Record<keyof typeof settingsUiKo, string> = {
   'settings.areas.saved': 'Area \'{code}\' saved.',
   'settings.areas.rowsAdded': 'Added a row for this area to {rowsAdded} weekly sheets from this week on.',
   'settings.areas.count': '{label}: {n}',
-  'settings.areas.emptyLead': '{empty}',
+  'settings.areas.emptyLead': 'No {label} yet. {empty}',
   'settings.areas.newOf': 'New {label}',
   'settings.areas.codeRule': '· 1–8 uppercase letters or digits',
   'settings.areas.codeLocked': 'The code cannot be changed. Create a new area and leave the old one inactive.',

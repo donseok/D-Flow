@@ -364,13 +364,16 @@ describe('streamedErrorDigests — 실측 화면(2026-09-26 로컬 캡처)', () 
 
 describe('PAGE_MARKERS·거부 문구 — 앱 원본과의 드리프트', () => {
   it('문구 표식이 원본 컴포넌트에 그대로 있다', () => {
+    // 문구는 사전으로 옮겼다 — 컴포넌트가 그 키를 그리고, 키의 한국어 문구가 표식과 같다
     const src = {
-      degraded: 'src/components/app/DegradedNotice.tsx',
-      'error-boundary': 'src/components/app/ScopeError.tsx',
-    } as Record<string, string>
+      degraded: ['src/components/app/DegradedNotice.tsx', 'shell.degraded.title'],
+      'error-boundary': ['src/components/app/ScopeError.tsx', 'error.title'],
+    } as Record<string, [string, string]>
     for (const [name, marker] of PAGE_MARKERS) {
       if (name === 'next-error') continue
-      expect(readFileSync(src[name], 'utf8')).toContain(marker)
+      const [file, key] = src[name]
+      expect(readFileSync(file, 'utf8')).toContain(`t('${key}')`)
+      expect((KO as Record<string, string>)[key]).toBe(marker)
     }
     // 오류 경계 넷(셸 없는 전체 + 범위 셋 — 과제 31)이 모두 그 표지를 그리는 ScopeError 를 쓴다
     for (const f of ['src/app/(app)/error.tsx', 'src/app/(app)/w/[slug]/error.tsx', 'src/app/(app)/p/[projectId]/error.tsx', 'src/app/(app)/(global)/error.tsx']) {
@@ -1052,6 +1055,7 @@ import { parseNotifyPolicy } from '@/lib/settings/defs/notify'
 import { buildSecurityHeaders } from '@/lib/http/securityHeaders'
 import { checkWorkspaceCreate } from '@/lib/workspace/createInput'
 import { commonKo } from '@/lib/i18n/dict/common'
+import { KO } from '@/lib/i18n/dict/ko'
 import { minutesKo } from '@/lib/i18n/dict/minutes'
 
 describe('재점검 보강 — 순수 조각', () => {

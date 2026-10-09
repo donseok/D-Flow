@@ -177,7 +177,7 @@ export function PortfolioTable({ rows, leadersDegraded, locale }: {
                     </span>
                   </td>
                   <td className="px-2 py-2.5">
-                    <Link href={`/p/${row.projectId}/dashboard`} aria-label={`${row.name} 대시보드`}
+                    <Link href={`/p/${row.projectId}/dashboard`} aria-label={tr('pf.row.dashboardLink').replace('{name}', () => row.name)}
                       className="text-fg-muted transition hover:text-action">
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Link>

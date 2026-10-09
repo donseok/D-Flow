@@ -39,7 +39,7 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
   const navPath = p.scope === 'global' && !activeId ? '' : pathname
   const item = activeId ? p.groups.flatMap((g) => g.items).find((i) => i.id === activeId) : undefined
   const screenName = item ? (typeof item.label === 'string' ? item.label : t(item.label.key)) : null
-  const projectName = p.project ? p.project.name || '프로젝트' : null
+  const projectName = p.project ? p.project.name || t('nav.project') : null
   const wsSwitcher = known ? <WorkspaceSwitcher current={p.workspace} workspaces={p.workspaces} viewingAsPlatformAdmin={p.viewingAsPlatformAdmin} /> : null
   const projectSwitcher = p.scope === 'project' && known
     ? <ProjectSwitcher currentProjectId={p.project?.id ?? null} projects={p.projects} favoriteIds={p.favoriteIds} recentIds={p.recentIds} projectsFailed={p.projectsFailed} />
@@ -71,8 +71,8 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
           {(p.degraded || p.projectsFailed) && <div className="shrink-0"><DegradedNotice actorFailed={p.degraded} projectsFailed={p.projectsFailed} /></div>}
           {p.configDegraded && (
             <div data-config-degraded className="mb-3 shrink-0 rounded-(--radius-panel) border border-border bg-surface px-3">
-              <StatusMessage kind="partial_error" blocking compact title="설정을 불러오지 못해 메뉴 일부를 숨겼습니다."
-                action={p.canEditSettings && known ? { label: '설정 열기', href: wsHref(p.workspace.slug, 'settings') } : undefined} />
+              <StatusMessage kind="partial_error" blocking compact title={t('shell.configDegraded')}
+                action={p.canEditSettings && known ? { label: t('shell.openSettings'), href: wsHref(p.workspace.slug, 'settings') } : undefined} />
             </div>
           )}
           {children}

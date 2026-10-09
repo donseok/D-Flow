@@ -3,7 +3,7 @@
 // (TOUCH_TARGET — 투명 ::before, size-11 = 44px). 닫기·햄버거가 그 클래스를 빠뜨리면 34·32·28px 로 돌아간다.
 import { describe, expect, it, vi } from 'vitest'
 import { render } from '../shell/_dom'
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale())
 import { TOUCH_TARGET } from '@/components/ui/touchTarget'
 import { IconButton } from '@/components/ui/IconButton'
 import { Modal, ModalCloseButton } from '@/components/ui/Modal'

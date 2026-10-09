@@ -16,10 +16,12 @@ import { ProjectCards } from '@/components/portal/ProjectCards'
 import { ProjectsToolbar } from '@/components/portal/ProjectsToolbar'
 import { wsHref } from '@/lib/workspace/paths'
 import { getServerLocale } from '@/lib/i18n/server'
+import { translatorFor } from '@/lib/i18n/translate'
 import { t } from '@/lib/i18n/dict'
 import { buttonClass } from '@/components/ui/buttonStyles'
 const STATUSES = ['ready', 'active', 'overdue', 'done', 'unknown'] as const
-export const metadata = { title: '전체 프로젝트' }
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '전체 프로젝트') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.allProjects') } }
 export default async function ProjectsPage({ params, searchParams }: {
   params: Promise<{ slug: string }>; searchParams: Promise<{ q?: string; status?: string; fav?: string; cursor?: string; new?: string }>
 }) {
@@ -35,7 +37,7 @@ export default async function ProjectsPage({ params, searchParams }: {
   const status = (STATUSES as readonly string[]).includes(sp.status ?? '') ? sp.status as (typeof STATUSES)[number] : undefined
   const q = sp.q?.trim() || undefined, favoritesOnly = sp.fav === '1'
   const [res, acc, wsPrefs] = await Promise.all([
-    getProjectRows(ws.id, actor, { q, status, favoritesOnly, cursor: sp.cursor ?? null, limit: 50 }),
+    getProjectRows(ws.id, actor, { q, status, favoritesOnly, cursor: sp.cursor ?? null, limit: 50, t: translatorFor(locale) }),
     getAccountPrefs(),
     getWorkspacePrefs(ws.id, { strict: true }).catch((e: unknown) => { console.error('[projects] 즐겨찾기 조회 실패', e); return null }),
   ])

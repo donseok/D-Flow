@@ -32,13 +32,13 @@ export function WorkspaceNav({ groups, pathname, slug, projects, favoriteIds, re
   const rec = pick(recentIds).filter((r) => !fav.some((f) => f.id === r.id)).slice(0, RECENT_MAX)
   const shortcuts = collapsed !== true && (fav.length > 0 || rec.length > 0 || canCreateProject || projectsFailed) ? (
     <div className="mt-3 space-y-0.5 border-t border-border pt-3">
-      {projectsFailed && <p data-projects-failed role="status" className="px-3 py-1.5 text-meta text-danger">프로젝트 목록을 불러오지 못했습니다</p>}
+      {projectsFailed && <p data-projects-failed role="status" className="px-3 py-1.5 text-meta text-danger">{t('pages.accounts.projectsFailed')}</p>}
       {fav.map((p) => <Link key={p.id} data-fav-project href={`/p/${encodeURIComponent(p.id)}/dashboard`} className={ROW}>{p.name}</Link>)}
       {rec.map((p) => <Link key={p.id} data-recent-project href={`/p/${encodeURIComponent(p.id)}/dashboard`} className={ROW}>{p.name}</Link>)}
-      <Link href={wsHref(slug, 'projects')} className="block px-3 py-1.5 text-meta font-semibold text-action hover:underline">전체 보기</Link>
+      <Link href={wsHref(slug, 'projects')} className="block px-3 py-1.5 text-meta font-semibold text-action hover:underline">{t('common.viewAll')}</Link>
       {canCreateProject && (
         <Link href={wsHref(slug, 'projects', { new: '1' })} className="flex items-center gap-1.5 px-3 py-1.5 text-meta font-semibold text-action hover:underline">
-          <Plus size={14} aria-hidden /> 새 프로젝트
+          <Plus size={14} aria-hidden /> {t('common.newProject')}
         </Link>
       )}
     </div>

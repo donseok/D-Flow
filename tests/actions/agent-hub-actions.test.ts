@@ -103,12 +103,12 @@ describe('refreshAgentHub', () => {
   it('멤버 → getAgentHub(projectId, {userId, isAdmin}) 결과', async () => {
     const r = await refreshAgentHub(P1)
     expect(r).toEqual({ ok: true, hub: HUB })
-    expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'member-1', isAdmin: false })
+    expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'member-1', isAdmin: false }, undefined, expect.any(Function))
   })
   it('관리자면 isAdmin=true 로 넘긴다', async () => {
     mocks.requireProjectMember.mockResolvedValue(ADMIN)
     await refreshAgentHub(P1)
-    expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'admin-1', isAdmin: true })
+    expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'admin-1', isAdmin: true }, undefined, expect.any(Function))
   })
   it('가드 거부 → 오류 그대로, 조회 없음', async () => {
     mocks.requireProjectMember.mockResolvedValue(DENIED)
@@ -137,7 +137,7 @@ describe('applyHubDelegations — 묶음 1건: 가드 1회 → 항목별 applyDe
     expect(mocks.applyDelegation).toHaveBeenCalledTimes(3)
     expect(mocks.applyDelegation.mock.calls[0][1]).toMatchObject({ itemId: I(1), projectId: P1, delegated: true, actorUserId: 'admin-1', isAdmin: true })
     expect(mocks.applyDelegation.mock.calls[2][1]).toMatchObject({ itemId: I(3), delegated: false })
-    expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'admin-1', isAdmin: true })
+    expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'admin-1', isAdmin: true }, undefined, expect.any(Function))
     // 관리자는 로스터 판정을 하지 않는다.
     expect(mocks.myMemberIds).not.toHaveBeenCalled()
   })
@@ -222,7 +222,7 @@ describe('runHubProcessOp — 멤버 이상 가드 → 이 프로젝트 것인�
     fakeAdmin({ orders: ORDERS })
     expect(await runHubProcessOp(P1, { kind: 'approve', orderId: O(1), expectedReportId: R1 })).toEqual({ ok: true, hub: HUB })
     expect(mocks.approve).toHaveBeenCalledWith(O(1), R1)
-    expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'admin-1', isAdmin: true })
+    expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'admin-1', isAdmin: true }, undefined, expect.any(Function))
     await runHubProcessOp(P1, { kind: 'reject', orderId: O(1), note: '다시', expectedReportId: R1 })
     expect(mocks.reject).toHaveBeenCalledWith(O(1), '다시', R1)
     // 보고가 없는 주문(null)도 그대로 넘긴다 — 대조는 내부 액션이 한다.
@@ -398,7 +398,7 @@ describe('runHubProcessOp — 멤버 이상 가드 → 이 프로젝트 것인�
       fakeAdmin({ orders: ORDERS })
       expect(await runHubProcessOp(P1, { kind: 'reject', orderId: O(1), note: '다시', expectedReportId: R1 })).toEqual({ ok: true, hub: HUB })
       expect(mocks.reject).toHaveBeenCalledWith(O(1), '다시', R1)
-      expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'member-1', isAdmin: false })
+      expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'member-1', isAdmin: false }, undefined, expect.any(Function))
     })
     it('서브트리 관리자가 아닌 멤버의 중단은 여기서 막는다 — 내부 액션·재조회 없음', async () => {
       fakeAdmin({ orders: { [O(1)]: { project_id: P1, status: 'claimed', wbs_item_id: I(1) } } })
@@ -433,7 +433,7 @@ describe('runHubProcessOp — 멤버 이상 가드 → 이 프로젝트 것인�
       expect(mocks.isSubtreeManager).toHaveBeenCalledWith(
         expect.anything(), { itemId: I(1), projectId: P1, myMemberIds: ['anc-member'] },
       )
-      expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'member-1', isAdmin: false })
+      expect(mocks.getAgentHub).toHaveBeenCalledWith(P1, { userId: 'member-1', isAdmin: false }, undefined, expect.any(Function))
     })
     it('멤버의 승인 취소·재작업도 내부 액션으로 넘어간다(자격 판정은 loadOrderForReview)', async () => {
       fakeAdmin({ orders: { [O(1)]: { project_id: P1, status: 'approved', wbs_item_id: I(1) } } })

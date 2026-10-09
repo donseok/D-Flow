@@ -9,6 +9,7 @@ import { AccountMenu, type ShellIdentity } from './AccountMenu'
 import { SyncStatus } from '@/components/ui/SyncStatus'
 import { GlobalSearchDialog, type SearchNav } from '@/components/search/GlobalSearchDialog'
 import { TOUCH_TARGET } from '@/components/ui/touchTarget'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 /**
  * 전역 바(★10, 개정 §5.4.1·§5.4.3) — 높이 48·전체 폭·아래 1px 경계·그림자 없음. 가운데는 ⌘K 제목 검색 슬롯(SPU2). 티커는 없다(D28).
@@ -53,6 +54,7 @@ export function GlobalBar({
   /** 검색 대화상자의 메뉴 — 사이드 내비와 같은 해석 결과(navigation.menu). 없으면 메뉴 없이 제목 검색만 */
   searchNav?: SearchNav
 }) {
+  const { t } = useLocale()
   const [searchOpen, setSearchOpen] = useState(false)
   const scopeName = crumbs.project?.name ?? crumbs.workspace?.name ?? null
   const canSearch = !!workspaceId
@@ -76,15 +78,15 @@ export function GlobalBar({
     (crumbs.project?.href ? crumbs.project.href.replace(/^\/p\//, '').split('/')[0] : undefined)
   return (
     <header className="relative z-(--z-shell) flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-3">
-      <button type="button" data-drawer-trigger onClick={onOpenDrawer} aria-label="메뉴 열기" className={`rounded-(--radius-control) p-2 hover:bg-surface-hover lg:hidden ${TOUCH_TARGET}`}><Menu size={18} aria-hidden /></button>
-      <Link href={homeHref} aria-label={`${brand.productName} 홈`} className="flex shrink-0 items-center">
+      <button type="button" data-drawer-trigger onClick={onOpenDrawer} aria-label={t('shell.bar.openMenu')} className={`rounded-(--radius-control) p-2 hover:bg-surface-hover lg:hidden ${TOUCH_TARGET}`}><Menu size={18} aria-hidden /></button>
+      <Link href={homeHref} aria-label={t('shell.bar.home').replace('{name}', () => brand.productName)} className="flex shrink-0 items-center">
         <span className="hidden lg:inline-flex"><BrandSlot brand={brand} compact={false} /></span>
         <span className="lg:hidden"><BrandSlot brand={brand} compact /></span>
       </Link>
       <div className="min-w-0 flex-1">
         <div className="hidden min-w-0 md:block"><ContextBreadcrumb {...crumbs} scope={scope} workspaceSlot={workspaceSwitcher} projectSlot={projectSwitcher} /></div>
         {scopeName && (
-          <button type="button" data-scope-button onClick={onOpenDrawer} aria-haspopup="dialog" aria-label={`${scopeName} — 메뉴 열기`}
+          <button type="button" data-scope-button onClick={onOpenDrawer} aria-haspopup="dialog" aria-label={t('shell.bar.scopeMenu').replace('{name}', () => scopeName)}
             className="flex min-w-0 max-w-full items-center gap-1 rounded-(--radius-control) px-2 py-1 text-control font-semibold text-fg hover:bg-surface-hover md:hidden">
             <span className="truncate">{scopeName}</span><ChevronDown size={14} aria-hidden className="shrink-0 text-fg-secondary" />
           </button>
@@ -95,15 +97,15 @@ export function GlobalBar({
           type="button"
           onClick={() => setSearchOpen(true)}
           className="flex items-center gap-2 rounded-(--radius-control) border border-border bg-surface px-2.5 py-1 text-control text-fg-secondary hover:bg-surface-hover hover:text-fg"
-          aria-label="전역 검색 (⌘K)"
+          aria-label={t('shell.bar.searchAria')}
         >
           <Search size={14} aria-hidden />
-          <span className="text-meta">제목 검색...</span>
+          <span className="text-meta">{t('shell.bar.searchHint')}</span>
           <kbd className="ml-1.5 rounded border border-border bg-surface-subtle px-1.5 py-0.5 text-[10px] font-mono text-fg-muted">⌘K</kbd>
         </button>
       </div>}
       {canSearch && (
-        <button type="button" data-search-mobile onClick={() => setSearchOpen(true)} aria-label="제목 검색"
+        <button type="button" data-search-mobile onClick={() => setSearchOpen(true)} aria-label={t('shell.bar.searchTitle')}
           className={`shrink-0 rounded-(--radius-control) p-2 text-fg-secondary hover:bg-surface-hover hover:text-fg sm:hidden ${TOUCH_TARGET}`}>
           <Search size={18} aria-hidden />
         </button>

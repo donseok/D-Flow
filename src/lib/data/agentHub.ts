@@ -1,6 +1,7 @@
 // 에이전트 허브 조회 — 서버 전용(service_role). 1차 4건 병렬 + 2차(감시자·살아 있는 주문의 완료 보고) 병렬.
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
 import { loadQueueApprovals } from '@/lib/agent/approvalState'
+import type { Translate } from '@/lib/i18n/translate'
 import { loadPredecessorGate, loadStageLabelsMap } from '@/lib/agent/predecessorGate'
 import { adminFor } from '@/lib/supabase/adminFor'
 import type { AdminClient } from '@/lib/minutes/externalApi'
@@ -76,9 +77,10 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
   return { project: project && { id: project.id, name: project.name }, agentProject, items, orders, reports, watchers, members, approvedItemIds, gate, queueApprovals, stageLabels: labelsMap.get(projectId) }
 }
 
-export async function getAgentHub(projectId: string, viewer: { userId: string; isAdmin: boolean }, nowMs = Date.now()): Promise<AgentHub> {
+/** t — 착수 대기 사유의 화면 언어(페이지·허브 액션이 넘긴다). 없으면 한국어 */
+export async function getAgentHub(projectId: string, viewer: { userId: string; isAdmin: boolean }, nowMs = Date.now(), t?: Translate): Promise<AgentHub> {
   // 호출부(페이지·허브 액션)가 requireProjectMember(projectId) 를 통과한 뒤다 — 조회는 전부 이 projectId 로 좁힌다.
   const { admin } = adminFor({ projectId })
   const rows = await fetchAgentHubRows(admin, projectId, nowMs)
-  return assembleAgentHub(rows, nowMs, { userId: viewer.userId, isAdmin: viewer.isAdmin })
+  return assembleAgentHub(rows, nowMs, { userId: viewer.userId, isAdmin: viewer.isAdmin }, t)
 }

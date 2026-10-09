@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from './_dom'
 const h = vi.hoisted(() => ({ push: vi.fn(), toast: vi.fn(), pathname: '/p/p1/issues', search: 'view=board&q=x' }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: h.push }), usePathname: () => h.pathname, useSearchParams: () => new URLSearchParams(h.search) }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['pages.accounts.projectsFailed', 'nav.project'] }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: h.toast }) }))
 import { ProjectCrumbSwitcher, ProjectSwitcher } from '@/components/app/ProjectSwitcher'
 

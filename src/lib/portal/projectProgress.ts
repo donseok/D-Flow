@@ -3,6 +3,7 @@
  * today = 기한 판정의 '오늘'(프로젝트 상태와 같은 워크스페이스 tz — 판정 R1). null 이면 기한 판정(다음 기한·지난 미완)을 하지 않고 완료·전체만 센다.
  */
 import type { ProjectLifecycleStatus } from '@/lib/domain/project-status'
+import { fill, koTranslate, type Translate } from '@/lib/i18n/translate'
 
 export interface ProgressRow { id: string; parentId: string | null; projectId: string; actualPct: number | null; plannedEnd: string | null }
 export interface ProjectProgress { hasWbs: boolean; allDone: boolean; done: number; total: number; nextDue: string | null; overdueOpen: number }
@@ -25,11 +26,11 @@ export function projectProgressMap(rows: readonly ProgressRow[], today: string |
 }
 
 /** 현황의 근거 한 줄(스펙 §6.1 projects 위젯) — 상태 칩 옆에 글로 둔다(색만으로 뜻을 전하지 않는다) */
-export function statusReason(status: ProjectLifecycleStatus, p: Pick<ProjectProgress, 'done' | 'total' | 'overdueOpen'> | null): string {
-  if (status === 'unknown') return '진척을 확인하지 못했습니다'
-  if (status === 'ready') return '시작 전'
-  if (status === 'done') return p ? `종료일 지남 · 완료 ${p.done}/${p.total}` : '종료일 지남 · WBS 없음'
-  if (status === 'overdue') return `종료일 지남 · 미완료 ${p ? p.total - p.done : 0}`
-  if (!p) return 'WBS 없음'
-  return p.overdueOpen > 0 ? `완료 ${p.done}/${p.total} · 기한 지난 작업 ${p.overdueOpen}` : `완료 ${p.done}/${p.total}`
+export function statusReason(status: ProjectLifecycleStatus, p: Pick<ProjectProgress, 'done' | 'total' | 'overdueOpen'> | null, t: Translate = koTranslate): string {
+  if (status === 'unknown') return t('portal.status.unknown')
+  if (status === 'ready') return t('portal.status.ready')
+  if (status === 'done') return p ? fill(t('portal.status.doneWithWbs'), { done: p.done, total: p.total }) : t('portal.status.doneNoWbs')
+  if (status === 'overdue') return fill(t('portal.status.overdue'), { n: p ? p.total - p.done : 0 })
+  if (!p) return t('portal.status.noWbs')
+  return p.overdueOpen > 0 ? fill(t('portal.status.activeOverdue'), { done: p.done, total: p.total, n: p.overdueOpen }) : fill(t('portal.status.active'), { done: p.done, total: p.total })
 }

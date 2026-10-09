@@ -9,7 +9,7 @@ import { Field } from '@/components/ui/Field'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import type { DictKey } from '@/lib/i18n/dict'
 import { NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
-import { MODULE_LABEL } from '@/lib/modules/labels'
+import { MODULE_LABEL_KEY } from '@/lib/modules/labels'
 import { checkWorkspaceCreate, splitDomainsInput, suggestedInviteDomain, type WorkspaceCreateField } from '@/lib/workspace/createInput'
 import { wsHref } from '@/lib/workspace/paths'
 
@@ -115,7 +115,7 @@ export function WorkspacesManager({ rows, accountsHref }: {
                       <td className="py-2.5 pr-3 text-right tabular-nums text-fg-secondary">{w.projectCount}</td>
                       <td className="py-2.5 pr-3 text-fg-muted">{w.createdAt.slice(0, 10)}</td>
                       <td className="py-2.5 pr-3 text-fg-secondary"
-                        title={w.allowedModules?.length ? w.allowedModules.map((m) => MODULE_LABEL[m]).join(', ') : undefined}>
+                        title={w.allowedModules?.length ? w.allowedModules.map((m) => t(MODULE_LABEL_KEY[m])).join(', ') : undefined}>
                         {moduleSummary(w.allowedModules)}
                       </td>
                       <td className="py-2.5 pr-3 text-right">
@@ -173,7 +173,7 @@ export function WorkspacesManager({ rows, accountsHref }: {
               {NON_CORE_MODULES.map((id) => (
                 <label key={id} className="flex min-h-9 items-center gap-2 text-sm text-fg">
                   <input type="checkbox" className="h-4 w-4" checked={modules.includes(id)} onChange={() => toggle(id)} />
-                  {MODULE_LABEL[id]}
+                  {t(MODULE_LABEL_KEY[id])}
                 </label>
               ))}
             </div>

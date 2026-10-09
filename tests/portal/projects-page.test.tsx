@@ -38,7 +38,7 @@ describe('/w/[slug]/projects v1(스펙 §6.2)', () => {
   })
   it('검색·상태·즐겨찾기만은 서버 쿼리로 로더에', async () => {
     await render({ q: 'ac%', status: 'overdue', fav: '1' })
-    expect(h.rows).toHaveBeenCalledWith(WS.id, member, { q: 'ac%', status: 'overdue', favoritesOnly: true, cursor: null, limit: 50 })
+    expect(h.rows).toHaveBeenCalledWith(WS.id, member, { q: 'ac%', status: 'overdue', favoritesOnly: true, cursor: null, limit: 50, t: expect.any(Function) })   // t — 현황 사유 한 줄의 화면 언어
   })
   it('모르는 상태 값은 무시한다', async () => {
     await render({ status: 'bogus' })

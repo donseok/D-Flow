@@ -11,7 +11,7 @@ const h = vi.hoisted(() => ({
 }))
 vi.mock('next/navigation', () => ({ usePathname: () => h.pathname, useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => `t:${k}`, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ fallback: (k) => `t:${k}` }))
 vi.mock('@/components/app/ShellStateProvider', () => ({ useShellState: () => ({ badges: h.badges }) }))
 vi.mock('@/components/chat/AssistantChat', () => ({ useAiRailButton: () => null }))
 vi.mock('@/components/app/GlobalBar', () => ({ GlobalBar: (p: unknown) => { h.globalBar(p); return <header data-global-bar /> } }))

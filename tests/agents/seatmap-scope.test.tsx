@@ -12,6 +12,8 @@ vi.mock('next/navigation', () => ({ redirect: h.redirect, notFound: vi.fn() }))
 vi.mock('@/components/agents/SeatmapView', () => ({ SeatmapView: () => null }))
 // 화면의 tz = 그 워크스페이스 달력(SP5 — merge 뒤 슬러그 워크스페이스)
 vi.mock('@/lib/calendar/viewZone', () => ({ viewTimezone: h.viewTimezone }))
+// 좌석표의 화면 문구(대기 사유)는 요청의 화면 언어를 따른다 — 페이지가 로캘을 읽어 로더에 번역 함수를 넘긴다
+vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 
 import AgentsPage from '@/app/(app)/w/[slug]/agents/page'
 import { makeActor, makeMemberActor } from '../fixtures/actor'
@@ -27,7 +29,7 @@ describe('/w/[slug]/agents — 그 워크스페이스 좌석표', () => {
     h.loadWorkspaceScope.mockResolvedValue({ ws: WS, actor, degraded: false, role: 'member' })
     await run()
     expect(h.requireModulePage).toHaveBeenCalledWith({ workspaceId: WS.id }, 'agents')
-    expect(h.getSeatmap).toHaveBeenCalledWith(actor, expect.any(Number), 'all', { workspaceId: WS.id })
+    expect(h.getSeatmap).toHaveBeenCalledWith(actor, expect.any(Number), 'all', { workspaceId: WS.id, t: expect.any(Function) })
     expect(h.viewTimezone).toHaveBeenCalledWith(WS.id)
   })
   it('소속이지만 역할 없음 → /w/<slug>(D7), service_role 로더 미호출', async () => {

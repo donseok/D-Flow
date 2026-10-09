@@ -1,6 +1,6 @@
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['search.scopeWorkspace'] }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }), usePathname: () => '/w/acme/minutes' }))
 vi.mock('@/components/app/NotificationBell', () => ({ NotificationBell: () => <span data-bell /> }))
 vi.mock('@/components/app/AccountMenu', () => ({ AccountMenu: () => <span data-account /> }))

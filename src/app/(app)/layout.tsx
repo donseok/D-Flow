@@ -7,6 +7,7 @@ import { ShellEnvProvider } from '@/components/app/ShellEnv'
 import { PrefsSync } from '@/components/app/PrefsSync'
 import { UsageTracker } from '@/components/app/UsageTracker'
 import { AssistantChat } from '@/components/chat/AssistantChat'
+import { serverTranslator } from '@/lib/i18n/server'
 
 /**
  * (app) 공급자 층(D2, 스펙 §5.4.1) — 셸(전역 바·내비·main)은 범위 레이아웃 셋(w/[slug]·p/[projectId]·(global))이 그린다.
@@ -23,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <ShellStateProvider>
               <PrefsSync server={prefs} />
               <UsageTracker />
-              <a href="#main-content" className="fixed left-4 top-3 z-(--z-skip) -translate-y-20 rounded-(--radius-control) bg-action px-4 py-2 text-sm font-semibold text-action-fg transition focus:translate-y-0">본문 바로가기</a>
+              <a href="#main-content" className="fixed left-4 top-3 z-(--z-skip) -translate-y-20 rounded-(--radius-control) bg-action px-4 py-2 text-sm font-semibold text-action-fg transition focus:translate-y-0">{(await serverTranslator())('shell.skipToMain')}</a>
               {children}
               <AssistantChat />
             </ShellStateProvider>

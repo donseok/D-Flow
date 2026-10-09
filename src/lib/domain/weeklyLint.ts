@@ -14,6 +14,7 @@
  *  들여쓰기 취급까지 같지는 않다 — 중복은 들여쓴 줄을 '딸린 줄'로 빼지만 체번은 예전부터 평면이다.
  *  (예외: 글머리 기호·번호 표기 통일만 보고서 겉모습 문제라 시트 전체 다수결을 따른다.) ── */
 
+import { fill, koTranslate, type Translate } from '@/lib/i18n/translate'
 import {
   CELL_FIELD, WEEKLY_CELL_KEYS, WEEKLY_CELL_LABEL,
   type WeeklyCellEdit, type WeeklyCellKey, type WeeklyCells,
@@ -130,10 +131,10 @@ function tidyBlankLines(lines: readonly string[]): { kept: string[]; removed: nu
 }
 
 /** 지울 자리 표기 — 한 행 안이면 몇 번째 줄인지까지, 여러 행에 걸치면 행 수까지만. */
-function victimsWhere(victims: readonly { rowId: string; line: number }[]): string {
+function victimsWhere(victims: readonly { rowId: string; line: number }[], t: Translate): string {
   const rows = new Set(victims.map(v => v.rowId))
-  if (rows.size > 1) return `${rows.size}개 행에서 ${victims.length}줄`
-  return `${victims.map(v => v.line + 1).join('·')}번째 줄`
+  if (rows.size > 1) return fill(t('weekly.lint.where.rowsLines'), { rows: rows.size, n: victims.length })
+  return fill(t('weekly.lint.where.lines'), { list: victims.map(v => v.line + 1).join('·') })
 }
 
 /** 줄 앞 공백 길이(들여쓰기 깊이). 전각 공백·탭도 공백으로 센다. */
@@ -263,7 +264,7 @@ function removeLines(content: string, drop: ReadonlySet<number>): { content: str
  *  단, **들여쓴 줄은 검사에서 뺀다.** 비교는 글머리·번호를 떼고 하기 때문에, 항목마다 달아 둔
  *  `- 완료` 같은 상태줄이 서로 '같은 줄'로 보여 뒤쪽 항목의 상태줄이 통째로 지워진다.
  *  들여쓴 줄은 바로 위 항목에 딸린 것이라 문맥이 다르다 — 같은 글자여도 중복이 아니다. */
-export function lintDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
+export function lintDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
   const out: LintFinding[] = []
 
   for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
@@ -325,8 +326,8 @@ export function lintDuplicates<R extends LintRow>(rows: readonly R[], groupOf: L
           // 지울 줄을 눈으로 고르지 못하면 사용자가 되돌릴 수 없는 삭제에 동의하는 셈이 된다.
           // 머리글까지 지워지는 경우를 문구에 반드시 드러낸다 — "2번째 줄을 지웁니다"라고만 적어 놓고
           // 셀을 통째로 비우면, 사용자는 되돌릴 수 없는 삭제에 사실과 다른 설명을 보고 동의하는 셈이 된다.
-          detail: `같은 줄이 ${hits.length}번 있습니다: "${norm}" — ${victimsWhere(victims)}을 지웁니다(남는 빈 줄도 함께 정리).`
-            + (headersGone > 0 ? ` 항목이 모두 없어지는 구획 머리글 ${headersGone}줄도 함께 지웁니다.` : ''),
+          detail: fill(t('weekly.lint.dup'), { n: hits.length, line: norm, where: victimsWhere(victims, t) })
+            + (headersGone > 0 ? fill(t('weekly.lint.dupHeaders'), { n: headersGone }) : ''),
           edits,
         })
       }
@@ -376,7 +377,7 @@ export function lineSimilarity(a: string, b: string): number {
  *  유사한 두 줄은 다르다 — "진행 중 60%"와 "진행 중 70%"에서 남길 쪽은 사람만 안다.
  *  기계가 앞줄을 지우면 최신 값이, 뒷줄을 지우면 정정된 값이 사라질 수 있다.
  *  그래서 이 지적은 위치를 보여 주고 셀로 데려가는 데서 멈춘다. */
-export function lintNearDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
+export function lintNearDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
   const out: LintFinding[] = []
 
   for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
@@ -444,17 +445,17 @@ export function lintNearDuplicates<R extends LintRow>(rows: readonly R[], groupO
             const sim = edges.find(e => e.i === members[0] && e.j === members[1])!.sim
             // floor 를 쓴다 — 89.6% 를 반올림해 '90% 일치'로 적으면 문턱 미달이 문턱 문구를 달게 된다.
             const where = rowIds.size > 1
-              ? '2개 행에 걸쳐 있음'
-              : `${a.line + 1}번째 줄과 ${b.line + 1}번째 줄`
-            detail = `비슷한 줄이 있습니다(${Math.floor(sim * 100)}% 일치): "${a.norm}" ↔ "${b.norm}" — ${where}. 같은 내용이면 한쪽을 지워 정리하세요(자동 수정 없음).`
+              ? t('weekly.lint.where.twoRows')
+              : fill(t('weekly.lint.where.pair'), { a: a.line + 1, b: b.line + 1 })
+            detail = fill(t('weekly.lint.near2'), { pct: Math.floor(sim * 100), a: a.norm, b: b.norm, where })
           } else {
             // 군집이 크면 쌍마다 일치율이 달라 하나로 적을 수 없다 — 문턱만 밝힌다.
             const quoted = ms.slice(0, 3).map(m => `"${m.norm}"`).join(' ↔ ')
-            const more = ms.length > 3 ? ` 외 ${ms.length - 3}줄` : ''
+            const more = ms.length > 3 ? fill(t('weekly.lint.more'), { n: ms.length - 3 }) : ''
             const where = rowIds.size > 1
-              ? `${rowIds.size}개 행에 걸쳐 있음`
-              : `${ms.map(m => m.line + 1).join('·')}번째 줄`
-            detail = `서로 ${Math.round(NEAR_DUPLICATE_THRESHOLD * 100)}% 이상 비슷한 줄이 ${ms.length}개 있습니다: ${quoted}${more} — ${where}. 같은 내용이면 하나만 남기고 정리하세요(자동 수정 없음).`
+              ? fill(t('weekly.lint.where.rows'), { n: rowIds.size })
+              : fill(t('weekly.lint.where.lines'), { list: ms.map(m => m.line + 1).join('·') })
+            detail = fill(t('weekly.lint.nearN'), { pct: Math.round(NEAR_DUPLICATE_THRESHOLD * 100), n: ms.length, quoted, more, where })
           }
 
           out.push({
@@ -502,7 +503,7 @@ function dominantNumberSep(rows: readonly LintRow[]): '.' | ')' | null {
  *  1..n 이 아닐 때만 하고, 표기(구분자 시트 다수결·번호 뒤 공백 1칸)는 번호 줄 1개부터
  *  맞춘다. 구분자만 시트 전체 기준이다(묶음 단위 원칙의 의도된 예외 — 글머리 기호와 동일).
  *  순서와 표기를 한 규칙이 소유해야 같은 줄을 두 지적이 서로 다르게 고치는 충돌이 없다. */
-export function lintNumbering<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
+export function lintNumbering<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
   const sep = dominantNumberSep(rows)
   if (sep === null) return []
   const out: LintFinding[] = []
@@ -557,14 +558,14 @@ export function lintNumbering<R extends LintRow>(rows: readonly R[], groupOf: Li
           // 라벨은 원문 표기 그대로 적는다. 반각으로 바꿔 적으면 사용자가 셀에서 찾지 못한다.
           if (renumber) {
             const where = label === null ? '' : `${label} `
-            renumberNotes.push(`${where}줄 번호가 ${nums.join(', ')} 입니다 → ${nums.map((_, k) => k + 1).join(', ')}`)
+            renumberNotes.push(fill(t('weekly.lint.renumber'), { where, nums: nums.join(', '), fixed: nums.map((_, k) => k + 1).join(', ') }))
           }
         }
         if (renumberNotes.length === 0 && sepFixed === 0 && gapFixed === 0) continue
 
         const notes: string[] = [...renumberNotes]
-        if (sepFixed > 0) notes.push(`번호 표기 → '1${sep}' (시트 전체 기준)`)
-        else if (gapFixed > 0) notes.push('번호 뒤 공백 → 1칸')
+        if (sepFixed > 0) notes.push(fill(t('weekly.lint.sep'), { sep: sep ?? '' }))
+        else if (gapFixed > 0) notes.push(t('weekly.lint.gap'))
 
         out.push({
           id: `numbering:${row.id}:${cellKey}`,
@@ -609,7 +610,7 @@ interface FormatResult { next: string; notes: string[] }
 
 /** 셀 1개의 글머리 기호 통일. 바뀐 것이 없으면 notes가 빈 배열.
  *  줄 끝 공백·연속 공백·전각 공백·빈 줄은 더 이상 손대지 않는다(파일 머리 주석의 사용자 결정). */
-function formatCell(content: string, bullet: string | null): FormatResult {
+function formatCell(content: string, bullet: string | null, t: Translate): FormatResult {
   if (!bullet) return { next: content, notes: [] }
   let bulletFixed = 0
 
@@ -625,21 +626,21 @@ function formatCell(content: string, bullet: string | null): FormatResult {
 
   // '시트 전체 기준'을 밝혀 둔다 — 자기 묶음 안에서는 기호가 일관된 셀도 여기서 지적되기 때문에,
   // 근거를 적지 않으면 "우리 묶음엔 ·밖에 없는데 왜?"가 되고 지적이 버그로 읽힌다.
-  const notes = bulletFixed > 0 ? [`글머리 기호 → ${bullet} (시트 전체 기준)`] : []
+  const notes = bulletFixed > 0 ? [fill(t('weekly.lint.bullet'), { bullet: bullet ?? '' })] : []
   return { next: out.join('\n'), notes }
 }
 
 /** 규칙 ③ — 글머리 기호 통일. 셀당 지적 1건.
  *  보고서 겉모습을 맞추는 검사라 시트 전체 다수결을 기준으로 삼는다
  *  (묶음별 다수결이 아니다 — 번호 표기 통일과 더불어 묶음 단위 원칙의 의도된 예외). */
-export function lintFormat<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
+export function lintFormat<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
   const bullet = dominantBullet(rows)
   const out: LintFinding[] = []
   for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
     for (const row of group) {
       for (const cellKey of WEEKLY_CELL_KEYS) {
         const content = row[CELL_FIELD[cellKey]]
-        const { next, notes } = formatCell(content, bullet)
+        const { next, notes } = formatCell(content, bullet, t)
         if (next === content || notes.length === 0) continue
         out.push({
           id: `format:${row.id}:${cellKey}`,
@@ -665,14 +666,15 @@ const KIND_ORDER: Record<LintKind, number> = { duplicate: 0, nearDuplicate: 1, n
  *  부류를 바깥에 두고 이어붙이기만 하면, 위쪽 묶음에 정리 지적만 있고 아래쪽 묶음에 중복 지적이
  *  있을 때 아래 묶음이 목록 맨 앞으로 올라와 화면(시트) 순서와 어긋난다. 행·열까지 정렬 키에 넣는
  *  것은 중복 규칙만 열 바깥으로 도는 탓 — 한 묶음에 행이 여럿이면 그 부류만 순서가 튄다. */
-export function lintWeeklySheet<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>): LintFinding[] {
+/** t — 지적 설명의 화면 언어(점검 패널이 넘긴다). 없으면 한국어(종전 출력 그대로). 제목(주간 4열 이름)은 제품 고정이라 따르지 않는다 */
+export function lintWeeklySheet<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
   const groupRank = new Map(byGroup(rows, groupOf).map((g, i) => [g.key, i]))
   const rowRank = new Map(rows.map((r, i) => [r.id, i]))
   const cellRank = new Map(WEEKLY_CELL_KEYS.map((k, i) => [k, i]))
   const at = (f: LintFinding) => groupRank.get(f.groupKey) ?? groupRank.size
   return [
-    ...lintDuplicates(rows, groupOf), ...lintNearDuplicates(rows, groupOf),
-    ...lintNumbering(rows, groupOf), ...lintFormat(rows, groupOf),
+    ...lintDuplicates(rows, groupOf, t), ...lintNearDuplicates(rows, groupOf, t),
+    ...lintNumbering(rows, groupOf, t), ...lintFormat(rows, groupOf, t),
   ].sort((a, b) =>
     at(a) - at(b)
     || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]

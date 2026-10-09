@@ -32,7 +32,8 @@ import { workspaceCalendarFieldsOf } from '@/lib/settings/calendarField'
 import { todayIn } from '@/lib/domain/calendar'
 import { getServerLocale } from '@/lib/i18n/server'
 
-export const metadata = { title: '설정' }   // 레이아웃 템플릿이 '설정 · {워크스페이스} | {제품}' 을 만든다(V6)
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '설정') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.settings') } }   // 레이아웃 템플릿이 '설정 · {워크스페이스} | {제품}' 을 만든다(V6)
 
 const SIMPLE: Record<SimpleWorkspaceKey, { label: DictKey; description: DictKey; kind: WorkspaceField['kind'] }> = {
   'branding.product_name': { label: 'pages.wsSettings.field.productName.label', description: 'pages.wsSettings.field.productName.desc', kind: 'text' },
@@ -47,7 +48,7 @@ function field(config: Awaited<ReturnType<typeof getWorkspaceConfig>>, key: Simp
   const valid = state.status === 'set' || state.status === 'default'
   const raw = valid ? state.value : null
   const value = kind === 'boolean' ? raw === true : kind === 'domains' ? (Array.isArray(raw) ? raw.join('\n') : '') : (typeof raw === 'string' ? raw : '')
-  const source = state.status === 'set' ? '워크스페이스 설정' : state.status === 'default' ? (state.from === 'deploy' ? '배포 기본값' : '제품 기본값') : '설정 손상'
+  const source = state.status === 'set' ? 'workspace' : state.status === 'default' ? (state.from === 'deploy' ? 'deploy' : 'product') : 'corrupted'
   return { key, label: t(locale, SIMPLE[key].label), description: t(locale, SIMPLE[key].description), kind, value, source, error: state.status === 'invalid' ? state.error : undefined }
 }
 

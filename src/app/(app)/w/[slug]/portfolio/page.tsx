@@ -19,7 +19,8 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 워크스페이스 비교 화면은 항상 최신이어야 한다
-export const metadata = { title: '포트폴리오' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '포트폴리오') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.portfolio') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function PortfolioPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

@@ -95,7 +95,8 @@ export function SideRail({ collapsed, children, label, onToggleCollapsed }: {
   const known: boolean | null = collapsed === null ? xl : !collapsed
   const expanded = known === true
   const navId = useId()
-  const toggleLabel = known === null ? '사이드바 접기·펼치기' : expanded ? '사이드바 접기' : '사이드바 펼치기'
+  const { t } = useLocale()
+  const toggleLabel = known === null ? t('shell.sidebar.toggle') : expanded ? t('shell.sidebar.collapse') : t('shell.sidebar.expand')
   return (
     <div data-side-rail data-collapsed={collapsed === true ? 'true' : collapsed === false ? 'false' : 'auto'}
       className={`hidden lg:flex ${width} shrink-0 flex-col overflow-y-auto border-r border-border bg-surface px-2 py-3`}>
@@ -105,7 +106,7 @@ export function SideRail({ collapsed, children, label, onToggleCollapsed }: {
           onClick={() => onToggleCollapsed(expanded)}
           className="mt-auto flex h-9 shrink-0 items-center gap-2 rounded-(--radius-control) px-3 text-control text-fg-secondary hover:bg-surface-hover hover:text-fg">
           {expanded ? <PanelLeftClose size={16} aria-hidden /> : <PanelLeftOpen size={16} aria-hidden />}
-          {collapsed !== true && <span className={collapsed === null ? 'hidden xl:inline' : ''}>접기</span>}
+          {collapsed !== true && <span className={collapsed === null ? 'hidden xl:inline' : ''}>{t('shell.sidebar.fold')}</span>}
         </button>
       )}
     </div>

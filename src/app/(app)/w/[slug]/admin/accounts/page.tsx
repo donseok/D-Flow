@@ -12,7 +12,8 @@ import { AccountsManager } from '@/components/admin/AccountsManager'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 목록은 항상 최신(admin API) 조회
-export const metadata = { title: '멤버·초대' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '멤버·초대') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.wsMembers') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function AccountsAdminPage({ params, searchParams }: {
   params: Promise<{ slug: string }>; searchParams: Promise<{ project?: string }>

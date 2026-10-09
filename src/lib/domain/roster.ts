@@ -83,6 +83,11 @@ export function accessRoleLabel(r: AccessRole | null): string {
   return r ? ACCESS_ROLE_LABEL[r] : '없음(조회 전용)'
 }
 
+/** 화면용 사전 키 — 화면은 `t(accessRoleLabelKey(r))` 로 그린다(로캘을 따른다). ko 문구는 accessRoleLabel 과 같다 */
+export function accessRoleLabelKey(r: AccessRole | null): 'roster.access.admin' | 'roster.access.member' | 'roster.access.none' {
+  return r === 'admin' ? 'roster.access.admin' : r === 'member' ? 'roster.access.member' : 'roster.access.none'
+}
+
 /** 체크 토글 — 새 팀은 뒤에 붙는다(대표는 그대로). 대표 팀을 빼면 다음 팀이 대표가 된다. */
 export function toggleTeam(ids: readonly string[], id: string): string[] {
   return ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]

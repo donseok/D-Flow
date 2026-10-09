@@ -37,28 +37,28 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6">
-      <PageHeader title="내 계정" />
+      <PageHeader title={t('account.title')} />
 
       <div className="card p-5 sm:p-6">
-        <h2 className="mt-0.5 text-sm font-semibold text-fg">프로필 정보</h2>
+        <h2 className="mt-0.5 text-sm font-semibold text-fg">{t('account.profile')}</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
             <UserIcon className="h-4 w-4 text-fg-muted" />
             <div className="min-w-0">
-              <div className="text-meta text-fg-secondary">이름</div>
+              <div className="text-meta text-fg-secondary">{t('account.name')}</div>
               <div className="truncate text-sm text-fg">{displayName ?? '—'}</div>
             </div>
           </div>
           <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
             <Mail className="h-4 w-4 text-fg-muted" />
             <div className="min-w-0">
-              <div className="text-meta text-fg-secondary">이메일</div>
+              <div className="text-meta text-fg-secondary">{t('account.email')}</div>
               <div className="truncate text-sm text-fg">{email ?? '—'}</div>
             </div>
           </div>
         </div>
         <button onClick={() => setPwOpen(true)} className="btn btn-ghost mt-4">
-          <KeyRound className="h-4 w-4" />비밀번호 변경
+          <KeyRound className="h-4 w-4" />{t('account.pw.change')}
         </button>
       </div>
 

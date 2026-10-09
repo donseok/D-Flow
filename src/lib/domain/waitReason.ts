@@ -1,15 +1,19 @@
 // 착수 대기 사유 — 순수 함수. ready 주문(빈자리)이 왜 안 시작되는지를 서버가 아는 재료로 판정한다.
 // 판정 축은 클레임 API(work/[id]/claim)의 거절 조건과 같다 — not_assignee · dependency_not_met. 여기서 다르게 말하면 화면이 거짓말한다.
 import { predecessorReachedFor, type PredecessorGate } from './agentWork'
-import { STAGE_LABEL_KO, isStageCode } from './stageLabels'
+import { isStageCode } from './stageLabels'
+import { fill, koTranslate, type Translate } from '@/lib/i18n/translate'
 
 export type WaitReasonKind = 'dependency' | 'agent_off' | 'agents_busy' | 'pickup'
 export interface WaitReason { kind: WaitReasonKind; label: string; text: string }
 
-/** 단계 표기 — labels 는 프로젝트의 단계 이름(SP5b W2 workflow.wbs_stage_labels). 없는 칸은 STAGE_LABEL_KO */
-export function stageText(stage: string | null, labels?: Readonly<Partial<Record<string, string>>>): string {
-  if (stage === null) return '단계 없음'
-  return isStageCode(stage) ? `${stage}(${labels?.[stage] ?? STAGE_LABEL_KO[stage]})` : stage
+const STAGE_KEY = { as: 'wbs.stageAs', ip: 'wbs.stageIp', im: 'wbs.stageIm', xx: 'wbs.stageXx' } as const
+
+/** 단계 표기 — labels 는 프로젝트의 단계 이름(SP5b W2 workflow.wbs_stage_labels). 없는 칸은 기본 이름(사전 wbs.stage* — ko 는 STAGE_LABEL_KO 와 같다).
+ *  t 는 화면이 넘기는 번역 함수 — 없으면 한국어(종전 출력 그대로) */
+export function stageText(stage: string | null, labels?: Readonly<Partial<Record<string, string>>>, t: Translate = koTranslate): string {
+  if (stage === null) return t('wait.stageNone')
+  return isStageCode(stage) ? `${stage}(${labels?.[stage] ?? t(STAGE_KEY[stage])})` : stage
 }
 
 export interface PredecessorLike {
@@ -33,8 +37,10 @@ export function unmetDepends(depends: string[] | null, byRef: (ref: string) => P
   return out
 }
 
-export function unmetDependsList(u: UnmetDepend[], labels?: Readonly<Partial<Record<string, string>>>): string {
-  return u.map(d => d.found ? `${d.code} ${d.name}(현재 ${stageText(d.stage ?? null, labels)})` : `${d.ref}(프로젝트에 없는 항목)`).join(', ')
+export function unmetDependsList(u: UnmetDepend[], labels?: Readonly<Partial<Record<string, string>>>, t: Translate = koTranslate): string {
+  return u.map(d => d.found
+    ? fill(t('wait.dep.found'), { code: d.code ?? '', name: d.name ?? '', stage: stageText(d.stage ?? null, labels, t) })
+    : fill(t('wait.dep.missing'), { ref: d.ref })).join(', ')
 }
 
 export interface WatcherLike { agent: string; user_id: string | null; slots: number | null; busy: number | null; until_label: string | null }
@@ -53,41 +59,33 @@ export function deriveWaitReason(args: {
   gate?: PredecessorGate
   /** 프로젝트의 단계 이름(SP5b W2) — 선행 대기 문구의 단계 표기 */
   stageLabels?: Readonly<Partial<Record<string, string>>>
+  /** 화면이 넘기는 번역 함수(라벨·전문의 언어) — 없으면 한국어(종전 출력 그대로) */
+  t?: Translate
 }): WaitReason {
+  const t = args.t ?? koTranslate
   const gate = args.gate ?? 'reached'
   const unmet = unmetDepends(args.depends, args.predecessorByRef, gate)
   if (unmet.length > 0) {
-    const need = gate === 'final'
-      ? '선행이 완료(xx)되거나, 그 주문이 최종 승인되거나, 개발 워크플로 밖 항목이면 실적이 100% 가 돼야'
-      : '선행이 검수 대기(im) 이상이 되거나, 그 주문이 승인되거나, 실적이 100% 가 돼야'
     return {
-      kind: 'dependency', label: '선행 대기',
-      text: `선행 작업이 아직 끝나지 않았습니다: ${unmetDependsList(unmet, args.stageLabels)}. ${need} 이 작업을 집어갈 수 있습니다.`,
+      kind: 'dependency', label: t('wait.label.dependency'),
+      text: fill(t(gate === 'final' ? 'wait.dep.textFinal' : 'wait.dep.textReached'), { list: unmetDependsList(unmet, args.stageLabels, t) }),
     }
   }
   const a = args.assignee
   const eligible = a ? args.watchers.filter(w => a.user_id !== null && w.user_id === a.user_id) : args.watchers
   if (eligible.length === 0) {
-    if (!a) {
-      return {
-        kind: 'agent_off', label: '에이전트 꺼짐',
-        text: '이 프로젝트를 보는 에이전트가 하나도 없습니다. 위임은 됐지만 집어갈 주체가 없어 대기 중입니다. 프로젝트 멤버 누구든 자기 PC 에서 /dflow-team 또는 /dflow-poll 을 켜면 시작됩니다.',
-      }
-    }
-    let text = `담당자 ${a.name} 의 에이전트가 켜져 있지 않습니다. 이 작업은 담당자가 지정돼 있어 ${a.name} 의 에이전트만 집어갈 수 있습니다. ${a.name} 이(가) 자기 PC 에서 /dflow-team 또는 /dflow-poll 을 켜야 시작됩니다.`
-    if (args.watchers.length > 0) text += ` 지금 켜진 에이전트 ${args.watchers.length}개(${args.watchers.map(w => w.agent).join(', ')})는 다른 사람 것이라 이 작업을 집어갈 수 없습니다.`
-    if (a.user_id === null) text += ' (담당자 계정이 로스터에 연결돼 있지 않아 어느 에이전트도 집어갈 수 없습니다. 멤버 화면에서 계정을 연결하세요.)'
-    return { kind: 'agent_off', label: '에이전트 꺼짐', text }
+    if (!a) return { kind: 'agent_off', label: t('wait.label.agent_off'), text: t('wait.off.none') }
+    let text = fill(t('wait.off.assignee'), { name: a.name })
+    if (args.watchers.length > 0) text += fill(t('wait.off.others'), { n: args.watchers.length, agents: args.watchers.map(w => w.agent).join(', ') })
+    if (a.user_id === null) text += t('wait.off.unlinked')
+    return { kind: 'agent_off', label: t('wait.label.agent_off'), text }
   }
   const free = eligible.filter(w => !isBusy(w))
   if (free.length === 0) {
     return {
-      kind: 'agents_busy', label: '에이전트 바쁨',
-      text: `에이전트 ${eligible.length}개가 켜져 있지만 모두 다른 작업 중입니다(${eligible.map(watcherLabel).join(', ')}). 자리가 비면 다음 확인 주기에 자동으로 집어갑니다.`,
+      kind: 'agents_busy', label: t('wait.label.agents_busy'),
+      text: fill(t('wait.busy'), { n: eligible.length, agents: eligible.map(watcherLabel).join(', ') }),
     }
   }
-  return {
-    kind: 'pickup', label: '착수 대기',
-    text: `집어갈 수 있는 에이전트가 있습니다(${free.map(w => w.agent).join(', ')}). 다음 확인 주기에 착수합니다. 이 상태가 오래 가면 그 에이전트의 로그를 확인하세요.`,
-  }
+  return { kind: 'pickup', label: t('wait.label.pickup'), text: fill(t('wait.pickup'), { agents: free.map(w => w.agent).join(', ') }) }
 }

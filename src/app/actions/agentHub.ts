@@ -1,6 +1,7 @@
 'use server'
 // 에이전트 허브 액션 — 재조회와 위임 묶음 저장. 판정은 authz 가드로만, 본체는 src/lib/agent/delegation.ts.
 import { requireProjectMember } from '@/lib/authz'
+import { serverTranslator } from '@/lib/i18n/server'
 import { requireModule } from '@/lib/modules/gate'
 import { isProjectAdmin } from '@/lib/domain/authz'
 import { isUuidLike, resumeHostFromClaimLabel } from '@/lib/domain/agentWork'
@@ -28,7 +29,7 @@ export async function refreshAgentHub(projectId: string): Promise<{ ok: true; hu
   const mod = await requireModule({ projectId }, 'agents')                    // 스펙 §4.2 — 가드 뒤·본문 앞(P17)
   if (!mod.ok) return { ok: false, error: mod.error }
   try {
-    return { ok: true, hub: await getAgentHub(projectId, { userId: g.actor.userId, isAdmin: isProjectAdmin(g.actor, projectId) }) }
+    return { ok: true, hub: await getAgentHub(projectId, { userId: g.actor.userId, isAdmin: isProjectAdmin(g.actor, projectId) }, undefined, await serverTranslator()) }
   } catch (e) {
     // 상세는 로그에, 화면에는 고정 문구 — 조회 실패를 빈 화면으로 위장하지 않되 내부 오류 문자열을 흘리지 않는다.
     console.error('[agentHub] 재조회 실패:', e instanceof Error ? e.message : e)
@@ -108,7 +109,7 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
   if (actualChanged) after(() => recordProgressSnapshot(projectId))
 
   try {
-    const hub = await getAgentHub(projectId, { userId: g.actor.userId, isAdmin })
+    const hub = await getAgentHub(projectId, { userId: g.actor.userId, isAdmin }, undefined, await serverTranslator())
     return { ok: true, hub, failed, warnings }
   } catch (e) {
     // 저장은 끝났다. 재조회만 실패했음을 분명히 알려 클라이언트가 대기분을 되돌리지 않게 한다(표시 = 로깅).
@@ -333,7 +334,7 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
   if (!r.ok) return { ok: false, error: r.error ?? '처리에 실패했습니다.', ...(r.stale ? { stale: true as const } : {}) }
   const warning = r.warning ? { warning: r.warning } : {}
   try {
-    const hub = await getAgentHub(projectId, { userId: g.actor.userId, isAdmin })
+    const hub = await getAgentHub(projectId, { userId: g.actor.userId, isAdmin }, undefined, await serverTranslator())
     return { ok: true, hub, ...warning }
   } catch (e) {
     console.error('[agentHub] 조정 뒤 재조회 실패:', e instanceof Error ? e.message : e)

@@ -10,7 +10,7 @@ vi.mock('@/components/account/ThemeRadioGroup', () => ({ ThemeRadioGroup: () => 
 vi.mock('@/components/account/MyTokensSection', () => ({ MyTokensSection: () => null }))
 vi.mock('@/app/actions/preferences', () => ({ saveNotifPrefs: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/components/account/ChangePasswordModal', () => ({ ChangePasswordModal: () => null }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko', setLocale: vi.fn() }) }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale())
 import { AccountView } from '@/components/account/AccountView'
 
 const WS = { id: '00000000-0000-0000-7e57-000000001880', name: 'Acme' }

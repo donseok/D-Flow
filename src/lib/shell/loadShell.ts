@@ -15,7 +15,7 @@ import { accentStyle } from '@/lib/settings/accentCss'
 import { effectiveModules } from '@/lib/modules/effective'
 import { CORE } from '@/lib/modules/registry'
 import { navFor, type NavGroup } from '@/lib/nav/registry'
-import { navCapsFor, scopeRoleLabel } from '@/lib/authz/navCaps'
+import { navCapsFor, scopeRoleKey, scopeRoleLabel } from '@/lib/authz/navCaps'
 import { identityTeamCodes, identityTeamLabels } from '@/lib/domain/identityTeams'
 import { isWorkspaceAdmin, type Actor } from '@/lib/domain/authz'
 import { listWorkspaceProjects, type ShellProject } from '@/lib/data/portal'
@@ -98,7 +98,7 @@ export async function loadShell(input: {
     scope, base, groups, workspaceGroups, workspace: ws, workspaces: input.workspaces, viewingAsPlatformAdmin: input.viewingAsPlatformAdmin,
     project: projectId ? { id: projectId, name: projects.find((p) => p.id === projectId)?.name ?? '' } : null,
     projects, projectsFailed: !listR.ok, favoriteIds, recentIds,
-    identity: { displayName: input.userName, roleLabel: scopeRoleLabel(actor, { workspaceId: ws.id, projectId }, degraded), teamCodes: actor ? identityTeamCodes(actor, ws.id) : null, teamLabels: actor ? identityTeamLabels(actor, ws.id) : null },
+    identity: { displayName: input.userName, roleLabel: scopeRoleLabel(actor, { workspaceId: ws.id, projectId }, degraded), roleKey: scopeRoleKey(actor, { workspaceId: ws.id, projectId }, degraded), teamCodes: actor ? identityTeamCodes(actor, ws.id) : null, teamLabels: actor ? identityTeamLabels(actor, ws.id) : null },
     brand: { productName, workspaceId: ws.id, hasFull: !!logo.full, hasFullDark: !!logo.full_dark, hasMark: !!logo.mark },
     accentCss, degraded, configDegraded, canEditSettings: isWorkspaceAdmin(actor, ws.id),
   }
@@ -109,7 +109,7 @@ export function minimalShell(input: { scope: ShellScopeKind; projectId: string |
   return {
     scope: input.scope, base: '/', groups: [], workspaceGroups: [], workspace: { id: '', slug: '', name: '' }, workspaces: input.workspaces, viewingAsPlatformAdmin: false,
     project: input.projectId ? { id: input.projectId, name: '' } : null, projects: [], projectsFailed: false, favoriteIds: [], recentIds: [],
-    identity: { displayName: input.userName, roleLabel: input.degraded ? '확인 불가' : '조회', teamCodes: null, teamLabels: null },
+    identity: { displayName: input.userName, roleLabel: scopeRoleLabel(null, { workspaceId: null }, input.degraded), roleKey: scopeRoleKey(null, { workspaceId: null }, input.degraded), teamCodes: null, teamLabels: null },
     brand: { productName: BRAND.productName, workspaceId: null, hasFull: false, hasFullDark: false, hasMark: false },
     accentCss: '', degraded: input.degraded, configDegraded: false, canEditSettings: false,
   }

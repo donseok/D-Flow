@@ -21,9 +21,9 @@ type TokenRow = {
 // work:report 는 **폐지됐다**(2026-08-25) — claim 할 수 있으면 그 결과도 적을 수 있어야 하고,
 // claim 이 무제한인 이상 보고만 따로 막는 건 실질 방어선이 아니었다. 신규 발급에는 붙이지 않는다
 // (옛 토큰에 남은 work:report 는 서버가 work:claim 과 동등하게 받아준다 — externalApi 참조).
-const SCOPE_OPTIONS: readonly { value: string; label: string; descKey: DictKey }[] = [
-  { value: 'work:read', label: '조회 (work:read)', descKey: 'account.scope.workRead.desc' },
-  { value: 'work:claim', label: 'claim/release/완료보고 (work:claim)', descKey: 'account.scope.workClaim.desc' },
+const SCOPE_OPTIONS: readonly { value: string; labelKey: DictKey; descKey: DictKey }[] = [
+  { value: 'work:read', labelKey: 'account.scope.workRead.label', descKey: 'account.scope.workRead.desc' },
+  { value: 'work:claim', labelKey: 'account.scope.workClaim.label', descKey: 'account.scope.workClaim.desc' },
 ] as const
 
 const EXPIRES_OPTIONS = [30, 90, 180] as const
@@ -72,10 +72,10 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
   async function submitIssue() {
     setIssueError(null)
     const trimmed = name.trim()
-    if (!trimmed) { setIssueError('이름을 입력하세요.'); return }
-    if (!workspaceId || workspaceError) { setIssueError('워크스페이스 소속을 확인하고 하나 선택하세요.'); return }
-    if (!allProjects && selectedProjects.length === 0) { setIssueError('허용할 프로젝트를 선택하세요.'); return }
-    if (scopes.length === 0) { setIssueError('스코프를 1개 이상 선택하세요.'); return }
+    if (!trimmed) { setIssueError(t('account.pat.err.name')); return }
+    if (!workspaceId || workspaceError) { setIssueError(t('account.pat.err.workspace')); return }
+    if (!allProjects && selectedProjects.length === 0) { setIssueError(t('account.pat.err.projects')); return }
+    if (scopes.length === 0) { setIssueError(t('account.pat.err.scopes')); return }
     setIssuing(true)
     try {
       const r = await createAgentToken({
@@ -91,7 +91,7 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
       setExpiresDays(90)
       await reload()
     } catch {
-      setIssueError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+      setIssueError(t('wsAccounts.requestFailed'))
     } finally {
       setIssuing(false)
     }
@@ -107,8 +107,8 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
     setRevokeBusy(true)
     try {
       const r = await revokeAgentToken(revoking.id)
-      if (!r.ok) { toast({ title: r.error ?? '폐기 실패', variant: 'error' }); return }
-      toast({ title: '토큰을 폐기했습니다.', variant: 'success' })
+      if (!r.ok) { toast({ title: r.error ?? t('account.pat.revokeFailed'), variant: 'error' }); return }
+      toast({ title: t('account.pat.revoked'), variant: 'success' })
       setRevoking(null)
       await reload()
     } finally {
@@ -118,7 +118,7 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
 
   const projectName = (token: TokenRow) => {
     const workspace = workspaces.find(w => w.id === token.workspace_id)?.name ?? token.workspace_id
-    const names = token.project_ids === null ? '전체 프로젝트' : token.project_ids.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ')
+    const names = token.project_ids === null ? t('account.pat.allProjects') : token.project_ids.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ')
     return `${workspace} · ${names}`
   }
   const candidates = projects.filter(p => p.workspace_id === workspaceId)
@@ -127,29 +127,29 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
     <div className="card w-full min-w-0 max-w-full overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
-          <h2 className="text-sm font-semibold text-fg">개인 액세스 토큰(PAT)</h2>
+          <h2 className="text-sm font-semibold text-fg">{t('account.pat.title')}</h2>
         </div>
       </div>
 
       <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-6 p-5 sm:p-6 lg:grid-cols-[1.1fr_1fr]">
         <div className="w-full min-w-0 max-w-full">
-          {loadError && <p role="alert" className="mb-3 text-sm font-medium text-danger">토큰 목록을 불러오지 못했습니다: {loadError}</p>}
+          {loadError && <p role="alert" className="mb-3 text-sm font-medium text-danger">{t('account.pat.loadFailed')}{loadError}</p>}
           {loading ? (
-            <p className="text-sm text-fg-muted">불러오는 중…</p>
+            <p className="text-sm text-fg-muted">{t('common.loading')}</p>
           ) : tokens.length === 0 ? (
-            <EmptyState icon={KeyRound} title="발급된 토큰이 없습니다" description="오른쪽 폼으로 새 토큰을 발급하세요." />
+            <EmptyState icon={KeyRound} title={t('account.pat.empty')} description={t('account.pat.emptyDesc')} />
           ) : (
             <div className="w-full min-w-0 max-w-full overflow-x-auto">
               <table className="w-full min-w-[560px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
-                    <th className="py-2 pr-3">이름</th>
+                    <th className="py-2 pr-3">{t('account.pat.colName')}</th>
                     <th className="py-2 pr-3">prefix</th>
-                    <th className="py-2 pr-3">스코프</th>
-                    <th className="py-2 pr-3">프로젝트</th>
-                    <th className="py-2 pr-3">만료</th>
-                    <th className="py-2 pr-3">최근 사용</th>
-                    <th className="py-2 pr-3 text-right">작업</th>
+                    <th className="py-2 pr-3">{t('account.pat.scopes')}</th>
+                    <th className="py-2 pr-3">{t('account.pat.colProjects')}</th>
+                    <th className="py-2 pr-3">{t('account.pat.expires')}</th>
+                    <th className="py-2 pr-3">{t('account.pat.colLastUsed')}</th>
+                    <th className="py-2 pr-3 text-right">{t('account.pat.colActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -166,12 +166,12 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
                         <td className="py-2.5 pr-3 text-fg-muted">{tk.last_seen_at ? tk.last_seen_at.slice(0, 10) : '—'}</td>
                         <td className="py-2.5 pr-3 text-right">
                           {isRevoked ? (
-                            <span className="chip bg-surface-subtle text-fg-muted">폐기됨</span>
+                            <span className="chip bg-surface-subtle text-fg-muted">{t('account.pat.revokedBadge')}</span>
                           ) : isExpired ? (
-                            <span className="chip bg-surface-subtle text-fg-muted">만료됨</span>
+                            <span className="chip bg-surface-subtle text-fg-muted">{t('account.pat.expiredBadge')}</span>
                           ) : (
-                            <button onClick={() => setRevoking(tk)} className="btn btn-ghost btn-sm" title="폐기">
-                              <Trash2 className="h-3.5 w-3.5" />폐기
+                            <button onClick={() => setRevoking(tk)} className="btn btn-ghost btn-sm" title={t('account.pat.revoke')}>
+                              <Trash2 className="h-3.5 w-3.5" />{t('account.pat.revoke')}
                             </button>
                           )}
                         </td>
@@ -185,28 +185,28 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
         </div>
 
         <div className="w-full min-w-0 max-w-full rounded-2xl border border-border bg-surface-subtle p-4">
-          <h3 className="text-sm font-semibold text-fg">새 토큰 발급</h3>
+          <h3 className="text-sm font-semibold text-fg">{t('account.pat.issueTitle')}</h3>
           <div className="mt-3 space-y-3">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">이름</span>
-              <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 노트북" maxLength={64} disabled={issuing} />
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('account.pat.colName')}</span>
+              <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('account.pat.namePlaceholder')} maxLength={64} disabled={issuing} />
             </label>
-            {workspaceError && <p role="alert" className="text-sm text-danger">워크스페이스 소속을 불러오지 못했습니다. 토큰 발급을 잠시 중단합니다.</p>}
+            {workspaceError && <p role="alert" className="text-sm text-danger">{t('account.pat.wsLoadFailed')}</p>}
             {workspaces.length > 1 ? (
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">워크스페이스</span>
-                <select aria-label="워크스페이스" className="app-input" value={workspaceId} disabled={issuing || workspaceError} onChange={e => {
+                <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('account.pat.workspace')}</span>
+                <select aria-label={t('account.pat.workspace')} className="app-input" value={workspaceId} disabled={issuing || workspaceError} onChange={e => {
                   setWorkspaceId(e.target.value); setSelectedProjects([]); setAllProjects(true)
                 }}>
                   {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
               </label>
-            ) : <p className="text-sm text-fg-secondary">워크스페이스: {workspaces[0]?.name ?? '소속 없음'}</p>}
+            ) : <p className="text-sm text-fg-secondary">{t('account.pat.workspacePrefix')}{workspaces[0]?.name ?? t('account.pat.noWorkspace')}</p>}
             <fieldset className="min-w-0 space-y-2" disabled={issuing || workspaceError}>
-              <legend className="text-xs font-semibold text-fg-secondary">허용 프로젝트</legend>
+              <legend className="text-xs font-semibold text-fg-secondary">{t('account.pat.allowedProjects')}</legend>
               <label className="flex items-center gap-2 text-sm text-fg">
                 <input type="checkbox" checked={allProjects} onChange={e => setAllProjects(e.target.checked)} />
-                이 워크스페이스의 전체 프로젝트
+                {t('account.pat.allInWorkspace')}
               </label>
               {!allProjects && candidates.map(p => (
                 <label key={p.id} className="flex items-center gap-2 text-sm text-fg">
@@ -214,16 +214,16 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
                   <span className="min-w-0 break-words">{p.name}</span>
                 </label>
               ))}
-              {!allProjects && candidates.length === 0 && <p className="text-xs text-fg-muted">선택할 프로젝트가 없습니다.</p>}
+              {!allProjects && candidates.length === 0 && <p className="text-xs text-fg-muted">{t('account.pat.noCandidates')}</p>}
             </fieldset>
             <div>
-              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">스코프</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('account.pat.scopes')}</span>
               <div className="flex flex-col gap-1.5">
                 {SCOPE_OPTIONS.map((opt) => (
                   <label key={opt.value} className="flex items-start gap-2 text-sm text-fg">
                     <input type="checkbox" checked={scopes.includes(opt.value)} onChange={() => toggleScope(opt.value)} disabled={issuing} className="mt-0.5" />
                     <span className="min-w-0 break-words">
-                      {opt.label}
+                      {t(opt.labelKey)}
                       <span className="block text-xs text-fg-muted">{t(opt.descKey)}</span>
                     </span>
                   </label>
@@ -231,24 +231,24 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
               </div>
             </div>
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">만료</span>
+              <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('account.pat.expires')}</span>
               <select className="app-input" value={expiresDays} onChange={(e) => setExpiresDays(Number(e.target.value))} disabled={issuing}>
-                {EXPIRES_OPTIONS.map((d) => <option key={d} value={d}>{d}일</option>)}
+                {EXPIRES_OPTIONS.map((d) => <option key={d} value={d}>{d}{t('account.pat.daysUnit')}</option>)}
               </select>
             </label>
             {issueError && <p role="alert" className="text-sm font-medium text-danger">{issueError}</p>}
             <button onClick={submitIssue} className="btn btn-primary w-full" disabled={issuing || workspaceError || !workspaceId}>
-              {issuing ? '발급 중…' : '토큰 발급'}
+              {issuing ? t('account.pat.issuing') : t('account.pat.issue')}
             </button>
           </div>
 
           {issued && (
             <div className="mt-4 rounded-xl border border-border bg-surface px-3.5 py-3">
-              <p className="text-xs font-medium text-danger">이 창을 닫으면 다시 볼 수 없습니다. 지금 복사해 안전한 곳에 보관하세요.</p>
+              <p className="text-xs font-medium text-danger">{t('account.pat.onceNotice')}</p>
               <div className="mt-2 flex items-center gap-2">
                 <code className="min-w-0 flex-1 truncate rounded-lg bg-surface-subtle px-2.5 py-1.5 font-mono text-xs text-fg">{issued.token}</code>
                 <button type="button" onClick={copyIssued} className="btn btn-ghost btn-sm shrink-0">
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? '복사됨' : '복사'}
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? t('account.pat.copied') : t('account.pat.copy')}
                 </button>
               </div>
             </div>
@@ -257,16 +257,16 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
       </div>
 
       <Modal
-        open={!!revoking} onClose={() => setRevoking(null)} title="토큰 폐기"
+        open={!!revoking} onClose={() => setRevoking(null)} title={t('account.pat.revokeTitle')}
         footer={
           <>
-            <button onClick={() => setRevoking(null)} className="btn btn-ghost" disabled={revokeBusy}>취소</button>
-            <button onClick={confirmRevoke} className="btn btn-primary" disabled={revokeBusy}>{revokeBusy ? '폐기 중…' : '폐기'}</button>
+            <button onClick={() => setRevoking(null)} className="btn btn-ghost" disabled={revokeBusy}>{t('common.cancel')}</button>
+            <button onClick={confirmRevoke} className="btn btn-primary" disabled={revokeBusy}>{revokeBusy ? t('account.pat.revoking') : t('account.pat.revoke')}</button>
           </>
         }
       >
         <p className="text-sm text-fg-secondary">
-          <b className="text-fg">{revoking?.name}</b> 토큰을 폐기합니다. 이 토큰을 사용하는 에이전트는 즉시 인증에 실패합니다. 되돌릴 수 없습니다.
+          <b className="text-fg">{revoking?.name}</b>{t('account.pat.revokeBody')}
         </p>
       </Modal>
     </div>

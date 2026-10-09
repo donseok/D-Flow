@@ -2,7 +2,7 @@
 import { act } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from './_dom'
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale())
 import { MobileNavDrawer } from '@/components/app/MobileNavDrawer'
 
 const groups = [{ group: 'ws.main' as const, items: [{ id: 'ws.home' as const, href: '/w/a', label: '홈', icon: 'LayoutGrid' }] }]

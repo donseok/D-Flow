@@ -17,11 +17,11 @@ describe('refreshSeatmap — projectId', () => {
   it('내 프로젝트면 getSeatmap 에 { projectId } 옵션으로 넘긴다', async () => {
     const r = await refreshSeatmap('mine', P1)
     expect(r).toEqual({ ok: true, seatmap: { floors: [] } })
-    expect(mocks.getSeatmap).toHaveBeenCalledWith(MEMBER_P1, expect.any(Number), 'mine', { projectId: P1 })
+    expect(mocks.getSeatmap).toHaveBeenCalledWith(MEMBER_P1, expect.any(Number), 'mine', { projectId: P1, t: expect.any(Function) })
   })
   it('projectId 없으면 인자 워크스페이스로 좁힌다({ workspaceId }, D26)', async () => {
     await refreshSeatmap('all', undefined, WS)
-    expect(mocks.getSeatmap).toHaveBeenCalledWith(MEMBER_P1, expect.any(Number), 'all', { workspaceId: WS })
+    expect(mocks.getSeatmap).toHaveBeenCalledWith(MEMBER_P1, expect.any(Number), 'all', { workspaceId: WS, t: expect.any(Function) })
   })
   it('플랫폼 관리자가 형식 밖 워크스페이스 값을 보내면 같은 문구로 거절 — 설정 조회(22P02 로그)까지 가지 않는다(U2a-4 T5)', async () => {
     mocks.getActorForView.mockResolvedValue(makeSuperuser())
@@ -42,9 +42,9 @@ describe('refreshSeatmap — projectId', () => {
     expect(await refreshSeatmap('all', undefined, 'ws-unknown')).toEqual({ ok: false, error: '권한이 없습니다.' })
     expect(mocks.getSeatmap).not.toHaveBeenCalled()
     expect(await refreshSeatmap('all', undefined, WS)).toEqual({ ok: true, seatmap: { floors: [] } })
-    expect(mocks.getSeatmap).toHaveBeenCalledWith(duo, expect.any(Number), 'all', { workspaceId: WS })
+    expect(mocks.getSeatmap).toHaveBeenCalledWith(duo, expect.any(Number), 'all', { workspaceId: WS, t: expect.any(Function) })
     expect(await refreshSeatmap('mine', P1)).toEqual({ ok: true, seatmap: { floors: [] } })
-    expect(mocks.getSeatmap).toHaveBeenCalledWith(duo, expect.any(Number), 'mine', { projectId: P1 })
+    expect(mocks.getSeatmap).toHaveBeenCalledWith(duo, expect.any(Number), 'mine', { projectId: P1, t: expect.any(Function) })
   })
   it('그 워크스페이스에 역할이 없으면(조회 전용) 전체 좌석표는 권한 없음', async () => {
     mocks.getActorForView.mockResolvedValue(makeMemberActor(P1, [], { projectRoles: new Map() }))

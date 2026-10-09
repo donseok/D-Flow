@@ -2,6 +2,7 @@
 // 실패는 throw 한다(에러 3원칙: 조회 실패를 데이터 없음으로 위장하지 않는다).
 // 단 agents 모듈 판정 실패(설정 조회·손상)는 그 프로젝트의 층을 뺀다 — 로그는 [requireModule](스펙 §3 modules.* fail-closed, P13).
 import { loadPredecessorGates, loadStageLabelsMap } from '@/lib/agent/predecessorGate'
+import type { Translate } from '@/lib/i18n/translate'
 import { loadQueueApprovals } from '@/lib/agent/approvalState'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { personOf } from '@/lib/data/memberSelect'
@@ -138,7 +139,8 @@ export async function fetchMyMemberIds(
   return must<Array<{ id: string }>>('로스터', await q).map(m => m.id)
 }
 
-export interface SeatmapOptions { projectId?: string; workspaceId?: string }
+/** t — 착수 대기 사유·주의 띠 사유의 화면 언어(페이지·좌석표 액션이 넘긴다). 없으면 한국어 */
+export interface SeatmapOptions { projectId?: string; workspaceId?: string; t?: Translate }
 
 /**
  * 층 목록 — 그 워크스페이스의 접근 가능 프로젝트(seatmapProjectIds). projectId 가 있으면 그 프로젝트의 워크스페이스 범위와 교집합.
@@ -167,21 +169,21 @@ export async function getSeatmap(actor: Actor, nowMs = Date.now(), scope: Seatma
     memberIds,
     adminProjectIds: new Set(rows.projects.filter(p => isProjectAdmin(actor, p.id)).map(p => p.id)),
   }
-  if (scope === 'all') return assembleSeatmap(rows, nowMs, { viewer })
-  return assembleSeatmap(rows, nowMs, { mine: { userId: actor.userId, memberIds }, viewer })
+  if (scope === 'all') return assembleSeatmap(rows, nowMs, { viewer, t: opts.t })
+  return assembleSeatmap(rows, nowMs, { mine: { userId: actor.userId, memberIds }, viewer, t: opts.t })
 }
 
 export interface ProjectOffice { projectName: string | null; seatmap: Seatmap }
 
 /** 프로젝트 스튜디오 — 이름 + 이 프로젝트 층 하나. 프로젝트가 없으면 projectName null(페이지가 notFound 로 보낸다). */
-export async function getProjectOffice(actor: Actor, projectId: string, nowMs = Date.now(), scope: SeatmapScope = 'mine'): Promise<ProjectOffice> {
+export async function getProjectOffice(actor: Actor, projectId: string, nowMs = Date.now(), scope: SeatmapScope = 'mine', t?: Translate): Promise<ProjectOffice> {
   const admin = createAdminClient()
   const [project, seatmap] = await Promise.all([
     admin.from('projects').select('id, name').eq('id', projectId).maybeSingle().then(r => {
       if (r.error) throw new Error(`[seatmap] 프로젝트 조회 실패: ${r.error.message}`)
       return r.data as { id: string; name: string } | null
     }),
-    getSeatmap(actor, nowMs, scope, { projectId }),
+    getSeatmap(actor, nowMs, scope, { projectId, t }),
   ])
   return { projectName: project?.name ?? null, seatmap }
 }

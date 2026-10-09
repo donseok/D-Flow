@@ -17,14 +17,14 @@ export interface WorkspaceField {
   description: string
   kind: 'boolean' | 'text' | 'domains'
   value: string | boolean
-  source: '워크스페이스 설정' | '배포 기본값' | '제품 기본값' | '설정 손상'
+  source: 'workspace' | 'deploy' | 'product' | 'corrupted'
   error?: string
 }
 type Draft = Record<string, string | boolean>
-/** 값 출처(페이지가 넘기는 구분값) → 화면 글자의 사전 키 */
+/** 값 출처(페이지가 넘기는 코드값) → 화면 글자의 사전 키 */
 const SOURCE_KEY: Readonly<Record<WorkspaceField['source'], DictKey>> = {
-  '워크스페이스 설정': 'settings.wsFields.source.workspace', '배포 기본값': 'settings.wsFields.source.deploy',
-  '제품 기본값': 'settings.wsFields.source.product', '설정 손상': 'settings.notify.policy.corrupted',
+  'workspace': 'settings.wsFields.source.workspace', 'deploy': 'settings.wsFields.source.deploy',
+  'product': 'settings.wsFields.source.product', 'corrupted': 'settings.notify.policy.corrupted',
 }
 type Conflict = { revision: number; values: Partial<Record<SimpleWorkspaceKey, unknown>>; invalidKeys: string[] }
 
@@ -59,7 +59,7 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
   const [pending, startTransition] = useTransition()
   // 저장되는 값으로 비교한다 — 공백만 넣은 메일 발신 이름(→ null)·빈 줄뿐인 도메인 목록이 '변경'으로 새지 않게
   const differs = (f: WorkspaceField) => !same(draft[f.key], baseline[f.key]) && JSON.stringify(stored(f, draft[f.key])) !== JSON.stringify(stored(f, baseline[f.key]))
-  const changed = fields.filter(f => differs(f) || (f.source === '설정 손상' && !repaired.includes(f.key)))
+  const changed = fields.filter(f => differs(f) || (f.source === 'corrupted' && !repaired.includes(f.key)))
 
   async function submit(patch: SettingsPatch, resendCount = 0): Promise<void> {
     let result: SettingsCommandResult | null = null

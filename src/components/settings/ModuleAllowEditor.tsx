@@ -5,14 +5,13 @@ import { useRouter } from 'next/navigation'
 import { previewSettingsImpact, type SettingsImpactResult } from '@/app/actions/settingsPreview'
 import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
-import { MODULE_LABEL } from '@/lib/modules/labels'
+import { MODULE_LABEL_KEY } from '@/lib/modules/labels'
 import { newUuid } from '@/lib/domain/uuid'
 import type { Locale } from '@/lib/i18n/dict'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
-const LABEL = MODULE_LABEL
 
 const sameIds = (a: readonly ModuleId[], b: readonly ModuleId[]) => a.length === b.length && a.every(id => b.includes(id))
 type Conflict = { revision: number; allowed: ModuleId[] | null }
@@ -21,6 +20,8 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
   workspaceId: string; initialAllowed: ModuleId[] | null; revision: number; invalidReason?: string; requiredMissing?: boolean; locale?: Locale
 }) {
   const { t } = useLocale()
+  // 모듈 이름은 화면 언어를 따른다(사전 module.*)
+  const LABEL = Object.fromEntries(Object.entries(MODULE_LABEL_KEY).map(([id, key]) => [id, t(key)])) as Record<keyof typeof MODULE_LABEL_KEY, string>
   const router = useRouter()
   const [baseline, setBaseline] = useState<ModuleId[]>(initialAllowed ?? [])
   const [selected, setSelected] = useState<ModuleId[]>(initialAllowed ?? [])

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { t, type Locale } from '@/lib/i18n/dict'
 
 type ReindexAction = 'status' | 'enqueue' | 'step' | 'repair'
@@ -53,6 +54,7 @@ async function callReindex<T>(action: ReindexAction): Promise<{ ok: true; data: 
  * 중간에 끊겨도 다음에 다시 누르면 이어서 처리되므로 무해하다.
  */
 export function WikiReindexButton({ locale }: { locale: Locale }) {
+  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const [status, setStatus] = useState<StatusResult | null>(null)
   const [run, setRun] = useState<RunState>({ kind: 'idle' })
   const stopRef = useRef(false)

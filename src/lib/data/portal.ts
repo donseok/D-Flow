@@ -11,6 +11,7 @@
  * 어디서도 원천 인자에 들지 않는다(canSeeProject).
  */
 import { cache } from 'react'
+import { koTranslate, type Translate } from '@/lib/i18n/translate'
 import { createServerClient } from '@/lib/supabase/server'
 import { fetchAllPages, type PageResult } from '@/lib/data/paging'
 import { getMyMeetings } from '@/lib/data/meetings'
@@ -39,7 +40,8 @@ import { isDueToday, summarize, type PortalSummary } from '@/lib/portal/summary'
 import { projectProgressMap, statusReason } from '@/lib/portal/projectProgress'
 
 type Db = Awaited<ReturnType<typeof createServerClient>>
-type Opts = { client?: Db; now?: Date }
+/** t — 화면에 그대로 보이는 사유 한 줄(요약 칸·프로젝트 현황)의 번역 함수. 없으면 한국어 */
+type Opts = { client?: Db; now?: Date; t?: Translate }
 const LIMIT_MAX = 50
 /** in() 목록 한 번에 실을 id 수 — 요청 URL 길이 상한 안에 두려고 나눠 묻는다 */
 const IN_CHUNK = 200
@@ -259,7 +261,7 @@ export async function getMyWork(workspaceId: string, actor: Actor, opts: { kinds
 
 /** 요약 수치 셋(스펙 §6.1) — 업무 위젯과 같은 원천(왕복이 늘지 않는다). 검토 칸은 홈이 검토자에게만 그린다 */
 export async function getPortalSummary(workspaceId: string, actor: Actor, opts: Opts = {}): Promise<PortalSummary> {
-  return summarize(await loadMyWorkSources(workspaceId, actor, opts.client, opts.now))
+  return summarize(await loadMyWorkSources(workspaceId, actor, opts.client, opts.now), opts.t)
 }
 
 /** 검토 위젯 행(D40 — 내가 승인할 수 있는 보고됨 주문, 최대 20) — 같은 원천. 원천 실패는 0건으로 위장하지 않는다 */
@@ -477,7 +479,7 @@ export async function getProjectRows(workspaceId: string, actor: Actor, opts: { 
         : projectLifecycleStatus(p.start_date, p.end_date, today, progress === null ? null : (pr ?? { hasWbs: false, allDone: false }))
       return {
         id: p.id, name: p.name, description: p.description ?? null, startDate: p.start_date, endDate: p.end_date, isFavorite: fav.has(p.id), status,
-        statusReason: today === null ? '오늘 날짜(워크스페이스 시간대)를 확인하지 못했습니다' : statusReason(status, pr),
+        statusReason: today === null ? (opts.t ?? koTranslate)('portal.status.todayUnknown') : statusReason(status, pr, opts.t),
         progress: pr ? { done: pr.done, total: pr.total } : (progress === null ? null : { done: 0, total: 0 }), nextDue: pr?.nextDue ?? null,
       }
     }).filter((p) => (!opts.status || p.status === opts.status) && (!opts.favoritesOnly || p.isFavorite))

@@ -14,6 +14,7 @@ const upsertRosterMember = vi.fn<(...a: unknown[]) => Promise<{ ok: true; member
 const removeRosterMember = vi.fn<(...a: unknown[]) => Promise<{ ok: true } | Fail>>(async () => ({ ok: true }))
 const refresh = vi.fn()
 
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['common.save', 'common.cancel'] }))
 vi.mock('@/app/actions/roster', () => ({
   upsertRosterMember: (...a: unknown[]) => upsertRosterMember(...a),
   removeRosterMember: (...a: unknown[]) => removeRosterMember(...a),

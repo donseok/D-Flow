@@ -6,21 +6,24 @@ import { upsertRosterMember, removeRosterMember } from '@/app/actions/roster'
 import type { EffectiveRoleView } from '@/lib/domain/authz'
 import type { RosterMember } from '@/lib/data/memberSelect'
 import {
-  accessRoleLabel, draftFromMember, isDraftDirty, validateDraft, type AccessRole, type RosterDraft,
+  accessRoleLabelKey, draftFromMember, isDraftDirty, validateDraft, type AccessRole, type RosterDraft,
 } from '@/lib/domain/roster'
 import { TeamMultiSelect, type TeamOption } from './TeamMultiSelect'
 import { useTeamLabel } from '@/components/app/TeamsProvider'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { DictKey } from '@/lib/i18n/dict'
 
 export const ROSTER_COLUMNS = 9
 
 /** 외부 인력 안내 — 배지 title 과 권한 셀이 같은 문구를 쓴다. */
-export const UNLINKED_HINT = '로그인 계정과 연결되지 않은 사람입니다. 계정이 있어야 권한을 줄 수 있습니다.'
+const UNLINKED_HINT_KEY = 'roster.unlinkedHint' satisfies DictKey
 
 /** 계정이 연결되지 않은 사람(외부 인력) — 권한을 받을 수 없고, 로그인해도 '나'로 이어지지 않는다. */
 function UnlinkedBadge() {
+  const { t: tr } = useLocale()
   return (
-    <span className="chip shrink-0 bg-surface-subtle text-fg-secondary" data-unlinked-badge title={UNLINKED_HINT}>
-      <Unlink className="h-3 w-3" aria-hidden />계정 미연결
+    <span className="chip shrink-0 bg-surface-subtle text-fg-secondary" data-unlinked-badge title={tr(UNLINKED_HINT_KEY)}>
+      <Unlink className="h-3 w-3" aria-hidden />{tr('roster.unlinked')}
     </span>
   )
 }
@@ -35,16 +38,18 @@ function NameCell({ member, children }: { member: RosterMember; children?: React
 }
 
 function EffectiveRoleCell({ member, effective }: { member: RosterMember; effective: EffectiveRoleView }) {
+  const { t: tr } = useLocale()
   return <td data-effective-role={member.id} className="py-2.5 pr-3 text-xs text-fg-secondary">
-    {effective.kind === 'unknown' ? '확인 불가' : effective.kind === 'external' ? accessRoleLabel(member.accessRole)
-      : <>{({ admin: '관리자', member: '멤버', viewer: '조회 전용' })[effective.role]}
-        {effective.inherited && <span className="ml-1 chip text-fg-secondary">워크스페이스 관리자에서 상속</span>}</>}
+    {effective.kind === 'unknown' ? tr('roster.effective.unknown') : effective.kind === 'external' ? tr(accessRoleLabelKey(member.accessRole))
+      : <>{({ admin: tr('roster.effective.admin'), member: tr('roster.effective.member'), viewer: tr('roster.effective.viewer') })[effective.role]}
+        {effective.inherited && <span className="ml-1 chip text-fg-secondary">{tr('roster.inherited')}</span>}</>}
   </td>
 }
 
 /** 읽기 전용 행 — 비관리자 화면, 또는 관리자 행을 고칠 수 없는 프로젝트 관리자. */
 export function RosterReadRow({ member, note, effective = { kind: 'unknown' } }: { member: RosterMember; note?: string; effective?: EffectiveRoleView }) {
   const teamLabelOf = useTeamLabel()   // 칩 글자는 팀 이름(범위 밖·비활성 팀은 code 그대로)
+  const { t: tr } = useLocale()
   return (
     <tr className={`border-b border-border/60 align-top ${member.active ? '' : 'opacity-60'}`} data-roster-row={member.id}>
       <td className="py-2.5 pr-3"><NameCell member={member} /></td>
@@ -60,9 +65,9 @@ export function RosterReadRow({ member, note, effective = { kind: 'unknown' } }:
       </td>
       <td className="py-2.5 pr-3 text-xs text-fg-secondary">{member.roleLabel ?? '—'}</td>
       <td className="py-2.5 pr-3 text-xs text-fg-secondary">{member.title ?? '—'}</td>
-      <td className="py-2.5 pr-3 text-xs text-fg-secondary">{accessRoleLabel(member.accessRole)}</td>
+      <td className="py-2.5 pr-3 text-xs text-fg-secondary">{tr(accessRoleLabelKey(member.accessRole))}</td>
       <EffectiveRoleCell member={member} effective={effective} />
-      <td className="py-2.5 pr-3 text-xs text-fg-secondary">{member.active ? '활성' : '비활성'}</td>
+      <td className="py-2.5 pr-3 text-xs text-fg-secondary">{member.active ? tr('roster.active') : tr('roster.inactive')}</td>
       <td className="py-2.5 text-xs text-fg-muted">{note ?? ''}</td>
     </tr>
   )
@@ -121,6 +126,7 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
   }
 
   const who = member.name
+  const { t: tr } = useLocale()
   const unlinked = member.kind === 'external'
   return (
     <>
@@ -131,56 +137,56 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
       >
         <td className="py-2 pr-3">
           <NameCell member={member}>
-            <input className="app-input h-8 w-28 text-xs" aria-label={`${who} 이름`} value={draft.name}
+            <input className="app-input h-8 w-28 text-xs" aria-label={tr('roster.aria.name').replace('{who}', () => String(who))} value={draft.name}
               disabled={pending} onChange={e => set('name', e.target.value)} />
           </NameCell>
         </td>
         <td className="py-2 pr-3 text-fg-secondary">{member.email ?? '—'}</td>
         <td className="py-2 pr-3">
-          <TeamMultiSelect options={options} value={draft.teamIds} label={`${who} 팀`} disabled={pending}
+          <TeamMultiSelect options={options} value={draft.teamIds} label={tr('roster.aria.teams').replace('{who}', () => String(who))} disabled={pending}
             onChange={ids => set('teamIds', ids)} />
         </td>
         <td className="py-2 pr-3">
-          <input className="app-input h-8 w-24 text-xs" aria-label={`${who} 역할 라벨`} placeholder="역할" value={draft.roleLabel}
+          <input className="app-input h-8 w-24 text-xs" aria-label={tr('roster.aria.roleLabel').replace('{who}', () => String(who))} placeholder={tr('roster.rolePlaceholder')} value={draft.roleLabel}
             disabled={pending} onChange={e => set('roleLabel', e.target.value)} />
         </td>
         <td className="py-2 pr-3">
-          <input className="app-input h-8 w-24 text-xs" aria-label={`${who} 직함`} placeholder="직함" value={draft.title}
+          <input className="app-input h-8 w-24 text-xs" aria-label={tr('roster.aria.title').replace('{who}', () => String(who))} placeholder={tr('roster.col.title')} value={draft.title}
             disabled={pending} onChange={e => set('title', e.target.value)} />
         </td>
         <td className="py-2 pr-3">
-          <select className="app-input h-8 w-auto text-xs" aria-label={`${who} 권한`} value={draft.accessRole ?? ''}
-            disabled={pending} title={unlinked ? UNLINKED_HINT : undefined}
+          <select className="app-input h-8 w-auto text-xs" aria-label={tr('roster.aria.access').replace('{who}', () => String(who))} value={draft.accessRole ?? ''}
+            disabled={pending} title={unlinked ? tr(UNLINKED_HINT_KEY) : undefined}
             onChange={e => set('accessRole', (e.target.value || null) as AccessRole | null)}>
-            <option value="">{accessRoleLabel(null)}</option>
+            <option value="">{tr(accessRoleLabelKey(null))}</option>
             {/* 외부 인력은 계정이 없어 권한을 받을 수 없다 — 트리거(PROJECT_MEMBER_ACCESS_REQUIRES_ACCOUNT)가 거부하기 전에 막는다. */}
-            <option value="member" disabled={unlinked}>{accessRoleLabel('member')}</option>
+            <option value="member" disabled={unlinked}>{tr(accessRoleLabelKey('member'))}</option>
             <option value="admin" disabled={unlinked || !canGrantAdmin}>
-              {accessRoleLabel('admin')}{!unlinked && !canGrantAdmin ? ' (워크스페이스 관리자 전용)' : ''}
+              {tr(accessRoleLabelKey('admin'))}{!unlinked && !canGrantAdmin ? tr('roster.wsAdminOnly') : ''}
             </option>
           </select>
-          {unlinked && <p className="mt-1 max-w-[12rem] text-meta leading-4 text-fg-muted" data-unlinked-access-hint>{UNLINKED_HINT}</p>}
+          {unlinked && <p className="mt-1 max-w-[12rem] text-meta leading-4 text-fg-muted" data-unlinked-access-hint>{tr(UNLINKED_HINT_KEY)}</p>}
         </td>
         <EffectiveRoleCell member={member} effective={effective} />
         <td className="py-2 pr-3">
           <label className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
-            <input type="checkbox" aria-label={`${who} 활성`} checked={draft.active} disabled={pending}
+            <input type="checkbox" aria-label={tr('roster.aria.active').replace('{who}', () => String(who))} checked={draft.active} disabled={pending}
               onChange={e => set('active', e.target.checked)} />
-            활성
+            {tr('roster.active')}
           </label>
         </td>
         <td className="py-2">
           <span className="flex items-center gap-1.5">
             <button type="button" className="btn btn-primary h-8 px-3 text-xs" disabled={pending || !dirty} onClick={save}>
-              {pending ? '저장 중…' : '저장'}
+              {pending ? tr('roster.saving') : tr('common.save')}
             </button>
             {confirmDelete ? (
               <>
-                <button type="button" className="btn btn-ghost h-8 px-2 text-xs text-danger" disabled={pending} onClick={remove}>삭제 확인</button>
-                <button type="button" className="btn btn-ghost h-8 px-2 text-xs" disabled={pending} onClick={() => setConfirmDelete(false)}>취소</button>
+                <button type="button" className="btn btn-ghost h-8 px-2 text-xs text-danger" disabled={pending} onClick={remove}>{tr('roster.confirmDelete')}</button>
+                <button type="button" className="btn btn-ghost h-8 px-2 text-xs" disabled={pending} onClick={() => setConfirmDelete(false)}>{tr('common.cancel')}</button>
               </>
             ) : (
-              <button type="button" className="btn btn-ghost h-8 px-2 text-xs" aria-label={`${who} 삭제`} disabled={pending}
+              <button type="button" className="btn btn-ghost h-8 px-2 text-xs" aria-label={tr('roster.aria.delete').replace('{who}', () => String(who))} disabled={pending}
                 onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="h-3.5 w-3.5" aria-hidden />
               </button>

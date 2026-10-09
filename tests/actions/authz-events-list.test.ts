@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ guard: vi.fn(), server: vi.fn(), adminFor: vi.fn() }))
+const h = vi.hoisted(() => ({ guard: vi.fn(), server: vi.fn(), adminFor: vi.fn(), translator: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireWorkspaceAdmin: h.guard }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: h.server }))
 vi.mock('@/lib/supabase/adminFor', () => ({ adminFor: h.adminFor }))
+vi.mock('@/lib/i18n/server', () => ({ serverTranslator: () => h.translator() }))
 
 import { listAuthzEvents } from '@/app/actions/authzEvents'
 import { ERR_DENIED } from '@/lib/authz/errors'
+import { registerEn } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+import { koTranslate, translatorFor } from '@/lib/i18n/translate'
+
+registerEn(EN)
 
 const WS = '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
 const U_ACTOR = '00000000-0000-4000-8000-0000000000a1'
@@ -39,7 +45,7 @@ function setup(o: { events?: unknown[]; eventsErr?: string; profiles?: unknown[]
   return { events, profiles, people, projects, adminFrom }
 }
 
-beforeEach(() => { vi.clearAllMocks() })
+beforeEach(() => { vi.clearAllMocks(); h.translator.mockResolvedValue(koTranslate) })
 
 describe('listAuthzEvents — 워크스페이스 설정 \'기록\' 범주의 권한 변경 목록', () => {
   it('가드가 거부하면 그대로 돌려주고 아무것도 읽지 않는다', async () => {
@@ -118,5 +124,26 @@ describe('listAuthzEvents — 워크스페이스 설정 \'기록\' 범주의 권
     expect(h.adminFor).toHaveBeenCalledWith({ workspaceId: WS })
     expect(s.people.eq).toHaveBeenCalledWith('workspace_id', WS)
     expect(s.projects.eq).toHaveBeenCalledWith('workspace_id', WS)
+  })
+
+  it('요청의 화면 언어가 영어면 종류·원인·요약·이름 자리 대체 글자가 영어다', async () => {
+    h.translator.mockResolvedValue(translatorFor('en'))
+    setup({
+      events: [row(3, { actor_user_id: null, target_user_id: U_GONE, before: null, after: { role: 'member' } }),
+        row(2, { kind: 'project_access', project_id: P1, target_user_id: null, target_person_id: PE, before: { access_role: 'admin' }, after: null, cause: 'cascade' })],
+      profiles: [{ user_id: U_ACTOR, display_name: 'Kim' }], people: [], projects: [],
+    })
+    const r = await listAuthzEvents(WS)
+    expect(r.ok && r.rows[0]).toMatchObject({ kindLabel: 'Workspace role', summary: 'Added to workspace (Member)', causeLabel: 'Direct change', actorName: 'System', targetName: 'Deleted account' })
+    expect(r.ok && r.rows[1]).toMatchObject({ kindLabel: 'Project access', summary: 'Revoked (Admin)', causeLabel: 'Cascade (membership change)', targetName: 'Deleted person', projectName: 'Deleted project' })
+  })
+
+  it('영어 화면에서 이름 조회가 실패하면 "Name unavailable"', async () => {
+    h.translator.mockResolvedValue(translatorFor('en'))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    setup({ events: [row(1)], profilesErr: 'db down' })
+    const r = await listAuthzEvents(WS)
+    expect(r.ok && r.rows[0]).toMatchObject({ actorName: 'Name unavailable', targetName: 'Name unavailable' })
+    spy.mockRestore()
   })
 })

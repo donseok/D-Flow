@@ -28,7 +28,8 @@ import { requireCalendar } from '@/lib/calendar/load'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 접속 지표는 항상 최신이어야 한다
-export const metadata = { title: '사용 현황' }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '사용 현황') */
+export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.usage') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 /** 접속 로그 표시 상한. 넘치면 화면이 그 사실을 밝힌다. */
 const EVENT_LIMIT = 200

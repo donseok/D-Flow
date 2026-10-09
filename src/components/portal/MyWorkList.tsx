@@ -5,8 +5,6 @@ import { StatusMessage } from '@/components/ui/StatusMessage'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 
 export const KIND_LABEL_KEY: Record<MyWorkKind, DictKey> = { wbs: 'portalUi.kind.wbs', issue: 'portalUi.kind.issue', approval: 'portalUi.kind.approval', meeting: 'portalUi.kind.meeting' }
-/** ko 고정 라벨 — 옛 호출부(내 업무 페이지)용. 로캘을 따르려면 KIND_LABEL_KEY 를 쓴다 */
-export const KIND_LABEL: Record<MyWorkKind, string> = { wbs: t('ko', KIND_LABEL_KEY.wbs), issue: t('ko', KIND_LABEL_KEY.issue), approval: t('ko', KIND_LABEL_KEY.approval), meeting: t('ko', KIND_LABEL_KEY.meeting) }
 const KIND_ICON: Record<MyWorkKind, LucideIcon> = { wbs: ListChecks, issue: CircleAlert, approval: ShieldCheck, meeting: CalendarClock }
 
 /**

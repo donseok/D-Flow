@@ -49,7 +49,7 @@ export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, canApp
   // 열려 있는 동안 rows(또는 groupOf)가 바뀔 때마다 재계산 — 적용 직후에도, 타인의 Realtime 수정에도 목록이 따라간다.
   // 묶음 수만큼의 행 × 4열이라 비용은 무시할 만하다. 닫혀 있으면 계산하지 않는다.
   const { t } = useLocale()
-  const findings = useMemo(() => (open ? lintWeeklySheet(rows, groupOf) : []), [open, rows, groupOf])
+  const findings = useMemo(() => (open ? lintWeeklySheet(rows, groupOf, t) : []), [open, rows, groupOf, t])
   const groups = useMemo(() => groupFindings(findings), [findings])
 
   return (

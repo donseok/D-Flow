@@ -21,8 +21,8 @@ export function ProjectNav({ groups, pathname, workspaceHome, projectSwitcher, b
   return (
     <SideRail collapsed={collapsed} label={t('nav.project')} onToggleCollapsed={onToggleCollapsed}>
       {workspaceHome && (
-        <Link href={workspaceHome} aria-label="워크스페이스 홈" className="mb-2 flex h-9 items-center gap-2 px-3 text-control text-fg-secondary hover:text-fg">
-          <ArrowLeft size={16} aria-hidden />{collapsed !== true && <span className={collapsed === null ? 'hidden xl:inline' : ''}>워크스페이스 홈</span>}
+        <Link href={workspaceHome} aria-label={t('shell.workspaceHome')} className="mb-2 flex h-9 items-center gap-2 px-3 text-control text-fg-secondary hover:text-fg">
+          <ArrowLeft size={16} aria-hidden />{collapsed !== true && <span className={collapsed === null ? 'hidden xl:inline' : ''}>{t('shell.workspaceHome')}</span>}
         </Link>
       )}
       {/* 선호 없음이면 1024~1279(64px 레일)에서 전환기를 숨긴다 — 그 폭은 전역 바 브레드크럼의 프로젝트 전환기(768 이상, AA1)가 맡는다(정적 래퍼, D17 ②) */}
