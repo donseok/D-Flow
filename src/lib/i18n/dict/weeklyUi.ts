@@ -104,6 +104,8 @@ export const weeklyUiKo = {
   'weekly.custom.clickToEdit': '(클릭하여 편집)',
   'weekly.custom.modalTitle': '{area} — 추가 정보',
   // 도구 줄 — 주차 이동·내보내기
+  // 주차 라벨(화면 표시 전용 — weekDisplayLabel). 문서 기본 제목·파일 이름·보고서 라벨은 제품 고정이라 사전을 거치지 않는다
+  'weekly.week.labelWithRange': '{month} {ordinal}주차 ({from}~{to})',
   'weekly.nav.prev': '이전 주',
   'weekly.nav.next': '다음 주',
   'weekly.export.abortedTitle': '내보내기 중단',

@@ -1105,13 +1105,25 @@ describe('재점검 보강 — 순수 조각', () => {
     expect(settingDef('workspace', 'notify.policy')?.explicit).toBeUndefined()   // 지울 수 있는 키여야 되돌리기가 된다
   })
   it('securityHeaderProblems — 앱이 실제로 싣는 헤더 구성을 통과하고, 빠지거나 약해지면 그 헤더를 짚는다', () => {
-    const rule = buildSecurityHeaders({ appEnv: 'development', dev: false, supabaseUrl: 'http://127.0.0.1:54521' }).at(-1)!
+    const build = (cspMode?: string) => buildSecurityHeaders({ appEnv: 'development', dev: false, supabaseUrl: 'http://127.0.0.1:54521', cspMode }).at(-1)!
     const of = (pairs: { key: string; value: string }[]) => new Headers(pairs.map((h) => [h.key, h.value] as [string, string]))
+    const names = (pairs: { key: string; value: string }[]) => securityHeaderProblems(of(pairs)).map((x) => x.split(' ')[0])
+    // 기본 구성(강제 — CSP_MODE 없음): 자원 정책이 강제 헤더 하나에 실리고 보고 전용 헤더는 없다
+    const rule = build()
+    expect(rule.headers.some((h) => h.key === 'Content-Security-Policy-Report-Only')).toBe(false)
     expect(securityHeaderProblems(of(rule.headers))).toEqual([])
-    expect(securityHeaderProblems(new Headers()).map((x) => x.split(' ')[0])).toEqual([
+    // 되돌린 구성(CSP_MODE=report): 강제 헤더는 프레임 차단만, 자원 정책은 보고 전용 헤더 — 이것도 통과한다
+    const report = build('report')
+    expect(securityHeaderProblems(of(report.headers))).toEqual([])
+    expect(names([])).toEqual([
       'x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy', 'content-security-policy', 'content-security-policy-report-only'])
-    const weak = rule.headers.map((h) => (h.key === 'X-Frame-Options' ? { ...h, value: 'SAMEORIGIN' } : h.key === 'Content-Security-Policy' ? { ...h, value: "default-src 'self'" } : h))
-    expect(securityHeaderProblems(of(weak)).map((x) => x.split(' ')[0])).toEqual(['x-frame-options', 'content-security-policy'])
+    const weaken = (pairs: { key: string; value: string }[], csp: string) =>
+      pairs.map((h) => (h.key === 'X-Frame-Options' ? { ...h, value: 'SAMEORIGIN' } : h.key === 'Content-Security-Policy' ? { ...h, value: csp } : h))
+    // report 구성에서 강제 헤더의 프레임 차단이 빠지면 그 헤더만 짚는다(자원 정책은 보고 전용 헤더에 있다)
+    expect(names(weaken(report.headers, "default-src 'self'"))).toEqual(['x-frame-options', 'content-security-policy'])
+    // 기본(강제) 구성에서 프레임 차단만 빠지면 그 헤더만, 자원 정책까지 빠지면 어느 헤더에도 자원 정책이 없다고 함께 짚는다
+    expect(names(weaken(rule.headers, "default-src 'self'; object-src 'none'"))).toEqual(['x-frame-options', 'content-security-policy'])
+    expect(names(weaken(rule.headers, "frame-ancestors 'none'"))).toEqual(['x-frame-options', 'content-security-policy-report-only'])
   })
   it('healthProblems — 얕은 점검은 DB 칸이 없어야 하고 깊은 점검은 db ok, 둘 다 no-store', () => {
     const ok = { status: 200, body: { ok: true }, cacheControl: 'no-store, max-age=0' }

@@ -1,7 +1,29 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { CSP_HEADER, CSP_REPORT_ONLY_HEADER, buildCsp, cspModeOf } from '@/lib/http/securityHeaders'
+
+/** 요청마다 새 nonce(128비트 난수의 base64) — 엣지 런타임이라 Web Crypto 만 쓴다 */
+function newNonce(): string {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))))
+}
 
 export async function middleware(req: NextRequest) {
+  // ── CSP nonce(src/lib/http/securityHeaders.ts 머리 주석 ①) — 세션 검증과 독립이다: 아래 인증 흐름은 그대로 두고 헤더만 싣는다 ──
+  // 요청 헤더에 싣는 이유: Next 는 **요청**의 CSP 헤더에서 nonce 를 읽어 자기 인라인 스크립트에 붙이고, 루트 레이아웃은 x-nonce 로 읽는다.
+  // 아래 NextResponse.next({ request: req }) 두 곳이 이 req 를 그대로 물려주므로 여기서 한 번만 적으면 된다.
+  // 클라이언트가 보낸 같은 이름의 헤더는 먼저 지운다 — Next 는 강제 헤더를 먼저 보고 없으면 보고 전용을 보므로, 남겨 두면 우리 nonce 대신 그 값을 읽는다.
+  const nonce = newNonce()
+  const csp = buildCsp({
+    nonce,
+    mode: cspModeOf(process.env.CSP_MODE),
+    dev: process.env.NODE_ENV === 'development',
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  })
+  req.headers.delete(CSP_HEADER)
+  req.headers.delete(CSP_REPORT_ONLY_HEADER)
+  req.headers.set('x-nonce', nonce)
+  req.headers.set(csp.key, csp.value)
+
   // { request: req } 전파가 핵심이다(2026-08-18 수정, supabase 공식 패턴): 토큰 갱신 시
   // 갱신 쿠키를 req.cookies 에도 써서 **같은 요청의 RSC 가 새 토큰을 보게** 한다.
   // 종전엔 res 에만 실어 브라우저는 받지만 당장의 렌더는 만료 토큰으로 조회했고,
@@ -40,6 +62,10 @@ export async function middleware(req: NextRequest) {
     res.cookies.getAll().forEach(c => redirect.cookies.set(c))
     return redirect
   }
+  // 응답에는 정책 헤더 하나만 싣는다(기본은 강제 헤더, CSP_MODE=report 면 보고 전용) — next.config.ts 의 정적 헤더가 낸 같은 이름의 값을 덮는다.
+  // report 모드의 강제 헤더(frame-ancestors 'none')는 정적 헤더의 것을 그대로 둔다: 여기서 그 헤더를 응답에 실으면 Next 가 그것을 요청 헤더로도
+  // 옮겨 nonce 없는 값이 먼저 읽힌다(인라인 스크립트에 nonce 가 붙지 않는다). 리다이렉트 응답은 문서가 아니라 정적 헤더로 충분하다.
+  res.headers.set(csp.key, csp.value)
   return res
 }
 

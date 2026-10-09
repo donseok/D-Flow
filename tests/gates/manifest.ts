@@ -340,6 +340,7 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('cron/minutes-attachments-gc')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 minutes-attachments-gc) — 회의록 첨부 청소(고아 객체·미정리 톰스톤. core 잡, 수량만 돌려준다)'),
   [`${R('cron/inbox-retention')}#GET`]: nul('cronSecret', 'CRON_SECRET(잡 inbox-retention) — 알림함 보존(셸)'),
   [`${R('export')}#GET`]: { guard: 'projectMember', module: null, note: '정본 §4.8 — requireProjectMember. wbs 는 core 라 모듈 관문은 없다. form=1 은 양식, 그 밖은 프로파일 라운드트립' },
+  [`${R('csp-report')}#POST`]: nul('public', 'CSP 위반 보고 수집 — 무인증(브라우저가 직접 보낸다). 표·RPC 를 읽지 않고 저장하지 않는다: 지시어와 차단된 주소(쿼리 제거)만 서버 로그에 남긴다. 콘텐츠 타입·본문 상한·IP 별 요청 제한'),
   [`${R('health')}#GET`]: nul('public', '헬스체크 — 무인증 생존 신호({ ok: true })만. ?deep=1 의 DB 한 줄 조회는 CRON_SECRET Bearer 가 맞을 때만(없으면 얕은 응답). 행·오류 문구를 돌려주지 않는다'),
   [`${R('import/execute')}#POST`]: nul('projectAdmin'),
   [`${R('import/inspect')}#POST`]: nul('projectAdmin'),
@@ -389,6 +390,7 @@ export const ROUTE_MODULE_OVERRIDES: Readonly<Record<string, string>> = {
 export const CORE_ROUTE_ALLOW: Readonly<Record<string, string>> = {
   '/api/brand/[workspaceId]/[slot]': '브랜딩 설정의 현재 로고 — 비공개 버킷, 소속 판정',
   '/api/health': '운영 — 헬스체크(무인증 생존 신호, 깊은 점검은 CRON_SECRET)',
+  '/api/csp-report': '운영 — CSP 위반 보고 수집(무인증, 로그만 — 저장소 없음)',
   '/api/prefs': '셸 — 개인 UI 설정',
   '/api/shell': '셸 — 알림함·파생 알림·범위 배지 셋(검토 대기·결재 대기·공지 안읽음) 통합 조회',
   '/api/nav/switch-target': '셸 — 프로젝트 전환의 같은 모듈 유지 판정(D41)',

@@ -4,7 +4,7 @@ import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { visibleRows } from '@/lib/domain/weeklySheet'
-import { normalizeWeekParam, sheetWeekMeta } from '@/lib/report/week'
+import { normalizeWeekParam, sheetWeekMeta, weekDisplayLabel } from '@/lib/report/week'
 import { nextWeekKey, prevWeekKey, todayIn, type WorkCalendar } from '@/lib/domain/calendar'
 import { requireCalendar } from '@/lib/calendar/load'
 import { ConfigKeyError } from '@/lib/settings/errors'
@@ -77,7 +77,8 @@ export default async function WeeklyPage({
           weekStart={weekStart}
           prevWeek={prevWeekKey(cal.weekStart, weekStart)}
           nextWeek={nextWeekKey(cal.weekStart, weekStart)}
-          weekLabel={`${wk.label} (${wk.thisRange})`}
+          // 주차 이동 줄·빈 시트 안내의 라벨만 화면 언어를 따른다. weekTitle 은 문서 기본 제목의 재료(저장 값과 비교 — 제품 고정)라 한국어 그대로
+          weekLabel={weekDisplayLabel(cal, weekStart, locale)}
           weekTitle={wk.label}
           thisRange={wk.thisRange}
           nextRange={wk.nextRange}

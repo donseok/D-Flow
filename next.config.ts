@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { buildSecurityHeaders } from "./src/lib/http/securityHeaders";
+import { buildSecurityHeaders, cspModeOf } from "./src/lib/http/securityHeaders";
 
 // 배포 환경의 정본은 APP_ENV(production|staging|preview|development)다(정본 §5.5.2 ⑦). Vercel 은 APP_ENV 를 모르므로
 // APP_ENV 가 없을 때만 **여기 한 곳에서** VERCEL_ENV 를 읽어 빌드 env 로 옮긴다(아래 env — 빌드 때 process.env.APP_ENV 에 박힌다).
@@ -8,8 +8,12 @@ const APP_ENVS = ["production", "staging", "preview", "development"] as const;
 const mappedAppEnv = process.env.APP_ENV ? undefined : APP_ENVS.find((v) => v === process.env.VERCEL_ENV);
 const appEnv = process.env.APP_ENV ?? mappedAppEnv;
 
+// CSP 모드(enforce|report — 기본 enforce, 정확히 report 일 때만 보고 전용)는 빌드 때 굳힌다: 정적 헤더(아래 headers())는 빌드 산출물에 들어가므로, 미들웨어가 읽는 값도
+// 같은 빌드 값이 되게 빌드 env 로 박는다(런타임에 한쪽만 바뀌어 두 경로의 모드가 어긋나지 않게). 바꾸려면 다시 빌드한다.
+const cspMode = cspModeOf(process.env.CSP_MODE);
+
 const nextConfig: NextConfig = {
-  ...(mappedAppEnv ? { env: { APP_ENV: mappedAppEnv } } : {}),
+  env: { ...(mappedAppEnv ? { APP_ENV: mappedAppEnv } : {}), CSP_MODE: cspMode },
   ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   // 라우터 캐시(2026-08-18 성능 감사): 동적 페이지도 30초간 클라이언트 라우터 캐시를 재사용해
   // 방금 본 화면 재방문·뒤로가기가 왕복 0회가 된다. 서버 액션의 revalidatePath / router.refresh
@@ -24,12 +28,13 @@ const nextConfig: NextConfig = {
     "/api/issue-analysis": ["./src/lib/report/assets/default/issue_analysis_pptx.pptx"],
   },
   async headers() {
-    // 보안 헤더·보고 전용 CSP·기존 두 규칙(스테이징 noindex, 프로덕션 툴바 숨김)의 구성은 순수 함수 한 곳이다(단위 테스트가 정책을 고정한다).
+    // 보안 헤더·정적 경로의 CSP·기존 두 규칙(스테이징 noindex, 프로덕션 툴바 숨김)의 구성은 순수 함수 한 곳이다(단위 테스트가 정책을 고정한다).
     return buildSecurityHeaders({
       appEnv,
       staging: process.env.STAGING,
       supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
       dev: process.env.NODE_ENV === "development",
+      cspMode,
     });
   },
 };

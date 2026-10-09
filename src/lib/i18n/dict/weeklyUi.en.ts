@@ -96,6 +96,7 @@ export const weeklyUiEn: Record<keyof typeof weeklyUiKo, string> = {
   'weekly.custom.edit': 'Edit more info',
   'weekly.custom.clickToEdit': '(click to edit)',
   'weekly.custom.modalTitle': '{area} — More info',
+  'weekly.week.labelWithRange': '{month} · Week {ordinal} ({from}–{to})',
   'weekly.nav.prev': 'Previous week',
   'weekly.nav.next': 'Next week',
   'weekly.export.abortedTitle': 'Export stopped',

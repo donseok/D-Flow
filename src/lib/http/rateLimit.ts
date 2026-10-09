@@ -34,6 +34,9 @@ export const RATE_RULES = {
   passwordResetRequest: { limit: 10, windowMs: TEN_MINUTES },
   /** 외부 API·에이전트 API(/api/v1/**)의 토큰 인증 실패. 회수된 토큰으로 계속 물어보는 에이전트가 같은 사무실의 다른 에이전트를 막지 않게 넉넉히 */
   apiCredential: { limit: 30, windowMs: TEN_MINUTES },
+  /** CSP 위반 보고(/api/csp-report) — 실패가 아니라 요청 수(무인증 수집이라 요청마다 로그 한 줄이 될 수 있다). 위반이 많은 화면 하나가 수십 건을
+   *  보내므로 넉넉히 잡는다 — 넘친 보고는 버려도 된다(같은 위반은 다음 창에 다시 온다) */
+  cspReport: { limit: 120, windowMs: TEN_MINUTES },
 } as const satisfies Record<string, RateRule>
 export type RateKind = keyof typeof RATE_RULES
 

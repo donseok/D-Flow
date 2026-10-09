@@ -190,13 +190,69 @@ journalctl -u dflow --since '1 hour ago' | grep -F '<참조 ID>'      # systemd 
 
 ## 응답 보안 헤더
 
-모든 응답에 `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Permissions-Policy`(카메라·마이크·위치 등 차단),
-`Content-Security-Policy: frame-ancestors 'none'` 이 붙는다(구성은 `src/lib/http/securityHeaders.ts`). `Strict-Transport-Security` 는 `APP_ENV=production` 일 때만 붙는다 —
-TLS 를 앞단 프록시가 끝내는 구성에서도 브라우저가 https 로 받은 응답이면 적용된다.
+모든 응답에 `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Permissions-Policy`(카메라·마이크·위치 등 차단)가
+붙고, 프레임 차단(`frame-ancestors 'none'`)은 언제나 강제된다(구성은 `src/lib/http/securityHeaders.ts`). `Strict-Transport-Security` 는 `APP_ENV=production` 일 때만 붙는다 —
+TLS 를 앞단 프록시가 끝내는 구성에서도 브라우저가 https 로 받은 응답이면 적용된다. 앞단 프록시가 같은 이름의 헤더를 따로 붙이면 값이 겹치므로 한쪽에서만 붙인다.
 
-나머지 콘텐츠 보안 정책은 **보고 전용**(`Content-Security-Policy-Report-Only`)이다: 어긋나는 자원을 막지 않고 브라우저 콘솔에만 위반을 남긴다. 정책의 Supabase 출처는
-빌드 때의 `NEXT_PUBLIC_SUPABASE_URL` 에서 나온다. 강제 전환은 배포된 화면에서 콘솔 위반이 0 인 것을 확인한 뒤의 일이고 아직 하지 않았다(화면이 깨져도 자동 테스트가 잡지 못한다).
-앞단 프록시가 같은 이름의 헤더를 따로 붙이면 값이 겹치므로 한쪽에서만 붙인다.
+### 콘텐츠 보안 정책(CSP)
+
+정책은 경로에 따라 두 갈래다. 정책의 Supabase 출처는 빌드 때의 `NEXT_PUBLIC_SUPABASE_URL` 에서 나온다.
+
+| 경로 | 누가 붙이나 | `script-src` |
+|---|---|---|
+| 로그인 뒤의 앱 화면(미들웨어가 도는 경로) | `src/middleware.ts` — 요청마다 nonce 를 새로 만든다 | `'self' 'nonce-…' 'strict-dynamic'` + 테마 스크립트 해시 |
+| `/login`·`/invite/**`·`/share/**`·`/api/**`·정적 자산(미들웨어 제외 경로) | `next.config.ts` 의 정적 헤더 | `'self' 'unsafe-inline'`(nonce 를 만들 코드가 돌지 않는다) |
+
+나머지 지시어는 두 갈래가 같다: 스타일은 `'unsafe-inline'` 유지(인라인 style 속성), 그림은 자체·`data:`·`blob:`·Storage 와 **`https:` 전체**(마크다운 본문의 외부 그림),
+연결은 자체와 Supabase(https·wss), 프레임은 자체·`blob:`·Storage.
+
+**기본은 강제(enforce)다.** `CSP_MODE` 는 되돌리는 스위치다 — 정확히 `report` 일 때만 보고 전용이고, 값이 없거나 그 밖의 값(오타·대문자 포함)이면 강제한다
+(모르는 값이 보호를 풀지 않게). 값은 **빌드 때 굳는다**: 바꾸면 다시 빌드하고 다시 띄운다. 런타임 env 만 바꿔서는 바뀌지 않는다.
+
+| 모드 | 응답 헤더 | 동작 |
+|---|---|---|
+| 강제(기본 — 값 없음·`enforce`·그 밖의 값) | `Content-Security-Policy: <정책>` | 정책 밖의 스크립트·그림·연결을 막는다 |
+| `CSP_MODE=report` | `Content-Security-Policy-Report-Only: <정책>` + `Content-Security-Policy: frame-ancestors 'none'` | 막지 않는다. 위반을 보고만 한다 |
+
+**위반 보고 보는 법.** 브라우저가 `POST /api/csp-report`(무인증)로 보낸다. 저장하지 않고 서버 로그에 한 줄씩 남긴다 — 지시어와 차단된 주소(쿼리스트링 제거)뿐이다:
+
+```bash
+journalctl -u dflow --since '1 day ago' | grep -F '[csp] 위반 보고'      # 유닛 이름은 예시
+# [csp] 위반 보고 directive=img-src blocked=https://example.com/a.png
+```
+
+같은 IP 의 보고는 10분에 120건까지만 받는다(넘으면 429 — 요청 제한과 같은 프록시 전제, 위 '요청 제한'). 브라우저 확장 프로그램이 끼워 넣는 스크립트도 보고로 온다
+(`blocked=chrome-extension` 같은 줄 — 앱의 위반이 아니다). 브라우저 콘솔에도 같은 위반이 찍힌다(강제 모드는 `Refused to …`, 보고 모드는 `[Report Only]`).
+정상 상태에서는 앱이 낸 줄이 0 이다 — 줄이 생기면 그 지시어·주소가 막히고 있다는 뜻이다(강제 모드에서는 실제로 화면의 그 부분이 동작하지 않는다).
+
+**문제가 생겼을 때 되돌리기.** 강제 때문에 화면 일부가 동작하지 않으면(스크립트·그림·연결이 막힌다) `CSP_MODE=report` 로 **다시 빌드**해 띄운다.
+정책은 그대로 보고만 하므로 위 로그로 무엇이 걸렸는지 본 뒤 정책(`src/lib/http/securityHeaders.ts`)을 고치고, `CSP_MODE` 를 지워 다시 빌드해 강제로 돌아온다.
+데이터에는 영향이 없다. 프레임 차단은 되돌린 동안에도 강제된다.
+
+**원격 호스팅 첫 배포 때 확인할 것**(자동 테스트가 잡지 못한다 — 어긋나면 화면이 조용히 깨진다):
+
+1. 문서 응답의 CSP 헤더가 **하나**인지 — 로그인한 화면의 문서 응답(개발자 도구 네트워크 탭)에 `Content-Security-Policy` 가 한 줄만 있고 그 `script-src` 에 `'nonce-…'` 가 있다.
+   두 줄이면(정적 헤더와 미들웨어 헤더가 함께 나간 것) 호스팅의 헤더 병합이 자체호스트와 다르다는 뜻이다 — 화면은 뜨지만(nonce 스크립트는 두 정책을 모두 통과한다) 기록해 둔다.
+   `curl -sI https://<호스트>/login | grep -i content-security` 는 정적 경로의 정책(`'unsafe-inline'`)을 보인다.
+2. nonce 가 **요청마다 바뀌는지** — 같은 화면을 두 번 새로 고쳐 헤더의 `'nonce-…'` 값이 다르고, 페이지 소스의 `<script nonce>` 가 그 값과 같다.
+3. **HTML 을 캐시하는 프록시·CDN 이 없는지** — 캐시된 HTML 의 nonce 는 다음 응답의 헤더와 맞지 않아 화면이 뜨지 않는다. 문서 응답은 캐시하지 않게 둔다(정적 자산 `/_next/static/**` 만 캐시).
+4. 서버 로그의 `[csp] 위반 보고` 가 (확장 프로그램 것을 빼고) 0 인지 — 아래 미확인 항목의 화면을 포함해 한 번 돈 뒤 본다.
+
+**확인된 것 / 확인하지 못한 것**(2026-10-10, 개발 PC 에서 `CSP_MODE=enforce` 로 빌드한 서버 — 실호스트 아님):
+
+| 항목 | 상태 | 내용 |
+|---|---|---|
+| 로컬 E2E | 확인됨 | 68단계 통과 |
+| 화면 순회 | 확인됨 | 27개 화면 + 전역 검색·보고서 모달·다크 모드 새로 고침에서 콘솔 CSP 위반 0, 페이지 오류 0 |
+| nonce 부착 | 확인됨 | 문서의 스크립트 96개 전부 nonce(nonce 없는 인라인 0) |
+| 서버 위반 보고 | 확인됨 | `[csp]` 로그 0 |
+| mermaid 다이어그램 | 확인됨 | 렌더 정상 |
+| 본문의 외부 https 그림 | 확인됨 | 로드 정상 |
+| 원격 호스팅의 헤더 병합 | **미확인** | 정적 헤더와 미들웨어 헤더가 한 줄로 합쳐지는지는 호스팅마다 다를 수 있다 — 위 1번 |
+| 첨부 미리보기 iframe | **미확인** | Storage 서명 URL 을 싣는 iframe(`frame-src`) — 회의록 첨부를 열어 본다 |
+| 옛 브라우저의 `'strict-dynamic'` | **미확인** | 지원하지 않는 브라우저는 `'self'` + nonce 로 내려간다(설계상 동작) — 실제 옛 브라우저에서 띄워 보지 않았다 |
+
+정책이나 앱의 인라인 스크립트(테마 스크립트 — 해시가 정책에 박혀 있다)를 바꾸면 이 표의 확인을 다시 한다.
 
 ## 백업·복구
 

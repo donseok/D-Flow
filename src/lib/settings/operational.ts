@@ -23,6 +23,8 @@ export const OPERATIONAL_SETTINGS: readonly OperationalDef[] = [
   ...env(['VERCEL_PROJECT_PRODUCTION_URL'], ['src/app/actions/meetingNotify.ts']),
   ...env(['APP_ENV'], ['next.config.ts', 'src/app/api/track/route.ts', 'src/app/login/layout.tsx', 'src/app/actions/passwordReset.ts', 'src/lib/http/rateLimit.ts']),
   ...env(['RATE_LIMIT'], ['src/lib/http/rateLimit.ts']),
+  // 기본(값 없음)은 강제 — 정확히 report 일 때만 보고 전용(되돌리는 스위치). 빌드 env 로 박혀 rebuild 다
+  ...env(['CSP_MODE'], ['next.config.ts', 'src/middleware.ts'], { apply: 'rebuild' }),
   ...env(['VERCEL_ENV'], ['next.config.ts']),
   ...env(['NEXT_OUTPUT'], ['next.config.ts'], { apply: 'rebuild' }),
   ...env(['STAGING'], ['src/app/(app)/layout.tsx', 'next.config.ts']),

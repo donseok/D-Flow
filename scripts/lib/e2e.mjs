@@ -1017,9 +1017,14 @@ export function securityHeaderProblems(headers) {
   want('x-frame-options', (v) => v.toUpperCase() === 'DENY', 'DENY 여야 한다')
   want('referrer-policy', (v) => v === 'strict-origin-when-cross-origin', 'strict-origin-when-cross-origin 이어야 한다')
   want('permissions-policy', (v) => ['camera=()', 'microphone=()', 'geolocation=()'].every((x) => v.includes(x)), '카메라·마이크·위치를 닫아야 한다')
-  // 강제하는 CSP 는 프레임 차단 한 지시어, 자원 정책은 보고 전용이다
+  // 프레임 차단은 어느 모드에서도 강제한다. 자원 정책은 모드(CSP_MODE)에 따라 강제 헤더(enforce)나 보고 전용 헤더(report) 한쪽에 실린다 —
+  // 어느 쪽이든 실려 있어야 한다(둘 다 없으면 보고 전용 헤더가 없다고 짚는다)
   want('content-security-policy', (v) => v.includes("frame-ancestors 'none'"), "frame-ancestors 'none' 이 있어야 한다")
-  want('content-security-policy-report-only', (v) => v.includes("default-src 'self'") && v.includes("object-src 'none'"), "default-src 'self'·object-src 'none' 이 있어야 한다")
+  const resource = (v) => v.includes("default-src 'self'") && v.includes("object-src 'none'")
+  const enforced = headers.get('content-security-policy')
+  if (!(enforced !== null && resource(enforced))) {
+    want('content-security-policy-report-only', resource, "default-src 'self'·object-src 'none' 이 있어야 한다")
+  }
   return p
 }
 
