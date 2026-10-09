@@ -33,11 +33,15 @@ export function teamsInScope<T extends Pick<TeamRef, 'code' | 'projectId'>>(
     || (t.projectId === null && !ownCodes.has(t.code)))
 }
 
+/** 담당 필터의 "팀 없음" 값(0052) — 필터는 팀 id(uuid)라 uuid 가 아닌 고정 글자를 쓴다. 화면 탭 키·`?team=`·목록 액션 인자가 같은 값이다.
+ *  고르는 행은 team_id null ∧ team_code '' 뿐이다 — 팀 행이 지워져 team_id 만 빈 옛 회의록(team_code 원문이 남음)은 들지 않는다 */
+export const NO_TEAM_FILTER = 'none'
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** 회의록 화면의 `?team=` 해석(SP5 B2 — 필터는 팀 id). 옛 링크의 `?team=<code>` 는 code 단위로 한 번 해석해 id 로 리다이렉트한다.
  *  teams 는 그 화면이 고르게 하는 팀 목록(필터 탭과 같은 것)이다.
- *  - id: 그 목록의 팀 id 면 그대로 필터
+ *  - id: 그 목록의 팀 id 면 그대로 필터. `?team=none`(NO_TEAM_FILTER)은 팀 없음 필터 — code 가 'none' 인 팀의 옛 링크보다 먼저다
  *  - redirect: 옛 code(→ 해석한 id) 또는 범위 밖·모르는 값(→ null = 팀 파라미터 제거)
  *  - none: 파라미터 없음 */
 export type TeamParam = { kind: 'none' } | { kind: 'id'; id: string } | { kind: 'redirect'; id: string | null }
@@ -47,6 +51,7 @@ export function resolveTeamParam<T extends Pick<TeamRef, 'id' | 'code' | 'projec
 ): TeamParam {
   const v = (raw ?? '').trim()
   if (!v) return raw === undefined || raw === null ? { kind: 'none' } : { kind: 'redirect', id: null }
+  if (v === NO_TEAM_FILTER) return { kind: 'id', id: NO_TEAM_FILTER }
   if (UUID.test(v)) {
     const lower = v.toLowerCase()
     return teams.some(t => t.id.toLowerCase() === lower) ? { kind: 'id', id: lower } : { kind: 'redirect', id: null }

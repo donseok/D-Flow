@@ -38,6 +38,11 @@ interface MinuteMatch {
   minuteId: string; content: string; minuteDate: string; teamCode: string; title: string; similarity: number
 }
 
+/** 회의록 한 줄 머리 `일자 · 팀 · 제목` — 팀 없는 회의록(team_code 빈 값, 0052)은 팀 칸을 뺀다(빈 칸이 `일자 ·  · 제목` 으로 남지 않게) */
+export function minuteHead(r: { minuteDate: string; teamCode: string; title: string }): string {
+  return [r.minuteDate, r.teamCode, r.title].filter(part => part !== '').join(' · ')
+}
+
 function sourcesFooter(rows: { minuteId: string; minuteDate: string; teamCode: string; title: string }[]): string {
   if (!rows.length) return ''
   const seen = new Set<string>()
@@ -45,7 +50,7 @@ function sourcesFooter(rows: { minuteId: string; minuteDate: string; teamCode: s
   for (const r of rows) {
     if (seen.has(r.minuteId)) continue
     seen.add(r.minuteId)
-    lines.push(`- ${r.minuteDate} · ${r.teamCode} · ${r.title} (/minutes/${r.minuteId})`)
+    lines.push(`- ${minuteHead(r)} (/minutes/${r.minuteId})`)
   }
   return `\n\n---\n출처:\n${lines.join('\n')}`
 }
@@ -97,7 +102,7 @@ export async function streamDocAnswer(input: {
     .maybeSingle()
   if (!r) return null
 
-  const system = `${DOC_SYSTEM}\n\n[회의록] ${r.minute_date} · ${r.team_code} · ${r.title}\n${r.body_md as string}`
+  const system = `${DOC_SYSTEM}\n\n[회의록] ${minuteHead({ minuteDate: r.minute_date as string, teamCode: r.team_code as string, title: r.title as string })}\n${r.body_md as string}`
   // 폴백: 문서 내 키워드 일치 줄 발췌
   const keywords = extractSearchKeywords(input.message)
   const lines = (r.body_md as string).split('\n')
@@ -187,11 +192,11 @@ export async function streamArchiveAnswer(input: {
   const blocks: string[] = []
   if (keywordRows.length) {
     blocks.push(`[키워드 정확 일치: "${keywords[0]}"]\n${keywordRows
-      .map(r => `- ${r.minuteDate} · ${r.teamCode} · ${r.title}`).join('\n')}`)
+      .map(r => `- ${minuteHead(r)}`).join('\n')}`)
   }
   if (matches.length) {
     blocks.push(`[검색된 회의록]\n${matches
-      .map(m => `[회의록: ${m.minuteDate} · ${m.teamCode} · ${m.title}]\n${m.content}`).join('\n---\n')}`)
+      .map(m => `[회의록: ${minuteHead(m)}]\n${m.content}`).join('\n---\n')}`)
   }
   const system = `${ARCHIVE_SYSTEM}\n\n${blocks.length ? blocks.join('\n\n') : '[검색된 회의록]\n(없음)'}`
 
@@ -199,7 +204,7 @@ export async function streamArchiveAnswer(input: {
   const sourceRows = [...keywordRows, ...matches]
   const footer = sourcesFooter(sourceRows)
   const fallback = sourceRows.length
-    ? `관련 회의록이에요:\n${[...new Set(sourceRows.map(r => `• ${r.minuteDate} · ${r.teamCode} · ${r.title}`))].join('\n')}`
+    ? `관련 회의록이에요:\n${[...new Set(sourceRows.map(r => `• ${minuteHead(r)}`))].join('\n')}`
     : '관련 회의록을 찾지 못했어요. 담당·기간 필터를 넓히거나 다른 표현으로 물어보세요.'
   return llmOrFallbackStream(system, input.history, input.message, fallback, footer, await aiAvailable({ workspaceId: input.workspaceId }, { module: 'minutes' }))
 }

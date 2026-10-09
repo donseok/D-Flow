@@ -36,17 +36,24 @@ export interface CredentialTeamCandidate {
   active: boolean
 }
 
-/** 프로젝트/워크스페이스에 맞춰 읽은 후보 팀만 받는다. 명시된 매핑 실패는 폴백하지 않는다. */
+/** 프로젝트/워크스페이스에 맞춰 읽은 후보 팀만 받는다. 명시된 매핑 실패는 폴백하지 않는다.
+ *  요청이 team 을 보내지 않았으면(빈 값 — 0052) 매핑·code 일치를 건너뛰고 자격증명의 기본 팀, 그것도 없거나 이 범위의 팀이 아니면
+ *  팀 없음({ teamId: null })이다. 기본 팀이 비활성이면 지금처럼 inactive(조용히 팀 없음으로 내리지 않는다 — 설정을 고치라는 신호).
+ *  team 을 **명시했는데** 맞는 팀이 없을 때의 결과는 그대로다: 기본 팀이 이 범위에 있으면 그 팀, 없으면 not_found(400). */
 export function resolveCredentialTeam(
   cred: Pick<ResolvedCredential, 'teamMap' | 'defaultTeamId'>,
   payloadTeam: string,
   teams: readonly CredentialTeamCandidate[],
-): { ok: true; teamId: string } | { ok: false; reason: 'inactive' | 'not_found' } {
+): { ok: true; teamId: string | null } | { ok: false; reason: 'inactive' | 'not_found' } {
   const name = payloadTeam.trim()
   const choose = (team: CredentialTeamCandidate | undefined) => {
     if (!team) return { ok: false, reason: 'not_found' } as const
     if (!team.active) return { ok: false, reason: 'inactive' } as const
     return { ok: true, teamId: team.id } as const
+  }
+  if (name === '') {
+    const fallback = teams.find(team => team.id === cred.defaultTeamId)
+    return fallback ? choose(fallback) : { ok: true, teamId: null }
   }
   if (Object.hasOwn(cred.teamMap, name)) {
     return choose(teams.find(team => team.id === cred.teamMap[name]))

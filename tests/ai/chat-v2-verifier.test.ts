@@ -329,6 +329,17 @@ describe('deterministic answer — 권한 표시 어휘(0003: 명단 access_role
     expect(answer).toContain('변경자 역할: 조회')
   })
 
+  it('팀 없는 회의록(teamCode 빈 값 — 0052)은 팀 칸을 내지 않는다 — "팀: " 뒤가 빈 채로 남지 않는다', () => {
+    const answer = deterministicEvidenceAnswer(recordPack('search_minutes', [
+      { title: '전체 타운홀', minuteDate: '2026-10-09', teamCode: '', createdByName: '가' },
+      { title: '품질 주간회의', minuteDate: '2026-10-08', teamCode: 'QA', createdByName: '나' },
+    ]), 'Asia/Seoul')
+    const [noTeam, withTeam] = answer.split('\n').filter(l => l.startsWith('• '))
+    expect(noTeam).toContain('전체 타운홀')
+    expect(noTeam).not.toContain('팀:')
+    expect(withTeam).toContain('팀: QA')
+  })
+
   it('시각 값은 요청 범위 tz 로 찍는다 — 서울 고정이 아니다(SP5 과제 22)', () => {
     const pack = recordPack('get_wbs_change_log', [{ itemName: '설계', changedAt: '2026-10-03T23:30:00Z' }])
     expect(deterministicEvidenceAnswer(pack, 'Asia/Seoul')).toContain('2026-10-04 08:30')

@@ -45,5 +45,6 @@ export function parseRootFolders(raw: unknown): Parsed<RootFoldersSetting> {
 
 /** 팀 생성이 루트를 만드는가(개정 §4.7 표 '팀 생성') */
 export const teamCreatesRoot = (s: RootFoldersSetting): boolean => s.mode === 'teams'
-/** 회의록 team_id 가 필수인가(표 '회의록 team_id' — teams 는 편철 위치를 정한다) */
+/** 회의록의 팀이 편철 위치(팀 루트)를 정하는가(표 '회의록 team_id') — teams 모드만. 팀은 어느 모드에서도 필수가 아니다(0052 — 팀 없는 회의록은
+ *  teams 모드에서 미분류에, custom 모드에서 지정 루트 아래에 둔다). 이름은 옛 뜻("필수")에서 왔다 — 호출부가 없어 그대로 둔다 */
 export const minuteTeamRequired = (s: RootFoldersSetting): boolean => s.mode === 'teams'

@@ -75,7 +75,8 @@ export function minutesExportFileNames(date: string, productName: string = BRAND
 }
 
 export function minuteExportEntryPath(row: MinuteExportRow): string {
-  const team = sanitizeArchiveSegment(row.teamCode, '미분류', 30)
+  // 팀 없는 회의록(team_code 빈 값 — 0052)은 화면과 같은 이름의 묶음에 모은다. 값은 있는데 경로에 쓸 글자가 남지 않는 코드는 지금처럼 '미분류'
+  const team = row.teamCode === '' ? '팀 없음' : sanitizeArchiveSegment(row.teamCode, '미분류', 30)
   const group = sanitizeArchiveSegment(meetingBodyOf(row.title), '회의록', 80)
   const title = sanitizeArchiveSegment(row.title, '회의록', 100)
   const id = sanitizeArchiveSegment(row.id, 'id', 64)

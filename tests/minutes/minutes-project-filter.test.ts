@@ -6,6 +6,7 @@ const h = vi.hoisted(() => ({
   loadWorkspaceScope: vi.fn(), requireModulePage: vi.fn(async () => {}), getMinutesPage: vi.fn(async () => []), getMinutesExplorer: vi.fn(async () => ({ folders: [], leaves: [], total: 0, truncated: false })),
   getMinuteFavorites: vi.fn(async () => []), getSession: vi.fn(async () => ({ id: 'u1' })), getAccountPrefs: vi.fn(async () => ({})), listProjects: vi.fn(async (): Promise<{ id: string; name: string; workspace_id: string }[]> => []),
   getServerLocale: vi.fn(async () => 'ko'), getMyProjectIds: vi.fn(async () => []), viewProps: vi.fn(),
+  hasMinutesWithoutTeam: vi.fn(async () => false),
   workspaceTeams: vi.fn(async (): Promise<unknown[]> => []), projectTeams: vi.fn(async (): Promise<unknown[]> => []),
   redirect: vi.fn((url: string) => { throw new Error(`REDIRECT ${url}`) }),
 }))
@@ -13,7 +14,10 @@ vi.mock('@/lib/teams/source', () => ({ workspaceTeams: h.workspaceTeams, project
 vi.mock('next/navigation', () => ({ redirect: h.redirect }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspaceScope }))
 vi.mock('@/lib/modules/pageGate', () => ({ requireModulePage: h.requireModulePage }))
-vi.mock('@/lib/data/minutes', () => ({ getMinutesPage: h.getMinutesPage, getMinutesExplorer: h.getMinutesExplorer, getMinuteFavorites: h.getMinuteFavorites }))
+vi.mock('@/lib/data/minutes', () => ({
+  getMinutesPage: h.getMinutesPage, getMinutesExplorer: h.getMinutesExplorer, getMinuteFavorites: h.getMinuteFavorites,
+  hasMinutesWithoutTeam: h.hasMinutesWithoutTeam,
+}))
 vi.mock('@/lib/auth', () => ({ getSession: h.getSession }))
 vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: h.getAccountPrefs }))
 vi.mock('@/app/actions/project', () => ({ listProjects: h.listProjects }))
@@ -122,5 +126,17 @@ describe('?team= — 담당 필터는 팀 id, 옛 code 링크는 id 로 리다�
     await render({})
     expect(h.getMinutesPage).toHaveBeenCalledWith(WS.id, null, expect.any(String), expect.any(String), null)
     expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ initialTeamId: null }))
+  })
+  it('?team=none 은 팀 없는 회의록 필터(0052) — 리다이렉트 없이 그 값으로 거르고, 그 범위에 팀 없는 회의록이 있는지를 뷰에 넘긴다', async () => {
+    h.hasMinutesWithoutTeam.mockResolvedValueOnce(true)
+    await render({ team: 'none' })
+    expect(h.redirect).not.toHaveBeenCalled()
+    expect(h.getMinutesPage).toHaveBeenCalledWith(WS.id, null, expect.any(String), expect.any(String), 'none')
+    expect(h.hasMinutesWithoutTeam).toHaveBeenCalledWith(WS.id, null)
+    expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ initialTeamId: 'none', hasNoTeamMinutes: true }))
+    h.viewProps.mockClear()
+    await render({ project: P_IN })
+    expect(h.hasMinutesWithoutTeam).toHaveBeenLastCalledWith(WS.id, P_IN)
+    expect(h.viewProps).toHaveBeenCalledWith(expect.objectContaining({ hasNoTeamMinutes: false }))
   })
 })

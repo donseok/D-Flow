@@ -13,6 +13,17 @@ export const MINUTES_ATTACHMENTS_MAX_COUNT = 10
  *  actions/minutes.ts 는 'use server' 라 상수를 여기 둔다. */
 export const MINUTE_FILE_URL_TTL_SEC = SIGNED_URL_TTL_SEC
 
+/* ── 팀 없는 회의록(0052): team_code 빈 문자열 + team_id null ── */
+
+/** "팀 없음"의 팀 코드 — 열은 NOT NULL 이라 빈 문자열로 적는다. 팀 code 는 빈 값을 못 쓰므로(teams_code_check) 어떤 팀과도 겹치지 않는다 */
+export const NO_TEAM: TeamCode = ''
+
+/** 팀 없는 회의록인가 — 사용자가 팀을 정하지 않았다(또는 해제했다). 팀 행이 지워진 옛 회의록(team_id null 이지만 team_code 원문이 남은 것)은
+ *  여기에 들지 않는다: 그쪽은 옛 code 로 보인다. teamId 를 모르는 호출부(목록 밖 화면)는 code 만 넘긴다 */
+export function isNoTeam(m: { teamCode: string; teamId?: string | null }): boolean {
+  return m.teamCode === NO_TEAM && (m.teamId ?? null) === null
+}
+
 /* ── 최상위 폴더(SP5 B2): 종류는 minute_folders.kind, 팀 루트의 팀은 team_id ── */
 
 /** 최상위 일반 폴더 이름이 그 범위의 팀 이름과 겹치는가 — 팀 루트 이름(= 팀 이름)을 선점하면 지연 생성되는 팀 루트가
@@ -139,6 +150,25 @@ export function teamSubOfFolder(
   return null
 }
 
+/** 폴더가 회의록의 팀을 어떻게 정하는가(0052) — 조상 체인의 최상위 폴더 종류로 가른다.
+ *  - team: 팀 루트 아래 — 팀은 그 루트의 팀이다(폴더가 팀의 유일한 출처, §6.3)
+ *  - free: 지정 루트(custom_root) 아래 — 폴더는 팀을 정하지 않는다. 팀은 속성일 뿐이라 팀 없이도 편철한다
+ *  - null: 판정 불가(없는 폴더·끊긴 체인·팀을 못 읽은 루트·최상위 일반 폴더) — 추측하지 않는다 */
+export function folderTeamRule(
+  folders: MinuteFolder[], folderId: string,
+): { kind: 'team'; team: TeamCode } | { kind: 'free' } | null {
+  const byId = new Map(folders.map(f => [f.id, f]))
+  const seen = new Set<string>()
+  let cur = byId.get(folderId)
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id)
+    if (isTeamRootFolder(cur)) return cur.teamCode ? { kind: 'team', team: cur.teamCode } : null
+    if (cur.kind === 'custom_root') return { kind: 'free' }
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined
+  }
+  return null
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export interface MinuteInput {
@@ -166,8 +196,11 @@ export function validateMinuteFields(input: MinuteInput): string | null {
   return null
 }
 
-/** 담당 팀 검증 — teamCodes 는 회의록이 속할 범위의 활성 팀(activeTeamCodesForMinuteScope). */
+/** 담당 팀 검증 — teamCodes 는 회의록이 속할 범위의 활성 팀(activeTeamCodesForMinuteScope).
+ *  빈 값(NO_TEAM)은 "팀 없음"이라 통과한다(0052). 값이 있으면 지금처럼 그 범위의 활성 팀이어야 한다 — 공백뿐인 값·모르는 코드는 거부
+ *  (오타를 조용히 팀 없음으로 삼키지 않는다). */
 export function validateMinuteTeam(teamCode: TeamCode, teamCodes: readonly TeamCode[]): string | null {
+  if (teamCode === NO_TEAM) return null
   return teamCodes.includes(teamCode) ? null : '잘못된 담당입니다.'
 }
 

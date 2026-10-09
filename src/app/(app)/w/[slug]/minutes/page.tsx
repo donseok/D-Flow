@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { t } from '@/lib/i18n/dict'
 import { getServerLocale } from '@/lib/i18n/server'
-import { getMinuteFavorites, getMinutesExplorer, getMinutesPage } from '@/lib/data/minutes'
+import { getMinuteFavorites, getMinutesExplorer, getMinutesPage, hasMinutesWithoutTeam } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { UUID_RE } from '@/lib/domain/validate'
@@ -56,7 +56,8 @@ export default async function MinutesPage({ params, searchParams }: {
   const projectId = filterProject?.id ?? null
   const minutesScope = { workspaceId: scope.ws.id, projectId }
   // 담당 팀 필터(SP5 B2) — ?team=<팀 id>. 선택지는 그 범위의 팀(프로젝트를 고르면 그 프로젝트의 전용 + 공용, 아니면 공용).
-  // 옛 ?team=<code> 링크는 code 단위로 한 번 해석해 id 로 리다이렉트하고, 모르는 값·범위 밖은 파라미터를 지운다(존재 은닉 — 안내 없음)
+  // 옛 ?team=<code> 링크는 code 단위로 한 번 해석해 id 로 리다이렉트하고, 모르는 값·범위 밖은 파라미터를 지운다(존재 은닉 — 안내 없음).
+  // ?team=none 은 팀 없는 회의록 필터(0052 — resolveTeamParam 이 그대로 돌려준다)
   const scopeTeams = projectId ? await projectTeams(projectId) : await workspaceTeams(scope.ws.id)
   const teamOptions = scopeTeams.filter((tm) => tm.active).map((tm) => ({ id: tm.id, code: tm.code, name: tm.name }))
   const teamParam = resolveTeamParam(typeof q.team === 'string' ? q.team : Array.isArray(q.team) ? (q.team[0] ?? '') : undefined,
@@ -67,7 +68,7 @@ export default async function MinutesPage({ params, searchParams }: {
   // 가져와서 "화면이 뜨고 나서 또 로딩이 도는" 왕복이 한 번 더 붙었다. 여기서 함께 싣는다.
   // prefs.minutesView 를 먼저 await 해 조건부로 부르면 안 된다 — 직렬 2단이 되고,
   // 리스트/달력 전환용 월 목록까지 늦어진다.
-  const [minutes, tree, favs, user, prefs, locale, myProjectIds] = await Promise.all([
+  const [minutes, tree, favs, user, prefs, locale, myProjectIds, hasNoTeam] = await Promise.all([
     getMinutesPage(scope.ws.id, projectId, rs, re, initialTeamId),
     getMinutesExplorer(scope.ws.id, projectId, m ?? null),
     getMinuteFavorites(scope.ws.id),
@@ -75,6 +76,7 @@ export default async function MinutesPage({ params, searchParams }: {
     getAccountPrefs(),
     getServerLocale(),
     getMyProjectIds(),
+    hasMinutesWithoutTeam(scope.ws.id, projectId),
   ])
   // 기본값은 트리, 미지 값(구버전 롤백·스큐)도 트리로 클램프 — calendar만 저장값 유지.
   // 리스트 뷰는 폐지(2026-07-24) — 구 저장값 'list'도 트리로 정규화.
@@ -102,7 +104,7 @@ export default async function MinutesPage({ params, searchParams }: {
           projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
           noProjectWorkspace={{ ok: true, workspaceId: scope.ws.id }}
           isSuperuser={m?.isSuperuser ?? false}
-          calendar={calendarViewOf(vc.calendar)} teamOptions={teamOptions} initialTeamId={initialTeamId} />
+          calendar={calendarViewOf(vc.calendar)} teamOptions={teamOptions} initialTeamId={initialTeamId} hasNoTeamMinutes={hasNoTeam} />
       </ProjectPageShell>
     </MinutesScopeProvider>
   )

@@ -150,7 +150,14 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export interface ExternalMinutePayload {
   minuteDate: string
+  /** 요청의 team(앞뒤 공백 정리). 키 부재면 빈 값 — 라우트(resolveWriteTarget)가 범위를 정한 뒤 실제 팀 code 또는 빈 값(팀 없음)으로 확정한다 */
   teamCode: TeamCode
+  /**
+   * 0052 3값 규약(meetingIdProvided·folderPathProvided 와 동형) — team 은 선택이다.
+   * 키 부재(false): 새 회의록은 자격증명의 기본 팀, 없으면 팀 없음 / 재전송(replace)은 기존 담당 유지.
+   * `""`(true + 빈 값): 팀 없음을 명시(재전송이면 해제). 값(true): 그 팀 — 맞는 팀이 없으면 400(오타를 팀 없음으로 삼키지 않는다).
+   */
+  teamProvided: boolean
   title: string
   bodyMd: string
   externalId: string
@@ -233,8 +240,8 @@ export function parseFolderPathValue(raw: unknown): FolderPathParse {
 
 /**
  * POST /minutes 페이로드 검증 — 수동 타입가드(레포 관례) + validateMinuteFields 재사용.
- * 담당 팀(team)은 여기서 보지 않는다 — 회의록이 속할 범위(연결할 회의의 프로젝트·기존 행·호출자 워크스페이스)가
- * 정해져야 그 범위의 팀으로 판정할 수 있어서, 라우트가 범위를 확정한 뒤 validateMinuteTeam 으로 본다(같은 400).
+ * 담당 팀(team)은 여기서 형식만 본다(선택 — 있으면 문자열. 0052) — 회의록이 속할 범위(연결할 회의의 프로젝트·기존 행·자격증명 범위)가
+ * 정해져야 그 범위의 팀으로 판정할 수 있어서, 라우트가 범위를 확정한 뒤 자격증명의 팀 해석(resolveCredentialTeam)으로 본다(같은 400).
  * §0 D4: 이 경로는 correctMinuteBodyTime(UTC → 회의록 범위 tz 보정)을 적용하지 않는다 — 또박또박이 이미 현지 시각을
  * 보내므로 기존 UI 경로의 보정을 재사용하면 이중 보정으로 시간이 밀린다(§1.4).
  */
@@ -247,9 +254,14 @@ export function parseMinutePayload(raw: unknown): { payload: ExternalMinutePaylo
   if (externalId.length > EXTERNAL_ID_MAX) return { error: `external_id는 ${EXTERNAL_ID_MAX}자 이하여야 합니다.` }
 
   if (
-    typeof b.date !== 'string' || typeof b.team !== 'string' ||
+    typeof b.date !== 'string' ||
     typeof b.title !== 'string' || typeof b.body_markdown !== 'string'
-  ) return { error: 'date, team, title, body_markdown은 필수입니다.' }
+  ) return { error: 'date, title, body_markdown은 필수입니다.' }
+  // team 은 선택(0052) — 키가 있으면 문자열이어야 한다. 명시적 null 은 3값 규약에 없는 값이라 거절한다(folder_path 와 같은 이유 —
+  // 조용히 '키 부재'로 뭉개면 "기존 담당 유지"와 "팀 없음"이 갈리지 않는다). 팀 없음은 빈 문자열로 보낸다.
+  const teamProvided = b.team !== undefined
+  if (teamProvided && typeof b.team !== 'string') return { error: 'team은 문자열이어야 합니다(팀 없음은 빈 문자열, 생략 가능).' }
+  const team = (teamProvided ? (b.team as string).trim() : '') as TeamCode
 
   let meetingId: string | null = null
   const meetingIdProvided = b.meeting_id !== undefined
@@ -312,13 +324,13 @@ export function parseMinutePayload(raw: unknown): { payload: ExternalMinutePaylo
   }
 
   const err = validateMinuteFields({
-    minuteDate: b.date, teamCode: b.team as TeamCode, title: b.title, bodyMd: b.body_markdown, meetingId,
+    minuteDate: b.date, teamCode: team, title: b.title, bodyMd: b.body_markdown, meetingId,
   })
   if (err) return { error: err }
 
   return {
     payload: {
-      minuteDate: b.date, teamCode: b.team as TeamCode, title: b.title.trim(),
+      minuteDate: b.date, teamCode: team, teamProvided, title: b.title.trim(),
       bodyMd: b.body_markdown, externalId, meetingId, meetingIdProvided,
       meetingProvided, meeting, folderPath, folderPathProvided, onConflict,
     },

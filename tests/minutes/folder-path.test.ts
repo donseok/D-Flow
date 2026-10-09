@@ -464,6 +464,23 @@ describe('custom 모드 정규화(계약 v2.9 — SP5 B2)', () => {
       expect(!res.ok && res.kind, path.join('/')).toBe('unmatched_root')
     }
   })
+  it('팀 없는 회의록(빈 팀 코드 — 0052)도 지정 루트 아래에 편철한다 — custom 모드는 팀을 보지 않는다', async () => {
+    const snap = buildFolderSnapshot([ROOT, { id: 'c-sub', name: '주간', parentId: 'c-ext', createdBy: 'u9', projectId: null, workspaceId: 'ws-1', kind: 'user' }])
+    const res = await resolveFolderPath(fakeSb(), '', ['외부 연동', '주간'], { ...base, snapshot: snap, create: false })
+    expect(res).toMatchObject({ ok: true, folderId: 'c-sub', resolvedPath: ['외부 연동', '주간'], complete: true })
+  })
+  it('teams 모드의 팀 없는 회의록은 편철할 팀 루트가 없다 — no_team_root(등록은 미분류, 배치는 failed). 폴더를 읽거나 만들지 않는다', async () => {
+    const snap = buildFolderSnapshot([{ id: 'r', name: 'PMO', parentId: null, createdBy: null, projectId: null, workspaceId: 'ws-1', kind: 'team_root', teamCode: 'PMO' }])
+    const { db, from } = fakeDb([])
+    for (const path of [[], ['PMO'], ['PMO', '주간'], ['신규TF']]) {
+      const res = await resolveFolderPath(db, '', path, { ...base, rootMode: { mode: 'teams' }, snapshot: snap })
+      expect(res, path.join('/')).toMatchObject({ ok: false, kind: 'no_team_root', reason: 'no_team_root' })
+    }
+    expect(from).not.toHaveBeenCalled()
+    // 형식 오류는 팀과 무관하게 먼저 걸린다(400 그대로)
+    expect(await resolveFolderPath(db, '', ['x'.repeat(61)], { ...base, rootMode: { mode: 'teams' }, snapshot: snap }))
+      .toMatchObject({ ok: false, kind: 'validation_failed' })
+  })
   it('깊이 절단은 v2.8 그대로(5단)', async () => {
     const snap = buildFolderSnapshot([ROOT])
     const res = await resolveFolderPath(fakeSb(), 'PMO', ['외부 연동', 'a', 'b', 'c', 'd', 'e'], { ...base, snapshot: snap, create: false })

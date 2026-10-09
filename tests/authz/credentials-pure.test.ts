@@ -99,6 +99,27 @@ describe('resolveCredentialTeam', () => {
       .toEqual({ ok: false, reason: 'not_found' })
   })
 
+  describe('team 을 보내지 않은 요청(빈 값 — 0052)', () => {
+    it('기본 팀이 이 범위에 있으면 그 팀, 없으면 팀 없음(teamId null) — 400 이 아니다', () => {
+      expect(resolveCredentialTeam({ teamMap: {}, defaultTeamId: 't2' }, '', teams)).toEqual({ ok: true, teamId: 't2' })
+      expect(resolveCredentialTeam({ teamMap: {}, defaultTeamId: null }, '', teams)).toEqual({ ok: true, teamId: null })
+      expect(resolveCredentialTeam({ teamMap: {}, defaultTeamId: null }, '   ', teams)).toEqual({ ok: true, teamId: null })
+      // 기본 팀이 이 범위(후보)의 팀이 아니다 — 다른 프로젝트의 전용 팀 등. 짐작해 붙이지 않는다
+      expect(resolveCredentialTeam({ teamMap: {}, defaultTeamId: 'elsewhere' }, '', teams)).toEqual({ ok: true, teamId: null })
+      expect(resolveCredentialTeam({ teamMap: {}, defaultTeamId: null }, '', [])).toEqual({ ok: true, teamId: null })
+    })
+    it('기본 팀이 비활성이면 inactive 그대로 — 조용히 팀 없음으로 내리지 않는다', () => {
+      expect(resolveCredentialTeam({ teamMap: {}, defaultTeamId: 't3' }, '', teams)).toEqual({ ok: false, reason: 'inactive' })
+    })
+    it('빈 이름은 매핑 표를 보지 않는다(빈 키 매핑으로 팀이 붙지 않는다)', () => {
+      expect(resolveCredentialTeam({ teamMap: { '': 't1' }, defaultTeamId: null }, '', teams)).toEqual({ ok: true, teamId: null })
+    })
+    it('team 을 명시했는데 맞는 팀이 없으면 지금처럼 not_found — 팀 없음으로 삼키지 않는다', () => {
+      expect(resolveCredentialTeam({ teamMap: {}, defaultTeamId: null }, 'DEVV', teams)).toEqual({ ok: false, reason: 'not_found' })
+      expect(resolveCredentialTeam({ teamMap: {}, defaultTeamId: null }, 'DEV', [])).toEqual({ ok: false, reason: 'not_found' })
+    })
+  })
+
   it('비활성 기본 팀과 모호한 코드 일치는 거절한다', () => {
     expect(resolveCredentialTeam({ teamMap: {}, defaultTeamId: 't3' }, 'UNKNOWN', teams))
       .toEqual({ ok: false, reason: 'inactive' })

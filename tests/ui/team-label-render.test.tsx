@@ -11,6 +11,7 @@ import { TEAM_PALETTE } from '@/lib/domain/teamColor'
 import type { ComputedItem } from '@/lib/domain/types'
 import type { RosterMember } from '@/lib/data/memberSelect'
 import { teamRows } from '../helpers/teams-source-mock'
+import { ensureEnLoaded, t as dictT } from '@/lib/i18n/dict'
 
 vi.mock('@/app/actions/roster', () => ({ upsertRosterMember: vi.fn(), removeRosterMember: vi.fn() }))
 
@@ -79,6 +80,27 @@ describe('TeamBar — 회의록 팀 막대', () => {
   })
   it('호출부가 준 title 은 그대로 둔다', () => {
     expect(renderToStaticMarkup(<TeamBar code="X" title="담당 팀" />)).toContain('title="담당 팀"')
+  })
+  it('팀 없는 회의록(code 빈 값 — 0052)은 같은 자리에 중립 색 "팀 없음"으로 그린다 — 공급자가 없는 공유 화면도 같다', async () => {
+    for (const html of [
+      renderToStaticMarkup(<TeamsProvider teams={teams}><TeamBar code="" /></TeamsProvider>),
+      renderToStaticMarkup(<TeamsProvider teams={teams}><TeamBarLabelsProvider value={() => '엉뚱한 이름'}><TeamBar code="" shape="tag" /></TeamBarLabelsProvider></TeamsProvider>),
+      renderToStaticMarkup(<TeamBar code="" shape="label" />),
+    ]) {
+      // 로케일 공급자 밖이라 사전 키가 그대로 나온다 — 글자는 사전(ko·en)이 정한다(아래)
+      expect(html).toContain('data-team-bar=""')
+      expect(html).toContain('<span class="truncate">min.team.none</span>')
+      expect(html).toContain('title="min.team.none"')
+      expect(html).not.toMatch(/bg-category-\d/)       // 어느 팀의 색도 아니다
+    }
+    await ensureEnLoaded()   // en 사전은 지연 등록이다
+    expect([dictT('ko', 'min.team.none'), dictT('en', 'min.team.none')]).toEqual(['팀 없음', 'No team'])
+    expect([dictT('ko', 'min.fold.noTeam'), dictT('en', 'min.fold.noTeam')]).toEqual(['팀 없음(미분류)', 'No team (unfiled)'])
+  })
+  it('팀 행이 지워진 옛 회의록은 빈 값이 아니라 옛 code 가 온다 — "팀 없음"이 아니라 그 code 글자다', () => {
+    const html = renderToStaticMarkup(<TeamsProvider teams={teams}><TeamBar code="DELETED" /></TeamsProvider>)
+    expect(html).toContain('<span class="truncate">DELETED</span>')
+    expect(html).not.toContain('min.team.none')
   })
 })
 

@@ -231,6 +231,8 @@ function displayValue(value: unknown, timeZone: string, key?: string): string {
     const entries = Object.entries(source)
       .filter(([field, v]) =>
         v !== undefined && v !== null && v !== false
+        // 팀 없는 회의록(teamCode 빈 값 — 0052)은 팀 칸을 내지 않는다("팀: " 뒤가 빈 채로 남지 않게)
+        && !(field === 'teamCode' && v === '')
         && field !== 'sortOrder' && field !== 'updatedAt'
         && !/(?:^id$|ids$|id$)/i.test(field)
         && !(field.endsWith('Label') && pairedLabel(field.slice(0, -'Label'.length)) !== null))

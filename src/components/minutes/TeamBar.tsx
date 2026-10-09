@@ -1,6 +1,8 @@
 'use client'
 import { createContext, useContext } from 'react'
 import { useTeamLabel, useTeamSlot } from '@/components/app/TeamsProvider'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { NO_TEAM } from '@/lib/domain/minutes'
 
 /** 회의록 화면이 아는 팀 이름(code → 라벨) — 프로젝트를 고른 회의록 화면의 담당 선택지는 그 프로젝트의 전용 팀이라 워크스페이스 범위
  *  공급자(공용 팀)에는 없다. 화면이 선택지로 이 값을 내려 주면 막대가 그 이름을 쓴다. 모르는 code 는 undefined(공급자·code 로 물러난다) */
@@ -14,6 +16,8 @@ export const TeamBarLabelsProvider = TeamBarLabels.Provider
  * TeamBarLabelsProvider 로 내려 준다(고른 프로젝트의 전용 팀까지 안다). code 는 data-team-bar(선택자·색)로만 남는다.
  * 이름은 길 수 있다(40자) — 모양마다 상한 폭을 두고 줄이며 title 로 전부 보인다(호출부 title 이 있으면 그쪽이 이긴다).
  * 모양 셋: cell(목록·탐색기 줄 — 폭 상한), tag(달력 칸 — 작게), pill(뷰어 머리 — 둥글게). 공유 화면처럼 공급자가 없으면 중립 색이다.
+ * 팀 없는 회의록(code 빈 값 — 0052)은 같은 자리에 중립 색 "팀 없음"으로 그린다(막대를 빼면 줄마다 제목 시작 위치가 흔들리고 달력 칸에서는
+ * 그 회의록이 사라진다). 팀 행이 지워진 옛 회의록은 빈 값이 아니라 옛 code 가 온다 — 그쪽은 지금처럼 code 글자다.
  */
 const SHAPE = {
   cell: 'min-w-12 max-w-[7rem] justify-center rounded-md px-1.5 py-0.5 text-meta',
@@ -27,7 +31,8 @@ export function TeamBar({ code, shape = 'cell', title }: { code: string; shape?:
   const slotOf = useTeamSlot()
   const labelOf = useTeamLabel()
   const scoped = useContext(TeamBarLabels)
-  const text = scoped?.(code) ?? labelOf(code)
+  const { t } = useLocale()
+  const text = code === NO_TEAM ? t('min.team.none') : scoped?.(code) ?? labelOf(code)
   return (
     <span data-team-bar={code} title={title ?? text}
       className={`inline-flex shrink-0 font-bold text-category-fg ${SHAPE[shape]} ${slotOf(code).bar}`}>

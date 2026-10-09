@@ -23,6 +23,7 @@ import { resolveOrCreateExternalMeeting } from '@/lib/minutes/meetings'
 import { actorFromUser } from '@/lib/authz'
 import { canEditMinute, canSeeProject, hasProjectRoleInWorkspace, isProjectMember, teamViewOf, type Actor } from '@/lib/domain/authz'
 import type { TeamCode } from '@/lib/domain/types'
+import { NO_TEAM } from '@/lib/domain/minutes'
 import { credentialAllows, resolveCredentialTeam } from '@/lib/authz/credentials'
 import { projectTeams, workspaceTeams } from '@/lib/teams/source'
 
@@ -166,19 +167,25 @@ async function resolveWriteTarget(
   }
 
   // 담당 팀은 자격증명 행의 해석(team_map·default_team_id)으로 정한다 — 그 범위의 활성 팀이어야 한다.
-  const candidateTeams = scope.projectId
-    ? await projectTeams(scope.projectId, { client: admin })
-    : await workspaceTeams(scope.workspaceId, { client: admin })
-  const teamRes = resolveCredentialTeam(principal.credential, p.teamCode, candidateTeams)
-  if (!teamRes.ok) {
-    if (teamRes.reason === 'inactive') {
-      return { ok: false, response: apiFail(400, 'team_inactive', '비활성화된 담당 팀입니다.') }
+  // team 은 선택이다(0052 — 3값): 키 부재 + 기존 행 = 기존 담당 유지(자격증명 해석을 타지 않는다 — 재전송이 담당을 조용히 바꾸거나 지우지 않게),
+  // 빈 문자열 = 팀 없음 명시, 키 부재 + 새 회의록 = 기본 팀 → 없으면 팀 없음, 값 = 그 팀(맞는 팀이 없으면 지금처럼 400).
+  if (!p.teamProvided && ex) {
+    p.teamCode = ex.team_code as TeamCode
+  } else if (p.teamProvided && p.teamCode === NO_TEAM) {
+    // 팀 없음 명시 — 해석할 것이 없다(기본 팀으로 채우지 않는다)
+  } else {
+    const candidateTeams = scope.projectId
+      ? await projectTeams(scope.projectId, { client: admin })
+      : await workspaceTeams(scope.workspaceId, { client: admin })
+    const teamRes = resolveCredentialTeam(principal.credential, p.teamCode, candidateTeams)
+    if (!teamRes.ok) {
+      if (teamRes.reason === 'inactive') {
+        return { ok: false, response: apiFail(400, 'team_inactive', '비활성화된 담당 팀입니다.') }
+      }
+      return { ok: false, response: apiBadRequest('잘못된 담당입니다.') }
     }
-    return { ok: false, response: apiBadRequest('잘못된 담당입니다.') }
-  }
-  const chosen = candidateTeams.find(t => t.id === teamRes.teamId)
-  if (chosen) {
-    p.teamCode = chosen.code as TeamCode
+    const chosen = teamRes.teamId === null ? null : candidateTeams.find(t => t.id === teamRes.teamId)
+    p.teamCode = chosen ? chosen.code as TeamCode : teamRes.teamId === null ? NO_TEAM : p.teamCode
   }
 
   const activeTeamCodes = await activeTeamCodesForMinuteScope(scope, { client: admin })
@@ -198,6 +205,7 @@ async function resolveWriteTarget(
 async function resolveTeamRootWithLazyCreate(
   admin: AdminClient, teamCode: TeamCode, target: WriteTarget, actorId: string,
 ): Promise<string | null> {
+  if (teamCode === NO_TEAM) return null   // 팀 없는 회의록은 편철할 팀 루트가 없다 — 미분류(0052)
   const res = await resolveFolderPath(admin, teamCode, [], {
     actorId, activeTeamCodes: target.activeTeamCodes,
     projectId: target.scope.projectId, workspaceId: target.scope.workspaceId, rootMode: target.rootMode,
@@ -295,14 +303,22 @@ async function handleExisting(
   }
   let folderUpdated = folder.provided && folder.folderId !== null && !folderPartial
   let teamMovedFolderId: string | null = null
+  // 팀 해제(team: "")로 팀 루트 아래에 있던 회의록을 미분류로 뺐는가(0052) — 아래 folder_id null 을 **넣어야** 하는 유일한 경우
+  let unfiledByTeamRelease = false
   // 결정 §6 「구버전 replace 의 team 불일치」 — folder_path 키가 없는데 team 만 바뀐 재전송은
   // 폴더가 옛 팀 서브트리에 남아 "team=ERP 인데 폴더는 MES" 인 데이터를 만든다(§6.4 가 D&D
   // 에서 금지한 상태를 외부 API 가 정상 경로로 만드는 셈). 새 팀 루트로 옮긴다.
   // 400 거절은 구버전 클라이언트의 정상 조작(담당 정정)을 막으므로 채택하지 않는다.
   if (!folderUpdated && p.teamCode !== existing.team_code) {
-    teamMovedFolderId = await resolveTeamRootWithLazyCreate(admin, p.teamCode, target, actor.id)
-    if (teamMovedFolderId) folderUpdated = true
-    else console.error(`[minutes-api] 담당 변경(${existing.team_code}→${p.teamCode}) 팀 루트 부재 — 폴더 유지`)
+    if (p.teamCode === NO_TEAM) {
+      // 팀을 해제했는데 폴더가 옛 팀 서브트리에 남으면 같은 불일치다 — teams 모드에서는 미분류로 뺀다(화면의 폴더 이동과 같은 규칙).
+      // custom 모드는 폴더가 팀을 정하지 않으므로 자리를 그대로 둔다. 이미 미분류면 할 일이 없다.
+      unfiledByTeamRelease = target.rootMode.mode === 'teams' && existing.folder_id !== null
+    } else {
+      teamMovedFolderId = await resolveTeamRootWithLazyCreate(admin, p.teamCode, target, actor.id)
+      if (teamMovedFolderId) folderUpdated = true
+      else console.error(`[minutes-api] 담당 변경(${existing.team_code}→${p.teamCode}) 팀 루트 부재 — 폴더 유지`)
+    }
   }
   const metadata = {
     minute_date: p.minuteDate,
@@ -313,7 +329,8 @@ async function handleExisting(
     meeting_occurrence_date: p.meetingIdProvided
       ? (p.meetingId ? p.minuteDate : null)
       : existing.meeting_occurrence_date,
-    ...(folderUpdated ? { folder_id: teamMovedFolderId ?? (folder.provided ? folder.folderId : null) } : {}),
+    ...(unfiledByTeamRelease ? { folder_id: null }
+      : folderUpdated ? { folder_id: teamMovedFolderId ?? (folder.provided ? folder.folderId : null) } : {}),
   }
   // 불변 버전 append + 본문/메타 갱신 + 파일 없는 현재 원본 포인터 해제를 한
   // DB 트랜잭션으로 처리한다. 이전 파일은 기존 minute_version이 계속 보존한다.
@@ -352,7 +369,7 @@ async function handleExisting(
   // 발생) 건드리지 않는다 — 그 경로는 새 위치가 이미 확정됐다. folder_path 를 보냈어도
   // (folder.provided) 해석이 실패해(unclassified/partial) 폴더를 못 옮겼으면 이 refile 이
   // 정리한다 — 조건에서 !folder.provided 를 뺐다(승인된 정리).
-  if (projectChanged && !folderUpdated) {
+  if (projectChanged && !folderUpdated && !unfiledByTeamRelease) {
     await refileMinuteAfterProjectChange(admin, {
       minuteId: existing.id, teamCode: p.teamCode, oldFolderId: existing.folder_id,
       newProjectId: targetProjectId, actorId: actor.id,
@@ -387,9 +404,10 @@ async function handleExisting(
   })
   // 에코는 **실제 편철 결과**다(§3.3) — 갱신했으면 새 위치, 아니면(키 부재·시드 루트 부재)
   // 손대지 않은 현재 위치. 요청한 경로를 그대로 되돌려주면 안 된다.
-  const echoFolderId = folderUpdated
-    ? (teamMovedFolderId ?? (folder.provided ? folder.folderId : null))
-    : existing.folder_id
+  const echoFolderId = unfiledByTeamRelease ? null
+    : folderUpdated
+      ? (teamMovedFolderId ?? (folder.provided ? folder.folderId : null))
+      : existing.folder_id
   return respondMinute(req, 200, {
     id: existing.id, action: 'replaced', title: p.title, date: p.minuteDate,
     team: p.teamCode, meetingId: p.meetingIdProvided ? p.meetingId : existing.meeting_id,
@@ -400,9 +418,10 @@ async function handleExisting(
     createdAt: existing.created_at,
     updatedAt: nowIso,
     folderId: echoFolderId,
-    folderPath: folderUpdated
-      ? (teamMovedFolderId ? [p.teamCode] : (folder.provided ? folder.folderPath : null))
-      : await folderPathOf(admin, existing.folder_id),
+    folderPath: unfiledByTeamRelease ? null
+      : folderUpdated
+        ? (teamMovedFolderId ? [p.teamCode] : (folder.provided ? folder.folderPath : null))
+        : await folderPathOf(admin, existing.folder_id),
     folderPathStatus: echoFolderId === null
       ? 'unclassified'
       : (folder.provided && !teamMovedFolderId ? folder.status : 'exact'),

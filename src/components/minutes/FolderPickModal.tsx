@@ -7,17 +7,21 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import { Modal } from '@/components/ui/Modal'
 
 /** 이동 대상 폴더 픽커 — 트리 들여쓰기 + 미분류. 선택 즉시 onPick(닫기는 호출부).
+ *  onPickNoTeam 을 주면 맨 위에 "팀 없음(미분류)" 항목이 생긴다(0052 — 업로드·메타 모달). 팀은 폴더에서 파생되므로 "팀 없음"도 폴더 선택의
+ *  한 항목으로 고른다. hideUnfiled 는 그 화면에서 "미분류"가 "팀 없음(미분류)"와 같은 뜻일 때(팀이 하나도 없음·이미 팀 없는 회의록) 중복을 숨긴다.
  *  scopeProjectId 로 그 프로젝트 소속 폴더만 보여준다 — 교차 프로젝트 편철은 서버도 거부하므로
  *  (moveMinuteToFolder·createMinuteFolder 의 자식=부모 프로젝트 불변식) 애초에 고를 수 없게 한다.
  *  null = 미지정 폴더만. */
 export function FolderPickModal({
-  open, folders, scopeProjectId, onClose, onPick,
+  open, folders, scopeProjectId, onClose, onPick, onPickNoTeam, hideUnfiled = false,
 }: {
   open: boolean
   folders: MinuteFolder[]
   scopeProjectId: string | null
   onClose: () => void
   onPick: (folderId: string | null) => void
+  onPickNoTeam?: () => void
+  hideUnfiled?: boolean
 }) {
   const { t } = useLocale()
   const scoped = useMemo(
@@ -43,13 +47,24 @@ export function FolderPickModal({
   return (
     <Modal open={open} onClose={onClose} title={t('min.fold.pickTitle')} size="sm">
       <ul className="max-h-80 space-y-0.5 overflow-y-auto">
-        <li>
-          <button onClick={() => onPick(null)}
-            className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 hover:bg-surface-subtle">
-            <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
-            <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{t('min.fold.unfiled')}</span>
-          </button>
-        </li>
+        {onPickNoTeam && (
+          <li>
+            <button onClick={onPickNoTeam} data-folder-pick="no-team"
+              className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 hover:bg-surface-subtle">
+              <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
+              <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{t('min.fold.noTeam')}</span>
+            </button>
+          </li>
+        )}
+        {!hideUnfiled && (
+          <li>
+            <button onClick={() => onPick(null)}
+              className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors duration-100 hover:bg-surface-subtle">
+              <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
+              <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{t('min.fold.unfiled')}</span>
+            </button>
+          </li>
+        )}
         {rows(roots, 0)}
       </ul>
     </Modal>

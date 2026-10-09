@@ -1056,3 +1056,177 @@ describe('프로젝트 없는 회의록의 폴더 이동 — 워크스페이스 
     expect((await moveMinuteToFolder('m1', 'w2-sub')).ok).toBe(true)
   })
 })
+
+/* ── 팀 없는 회의록(0052) — 빈 팀 코드 ─────────────────────────────────────── */
+describe('팀 없는 회의록(0052)', () => {
+  const noTeamInput = {
+    minuteDate: '2026-10-09', teamCode: '', title: '팀 없는 회의', bodyMd: '본문', meetingId: null, projectId: null,
+  } as never
+  const rpcCreateOk = () => vi.fn(() => ({
+    single: () => Promise.resolve({ data: { minute_id: 'm-new', version_id: 'v1', wiki_rebuild_required: false }, error: null }),
+  }))
+  const TEAM_ROOT = { id: 'r-pmo', name: 'PMO', parent_id: null, sort: 0, created_by: null, kind: 'team_root', team_id: 't-PMO', team: { code: 'PMO', project_id: null }, project_id: null, workspace_id: 'ws-1' }
+  const TEAM_SUB = { id: 'r-pmo-sub', name: '하위', parent_id: 'r-pmo', sort: 1, created_by: 'u1', project_id: null, workspace_id: 'ws-1' }
+  const CUSTOM_ROOT = { id: 'c-root', name: '정례', parent_id: null, sort: 0, created_by: null, kind: 'custom_root', project_id: null, workspace_id: 'ws-1' }
+  const CUSTOM_SUB = { id: 'c-sub', name: '주간', parent_id: 'c-root', sort: 1, created_by: 'u1', project_id: null, workspace_id: 'ws-1' }
+  const TREE = [TEAM_ROOT, TEAM_SUB, CUSTOM_ROOT, CUSTOM_SUB]
+  const patch = { minuteDate: '2026-10-09', teamCode: '', title: '제목', meetingId: null } as never
+
+  describe('createMinute', () => {
+    it('빈 팀 코드로 만든다 — p_team_code 빈 값, 폴더는 미분류(팀 루트 자동 편철을 찾지 않는다)', async () => {
+      const { client, calls } = fakeClient({ minute_folders: { data: [TEAM_ROOT], error: null } })
+      createServerClient.mockResolvedValue(client)
+      const rpc = rpcCreateOk()
+      adminMocks.createAdminClient.mockReturnValue({ rpc, from: vi.fn() })
+      const r = await createMinute(noTeamInput, null, undefined, 'ws-1')
+      expect(r.ok).toBe(true)
+      expect(rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({
+        p_team_code: '', p_folder_id: null, p_workspace_id: 'ws-1',
+      }))
+      expect(calls['minute_folders']).toBeUndefined()   // 팀 루트를 찾으러 가지 않았다
+    })
+    it('가드가 먼저다 — 미로그인·조회 전용은 빈 팀 코드여도 거부되고 RPC 에 닿지 않는다', async () => {
+      createServerClient.mockResolvedValue(fakeClient({}).client)
+      getActor.mockResolvedValue(null)
+      expect(await createMinute(noTeamInput, null, undefined, 'ws-1')).toMatchObject({ ok: false, error: '로그인 필요' })
+      getActor.mockResolvedValue(viewerActor)
+      expect(await createMinute(noTeamInput, null, undefined, 'ws-1')).toMatchObject({ ok: false, error: '권한 없음' })
+      expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+    })
+    it('값이 있는 틀린 팀 코드·공백뿐인 값은 지금처럼 거부 — 팀 없음으로 삼키지 않는다(RPC 미도달)', async () => {
+      createServerClient.mockResolvedValue(fakeClient({}).client)
+      for (const teamCode of ['NOPE', ' ']) {
+        const r = await createMinute({ ...(noTeamInput as object), teamCode } as never, null, undefined, 'ws-1')
+        expect(r, teamCode).toMatchObject({ ok: false, error: '잘못된 담당입니다.' })
+      }
+      expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+    })
+    it('팀 루트 아래 폴더를 고르면 빈 팀 코드를 보냈어도 그 팀이다(폴더가 팀의 출처)', async () => {
+      createServerClient.mockResolvedValue(fakeClient({ minute_folders: { data: TREE, error: null } }).client)
+      const rpc = rpcCreateOk()
+      adminMocks.createAdminClient.mockReturnValue({ rpc, from: vi.fn() })
+      expect((await createMinute(noTeamInput, 'r-pmo-sub', undefined, 'ws-1')).ok).toBe(true)
+      expect(rpc).toHaveBeenCalledWith('create_minute_with_version', expect.objectContaining({ p_team_code: 'PMO', p_folder_id: 'r-pmo-sub' }))
+    })
+    it('지정 루트(custom_root) 아래 폴더에는 팀 없이 편철한다 — 팀을 보냈으면 그 팀 그대로(폴더가 팀을 정하지 않는다)', async () => {
+      createServerClient.mockResolvedValue(fakeClient({ minute_folders: { data: TREE, error: null } }).client)
+      const rpc = rpcCreateOk()
+      adminMocks.createAdminClient.mockReturnValue({ rpc, from: vi.fn() })
+      expect((await createMinute(noTeamInput, 'c-sub', undefined, 'ws-1')).ok).toBe(true)
+      expect(rpc).toHaveBeenLastCalledWith('create_minute_with_version', expect.objectContaining({ p_team_code: '', p_folder_id: 'c-sub' }))
+      expect((await createMinute({ ...(noTeamInput as object), teamCode: 'ERP' } as never, 'c-sub', undefined, 'ws-1')).ok).toBe(true)
+      expect(rpc).toHaveBeenLastCalledWith('create_minute_with_version', expect.objectContaining({ p_team_code: 'ERP', p_folder_id: 'c-sub' }))
+    })
+  })
+
+  describe('updateMinuteMeta', () => {
+    const OWN = { created_by: 'u1', archived_at: null, project_id: null, workspace_id: 'ws-1', folder_id: 'r-pmo-sub' }
+    it('팀 해제 — 빈 팀 코드와 폴더 null 을 메타 RPC 로 보낸다', async () => {
+      createServerClient.mockResolvedValue(fakeClient({ minutes: { data: OWN, error: null } }).client)
+      const { client: admin, rpc } = fakeMetadataAdmin()
+      adminMocks.createAdminClient.mockReturnValue(admin)
+      expect((await updateMinuteMeta('m1', patch, null)).ok).toBe(true)
+      expect(rpc).toHaveBeenCalledWith('update_minute_metadata_with_wiki_retraction', expect.objectContaining({
+        p_minute_id: 'm1', p_metadata: expect.objectContaining({ team_code: '', folder_id: null }),
+      }))
+    })
+    it('팀 없는 회의록의 제목만 고쳐도 통과한다(폴더 무접촉 — folder_id 키 없음)', async () => {
+      createServerClient.mockResolvedValue(fakeClient({ minutes: { data: { ...OWN, folder_id: null }, error: null } }).client)
+      const { client: admin, rpc } = fakeMetadataAdmin()
+      adminMocks.createAdminClient.mockReturnValue(admin)
+      expect((await updateMinuteMeta('m1', patch)).ok).toBe(true)
+      const meta = (rpc.mock.calls[0][1] as { p_metadata: Record<string, unknown> }).p_metadata
+      expect(meta.team_code).toBe('')
+      expect('folder_id' in meta).toBe(false)
+    })
+    it('재지정 — 팀 루트 아래 폴더로 옮기면 그 팀이 된다', async () => {
+      createServerClient.mockResolvedValue(fakeClient({
+        minutes: { data: { ...OWN, folder_id: null }, error: null }, minute_folders: { data: TREE, error: null },
+      }).client)
+      const { client: admin, rpc } = fakeMetadataAdmin()
+      adminMocks.createAdminClient.mockReturnValue(admin)
+      expect((await updateMinuteMeta('m1', patch, 'r-pmo')).ok).toBe(true)
+      expect(rpc).toHaveBeenCalledWith('update_minute_metadata_with_wiki_retraction', expect.objectContaining({
+        p_metadata: expect.objectContaining({ team_code: 'PMO', folder_id: 'r-pmo' }),
+      }))
+    })
+    it('지정 루트 아래 폴더로 옮기면 팀은 보낸 값 그대로(팀 없음 포함)', async () => {
+      createServerClient.mockResolvedValue(fakeClient({
+        minutes: { data: OWN, error: null }, minute_folders: { data: TREE, error: null },
+      }).client)
+      const { client: admin, rpc } = fakeMetadataAdmin()
+      adminMocks.createAdminClient.mockReturnValue(admin)
+      expect((await updateMinuteMeta('m1', patch, 'c-sub')).ok).toBe(true)
+      expect(rpc).toHaveBeenCalledWith('update_minute_metadata_with_wiki_retraction', expect.objectContaining({
+        p_metadata: expect.objectContaining({ team_code: '', folder_id: 'c-sub' }),
+      }))
+    })
+    it('소유권 가드가 먼저다 — 남의 회의록은 빈 팀 코드여도 거부(RPC 미도달). 틀린 팀 코드는 지금처럼 거부', async () => {
+      createServerClient.mockResolvedValue(fakeClient({ minutes: { data: { ...OWN, created_by: 'someone-else' }, error: null } }).client)
+      expect((await updateMinuteMeta('m1', patch, null)).ok).toBe(false)
+      createServerClient.mockResolvedValue(fakeClient({ minutes: { data: OWN, error: null } }).client)
+      expect(await updateMinuteMeta('m1', { ...(patch as object), teamCode: 'NOPE' } as never)).toMatchObject({ ok: false, error: '잘못된 담당입니다.' })
+      expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('moveMinuteToFolder — 팀 루트 ↔ 미분류', () => {
+    const own = (extra: Record<string, unknown>) => ({ id: 'm1', created_by: 'u1', archived_at: null, project_id: null, workspace_id: 'ws-1', ...extra })
+    it('팀 루트 아래 → 미분류: 팀을 해제한다(메타 RPC — 색인이 따라온다)', async () => {
+      createServerClient.mockResolvedValue(fakeClient({
+        minutes: { data: own({ team_code: 'PMO', folder_id: 'r-pmo-sub' }), error: null }, minute_folders: { data: TREE, error: null },
+      }).client)
+      const { client: admin, rpc } = fakeMetadataAdmin()
+      adminMocks.createAdminClient.mockReturnValue(admin)
+      expect((await moveMinuteToFolder('m1', null)).ok).toBe(true)
+      expect(rpc).toHaveBeenCalledWith('update_minute_metadata_with_wiki_retraction', {
+        p_minute_id: 'm1', p_metadata: { team_code: '', folder_id: null },
+      })
+    })
+    it('미분류(팀 없음) → 팀 루트 아래: 그 팀으로 지정한다', async () => {
+      createServerClient.mockResolvedValue(fakeClient({
+        minutes: { data: own({ team_code: '', folder_id: null }), error: null }, minute_folders: { data: TREE, error: null },
+      }).client)
+      const { client: admin, rpc } = fakeMetadataAdmin()
+      adminMocks.createAdminClient.mockReturnValue(admin)
+      expect((await moveMinuteToFolder('m1', 'r-pmo-sub')).ok).toBe(true)
+      expect(rpc).toHaveBeenCalledWith('update_minute_metadata_with_wiki_retraction', {
+        p_minute_id: 'm1', p_metadata: { team_code: 'PMO', folder_id: 'r-pmo-sub' },
+      })
+    })
+    it('지정 루트 아래 ↔ 미분류·지정 루트로의 이동은 팀을 건드리지 않는다(raw update — 메타 RPC 미경유)', async () => {
+      for (const [row, target] of [
+        [own({ team_code: 'PMO', folder_id: 'c-sub' }), null],       // 지정 루트 아래 → 미분류: 팀 유지
+        [own({ team_code: 'PMO', folder_id: null }), 'c-sub'],       // 미분류 → 지정 루트 아래: 팀 유지
+        [own({ team_code: '', folder_id: null }), 'c-sub'],          // 팀 없는 회의록을 지정 루트 아래로
+        [own({ team_code: 'PMO', folder_id: null }), null],          // 이미 미분류 — 해제하지 않는다
+      ] as const) {
+        adminMocks.createAdminClient.mockReset()
+        createServerClient.mockResolvedValue(fakeClient({ minutes: { data: row, error: null }, minute_folders: { data: TREE, error: null } }).client)
+        const { client: admin, calls } = fakeClient({ minutes: { data: [{ id: 'm1' }], error: null } })
+        const rpc = vi.fn()
+        adminMocks.createAdminClient.mockReturnValue({ ...admin, rpc })
+        expect((await moveMinuteToFolder('m1', target)).ok, JSON.stringify([row, target])).toBe(true)
+        expect(rpc).not.toHaveBeenCalled()
+        expect(calls['minutes']!.find(c => c.method === 'update')!.args[0]).toMatchObject({ folder_id: target })
+      }
+    })
+    it('미분류로 뺄 때 지금 폴더를 못 읽으면 중단한다 — 해제 여부를 추측하지 않는다(쓰기 미도달)', async () => {
+      createServerClient.mockResolvedValue(fakeClient({
+        minutes: { data: own({ team_code: 'PMO', folder_id: 'r-pmo-sub' }), error: null },
+        minute_folders: { data: null, error: { message: 'boom' } },
+      }).client)
+      const r = await moveMinuteToFolder('m1', null)
+      expect(r).toMatchObject({ ok: false, error: '폴더 목록을 불러오지 못했습니다.' })
+      expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+    })
+    it('남의 회의록은 팀 해제 이동도 거부된다(소유권 가드 — 쓰기 미도달)', async () => {
+      createServerClient.mockResolvedValue(fakeClient({
+        minutes: { data: own({ created_by: 'someone-else', team_code: 'PMO', folder_id: 'r-pmo-sub' }), error: null },
+        minute_folders: { data: TREE, error: null },
+      }).client)
+      expect((await moveMinuteToFolder('m1', null)).ok).toBe(false)
+      expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+    })
+  })
+})

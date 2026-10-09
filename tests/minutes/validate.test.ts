@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   validateMinuteFields, validateMinuteTeam, sanitizeFileName, stampedFileName, isMinuteFilePathValid, ilikeOrPattern,
-  MINUTE_BODY_MAX, type MinuteInput,
+  MINUTE_BODY_MAX, NO_TEAM, folderTeamRule, isNoTeam, type MinuteInput,
 } from '@/lib/domain/minutes'
+import type { MinuteFolder } from '@/lib/domain/types'
 import { makeStoragePath } from '@/lib/domain/storagePath'
 
 const base: MinuteInput = {
@@ -32,6 +33,45 @@ describe('validateMinuteFields / validateMinuteTeam — 담당 팀은 범위가 
     expect(validateMinuteTeam('ERP', ['ERP'])).toBeNull()
     expect(validateMinuteTeam('ERP', ['PMO'])).toBe('잘못된 담당입니다.')
     expect(validateMinuteTeam('ERP', [])).toBe('잘못된 담당입니다.')
+  })
+})
+
+describe('팀 없는 회의록(0052) — 빈 팀 코드', () => {
+  it('빈 값은 "팀 없음"이라 통과한다 — 팀이 하나도 없는 범위에서도', () => {
+    expect(NO_TEAM).toBe('')
+    expect(validateMinuteTeam(NO_TEAM, ['ERP'])).toBeNull()
+    expect(validateMinuteTeam(NO_TEAM, [])).toBeNull()
+  })
+  it('값이 있으면 지금처럼 그 범위의 팀이어야 한다 — 공백뿐인 값·틀린 코드를 팀 없음으로 삼키지 않는다', () => {
+    expect(validateMinuteTeam(' ', ['ERP'])).toBe('잘못된 담당입니다.')
+    expect(validateMinuteTeam('ERQ', ['ERP'])).toBe('잘못된 담당입니다.')
+    expect(validateMinuteTeam('erp', ['ERP'])).toBe('잘못된 담당입니다.')
+  })
+  it('isNoTeam — 빈 code 이면서 팀 id 도 없을 때만. 팀 행이 지워진 옛 회의록(원문 code 가 남음)은 팀 없음이 아니다', () => {
+    expect(isNoTeam({ teamCode: '', teamId: null })).toBe(true)
+    expect(isNoTeam({ teamCode: '' })).toBe(true)                    // 팀 id 를 싣지 않는 조회(상세·공유)
+    expect(isNoTeam({ teamCode: 'OLD', teamId: null })).toBe(false)  // 지워진 팀의 옛 회의록
+    expect(isNoTeam({ teamCode: 'ERP', teamId: 't1' })).toBe(false)
+  })
+})
+
+describe('folderTeamRule — 폴더가 팀을 정하는가(최상위 폴더 종류)', () => {
+  const f = (id: string, parentId: string | null, extra: Partial<MinuteFolder> = {}): MinuteFolder =>
+    ({ id, name: id, parentId, sort: 0, createdBy: null, projectId: null, ...extra })
+  const folders = [
+    f('team', null, { kind: 'team_root', teamId: 't1', teamCode: 'ERP' }), f('team-sub', 'team'), f('team-leaf', 'team-sub'),
+    f('custom', null, { kind: 'custom_root' }), f('custom-sub', 'custom'),
+    f('unread', null, { kind: 'team_root', teamId: 't2', teamCode: null }), f('unread-sub', 'unread'),
+    f('loose', null), f('loop-a', 'loop-b'), f('loop-b', 'loop-a'),
+  ]
+  it('팀 루트 아래(루트 자신 포함)는 그 팀', () => {
+    for (const id of ['team', 'team-sub', 'team-leaf']) expect(folderTeamRule(folders, id), id).toEqual({ kind: 'team', team: 'ERP' })
+  })
+  it('지정 루트(custom_root) 아래는 팀을 정하지 않는다(free) — 팀 없이도 편철한다', () => {
+    for (const id of ['custom', 'custom-sub']) expect(folderTeamRule(folders, id), id).toEqual({ kind: 'free' })
+  })
+  it('팀을 못 읽은 루트·최상위 일반 폴더·없는 폴더·순환은 판정 불가(null) — 추측하지 않는다', () => {
+    for (const id of ['unread', 'unread-sub', 'loose', 'ghost', 'loop-a']) expect(folderTeamRule(folders, id), id).toBeNull()
   })
 })
 

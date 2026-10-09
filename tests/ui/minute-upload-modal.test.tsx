@@ -152,6 +152,94 @@ describe('MinuteUploadModal — 폴더 직접 선택', () => {
     expect(createMinute.mock.calls[0][0]).toMatchObject({ teamCode: 'PMO' })
   })
 
+  describe('팀 없는 회의록(0052)', () => {
+    const mountWithTeams = async (teams: Parameters<typeof withTeams>[1], over: Partial<Parameters<typeof MinuteUploadModal>[0]> = {}) => {
+      await act(async () => root.render(withTeams(
+        <MinuteUploadModal open onClose={() => {}} onSaved={onSaved} todayIso="2026-07-24"
+          projects={[]} folders={over.folders ?? tree} defaultFolderId={null}
+          projectWorkspaces={{ [P1]: WS }} noProjectWorkspace={{ ok: true, workspaceId: WS }} {...over} />, teams,
+      )))
+    }
+    // 모달 머리의 닫기 단추(글자 없음)는 뺀다 — 목록 항목만
+    const pickerLabels = () => [...pickerDialog().querySelectorAll<HTMLButtonElement>('li button')].map(b => b.textContent)
+    const saveBtn = () => [...mainDialog().querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'min.form.save')!
+
+    it('폴더 선택에 "팀 없음(미분류)" 항목이 있다 — 기본 선택은 지금과 같다(미분류 = 기본 팀)', async () => {
+      await mount()
+      expect(folderFieldBtn().textContent).toContain('min.fold.unfiled')
+      expect(mainDialog().querySelector('[data-no-team-hint]')).toBeNull()
+      await openPicker()
+      expect(pickerLabels().slice(0, 2)).toEqual(['min.fold.noTeam', 'min.fold.unfiled'])
+    })
+    it('"팀 없음(미분류)"를 고르면 필드·안내가 바뀌고, 저장은 빈 팀 코드 + 폴더 null 로 간다', async () => {
+      await mount({ defaultFolderId: 'c-q', defaultTeam: 'MDM' })
+      await openPicker()
+      await pickFolder('min.fold.noTeam')
+      expect(dialogs().length).toBe(1)
+      expect(folderFieldBtn().textContent).toContain('min.fold.noTeam')
+      expect(mainDialog().querySelector('[data-no-team-hint]')?.textContent).toBe('min.fold.noTeamHint')
+      await attachBodyFile()
+      await clickSave()
+      expect(createMinute.mock.calls[0][0]).toMatchObject({ teamCode: '' })
+      expect(createMinute.mock.calls[0][1]).toBe(null)
+      expect(onSaved).toHaveBeenCalled()
+    })
+    it('"팀 없음"을 골랐다가 폴더를 다시 고르면 그 폴더의 팀으로 돌아온다(미분류를 고르면 기본 팀)', async () => {
+      await mount({ defaultTeam: 'MDM' })
+      await openPicker(); await pickFolder('min.fold.noTeam')
+      await openPicker(); await pickFolder('구매')
+      expect(folderFieldBtn().textContent).toContain('구매')
+      await openPicker(); await pickFolder('min.fold.noTeam')
+      await openPicker(); await pickFolder('min.fold.unfiled')
+      expect(folderFieldBtn().textContent).toContain('min.fold.unfiled')
+      await attachBodyFile()
+      await clickSave()
+      expect(createMinute.mock.calls[0][0]).toMatchObject({ teamCode: 'MDM' })
+    })
+    it('팀이 하나도 없으면 "팀 없음(미분류)"이 기본이자 유일한 선택 — 저장을 막지 않는다("먼저 팀을 등록하세요" 차단 없음)', async () => {
+      fetchMinuteFoldersLite.mockImplementation(async () => [])
+      await mountWithTeams([], { folders: [] })
+      expect(folderFieldBtn().textContent).toContain('min.fold.noTeam')
+      expect(mainDialog().textContent).not.toContain('먼저 팀을 등록하세요')
+      expect(mainDialog().querySelector('[role="alert"]')).toBeNull()
+      await openPicker()
+      expect(pickerLabels()).toEqual(['min.fold.noTeam'])   // 같은 뜻의 "미분류"는 숨긴다
+      await pickFolder('min.fold.noTeam')
+      await attachBodyFile()
+      expect(saveBtn().disabled).toBe(false)
+      await clickSave()
+      expect(createMinute).toHaveBeenCalledTimes(1)
+      expect(createMinute.mock.calls[0][0]).toMatchObject({ teamCode: '' })
+      expect(createMinute.mock.calls[0][1]).toBe(null)
+      expect(onSaved).toHaveBeenCalled()
+    })
+    it('지정 루트(custom_root) 아래 폴더는 팀을 정하지 않는다 — 내 팀이 이 범위의 팀이면 그 팀, 아니면 팀 없이 편철한다', async () => {
+      const custom: MinuteFolder[] = [
+        { id: 'c-root', name: '정례', parentId: null, sort: 0, createdBy: null, projectId: null, kind: 'custom_root' },
+        { id: 'c-week', name: '주간', parentId: 'c-root', sort: 0, createdBy: 'u1', projectId: null, kind: 'user' },
+      ]
+      fetchMinuteFoldersLite.mockImplementation(async () => custom)
+      await mount({ folders: custom })
+      await openPicker(); await pickFolder('주간')
+      await attachBodyFile()
+      await clickSave()
+      expect(createMinute.mock.calls[0][0]).toMatchObject({ teamCode: '' })   // 첫 팀(PMO)으로 짐작해 붙이지 않는다
+      expect(createMinute.mock.calls[0][1]).toBe('c-week')
+      act(() => root.unmount()); root = createRoot(container); createMinute.mockClear()
+      await mount({ folders: custom, defaultTeam: 'ERP' })
+      await openPicker(); await pickFolder('주간')
+      await attachBodyFile()
+      await clickSave()
+      expect(createMinute.mock.calls[0][0]).toMatchObject({ teamCode: 'ERP' })
+      act(() => root.unmount()); root = createRoot(container); createMinute.mockClear()
+      await mount({ folders: custom, defaultTeam: 'GONE' })               // 이 범위의 팀이 아닌 내 팀
+      await openPicker(); await pickFolder('주간')
+      await attachBodyFile()
+      await clickSave()
+      expect(createMinute.mock.calls[0][0]).toMatchObject({ teamCode: '' })
+    })
+  })
+
   it.each([
     ['calendar_unavailable', 'min.timeFix.skippedCalendar'],
     ['invalid_time', 'min.timeFix.skippedInvalidTime'],

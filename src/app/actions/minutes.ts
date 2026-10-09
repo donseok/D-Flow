@@ -15,7 +15,7 @@ import { requireModule } from '@/lib/modules/gate'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import {
   validateMinuteFields, validateMinuteTeam, isMinuteFilePathValid, validateFolderName, folderDepthOf, MINUTE_FOLDER_DEPTH_MAX,
-  isTeamRootName, isLockedRootFolder, teamSubOfFolder, normalizeFolderName,
+  isTeamRootName, isLockedRootFolder, folderTeamRule, normalizeFolderName, NO_TEAM,
   MINUTES_PROJECT_BULK_MAX, MINUTE_FILE_URL_TTL_SEC,
   type MinuteInput,
 } from '@/lib/domain/minutes'
@@ -43,6 +43,7 @@ import { activeTeamCodesForMinuteScope, teamNamesForMinuteScope, type MinuteScop
 import { resolveMinuteProject } from '@/lib/minutes/project'
 import { MINUTE_FOLDER_COLS, minuteFolderFromRow } from '@/lib/minutes/folderRow'
 import { loadRootFolders } from '@/lib/minutes/rootMode'
+import { NO_TEAM_FILTER } from '@/lib/minutes/teamResolve'
 import {
   type MinuteVersionFile,
 } from '@/lib/minutes/versions'
@@ -227,10 +228,11 @@ function adminOr(fallback: string): { admin: ReturnType<typeof createAdminClient
  *  "폴더는 MES 인데 team_code 는 ERP" 인 데이터를 서버가 직접 만든다). 자식=부모 프로젝트 불변식도
  *  여기서 함께 검사한다 — moveMinuteToFolder 와 동일하게 회의록이 속할 프로젝트와 명시 지정된
  *  폴더의 프로젝트가 다르면 거절(무스코프면 다른 프로젝트 폴더에 새로 꽂힌다). 파생 불가 폴더
- *  (시드 체인 밖)는 추측하지 않고 거절한다. createMinute·updateMinuteMeta 공용.
+ *  (끊긴 체인·최상위 일반 폴더)는 추측하지 않고 거절한다. createMinute·updateMinuteMeta 공용.
+ *  지정 루트(custom_root) 아래 폴더는 팀을 정하지 않는다(0052) — 그때는 호출부가 이미 검증한 inputTeam(빈 값 = 팀 없음 포함)을 그대로 쓴다.
  *  workspaceId 는 회의록의 워크스페이스(생성이면 확정한 쓰기 대상) — 회의록의 워크스페이스는 바뀌지 않는다. */
 async function deriveTeamFromFolder(
-  sb: Sb, folderId: string, projectId: string | null, workspaceId: string,
+  sb: Sb, folderId: string, projectId: string | null, workspaceId: string, inputTeam: TeamCode,
 ): Promise<{ team: TeamCode } | { error: string }> {
   const folders = await loadFolders(sb)
   if (!folders) return { error: '폴더 목록을 불러오지 못했습니다.' }
@@ -243,9 +245,9 @@ async function deriveTeamFromFolder(
   if (targetFolder.workspaceId !== workspaceId) {
     return { error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' }
   }
-  const derived = teamSubOfFolder(folders, folderId)
-  if (!derived) return { error: '담당 팀을 판정할 수 없는 폴더입니다.' }
-  return { team: derived.team }
+  const rule = folderTeamRule(folders, folderId)
+  if (!rule) return { error: '담당 팀을 판정할 수 없는 폴더입니다.' }
+  return { team: rule.kind === 'team' ? rule.team : inputTeam }
 }
 
 export async function createMinute(
@@ -310,6 +312,7 @@ export async function createMinute(
     ?? (resolvedProject.projectId ? g.actor.projectWorkspace.get(resolvedProject.projectId) ?? null : null)
   if (!targetWs) return { ok: false, error: ERR_MISSING }
   // 담당 팀은 그 범위(프로젝트, 미지정이면 워크스페이스)의 활성 팀이어야 한다 — 다른 워크스페이스의 팀 코드는 거부.
+  // 빈 값은 팀 없음(0052)이라 통과한다 — 팀이 하나도 없는 범위에서도 등록된다.
   const teams = await activeTeamsOr({ projectId: resolvedProject.projectId ?? null, workspaceId: targetWs })
   if ('error' in teams) return { ok: false, error: teams.error }
   const teamErr = validateMinuteTeam(input.teamCode, teams.codes)
@@ -323,14 +326,16 @@ export async function createMinute(
   // §6.3 — 폴더가 주어지면 team 은 폴더에서 파생한다(파생·불변식 검사는 deriveTeamFromFolder).
   let effectiveTeam = input.teamCode
   if (folderId) {
-    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, targetWs)
+    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, targetWs, input.teamCode)
     if ('error' in derived) return { ok: false, error: derived.error }
     effectiveTeam = derived.team
   }
   // 폴더 미지정이면 담당 팀 루트 폴더로 자동 편철(0043) — 부재·실패는 미분류(null) 폴백.
   // sb 는 사용자 세션 클라이언트라(admin 아님) resolveTeamRootFolderId 는 읽기만 한다 —
   // 프로젝트 루트가 아직 없으면(지연 생성 미적용) null → 미분류 폴백으로 등록 자체는 막지 않는다.
-  const effectiveFolderId = folderId ?? await resolveTeamRootFolderId(sb, effectiveTeam, resolvedProject.projectId, targetWs)
+  // 팀 없는 회의록은 편철할 팀 루트가 없다 — 미분류에 둔다(0052).
+  const effectiveFolderId = folderId
+    ?? (effectiveTeam === NO_TEAM ? null : await resolveTeamRootFolderId(sb, effectiveTeam, resolvedProject.projectId, targetWs))
   // 녹취툴 산출물이면 시간 줄을 UTC → 회의록 범위 tz 로 보정 — DB·다운스트림 전부 보정본 사용(스펙 D13 ④).
   // 보정은 업로드를 막지 않는다(A-4 리뷰 N4) — 범위 달력은 보정 대상일 때만 읽고, 못 읽거나 시각이 범위 밖이면 원문 그대로 + 경고
   const { fix, warning: timeFixWarning } = await applyScopeTimeFix(input.bodyMd, { projectId: resolvedProject.projectId ?? null, workspaceId: targetWs }, input.minuteDate)
@@ -429,7 +434,7 @@ export async function updateMinuteMeta(
     && g.actor.projectWorkspace.get(resolvedProject.projectId) !== own.scope.workspaceId) {
     return { ok: false, error: CROSS_WORKSPACE_MOVE_MSG }
   }
-  // 담당 팀은 옮겨 갈 범위(새 프로젝트, 미지정이면 회의록의 워크스페이스)의 활성 팀이어야 한다.
+  // 담당 팀은 옮겨 갈 범위(새 프로젝트, 미지정이면 회의록의 워크스페이스)의 활성 팀이어야 한다. 빈 값은 팀 해제(0052).
   const teams = await activeTeamsOr({ projectId: resolvedProject.projectId ?? null, workspaceId: own.scope.workspaceId })
   if ('error' in teams) return { ok: false, error: teams.error }
   const teamErr = validateMinuteTeam(patch.teamCode, teams.codes)
@@ -439,7 +444,7 @@ export async function updateMinuteMeta(
   // 메타 RPC·minutes 트리거는 이 불일치를 잡지 않는다.
   let effectiveTeam = patch.teamCode
   if (folderId) {
-    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, own.scope.workspaceId)
+    const derived = await deriveTeamFromFolder(sb, folderId, resolvedProject.projectId ?? null, own.scope.workspaceId, patch.teamCode)
     if ('error' in derived) return { ok: false, error: derived.error }
     effectiveTeam = derived.team
   }
@@ -1182,9 +1187,11 @@ export type MinutesListResult = { ok: true; rows: Minute[] } | { ok: false; erro
 const listOrFail = (g: { ok: false; error: string }): MinutesListResult =>
   g.error === ERR_LOOKUP ? { ok: false, error: g.error } : { ok: true, rows: [] }
 
-/** 담당 필터는 팀 id(SP5 B2) — uuid 가 아니면 필터로 쓰지 않고 거부한다(옛 code 를 조용히 '전체'로 넓히지 않는다) */
+/** 담당 필터는 팀 id(SP5 B2) — uuid 가 아니면 필터로 쓰지 않고 거부한다(옛 code 를 조용히 '전체'로 넓히지 않는다).
+ *  팀 없음 필터(NO_TEAM_FILTER — 0052)만 uuid 가 아닌 값으로 받는다 */
 const ERR_TEAM_FILTER = '담당 팀 필터가 올바르지 않습니다. 화면을 새로고침하세요.'
-const teamFilterOk = (teamId: string | null) => teamId === null || (typeof teamId === 'string' && ANY_UUID_RE.test(teamId))
+const teamFilterOk = (teamId: string | null) =>
+  teamId === null || teamId === NO_TEAM_FILTER || (typeof teamId === 'string' && ANY_UUID_RE.test(teamId))
 
 export async function fetchMinutesRange(
   scope: MinutesScope, rangeStart: string, rangeEnd: string, teamId: string | null,
@@ -1502,6 +1509,8 @@ export async function moveMinuteFolder(
  * §6.4: 폴더가 team 의 유일한 출처가 되므로 **팀 루트를 넘어가면 team_code 도 따라가야** 한다.
  * 아니면 "폴더는 MES인데 team_code 는 ERP"인 불일치가 생겨 목록 필터(?team=)와 트리가 서로
  * 다른 답을 준다. 같은 팀 안 이동(대부분)은 종전처럼 raw update — 싸고 위키에 무영향.
+ * 팀 없는 회의록(0052)도 같은 규칙이다: 미분류 → 팀 루트 아래는 그 팀으로 지정되고, 팀 루트 아래 → 미분류는 팀이 해제된다
+ * (팀 루트 밖에 있으면서 그 팀으로 남으면 같은 불일치다). 지정 루트(custom_root) 아래 폴더는 팀을 정하지 않으므로 드나들어도 팀은 그대로다.
  *
  * 권한은 기존 checkOwner(작성자 또는 그 회의록 프로젝트의 관리자 이상) 유지 — archived 차단도 checkOwner 가 한다.
  */
@@ -1511,7 +1520,7 @@ export async function moveMinuteToFolder(
   const g = await requireActor()
   if (!g.ok) return { ok: false, error: g.error }
   // 미분류(null)로 빼내는 것은 탐색기 D&D 가 제공하는 조작이라 허용한다. 팀 파생은 대상
-  // 폴더가 있을 때만 다시 하고, 미분류면 현재 team_code 를 그대로 둔다(추측 금지).
+  // 폴더가 있을 때 다시 하고, 미분류면 "지금 팀 루트 아래에 있었는가"로만 해제를 정한다(아래 — 그 밖은 추측하지 않고 그대로 둔다).
   const sb = await createServerClient()
   let folders: FolderRow[] | null = null
   let targetFolder: FolderRow | undefined
@@ -1522,9 +1531,10 @@ export async function moveMinuteToFolder(
     if (!targetFolder) return { ok: false, error: '이동할 폴더를 찾을 수 없습니다.' }
   }
   // 현재 팀은 소유권 조회에 싣고, 프로젝트·워크스페이스는 resolveScope 가 확정한 범위다 — 쓰기 선행조회 실패는 중단(추측 금지).
-  const own = await checkOwner(sb, minuteId, g.actor, { extra: 'team_code' })
+  const own = await checkOwner(sb, minuteId, g.actor, { extra: 'team_code, folder_id' })
   if (!own.ok) return { ok: false, error: own.error }
   const currentTeam = own.row.team_code as string
+  const currentFolderId = (own.row.folder_id as string | null | undefined) ?? null
   const minuteProjectId = own.scope.projectId
 
   // 자식=부모 프로젝트 불변식 — 대상 폴더의 프로젝트와 회의록의 프로젝트가 다르면 거부한다
@@ -1537,12 +1547,18 @@ export async function moveMinuteToFolder(
     return { ok: false, error: '다른 워크스페이스 폴더로는 이동할 수 없습니다.' }
   }
 
-  // 대상 폴더에서 팀 파생. 시드 체인 밖(§6.3 불변식 위반)이면 추측하지 않고 거절한다.
+  // 대상 폴더에서 팀 파생. 판정 불가 폴더(§6.3 불변식 위반)면 추측하지 않고 거절한다. 지정 루트 아래는 팀을 정하지 않는다(그대로).
   let nextTeam = currentTeam
   if (folderId && folders) {
-    const derived = teamSubOfFolder(folders, folderId)
-    if (!derived) return { ok: false, error: '담당 팀을 판정할 수 없는 폴더입니다.' }
-    nextTeam = derived.team
+    const rule = folderTeamRule(folders, folderId)
+    if (!rule) return { ok: false, error: '담당 팀을 판정할 수 없는 폴더입니다.' }
+    if (rule.kind === 'team') nextTeam = rule.team
+  } else if (!folderId && currentFolderId && currentTeam !== NO_TEAM) {
+    // 팀 루트 아래에서 미분류로 빼내면 팀을 해제한다(0052). 지금 폴더가 팀을 정하던 것인지 알아야 하므로 폴더를 읽는다 —
+    // 못 읽으면 해제 여부를 추측하지 않고 중단한다(쓰기 전 선행 조회 실패). 지정 루트 아래·판정 불가 폴더에서 나온 것은 팀을 그대로 둔다.
+    const all = await loadFolders(sb)
+    if (!all) return { ok: false, error: '폴더 목록을 불러오지 못했습니다.' }
+    if (folderTeamRule(all, currentFolderId)?.kind === 'team') nextTeam = NO_TEAM
   }
 
   const adm = adminOr('폴더 이동 설정을 확인하세요.')

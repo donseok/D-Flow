@@ -540,3 +540,131 @@ describe('회의록 v3 API 연동 (SP7 integration_credentials)', () => {
     })
   })
 })
+
+/* ── team 은 선택(0052) — 3값: 키 부재 / "" / 값 ─────────────────────────────── */
+describe('POST /api/v1/minutes — team 은 선택이다(팀 없는 회의록, 0052)', () => {
+  const send = (body: Record<string, unknown>) => POST(new NextRequest('http://localhost/api/v1/minutes', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ user_email: 'lead@example.com', date: '2026-10-09', title: '팀 없는 회의', body_markdown: '# 본문', external_id: 'ext:no-team', ...body }),
+  }))
+  const createArgs = (rpc: { mock: { calls: unknown[][] } }) =>
+    rpc.mock.calls.find(([fn]) => fn === 'create_minute_with_version')![1] as Record<string, unknown>
+  const commitMeta = (rpc: { mock: { calls: unknown[][] } }) =>
+    (rpc.mock.calls.find(([fn]) => fn === 'commit_minute_body_version')![1] as { p_metadata: Record<string, unknown> }).p_metadata
+  const noDefault = { ...baseCredRow, default_team_id: null }
+  const existing = (over: Record<string, unknown> = {}) => ({
+    id: 'm-1', minute_date: '2026-10-01', team_code: 'ERP', title: '옛 제목', body_md: '# 옛 본문', meeting_id: null, project_id: P1,
+    meeting_occurrence_date: null, archived_at: null, external_id: 'ext:no-team', folder_id: 'f-erp', created_by: U1, created_by_name: '테스터',
+    created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', workspace_id: W1, ...over,
+  })
+
+  describe('새 회의록 — 해석 순서: 요청의 team → 자격증명의 기본 팀 → 팀 없음', () => {
+    it('team 생략 + 기본 팀이 있으면 그 팀으로 등록한다', async () => {
+      const { rpc } = mockSupabase()
+      const res = await send({})
+      expect(res.status).toBe(201)
+      expect(createArgs(rpc)).toMatchObject({ p_team_code: 'PMO' })
+      expect(await res.json()).toMatchObject({ ok: true, action: 'created', team: 'PMO' })
+    })
+    it('team 생략 + 기본 팀이 없으면 팀 없이 등록한다 — p_team_code 빈 값·미분류, 응답의 team 은 빈 문자열', async () => {
+      const { rpc, from } = mockSupabase(noDefault)
+      const res = await send({})
+      expect(res.status).toBe(201)
+      expect(createArgs(rpc)).toMatchObject({ p_team_code: '', p_folder_id: null })
+      expect(await res.json()).toMatchObject({ ok: true, action: 'created', team: '', folder_id: null, folder_path: null, folder_path_status: 'unclassified' })
+      expect(from.mock.calls.some(([table]) => table === 'minute_folders')).toBe(false)   // 편철할 팀 루트를 찾지 않는다
+    })
+    it('team: "" 은 팀 없음을 명시한다 — 기본 팀이 있어도 채우지 않는다(공백뿐인 값도 같다)', async () => {
+      for (const team of ['', '   ']) {
+        const { rpc } = mockSupabase()
+        const res = await send({ team })
+        expect(res.status, JSON.stringify(team)).toBe(201)
+        expect(createArgs(rpc)).toMatchObject({ p_team_code: '', p_folder_id: null })
+        expect((await res.json()).team).toBe('')
+      }
+    })
+    it('team 을 명시했는데 맞는 팀이 없으면 지금처럼 400 — 오타를 팀 없음으로 삼키지 않는다(쓰기 미도달)', async () => {
+      const { rpc } = mockSupabase(noDefault)
+      const res = await send({ team: 'PMOO' })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ code: 'validation_failed', error: '잘못된 담당입니다.' })
+      expect(rpc).not.toHaveBeenCalled()
+    })
+    it('team 을 명시했고 맞는 팀이 없지만 기본 팀이 있으면 그 팀이다(기존 해석 순서 그대로)', async () => {
+      const { rpc } = mockSupabase()
+      expect((await send({ team: 'PMOO' })).status).toBe(201)
+      expect(createArgs(rpc)).toMatchObject({ p_team_code: 'PMO' })
+    })
+    it('team 이 문자열이 아니면(null·숫자) 400 — 3값 규약 밖의 값을 키 부재로 뭉개지 않는다', async () => {
+      for (const team of [null, 3, ['PMO']]) {
+        const { rpc } = mockSupabase(noDefault)
+        const res = await send({ team })
+        expect(res.status, JSON.stringify(team)).toBe(400)
+        expect((await res.json()).error).toContain('team은 문자열')
+        expect(rpc).not.toHaveBeenCalled()
+      }
+    })
+    it('필수 항목 문구에서 team 이 빠졌다 — date·title·body_markdown 만 필수', async () => {
+      mockSupabase(noDefault)
+      const res = await send({ title: undefined })
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe('date, title, body_markdown은 필수입니다.')
+    })
+    it('teams 모드에서 팀 없이 folder_path 를 보내면 미분류로 등록한다(편철할 팀 루트가 없다) — 등록은 201', async () => {
+      vi.stubEnv('MINUTES_FOLDER_PATH_ENABLED', 'true')
+      const { rpc } = mockSupabase(noDefault)
+      const res = await send({ folder_path: ['정례', '주간'] })
+      expect(res.status).toBe(201)
+      expect(createArgs(rpc)).toMatchObject({ p_team_code: '', p_folder_id: null })
+      expect(await res.json()).toMatchObject({ team: '', folder_id: null, folder_path: null, folder_path_status: 'unclassified' })
+    })
+  })
+
+  describe('재전송(replace)', () => {
+    it('team 생략 = 기존 담당 유지 — 기본 팀으로 바꾸지도, 해제하지도 않는다. 폴더도 그대로', async () => {
+      const { rpc } = mockSupabase(baseCredRow, { existingMinute: existing() })
+      const res = await send({})
+      expect(res.status).toBe(200)
+      const meta = commitMeta(rpc)
+      expect(meta.team_code).toBe('ERP')
+      expect(meta).not.toHaveProperty('folder_id')
+      expect(await res.json()).toMatchObject({ action: 'replaced', team: 'ERP' })
+    })
+    it('team 생략 + 팀 없는 기존 회의록 = 팀 없음 유지(기본 팀을 붙이지 않는다)', async () => {
+      const { rpc } = mockSupabase(baseCredRow, { existingMinute: existing({ team_code: '', folder_id: null }) })
+      const res = await send({})
+      expect(res.status).toBe(200)
+      expect(commitMeta(rpc).team_code).toBe('')
+      expect((await res.json()).team).toBe('')
+    })
+    it('team: "" = 해제 — teams 모드에서는 옛 팀 폴더에 남기지 않고 미분류로 뺀다(folder_id null)', async () => {
+      const { rpc } = mockSupabase(baseCredRow, { existingMinute: existing() })
+      const res = await send({ team: '' })
+      expect(res.status).toBe(200)
+      expect(commitMeta(rpc)).toMatchObject({ team_code: '', folder_id: null })
+      expect(await res.json()).toMatchObject({ action: 'replaced', team: '', folder_id: null, folder_path: null, folder_path_status: 'unclassified' })
+    })
+    it('team: "" + custom 모드 = 팀만 해제하고 폴더는 그대로 둔다(폴더가 팀을 정하지 않는다)', async () => {
+      mocks.loadRootFolders.mockResolvedValueOnce({ ok: true, value: { mode: 'custom', names: ['정례'] } } as never)
+      const { rpc } = mockSupabase(baseCredRow, { existingMinute: existing() })
+      expect((await send({ team: '' })).status).toBe(200)
+      const meta = commitMeta(rpc)
+      expect(meta.team_code).toBe('')
+      expect(meta).not.toHaveProperty('folder_id')
+    })
+    it('팀 없는 기존 회의록에 team 을 보내면 그 팀으로 지정한다', async () => {
+      const { rpc } = mockSupabase(noDefault, { existingMinute: existing({ team_code: '', folder_id: null }) })
+      const res = await send({ team: 'ERP' })
+      expect(res.status).toBe(200)
+      expect(commitMeta(rpc).team_code).toBe('ERP')
+      expect((await res.json()).team).toBe('ERP')
+    })
+    it('on_conflict=skip 응답은 기존 값 그대로 — 팀 없는 회의록이면 team 빈 문자열', async () => {
+      mockSupabase(baseCredRow, { existingMinute: existing({ team_code: '', folder_id: null }) })
+      const res = await send({ on_conflict: 'skip' })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ action: 'skipped', team: '' })
+    })
+  })
+})

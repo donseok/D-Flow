@@ -130,6 +130,68 @@ describe('MinuteMetaModal — 폴더 직접 선택 + 또박또박 연결', () =>
     expect(updateMinuteMeta.mock.calls[0][2]).toBeUndefined()
   })
 
+  describe('팀 없는 회의록(0052)', () => {
+    const pickerLabels = () => [...pickerDialog().querySelectorAll<HTMLButtonElement>('li button')].map(b => b.textContent)
+    const patchOf = () => updateMinuteMeta.mock.calls[0][1] as { teamCode: string }
+
+    it('폴더 선택에 "팀 없음(미분류)"와 "미분류"가 따로 있다 — 미분류는 담당 유지, 팀 없음은 해제', async () => {
+      await mount()
+      await openPicker()
+      expect(pickerLabels().slice(0, 2)).toEqual(['min.fold.noTeam', 'min.fold.unfiled'])
+      await pickFolder('min.fold.unfiled')
+      expect(folderFieldBtn().textContent).toContain('min.fold.unfiled')
+      await save()
+      expect(patchOf().teamCode).toBe('MES')
+      expect(updateMinuteMeta.mock.calls[0][2]).toBeNull()
+    })
+    it('"팀 없음(미분류)"를 고르고 저장 → 빈 팀 코드 + 폴더 null(해제)', async () => {
+      await mount()
+      await openPicker()
+      await pickFolder('min.fold.noTeam')
+      expect(folderFieldBtn().textContent).toContain('min.fold.noTeam')
+      await save()
+      expect(patchOf().teamCode).toBe('')
+      expect(updateMinuteMeta.mock.calls[0][2]).toBeNull()
+      expect(onSaved).toHaveBeenCalled()
+    })
+    it('이미 미분류인 회의록의 팀만 해제 — 폴더는 무접촉(undefined), 팀 코드만 빈 값', async () => {
+      await mount({ ...baseMinute, folderId: null })
+      await openPicker()
+      await pickFolder('min.fold.noTeam')
+      await save()
+      expect(patchOf().teamCode).toBe('')
+      expect(updateMinuteMeta.mock.calls[0][2]).toBeUndefined()
+    })
+    it('팀 없는 회의록을 열면 필드가 "팀 없음(미분류)"이고 무변경 저장은 팀 없음을 유지한다 — 같은 뜻의 "미분류"는 숨긴다', async () => {
+      await mount({ ...baseMinute, teamCode: '', teamId: null, folderId: null })
+      expect(folderFieldBtn().textContent).toContain('min.fold.noTeam')
+      await openPicker()
+      expect(pickerLabels()).toContain('min.fold.noTeam')
+      expect(pickerLabels()).not.toContain('min.fold.unfiled')
+      await pickFolder('min.fold.noTeam')
+      await save()
+      expect(patchOf().teamCode).toBe('')
+      expect(updateMinuteMeta.mock.calls[0][2]).toBeUndefined()
+    })
+    it('재지정 — 팀 없는 회의록을 팀 폴더로 옮기면 그 팀이 된다. 해제를 골랐다가 폴더를 다시 골라도 같다', async () => {
+      await mount({ ...baseMinute, teamCode: '', teamId: null, folderId: null })
+      await openPicker(); await pickFolder('min.fold.noTeam')
+      await openPicker(); await pickFolder('구매')
+      await save()
+      expect(patchOf().teamCode).toBe('ERP')
+      expect(updateMinuteMeta.mock.calls[0][2]).toBe('c-buy')
+    })
+    it('팀 행이 지워진 옛 회의록(원문 code 가 남음)은 팀 없음이 아니다 — 미분류 표시·두 항목 모두 보이고, 무변경 저장은 옛 code 그대로 보낸다', async () => {
+      await mount({ ...baseMinute, teamCode: 'OLD', teamId: null, folderId: null })
+      expect(folderFieldBtn().textContent).toContain('min.fold.unfiled')
+      await openPicker()
+      expect(pickerLabels().slice(0, 2)).toEqual(['min.fold.noTeam', 'min.fold.unfiled'])
+      await pickFolder('min.fold.unfiled')
+      await save()
+      expect(patchOf().teamCode).toBe('OLD')
+    })
+  })
+
   it('또박또박 연결 없음이면 "연결 없음" 표시, 초기화 버튼 없음', async () => {
     await mount()
     expect(mainDialog().textContent).toContain('min.ext.none')

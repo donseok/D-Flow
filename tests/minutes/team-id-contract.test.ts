@@ -23,8 +23,8 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectVocabs: async () => ({}) }))
 
-import { getMinutesPage, searchMinutes } from '@/lib/data/minutes'
-import { resolveTeamParam } from '@/lib/minutes/teamResolve'
+import { getMinutesPage, hasMinutesWithoutTeam, searchMinutes } from '@/lib/data/minutes'
+import { NO_TEAM_FILTER, resolveTeamParam } from '@/lib/minutes/teamResolve'
 
 const migration = (suffix: string) => {
   const dir = 'supabase/migrations'
@@ -52,6 +52,28 @@ describe('① 목록은 team_id 를 싣고 team_id 로 거른다', () => {
     await searchMinutes('ws-z', null, '주간', null)
     expect(h.calls.some(([m, a]) => m === 'eq' && String(a[0]).startsWith('team'))).toBe(false)
   })
+  it('팀 없음 필터(0052)는 team_id null ∧ team_code 빈 값 — 팀 행이 지워진 옛 회의록(원문 code 가 남음)은 고르지 않는다', async () => {
+    await getMinutesPage('ws-n', null, '2026-10-01', '2026-10-31', NO_TEAM_FILTER)
+    expect(h.calls).toContainEqual(['is', ['team_id', null]])
+    expect(h.calls).toContainEqual(['eq', ['team_code', '']])
+    expect(h.calls.some(([m, a]) => m === 'eq' && a[0] === 'team_id')).toBe(false)
+    h.calls = []
+    await searchMinutes('ws-n2', null, '주간', NO_TEAM_FILTER)
+    expect(h.calls).toContainEqual(['is', ['team_id', null]])
+    expect(h.calls).toContainEqual(['eq', ['team_code', '']])
+  })
+  it('팀 필터가 없으면 팀 없는 회의록도 목록에 그대로 실린다 — team_code 빈 값이 teamCode 빈 값으로 온다', async () => {
+    h.rows = [{ id: 'm0', minute_date: '2026-10-01', team_code: '', team_id: null, title: '팀 없는 회의', created_at: 'x', updated_at: 'x' }]
+    expect((await getMinutesPage('ws-m', null, '2026-10-01', '2026-10-31', null))[0]).toMatchObject({ teamCode: '', teamId: null })
+  })
+  it('hasMinutesWithoutTeam — 같은 조건으로 한 건만 읽어 "팀 없음" 탭을 보일지 정한다(보관 제외·프로젝트 범위)', async () => {
+    h.rows = [{ id: 'm0' }]
+    expect(await hasMinutesWithoutTeam('ws-h', 'p-1')).toBe(true)
+    for (const c of [['eq', ['workspace_id', 'ws-h']], ['is', ['archived_at', null]], ['is', ['team_id', null]], ['eq', ['team_code', '']],
+      ['limit', [1]], ['eq', ['project_id', 'p-1']]]) expect(h.calls).toContainEqual(c)
+    h.rows = []
+    expect(await hasMinutesWithoutTeam('ws-h2', null)).toBe(false)
+  })
 })
 
 describe('② ?team= 해석(옛 code 링크 → id 리다이렉트)', () => {
@@ -62,6 +84,12 @@ describe('② ?team= 해석(옛 code 링크 → id 리다이렉트)', () => {
     expect(resolveTeamParam('NOPE', teams, { projectId: null })).toEqual({ kind: 'redirect', id: null })
     expect(resolveTeamParam('00000000-0000-4000-8000-0000000000ff', teams, { projectId: null })).toEqual({ kind: 'redirect', id: null })
     expect(resolveTeamParam(undefined, teams, { projectId: null })).toEqual({ kind: 'none' })
+  })
+  it('?team=none 은 팀 없음 필터 그대로(0052) — 리다이렉트하지 않는다. code 가 none 인 팀의 옛 링크보다 먼저다', () => {
+    expect(resolveTeamParam(NO_TEAM_FILTER, teams, { projectId: null })).toEqual({ kind: 'id', id: 'none' })
+    expect(resolveTeamParam('none', [...teams, { id: '00000000-0000-4000-8000-0000000000a2', code: 'none', projectId: null }], { projectId: null }))
+      .toEqual({ kind: 'id', id: 'none' })
+    expect(resolveTeamParam('None', teams, { projectId: null })).toEqual({ kind: 'redirect', id: null })   // 대소문자를 넓히지 않는다
   })
 })
 

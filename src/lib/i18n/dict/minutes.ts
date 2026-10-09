@@ -12,6 +12,7 @@ export const minutesKo = {
   'min.export.failed': '전체 회의록을 내려받지 못했습니다.',
   'min.export.networkError': '네트워크 상태를 확인하고 다시 시도해 주세요.',
   'min.team.all': '전체',
+  'min.team.none': '팀 없음',
   'min.view.calendar': '달력',
   'min.view.tree': '트리',
   'min.tree.expandAll': '전체 펼치기',
@@ -52,6 +53,8 @@ export const minutesKo = {
   'min.grp.unknownProject': '이름 미상 프로젝트',
   // 폴더 디렉토리 (스펙 2026-07-23-minutes-folders-design.md)
   'min.fold.unfiled': '미분류',
+  'min.fold.noTeam': '팀 없음(미분류)',
+  'min.fold.noTeamHint': '팀을 정하지 않고 미분류에 등록합니다.',
   'min.fold.new': '새 폴더',
   'min.fold.addSub': '하위 폴더 추가',
   'min.fold.rename': '이름 변경',

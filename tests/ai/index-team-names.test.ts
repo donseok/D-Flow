@@ -68,6 +68,15 @@ describe('회의록 — 팀 줄', () => {
     expect(team).toBe('TEAM_A')
     expect(String((builder.select as ReturnType<typeof vi.fn>).mock.calls[0][0])).toContain('team:teams(name)')
   })
+  it('팀 없는 회의록(team_code 빈 값 — 0052)은 팀 줄을 빼고 문서의 team 을 비운다(null) — 본문·일자는 그대로 색인된다', async () => {
+    const { client: c } = client('minutes', { data: row({ team_code: '', team: null }), error: null })
+    const { text, team } = textOf(await createSupabaseIndexContentLoader(c)(job('minute', 'minutes', MINUTE_ID)))
+    expect(text).not.toContain('팀:')
+    expect(text).toContain('# 회의록 주간 회의')
+    expect(text).toContain('일자: 2026-10-02')
+    expect(text).toContain('결정: 일정을 유지한다')
+    expect(team).toBeNull()
+  })
   it('팀 행이 없거나(team_id null) 이름이 code 와 같으면 code 한 번만', async () => {
     for (const team of [null, undefined, { name: 'TEAM_A' }, []]) {
       const { client: c } = client('minutes', { data: row({ team }), error: null })

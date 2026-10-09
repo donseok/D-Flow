@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Folder } from 'lucide-react'
 import type { Minute, MinuteFolder, TeamCode } from '@/lib/domain/types'
-import { teamSubOfFolder } from '@/lib/domain/minutes'
+import { NO_TEAM, folderTeamRule, isNoTeam } from '@/lib/domain/minutes'
 import { pickDefaultProjectId, sortMyProjectsFirst } from '@/lib/domain/projectPick'
 import {
   fetchMinuteFoldersLite, fetchProjectMeetingsLite, resetMinuteExternalId, updateMinuteMeta,
@@ -28,6 +28,8 @@ export function MinuteMetaModal({
   const initialFolderIdRef = useRef<string | null>(minute.folderId ?? null)
   const [folderId, setFolderId] = useState<string | null>(minute.folderId ?? null)
   const [folderPickOpen, setFolderPickOpen] = useState(false)
+  // 폴더 선택에서 "팀 없음(미분류)"를 골랐는가(0052) — 그냥 "미분류"(폴더만 빼고 담당 유지)와 구분한다
+  const [noTeam, setNoTeam] = useState(false)
   const [folders, setFolders] = useState<MinuteFolder[]>([])
   const [title, setTitle] = useState(minute.title)
   // 이미 귀속이 있으면 절대 건드리지 않는다 — 남의 회의록을 열었다는 이유만으로 프로젝트가
@@ -91,13 +93,15 @@ export function MinuteMetaModal({
     return () => { alive = false }
   }, [open, minute.workspaceId])
 
-  // 담당(teamCode)은 선택 폴더에서 파생 — 시드 체인 밖(미분류·커스텀 폴더)이면 기존 담당 유지
-  const team: TeamCode = useMemo(
-    () => teamSubOfFolder(folders, folderId)?.team ?? minute.teamCode,
-    [folders, folderId, minute.teamCode],
-  )
+  // 담당(teamCode)은 선택 폴더에서 파생 — "팀 없음"을 골랐으면 빈 값(해제), 팀 루트 아래면 그 팀,
+  // 그 밖(미분류·지정 루트 아래·판정 불가)이면 기존 담당 유지
+  const team: TeamCode = useMemo(() => {
+    if (noTeam) return NO_TEAM
+    const rule = folderId ? folderTeamRule(folders, folderId) : null
+    return rule?.kind === 'team' ? rule.team : minute.teamCode
+  }, [noTeam, folders, folderId, minute.teamCode])
   const folderName = folderId === null
-    ? t('min.fold.unfiled')
+    ? t(team === NO_TEAM ? 'min.fold.noTeam' : 'min.fold.unfiled')
     : folders.find(f => f.id === folderId)?.name ?? '…'
 
   async function onProject(pid: string) {
@@ -202,7 +206,10 @@ export function MinuteMetaModal({
       </div>
       <FolderPickModal open={folderPickOpen} folders={folders} scopeProjectId={projectId || null}
         onClose={() => setFolderPickOpen(false)}
-        onPick={id => { setFolderId(id); setFolderPickOpen(false) }} />
+        onPickNoTeam={() => { setNoTeam(true); setFolderId(null); setFolderPickOpen(false) }}
+        // 이미 팀 없는 회의록이면 "미분류"(담당 유지)는 "팀 없음(미분류)"와 같은 결과다 — 하나만 보인다
+        hideUnfiled={isNoTeam(minute)}
+        onPick={id => { setNoTeam(false); setFolderId(id); setFolderPickOpen(false) }} />
     </Modal>
   )
 }

@@ -7,7 +7,8 @@ import {
   Bot, CalendarDays, ChevronLeft, ChevronRight, Download, LayoutGrid, List, ListTree, Plus, Search,
 } from 'lucide-react'
 import type { ExplorerData, ExplorerLeaf, Minute, MinuteFolder, TeamCode } from '@/lib/domain/types'
-import { MINUTES_TREE_LIMIT } from '@/lib/domain/minutes'
+import { isNoTeam, MINUTES_TREE_LIMIT } from '@/lib/domain/minutes'
+import { NO_TEAM_FILTER } from '@/lib/minutes/teamResolve'
 import { fetchMinutesRange, fetchMinutesSearch, fetchMinutesExplorer, fetchMinuteFavorites, toggleMinuteFavorite } from '@/app/actions/minutes'
 import { queueUiPref } from '@/lib/prefs/debouncedSave'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -27,7 +28,7 @@ import type { MinutesScope } from '@/lib/minutes/scope'
 
 type ViewKey = 'list' | 'calendar' | 'tree'
 type TreeState = 'idle' | 'loading' | 'error' | ExplorerData
-/** 'ALL' 또는 팀 id(SP5 B2 — 담당 필터는 minutes.team_id) */
+/** 'ALL', 팀 id(SP5 B2 — 담당 필터는 minutes.team_id), 또는 팀 없음(NO_TEAM_FILTER — 0052) */
 type TeamKey = 'ALL' | string
 
 function monthRangeOf(year: number, month0: number): [string, string] {
@@ -40,7 +41,7 @@ export function MinutesView({
   scope, initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
   initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
   isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null, calendar,
-  teamOptions = [], initialTeamId = null,
+  teamOptions = [], initialTeamId = null, hasNoTeamMinutes = false,
 }: {
   /** 화면의 범위(슬러그 워크스페이스 + ?project=, 계획 V13) — 월 이동·검색·탐색기·즐겨찾기 재조회에 그대로 넘긴다 */
   scope: MinutesScope
@@ -72,8 +73,10 @@ export function MinutesView({
   calendar: CalendarView
   /** 담당 필터 선택지(SP5 B2) — 그 범위의 활성 팀(프로젝트를 고르면 그 프로젝트의 전용 + 공용). 키는 팀 id */
   teamOptions?: { id: string; code: string; name: string }[]
-  /** ?team=<팀 id> — 페이지가 확인한 선택지의 id 만 온다 */
+  /** ?team=<팀 id> — 페이지가 확인한 선택지의 id 만 온다(팀 없음 필터면 NO_TEAM_FILTER) */
   initialTeamId?: string | null
+  /** 이 범위에 팀 없는 회의록이 있다(서버 확인) — "팀 없음" 탭을 보인다. 화면이 받은 목록·트리에 있으면 이 값과 무관하게 보인다 */
+  hasNoTeamMinutes?: boolean
 }) {
   const router = useRouter()
   const { t, locale } = useLocale()
@@ -167,8 +170,13 @@ export function MinutesView({
     }
   }
 
+  // "팀 없음" 탭은 팀 없는 회의록이 하나라도 있을 때만(0052) — 서버가 확인한 값, 또는 지금 받은 목록·트리에 보이는 것(막 올린 것 포함).
+  // 그 탭을 고른 동안은 결과가 비어도 탭을 남긴다(고른 탭이 사라지면 필터가 걸린 채 표시가 없어진다)
+  const showNoTeamTab = hasNoTeamMinutes || team === NO_TEAM_FILTER || minutes.some(isNoTeam)
+    || (typeof treeState === 'object' && treeState.leaves.some(isNoTeam))
   const canUpload = canEdit
   // 보관함 챗의 담당 필터는 팀 code 계약(폴더 루트 판정)이라 선택한 팀의 code 를 넘긴다
+  // (팀 없음 탭은 챗에 대응하는 필터가 없다 — 전체로 연다)
   const teamCodeOrNull = team === 'ALL' ? null : teamOptions.find(o => o.id === team)?.code ?? null
   const isSearch = query.trim().length > 0
   const isTreeExplorer = view === 'tree' && !isSearch
@@ -293,7 +301,9 @@ export function MinutesView({
 
   // 팀 탭은 재조회 없이 리프만 클라이언트 필터(폴더 레일은 항상 전부 — 스펙 v2)
   const explorerLeaves: ExplorerLeaf[] = typeof treeState === 'object'
-    ? (team === 'ALL' ? treeState.leaves : treeState.leaves.filter(l => l.teamId === team))
+    ? (team === 'ALL' ? treeState.leaves
+      : team === NO_TEAM_FILTER ? treeState.leaves.filter(isNoTeam)
+      : treeState.leaves.filter(l => l.teamId === team))
     : []
   const explorerFolders: MinuteFolder[] = typeof treeState === 'object' ? treeState.folders : []
 
@@ -311,7 +321,8 @@ export function MinutesView({
       <div ref={filterBarRef} className="sticky top-(--frame-sticky-top) z-10 -mx-1 shrink-0 space-y-3 bg-canvas/95 px-1 pb-3 pt-1 backdrop-blur-sm">
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedTabs<TeamKey>
-            tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamTabs]}
+            tabs={[{ key: 'ALL', label: t('min.team.all') }, ...teamTabs,
+              ...(showNoTeamTab ? [{ key: NO_TEAM_FILTER, label: t('min.team.none') }] : [])]}
             value={team} onChange={changeTeam} size="sm" />
           <div className="flex items-center gap-1">
             <button onClick={() => shift(-1)} disabled={isSearch || view === 'tree'} className="chrome-icon disabled:opacity-40" aria-label="prev month">

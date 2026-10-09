@@ -1,6 +1,6 @@
 import type { createServerClient } from '@/lib/supabase/server'
 import type { createAdminClient } from '@/lib/supabase/admin'
-import { MINUTE_FOLDER_DEPTH_MAX } from '@/lib/domain/minutes'
+import { MINUTE_FOLDER_DEPTH_MAX, NO_TEAM } from '@/lib/domain/minutes'
 import type { MinuteFolderKind, TeamCode } from '@/lib/domain/types'
 import { parseFolderPathValue } from '@/lib/minutes/externalApi'
 import { folderKindOf } from '@/lib/minutes/folderRow'
@@ -380,6 +380,11 @@ export async function resolveFolderPath(
   const parsed = parseFolderPathValue(path)
   if (!parsed.ok) return { ok: false, kind: 'validation_failed', error: parsed.error, reason: parsed.reason }
   if (opts.rootMode?.mode === 'custom') return resolveCustomFolderPath(sb, parsed.path, { ...opts, names: opts.rootMode.names })
+  // 팀 없는 회의록(0052)은 teams 모드에서 편철할 팀 루트가 없다 — 정규화(팀 code 를 경로 머리에 붙인다)에 빈 값을 넣지 않고 여기서 끝낸다.
+  // 등록은 미분류로 저장하고 배치는 failed(no_team_root)로 보고한다(호출부의 기존 no_team_root 처리 그대로). custom 모드는 위에서 팀과 무관하게 편철한다
+  if (teamCode === NO_TEAM) {
+    return { ok: false, kind: 'no_team_root', error: '팀 없는 회의록은 팀 폴더에 편철하지 않습니다.', reason: 'no_team_root' }
+  }
   const norm = normalizeFolderPath(teamCode, parsed.path, opts.activeTeamCodes)
   if (!norm.ok) return { ok: false, kind: 'validation_failed', error: norm.error, reason: norm.reason }
 

@@ -402,7 +402,8 @@ async function loadMinute(client: SupabaseKnowledgeClient, job: ClaimedIndexJob)
       title: str(row.title) ?? '회의록',
       text,
       href: `/minutes/${encodeURIComponent(job.entityId)}`,
-      team: str(row.team_code),
+      // 팀 없는 회의록(빈 값 — 0052)은 색인 문서의 team 을 비운다(null) — 위 본문의 팀 줄도 빈 값이면 빠진다
+      team: str(row.team_code) || null,
       occurredOn: minuteDate,
       sourceUpdatedAt: safeTimestamp(row.updated_at) ?? safeTimestamp(row.created_at),
     }),

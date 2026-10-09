@@ -9,6 +9,7 @@ import type {
 } from '@/lib/domain/types'
 import { ilikeOrPattern, MINUTES_TREE_LIMIT } from '@/lib/domain/minutes'
 import { folderPathOf } from '@/lib/minutes/folders'
+import { NO_TEAM_FILTER } from '@/lib/minutes/teamResolve'
 import type { MinuteVersionListItem } from '@/components/minutes/MinuteVersionPanel'
 import type {
   MinuteWikiImpactCardProps, MinuteWikiImpactCounts, MinuteWikiImpactItem, MinuteWikiSyncStatus,
@@ -91,6 +92,25 @@ function mapMinute(r: Row, bodyMd = ''): Minute {
   }
 }
 
+/** 담당 필터(SP5 B2 — 팀 id). NO_TEAM_FILTER(0052)는 팀 없는 회의록만: team_id null ∧ team_code ''.
+ *  team_code 까지 보는 이유 — 팀 행이 지워져 team_id 만 빈 옛 회의록(원문 code 가 남음)은 "팀 없음"이 아니다 */
+function applyTeamFilter<Q extends { eq(col: string, v: string): Q; is(col: string, v: null): Q }>(q: Q, teamId: string | null): Q {
+  if (!teamId) return q
+  return teamId === NO_TEAM_FILTER ? q.is('team_id', null).eq('team_code', '') : q.eq('team_id', teamId)
+}
+
+/** 그 범위에 팀 없는 회의록이 하나라도 있는가 — 담당 필터의 "팀 없음" 탭을 보일지 정한다(0052). 조회 실패는 탭을 숨기는 쪽(로그) —
+ *  탭이 없어도 목록·탐색기의 "전체"에는 그 회의록이 그대로 보인다 */
+export const hasMinutesWithoutTeam = cache(async (workspaceId: string, projectId: string | null): Promise<boolean> => {
+  const sb = await createServerClient()
+  let q = sb.from('minutes').select('id').eq('workspace_id', workspaceId).is('archived_at', null)
+    .is('team_id', null).eq('team_code', '').limit(1)
+  if (projectId) q = q.eq('project_id', projectId)
+  const { data, error } = await q
+  if (error) { console.error('[hasMinutesWithoutTeam] 조회 실패:', error.message); return false }
+  return (data ?? []).length > 0
+})
+
 /** 기간(달력 그리드) + 담당 필터 목록. body_md 제외. 실패 시 빈 배열. 담당 필터는 팀 id(minutes.team_id — SP5 B2).
  *  범위(계획 V13) — 그 워크스페이스의 회의록만, projectId 가 있으면 그 프로젝트의 것만(?project=, D53). */
 export const getMinutesPage = cache(async (
@@ -102,7 +122,7 @@ export const getMinutesPage = cache(async (
     .is('archived_at', null)
     .gte('minute_date', rangeStart).lte('minute_date', rangeEnd)
     .order('minute_date', { ascending: false }).order('created_at', { ascending: false })
-  if (teamId) q = q.eq('team_id', teamId)
+  q = applyTeamFilter(q, teamId)
   if (projectId) q = q.eq('project_id', projectId)
   const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 목록 — 실패를 삼키면 보관함이 '회의록 없음' 빈 화면으로 위장돼 재업로드를 유발한다. 최소한 원인은 남긴다.
@@ -124,7 +144,7 @@ export const searchMinutes = cache(async (
     .is('archived_at', null)
     .or(`title.ilike.${pat},body_md.ilike.${pat}`)
     .order('minute_date', { ascending: false }).limit(limit)
-  if (teamId) q = q.eq('team_id', teamId)
+  q = applyTeamFilter(q, teamId)
   if (projectId) q = q.eq('project_id', projectId)
   const [{ data, error }, hidden] = await Promise.all([q, hiddenOrNull()])
   // 표시용 검색 — 실패를 '검색 결과 0건'으로 위장하면 사용자는 회의록이 없다고 오인한다. 폴백은 유지하되 로깅.

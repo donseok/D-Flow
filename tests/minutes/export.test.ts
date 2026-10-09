@@ -34,6 +34,19 @@ describe('minutes bulk export archive', () => {
     expect(path.split('/')).toHaveLength(4)
   })
 
+  it('팀 없는 회의록(team_code 빈 값 — 0052)은 "팀 없음" 묶음에 넣고 목록 파일의 team 칸은 비운다', () => {
+    const path = minuteExportEntryPath(row({ teamCode: '' }))
+    expect(path.split('/').slice(0, 2)).toEqual(['minutes', '팀 없음'])
+    expect(path.split('/')).toHaveLength(4)
+    // 값은 있는데 경로에 쓸 글자가 남지 않는 코드는 지금처럼 '미분류' — 팀 없음과 섞지 않는다
+    expect(minuteExportEntryPath(row({ teamCode: '   ' })).split('/')[1]).toBe('미분류')
+    const csv = minutesManifestCsv([{
+      id: 'x', date: '2026-07-23', team: '', meetingGroup: '주간정례', title: '주간정례', createdByName: null, meetingId: null,
+      createdAt: 't', updatedAt: 't', bodyBytes: 1, path,
+    }])
+    expect(csv.split('\r\n')[1].split(',').slice(0, 3)).toEqual(['"x"', '"2026-07-23"', '""'])
+  })
+
   it('stores every canonical body verbatim and includes a matching UTF-8 manifest', async () => {
     const rows = [
       row(),

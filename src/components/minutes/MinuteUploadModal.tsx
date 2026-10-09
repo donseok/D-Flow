@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { AlertTriangle, Folder } from 'lucide-react'
 import type { MinuteFolder, TeamCode } from '@/lib/domain/types'
 import {
-  MINUTE_BODY_FILE_MAX, MINUTE_BODY_MAX, stampedFileName, teamSubOfFolder,
+  MINUTE_BODY_FILE_MAX, MINUTE_BODY_MAX, NO_TEAM, folderTeamRule, stampedFileName,
 } from '@/lib/domain/minutes'
 import { attachmentRejection, type AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
 import type { DictKey } from '@/lib/i18n/dict'
@@ -49,9 +49,10 @@ export function MinuteUploadModal({
   const teamCodes = useTeamCodes()
   // 화면의 범위(계획 V13) — 폴더 재조회와 프로젝트 없는 새 회의록의 워크스페이스. 없으면 서버가 null·ERR_WORKSPACE_REQUIRED 로 닫는다
   const minutesScope = useMinutesScope()
-  // 팀 목록이 비어 있으면(SP4 이전 콜드스타트·신규 프로젝트) 지어낼 팀이 없다 — 빈 문자열로
-  // 두고 저장 버튼을 막는다(아래 !team 가드).
-  const fallbackTeam = teamCodes[0] ?? ''
+  // 팀 목록이 비어 있으면 지어낼 팀이 없다 — 팀 없음(빈 값)으로 등록한다(0052. 예전에는 저장을 막았다).
+  const fallbackTeam = teamCodes[0] ?? NO_TEAM
+  // 폴더 선택에서 "팀 없음(미분류)"를 골랐는가 — 폴더 없음(null)만으로는 "기본 팀 루트로 자동 편철"과 구분되지 않는다
+  const [noTeam, setNoTeam] = useState(false)
   const [date, setDate] = useState(todayIso)
   // 올리는 사람의 프로젝트 소속에서 기본값을 유도한다(pickDefaultProjectId). 고르지 않고 올린
   // 회의록은 위키·이슈·대시보드 어디에도 잡히지 않는다.
@@ -118,12 +119,17 @@ export function MinuteUploadModal({
     return () => { alive = false }
   }, [defaultProjectId])
 
-  // 선택 폴더가 팀 시드 체인 안이면 그 팀, 밖(미분류·커스텀 폴더 등)이면 defaultTeam → 활성 팀 1순위
-  const team: TeamCode = useMemo(
-    () => teamSubOfFolder(liveFolders, folderId)?.team ?? defaultTeam ?? fallbackTeam,
-    [liveFolders, folderId, defaultTeam, fallbackTeam],
-  )
-  const folderName = (folderId && liveFolders.find(f => f.id === folderId)?.name) || t('min.fold.unfiled')
+  // "팀 없음"을 골랐으면 빈 값. 선택 폴더가 팀 루트 아래면 그 팀, 지정 루트 아래면(폴더가 팀을 정하지 않는다) 내 팀이 이 범위의 팀일 때만
+  // 그 팀이고 아니면 팀 없음, 폴더 없음(미분류)·판정 불가면 지금처럼 defaultTeam → 활성 팀 1순위(팀이 하나도 없으면 팀 없음)
+  const team: TeamCode = useMemo(() => {
+    if (noTeam) return NO_TEAM
+    const rule = folderId ? folderTeamRule(liveFolders, folderId) : null
+    if (rule?.kind === 'team') return rule.team
+    if (rule?.kind === 'free') return defaultTeam && teamCodes.includes(defaultTeam) ? defaultTeam : NO_TEAM
+    return defaultTeam ?? fallbackTeam
+  }, [noTeam, liveFolders, folderId, defaultTeam, fallbackTeam, teamCodes])
+  const folderName = (folderId && liveFolders.find(f => f.id === folderId)?.name)
+    || t(team === NO_TEAM ? 'min.fold.noTeam' : 'min.fold.unfiled')
   const [err, setErr] = useState<string | null>(null)
   // 부분 실패 후 재시도 시 회의록 재생성·파일 중복 기록 방지 (모달은 열 때마다 리마운트되므로 세션 단위).
   // scope 는 생성 시점의 저장 경로 scope — 재시도 사이에 프로젝트 셀렉트를 바꿔도 첨부 경로가 회의록 행과 어긋나지 않게 고정한다.
@@ -263,7 +269,6 @@ export function MinuteUploadModal({
 
   async function save() {
     if (!bodyFile) { setErr(t('min.err.bodyRequired')); return }
-    if (!team) { setErr('먼저 팀을 등록하세요.'); return }
     // 새로 만들 때만 경로 워크스페이스가 필요하다 — 재시도는 생성 시점 scope 를 쓴다.
     if (!progressRef.current && !targetWs.ok) { setErr(targetWs.error); return }
     // 회의록을 만들기 전에 첨부를 정책에 대 본다 — 프로젝트를 바꿨으면 범위 정책도 바뀌었다. 아직 못 읽었으면 기다리게 한다.
@@ -316,7 +321,7 @@ export function MinuteUploadModal({
     <Modal open={open} onClose={onClose} title={t('min.upload')} size="md"
       footer={
         <div className="flex justify-end gap-2">
-          <button onClick={save} disabled={busy || !bodyFile || !team || !targetWs.ok} className="btn btn-primary">
+          <button onClick={save} disabled={busy || !bodyFile || !targetWs.ok} className="btn btn-primary">
             {busy ? t('min.form.saving') : t('min.form.save')}
           </button>
         </div>
@@ -333,6 +338,9 @@ export function MinuteUploadModal({
             <span className="truncate">{folderName}</span>
             <Folder aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
           </button>
+          {folderId === null && team === NO_TEAM && (
+            <span data-no-team-hint className="mt-1 block text-xs text-fg-muted">{t('min.fold.noTeamHint')}</span>
+          )}
         </label>
         <label className="block text-sm">
           <span className="mb-1 block font-medium">{t('min.form.files')}</span>
@@ -383,13 +391,15 @@ export function MinuteUploadModal({
           </label>
         </div>
         {meetingsFailed && <p role="alert" className="flex items-center gap-1.5 text-xs text-fg"><AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0 text-danger" />{t('min.meetingsLoadFailed')}</p>}
-        {!team && <p role="alert" className="text-sm text-danger">먼저 팀을 등록하세요.</p>}
         {!targetWs.ok && <p role="alert" className="text-sm text-danger">{targetWs.error}</p>}
         {err && <p className="text-sm text-danger">{err}</p>}
       </div>
       <FolderPickModal open={folderPickOpen} folders={liveFolders} scopeProjectId={projectId || null}
         onClose={() => setFolderPickOpen(false)}
-        onPick={id => { setFolderId(id); setFolderPickOpen(false) }} />
+        onPickNoTeam={() => { setNoTeam(true); setFolderId(null); setFolderPickOpen(false) }}
+        // 팀이 하나도 없으면 "미분류"는 곧 "팀 없음(미분류)"다 — 같은 뜻의 항목을 둘 보이지 않는다
+        hideUnfiled={teamCodes.length === 0}
+        onPick={id => { setNoTeam(false); setFolderId(id); setFolderPickOpen(false) }} />
     </Modal>
   )
 }
