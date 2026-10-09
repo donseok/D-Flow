@@ -1,16 +1,23 @@
 // tests/components/agents-owner.test.tsx — 내 에이전트·다른 계정 에이전트 구분(2026-09-19): 세 보기 모두 같은 규칙.
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { SeatCard } from '@/components/agents/Seat'
 import { LaneBoard } from '@/components/agents/LaneBoard'
 import { RosterBoard } from '@/components/agents/RosterBoard'
 import { ownerLabel } from '@/components/agents/OwnerTag'
+import { t as translate, type DictKey } from '@/lib/i18n/dict'
 import { assembleRoster } from '@/lib/domain/agentRoster'
 import type { Seat, Seatmap, Watcher } from '@/lib/domain/seatmap'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+// 화면 문구는 진짜 ko 사전으로 읽는다 — 한국어 단언이 사전 이전 뒤에도 같은 글자를 본다
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 const seat = (over: Partial<Seat> = {}): Seat => ({
@@ -33,14 +40,15 @@ beforeEach(() => { host = document.createElement('div'); document.body.appendChi
 afterEach(() => { act(() => root.unmount()); host.remove() })
 
 describe('ownerLabel', () => {
+  const ko = (k: DictKey) => translate('ko', k)
   it('내 것 · 이름 있는 남의 것 · 이름 모르는 남의 것 · 에이전트 없는 좌석', () => {
-    expect(ownerLabel(seat({ agentMine: true }))).toEqual({ kind: 'mine', text: '내 에이전트' })
-    expect(ownerLabel(seat({ agentOwnerName: '홍길동' }))).toEqual({ kind: 'other', text: '홍길동의 에이전트' })
-    expect(ownerLabel(seat())).toEqual({ kind: 'other', text: '다른 계정' })
-    expect(ownerLabel(seat({ state: 'READY', agent: null }))).toBeNull()
+    expect(ownerLabel(seat({ agentMine: true }), ko)).toEqual({ kind: 'mine', text: '내 에이전트' })
+    expect(ownerLabel(seat({ agentOwnerName: '홍길동' }), ko)).toEqual({ kind: 'other', text: '홍길동의 에이전트' })
+    expect(ownerLabel(seat(), ko)).toEqual({ kind: 'other', text: '다른 계정' })
+    expect(ownerLabel(seat({ state: 'READY', agent: null }), ko)).toBeNull()
     // READY 는 에이전트 이름이 남아 있어도(재위임으로 풀린 주문) 빈자리다.
-    expect(ownerLabel(seat({ state: 'READY', agentMine: true }))).toBeNull()
-    expect(ownerLabel(seat({ agent: null, agentMine: true }))).toBeNull()
+    expect(ownerLabel(seat({ state: 'READY', agentMine: true }), ko)).toBeNull()
+    expect(ownerLabel(seat({ agent: null, agentMine: true }), ko)).toBeNull()
   })
 })
 

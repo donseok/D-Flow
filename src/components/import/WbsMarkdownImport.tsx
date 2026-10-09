@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, CheckCircle2, FileText, Upload, XCircle } from 'lucide-react'
 import { previewWbsUpload, applyWbsUpload, type WbsUploadPreview } from '@/app/actions/wbsMarkdown'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 /**
  * wbs.md 웹 업로드 — "자동 부착 + 확인"(스펙 §업로드 경로 2개).
@@ -12,6 +13,7 @@ import { previewWbsUpload, applyWbsUpload, type WbsUploadPreview } from '@/app/a
  */
 export function WbsMarkdownImport({ projectId }: { projectId: string }) {
   const router = useRouter()
+  const { t: dictT } = useLocale()
   const fileRef = useRef<HTMLInputElement>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
@@ -37,7 +39,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
     startTransition(async () => {
       const r = await applyWbsUpload(projectId, text)
       if (!r.ok) {
-        setPreview(p => p ? { ...p, errors: [...(p.errors ?? []), r.error ?? '업로드에 실패했습니다.'], canApply: false } : p)
+        setPreview(p => p ? { ...p, errors: [...(p.errors ?? []), r.error ?? dictT('importWizard.md.uploadFailed')], canApply: false } : p)
         return
       }
       setResult(r)
@@ -49,20 +51,19 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
     <div className="card space-y-4 p-6">
       <div className="flex items-center gap-2">
         <FileText className="h-4 w-4 text-fg-muted" />
-        <h3 className="text-sm font-semibold">WBS 마크다운 업로드 (wbs.md)</h3>
+        <h3 className="text-sm font-semibold">{dictT('importWizard.md.title')}</h3>
       </div>
       <p className="text-xs leading-5 text-fg-muted">
-        levels 계약(N단) wbs.md 를 업로드합니다. 부착점은 파일의 attach 로 자동 판정되며,
-        아래 미리보기를 확인한 뒤 적용하세요. 골격 파일(attach 없음)은 단계 정본(levels)을 시드합니다.
+        {dictT('importWizard.md.intro')}
       </p>
 
       <div className="flex items-center gap-3">
         <label className="btn btn-ghost cursor-pointer">
           <Upload className="h-3.5 w-3.5" />
-          파일 선택
+          {dictT('importWizard.md.pickFile')}
           <input ref={fileRef} data-md-file type="file" accept=".md,text/markdown" className="hidden" onChange={onFile} disabled={pending} />
         </label>
-        <span className="text-xs text-fg-muted">{fileName ?? '선택된 파일 없음 (.md)'}</span>
+        <span className="text-xs text-fg-muted">{fileName ?? dictT('importWizard.md.noFile')}</span>
       </div>
 
       {preview && !preview.ok && (
@@ -74,20 +75,20 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
       {preview?.ok && (
         <div data-md-preview className="space-y-3 rounded-xl border border-border bg-surface-subtle p-4">
           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
-            <Info label="종류" value={preview.mode === 'skeleton' ? '골격' : 'PL 모듈'} />
+            <Info label={dictT('importWizard.md.kind')} value={preview.mode === 'skeleton' ? dictT('importWizard.md.kindSkeleton') : dictT('importWizard.md.kindModule')} />
             <Info label="module" value={preview.module ?? '—'} />
             <Info
-              label="부착점"
-              value={preview.mode === 'skeleton' ? '루트(1레벨)' : `${preview.attach ?? '—'} → ${preview.attachRef ?? '해석 실패'}`}
+              label={dictT('importWizard.md.attach')}
+              value={preview.mode === 'skeleton' ? dictT('importWizard.md.attachRoot') : `${preview.attach ?? '—'} → ${preview.attachRef ?? dictT('importWizard.md.attachUnresolved')}`}
               tone={preview.mode === 'skeleton' || preview.attachFound ? undefined : 'danger'}
             />
             <Info
               label="levels"
-              value={preview.levelsStatus === 'seed' ? `시드 예정 (${preview.fileLevels?.length}층)` : preview.levelsStatus === 'match' ? '정본 일치' : '정본 불일치'}
+              value={preview.levelsStatus === 'seed' ? dictT('importWizard.md.levelsSeed').replace('{n}', String(preview.fileLevels?.length)) : preview.levelsStatus === 'match' ? dictT('importWizard.md.levelsMatch') : dictT('importWizard.md.levelsMismatch')}
               tone={preview.levelsStatus === 'mismatch' ? 'danger' : undefined}
             />
-            <Info label="신규 / 갱신" value={`${preview.newCount ?? 0} / ${preview.updateCount ?? 0}`} />
-            <Info label="acceptance 로 접힘(fold)" value={String(preview.foldCount ?? 0)} />
+            <Info label={dictT('importWizard.md.newUpdate')} value={`${preview.newCount ?? 0} / ${preview.updateCount ?? 0}`} />
+            <Info label={dictT('importWizard.md.fold')} value={String(preview.foldCount ?? 0)} />
           </div>
 
           {preview.counts && (
@@ -99,7 +100,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
           {(preview.errors?.length ?? 0) > 0 && (
             <div role="alert" className="rounded-lg border border-danger/30 bg-danger-weak/30 p-3">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-danger">
-                <XCircle className="h-3.5 w-3.5" />검증 에러 {preview.errors!.length}건 — 적용 불가
+                <XCircle className="h-3.5 w-3.5" />{dictT('importWizard.md.errors').replace('{n}', String(preview.errors!.length))}
               </p>
               <ul className="mt-1.5 space-y-1 text-xs leading-5 text-fg-secondary">
                 {preview.errors!.map((e, i) => <li key={i}>{e}</li>)}
@@ -109,7 +110,7 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
           {(preview.warnings?.length ?? 0) > 0 && (
             <div className="rounded-lg border border-pending/30 bg-pending-weak/30 p-3">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
-                <AlertTriangle className="h-3.5 w-3.5" />경고 {preview.warnings!.length}건 (적용은 가능)
+                <AlertTriangle className="h-3.5 w-3.5" />{dictT('importWizard.md.warnings').replace('{n}', String(preview.warnings!.length))}
               </p>
               <ul className="mt-1.5 space-y-1 text-xs leading-5 text-fg-secondary">
                 {preview.warnings!.map((w, i) => <li key={i}>{w}</li>)}
@@ -121,19 +122,19 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
             <div className="space-y-2">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-success">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                적용 완료 — {result.upserted}건 반영, 주문 {result.ordersCreated ?? 0}건 발행
-                {result.taskCount !== undefined && ` (task ${result.taskCount}건)`}
-                {(result.unmatched?.length ?? 0) > 0 && ` · 담당자 미매칭 ${result.unmatched!.length}건: ${result.unmatched!.map(u => u.assignee).join(', ')}`}
+                {dictT('importWizard.md.applied').replace('{upserted}', String(result.upserted ?? '')).replace('{orders}', String(result.ordersCreated ?? 0))}
+                {result.taskCount !== undefined && dictT('importWizard.md.appliedTasks').replace('{n}', String(result.taskCount))}
+                {(result.unmatched?.length ?? 0) > 0 && dictT('importWizard.md.appliedUnmatched').replace('{n}', String(result.unmatched!.length)).replace('{names}', () => result.unmatched!.map(u => u.assignee).join(', '))}
               </p>
               {/* 침묵 실패 방지(2026-08-24 리허설 실측) — task 가 있는데 주문 0 이면 원인을 바로 말한다. */}
               {(result.taskCount ?? 0) > 0 && (result.ordersCreated ?? 0) === 0 && (
                 <p role="alert" className="flex items-start gap-1.5 rounded-lg border border-pending/30 bg-pending-weak/30 p-3 text-xs text-pending">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
-                    task {result.taskCount}건이 있는데 주문이 0건입니다.{' '}
+                    {dictT('importWizard.md.noOrders').replace('{n}', String(result.taskCount))}{' '}
                     {result.agentStopped
-                      ? '이 프로젝트의 에이전트가 꺼져 있습니다 — 프로젝트 설정 › 모듈·메뉴에서 에이전트를 켜면 백필로 주문이 발행됩니다.'
-                      : '이미 활성 주문이 있는 항목(재업로드)이거나 task 가 리프가 아닙니다. WBS 화면에서 확인하세요.'}
+                      ? dictT('importWizard.md.noOrdersAgentOff')
+                      : dictT('importWizard.md.noOrdersOther')}
                   </span>
                 </p>
               )}
@@ -141,10 +142,10 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
           ) : (
             <div className="flex items-center gap-2">
               <button data-md-apply className="btn btn-primary" onClick={apply} disabled={pending || !preview.canApply}>
-                적용
+                {dictT('importWizard.md.apply')}
               </button>
               <button data-md-cancel className="btn btn-ghost" onClick={reset} disabled={pending}>
-                취소
+                {dictT('common.cancel')}
               </button>
             </div>
           )}

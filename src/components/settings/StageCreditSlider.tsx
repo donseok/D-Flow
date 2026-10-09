@@ -180,7 +180,7 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
     } catch { /* 같은 명령으로 재시도 */ }
     if (resendCount === 0) return submit(patch, 1)
     setUncertainPatch(patch)
-    setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+    setError(t('settings.rootFolders.uncertain'))
   }
   function save() {
     if (conflict || (!dirty && !uncertainPatch)) return
@@ -420,27 +420,27 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
         <SettingsSaveBar summary={t('settings.creditsNoRetro')}>
           <button type="button" data-credit-save onClick={save} disabled={pending || (!dirty && !uncertainPatch) || !!conflict}
             className="btn btn-primary h-8 px-3 text-xs">
-            {uncertainPatch ? '저장 결과 확인 및 재시도' : reviewing ? t('settings.creditsSave') : '변경 내용 검토'}
+            {uncertainPatch ? t('settings.workflow.retry') : reviewing ? t('settings.creditsSave') : t('settings.review.title')}
           </button>
         </SettingsSaveBar>
       ) : (
         <p className="text-meta text-fg-muted">{t('settings.creditsNoRetro')}</p>
       )}
-      {reviewing && !conflict && !uncertainPatch && <section aria-label="변경 내용 검토" className="space-y-2 rounded-lg border border-border bg-surface-subtle p-3 text-sm">
-        <h3 className="font-semibold text-fg">변경 내용 검토</h3>
+      {reviewing && !conflict && !uncertainPatch && <section aria-label={t('settings.review.title')} className="space-y-2 rounded-lg border border-border bg-surface-subtle p-3 text-sm">
+        <h3 className="font-semibold text-fg">{t('settings.review.title')}</h3>
         {CREDIT_KEYS.filter(key => baseline[key] !== table[key]).map(key =>
           <p key={key} className="text-fg-secondary">{key.toUpperCase()}: {baseline[key]}% → {table[key]}%</p>)}
         {policyChanged && <p className="text-fg-secondary">{t('settings.creditPolicyStep')} {basePolicy.step} → {policy.step} · {t('settings.creditPolicyGap')} {basePolicy.min_gap} → {policy.min_gap}</p>}
-        <p className="text-fg-secondary">새 크레딧은 다음 단계 전이부터 적용됩니다. 이미 기록된 실적은 바뀌지 않습니다.</p>
-        <button type="button" className="btn btn-secondary" onClick={() => setReviewing(false)}>계속 수정</button>
+        <p className="text-fg-secondary">{t('settings.credits.reviewNote')}</p>
+        <button type="button" className="btn btn-secondary" onClick={() => setReviewing(false)}>{t('settings.credits.keepEditing')}</button>
       </section>}
-      {conflict && <ConflictCompare rows={[{ key: 'workflow.stage_credits', label: '단계 실적 크레딧',
+      {conflict && <ConflictCompare rows={[{ key: 'workflow.stage_credits', label: t('settings.workflow.stage_credits.label'),
         mine: CREDIT_KEYS.map(key => `${key.toUpperCase()} ${table[key]}`).join(' · '),
-        latest: conflict.latest ? CREDIT_KEYS.map(key => `${key.toUpperCase()} ${conflict.latest!.default[key]}`).join(' · ') : '설정 손상',
+        latest: conflict.latest ? CREDIT_KEYS.map(key => `${key.toUpperCase()} ${conflict.latest!.default[key]}`).join(' · ') : t('settings.notify.policy.corrupted'),
       }]} latestAvailable={conflict.latest !== null}
         onMine={() => { setBase(conflict.revision); setConflict(null); setReviewing(false); setError(null) }}
         onLatest={() => { if (conflict.latest) { setTable({ ...conflict.latest.default }); setBaseline({ ...conflict.latest.default }) } setBase(conflict.revision); setDirty(false); setReviewing(false); setConflict(null); setError(null) }} />}
-      {saved && <p data-credit-saved role="status" className="text-xs text-success">{noChange ? '바뀐 값이 없습니다.' : t('settings.creditsSaved')}</p>}
+      {saved && <p data-credit-saved role="status" className="text-xs text-success">{noChange ? t('settings.save.noChange') : t('settings.creditsSaved')}</p>}
     </div>
   )
 }

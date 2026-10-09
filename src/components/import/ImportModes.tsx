@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { FileSpreadsheet, FileText } from 'lucide-react'
 import { ImportWizard } from '@/components/import/ImportWizard'
 import { WbsMarkdownImport } from '@/components/import/WbsMarkdownImport'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 /**
  * 임포트 모드 전환 — wbs.md(levels 계약 N단, 자동 부착) | 엑셀(.xlsx 위저드).
@@ -17,6 +18,7 @@ export function ImportModes({ projectId, currentItemCount, timeZone, extraAxisLa
   /** 프로젝트의 추가 축 이름(core.extra_axis_label) — 엑셀 마법사의 그 열 이름. null 은 사전 기본 문구 */
   extraAxisLabel?: string | null
 }) {
+  const { t } = useLocale()
   const [mode, setMode] = useState<'md' | 'xlsx'>('md')
   return (
     <div className="space-y-4">
@@ -26,14 +28,14 @@ export function ImportModes({ projectId, currentItemCount, timeZone, extraAxisLa
           className={`btn ${mode === 'md' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setMode('md')}
         >
-          <FileText className="h-3.5 w-3.5" />WBS 마크다운 (wbs.md)
+          <FileText className="h-3.5 w-3.5" />{t('importWizard.modeTabMd')}
         </button>
         <button
           role="tab" aria-selected={mode === 'xlsx'} data-mode-xlsx
           className={`btn ${mode === 'xlsx' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setMode('xlsx')}
         >
-          <FileSpreadsheet className="h-3.5 w-3.5" />엑셀 (.xlsx)
+          <FileSpreadsheet className="h-3.5 w-3.5" />{t('importWizard.modeTabXlsx')}
         </button>
       </div>
       {mode === 'md'

@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 // 로컬 초안 정책 편집기(security.local_drafts — 개정 §5.8.5·§2.8.1). 저장 규약은 PortalWidgetsEditor 와 같은 useSettingItemCommand
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+// 화면 문구는 사전(settingsUi·adminUi)에 있다 — 옮긴 문구만 한국어 글자로 돌려주는 대역(공급자 없는 기본 t 는 키를 돌려준다)
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale())
 import { fireEvent, render, screen, waitFor } from '../shell/_dom'
 const h = vi.hoisted(() => ({ update: vi.fn(), outcome: vi.fn(), refresh: vi.fn() }))
 vi.mock('@/app/actions/settings', () => ({ updateWorkspaceSettings: h.update, updateProjectSettings: vi.fn(), getSettingsCommandOutcome: h.outcome }))

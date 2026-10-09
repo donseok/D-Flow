@@ -10,6 +10,10 @@ vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: h.update, getS
 vi.mock('@/app/actions/customFields', () => ({ getCustomFieldUsage: h.usage, backfillCustomField: h.backfill, purgeCustomField: h.purge }))
 import { CustomFieldsSettings } from '@/components/settings/CustomFieldsSettings'
 import { CustomFieldInput } from '@/components/fields/CustomFieldInput'
+import { registerEn } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+
+registerEn(EN)   // 화면 문구는 사전에 있다 — locale="en" 케이스가 영어 사전을 본다(브라우저에서는 LocaleProvider 가 싣는다)
 const P = '00000000-0000-0000-7e57-000000001432'
 const def = (patch: Partial<FieldDef> = {}): FieldDef => ({ key: 'quantity', label: 'Quantity', description: '', type: 'number', default: 0,
   required: false, active: true, editable_by: 'member', show_in_list: false, searchable: false, sort: 0, ...patch })

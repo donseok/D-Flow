@@ -1,6 +1,7 @@
 'use client'
 
 import { Edit3, X, CheckSquare } from 'lucide-react'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export interface WbsBulkBarProps {
   selectedCount: number
@@ -26,12 +27,13 @@ export function WbsBulkBar({
   onOpenPaste,
   isAllSelected = false,
 }: WbsBulkBarProps) {
+  const { t } = useLocale()
   if (selectedCount <= 0) return null
 
   return (
     <div
       role="region"
-      aria-label="대량 작업 바"
+      aria-label={t('wbs.bulk.barAria')}
       data-testid="wbs-bulk-bar"
       className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex w-[calc(100%-2rem)] max-w-xl flex-wrap justify-center items-center gap-3 rounded-2xl border border-border bg-surface-raised/95 px-5 py-2.5 shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-200"
     >
@@ -41,7 +43,7 @@ export function WbsBulkBar({
           <strong className="font-semibold text-fg" data-testid="wbs-bulk-selected-count">
             {selectedCount}
           </strong>
-          개 선택됨
+          {t('wbs.bulk.selectedSuffix')}
         </span>
       </div>
 
@@ -52,7 +54,7 @@ export function WbsBulkBar({
           data-testid="wbs-bulk-select-all-btn"
           className="min-h-11 px-2 text-xs font-medium text-action hover:underline rounded transition-colors"
         >
-          결과 전체 {totalCount}개 선택
+          {t('wbs.bulk.selectAll').replace('{n}', String(totalCount))}
         </button>
       )}
 
@@ -63,17 +65,17 @@ export function WbsBulkBar({
         className="flex min-h-11 items-center gap-1.5 rounded-full bg-action px-3.5 text-xs font-semibold text-action-fg shadow-xs hover:bg-action-hover transition-colors"
       >
         <Edit3 className="h-3.5 w-3.5" />
-        대량 수정
+        {t('wbs.bulk.edit')}
       </button>
 
-      {onOpenPaste && <button type="button" onClick={onOpenPaste} className="min-h-11 rounded-full border border-border px-3 text-xs font-semibold">붙여넣기</button>}
+      {onOpenPaste && <button type="button" onClick={onOpenPaste} className="min-h-11 rounded-full border border-border px-3 text-xs font-semibold">{t('wbs.bulk.paste')}</button>}
       <button
         type="button"
         onClick={onClearSelection}
         data-testid="wbs-bulk-clear-btn"
         className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors"
-        title="선택 해제"
-        aria-label="선택 해제"
+        title={t('wbs.bulk.clear')}
+        aria-label={t('wbs.bulk.clear')}
       >
         <X className="h-4 w-4" />
       </button>

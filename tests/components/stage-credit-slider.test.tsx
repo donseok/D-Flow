@@ -15,7 +15,8 @@ vi.mock('@/app/actions/settings', () => ({
   getSettingsCommandOutcome: (...a: unknown[]) => getSettingsCommandOutcome(...(a as [])),
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
+// 화면 문구는 사전(settingsUi·adminUi)에 있다 — 옮긴 문구만 한국어 글자로 돌려주는 대역(공급자 없는 기본 t 는 키를 돌려준다)
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale())
 
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
 import { ERR_CONFIG_CONFLICT } from '@/lib/settings/errors'

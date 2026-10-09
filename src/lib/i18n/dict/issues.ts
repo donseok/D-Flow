@@ -231,4 +231,13 @@ export const issuesKo = {
   'issue.bulk.col.issue': '이슈',
   'issue.bulk.col.current': '현재 상태',
   'issue.bulk.col.result': '결과',
+  // 추가 정보(사용자 정의 필드)·등록 설정 조회 실패
+  'issue.entry.contextFailed': '이슈 설정을 읽지 못했습니다. 다시 시도하세요.',
+  'issue.custom.checkValues': '추가 정보 입력값을 확인하세요.',
+  'issue.custom.unreadable': '추가 정보를 읽을 수 없습니다. 행을 새로 조회하세요.',
+  'issue.custom.changed': '추가 정보가 변경되었습니다. 작성 중인 값은 유지됩니다. 최신 값을 불러온 뒤 저장하세요.',
+  'issue.custom.discardDraft': '추가 정보 초안 취소',
+  'issue.custom.settingsUnreadable': '추가 정보 설정을 읽을 수 없습니다.',
+  'issue.custom.filter': '추가 정보 필터',
+  'issue.custom.unreadableValue': '값 확인 필요',
 } as const

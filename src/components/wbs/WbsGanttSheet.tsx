@@ -41,7 +41,7 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes, useTeamLabel, useTeamSlot } from '@/components/app/TeamsProvider'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import { useRightRailOptional } from '@/components/app/RightRail'
-import type { DictKey } from '@/lib/i18n/dict'
+import { t as translate, type DictKey } from '@/lib/i18n/dict'
 import { wbsFontScaleVariables } from '@/lib/wbsFontScale'
 import { WBS_ADD_PHASE_EVENT } from './WbsAddButton'
 import { useWbsRealtime } from '@/lib/hooks/useWbsRealtime'
@@ -292,7 +292,7 @@ export function WbsGanttSheet({
   const router = useRouter()
   const { t } = useLocale()
   // 1레벨 단계 이름 — 추가 입력·토스트·가중치 합계 툴팁·보고서 모달이 'Phase' 대신 프로젝트 설정의 이름을 쓴다(라벨 밖이면 배지 규칙 'N단')
-  const topLevelLabel = levelBadgeText(0, false, levelLabels)
+  const topLevelLabel = levelBadgeText(0, false, levelLabels, t)
   const legendTeams = useTeamCodes()
   const cal = useMemo(() => calendarOf(calendar), [calendar])
   const slotOf = useTeamSlot()
@@ -316,7 +316,7 @@ export function WbsGanttSheet({
         editSessionStore.setSession(`wbs:${edit.id}:${edit.field}`, 'wbs_cell', `${edit.id}:${edit.field}`, 'conflict', {
           error: {
             kind: 'conflict',
-            message: `${t('wbs.toastConflict')} — 원격 값이 변경되었습니다.`,
+            message: t('wbs.conflictRemoteChanged'),
           },
         })
       }
@@ -507,7 +507,7 @@ export function WbsGanttSheet({
   // 개요 번호 열 켜짐 여부에 따라 동결 오프셋(sk)이 달라져 컬럼 메타 자체가 파생값이다.
   const fieldScope = useCustomFieldScope()
   const customListDefs = useMemo(() => orderedFields(fieldScope?.defs ?? []).filter(d => d.active && d.show_in_list), [fieldScope?.defs])
-  const customFormat = useMemo(() => ({ locale: fieldScope?.locale ?? 'ko', yes: fieldScope?.locale === 'en' ? 'Yes' : '예', no: fieldScope?.locale === 'en' ? 'No' : '아니오', empty: '—' }), [fieldScope?.locale])
+  const customFormat = useMemo(() => ({ locale: fieldScope?.locale ?? 'ko', yes: translate(fieldScope?.locale ?? 'ko', 'wbs.custom.yes'), no: translate(fieldScope?.locale ?? 'ko', 'wbs.custom.no'), empty: '—' }), [fieldScope?.locale])
   const cols = useMemo(() => [
     ...buildCols(outlineVisible, narrow, nameColWidth),
     ...customListDefs.map((d): Col => ({ key: `cf:${d.key}`, w: 140 })),
@@ -861,7 +861,7 @@ export function WbsGanttSheet({
         setImpactDialogState(null)
         router.refresh()
       } else {
-        setToast({ kind: 'err', msg: res.failed[0]?.message || res.error || '일정 변경 저장에 실패했습니다.' })
+        setToast({ kind: 'err', msg: res.failed[0]?.message || res.error || t('wbs.scheduleSaveFail') })
       }
     } finally {
       setIsSavingImpact(false)
@@ -2097,7 +2097,7 @@ export function WbsGanttSheet({
                   {/* focus 도착 마커 — 동결(#) 셀 안에 두어 가로 스크롤에도 항상 보인다 */}
                   {isFlash && <span aria-hidden data-flash-accent className="absolute inset-y-0 left-0 z-10 w-1 bg-action" />}
                   {isAdmin && !readOnly ? (
-                    <input type="checkbox" tabIndex={-1} aria-label={`${n.name} 대량 수정 선택`}
+                    <input type="checkbox" tabIndex={-1} aria-label={t('wbs.bulk.rowSelectAria').replace('{name}', n.name)}
                       checked={bulkSelection.has(n.id)}
                       onChange={e => {
                         const checked = e.currentTarget.checked
@@ -2162,7 +2162,7 @@ export function WbsGanttSheet({
                       className={`truncate text-left ${nameWeight} ${isCritical ? 'font-semibold text-critical' : ''} hover:text-action hover:underline`}
                       title={`${n.name} · ${
                         // 툴팁은 그 깊이의 단계 이름(설정값 levelLabels) 그대로 — 라벨 밖 깊이·sub-act 만 배지 규칙(levelBadgeText) 재사용
-                        n.isOwnerSplit ? levelBadgeText(n.depth, true, levelLabels) : levelLabels[n.depth] ?? levelBadgeText(n.depth, false, levelLabels)
+                        n.isOwnerSplit ? levelBadgeText(n.depth, true, levelLabels, t) : levelLabels[n.depth] ?? levelBadgeText(n.depth, false, levelLabels, t)
                       } · ${t('wbs.rowDetailTitle')}${isCritical ? ` · ${t('wbs.criticalPath')}` : ''}`}
                     >
                       {subLabel != null ? (
@@ -2678,7 +2678,7 @@ export function WbsGanttSheet({
           onOpenPaste={async () => {
             const fields: Array<[string, WbsPasteField]> = [['deliverable', 'deliverable'], ['pstart', 'plannedStart'], ['pend', 'plannedEnd']]
             const columns = fields.filter(([key]) => showCol(key)).map(([, field]) => field)
-            if (!columns.length) { setToast({ kind: 'err', msg: '편집할 계획 열을 먼저 표시해 주세요.' }); return }
+            if (!columns.length) { setToast({ kind: 'err', msg: t('wbs.paste.noColumns') }); return }
             const ids = flatRows.filter(row => bulkSelection.has(row.id)).map(row => row.id)
             const snapshot = await createWbsBulkSnapshot(projectId, ids)
             if (!snapshot.ok) { setToast({ kind: 'err', msg: snapshot.error }); return }

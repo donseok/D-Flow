@@ -832,7 +832,9 @@ describe('e2e-local.mjs — SP5 A 달력 단계(스펙 §6.3)', () => {
   // SP8 뒤로 사용 현황은 그 워크스페이스의 시간대로 센다 — 러너는 'UTC 기준' 이 아니라 워크스페이스 시간대 표기를 본다
   it("'<워크스페이스 시간대> 기준' 판정은 SSR 의 텍스트 노드 구분(<!-- -->)을 걷어 낸 HTML 로 한다 — 화면은 '{timezone} 기준' 보간이다", () => {
     expect(src).toContain("usageHtml.replace(/<!-- -->/g, '').includes(`${WORKSPACE_TZ} 기준`)")
-    expect(readFileSync('src/app/(app)/w/[slug]/usage/page.tsx', 'utf8')).toContain('{timezone} 기준')
+    // 문구는 사전으로 옮겼다(pages.usage.periodNote) — 페이지는 그 키에 시간대를 끼우고, ko 문구가 '{tz} 기준' 을 갖는다
+    expect(readFileSync('src/app/(app)/w/[slug]/usage/page.tsx', 'utf8')).toContain("t(locale, 'pages.usage.periodNote')")
+    expect(readFileSync('src/lib/i18n/dict/pagesUi.ts', 'utf8')).toMatch(/'pages\.usage\.periodNote': '[^']*\{tz\} 기준/)
   })
 })
 
@@ -1084,7 +1086,9 @@ describe('재점검 보강 — 순수 조각', () => {
     expect(CONFLICT_TAKE_LATEST).toBe(commonKo['common.conflictTakeLatest'])
     const resolver = readFileSync('src/components/ui/ConflictResolver.tsx', 'utf8')
     expect(resolver).toContain(`data-testid="${/data-testid="([^"]+)"/.exec(CONFLICT_DIALOG)![1]}"`)
-    expect(readFileSync('src/components/weekly/WeeklySheetView.tsx', 'utf8')).toContain(`aria-label="${/aria-label="([^"]+)"/.exec(WEEKLY_TITLE_INPUT)![1]}"`)
+    // 시트 제목 라벨은 사전으로 옮겼다(weekly.sheet.titleLabel) — 화면은 그 키를 aria-label 에 쓰고, ko 문구가 러너의 선택자와 같다
+    expect(readFileSync('src/components/weekly/WeeklySheetView.tsx', 'utf8')).toContain("aria-label={t('weekly.sheet.titleLabel')}")
+    expect(readFileSync('src/lib/i18n/dict/weeklyUi.ts', 'utf8')).toContain(`'weekly.sheet.titleLabel': '${/aria-label="([^"]+)"/.exec(WEEKLY_TITLE_INPUT)![1]}'`)
   })
   it('알림 정책 값 — 끌 수 있는(필수가 아닌) 유형이고 레지스트리 parse 를 그대로 통과한다. settingPatch 는 undefined 면 키를 지운다', () => {
     expect(NOTIFICATION_CATALOG[NOTIFY_PROBE_TYPE as keyof typeof NOTIFICATION_CATALOG]).toMatchObject({ required: false })

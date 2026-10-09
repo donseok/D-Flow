@@ -11,6 +11,7 @@ import { MenuRankingCard } from '@/components/usage/MenuRankingCard'
 import { UsageUserTable } from '@/components/usage/UsageUserTable'
 import { UsageEventLog } from '@/components/usage/UsageEventLog'
 import { getServerLocale } from '@/lib/i18n/server'
+import { t } from '@/lib/i18n/dict'
 import {
   SESSION_GAP_MINUTES, USAGE_RETAIN_DAYS, addDaysIso, fillDailySeries, mergeUserRows,
   parsePeriodDays, pickAllowed, usageTimezone,
@@ -86,17 +87,17 @@ export default async function UsagePage({ params, searchParams }: {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="사용 현황" />
-      <UsageScopeChip workspaceName={scope.ws.name} />
+      <PageHeader title={t(locale, 'nav.usage')} />
+      <UsageScopeChip workspaceName={scope.ws.name} locale={locale} />
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-fg-secondary">
-          최근 {period}일 · {timezone} 기준 · 원시 기록은 {USAGE_RETAIN_DAYS}일간 보관됩니다.
+          {t(locale, 'pages.usage.periodNote').replace('{days}', String(period)).replace('{tz}', timezone).replace('{retain}', String(USAGE_RETAIN_DAYS))}
         </p>
-        <PeriodTabs base={usageBase} filter={filter} />
+        <PeriodTabs base={usageBase} filter={filter} locale={locale} />
       </div>
-      <UsageSummary summary={summary} days={period} sessions={sessions} timeZone={timezone} />
+      <UsageSummary summary={summary} days={period} sessions={sessions} timeZone={timezone} locale={locale} />
       <div className="grid gap-5 lg:grid-cols-2">
-        <UsageTrendChart series={series} />
+        <UsageTrendChart series={series} locale={locale} />
         <MenuRankingCard ranks={ranks} locale={locale} />
       </div>
       <UsageUserTable rows={userRows} days={period} timeZone={timezone} />

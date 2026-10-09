@@ -1,0 +1,31 @@
+// searchUi 화면 사전 — 업무 화면의 한국어 리터럴을 옮긴 자리(i18n 정리). 모음은 workUi.ts.
+// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
+export const searchUiKo = {
+  // 전역 제목 검색(GlobalSearchDialog)
+  'search.sub.project': '프로젝트',
+  'search.sub.workspace': '워크스페이스',
+  'search.sub.settings': '설정',
+  'search.sub.go': '이동',
+  'search.sub.wbs': 'WBS 작업',
+  'search.err.requestFailed': '검색 요청을 보내지 못했습니다. 연결을 확인하세요.',
+  'search.dialogAria': '전역 ⌘K 제목 검색',
+  'search.placeholderProject': '제목 검색 (메뉴 이동, 현재 프로젝트의 작업 이름·코드)...',
+  'search.placeholderWorkspace': '제목 검색 (메뉴 이동, 프로젝트 이름)...',
+  'search.inputAria': '제목 검색어',
+  'search.clearInput': '입력 지우기',
+  'search.scopeLabel': '범위:',
+  'search.scopeCurrentProject': '현재 프로젝트',
+  'search.scopeWorkspace': '워크스페이스 전체',
+  'search.titleOnly': '제목 검색 전용',
+  'search.err.failedTitle': '검색하지 못했습니다',
+  'search.err.notEmptySuffix': ' 결과가 없는 것이 아닙니다.',
+  'search.retry': '다시 시도',
+  'search.err.deniedTitle': '이 범위에서는 검색할 수 없습니다',
+  'search.emptyTitle': '‘{q}’ 제목과 일치하는 결과가 없습니다',
+  'search.emptyDetailProject': '현재 프로젝트의 작업 이름·코드에서 찾았습니다.',
+  'search.emptyDetailWorkspace': '이 워크스페이스의 프로젝트 이름에서 찾았습니다.',
+  'search.hintMove': '↑↓ 이동',
+  'search.hintSelect': '↵ 선택',
+  'search.hintClose': 'ESC 닫기',
+  'search.footer': '{product} 검색 v1',
+} as const

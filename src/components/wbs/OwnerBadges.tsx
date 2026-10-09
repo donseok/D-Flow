@@ -4,6 +4,7 @@
 // 글자는 팀 이름이다(code 는 바꿀 수 없어 이름을 바꿔도 옛 글자가 남는다) — 긴 이름은 줄이고 title 로 전부 보인다.
 import type { ComputedItem } from '@/lib/domain/types'
 import { useTeamLabel, useTeamSlot } from '@/components/app/TeamsProvider'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export function OwnerBadges({
   owners,
@@ -14,6 +15,7 @@ export function OwnerBadges({
 }) {
   const slotOf = useTeamSlot()
   const labelOf = useTeamLabel()
+  const { t } = useLocale()
   if (!owners.length) return <span className="text-fg-muted">-</span>
   return (
     <div className={`flex items-center gap-x-1.5 gap-y-0.5 overflow-hidden ${nowrap ? 'flex-nowrap' : 'flex-wrap'}`}>
@@ -22,7 +24,7 @@ export function OwnerBadges({
           key={o.team + o.kind}
           className={`inline-flex min-w-0 max-w-full items-center gap-0.5 font-semibold leading-none ${nowrap ? 'shrink-0' : ''}`}
           style={{ fontSize: 'var(--wbs-owner-font, 12px)' }}
-          title={o.kind === 'primary' ? `${labelOf(o.team)} 주관` : `${labelOf(o.team)} 지원`}
+          title={t(o.kind === 'primary' ? 'wbs.ownerTitlePrimary' : 'wbs.ownerTitleSupport').replace('{team}', labelOf(o.team))}
         >
           <span
             className={`${slotOf(o.team).fg} ${o.kind === 'support' ? 'opacity-60' : ''} shrink-0 leading-none`}

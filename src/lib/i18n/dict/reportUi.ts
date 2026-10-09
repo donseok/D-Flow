@@ -1,0 +1,57 @@
+// reportUi 화면 사전 — 업무 화면의 한국어 리터럴을 옮긴 자리(i18n 정리). 모음은 workUi.ts.
+// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
+// 접두어 둘: `reportUi.`(주간 보고서 모달 — 화면 요약이다. 내려받는 문서의 서식 글자는 lib/report 에 고정) · `doc.`(문서 버전·상태 표시).
+export const reportUiKo = {
+  'reportUi.title': '주간 보고서',
+  'reportUi.topFallback': '최상위 단계',
+  // 조작부 — AI 코멘트·내려받기
+  'reportUi.ai.include': 'AI 코멘트 포함',
+  'reportUi.ai.includeHintFresh': 'PPT 마지막에 AI 종합 코멘트 슬라이드를 추가합니다',
+  'reportUi.ai.includeHintStale': '신선한 AI 브리핑이 있어야 포함할 수 있습니다',
+  'reportUi.ai.generate': 'AI 브리핑 생성',
+  'reportUi.ai.generating': '생성 중…',
+  'reportUi.ai.retry': '생성 실패 — 다시 시도',
+  'reportUi.ai.adminOnly': 'AI 브리핑 생성은 프로젝트 관리자만 할 수 있습니다',
+  'reportUi.ai.downloadFailed': 'AI 코멘트 포함 다운로드에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+  'reportUi.downloadFailed': '다운로드에 실패했습니다. 네트워크 상태를 확인하고 잠시 후 다시 시도해 주세요.',
+  // 머리
+  'reportUi.dateFull': '{y}년 {m}월 {d}일',
+  'reportUi.meta.created': '생성일',
+  'reportUi.meta.period': '기간',
+  'reportUi.meta.totalTasks': '전체 작업',
+  'reportUi.count': '{n}건',
+  // 전체 요약
+  'reportUi.kpi.actual': '전체 실적',
+  'reportUi.kpi.actualSub': '현재까지 실적',
+  'reportUi.kpi.planned': '전체 계획',
+  'reportUi.kpi.plannedSub': '기준일 계획',
+  'reportUi.kpi.variance': '계획 대비 편차',
+  'reportUi.kpi.ahead': '계획 이상',
+  'reportUi.kpi.behind': '계획 미달',
+  'reportUi.kpi.delayed': '지연 작업',
+  'reportUi.kpi.delayedSub': '전체 {n}건 중',
+  // 표
+  'reportUi.phase.title': '{label}별 진척',
+  'reportUi.phase.empty': '표시할 {label} 항목이 없습니다.',
+  'reportUi.col.plan': '계획',
+  'reportUi.col.actual': '실적',
+  'reportUi.col.variance': '편차',
+  'reportUi.col.status': '상태',
+  'reportUi.col.task': '작업명',
+  'reportUi.col.owner': '담당',
+  'reportUi.col.end': '종료일',
+  'reportUi.delayed.title': '지연 작업 목록',
+  'reportUi.delayed.empty': '현재 지연된 작업이 없습니다.',
+  'reportUi.team.title': '팀별 진척현황',
+  'reportUi.team.count': '{n}개 작업',
+  // 문서 버전·상태(DocumentVersionStatus) — 버전 번호는 <strong> 이라 문장을 그 자리에서 끊었다
+  'doc.version.oldLead': '이전 버전(',
+  'doc.version.oldMid': ')을 열람 중입니다. 최신 버전은',
+  'doc.version.oldTail': '입니다.',
+  'doc.version.viewLatest': '최신 버전 보기',
+  'doc.version.none': '버전 정보 없음',
+  'doc.version.latest': '(최신)',
+  'doc.status.draft': '초안 (Draft)',
+  'doc.status.saved': '저장된 문서',
+  'doc.status.published': '게시됨 (Published)',
+} as const

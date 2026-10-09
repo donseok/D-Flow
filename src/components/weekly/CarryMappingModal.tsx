@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { StatusMessage } from '@/components/ui/StatusMessage'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { intlLocale } from '@/lib/i18n/format'
 import { orderAreas, WEEKLY_CELL_LABEL, WEEKLY_CELL_MAX, type WeeklyArea } from '@/lib/domain/weeklySheet'
 import { CARRY_SKIP, type CarryMapping, type CarryOverflow, type CarryPending } from '@/lib/domain/weeklyCarry'
 
@@ -32,6 +34,7 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
   onSubmit: (mapping: CarryMapping) => void
   onClose: () => void
 }) {
+  const { t, locale } = useLocale()
   const [choice, setChoice] = useState<Record<string, string>>(() => Object.fromEntries(
     pending.filter(p => Object.hasOwn(mapping, p.areaId)).map(p => [p.areaId, mapping[p.areaId]])))
   const targets = orderAreas(areas.filter(a => a.active))
@@ -43,18 +46,17 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
     <Modal
       open={open}
       onClose={onClose}
-      title="이월할 내용의 업무영역 고르기"
+      title={t('weekly.carry.title')}
       size="lg"
       footer={
         <>
-          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>취소</button>
-          <button type="button" className="btn btn-primary" onClick={submit} disabled={busy || !complete}>이 매핑으로 이월</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={busy || !complete}>{t('weekly.carry.submit')}</button>
         </>
       }
     >
       <p className="text-sm leading-6 text-fg-secondary">
-        이전 주차의 차주계획에 지금은 비활성인 업무영역의 내용이 있습니다. 옮길 영역을 고르거나 &lsquo;옮기지 않음&rsquo;을 고르세요 —
-        옮기지 않아도 이전 주차 시트의 내용은 그대로 남습니다.
+        {t('weekly.carry.intro')}
       </p>
       {overflow.length > 0 && (
         // 창의 실행(이월)이 막혔다 — blocking 이라 StatusMessage 가 경고(alert) 영역으로 알린다. 넘친 칸 목록은 detail 에 그대로 둔다.
@@ -63,12 +65,12 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
             kind="partial_error"
             blocking
             compact
-            title={`옮긴 내용이 칸 상한(${WEEKLY_CELL_MAX.toLocaleString('ko-KR')}자)을 넘어 시트를 만들지 않았습니다 — 다른 영역이나 ‘옮기지 않음’을 고르세요.`}
+            title={t('weekly.carry.overflowTitle').replace('{n}', WEEKLY_CELL_MAX.toLocaleString(intlLocale(locale)))}
             detail={
               <ul className="mt-1 list-disc pl-5">
                 {overflow.map(o => (
                   <li key={`${o.areaId}:${o.cell}`} data-carry-overflow={o.areaId}>
-                    {o.areaName} · {WEEKLY_CELL_LABEL[o.cell]} {o.length.toLocaleString('ko-KR')}자
+                    {o.areaName} · {WEEKLY_CELL_LABEL[o.cell]} {t('weekly.unit.chars').replace('{n}', o.length.toLocaleString(intlLocale(locale)))}
                   </li>
                 ))}
               </ul>
@@ -79,17 +81,17 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
       <ul className="mt-4 space-y-3">
         {pending.map(p => (
           <li key={p.areaId} data-carry-source={p.areaId} className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm text-fg">비활성 영역 {p.areaName} — 대기 {p.cells.length}칸</span>
+            <span className="text-sm text-fg">{t('weekly.carry.sourceLine').replace('{n}', String(p.cells.length)).replace('{area}', () => p.areaName)}</span>
             <select
               className="app-input"
-              aria-label={`${p.areaName} 대기 내용을 옮길 영역`}
+              aria-label={t('weekly.carry.targetAria').replace('{area}', () => p.areaName)}
               value={choice[p.areaId] ?? ''}
               disabled={busy}
               onChange={e => { const v = e.target.value; setChoice(c => ({ ...c, [p.areaId]: v })) }}
             >
-              <option value="">영역 선택</option>
+              <option value="">{t('weekly.carry.choose')}</option>
               {targets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              <option value={CARRY_SKIP}>옮기지 않음</option>
+              <option value={CARRY_SKIP}>{t('weekly.carry.skip')}</option>
             </select>
           </li>
         ))}

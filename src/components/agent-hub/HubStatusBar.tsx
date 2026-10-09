@@ -4,6 +4,8 @@
 import Link from 'next/link'
 import { Bot, PauseCircle } from 'lucide-react'
 import type { Watcher } from '@/lib/domain/seatmap'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { fill, type Translate } from '@/components/agents/labelKeys'
 
 type Props = {
   projectId: string
@@ -14,28 +16,29 @@ type Props = {
 }
 
 /** FloorCard 의 감시자 표기와 같은 조합 — `agent busy/slots ~until`. */
-export function watchLabel(w: Watcher[]): string {
-  if (w.length === 0) return '감시 없음'
+export function watchLabel(w: Watcher[], t: Translate): string {
+  if (w.length === 0) return t('agents.watch.none')
   return w.map(x => `${x.agent}${x.slots != null ? ` ${x.busy ?? 0}/${x.slots}` : ''}${x.untilLabel ? ` ~${x.untilLabel}` : ''}`).join(' · ')
 }
 
 export function HubStatusBar({ projectId, registered, enabled, watchers, isAdmin }: Props) {
+  const { t } = useLocale()
   const badge = !registered
-    ? { cls: 'bg-surface-subtle text-fg-muted', label: '아직 등록 안 됨 — 첫 위임 때 켜집니다', icon: PauseCircle }
+    ? { cls: 'bg-surface-subtle text-fg-muted', label: t('agentHub.status.unregistered'), icon: PauseCircle }
     : enabled
-      ? { cls: 'bg-action-soft text-action', label: '에이전트 켜짐', icon: Bot }
-      : { cls: 'bg-pending-weak text-warning', label: '에이전트 중지', icon: PauseCircle }
+      ? { cls: 'bg-action-soft text-action', label: t('agentHub.status.on'), icon: Bot }
+      : { cls: 'bg-pending-weak text-warning', label: t('agentHub.status.off'), icon: PauseCircle }
   const Icon = badge.icon
   return (
-    <section aria-label="에이전트 상태" className="flex flex-wrap items-center gap-3">
+    <section aria-label={t('agentHub.status.aria')} className="flex flex-wrap items-center gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className={`chip ${badge.cls}`}><Icon className="mr-1 h-3.5 w-3.5" aria-hidden />{badge.label}</span>
-        {isAdmin && !registered && <span className="text-meta text-fg-muted">첫 위임 때 켜집니다</span>}
-        {isAdmin && <Link href={`/p/${projectId}/settings#project-modules`} className="text-xs font-medium text-action underline-offset-2 hover:underline">프로젝트 설정 → 모듈·메뉴</Link>}
+        {isAdmin && !registered && <span className="text-meta text-fg-muted">{t('agentHub.status.firstDelegation')}</span>}
+        {isAdmin && <Link href={`/p/${projectId}/settings#project-modules`} className="text-xs font-medium text-action underline-offset-2 hover:underline">{t('agentHub.status.settingsLink')}</Link>}
       </div>
       <div className="flex items-center gap-3 text-meta text-fg-secondary">
-        <span title={watchLabel(watchers)}>{watchers.length ? `감시 중 · ${watchLabel(watchers)}` : '감시 없음'}</span>
-        <Link href="/account" className="text-action underline-offset-2 hover:underline">내 토큰</Link>
+        <span title={watchLabel(watchers, t)}>{watchers.length ? fill(t('agents.watch.on'), { list: watchLabel(watchers, t) }) : t('agents.watch.none')}</span>
+        <Link href="/account" className="text-action underline-offset-2 hover:underline">{t('agentHub.status.myToken')}</Link>
       </div>
     </section>
   )

@@ -3,29 +3,33 @@
 import type { Seat } from '@/lib/domain/seatmap'
 import type { AnimName, SeatState } from '@/lib/domain/seatState'
 import { ageLabel } from '@/lib/domain/seatmap'
+import type { DictKey } from '@/lib/i18n/dict'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { Sprite } from './Sprite'
 import { PhaseBadge } from './PhaseBadge'
 import { ChatBubble, seatSpeech, useOfficeChatter } from './SeatSpeech'
 import { SeatOpsBar, type SeatOpHandler } from './SeatOpsBar'
 import { OwnerTag, ownerLabel } from './OwnerTag'
+import { fill, type Translate } from './labelKeys'
 import { IconBlocked, IconDependency, IconDone, IconOffline, IconRejected, IconStale, IconWait } from './icons'
 import css from './seatmap.module.css'
 
-export const STATE_LABEL: Record<SeatState, string> = {
-  ACTIVE: '업무 중', STALE: '무응답', OFFLINE: '끊김', BLOCKED: '결정 대기', REJECTED: '반려 · 재작업',
-  WAIT: '승인 대기', READY: '빈자리', DONE: '머지 완료',
+/** 좌석 상태 이름의 사전 키 — 그리는 자리에서 t(STATE_LABEL[state]) 로 읽는다. */
+export const STATE_LABEL: Record<SeatState, DictKey> = {
+  ACTIVE: 'agents.state.active', STALE: 'agents.state.stale', OFFLINE: 'agents.state.offline', BLOCKED: 'agents.state.blocked', REJECTED: 'agents.state.rejected',
+  WAIT: 'agents.state.wait', READY: 'agents.state.ready', DONE: 'agents.state.done',
 }
 
-export function seatMetaLine(seat: Seat, nowMs: number): string {
+export function seatMetaLine(seat: Seat, nowMs: number, t: Translate): string {
   const who = seat.agent ?? '—'
   switch (seat.state) {
     case 'ACTIVE': case 'REJECTED': return `${who} · ${ageLabel(seat.lastSignalAt, nowMs)}`
-    case 'STALE': return `${who} · 무응답 ${ageLabel(seat.lastSignalAt, nowMs)}`
-    case 'OFFLINE': return `${seat.phase} 에서 끊김 · ${ageLabel(seat.lastSignalAt, nowMs)}`
-    case 'BLOCKED': return `${who} · 결정 대기`
-    case 'WAIT': return '승인 대기'
-    case 'READY': return seat.waitReason?.label ?? '미착수' // 짧은 라벨만 — 전문은 상세 패널(착수 대기 사유 스펙 §4)
-    default: return '머지 완료'
+    case 'STALE': return fill(t('agents.meta.stale'), { who, age: ageLabel(seat.lastSignalAt, nowMs) })
+    case 'OFFLINE': return fill(t('agents.meta.offline'), { step: seat.phase, age: ageLabel(seat.lastSignalAt, nowMs) })
+    case 'BLOCKED': return fill(t('agents.meta.blocked'), { who })
+    case 'WAIT': return t('agents.state.wait')
+    case 'READY': return seat.waitReason?.label ?? t('agents.meta.notStarted') // 짧은 라벨만 — 전문은 상세 패널(착수 대기 사유 스펙 §4)
+    default: return t('agents.state.done')
   }
 }
 
@@ -36,13 +40,14 @@ const MARK: Partial<Record<SeatState, () => React.JSX.Element>> = {
 const HAS_BAR: readonly SeatState[] = ['ACTIVE', 'STALE', 'REJECTED', 'BLOCKED', 'OFFLINE']
 
 export function SeatMark({ state, anim }: { state: SeatState; anim?: AnimName }) {
+  const { t } = useLocale()
   // 선행 대기는 상태가 READY 라 상태 표로는 못 가른다 — 좌석 그림(waiting)을 따라 표지를 단다.
   if (anim === 'waiting') {
-    return <span className={css.mark} data-mark="waiting" title="선행 대기"><IconDependency /></span>
+    return <span className={css.mark} data-mark="waiting" title={t('agents.mark.waiting')}><IconDependency /></span>
   }
   const Icon = MARK[state]
   if (!Icon) return null
-  return <span className={css.mark} data-mark={state} title={STATE_LABEL[state]}><Icon /></span>
+  return <span className={css.mark} data-mark={state} title={t(STATE_LABEL[state])}><Icon /></span>
 }
 
 /** 캐릭터 머리 위 — 보고·한마디가 있으면 말풍선, 없으면 단계 말풍선(에이전트 보기와 같은 규칙). */
@@ -58,7 +63,8 @@ export function SeatCard({ seat, side, selected, nowMs, busy, onSelect, onOp }: 
   onSelect: (orderId: string) => void
   onOp: SeatOpHandler
 }) {
-  const owner = ownerLabel(seat)
+  const { t } = useLocale()
+  const owner = ownerLabel(seat, t)
   return (
     <div className={`${css.seat} ${side === 'left' ? css.seatLeft : css.seatRight}`}>
       <div className={css.chair}>
@@ -69,7 +75,7 @@ export function SeatCard({ seat, side, selected, nowMs, busy, onSelect, onOp }: 
         data-selected={selected ? '1' : undefined} data-owner={owner?.kind}>
         <button
           type="button" className={css.deskPick}
-          aria-pressed={selected} aria-label={`${seat.code} ${seat.name} ${STATE_LABEL[seat.state]}`}
+          aria-pressed={selected} aria-label={`${seat.code} ${seat.name} ${t(STATE_LABEL[seat.state])}`}
           onClick={() => onSelect(seat.orderId)}
         >
           <span className={css.deskTop}>
@@ -78,7 +84,7 @@ export function SeatCard({ seat, side, selected, nowMs, busy, onSelect, onOp }: 
             <SeatMark state={seat.state} anim={seat.anim} />
           </span>
           <span className={css.deskName}>{seat.name}</span>
-          <span className={css.deskMeta}>{seatMetaLine(seat, nowMs)}</span>
+          <span className={css.deskMeta}>{seatMetaLine(seat, nowMs, t)}</span>
           {seat.state === 'BLOCKED' && seat.note && <span className={css.note}>{seat.note}</span>}
           {HAS_BAR.includes(seat.state) && <span className={css.bar}><i style={{ width: `${seat.progress}%` }} /></span>}
         </button>

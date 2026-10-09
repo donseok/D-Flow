@@ -13,4 +13,13 @@ export const uiEn: Record<keyof typeof uiKo, string> = {
   'ui.memberPicker.nameOrder': 'By name',
   'ui.memberPicker.categoryOrder': 'By responsibility',
   'ui.memberPicker.unassigned': 'Unassigned',
+  'ui.sync.offlineTitle': 'You are offline',
+  'ui.sync.offline': 'Offline',
+  'ui.sync.lastChecked': ' · last checked {time}',
+  'ui.sync.attentionTitle': 'Some changes are unsaved or in conflict',
+  'ui.sync.attention': 'Needs attention {n}',
+  'ui.sync.saving': 'Saving...',
+  'ui.sync.editingTitle': 'Some edits are not saved yet',
+  'ui.sync.editing': 'Unsaved changes {n}',
+  'ui.sync.synced': 'Synced',
 }

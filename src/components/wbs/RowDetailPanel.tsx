@@ -407,7 +407,7 @@ export function RowDetailPanel({
         <header className="flex items-start justify-between gap-3 border-b border-border/80 px-5 py-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <LevelBadge depth={item.depth} isOwnerSplit={item.isOwnerSplit} levelLabels={levelLabels} />
+              <LevelBadge depth={item.depth} isOwnerSplit={item.isOwnerSplit} levelLabels={levelLabels} t={t} />
               {item.code && <span className="text-meta font-semibold tabular-nums text-fg-muted">{item.code}</span>}
             </div>
             <h2 className="mt-1.5 break-words text-[16px] font-bold leading-snug text-fg">{item.name}</h2>
@@ -732,7 +732,7 @@ export function RowDetailPanel({
                     <p className="rounded-lg bg-pending-weak px-2.5 py-1.5 text-meta leading-snug text-pending">{t('wbs.addChildLeafWarn')}</p>
                   )}
                   <div className="flex gap-2">
-                    <input autoFocus value={addName} onChange={e => setAddName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addChild() }} placeholder={`${levelLabels[item.depth + 1] ?? '항목'} ${t('wbs.namePlaceholderSuffix')}`} className="app-input h-8 text-xs" />
+                    <input autoFocus value={addName} onChange={e => setAddName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addChild() }} placeholder={`${levelLabels[item.depth + 1] ?? t('wbs.itemFallback')} ${t('wbs.namePlaceholderSuffix')}`} className="app-input h-8 text-xs" />
                     <button onClick={addChild} disabled={busy || !addName.trim()} className="btn btn-primary h-8 px-3 text-xs">{t('common.add')}</button>
                   </div>
                 </div>
@@ -1060,7 +1060,7 @@ function DependencyRow({
       <div className="mt-1 flex items-center gap-1.5">
         {linked ? (
           <>
-            <StatusChip status={linked.status} />
+            <StatusChip status={linked.status} t={t} />
             <span className="tabular-nums text-meta text-fg-secondary">{formatPct1(linked.rolledActualPct)}%</span>
           </>
         ) : (

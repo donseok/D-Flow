@@ -9,9 +9,10 @@ import { menuLabel } from '@/lib/domain/usageMenu'
 import { usageHref } from '@/lib/domain/usage'
 import type { UsageEventRow } from '@/lib/data/usage'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { intlLocale } from '@/lib/i18n/format'
 
-function fmtDateTime(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat('ko-KR', {
+function fmtDateTime(iso: string, timeZone: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     timeZone, dateStyle: 'short', timeStyle: 'medium',
   }).format(new Date(iso))
 }
@@ -50,12 +51,12 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
     `chip ${active ? 'bg-action text-action-fg' : 'text-fg-secondary transition hover:text-fg'}`
 
   return (
-    <SectionCard title="접속 로그" icon={ScrollText}
+    <SectionCard title={translate('usage.log.title')} icon={ScrollText}
       actions={events.length >= limit
-        ? <span className="badge bg-pending-weak text-pending">최근 {limit}건만 표시</span>
-        : <span className="badge bg-action-soft text-action">{events.length}건</span>}>
+        ? <span className="badge bg-pending-weak text-pending">{translate('usage.log.capped').replace('{n}', String(limit))}</span>
+        : <span className="badge bg-action-soft text-action">{translate('usage.log.count').replace('{n}', String(events.length))}</span>}>
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
-        <Link href={usageHref(base, filter, { menu: undefined })} className={chip(!filter.menu)}>전체 메뉴</Link>
+        <Link href={usageHref(base, filter, { menu: undefined })} className={chip(!filter.menu)}>{translate('usage.log.allMenus')}</Link>
         {menus.map(k => (
           <Link key={k} href={usageHref(base, filter, { menu: k })} className={chip(filter.menu === k)}>
             {menuLabel(k, translate)}
@@ -64,33 +65,33 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
         {filter.user && (
           <Link href={usageHref(base, filter, { user: undefined })}
             className="chip ml-auto bg-action-soft text-action transition hover:bg-action hover:text-action-fg">
-            {names.get(filter.user) ?? '확인 불가'} <X className="ml-1 h-3 w-3" />
+            {names.get(filter.user) ?? translate('usage.unknown')} <X className="ml-1 h-3 w-3" />
           </Link>
         )}
       </div>
       {events.length === 0 ? (
         <MiniEmpty text={filter.user || filter.menu
-          ? '이 조건에 해당하는 접속 기록이 없습니다.'
-          : '이 기간에 기록된 접속이 없습니다.'} />
+          ? translate('usage.log.emptyFiltered')
+          : translate('usage.log.empty')} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-border text-xs font-semibold text-fg-muted">
-                <th className="py-2 pr-3 text-left">시각</th>
-                <th className="py-2 pr-3 text-left">사용자</th>
-                <th className="py-2 pr-3 text-left">메뉴</th>
-                <th className="py-2 pr-3 text-left">경로</th>
+                <th className="py-2 pr-3 text-left">{translate('usage.log.colTime')}</th>
+                <th className="py-2 pr-3 text-left">{translate('usage.log.colUser')}</th>
+                <th className="py-2 pr-3 text-left">{translate('usage.log.colMenu')}</th>
+                <th className="py-2 pr-3 text-left">{translate('usage.log.colPath')}</th>
               </tr>
             </thead>
             <tbody>
               {visibleEvents.map(e => (
                 <tr key={e.id} className="border-b border-border/60">
-                  <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDateTime(e.occurredAt, timeZone)}</td>
+                  <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDateTime(e.occurredAt, timeZone, locale)}</td>
                   {/* 계정 목록에 없는 id 는 이름을 지어내지 않는다. 이름 클릭 = 그 사용자로 필터. */}
                   <td className="py-2 pr-3 text-fg">
                     <Link href={usageHref(base, filter, { user: e.userId })} className="transition hover:text-action hover:underline">
-                      {names.get(e.userId) ?? '확인 불가'}
+                      {names.get(e.userId) ?? translate('usage.unknown')}
                     </Link>
                   </td>
                   <td className="py-2 pr-3 text-fg-secondary">{menuLabel(e.menuKey, translate)}</td>
@@ -104,7 +105,7 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
       {events.length > EVENT_PAGE_SIZE && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-fg-secondary">
           <span className="tabular-nums">
-            {pageStart + 1}–{Math.min(pageStart + EVENT_PAGE_SIZE, events.length)} / {events.length}건
+            {translate('usage.log.range').replace('{from}', String(pageStart + 1)).replace('{to}', String(Math.min(pageStart + EVENT_PAGE_SIZE, events.length))).replace('{total}', String(events.length))}
           </span>
           <div className="flex items-center gap-1.5">
             <button
@@ -112,10 +113,10 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
               onClick={() => setPage(currentPage - 1)}
               disabled={currentPage === 1}
               className="btn btn-ghost inline-flex items-center gap-1 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="이전 접속 로그 페이지"
+              aria-label={translate('usage.log.prevAria')}
             >
               <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-              이전
+              {translate('usage.prev')}
             </button>
             <span className="tabular-nums px-1">{currentPage} / {pageCount}</span>
             <button
@@ -123,9 +124,9 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
               onClick={() => setPage(currentPage + 1)}
               disabled={currentPage === pageCount}
               className="btn btn-ghost inline-flex items-center gap-1 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="다음 접속 로그 페이지"
+              aria-label={translate('usage.log.nextAria')}
             >
-              다음
+              {translate('usage.next')}
               <ChevronRight className="h-3.5 w-3.5" aria-hidden />
             </button>
           </div>

@@ -84,7 +84,7 @@ export async function ExecSummary({
           <ProgressGauge
             actual={s.progress.actual} planned={s.progress.planned} variance={s.progress.variance}
             signal={s.progress.signal} verdictText={verdict} plannedText={plannedText}
-            label={tr('dash.exec.progressLabel')}
+            label={tr('dash.exec.progressLabel')} locale={locale}
           />
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

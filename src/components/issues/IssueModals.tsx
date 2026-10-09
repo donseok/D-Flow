@@ -47,6 +47,10 @@ import { IssueAssigneePicker } from './IssueAssigneePicker'
 import { IssueAttachments } from './IssueAttachments'
 import { IssueUpdates } from './IssueUpdates'
 import type { ProjectMember } from '@/lib/domain/types'
+import type { DictKey } from '@/lib/i18n/dict'
+
+// 등록 설정 조회 실패 — effect 안에서 문구를 풀면 로캘이 바뀔 때 다시 조회하므로 키로 두고 그리는 자리에서 푼다.
+const ENTRY_CONTEXT_FAILED: DictKey = 'issue.entry.contextFailed'
 
 function ErrorBox({ message }: { message: string }) {
   return (
@@ -477,7 +481,7 @@ export function IssueDetailModal({
               <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.form.assignee')}</span>
               <IssueAssigneePicker members={members} selected={assignees} onChange={setAssignees} />
             </div>
-            {error && <ErrorBox message={error} />}
+            {error && <ErrorBox message={error === ENTRY_CONTEXT_FAILED ? t(ENTRY_CONTEXT_FAILED) : error} />}
           </div>
         </div>
       )}
@@ -692,7 +696,7 @@ export function IssueFormModal({
       if (cancelled) return
       if (result.ok) setLoadedContext(result.value)
       else setError(result.error)
-    }).catch(() => { if (!cancelled) setError('이슈 설정을 읽지 못했습니다. 다시 시도하세요.') })
+    }).catch(() => { if (!cancelled) setError(ENTRY_CONTEXT_FAILED) })
     return () => { cancelled = true }
   }, [open, projectId, entryContext])
   // 새 이슈의 기본 심각도·출처가 이 프로젝트에서 비활성이면(기본 'medium'·'other') 문맥이 도착한 때 한 번 활성 값으로 맞춘다
@@ -779,7 +783,7 @@ export function IssueFormModal({
     if (customWriteNeeded && (!customReady || customUnreadable || customStale)) return
     const custom = customWriteNeeded ? (isEdit ? validateCustomValues(customDefs,customDraft,customBase,customCanAdmin)
       : validateCustomInsertValues(customDefs,customDraft,customCanAdmin)) : null
-    if (custom && !custom.ok) {setCustomErrors(custom.errors);setError(locale === 'ko' ? '추가 정보 입력값을 확인하세요.' : 'Check custom field values.');return}
+    if (custom && !custom.ok) {setCustomErrors(custom.errors);setError(t('issue.custom.checkValues'));return}
     const input: IssueFormInput = {
       ...(custom?.ok && customDefs.length ? {custom:custom.value,...(isEdit ? {expectedCustom:customBase} : {})} : {}),
       title: title.trim(),
@@ -1065,12 +1069,12 @@ export function IssueFormModal({
           <IssueAssigneePicker members={members} selected={assignees} onChange={setAssignees} />
         </div>
         <p className="text-meta text-fg-muted">{t('issue.form.dueHint')}</p>
-        {customEnabled && customUnreadable && <p role="alert" className="text-xs text-danger">{locale === 'ko' ? '추가 정보를 읽을 수 없습니다. 행을 새로 조회하세요.' : 'Custom values could not be read. Reload the row.'}</p>}
+        {customEnabled && customUnreadable && <p role="alert" className="text-xs text-danger">{t('issue.custom.unreadable')}</p>}
         {customEnabled && customReady && !customUnreadable && <CustomFieldDraft defs={customDefs} values={customDraft} base={customBase} canAdmin={customCanAdmin} creating={!isEdit} disabled={pending || createdIdRef.current !== null} locale={locale} errors={customErrors}
           onChange={(key,value)=>{setCustomDraft(prev=>{const next={...prev};if(value===undefined)delete next[key];else next[key]=value;return next});setCustomErrors({})}} />}
         {customEnabled && customStale && <div className="space-y-2">
-          <p role="alert" className="text-xs text-danger">{locale === 'ko' ? '추가 정보가 변경되었습니다. 작성 중인 값은 유지됩니다. 최신 값을 불러온 뒤 저장하세요.' : 'Custom values changed. Your draft is preserved. Load the latest values before saving.'}</p>
-          <button type="button" disabled={pending} className="btn btn-ghost text-xs" onClick={adoptCustom}>{locale === 'ko' ? '추가 정보 초안 취소' : 'Discard custom draft'}</button>
+          <p role="alert" className="text-xs text-danger">{t('issue.custom.changed')}</p>
+          <button type="button" disabled={pending} className="btn btn-ghost text-xs" onClick={adoptCustom}>{t('issue.custom.discardDraft')}</button>
         </div>}
         {/* 수정 폼은 이슈가 이미 있으니 고르는 즉시 올린다. 등록 폼은 id 가 없어 담아만 두고,
             저장이 성공한 뒤 submit() 이 발급된 id 로 올린다. */}
@@ -1082,7 +1086,7 @@ export function IssueFormModal({
           disabled={pending}
           scope={attachScope}
         />
-        {error && <ErrorBox message={error} />}
+        {error && <ErrorBox message={error === ENTRY_CONTEXT_FAILED ? t(ENTRY_CONTEXT_FAILED) : error} />}
       </div>
     </Modal>
   )
@@ -1128,7 +1132,7 @@ export function DeleteIssueModal({ issue, onClose }: { issue: Issue | null; onCl
             {issue.code} {issue.title}
           </p>
         )}
-        {error && <ErrorBox message={error} />}
+        {error && <ErrorBox message={error === ENTRY_CONTEXT_FAILED ? t(ENTRY_CONTEXT_FAILED) : error} />}
       </div>
     </Modal>
   )

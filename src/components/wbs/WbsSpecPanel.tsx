@@ -453,7 +453,7 @@ function WbsAgentOrderStatus({ itemId, editable, refreshKey }: { itemId: string;
         </button>
         <span className="flex items-center gap-2">
           {projectId && (
-            <Link href={`/p/${projectId}/agents`} data-agent-hub-link className="text-meta text-action underline-offset-2 hover:underline">에이전트 페이지</Link>
+            <Link href={`/p/${projectId}/agents`} data-agent-hub-link className="text-meta text-action underline-offset-2 hover:underline">{t('wbs.agentHubLink')}</Link>
           )}
           <span className={`chip ${order.status === 'reported' ? 'bg-action-soft text-action' : 'bg-surface-subtle text-fg-secondary'}`}>
             {order.status === 'claimed' ? t('wbs.agentOrderClaimed') : t(ORDER_STATUS_LABEL[order.status] ?? 'wbs.agentOrderReady')}

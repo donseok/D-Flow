@@ -5,12 +5,14 @@
 // NFKC 뒤 코드 포인트로 센다 — 화면이 UTF-16 으로 따로 세면 두 기준이 어긋난다).
 import { useEffect, useId, useRef, useState } from 'react'
 import { Check, Pencil, X } from 'lucide-react'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export function TeamNameCell({ team, disabled, onRename }: {
   team: { id: string; code: string; name: string }
   disabled: boolean
   onRename: (name: string) => Promise<{ ok: boolean; error?: string }>
 }) {
+  const { t } = useLocale()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(team.name)
   const [error, setError] = useState<string | null>(null)
@@ -30,12 +32,12 @@ export function TeamNameCell({ team, disabled, onRename }: {
   async function save() {
     if (savingRef.current) return
     const name = value.trim()
-    if (!name) { setError('팀 이름을 입력하세요.'); return }
+    if (!name) { setError(t('settings.teamName.required')); return }
     savingRef.current = true; setSaving(true); setError(null)
     try {
       const r = await onRename(name)
       // 거부되면 고쳐 입력하도록 입력에 포커스를 둔다 — 저장 버튼으로 저장했다면 꺼진 버튼에 남은 포커스를 데려온다(B-4 리뷰 I2)
-      if (!r.ok) { setError(r.error ?? '이름을 바꾸지 못했습니다.'); inputRef.current?.focus(); return }
+      if (!r.ok) { setError(r.error ?? t('settings.teamName.failed')); inputRef.current?.focus(); return }
       finish()
     } finally {
       savingRef.current = false; setSaving(false)
@@ -47,7 +49,7 @@ export function TeamNameCell({ team, disabled, onRename }: {
       <div className="flex min-w-0 items-center gap-2">
         <span className="max-w-[16rem] truncate font-medium text-fg" title={team.name}>{team.name}</span>
         <button ref={triggerRef} type="button" className="btn btn-ghost btn-sm" disabled={disabled} data-team-rename={team.id}
-          aria-label={`${team.name} 이름 바꾸기`} onClick={() => { setValue(team.name); setError(null); setEditing(true) }}>
+          aria-label={t('settings.teamName.rename').replace('{name}', String(team.name))} onClick={() => { setValue(team.name); setError(null); setEditing(true) }}>
           <Pencil className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -58,7 +60,7 @@ export function TeamNameCell({ team, disabled, onRename }: {
       <div className="flex items-center gap-1.5">
         {/* 저장 중 잠금은 disabled 가 아니라 readOnly+aria-busy — disabled 는 포커스를 body 로 떨어뜨린다(focus fixup, B-4 리뷰 I2) */}
         <input ref={inputRef} data-team-rename-input className="app-input w-40" value={value} autoFocus readOnly={saving}
-          aria-busy={saving || undefined} aria-label={`${team.code} 팀 새 이름`} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}
+          aria-busy={saving || undefined} aria-label={t('settings.teamName.newName').replace('{code}', String(team.code))} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             // 한글 IME 조합을 끝내는 Enter 는 저장이 아니다(브라우저에 따라 keydown 이 두 번 온다 — Safari 는 keyCode 229)
@@ -66,10 +68,10 @@ export function TeamNameCell({ team, disabled, onRename }: {
             if (e.key === 'Enter') void save()
             if (e.key === 'Escape' && !savingRef.current) finish()   // 저장 중 Esc 는 무시 — 응답이 닫힌 칸에 떨어지지 않게
           }} />
-        <button type="button" className="btn btn-primary btn-sm" data-team-rename-save disabled={saving} onClick={() => void save()} aria-label="이름 저장">
+        <button type="button" className="btn btn-primary btn-sm" data-team-rename-save disabled={saving} onClick={() => void save()} aria-label={t('settings.teamName.save')}>
           <Check className="h-3.5 w-3.5" />
         </button>
-        <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={finish} aria-label="취소">
+        <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={finish} aria-label={t('common.cancel')}>
           <X className="h-3.5 w-3.5" />
         </button>
       </div>

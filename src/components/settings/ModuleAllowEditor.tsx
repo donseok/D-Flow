@@ -10,6 +10,7 @@ import { newUuid } from '@/lib/domain/uuid'
 import type { Locale } from '@/lib/i18n/dict'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 const LABEL = MODULE_LABEL
 
@@ -19,6 +20,7 @@ type Conflict = { revision: number; allowed: ModuleId[] | null }
 export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, invalidReason, requiredMissing = false, locale = 'ko' }: {
   workspaceId: string; initialAllowed: ModuleId[] | null; revision: number; invalidReason?: string; requiredMissing?: boolean; locale?: Locale
 }) {
+  const { t } = useLocale()
   const router = useRouter()
   const [baseline, setBaseline] = useState<ModuleId[]>(initialAllowed ?? [])
   const [selected, setSelected] = useState<ModuleId[]>(initialAllowed ?? [])
@@ -49,7 +51,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
     startTransition(async () => {
       let result: SettingsImpactResult
       try { result = await previewSettingsImpact(workspaceId, selected) }
-      catch { setError('변경 영향을 확인하지 못했습니다. 다시 시도하세요.'); return }
+      catch { setError(t('settings.modules.impactFailed')); return }
       if (!result.ok) { setError(result.error); return }
       // 충돌은 문서 revision 이 아니라 이 키의 값으로 본다 — 같은 문서의 다른 편집기를 먼저 저장해도 revision 만 오른다.
       const latestSame = result.before === null ? needsRepair : sameIds(result.before, baseline)
@@ -73,7 +75,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
       setFieldError(null)
       setReview(null)
       setUncertainPatch(null)
-      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '모듈 허용 목록을 저장했습니다.')
+      setNotice(result.revision === patch.expectedRevision ? t('settings.save.noChange') : t('settings.moduleAllow.saved'))
       router.refresh()
       return
     }
@@ -107,14 +109,14 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
         setFieldError(null)
         setReview(null)
         setUncertainPatch(null)
-        setNotice('저장된 명령을 확인했습니다.')
+        setNotice(t('settings.save.confirmed'))
         router.refresh()
         return
       }
     } catch { /* 조회 불명도 같은 명령으로 다시 보낸다 */ }
     if (resendCount === 0) return submit(patch, 1)
     setUncertainPatch(patch)
-    setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 결과를 다시 확인하세요.')
+    setError(t('settings.moduleAllow.uncertain'))
   }
 
   function save() {
@@ -129,7 +131,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
 
   return (
     <div className="space-y-4">
-      <p className="text-sm leading-6 text-fg-secondary">프로젝트 관리자가 켤 수 있는 모듈을 고릅니다. 허용에서 빼도 기존 데이터는 삭제되지 않습니다.</p>
+      <p className="text-sm leading-6 text-fg-secondary">{t('settings.moduleAllow.desc')}</p>
       {needsRepair && (invalidReason || requiredMissing) && <ConfigStateNotice kind={requiredMissing ? 'required' : 'invalid'} locale={locale}
         keyName="modules.allowed" message={invalidReason} isAdmin settingsHref="#workspace-modules" />}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -144,31 +146,31 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
       {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
       {conflict && (
         <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
-          <strong>다른 사용자가 허용 목록을 바꿨습니다.</strong>
-          <p>내 선택: {selected.map(id => LABEL[id as keyof typeof LABEL]).join(', ') || '없음'}</p>
-          <p>최신 값: {conflict.allowed === null ? '설정 손상 — 복구 필요' : conflict.allowed.map(id => LABEL[id as keyof typeof LABEL]).join(', ') || '없음'}</p>
+          <strong>{t('settings.moduleAllow.conflict')}</strong>
+          <p>{t('settings.modules.mine')} {selected.map(id => LABEL[id as keyof typeof LABEL]).join(', ') || t('common.none')}</p>
+          <p>{t('settings.modules.latest')} {conflict.allowed === null ? t('settings.modules.corruptedRepair') : conflict.allowed.map(id => LABEL[id as keyof typeof LABEL]).join(', ') || t('common.none')}</p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.allowed ?? []); setNeedsRepair(conflict.allowed === null); setBaseRevision(conflict.revision); setConflict(null); setError(null) }}>내 값 다시 검토</button>
-            {conflict.allowed !== null && <button type="button" className="btn btn-ghost" onClick={() => { setSelected(conflict.allowed!); setBaseline(conflict.allowed!); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null); setError(null) }}>최신 값 사용</button>}
+            <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.allowed ?? []); setNeedsRepair(conflict.allowed === null); setBaseRevision(conflict.revision); setConflict(null); setError(null) }}>{t('settings.modules.reviewMine')}</button>
+            {conflict.allowed !== null && <button type="button" className="btn btn-ghost" onClick={() => { setSelected(conflict.allowed!); setBaseline(conflict.allowed!); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null); setError(null) }}>{t('settings.conflict.useLatest')}</button>}
           </div>
         </div>
       )}
       {review && (
         <div className="space-y-2 rounded-xl border border-border-focus bg-action-soft/30 p-4 text-sm">
-          <strong>변경 내용 검토</strong>
-          <p>추가: {selected.filter(id => !baseline.includes(id)).map(id => LABEL[id as keyof typeof LABEL]).join(', ') || '없음'}</p>
-          <p>제외: {baseline.filter(id => !selected.includes(id)).map(id => LABEL[id as keyof typeof LABEL]).join(', ') || '없음'}</p>
-          {review.impact === null ? <p>기존 허용 목록이 손상되어 영향 수를 계산할 수 없습니다. 저장하면 새 선택으로 복구됩니다.</p> : <>
-            <p>영향받는 프로젝트: {review.impact.affectedProjects}개</p>
-            {review.impact.removed.map(row => <p key={row.moduleId}>{LABEL[row.moduleId as keyof typeof LABEL]}: {row.projectCount}개 프로젝트</p>)}
+          <strong>{t('settings.review.title')}</strong>
+          <p>{t('settings.modules.added')} {selected.filter(id => !baseline.includes(id)).map(id => LABEL[id as keyof typeof LABEL]).join(', ') || t('common.none')}</p>
+          <p>{t('settings.modules.removed')} {baseline.filter(id => !selected.includes(id)).map(id => LABEL[id as keyof typeof LABEL]).join(', ') || t('common.none')}</p>
+          {review.impact === null ? <p>{t('settings.moduleAllow.corruptedImpact')}</p> : <>
+            <p>{t('settings.moduleAllow.affected').replace('{affectedProjects}', String(review.impact.affectedProjects))}</p>
+            {review.impact.removed.map(row => <p key={row.moduleId}>{t('settings.moduleAllow.perModule').replace('{v}', String(LABEL[row.moduleId as keyof typeof LABEL])).replace('{projectCount}', String(row.projectCount))}</p>)}
           </>}
-          <p>데이터는 삭제되지 않으며, 저장 직후 프로젝트 모듈 설정과 메뉴 표시에 반영됩니다.</p>
+          <p>{t('settings.moduleAllow.note')}</p>
         </div>
       )}
       {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
       <SettingsSaveBar notice={notice}>
-        <button type="button" className="btn btn-ghost" disabled={pending || !dirty || !!conflict || !!uncertainPatch} onClick={inspect}>변경 내용 검토</button>
-        {(review || uncertainPatch) && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{uncertainPatch ? '저장 결과 확인 및 재시도' : '변경 저장'}</button>}
+        <button type="button" className="btn btn-ghost" disabled={pending || !dirty || !!conflict || !!uncertainPatch} onClick={inspect}>{t('settings.review.title')}</button>
+        {(review || uncertainPatch) && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{uncertainPatch ? t('settings.workflow.retry') : t('settings.modules.saveChanges')}</button>}
       </SettingsSaveBar>
     </div>
   )

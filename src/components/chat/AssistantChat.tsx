@@ -13,7 +13,8 @@ import { consumeChatNdjson, isSafeInternalBotHref } from './chatStream'
 import { QUICK_SUGGESTIONS } from '@/lib/ai/intent'
 import { parseScopePath } from '@/lib/nav/active'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import type { DictKey } from '@/lib/i18n/dict'
+import { intlLocale } from '@/lib/i18n/format'
+import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { isCommandUtterance } from '@/lib/ai/commands/cue'
 import type { CommandProposal, CommandCandidate } from '@/lib/ai/commands/types'
 import type {
@@ -73,12 +74,12 @@ function welcomeText(ctx: BotContext | null, t: T): string {
   }
   if (ctx.totalProjects === 1) {
     // N=1일 때 "전체 1개 프로젝트에 대해서도 질문할 수 있습니다"는 어색하다 — 단일 프로젝트 전용 문구로 대체.
-    lines.push('이 프로젝트에 대해 무엇이든 질문하세요')
+    lines.push(t('chat.welcome.singleProject'))
   } else if (ctx.totalProjects > 1) {
     lines.push(`${t('chat.welcome.totalPrefix')}${ctx.totalProjects}${t('chat.welcome.totalSuffix')}`)
   }
   lines.push(t('chat.welcome.ask'))
-  lines.push('실적 변경 같은 명령도 할 수 있어요 — 예: "○○ 실적 80으로 올려줘"')
+  lines.push(t('chat.welcome.commandHint'))
   return lines.join('\n')
 }
 
@@ -338,9 +339,9 @@ export function AssistantChat() {
         if (genRef.current !== gen) return 'stale' as const
         if (proposal.kind === 'not_command') return 'not_command' as const
         const content =
-          proposal.kind === 'proposal' ? '변경 내용을 확인해 주세요:'
-          : proposal.kind === 'disambiguate' ? '어떤 작업인지 골라 주세요:'
-          : proposal.kind === 'not_found' ? `"${proposal.targetQuery}" 작업을 찾지 못했어요. 작업명을 더 정확히 말해 주세요.`
+          proposal.kind === 'proposal' ? t('chat.cmd.confirm')
+          : proposal.kind === 'disambiguate' ? t('chat.cmd.disambiguate')
+          : proposal.kind === 'not_found' ? t('chat.cmd.notFound').replace('{q}', () => proposal.targetQuery)
           : proposal.message
         setMessages(prev => [...prev, {
           id: nextId(), role: 'assistant', content,
@@ -355,7 +356,7 @@ export function AssistantChat() {
         if (genRef.current === gen) setLoading(false) // ← 로딩 고착 방지 (stale이면 다른 세대 소유)
       }
     },
-    [currentProjectId, currentWorkspaceId],
+    [currentProjectId, currentWorkspaceId, t],
   )
 
   const send = useCallback(
@@ -543,22 +544,24 @@ export function AssistantChat() {
         const result = await applyCommandProposal(p, { updateActual, updateWbsFields })
         if (result.ok) {
           mark('applied')
-          say(`✓ 변경했어요. ${p.target.name} — ${p.changes.map(c => `${c.label} ${c.after}`).join(', ')}`)
+          say(t('chat.cmd.applied').replace('{name}', () => p.target.name).replace('{changes}', () => p.changes.map(c => `${c.label} ${c.after}`).join(', ')))
           router.refresh()
         } else if (result.conflict) {
           // 제안이 낡았다 — 쓰지 않았다. 서버의 현재 값을 말해 주고 화면을 다시 읽는다(낡은 제안은 닫아 다시 누를 수 없게 한다)
           mark('cancelled')
-          say(`적용하지 않았어요 — 제안을 만든 뒤 다른 사용자가 ${p.target.name} 의 값을 바꿨어요${result.latestText ? ` (지금: ${result.latestText})` : ''}. 최신 값을 확인하고 다시 요청해 주세요.`)
+          const latest = result.latestText ?? ''
+          say(t('chat.cmd.conflict').replace('{name}', () => p.target.name)
+            .replace('{latest}', () => (latest ? t('chat.cmd.conflictLatest').replace('{v}', () => latest) : '')))
           router.refresh()
         } else {
           mark('cancelled')
-          say(`변경하지 못했어요: ${result.error ?? '알 수 없는 오류'}`) // 서버 액션의 한국어 에러 그대로 — AI도 권한을 우회하지 못한다
+          say(t('chat.cmd.failed').replace('{error}', () => result.error ?? t('chat.cmd.unknownError'))) // 서버 액션의 한국어 에러 그대로 — AI도 권한을 우회하지 못한다
         }
       } finally {
         applyingRef.current.delete(msgId)
       }
     },
-    [router],
+    [router, t],
   )
 
   const pickCandidate = useCallback((c: CommandCandidate) => {
@@ -811,6 +814,7 @@ function Bubble({
   asOfTimezone?: string
   truncated?: boolean
 }) {
+  const { t, locale } = useLocale()
   const isUser = role === 'user'
   const safeSources = isUser ? [] : (sources ?? []).filter(source => isSafeInternalBotHref(source.href))
   const citedIds = [...content.matchAll(/\[(S\d+)]/g)].map(match => match[1])
@@ -833,7 +837,7 @@ function Bubble({
         {!isUser && (safeSources.length > 0 || (asOf && asOfTimezone) || truncated) && (
           <div className="mt-2 border-t border-border-focus/30 pt-2 text-meta text-fg-muted">
             {visibleSources.length > 0 && (
-              <div className="flex flex-wrap gap-1.5" aria-label="답변 출처">
+              <div className="flex flex-wrap gap-1.5" aria-label={t('chat.sources.aria')}>
                 {visibleSources.map(source => (
                   <a
                     key={source.id}
@@ -846,14 +850,14 @@ function Bubble({
                 ))}
                 {hiddenSourceCount > 0 && (
                   <span className="rounded-full border border-border-focus/30 px-2 py-1">
-                    출처 +{hiddenSourceCount}개
+                    {t('chat.sources.more').replace('{n}', String(hiddenSourceCount))}
                   </span>
                 )}
               </div>
             )}
             <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-              {asOf && asOfTimezone && <span>기준 {formatAsOf(asOf, asOfTimezone)} ({asOfTimezone})</span>}
-              {truncated && <span>일부 결과만 표시</span>}
+              {asOf && asOfTimezone && <span>{t('chat.asOf').replace('{time}', formatAsOf(asOf, asOfTimezone, locale)).replace('{tz}', () => asOfTimezone)}</span>}
+              {truncated && <span>{t('chat.truncated')}</span>}
             </div>
           </div>
         )}
@@ -863,10 +867,10 @@ function Bubble({
 }
 
 /** 봇 답의 기준 시각 — 그 응답의 요청 범위 tz 로 찍는다(서울로 대체하지 않는다, 계획 D-21b) */
-function formatAsOf(value: string, timeZone: string): string {
+function formatAsOf(value: string, timeZone: string, locale: Locale): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('ko-KR', { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(date)
+  return new Intl.DateTimeFormat(intlLocale(locale), { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(date)
 }
 
 function ProposalCard({
@@ -877,6 +881,7 @@ function ProposalCard({
   onPick: (c: CommandCandidate) => void
   onCancel: (msgId: number) => void
 }) {
+  const { t } = useLocale()
   const p = msg.proposal
   if (!p || (p.kind !== 'proposal' && p.kind !== 'disambiguate')) return null
   const disabled = msg.proposalState !== 'pending'
@@ -887,7 +892,7 @@ function ProposalCard({
           <>
             <div className="font-medium">{p.target.name}</div>
             <div className="mt-0.5 text-[12px] text-fg-secondary">
-              [{p.target.phaseName}] · 담당 {p.target.ownersText}
+              {t('chat.proposal.target').replace('{group}', () => p.target.phaseName).replace('{owners}', () => p.target.ownersText)}
             </div>
             <ul className="mt-1.5 space-y-0.5">
               {p.changes.map(c => (
@@ -903,18 +908,18 @@ function ProposalCard({
                 disabled={disabled}
                 className="inline-flex items-center gap-1 rounded-full bg-action px-3 py-1.5 text-xs font-medium text-action-fg transition hover:bg-action-hover disabled:opacity-50"
               >
-                적용
+                {t('chat.proposal.apply')}
               </button>
               <button
                 onClick={() => onCancel(msg.id)}
                 disabled={disabled}
                 className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-fg-secondary transition hover:border-border-focus disabled:opacity-50"
               >
-                취소
+                {t('common.cancel')}
               </button>
             </div>
-            {msg.proposalState === 'applied' && <div className="mt-1.5 text-[12px] text-fg-muted">적용됨</div>}
-            {msg.proposalState === 'cancelled' && <div className="mt-1.5 text-[12px] text-fg-muted">취소됨</div>}
+            {msg.proposalState === 'applied' && <div className="mt-1.5 text-[12px] text-fg-muted">{t('chat.proposal.applied')}</div>}
+            {msg.proposalState === 'cancelled' && <div className="mt-1.5 text-[12px] text-fg-muted">{t('chat.proposal.cancelled')}</div>}
           </>
         ) : (
           <div className="flex flex-wrap gap-1.5">

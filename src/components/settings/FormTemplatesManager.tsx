@@ -11,6 +11,7 @@ import { createBrowserClient } from '@/lib/supabase/client'
 import { formatBytes } from '@/lib/minutes/attachmentQueue'
 import type { FormSetting } from '@/lib/settings/defs/forms'
 import { FORM_FORMAT, type FormKind } from '@/lib/report/engine/types'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export interface FormTemplateRow {
   id: string
@@ -39,6 +40,7 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
   canEdit: boolean
   kinds: FormKindState[]
 }) {
+  const { t } = useLocale()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [rev, setRev] = useState(revision)
@@ -66,13 +68,13 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
         if (!prepared.ok) { setError(prepared.error); return }
         const { error: upErr } = await createBrowserClient().storage.from(BUCKET)
           .upload(prepared.path, file, { upsert: false, contentType: file.type || undefined })
-        if (upErr) { setError('파일을 올리지 못했습니다. 잠시 후 다시 시도하세요.'); return }
+        if (upErr) { setError(t('settings.forms.uploadFailed')); return }
         const reg = await registerFormTemplate(projectId, kind, prepared.path, file.name)
         if (!reg.ok) { setError(reg.error); return }
-        const warn = reg.warnings.length ? ` (경고 ${reg.warnings.length}건)` : ''
-        done(`양식 v${reg.version} 을 등록했습니다${warn}. 활성화하면 보고서에 쓰입니다.`)
+        const warn = reg.warnings.length ? t('settings.forms.warnCount').replace('{n}', String(reg.warnings.length)) : ''
+        done(t('settings.forms.registered').replace('{version}', String(reg.version)).replace('{warn}', String(warn)))
       } catch {
-        setError('양식을 등록하지 못했습니다. 잠시 후 다시 시도하세요.')
+        setError(t('settings.forms.registerFailed'))
       }
     })
   }
@@ -83,7 +85,7 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
       try {
         const command = { expectedRevision: rev, commandId: newUuid() }
         if (row.active) {
-          applyResult(await deactivateFormTemplate(projectId, row.id, command), '양식을 해제했습니다. 기본 양식으로 돌아갑니다.')
+          applyResult(await deactivateFormTemplate(projectId, row.id, command), t('settings.forms.deactivated'))
           return
         }
         const result = await activateFormTemplate(projectId, row.id, command)
@@ -92,9 +94,9 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
           setError(result.error)
           return
         }
-        applyResult(result, `양식 v${row.version} 을 활성화했습니다.`)
+        applyResult(result, t('settings.forms.activated').replace('{version}', String(row.version)))
       } catch {
-        setError('양식 상태를 바꾸지 못했습니다. 새로고침 후 다시 시도하세요.')
+        setError(t('settings.forms.stateFailed'))
       }
     })
   }
@@ -122,9 +124,9 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
           setUnmapped({ kind: state.kind, templateId, tokens: result.unmapped }); setError(result.error); return
         }
         setUnmapped(null)
-        applyResult(result, `매핑을 저장하고 양식 v${row?.version ?? ''} 을 활성화했습니다.`)
+        applyResult(result, t('settings.forms.mappedActivated').replace('{version}', String(row?.version ?? '')))
       } catch {
-        setError('매핑을 저장하지 못했습니다. 새로고침 후 다시 시도하세요.')
+        setError(t('settings.forms.mapFailed'))
       }
     })
   }
@@ -134,38 +136,38 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg">{state.label}</h3>
         <span className="text-xs text-fg-secondary">
-          {state.templates.some((t) => t.active) ? '사용자 양식 사용 중' : '기본 양식 사용 중'}
+          {state.templates.some((t) => t.active) ? t('settings.forms.usingCustom') : t('settings.forms.usingDefault')}
         </span>
       </div>
       {state.templates.length === 0
-        ? <p className="text-xs text-fg-secondary">등록한 양식이 없습니다.</p>
+        ? <p className="text-xs text-fg-secondary">{t('settings.forms.empty')}</p>
         : <ul className="divide-y divide-border text-sm">
           {state.templates.map((row) => <li key={row.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
             <span className="font-medium text-fg">v{row.version}</span>
             <span className="min-w-0 flex-1 truncate text-fg-secondary" title={row.fileName}>{row.fileName} · {formatBytes(row.sizeBytes)}</span>
-            {row.errors > 0 && <span className="text-xs text-danger">스캔 오류 {row.errors}</span>}
-            {row.warnings > 0 && <span className="text-xs text-fg-secondary">경고 {row.warnings}</span>}
-            {row.active && <span className="rounded bg-success-weak px-1.5 py-0.5 text-xs text-success">활성</span>}
+            {row.errors > 0 && <span className="text-xs text-danger">{t('settings.forms.scanErrors').replace('{errors}', String(row.errors))}</span>}
+            {row.warnings > 0 && <span className="text-xs text-fg-secondary">{t('settings.forms.warnings').replace('{warnings}', String(row.warnings))}</span>}
+            {row.active && <span className="rounded bg-success-weak px-1.5 py-0.5 text-xs text-success">{t('settings.forms.active')}</span>}
             <button type="button" className="btn" disabled={locked} onClick={() => toggle(state.kind, row)}>
-              {row.active ? '해제' : '활성화'}
+              {row.active ? t('settings.forms.deactivate') : t('settings.forms.activate')}
             </button>
           </li>)}
         </ul>}
-      {unmapped?.kind === state.kind && <div className="space-y-2 rounded-lg bg-danger-weak p-3" role="group" aria-label="미매핑 자리표시자">
-        <p className="text-xs text-danger">아래 자리표시자를 데이터 경로에 연결하세요(예: project.name).</p>
+      {unmapped?.kind === state.kind && <div className="space-y-2 rounded-lg bg-danger-weak p-3" role="group" aria-label={t('settings.forms.unmapped')}>
+        <p className="text-xs text-danger">{t('settings.forms.mapHint')}</p>
         {unmapped.tokens.map((token) => <label key={token} className="flex flex-col gap-1 text-xs text-fg-secondary">
           <code>{token}</code>
-          <input className="app-input" aria-label={`${token} 경로`} disabled={locked || !state.setting}
+          <input className="app-input" aria-label={t('settings.forms.pathOf').replace('{token}', String(token))} disabled={locked || !state.setting}
             value={paths[`${state.kind}:${token}`] ?? ''}
             onChange={(e) => setPaths((p) => ({ ...p, [`${state.kind}:${token}`]: e.target.value }))} />
         </label>)}
         <button type="button" className="btn btn-primary" disabled={locked || !state.setting}
-          onClick={() => saveMapping(state, unmapped.templateId)}>매핑 저장 후 활성화</button>
-        {!state.setting && <p className="text-xs text-danger">양식 설정이 손상되어 매핑을 저장할 수 없습니다.</p>}
+          onClick={() => saveMapping(state, unmapped.templateId)}>{t('settings.forms.saveMapActivate')}</button>
+        {!state.setting && <p className="text-xs text-danger">{t('settings.forms.corrupted')}</p>}
       </div>}
       <label className="flex flex-col gap-1 text-xs text-fg-secondary">
-        새 양식 올리기 (.{FORM_FORMAT[state.kind]}, 10MB 이하)
-        <input type="file" accept={`.${FORM_FORMAT[state.kind]}`} disabled={locked} aria-label={`${state.label} 파일`}
+        {t('settings.forms.uploadNew').replace('{kind}', String(FORM_FORMAT[state.kind]))}
+        <input type="file" accept={`.${FORM_FORMAT[state.kind]}`} disabled={locked} aria-label={t('settings.forms.fileOf').replace('{label}', String(state.label))}
           onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) upload(state.kind, f) }} />
       </label>
     </section>)}

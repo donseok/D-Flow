@@ -60,7 +60,7 @@ export function WbsProgressLens({
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2 text-xs text-fg-muted">
-                <LevelBadge depth={item.depth} isOwnerSplit={item.isOwnerSplit} levelLabels={levelLabels} />
+                <LevelBadge depth={item.depth} isOwnerSplit={item.isOwnerSplit} levelLabels={levelLabels} t={t} />
                 <span data-lens-field="path" className="truncate">{pathLabel}</span>
               </div>
               <h3 data-lens-field="name" className="mt-1 truncate text-lg font-bold tracking-tight text-fg">

@@ -3,6 +3,9 @@
 import { useSyncExternalStore, useCallback } from 'react'
 import { Loader2, AlertCircle, WifiOff, Check, PencilLine } from 'lucide-react'
 import { editSessionStore, type SyncSummary } from '@/lib/sync/editSession'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { Locale } from '@/lib/i18n/dict'
+import { intlLocale } from '@/lib/i18n/format'
 
 const SERVER_SUMMARY: SyncSummary = {
   connectionState: 'online', editingCount: 0, savingCount: 0, failedCount: 0, conflictCount: 0,
@@ -25,9 +28,9 @@ export function useSyncStatus(): SyncSummary {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
-function formatTime(timestamp: number | null, timeZone: string = 'UTC'): string {
+function formatTime(timestamp: number | null, timeZone: string = 'UTC', locale: Locale = 'ko'): string {
   if (!timestamp) return ''
-  return new Intl.DateTimeFormat('ko-KR', {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -37,19 +40,20 @@ function formatTime(timestamp: number | null, timeZone: string = 'UTC'): string 
 
 export function SyncStatus({ className = '', timeZone = 'UTC' }: { className?: string; timeZone?: string }) {
   const summary = useSyncStatus()
+  const { t, locale } = useLocale()
 
   // 1. 오프라인 상태
   if (summary.connectionState === 'offline') {
-    const timeStr = formatTime(summary.lastSavedAt, timeZone)
+    const timeStr = formatTime(summary.lastSavedAt, timeZone, locale)
     return (
       <div
         role="status"
         aria-live="polite"
         className={`flex items-center gap-1.5 text-xs text-neutral-weak ${className}`}
-        title="오프라인 상태입니다"
+        title={t('ui.sync.offlineTitle')}
       >
         <WifiOff size={14} className="text-neutral-weak" aria-hidden="true" />
-        <span>연결 끊김{timeStr ? ` · 마지막 확인 ${timeStr}` : ''}</span>
+        <span>{t('ui.sync.offline')}{timeStr ? t('ui.sync.lastChecked').replace('{time}', timeStr) : ''}</span>
       </div>
     )
   }
@@ -61,10 +65,10 @@ export function SyncStatus({ className = '', timeZone = 'UTC' }: { className?: s
         role="status"
         aria-live="assertive"
         className={`flex items-center gap-1.5 text-xs font-medium text-warning ${className}`}
-        title="저장되지 않았거나 충돌된 변경사항이 있습니다"
+        title={t('ui.sync.attentionTitle')}
       >
         <AlertCircle size={14} className="text-warning shrink-0" aria-hidden="true" />
-        <span>확인 필요 {summary.needsAttentionCount}</span>
+        <span>{t('ui.sync.attention').replace('{n}', String(summary.needsAttentionCount))}</span>
       </div>
     )
   }
@@ -78,7 +82,7 @@ export function SyncStatus({ className = '', timeZone = 'UTC' }: { className?: s
         className={`flex items-center gap-1.5 text-xs text-fg-secondary ${className}`}
       >
         <Loader2 size={13} className="animate-spin text-neutral-weak" aria-hidden="true" />
-        <span>저장 중...</span>
+        <span>{t('ui.sync.saving')}</span>
       </div>
     )
   }
@@ -90,17 +94,17 @@ export function SyncStatus({ className = '', timeZone = 'UTC' }: { className?: s
         role="status"
         aria-live="polite"
         className={`flex items-center gap-1.5 text-xs text-fg-secondary ${className}`}
-        title="아직 저장하지 않은 편집이 있습니다"
+        title={t('ui.sync.editingTitle')}
       >
         <PencilLine size={13} className="text-neutral-weak" aria-hidden="true" />
-        <span>저장 전 변경 {summary.editingCount}</span>
+        <span>{t('ui.sync.editing').replace('{n}', String(summary.editingCount))}</span>
       </div>
     )
   }
 
   // 5. 동기화 완료 상태
   if (summary.isFullySynced && summary.lastSavedAt) {
-    const timeStr = formatTime(summary.lastSavedAt, timeZone)
+    const timeStr = formatTime(summary.lastSavedAt, timeZone, locale)
     return (
       <div
         role="status"
@@ -109,7 +113,7 @@ export function SyncStatus({ className = '', timeZone = 'UTC' }: { className?: s
       >
         <Check size={13} className="text-success" aria-hidden="true" />
         {/* 좁은 화면(640 미만)에서는 표시만 남긴다 — 글자가 전역 바의 범위 이름 자리를 다 가져간다. 주의가 필요한 상태(저장 전·확인 필요·오프라인)는 글자를 그대로 둔다 */}
-        <span className="sr-only sm:not-sr-only">동기화됨{timeStr ? ` · ${timeStr}` : ''}</span>
+        <span className="sr-only sm:not-sr-only">{t('ui.sync.synced')}{timeStr ? ` · ${timeStr}` : ''}</span>
       </div>
     )
   }

@@ -38,6 +38,8 @@ import { formatCustomValue, orderedFields } from '@/lib/domain/customFields'
 import { parseCustomValues } from '@/lib/domain/customFieldValues'
 import { CustomFieldValuesEditor, useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
 import { Modal } from '@/components/ui/Modal'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { DictKey } from '@/lib/i18n/dict'
 
 /** 헤더 동기화 표시(§5.8.3)로 올리는 셀 상태 — error 는 실패, 응답을 잃은 저장은 outcome_unknown */
 const SESSION_STATUS: Record<CellStatus, EditStatus> = { editing: 'editing', saving: 'saving', saved: 'saved', error: 'failed', conflict: 'conflict' }
@@ -86,6 +88,7 @@ export function WeeklySheetView({
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  const { t } = useLocale()
   const [rows, setRows] = useState<WeeklySheetRow[]>(initialRows)
   const fieldScope = useCustomFieldScope()
   const customDefs = useMemo(() => fieldScope?.defs ?? [], [fieldScope?.defs])
@@ -95,10 +98,10 @@ export function WeeklySheetView({
   )
   const customFormat = useMemo(() => ({
     locale: fieldScope?.locale ?? 'ko',
-    yes: fieldScope?.locale === 'en' ? 'Yes' : '예',
-    no: fieldScope?.locale === 'en' ? 'No' : '아니오',
+    yes: t('weekly.custom.yes'),
+    no: t('weekly.custom.no'),
     empty: '—',
-  }), [fieldScope?.locale])
+  }), [fieldScope?.locale, t])
   const [selectedCustomRowId, setSelectedCustomRowId] = useState<string | null>(null)
   const selectedCustomRow = useMemo(
     () => (selectedCustomRowId ? rows.find(r => r.id === selectedCustomRowId) ?? null : null),
@@ -297,7 +300,7 @@ export function WeeklySheetView({
     // .catch: 오프라인·전송 계층 예외를 ok:false로 흡수 → 아래 error/재시도 경로로 합류(미포착 시 dirty·상태 영구 잔류, F2).
     // 응답을 잃은 저장은 반영됐을 수도 있다 — 보낸 값을 적어 두고, 재시도(같은 기대값의 CAS)가 그 값을 만나면 반영으로 가린다(Q10).
     saveWeeklyCell(projectId, rowId, key, sent, expected)
-      .catch((): WeeklyActionResult => { unknownRef.current.add(k); return { ok: false, error: '네트워크 오류로 저장하지 못했습니다.' } })
+      .catch((): WeeklyActionResult => { unknownRef.current.add(k); return { ok: false, error: t('weekly.sheet.networkError') } })
       .then(res => {
       cellFlightRef.current.delete(k)
       const now = rowsRef.current.find(r => r.id === rowId)?.[CELL_FIELD[key]]
@@ -325,12 +328,12 @@ export function WeeklySheetView({
           const prev = timersRef.current.get(k)
           if (prev) clearTimeout(prev)
           timersRef.current.set(k, setTimeout(() => commit(rowId, key), 2000)) // 자동 재시도 1회
-        } else toast({ title: '저장 실패', description: res.error, variant: 'error' })
+        } else toast({ title: t('weekly.sheet.saveFailed'), description: res.error, variant: 'error' })
         return
       }
       saved()
     })
-  }, [projectId, toast, cleanupRowKeys, canEditCells, settleConflict, noteSent])
+  }, [projectId, toast, cleanupRowKeys, canEditCells, settleConflict, noteSent, t])
 
   // PPT 내보내기 직전 미저장 셀 flush — export fetch와 blur commit이 경합하면 서버가
   // 저장 전 스냅샷으로 PPT를 만들 수 있다. 남은 dirty 키를 즉시 commit(디바운스 우회)하고
@@ -338,7 +341,7 @@ export function WeeklySheetView({
   const flushPendingSaves = useCallback((): Promise<boolean> => {
     // 충돌한 칸은 정하기 전에 저장되지 않는다 — 기다려도 끝나지 않으니 바로 알린다
     if (conflictRef.current.size) {
-      toast({ title: '내보내기 중단', description: '다른 사용자가 먼저 바꾼 셀이 있습니다. 비교에서 정한 뒤 다시 내보내 주세요.', variant: 'error' })
+      toast({ title: t('weekly.export.abortedTitle'), description: t('weekly.export.abortedConflict'), variant: 'error' })
       return Promise.resolve(false)
     }
     for (const k of dirtyRef.current) {
@@ -351,7 +354,7 @@ export function WeeklySheetView({
       const poll = () => {
         if (!dirtyRef.current.size) { resolve(true); return }
         if (Date.now() - start >= 5000) {
-          toast({ title: '내보내기 중단', description: '일부 셀이 아직 저장 중입니다. 저장 완료 후 다시 내보내 주세요.', variant: 'error' })
+          toast({ title: t('weekly.export.abortedTitle'), description: t('weekly.export.abortedSaving'), variant: 'error' })
           resolve(false)
           return
         }
@@ -359,7 +362,7 @@ export function WeeklySheetView({
       }
       poll()
     })
-  }, [commit, toast])
+  }, [commit, toast, t])
 
   const onCellChange = (rowId: string, key: WeeklyCellKey, value: string) => {
     if (!canEditCells) return // 조회 전용 — 로컬 값도 바꾸지 않는다(저장되지 않은 편집이 남으면 화면이 거짓말을 한다)
@@ -395,7 +398,7 @@ export function WeeklySheetView({
         router.refresh()
         return
       }
-      toast({ title: '시트를 만들지 못했습니다', description: res.error, variant: 'error' })
+      toast({ title: t('weekly.sheet.createFailed'), description: res.error, variant: 'error' })
     })
 
   // 재시도 직전 edits 재구성 — 여전히 dirty이고 행이 존재하는 키만 유지, content는 rowsRef 현재값으로 재스냅샷.
@@ -418,13 +421,13 @@ export function WeeklySheetView({
     if (!canEditCells) return // 조회 전용 — 붙여넣기·범위삭제·채우기·undo/redo 전부 진입 불가(그리드도 막지만 이중으로)
     if (editsRaw.length === 0) return
     if (editsRaw.length > BATCH_MAX) { // §6-E 사전 검사(로컬 클램프 전 원본 크기)
-      toast({ title: '붙여넣기 범위가 너무 큽니다', variant: 'error',
-        description: `한 번에 처리할 수 있는 셀 수(${BATCH_MAX}개)를 초과했습니다. 범위를 나눠 붙여넣어 주세요.` })
+      toast({ title: t('weekly.sheet.pasteTooLargeTitle'), variant: 'error',
+        description: t('weekly.sheet.pasteTooLargeDesc').replace('{n}', String(BATCH_MAX)) })
       return
     }
     let clamped = false // §6-D 로컬 CELL_MAX 클램프
     const edits = editsRaw.map(e => (e.content.length > CELL_MAX ? (clamped = true, { ...e, content: e.content.slice(0, CELL_MAX) }) : e))
-    if (clamped) toast({ title: '내용이 잘렸습니다', variant: 'info', description: '일부 셀 내용이 최대 길이(20,000자)를 넘어 잘라냈습니다.' })
+    if (clamped) toast({ title: t('weekly.sheet.clampedTitle'), variant: 'info', description: t('weekly.sheet.clampedDesc') })
 
     // undo용 before 스냅샷(③ 낙관 적용 전 현재 값). 사라진 행은 스킵.
     const before: WeeklyCellEdit[] = []
@@ -489,7 +492,7 @@ export function WeeklySheetView({
       // batchInFlightRef 미복귀·batchActive 영구 true·dirty 영구 잔류로 flush가 매번 타임아웃(F2).
       // 응답을 잃은 배치는 반영됐을 수도 있다 — 보낸 값을 적어 두고 재시도의 CAS 가 그 값을 만나면 반영으로 가린다(Q10).
       saveWeeklyCells(projectId, sendEdits)
-        .catch((): WeeklyBatchResult => { for (const k of sent.keys()) unknownRef.current.add(k); return { ok: false, error: '네트워크 오류로 저장하지 못했습니다.' } })
+        .catch((): WeeklyBatchResult => { for (const k of sent.keys()) unknownRef.current.add(k); return { ok: false, error: t('weekly.sheet.networkError') } })
         .then(res => {
           // ⑥ 응답 처리
           if (res.ok) {
@@ -539,12 +542,12 @@ export function WeeklySheetView({
             lastFailedBatchRef.current = sendEdits
             setBatchChip({ phase: 'error', count: sendEdits.length })
             setBatchActive(false) // 억제 해제 — per-cell 재시도 배지 재개(칩은 활성 셀에 배치 재시도로 상주). batchActive 영구 true 방지.
-            toast({ title: '저장 실패', variant: 'error', description: "일부 셀을 저장하지 못했습니다. 상태 표시의 '재시도'를 눌러 주세요." })
+            toast({ title: t('weekly.sheet.saveFailed'), variant: 'error', description: t('weekly.sheet.batchFailedDesc') })
           }
         })
     }
     send(edits, 0)
-  }, [projectId, toast, cleanupRowKeys, rebuildForRetry, canEditCells, markDirty, settleConflict, commit, noteSent])
+  }, [projectId, toast, cleanupRowKeys, rebuildForRetry, canEditCells, markDirty, settleConflict, commit, noteSent, t])
 
   const retryBatch = useCallback(() => {
     const failed = lastFailedBatchRef.current
@@ -560,9 +563,9 @@ export function WeeklySheetView({
   // 역명령은 "지금 서버 값 = 내가 쓴 값"을 기대값으로 싣는 CAS 다 — 그새 다른 사람이 바꿨으면 덮지 않고 충돌(비교)로 간다.
   const confirmed = useCallback((cells: WeeklyCellEdit[]): boolean => {
     if (!cells.some(e => dirtyRef.current.has(`${e.rowId}:${e.cellKey}`))) return true
-    toast({ title: '아직 되돌릴 수 없습니다', description: '저장이 끝난 뒤 다시 시도하세요.', variant: 'info' })
+    toast({ title: t('weekly.sheet.undoNotYetTitle'), description: t('weekly.sheet.undoNotYetDesc'), variant: 'info' })
     return false
-  }, [toast])
+  }, [toast, t])
   const inverse = (apply: WeeklyCellEdit[], written: WeeklyCellEdit[]): WeeklyCellEdit[] => {
     const mine = new Map(written.map(e => [`${e.rowId}:${e.cellKey}`, e.content]))
     return apply.map(e => ({ ...e, expected: mine.get(`${e.rowId}:${e.cellKey}`) }))
@@ -714,7 +717,7 @@ export function WeeklySheetView({
         return [{ ...edit, section: target.section, label: target.label }]
       })
       if (items.length !== targets.length) {
-        setAiError('AI 응답의 대상이 선택 범위와 일치하지 않습니다. 원문은 변경되지 않았습니다.')
+        setAiError(t('weekly.ai.err.mismatch'))
         setAiItems([])
         return
       }
@@ -722,23 +725,23 @@ export function WeeklySheetView({
     } catch {
       if (aiRequestRef.current !== requestId) return
       setAiBusy(false)
-      setAiError('네트워크 오류로 AI 제안을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.')
+      setAiError(t('weekly.ai.err.network'))
     }
-  }, [canEditCells, projectId])
+  }, [canEditCells, projectId, t])
 
   const openAiRewrite = useCallback(() => {
     if (!hasFocusedCell || !grid.rect) {
-      toast({ title: '셀을 먼저 선택해 주세요', description: '다듬을 셀 하나를 클릭하거나 범위로 선택해 주세요.', variant: 'info' })
+      toast({ title: t('weekly.ai.selectFirstTitle'), description: t('weekly.ai.selectFirstDesc'), variant: 'info' })
       return
     }
     const targets = buildWeeklyRewriteSelection(rowsRef.current, grid.rect, r => rowLabel(r, areasRef.current))
     if (targets.length === 0) {
-      toast({ title: '작성된 내용이 없습니다', description: '선택 범위의 빈 셀은 AI로 다듬지 않습니다.', variant: 'info' })
+      toast({ title: t('weekly.ai.noContentTitle'), description: t('weekly.ai.noContentDesc'), variant: 'info' })
       return
     }
     setAiItems([])
     void requestAiRewrite(targets)
-  }, [grid.rect, hasFocusedCell, requestAiRewrite, toast])
+  }, [grid.rect, hasFocusedCell, requestAiRewrite, toast, t])
 
   const retryAiRewrite = useCallback(() => {
     const latest = aiTargetsRef.current.flatMap(target => {
@@ -748,11 +751,11 @@ export function WeeklySheetView({
       return original.trim() ? [{ ...target, original }] : []
     })
     if (latest.length === 0) {
-      setAiError('다시 생성할 원문을 찾을 수 없습니다. 모달을 닫고 셀을 다시 선택해 주세요.')
+      setAiError(t('weekly.ai.err.noSource'))
       return
     }
     void requestAiRewrite(latest)
-  }, [requestAiRewrite])
+  }, [requestAiRewrite, t])
 
   const closeAiRewrite = useCallback(() => {
     aiRequestRef.current += 1
@@ -766,16 +769,16 @@ export function WeeklySheetView({
   const applyAiRewrite = useCallback((candidates: Parameters<typeof prepareApplicableWeeklyRewriteEdits>[1]) => {
     const applicable = prepareApplicableWeeklyRewriteEdits(rowsRef.current, candidates)
     if (!applicable.ok) {
-      setAiError('AI 생성 후 원본 내용이 변경되었습니다. 변경 내용을 보호하기 위해 적용하지 않았습니다. 다시 생성해 주세요.')
+      setAiError(t('weekly.ai.err.changed'))
       return
     }
     if (applicable.edits.length === 0) {
-      toast({ title: '적용할 변경이 없습니다', variant: 'info' })
+      toast({ title: t('weekly.ai.nothingToApply'), variant: 'info' })
       return
     }
     runBatch(applicable.edits, { undoable: true })
     closeAiRewrite()
-  }, [closeAiRewrite, runBatch, toast])
+  }, [closeAiRewrite, runBatch, toast, t])
 
   // 프레즌스 — 같은 주차 문서를 보는 다른 사용자의 위치/편집 상태(구글시트의 색상 커서 대응).
   // 훅 규칙: 아래 빈 상태(StatusMessage) 조기 return보다 반드시 먼저 호출(렌더마다 훅 순서 고정).
@@ -817,11 +820,11 @@ export function WeeklySheetView({
         {activeAreaNames.length === 0 ? (
           <StatusMessage
             kind="needs_setup"
-            title="주간보고 영역을 먼저 설정하세요"
+            title={t('weekly.setup.title')}
             detail={canCreateRound
-              ? '활성 업무영역이 없어 이 주차 시트를 만들 수 없습니다. 프로젝트 설정의 팀·업무영역에서 주간보고 영역을 추가하세요.'
-              : '활성 업무영역이 없어 이 주차 시트를 만들 수 없습니다. 프로젝트 관리자에게 주간보고 영역 설정을 요청하세요.'}
-            action={canCreateRound ? { label: '업무영역 설정으로', href: areaSettingsHref } : undefined}
+              ? t('weekly.setup.detailAdmin')
+              : t('weekly.setup.detailMember')}
+            action={canCreateRound ? { label: t('weekly.setup.action'), href: areaSettingsHref } : undefined}
           />
         ) : (
           // 회차 생성은 시트의 구조를 만드는 일이라 관리자 몫(createWeeklyReport=requireProjectAdmin).
@@ -830,20 +833,20 @@ export function WeeklySheetView({
           <div className="space-y-3">
             <StatusMessage
               kind="empty"
-              title={`${weekLabel} 시트가 없습니다`}
+              title={t('weekly.empty.title').replace('{week}', () => weekLabel)}
               detail={canCreateRound
-                ? `이전 주차에서 이월하거나 업무영역 ${activeAreaNames.length}개(${activeAreaNames.join('·')})로 기본 시트를 시작하세요. 이월하면 이전 주의 차주계획이 이번 주 금주실적 초안으로 들어옵니다.`
-                : '아직 이 주차의 시트가 만들어지지 않았습니다. 주차 시트 생성은 프로젝트 관리자가 합니다.'}
+                ? t('weekly.empty.detailAdmin').replace('{n}', String(activeAreaNames.length)).replace('{names}', () => activeAreaNames.join('·'))
+                : t('weekly.empty.detailMember')}
             />
             {canCreateRound && (
               <div className="flex gap-2">
                 {hasCarrySource && (
                   <button className="btn btn-primary" disabled={isPending} onClick={() => startReport(true)}>
-                    이전 주차에서 이월해 시작
+                    {t('weekly.empty.startCarry')}
                   </button>
                 )}
                 <button className="btn btn-ghost" disabled={isPending} onClick={() => startReport(false)}>
-                  기본 시트로 시작
+                  {t('weekly.empty.startBlank')}
                 </button>
               </div>
             )}
@@ -875,11 +878,11 @@ export function WeeklySheetView({
         <WeekNav projectId={projectId} weekStart={weekStart} prevWeek={prevWeek} nextWeek={nextWeek} weekLabel={weekLabel} exportDisabled onBeforeExport={flushPendingSaves} />
         <StatusMessage
           kind="needs_setup"
-          title={`${weekLabel} 시트에 업무영역 행이 없습니다`}
+          title={t('weekly.noRows.title').replace('{week}', () => weekLabel)}
           detail={canCreateRound
-            ? '프로젝트 설정의 팀·업무영역에서 활성 영역을 저장하면 이번 주 이후 시트에 행이 생깁니다.'
-            : '프로젝트 관리자가 업무영역에서 활성 영역을 저장하면 이번 주 이후 시트에 행이 생깁니다.'}
-          action={canCreateRound ? { label: '업무영역 설정으로', href: areaSettingsHref } : undefined}
+            ? t('weekly.noRows.detailAdmin')
+            : t('weekly.noRows.detailMember')}
+          action={canCreateRound ? { label: t('weekly.setup.action'), href: areaSettingsHref } : undefined}
         />
       </div>
     )
@@ -887,6 +890,7 @@ export function WeeklySheetView({
 
   // ── 구글시트 복제 룩: 종이(surface) + 얇은 테두리 + 옅은 2단 헤더 + 병합 셀.
   //    시트도 테마 토큰을 따른다 — 다크 대비는 토큰이 진다(SP4 B, D52).
+  // 2단 머리의 금주실적·차주계획 × 내용·이슈 및 주요 이벤트(핵심 4열)와 기본 제목(▣ 주간업무보고)은 제품 고정이다 — 사전으로 옮기지 않는다(개정 §2.9)
   const HDR = 'border border-border-input bg-surface-subtle px-1 py-1.5 text-center text-[13px] font-bold text-fg'
 
   // 선택/채우기 사각 — 셀 단위 틴트·외곽선·핸들을 선언적으로 그린다(측정 없음, 회귀 #7).
@@ -920,11 +924,11 @@ export function WeeklySheetView({
             initial={report.title}
             fallback={`▣ 주간업무보고 - ${projectName}(${weekTitle})`}
             readOnly={!canEditCells}
-            onSave={async (t, expected) => {
-              const res = await saveWeeklyTitle(projectId, report.id, t, expected)
+            onSave={async (title, expected) => {
+              const res = await saveWeeklyTitle(projectId, report.id, title, expected)
               // 그새 다른 사람이 제목을 바꿨다 — 실패 토스트가 아니라 비교로 잇는다(SPU1, 개정 §5.8)
               if (res.conflict && res.latest !== undefined) return { conflict: res.latest }
-              if (!res.ok) { toast({ title: '제목 저장 실패', description: res.error, variant: 'error' }); return false }
+              if (!res.ok) { toast({ title: t('weekly.sheet.titleSaveFailed'), description: res.error, variant: 'error' }); return false }
               router.refresh()
               return true
             }}
@@ -946,7 +950,7 @@ export function WeeklySheetView({
             </colgroup>
             <thead>
               <tr>
-                <th rowSpan={2} className={HDR}>업무영역</th>
+                <th rowSpan={2} className={HDR}>{t('weekly.sheet.areaHeader')}</th>
                 <th colSpan={2} className={HDR}>금주실적({thisRange})</th>
                 <th colSpan={2} className={HDR}>차주계획({nextRange})</th>
                 {customListDefs.map(d => (
@@ -974,9 +978,9 @@ export function WeeklySheetView({
                           type="button"
                           onClick={() => setSelectedCustomRowId(r.id)}
                           className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-xs font-normal text-fg-muted hover:bg-surface-hover hover:text-fg"
-                          title="추가 정보 편집"
+                          title={t('weekly.custom.edit')}
                         >
-                          추가 정보
+                          {t('weekly.custom.button')}
                         </button>
                       )}
                     </div>
@@ -1039,7 +1043,7 @@ export function WeeklySheetView({
                         key={d.key}
                         onClick={() => setSelectedCustomRowId(r.id)}
                         className="cursor-pointer border border-border-input px-2 py-1 text-center align-middle hover:bg-surface-hover/50 text-[13px]"
-                        title={`${d.label}: ${text} (클릭하여 편집)`}
+                        title={`${d.label}: ${text} ${t('weekly.custom.clickToEdit')}`}
                       >
                         <span className="truncate">{text}</span>
                       </td>
@@ -1052,11 +1056,11 @@ export function WeeklySheetView({
           </table>
           {/* 단축키 안내 — 셀 내 줄바꿈은 눌러보기 전엔 알 수 없어서 표에 붙여 노출한다. */}
           <p className="pt-1.5 text-xs text-fg-secondary">
-            셀 안에서 줄을 바꾸려면 <kbd className="rounded border border-border px-1 font-sans">Alt</kbd>
+            {t('weekly.sheet.hint.newlineLead')}<kbd className="rounded border border-border px-1 font-sans">Alt</kbd>
             <span className="px-0.5">+</span>
             <kbd className="rounded border border-border px-1 font-sans">Enter</kbd>
-            <span className="px-1 text-fg-muted">(Mac: ⌥ 또는 ⌘ + Enter)</span>
-            — 그냥 <kbd className="rounded border border-border px-1 font-sans">Enter</kbd>를 누르면 저장하고 아래 칸으로 넘어갑니다.
+            <span className="px-1 text-fg-muted">{t('weekly.sheet.hint.mac')}</span>
+            {t('weekly.sheet.hint.enterLead')}<kbd className="rounded border border-border px-1 font-sans">Enter</kbd>{t('weekly.sheet.hint.enterTail')}
           </p>
           {/* 선택/배치 결과 방송(§7) — 시각적 숨김 */}
           <div aria-live="polite" className="sr-only">{grid.live}</div>
@@ -1102,7 +1106,7 @@ export function WeeklySheetView({
         <Modal
           open={!!selectedCustomRowId}
           onClose={() => setSelectedCustomRowId(null)}
-          title={`${rowLabel(selectedCustomRow, areas)} — 추가 정보`}
+          title={t('weekly.custom.modalTitle').replace('{area}', () => rowLabel(selectedCustomRow, areas))}
           size="md"
         >
           <div className="p-4">
@@ -1129,17 +1133,18 @@ function WeekNav({
   aiRewriteDisabled?: boolean
   onLint?: () => void        // 주간보고 점검 패널 열기. 시트가 없는 빈 상태에서는 점검할 것이 없어 넘기지 않는다.
 }) {
+  const { t } = useLocale()
   const base = `/p/${projectId}/weekly`
   return (
     // 채움형(SP4 B) — main 은 스크롤하지 않고 시트 상자가 스크롤한다. 이 줄은 늘 보이고, 셀 오버레이(배지·핸들 z-30)는
     // 시트 상자의 isolate 안에 갇힌다. 좁은 화면(390)에서는 줄을 바꿔 감싼다 — main 이 닫혀 옆으로 넘친 내보내기 버튼에 닿을 길이 없다.
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 pb-1 pt-1">
       <div className="flex items-center gap-1 rounded-(--radius-control) border border-border/80 bg-surface p-0.5">
-        <Link href={`${base}?week=${prevWeek}`} className="btn btn-ghost h-8 w-8 p-0" aria-label="이전 주">
+        <Link href={`${base}?week=${prevWeek}`} className="btn btn-ghost h-8 w-8 p-0" aria-label={t('weekly.nav.prev')}>
           <ChevronLeft className="h-4 w-4" />
         </Link>
         <span className="min-w-36 text-center text-xs font-semibold tabular-nums text-fg">{weekLabel}</span>
-        <Link href={`${base}?week=${nextWeek}`} className="btn btn-ghost h-8 w-8 p-0" aria-label="다음 주">
+        <Link href={`${base}?week=${nextWeek}`} className="btn btn-ghost h-8 w-8 p-0" aria-label={t('weekly.nav.next')}>
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
@@ -1153,13 +1158,13 @@ function WeekNav({
               className="btn btn-ghost"
               disabled={aiRewriteDisabled}
               onClick={onAiRewrite}
-              title={aiRewriteDisabled ? '시트에서 다듬을 셀을 먼저 선택해 주세요.' : undefined}
+              title={aiRewriteDisabled ? t('weekly.ai.selectHint') : undefined}
               data-weekly-ai-rewrite
             >
-              <Sparkles className="mr-1 h-4 w-4 text-action" />AI로 다시 작성
+              <Sparkles className="mr-1 h-4 w-4 text-action" />{t('weekly.ai.title')}
             </button>
           )}
-          {onLint && <button type="button" className="btn btn-ghost" onClick={onLint}>주간보고 점검</button>}
+          {onLint && <button type="button" className="btn btn-ghost" onClick={onLint}>{t('weekly.lint.title')}</button>}
           <ExportSummaryPptButton projectId={projectId} />
           <ExportPptButton projectId={projectId} weekStart={weekStart} disabled={exportDisabled} onBeforeExport={onBeforeExport} />
         </div>
@@ -1169,11 +1174,11 @@ function WeekNav({
 }
 
 /** PPT 응답을 blob으로 받아 파일 저장. 실패(400 등)는 Toast로 안내(스펙 §7). */
-async function downloadPpt(url: string, fallbackName: string, toast: ReturnType<typeof useToast>['toast']) {
+async function downloadPpt(url: string, fallbackName: string, toast: ReturnType<typeof useToast>['toast'], t: (k: DictKey) => string) {
   const res = await fetch(url)
   if (!res.ok) {
     const err = (await res.json().catch(() => null)) as { error?: string } | null
-    toast({ title: 'PPT 생성 실패', description: err?.error ?? `오류 (${res.status})`, variant: 'error' })
+    toast({ title: t('weekly.export.failed'), description: err?.error ?? t('weekly.export.errorStatus').replace('{status}', String(res.status)), variant: 'error' })
     return
   }
   const blob = await res.blob()
@@ -1191,18 +1196,19 @@ async function downloadPpt(url: string, fallbackName: string, toast: ReturnType<
  *  페이지에서 바로 다운로드. 시트 데이터를 읽지 않으므로 flush·시트 유무와 무관하게 항상 활성. */
 function ExportSummaryPptButton({ projectId }: { projectId: string }) {
   const { toast } = useToast()
+  const { t } = useLocale()
   const [busy, setBusy] = useState(false)
   const onExport = async () => {
     setBusy(true)
     try {
-      await downloadPpt(`/api/report?projectId=${projectId}&format=pptx`, 'weekly_report.pptx', toast)
+      await downloadPpt(`/api/report?projectId=${projectId}&format=pptx`, 'weekly_report.pptx', toast, t)
     } finally {
       setBusy(false)
     }
   }
   return (
     <button className="btn btn-ghost" disabled={busy} onClick={onExport}>
-      <Download className="mr-1 h-4 w-4" />주간보고서 요약(PPT)
+      <Download className="mr-1 h-4 w-4" />{t('weekly.export.summary')}
     </button>
   )
 }
@@ -1214,6 +1220,7 @@ function ExportPptButton({ projectId, weekStart, disabled, onBeforeExport }: {
   projectId: string; weekStart: string; disabled: boolean; onBeforeExport: () => Promise<boolean>
 }) {
   const { toast } = useToast()
+  const { t } = useLocale()
   const [busy, setBusy] = useState(false)
   const onExport = async () => {
     setBusy(true)
@@ -1222,7 +1229,7 @@ function ExportPptButton({ projectId, weekStart, disabled, onBeforeExport }: {
       if (!canExport) return
       await downloadPpt(
         `/api/report?projectId=${projectId}&format=pptx&source=sheet&week=${weekStart}`,
-        `weekly_${weekStart}.pptx`, toast,
+        `weekly_${weekStart}.pptx`, toast, t,
       )
     } finally {
       setBusy(false)
@@ -1230,7 +1237,7 @@ function ExportPptButton({ projectId, weekStart, disabled, onBeforeExport }: {
   }
   return (
     <button className="btn btn-primary" disabled={disabled || busy} onClick={onExport}>
-      <Download className="mr-1 h-4 w-4" />주간보고서 상세(PPT)
+      <Download className="mr-1 h-4 w-4" />{t('weekly.export.detail')}
     </button>
   )
 }
@@ -1248,6 +1255,7 @@ function TitleEditor({ initial, fallback, readOnly, onSave, onReload }: {
   /** '서버 값 받기' 뒤 화면을 다시 읽는다 */
   onReload?: () => void
 }) {
+  const { t } = useLocale()
   const [v, setV] = useState(initial || fallback)
   const savedRef = useRef(initial || fallback)
   const focusedRef = useRef(false)
@@ -1298,12 +1306,12 @@ function TitleEditor({ initial, fallback, readOnly, onSave, onReload }: {
       <input
         value={v} onChange={e => setV(e.target.value)} onBlur={onBlur}
         onFocus={() => { focusedRef.current = true }}
-        readOnly={readOnly} maxLength={200} aria-label="시트 제목"
+        readOnly={readOnly} maxLength={200} aria-label={t('weekly.sheet.titleLabel')}
         className="w-full border-0 bg-surface px-0.5 pb-1.5 pt-0.5 text-[15px] font-extrabold text-fg outline-none placeholder:text-fg-muted focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-border-focus"
       />
       <ConflictResolver
         open={!!conflict}
-        fields={conflict ? [{ key: 'title', label: '시트 제목', mine: conflict.mine, latest: conflict.latest, base: conflict.base }] : []}
+        fields={conflict ? [{ key: 'title', label: t('weekly.sheet.titleLabel'), mine: conflict.mine, latest: conflict.latest, base: conflict.base }] : []}
         onKeepMine={() => void keepMine()} onTakeLatest={takeLatest} onContinue={() => setConflict(null)} busy={busy}
       />
     </>

@@ -610,7 +610,7 @@ export function MinuteViewer({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${minute.minuteDate} ${safeTitle} 내용.md`
+    a.download = `${minute.minuteDate} ${safeTitle} ${t('min.download.bodySuffix')}.md`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -687,7 +687,7 @@ export function MinuteViewer({
   // 같은 문장을 하이라이트한 사람 명단 — 하이라이트를 누른 시각순이 아니라 가나다순으로 보여준다.
   const popNames = popover
     ? [...new Set(others.filter(h => h.blockIndex === popover.blockIndex)
-        .map(h => h.createdByName ?? '이름 없음'))].sort(compareKoreanName)
+        .map(h => h.createdByName ?? t('min.hl.unnamed')))].sort(compareKoreanName)
     : []
   const popKinds = popover
     ? [...new Set(insights.filter(i => i.blockIndex === popover.blockIndex).map(i => i.kind as InsightKind))]

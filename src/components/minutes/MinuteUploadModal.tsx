@@ -352,7 +352,7 @@ export function MinuteUploadModal({
                 <li className="flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span className="shrink-0 rounded bg-progress-weak px-1 text-meta font-semibold text-action">{t('min.form.roleBody')}</span>
-                    <span className="truncate">{bodyFile.name} · {bodyText.length.toLocaleString()}자</span>
+                    <span className="truncate">{bodyFile.name} · {t('min.form.charCount').replace('{n}', bodyText.length.toLocaleString())}</span>
                   </span>
                   <button type="button" className="text-danger" onClick={() => { setBodyFile(null); setBodyText('') }}>✕</button>
                 </li>

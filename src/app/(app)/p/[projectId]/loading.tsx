@@ -1,3 +1,5 @@
+'use client'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 /**
@@ -13,8 +15,9 @@ import { Skeleton } from '@/components/ui/Skeleton'
  * 더 구체적인 자기 파일이 우선하므로 이 폴백의 영향을 받지 않는다.
  */
 export default function Loading() {
+  const { t } = useLocale()
   return (
-    <div className="flex h-full min-h-0 flex-col gap-5" role="status" aria-label="화면을 불러오는 중">
+    <div className="flex h-full min-h-0 flex-col gap-5" role="status" aria-label={t('pages.loading.screen')}>
       {/* 페이지 머리(PageHeader — 64, 컴팩트 48) 자리 — 그 높이에 맞춰 로드 완료 시 세로 시프트가 없게 한다 */}
       <Skeleton className="h-16 shrink-0 rounded-3xl [@media(max-width:1279px),(max-height:799px)]:h-12" />
       <div className="min-h-0 flex-1 space-y-4">

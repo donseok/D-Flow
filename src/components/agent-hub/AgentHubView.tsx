@@ -22,6 +22,8 @@ import type { StageLabels } from '@/lib/settings/defs/project'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { intlLocale } from '@/lib/i18n/format'
+import { fill } from '@/components/agents/labelKeys'
 import { HubStatusBar } from './HubStatusBar'
 import { AgentFrame, type HeroTile } from './AgentFrame'
 import { DelegationTable, type HubFilter } from './DelegationTable'
@@ -65,16 +67,17 @@ function flattenComputed(items: ComputedItem[]): ComputedItem[] {
   return out
 }
 
-export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showTimeZone = false }: {
+export function AgentHubView({ initial, wbs, timeZone, locale: timeLocaleProp, showTimeZone = false }: {
   initial: AgentHub; wbs: HubWbsBundle
   /** 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다 */
   timeZone: string
-  /** 시각 포맷의 locale — 없으면 'ko-KR'(값 공급은 레인 B). 화면 사전 locale(useLocale)과는 다른 값이다 */
+  /** 시각 포맷의 locale — 없으면 화면 언어의 형식 태그(ko 는 'ko-KR'). 화면 사전 locale(useLocale)과는 다른 값이다 */
   locale?: string
   /** 시각 뒤에 시간대 이름을 붙인다 — 프로젝트 달력을 못 읽어 기준 UTC 로 찍을 때(A-4 리뷰 N3, 라벨이 사실이게) */
   showTimeZone?: boolean
 }) {
   const { locale, t } = useLocale()
+  const timeLocale = timeLocaleProp ?? intlLocale(locale)
   const [hub, setHub] = useState(initial)
   const [error, setError] = useState<{ at: string; message: string } | null>(null)
   // 관리자는 프로젝트 전체를 관리하니 all, 멤버는 자기 담당부터.
@@ -131,7 +134,7 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
       applyWbsChange(cur, payload, { today: wbs.today, calendar: cal }) ?? cur),
   })
   // 경과 시간 표시만 1초마다 — 데이터는 건드리지 않는다.
-  useEffect(() => { const t = window.setInterval(() => setNowMs(n => n + 1000), 1000); return () => window.clearInterval(t) }, [])
+  useEffect(() => { const tick = window.setInterval(() => setNowMs(n => n + 1000), 1000); return () => window.clearInterval(tick) }, [])
 
   // 상세 패널 데이터 — WBS 페이지(WbsGanttSheet)와 같은 계산. 허브 갱신과 무관하게 서버 페이지 데이터로 고정된다.
   const allFlat = useMemo(() => flattenComputed(wbsItems), [wbsItems])
@@ -150,17 +153,17 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
 
   const c = hub.counters
   const tiles: HeroTile[] = [
-    { key: 'delegated', label: '위임', value: c.delegated, color: 'var(--color-border-input)', valueColor: 'var(--color-fg)', bar: false },
-    { key: 'ready', label: '대기', value: c.ready, color: 'var(--color-pending)' },
-    { key: 'working', label: '작업 중', value: c.working, color: 'var(--color-progress)' },
-    { key: 'waiting', label: '승인 대기', value: c.waiting, color: 'var(--color-warning)' },
+    { key: 'delegated', label: t('agentHub.tile.delegated'), value: c.delegated, color: 'var(--color-border-input)', valueColor: 'var(--color-fg)', bar: false },
+    { key: 'ready', label: t('agentHub.tile.ready'), value: c.ready, color: 'var(--color-pending)' },
+    { key: 'working', label: t('agentHub.tile.working'), value: c.working, color: 'var(--color-progress)' },
+    { key: 'waiting', label: t('agents.state.wait'), value: c.waiting, color: 'var(--color-warning)' },
     // 막힘은 대기의 부분집합(선행 대기·에이전트 꺼짐) — 막대에 넣으면 이중으로 센다.
-    { key: 'stuck', label: '막힘', value: c.stuck, color: 'var(--color-danger)', bar: false },
+    { key: 'stuck', label: t('agentHub.tile.stuck'), value: c.stuck, color: 'var(--color-danger)', bar: false },
   ]
   const lede = (
     <>
-      위임한 <b>{c.delegated}건</b> 중 <b>{c.working}건</b>을 에이전트가 하고 있습니다.
-      {c.waiting > 0 && <> <em>{c.waiting}건이 승인을 기다립니다.</em></>}
+      {t('agentHub.lede.before')}<b>{fill(t('agentHub.lede.count'), { n: c.delegated })}</b>{t('agentHub.lede.mid')}<b>{fill(t('agentHub.lede.count'), { n: c.working })}</b>{t('agentHub.lede.after')}
+      {c.waiting > 0 && <> <em>{fill(t('agentHub.lede.waiting'), { n: c.waiting })}</em></>}
     </>
   )
   const tools = (
@@ -169,16 +172,18 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocale, showT
         watchers={hub.watchers} isAdmin={hub.viewer.isAdmin} />
       <div className="ml-auto flex items-center gap-2 text-xs text-fg-secondary">
         <span data-hub-stamp className={error ? 'text-warning' : ''}>
-          {error ? `갱신 실패 ${hhmmss(error.at, timeZone, timeLocale)}${tzTag} · ${error.message}` : `갱신 ${hhmmss(hub.fetchedAt, timeZone, timeLocale)}${tzTag}`}
+          {error
+            ? fill(t('agents.stamp.fail'), { time: `${hhmmss(error.at, timeZone, timeLocale)}${tzTag}`, message: error.message })
+            : fill(t('agents.stamp.ok'), { time: `${hhmmss(hub.fetchedAt, timeZone, timeLocale)}${tzTag}` })}
         </span>
-        <button type="button" data-hub-refresh className="btn btn-ghost h-8 px-2 text-xs" onClick={() => { void refresh() }}>새로고침</button>
+        <button type="button" data-hub-refresh className="btn btn-ghost h-8 px-2 text-xs" onClick={() => { void refresh() }}>{t('agentHub.refresh')}</button>
       </div>
     </>
   )
 
   return (
     <StageLabelsProvider labels={wbs.stageLabels}>
-    <AgentFrame projectId={hub.projectId} projectName={hub.projectName} title="위임·승인" lede={lede} tiles={tiles} tools={tools}>
+    <AgentFrame projectId={hub.projectId} projectName={hub.projectName} title={t('agentHub.title')} lede={lede} tiles={tiles} tools={tools}>
       <div className="space-y-4">
         {wbs.membersError && <RosterLoadError error={wbs.membersError} />}
         <DelegationTable rows={hub.rows} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} filter={filter} onFilter={setFilter}

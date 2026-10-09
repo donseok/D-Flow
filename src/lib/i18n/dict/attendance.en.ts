@@ -69,4 +69,7 @@ export const attendanceEn: Record<keyof typeof attendanceKo, string> = {
   'att.typeShort.trip': 'Trip',
   'att.typeShort.official': 'Official',
   'att.typeShort.absent': 'Absent',
+  'att.botFilter': '{name} filter',
+  'att.botFilterClear': 'Clear',
+  'att.deleteConfirmBody': 'Delete the {date} attendance record for {name}? This action cannot be undone.',
 }

@@ -8,7 +8,7 @@ import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
 import { customFieldErrorText } from '@/components/fields/CustomFieldValuesEditor'
 import { formatCustomValue, type CustomValues, type FieldDef, type FieldValue } from '@/lib/domain/customFields'
 import { parseCustomValues, validateCustomValues } from '@/lib/domain/customFieldValues'
-import type { Locale } from '@/lib/i18n/dict'
+import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
 
 /** 셀 안에서 고칠 수 있는 유형 — 한 줄 입력으로 끝나는 것만. 여러 줄·다중 선택은 행 높이에 들어가지 않아 상세 패널에서 고친다 */
 const CELL_TYPES: readonly FieldDef['type'][] = ['text', 'number', 'date', 'boolean', 'select']
@@ -48,7 +48,8 @@ export function WbsCustomFieldCell({
   grid?: { colIndex: number; onClosed: (move: 'down' | 'right' | 'left' | 'self') => void }
 }) {
   const router = useRouter()
-  const ko = locale === 'ko'
+  // 문구는 필드 범위의 locale(prop)로 읽는다 — 셀의 값 서식(format)과 같은 말이 되게
+  const tr = (k: DictKey) => translate(locale, k)
   const [draft, setDraft] = useState<string | null>(null)   // null = 편집 중 아님. 입력값은 문자열로 들고 저장 때 유형으로 바꾼다
   const [busy, setBusy] = useState(false)
   const [invalid, setInvalid] = useState(false)
@@ -110,7 +111,7 @@ export function WbsCustomFieldCell({
     if (!checked.ok) {
       afterClose.current = null   // 편집기에 남는다 — 뒤의 blur 닫힘이 포커스를 옮기지 않게
       setInvalid(true)
-      onError(`${def.label}: ${customFieldErrorText(checked.errors[def.key] ?? Object.values(checked.errors)[0], ko)}`)
+      onError(`${def.label}: ${customFieldErrorText(checked.errors[def.key] ?? Object.values(checked.errors)[0], locale === 'ko')}`)
       return
     }
     const applied = (values: CustomValues) => { mark('saved'); setSaved({ from: signature, values }); close(); router.refresh() }
@@ -154,10 +155,10 @@ export function WbsCustomFieldCell({
       mark('outcome_unknown')
       const snap = await getWbsCellSnapshot(rowId).catch(() => null)
       const latest = snap?.ok ? parseCustomValues(snap.custom) : null
-      if (!latest?.ok) { onError(ko ? '저장 결과를 확인하지 못했습니다. 입력은 그대로 있습니다 — 다시 저장하면 반영 여부부터 확인합니다.' : 'The save result could not be confirmed. Your input is kept — saving again checks whether it was applied first.'); setInvalid(true); return }
+      if (!latest?.ok) { onError(tr('wbs.custom.outcomeUnknown')); setInvalid(true); return }
       const outcome = classifyCasOutcome<FieldValue | undefined>({ mine: value, base: from[def.key], latest: latest.value[def.key] }, same)
       if (outcome === 'applied') applied(latest.value)
-      else if (outcome === 'not_applied') { mark('failed'); setInvalid(true); onError(ko ? '저장되지 않았습니다. 입력은 그대로 있습니다 — 다시 저장하세요.' : 'Not saved. Your input is kept — save again.') }
+      else if (outcome === 'not_applied') { mark('failed'); setInvalid(true); onError(tr('wbs.custom.notSaved')) }
       else conflicted(latest.value)
     } finally {
       inFlight.current = false; setBusy(false)
@@ -204,10 +205,10 @@ export function WbsCustomFieldCell({
         : def.type === 'boolean' || def.type === 'select' ? (
           // disabled 는 포커스를 빼앗는다 — 저장 중에는 변경만 막는다
           <select {...common} className={INPUT} value={draft} onChange={e => { if (!busy) { setDraft(e.target.value); setInvalid(false) } }}>
-            <option value="">{ko ? '미설정' : 'Not set'}</option>
+            <option value="">{tr('wbs.custom.unset')}</option>
             {def.type === 'boolean'
               ? <><option value="true">{format.yes}</option><option value="false">{format.no}</option></>
-              : options.map(o => <option key={o.code} value={o.code} disabled={!o.active}>{o.label}{!o.active ? ko ? ' (비활성)' : ' (inactive)' : ''}</option>)}
+              : options.map(o => <option key={o.code} value={o.code} disabled={!o.active}>{o.label}{!o.active ? tr('wbs.custom.inactiveSuffix') : ''}</option>)}
           </select>
         ) : (
           <input {...common} className={`${INPUT} ${def.type === 'number' ? 'text-right tabular-nums' : ''}`} readOnly={busy}

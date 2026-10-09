@@ -65,7 +65,7 @@ export function MinuteBlockPopover({
 
   return (
     <>
-      <button className="fixed inset-0 z-[90] cursor-default" aria-label="닫기" onClick={onClose} />
+      <button className="fixed inset-0 z-[90] cursor-default" aria-label={t('common.close')} onClick={onClose} />
       <div ref={boxRef} style={{ position: 'fixed', width: W, ...pos }}
         className="z-[95] max-h-[calc(100vh-16px)] overflow-y-auto rounded-2xl border border-border bg-surface p-3 shadow-[var(--shadow-lg)]">
         {insKinds.length > 0 && (

@@ -9,6 +9,7 @@ import { newUuid } from '@/lib/domain/uuid'
 import { ACCENT_TOKENS } from '@/lib/settings/accentTokens'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 function baseOf(value: unknown): string | null {
   if (value === null) return null
@@ -22,6 +23,7 @@ function baseOf(value: unknown): string | null {
 export function AccentEditor({ workspaceId, revision, initialAccent, invalidReason }: {
   workspaceId: string; revision: number; initialAccent: AccentValue | null; invalidReason?: string
 }) {
+  const { t } = useLocale()
   const router = useRouter()
   const [baseline, setBaseline] = useState<string | null>(initialAccent?.base ?? null)
   const [draft, setDraft] = useState<string | null>(initialAccent?.base ?? null)
@@ -41,7 +43,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
     try { result = await updateWorkspaceSettings(workspaceId, patch) } catch { /* 이력으로 결과 판정 */ }
     if (result?.ok) {
       setBaseline(draft); setBaseRevision(result.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
-      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '강조색 설정을 저장했습니다.'); router.refresh(); return
+      setNotice(result.revision === patch.expectedRevision ? t('settings.save.noChange') : t('settings.accent.saved')); router.refresh(); return
     }
     if (result?.kind === 'conflict') {
       setConflict({ revision: result.latest.revision, value: baseOf(result.latest.values['branding.accent']),
@@ -58,12 +60,12 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
       const found = await getSettingsCommandOutcome({ workspaceId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
         setBaseline(draft); setBaseRevision(found.outcome.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
-        setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
+        setNotice(t('settings.save.confirmed')); router.refresh(); return
       }
     } catch { /* 같은 명령으로 재전송 */ }
     if (resendCount === 0) return submit(patch, 1)
     setUncertainPatch(patch)
-    setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+    setError(t('settings.rootFolders.uncertain'))
   }
 
   function save() {
@@ -75,43 +77,43 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
 
   return <div className="space-y-4 border-t border-border pt-5">
     <div>
-      <h3 className="text-sm font-semibold text-fg">강조색</h3>
-      <p className="mt-1 text-xs text-fg-secondary">기준 색 하나를 입력하면 밝은 화면과 어두운 화면에 쓸 색을 계산합니다. 저장하면 화면 전체에 바로 반영됩니다.</p>
+      <h3 className="text-sm font-semibold text-fg">{t('settings.branding.accent.label')}</h3>
+      <p className="mt-1 text-xs text-fg-secondary">{t('settings.accent.desc')}</p>
     </div>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.accent" message={invalidReason} isAdmin settingsHref="#workspace-accent" />}
     <div className="flex flex-wrap items-center gap-3">
-      <label htmlFor="workspace-accent" className="text-sm text-fg">기준 색</label>
+      <label htmlFor="workspace-accent" className="text-sm text-fg">{t('settings.accent.base')}</label>
       <input id="workspace-accent" className="app-input w-32 font-mono text-sm" value={draft ?? ''} placeholder={ACCENT_TOKENS.light.action} maxLength={7}
         disabled={pending || !!uncertainPatch} onChange={event => setDraft(event.target.value || null)} />
-      <input type="color" aria-label="강조색 선택" value={/^#[0-9a-fA-F]{6}$/.test(draft ?? '') ? draft! : ACCENT_TOKENS.light.action}
+      <input type="color" aria-label={t('settings.accent.pick')} value={/^#[0-9a-fA-F]{6}$/.test(draft ?? '') ? draft! : ACCENT_TOKENS.light.action}
         disabled={pending || !!uncertainPatch} onChange={event => setDraft(event.target.value)} />
       <button type="button" className="btn btn-ghost" disabled={pending || !!uncertainPatch || draft === null}
-        onClick={() => setDraft(null)}>기본값으로</button>
+        onClick={() => setDraft(null)}>{t('settings.accent.reset')}</button>
     </div>
-    {preview && !preview.ok && <ConfigStateNotice kind="field" locale="ko" message={`${preview.error} ${preview.failures.map(f => `${f.pair} ${f.contrast} (최소 ${f.min})`).join(', ')}`} />}
+    {preview && !preview.ok && <ConfigStateNotice kind="field" locale="ko" message={`${preview.error} ${preview.failures.map(f => t('settings.accent.contrast').replace('{pair}', String(f.pair)).replace('{contrast}', String(f.contrast)).replace('{min}', String(f.min))).join(', ')}`} />}
     {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
     {preview?.ok && <div className="grid gap-3 sm:grid-cols-2">
       {(['light', 'dark'] as const).map(mode => <div key={mode} className="overflow-hidden rounded-xl border border-border">
         <div className="p-4" style={{ backgroundColor: ACCENT_TOKENS[mode].surface }}>
           <span className="rounded-lg px-3 py-2 text-sm font-semibold" style={{ backgroundColor: preview.value[mode].bg, color: preview.value[mode].fg }}>
-            {mode === 'light' ? '밝은 화면' : '어두운 화면'}
+            {mode === 'light' ? t('settings.accent.light') : t('settings.accent.dark')}
           </span>
         </div>
         <p className="bg-surface-subtle px-4 py-2 font-mono text-meta text-fg-secondary">{preview.value[mode].bg} · {preview.value[mode].fg}</p>
       </div>)}
     </div>}
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
-      <strong>다른 사용자가 강조색을 바꿨습니다.</strong>
-      <p>내 값: {draft ?? '기본값'} / 최신 값: {conflict.invalid ? '설정 손상' : conflict.value ?? '기본값'}</p>
+      <strong>{t('settings.accent.conflict')}</strong>
+      <p>{t('settings.accent.conflictValues').replace('{draft}', String(draft ?? t('settings.accent.default'))).replace('{v}', String(conflict.invalid ? t('settings.notify.policy.corrupted') : conflict.value ?? t('settings.accent.default')))}</p>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.value); setBaseRevision(conflict.revision); setNeedsRepair(conflict.invalid); setConflict(null) }}>내 값 다시 적용</button>
-        {!conflict.invalid && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.value); setBaseline(conflict.value); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>최신 값 사용</button>}
+        <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.value); setBaseRevision(conflict.revision); setNeedsRepair(conflict.invalid); setConflict(null) }}>{t('settings.conflict.reapplyMine')}</button>
+        {!conflict.invalid && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.value); setBaseline(conflict.value); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>{t('settings.conflict.useLatest')}</button>}
       </div>
     </div>}
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
     <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict || !!(preview && !preview.ok)} onClick={save}>
-        {uncertainPatch ? '저장 결과 확인 및 재시도' : '강조색 저장'}
+        {uncertainPatch ? t('settings.workflow.retry') : t('settings.accent.save')}
       </button>
     </SettingsSaveBar>
   </div>

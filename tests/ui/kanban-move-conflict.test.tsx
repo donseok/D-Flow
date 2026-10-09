@@ -11,7 +11,11 @@ import type { ComputedItem } from '@/lib/domain/types'
 const h = vi.hoisted(() => ({ actual: vi.fn(), snapshot: vi.fn(), toast: vi.fn(), refresh: vi.fn() }))
 vi.mock('@/app/actions/wbs', () => ({ updateActual: h.actual, getWbsCellSnapshot: h.snapshot }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn() }), useSearchParams: () => new URLSearchParams('') }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 vi.mock('@/components/app/TeamsProvider', () => ({ useTeamLabel: () => (c: string) => c, useTeamCodes: () => ['PMO'], useTeams: () => [], useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }) }))
 vi.mock('@/components/chat/BotPageContextProvider', () => ({ useBotPageContext: () => {} }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: h.toast }) }))
@@ -40,7 +44,7 @@ describe('KanbanBoard — 이동 실패·충돌·응답 유실', () => {
   })
   afterEach(async () => { await act(async () => root.unmount()); container.remove() })
 
-  const complete = () => act(async () => [...container.querySelectorAll('button')].find(b => b.textContent?.includes('kanban.complete'))!.click())
+  const complete = () => act(async () => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === '완료')!.click())
   const banner = () => container.querySelector<HTMLElement>('[data-testid="kanban-failed-move"]')
   const bannerButton = (text: string) => [...banner()!.querySelectorAll('button')].find(b => b.textContent?.includes(text))!
   const dialog = () => document.querySelector<HTMLElement>('[data-testid="conflict-resolver"]')
@@ -125,7 +129,7 @@ describe('KanbanBoard — 이동 실패·충돌·응답 유실', () => {
     h.snapshot.mockResolvedValueOnce({ ok: true, actualPct: 50, weight: null, custom: {} })
     await complete()
     expect(h.actual).toHaveBeenCalledTimes(1)
-    expect(banner()?.textContent).toContain('common.outcomeNotApplied')
+    expect(banner()?.textContent).toContain('저장되지 않았습니다. 입력은 그대로 있습니다 — 다시 저장하세요.')
     expect(session()).toBe('failed')
   })
 
@@ -138,7 +142,7 @@ describe('KanbanBoard — 이동 실패·충돌·응답 유실', () => {
     h.actual.mockRejectedValueOnce(new Error('network'))
     h.snapshot.mockRejectedValueOnce(new Error('network'))
     await complete()
-    expect(banner()?.textContent).toContain('common.outcomeUnknown')
+    expect(banner()?.textContent).toContain('저장 결과를 확인하지 못했습니다. 입력은 그대로 있습니다 — 다시 저장하면 반영 여부부터 확인합니다.')
     expect(session()).toBe('outcome_unknown')
     // 재시도는 같은 기대값의 CAS 다 — 앞선 이동이 반영돼 있었다면 서버가 충돌(값 100)로 답하고 화면은 반영으로 읽는다
     h.actual.mockResolvedValueOnce({ ok: false, conflict: true, error: 'x', latest: 100 })

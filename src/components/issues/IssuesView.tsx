@@ -104,7 +104,7 @@ export function IssuesView({
   const fieldDefs = useMemo(() => orderedFields(customFields ?? []).filter(d => d.active), [customFields])
   const listFields = fieldDefs.filter(d => d.show_in_list)
   const filterDef = fieldDefs.find(d => d.key === customKey)
-  const customFormat = { locale, yes: locale === 'ko' ? '예' : 'Yes', no: locale === 'ko' ? '아니오' : 'No', empty: '—' }
+  const customFormat = { locale, yes: t('wbs.custom.yes'), no: t('wbs.custom.no'), empty: '—' }
 
   // 페이징 — 필터를 바꾸면 1페이지로 돌아간다(안 그러면 결과가 줄었을 때 빈 페이지가 보인다).
   // 목록 자체가 줄어드는 경우(삭제·refresh)는 렌더 시점 clamp 로 잡는다.
@@ -281,19 +281,19 @@ export function IssuesView({
         >
           {t('issue.filter.mine')}
         </button>
-        {customFields === null && <p role="alert" className="text-xs text-danger">{locale === 'ko' ? '추가 정보 설정을 읽을 수 없습니다.' : 'Custom field settings could not be read.'}</p>}
+        {customFields === null && <p role="alert" className="text-xs text-danger">{t('issue.custom.settingsUnreadable')}</p>}
         {fieldDefs.length > 0 && <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
           <label className="space-y-1 text-xs text-fg-secondary">
-            <span>{locale === 'ko' ? '추가 정보 필터' : 'Custom field filter'}</span>
-            <select aria-label={locale === 'ko' ? '추가 정보 필터' : 'Custom field filter'} value={filterDef?.key ?? ''}
+            <span>{t('issue.custom.filter')}</span>
+            <select aria-label={t('issue.custom.filter')} value={filterDef?.key ?? ''}
               className="app-input h-9 w-full min-w-[140px] text-xs"
               onChange={e => { setCustomKey(e.target.value); setCustomCriterion(undefined); setPage(1) }}>
-              <option value="">{locale === 'ko' ? '전체' : 'All'}</option>
+              <option value="">{t('issue.filter.all')}</option>
               {fieldDefs.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
             </select>
           </label>
           {filterDef && <div className="min-w-0 max-w-full sm:w-48"><CustomFieldInput def={{ ...filterDef, required: false, options: filterDef.options?.map(o => ({ ...o, active: true })) }} value={customCriterion}
-            label={filterDef.label} emptyLabel={locale === 'ko' ? '전체' : 'All'} locale={locale} onChange={v => { setCustomCriterion(Array.isArray(v) && v.length === 0 ? undefined : v); setPage(1) }} /></div>}
+            label={filterDef.label} emptyLabel={t('issue.filter.all')} locale={locale} onChange={v => { setCustomCriterion(Array.isArray(v) && v.length === 0 ? undefined : v); setPage(1) }} /></div>}
         </div>}
         {myMemberIdsFailed && <StatusMessage compact kind="partial_error" title={t('issue.filter.mineFailed')} />}
         {canEdit && entryError && <StatusMessage compact kind="partial_error" title={entryError} />}
@@ -475,7 +475,7 @@ export function IssuesView({
                       </td>
                       {listFields.map(d => <td key={d.key} className="whitespace-pre-wrap break-words px-2.5 py-2.5 text-fg-secondary">
                         {custom.ok ? formatCustomValue(d, custom.value[d.key], customFormat)
-                          : <span role="status">{locale === 'ko' ? '값 확인 필요' : 'Unreadable value'}</span>}
+                          : <span role="status">{t('issue.custom.unreadableValue')}</span>}
                       </td>)}
                     </tr>
                   )

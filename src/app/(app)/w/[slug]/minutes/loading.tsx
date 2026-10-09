@@ -1,3 +1,5 @@
+'use client'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 /**
@@ -9,8 +11,9 @@ import { Skeleton } from '@/components/ui/Skeleton'
  * "상단 바 + 본문(+ xl 이상에서 우측 패널)"만 잡는다.
  */
 export default function Loading() {
+  const { t } = useLocale()
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4" role="status" aria-label="회의록을 불러오는 중">
+    <div className="flex h-full min-h-0 flex-col gap-4" role="status" aria-label={t('pages.loading.minutes')}>
       <Skeleton className="h-14 shrink-0 rounded-2xl" />
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Skeleton className="h-[420px] rounded-2xl" />

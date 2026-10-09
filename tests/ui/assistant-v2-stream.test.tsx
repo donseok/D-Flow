@@ -11,9 +11,11 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams('week=2026-07-13'),
   useRouter: () => ({ refresh: vi.fn() }),
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (key: string) => key, locale: 'ko' }),
-}))
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 vi.mock('@/app/actions/wbs', () => ({
   updateActual: vi.fn(),
   updateWbsFields: vi.fn(),
@@ -133,14 +135,14 @@ describe('AssistantChat v2 스트림', () => {
     })
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-label="chat.open"]')!.click()
+      container.querySelector<HTMLButtonElement>('button[aria-label="AI 어시스턴트 열기"]')!.click()
       await new Promise(resolve => setTimeout(resolve, 0))
     })
     await act(async () => {
       setTextarea(container.querySelector('textarea')!, '주간 이슈 알려줘')
     })
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-label="chat.send"]')!.click()
+      container.querySelector<HTMLButtonElement>('button[aria-label="전송"]')!.click()
       await new Promise(resolve => setTimeout(resolve, 0))
     })
 
@@ -170,7 +172,7 @@ describe('AssistantChat v2 스트림', () => {
       setTextarea(container.querySelector('textarea')!, '그 항목 자세히 알려줘')
     })
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-label="chat.send"]')!.click()
+      container.querySelector<HTMLButtonElement>('button[aria-label="전송"]')!.click()
       await new Promise(resolve => setTimeout(resolve, 0))
     })
 

@@ -24,12 +24,14 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { OwnerBadges, fmtDate } from '@/components/wbs/shared'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { DictKey } from '@/lib/i18n/dict'
 
-/** 'YYYY-MM-DD' → '2026년 9월 15일' */
-function fmtFull(d?: string | null): string {
+/** 'YYYY-MM-DD' → '2026년 9월 15일'(꼴은 사전의 reportUi.dateFull) */
+function fmtFull(d: string | null | undefined, t: (k: DictKey) => string): string {
   if (!d) return '-'
   const [y, m, day] = d.split('-')
-  return `${y}년 ${Number(m)}월 ${Number(day)}일`
+  return t('reportUi.dateFull').replace('{y}', y).replace('{m}', String(Number(m))).replace('{d}', String(Number(day)))
 }
 
 /**
@@ -66,7 +68,8 @@ export function ReportModal({
   /** 1레벨 단계 이름(core.level_labels 첫 값) — 진척 표의 머리·제목에 쓴다. 못 받으면(설정 손상 등) 유형 중립 문구 */
   topLevelLabel?: string | null
 }) {
-  const topLabel = topLevelLabel?.trim() || '최상위 단계'
+  const { t } = useLocale()
+  const topLabel = topLevelLabel?.trim() || t('reportUi.topFallback')
   // '팀별 진척' 대상 = 활성 + progressVisible(팀 마스터) — 대시보드 카드와 동일 기준
   const progressTeams = useTeams().filter(tm => tm.progressVisible).map(tm => tm.code)
   const slotOf = useTeamSlot()
@@ -129,7 +132,7 @@ export function ReportModal({
       const res = await fetch(pptHref)
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: string } | null
-        setAiError(j?.error ?? 'AI 코멘트 포함 다운로드에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+        setAiError(j?.error ?? t('reportUi.ai.downloadFailed'))
         if (res.status === 409) { setAiStatus('stale'); setAiChecked(false) }
         return
       }
@@ -143,7 +146,7 @@ export function ReportModal({
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      setAiError('다운로드에 실패했습니다. 네트워크 상태를 확인하고 잠시 후 다시 시도해 주세요.')
+      setAiError(t('reportUi.downloadFailed'))
     } finally {
       setPptBusy(false)
     }
@@ -152,23 +155,23 @@ export function ReportModal({
   const footer = (
     <>
       <button type="button" onClick={onClose} className="no-print btn btn-ghost">
-        닫기
+        {t('common.close')}
       </button>
       <label className={`no-print flex items-center gap-1.5 text-xs ${aiStatus === 'fresh' ? 'text-fg-secondary' : 'text-fg-muted'}`}
-        title={aiStatus === 'fresh' ? 'PPT 마지막에 AI 종합 코멘트 슬라이드를 추가합니다' : '신선한 AI 브리핑이 있어야 포함할 수 있습니다'}>
+        title={aiStatus === 'fresh' ? t('reportUi.ai.includeHintFresh') : t('reportUi.ai.includeHintStale')}>
         <input type="checkbox" checked={withAi} disabled={aiStatus !== 'fresh'}
           onChange={e => setAiChecked(e.target.checked)} className="h-3.5 w-3.5 accent-(--color-action)" />
-        AI 코멘트 포함
+        {t('reportUi.ai.include')}
       </label>
       {(aiStatus === 'stale' || aiStatus === 'none' || aiStatus === 'failed') && (
         canGenerate ? (
           <button type="button" onClick={generateBrief} disabled={aiBusy}
             className="no-print btn btn-ghost !text-xs disabled:opacity-60">
             {aiBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-            {aiBusy ? '생성 중…' : aiStatus === 'failed' ? '생성 실패 — 다시 시도' : 'AI 브리핑 생성'}
+            {aiBusy ? t('reportUi.ai.generating') : aiStatus === 'failed' ? t('reportUi.ai.retry') : t('reportUi.ai.generate')}
           </button>
         ) : (
-          <span className="no-print text-xs text-fg-muted">AI 브리핑 생성은 프로젝트 관리자만 할 수 있습니다</span>
+          <span className="no-print text-xs text-fg-muted">{t('reportUi.ai.adminOnly')}</span>
         )
       )}
       <a
@@ -193,29 +196,29 @@ export function ReportModal({
   )
 
   return (
-    <Modal open={open} onClose={onClose} title="주간 보고서" size="lg" footer={footer}>
+    <Modal open={open} onClose={onClose} title={t('reportUi.title')} size="lg" footer={footer}>
       <div className="print-area space-y-6">
         {/* ── 보고서 헤더 ── */}
         <header className="card overflow-hidden p-6">
-          <div className="eyebrow">주간 보고서</div>
+          <div className="eyebrow">{t('reportUi.title')}</div>
           <h2 className="mt-2 text-2xl font-bold tracking-tight text-fg">{meta.projectName}</h2>
           {meta.description && (
             <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-secondary">{meta.description}</p>
           )}
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-fg-muted">
             <span>
-              생성일 <span className="font-semibold text-fg-secondary">{fmtFull(meta.today)}</span>
+              {t('reportUi.meta.created')} <span className="font-semibold text-fg-secondary">{fmtFull(meta.today, t)}</span>
             </span>
             {(meta.startDate || meta.endDate) && (
               <span>
-                기간{' '}
+                {t('reportUi.meta.period')}{' '}
                 <span className="font-semibold text-fg-secondary">
-                  {fmtFull(meta.startDate)} ~ {fmtFull(meta.endDate)}
+                  {fmtFull(meta.startDate, t)} ~ {fmtFull(meta.endDate, t)}
                 </span>
               </span>
             )}
             <span>
-              전체 작업 <span className="font-semibold text-fg-secondary">{meta.totalLeaves}건</span>
+              {t('reportUi.meta.totalTasks')} <span className="font-semibold text-fg-secondary">{t('reportUi.count').replace('{n}', String(meta.totalLeaves))}</span>
             </span>
           </div>
         </header>
@@ -223,37 +226,37 @@ export function ReportModal({
         {/* ── 전체 요약 KPI ── */}
         {/* 열 수는 모달 폭(672px)에 맞춘다 — 4열이면 28px 수치가 칸을 넘고 아이콘과 겹친다(U1b 수정 G4) */}
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <KpiCard label="전체 실적" value={`${kpi.actual}%`} sub="현재까지 실적" icon={Activity} tone="brand" />
-          <KpiCard label="전체 계획" value={`${kpi.planned}%`} sub="기준일 계획" icon={CalendarRange} tone="default" />
+          <KpiCard label={t('reportUi.kpi.actual')} value={`${kpi.actual}%`} sub={t('reportUi.kpi.actualSub')} icon={Activity} tone="brand" />
+          <KpiCard label={t('reportUi.kpi.planned')} value={`${kpi.planned}%`} sub={t('reportUi.kpi.plannedSub')} icon={CalendarRange} tone="default" />
           <KpiCard
-            label="계획 대비 편차"
+            label={t('reportUi.kpi.variance')}
             value={`${kpi.variance > 0 ? '+' : ''}${kpi.variance}%p`}
-            sub={kpi.variance >= 0 ? '계획 이상' : '계획 미달'}
+            sub={kpi.variance >= 0 ? t('reportUi.kpi.ahead') : t('reportUi.kpi.behind')}
             icon={kpi.variance >= 0 ? TrendingUp : TrendingDown}
             tone={kpi.variance >= 0 ? 'success' : 'danger'}
           />
           <KpiCard
-            label="지연 작업"
+            label={t('reportUi.kpi.delayed')}
             value={String(kpi.delayedCount)}
-            sub={`전체 ${meta.totalLeaves}건 중`}
+            sub={t('reportUi.kpi.delayedSub').replace('{n}', String(meta.totalLeaves))}
             icon={AlertTriangle}
             tone="danger"
           />
         </section>
 
         {/* ── 1레벨 단계별 진척 ── */}
-        <SectionCard title={`${topLabel}별 진척`} icon={Layers}>
+        <SectionCard title={t('reportUi.phase.title').replace('{label}', () => topLabel)} icon={Layers}>
           {phases.length === 0 ? (
-            <p className="text-sm text-fg-secondary">표시할 {topLabel} 항목이 없습니다.</p>
+            <p className="text-sm text-fg-secondary">{t('reportUi.phase.empty').replace('{label}', () => topLabel)}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-meta leading-4 text-fg-muted">
                   <th className="py-2 pr-3 font-semibold">{topLabel}</th>
-                  <th className="px-3 py-2 text-right font-semibold">계획</th>
-                  <th className="px-3 py-2 text-right font-semibold">실적</th>
-                  <th className="px-3 py-2 text-right font-semibold">편차</th>
-                  <th className="py-2 pl-3 text-right font-semibold">상태</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t('reportUi.col.plan')}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t('reportUi.col.actual')}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t('reportUi.col.variance')}</th>
+                  <th className="py-2 pl-3 text-right font-semibold">{t('reportUi.col.status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -279,17 +282,17 @@ export function ReportModal({
         </SectionCard>
 
         {/* ── 지연 작업 목록 ── */}
-        <SectionCard title="지연 작업 목록" icon={AlertTriangle}>
+        <SectionCard title={t('reportUi.delayed.title')} icon={AlertTriangle}>
           {delayed.length === 0 ? (
-            <p className="text-sm text-fg-secondary">현재 지연된 작업이 없습니다.</p>
+            <p className="text-sm text-fg-secondary">{t('reportUi.delayed.empty')}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-meta leading-4 text-fg-muted">
-                  <th className="py-2 pr-3 font-semibold">작업명</th>
-                  <th className="px-3 py-2 font-semibold">담당</th>
-                  <th className="px-3 py-2 text-right font-semibold">종료일</th>
-                  <th className="py-2 pl-3 text-right font-semibold">실적</th>
+                  <th className="py-2 pr-3 font-semibold">{t('reportUi.col.task')}</th>
+                  <th className="px-3 py-2 font-semibold">{t('reportUi.col.owner')}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t('reportUi.col.end')}</th>
+                  <th className="py-2 pl-3 text-right font-semibold">{t('reportUi.col.actual')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -311,7 +314,7 @@ export function ReportModal({
         </SectionCard>
 
         {/* ── 팀별 진척현황 ── */}
-        <SectionCard title="팀별 진척현황" icon={Users}>
+        <SectionCard title={t('reportUi.team.title')} icon={Users}>
           <div className="space-y-4">
             {teams.map(s => (
               <div key={s.team} className="flex items-center gap-3">
@@ -319,7 +322,7 @@ export function ReportModal({
                   <span className={`h-2 w-2 shrink-0 rounded-full ${slotOf(s.team).bar}`} />
                   <span className="truncate">{teamLabelOf(s.team)}</span>
                 </span>
-                <span className="w-20 shrink-0 text-xs text-fg-muted">{s.count}개 작업</span>
+                <span className="w-20 shrink-0 text-xs text-fg-muted">{t('reportUi.team.count').replace('{n}', String(s.count))}</span>
                 <div className="min-w-0 flex-1">
                   <ProgressBar value={s.pct ?? 0} tone={slotOf(s.team).bar} />
                 </div>

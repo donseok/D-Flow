@@ -1,8 +1,11 @@
+'use client'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { Skeleton, KpiSkeleton } from '@/components/ui/Skeleton'
 
 export default function Loading() {
+  const { t } = useLocale()
   return (
-    <div className="space-y-5" role="status" aria-label="공지사항을 불러오는 중">
+    <div className="space-y-5" role="status" aria-label={t('pages.loading.announcements')}>
       {/* 히어로 + KPI 레일 */}
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
         <Skeleton className="h-[240px] rounded-3xl" />

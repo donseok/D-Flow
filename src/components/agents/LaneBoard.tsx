@@ -2,6 +2,8 @@
 'use client'
 import type { Seat, Seatmap } from '@/lib/domain/seatmap'
 import type { SeatState } from '@/lib/domain/seatState'
+import type { DictKey } from '@/lib/i18n/dict'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { Sprite } from './Sprite'
 import { PhaseBadge } from './PhaseBadge'
 import { ChatBubble, seatSpeech, useOfficeChatter } from './SeatSpeech'
@@ -11,14 +13,14 @@ import { OwnerTag, ownerLabel } from './OwnerTag'
 import { IconFolded, IconStale, IconWait } from './icons'
 import css from './seatmap.module.css'
 
-interface LaneDef { key: string; title: string; states: readonly SeatState[]; icon: (() => React.JSX.Element) | null }
+interface LaneDef { key: string; title: DictKey; states: readonly SeatState[]; icon: (() => React.JSX.Element) | null }
 
 /** 처리하는 화면이므로 손대야 할 것이 먼저 온다 — 결재 대기 → 손봐야 함 → 업무 중 → 빈자리·완료. */
 const LANES: readonly LaneDef[] = [
-  { key: 'wait', title: '결재 대기', states: ['WAIT'], icon: IconWait },
-  { key: 'attention', title: '손봐야 함', states: ['BLOCKED', 'STALE', 'OFFLINE', 'REJECTED'], icon: IconStale },
-  { key: 'work', title: '업무 중', states: ['ACTIVE'], icon: null },
-  { key: 'rest', title: '빈자리 · 완료', states: ['READY', 'DONE'], icon: IconFolded },
+  { key: 'wait', title: 'agents.lane.wait', states: ['WAIT'], icon: IconWait },
+  { key: 'attention', title: 'agents.lane.attention', states: ['BLOCKED', 'STALE', 'OFFLINE', 'REJECTED'], icon: IconStale },
+  { key: 'work', title: 'agents.state.active', states: ['ACTIVE'], icon: null },
+  { key: 'rest', title: 'agents.lane.rest', states: ['READY', 'DONE'], icon: IconFolded },
 ]
 
 interface Entry { seat: Seat; floorName: string; zoneLabel: string }
@@ -59,26 +61,27 @@ export function LaneBoard({ map, selectedId, nowMs, busyOrderId, showFloorName, 
   onSelect: (orderId: string) => void
   onOp: SeatOpHandler
 }) {
+  const { t } = useLocale()
   const all = collect(map)
   return (
-    <div className={css.lanes} aria-label="상태별 좌석">
+    <div className={css.lanes} aria-label={t('agents.lanes.aria')}>
       {LANES.map(lane => {
         const list = all.filter(e => lane.states.includes(e.seat.state))
         const Icon = lane.icon
         return (
-          <section key={lane.key} className={css.lane} data-lane={lane.key} aria-label={lane.title}>
+          <section key={lane.key} className={css.lane} data-lane={lane.key} aria-label={t(lane.title)}>
             <div className={css.laneHead}>
-              {Icon && <Icon />}<b>{lane.title}</b><span className={css.laneN} data-lane-n={lane.key}>{list.length}</span>
+              {Icon && <Icon />}<b>{t(lane.title)}</b><span className={css.laneN} data-lane-n={lane.key}>{list.length}</span>
             </div>
-            {list.length === 0 && <p className={css.laneEmpty}>없음</p>}
+            {list.length === 0 && <p className={css.laneEmpty}>{t('common.none')}</p>}
             {list.map(({ seat, floorName, zoneLabel }) => {
-              const owner = ownerLabel(seat)
+              const owner = ownerLabel(seat, t)
               return (
               <div key={seat.orderId} className={css.card} data-state={seat.state}
                 data-selected={seat.orderId === selectedId ? '1' : undefined} data-owner={owner?.kind}>
                 <button type="button" className={css.deskPick}
                   aria-pressed={seat.orderId === selectedId}
-                  aria-label={`${seat.code} ${seat.name} ${STATE_LABEL[seat.state]}`}
+                  aria-label={`${seat.code} ${seat.name} ${t(STATE_LABEL[seat.state])}`}
                   onClick={() => onSelect(seat.orderId)}>
                   <span className={css.cardTop}>
                     <Sprite character={seat.character} anim={seat.anim} />
@@ -86,7 +89,7 @@ export function LaneBoard({ map, selectedId, nowMs, busyOrderId, showFloorName, 
                       <span className={css.cardZone}>{showFloorName ? `${floorName} · ${zoneLabel}` : zoneLabel}</span>
                       <span className={css.deskName}>{seat.code} {seat.name}</span>
                       {owner && <span className="flex min-w-0"><OwnerTag owner={owner} /></span>}
-                      <span className={css.cardMeta}><PhaseBadge seat={seat} size="chip" /><span className={css.deskMeta}>{seatMetaLine(seat, nowMs)}</span></span>
+                      <span className={css.cardMeta}><PhaseBadge seat={seat} size="chip" /><span className={css.deskMeta}>{seatMetaLine(seat, nowMs, t)}</span></span>
                     </span>
                     <SeatMark state={seat.state} anim={seat.anim} />
                   </span>

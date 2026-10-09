@@ -118,4 +118,15 @@ export const dashboardKo = {
   'dash.teamProgress.emptyTitle': '표시할 팀이 없습니다',
   'dash.teamProgress.emptyDesc': '팀을 추가하면 팀별 진척이 여기에 보입니다. 팀은 프로젝트 설정의 「팀 관리」에서 만듭니다(진척현황에서 숨긴 팀은 나오지 않습니다).',
   'dash.teamProgress.emptyAction': '팀 추가하러 가기',
+  'dash.teamProgress.title': '팀별 진척현황',
+  'dash.teamProgress.taskCount': '{n}개 작업',
+  'dash.teamProgress.barLabel': '{team} 진척 {pct}%',
+  // 지금 확인할 작업(RiskWorklist) — 임박 배지는 dash.issues.dueToday·ddaySuffix, 지연 일수는 dash.overdueSuffix 를 같이 쓴다
+  'dash.risk.title': '지금 확인할 작업(WBS)',
+  'dash.risk.badge': '지연 {delayed} · 임박 {dueSoon}',
+  'dash.risk.empty': '현재 즉시 조치가 필요한 작업이 없습니다.',
+  'dash.risk.behind': '계획 대비 {n}%p 미달',
+  'dash.risk.ariaDueSoon': '{name}, 마감 임박 {dday}',
+  // 진척 게이지(ProgressGauge) 읽기 이름
+  'dash.gauge.aria': '{label} 실적 {actual}%, 계획 {planned}%, 편차 {variance}, 진척 판정 {verdict}',
 } as const

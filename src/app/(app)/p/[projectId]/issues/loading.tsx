@@ -1,8 +1,11 @@
+'use client'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { Skeleton, KpiSkeleton } from '@/components/ui/Skeleton'
 
 export default function Loading() {
+  const { t } = useLocale()
   return (
-    <div className="space-y-5" role="status" aria-label="이슈를 불러오는 중">
+    <div className="space-y-5" role="status" aria-label={t('pages.loading.issues')}>
       <Skeleton className="h-[140px] rounded-3xl" />
       <div className="grid gap-3 sm:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => <KpiSkeleton key={i} />)}

@@ -19,10 +19,12 @@ import { issuesEn } from './issues.en'
 import { wikiEn } from './wiki.en'
 import { importWizardEn } from './importWizard.en'
 import { inboxEn } from './inbox.en'
+import { workUiEn } from './workUi.en'
 import { accountEn } from './account.en'
 import { portfolioEn } from './portfolio.en'
 import { platformEn } from './platform.en'
 import { authEn } from './auth.en'
+import { adminUiEn } from './adminUi.en'
 
 export const EN: Record<DictKey, string> = {
   ...commonEn,
@@ -42,8 +44,10 @@ export const EN: Record<DictKey, string> = {
   ...wikiEn,
   ...importWizardEn,
   ...inboxEn,
+  ...workUiEn,
   ...accountEn,
   ...portfolioEn,
   ...platformEn,
   ...authEn,
+  ...adminUiEn,
 }

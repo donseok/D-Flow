@@ -8,7 +8,9 @@ const modal = readFileSync(join(process.cwd(), 'src/components/report/ReportModa
 
 describe('보고서 모달 KPI 격자', () => {
   it('KPI 넷의 격자는 4열로 가지 않는다 — 좁은 화면 1열, 그 위 2열', () => {
-    const i = modal.indexOf('<KpiCard label="전체 실적"')
+    // 라벨은 사전으로 옮겼다(reportUi.kpi.actual = '전체 실적') — 첫 KPI 카드는 그 키로 찾는다
+    const i = modal.indexOf("<KpiCard label={t('reportUi.kpi.actual')}")
+    expect(i).toBeGreaterThan(-1)
     const section = modal.slice(modal.lastIndexOf('<section', i), i)
     expect(section).toMatch(/className="grid grid-cols-1 gap-3 sm:grid-cols-2"/)
     expect(section).not.toMatch(/grid-cols-4/)

@@ -160,7 +160,7 @@ export function KanbanCard({
               data-testid="kanban-card-approve-btn"
             >
               <Check className="h-3.5 w-3.5" />
-              <span>{t('wbs.approveStepDefault') || '승인'}</span>
+              <span>{t('wbs.approveStepDefault')}</span>
             </button>
           )}
 
@@ -172,18 +172,18 @@ export function KanbanCard({
                 className="btn btn-ghost h-7 px-2 text-[12px] gap-1 text-fg-secondary hover:text-fg"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                aria-label={`${card.name} 이동 메뉴`}
+                aria-label={t('kanban.moveMenuAria').replace('{name}', () => card.name)}
                 disabled={saving}
                 onClick={() => setMenuOpen(!menuOpen)}
                 data-testid="kanban-card-move-trigger"
               >
                 <ArrowRightLeft className="h-3.5 w-3.5" />
-                <span>{t('kanban.move') || '이동'}</span>
+                <span>{t('kanban.move')}</span>
               </button>
               {menuOpen && (
                 <div
                   role="menu"
-                  aria-label={`${card.name} 이동 선택`}
+                  aria-label={t('kanban.moveSelectAria').replace('{name}', () => card.name)}
                   className="absolute right-0 bottom-full mb-1 z-30 min-w-[130px] rounded-xl border border-border bg-surface p-1 shadow-lg"
                 >
                   {stageOptions && onMoveStage && stageOptions.map(opt => (
@@ -236,7 +236,7 @@ export function KanbanCard({
         <div data-testid="kanban-failed-move" className="mt-2.5 rounded-lg bg-surface border border-warning/30 p-2 text-xs" onClick={stop}>
           <div className="flex items-start gap-1.5 text-warning font-medium">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <span className="leading-tight">{failed.error || '이동 저장에 실패했습니다.'}</span>
+            <span className="leading-tight">{failed.error || t('kanban.moveSaveFailed')}</span>
           </div>
           <div className="mt-2 flex items-center justify-end gap-1.5">
             <button
@@ -245,7 +245,7 @@ export function KanbanCard({
               className="inline-flex items-center gap-1 rounded px-2 py-1 text-fg-secondary hover:bg-surface-hover text-xs"
             >
               <X className="h-3 w-3" />
-              <span>원위치</span>
+              <span>{t('kanban.moveRevert')}</span>
             </button>
             <button
               type="button"
@@ -254,7 +254,7 @@ export function KanbanCard({
               className="inline-flex items-center gap-1 rounded bg-warning text-warning-fg font-medium px-2 py-1 text-xs hover:bg-warning/90"
             >
               <RotateCw className={`h-3 w-3 ${saving ? 'animate-spin' : ''}`} />
-              <span>재시도</span>
+              <span>{t('kanban.moveRetry')}</span>
             </button>
           </div>
         </div>

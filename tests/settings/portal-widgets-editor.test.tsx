@@ -5,7 +5,8 @@ import { fireEvent, render, screen, waitFor } from '../shell/_dom'
 const h = vi.hoisted(() => ({ update: vi.fn(), outcome: vi.fn(), refresh: vi.fn() }))
 vi.mock('@/app/actions/settings', () => ({ updateWorkspaceSettings: h.update, updateProjectSettings: vi.fn(), getSettingsCommandOutcome: h.outcome }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => ({ 'portal.widget.my_work': '내 업무', 'portal.widget.projects': '진행 중인 프로젝트', 'portal.widget.review': '검토 대기', 'portal.widget.upcoming': '다가오는 회의', 'portal.widget.recent_docs': '최근 회의록', 'portal.widget.announcements': '공지' } as Record<string, string>)[k] ?? k, locale: 'ko' }) }))
+// 위젯 이름·편집기 문구 모두 사전의 한국어 글자로 본다
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).koLocale())
 import { PortalWidgetsEditor } from '@/components/settings/PortalWidgetsEditor'
 import { defaultPortalWidgets } from '@/lib/portal/widgets'
 

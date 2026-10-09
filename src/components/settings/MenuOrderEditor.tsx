@@ -8,22 +8,24 @@ import type { NavMenuSetting } from '@/lib/settings/defs/workspace'
 import { newUuid } from '@/lib/domain/uuid'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
+import type { DictKey } from '@/lib/i18n/dict'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
-const GROUPS: readonly { id: NavGroupId; label: string }[] = [
-  { id: 'ws.main', label: '워크스페이스 · 기본' }, { id: 'ws.shared', label: '워크스페이스 · 협업' },
-  { id: 'ws.ops', label: '워크스페이스 · 운영' }, { id: 'ws.platform', label: '워크스페이스 · 플랫폼' },
-  { id: 'p.overview', label: '프로젝트 · 개요' }, { id: 'p.plan', label: '프로젝트 · 계획' },
-  { id: 'p.collab', label: '프로젝트 · 협업' }, { id: 'p.team', label: '프로젝트 · 팀' },
-  { id: 'p.settings', label: '프로젝트 · 설정' },
+const GROUPS: readonly { id: NavGroupId; label: DictKey }[] = [
+  { id: 'ws.main', label: 'settings.menu.group.wsMain' }, { id: 'ws.shared', label: 'settings.menu.group.wsShared' },
+  { id: 'ws.ops', label: 'settings.menu.group.wsOps' }, { id: 'ws.platform', label: 'settings.menu.group.wsPlatform' },
+  { id: 'p.overview', label: 'settings.menu.group.pOverview' }, { id: 'p.plan', label: 'settings.menu.group.pPlan' },
+  { id: 'p.collab', label: 'settings.menu.group.pCollab' }, { id: 'p.team', label: 'settings.menu.group.pTeam' },
+  { id: 'p.settings', label: 'settings.menu.group.pSettings' },
 ]
-const NAMES: Record<NavItemId, string> = {
-  'ws.home': '홈', 'ws.my_work': '내 작업', 'ws.projects': '프로젝트',
-  'ws.meetings': '회의', 'ws.minutes': '회의록', 'ws.agents': '에이전트',
-  'ws.portfolio': '포트폴리오', 'ws.usage': '사용 현황', 'ws.members': '구성원', 'ws.teams': '팀', 'ws.settings': '설정',
-  'ws.workspaces': '워크스페이스 관리', 'ws.llm': 'LLM 설정', 'ws.ui_states': '화면 상태',
-  'p.dashboard': '대시보드', 'p.wbs': 'WBS', 'p.issues': '이슈', 'p.weekly': '주간보고',
-  'p.meetings': '회의', 'p.wiki': '위키', 'p.announcements': '공지',
-  'p.members': '구성원', 'p.attendance': '근태', 'p.agents': '에이전트', 'p.settings': '설정',
+const NAMES: Record<NavItemId, DictKey> = {
+  'ws.home': 'nav.home', 'ws.my_work': 'agents.scope.mine', 'ws.projects': 'workspace.projects',
+  'ws.meetings': 'nav.meetings', 'ws.minutes': 'nav.minutes', 'ws.agents': 'nav.projectAgents',
+  'ws.portfolio': 'nav.portfolio', 'ws.usage': 'nav.usage', 'ws.members': 'settings.menu.item.members', 'ws.teams': 'att.col.team', 'ws.settings': 'nav.settings',
+  'ws.workspaces': 'nav.workspaces', 'ws.llm': 'nav.llm', 'ws.ui_states': 'settings.menu.item.uiStates',
+  'p.dashboard': 'settings.menu.item.dashboard', 'p.wbs': 'nav.wbs', 'p.issues': 'nav.issues', 'p.weekly': 'nav.weekly',
+  'p.meetings': 'nav.meetings', 'p.wiki': 'settings.menu.item.wiki', 'p.announcements': 'settings.menu.item.announcements',
+  'p.members': 'settings.menu.item.members', 'p.attendance': 'settings.menu.item.attendance', 'p.agents': 'nav.projectAgents', 'p.settings': 'nav.settings',
 }
 const EMPTY: NavMenuSetting = { order: [], labels: {} }
 
@@ -47,6 +49,7 @@ function fromLatest(value: unknown): NavMenuSetting | null {
 export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidReason }: {
   workspaceId: string; revision: number; initialMenu: NavMenuSetting | null; invalidReason?: string
 }) {
+  const { t, locale } = useLocale()
   const router = useRouter()
   const [baseline, setBaseline] = useState<NavMenuSetting>(initialMenu ?? EMPTY)
   const [draft, setDraft] = useState<NavMenuSetting>(initialMenu ?? EMPTY)
@@ -79,7 +82,7 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
     try { result = await updateWorkspaceSettings(workspaceId, patch) } catch { /* 이력으로 결과 판정 */ }
     if (result?.ok) {
       setBaseline(draft); setBaseRevision(result.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
-      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '메뉴 설정을 저장했습니다.'); router.refresh(); return
+      setNotice(result.revision === patch.expectedRevision ? t('settings.save.noChange') : t('settings.menu.saved')); router.refresh(); return
     }
     if (result?.kind === 'conflict') {
       setConflict({ revision: result.latest.revision, menu: fromLatest(result.latest.values['navigation.menu']) })
@@ -95,11 +98,11 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
       const found = await getSettingsCommandOutcome({ workspaceId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
         setBaseline(draft); setBaseRevision(found.outcome.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
-        setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
+        setNotice(t('settings.save.confirmed')); router.refresh(); return
       }
     } catch { /* 같은 명령으로 재전송 */ }
     if (resendCount === 0) return submit(patch, 1)
-    setUncertainPatch(patch); setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+    setUncertainPatch(patch); setError(t('settings.rootFolders.uncertain'))
   }
 
   function save() {
@@ -110,40 +113,40 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
   }
 
   return <div className="space-y-5">
-    <p className="text-xs leading-5 text-fg-secondary">그룹 안의 순서를 바꾸거나 이름을 입력하세요. 빈 이름은 기본 이름을 사용합니다.</p>
+    <p className="text-xs leading-5 text-fg-secondary">{t('settings.menu.desc')}</p>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="navigation.menu" message={invalidReason} isAdmin settingsHref="#workspace-menu" />}
     {GROUPS.map(group => <section key={group.id} className="rounded-xl border border-border p-3">
-      <h3 className="mb-3 text-sm font-semibold text-fg">{group.label}</h3>
+      <h3 className="mb-3 text-sm font-semibold text-fg">{t(group.label)}</h3>
       <div className="space-y-2">
         {displayOrder.filter(id => NAV_GROUP_OF[id] === group.id).map((id, index, siblings) => <div key={id} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-subtle p-2">
-          <span className="min-w-24 text-sm text-fg">{NAMES[id]}</span>
+          <span className="min-w-24 text-sm text-fg">{t(NAMES[id])}</span>
           <span className="text-meta text-fg-muted">{id}</span>
-          <input aria-label={`${NAMES[id]} 메뉴 이름`} className="app-input ml-auto w-36 text-sm" maxLength={20}
-            placeholder={NAMES[id]} value={draft.labels[id] ?? ''} disabled={pending || !!uncertainPatch}
+          <input aria-label={t('settings.menu.nameOf').replace('{id}', t(NAMES[id]))} className="app-input ml-auto w-36 text-sm" maxLength={20}
+            placeholder={t(NAMES[id])} value={draft.labels[id] ?? ''} disabled={pending || !!uncertainPatch}
             onChange={event => { const value = event.target.value; setDraft(current => {
               const labels = { ...current.labels }; if (value) labels[id] = value; else delete labels[id]
               return { ...current, labels }
             }) }} />
-          <button type="button" className="btn btn-ghost" aria-label={`${NAMES[id]} 위로`} disabled={pending || !!uncertainPatch || index === 0} onClick={() => move(id, -1)}>↑</button>
-          <button type="button" className="btn btn-ghost" aria-label={`${NAMES[id]} 아래로`} disabled={pending || !!uncertainPatch || index === siblings.length - 1} onClick={() => move(id, 1)}>↓</button>
+          <button type="button" className="btn btn-ghost" aria-label={t('settings.portalWidgets.up').replace('{id}', t(NAMES[id]))} disabled={pending || !!uncertainPatch || index === 0} onClick={() => move(id, -1)}>↑</button>
+          <button type="button" className="btn btn-ghost" aria-label={t('settings.portalWidgets.down').replace('{id}', t(NAMES[id]))} disabled={pending || !!uncertainPatch || index === siblings.length - 1} onClick={() => move(id, 1)}>↓</button>
         </div>)}
       </div>
     </section>)}
-    {badLabel && <ConfigStateNotice kind="field" locale="ko" message={`${badLabel[0]}의 이름은 1~20자이며 꺾쇠를 쓸 수 없습니다.`} />}
+    {badLabel && <ConfigStateNotice kind="field" locale={locale} message={t('settings.menu.badLabel').replace('{badLabel}', String(badLabel[0]))} />}
     {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
-      <strong>다른 사용자가 메뉴를 바꿨습니다.</strong>
-      <p>내 순서: {draft.order.join(', ') || '기본 순서'}</p>
-      <p>최신 순서: {conflict.menu?.order.join(', ') || '설정 손상 또는 기본 순서'}</p>
+      <strong>{t('settings.menu.conflict')}</strong>
+      <p>{t('settings.menu.mine')} {draft.order.join(', ') || t('settings.menu.defaultOrder')}</p>
+      <p>{t('settings.menu.latest')} {conflict.menu?.order.join(', ') || t('settings.menu.corruptedOrDefault')}</p>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.menu ?? EMPTY); setBaseRevision(conflict.revision); setNeedsRepair(conflict.menu === null); setConflict(null) }}>내 값 다시 적용</button>
-        {conflict.menu && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.menu!); setBaseline(conflict.menu!); setDisplayOrder(ordered(conflict.menu!)); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>최신 값 사용</button>}
+        <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.menu ?? EMPTY); setBaseRevision(conflict.revision); setNeedsRepair(conflict.menu === null); setConflict(null) }}>{t('settings.conflict.reapplyMine')}</button>
+        {conflict.menu && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.menu!); setBaseline(conflict.menu!); setDisplayOrder(ordered(conflict.menu!)); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>{t('settings.conflict.useLatest')}</button>}
       </div>
     </div>}
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
     <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!badLabel || !!conflict} onClick={save}>
-        {uncertainPatch ? '저장 결과 확인 및 재시도' : '메뉴 설정 저장'}
+        {uncertainPatch ? t('settings.workflow.retry') : t('settings.menu.save')}
       </button>
     </SettingsSaveBar>
   </div>

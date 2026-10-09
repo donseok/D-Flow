@@ -28,7 +28,7 @@ export default async function ProjectsPage({ params, searchParams }: {
   const [sp, locale] = await Promise.all([searchParams, getServerLocale()])
   const { ws, actor } = scope
   const header = (create?: ReactNode) => <PageHeader title={t(locale, 'nav.allProjects')} meta={ws.name} primaryAction={create} />
-  if (!actor) return <PageFrame width="portal" header={header()}><StatusMessage kind="partial_error" blocking title="권한 정보를 읽지 못해 목록을 그리지 못했습니다" /></PageFrame>
+  if (!actor) return <PageFrame width="portal" header={header()}><StatusMessage kind="partial_error" blocking title={t(locale, 'pages.projects.noActor')} /></PageFrame>
   // 기존 달력 손상 경로를 보존한다. 잘못된 시간대로 상태를 지어내지 않는다(R6).
   const zone = await viewTimezone(scope.ws.id)
   if (!zone.ok) return <ConfigLoadError error={zone.error} keyName={zone.key} kind="invalid" locale={locale} />
@@ -44,14 +44,14 @@ export default async function ProjectsPage({ params, searchParams }: {
   const create = canCreate ? <NewProjectModal workspaceId={ws.id} workspaceName={ws.name} copyCandidates={copy?.ok ? copy.rows.map(p => ({ id: p.id, name: p.name })) : []} defaultOpen={sp.new === '1'} /> : undefined
   const view = acc.projectsView === 'cards' ? 'cards' : 'rows'
   const keep = { q, status, fav: favoritesOnly ? '1' : undefined }
-  return <PageFrame width="portal" header={header(create)} toolbar={<ProjectsToolbar slug={ws.slug} q={q ?? ''} status={status} favoritesOnly={favoritesOnly} view={view} />}>
-    {copy && !copy.ok && <StatusMessage kind="partial_error" compact title="복사할 프로젝트 목록을 불러오지 못했습니다 — 빈 프로젝트로만 만들 수 있습니다" />}
-    {wsPrefs === null && <StatusMessage kind="partial_error" compact title="즐겨찾기를 불러오지 못했습니다" detail="현재 목록은 볼 수 있지만 즐겨찾기는 변경할 수 없습니다." />}
+  return <PageFrame width="portal" header={header(create)} toolbar={<ProjectsToolbar slug={ws.slug} q={q ?? ''} status={status} favoritesOnly={favoritesOnly} view={view} locale={locale} />}>
+    {copy && !copy.ok && <StatusMessage kind="partial_error" compact title={t(locale, 'pages.projects.copyFailed')} />}
+    {wsPrefs === null && <StatusMessage kind="partial_error" compact title={t(locale, 'pages.projects.favoritesFailed')} detail={t(locale, 'pages.projects.favoritesFailedDetail')} />}
     <FavoritesProvider key={ws.id} workspaceId={ws.id} initial={wsPrefs === null ? null : wsPrefs.favoriteProjectIds ?? []}>
-      {!res.ok ? <StatusMessage kind="partial_error" blocking title="프로젝트를 불러오지 못했습니다" detail="잠시 뒤 새로고침하세요." />
-        : !res.rows.length ? <StatusMessage kind="empty" title={q || status || favoritesOnly ? '조건에 맞는 프로젝트가 없습니다' : '아직 프로젝트가 없습니다'} />
+      {!res.ok ? <StatusMessage kind="partial_error" blocking title={t(locale, 'pages.projects.loadFailed')} detail={t(locale, 'pages.common.refreshLater')} />
+        : !res.rows.length ? <StatusMessage kind="empty" title={t(locale, q || status || favoritesOnly ? 'pages.projects.emptyFiltered' : 'pages.projects.empty')} />
         : view === 'cards' ? <ProjectCards rows={res.rows} locale={locale} /> : <ProjectRowsTable rows={res.rows} locale={locale} />}
-      {res.ok && res.nextCursor && <Link href={wsHref(ws.slug, 'projects', { ...keep, cursor: res.nextCursor })} className={`${buttonClass('ghost')} mt-4`}>더 보기</Link>}
+      {res.ok && res.nextCursor && <Link href={wsHref(ws.slug, 'projects', { ...keep, cursor: res.nextCursor })} className={`${buttonClass('ghost')} mt-4`}>{t(locale, 'pages.common.more')}</Link>}
     </FavoritesProvider>
   </PageFrame>
 }

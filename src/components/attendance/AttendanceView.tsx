@@ -295,17 +295,17 @@ export function AttendanceView({
           ))}
         </div>
 
-        {/* 챗봇 딥링크 필터 — 해제 전까지 달력·목록에 적용 (신규 문구는 dict 미보유라 locale 분기) */}
+        {/* 챗봇 딥링크 필터 — 해제 전까지 달력·목록에 적용 (문구는 att.botFilter·att.botFilterClear) */}
         {botFilter && (
           <div className="flex flex-wrap items-center gap-1.5 text-meta font-medium text-fg-secondary">
-            <span className="text-fg-muted">{locale === 'en' ? `${ASSISTANT_NAME.en} filter` : `${ASSISTANT_NAME.ko} 필터`}</span>
+            <span className="text-fg-muted">{t('att.botFilter').replace('{name}', ASSISTANT_NAME[locale])}</span>
             {botFilter.from && botFilter.to && (
               <span className="chip bg-surface-subtle tabular-nums text-fg-secondary">{botFilter.from} ~ {botFilter.to}</span>
             )}
             {botFilter.team && <span className="chip bg-surface-subtle text-fg-secondary">{teamLabelOf(botFilter.team)}</span>}
             {botFilter.type && <span className="chip bg-surface-subtle text-fg-secondary">{typeLabel(botFilter.type)}</span>}
             <button onClick={() => setBotFilter(null)} className="btn btn-ghost h-7 px-2 text-meta">
-              {locale === 'en' ? 'Clear' : '해제'}
+              {t('att.botFilterClear')}
             </button>
           </div>
         )}
@@ -524,12 +524,11 @@ export function AttendanceView({
         }
       >
         <p className="text-sm leading-6 text-fg-secondary">
-          {/* 이름·날짜가 문장 중간에 끼고 어순이 달라 t() 파라미터 치환 없이 locale 분기로 조합 */}
-          {locale === 'en' ? (
-            <>Delete the {fmtDate(form.date)} attendance record for <strong className="text-fg">{memberMap.get(form.memberId)?.name ?? t('att.unknown')}</strong>? This action cannot be undone.</>
-          ) : (
-            <><strong className="text-fg">{memberMap.get(form.memberId)?.name ?? t('att.unknown')}</strong> 님의 {fmtDate(form.date)} 근태 기록을 삭제할까요? 이 작업은 되돌릴 수 없습니다.</>
-          )}
+          {/* 이름(굵게)이 문장 안에 끼고 어순이 로캘마다 달라 {name} 자리에서 문장을 둘로 가른다 */}
+          {(() => {
+            const [before, after = ''] = t('att.deleteConfirmBody').replace('{date}', fmtDate(form.date)).split('{name}')
+            return <>{before}<strong className="text-fg">{memberMap.get(form.memberId)?.name ?? t('att.unknown')}</strong>{after}</>
+          })()}
         </p>
       </Modal>
     </div>

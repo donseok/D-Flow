@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { FileText } from 'lucide-react'
 import type { ComputedItem } from '@/lib/domain/types'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { ReportModal } from './ReportModal'
 
 /**
@@ -18,7 +19,7 @@ export function ReportButton({
   startDate,
   endDate,
   variant = 'hero',
-  label = '주간 보고서',
+  label,
   canGenerate,
   topLevelLabel = null,
 }: {
@@ -36,6 +37,7 @@ export function ReportButton({
   /** 1레벨 단계 이름 — 모달에 그대로 넘긴다(없으면 모달이 중립 문구) */
   topLevelLabel?: string | null
 }) {
+  const { t } = useLocale()
   const [open, setOpen] = useState(false)
 
   return (
@@ -51,7 +53,7 @@ export function ReportButton({
         }
       >
         <FileText className="h-4 w-4" />
-        {label}
+        {label ?? t('reportUi.title')}
       </button>
 
       <ReportModal

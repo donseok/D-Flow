@@ -75,8 +75,10 @@ const SITES: Site[] = FILES.flatMap(f => {
 describe('영문 머리말(eyebrow) — 한국어 화면에 되돌아오지 않는다', () => {
   it('src 의 머리말 자리를 실제로 본다(빈 목록으로 통과하지 않는다)', () => {
     const files = new Set(SITES.map(s => s.file))
-    expect([...files]).toEqual(expect.arrayContaining(['src/components/report/ReportModal.tsx', 'src/components/invite/InviteRedeemCard.tsx']))
-    expect(SITES.length).toBeGreaterThan(10)
+    // 보고서 모달의 머리말은 사전(reportUi.title)으로 옮겨 리터럴 자리가 아니게 됐다 — 남은 리터럴 자리로 확인한다
+    expect([...files]).toEqual(expect.arrayContaining(['src/components/invite/InviteRedeemCard.tsx']))
+    // 머리말이 사전(`t(…)` — 호출 인자는 문구로 세지 않는다)으로 옮겨 가면서 리터럴 자리는 줄어든다(워크스페이스 설정의 열 곳이 그랬다)
+    expect(SITES.length).toBeGreaterThan(0)
   })
 
   it('머리말 리터럴에 영문 문구가 없다 — 제목과 겹치면 지우고, 정보가 있으면 한국어(사전)로 쓴다', () => {

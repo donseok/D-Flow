@@ -21,6 +21,12 @@ vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 import { resolveWbsView, viewHref } from '@/lib/wbs/view'
 import { ViewSwitch } from '@/components/wbs/ViewSwitch'
 import WbsPage from '@/app/(app)/p/[projectId]/wbs/page'
+
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 const cfg = (over = {}) => ({ projectId: 'p1', workspaceId: 'w1', revision: 1, schemaAhead: false, teams: [], keys: {
   'core.level_labels': { status: 'set', value: ['단계', '작업'] }, 'core.milestone_keywords': { status: 'default', value: [] },
   'views.default': { status: 'set', value: { wbs: 'board' } }, ...over,

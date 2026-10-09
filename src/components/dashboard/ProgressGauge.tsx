@@ -1,13 +1,14 @@
 import type { Signal } from '@/lib/domain/dashboard'
 import { formatPct1, formatPp1 } from '@/lib/domain/format'
 import { SIGNAL_META } from './signalStyle'
+import { t, type Locale } from '@/lib/i18n/dict'
 
 const SIZE = 128, CENTER = 64, R = 52, STROKE = 12
 const CIRC = 2 * Math.PI * R
 const clamp = (n: number) => Math.min(100, Math.max(0, n))
 
 /** 실적=파랑 채움, 계획=눈금 마커, 중앙=진척 판정 칩 + 큰 실적%. */
-export function ProgressGauge({ actual, planned, variance, signal, verdictText, plannedText, label }: {
+export function ProgressGauge({ actual, planned, variance, signal, verdictText, plannedText, label, locale = 'ko' }: {
   actual: number
   planned: number
   variance: number
@@ -15,6 +16,7 @@ export function ProgressGauge({ actual, planned, variance, signal, verdictText, 
   verdictText: string
   plannedText: string
   label: string
+  locale?: Locale
 }) {
   const m = SIGNAL_META[signal]
   const dash = (clamp(actual) / 100) * CIRC
@@ -27,7 +29,7 @@ export function ProgressGauge({ actual, planned, variance, signal, verdictText, 
     <div
       className="relative h-32 w-32 shrink-0"
       role="img"
-      aria-label={`${label} 실적 ${formatPct1(actual)}%, 계획 ${formatPct1(planned)}%, 편차 ${varText}, 진척 판정 ${verdictText}`}
+      aria-label={t(locale, 'dash.gauge.aria').replace('{actual}', formatPct1(actual)).replace('{planned}', formatPct1(planned)).replace('{variance}', varText).replace('{verdict}', verdictText).replace('{label}', label)}
     >
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full">
         <circle cx={CENTER} cy={CENTER} r={R} fill="none" strokeWidth={STROKE} className="stroke-border" />

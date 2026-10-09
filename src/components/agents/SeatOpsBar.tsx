@@ -2,7 +2,8 @@
 'use client'
 import type { Seat } from '@/lib/domain/seatmap'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { opsFor, whyText, type SeatOpKind } from './seatOps'
+import { opsFor, type SeatOpKind } from './seatOps'
+import { OP_LABEL_KEY, fill, opWhyText } from './labelKeys'
 import { IconApprove, IconReject, IconResume, IconRework, IconStop, IconUnapprove } from './icons'
 import css from './seatmap.module.css'
 
@@ -25,15 +26,15 @@ export function SeatOpsBar({ seat, busy, onOp }: { seat: Seat; busy: boolean; on
   const ops = opsFor(seat)
   if (ops.length === 0) return null
   return (
-    <div className={css.seatOps} role="group" aria-label={`${seat.code} 결재`}>
+    <div className={css.seatOps} role="group" aria-label={fill(t('agents.op.barAria'), { code: seat.code })}>
       {ops.map(({ spec, allowed, why }) => {
         const Icon = OP_ICON[spec.kind]
         return (
           <button key={spec.kind} type="button" className={css.opMini} data-op={spec.kind} data-seat-op={spec.kind}
-            disabled={!allowed || busy} title={busy ? '처리 중입니다' : whyText(why, t)}
-            aria-label={`${seat.code} ${spec.label}`}
+            disabled={!allowed || busy} title={busy ? t('agents.op.busy') : opWhyText(spec.kind, why, t)}
+            aria-label={`${seat.code} ${t(OP_LABEL_KEY[spec.kind])}`}
             onClick={() => onOp(seat, spec.kind)}>
-            <Icon />{spec.label}
+            <Icon />{t(OP_LABEL_KEY[spec.kind])}
           </button>
         )
       })}

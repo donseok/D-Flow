@@ -25,7 +25,7 @@ export function TeamProgress({ items, teams, locale = 'ko', teamSettingsHref = n
   const labelOf = teamLabelLookup(teams.filter(tm => tm.active))
 
   return (
-    <SectionCard title="팀별 진척현황" icon={Users}>
+    <SectionCard title={t(locale, 'dash.teamProgress.title')} icon={Users}>
       {rows.length === 0 ? (
         <EmptyState icon={Users} title={t(locale, 'dash.teamProgress.emptyTitle')} description={t(locale, 'dash.teamProgress.emptyDesc')}
           action={teamSettingsHref ? <Link href={teamSettingsHref} className="btn btn-primary">{t(locale, 'dash.teamProgress.emptyAction')}</Link> : undefined} />
@@ -37,9 +37,9 @@ export function TeamProgress({ items, teams, locale = 'ko', teamSettingsHref = n
               <span className={`h-2 w-2 shrink-0 rounded-full ${teamSlotFor(s.team, teams).bar}`} />
               <span className="truncate">{labelOf(s.team)}</span>
             </span>
-            <span className="w-20 shrink-0 text-xs text-fg-muted">{s.count}개 작업</span>
+            <span className="w-20 shrink-0 text-xs text-fg-muted">{t(locale, 'dash.teamProgress.taskCount').replace('{n}', String(s.count))}</span>
             <div className="min-w-0 flex-1">
-              <ProgressBar value={s.pct ?? 0} tone={teamSlotFor(s.team, teams).bar} label={`${labelOf(s.team)} 진척 ${s.pct ?? 0}%`} />
+              <ProgressBar value={s.pct ?? 0} tone={teamSlotFor(s.team, teams).bar} label={t(locale, 'dash.teamProgress.barLabel').replace('{pct}', String(s.pct ?? 0)).replace('{team}', () => labelOf(s.team))} />
             </div>
             <span className="w-14 shrink-0 text-right text-sm font-semibold tabular-nums text-fg">
               {s.pct == null ? '-' : `${s.pct}%`}

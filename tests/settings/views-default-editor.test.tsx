@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 // 작업 계획 기본 보기 편집기(views.default 네 연결 ② — SP3b 스펙 §6.4 표·D43, Review Focus 3)
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+// 화면 문구는 사전(settingsUi·adminUi)에 있다 — 사전의 한국어 글자를 돌려주는 대역(공급자 없는 기본 t 는 키를 돌려준다)
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).koLocale())
 import { fireEvent, render, screen, waitFor } from '../shell/_dom'
 const h = vi.hoisted(() => ({ update: vi.fn(), refresh: vi.fn() }))
 vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: h.update, updateWorkspaceSettings: vi.fn(), getSettingsCommandOutcome: vi.fn() }))

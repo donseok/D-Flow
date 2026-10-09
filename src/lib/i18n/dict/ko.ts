@@ -17,10 +17,12 @@ import { issuesKo } from './issues'
 import { wikiKo } from './wiki'
 import { importWizardKo } from './importWizard'
 import { inboxKo } from './inbox'
+import { workUiKo } from './workUi'
 import { accountKo } from './account'
 import { portfolioKo } from './portfolio'
 import { platformKo } from './platform'
 import { authKo } from './auth'
+import { adminUiKo } from './adminUi'
 
 export const KO = {
   ...commonKo,
@@ -40,8 +42,10 @@ export const KO = {
   ...wikiKo,
   ...importWizardKo,
   ...inboxKo,
+  ...workUiKo,
   ...accountKo,
   ...portfolioKo,
   ...platformKo,
   ...authKo,
+  ...adminUiKo,
 } as const

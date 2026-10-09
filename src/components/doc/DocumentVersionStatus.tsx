@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { History, ArrowRight, FileEdit, CheckCircle2 } from 'lucide-react'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export interface DocumentVersionStatusProps {
   currentVersionNo: number | null
@@ -26,6 +27,7 @@ export function DocumentVersionStatus({
   latestHref,
   className = '',
 }: DocumentVersionStatusProps) {
+  const { t } = useLocale()
   const hasVersion = currentVersionNo !== null && viewingVersionNo !== null
   const isLatest = hasVersion && viewingVersionNo === currentVersionNo
   const state = publicationState ?? (isDraft ? 'draft' : 'saved')
@@ -42,8 +44,8 @@ export function DocumentVersionStatus({
           <div className="flex items-center gap-2">
             <History className="h-4 w-4 shrink-0 text-warning dark:text-warning" />
             <span>
-              이전 버전(<strong>v{viewingVersionNo}</strong>)을 열람 중입니다. 최신 버전은{' '}
-              <strong>v{currentVersionNo}</strong>입니다.
+              {t('doc.version.oldLead')}<strong>v{viewingVersionNo}</strong>{t('doc.version.oldMid')}{' '}
+              <strong>v{currentVersionNo}</strong>{t('doc.version.oldTail')}
             </span>
           </div>
           {latestHref && (
@@ -52,7 +54,7 @@ export function DocumentVersionStatus({
               data-testid="doc-version-latest-link"
               className="flex items-center gap-1 font-semibold text-warning dark:text-warning hover:underline shrink-0"
             >
-              최신 버전 보기
+              {t('doc.version.viewLatest')}
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           )}
@@ -65,9 +67,9 @@ export function DocumentVersionStatus({
           data-testid="doc-version-badge"
           className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-subtle px-2 py-0.5 font-medium text-fg"
         >
-          {viewingVersionNo === null ? '버전 정보 없음' : `v${viewingVersionNo}`}
+          {viewingVersionNo === null ? t('doc.version.none') : `v${viewingVersionNo}`}
           {isLatest && (
-            <span className="text-meta text-action font-semibold ml-0.5">(최신)</span>
+            <span className="text-meta text-action font-semibold ml-0.5">{t('doc.version.latest')}</span>
           )}
         </span>
 
@@ -77,7 +79,7 @@ export function DocumentVersionStatus({
             className="inline-flex items-center gap-1 rounded-md border border-warning bg-warning-weak dark:bg-warning-weak px-2 py-0.5 text-xs font-semibold text-warning dark:text-warning"
           >
             <FileEdit className="h-3 w-3" />
-            초안 (Draft)
+            {t('doc.status.draft')}
           </span>
         ) : (
           <span
@@ -85,7 +87,7 @@ export function DocumentVersionStatus({
             className="inline-flex items-center gap-1 rounded-md border border-success bg-success-weak dark:bg-success-weak px-2 py-0.5 text-xs font-semibold text-success dark:text-success"
           >
             <CheckCircle2 className="h-3 w-3" />
-            {state === 'saved' ? '저장된 문서' : '게시됨 (Published)'}
+            {state === 'saved' ? t('doc.status.saved') : t('doc.status.published')}
           </span>
         )}
       </div>

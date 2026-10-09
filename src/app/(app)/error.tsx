@@ -13,7 +13,7 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
     <main id="main-content" className="mx-auto flex min-h-dvh max-w-[560px] flex-col justify-center gap-3 bg-canvas px-4">
       <ScopeError reset={reset} />
       {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 리졸버로 전체 새로 고침(셸이 깨진 상태에서 클라이언트 이동을 믿지 않는다) */}
-      <a href="/" className="text-center text-meta font-semibold text-action hover:underline">처음으로</a>
+      <a href="/" className="text-center text-meta font-semibold text-action hover:underline">{t('error.home')}</a>
       <ErrorReference digest={error.digest} t={t} />
     </main>
   )

@@ -11,4 +11,13 @@ export const uiKo = {
   'ui.memberPicker.nameOrder': '이름순',
   'ui.memberPicker.categoryOrder': '담당 카테고리별',
   'ui.memberPicker.unassigned': '담당 미지정',
+  'ui.sync.offlineTitle': '오프라인 상태입니다',
+  'ui.sync.offline': '연결 끊김',
+  'ui.sync.lastChecked': ' · 마지막 확인 {time}',
+  'ui.sync.attentionTitle': '저장되지 않았거나 충돌된 변경사항이 있습니다',
+  'ui.sync.attention': '확인 필요 {n}',
+  'ui.sync.saving': '저장 중...',
+  'ui.sync.editingTitle': '아직 저장하지 않은 편집이 있습니다',
+  'ui.sync.editing': '저장 전 변경 {n}',
+  'ui.sync.synced': '동기화됨',
 } as const

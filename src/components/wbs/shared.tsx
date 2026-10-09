@@ -1,12 +1,12 @@
 import type { Status } from '@/lib/domain/types'
 import { useStageLabel } from './StageLabelsProvider'
-import type { DictKey } from '@/lib/i18n/dict'
+import { t as translate, type DictKey } from '@/lib/i18n/dict'
 
-export const STATUS: Record<Status, { label: string; chip: string; bar: string; dot: string }> = {
-  not_started: { label: '시작전', chip: 'bg-pending-weak text-pending', bar: 'bg-pending', dot: 'bg-pending' },
-  in_progress: { label: '진행중', chip: 'bg-progress-weak text-progress', bar: 'bg-progress', dot: 'bg-progress' },
-  delayed: { label: '지연', chip: 'bg-danger-weak text-danger', bar: 'bg-danger', dot: 'bg-danger' },
-  done: { label: '완료', chip: 'bg-success-weak text-success', bar: 'bg-success', dot: 'bg-success' },
+export const STATUS: Record<Status, { labelKey: DictKey; chip: string; bar: string; dot: string }> = {
+  not_started: { labelKey: 'status.not_started', chip: 'bg-pending-weak text-pending', bar: 'bg-pending', dot: 'bg-pending' },
+  in_progress: { labelKey: 'status.in_progress', chip: 'bg-progress-weak text-progress', bar: 'bg-progress', dot: 'bg-progress' },
+  delayed: { labelKey: 'status.delayed', chip: 'bg-danger-weak text-danger', bar: 'bg-danger', dot: 'bg-danger' },
+  done: { labelKey: 'status.done', chip: 'bg-success-weak text-success', bar: 'bg-success', dot: 'bg-success' },
 }
 
 /** depth(0-based) 별 배지 색 팔레트 — 옛 LEVEL 상수의 cls 를 그대로 재활용(회귀 0). depth 3+ 는 pending 재사용. */
@@ -18,10 +18,12 @@ const DEPTH_CLASS = [
 const DEPTH_CLASS_FALLBACK = 'bg-surface-subtle text-fg-secondary' // depth 3+
 /* act 하위의 담당자별 분리 항목(임포트 시 자동 생성) 전용 표기 — 일반 배지와 시각 구분 */
 const SUB_ACT = { label: 'SUB-ACT', cls: 'bg-surface-subtle text-fg-secondary' }
-/** 배지 텍스트 — isOwnerSplit 이면 SUB-ACT, 아니면 프로젝트 단계 라벨 원문(levelLabels[depth]), 라벨 밖 깊이는 'N단'(SP4 — 옛 축약 규칙 삭제). */
-export function levelBadgeText(depth: number, isOwnerSplit: boolean, levelLabels: readonly string[]): string {
+const koT = (k: DictKey) => translate('ko', k)
+/** 배지 텍스트 — isOwnerSplit 이면 SUB-ACT, 아니면 프로젝트 단계 라벨 원문(levelLabels[depth]), 라벨 밖 깊이는 'N단'(SP4 — 옛 축약 규칙 삭제).
+ * t 를 넘기지 않으면 ko 사전으로 읽는다(훅 밖 호출 — 서버·순수 함수). */
+export function levelBadgeText(depth: number, isOwnerSplit: boolean, levelLabels: readonly string[], t: (k: DictKey) => string = koT): string {
   if (isOwnerSplit) return SUB_ACT.label
-  return levelLabels[depth] ?? `${depth + 1}단`
+  return levelLabels[depth] ?? t('wbs.levelNth').replace('{n}', String(depth + 1))
 }
 
 /** 배지 색 — isOwnerSplit 이면 SUB-ACT 톤, 아니면 depth 기반 팔레트(depth 3+ 는 폴백 재사용). */
@@ -30,12 +32,12 @@ export function levelBadgeClass(depth: number, isOwnerSplit: boolean): string {
   return DEPTH_CLASS[depth] ?? DEPTH_CLASS_FALLBACK
 }
 
-export function StatusChip({ status }: { status: Status }) {
+export function StatusChip({ status, t }: { status: Status; t: (k: DictKey) => string }) {
   const s = STATUS[status]
   return (
     <span className={`chip ${s.chip}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {s.label}
+      {t(s.labelKey)}
     </span>
   )
 }
@@ -45,11 +47,13 @@ export function LevelBadge({
   isOwnerSplit = false,
   levelLabels,
   compact = false,
+  t,
 }: {
   depth: number
   isOwnerSplit?: boolean
   levelLabels: readonly string[]
   compact?: boolean
+  t?: (k: DictKey) => string
 }) {
   return (
     <span
@@ -67,7 +71,7 @@ export function LevelBadge({
           : {}),
       }}
     >
-      {levelBadgeText(depth, isOwnerSplit, levelLabels)}
+      {levelBadgeText(depth, isOwnerSplit, levelLabels, t)}
     </span>
   )
 }

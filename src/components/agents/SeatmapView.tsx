@@ -7,12 +7,15 @@ import type { Seat, Seatmap, SeatmapScope } from '@/lib/domain/seatmap'
 import { seatmapChannelProjectIds } from '@/lib/domain/seatmap'
 import { refreshSeatmap } from '@/app/actions/agentSeatmap'
 import { runHubProcessOp, type HubProcessOp } from '@/app/actions/agentHub'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { intlLocale } from '@/lib/i18n/format'
 import { OfficeNav } from './OfficeNav'
 import { AttentionBand } from './AttentionBand'
 import { FloorCard } from './FloorCard'
 import { LaneBoard } from './LaneBoard'
 import { DetailPanel, type NoteDraft } from './DetailPanel'
 import { opSpec, type SeatOpKind } from './seatOps'
+import { fill } from './labelKeys'
 import { SeatmapRealtime } from './SeatmapRealtime'
 import { IconAgentView, IconApprove, IconChat, IconFloorView, IconLaneView } from './icons'
 import { OfficeChatterContext } from './SeatSpeech'
@@ -46,9 +49,11 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
   initial: Seatmap; pollMs?: number; projectId?: string; projectName?: string; workspaceId?: string | null
   /** 시각·사무실 대사(계절·점심)의 시간대 — 프로젝트 스튜디오는 프로젝트, 전역은 세션 유일 워크스페이스(viewTimezone) */
   timeZone: string
-  /** 시각 포맷의 locale — 없으면 'ko-KR' */
+  /** 시각 포맷의 locale — 없으면 화면 언어의 형식 태그(ko 는 'ko-KR') */
   locale?: string
 }) {
+  const { t, locale: uiLocale } = useLocale()
+  const timeLocale = locale ?? intlLocale(uiLocale)
   const [map, setMap] = useState(initial)
   const [error, setError] = useState<{ at: string; message: string } | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -180,8 +185,8 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
 
   // 경과 시간 표시만 1초마다 — 데이터는 건드리지 않는다.
   useEffect(() => {
-    const t = window.setInterval(() => setNowMs(n => n + 1000), 1000)
-    return () => window.clearInterval(t)
+    const tick = window.setInterval(() => setNowMs(n => n + 1000), 1000)
+    return () => window.clearInterval(tick)
   }, [])
 
   const sel = useMemo(() => findSeat(map, selected), [map, selected])
@@ -201,35 +206,35 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
   const range = useScope()   // 화면 안 링크의 범위(D38 ①) — 없으면 옛 형식(스텁이 해석, D5)
   const tools = (
     <>
-      {projectId !== undefined && <Link href={range?.workspace ? wsHref(range.workspace.slug, 'agents') : '/agents'} data-office-all-link className={css.allLink}>전체 스튜디오</Link>}
-      <div className={css.viewSeg} role="group" aria-label="보기">
-        <button type="button" data-view="agent" aria-pressed={view === 'agent'} onClick={() => pickView('agent')}><IconAgentView />에이전트</button>
-        <button type="button" data-view="floor" aria-pressed={view === 'floor'} onClick={() => pickView('floor')}><IconFloorView />평면도</button>
-        <button type="button" data-view="lane" aria-pressed={view === 'lane'} onClick={() => pickView('lane')}><IconLaneView />상태 레인</button>
+      {projectId !== undefined && <Link href={range?.workspace ? wsHref(range.workspace.slug, 'agents') : '/agents'} data-office-all-link className={css.allLink}>{t('agents.nav.all')}</Link>}
+      <div className={css.viewSeg} role="group" aria-label={t('agents.view.aria')}>
+        <button type="button" data-view="agent" aria-pressed={view === 'agent'} onClick={() => pickView('agent')}><IconAgentView />{t('agents.view.agent')}</button>
+        <button type="button" data-view="floor" aria-pressed={view === 'floor'} onClick={() => pickView('floor')}><IconFloorView />{t('agents.view.floor')}</button>
+        <button type="button" data-view="lane" aria-pressed={view === 'lane'} onClick={() => pickView('lane')}><IconLaneView />{t('agents.view.lane')}</button>
       </div>
       {/* 완료 포함은 평면도에서만 뜻이 있다 — 상태 레인은 "빈자리 · 완료" 레인이 늘 안고 있고, 에이전트 보기는 좌석이 아니다.
           보기 전환은 조작 줄 왼쪽에 고정돼(.toolsLight) 이 버튼이 빠져도 밀리지 않는다. */}
       {view === 'floor' && (
         <button type="button" className={css.doneToggle} data-done-toggle aria-pressed={withDone}
-          title="머지 완료(최근 7일) 좌석을 평면도에 함께 그립니다. 승인 취소·재작업 요청을 그 자리에서 할 수 있습니다."
+          title={t('agents.done.toggleTitle')}
           onClick={toggleDone}>
-          <IconApprove />완료 포함{doneTotal > 0 ? ` ${doneTotal}` : ''}
+          <IconApprove />{t('agents.done.toggle')}{doneTotal > 0 ? ` ${doneTotal}` : ''}
         </button>
       )}
       {/* 잡담은 세 보기 모두에 말풍선이 있어 늘 보인다. 꺼도 팀원 보고·단계 말풍선(업무)은 남는다. */}
       <button type="button" className={css.doneToggle} data-chatter-toggle aria-pressed={chatter}
         title={chatter
-          ? '잡담 켬 — 팀장 잔소리·혼잣말과 팀원 한마디까지 말풍선으로 띄웁니다. 누르면 업무 말풍선(보고·단계)만 남습니다.'
-          : '잡담 끔 — 업무 말풍선(보고·단계)만 띄웁니다. 누르면 팀장 잔소리·혼잣말과 팀원 한마디가 돌아옵니다.'}
+          ? t('agents.chatter.onTitle')
+          : t('agents.chatter.offTitle')}
         onClick={toggleChatter}>
-        <IconChat />잡담 {chatter ? '켬' : '끔'}
+        <IconChat />{chatter ? t('agents.chatter.on') : t('agents.chatter.off')}
       </button>
-      <div className={css.scope} role="group" aria-label="표시 범위">
-        <button type="button" aria-pressed={scope === 'mine'} onClick={() => { void refresh('mine', true) }}>내 작업</button>
-        <button type="button" aria-pressed={scope === 'all'} onClick={() => { void refresh('all', true) }}>전체</button>
+      <div className={css.scope} role="group" aria-label={t('agents.scope.aria')}>
+        <button type="button" aria-pressed={scope === 'mine'} onClick={() => { void refresh('mine', true) }}>{t('agents.scope.mine')}</button>
+        <button type="button" aria-pressed={scope === 'all'} onClick={() => { void refresh('all', true) }}>{t('agents.scope.all')}</button>
       </div>
       <div className={`${css.stamp} ${error ? css.stampBad : ''}`}>
-        {error ? <span data-error="">갱신 실패 {hhmmss(error.at, timeZone, locale)} · {error.message}</span> : <span>갱신 {hhmmss(map.fetchedAt, timeZone, locale)}{projectId ? '' : ` (${timeZone})`}</span>}
+        {error ? <span data-error="">{fill(t('agents.stamp.fail'), { time: hhmmss(error.at, timeZone, timeLocale), message: error.message })}</span> : <span>{fill(t('agents.stamp.ok'), { time: hhmmss(map.fetchedAt, timeZone, timeLocale) })}{projectId ? '' : ` (${timeZone})`}</span>}
       </div>
     </>
   )
@@ -238,14 +243,14 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
       <AttentionBand items={map.attention} onSelect={setSelected} />
       <main className={css.stage}>
         {view === 'agent' ? <RosterBoard roster={roster} nowMs={nowMs} timeZone={timeZone} /> : (
-        <section className={css.floors} data-view={view} aria-label={view === 'floor' ? '프로젝트별 좌석' : '상태별 좌석'}>
+        <section className={css.floors} data-view={view} aria-label={view === 'floor' ? t('agents.floors.aria') : t('agents.lanes.aria')}>
           {map.floors.length === 0 && (projectId !== undefined
             ? (map.scope === 'mine'
-              ? <p className={css.doneNote}>이 프로젝트에서 내게 배정된 에이전트 작업이 없습니다. 다른 사람 것까지 보려면 ‘전체’를 누르세요.</p>
-              : <p className={css.doneNote}>이 프로젝트에 위임된 주문이 없습니다. 위임·승인 탭에서 리프 항목에 위임을 켜면 좌석이 생깁니다.</p>)
+              ? <p className={css.doneNote}>{t('agents.empty.projectMine')}</p>
+              : <p className={css.doneNote}>{t('agents.empty.projectAll')}</p>)
             : map.scope === 'mine'
-              ? <p className={css.doneNote}>배정된 에이전트 작업이 없습니다. 담당자가 나이거나 내 에이전트가 잡은 주문만 보입니다 — 다른 사람 것까지 보려면 ‘전체’를 누르세요.</p>
-              : <p className={css.doneNote}>표시할 주문이 없습니다. 에이전트 위임(agent 태그) 항목의 주문만 보이며, 내가 속한 프로젝트에 그런 주문이 생기면 여기 층이 생깁니다.</p>)}
+              ? <p className={css.doneNote}>{t('agents.empty.allMine')}</p>
+              : <p className={css.doneNote}>{t('agents.empty.allAll')}</p>)}
           {view === 'floor'
             ? map.floors.map(f => (
               <FloorCard key={f.id} floor={f} selectedId={selected} nowMs={nowMs} busyOrderId={busyOrderId} withDone={withDone} onSelect={setSelected} onOp={onOp} />
@@ -256,11 +261,11 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
             )}
           {view === 'floor' && !withDone && doneTotal > 0 && (
             <p className={css.doneNote}>
-              머지 완료 {doneTotal}건(최근 7일)은 평면도에 그리지 않습니다 —{' '}
-              <button type="button" className={css.zoneFold} data-goto-done onClick={toggleDone}>완료 포함으로 보기</button>
-              {' 또는 '}
-              <button type="button" className={css.zoneFold} data-goto-lane onClick={() => pickView('lane')}>상태 레인에서 보기</button>
-              . 승인 취소·재작업 요청은 둘 중 어디서든 합니다.
+              {fill(t('agents.doneNote.before'), { n: doneTotal })}{' '}
+              <button type="button" className={css.zoneFold} data-goto-done onClick={toggleDone}>{t('agents.doneNote.withDone')}</button>
+              {t('agents.doneNote.or')}
+              <button type="button" className={css.zoneFold} data-goto-lane onClick={() => pickView('lane')}>{t('agents.doneNote.lane')}</button>
+              {t('agents.doneNote.after')}
             </p>
           )}
         </section>
@@ -270,7 +275,7 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
           그대로 보이는 채로 고른 좌석의 상세만 위로 올라온다. 카드 디자인은 옛 오른쪽 패널 그대로다.
           닫으면 선택과 쓰던 사유를 함께 비운다 — 초안만 남으면 폴링이 계속 쉰다. */}
       {sel !== null && (
-        <div className={css.popWrap} role="dialog" aria-label={`${sel.seat.code} 상세`}>
+        <div className={css.popWrap} role="dialog" aria-label={fill(t('agents.detail.aria'), { code: sel.seat.code })}>
           <button type="button" className={css.popScrim} tabIndex={-1} aria-hidden="true" onClick={closeDetail} />
           <div className={css.pop} ref={popRef} tabIndex={-1}>
             <DetailPanel
@@ -287,15 +292,15 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
       {/* 범례는 좌석 색 설명이라 평면도·상태 레인에서만 — 에이전트 보기는 책상마다 상태 이름을 적는다. */}
       {view !== 'agent' && <footer className={css.legend}>
         <ul>
-          <li><i className={css.sw} style={{ background: 'var(--sm-active)' }} />업무 중(신호 5분 이내)</li>
-          <li><i className={css.sw} style={{ background: 'var(--sm-active)', borderColor: 'var(--sm-warn)' }} />무응답 5분 초과</li>
-          <li><i className={css.sw} style={{ background: 'var(--sm-empty)', borderColor: 'var(--sm-warn)' }} />끊김 30분 초과</li>
-          <li><i className={css.sw} style={{ background: 'var(--sm-active)' }} />결정 대기</li>
-          <li><i className={css.sw} style={{ background: 'var(--sm-wait)' }} />승인 대기</li>
-          <li><i className={css.sw} style={{ background: 'var(--sm-reject)' }} />반려 · 재작업</li>
-          <li><i className={css.sw} style={{ borderStyle: 'dashed' }} />빈자리</li>
+          <li><i className={css.sw} style={{ background: 'var(--sm-active)' }} />{t('agents.legend.active')}</li>
+          <li><i className={css.sw} style={{ background: 'var(--sm-active)', borderColor: 'var(--sm-warn)' }} />{t('agents.legend.stale')}</li>
+          <li><i className={css.sw} style={{ background: 'var(--sm-empty)', borderColor: 'var(--sm-warn)' }} />{t('agents.legend.offline')}</li>
+          <li><i className={css.sw} style={{ background: 'var(--sm-active)' }} />{t('agents.state.blocked')}</li>
+          <li><i className={css.sw} style={{ background: 'var(--sm-wait)' }} />{t('agents.state.wait')}</li>
+          <li><i className={css.sw} style={{ background: 'var(--sm-reject)' }} />{t('agents.state.rejected')}</li>
+          <li><i className={css.sw} style={{ borderStyle: 'dashed' }} />{t('agents.state.ready')}</li>
         </ul>
-        <p>프로젝트가 층, 주문 항목의 부모 항목이 구역, 작업 주문 하나가 책상입니다. 의자의 인물은 그 주문을 잡은 에이전트(슬롯)이며 같은 에이전트는 늘 같은 인물입니다. 신호는 PostToolUse 훅의 heartbeat(60초 절제)와 progress 보고입니다. 승인·반려·승인 취소·재작업 요청·중단은 좌석에서 바로 하며, 반려와 재작업 요청은 사유를 적어야, 중단은 한 번 더 확인해야 확정됩니다. 중단은 에이전트 위임을 끄고 진행 중인 개발을 멈춥니다 — 단계는 착수 전(as)으로 돌아가고, 워커는 다음 신호(약 1분 안)에서 멈춥니다. 다시 맡기려면 위임 체크를 켭니다.</p>
+        <p>{t('agents.legend.help')}</p>
       </footer>}
     </>
   )
@@ -305,23 +310,23 @@ export function SeatmapView({ initial, pollMs = 30_000, projectId, projectName, 
   // 프로젝트 스튜디오는 헤더에 위임·승인|에이전트 스튜디오 탭을, 전체 스튜디오(/agents)는 층(프로젝트) 칩을 단다(2026-09-18).
   const c = map.counters
   const officeTiles: HeroTile[] = [
-    { key: 'active', label: '업무 중', value: c.active, color: '#5DB1E5' },
-    { key: 'idle', label: '승인 대기', value: c.idle, color: '#F0B068' },
-    { key: 'offline', label: '빈자리·끊김', value: c.offline, color: '#6b7580', valueColor: '#b7bfba' },
+    { key: 'active', label: t('agents.state.active'), value: c.active, color: '#5DB1E5' },
+    { key: 'idle', label: t('agents.state.wait'), value: c.idle, color: '#F0B068' },
+    { key: 'offline', label: t('agents.tile.offline'), value: c.offline, color: '#6b7580', valueColor: '#b7bfba' },
     // 감시 중은 좌석이 아니라 감시자 수 — 다른 축이라 막대에서 뺀다.
-    { key: 'standby', label: '감시 중', value: c.standby, color: '#3F8F58', valueColor: '#7fd29a', bar: false },
+    { key: 'standby', label: t('agents.tile.standby'), value: c.standby, color: '#3F8F58', valueColor: '#7fd29a', bar: false },
   ]
-  const attention = map.attention.length > 0 && <> <em>{map.attention.length}건이 확인을 기다립니다.</em></>
+  const attention = map.attention.length > 0 && <> <em>{fill(t('agents.lede.attention'), { n: map.attention.length })}</em></>
   const officeLede = projectId !== undefined
-    ? <>에이전트 <b>{c.active}명</b>이 이 층에서 일하고 있습니다.{attention}</>
-    : <>에이전트 <b>{c.active}명</b>이 <b>{map.floors.length}개 층</b>에서 일하고 있습니다.{attention}</>
+    ? <>{t('agents.lede.before')}<b>{fill(t('agents.lede.count'), { n: c.active })}</b>{t('agents.lede.afterFloor')}{attention}</>
+    : <>{t('agents.lede.before')}<b>{fill(t('agents.lede.count'), { n: c.active })}</b>{t('agents.lede.mid')}<b>{fill(t('agents.lede.floors'), { n: map.floors.length })}</b>{t('agents.lede.afterAll')}{attention}</>
   // 에이전트 보기는 헤더도 자리 기준 숫자로 바꾼다(작업 PC · 결정 대기 · 무응답 · 끊김 · 빈자리).
-  const hero = view === 'agent' ? rosterHero(roster) : { tiles: officeTiles, lede: officeLede }
+  const hero = view === 'agent' ? rosterHero(roster, t) : { tiles: officeTiles, lede: officeLede }
   const floorsNav = map.floors.map(f => ({ id: f.id, name: f.name }))
   return (
     <AgentFrame
       {...(projectId !== undefined ? { projectId } : { nav: tone => <OfficeNav floors={floorsNav} tone={tone} /> })}
-      projectName={projectName ?? '전체 프로젝트'} title={projectId !== undefined ? '에이전트 스튜디오' : '에이전트 스튜디오 · 전체'}
+      projectName={projectName ?? t('agents.frame.allProjects')} title={projectId !== undefined ? t('agents.title.office') : t('agents.title.officeAll')}
       lede={hero.lede} tiles={hero.tiles}
       tools={<div className={css.toolsLight}>{tools}</div>}>
       <div className={css.root}>

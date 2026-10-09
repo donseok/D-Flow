@@ -14,6 +14,12 @@ const h = vi.hoisted(() => ({
   toast: vi.fn(),
   createWeeklyReport: vi.fn(),
 }))
+// 화면 문구는 사전에서 온다 — 진짜 ko 사전으로 풀어 한국어 단언을 그대로 둔다
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 vi.mock('next/navigation', () => ({ useRouter: () => h.router }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: h.toast }) }))
 vi.mock('@/components/weekly/usePresence', () => ({ usePresence: () => [] }))

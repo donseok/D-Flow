@@ -9,6 +9,10 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: (...args: unknown[]) => h.update(...args) }))
 import { IssuePolicyEditor } from '@/components/settings/IssuePolicyEditor'
 import { DEFAULT_ID_POLICY } from '@/lib/issues/idPolicy'
+import { registerEn } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+
+registerEn(EN)   // 화면 문구는 사전에 있다 — locale="en" 으로 그리는 이 테스트가 영어 사전을 본다
 
 describe('IssuePolicyEditor', () => {
   let root: Root, container: HTMLDivElement

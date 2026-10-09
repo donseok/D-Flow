@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { wsHref } from '@/lib/workspace/paths'
 import { InboxPanel } from '@/components/app/InboxPanel'
 import { useShellState } from '@/components/app/ShellStateProvider'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { markAllInboxRead, markInboxItemRead, type InboxItem } from '@/app/actions/inbox'
 
 export type MyWorkTabId = 'work' | 'review' | 'inbox'
@@ -18,14 +19,15 @@ export function MyWorkTabNav({
   currentTab: MyWorkTabId
   reviewCount?: number
 }) {
+  const { t } = useLocale()
   const tabs: { id: MyWorkTabId; label: string; count?: number }[] = [
-    { id: 'work', label: '내 작업' },
-    { id: 'review', label: '검토 대기', count: reviewCount },
-    { id: 'inbox', label: '알림' },
+    { id: 'work', label: t('portalUi.tabs.work') },
+    { id: 'review', label: t('portalUi.tabs.review'), count: reviewCount },
+    { id: 'inbox', label: t('portalUi.tabs.inbox') },
   ]
 
   return (
-    <div role="tablist" aria-label="내 업무 탭" className="flex border-b border-border gap-6">
+    <div role="tablist" aria-label={t('portalUi.tabs.aria')} className="flex border-b border-border gap-6">
       {tabs.map((tab) => {
         const active = currentTab === tab.id
         return (

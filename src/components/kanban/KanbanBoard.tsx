@@ -348,7 +348,7 @@ export function KanbanBoard({
         return
       }
       editSessionStore.setSession(sessionId, 'kanban', card.id, 'saved')
-      setLiveMsg(`${card.name} 단계 변경: ${nextStage ?? '미착수'}`)
+      setLiveMsg(t('kanban.liveStageChanged').replace('{name}', () => card.name).replace('{stage}', () => nextStage ?? t('wbs.stageNoneOption')))
       router.refresh()
     } catch {
       setStageOverride(prev => {
@@ -356,7 +356,7 @@ export function KanbanBoard({
         delete copy[card.id]
         return copy
       })
-      const errMsg = t('kanban.saveFailedTitle') || '저장에 실패했습니다.'
+      const errMsg = t('kanban.saveFailedTitle')
       toast({ title: errMsg, variant: 'error' })
       editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
         error: { kind: 'server_reject', message: errMsg },
@@ -390,10 +390,10 @@ export function KanbanBoard({
         return
       }
       editSessionStore.setSession(sessionId, 'kanban', card.id, 'saved')
-      setLiveMsg(`${card.name} 승인 완료`)
+      setLiveMsg(t('kanban.liveApproved').replace('{name}', () => card.name))
       router.refresh()
     } catch {
-      const errMsg = t('kanban.saveFailedTitle') || '승인에 실패했습니다.'
+      const errMsg = t('kanban.saveFailedTitle')
       toast({ title: errMsg, variant: 'error' })
       editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', {
         error: { kind: 'server_reject', message: errMsg },

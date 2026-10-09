@@ -11,12 +11,13 @@ import {
   type WbsBulkChanges,
   type WbsBulkResult,
 } from '@/app/actions/wbsBulk'
-import { stageLabelKo, type StageCode } from '@/lib/domain/stageLabels'
+import type { StageCode } from '@/lib/domain/stageLabels'
 import { useTeams } from '@/components/app/TeamsProvider'
 import type { ProjectMember } from '@/lib/domain/types'
 import { useDialogFocus } from '@/lib/ui/useDialogFocus'
 import { DirtyConfirmDialog } from '@/components/ui/DirtyConfirmDialog'
 import { useStageLabel } from './StageLabelsProvider'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export interface WbsItemSummary {
   id: string
@@ -58,6 +59,7 @@ export function WbsBulkEditDialog({
   extraAxisLabel = null,
 }: WbsBulkEditDialogProps) {
   const stageLabel = useStageLabel()
+  const { t } = useLocale()
   const dialogId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   useDialogFocus(panelRef, open)
@@ -148,13 +150,13 @@ export function WbsBulkEditDialog({
     if (!hasChanges || targetIds.length === 0) return
     setErrorMessage(null)
     if ((stageMode !== 'unchanged' || assigneeMode !== 'unchanged') && [startMode, endMode, delivMode, bizMode, teamMode, stageMode, assigneeMode].filter(mode => mode !== 'unchanged').length > 1) {
-      setErrorMessage('단계·담당자 변경은 각각 다른 필드와 분리해서 적용해 주세요.')
+      setErrorMessage(t('wbs.bulk.errSeparate'))
       return
     }
 
     // 시작일 > 종료일 사전 검증
     if (startMode === 'set' && endMode === 'set' && startVal && endVal && startVal > endVal) {
-      setErrorMessage('시작일이 종료일보다 늦을 수 없습니다.')
+      setErrorMessage(t('wbs.bulk.errDateOrder'))
       return
     }
 
@@ -210,7 +212,7 @@ export function WbsBulkEditDialog({
           onSuccess()
         }
       } catch {
-        setErrorMessage('대량 변경 중 오류가 발생했습니다. 변경 내용을 유지했습니다. 다시 시도해 주세요.')
+        setErrorMessage(t('wbs.bulk.errApply'))
       }
     })
   }
@@ -225,8 +227,8 @@ export function WbsBulkEditDialog({
       setRetryItemIds(ids)
       setRetryRows(snapshot.rows)
       setResult(null)
-      setErrorMessage('실패한 항목의 최신 내용을 다시 불러왔습니다. 검토한 뒤 적용해 주세요.')
-      } catch { setErrorMessage('최신 내용을 불러오지 못했습니다. 다시 시도해 주세요.') }
+      setErrorMessage(t('wbs.bulk.reloaded'))
+      } catch { setErrorMessage(t('wbs.bulk.reloadFail')) }
     })
   }
 
@@ -251,12 +253,12 @@ export function WbsBulkEditDialog({
             </div>
             <div>
               <h2 id={`${dialogId}-title`} className="text-base font-semibold text-fg">
-                WBS 작업 대량 수정
+                {t('wbs.bulk.title')}
               </h2>
               <p className="text-xs text-fg-muted">
                 {retryItemIds
-                  ? `실패한 ${retryItemIds.length}개 항목 재시도`
-                  : `선택된 ${selectedItems.length}개 작업 항목`}
+                  ? t('wbs.bulk.subtitleRetry').replace('{n}', String(retryItemIds.length))
+                  : t('wbs.bulk.subtitleSelected').replace('{n}', String(selectedItems.length))}
               </p>
             </div>
           </div>
@@ -264,7 +266,7 @@ export function WbsBulkEditDialog({
             type="button"
             onClick={requestClose} disabled={isPending}
             className="rounded-lg p-1.5 text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors"
-            aria-label="닫기"
+            aria-label={t('common.close')}
           >
             <X className="h-5 w-5" />
           </button>
@@ -280,10 +282,10 @@ export function WbsBulkEditDialog({
                   <CheckCircle2 className="h-5 w-5 text-success dark:text-success shrink-0 mt-0.5" />
                   <div>
                     <h3 className="text-sm font-semibold text-success dark:text-success">
-                      대량 수정 완료
+                      {t('wbs.bulk.doneTitle')}
                     </h3>
                     <p className="text-xs text-success dark:text-success mt-0.5">
-                      총 {result.total}개 항목이 성공적으로 반영되었습니다.
+                      {t('wbs.bulk.doneDesc').replace('{n}', String(result.total))}
                     </p>
                   </div>
                 </div>
@@ -293,18 +295,17 @@ export function WbsBulkEditDialog({
                     <AlertTriangle className="h-5 w-5 text-warning dark:text-warning shrink-0 mt-0.5" />
                     <div>
                       <h3 className="text-sm font-semibold text-warning dark:text-warning">
-                        부분 실패 발생
+                        {t('wbs.bulk.partialTitle')}
                       </h3>
                       <p className="text-xs text-warning dark:text-warning mt-0.5">
-                        총 {result.total}개 중 {result.succeeded.length}개 성공,{' '}
-                        {result.failed.length}개 실패
+                        {t('wbs.bulk.partialDesc').replace('{total}', String(result.total)).replace('{ok}', String(result.succeeded.length)).replace('{fail}', String(result.failed.length))}
                       </p>
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <h4 className="text-xs font-semibold text-fg-muted">
-                      실패 항목 목록
+                      {t('wbs.bulk.failedList')}
                     </h4>
                     <div className="max-h-48 overflow-y-auto space-y-1.5 rounded-lg border border-border bg-surface-subtle p-2">
                       {result.failed.map(f => (
@@ -319,10 +320,10 @@ export function WbsBulkEditDialog({
                           </div>
                           <span className="shrink-0 rounded bg-danger-weak px-1.5 py-0.5 text-xs font-medium text-danger">
                             {f.reason === 'permission'
-                              ? '권한 없음'
+                              ? t('wbs.err.denied')
                               : f.reason === 'conflict'
-                                ? '충돌/잠금'
-                                : '유효성 오류'}
+                                ? t('wbs.bulk.reasonConflict')
+                                : t('wbs.bulk.reasonInvalid')}
                           </span>
                         </div>
                       ))}
@@ -336,7 +337,7 @@ export function WbsBulkEditDialog({
               {/* 범위 선택기 (전체 스냅샷이 있는 경우만) */}
               {!retryItemIds && allItemIdsSnapshot && allItemIdsSnapshot.length > selectedItems.length && (
                 <div className="rounded-xl border border-border bg-surface-subtle p-3.5 space-y-2">
-                  <span className="text-xs font-semibold text-fg-muted block">적용 대상 범위</span>
+                  <span className="text-xs font-semibold text-fg-muted block">{t('wbs.bulk.scope')}</span>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <label
                       className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
@@ -352,7 +353,7 @@ export function WbsBulkEditDialog({
                         onChange={() => setScope('selected')}
                         className="sr-only"
                       />
-                      <span>현재 선택한 {selectedItems.length}개 항목</span>
+                      <span>{t('wbs.bulk.scopeSelected').replace('{n}', String(selectedItems.length))}</span>
                     </label>
                     <label
                       className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
@@ -368,7 +369,7 @@ export function WbsBulkEditDialog({
                         onChange={() => setScope('all')}
                         className="sr-only"
                       />
-                      <span>결과 전체 {allItemIdsSnapshot.length}개 항목</span>
+                      <span>{t('wbs.bulk.scopeAll').replace('{n}', String(allItemIdsSnapshot.length))}</span>
                     </label>
                   </div>
                 </div>
@@ -388,7 +389,7 @@ export function WbsBulkEditDialog({
               <div className="space-y-4">
                 {/* 1. 시작일 */}
                 <FieldRow
-                  label="시작일"
+                  label={t('wbs.field.start')}
                   isMixed={activeRows.length ? mixed("plannedStart") : isMixedStart}
                   mode={startMode}
                   onModeChange={setStartMode}
@@ -405,7 +406,7 @@ export function WbsBulkEditDialog({
 
                 {/* 2. 종료일 */}
                 <FieldRow
-                  label="종료일"
+                  label={t('wbs.field.end')}
                   isMixed={activeRows.length ? mixed("plannedEnd") : isMixedEnd}
                   mode={endMode}
                   onModeChange={setEndMode}
@@ -422,14 +423,14 @@ export function WbsBulkEditDialog({
 
                 {/* 3. 산출물 */}
                 <FieldRow
-                  label="산출물"
+                  label={t('wbs.colDeliverable')}
                   isMixed={activeRows.length ? mixed("deliverable") : isMixedDeliv}
                   mode={delivMode}
                   onModeChange={setDelivMode}
                   inputControl={
                     <input
                       type="text"
-                      placeholder="산출물 명칭"
+                      placeholder={t('wbs.bulk.deliverablePlaceholder')}
                       value={delivVal}
                       onChange={e => setDelivVal(e.target.value)}
                       data-testid="bulk-input-deliverable"
@@ -440,14 +441,14 @@ export function WbsBulkEditDialog({
 
                 {/* 4. 업무 분류 — 이름은 프로젝트의 추가 축 이름을 따른다 */}
                 <FieldRow
-                  label={extraAxisLabel ?? '업무 분류'}
+                  label={extraAxisLabel ?? t('wbs.field.biz')}
                   isMixed={activeRows.length ? mixed("biz") : isMixedBiz}
                   mode={bizMode}
                   onModeChange={setBizMode}
                   inputControl={
                     <input
                       type="text"
-                      placeholder="업무 구분 코드 또는 이름"
+                      placeholder={t('wbs.bulk.bizPlaceholder')}
                       value={bizVal}
                       onChange={e => setBizVal(e.target.value)}
                       data-testid="bulk-input-biz"
@@ -457,17 +458,17 @@ export function WbsBulkEditDialog({
                 />
 
                 {/* 5. WBS 단계 */}
-                <p className="text-xs text-fg-secondary">단계·담당자는 각각 따로 적용합니다. 주관 팀 변경은 지원 팀을 유지합니다.</p>
-                <FieldRow label="담당자" isMixed={mixed('assigneeMemberId')} mode={assigneeMode} onModeChange={setAssigneeMode}
-                  inputControl={<select aria-label="담당자 새 값" value={assigneeVal} onChange={e => setAssigneeVal(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs">
-                    <option value="">담당자 선택</option>{members.filter(member => member.active).map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
+                <p className="text-xs text-fg-secondary">{t('wbs.bulk.separateHint')}</p>
+                <FieldRow label={t('wbs.colAssignee')} isMixed={mixed('assigneeMemberId')} mode={assigneeMode} onModeChange={setAssigneeMode}
+                  inputControl={<select aria-label={t('wbs.bulk.assigneeNewAria')} value={assigneeVal} onChange={e => setAssigneeVal(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs">
+                    <option value="">{t('wbs.bulk.assigneePick')}</option>{members.filter(member => member.active).map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
                   </select>} />
-                <FieldRow label="주관 팀" isMixed={mixed('teamCode')} mode={teamMode} onModeChange={setTeamMode}
-                  inputControl={<select aria-label="주관 팀 새 값" value={teamVal} onChange={e => setTeamVal(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs">
-                    <option value="">팀 선택</option>{teams.map(team => <option key={team.id} value={team.code}>{team.name}</option>)}
+                <FieldRow label={t('wbs.bulk.primaryTeam')} isMixed={mixed('teamCode')} mode={teamMode} onModeChange={setTeamMode}
+                  inputControl={<select aria-label={t('wbs.bulk.teamNewAria')} value={teamVal} onChange={e => setTeamVal(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs">
+                    <option value="">{t('wbs.bulk.teamPick')}</option>{teams.map(team => <option key={team.id} value={team.code}>{team.name}</option>)}
                   </select>} />
                 <FieldRow
-                  label="작업 단계"
+                  label={t('wbs.bulk.stage')}
                   isMixed={activeRows.length ? mixed("stage") : isMixedStage}
                   mode={stageMode}
                   onModeChange={setStageMode}
@@ -478,11 +479,11 @@ export function WbsBulkEditDialog({
                       data-testid="bulk-input-stage"
                       className="w-full text-xs rounded-lg border border-border bg-surface px-2.5 py-1.5 text-fg focus:outline-hidden focus:ring-1 focus:ring-action"
                     >
-                      <option value="none">{stageLabel(null, stageLabelKo(null))}</option>
-                      <option value="as">{stageLabel('as', stageLabelKo('as'))}</option>
-                      <option value="ip">{stageLabel('ip', stageLabelKo('ip'))}</option>
-                      <option value="im">{stageLabel('im', stageLabelKo('im'))}</option>
-                      <option value="xx">{stageLabel('xx', stageLabelKo('xx'))}</option>
+                      <option value="none">{stageLabel(null, t('wbs.stageNoneOption'))}</option>
+                      <option value="as">{stageLabel('as', t('wbs.stageAs'))}</option>
+                      <option value="ip">{stageLabel('ip', t('wbs.stageIp'))}</option>
+                      <option value="im">{stageLabel('im', t('wbs.stageIm'))}</option>
+                      <option value="xx">{stageLabel('xx', t('wbs.stageXx'))}</option>
                     </select>
                   }
                 />
@@ -503,7 +504,7 @@ export function WbsBulkEditDialog({
                   className="flex min-h-11 items-center gap-1.5 rounded-xl bg-warning px-4 text-xs font-semibold text-warning-fg transition-colors hover:bg-warning/90"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
-                  실패한 {result.failed.length}건만 다시 시도
+                  {t('wbs.bulk.retryFailed').replace('{n}', String(result.failed.length))}
                 </button>
               )}
               <button
@@ -511,7 +512,7 @@ export function WbsBulkEditDialog({
                 onClick={requestClose} disabled={isPending}
                 className="min-h-11 rounded-xl border border-border bg-surface px-4 text-xs font-semibold text-fg transition-colors hover:bg-surface-hover"
               >
-                닫기
+                {t('common.close')}
               </button>
             </div>
           ) : (
@@ -521,7 +522,7 @@ export function WbsBulkEditDialog({
                 onClick={requestClose} disabled={isPending}
                 className="min-h-11 rounded-xl border border-border bg-surface px-4 text-xs font-medium text-fg transition-colors hover:bg-surface-hover"
               >
-                취소
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -531,7 +532,7 @@ export function WbsBulkEditDialog({
                 className="flex min-h-11 items-center gap-1.5 rounded-xl bg-action px-4 text-xs font-semibold text-action-fg transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isPending && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-                {isPending ? '적용 중...' : `총 ${targetIds.length}개 항목에 적용`}
+                {isPending ? t('wbs.bulk.applying') : t('wbs.bulk.apply').replace('{n}', String(targetIds.length))}
               </button>
             </>
           )}
@@ -558,6 +559,7 @@ function FieldRow({
   onModeChange: (m: FieldMode) => void
   inputControl: React.ReactNode
 }) {
+  const { t } = useLocale()
   return (
     <div className="flex flex-col gap-1.5 rounded-xl border border-border/60 bg-surface p-3 text-xs">
       <div className="flex items-center justify-between">
@@ -568,7 +570,7 @@ function FieldRow({
               data-testid={`bulk-mixed-indicator-${label}`}
               className="rounded bg-warning-weak px-1.5 py-0.5 text-xs font-medium text-warning"
             >
-              (혼합)
+              {t('wbs.bulk.mixed')}
             </span>
           )}
         </div>
@@ -582,7 +584,7 @@ function FieldRow({
                 : 'text-fg-muted hover:text-fg hover:bg-surface-hover'
             }`}
           >
-            변경 안 함
+            {t('wbs.bulk.modeUnchanged')}
           </button>
           <button
             type="button"
@@ -593,7 +595,7 @@ function FieldRow({
                 : 'text-fg-muted hover:text-fg hover:bg-surface-hover'
             }`}
           >
-            새 값 지정
+            {t('wbs.bulk.modeSet')}
           </button>
           <button
             type="button"
@@ -604,7 +606,7 @@ function FieldRow({
                 : 'text-fg-muted hover:text-fg hover:bg-surface-hover'
             }`}
           >
-            값 비우기
+            {t('wbs.bulk.modeClear')}
           </button>
         </div>
       </div>
@@ -612,12 +614,12 @@ function FieldRow({
       <div className="mt-1">
         {mode === 'unchanged' && (
           <div className="text-fg-muted text-xs py-1">
-            {isMixed ? '기존 서로 다른 값을 유지합니다.' : '기존 값을 변경하지 않고 유지합니다.'}
+            {isMixed ? t('wbs.bulk.keepMixed') : t('wbs.bulk.keepSame')}
           </div>
         )}
         {mode === 'clear' && (
           <div className="text-danger dark:text-danger text-xs py-1 font-medium">
-            이 필드의 값을 비웁니다.
+            {t('wbs.bulk.clearHint')}
           </div>
         )}
         {mode === 'set' && inputControl}

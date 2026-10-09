@@ -4,6 +4,7 @@ import { MiniEmpty } from '@/components/dashboard/bits'
 import { menuLabel } from '@/lib/domain/usageMenu'
 import { barPct, type MenuRank } from '@/lib/domain/usage'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { intlLocale } from '@/lib/i18n/format'
 
 /** 많이 쓰는 프로그램(메뉴) — 조회수 순. 막대는 1위 대비 비율. */
 export function MenuRankingCard({ ranks, locale }: { ranks: MenuRank[]; locale: Locale }) {
@@ -11,9 +12,9 @@ export function MenuRankingCard({ ranks, locale }: { ranks: MenuRank[]; locale: 
   const max = ranks[0]?.events ?? 0
 
   return (
-    <SectionCard title="많이 쓰는 프로그램" icon={BarChart3}>
+    <SectionCard title={t(locale, 'usage.rank.title')} icon={BarChart3}>
       {ranks.length === 0 ? (
-        <MiniEmpty text="수집 시작 이후 데이터가 쌓입니다." />
+        <MiniEmpty text={t(locale, 'usage.noDataYet')} />
       ) : (
         <ol className="space-y-2">
           {ranks.map((r, i) => (
@@ -24,7 +25,7 @@ export function MenuRankingCard({ ranks, locale }: { ranks: MenuRank[]; locale: 
                 <span className="block h-2 rounded-full bg-action" style={{ width: `${barPct(r.events, max)}%` }} />
               </span>
               <span className="w-28 shrink-0 text-right text-meta tabular-nums text-fg-secondary">
-                {r.events.toLocaleString('ko-KR')}회 · {r.activeUsers}명
+                {t(locale, 'usage.rank.counts').replace('{events}', r.events.toLocaleString(intlLocale(locale))).replace('{users}', String(r.activeUsers))}
               </span>
             </li>
           ))}

@@ -10,7 +10,7 @@ import { WIKI_DOCUMENT_KINDS, type WikiDocumentKind } from '@/lib/domain/wiki'
 import { clearLegacyWikiDrafts, draftKey, legacyWikiDraftKey, readDraftWithMigration, settleLegacyDraft } from '@/lib/drafts/wikiDrafts'
 import { readDraftRaw, sweepExpiredDrafts, writeDraftRaw, type LocalDraftPolicy } from '@/lib/drafts/storage'
 import { useScope } from '@/components/app/ScopeContext'
-import type { Locale } from '@/lib/i18n/dict'
+import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import { formatWikiDate } from './WikiShared'
 import { trackWikiEvent } from './wikiAnalytics'
@@ -28,14 +28,14 @@ type EditableTopic = {
   documentKind?: string | null
 }
 
-const KIND_LABEL: Record<WikiDocumentKind, { ko: string; en: string }> = {
-  overview: { ko: '프로젝트 개요', en: 'Overview' },
-  decision: { ko: '결정 기록', en: 'Decision' },
-  how_to: { ko: '사용 방법', en: 'How-to' },
-  runbook: { ko: '운영 런북', en: 'Runbook' },
-  faq: { ko: '자주 묻는 질문', en: 'FAQ' },
-  glossary: { ko: '용어집', en: 'Glossary' },
-  reference: { ko: '참조 자료', en: 'Reference' },
+const KIND_LABEL: Record<WikiDocumentKind, DictKey> = {
+  overview: 'wiki.docKind.overview',
+  decision: 'wiki.docKind.decision',
+  how_to: 'wiki.docKind.how_to',
+  runbook: 'wiki.docKind.runbook',
+  faq: 'wiki.docKind.faq',
+  glossary: 'wiki.docKind.glossary',
+  reference: 'wiki.docKind.reference',
 }
 
 const TEMPLATE: Record<WikiDocumentKind, { ko: string; en: string }> = {
@@ -384,7 +384,7 @@ export function WikiDocumentEditor({
     return (
       <div className="space-y-4">
         <DocumentVersionStatus currentVersionNo={null} viewingVersionNo={null} publicationState="draft" />
-        <p className="text-xs text-fg-secondary">편집 중인 초안입니다. 저장 전까지 다른 사람에게 반영되지 않습니다.</p>
+        <p className="text-xs text-fg-secondary">{t(locale, 'wiki.document.editingDraft')}</p>
         {!draftsOn && <p data-drafts-off className="text-xs text-fg-secondary">{t(locale, 'wiki.document.draftsOff')}</p>}
         {draft && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-pending/40 bg-pending-weak px-4 py-3">
@@ -415,7 +415,7 @@ export function WikiDocumentEditor({
           <label className="block">
             <span className="mb-1 block text-meta font-semibold text-fg-secondary">{t(locale, 'wiki.document.kindLabel')}</span>
             <select value={kind} onChange={(event) => changeKind(event.target.value as WikiDocumentKind)} className="app-input">
-              {WIKI_DOCUMENT_KINDS.map((value) => <option key={value} value={value}>{KIND_LABEL[value][locale]}</option>)}
+              {WIKI_DOCUMENT_KINDS.map((value) => <option key={value} value={value}>{t(locale, KIND_LABEL[value])}</option>)}
             </select>
           </label>
         </div>
@@ -452,7 +452,7 @@ export function WikiDocumentEditor({
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-        <span className="chip bg-action-soft text-action">{KIND_LABEL[snapshot.kind][locale]}</span>
+        <span className="chip bg-action-soft text-action">{t(locale, KIND_LABEL[snapshot.kind])}</span>
         <div className="flex flex-wrap gap-2">
           {canVerify && snapshot.bodyMd.trim() && (
             <button type="button" onClick={() => void verify()} disabled={verifying} className="btn btn-ghost h-9 px-3 text-xs">

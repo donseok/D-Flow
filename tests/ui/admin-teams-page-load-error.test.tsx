@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: mocks.loadWorkspaceScope }))
 vi.mock('@/app/actions/teams', () => ({ listTeamsAdmin: mocks.listTeamsAdmin }))
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
+vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('@/components/admin/TeamsManager', () => ({ TeamsManager: mocks.TeamsManager }))
 
 import TeamsAdminPage from '@/app/(app)/w/[slug]/admin/teams/page'

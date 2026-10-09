@@ -14,7 +14,7 @@ import {
   ShieldAlert,
   UserRound,
 } from 'lucide-react'
-import type { Locale } from '@/lib/i18n/dict'
+import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import type { WikiItem, WikiTopicDetailData } from '@/lib/data/wiki'
 import {
@@ -90,16 +90,17 @@ function trustStatusMeta(state: WikiTopicTrustState, locale: Locale) {
 }
 
 function kindLabel(kind: string | null | undefined, locale: Locale): string {
-  const labels: Record<string, { ko: string; en: string }> = {
-    overview: { ko: '프로젝트 개요', en: 'Overview' },
-    decision: { ko: '결정 기록', en: 'Decision' },
-    how_to: { ko: '사용 방법', en: 'How-to' },
-    runbook: { ko: '운영 런북', en: 'Runbook' },
-    faq: { ko: '자주 묻는 질문', en: 'FAQ' },
-    glossary: { ko: '용어집', en: 'Glossary' },
-    reference: { ko: '참조 자료', en: 'Reference' },
+  const labels: Record<string, DictKey> = {
+    overview: 'wiki.docKind.overview',
+    decision: 'wiki.docKind.decision',
+    how_to: 'wiki.docKind.how_to',
+    runbook: 'wiki.docKind.runbook',
+    faq: 'wiki.docKind.faq',
+    glossary: 'wiki.docKind.glossary',
+    reference: 'wiki.docKind.reference',
   }
-  return labels[kind ?? '']?.[locale] ?? t(locale, 'wiki.document.unclassified')
+  const key: unknown = labels[kind ?? '']
+  return t(locale, typeof key === 'string' ? key as DictKey : 'wiki.document.unclassified')
 }
 
 function TrustPanel({

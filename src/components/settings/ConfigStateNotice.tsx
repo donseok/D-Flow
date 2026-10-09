@@ -18,21 +18,21 @@ export function ConfigStateNotice({ kind, locale, keyName, message, settingsHref
 }) {
   const ko = locale === 'ko'
   const title = kind === 'unavailable' ? t(locale, 'settings.configLoadFailed')
-    : kind === 'required' ? (ko ? '필요한 설정이 없습니다.' : 'A required setting is missing.')
-      : kind === 'invalid' ? (ko ? '설정이 손상되었습니다.' : 'A setting is invalid.')
-        : kind === 'disabled' ? (ko ? '이 기능이 꺼져 있습니다.' : 'This feature is turned off.')
-          : kind === 'field' ? (ko ? '입력값을 확인하세요.' : 'Check this value.')
-            : (ko ? '설정을 저장하지 못했습니다.' : 'Settings could not be saved.')
+    : kind === 'required' ? t(locale, 'settings.state.required')
+      : kind === 'invalid' ? t(locale, 'settings.state.invalid')
+        : kind === 'disabled' ? t(locale, 'settings.state.disabled')
+          : kind === 'field' ? t(locale, 'settings.state.field')
+            : t(locale, 'settings.state.patch')
   const detailText = kind === 'unavailable' ? (ko ? CONFIG_MESSAGES.CONFIG_UNAVAILABLE : 'The settings could not be loaded.') : message
   const canRecover = RECOVERABLE.has(kind) && isAdmin && !!settingsHref
   const askAdmin = RECOVERABLE.has(kind) && !canRecover
   const detail = (keyName || detailText || askAdmin) ? <>
     {keyName && <span className="block">{t(locale, 'settings.configLoadFailedKey').replace('{key}', keyName)}</span>}
     {detailText && <span className="block">{detailText}</span>}
-    {askAdmin && <span className="block">{ko ? '관리자에게 문의하세요.' : 'Contact an administrator.'}</span>}
+    {askAdmin && <span className="block">{t(locale, 'settings.state.askAdmin')}</span>}
   </> : undefined
   const action = canRecover
-    ? { label: kind === 'disabled' ? (ko ? '설정에서 켜기' : 'Turn on in settings') : (ko ? '설정에서 복구하기' : 'Open settings'), href: settingsHref! }
+    ? { label: kind === 'disabled' ? t(locale, 'settings.state.turnOn') : t(locale, 'settings.state.recover'), href: settingsHref! }
     : undefined
   return <div data-config-state={kind} {...(kind === 'unavailable' ? { 'data-config-load-error': true } : {})}>
     <StatusMessage kind={NOTICE_STATUS[kind]} title={title} detail={detail} action={action} compact={compact || kind === 'field'} blocking={BLOCKING.has(kind)} />

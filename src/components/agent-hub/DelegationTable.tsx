@@ -16,16 +16,16 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 import type { AgentHub, HubRow } from '@/lib/domain/agentHub'
 import { ageLabel } from '@/lib/domain/seatmap'
-import { stageLabelKo } from '@/lib/domain/stageLabels'
 import { useStageLabel } from '@/components/wbs/StageLabelsProvider'
 import { updateAgentPrompt } from '@/app/actions/wbsSpec'
 import { applyHubDelegations, runHubProcessOp, type HubDelegationsResult, type HubProcessOp, type WbsStageCode } from '@/app/actions/agentHub'
 import { PendingSaveChip } from '@/components/wbs/PendingSaveChip'
 import { usePendingDelegations } from './usePendingDelegations'
-import {
-  DELEGATE_OFF_TITLE, DELEGATE_ON_TITLE, NEEDS_DELEGATION, NEEDS_DELEGATION_TONE, NO_ORDER, NOTE_PLACEHOLDER, OP_LABEL, OP_TITLE,
-  REASON_TONE, STAGE_CODES, STAGE_NONE_LABEL, STATE_LABEL, STATE_TONE, TOGGLE_DENIED_TITLE,
-} from './labels'
+import type { DictKey } from '@/lib/i18n/dict'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { fill } from '@/components/agents/labelKeys'
+import { NEEDS_DELEGATION_TONE, NO_ORDER, REASON_TONE, STAGE_CODES, STATE_TONE } from './labels'
+import { NOTE_PLACEHOLDER_KEY, OP_LABEL_KEY, OP_TITLE_KEY, STATE_LABEL_KEY, type HubOpKind } from './labelKeys'
 import s from './delegationTable.module.css'
 
 export type HubFilter = 'mine' | 'all'
@@ -55,7 +55,7 @@ type NoteKind = 'reject' | 'rework'
  * 승인은 who 대신 r.canApprove 만 본다 — 서브트리 관리자라도 그 리프의 담당자 본인이거나 그 주문을 claim 한
  * 계정이면 안 뜬다(분리 원칙, requireCompletionApprover — AUTH-07a).
  */
-type OpButton = { kind: keyof typeof OP_LABEL; who: 'admin' | 'review'; note?: NoteKind; confirm?: true }
+type OpButton = { kind: HubOpKind; who: 'admin' | 'review'; note?: NoteKind; confirm?: true }
 const OPS_BY_STATUS: Readonly<Record<string, readonly OpButton[]>> = {
   reported: [{ kind: 'approve', who: 'admin' }, { kind: 'reject', who: 'review', note: 'reject' }],
   approved: [{ kind: 'unapprove', who: 'review' }, { kind: 'rework', who: 'review', note: 'rework' }],
@@ -68,19 +68,21 @@ const OPS_BY_STATUS: Readonly<Record<string, readonly OpButton[]>> = {
  * 맨 끝 "여유" 열은 남는 폭을 먹는 자리라 손잡이를 두지 않는다.
  */
 const COLS = [
-  { key: 'check', label: '위임', w: 38, min: 32 },
-  { key: 'code', label: '코드', w: 126, min: 80 },
-  { key: 'name', label: '작업', w: 296, min: 140 },
-  { key: 'owner', label: '담당자', w: 88, min: 60 },
-  { key: 'state', label: '단계 · 상태', w: 182, min: 128 },
-  { key: 'reason', label: '사유', w: 116, min: 72 },
-  { key: 'agent', label: '에이전트 · 신호', w: 162, min: 92 },
-  { key: 'ops', label: '조정', w: 176, min: 96 },
-] as const
+  { key: 'check', label: 'agentHub.col.check', w: 38, min: 32 },
+  { key: 'code', label: 'agentHub.col.code', w: 126, min: 80 },
+  { key: 'name', label: 'agentHub.col.name', w: 296, min: 140 },
+  { key: 'owner', label: 'agentHub.col.owner', w: 88, min: 60 },
+  { key: 'state', label: 'agentHub.col.state', w: 182, min: 128 },
+  { key: 'reason', label: 'agentHub.col.reason', w: 116, min: 72 },
+  { key: 'agent', label: 'agentHub.col.agent', w: 162, min: 92 },
+  { key: 'ops', label: 'agentHub.col.ops', w: 176, min: 96 },
+] as const satisfies ReadonlyArray<{ key: string; label: DictKey; w: number; min: number }>
 type ColKey = (typeof COLS)[number]['key']
 const COL_W = Object.fromEntries(COLS.map(c => [c.key, c.w])) as Record<ColKey, number>
 const COL_MIN = Object.fromEntries(COLS.map(c => [c.key, c.min])) as Record<ColKey, number>
 /** 열 너비는 이 브라우저에만 남는다 — 읽기·쓰기 모두 try/catch(사생활 보호 창·차단된 사이트 데이터). */
+/** 단계 기본 이름의 사전 키 — WBS 화면(wbs.stage*)과 같은 문구. 프로젝트가 정한 이름이 있으면 그쪽이 이긴다(useStageLabel). */
+const STAGE_KEY: Readonly<Record<(typeof STAGE_CODES)[number], DictKey>> = { as: 'wbs.stageAs', ip: 'wbs.stageIp', im: 'wbs.stageIm', xx: 'wbs.stageXx' }
 const COL_W_KEY = 'dflow-hub-colw'
 const VIEW_KEY = 'dflow-hub-view'
 
@@ -104,19 +106,24 @@ function leafDescendants(rows: HubRow[]): Map<string, string[]> {
 }
 
 function ParentCheckbox({ state, count, onClick }: { state: 'all' | 'some' | 'none'; count: number; onClick: () => void }) {
+  const { t } = useLocale()
   const ref = useRef<HTMLInputElement>(null)
   useEffect(() => { if (ref.current) ref.current.indeterminate = state === 'some' }, [state])
   // 네이티브 체크박스를 그대로 쓴다 — indeterminate 3상태를 직접 그리지 않으려는 것이고,
   // 날것으로 보이던 원인은 형태가 아니라 파란 기본색이라 accent-color 만 바꾼다.
   return (
     <input ref={ref} type="checkbox" data-hub-parent-toggle checked={state === 'all'}
-      aria-label={`하위 ${count}건 한 번에 위임`} title={`내가 켤 수 있는 하위 리프 ${count}건을 한 번에 위임/해제합니다.`}
+      aria-label={fill(t('agentHub.parent.aria'), { n: count })} title={fill(t('agentHub.parent.title'), { n: count })}
       onChange={onClick} className="h-[15px] w-[15px] accent-action" />
   )
 }
 
 export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, nowMs, onHub, onChanged, onSelect }: Props) {
-  const stageName = useStageLabel()   // 프로젝트의 단계 이름(SP5b W2) — 없는 칸은 STAGE_LABEL_KO
+  const { t } = useLocale()
+  const stageName = useStageLabel()   // 프로젝트의 단계 이름(SP5b W2) — 없는 칸은 사전의 기본 이름
+  /** null → 미착수, 모르는 코드 → 코드 그대로(표시 = 로깅 — 감추면 "단계 없음"으로 위장한다). */
+  const stageDefault = (stage: string | null): string =>
+    stage === null ? t('wbs.stageNoneOption') : (STAGE_CODES as readonly string[]).includes(stage) ? t(STAGE_KEY[stage as (typeof STAGE_CODES)[number]]) : stage
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set())
   // 프롬프트 저장·조정 처리 중인 행 — 체크는 잠그지 않으므로 여기에 들어가지 않는다.
   const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set())
@@ -155,7 +162,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
       setRowErr(m => { const n = new Map(m); for (const c of sent) n.delete(c.itemId); for (const f of res.failed) n.set(f.itemId, f.error); return n })
       setRowWarn(m => { const n = new Map(m); for (const c of sent) n.delete(c.itemId); for (const w of res.warnings) n.set(w.itemId, w.warning); return n })
       setNotice(res.failed.length > 1
-        ? `${res.failed.length}건 실패: ${res.failed.map(f => byId.get(f.itemId)?.code ?? f.itemId).join(', ')}`
+        ? fill(t('agentHub.notice.failed'), { n: res.failed.length, codes: res.failed.map(f => byId.get(f.itemId)?.code ?? f.itemId).join(', ') })
         : res.hubError ?? null)
       if (res.hub) onHub(res.hub)
       else void onChanged() // 저장은 됐고 재조회만 실패 — 한 번 더 시도한다.
@@ -277,7 +284,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
     setBusy(s2 => setWith(s2, r.itemId, true)); setRowErr(m => mapWith(m, r.itemId, null))
     try {
       const res = await updateAgentPrompt(r.itemId, draft)
-      if (!res.ok) { setRowErr(m => mapWith(m, r.itemId, res.error ?? '실패')); return }
+      if (!res.ok) { setRowErr(m => mapWith(m, r.itemId, res.error ?? t('agentHub.failed'))); return }
       setEditing(null)
       await onChanged()
     } catch (e) {
@@ -346,25 +353,25 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
   let leafSeq = 0
 
   return (
-    <section aria-label="위임 표" className="rounded-xl border border-border bg-surface p-3">
+    <section aria-label={t('agentHub.table.aria')} className="rounded-xl border border-border bg-surface p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1" role="group" aria-label="표시 범위">{seg('mine', '내 담당')}{seg('all', '전체')}</div>
-          {tool(onlyWait, `승인 대기만${waitCount ? ` ${waitCount}` : ''}`, '완료 보고가 올라와 승인을 기다리는 행만 봅니다', () => setOnlyWait(v => !v), { 'data-hub-only-wait': '' })}
+          <div className="flex items-center gap-1" role="group" aria-label={t('agents.scope.aria')}>{seg('mine', t('agentHub.filter.mine'))}{seg('all', t('agents.scope.all'))}</div>
+          {tool(onlyWait, `${t('agentHub.onlyWait')}${waitCount ? ` ${waitCount}` : ''}`, t('agentHub.onlyWaitTitle'), () => setOnlyWait(v => !v), { 'data-hub-only-wait': '' })}
           {(pend.isPending || pend.saving) && (
             <span data-hub-pending className="inline-flex items-center gap-1 text-meta text-fg-secondary">
-              <span data-hub-pending-count>{pend.count}건</span>
+              <span data-hub-pending-count>{fill(t('agentHub.pendingCount'), { n: pend.count })}</span>
               <PendingSaveChip isPending={pend.isPending} saving={pend.saving} remainingMs={pend.remainingMs} onSaveNow={() => { void pend.flush() }} />
             </span>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {tool(dense, '조밀', '행 높이를 줄입니다', () => { const v = !dense; setDense(v); saveView({ freeze, dense: v }) })}
-          {tool(freeze === 2, '작업 열까지 고정', '가로로 밀어도 위임·코드·작업 열이 왼쪽에 남습니다', () => { const v = freeze === 2 ? 1 : 2; setFreeze(v); saveView({ freeze: v, dense }) })}
-          {tool(false, '열 너비 초기화', '모든 열을 기본 폭으로 되돌립니다', resetAll)}
+          {tool(dense, t('agentHub.dense'), t('agentHub.denseTitle'), () => { const v = !dense; setDense(v); saveView({ freeze, dense: v }) })}
+          {tool(freeze === 2, t('agentHub.freezeName'), t('agentHub.freezeNameTitle'), () => { const v = freeze === 2 ? 1 : 2; setFreeze(v); saveView({ freeze: v, dense }) })}
+          {tool(false, t('agentHub.resetWidths'), t('agentHub.resetWidthsTitle'), resetAll)}
         </div>
       </div>
-      <p className="mb-2 text-meta text-fg-muted">리프 항목의 체크가 위임(발행)입니다. 부모 체크는 내가 켤 수 있는 하위 리프를 한 번에 켭니다. 머리글 경계를 끌면 열 너비가 바뀝니다.</p>
+      <p className="mb-2 text-meta text-fg-muted">{t('agentHub.help')}</p>
       {notice && <p data-hub-notice role="status" className="mb-2 rounded-md bg-pending-weak px-2 py-1 text-xs text-pending">{notice}</p>}
       <div ref={boxRef} data-shift="0" onScroll={onScroll} style={boxVars} className={s.box}>
         <table className={cls(s.table, dense && s.dense)} style={{ minWidth: `${totalW}px` }}>
@@ -376,14 +383,14 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
             <tr>
               {COLS.map(c => (
                 <th key={c.key} scope="col" className={colCls(c.key)}>
-                  {c.label}
-                  <button type="button" data-rsz={c.key} className={s.rsz} aria-label={`${c.label} 열 너비`}
-                    title="끌어서 너비 조절 · 두 번 누르면 기본값 · ←/→ 로도 조절"
+                  {t(c.label)}
+                  <button type="button" data-rsz={c.key} className={s.rsz} aria-label={fill(t('agentHub.col.widthAria'), { label: t(c.label) })}
+                    title={t('agentHub.col.widthTitle')}
                     onPointerDown={onHandleDown(c.key)} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp}
                     onDoubleClick={() => resetOne(c.key)} onKeyDown={onHandleKey(c.key)} />
                 </th>
               ))}
-              <th scope="col"><span className="sr-only">여유</span></th>
+              <th scope="col"><span className="sr-only">{t('agentHub.col.slack')}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -412,7 +419,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                   <td className={colCls('check')}>
                     {r.isLeaf
                       ? <input type="checkbox" data-hub-toggle checked={checked} disabled={!r.canToggle}
-                          title={!r.canToggle ? TOGGLE_DENIED_TITLE : checked ? DELEGATE_OFF_TITLE : DELEGATE_ON_TITLE} aria-label={`${r.code} 위임`}
+                          title={!r.canToggle ? t('agentHub.toggle.denied') : checked ? t('agentHub.toggle.offTitle') : t('agentHub.toggle.onTitle')} aria-label={fill(t('agentHub.toggle.aria'), { code: r.code })}
                           onChange={() => toggleLeaf(r)} className="h-[15px] w-[15px] accent-action" />
                       : (leaves.get(r.itemId)?.length ?? 0) > 0
                         ? <ParentCheckbox count={leaves.get(r.itemId)!.length} state={parentState(r)} onClick={() => toggleParent(r)} />
@@ -424,7 +431,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                   <td className={colCls('name')}>
                     <span data-hub-name style={{ paddingLeft: `${r.depth * 16}px` }} className="flex min-w-0 items-center gap-1">
                       {!r.isLeaf && (
-                        <button type="button" data-hub-fold aria-expanded={!folded.has(r.itemId)} aria-label={`${r.code} 접기/펼치기`}
+                        <button type="button" data-hub-fold aria-expanded={!folded.has(r.itemId)} aria-label={fill(t('agentHub.fold.aria'), { code: r.code })}
                           onClick={() => setFolded(s2 => setWith(s2, r.itemId, !s2.has(r.itemId)))} className="shrink-0 text-fg-muted hover:text-fg">
                           {folded.has(r.itemId) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                         </button>
@@ -434,9 +441,9 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                             title={r.name} className={cls(s.trunc, 'min-w-0 text-left hover:underline', r.isLeaf ? 'text-fg' : 'font-semibold text-fg')}>{r.name}</button>
                         : <span className={cls(s.trunc, 'min-w-0', r.isLeaf ? 'text-fg' : 'font-semibold text-fg')} title={r.name}>{r.name}</span>}
                       {canEditPrompt && (
-                        <button type="button" data-hub-prompt-edit aria-label={`${r.code} 프롬프트 편집`} disabled={isBusy}
+                        <button type="button" data-hub-prompt-edit aria-label={fill(t('agentHub.prompt.editAria'), { code: r.code })} disabled={isBusy}
                           onClick={() => { setEditing(r.itemId); setDraft(r.prompt ?? '') }}
-                          title={r.prompt ? `에이전트 지시문: ${r.prompt}` : '에이전트에게 덧붙일 지시문을 씁니다'}
+                          title={r.prompt ? fill(t('agentHub.prompt.title'), { prompt: r.prompt }) : t('agentHub.prompt.emptyTitle')}
                           className={cls('shrink-0 hover:text-fg', r.prompt ? 'text-action' : 'text-fg-muted')}>
                           <Pencil className="h-3 w-3" />
                         </button>
@@ -444,29 +451,29 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                     </span>
                   </td>
                   <td className={cls(colCls('owner'), 'text-fg-secondary')}>
-                    <span className={s.trunc} title={r.canManage && !r.assigneeMine ? `${r.assigneeName ?? ''} — 상위 항목 담당자로서 조정할 수 있는 항목입니다(서브트리 관리)` : r.assigneeName ?? undefined}>{r.assigneeName ?? ''}</span>
+                    <span className={s.trunc} title={r.canManage && !r.assigneeMine ? fill(t('agentHub.owner.subtreeTitle'), { name: r.assigneeName ?? '' }) : r.assigneeName ?? undefined}>{r.assigneeName ?? ''}</span>
                   </td>
                   <td className={cls(colCls('state'), s.clip)}>
                     <span className="flex flex-nowrap items-center gap-1">
                       {canStage
-                        ? <select data-hub-stage value={stageShown ?? ''} disabled={isBusy || r.stageLocked} aria-label={`${r.code} 단계`}
+                        ? <select data-hub-stage value={stageShown ?? ''} disabled={isBusy || r.stageLocked} aria-label={fill(t('agentHub.stage.aria'), { code: r.code })}
                             title={r.stageLocked
-                              ? '에이전트에 위임된 작업입니다. 단계는 승인·반려로 바뀝니다. 직접 바꾸려면 위임을 끄세요.'
-                              : '단계 직접 조정 — 실적은 그 단계의 크레딧으로 지정됩니다'}
+                              ? t('agentHub.stage.lockedTitle')
+                              : t('agentHub.stage.title')}
                             onChange={e => changeStage(r, e.target.value)} className="app-input h-6 min-w-0 shrink py-0 text-meta">
-                            <option value="">{stageName(null, STAGE_NONE_LABEL)}</option>
-                            {STAGE_CODES.map(c => <option key={c} value={c}>{stageName(c, stageLabelKo(c))}</option>)}
+                            <option value="">{stageName(null, stageDefault(null))}</option>
+                            {STAGE_CODES.map(c => <option key={c} value={c}>{stageName(c, stageDefault(c))}</option>)}
                           </select>
                         : r.isLeaf && !r.milestone
-                          ? <span data-hub-stage-text className="shrink-0 text-meta text-fg-secondary">{stageName(r.stage, stageLabelKo(r.stage))}</span>
+                          ? <span data-hub-stage-text className="shrink-0 text-meta text-fg-secondary">{stageName(r.stage, stageDefault(r.stage))}</span>
                           : null}
                       {r.order
-                        ? <span className={`chip shrink-0 ${STATE_TONE[r.order.state]}`}>{STATE_LABEL[r.order.state]}</span>
+                        ? <span className={`chip shrink-0 ${STATE_TONE[r.order.state]}`}>{t(STATE_LABEL_KEY[r.order.state])}</span>
                         : <span className="shrink-0 text-fg-muted">{NO_ORDER}</span>}
                     </span>
                   </td>
                   <td className={cls(colCls('reason'), s.clip)}>
-                    {r.isLeaf && r.devWorkflow && !r.delegated && <span className={`chip ${NEEDS_DELEGATION_TONE}`}>{NEEDS_DELEGATION}</span>}
+                    {r.isLeaf && r.devWorkflow && !r.delegated && <span className={`chip ${NEEDS_DELEGATION_TONE}`}>{t('agentHub.needsDelegation')}</span>}
                     {r.waitReason && (
                       <button type="button" data-hub-depends data-wait-reason={r.waitReason.kind}
                         aria-expanded={showReason} title={r.waitReason.text}
@@ -482,7 +489,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                     {ops.length > 0 && (
                       <span className="flex flex-nowrap gap-1">
                         {ops.map(b => (
-                          <button key={b.kind} type="button" data-hub-op={b.kind} disabled={isBusy} title={OP_TITLE[b.kind]}
+                          <button key={b.kind} type="button" data-hub-op={b.kind} disabled={isBusy} title={t(OP_TITLE_KEY[b.kind])}
                             aria-expanded={b.note ? noteOpen?.kind === b.note : b.confirm ? confirmOpen?.kind === b.kind : undefined}
                             onClick={() => {
                               const orderId = r.order?.id
@@ -494,7 +501,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                                 ? { kind: 'approve', orderId, expectedReportId: r.order?.reportId ?? null }
                                 : { kind: b.kind, orderId } as HubProcessOp)
                             }}
-                            className={`btn h-6 shrink-0 whitespace-nowrap px-2 text-meta ${b.kind === 'approve' ? 'btn-primary' : 'btn-ghost'}`}>{OP_LABEL[b.kind]}</button>
+                            className={`btn h-6 shrink-0 whitespace-nowrap px-2 text-meta ${b.kind === 'approve' ? 'btn-primary' : 'btn-ghost'}`}>{t(OP_LABEL_KEY[b.kind])}</button>
                         ))}
                       </span>
                     )}
@@ -509,16 +516,16 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                       )}
                       {editing === r.itemId && (
                         <div className="flex flex-col gap-1">
-                          <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} className="app-input w-full text-xs" placeholder="에이전트에게 덧붙일 지시문" />
+                          <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} className="app-input w-full text-xs" placeholder={t('agentHub.prompt.placeholder')} />
                           <div className="flex gap-2">
-                            <button type="button" data-hub-prompt-save disabled={isBusy} onClick={() => { void savePrompt(r) }} className="btn btn-primary h-7 px-2 text-xs">저장</button>
-                            <button type="button" onClick={() => setEditing(null)} className="btn btn-ghost h-7 px-2 text-xs">취소</button>
+                            <button type="button" data-hub-prompt-save disabled={isBusy} onClick={() => { void savePrompt(r) }} className="btn btn-primary h-7 px-2 text-xs">{t('common.save')}</button>
+                            <button type="button" onClick={() => setEditing(null)} className="btn btn-ghost h-7 px-2 text-xs">{t('common.cancel')}</button>
                           </div>
                         </div>
                       )}
                       {noteOpen && (
                         <div data-hub-note={noteOpen.kind} className="flex flex-col gap-1">
-                          <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} className="app-input w-full text-xs" placeholder={NOTE_PLACEHOLDER[noteOpen.kind]} />
+                          <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} className="app-input w-full text-xs" placeholder={t(NOTE_PLACEHOLDER_KEY[noteOpen.kind])} />
                           <div className="flex gap-2">
                             <button type="button" data-hub-note-confirm disabled={isBusy || noteDraft.trim() === ''}
                               onClick={() => {
@@ -527,19 +534,19 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                                   ? { kind: 'reject', orderId: noteOpen.orderId, note, expectedReportId: r.order?.reportId ?? null }
                                   : { kind: noteOpen.kind, orderId: noteOpen.orderId, note })
                               }}
-                              className="btn btn-primary h-7 px-2 text-xs">{OP_LABEL[noteOpen.kind]} 확정</button>
-                            <button type="button" onClick={() => { setNoteOp(null); setNoteDraft('') }} className="btn btn-ghost h-7 px-2 text-xs">취소</button>
+                              className="btn btn-primary h-7 px-2 text-xs">{fill(t('agents.op.confirmGo'), { label: t(OP_LABEL_KEY[noteOpen.kind]) })}</button>
+                            <button type="button" onClick={() => { setNoteOp(null); setNoteDraft('') }} className="btn btn-ghost h-7 px-2 text-xs">{t('common.cancel')}</button>
                           </div>
                         </div>
                       )}
                       {confirmOpen && (
                         <div data-hub-confirm={confirmOpen.kind} className="flex flex-col gap-1">
-                          <p className="text-meta leading-relaxed text-fg-secondary">{OP_LABEL[confirmOpen.kind]}할까요? {OP_TITLE[confirmOpen.kind]}</p>
+                          <p className="text-meta leading-relaxed text-fg-secondary">{fill(t('agents.op.confirmAsk'), { label: t(OP_LABEL_KEY[confirmOpen.kind]), title: t(OP_TITLE_KEY[confirmOpen.kind]) })}</p>
                           <div className="flex gap-2">
                             <button type="button" data-hub-confirm-go disabled={isBusy}
                               onClick={() => { void runOp(r, { kind: confirmOpen.kind, orderId: confirmOpen.orderId }) }}
-                              className="btn btn-primary h-7 px-2 text-xs">{OP_LABEL[confirmOpen.kind]} 확정</button>
-                            <button type="button" data-hub-confirm-cancel onClick={() => setConfirmOp(null)} className="btn btn-ghost h-7 px-2 text-xs">취소</button>
+                              className="btn btn-primary h-7 px-2 text-xs">{fill(t('agents.op.confirmGo'), { label: t(OP_LABEL_KEY[confirmOpen.kind]) })}</button>
+                            <button type="button" data-hub-confirm-cancel onClick={() => setConfirmOp(null)} className="btn btn-ghost h-7 px-2 text-xs">{t('common.cancel')}</button>
                           </div>
                         </div>
                       )}

@@ -12,6 +12,7 @@ import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { ConflictCompare } from './ConflictCompare'
 import { SettingsSaveBar } from './SettingsSaveBar'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export function messageOf(r: SettingsCommandResult): string | null {
   if (r.ok) return null
@@ -23,6 +24,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
   levelLabels: string[]
   revision: number
 }) {
+  const { t } = useLocale()
   const router = useRouter()
   const [labels, setLabels] = useState<string[]>(levelLabels)
   // 편집 세션의 기준 revision — 초안을 읽은 시점. 렌더마다 오는 revision prop 으로 보내면 형제 편집기 저장·refresh 뒤
@@ -42,7 +44,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
     try { r = await updateProjectSettings(projectId, patch) } catch { /* 결과 불명 — 이력으로 판정 */ }
     if (r?.ok) {
       setBase(r.revision); setUncertainPatch(null); setFieldError(null)
-      setNotice(r.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : 'WBS 단계를 저장했습니다.')
+      setNotice(r.revision === patch.expectedRevision ? t('settings.save.noChange') : t('settings.levels.saved'))
       router.refresh(); return
     }
     if (r?.kind === 'conflict') {
@@ -61,12 +63,12 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
       const found = await getSettingsCommandOutcome({ projectId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
         setBase(found.outcome.revision); setUncertainPatch(null); setFieldError(null)
-        setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
+        setNotice(t('settings.save.confirmed')); router.refresh(); return
       }
     } catch { /* 같은 명령을 재전송 */ }
     if (resendCount === 0) return submit(patch, 1)
     setUncertainPatch(patch)
-    setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+    setError(t('settings.rootFolders.uncertain'))
   }
 
   function save() {
@@ -81,7 +83,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
       <ol className="space-y-1.5">
         {labels.map((label, i) => (
           <li key={i} className="flex items-center gap-2">
-            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-fg-muted">{i + 1}단</span>
+            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-fg-muted">{t('settings.levels.nth').replace('{i}', String(i + 1))}</span>
             <input
               data-level-label
               className="app-input h-8 flex-1 text-sm"
@@ -94,7 +96,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
                 type="button"
                 data-remove-level
                 className="btn btn-ghost h-8 w-8 shrink-0 p-0"
-                aria-label={`${i + 1}단 삭제`}
+                aria-label={t('settings.levels.removeNth').replace('{i}', String(i + 1))}
                 onClick={() => setLabels(labels.filter((_, j) => j !== i))}
                 disabled={pending}
               >
@@ -113,11 +115,11 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
             onClick={() => setLabels([...labels, ''])}
             disabled={pending}
           >
-            <Plus className="h-4 w-4" /> 단계 추가
+            <Plus className="h-4 w-4" /> {t('settings.levels.add')}
           </button>
         </div>
       )}
-      {conflict && <ConflictCompare rows={[{ key: 'core.level_labels', label: 'WBS 단계', mine: labels.join(' → '), latest: conflict.latest?.join(' → ') ?? '설정 손상' }]}
+      {conflict && <ConflictCompare rows={[{ key: 'core.level_labels', label: t('home.fieldLevels'), mine: labels.join(' → '), latest: conflict.latest?.join(' → ') ?? t('settings.notify.policy.corrupted') }]}
         latestAvailable={conflict.latest !== null}
         onMine={() => { setBase(conflict.revision); setConflict(null); setError(null) }}
         onLatest={() => { setLabels(conflict.latest ?? labels); setBase(conflict.revision); setConflict(null); setError(null) }} />}
@@ -125,7 +127,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
       {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
       <SettingsSaveBar notice={notice}>
         <button type="button" data-save-levels className="btn btn-primary h-8 text-sm" onClick={save} disabled={pending || !!conflict}>
-          {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
+          {uncertainPatch ? t('settings.workflow.retry') : t('common.save')}
         </button>
       </SettingsSaveBar>
     </div>

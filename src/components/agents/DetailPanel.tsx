@@ -4,7 +4,8 @@ import type { Seat } from '@/lib/domain/seatmap'
 import { ageLabel } from '@/lib/domain/seatmap'
 import { STATE_LABEL } from './Seat'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { opsFor, opSpec, whyText, type SeatOpKind } from './seatOps'
+import { opsFor, opSpec, type SeatOpKind } from './seatOps'
+import { OP_LABEL_KEY, OP_TITLE_KEY, fill, opWhyText, type Translate } from './labelKeys'
 import { IconApprove, IconReject, IconResume, IconRework, IconStop, IconUnapprove } from './icons'
 import css from './seatmap.module.css'
 
@@ -29,8 +30,8 @@ function ladderPhase(seat: Seat): string {
 export interface NoteDraft { orderId: string; kind: SeatOpKind; text: string }
 
 /** 모달 머리에 쓰는 한 줄 — 층 · 구역 · 주문 8자리. */
-export function seatEyebrow(floorName: string, zoneLabel: string, seat: Seat): string {
-  return `${floorName} · ${zoneLabel} · 주문 ${seat.id8}`
+export function seatEyebrow(floorName: string, zoneLabel: string, seat: Seat, t: Translate): string {
+  return `${floorName} · ${zoneLabel} · ${fill(t('agents.detail.order'), { id: seat.id8 })}`
 }
 
 export function DetailPanel({ seat, floorName = '', zoneLabel = '', nowMs, busy, note, opError, onOp, onNoteChange, onNoteConfirm, onNoteCancel, onClose }: {
@@ -54,20 +55,21 @@ export function DetailPanel({ seat, floorName = '', zoneLabel = '', nowMs, busy,
   const ops = opsFor(seat)
   const draft = note && note.orderId === seat.orderId ? note : null
   const draftSpec = draft ? opSpec(draft.kind) : null
+  const draftLabel = draft ? t(OP_LABEL_KEY[draft.kind]) : ''
   const noteReady = (draft?.text ?? '').trim().length > 0
   return (
     <div className={css.panel} data-panel="" aria-live="polite">
       <div className={css.panelHead}>
-        <div className={css.eyebrow}>{floorName} · {zoneLabel} · 주문 {seat.id8}</div>
+        <div className={css.eyebrow}>{floorName} · {zoneLabel} · {fill(t('agents.detail.order'), { id: seat.id8 })}</div>
         {onClose && (
-          <button type="button" className={css.panelClose} data-panel-close="" aria-label="닫기" onClick={onClose}>
+          <button type="button" className={css.panelClose} data-panel-close="" aria-label={t('common.close')} onClick={onClose}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         )}
       </div>
       <h3>{seat.code}</h3>
       <p className={css.task}>{seat.name}</p>
-      <span className={css.pill} data-state={seat.state}>{STATE_LABEL[seat.state]}</span>
+      <span className={css.pill} data-state={seat.state}>{t(STATE_LABEL[seat.state])}</span>
       {seat.state === 'READY' && seat.waitReason && (
         <p className={css.waitReason} data-wait-reason={seat.waitReason.kind}><b>{seat.waitReason.label}</b> · {seat.waitReason.text}</p>
       )}
@@ -82,33 +84,33 @@ export function DetailPanel({ seat, floorName = '', zoneLabel = '', nowMs, busy,
         ))}
       </ul>
       <dl className={css.facts}>
-        <dt>에이전트</dt><dd>{seat.agent ?? '—'}</dd>
-        <dt>진행</dt><dd>{seat.progress}%</dd>
-        <dt>마지막 신호</dt><dd className={hbBad ? css.factBad : ''}>{showSignal ? ageLabel(seat.lastSignalAt, nowMs) : '—'}</dd>
-        <dt>heartbeat</dt><dd>{seat.heartbeatAt ? `${ageLabel(seat.heartbeatAt, nowMs)} · ${seat.heartbeatPhase ?? '—'}` : '없음(훅 미설치 또는 옛 세션)'}</dd>
+        <dt>{t('agents.detail.agent')}</dt><dd>{seat.agent ?? '—'}</dd>
+        <dt>{t('agents.detail.progress')}</dt><dd>{seat.progress}%</dd>
+        <dt>{t('agents.detail.lastSignal')}</dt><dd className={hbBad ? css.factBad : ''}>{showSignal ? ageLabel(seat.lastSignalAt, nowMs) : '—'}</dd>
+        <dt>heartbeat</dt><dd>{seat.heartbeatAt ? `${ageLabel(seat.heartbeatAt, nowMs)} · ${seat.heartbeatPhase ?? '—'}` : t('agents.detail.noHeartbeat')}</dd>
         {seat.resumeRequestedAt && (
           <>
-            <dt>재개 요청</dt>
+            <dt>{t('agents.detail.resumeRequested')}</dt>
             <dd data-resume-requested="">
-              {ageLabel(seat.resumeRequestedAt, nowMs)} · {seat.resumeRequestedHost ?? '대상 PC 미상'} 의 팀장이 가져갑니다
+              {fill(t('agents.detail.resumeBy'), { age: ageLabel(seat.resumeRequestedAt, nowMs), host: seat.resumeRequestedHost ?? t('agents.detail.hostUnknown') })}
             </dd>
           </>
         )}
       </dl>
       {seat.state === 'BLOCKED' && seat.note && <p className={css.quote}>{seat.note}</p>}
-      {seat.rejected && <p className={css.quote}>반려 사유: {seat.reviewNote ?? '(없음)'}</p>}
+      {seat.rejected && <p className={css.quote}>{fill(t('agents.detail.rejectNote'), { note: seat.reviewNote ?? t('agents.detail.noteNone') })}</p>}
 
       {/* 결재 — 좌석 위 결재 바와 같은 op 표를 큰 버튼으로. 사유가 필요한 op 는 아래 입력이 열린다. */}
-      <div className={css.acts} role="group" aria-label="결재">
+      <div className={css.acts} role="group" aria-label={t('agents.detail.opsAria')}>
         {ops.length === 0
-          ? <span className={css.actNone}>이 좌석에는 처리할 것이 없습니다.</span>
+          ? <span className={css.actNone}>{t('agents.detail.noOps')}</span>
           : ops.map(({ spec, allowed, why }) => {
             const Icon = OP_ICON[spec.kind]
             return (
               <button key={spec.kind} type="button" className={css.act} data-op={spec.kind} data-panel-op={spec.kind}
-                disabled={!allowed || busy} title={busy ? '처리 중입니다' : whyText(why, t)}
+                disabled={!allowed || busy} title={busy ? t('agents.op.busy') : opWhyText(spec.kind, why, t)}
                 onClick={() => onOp(seat, spec.kind)}>
-                <Icon />{spec.label}
+                <Icon />{t(OP_LABEL_KEY[spec.kind])}
               </button>
             )
           })}
@@ -116,36 +118,36 @@ export function DetailPanel({ seat, floorName = '', zoneLabel = '', nowMs, busy,
       {/* 확인이 필요한 op(중단) — 사유 입력과 같은 자리에서 한 번 더 묻는다. 브라우저 confirm() 은 쓰지 않는다. */}
       {draft && draftSpec?.needsConfirm && (
         <div className={css.noteBox} data-confirm="" data-op-confirm-box={draft.kind}>
-          <p className={css.confirmText}>{draftSpec.label}할까요? {draftSpec.title}</p>
+          <p className={css.confirmText}>{fill(t('agents.op.confirmAsk'), { label: draftLabel, title: t(OP_TITLE_KEY[draft.kind]) })}</p>
           <div className={css.noteRow}>
             <button type="button" className={css.act} data-op={draft.kind} data-op-confirm=""
               disabled={busy} onClick={onNoteConfirm}>
-              {draftSpec.label} 확정
+              {fill(t('agents.op.confirmGo'), { label: draftLabel })}
             </button>
-            <button type="button" className={css.act} data-op-cancel="" onClick={onNoteCancel}>취소</button>
+            <button type="button" className={css.act} data-op-cancel="" onClick={onNoteCancel}>{t('common.cancel')}</button>
           </div>
         </div>
       )}
       {draft && !draftSpec?.needsConfirm && (
         <div className={css.noteBox}>
-          <label htmlFor="seat-op-note">{opSpec(draft.kind).label} 사유 (필수)</label>
+          <label htmlFor="seat-op-note">{fill(t('agents.detail.noteLabel'), { label: draftLabel })}</label>
           <textarea id="seat-op-note" data-op-note="" rows={2} value={draft.text}
-            placeholder="에이전트가 이 글을 읽고 다시 돕니다"
+            placeholder={t('agents.detail.notePlaceholder')}
             onChange={e => onNoteChange(e.target.value)} />
           <div className={css.noteRow}>
             <button type="button" className={css.act} data-op={draft.kind} data-op-confirm=""
               disabled={!noteReady || busy} onClick={onNoteConfirm}>
-              {opSpec(draft.kind).label} 확정
+              {fill(t('agents.op.confirmGo'), { label: draftLabel })}
             </button>
-            <button type="button" className={css.act} data-op-cancel="" onClick={onNoteCancel}>취소</button>
-            <span className={css.noteHint}>{noteReady ? '서버가 사유를 받습니다' : '사유가 비면 서버가 거부합니다'}</span>
+            <button type="button" className={css.act} data-op-cancel="" onClick={onNoteCancel}>{t('common.cancel')}</button>
+            <span className={css.noteHint}>{noteReady ? t('agents.detail.noteReady') : t('agents.detail.noteEmpty')}</span>
           </div>
         </div>
       )}
       {opError && <p className={css.opError} data-op-error="">{opError}</p>}
 
       <div className={css.actions}>
-        <Link href={`/p/${seat.projectId}/wbs`}>WBS 에서 열기</Link>
+        <Link href={`/p/${seat.projectId}/wbs`}>{t('agents.detail.openWbs')}</Link>
       </div>
     </div>
   )

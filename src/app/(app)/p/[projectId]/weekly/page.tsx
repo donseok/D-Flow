@@ -41,7 +41,7 @@ export default async function WeeklyPage({
   ])
   const projectName = projects.find(p => p.id === projectId)?.name ?? ''
   // 프레즌스 신원 — 표시명 규칙은 헤더와 동일(full_name → name → 이메일 아이디)
-  const me = user ? { id: user.id, name: displayNameFrom(user.user_metadata, user.email) ?? '사용자' } : null
+  const me = user ? { id: user.id, name: displayNameFrom(user.user_metadata, user.email) ?? t(locale, 'pages.common.userFallback') } : null
   // 이 화면은 구글시트 복제 룩이 주인공 — 머리는 제목 한 줄만 둔다(공용 PageHeader).
   const hero = <PageHeader title={`${projectName} ${t(locale, 'nav.weekly')}`} />
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>

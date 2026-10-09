@@ -10,6 +10,7 @@ import type { ReactNode } from 'react'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { PageHeader } from '@/components/app/PageHeader'
 import { useCompactViewport } from '@/lib/hooks/useCompactViewport'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { AgentTabs, type TabTone } from './AgentTabs'
 
 /** 고정 도구 줄(늘 light 톤)에 얹는 내비게이션. 기본은 프로젝트의 위임·승인|에이전트 스튜디오 탭이다.
@@ -22,8 +23,9 @@ export interface HeroTile { key: string; label: string; value: number; color: st
 export function AgentHero({ nav, projectName, title, lede, tiles, aside }: {
   nav: ReactNode; projectName: string; title: string; lede: ReactNode; tiles: HeroTile[]; aside?: ReactNode
 }) {
-  const barTiles = tiles.filter(t => t.bar !== false && t.value > 0)
-  const total = barTiles.reduce((n, t) => n + t.value, 0)
+  const { t } = useLocale()
+  const barTiles = tiles.filter(x => x.bar !== false && x.value > 0)
+  const total = barTiles.reduce((n, x) => n + x.value, 0)
   return (
     <header data-agent-hero className="hero-card grid items-center gap-7 px-7 py-5 [grid-template-columns:minmax(0,1fr)_minmax(0,560px)]">
       <div className="relative z-10 min-w-0">
@@ -35,14 +37,14 @@ export function AgentHero({ nav, projectName, title, lede, tiles, aside }: {
       <div className="relative z-10 flex min-w-0 flex-col gap-3">
         {aside}
         <div className="flex h-3.5 overflow-hidden rounded-full bg-surface-subtle" aria-hidden>
-          {total > 0 && barTiles.map(t => <i key={t.key} className="block h-full" style={{ width: `${(t.value / total) * 100}%`, background: t.color }} />)}
+          {total > 0 && barTiles.map(x => <i key={x.key} className="block h-full" style={{ width: `${(x.value / total) * 100}%`, background: x.color }} />)}
         </div>
-        <ul aria-label="현황" className="grid gap-2" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
-          {tiles.map(t => (
-            <li key={t.key} className="rounded-(--radius-panel) border border-border bg-surface-subtle px-3 py-2.5">
-              <b data-hero-tile={t.key} className="block text-2xl font-extrabold leading-none tabular-nums" style={{ color: t.valueColor ?? t.color }}>{t.value}</b>
+        <ul aria-label={t('agentHub.hero.tilesAria')} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
+          {tiles.map(x => (
+            <li key={x.key} className="rounded-(--radius-panel) border border-border bg-surface-subtle px-3 py-2.5">
+              <b data-hero-tile={x.key} className="block text-2xl font-extrabold leading-none tabular-nums" style={{ color: x.valueColor ?? x.color }}>{x.value}</b>
               <span className="mt-1.5 flex items-center gap-1.5 text-meta text-fg-secondary">
-                <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: t.color }} />{t.label}
+                <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: x.color }} />{x.label}
               </span>
             </li>
           ))}

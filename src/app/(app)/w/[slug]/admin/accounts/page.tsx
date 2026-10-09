@@ -31,7 +31,7 @@ export default async function AccountsAdminPage({ params, searchParams }: {
     return (
       <div className="space-y-6">
         <PageHeader title={title} meta={scope.ws.name} />
-        <StatusMessage kind="partial_error" blocking title="프로젝트 목록을 불러오지 못했습니다" detail="잠시 뒤 새로고침하세요. 계속되면 관리자에게 알려 주세요." />
+        <StatusMessage kind="partial_error" blocking title={t(locale, 'pages.accounts.projectsFailed')} detail={t(locale, 'pages.accounts.projectsFailedDetail')} />
       </div>
     )
   }
@@ -46,7 +46,7 @@ export default async function AccountsAdminPage({ params, searchParams }: {
     return (
       <div className="space-y-6">
         <PageHeader title={title} meta={scope.ws.name} />
-        <StatusMessage kind="empty" title="관리할 프로젝트가 없습니다" detail="이 워크스페이스에 프로젝트를 만든 뒤 계정과 권한을 지정할 수 있습니다." />
+        <StatusMessage kind="empty" title={t(locale, 'pages.accounts.noProjects')} detail={t(locale, 'pages.accounts.noProjectsDetail')} />
       </div>
     )
   }
@@ -58,7 +58,7 @@ export default async function AccountsAdminPage({ params, searchParams }: {
     return (
       <div className="space-y-6">
         <PageHeader title={title} meta={scope.ws.name} />
-        <StatusMessage kind="partial_error" blocking title="계정 목록을 불러오지 못했습니다" detail={res.error} />
+        <StatusMessage kind="partial_error" blocking title={t(locale, 'pages.accounts.listFailed')} detail={res.error} />
       </div>
     )
   }
@@ -70,7 +70,7 @@ export default async function AccountsAdminPage({ params, searchParams }: {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={title} meta={`${scope.ws.name} · 계정 ${total} · 관리자 ${admins} · 멤버 ${members}`} />
+      <PageHeader title={title} meta={t(locale, 'pages.accounts.meta').replace('{total}', String(total)).replace('{admins}', String(admins)).replace('{members}', String(members)).replace('{ws}', () => scope.ws.name)} />
       <AccountsManager
         accounts={accounts}
         projectId={projectId}

@@ -22,6 +22,12 @@ vi.mock('@/lib/auth', () => ({ getSession: h.getSession }))
 vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: h.getAccountPrefs }))
 vi.mock('@/app/actions/project', () => ({ listProjects: h.listProjects }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: h.getServerLocale }))
+// 칩(MinutesProjectChip)은 useLocale 로 문구를 읽는다 — 공급자 밖 기본값은 키를 돌려주므로 진짜 ko 사전을 물린다
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 vi.mock('@/lib/data/members', () => ({ getMyProjectIds: h.getMyProjectIds }))
 vi.mock('@/components/minutes/MinutesView', () => ({ MinutesView: (p: unknown) => { h.viewProps(p); return null } }))
 // '오늘'·첫 열 = 그 워크스페이스 달력(SP5 — merge 뒤 슬러그 워크스페이스). 이 파일은 달력 축을 보지 않는다

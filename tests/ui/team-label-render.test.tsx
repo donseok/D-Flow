@@ -14,6 +14,14 @@ import { teamRows } from '../helpers/teams-source-mock'
 import { ensureEnLoaded, t as dictT } from '@/lib/i18n/dict'
 
 vi.mock('@/app/actions/roster', () => ({ upsertRosterMember: vi.fn(), removeRosterMember: vi.fn() }))
+// 담당 표지의 title 문구는 사전에서 온다 — 그 검사에서만 ko 사전을 물린다(나머지는 공급자 밖 기본값 = 키 그대로)
+const loc = vi.hoisted(() => ({ ko: false }))
+vi.mock('@/components/providers/LocaleProvider', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/components/providers/LocaleProvider')>()
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])
+  return { ...actual, useLocale: () => (loc.ko ? { locale: 'ko' as const, t: ko, setLocale: () => {} } : actual.useLocale()) }
+})
 
 const LONG = '아주 긴 이름을 가진 전사 디지털 전환 추진 기획 조정 팀'
 const teams = [
@@ -43,7 +51,9 @@ describe('useTeamLabel — 범위 공급자의 활성 팀으로 code 를 이름�
 describe('OwnerBadges — WBS 담당 표지', () => {
   const owners = [{ team: 'TEAM_A', kind: 'primary' as const }, { team: 'TEAM_B', kind: 'support' as const }, { team: 'GONE', kind: 'primary' as const }]
   it('글자와 title 은 팀 이름 — code 는 보이지 않는다(목록 밖 팀만 code)', () => {
-    const html = renderToStaticMarkup(<TeamsProvider teams={teams}><OwnerBadges owners={owners} /></TeamsProvider>)
+    loc.ko = true
+    let html = ''
+    try { html = renderToStaticMarkup(<TeamsProvider teams={teams}><OwnerBadges owners={owners} /></TeamsProvider>) } finally { loc.ko = false }
     expect(html).toContain('>기획팀</span>')
     expect(html).toContain('title="기획팀 주관"')
     expect(html).toContain(`title="${LONG} 지원"`)

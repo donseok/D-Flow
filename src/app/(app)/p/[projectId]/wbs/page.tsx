@@ -60,7 +60,7 @@ export default async function WbsPage({
   const members = roster.ok ? roster.rows : []
   const project = (projects as ProjectRow[]).find(p => p.id === projectId)
   // 프레즌스 신원 — 주간 시트와 동일하게 서버 세션에서 전달
-  const me = user ? { id: user.id, name: displayNameFrom(user.user_metadata, user.email) ?? '사용자' } : null
+  const me = user ? { id: user.id, name: displayNameFrom(user.user_metadata, user.email) ?? t(locale, 'pages.common.userFallback') } : null
   const hero = <PageHeader title={t(locale, 'nav.wbsGantt')} />
   // 설정을 못 읽거나 단계 이름이 손상이면 간트를 기본값으로 그리지 않는다(스펙 §3.5) — 트리 깊이·라벨이 틀린 채 편집하게 된다.
   if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
@@ -98,14 +98,14 @@ export default async function WbsPage({
   const pinned = (
     <div className="flex flex-col gap-2 pb-2">
       {reason && <StatusMessage kind={reason === 'unknown' ? 'partial_error' : 'disabled'} compact
-        title={reason === 'project_off' ? '이 프로젝트에서는 보드를 사용하지 않습니다' : reason === 'workspace_denied' ? '워크스페이스에서 보드를 허용하지 않습니다' : '보드 사용 여부를 확인하지 못했습니다'}
-        detail={reason === 'workspace_denied' ? '워크스페이스 관리자에게 문의하세요.' : undefined}
-        action={admin && reason !== 'workspace_denied' ? { label: '모듈·메뉴 설정', href: `/p/${projectId}/settings#project-modules` } : undefined} />}
+        title={t(locale, reason === 'project_off' ? 'pages.wbs.board.projectOff' : reason === 'workspace_denied' ? 'pages.wbs.board.workspaceDenied' : 'pages.wbs.board.unknown')}
+        detail={reason === 'workspace_denied' ? t(locale, 'pages.wbs.board.askWorkspaceAdmin') : undefined}
+        action={admin && reason !== 'workspace_denied' ? { label: t(locale, 'pages.wbs.board.modulesSettings'), href: `/p/${projectId}/settings#project-modules` } : undefined} />}
       {!storedPick.ok && <ConfigStateNotice kind={storedPick.kind} locale={locale} keyName="views.default" message={storedPick.error} compact isAdmin={admin} settingsHref={`/p/${projectId}/settings#project-modules`} />}
       {!roster.ok && <RosterLoadError error={roster.error} />}
       {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} kind={keywords.kind} locale={locale}
         isAdmin={isProjectAdmin(actor, projectId)} settingsHref={`/p/${projectId}/settings`} />}
-      <ViewSwitch basePath={`/p/${projectId}/wbs`} query={sp} current={decided.view} boardOn={boardGate.ok} />
+      <ViewSwitch basePath={`/p/${projectId}/wbs`} query={sp} current={decided.view} boardOn={boardGate.ok} locale={locale} />
     </div>
   )
   return (

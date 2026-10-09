@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export interface SettingsNavItem { id: string; label: string }
 
@@ -11,6 +12,7 @@ export interface SettingsNavItem { id: string; label: string }
  * 목차는 lg 이상에서 붙되 전역 바에 맞닿지 않게 1rem 띄운다(UI-2b 이월). 범주·섹션 저장·검증은 각 편집기(C)의 것이고 여기서 바꾸지 않는다.
  */
 export function SettingsShell({ items, children }: { items: SettingsNavItem[]; children: ReactNode }) {
+  const { t } = useLocale()
   const [query, setQuery] = useState('')
   const [active, setActive] = useState<string | null>(items[0]?.id ?? null)
   const root = useRef<HTMLDivElement>(null)
@@ -67,11 +69,11 @@ export function SettingsShell({ items, children }: { items: SettingsNavItem[]; c
   }, [children])
 
   return <div ref={root} style={{ '--settings-save-bar-h': '0px' } as CSSProperties} className="grid items-start gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-    <aside className="space-y-3 rounded-(--radius-panel) border border-border bg-surface p-4 lg:sticky lg:top-[calc(var(--frame-sticky-top)+1rem)]" aria-label="설정 목차">
-      <label htmlFor="settings-search" className="block text-meta font-semibold text-fg">설정 검색</label>
+    <aside className="space-y-3 rounded-(--radius-panel) border border-border bg-surface p-4 lg:sticky lg:top-[calc(var(--frame-sticky-top)+1rem)]" aria-label={t('settings.shell.toc')}>
+      <label htmlFor="settings-search" className="block text-meta font-semibold text-fg">{t('settings.shell.search')}</label>
       <input id="settings-search" type="search" className="app-input w-full text-sm" value={query}
-        onChange={event => setQuery(event.target.value)} placeholder="이름·설명·설정 키" />
-      <nav aria-label="설정 범주" className="flex flex-wrap gap-1 lg:flex-col">
+        onChange={event => setQuery(event.target.value)} placeholder={t('settings.shell.searchPh')} />
+      <nav aria-label={t('settings.shell.categories')} className="flex flex-wrap gap-1 lg:flex-col">
         {items.map(item => <a key={item.id} href={`#${item.id}`} aria-current={active === item.id ? 'location' : undefined}
           onClick={() => setActive(item.id)}
           className={`rounded-(--radius-control) px-3 py-2 text-sm ${active === item.id ? 'bg-surface-selected font-semibold text-fg' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg'}`}>

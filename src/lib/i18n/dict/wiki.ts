@@ -344,4 +344,13 @@ export const wikiKo = {
   'wiki.change.curate': '사람이 정리',
   'wiki.change.other': '지식 변경',
   'wiki.change.noReason': '회의록을 바탕으로 프로젝트 Wiki가 갱신되었습니다.',
+  // 문서 종류 라벨·편집 초안 안내
+  'wiki.docKind.overview': '프로젝트 개요',
+  'wiki.docKind.decision': '결정 기록',
+  'wiki.docKind.how_to': '사용 방법',
+  'wiki.docKind.runbook': '운영 런북',
+  'wiki.docKind.faq': '자주 묻는 질문',
+  'wiki.docKind.glossary': '용어집',
+  'wiki.docKind.reference': '참조 자료',
+  'wiki.document.editingDraft': '편집 중인 초안입니다. 저장 전까지 다른 사람에게 반영되지 않습니다.',
 } as const

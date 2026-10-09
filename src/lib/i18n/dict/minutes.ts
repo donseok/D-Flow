@@ -277,4 +277,10 @@ export const minutesKo = {
   // 액션(getMinuteShare·setMinuteShare)의 사유 코드 share_lookup·share_save — 액션의 한국어 문구와 같다.
   'min.share.lookupFailed': '공유 상태를 확인하지 못했습니다. 잠시 후 다시 시도하세요.',
   'min.share.saveFailed': '공유 설정을 저장하지 못했습니다.',
+  // 화면에 남아 있던 리터럴(i18n 정리)
+  'min.download.bodySuffix': '내용',
+  'min.hl.unnamed': '이름 없음',
+  'min.projectChip.prefix': '프로젝트: ',
+  'min.projectChip.clear': '프로젝트 거르기 해제',
+  'min.form.charCount': '{n}자',
 }

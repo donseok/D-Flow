@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { EyeOff } from 'lucide-react'
 import { IconButton } from '@/components/ui/IconButton'
 import { useHiddenWidgets } from './HiddenWidgetsProvider'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import type { PortalWidgetId } from '@/lib/portal/widgets'
 
 /**
@@ -10,6 +11,7 @@ import type { PortalWidgetId } from '@/lib/portal/widgets'
  * 설정 화면의 저장 바(SettingsSaveBar)를 쓰지 않는다 — 초안이 없는 즉시 동작이다(판정 R3 제외 기준).
  */
 export function WidgetHideButton({ widgetId, title }: { workspaceId: string; widgetId: PortalWidgetId; hidden: readonly PortalWidgetId[]; title: string }) {
+  const { t } = useLocale()
   const commands = useHiddenWidgets()
   const [ready, setReady] = useState(false)
   useEffect(() => { setReady(true) }, [])
@@ -23,7 +25,7 @@ export function WidgetHideButton({ widgetId, title }: { workspaceId: string; wid
     if (!ok) { setErr(true); return }
   }
   return <>
-    {err && <span role="alert" className="text-meta text-danger">숨기지 못했습니다</span>}
-    <IconButton aria-label="이 위젯 숨기기" title={`${title} 숨기기`} variant="ghost" disabled={!ready || commands.disabled} busy={busy || commands.pending} icon={<EyeOff className="h-4 w-4" aria-hidden />} onClick={hide} />
+    {err && <span role="alert" className="text-meta text-danger">{t('portalUi.widget.hideFailed')}</span>}
+    <IconButton aria-label={t('portalUi.widget.hideAria')} title={t('portalUi.widget.hideTitle').replace('{title}', () => title)} variant="ghost" disabled={!ready || commands.disabled} busy={busy || commands.pending} icon={<EyeOff className="h-4 w-4" aria-hidden />} onClick={hide} />
   </>
 }

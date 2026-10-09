@@ -1,8 +1,12 @@
 // 캐릭터 머리 위 단계 말풍선 — 지금 설계·구현·검증·리팩터 중 어디인지 눌러 보지 않고 바로 읽힌다(2026-09-18 사용자 선택).
 // 말풍선은 단계색 + 아이콘 + 이름, 그 아래 네 점이 dflow-dev Phase 순서(설계 → 구현 → 검증 → 리팩터)에서 지금 위치다.
 // 결정 대기·재작업은 순서 밖의 상태라 점 없이 말풍선만 단다. 에이전트가 붙어 있지 않은 좌석(빈자리·승인 대기·완료)엔 달지 않는다.
+'use client'
 import type React from 'react'
 import type { Seat } from '@/lib/domain/seatmap'
+import type { DictKey } from '@/lib/i18n/dict'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import { fill } from './labelKeys'
 
 export const PHASE_STEPS = ['design', 'build', 'verify', 'refactor'] as const
 
@@ -10,13 +14,13 @@ const I = (d: React.ReactNode) => (
   <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{d}</svg>
 )
 /** 단계 모양 — 색은 좌석 상태색(업무 중 파랑 · 승인 대기 주황 · 반려 빨강)과 겹치지 않게 골랐다. 구현만 업무 중 파랑과 같은 계열이다. */
-export const PHASE_LOOK: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  design: { label: '설계', color: '#A58BF0', icon: I(<><path d="M3 13l2.5-.6L13 4.9 11.1 3 3.6 10.5z" /><path d="M9.8 4.3l1.9 1.9" /></>) },
-  build: { label: '구현', color: '#5DB1E5', icon: I(<><path d="M5.5 4.5L2 8l3.5 3.5" /><path d="M10.5 4.5L14 8l-3.5 3.5" /></>) },
-  verify: { label: '검증', color: '#4FC07E', icon: I(<><circle cx="7" cy="7" r="4" /><path d="M10 10l3.5 3.5" /><path d="M5.3 7l1.2 1.2L8.8 6" /></>) },
-  refactor: { label: '리팩터', color: '#2FB8AC', icon: I(<><path d="M8 2.5l1.3 3.2L12.5 7 9.3 8.3 8 11.5 6.7 8.3 3.5 7l3.2-1.3z" /><path d="M12.5 11.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z" /></>) },
-  blocked: { label: '결정 대기', color: '#F2AA4C', icon: I(<><path d="M6 6.2a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6.9v.5" /><path d="M8 12h0" /></>) },
-  rejected: { label: '재작업', color: '#EE7B6A', icon: I(<><path d="M3 8a5 5 0 1 0 1.5-3.5" /><path d="M3 2.5v2.5h2.5" /></>) },
+export const PHASE_LOOK: Record<string, { label: DictKey; color: string; icon: React.ReactNode }> = {
+  design: { label: 'agents.step.design', color: '#A58BF0', icon: I(<><path d="M3 13l2.5-.6L13 4.9 11.1 3 3.6 10.5z" /><path d="M9.8 4.3l1.9 1.9" /></>) },
+  build: { label: 'agents.step.build', color: '#5DB1E5', icon: I(<><path d="M5.5 4.5L2 8l3.5 3.5" /><path d="M10.5 4.5L14 8l-3.5 3.5" /></>) },
+  verify: { label: 'agents.step.verify', color: '#4FC07E', icon: I(<><circle cx="7" cy="7" r="4" /><path d="M10 10l3.5 3.5" /><path d="M5.3 7l1.2 1.2L8.8 6" /></>) },
+  refactor: { label: 'agents.step.refactor', color: '#2FB8AC', icon: I(<><path d="M8 2.5l1.3 3.2L12.5 7 9.3 8.3 8 11.5 6.7 8.3 3.5 7l3.2-1.3z" /><path d="M12.5 11.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z" /></>) },
+  blocked: { label: 'agents.state.blocked', color: '#F2AA4C', icon: I(<><path d="M6 6.2a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6.9v.5" /><path d="M8 12h0" /></>) },
+  rejected: { label: 'agents.step.rejected', color: '#EE7B6A', icon: I(<><path d="M3 8a5 5 0 1 0 1.5-3.5" /><path d="M3 2.5v2.5h2.5" /></>) },
 }
 
 /** 이 좌석에 말풍선을 다는가 — 에이전트가 붙어 일하는(또는 일하다 멈춘) 좌석만. */
@@ -34,16 +38,19 @@ export function seatPhaseKey(seat: Pick<Seat, 'state' | 'phase'>): string | null
  * 신호가 끊긴(무응답·끊김) 좌석은 흐리게 — 마지막으로 보고한 단계라는 뜻이다.
  */
 export function PhaseBadge({ seat, size = 'bubble' }: { seat: Pick<Seat, 'state' | 'phase'>; size?: 'bubble' | 'chip' }) {
+  const { t } = useLocale()
   const key = seatPhaseKey(seat)
   if (!key) return null
   const look = PHASE_LOOK[key]
   const step = PHASE_STEPS.indexOf(key as typeof PHASE_STEPS[number])
   const faded = seat.state === 'STALE' || seat.state === 'OFFLINE'
-  const title = `${look.label}${step >= 0 ? ` 단계 (${step + 1}/4)` : ''}${faded ? ' · 마지막 보고' : ''}`
+  const label = t(look.label)
+  const stepTitle = step >= 0 ? fill(t('agents.step.title'), { label, i: step + 1 }) : label
+  const title = faded ? fill(t('agents.step.titleFaded'), { title: stepTitle }) : stepTitle
   const pill = (
     <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full font-bold leading-none ${size === 'chip' ? 'px-1.5 py-[3px] text-meta' : 'px-2 py-[5px] text-meta'}`}
       style={{ color: '#fff', background: look.color, boxShadow: size === 'bubble' ? `0 6px 14px -8px ${look.color}` : undefined }}>
-      {look.icon}{look.label}
+      {look.icon}{label}
     </span>
   )
   if (size === 'chip') {

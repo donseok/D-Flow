@@ -63,4 +63,11 @@ export const kanbanEn: Record<keyof typeof kanbanKo, string> = {
   'kanban.coachDismiss': 'Got it',
   'kanban.noMatchTitle': 'No tasks match your filters',
   'kanban.noMatchDesc': 'Try adjusting the lens, filters, or search.',
+  'kanban.liveStageChanged': '{name} stage changed: {stage}',
+  'kanban.liveApproved': '{name} approved',
+  'kanban.moveMenuAria': 'Move menu for {name}',
+  'kanban.moveSelectAria': 'Choose where to move {name}',
+  'kanban.moveSaveFailed': 'Could not save the move.',
+  'kanban.moveRevert': 'Revert',
+  'kanban.moveRetry': 'Retry',
 }

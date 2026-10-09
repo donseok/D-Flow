@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 // '공용 팀 전환으로 시작'(T14·계획 P7) — 확인 창이 전환의 실제 결과(연결을 옮기고 되돌리지 않는다)를 말하고 성공 토스트가 전환을 말한다. 화면에 '전역' 낱말이 없다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+// 화면 문구는 사전(settingsUi·adminUi)에 있다 — 옮긴 문구만 한국어 글자로 돌려주는 대역(공급자 없는 기본 t 는 키를 돌려준다)
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale())
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 

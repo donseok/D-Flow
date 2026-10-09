@@ -6,7 +6,7 @@ import { useSettingItemCommand } from './useSettingItemCommand'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { PORTAL_WIDGETS, defaultPortalWidgets, parsePortalWidgets, type PortalWidgetId, type PortalWidgetSetting } from '@/lib/portal/widgets'
 
-const COLUMNS = [{ id: 'main', label: '주 열' }, { id: 'side', label: '보조 열' }] as const
+const COLUMNS = [{ id: 'main', label: 'settings.portalWidgets.colMain' }, { id: 'side', label: 'settings.portalWidgets.colSide' }] as const
 const columnOf = new Map(PORTAL_WIDGETS.map((w) => [w.id, w.column]))
 const labelKeyOf = new Map(PORTAL_WIDGETS.map((w) => [w.id, w.labelKey]))
 const fromLatest = (v: unknown) => { const p = parsePortalWidgets(v ?? []); return p.ok ? p.value : null }
@@ -32,38 +32,38 @@ export function PortalWidgetsEditor({ workspaceId, revision, initial, invalidRea
     c.setDraft(next)
   }
   const toggle = (id: PortalWidgetId) => c.setDraft(c.draft.map((w) => (w.id === id ? { id: w.id, enabled: !w.enabled } : w)))
-  const summary = (v: PortalWidgetSetting) => v.map((w) => `${label(w.id)}${w.enabled ? '' : '(꺼짐)'}`).join(', ')
+  const summary = (v: PortalWidgetSetting) => v.map((w) => `${label(w.id)}${w.enabled ? '' : t('settings.portalWidgets.offMark')}`).join(', ')
   const off = c.pending || c.uncertain
   return <div className="space-y-4">
-    <p className="text-meta text-fg-secondary">홈에 보일 위젯과 열 안의 순서를 정합니다. 각 사람은 홈에서 위젯을 숨길 수 있습니다.</p>
+    <p className="text-meta text-fg-secondary">{t('settings.portalWidgets.desc')}</p>
     {invalidReason && c.needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="portal.widgets" message={invalidReason} isAdmin settingsHref="#workspace-menu" />}
     {COLUMNS.map((col) => {
       const rows = c.draft.filter((w) => columnOf.get(w.id) === col.id)
-      return <fieldset key={col.id} role="group" aria-label={col.label} className="rounded-(--radius-panel) border border-border p-3">
-        <legend className="px-1 text-meta font-semibold text-fg-secondary">{col.label}</legend>
+      return <fieldset key={col.id} role="group" aria-label={t(col.label)} className="rounded-(--radius-panel) border border-border p-3">
+        <legend className="px-1 text-meta font-semibold text-fg-secondary">{t(col.label)}</legend>
         <ul className="space-y-2">
           {rows.map((w, i) => <li key={w.id} className="flex items-center gap-2 rounded-(--radius-control) bg-surface-subtle p-2">
             {/* 이름은 줄어들고(390 에서 조작이 다음 줄로 밀리지 않게) 조작 셋은 한 묶음 */}
             <span className="min-w-0 flex-1 text-sm text-fg">{label(w.id)}</span>
             <span className="flex shrink-0 items-center gap-2">
-              <button type="button" role="switch" aria-checked={w.enabled} aria-label={`${label(w.id)} 보이기`} disabled={off} onClick={() => toggle(w.id)}
+              <button type="button" role="switch" aria-checked={w.enabled} aria-label={t('settings.portalWidgets.show').replace('{id}', String(label(w.id)))} disabled={off} onClick={() => toggle(w.id)}
                 className={`rounded-full px-3 py-1 text-meta font-semibold ${w.enabled ? 'bg-action text-action-fg' : 'bg-surface text-fg-secondary ring-1 ring-border'}`}>
-                {w.enabled ? '켜짐' : '꺼짐'}
+                {w.enabled ? t('account.notif.on') : t('account.notif.off')}
               </button>
-              <button type="button" className="btn btn-ghost" aria-label={`${label(w.id)} 위로`} disabled={off || i === 0} onClick={() => move(w.id, -1)}>↑</button>
-              <button type="button" className="btn btn-ghost" aria-label={`${label(w.id)} 아래로`} disabled={off || i === rows.length - 1} onClick={() => move(w.id, 1)}>↓</button>
+              <button type="button" className="btn btn-ghost" aria-label={t('settings.portalWidgets.up').replace('{id}', String(label(w.id)))} disabled={off || i === 0} onClick={() => move(w.id, -1)}>↑</button>
+              <button type="button" className="btn btn-ghost" aria-label={t('settings.portalWidgets.down').replace('{id}', String(label(w.id)))} disabled={off || i === rows.length - 1} onClick={() => move(w.id, 1)}>↓</button>
             </span>
           </li>)}
         </ul>
       </fieldset>
     })}
     {c.fieldError && <ConfigStateNotice kind="field" locale="ko" message={c.fieldError} />}
-    {c.conflict && <ConflictCompare rows={[{ key: 'portal.widgets', label: '홈 위젯', mine: summary(c.draft), latest: c.conflict.value ? summary(c.conflict.value) : '설정 손상' }]}
+    {c.conflict && <ConflictCompare rows={[{ key: 'portal.widgets', label: t('settings.portal.widgets.label'), mine: summary(c.draft), latest: c.conflict.value ? summary(c.conflict.value) : t('settings.notify.policy.corrupted') }]}
       onMine={c.keepMine} onLatest={c.useLatest} latestAvailable={!!c.conflict.value} />}
     {c.error && <ConfigStateNotice kind="patch" locale="ko" message={c.error} />}
     <SettingsSaveBar notice={c.notice}>
-      <button type="button" className="btn btn-primary" aria-label="홈 위젯 저장" disabled={c.pending || (!c.dirty && !c.uncertain) || !!c.conflict} onClick={c.save}>
-        {c.uncertain ? '저장 결과 확인 및 재시도' : '홈 위젯 저장'}
+      <button type="button" className="btn btn-primary" aria-label={t('settings.portalWidgets.save')} disabled={c.pending || (!c.dirty && !c.uncertain) || !!c.conflict} onClick={c.save}>
+        {c.uncertain ? t('settings.workflow.retry') : t('settings.portalWidgets.save')}
       </button>
     </SettingsSaveBar>
   </div>

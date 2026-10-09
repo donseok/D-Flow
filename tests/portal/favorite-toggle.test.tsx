@@ -5,6 +5,11 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({ post: vi.fn(), refresh: vi.fn() }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ postPrefsNow: h.post }))
 vi.mock('@/lib/portal/reload', () => ({ reloadPortalPage: h.refresh }))
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 import { toggleFavorite } from '@/lib/portal/favorites'
 import { FavoritesProvider, useFavorites } from '@/components/portal/FavoritesProvider'
 import { FavoriteToggle } from '@/components/portal/FavoriteToggle'

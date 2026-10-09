@@ -27,28 +27,28 @@ import { CalendarSettingsPanel } from '@/components/settings/CalendarSettingsPan
 import { AttachmentPolicyEditor } from '@/components/settings/AttachmentPolicyEditor'
 import { RootFoldersEditor } from '@/components/settings/RootFoldersEditor'
 import { parseAttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
-import { t } from '@/lib/i18n/dict'
+import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 import { workspaceCalendarFieldsOf } from '@/lib/settings/calendarField'
 import { todayIn } from '@/lib/domain/calendar'
 import { getServerLocale } from '@/lib/i18n/server'
 
 export const metadata = { title: '설정' }   // 레이아웃 템플릿이 '설정 · {워크스페이스} | {제품}' 을 만든다(V6)
 
-const SIMPLE: Record<SimpleWorkspaceKey, Omit<WorkspaceField, 'key' | 'value' | 'source' | 'error'>> = {
-  'branding.product_name': { label: '제품 이름', description: '워크스페이스의 제품 이름입니다.', kind: 'text' },
-  'branding.mail_from_name': { label: '메일 발신 이름', description: '비우면 제품 이름을 사용합니다.', kind: 'text' },
-  'ai.enabled': { label: 'AI 기능', description: '워크스페이스의 AI 기능 사용 여부입니다.', kind: 'boolean' },
-  'invites.allowed_domains': { label: '초대 허용 도메인', description: '한 줄에 한 도메인을 적습니다. 비우면 새 초대를 허용하지 않습니다. * 단독 입력은 모든 도메인을 허용합니다.', kind: 'domains' },
+const SIMPLE: Record<SimpleWorkspaceKey, { label: DictKey; description: DictKey; kind: WorkspaceField['kind'] }> = {
+  'branding.product_name': { label: 'pages.wsSettings.field.productName.label', description: 'pages.wsSettings.field.productName.desc', kind: 'text' },
+  'branding.mail_from_name': { label: 'pages.wsSettings.field.mailFromName.label', description: 'pages.wsSettings.field.mailFromName.desc', kind: 'text' },
+  'ai.enabled': { label: 'pages.wsSettings.field.aiEnabled.label', description: 'pages.wsSettings.field.aiEnabled.desc', kind: 'boolean' },
+  'invites.allowed_domains': { label: 'pages.wsSettings.field.inviteDomains.label', description: 'pages.wsSettings.field.inviteDomains.desc', kind: 'domains' },
 }
 
-function field(config: Awaited<ReturnType<typeof getWorkspaceConfig>>, key: SimpleWorkspaceKey): WorkspaceField {
+function field(config: Awaited<ReturnType<typeof getWorkspaceConfig>>, key: SimpleWorkspaceKey, locale: Locale): WorkspaceField {
   const state = config.keys[key]
   const kind = SIMPLE[key].kind
   const valid = state.status === 'set' || state.status === 'default'
   const raw = valid ? state.value : null
   const value = kind === 'boolean' ? raw === true : kind === 'domains' ? (Array.isArray(raw) ? raw.join('\n') : '') : (typeof raw === 'string' ? raw : '')
   const source = state.status === 'set' ? '워크스페이스 설정' : state.status === 'default' ? (state.from === 'deploy' ? '배포 기본값' : '제품 기본값') : '설정 손상'
-  return { key, ...SIMPLE[key], value, source, error: state.status === 'invalid' ? state.error : undefined }
+  return { key, label: t(locale, SIMPLE[key].label), description: t(locale, SIMPLE[key].description), kind, value, source, error: state.status === 'invalid' ? state.error : undefined }
 }
 
 export default async function WorkspaceSettingsPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -56,7 +56,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   const access = await workspacePageAccess(slug)
   if (!access.isAdmin) redirect(wsHref(access.slug))
   const locale = await getServerLocale()
-  const pageTitle = locale === 'ko' ? '워크스페이스 설정' : 'Workspace settings'      // 프로젝트 설정 머리와 같은 로케일 갈래(u3-3 리뷰 P2-9)
+  const pageTitle = t(locale, 'pages.wsSettings.title')      // 프로젝트 설정 머리와 같은 로케일 갈래(u3-3 리뷰 P2-9)
   let config: Awaited<ReturnType<typeof getWorkspaceConfig>>
   try {
     config = await getWorkspaceConfig(access.id)
@@ -64,7 +64,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
     if (!(error instanceof ConfigUnavailableError)) throw error
     console.error('[workspace settings] 설정 조회 실패:', { workspaceId: access.id, cause: error.message })
     return <PageFrame header={<PageHeader title={pageTitle} meta={access.name} />}>
-      <ConfigLoadError locale={locale} error="워크스페이스 설정을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요." />
+      <ConfigLoadError locale={locale} error={t(locale, 'pages.wsSettings.loadFailed')} />
     </PageFrame>
   }
 
@@ -88,14 +88,14 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
     // 머리 하나(PageHeader — 개정 §5.9.3). 본문 폭 800·저장 바 예약은 SettingsShell 이 맡는다(SP3b 스펙 §6.4)
     <PageFrame header={<PageHeader title={pageTitle} meta={access.name} />}>
       <SettingsShell items={[
-        { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
-        { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' }, { id: 'workspace-minutes', label: '회의록' }, { id: 'workspace-minute-roots', label: '회의록 폴더' }, { id: 'workspace-menu', label: '메뉴' }, { id: 'workspace-notify', label: '알림' }, { id: 'workspace-security', label: '보안' },
-        { id: 'workspace-history', label: '기록' },
+        { id: 'workspace-general', label: t(locale, 'pages.settingsNav.general') }, { id: 'workspace-modules', label: t(locale, 'pages.wsSettings.nav.modulesAi') },
+        { id: 'workspace-invites', label: t(locale, 'pages.wsSettings.nav.invites') }, { id: 'workspace-calendar', label: t(locale, 'pages.settingsNav.calendar') }, { id: 'workspace-minutes', label: t(locale, 'pages.settingsNav.minutes') }, { id: 'workspace-minute-roots', label: t(locale, 'pages.wsSettings.nav.minuteRoots') }, { id: 'workspace-menu', label: t(locale, 'pages.wsSettings.nav.menu') }, { id: 'workspace-notify', label: t(locale, 'pages.wsSettings.nav.notify') }, { id: 'workspace-security', label: t(locale, 'pages.wsSettings.nav.security') },
+        { id: 'workspace-history', label: t(locale, 'pages.settingsNav.history') },
       ]}>
-      <SectionCard id="workspace-general" searchText="branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow="일반" title="이름과 메일" icon={Palette}>
+      <SectionCard id="workspace-general" searchText="branding.product_name branding.mail_from_name branding.logo branding.accent" eyebrow={t(locale, 'pages.settingsNav.general')} title={t(locale, 'pages.wsSettings.generalTitle')} icon={Palette}>
         <div className="space-y-6">
           <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale}
-            fields={[field(config, 'branding.product_name'), field(config, 'branding.mail_from_name')]} />
+            fields={[field(config, 'branding.product_name', locale), field(config, 'branding.mail_from_name', locale)]} />
           <LogoEditor workspaceId={access.id} revision={config.revision}
             initialLogo={config.keys['branding.logo'].status === 'set' || config.keys['branding.logo'].status === 'default' ? config.keys['branding.logo'].value : null}
             invalidReason={config.keys['branding.logo'].status === 'invalid' ? config.keys['branding.logo'].error : undefined} />
@@ -105,9 +105,9 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         </div>
       </SectionCard>
       <SectionCard id="workspace-modules" searchText={access.isSuperuser ? 'modules.allowed ai.enabled integrations api 연동 자격증명' : 'ai.enabled integrations api 연동 자격증명'}
-        eyebrow="모듈·AI" title={access.isSuperuser ? '모듈 사용 범위' : 'AI 사용'} icon={Settings2}>
+        eyebrow={t(locale, 'pages.wsSettings.nav.modulesAi')} title={t(locale, access.isSuperuser ? 'pages.wsSettings.modulesTitleSuperuser' : 'pages.wsSettings.modulesTitle')} icon={Settings2}>
         <div className="space-y-5">
-          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'ai.enabled')]} />
+          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'ai.enabled', locale)]} />
           {access.isSuperuser ? (
             <ModuleAllowEditor workspaceId={access.id} revision={config.revision} locale={locale}
               initialAllowed={allowed.status === 'set' || allowed.status === 'default' ? allowed.value : null}
@@ -115,9 +115,9 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
               requiredMissing={allowed.status === 'required_missing'} />
           ) : null}
           <div className="border-t border-border pt-4">
-            <h4 className="text-sm font-semibold text-fg">외부 연동 자격증명</h4>
+            <h4 className="text-sm font-semibold text-fg">{t(locale, 'pages.wsSettings.integrationsTitle')}</h4>
             <p className="mt-1 text-xs leading-5 text-fg-secondary">
-              회의록 자동 등록(v3 API) 및 에이전트 워크스페이스 권한을 위한 API 토큰을 발급하고 관리합니다.
+              {t(locale, 'pages.wsSettings.integrationsDesc')}
             </p>
             <div className="mt-3">
               <Link
@@ -125,76 +125,76 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-fg hover:bg-surface-hover hover:border-border-input transition-colors shadow-xs"
               >
                 <KeyRound className="size-3.5 text-fg-secondary" />
-                연동 자격증명 관리 바로가기
+                {t(locale, 'pages.wsSettings.integrationsLink')}
               </Link>
             </div>
           </div>
         </div>
       </SectionCard>
-      <SectionCard id="workspace-invites" searchText="invites.allowed_domains" eyebrow="초대" title="초대 정책" icon={Mail}>
+      <SectionCard id="workspace-invites" searchText="invites.allowed_domains" eyebrow={t(locale, 'pages.wsSettings.nav.invites')} title={t(locale, 'pages.wsSettings.invitesTitle')} icon={Mail}>
         <div className="space-y-4">
-          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'invites.allowed_domains')]} />
+          <WorkspaceFieldsEditor workspaceId={access.id} revision={config.revision} locale={locale} fields={[field(config, 'invites.allowed_domains', locale)]} />
           {/* 공용 팀은 그 워크스페이스 관리자가 연다(SP3b D22) — 이 화면은 관리자만 들어오므로(위 redirect) 링크가 튕기지 않는다. */}
-          <p className="text-sm text-fg-secondary">공용 팀 기준정보는 <Link href={wsHref(access.slug, 'admin/teams')} className="font-medium text-action underline">공용 팀 관리</Link>에서 편집합니다.</p>
+          <p className="text-sm text-fg-secondary">{t(locale, 'pages.wsSettings.teamsHintPre')}<Link href={wsHref(access.slug, 'admin/teams')} className="font-medium text-action underline">{t(locale, 'pages.wsSettings.teamsHintLink')}</Link>{t(locale, 'pages.wsSettings.teamsHintPost')}</p>
         </div>
       </SectionCard>
       <SectionCard id="workspace-calendar" searchText="calendar.working_days calendar.timezone calendar.week_start 달력 시간대 근무 요일 주 시작"
-        eyebrow="달력" title="시간대·근무 요일·주 시작" icon={CalendarDays}>
+        eyebrow={t(locale, 'pages.settingsNav.calendar')} title={t(locale, 'pages.wsSettings.calendarTitle')} icon={CalendarDays}>
         <div className="space-y-3">
-          <p className="text-sm text-fg-secondary">워크스페이스 화면(내 회의·회의록 등)의 오늘 날짜와 달력이 이 값을 따르고, 새 프로젝트를 만들 때 초기값으로 복사됩니다. 이미 있는 프로젝트는 바뀌지 않습니다.</p>
+          <p className="text-sm text-fg-secondary">{t(locale, 'pages.wsSettings.calendarDesc')}</p>
           {/* 이 페이지는 워크스페이스 관리자만 들인다(access.isAdmin 아니면 redirect) — 키 정의의 editor 도 workspace_admin 이라 액션이 다시 판정한다 */}
           <CalendarSettingsPanel scope={{ workspaceId: access.id }} revision={config.revision} todayIso={calendarToday} locale={locale}
             canEdit suggestBrowserTimezone {...calendarFields} />
         </div>
       </SectionCard>
-      <SectionCard id="workspace-minutes" searchText="minutes.attachments 회의록 첨부 정책 용량 개수 형식 미리보기" eyebrow="회의록" title={t(locale, 'settings.minutes.attachments.label')} icon={Paperclip}>
+      <SectionCard id="workspace-minutes" searchText="minutes.attachments 회의록 첨부 정책 용량 개수 형식 미리보기" eyebrow={t(locale, 'pages.settingsNav.minutes')} title={t(locale, 'settings.minutes.attachments.label')} icon={Paperclip}>
         <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.minutes.attachments.desc')}</p>
         {/* 이 페이지는 워크스페이스 관리자만 들인다 — 키 정의의 editor 도 workspace_admin 이라 액션이 다시 판정한다 */}
         <AttachmentPolicyEditor key={`${access.id}-${config.revision}`} scope={{ workspaceId: access.id }} revision={config.revision} canEdit
           policy={attPolicy} invalid={attPolicy === null} />
       </SectionCard>
-      <SectionCard id="workspace-minute-roots" searchText="minutes.root_folders 회의록 최상위 폴더 팀 폴더" eyebrow="회의록 폴더" title={t(locale, 'settings.minutes.root_folders.label')} icon={FolderTree}>
+      <SectionCard id="workspace-minute-roots" searchText="minutes.root_folders 회의록 최상위 폴더 팀 폴더" eyebrow={t(locale, 'pages.wsSettings.nav.minuteRoots')} title={t(locale, 'settings.minutes.root_folders.label')} icon={FolderTree}>
         <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.minutes.root_folders.desc')}</p>
         <RootFoldersEditor key={`${access.id}-${config.revision}`} workspaceId={access.id} revision={config.revision} canEdit={access.isSuperuser}
           value={rootFolders} invalid={rootFolders === null} />
       </SectionCard>
-      <SectionCard id="workspace-menu" searchText="navigation.menu portal.widgets 홈 위젯" eyebrow="메뉴" title="메뉴 순서와 이름" icon={Menu}>
+      <SectionCard id="workspace-menu" searchText="navigation.menu portal.widgets 홈 위젯" eyebrow={t(locale, 'pages.wsSettings.nav.menu')} title={t(locale, 'pages.wsSettings.menuTitle')} icon={Menu}>
         <MenuOrderEditor workspaceId={access.id} revision={config.revision}
           initialMenu={config.keys['navigation.menu'].status === 'set' || config.keys['navigation.menu'].status === 'default' ? config.keys['navigation.menu'].value : null}
           invalidReason={config.keys['navigation.menu'].status === 'invalid' ? config.keys['navigation.menu'].error : undefined} />
         {/* 홈 위젯(portal.widgets — SP3b UI-3 W20) — 같은 '메뉴' 범주 안 구역(목차 항목을 늘리지 않는다) */}
         <section aria-labelledby="workspace-portal-widgets" data-settings-search="portal.widgets 홈 위젯" className="mt-8 border-t border-border pt-6">
-          <h4 id="workspace-portal-widgets" className="mb-3 text-sm font-semibold text-fg">홈 위젯</h4>
+          <h4 id="workspace-portal-widgets" className="mb-3 text-sm font-semibold text-fg">{t(locale, 'settings.portal.widgets.label')}</h4>
           <PortalWidgetsEditor workspaceId={access.id} revision={config.revision}
             initial={config.keys['portal.widgets'].status === 'set' || config.keys['portal.widgets'].status === 'default' ? config.keys['portal.widgets'].value : null}
             invalidReason={config.keys['portal.widgets'].status === 'invalid' ? config.keys['portal.widgets'].error : undefined} />
         </section>
       </SectionCard>
       {/* 관리자 알림 정책(notify.policy — 개정 §4.10). 끈 유형은 이 워크스페이스에서 발행되지 않는다. 개인 토글(/account)은 그 뒤 조회 시점 필터 */}
-      <SectionCard id="workspace-notify" searchText="notify.policy 알림 정책 알림 유형 발행" eyebrow="알림" title={t(locale, 'settings.notify.policy.label')} icon={Bell}>
+      <SectionCard id="workspace-notify" searchText="notify.policy 알림 정책 알림 유형 발행" eyebrow={t(locale, 'pages.wsSettings.nav.notify')} title={t(locale, 'settings.notify.policy.label')} icon={Bell}>
         <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.notify.policy.desc')}</p>
         <NotifyPolicyEditor workspaceId={access.id} revision={config.revision}
           initial={config.keys['notify.policy'].status === 'set' || config.keys['notify.policy'].status === 'default' ? config.keys['notify.policy'].value : null}
           invalidReason={config.keys['notify.policy'].status === 'invalid' ? config.keys['notify.policy'].error : undefined} />
       </SectionCard>
       {/* 보안 제한(개정 §2.9 워크스페이스 전역 키) — 로컬 초안 정책(security.local_drafts, §5.8.5). 모든 편집 화면이 이 값을 따른다 */}
-      <SectionCard id="workspace-security" searchText="security.local_drafts 로컬 초안 보존 기간 보안" eyebrow="보안" title={t(locale, 'settings.security.local_drafts.label')} icon={ShieldCheck}>
+      <SectionCard id="workspace-security" searchText="security.local_drafts 로컬 초안 보존 기간 보안" eyebrow={t(locale, 'pages.wsSettings.nav.security')} title={t(locale, 'settings.security.local_drafts.label')} icon={ShieldCheck}>
         <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'settings.security.local_drafts.desc')}</p>
         <LocalDraftsEditor workspaceId={access.id} revision={config.revision}
           initial={config.keys['security.local_drafts'].status === 'set' || config.keys['security.local_drafts'].status === 'default' ? config.keys['security.local_drafts'].value : null}
           invalidReason={config.keys['security.local_drafts'].status === 'invalid' ? config.keys['security.local_drafts'].error : undefined} />
       </SectionCard>
-      <SectionCard id="workspace-history" searchText="settings history revision authz 기록 이력 설정 변경 권한 변경" eyebrow="기록" title="변경 이력" icon={History}>
+      <SectionCard id="workspace-history" searchText="settings history revision authz 기록 이력 설정 변경 권한 변경" eyebrow={t(locale, 'pages.settingsNav.history')} title={t(locale, 'pages.wsSettings.historyTitle')} icon={History}>
         <div className="space-y-8">
-          <section aria-label="설정 변경">
-            <h4 className="mb-3 text-sm font-semibold text-fg">설정 변경</h4>
+          <section aria-label={t(locale, 'pages.wsSettings.settingsChanges')}>
+            <h4 className="mb-3 text-sm font-semibold text-fg">{t(locale, 'pages.wsSettings.settingsChanges')}</h4>
             {historyCal.ok
               ? <SettingsHistoryList scope={{ workspaceId: access.id }} initial={history} timeZone={historyCal.calendar.timezone} />
               : historyCalError}
           </section>
-          <section aria-label="권한 변경" className="border-t border-border pt-6">
-            <h4 className="mb-1 text-sm font-semibold text-fg">권한 변경</h4>
-            <p className="mb-3 text-xs text-fg-secondary">누가 누구의 권한을 바꿨는지 남는 기록입니다.{access.isSuperuser ? ' 플랫폼 관리자 지정·해제도 함께 보입니다.' : ''}</p>
+          <section aria-label={t(locale, 'pages.wsSettings.authzChanges')} className="border-t border-border pt-6">
+            <h4 className="mb-1 text-sm font-semibold text-fg">{t(locale, 'pages.wsSettings.authzChanges')}</h4>
+            <p className="mb-3 text-xs text-fg-secondary">{t(locale, 'pages.wsSettings.authzDesc')}{access.isSuperuser ? t(locale, 'pages.wsSettings.authzDescSuperuser') : ''}</p>
             {historyCal.ok
               ? <AuthzEventsList workspaceId={access.id} initial={authzEvents} timeZone={historyCal.calendar.timezone} />
               : historyCalError}

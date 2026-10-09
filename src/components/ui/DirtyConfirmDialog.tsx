@@ -4,7 +4,6 @@ import { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import type { DictKey } from '@/lib/i18n/dict'
 import { useEscHandler, ESC_PRIORITY } from '@/lib/ui/escStack'
 
 export interface DirtyConfirmDialogProps {
@@ -49,20 +48,10 @@ export function DirtyConfirmDialog({
 
   if (!open || typeof document === 'undefined') return null
 
-  const getLabel = (key: DictKey, fallback: string) => {
-    const val = t(key)
-    return !val || val === key ? fallback : val
-  }
-
-  const resolvedTitle = title ?? getLabel('common.unsavedChanges', '저장되지 않은 변경사항')
-  const resolvedDesc =
-    description ??
-    getLabel(
-      'common.unsavedChangesDesc',
-      '저장하지 않은 변경사항이 있습니다. 나가시겠습니까? 변경사항은 취소됩니다.'
-    )
-  const resolvedDiscard = discardText ?? getLabel('common.discardAndLeave', '변경사항 버리기')
-  const resolvedContinue = continueText ?? getLabel('common.continueEditing', '계속 편집')
+  const resolvedTitle = title ?? t('common.unsavedChanges')
+  const resolvedDesc = description ?? t('common.unsavedChangesDesc')
+  const resolvedDiscard = discardText ?? t('common.discardAndLeave')
+  const resolvedContinue = continueText ?? t('common.continueEditing')
 
   return createPortal(
     <div

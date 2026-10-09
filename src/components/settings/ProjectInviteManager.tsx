@@ -14,10 +14,11 @@ import {
 import type { ProjectActorView } from '@/lib/domain/authz'
 import { canGrantAdmin } from '@/lib/domain/roster'
 import { DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, inviteStatusLabel, type InviteStatus } from '@/lib/domain/invites'
+import type { DictKey } from '@/lib/i18n/dict'
 
 type AccessRole = 'admin' | 'member'
 /** 합류 시 권한. null = 조회 전용으로 명단에만 오른다. */
-const ACCESS_LABEL: Record<AccessRole, string> = { admin: '관리자', member: '멤버' }
+const ACCESS_LABEL: Record<AccessRole, DictKey> = { admin: 'wbs.roleAdmin', member: 'att.col.member' }
 
 const STATUS_CLASS: Record<InviteStatus, string> = {
   active: 'bg-success-weak text-success',
@@ -109,21 +110,21 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
         setCopied(false); setCopyError(null)
         toast(res.mailed
           ? {
-              title: '초대 메일을 보냈습니다.',
+              title: t('settings.invite.sent'),
               description: res.alreadyAccount
-                ? `${res.row.email} · 이미 계정이 있는 주소라 로그인 후 합류하게 됩니다.`
+                ? t('settings.invite.existingAccount').replace('{email}', String(res.row.email))
                 : res.row.email,
               variant: 'success',
             }
           : {
-              title: '초대는 만들었지만 메일 발송에 실패했습니다. 링크를 복사해 전달해 주세요.',
+              title: t('settings.invite.mailFailed'),
               description: res.mailError,
               variant: 'info',
             })
         setEmail(''); setRoleLabel('')
         router.refresh()
       } catch {
-        setFormError('요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.')
+        setFormError(t('wsAccounts.requestFailed'))
       }
     })
   }
@@ -135,7 +136,7 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
       setCopied(true); setCopyError(null)
       setTimeout(() => setCopied(false), COPIED_MS)
     } catch {
-      setCopyError('링크를 복사하지 못했습니다. 위 칸에서 직접 선택해 복사해 주세요.')
+      setCopyError(t('settings.invite.copyFailed'))
     }
   }
 
@@ -149,23 +150,23 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
         // 성공이든 실패든 모달은 닫는다 — 실패 사유는 그 행 아래에 남겨야 보인다.
         setRevoking(null)
         if (!res.ok) { setRowErrors(prev => ({ ...prev, [target.id]: res.error })); return }
-        toast({ title: '초대를 취소했습니다.', variant: 'success' })
+        toast({ title: t('settings.invite.revoked'), variant: 'success' })
         router.refresh()
       } catch {
         setRevoking(null)
-        setRowErrors(prev => ({ ...prev, [target.id]: '요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.' }))
+        setRowErrors(prev => ({ ...prev, [target.id]: t('wsAccounts.requestFailed') }))
       }
     })
   }
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-semibold text-fg">초대 링크</h4>
+      <h4 className="text-sm font-semibold text-fg">{t('settings.invite.linkTitle')}</h4>
 
       <div className="flex items-start gap-2.5 rounded-xl border border-border bg-pending-weak px-3.5 py-3">
         <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-pending" />
         <p className="text-xs leading-5 text-fg">
-          합류한 사람은 이 프로젝트뿐 아니라 전체 회의록·WBS·이슈·근태를 조회할 수 있습니다. 신뢰할 수 있는 인원에게만 발급하세요.
+          {t('settings.invite.trustNote')}
         </p>
       </div>
 
@@ -188,7 +189,7 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
 
       <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
         <label className="block min-w-[14rem] flex-1">
-          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">이메일</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('login.email')}</span>
           <input
             type="email"
             className="app-input"
@@ -200,34 +201,34 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
           />
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">권한</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.invite.access')}</span>
           <select
             className="app-input w-36"
-            aria-label="초대 권한"
+            aria-label={t('settings.invite.accessAria')}
             value={accessRole ?? ''}
             onChange={(e) => setAccessRole(e.target.value === '' ? null : e.target.value as AccessRole)}
           >
-            <option value="">없음(조회 전용)</option>
-            <option value="member">{ACCESS_LABEL.member}</option>
-            {canInviteAdmin && <option value="admin">{ACCESS_LABEL.admin}</option>}
+            <option value="">{t('settings.invite.viewOnlyOption')}</option>
+            <option value="member">{t(ACCESS_LABEL.member)}</option>
+            {canInviteAdmin && <option value="admin">{t(ACCESS_LABEL.admin)}</option>}
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">역할 라벨</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.invite.roleLabel')}</span>
           <input
             className="app-input w-32"
-            aria-label="역할 라벨"
+            aria-label={t('settings.invite.roleLabel')}
             value={roleLabel}
             onChange={(e) => setRoleLabel(e.target.value)}
-            placeholder="예: PL"
+            placeholder={t('settings.invite.roleLabelPh')}
           />
         </label>
         <div className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">팀</span>
-          <TeamMultiSelect options={teamOptions} value={teamIds} onChange={setTeamIds} label="초대 팀" />
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('att.col.team')}</span>
+          <TeamMultiSelect options={teamOptions} value={teamIds} onChange={setTeamIds} label={t('settings.invite.teamsAria')} />
         </div>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">유효기간(일)</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.invite.expiryDays')}</span>
           <input
             type="number"
             className="app-input w-24"
@@ -238,35 +239,34 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
           />
         </label>
         <button type="submit" className="btn btn-primary" disabled={pending}>
-          <Send className="h-4 w-4" />{pending ? '보내는 중…' : '초대 보내기'}
+          <Send className="h-4 w-4" />{pending ? t('forgot.submitting') : t('settings.invite.send')}
         </button>
         <p className="basis-full text-xs leading-5 text-fg-muted">
-          합류하면 이 프로젝트 명단에 선택한 팀(첫 팀이 대표)으로 오릅니다. 이미 명단에 있는 사람은 기존 팀이 그대로 남고
-          이 팀이 <strong className="font-semibold text-fg-secondary">더해집니다</strong>.
+          {t('settings.invite.joinNote')} <strong className="font-semibold text-fg-secondary">{t('settings.invite.joinNoteAdded')}</strong>.
         </p>
       </form>
       {formError && <p role="alert" className="text-sm font-medium text-danger">{formError}</p>}
       {issued?.url && (
         <div data-issued-invite className="space-y-2 rounded-xl border border-border bg-surface-subtle/50 px-3.5 py-3">
           <p className="text-xs leading-5 text-fg-secondary">
-            <strong className="font-semibold text-fg">{issued.email}</strong> 초대 링크 —{' '}
-            <strong className="font-semibold text-fg">이 링크는 다시 볼 수 없습니다.</strong>{' '}
-            메일이 닿지 않았으면 지금 복사해 전달하세요. 다시 보내려면 초대를 취소하고 새로 발급합니다.
+            <strong className="font-semibold text-fg">{issued.email}</strong> {t('settings.invite.linkOf')}{' '}
+            <strong className="font-semibold text-fg">{t('settings.invite.linkOnce')}</strong>{' '}
+            {t('settings.invite.linkCopyNow')}
           </p>
           <div className="flex items-center gap-2">
             <input
               readOnly
               className="app-input h-8 min-w-0 flex-1 font-mono text-xs"
               value={issued.url}
-              aria-label="초대 링크"
+              aria-label={t('settings.invite.linkTitle')}
               onFocus={(e) => e.currentTarget.select()}
             />
             <button type="button" className="btn btn-ghost h-8 shrink-0 px-3 text-xs" onClick={() => void copyIssued()}>
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? '복사됨' : '링크 복사'}
+              {copied ? t('settings.invite.copied') : t('settings.invite.copyLink')}
             </button>
             <button type="button" className="btn btn-ghost h-8 shrink-0 px-3 text-xs" onClick={() => setIssued(null)}>
-              닫기
+              {t('common.close')}
             </button>
           </div>
           {copyError ? <p role="alert" className="text-xs font-medium text-danger">{copyError}</p> : null}
@@ -275,24 +275,24 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
 
       {timeZone === null && (
         <p role="status" data-invite-time-unavailable className="text-xs text-fg-secondary">
-          만료·합류 시각을 표시하지 못했습니다 — {timeZoneError ?? '프로젝트 달력 설정을 읽지 못했습니다.'} 초대 발급·취소는 그대로 됩니다.
+          {t('settings.invite.timeUnavailable')} {timeZoneError ?? t('settings.invite.calendarUnreadable')} {t('settings.invite.timeUnavailableTail')}
         </p>
       )}
       {loadError ? (
         <p role="alert" className="text-sm font-medium text-danger">{loadError}</p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-fg-muted">발급한 초대가 없습니다.</p>
+        <p className="text-sm text-fg-muted">{t('settings.invite.empty')}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
-                <th className="py-2 pr-3">이메일</th>
-                <th className="py-2 pr-3">권한</th>
-                <th className="py-2 pr-3">팀</th>
-                <th className="py-2 pr-3">상태</th>
-                <th className="py-2 pr-3">만료</th>
-                <th className="py-2 pr-3">합류</th>
+                <th className="py-2 pr-3">{t('login.email')}</th>
+                <th className="py-2 pr-3">{t('settings.invite.access')}</th>
+                <th className="py-2 pr-3">{t('att.col.team')}</th>
+                <th className="py-2 pr-3">{t('issue.col.status')}</th>
+                <th className="py-2 pr-3">{t('settings.invite.colExpires')}</th>
+                <th className="py-2 pr-3">{t('settings.invite.colJoined')}</th>
                 <th className="py-2 pr-3" />
               </tr>
             </thead>
@@ -301,7 +301,7 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
                 <tr key={row.id} className="border-b border-border/60 align-top">
                   <td className="py-2.5 pr-3 font-medium text-fg">{row.email}</td>
                   <td className="py-2.5 pr-3 text-fg-secondary">
-                    {row.accessRole ? ACCESS_LABEL[row.accessRole] : '조회 전용'}
+                    {row.accessRole ? t(ACCESS_LABEL[row.accessRole]) : t('settings.invite.viewOnly')}
                     {row.roleLabel && <span className="ml-1.5 chip bg-surface-subtle text-fg-secondary">{row.roleLabel}</span>}
                   </td>
                   <td className="py-2.5 pr-3">
@@ -321,14 +321,14 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
                       <div className="flex flex-wrap items-center gap-2">
                         {/* 목록 행에는 링크가 없다(토큰 해시만 저장) — 발급 직후 위 상자에서만 복사할 수 있다. */}
                         {row.status === 'active' && (
-                          <span className="text-xs text-fg-muted">링크는 발급 시 한 번만 표시됩니다</span>
+                          <span className="text-xs text-fg-muted">{t('settings.invite.linkShownOnce')}</span>
                         )}
                         <button
                           type="button"
                           className="btn btn-ghost h-8 px-3 text-xs text-danger"
                           onClick={() => { setRowErrors(prev => ({ ...prev, [row.id]: '' })); setRevoking(row) }}
                         >
-                          취소
+                          {t('common.cancel')}
                         </button>
                       </div>
                     )}
@@ -346,26 +346,26 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
       <Modal
         open={!!revoking}
         onClose={() => { if (!revokePending) setRevoking(null) }}
-        title="초대 취소"
+        title={t('settings.invite.cancelInvite')}
         size="sm"
         footer={
           <>
             <button type="button" className="btn btn-ghost" disabled={revokePending} onClick={() => setRevoking(null)}>
-              닫기
+              {t('common.close')}
             </button>
             <button type="button" className="btn btn-primary" disabled={revokePending} onClick={confirmRevoke}>
-              {revokePending ? '취소 중…' : '초대 취소'}
+              {revokePending ? t('settings.invite.cancelling') : t('settings.invite.cancelInvite')}
             </button>
           </>
         }
       >
         <p className="text-sm text-fg-secondary">
-          이 초대를 취소할까요? 이미 합류한 사람은 영향받지 않습니다.
+          {t('settings.invite.cancelConfirm')}
         </p>
         {/* 만료 행에서 '취소'는 무의미해 보인다 — 왜 눌러야 하는지 그 자리에서 말해 준다. */}
         {revoking?.status === 'expired' && (
           <p className="mt-2 text-sm text-fg-secondary">
-            만료된 초대가 남아 있는 동안에는 같은 주소로 다시 보낼 수 없습니다. 취소하면 재발급할 수 있습니다.
+            {t('settings.invite.expiredNote')}
           </p>
         )}
         {revoking && <p className="mt-2 text-sm font-semibold text-fg">{revoking.email}</p>}

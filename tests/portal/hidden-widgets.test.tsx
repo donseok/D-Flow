@@ -8,6 +8,11 @@ import { ShowHiddenWidgets } from '@/components/portal/ShowHiddenWidgets'
 const h = vi.hoisted(() => ({ save: vi.fn(), reload: vi.fn() }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ postPrefsNow: h.save }))
 vi.mock('@/lib/portal/reload', () => ({ reloadPortalPage: h.reload }))
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 beforeEach(() => { h.save.mockReset(); h.reload.mockReset() })
 it('숨김 설정을 읽지 못하면 버튼과 직접 명령 모두 저장을 막는다', async () => {
   render(<HiddenWidgetsProvider workspaceId="ws" hidden={null}>

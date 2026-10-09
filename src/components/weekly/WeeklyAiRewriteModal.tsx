@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Sparkles } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { StatusMessage } from '@/components/ui/StatusMessage'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { WEEKLY_CELL_MAX } from '@/lib/domain/weeklySheet'
 import type { WeeklyRewriteCandidate } from '@/lib/domain/weeklyRewrite'
 
@@ -27,6 +28,7 @@ export function WeeklyAiRewriteModal({
   onRetry: () => void
   onApply: (items: WeeklyRewriteCandidate[]) => void
 }) {
+  const { t } = useLocale()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [checked, setChecked] = useState<Record<string, boolean>>({})
 
@@ -43,24 +45,28 @@ export function WeeklyAiRewriteModal({
     return [{ rowId: item.rowId, cellKey: item.cellKey, original: item.original, content }]
   }), [checked, drafts, items])
 
+  // 영역 이름·칸 라벨은 사용자 데이터라 한 번에 치환한다(값 안의 치환자 꼴을 다시 읽지 않게)
+  const ariaFor = (key: 'weekly.ai.selectAria' | 'weekly.ai.suggestionAria', item: WeeklyAiRewriteItem) =>
+    t(key).replace(/\{(section|label)\}/g, (_, name: string) => (name === 'section' ? item.section : item.label))
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="AI로 다시 작성"
-      eyebrow={items.length > 0 ? `${items.length}개 셀` : undefined}
+      title={t('weekly.ai.title')}
+      eyebrow={items.length > 0 ? t('weekly.ai.cellCount').replace('{n}', String(items.length)) : undefined}
       size="lg"
       footer={(
         <>
-          <button type="button" className="btn btn-ghost" onClick={onClose}>취소</button>
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={onRetry}>다시 생성</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
+          <button type="button" className="btn btn-ghost" disabled={busy} onClick={onRetry}>{t('weekly.ai.regenerate')}</button>
           <button
             type="button"
             className="btn btn-primary"
             disabled={busy || selected.length === 0}
             onClick={() => onApply(selected)}
           >
-            선택한 제안 적용{selected.length > 0 ? ` (${selected.length})` : ''}
+            {t('weekly.ai.apply')}{selected.length > 0 ? ` (${selected.length})` : ''}
           </button>
         </>
       )}
@@ -69,8 +75,7 @@ export function WeeklyAiRewriteModal({
         <div className="flex gap-3 rounded-2xl border border-border bg-action-soft px-4 py-3 text-sm text-fg">
           <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-action" />
           <p>
-            선택한 내용과 업무영역 이름만 AI에 보내 보고서 문장으로 다듬습니다. 아래에서 원문과 제안을 비교한 뒤
-            적용할 수 있으며, <b>적용 전에는 저장되지 않습니다.</b>
+            {t('weekly.ai.introLead')}<b>{t('weekly.ai.introStrong')}</b>
           </p>
         </div>
 
@@ -81,12 +86,12 @@ export function WeeklyAiRewriteModal({
         {busy && items.length === 0 && (
           <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-sm text-fg-secondary" aria-live="polite">
             <LoaderCircle className="h-7 w-7 animate-spin text-action" />
-            선택한 내용을 깔끔하게 다듬고 있습니다…
+            {t('weekly.ai.working')}
           </div>
         )}
 
         {!busy && items.length === 0 && !error && (
-          <p className="py-8 text-center text-sm text-fg-secondary">다듬을 제안이 없습니다.</p>
+          <p className="py-8 text-center text-sm text-fg-secondary">{t('weekly.ai.empty')}</p>
         )}
 
         {items.length > 0 && (
@@ -103,22 +108,22 @@ export function WeeklyAiRewriteModal({
                         type="checkbox"
                         checked={!!checked[key]}
                         onChange={event => setChecked(current => ({ ...current, [key]: event.target.checked }))}
-                        aria-label={`${item.section} ${item.label} 제안 선택`}
+                        aria-label={ariaFor('weekly.ai.selectAria', item)}
                       />
                       <span className="truncate">{item.section}</span>
                       <span className="shrink-0 text-xs font-normal text-fg-secondary">{item.label}</span>
                     </label>
-                    {!changed && <span className="shrink-0 text-xs text-fg-secondary">변경 없음</span>}
+                    {!changed && <span className="shrink-0 text-xs text-fg-secondary">{t('weekly.ai.unchanged')}</span>}
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     <div>
-                      <div className="mb-1 text-xs font-semibold text-fg-secondary">원문</div>
+                      <div className="mb-1 text-xs font-semibold text-fg-secondary">{t('weekly.ai.original')}</div>
                       <div className="min-h-28 whitespace-pre-wrap break-words rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg-secondary">
                         {item.original}
                       </div>
                     </div>
                     <label>
-                      <span className="mb-1 block text-xs font-semibold text-action">AI 제안 · 수정 가능</span>
+                      <span className="mb-1 block text-xs font-semibold text-action">{t('weekly.ai.suggestion')}</span>
                       <textarea
                         value={draft}
                         maxLength={WEEKLY_CELL_MAX}
@@ -128,7 +133,7 @@ export function WeeklyAiRewriteModal({
                           setDrafts(current => ({ ...current, [key]: content }))
                           setChecked(current => ({ ...current, [key]: content !== item.original }))
                         }}
-                        aria-label={`${item.section} ${item.label} AI 제안`}
+                        aria-label={ariaFor('weekly.ai.suggestionAria', item)}
                         className="min-h-28 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg outline-none transition focus:border-action focus:ring-2 focus:ring-border-focus"
                       />
                     </label>

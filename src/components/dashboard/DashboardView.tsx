@@ -213,7 +213,7 @@ export async function DashboardView({
           WBS 가 없으면 바로 위 이슈 섹션(E)의 사유와 나란히 겹쳐 재시도 버튼·스크린리더 알림이 두 번이 된다. */}
       {(wbs || (modules.issues && issues !== null)) && (
         <div className={wbs && modules.issues ? 'grid gap-5 lg:grid-cols-2' : undefined}>
-          {wbs && <RiskWorklist items={items} projectId={projectId} today={today} />}
+          {wbs && <RiskWorklist items={items} projectId={projectId} today={today} locale={locale} />}
           {modules.issues && (issues === null ? issuesError
             : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} locale={locale} severities={issueSeverities} />)}
         </div>

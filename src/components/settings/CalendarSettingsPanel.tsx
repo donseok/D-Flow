@@ -10,7 +10,7 @@ import { getSettingsCommandOutcome, updateProjectSettings, updateWorkspaceSettin
 import { previewWeekStartChange } from '@/app/actions/settingsPreview'
 import { currentRuleDay, parseTimezone, parseWorkingDays, type IsoDow, type WeekStartDay, type WeekStartRule } from '@/lib/domain/calendar'
 import { newUuid } from '@/lib/domain/uuid'
-import type { Locale } from '@/lib/i18n/dict'
+import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { browserTimezoneSuggestion, type CalendarFieldState } from '@/lib/settings/calendarField'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
@@ -19,6 +19,7 @@ import { TimezoneSelect } from './TimezoneSelect'
 import { WeekStartEditor } from './WeekStartEditor'
 import { reviewBlocksSave, type WeekStartReviewState } from './WeekStartReview'
 import { WorkingDaysEditor } from './WorkingDaysEditor'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export type CalendarScope = { projectId: string } | { workspaceId: string }
 type Key = 'calendar.timezone' | 'calendar.working_days' | 'calendar.week_start'
@@ -26,13 +27,14 @@ type Key = 'calendar.timezone' | 'calendar.working_days' | 'calendar.week_start'
 type Draft = { timezone: string; workingDays: IsoDow[]; weekDay: WeekStartDay | '' }
 type Conflict = { revision: number; values: Partial<Record<string, unknown>>; invalidKeys: string[] }
 
-const LABEL: Readonly<Record<Key, string>> = { 'calendar.week_start': '주 시작', 'calendar.working_days': '근무 요일', 'calendar.timezone': '시간대' }
+type T = (k: DictKey) => string
+const LABEL: Readonly<Record<Key, DictKey>> = { 'calendar.week_start': 'settings.weekStart.label', 'calendar.working_days': 'settings.calendar.working_days.label', 'calendar.timezone': 'settings.calendar.timezone.label' }
 const KEYS: readonly Key[] = ['calendar.week_start', 'calendar.working_days', 'calendar.timezone']
 
-function sourceLabel(scope: CalendarScope, s: CalendarFieldState<unknown>): string {
-  if (s.source === 'invalid') return '설정 손상'
-  if (s.source === 'default') return '제품 기본값'
-  return 'projectId' in scope ? '프로젝트 설정' : '워크스페이스 설정'
+function sourceLabel(scope: CalendarScope, s: CalendarFieldState<unknown>, t: T): string {
+  if (s.source === 'invalid') return t('settings.notify.policy.corrupted')
+  if (s.source === 'default') return t('settings.wsFields.source.product')
+  return 'projectId' in scope ? t('settings.source.project') : t('settings.wsFields.source.workspace')
 }
 /** 편집 요일 = 마지막 원소의 요일(예정 전환이 있으면 그 요일 — 직전 요일을 고르는 것이 곧 예정 취소다, A-5 리뷰 P2·O1),
  *  오늘 적용되는 요일, 아직 적용 전인 전환(마지막 원소의 from > 오늘). 저장 직후(baseline = 보낸 요일)와 새로고침 뒤가 같은 요일이다 */
@@ -57,6 +59,7 @@ export function CalendarSettingsPanel(props: {
   /** 워크스페이스 — 시간대가 아직 제품 기본값이면 브라우저 시간대를 제안(D13 ② — 자동 저장 없음, 저장은 관리자가) */
   suggestBrowserTimezone?: boolean
 }) {
+  const { t } = useLocale()
   const { scope, canEdit, locale = 'ko' } = props
   const isProject = 'projectId' in scope
   const router = useRouter()
@@ -92,9 +95,9 @@ export function CalendarSettingsPanel(props: {
   const saveDisabled = !canEdit || pending || !!conflict || invalidInput || reviewBlocks || (changed.length === 0 && !uncertainPatch)
   // 저장이 막힌 이유(변경 없음·권한·진행 중은 제외) — 저장 버튼의 aria-describedby 로 잇는다(A-5 리뷰 O3)
   const saveReason = !canEdit ? null
-    : conflict ? '다른 사람이 먼저 저장했습니다 — 아래에서 내 값과 최신 값 중 하나를 고르세요.'
-    : invalidInput ? '입력값을 확인하세요 — 시간대·근무 요일 오류를 고치면 저장할 수 있습니다.'
-    : reviewBlocks ? '주 시작 변경 내용 검토가 끝나지 않았거나, 검토 결과 저장할 수 없는 변경입니다(위 변경 내용 검토 참고).'
+    : conflict ? t('settings.calendarPanel.conflictFirst')
+    : invalidInput ? t('settings.calendarPanel.fixInputs')
+    : reviewBlocks ? t('settings.calendarPanel.reviewPending')
     : null
   const saveDescribedBy = [saveReason ? 'calendar-save-reason' : null, reviewBlocks ? 'calendar-week-start-review' : null].filter(Boolean).join(' ') || undefined
 
@@ -106,9 +109,9 @@ export function CalendarSettingsPanel(props: {
     setReview({ kind: 'loading' })
     previewWeekStartChange(projectId, draft.weekDay).then(
       r => { if (seq === reviewSeq.current) setReview(r.ok ? { kind: 'ready', preview: r.preview } : { kind: 'error', message: r.error }) },
-      () => { if (seq === reviewSeq.current) setReview({ kind: 'error', message: '영향을 확인하지 못했습니다. 잠시 뒤 다시 시도하세요.' }) },
+      () => { if (seq === reviewSeq.current) setReview({ kind: 'error', message: t('settings.calendarPanel.impactFailed') }) },
     )
-  }, [projectId, weekChanged, draft.weekDay])
+  }, [projectId, weekChanged, draft.weekDay, t])
 
   async function update(patch: SettingsPatch): Promise<SettingsCommandResult> {
     return 'projectId' in scope ? updateProjectSettings(scope.projectId, patch) : updateWorkspaceSettings(scope.workspaceId, patch)
@@ -120,7 +123,7 @@ export function CalendarSettingsPanel(props: {
   async function submit(patch: SettingsPatch, resendCount = 0): Promise<void> {
     let result: SettingsCommandResult | null = null
     try { result = await update(patch) } catch { /* 이력으로 결과 판정 */ }
-    if (result?.ok) { applied(result.revision, result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : `${changed.length}개 설정을 저장했습니다.`); return }
+    if (result?.ok) { applied(result.revision, result.revision === patch.expectedRevision ? t('settings.save.noChange') : t('settings.wsFields.saved').replace('{n}', String(changed.length))); return }
     if (result?.kind === 'conflict') {
       setConflict({ revision: result.latest.revision, values: result.latest.values, invalidKeys: result.latest.invalidKeys }); setUncertainPatch(null); setFieldErrors({}); return
     }
@@ -130,10 +133,10 @@ export function CalendarSettingsPanel(props: {
     }
     try {
       const found = await getSettingsCommandOutcome(scope, patch.commandId)
-      if (found.ok && found.outcome.status === 'applied') { applied(found.outcome.revision, '저장된 명령을 확인했습니다.'); return }
+      if (found.ok && found.outcome.status === 'applied') { applied(found.outcome.revision, t('settings.save.confirmed')); return }
     } catch { /* 같은 명령을 재전송 */ }
     if (resendCount === 0) return submit(patch, 1)
-    setUncertainPatch(patch); setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+    setUncertainPatch(patch); setError(t('settings.rootFolders.uncertain'))
   }
   function save() {
     if (saveDisabled) return
@@ -173,9 +176,9 @@ export function CalendarSettingsPanel(props: {
   const head = (k: Key, s: CalendarFieldState<unknown>, applies: string, labelFor?: string) => (
     <div className="flex flex-wrap items-center justify-between gap-2">
       {labelFor
-        ? <label htmlFor={labelFor} className="text-sm font-semibold text-fg">{LABEL[k]}</label>
-        : <span className="text-sm font-semibold text-fg">{LABEL[k]}</span>}
-      <span className="text-xs text-fg-muted">{sourceLabel(scope, s)} · {applies}</span>
+        ? <label htmlFor={labelFor} className="text-sm font-semibold text-fg">{t(LABEL[k])}</label>
+        : <span className="text-sm font-semibold text-fg">{t(LABEL[k])}</span>}
+      <span className="text-xs text-fg-muted">{sourceLabel(scope, s, t)} · {applies}</span>
     </div>
   )
 
@@ -183,12 +186,12 @@ export function CalendarSettingsPanel(props: {
     <div className="space-y-5">
       {isProject && (
         <p className="text-xs leading-5 text-fg-muted">
-          워크스페이스 기본값에서 복사됨(생성 시점) — 새 프로젝트를 만들 때 워크스페이스의 값을 한 번 복사합니다. 워크스페이스 값을 바꿔도 이 프로젝트는 바뀌지 않습니다.
+          {t('settings.calendarPanel.copiedNote')}
         </p>
       )}
 
-      <section className="space-y-2 border-b border-border pb-4" data-field="calendar.week_start" aria-label={LABEL['calendar.week_start']}>
-        {head('calendar.week_start', props.weekStart, isProject ? '다음 주부터 적용' : '새 프로젝트의 초기값')}
+      <section className="space-y-2 border-b border-border pb-4" data-field="calendar.week_start" aria-label={t(LABEL['calendar.week_start'])}>
+        {head('calendar.week_start', props.weekStart, isProject ? t('settings.calendarPanel.appliesNextWeek') : t('settings.calendarPanel.initialForNew'))}
         {corruptNotice('calendar.week_start', props.weekStart, '#calendar-week-start')}
         <WeekStartEditor value={draft.weekDay} onChange={day => edit({ weekDay: day }, 'calendar.week_start')} disabled={inputsLocked}
           scheduled={isProject ? scheduled : null} currentDay={currentDay ?? undefined} review={isProject && weekChanged ? review : null}
@@ -197,31 +200,31 @@ export function CalendarSettingsPanel(props: {
         {keyLine('calendar.week_start')}
       </section>
 
-      <section className="space-y-2 border-b border-border pb-4" data-field="calendar.working_days" aria-label={LABEL['calendar.working_days']}>
-        {head('calendar.working_days', props.workingDays, '즉시 적용(저장된 진척 기록은 다시 계산하지 않습니다)')}
+      <section className="space-y-2 border-b border-border pb-4" data-field="calendar.working_days" aria-label={t(LABEL['calendar.working_days'])}>
+        {head('calendar.working_days', props.workingDays, t('settings.calendarPanel.appliesNowProgress'))}
         {corruptNotice('calendar.working_days', props.workingDays, '#calendar-working-days')}
         <WorkingDaysEditor value={draft.workingDays} onChange={days => edit({ workingDays: days }, 'calendar.working_days')} disabled={inputsLocked} locale={locale} />
         {fieldNotice('calendar.working_days')}
         {keyLine('calendar.working_days')}
       </section>
 
-      <section className="space-y-2" data-field="calendar.timezone" aria-label={LABEL['calendar.timezone']}>
-        {head('calendar.timezone', props.timezone, '즉시 적용(저장된 날짜는 바뀌지 않습니다)', 'calendar-timezone')}
+      <section className="space-y-2" data-field="calendar.timezone" aria-label={t(LABEL['calendar.timezone'])}>
+        {head('calendar.timezone', props.timezone, t('settings.calendarPanel.appliesNowDates'), 'calendar-timezone')}
         {corruptNotice('calendar.timezone', props.timezone, '#calendar-timezone')}
         <TimezoneSelect value={draft.timezone} onChange={tz => edit({ timezone: tz }, 'calendar.timezone')} disabled={inputsLocked} locale={locale}
-          suggestion={suggestion && suggestion !== draft.timezone.trim() && !inputsLocked ? { label: `이 브라우저의 시간대(${suggestion})로 제안`, value: suggestion } : null} />
+          suggestion={suggestion && suggestion !== draft.timezone.trim() && !inputsLocked ? { label: t('settings.calendarPanel.suggestTz').replace('{suggestion}', String(suggestion)), value: suggestion } : null} />
         {fieldNotice('calendar.timezone')}
         {keyLine('calendar.timezone')}
       </section>
 
-      {conflict && <ConflictCompare rows={changed.map(k => ({ key: k, label: LABEL[k], mine: String(stored(draft, k)),
-        latest: conflict.invalidKeys.includes(k) ? '설정 손상' : JSON.stringify(conflict.values[k] ?? null) }))}
+      {conflict && <ConflictCompare rows={changed.map(k => ({ key: k, label: t(LABEL[k]), mine: String(stored(draft, k)),
+        latest: conflict.invalidKeys.includes(k) ? t('settings.notify.policy.corrupted') : JSON.stringify(conflict.values[k] ?? null) }))}
         onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(k => !conflict.invalidKeys.includes(k))} />}
       {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
-      <SettingsSaveBar notice={notice} summary={`변경 ${changed.length}개`}>
+      <SettingsSaveBar notice={notice} summary={t('settings.wsFields.changed').replace('{n}', String(changed.length))}>
         {saveReason && <span id="calendar-save-reason" className="sr-only">{saveReason}</span>}
         <button type="button" className="btn btn-primary" disabled={saveDisabled} onClick={save} aria-describedby={saveDescribedBy}>
-          {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
+          {uncertainPatch ? t('settings.workflow.retry') : t('common.save')}
         </button>
       </SettingsSaveBar>
     </div>

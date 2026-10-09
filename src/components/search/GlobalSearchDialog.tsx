@@ -54,7 +54,7 @@ export function GlobalSearchDialog({
   const [projects, setProjects] = useState<SearchProjectItem[]>([])
   const [wbsItems, setWbsItems] = useState<SearchWbsItem[]>([])
   // 실패(조회 오류·범위 거부)와 0건은 다른 상태다 — 0건은 서버가 답한 검색어(answered)가 지금 검색어와 같을 때만 말한다
-  const [searchError, setSearchError] = useState<{ reason: 'denied' | 'failed'; message: string } | null>(null)
+  const [searchError, setSearchError] = useState<{ reason: 'denied' | 'failed'; message: string | null } | null>(null)
   const [answered, setAnswered] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -91,7 +91,7 @@ export function GlobalSearchDialog({
       kind: 'nav' as const,
       id: `nav-${item.id}`,
       title: typeof item.label === 'string' ? item.label : t(item.label.key),
-      subtitle: `${inProject ? projectName ?? '프로젝트' : '워크스페이스'} · ${SETTINGS_ITEMS.has(item.id) ? '설정' : '이동'}`,
+      subtitle: `${inProject ? projectName ?? t('search.sub.project') : t('search.sub.workspace')} · ${SETTINGS_ITEMS.has(item.id) ? t('search.sub.settings') : t('search.sub.go')}`,
       href: item.href,
     }))
     .filter((item) => !needle || item.title.toLowerCase().includes(needle))
@@ -110,7 +110,8 @@ export function GlobalSearchDialog({
     let stale = false   // 늦게 온 앞 검색어의 응답이 지금 결과를 덮지 않게
     const timer = setTimeout(() => {
       startTransition(async () => {
-        let res: Awaited<ReturnType<typeof searchTitles>>
+        // 요청 자체가 실패하면 error 를 null 로 둔다 — 문구는 렌더에서 고른다(effect 가 t 에 매이면 로캘 전환이 재검색을 일으킨다)
+        let res: Awaited<ReturnType<typeof searchTitles>> | { ok: false; reason: 'failed'; error: null }
         try {
           res = await searchTitles({
             workspaceId,
@@ -119,7 +120,7 @@ export function GlobalSearchDialog({
             projectId: scope === 'project' ? projectId : null,
           })
         } catch {
-          res = { ok: false, reason: 'failed', error: '검색 요청을 보내지 못했습니다. 연결을 확인하세요.' }
+          res = { ok: false, reason: 'failed', error: null }
         }
         if (stale) return
         if (!res.ok) {
@@ -149,14 +150,14 @@ export function GlobalSearchDialog({
       kind: 'project' as const,
       id: `proj-${p.id}`,
       title: p.name,
-      subtitle: '프로젝트',
+      subtitle: t('search.sub.project'),
       href: p.href,
     })),
     ...wbsItems.map((w) => ({
       kind: 'wbs' as const,
       id: `wbs-${w.id}`,
       title: `${w.code} ${w.title}`,
-      subtitle: 'WBS 작업',
+      subtitle: t('search.sub.wbs'),
       href: w.href,
     })),
   ]
@@ -196,7 +197,7 @@ export function GlobalSearchDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="전역 ⌘K 제목 검색"
+      aria-label={t('search.dialogAria')}
       className="fixed inset-0 z-(--z-modal) flex items-start justify-center bg-black/50 p-4 pt-16 sm:pt-24 backdrop-blur-xs"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
@@ -217,8 +218,8 @@ export function GlobalSearchDialog({
               setQuery(e.target.value)
               setSelectedIndex(0)
             }}
-            placeholder={scope === 'project' ? '제목 검색 (메뉴 이동, 현재 프로젝트의 작업 이름·코드)...' : '제목 검색 (메뉴 이동, 프로젝트 이름)...'}
-            aria-label="제목 검색어"
+            placeholder={scope === 'project' ? t('search.placeholderProject') : t('search.placeholderWorkspace')}
+            aria-label={t('search.inputAria')}
             className="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-muted"
           />
           {isPending && <Loader2 size={16} className="animate-spin text-fg-muted shrink-0" />}
@@ -230,7 +231,7 @@ export function GlobalSearchDialog({
                 inputRef.current?.focus()
               }}
               className="rounded p-1 text-fg-muted hover:text-fg"
-              aria-label="입력 지우기"
+              aria-label={t('search.clearInput')}
             >
               <X size={14} />
             </button>
@@ -239,7 +240,7 @@ export function GlobalSearchDialog({
             type="button"
             onClick={onClose}
             className="rounded p-1 text-fg-muted hover:text-fg"
-            aria-label="닫기"
+            aria-label={t('common.close')}
           >
             <span className="text-xs font-mono">ESC</span>
           </button>
@@ -248,7 +249,7 @@ export function GlobalSearchDialog({
         {/* 범위 칩 바 */}
         <div className="flex items-center justify-between border-b border-border bg-surface-subtle/50 px-3 py-1.5 text-xs">
           <div className="flex items-center gap-1.5">
-            <span className="text-fg-muted">범위:</span>
+            <span className="text-fg-muted">{t('search.scopeLabel')}</span>
             {projectId && (
               <button
                 type="button"
@@ -262,7 +263,7 @@ export function GlobalSearchDialog({
                     : 'bg-surface text-fg-secondary hover:bg-surface-hover'
                 }`}
               >
-                {projectName ? `${projectName}` : '현재 프로젝트'}
+                {projectName ? `${projectName}` : t('search.scopeCurrentProject')}
               </button>
             )}
             <button
@@ -277,10 +278,10 @@ export function GlobalSearchDialog({
                   : 'bg-surface text-fg-secondary hover:bg-surface-hover'
               }`}
             >
-              워크스페이스 전체
+              {t('search.scopeWorkspace')}
             </button>
           </div>
-          <span className="text-meta text-fg-muted">제목 검색 전용</span>
+          <span className="text-meta text-fg-muted">{t('search.titleOnly')}</span>
         </div>
 
         {/* 결과 리스트 영역 */}
@@ -291,12 +292,12 @@ export function GlobalSearchDialog({
                 <StatusMessage
                   compact
                   kind="partial_error"
-                  title="검색하지 못했습니다"
-                  detail={`${searchError.message} 결과가 없는 것이 아닙니다.`}
-                  action={{ label: '다시 시도', onSelect: () => setRetry((n) => n + 1) }}
+                  title={t('search.err.failedTitle')}
+                  detail={`${searchError.message ?? t('search.err.requestFailed')}${t('search.err.notEmptySuffix')}`}
+                  action={{ label: t('search.retry'), onSelect: () => setRetry((n) => n + 1) }}
                 />
               ) : (
-                <StatusMessage compact kind="disabled" title="이 범위에서는 검색할 수 없습니다" detail={searchError.message} />
+                <StatusMessage compact kind="disabled" title={t('search.err.deniedTitle')} detail={searchError.message ?? t('search.err.requestFailed')} />
               )}
             </div>
           )}
@@ -306,8 +307,8 @@ export function GlobalSearchDialog({
               <StatusMessage
                 compact
                 kind="empty"
-                title={`‘${query.trim()}’ 제목과 일치하는 결과가 없습니다`}
-                detail={scope === 'project' ? '현재 프로젝트의 작업 이름·코드에서 찾았습니다.' : '이 워크스페이스의 프로젝트 이름에서 찾았습니다.'}
+                title={t('search.emptyTitle').replace('{q}', () => query.trim())}
+                detail={scope === 'project' ? t('search.emptyDetailProject') : t('search.emptyDetailWorkspace')}
               />
             </div>
           )}
@@ -343,11 +344,11 @@ export function GlobalSearchDialog({
         {/* 키보드 도움말 하단 바 */}
         <div className="flex items-center justify-between border-t border-border bg-surface-subtle/30 px-3 py-1.5 text-meta text-fg-muted">
           <div className="flex items-center gap-3">
-            <span>↑↓ 이동</span>
-            <span>↵ 선택</span>
-            <span>ESC 닫기</span>
+            <span>{t('search.hintMove')}</span>
+            <span>{t('search.hintSelect')}</span>
+            <span>{t('search.hintClose')}</span>
           </div>
-          <span>{productName} 검색 v1</span>
+          <span>{t('search.footer').replace('{product}', () => productName)}</span>
         </div>
       </div>
     </div>,

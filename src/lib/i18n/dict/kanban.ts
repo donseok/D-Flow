@@ -74,4 +74,12 @@ export const kanbanKo = {
   'kanban.coachDismiss': '알겠어요',
   'kanban.noMatchTitle': '필터에 맞는 작업이 없습니다',
   'kanban.noMatchDesc': '렌즈·필터·검색을 조정해 보세요.',
+  // 카드 이동 메뉴·실패 복구·낭독 알림
+  'kanban.liveStageChanged': '{name} 단계 변경: {stage}',
+  'kanban.liveApproved': '{name} 승인 완료',
+  'kanban.moveMenuAria': '{name} 이동 메뉴',
+  'kanban.moveSelectAria': '{name} 이동 선택',
+  'kanban.moveSaveFailed': '이동 저장에 실패했습니다.',
+  'kanban.moveRevert': '원위치',
+  'kanban.moveRetry': '재시도',
 } as const

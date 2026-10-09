@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { GitCompareArrows, RefreshCw } from 'lucide-react'
 import type { CellAddr } from '@/lib/domain/sheetSelection'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { CELL_PEERS_MAX, presenceColor, presenceStyle, type PresencePeer } from '@/lib/domain/sheetPresence'
 
 /** editing = 저장 전 초안(배지 없음), conflict = 다른 사람이 먼저 바꿔 쓰지 않았다(비교 대기 — SPU1) */
@@ -49,6 +50,7 @@ export interface SheetCellProps {
 }
 
 export function SheetCell(p: SheetCellProps) {
+  const { t } = useLocale()
   const ref = useRef<HTMLTextAreaElement>(null)
   const k = `${p.addr.rowId}:${p.addr.col}`
   const { register } = p
@@ -110,7 +112,7 @@ export function SheetCell(p: SheetCellProps) {
               <span key={peer.connKey}
                 className="truncate rounded-sm px-1 text-xs font-bold leading-4"
                 style={presenceStyle(peer.userId)}
-                title={peer.editing ? `${peer.name} · 입력 중` : peer.name}>
+                title={peer.editing ? t('weekly.cell.peerEditing').replace('{name}', () => peer.name) : peer.name}>
                 {peer.name}{peer.editing ? ' ✎' : ''}
               </span>
             ))}
@@ -133,22 +135,22 @@ export function SheetCell(p: SheetCellProps) {
       )}
       <span className="absolute right-1 top-0.5 z-30 text-xs">
         {p.chip ? (
-          p.chip.phase === 'saving' ? <span className="text-fg-muted">{p.chip.count}개 셀 저장 중…</span>
-            : p.chip.phase === 'saved' ? <span className="text-success">저장됨</span>
-              : <button className="flex items-center gap-0.5 text-danger" onClick={p.onChipRetry} title="다시 저장"><RefreshCw className="h-3 w-3" />{p.chip.count}개 셀 저장 실패 · 재시도</button>
+          p.chip.phase === 'saving' ? <span className="text-fg-muted">{t('weekly.cell.batchSaving').replace('{n}', String(p.chip.count))}</span>
+            : p.chip.phase === 'saved' ? <span className="text-success">{t('weekly.cell.saved')}</span>
+              : <button className="flex items-center gap-0.5 text-danger" onClick={p.onChipRetry} title={t('weekly.cell.saveAgain')}><RefreshCw className="h-3 w-3" />{t('weekly.cell.batchFailed').replace('{n}', String(p.chip.count))}</button>
         ) : (!p.batchActive && (
           <>
-            {p.status === 'saving' && <span className="text-fg-muted">저장 중…</span>}
-            {p.status === 'saved' && <span className="text-success">저장됨</span>}
+            {p.status === 'saving' && <span className="text-fg-muted">{t('weekly.cell.saving')}</span>}
+            {p.status === 'saved' && <span className="text-success">{t('weekly.cell.saved')}</span>}
             {p.status === 'error' && (
-              <button className="flex items-center gap-0.5 text-danger" onClick={p.onRetry} title="다시 저장"><RefreshCw className="h-3 w-3" />재시도</button>
+              <button className="flex items-center gap-0.5 text-danger" onClick={p.onRetry} title={t('weekly.cell.saveAgain')}><RefreshCw className="h-3 w-3" />{t('weekly.cell.retry')}</button>
             )}
           </>
         ))}
         {/* 충돌은 배치 칩에 가리지 않는다 — 저장되지 않은 채 남은 입력이라 항상 보인다 */}
         {p.status === 'conflict' && (
-          <button data-cell-conflict className="flex items-center gap-0.5 font-medium text-warning" onClick={p.onCompare} title="다른 사용자가 먼저 바꿨습니다 — 비교">
-            <GitCompareArrows className="h-3 w-3" aria-hidden />충돌 · 비교
+          <button data-cell-conflict className="flex items-center gap-0.5 font-medium text-warning" onClick={p.onCompare} title={t('weekly.cell.conflictTitle')}>
+            <GitCompareArrows className="h-3 w-3" aria-hidden />{t('weekly.cell.conflict')}
           </button>
         )}
       </span>

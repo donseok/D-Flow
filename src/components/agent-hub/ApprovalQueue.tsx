@@ -9,7 +9,9 @@ import { useState } from 'react'
 import type { AgentHub, HubQueueEntry } from '@/lib/domain/agentHub'
 import { runHubProcessOp, type HubProcessOp } from '@/app/actions/agentHub'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { NOTE_PLACEHOLDER, OP_LABEL, OP_TITLE } from './labels'
+import { intlLocale } from '@/lib/i18n/format'
+import { fill } from '@/components/agents/labelKeys'
+import { NOTE_PLACEHOLDER_KEY, OP_LABEL_KEY, OP_TITLE_KEY } from './labelKeys'
 
 type Props = {
   queue: HubQueueEntry[]
@@ -21,7 +23,7 @@ type Props = {
   onChanged: () => Promise<void> | void
   /** 보고 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다(기본값 없음) */
   timeZone: string
-  /** 시각 포맷의 locale — 없으면 'ko-KR'(값 공급은 레인 B) */
+  /** 시각 포맷의 locale — 없으면 화면 언어의 형식 태그(ko 는 'ko-KR') */
   locale?: string
   /** 시각 뒤에 시간대 이름 — 프로젝트 달력을 못 읽어 UTC 로 찍을 때(허브 머리와 같은 표기, A-4 리뷰 N3·A-5 리뷰 O6) */
   showTimeZone?: boolean
@@ -30,7 +32,8 @@ type Props = {
 const when = (iso: string, timeZone: string, locale = 'ko-KR') => new Date(iso).toLocaleString(locale, { timeZone, hour12: false })
 
 function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, showTimeZone = false }: { q: HubQueueEntry } & Omit<Props, 'queue'>) {
-  const { t } = useLocale()
+  const { t, locale: uiLocale } = useLocale()
+  const timeLocale = locale ?? intlLocale(uiLocale)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
@@ -49,7 +52,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
       if (r.warning) setWarn(r.warning)
       setRejecting(false); setNote('')
       if (r.hub) onHub(r.hub)
-      else { setErr(r.hubError ?? '현황 재조회에 실패했습니다.'); await onChanged() }
+      else { setErr(r.hubError ?? t('agentHub.refetchFailed')); await onChanged() }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally { setBusy(false) }
@@ -62,7 +65,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
           <span className="font-mono text-meta text-fg-secondary">{q.code}</span>
           <span className="ml-2 text-sm font-semibold text-fg">{q.name}</span>
         </div>
-        <span className="text-meta text-fg-muted">{q.agent} · {when(q.reportedAt, timeZone, locale)}{showTimeZone ? ` (${timeZone})` : ''} · {q.percent}%</span>
+        <span className="text-meta text-fg-muted">{q.agent} · {when(q.reportedAt, timeZone, timeLocale)}{showTimeZone ? ` (${timeZone})` : ''} · {q.percent}%</span>
       </div>
       {/* SP5b W1 — 승인 단계가 둘 이상이면 지금 기다리는 단계를 보인다("1/2 · 내부 검토") */}
       {q.approval && q.approval.total >= 2 && (
@@ -84,26 +87,26 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
         <div className="mt-2 flex flex-col gap-2">
           <div className="flex gap-2">
             {q.canApprove && (
-              <button type="button" data-queue-approve disabled={busy} title={OP_TITLE.approve}
-                onClick={() => { void run({ kind: 'approve', orderId: q.orderId, expectedReportId: q.reportId, ...(q.approval ? { expectedStep: q.approval.step } : {}) }) }} className="btn btn-primary h-8 px-3 text-xs">{OP_LABEL.approve}</button>
+              <button type="button" data-queue-approve disabled={busy} title={t(OP_TITLE_KEY.approve)}
+                onClick={() => { void run({ kind: 'approve', orderId: q.orderId, expectedReportId: q.reportId, ...(q.approval ? { expectedStep: q.approval.step } : {}) }) }} className="btn btn-primary h-8 px-3 text-xs">{t(OP_LABEL_KEY.approve)}</button>
             )}
-            <button type="button" data-queue-reject-open disabled={busy} aria-expanded={rejecting} title={OP_TITLE.reject}
-              onClick={() => setRejecting(v => !v)} className="btn btn-ghost h-8 px-3 text-xs">{OP_LABEL.reject}</button>
+            <button type="button" data-queue-reject-open disabled={busy} aria-expanded={rejecting} title={t(OP_TITLE_KEY.reject)}
+              onClick={() => setRejecting(v => !v)} className="btn btn-ghost h-8 px-3 text-xs">{t(OP_LABEL_KEY.reject)}</button>
           </div>
           {!q.canApprove && (
             <p className="text-meta text-fg-muted">{t(q.canManage ? 'agent.queue.selfApprovalHint' : 'agent.queue.adminApprovesHint')}</p>
           )}
           {rejecting && (
             <div className="flex flex-col gap-1">
-              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder={NOTE_PLACEHOLDER.reject} className="app-input w-full text-xs" />
+              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder={t(NOTE_PLACEHOLDER_KEY.reject)} className="app-input w-full text-xs" />
               <div>
                 <button type="button" data-queue-reject disabled={busy || note.trim() === ''}
-                  onClick={() => { void run({ kind: 'reject', orderId: q.orderId, note: note.trim(), expectedReportId: q.reportId }) }} className="btn btn-ghost h-8 px-3 text-xs">반려 확정</button>
+                  onClick={() => { void run({ kind: 'reject', orderId: q.orderId, note: note.trim(), expectedReportId: q.reportId }) }} className="btn btn-ghost h-8 px-3 text-xs">{fill(t('agents.op.confirmGo'), { label: t(OP_LABEL_KEY.reject) })}</button>
               </div>
             </div>
           )}
         </div>
-      ) : <p className="mt-2 text-meta text-fg-muted">승인은 관리자가 합니다.</p>}
+      ) : <p className="mt-2 text-meta text-fg-muted">{t('agentHub.queue.adminOnly')}</p>}
       {err && <p data-queue-error className="mt-1 text-meta text-warning">{err}</p>}
       {warn && <p data-queue-warning className="mt-1 text-meta text-pending">{warn}</p>}
     </li>
@@ -111,11 +114,12 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
 }
 
 export function ApprovalQueue({ queue, ...rest }: Props) {
+  const { t } = useLocale()
   return (
-    <section aria-label="승인 대기" className="rounded-xl border border-border bg-surface p-3">
-      <h2 className="mb-2 text-xs font-semibold text-fg-muted">승인 대기 {queue.length > 0 && <span className="ml-1 tabular-nums text-fg">{queue.length}</span>}</h2>
+    <section aria-label={t('agents.state.wait')} className="rounded-xl border border-border bg-surface p-3">
+      <h2 className="mb-2 text-xs font-semibold text-fg-muted">{t('agents.state.wait')} {queue.length > 0 && <span className="ml-1 tabular-nums text-fg">{queue.length}</span>}</h2>
       {queue.length === 0
-        ? <p className="text-xs text-fg-secondary">승인 대기 없음</p>
+        ? <p className="text-xs text-fg-secondary">{t('agentHub.queue.empty')}</p>
         : <ul className="space-y-2">{queue.map(q => <QueueCard key={q.orderId} q={q} {...rest} />)}</ul>}
     </section>
   )

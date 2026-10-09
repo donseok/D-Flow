@@ -4,7 +4,9 @@ import { reloadPortalPage } from '@/lib/portal/reload'
 import { Button } from '@/components/ui/Button'
 import { flushUiPrefs, queueUiPref } from '@/lib/prefs/debouncedSave'
 import type { ProjectsView } from '@/lib/portal/prefs'
+import { useLocale } from '@/components/providers/LocaleProvider'
 export function ProjectsViewToggle({ view }: { view: ProjectsView }) {
+  const { t } = useLocale()
   const [selected, setSelected] = useState(view), [busy, setBusy] = useState(false), [error, setError] = useState(false)
   useEffect(() => { setSelected(view) }, [view])
   async function select(next: ProjectsView) {
@@ -17,9 +19,9 @@ export function ProjectsViewToggle({ view }: { view: ProjectsView }) {
     setBusy(false)
   }
 
-  return <span className="inline-flex gap-1" role="group" aria-label="프로젝트 보기">
-    <Button variant={selected === 'rows' ? 'primary' : 'ghost'} aria-pressed={selected === 'rows'} disabled={busy} onClick={() => void select('rows')}>행</Button>
-    <Button variant={selected === 'cards' ? 'primary' : 'ghost'} aria-pressed={selected === 'cards'} disabled={busy} onClick={() => void select('cards')}>카드</Button>
-    {error && <span role="alert" className="text-meta text-danger">보기 설정을 저장하지 못했습니다</span>}
+  return <span className="inline-flex gap-1" role="group" aria-label={t('portalUi.projects.viewAria')}>
+    <Button variant={selected === 'rows' ? 'primary' : 'ghost'} aria-pressed={selected === 'rows'} disabled={busy} onClick={() => void select('rows')}>{t('portalUi.projects.viewRows')}</Button>
+    <Button variant={selected === 'cards' ? 'primary' : 'ghost'} aria-pressed={selected === 'cards'} disabled={busy} onClick={() => void select('cards')}>{t('portalUi.projects.viewCards')}</Button>
+    {error && <span role="alert" className="text-meta text-danger">{t('portalUi.projects.viewSaveFailed')}</span>}
   </span>
 }

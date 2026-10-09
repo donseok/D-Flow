@@ -1,11 +1,14 @@
+'use client'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 // Wiki 세그먼트 폴백 — 검색 페이지 ↔ 토픽 상세(topics/[topicId]) 양방향 이동 모두
 // 이 경계가 재마운트되어 클릭 즉시 스켈레톤이 뜬다(2026-08-18 성능 감사: 종전엔 무피드백 동결).
 // 2분할(좌 목록 / 우 읽기 패널) 레이아웃과 같은 골격이라 시프트가 없다.
 export default function Loading() {
+  const { t } = useLocale()
   return (
-    <div className="space-y-4" role="status" aria-label="프로젝트 Wiki 를 불러오는 중">
+    <div className="space-y-4" role="status" aria-label={t('pages.loading.wiki')}>
       {/* 검색 바 */}
       <Skeleton className="h-11 w-full max-w-xl rounded-xl" />
 

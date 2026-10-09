@@ -25,9 +25,11 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/p/p1/menu',
   useSearchParams: () => new URLSearchParams(currentSearch),
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (key: string) => key }),
-}))
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 // MeetingsView 가 항상 마운트하는 MeetingFormModal 이 useToast 를 쓴다.
 // 이 테스트는 뷰만 단독 마운트해 ToastProvider 가 없으므로 훅 자체를 대체한다.
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
@@ -358,9 +360,9 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     expect(dialog()).not.toBeNull()
 
     // Modal 은 document.body 로 portal 되므로 container 가 아니라 document 에서 찾는다.
-    // 배경 버튼과 X 버튼 둘 다 aria-label 이 같아(common.close, LocaleProvider mock 은 항등
+    // 배경 버튼과 X 버튼 둘 다 aria-label 이 같아(닫기 — common.close, LocaleProvider mock 은 진짜 ko
     // 번역) 뒤엣것(X 버튼)을 집는다 — 어느 쪽이든 onClose 는 같다.
-    const closeButtons = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="common.close"]')]
+    const closeButtons = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="닫기"]')]
     expect(closeButtons.length).toBeGreaterThan(0)
     await act(async () => { closeButtons[closeButtons.length - 1].click() })
 
@@ -399,7 +401,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     )
     expect(dialog()).not.toBeNull()
 
-    const closeButtons = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="common.close"]')]
+    const closeButtons = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="닫기"]')]
     await act(async () => { closeButtons[closeButtons.length - 1].click() })
     expect(dialog()).toBeNull()
 

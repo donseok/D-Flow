@@ -1,16 +1,18 @@
 // src/components/agents/ZoneBlock.tsx
 'use client'
 import type { Zone } from '@/lib/domain/seatmap'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { Translate } from './labelKeys'
 import { SeatCard } from './Seat'
 import type { SeatOpHandler } from './SeatOpsBar'
 import css from './seatmap.module.css'
 
-function summary(z: Zone, withDone: boolean): string {
+function summary(z: Zone, withDone: boolean, t: Translate): string {
   const parts: string[] = []
-  if (z.summary.work) parts.push(`${z.summary.work} 진행`)
-  if (z.summary.wait) parts.push(`${z.summary.wait} 승인 대기`)
-  if (withDone && z.summary.done) parts.push(`${z.summary.done} 완료`)
-  if (z.summary.ready) parts.push(`${z.summary.ready} 빈자리`)
+  if (z.summary.work) parts.push(`${z.summary.work} ${t('agents.zone.work')}`)
+  if (z.summary.wait) parts.push(`${z.summary.wait} ${t('agents.state.wait')}`)
+  if (withDone && z.summary.done) parts.push(`${z.summary.done} ${t('agents.zone.done')}`)
+  if (z.summary.ready) parts.push(`${z.summary.ready} ${t('agents.state.ready')}`)
   return parts.join(' · ')
 }
 
@@ -37,14 +39,15 @@ export function ZoneBlock({ zone, selectedId, nowMs, busyOrderId, withDone = fal
   // 머지 완료(최근 7일)는 기본적으로 평면도에 그리지 않는다 — 책상이 승인분으로 메워지면 지금
   // 돌고 있는 것이 안 보인다. 승인 취소·재작업 요청을 좌석에서 하려면 '완료 포함'을 켜거나
   // 상태 레인 보기의 "빈자리 · 완료" 레인을 쓴다.
+  const { t } = useLocale()
   const seats = withDone ? zone.seats : zone.seats.filter(s => s.state !== 'DONE')
   return (
     <div className={css.zone}>
       <div className={css.zoneHead}>
         <span className={css.zoneCode}>{zone.code}</span>
         <span className={css.zoneName}>{zone.name}</span>
-        <span className={css.zoneSum}>{summary(zone, withDone)}</span>
-        {onFold && <button type="button" className={css.zoneFold} aria-label="구역 접기" onClick={onFold}>접기</button>}
+        <span className={css.zoneSum}>{summary(zone, withDone, t)}</span>
+        {onFold && <button type="button" className={css.zoneFold} aria-label={t('agents.floor.foldGroupAria')} onClick={onFold}>{t('agents.zone.fold')}</button>}
       </div>
       <div className={css.block}>
         {seats.map((s, i) => (

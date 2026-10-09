@@ -2,34 +2,35 @@
 // 내 에이전트·다른 계정 에이전트 명찰(2026-09-19 사용자 결정: 테두리와 명찰로 구분, 남의 것을 흐리게 하지 않는다).
 // 평면도·상태 레인·에이전트 보기가 같은 규칙을 쓴다. 테두리는 각 보기가 data-owner 로 그린다.
 import type { Seat, Watcher } from '@/lib/domain/seatmap'
+import { fill, type Translate } from './labelKeys'
 
 export type OwnerKind = 'mine' | 'other'
 export interface OwnerLabel { kind: OwnerKind; text: string }
 
-function label(mine: boolean, name: string | null | undefined): OwnerLabel {
-  if (mine) return { kind: 'mine', text: '내 에이전트' }
+function label(mine: boolean, name: string | null | undefined, t: Translate): OwnerLabel {
+  if (mine) return { kind: 'mine', text: t('agents.owner.mine') }
   const n = name?.trim()
-  return { kind: 'other', text: n ? `${n}의 에이전트` : '다른 계정' }
+  return { kind: 'other', text: n ? fill(t('agents.owner.named'), { name: n }) : t('agents.owner.other') }
 }
 
 /** 좌석의 명찰 — 빈자리(READY)와 에이전트가 없는 좌석은 null(아무 표시도 없다). */
-export function ownerLabel(seat: Pick<Seat, 'state' | 'agent' | 'agentMine' | 'agentOwnerName'>): OwnerLabel | null {
+export function ownerLabel(seat: Pick<Seat, 'state' | 'agent' | 'agentMine' | 'agentOwnerName'>, t: Translate): OwnerLabel | null {
   if (seat.state === 'READY' || !seat.agent) return null
-  return label(seat.agentMine === true, seat.agentOwnerName)
+  return label(seat.agentMine === true, seat.agentOwnerName, t)
 }
 
 /** 팀장(감시자)의 명찰 — 계정 재료를 싣지 않은 감시자(mine 없음)는 판정하지 않는다. */
-export function watcherOwnerLabel(w: Watcher): OwnerLabel | null {
+export function watcherOwnerLabel(w: Watcher, t: Translate): OwnerLabel | null {
   if (w.mine === undefined) return null
-  return label(w.mine, w.ownerName)
+  return label(w.mine, w.ownerName, t)
 }
 
 /** 작업 PC 행(팀)의 명찰 — 책상 명찰과 같은 말투로 「내 팀」·「<이름>의 팀」.
  *  재료는 그 행의 팀장(감시자)이고, 감시자가 없으면 그 행에 앉은 에이전트의 계정을 쓴다. */
-export function teamOwnerLabel(mine: boolean, name: string | null | undefined): OwnerLabel {
-  if (mine) return { kind: 'mine', text: '내 팀' }
+export function teamOwnerLabel(mine: boolean, name: string | null | undefined, t: Translate): OwnerLabel {
+  if (mine) return { kind: 'mine', text: t('agents.owner.teamMine') }
   const n = name?.trim()
-  return { kind: 'other', text: n ? `${n}의 팀` : '다른 계정' }
+  return { kind: 'other', text: n ? fill(t('agents.owner.teamNamed'), { name: n }) : t('agents.owner.other') }
 }
 
 /** 작은 명찰 — 내 것은 브랜드 바탕, 남의 것은 표면색 바탕에 이름(대비는 라이트·다크 토큰이 맞춘다). */

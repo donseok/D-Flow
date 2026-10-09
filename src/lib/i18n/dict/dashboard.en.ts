@@ -110,4 +110,13 @@ export const dashboardEn: Record<keyof typeof dashboardKo, string> = {
   'dash.teamProgress.emptyTitle': 'No teams to show',
   'dash.teamProgress.emptyDesc': 'Add a team to see progress by team here. Teams are created under “Teams” in project settings (teams hidden from progress are not listed).',
   'dash.teamProgress.emptyAction': 'Add a team',
+  'dash.teamProgress.title': 'Progress by team',
+  'dash.teamProgress.taskCount': '{n} tasks',
+  'dash.teamProgress.barLabel': '{team} progress {pct}%',
+  'dash.risk.title': 'Tasks to check now (WBS)',
+  'dash.risk.badge': 'Delayed {delayed} · Due soon {dueSoon}',
+  'dash.risk.empty': 'No tasks need immediate action right now.',
+  'dash.risk.behind': '{n}%p behind plan',
+  'dash.risk.ariaDueSoon': '{name}, due soon: {dday}',
+  'dash.gauge.aria': '{label}: actual {actual}%, planned {planned}%, variance {variance}, progress verdict {verdict}',
 }

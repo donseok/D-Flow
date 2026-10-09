@@ -70,4 +70,8 @@ export const attendanceKo = {
   'att.typeShort.trip': '출장',
   'att.typeShort.official': '공가',
   'att.typeShort.absent': '결근',
+  // 어시스턴트 딥링크 필터·삭제 확인 본문(i18n 정리) — {name} 은 화면이 굵은 글자로 끼운다
+  'att.botFilter': '{name} 필터',
+  'att.botFilterClear': '해제',
+  'att.deleteConfirmBody': '{name} 님의 {date} 근태 기록을 삭제할까요? 이 작업은 되돌릴 수 없습니다.',
 } as const

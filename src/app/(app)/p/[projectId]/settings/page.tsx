@@ -68,9 +68,9 @@ import { MODULE_LABEL } from '@/lib/modules/labels'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { manageableWorkspaceLinks } from '@/lib/settings/workspaceLinks'
 
-const FORM_KIND_LABEL: Record<FormKind, string> = {
-  weekly_report_pptx: '주간보고 (PPTX)', weekly_report_xlsx: '주간보고 (XLSX)',
-  issue_analysis_pptx: '이슈 분석 (PPTX)', wbs_export_xlsx: 'WBS 내보내기 (XLSX)',
+const FORM_KIND_LABEL: Record<FormKind, DictKey> = {
+  weekly_report_pptx: 'pages.projSettings.formKind.weekly_report_pptx', weekly_report_xlsx: 'pages.projSettings.formKind.weekly_report_xlsx',
+  issue_analysis_pptx: 'pages.projSettings.formKind.issue_analysis_pptx', wbs_export_xlsx: 'pages.projSettings.formKind.wbs_export_xlsx',
 }
 
 type ProjectRow = {
@@ -147,12 +147,12 @@ async function loadTeams(projectId: string, workspaceId: string) {
     return { ok: false as const }
   }
 }
-const ERR_TEAMS_UI = '팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
 
 export default async function SettingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'settings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const locale = await getServerLocale()
+  const ERR_TEAMS_UI = t(locale, 'pages.projSettings.teamsLoadFailed')
   // WBS 트리는 읽지 않는다 — 트리에서 쓰던 표시용 스탯(과업 수 KPI)을 머리 교체(SP3b UI-3 — PageHeader)와 함께 지웠다.
   // 날짜 예외는 설정 해석기(pc.cfg.holidays)가 읽는다.
   const [projects, actor] = await Promise.all([
@@ -192,7 +192,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   let workspaceModulesError: string | null = null
   if (pc.ok) {
     try { workspaceModules = await getWorkspaceConfig(pc.cfg.workspaceId) }
-    catch (error) { console.error('[settings] 모듈 허용 목록 조회 실패:', error); workspaceModulesError = '워크스페이스 허용 목록을 불러오지 못했습니다.' }
+    catch (error) { console.error('[settings] 모듈 허용 목록 조회 실패:', error); workspaceModulesError = t(locale, 'pages.projSettings.wsModulesLoadFailed') }
   }
   // 저장된 양식이 있거나 손상이면 비우기 버튼 — 손상된 양식을 푸는 것이 이 버튼의 원래 목적이다.
   const profileState = pc.ok ? pc.cfg.keys['wbs.excel_profile'] : null
@@ -237,7 +237,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const fieldStates = pc.ok ? Object.fromEntries(FIELD_ENTITIES.map((entity, i) => {
     const st = pc.cfg.keys[`fields.${entity}`]
     return [entity, { enabled: fieldModules[i] === 'on', value: st.status === 'set' || st.status === 'default' ? st.value : null,
-      error: fieldModules[i] === 'unknown' ? (locale === 'ko' ? '모듈 상태를 확인하지 못했습니다.' : 'Could not determine module availability.') : st.status === 'invalid' ? st.error : undefined }]
+      error: fieldModules[i] === 'unknown' ? t(locale, 'pages.projSettings.moduleStateUnknown') : st.status === 'invalid' ? st.error : undefined }]
   })) as Record<FieldEntity, { value: readonly FieldDef[] | null; error?: string; enabled: boolean }> : null
   const timezoneState = pc.ok ? pc.cfg.keys['calendar.timezone'] : null
   const issueYear = timezoneState && (timezoneState.status === 'set' || timezoneState.status === 'default')
@@ -268,7 +268,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             const st = pc.cfg.keys[`forms.${kind}` as const]
             const ok = st.status === 'set' || st.status === 'default'
             return {
-              kind, label: FORM_KIND_LABEL[kind],
+              kind, label: t(locale, FORM_KIND_LABEL[kind]),
               setting: ok ? st.value as FormKindState['setting'] : null,
               templates: (rows ?? []).filter((r) => r.form_kind === kind).map((r) => {
                 const issues = (r.placeholders as { issues?: { severity?: string }[] } | null)?.issues ?? []
@@ -305,20 +305,20 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   return (
     // 머리 하나(PageHeader — 개정 §5.9.3, SP3b 스펙 §6.4). 일정은 meta 로, 과업 수·기준일 KPI 카드는 지웠다(기준일은 '달력' 범주에 있다)
     <ProjectPageShell
-      hero={<PageHeader title={locale === 'ko' ? '프로젝트 설정' : 'Project settings'}
+      hero={<PageHeader title={t(locale, 'pages.projSettings.title')}
         meta={`${project?.name ?? t(locale, 'settings.projectFallback')} · ${scheduleLabel}`} />}
     >
       {/* 준비 체크리스트 — 단계의 완료는 실제 상태(setupSteps). 설정을 못 읽었으면 그리지 않는다(아래 편집기 자리의 오류 상태가 알린다) */}
       {actor && setupSteps && <ProjectSetupChecklist key={`${actor.userId}:${projectId}`} projectId={projectId} userId={actor.userId} steps={setupSteps} />}
       <SettingsShell items={[
-        { id: 'project-general', label: '일반' }, { id: 'project-modules', label: '모듈·메뉴' },
-        ...(isAdmin ? [{ id: 'project-team', label: '팀·업무영역' }] : []),
-        ...(isAdmin && issuesGate.ok ? [{ id: 'project-issues', label: locale === 'ko' ? '이슈' : 'Issues' }] : []),
-        ...(isAdmin && pc.ok && minutesGate.ok ? [{ id: 'project-minutes', label: locale === 'ko' ? '회의록' : 'Minutes' }] : []),
+        { id: 'project-general', label: t(locale, 'pages.settingsNav.general') }, { id: 'project-modules', label: t(locale, 'pages.projSettings.nav.modules') },
+        ...(isAdmin ? [{ id: 'project-team', label: t(locale, 'pages.projSettings.nav.team') }] : []),
+        ...(isAdmin && issuesGate.ok ? [{ id: 'project-issues', label: t(locale, 'pages.projSettings.nav.issues') }] : []),
+        ...(isAdmin && pc.ok && minutesGate.ok ? [{ id: 'project-minutes', label: t(locale, 'pages.settingsNav.minutes') }] : []),
         ...(isAdmin && vocabKeys.length ? [{ id: 'project-vocab', label: t(locale, 'settings.vocab.section') }] : []),
-        ...(isAdmin && formKinds ? [{ id: 'project-forms', label: locale === 'ko' ? '양식' : 'Forms' }] : []),
-        ...(isAdmin && pc.ok ? [{ id: 'project-fields', label: locale === 'ko' ? '추가 필드' : 'Custom fields' }] : []), { id: 'project-status', label: '상태·승인' },
-        { id: 'project-calendar', label: '달력' }, { id: 'project-history', label: '기록' },
+        ...(isAdmin && formKinds ? [{ id: 'project-forms', label: t(locale, 'pages.projSettings.nav.forms') }] : []),
+        ...(isAdmin && pc.ok ? [{ id: 'project-fields', label: t(locale, 'pages.projSettings.nav.fields') }] : []), { id: 'project-status', label: t(locale, 'pages.projSettings.nav.status') },
+        { id: 'project-calendar', label: t(locale, 'pages.settingsNav.calendar') }, { id: 'project-history', label: t(locale, 'pages.settingsNav.history') },
       ]}>
       <div className="space-y-5">
         {!pc.ok && <ConfigLoadError error={pc.error} locale={locale} />}
@@ -341,7 +341,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         >
         {workspaceLink && (
           <Link href={`/w/${encodeURIComponent(workspaceLink.slug)}/settings`} className="mb-4 inline-flex text-sm font-medium text-action hover:underline">
-            {workspaceLink.name} 워크스페이스 설정 →
+            {t(locale, 'pages.projSettings.wsSettingsLink').replace('{name}', () => workspaceLink.name)}
           </Link>
         )}
         <dl className="-mt-1">
@@ -363,7 +363,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {pc.ok && <div className="mt-6 border-t border-border pt-5">
           <MilestoneKeywordsEditor projectId={projectId} revision={pc.cfg.revision} locale={locale}
             initial={pc.cfg.keys['core.milestone_keywords'].status === 'set' || pc.cfg.keys['core.milestone_keywords'].status === 'default' ? pc.cfg.keys['core.milestone_keywords'].value : []}
-            source={pc.cfg.keys['core.milestone_keywords'].status === 'set' ? '프로젝트 설정' : '제품 기본값'}
+            source={pc.cfg.keys['core.milestone_keywords'].status === 'set' ? t(locale, 'pages.projSettings.source.project') : t(locale, 'pages.projSettings.source.product')}
             invalidReason={pc.cfg.keys['core.milestone_keywords'].status === 'invalid' ? pc.cfg.keys['core.milestone_keywords'].error : undefined} />
         </div>}
         </SectionCard>
@@ -371,13 +371,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isAdmin && labels && (
           <SectionCard
             searchText="core.level_labels 단계 깊이 WBS"
-            title={locale === 'ko' ? 'WBS 단계' : 'WBS Levels'}
+            title={t(locale, 'pages.projSettings.levelsTitle')}
             icon={ListTree}
           >
             <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">
-              {locale === 'ko'
-                ? '트리 깊이별 단계 이름입니다. 단계 수가 곧 최대 깊이이며, 기존 WBS 보다 얕게 줄일 수 없습니다. 화면 배지·보고서·엑셀 헤더가 이 이름을 씁니다.'
-                : 'Level names per tree depth. The number of levels is the max depth; you cannot shrink below the existing tree. Badges, reports and Excel headers use these names.'}
+              {t(locale, 'pages.projSettings.levelsDesc')}
             </p>
             {labels.ok
               ? <LevelSettingsManager projectId={projectId} levelLabels={labels.value} revision={revision} />
@@ -485,7 +483,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {/* ════ 모듈·메뉴 ════ */}
         <div id="project-modules" className="scroll-mt-24 space-y-5">
         <div>
-        <SectionCard searchText="modules.enabled 모듈 메뉴 views.default 작업 계획 기본 보기" title="모듈·메뉴" icon={LayoutList}>
+        <SectionCard searchText="modules.enabled 모듈 메뉴 views.default 작업 계획 기본 보기" title={t(locale, 'pages.projSettings.nav.modules')} icon={LayoutList}>
           {pc.ok && workspaceModules ? (() => {
             const enabled = pc.cfg.keys['modules.enabled']
             const allowed = workspaceModules.keys['modules.allowed']
@@ -496,7 +494,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                   message={allowed.status === 'invalid' ? allowed.error : undefined}
                   isAdmin={Boolean(workspaceLink)} settingsHref={workspaceLink ? `/w/${encodeURIComponent(workspaceLink.slug)}/settings` : undefined} />}
               {!agentsOn && allowedIds.includes('agents') && (enabled.status === 'set' || enabled.status === 'default') && enabled.value.includes('agents') &&
-                <p role="alert" className="mb-3 text-sm text-pending">에이전트 사용 설정은 켜져 있지만 현재 기능은 닫혀 있습니다. 등록 동기화 실패라면 에이전트를 끈 뒤 다시 켜세요.</p>}
+                <p role="alert" className="mb-3 text-sm text-pending">{t(locale, 'pages.projSettings.agentsClosed')}</p>}
               <ModuleToggleEditor projectId={projectId} revision={pc.cfg.revision} locale={locale}
                 initialEnabled={enabled.status === 'set' || enabled.status === 'default' ? enabled.value : null}
                 invalidReason={enabled.status === 'invalid' ? enabled.error : undefined}
@@ -505,7 +503,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
                   allowed: allowedIds.includes(m.id), available: m.envAvailable() }))} />
               {/* 작업 계획 기본 보기(views.default — SP3b UI-3 과제 7) — 같은 '모듈·메뉴' 범주 안 구역 */}
               <section aria-labelledby="project-views-default" data-settings-search="views.default 작업 계획 기본 보기 표 간트 보드" className="mt-8 border-t border-border pt-6">
-                <h4 id="project-views-default" className="mb-3 text-sm font-semibold text-fg">작업 계획 기본 보기</h4>
+                <h4 id="project-views-default" className="mb-3 text-sm font-semibold text-fg">{t(locale, 'settings.views.default.label')}</h4>
                 <ViewsDefaultEditor projectId={projectId} revision={pc.cfg.revision} kanbanOn={kanbanOn} labelledBy="project-views-default"
                   initial={pc.cfg.keys['views.default'].status === 'set' || pc.cfg.keys['views.default'].status === 'default' ? pc.cfg.keys['views.default'].value : null}
                   invalidReason={pc.cfg.keys['views.default'].status === 'invalid' ? pc.cfg.keys['views.default'].error : undefined} />
@@ -522,16 +520,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isAdmin && (
           <SectionCard
             searchText="권한 역할 멤버"
-            title={locale === 'ko' ? '권한' : 'Roles'}
+            title={t(locale, 'pages.projSettings.rolesTitle')}
             icon={Shield}
           >
             <p className="-mt-2 text-xs leading-5 text-fg-secondary">
-              {locale === 'ko'
-                ? '권한과 초대는 참여 인력 명단과 함께 팀 구성에서 관리합니다.'
-                : 'Roles and invites are managed under Members, together with the roster.'}
+              {t(locale, 'pages.projSettings.rolesDesc')}
               {' '}
               <Link href={`/p/${projectId}/members`} className="font-semibold text-action hover:underline">
-                {locale === 'ko' ? '팀 구성 열기' : 'Open Members'}
+                {t(locale, 'pages.projSettings.openMembers')}
                 <ArrowUpRight className="ml-0.5 inline h-3.5 w-3.5" aria-hidden />
               </Link>
             </p>
@@ -541,13 +537,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isAdmin && (
           <SectionCard
             searchText="팀 업무영역 담당"
-            title={locale === 'ko' ? '팀 관리' : 'Teams'}
+            title={t(locale, 'pages.projSettings.teamsTitle')}
             icon={Users}
           >
             <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">
-              {locale === 'ko'
-                ? '이 프로젝트의 팀 목록입니다. WBS 담당·명단·칸반·보고서가 이 목록을 씁니다. 정의하지 않으면 워크스페이스 공용 팀을 상속합니다.'
-                : 'Teams for this project, used by WBS owners, roster, kanban and reports. Inherits the workspace’s shared teams until defined.'}
+              {t(locale, 'pages.projSettings.teamsDesc')}
             </p>
             {teams.ok ? (
               <ProjectTeamsManager
@@ -565,13 +559,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isAdmin && pc.ok && (
           <SectionCard
             searchText="업무영역 주간보고 영역 담당 팀 weekly areas"
-            title={locale === 'ko' ? '업무영역' : 'Work areas'}
+            title={t(locale, 'pages.projSettings.areasTitle')}
             icon={ListTree}
           >
             <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">
-              {locale === 'ko'
-                ? '주간보고 시트의 행이 이 영역입니다. 활성 영역을 저장하면 이번 주 이후 시트에 그 영역의 행이 생기고, 비활성으로 두면 이번 주 이후 시트에서 숨겨지며 쓴 내용은 남습니다.'
-                : 'Each work area is a row of the weekly report sheet. Saving an active area adds its row to this week’s and later sheets; an inactive area is hidden from this week on and its content is kept.'}
+              {t(locale, 'pages.projSettings.areasDesc')}
             </p>
             {teams.ok ? (
               <ProjectAreasManager
@@ -626,14 +618,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         </div>}
 
         {isAdmin && pc.ok && formKinds && <div id="project-forms" className="scroll-mt-24 space-y-5">
-          <SectionCard searchText="forms 양식 템플릿 보고서 pptx xlsx 업로드 매핑 자리표시자" title={locale === 'ko' ? '보고서 양식' : 'Report templates'} icon={Upload}>
-            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{locale === 'ko' ? '자체 양식 파일을 올려 활성화하면 보고서·내보내기가 그 양식으로 만들어집니다. 활성 양식이 없으면 기본 양식을 씁니다.' : 'Upload and activate your own template to use it for reports and exports. Without an active one, the default template is used.'}</p>
+          <SectionCard searchText="forms 양식 템플릿 보고서 pptx xlsx 업로드 매핑 자리표시자" title={t(locale, 'pages.projSettings.formsTitle')} icon={Upload}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'pages.projSettings.formsDesc')}</p>
             <FormTemplatesManager key={`${projectId}-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate} kinds={formKinds} />
           </SectionCard>
         </div>}
 
         {isAdmin && pc.ok && fieldStates && <div id="project-fields" className="scroll-mt-24 space-y-5">
-          <SectionCard searchText="fields.wbs_item fields.issue fields.weekly_row 추가 필드 custom fields" title={locale === 'ko' ? '추가 필드' : 'Custom fields'} icon={LayoutList}>
+          <SectionCard searchText="fields.wbs_item fields.issue fields.weekly_row 추가 필드 custom fields" title={t(locale, 'pages.projSettings.nav.fields')} icon={LayoutList}>
             <CustomFieldsSettings key={`${projectId}-fields-${revision}`} projectId={projectId} states={fieldStates} revision={revision} canEdit={canMutate} locale={locale} />
           </SectionCard>
         </div>}
@@ -774,12 +766,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
             </span>
             <div>
               <p className="text-sm font-semibold text-fg">
-                {locale === 'ko' ? '기준일·날짜 예외 정보를 불러오지 못했습니다.' : 'Could not load base date and date exceptions.'}
+                {t(locale, 'pages.projSettings.scheduleLoadFailed')}
               </p>
               <p className="mt-1 text-xs leading-5 text-fg-secondary">
-                {locale === 'ko'
-                  ? '일시적인 오류일 수 있습니다. 잠시 후 새로고침하세요. 이 페이지의 다른 설정(WBS 임포트 포함)은 그대로 사용할 수 있습니다.'
-                  : 'This may be temporary — please refresh shortly. Other settings on this page (including WBS import) remain available.'}
+                {t(locale, 'pages.projSettings.scheduleLoadFailedDesc')}
               </p>
             </div>
           </div>
@@ -788,7 +778,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         </SectionCard>
         </div>
 
-        <SectionCard id="project-history" searchText="history 설정 변경 기록 이력" title="설정 변경 이력" icon={History}>
+        <SectionCard id="project-history" searchText="history 설정 변경 기록 이력" title={t(locale, 'pages.projSettings.historyTitle')} icon={History}>
           {historyCal === null
             ? null /* 설정 전체를 못 읽었다 — 페이지 머리의 ConfigLoadError 가 이미 사유를 그린다 */
             : historyCal.ok

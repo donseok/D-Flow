@@ -9,9 +9,11 @@ import type { BrandingLogo } from '@/lib/settings/defs/workspace'
 import { newUuid } from '@/lib/domain/uuid'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { DictKey } from '@/lib/i18n/dict'
 
 const EMPTY: BrandingLogo = { full: null, full_dark: null, mark: null }
-const LABEL: Record<BrandingSlot, string> = { full: '기본 로고', full_dark: '어두운 배경 로고', mark: '아이콘 마크' }
+const LABEL: Record<BrandingSlot, DictKey> = { full: 'settings.logo.slot.full', full_dark: 'settings.logo.slot.fullDark', mark: 'settings.logo.slot.mark' }
 const same = (a: BrandingLogo, b: BrandingLogo) => BRANDING_SLOTS.every(slot => a[slot] === b[slot])
 /** 선택한 파일의 로컬 미리보기 주소 — 서버에 요청하지 않는다(저장 전 경로는 /api/brand 가 주지 않는다). 지원하지 않으면 null. */
 function localPreview(file: File): string | null {
@@ -22,6 +24,7 @@ function revoke(url: string | undefined) { try { if (url && typeof URL.revokeObj
 export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }: {
   workspaceId: string; revision: number; initialLogo: BrandingLogo | null; invalidReason?: string
 }) {
+  const { t } = useLocale()
   const router = useRouter()
   const [baseline, setBaseline] = useState<BrandingLogo>(initialLogo ?? EMPTY)
   const [draft, setDraft] = useState<BrandingLogo>(initialLogo ?? EMPTY)
@@ -49,11 +52,11 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
     startTransition(async () => {
       let result: Awaited<ReturnType<typeof uploadBrandLogo>>
       try { result = await uploadBrandLogo(workspaceId, slot, file) }
-      catch { setUploadError('로고 업로드 결과를 확인하지 못했습니다. 다시 시도하세요.'); return }
+      catch { setUploadError(t('settings.logo.uploadUncertain')); return }
       if (!result.ok) { setUploadError(result.error); return }
       setDraft(current => ({ ...current, [slot]: result.path }))
       setFiles(current => ({ ...current, [slot]: undefined }))
-      setNotice(`${LABEL[slot]} 업로드가 끝났습니다. 설정을 저장하면 적용됩니다.`)
+      setNotice(t('settings.logo.uploaded').replace('{slot}', t(LABEL[slot])))
     })
   }
 
@@ -62,7 +65,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
     try { result = await updateWorkspaceSettings(workspaceId, patch) } catch { /* 이력으로 결과 판정 */ }
     if (result?.ok) {
       setBaseline(draft); setBaseRevision(result.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
-      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : '로고 설정을 저장했습니다. 화면에 바로 반영됩니다.'); router.refresh(); return
+      setNotice(result.revision === patch.expectedRevision ? t('settings.save.noChange') : t('settings.logo.saved')); router.refresh(); return
     }
     if (result?.kind === 'conflict') {
       const value = result.latest.values['branding.logo']
@@ -79,12 +82,12 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
       const found = await getSettingsCommandOutcome({ workspaceId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
         setBaseline(draft); setBaseRevision(found.outcome.revision); setNeedsRepair(false); setUncertainPatch(null); setFieldError(null)
-        setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
+        setNotice(t('settings.save.confirmed')); router.refresh(); return
       }
     } catch { /* 같은 명령으로 다시 보낸다 */ }
     if (resendCount === 0) return submit(patch, 1)
     setUncertainPatch(patch)
-    setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+    setError(t('settings.rootFolders.uncertain'))
   }
 
   function save() {
@@ -95,49 +98,49 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
   }
 
   return <div className="space-y-4">
-    <p className="text-xs leading-5 text-fg-secondary">PNG·JPEG·WebP, 256KB 이하. 업로드한 뒤 저장하면 화면에 바로 반영됩니다. 이전 파일은 삭제되지 않습니다.</p>
+    <p className="text-xs leading-5 text-fg-secondary">{t('settings.logo.desc')}</p>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.logo" message={invalidReason} isAdmin settingsHref="#workspace-general" />}
     <div className="grid gap-3 sm:grid-cols-3">
       {BRANDING_SLOTS.map(slot => <div key={slot} className="space-y-2 rounded-xl border border-border p-3">
-        <div className="text-sm font-semibold text-fg">{LABEL[slot]}</div>
+        <div className="text-sm font-semibold text-fg">{t(LABEL[slot])}</div>
         {draft[slot] ? <>
           {draft[slot] === baseline[slot] ? <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/brand/${workspaceId}/${slot}`} alt={`${LABEL[slot]} 미리보기`} className="h-16 max-w-full object-contain" />
+            <img src={`/api/brand/${workspaceId}/${slot}`} alt={t('settings.logo.preview').replace('{slot}', t(LABEL[slot]))} className="h-16 max-w-full object-contain" />
           </> : <>
             {previews[slot] && <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previews[slot]} alt={`${LABEL[slot]} 새 이미지 미리보기`} className="h-16 max-w-full object-contain" />
+              <img src={previews[slot]} alt={t('settings.logo.newPreview').replace('{slot}', t(LABEL[slot]))} className="h-16 max-w-full object-contain" />
             </>}
-            <p className="text-xs text-pending">새 이미지 업로드됨 · {previews[slot] ? '저장하면 적용됩니다' : '저장 후 미리보기'}</p>
+            <p className="text-xs text-pending">{t('settings.logo.uploadedMark')} {previews[slot] ? t('settings.logo.appliesOnSave') : t('settings.logo.previewAfterSave')}</p>
           </>}
           <p className="break-all text-meta text-fg-muted">{draft[slot]}</p>
-        </> : <p className="text-xs text-fg-secondary">설정된 이미지 없음</p>}
-        <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={`${LABEL[slot]} 파일`} className="block w-full min-w-0 max-w-full text-xs text-fg-secondary file:mr-2 file:rounded-lg file:border file:border-border file:bg-surface-subtle file:px-2 file:py-1 file:text-xs"
+        </> : <p className="text-xs text-fg-secondary">{t('settings.logo.noImage')}</p>}
+        <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={t('settings.logo.fileOf').replace('{slot}', t(LABEL[slot]))} className="block w-full min-w-0 max-w-full text-xs text-fg-secondary file:mr-2 file:rounded-lg file:border file:border-border file:bg-surface-subtle file:px-2 file:py-1 file:text-xs"
           disabled={pending || !!uncertainPatch} onChange={event => {
             const picked = event.target.files?.[0]
             revoke(previews[slot]); setFiles({ ...files, [slot]: picked })
             setPreviews(current => ({ ...current, [slot]: picked ? (localPreview(picked) ?? undefined) : undefined }))
             event.target.value = ''
           }} />
-        {files[slot] && <p className="break-all text-xs text-fg-secondary">선택: {files[slot].name}</p>}
+        {files[slot] && <p className="break-all text-xs text-fg-secondary">{t('settings.logo.selected').replace('{name}', String(files[slot].name))}</p>}
         {files[slot] && previews[slot] && draft[slot] === baseline[slot] && <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={previews[slot]} alt={`${LABEL[slot]} 선택 파일 미리보기`} className="h-16 max-w-full object-contain" />
+          <img src={previews[slot]} alt={t('settings.logo.selectedPreview').replace('{slot}', t(LABEL[slot]))} className="h-16 max-w-full object-contain" />
         </>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn btn-ghost" disabled={pending || !files[slot] || !!uncertainPatch} onClick={() => upload(slot)}>업로드</button>
+          <button type="button" className="btn btn-ghost" disabled={pending || !files[slot] || !!uncertainPatch} onClick={() => upload(slot)}>{t('settings.logo.upload')}</button>
           {draft[slot] && <button type="button" className="btn btn-ghost" disabled={pending || !!uncertainPatch}
-            onClick={() => { setDraft({ ...draft, [slot]: null }); setError(null); setNotice(null) }}>제거</button>}
+            onClick={() => { setDraft({ ...draft, [slot]: null }); setError(null); setNotice(null) }}>{t('settings.logo.remove')}</button>}
         </div>
       </div>)}
     </div>
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
-      <strong>다른 사용자가 로고를 바꿨습니다.</strong>
-      {BRANDING_SLOTS.map(slot => <p key={slot}>{LABEL[slot]} — 내 값: {draft[slot] ?? '없음'} / 최신 값: {conflict.logo?.[slot] ?? '없음'}</p>)}
+      <strong>{t('settings.logo.conflict')}</strong>
+      {BRANDING_SLOTS.map(slot => <p key={slot}>{t(LABEL[slot])} {t('settings.logo.mine')} {draft[slot] ?? t('common.none')} {t('settings.logo.latest')} {conflict.logo?.[slot] ?? t('common.none')}</p>)}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.logo ?? EMPTY); setBaseRevision(conflict.revision); setNeedsRepair(conflict.logo === null); setConflict(null) }}>내 값 다시 적용</button>
-        {conflict.logo && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.logo!); setBaseline(conflict.logo!); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>최신 값 사용</button>}
+        <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.logo ?? EMPTY); setBaseRevision(conflict.revision); setNeedsRepair(conflict.logo === null); setConflict(null) }}>{t('settings.conflict.reapplyMine')}</button>
+        {conflict.logo && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.logo!); setBaseline(conflict.logo!); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>{t('settings.conflict.useLatest')}</button>}
       </div>
     </div>}
     {uploadError && <ConfigStateNotice kind="field" locale="ko" message={uploadError} />}
@@ -145,7 +148,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
     {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
     <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
-        {uncertainPatch ? '저장 결과 확인 및 재시도' : '로고 설정 저장'}
+        {uncertainPatch ? t('settings.workflow.retry') : t('settings.logo.save')}
       </button>
     </SettingsSaveBar>
   </div>

@@ -341,4 +341,12 @@ export const wikiEn: Record<keyof typeof wikiKo, string> = {
   'wiki.change.curate': 'Curated by a person',
   'wiki.change.other': 'Knowledge changed',
   'wiki.change.noReason': 'Project Wiki was updated from meeting minutes.',
+  'wiki.docKind.overview': 'Overview',
+  'wiki.docKind.decision': 'Decision',
+  'wiki.docKind.how_to': 'How-to',
+  'wiki.docKind.runbook': 'Runbook',
+  'wiki.docKind.faq': 'FAQ',
+  'wiki.docKind.glossary': 'Glossary',
+  'wiki.docKind.reference': 'Reference',
+  'wiki.document.editingDraft': 'You are editing a draft. Others will not see it until you save.',
 }

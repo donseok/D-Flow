@@ -7,7 +7,7 @@ import { formatWeightPct } from '@/lib/domain/format'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamLabel } from '@/components/app/TeamsProvider'
 import { SPEC_UPDATED_TOKEN } from '@/lib/domain/wbsSpecLog'
-import type { DictKey } from '@/lib/i18n/dict'
+import { t as translate, type DictKey } from '@/lib/i18n/dict'
 import { stampIn } from '@/lib/domain/calendar'
 import { useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
 import type { FieldDef } from '@/lib/domain/customFields'
@@ -69,7 +69,7 @@ export function ChangeHistoryList({ logs, timeZone, extraAxisLabel = null }: {
   const fieldScope = useCustomFieldScope()
   const customDef = (field: string): FieldDef | undefined =>
     field.startsWith(CUSTOM_LOG_PREFIX) ? fieldScope?.defs?.find(d => d.key === field.slice(CUSTOM_LOG_PREFIX.length)) : undefined
-  const customFormat = { locale: fieldScope?.locale ?? 'ko', yes: fieldScope?.locale === 'en' ? 'Yes' : '예', no: fieldScope?.locale === 'en' ? 'No' : '아니오', empty: '—' }
+  const customFormat = { locale: fieldScope?.locale ?? 'ko', yes: translate(fieldScope?.locale ?? 'ko', 'wbs.custom.yes'), no: translate(fieldScope?.locale ?? 'ko', 'wbs.custom.no'), empty: '—' }
   const fieldLabel = (field: string) => field === 'biz' && extraAxisLabel ? extraAxisLabel
     : FIELD_KEY[field] ? t(FIELD_KEY[field])
     : field.startsWith(CUSTOM_LOG_PREFIX) ? customDef(field)?.label ?? field.slice(CUSTOM_LOG_PREFIX.length) : field

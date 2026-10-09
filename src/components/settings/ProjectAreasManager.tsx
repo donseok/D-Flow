@@ -14,13 +14,14 @@ import { ISSUE_AREA_CODE_RE } from '@/lib/domain/issueAreas'
 import type { AreaTeamKind, AreaTeamOption } from '@/lib/domain/areas'
 import { teamLabel } from '@/lib/domain/teamLabel'
 import type { ConfigArea } from '@/lib/settings/projectConfig'
-import type { Locale } from '@/lib/i18n/dict'
+import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { useToast } from '@/components/ui/Toast'
 import { SettingsSaveBar } from './SettingsSaveBar'
 
-const KIND_LABEL = { weekly_section: '업무영역', issue_area: '이슈 영역' } as const
-const TEAM_KIND_LABEL: Record<AreaTeamKind, string> = { primary: '주', support: '보조' }
-const DEACTIVATE_NOTE = '비활성으로 두면 이번 주 이후 주간 시트에서 숨겨지고, 이미 쓴 내용은 남습니다.'
+const KIND_LABEL = { weekly_section: 'setup.step.areas', issue_area: 'settings.issueAreas.title' } as const
+const TEAM_KIND_LABEL: Record<AreaTeamKind, DictKey> = { primary: 'settings.areas.teamKind.primary', support: 'settings.areas.teamKind.support' }
+const DEACTIVATE_NOTE: DictKey = 'settings.areas.deactivateNote'
 
 /** codeTouched — 새 영역의 코드를 사용자가 직접 고쳤는가. 고치기 전에는 이름을 따라 채운다(기존 영역은 늘 true — 코드 불변) */
 type Draft = {
@@ -47,19 +48,21 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
   const { toast } = useToast()
   const [draft, setDraft] = useState<Draft | null>(null)
   const [error, setError] = useState<string | null>(null)
+  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
+  const tr = (k: DictKey) => translate(locale, k)   // 이 파일의 t 는 팀 변수다
   const [pending, startTransition] = useTransition()
   // 시트와 같은 순서(sortOrder, code, id) — 해석기는 sort_order 로만 정렬해 동률의 순서가 고정되지 않는다
   const rows = orderAreas(areas.filter(a => a.kind === kind))
-  const label = locale === 'ko' ? KIND_LABEL[kind] : kind === 'issue_area' ? 'Issue areas' : 'Work areas'
+  const label = tr(KIND_LABEL[kind])
   const issueArea = kind === 'issue_area'
-  const text = locale === 'ko' ? { new: '새 영역', code: '코드', name: '이름', order: '순서', teams: '담당 팀', status: '상태', action: '작업', active: '활성', inactive: '비활성', edit: '편집', empty: issueArea ? '이슈 영역을 추가할 수 있습니다.' : '영역을 하나 이상 저장해야 주간보고를 시작할 수 있습니다.' } : { new: 'New area', code: 'Code', name: 'Name', order: 'Order', teams: 'Teams', status: 'Status', action: 'Actions', active: 'Active', inactive: 'Inactive', edit: 'Edit', empty: issueArea ? 'Add issue areas when needed.' : 'Add at least one area to start weekly reporting.' }
+  const text = { new: tr('settings.areas.new'), code: tr('settings.vocab.code'), name: tr('platform.ws.colName'), order: tr('settings.vocab.order'), teams: tr('settings.areas.teams'), status: tr('issue.col.status'), action: tr('wsAccounts.colActions'), active: tr('settings.forms.active'), inactive: tr('issue.analysis.areaInactive'), edit: tr('common.edit'), empty: issueArea ? tr('settings.areas.emptyIssue') : tr('settings.areas.emptyWeekly') }
   const teamOf = new Map(teamOptions.map(t => [t.id, t]))
   // 글자는 팀 이름(같은 이름이 둘이면 `이름 (code)`) — 선택자(data-area-team)와 저장 값은 code·id 그대로
   const nameOf = (t: AreaTeamOption) => teamLabel({ code: t.code, name: t.name ?? t.code }, teamOptions.map(o => ({ code: o.code, name: o.name ?? o.code })))
-  const teamText = (t: AreaTeamOption) => (t.active ? nameOf(t) : `${nameOf(t)}(비활성)`)
+  const teamText = (t: AreaTeamOption) => (t.active ? nameOf(t) : tr('settings.areas.teamInactive').replace('{t}', String(nameOf(t))))
   const teamLabelOfId = (id: string) => {
     const t = teamOf.get(id)
-    return t ? teamText(t) : '알 수 없는 팀'
+    return t ? teamText(t) : tr('settings.areas.unknownTeam')
   }
 
   function startNew() {
@@ -76,7 +79,7 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
   function save() {
     if (!draft) return
     // 빈 칸을 Number('') = 0 으로 조용히 바꾸지 않는다. 소수·문자는 validateArea 가 거부한다.
-    if (!draft.sortOrder.trim()) { setError('순서를 입력하세요.'); return }
+    if (!draft.sortOrder.trim()) { setError(tr('settings.areas.orderRequired')); return }
     const sortOrder = Number(draft.sortOrder)
     setError(null)
     startTransition(async () => {
@@ -87,9 +90,9 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
       })
       if (!r.ok) { setError(r.error); return }
       toast({
-        title: `'${draft.code.trim()}' 영역을 저장했습니다.`,
+        title: tr('settings.areas.saved').replace('{code}', String(draft.code.trim())),
         // RPC 가 활성 영역을 이번 주 이후 주간 문서에 채운다 — 생긴 행이 있으면 알린다
-        description: r.rowsAdded > 0 ? `이번 주 이후 주간 시트 ${r.rowsAdded}곳에 이 영역 행을 더했습니다.` : undefined,
+        description: r.rowsAdded > 0 ? tr('settings.areas.rowsAdded').replace('{rowsAdded}', String(r.rowsAdded)) : undefined,
         variant: 'success',
       })
       setDraft(null)
@@ -113,7 +116,7 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
   return (
     <section className="card overflow-hidden" data-area-editor={kind}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
-        <p className="text-sm font-semibold text-fg">{label} {rows.length}개</p>
+        <p className="text-sm font-semibold text-fg">{tr('settings.areas.count').replace('{label}', String(label)).replace('{n}', String(rows.length))}</p>
         <button type="button" onClick={startNew} className="btn btn-primary" disabled={pending}>
           <Plus className="h-4 w-4" />{text.new}
         </button>
@@ -121,7 +124,7 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
 
       <div className="p-5 sm:p-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-fg-muted">{locale === 'ko' ? `아직 ${label}이 없습니다. ${text.empty}` : text.empty}</p>
+          <p className="text-sm text-fg-muted">{tr('settings.areas.emptyLead').replace('{label}', String(label)).replace('{empty}', String(text.empty))}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
@@ -145,7 +148,7 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
                       <span className="flex flex-wrap gap-1">
                         {a.teams.length === 0 ? <span className="text-fg-muted">—</span> : a.teams.map(t => (
                           <span key={t.teamId} className={`chip bg-surface-subtle ${t.kind === 'primary' ? 'font-semibold text-fg' : 'text-fg-secondary'}`}>
-                            {teamLabelOfId(t.teamId)} · {TEAM_KIND_LABEL[t.kind]}
+                            {teamLabelOfId(t.teamId)} · {tr(TEAM_KIND_LABEL[t.kind])}
                           </span>
                         ))}
                       </span>
@@ -158,7 +161,7 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
                     <td className="py-2.5 pr-3 text-right">
                       <button type="button" className="btn btn-ghost btn-sm" disabled={pending}
                         aria-label={`${a.code} ${text.edit}`} onClick={() => { setError(null); setDraft(toDraft(a)) }}>
-                        <Pencil className="h-3.5 w-3.5" />편집
+                        <Pencil className="h-3.5 w-3.5" />{tr('common.edit')}
                       </button>
                     </td>
                   </tr>
@@ -170,15 +173,15 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
 
         {draft && (
           <form className="panel-soft mt-4 space-y-4 p-5" onSubmit={e => { e.preventDefault(); save() }}>
-            <p className="text-sm font-semibold text-fg">{draft.id ? `${label} ${text.edit}` : `새 ${label}`}</p>
+            <p className="text-sm font-semibold text-fg">{draft.id ? `${label} ${text.edit}` : tr('settings.areas.newOf').replace('{label}', String(label))}</p>
             {error && <p role="alert" className="rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{error}</p>}
             <div className="grid gap-3 sm:grid-cols-[10rem_1fr_6rem]">
               <label className="flex flex-col gap-1 text-xs text-fg-secondary">
-                {text.code}{issueArea ? ' · 영문 대문자·숫자 1~8자' : ''}
+                {text.code}{issueArea ? tr('settings.areas.codeRule') : ''}
                 <input className={`app-input ${draft.id ? 'bg-surface-subtle text-fg-secondary' : ''}`} value={draft.code} readOnly={!!draft.id} aria-readonly={!!draft.id}
                   data-area-code
                   pattern={issueArea ? ISSUE_AREA_CODE_RE.source.replace(/^\^|\$$/g, '') : undefined}
-                  title={draft.id ? '코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.' : issueArea ? '이슈 코드의 {area} 자리에 들어갑니다. 만든 뒤 바꿀 수 없습니다.' : '이름으로 미리 채웁니다. 저장한 뒤에는 바꿀 수 없습니다.'}
+                  title={draft.id ? tr('settings.areas.codeLocked') : issueArea ? tr('settings.areas.codeIssueHint') : tr('settings.areas.codeAutoHint')}
                   onChange={e => setDraft({ ...draft, code: e.target.value, codeTouched: true })} disabled={pending} />
               </label>
               <label className="flex flex-col gap-1 text-xs text-fg-secondary">
@@ -195,18 +198,18 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
             <fieldset className="space-y-2">
               <legend className="text-xs text-fg-secondary">{text.teams}</legend>
               {formTeams.length === 0 ? (
-                <p className="text-xs text-fg-muted">이 프로젝트에 팀이 없습니다.</p>
+                <p className="text-xs text-fg-muted">{tr('settings.areas.noTeams')}</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {formTeams.map(t => (
                     <label key={t.id} className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs ${t.active ? 'text-fg' : 'text-fg-muted'}`}>
                       <span className="max-w-[12rem] truncate" title={teamText(t)}>{teamText(t)}</span>
                       <select className="app-input h-7 py-0 text-xs" value={draft.teams[t.id] ?? ''} data-area-team={t.code}
-                        aria-label={`${nameOf(t)} 담당 구분`}
+                        aria-label={tr('settings.areas.teamRole').replace('{t}', String(nameOf(t)))}
                         onChange={e => setTeam(t.id, e.target.value as AreaTeamKind | '')} disabled={pending}>
                         <option value="">—</option>
-                        <option value="primary">{TEAM_KIND_LABEL.primary}</option>
-                        <option value="support">{TEAM_KIND_LABEL.support}</option>
+                        <option value="primary">{tr(TEAM_KIND_LABEL.primary)}</option>
+                        <option value="support">{tr(TEAM_KIND_LABEL.support)}</option>
                       </select>
                     </label>
                   ))}
@@ -216,17 +219,17 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
             <label className="flex items-center gap-2 text-sm text-fg">
               <input type="checkbox" checked={draft.active} data-area-active
                 onChange={e => setDraft({ ...draft, active: e.target.checked })} disabled={pending} />
-              활성
+              {tr('settings.forms.active')}
             </label>
-            {!draft.active && <p data-area-deactivate-note className="text-xs leading-5 text-fg-secondary">{DEACTIVATE_NOTE}</p>}
+            {!draft.active && <p data-area-deactivate-note className="text-xs leading-5 text-fg-secondary">{tr(DEACTIVATE_NOTE)}</p>}
             <SettingsSaveBar tone="subtle">
-              <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => { setDraft(null); setError(null) }}>취소</button>
-              <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? '저장 중…' : '저장'}</button>
+              <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => { setDraft(null); setError(null) }}>{tr('common.cancel')}</button>
+              <button type="submit" className="btn btn-primary" disabled={pending}>{pending ? tr('ann.saving') : tr('common.save')}</button>
             </SettingsSaveBar>
           </form>
         )}
         <p className="mt-3 text-xs leading-5 text-fg-muted">
-          영역 코드는 만든 뒤 바꿀 수 없습니다. 쓰지 않는 영역은 비활성으로 두세요.
+          {tr('settings.areas.codeNote')}
         </p>
       </div>
     </section>

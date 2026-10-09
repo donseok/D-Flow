@@ -1,8 +1,11 @@
+'use client'
+import { useLocale } from '@/components/providers/LocaleProvider'
 import { Skeleton, CardSkeleton } from '@/components/ui/Skeleton'
 
 export default function Loading() {
+  const { t } = useLocale()
   return (
-    <div className="space-y-5" role="status" aria-label="대시보드를 불러오는 중">
+    <div className="space-y-5" role="status" aria-label={t('pages.loading.dashboard')}>
       {/* ExecSummary: 헤더(eyebrow+제목)+리포트 버튼 · 게이지 + 신호등 타일 3
           (공지 슬림바는 조건부라 스켈레톤에서 예약하지 않음 — 로드 후 레이아웃 시프트 방지) */}
       <div className="card p-5 sm:p-6">

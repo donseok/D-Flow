@@ -2,6 +2,8 @@
 // 주간 업무영역 편집기(스펙 §4.1.8·D26) — kind 고정(종류 탭 없음), 저장은 upsertArea(→ RPC), 새 영역 코드는 이름으로 미리 채우고 고칠 수
 // 있다(기존 영역은 불변), 비활성화 안내, 저장으로 생긴 주간 행 수 알림, 배정된 비활성·목록 밖 팀의 해제, 시트와 같은 영역 순서.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+// 화면 문구는 사전(settingsUi·adminUi)에 있다 — 사전의 한국어 글자를 돌려주는 대역(공급자 없는 기본 t 는 키를 돌려준다)
+vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).koLocale())
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { UpsertAreaResult } from '@/app/actions/projectAreas'

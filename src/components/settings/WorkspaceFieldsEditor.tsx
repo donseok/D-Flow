@@ -4,10 +4,11 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
-import type { Locale } from '@/lib/i18n/dict'
+import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { ConflictCompare } from './ConflictCompare'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
+import { useLocale } from '@/components/providers/LocaleProvider'
 
 export type SimpleWorkspaceKey = 'ai.enabled' | 'invites.allowed_domains' | 'branding.product_name' | 'branding.mail_from_name'
 export interface WorkspaceField {
@@ -20,6 +21,11 @@ export interface WorkspaceField {
   error?: string
 }
 type Draft = Record<string, string | boolean>
+/** 값 출처(페이지가 넘기는 구분값) → 화면 글자의 사전 키 */
+const SOURCE_KEY: Readonly<Record<WorkspaceField['source'], DictKey>> = {
+  '워크스페이스 설정': 'settings.wsFields.source.workspace', '배포 기본값': 'settings.wsFields.source.deploy',
+  '제품 기본값': 'settings.wsFields.source.product', '설정 손상': 'settings.notify.policy.corrupted',
+}
 type Conflict = { revision: number; values: Partial<Record<SimpleWorkspaceKey, unknown>>; invalidKeys: string[] }
 
 function initial(fields: WorkspaceField[]): Draft { return Object.fromEntries(fields.map(f => [f.key, f.value])) }
@@ -39,6 +45,7 @@ function same(a: string | boolean, b: string | boolean): boolean { return a === 
 export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 'ko' }: {
   workspaceId: string; revision: number; fields: WorkspaceField[]; locale?: Locale
 }) {
+  const { t } = useLocale()
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(() => initial(fields))
   const [baseline, setBaseline] = useState<Draft>(() => initial(fields))
@@ -60,7 +67,7 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
     if (result?.ok) {
       setBaseline({ ...draft }); setBaseRevision(result.revision); setRepaired([...repaired, ...changed.map(f => f.key)])
       setUncertainPatch(null); setConflict(null); setFieldErrors({})
-      setNotice(result.revision === patch.expectedRevision ? '바뀐 값이 없습니다.' : `${changed.length}개 설정을 저장했습니다.`)
+      setNotice(result.revision === patch.expectedRevision ? t('settings.save.noChange') : t('settings.wsFields.saved').replace('{n}', String(changed.length)))
       router.refresh(); return
     }
     if (result?.kind === 'conflict') {
@@ -77,12 +84,12 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
       const found = await getSettingsCommandOutcome({ workspaceId }, patch.commandId)
       if (found.ok && found.outcome.status === 'applied') {
         setBaseline({ ...draft }); setBaseRevision(found.outcome.revision); setRepaired([...repaired, ...changed.map(f => f.key)])
-        setUncertainPatch(null); setFieldErrors({}); setNotice('저장된 명령을 확인했습니다.'); router.refresh(); return
+        setUncertainPatch(null); setFieldErrors({}); setNotice(t('settings.save.confirmed')); router.refresh(); return
       }
     } catch { /* 같은 명령을 재전송 */ }
     if (resendCount === 0) return submit(patch, 1)
     setUncertainPatch(patch)
-    setError('저장 결과를 확인하지 못했습니다. 같은 명령으로 다시 확인하세요.')
+    setError(t('settings.rootFolders.uncertain'))
   }
 
   function save() {
@@ -128,7 +135,7 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
     {fields.map(field => <div key={field.key} className="space-y-1.5 border-b border-border pb-4 last:border-0 last:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <label htmlFor={`workspace-${field.key}`} className="text-sm font-semibold text-fg">{field.label}</label>
-        <span className="text-xs text-fg-muted">{field.source} · 즉시 적용</span>
+        <span className="text-xs text-fg-muted">{t('settings.wsFields.sourceImmediate').replace('{source}', t(SOURCE_KEY[field.source]))}</span>
       </div>
       <p className="text-xs text-fg-secondary">{field.description}</p>
       {field.error && !repaired.includes(field.key) && <ConfigStateNotice kind="invalid" locale={locale} keyName={field.key}
@@ -138,20 +145,20 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
           disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.checked)} /> :
         field.kind === 'domains' ?
           <textarea id={`workspace-${field.key}`} className="app-textarea min-h-24 w-full text-sm" value={String(draft[field.key])}
-            disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} placeholder="한 줄에 한 도메인" /> :
+            disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} placeholder={t('settings.wsFields.domainsPh')} /> :
           <input id={`workspace-${field.key}`} className="app-input w-full text-sm" value={String(draft[field.key])}
             disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} />}
       {fieldErrors[field.key] && <ConfigStateNotice kind="field" locale={locale} message={fieldErrors[field.key]} />}
       <p className="text-meta text-fg-muted">{field.key}</p>
     </div>)}
     {conflict && <ConflictCompare rows={changed.map(f => ({ key: f.key, label: f.label,
-      mine: String(draft[f.key]), latest: conflict.invalidKeys.includes(f.key) ? '설정 손상' : String(inputValue(f, conflict.values[f.key])),
+      mine: String(draft[f.key]), latest: conflict.invalidKeys.includes(f.key) ? t('settings.notify.policy.corrupted') : String(inputValue(f, conflict.values[f.key])),
     }))} onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(f => !conflict.invalidKeys.includes(f.key))} />}
     {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
     {/* 공용 저장 바(data-save-bar — 셸의 떠 있는 버튼이 저장 바를 가리지 않게 찾는 표지, SP3b 알림 13·D33) */}
-    <SettingsSaveBar notice={notice} summary={`변경 ${changed.length}개`}>
+    <SettingsSaveBar notice={notice} summary={t('settings.wsFields.changed').replace('{n}', String(changed.length))}>
       <button type="button" className="btn btn-primary" disabled={pending || (!changed.length && !uncertainPatch) || !!conflict} onClick={save}>
-        {uncertainPatch ? '저장 결과 확인 및 재시도' : '저장'}
+        {uncertainPatch ? t('settings.workflow.retry') : t('common.save')}
       </button>
     </SettingsSaveBar>
   </div>

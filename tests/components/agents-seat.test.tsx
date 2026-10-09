@@ -9,8 +9,15 @@ import { ZoneBlock } from '@/components/agents/ZoneBlock'
 import { FloorCard } from '@/components/agents/FloorCard'
 import type { Floor, Seat, Zone } from '@/lib/domain/seatmap'
 import { makeSeat } from '../fixtures/seat'
+import { t as translate, type DictKey } from '@/lib/i18n/dict'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+// 화면 문구는 진짜 ko 사전으로 읽는다 — 한국어 단언이 사전 이전 뒤에도 같은 글자를 본다
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 const seat = (over: Partial<Seat> = {}): Seat => makeSeat({
@@ -139,14 +146,15 @@ describe('SeatCard', () => {
 
 describe('seatMetaLine · STATE_LABEL', () => {
   it('상태별 문구', () => {
-    expect(seatMetaLine(seat(), NOW)).toBe('hong/mbp/w1 · 42초 전')
-    expect(seatMetaLine(seat({ state: 'STALE' }), NOW)).toBe('hong/mbp/w1 · 무응답 42초 전')
-    expect(seatMetaLine(seat({ state: 'OFFLINE', phase: 'build' }), NOW)).toBe('build 에서 끊김 · 42초 전')
-    expect(seatMetaLine(seat({ state: 'WAIT' }), NOW)).toBe('승인 대기')
-    expect(seatMetaLine(seat({ state: 'READY', agent: null }), NOW)).toBe('미착수')
-    expect(seatMetaLine(seat({ state: 'READY', agent: null, waitReason: { kind: 'agent_off', label: '에이전트 꺼짐', text: '…' } }), NOW)).toBe('에이전트 꺼짐')
-    expect(seatMetaLine(seat({ state: 'BLOCKED' }), NOW)).toBe('hong/mbp/w1 · 결정 대기')
-    expect(STATE_LABEL.REJECTED).toBe('반려 · 재작업')
+    const ko = (k: DictKey) => translate('ko', k)
+    expect(seatMetaLine(seat(), NOW, ko)).toBe('hong/mbp/w1 · 42초 전')
+    expect(seatMetaLine(seat({ state: 'STALE' }), NOW, ko)).toBe('hong/mbp/w1 · 무응답 42초 전')
+    expect(seatMetaLine(seat({ state: 'OFFLINE', phase: 'build' }), NOW, ko)).toBe('build 에서 끊김 · 42초 전')
+    expect(seatMetaLine(seat({ state: 'WAIT' }), NOW, ko)).toBe('승인 대기')
+    expect(seatMetaLine(seat({ state: 'READY', agent: null }), NOW, ko)).toBe('미착수')
+    expect(seatMetaLine(seat({ state: 'READY', agent: null, waitReason: { kind: 'agent_off', label: '에이전트 꺼짐', text: '…' } }), NOW, ko)).toBe('에이전트 꺼짐')
+    expect(seatMetaLine(seat({ state: 'BLOCKED' }), NOW, ko)).toBe('hong/mbp/w1 · 결정 대기')
+    expect(ko(STATE_LABEL.REJECTED)).toBe('반려 · 재작업')
   })
 })
 

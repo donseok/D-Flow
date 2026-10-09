@@ -42,6 +42,10 @@ vi.mock('@/components/settings/ConfigLoadError', () => ({ ConfigLoadError: ({ er
 
 import WorkspaceSettingsPage from '@/app/(app)/w/[slug]/settings/page'
 import { getServerLocale } from '@/lib/i18n/server'
+import { registerEn } from '@/lib/i18n/dict'
+import { EN } from '@/lib/i18n/dict/en'
+
+registerEn(EN)   // 서버 모듈(@/lib/i18n/server)을 mock 해서 en 등록이 빠진다 — 머리 문구가 사전에서 오므로 여기서 등록한다
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 import { resolveKeys } from '@/lib/settings/resolve'

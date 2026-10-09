@@ -2,11 +2,14 @@
 
 import { useMemo } from 'react'
 import { Modal } from '@/components/ui/Modal'
+import { useLocale } from '@/components/providers/LocaleProvider'
+import type { DictKey } from '@/lib/i18n/dict'
 import { lintWeeklySheet, type LintFinding, type LintGroupOf, type LintKind, type LintRow } from '@/lib/domain/weeklyLint'
 import type { WeeklyCellEdit, WeeklyCellKey } from '@/lib/domain/weeklySheet'
 
-const KIND_LABEL: Record<LintKind, string> = {
-  duplicate: '완전 중복', nearDuplicate: '유사 중복', numbering: '체번', format: '정리',
+const KIND_LABEL: Record<LintKind, DictKey> = {
+  duplicate: 'weekly.lint.kind.duplicate', nearDuplicate: 'weekly.lint.kind.nearDuplicate',
+  numbering: 'weekly.lint.kind.numbering', format: 'weekly.lint.kind.format',
 }
 const KIND_TONE: Record<LintKind, string> = {
   duplicate: 'bg-warning-weak text-warning',
@@ -45,6 +48,7 @@ export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, canApp
 }) {
   // 열려 있는 동안 rows(또는 groupOf)가 바뀔 때마다 재계산 — 적용 직후에도, 타인의 Realtime 수정에도 목록이 따라간다.
   // 묶음 수만큼의 행 × 4열이라 비용은 무시할 만하다. 닫혀 있으면 계산하지 않는다.
+  const { t } = useLocale()
   const findings = useMemo(() => (open ? lintWeeklySheet(rows, groupOf) : []), [open, rows, groupOf])
   const groups = useMemo(() => groupFindings(findings), [findings])
 
@@ -52,31 +56,30 @@ export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, canApp
     <Modal
       open={open}
       onClose={onClose}
-      title="주간보고 점검"
-      eyebrow={findings.length > 0 ? `${findings.length}건` : undefined}
+      title={t('weekly.lint.title')}
+      eyebrow={findings.length > 0 ? t('weekly.lint.count').replace('{n}', String(findings.length)) : undefined}
       size="lg"
-      footer={<button type="button" className="btn btn-ghost" onClick={onClose}>닫기</button>}
+      footer={<button type="button" className="btn btn-ghost" onClick={onClose}>{t('common.close')}</button>}
     >
       {findings.length === 0 ? (
-        <p className="py-6 text-center text-sm text-fg-secondary">점검할 내용이 없습니다.</p>
+        <p className="py-6 text-center text-sm text-fg-secondary">{t('weekly.lint.empty')}</p>
       ) : (
         <>
           {/* 왜 다른 업무영역의 같은 문구가 안 잡히는지 매번 묻지 않도록 점검 범위를 못박되,
               글머리 기호·번호 표기만 시트 전체 기준이라는 예외까지 같이 적는다(안 적으면 그 지적이 버그로 읽힌다).
               셀 안 [머리글] 구획도 같이 적는다 — 적지 않으면 이번엔 반대로 "왜 안 잡히지?"를 묻게 된다. */}
           <p className="pb-2 text-xs text-fg-secondary">
-            점검은 업무영역 안에서만 합니다 — 서로 다른 업무영역끼리는 견주지 않습니다. 한 셀 안이라도 <code>[현장]</code> 처럼
-            머리글로 갈린 구획은 서로 다른 영역으로 보아, <b>이름이 다른</b> 구획끼리는 같은 문구여도 중복으로 잡지
-            않습니다. 번호도 구획마다 따로 세지만, 머리글 뒤에서 번호가 <b>1로 다시 시작할 때만</b> 새 구획으로
-            봅니다 — <code>[완료]</code> 같은 표시 뒤로 번호를 이어 쓴 경우는 한 목록으로 셉니다.
-            (글머리 기호·번호 표기 통일만 시트 전체 기준)
+            {t('weekly.lint.scope.lead')}<code>{t('weekly.lint.scope.headingSample')}</code>{t('weekly.lint.scope.afterHeading')}
+            <b>{t('weekly.lint.scope.differentName')}</b>{t('weekly.lint.scope.afterName')}
+            <b>{t('weekly.lint.scope.restart')}</b>{t('weekly.lint.scope.afterRestart')}
+            <code>{t('weekly.lint.scope.markSample')}</code>{t('weekly.lint.scope.tail')}
           </p>
           <div className="divide-y divide-border/80">
             {groups.map(g => (
               <section key={g.key} data-lint-section={g.key} className="py-2">
                 <h3 className="flex items-baseline gap-2 pb-1 text-sm font-semibold text-fg">
                   {g.label}
-                  <span className="text-xs font-normal text-fg-muted">{g.items.length}건</span>
+                  <span className="text-xs font-normal text-fg-muted">{t('weekly.lint.count').replace('{n}', String(g.items.length))}</span>
                 </h3>
                 <ul className="divide-y divide-border/60">
                   {g.items.map(f => (
@@ -103,10 +106,11 @@ export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, canApp
 function LintItem({ finding, canApply, onApply, onGo }: {
   finding: LintFinding; canApply: boolean; onApply: () => void; onGo: () => void
 }) {
+  const { t } = useLocale()
   return (
     <li className="flex items-start gap-3 py-3">
       <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${KIND_TONE[finding.kind]}`}>
-        {KIND_LABEL[finding.kind]}
+        {t(KIND_LABEL[finding.kind])}
       </span>
       <div className="min-w-0 flex-1">
         {/* 제목 클릭 = 모달 닫고 해당 셀로 이동. 어디를 말하는지 눈으로 확인하고 직접 고칠 수 있게. */}
@@ -121,7 +125,7 @@ function LintItem({ finding, canApply, onApply, onGo }: {
       </div>
       {/* 유사 중복은 edits 가 없다(어느 줄을 남길지는 사람의 판단) — 적용 버튼 대신 제목 클릭으로 셀에 간다. */}
       {canApply && finding.edits.length > 0 && (
-        <button type="button" className="btn btn-ghost shrink-0 text-xs" onClick={onApply}>적용</button>
+        <button type="button" className="btn btn-ghost shrink-0 text-xs" onClick={onApply}>{t('weekly.lint.apply')}</button>
       )}
     </li>
   )

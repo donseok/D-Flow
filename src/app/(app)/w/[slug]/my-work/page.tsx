@@ -5,10 +5,12 @@ import { MY_WORK_KINDS, type MyWorkKind } from '@/lib/portal/myWork'
 import { wsHref } from '@/lib/workspace/paths'
 import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
-import { KIND_LABEL, MyWorkList } from '@/components/portal/MyWorkList'
+import { KIND_LABEL_KEY, MyWorkList } from '@/components/portal/MyWorkList'
 import { MyWorkTabNav, MyWorkInboxView, type MyWorkTabId } from '@/components/portal/MyWorkTabs'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { buttonClass } from '@/components/ui/buttonStyles'
+import { t } from '@/lib/i18n/dict'
+import { getServerLocale } from '@/lib/i18n/server'
 
 export const metadata = { title: '내 업무' } // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 const isKind = (k: string): k is MyWorkKind => (MY_WORK_KINDS as readonly string[]).includes(k)
@@ -28,7 +30,7 @@ export default async function MyWorkPage({
 }) {
   const { slug } = await params
   const scope = await loadWorkspaceScope(slug) // 첫 await — 비소속 404
-  const q = await searchParams
+  const [q, locale] = await Promise.all([searchParams, getServerLocale()])
 
   const tab: MyWorkTabId = q.tab === 'review' || q.tab === 'inbox' ? q.tab : 'work'
   const kinds =
@@ -74,16 +76,16 @@ export default async function MyWorkPage({
   return (
     <PageFrame
       width="portal"
-      header={<PageHeader title="내 업무" />}
+      header={<PageHeader title={t(locale, 'nav.myWork')} />}
       toolbar={
         <div className="space-y-3">
           <MyWorkTabNav slug={scope.ws.slug} currentTab={tab} reviewCount={reviewCount} />
           {tab === 'work' && (
-            <nav aria-label="종류" className="flex flex-wrap gap-2">
-              {chip(null, false, '전체')}
-              {chip('wbs,issue', false, '내 담당')}
-              {chip(null, true, '오늘 마감')}
-              {MY_WORK_KINDS.map((k) => chip(k, false, KIND_LABEL[k]))}
+            <nav aria-label={t(locale, 'pages.myWork.kindNav')} className="flex flex-wrap gap-2">
+              {chip(null, false, t(locale, 'pages.myWork.chipAll'))}
+              {chip('wbs,issue', false, t(locale, 'pages.myWork.chipMine'))}
+              {chip(null, true, t(locale, 'pages.myWork.chipDueToday'))}
+              {MY_WORK_KINDS.map((k) => chip(k, false, t(locale, KIND_LABEL_KEY[k])))}
             </nav>
           )}
         </div>
@@ -94,14 +96,15 @@ export default async function MyWorkPage({
       ) : res?.ok ? (
         <div className="space-y-4 pb-8">
           <MyWorkList
+            locale={locale}
             rows={res.rows}
             failedKinds={res.failedKinds}
             empty={
               tab === 'review'
-                ? '검토 대기 중인 업무가 없습니다'
+                ? t(locale, 'pages.myWork.emptyReview')
                 : dueToday
-                ? '오늘 마감인 일이 없습니다'
-                : '처리할 일이 없습니다'
+                ? t(locale, 'pages.myWork.emptyDueToday')
+                : t(locale, 'pages.myWork.empty')
             }
           />
           {res.nextCursor && (
@@ -114,7 +117,7 @@ export default async function MyWorkPage({
               })}
               className={buttonClass('ghost')}
             >
-              더 보기
+              {t(locale, 'pages.common.more')}
             </Link>
           )}
         </div>
@@ -122,8 +125,8 @@ export default async function MyWorkPage({
         <StatusMessage
           kind="partial_error"
           blocking
-          title="내 업무를 불러오지 못했습니다"
-          detail={res ? '잠시 뒤 새로고침하세요.' : '권한 정보를 읽지 못했습니다.'}
+          title={t(locale, 'pages.myWork.loadFailed')}
+          detail={t(locale, res ? 'pages.common.refreshLater' : 'pages.myWork.noActorDetail')}
         />
       )}
     </PageFrame>

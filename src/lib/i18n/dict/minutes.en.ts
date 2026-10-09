@@ -276,4 +276,9 @@ export const minutesEn: Record<keyof typeof minutesKo, string> = {
   'min.share.failed': 'Failed to update sharing settings.',
   'min.share.lookupFailed': 'Could not check the sharing status. Please try again shortly.',
   'min.share.saveFailed': 'Could not save the sharing settings.',
+  'min.download.bodySuffix': 'content',
+  'min.hl.unnamed': 'No name',
+  'min.projectChip.prefix': 'Project: ',
+  'min.projectChip.clear': 'Clear project filter',
+  'min.form.charCount': '{n} chars',
 }

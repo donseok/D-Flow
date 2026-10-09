@@ -232,4 +232,12 @@ export const issuesEn: Record<keyof typeof issuesKo, string> = {
   'issue.bulk.col.issue': 'Issue',
   'issue.bulk.col.current': 'Current status',
   'issue.bulk.col.result': 'Result',
+  'issue.entry.contextFailed': 'Could not read the issue settings. Try again.',
+  'issue.custom.checkValues': 'Check custom field values.',
+  'issue.custom.unreadable': 'Custom values could not be read. Reload the row.',
+  'issue.custom.changed': 'Custom values changed. Your draft is preserved. Load the latest values before saving.',
+  'issue.custom.discardDraft': 'Discard custom draft',
+  'issue.custom.settingsUnreadable': 'Custom field settings could not be read.',
+  'issue.custom.filter': 'Custom field filter',
+  'issue.custom.unreadableValue': 'Unreadable value',
 }

@@ -6,6 +6,12 @@ import { WbsBulkBar } from '@/components/wbs/WbsBulkBar'
 import { WbsBulkEditDialog, type WbsItemSummary } from '@/components/wbs/WbsBulkEditDialog'
 import * as wbsBulkActions from '@/app/actions/wbsBulk'
 
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  const { t } = await import('@/lib/i18n/dict')
+  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+})
+
 vi.mock('@/app/actions/wbsBulk', () => ({
   bulkUpdateWbsItems: vi.fn(),
   createWbsBulkSnapshot: vi.fn(),
