@@ -311,7 +311,24 @@ export function KanbanBoard({
     editSessionStore.setSession(sessionId, 'kanban', card.id, 'saving')
 
     try {
-      const res = await setWbsStage(card.id, nextStage)
+      // 기대값 = 이 카드가 지금 놓여 있던 칸(화면이 본 단계). 그새 남이 옮겼으면 서버가 쓰지 않고 현재 단계를 돌려준다(0048)
+      const seenStage: StageCode | null = card.stage && isStageCode(card.stage) ? card.stage : null
+      const raw = await setWbsStage(card.id, nextStage, undefined, undefined, seenStage)
+      // 서버가 이미 내가 놓으려던 단계다(응답만 잃은 재시도·남이 같은 칸으로 옮김) — 충돌이 아니라 반영된 것이다
+      const res = raw.conflict && (raw.latest ?? null) === nextStage ? { ok: true as const } : raw
+      if (!res.ok && res.conflict) {
+        // 비교 화면 없이 카드를 원위치로 — 낙관 표시를 걷고 서버 값으로 다시 그린다
+        setStageOverride(prev => {
+          const copy = { ...prev }
+          delete copy[card.id]
+          return copy
+        })
+        toast({ title: t('common.changedMeanwhile'), variant: 'error' })
+        // 되돌리고 다시 그리는 것으로 끝난 일이다 — 손볼 것이 남은 편집(failed)으로 세지 않는다
+        editSessionStore.removeSession(sessionId)
+        router.refresh()
+        return
+      }
       if (!res.ok) {
         setStageOverride(prev => {
           const copy = { ...prev }

@@ -145,7 +145,8 @@ export type HubProcessOp =
   | { kind: 'stop'; orderId: string }
   /** 재개 요청 — 멈춘(무응답·끊김) 좌석을 팀장이 이어받아 달라는 표식. 상태 전이가 아니다. */
   | { kind: 'resume'; orderId: string }
-  | { kind: 'stage'; itemId: string; stage: WbsStageCode | null }
+  /** expectedStage — 그 행에서 화면이 본 단계(SPU1). 있으면 서버가 대조하고, 그새 바뀌었으면 쓰지 않고 stale 로 돌려준다 */
+  | { kind: 'stage'; itemId: string; stage: WbsStageCode | null; expectedStage?: WbsStageCode | null }
 
 export type HubProcessResult =
   | { ok: true; hub: AgentHub | null; hubError?: string; warning?: string }
@@ -167,6 +168,7 @@ function isProcessOp(op: unknown): op is HubProcessOp {
       return uuid(o.orderId) && typeof o.note === 'string'
     case 'stage':
       return uuid(o.itemId) && (o.stage === null || (typeof o.stage === 'string' && STAGE_CODES.has(o.stage)))
+        && (o.expectedStage === undefined || o.expectedStage === null || (typeof o.expectedStage === 'string' && STAGE_CODES.has(o.expectedStage)))
     default:
       return false
   }
@@ -321,7 +323,12 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
     case 'rework': r = await requestAgentRework(op.orderId, op.note); break
     case 'stop': r = await stopOrderByAdmin(admin, op.orderId, g.actor.userId, projectId, isAdmin); break
     case 'resume': r = await requestResumeOnOrder(admin, op.orderId, g.actor.userId); break
-    case 'stage': r = await setWbsStage(op.itemId, op.stage); break
+    // expectedStage 는 있을 때만 넘긴다(옛 호출은 두 인자 그대로). 단계 충돌은 이 화면의 stale(다시 읽기)로 접는다 — 비교 화면이 없는 표다
+    case 'stage': {
+      const sr = op.expectedStage !== undefined ? await setWbsStage(op.itemId, op.stage, undefined, undefined, op.expectedStage) : await setWbsStage(op.itemId, op.stage)
+      r = sr.conflict ? { ok: false, error: sr.error, stale: true } : sr
+      break
+    }
   }
   if (!r.ok) return { ok: false, error: r.error ?? '처리에 실패했습니다.', ...(r.stale ? { stale: true as const } : {}) }
   const warning = r.warning ? { warning: r.warning } : {}

@@ -30,6 +30,10 @@ export type WorkflowEventArgs = {
   expectedStep?: string | null
   /** SPU3: 대량 변경이 검토한 행 revision. set_stage만 지원하며 DB가 행 잠금 아래 비교한다. */
   expectedUpdatedAt?: string | null
+  /** SPU1(0048): 사람의 단계 지정이 화면에서 본 단계 — set_stage 만. undefined = 대조 안 함, null = "단계 없음을 봤다".
+   *  DB 가 행 잠금 아래 stage 값 하나만 대조한다(updated_at 은 실적·담당자 저장으로도 바뀌어 거짓 충돌이 난다).
+   *  expectedUpdatedAt 과 같이 오면 그쪽(일괄 편집의 행 revision)이 우선이다. projectId 가 함께 있어야 한다. */
+  expectedStage?: string | null
   projectId?: string
 }
 
@@ -42,7 +46,11 @@ export type WorkflowEventOk = {
   stageChanged: boolean; actualChanged: boolean; reachedFirst: boolean; skipped: WorkflowSkipped | null
   approval?: WorkflowApproval
 }
-export type WorkflowEventFail = { ok: false; conflict: boolean; reason: string; orderStatus: string | null; error: string; stale?: true }
+export type WorkflowEventFail = {
+  ok: false; conflict: boolean; reason: string; orderStatus: string | null; error: string; stale?: true
+  /** 단계 값 대조(expectedStage)가 어긋났을 때만 — 서버의 현재 단계(null = 단계 없음). 주문 상태 충돌 같은 다른 conflict 에는 없다 */
+  latestStage?: string | null
+}
 
 /** RPC 호출 자체가 실패했을 때의 고정 문구 — DB 오류 원문은 로그에만 남긴다. */
 export const ERR_TRANSITION_RPC = '처리하지 못했습니다. 잠시 뒤 다시 시도하세요.'
@@ -82,6 +90,9 @@ export async function applyWorkflowEvent(admin: AdminClient, args: WorkflowEvent
   const { data, error } = args.expectedUpdatedAt !== undefined && args.event === 'set_stage'
     ? await admin.rpc('apply_workflow_event_cas', { p_project_id: args.projectId, p_actor: args.actorUserId,
         p_item_id: args.itemId, p_expected_updated_at: args.expectedUpdatedAt, p_stage: args.stage ?? null, p_expected_step: args.expectedStep ?? null })
+    : args.expectedStage !== undefined && args.event === 'set_stage'
+    ? await admin.rpc('apply_workflow_event_stage_cas', { p_project_id: args.projectId, p_actor: args.actorUserId,
+        p_item_id: args.itemId, p_expected_stage: args.expectedStage, p_stage: args.stage ?? null, p_expected_step: args.expectedStep ?? null })
     : await admin.rpc('apply_workflow_event', {
     p_event: args.event, p_actor: args.actorUserId,
     p_item_id: args.itemId ?? null, p_order_id: args.orderId ?? null, p_stage: args.stage ?? null,
@@ -106,6 +117,8 @@ export async function applyWorkflowEvent(admin: AdminClient, args: WorkflowEvent
     const conflict = r.conflict === true
     const reason = typeof r.reason === 'string' ? r.reason : conflict ? 'conflict' : 'unknown'
     const fail: WorkflowEventFail = { ok: false, conflict, reason, orderStatus, error: REASON_TEXT[reason] ?? `전이 실패(${reason})` }
+    // latest_stage 는 단계 값 대조 래퍼(0048)만 싣는다 — 키가 있을 때만 옮겨 "서버 값 모름"과 "서버 값이 단계 없음(null)"을 가른다
+    if ('latest_stage' in r) fail.latestStage = typeof r.latest_stage === 'string' ? r.latest_stage : null
     return r.stale === true ? { ...fail, stale: true } : fail
   }
   // 단계 전이가 실적%를 바꿨으면 그 항목을 다시 색인한다(진행률은 색인 본문에 든다). 주문만 아는 사건(itemId 없음)은 정합성 검사가 메운다.

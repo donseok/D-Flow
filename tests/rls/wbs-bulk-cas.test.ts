@@ -57,4 +57,30 @@ describe('SPU3 항목별 원자 저장/CAS', () => {
       expect(rows[0].result).toMatchObject({ ok:false, conflict:true })
     })
   })
+  // 0048 — 단계 값 대조 래퍼. updated_at 이 아니라 화면이 본 단계 하나만 본다(실적 저장만으로 거짓 충돌이 나지 않는다)
+  const stageCas = "select public.apply_workflow_event_stage_cas($1,$2,$3,$4,$5,null) result"
+  it('단계 값 CAS: 본 단계가 서버와 다르면 실행하지 않고 서버의 단계를 돌려준다', async () => {
+    await asService(pool, async c => {
+      const now = (await c.query('select stage from public.wbs_items where id=$1', [F.leaf.aErp])).rows[0].stage as string | null
+      const wrong = now === 'ip' ? 'td' : 'ip'
+      const { rows } = await c.query(stageCas, [F.projects.a, F.users.member, F.leaf.aErp, wrong, null])
+      expect(rows[0].result).toMatchObject({ ok: false, conflict: true, reason: 'conflict', latest_stage: now })
+      expect((await c.query('select stage from public.wbs_items where id=$1', [F.leaf.aErp])).rows[0].stage).toBe(now)
+    })
+  })
+  it('단계 값 CAS: 본 단계가 같으면 기존 사건 함수의 결과를 그대로 돌려준다(충돌 아님) · 다른 프로젝트의 항목은 없는 항목이다', async () => {
+    await asService(pool, async c => {
+      const now = (await c.query('select stage from public.wbs_items where id=$1', [F.leaf.aErp])).rows[0].stage as string | null
+      const same = (await c.query(stageCas, [F.projects.a, F.users.member, F.leaf.aErp, now, now])).rows[0].result
+      expect(same.conflict).not.toBe(true)
+      const base = (await c.query("select public.apply_workflow_event(p_event => 'set_stage', p_actor => $1, p_item_id => $2, p_stage => $3) result", [F.users.member, F.leaf.aErp, now])).rows[0].result
+      expect(same.ok).toBe(base.ok)
+      expect((await c.query(stageCas, [F.projects.bWs, F.users.member, F.leaf.aErp, now, now])).rows[0].result).toMatchObject({ ok: false, reason: 'item_not_found' })
+    })
+  })
+  it('단계 값 CAS 래퍼도 JWT 세션은 실행할 수 없다', async () => {
+    await asUser(pool, F.users.member, async c => {
+      expect((await pgError(c, stageCas, [F.projects.a, F.users.member, F.leaf.aErp, null, null]))?.code).toBe('42501')
+    })
+  })
 })

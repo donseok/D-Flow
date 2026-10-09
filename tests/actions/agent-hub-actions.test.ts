@@ -237,6 +237,11 @@ describe('runHubProcessOp — 멤버 이상 가드 → 이 프로젝트 것인�
     fakeAdmin({ items: ITEMS })
     expect(await runHubProcessOp(P1, { kind: 'stage', itemId: I(1), stage: 'ip' })).toEqual({ ok: true, hub: HUB })
     expect(mocks.setWbsStage).toHaveBeenCalledWith(I(1), 'ip')
+    // 화면이 본 단계(expectedStage)가 오면 다섯째 인자로 넘기고, 단계 충돌은 이 화면의 stale(다시 읽기)로 접는다(0048)
+    mocks.setWbsStage.mockResolvedValueOnce({ ok: false, conflict: true, latest: 'im', error: '단계 충돌' })
+    expect(await runHubProcessOp(P1, { kind: 'stage', itemId: I(1), stage: 'ip', expectedStage: null })).toEqual({ ok: false, error: '단계 충돌', stale: true })
+    expect(mocks.setWbsStage).toHaveBeenLastCalledWith(I(1), 'ip', undefined, undefined, null)
+    expect(await runHubProcessOp(P1, { kind: 'stage', itemId: I(1), stage: 'ip', expectedStage: 'zz' } as never)).toEqual({ ok: false, error: '잘못된 요청입니다.' })
     // fp 는 0096 에서 어휘에서 빠졌다 — 형식 검사에서 거부하고 내부 액션을 부르지 않는다.
     mocks.setWbsStage.mockClear()
     expect(await runHubProcessOp(P1, { kind: 'stage', itemId: I(1), stage: 'fp' as never })).toEqual({ ok: false, error: '잘못된 요청입니다.' })

@@ -311,7 +311,8 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
   const changeStage = (r: HubRow, raw: string) => {
     const stage = (raw || null) as WbsStageCode | null
     setStageOpt(m => { const n = new Map(m); n.set(r.itemId, stage); return n })
-    void runOp(r, { kind: 'stage', itemId: r.itemId, stage })
+    // 기대값 = 이 행에 그려져 있던 서버 단계(낙관 표시 stageOpt 는 요청이 끝나면 지워지므로 r.stage 가 곧 본 값이다)
+    void runOp(r, { kind: 'stage', itemId: r.itemId, stage, expectedStage: (r.stage ?? null) as WbsStageCode | null })
   }
 
   const parentState = (r: HubRow): 'all' | 'some' | 'none' => {

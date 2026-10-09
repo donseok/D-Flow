@@ -193,6 +193,48 @@ describe('KanbanBoard — 흐름(flow) 모드 화면', () => {
     const draggableCards = container.querySelectorAll('[draggable="true"]')
     expect(draggableCards.length).toBe(0)
   })
+
+  describe('단계 이동 — 화면이 본 단계 대조(0048)', () => {
+    const byId = (id: string) => container.querySelector(`[data-testid="${id}"]`) as HTMLButtonElement
+    const openMenu = () => act(async () => { byId('kanban-card-move-trigger').click() })
+    /** as 칸의 카드 하나를 ip 로 옮긴다 */
+    async function moveAsToIp() {
+      await act(async () => {
+        root.render(<KanbanBoard projectId="p1" items={[n('TaskAs', { stage: 'as', rolledActualPct: 10 })]} actorView={ADMIN} today="2026-07-25" />)
+      })
+      await openMenu()
+      await act(async () => { byId('kanban-card-move-stage-ip').click() })
+    }
+
+    it('이동은 카드가 놓여 있던 칸(본 단계)을 기대값으로 싣는다', async () => {
+      await moveAsToIp()
+      expect(setWbsStageMock).toHaveBeenCalledWith('TaskAs', 'ip', undefined, undefined, 'as')
+      expect(refreshFn).toHaveBeenCalledTimes(1)
+      expect(toastFn).not.toHaveBeenCalled()
+    })
+
+    it('그새 남이 옮겼으면 카드를 원위치로 되돌리고 "그새 바뀜"을 알린 뒤 다시 읽는다 — 비교 화면도 실패 문구도 아니다', async () => {
+      setWbsStageMock.mockResolvedValueOnce({ ok: false, conflict: true, latest: 'im', error: '서버 문구' } as never)
+      await moveAsToIp()
+      expect(toastFn).toHaveBeenCalledTimes(1)
+      expect(toastFn).toHaveBeenCalledWith({ title: 'common.changedMeanwhile', variant: 'error' })
+      expect(refreshFn).toHaveBeenCalledTimes(1)
+      expect(document.querySelector('[data-testid="conflict-resolver"]')).toBeNull()
+      // 낙관 표시(ip)가 걷혔다 — 새 items 가 오기 전까지 카드는 원래 칸(as)이다
+      await openMenu()
+      expect(byId('kanban-card-move-stage-as').disabled).toBe(true)
+      expect(byId('kanban-card-move-stage-ip').disabled).toBe(false)
+    })
+
+    it('서버가 이미 내가 놓으려던 단계면 충돌이 아니다 — 카드는 옮긴 칸에 남는다', async () => {
+      setWbsStageMock.mockResolvedValueOnce({ ok: false, conflict: true, latest: 'ip', error: '서버 문구' } as never)
+      await moveAsToIp()
+      expect(toastFn).not.toHaveBeenCalled()
+      expect(refreshFn).toHaveBeenCalledTimes(1)
+      await openMenu()
+      expect(byId('kanban-card-move-stage-ip').disabled).toBe(true)
+    })
+  })
 })
 
 describe('KanbanCard — 이동 메뉴 및 승인 액션', () => {

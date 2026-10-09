@@ -180,7 +180,7 @@ describe('WbsAssigneeStagePanel', () => {
     expect(stageSelect().value).toBe('im') // 낙관 표시
     expect(setWbsStage).not.toHaveBeenCalled()
     await elapse()
-    expect(setWbsStage).toHaveBeenCalledWith('item-1', 'im')
+    expect(setWbsStage).toHaveBeenCalledWith('item-1', 'im', undefined, undefined, null)
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
@@ -190,7 +190,7 @@ describe('WbsAssigneeStagePanel', () => {
     await changeStage('ip')
     await elapse()
     expect(setWbsStage).toHaveBeenCalledTimes(1)
-    expect(setWbsStage).toHaveBeenCalledWith('item-1', 'ip')
+    expect(setWbsStage).toHaveBeenCalledWith('item-1', 'ip', undefined, undefined, 'as')
 
     await changeStage('im')
     await changeStage('ip') // 서버 확정 값(직전 저장)으로 복귀
@@ -218,7 +218,7 @@ describe('WbsAssigneeStagePanel', () => {
     expect(saveNow()).not.toBeNull()
     await act(async () => saveNow()!.click())
     await act(async () => {})
-    expect(setWbsStage).toHaveBeenCalledWith('item-1', 'im')
+    expect(setWbsStage).toHaveBeenCalledWith('item-1', 'im', undefined, undefined, null)
     expect(refresh).toHaveBeenCalledTimes(1)
     await elapse()
     expect(setWbsStage).toHaveBeenCalledTimes(1) // 타이머가 다시 쏘지 않는다
@@ -318,6 +318,59 @@ describe('WbsAssigneeStagePanel', () => {
     })
   })
 
+  describe('단계 저장 충돌(0048 — 본 단계 대조)', () => {
+    const dialog = () => document.querySelector<HTMLElement>('[data-testid="conflict-resolver"]')
+    const values = () => (['mine', 'latest', 'base'] as const).map(w => dialog()!.querySelector(`[data-conflict-value="${w}"]`)?.textContent)
+
+    it('충돌이면 오류 문구가 아니라 비교를 띄운다(내 값·서버 값·열 때 본 값, 단계의 화면 이름). 내 값으로 저장은 서버 값을 기대값으로 한 번만', async () => {
+      await mount({ resolved: { assigneeMemberId: null, stage: 'as', devWorkflow: true } })
+      setWbsStage.mockResolvedValueOnce({ ok: false, conflict: true, error: '서버 문구', latest: 'im' } as never)
+      await changeStage('ip')
+      await elapse()
+      expect(setWbsStage).toHaveBeenCalledWith('item-1', 'ip', undefined, undefined, 'as')
+      expect(values()).toEqual(['wbs.stageIp', 'wbs.stageIm', 'wbs.stageAs'])
+      expect(container.textContent).not.toContain('서버 문구')
+      expect(stageSelect().value).toBe('im')   // 기준이 서버의 현재 단계로 옮겨졌다 — 낡은 단계를 보이지 않는다
+      expect(refresh).not.toHaveBeenCalled()
+      await act(async () => { dialog()!.querySelector<HTMLButtonElement>('[data-conflict-action="mine"]')!.click() })
+      expect(setWbsStage).toHaveBeenCalledTimes(2)
+      expect(setWbsStage).toHaveBeenLastCalledWith('item-1', 'ip', undefined, undefined, 'im')
+      expect(dialog()).toBeNull()
+      expect(stageSelect().value).toBe('ip')
+      expect(refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('서버가 이미 내 값이면 충돌이 아니다 — 비교 없이 저장된 것으로 본다', async () => {
+      await mount({ resolved: { assigneeMemberId: null, stage: 'as', devWorkflow: true } })
+      setWbsStage.mockResolvedValueOnce({ ok: false, conflict: true, error: '서버 문구', latest: 'ip' } as never)
+      await changeStage('ip')
+      await elapse()
+      expect(dialog()).toBeNull()
+      expect(stageSelect().value).toBe('ip')
+      expect(refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('같은 flush 에서 내 워크플로 저장이 먼저 나갔으면 기대값을 다시 읽는다 — 내가 옮긴 단계를 남의 변경으로 띄우지 않는다', async () => {
+      await mount({ resolved: { assigneeMemberId: null, stage: null, devWorkflow: false } })
+      await act(async () => devWorkflowCheckbox().click())   // 워크플로 on — 낙관 표시로 단계 드롭다운이 열린다(먼저 고른 쪽이 먼저 저장된다)
+      await changeStage('ip')
+      getWbsAssigneeStage.mockResolvedValue({ assigneeMemberId: null, stage: 'as', devWorkflow: true, canDevWorkflow: true })   // on 이 서버에서 as 로 옮겼다
+      await elapse()
+      expect(setWbsStage).toHaveBeenCalledWith('item-1', 'ip', undefined, undefined, 'as')
+      expect(dialog()).toBeNull()
+    })
+
+    it('그 다시 읽기가 실패하면 단계를 쓰지 않는다 — 선행 조회 실패는 중단', async () => {
+      await mount({ resolved: { assigneeMemberId: null, stage: null, devWorkflow: false } })
+      await act(async () => devWorkflowCheckbox().click())
+      await changeStage('ip')
+      getWbsAssigneeStage.mockResolvedValueOnce(null as never)
+      await elapse()
+      expect(setWbsDevWorkflow).toHaveBeenCalledTimes(1)
+      expect(setWbsStage).not.toHaveBeenCalled()
+    })
+  })
+
   it('(g) 패널이 닫히면(언마운트) 대기 중인 변경을 기다리지 않고 저장한다', async () => {
     await mount({ resolved: { assigneeMemberId: null, stage: null, devWorkflow: true } })
     await changeStage('im')
@@ -325,7 +378,7 @@ describe('WbsAssigneeStagePanel', () => {
     await act(async () => { root.unmount() })
     root = createRoot(container) // afterEach 의 unmount 가 두 번 되지 않게
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })
-    expect(setWbsStage).toHaveBeenCalledWith('item-1', 'im')
+    expect(setWbsStage).toHaveBeenCalledWith('item-1', 'im', undefined, undefined, null)
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 

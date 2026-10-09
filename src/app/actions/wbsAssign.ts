@@ -33,6 +33,7 @@ import { requireCompletionApprover, requireSubtreeManagerOrAdmin } from '@/lib/a
 const ERR_DEV_WORKFLOW_CASCADE_ADMIN = '하위 일괄 적용은 프로젝트 관리자만 할 수 있습니다.'
 const ERR_DEV_WORKFLOW_DELEGATED = '에이전트에 위임된 작업입니다. 위임을 먼저 끄십시오.'
 const ERR_ASSIGNEE_CONFLICT = '다른 사용자가 담당자를 먼저 바꿨습니다. 저장하지 않았습니다.'
+const ERR_STAGE_CONFLICT = '다른 사용자가 단계를 먼저 바꿨습니다. 저장하지 않았습니다.'
 const ERR_ASSIGNEE_RECHECK = '담당자를 다시 확인하지 못했습니다 — 잠시 후 다시 시도하세요.'
 
 type LoadedItem = {
@@ -388,8 +389,12 @@ export async function setWbsAssigneeCascade(
  */
 export async function setWbsStage(
   itemId: string, stage: StageCode | null, expectedStep?: string | null, expectedUpdatedAt?: string | null,
-): Promise<{ ok: boolean; error?: string; stale?: true }> {
+  /** 화면이 이 항목에서 마지막으로 본 단계(SPU1, 0048) — undefined 면 대조하지 않는다(옛 호출), null 은 "단계 없음을 봤다".
+   *  서버 값이 그새 달라졌으면 쓰지 않고 conflict 와 현재 단계(latest)를 돌려준다. expectedUpdatedAt(일괄 변경의 행 revision)과는 따로 쓴다 */
+  expectedStage?: StageCode | null,
+): Promise<{ ok: boolean; error?: string; stale?: true; conflict?: true; latest?: string | null }> {
   if (stage !== null && !isStageCode(stage)) return { ok: false, error: '허용되지 않는 단계입니다.' }
+  if (expectedStage !== undefined && expectedStage !== null && !isStageCode(expectedStage)) return { ok: false, error: '잘못된 요청입니다.' }
   if (expectedStep != null && (typeof expectedStep !== 'string' || !STEP_CODE_RE.test(expectedStep))) return { ok: false, error: '잘못된 요청입니다.' }
   const resolved = await resolveItemProjectId(itemId)
   if (!resolved.ok) return resolved
@@ -399,7 +404,10 @@ export async function setWbsStage(
   if (!g.ok) return { ok: false, error: g.error }
   if (expectedStep != null && 'pending' in g && g.pending.step !== expectedStep) return { ok: false, stale: true, error: REASON_TEXT.approval_stale }
   const admin = createAdminClient()
-  const tr = await applyWorkflowEvent(admin, { event: 'set_stage', actorUserId: g.actor.userId, itemId, stage, expectedStep, expectedUpdatedAt, projectId: expectedUpdatedAt !== undefined ? resolved.projectId : undefined })
+  const tr = await applyWorkflowEvent(admin, { event: 'set_stage', actorUserId: g.actor.userId, itemId, stage, expectedStep, expectedUpdatedAt, expectedStage,
+    projectId: expectedUpdatedAt !== undefined || expectedStage !== undefined ? resolved.projectId : undefined })
+  // 단계 값 대조가 어긋났다(latestStage 는 0048 래퍼만 싣는다) — 주문 상태 충돌 같은 다른 conflict 는 아래 stale 그대로
+  if (!tr.ok && tr.conflict && tr.latestStage !== undefined) return { ok: false, conflict: true, error: ERR_STAGE_CONFLICT, latest: tr.latestStage }
   if (!tr.ok) return tr.reason === 'approval_stale' || tr.conflict ? { ok: false, stale: true, error: tr.error } : { ok: false, error: tr.error }
   revalidatePath(`/p/${resolved.projectId}`, 'layout')
   if (tr.actualChanged) after(() => recordProgressSnapshot(resolved.projectId))
