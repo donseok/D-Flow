@@ -47,6 +47,7 @@ export const minutesKo = {
   'min.exp.assignDesc': '선택한 {n}건에 지정합니다.',
   'min.exp.assignNone': '연결 없음(해제)',
   'min.exp.assignDone': '{n}건에 프로젝트를 지정했습니다',
+  'min.exp.unassignDone': '{n}건의 프로젝트 연결을 해제했습니다',
   'min.exp.assignPartial': '{n}건 지정 · {k}건 건너뜀',
   // 탐색기 최상위 프로젝트 그룹 (0076, 스펙 2026-08-12-minutes-project-reorg-design.md)
   'min.grp.unassigned': '미지정',

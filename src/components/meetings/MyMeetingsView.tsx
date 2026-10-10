@@ -19,7 +19,7 @@ import { currentRuleDay } from '@/lib/domain/calendar'
 import { MeetingDetailModal } from './MeetingDetailModal'
 import { fetchMyMeetings } from '@/app/actions/meetings'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatYearMonth } from '@/lib/i18n/format'
 
 type ViewKey = 'calendar' | 'list'
 type MyMeetingsFetch = Awaited<ReturnType<typeof fetchMyMeetings>>
@@ -213,7 +213,7 @@ export function MyMeetingsView({
         <div className="flex items-center gap-2">
           <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('meet.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
           <div ref={monthLabelRef} tabIndex={-1} className="min-w-[116px] text-center text-base font-bold tabular-nums text-fg">
-            {new Intl.DateTimeFormat(KO_LOCALE, { year: 'numeric', month: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
+            {formatYearMonth(year, month0)}
           </div>
           <button onClick={() => shift(1)} className="chrome-icon" aria-label={t('meet.nextMonth')}><ChevronRight className="h-4 w-4" /></button>
           <button onClick={() => { setYear(initY); setMonth0((initM || 1) - 1) }} className="btn btn-ghost h-10">{t('meet.today')}</button>

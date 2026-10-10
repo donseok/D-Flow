@@ -146,6 +146,7 @@ describe('MinutesExplorer — 프로젝트 일괄 지정', () => {
     await act(async () => dialogButton('Acme 프로젝트')!.click())
     expect(assignMinutesProject).toHaveBeenCalledWith('ws-1', ['m1', 'm2'], 'p1')
     expect(onChanged).toHaveBeenCalled()
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'min.exp.assignDone' }))
   })
 
   it("'보이는 것 모두' 는 권한 있는 것만 담는다", async () => {
@@ -163,6 +164,8 @@ describe('MinutesExplorer — 프로젝트 일괄 지정', () => {
     await act(async () => byText('min.exp.assignProject')!.click())
     await act(async () => dialogButton('min.exp.assignNone')!.click())
     expect(assignMinutesProject).toHaveBeenCalledWith('ws-1', ['m1'], null)
+    // 해제했는데 "지정했습니다" 로 알리지 않는다(재테스트 2026-10-10)
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'min.exp.unassignDone' }))
   })
 
   it('건너뛴 건이 있으면 건수를 알린다 — 전부 됐다로 읽히지 않게', async () => {

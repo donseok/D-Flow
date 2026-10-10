@@ -185,7 +185,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
     )
     expect(dialog()).not.toBeNull()
     expect(dialog()!.textContent).toContain('주간 정기회의')
-    expect(container.textContent).toContain('2026. 9.')
+    expect(container.textContent).toContain('2026-09')
   })
 
   it('MeetingsView: 존재하지 않는 회의 focus 는 조용히 무시한다', async () => {
@@ -195,7 +195,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
         todayIso="2026-07-19" currentUserId={null} canManage={false} canEdit={false} categories={MEET_CATS} />,
     )
     expect(dialog()).toBeNull()
-    expect(container.textContent).toContain('2026. 7.')
+    expect(container.textContent).toContain('2026-07')
   })
 
   it('MyMeetingsView: /meetings?focus= 로 초기 데이터에서 상세를 연다', async () => {
@@ -225,7 +225,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
         initialDate="2026-07-19" canEdit={false} types={ATT_TYPES} />,
     )
     // from 의 달(6월)로 이동 + ERP·annual·기간 내 기록 칩만 남는다(멤버 셀렉트 옵션은 제외하고 판정).
-    expect(container.textContent).toContain('2026. 6.')
+    expect(container.textContent).toContain('2026-06')
     expect(container.querySelector('[title*="김이알피"]')).not.toBeNull()
     expect(container.querySelector('[title*="박피엠오"]')).toBeNull()
 
@@ -241,7 +241,7 @@ describe('메뉴별 딥링크 query parameter 소비', () => {
       <AttendanceView calendar={SUNDAY_CAL} projectId="p1" records={[attendance()]} members={[member()]}
         initialDate="2026-07-19" canEdit={false} types={ATT_TYPES} />,
     )
-    expect(container.textContent).toContain('2026. 7.')
+    expect(container.textContent).toContain('2026-07')
     expect([...container.querySelectorAll('button')].some(b => b.textContent === '해제')).toBe(false)
   })
 

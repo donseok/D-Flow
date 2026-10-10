@@ -130,7 +130,7 @@ export const settingsKo = {
   'settings.danger.count.form_templates': '양식 {n}개',
   'settings.danger.count.attachments': '첨부 파일 {n}개',
   'settings.danger.blockedTitle': '회의록이 {n}건 있어 삭제할 수 없습니다.',
-  'settings.danger.blockedDesc': '회의록은 프로젝트와 함께 지우지 않습니다. 회의록 화면에서 회의록을 고른 뒤 ‘프로젝트 지정’으로 다른 프로젝트로 옮긴 다음 다시 시도하세요.',
+  'settings.danger.blockedDesc': '회의록은 프로젝트와 함께 지우지 않습니다. 회의록 화면에서 회의록을 고른 뒤 ‘프로젝트 지정’으로 다른 프로젝트로 옮기거나 연결을 해제한 다음 다시 시도하세요.',
   'settings.danger.blockedArchived': '이 가운데 {n}건은 보관된 회의록입니다. 보관된 회의록은 옮길 수 없어, 남아 있는 동안에는 이 프로젝트를 삭제할 수 없습니다.',
   'settings.danger.summaryFailed': '지워질 자료를 확인하지 못해 삭제를 열지 않았습니다. 잠시 뒤 새로 고쳐 다시 시도하세요.',
   'settings.danger.open': '프로젝트 삭제',

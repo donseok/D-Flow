@@ -323,7 +323,7 @@ export function MinutesExplorer({
           variant: 'info',
         })
       } else {
-        toast({ title: t('min.exp.assignDone').replace('{n}', String(res.updated + res.unchanged)), variant: 'info' })
+        toast({ title: t(projectId === null ? 'min.exp.unassignDone' : 'min.exp.assignDone').replace('{n}', String(res.updated + res.unchanged)), variant: 'info' })
       }
       setAssignOpen(false)
       exitSelect()

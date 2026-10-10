@@ -26,7 +26,7 @@ import { memberBelongsToTeam, type MemberPickerView } from '@/lib/domain/memberP
 import { upsertAttendance, removeAttendance } from '@/app/actions/attendance'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import { RestDayMark } from '@/components/calendar/RestDayMark'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatYearMonth } from '@/lib/i18n/format'
 
 type ViewKey = 'calendar' | 'list'
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -250,7 +250,7 @@ export function AttendanceView({
           <div className="flex items-center gap-2">
             <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('att.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
             <div className="min-w-[116px] text-center text-base font-bold tabular-nums text-fg">
-              {new Intl.DateTimeFormat(KO_LOCALE, { year: 'numeric', month: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
+              {formatYearMonth(year, month0)}
             </div>
             <button onClick={() => shift(1)} className="chrome-icon" aria-label={t('att.nextMonth')}><ChevronRight className="h-4 w-4" /></button>
             <button onClick={goToday} className="btn btn-ghost h-10">{t('att.today')}</button>

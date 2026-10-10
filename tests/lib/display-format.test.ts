@@ -1,11 +1,15 @@
 // 화면 날짜 표기의 한 꼴(BUG-20)과 시작/종료 역전 문구의 한 문형(BUG-21).
 import { describe, expect, it } from 'vitest'
 import { t, type DictKey } from '@/lib/i18n/dict'
-import { formatDayIn, formatStampIn, formatYmd } from '@/lib/i18n/format'
+import { formatDayIn, formatStampIn, formatYearMonth, formatYmd } from '@/lib/i18n/format'
 import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 import { fmtDate } from '@/components/wbs/shared'
 
 describe('[BUG-20] 화면 날짜 표기 — 4자리 연도 YYYY-MM-DD(시각은 YYYY-MM-DD HH:mm)', () => {
+  it('달력 머리의 달은 YYYY-MM — 로케일 꼴(2026. 10.)을 쓰지 않고, 범위를 넘는 달은 해를 넘긴다', () => {
+    expect(formatYearMonth(2026, 9)).toBe('2026-10'); expect(formatYearMonth(2026, 0)).toBe('2026-01')
+    expect(formatYearMonth(2026, 12)).toBe('2027-01'); expect(formatYearMonth(2026, -1)).toBe('2025-12')
+  })
   it('date-only 값은 그대로 — 2자리 연도(26.10.12)로 줄이지 않는다', () => {
     expect(formatYmd('2026-10-12')).toBe('2026-10-12')
     expect(fmtDate('2026-10-12')).toBe('2026-10-12')

@@ -13,6 +13,12 @@ export function formatYmd(date: string | null | undefined, empty = '-'): string 
   return date ? date.slice(0, 10) : empty
 }
 
+/** 달력 머리의 달 표기 'YYYY-MM' — 날짜(2026-10-12)와 같은 꼴(로케일 꼴 '2026. 10.' 을 섞지 않는다). month0 은 0 부터 */
+export function formatYearMonth(year: number, month0: number): string {
+  const d = new Date(Date.UTC(year, month0, 1))   // 범위를 벗어난 달(12 → 다음 해 1월)도 날짜 계산으로 넘긴다
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
 /** instant 의 그 tz 날짜 'YYYY-MM-DD' — 읽을 수 없는 값·tz 미상은 empty */
 export function formatDayIn(at: string | Date | null | undefined, timeZone: string | null, empty = '—'): string {
   if (!at || timeZone === null) return empty
