@@ -33,9 +33,9 @@ beforeEach(() => {
 
 describe('saveNotifPrefs — 개인 알림 유형 토글(SPU1, 개정 §4.10)', () => {
   it('자기 계정 행의 notif 에 부분 병합한다 — 다른 유형의 토글과 다른 계정 키를 지우지 않는다', async () => {
-    h.createServerClient.mockResolvedValue(db({ theme: 'dark', notif: { 'issue.status': false } }))
+    h.createServerClient.mockResolvedValue(db({ wbsHideDone: true, notif: { 'issue.status': false } }))
     expect(await saveNotifPrefs({ 'work.assigned': false })).toEqual({ ok: true })
-    expect(h.ops).toEqual([['account_preferences', { theme: 'dark', notif: { 'issue.status': false, 'work.assigned': false } }]])
+    expect(h.ops).toEqual([['account_preferences', { wbsHideDone: true, notif: { 'issue.status': false, 'work.assigned': false } }]])
   })
   it('행이 없으면 그 유형만 담아 만든다', async () => {
     h.createServerClient.mockResolvedValue(db(null))

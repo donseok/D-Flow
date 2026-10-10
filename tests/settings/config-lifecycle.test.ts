@@ -281,7 +281,7 @@ describe('updateWorkspaceSettings', () => {
   })
   it('accent 는 입력 hex → 파생 세트로 저장, 저장 형태를 직접 보내면 invalid. 줄바꿈 발신명 거부. 로고는 자기 워크스페이스 경로만', async () => {
     expect(await updateWorkspaceSettings(WID, patch({ set: { 'branding.accent': '#315CDB' } }))).toMatchObject({ ok: true })
-    const stored = db.workspaces.get(WID)!.values['branding.accent'] as { base: string; light: object; dark: object }
+    const stored = db.workspaces.get(WID)!.values['branding.accent'] as { base: string; light: object }
     expect(stored.base).toBe('#315cdb'); expect(Object.keys(stored.light)).toHaveLength(6)
     expect(await updateWorkspaceSettings(WID, patch({ expectedRevision: 2, set: { 'branding.accent': stored } }))).toMatchObject({ code: 'CONFIG_INVALID', fieldErrors: [{ key: 'branding.accent' }] })
     expect(await updateWorkspaceSettings(WID, patch({ expectedRevision: 2, set: { 'branding.mail_from_name': 'Acme\n알림' } }))).toMatchObject({ code: 'CONFIG_INVALID' })

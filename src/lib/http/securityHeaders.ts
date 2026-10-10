@@ -47,13 +47,6 @@ export const CSP_REPORT_PATH = '/api/csp-report'
 const REPORT_GROUP = 'csp-endpoint'
 export const REPORTING_ENDPOINTS_VALUE = `${REPORT_GROUP}="${CSP_REPORT_PATH}"`
 
-/**
- * 테마 no-flash 스크립트(src/lib/theme/policy.ts 의 noFlashScript())의 SHA-256 — 엄격한 정책에서 그 인라인 스크립트를 허용한다.
- * 루트 레이아웃은 nonce 를 붙이지만 global-error.tsx 는 클라이언트 컴포넌트라 요청 헤더(nonce)를 읽지 못한다 — 스크립트 내용이 고정이므로 해시로 연다.
- * 스크립트 문자열을 바꾸면 이 값도 바꾼다(tests/http/security-headers.test.ts 가 실제 문자열의 해시와 대조한다 — 이 파일은 다른 모듈을 import 하지 않는다).
- */
-export const NO_FLASH_SCRIPT_HASH = "'sha256-T/kbOJ7tnrbBNb6nXL42CKMPN8XhzLm/z4eds+MIyiQ='"
-
 /** nonce 로 쓸 수 있는 글자만(base64·base64url) — 정책 문자열에 다른 지시어를 끼워 넣지 못하게 형식 밖이면 nonce 없는 정책으로 내려간다 */
 const NONCE_RE = /^[A-Za-z0-9+/_-]{16,}={0,2}$/
 
@@ -82,8 +75,9 @@ export function cspDirectives(env: SecurityHeaderEnv & { nonce?: string }): Reco
     'default-src': ["'self'"],
     'script-src': nonce
       // 'strict-dynamic': nonce 가 붙은 스크립트가 불러오는 청크(웹팩 런타임의 동적 삽입)를 믿는다 — 지원 브라우저에서는 'self' 가 무시되고,
-      // 지원하지 않는 옛 브라우저에서는 'self' + nonce 로 동작한다. 해시는 no-flash 스크립트 하나(NO_FLASH_SCRIPT_HASH).
-      ? ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", NO_FLASH_SCRIPT_HASH, ...evalInDev]
+      // 지원하지 않는 옛 브라우저에서는 'self' + nonce 로 동작한다. 앱이 직접 넣는 인라인 스크립트는 없다(해시 허용 없음) — 인라인은 Next 의 것뿐이고
+      // Next 가 요청 헤더의 nonce 를 붙인다.
+      ? ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", ...evalInDev]
       // 정적 경로 — nonce 를 만들 코드가 돌지 않는다(머리 주석 ②). 해시를 같이 적으면 'unsafe-inline' 이 무시되어 Next 의 인라인이 막힌다 — 적지 않는다
       : ["'self'", "'unsafe-inline'", ...evalInDev],
     // 스타일은 nonce 화하지 않는다(범위 밖): React 의 인라인 style 속성(진행 막대·간트·표 폭 등 값이 실행 중에 정해진다)과 mermaid 가 그리는 SVG 의

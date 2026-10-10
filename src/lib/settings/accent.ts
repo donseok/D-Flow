@@ -1,13 +1,13 @@
-// 강조색(branding.accent) 파생·검증 — 개정 §5.11.2 의 1~4 를 순수 함수로. 서버가 저장할 때 base 에서 라이트·다크 세트를 계산해 함께
+// 강조색(branding.accent) 파생·검증 — 개정 §5.11.2 를 순수 함수로. 서버가 저장할 때 base 에서 세트를 계산해 함께
 // 저장하고(edit.toStored), 저장값은 parseAccentValue 가 모양만 본다. 거부 응답은 실패한 쌍과 대비값을 싣는다.
+// 제품이 라이트 전용(2026-10-10)이라 세트는 light 하나다 — 옛 저장값의 dark 세트는 읽을 때 버린다(parseAccentValue).
 // 임계값(D30): 상태색과 hue 거리 20° 미만이면서 C > 0.08 이면 거부 — SP3b UI-1 이 표본 10종으로 20°·0.08 유지를 확정했다
 // (tests/settings/accent.test.ts 의 표: 흔한 초록 #2b8a3e 18.0° 거부 · 주황 #f76707 25.4° 통과가 경계, 실현 가능 구간 hue (18.0°, 25.4°]).
-// 다크 세트의 hover(+0.05)·pressed(+0.10)·soft(L 0.32·C 0.04)·fg 채도 상한(0.06)은 개정에 없어 이 파일이 정한 시작값이다.
 import { ACCENT_TOKENS } from './accentTokens'
 
 export type Hex = string
 export interface AccentSet { bg: Hex; fg: Hex; hover: Hex; pressed: Hex; soft: Hex; focus: Hex }
-export interface AccentValue { base: Hex; light: AccentSet; dark: AccentSet }
+export interface AccentValue { base: Hex; light: AccentSet }
 export interface AccentFailure { pair: string; contrast: number; min: number }
 /** 상태색과 가까워 거부된 이유 — 대비 쌍이 아니라 hue 거리다(쇼케이스·설정 편집기가 '왜'를 보인다) */
 export interface AccentHueReject { status: 'danger' | 'success'; distance: number; min: number }
@@ -95,7 +95,7 @@ export function deriveAccent(baseHex: string, thresholds: Thresholds = ACCENT_TH
         hue: { status: name, distance: Math.round(distance * 10) / 10, min: thresholds.hueDistanceDeg } }
     }
   }
-  // 1. 라이트 — 흰 글자 대비가 하한이 될 때까지 L 을 낮춘다
+  // 1. 흰 글자 대비가 하한이 될 때까지 L 을 낮춘다
   let L = base.L
   let bg = oklchToHex({ L, C: base.C, h: base.h })
   for (let i = 0; i < 100 && contrastRatio('#ffffff', bg) < minContrast && L > 0.05; i++) {
@@ -109,33 +109,16 @@ export function deriveAccent(baseHex: string, thresholds: Thresholds = ACCENT_TH
     soft: oklchToHex({ L: 0.96, C: 0.03, h: base.h }),
     focus: bg,
   }
-  // 2. 다크 — 다크 surface 위 링크 대비가 하한이 될 때까지 L 을 올린다. 전경은 같은 hue 의 L 0.20
-  let Ld = base.L
-  let dbg = oklchToHex({ L: Ld, C: base.C, h: base.h })
-  for (let i = 0; i < 100 && contrastRatio(dbg, ACCENT_TOKENS.dark.surface) < minContrast && Ld < 0.98; i++) {
-    Ld += 0.01
-    dbg = oklchToHex({ L: Ld, C: base.C, h: base.h })
-  }
-  const dark: AccentSet = {
-    bg: dbg, fg: oklchToHex({ L: 0.2, C: Math.min(base.C, 0.06), h: base.h }),
-    hover: oklchToHex({ L: Ld + 0.05, C: base.C, h: base.h }),
-    pressed: oklchToHex({ L: Ld + 0.1, C: base.C, h: base.h }),
-    soft: oklchToHex({ L: 0.32, C: 0.04, h: base.h }),
-    focus: dbg,
-  }
-  // 4. 하한 검사 — 한 쌍이라도 미달이면 거부하고 쌍과 값을 돌려준다
+  // 2. 하한 검사 — 한 쌍이라도 미달이면 거부하고 쌍과 값을 돌려준다
   const failures: AccentFailure[] = []
   const need = (pair: string, a: Hex, b: Hex, min: number) => {
     const c = contrastRatio(a, b)
     if (c < min) failures.push({ pair, contrast: Math.round(c * 100) / 100, min })
   }
   need('light.fg/light.bg', light.fg, light.bg, minContrast)
-  need('dark.fg/dark.bg', dark.fg, dark.bg, minContrast)
-  need('dark.bg/dark.surface', dark.bg, ACCENT_TOKENS.dark.surface, minContrast)
   need('light.focus/light.canvas', light.focus, ACCENT_TOKENS.light.canvas, minFocus)
-  need('dark.focus/dark.canvas', dark.focus, ACCENT_TOKENS.dark.canvas, minFocus)
   if (failures.length) return { ok: false, error: '강조색의 대비가 하한에 미치지 못합니다.', failures }
-  return { ok: true, value: { base: baseHex.toLowerCase(), light, dark } }
+  return { ok: true, value: { base: baseHex.toLowerCase(), light } }
 }
 
 /** 편집 입력 — hex 하나 또는 null(기본값으로). 세트를 직접 보내면 거부한다(개정 §2.3.1 ④) */
@@ -151,14 +134,18 @@ function isAccentSet(x: unknown): x is AccentSet {
   if (keys.length !== SET_KEYS.length || SET_KEYS.some((k) => !keys.includes(k))) return false
   return SET_KEYS.every((k) => typeof (x as Record<string, unknown>)[k] === 'string' && HEX_LOWER.test((x as Record<string, string>)[k]))
 }
-/** 저장 형태 — 정확히 { base, light, dark }, 세트는 정확히 여섯 키, 모든 값이 소문자 hex. 아니면 거부(읽을 때는 invalid) */
+/**
+ * 저장 형태 — { base, light }, 세트는 정확히 여섯 키, 모든 값이 소문자 hex. 아니면 거부(읽을 때는 invalid).
+ * 라이트 전용 결정(2026-10-10) 전에 저장된 값에는 dark 세트가 함께 있다 — 그 키는 내용을 보지 않고 버린다(주입하지 않으므로 검사할 이유가 없고,
+ * 거부하면 멀쩡한 강조색이 손상 값으로 뜬다). 그 밖의 여분 키는 그대로 거부한다.
+ */
 export function parseAccentValue(raw: unknown): { ok: true; value: AccentValue | null } | { ok: false; error: string } {
   if (raw === null) return { ok: true, value: null }
   if (typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: '강조색 저장값은 객체여야 합니다.' }
   const o = raw as Record<string, unknown>
-  const keys = Object.keys(o).sort()
-  if (keys.join(',') !== 'base,dark,light') return { ok: false, error: '강조색 저장값은 base·light·dark 만 가져야 합니다.' }
+  const keys = Object.keys(o).filter((k) => k !== 'dark').sort()
+  if (keys.join(',') !== 'base,light') return { ok: false, error: '강조색 저장값은 base·light 만 가져야 합니다.' }
   if (typeof o.base !== 'string' || !HEX_LOWER.test(o.base)) return { ok: false, error: 'base 는 소문자 #rrggbb 여야 합니다.' }
-  if (!isAccentSet(o.light) || !isAccentSet(o.dark)) return { ok: false, error: '세트는 bg·fg·hover·pressed·soft·focus 여섯 소문자 hex 여야 합니다.' }
-  return { ok: true, value: { base: o.base, light: o.light, dark: o.dark } }
+  if (!isAccentSet(o.light)) return { ok: false, error: '세트는 bg·fg·hover·pressed·soft·focus 여섯 소문자 hex 여야 합니다.' }
+  return { ok: true, value: { base: o.base, light: o.light } }
 }

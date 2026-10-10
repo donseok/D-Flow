@@ -7,17 +7,16 @@
 import type { UiPrefs } from '@/lib/domain/types'
 import { UUID_RE } from '@/lib/domain/validate'
 import { MINUTE_FS_MAX, MINUTE_FS_MIN } from '@/lib/minutes/fontSize'
-import { isThemePref } from '@/lib/theme/policy'
 import { isProjectsView, parseHiddenWidgets } from '@/lib/portal/prefs'
 import { NOTIFICATION_CATALOG } from '@/lib/domain/inbox'
 
 export const ACCOUNT_PREF_KEYS = [
-  'theme', 'sidebarCollapsed', 'dashSections', 'minutesView', 'minuteFontSize', 'minutesExplorerLayout',
+  'sidebarCollapsed', 'dashSections', 'minutesView', 'minuteFontSize', 'minutesExplorerLayout',
   'wbsHideDone', 'wbsOutline', 'wbsGanttScale', 'notif', 'projectsView',
 ] as const satisfies readonly (keyof UiPrefs)[]
 export const WORKSPACE_PREF_KEYS = ['startPage', 'favoriteProjectIds', 'recentProjects', 'notifRead', 'portalHiddenWidgets'] as const satisfies readonly (keyof UiPrefs)[]
-/** 폐기된 키 — 저장된 옛 값은 읽지 않는다. locale 은 한국어 전용 결정(2026-10-10)으로 폐기 */
-export const RETIRED_PREF_KEYS = ['heroCollapsed', 'lastProjectId', 'locale'] as const
+/** 폐기된 키 — 저장된 옛 값은 읽지 않는다. locale 은 한국어 전용, theme 은 라이트 전용 결정(둘 다 2026-10-10)으로 폐기 */
+export const RETIRED_PREF_KEYS = ['heroCollapsed', 'lastProjectId', 'locale', 'theme'] as const
 export const FAVORITES_MAX = 20
 export const RECENT_MAX = 10
 const START_PAGES = new Set(['home', 'my_work', 'projects', 'last_project'])
@@ -34,7 +33,6 @@ const isFiniteIn = (v: unknown, lo: number, hi: number): v is number => typeof v
 /** 계정 키 값 검사 — 클라이언트가 보내는 꼴(UiPrefs 주석의 값 범위)만 받는다. 형식 밖이면 그 키만 버린다 */
 function cleanAccountValue(key: string, v: unknown): { ok: true; value: unknown } | { ok: false } {
   switch (key) {
-    case 'theme': return isThemePref(v) ? { ok: true, value: v } : { ok: false }
     case 'sidebarCollapsed': case 'wbsHideDone': case 'wbsOutline': return typeof v === 'boolean' ? { ok: true, value: v } : { ok: false }
     case 'minutesView': return v === 'list' || v === 'calendar' || v === 'tree' ? { ok: true, value: v } : { ok: false }
     case 'minutesExplorerLayout': return v === 'grid' || v === 'list' ? { ok: true, value: v } : { ok: false }

@@ -7,8 +7,8 @@ import { ACCOUNT_PREF_KEYS, RETIRED_PREF_KEYS } from '@/lib/prefs/split'
 const dir = (d: string) => join(process.cwd(), d)
 /** 이행(SP3b UI-2) 뒤에 처음 생긴 계정 키 — 처음부터 계정 행에만 쓰여 옮길 것이 없다. 새 마이그레이션 없이 키를 더한 차례대로(UI-3 과제 8) */
 const ADDED_AFTER_MIGRATION = ['projectsView'] as const
-/** 이행은 옮겼지만 그 뒤 코드에서만 폐기한 계정 키 — 마이그레이션 없이 읽기·쓰기만 걷었다(저장된 옛 값은 무시된다). locale: 한국어 전용 결정(2026-10-10) */
-const RETIRED_AFTER_MIGRATION: readonly string[] = ['locale']
+/** 이행은 옮겼지만 그 뒤 코드에서만 폐기한 계정 키 — 마이그레이션 없이 읽기·쓰기만 걷었다(저장된 옛 값은 무시된다). locale: 한국어 전용 결정, theme: 라이트 전용 결정(둘 다 2026-10-10) */
+const RETIRED_AFTER_MIGRATION: readonly string[] = ['locale', 'theme']
 const find = (d: string, suffix: string) => readdirSync(dir(d)).find((f) => f.endsWith(suffix))
 
 describe('account_preferences 마이그레이션 원문', () => {

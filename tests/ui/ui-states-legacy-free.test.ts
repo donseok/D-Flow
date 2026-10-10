@@ -1,5 +1,4 @@
-// 쇼케이스와 새 상태 컴포넌트는 옛 토큰 이름을 쓰지 않는다(계획 Review Focus 5·판정 Q12) — 옛 이름의 var() 는 :root 에서 계산돼
-// 중첩 .dark·[data-theme-scope] 안에서 라이트 값을 상속한다. 그러면 쇼케이스가 "다크가 맞다"고 거짓으로 보인다.
+// 쇼케이스와 새 상태 컴포넌트는 옛 토큰 이름을 쓰지 않는다(계획 Review Focus 5·판정 Q12) — 옛 이름(별칭)은 UI-6 에서 지웠다.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'

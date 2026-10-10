@@ -6,7 +6,7 @@ const U = (n: number) => `00000000-0000-0000-7e57-0000000016${String(40 + n).pad
 
 /** UiPrefs 의 키 전부 — 타입이 새 키를 얻으면 이 목록을 고치라고 컴파일러가 알린다(Record<keyof UiPrefs, true>) */
 const ALL: Record<keyof UiPrefs, true> = {
-  theme: true, sidebarCollapsed: true, dashSections: true, minutesView: true, minuteFontSize: true, minutesExplorerLayout: true,
+  sidebarCollapsed: true, dashSections: true, minutesView: true, minuteFontSize: true, minutesExplorerLayout: true,
   wbsHideDone: true, wbsOutline: true, wbsGanttScale: true, notif: true,
   startPage: true, favoriteProjectIds: true, recentProjects: true, notifRead: true,
   projectsView: true, portalHiddenWidgets: true,
@@ -25,8 +25,8 @@ describe('두 목록 — 서로소이고 합집합 = UiPrefs 키', () => {
 
 describe('splitPrefs', () => {
   it('계정·워크스페이스로 가르고 은퇴·모르는 키는 버린다', () => {
-    expect(splitPrefs({ theme: 'dark', startPage: 'my_work', ...({ heroCollapsed: true, evil: 1 } as object) } as Partial<UiPrefs>))
-      .toEqual({ account: { theme: 'dark' }, workspace: { startPage: 'my_work' }, dropped: ['heroCollapsed', 'evil'] })
+    expect(splitPrefs({ projectsView: 'cards', startPage: 'my_work', ...({ heroCollapsed: true, theme: 'dark', evil: 1 } as object) } as Partial<UiPrefs>))
+      .toEqual({ account: { projectsView: 'cards' }, workspace: { startPage: 'my_work' }, dropped: ['heroCollapsed', 'theme', 'evil'] })
   })
   it('형식 검사 — 즐겨찾기 uuid·상한 20(중복 제거), 최근 {id,at}·상한 10, startPage 닫힌 값', () => {
     const many = Array.from({ length: 25 }, (_, i) => U(i % 22))
@@ -41,8 +41,8 @@ describe('splitPrefs', () => {
 
 describe('mergePrefs·pushRecent', () => {
   it('워크스페이스 키는 워크스페이스 행, 계정 키는 계정 행에서만 읽는다(섞여 있어도)', () => {
-    expect(mergePrefs({ theme: 'dark', startPage: 'projects' } as Partial<UiPrefs>, { startPage: 'home', theme: 'light' } as Partial<UiPrefs>))
-      .toEqual({ theme: 'dark', startPage: 'home' })
+    expect(mergePrefs({ projectsView: 'cards', startPage: 'projects' } as Partial<UiPrefs>, { startPage: 'home', projectsView: 'rows' } as Partial<UiPrefs>))
+      .toEqual({ projectsView: 'cards', startPage: 'home' })
   })
   it('pushRecent — 앞에 넣고 중복 제거, 10개로 자른다', () => {
     let list: { id: string; at: string }[] = []

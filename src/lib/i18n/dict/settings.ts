@@ -204,7 +204,7 @@ export const settingsKo = {
   'settings.ai.enabled.label': 'AI 기능', 'settings.ai.enabled.desc': '끄면 위키·챗봇 등 AI 모듈이 워크스페이스 전체에서 꺼집니다.',
   'settings.invites.allowed_domains.label': '초대 허용 도메인', 'settings.invites.allowed_domains.desc': '이 도메인의 이메일만 초대할 수 있습니다. 비우면 초대할 수 없고, 미설정이면 배포 기본값을 씁니다.',
   'settings.branding.product_name.label': '제품 이름', 'settings.branding.product_name.desc': '메일·내보내기 파일에 쓰는 이름입니다(1~40자).',
-  'settings.branding.logo.label': '로고', 'settings.branding.logo.desc': '가로형·다크용·마크 세 슬롯. PNG·JPG·WebP, 256KB 이하.',
+  'settings.branding.logo.label': '로고', 'settings.branding.logo.desc': '가로형·마크 두 슬롯. PNG·JPG·WebP, 256KB 이하.',
   'settings.branding.accent.label': '강조색', 'settings.branding.accent.desc': '버튼·링크·선택에 쓰는 색입니다. 대비가 낮거나 상태색과 비슷하면 저장되지 않습니다.',
   'settings.branding.mail_from_name.label': '메일 발신 표시명', 'settings.branding.mail_from_name.desc': '알림 메일의 보내는 사람 이름입니다. 비우면 제품 이름을 씁니다.',
   'settings.navigation.menu.label': '메뉴 순서·이름', 'settings.navigation.menu.desc': '그룹 안의 순서와 표시 이름만 바꿉니다. 숨김은 모듈을 끄는 것으로 합니다.',

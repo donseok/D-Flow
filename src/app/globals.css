@@ -32,30 +32,21 @@
 @source not "../../README.md";
 @source not "../../HANDOFF.md";
 
-/* Tailwind v4 다크 변형: <html class="dark"> 하위에서 dark: 유틸 활성 */
-@custom-variant dark (&:where(.dark, .dark *));
-
 /* ------------------------------------------------------------------ */
 /*  디자인 토큰 — 3층(개정 §5.5.1, SP3b 스펙 §4.1)                       */
 /*  ① 원색 --p-*: @layer 밖 :root. 컴포넌트·페이지가 직접 쓰지 않는다(D11) */
-/*  ② 의미 --color-*: @theme. 유틸의 원천이고 .dark 가 다시 정의한다      */
+/*  ② 의미 --color-*: @theme. 유틸의 원천이다 — 라이트 값 하나뿐(다크 없음) */
 /*  ③ 옛 이름: @theme inline 별칭. 호출부 이행은 UI-5, 삭제는 UI-6        */
 /* ------------------------------------------------------------------ */
 :root {
-  color-scheme: light;   /* 블록 5 .dark 앞이어야 다크의 color-scheme: dark 가 이긴다(판정 Q36) */
+  color-scheme: light;   /* 라이트 전용(2026-10-10) — OS 가 다크여도 폼 컨트롤·스크롤바를 브라우저가 어둡게 칠하지 않는다 */
 
   --p-gray-0: #FFFFFF;  --p-gray-25: #F5F7FA;  --p-gray-50: #F0F3F8;
   --p-gray-75: #EEF2F7;  --p-gray-100: #EDF0F4;  --p-gray-150: #E3E8EF;
   --p-gray-200: #DCE2EA;  --p-gray-400: #7B8798;  --p-gray-450: #788394;
   --p-gray-500: #606E82;  --p-gray-600: #526074;  --p-gray-900: #17212F;
-  --p-night-950: #11151C;  --p-night-900: #191F29;  --p-night-850: #1F2632;
-  --p-night-800: #222B38;  --p-night-780: #232A35;  --p-night-700: #344052;
-  --p-cobalt-50: #EDF2FF;  --p-cobalt-300: #A8BDFF;  --p-cobalt-400: #8AA8FF;
-  --p-cobalt-450: #7799F7;  --p-cobalt-600: #315CDB;  --p-cobalt-700: #274CC5;
-  --p-cobalt-800: #2142AB;  --p-cobalt-900: #26375E;  --p-cobalt-950: #111B35;
-  --p-mint-300: #5BD7E7;  --p-mint-700: #0B7A8A;  --p-ink-d50: #EDF2FA;
-  --p-ink-d200: #B6C2D2;  --p-ink-d300: #96A5BA;  --p-ink-d350: #8994A5;
-  --p-ink-d400: #718198;
+  --p-cobalt-50: #EDF2FF;  --p-cobalt-600: #315CDB;  --p-cobalt-700: #274CC5;
+  --p-cobalt-800: #2142AB;  --p-mint-700: #0B7A8A;
 }
 
 @theme {
@@ -126,7 +117,7 @@
   --color-category-7: #5B6B00;
   --color-category-8: #3F5F7A;
 
-  /* 채움 위 전경(D12 + 계획 판정 Q13) — 라이트 흰색, 다크 cobalt-950 */
+  /* 채움 위 전경(D12 + 계획 판정 Q13) — 흰색 */
   --color-today-fg: var(--p-gray-0);
   --color-success-fg: var(--p-gray-0);
   --color-warning-fg: var(--p-gray-0);
@@ -137,7 +128,7 @@
   --color-phasebar-fg: var(--p-gray-0);
   --color-critical-fg: var(--p-gray-0);
 
-  /* weak·채움(D12 + 판정 Q13) — 라이트 L 0.97·C 0.02, 다크 L 0.25·C 0.04(accent.ts 의 oklchToHex 로 계산) */
+  /* weak·채움(D12 + 판정 Q13) — L 0.97·C 0.02(accent.ts 의 oklchToHex 로 계산) */
   --color-category-1-weak: #F3F5FE;
   --color-category-2-weak: #EBF7FF;
   --color-category-3-weak: #F5F3FE;
@@ -151,97 +142,11 @@
 }
 
 /* ------------------------------------------------------------------ */
-/*  다크 — 의미 토큰만 다시 정의한다(라이트 값을 반전하지 않는다)          */
-/* ------------------------------------------------------------------ */
-.dark {
-  color-scheme: dark;
-
-  /* 표면·글자·경계·동작 */
-  --color-canvas: var(--p-night-950);
-  --color-surface: var(--p-night-900);
-  --color-surface-subtle: var(--p-night-800);
-  --color-surface-raised: var(--p-night-850);
-  --color-surface-hover: var(--p-night-800);
-  --color-surface-zebra: #1C232E;
-  --color-surface-selected: var(--p-cobalt-900);
-  --color-surface-disabled: var(--p-night-780);
-  --color-fg: var(--p-ink-d50);
-  --color-fg-secondary: var(--p-ink-d200);
-  --color-fg-muted: var(--p-ink-d300);
-  --color-fg-disabled: var(--p-ink-d350);
-  --color-border: var(--p-night-700);
-  --color-border-input: var(--p-ink-d400);
-  --color-border-focus: var(--p-cobalt-300);
-  --color-action: var(--p-cobalt-400);
-  --color-action-hover: var(--p-cobalt-300);
-  --color-action-pressed: var(--p-cobalt-450);
-  --color-action-fg: var(--p-cobalt-950);
-  --color-action-soft: var(--p-cobalt-900);
-
-  /* 상태 6종 */
-  --color-success: #4CC99A;
-  --color-success-weak: #173429;
-  --color-warning: #E7B25A;
-  --color-warning-weak: #3A2F17;
-  --color-danger: #FF8A94;
-  --color-danger-weak: #3F2126;
-  --color-progress: #6CB3EB;
-  --color-progress-weak: #16283A;
-  --color-pending: var(--p-ink-d300);
-  --color-pending-weak: var(--p-night-780);
-  --color-neutral: var(--p-ink-d200);
-  --color-neutral-weak: var(--p-night-800);
-
-  /* 간트 */
-  --color-today: var(--p-mint-300);
-  --color-critical: #F29A5C;
-  --color-phasebar: #7A879C;
-  --color-plan-track: #2A3240;
-  --color-weekend: #1D2430;
-  --color-holiday-band: #2E2718;
-
-  /* 범주 슬롯 */
-  --color-category-1: #8B87F5;
-  --color-category-2: #4FB3E3;
-  --color-category-3: #B394F7;
-  --color-category-4: #E0A24B;
-  --color-category-5: #3DBFB0;
-  --color-category-6: #D98ACB;
-  --color-category-7: #B3C24A;
-  --color-category-8: #8FB0CC;
-
-  /* 채움 위 전경 */
-  --color-today-fg: var(--p-cobalt-950);
-  --color-success-fg: var(--p-cobalt-950);
-  --color-warning-fg: var(--p-cobalt-950);
-  --color-danger-fg: var(--p-cobalt-950);
-  --color-progress-fg: var(--p-cobalt-950);
-  --color-pending-fg: var(--p-cobalt-950);
-  --color-category-fg: var(--p-cobalt-950);
-  --color-phasebar-fg: var(--p-cobalt-950);
-  --color-critical-fg: var(--p-cobalt-950);
-
-  /* weak·채움 */
-  --color-category-1-weak: #1F1F34;
-  --color-category-2-weak: #0A2532;
-  --color-category-3-weak: #241D32;
-  --color-category-4-weak: #2D1E0A;
-  --color-category-5-weak: #052824;
-  --color-category-6-weak: #2D1A2A;
-  --color-category-7-weak: #21240C;
-  --color-category-8-weak: #0F2433;
-  --color-critical-weak: #301C0E;
-  --color-phasebar-fill: var(--p-ink-d50);
-}
-
-/* ------------------------------------------------------------------ */
 /*  비색 토큰 — 층·그림자·반경·조작 높이·모션·아이콘(@layer 밖 :root)    */
 /*  유틸은 임의 변수 문법으로 쓴다: z-(--z-modal) · rounded-(--radius-control) */
 /*  · h-(--control-h) · duration-(--motion-fast) · shadow-(--shadow-popover)  */
 /* ------------------------------------------------------------------ */
 :root {
-  /* color-scheme: light 는 블록 2(원색 :root — .dark 앞)에 있다. 여기(.dark 뒤)에 두면 다크를 덮는다(판정 Q36) */
-
   /* 층(D56) — 페이지 안 고정 요소는 z-10 이하, 전체 화면은 overlay 위·modal 아래 */
   --z-sticky: 20;
   --z-shell: 70;
@@ -285,15 +190,8 @@
   --shadow-lg: var(--shadow-popover);
   --shadow-xl: var(--shadow-modal);
 
-  /* 동결 컬럼 경계 그림자 — 다크는 아래 .dark 가 어두운 그림자로 다시 정의한다(fg 를 섞으면 다크에서 밝게 번진다) */
+  /* 동결 컬럼 경계 그림자 */
   --shadow-freeze-edge: 6px 0 8px -6px rgb(17 21 28 / 0.12);
-}
-
-/* 위 :root 와 같은 이름의 다크 값은 반드시 이 뒤에(같은 특이성은 뒤가 이긴다 — 판정 Q36) */
-.dark {
-  --shadow-popover: 0 8px 24px -8px rgb(0 0 0 / 0.55);
-  --shadow-modal: 0 24px 56px -16px rgb(0 0 0 / 0.65);
-  --shadow-freeze-edge: 6px 0 8px -6px rgb(0 0 0 / 0.5);
 }
 
 html,
@@ -317,10 +215,6 @@ body {
 ::selection {
   background: color-mix(in oklab, var(--color-action) 24%, transparent);
   color: var(--color-fg);
-}
-
-.dark ::selection {
-  background: color-mix(in oklab, var(--color-action) 30%, transparent);
 }
 
 button,
@@ -363,7 +257,7 @@ textarea {
            focus:border-border-focus focus:ring-2 focus:ring-border-focus/25;
   }
 
-  /* 회의록 md 뷰어 타이포 — 토큰만 사용, .dark 자동 대응.
+  /* 회의록 md 뷰어 타이포 — 토큰만 사용.
      크기는 --minutes-fs(뷰어가 본문 카드에 인라인 주입, 기본 14px) 하나로 스케일한다.
      CSS 변수는 상속되므로 MarkdownView(memo+ReactMarkdown)의 props 가 바뀌지 않는다 —
      1px 조절마다 10만 자 재파싱이 일어나지 않게 하는 핵심 계약(스펙 §3).
@@ -398,7 +292,7 @@ textarea {
   .minutes-md hr { @apply border-border; margin: 1.15em 0; }
   .minutes-md img { @apply max-w-full; }
 
-  /* ── 뷰어 인사이트: 속성 선택자 전용(클래스 스탬프 금지 — language-* 클로버 함정), 토큰 기반 다크 자동 ── */
+  /* ── 뷰어 인사이트: 속성 선택자 전용(클래스 스탬프 금지 — language-* 클로버 함정), 토큰 기반 ── */
   /* 마킹 가능 블록 hover 힌트 + 점프 여유 */
   .minutes-md [data-mblock] { @apply scroll-mt-16 cursor-pointer rounded-md transition-colors duration-150; }
   .minutes-md [data-mblock]:hover { @apply outline outline-1 outline-border-input; }
@@ -519,18 +413,6 @@ textarea {
     @apply bg-surface-selected text-fg;
   }
 
-  /* 로고 라이트·다크(D24) — 소비는 UI-2b. 크기별 전환은 바깥 래퍼에서 한다.
-     되돌림은 revert-layer — revert 는 preflight(@layer base 의 img display:block)까지 버려 다크 로고만 inline 이 된다 */
-  .brand-logo-dark {
-    display: none;
-  }
-  .dark .brand-logo-light {
-    display: none;
-  }
-  .dark .brand-logo-dark {
-    display: revert-layer;
-  }
-
   /* 동결 컬럼 우측 경계 */
   .freeze-edge {
     border-right: 1.5px solid var(--color-border-input);
@@ -573,78 +455,9 @@ textarea {
 }
 
 /* ------------------------------------------------------------------ */
-/*  인쇄 — 현황 보고서(.print-area)만 출력. 테마와 무관하게 라이트 값이다  */
-/*  (다크 선호 사용자가 인쇄해도 흰 종이에 어두운 글자 — 스펙 §4.1 블록 10) */
+/*  인쇄 — 현황 보고서(.print-area)만 출력한다                          */
 /* ------------------------------------------------------------------ */
 @media print {
-  :root, .dark {
-    color-scheme: light;
-    --color-canvas: var(--p-gray-25);
-    --color-surface: var(--p-gray-0);
-    --color-surface-subtle: var(--p-gray-75);
-    --color-surface-raised: var(--p-gray-0);
-    --color-surface-hover: var(--p-gray-50);
-    --color-surface-zebra: var(--p-gray-25);
-    --color-surface-selected: var(--p-cobalt-50);
-    --color-surface-disabled: var(--p-gray-100);
-    --color-fg: var(--p-gray-900);
-    --color-fg-secondary: var(--p-gray-600);
-    --color-fg-muted: var(--p-gray-500);
-    --color-fg-disabled: var(--p-gray-450);
-    --color-border: var(--p-gray-200);
-    --color-border-input: var(--p-gray-400);
-    --color-border-focus: var(--p-cobalt-600);
-    --color-action: var(--p-cobalt-600);
-    --color-action-hover: var(--p-cobalt-700);
-    --color-action-pressed: var(--p-cobalt-800);
-    --color-action-fg: var(--p-gray-0);
-    --color-action-soft: var(--p-cobalt-50);
-    --color-success: #197455;
-    --color-success-weak: #E6F4EE;
-    --color-warning: #8A5B13;
-    --color-warning-weak: #FBF1DE;
-    --color-danger: #B93845;
-    --color-danger-weak: #FBEAEC;
-    --color-progress: #1F6FA8;
-    --color-progress-weak: #E5F0F8;
-    --color-pending: var(--p-gray-500);
-    --color-pending-weak: var(--p-gray-75);
-    --color-neutral: var(--p-gray-600);
-    --color-neutral-weak: var(--p-gray-75);
-    --color-today: var(--p-mint-700);
-    --color-critical: #B4541A;
-    --color-phasebar: #3F4A5C;
-    --color-plan-track: var(--p-gray-150);
-    --color-weekend: var(--p-gray-50);
-    --color-holiday-band: #FFF4E0;
-    --color-category-1: #4F46E5;
-    --color-category-2: #0276A8;
-    --color-category-3: #7C3AED;
-    --color-category-4: #A65B00;
-    --color-category-5: #0F766E;
-    --color-category-6: #9D3B8C;
-    --color-category-7: #5B6B00;
-    --color-category-8: #3F5F7A;
-    --color-today-fg: var(--p-gray-0);
-    --color-success-fg: var(--p-gray-0);
-    --color-warning-fg: var(--p-gray-0);
-    --color-danger-fg: var(--p-gray-0);
-    --color-progress-fg: var(--p-gray-0);
-    --color-pending-fg: var(--p-gray-0);
-    --color-category-fg: var(--p-gray-0);
-    --color-phasebar-fg: var(--p-gray-0);
-    --color-critical-fg: var(--p-gray-0);
-    --color-category-1-weak: #F3F5FE;
-    --color-category-2-weak: #EBF7FF;
-    --color-category-3-weak: #F5F3FE;
-    --color-category-4-weak: #FFF3E9;
-    --color-category-5-weak: #E7FAF7;
-    --color-category-6-weak: #FEF0FB;
-    --color-category-7-weak: #F3F7E9;
-    --color-category-8-weak: #EDF6FF;
-    --color-critical-weak: #FEF2ED;
-    --color-phasebar-fill: #97A3B6;
-  }
   body { background: var(--p-gray-0); }
   body * { visibility: hidden; }
   .print-area, .print-area * { visibility: visible; }

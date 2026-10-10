@@ -99,7 +99,7 @@ export async function loadShell(input: {
     project: projectId ? { id: projectId, name: projects.find((p) => p.id === projectId)?.name ?? '' } : null,
     projects, projectsFailed: !listR.ok, favoriteIds, recentIds,
     identity: { displayName: input.userName, roleLabel: scopeRoleLabel(actor, { workspaceId: ws.id, projectId }, degraded), roleKey: scopeRoleKey(actor, { workspaceId: ws.id, projectId }, degraded), teamCodes: actor ? identityTeamCodes(actor, ws.id) : null, teamLabels: actor ? identityTeamLabels(actor, ws.id) : null },
-    brand: { productName, workspaceId: ws.id, hasFull: !!logo.full, hasFullDark: !!logo.full_dark, hasMark: !!logo.mark },
+    brand: { productName, workspaceId: ws.id, hasFull: !!logo.full, hasMark: !!logo.mark },
     accentCss, degraded, configDegraded, canEditSettings: isWorkspaceAdmin(actor, ws.id),
   }
 }
@@ -110,7 +110,7 @@ export function minimalShell(input: { scope: ShellScopeKind; projectId: string |
     scope: input.scope, base: '/', groups: [], workspaceGroups: [], workspace: { id: '', slug: '', name: '' }, workspaces: input.workspaces, viewingAsPlatformAdmin: false,
     project: input.projectId ? { id: input.projectId, name: '' } : null, projects: [], projectsFailed: false, favoriteIds: [], recentIds: [],
     identity: { displayName: input.userName, roleLabel: scopeRoleLabel(null, { workspaceId: null }, input.degraded), roleKey: scopeRoleKey(null, { workspaceId: null }, input.degraded), teamCodes: null, teamLabels: null },
-    brand: { productName: BRAND.productName, workspaceId: null, hasFull: false, hasFullDark: false, hasMark: false },
+    brand: { productName: BRAND.productName, workspaceId: null, hasFull: false, hasMark: false },
     accentCss: '', degraded: input.degraded, configDegraded: false, canEditSettings: false,
   }
 }

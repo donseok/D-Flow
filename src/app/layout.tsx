@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { connection } from "next/server";
 import "./globals.css";
-import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { LocaleProvider } from "@/components/providers/LocaleProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { BRAND } from "@/lib/branding";
-import { noFlashScript } from "@/lib/theme/policy";
 
 export const metadata: Metadata = {
   title: `${BRAND.productName} — ${BRAND.tagline}`,
@@ -15,12 +13,12 @@ export const metadata: Metadata = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined; // CSP nonce(미들웨어) — 미들웨어가 돌지 않는 경로(/login 등)에서는 없다
+  // 모든 경로를 요청 때 그린다 — 엄격한 CSP(미들웨어)는 Next 의 인라인 스크립트에 요청마다 다른 nonce 를 요구하는데, 빌드 때 굳은 HTML 에는
+  // nonce 가 없어 스크립트가 통째로 막힌다. 요청 API 를 읽지 않는 화면(not-found 등)이 정적으로 굳지 않게 여기서 한 번 건다.
+  await connection();
   return (
-    <html lang="ko" suppressHydrationWarning>
+    <html lang="ko">
       <head>
-        {/* 다크 FOUC 방지 — 페인트 전에 선호(localStorage → 쿠키 → 미설정 기본)를 <html> 에 반영한다(D10) */}
-        <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: noFlashScript() }} />
         {/* Pretendard(dynamic subset) — globals.css 의 @import 에서 옮겨왔다(2026-08-18 성능 감사).
             @import 는 globals.css 를 받은 뒤에야 CDN CSS 를 받는 직렬 차단 체인이지만, head 의
             link 는 HTML 파싱 즉시 globals.css 와 병렬로 내려받는다. preconnect 2건이 DNS+TLS 를
@@ -34,11 +32,9 @@ export default async function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
-        <ThemeProvider>
-          <LocaleProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </LocaleProvider>
-        </ThemeProvider>
+        <LocaleProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

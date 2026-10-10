@@ -9,7 +9,8 @@ function newNonce(): string {
 
 export async function middleware(req: NextRequest) {
   // ── CSP nonce(src/lib/http/securityHeaders.ts 머리 주석 ①) — 세션 검증과 독립이다: 아래 인증 흐름은 그대로 두고 헤더만 싣는다 ──
-  // 요청 헤더에 싣는 이유: Next 는 **요청**의 CSP 헤더에서 nonce 를 읽어 자기 인라인 스크립트에 붙이고, 루트 레이아웃은 x-nonce 로 읽는다.
+  // 요청 헤더에 싣는 이유: Next 는 **요청**의 CSP 헤더에서 nonce 를 읽어 자기 인라인 스크립트에 붙인다(앱이 직접 넣는 인라인 스크립트는 없다 —
+  // 그래서 nonce 를 따로 내려 주는 헤더도 없다. 화면이 요청 때 그려져야 nonce 가 붙는다: 루트 레이아웃의 connection()).
   // 아래 NextResponse.next({ request: req }) 두 곳이 이 req 를 그대로 물려주므로 여기서 한 번만 적으면 된다.
   // 클라이언트가 보낸 같은 이름의 헤더는 먼저 지운다 — Next 는 강제 헤더를 먼저 보고 없으면 보고 전용을 보므로, 남겨 두면 우리 nonce 대신 그 값을 읽는다.
   const nonce = newNonce()
@@ -21,7 +22,6 @@ export async function middleware(req: NextRequest) {
   })
   req.headers.delete(CSP_HEADER)
   req.headers.delete(CSP_REPORT_ONLY_HEADER)
-  req.headers.set('x-nonce', nonce)
   req.headers.set(csp.key, csp.value)
 
   // { request: req } 전파가 핵심이다(2026-08-18 수정, supabase 공식 패턴): 토큰 갱신 시

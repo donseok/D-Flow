@@ -6,7 +6,7 @@ vi.mock('@/components/app/NotificationBell', () => ({ NotificationBell: () => <s
 vi.mock('@/components/app/AccountMenu', () => ({ AccountMenu: () => <span data-account /> }))
 import { GlobalBar } from '@/components/app/GlobalBar'
 
-const brand = { productName: 'Acme', workspaceId: 'w1', hasFull: false, hasFullDark: false, hasMark: false }
+const brand = { productName: 'Acme', workspaceId: 'w1', hasFull: false, hasMark: false }
 const base = { brand, homeHref: '/w/acme', identity: null, staging: false, onOpenDrawer: () => {}, workspaceId: 'w1' }
 const wsCrumbs = { scope: 'workspace' as const, workspace: { name: 'Acme', href: '/w/acme' }, project: null, screen: '회의록' }
 const TOUCH = "before:size-11"

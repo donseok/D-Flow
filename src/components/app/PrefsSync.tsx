@@ -3,18 +3,13 @@ import { useEffect, useRef } from 'react'
 import type { UiPrefs } from '@/lib/domain/types'
 import { computePrefsSync, type LocalPrefs } from '@/lib/prefs/sync'
 import { queueUiPref } from '@/lib/prefs/debouncedSave'
-import { useTheme } from '@/components/providers/ThemeProvider'
-import { readStoredPreference } from '@/lib/theme/policy'
 import { dispatchSidebarToggle, SIDEBAR_STORAGE_KEY } from '@/components/app/sidebarState'
 
-/**
- * 현재 로컬 상태를 LocalPrefs 로 읽는다. 테마는 저장된 **선호**(localStorage → 쿠키, 없으면 null — D10: 해석값을 백필하지 않는다).
- */
+/** 현재 로컬 상태를 LocalPrefs 로 읽는다 */
 function readLocal(): LocalPrefs {
   let sidebarCollapsed = false
   try { sidebarCollapsed = localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1' } catch {}
-  const theme = readStoredPreference()
-  return { sidebarCollapsed, theme }
+  return { sidebarCollapsed }
 }
 
 /**
@@ -25,7 +20,6 @@ function readLocal(): LocalPrefs {
  * 계정 설정 서버 액션(getAccountPrefs)을 다시 쏘면 완전 중복 왕복이다(2026-08-18 성능 감사). 서버 값은 계정 키만이다(SP3b D9).
  */
 export function PrefsSync({ server }: { server: UiPrefs }) {
-  const { setPreference } = useTheme()
   const done = useRef(false)
 
   useEffect(() => {
@@ -34,11 +28,10 @@ export function PrefsSync({ server }: { server: UiPrefs }) {
     const local = readLocal()
     const { apply, backfill } = computePrefsSync(server, local)
     // 적용: 각 설정의 기존 변경 경로 재사용(같은 값이면 computePrefsSync 가 이미 걸러냄).
-    if (apply.theme) setPreference(apply.theme)
     if (apply.sidebarCollapsed !== undefined) dispatchSidebarToggle(apply.sidebarCollapsed)
     // 백필: 서버에 없던 키를 현재 로컬값으로 1회 저장(debounce 병합).
     if (Object.keys(backfill).length) queueUiPref(backfill)
-    // 마운트 1회만. setPreference 는 안정적 콜백이고 로컬 상태는 readLocal 이 DOM/쿠키에서 직접 읽음.
+    // 마운트 1회만. 로컬 상태는 readLocal 이 저장소에서 직접 읽음.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

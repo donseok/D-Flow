@@ -8,7 +8,6 @@ const DISPLAY = 'hidden|flex|grid|block|inline|inline-flex|inline-block|table|co
 const SAFETY = new RegExp(`(?<![\\w-])(?:sm|md|lg|xl|2xl):(?:${DISPLAY})(?![\\w-])`)
 const BARE_DISPLAY = new RegExp(`(?<![\\w:\\[-])(?:${DISPLAY})(?![\\w-])`, 'g')
 const ARBITRARY_BP = new RegExp(`(?:min|max)-\\[[^\\]]+\\]:(?:${DISPLAY})(?![\\w-])|\\[@media[^\\]]*\\]:(?:${DISPLAY})(?![\\w-])`)
-const ANY_DISPLAY = new RegExp(`(?<![\\w\\[-])(?:[a-z0-9-]+:)*(?:${DISPLAY})(?![\\w-])`)
 const OFF_VARIANT = new RegExp(
   `(?<![\\w-])(?:aria-\\[[^\\]]+\\]|empty|not-[a-z-]+|in-[a-z-]+|pointer-[a-z]+|motion-[a-z]+|invalid|required|placeholder-shown|inert|starting|forced-colors|contrast-more|(?:group|peer)-[a-z-]+(?:\\/[\\w-]+)?|portrait|landscape|nth-[\\w-]+|nth-[a-z-]*\\[[^\\]]+\\]|only|has-[a-z-]+):(?:${DISPLAY})(?![\\w-])|(?:^|[\\s"'\`])\\*{1,2}:(?:${DISPLAY})(?![\\w-])`, 'g')
 
@@ -100,16 +99,6 @@ describe('display 캐스케이드(D17)', () => {
     const outside = [...hits].filter(([f, v]) => !(f in ALLOW_CONDITIONAL) || v.length > ALLOW_CONDITIONAL[f][0])
     expect(outside.map(([f, v]) => `${f} ${v.join(' | ')}`)).toEqual([])
     expect(Object.keys(ALLOW_CONDITIONAL).filter((f) => !hits.has(f)), '0이 된 파일은 목록에서 뺀다').toEqual([])
-  })
-  it('③ brand-logo-light·brand-logo-dark 를 단 요소에 display 유틸이 없다(D24)', () => {
-    const bad = files.flatMap(([f, t]) => classNameValues(t).filter(({ value }) => /brand-logo-(?:light|dark)/.test(value) && ANY_DISPLAY.test(value.replace(/brand-logo-(?:light|dark)/g, ''))).map(({ line }) => `${f}:${line}`))
-    expect(bad).toEqual([])
-  })
-  it('③-b 다크 로고 되돌림은 revert-layer — revert 는 preflight(@layer base 의 img·svg display:block)까지 버려 라이트 로고와 배치가 달라진다(UI-1 최종 리뷰 N3)', () => {
-    const css = readFileSync('src/app/globals.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
-    const m = css.match(/\.dark \.brand-logo-dark\s*\{\s*display:\s*([\w-]+)\s*;?\s*\}/)
-    expect(m?.[1]).toBe('revert-layer')
-    expect(css).not.toMatch(/display:\s*revert\s*[;}]/)
   })
   it('④ 안전망 VARIANT 밖 변형의 display 를 쓰지 않는다', () => {
     const bad = files.flatMap(([f, t]) => [...t.matchAll(OFF_VARIANT)].map((m) => `${f}:${t.slice(0, m.index).split('\n').length} ${m[0].trim()}`))

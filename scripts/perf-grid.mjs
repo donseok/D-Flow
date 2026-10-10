@@ -10,8 +10,8 @@
 //                      가상화 없이 전 행을 렌더하는 현재 상태의 기록(스펙 §3.2). 결과 파일을 쓴 뒤 exit 2.
 //                      응답 뒤 단계(행 수 안정 대기·스크롤 측정)도 각각 timeout-ms 안에 끝나야 한다 — 넘으면 같은 '응답 없음'이고
 //                      멈춘 단계를 stalledAt(load·settle·scroll)으로 남긴다(과제 5b — 한순간 응답 뒤 다시 막힌 run 이 끝없이 기다렸다).
-//                      run 마다 브라우저를 새로 띄우고 닫기 소요·시간 초과를 표본에(D7). 시작 상태 = 측정 계정 선호 고정 객체(라이트)·
-//                      테마 쿠키(D6), item_owners 총수 < max_rows(D12). 스크롤 = 1,000행 × 행 높이(D13).
+//                      run 마다 브라우저를 새로 띄우고 닫기 소요·시간 초과를 표본에(D7). 시작 상태 = 측정 계정 선호 고정 객체(D6),
+//                      item_owners 총수 < max_rows(D12). 스크롤 = 1,000행 × 행 높이(D13).
 // 사용: seed 는 node 로, measure 는 npx --yes -p playwright@1.58.2 node scripts/perf-grid.mjs measure … (래퍼 경유)
 // DB·세션 클라이언트와 앱 주소(--base)는 ui-capture 의 laneEnv 가 만든다 — 이 파일은 클라이언트를 만들지 않는다(UI-0 안전 리뷰 P2-2).
 import { randomUUID } from 'node:crypto'
@@ -20,7 +20,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
   KEY_RE, LEVEL_LABELS_4, SEED_ACCOUNTS, contextOptions, deterministicId, fail, fixedPrefs, freshSessions, kstToday, laneEnv, laneTarget,
-  loadPlaywright, must, plusDays, setServerTheme, startPin, userIdByEmail,
+  loadPlaywright, must, plusDays, setServerPrefs, startPin, userIdByEmail,
 } from './ui-capture.mjs'
 import { median } from './lib/perf.mjs'
 import { PROJECT_TOGGLE_IDS, SCRIPT_SCHEMA_VERSION } from './lib/settings-consts.mjs'
@@ -284,7 +284,7 @@ const probe = (page, ms = 3000) => Promise.race([
 async function oneRun({ chromium, ...rest }) {
   const browser = await chromium.launch()
   const browserVersion = browser.version()
-  const context = await browser.newContext(contextOptions({ width: 1440, height: 900, theme: 'light' }))
+  const context = await browser.newContext(contextOptions({ width: 1440, height: 900 }))
   let sample = null
   try {
     sample = await measureIn(context, rest)
@@ -301,8 +301,7 @@ async function oneRun({ chromium, ...rest }) {
  *  시간 제한 없는 page.evaluate 를 끝없이 기다렸다(과제 5 의 5,055행 재측정 셋째 run 15분). 넘으면 그 단계로 stalledRun.
  *  스크롤은 1,000행(행 높이 × 1,000 — scrollPlan), 통계는 페이지가 돌려준 원자료로 node 가 낸다(frameStats·longTaskBefore — 단위 테스트) */
 async function measureIn(context, { sessions, base, projectId, seedRows, timeoutMs }) {
-  // 측정 시작 상태(D6) — 서버 선호(light, cmdMeasure 가 덮는다)와 같은 테마 쿠키(no-flash 가 첫 칠부터 라이트)
-  await context.addCookies([...sessions.wsAdmin.cookies, { name: 'dflow-theme', value: 'light' }].map((c) => ({ name: c.name, value: c.value, url: base })))
+  await context.addCookies(sessions.wsAdmin.cookies.map((c) => ({ name: c.name, value: c.value, url: base })))
   await context.addInitScript(() => {
     const g = { firstRow: null, longTasks: [] }
     window.__grid = g
@@ -386,11 +385,11 @@ async function cmdMeasure(argv) {
   const { count: stateRows, error: sErr } = await db.from('user_wbs_state').select('project_id', { count: 'exact', head: true }).eq('user_id', uid).eq('project_id', project.id)
   if (sErr) throw new Error(`user_wbs_state 조회: ${sErr.message}`)
   if (stateRows !== 0) throw new Error('측정 계정에 user_wbs_state 가 있다 — 접힘이 행 수를 바꾼다(판정 Q9)')
-  // D6 — 측정 시작 상태: 측정 계정의 서버 선호를 shoot 와 같은 고정 객체(계정 행 = 라이트, 워크스페이스 행 = 최근 방문 측정 프로젝트 — SP3b D9)로 덮고 읽어 확인한다.
-  // 캡처의 다크 패스가 남긴 테마·간트 일 폭·개요 번호·완료 숨김(판정 Q9)이 측정 조건을 바꾸지 않게. 쿠키 dflow-theme=light 는 run 마다
-  const startPrefs = fixedPrefs('light')
+  // D6 — 측정 시작 상태: 측정 계정의 서버 선호를 shoot 와 같은 고정 객체(계정 행 = 고정 선호, 워크스페이스 행 = 최근 방문 측정 프로젝트 — SP3b D9)로 덮고 읽어 확인한다.
+  // 캡처·수동 확인이 남긴 간트 일 폭·개요 번호·완료 숨김(판정 Q9)이 측정 조건을 바꾸지 않게
+  const startPrefs = fixedPrefs()
   const pin = startPin(project.id)
-  await setServerTheme(db, [uid], 'light', pin)
+  await setServerPrefs(db, [uid], pin)
   const accountRows = must('계정 선호 확인', await db.from('account_preferences').select('prefs').eq('user_id', uid))
   const bad = [
     ...prefsMismatch(accountRows.map((r) => ({ workspace_id: '(계정 행)', prefs: r.prefs })), startPrefs).map((x) => (x === '(소속 없음)' ? '(계정 행 없음)' : x)),
@@ -404,7 +403,7 @@ async function cmdMeasure(argv) {
   const verdict = classifyRuns(runs)
   const out = { label: opts.label, base, phases, project: name, projectRows: seedRows, runs: runs.length, timeoutMs: opts.timeoutMs,
     unresponsive: verdict.unresponsive, runStatuses: verdict.statuses, median: verdict.median, browser: runs[0]?.browser ?? null, kstDate: kstToday(),
-    browserPerRun: BROWSER_PER_RUN, closeTimedOut: runs.filter((r) => r.closeTimedOut).length, itemOwners: ownersTotal, maxRows, startTheme: startPrefs.theme, llmKeys: env.llmKeys }
+    browserPerRun: BROWSER_PER_RUN, closeTimedOut: runs.filter((r) => r.closeTimedOut).length, itemOwners: ownersTotal, maxRows, llmKeys: env.llmKeys }
   writeFileSync(join(outDir, `perf-grid-${opts.label}.json`), JSON.stringify({ ...out, samples: runs }, null, 2))
   console.log(JSON.stringify(out))
   return verdict.exitCode

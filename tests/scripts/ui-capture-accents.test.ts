@@ -11,7 +11,7 @@ describe('ui-capture.accents.json', () => {
     expect(Object.keys(accents).sort()).toEqual([...ACCENT_CAPTURE_NAMES].sort())
     expect(accents.default).toBeNull()
   })
-  it('light·dark 는 UI-1 표본(아주 밝은 색·아주 어두운 색)의 파생 세트와 같다', () => {
+  it('light·dark(표본 이름 — 아주 밝은 색·아주 어두운 색. 화면 테마가 아니다)는 UI-1 표본의 파생 세트와 같다', () => {
     const light = deriveAccent('#ffe066'); const dark = deriveAccent('#1b1f3b')
     expect(light.ok && dark.ok).toBe(true)
     if (light.ok) expect(accents.light).toEqual(light.value)

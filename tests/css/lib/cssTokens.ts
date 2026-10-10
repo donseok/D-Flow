@@ -1,11 +1,10 @@
 // globals.css 파서 — 대비·별칭·층 테스트가 같이 쓴다(SP3b UI-1). 주석을 지우고 중괄호 깊이로 최상위 블록을 걷는다.
-// 값은 var() 를 재귀로 풀어 hex 로 낸다. 문맥: light(:root·@theme·@theme inline), dark(+ .dark), print(+ @media print 의 :root, .dark).
+// 값은 var() 를 재귀로 풀어 hex 로 낸다. 문맥은 라이트 하나다(:root·@theme·@theme inline) — 제품이 라이트 전용이라 다크·인쇄 재정의가 없다.
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 export type Decl = { name: string; value: string }
 export type Block = { prelude: string; body: string }
-export type Theme = 'light' | 'dark' | 'print'
 
 export const GLOBALS = join(process.cwd(), 'src/app/globals.css')
 export const readGlobals = (): string => readFileSync(GLOBALS, 'utf8')
@@ -44,15 +43,12 @@ export function tokenMaps(css = readGlobals()) {
   const blocks = topBlocks(stripComments(css))
   const pick = (p: string) => blocks.filter((b) => b.prelude === p).flatMap((b) => declsOf(b.body))
   const root = pick(':root')
-  const printBlocks = blocks.filter((b) => b.prelude === '@media print').flatMap((b) => topBlocks(b.body))
   return {
     blocks,
     primitives: root.filter((d) => d.name.startsWith('--p-')),
     rootOther: root.filter((d) => !d.name.startsWith('--p-')),
     theme: pick('@theme'),
     inline: pick('@theme inline'),
-    dark: pick('.dark'),
-    print: printBlocks.filter((b) => /^:root\s*,\s*\.dark$/.test(b.prelude)).flatMap((b) => declsOf(b.body)),
   }
 }
 
@@ -63,19 +59,14 @@ export function resolver(css = readGlobals()) {
   const maps = tokenMaps(css)
   const entries = (ds: Decl[]) => ds.map((d) => [d.name, d.value] as [string, string])
   const light = new Map([...entries(maps.primitives), ...entries(maps.rootOther), ...entries(maps.theme), ...entries(maps.inline)])
-  const ctx: Record<Theme, Map<string, string>> = {
-    light,
-    dark: new Map([...light, ...entries(maps.dark)]),
-    print: new Map([...light, ...entries(maps.dark), ...entries(maps.print)]),
-  }
-  const resolve = (theme: Theme, name: string, seen: string[] = []): string => {
+  const resolve = (name: string, seen: string[] = []): string => {
     const key = name.startsWith('--') ? name : `--color-${name}`
     if (seen.includes(key)) throw new Error(`순환: ${[...seen, key].join(' → ')}`)
-    const v = ctx[theme].get(key)
-    if (v === undefined) throw new Error(`토큰 없음: ${key}(${theme})`)
+    const v = light.get(key)
+    if (v === undefined) throw new Error(`토큰 없음: ${key}`)
     const ref = /^var\((--[\w-]+)\)$/.exec(v)
-    if (ref) return resolve(theme, ref[1], [...seen, key])
-    if (!/^#[0-9a-fA-F]{6}$/.test(v)) throw new Error(`hex 가 아니다: ${key} = ${v}(${theme})`)
+    if (ref) return resolve(ref[1], [...seen, key])
+    if (!/^#[0-9a-fA-F]{6}$/.test(v)) throw new Error(`hex 가 아니다: ${key} = ${v}`)
     return v.toLowerCase()
   }
   return { maps, resolve }

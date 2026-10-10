@@ -16,8 +16,8 @@ describe('rovingRadioIndex', () => {
     expect(rovingRadioIndex('Tab', 0, 3)).toBeNull()
     expect(rovingRadioIndex(' ', 0, 3)).toBeNull()
   })
-  it('테마·시작 화면 그룹이 이 함수를 쓴다(제 손으로 % 를 계산하지 않는다)', () => {
-    for (const f of ['src/components/account/ThemeRadioGroup.tsx', 'src/components/account/WorkspacePrefsSection.tsx']) {
+  it('시작 화면 그룹이 이 함수를 쓴다(제 손으로 % 를 계산하지 않는다)', () => {
+    for (const f of ['src/components/account/WorkspacePrefsSection.tsx']) {
       const src = readFileSync(join(process.cwd(), f), 'utf8')
       expect(src, f).toContain('rovingRadioIndex(')
       expect(src, f).not.toMatch(/\(i [+-] 1( \+ n)?\) %/)

@@ -39,22 +39,16 @@ const FLOOR = {
   cssBytes: 90_000,
   rules: 1_300,
   // 2026-10 SP3b UI-1(최종 리뷰 N2): 실측 493 → 616(3층 토큰). 하한 380 그대로면 여유가 113 → 236 으로 두 배라 UI-0 비율(380/493 ≈ 0.77)에 맞춰 480
-  customProps: 480,
+  // 2026-10-10 라이트 전용: .dark 재정의·인쇄 재선언·다크 전용 원색 약 160 선언을 지웠다. 빌드 실측 459(주 스타일시트) — 같은 비율(0.77)로 350
+  customProps: 350,
   atProperty: 50,
   keyframes: 4,   // 2026-09 SP3b UI-1: 로그인 부유 장식 keyframes 넷을 지워 9 → 5(계획 판정 Q21). UI-2b 가 티커 keyframes 를 지우면 4
 }
 
 /**
- * 테마 블록 존재(2026-10 SP3b UI-1 — U1b 리뷰 R2 P3). 셸·표면 색이 이제 .dark 재정의에만 기대므로 .dark·@media print 블록이
- * 통째로 빠지면 다크·인쇄가 조용히 라이트가 된다 — 그 손실(블록당 ~70 선언)은 커스텀 프로퍼티 하한 아래로 내려가지 않는다.
- * 존재만 본다(값은 tests/css/contrast-tokens 가 소스에서 본다).
- */
-const DARK_BLOCK_RE = /\.dark\{[^}]*--color-surface:/
-const PRINT_BLOCK_RE = /@media print\{[^{}]*\{[^}]*--color-fg:/
-/**
- * 원색·비색 :root 블록 존재(2026-10 SP3b UI-1 최종 리뷰 N2). 라이트 의미 토큰은 전부 var(--p-*) 를 거치고 그 원색은 @layer 밖 :root 하나(~34 선언)에만,
- * 층(--z-*)·조작 높이·반경·모션은 비색 :root 하나(~27 선언)에만 있다. 규칙 경계에서 깔끔하게 빠지면 하한(-34·-27)·.dark·print 검사를 모두
- * 통과한 채 라이트·다크 색 전체(다크도 var(--p-night-*)) 또는 모달·토스트 겹침과 .btn 높이가 무너진다. 앞이 } 인 :root 만 본다(인쇄의 .dark,:root 제외).
+ * 원색·비색 :root 블록 존재(2026-10 SP3b UI-1 최종 리뷰 N2). 의미 토큰은 전부 var(--p-*) 를 거치고 그 원색은 @layer 밖 :root 하나(17 선언)에만,
+ * 층(--z-*)·조작 높이·반경·모션은 비색 :root 하나(~27 선언)에만 있다. 규칙 경계에서 깔끔하게 빠지면 하한(-17·-27) 검사를
+ * 통과한 채 색 전체 또는 모달·토스트 겹침과 .btn 높이가 무너진다. 앞이 } 인 :root 만 본다.
  */
 const ROOT_PRIMITIVE_RE = /\}\s*:root\{color-scheme:light;[^}]*--p-gray-0:/
 const ROOT_NONCOLOR_RE = /\}\s*:root\{[^}]*--z-modal:[^}]*--control-h:/
@@ -226,13 +220,8 @@ async function main() {
     else bad(`@layer ${layer}`, '레이어 블록 소실 — 해당 레이어 전량 무효')
   }
 
-  // 다크·인쇄 토큰 블록 — 빠지면 다크 선택 사용자가 라이트 표면 + color-scheme:dark 를 본다
-  if (DARK_BLOCK_RE.test(css)) ok('.dark 토큰 블록', '--color-surface 재정의 존재')
-  else bad('.dark 토큰 블록', '.dark{… --color-surface: …} 없음 — 다크 재정의 소실')
-  if (PRINT_BLOCK_RE.test(css)) ok('@media print 토큰 블록', '--color-fg 재정의 존재')
-  else bad('@media print 토큰 블록', '@media print{…{… --color-fg: …}} 없음 — 인쇄 라이트 값 소실')
   if (ROOT_PRIMITIVE_RE.test(css)) ok('원색 :root 블록', '--p-gray-0 존재')
-  else bad('원색 :root 블록', ':root{color-scheme:light;… --p-gray-0: …} 없음 — 라이트·다크 의미 토큰 전체 무효')
+  else bad('원색 :root 블록', ':root{color-scheme:light;… --p-gray-0: …} 없음 — 의미 토큰 전체 무효')
   if (ROOT_NONCOLOR_RE.test(css)) ok('비색 :root 블록', '--z-modal·--control-h 존재')
   else bad('비색 :root 블록', ':root{… --z-modal: … --control-h: …} 없음 — 층·조작 높이 소실')
 

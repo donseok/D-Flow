@@ -116,13 +116,12 @@ export const settingsUiKo = {
   'settings.localDrafts.save': '로컬 초안 정책 저장',
   // components/settings/AccentEditor.tsx
   'settings.accent.saved': '강조색 설정을 저장했습니다.',
-  'settings.accent.desc': '기준 색 하나를 입력하면 밝은 화면과 어두운 화면에 쓸 색을 계산합니다. 저장하면 화면 전체에 바로 반영됩니다.',
+  'settings.accent.desc': '기준 색 하나를 입력하면 화면에 쓸 색을 계산합니다. 저장하면 화면 전체에 바로 반영됩니다.',
   'settings.accent.base': '기준 색',
   'settings.accent.pick': '강조색 선택',
   'settings.accent.reset': '기본값으로',
   'settings.accent.contrast': '{pair} {contrast} (최소 {min})',
   'settings.accent.light': '밝은 화면',
-  'settings.accent.dark': '어두운 화면',
   'settings.accent.conflict': '다른 사용자가 강조색을 바꿨습니다.',
   'settings.accent.default': '기본값',
   'settings.accent.save': '강조색 저장',
@@ -227,7 +226,6 @@ export const settingsUiKo = {
   'settings.forms.fileOf': '{label} 파일',
   // components/settings/LogoEditor.tsx
   'settings.logo.slot.full': '기본 로고',
-  'settings.logo.slot.fullDark': '어두운 배경 로고',
   'settings.logo.slot.mark': '아이콘 마크',
   'settings.logo.uploadUncertain': '로고 업로드 결과를 확인하지 못했습니다. 다시 시도하세요.',
   'settings.logo.uploaded': '{slot} 업로드가 끝났습니다. 설정을 저장하면 적용됩니다.',

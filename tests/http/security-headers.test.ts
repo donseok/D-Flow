@@ -1,11 +1,10 @@
 // 응답 보안 헤더의 순수 구성 — 정적 경로(next.config.ts headers())와 미들웨어 경로(nonce)의 CSP, 모드(report 기본·enforce), 프레임 차단은 늘 강제.
-import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
-  CSP_REPORT_PATH, HSTS_VALUE, NO_FLASH_SCRIPT_HASH, PERMISSIONS_POLICY,
+  CSP_REPORT_PATH, HSTS_VALUE, PERMISSIONS_POLICY,
   buildCsp, buildSecurityHeaders, cspDirectives, cspModeOf, serializeCsp, supabaseOrigins,
 } from '@/lib/http/securityHeaders'
-import { noFlashScript } from '@/lib/theme/policy'
 
 const NONCE = 'q83vEjRWeJCrze8SNFZ4kA=='
 
@@ -122,9 +121,10 @@ describe('cspDirectives', () => {
 })
 
 describe('nonce 정책(미들웨어 경로)과 정적 경로의 정책', () => {
-  it("nonce 가 있으면 script-src 는 'self' 'nonce-…' 'strict-dynamic' + no-flash 해시 — 'unsafe-inline' 이 없다", () => {
-    expect(cspDirectives({ nonce: NONCE })['script-src']).toEqual(["'self'", `'nonce-${NONCE}'`, "'strict-dynamic'", NO_FLASH_SCRIPT_HASH])
-    expect(cspDirectives({ nonce: NONCE, dev: true })['script-src']).toEqual(["'self'", `'nonce-${NONCE}'`, "'strict-dynamic'", NO_FLASH_SCRIPT_HASH, "'unsafe-eval'"])
+  it("nonce 가 있으면 script-src 는 'self' 'nonce-…' 'strict-dynamic' 뿐 — 'unsafe-inline' 도 해시 허용도 없다", () => {
+    expect(cspDirectives({ nonce: NONCE })['script-src']).toEqual(["'self'", `'nonce-${NONCE}'`, "'strict-dynamic'"])
+    expect(cspDirectives({ nonce: NONCE, dev: true })['script-src']).toEqual(["'self'", `'nonce-${NONCE}'`, "'strict-dynamic'", "'unsafe-eval'"])
+    expect(serializeCsp(cspDirectives({ nonce: NONCE }))).not.toMatch(/sha256-/)
   })
   it("nonce 가 없으면(정적 경로) 'self' 'unsafe-inline' — 해시를 섞지 않는다(섞으면 'unsafe-inline' 이 무시된다)", () => {
     expect(cspDirectives({})['script-src']).toEqual(["'self'", "'unsafe-inline'"])
@@ -146,8 +146,16 @@ describe('nonce 정책(미들웨어 경로)과 정적 경로의 정책', () => {
     const found = directive.split(/\s+/).slice(1).map(src => src.match(/^'nonce-([A-Za-z0-9+/_-]+={0,2})'$/)?.[1]).find(Boolean)
     expect(found).toBe(NONCE)
   })
-  it('no-flash 해시는 실제 스크립트 문자열의 SHA-256 이다 — 스크립트를 바꾸면 상수도 바꾼다', () => {
-    expect(NO_FLASH_SCRIPT_HASH).toBe(`'sha256-${createHash('sha256').update(noFlashScript()).digest('base64')}'`)
+  // 깜박임 방지 스크립트는 라이트 전용 결정(2026-10-10)으로 지웠다 — 엄격한 정책은 해시 허용 없이 nonce 만 믿는다.
+  // 루트 틀에 인라인 스크립트를 다시 넣으면 nonce·해시가 없어 조용히 막힌다(빌드·단위 테스트로 안 잡힌다)
+  it('루트 레이아웃·전역 오류 화면은 앱이 직접 넣는 인라인 스크립트가 없다', () => {
+    for (const f of ['src/app/layout.tsx', 'src/app/global-error.tsx']) {
+      const src = readFileSync(f, 'utf8')
+      expect(src, f).not.toMatch(/<script\b|dangerouslySetInnerHTML/)
+    }
+  })
+  it('루트 레이아웃은 모든 경로를 요청 때 그린다(connection) — 빌드 때 굳은 HTML 에는 Next 가 nonce 를 붙이지 못한다', () => {
+    expect(readFileSync('src/app/layout.tsx', 'utf8')).toMatch(/await connection\(\)/)
   })
 })
 

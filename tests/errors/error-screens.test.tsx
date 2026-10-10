@@ -94,9 +94,9 @@ describe('src/app/global-error.tsx — 루트 레이아웃 오류', () => {
     expect(html).toContain(DIGEST)
     expect(html).not.toMatch(/secret_table|db\.internal/)
   })
-  it('다크 선호를 페인트 전에 반영한다 — 레이아웃과 같은 no-flash 스크립트', () => {
+  it('인라인 스크립트를 싣지 않는다 — 제품이 라이트 전용이라 깜박임 방지 스크립트가 없다(엄격한 CSP 에 해시 허용도 없다)', () => {
     const html = renderToStaticMarkup(<GlobalError error={boom(DIGEST)} reset={vi.fn()} />)
-    expect(html).toContain("document.documentElement.classList.add('dark')")
+    expect(html).not.toContain('<script')
   })
   it('전역 CSS 를 스스로 불러온다(레이아웃이 불러오던 것은 따라오지 않는다) — 의미 토큰 클래스를 쓴다', async () => {
     const { readFileSync } = await import('node:fs')

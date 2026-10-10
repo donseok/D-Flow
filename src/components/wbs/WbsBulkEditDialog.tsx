@@ -278,26 +278,26 @@ export function WbsBulkEditDialog({
           {result ? (
             <div className="space-y-4" data-testid="wbs-bulk-result-panel">
               {result.ok ? (
-                <div className="rounded-xl border border-success bg-success-weak dark:bg-success-weak p-4 flex items-start gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-success dark:text-success shrink-0 mt-0.5" />
+                <div className="rounded-xl border border-success bg-success-weak p-4 flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-success shrink-0 mt-0.5" />
                   <div>
-                    <h3 className="text-sm font-semibold text-success dark:text-success">
+                    <h3 className="text-sm font-semibold text-success">
                       {t('wbs.bulk.doneTitle')}
                     </h3>
-                    <p className="text-xs text-success dark:text-success mt-0.5">
+                    <p className="text-xs text-success mt-0.5">
                       {t('wbs.bulk.doneDesc').replace('{n}', String(result.total))}
                     </p>
                   </div>
                 </div>
               ) : (
               <div className="space-y-3">
-                  <div className="rounded-xl border border-warning bg-warning-weak dark:bg-warning-weak p-4 flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-warning dark:text-warning shrink-0 mt-0.5" />
+                  <div className="rounded-xl border border-warning bg-warning-weak p-4 flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
                     <div>
-                      <h3 className="text-sm font-semibold text-warning dark:text-warning">
+                      <h3 className="text-sm font-semibold text-warning">
                         {t('wbs.bulk.partialTitle')}
                       </h3>
-                      <p className="text-xs text-warning dark:text-warning mt-0.5">
+                      <p className="text-xs text-warning mt-0.5">
                         {t('wbs.bulk.partialDesc').replace('{total}', String(result.total)).replace('{ok}', String(result.succeeded.length)).replace('{fail}', String(result.failed.length))}
                       </p>
                     </div>
@@ -378,7 +378,7 @@ export function WbsBulkEditDialog({
               {errorMessage && (
                 <div
                   role="alert"
-                  className="rounded-xl border border-danger bg-danger-weak dark:bg-danger-weak p-3 text-xs text-danger dark:text-danger flex items-center gap-2"
+                  className="rounded-xl border border-danger bg-danger-weak p-3 text-xs text-danger flex items-center gap-2"
                 >
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{errorMessage}</span>
@@ -618,7 +618,7 @@ function FieldRow({
           </div>
         )}
         {mode === 'clear' && (
-          <div className="text-danger dark:text-danger text-xs py-1 font-medium">
+          <div className="text-danger text-xs py-1 font-medium">
             {t('wbs.bulk.clearHint')}
           </div>
         )}

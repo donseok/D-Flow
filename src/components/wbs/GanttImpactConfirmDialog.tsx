@@ -182,7 +182,7 @@ export function GanttImpactConfirmDialog({
                     data-testid="impact-predecessor"
                     className={`p-2.5 rounded-lg border text-xs ${
                       p.conflict
-                        ? 'border-warning bg-warning-weak dark:bg-warning-weak text-warning dark:text-warning'
+                        ? 'border-warning bg-warning-weak text-warning'
                         : 'border-border/60 bg-surface text-fg-secondary'
                     }`}
                   >
@@ -197,7 +197,7 @@ export function GanttImpactConfirmDialog({
                     data-testid="impact-successor"
                     className={`p-2.5 rounded-lg border text-xs ${
                       s.conflict
-                        ? 'border-warning bg-warning-weak dark:bg-warning-weak text-warning dark:text-warning'
+                        ? 'border-warning bg-warning-weak text-warning'
                         : 'border-border/60 bg-surface text-fg-secondary'
                     }`}
                   >

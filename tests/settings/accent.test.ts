@@ -6,19 +6,17 @@ import { ACCENT_TOKENS } from '@/lib/settings/accentTokens'
 const HEX = /^#[0-9a-f]{6}$/
 
 describe('deriveAccent', () => {
-  it('제품 action 색에서 라이트·다크 세트를 만든다 — 대비 하한을 지키고 전부 소문자 hex', () => {
+  it('제품 action 색에서 세트 하나(light)를 만든다 — 대비 하한을 지키고 전부 소문자 hex. 다크 세트는 없다(라이트 전용 2026-10-10)', () => {
     const r = deriveAccent('#315CDB')
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    const { light, dark, base } = r.value
+    const { light, base } = r.value
+    expect(Object.keys(r.value).sort()).toEqual(['base', 'light'])
     expect(base).toBe('#315cdb')
-    for (const set of [light, dark]) for (const v of Object.values(set)) expect(v).toMatch(HEX)
+    for (const v of Object.values(light)) expect(v).toMatch(HEX)
     expect(light.fg).toBe('#ffffff')
     expect(contrastRatio(light.fg, light.bg)).toBeGreaterThanOrEqual(4.5)
-    expect(contrastRatio(dark.fg, dark.bg)).toBeGreaterThanOrEqual(4.5)
-    expect(contrastRatio(dark.bg, ACCENT_TOKENS.dark.surface)).toBeGreaterThanOrEqual(4.5)
     expect(contrastRatio(light.focus, ACCENT_TOKENS.light.canvas)).toBeGreaterThanOrEqual(3)
-    expect(contrastRatio(dark.focus, ACCENT_TOKENS.dark.canvas)).toBeGreaterThanOrEqual(3)
     expect(light.focus).toBe(light.bg)
     expect(hexToOklch(light.hover)!.L).toBeLessThan(hexToOklch(light.bg)!.L)
     expect(hexToOklch(light.pressed)!.L).toBeLessThan(hexToOklch(light.hover)!.L)
@@ -63,7 +61,7 @@ describe('parseAccentInput·parseAccentValue', () => {
     expect(parseAccentInput({ base: '#315cdb' }).ok).toBe(false)
     expect(parseAccentInput('315cdb').ok).toBe(false)
   })
-  it('저장 형태는 정확히 { base, light, dark } 이고 세트는 정확히 여섯 키, 값은 소문자 hex 여야 한다', () => {
+  it('저장 형태는 { base, light } 이고 세트는 정확히 여섯 키, 값은 소문자 hex 여야 한다', () => {
     const d = deriveAccent('#315cdb')
     if (!d.ok) throw new Error('파생 실패')
     expect(parseAccentValue(d.value)).toEqual({ ok: true, value: d.value })
@@ -72,8 +70,18 @@ describe('parseAccentInput·parseAccentValue', () => {
     expect(parseAccentValue({ ...d.value, light: { ...d.value.light, shadow: '#000000' } }).ok).toBe(false)
     expect(parseAccentValue({ ...d.value, base: '#315CDB' }).ok).toBe(false)
     expect(parseAccentValue({ ...d.value, light: { ...d.value.light, bg: 'red;}' } }).ok).toBe(false)
-    expect(parseAccentValue({ ...d.value, dark: { ...d.value.dark, fg: '</style>' } }).ok).toBe(false)
     expect(parseAccentValue('#315cdb').ok).toBe(false)
+  })
+  it('옛 저장값의 dark 세트는 읽을 때 버린다 — 손상 값으로 뜨지 않고, 내용이 무엇이든 결과에 실리지 않는다', () => {
+    const d = deriveAccent('#315cdb')
+    if (!d.ok) throw new Error('파생 실패')
+    const legacyDark = { bg: '#8aa8ff', fg: '#0f1830', hover: '#9bb5ff', pressed: '#adc2ff', soft: '#1f2d55', focus: '#8aa8ff' }
+    for (const dark of [legacyDark, { ...legacyDark, fg: '</style>' }, null, 'x']) {
+      expect(parseAccentValue({ ...d.value, dark }), JSON.stringify(dark)).toEqual({ ok: true, value: d.value })
+    }
+    // dark 를 봐준다고 light·base 검사가 느슨해지지 않는다
+    expect(parseAccentValue({ base: d.value.base, dark: legacyDark }).ok).toBe(false)
+    expect(parseAccentValue({ ...d.value, dark: legacyDark, extra: 1 }).ok).toBe(false)
   })
 })
 

@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { KeyRound, LogOut, User } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { ThemeRadioGroup } from '@/components/account/ThemeRadioGroup'
 import { identityTeamLabel } from '@/lib/domain/identityTeams'
 import { signOutAndClear } from '@/lib/auth/signOut'
 import { usePopover } from './usePopover'
@@ -14,7 +13,7 @@ import type { DictKey } from '@/lib/i18n/dict'
 export interface ShellIdentity { displayName: string | null; roleLabel: string; roleKey?: DictKey; teamCodes: string[] | null; teamLabels?: string[] | null }
 
 /** 계정 팝오버(★10, D28) — 관리 링크는 내비의 '운영'·'플랫폼 운영' 그룹으로 옮겼으므로 없다. 로그아웃은 signOutAndClear 하나(W16).
- *  테마 라디오·머리를 담으므로 menu 가 아니라 비모달 dialog 다(알림 벨과 같은 꼴 — 첫 항목 초점·Esc·바깥 클릭은 usePopover) */
+ *  머리(이름·역할)를 담으므로 menu 가 아니라 비모달 dialog 다(알림 벨과 같은 꼴 — 첫 항목 초점·Esc·바깥 클릭은 usePopover) */
 export function AccountMenu({ identity }: { identity: ShellIdentity | null }) {
   const { t } = useLocale(); const router = useRouter()
   const { open, setOpen, triggerRef, panelRef } = usePopover()
@@ -39,10 +38,6 @@ export function AccountMenu({ identity }: { identity: ShellIdentity | null }) {
           <Link href="/account" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-3 text-control text-fg-secondary hover:bg-surface-hover hover:text-fg">
             <KeyRound size={16} aria-hidden />{t('shell.account.mine')}
           </Link>
-          <div data-theme-section className="border-t border-border px-4 py-3">
-            <div className="mb-2 text-meta font-semibold text-fg-secondary">{t('chrome.theme')}</div>
-            <ThemeRadioGroup compact />
-          </div>
           <button type="button" onClick={() => void signOutAndClear(router)} className="flex w-full items-center gap-2 border-t border-border px-4 py-3 text-left text-control text-fg-secondary hover:bg-surface-hover hover:text-danger">
             <LogOut size={16} aria-hidden />{t('chrome.logout')}
           </button>

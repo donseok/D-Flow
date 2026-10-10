@@ -15,8 +15,8 @@ const DENIED = { code: '42501' }
 describe('account_preferences RLS·권한', () => {
   it('① 자기 행 insert·select·update 성공', async () => {
     await asUser(pool, ME, async (c) => {
-      await c.query(`insert into public.account_preferences (user_id, prefs) values ($1, '{"theme":"dark"}') on conflict (user_id) do update set prefs = excluded.prefs`, [ME])
-      expect((await c.query('select prefs from public.account_preferences where user_id = $1', [ME])).rows).toEqual([{ prefs: { theme: 'dark' } }])
+      await c.query(`insert into public.account_preferences (user_id, prefs) values ($1, '{"wbsHideDone":true}') on conflict (user_id) do update set prefs = excluded.prefs`, [ME])
+      expect((await c.query('select prefs from public.account_preferences where user_id = $1', [ME])).rows).toEqual([{ prefs: { wbsHideDone: true } }])
       const u = await c.query(`update public.account_preferences set prefs = prefs || '{"sidebarCollapsed":true}', updated_at = now() where user_id = $1`, [ME])
       expect(u.rowCount).toBe(1)
     })

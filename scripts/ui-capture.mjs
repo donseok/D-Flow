@@ -166,7 +166,7 @@ export function fontVerdict({ registered, loaded, loading }) {
 /** @param {{ key: string, width: number, height: number, theme: string }} s */
 export function shotFileName({ key, width, height, theme }) {
   if (!KEY_RE.test(key)) throw new Error(`라우트 키 형식 밖: ${key}`)
-  if (!['light', 'dark'].includes(theme)) throw new Error(`테마 형식 밖: ${theme}`)
+  if (theme !== 'light') throw new Error(`테마 형식 밖: ${theme}`)
   if (!Number.isInteger(width) || !Number.isInteger(height)) throw new Error('크기는 정수')
   return `${key}-${width}x${height}-${theme}.png`
 }
@@ -205,7 +205,8 @@ export function parseArgs(argv) {
     else if (a.startsWith('--')) throw new Error(`알 수 없는 인자: ${a}`)
     else out.positional.push(a)
   }
-  for (const t of out.theme) if (!['light', 'dark'].includes(t)) throw new Error(`--theme 은 light|dark: ${t}`)
+  // 제품이 라이트 전용이다(2026-10-10) — 축은 light 하나. 파일 이름·행의 theme 칸은 옛 기준 캡처와 맞대려고 남긴다
+  for (const t of out.theme) if (t !== 'light') throw new Error(`--theme 은 light 뿐이다(라이트 전용): ${t}`)
   for (const s of out.since) if (!SINCE.includes(s)) throw new Error(`--since 값 밖: ${s}`)
   if (out.label !== null && !KEY_RE.test(out.label)) throw new Error(`--label 형식 밖: ${out.label}`)
   // 위치 인자는 라벨이다(diff 의 기준·대상, UI-1 sheet 의 추가 라벨) — 산출 폴더 아래 경로가 되므로 같은 형식만(UI-0 안전 리뷰 P3-2)
@@ -522,9 +523,10 @@ export function accentPatch(values, name, accents) {
 }
 
 /** 캡처 조건(스펙 §3.4) — 새 컨텍스트마다 같은 값. javaScript === false 만 JS 를 끈다(D55 첫 페인트 — 그 밖에는 키를 더하지 않아 기본 조건 그대로)
- *  @param {{ width: number, height: number, theme: string, javaScript?: boolean }} s */
-export function contextOptions({ width, height, theme, javaScript }) {
-  return { viewport: { width, height }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: theme, ...(javaScript === false ? { javaScriptEnabled: false } : {}) }
+ *  색 체계는 light 로 고정한다 — 제품이 라이트 전용이고, 실행 기기의 OS 설정이 캡처에 새지 않게.
+ *  @param {{ width: number, height: number, javaScript?: boolean }} s */
+export function contextOptions({ width, height, javaScript }) {
+  return { viewport: { width, height }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: 'light', ...(javaScript === false ? { javaScriptEnabled: false } : {}) }
 }
 
 /** 비교 조건 — 늘 같아야 하는 것(날짜·브라우저)과 판·시드의 정체(--allow-cross 참고 대조로만 다를 수 있다, D3) */
@@ -921,7 +923,7 @@ export async function freshSessions(env, grades) {
 }
 
 /** 실행 시작 선호값의 고정 키 — 계정 키(account_preferences, SP3b D9). PrefsSync 가 서버값과 맞추는 키(src/lib/prefs/sync.ts)를 새
- *  컨텍스트의 로컬값으로: 사이드바는 localStorage 가 없으니 펼침. 테마는 패스마다 따로 넣는다 */
+ *  컨텍스트의 로컬값으로: 사이드바는 localStorage 가 없으니 펼침 */
 export const RUN_START_PREFS = Object.freeze({ sidebarCollapsed: false })
 
 /** 워크스페이스 행 pin 의 고정 시각 — 결정적이어야 한다(실행 시각을 쓰면 행이 실행마다 바뀐다) */
@@ -938,25 +940,23 @@ export function startPin(projectId) {
  * 완료 숨김·대시보드 펼침·회의록 보기·알림 읽음·알림 설정 …)는 없음 = 제품 기본값이라 db:reset 뒤 첫 실행(빈 prefs + 고정 키)과 같은
  * 화면이다. 병합하면 지난 실행·수동 확인·perf-grid 가 남긴 키가 다음 실행의 시작 상태를 바꿨다. 새 컨텍스트에서 PrefsSync 가 적용·백필할
  * 것이 없어 실행 중 선호 쓰기도 생기지 않는다(테스트가 앱의 computePrefsSync 로 확인).
- * 계정 키만이다 — 워크스페이스 키(최근 방문 등)는 setServerTheme 의 pin 이 워크스페이스 행에 쓴다(SP3b D9).
- * @param {string} theme @returns {Record<string, unknown>}
+ * 계정 키만이다 — 워크스페이스 키(최근 방문 등)는 setServerPrefs 의 pin 이 워크스페이스 행에 쓴다(SP3b D9).
+ * @returns {Record<string, unknown>}
  */
-export function fixedPrefs(theme) {
-  // system 은 checks flicker 의 OS 다크 패스만 쓴다(ui1-addendum §5) — 그 패스의 컨텍스트 색 체계가 해석값을 정한다. shoot·axe 는 --theme 이 light|dark 로 막는다
-  if (!['light', 'dark', 'system'].includes(theme)) throw new Error(`테마는 light|dark|system: ${theme}`)
-  return { ...RUN_START_PREFS, theme }
+export function fixedPrefs() {
+  return { ...RUN_START_PREFS }
 }
 
 /**
- * 캡처 계정의 서버 선호값을 고정 객체로 덮는다(판정 Q8 — PrefsSync 는 서버값이 이긴다). 계정 행(account_preferences) = fixedPrefs(theme),
+ * 캡처 계정의 서버 선호값을 고정 객체로 덮는다(판정 Q8 — PrefsSync 는 서버값이 이긴다). 계정 행(account_preferences) = fixedPrefs(),
  * 모든 소속 워크스페이스 행(user_preferences) = pin(워크스페이스 키만 — shoot 는 startPin(시드 프로젝트))(SP3b D9). 두 행 모두 병합이 아니라
  * 덮는다 — 앞 실행이 남긴 계정 키·알림 읽음·즐겨찾기가 다음 실행의 시작 상태를 바꾸지 않게. seed 가 아니라 실행 시작에서 덮는 이유:
  * perf-grid measure·axe·수동 확인이 그 값을 다시 바꾼다.
  * extra(행의 prefs — 허용 키만, validateRoutes) 는 고정 객체 위에 얹는다 — 그 행을 찍는 동안만이고 끝나면 extra 없이 다시 덮는다.
- * @param {any} db @param {string[]} userIds @param {string} theme @param {Record<string, unknown>} [pin] @param {Record<string, unknown>} [extra]
+ * @param {any} db @param {string[]} userIds @param {Record<string, unknown>} [pin] @param {Record<string, unknown>} [extra]
  */
-export async function setServerTheme(db, userIds, theme, pin = {}, extra = {}) {
-  const prefs = { ...fixedPrefs(theme), ...extra }
+export async function setServerPrefs(db, userIds, pin = {}, extra = {}) {
+  const prefs = { ...fixedPrefs(), ...extra }
   for (const userId of userIds) {
     must('계정 선호 쓰기', await db.from('account_preferences').upsert(
       { user_id: userId, prefs, updated_at: new Date().toISOString() },
@@ -973,7 +973,7 @@ export async function setServerTheme(db, userIds, theme, pin = {}, extra = {}) {
 }
 
 /**
- * 테마 패스의 시작 상태 = db:reset 뒤 첫 실행(과제 5b·D4) — 첫 방문·클릭이 써서 그 뒤 화면을 바꾸는 상태 셋을 되돌린다.
+ * 패스의 시작 상태 = db:reset 뒤 첫 실행(과제 5b·D4) — 첫 방문·클릭이 써서 그 뒤 화면을 바꾸는 상태 셋을 되돌린다.
  * ① 공지 읽음 워터마크(announcement_seen) — 캡처 계정(seenResetTargets)의 행 전부. 공지 화면 방문이 워터마크를 써서 db:reset 뒤 첫 실행만
  *    공지 화면에 NEW 칩이 있었고(과제 5 자기 차이 0.13%), 워터마크가 마이크로초로 저장되면(레인 A 수정) 첫 방문 뒤 공지 배지가 사라져
  *    같은 실행의 뒤 화면과 다음 실행이 달라진다.
@@ -993,12 +993,12 @@ export async function resetRunStart(db, { userIds, projectId }) {
 }
 
 /**
- * 테마 패스의 시작(조립, D15) — 캡처 계정의 선호값을 고정 객체로 덮고(워크스페이스 행 최근 방문 = 시드 프로젝트) 첫 방문·클릭이 쓰는 상태를 되돌린다.
+ * 패스의 시작(조립, D15) — 캡처 계정의 선호값을 고정 객체로 덮고(워크스페이스 행 최근 방문 = 시드 프로젝트) 첫 방문·클릭이 쓰는 상태를 되돌린다.
  * 순서가 계약이다: 선호 → 워터마크 → 알림 → 스냅샷(그 뒤 사전 방문). 앞 단계가 실패하면 멈춘다.
- * @param {any} db @param {{ theme: string, userIds: string[], projectId: string }} pass
+ * @param {any} db @param {{ userIds: string[], projectId: string }} pass
  */
-export async function passStart(db, { theme, userIds, projectId }) {
-  await setServerTheme(db, userIds, theme, startPin(projectId))
+export async function passStart(db, { userIds, projectId }) {
+  await setServerPrefs(db, userIds, startPin(projectId))
   await resetRunStart(db, { userIds, projectId })
 }
 
@@ -1083,10 +1083,10 @@ export function redactTokens(text, { inviteToken, shareToken } = {}) {
  */
 async function warmupSnapshot({ browser, db, baseUrl, session, theme, projectId, outDir }) {
   const date = kstToday()
-  const context = await browser.newContext(contextOptions({ width: 1440, height: 900, theme }))
+  const context = await browser.newContext(contextOptions({ width: 1440, height: 900 }))
   try {
     await routeCdn(context, join(outDir, 'cdn-cache'))
-    await context.addCookies([...session.cookies, { name: 'dflow-theme', value: theme }].map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
+    await context.addCookies(session.cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
     const page = await context.newPage()
     await page.goto(`${baseUrl}/p/${encodeURIComponent(projectId)}/dashboard`, { waitUntil: 'load', timeout: 60_000 })
     try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { /* 판정은 아래 DB 확인이 한다 */ }
@@ -1135,17 +1135,17 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
   const warmups = []
   try {
     for (const theme of opts.theme) {
-      await passStart(db, { theme, userIds: captureIds, projectId: seed.pid })
+      await passStart(db, { userIds: captureIds, projectId: seed.pid })
       warmups.push(await warmupSnapshot({ browser, db, baseUrl, session: sessions[WARMUP_GRADE], theme, projectId: seed.pid, outDir }))
       for (const r of routes) {
         // 행의 계정 선호(prefs — 서버값이 이기는 키라 클릭·init 으로는 못 정한다)는 그 행을 찍는 동안만 덮고, 끝나면 시작 상태로 되돌려 뒤 행을 바꾸지 않게 한다
-        if (r.prefs) await setServerTheme(db, captureIds, theme, startPin(seed.pid), r.prefs)
+        if (r.prefs) await setServerPrefs(db, captureIds, startPin(seed.pid), r.prefs)
         try {
           for (const [width, height] of opts.sizes) {
-            const context = await browser.newContext(contextOptions({ width, height, theme, javaScript: opts.javaScript }))
+            const context = await browser.newContext(contextOptions({ width, height, javaScript: opts.javaScript }))
             try {
               await routeCdn(context, join(outDir, 'cdn-cache'))
-              const cookies = [...(r.grade === 'public' ? [] : sessions[r.grade].cookies), { name: 'dflow-theme', value: theme }]
+              const cookies = r.grade === 'public' ? [] : sessions[r.grade].cookies
               await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
               await context.addInitScript((entries) => {
                 try { for (const [k, v] of Object.entries(entries)) window.localStorage.setItem(k, v) } catch { /* 저장소 없음 */ }
@@ -1173,7 +1173,7 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
             } finally { await context.close() }
           }
         } finally {
-          if (r.prefs) await setServerTheme(db, captureIds, theme, startPin(seed.pid))
+          if (r.prefs) await setServerPrefs(db, captureIds, startPin(seed.pid))
         }
       }
     }
@@ -1301,7 +1301,7 @@ COMMANDS.shoot = cmdShoot
 COMMANDS.diff = cmdDiff
 COMMANDS.axe = cmdAxe
 
-// ── UI-1 이 이어 고친다(계획 판정 Q28): checks(tab·print·flicker·showcase)·sheet ──────────────────────
+// ── UI-1 이 이어 고친다(계획 판정 Q28): checks(tab·print)·sheet ──────────────────────
 
 /** 'rgb(1, 2, 3)'·'rgba(1, 2, 3, 0.5)'·'rgb(1 2 3 / 50%)' → [r, g, b, a] (읽지 못하면 null) */
 export function parseRgb(s) {
@@ -1370,12 +1370,6 @@ export function focusVerdict({ outlineStyle, outlineWidth, outlineColor, backgro
   }
   return best ? { ok: false, why: `대비 ${best.ratio.toFixed(2)} < 3(${best.via})`, ratio: best.ratio } : { ok: false, why: `색을 읽지 못함(${tries.map((t) => t.color).join(' / ')})` }
 }
-/** 깜빡임 — 페인트 전(DOMContentLoaded) 클래스 = 하이드레이션 뒤 클래스 = 기대값 */
-export function flickerVerdict({ atDcl, afterHydrate, expected }) {
-  if (atDcl !== afterHydrate) return { ok: false, why: `첫 페인트 ${atDcl} → 하이드레이션 뒤 ${afterHydrate}` }
-  if (afterHydrate !== expected) return { ok: false, why: `기대 ${expected} ≠ ${afterHydrate}` }
-  return { ok: true }
-}
 /**
  * Tab 순회가 대상에 닿았는가(판정 Q43) — 대상 선택자마다 그 선택자에 맞은 걸음 수, 0 이면 unreached(판정 실패)
  * @param {{ matched?: string[] }[]} steps @param {string[]} targets
@@ -1416,7 +1410,7 @@ export function sheetSummary(rows) {
       .sort((x, y) => SHEET_LOOK.indexOf(x.verdict) - SHEET_LOOK.indexOf(y.verdict) || (y.ratio ?? -1) - (x.ratio ?? -1)) }
 }
 /**
- * axe 절(판정 Q45) — 머리·추가 라벨의 모든 테마 행(다크 포함)을 테마·위반 수 순으로
+ * axe 절(판정 Q45) — 머리·추가 라벨의 모든 행을 테마·위반 수 순으로
  * @param {any[]} rows
  * @returns {{ label: string | null, key: string, width: number, height: number, theme: string, violations: number }[]}
  */
@@ -1425,19 +1419,16 @@ export function axeTable(rows) {
     .sort((a, b) => (a.theme === b.theme ? b.violations - a.violations : a.theme < b.theme ? -1 : 1))
 }
 /**
- * checks 절(판정 Q43·Q45) — 머리 라벨 폴더의 tab·print·flicker·showcase JSON(없으면 null) → 대조표 요약
- * @param {{ tab?: any, print?: any, flicker?: any, showcase?: any }} src
+ * checks 절(판정 Q43·Q45) — 머리 라벨 폴더의 tab·print JSON(없으면 null) → 대조표 요약.
+ * 깜빡임(flicker)·쇼케이스 다크 대조(showcase) 검사는 라이트 전용 결정(2026-10-10)으로 지웠다 — 견줄 다크가 없다.
+ * @param {{ tab?: any, print?: any }} src
  */
-export function checksSummary({ tab = null, print = null, flicker = null, showcase = null }) {
+export function checksSummary({ tab = null, print = null }) {
   return {
     /** @type {{ key: string, theme: string, failed: number, unreached: string[], ok: boolean }[] | null} */
     tab: tab ? tab.rows.map((r) => ({ key: r.key, theme: r.theme, failed: r.failed ?? 0, unreached: r.unreached ?? [], ok: (r.failed ?? 0) === 0 })) : null,
     /** @type {{ key: string, theme: string, texts: number, low: number, ok: boolean }[] | null} */
     print: print ? print.rows.map((r) => ({ key: r.key, theme: r.theme, texts: r.texts, low: r.lowContrast, ok: r.texts > 0 && r.lowContrast === 0 })) : null,
-    /** @type {{ key: string, pref: string, ok: boolean, why: string }[] | null} */
-    flicker: flicker ? flicker.map((r) => ({ key: r.key, pref: r.pref, ok: Boolean(r.ok), why: r.why ?? '' })) : null,
-    /** @type {{ pairs: number, unequal: string[] } | null} */
-    showcase: showcase ? { pairs: showcase.length, unequal: showcase.filter((p) => !p.equal).map((p) => p.name) } : null,
   }
 }
 
@@ -1540,75 +1531,6 @@ async function checkPrint(opts) {
   console.log(JSON.stringify({ ok: true, kind: 'print', rows: res.rows.map((r) => `${r.key}/${r.theme} texts ${r.texts} low ${r.lowContrast} min ${r.minRatio?.toFixed(2)}${r.problems.length ? ` problems ${r.problems.join('+')}` : ''}`) }))
 }
 
-/** 깜빡임 패스 — 서버 선호·쿠키 = pref, 컨텍스트 색 체계는 system 패스만 OS 다크(그 해석값이 기대값) */
-const FLICKER_PASSES = Object.freeze([['light', 'light'], ['dark', 'dark'], ['system', 'dark']])
-
-async function checkFlicker(opts) {
-  const env = laneEnv({ base: opts.base })
-  const { db, outDir, baseUrl } = env
-  const doc = JSON.parse(readFileSync('scripts/ui-capture.routes.json', 'utf8'))
-  const routes = selectRoutes(doc, opts)
-  const seed = await resolveSeed(db)
-  const sessions = await freshSessions(env, [...new Set(routes.map((r) => r.grade).filter((g) => g !== 'public'))])
-  const values = { pid: seed.pid, minuteId: seed.minuteId, topicId: seed.topicId, inviteToken: seed.inviteToken, shareToken: seed.shareToken, wsSlug: seed.wsSlug }
-  const { chromium } = await loadPlaywright()
-  const browser = await chromium.launch()
-  const rows = []
-  try {
-    for (const [pref, scheme] of FLICKER_PASSES) {
-      await setServerTheme(db, Object.values(sessions).map((s) => s.userId), pref, startPin(seed.pid))
-      for (const r of routes) {
-        const context = await browser.newContext(contextOptions({ width: 1440, height: 900, theme: scheme }))
-        try {
-          await routeCdn(context, join(outDir, 'cdn-cache'))
-          const cookies = [...(r.grade === 'public' ? [] : sessions[r.grade].cookies), { name: 'dflow-theme', value: pref }]
-          await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
-          await context.addInitScript(() => {
-            document.addEventListener('DOMContentLoaded', () => { window.__themeAtDcl = document.documentElement.classList.contains('dark') }, { once: true })
-          })
-          const page = await context.newPage()
-          await page.goto(baseUrl + fillPath(r.path, values), { waitUntil: 'load', timeout: 60_000 })
-          try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { /* 폴링 화면 */ }
-          await page.waitForTimeout(800)
-          const seen = await page.evaluate(() => ({ atDcl: window.__themeAtDcl ? 'dark' : 'light', afterHydrate: document.documentElement.classList.contains('dark') ? 'dark' : 'light' }))
-          const problems = pageProblems(await page.content())
-          const v = problems.length ? { ok: false, why: `화면 문제 ${problems.join('+')}` } : flickerVerdict({ ...seen, expected: scheme })
-          rows.push({ key: r.key, pref, scheme, ...seen, expected: scheme, ...v })
-        } finally { await context.close() }
-      }
-    }
-  } finally { await browser.close() }
-  mkdirSync(join(outDir, opts.label), { recursive: true })
-  writeFileSync(join(outDir, opts.label, 'flicker.json'), JSON.stringify(rows, null, 2))
-  console.log(JSON.stringify({ ok: true, kind: 'flicker', rows: rows.map((r) => `${r.key}/${r.pref} ${r.atDcl}→${r.afterHydrate} ${r.ok ? 'ok' : r.why}`) }))
-}
-
-async function checkShowcase(opts) {
-  const pick = (page, column) => page.evaluate((col) => {
-    const SAMPLES = [['column', '', 'backgroundColor'], ['primary', '[data-sample="primary"]', 'backgroundColor'],
-      ['legacyPrimary', '[data-sample="legacy-btn-primary"]', 'backgroundColor'], ['notify', '[data-badge="notify"]', 'backgroundColor'],
-      ['review', '[data-badge="review"]', 'backgroundColor'], ['urgent', '[data-badge="urgent"]', 'backgroundColor'],
-      ['urgentText', '[data-badge="urgent"]', 'color'], ['errorIcon', '[data-status-kind="partial_error"] svg', 'color'],
-      ['selectedRow', '[data-sample="selected-error-focus-row"]', 'backgroundColor']]
-    const root = document.querySelector(`[data-showcase-column="${col}"]`)
-    return Object.fromEntries(SAMPLES.map(([name, sel, prop]) => {
-      const el = sel ? root?.querySelector(sel) : root
-      return [name, el ? getComputedStyle(el)[prop] : null]
-    }))
-  }, column)
-  // 라이트 페이지(html 에 dark 없음)의 다크 열 = 중첩 다크, 다크 페이지(html.dark)의 라이트 열 = 페이지 전체 다크를 상속한 같은 컴포넌트(판정 Q37)
-  const res = await forEachShot({ ...opts, routes: ['admin-ui-states'], theme: ['light', 'dark'], sizes: [[1440, 900]] },
-    async (page, { theme }) => ({ values: await pick(page, theme === 'light' ? 'dark' : 'light') }))
-  const bad = res.rows.filter((r) => r.problems.length).map((r) => `${r.theme}:${r.problems.join('+')}`)
-  if (bad.length) throw new Error(`쇼케이스 화면 문제 — ${bad.join('; ')}`)
-  const nested = res.rows.find((r) => r.theme === 'light')?.values ?? {}
-  const whole = res.rows.find((r) => r.theme === 'dark')?.values ?? {}
-  const pairs = Object.keys(nested).map((k) => ({ name: k, nestedDark: nested[k], pageDark: whole[k] ?? null, equal: nested[k] !== null && nested[k] === whole[k] }))
-  mkdirSync(join(res.outDir, opts.label), { recursive: true })
-  writeFileSync(join(res.outDir, opts.label, 'showcase.json'), JSON.stringify(pairs, null, 2))
-  console.log(JSON.stringify({ ok: true, kind: 'showcase', pairs: pairs.length, unequal: pairs.filter((p) => !p.equal) }))
-}
-
 /** 병치 레일 옆의 필수 열(R8) — 번호·작업명·담당팀·진척 상태. 기간 등 후속 열은 가로 스크롤로 확인한다. */
 export const RAIL_REQUIRED_COLS = Object.freeze(['no', 'name', 'owners', 'status'])
 /**
@@ -1656,8 +1578,8 @@ async function checkRail(opts) {
 async function cmdChecks(opts) {
   if (!opts.label) throw new Error('--label 이 필요하다')
   const kind = opts.positional[0]
-  const run = { tab: checkTab, print: checkPrint, flicker: checkFlicker, showcase: checkShowcase, rail: checkRail }[kind ?? '']
-  if (!run || opts.positional.length !== 1) throw new Error('사용: checks tab|print|flicker|showcase|rail --label <l> [--routes …] [--theme …]')
+  const run = { tab: checkTab, print: checkPrint, rail: checkRail }[kind ?? '']
+  if (!run || opts.positional.length !== 1) throw new Error('사용: checks tab|print|rail --label <l> [--routes …]')
   await run(opts)
 }
 
@@ -1679,8 +1601,7 @@ async function cmdSheet(opts) {
     if (m) sections.push({ label: l, baseLabel: null, rows: sheetRows(m, [], axePool) })
     else if (!readJson(l, 'axe.json')) throw new Error(`${l}: meta.json·axe.json 둘 다 없다`)
   }
-  const checks = checksSummary({ tab: readJson(opts.label, 'tab.json'), print: readJson(opts.label, 'print.json'),
-    flicker: readJson(opts.label, 'flicker.json'), showcase: readJson(opts.label, 'showcase.json') })
+  const checks = checksSummary({ tab: readJson(opts.label, 'tab.json'), print: readJson(opts.label, 'print.json') })
   const img = (label, file) => `<img loading="lazy" src="${escapeHtml(`${label}/${file}`)}" alt="">`
   const okCell = (ok) => (ok ? '통과' : '<b>실패</b>')
   const table = (cols, rows) => `<table><thead><tr>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>\n${rows.join('\n')}\n</tbody></table>`
@@ -1707,13 +1628,11 @@ async function cmdSheet(opts) {
     `<h1>${escapeHtml(opts.label)} 대조표</h1>`,
     `<p>기준 ${escapeHtml(baseLabel ?? '—')} · 머리 커밋 ${escapeHtml(head.commit)} · 빌드 ${escapeHtml(head.buildId ?? '—')} · 브라우저 ${escapeHtml(head.browser)} · KST ${escapeHtml(head.kstDate)} · 추가 라벨 ${escapeHtml(extras.join(', ') || '—')} · 쇼케이스 두 열 대조는 라이트 장으로 본다(판정 Q37)</p>`,
     ...sections.map(sectionHtml),
-    '<h2>axe 대비 위반 — 모든 라벨·테마(다크 포함)</h2>',
+    '<h2>axe 대비 위반 — 모든 라벨</h2>',
     table(['라벨', '라우트', '크기', '테마', '위반'], axeTable(axePool).map((r) => `<tr><td>${escapeHtml(r.label ?? '—')}</td><td>${escapeHtml(r.key)}</td><td>${r.width}×${r.height}</td><td>${escapeHtml(r.theme)}</td><td>${r.violations}</td></tr>`)),
     '<h2>checks</h2>',
     checks.tab ? table(['Tab 라우트', '테마', '실패', '못 닿은 대상', '판정'], checks.tab.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.theme)}</td><td>${r.failed}</td><td>${escapeHtml(r.unreached.join(' · ') || '—')}</td><td>${okCell(r.ok)}</td></tr>`)) : '<p>tab.json 없음</p>',
     checks.print ? table(['인쇄 라우트', '테마', '글자', '4.5 미만', '판정'], checks.print.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.theme)}</td><td>${r.texts}</td><td>${r.low}</td><td>${okCell(r.ok)}</td></tr>`)) : '<p>print.json 없음</p>',
-    checks.flicker ? table(['깜빡임 라우트', '선호', '판정', '이유'], checks.flicker.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.pref)}</td><td>${okCell(r.ok)}</td><td>${escapeHtml(r.why)}</td></tr>`)) : '<p>flicker.json 없음</p>',
-    checks.showcase ? `<p>쇼케이스 계산색 대조 ${checks.showcase.pairs}쌍 · 불일치 ${escapeHtml(checks.showcase.unequal.join(', ') || '없음')}</p>` : '<p>showcase.json 없음</p>',
     '</body></html>',
   ].join('\n')
   writeFileSync(join(outDir, `${opts.label}-sheet.html`), html)

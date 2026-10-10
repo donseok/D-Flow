@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe('queueUiPref', () => {
   it('연속 호출을 병합해 delay 후 /api/prefs 1회만 저장한다', () => {
-    queueUiPref({ theme: 'dark' })
+    queueUiPref({ projectsView: 'cards' })
     queueUiPref({ sidebarCollapsed: true })
     expect(fetchMock).not.toHaveBeenCalled()
     vi.advanceTimersByTime(600)
@@ -32,7 +32,7 @@ describe('queueUiPref', () => {
     expect(init.method).toBe('POST')
     // keepalive: 페이지 이탈 직전의 저장도 유실되지 않는 계약
     expect((init as { keepalive?: boolean }).keepalive).toBe(true)
-    expect(JSON.parse(init.body as string)).toEqual({ prefs: { theme: 'dark', sidebarCollapsed: true } })
+    expect(JSON.parse(init.body as string)).toEqual({ prefs: { projectsView: 'cards', sidebarCollapsed: true } })
   })
 })
 
@@ -41,13 +41,13 @@ describe('queueWorkspacePref — 워크스페이스 키는 그 화면의 워크�
     queueWorkspacePref('w1', { startPage: 'home' })
     queueWorkspacePref('w1', { favoriteProjectIds: ['p'] })
     queueWorkspacePref('w2', { startPage: 'my_work' })
-    queueUiPref({ theme: 'dark' })
+    queueUiPref({ projectsView: 'cards' })
     vi.advanceTimersByTime(600)
     expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(sentBodies()).toEqual(expect.arrayContaining([
       { prefs: { startPage: 'home', favoriteProjectIds: ['p'] }, workspaceId: 'w1' },
       { prefs: { startPage: 'my_work' }, workspaceId: 'w2' },
-      { prefs: { theme: 'dark' } },
+      { prefs: { projectsView: 'cards' } },
     ]))
   })
 })
@@ -73,7 +73,7 @@ describe('postPrefs 실패 기록', () => {
   it('응답이 ok 가 아니면 상태 코드를 경고한다', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     fetchMock.mockImplementationOnce(async () => ({ ok: false, status: 401 }) as Response)
-    queueUiPref({ theme: 'dark' })
+    queueUiPref({ projectsView: 'cards' })
     await flush()
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn.mock.calls[0].join(' ')).toMatch(/\[prefs\].*저장 실패.*401/)
@@ -90,7 +90,7 @@ describe('postPrefs 실패 기록', () => {
   })
   it('성공은 조용하다', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    queueUiPref({ theme: 'light' })
+    queueUiPref({ projectsView: 'rows' })
     await flush()
     expect(warn).not.toHaveBeenCalled()
     warn.mockRestore()

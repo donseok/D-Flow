@@ -1,4 +1,4 @@
-// 의미 토큰 대비(개정 §5.5.3·§5.5.4, SP3b 스펙 §8.1 · E15 · D12 · 계획 판정 Q13) — 라이트·다크를 모두 파싱하고 var() 를 풀어 계산한다.
+// 의미 토큰 대비(개정 §5.5.3·§5.5.4, SP3b 스펙 §8.1 · E15 · D12 · 계획 판정 Q13) — 라이트 토큰을 파싱하고 var() 를 풀어 계산한다(제품이 라이트 전용이다).
 // 쌍 목록은 닫힌 표다: 새 의미 색 토큰은 쌍에 들거나 DECORATIVE 에 사유와 함께 든다(메타 단언). 대비 식은 accent.ts 의 contrastRatio 하나.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -45,23 +45,21 @@ export const DECORATIVE: Record<string, string> = {
   'action-soft': '선택 탭 배경 = surface-selected 와 같은 값(개정 §5.5.3)',
 }
 
-describe('의미 토큰 대비 — 라이트·다크(스펙 §8.1 ⑤)', () => {
-  for (const theme of ['light', 'dark'] as const) {
-    it.each(PAIRS.map((p) => [...p]))(`${theme} %s / %s ≥ %s (%s)`, (fg, bg, min) => {
-      expect(contrastRatio(resolve(theme, fg as string), resolve(theme, bg as string))).toBeGreaterThanOrEqual(min as number)
-    })
-  }
+describe('의미 토큰 대비(스펙 §8.1 ⑤)', () => {
+  it.each(PAIRS.map((p) => [...p]))('%s / %s ≥ %s (%s)', (fg, bg, min) => {
+    expect(contrastRatio(resolve(fg as string), resolve(bg as string))).toBeGreaterThanOrEqual(min as number)
+  })
 })
 
 describe('N1 중립 칩 — 옛 bg-line text-ink-subtle(경계 채움 위 fg-muted) 6곳의 대체 쌍', () => {
-  // 경계(border)는 DECORATIVE 라 그 위 글자는 쌍 표가 보증하지 않는다(라이트 3.97·다크 4.19 였다). 대체 쌍은 neutral on neutral-weak,
+  // 경계(border)는 DECORATIVE 라 그 위 글자는 쌍 표가 보증하지 않는다(3.97 이었다). 대체 쌍은 neutral on neutral-weak,
   // surface-subtle 상자 안의 칩(이슈 모달 둘)은 neutral on surface(neutral-weak 는 surface-subtle 과 같은 값이라 칩 모양이 사라진다).
   const N1: [string, string][] = [['neutral', 'neutral-weak'], ['neutral', 'surface']]
   it.each(N1)('쌍 표에 %s / %s(TEXT)가 있다', (fg, bg) => {
     expect(PAIRS.some(([f, b, min]) => f === fg && b === bg && min === TEXT)).toBe(true)
   })
-  it.each((['light', 'dark'] as const).flatMap((t) => N1.map(([fg, bg]) => [t, fg, bg] as const)))('%s %s on %s ≥ 4.5', (theme, fg, bg) => {
-    expect(contrastRatio(resolve(theme, fg), resolve(theme, bg))).toBeGreaterThanOrEqual(TEXT)
+  it.each(N1)('%s on %s ≥ 4.5', (fg, bg) => {
+    expect(contrastRatio(resolve(fg), resolve(bg))).toBeGreaterThanOrEqual(TEXT)
   })
 })
 
@@ -75,18 +73,8 @@ describe('메타 단언', () => {
   it('쌍의 토큰은 모두 의미 토큰이다(옛 이름·원색을 쌍에 쓰지 않는다)', () => {
     expect([...new Set(PAIRS.flatMap(([fg, bg]) => [fg, bg]))].filter((n) => !names.includes(n))).toEqual([])
   })
-  it('다크는 모든 의미 색 토큰을 다시 정의한다(라이트 값이 다크로 새지 않는다)', () => {
-    const dark = new Set(maps.dark.map((d) => d.name))
-    expect(names.filter((n) => !dark.has(`--color-${n}`))).toEqual([])
-  })
-  it('인쇄 블록의 의미 토큰 집합 = 라이트 의미 토큰 집합이고 값이 같다(스펙 §4.1 블록 10)', () => {
-    expect(maps.print.map((d) => d.name.slice('--color-'.length)).sort()).toEqual([...names].sort())
-    for (const n of names) expect(resolve('print', n), n).toBe(resolve('light', n))
-  })
   it('accentTokens.ts(A) 기준 색 = globals.css 의미 토큰 값', () => {
-    for (const theme of ['light', 'dark'] as const) {
-      for (const [k, hex] of Object.entries(ACCENT_TOKENS[theme])) expect(resolve(theme, k), `${theme} ${k}`).toBe(hex)
-    }
+    for (const [k, hex] of Object.entries(ACCENT_TOKENS.light)) expect(resolve(k), k).toBe(hex)
   })
   it('의미 층(@theme)의 값은 원색 var(--p-*) 또는 hex 다 — 다른 의미 토큰을 가리키지 않는다', () => {
     expect(maps.theme.filter((d) => d.name.startsWith('--color-') && !/^(var\(--p-[\w-]+\)|#[0-9A-Fa-f]{6})$/.test(d.value))).toEqual([])

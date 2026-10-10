@@ -42,7 +42,7 @@ afterEach(async () => {
 })
 
 describe('헤더 동기화 상태 연동 (GlobalBar & PageHeader)', () => {
-  const brand = { productName: 'D-Flow', workspaceId: 'w1', hasFull: false, hasFullDark: false, hasMark: false }
+  const brand = { productName: 'D-Flow', workspaceId: 'w1', hasFull: false, hasMark: false }
   const crumbs = { scope: 'workspace' as const, workspace: null, project: null, screen: null }
 
   it('GlobalBar는 기본적으로 data-slot="sync-status"에 SyncStatus를 렌더링한다', async () => {

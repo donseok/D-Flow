@@ -26,14 +26,12 @@ const render = async () => {
 beforeEach(() => { vi.clearAllMocks() })
 
 describe('/admin/ui-states', () => {
-  it('플랫폼 관리자 — 라이트·다크 두 열(data-theme-scope, 다크 열에 .dark), 열마다 상태 8종', async () => {
+  it('플랫폼 관리자 — 한 열(라이트 전용 2026-10-10 — 다크 열·.dark 컨테이너가 없다), 상태 8종', async () => {
     mocks.getActorForView.mockResolvedValue(makeSuperuser())
     const d = await render()
     const cols = [...d.querySelectorAll('[data-showcase-column]')]
-    expect(cols.map((c) => c.getAttribute('data-showcase-column'))).toEqual(['light', 'dark'])
-    expect(cols.every((c) => c.hasAttribute('data-theme-scope'))).toBe(true)
-    expect(cols[1].classList.contains('dark')).toBe(true)
-    expect(cols[0].classList.contains('dark')).toBe(false)
+    expect(cols.map((c) => c.getAttribute('data-showcase-column'))).toEqual(['light'])
+    expect(d.querySelector('.dark, [data-theme-scope]')).toBeNull()
     for (const c of cols) expect(new Set([...c.querySelectorAll('[data-status-kind]')].map((e) => e.getAttribute('data-status-kind'))).size).toBe(8)
   })
   it('accent 표본 10 — 통과 6·거부 4, 통과 표본은 여섯 변수를 style 로, 거부는 hue 거리를 보인다', async () => {
@@ -49,7 +47,7 @@ describe('/admin/ui-states', () => {
     const rejected = samples.find((s) => s.dataset.accentSample === '#e03131')!
     expect(rejected.textContent).toMatch(/hue 거리/)
   })
-  it('UI-5 표본 — 페이지 머리(일반·컴팩트)·아이콘 버튼·모달 닫기·KPI·구역 카드·빈 상태가 두 열에, 겹침(모달·충돌 비교)은 열 밖 버튼으로', async () => {
+  it('UI-5 표본 — 페이지 머리(일반·컴팩트)·아이콘 버튼·모달 닫기·KPI·구역 카드·빈 상태가 열에, 겹침(모달·충돌 비교)은 열 밖 버튼으로', async () => {
     mocks.getActorForView.mockResolvedValue(makeSuperuser())
     const d = await render()
     for (const col of d.querySelectorAll('[data-showcase-column]')) {
@@ -68,7 +66,7 @@ describe('/admin/ui-states', () => {
     expect(overlays.querySelector('[data-sample="open-conflict"]')).not.toBeNull()
     expect(d.querySelector('[role="dialog"]')).toBeNull()                 // 닫힌 채로 시작한다(화면을 덮지 않는다)
   })
-  it('타이포 스케일 표본 — 여덟 단계가 두 열에, 단계마다 그 크기 토큰 클래스로 그린다(가장 작은 단계는 text-meta)', async () => {
+  it('타이포 스케일 표본 — 여덟 단계가 열에, 단계마다 그 크기 토큰 클래스로 그린다(가장 작은 단계는 text-meta)', async () => {
     mocks.getActorForView.mockResolvedValue(makeSuperuser())
     const d = await render()
     for (const col of d.querySelectorAll('[data-showcase-column]')) {

@@ -1,6 +1,6 @@
 /* src/components/agent-hub/delegationTable.module.css — 위임·승인 표 전용.
    globals.css 를 건드리지 않으려고 모듈로 둔다(새 색 토큰 없음 — 값은 전부 globals.css 의 기존
-   토큰을 참조하므로 .dark 오버라이드가 그대로 따라온다). 상태 변형 display 유틸을 쓰지 않는다(안전망). */
+   토큰을 참조한다). 상태 변형 display 유틸을 쓰지 않는다(안전망). */
 
 /* 스크롤 상자 — 세로 sticky 머리글이 붙으려면 이 상자가 세로 스크롤 주체여야 한다.
    종전 코드는 overflow-x 만 있어 스크롤 주체가 페이지였고 sticky 가 발화하지 않았다. */

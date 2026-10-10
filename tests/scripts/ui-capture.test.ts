@@ -5,14 +5,14 @@ import {
   DEFAULT_SIZES, DIFF_THRESHOLD, SAME_RATIO, deterministicId, fillPath, fontVerdict, hideStyle, kstToday, laneTarget, maskStyle,
   parseArgs, pixelDiffRatio, plusDays, shotFileName, validateRoutes,
 } from '../../scripts/ui-capture.mjs'
-import { ROW_PREF_KEYS, scrollMain, setServerTheme } from '../../scripts/ui-capture.mjs'
+import { ROW_PREF_KEYS, scrollMain, setServerPrefs } from '../../scripts/ui-capture.mjs'
 import { LEVEL_LABELS_4, SEED_ACCOUNTS, seedProjectValues, compareMeta, contextOptions, diffVerdict, fnv1a64, resetTargets, seedIds, seedPlan, selectRoutes } from '../../scripts/ui-capture.mjs'
 import { SEED_INVITE_DOMAIN, inviteDomainPatch, resetRunStart, seenResetTargets } from '../../scripts/ui-capture.mjs'
 import { LANE_APP_PORTS, laneAppUrl, redactTokens, resolveBase } from '../../scripts/ui-capture.mjs'
 import { PIN_AT, WARMUP_GRADE, WARMUP_LIMIT_MS, fixedPrefs, passStart, pollUntil, runGrades, startPin, warmupFailure } from '../../scripts/ui-capture.mjs'
 import { KNOWN_NOISE, buildIdOf, diffRows, envPremise, finalProblem, pairPlan, pairRows, maskReport, pixelDiffStats, rowVerdict, serverCommitOf, shotSelectors, shotStyle,
   summarizeDiff } from '../../scripts/ui-capture.mjs'
-import { axeTable, blend, checksSummary, contrastRgb, escapeHtml, flickerVerdict, focusVerdict, parseRgb, ringsOf, sheetRows, sheetSummary, tabCoverage } from '../../scripts/ui-capture.mjs'
+import { axeTable, blend, checksSummary, contrastRgb, escapeHtml, focusVerdict, parseRgb, ringsOf, sheetRows, sheetSummary, tabCoverage } from '../../scripts/ui-capture.mjs'
 import { computePrefsSync } from '../../src/lib/prefs/sync'
 import { findTraces } from '../../scripts/lib/e2e.mjs'
 import { deriveSeatState } from '../../src/lib/domain/seatState'
@@ -231,14 +231,16 @@ describe('maskStyle·fontVerdict·shotFileName·parseArgs·fillPath', () => {
     expect(shotFileName({ key: 'p-wbs', width: 1440, height: 900, theme: 'light' })).toBe('p-wbs-1440x900-light.png')
     expect(() => shotFileName({ key: '/p/[id]', width: 1, height: 1, theme: 'light' })).toThrow(/키 형식/)
     expect(() => shotFileName({ key: 'x', width: 1, height: 1, theme: 'sepia' })).toThrow(/테마/)
+    expect(() => shotFileName({ key: 'x', width: 1, height: 1, theme: 'dark' })).toThrow(/테마/)   // 라이트 전용(2026-10-10)
   })
   it('인자 — 기본값과 파싱, 모르는 인자·값 밖은 throw', () => {
     expect(parseArgs([])).toMatchObject({ theme: ['light'], since: ['b4283c0'], routes: null, sizes: DEFAULT_SIZES.map((s) => [...s]) })
-    expect(parseArgs(['--label', 'ui0', '--theme', 'light,dark', '--sizes', '1440x900', '--routes', 'root,p-wbs'])).toMatchObject({
-      label: 'ui0', theme: ['light', 'dark'], sizes: [[1440, 900]], routes: ['root', 'p-wbs'],
+    expect(parseArgs(['--label', 'ui0', '--theme', 'light', '--sizes', '1440x900', '--routes', 'root,p-wbs'])).toMatchObject({
+      label: 'ui0', theme: ['light'], sizes: [[1440, 900]], routes: ['root', 'p-wbs'],
     })
     expect(() => parseArgs(['--nope'])).toThrow(/알 수 없는/)
-    expect(() => parseArgs(['--theme', 'sepia'])).toThrow(/light\|dark/)
+    expect(() => parseArgs(['--theme', 'sepia'])).toThrow(/light 뿐/)
+    expect(() => parseArgs(['--theme', 'light,dark'])).toThrow(/light 뿐/)   // 다크 축은 없다(라이트 전용 2026-10-10)
     expect(() => parseArgs(['--since', 'UI-9'])).toThrow(/since/)
     expect(() => parseArgs(['--label', '../x'])).toThrow(/label/)
   })
@@ -319,8 +321,7 @@ describe('ui-capture.routes.json', () => {
 
 describe('fixedPrefs — 실행 시작 선호값은 병합이 아니라 고정 객체로 덮는다(UI-0 결정성 리뷰 P2 — D4)', () => {
   it('계정 키만 — 히어로 접힘·마지막 프로젝트는 은퇴 키(D9), 그 밖의 UiPrefs 키는 없다(= 제품 기본값)', () => {
-    expect(fixedPrefs('light')).toEqual({ sidebarCollapsed: false, theme: 'light' })
-    expect(Object.keys(fixedPrefs('dark'))).toEqual(['sidebarCollapsed', 'theme'])
+    expect(fixedPrefs()).toEqual({ sidebarCollapsed: false })   // 테마 키는 없다 — 라이트 전용(2026-10-10)으로 폐기된 개인 설정
   })
   it('워크스페이스 행 pin — 최근 방문 = 그 프로젝트, 고정 시각(결정적), 빈 id 는 멈춘다', () => {
     expect(startPin('p1')).toEqual({ recentProjects: [{ id: 'p1', at: PIN_AT }] })
@@ -328,21 +329,12 @@ describe('fixedPrefs — 실행 시작 선호값은 병합이 아니라 고정 �
     expect(() => startPin('')).toThrow(/pin/)
   })
   it('새 컨텍스트에서 앱의 PrefsSync 가 적용·백필할 것이 없다 — 키 목록은 앱의 동기화 키(computePrefsSync)가 정한다', () => {
-    for (const theme of ['light', 'dark'] as const) {
-      // 새 컨텍스트의 로컬값 — PrefsSync.readLocal: 사이드바 localStorage 없음 → false · 테마 = dflow-theme 쿠키
-      expect(computePrefsSync(fixedPrefs(theme), { sidebarCollapsed: false, theme }))
-        .toEqual({ apply: {}, backfill: {} })
-    }
+    // 새 컨텍스트의 로컬값 — PrefsSync.readLocal: 사이드바 localStorage 없음 → false
+    expect(computePrefsSync(fixedPrefs(), { sidebarCollapsed: false })).toEqual({ apply: {}, backfill: {} })
   })
   it('지난 실행·수동 확인이 남긴 키(간트 일 폭·개요 번호·완료 숨김·대시보드 펼침 등)를 이어받지 않는다 — 입력에 지금 값이 없다', () => {
-    expect(fixedPrefs.length).toBe(1)   // (theme) — 지금 값을 받지 않는다
-    for (const k of ['wbsGanttScale', 'wbsOutline', 'wbsHideDone', 'dashSections', 'minutesView', 'notifRead', 'notif']) expect(fixedPrefs('light')).not.toHaveProperty(k)
-  })
-  it('테마는 light|dark|system(checks flicker 의 system 패스 — ui1-addendum §5)', () => {
-    expect(() => fixedPrefs('sepia')).toThrow(/테마/)
-    expect(fixedPrefs('system')).toEqual({ sidebarCollapsed: false, theme: 'system' })
-    // system 선호 + 쿠키 system 이면 새 컨텍스트에서 PrefsSync 가 적용·백필할 것이 없다(로컬값 theme = 쿠키 system)
-    expect(computePrefsSync(fixedPrefs('system'), { sidebarCollapsed: false, theme: 'system' })).toEqual({ apply: {}, backfill: {} })
+    expect(fixedPrefs.length).toBe(0)   // 지금 값을 받지 않는다
+    for (const k of ['wbsGanttScale', 'wbsOutline', 'wbsHideDone', 'dashSections', 'minutesView', 'notifRead', 'notif']) expect(fixedPrefs()).not.toHaveProperty(k)
   })
 })
 
@@ -385,7 +377,7 @@ const fakeDb = (fail?: string, memberships: Record<string, string[]> = {}) => {
   return { db, calls }
 }
 
-describe('resetRunStart — 테마 패스 시작 상태 = db:reset 뒤 첫 실행(첫 방문·클릭이 쓰는 상태 셋 — 과제 5b, D4)', () => {
+describe('resetRunStart — 패스 시작 상태 = db:reset 뒤 첫 실행(첫 방문·클릭이 쓰는 상태 셋 — 과제 5b, D4)', () => {
   it('캡처 계정의 공지 읽음 워터마크 → 알림 열람·읽음 되돌리기 → 시드 프로젝트의 진척 스냅샷 순서(그 밖의 표·행은 건드리지 않는다)', async () => {
     const { db, calls } = fakeDb()
     await resetRunStart(db, { userIds: ['u1', 'u2'], projectId: 'p1' })
@@ -409,11 +401,11 @@ describe('resetRunStart — 테마 패스 시작 상태 = db:reset 뒤 첫 실�
   })
 })
 
-describe('passStart — 테마 패스의 시작(조립 — UI-0 결정성 리뷰 P3, D15)', () => {
+describe('passStart — 패스의 시작(조립 — UI-0 결정성 리뷰 P3, D15)', () => {
   it('캡처 계정의 계정 행을 고정 객체로, 모든 소속 워크스페이스 행을 pin 으로 덮은 뒤 워터마크·알림·스냅샷을 되돌린다 — 순서 고정(SP3b D9)', async () => {
     const { db, calls } = fakeDb(undefined, { u1: ['wA'], u2: ['wA', 'wB'] })
-    await passStart(db, { theme: 'dark', userIds: ['u1', 'u2'], projectId: 'p1' })
-    const prefs = JSON.stringify(fixedPrefs('dark'))
+    await passStart(db, { userIds: ['u1', 'u2'], projectId: 'p1' })
+    const prefs = JSON.stringify(fixedPrefs())
     const pin = JSON.stringify(startPin('p1'))
     expect(calls).toEqual([
       `account_preferences upsert u1 ${prefs} on user_id`,
@@ -431,7 +423,7 @@ describe('passStart — 테마 패스의 시작(조립 — UI-0 결정성 리뷰
   it('선호 쓰기(계정 행·워크스페이스 행)가 실패하면 되돌리기로 넘어가지 않는다', async () => {
     for (const t of ['account_preferences', 'user_preferences']) {
       const { db, calls } = fakeDb(t, { u1: ['wA'] })
-      await expect(passStart(db, { theme: 'light', userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/선호.*boom/)
+      await expect(passStart(db, { userIds: ['u1'], projectId: 'p1' })).rejects.toThrow(/선호.*boom/)
       expect(calls.some((c) => c.startsWith('announcement_seen'))).toBe(false)
     }
   })
@@ -673,9 +665,9 @@ describe('캡처 조건·계정·비교 가능성', () => {
     expect(() => resetTargets(['member'], SEED_ACCOUNTS.member.toUpperCase())).toThrow(/부트스트랩/)
     expect(() => resetTargets(['public'], 'admin@example.com')).toThrow(/시드 계정이 아닌/)
   })
-  it('컨텍스트 옵션 — 배율 1·ko-KR·서울·모션 줄임·테마 = colorScheme', () => {
-    expect(contextOptions({ width: 390, height: 844, theme: 'dark' })).toEqual({
-      viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: 'dark',
+  it('컨텍스트 옵션 — 배율 1·ko-KR·서울·모션 줄임·색 체계는 늘 light(라이트 전용 — 실행 기기의 OS 설정이 새지 않게)', () => {
+    expect(contextOptions({ width: 390, height: 844 })).toEqual({
+      viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, locale: 'ko-KR', timezoneId: 'Asia/Seoul', reducedMotion: 'reduce', colorScheme: 'light',
     })
   })
   it('비교 가능성(Review Focus 2·D3) — KST 날짜·시드 날짜·브라우저는 늘 거부, 스크립트 판·routes 해시·시드 프로젝트는 --allow-cross 로만(경고), 같은 빌드 id 는 경고', () => {
@@ -855,17 +847,12 @@ describe('checks·sheet 의 순수 조각(UI-1 — 계획 판정 Q28)', () => {
     expect(focusVerdict({ ...none, rings: [{ color: 'rgba(49, 92, 219, 0.25)', width: 2 }] }).ok).toBe(false)
     expect(focusVerdict({ ...none, rings: [] }).why).toMatch(/외곽선 없음/)
   })
-  it('flickerVerdict — 첫 페인트와 하이드레이션 뒤가 같고 기대와 같아야', () => {
-    expect(flickerVerdict({ atDcl: 'dark', afterHydrate: 'dark', expected: 'dark' }).ok).toBe(true)
-    expect(flickerVerdict({ atDcl: 'light', afterHydrate: 'dark', expected: 'dark' }).why).toMatch(/첫 페인트/)
-    expect(flickerVerdict({ atDcl: 'light', afterHydrate: 'light', expected: 'dark' }).why).toMatch(/기대/)
-  })
   it('escapeHtml·sheetRows — 차이율 큰 순, 차이·axe 가 없으면 new·null', () => {
     expect(escapeHtml('<a href="x">&\'</a>')).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/a&gt;')
     const head = { rows: [
       { key: 'a', width: 1440, height: 900, theme: 'light', file: 'a.png', h1Count: 1, problems: [] },
       { key: 'b', width: 1440, height: 900, theme: 'light', file: 'b.png', h1Count: 0, problems: ['not-found'] },
-      { key: 'c', width: 390, height: 844, theme: 'dark', file: 'c.png', h1Count: 1, problems: [] },
+      { key: 'c', width: 390, height: 844, theme: 'light', file: 'c.png', h1Count: 1, problems: [] },
     ] }
     const rows = sheetRows(head, [{ key: 'a', width: 1440, height: 900, theme: 'light', ratio: 0, verdict: 'same' }, { key: 'b', width: 1440, height: 900, theme: 'light', ratio: 0.2, verdict: 'diff' }],
       [{ key: 'b', width: 1440, height: 900, theme: 'light', violations: 3 }])
@@ -875,13 +862,13 @@ describe('checks·sheet 의 순수 조각(UI-1 — 계획 판정 Q28)', () => {
     const head = { rows: [
       { key: 'a', width: 1440, height: 900, theme: 'light', file: 'a.png', h1Count: 1, problems: [] },
       { key: 'n', width: 1440, height: 900, theme: 'light', file: 'n.png', h1Count: 1, problems: [] },
-      { key: 'p', width: 1440, height: 900, theme: 'dark', file: 'p.png', h1Count: 1, problems: ['click-failed'] },
+      { key: 'p', width: 1440, height: 900, theme: 'light', file: 'p.png', h1Count: 1, problems: ['click-failed'] },
       { key: 's', width: 390, height: 844, theme: 'light', file: 's.png', h1Count: 1, problems: [] },
     ] }
     const diff = [
       { key: 'a', width: 1440, height: 900, theme: 'light', ratio: 0.01, verdict: 'diff', reasons: [] },
       { key: 'n', width: 1440, height: 900, theme: 'light', ratio: 0.001, verdict: 'near', reasons: [] },
-      { key: 'p', width: 1440, height: 900, theme: 'dark', ratio: 0, verdict: 'problem', reasons: ['대상:click-failed'] },
+      { key: 'p', width: 1440, height: 900, theme: 'light', ratio: 0, verdict: 'problem', reasons: ['대상:click-failed'] },
       { key: 's', width: 390, height: 844, theme: 'light', ratio: 0, verdict: 'same', reasons: [] },
       { key: 'gone', width: 1440, height: 900, theme: 'light', file: 'gone.png', ratio: null, verdict: 'missing', reasons: [] },
     ]
@@ -899,31 +886,27 @@ describe('checks·sheet 의 순수 조각(UI-1 — 계획 판정 Q28)', () => {
     expect(tabCoverage(steps, ['aside a', 'header button', 'tr[role="button"]'])).toEqual({ hits: { 'aside a': 2, 'header button': 1, 'tr[role="button"]': 0 }, unreached: ['tr[role="button"]'] })
     expect(tabCoverage([], [])).toEqual({ hits: {}, unreached: [] })
   })
-  it('axeTable — 모든 라벨·테마 행을 싣는다(다크 axe 행 보존 — 판정 Q45)', () => {
+  it('axeTable — 모든 라벨의 행을 싣고 위반 많은 순으로(판정 Q45)', () => {
     const rows = axeTable([
       { label: 'ui1', key: 'a', width: 1440, height: 900, theme: 'light', violations: 1 },
-      { label: 'ui1', key: 'a', width: 1440, height: 900, theme: 'dark', violations: 4 },
-      { label: 'ui1', key: 'b', width: 1440, height: 900, theme: 'dark', violations: 0 },
+      { label: 'ui2', key: 'a', width: 1440, height: 900, theme: 'light', violations: 4 },
+      { label: 'ui2', key: 'b', width: 1440, height: 900, theme: 'light', violations: 0 },
     ])
-    expect(rows.map((r) => [r.theme, r.key, r.violations])).toEqual([['dark', 'a', 4], ['dark', 'b', 0], ['light', 'a', 1]])
+    expect(rows.map((r) => [r.label, r.key, r.violations])).toEqual([['ui2', 'a', 4], ['ui1', 'a', 1], ['ui2', 'b', 0]])
   })
-  it('sheetRows 를 추가 라벨 절에 — 기준 없이 new, axe 는 풀에서 테마로 찾는다(판정 Q45)', () => {
-    const extra = { rows: [{ key: 'a', width: 1440, height: 900, theme: 'dark', file: 'a-d.png', h1Count: 1, problems: [] }] }
-    const pool = [{ key: 'a', width: 1440, height: 900, theme: 'light', violations: 1 }, { key: 'a', width: 1440, height: 900, theme: 'dark', violations: 4 }]
+  it('sheetRows 를 추가 라벨 절에 — 기준 없이 new, axe 는 풀에서 같은 장(키·크기)으로 찾는다(판정 Q45)', () => {
+    const extra = { rows: [{ key: 'a', width: 390, height: 844, theme: 'light', file: 'a-m.png', h1Count: 1, problems: [] }] }
+    const pool = [{ key: 'a', width: 1440, height: 900, theme: 'light', violations: 1 }, { key: 'a', width: 390, height: 844, theme: 'light', violations: 4 }]
     expect(sheetRows(extra, [], pool).map((r) => [r.verdict, r.axe])).toEqual([['new', 4]])
   })
-  it('checksSummary — Tab 미도달·인쇄 글자 0·쇼케이스 불일치를 실패로(판정 Q43·Q45)', () => {
+  it('checksSummary — Tab 미도달·인쇄 글자 0 을 실패로(판정 Q43·Q45). 깜빡임·쇼케이스 다크 대조 절은 없다(라이트 전용 2026-10-10)', () => {
     const s = checksSummary({
-      tab: { rows: [{ key: 'p-wbs', theme: 'dark', failed: 1, unreached: ['[data-row-id] button'] }, { key: 'p-dashboard', theme: 'light', failed: 0, unreached: [] }] },
-      print: { rows: [{ key: 'report-modal', theme: 'dark', texts: 0, lowContrast: 0 }] },
-      flicker: [{ key: 'account', pref: 'system', ok: true }],
-      showcase: [{ name: 'primary', equal: true }, { name: 'notify', equal: false }],
+      tab: { rows: [{ key: 'p-wbs', theme: 'light', failed: 1, unreached: ['[data-row-id] button'] }, { key: 'p-dashboard', theme: 'light', failed: 0, unreached: [] }] },
+      print: { rows: [{ key: 'report-modal', theme: 'light', texts: 0, lowContrast: 0 }] },
     })
     expect(s.tab?.map((r) => r.ok)).toEqual([false, true])
     expect(s.print?.[0].ok).toBe(false)
-    expect(s.flicker?.[0].ok).toBe(true)
-    expect(s.showcase).toEqual({ pairs: 2, unequal: ['notify'] })
-    expect(checksSummary({})).toEqual({ tab: null, print: null, flicker: null, showcase: null })
+    expect(checksSummary({})).toEqual({ tab: null, print: null })
   })
 })
 
@@ -952,8 +935,8 @@ describe('pairPlan·pairRows — 옛 경로 캡처와 새 경로 캡처를 짝�
     expect(pairPlan([{ key: 'x', pair: 'zz' }], doc)).toEqual([])
   })
   const row = (key: string, extra: Record<string, unknown> = {}) => ({ key, width: 1440, height: 900, theme: 'light', file: `${key}.png`, font: 'ok', idle: true, problems: [] as string[], finalPath: `/${key}`, ...extra })
-  it('같은 크기·테마의 짝만 잇고, 짝 장이 없으면 unmatched(같음으로 숨기지 않는다)', () => {
-    const A = [row('minutes'), row('minutes', { theme: 'dark' }), row('meetings')]
+  it('같은 크기의 짝만 잇고, 짝 장이 없으면 unmatched(같음으로 숨기지 않는다)', () => {
+    const A = [row('minutes'), row('minutes', { width: 768, height: 1024 }), row('meetings')]
     const B = [row('ws-minutes'), row('ws-minutes', { width: 390, height: 844 }), row('ws-home')]
     const r = pairRows(A, B, [{ key: 'ws-minutes', pairKey: 'minutes' }])
     expect(r.pairs.map((p) => [p.label, p.a.key, p.b.key])).toEqual([['ws-minutes⇐minutes', 'minutes', 'ws-minutes']])
@@ -1025,9 +1008,9 @@ describe('clicks — 여러 단계 클릭', () => {
 
 describe('contextOptions·parseArgs — JS 끈 첫 페인트와 스크롤 상태(D54·D55)', () => {
   it('javaScript:false 면 javaScriptEnabled false, 그 밖에는 키를 더하지 않는다(기본 조건 그대로)', () => {
-    expect(contextOptions({ width: 390, height: 844, theme: 'light', javaScript: false })).toMatchObject({ javaScriptEnabled: false })
-    expect(contextOptions({ width: 390, height: 844, theme: 'light' })).not.toHaveProperty('javaScriptEnabled')
-    expect(contextOptions({ width: 390, height: 844, theme: 'light', javaScript: true })).not.toHaveProperty('javaScriptEnabled')
+    expect(contextOptions({ width: 390, height: 844, javaScript: false })).toMatchObject({ javaScriptEnabled: false })
+    expect(contextOptions({ width: 390, height: 844 })).not.toHaveProperty('javaScriptEnabled')
+    expect(contextOptions({ width: 390, height: 844, javaScript: true })).not.toHaveProperty('javaScriptEnabled')
   })
   it('--scroll·--js 값과 기본(0·켬), 값 밖은 throw', () => {
     expect(parseArgs(['shoot', '--label', 'x', '--scroll', '600', '--js', 'off'])).toMatchObject({ scroll: 600, javaScript: false })
@@ -1039,7 +1022,7 @@ describe('contextOptions·parseArgs — JS 끈 첫 페인트와 스크롤 상태
   })
   it('촬영 루프가 두 옵션을 쓴다 — JS 옵션은 컨텍스트로, 스크롤은 클릭 뒤 main 을 내린다', () => {
     const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
-    expect(src).toMatch(/contextOptions\(\{ width, height, theme, javaScript: opts\.javaScript \}\)/)
+    expect(src).toMatch(/contextOptions\(\{ width, height, javaScript: opts\.javaScript \}\)/)
     expect(src).toMatch(/if \(opts\.scroll > 0\) await scrollMain\(page, opts\.scroll\)/)
   })
   it('scrollMain — main#main-content 를 y 로 내리고 한 프레임 기다린다', async () => {
@@ -1078,22 +1061,22 @@ describe('행 선택·행 prefs — manual 행과 접힘 선호(과제 37)', () 
     expect(p.filter((x) => x.startsWith('a:'))).toEqual([])
     expect(p.map((x) => x.split(':')[0]).sort()).toEqual(['b', 'c', 'd'])
   })
-  it('setServerTheme — extra 가 고정 객체 위에 얹히고, extra 없이 부르면 고정 객체 그대로(되돌림)', async () => {
+  it('setServerPrefs — extra 가 고정 객체 위에 얹히고, extra 없이 부르면 고정 객체 그대로(되돌림)', async () => {
     const upserts: { table: string; row: Record<string, unknown> }[] = []
     const db = { from: (table: string) => ({
       upsert: async (row: Record<string, unknown>) => { upserts.push({ table, row }); return { data: null, error: null } },
       select: () => ({ eq: async () => ({ data: [], error: null }) }),
     }) }
-    await setServerTheme(db, ['u1'], 'dark', {}, { sidebarCollapsed: true })
-    await setServerTheme(db, ['u1'], 'dark', {})
+    await setServerPrefs(db, ['u1'], {}, { sidebarCollapsed: true })
+    await setServerPrefs(db, ['u1'], {})
     const prefs = upserts.filter((u) => u.table === 'account_preferences').map((u) => u.row.prefs)
-    expect(prefs).toEqual([{ ...fixedPrefs('dark'), sidebarCollapsed: true }, fixedPrefs('dark')])
-    expect(fixedPrefs('dark').sidebarCollapsed).toBe(false)
+    expect(prefs).toEqual([{ ...fixedPrefs(), sidebarCollapsed: true }, fixedPrefs()])
+    expect(fixedPrefs().sidebarCollapsed).toBe(false)
   })
   it('촬영 루프는 행 prefs 를 그 행을 찍는 동안만 덮고 finally 에서 되돌린다', () => {
     const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
-    expect(src).toMatch(/if \(r\.prefs\) await setServerTheme\(db, captureIds, theme, startPin\(seed\.pid\), r\.prefs\)/)
-    expect(src).toMatch(/\} finally \{\s+if \(r\.prefs\) await setServerTheme\(db, captureIds, theme, startPin\(seed\.pid\)\)\s+\}/)
+    expect(src).toMatch(/if \(r\.prefs\) await setServerPrefs\(db, captureIds, startPin\(seed\.pid\), r\.prefs\)/)
+    expect(src).toMatch(/\} finally \{\s+if \(r\.prefs\) await setServerPrefs\(db, captureIds, startPin\(seed\.pid\)\)\s+\}/)
   })
 })
 
@@ -1157,7 +1140,7 @@ describe('railVerdict(§6.7 — 병치에서 필수 열이 잘리면 실패)', (
 describe('checks rail 하위 명령', () => {
   it('cmdChecks 의 종류 표에 rail 이 있다', () => {
     const src = readFileSync(join(process.cwd(), 'scripts/ui-capture.mjs'), 'utf8')
-    expect(src).toMatch(/\{ tab: checkTab, print: checkPrint, flicker: checkFlicker, showcase: checkShowcase, rail: checkRail \}/)
+    expect(src).toMatch(/\{ tab: checkTab, print: checkPrint, rail: checkRail \}/)
   })
 })
 

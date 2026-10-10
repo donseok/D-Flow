@@ -89,9 +89,9 @@ describe('/w/[slug] 레이아웃 — 셸', () => {
     renderToString(await run())
     const p = h.shellProps.mock.calls[0][0]
     expect(p.configDegraded).toBe(false)
-    expect(p.brand).toEqual({ productName: 'Acme Flow', workspaceId: WS.id, hasFull: true, hasFullDark: false, hasMark: true })
+    expect(p.brand).toEqual({ productName: 'Acme Flow', workspaceId: WS.id, hasFull: true, hasMark: true })
   })
-  it('저장된 강조색(branding.accent)을 셸의 스타일로 싣는다 — 라이트(:root) 뒤 다크(.dark), action 계열 변수. 지우면(null) 빈 문자열', async () => {
+  it('저장된 강조색(branding.accent)을 셸의 스타일로 싣는다 — :root 한 블록, action 계열 변수. 지우면(null) 빈 문자열', async () => {
     const d = deriveAccent('#0f766e')
     if (!d.ok) throw new Error(`표본 색이 파생 검사에 걸렸다: ${d.error}`)
     h.getWorkspaceConfig.mockResolvedValue(cfg({ 'branding.accent': d.value }))
@@ -99,9 +99,9 @@ describe('/w/[slug] 레이아웃 — 셸', () => {
     const p = h.shellProps.mock.calls[0][0]
     expect(p.configDegraded).toBe(false)
     expect(p.accentCss).toBe(accentStyle(d.value))
-    expect(p.accentCss).toMatch(/^:root\{--color-action:#[0-9a-f]{6};.*\}\.dark\{--color-action:#[0-9a-f]{6};.*\}$/)
+    expect(p.accentCss).toMatch(/^:root\{--color-action:#[0-9a-f]{6};[^{}]*\}$/)
     expect(p.accentCss).toContain(`--color-action:${d.value.light.bg}`)
-    expect(p.accentCss).toContain(`--color-border-focus:${d.value.dark.focus}`)
+    expect(p.accentCss).toContain(`--color-border-focus:${d.value.light.focus}`)
     // 저장값을 지운 워크스페이스는 제품 기본색 — 스타일 블록이 없다
     h.shellProps.mockClear()
     h.getWorkspaceConfig.mockResolvedValue(cfg({ 'branding.accent': null }))

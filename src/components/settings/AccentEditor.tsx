@@ -19,7 +19,7 @@ function baseOf(value: unknown): string | null {
   return null
 }
 
-/** 서버는 base 색 하나에서 라이트·다크 토큰을 파생한다. */
+/** 서버는 base 색 하나에서 action 계열 토큰을 파생한다. */
 export function AccentEditor({ workspaceId, revision, initialAccent, invalidReason }: {
   workspaceId: string; revision: number; initialAccent: AccentValue | null; invalidReason?: string
 }) {
@@ -93,14 +93,14 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
     {preview && !preview.ok && <ConfigStateNotice kind="field" locale="ko" message={`${preview.error} ${preview.failures.map(f => t('settings.accent.contrast').replace('{pair}', String(f.pair)).replace('{contrast}', String(f.contrast)).replace('{min}', String(f.min))).join(', ')}`} />}
     {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
     {preview?.ok && <div className="grid gap-3 sm:grid-cols-2">
-      {(['light', 'dark'] as const).map(mode => <div key={mode} className="overflow-hidden rounded-xl border border-border">
-        <div className="p-4" style={{ backgroundColor: ACCENT_TOKENS[mode].surface }}>
-          <span className="rounded-lg px-3 py-2 text-sm font-semibold" style={{ backgroundColor: preview.value[mode].bg, color: preview.value[mode].fg }}>
-            {mode === 'light' ? t('settings.accent.light') : t('settings.accent.dark')}
+      <div className="overflow-hidden rounded-xl border border-border">
+        <div className="p-4" style={{ backgroundColor: ACCENT_TOKENS.light.surface }}>
+          <span className="rounded-lg px-3 py-2 text-sm font-semibold" style={{ backgroundColor: preview.value.light.bg, color: preview.value.light.fg }}>
+            {t('settings.accent.light')}
           </span>
         </div>
-        <p className="bg-surface-subtle px-4 py-2 font-mono text-meta text-fg-secondary">{preview.value[mode].bg} · {preview.value[mode].fg}</p>
-      </div>)}
+        <p className="bg-surface-subtle px-4 py-2 font-mono text-meta text-fg-secondary">{preview.value.light.bg} · {preview.value.light.fg}</p>
+      </div>
     </div>}
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
       <strong>{t('settings.accent.conflict')}</strong>

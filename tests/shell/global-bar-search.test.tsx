@@ -14,7 +14,7 @@ import type { NavGroup } from '@/lib/nav/registry'
 
 const wsGroups: NavGroup[] = [{ group: 'ws.main', items: [{ id: 'ws.projects', href: '/w/acme/projects', label: '과제 목록', icon: 'FolderOpen' }] }]
 const pGroups: NavGroup[] = [{ group: 'p.plan', items: [{ id: 'p.wbs', href: '/p/p1/wbs', label: '공정표', icon: 'ListTree' }] }]
-const brand = (productName: string) => ({ productName, workspaceId: 'w1', hasFull: false, hasFullDark: false, hasMark: false })
+const brand = (productName: string) => ({ productName, workspaceId: 'w1', hasFull: false, hasMark: false })
 const base = { homeHref: '/w/acme', identity: null, staging: false, onOpenDrawer: () => {}, workspaceId: 'w1' }
 const crumbs = { scope: 'workspace' as const, workspace: { name: 'Acme', href: '/w/acme' }, project: null, screen: null }
 const props = () => h.dialog.mock.calls.at(-1)?.[0] as { nav: unknown; productName: string }

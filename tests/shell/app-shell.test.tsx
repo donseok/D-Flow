@@ -35,7 +35,7 @@ const base = (over: Partial<ShellProps> = {}): ShellProps => ({
   project: null, projects: [{ id: P1, name: '하나', status: 'active', isAdmin: false }, { id: P2, name: '둘', status: 'active', isAdmin: false }],
   projectsFailed: false, favoriteIds: [P2], recentIds: [P1],
   identity: { displayName: 'alice', roleLabel: '멤버', teamCodes: null },
-  brand: { productName: 'D-Flow', workspaceId: WS.id, hasFull: false, hasFullDark: false, hasMark: false },
+  brand: { productName: 'D-Flow', workspaceId: WS.id, hasFull: false, hasMark: false },
   accentCss: '', degraded: false, configDegraded: false, canEditSettings: false, ...over,
 })
 const shell = (p: ShellProps) => render(<ShellEnvProvider value={{ staging: false, sidebarCollapsed: null }}><AppShell {...p}><p data-body>본문</p></AppShell></ShellEnvProvider>)
@@ -88,7 +88,7 @@ describe('AppShell', () => {
     expect(last(h.drawer).workspaceSwitcher).toBeTruthy()
   })
   it('전역 검색에 내리는 메뉴 — 워크스페이스 범위는 워크스페이스 메뉴만(프로젝트 null), 제품 이름은 셸의 브랜드 그대로', () => {
-    shell(base({ brand: { productName: 'Acme Flow', workspaceId: WS.id, hasFull: false, hasFullDark: false, hasMark: false } }))
+    shell(base({ brand: { productName: 'Acme Flow', workspaceId: WS.id, hasFull: false, hasMark: false } }))
     expect(last(h.globalBar).searchNav).toEqual({ workspace: wsGroups, project: null })
     expect(last(h.globalBar).brand.productName).toBe('Acme Flow')
   })

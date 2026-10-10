@@ -52,12 +52,12 @@ beforeEach(() => {
 describe('saveUiPrefs — 계정 키', () => {
   it('account_preferences 자기 행에 병합 upsert — onConflict user_id, 소속 조회 없음', async () => {
     const c = client({ account_preferences: [{ data: { prefs: { locale: 'ko' } } }] })
-    expect(await saveUiPrefs({ theme: 'dark' })).toEqual({ ok: true })
+    expect(await saveUiPrefs({ projectsView: 'cards' })).toEqual({ ok: true })
     expect(c.eqs.account_preferences).toEqual([['user_id', 'u1']])
     expect(c.upserts).toHaveLength(1)
     const [table, row, opts] = c.upserts[0]
     expect(table).toBe('account_preferences')
-    expect(row).toMatchObject({ user_id: 'u1', prefs: { locale: 'ko', theme: 'dark' } })
+    expect(row).toMatchObject({ user_id: 'u1', prefs: { locale: 'ko', projectsView: 'cards' } })
     expect(row).not.toHaveProperty('workspace_id')
     expect(opts).toEqual({ onConflict: 'user_id' })
     expect(c.tables).not.toContain('workspace_members')
@@ -65,7 +65,7 @@ describe('saveUiPrefs — 계정 키', () => {
   })
   it('선행 조회 실패면 저장 중단 — upsert 미도달, ok:false', async () => {
     const c = client({ account_preferences: [{ error: { message: 'ap boom' } }] })
-    expect(await saveUiPrefs({ theme: 'dark' })).toEqual({ ok: false })
+    expect(await saveUiPrefs({ projectsView: 'cards' })).toEqual({ ok: false })
     expect(c.upserts).toHaveLength(0)
     expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('선행 조회 실패'), 'ap boom')
   })

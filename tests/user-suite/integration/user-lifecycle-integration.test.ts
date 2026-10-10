@@ -369,7 +369,7 @@ describe('사용자 생애주기 통합 테스트 슈트 (User Lifecycle Integra
       }
       mocks.createServerClient.mockResolvedValue(serverClientMock)
 
-      const res = await saveUiPrefs({ theme: 'dark', sidebarCollapsed: true })
+      const res = await saveUiPrefs({ projectsView: 'cards', sidebarCollapsed: true })
       expect(res.ok).toBe(true)
       expect(serverClientMock.from).toHaveBeenCalledWith('account_preferences')
     })

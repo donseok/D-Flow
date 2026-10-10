@@ -16,9 +16,8 @@ import { ConflictResolver } from '@/components/ui/ConflictResolver'
 import { PageHeader } from '@/components/app/PageHeader'
 
 /**
- * 컴포넌트 상태 쇼케이스(SP3b 스펙 §4.6, 개정 §5.7.3) — 라이트·다크 두 열. 다크 열 컨테이너는 .dark + data-theme-scope 라
- * 유틸이 컨테이너의 재정의를 먹는다. 옛 토큰 이름을 쓰는 컴포넌트는 넣지 않는다(옛 이름의 var() 는 :root 값을 상속한다 — 계획 판정 Q12).
- * 겹쳐 뜨는 것(모달·충돌 비교)은 body 로 나가 열 안에 가둘 수 없다 — 열 밖 '겹침' 구역의 버튼으로 실제 테마에서 연다.
+ * 컴포넌트 상태 쇼케이스(SP3b 스펙 §4.6, 개정 §5.7.3) — 한 열이다(제품이 라이트 전용이라 다크 열은 없다 — 2026-10-10).
+ * 겹쳐 뜨는 것(모달·충돌 비교)은 body 로 나가 열 안에 가둘 수 없다 — 열 밖 '겹침' 구역의 버튼으로 연다.
  * 포커스는 정적으로 그릴 수 없어 전역 :focus-visible 과 같은 값의 외곽선으로 흉내 낸다(진짜 포커스는 Tab 눈확인).
  */
 export type AccentSample = { name: string; hex: string; result: AccentDerivation }
@@ -65,15 +64,12 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function Panel({ theme, samples }: { theme: 'light' | 'dark'; samples: AccentSample[] }) {
+function Panel({ samples }: { samples: AccentSample[] }) {
   return (
     <div
-      data-theme-scope
-      data-showcase-column={theme}
-      className={`${theme === 'dark' ? 'dark ' : ''}space-y-6 rounded-(--radius-panel) border border-border bg-canvas p-4 text-fg`}
+      data-showcase-column="light"
+      className="space-y-6 rounded-(--radius-panel) border border-border bg-canvas p-4 text-fg"
     >
-      <p className="text-meta font-semibold text-fg-muted">{theme === 'dark' ? '다크' : '라이트'}</p>
-
       <Section title="상태 8종">
         <div className="grid gap-2">
           {STATUS_KINDS.map((k) => (
@@ -198,7 +194,7 @@ function Panel({ theme, samples }: { theme: 'light' | 'dark'; samples: AccentSam
         <div className="grid gap-2 sm:grid-cols-2">
           {samples.map((s) => (
             <div key={s.hex} data-accent-sample={s.hex} data-accent-ok={String(s.result.ok)}
-              data-theme-scope style={s.result.ok ? accentStyle(s.result.value[theme]) : undefined}
+              style={s.result.ok ? accentStyle(s.result.value.light) : undefined}
               className="space-y-2 rounded-(--radius-control) border border-border bg-surface p-3">
               <p className="text-meta text-fg-secondary">{s.name} <span className="font-mono">{s.hex}</span></p>
               {s.result.ok ? (
@@ -229,13 +225,13 @@ const CONFLICT_FIELDS = [
   { key: 'note', label: '비고', mine: '', latest: '외주 일정 확인 필요' },
 ] as const
 
-/** 겹쳐 뜨는 표본 — body 로 나가므로 지금 화면의 테마로 뜬다(다크는 테마를 바꿔서 본다) */
+/** 겹쳐 뜨는 표본 — body 로 나가므로 열 밖에 둔다 */
 function Overlays() {
   const [open, setOpen] = useState<'modal' | 'conflict' | null>(null)
   const close = () => setOpen(null)
   return (
     <section data-showcase-overlays className="space-y-2 rounded-(--radius-panel) border border-border bg-canvas p-4">
-      <h2 className="text-section text-fg">겹침 — 모달·충돌 비교(지금 테마로 열린다)</h2>
+      <h2 className="text-section text-fg">겹침 — 모달·충돌 비교</h2>
       <div className="flex flex-wrap items-center gap-2">
         <Button data-sample="open-modal" variant="secondary" onClick={() => setOpen('modal')}>모달 열기</Button>
         <Button data-sample="open-conflict" variant="secondary" onClick={() => setOpen('conflict')}>충돌 비교 열기</Button>
@@ -253,10 +249,7 @@ export function UiStatesShowcase({ samples }: { samples: AccentSample[] }) {
   return (
     <div className="space-y-4">
       <Overlays />
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Panel theme="light" samples={samples} />
-        <Panel theme="dark" samples={samples} />
-      </div>
+      <Panel samples={samples} />
     </div>
   )
 }

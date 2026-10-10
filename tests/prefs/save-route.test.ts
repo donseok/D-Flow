@@ -39,8 +39,8 @@ beforeEach(() => {
 describe('saveUiPrefs — 계정 키는 account_preferences, 워크스페이스 키는 그 워크스페이스 행(D9)', () => {
   it('계정 키 병합 upsert', async () => {
     h.createServerClient.mockResolvedValue(db({ account_preferences: { sidebarCollapsed: true } }))
-    expect(await saveUiPrefs({ theme: 'dark' })).toEqual({ ok: true })
-    expect(h.ops).toEqual([['account_preferences', { sidebarCollapsed: true, theme: 'dark' }, null, { onConflict: 'user_id' }]])
+    expect(await saveUiPrefs({ projectsView: 'cards' })).toEqual({ ok: true })
+    expect(h.ops).toEqual([['account_preferences', { sidebarCollapsed: true, projectsView: 'cards' }, null, { onConflict: 'user_id' }]])
     expect(h.eqs).toEqual({ account_preferences: [['user_id', 'u1']] })
   })
   it('워크스페이스 키는 본문의 workspaceId 행에만(쿠키를 읽지 않는다 — Review Focus 4)', async () => {
@@ -59,15 +59,15 @@ describe('saveUiPrefs — 계정 키는 account_preferences, 워크스페이스 
   it('workspaceId 가 없거나 비소속이면 같은 요청의 계정 키도 쓰지 않는다 — 전부 아니면 전무(Y4)', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     h.createServerClient.mockResolvedValue(db({}))
-    expect(await saveUiPrefs({ theme: 'light', startPage: 'home' })).toEqual({ ok: false })
-    expect(await saveUiPrefs({ theme: 'light', startPage: 'home' }, { workspaceId: WS_X })).toEqual({ ok: false })
+    expect(await saveUiPrefs({ projectsView: 'rows', startPage: 'home' })).toEqual({ ok: false })
+    expect(await saveUiPrefs({ projectsView: 'rows', startPage: 'home' }, { workspaceId: WS_X })).toEqual({ ok: false })
     expect(await saveUiPrefs({ startPage: 'home' }, { workspaceId: WS_X })).toEqual({ ok: false })
     expect(h.ops).toEqual([]); expect(h.eqs).toEqual({})
     expect(err).toHaveBeenCalledTimes(3); err.mockRestore()
   })
   it('섞인 요청이 통과하면 둘 다 저장한다', async () => {
     h.createServerClient.mockResolvedValue(db({}))
-    expect(await saveUiPrefs({ theme: 'light', startPage: 'home' }, { workspaceId: WS })).toEqual({ ok: true })
+    expect(await saveUiPrefs({ projectsView: 'rows', startPage: 'home' }, { workspaceId: WS })).toEqual({ ok: true })
     expect(h.ops.map((o) => o[0])).toEqual(['account_preferences', 'user_preferences'])
   })
   it('notifRead 는 이 경로로 받지 않는다 — 쓰기 주체는 markAllNotificationsRead 하나(Y4)', async () => {
@@ -81,7 +81,7 @@ describe('saveUiPrefs — 계정 키는 account_preferences, 워크스페이스 
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     h.createServerClient.mockResolvedValue(db({}))
     const bad = {
-      theme: 'purple', locale: 'fr', sidebarCollapsed: 'yes', minuteFontSize: 99, wbsGanttScale: Number.NaN, minutesView: 'grid',
+      projectsView: 'tiles', locale: 'fr', theme: 'dark', sidebarCollapsed: 'yes', minuteFontSize: 99, wbsGanttScale: Number.NaN, minutesView: 'grid',
       dashSections: Array.from({ length: 51 }, (_, i) => `s${i}`), notif: { a: 'on' },
     }
     expect(await saveUiPrefs({ ...bad, wbsOutline: true, minutesExplorerLayout: 'list' } as never)).toEqual({ ok: true })
@@ -102,7 +102,7 @@ describe('saveUiPrefs — 계정 키는 account_preferences, 워크스페이스 
   it('선행 조회 실패면 그 표의 저장을 중단한다(원칙 ②)', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     h.createServerClient.mockResolvedValue(db({}, { readFail: 'account_preferences' }))
-    expect(await saveUiPrefs({ theme: 'dark' })).toEqual({ ok: false })
+    expect(await saveUiPrefs({ projectsView: 'cards' })).toEqual({ ok: false })
     expect(h.ops).toEqual([]); err.mockRestore()
   })
   it('은퇴 키(heroCollapsed·lastProjectId)는 로그 없이 버린다 — 옛 셸이 계속 보낸다', async () => {
@@ -166,7 +166,7 @@ describe('/api/prefs — 거부 응답은 하나(W10 — 존재 오라클 금지
   })
   it('허용된 쓰기·은퇴 키만 담긴 요청은 200 ok', async () => {
     h.createServerClient.mockResolvedValue(db({}))
-    expect((await post({ prefs: { theme: 'dark' } })).status).toBe(200)
+    expect((await post({ prefs: { projectsView: 'cards' } })).status).toBe(200)
     expect((await post({ prefs: { startPage: 'home' }, workspaceId: WS })).status).toBe(200)
     expect((await post({ prefs: { lastProjectId: 'p', heroCollapsed: true } })).status).toBe(200)
     expect(h.ops.map((o) => o[0])).toEqual(['account_preferences', 'user_preferences'])
@@ -174,10 +174,10 @@ describe('/api/prefs — 거부 응답은 하나(W10 — 존재 오라클 금지
   it('content-type 이 application/json 이 아니면 본문을 읽지 않고 415(Y5 — text/plain 폼 CSRF)', async () => {
     h.createServerClient.mockResolvedValue(db({}))
     for (const ct of ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x', 'application/jsonp']) {
-      const res = await POST(new NextRequest('http://localhost/api/prefs', { method: 'POST', headers: { 'content-type': ct }, body: JSON.stringify({ prefs: { theme: 'dark' } }) }))
+      const res = await POST(new NextRequest('http://localhost/api/prefs', { method: 'POST', headers: { 'content-type': ct }, body: JSON.stringify({ prefs: { projectsView: 'cards' } }) }))
       expect(res.status, ct).toBe(415)
     }
-    expect((await post({ prefs: { theme: 'dark' } }, { 'content-type': 'application/json; charset=utf-8' })).status).toBe(200)
+    expect((await post({ prefs: { projectsView: 'cards' } }, { 'content-type': 'application/json; charset=utf-8' })).status).toBe(200)
     expect(h.ops.map((o) => o[0])).toEqual(['account_preferences'])
   })
   it('본문이 JSON 이 아니거나 객체가 아니면 400(prefs 배열은 무시)', async () => {
@@ -185,7 +185,7 @@ describe('/api/prefs — 거부 응답은 하나(W10 — 존재 오라클 금지
     expect(bad.status).toBe(400)
     expect((await post(null)).status).toBe(400)
     h.createServerClient.mockResolvedValue(db({}))
-    expect((await post({ prefs: ['theme'] })).status).toBe(200)
+    expect((await post({ prefs: ['projectsView'] })).status).toBe(200)
     expect(h.ops).toEqual([])
   })
 })

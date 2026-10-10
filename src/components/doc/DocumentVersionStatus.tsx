@@ -39,10 +39,10 @@ export function DocumentVersionStatus({
         <div
           role="status"
           data-testid="doc-version-old-warning"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning bg-warning-weak px-3.5 py-2 text-xs text-warning dark:text-warning"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning bg-warning-weak px-3.5 py-2 text-xs text-warning"
         >
           <div className="flex items-center gap-2">
-            <History className="h-4 w-4 shrink-0 text-warning dark:text-warning" />
+            <History className="h-4 w-4 shrink-0 text-warning" />
             <span>
               {t('doc.version.oldLead')}<strong>v{viewingVersionNo}</strong>{t('doc.version.oldMid')}{' '}
               <strong>v{currentVersionNo}</strong>{t('doc.version.oldTail')}
@@ -52,7 +52,7 @@ export function DocumentVersionStatus({
             <Link
               href={latestHref}
               data-testid="doc-version-latest-link"
-              className="flex items-center gap-1 font-semibold text-warning dark:text-warning hover:underline shrink-0"
+              className="flex items-center gap-1 font-semibold text-warning hover:underline shrink-0"
             >
               {t('doc.version.viewLatest')}
               <ArrowRight className="h-3.5 w-3.5" />
@@ -76,7 +76,7 @@ export function DocumentVersionStatus({
         {state === 'draft' ? (
           <span
             data-testid="doc-status-draft-chip"
-            className="inline-flex items-center gap-1 rounded-md border border-warning bg-warning-weak dark:bg-warning-weak px-2 py-0.5 text-xs font-semibold text-warning dark:text-warning"
+            className="inline-flex items-center gap-1 rounded-md border border-warning bg-warning-weak px-2 py-0.5 text-xs font-semibold text-warning"
           >
             <FileEdit className="h-3 w-3" />
             {t('doc.status.draft')}
@@ -84,7 +84,7 @@ export function DocumentVersionStatus({
         ) : (
           <span
             data-testid="doc-status-published-chip"
-            className="inline-flex items-center gap-1 rounded-md border border-success bg-success-weak dark:bg-success-weak px-2 py-0.5 text-xs font-semibold text-success dark:text-success"
+            className="inline-flex items-center gap-1 rounded-md border border-success bg-success-weak px-2 py-0.5 text-xs font-semibold text-success"
           >
             <CheckCircle2 className="h-3 w-3" />
             {state === 'saved' ? t('doc.status.saved') : t('doc.status.published')}

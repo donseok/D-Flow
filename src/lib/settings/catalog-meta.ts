@@ -61,10 +61,10 @@ const BASE_META: Readonly<Record<SettingKey, CatalogMeta>> = {
     ['src/app/api/brand/[workspaceId]/[slot]/route.ts', 'src/lib/shell/loadShell.ts', 'src/components/app/BrandSlot.tsx', 'src/components/ui/BrandMark.tsx', 'src/app/(app)/w/[slug]/layout.tsx', 'src/app/(app)/p/[projectId]/layout.tsx', 'src/app/(app)/(global)/layout.tsx'],
     ['tests/settings/logo-upload.test.ts', 'tests/api/brand-route.test.ts', 'tests/shell/scope-layouts.test.tsx', 'tests/shell/brand.test.tsx', 'tests/app/w-layout.test.tsx', 'tests/settings/validate-config.test.ts', 'tests/shell/scope-branding.test.tsx']),
   // wired(2026-10-09) — 저장(hex → 파생 세트) → loadShell 이 스타일 문자열로(accentStyle) → 세 범위 레이아웃이 모두 loadShell 을 거쳐 AppShell 이
-  // <style> 한 블록으로 싣는다(action 계열 변수 여섯, 라이트·다크). 근거 테스트: scope-layouts '저장된 강조색(branding.accent)을 셸의 스타일로 싣는다',
-  // brand '두 세트 열두 값이 모두 소문자 hex 면 :root 다음 .dark', app-shell 'accent 는 <style> 한 블록', config-lifecycle '저장된 accent 가 red;} 나
+  // <style> 한 블록으로 싣는다(action 계열 변수 여섯). 근거 테스트: scope-layouts '저장된 강조색(branding.accent)을 셸의 스타일로 싣는다',
+  // brand '여섯 값이 모두 소문자 hex 면 :root 한 블록', app-shell 'accent 는 <style> 한 블록', config-lifecycle '저장된 accent 가 red;} 나
   // </style> 이면 읽기에서 invalid 다', accent-editor(409 뒤 새 명령 id). 공개 화면은 워크스페이스를 몰라 제품 기본색이다(의도).
-  // 격리 완주: 로컬 E2E setting-accent(세 범위 셸의 :root action 배경 = 저장된 라이트 세트, 다른 워크스페이스 셸에는 강조색 블록이 없다)
+  // 격리 완주: 로컬 E2E setting-accent(세 범위 셸의 :root action 배경 = 저장된 세트, 다른 워크스페이스 셸에는 강조색 블록이 없다)
   'branding.accent': A('wired',
     ['src/components/settings/AccentEditor.tsx', 'src/lib/shell/loadShell.ts', 'src/lib/settings/accentCss.ts', 'src/components/app/AppShell.tsx'],
     ['tests/settings/accent.test.ts', 'tests/shell/brand.test.tsx', 'tests/shell/scope-layouts.test.tsx', 'tests/shell/app-shell.test.tsx', 'tests/settings/config-lifecycle.test.ts', 'tests/components/accent-editor.test.tsx']),
@@ -223,7 +223,6 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
 /** 개인 설정(개정 §2.8.5) — 계정 키는 계정 행, 워크스페이스 키는 그 워크스페이스의 개인 행(SP3b D9 — 키 목록의 정본은 prefs 의 split.ts).
  *  표 이름을 여기 적지 않는다 — 설정 해석기 쪽 파일은 개인 설정 저장소 이름을 원문에 두지 않는다(tests/settings/project-isolation) */
 export const PERSONAL_PREFS: readonly { key: string; desc: string; scope: '계정' | '워크스페이스' }[] = [
-  { key: 'theme', desc: '시스템·라이트·다크', scope: '계정' },
   { key: 'sidebarCollapsed', desc: '사이드바 접기', scope: '계정' }, { key: 'dashSections', desc: '대시보드 구역', scope: '계정' },
   { key: 'minutesView', desc: '회의록 보기', scope: '계정' }, { key: 'minuteFontSize', desc: '회의록 글자 크기', scope: '계정' },
   { key: 'minutesExplorerLayout', desc: '회의록 탐색기 배치', scope: '계정' }, { key: 'wbsHideDone', desc: 'WBS 완료 숨김', scope: '계정' },

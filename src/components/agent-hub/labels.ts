@@ -4,7 +4,7 @@ import type { WaitReasonKind } from '@/lib/domain/waitReason'
 import { STAGE_NONE_LABEL_KO } from '@/lib/domain/stageLabels'
 
 /**
- * 상태 칩 색 — globals.css 의 기존 토큰만 쓴다(새 색을 만들지 않으므로 .dark 오버라이드가 그대로 따라온다).
+ * 상태 칩 색 — globals.css 의 기존 토큰만 쓴다(새 색을 만들지 않는다).
  * 기준은 "지금 누가 손대야 하나" 다. 사람 차례(승인 대기·결정 대기·반려)는 눈에 띄게, 기계 차례
  * (작업 중·대기)는 조용하게, 끝난 것(승인됨)은 초록으로 둔다. 컴포넌트에 if (state === ...) 를
  * 흩지 않으려고 표 하나로 모은다.

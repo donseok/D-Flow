@@ -13,7 +13,11 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 
 const EMPTY: BrandingLogo = { full: null, full_dark: null, mark: null }
-const LABEL: Record<BrandingSlot, DictKey> = { full: 'settings.logo.slot.full', full_dark: 'settings.logo.slot.fullDark', mark: 'settings.logo.slot.mark' }
+// 편집하는 슬롯 — full_dark(어두운 배경 로고)는 라이트 전용 결정(2026-10-10)으로 쓰이지 않는다. 저장 형태의 세 슬롯은 그대로라
+// (Storage 정책·설정 파서가 같은 모양을 본다) 그 칸은 값을 건드리지 않고 그대로 실어 보낸다.
+type ShownSlot = Exclude<BrandingSlot, 'full_dark'>
+const SHOWN_SLOTS = BRANDING_SLOTS.filter((slot): slot is ShownSlot => slot !== 'full_dark')
+const LABEL: Record<ShownSlot, DictKey> = { full: 'settings.logo.slot.full', mark: 'settings.logo.slot.mark' }
 const same = (a: BrandingLogo, b: BrandingLogo) => BRANDING_SLOTS.every(slot => a[slot] === b[slot])
 /** 선택한 파일의 로컬 미리보기 주소 — 서버에 요청하지 않는다(저장 전 경로는 /api/brand 가 주지 않는다). 지원하지 않으면 null. */
 function localPreview(file: File): string | null {
@@ -45,7 +49,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
   const [pending, startTransition] = useTransition()
   const dirty = needsRepair || !same(baseline, draft)
 
-  function upload(slot: BrandingSlot) {
+  function upload(slot: ShownSlot) {
     const file = files[slot]
     if (!file) return
     setError(null); setUploadError(null); setNotice(null)
@@ -100,8 +104,8 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
   return <div className="space-y-4">
     <p className="text-xs leading-5 text-fg-secondary">{t('settings.logo.desc')}</p>
     {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.logo" message={invalidReason} isAdmin settingsHref="#workspace-general" />}
-    <div className="grid gap-3 sm:grid-cols-3">
-      {BRANDING_SLOTS.map(slot => <div key={slot} className="space-y-2 rounded-xl border border-border p-3">
+    <div className="grid gap-3 sm:grid-cols-2">
+      {SHOWN_SLOTS.map(slot => <div key={slot} className="space-y-2 rounded-xl border border-border p-3">
         <div className="text-sm font-semibold text-fg">{t(LABEL[slot])}</div>
         {draft[slot] ? <>
           {draft[slot] === baseline[slot] ? <>
@@ -137,7 +141,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
     </div>
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
       <strong>{t('settings.logo.conflict')}</strong>
-      {BRANDING_SLOTS.map(slot => <p key={slot}>{t(LABEL[slot])} {t('settings.logo.mine')} {draft[slot] ?? t('common.none')} {t('settings.logo.latest')} {conflict.logo?.[slot] ?? t('common.none')}</p>)}
+      {SHOWN_SLOTS.map(slot => <p key={slot}>{t(LABEL[slot])} {t('settings.logo.mine')} {draft[slot] ?? t('common.none')} {t('settings.logo.latest')} {conflict.logo?.[slot] ?? t('common.none')}</p>)}
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn btn-ghost" onClick={() => { setBaseline(conflict.logo ?? EMPTY); setBaseRevision(conflict.revision); setNeedsRepair(conflict.logo === null); setConflict(null) }}>{t('settings.conflict.reapplyMine')}</button>
         {conflict.logo && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.logo!); setBaseline(conflict.logo!); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>{t('settings.conflict.useLatest')}</button>}

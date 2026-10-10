@@ -1,6 +1,5 @@
 import type { PortalWidgetId } from '@/lib/portal/widgets'
 import type { CustomValues } from './customFields'
-import type { ThemePref } from '@/lib/theme/policy'
 import type { VocabByProject } from '@/lib/settings/vocab'
 
 /** DEPRECATED — 깊이 판정에 쓰지 않는다(진실은 parent_id 트리). 프로젝트별 레벨 라벨은 ProjectConfig.levelLabels. */
@@ -197,7 +196,6 @@ export interface MeetingAttendeeInfo {
 /** 계정별로 동기화되는 전역 UI 설정. 각 키는 서버에 없을 수 있음(부분 저장). */
 export interface UiPrefs {
   sidebarCollapsed?: boolean
-  theme?: ThemePref        // 선호 — 형식 밖 저장값은 읽는 쪽(isThemePref)이 '없음'으로 본다
   dashSections?: string[]   // 대시보드 상세 아코디언에서 펼쳐 둔 그룹 id
   minutesView?: 'list' | 'calendar' | 'tree'   // 회의록 보관함 뷰 토글
   minuteFontSize?: number   // 회의록 뷰어 본문 글자크기(px, 12~28)

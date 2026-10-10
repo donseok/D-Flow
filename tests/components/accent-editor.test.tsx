@@ -25,21 +25,21 @@ describe('AccentEditor', () => {
     const button = [...host.querySelectorAll('button')].find(x => x.textContent?.includes(label))!
     await act(async () => button.click())
   }
-  it('기준 색 하나를 보내고 밝은·어두운 미리보기를 그린다', async () => {
+  it('기준 색 하나를 보내고 미리보기 한 칸을 그린다 — 어두운 화면 미리보기는 없다(라이트 전용 2026-10-10)', async () => {
     const input = host.querySelector<HTMLInputElement>('#workspace-accent')!
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '#315cdb')
       input.dispatchEvent(new Event('input', { bubbles: true }))
     })
     expect(host.textContent).toContain('밝은 화면')
-    expect(host.textContent).toContain('어두운 화면')
+    expect(host.textContent).not.toContain('어두운 화면')
     await click('강조색 저장')
     expect(update).toHaveBeenCalledWith('ws-1', expect.objectContaining({ expectedRevision: 1, set: { 'branding.accent': '#315cdb' } }))
     expect(refresh).toHaveBeenCalledOnce()
   })
   it('기본값으로 되돌릴 때 null 을 저장한다', async () => {
     act(() => root.render(<AccentEditor key="existing" workspaceId="ws-1" revision={1}
-      initialAccent={{ base: '#315cdb', light: {} as never, dark: {} as never }} />))
+      initialAccent={{ base: '#315cdb', light: {} as never }} />))
     await click('기본값으로')
     await click('강조색 저장')
     expect(update).toHaveBeenCalledWith('ws-1', expect.objectContaining({ set: { 'branding.accent': null } }))

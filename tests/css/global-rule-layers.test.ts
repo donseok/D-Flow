@@ -5,14 +5,12 @@ import { declsOf, readGlobals, srcFiles, stripComments, topBlocks, tokenMaps, ty
 
 const css = stripComments(readGlobals())
 const top = topBlocks(css)
-/** 개정 §5.5.2 원색 34 — 닫힌 집합 */
+/** 원색 17 — 닫힌 집합. 개정 §5.5.2 의 34개 중 다크 전용 17개(night·ink-d·cobalt 300/400/450/900/950·mint-300)는 라이트 전용 결정(2026-10-10)으로 지웠다 */
 export const PRIMITIVES = [
   'gray-0', 'gray-25', 'gray-50', 'gray-75', 'gray-100', 'gray-150', 'gray-200', 'gray-400', 'gray-450', 'gray-500', 'gray-600', 'gray-900',
-  'night-950', 'night-900', 'night-850', 'night-800', 'night-780', 'night-700',
-  'cobalt-50', 'cobalt-300', 'cobalt-400', 'cobalt-450', 'cobalt-600', 'cobalt-700', 'cobalt-800', 'cobalt-900', 'cobalt-950',
-  'mint-300', 'mint-700', 'ink-d50', 'ink-d200', 'ink-d300', 'ink-d350', 'ink-d400',
+  'cobalt-50', 'cobalt-600', 'cobalt-700', 'cobalt-800', 'mint-700',
 ]
-const UNLAYERED = [':focus-visible', '::selection', 'body', '*', '.dark', ':root', '@media print', '@media (prefers-reduced-motion: reduce)']
+const UNLAYERED = [':focus-visible', '::selection', 'body', '*', ':root', '@media print', '@media (prefers-reduced-motion: reduce)']
 
 /** 모든 깊이의 블록을 [조상 prelude 목록, 블록] 으로 */
 function walkAll(blocks: Block[], parents: string[] = []): [string[], Block][] {
@@ -32,7 +30,7 @@ describe('전역 규칙은 @layer 밖(D50)', () => {
 
 describe('원색 --p-*(D11·판정 Q14)', () => {
   const m = tokenMaps()
-  it('최상위 :root 에만, 개정 §5.5.2 의 34개와 같다', () => {
+  it('최상위 :root 에만, 닫힌 17개와 같다', () => {
     expect(m.primitives.map((d) => d.name.slice(4)).sort()).toEqual([...PRIMITIVES].sort())
     const elsewhere = walkAll(top).filter(([parents, b]) => !(parents.length === 0 && b.prelude === ':root'))
       .flatMap(([, b]) => declsOf(b.body)).filter((d) => d.name.startsWith('--p-'))
@@ -40,14 +38,6 @@ describe('원색 --p-*(D11·판정 Q14)', () => {
   })
   it('컴포넌트·페이지는 원색을 직접 참조하지 않는다(src 에 var(--p- 0건)', () => {
     expect(srcFiles(/\.(tsx?)$/).filter(([, t]) => t.includes('var(--p-')).map(([f]) => f)).toEqual([])
-  })
-})
-
-describe('var(--color-…) 를 값으로 가진 커스텀 프로퍼티의 자리(스펙 §4.1 블록 8, 비평 ui-risk I4)', () => {
-  it('@theme inline 안이거나, 선언 셀렉터 목록에 .dark 와 [data-theme-scope] 가 함께 있다', () => {
-    const bad = walkAll(top).flatMap(([, b]) => declsOf(b.body).filter((d) => d.value.includes('var(--color-')).map((d) => ({ sel: b.prelude, d })))
-      .filter(({ sel }) => sel !== '@theme inline' && !(sel.split(',').map((s) => s.trim()).includes('.dark') && sel.includes('[data-theme-scope]')))
-    expect(bad.map(({ sel, d }) => `${sel} ${d.name}`)).toEqual([])
   })
 })
 
@@ -67,64 +57,27 @@ describe('비색 토큰 값(스펙 §4.1 블록 6·D56)', () => {
   it('옛 --shadow-sm·md 는 "그림자 없음"이되 none 이 아니다 — shadow-[var(--shadow-sm)] 의 box-shadow 쉼표 목록에 none 이 들면 선언 전체가 무효(IACVT)라 같은 요소의 ring 까지 사라진다(U1a 리뷰 R2 P2, Tailwind 의 shadow-none 과 같은 0 0 #0000)', () => {
     for (const n of ['--shadow-sm', '--shadow-md']) expect(val(n)).not.toMatch(/\bnone\b/)
   })
-  it('.freeze-edge 그림자는 다크에서 다시 정의된다 — fg(다크에서 밝은 색)를 섞지 않는다(U1a 리뷰 R1 P3)', () => {
+  it('.freeze-edge 그림자는 토큰이다 — fg 를 섞지 않는다(U1a 리뷰 R1 P3)', () => {
     expect(val('--shadow-freeze-edge')).toBeDefined()
-    expect(m.dark.find((d) => d.name === '--shadow-freeze-edge')?.value).toBeDefined()
     const comps = top.filter((b) => b.prelude === '@layer components').flatMap((b) => topBlocks(b.body))
     const body = comps.find((b) => b.prelude === '.freeze-edge')?.body ?? ''
     expect(body).toMatch(/box-shadow\s*:\s*var\(--shadow-freeze-edge\)/)
     expect(body).not.toMatch(/--color-fg\b/)
   })
-  it('--gradient-primary 는 마지막 소비처와 함께 지웠다(판정 Q15) — :root·.dark 어디에도 다시 두지 않는다', () => {
+  it('--gradient-primary 는 마지막 소비처와 함께 지웠다(판정 Q15) — 다시 두지 않는다', () => {
     expect(val('--gradient-primary')).toBeUndefined()
-    expect(m.dark.some((d) => d.name === '--gradient-primary')).toBe(false)
   })
 })
 
-/** 최상위 :root·.dark 가 같은 이름(커스텀 프로퍼티·color-scheme)을 선언할 때 :root 가 .dark 뒤에 오는 쌍 — 같은 특이성은 뒤가 이긴다.
- *  contrast-tokens 의 해석기는 문맥 맵이라 소스 순서를 보지 않는다(판정 Q36) */
-function orderViolations(src: string): string[] {
-  const blocks = topBlocks(stripComments(src)).map((b, i) => ({
-    i, sel: b.prelude,
-    names: new Set([...declsOf(b.body).map((d) => d.name), ...(/(^|[\s;{])color-scheme\s*:/.test(b.body) ? ['color-scheme'] : [])]),
-  }))
-  const roots = blocks.filter((b) => b.sel === ':root')
-  const darks = blocks.filter((b) => b.sel === '.dark')
-  return roots.flatMap((r) => darks.flatMap((d) => [...r.names].filter((n) => d.names.has(n) && r.i > d.i).map((n) => `${n}: :root#${r.i} 가 .dark#${d.i} 뒤`)))
-}
-
-describe('소스 순서 — :root 와 .dark 가 같은 이름을 선언하면 :root 가 앞(판정 Q36)', () => {
-  it('globals.css 에 위반 0, color-scheme 은 :root(light)·.dark(dark) 둘 다 있다', () => {
-    const src = readGlobals()
-    expect(orderViolations(src)).toEqual([])
-    const blocks = topBlocks(stripComments(src))
-    expect(blocks.some((b) => b.prelude === ':root' && /color-scheme\s*:\s*light/.test(b.body))).toBe(true)
-    expect(blocks.some((b) => b.prelude === '.dark' && /color-scheme\s*:\s*dark/.test(b.body))).toBe(true)
+describe('라이트 전용(2026-10-10) — 색 체계는 :root 의 light 하나', () => {
+  it(':root 가 color-scheme: light 를 선언한다 — OS 가 다크여도 브라우저가 폼 컨트롤·스크롤바를 어둡게 칠하지 않는다', () => {
+    expect(top.some((b) => b.prelude === ':root' && /color-scheme\s*:\s*light/.test(b.body))).toBe(true)
+    expect(css).not.toMatch(/color-scheme\s*:\s*(?!light\b)[a-z]/)
   })
-  it('검사가 살아 있다 — :root 가 .dark 뒤면 잡는다', () => {
-    expect(orderViolations(':root { --a: 1; }\n.dark { --a: 2; color-scheme: dark; }\n:root { color-scheme: light; --a: 3; }')).toEqual([
-      '--a: :root#2 가 .dark#1 뒤', 'color-scheme: :root#2 가 .dark#1 뒤',
-    ])
-  })
-})
-
-/** 인쇄 블록(@media print 의 :root, .dark)이 최상위 .dark 앞에 오는 쌍 — 특이성이 같아(0,1,0) 뒤가 이긴다.
- *  앞에 오면 다크 사용자의 인쇄가 다크 값이 된다. contrast-tokens 의 해석기는 print 가 늘 이긴다고 가정해 순서를 보지 않는다 */
-function printOrderViolations(src: string): string[] {
-  const blocks = topBlocks(stripComments(src)).map((b, i) => ({ i, b }))
-  const prints = blocks.filter(({ b }) => b.prelude === '@media print' && topBlocks(b.body).some((x) => /^:root\s*,\s*\.dark$/.test(x.prelude)))
-  const darks = blocks.filter(({ b }) => b.prelude === '.dark')
-  return prints.flatMap((p) => darks.filter((d) => d.i > p.i).map((d) => `.dark#${d.i} 가 @media print#${p.i} 뒤`))
-}
-
-describe('소스 순서 — 인쇄 블록은 모든 최상위 .dark 뒤(스펙 §4.1 블록 10, U1a 리뷰 R2·R3)', () => {
-  it('globals.css 에 위반 0, 인쇄 블록이 있다', () => {
-    const src = readGlobals()
-    expect(printOrderViolations(src)).toEqual([])
-    expect(topBlocks(stripComments(src)).some((b) => b.prelude === '@media print' && /:root\s*,\s*\.dark/.test(b.body))).toBe(true)
-  })
-  it('검사가 살아 있다 — .dark 가 인쇄 블록 뒤면 잡는다', () => {
-    expect(printOrderViolations('.dark { --a: 1; }\n@media print { :root, .dark { --a: 0; } }\n.dark { --b: 2; }')).toEqual(['.dark#2 가 @media print#1 뒤'])
+  it('의미 색 토큰(--color-*)은 @theme 한 곳에서만 선언한다 — 다크·인쇄 재정의 블록이 없다', () => {
+    const elsewhere = walkAll(top).filter(([parents, b]) => !(parents.length === 0 && b.prelude === '@theme'))
+      .flatMap(([, b]) => declsOf(b.body).filter((d) => d.name.startsWith('--color-')).map((d) => `${b.prelude} ${d.name}`))
+    expect(elsewhere).toEqual([])
   })
 })
 
