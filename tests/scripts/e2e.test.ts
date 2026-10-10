@@ -1474,6 +1474,33 @@ describe('archivedRowVerdict — 목록 행의 보관 상태', () => {
   })
 })
 
+describe('e2e-local.mjs — project-delete 단계(0058)', () => {
+  const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+  const start = src.indexOf('// 26b. project-delete')
+  const section = src.slice(start, src.indexOf('// 27. workspace-archive'))
+  it('끝 근처다 — 맨 끝의 workspace-archive 바로 앞이고, 이 단계가 만든 프로젝트만 지운다', () => {
+    expect(start).toBeGreaterThan(src.lastIndexOf("settingStep('setting-local-drafts'"))
+    expect(section.match(/\bstep\('/g)).toHaveLength(1)
+    expect(section).toContain("step('project-delete',")
+    expect(section).toContain("const X = await createProject(ana, wsA, 'DEL')")
+    // 삭제 액션의 대상은 버릴 프로젝트(X)와 회의록이 있는 프로젝트(M — 거부돼야 한다)뿐이다. 앞 단계의 프로젝트(A·B·C)를 직접 넘기지 않는다
+    expect([...section.matchAll(/'deleteProject', \[(\w+)\.id,/g)].map((m) => m[1]).sort()).toEqual(['M', 'X', 'X', 'X'])
+    expect(section).toMatch(/minutesBlocked: withMinutes\?\.ok === false && withMinutes\.code === 'has_minutes'/)
+  })
+  it('보는 것 — 워크스페이스 관리자만(프로젝트 관리자 거부·구역 숨김)·이름 대조·회의록 차단·행 삭제·주소 404·목록·다른 프로젝트 불변·기록', () => {
+    for (const check of ['projectAdminIsNotWorkspaceAdmin', 'zoneForWorkspaceAdminOnly', 'projectAdminRefused', 'wrongNameRefused', 'minutesBlocked',
+      'deleted', 'rowsGone', 'addressGone', 'listUpdated', 'othersUntouched', 'deleteAgainRefused', 'recorded']) {
+      expect(section, check).toContain(`${check}:`)
+    }
+    // 삭제하는 사람은 플랫폼 관리자가 아닌 워크스페이스 관리자(ana)다 — 플랫폼 관리자 우회로 통과한 것이 아니어야 한다
+    expect(section).toMatch(/const deleted = \(await ana\.action\(page, 'deleteProject'/)
+    expect(section).toMatch(/const byProjectAdmin = \(await carol\.action\(page, 'deleteProject'/)
+  })
+  it('액션 등록 — 설정 화면이 싣는 deleteProject', () => {
+    expect(src).toContain("deleteProject: { filename: 'src/app/actions/projectDelete.ts', exportedName: 'deleteProject', worker: '/p/[projectId]/settings/page' }")
+  })
+})
+
 describe('e2e-local.mjs — workspace-archive 단계(0056)', () => {
   const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
   const section = src.slice(src.indexOf('// 27. workspace-archive'))

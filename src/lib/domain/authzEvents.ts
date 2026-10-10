@@ -7,18 +7,20 @@
 //   project_access  {person_active}                              — 인물의 비활성·재활성(SP4) — 그 인물의 권한 있는 명단 행마다 한 기록
 //   password_reset  {reset: true}                                — 관리자가 한 비밀번호 재설정(0053 record_password_reset). before 없음. 권한이 바뀐 것은
 //                   아니지만 "그 계정으로 로그인할 수 있게 만든" 조작이라 같은 이력에 남긴다. 비밀번호 값은 어디에도 없다
+//   project_deleted {name, removed: {표: 건수}}                  — 프로젝트 삭제(0058 delete_project). after 없음. 프로젝트 행이 사라져 이름은 여기에만 남는다
 // 문구는 사전(libUi 의 authz.* · 역할 이름은 role.admin·role.member)에서 읽는다. 문구를 만드는 함수는 번역 함수(Translate)를 선택 인자로 받고,
 // 넘기지 않으면 종전의 한국어다 — 화면으로 가는 액션(actions/authzEvents.ts)만 serverTranslator() 를 넘긴다(스펙 §3.4 T11 은 이 한국어 기본값을 지킨다).
 // 모르는 모양은 지어내지 않는다 — 읽을 수 있는 값만 쓰고 아니면 그대로 알린다(3원칙: 모르면 unknown).
 import type { DictKey } from '@/lib/i18n/dict'
 import { koTranslate, type Translate } from '@/lib/i18n/translate'
 
-export type AuthzEventKind = 'platform_admin' | 'workspace_role' | 'project_access' | 'password_reset'
+export type AuthzEventKind = 'platform_admin' | 'workspace_role' | 'project_access' | 'password_reset' | 'project_deleted'
 export type AuthzEventCause = 'direct' | 'cascade' | 'parent_deleted'
 
 /** 종류·원인 라벨의 사전 키 — 화면은 이 표로 읽는다(플랫폼 관리자는 기존 role.platformAdmin 을 재사용) */
 export const AUTHZ_KIND_KEY = {
   platform_admin: 'role.platformAdmin', workspace_role: 'authz.kind.workspace_role', project_access: 'authz.kind.project_access', password_reset: 'authz.kind.password_reset',
+  project_deleted: 'authz.kind.project_deleted',
 } as const satisfies Record<AuthzEventKind, DictKey>
 export const AUTHZ_CAUSE_KEY = {
   direct: 'authz.cause.direct', cascade: 'authz.cause.cascade', parent_deleted: 'authz.cause.parent_deleted',
@@ -27,6 +29,7 @@ export const AUTHZ_CAUSE_KEY = {
 export const AUTHZ_KIND_LABEL: Record<AuthzEventKind, string> = {
   platform_admin: koTranslate(AUTHZ_KIND_KEY.platform_admin), workspace_role: koTranslate(AUTHZ_KIND_KEY.workspace_role),
   project_access: koTranslate(AUTHZ_KIND_KEY.project_access), password_reset: koTranslate(AUTHZ_KIND_KEY.password_reset),
+  project_deleted: koTranslate(AUTHZ_KIND_KEY.project_deleted),
 }
 export const AUTHZ_CAUSE_LABEL: Record<AuthzEventCause, string> = {
   direct: koTranslate(AUTHZ_CAUSE_KEY.direct), cascade: koTranslate(AUTHZ_CAUSE_KEY.cascade), parent_deleted: koTranslate(AUTHZ_CAUSE_KEY.parent_deleted),
@@ -86,6 +89,11 @@ export function describeAuthzChange(kind: AuthzEventKind, before: unknown, after
     return unreadable
   }
   if (kind === 'password_reset') return b === null && a?.reset === true ? t('authz.passwordReset') : unreadable
+  if (kind === 'project_deleted') {
+    // 지운 프로젝트의 이름은 이 기록에만 남는다 — 이름을 읽지 못하면 지어내지 않는다
+    const name = a === null && typeof b?.name === 'string' ? b.name.trim() : ''
+    return name ? `${t('authz.projectDeleted')} (${name})` : unreadable
+  }
   if (kind === 'project_access' && ((b !== null && 'person_active' in b) || (a !== null && 'person_active' in a))) {
     return describePersonActive(b, a, t)
   }

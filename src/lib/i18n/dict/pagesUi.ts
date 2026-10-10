@@ -94,6 +94,7 @@ export const pagesUiKo = {
   'pages.projSettings.nav.forms': '양식',
   'pages.projSettings.nav.fields': '추가 필드',
   'pages.projSettings.nav.status': '상태·승인',
+  'pages.projSettings.nav.danger': '위험 구역',
   'pages.projSettings.formKind.weekly_report_pptx': '주간보고 (PPTX)',
   'pages.projSettings.formKind.weekly_report_xlsx': '주간보고 (XLSX)',
   'pages.projSettings.formKind.issue_analysis_pptx': '이슈 분석 (PPTX)',

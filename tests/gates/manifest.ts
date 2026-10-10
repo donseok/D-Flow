@@ -227,6 +227,9 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('projectInvites')}#listProjectInvites`]: nul('projectAdmin'),
   [`${A('projectInvites')}#createProjectInvite`]: nul('projectAdmin'),
   [`${A('projectInvites')}#revokeProjectInvite`]: nul('projectAdmin'),
+  // ── projectDelete — 프로젝트 삭제(0058 delete_project). 워크스페이스 관리자 — 프로젝트의 워크스페이스는 resolveScope('projects', id) 로 읽는다
+  [`${A('projectDelete')}#getProjectDeleteSummary`]: { ...nul('workspaceAdmin'), sample: [P] },   // isUuidLike 가 가드 앞
+  [`${A('projectDelete')}#deleteProject`]: { ...nul('workspaceAdmin'), sample: [P, 'T'] },
   [`${A('projectTeams')}#addProjectTeam`]: nul('projectAdmin'),
   [`${A('projectTeams')}#updateProjectTeam`]: nul('projectAdmin'),
   [`${A('projectTeams')}#copyGlobalTeams`]: nul('projectAdmin'),

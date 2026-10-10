@@ -51,6 +51,11 @@ const NULL_TABLE_ALLOW: Readonly<Record<string, { tables: readonly string[]; why
   'src/app/actions/settings.ts#updateWorkspaceSettings': { tables: ['minute_folders'], why: '최상위 폴더 모드를 teams 로 되돌린 뒤의 팀 루트 보장(ensure_team_roots — SP5 B2) — 폴더 트리의 루트이지 회의록 데이터가 아니다' },
   'src/app/actions/wbs.ts#updateActual': { tables: ['agent_work_orders'], why: 'WBS(core) 진척의 갱신이 에이전트 주문 행에도 닿는다 — 같은 로컬 쓰기다' },
   'src/app/actions/wbsAssign.ts#setWbsDevWorkflow': { tables: ['agent_work_orders'], why: 'WBS 필드(core) — 주문 발행은 ensureOrder 의 두 원천 AND 가 막는다(P19)' },
+  'src/app/actions/projectDelete.ts#deleteProject': {
+    tables: ['agent_work_orders', 'weekly_report_rows', 'issue_assignees', 'issues', 'issue_major_processes', 'attendance_records', 'meeting_attendees',
+      'wiki_change_events', 'wiki_questions', 'wiki_items', 'minute_folders'],
+    why: '프로젝트 삭제(delete_project — 0058)는 프로젝트의 수명이다 — 모듈이 꺼져 있어도 그 프로젝트에 딸린 모듈 표의 행까지 함께 지워야 한다(남으면 FK 가 삭제를 막는다). 회의록(minutes)은 쓰지 않는다 — 있으면 거부하고, 폴더는 회의록이 0건일 때만 지운다',
+  },
   'src/app/api/wiki/reindex/route.ts#POST': { tables: ['ai_documents', 'ai_index_jobs'], why: '플랫폼 진단 — ROUTE_MODULE_OVERRIDES 가 이 경로를 플랫폼 전용으로 뺐다' },
 }
 /** 목록 항목의 표 접촉 — 문제 목록. entry 의 note 를 먼저 읽어 사람이 맥락을 보게 하고(계층 서술일 수 있다), 없으면 표 이름으로 판정한다.

@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip, FolderInput, Gauge } from 'lucide-react'
+import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip, FolderInput, Gauge, AlertTriangle } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
 import { ProjectSetupChecklist } from '@/components/settings/ProjectSetupChecklist'
 import { loadProjectSetupSteps } from '@/lib/data/projectSetup'
 import { listProjects } from '@/app/actions/project'
+import { getProjectDeleteSummary } from '@/app/actions/projectDelete'
+import { ProjectDeleteZone } from '@/components/settings/ProjectDeleteZone'
 import { getLlmConfig } from '@/app/actions/llmConfig'
 import { getActorForView } from '@/lib/authz'
 import { isProjectAdmin } from '@/lib/domain/authz'
@@ -166,6 +168,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const workspaceId = actor?.projectWorkspace.get(projectId)
   const workspaceLink = workspaceId ? (await manageableWorkspaceLinks(actor, workspaceId))[0] : null
   const isSuperuser = actor?.isSuperuser === true
+  // 위험 구역(프로젝트 삭제 — BUG-18)은 워크스페이스 관리자에게만 그린다. workspaceLink 는 isWorkspaceAdmin 판정과 세션 RLS 를 통과한 행이라
+  // 프로젝트 관리자(워크스페이스 멤버)에게는 null 이다. 지워질 것의 건수는 같은 가드의 사전 조회 — 실패해도 구역은 그려 사유를 보인다(삭제는 열지 않는다)
+  const deleteSummary = workspaceLink && project ? await getProjectDeleteSummary(projectId) : null
   const canMutate = isAdmin
   // 위 Promise.all 에 합류시키지 않는다 — 슈퍼유저에게만 필요한 부가 정보이고,
   // 이 조회의 실패가 페이지 본체(임포트·일정 등)를 막으면 안 된다(배지 degrade 로 흡수).
@@ -321,6 +326,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         ...(isAdmin && formKinds ? [{ id: 'project-forms', label: t('pages.projSettings.nav.forms') }] : []),
         ...(isAdmin && pc.ok ? [{ id: 'project-fields', label: t('pages.projSettings.nav.fields') }] : []), { id: 'project-status', label: t('pages.projSettings.nav.status') },
         { id: 'project-calendar', label: t('pages.settingsNav.calendar') }, { id: 'project-history', label: t('pages.settingsNav.history') },
+        ...(deleteSummary ? [{ id: 'project-danger', label: t('pages.projSettings.nav.danger') }] : []),
       ]}>
       <div className="space-y-5">
         {!pc.ok && <ConfigLoadError error={pc.error} />}
@@ -795,6 +801,13 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               ? <SettingsHistoryList scope={{ projectId }} initial={settingsHistory} timeZone={historyCal.calendar.timezone} />
               : <ConfigLoadError error={historyCal.error} keyName={historyCal.key} kind={historyCal.kind} />}
         </SectionCard>
+
+        {/* ════ 위험 구역 — 프로젝트 삭제. 워크스페이스 관리자에게만(위 deleteSummary 의 판정) ════ */}
+        {deleteSummary && workspaceLink && project && (
+          <SectionCard id="project-danger" searchText={t('settings.danger.searchText')} title={t('settings.danger.title')} icon={AlertTriangle}>
+            <ProjectDeleteZone projectId={projectId} projectName={project.name} workspaceSlug={workspaceLink.slug} summary={deleteSummary} />
+          </SectionCard>
+        )}
       </div>
       </SettingsShell>
     </ProjectPageShell>

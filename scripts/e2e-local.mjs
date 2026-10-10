@@ -202,6 +202,8 @@ const ACTIONS = {
   renameWorkspace: { filename: 'src/app/actions/platformWorkspaces.ts', exportedName: 'renameWorkspace', worker: '/admin/workspaces/page' },
   removeWorkspaceMember: { filename: 'src/app/actions/accounts.ts', exportedName: 'removeWorkspaceMember', worker: '/w/[slug]/admin/accounts/page' },
   resetPassword: { filename: 'src/app/actions/accounts.ts', exportedName: 'resetPassword', worker: '/w/[slug]/admin/accounts/page' },
+  // project-delete(0058) — 프로젝트 설정 맨 아래 '위험 구역'의 삭제 확정
+  deleteProject: { filename: 'src/app/actions/projectDelete.ts', exportedName: 'deleteProject', worker: '/p/[projectId]/settings/page' },
 }
 
 const summary = { base, email, outDir, steps: [], artifacts: [] }
@@ -2816,6 +2818,79 @@ async function main() {
       otherWorkspaceStillOn: JSON.stringify(out.b) === JSON.stringify(before.b),
       restored: restored && JSON.stringify(after) === JSON.stringify(before.a),
     })
+  }
+
+  // 26b. project-delete — 프로젝트 삭제(0058 delete_project, 사용자 테스트 BUG-18). 버릴 프로젝트 X 를 만들어 작업·이슈를 넣고 지운다.
+  //     지우는 길은 설정 화면 '위험 구역'의 deleteProject 하나 — 워크스페이스 관리자(ana — 플랫폼 관리자가 아니다)만, 이름을 그대로 적어야 하고,
+  //     회의록이 있는 프로젝트는 거부된다. 프로젝트 관리자(carol — 워크스페이스에서는 멤버)에게는 구역이 보이지 않고 액션도 거부된다.
+  //     끝 근처(맨 끝의 workspace-archive 바로 앞)에 둔다 — 지우는 것은 이 단계가 만든 X 뿐이고 앞 단계의 프로젝트는 그대로여야 한다
+  //     (회의록이 있는 프로젝트로는 거부만 확인한다).
+  {
+    const X = await createProject(ana, wsA, 'DEL')
+    const page = `/p/${X.id}/settings`
+    const countOf = async (table, projectId) => {
+      const { count, error } = await svc.from(table).select('id', { count: 'exact', head: true }).eq('project_id', projectId)
+      if (error || typeof count !== 'number') throw new Fail(`${table} 건수 조회 실패: ${error?.message ?? 'count 없음'}`)
+      return count
+    }
+    const projectsInA = async () => rows('워크스페이스 A 의 프로젝트', await svc.from('projects').select('id').eq('workspace_id', wsA)).length
+    const existsX = async () => rows('X', await svc.from('projects').select('id').eq('id', X.id)).length
+    mustOk('지울 작업', (await ana.action(`/p/${X.id}/wbs`, 'addWbsItem', [X.id, null, 'E2E 지울 작업'])).result)
+    mustOk('지울 이슈', (await ana.action(`/p/${X.id}/issues`, 'createIssue', [X.id, {
+      title: 'E2E 지울 이슈', body: '프로젝트와 함께 지워진다', severity: 'medium', assigneeMemberIds: [], startDate: null, dueDate: null, areaId: null, analysis: null,
+    }])).result)
+    // 프로젝트 관리자 — carol 을 X 명단의 관리자로(명단 = 권한, workflow-approval 단계와 같은 길). 워크스페이스에서는 멤버다
+    rows('carol 명단(X)', await svc.from('project_members').insert({ project_id: X.id, person_id: carolPerson.id, access_role: 'admin' }).select('id'))
+    const carolWs = await membershipOf(INVITEE.email)
+    // 회의록이 있는 프로젝트 — 지금 워크스페이스 A 에서 회의록이 걸린 프로젝트 하나(앞 단계가 올린 것). 거부만 확인하고 건드리지 않는다
+    const [held] = rows('회의록이 있는 프로젝트', await svc.from('minutes').select('project_id').eq('workspace_id', wsA).not('project_id', 'is', null).limit(1))
+    if (!held) throw new Fail('워크스페이스 A 에 프로젝트 회의록이 없다 — 회의록 차단을 확인할 대상이 없다')
+    const [M] = rows('회의록 프로젝트 이름', await svc.from('projects').select('id, name').eq('id', held.project_id))
+    const before = { items: await countOf('wbs_items', X.id), issues: await countOf('issues', X.id), heldItems: await countOf('wbs_items', M.id), projects: await projectsInA() }
+
+    const screens = { ana: await raw(ana, page), carol: await raw(carol, page) }
+    const byProjectAdmin = (await carol.action(page, 'deleteProject', [X.id, X.name])).result
+    const afterProjectAdmin = await existsX()
+    const wrongName = (await ana.action(page, 'deleteProject', [X.id, `${X.name} 아님`])).result
+    const afterWrongName = await existsX()
+    const withMinutes = (await ana.action(`/p/${M.id}/settings`, 'deleteProject', [M.id, M.name])).result
+    const heldAfter = { exists: rows('회의록 프로젝트(거부 뒤)', await svc.from('projects').select('id').eq('id', M.id)).length, items: await countOf('wbs_items', M.id) }
+
+    const deleted = (await ana.action(page, 'deleteProject', [X.id, `  ${X.name} `])).result
+    const after = { exists: await existsX(), items: await countOf('wbs_items', X.id), issues: await countOf('issues', X.id), members: await countOf('project_members', X.id), projects: await projectsInA() }
+    const gone = { dashboard: await raw(ana, `/p/${X.id}/dashboard`), settings: await raw(ana, page) }
+    const list = await raw(ana, wsPath(wsA, 'projects'))
+    // 두 번째 삭제 — 지운 프로젝트의 설정 화면은 404 라 액션을 실을 주소가 없다. RPC 로 본다(없는 프로젝트는 등급 거부와 같은 42501)
+    const againRpc = await svc.rpc('delete_project', { p_actor: anaWs.userId, p_project_id: X.id, p_expected_name: X.name })
+    // 삭제 기록 — 워크스페이스 설정 '기록'의 권한 변경 목록(화면이 읽는 그 액션)
+    const listedEvents = (await ana.action(wsPath(wsA, 'settings'), 'listAuthzEvents', [wsA])).result
+    const record = listedEvents?.ok ? listedEvents.rows.find((r) => r.kind === 'project_deleted' && r.summary.includes(X.name)) ?? null : null
+
+    const checks = {
+      projectAdminIsNotWorkspaceAdmin: carolWs.memberships.some((m) => m.workspace_id === wsA && m.role === 'member') && !carolWs.platformAdmin,
+      // 위험 구역은 워크스페이스 관리자에게만 — 프로젝트 관리자도 설정 화면은 열지만 구역이 없다
+      zoneForWorkspaceAdminOnly: screens.ana.status === 200 && screens.ana.html.includes('data-project-danger')
+        && screens.carol.status === 200 && !screens.carol.html.includes('data-project-danger'),
+      projectAdminRefused: byProjectAdmin?.ok === false && byProjectAdmin.code === 'denied' && afterProjectAdmin === 1,
+      wrongNameRefused: wrongName?.ok === false && wrongName.code === 'name_mismatch' && afterWrongName === 1,
+      minutesBlocked: withMinutes?.ok === false && withMinutes.code === 'has_minutes' && withMinutes.minutes >= 1
+        && heldAfter.exists === 1 && heldAfter.items === before.heldItems,
+      deleted: deleted?.ok === true && deleted.name === X.name && deleted.removed?.wbs_items === before.items && deleted.removed?.issues === before.issues
+        && before.items >= 1 && before.issues >= 1 && deleted.orphanedFiles === 0 && deleted.filesUnchecked === false,
+      rowsGone: after.exists === 0 && after.items === 0 && after.issues === 0 && after.members === 0,
+      // 그 주소는 없는 프로젝트다(404) — 이름이 본문에 없다
+      addressGone: hiddenVerdict(gone.dashboard, [X.name]).length === 0 && hiddenVerdict(gone.settings, [X.name]).length === 0,
+      listUpdated: list.status === 200 && !list.html.includes(X.name) && list.html.includes(M.name),
+      othersUntouched: after.projects === before.projects - 1 && (await countOf('wbs_items', M.id)) === before.heldItems,
+      deleteAgainRefused: !!againRpc.error,
+      recorded: !!record && record.actorName !== '시스템' && record.actorName !== '삭제된 계정',
+    }
+    step('project-delete', {
+      project: { id: X.id, name: X.name }, heldProject: { id: M.id, minutes: withMinutes?.minutes ?? null }, before, after,
+      results: { byProjectAdmin, wrongName, withMinutes, deleted, againCode: againRpc.error?.code ?? null },
+      status: { ana: screens.ana.status, carol: screens.carol.status, dashboard: gone.dashboard.status, settings: gone.settings.status, list: list.status },
+      record, checks,
+    }, allOk(checks) ? undefined : `프로젝트 삭제: ${JSON.stringify({ checks, byProjectAdmin, wrongName, withMinutes, deleted, before, after, heldAfter, againCode: againRpc.error?.code ?? null })}`)
   }
 
   // 27. workspace-archive — 워크스페이스 보관·복원(0056). 보관 = 숨김 + 동결, 자료는 그대로. 대조용 워크스페이스 B(e2e-other)를 보관해

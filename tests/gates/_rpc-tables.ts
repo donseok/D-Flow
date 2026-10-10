@@ -46,11 +46,17 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   // 0055 — 빈 워크스페이스 삭제. 본문이 쓰는 표는 workspaces 하나다(부속 행은 FK 캐스케이드·권한 이력은 삭제 트리거 — 규칙: 트리거 제외).
   // 모듈 표를 포함해 닫힌 목록 밖의 참조 표에 행이 있으면 RPC 가 지우지 않고 거부한다
   delete_empty_workspace: ['workspaces'],
+  // 0058 — 프로젝트 삭제. 비-CASCADE 참조의 자식 쪽을 손으로 지운 뒤 projects 행을 지운다(나머지는 FK 캐스케이드 — 규칙: 트리거·캐스케이드 제외).
+  // 연동 토큰에서는 그 프로젝트·전용 팀의 참조만 떼고, 삭제 사실을 권한 이력에 한 행 남긴다. 회의록이 있으면 아무것도 쓰지 않고 거부한다
+  delete_project: ['integration_credentials', 'wbs_stage_approvals', 'agent_work_orders', 'area_teams', 'project_member_teams', 'weekly_report_rows',
+    'issue_assignees', 'issues', 'issue_major_processes', 'attendance_records', 'meeting_attendees', 'wiki_change_events', 'wiki_questions',
+    'wiki_items', 'wbs_items', 'minute_folders', 'projects', 'authz_events'],
   ensure_team_roots: ['minute_folders'],
   get_project_creation_receipt: [], // command receipt read only; no writes
   import_wbs_cmd: ['wbs_items', 'item_owners', 'holidays', 'command_receipts'],
   // 팀 병합 — 원본 팀의 참조를 대상 팀으로 옮기고 원본을 비활성으로
   merge_teams: ['item_owners', 'project_member_teams', 'area_teams', 'project_invites', 'minutes', 'minute_folders', 'integration_credentials', 'teams'],
+  project_delete_summary: [], // 삭제 미리보기 — 건수만 읽는다
   purge_read_notifications: ['notification_events', 'notification_recipients'],
   // 0053 — 관리자가 한 비밀번호 재설정의 기록 1행
   record_password_reset: ['authz_events'],

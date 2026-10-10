@@ -419,6 +419,14 @@ export const serverUiKo = {
   'srv.platformWorkspaces.couldNotLoadWorkspaceList': '워크스페이스 목록을 불러오지 못했습니다.',
   // src/app/actions/project.ts
   'srv.project.checkDateKind': '날짜와 종류(휴무·근무)를 확인하세요.',
+  // actions/projectDelete.ts — 프로젝트 삭제(0058 delete_project)의 거부 사유
+  'srv.projectDelete.denied': '프로젝트를 삭제할 권한이 없습니다. 워크스페이스 관리자만 삭제할 수 있습니다.',
+  'srv.projectDelete.notFound': '프로젝트를 찾을 수 없습니다. 이미 삭제됐을 수 있습니다.',
+  'srv.projectDelete.lookupFailed': '지워질 자료를 확인하지 못해 삭제하지 않았습니다. 잠시 뒤 다시 시도하세요.',
+  'srv.projectDelete.nameMismatch': '입력한 이름이 프로젝트 이름과 다릅니다.',
+  'srv.projectDelete.hasMinutes': '회의록이 {n}건 있어 삭제할 수 없습니다.',
+  'srv.projectDelete.credentialBlocked': '이 프로젝트를 가리키는 연동 토큰을 정리하지 못해 삭제하지 않았습니다. 그 토큰을 회수한 뒤 다시 시도하세요.',
+  'srv.projectDelete.failed': '프로젝트를 삭제하지 못했습니다. 아무것도 지워지지 않았습니다. 잠시 뒤 다시 시도하세요.',
   'srv.project.couldNotDeleteDateException': '날짜 예외를 지우지 못했습니다. 잠시 뒤 다시 시도하세요.',
   'srv.project.couldNotLoadProject': '프로젝트를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.',
   'srv.project.couldNotSaveDateException': '날짜 예외를 저장하지 못했습니다. 잠시 뒤 다시 시도하세요.',

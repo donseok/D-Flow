@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   slider: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div id="mock-slider" />),
   workspaceConfig: vi.fn(), actor: vi.fn(), links: vi.fn(),
   privacy: vi.fn<(p: Record<string, unknown>) => null>(() => null), areas: vi.fn<(p: Record<string, unknown>) => null>(() => null),
+  deleteSummary: vi.fn(), deleteZone: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div id="mock-danger-zone" />),
 }))
 // 팀 원천은 요청 범위 원천(SP4 §4.2.1) — 기본 픽스처 팀이면 팀 절·업무영역 편집기가 그려진다
 vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
@@ -18,6 +19,9 @@ vi.mock('@/lib/authz', () => ({ getActorForView: () => h.actor(), getActorViewSt
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: vi.fn(async () => ({ items: [], holidays: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: 'p1', name: 'Acme', start_date: null, end_date: null }]) }))
+// 위험 구역(프로젝트 삭제 — BUG-18)의 사전 조회와 구역 본체. 구역 안의 동작은 tests/ui/project-delete-zone.test.tsx
+vi.mock('@/app/actions/projectDelete', () => ({ getProjectDeleteSummary: (...a: unknown[]) => h.deleteSummary(...a) }))
+vi.mock('@/components/settings/ProjectDeleteZone', () => ({ ProjectDeleteZone: h.deleteZone }))
 vi.mock('@/app/actions/llmConfig', () => ({ getLlmConfig: vi.fn(async () => ({ error: 'x' })) }))
 vi.mock('@/app/actions/settings', () => ({ listSettingsHistory: vi.fn(async () => ({ ok: true, rows: [], nextBefore: null })) }))
 vi.mock('@/lib/settings/projectConfig', async () => {
@@ -66,6 +70,37 @@ beforeEach(() => {
   h.workspaceConfig.mockResolvedValue({ keys: { 'modules.allowed': { status: 'set', value: ['agents'] } } })
 })
 afterEach(() => { vi.mocked(requireModule).mockReset() })
+
+describe('설정 페이지 — 위험 구역(프로젝트 삭제)은 워크스페이스 관리자에게만', () => {
+  const SUMMARY = { ok: true, minutes: 0, minutesArchived: 0, counts: {} }
+  const LINK = { id: WS, slug: 'acme', name: 'Acme WS' }
+  it('프로젝트 관리자(워크스페이스 관리자 아님)에게는 구역도 목차 항목도 없고, 사전 조회도 부르지 않는다', async () => {
+    h.deleteSummary.mockResolvedValue(SUMMARY)
+    const html = await render()
+    expect(h.deleteSummary).not.toHaveBeenCalled()
+    expect(h.deleteZone).not.toHaveBeenCalled()
+    expect(html).not.toContain('mock-danger-zone')
+    expect(html).not.toContain('위험 구역')
+  })
+  it('워크스페이스 관리자에게는 맨 아래에 그린다 — 이름·돌아갈 주소·사전 조회 결과를 넘긴다', async () => {
+    h.links.mockResolvedValue([LINK])
+    h.deleteSummary.mockResolvedValue(SUMMARY)
+    const html = await render()
+    expect(h.deleteSummary).toHaveBeenCalledWith('p1')
+    expect(h.deleteZone).toHaveBeenCalledTimes(1)
+    expect(h.deleteZone.mock.calls[0][0]).toEqual({ projectId: 'p1', projectName: 'Acme', workspaceSlug: 'acme', summary: SUMMARY })
+    // 목차의 마지막 항목이고, 본문에서도 변경 이력 뒤다
+    expect(html).toContain('위험 구역')
+    expect(html.indexOf('mock-danger-zone')).toBeGreaterThan(html.lastIndexOf('id="project-calendar"'))
+  })
+  it('사전 조회가 실패해도 구역은 그린다 — 실패를 그대로 넘겨 구역이 사유를 보이게 한다(삭제는 열지 않는다)', async () => {
+    const failed = { ok: false, code: 'lookup_failed', error: 'x' }
+    h.links.mockResolvedValue([LINK])
+    h.deleteSummary.mockResolvedValue(failed)
+    await render()
+    expect(h.deleteZone.mock.calls[0][0]).toMatchObject({ summary: failed })
+  })
+})
 
 describe('설정 페이지 — 표시 조건(스펙 §5.1·§9 #7·#8·#9)', () => {
   it('프로젝트 관리자가 아니면 대시보드로 돌려보낸다', async () => {

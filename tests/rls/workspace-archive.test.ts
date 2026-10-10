@@ -284,7 +284,7 @@ describe('② 숨김 — 보관된 워크스페이스는 세션에게 없는 것
 })
 
 describe('② 동결 — 세션의 쓰기가 거부된다', () => {
-  it('UPDATE·DELETE 는 0행(RLS 가 대상 행을 가린다), INSERT 는 42501 — 관리자·플랫폼 관리자 모두', async () => {
+  it('UPDATE 는 0행(RLS 가 대상 행을 가린다), INSERT·projects DELETE 는 42501 — 관리자·플랫폼 관리자 모두', async () => {
     await asService(pool, async (c) => {
       const name = async () => (await c.query<{ name: string }>('select name from public.projects where id = $1', [F.projects.a])).rows[0].name
       const before = await name()
@@ -305,7 +305,8 @@ describe('② 동결 — 세션의 쓰기가 거부된다', () => {
           expect((await c.query('update public.wbs_items set actual_pct = 55 where id = $1', [F.leaf.aErp])).rowCount, u).toBe(0)
           expect((await c.query(`update public.people set display_name = '바뀜' where workspace_id = $1`, [F.ws])).rowCount, u).toBe(0)
           expect((await c.query(`update public.workspace_members set role = 'member' where workspace_id = $1`, [F.ws])).rowCount, u).toBe(0)
-          expect((await c.query('delete from public.projects where id = $1', [F.projects.a])).rowCount, u).toBe(0)
+          // 세션의 projects DELETE 는 0058(*_project_delete)이 권한째 거뒀다 — 보관과 무관하게 42501(지우는 길은 delete_project RPC 하나)
+          expect(await pgError(c, 'delete from public.projects where id = $1', [F.projects.a]), u).toMatchObject({ code: '42501' })
           expect(await pgError(c, `insert into public.people (workspace_id, display_name) values ($1, '새 인물')`, [F.ws]), u).toMatchObject({ code: '42501' })
           expect(await pgError(c, `insert into public.workspace_members (workspace_id, user_id, role) values ($1, $2, 'member')`, [F.ws, U.bMember]), u)
             .toMatchObject({ code: '42501' })
