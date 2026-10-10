@@ -27,8 +27,7 @@ import {
 } from '@/lib/domain/issueUpdates'
 import { DEFAULT_ISSUE_STATUSES, vocabLabel, type IssueStatusDef } from '@/lib/settings/vocab'
 import type { ProjectMember } from '@/lib/domain/types'
-import type { Locale } from '@/lib/i18n/dict'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 /** 기본으로 펴는 건수 — 모달 본문이 max-h-[70vh] 스크롤 박스라 전량을 펴면 푸터가 밀린다. */
 const VISIBLE_DEFAULT = 5
@@ -47,16 +46,16 @@ export interface IssueUpdatesProps {
   statuses?: readonly IssueStatusDef[]
 }
 
-function fmtAt(iso: string, locale: Locale, timeZone: string): string {
+function fmtAt(iso: string, timeZone: string): string {
   const d = new Date(iso)
-  return d.toLocaleString(intlLocale(locale), {
+  return d.toLocaleString(KO_LOCALE, {
     month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone,
   })
 }
 
 export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin, members, timeZone, statuses }: IssueUpdatesProps) {
   const statusDefs = statuses ?? DEFAULT_ISSUE_STATUSES
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const [list, setList] = useState<IssueUpdate[] | null>(null)
   // 실패 '여부'만 담는다 — 번역문을 state 에 넣으면 load 가 t 에 의존해 무한 루프가 된다.
   const [loadFailed, setLoadFailed] = useState(false)
@@ -203,7 +202,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                   <div className="flex flex-wrap items-center gap-1.5 text-meta text-fg-muted">
                     <span className="font-medium text-fg-secondary">{u.authorName}</span>
                     <span aria-hidden>·</span>
-                    <time dateTime={u.createdAt}>{fmtAt(u.createdAt, locale, timeZone)}</time>
+                    <time dateTime={u.createdAt}>{fmtAt(u.createdAt, timeZone)}</time>
                     {u.authorName === MIGRATED_AUTHOR_NAME && (
                       <span className="text-meta text-fg-muted">{t('issue.update.migrated')}</span>
                     )}
@@ -339,8 +338,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
  * 값싼 수단이고, 이 앱의 다른 파괴적 동작은 전용 모달을 쓰지만 그건 이슈 단위다.
  * 이력 한 건에 모달을 하나 더 띄우면 모달 안의 모달이 된다.
  *
- * 문구는 호출부가 t('issue.update.purgeConfirm') 로 번역해 넘긴다 — 여기서 하드코딩하면
- * EN 로케일 사용자가 되돌릴 수 없는 동작 앞에서 한국어 대화상자를 보게 된다.
+ * 문구는 호출부가 t('issue.update.purgeConfirm') 로 사전에서 꺼내 넘긴다(여기에 리터럴로 두지 않는다).
  */
 function confirmPurge(message: string): boolean {
   if (typeof window === 'undefined') return false

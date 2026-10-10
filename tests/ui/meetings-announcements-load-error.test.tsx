@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   getProjectMeetingData: vi.fn(),
   getAnnouncements: vi.fn(),
   getActorForView: vi.fn(),
-  getServerLocale: vi.fn(async (): Promise<'ko'> => 'ko'),
   // 셸은 받은 props 를 기록하고 pinned·본문만 그린다 — 머리는 props 로 검사한다.
   ProjectPageShell: vi.fn(({ pinned, children }: { pinned?: ReactNode; children: ReactNode }) => <>{pinned}{children}</>),
   MeetingsView: vi.fn<(props: Record<string, unknown>) => null>(() => null),
@@ -35,7 +34,6 @@ vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView, getActor
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: async () => new Set<string>() }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: PID, name: 'Acme' }]) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: mocks.getServerLocale }))
 vi.mock('@/lib/settings/pageConfig', async () => {
   const { calSeoulMon } = await import('../helpers/calendarFixture')
   const { makeProjectConfig } = await import('../helpers/projectConfigFixture')
@@ -62,8 +60,8 @@ const headerProps = () => {
   expect(shell.hero.type).toBe(PageHeader)
   return shell.hero.props
 }
-const MEET_HEADER = { title: `Acme ${t('ko', 'meet.heroTitleSuffix')}`, description: t('ko', 'meet.heroDesc') }
-const ANN_HEADER = { title: `Acme ${t('ko', 'ann.heroTitleSuffix')}`, description: t('ko', 'ann.heroDesc') }
+const MEET_HEADER = { title: `Acme ${t('meet.heroTitleSuffix')}`, description: t('meet.heroDesc') }
+const ANN_HEADER = { title: `Acme ${t('ann.heroTitleSuffix')}`, description: t('ann.heroDesc') }
 
 let errSpy: ReturnType<typeof vi.spyOn>
 beforeEach(() => {
@@ -78,7 +76,7 @@ describe('회의 화면 — 회의 조회 실패', () => {
     mocks.getProjectMeetingData.mockResolvedValue({ ok: false, error: ERR_MEETINGS_LOAD })
     const html = renderToStaticMarkup((await MeetingsPage({ params })) as ReactElement)
     expect(html).toContain('role="alert"')
-    expect(html).toContain(t('ko', 'common.loadFailed.meetings'))
+    expect(html).toContain(t('common.loadFailed.meetings'))
     expect(mocks.MeetingsView.mock.calls.at(-1)![0]).toMatchObject({ meetings: [], exceptions: [], loadFailed: true })
     expect(headerProps()).toEqual(MEET_HEADER)
   })
@@ -97,7 +95,7 @@ describe('공지 화면 — 공지 조회 실패', () => {
     mocks.getAnnouncements.mockResolvedValue({ ok: false, error: ERR_ANNOUNCEMENTS_LOAD })
     const html = renderToStaticMarkup((await AnnouncementsPage({ params })) as ReactElement)
     expect(html).toContain('role="alert"')
-    expect(html).toContain(t('ko', 'common.loadFailed.announcements'))
+    expect(html).toContain(t('common.loadFailed.announcements'))
     expect(mocks.AnnouncementsView).not.toHaveBeenCalled()
     expect(headerProps()).toEqual(ANN_HEADER)
   })

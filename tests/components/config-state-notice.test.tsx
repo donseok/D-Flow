@@ -5,19 +5,19 @@ import { ConfigStateNotice } from '@/components/settings/ConfigStateNotice'
 
 describe('ConfigStateNotice', () => {
   it('조회 오류에 서버의 원문을 싣지 않는다 — 사전의 고정 문구와 키 이름만', () => {
-    const html = renderToStaticMarkup(<ConfigLoadError locale="ko" keyName="core.level_labels" error="서버가 준 원문" />)
+    const html = renderToStaticMarkup(<ConfigLoadError keyName="core.level_labels" error="서버가 준 원문" />)
     expect(html).toContain('core.level_labels')
     expect(html).not.toContain('서버가 준 원문')
     expect(html).toContain('data-config-load-error')
   })
   it('필요 설정 없음은 관리자에게 복구 경로, 일반 사용자에게 문의 안내를 준다', () => {
-    const admin = renderToStaticMarkup(<ConfigStateNotice kind="required" locale="ko" keyName="core.level_labels" isAdmin settingsHref="/p/one/settings" />)
-    const member = renderToStaticMarkup(<ConfigStateNotice kind="required" locale="ko" keyName="core.level_labels" />)
+    const admin = renderToStaticMarkup(<ConfigStateNotice kind="required" keyName="core.level_labels" isAdmin settingsHref="/p/one/settings" />)
+    const member = renderToStaticMarkup(<ConfigStateNotice kind="required" keyName="core.level_labels" />)
     expect(admin).toContain('href="/p/one/settings"')
     expect(member).toContain('관리자에게 문의하세요.')
   })
   it('키 손상은 조회 실패와 구분하고 관리자에게 설정 경로를 보여 준다', () => {
-    const html = renderToStaticMarkup(<ConfigLoadError locale="ko" keyName="core.milestone_keywords" error="내부 오류" kind="invalid"
+    const html = renderToStaticMarkup(<ConfigLoadError keyName="core.milestone_keywords" error="내부 오류" kind="invalid"
       isAdmin settingsHref="/p/one/settings" />)
     expect(html).toContain('data-config-state="invalid"')
     expect(html).toContain('설정이 손상되었습니다.')

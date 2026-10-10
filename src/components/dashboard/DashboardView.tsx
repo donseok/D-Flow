@@ -13,8 +13,7 @@ import type { DashboardIssue } from '@/lib/domain/issueDashboard'
 import { announcementMilestones, mergeMilestonePoints } from '@/lib/domain/announcements'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
-import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
+import { t} from '@/lib/i18n/dict'
 import { activeCodes, teamOrderMap } from '@/lib/domain/teams'
 import { projectTeams } from '@/lib/teams/source'
 import { ExecSummary } from './ExecSummary'
@@ -104,8 +103,7 @@ export async function DashboardView({
   meetingCategories: readonly MeetingCategoryDef[]
   issueSeverities: readonly SeverityDef[]
 }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
 
   const hasWbs = items.length > 0
   const cal = calendarOf(calendar)
@@ -182,7 +180,7 @@ export async function DashboardView({
           </div>
 
           {/* 팀별 진척 — 실행 큐로 내려가기 전에 팀 단위 진행 현황을 한눈에 */}
-          <TeamProgress items={items} teams={teams} locale={locale} teamSettingsHref={canManage ? `/p/${projectId}/settings#project-team` : null} />
+          <TeamProgress items={items} teams={teams} teamSettingsHref={canManage ? `/p/${projectId}/settings#project-team` : null} />
         </>
       )}
 
@@ -198,11 +196,11 @@ export async function DashboardView({
           추이 카드는 표로 높이를 채워 좌측과 균형을 맞춘다(차트만 두면 아래가 빈다 — 목업 B안에서 확인).
           이슈 0건이면 현황 카드 하나만 빈 상태로 — 빈 카드를 나란히 두지 않는다. 조회 실패면 카드 대신 사유. */}
       {modules.issues && (issues === null ? issuesError : issues.length === 0 ? (
-        <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
+        <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
-          <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} locale={locale} />
-          <IssueTrendCard issues={issues} today={realToday} weekStart={cal.weekStart} timeZone={cal.timezone} locale={locale} />
+          <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} />
+          <IssueTrendCard issues={issues} today={realToday} weekStart={cal.weekStart} timeZone={cal.timezone} />
         </div>
       ))}
 
@@ -213,9 +211,9 @@ export async function DashboardView({
           WBS 가 없으면 바로 위 이슈 섹션(E)의 사유와 나란히 겹쳐 재시도 버튼·스크린리더 알림이 두 번이 된다. */}
       {(wbs || (modules.issues && issues !== null)) && (
         <div className={wbs && modules.issues ? 'grid gap-5 lg:grid-cols-2' : undefined}>
-          {wbs && <RiskWorklist items={items} projectId={projectId} today={today} locale={locale} />}
+          {wbs && <RiskWorklist items={items} projectId={projectId} today={today} />}
           {modules.issues && (issues === null ? issuesError
-            : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} locale={locale} severities={issueSeverities} />)}
+            : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} severities={issueSeverities} />)}
         </div>
       )}
 

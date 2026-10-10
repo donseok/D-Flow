@@ -2,7 +2,7 @@
 // 과제 29 가 MobileNavDrawer·ContextBreadcrumb 를 같은 표에 더한다.
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => `t:${k}`, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => `t:${k}` }) }))
 import { WorkspaceNav } from '@/components/app/WorkspaceNav'
 import { ProjectNav } from '@/components/app/ProjectNav'
 import { MobileNavDrawer } from '@/components/app/MobileNavDrawer'

@@ -30,8 +30,8 @@ describe('ExportExcelButton — 실패 사유는 사전 문구', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: RAW }), { status: 422 })))
     await act(async () => { (document.body.querySelector('button') as HTMLButtonElement).click() })
     await act(async () => {})
-    expect(document.body.textContent).toContain(t('ko', 'settings.exportFailed'))
-    expect(document.body.textContent).toContain(t('ko', 'settings.exportErrProfileCorrupt'))
+    expect(document.body.textContent).toContain(t('settings.exportFailed'))
+    expect(document.body.textContent).toContain(t('settings.exportErrProfileCorrupt'))
     expect(document.body.textContent).not.toContain(RAW)
   })
 
@@ -39,8 +39,8 @@ describe('ExportExcelButton — 실패 사유는 사전 문구', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: '설정 값이 올바르지 않습니다. (core.level_labels)', code: 'CONFIG_INVALID', key: 'core.level_labels' }), { status: 422 })))
     await act(async () => { (document.body.querySelector('button') as HTMLButtonElement).click() })
     await act(async () => {})
-    expect(document.body.textContent).toContain(t('ko', 'settings.exportErrLevelLabels'))
-    expect(document.body.textContent).not.toContain(t('ko', 'settings.exportErrProfileCorrupt'))
+    expect(document.body.textContent).toContain(t('settings.exportErrLevelLabels'))
+    expect(document.body.textContent).not.toContain(t('settings.exportErrProfileCorrupt'))
   })
 
   it('fetch 가 던져도(오프라인) 실패 토스트를 띄우고 버튼은 다시 풀린다', async () => {
@@ -49,7 +49,7 @@ describe('ExportExcelButton — 실패 사유는 사전 문구', () => {
     const button = document.body.querySelector('button') as HTMLButtonElement
     await act(async () => { button.click() })
     await act(async () => {})
-    expect(document.body.textContent).toContain(t('ko', 'settings.exportFailed'))
+    expect(document.body.textContent).toContain(t('settings.exportFailed'))
     expect(button.disabled).toBe(false)
     err.mockRestore()
   })

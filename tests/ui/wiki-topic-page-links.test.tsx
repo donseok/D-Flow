@@ -10,7 +10,6 @@ const h = vi.hoisted(() => ({
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id: 'p1', name: '프로젝트' }]) }))
 vi.mock('@/lib/authz', () => ({ getActorForView: h.getActorForView }))
 vi.mock('@/lib/data/wiki', () => ({ getWikiTopicDetail: vi.fn(async () => ({ available: true, topic: null })) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('@/lib/modules/pageGate', () => ({ requireModulePage: vi.fn(async () => undefined) }))
 vi.mock('@/lib/workspace/resolve', () => ({ workspaceRefById: h.workspaceRefById }))
 // 시각의 tz = 프로젝트 달력(SP5) — 이 파일은 tz 를 보지 않는다

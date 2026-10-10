@@ -3,8 +3,7 @@ import type { TrendModel, TrendPoint } from '@/lib/domain/trend'
 import { diffDaysCal } from '@/lib/domain/dashboard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
-import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
+import { t} from '@/lib/i18n/dict'
 import { MiniEmpty } from './bits'
 
 const W = 640, H = 240, PL = 34, PR = 12, PT = 12, PB = 26
@@ -14,8 +13,7 @@ const W = 640, H = 240, PL = 34, PR = 12, PT = 12, PB = 26
 export async function TrendChart({ model, today, historyFailed = false }: {
   model: TrendModel; today: string; historyFailed?: boolean
 }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
 
   if (model.empty) {
     return (

@@ -15,7 +15,6 @@ import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import type { WbsBulkChanges, WbsBulkTarget, WbsBulkSnapshotRow, WbsBulkFailedItem, WbsBulkResult } from '@/lib/domain/wbsBulk'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerDictKey } from '@/lib/i18n/serverDict'
-import { libText } from '@/lib/i18n/serverText'
 export type { BulkFieldMode, WbsBulkChanges, WbsBulkTarget, WbsBulkSnapshotRow, WbsBulkFailedItem, WbsBulkResult } from '@/lib/domain/wbsBulk'
 
 const MAX_TARGETS = 2000
@@ -35,7 +34,7 @@ export async function createWbsBulkSnapshot(projectId: string, itemIds: string[]
 > {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   if (!isProjectAdmin(g.actor, projectId)) return { ok: false, error: tr(REASONS.permission) }
   if (!Array.isArray(itemIds) || itemIds.length > MAX_TARGETS || itemIds.some(id => !isUuidLike(id))) return { ok: false, error: tr(REASONS.validation) }
   if (!itemIds.length) return { ok: true, rows: [] }
@@ -74,7 +73,7 @@ async function updateWbsItems(projectId: string, itemIds: string[], changes: Wbs
   const ids = Array.isArray(itemIds) ? [...new Set(itemIds)] : []
   const failAll = (reason: WbsBulkFailedItem['reason'], message: string): WbsBulkResult => ({ ok: false, error: message, total: ids.length, succeeded: [], failed: ids.map(itemId => ({ itemId, reason, message })) })
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return failAll('permission', libText(tr, g.error))
+  if (!g.ok) return failAll('permission', g.error)
   if (!isProjectAdmin(g.actor, projectId)) return failAll('permission', tr(REASONS.permission))
   if (!Array.isArray(itemIds) || ids.length > MAX_TARGETS || ids.some(id => !isUuidLike(id))) return failAll('validation', tr(REASONS.validation))
   if (!ids.length) return { ok: true, total: 0, succeeded: [], failed: [] }
@@ -137,7 +136,7 @@ export async function bulkPasteWbsItems(projectId: string, operations: Array<{ t
   const input = Array.isArray(operations) ? operations : []
   const result: WbsBulkResult = { ok: true, total: input.length, succeeded: [], failed: [] }
   if (!g.ok || !isProjectAdmin(g.actor, projectId) || input.length > 200 || new Set(input.map(op => op?.target?.id)).size !== input.length) {
-    return { ...result, ok: false, error: !g.ok ? libText(tr, g.error) : tr('srv.wbsBulk.checkTargetsPermission'), failed: input.map(op => ({ itemId: op?.target?.id ?? '', reason: !g.ok ? 'permission' : 'validation', message: !g.ok ? libText(tr, g.error) : tr('srv.wbsBulk.checkTargetsPermission') })) }
+    return { ...result, ok: false, error: !g.ok ? g.error : tr('srv.wbsBulk.checkTargetsPermission'), failed: input.map(op => ({ itemId: op?.target?.id ?? '', reason: !g.ok ? 'permission' : 'validation', message: !g.ok ? g.error : tr('srv.wbsBulk.checkTargetsPermission') })) }
   }
   for (const operation of input) {
     if (!operation?.target || !operation.changes || typeof operation.changes !== 'object' || Object.keys(operation.changes).some(field => !['deliverable','plannedStart','plannedEnd','biz'].includes(field))) {

@@ -9,7 +9,7 @@ import { withTeams } from '../fixtures/teams'
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (k: string) => k, locale: 'ko' }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 const toastSpy = vi.hoisted(() => vi.fn())
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: toastSpy }) }))

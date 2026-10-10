@@ -6,7 +6,6 @@ import { adminFor } from '@/lib/supabase/adminFor'
 import { BRANDING_BUCKET, BRANDING_SLOTS, type BrandingSlot } from '@/lib/settings/brandingPath'
 import { inspectBrandLogo } from '@/lib/settings/logoFile'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText, failureText } from '@/lib/i18n/serverText'
 
 export type BrandUploadResult = { ok: true; path: string } | { ok: false; error: string }
 
@@ -14,12 +13,12 @@ export type BrandUploadResult = { ok: true; path: string } | { ok: false; error:
 export async function uploadBrandLogo(workspaceId: string, slot: BrandingSlot, file: File): Promise<BrandUploadResult> {
   const t = await serverTranslator()
   const guard = await requireWorkspaceAdmin(workspaceId)
-  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
+  if (!guard.ok) return { ok: false, error: guard.error }
   if (!isUuidLike(workspaceId) || !(BRANDING_SLOTS as readonly string[]).includes(slot)) return { ok: false, error: t('srv.branding.logoSlotNotValid') }
   if (!file || typeof file.arrayBuffer !== 'function' || typeof file.size !== 'number') return { ok: false, error: t('srv.branding.logoFileRequired') }
   try {
     const checked = await inspectBrandLogo(workspaceId, slot, file)
-    if (!checked.ok) return failureText(t, checked)
+    if (!checked.ok) return checked
     const { error } = await adminFor({ workspaceId }).admin.storage.from(BRANDING_BUCKET).upload(checked.path, checked.bytes,
       { contentType: checked.contentType, upsert: true })
     if (error) {

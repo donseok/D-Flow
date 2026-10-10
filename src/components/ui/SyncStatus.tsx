@@ -4,8 +4,7 @@ import { useSyncExternalStore, useCallback } from 'react'
 import { Loader2, AlertCircle, WifiOff, Check, PencilLine } from 'lucide-react'
 import { editSessionStore, type SyncSummary } from '@/lib/sync/editSession'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import type { Locale } from '@/lib/i18n/dict'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 const SERVER_SUMMARY: SyncSummary = {
   connectionState: 'online', editingCount: 0, savingCount: 0, failedCount: 0, conflictCount: 0,
@@ -28,9 +27,9 @@ export function useSyncStatus(): SyncSummary {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
-function formatTime(timestamp: number | null, timeZone: string = 'UTC', locale: Locale = 'ko'): string {
+function formatTime(timestamp: number | null, timeZone: string = 'UTC'): string {
   if (!timestamp) return ''
-  return new Intl.DateTimeFormat(intlLocale(locale), {
+  return new Intl.DateTimeFormat(KO_LOCALE, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -40,11 +39,11 @@ function formatTime(timestamp: number | null, timeZone: string = 'UTC', locale: 
 
 export function SyncStatus({ className = '', timeZone = 'UTC' }: { className?: string; timeZone?: string }) {
   const summary = useSyncStatus()
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
 
   // 1. 오프라인 상태
   if (summary.connectionState === 'offline') {
-    const timeStr = formatTime(summary.lastSavedAt, timeZone, locale)
+    const timeStr = formatTime(summary.lastSavedAt, timeZone)
     return (
       <div
         role="status"
@@ -104,7 +103,7 @@ export function SyncStatus({ className = '', timeZone = 'UTC' }: { className?: s
 
   // 5. 동기화 완료 상태
   if (summary.isFullySynced && summary.lastSavedAt) {
-    const timeStr = formatTime(summary.lastSavedAt, timeZone, locale)
+    const timeStr = formatTime(summary.lastSavedAt, timeZone)
     return (
       <div
         role="status"

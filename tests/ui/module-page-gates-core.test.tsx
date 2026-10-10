@@ -43,7 +43,6 @@ vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => [{ id:
 vi.mock('@/app/actions/preferences', () => ({ getWbsCollapse: vi.fn(async () => null), getAccountPrefs: vi.fn(async () => ({})) }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => ({})) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('@/components/app/ProjectPageShell', () => ({
   ProjectPageShell: ({ pinned, children }: { pinned?: ReactNode; children: ReactNode }) => <>{pinned}{children}</>,
 }))

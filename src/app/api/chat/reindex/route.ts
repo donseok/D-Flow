@@ -4,7 +4,6 @@ import { denyStatus } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { ingestProject } from '@/lib/ai/ingest'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,10 +20,10 @@ export async function POST(req: NextRequest) {
   if (!projectId) return NextResponse.json({ error: t('srv.api.chatReindex.projectidRequired') }, { status: 400 })
 
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return NextResponse.json({ error: libText(t, g.error) }, { status: denyStatus(g) })
+  if (!g.ok) return NextResponse.json({ error: g.error }, { status: denyStatus(g) })
   // chatbot 관문 — 가드 뒤(정본 §3.2.4)
   const mod = await requireModule({ projectId }, 'chatbot')
-  if (!mod.ok) return NextResponse.json({ error: libText(t, mod.error) }, { status: denyStatus(mod) })
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod) })
 
   try {
     const result = await ingestProject(projectId)

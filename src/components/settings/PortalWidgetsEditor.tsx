@@ -36,7 +36,7 @@ export function PortalWidgetsEditor({ workspaceId, revision, initial, invalidRea
   const off = c.pending || c.uncertain
   return <div className="space-y-4">
     <p className="text-meta text-fg-secondary">{t('settings.portalWidgets.desc')}</p>
-    {invalidReason && c.needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="portal.widgets" message={invalidReason} isAdmin settingsHref="#workspace-menu" />}
+    {invalidReason && c.needsRepair && <ConfigStateNotice kind="invalid" keyName="portal.widgets" message={invalidReason} isAdmin settingsHref="#workspace-menu" />}
     {COLUMNS.map((col) => {
       const rows = c.draft.filter((w) => columnOf.get(w.id) === col.id)
       return <fieldset key={col.id} role="group" aria-label={t(col.label)} className="rounded-(--radius-panel) border border-border p-3">
@@ -57,10 +57,10 @@ export function PortalWidgetsEditor({ workspaceId, revision, initial, invalidRea
         </ul>
       </fieldset>
     })}
-    {c.fieldError && <ConfigStateNotice kind="field" locale="ko" message={c.fieldError} />}
+    {c.fieldError && <ConfigStateNotice kind="field" message={c.fieldError} />}
     {c.conflict && <ConflictCompare rows={[{ key: 'portal.widgets', label: t('settings.portal.widgets.label'), mine: summary(c.draft), latest: c.conflict.value ? summary(c.conflict.value) : t('settings.notify.policy.corrupted') }]}
       onMine={c.keepMine} onLatest={c.useLatest} latestAvailable={!!c.conflict.value} />}
-    {c.error && <ConfigStateNotice kind="patch" locale="ko" message={c.error} />}
+    {c.error && <ConfigStateNotice kind="patch" message={c.error} />}
     <SettingsSaveBar notice={c.notice}>
       <button type="button" className="btn btn-primary" aria-label={t('settings.portalWidgets.save')} disabled={c.pending || (!c.dirty && !c.uncertain) || !!c.conflict} onClick={c.save}>
         {c.uncertain ? t('settings.workflow.retry') : t('settings.portalWidgets.save')}

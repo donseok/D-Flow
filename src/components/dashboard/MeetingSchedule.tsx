@@ -4,8 +4,7 @@ import type { Meeting, MeetingException } from '@/lib/domain/types'
 import { buildMeetingRowExtras, expandMeetings, occurrencesByDate, sortOccurrences, summarizeMeetings } from '@/lib/domain/meetings'
 import { getMeetingRowExtras } from '@/lib/data/meetings'
 import { SectionCard } from '@/components/ui/SectionCard'
-import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
+import { t} from '@/lib/i18n/dict'
 import { CountBadge, MiniEmpty, addDaysIso } from './bits'
 import { MeetingScheduleList } from './MeetingScheduleList'
 import type { MeetingCategoryDef } from '@/lib/settings/vocab'
@@ -30,8 +29,7 @@ export async function MeetingSchedule({ projectId, meetings, exceptions, today, 
   /** 이 프로젝트의 회의 범주(설정 meetings.categories) */
   categories: readonly MeetingCategoryDef[]
 }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
 
   const windowEnd = addDaysIso(today, WINDOW_DAYS - 1)
   const occ = expandMeetings(meetings, exceptions, today, windowEnd)

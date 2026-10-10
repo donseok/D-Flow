@@ -18,7 +18,7 @@ const DEPTH_CLASS = [
 const DEPTH_CLASS_FALLBACK = 'bg-surface-subtle text-fg-secondary' // depth 3+
 /* act 하위의 담당자별 분리 항목(임포트 시 자동 생성) 전용 표기 — 일반 배지와 시각 구분 */
 const SUB_ACT = { label: 'SUB-ACT', cls: 'bg-surface-subtle text-fg-secondary' }
-const koT = (k: DictKey) => translate('ko', k)
+const koT = (k: DictKey) => translate(k)
 /** 배지 텍스트 — isOwnerSplit 이면 SUB-ACT, 아니면 프로젝트 단계 라벨 원문(levelLabels[depth]), 라벨 밖 깊이는 'N단'(SP4 — 옛 축약 규칙 삭제).
  * t 를 넘기지 않으면 ko 사전으로 읽는다(훅 밖 호출 — 서버·순수 함수). */
 export function levelBadgeText(depth: number, isOwnerSplit: boolean, levelLabels: readonly string[], t: (k: DictKey) => string = koT): string {

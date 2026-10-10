@@ -8,7 +8,7 @@ import { t, type DictKey } from '@/lib/i18n/dict'
 const PID = '00000000-0000-0000-7e57-000000001aa0'
 const CMD = '00000000-0000-4000-8000-000000001aa1'
 const receipt = { commandId: CMD, mode: 'replace' as const, count: 42, createdAt: '2026-10-02T01:02:03+00:00' }
-const tKo = (k: DictKey) => t('ko', k)
+const tKo = (k: DictKey) => t(k)
 
 describe('ImportRunSummary — 결과 카드의 실행 ID·영수증 링크·중복 안내', () => {
   it('실행 ID 는 앞 8자(전체는 title), 링크는 같은 화면의 ?receipt=', () => {
@@ -27,16 +27,16 @@ describe('ImportRunSummary — 결과 카드의 실행 ID·영수증 링크·중
 
 describe('?receipt= 패널', () => {
   it('찾음 — 실행 ID 8자·모드·건수·시각(프로젝트 달력의 tz — SP5, 서울 고정 아님)', () => {
-    const html = renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} timeZone="Asia/Seoul" />)
     expect(html).toContain('data-import-receipt')
     expect(html).toContain('>00000000<')
     expect(html).toContain('42')
     expect(html).toContain('2026-10-02 10:02')
     expect(html).toContain(tKo('importWizard.modeReplace'))
-    expect(renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} locale="ko" timeZone="America/Los_Angeles" />)).toContain('2026-10-01 18:02')
+    expect(renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} timeZone="America/Los_Angeles" />)).toContain('2026-10-01 18:02')
   })
   it('달력을 못 읽었으면(timeZone null) 시각만 \'—\' — 다른 tz 로 잇지 않는다', () => {
-    const html = renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} locale="ko" timeZone={null} />)
+    const html = renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} timeZone={null} />)
     expect(html).toContain('>—<')
     expect(html).not.toContain('2026-10-02 10:02')
   })
@@ -51,7 +51,7 @@ describe('?receipt= 패널', () => {
     expect(await receiptStateOf(CMD, async () => ({ ok: true, receipt: null }))).toEqual({ kind: 'missing' })
     expect(await receiptStateOf(CMD, async () => ({ ok: false, error: '실행 기록을 불러오지 못했습니다.' }))).toEqual({ kind: 'error' })
     expect(await receiptStateOf(CMD, async () => ({ ok: true, receipt }))).toEqual({ kind: 'found', receipt })
-    const html = renderToString(<ImportReceiptPanel state={{ kind: 'error' }} locale="ko" timeZone="UTC" />)
+    const html = renderToString(<ImportReceiptPanel state={{ kind: 'error' }} timeZone="UTC" />)
     expect(html).toContain(tKo('importWizard.receiptError'))
   })
 })

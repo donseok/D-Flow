@@ -4,7 +4,7 @@ import { vocabView, type SeverityDef } from '@/lib/settings/vocab'
 import { issueQueue, type DashboardIssue, type IssueQueueKind } from '@/lib/domain/issueDashboard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t} from '@/lib/i18n/dict'
 
 // 행 스타일 — 지연=빨강 틴트, 임박=주황 틴트(RiskWorklist ROW_META 미러).
 const ROW_META: Record<IssueQueueKind, { border: string; icon: string }> = {
@@ -16,16 +16,15 @@ const ROW_META: Record<IssueQueueKind, { border: string; icon: string }> = {
  * 지연·임박 이슈 — 실행 큐(RiskWorklist)의 이슈판. 기한 경과(경과 많은 순) → 7일 내 마감(가까운 순),
  * 행은 이슈관리 ?focus= 딥링크. 상한(QUEUE_LIMIT)을 넘는 건수는 +N 으로 알린다(조용한 절단 금지).
  */
-export function IssueQueueCard({ issues, projectId, today, locale, severities }: {
+export function IssueQueueCard({ issues, projectId, today, severities }: {
   issues: DashboardIssue[]
   projectId: string
   /** 실제 오늘(그 프로젝트 tz 의 todayIn). */
   today: string
-  locale: Locale
   /** 이 프로젝트의 이슈 심각도(설정 issues.severities) */
   severities: readonly SeverityDef[]
 }) {
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
   const q = issueQueue(issues, today)
   const issuesHref = `/p/${projectId}/issues`
   const ddayText = (n: number) => (n <= 0 ? tr('dash.issues.dueToday') : `D-${n}${tr('dash.issues.ddaySuffix')}`)

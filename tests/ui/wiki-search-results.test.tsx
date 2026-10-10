@@ -11,7 +11,7 @@ const hit: SearchHit = {
 }
 
 function html(state: Parameters<typeof WikiSearchResults>[0]['state'], query = ''): string {
-  return renderToStaticMarkup(<WikiSearchResults state={state} locale="ko" query={query} projectId="proj-1" />)
+  return renderToStaticMarkup(<WikiSearchResults state={state} query={query} projectId="proj-1" />)
 }
 
 describe('WikiSearchResults', () => {
@@ -120,7 +120,7 @@ describe('WikiSearchResults 2분할 상호작용', () => {
         root.render(
           <WikiSearchResults
             state={{ kind: 'done', hits: [longHit], degraded: false }}
-            locale="ko" query="발급" projectId="proj-1"
+            query="발급" projectId="proj-1"
           />)
         await new Promise(resolve => setTimeout(resolve, 0))
       })

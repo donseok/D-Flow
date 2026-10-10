@@ -23,10 +23,9 @@ vi.mock('@/app/actions/platformWorkspaces', () => ({
   archivePlatformWorkspace: mocks.archivePlatformWorkspace, restorePlatformWorkspace: mocks.restorePlatformWorkspace,
 }))
 vi.mock('@/lib/workspace/current', () => ({ readCurrentWorkspace: mocks.readCurrentWorkspace }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound, useRouter: () => ({ refresh: mocks.refresh }) }))
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', setLocale: vi.fn(), t: (k: keyof typeof KO) => KO[k] ?? k }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: keyof typeof KO) => KO[k] ?? k }) }))
 
 import WorkspacesAdminPage from '@/app/(app)/(global)/admin/workspaces/page'
 import { WorkspacesManager } from '@/components/admin/WorkspacesManager'

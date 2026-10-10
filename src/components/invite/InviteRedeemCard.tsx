@@ -14,7 +14,7 @@ import {
 } from '@/app/actions/inviteRedeem'
 
 const E_INVALID_LINK_KEY = 'invite.err.invalidLink' satisfies DictKey
-// 세션 판정 실패(네트워크 등)는 화면 언어를 따르는 사전 문구 — 상태에는 키를 담고 그릴 때 푼다(서버가 준 사유는 그대로 담긴다)
+// 세션 판정 실패(네트워크 등)는 사전 문구 — 상태에는 키를 담고 그릴 때 푼다(서버가 준 사유는 그대로 담긴다)
 const E_SESSION_CHECK_KEY = 'invite.err.sessionCheck' satisfies DictKey
 
 /** 서버가 내려주는 화면 분기용 세션 상태. 이메일 원문도 마스킹도 여기로 오지 않는다. */
@@ -93,7 +93,7 @@ export function InviteRedeemCard({ token, preview, loadError }: {
     const res = await redeemInvite(token)
     if (!res.ok) {
       // 서버 로그아웃이 실패·던져도 로컬 세션은 지운다(endSession — 로그아웃 경로는 하나, AA8)
-      if (signOutOnMismatch && res.code === 'other_account') await endSession()   // 서버 문구는 화면 언어를 따른다 — 사유는 code 로 본다
+      if (signOutOnMismatch && res.code === 'other_account') await endSession()   // 사유는 문구가 아니라 code 로 본다
       setError(res.error)
       return
     }

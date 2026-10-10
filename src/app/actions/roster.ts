@@ -16,7 +16,6 @@ import { ROSTER_SELECT, mapRosterRows, type RosterMember } from '@/lib/data/memb
 import { projectTeams } from '@/lib/teams/source'
 import type { AccessRole, RosterInput } from '@/lib/domain/roster'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 // 입력 계약은 도메인(순수 계층)이 정본이다 — 화면의 검증(validateDraft)과 이 액션이 같은 타입을 본다.
@@ -119,15 +118,14 @@ async function callUpsert(
   admin: AdminClient, actorId: string, projectId: string,
   person: Record<string, unknown>, member: Record<string, unknown>, teamIds: string[] | null,
 ): Promise<RosterActionResult> {
-  const tr = await serverTranslator()
   const { data, error } = await admin.rpc('upsert_project_member_cmd', {
     p_command_id: newAuthzCommandId(), p_actor: actorId, p_project_id: projectId, p_person: person, p_member: member, p_team_ids: teamIds,
   })
-  if (error) return { ok: false, error: libText(tr, rosterWriteError(error)) }
+  if (error) return { ok: false, error: rosterWriteError(error) }
   const result = parseAuthzResult(data)
   if (!result?.memberId) {
     console.error('[roster] upsert_project_member_cmd 가 member_id 를 돌려주지 않았다:', data)
-    return { ok: false, error: libText(tr, ROSTER_WRITE_FAILED) }
+    return { ok: false, error: ROSTER_WRITE_FAILED }
   }
   revalidatePath(`/p/${projectId}/members`)
   return { ok: true, memberId: result.memberId }
@@ -136,7 +134,7 @@ async function callUpsert(
 export async function upsertRosterMember(projectId: string, input: RosterInput): Promise<RosterActionResult> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const name = normalizeName(input?.name)
   if (!name) return { ok: false, error: tr(ERR_NAME) }
   const personId = input.personId ?? null
@@ -171,22 +169,22 @@ export async function upsertRosterMember(projectId: string, input: RosterInput):
 export async function removeRosterMember(memberId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const tr = await serverTranslator()
   const found = await resolveProjectId('project_members', memberId)
-  if (!found.ok) return { ok: false, error: libText(tr, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const projectId = found.projectId
-  if (!projectId) return { ok: false, error: libText(tr, ERR_MISSING) }
+  if (!projectId) return { ok: false, error: ERR_MISSING }
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
 
   const records = await memberHasRecords(createAdminClient(), memberId)
   if (!records.ok) return { ok: false, error: tr(ERR_ROSTER_LOOKUP) }
-  if (records.has) return { ok: false, error: libText(tr, ROSTER_HAS_RECORDS) }
+  if (records.has) return { ok: false, error: ROSTER_HAS_RECORDS }
 
   // service_role 로 지우면 '관리자 행은 워크스페이스 관리자만' 이 뚫린다(RPC 는 같은 규칙을 본문에서 본다).
   // 세션 경로로 지워 RLS 두 정책이 판정하게 하고, 영향 행 수로 거부를 드러낸다.
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('project_members').delete().eq('id', memberId).eq('project_id', projectId).select('id')
-  if (error) return { ok: false, error: libText(tr, rosterWriteError(error)) }
+  if (error) return { ok: false, error: rosterWriteError(error) }
   if (!data || data.length === 0) return { ok: false, error: tr(ERR_REMOVE_ADMIN_ROW) }
   revalidatePath(`/p/${projectId}/members`)
   return { ok: true }
@@ -197,7 +195,7 @@ export async function listRoster(
 ): Promise<{ ok: true; rows: RosterMember[] } | { ok: false; error: string }> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const { data, error } = await createAdminClient()
     .from('project_members').select(ROSTER_SELECT).eq('project_id', projectId)
     .order('sort_order').order('created_at')

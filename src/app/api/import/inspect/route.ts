@@ -13,7 +13,6 @@ import { withSuggestedCustomColumns } from '@/lib/excel/customColumns'
 import { createServerClient } from '@/lib/supabase/server'
 import { serverTranslator } from '@/lib/i18n/server'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
 
 /**
  * 임포트 마법사 1단계 — 업로드된 워크북을 감지만 하고 아무것도 쓰지 않는다(§6.2, DB 쓰기 0).
@@ -32,11 +31,11 @@ export async function POST(req: NextRequest) {
 
   const g = await requireProjectAdmin(projectId)
   // 가드 실패 → 401·403·404(타 워크스페이스·미존재 — 존재 은닉), 그 밖(권한 조회 실패)은 서버 사정이라 500(재시도 가능).
-  if (!g.ok) return NextResponse.json({ error: libText(t, g.error) }, { status: denyStatus(g) })
+  if (!g.ok) return NextResponse.json({ error: g.error }, { status: denyStatus(g) })
 
   const buf = await file.arrayBuffer()
   let detected = detectWorkbook(buf)
-  if (!detected.ok) return NextResponse.json({ error: libText(t, detected.error) }, { status: 400 })
+  if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
 
   let cfg: ProjectConfig
   try { cfg = await getProjectConfig(projectId) } catch (e) {
@@ -50,11 +49,11 @@ export async function POST(req: NextRequest) {
   const extraAxisState = cfg.keys['core.extra_axis_label']
   if (extraAxisState.status === 'set' && extraAxisState.value) {
     detected = detectWorkbook(buf, { extraAxisLabel: extraAxisState.value })
-    if (!detected.ok) return NextResponse.json({ error: libText(t, detected.error) }, { status: 400 })
+    if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
   }
 
   // 감지 결과를 그대로 반환에 쓰되, warnings 는 아래서 덧붙일 수 있어 얕은 복제로 원본 배열을 보존한다.
-  const detection = { ...detected.result, warnings: detected.result.warnings.map((w) => libText(t, w)) }   // 감지 경고(lib 문구)는 화면 언어로
+  const detection = { ...detected.result, warnings: [...detected.result.warnings] }
 
   // 저장 양식은 해석기의 키 상태로 판정한다 — set 이면 이미 검증된 값, 기본값(null)이면 없음(정상, 경고 아님).
   const profileState = cfg.keys['wbs.excel_profile']

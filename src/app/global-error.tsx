@@ -7,7 +7,7 @@ import './globals.css'
 import { StandaloneError } from '@/components/errors/StandaloneError'
 import { t as translate, type DictKey } from '@/lib/i18n/dict'
 
-const t = (key: DictKey) => translate('ko', key)
+const t = (key: DictKey) => translate(key)
 
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (

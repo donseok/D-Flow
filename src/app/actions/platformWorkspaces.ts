@@ -23,7 +23,6 @@ import { activeFirst, checkArchiveReason } from '@/lib/workspace/archiveInput'
 import { SLUG_RE } from '@/lib/workspace/constants'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 
 export interface PlatformWorkspaceRow {
   id: string
@@ -55,7 +54,7 @@ const FORBIDDEN = '42501'
 export async function listPlatformWorkspaces(): Promise<PlatformWorkspaceListResult> {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const admin = createAdminClient()
   try {
     const [workspaces, members, projects] = await Promise.all([
@@ -134,9 +133,8 @@ function createFailure(error: { code?: string; message: string }): PlatformWorks
  * 예전의 "만든 행을 지우는 보상"은 그 삭제가 실패하면 관리자 없는 워크스페이스가 남았다). slug 중복·첫 관리자 없음·등급은 RPC 가 다시 판정한다.
  */
 export async function createPlatformWorkspace(input: unknown): Promise<PlatformWorkspaceCreateResult> {
-  const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { ok: false, code: 'denied', field: null, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, code: 'denied', field: null, error: g.error }
   const checked = checkWorkspaceCreate(input)
   if (!checked.ok) return { ok: false, code: checked.code, field: checked.field }
   const { name, slug, adminEmail, modules, timezone, inviteDomains } = checked.value
@@ -188,10 +186,9 @@ export type WorkspaceRenameResult =
  * 쓰기는 rename_workspace RPC 한 번(0055 — 등급·이름 규칙을 RPC 가 다시 본다). 이름은 셸·탭 제목·전환기·메일에 쓰이므로 레이아웃 데이터까지 새로 읽게 한다.
  */
 export async function renameWorkspace(workspaceId: string, name: string): Promise<WorkspaceRenameResult> {
-  const t = await serverTranslator()
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: 'not_found' }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, code: 'denied', error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, code: 'denied', error: g.error }
   const checked = checkWorkspaceName(name)
   if (!checked.ok) return { ok: false, code: checked.code }
   const admin = createAdminClient()
@@ -225,9 +222,8 @@ export type PlatformWorkspaceDeleteResult =
  * 남은 것이 있으면 아무것도 지우지 않고 표별 건수를 돌려준다 — 강제 삭제는 없다.
  */
 export async function deletePlatformWorkspace(workspaceId: string, confirmSlug: string): Promise<PlatformWorkspaceDeleteResult> {
-  const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { ok: false, code: 'denied', error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, code: 'denied', error: g.error }
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: 'not_found' }
   // slug 는 다듬지 않는다 — 적은 글자 그대로 대조한다(형식 밖이면 DB 에 묻지 않는다)
   if (typeof confirmSlug !== 'string' || !SLUG_RE.test(confirmSlug)) return { ok: false, code: 'slug_mismatch' }
@@ -276,9 +272,8 @@ export type PlatformWorkspaceArchiveResult =
  * 쓰기는 archive_workspace RPC 한 번(0056 — 등급·주소·사유 길이를 RPC 가 다시 본다).
  */
 export async function archivePlatformWorkspace(workspaceId: string, confirmSlug: string, reason?: string | null): Promise<PlatformWorkspaceArchiveResult> {
-  const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { ok: false, code: 'denied', error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, code: 'denied', error: g.error }
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: 'not_found' }
   // 주소는 다듬지 않는다 — 적은 글자 그대로 대조한다(형식 밖이면 DB 에 묻지 않는다)
   if (typeof confirmSlug !== 'string' || !SLUG_RE.test(confirmSlug)) return { ok: false, code: 'slug_mismatch' }
@@ -323,9 +318,8 @@ export type PlatformWorkspaceRestoreResult =
  * 이미 활성이면 쓰지 않고 그 사실을 돌려준다(unchanged). 쓰기는 restore_workspace RPC 한 번(0056).
  */
 export async function restorePlatformWorkspace(workspaceId: string): Promise<PlatformWorkspaceRestoreResult> {
-  const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return { ok: false, code: 'denied', error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, code: 'denied', error: g.error }
   if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: 'not_found' }
   const admin = createAdminClient()
   const { data, error } = await admin.rpc('restore_workspace', { p_actor: g.actor.userId, p_workspace_id: workspaceId })

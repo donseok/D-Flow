@@ -10,13 +10,12 @@ vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWeight: vi.fn
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
-  const api = { locale: 'ko' as const, t: (k: Parameters<typeof t>[1]) => t('ko', k) }
+  const api = { t: (k: Parameters<typeof t>[0]) => t(k) }
   return { useLocale: () => api }
 })
 vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn() }))
 vi.mock('@/lib/teams/source', () => ({ projectTeams: vi.fn(async () => []) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'

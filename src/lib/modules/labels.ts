@@ -10,7 +10,7 @@ export const MODULE_LABEL: Readonly<Record<ModuleId, string>> = {
   minutes_integration: '회의록 외부 연동', chatbot: '챗봇', portfolio: '포트폴리오', usage: '사용 현황',
 }
 
-/** 화면용 사전 키 — 화면은 `t(MODULE_LABEL_KEY[id])` 로 그린다(로캘을 따른다). MODULE_LABEL 은 그 키들의 ko 문구와 같다 */
+/** 화면용 사전 키 — 화면은 `t(MODULE_LABEL_KEY[id])` 로 그린다. MODULE_LABEL 은 그 키들의 ko 문구와 같다 */
 export const MODULE_LABEL_KEY: Readonly<Record<ModuleId, DictKey>> = {
   dashboard: 'module.dashboard', wbs: 'module.wbs', members: 'module.members', settings: 'module.settings',
   kanban: 'module.kanban', meetings: 'module.meetings', weekly: 'module.weekly', issues: 'module.issues', issue_analysis: 'module.issue_analysis', wiki: 'module.wiki',

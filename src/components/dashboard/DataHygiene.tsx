@@ -3,12 +3,10 @@ import { ClipboardCheck, CheckCircle2, ArrowRight } from 'lucide-react'
 import type { HygieneModel } from '@/lib/domain/dashboard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 
 /** 계획 데이터 품질 — 담당 누락/기간 미설정/가중치 혼재. 전부 0이면 확인 상태. */
 export async function DataHygiene({ hygiene, projectId }: { hygiene: HygieneModel; projectId: string }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
   const rows: { key: DictKey; n: number }[] = [
     { key: 'dash.hygiene.noOwner', n: hygiene.noOwner },
     { key: 'dash.hygiene.noDates', n: hygiene.noDates },

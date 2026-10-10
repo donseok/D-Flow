@@ -126,10 +126,10 @@ const EMPTY_REFS: string[] = []
 const EMPTY_MILESTONE_KEYWORDS: readonly string[] = []
 const EMPTY_MEMBERS: ProjectMember[] = []
 /* 마일스톤 기준선 색 — 간트는 초록·청록(brand/done)이 바·상태색으로 포화라 대시보드 배색(MS_TONE)과
-   의도적으로 다르다. 예정=바이올렛(category-3 — 라이트 값은 옛 #7c3aed 와 같고 다크 값이 따로 있다),
-   완료=phasebar 슬레이트(가라앉음·다크 자동 대응), 지연=delayed 빨강(전역 지연 경보와 일치). */
+   의도적으로 다르다. 예정=바이올렛(category-3 — 값은 옛 #7c3aed 와 같다),
+   완료=phasebar 슬레이트(가라앉음), 지연=delayed 빨강(전역 지연 경보와 일치). */
 const MS_LINE: Record<MilestoneStatus, string> = { done: 'border-phasebar', overdue: 'border-danger', upcoming: 'border-category-3' }
-/** 칩은 채움과 전경을 짝으로 — 다크 채움 위 흰 글자는 1.7~3.6:1 이다(D12·판정 Q13) */
+/** 칩은 채움과 전경을 짝으로 둔다(D12·판정 Q13) */
 const MS_CHIP: Record<MilestoneStatus, string> = { done: 'bg-phasebar text-phasebar-fg', overdue: 'bg-danger text-danger-fg', upcoming: 'bg-category-3 text-category-fg' }
 /** 막대 안 % 라벨 — STATUS[…].bar 채움의 전경 */
 const BAR_FG: Record<keyof typeof STATUS, string> = { not_started: 'text-pending-fg', in_progress: 'text-progress-fg', delayed: 'text-danger-fg', done: 'text-success-fg' }
@@ -510,7 +510,7 @@ export function WbsGanttSheet({
   // 개요 번호 열 켜짐 여부에 따라 동결 오프셋(sk)이 달라져 컬럼 메타 자체가 파생값이다.
   const fieldScope = useCustomFieldScope()
   const customListDefs = useMemo(() => orderedFields(fieldScope?.defs ?? []).filter(d => d.active && d.show_in_list), [fieldScope?.defs])
-  const customFormat = useMemo(() => ({ locale: fieldScope?.locale ?? 'ko', yes: translate(fieldScope?.locale ?? 'ko', 'wbs.custom.yes'), no: translate(fieldScope?.locale ?? 'ko', 'wbs.custom.no'), empty: '—' }), [fieldScope?.locale])
+  const customFormat = useMemo(() => ({ yes: translate('wbs.custom.yes'), no: translate('wbs.custom.no'), empty: '—' }), [])
   const cols = useMemo(() => [
     ...buildCols(outlineVisible, narrow, nameColWidth),
     ...customListDefs.map((d): Col => ({ key: `cf:${d.key}`, w: 140 })),
@@ -2112,7 +2112,7 @@ export function WbsGanttSheet({
             // 레벨별 배경은 종전 그대로 유지(사용자 결정 2026-08-21) — 구분 열이 사라져도
             // depth 0/1 틴트가 레벨 식별을 계속 담당한다. depth 2+ 는 zebra.
             // 배경은 불투명이어야 한다 — 번호·이름 칸은 sticky 라 그 아래로 가로 스크롤된 칸이 지나간다. depth 1 은
-            // 불투명 surface 위에 옅은 action-soft 층(배경 이미지)을 얹는다: 라이트 합성은 옛 #f8faff, 다크는 depth 0 과 구별(판정 Q19).
+            // 불투명 surface 위에 옅은 action-soft 층(배경 이미지)을 얹는다: 합성은 옛 #f8faff(판정 Q19).
             const rowBg =
               depth === 0
                 ? 'bg-surface-subtle'
@@ -2494,7 +2494,6 @@ export function WbsGanttSheet({
                       // 상세 패널의 '추가 정보'와 같은 행 판정 — 관리자이거나 그 항목의 산출물을 고칠 수 있는 멤버
                       canEdit={!readOnly && (isAdmin || canEditDeliverable(n, actor, projectId))}
                       canAdmin={fieldScope?.canAdmin === true}
-                      locale={fieldScope?.locale ?? 'ko'}
                       format={customFormat}
                       className={`${cellBase} items-center justify-start border-r border-border ${cellBg}`}
                       width={W(`cf:${d.key}`)}

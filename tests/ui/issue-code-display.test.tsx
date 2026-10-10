@@ -8,7 +8,7 @@ import { SEVERITIES } from '../fixtures/vocab'
 
 describe('opaque issue code display', () => {
   it('queue shows the issued code', () => {
-    const html = renderToStaticMarkup(<IssueQueueCard issues={[{ ...DASH_ISSUE, code: 'RS-RND-007' }]} projectId="p1" today="2026-09-27" locale="ko" severities={SEVERITIES} />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={[{ ...DASH_ISSUE, code: 'RS-RND-007' }]} projectId="p1" today="2026-09-27" severities={SEVERITIES} />)
     expect(html).toContain('RS-RND-007')
   })
   it('screens and index never build a public number from issueNo', () => {

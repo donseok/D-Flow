@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({
   setInbox: vi.fn(), setNotifs: vi.fn(), seen: vi.fn(async () => ({ ok: true })),
   ann: 4 as number | null,
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('@/app/actions/notifications', () => ({ markAllNotificationsRead: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/app/actions/inbox', () => ({ markInboxSeen: h.seen, markAllInboxRead: vi.fn(async () => ({ ok: true })), markInboxItemRead: vi.fn(async () => ({ ok: true })) }))

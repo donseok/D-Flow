@@ -11,9 +11,8 @@ import type { TrendModel } from '@/lib/domain/trend'
 // 대시보드 부분 표시 — WBS 가 비어도 회의·이슈·공지는 그리고, 조회 실패한 위젯은 '0건'·'데이터 없음' 대신 사유를 둔다.
 // DashboardView 는 async 서버 컴포넌트라 renderToStaticMarkup 을 바로 쓸 수 없다 — 돌려준 요소 트리를 순회해
 // 자식 컴포넌트의 타입(함수 참조)을 모은다. 자식은 실행되지 않는다(팀 원천 호출 여부는 뷰 자신의 것만 잡힌다).
-const mocks = vi.hoisted(() => ({ projectTeams: vi.fn(async () => []), getServerLocale: vi.fn(async (): Promise<'ko'> => 'ko') }))
+const mocks = vi.hoisted(() => ({ projectTeams: vi.fn(async () => []) }))
 vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: mocks.getServerLocale }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 
 import { DashboardView } from '@/components/dashboard/DashboardView'
@@ -35,7 +34,7 @@ import { calInputUtcMon, calUtcSun } from '../helpers/calendarFixture'
 import { MEET_CATS, SEVERITIES } from '../fixtures/vocab'
 
 // 사유는 사전 문구로 보인다 — 로더의 ERR_* 상수는 로그·시험용(최종 리뷰 UI M-1).
-const ko = (k: DictKey) => t('ko', k)
+const ko = (k: DictKey) => t(k)
 const ISSUES_FAILED = ko('common.loadFailed.issues')
 
 const typesIn = (node: ReactNode, out = new Set<unknown>()): Set<unknown> => {

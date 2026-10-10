@@ -1,4 +1,4 @@
-import { t, type Locale } from '@/lib/i18n/dict'
+import { t} from '@/lib/i18n/dict'
 import { CONFIG_MESSAGES } from '@/lib/settings/errors'
 import { StatusMessage, type StatusKind } from '@/components/ui/StatusMessage'
 
@@ -12,26 +12,26 @@ const BLOCKING: ReadonlySet<NoticeKind> = new Set(['unavailable', 'invalid', 'fi
 const RECOVERABLE: ReadonlySet<NoticeKind> = new Set(['invalid', 'required', 'disabled'])
 
 /** 설정 상태를 표시하는 공통 자리. 업무 기능은 오류를 기본값으로 바꾸지 않는다. 이름·호출부·루트 표지는 C 그대로다 */
-export function ConfigStateNotice({ kind, locale, keyName, message, settingsHref, isAdmin = false, compact = false }: {
-  kind: NoticeKind; locale: Locale; keyName?: string | null; message?: string
+export function ConfigStateNotice({ kind, keyName, message, settingsHref, isAdmin = false, compact = false }: {
+  kind: NoticeKind; keyName?: string | null; message?: string
   settingsHref?: string; isAdmin?: boolean; compact?: boolean
 }) {
-  const title = kind === 'unavailable' ? t(locale, 'settings.configLoadFailed')
-    : kind === 'required' ? t(locale, 'settings.state.required')
-      : kind === 'invalid' ? t(locale, 'settings.state.invalid')
-        : kind === 'disabled' ? t(locale, 'settings.state.disabled')
-          : kind === 'field' ? t(locale, 'settings.state.field')
-            : t(locale, 'settings.state.patch')
+  const title = kind === 'unavailable' ? t('settings.configLoadFailed')
+    : kind === 'required' ? t('settings.state.required')
+      : kind === 'invalid' ? t('settings.state.invalid')
+        : kind === 'disabled' ? t('settings.state.disabled')
+          : kind === 'field' ? t('settings.state.field')
+            : t('settings.state.patch')
   const detailText = kind === 'unavailable' ? CONFIG_MESSAGES.CONFIG_UNAVAILABLE : message
   const canRecover = RECOVERABLE.has(kind) && isAdmin && !!settingsHref
   const askAdmin = RECOVERABLE.has(kind) && !canRecover
   const detail = (keyName || detailText || askAdmin) ? <>
-    {keyName && <span className="block">{t(locale, 'settings.configLoadFailedKey').replace('{key}', keyName)}</span>}
+    {keyName && <span className="block">{t('settings.configLoadFailedKey').replace('{key}', keyName)}</span>}
     {detailText && <span className="block">{detailText}</span>}
-    {askAdmin && <span className="block">{t(locale, 'settings.state.askAdmin')}</span>}
+    {askAdmin && <span className="block">{t('settings.state.askAdmin')}</span>}
   </> : undefined
   const action = canRecover
-    ? { label: kind === 'disabled' ? t(locale, 'settings.state.turnOn') : t(locale, 'settings.state.recover'), href: settingsHref! }
+    ? { label: kind === 'disabled' ? t('settings.state.turnOn') : t('settings.state.recover'), href: settingsHref! }
     : undefined
   return <div data-config-state={kind} {...(kind === 'unavailable' ? { 'data-config-load-error': true } : {})}>
     <StatusMessage kind={NOTICE_STATUS[kind]} title={title} detail={detail} action={action} compact={compact || kind === 'field'} blocking={BLOCKING.has(kind)} />

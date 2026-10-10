@@ -53,7 +53,7 @@ describe('ClearExcelProfileButton', () => {
     await click(button('저장된 양식 비우기')!)
     await click(button('비우기')!)
     expect(document.body.textContent).toContain('양식을 비우지 못했습니다')
-    expect(document.body.textContent).toContain(t('ko', 'common.err.denied'))
+    expect(document.body.textContent).toContain(t('common.err.denied'))
     expect(mocks.refresh).not.toHaveBeenCalled()
   })
 
@@ -63,8 +63,8 @@ describe('ClearExcelProfileButton', () => {
     await click(button('저장된 양식 비우기')!)
     await click(button('비우기')!)
     expect(document.body.textContent).toContain('양식을 비우지 못했습니다')
-    expect(document.body.textContent).toContain(t('ko', 'settings.configConflict'))
-    expect(document.body.textContent).not.toContain(t('ko', 'common.err.tryAgain'))
+    expect(document.body.textContent).toContain(t('settings.configConflict'))
+    expect(document.body.textContent).not.toContain(t('common.err.tryAgain'))
     expect(mocks.refresh).toHaveBeenCalled()
   })
 
@@ -73,7 +73,7 @@ describe('ClearExcelProfileButton', () => {
       error: 'relation "project_settings" boom', retryable: true })
     await click(button('저장된 양식 비우기')!)
     await click(button('비우기')!)
-    expect(document.body.textContent).toContain(t('ko', 'common.err.tryAgain'))
+    expect(document.body.textContent).toContain(t('common.err.tryAgain'))
     expect(document.body.textContent).not.toContain('boom')
   })
 })

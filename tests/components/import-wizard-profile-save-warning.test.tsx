@@ -78,25 +78,25 @@ describe('ImportWizard — 양식 저장 실패 경고(W5)', () => {
     executeResponse = () => new Response(JSON.stringify({ ok: true, kind: 'applied', commandId: '00000000-0000-4000-8000-000000001aa2', count: 2, mode: 'append', reindexed: 0, profileSaved: false,
       profileSave: { ok: false, code: 'CONFIG_UNAVAILABLE', error: 'x' } }), { status: 200 })
     await runToDone()
-    const status = statusWith(t('ko', 'importWizard.profileSaveFailedTitle'))
+    const status = statusWith(t('importWizard.profileSaveFailedTitle'))
     expect(status).toBeTruthy()
     expect(status!.textContent).toContain('CONFIG_UNAVAILABLE')
     // 처방은 다음 가져오기의 '양식 저장' 선택 — 설정 화면에는 양식을 저장하는 UI 가 없고, '다시 시도'는 교체 가져오기를 다시 돌려
     // 변경 이력을 또 지운다(FM-14)
-    expect(status!.textContent).toContain(t('ko', 'importWizard.saveProfileLabel'))
+    expect(status!.textContent).toContain(t('importWizard.saveProfileLabel'))
     expect(status!.textContent).not.toMatch(/설정 화면에서 다시 저장|다시 시도/)
-    expect(t('ko', 'importWizard.profileSaveFailedDesc')).toContain(t('ko', 'importWizard.saveProfileLabel'))
+    expect(t('importWizard.profileSaveFailedDesc')).toContain(t('importWizard.saveProfileLabel'))
     // 저장 양식이 없으면 라우트가 표준 양식으로 낸다(409 는 더 없다) — 버튼은 양식 저장 여부와 무관하게 보이고 설명만 다르다
-    expect(document.querySelector(`[aria-label="${t('ko', 'importWizard.exportProfileButton')}"]`)).not.toBeNull()
-    expect(container.textContent).toContain(t('ko', 'importWizard.exportLayoutDesc'))
-    expect(container.textContent).not.toContain(t('ko', 'importWizard.exportProfileDesc'))
+    expect(document.querySelector(`[aria-label="${t('importWizard.exportProfileButton')}"]`)).not.toBeNull()
+    expect(container.textContent).toContain(t('importWizard.exportLayoutDesc'))
+    expect(container.textContent).not.toContain(t('importWizard.exportProfileDesc'))
   })
 
   it('저장하지 않았을 뿐(profileSave 없음)이면 경고가 없다', async () => {
     executeResponse = () => new Response(JSON.stringify({ ok: true, kind: 'applied', commandId: '00000000-0000-4000-8000-000000001aa2', count: 2, mode: 'append', reindexed: 0, profileSaved: false }), { status: 200 })
     await runToDone()
-    expect(container.textContent).toContain(t('ko', 'importWizard.doneCountSuffix'))   // 완료 화면까지 왔다
-    expect(statusWith(t('ko', 'importWizard.profileSaveFailedTitle'))).toBeUndefined()
-    expect(container.textContent).not.toContain(t('ko', 'importWizard.profileSaveFailedTitle'))
+    expect(container.textContent).toContain(t('importWizard.doneCountSuffix'))   // 완료 화면까지 왔다
+    expect(statusWith(t('importWizard.profileSaveFailedTitle'))).toBeUndefined()
+    expect(container.textContent).not.toContain(t('importWizard.profileSaveFailedTitle'))
   })
 })

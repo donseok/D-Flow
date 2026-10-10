@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { getMinuteFavorites, getMinutesExplorer, getMinutesPage, hasMinutesWithoutTeam } from '@/lib/data/minutes'
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
@@ -32,8 +31,8 @@ function monthRange(todayIso: string): [string, string] {
   return [`${y}-${mm}-01`, `${y}-${mm}-${String(last).padStart(2, '0')}`]
 }
 
-/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '회의록') */
-export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.minutes') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 사전에서 꺼낸다('회의록') */
+export async function generateMetadata() { return { title: t('nav.minutes') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function MinutesPage({ params, searchParams }: {
   params: Promise<{ slug: string }>; searchParams: Promise<{ project?: string | string[]; team?: string | string[] }>
@@ -44,7 +43,7 @@ export default async function MinutesPage({ params, searchParams }: {
   const q = await searchParams
   // '오늘'(이번 달 목록)·달력 첫 열·쉬는 날 = 이 워크스페이스의 달력(계획 D-22b — 소속 목록으로 정하지 않는다)
   const vc = await viewCalendar(scope.ws.id)
-  if (!vc.ok) return <ConfigLoadError error={vc.error} keyName={vc.key} kind="invalid" locale={await getServerLocale()} />
+  if (!vc.ok) return <ConfigLoadError error={vc.error} keyName={vc.key} kind="invalid" />
   const today = todayIn(vc.calendar.timezone, new Date())
   const [rs, re] = monthRange(today)
   const m = scope.actor
@@ -69,13 +68,12 @@ export default async function MinutesPage({ params, searchParams }: {
   // 가져와서 "화면이 뜨고 나서 또 로딩이 도는" 왕복이 한 번 더 붙었다. 여기서 함께 싣는다.
   // prefs.minutesView 를 먼저 await 해 조건부로 부르면 안 된다 — 직렬 2단이 되고,
   // 리스트/달력 전환용 월 목록까지 늦어진다.
-  const [minutes, tree, favs, user, prefs, locale, myProjectIds, hasNoTeam] = await Promise.all([
+  const [minutes, tree, favs, user, prefs, myProjectIds, hasNoTeam] = await Promise.all([
     getMinutesPage(scope.ws.id, projectId, rs, re, initialTeamId),
     getMinutesExplorer(scope.ws.id, projectId, m ?? null),
     getMinuteFavorites(scope.ws.id),
     getSession(),
     getAccountPrefs(),
-    getServerLocale(),
     getMyProjectIds(),
     hasMinutesWithoutTeam(scope.ws.id, projectId),
   ])
@@ -86,7 +84,7 @@ export default async function MinutesPage({ params, searchParams }: {
   return (
     <MinutesScopeProvider scope={minutesScope}>
       <ProjectPageShell
-        hero={<PageHeader title={t(locale, 'min.heroTitle')} description={t(locale, 'min.heroDesc')} />}
+        hero={<PageHeader title={t('min.heroTitle')} description={t('min.heroDesc')} />}
         pinned={filterProject ? <MinutesProjectChip slug={scope.ws.slug} project={filterProject} /> : undefined}
       >
         {/* 세션이 없으면 프리페치를 버린다. minutes 의 RLS 는 `to authenticated`(0021:77)라

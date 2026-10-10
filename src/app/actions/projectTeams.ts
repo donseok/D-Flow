@@ -27,7 +27,6 @@ import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
-import { libText, failureText } from '@/lib/i18n/serverText'
 
 /** notice — 성공했지만 사용자에게 알릴 것(코드 변경 뒤 엑셀 양식을 맞추지 못했다 등) */
 export type ProjectTeamActionResult = { ok: true; notice?: string } | { ok: false; error: string }
@@ -46,7 +45,7 @@ const ERR_COMMON_IN_USE = (t: ServerTranslate, code: string) =>
 export async function addProjectTeam(projectId: string, name: string, code?: string | null): Promise<ProjectTeamActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   // 예약어는 그 프로젝트의 단계 이름·추가 축 이름까지(D38) — 설정을 못 읽으면 만들지 않는다(쓰기 전 선행 조회 실패는 중단, 3원칙 ②)
   let reserved: string[]
   try {
@@ -57,7 +56,7 @@ export async function addProjectTeam(projectId: string, name: string, code?: str
     return { ok: false, error: t('srv.projectTeams.couldNotVerifyProjectSettings') }
   }
   const norm = checkNewTeam({ name, code, reserved })
-  if (!norm.ok) return failureText(t, norm)
+  if (!norm.ok) return norm
   // requireProjectAdmin 이 통과했으면 roleIn 이 이미 projectWorkspace 에서 이 프로젝트를 찾은 뒤다
   // (domain/authz.ts roleIn ④) — 여기서 다시 없을 수 없다. projects 테이블을 별도 조회하지 않는다
   // (이 액션은 teams 테이블만 만진다는 계약, project-teams-actions.test.ts 의 fromCalls 가드).
@@ -109,7 +108,7 @@ export async function updateProjectTeam(
 ): Promise<ProjectTeamActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const admin = createAdminClient()
   // 순서 맞바꾸기(위·아래 단추) — 두 행을 한 액션에서 바꾸고 둘째가 실패하면 첫 행을 되돌린다(lib/teams/swapOrder)
   if (patch.swapOrderWith !== undefined) {
@@ -117,7 +116,7 @@ export async function updateProjectTeam(
     const sw = await swapTeamOrder(admin, { projectId }, teamId, patch.swapOrderWith)
     if (!sw.ok) {
       if (sw.kind === 'missing') return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
-      if (sw.kind === 'stale') return { ok: false, error: libText(t, ERR_TEAM_ORDER_STALE) }
+      if (sw.kind === 'stale') return { ok: false, error: ERR_TEAM_ORDER_STALE }
       return { ok: false, error: failWith('projectTeams.swapOrder', sw.cause, t(ERR_TEAM_UPDATE)) }
     }
     revalidatePath('/(app)/p/[projectId]', 'layout')
@@ -129,7 +128,7 @@ export async function updateProjectTeam(
   if (typeof patch.progressVisible === 'boolean') row.progress_visible = patch.progressVisible
   if (typeof patch.sortOrder === 'number' && Number.isInteger(patch.sortOrder)) row.sort_order = patch.sortOrder
   if (patch.colorSlot !== undefined) {
-    // 색은 테마 슬롯으로만 고른다(임의 hex 금지 — 다크 대비). 저장은 그 슬롯의 팔레트 hex(teamSlotIndex 가 되찾는다)
+    // 색은 테마 슬롯으로만 고른다(임의 hex 금지). 저장은 그 슬롯의 팔레트 hex(teamSlotIndex 가 되찾는다)
     const color = teamColorOfSlot(patch.colorSlot)
     if (!color) return { ok: false, error: t(ERR_TEAM_COLOR) }
     row.color = color
@@ -149,7 +148,7 @@ export async function updateProjectTeam(
     const self = siblings.find((s) => s.id === teamId)
     if (!self) return { ok: false, error: t('srv.projectTeams.teamDoesNotBelongProject') }
     const checked = checkTeamRename({ name: patch.name, selfId: teamId, selfCode: self.code, siblings, reserved })
-    if (!checked.ok) return failureText(t, checked)
+    if (!checked.ok) return checked
     row.name = checked.name
     renamed = checked.name !== self.name
   }
@@ -185,7 +184,7 @@ const CONVERT_TOKENS: OwnTokenTable = {
 export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const { data, error } = await createAdminClient().rpc('convert_inherited_teams', { p_actor: g.actor.userId, p_project_id: projectId })
   if (error) {
     const f = rpcFailure(error, CONVERT_TOKENS, t)
@@ -209,7 +208,7 @@ export async function copyGlobalTeams(projectId: string): Promise<ProjectTeamAct
 export async function changeProjectTeamCode(projectId: string, teamId: string, code: string): Promise<ProjectTeamActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   if (typeof teamId !== 'string' || !teamId) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
   let reserved: string[]
   try {
@@ -227,7 +226,7 @@ export async function changeProjectTeamCode(projectId: string, teamId: string, c
   const self = siblings.find((s) => s.id === teamId)
   if (!self) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
   const checked = checkTeamCodeChange({ code, selfId: teamId, siblings, reserved })
-  if (!checked.ok) return failureText(t, checked)
+  if (!checked.ok) return checked
   if (checked.unchanged) return { ok: false, error: t('err.sameCurrentCode') }
   // 이 프로젝트가 이미 쓰는 공용 팀과 같은 낱말의 code 로는 바꾸지 않는다(팀 추가와 같은 판정 — 대소문자·전각·개명 이름까지). 정확히 같은 code 는
   // DB 도 막지만(TEAM_CODE_SCOPE_CONFLICT) 낱말 겹침은 앱만 본다. 선행 조회 실패는 중단한다(3원칙 ②)
@@ -238,12 +237,12 @@ export async function changeProjectTeamCode(projectId: string, teamId: string, c
     return { ok: false, error: failWith('projectTeams.changeCode 공용 팀 참조 조회', e, t(ERR_TEAM_LOOKUP)) }
   }
   const common = referenced.get(checked.code)
-  if (common === checked.code) return { ok: false, error: libText(t, ERR_TEAM_CODE_SCOPE_CONFLICT) }
+  if (common === checked.code) return { ok: false, error: ERR_TEAM_CODE_SCOPE_CONFLICT }
   if (common) return { ok: false, error: teamCodeClashError(checked.code, common) }
   const res = await admin.rpc('change_team_code', { p_actor: g.actor.userId, p_team_id: teamId, p_code: checked.code })
   if (res.error) {
     const f = rpcFailure(res.error, TEAM_CODE_TOKENS, t)
-    if (!f) return { ok: false, error: failWith('projectTeams.changeCode', res.error, libText(t, ERR_TEAM_CODE_CHANGE)) }
+    if (!f) return { ok: false, error: failWith('projectTeams.changeCode', res.error, ERR_TEAM_CODE_CHANGE) }
     console.error('[projectTeams.changeCode] 코드 변경 거부:', f.token)
     return { ok: false, error: f.message }
   }
@@ -252,7 +251,7 @@ export async function changeProjectTeamCode(projectId: string, teamId: string, c
   // 색인 본문은 팀을 '이름 (code)' 로 적는다 — 그 팀의 작업·회의록을 다시 색인한다(실패는 코드 변경을 막지 않는다)
   await enqueueTeamRenameIndexChange(teamId)
   revalidatePath('/(app)/p/[projectId]', 'layout')
-  return swap.failed > 0 ? { ok: true, notice: libText(t, NOTICE_TEAM_CODE_PROFILE) } : { ok: true }
+  return swap.failed > 0 ? { ok: true, notice: NOTICE_TEAM_CODE_PROFILE } : { ok: true }
 }
 
 export type ProjectTeamMergePreviewResult = { ok: true; counts: TeamRefCounts } | { ok: false; error: string }
@@ -262,20 +261,20 @@ export type ProjectTeamMergeResult = { ok: true; summary: TeamMergeSummary } | {
 export async function previewProjectTeamMerge(projectId: string, sourceId: string, targetId: string): Promise<ProjectTeamMergePreviewResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   if (typeof sourceId !== 'string' || !sourceId || typeof targetId !== 'string' || !targetId) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
-  if (sourceId === targetId) return { ok: false, error: libText(t, ERR_TEAM_MERGE_SAME) }
+  if (sourceId === targetId) return { ok: false, error: ERR_TEAM_MERGE_SAME }
   const admin = createAdminClient()
   const pair = await admin.from('teams').select('id, active').eq('project_id', projectId).in('id', [sourceId, targetId])
   if (pair.error) return { ok: false, error: failWith('projectTeams.mergePreview', pair.error, t(ERR_TEAM_LOOKUP)) }
   const rows = (pair.data ?? []) as { id: string; active: boolean }[]
   if (rows.length !== 2) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
-  if (!rows.find((r) => r.id === targetId)?.active) return { ok: false, error: libText(t, ERR_TEAM_MERGE_TARGET_INACTIVE) }
+  if (!rows.find((r) => r.id === targetId)?.active) return { ok: false, error: ERR_TEAM_MERGE_TARGET_INACTIVE }
   const res = await admin.rpc('team_reference_counts', { p_team_id: sourceId })
-  if (res.error) return { ok: false, error: failWith('projectTeams.mergePreview', res.error, libText(t, ERR_TEAM_MERGE_PREVIEW)) }
+  if (res.error) return { ok: false, error: failWith('projectTeams.mergePreview', res.error, ERR_TEAM_MERGE_PREVIEW) }
   const counts = parseTeamRefCounts(res.data)
   // 모양이 다른 결과를 0건으로 위장하지 않는다(표시 = 로깅)
-  if (!counts) return { ok: false, error: failWith('projectTeams.mergePreview', new Error(`건수 결과의 모양이 기대와 다릅니다: ${JSON.stringify(res.data)}`), libText(t, ERR_TEAM_MERGE_PREVIEW)) }
+  if (!counts) return { ok: false, error: failWith('projectTeams.mergePreview', new Error(`건수 결과의 모양이 기대와 다릅니다: ${JSON.stringify(res.data)}`), ERR_TEAM_MERGE_PREVIEW) }
   return { ok: true, counts }
 }
 
@@ -284,25 +283,25 @@ export async function previewProjectTeamMerge(projectId: string, sourceId: strin
 export async function mergeProjectTeams(projectId: string, sourceId: string, targetId: string): Promise<ProjectTeamMergeResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   if (typeof sourceId !== 'string' || !sourceId || typeof targetId !== 'string' || !targetId) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
-  if (sourceId === targetId) return { ok: false, error: libText(t, ERR_TEAM_MERGE_SAME) }
+  if (sourceId === targetId) return { ok: false, error: ERR_TEAM_MERGE_SAME }
   const admin = createAdminClient()
   // 쓰기 전 선행 조회 — 가드가 통과한 그 프로젝트의 전용 팀 둘이어야 한다(다른 범위의 팀 id 를 RPC 에 넘기지 않는다)
   const pair = await admin.from('teams').select('id, active').eq('project_id', projectId).in('id', [sourceId, targetId])
   if (pair.error) return { ok: false, error: failWith('projectTeams.merge', pair.error, t(ERR_TEAM_LOOKUP)) }
   const rows = (pair.data ?? []) as { id: string; active: boolean }[]
   if (rows.length !== 2) return { ok: false, error: t(ERR_TEAM_NOT_OWN) }
-  if (!rows.find((r) => r.id === targetId)?.active) return { ok: false, error: libText(t, ERR_TEAM_MERGE_TARGET_INACTIVE) }
+  if (!rows.find((r) => r.id === targetId)?.active) return { ok: false, error: ERR_TEAM_MERGE_TARGET_INACTIVE }
   const res = await admin.rpc('merge_teams', { p_actor: g.actor.userId, p_source_team_id: sourceId, p_target_team_id: targetId })
   if (res.error) {
     const f = rpcFailure(res.error, TEAM_MERGE_TOKENS, t)
-    if (!f) return { ok: false, error: failWith('projectTeams.merge', res.error, libText(t, ERR_TEAM_MERGE)) }
+    if (!f) return { ok: false, error: failWith('projectTeams.merge', res.error, ERR_TEAM_MERGE) }
     console.error('[projectTeams.merge] 병합 거부:', f.token)
     return { ok: false, error: f.message }
   }
   const summary = parseTeamMergeResult(res.data)
-  if (!summary) return { ok: false, error: failWith('projectTeams.merge', new Error(`병합 결과의 모양이 기대와 다릅니다: ${JSON.stringify(res.data)}`), libText(t, ERR_TEAM_MERGE)) }
+  if (!summary) return { ok: false, error: failWith('projectTeams.merge', new Error(`병합 결과의 모양이 기대와 다릅니다: ${JSON.stringify(res.data)}`), ERR_TEAM_MERGE) }
   // 옮겨 온 작업·회의록의 색인 본문(담당 팀 이름)을 다시 만든다 — 대상 팀이 이제 그 문서를 전부 가리킨다
   await enqueueTeamRenameIndexChange(targetId)
   revalidatePath('/(app)/p/[projectId]', 'layout')

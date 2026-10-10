@@ -21,7 +21,7 @@ const fromLatest = (v: unknown) => { const p = parseNotifyPolicy(v ?? DEFAULT_NO
 export function NotifyPolicyEditor({ workspaceId, revision, initial, invalidReason }: {
   workspaceId: string; revision: number; initial: NotifyPolicy | null; invalidReason?: string
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const c = useSettingItemCommand<NotifyPolicy>({
     scope: { workspaceId }, key: 'notify.policy', revision, initial: initial && disabledOnly(initial), empty: { ...DEFAULT_NOTIFY_POLICY }, fromLatest,
   })
@@ -40,7 +40,7 @@ export function NotifyPolicyEditor({ workspaceId, revision, initial, invalidReas
   }
   return <div className="space-y-4">
     <p data-notify-required-reason className="text-meta text-fg-secondary">{t('settings.notify.policy.requiredReason')}</p>
-    {invalidReason && c.needsRepair && <ConfigStateNotice kind="invalid" locale={locale} keyName="notify.policy" message={invalidReason} isAdmin settingsHref="#workspace-notify" />}
+    {invalidReason && c.needsRepair && <ConfigStateNotice kind="invalid" keyName="notify.policy" message={invalidReason} isAdmin settingsHref="#workspace-notify" />}
     {CATEGORIES.map((category) => {
       const types = TYPES.filter((type) => NOTIFICATION_CATALOG[type].category === category)
       if (types.length === 0) return null
@@ -66,10 +66,10 @@ export function NotifyPolicyEditor({ workspaceId, revision, initial, invalidReas
       </fieldset>
     })}
     <p className="text-meta text-fg-secondary">{t('settings.notify.policy.personalNote')}</p>
-    {c.fieldError && <ConfigStateNotice kind="field" locale={locale} message={c.fieldError} />}
+    {c.fieldError && <ConfigStateNotice kind="field" message={c.fieldError} />}
     {c.conflict && <ConflictCompare rows={[{ key: 'notify.policy', label: t('settings.notify.policy.label'), mine: summary(c.draft), latest: c.conflict.value ? summary(c.conflict.value) : t('settings.notify.policy.corrupted') }]}
       onMine={c.keepMine} onLatest={c.useLatest} latestAvailable={!!c.conflict.value} />}
-    {c.error && <ConfigStateNotice kind="patch" locale={locale} message={c.error} />}
+    {c.error && <ConfigStateNotice kind="patch" message={c.error} />}
     <SettingsSaveBar notice={c.notice}>
       <button type="button" className="btn btn-primary" data-notify-save disabled={c.pending || (!c.dirty && !c.uncertain) || !!c.conflict} onClick={c.save}>
         {c.uncertain ? t('settings.notify.policy.saveRetry') : t('settings.notify.policy.save')}

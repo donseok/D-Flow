@@ -25,7 +25,7 @@ vi.mock('@/app/actions/attachments', () => ({
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => realT('ko', k as Parameters<typeof realT>[1]) }),
+  useLocale: () => ({ t: (k: string) => realT(k as Parameters<typeof realT>[0]) }),
 }))
 vi.mock('@/components/app/TeamsProvider', () => ({ useTeamLabel: () => (c: string) => c, useTeamCodes: () => [], useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }) }))
 // 담당·단계 패널은 자체 데이터 로드를 갖고 있어 이 테스트의 관심사가 아니다 — no-op 처리.

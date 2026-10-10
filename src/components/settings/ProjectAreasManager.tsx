@@ -14,7 +14,7 @@ import { ISSUE_AREA_CODE_RE } from '@/lib/domain/issueAreas'
 import type { AreaTeamKind, AreaTeamOption } from '@/lib/domain/areas'
 import { teamLabel } from '@/lib/domain/teamLabel'
 import type { ConfigArea } from '@/lib/settings/projectConfig'
-import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t as translate, type DictKey} from '@/lib/i18n/dict'
 import { useToast } from '@/components/ui/Toast'
 import { SettingsSaveBar } from './SettingsSaveBar'
 
@@ -35,11 +35,10 @@ function toDraft(a: ConfigArea): Draft {
   }
 }
 
-export function ProjectAreasManager({ projectId, kind, areas, teamOptions, locale = 'ko' }: {
+export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
   projectId: string
   /** 영역 종류 — A1 은 주간 업무영역 하나다(이슈 영역은 SP5) */
   kind: 'weekly_section' | 'issue_area'
-  locale?: Locale
   areas: readonly ConfigArea[]
   teamOptions: readonly AreaTeamOption[]
 }) {
@@ -47,7 +46,7 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
   const { toast } = useToast()
   const [draft, setDraft] = useState<Draft | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const tr = (k: DictKey) => translate(locale, k)   // 이 파일의 t 는 팀 변수다
+  const tr = (k: DictKey) => translate(k)   // 이 파일의 t 는 팀 변수다
   const [pending, startTransition] = useTransition()
   // 시트와 같은 순서(sortOrder, code, id) — 해석기는 sort_order 로만 정렬해 동률의 순서가 고정되지 않는다
   const rows = orderAreas(areas.filter(a => a.kind === kind))

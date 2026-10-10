@@ -87,7 +87,7 @@ export function nextResolvedAt(from: IssueStatus, to: IssueStatus, current: stri
 }
 
 // 배지 META — 회의 MEETING_META 형식(labelKey 는 dict 키, 표시 지점에서 t()).
-// 색은 전부 기존 토큰 팔레트(라이트·다크 자동 대응). on_hold dot 은 사이드바 unknown 관례(slate-400).
+// 색은 전부 기존 토큰 팔레트다. on_hold dot 은 사이드바 unknown 관례(slate-400).
 export const ISSUE_STATUS_META: Record<
   IssueStatus,
   { labelKey: `issue.status.${IssueStatus}`; chip: string; dot: string }

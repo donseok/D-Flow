@@ -1,5 +1,4 @@
-// 메일 본문은 한국어 고정 — 수신자의 언어를 알 수 없고 발신자 로케일을 쓰는 것은 틀린 답이다.
-// (src/lib/mail/meetingInvite.ts 와 같은 이유·같은 구성: 순수 렌더 함수, 발송은 호출자가 한다.)
+// (src/lib/mail/meetingInvite.ts 와 같은 구성: 순수 렌더 함수, 발송은 호출자가 한다.)
 
 import { stampIn } from '@/lib/domain/calendar'
 import { esc } from './esc'

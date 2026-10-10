@@ -14,7 +14,6 @@ import { parseModuleList } from '@/lib/settings/defs/workspace'
 import { NON_CORE_MODULES, PROJECT_TOGGLABLE } from '@/lib/modules/defaults'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 
 export type SettingsImpactResult =
   | { ok: true; revision: number; before: ModuleId[] | null; impact: ModuleAllowImpact | null }
@@ -24,11 +23,11 @@ export type SettingsImpactResult =
 export async function previewSettingsImpact(workspaceId: string, next: ModuleId[]): Promise<SettingsImpactResult> {
   const t = await serverTranslator()
   const guard = await requireWorkspaceAdmin(workspaceId)
-  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
-  if (!guard.actor.isSuperuser) return { ok: false, error: libText(t, ERR_DENIED) }
+  if (!guard.ok) return { ok: false, error: guard.error }
+  if (!guard.actor.isSuperuser) return { ok: false, error: ERR_DENIED }
   if (!isUuidLike(workspaceId)) return { ok: false, error: t('err.workspaceIdNotValid') }
   const parsed = parseModuleList(next, NON_CORE_MODULES)
-  if (!parsed.ok) return { ok: false, error: libText(t, parsed.error) }
+  if (!parsed.ok) return { ok: false, error: parsed.error }
   try {
     const admin = adminFor({ workspaceId }).admin
     const current = await getWorkspaceConfig(workspaceId, { client: admin })
@@ -49,10 +48,10 @@ export type ProjectSettingsImpactResult =
 export async function previewProjectSettingsImpact(projectId: string, next: ModuleId[]): Promise<ProjectSettingsImpactResult> {
   const t = await serverTranslator()
   const guard = await requireProjectAdmin(projectId)
-  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
+  if (!guard.ok) return { ok: false, error: guard.error }
   if (!isUuidLike(projectId)) return { ok: false, error: t('srv.settingsPreview.projectIdNotValid') }
   const parsed = parseModuleList(next, [...PROJECT_TOGGLABLE])
-  if (!parsed.ok) return { ok: false, error: libText(t, parsed.error) }
+  if (!parsed.ok) return { ok: false, error: parsed.error }
   try {
     const admin = adminFor({ projectId }).admin
     const current = await getProjectConfig(projectId, { client: admin })
@@ -72,10 +71,10 @@ export type WeekStartPreviewResult = { ok: true; preview: WeekStartPreview } | {
 export async function previewWeekStartChange(projectId: string, day: WeekStartDay): Promise<WeekStartPreviewResult> {
   const t = await serverTranslator()
   const guard = await requireProjectAdmin(projectId)
-  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
+  if (!guard.ok) return { ok: false, error: guard.error }
   if (!isUuidLike(projectId)) return { ok: false, error: t('srv.settingsPreview.projectIdNotValid') }
   const parsed = parseWeekStartDay(day)
-  if (!parsed.ok) return { ok: false, error: libText(t, parsed.error) }
+  if (!parsed.ok) return { ok: false, error: parsed.error }
   try {
     const admin = adminFor({ projectId }).admin
     return { ok: true, preview: await previewWeekStartImpact(admin, { projectId, day: parsed.value, now: new Date() }) }

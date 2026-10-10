@@ -3,8 +3,7 @@
 import Link from 'next/link'
 import { AlertTriangle, ArrowRight, BookOpen, CheckCircle2, Clock3, LoaderCircle } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import type { Locale } from '@/lib/i18n/dict'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 export type MinuteWikiSyncStatus =
   | 'unlinked'
@@ -112,11 +111,11 @@ function statusDescription(status: MinuteWikiSyncStatus) {
   }
 }
 
-function processedDate(value: string, locale: Locale, timeZone: string | null) {
+function processedDate(value: string, timeZone: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   if (timeZone === null) return '—'
-  return new Intl.DateTimeFormat(intlLocale(locale), {
+  return new Intl.DateTimeFormat(KO_LOCALE, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -139,7 +138,7 @@ export function MinuteWikiImpactCard({
   /** 처리 시각의 시간대 — 서버가 내려준 회의록 범위 tz(계획 P8, A-4 리뷰 N7). null 이면 범위 달력을 읽지 못한 것 — 시각은 '—' */
   timeZone: string | null
 }) {
-  const { locale, t } = useLocale()
+  const { t } = useLocale()
   const meta = statusStyle(status)
   const StatusIcon = meta.icon
   const countEntries = (Object.keys(counts) as (keyof MinuteWikiImpactCounts)[])
@@ -215,7 +214,7 @@ export function MinuteWikiImpactCard({
 
       {processedAt && (
         <p className="mt-2 text-right text-meta tabular-nums text-fg-muted">
-          {t('min.wiki.processedAt')} {processedDate(processedAt, locale, timeZone)}
+          {t('min.wiki.processedAt')} {processedDate(processedAt, timeZone)}
         </p>
       )}
     </section>

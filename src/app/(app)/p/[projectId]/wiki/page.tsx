@@ -5,7 +5,6 @@ import { PageHeader } from '@/components/app/PageHeader'
 import { WikiSearch } from '@/components/wiki/WikiSearch'
 import { WikiReindexButton } from '@/components/wiki/WikiReindexButton'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
 /**
@@ -31,8 +30,7 @@ export default async function ProjectWikiPage({
   // 종전 accessScope 의 projects 재조회를 대체한다: listProjectsWithState 의 canSeeProject
   // 필터가 비공개(0070) 판정의 정본이라 allowedProjectIds 와 같은 집합이고, 레이아웃이 같은
   // 요청에서 이미 부른 조회를 재사용하므로 이 화면의 projects 3중 조회가 1회로 준다.
-  const [locale, { actor, degraded }, projectsState] = await Promise.all([
-    getServerLocale(),
+  const [{ actor, degraded }, projectsState] = await Promise.all([
     getActorViewState(),
     listProjectsWithState(),
   ])
@@ -48,7 +46,7 @@ export default async function ProjectWikiPage({
   const project = projectsState.projects.find(p => p.id === projectId)
   if (!project) notFound()
 
-  const projectName = project.name ?? t(locale, 'wiki.projectFallback')
+  const projectName = project.name ?? t('wiki.projectFallback')
   const initialQuery = parseQuery(q)
   // 색인 수동 갱신은 슈퍼유저 전용 — 일반 사용자에겐 스트립 자체를 렌더하지 않는다.
   // 히어로 카드 우상단의 빈 다크 영역에 앉히려고 슬롯으로 내려보낸다(카드 밖 별도 줄 아님).
@@ -59,10 +57,9 @@ export default async function ProjectWikiPage({
   return (
     <WikiSearch
       projectId={projectId}
-      locale={locale}
       initialQuery={initialQuery}
-      pageHero={<PageHeader title={`${projectName}${t(locale, 'wiki.heroTitleSuffix')}`} />}
-      adminSlot={isSuperuser ? <WikiReindexButton locale={locale} /> : undefined}
+      pageHero={<PageHeader title={`${projectName}${t('wiki.heroTitleSuffix')}`} />}
+      adminSlot={isSuperuser ? <WikiReindexButton /> : undefined}
     />
   )
 }

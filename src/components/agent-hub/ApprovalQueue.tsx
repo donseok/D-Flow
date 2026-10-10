@@ -9,7 +9,7 @@ import { useState } from 'react'
 import type { AgentHub, HubQueueEntry } from '@/lib/domain/agentHub'
 import { runHubProcessOp, type HubProcessOp } from '@/app/actions/agentHub'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 import { fill } from '@/components/agents/labelKeys'
 import { NOTE_PLACEHOLDER_KEY, OP_LABEL_KEY, OP_TITLE_KEY } from './labelKeys'
 
@@ -23,17 +23,14 @@ type Props = {
   onChanged: () => Promise<void> | void
   /** 보고 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다(기본값 없음) */
   timeZone: string
-  /** 시각 포맷의 locale — 없으면 화면 언어의 형식 태그(ko 는 'ko-KR') */
-  locale?: string
   /** 시각 뒤에 시간대 이름 — 프로젝트 달력을 못 읽어 UTC 로 찍을 때(허브 머리와 같은 표기, A-4 리뷰 N3·A-5 리뷰 O6) */
   showTimeZone?: boolean
 }
 
-const when = (iso: string, timeZone: string, locale = 'ko-KR') => new Date(iso).toLocaleString(locale, { timeZone, hour12: false })
+const when = (iso: string, timeZone: string) => new Date(iso).toLocaleString(KO_LOCALE, { timeZone, hour12: false })
 
-function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, showTimeZone = false }: { q: HubQueueEntry } & Omit<Props, 'queue'>) {
-  const { t, locale: uiLocale } = useLocale()
-  const timeLocale = locale ?? intlLocale(uiLocale)
+function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, showTimeZone = false }: { q: HubQueueEntry } & Omit<Props, 'queue'>) {
+  const { t } = useLocale()
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [warn, setWarn] = useState<string | null>(null)
@@ -65,7 +62,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, locale, 
           <span className="font-mono text-meta text-fg-secondary">{q.code}</span>
           <span className="ml-2 text-sm font-semibold text-fg">{q.name}</span>
         </div>
-        <span className="text-meta text-fg-muted">{q.agent} · {when(q.reportedAt, timeZone, timeLocale)}{showTimeZone ? ` (${timeZone})` : ''} · {q.percent}%</span>
+        <span className="text-meta text-fg-muted">{q.agent} · {when(q.reportedAt, timeZone)}{showTimeZone ? ` (${timeZone})` : ''} · {q.percent}%</span>
       </div>
       {/* SP5b W1 — 승인 단계가 둘 이상이면 지금 기다리는 단계를 보인다("1/2 · 내부 검토") */}
       {q.approval && q.approval.total >= 2 && (

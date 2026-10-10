@@ -10,7 +10,7 @@ import type { FieldDef } from '@/lib/domain/customFields'
 vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWeight: vi.fn(), addWbsItem: vi.fn() }))
 vi.mock('@/app/actions/customFieldValues', () => ({ saveCustomFieldValues: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (key: string) => key }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn() }))
 
@@ -39,7 +39,7 @@ describe('WbsGanttSheet — 사용자 정의 필드 열', () => {
 
   async function render(defs: FieldDef[] | null, custom: unknown) {
     await act(async () => root.render(
-      <CustomFieldsProvider projectId="p1" entity="wbs_item" defs={defs} canAdmin={false} locale="ko">
+      <CustomFieldsProvider projectId="p1" entity="wbs_item" defs={defs} canAdmin={false}>
         <WbsGanttSheet levelLabels={['Phase', 'Task']} items={[{ ...base, custom: custom as never }]} calendar={calInputUtcMon}
           today="2026-07-03" actorView={null} projectId="p1" readOnly />
       </CustomFieldsProvider>,

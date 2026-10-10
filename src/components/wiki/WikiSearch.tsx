@@ -5,14 +5,13 @@ import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { WikiSearchResults } from './WikiSearchResults'
 import { useWikiSearchQuery } from './useWikiSearchQuery'
 import { toSearchViewState, type SearchViewState } from '@/lib/domain/searchView'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t, type DictKey} from '@/lib/i18n/dict'
 
 // 사용자가 지정한 옛 WikiAskPanel 디자인의 추천 칩과 같은 자리 — 문구만 검색용으로 바꿨다.
 const CHIP_KEYS: DictKey[] = ['wiki.search2.chip1', 'wiki.search2.chip2', 'wiki.search2.chip3']
 
-export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlot }: {
+export function WikiSearch({ projectId, initialQuery, pageHero, adminSlot }: {
   projectId: string
-  locale: Locale
   initialQuery: string
   /** 화면 제목 히어로. 검색 카드와 함께 고정 영역에 얹으려고 서버 페이지에서 받아 온다. */
   pageHero?: ReactNode
@@ -98,12 +97,12 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="inline-flex shrink-0 translate-y-px items-center gap-1.5 text-xs font-semibold text-fg-secondary">
             <Sparkles className="h-3.5 w-3.5 text-action" aria-hidden />
-            {t(locale, 'wiki.ask.eyebrow')}
+            {t('wiki.ask.eyebrow')}
           </span>
           <h2 id="wiki-search-title" className="text-lg font-bold tracking-tight text-fg sm:text-xl">
-            {t(locale, 'wiki.ask.title')}
+            {t('wiki.ask.title')}
           </h2>
-          <p className="min-w-0 text-[13px] leading-5 text-fg-secondary">{t(locale, 'wiki.search2.idle.desc')}</p>
+          <p className="min-w-0 text-[13px] leading-5 text-fg-secondary">{t('wiki.search2.idle.desc')}</p>
         </div>
 
         <form
@@ -120,14 +119,14 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
               onKeyDown={event => {
                 if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault()
               }}
-              placeholder={t(locale, 'wiki.search2.placeholder')}
-              aria-label={t(locale, 'wiki.search2.placeholder')}
+              placeholder={t('wiki.search2.placeholder')}
+              aria-label={t('wiki.search2.placeholder')}
               disabled={busy}
               className="h-11 w-full rounded-(--radius-control) border border-border-input bg-surface pl-11 pr-4 text-sm text-fg outline-none transition-[border-color] duration-(--motion-fast) placeholder:text-fg-muted focus:border-border-focus focus:ring-2 focus:ring-border-focus/25 disabled:opacity-70"
             />
           </div>
           <button type="submit" disabled={busy || !query.trim()} className="btn btn-primary h-11 rounded-2xl px-5">
-            {busy ? t(locale, 'wiki.ask.working') : t(locale, 'wiki.ask.submit')}
+            {busy ? t('wiki.ask.working') : t('wiki.ask.submit')}
             <Send className="h-4 w-4" aria-hidden />
           </button>
         </form>
@@ -137,7 +136,7 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
         <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <div className="flex flex-wrap gap-1.5">
             {CHIP_KEYS.map(key => {
-              const label = t(locale, key)
+              const label = t(key)
               return (
                 <button
                   key={key}
@@ -161,7 +160,7 @@ export function WikiSearch({ projectId, locale, initialQuery, pageHero, adminSlo
     // 결과 그리드는 히어로 카드 밖(캔버스)에 둔다 — hero-card 의 overflow-hidden 이
     // 조상에 있으면 읽기 패널의 position:sticky 가 뷰포트에 붙지 못한다.
     <ProjectPageShell hero={pageHero} pinned={searchCard}>
-      <WikiSearchResults state={state} locale={locale} query={submittedQuery} projectId={projectId} />
+      <WikiSearchResults state={state} query={submittedQuery} projectId={projectId} />
     </ProjectPageShell>
   )
 }

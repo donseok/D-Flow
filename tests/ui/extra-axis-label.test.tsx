@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const h = vi.hoisted(() => ({ update: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: (...a: unknown[]) => h.update(...a), getSettingsCommandOutcome: vi.fn() }))
 import { ExtraAxisLabelEditor } from '@/components/settings/ExtraAxisLabelEditor'
 import { ChangeHistoryList } from '@/components/wbs/ChangeHistoryList'

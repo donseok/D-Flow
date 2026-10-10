@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({ scope: vi.fn(), rows: vi.fn(), acc: vi.fn(), wsp: vi.fn(), zone: vi.fn() }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.scope }))
 vi.mock('@/lib/data/portal', () => ({ getProjectRows: h.rows, listWorkspaceProjects: vi.fn(async () => ({ ok: true, rows: [] })) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('@/lib/calendar/viewZone', () => ({ viewTimezone: h.zone }))
 vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: h.acc, getWorkspacePrefs: h.wsp }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }), usePathname: () => '/w/acme/projects', useSearchParams: () => new URLSearchParams() }))

@@ -45,7 +45,6 @@ describe('Wiki 탐색 계측', () => {
   it('회의 근거 링크는 목적지가 아니라 현재 Wiki 상세 경로에서 열린 것으로 기록한다', async () => {
     await act(async () => root.render(
       <WikiSourceLinks
-        locale="ko"
         sources={[{
           id: 'source-1',
           wikiItemId: 'item-1',

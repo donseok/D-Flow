@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEv
 import { useRouter } from 'next/navigation'
 import { Download, Eye, FileText, Loader2, Paperclip, Plus, RotateCw, Trash2, X } from 'lucide-react'
 import type { MinuteFile } from '@/lib/domain/types'
-import type { DictKey, Locale } from '@/lib/i18n/dict'
+import type { DictKey} from '@/lib/i18n/dict'
 import { stampedFileName } from '@/lib/domain/minutes'
 import { makeStoragePath } from '@/lib/domain/storagePath'
 import type { AttachmentPolicy, AttachmentPreviewKind } from '@/lib/minutes/attachmentPolicy'
@@ -17,17 +17,17 @@ import { createBrowserClient } from '@/lib/supabase/client'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useToast } from '@/components/ui/Toast'
 import { Modal } from '@/components/ui/Modal'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 const BUCKET = 'minutes'
 
 type PolicyState = { kind: 'loading' } | { kind: 'ok'; policy: AttachmentPolicy } | { kind: 'failed'; error: string }
 type Preview = { fileName: string; url: string; kind: AttachmentPreviewKind }
 
-function fileDate(value: string, locale: Locale, timeZone: string | null): string {
+function fileDate(value: string, timeZone: string | null): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime()) || timeZone === null) return '—'
-  return new Intl.DateTimeFormat(intlLocale(locale), { year: 'numeric', month: 'short', day: 'numeric', timeZone }).format(date)
+  return new Intl.DateTimeFormat(KO_LOCALE, { year: 'numeric', month: 'short', day: 'numeric', timeZone }).format(date)
 }
 
 /**
@@ -51,7 +51,7 @@ export function MinuteAttachmentsPanel({
   timeZone: string | null
 }) {
   const router = useRouter()
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const { toast } = useToast()
   const [policy, setPolicy] = useState<PolicyState>({ kind: 'loading' })
   const [queue, setQueue] = useState<QueueItem[]>([])
@@ -250,7 +250,7 @@ export function MinuteAttachmentsPanel({
               <span className="text-xs text-fg-muted">
                 {t('min.att.by')
                   .replace('{name}', f.uploadedByName ?? t('min.att.unknownUser'))
-                  .replace('{date}', fileDate(f.createdAt, locale, timeZone))}
+                  .replace('{date}', fileDate(f.createdAt, timeZone))}
               </span>
               <span className="flex items-center gap-1">
                 {busyId === f.id && <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin text-fg-muted" />}

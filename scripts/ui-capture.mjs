@@ -163,12 +163,11 @@ export function fontVerdict({ registered, loaded, loading }) {
   return registered >= 1 && loaded >= 1 && loading === 0 ? 'ok' : 'fallback'
 }
 
-/** @param {{ key: string, width: number, height: number, theme: string }} s */
-export function shotFileName({ key, width, height, theme }) {
+/** @param {{ key: string, width: number, height: number }} s */
+export function shotFileName({ key, width, height }) {
   if (!KEY_RE.test(key)) throw new Error(`라우트 키 형식 밖: ${key}`)
-  if (theme !== 'light') throw new Error(`테마 형식 밖: ${theme}`)
   if (!Number.isInteger(width) || !Number.isInteger(height)) throw new Error('크기는 정수')
-  return `${key}-${width}x${height}-${theme}.png`
+  return `${key}-${width}x${height}.png`
 }
 
 export function parseSize(s) {
@@ -179,13 +178,12 @@ export function parseSize(s) {
 
 /** 하위 명령 뒤 argv → 옵션. 모르는 인자·값 밖은 throw @param {string[]} argv */
 export function parseArgs(argv) {
-  /** @type {{ label: string | null, theme: string[], sizes: number[][], routes: string[] | null, since: string[], base: string | null, serverCommit: string | null, allowCross: boolean, pair: boolean, scroll: number, javaScript: boolean, positional: string[] }} */
-  const out = { label: null, theme: ['light'], sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, serverCommit: null, allowCross: false, pair: false, scroll: 0, javaScript: true, positional: [] }
+  /** @type {{ label: string | null, sizes: number[][], routes: string[] | null, since: string[], base: string | null, serverCommit: string | null, allowCross: boolean, pair: boolean, scroll: number, javaScript: boolean, positional: string[] }} */
+  const out = { label: null, sizes: DEFAULT_SIZES.map((s) => [...s]), routes: null, since: ['b4283c0'], base: null, serverCommit: null, allowCross: false, pair: false, scroll: 0, javaScript: true, positional: [] }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${a} 뒤에 값이 없다`); return v }
     if (a === '--label') out.label = next()
-    else if (a === '--theme') out.theme = next().split(',')
     else if (a === '--sizes') out.sizes = next().split(',').map(parseSize)
     else if (a === '--routes') out.routes = next().split(',')
     else if (a === '--since') out.since = next().split(',')
@@ -205,8 +203,6 @@ export function parseArgs(argv) {
     else if (a.startsWith('--')) throw new Error(`알 수 없는 인자: ${a}`)
     else out.positional.push(a)
   }
-  // 제품이 라이트 전용이다(2026-10-10) — 축은 light 하나. 파일 이름·행의 theme 칸은 옛 기준 캡처와 맞대려고 남긴다
-  for (const t of out.theme) if (t !== 'light') throw new Error(`--theme 은 light 뿐이다(라이트 전용): ${t}`)
   for (const s of out.since) if (!SINCE.includes(s)) throw new Error(`--since 값 밖: ${s}`)
   if (out.label !== null && !KEY_RE.test(out.label)) throw new Error(`--label 형식 밖: ${out.label}`)
   // 위치 인자는 라벨이다(diff 의 기준·대상, UI-1 sheet 의 추가 라벨) — 산출 폴더 아래 경로가 되므로 같은 형식만(UI-0 안전 리뷰 P3-2)
@@ -585,11 +581,11 @@ export const KNOWN_NOISE = Object.freeze([
 
 /** 최종 경로의 모양 — 시드 id(uuid)·자리표시·옛 가림 표기를 하나로(시드가 다른 참고 대조에서도 같은 화면이면 같다) */
 const finalShape = (p) => String(p ?? '').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{id}').replace(/\{[A-Za-z]+\}|<token>/g, '{id}')
-const shotAt = (r) => ({ key: r.key, width: r.width, height: r.height, theme: r.theme })
-const sameShot = (x, y) => x.key === y.key && x.width === y.width && x.height === y.height && x.theme === y.theme
+const shotAt = (r) => ({ key: r.key, width: r.width, height: r.height })
+const sameShot = (x, y) => x.key === y.key && x.width === y.width && x.height === y.height
 
 /** diff 의 행 매칭(순수, D11·D15) — 둘 다 있는 쌍·대상에만(added → new)·기준에만(missing — 부분 실행이 빠진 장을 같음처럼 숨기지 않는다)
- *  @template {{ key: string, width: number, height: number, theme: string }} R @param {R[]} A @param {R[]} B */
+ *  @template {{ key: string, width: number, height: number }} R @param {R[]} A @param {R[]} B */
 export function diffRows(A, B) {
   return {
     pairs: B.flatMap((b) => { const a = A.find((x) => sameShot(x, b)); return a ? [{ at: shotAt(b), a, b }] : [] }),
@@ -623,7 +619,7 @@ export function pairPlan(rows, doc) {
   return rows.flatMap((r) => (r.pair && keys.has(r.pair) ? [{ key: r.key, pairKey: r.pair }] : []))
 }
 
-/** diff --pair 의 행 매칭(순수) — 머리 라벨의 pair 행마다 기준 라벨의 짝 행(같은 크기·테마)을 찾는다. 짝 장이 없으면 unmatched(볼 목록에 new 로 오른다 —
+/** diff --pair 의 행 매칭(순수) — 머리 라벨의 pair 행마다 기준 라벨의 짝 행(같은 크기)을 찾는다. 짝 장이 없으면 unmatched(볼 목록에 new 로 오른다 —
  *  짝이 빠진 채 같음처럼 숨기지 않는다). pair 가 없는 머리 행은 이 비교의 대상이 아니다
  *  @param {any[]} A @param {any[]} B @param {{ key: string, pairKey: string }[]} plan */
 export function pairRows(A, B, plan) {
@@ -631,7 +627,7 @@ export function pairRows(A, B, plan) {
   const unmatched = []
   for (const { key, pairKey } of plan) {
     for (const b of B.filter((x) => x.key === key)) {
-      const a = A.find((x) => x.key === pairKey && x.width === b.width && x.height === b.height && x.theme === b.theme)
+      const a = A.find((x) => x.key === pairKey && x.width === b.width && x.height === b.height)
       if (a) pairs.push({ label: `${key}⇐${pairKey}`, a, b })
       else unmatched.push({ label: `${key}⇐${pairKey}`, b })
     }
@@ -647,7 +643,7 @@ export function summarizeDiff(rows) {
   const count = (v) => rows.filter((r) => r.verdict === v).length
   const look = rows.filter((r) => LOOK_ORDER.includes(r.verdict))
     .sort((x, y) => LOOK_ORDER.indexOf(x.verdict) - LOOK_ORDER.indexOf(y.verdict) || (y.ratio ?? -1) - (x.ratio ?? -1))
-    .map((r) => `${r.key}@${r.width}x${r.height}/${r.theme} ${r.verdict} ${pctOf(r.ratio)}${r.reasons?.length ? ` ${r.reasons.join(' · ')}` : ''}${r.known ? ` (알려진 잡음: ${r.known})` : ''}`)
+    .map((r) => `${r.key}@${r.width}x${r.height} ${r.verdict} ${pctOf(r.ratio)}${r.reasons?.length ? ` ${r.reasons.join(' · ')}` : ''}${r.known ? ` (알려진 잡음: ${r.known})` : ''}`)
   return { compared: rows.length, same: count('same'), near: count('near'), diff: count('diff'), problem: count('problem'), missing: count('missing'),
     new: count('new'), skipped: rows.filter((r) => String(r.verdict).startsWith('skip')).length, look }
 }
@@ -1081,7 +1077,7 @@ export function redactTokens(text, { inviteToken, shareToken } = {}) {
  * 그래서 포트폴리오 없이 대시보드를 찍는 부분 실행도 계기가 '—' 가 아니라 전 경로 실행과 같은 값이다. 스냅샷을 service_role 로 직접 넣지
  * 않는다 — 방문한 서버 코드의 계산값이어야 (기준, 머리) 비교가 롤업 회귀를 본다. 남의 서버·다른 스택이면 여기서 멈춘다(안전 리뷰 §3).
  */
-async function warmupSnapshot({ browser, db, baseUrl, session, theme, projectId, outDir }) {
+async function warmupSnapshot({ browser, db, baseUrl, session, projectId, outDir }) {
   const date = kstToday()
   const context = await browser.newContext(contextOptions({ width: 1440, height: 900 }))
   try {
@@ -1095,11 +1091,11 @@ async function warmupSnapshot({ browser, db, baseUrl, session, theme, projectId,
     .eq('project_id', projectId).eq('snap_date', date).maybeSingle()))
   const res = await pollUntil(found, { limitMs: WARMUP_LIMIT_MS })
   if (!res.ok) throw new Error(warmupFailure({ email: session.email, date, baseUrl, limitMs: WARMUP_LIMIT_MS }))
-  return { theme, date, tries: res.tries, elapsedMs: res.elapsedMs }
+  return { date, tries: res.tries, elapsedMs: res.elapsedMs }
 }
 
-/** 라우트 × 테마 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다.
- *  테마 패스마다 시작 상태를 고정한다(passStart — 선호값 고정 객체·워크스페이스 행 pin·공지 워터마크·알림 열람·진척 스냅샷) 뒤 속도 계기 사전 방문.
+/** 라우트 × 크기마다 새 컨텍스트(캐시 없음)로 열고 visit(page, info) 의 결과를 rows 로 모은다.
+ *  시작할 때 상태를 고정한다(passStart — 선호값 고정 객체·워크스페이스 행 pin·공지 워터마크·알림 열람·진척 스냅샷) 뒤 속도 계기 사전 방문.
  *  env 는 laneEnv 의 결과(shoot 가 서버 커밋 판정에 먼저 쓴다) — 주지 않으면 여기서 만든다 */
 /** main 의 스크롤 주체(D19)를 y px 만큼 내리고 한 프레임 기다린다 — 짧은 화면은 브라우저가 끝에서 멈춘다(그만큼만 내려간 장이 찍힌다) */
 export async function scrollMain(page, y) {
@@ -1134,47 +1130,45 @@ export async function forEachShot(opts, visit, env = laneEnv({ base: opts.base }
   const rows = []
   const warmups = []
   try {
-    for (const theme of opts.theme) {
-      await passStart(db, { userIds: captureIds, projectId: seed.pid })
-      warmups.push(await warmupSnapshot({ browser, db, baseUrl, session: sessions[WARMUP_GRADE], theme, projectId: seed.pid, outDir }))
-      for (const r of routes) {
-        // 행의 계정 선호(prefs — 서버값이 이기는 키라 클릭·init 으로는 못 정한다)는 그 행을 찍는 동안만 덮고, 끝나면 시작 상태로 되돌려 뒤 행을 바꾸지 않게 한다
-        if (r.prefs) await setServerPrefs(db, captureIds, startPin(seed.pid), r.prefs)
-        try {
-          for (const [width, height] of opts.sizes) {
-            const context = await browser.newContext(contextOptions({ width, height, javaScript: opts.javaScript }))
-            try {
-              await routeCdn(context, join(outDir, 'cdn-cache'))
-              const cookies = r.grade === 'public' ? [] : sessions[r.grade].cookies
-              await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
-              await context.addInitScript((entries) => {
-                try { for (const [k, v] of Object.entries(entries)) window.localStorage.setItem(k, v) } catch { /* 저장소 없음 */ }
-              }, r.init ?? {})
-              const page = await context.newPage()
-              await page.goto(baseUrl + fillPath(r.path, values), { waitUntil: 'load', timeout: 60_000 })
-              let idle = true
-              // JS 를 끈 장(--js off, D55 첫 페인트)은 스크립트가 없어 네트워크 유휴를 기다릴 것이 없다 — 글꼴만 확정하고 찍는다
-              if (opts.javaScript !== false) { try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { idle = false } }
-              await page.evaluate(() => document.fonts.ready.then(() => true))
-              await page.waitForTimeout(500)
-              let clickFailed = false
-              for (const sel of clickSteps(r)) {   // 단계마다 400ms 를 두고 차례로 — 한 단계가 실패하면 뒤 단계는 누르지 않는다
-                try { await page.locator(sel).first().click({ timeout: 5_000 }); await page.waitForTimeout(400) } catch { clickFailed = true; break }
-              }
-              if (opts.scroll > 0) await scrollMain(page, opts.scroll)   // 클릭 뒤 — 고정 요소가 스크롤된 main 위에서 어디 붙는지(D54)
-              const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
-              for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
-              const u = new URL(page.url())
-              const final = finalProblem(r, values, u, { base: env.explicitBase })   // D2 — expectFinal 이 없는 행도 채운 경로가 기대 최종 경로다
-              const problems = [...pageProblems(await page.content()), ...(final ? [final] : []), ...(clickFailed ? ['click-failed'] : []), ...missing]
-              const row0 = { key: r.key, grade: r.grade, width, height, theme, idle, finalPath: redact(u.pathname + u.search) }
-              const v = await visit(page, { r, width, height, theme, doc, outDir })
-              rows.push({ ...row0, ...v, problems: [...problems, ...(v.problems ?? [])].map(redact) })
-            } finally { await context.close() }
-          }
-        } finally {
-          if (r.prefs) await setServerPrefs(db, captureIds, startPin(seed.pid))
+    await passStart(db, { userIds: captureIds, projectId: seed.pid })
+    warmups.push(await warmupSnapshot({ browser, db, baseUrl, session: sessions[WARMUP_GRADE], projectId: seed.pid, outDir }))
+    for (const r of routes) {
+      // 행의 계정 선호(prefs — 서버값이 이기는 키라 클릭·init 으로는 못 정한다)는 그 행을 찍는 동안만 덮고, 끝나면 시작 상태로 되돌려 뒤 행을 바꾸지 않게 한다
+      if (r.prefs) await setServerPrefs(db, captureIds, startPin(seed.pid), r.prefs)
+      try {
+        for (const [width, height] of opts.sizes) {
+          const context = await browser.newContext(contextOptions({ width, height, javaScript: opts.javaScript }))
+          try {
+            await routeCdn(context, join(outDir, 'cdn-cache'))
+            const cookies = r.grade === 'public' ? [] : sessions[r.grade].cookies
+            await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: baseUrl })))
+            await context.addInitScript((entries) => {
+              try { for (const [k, v] of Object.entries(entries)) window.localStorage.setItem(k, v) } catch { /* 저장소 없음 */ }
+            }, r.init ?? {})
+            const page = await context.newPage()
+            await page.goto(baseUrl + fillPath(r.path, values), { waitUntil: 'load', timeout: 60_000 })
+            let idle = true
+            // JS 를 끈 장(--js off, D55 첫 페인트)은 스크립트가 없어 네트워크 유휴를 기다릴 것이 없다 — 글꼴만 확정하고 찍는다
+            if (opts.javaScript !== false) { try { await page.waitForLoadState('networkidle', { timeout: 15_000 }) } catch { idle = false } }
+            await page.evaluate(() => document.fonts.ready.then(() => true))
+            await page.waitForTimeout(500)
+            let clickFailed = false
+            for (const sel of clickSteps(r)) {   // 단계마다 400ms 를 두고 차례로 — 한 단계가 실패하면 뒤 단계는 누르지 않는다
+              try { await page.locator(sel).first().click({ timeout: 5_000 }); await page.waitForTimeout(400) } catch { clickFailed = true; break }
+            }
+            if (opts.scroll > 0) await scrollMain(page, opts.scroll)   // 클릭 뒤 — 고정 요소가 스크롤된 main 위에서 어디 붙는지(D54)
+            const missing = []   // 판정 Q35 — 그려져야 할 선택자(예: 좌석표의 막힘 좌석 — Q34)가 0개면 문제로 적는다
+            for (const sel of r.expect ?? []) if ((await page.locator(sel).count()) === 0) missing.push(`expect-missing:${sel}`)
+            const u = new URL(page.url())
+            const final = finalProblem(r, values, u, { base: env.explicitBase })   // D2 — expectFinal 이 없는 행도 채운 경로가 기대 최종 경로다
+            const problems = [...pageProblems(await page.content()), ...(final ? [final] : []), ...(clickFailed ? ['click-failed'] : []), ...missing]
+            const row0 = { key: r.key, grade: r.grade, width, height, idle, finalPath: redact(u.pathname + u.search) }
+            const v = await visit(page, { r, width, height, doc, outDir })
+            rows.push({ ...row0, ...v, problems: [...problems, ...(v.problems ?? [])].map(redact) })
+          } finally { await context.close() }
         }
+      } finally {
+        if (r.prefs) await setServerPrefs(db, captureIds, startPin(seed.pid))
       }
     }
   } finally { await browser.close() }
@@ -1189,7 +1183,7 @@ async function cmdShoot(opts) {
   const head = gitHead()
   // 서버 정체(D3) — --base(기준 서버) 실행은 그 서버를 빌드한 트리가 있어야 한다. 찍기 전에 판정한다
   const server = serverCommitOf({ explicitBase: env.explicitBase, envCommit: process.env.UI_CAPTURE_SERVER_COMMIT, flagCommit: opts.serverCommit, head })
-  const res = await forEachShot(opts, async (page, { r, width, height, theme, doc, outDir }) => {
+  const res = await forEachShot(opts, async (page, { r, width, height, doc, outDir }) => {
     const fonts = await page.evaluate(() => {
       const f = [...document.fonts].filter((x) => x.family.replace(/["']/g, '') === 'Pretendard Variable')
       return { registered: f.length, loaded: f.filter((x) => x.status === 'loaded').length, loading: f.filter((x) => x.status === 'loading').length }
@@ -1200,20 +1194,20 @@ async function cmdShoot(opts) {
     const mask = maskReport(sels, await page.evaluate((list) => list.map((s) => { try { return document.querySelectorAll(s).length } catch { return -1 } }), sels.map((s) => s.sel)))
     const dir = join(outDir, opts.label)
     mkdirSync(dir, { recursive: true })
-    const file = shotFileName({ key: r.key, width, height, theme })
+    const file = shotFileName({ key: r.key, width, height })
     const style = shotStyle(doc, r)
     const buf = await page.screenshot({ path: join(dir, file), ...(style ? { style } : {}), animations: 'disabled', caret: 'hide' })
     return { file, sha256: createHash('sha256').update(buf).digest('hex'), font: fontVerdict(fonts), fonts, h1Count: h1.length, h1,
       maskCounts: mask.counts, maskZero: mask.zero, problems: mask.invalid.map((s) => `mask-invalid:${s}`) }
   }, env)
-  const maskWarnings = res.rows.flatMap((x) => x.maskZero.map((s) => `${x.key}@${x.width}x${x.height}/${x.theme}: ${s}`))
+  const maskWarnings = res.rows.flatMap((x) => x.maskZero.map((s) => `${x.key}@${x.width}x${x.height}: ${s}`))
   const meta = { label: opts.label, commit: server.commit, commitSource: server.source, scriptCommit: head, buildId: res.buildId, browser: res.browserVersion,
     kstDate: kstToday(), seedDate: res.seed.seedDate, seedProjectId: res.seed.pid, routesSha256: res.routesSha256, accent: res.accent, baseUrl: res.baseUrl, llmKeys: env.llmKeys,
-    themes: opts.theme, sizes: opts.sizes, scroll: opts.scroll, javaScript: opts.javaScript, warmups: res.warmups, maskWarnings, rows: res.rows }
+    sizes: opts.sizes, scroll: opts.scroll, javaScript: opts.javaScript, warmups: res.warmups, maskWarnings, rows: res.rows }
   writeFileSync(join(res.outDir, opts.label, 'meta.json'), JSON.stringify(meta, null, 2))
   console.log(JSON.stringify({ ok: true, label: opts.label, shots: res.rows.length, buildId: res.buildId, commit: `${server.commit}(${server.source})`,
-    warmups: res.warmups.map((w) => `${w.theme} ${w.elapsedMs}ms`),
-    withProblems: res.rows.filter((x) => x.problems.length).map((x) => `${x.key}@${x.width}x${x.height}/${x.theme}:${x.problems.join('+')}`),
+    warmups: res.warmups.map((w) => `${w.elapsedMs}ms`),
+    withProblems: res.rows.filter((x) => x.problems.length).map((x) => `${x.key}@${x.width}x${x.height}:${x.problems.join('+')}`),
     fallbackFonts: res.rows.filter((x) => x.font !== 'ok').length, maskZero: maskWarnings.length }))
 }
 
@@ -1260,8 +1254,8 @@ async function cmdDiff(opts) {
       out.push({ ...rowVerdict({ a, b, stats }, { ignoreFinal }), key: label })
     }
   } finally { await browser.close() }
-  for (const b of added) out.push({ key: b.key, width: b.width, height: b.height, theme: b.theme, file: b.file, ratio: null, verdict: 'new', reasons: b.reasons ?? [] })
-  for (const a of missing) out.push({ key: a.key, width: a.width, height: a.height, theme: a.theme, file: a.file, ratio: null, verdict: 'missing', reasons: [] })
+  for (const b of added) out.push({ key: b.key, width: b.width, height: b.height, file: b.file, ratio: null, verdict: 'new', reasons: b.reasons ?? [] })
+  for (const a of missing) out.push({ key: a.key, width: a.width, height: a.height, file: a.file, ratio: null, verdict: 'missing', reasons: [] })
   const sorted = [...out].sort((x, y) => (y.ratio ?? -1) - (x.ratio ?? -1))
   const sum = summarizeDiff(sorted)
   const box = (r) => (r.bbox ? `${r.bbox.x},${r.bbox.y} ${r.bbox.w}×${r.bbox.h}` : '—')
@@ -1271,8 +1265,8 @@ async function cmdDiff(opts) {
     `- 판정 수: same ${sum.same} · near ${sum.near} · diff ${sum.diff} · problem ${sum.problem} · missing ${sum.missing} · new ${sum.new} · skip ${sum.skipped}(판정 Q33 문턱 0.2%, near = 0 초과 문턱 이하)`,
     ...(cmp.warnings.length ? ['', '## 경고', ...cmp.warnings.map((w) => `- ${w}`)] : []),
     '', '## 볼 목록', ...(sum.look.length ? sum.look.map((l) => `- ${l}`) : ['- (없음 — 전부 same 또는 skip)']),
-    '', '## 전체', '', '| 라우트 | 크기 | 테마 | 차이율 | 다른 픽셀 | 차이 영역(x,y w×h) | 판정 |', '|---|---|---|---|---|---|---|',
-    ...sorted.map((r) => `| ${r.key} | ${r.width}×${r.height} | ${r.theme} | ${pctOf(r.ratio)} | ${r.diffPixels ?? '—'} | ${box(r)} | ${r.verdict}${r.known ? ' (알려진 잡음)' : ''} |`)].join('\n')
+    '', '## 전체', '', '| 라우트 | 크기 | 차이율 | 다른 픽셀 | 차이 영역(x,y w×h) | 판정 |', '|---|---|---|---|---|---|',
+    ...sorted.map((r) => `| ${r.key} | ${r.width}×${r.height} | ${pctOf(r.ratio)} | ${r.diffPixels ?? '—'} | ${box(r)} | ${r.verdict}${r.known ? ' (알려진 잡음)' : ''} |`)].join('\n')
   writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}${suffix}.json`), JSON.stringify(sorted, null, 2))
   writeFileSync(join(outDir, `diff-${baseLabel}--${headLabel}${suffix}.md`), `${md}\n`)
   console.log(JSON.stringify({ ok: true, compared: sum.compared, same: sum.same, near: sum.near, diff: sum.diff, problem: sum.problem, missing: sum.missing, new: sum.new,
@@ -1383,18 +1377,18 @@ export const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&
  * 대조표 행 — 머리 라벨의 장마다 diff 판정(same·near·diff·problem — 수정 라운드 뒤 판정, ui1-addendum §2)·axe 위반을 붙이고, diff 가 기준에만
  * 있다고 본 장(missing)도 행으로 더한다(머리에 없으니 기준 이미지만 — 빠진 장을 표에서 숨기지 않는다). 차이율 큰 순, 차이가 없으면 new
  * @param {{ rows: any[] }} head @param {any[]} [diff] @param {any[]} [axe]
- * @returns {{ key: string, width: number, height: number, theme: string, file: string, ratio: number | null, verdict: string, reasons: string[], axe: number | null, h1Count: number | null, problems: string[], inHead: boolean }[]}
+ * @returns {{ key: string, width: number, height: number, file: string, ratio: number | null, verdict: string, reasons: string[], axe: number | null, h1Count: number | null, problems: string[], inHead: boolean }[]}
  */
 export function sheetRows(head, diff = [], axe = []) {
-  const same = (x, r) => x.key === r.key && x.width === r.width && x.height === r.height && x.theme === r.theme
+  const same = (x, r) => x.key === r.key && x.width === r.width && x.height === r.height
   const fromHead = head.rows.map((r) => {
     const d = diff.find((x) => same(x, r) && x.verdict !== 'missing')
     const a = axe.find((x) => same(x, r))
-    return { key: r.key, width: r.width, height: r.height, theme: r.theme, file: r.file, ratio: d?.ratio ?? null, verdict: d?.verdict ?? 'new', reasons: d?.reasons ?? [],
+    return { key: r.key, width: r.width, height: r.height, file: r.file, ratio: d?.ratio ?? null, verdict: d?.verdict ?? 'new', reasons: d?.reasons ?? [],
       axe: a ? a.violations : null, h1Count: r.h1Count, problems: r.problems ?? [], inHead: true }
   })
   const gone = diff.filter((d) => d.verdict === 'missing' && !head.rows.some((r) => same(d, r))).map((d) => ({ key: d.key, width: d.width, height: d.height,
-    theme: d.theme, file: d.file, ratio: null, verdict: 'missing', reasons: d.reasons ?? [], axe: null, h1Count: null, problems: [], inHead: false }))
+    file: d.file, ratio: null, verdict: 'missing', reasons: d.reasons ?? [], axe: null, h1Count: null, problems: [], inHead: false }))
   return [...fromHead.sort((x, y) => (y.ratio ?? -1) - (x.ratio ?? -1)), ...gone]
 }
 /** 대조표 '볼 목록' 순서 — 문제 → 다름 → 빠짐 → 근소(near 도 눈으로 본다 — ui1-addendum §2) */
@@ -1410,13 +1404,13 @@ export function sheetSummary(rows) {
       .sort((x, y) => SHEET_LOOK.indexOf(x.verdict) - SHEET_LOOK.indexOf(y.verdict) || (y.ratio ?? -1) - (x.ratio ?? -1)) }
 }
 /**
- * axe 절(판정 Q45) — 머리·추가 라벨의 모든 행을 테마·위반 수 순으로
+ * axe 절(판정 Q45) — 머리·추가 라벨의 모든 행을 위반 수 순으로
  * @param {any[]} rows
- * @returns {{ label: string | null, key: string, width: number, height: number, theme: string, violations: number }[]}
+ * @returns {{ label: string | null, key: string, width: number, height: number, violations: number }[]}
  */
 export function axeTable(rows) {
-  return rows.map((r) => ({ label: r.label ?? null, key: r.key, width: r.width, height: r.height, theme: r.theme, violations: r.violations ?? 0 }))
-    .sort((a, b) => (a.theme === b.theme ? b.violations - a.violations : a.theme < b.theme ? -1 : 1))
+  return rows.map((r) => ({ label: r.label ?? null, key: r.key, width: r.width, height: r.height, violations: r.violations ?? 0 }))
+    .sort((a, b) => b.violations - a.violations)
 }
 /**
  * checks 절(판정 Q43·Q45) — 머리 라벨 폴더의 tab·print JSON(없으면 null) → 대조표 요약.
@@ -1425,15 +1419,15 @@ export function axeTable(rows) {
  */
 export function checksSummary({ tab = null, print = null }) {
   return {
-    /** @type {{ key: string, theme: string, failed: number, unreached: string[], ok: boolean }[] | null} */
-    tab: tab ? tab.rows.map((r) => ({ key: r.key, theme: r.theme, failed: r.failed ?? 0, unreached: r.unreached ?? [], ok: (r.failed ?? 0) === 0 })) : null,
-    /** @type {{ key: string, theme: string, texts: number, low: number, ok: boolean }[] | null} */
-    print: print ? print.rows.map((r) => ({ key: r.key, theme: r.theme, texts: r.texts, low: r.lowContrast, ok: r.texts > 0 && r.lowContrast === 0 })) : null,
+    /** @type {{ key: string, failed: number, unreached: string[], ok: boolean }[] | null} */
+    tab: tab ? tab.rows.map((r) => ({ key: r.key, failed: r.failed ?? 0, unreached: r.unreached ?? [], ok: (r.failed ?? 0) === 0 })) : null,
+    /** @type {{ key: string, texts: number, low: number, ok: boolean }[] | null} */
+    print: print ? print.rows.map((r) => ({ key: r.key, texts: r.texts, low: r.lowContrast, ok: r.texts > 0 && r.lowContrast === 0 })) : null,
   }
 }
 
 async function checkTab(opts) {
-  const res = await forEachShot({ ...opts, sizes: [[1440, 900]] }, async (page, { r, theme, outDir }) => {
+  const res = await forEachShot({ ...opts, sizes: [[1440, 900]] }, async (page, { r, outDir }) => {
     const dir = join(outDir, opts.label, 'tab')
     mkdirSync(dir, { recursive: true })
     /** @type {string[]} */
@@ -1482,7 +1476,7 @@ async function checkTab(opts) {
         const v = focusVerdict(s)
         const { x, y, width, height } = s.rect
         if (i < 12 && width > 0 && height > 0 && x >= 0 && y >= 0 && x + width <= 1440 && y + height <= 900) {
-          await page.screenshot({ path: join(dir, `${r.key}-${theme}-${pass}-${String(i).padStart(2, '0')}.png`),
+          await page.screenshot({ path: join(dir, `${r.key}-${pass}-${String(i).padStart(2, '0')}.png`),
             clip: { x: Math.max(0, x - 8), y: Math.max(0, y - 8), width: Math.min(1440 - Math.max(0, x - 8), width + 16), height: Math.min(900 - Math.max(0, y - 8), height + 16) } })
         }
         steps.push({ pass, i, tag: s.tag, label: s.label, outline: `${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor}`, rings: s.rings, background: s.background, matched: s.matched, ...v })
@@ -1510,16 +1504,16 @@ async function checkTab(opts) {
   })
   writeFileSync(join(res.outDir, opts.label, 'tab.json'), JSON.stringify({ browser: res.browserVersion, accent: res.accent, buildId: res.buildId, kstDate: kstToday(), rows: res.rows }, null, 2))
   console.log(JSON.stringify({ ok: true, kind: 'tab', pages: res.rows.length,
-    failedSteps: res.rows.flatMap((r) => r.steps.filter((s) => !s.ok).map((s) => `${r.key}/${r.theme}#${s.pass}${s.i} ${s.tag} ${s.label}: ${s.why}`)),
-    unreached: res.rows.flatMap((r) => [...r.unreached.map((x) => `${r.key}/${r.theme} target-unreached:${x}`), ...r.startProblems.map((x) => `${r.key}/${r.theme} ${x}`)]) }))
+    failedSteps: res.rows.flatMap((r) => r.steps.filter((s) => !s.ok).map((s) => `${r.key}#${s.pass}${s.i} ${s.tag} ${s.label}: ${s.why}`)),
+    unreached: res.rows.flatMap((r) => [...r.unreached.map((x) => `${r.key} target-unreached:${x}`), ...r.startProblems.map((x) => `${r.key} ${x}`)]) }))
 }
 
 async function checkPrint(opts) {
-  const res = await forEachShot({ ...opts, sizes: [[1440, 900]] }, async (page, { r, theme, outDir }) => {
+  const res = await forEachShot({ ...opts, sizes: [[1440, 900]] }, async (page, { r, outDir }) => {
     await page.emulateMedia({ media: 'print' })
     await page.waitForTimeout(300)
     mkdirSync(join(outDir, opts.label), { recursive: true })
-    const file = `print-${r.key}-${theme}.png`
+    const file = `print-${r.key}.png`
     await page.screenshot({ path: join(outDir, opts.label, file) })
     const colors = await page.evaluate(() => [...document.querySelectorAll('.print-area *')]
       .filter((e) => e.childElementCount === 0 && (e.textContent || '').trim()).slice(0, 300).map((e) => getComputedStyle(e).color))
@@ -1528,7 +1522,7 @@ async function checkPrint(opts) {
     return { file, texts: ratios.length, lowContrast: ratios.filter((x) => x < 4.5).length, minRatio: ratios.length ? Math.min(...ratios) : null }
   })
   writeFileSync(join(res.outDir, opts.label, 'print.json'), JSON.stringify({ browser: res.browserVersion, accent: res.accent, buildId: res.buildId, rows: res.rows }, null, 2))
-  console.log(JSON.stringify({ ok: true, kind: 'print', rows: res.rows.map((r) => `${r.key}/${r.theme} texts ${r.texts} low ${r.lowContrast} min ${r.minRatio?.toFixed(2)}${r.problems.length ? ` problems ${r.problems.join('+')}` : ''}`) }))
+  console.log(JSON.stringify({ ok: true, kind: 'print', rows: res.rows.map((r) => `${r.key} texts ${r.texts} low ${r.lowContrast} min ${r.minRatio?.toFixed(2)}${r.problems.length ? ` problems ${r.problems.join('+')}` : ''}`) }))
 }
 
 /** 병치 레일 옆의 필수 열(R8) — 번호·작업명·담당팀·진척 상태. 기간 등 후속 열은 가로 스크롤로 확인한다. */
@@ -1550,7 +1544,7 @@ const RAIL_SIZES = Object.freeze([[1440, 900], [1400, 900], [1366, 768], [1280, 
 /** checks rail — 인스펙터 행(펼침·접힘)을 임계 폭 넷에서 열고 레일 모드와 필수 열의 보임을 잰다 → <label>/rail.json. 클릭(행 열기)은 forEachShot 이 먼저 한다 */
 async function checkRail(opts) {
   const out = []
-  const res = await forEachShot({ ...opts, routes: ['p-wbs-inspector', 'p-wbs-inspector-collapsed'], theme: ['light'], sizes: RAIL_SIZES.map((s) => [...s]) }, async (page, { r, width }) => {
+  const res = await forEachShot({ ...opts, routes: ['p-wbs-inspector', 'p-wbs-inspector-collapsed'], sizes: RAIL_SIZES.map((s) => [...s]) }, async (page, { r, width }) => {
     // 간트의 오늘 중심 자동 스크롤과 열 수용 폭을 분리한다. 필수 열은 표의 시작 위치에서 측정한다.
     await page.locator('[data-wbs-scroll-region]').evaluate(el => { el.scrollLeft = 0 })
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)))
@@ -1605,17 +1599,17 @@ async function cmdSheet(opts) {
   const img = (label, file) => `<img loading="lazy" src="${escapeHtml(`${label}/${file}`)}" alt="">`
   const okCell = (ok) => (ok ? '통과' : '<b>실패</b>')
   const table = (cols, rows) => `<table><thead><tr>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>\n${rows.join('\n')}\n</tbody></table>`
-  const where = (r) => `${r.key}@${r.width}x${r.height}/${r.theme}`
+  const where = (r) => `${r.key}@${r.width}x${r.height}`
   const sectionHtml = (s) => {
     const sum = sheetSummary(s.rows)
     const head2 = `<h2>${escapeHtml(s.label)}${s.baseLabel ? ` — 기준 ${escapeHtml(s.baseLabel)} 과 비교` : ''} · 장 ${s.rows.length}`
       + (s.baseLabel ? ` · 다름 ${sum.diff} · 근소 ${sum.near} · 문제 ${sum.problem} · 빠짐 ${sum.missing} · 같음 ${sum.same} · 새 장 ${sum.new}` : '') + '</h2>'
     const look = s.baseLabel ? `<p>볼 목록(문제·다름·빠짐·근소): ${sum.look.length ? sum.look.map((r) => `${escapeHtml(where(r))} ${escapeHtml(r.verdict)} ${pctOf(r.ratio)}`).join(' · ') : '없음'}</p>` : ''
-    const cols = ['라우트', '크기', '테마', '차이율', '판정', 'axe', 'h1', ...(s.baseLabel ? ['기준'] : []), '머리']
+    const cols = ['라우트', '크기', '차이율', '판정', 'axe', 'h1', ...(s.baseLabel ? ['기준'] : []), '머리']
     const rows = s.rows.map((r) => {
       const notes = [...r.problems, ...r.reasons]
       return `<tr class="${escapeHtml(r.verdict)}"><td>${escapeHtml(r.key)}${notes.length ? `<br><small>${escapeHtml(notes.join(' '))}</small>` : ''}</td><td>${r.width}×${r.height}</td>`
-        + `<td>${escapeHtml(r.theme)}</td><td>${pctOf(r.ratio)}</td><td>${escapeHtml(r.verdict)}</td><td>${r.axe ?? '—'}</td><td>${r.h1Count ?? '—'}</td>`
+        + `<td>${pctOf(r.ratio)}</td><td>${escapeHtml(r.verdict)}</td><td>${r.axe ?? '—'}</td><td>${r.h1Count ?? '—'}</td>`
         + (s.baseLabel ? `<td>${r.verdict !== 'new' ? img(s.baseLabel, r.file) : ''}</td>` : '') + `<td>${r.inHead ? img(s.label, r.file) : '(머리에 없음)'}</td></tr>`
     })
     return [head2, look, table(cols, rows)].join('\n')
@@ -1626,13 +1620,13 @@ async function cmdSheet(opts) {
     '<style>body{font:13px system-ui,sans-serif;margin:16px}table{border-collapse:collapse;width:100%;margin-bottom:24px}td,th{border:1px solid #ccc;padding:4px;vertical-align:top;text-align:left}img{max-width:360px;display:block}tr.diff,tr.problem,tr.missing{background:#fff3e0}tr.near{background:#fffde7}tr.same td{color:#555}</style>',
     '</head><body>',
     `<h1>${escapeHtml(opts.label)} 대조표</h1>`,
-    `<p>기준 ${escapeHtml(baseLabel ?? '—')} · 머리 커밋 ${escapeHtml(head.commit)} · 빌드 ${escapeHtml(head.buildId ?? '—')} · 브라우저 ${escapeHtml(head.browser)} · KST ${escapeHtml(head.kstDate)} · 추가 라벨 ${escapeHtml(extras.join(', ') || '—')} · 쇼케이스 두 열 대조는 라이트 장으로 본다(판정 Q37)</p>`,
+    `<p>기준 ${escapeHtml(baseLabel ?? '—')} · 머리 커밋 ${escapeHtml(head.commit)} · 빌드 ${escapeHtml(head.buildId ?? '—')} · 브라우저 ${escapeHtml(head.browser)} · KST ${escapeHtml(head.kstDate)} · 추가 라벨 ${escapeHtml(extras.join(', ') || '—')}</p>`,
     ...sections.map(sectionHtml),
     '<h2>axe 대비 위반 — 모든 라벨</h2>',
-    table(['라벨', '라우트', '크기', '테마', '위반'], axeTable(axePool).map((r) => `<tr><td>${escapeHtml(r.label ?? '—')}</td><td>${escapeHtml(r.key)}</td><td>${r.width}×${r.height}</td><td>${escapeHtml(r.theme)}</td><td>${r.violations}</td></tr>`)),
+    table(['라벨', '라우트', '크기', '위반'], axeTable(axePool).map((r) => `<tr><td>${escapeHtml(r.label ?? '—')}</td><td>${escapeHtml(r.key)}</td><td>${r.width}×${r.height}</td><td>${r.violations}</td></tr>`)),
     '<h2>checks</h2>',
-    checks.tab ? table(['Tab 라우트', '테마', '실패', '못 닿은 대상', '판정'], checks.tab.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.theme)}</td><td>${r.failed}</td><td>${escapeHtml(r.unreached.join(' · ') || '—')}</td><td>${okCell(r.ok)}</td></tr>`)) : '<p>tab.json 없음</p>',
-    checks.print ? table(['인쇄 라우트', '테마', '글자', '4.5 미만', '판정'], checks.print.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${escapeHtml(r.theme)}</td><td>${r.texts}</td><td>${r.low}</td><td>${okCell(r.ok)}</td></tr>`)) : '<p>print.json 없음</p>',
+    checks.tab ? table(['Tab 라우트', '실패', '못 닿은 대상', '판정'], checks.tab.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${r.failed}</td><td>${escapeHtml(r.unreached.join(' · ') || '—')}</td><td>${okCell(r.ok)}</td></tr>`)) : '<p>tab.json 없음</p>',
+    checks.print ? table(['인쇄 라우트', '글자', '4.5 미만', '판정'], checks.print.map((r) => `<tr><td>${escapeHtml(r.key)}</td><td>${r.texts}</td><td>${r.low}</td><td>${okCell(r.ok)}</td></tr>`)) : '<p>print.json 없음</p>',
     '</body></html>',
   ].join('\n')
   writeFileSync(join(outDir, `${opts.label}-sheet.html`), html)

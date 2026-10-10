@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { exportLayoutLabel } from '@/components/settings/exportLayout'
 import { t } from '@/lib/i18n/dict'
 
-const ko = (k: Parameters<typeof t>[1]) => t('ko', k)
+const ko = (k: Parameters<typeof t>[0]) => t(k)
 describe('exportLayoutLabel — 내보내기 버튼 옆 표기(D48 — 조용한 대체가 아니다)', () => {
   it('표준 양식', () => {
     expect(exportLayoutLabel({ kind: 'standard' }, ko)).toBe('표준 양식(프로젝트 팀·단계로 생성)')

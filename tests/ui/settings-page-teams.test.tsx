@@ -34,7 +34,6 @@ vi.mock('@/lib/settings/workspaceLinks', () => ({ manageableWorkspaceLinks: vi.f
 vi.mock('@/components/settings/ModuleToggleEditor', () => ({ ModuleToggleEditor: () => null }))
 vi.mock('@/components/settings/ViewsDefaultEditor', () => ({ ViewsDefaultEditor: () => null }))
 vi.mock('@/lib/ai/health', () => ({ assistantIndexStatus: vi.fn(async () => ({ freshness: 'disabled', indexed: 0 })) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw new Error('NEXT_REDIRECT') }), useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ children }: { children: ReactNode }) => children }))
@@ -134,7 +133,7 @@ describe('설정 화면 — 업무영역 편집기(스펙 §4.1.8·D26)', () => 
     await render()
     expect(mocks.ProjectAreasManager).toHaveBeenCalledTimes(2)
     expect(mocks.ProjectAreasManager.mock.calls.find(([props]) => props.kind === 'weekly_section')?.[0]).toEqual({
-      projectId: 'p1', kind: 'weekly_section', areas: [AREA], locale: 'ko',
+      projectId: 'p1', kind: 'weekly_section', areas: [AREA],
       // 이름도 싣는다 — 영역 편집기가 팀을 code 가 아니라 이름으로 보인다
       teamOptions: [{ id: 't-res', code: 'RES', active: true, name: 'RES' }, { id: 't-arc', code: 'ARC', active: false, name: 'ARC' }, { id: 't-old', code: 'OLD', active: false, name: 'OLD' }],
     })

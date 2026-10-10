@@ -18,7 +18,6 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mocks.createAdminClient,
 }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('@/components/settings/IntegrationCredentialsManager', () => ({
   IntegrationCredentialsManager: (props: Record<string, unknown>) => mocks.manager(props),
 }))

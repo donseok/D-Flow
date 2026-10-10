@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({
 }))
 vi.mock('next/navigation', () => ({ usePathname: () => h.pathname, useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/app/actions/notifications', () => ({ markAllNotificationsRead: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/app/actions/inbox', () => ({ markInboxSeen: h.markInboxSeen, markAllInboxRead: h.markAllInboxRead, markInboxItemRead: h.markInboxItemRead }))
 vi.mock('@/lib/hooks/useInboxRealtime', () => ({ useInboxRealtime: () => {} }))

@@ -7,7 +7,6 @@ import { revalidatePath } from 'next/cache'
 import type { AttendanceType } from '@/lib/domain/types'
 import { checkProjectVocab, vocabWriteFailure } from '@/lib/settings/vocabGuard'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 
 /** member_id+date 유니크 충돌 시 갱신(upsert). 해당 프로젝트 멤버 이상만 허용. */
 export async function upsertAttendance(
@@ -17,9 +16,9 @@ export async function upsertAttendance(
   const t = await serverTranslator()
   if (!input.memberId || !input.date) return { ok: false, error: t('srv.attendance.memberDateRequired') }
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'attendance')                 // 스펙 §4.2 — 가드 뒤(가드 앞 필수값 검사는 그대로)
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   // 대상 멤버가 **이 프로젝트 로스터** 소속인지 확인한다. 없으면 남의 프로젝트 멤버 id 로
   // 이 프로젝트 근태 행을 만들 수 있고(로스터 읽기는 전면 개방이라 id 확보가 쉽다),
@@ -56,16 +55,15 @@ export async function upsertAttendance(
 
 /** 근태 기록 삭제. 해당 기록이 속한 프로젝트의 멤버 이상만 허용. */
 export async function removeAttendance(recordId: string): Promise<{ ok: boolean; error?: string }> {
-  const t = await serverTranslator()
   // 어느 프로젝트 기록인지 모르면 권한을 판정할 수 없다 — 조회를 게이트 앞에 두고,
   // 조회 실패는 '기록 없음'으로 위장하지 않고 그대로 중단한다(fail-closed).
   const found = await resolveProjectId('attendance_records', recordId)
-  if (!found.ok) return { ok: false, error: libText(t, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectMember(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
-  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
+  if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
   const mod = await requireModule({ projectId: found.projectId }, 'attendance')
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
 
   const sb = await createServerClient()
   const { error } = await sb.from('attendance_records').delete().eq('id', recordId)

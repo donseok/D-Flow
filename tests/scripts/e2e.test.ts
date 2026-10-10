@@ -837,7 +837,7 @@ describe('e2e-local.mjs — SP5 A 달력 단계(스펙 §6.3)', () => {
   it("'<워크스페이스 시간대> 기준' 판정은 SSR 의 텍스트 노드 구분(<!-- -->)을 걷어 낸 HTML 로 한다 — 화면은 '{timezone} 기준' 보간이다", () => {
     expect(src).toContain("usageHtml.replace(/<!-- -->/g, '').includes(`${WORKSPACE_TZ} 기준`)")
     // 문구는 사전으로 옮겼다(pages.usage.periodNote) — 페이지는 그 키에 시간대를 끼우고, ko 문구가 '{tz} 기준' 을 갖는다
-    expect(readFileSync('src/app/(app)/w/[slug]/usage/page.tsx', 'utf8')).toContain("t(locale, 'pages.usage.periodNote')")
+    expect(readFileSync('src/app/(app)/w/[slug]/usage/page.tsx', 'utf8')).toContain("t('pages.usage.periodNote')")
     expect(readFileSync('src/lib/i18n/dict/pagesUi.ts', 'utf8')).toMatch(/'pages\.usage\.periodNote': '[^']*\{tz\} 기준/)
   })
 })

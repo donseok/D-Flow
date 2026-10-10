@@ -121,7 +121,7 @@ export const settingsUiKo = {
   'settings.accent.pick': '강조색 선택',
   'settings.accent.reset': '기본값으로',
   'settings.accent.contrast': '{pair} {contrast} (최소 {min})',
-  'settings.accent.light': '밝은 화면',
+  'settings.accent.light': '미리보기',
   'settings.accent.conflict': '다른 사용자가 강조색을 바꿨습니다.',
   'settings.accent.default': '기본값',
   'settings.accent.save': '강조색 저장',

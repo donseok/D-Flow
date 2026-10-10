@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn(), snapshot: vi.fn()
 vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWeight: vi.fn(), addWbsItem: vi.fn(), getWbsCellSnapshot: h.snapshot }))
 vi.mock('@/app/actions/customFieldValues', () => ({ saveCustomFieldValues: h.save }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (key: string) => key }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn() }))
 
@@ -56,7 +56,7 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
   const editor = (k: string) => cell(k).querySelector<HTMLInputElement | HTMLSelectElement>('input, select')
   async function render(custom: unknown, opts: { defs?: FieldDef[]; actorView?: ProjectActorView | null; readOnly?: boolean; canAdmin?: boolean } = {}) {
     await act(async () => root.render(
-      <CustomFieldsProvider projectId={P} entity="wbs_item" defs={opts.defs ?? [def({}), RESULT, ADMIN_ONLY, MEMO]} canAdmin={opts.canAdmin ?? true} locale="ko">
+      <CustomFieldsProvider projectId={P} entity="wbs_item" defs={opts.defs ?? [def({}), RESULT, ADMIN_ONLY, MEMO]} canAdmin={opts.canAdmin ?? true}>
         <WbsGanttSheet levelLabels={['Phase', 'Task']} items={[{ ...base, custom: custom as never }]} calendar={calInputUtcMon}
           today="2026-07-03" actorView={opts.actorView === undefined ? admin : opts.actorView} projectId={P} readOnly={opts.readOnly ?? false} />
       </CustomFieldsProvider>,
@@ -217,7 +217,7 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
 
   it('그 항목의 담당 팀 멤버는 멤버 필드를 셀에서 고친다(관리자가 아니어도)', async () => {
     await act(async () => root.render(
-      <CustomFieldsProvider projectId={P} entity="wbs_item" defs={[def({}), ADMIN_ONLY]} canAdmin={false} locale="ko">
+      <CustomFieldsProvider projectId={P} entity="wbs_item" defs={[def({}), ADMIN_ONLY]} canAdmin={false}>
         <WbsGanttSheet levelLabels={['Phase', 'Task']} items={[{ ...base, owners: [{ team: 'RES', kind: 'primary' }], custom: { qty: 1, grade: 'A' } }]}
           calendar={calInputUtcMon} today="2026-07-03" actorView={viewOfActor(makeMemberActor(P, ['RES']))} projectId={P} />
       </CustomFieldsProvider>,

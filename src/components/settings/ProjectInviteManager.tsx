@@ -14,6 +14,7 @@ import {
 import type { ProjectActorView } from '@/lib/domain/authz'
 import { canGrantAdmin } from '@/lib/domain/roster'
 import { DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, inviteStatusLabel, type InviteStatus } from '@/lib/domain/invites'
+import { KO_LOCALE } from '@/lib/i18n/format'
 import type { DictKey } from '@/lib/i18n/dict'
 
 type AccessRole = 'admin' | 'member'
@@ -41,10 +42,10 @@ function canRevoke(s: InviteStatus): boolean {
   return s === 'active' || s === 'expired'
 }
 
-function fmtDateTime(iso: string, timeZone: string | null, locale = 'ko-KR'): string {
+function fmtDateTime(iso: string, timeZone: string | null): string {
   const d = new Date(iso)
   if (timeZone === null || Number.isNaN(d.getTime())) return '—'
-  return new Intl.DateTimeFormat(locale, { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(d)
+  return new Intl.DateTimeFormat(KO_LOCALE, { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(d)
 }
 
 /**
@@ -56,7 +57,7 @@ function fmtDateTime(iso: string, timeZone: string | null, locale = 'ko-KR'): st
  * 목록 조회가 실패했으면 loadError 로 받아 그 사실을 드러낸다: '초대 0건'으로 보이면
  * 관리자가 같은 주소로 다시 발급하다 중복 제약에 이유 없이 막힌다.
  */
-export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, actorView, timeZone, timeZoneError = null, locale, domainNotice = null }: {
+export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, actorView, timeZone, timeZoneError = null, domainNotice = null }: {
   projectId: string
   rows: InviteRow[]
   loadError: string | null
@@ -68,8 +69,6 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
   timeZone: string | null
   /** timeZone 이 null 인 까닭(설정 손상 키·조회 실패 문구) */
   timeZoneError?: string | null
-  /** 시각 포맷의 locale — 없으면 'ko-KR' */
-  locale?: string
   /** 초대 허용 도메인이 비어 있다(지금 보내면 어떤 주소든 거부된다) — 거부되기 전에 미리 알린다. settingsHref 는 워크스페이스 관리자에게만
    *  (그 설정을 고칠 수 있는 사람) 싣고, 아니면 null 이라 관리자에게 요청하라고 안내한다. 도메인이 있거나 읽지 못했으면 prop 자체가 null */
   domainNotice?: { settingsHref: string | null } | null
@@ -312,9 +311,9 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
                   <td className="py-2.5 pr-3">
                     <span className={`badge ${STATUS_CLASS[row.status]}`}>{inviteStatusLabel(row.status)}</span>
                   </td>
-                  <td className="py-2.5 pr-3 tabular-nums text-fg-secondary">{fmtDateTime(row.expiresAt, timeZone, locale)}</td>
+                  <td className="py-2.5 pr-3 tabular-nums text-fg-secondary">{fmtDateTime(row.expiresAt, timeZone)}</td>
                   <td className="py-2.5 pr-3 tabular-nums text-fg-secondary">
-                    {row.redeemedAt ? fmtDateTime(row.redeemedAt, timeZone, locale) : <span className="text-fg-muted">—</span>}
+                    {row.redeemedAt ? fmtDateTime(row.redeemedAt, timeZone) : <span className="text-fg-muted">—</span>}
                   </td>
                   <td className="py-2.5 pr-3">
                     {canRevoke(row.status) && (

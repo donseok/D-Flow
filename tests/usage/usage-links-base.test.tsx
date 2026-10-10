@@ -14,7 +14,7 @@ describe('사용 현황 링크 base', () => {
     expect(hs).toContain('/w/acme/usage?days=7&user=u1&menu=wbs')
   })
   it('접속 로그의 메뉴·사용자 칩', () => {
-    const html = renderToString(<UsageEventLog base="/w/acme/usage" events={[]} names={new Map([['u1', 'Alice']])} limit={200} locale="ko"
+    const html = renderToString(<UsageEventLog base="/w/acme/usage" events={[]} names={new Map([['u1', 'Alice']])} limit={200}
       menus={['wbs', 'issues']} filter={{ days: 7, user: 'u1' }} timeZone="UTC" />)
     const hs = hrefs(html)
     expect(hs).toEqual(expect.arrayContaining(['/w/acme/usage?days=7&user=u1', '/w/acme/usage?days=7&user=u1&menu=wbs', '/w/acme/usage?days=7']))

@@ -9,7 +9,6 @@ vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspa
 vi.mock('@/app/actions/project', () => ({ listProjectsWithState: h.listProjectsWithState }))
 vi.mock('@/app/actions/accounts', () => ({ listAccounts: h.listAccounts }))
 vi.mock('@/app/actions/teams', () => ({ listTeamsAdmin: h.listTeamsAdmin }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('next/navigation', () => ({ redirect: h.redirect, notFound: h.notFound }))
 vi.mock('@/components/admin/AccountsManager', () => ({ AccountsManager: (p: unknown) => { h.managerProps(p); return null } }))
 vi.mock('@/components/admin/TeamsManager', () => ({ TeamsManager: () => null }))

@@ -19,7 +19,6 @@ import {
 import { issueAnalysisPptExport, type IssueAnalysisPptExport } from '@/lib/report/forms/issueAnalysisExport'
 import { serverTranslator } from '@/lib/i18n/server'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
 
 export interface EnsureIssueAnalysisActionResult {
   ok: boolean
@@ -37,7 +36,6 @@ async function fromEnsureResult(
   result: EnsureIssueAnalysisResult,
   preflight: IssueAnalysisPreflight,
 ): Promise<EnsureIssueAnalysisActionResult> {
-  const t = await serverTranslator()
   if (!('reason' in result)) {
     return {
       ok: true,
@@ -51,7 +49,7 @@ async function fromEnsureResult(
   return {
     ok: false,
     state: result.reason === 'preflight_failed' ? 'blocked' : 'unavailable',
-    error: libText(t, result.error),
+    error: result.error,
     preflight,
   }
 }
@@ -73,14 +71,14 @@ export async function ensureIssueAnalysisAction(
     return {
       ok: false,
       state: 'unavailable',
-      error: libText(t, guard.error),
+      error: guard.error,
       preflight: null,
     }
   }
   const mod = await requireModule({ projectId }, 'issue_analysis')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17). 꺼지면 로더·LLM 에 닿지 않는다
-  if (!mod.ok) return { ok: false, state: 'unavailable', error: libText(t, mod.error), preflight: null }
+  if (!mod.ok) return { ok: false, state: 'unavailable', error: mod.error, preflight: null }
   const context = await loadIssueEntryContext(projectId)
-  if (!context.ok) return { ok: false, state: 'unavailable', error: libText(t, context.error), preflight: null }
+  if (!context.ok) return { ok: false, state: 'unavailable', error: context.error, preflight: null }
   if (areaFilter !== 'all' && !context.value.areas.some(area => area.id === areaFilter)) {
     return {
       ok: false,

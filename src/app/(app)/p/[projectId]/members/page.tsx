@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
 import { Users, Shield } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { getWorkspaceRoleMap } from '@/lib/data/workspaceRoles'
 import { getProjectRoster } from '@/lib/data/members'
 import { getActorViewState } from '@/lib/authz'
@@ -24,7 +23,7 @@ import { loadInviteDomainNotice } from '@/lib/data/inviteDomainNotice'
 export default async function MembersPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'members')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const [{ actor: m, degraded }, projects, locale, hidden] = await Promise.all([getActorViewState(), listProjects(), getServerLocale(), getHiddenProjectIds()])
+  const [{ actor: m, degraded }, projects, hidden] = await Promise.all([getActorViewState(), listProjects(), getHiddenProjectIds()])
   // 존재 은닉을 페이지가 다시 판정한다 — 레이아웃과 페이지는 병렬로 렌더돼 레이아웃의 notFound 가 이 페이지의 조회를 멈추지
   // 않고, 여기서 만든 RSC 페이로드는 404 digest 옆에 그대로 실린다. 아래 팀 후보도 게이트 뒤에서만 읽는다. 권한 조회 실패(degraded)는
   // 레이아웃처럼 404 로 위장하지 않는다(actor 가 null 이라 canEdit 도 거짓 — 팀을 읽지 않는다).
@@ -33,7 +32,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
   if (!degraded && isHiddenProject(m, projectId, hidden)) notFound()
 
   const project = projects.find((p) => p.id === projectId)
-  const projectName = project?.name ?? t(locale, 'members.projectFallback')
+  const projectName = project?.name ?? t('members.projectFallback')
   const canEdit = isProjectAdmin(m, projectId)
 
   // 관리자는 명단 편집 화면(listRoster), 그 외는 같은 표를 읽기 전용으로(getProjectRoster) — 둘 다 조회 실패를 '0명' 으로 위장하지 않는다.
@@ -63,14 +62,14 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
 
   return (
     <ProjectPageShell
-      hero={<PageHeader title={`${projectName} ${t(locale, 'members.heroTitleSuffix')}`} description={t(locale, 'members.heroDesc')} />}
+      hero={<PageHeader title={`${projectName} ${t('members.heroTitleSuffix')}`} description={t('members.heroDesc')} />}
     >
       <div className="space-y-4">
         <SectionCard
-          title={t(locale, canEdit ? 'members.sectionManage' : 'members.sectionRoster')}
+          title={t(canEdit ? 'members.sectionManage' : 'members.sectionRoster')}
           icon={canEdit ? Shield : Users}
         >
-          {canEdit && <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t(locale, 'members.manageHint')}</p>}
+          {canEdit && <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t('members.manageHint')}</p>}
           {roster.ok ? (
             <RosterManager
               projectId={projectId}

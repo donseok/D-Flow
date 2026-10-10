@@ -15,8 +15,8 @@ import { t as translate, type DictKey } from '@/lib/i18n/dict'
 // 화면 문구는 진짜 ko 사전으로 읽는다 — 한국어 단언이 사전 이전 뒤에도 같은 글자를 본다
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
-  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+  const ko = (k: string) => t(k as Parameters<typeof t>[0])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ t: ko }) }
 })
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
@@ -146,7 +146,7 @@ describe('SeatCard', () => {
 
 describe('seatMetaLine · STATE_LABEL', () => {
   it('상태별 문구', () => {
-    const ko = (k: DictKey) => translate('ko', k)
+    const ko = (k: DictKey) => translate(k)
     expect(seatMetaLine(seat(), NOW, ko)).toBe('hong/mbp/w1 · 42초 전')
     expect(seatMetaLine(seat({ state: 'STALE' }), NOW, ko)).toBe('hong/mbp/w1 · 무응답 42초 전')
     expect(seatMetaLine(seat({ state: 'OFFLINE', phase: 'build' }), NOW, ko)).toBe('build 에서 끊김 · 42초 전')

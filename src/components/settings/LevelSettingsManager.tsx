@@ -123,8 +123,8 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
         latestAvailable={conflict.latest !== null}
         onMine={() => { setBase(conflict.revision); setConflict(null); setError(null) }}
         onLatest={() => { setLabels(conflict.latest ?? labels); setBase(conflict.revision); setConflict(null); setError(null) }} />}
-      {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
-      {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
+      {fieldError && <ConfigStateNotice kind="field" message={fieldError} />}
+      {error && <ConfigStateNotice kind="patch" message={error} />}
       <SettingsSaveBar notice={notice}>
         <button type="button" data-save-levels className="btn btn-primary h-8 text-sm" onClick={save} disabled={pending || !!conflict}>
           {uncertainPatch ? t('settings.workflow.retry') : t('common.save')}

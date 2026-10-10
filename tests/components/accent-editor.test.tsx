@@ -31,7 +31,7 @@ describe('AccentEditor', () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '#315cdb')
       input.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    expect(host.textContent).toContain('밝은 화면')
+    expect(host.textContent).toContain('미리보기')
     expect(host.textContent).not.toContain('어두운 화면')
     await click('강조색 저장')
     expect(update).toHaveBeenCalledWith('ws-1', expect.objectContaining({ expectedRevision: 1, set: { 'branding.accent': '#315cdb' } }))

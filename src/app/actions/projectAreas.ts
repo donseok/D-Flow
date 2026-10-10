@@ -24,7 +24,6 @@ import { enqueueWeeklyAreaIndexChange } from '@/lib/ai/index/enqueueChange'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
 
 /** 저장 결과 — rowsAdded 는 RPC 가 이번 주 이후 문서에 새로 만든 주간 행 수(비활성·이슈 영역은 0) */
 export type UpsertAreaResult =
@@ -80,7 +79,7 @@ function assignableTeamIds(cfg: ProjectConfig, areaId: string | undefined): Set<
 export async function upsertArea(projectId: string, input: AreaInput): Promise<UpsertAreaResult> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, code: g.error, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, code: g.error, error: g.error }
   // 서버 액션 입력은 타입을 믿지 않는다.
   if (!input || typeof input.code !== 'string' || typeof input.name !== 'string'
       || typeof input.active !== 'boolean' || !Array.isArray(input.teams)
@@ -89,7 +88,7 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
     return { ok: false, code: 'INVALID_INPUT', error: tr(ERR_BAD_REQUEST) }
   }
   const v = validateArea(input, [])
-  if (!v.ok) return { ok: false, code: 'INVALID_INPUT', error: libText(tr, v.error) }
+  if (!v.ok) return { ok: false, code: 'INVALID_INPUT', error: v.error }
   const a = v.value
 
   let cfg: ProjectConfig
@@ -123,7 +122,7 @@ export async function upsertArea(projectId: string, input: AreaInput): Promise<U
   })
   if (error) {
     const f = rpcFailure(error, tokenTable(AREA_TOKENS, tr), tr)
-    if (f) return { ok: false, code: f.code, error: libText(tr, f.message), ...(f.retryable ? { retryable: true } : {}) }
+    if (f) return { ok: false, code: f.code, error: f.message, ...(f.retryable ? { retryable: true } : {}) }
     if (error.code === '23505') return { ok: false, code: 'INVALID_INPUT', error: dupCode(tr, a.code) }
     return { ok: false, code: 'UNAVAILABLE', error: failWith('areas/upsert', error, tr(ERR_SAVE)) }
   }

@@ -5,7 +5,6 @@ import { isShareToken } from '@/lib/minutes/share'
 import { requireModule } from '@/lib/modules/gate'
 import { noteRateFailure, rateLimited } from '@/lib/http/rateLimit'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { ShareViewer } from '@/components/minutes/ShareViewer'
 import type { TeamCode } from '@/lib/domain/types'
 
@@ -21,7 +20,7 @@ export default async function SharedMinutePage({ params }: { params: Promise<{ t
   if ((await rateLimited('shareToken')) > 0) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-canvas px-4">
-        <p role="alert" data-rate-limited className="text-body text-fg-secondary">{t(await getServerLocale(), 'rateLimit.tooMany')}</p>
+        <p role="alert" data-rate-limited className="text-body text-fg-secondary">{t('rateLimit.tooMany')}</p>
       </main>
     )
   }

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 import { orderAreas, WEEKLY_CELL_LABEL, WEEKLY_CELL_MAX, type WeeklyArea } from '@/lib/domain/weeklySheet'
 import { CARRY_SKIP, type CarryMapping, type CarryOverflow, type CarryPending } from '@/lib/domain/weeklyCarry'
 
@@ -34,7 +34,7 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
   onSubmit: (mapping: CarryMapping) => void
   onClose: () => void
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const [choice, setChoice] = useState<Record<string, string>>(() => Object.fromEntries(
     pending.filter(p => Object.hasOwn(mapping, p.areaId)).map(p => [p.areaId, mapping[p.areaId]])))
   const targets = orderAreas(areas.filter(a => a.active))
@@ -65,12 +65,12 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
             kind="partial_error"
             blocking
             compact
-            title={t('weekly.carry.overflowTitle').replace('{n}', WEEKLY_CELL_MAX.toLocaleString(intlLocale(locale)))}
+            title={t('weekly.carry.overflowTitle').replace('{n}', WEEKLY_CELL_MAX.toLocaleString(KO_LOCALE))}
             detail={
               <ul className="mt-1 list-disc pl-5">
                 {overflow.map(o => (
                   <li key={`${o.areaId}:${o.cell}`} data-carry-overflow={o.areaId}>
-                    {o.areaName} · {WEEKLY_CELL_LABEL[o.cell]} {t('weekly.unit.chars').replace('{n}', o.length.toLocaleString(intlLocale(locale)))}
+                    {o.areaName} · {WEEKLY_CELL_LABEL[o.cell]} {t('weekly.unit.chars').replace('{n}', o.length.toLocaleString(KO_LOCALE))}
                   </li>
                 ))}
               </ul>

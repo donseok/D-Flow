@@ -3,18 +3,18 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import { MiniEmpty } from '@/components/dashboard/bits'
 import { menuLabel } from '@/lib/domain/usageMenu'
 import { barPct, type MenuRank } from '@/lib/domain/usage'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
-import { intlLocale } from '@/lib/i18n/format'
+import { t} from '@/lib/i18n/dict'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 /** 많이 쓰는 프로그램(메뉴) — 조회수 순. 막대는 1위 대비 비율. */
-export function MenuRankingCard({ ranks, locale }: { ranks: MenuRank[]; locale: Locale }) {
-  const translate = (k: DictKey) => t(locale, k)
+export function MenuRankingCard({ ranks }: { ranks: MenuRank[] }) {
+  const translate = t
   const max = ranks[0]?.events ?? 0
 
   return (
-    <SectionCard title={t(locale, 'usage.rank.title')} icon={BarChart3}>
+    <SectionCard title={t('usage.rank.title')} icon={BarChart3}>
       {ranks.length === 0 ? (
-        <MiniEmpty text={t(locale, 'usage.noDataYet')} />
+        <MiniEmpty text={t('usage.noDataYet')} />
       ) : (
         <ol className="space-y-2">
           {ranks.map((r, i) => (
@@ -25,7 +25,7 @@ export function MenuRankingCard({ ranks, locale }: { ranks: MenuRank[]; locale: 
                 <span className="block h-2 rounded-full bg-action" style={{ width: `${barPct(r.events, max)}%` }} />
               </span>
               <span className="w-28 shrink-0 text-right text-meta tabular-nums text-fg-secondary">
-                {t(locale, 'usage.rank.counts').replace('{events}', r.events.toLocaleString(intlLocale(locale))).replace('{users}', String(r.activeUsers))}
+                {t('usage.rank.counts').replace('{events}', r.events.toLocaleString(KO_LOCALE)).replace('{users}', String(r.activeUsers))}
               </span>
             </li>
           ))}

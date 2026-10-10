@@ -12,7 +12,7 @@ import { useLoginEnv } from '@/components/login/LoginEnv'
 import { recoveryFragment } from '@/lib/auth/recoveryLink'
 
 /* 로그인 — 의미 토큰만 쓴다(SP3b UI-1, 스펙 §4.4). 평면 표면·단색 주 버튼, 부유 장식·방사 그라데이션 없음.
-   공개 화면의 브랜드는 env(BRAND_*) 그대로다. 가시 h1 은 모든 크기에서 하나다. 문구는 사전(auth) — 로캘을 따른다. */
+   공개 화면의 브랜드는 env(BRAND_*) 그대로다. 가시 h1 은 모든 크기에서 하나다. 문구는 사전(auth)이다. */
 const FEATURES = [
   { title: 'login.feature.wbs', sub: 'login.feature.wbsSub' },
   { title: 'login.feature.gantt', sub: 'login.feature.ganttSub' },

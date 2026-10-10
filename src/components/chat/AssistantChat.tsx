@@ -13,8 +13,8 @@ import { consumeChatNdjson, isSafeInternalBotHref } from './chatStream'
 import { QUICK_SUGGESTIONS } from '@/lib/ai/intent'
 import { parseScopePath } from '@/lib/nav/active'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { intlLocale } from '@/lib/i18n/format'
-import type { DictKey, Locale } from '@/lib/i18n/dict'
+import { KO_LOCALE } from '@/lib/i18n/format'
+import type { DictKey} from '@/lib/i18n/dict'
 import { isCommandUtterance } from '@/lib/ai/commands/cue'
 import type { CommandProposal, CommandCandidate } from '@/lib/ai/commands/types'
 import type {
@@ -136,8 +136,8 @@ export function useAiRailButton(): ReactNode | null {
  * 프로젝트 목록은 게시 저장소(현재 범위 워크스페이스의 가시 프로젝트 — 범위 레이아웃의 <ShellScope>)에서 읽는다.
  */
 export function AssistantChat() {
-  const { t, locale } = useLocale()
-  const assistantName = ASSISTANT_NAME[locale]
+  const { t } = useLocale()
+  const assistantName = ASSISTANT_NAME.ko
   const router = useRouter()
   const pageContext = useCurrentBotPageContext()
   const currentProjectId = pageContext.projectId
@@ -232,7 +232,7 @@ export function AssistantChat() {
         if (genRef.current !== gen) return
         setMessages(prev => (prev.length ? prev : [{ id: nextId(), role: 'assistant', content: welcomeText(null, t) }]))
       })
-    // t는 의도적으로 deps에서 제외 — locale 전환이 진행 중 대화를 리셋하면 안 된다.
+    // t는 의도적으로 deps에서 제외 — 값이 바뀌지 않는다(고정 사전).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, currentProjectId])
 
@@ -814,7 +814,7 @@ function Bubble({
   asOfTimezone?: string
   truncated?: boolean
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const isUser = role === 'user'
   const safeSources = isUser ? [] : (sources ?? []).filter(source => isSafeInternalBotHref(source.href))
   const citedIds = [...content.matchAll(/\[(S\d+)]/g)].map(match => match[1])
@@ -856,7 +856,7 @@ function Bubble({
               </div>
             )}
             <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-              {asOf && asOfTimezone && <span>{t('chat.asOf').replace('{time}', formatAsOf(asOf, asOfTimezone, locale)).replace('{tz}', () => asOfTimezone)}</span>}
+              {asOf && asOfTimezone && <span>{t('chat.asOf').replace('{time}', formatAsOf(asOf, asOfTimezone)).replace('{tz}', () => asOfTimezone)}</span>}
               {truncated && <span>{t('chat.truncated')}</span>}
             </div>
           </div>
@@ -867,10 +867,10 @@ function Bubble({
 }
 
 /** 봇 답의 기준 시각 — 그 응답의 요청 범위 tz 로 찍는다(서울로 대체하지 않는다, 계획 D-21b) */
-function formatAsOf(value: string, timeZone: string, locale: Locale): string {
+function formatAsOf(value: string, timeZone: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(intlLocale(locale), { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(date)
+  return new Intl.DateTimeFormat(KO_LOCALE, { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(date)
 }
 
 function ProposalCard({

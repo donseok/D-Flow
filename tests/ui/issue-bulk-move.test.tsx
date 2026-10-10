@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: mocks.replace, push: vi.fn(), refresh: mocks.refresh }),
   usePathname: () => '/p/p1/issues',
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (key: string) => key }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 vi.mock('@/app/actions/issues', () => ({ updateIssueProgress: mocks.update }))
 vi.mock('@/components/issues/IssueModals', () => ({

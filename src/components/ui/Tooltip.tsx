@@ -38,7 +38,7 @@ type TooltipProps = {
 /**
  * 풍선 도움말(툴팁). 래퍼 DOM 없이 자식에 이벤트만 얹고, 버블은 body 포털로
  * fixed 렌더한다 — 사이드바의 overflow 클리핑을 피하기 위함. hover와 keyboard
- * focus 모두에서 뜨며, 색상은 ink/surface 토큰을 반전해 라이트·다크에서 대비를 유지한다.
+ * focus 모두에서 뜨며, 색상은 ink/surface 토큰을 반전해 대비를 유지한다.
  */
 export function Tooltip({ label, side = 'top', delay = 350, disabled = false, children }: TooltipProps) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)

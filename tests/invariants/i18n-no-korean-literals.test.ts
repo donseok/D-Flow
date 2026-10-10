@@ -1,6 +1,6 @@
 // 화면 파일(src/components·src/app 의 .tsx)에 한국어 리터럴이 되돌아오지 못하게 한다(i18n 1·2차).
 // 제품은 한국어 전용이지만(2026-10-10 결정) 문구는 화면 파일에 흩지 않고 한 곳에 모은다 — 사전을 문자열 표로 쓴다.
-// 화면 글자는 사전(src/lib/i18n/dict/*)에 두고 `useLocale().t`(서버 화면은 `t(locale, …)`)로 읽는다.
+// 화면 글자는 사전(src/lib/i18n/dict/*)에 두고 `useLocale().t`(서버 화면은 `t(…)`)로 읽는다.
 // TS 파서로 리터럴(문자열·템플릿 조각·JSX 글자)만 본다 — 주석은 보지 않는다. 다음은 검사 대상이 아니다:
 //   · `console.*(…)` 의 인자와 `throw …` 문(개발자용 문구), `data-*` 속성 값(표지)
 // JSX 글자·사용자 노출 속성(title·aria-label·placeholder·alt·label …)·toast/confirm 인자뿐 아니라 그 밖의 리터럴(라벨 표·비교값)도 센다 —

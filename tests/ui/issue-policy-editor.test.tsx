@@ -15,7 +15,7 @@ describe('IssuePolicyEditor', () => {
   let root: Root, container: HTMLDivElement
   beforeEach(() => { vi.clearAllMocks(); container = document.createElement('div'); document.body.append(container); root = createRoot(container) })
   afterEach(() => { act(() => root.unmount()); container.remove() })
-  async function render(policy = DEFAULT_ID_POLICY, analysisEnabled = true) { await act(async () => { root.render(<IssuePolicyEditor projectId="p1" policy={policy} revision={8} areas={TEST_AREAS} year={2026} canEdit analysis="optional" analysisEnabled={analysisEnabled} locale="ko" />) }) }
+  async function render(policy = DEFAULT_ID_POLICY, analysisEnabled = true) { await act(async () => { root.render(<IssuePolicyEditor projectId="p1" policy={policy} revision={8} areas={TEST_AREAS} year={2026} canEdit analysis="optional" analysisEnabled={analysisEnabled} />) }) }
   it('previews the first active project area and keeps the immutable existing-code notice', async () => {
     await render({ prefix: 'RS', pattern: '{prefix}-{area}-{seq:3}', counter_scope: 'area', reset: 'never' })
     expect(container.textContent).toContain('RS-00-001')

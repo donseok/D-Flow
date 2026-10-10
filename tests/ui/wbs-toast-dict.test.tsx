@@ -6,7 +6,7 @@ import { t, type DictKey } from '@/lib/i18n/dict'
 import { WBS_ACTION_ERRORS, wbsErrorKey, wbsToastText } from '@/lib/wbs/actionErrors'
 import { ERR_ANON, ERR_DENIED, ERR_LOOKUP, ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 
-const tKo = (k: DictKey) => t('ko', k)
+const tKo = (k: DictKey) => t(k)
 const MESSAGES = [...Object.values(WBS_ACTION_ERRORS), ERR_ANON, ERR_DENIED, ERR_LOOKUP, ERR_MISSING, ERR_MODULE_DISABLED]
 
 const TABLE_KEYS = new Set(Object.keys(WBS_ACTION_ERRORS))

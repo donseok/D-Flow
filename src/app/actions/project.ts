@@ -27,7 +27,6 @@ import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ki
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
 
 export async function listProjects() {
   return (await listProjectsWithState()).projects
@@ -83,8 +82,8 @@ const invalidInput = (message: string, fieldErrors?: { key: string; message: str
 /** 프로젝트 관리 쓰기의 DB 오류 — 원문은 failWith 가 로그로만(SP4 B 최종 리뷰 관찰 — D21) */
 const ERR_PROJECT_LOOKUP = 'srv.project.couldNotLoadProject'
 const ERR_PROJECT_SAVE = 'srv.project.couldNotSaveProject'
-/** code 는 종전 그대로 가드 문구(한국어 — 화면은 guardCodeOf 로 읽는다), error 만 화면 언어 */
-const deniedIn = (t: ServerTranslate): CreateProjectResult => ({ ok: false, code: ERR_DENIED, error: libText(t, ERR_DENIED) })
+/** code·error 둘 다 가드 문구 그대로다(화면은 guardCodeOf 로 읽는다) */
+const deniedIn = (): CreateProjectResult => ({ ok: false, code: ERR_DENIED, error: ERR_DENIED })
 export type CopySourceResult =
   | { ok: true; levelLabels: string[] }
   | { ok: false; error: string; fieldErrors?: { key: string; message: string }[] }
@@ -94,22 +93,22 @@ export async function getProjectCopySource(workspaceId: string, projectId: strin
   const t = await serverTranslator()
   if (!workspaceId || !isUuidLike(projectId)) return { ok: false, error: configText(t, CONFIG_MESSAGES.CONFIG_INVALID) }
   const guard = await requireWorkspaceAdmin(workspaceId)
-  if (!guard.ok) return { ok: false, error: libText(t, guard.error) }
+  if (!guard.ok) return { ok: false, error: guard.error }
   const { admin } = adminFor({ workspaceId })
   const owner = await admin.from('projects').select('workspace_id').eq('id', projectId).maybeSingle()
   if (owner.error) {
     console.error('[getProjectCopySource] 원본 조회 실패', { workspaceId, projectId, cause: owner.error.message })
     return { ok: false, error: configText(t, CONFIG_MESSAGES.CONFIG_UNAVAILABLE) }
   }
-  if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return { ok: false, error: libText(t, ERR_DENIED) }
+  if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return { ok: false, error: ERR_DENIED }
   try {
     const source = await getProjectConfig(projectId, { client: admin })
-    if (source.workspaceId !== workspaceId) return { ok: false, error: libText(t, ERR_DENIED) }
+    if (source.workspaceId !== workspaceId) return { ok: false, error: ERR_DENIED }
     if (source.schemaAhead) return { ok: false, error: t('srv.project.sourceProjectSSettingsNewer'),
       fieldErrors: source.unknownKeys.map(key => ({ key, message: t('srv.project.serverDoesNotKnowSetting') })) }
     const broken = PROJECT_SETTINGS.flatMap(def => {
       const state = source.keys[def.key]
-      return state.status === 'invalid' ? [{ key: def.key, message: libText(t, state.error) }] : []
+      return state.status === 'invalid' ? [{ key: def.key, message: state.error }] : []
     })
     if (broken.length) return { ok: false, error: t('srv.project.sourceProjectSSettingsCorrupted'), fieldErrors: broken }
     const labels = source.keys['core.level_labels']
@@ -144,9 +143,9 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   const t = await serverTranslator()
   const { workspaceId } = input ?? {}
   // 대상 워크스페이스가 비면 가드 전에 거부한다 — 가드는 null 을 슈퍼유저에게 통과시킨다.
-  if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: libText(t, ERR_WORKSPACE_REQUIRED), error: libText(t, ERR_WORKSPACE_REQUIRED) }
+  if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: ERR_WORKSPACE_REQUIRED, error: ERR_WORKSPACE_REQUIRED }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, code: g.error, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, code: g.error, error: g.error }
   if (typeof input.commandId !== 'string' || !isUuidLike(input.commandId)) return invalidInput(fill(t('srv.project.requestId'), { configInvalid: configText(t, CONFIG_MESSAGES.CONFIG_INVALID) }))
   const name = typeof input.name === 'string' ? input.name.trim() : ''
   if (!name) return invalidInput(t('srv.project.enterProjectName'))
@@ -154,7 +153,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   if ([input.startDate, input.endDate].some((d) => d && (typeof d !== 'string' || !isValidIsoDate(d)))) return invalidInput(t('err.dateFormatNotValid'))
   if (!isValidDateRange(input.startDate || null, input.endDate || null)) return invalidInput(t('srv.project.endDateCannotEarlierStart'))
   const labels = settingDef('project', 'core.level_labels')!.parse(input.levelLabels)
-  if (!labels.ok) return invalidInput(configText(t, CONFIG_MESSAGES.CONFIG_INVALID), [{ key: 'core.level_labels', message: libText(t, labels.error) }])
+  if (!labels.ok) return invalidInput(configText(t, CONFIG_MESSAGES.CONFIG_INVALID), [{ key: 'core.level_labels', message: labels.error }])
   const copyFrom = input.copyFromProjectId ?? null
   if (copyFrom !== null && (typeof copyFrom !== 'string' || !isUuidLike(copyFrom))) return invalidInput(`${configText(t, CONFIG_MESSAGES.CONFIG_INVALID)}: copyFromProjectId`)
 
@@ -173,9 +172,9 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       // RPC 도 막지만(COPY_SOURCE_FORBIDDEN) 값을 읽어 넘기기 전에 여기서 끊는다. 조회 실패는 '없음'이 아니다(3원칙 ①).
       const owner = await admin.from('projects').select('workspace_id').eq('id', copyFrom).maybeSingle()
       if (owner.error) return unavailableLogged(t, '복사 원본 조회', ctx, owner.error.message)
-      if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return deniedIn(t)
+      if ((owner.data as { workspace_id: string } | null)?.workspace_id !== workspaceId) return deniedIn()
       const src = await getProjectConfig(copyFrom, { client: admin })
-      if (src.workspaceId !== workspaceId) return deniedIn(t)
+      if (src.workspaceId !== workspaceId) return deniedIn()
       sourceRevision = src.revision
       // 원본이 이 서버보다 새 세대면 거부(D29) — 모르는 키는 조용히 빠지고 세대 1 로 저장된다. 모르는 키가 없어도(기존 키의 모양만 바뀐 세대) 거부한다.
       // DB 는 원본 세대를 보지 않는다(copy_project_config 는 values 를 다루지 않는다) — 세대 2 배포를 되돌린 뒤 도는 이 코드가 막아야 한다
@@ -187,7 +186,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       const broken: { key: string; message: string }[] = []
       for (const def of PROJECT_SETTINGS) {
         const s = src.keys[def.key]
-        if (s.status === 'invalid') broken.push({ key: def.key, message: libText(t, s.error) })
+        if (s.status === 'invalid') broken.push({ key: def.key, message: s.error })
         else if (s.status === 'set') values[def.key] = s.value
       }
       if (broken.length) return invalidInput(t('srv.project.sourceProjectSSettingsCorrupted'), broken)
@@ -210,7 +209,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
     // 비core 가 전부 빠진 modules.enabled 가 명시 기록되는 조용한 갈림이 된다
     if (e instanceof ConfigKeyError) {
       console.error('[createProject] 설정 키 손상', { ...ctx, key: e.key, code: e.code })
-      const message = e.key === 'modules.allowed' ? libText(t, ERR_MODULES_ALLOWED_BROKEN) : `${configText(t, CONFIG_MESSAGES[e.code])} (${e.key})`
+      const message = e.key === 'modules.allowed' ? ERR_MODULES_ALLOWED_BROKEN : `${configText(t, CONFIG_MESSAGES[e.code])} (${e.key})`
       return invalidInput(message, [{ key: e.key, message }])
     }
     throw e
@@ -316,7 +315,7 @@ export async function updateProject(
 ): Promise<{ ok: boolean; error?: string }> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const patch: Record<string, unknown> = {}
   if (fields.name !== undefined) {
     if (!fields.name.trim()) return { ok: false, error: t('srv.project.enterProjectName2') }
@@ -356,7 +355,7 @@ export async function updateProject(
 export async function setProjectPrivacy(projectId: string, isPrivate: boolean): Promise<{ ok: boolean; error?: string }> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   // projects 의 RLS update 정책과 무관하게 동작해야 하는 관리 쓰기 — admin client 로 쓰고
   // 가드(프로젝트 관리자)가 유일한 관문임을 명시한다(fail-closed). id 는 가드가 판정한 그 프로젝트다.
   const admin = createAdminClient()
@@ -371,7 +370,7 @@ export async function setProjectPrivacy(projectId: string, isPrivate: boolean): 
 export async function setBaseDate(projectId: string, baseDate: string | null): Promise<{ ok: boolean; error?: string }> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const { error } = await sb.from('projects').update({ base_date: baseDate || null }).eq('id', projectId)
   if (error) return { ok: false, error: failWith('setBaseDate', error, t(ERR_PROJECT_SAVE)) }
@@ -392,7 +391,7 @@ const ERR_HOLIDAY_REMOVE = 'srv.project.couldNotDeleteDateException'
 export async function addHoliday(projectId: string, date: string, name: string, kind: 'off' | 'work'): Promise<HolidayWriteResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   if (typeof date !== 'string' || !isValidIsoDate(date) || (kind !== 'off' && kind !== 'work')) return { ok: false, error: t(ERR_HOLIDAY_INPUT) }
   const label = typeof name === 'string' ? name.trim() : ''
   const sb = await createServerClient()
@@ -406,7 +405,7 @@ export async function addHoliday(projectId: string, date: string, name: string, 
 export async function removeHoliday(projectId: string, date: string): Promise<HolidayWriteResult> {
   const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   if (typeof date !== 'string' || !isValidIsoDate(date)) return { ok: false, error: t(ERR_HOLIDAY_INPUT) }
   const sb = await createServerClient()
   const { error } = await sb.from('holidays').delete().eq('project_id', projectId).eq('date', date)

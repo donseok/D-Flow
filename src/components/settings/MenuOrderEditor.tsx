@@ -49,7 +49,7 @@ function fromLatest(value: unknown): NavMenuSetting | null {
 export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidReason }: {
   workspaceId: string; revision: number; initialMenu: NavMenuSetting | null; invalidReason?: string
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const router = useRouter()
   const [baseline, setBaseline] = useState<NavMenuSetting>(initialMenu ?? EMPTY)
   const [draft, setDraft] = useState<NavMenuSetting>(initialMenu ?? EMPTY)
@@ -114,7 +114,7 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
 
   return <div className="space-y-5">
     <p className="text-xs leading-5 text-fg-secondary">{t('settings.menu.desc')}</p>
-    {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="navigation.menu" message={invalidReason} isAdmin settingsHref="#workspace-menu" />}
+    {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" keyName="navigation.menu" message={invalidReason} isAdmin settingsHref="#workspace-menu" />}
     {GROUPS.map(group => <section key={group.id} className="rounded-xl border border-border p-3">
       <h3 className="mb-3 text-sm font-semibold text-fg">{t(group.label)}</h3>
       <div className="space-y-2">
@@ -132,8 +132,8 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
         </div>)}
       </div>
     </section>)}
-    {badLabel && <ConfigStateNotice kind="field" locale={locale} message={t('settings.menu.badLabel').replace('{badLabel}', String(badLabel[0]))} />}
-    {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
+    {badLabel && <ConfigStateNotice kind="field" message={t('settings.menu.badLabel').replace('{badLabel}', String(badLabel[0]))} />}
+    {fieldError && <ConfigStateNotice kind="field" message={fieldError} />}
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
       <strong>{t('settings.menu.conflict')}</strong>
       <p>{t('settings.menu.mine')} {draft.order.join(', ') || t('settings.menu.defaultOrder')}</p>
@@ -143,7 +143,7 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
         {conflict.menu && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.menu!); setBaseline(conflict.menu!); setDisplayOrder(ordered(conflict.menu!)); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>{t('settings.conflict.useLatest')}</button>}
       </div>
     </div>}
-    {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
+    {error && <ConfigStateNotice kind="patch" message={error} />}
     <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!badLabel || !!conflict} onClick={save}>
         {uncertainPatch ? t('settings.workflow.retry') : t('settings.menu.save')}

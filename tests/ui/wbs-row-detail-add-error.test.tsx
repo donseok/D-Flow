@@ -11,7 +11,6 @@ import { withTeams } from '../fixtures/teams'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const locale = 'ko' as const
 const addWbsItem = vi.fn(async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true }))
 vi.mock('@/app/actions/wbs', () => ({
   getChangeLogs: vi.fn(async () => []),
@@ -29,7 +28,7 @@ vi.mock('@/app/actions/attachments', () => ({
 vi.mock('@/lib/supabase/client', () => ({ createBrowserClient: () => ({}) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale, t: (k: DictKey) => t(locale, k) }),
+  useLocale: () => ({ t: (k: DictKey) => t(k) }),
 }))
 
 import { RowDetailPanel } from '@/components/wbs/RowDetailPanel'
@@ -63,14 +62,14 @@ describe('RowDetailPanel — 하위 항목 추가 실패 문구(사전 매핑)',
         <RowDetailPanel levelLabels={['Phase', 'Task', 'Activity']} item={phase} onClose={() => {}} projectId="p1" editable timeZone="UTC" />,
       )),
     )
-    const open = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes(t(locale, 'wbs.addChild')))!
+    const open = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes(t('wbs.addChild')))!
     await act(async () => open.click())
     const input = container.querySelector<HTMLInputElement>('input.app-input')!
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Task A')
       input.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    const add = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === t(locale, 'common.add'))!
+    const add = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === t('common.add'))!
     await act(async () => add.click())
     expect(addWbsItem).toHaveBeenCalledWith('p1', 'p1-phase', 'Task A')
     // 구조 편집 절의 오류 줄(err) — 같은 패널의 다른 절(에이전트 주문 상태 등)의 오류 줄은 보지 않는다
@@ -79,12 +78,12 @@ describe('RowDetailPanel — 하위 항목 추가 실패 문구(사전 매핑)',
 
   it('표의 문구(SUB-ACT 형제)는 그 사전 문구로 보인다', async () => {
     const shown = await addChildFailing(WBS_ACTION_ERRORS.subActSibling)
-    expect(shown).toEqual([t('ko', 'wbs.err.subActSibling')])
+    expect(shown).toEqual([t('wbs.err.subActSibling')])
   })
 
   it('표 밖 문구는 받은 문구를 그리지 않고 추가 실패 일반 문구', async () => {
     const shown = await addChildFailing('표에 없는 서버 문구 — 원문')
-    expect(shown).toEqual([t('ko', 'wbs.toastAddFail')])
+    expect(shown).toEqual([t('wbs.toastAddFail')])
   })
 
   it('표의 문구는 사전 문구와 같은 글자다', async () => {

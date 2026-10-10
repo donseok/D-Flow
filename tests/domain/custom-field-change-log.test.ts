@@ -8,7 +8,7 @@ const def = (over: Partial<FieldDef>): FieldDef => ({
   key: 'qty', label: '수량', description: '', type: 'number', required: false, editable_by: 'member',
   show_in_list: false, searchable: false, sort: 0, active: true, ...over,
 } as FieldDef)
-const FMT = { locale: 'ko', yes: '예', no: '아니오', empty: '—' }
+const FMT = { yes: '예', no: '아니오', empty: '—' }
 
 describe('customFieldChanges', () => {
   it('바뀐 키만 — 추가·변경·제거, key 순', () => {

@@ -10,8 +10,7 @@ import { getApprovedItemIds } from '@/lib/data/approvedItems'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick } from '@/lib/settings/pick'
 import { levelDepthOf } from '@/lib/settings/projectConfig'
-import { getServerLocale } from '@/lib/i18n/server'
-import { translatorFor } from '@/lib/i18n/translate'
+import { koTranslate } from '@/lib/i18n/translate'
 import { getProjectRoster } from '@/lib/data/members'
 import { AgentHubView } from '@/components/agent-hub/AgentHubView'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
@@ -30,8 +29,8 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
   if (!actor || !isProjectMember(actor, projectId)) redirect(`/p/${projectId}/dashboard`)
   await requireModulePage({ projectId }, 'agents')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   // 조회 실패는 throw → Next 의 error 경계가 받는다. 빈 허브로 위장하지 않는다.
-  const [hub, wbsRes, pc, roster, locale] = await Promise.all([
-    getAgentHub(projectId, { userId: actor.userId, isAdmin: isProjectAdmin(actor, projectId) }, undefined, translatorFor(await getServerLocale())),
+  const [hub, wbsRes, pc, roster] = await Promise.all([
+    getAgentHub(projectId, { userId: actor.userId, isAdmin: isProjectAdmin(actor, projectId) }, undefined, koTranslate),
     // 달력 손상(ConfigKeyError)은 결과로 받는다 — 허브(킬스위치·승인 큐·위임)는 그리고 상세 패널 자리에만 사유(FN-8, A-4 리뷰 N3).
     // 그 밖의 실패(조회 실패·팀 원천)는 던진다 — error 경계(빈 허브로 위장하지 않는다)
     getComputedWbs(projectId).then(
@@ -40,10 +39,9 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
     ),
     loadProjectConfigForPage(projectId),
     getProjectRoster(projectId),
-    getServerLocale(),
   ])
   // 상세 패널의 트리 깊이·라벨을 기본값으로 채우지 않는다(스펙 §3.5). 설정 전체 조회 실패면 허브 대신 사유를 그린다.
-  if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
+  if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} /></div>
   // 단계 이름은 상세 패널만 쓴다 — 손상이면 허브(킬스위치·승인 큐·위임)는 그대로 그리고 패널 자리에만 사유를 띄운다
   // (개정 §2.5 "그 키를 쓰는 기능만 멈춘다"). 허브 전체를 막으면 잘못 도는 에이전트를 UI 로 멈출 길이 없다(최종 리뷰 FN-8).
   const labels = pick(pc.cfg, 'core.level_labels')

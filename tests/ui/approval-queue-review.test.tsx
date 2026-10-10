@@ -14,7 +14,6 @@ vi.mock('@/components/providers/LocaleProvider', () => ({
       if (k === 'agent.queue.step') return '승인 {i}/{n} · {label}'
       return k
     },
-    locale: 'ko',
   }),
 }))
 

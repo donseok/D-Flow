@@ -70,7 +70,7 @@ export function canPurgeUpdate(isProjectAdmin: boolean): boolean {
 }
 
 /**
- * 상태 변경 자동 기록의 본문 형식. 한국어 문장을 DB 에 박으면 EN 로케일에서 번역되지 않고
+ * 상태 변경 자동 기록의 본문 형식. 문장을 DB 에 박으면
  * 상태 라벨이 바뀔 때 과거 기록이 거짓말이 된다 — 기계 판독 형식으로 저장하고 화면이 렌더한다.
  */
 export function encodeStatusChange(from: IssueStatus, to: IssueStatus): string {

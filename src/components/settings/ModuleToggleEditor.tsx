@@ -6,7 +6,6 @@ import { previewProjectSettingsImpact, type ProjectSettingsImpactResult } from '
 import { getSettingsCommandOutcome, updateProjectSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { PROJECT_TOGGLABLE, type ModuleId } from '@/lib/modules/defaults'
 import { newUuid } from '@/lib/domain/uuid'
-import type { Locale } from '@/lib/i18n/dict'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -15,9 +14,9 @@ export interface ProjectModuleOption { id: ModuleId; label: string; allowed: boo
 type Conflict = { revision: number; enabled: ModuleId[] | null }
 const sameIds = (a: readonly ModuleId[], b: readonly ModuleId[]) => a.length === b.length && a.every(id => b.includes(id))
 
-export function ModuleToggleEditor({ projectId, revision, initialEnabled, invalidReason, requiredMissing = false, options, locale = 'ko' }: {
+export function ModuleToggleEditor({ projectId, revision, initialEnabled, invalidReason, requiredMissing = false, options }: {
   projectId: string; revision: number; initialEnabled: ModuleId[] | null; invalidReason?: string; requiredMissing?: boolean
-  options: ProjectModuleOption[]; locale?: Locale
+  options: ProjectModuleOption[];
 }) {
   const { t } = useLocale()
   const router = useRouter()
@@ -111,7 +110,7 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
 
   return <div className="space-y-4">
     <p className="text-xs leading-5 text-fg-secondary">{t('settings.moduleToggle.desc')}</p>
-    {needsRepair && (invalidReason || requiredMissing) && <ConfigStateNotice kind={requiredMissing ? 'required' : 'invalid'} locale={locale}
+    {needsRepair && (invalidReason || requiredMissing) && <ConfigStateNotice kind={requiredMissing ? 'required' : 'invalid'}
       keyName="modules.enabled" message={invalidReason} isAdmin settingsHref="#project-modules" />}
     <div className="grid gap-2 sm:grid-cols-2">{enabledRows.map(row)}</div>
     {disabledRows.length > 0 && <details className="rounded-xl border border-border p-3">
@@ -123,7 +122,7 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
       <p>{retained.map(o => o.label).join(', ')}</p>
     </div>}
     {unavailable.length > 0 && <p className="text-xs text-fg-muted">{t('settings.moduleToggle.unavailable').replace('{v}', String(unavailable.map(o => o.label).join(', ')))}</p>}
-    {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
+    {fieldError && <ConfigStateNotice kind="field" message={fieldError} />}
     {conflict && <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
       <strong>{t('settings.moduleToggle.conflict')}</strong>
       <p>{t('settings.modules.mine')} {selected.map(label).join(', ') || t('common.none')}</p>
@@ -141,7 +140,7 @@ export function ModuleToggleEditor({ projectId, revision, initialEnabled, invali
         review.impact.removed.map(x => <p key={x.moduleId}>{label(x.moduleId)}: {x.dataCount === null ? x.dataLabel : t('settings.moduleToggle.dataCount').replace('{dataLabel}', String(x.dataLabel)).replace('{dataCount}', String(x.dataCount))}</p>)}
       <p>{t('settings.moduleToggle.note')}</p>
     </div>}
-    {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
+    {error && <ConfigStateNotice kind="patch" message={error} />}
     <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-ghost" disabled={pending || !dirty || !!conflict || !!uncertainPatch} onClick={inspect}>{t('settings.review.title')}</button>
       {(review || uncertainPatch) && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{uncertainPatch ? t('settings.workflow.retry') : t('settings.modules.saveChanges')}</button>}

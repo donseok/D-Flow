@@ -10,7 +10,6 @@ import { PageHeader } from '@/components/app/PageHeader'
 import { PortfolioKpis } from '@/components/portfolio/PortfolioKpis'
 import { PortfolioTable } from '@/components/portfolio/PortfolioTable'
 import { PortfolioMilestoneBoard } from '@/components/portfolio/PortfolioMilestoneBoard'
-import { getServerLocale } from '@/lib/i18n/server'
 import { t } from '@/lib/i18n/dict'
 import { todayIn } from '@/lib/domain/calendar'
 import { viewTimezone } from '@/lib/calendar/viewZone'
@@ -19,8 +18,8 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 워크스페이스 비교 화면은 항상 최신이어야 한다
-/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '포트폴리오') */
-export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.portfolio') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 사전에서 꺼낸다('포트폴리오') */
+export async function generateMetadata() { return { title: t('nav.portfolio') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function PortfolioPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -30,8 +29,8 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
   await requireModulePage({ workspaceId: scope.ws.id }, 'portfolio')
 
   // 실제 오늘의 tz = 이 워크스페이스의 달력(계획 D-22b·D-22d). 달력 손상이면 그 사유를 그린다
-  const [vz, locale] = await Promise.all([viewTimezone(scope.ws.id), getServerLocale()])
-  if (!vz.ok) return <ConfigLoadError error={vz.error} keyName={vz.key} kind="invalid" locale={locale} />
+  const vz = await viewTimezone(scope.ws.id)
+  if (!vz.ok) return <ConfigLoadError error={vz.error} keyName={vz.key} kind="invalid" />
   const realToday = todayIn(vz.timeZone, new Date())
   // 입력은 슬러그 워크스페이스의 프로젝트만(D21)
   const { inputs, leadersDegraded, listDegraded } = await getPortfolioInputs(scope.ws.id, realToday)
@@ -50,16 +49,16 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
 
   return (
     <div className="space-y-6 pb-10">
-      <PageHeader title={t(locale, 'pf.title')} />
+      <PageHeader title={t('pf.title')} />
       {listDegraded && (
         <div className="rounded-xl border border-danger/40 bg-danger-weak px-4 py-3 text-xs font-medium text-danger">
-          {t(locale, 'pf.listDegraded')}
+          {t('pf.listDegraded')}
         </div>
       )}
-      <PortfolioKpis totals={model.totals} locale={locale} />
-      <PortfolioTable rows={model.rows} leadersDegraded={leadersDegraded} locale={locale} />
+      <PortfolioKpis totals={model.totals} />
+      <PortfolioTable rows={model.rows} leadersDegraded={leadersDegraded} />
       {/* 통합 축의 오늘 마커는 실제 오늘 — 행별 마일스톤 상태(dday)는 각 프로젝트 today 로 이미 판정됨 */}
-      <PortfolioMilestoneBoard rows={model.rows} milestones={model.milestones} today={realToday} locale={locale} />
+      <PortfolioMilestoneBoard rows={model.rows} milestones={model.milestones} today={realToday} />
     </div>
   )
 }

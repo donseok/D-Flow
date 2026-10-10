@@ -107,7 +107,6 @@ describe('Wiki 상태 표시 안전성', () => {
   ] as const)('종료 lifecycle %s는 과거 confirmed보다 우선 표시한다', (lifecycleState, label) => {
     const html = renderToStaticMarkup(
       <WikiItemCard
-        locale="ko"
         item={item({
           kind: 'decision',
           lifecycleState,
@@ -151,7 +150,7 @@ describe('Wiki 상태 표시 안전성', () => {
     }
 
     const html = renderToStaticMarkup(
-      <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }} projectId="project-1" data={data} locale="ko" userId={null} timeZone="Asia/Seoul" />,
+      <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }} projectId="project-1" data={data} userId={null} timeZone="Asia/Seoul" />,
     )
 
     // 분류 체계를 본문보다 앞세우지 않되, 근거 항목은 하나도 유실하지 않는다.
@@ -169,7 +168,6 @@ describe('Wiki 상태 표시 안전성', () => {
   it('잠정 사실은 lifecycle이 active여도 현재 유효로 표시하지 않는다', () => {
     const html = renderToStaticMarkup(
       <WikiItemCard
-        locale="ko"
         item={item({ kind: 'fact', certainty: 'tentative', lifecycleState: 'active' })} timeZone="Asia/Seoul" />,
     )
     expect(html).toContain('>논의 중</span>')
@@ -222,7 +220,6 @@ describe('Wiki 상태 표시 안전성', () => {
       <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }}
         projectId="project-1"
         data={data}
-        locale="ko"
         canCurate
         canEditDocuments
         userId={null} timeZone="Asia/Seoul" />,
@@ -264,7 +261,6 @@ describe('Wiki 상태 표시 안전성', () => {
       <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }}
         projectId="project-1"
         data={data}
-        locale="ko"
         canCurate
         canEditDocuments
         canVerifyDocuments
@@ -297,7 +293,7 @@ describe('Wiki 상태 표시 안전성', () => {
       dataTruncated: false,
     }
     const html = renderToStaticMarkup(
-      <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }} projectId="project-1" data={data} locale="ko" userId={null} timeZone="Asia/Seoul" />,
+      <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }} projectId="project-1" data={data} userId={null} timeZone="Asia/Seoul" />,
     )
     const header = html.slice(html.indexOf('<section class="card overflow-hidden">'), html.indexOf('CANONICAL DOCUMENT'))
 
@@ -337,7 +333,6 @@ describe('Wiki 상태 표시 안전성', () => {
       <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }}
         projectId="project-1"
         data={data}
-        locale="ko"
         canCurate
         canEditDocuments
         canVerifyDocuments
@@ -355,7 +350,6 @@ describe('Wiki 상태 표시 안전성', () => {
   it('변경 타임라인은 원문 당시 minute version으로 연결하고 없으면 현재 문서로 폴백한다', () => {
     const html = renderToStaticMarkup(
       <WikiChangeList
-        locale="ko"
         changes={[
           change(),
           change({
@@ -407,7 +401,7 @@ describe('사람이 닫거나 숨긴 항목', () => {
 
   it.each(['archived', 'resolved'] as const)('%s 항목은 주제 상세 어느 섹션에도 렌더되지 않는다', (state) => {
     const html = renderToStaticMarkup(
-      <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }} projectId="project-1" data={closedData(state)} locale="ko" userId={null} timeZone="Asia/Seoul" />,
+      <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }} projectId="project-1" data={closedData(state)} userId={null} timeZone="Asia/Seoul" />,
     )
     expect(html).toContain('살아있는 사실')
     expect(html).not.toContain('닫힌 사실')

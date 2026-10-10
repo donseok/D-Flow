@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/components/chat/BotPageContextProvider', () => ({ useBotPageContext: mocks.botCtx }))
 vi.mock('@/app/actions/attendance', () => ({ upsertAttendance: vi.fn(async () => ({ ok: true })), removeAttendance: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/app/actions/meetings', () => ({

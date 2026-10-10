@@ -20,7 +20,6 @@ vi.mock('@/lib/authz/workspaceScope', () => ({
 }))
 vi.mock('@/lib/authz/agentsAccess', () => ({ canViewAgents: () => true }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('@/components/kanban/KanbanBoard', () => ({ KanbanBoard: () => null }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: () => null }))
 vi.mock('@/components/wbs/WbsRealtimeRefresh', () => ({ WbsRealtimeRefresh: () => null }))

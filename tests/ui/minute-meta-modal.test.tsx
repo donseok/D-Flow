@@ -7,7 +7,7 @@ import type { Minute, MinuteFolder } from '@/lib/domain/types'
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (k: string) => k, locale: 'ko' }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 // 인자 시그니처를 제네릭으로 명시 — 인자 없는 vi.fn 은 mock.calls 가 빈 튜플로 추론돼 tsc(TS2493)가 깨진다
 const updateMinuteMeta = vi.fn<(id: string, patch: unknown, folderId?: string | null) => Promise<{ ok: boolean; error?: string }>>(

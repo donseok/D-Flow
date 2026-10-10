@@ -6,14 +6,13 @@ import { SeatmapView } from '@/components/agents/SeatmapView'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { viewTimezone } from '@/lib/calendar/viewZone'
-import { getServerLocale } from '@/lib/i18n/server'
-import { translatorFor } from '@/lib/i18n/translate'
+import { koTranslate } from '@/lib/i18n/translate'
 import { wsHref } from '@/lib/workspace/paths'
 import { t as tDict } from '@/lib/i18n/dict'
 
 export const dynamic = 'force-dynamic' // 좌석표는 항상 최신이어야 한다
-/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '에이전트 현황') */
-export async function generateMetadata() { return { title: tDict(await getServerLocale(), 'nav.agents') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 사전에서 꺼낸다('에이전트 현황') */
+export async function generateMetadata() { return { title: tDict('nav.agents') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function AgentsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -23,11 +22,11 @@ export default async function AgentsPage({ params }: { params: Promise<{ slug: s
   await requireModulePage({ workspaceId: scope.ws.id }, 'agents')
   // 조회 실패는 throw → 오류 경계. 층은 그 워크스페이스의 접근 가능 프로젝트만(seatmapFloorIds). 기본은 전체(2026-09-19) — 화면에서 내 작업으로 좁힌다
   const [seatmap, vz] = await Promise.all([
-    getSeatmap(scope.actor, Date.now(), 'all', { workspaceId: scope.ws.id, t: translatorFor(await getServerLocale()) }),
+    getSeatmap(scope.actor, Date.now(), 'all', { workspaceId: scope.ws.id, t: koTranslate }),
     // 화면의 tz — 이 워크스페이스의 달력(화면이 이름을 적는다, 계획 D-21c)
     viewTimezone(scope.ws.id),
   ])
-  if (!vz.ok) return <div className="p-6"><ConfigLoadError error={vz.error} kind="invalid" keyName={vz.key} locale={await getServerLocale()} /></div>
+  if (!vz.ok) return <div className="p-6"><ConfigLoadError error={vz.error} kind="invalid" keyName={vz.key} /></div>
   // 문서형(D19) — 손으로 준 h-full 틀을 두지 않는다. 헤더·층 칩은 SeatmapView 가 공통 헤더(AgentFrame)로 그린다
   return <SeatmapView initial={seatmap} workspaceId={scope.ws.id} timeZone={vz.timeZone} />
 }

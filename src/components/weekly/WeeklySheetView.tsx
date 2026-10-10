@@ -97,11 +97,10 @@ export function WeeklySheetView({
     [customDefs],
   )
   const customFormat = useMemo(() => ({
-    locale: fieldScope?.locale ?? 'ko',
     yes: t('weekly.custom.yes'),
     no: t('weekly.custom.no'),
     empty: '—',
-  }), [fieldScope?.locale, t])
+  }), [t])
   const [selectedCustomRowId, setSelectedCustomRowId] = useState<string | null>(null)
   const selectedCustomRow = useMemo(
     () => (selectedCustomRowId ? rows.find(r => r.id === selectedCustomRowId) ?? null : null),
@@ -889,7 +888,7 @@ export function WeeklySheetView({
   }
 
   // ── 구글시트 복제 룩: 종이(surface) + 얇은 테두리 + 옅은 2단 헤더 + 병합 셀.
-  //    시트도 테마 토큰을 따른다 — 다크 대비는 토큰이 진다(SP4 B, D52).
+  //    시트도 테마 토큰을 따른다(SP4 B, D52).
   // 2단 머리의 금주실적·차주계획 × 내용·이슈 및 주요 이벤트(핵심 4열)와 기본 제목(▣ 주간업무보고)은 제품 고정이다 — 사전으로 옮기지 않는다(개정 §2.9)
   const HDR = 'border border-border-input bg-surface-subtle px-1 py-1.5 text-center text-[13px] font-bold text-fg'
 

@@ -4,8 +4,7 @@ import type { AttendanceRecord, ProjectMember } from '@/lib/domain/types'
 import { summarizeAttendance, vocabColor, vocabLabel, type AttendanceTypeDef } from '@/lib/settings/vocab'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { SectionCard } from '@/components/ui/SectionCard'
-import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
+import { t} from '@/lib/i18n/dict'
 import { CountBadge, DateCell, MiniEmpty, Stat, addDaysIso, weekdayKey } from './bits'
 
 /** 리스트 표시 상한 — 회의 카드와 좌우 균형을 맞춘다. */
@@ -22,8 +21,7 @@ export async function AttendanceBoard({ projectId, records, members, today, type
   /** 이 프로젝트의 근태 유형(설정 attendance.types) */
   types: readonly AttendanceTypeDef[]
 }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
 
   const windowEnd = addDaysIso(today, WINDOW_DAYS - 1)
   const countsAs = new Map(types.map(e => [e.code, e.counts_as]))

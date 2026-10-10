@@ -27,10 +27,9 @@ import type { ProjectSettingValue } from '@/lib/settings/registry'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
-import { libText, guardText } from '@/lib/i18n/serverText'
 
 // 손상 안내는 설정 화면의 '저장된 양식 비우기'로 — 마법사 재저장은 가져오기를 다시 해야 해서, 막힌 파일로 덮어쓸 위험이 있다.
-const errProfileCorrupt = (t: ServerTranslate, detail: string) => fill(t('srv.api.export.savedExcelTemplateCorrupted'), { detail: libText(t, detail) })
+const errProfileCorrupt = (t: ServerTranslate, detail: string) => fill(t('srv.api.export.savedExcelTemplateCorrupted'), { detail: detail })
 const ERR_TEAMS = 'err.couldNotVerifyProjectTeams'
 const ERR_BUILD = 'srv.api.export.couldNotBuildExcelFile'
 
@@ -41,7 +40,7 @@ export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get('projectId')
   if (!projectId) return NextResponse.json({ error: t('err.projectMissing') }, { status: 400 })
   const guard = await requireProjectMember(projectId)
-  if (!guard.ok) return jsonError(guardText(t, guard), denyStatus(guard))
+  if (!guard.ok) return jsonError(guard.error, denyStatus(guard))
   if (req.nextUrl.searchParams.get('form') === '1') return exportForm(projectId)
 
   // 대상은 호출자가 볼 수 있는 프로젝트여야 한다(RLS + canSeeProject 목록) — 팀·WBS 를 읽기 전에 판정한다.
@@ -137,7 +136,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: t(ERR_BUILD) }, { status: 500 })
     }
     // 저장 양식의 명시적 미지원(아웃라인+펼침)·양식보다 깊은 WBS — 무증상 오파싱 대신 400 과 사유.
-    return NextResponse.json({ error: libText(t, built.error) }, { status: 400 })
+    return NextResponse.json({ error: built.error }, { status: 400 })
   }
   // 파일명 날짜 = 그 프로젝트 tz 의 오늘(SP5 계획 D-22d) — getComputedWbs 가 이미 판독한 달력
   const today = todayIn(wbs.calendar.timezone, new Date())

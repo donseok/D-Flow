@@ -7,7 +7,6 @@ import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsComman
 import { NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
 import { MODULE_LABEL_KEY } from '@/lib/modules/labels'
 import { newUuid } from '@/lib/domain/uuid'
-import type { Locale } from '@/lib/i18n/dict'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -16,11 +15,11 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 const sameIds = (a: readonly ModuleId[], b: readonly ModuleId[]) => a.length === b.length && a.every(id => b.includes(id))
 type Conflict = { revision: number; allowed: ModuleId[] | null }
 
-export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, invalidReason, requiredMissing = false, locale = 'ko' }: {
-  workspaceId: string; initialAllowed: ModuleId[] | null; revision: number; invalidReason?: string; requiredMissing?: boolean; locale?: Locale
+export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, invalidReason, requiredMissing = false }: {
+  workspaceId: string; initialAllowed: ModuleId[] | null; revision: number; invalidReason?: string; requiredMissing?: boolean;
 }) {
   const { t } = useLocale()
-  // 모듈 이름은 화면 언어를 따른다(사전 module.*)
+  // 모듈 이름은 사전(module.*)에서 꺼낸다
   const LABEL = Object.fromEntries(Object.entries(MODULE_LABEL_KEY).map(([id, key]) => [id, t(key)])) as Record<keyof typeof MODULE_LABEL_KEY, string>
   const router = useRouter()
   const [baseline, setBaseline] = useState<ModuleId[]>(initialAllowed ?? [])
@@ -133,7 +132,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
   return (
     <div className="space-y-4">
       <p className="text-sm leading-6 text-fg-secondary">{t('settings.moduleAllow.desc')}</p>
-      {needsRepair && (invalidReason || requiredMissing) && <ConfigStateNotice kind={requiredMissing ? 'required' : 'invalid'} locale={locale}
+      {needsRepair && (invalidReason || requiredMissing) && <ConfigStateNotice kind={requiredMissing ? 'required' : 'invalid'}
         keyName="modules.allowed" message={invalidReason} isAdmin settingsHref="#workspace-modules" />}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {NON_CORE_MODULES.map(id => (
@@ -144,7 +143,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
           </label>
         ))}
       </div>
-      {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
+      {fieldError && <ConfigStateNotice kind="field" message={fieldError} />}
       {conflict && (
         <div role="alert" className="space-y-2 rounded-xl border border-pending/30 bg-pending-weak p-4 text-sm">
           <strong>{t('settings.moduleAllow.conflict')}</strong>
@@ -168,7 +167,7 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
           <p>{t('settings.moduleAllow.note')}</p>
         </div>
       )}
-      {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
+      {error && <ConfigStateNotice kind="patch" message={error} />}
       <SettingsSaveBar notice={notice}>
         <button type="button" className="btn btn-ghost" disabled={pending || !dirty || !!conflict || !!uncertainPatch} onClick={inspect}>{t('settings.review.title')}</button>
         {(review || uncertainPatch) && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{uncertainPatch ? t('settings.workflow.retry') : t('settings.modules.saveChanges')}</button>}

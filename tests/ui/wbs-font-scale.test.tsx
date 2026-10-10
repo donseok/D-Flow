@@ -16,7 +16,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (key: string) => key }),
+  useLocale: () => ({ t: (key: string) => key }),
 }))
 vi.mock('@/components/wbs/RowDetailPanel', () => ({
   RowDetailPanel: () => null,

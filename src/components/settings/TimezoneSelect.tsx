@@ -3,7 +3,6 @@
 // 입력 + 보조 목록(datalist). 검증은 parseTimezone(서버·PG 와 같은 규칙 — D54·L1) 이고 목록 포함 여부가 아니다.
 // 목록도 같은 규칙이다 — '/' 없는 이름은 닫힌 허용 목록(NO_SLASH_TIMEZONES)만, 나머지는 이 브라우저가 아는 'Area/City' 이름.
 import { NO_SLASH_TIMEZONES, parseTimezone } from '@/lib/domain/calendar'
-import type { Locale } from '@/lib/i18n/dict'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
@@ -12,11 +11,10 @@ export function timezoneOptions(supported: readonly string[] = typeof Intl.suppo
   return [...NO_SLASH_TIMEZONES, ...supported.filter(n => n.includes('/') && !NO_SLASH_TIMEZONES.includes(n))]
 }
 
-export function TimezoneSelect({ value, onChange, disabled, locale, suggestion = null }: {
+export function TimezoneSelect({ value, onChange, disabled, suggestion = null }: {
   value: string
   onChange: (tz: string) => void
   disabled: boolean
-  locale: Locale
   /** 제안 버튼(워크스페이스 — 브라우저 시간대, 과제 26). null 이면 그리지 않는다 */
   suggestion?: { label: string; value: string } | null
 }) {
@@ -35,7 +33,7 @@ export function TimezoneSelect({ value, onChange, disabled, locale, suggestion =
         )}
       </div>
       <datalist id="calendar-timezone-names">{timezoneOptions().map(n => <option key={n} value={n} />)}</datalist>
-      {!check.ok && <ConfigStateNotice kind="field" locale={locale} message={t('settings.tz.invalid').replace('{error}', String(check.error))} />}
+      {!check.ok && <ConfigStateNotice kind="field" message={t('settings.tz.invalid').replace('{error}', String(check.error))} />}
     </div>
   )
 }

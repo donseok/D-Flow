@@ -43,12 +43,12 @@ export const ERR_DUPLICATE_EMAIL = '같은 이메일의 사람이 이미 있습�
 export const ERR_NAME_REQUIRED = '이름을 입력하세요.'
 export const ERR_EMAIL_FORMAT = '올바른 이메일 형식이 아닙니다.'
 
-/** 화면이 저장 전에 직접 띄우는 초안 검증 문구 → 화면용 사전 키(ko 값은 같은 글자). 액션이 돌려준 문구(이미 화면 언어)는 표에 없어 그대로 보인다 */
+/** 화면이 저장 전에 직접 띄우는 초안 검증 문구 → 화면용 사전 키(ko 값은 같은 글자). 액션이 돌려준 문구는 표에 없어 그대로 보인다 */
 const DRAFT_ERROR_KEY: Readonly<Record<string, 'roster.err.nameRequired' | 'roster.err.emailFormat' | 'roster.err.accessNeedsEmail' | 'roster.err.duplicateEmail'>> = {
   [ERR_NAME_REQUIRED]: 'roster.err.nameRequired', [ERR_EMAIL_FORMAT]: 'roster.err.emailFormat',
   [ERR_ACCESS_NEEDS_EMAIL]: 'roster.err.accessNeedsEmail', [ERR_DUPLICATE_EMAIL]: 'roster.err.duplicateEmail',
 }
-/** 초안 검증 문구를 화면 언어로 — `t` 는 화면의 번역 함수(useLocale().t). 표 밖 문구는 받은 그대로 */
+/** 초안 검증 문구를 사전 문구로 — `t` 는 화면의 번역 함수(useLocale().t). 표 밖 문구는 받은 그대로 */
 export function rosterDraftErrorText(t: (key: (typeof DRAFT_ERROR_KEY)[string]) => string, message: string): string {
   return Object.hasOwn(DRAFT_ERROR_KEY, message) ? t(DRAFT_ERROR_KEY[message]) : message
 }
@@ -96,7 +96,7 @@ export function accessRoleLabel(r: AccessRole | null): string {
   return r ? ACCESS_ROLE_LABEL[r] : '없음(조회 전용)'
 }
 
-/** 화면용 사전 키 — 화면은 `t(accessRoleLabelKey(r))` 로 그린다(로캘을 따른다). ko 문구는 accessRoleLabel 과 같다 */
+/** 화면용 사전 키 — 화면은 `t(accessRoleLabelKey(r))` 로 그린다. ko 문구는 accessRoleLabel 과 같다 */
 export function accessRoleLabelKey(r: AccessRole | null): 'roster.access.admin' | 'roster.access.member' | 'roster.access.none' {
   return r === 'admin' ? 'roster.access.admin' : r === 'member' ? 'roster.access.member' : 'roster.access.none'
 }

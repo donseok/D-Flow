@@ -6,7 +6,7 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import { CountBadge, MiniEmpty } from '@/components/dashboard/bits'
 import { fmtDate } from '@/components/wbs/shared'
 import { projectColorClass } from '@/lib/domain/projectColors'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t} from '@/lib/i18n/dict'
 
 const MS_TONE: Record<MilestoneStatus, string> = { done: 'fill-success', overdue: 'fill-danger', upcoming: 'fill-action' }
 const W = 960, PL = 10, PR = 10, ROW_H = 26, BASE = 13
@@ -26,10 +26,10 @@ function monthTicks(axisStart: string, axisEnd: string): string[] {
 }
 
 /** 전 프로젝트 마일스톤을 공통 시간축 위에 프로젝트당 1행으로. 상세 라벨은 dot 툴팁. */
-export function PortfolioMilestoneBoard({ rows, milestones, today, locale }: {
-  rows: PortfolioRow[]; milestones: PortfolioMilestone[]; today: string; locale: Locale
+export function PortfolioMilestoneBoard({ rows, milestones, today }: {
+  rows: PortfolioRow[]; milestones: PortfolioMilestone[]; today: string;
 }) {
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
   const byProject = new Map<string, PortfolioMilestone[]>()
   for (const ms of milestones) {
     const arr = byProject.get(ms.projectId) ?? []

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ArrowRight, BookOpen, Sparkles } from 'lucide-react'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t, type DictKey} from '@/lib/i18n/dict'
 import {
   highlightSegments,
   snippetOf,
@@ -35,8 +35,8 @@ type CorpusState =
   | { kind: 'done'; domains: Array<{ domain: string; docs: number }>; total: number }
   | { kind: 'error' }
 
-function sourceLabel(locale: Locale, domain: string): string {
-  return SOURCE_KEYS[domain] ? t(locale, SOURCE_KEYS[domain]) : domain
+function sourceLabel(domain: string): string {
+  return SOURCE_KEYS[domain] ? t(SOURCE_KEYS[domain]) : domain
 }
 
 /** 질의 토큰 매칭 구간을 <mark> 로 감싼다 — 분할은 순수 함수(highlightSegments)가 한다. */
@@ -58,9 +58,8 @@ function marked(content: string, query: string): ReactNode[] {
  * 연속으로 판단하게 한다(2026-08-17 2분할 설계 U1). xl 미만은 1열로 접고 읽기 패널을
  * 숨긴다 — 그때는 각 항목의 원문 링크가 현재 동작(원문 이동)을 유지한다(C6).
  */
-export function WikiSearchResults({ state, locale, query, projectId }: {
+export function WikiSearchResults({ state, query, projectId }: {
   state: SearchViewState
-  locale: Locale
   /** 검색창에 제출된 질의(타이핑 중 값이 아니다) — 매칭 중심 스니펫과 요약 요청에 쓴다. */
   query: string
   projectId: string
@@ -103,7 +102,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
             n: index + 1,
             title: hit.title.slice(0, SUMMARY_TITLE_CHARS),
             snippet: snippetOf(hit.content, 400, query).slice(0, SUMMARY_SNIPPET_CHARS),
-            domain: sourceLabel(locale, hit.domain),
+            domain: sourceLabel(hit.domain),
           })),
         }),
       })
@@ -128,28 +127,28 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
       <div className="min-w-0" aria-live="polite">
         {state.kind === 'idle' && (
           <div className="rounded-2xl border border-dashed border-border-input px-5 py-8 text-center text-sm text-fg-muted">
-            {t(locale, 'wiki.pane.placeholder')}
+            {t('wiki.pane.placeholder')}
           </div>
         )}
 
         {state.kind === 'loading' && (
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-md)]">
-            <p className="text-sm text-fg-secondary">{t(locale, 'wiki.ask.working')}</p>
+            <p className="text-sm text-fg-secondary">{t('wiki.ask.working')}</p>
           </div>
         )}
 
         {state.kind === 'error' && (
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-md)]">
-            <p className="text-sm text-danger">{t(locale, 'wiki.search2.error')}</p>
+            <p className="text-sm text-danger">{t('wiki.search2.error')}</p>
           </div>
         )}
 
         {state.kind === 'done' && state.hits.length === 0 && (
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-md)]">
             {state.degraded && (
-              <p className="mb-2 text-sm text-fg-secondary">{t(locale, 'wiki.search2.degraded')}</p>
+              <p className="mb-2 text-sm text-fg-secondary">{t('wiki.search2.degraded')}</p>
             )}
-            <p className="text-sm text-fg-secondary">{t(locale, 'wiki.search2.empty')}</p>
+            <p className="text-sm text-fg-secondary">{t('wiki.search2.empty')}</p>
           </div>
         )}
 
@@ -171,7 +170,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
                     >
                       <span className="flex items-center gap-2">
                         <span className="shrink-0 text-xs font-semibold text-fg-muted">[{index + 1}]</span>
-                        <span className="chip bg-action-soft text-action">{sourceLabel(locale, hit.domain)}</span>
+                        <span className="chip bg-action-soft text-action">{sourceLabel(hit.domain)}</span>
                         {hit.occurredOn && (
                           <span className="text-meta text-fg-muted">{hit.occurredOn}</span>
                         )}
@@ -186,7 +185,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
                       href={hit.href}
                       className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-meta font-medium text-action transition hover:border-border-focus"
                     >
-                      {t(locale, 'wiki.pane.source')}
+                      {t('wiki.pane.source')}
                       <ArrowRight className="h-3 w-3" aria-hidden />
                     </a>
                   </li>
@@ -206,11 +205,11 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
               <>
                 <div className="flex items-center gap-2 text-meta font-semibold text-fg-muted">
                   <BookOpen className="h-3.5 w-3.5" aria-hidden />
-                  {t(locale, 'wiki.pane.reading')}
+                  {t('wiki.pane.reading')}
                 </div>
                 <h3 className="text-base font-bold leading-6 text-fg">{selectedHit.title}</h3>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-fg-muted">
-                  <span>{sourceLabel(locale, selectedHit.domain)}</span>
+                  <span>{sourceLabel(selectedHit.domain)}</span>
                   {selectedHit.occurredOn && <span>{selectedHit.occurredOn}</span>}
                   {selectedHit.matchedBy.length > 0 && <span>{selectedHit.matchedBy.join(' · ')}</span>}
                 </div>
@@ -220,7 +219,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
                 </div>
                 <div className="mt-auto pt-2">
                   <a href={selectedHit.href} className="btn btn-primary h-9 px-4 text-sm">
-                    {t(locale, 'wiki.pane.open')}
+                    {t('wiki.pane.open')}
                     <ArrowRight className="h-4 w-4" aria-hidden />
                   </a>
                 </div>
@@ -229,14 +228,14 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
             : (
               <>
                 <div className="text-meta font-semibold text-fg-muted">
-                  {t(locale, 'wiki.pane.guide.eyebrow')}
+                  {t('wiki.pane.guide.eyebrow')}
                 </div>
                 {state.kind === 'done' && state.hits.length > 0 && (
-                  <p className="text-sm text-fg">{t(locale, 'wiki.pane.pick')}</p>
+                  <p className="text-sm text-fg">{t('wiki.pane.pick')}</p>
                 )}
-                <p className="text-sm leading-6 text-fg-secondary">{t(locale, 'wiki.pane.guide.desc')}</p>
+                <p className="text-sm leading-6 text-fg-secondary">{t('wiki.pane.guide.desc')}</p>
                 {corpus.kind === 'error' && (
-                  <p className="text-xs text-fg-muted">{t(locale, 'wiki.pane.guide.statsFailed')}</p>
+                  <p className="text-xs text-fg-muted">{t('wiki.pane.guide.statsFailed')}</p>
                 )}
                 {corpus.kind === 'done' && (
                   <div className="mt-1 flex flex-col gap-2">
@@ -244,7 +243,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
                       const max = Math.max(1, ...corpus.domains.map(row => row.docs))
                       return corpus.domains.filter(row => row.docs > 0).map(row => (
                         <div key={row.domain} className="flex items-center gap-2.5 text-[13px]">
-                          <span className="w-16 shrink-0 text-fg-secondary">{sourceLabel(locale, row.domain)}</span>
+                          <span className="w-16 shrink-0 text-fg-secondary">{sourceLabel(row.domain)}</span>
                           <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-subtle">
                             <span
                               className="block h-full rounded-full bg-action"
@@ -252,7 +251,7 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
                             />
                           </span>
                           <span className="w-14 shrink-0 text-right text-xs tabular-nums text-fg-muted">
-                            {t(locale, 'wiki.pane.guide.docs').replace('{n}', String(row.docs))}
+                            {t('wiki.pane.guide.docs').replace('{n}', String(row.docs))}
                           </span>
                         </div>
                       ))
@@ -281,26 +280,26 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
             className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border-focus bg-action-soft px-3 text-xs font-semibold text-action transition hover:bg-action-soft/70 disabled:opacity-50"
           >
             <Sparkles className="h-3.5 w-3.5" aria-hidden />
-            {t(locale, 'wiki.search2.summarize')}
+            {t('wiki.search2.summarize')}
           </button>
           <span className="text-xs text-fg-muted">
-            {t(locale, 'wiki.search2.count').replace('{n}', String(state.hits.length))}
+            {t('wiki.search2.count').replace('{n}', String(state.hits.length))}
           </span>
         </div>
       )}
 
       {state.kind === 'done' && state.hits.length > 0 && state.degraded && (
-        <p className="px-0.5 text-xs text-fg-muted">{t(locale, 'wiki.search2.degraded')}</p>
+        <p className="px-0.5 text-xs text-fg-muted">{t('wiki.search2.degraded')}</p>
       )}
 
       {summary.kind === 'loading' && (
         <div className="rounded-xl border border-border bg-surface p-3.5">
-          <p className="text-sm text-fg-secondary">{t(locale, 'wiki.search2.summarizing')}</p>
+          <p className="text-sm text-fg-secondary">{t('wiki.search2.summarizing')}</p>
         </div>
       )}
       {summary.kind === 'error' && (
         <div className="rounded-xl border border-border bg-surface p-3.5">
-          <p className="text-sm text-danger">{t(locale, 'wiki.search2.summarizeFailed')}</p>
+          <p className="text-sm text-danger">{t('wiki.search2.summarizeFailed')}</p>
         </div>
       )}
       {summary.kind === 'done' && (

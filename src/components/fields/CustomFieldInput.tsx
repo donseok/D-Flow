@@ -1,15 +1,15 @@
 'use client'
 import { useId } from 'react'
 import type { FieldDef, FieldValue } from '@/lib/domain/customFields'
-import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t as translate, type DictKey} from '@/lib/i18n/dict'
 
 /** Seven typed controls, shared by field defaults and row editors. Absence stays distinct from false/0. */
-export function CustomFieldInput({ def, value, onChange, disabled = false, label, emptyLabel, locale = 'ko' }: {
+export function CustomFieldInput({ def, value, onChange, disabled = false, label, emptyLabel }: {
   def: FieldDef; value: FieldValue | undefined; onChange: (value: FieldValue | undefined) => void
-  disabled?: boolean; label?: string; emptyLabel?: string; locale?: Locale
+  disabled?: boolean; label?: string; emptyLabel?: string;
 }) {
   const id = useId()
-  const tr = (k: DictKey) => translate(locale, k)
+  const tr = (k: DictKey) => translate(k)
   const name = label ?? def.label
   const options = [...(def.options ?? [])].sort((a, b) => a.sort - b.sort || a.code.localeCompare(b.code))
   if (def.type === 'multiselect') return <fieldset disabled={disabled} className="space-y-2">

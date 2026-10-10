@@ -7,7 +7,7 @@ import { withTeams } from '../fixtures/teams'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (k: string) => (k === 'min.grp.unassigned' ? '미지정' : k), locale: 'ko' }),
+  useLocale: () => ({ t: (k: string) => (k === 'min.grp.unassigned' ? '미지정' : k) }),
 }))
 const fetchMinuteFoldersLite = vi.fn<() => Promise<MinuteFolder[]>>(async () => [])
 vi.mock('@/app/actions/minutes', () => ({

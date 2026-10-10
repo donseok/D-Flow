@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { t, type DictKey } from '@/lib/i18n/dict'
 import { StepBadge, stepSrText } from '@/components/import/ImportWizard'
 
-const tKo = (k: DictKey) => t('ko', k)
+const tKo = (k: DictKey) => t(k)
 
 /** 보조기술이 읽는 글 — aria-hidden 가지를 뺀 텍스트 */
 function spoken(node: Node): string {

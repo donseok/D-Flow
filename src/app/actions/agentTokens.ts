@@ -70,7 +70,7 @@ export async function createAgentToken(input: {
   if (!rows || rows.length !== 1 || typeof rows[0].workspace_id !== 'string' || !rows[0].workspace_id) return { ok: false, error: t('srv.agentTokens.selectOneWorkspaceBelong') }
   const workspaceId = rows[0].workspace_id as string
   const gate = await requireModule({ workspaceId }, 'agents', { client: admin })
-  if (!gate.ok) return denied(gate, t)
+  if (!gate.ok) return denied(gate)
   // DB 트리거가 프로젝트 소속과 현재 소유자 멤버십을 다시 검사한다.
   const allowedProjects = projectIds === null ? null : [...new Set(projectIds)]
   const { token, prefix, hash } = generateAgentToken()

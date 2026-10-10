@@ -28,7 +28,6 @@ vi.mock('@/app/actions/roster', () => ({ listRoster: mocks.listRoster }))
 vi.mock('@/lib/data/inviteDomainNotice', () => ({ loadInviteDomainNotice: vi.fn(async () => null) }))
 vi.mock('@/app/actions/projectInvites', () => ({ listProjectInvites: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 // 초대 칸의 tz = 프로젝트 달력(SP5 과제 21) — 해석기만 바꿔 끼운다
 vi.mock('@/lib/settings/pageConfig', async () => {
   const { calSeoulMon } = await import('../helpers/calendarFixture')

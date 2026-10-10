@@ -1,7 +1,6 @@
 import type { ComputedItem } from '@/lib/domain/types'
 import { buildExecSummary, type Signal } from '@/lib/domain/dashboard'
 import { formatPct1, formatPp1 } from '@/lib/domain/format'
-import { getServerLocale } from '@/lib/i18n/server'
 import { t, type DictKey } from '@/lib/i18n/dict'
 import { fmtDate } from '@/components/wbs/shared'
 import { ProgressGauge } from './ProgressGauge'
@@ -36,8 +35,7 @@ export async function ExecSummary({
   /** 1레벨 단계 이름(core.level_labels 첫 값) — 보고서 모달의 진척 표 머리. 손상·미주입이면 null(모달이 중립 문구) */
   topLevelLabel?: string | null
 }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
   const s = buildExecSummary(items, { startDate, endDate, today }, milestoneKeywords)
 
   // 게이지 중앙 배지는 진척(실적 vs 계획) 판정만 반영한다. 큰 실적%·편차와 같은 위계라
@@ -84,7 +82,7 @@ export async function ExecSummary({
           <ProgressGauge
             actual={s.progress.actual} planned={s.progress.planned} variance={s.progress.variance}
             signal={s.progress.signal} verdictText={verdict} plannedText={plannedText}
-            label={tr('dash.exec.progressLabel')} locale={locale}
+            label={tr('dash.exec.progressLabel')}
           />
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

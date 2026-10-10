@@ -36,8 +36,8 @@ vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }
 // 화면 문구는 진짜 ko 사전으로 읽는다 — 한국어 단언이 사전 이전 뒤에도 같은 글자를 본다
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
-  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+  const ko = (k: string) => t(k as Parameters<typeof t>[0])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ t: ko }) }
 })
 // 상세 패널은 WBS 편집 전체 표면(무거운 의존성)이라 스텁으로 대체 — 여기서는 "열림/닫힘·대상 항목"만 검증한다.
 vi.mock('@/components/wbs/RowDetailPanel', () => ({
@@ -223,6 +223,6 @@ describe('[RF5] 허브 상세 — 근무일을 찾지 못하면 그 사유를 �
     await act(async () => { root.render(<AgentHubView initial={hub()} wbs={wbs({ items, dependencies, calendar, today: '2026-01-05' })} timeZone="Asia/Seoul" />) })
     expect(host.querySelector('[data-hub-no-workday]')).toBeNull()                     // 상세를 열기 전에는 없다
     await act(async () => { (host.querySelector('[data-hub-open="a1"]') as HTMLButtonElement).click() })
-    expect(host.querySelector('[data-hub-no-workday]')?.textContent).toBe(translate('ko', 'wbs.noWorkday'))   // 이 파일의 useLocale 목은 ko 사전을 읽는다
+    expect(host.querySelector('[data-hub-no-workday]')?.textContent).toBe(translate('wbs.noWorkday'))   // 이 파일의 useLocale 목은 ko 사전을 읽는다
   })
 })

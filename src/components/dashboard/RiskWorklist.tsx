@@ -5,7 +5,7 @@ import { delayAging, diffDaysCal, dueSoonLeaves, riskModel, varianceRanking } fr
 import { collectLeaves } from '@/lib/domain/tree'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t, type DictKey} from '@/lib/i18n/dict'
 
 type Kind = 'overdue' | 'dueSoon' | 'behind'
 interface Row { item: ComputedItem; kind: Kind; overdue: number; dday: number; gap: number }
@@ -24,10 +24,10 @@ const ROW_META: Record<Kind, { border: string; icon: string }> = {
  *  기한 경과(지연)·7일 내 마감(임박)·계획 미달(뒤처짐)을 항상 함께 쌓아 보여준다.
  *  배지의 지연 카운트(riskModel)는 status==='delayed' 기준이라 기한 경과분만으로는 설명되지 않는다 —
  *  나머지는 뒤처짐 행이 받아내므로, 뒤처짐을 조건부로 숨기면 배지 숫자가 목록에서 사라진다. */
-export function RiskWorklist({ items, projectId, today, locale = 'ko' }: {
-  items: ComputedItem[]; projectId: string; today: string; locale?: Locale
+export function RiskWorklist({ items, projectId, today }: {
+  items: ComputedItem[]; projectId: string; today: string;
 }) {
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
   const leaves = collectLeaves(items)
   const risk = riskModel(items, today)
 

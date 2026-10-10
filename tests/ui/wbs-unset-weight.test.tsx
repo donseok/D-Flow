@@ -17,7 +17,7 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  return { useLocale: () => ({ locale: 'ko', t: (k: Parameters<typeof t>[1]) => t('ko', k) }) }
+  return { useLocale: () => ({ t: (k: Parameters<typeof t>[0]) => t(k) }) }
 })
 vi.mock('@/components/wbs/RowDetailPanel', () => ({
   RowDetailPanel: () => null,

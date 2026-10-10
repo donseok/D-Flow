@@ -67,7 +67,7 @@ export function IssuesView({
   /** 이 프로젝트의 표시 상태(SP5b — 설정 workflow.issue_statuses). 없으면 제품 기본 4정의 */
   statuses?: readonly IssueStatusDef[]
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const { toast } = useToast()
   const areas = entryContext?.areas ?? []
   const analysisVisible = !!entryContext && entryContext.rules.analysis !== 'off'
@@ -104,7 +104,7 @@ export function IssuesView({
   const fieldDefs = useMemo(() => orderedFields(customFields ?? []).filter(d => d.active), [customFields])
   const listFields = fieldDefs.filter(d => d.show_in_list)
   const filterDef = fieldDefs.find(d => d.key === customKey)
-  const customFormat = { locale, yes: t('wbs.custom.yes'), no: t('wbs.custom.no'), empty: '—' }
+  const customFormat = { yes: t('wbs.custom.yes'), no: t('wbs.custom.no'), empty: '—' }
 
   // 페이징 — 필터를 바꾸면 1페이지로 돌아간다(안 그러면 결과가 줄었을 때 빈 페이지가 보인다).
   // 목록 자체가 줄어드는 경우(삭제·refresh)는 렌더 시점 clamp 로 잡는다.
@@ -293,7 +293,7 @@ export function IssuesView({
             </select>
           </label>
           {filterDef && <div className="min-w-0 max-w-full sm:w-48"><CustomFieldInput def={{ ...filterDef, required: false, options: filterDef.options?.map(o => ({ ...o, active: true })) }} value={customCriterion}
-            label={filterDef.label} emptyLabel={t('issue.filter.all')} locale={locale} onChange={v => { setCustomCriterion(Array.isArray(v) && v.length === 0 ? undefined : v); setPage(1) }} /></div>}
+            label={filterDef.label} emptyLabel={t('issue.filter.all')} onChange={v => { setCustomCriterion(Array.isArray(v) && v.length === 0 ? undefined : v); setPage(1) }} /></div>}
         </div>}
         {myMemberIdsFailed && <StatusMessage compact kind="partial_error" title={t('issue.filter.mineFailed')} />}
         {canEdit && entryError && <StatusMessage compact kind="partial_error" title={entryError} />}

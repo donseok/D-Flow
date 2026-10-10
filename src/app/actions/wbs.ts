@@ -25,7 +25,6 @@ import { projectTeams } from '@/lib/teams/source'
 import { teamNameKey } from '@/lib/domain/teamName'
 import { serverTranslator } from '@/lib/i18n/server'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
 
 /** 변경 이력 작성자의 이 프로젝트 권한 — 명단 access_role, 활성 명단 행이 없으면 viewer. */
 export type ChangeActorRole = 'admin' | 'member' | 'viewer'
@@ -293,11 +292,10 @@ export async function updateWeight(
 export async function getWbsCellSnapshot(
   itemId: string,
 ): Promise<{ ok: true; actualPct: number | null; weight: number | null; custom: unknown } | { ok: false; error: string }> {
-  const tr = await serverTranslator()
   const found = await resolveProjectId('wbs_items', itemId)
-  if (!found.ok) return { ok: false, error: libText(tr, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectMember(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const { data, error } = await sb.from('wbs_items').select('id, actual_pct, weight, custom').eq('id', itemId).maybeSingle()
   if (error) return { ok: false, error: failWith('wbs.getWbsCellSnapshot', error, ERR_ITEM_LOOKUP) }
@@ -406,9 +404,9 @@ export async function addSubAct(
   const tr = await serverTranslator()
   // actId 는 wbs_items.id — 판정 대상 프로젝트를 그 행에서 읽는다.
   const found = await resolveProjectId('wbs_items', actId)
-  if (!found.ok) return { ok: false, error: libText(tr, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
 
   const { data: act, error: actErr } = await sb
@@ -516,9 +514,9 @@ export async function updateWbsFields(
 ): Promise<{ ok: boolean; error?: string; conflict?: boolean; latest?: WbsFieldValues }> {
   const tr = await serverTranslator()
   const found = await resolveProjectId('wbs_items', itemId)
-  if (!found.ok) return { ok: false, error: libText(tr, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   // 아래 patch/logs 가 이 현재값과의 diff 로 만들어진다 — 조회 실패를 '항목 없음'으로 위장하면 안 되고,
   // 빈 현재값으로 진행하면 변경 없는 필드까지 덮어쓰고 이력의 old_value 도 거짓이 된다. 실패 = 중단.
@@ -603,7 +601,7 @@ export async function addTaskDependency(
 ): Promise<{ ok: boolean; error?: string; id?: string; conflict?: boolean }> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   if (!projectId || !predecessorId || !successorId) return { ok: false, error: tr('srv.wbs.selectTaskLink') }
   if (predecessorId === successorId) return { ok: false, error: tr('srv.wbs.taskCannotLinkedItself') }
   if (type !== 'FS' && type !== 'SS') return { ok: false, error: tr('srv.wbs.dependencyTypeNotSupported') }
@@ -700,9 +698,9 @@ export async function removeTaskDependency(
   const tr = await serverTranslator()
   const found = await resolveProjectId('task_dependencies', dependencyId)
   // 행이 없다(또는 RLS 가 가린다) — 볼 수 없는 사람에게도 같은 답이라 존재를 흘리지 않는다
-  if (!found.ok) return guardCodeOf(found) === 'missing' ? { ok: false, conflict: true, error: tr(ERR_DEP_GONE) } : { ok: false, error: libText(tr, found.error) }
+  if (!found.ok) return guardCodeOf(found) === 'missing' ? { ok: false, conflict: true, error: tr(ERR_DEP_GONE) } : { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const { data: dependency, error: findErr } = await sb
     .from('task_dependencies')
@@ -747,9 +745,9 @@ export async function updateDeliverable(
 ): Promise<{ ok: boolean; error?: string; conflict?: boolean; latest?: string | null }> {
   const tr = await serverTranslator()
   const found = await resolveProjectId('wbs_items', itemId)
-  if (!found.ok) return { ok: false, error: libText(tr, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectMember(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const { data: item, error: itemErr } = await sb
     .from('wbs_items').select('id, project_id, deliverable').eq('id', itemId).single()
@@ -781,13 +779,13 @@ export async function deleteWbsItem(itemId: string): Promise<{ ok: boolean; erro
   // resolveProjectId 가 존재 확인(없으면 ok:false)과 project_id 조회를 이미 끝냈다 —
   // 같은 행을 다시 읽을 이유가 없어 재조회 없이 그 값을 쓴다.
   const found = await resolveProjectId('wbs_items', itemId)
-  if (!found.ok) return { ok: false, error: libText(tr, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const projectId = found.projectId
   // wbs_items.project_id 는 NOT NULL 이지만 resolveProjectId 타입이 nullable(minutes 공용)이라
   // 여기서 좁힌다 — 모르면 중단(fail-closed).
   if (!projectId) return { ok: false, error: tr('srv.wbs.couldNotVerifyProject') }
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const { error } = await sb.from('wbs_items').delete().eq('id', itemId)
   if (error) return { ok: false, error: failWith('wbs.deleteWbsItem', error, tr(ERR_DELETE)) }
@@ -808,9 +806,9 @@ type WbsMoveResult = { ok: boolean; error?: string; conflict?: boolean; latest?:
 export async function moveWbsItem(itemId: string, dir: 'up' | 'down', expected?: WbsMoveExpected): Promise<WbsMoveResult> {
   const tr = await serverTranslator()
   const found = await resolveProjectId('wbs_items', itemId)
-  if (!found.ok) return { ok: false, error: libText(tr, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   if (expected !== undefined && (
     typeof expected !== 'object' || expected === null || !Number.isFinite(Number(expected.sortOrder))
     || (expected.parentId !== null && typeof expected.parentId !== 'string')

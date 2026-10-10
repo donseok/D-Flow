@@ -19,10 +19,9 @@ import { moduleSetFor } from '@/lib/modules/gate'
 import { UUID_RE } from '@/lib/domain/validate'
 import { wsHref } from '@/lib/workspace/paths'
 import { t as tDict } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 
-/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '회의록') */
-export async function generateMetadata() { return { title: tDict(await getServerLocale(), 'nav.minutes') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 사전에서 꺼낸다('회의록') */
+export async function generateMetadata() { return { title: tDict('nav.minutes') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function MinuteDetailPage({
   params, searchParams,

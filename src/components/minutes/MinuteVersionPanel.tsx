@@ -5,8 +5,7 @@ import Link from 'next/link'
 import { AlertTriangle, ChevronDown, ChevronUp, Download, FileText, History } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
-import type { Locale } from '@/lib/i18n/dict'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 export type MinuteVersionListItem = {
   id: string
@@ -29,17 +28,17 @@ export type MinuteVersionPanelProps = {
   embedded?: boolean
   /** 원본 파일 서명 URL 발급(getMinuteVersionFileUrl). 없으면 받기 버튼을 두지 않는다. */
   onDownload?: (versionId: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>
-  /** 버전 목록 조회 실패 문구(화면 언어로) — 있으면 목록 대신 사유와 재시도를 보인다. 접힘과 무관하게 보인다. */
+  /** 버전 목록 조회 실패 문구 — 있으면 목록 대신 사유와 재시도를 보인다. 접힘과 무관하게 보인다. */
   loadError?: string | null
   /** 버전 시각의 시간대 — 서버가 내려준 회의록 범위 tz(계획 P8, A-4 리뷰 N7). null 이면 범위 달력을 읽지 못한 것 — 시각은 '—' */
   timeZone: string | null
 }
 
-function versionDate(value: string, locale: Locale, timeZone: string | null) {
+function versionDate(value: string, timeZone: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   if (timeZone === null) return '—'
-  return new Intl.DateTimeFormat(intlLocale(locale), {
+  return new Intl.DateTimeFormat(KO_LOCALE, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -58,7 +57,7 @@ export function MinuteVersionPanel({
   loadError = null,
   timeZone,
 }: MinuteVersionPanelProps) {
-  const { locale, t } = useLocale()
+  const { t } = useLocale()
   // 발급 중에는 받기 버튼을 모두 잠근다 — 한 번의 클릭에 URL 하나. 실패 사유는 그 버전 항목 아래에 둔다.
   const [downloading, setDownloading] = useState(false)
   const [downloadErrors, setDownloadErrors] = useState<Record<string, string>>({})
@@ -141,7 +140,7 @@ export function MinuteVersionPanel({
           <span className="chip bg-action-soft text-action">{t('min.version.viewing')}</span>
         )}
         <span className="text-xs tabular-nums text-fg-muted">
-          {versionDate(version.createdAt, locale, timeZone)}
+          {versionDate(version.createdAt, timeZone)}
         </span>
         {version.createdByName && (
           <span className="text-xs text-fg-secondary">{version.createdByName}</span>

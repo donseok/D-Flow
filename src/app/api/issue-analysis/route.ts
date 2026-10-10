@@ -21,7 +21,6 @@ import {
 } from '@/lib/report/issues/export'
 import type { CatalogModel } from '@/lib/report/catalog/types'
 import { serverTranslator } from '@/lib/i18n/server'
-import { guardText } from '@/lib/i18n/serverText'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -39,9 +38,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!projectId || !runId) return jsonError(t('srv.api.issueAnalysis.projectidRunidRequired'), 400)
 
   const guard = await requireProjectMember(projectId)
-  if (!guard.ok) return jsonError(guardText(t, guard), denyStatus(guard))
+  if (!guard.ok) return jsonError(guard.error, denyStatus(guard))
   const mod = await requireModule({ projectId }, 'issue_analysis')                    // 스펙 §4.2 세션 API — 꺼지면 404(존재 은닉)
-  if (!mod.ok) return jsonError(guardText(t, mod), denyStatus(mod))
+  if (!mod.ok) return jsonError(mod.error, denyStatus(mod))
 
   try {
     const cfg = await getProjectConfig(projectId)

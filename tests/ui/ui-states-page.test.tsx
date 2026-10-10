@@ -12,9 +12,8 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/authz', () => ({ getActorForView: mocks.getActorForView }))
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', setLocale: vi.fn(), t: (k: string) => k }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 
 import UiStatesPage from '@/app/(app)/(global)/admin/ui-states/page'
 

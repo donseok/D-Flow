@@ -2,8 +2,7 @@ import Link from 'next/link'
 import { Pin } from 'lucide-react'
 import type { Announcement } from '@/lib/domain/types'
 import { sortAnnouncements, isPublishedNow, ANNOUNCEMENT_META } from '@/lib/domain/announcements'
-import { getServerLocale } from '@/lib/i18n/server'
-import { t, type DictKey } from '@/lib/i18n/dict'
+import { t} from '@/lib/i18n/dict'
 
 /** 게시중 공지 1건(고정 우선 → 최신) 바로가기 — 경영진 요약 안에 있던 줄을 떼어 WBS 없이도 보이게 했다.
  *  게시중 공지가 없으면 그리지 않는다. */
@@ -14,8 +13,7 @@ export async function AnnouncementStrip({ projectId, announcements, today }: {
 }) {
   const notice = sortAnnouncements(announcements.filter(a => isPublishedNow(a, today)))[0] ?? null
   if (!notice) return null
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
 
   return (
     <Link href={`/p/${projectId}/announcements`}

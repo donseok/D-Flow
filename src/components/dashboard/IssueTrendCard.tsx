@@ -3,7 +3,7 @@ import { issueTrend, type DashboardIssue, type IssueTrendPoint } from '@/lib/dom
 import { currentRuleDay, type WeekStartRule } from '@/lib/domain/calendar'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t} from '@/lib/i18n/dict'
 import { MiniEmpty } from './bits'
 
 // S-Curve 와 같은 자체 SVG(의존성 0). 우측 여백(PR)은 끝점 라벨('미해결 999' · 영문 'Backlog 999') 자리.
@@ -34,7 +34,7 @@ function smoothPath(pts: IssueTrendPoint[], key: 'created' | 'resolved' | 'backl
  * 맥락으로 얇게. 차트 + 범례 + 캡션뿐 — 이번 주 타일·주간 표는 사용자 요청으로 뺐다(같은 날, "최대한 깔끔하게").
  * 값은 끝점 라벨·y축 눈금·aria-label 이 나른다. 해결 누적은 현재 해결 상태의 해결일 기준(재오픈은 빠짐) — 캡션이 명시.
  */
-export function IssueTrendCard({ issues, today, weekStart, timeZone, locale }: {
+export function IssueTrendCard({ issues, today, weekStart, timeZone }: {
   issues: DashboardIssue[]
   /** 실제 오늘(그 프로젝트 tz 의 todayIn). */
   today: string
@@ -42,9 +42,8 @@ export function IssueTrendCard({ issues, today, weekStart, timeZone, locale }: {
   timeZone: string
   /** 프로젝트 주 시작 규칙 — 추이는 현재 규칙의 시작 요일로 센다(SP5 §4.4) */
   weekStart: readonly WeekStartRule[]
-  locale: Locale
 }) {
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
   const model = issueTrend(issues, weekStart, today, timeZone)
   const caption = tr('dash.issues.trendCaption').replace('{day}',
     tr(currentRuleDay(weekStart, today) === 'sunday' ? 'dash.issues.weekStartSunday' : 'dash.issues.weekStartMonday'))

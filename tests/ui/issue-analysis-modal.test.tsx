@@ -16,7 +16,7 @@ const { ensureIssueAnalysisAction } = vi.hoisted(() => ({
 }))
 vi.mock('@/app/actions/issueAnalysis', () => ({ ensureIssueAnalysisAction }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (key: string) => key }),
+  useLocale: () => ({ t: (key: string) => key }),
 }))
 
 import { IssueAnalysisModal } from '@/components/issues/IssueAnalysisModal'

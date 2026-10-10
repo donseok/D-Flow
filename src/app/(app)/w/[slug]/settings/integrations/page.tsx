@@ -8,11 +8,10 @@ import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { IntegrationCredentialsManager } from '@/components/settings/IntegrationCredentialsManager'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 
 export const dynamic = 'force-dynamic'
-/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '연동 자격증명') */
-export async function generateMetadata() { return { title: t(await getServerLocale(), 'pages.integrations.title') } }
+/** 탭 제목 — 사전에서 꺼낸다('연동 자격증명') */
+export async function generateMetadata() { return { title: t('pages.integrations.title') } }
 
 export default async function WorkspaceIntegrationsPage({
   params,
@@ -22,7 +21,6 @@ export default async function WorkspaceIntegrationsPage({
   const { slug } = await params
   const access = await workspacePageAccess(slug)
   if (!access.isAdmin) redirect(wsHref(access.slug))
-  const locale = await getServerLocale()
 
   const admin = createAdminClient()
   const [{ data: projectsData }, { data: teamsData }] = await Promise.all([
@@ -50,10 +48,10 @@ export default async function WorkspaceIntegrationsPage({
               className="inline-flex items-center gap-1 hover:text-fg transition-colors"
             >
               <ChevronLeft className="size-3.5" />
-              {t(locale, 'pages.integrations.back')}
+              {t('pages.integrations.back')}
             </Link>
           </div>
-          <PageHeader title={t(locale, 'pages.integrations.title')} meta={access.name} />
+          <PageHeader title={t('pages.integrations.title')} meta={access.name} />
         </div>
       }
     >

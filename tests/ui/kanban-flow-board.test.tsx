@@ -31,7 +31,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams('group=flow'),
 }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => k }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 vi.mock('@/components/app/TeamsProvider', () => ({
   useTeamCodes: () => ['PMO', 'DEV'],

@@ -17,7 +17,6 @@ import {
   type MinuteExportRow,
 } from '@/lib/minutes/export'
 import { serverTranslator } from '@/lib/i18n/server'
-import { guardText } from '@/lib/i18n/serverText'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -117,7 +116,7 @@ export async function GET(req: NextRequest) {
   // 대상 행이 없는 ZIP — 요청의 워크스페이스(소속 확인, D26)로 minutes 관문. 없으면 400(추측하지 않는다). 첫 DB 접근 앞.
   // 브랜딩·행 거르기 모두 그 워크스페이스 — 두 워크스페이스 소속자의 ZIP 에 다른 워크스페이스 회의록이 섞이지 않는다.
   const g = await requireScopedSessionModule({ projectId: null, workspaceId: req.nextUrl.searchParams.get('workspaceId') }, 'minutes')
-  if (!g.ok) return jsonError(guardText(t, g.error), g.status)
+  if (!g.ok) return jsonError(g.error, g.status)
   const workspaceId = g.workspaceId
   if (!workspaceId) return jsonError(t('err.couldNotVerifyWorkspace'), 400)   // 프로젝트 없는 판정의 통과는 늘 워크스페이스를 낸다
   const { productName } = await loadDisplayBranding(workspaceId)

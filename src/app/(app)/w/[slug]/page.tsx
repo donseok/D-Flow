@@ -13,9 +13,7 @@ import type { MyWorkKind } from '@/lib/portal/myWork'
 import { isProjectAdmin, isWorkspaceAdmin } from '@/lib/domain/authz'
 import { wsHref } from '@/lib/workspace/paths'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
-import { translatorFor } from '@/lib/i18n/translate'
-import { failureTextIn } from '@/lib/i18n/serverText'
+import { koTranslate } from '@/lib/i18n/translate'
 import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { StatusMessage } from '@/components/ui/StatusMessage'
@@ -24,8 +22,8 @@ import { WidgetSlotView, safe, type HomeTab, type WidgetCtx, type WidgetData } f
 import { HiddenWidgetsProvider } from '@/components/portal/HiddenWidgetsProvider'
 import { ShowHiddenWidgets } from '@/components/portal/ShowHiddenWidgets'
 
-/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '홈') */
-export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.home') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 사전에서 꺼낸다('홈') */
+export async function generateMetadata() { return { title: t('nav.home') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 const TAB_KINDS: Record<HomeTab, MyWorkKind[] | undefined> = { all: undefined, mine: ['wbs', 'issue'], review: ['approval'] }
 
 /**
@@ -38,22 +36,22 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
   const scope = await loadWorkspaceScope(slug)                                   // 첫 await — 비소속 404
   const ws = scope.ws
   const now = new Date()
-  const [{ tab: rawTab }, locale, tz] = await Promise.all([
-    searchParams, getServerLocale(),
+  const [{ tab: rawTab }, tz] = await Promise.all([
+    searchParams,
     viewTimezone(ws.id).catch((e: unknown) => {
       console.error('[home] 워크스페이스 달력 조회 실패 — 머리의 날짜를 그리지 않는다', ws.id, e instanceof Error ? e.message : e)
       return { ok: false as const }
     }),
   ])
-  const date = tz.ok ? portalDateLabel(now, tz.timeZone, locale) : null
+  const date = tz.ok ? portalDateLabel(now, tz.timeZone) : null
   const meta = date && tz.ok
-    ? t(locale, 'pages.home.meta').replace('{date}', date).replace('{tz}', tz.timeZone)
-    : t(locale, 'pages.home.metaNoTz')     // 다른 시간대로 날짜를 지어내지 않는다
-  const header = <PageHeader title={t(locale, 'nav.home')} meta={meta} />
+    ? t('pages.home.meta').replace('{date}', date).replace('{tz}', tz.timeZone)
+    : t('pages.home.metaNoTz')     // 다른 시간대로 날짜를 지어내지 않는다
+  const header = <PageHeader title={t('nav.home')} meta={meta} />
   const actor = scope.actor
   if (!actor) {
     return <PageFrame width="portal" header={header}>
-      <StatusMessage kind="partial_error" blocking title={t(locale, 'pages.home.noActor')} detail={t(locale, 'pages.common.refreshLater')} />
+      <StatusMessage kind="partial_error" blocking title={t('pages.home.noActor')} detail={t('pages.common.refreshLater')} />
     </PageFrame>                                                                  // 열화 — 로더를 부르지 않는다(fail-closed)
   }
   const [cfg, prefs, mods, summary] = await Promise.all([
@@ -63,7 +61,7 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
     }),
     getWorkspacePrefs(ws.id, { strict: true }).catch(() => null),
     workspaceModuleSets(ws.id, actor),
-    getPortalSummary(ws.id, actor, { now, t: translatorFor(locale) }),
+    getPortalSummary(ws.id, actor, { now, t: koTranslate }),
   ])
   // 검토자(W11·R9 ①) — 합집합을 못 읽으면 관리자 여부는 '모름'(null). 검토 대기 수는 요약과 같은 원천(왕복이 늘지 않는다)
   const adminOfAgentsProject = mods.ok ? [...mods.sets].some(([pid, s]) => s.has('agents') && isProjectAdmin(actor, pid)) : null
@@ -72,24 +70,22 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
   const slots = visibleWidgets({ setting: cfg.ok ? cfg.value : defaultPortalWidgets(), hidden, moduleUnion: mods.ok ? mods.union : null, reviewer })
   const tab: HomeTab = rawTab === 'mine' || (rawTab === 'review' && reviewer === true) ? rawTab : 'all'
   const want = new Set([...slots.main, ...slots.side].filter((s) => s.state === 'show').map((s) => s.id))
-  // 로더(lib)의 실패 문구는 한국어 고정 문구다 — 위젯에 싣기 전에 화면 언어로 바꾼다(성공 결과는 그대로)
-  const loc = <R,>(p: Promise<R>): Promise<R> => p.then((r) => failureTextIn(locale, r))
   const data: WidgetData = {}                                                     // 보일 위젯의 로더만 — 꺼진·숨긴·판정 못 한 위젯의 원천은 읽지 않는다
-  if (want.has('my_work')) data.my_work = safe(loc(getMyWork(ws.id, actor, { kinds: TAB_KINDS[tab], limit: 20, now })), t(locale, 'portal.widget.my_work'), locale)
-  if (want.has('projects')) data.projects = safe(loc(getProjectRows(ws.id, actor, { status: 'active', limit: 20, now, t: translatorFor(locale) })), t(locale, 'portal.widget.projects'), locale)
-  if (want.has('review')) data.review = safe(loc(getReviewRows(ws.id, actor, { limit: 20, now })), t(locale, 'portal.widget.review'), locale)
-  if (want.has('upcoming')) data.upcoming = safe(loc(getUpcomingMeetings(ws.id, actor, { limit: 5, now })), t(locale, 'portal.widget.upcoming'), locale)
-  if (want.has('recent_docs')) data.recent_docs = safe(loc(getRecentDocuments(ws.id, actor, { limit: 5 })), t(locale, 'portal.widget.recent_docs'), locale)
-  if (want.has('announcements')) data.announcements = safe(loc(getWorkspaceAnnouncements(ws.id, actor, { limit: 5, now })), t(locale, 'portal.widget.announcements'), locale)
+  if (want.has('my_work')) data.my_work = safe(getMyWork(ws.id, actor, { kinds: TAB_KINDS[tab], limit: 20, now }), t('portal.widget.my_work'))
+  if (want.has('projects')) data.projects = safe(getProjectRows(ws.id, actor, { status: 'active', limit: 20, now, t: koTranslate }), t('portal.widget.projects'))
+  if (want.has('review')) data.review = safe(getReviewRows(ws.id, actor, { limit: 20, now }), t('portal.widget.review'))
+  if (want.has('upcoming')) data.upcoming = safe(getUpcomingMeetings(ws.id, actor, { limit: 5, now }), t('portal.widget.upcoming'))
+  if (want.has('recent_docs')) data.recent_docs = safe(getRecentDocuments(ws.id, actor, { limit: 5 }), t('portal.widget.recent_docs'))
+  if (want.has('announcements')) data.announcements = safe(getWorkspaceAnnouncements(ws.id, actor, { limit: 5, now }), t('portal.widget.announcements'))
   const labelOf = new Map(PORTAL_WIDGETS.map((w) => [w.id, w.labelKey]))
-  const ctx: WidgetCtx = { slug: ws.slug, workspaceId: ws.id, locale, hidden, tab, reviewTab: reviewer === true, data, title: (id) => t(locale, labelOf.get(id)!) }
-  const settingsAction = isWorkspaceAdmin(actor, ws.id) ? { label: t(locale, 'pages.home.toSettings'), href: `${wsHref(ws.slug, 'settings')}#workspace-menu` } : undefined
+  const ctx: WidgetCtx = { slug: ws.slug, workspaceId: ws.id, hidden, tab, reviewTab: reviewer === true, data, title: (id) => t(labelOf.get(id)!) }
+  const settingsAction = isWorkspaceAdmin(actor, ws.id) ? { label: t('pages.home.toSettings'), href: `${wsHref(ws.slug, 'settings')}#workspace-menu` } : undefined
   return (
     <PageFrame width="portal" header={header}>
-      {!cfg.ok && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t(locale, 'pages.home.widgetConfigFailed')} action={settingsAction} /></div>}
-      {prefs === null && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t(locale, 'pages.home.prefsFailed')} detail={t(locale, 'pages.home.prefsFailedDetail')} /></div>}
-      {mods.ok && mods.partial && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t(locale, 'pages.home.modulesPartial')} /></div>}
-      <PortalSummary slug={ws.slug} summary={summary} showReview={reviewer !== false} locale={locale} />
+      {!cfg.ok && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t('pages.home.widgetConfigFailed')} action={settingsAction} /></div>}
+      {prefs === null && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t('pages.home.prefsFailed')} detail={t('pages.home.prefsFailedDetail')} /></div>}
+      {mods.ok && mods.partial && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t('pages.home.modulesPartial')} /></div>}
+      <PortalSummary slug={ws.slug} summary={summary} showReview={reviewer !== false} />
       <HiddenWidgetsProvider key={`${ws.id}:${prefs === null ? 'unavailable' : hidden.join(',')}`} workspaceId={ws.id} hidden={prefs === null ? null : hidden}>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="min-w-0 space-y-6 lg:col-span-8">{slots.main.map((s) => <WidgetSlotView key={s.id} slot={s} ctx={ctx} />)}</div>

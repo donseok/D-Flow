@@ -2,9 +2,6 @@ import { t } from '@/lib/i18n/dict'
 import type { Meeting } from '@/lib/domain/types'
 import { esc } from './esc'
 
-// 메일 본문은 한국어 고정 — 수신자의 언어를 알 수 없고 발신자 로케일을 쓰는 것은 틀린 답이다.
-const LOCALE = 'ko' as const
-
 // src/lib/report/weekly.ts 에도 같은 배열이 있으나 export 되지 않으며,
 // 메일 모듈이 보고서 모듈에 의존하는 편이 중복보다 나쁘다.
 const DOW_KR = ['일', '월', '화', '수', '목', '금', '토'] as const
@@ -44,13 +41,13 @@ function fmtRange(fromIso: string, toIso: string): string {
 
 /** '14:00' 또는 '14:00~15:00', 종일이면 '종일'. */
 function fmtTime(meeting: Meeting): string {
-  if (!meeting.startTime) return t(LOCALE, 'meet.allDay')
+  if (!meeting.startTime) return t('meet.allDay')
   return meeting.endTime ? `${meeting.startTime}~${meeting.endTime}` : meeting.startTime
 }
 
 /** 제목용 시각 — 범위 없이 시작 시각만. */
 function fmtTimeShort(meeting: Meeting): string {
-  return meeting.startTime ?? t(LOCALE, 'meet.allDay')
+  return meeting.startTime ?? t('meet.allDay')
 }
 
 /**
@@ -63,7 +60,7 @@ function fmtRecurrence(meeting: Meeting): string {
   // 사전 항목을 빠뜨렸을 때 컴파일 에러로 잡힌다. 캐스트를 달면 그 에러가 지워지고
   // 대신 'meet.recur.quarterly' 같은 원문 키가 그대로 메일에 실려 외부 수신자에게 나간다.
   // 타입 에러가 나면 캐스트로 덮지 말고 사전에 키를 추가할 것.
-  const label = t(LOCALE, `meet.recur.${meeting.recurrence}`)
+  const label = t(`meet.recur.${meeting.recurrence}`)
   const d = utcDate(meeting.meetingDate)
   if (meeting.recurrence === 'weekly' || meeting.recurrence === 'biweekly') {
     return `${label} ${DOW_KR[d.getUTCDay()]}요일`

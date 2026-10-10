@@ -49,7 +49,7 @@ import { IssueUpdates } from './IssueUpdates'
 import type { ProjectMember } from '@/lib/domain/types'
 import type { DictKey } from '@/lib/i18n/dict'
 
-// 등록 설정 조회 실패 — effect 안에서 문구를 풀면 로캘이 바뀔 때 다시 조회하므로 키로 두고 그리는 자리에서 푼다.
+// 등록 설정 조회 실패 — 키로 두고 그리는 자리에서 푼다.
 const ENTRY_CONTEXT_FAILED: DictKey = 'issue.entry.contextFailed'
 
 function ErrorBox({ message }: { message: string }) {
@@ -518,7 +518,7 @@ export function IssueFormModal({
   /** 신규 등록 성공 응답에 id가 있을 때, DB가 확정한 체번 결과와 함께 한 번 호출된다. */
   onCreated?: (id: string, result: IssueActionResult) => void
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const [loadedContext, setLoadedContext] = useState<IssueEntryContext | null>(null)
   const context = entryContext ?? loadedContext
   const areas = context?.areas ?? []
@@ -1070,7 +1070,7 @@ export function IssueFormModal({
         </div>
         <p className="text-meta text-fg-muted">{t('issue.form.dueHint')}</p>
         {customEnabled && customUnreadable && <p role="alert" className="text-xs text-danger">{t('issue.custom.unreadable')}</p>}
-        {customEnabled && customReady && !customUnreadable && <CustomFieldDraft defs={customDefs} values={customDraft} base={customBase} canAdmin={customCanAdmin} creating={!isEdit} disabled={pending || createdIdRef.current !== null} locale={locale} errors={customErrors}
+        {customEnabled && customReady && !customUnreadable && <CustomFieldDraft defs={customDefs} values={customDraft} base={customBase} canAdmin={customCanAdmin} creating={!isEdit} disabled={pending || createdIdRef.current !== null} errors={customErrors}
           onChange={(key,value)=>{setCustomDraft(prev=>{const next={...prev};if(value===undefined)delete next[key];else next[key]=value;return next});setCustomErrors({})}} />}
         {customEnabled && customStale && <div className="space-y-2">
           <p role="alert" className="text-xs text-danger">{t('issue.custom.changed')}</p>

@@ -19,8 +19,8 @@ const loc = vi.hoisted(() => ({ ko: false }))
 vi.mock('@/components/providers/LocaleProvider', async importOriginal => {
   const actual = await importOriginal<typeof import('@/components/providers/LocaleProvider')>()
   const { t } = await import('@/lib/i18n/dict')
-  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])
-  return { ...actual, useLocale: () => (loc.ko ? { locale: 'ko' as const, t: ko } : actual.useLocale()) }
+  const ko = (k: string) => t(k as Parameters<typeof t>[0])
+  return { ...actual, useLocale: () => (loc.ko ? { t: ko } : actual.useLocale()) }
 })
 
 const LONG = '아주 긴 이름을 가진 전사 디지털 전환 추진 기획 조정 팀'
@@ -103,8 +103,8 @@ describe('TeamBar — 회의록 팀 막대', () => {
       expect(html).toContain('title="min.team.none"')
       expect(html).not.toMatch(/bg-category-\d/)       // 어느 팀의 색도 아니다
     }
-    expect(dictT('ko', 'min.team.none')).toBe('팀 없음')
-    expect(dictT('ko', 'min.fold.noTeam')).toBe('팀 없음(미분류)')
+    expect(dictT('min.team.none')).toBe('팀 없음')
+    expect(dictT('min.fold.noTeam')).toBe('팀 없음(미분류)')
   })
   it('팀 행이 지워진 옛 회의록은 빈 값이 아니라 옛 code 가 온다 — "팀 없음"이 아니라 그 code 글자다', () => {
     const html = renderToStaticMarkup(<TeamsProvider teams={teams}><TeamBar code="DELETED" /></TeamsProvider>)

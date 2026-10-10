@@ -1,6 +1,6 @@
 'use client'
 // 단계 이름(SP5b W2 — 설정 workflow.wbs_stage_labels). 단계 code(as/ip/im/xx)는 제품 고정이고 여기서는 표시 이름만 바꾼다(개정 §2.8.2).
-// 빈 칸 = 로케일 사전의 기본 이름. 모두 비우면 키를 지운다(unset — 기본값). 즉시 적용·표시 전용(impact none).
+// 빈 칸 = 사전의 기본 이름. 모두 비우면 키를 지운다(unset — 기본값). 즉시 적용·표시 전용(impact none).
 import { useState } from 'react'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'

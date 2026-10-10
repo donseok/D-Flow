@@ -17,8 +17,8 @@ vi.mock('@/app/actions/minutes', () => ({ getMinuteShare, setMinuteShare }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => {
   // 모달의 조회 effect 가 t 에 의존한다 — 렌더마다 새 함수를 주면 effect 가 끝없이 다시 돈다. 한 함수를 돌려준다.
-  const t = (k: string) => realT('ko', k as Parameters<typeof realT>[1])
-  return { useLocale: () => ({ locale: 'ko', t }) }
+  const t = (k: string) => realT(k as Parameters<typeof realT>[0])
+  return { useLocale: () => ({ t }) }
 })
 
 import { MinuteShareModal } from '@/components/minutes/MinuteShareModal'
@@ -54,12 +54,12 @@ describe('MinuteShareModal — 실패 문구', () => {
     await render()
     await act(async () => { toggle().click() })
     expect(setMinuteShare).toHaveBeenCalledWith('m1', 'enable')
-    expect(dialog().textContent).toContain(realT('ko', 'min.share.saveFailed'))
+    expect(dialog().textContent).toContain(realT('min.share.saveFailed'))
   })
 
   it('조회 실패(code=share_lookup) — 사전 문구가 액션 문구와 같은 글자다', async () => {
-    expect(realT('ko', 'min.share.lookupFailed')).toBe(LOOKUP_KO)
-    expect(realT('ko', 'min.share.saveFailed')).toBe(SAVE_KO)
+    expect(realT('min.share.lookupFailed')).toBe(LOOKUP_KO)
+    expect(realT('min.share.saveFailed')).toBe(SAVE_KO)
     getMinuteShare.mockResolvedValue({ ok: false, error: LOOKUP_KO, code: 'share_lookup' })
     await render()
     expect(dialog().textContent).toContain(LOOKUP_KO)
@@ -73,6 +73,6 @@ describe('MinuteShareModal — 실패 문구', () => {
     root = createRoot(container)
     getMinuteShare.mockResolvedValue({ ok: false })
     await render()
-    expect(dialog().textContent).toContain(realT('ko', 'min.share.failed'))
+    expect(dialog().textContent).toContain(realT('min.share.failed'))
   })
 })

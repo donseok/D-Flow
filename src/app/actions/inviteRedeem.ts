@@ -6,7 +6,6 @@ import { loadInviteDomains } from '@/lib/data/inviteDomains'
 import { personOf } from '@/lib/data/memberSelect'
 import { noteRateFailure, rateLimited } from '@/lib/http/rateLimit'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
 import { PERSON_INACTIVE, rosterTokenError } from '@/lib/domain/rosterErrors'
 import {
@@ -14,7 +13,6 @@ import {
   validateSignupInput, type InviteStatus, type SignupInput,
 } from '@/lib/domain/invites'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 type AccessRole = 'admin' | 'member'
@@ -43,7 +41,7 @@ const E_INACTIVE = PERSON_INACTIVE
 async function attemptsExhausted(): Promise<string | null> {
   const tr = await serverTranslator()
   try {
-    return (await rateLimited('inviteToken')) > 0 ? t(await getServerLocale(), 'rateLimit.tooMany') : null
+    return (await rateLimited('inviteToken')) > 0 ? t('rateLimit.tooMany') : null
   } catch (e) {
     console.error('[inviteRedeem] 요청 제한을 판정하지 못했다:', e instanceof Error ? e.message : e)
     return tr(E_LOOKUP)
@@ -152,7 +150,7 @@ async function consumeInvite(
     if (error.message.includes('PROJECT_INVITE_PERSON_LINKED')) return { ok: false, error: tr(E_PERSON_LINKED) }
     if (error.message.includes('PROJECT_MEMBER_TEAM_SCOPE')) return { ok: false, error: tr(E_INVITE_TEAM_GONE) }
     // 명단 트리거가 던진 나머지 토큰(워크스페이스 불일치·계정 없는 권한·비활성 INVITE_INACTIVE 등)은 명단 문구로. 모르는 오류(연결 등)만 조회 실패 문구.
-    return { ok: false, error: libText(tr, rosterTokenError(error.message)) ?? tr(E_LOOKUP) }
+    return { ok: false, error: rosterTokenError(error.message) ?? tr(E_LOOKUP) }
   }
   const rows = (data ?? []) as ConsumedInvite[]
   // 0행 = 만료·취소·이미 사용·이메일 불일치. 어느 쪽인지 알려주지 않는다(초대 존재 탐침 차단).
@@ -313,12 +311,11 @@ export async function getInvitePreview(
 export async function getInviteSessionState(
   token: string,
 ): Promise<{ ok: true; authed: boolean; emailMatches: boolean } | { ok: false; error: string }> {
-  const tr = await serverTranslator()
   const limited = await attemptsExhausted()
   if (limited) return { ok: false, error: limited }
   if (!isInviteToken(token)) return missedToken()
   const s = await currentUser()
-  if (!s.ok) return { ok: false, error: libText(tr, s.error) }
+  if (!s.ok) return { ok: false, error: s.error }
   // 비로그인 호출자에게는 초대 이메일에 관한 어떤 정보도 주지 않는다 — 조회조차 하지 않는다.
   if (!s.user) return { ok: true, authed: false, emailMatches: false }
 
@@ -347,7 +344,7 @@ export async function redeemInvite(
   if (limited) return { ok: false, error: limited }
   if (!isInviteToken(token)) return missedToken()
   const s = await currentUser()
-  if (!s.ok) return { ok: false, error: libText(tr, s.error) }
+  if (!s.ok) return { ok: false, error: s.error }
   if (!s.user) return { ok: false, error: tr('common.err.signIn') }
   const user = s.user
 
@@ -362,7 +359,7 @@ export async function redeemInvite(
 
   const sessionEmail = normalizeInviteEmail(user.email ?? '')
   if (!sessionEmail || sessionEmail !== normalizeInviteEmail(invite.email)) {
-    // code: 화면이 '다른 계정' 분기(방금 만든 세션 되돌리기)를 문구가 아니라 이 값으로 고른다 — 문구는 화면 언어를 따른다
+    // code: 화면이 '다른 계정' 분기(방금 만든 세션 되돌리기)를 문구가 아니라 이 값으로 고른다
     return { ok: false, error: tr('srv.inviteRedeem.inviteDifferentEmailAddress'), code: 'other_account' }
   }
 
@@ -379,7 +376,7 @@ export async function redeemInvite(
     return { ok: false, error: tr(E_LOOKUP) }
   }
   const pe = personOf(existing)
-  if (existing && (!existing.active || !pe?.active)) return { ok: false, error: libText(tr, E_INACTIVE) }
+  if (existing && (!existing.active || !pe?.active)) return { ok: false, error: E_INACTIVE }
   const current = existing ? (existing.access_role as AccessRole | null) : null
   if (current && accessRank(current) >= accessRank(invite.access_role)) {
     return { ok: true, projectId: invite.project_id, alreadyMember: true }
@@ -404,11 +401,11 @@ export async function redeemInviteWithSignup(
   if (limited) return { ok: false, error: limited }
   if (!isInviteToken(token)) return missedToken()
   const s = await currentUser()
-  if (!s.ok) return { ok: false, error: libText(tr, s.error) }
+  if (!s.ok) return { ok: false, error: s.error }
   if (s.user) return { ok: false, error: tr('srv.inviteRedeem.alreadySigned') }
 
   const valid = validateSignupInput(input)
-  if (!valid.ok) return { ok: false, error: libText(tr, valid.error) }
+  if (!valid.ok) return { ok: false, error: valid.error }
   const name = input.name.trim()
 
   const admin = createAdminClient()

@@ -7,7 +7,6 @@ vi.mock('@/app/actions/preferences', () => ({ getWorkspacePrefs: h.getWorkspaceP
 vi.mock('@/lib/authz', () => ({ getActorViewState: h.getActorViewState }))
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
 // 소속 0 화면의 문구는 사전에서 온다
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' as const }))
 vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['chrome.logout'] }))
 // 루트는 비공개 판정 catch 에서 unstable_rethrow 를 부른다(HH3) — 원본을 두고 redirect·useRouter 만 바꾼다
 vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), redirect: h.redirect, useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }))

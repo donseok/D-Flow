@@ -12,7 +12,7 @@ import { ISSUE_BOARD_PAGE } from '@/lib/domain/issueBoard'
 const mocks = vi.hoisted(() => ({ update: vi.fn(), refresh: vi.fn() }))
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh, replace: vi.fn(), push: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (key: string) => key }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key }) }))
 vi.mock('@/app/actions/issues', () => ({ updateIssueProgress: mocks.update }))
 
 import { IssueBoard } from '@/components/issues/IssueBoard'

@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
-import type { DictKey, Locale } from '@/lib/i18n/dict'
+import type { DictKey} from '@/lib/i18n/dict'
 import { ConflictCompare } from './ConflictCompare'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
@@ -42,8 +42,8 @@ function stored(field: WorkspaceField, value: string | boolean): unknown {
 function same(a: string | boolean, b: string | boolean): boolean { return a === b }
 
 /** 영향 검토가 필요 없는 워크스페이스 키를 범주 단위로 저장한다. */
-export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 'ko' }: {
-  workspaceId: string; revision: number; fields: WorkspaceField[]; locale?: Locale
+export function WorkspaceFieldsEditor({ workspaceId, revision, fields }: {
+  workspaceId: string; revision: number; fields: WorkspaceField[];
 }) {
   const { t } = useLocale()
   const router = useRouter()
@@ -138,7 +138,7 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
         <span className="text-xs text-fg-muted">{t('settings.wsFields.sourceImmediate').replace('{source}', t(SOURCE_KEY[field.source]))}</span>
       </div>
       <p className="text-xs text-fg-secondary">{field.description}</p>
-      {field.error && !repaired.includes(field.key) && <ConfigStateNotice kind="invalid" locale={locale} keyName={field.key}
+      {field.error && !repaired.includes(field.key) && <ConfigStateNotice kind="invalid" keyName={field.key}
         message={field.error} isAdmin settingsHref={`#workspace-${field.key}`} />}
       {field.kind === 'boolean' ?
         <input id={`workspace-${field.key}`} type="checkbox" checked={draft[field.key] === true}
@@ -148,13 +148,13 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields, locale = 
             disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} placeholder={t('settings.wsFields.domainsPh')} /> :
           <input id={`workspace-${field.key}`} className="app-input w-full text-sm" value={String(draft[field.key])}
             disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} />}
-      {fieldErrors[field.key] && <ConfigStateNotice kind="field" locale={locale} message={fieldErrors[field.key]} />}
+      {fieldErrors[field.key] && <ConfigStateNotice kind="field" message={fieldErrors[field.key]} />}
       <p className="text-meta text-fg-muted">{field.key}</p>
     </div>)}
     {conflict && <ConflictCompare rows={changed.map(f => ({ key: f.key, label: f.label,
       mine: String(draft[f.key]), latest: conflict.invalidKeys.includes(f.key) ? t('settings.notify.policy.corrupted') : String(inputValue(f, conflict.values[f.key])),
     }))} onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(f => !conflict.invalidKeys.includes(f.key))} />}
-    {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
+    {error && <ConfigStateNotice kind="patch" message={error} />}
     {/* 공용 저장 바(data-save-bar — 셸의 떠 있는 버튼이 저장 바를 가리지 않게 찾는 표지, SP3b 알림 13·D33) */}
     <SettingsSaveBar notice={notice} summary={t('settings.wsFields.changed').replace('{n}', String(changed.length))}>
       <button type="button" className="btn btn-primary" disabled={pending || (!changed.length && !uncertainPatch) || !!conflict} onClick={save}>

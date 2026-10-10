@@ -27,7 +27,7 @@ const data = (readState: WikiTopicDetailData['readState']): WikiTopicDetailData 
 })
 const html = (props: { canEditDocuments: boolean; readState?: WikiTopicDetailData['readState'] }) => renderToStaticMarkup(
   <WikiTopicDetail draftPolicy={{ allowed: true, retention_days: 7 }} projectId="project-1" data={data(props.readState ?? 'ready')}
-    locale="ko" canCurate={false} canEditDocuments={props.canEditDocuments} userId={null} timeZone="Asia/Seoul" />,
+    canCurate={false} canEditDocuments={props.canEditDocuments} userId={null} timeZone="Asia/Seoul" />,
 )
 
 describe('위키 주제 — 질문 남기기 어포던스', () => {

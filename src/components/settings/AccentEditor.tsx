@@ -80,7 +80,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
       <h3 className="text-sm font-semibold text-fg">{t('settings.branding.accent.label')}</h3>
       <p className="mt-1 text-xs text-fg-secondary">{t('settings.accent.desc')}</p>
     </div>
-    {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.accent" message={invalidReason} isAdmin settingsHref="#workspace-accent" />}
+    {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" keyName="branding.accent" message={invalidReason} isAdmin settingsHref="#workspace-accent" />}
     <div className="flex flex-wrap items-center gap-3">
       <label htmlFor="workspace-accent" className="text-sm text-fg">{t('settings.accent.base')}</label>
       <input id="workspace-accent" className="app-input w-32 font-mono text-sm" value={draft ?? ''} placeholder={ACCENT_TOKENS.light.action} maxLength={7}
@@ -90,8 +90,8 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
       <button type="button" className="btn btn-ghost" disabled={pending || !!uncertainPatch || draft === null}
         onClick={() => setDraft(null)}>{t('settings.accent.reset')}</button>
     </div>
-    {preview && !preview.ok && <ConfigStateNotice kind="field" locale="ko" message={`${preview.error} ${preview.failures.map(f => t('settings.accent.contrast').replace('{pair}', String(f.pair)).replace('{contrast}', String(f.contrast)).replace('{min}', String(f.min))).join(', ')}`} />}
-    {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
+    {preview && !preview.ok && <ConfigStateNotice kind="field" message={`${preview.error} ${preview.failures.map(f => t('settings.accent.contrast').replace('{pair}', String(f.pair)).replace('{contrast}', String(f.contrast)).replace('{min}', String(f.min))).join(', ')}`} />}
+    {fieldError && <ConfigStateNotice kind="field" message={fieldError} />}
     {preview?.ok && <div className="grid gap-3 sm:grid-cols-2">
       <div className="overflow-hidden rounded-xl border border-border">
         <div className="p-4" style={{ backgroundColor: ACCENT_TOKENS.light.surface }}>
@@ -110,7 +110,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
         {!conflict.invalid && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.value); setBaseline(conflict.value); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>{t('settings.conflict.useLatest')}</button>}
       </div>
     </div>}
-    {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
+    {error && <ConfigStateNotice kind="patch" message={error} />}
     <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict || !!(preview && !preview.ok)} onClick={save}>
         {uncertainPatch ? t('settings.workflow.retry') : t('settings.accent.save')}

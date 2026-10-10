@@ -20,7 +20,7 @@ const h = vi.hoisted(() => ({
 vi.mock('@/app/actions/wbs', () => ({ updateActual: h.updateActual, updateWeight: h.updateWeight, addWbsItem: vi.fn(), getWbsCellSnapshot: vi.fn() }))
 vi.mock('@/app/actions/customFieldValues', () => ({ saveCustomFieldValues: h.saveCustom }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: ({ item }: { item: { id: string } }) => <div data-detail={item.id} /> }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueWbsCollapse: vi.fn(), queueUiPref: vi.fn() }))
 
@@ -69,7 +69,7 @@ describe('WBS 표 — 키보드 이동·편집', () => {
       </Profiler>
     )
     return act(async () => root.render(
-      opts.defs ? <CustomFieldsProvider projectId="p1" entity="wbs_item" defs={opts.defs} canAdmin locale="ko">{sheet}</CustomFieldsProvider> : sheet,
+      opts.defs ? <CustomFieldsProvider projectId="p1" entity="wbs_item" defs={opts.defs} canAdmin>{sheet}</CustomFieldsProvider> : sheet,
     ))
   }
   const grid = () => container.querySelector<HTMLElement>('[role="treegrid"]')!

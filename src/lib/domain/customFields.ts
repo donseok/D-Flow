@@ -3,6 +3,7 @@
  * 값 오류는 SQL custom_value_error와 같은 이유 코드로 돌려준다.
  * 정의 없는 프로젝트는 빈 목록. 설정 레지스트리/DB/서버를 런타임 import하지 않는다.
  */
+import { KO_LOCALE } from '@/lib/i18n/format'
 import type { Parsed } from '@/lib/settings/def'
 import { VOCAB_COLORS, type VocabColor } from '@/lib/settings/vocab'
 
@@ -161,12 +162,12 @@ export function normalizeCustomValues(raw: Record<string, unknown>): Record<stri
   return Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== '' && v !== undefined))
 }
 /** Same formatter for lists, Excel display cells and AI index text; inactive option labels remain readable. */
-export function formatCustomValue(def: FieldDef, value: FieldValue | undefined, opts: { locale?: string; yes?: string; no?: string; empty?: string } = {}): string {
+export function formatCustomValue(def: FieldDef, value: FieldValue | undefined, opts: { yes?: string; no?: string; empty?: string } = {}): string {
   if (value === undefined) return opts.empty ?? ''
   if (def.type === 'boolean' && typeof value === 'boolean') return value ? opts.yes ?? '예' : opts.no ?? '아니오'
   if (def.type === 'number' && typeof value === 'number') {
     const decimals = def.limits?.decimals ?? 0
-    const n = new Intl.NumberFormat(opts.locale ?? 'ko-KR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(value)
+    const n = new Intl.NumberFormat(KO_LOCALE, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(value)
     return `${n}${def.limits?.unit ? ` ${def.limits.unit}` : ''}`
   }
   if (def.type === 'select' || def.type === 'multiselect') {

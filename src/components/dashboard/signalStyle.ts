@@ -1,7 +1,7 @@
 import { CheckCircle2, AlertTriangle, AlertOctagon, MinusCircle, type LucideIcon } from 'lucide-react'
 import type { Signal } from '@/lib/domain/dashboard'
 
-/** 신호 → 토큰(라이트/다크 자동 대응, 기존 상태 팔레트 재사용) + 접근성 아이콘. */
+/** 신호 → 토큰(기존 상태 팔레트 재사용) + 접근성 아이콘. */
 export const SIGNAL_META: Record<Signal, { text: string; dot: string; borderTop: string; chip: string; icon: LucideIcon }> = {
   green:   { text: 'text-success',           dot: 'bg-success',           borderTop: 'border-t-success',           chip: 'bg-success-weak text-success',              icon: CheckCircle2 },
   amber:   { text: 'text-warning', dot: 'bg-warning', borderTop: 'border-t-warning', chip: 'bg-pending-weak text-warning', icon: AlertTriangle },

@@ -88,7 +88,7 @@ export function parseStageCredits(raw: unknown, policy: CreditPolicy = DEFAULT_C
   return v.ok ? { ok: true, value: v.credits } : fail(v.error)
 }
 
-/** 단계 라벨(개정 §2.8.2) — 칸 none/as/ip/im/xx, 값은 트림 1~20자. 미설정 칸은 로케일 사전 */
+/** 단계 라벨(개정 §2.8.2) — 칸 none/as/ip/im/xx, 값은 트림 1~20자. 미설정 칸은 사전 */
 export const STAGE_LABEL_SLOTS = ['none', 'as', 'ip', 'im', 'xx'] as const
 export type StageLabelSlot = (typeof STAGE_LABEL_SLOTS)[number]
 export type StageLabels = Partial<Record<StageLabelSlot, string>>

@@ -93,7 +93,7 @@ function statusFields(status: IssueStatus, statuses: readonly IssueStatusDef[]):
   const row = statuses.find((entry) => entry.code === status)
   const stored = row?.label
   const status_label = stored == null || stored === ''
-    ? t('ko', `issue.status.${status}` as DictKey)
+    ? t(`issue.status.${status}` as DictKey)
     : stored
   return { status, status_code: status, status_label }
 }

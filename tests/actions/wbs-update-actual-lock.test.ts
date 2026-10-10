@@ -107,7 +107,7 @@ describe('updateActual — 에이전트 관할 작업의 100 잠금(D7)', () => 
   })
 
   it('잠금 문구는 사전의 한국어 문구와 같다 — 한국어 화면은 code 로 골라도 종전 문구 그대로', () => {
-    expect(realT('ko', 'wbs.actualLocked')).toBe(LOCKED_MSG)
+    expect(realT('wbs.actualLocked')).toBe(LOCKED_MSG)
   })
 
   // 경계 패리티의 TS 쪽 — tests/rls/workflow-parity.test.ts 의 ACTUAL_BOUNDARY 와 같은 세 값이다(과제 15). 한쪽을 바꾸면 다른 쪽도 바꾼다.

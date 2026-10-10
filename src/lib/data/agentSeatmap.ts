@@ -139,7 +139,7 @@ export async function fetchMyMemberIds(
   return must<Array<{ id: string }>>('로스터', await q).map(m => m.id)
 }
 
-/** t — 착수 대기 사유·주의 띠 사유의 화면 언어(페이지·좌석표 액션이 넘긴다). 없으면 한국어 */
+/** t — 착수 대기 사유·주의 띠 사유의 사전 조회 함수(페이지·좌석표 액션이 넘긴다). 없으면 koTranslate */
 export interface SeatmapOptions { projectId?: string; workspaceId?: string; t?: Translate }
 
 /**

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { t, type Locale } from '@/lib/i18n/dict'
+import { t} from '@/lib/i18n/dict'
 
 type ReindexAction = 'status' | 'enqueue' | 'step' | 'repair'
 
@@ -52,7 +52,7 @@ async function callReindex<T>(action: ReindexAction): Promise<{ ok: true; data: 
  * 이 루프는 그냥 끊긴다(별도 취소 처리 없음) — claim/step/repair 는 전부 멱등이라
  * 중간에 끊겨도 다음에 다시 누르면 이어서 처리되므로 무해하다.
  */
-export function WikiReindexButton({ locale }: { locale: Locale }) {
+export function WikiReindexButton() {
   const [status, setStatus] = useState<StatusResult | null>(null)
   const [run, setRun] = useState<RunState>({ kind: 'idle' })
   const stopRef = useRef(false)
@@ -121,7 +121,7 @@ export function WikiReindexButton({ locale }: { locale: Locale }) {
 
   const running = run.kind === 'stepping' || run.kind === 'repairing'
   const statusText = status
-    ? t(locale, 'wiki.reindex.status')
+    ? t('wiki.reindex.status')
         .replace('{docs}', String(status.docs))
         .replace('{pending}', String(status.pending))
         .replace('{embedded}', String(status.embedded))
@@ -134,20 +134,20 @@ export function WikiReindexButton({ locale }: { locale: Locale }) {
       {statusText && <span>{statusText}</span>}
 
       {run.kind === 'stepping' && (
-        <span>{t(locale, 'wiki.reindex.running').replace('{n}', String(run.processed))}</span>
+        <span>{t('wiki.reindex.running').replace('{n}', String(run.processed))}</span>
       )}
       {run.kind === 'repairing' && (
         <span>
-          {t(locale, 'wiki.reindex.repairing')
+          {t('wiki.reindex.repairing')
             .replace('{a}', String(run.embedded))
             .replace('{b}', String(run.total))}
         </span>
       )}
-      {run.kind === 'done' && <span className="text-success">{t(locale, 'wiki.reindex.done')}</span>}
+      {run.kind === 'done' && <span className="text-success">{t('wiki.reindex.done')}</span>}
       {run.kind === 'quotaExhausted' && (
-        <span>{t(locale, 'wiki.reindex.quotaExhausted').replace('{n}', String(run.remaining))}</span>
+        <span>{t('wiki.reindex.quotaExhausted').replace('{n}', String(run.remaining))}</span>
       )}
-      {run.kind === 'failed' && <span className="text-danger">{t(locale, 'wiki.reindex.failed')}</span>}
+      {run.kind === 'failed' && <span className="text-danger">{t('wiki.reindex.failed')}</span>}
 
       <button
         type="button"
@@ -156,7 +156,7 @@ export function WikiReindexButton({ locale }: { locale: Locale }) {
         className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-subtle px-2.5 text-xs text-fg-secondary transition hover:bg-surface-hover hover:text-fg disabled:opacity-50"
       >
         <RefreshCw className={`h-3.5 w-3.5 ${running ? 'animate-spin' : ''}`} aria-hidden />
-        {t(locale, 'wiki.reindex.button')}
+        {t('wiki.reindex.button')}
       </button>
       {running && (
         <button
@@ -164,7 +164,7 @@ export function WikiReindexButton({ locale }: { locale: Locale }) {
           onClick={() => { stopRef.current = true }}
           className="inline-flex h-7 shrink-0 items-center rounded-full border border-border bg-surface-subtle px-2.5 text-xs text-fg-secondary transition hover:bg-surface-hover hover:text-fg"
         >
-          {t(locale, 'wiki.reindex.stop')}
+          {t('wiki.reindex.stop')}
         </button>
       )}
     </div>

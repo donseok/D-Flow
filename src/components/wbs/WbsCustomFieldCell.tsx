@@ -8,7 +8,7 @@ import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
 import { customFieldErrorText } from '@/components/fields/CustomFieldValuesEditor'
 import { formatCustomValue, type CustomValues, type FieldDef, type FieldValue } from '@/lib/domain/customFields'
 import { parseCustomValues, validateCustomValues } from '@/lib/domain/customFieldValues'
-import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t as translate, type DictKey} from '@/lib/i18n/dict'
 
 /** 셀 안에서 고칠 수 있는 유형 — 한 줄 입력으로 끝나는 것만. 여러 줄·다중 선택은 행 높이에 들어가지 않아 상세 패널에서 고친다 */
 const CELL_TYPES: readonly FieldDef['type'][] = ['text', 'number', 'date', 'boolean', 'select']
@@ -26,7 +26,7 @@ const INPUT = 'h-6 w-full min-w-0 rounded border border-action bg-surface px-1 t
  * 값을 먼저 바꿨으면 덮지 않고 알린 뒤 새로 읽는다.
  */
 export function WbsCustomFieldCell({
-  def, defs, projectId, rowId, custom, canEdit, canAdmin, locale, format, className, width, onError, grid,
+  def, defs, projectId, rowId, custom, canEdit, canAdmin, format, className, width, onError, grid,
 }: {
   def: FieldDef
   /** 그 엔티티의 정의 전부 — 행 전체 검증(필수·권한)에 쓴다 */
@@ -38,8 +38,7 @@ export function WbsCustomFieldCell({
   /** 그 행을 이 사용자가 고칠 수 있는가(상세 패널의 '추가 정보'와 같은 판정) */
   canEdit: boolean
   canAdmin: boolean
-  locale: Locale
-  format: { locale: string; yes: string; no: string; empty: string }
+  format: { yes: string; no: string; empty: string }
   className: string
   width: number
   onError: (message: string) => void
@@ -48,8 +47,7 @@ export function WbsCustomFieldCell({
   grid?: { colIndex: number; onClosed: (move: 'down' | 'right' | 'left' | 'self') => void }
 }) {
   const router = useRouter()
-  // 문구는 필드 범위의 locale(prop)로 읽는다 — 셀의 값 서식(format)과 같은 말이 되게
-  const tr = (k: DictKey) => translate(locale, k)
+  const tr = (k: DictKey) => translate(k)
   const [draft, setDraft] = useState<string | null>(null)   // null = 편집 중 아님. 입력값은 문자열로 들고 저장 때 유형으로 바꾼다
   const [busy, setBusy] = useState(false)
   const [invalid, setInvalid] = useState(false)
@@ -111,7 +109,7 @@ export function WbsCustomFieldCell({
     if (!checked.ok) {
       afterClose.current = null   // 편집기에 남는다 — 뒤의 blur 닫힘이 포커스를 옮기지 않게
       setInvalid(true)
-      onError(`${def.label}: ${customFieldErrorText(checked.errors[def.key] ?? Object.values(checked.errors)[0], locale)}`)
+      onError(`${def.label}: ${customFieldErrorText(checked.errors[def.key] ?? Object.values(checked.errors)[0])}`)
       return
     }
     const applied = (values: CustomValues) => { mark('saved'); setSaved({ from: signature, values }); close(); router.refresh() }

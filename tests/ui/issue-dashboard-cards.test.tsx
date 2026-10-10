@@ -39,7 +39,7 @@ const ISSUES: DashboardIssue[] = [
 
 describe('IssueStatusCard', () => {
   it('KPI(미해결·지연·심각·최근 7일 해결)와 상태 범례 건수를 표시한다', () => {
-    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} timeZone="Asia/Seoul" />)
     expect(html).toContain('이슈 현황')
     const text = textOf(html)
     expect(text).toContain('전체 6건')
@@ -56,7 +56,7 @@ describe('IssueStatusCard', () => {
   })
 
   it('Mega 8영역을 코드순으로 전부 미니 링 타일로 그리고, 이슈 없는 영역은 –·이슈 없음, 미분류 타일은 마지막', () => {
-    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} timeZone="Asia/Seoul" />)
     const order = ['기준관리', '손익관리', '영업', '품질·설계', '생산계획', '조업', '출하', '원가', '미분류']
     const idx = order.map(n => html.indexOf(n))
     expect(idx.every(i => i >= 0)).toBe(true)
@@ -73,30 +73,30 @@ describe('IssueStatusCard', () => {
 
   it('타일의 상태 점은 14개까지만 찍고 나머지는 +N 으로 알린다', () => {
     const many = Array.from({ length: 20 }, () => issue({ areaId: '05' }))
-    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={many} projectId="p1" today={TODAY} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={many} projectId="p1" today={TODAY} timeZone="Asia/Seoul" />)
     expect((html.match(/data-dot="open"/g) ?? []).length).toBe(14)
     expect(textOf(html)).toContain('+6')
   })
 
   it('카드 제목 액션이 이슈관리 페이지로 링크된다', () => {
-    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} timeZone="Asia/Seoul" />)
     expect(html).toContain('href="/p/p1/issues"')
   })
 
   it('캡션 기준일은 다른 날짜와 같은 서식(26.08.28)', () => {
-    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} timeZone="Asia/Seoul" />)
     expect(html).toContain('기준일 26.08.28')
     expect(html).not.toContain('기준일 2026-08-28')
   })
 
   it('이슈 0건이면 빈 상태 문구만 — KPI 타일을 그리지 않는다', () => {
-    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={[]} projectId="p1" today={TODAY} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={[]} projectId="p1" today={TODAY} timeZone="Asia/Seoul" />)
     expect(html).toContain('등록된 이슈가 없습니다')
     expect(html).not.toContain('최근 7일 해결')
   })
 
   it('타일 상태 점은 ISSUE_STATUSES 순(열림→진행중→해결→보류)이고 title·sr-only 가 건수를 글로 나른다', () => {
-    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} timeZone="Asia/Seoul" />)
     // 00 기준관리 타일 = 진행중 1(ov3) + 보류 1(hold)
     const tile = html.slice(html.indexOf('title="기준관리:'), html.indexOf('title="손익관리:'))
     expect([...tile.matchAll(/data-dot="([a-z_]+)"/g)].map(m => m[1])).toEqual(['in_progress', 'on_hold'])
@@ -109,7 +109,7 @@ describe('IssueStatusCard', () => {
 
 describe('IssueTrendCard', () => {
   it('SVG 접근성 라벨에 등록·해결·미해결 끝값을 담고, 끝점 라벨은 미해결 잔량 하나', () => {
-    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} timeZone="Asia/Seoul" />)
     expect(html).toContain('<svg')
     expect(html).toMatch(/aria-label="[^"]*등록 누적 6[^"]*해결 누적 1[^"]*미해결 5/)
     // 끝점 라벨은 svg text 로(aria 가 아니라) 그려진다
@@ -120,7 +120,7 @@ describe('IssueTrendCard', () => {
   })
 
   it('차트만 남긴다 — 이번 주 타일·주간 표는 없다(2026-08-28 사용자 요청: 깔끔하게)', () => {
-    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} timeZone="Asia/Seoul" />)
     expect(html).not.toContain('<table')
     expect(textOf(html)).not.toMatch(/이번 주 등록|최근 6주/)
     // 값은 svg 라벨·범례·aria 가 나른다
@@ -128,21 +128,21 @@ describe('IssueTrendCard', () => {
   })
 
   it('x축에 첫 주와 마지막 주 시작일을 표기한다(12주)', () => {
-    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} timeZone="Asia/Seoul" />)
     expect(html).toContain('26.06.08')
     expect(html).toContain('26.08.24')
   })
 
   it('전량 해결(백로그 0)이어도 미해결 라벨은 축 위에 남고 면은 그려지지 않는다', () => {
     const allResolved = Array.from({ length: 10 }, () => issue({ status: 'resolved', resolvedAt: '2026-08-20T00:00:00+00:00' }))
-    const html = renderToStaticMarkup(<IssueTrendCard issues={allResolved} today={TODAY} weekStart={MON_RULES} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={allResolved} today={TODAY} weekStart={MON_RULES} timeZone="Asia/Seoul" />)
     expect(html).toContain('미해결 0')
     expect(html).toContain('<linearGradient')
   })
 
   it('건수가 커도 y축 눈금은 8개를 넘지 않는다(눈금 겹침 방지)', () => {
     const many = Array.from({ length: 1000 }, () => issue())
-    const html = renderToStaticMarkup(<IssueTrendCard issues={many} today={TODAY} weekStart={MON_RULES} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={many} today={TODAY} weekStart={MON_RULES} timeZone="Asia/Seoul" />)
     const ticks = (html.match(/text-anchor="end" font-size="10"/g) ?? []).length // y축 눈금 = 오른쪽 정렬 10px
     expect(ticks).toBeLessThanOrEqual(8)
     expect(ticks).toBeGreaterThanOrEqual(3)
@@ -150,7 +150,7 @@ describe('IssueTrendCard', () => {
 
 
   it('이슈 0건이면 차트 대신 빈 상태', () => {
-    const html = renderToStaticMarkup(<IssueTrendCard issues={[]} today={TODAY} weekStart={MON_RULES} locale="ko" timeZone="Asia/Seoul" />)
+    const html = renderToStaticMarkup(<IssueTrendCard issues={[]} today={TODAY} weekStart={MON_RULES} timeZone="Asia/Seoul" />)
     expect(html).not.toContain('viewBox="0 0 640')  // 헤더 아이콘도 svg 라 차트 svg 만 본다
     expect(html).toContain('등록된 이슈가 없습니다')
   })
@@ -158,7 +158,7 @@ describe('IssueTrendCard', () => {
 
 describe('IssueQueueCard', () => {
   it('지연(경과 많은 순) → 임박 순으로 focus 딥링크 행을 그린다', () => {
-    const html = renderToStaticMarkup(<IssueQueueCard issues={ISSUES} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={ISSUES} projectId="p1" today={TODAY} severities={SEVERITIES} />)
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map(m => m[1]).filter(h => h.includes('focus='))
     expect(hrefs).toEqual(['/p/p1/issues?focus=ov14', '/p/p1/issues?focus=ov3', '/p/p1/issues?focus=d0'])
     expect(html).toContain('14일 지연')
@@ -167,7 +167,7 @@ describe('IssueQueueCard', () => {
   })
 
   it('배지는 지연·마감임박 건수, 미분류 이슈도 DB code로 표기', () => {
-    const html = renderToStaticMarkup(<IssueQueueCard issues={[...ISSUES, issue({ id: 'n2', areaId: null, code: 'PI-U001',  dueDate: '2026-08-29' })]} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={[...ISSUES, issue({ id: 'n2', areaId: null, code: 'PI-U001',  dueDate: '2026-08-29' })]} projectId="p1" today={TODAY} severities={SEVERITIES} />)
     expect(html).toContain('지연 2 · 마감임박 2')
     expect(html).toContain('PI-U001')
     expect(html).not.toContain('#77')
@@ -175,20 +175,20 @@ describe('IssueQueueCard', () => {
   })
 
   it('행 aria-label 에 심각도와 마감일이 들어간다(색·위치 없이도 읽히게)', () => {
-    const html = renderToStaticMarkup(<IssueQueueCard issues={ISSUES} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={ISSUES} projectId="p1" today={TODAY} severities={SEVERITIES} />)
     expect(html).toMatch(/aria-label="PI-00-001 작업지시 실적 수기 입력 지연, 높음, 14일 지연, 26\.08\.14"/)
   })
 
   it('상한을 넘으면 +N 과 이슈관리 링크를 보인다 — 조용히 자르지 않는다', () => {
     const many = Array.from({ length: 7 }, (_, i) => issue({ dueDate: `2026-08-${String(10 + i).padStart(2, '0')}` }))
-    const html = renderToStaticMarkup(<IssueQueueCard issues={many} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={many} projectId="p1" today={TODAY} severities={SEVERITIES} />)
     expect((html.match(/focus=/g) ?? []).length).toBe(5)
     expect(html).toContain('+2')
     expect(html).toContain('href="/p/p1/issues"')
   })
 
   it('해당 이슈가 없으면 안내 문구', () => {
-    const html = renderToStaticMarkup(<IssueQueueCard issues={[issue()]} projectId="p1" today={TODAY} locale="ko" severities={SEVERITIES} />)
+    const html = renderToStaticMarkup(<IssueQueueCard issues={[issue()]} projectId="p1" today={TODAY} severities={SEVERITIES} />)
     expect(html).toContain('기한이 지났거나')
     expect(html).not.toContain('focus=')
   })

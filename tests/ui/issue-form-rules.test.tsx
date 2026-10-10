@@ -7,7 +7,7 @@ import { DEFAULT_ID_POLICY } from '@/lib/issues/idPolicy'
 import type { IssueEntryContext } from '@/lib/issues/context'
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => '/p/p1/issues' }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (key: string) => key }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key }) }))
 const h = vi.hoisted(() => ({ createIssue: vi.fn(), updateIssue: vi.fn() }))
 vi.mock('@/app/actions/issues', () => ({ ...h, fetchIssueMajorProcesses: vi.fn(async () => ({ ok: true, majors: [] })), fetchIssueEntryContext: vi.fn(), deleteIssue: vi.fn(), updateIssueProgress: vi.fn() }))
 vi.mock('@/app/actions/issueUpdates', () => ({ listIssueUpdates: vi.fn(async () => ({ ok: true, items: [] })) }))

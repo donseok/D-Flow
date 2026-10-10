@@ -25,7 +25,6 @@ vi.mock('@/lib/authz/workspaceScope', () => ({
   loadWorkspaceScope: vi.fn(async () => ({ ws: { id: 'ws-1', slug: 'acme', name: 'Acme' }, actor: await mocks.getActorForView(), degraded: false, role: 'member' })),
 }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1', email: 'alice@example.com' })) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async (): Promise<'ko'> => 'ko') }))
 // 전역 화면의 '오늘'·첫 열 = viewCalendar(소속 워크스페이스 달력 — SP5 과제 22·24). UTC·일요일로 주고 시스템 시각을 07-19 정오(UTC)로 고정한다(Date 만)
 vi.mock('@/lib/calendar/viewZone', async () => {
   const { calUtcSun } = await import('../helpers/calendarFixture')
@@ -40,7 +39,7 @@ import type { Meeting } from '@/lib/domain/types'
 import { PageHeader } from '@/components/app/PageHeader'
 import { t } from '@/lib/i18n/dict'
 
-const HEADER = { title: t('ko', 'meet.myHeroTitle'), description: t('ko', 'meet.myHeroDesc') }
+const HEADER = { title: t('meet.myHeroTitle'), description: t('meet.myHeroDesc') }
 
 /** 페이지가 돌려준 트리에서 셸·뷰에 넘긴 props 를 꺼낸다(렌더하지 않고 요소만 본다). */
 async function renderPage() {

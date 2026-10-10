@@ -8,7 +8,7 @@ const h = vi.hoisted(() => ({ save: vi.fn() }))
 vi.mock('@/app/actions/preferences', () => ({ saveNotifPrefs: h.save }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { KO } = await import('@/lib/i18n/dict/ko')
-  return { useLocale: () => ({ t: (k: string) => (KO as Record<string, string>)[k] ?? k, locale: 'ko' }) }
+  return { useLocale: () => ({ t: (k: string) => (KO as Record<string, string>)[k] ?? k }) }
 })
 import { NotifPrefsSection } from '@/components/account/NotifPrefsSection'
 import { NOTIFICATION_CATALOG, type NotificationType } from '@/lib/domain/inbox'

@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ addHoliday: vi.fn(), removeHoliday: vi.fn(), setBaseDate: vi.fn(), toast: vi.fn(), refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: m.refresh }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: m.toast }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/app/actions/project', () => ({ addHoliday: m.addHoliday, removeHoliday: m.removeHoliday, setBaseDate: m.setBaseDate }))
 
 import { ScheduleManager } from '@/components/settings/ScheduleManager'

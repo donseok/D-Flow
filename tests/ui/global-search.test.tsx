@@ -28,7 +28,7 @@ vi.mock('@/app/actions/globalSearch', () => ({
 
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
-  const api = { locale: 'ko' as const, setLocale: () => {}, t: (k: Parameters<typeof t>[1]) => t('ko', k) }
+  const api = { t: (k: Parameters<typeof t>[0]) => t(k) }
   return { useLocale: () => api }
 })
 

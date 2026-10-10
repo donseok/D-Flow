@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import {
   CheckCheck, EyeOff, LockKeyhole, LockKeyholeOpen, RotateCcw, ShieldCheck,
 } from 'lucide-react'
-import type { DictKey, Locale } from '@/lib/i18n/dict'
+import type { DictKey} from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import { useToast } from '@/components/ui/Toast'
 import { curateWikiItem } from '@/app/actions/wiki'
@@ -69,11 +69,9 @@ function availableActions(item: WikiItem): ActionSpec[] {
 export function WikiItemActions({
   item,
   projectId,
-  locale,
 }: {
   item: WikiItem
   projectId: string
-  locale: Locale
 }) {
   const router = useRouter()
   const { toast } = useToast()
@@ -81,7 +79,7 @@ export function WikiItemActions({
   const [running, setRunning] = useState<WikiCurateAction | null>(null)
 
   function run(spec: ActionSpec) {
-    if (spec.confirmKey && !window.confirm(t(locale, spec.confirmKey))) return
+    if (spec.confirmKey && !window.confirm(t(spec.confirmKey))) return
     setRunning(spec.action)
     startTransition(async () => {
       const result = await curateWikiItem({
@@ -92,10 +90,10 @@ export function WikiItemActions({
       })
       setRunning(null)
       if (!result.ok) {
-        toast({ title: result.error ?? t(locale, 'wiki.curate.failed'), variant: 'error' })
+        toast({ title: result.error ?? t('wiki.curate.failed'), variant: 'error' })
         return
       }
-      toast({ title: t(locale, 'wiki.curate.done'), variant: 'success' })
+      toast({ title: t('wiki.curate.done'), variant: 'success' })
       router.refresh()
     })
   }
@@ -113,7 +111,7 @@ export function WikiItemActions({
             className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-meta font-medium text-fg-secondary transition hover:border-border-input hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Icon className="h-3 w-3" aria-hidden />
-            {running === spec.action ? t(locale, 'wiki.curate.running') : t(locale, spec.labelKey)}
+            {running === spec.action ? t('wiki.curate.running') : t(spec.labelKey)}
           </button>
         )
       })}

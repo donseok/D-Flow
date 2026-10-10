@@ -110,7 +110,7 @@ export function GlobalSearchDialog({
     let stale = false   // 늦게 온 앞 검색어의 응답이 지금 결과를 덮지 않게
     const timer = setTimeout(() => {
       startTransition(async () => {
-        // 요청 자체가 실패하면 error 를 null 로 둔다 — 문구는 렌더에서 고른다(effect 가 t 에 매이면 로캘 전환이 재검색을 일으킨다)
+        // 요청 자체가 실패하면 error 를 null 로 둔다 — 문구는 렌더에서 고른다
         let res: Awaited<ReturnType<typeof searchTitles>> | { ok: false; reason: 'failed'; error: null }
         try {
           res = await searchTitles({

@@ -13,7 +13,6 @@ import { enqueueIndexChange, enqueueWeeklyRowIndexChange } from '@/lib/ai/index/
 import { failWith, rpcFailure, tokenTable, type OwnTokenKeys } from '@/lib/errors/dbFail'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 const MODULES: Record<FieldEntity, ModuleId> = { wbs_item: 'wbs', issue: 'issues', weekly_row: 'weekly' }
 const entityOk = (v: unknown): v is FieldEntity => typeof v === 'string' && (FIELD_ENTITIES as readonly string[]).includes(v)
 const ERR = 'srv.customFieldValues.couldNotSaveCustomFields'
@@ -34,9 +33,9 @@ const TOKENS: OwnTokenKeys = {
 export async function saveCustomFieldValues(projectId: string, entity: FieldEntity, rowId: string, expected: unknown, next: unknown): Promise<CustomFieldSaveResult> {
   const t = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, code: 'ERR_DENIED', error: g.error }
   const mod = await requireModule({ projectId }, entityOk(entity) ? MODULES[entity] : 'wbs')
-  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, code: 'ERR_MODULE_DISABLED', error: mod.error }
   if (!entityOk(entity) || !isUuidLike(rowId) || !parseCustomValues(expected).ok) return { ok: false, code: 'FIELD_INVALID', error: t(INVALID) }
   try {
     const cfg = await getProjectConfig(projectId)

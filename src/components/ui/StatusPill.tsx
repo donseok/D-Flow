@@ -29,7 +29,7 @@ export interface StatusPillDef {
 
 /**
  * 상태 칩. 두 꼴(SP5b D8 — 유니언 props):
- * - `{ status }` — WBS 일정 상태(제품 고정 4종), 라벨은 locale 사전(status.*)
+ * - `{ status }` — WBS 일정 상태(제품 고정 4종), 라벨은 사전(status.*)
  * - `{ def }` — 해석된 정의(이슈 표시 상태 등). 라벨·tone·아이콘을 정의에서 받는다
  */
 export function StatusPill(props: { status: Status } | { def: StatusPillDef }) {

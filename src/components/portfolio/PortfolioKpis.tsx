@@ -1,10 +1,10 @@
 import { Stat } from '@/components/dashboard/bits'
 import type { PortfolioModel } from '@/lib/domain/portfolio'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t} from '@/lib/i18n/dict'
 
 /** 상단 KPI — 프로젝트 수·신호 분포·지연 종료·집계 실패. 집계는 buildPortfolio 가 끝냈다. */
-export function PortfolioKpis({ totals, locale }: { totals: PortfolioModel['totals']; locale: Locale }) {
-  const tr = (k: DictKey) => t(locale, k)
+export function PortfolioKpis({ totals }: { totals: PortfolioModel['totals'] }) {
+  const tr = t
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Stat label={tr('pf.kpi.projects')} value={totals.count} />

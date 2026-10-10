@@ -42,7 +42,7 @@ describe('WikiSearchResults 요약 버튼 — POST /api/wiki/summarize', () => {
 
   async function mount() {
     await act(async () => root.render(
-      <WikiSearchResults state={doneState} locale="ko" query="권한" projectId="proj-1" />,
+      <WikiSearchResults state={doneState} query="권한" projectId="proj-1" />,
     ))
   }
 
@@ -107,7 +107,7 @@ describe('WikiSearchResults 요약 버튼 — POST /api/wiki/summarize', () => {
 
     const nextState: SearchViewState = { kind: 'done', hits: [hit], degraded: false }
     await act(async () => root.render(
-      <WikiSearchResults state={nextState} locale="ko" query="권한" projectId="proj-1" />,
+      <WikiSearchResults state={nextState} query="권한" projectId="proj-1" />,
     ))
     expect(container.textContent).not.toContain('이전 요약 문단')
   })

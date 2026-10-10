@@ -12,7 +12,7 @@ import { type WeeklyCellKey, type WeeklyCellEdit } from '@/lib/domain/weeklyShee
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { fill } from '@/lib/i18n/translate'
 
-/** aria-live 방송용 열 라벨(§7) — 주간 4열 이름은 제품 고정이라 화면 언어를 따르지 않는다(개정 §2.9). */
+/** aria-live 방송용 열 라벨(§7) — 주간 4열 이름은 제품 고정이라 사전에 두지 않는다(개정 §2.9). */
 const COL_LABEL: Record<WeeklyCellKey, string> = {
   this_content: '금주실적 내용', this_issue: '금주 이슈·이벤트',
   next_content: '차주계획 내용', next_issue: '차주 이슈·이벤트',
@@ -91,7 +91,7 @@ export function useSheetGrid({
   rowsRef.current = rows
   const rowIdsRef = useRef(rowIds)
   rowIdsRef.current = rowIds
-  // 문구는 화면 언어를 따른다 — ref 로 읽어 효과·콜백의 의존성을 늘리지 않는다(언어가 바뀌었다고 선택을 다시 낭독하지 않게)
+  // 문구는 사전에서 꺼낸다 — ref 로 읽어 효과·콜백의 의존성을 늘리지 않는다
   const { t: translate } = useLocale()
   const tRef = useRef(translate)
   tRef.current = translate

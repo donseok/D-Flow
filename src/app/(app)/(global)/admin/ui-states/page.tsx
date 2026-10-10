@@ -5,7 +5,6 @@ import { deriveAccent } from '@/lib/settings/accent'
 import { PageHeader } from '@/components/app/PageHeader'
 import { UiStatesShowcase, type AccentSample } from '@/components/admin/UiStatesShowcase'
 import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,11 +21,10 @@ const ACCENT_SAMPLES: readonly (readonly [nameKey: DictKey, hex: string])[] = [
 export default async function UiStatesPage() {
   const actor = await getActorForView()
   if (!canViewUiStates(actor)) notFound()
-  const locale = await getServerLocale()
-  const samples: AccentSample[] = ACCENT_SAMPLES.map(([nameKey, hex]) => ({ name: t(locale, nameKey), hex, result: deriveAccent(hex) }))
+  const samples: AccentSample[] = ACCENT_SAMPLES.map(([nameKey, hex]) => ({ name: t(nameKey), hex, result: deriveAccent(hex) }))
   return (
     <div className="space-y-6">
-      <PageHeader title={t(locale, 'nav.uiStates')} />
+      <PageHeader title={t('nav.uiStates')} />
       <UiStatesShowcase samples={samples} />
     </div>
   )

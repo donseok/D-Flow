@@ -3,8 +3,7 @@ import type { TrendModel } from '@/lib/domain/trend'
 import { progressSignal, SPI_DONE_FLOOR, SPI_WARN_FLOOR, type Signal } from '@/lib/domain/dashboard'
 import { formatPp1 } from '@/lib/domain/format'
 import { SectionCard } from '@/components/ui/SectionCard'
-import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
+import { t} from '@/lib/i18n/dict'
 import { Stat } from './bits'
 
 const SIG_TONE: Record<Signal, string> = {
@@ -28,8 +27,7 @@ const arcPath = (from: number, to: number) =>
 export async function SpiPanel({ model, variance, historyFailed = false }: {
   model: TrendModel; variance: number; historyFailed?: boolean
 }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
   const fmtPp = (n: number) => `${formatPp1(n)}%p`
 
   const spi = model.currentSpi

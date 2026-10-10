@@ -22,12 +22,12 @@ export function WbsCellRangeDialog({ job, rowLabel, colLabel, onConfirm, onClose
   onConfirm: () => void
   onClose: () => void
 }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   if (!job) return null
   const { kind, phase, plan } = job
   const outcome = job.outcome ?? { written: [], already: [], conflicts: [], failed: [] }
   const where = (c: { rowId: string; col: string }) => `${rowLabel(c.rowId)} · ${colLabel(c.col)}`
-  const invalidText = (r: RangeInvalidReason) => (typeof r === 'string' ? t(`wbs.range.why.${r}` as DictKey) : customFieldErrorText(r.field, locale))
+  const invalidText = (r: RangeInvalidReason) => (typeof r === 'string' ? t(`wbs.range.why.${r}` as DictKey) : customFieldErrorText(r.field))
   const title = t(`wbs.range.title.${kind}${phase === 'done' ? '' : 'Confirm'}` as DictKey)
   const sections: { key: string; label: string; n: number; count?: string; tone?: 'warn'; lines?: Line[] }[] = [
     phase === 'done'

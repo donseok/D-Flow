@@ -35,7 +35,7 @@ const SPECIAL: Record<string, { module: ModuleId; why: string }> = {
   'src/app/share/minutes/[token]/page.tsx': { module: 'minutes', why: '익명 공유 링크 — 토큰 행의 워크스페이스로 admin 판정' },
 }
 /** 관문 앞에서 await 해도 되는 호출 — 권한 redirect 재료·로케일. 데이터 로더·Promise.all 은 관문 뒤다(notFound 뒤 로더가 돌지 않게) */
-const ALLOWED_BEFORE = new Set(['params', 'searchParams', 'getActorForView', 'getActor', 'getActorViewState', 'getServerLocale', 'loadWorkspaceScope'])
+const ALLOWED_BEFORE = new Set(['params', 'searchParams', 'getActorForView', 'getActor', 'getActorViewState', 'loadWorkspaceScope'])
 /** 관문 앞에서 await 없이 불러도 되는 동기 호출 — 권한 판정 술어와 Next 신호. await 없이 시작한 로더(프라미스)는 여기 없으므로 막힌다 */
 const SYNC_BEFORE = new Set(['redirect', 'notFound', 'isProjectMember', 'isProjectAdmin', 'canViewAgents', 'canViewPortfolio', 'canViewUsage', 'wsHref'])
 /** 페이지별 관문 앞 허용(사유) — 대상 행에서 워크스페이스를 알아야 하는 페이지. selects 는 관문 앞 조회 체인이 고를 수 있는 열(그 밖의 열을 읽는 체인은 문제) */

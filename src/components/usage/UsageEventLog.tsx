@@ -8,11 +8,11 @@ import { MiniEmpty } from '@/components/dashboard/bits'
 import { menuLabel } from '@/lib/domain/usageMenu'
 import { usageHref } from '@/lib/domain/usage'
 import type { UsageEventRow } from '@/lib/data/usage'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
-import { intlLocale } from '@/lib/i18n/format'
+import { t} from '@/lib/i18n/dict'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
-function fmtDateTime(iso: string, timeZone: string, locale: Locale): string {
-  return new Intl.DateTimeFormat(intlLocale(locale), {
+function fmtDateTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(KO_LOCALE, {
     timeZone, dateStyle: 'short', timeStyle: 'medium',
   }).format(new Date(iso))
 }
@@ -23,13 +23,12 @@ const EVENT_PAGE_SIZE = 20
  * 접속 로그 — 최신순. 상한에 걸리면 그 사실을 화면에 밝힌다(잘린 목록을 전부처럼 보이지 않게).
  * 필터는 searchParams 기반 링크로 유지하고, 긴 목록의 페이지 이동만 클라이언트 상태로 처리한다.
  */
-export function UsageEventLog({ base, events, names, limit, locale, menus, filter, timeZone }: {
+export function UsageEventLog({ base, events, names, limit, menus, filter, timeZone }: {
   /** 필터 링크의 경로 — 범위의 사용 현황 주소(/w/<slug>/usage) */
   base: string
   events: UsageEventRow[]
   names: Map<string, string>
   limit: number
-  locale: Locale
   /** 이 기간에 실제로 기록이 있는 메뉴 키(사용량 순) — 없는 메뉴로 필터를 걸 수 없게 한다. */
   menus: string[]
   filter: { days: number; user?: string; menu?: string }
@@ -46,7 +45,7 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
     setPage(current => Math.min(current, pageCount))
   }, [pageCount])
 
-  const translate = (k: DictKey) => t(locale, k)
+  const translate = t
   const chip = (active: boolean) =>
     `chip ${active ? 'bg-action text-action-fg' : 'text-fg-secondary transition hover:text-fg'}`
 
@@ -87,7 +86,7 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
             <tbody>
               {visibleEvents.map(e => (
                 <tr key={e.id} className="border-b border-border/60">
-                  <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDateTime(e.occurredAt, timeZone, locale)}</td>
+                  <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDateTime(e.occurredAt, timeZone)}</td>
                   {/* 계정 목록에 없는 id 는 이름을 지어내지 않는다. 이름 클릭 = 그 사용자로 필터. */}
                   <td className="py-2 pr-3 text-fg">
                     <Link href={usageHref(base, filter, { user: e.userId })} className="transition hover:text-action hover:underline">

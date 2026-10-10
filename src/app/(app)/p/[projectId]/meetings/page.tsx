@@ -1,5 +1,4 @@
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { getProjectMeetingData } from '@/lib/data/meetings'
 import { getProjectRoster } from '@/lib/data/members'
 import { getSession } from '@/lib/auth'
@@ -25,13 +24,12 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
   const { projectId } = await params
   await requireModulePage({ projectId }, 'meetings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const actorP = getActorForView()
-  const [meetRes, roster, m, user, projects, locale, pc, mods, wsRef] = await Promise.all([
+  const [meetRes, roster, m, user, projects, pc, mods, wsRef] = await Promise.all([
     getProjectMeetingData(projectId),
     getProjectRoster(projectId),
     actorP,
     getSession(),
     listProjects(),
-    getServerLocale(),
     loadProjectConfigForPage(projectId),
     // D53 — '이 프로젝트 회의록' 은 회의록 모듈이 켜졌을 때만(판정 실패는 core 만 = 숨김, 로그는 moduleSetFor)
     moduleSetFor({ projectId }),
@@ -42,11 +40,11 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
     }),
   ])
   // '오늘'의 tz = 프로젝트 달력(계획 D-22·D-21a) — 못 읽거나 손상이면 그 사유를 그린다(서울·UTC 로 대체하지 않는다)
-  if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
+  if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} /></div>
   const cal = pickCalendar(pc.cfg)
-  if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} /></div>
+  if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} /></div>
   const categories = pick(pc.cfg, 'meetings.categories')
-  if (!categories.ok) return <div className="p-6"><ConfigLoadError error={categories.error} keyName={categories.key} kind={categories.kind} locale={locale} /></div>
+  if (!categories.ok) return <div className="p-6"><ConfigLoadError error={categories.error} keyName={categories.key} kind={categories.kind} /></div>
   const today = todayIn(cal.calendar.timezone, new Date())
   const minutesHref = mods.has('minutes') && wsRef?.ok ? wsHref(wsRef.ws.slug, 'minutes', { project: projectId }) : null
   // 명단은 참석자 선택·이름 표시용 곁가지 — 실패해도 일정은 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
@@ -62,11 +60,11 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
     <ProjectPageShell
       pinned={meetRes.ok && roster.ok ? undefined : (
         <div className="space-y-2">
-          {!meetRes.ok && <LoadErrorNotice message={t(locale, 'common.loadFailed.meetings')} />}
+          {!meetRes.ok && <LoadErrorNotice message={t('common.loadFailed.meetings')} />}
           {!roster.ok && <RosterLoadError error={roster.error} />}
         </div>
       )}
-      hero={<PageHeader title={`${projectName} ${t(locale, 'meet.heroTitleSuffix')}`} description={t(locale, 'meet.heroDesc')} />}
+      hero={<PageHeader title={`${projectName} ${t('meet.heroTitleSuffix')}`} description={t('meet.heroDesc')} />}
     >
       <MeetingsView projectId={projectId} meetings={meetings} exceptions={exceptions} members={members}
         loadFailed={!meetRes.ok} todayIso={today} currentUserId={user?.id ?? null}

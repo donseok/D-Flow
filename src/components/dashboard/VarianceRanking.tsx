@@ -3,14 +3,12 @@ import type { VarianceEntry } from '@/lib/domain/dashboard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { OwnerBadges, fmtDate } from '@/components/wbs/shared'
-import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
+import { t} from '@/lib/i18n/dict'
 import { CountBadge, MiniEmpty } from './bits'
 
 /** 마감 전인데 계획보다 뒤처진 작업 Top N — 기한 경과분은 DelayAging 전담(상호 배타). */
 export async function VarianceRanking({ entries }: { entries: VarianceEntry[] }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
 
   return (
     <SectionCard title={tr('dash.rank.title')} icon={TrendingDown}

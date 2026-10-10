@@ -27,8 +27,8 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
-  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+  const ko = (k: string) => t(k as Parameters<typeof t>[0])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ t: ko }) }
 })
 // MeetingsView 가 항상 마운트하는 MeetingFormModal 이 useToast 를 쓴다.
 // 이 테스트는 뷰만 단독 마운트해 ToastProvider 가 없으므로 훅 자체를 대체한다.

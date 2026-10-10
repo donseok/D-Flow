@@ -9,17 +9,16 @@ import type { IssueAttachment } from '@/lib/domain/issueAttachments'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const { listIssueAttachments, removeIssueAttachment, getIssueAttachmentUrl, L } = vi.hoisted(() => ({
+const { listIssueAttachments, removeIssueAttachment, getIssueAttachmentUrl } = vi.hoisted(() => ({
   listIssueAttachments: vi.fn(),
   getIssueAttachmentUrl: vi.fn<(issueId: string, id: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>>(),
   removeIssueAttachment: vi.fn<(id: string) => Promise<{ ok: boolean; error?: string }>>(),
-  L: { locale: 'ko' as const },
 }))
 vi.mock('@/app/actions/issueAttachments', () => ({ listIssueAttachments, removeIssueAttachment, getIssueAttachmentUrl }))
 vi.mock('@/lib/issues/uploadIssueAttachments', () => ({ uploadIssueAttachments: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: L.locale, t: (k: string) => realT(L.locale, k as Parameters<typeof realT>[1]) }),
+  useLocale: () => ({ t: (k: string) => realT(k as Parameters<typeof realT>[0]) }),
 }))
 
 import { IssueAttachments } from '@/components/issues/IssueAttachments'
@@ -37,7 +36,6 @@ describe('IssueAttachments — 삭제 실패 문구', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    L.locale = 'ko'
     listIssueAttachments.mockResolvedValue({ ok: true, items: [ATT] })
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -52,7 +50,7 @@ describe('IssueAttachments — 삭제 실패 문구', () => {
     await act(async () => { root.render(<IssueAttachments issueId={ISSUE} editable />) })
     await act(async () => {})
   }
-  const del = () => container.querySelector(`button[aria-label="${realT(L.locale, 'issue.attach.remove')}"]`) as HTMLButtonElement
+  const del = () => container.querySelector(`button[aria-label="${realT('issue.attach.remove')}"]`) as HTMLButtonElement
   const line = () => [...container.querySelectorAll('p')].find(p => p.className.includes('text-danger'))?.textContent
 
   it.each([
@@ -63,8 +61,8 @@ describe('IssueAttachments — 삭제 실패 문구', () => {
     await render()
     await act(async () => { del().click() })
     expect(removeIssueAttachment).toHaveBeenCalledWith('a1')
-    expect(line()).toBe(realT('ko', key))
-    expect(realT('ko', key)).toBe(error)
+    expect(line()).toBe(realT(key))
+    expect(realT(key)).toBe(error)
   })
 
   it('도우미의 두 문구가 아닌 사유는 받은 문구를 그대로, 사유가 없으면 일반 문구', async () => {
@@ -74,7 +72,7 @@ describe('IssueAttachments — 삭제 실패 문구', () => {
     expect(line()).toBe('권한 없음')
     removeIssueAttachment.mockResolvedValue({ ok: false })
     await act(async () => { del().click() })
-    expect(line()).toBe(realT('ko', 'issue.err.attachRemoveFailed'))
+    expect(line()).toBe(realT('issue.err.attachRemoveFailed'))
   })
 
   // SP5 B3 과제7 — 목록에 서명 링크가 없다. 파일명을 누르면 그때 이슈·첨부 id 로 60초 링크를 받아 연다.
@@ -97,7 +95,7 @@ describe('IssueAttachments — 삭제 실패 문구', () => {
     await render()
     await act(async () => { (container.querySelector('button[title="plan.pdf"]') as HTMLButtonElement).click() })
     expect(open).not.toHaveBeenCalled()
-    expect(line()).toBe(realT('ko', 'issue.attach.linkFailed'))
+    expect(line()).toBe(realT('issue.attach.linkFailed'))
     open.mockRestore(); err.mockRestore()
   })
 })

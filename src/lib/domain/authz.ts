@@ -21,7 +21,7 @@ export function isAdminAccessRole(v: unknown): v is 'admin' {
 }
 /** 워크스페이스 역할 표시 라벨. */
 export const WORKSPACE_ROLE_LABEL: Record<WorkspaceRole, string> = { admin: '관리자', member: '멤버' }
-/** 화면용 사전 키 — 화면은 `t(WORKSPACE_ROLE_LABEL_KEY[role])` 로 그린다(로캘을 따른다). ko 문구는 위 표와 같다 */
+/** 화면용 사전 키 — 화면은 `t(WORKSPACE_ROLE_LABEL_KEY[role])` 로 그린다. ko 문구는 위 표와 같다 */
 export const WORKSPACE_ROLE_LABEL_KEY = { admin: 'wsAccounts.role.admin', member: 'wsAccounts.role.member' } as const satisfies Record<WorkspaceRole, string>
 
 /** 로그인 사용자의 권한 스냅샷. buildActor() 가 4축(플랫폼 관리자·워크스페이스·프로젝트·명단)으로 조립한다. */

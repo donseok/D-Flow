@@ -42,7 +42,7 @@ export function ViewsDefaultEditor({ projectId, revision, initial, invalidReason
   }
   const boardWanted = c.draft.wbs === 'board' && !kanbanOn            // 저장값 보드 + 칸반 꺼짐 — 그대로는 저장하지 않는다(서버가 거부한다)
   return <div className="space-y-3">
-    {invalidReason && c.needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="views.default" message={invalidReason} isAdmin settingsHref="#project-modules" />}
+    {invalidReason && c.needsRepair && <ConfigStateNotice kind="invalid" keyName="views.default" message={invalidReason} isAdmin settingsHref="#project-modules" />}
     <div role="radiogroup" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : t('settings.views.default.label')} aria-invalid={c.fieldError ? true : undefined} aria-describedby={c.fieldError ? errId : undefined}
       className="grid gap-2 sm:grid-cols-3">
       {OPTIONS.map((o, i) => {
@@ -57,7 +57,7 @@ export function ViewsDefaultEditor({ projectId, revision, initial, invalidReason
         </button>
       })}
     </div>
-    {!kanbanOn && <div id={offId}><ConfigStateNotice kind="disabled" locale="ko" compact message={t('settings.viewsDefault.boardBlocked')} isAdmin settingsHref="#project-modules" /></div>}
+    {!kanbanOn && <div id={offId}><ConfigStateNotice kind="disabled" compact message={t('settings.viewsDefault.boardBlocked')} isAdmin settingsHref="#project-modules" /></div>}
     {c.fieldError && <p id={errId} role="alert" className="text-meta font-semibold text-danger">{c.fieldError}</p>}
     {c.conflict && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-(--radius-panel) border border-border bg-surface-subtle p-3 text-sm text-fg">
       <span>{t('settings.viewsDefault.conflict')}</span>
@@ -65,7 +65,7 @@ export function ViewsDefaultEditor({ projectId, revision, initial, invalidReason
       {/* 최신 값이 손상이어도 갇히지 않게 — 내 선택을 최신 revision 위에 다시 저장할 수 있다 */}
       <button type="button" className="btn btn-ghost" onClick={c.keepMine}>{t('settings.viewsDefault.keepMine')}</button>
     </div>}
-    {c.error && <ConfigStateNotice kind="patch" locale="ko" message={c.error} />}
+    {c.error && <ConfigStateNotice kind="patch" message={c.error} />}
     <SettingsSaveBar notice={c.notice}>
       <button type="button" className="btn btn-primary" aria-label={t('settings.viewsDefault.save')} disabled={c.pending || (!c.dirty && !c.uncertain) || boardWanted || !!c.conflict} onClick={c.save}>
         {c.uncertain ? t('settings.workflow.retry') : t('settings.viewsDefault.save')}

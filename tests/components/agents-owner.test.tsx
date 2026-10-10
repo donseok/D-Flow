@@ -15,8 +15,8 @@ import type { Seat, Seatmap, Watcher } from '@/lib/domain/seatmap'
 // 화면 문구는 진짜 ko 사전으로 읽는다 — 한국어 단언이 사전 이전 뒤에도 같은 글자를 본다
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
-  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+  const ko = (k: string) => t(k as Parameters<typeof t>[0])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ t: ko }) }
 })
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
@@ -40,7 +40,7 @@ beforeEach(() => { host = document.createElement('div'); document.body.appendChi
 afterEach(() => { act(() => root.unmount()); host.remove() })
 
 describe('ownerLabel', () => {
-  const ko = (k: DictKey) => translate('ko', k)
+  const ko = (k: DictKey) => translate(k)
   it('내 것 · 이름 있는 남의 것 · 이름 모르는 남의 것 · 에이전트 없는 좌석', () => {
     expect(ownerLabel(seat({ agentMine: true }), ko)).toEqual({ kind: 'mine', text: '내 에이전트' })
     expect(ownerLabel(seat({ agentOwnerName: '홍길동' }), ko)).toEqual({ kind: 'other', text: '홍길동의 에이전트' })

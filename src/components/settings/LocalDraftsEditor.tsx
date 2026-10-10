@@ -27,7 +27,7 @@ export function LocalDraftsEditor({ workspaceId, revision, initial, invalidReaso
   const days = c.draft.retention_days
   const daysValid = Number.isInteger(days) && days >= LOCAL_DRAFTS_RETENTION_MIN && days <= LOCAL_DRAFTS_RETENTION_MAX
   return <div className="space-y-4">
-    {invalidReason && c.needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="security.local_drafts" message={invalidReason} isAdmin settingsHref="#workspace-security" />}
+    {invalidReason && c.needsRepair && <ConfigStateNotice kind="invalid" keyName="security.local_drafts" message={invalidReason} isAdmin settingsHref="#workspace-security" />}
     <div className="flex items-center gap-2 rounded-(--radius-control) bg-surface-subtle p-2">
       <span className="min-w-0 flex-1 text-sm text-fg">{t('settings.localDrafts.keep')}</span>
       <button type="button" role="switch" aria-checked={c.draft.allowed} aria-label={t('settings.localDrafts.allowAria')} disabled={off}
@@ -47,10 +47,10 @@ export function LocalDraftsEditor({ workspaceId, revision, initial, invalidReaso
       </span>
     </label>
     {!c.draft.allowed && <p className="text-meta text-fg-secondary">{t('settings.localDrafts.offNote')}</p>}
-    {c.fieldError && <ConfigStateNotice kind="field" locale="ko" message={c.fieldError} />}
+    {c.fieldError && <ConfigStateNotice kind="field" message={c.fieldError} />}
     {c.conflict && <ConflictCompare rows={[{ key: 'security.local_drafts', label: t('settings.security.local_drafts.label'), mine: daysValid ? summary(c.draft, t) : t('settings.localDrafts.inputError'), latest: c.conflict.value ? summary(c.conflict.value, t) : t('settings.notify.policy.corrupted') }]}
       onMine={c.keepMine} onLatest={c.useLatest} latestAvailable={!!c.conflict.value} />}
-    {c.error && <ConfigStateNotice kind="patch" locale="ko" message={c.error} />}
+    {c.error && <ConfigStateNotice kind="patch" message={c.error} />}
     <SettingsSaveBar notice={c.notice}>
       <button type="button" className="btn btn-primary" aria-label={t('settings.localDrafts.save')} disabled={c.pending || !daysValid || (!c.dirty && !c.uncertain) || !!c.conflict} onClick={c.save}>
         {c.uncertain ? t('settings.workflow.retry') : t('settings.localDrafts.save')}

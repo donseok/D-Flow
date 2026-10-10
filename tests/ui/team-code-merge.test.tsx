@@ -20,7 +20,7 @@ vi.mock('@/app/actions/projectTeams', () => ({
   addProjectTeam: vi.fn(), copyGlobalTeams: vi.fn(), updateProjectTeam: vi.fn(),
   changeProjectTeamCode: h.changeProjectTeamCode, previewProjectTeamMerge: h.previewProjectTeamMerge, mergeProjectTeams: h.mergeProjectTeams,
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: DictKey) => dict('ko', k) }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: DictKey) => dict(k) }) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn() }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: h.toast }) }))
 

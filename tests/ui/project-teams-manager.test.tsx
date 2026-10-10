@@ -24,7 +24,7 @@ vi.mock('@/components/ui/Toast', () => ({
 }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  return { useLocale: () => ({ locale: 'ko', t: (key: string) => t('ko', key as Parameters<typeof t>[1]) }) }
+  return { useLocale: () => ({ t: (key: string) => t(key as Parameters<typeof t>[0]) }) }
 })
 vi.mock('@/app/actions/projectTeams', () => ({
   addProjectTeam: mocks.addProjectTeam,

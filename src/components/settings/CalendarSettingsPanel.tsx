@@ -10,7 +10,7 @@ import { getSettingsCommandOutcome, updateProjectSettings, updateWorkspaceSettin
 import { previewWeekStartChange } from '@/app/actions/settingsPreview'
 import { currentRuleDay, parseTimezone, parseWorkingDays, type IsoDow, type WeekStartDay, type WeekStartRule } from '@/lib/domain/calendar'
 import { newUuid } from '@/lib/domain/uuid'
-import type { DictKey, Locale } from '@/lib/i18n/dict'
+import type { DictKey} from '@/lib/i18n/dict'
 import { browserTimezoneSuggestion, type CalendarFieldState } from '@/lib/settings/calendarField'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
@@ -55,12 +55,12 @@ const stored = (d: Draft, k: Key): unknown => k === 'calendar.timezone' ? d.time
 export function CalendarSettingsPanel(props: {
   scope: CalendarScope; revision: number; todayIso: string | null
   timezone: CalendarFieldState<string>; workingDays: CalendarFieldState<IsoDow[]>; weekStart: CalendarFieldState<WeekStartRule[]>
-  canEdit: boolean; locale?: Locale
+  canEdit: boolean;
   /** 워크스페이스 — 시간대가 아직 제품 기본값이면 브라우저 시간대를 제안(D13 ② — 자동 저장 없음, 저장은 관리자가) */
   suggestBrowserTimezone?: boolean
 }) {
   const { t } = useLocale()
-  const { scope, canEdit, locale = 'ko' } = props
+  const { scope, canEdit } = props
   const isProject = 'projectId' in scope
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(() => draftOf(props))
@@ -169,9 +169,9 @@ export function CalendarSettingsPanel(props: {
 
   const inputsLocked = !canEdit || pending || !!uncertainPatch
   const corruptNotice = (k: Key, s: CalendarFieldState<unknown>, href: string) => s.error && !repaired.includes(k)
-    ? <ConfigStateNotice kind="invalid" locale={locale} keyName={k} message={s.error} isAdmin={canEdit} settingsHref={href} />
+    ? <ConfigStateNotice kind="invalid" keyName={k} message={s.error} isAdmin={canEdit} settingsHref={href} />
     : null
-  const fieldNotice = (k: Key) => fieldErrors[k] ? <ConfigStateNotice kind="field" locale={locale} message={fieldErrors[k]} /> : null
+  const fieldNotice = (k: Key) => fieldErrors[k] ? <ConfigStateNotice kind="field" message={fieldErrors[k]} /> : null
   const keyLine = (k: Key) => <p className="text-meta text-fg-muted">{k}</p>
   const head = (k: Key, s: CalendarFieldState<unknown>, applies: string, labelFor?: string) => (
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -203,7 +203,7 @@ export function CalendarSettingsPanel(props: {
       <section className="space-y-2 border-b border-border pb-4" data-field="calendar.working_days" aria-label={t(LABEL['calendar.working_days'])}>
         {head('calendar.working_days', props.workingDays, t('settings.calendarPanel.appliesNowProgress'))}
         {corruptNotice('calendar.working_days', props.workingDays, '#calendar-working-days')}
-        <WorkingDaysEditor value={draft.workingDays} onChange={days => edit({ workingDays: days }, 'calendar.working_days')} disabled={inputsLocked} locale={locale} />
+        <WorkingDaysEditor value={draft.workingDays} onChange={days => edit({ workingDays: days }, 'calendar.working_days')} disabled={inputsLocked} />
         {fieldNotice('calendar.working_days')}
         {keyLine('calendar.working_days')}
       </section>
@@ -211,7 +211,7 @@ export function CalendarSettingsPanel(props: {
       <section className="space-y-2" data-field="calendar.timezone" aria-label={t(LABEL['calendar.timezone'])}>
         {head('calendar.timezone', props.timezone, t('settings.calendarPanel.appliesNowDates'), 'calendar-timezone')}
         {corruptNotice('calendar.timezone', props.timezone, '#calendar-timezone')}
-        <TimezoneSelect value={draft.timezone} onChange={tz => edit({ timezone: tz }, 'calendar.timezone')} disabled={inputsLocked} locale={locale}
+        <TimezoneSelect value={draft.timezone} onChange={tz => edit({ timezone: tz }, 'calendar.timezone')} disabled={inputsLocked}
           suggestion={suggestion && suggestion !== draft.timezone.trim() && !inputsLocked ? { label: t('settings.calendarPanel.suggestTz').replace('{suggestion}', String(suggestion)), value: suggestion } : null} />
         {fieldNotice('calendar.timezone')}
         {keyLine('calendar.timezone')}
@@ -220,7 +220,7 @@ export function CalendarSettingsPanel(props: {
       {conflict && <ConflictCompare rows={changed.map(k => ({ key: k, label: t(LABEL[k]), mine: String(stored(draft, k)),
         latest: conflict.invalidKeys.includes(k) ? t('settings.notify.policy.corrupted') : JSON.stringify(conflict.values[k] ?? null) }))}
         onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(k => !conflict.invalidKeys.includes(k))} />}
-      {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
+      {error && <ConfigStateNotice kind="patch" message={error} />}
       <SettingsSaveBar notice={notice} summary={t('settings.wsFields.changed').replace('{n}', String(changed.length))}>
         {saveReason && <span id="calendar-save-reason" className="sr-only">{saveReason}</span>}
         <button type="button" className="btn btn-primary" disabled={saveDisabled} onClick={save} aria-describedby={saveDescribedBy}>

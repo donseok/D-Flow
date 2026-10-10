@@ -7,7 +7,7 @@ import { SIGNAL_META } from '@/components/dashboard/signalStyle'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { CountBadge, MiniEmpty } from '@/components/dashboard/bits'
 import { fmtDate } from '@/components/wbs/shared'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t, type DictKey} from '@/lib/i18n/dict'
 
 const SIGNAL_LABEL: Record<Signal, DictKey> = {
   green: 'pf.signal.green', amber: 'pf.signal.amber', red: 'pf.signal.red', neutral: 'pf.signal.neutral',
@@ -22,10 +22,10 @@ const STATUS_CHIP: Record<ProjectLifecycleStatus, { labelKey: DictKey; chip: str
 
 const th = 'px-2 py-2 font-semibold'
 
-export function PortfolioTable({ rows, leadersDegraded, locale }: {
-  rows: PortfolioRow[]; leadersDegraded: boolean; locale: Locale
+export function PortfolioTable({ rows, leadersDegraded }: {
+  rows: PortfolioRow[]; leadersDegraded: boolean;
 }) {
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
   if (rows.length === 0) {
     return (
       <SectionCard title={tr('pf.table.title')} icon={Briefcase}>

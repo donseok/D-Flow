@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ dialog: vi.fn() }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }), usePathname: () => '/w/acme' }))
 vi.mock('@/components/app/NotificationBell', () => ({ NotificationBell: () => null }))
 vi.mock('@/components/app/AccountMenu', () => ({ AccountMenu: () => null }))

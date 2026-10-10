@@ -14,7 +14,6 @@ import { projectTimezone } from '@/lib/calendar/load'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 
 // 입력 타입·검증은 도메인(순수)이 정본 — 폼과 액션이 같은 규칙을 쓴다(0091 마일스톤 일자 포함).
 export type { AnnouncementInput }
@@ -36,11 +35,10 @@ export async function createAnnouncement(
   projectId: string,
   input: AnnouncementInput,
 ): Promise<AnnouncementActionResult> {
-  const t = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'announcements')             // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const err = validateAnnouncementInput(input)
   if (err) return { ok: false, error: err }
 
@@ -74,15 +72,14 @@ export async function updateAnnouncement(
   id: string,
   input: AnnouncementInput,
 ): Promise<AnnouncementActionResult> {
-  const t = await serverTranslator()
   // projectId 를 인자로 받지 않으므로 대상 행에서 먼저 읽는다 — 선행 조회 실패는 쓰기 중단 사유.
   const found = await resolveProjectId('announcements', id)
-  if (!found.ok) return { ok: false, error: libText(t, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
-  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
+  if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
   const mod = await requireModule({ projectId: found.projectId }, 'announcements')
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const err = validateAnnouncementInput(input)
   if (err) return { ok: false, error: err }
 
@@ -109,14 +106,13 @@ export async function updateAnnouncement(
 }
 
 export async function deleteAnnouncement(id: string): Promise<AnnouncementActionResult> {
-  const t = await serverTranslator()
   const found = await resolveProjectId('announcements', id)
-  if (!found.ok) return { ok: false, error: libText(t, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
-  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }
+  if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }
   const mod = await requireModule({ projectId: found.projectId }, 'announcements')
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
 
   const sb = await createServerClient()
   const { data, error } = await sb
@@ -173,9 +169,9 @@ export async function markAnnouncementsSeen(
 ): Promise<AnnouncementActionResult> {
   const t = await serverTranslator()
   const user = await getSession()
-  if (!user) return { ok: false, error: libText(t, ERR_ANON) }
+  if (!user) return { ok: false, error: ERR_ANON }
   const mod = await requireModule({ projectId }, 'announcements')
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const micros = typeof seenAt === 'string' ? isoMicros(seenAt) : null
   if (micros === null) return { ok: false, error: t('srv.announcements.invalidTime') }
   // 미래 시각 방지(클라이언트 값 신뢰 금지) — now 로 클램프. 과거 시각은 µs 그대로 둔다(DB created_at 과 같은 정밀도)
@@ -242,12 +238,12 @@ export async function createAnnouncementFromMeeting(
   const t = await serverTranslator()
   // 공지가 붙을 프로젝트는 회의 행이 정한다 — 클라이언트가 프로젝트를 고르게 하지 않는다.
   const found = await resolveProjectId('meetings', meetingId)
-  if (!found.ok) return { ok: false, error: libText(t, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectAdmin(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
-  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }
+  if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }
   const mod = await requireModule({ projectId: found.projectId }, ['announcements', 'meetings'])   // 회의 → 공지 — 둘 다 켜져야
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (!DATE_RE.test(occurrenceDate)) return { ok: false, error: t('err.invalidDate') }
 
   const sb = await createServerClient()
@@ -273,7 +269,7 @@ export async function createAnnouncementFromMeeting(
   }
   // 게시 시작일 = 그 프로젝트 tz 의 오늘 — 달력을 못 읽으면 쓰기 전에 멈춘다(3원칙 ②)
   const pt = await projectToday(r.project_id as string)
-  if (!pt.ok) return { ok: false, error: libText(t, pt.error) }
+  if (!pt.ok) return { ok: false, error: pt.error }
 
   const input = composeAnnouncementFromMeeting({
     title: r.title as string,

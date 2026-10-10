@@ -175,7 +175,7 @@
 
 | 제한 | 현재 값 | 근거 | 재검토 조건 |
 | --- | --- | --- | --- |
-| UI 언어 | 한국어 전용(2026-10-10 결정 — 영어 사전·언어 전환을 걷었다) | `src/lib/i18n/dict.ts` `Locale` | 다국어 요구가 다시 생기면 제품 결정부터 |
+| UI 언어 | 한국어 전용(2026-10-10 결정 — 영어 사전·언어 전환을 걷었다) | `src/lib/i18n/dict.ts` `KO` | 다국어 요구가 다시 생기면 제품 결정부터 |
 | 보고서 생성 문구 | 한국어 | `src/lib/report/weekly.ts` | 출력 언어 요구 |
 | 보고 주기 | 주간 | `src/lib/report/week.ts` | 격주·월간 요구 |
 | WBS 단수 | 1~10 | `src/lib/domain/levelSettings.ts` `LEVEL_LABELS_MAX` | 깊이 정책 요구 |

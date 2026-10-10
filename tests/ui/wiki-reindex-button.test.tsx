@@ -42,7 +42,7 @@ describe('WikiReindexButton', () => {
 
   async function mount() {
     await act(async () => {
-      root.render(<WikiReindexButton locale="ko" />)
+      root.render(<WikiReindexButton />)
       await new Promise(resolve => setTimeout(resolve, 0))
     })
   }

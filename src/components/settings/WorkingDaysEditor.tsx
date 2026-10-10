@@ -2,18 +2,17 @@
 // 근무 요일 편집기(설정 키 calendar.working_days 의 custom 위젯 — 판정 J1). 프로젝트·워크스페이스가 같이 쓴다.
 // 값 검증은 calendar.ts 의 parseWorkingDays(서버와 같은 규칙 — 하나 이상, 1..7) — 저장은 오름차순 ISO 목록.
 import { parseWorkingDays, type IsoDow } from '@/lib/domain/calendar'
-import type { DictKey, Locale } from '@/lib/i18n/dict'
+import type { DictKey} from '@/lib/i18n/dict'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
 const ISO_ORDER: readonly IsoDow[] = [1, 2, 3, 4, 5, 6, 7]
 const ISO_LABEL: Readonly<Record<IsoDow, DictKey>> = { 1: 'att.weekday.mon', 2: 'att.weekday.tue', 3: 'att.weekday.wed', 4: 'att.weekday.thu', 5: 'att.weekday.fri', 6: 'att.weekday.sat', 7: 'att.weekday.sun' }
 
-export function WorkingDaysEditor({ value, onChange, disabled, locale }: {
+export function WorkingDaysEditor({ value, onChange, disabled }: {
   value: readonly IsoDow[]
   onChange: (days: IsoDow[]) => void
   disabled: boolean
-  locale: Locale
 }) {
   const { t } = useLocale()
   const check = parseWorkingDays([...value])
@@ -32,7 +31,7 @@ export function WorkingDaysEditor({ value, onChange, disabled, locale }: {
           </label>
         ))}
       </div>
-      {!check.ok && <ConfigStateNotice kind="field" locale={locale} message={t('settings.workingDays.required')} />}
+      {!check.ok && <ConfigStateNotice kind="field" message={t('settings.workingDays.required')} />}
     </div>
   )
 }

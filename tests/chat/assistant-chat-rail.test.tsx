@@ -6,7 +6,7 @@ import { fireEvent, render, waitFor } from '../shell/_dom'
 Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() })
 const h = vi.hoisted(() => ({ wide: true, probe: 200 }))
 vi.mock('next/navigation', () => ({ usePathname: () => '/w/acme', useSearchParams: () => new URLSearchParams(''), useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key }) }))
 vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWbsFields: vi.fn() }))
 import { AssistantChat, useAiRailButton } from '@/components/chat/AssistantChat'
 import { RightRailProvider, useRightRail } from '@/components/app/RightRail'

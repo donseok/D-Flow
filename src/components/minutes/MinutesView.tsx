@@ -79,7 +79,7 @@ export function MinutesView({
   hasNoTeamMinutes?: boolean
 }) {
   const router = useRouter()
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const { toast } = useToast()
   const minuteLinks = useMinuteLinks()   // 화면 안 링크의 범위(D38 ①) — 슬러그 워크스페이스의 상세
   // 고정 필터 바의 테두리 상자 높이 → 루트의 --minutes-bar-h(탐색기 폴더 트리의 고정 위치·결과 scroll-mt, BB2). PageFrame 의 --frame-sticky-top 과 같은 꼴
@@ -486,7 +486,6 @@ export function MinutesView({
         team={teamCodeOrNull}
         from={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[0]}
         to={isSearch || view === 'tree' ? null : monthRangeOf(year, month0)[1]} />
-      {void locale}
     </div>
     </TeamBarLabelsProvider>
   )

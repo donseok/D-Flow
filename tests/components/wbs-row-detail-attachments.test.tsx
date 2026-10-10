@@ -9,11 +9,10 @@ import { t as realT } from '@/lib/i18n/dict'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const { listAttachments, removeAttachment, getAttachmentUrl, L } = vi.hoisted(() => ({
+const { listAttachments, removeAttachment, getAttachmentUrl } = vi.hoisted(() => ({
   listAttachments: vi.fn<(itemId: string) => Promise<AttachmentList>>(),
   getAttachmentUrl: vi.fn<(itemId: string, id: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>>(),
   removeAttachment: vi.fn<(id: string) => Promise<{ ok: boolean; error?: string }>>(),
-  L: { locale: 'ko' as const },
 }))
 vi.mock('@/app/actions/wbs', () => ({
   getChangeLogs: vi.fn().mockResolvedValue([]),
@@ -26,7 +25,7 @@ vi.mock('@/app/actions/attachments', () => ({
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: L.locale, t: (k: string) => realT(L.locale, k as Parameters<typeof realT>[1]) }),
+  useLocale: () => ({ t: (k: string) => realT(k as Parameters<typeof realT>[0]) }),
 }))
 vi.mock('@/components/app/TeamsProvider', () => ({ useTeamLabel: () => (c: string) => c, useTeamCodes: () => [], useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }) }))
 vi.mock('@/components/wbs/WbsAssigneeStagePanel', () => ({ WbsAssigneeStagePanel: () => null }))
@@ -34,7 +33,7 @@ vi.mock('@/components/wbs/WbsAssigneeStagePanel', () => ({ WbsAssigneeStagePanel
 import { RowDetailPanel } from '@/components/wbs/RowDetailPanel'
 import { ERR_OBJECT_REMOVE, ERR_ROW_REMOVE } from '@/lib/attachments/removeStoredAttachment'
 
-const ko = (k: Parameters<typeof realT>[1]) => realT('ko', k)
+const ko = (k: Parameters<typeof realT>[0]) => realT(k)
 
 const item: ComputedItem = {
   id: 'item-1', parentId: null, code: 'A-1', sortOrder: 1, name: '대상 작업',
@@ -55,7 +54,6 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    L.locale = 'ko'
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -73,7 +71,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
   }
   /** 첨부 섹션 — 머리글 문구를 가진 section. 패널의 다른 영역(링크·알림)과 섞지 않는다. */
   function section(): HTMLElement {
-    const head = [...container.querySelectorAll('section')].find(s => s.textContent?.includes(realT(L.locale, 'wbs.attachments')))
+    const head = [...container.querySelectorAll('section')].find(s => s.textContent?.includes(realT('wbs.attachments')))
     expect(head).toBeTruthy()
     return head as HTMLElement
   }
@@ -114,7 +112,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     listAttachments.mockResolvedValueOnce({ ok: false, error: '첨부 목록을 불러오지 못했습니다.' })
     await render()
     const alert = section().querySelector('[role="alert"]')!
-    expect(alert.textContent).toContain(realT('ko', 'wbs.attachLoadFail'))
+    expect(alert.textContent).toContain(realT('wbs.attachLoadFail'))
   })
 
   // 삭제 실패 — 같은 섹션의 목록 실패는 사전 문구인데 삭제 실패만 도우미의 한국어 문구가 그대로 떴다.
@@ -125,12 +123,12 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     listAttachments.mockResolvedValue({ ok: true, rows: [att()], download: 'allowed' })
     removeAttachment.mockResolvedValue({ ok: false, error })
     await render(true)
-    const del = section().querySelector(`button[aria-label="${realT('ko', 'wbs.deleteAttachmentAria')}"]`) as HTMLButtonElement
+    const del = section().querySelector(`button[aria-label="${realT('wbs.deleteAttachmentAria')}"]`) as HTMLButtonElement
     await act(async () => { del.click() })
     expect(removeAttachment).toHaveBeenCalledWith('att-1')
     const line = [...section().querySelectorAll('p')].find(p => p.className.includes('text-danger'))!
-    expect(line.textContent).toBe(realT('ko', key))
-    expect(realT('ko', key)).toBe(error)
+    expect(line.textContent).toBe(realT(key))
+    expect(realT(key)).toBe(error)
   })
 
   it('삭제 실패 — 도우미의 두 문구가 아닌 사유는 받은 문구를 그대로, 사유가 없으면 일반 문구', async () => {
@@ -182,7 +180,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     await render()
     await act(async () => { fileNode('plan.xlsx')!.click() })
     expect(open).not.toHaveBeenCalled()
-    expect(fileNode('plan.xlsx')!.closest('li')!.textContent).toContain(realT('ko', 'wbs.attachLinkFail'))
+    expect(fileNode('plan.xlsx')!.closest('li')!.textContent).toContain(realT('wbs.attachLinkFail'))
     open.mockRestore(); err.mockRestore()
   })
 

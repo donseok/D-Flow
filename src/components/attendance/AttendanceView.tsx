@@ -26,7 +26,7 @@ import { memberBelongsToTeam, type MemberPickerView } from '@/lib/domain/memberP
 import { upsertAttendance, removeAttendance } from '@/app/actions/attendance'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
 import { RestDayMark } from '@/components/calendar/RestDayMark'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 type ViewKey = 'calendar' | 'list'
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -73,7 +73,7 @@ export function AttendanceView({
   types: readonly AttendanceTypeDef[]
 }) {
   const router = useRouter()
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   // 근태 유형 표시 — 설정 어휘(기본 라벨이면 사전 문구). 등록 선택지·범례 = 활성이면서 등록 가능한 유형.
   const typeLabel = (ty: AttendanceType) => vocabLabel('attendance.types', types, ty, t)
   const typeShort = (ty: AttendanceType) => vocabShort(types, ty, t)
@@ -250,7 +250,7 @@ export function AttendanceView({
           <div className="flex items-center gap-2">
             <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('att.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
             <div className="min-w-[116px] text-center text-base font-bold tabular-nums text-fg">
-              {new Intl.DateTimeFormat(intlLocale(locale), { year: 'numeric', month: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
+              {new Intl.DateTimeFormat(KO_LOCALE, { year: 'numeric', month: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
             </div>
             <button onClick={() => shift(1)} className="chrome-icon" aria-label={t('att.nextMonth')}><ChevronRight className="h-4 w-4" /></button>
             <button onClick={goToday} className="btn btn-ghost h-10">{t('att.today')}</button>
@@ -299,7 +299,7 @@ export function AttendanceView({
         {/* 챗봇 딥링크 필터 — 해제 전까지 달력·목록에 적용 (문구는 att.botFilter·att.botFilterClear) */}
         {botFilter && (
           <div className="flex flex-wrap items-center gap-1.5 text-meta font-medium text-fg-secondary">
-            <span className="text-fg-muted">{t('att.botFilter').replace('{name}', ASSISTANT_NAME[locale])}</span>
+            <span className="text-fg-muted">{t('att.botFilter').replace('{name}', ASSISTANT_NAME.ko)}</span>
             {botFilter.from && botFilter.to && (
               <span className="chip bg-surface-subtle tabular-nums text-fg-secondary">{botFilter.from} ~ {botFilter.to}</span>
             )}
@@ -525,7 +525,7 @@ export function AttendanceView({
         }
       >
         <p className="text-sm leading-6 text-fg-secondary">
-          {/* 이름(굵게)이 문장 안에 끼고 어순이 로캘마다 달라 {name} 자리에서 문장을 둘로 가른다 */}
+          {/* 이름(굵게)이 문장 안에 끼어 {name} 자리에서 문장을 둘로 가른다 */}
           {(() => {
             const [before, after = ''] = t('att.deleteConfirmBody').replace('{date}', fmtDate(form.date)).split('{name}')
             return <>{before}<strong className="text-fg">{memberMap.get(form.memberId)?.name ?? t('att.unknown')}</strong>{after}</>

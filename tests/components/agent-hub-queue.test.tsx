@@ -13,7 +13,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  return { useLocale: () => ({ locale: 'ko', t: (k: string) => t('ko', k as Parameters<typeof t>[1]) }) }
+  return { useLocale: () => ({ t: (k: string) => t(k as Parameters<typeof t>[0]) }) }
 })
 import { ApprovalQueue } from '@/components/agent-hub/ApprovalQueue'
 import { HubStatusBar } from '@/components/agent-hub/HubStatusBar'

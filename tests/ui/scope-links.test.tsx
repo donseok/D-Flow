@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({ push: vi.fn(), fetchMeetingDetail: vi.fn(), fetchMeetingMinutesLite: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: h.push, refresh: vi.fn() }), usePathname: () => '/w/acme/agents' }))
 vi.mock('next/link', () => ({ default: ({ children, href, ...rest }: { children: React.ReactNode; href: string }) => <a href={href} {...rest}>{children}</a> }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 vi.mock('@/app/actions/meetings', () => ({ fetchMeetingDetail: h.fetchMeetingDetail, cancelOccurrence: vi.fn(), deleteMeeting: vi.fn() }))
 vi.mock('@/app/actions/announcements', () => ({ createAnnouncementFromMeeting: vi.fn() }))
@@ -48,8 +48,8 @@ describe('화면 안 링크 — 범위 컨텍스트로 새 형식(D38 ①)', () 
       id: 'c1', projectId: 'p', wikiItemId: 'i', minuteId: 'minute-1', minuteVersionId: 'v-2', changeType: 'new',
       beforeSnapshot: null, afterSnapshot: { statement: 's' }, reason: null, createdAt: '2026-07-25T01:00:00.000Z', minuteTitle: 't', minuteDate: '2026-07-25',
     } as const
-    expect(renderToStaticMarkup(<WikiChangeList locale="ko" timeZone="UTC" changes={[change]} minutesBase="/w/acme/minutes" />)).toContain('href="/w/acme/minutes/minute-1?version=v-2"')
-    expect(renderToStaticMarkup(<WikiChangeList locale="ko" timeZone="UTC" changes={[change]} />)).toContain('href="/minutes/minute-1?version=v-2"')
+    expect(renderToStaticMarkup(<WikiChangeList timeZone="UTC" changes={[change]} minutesBase="/w/acme/minutes" />)).toContain('href="/w/acme/minutes/minute-1?version=v-2"')
+    expect(renderToStaticMarkup(<WikiChangeList timeZone="UTC" changes={[change]} />)).toContain('href="/minutes/minute-1?version=v-2"')
   })
 
   // U2b-5 리뷰 수정 CC6 — 위키 근거 링크(WikiItemCard → WikiSourceLinks)도 기준 경로를 따른다. 블록 앵커가 있으면 원문 블록 링크, 없으면 회의록(판) 링크
@@ -67,11 +67,11 @@ describe('화면 안 링크 — 범위 컨텍스트로 새 형식(D38 ①)', () 
         src({ id: 's2', minuteId: 'minute-2', minuteVersionId: null }),
       ],
     } as unknown as WikiItem
-    const scoped = renderToStaticMarkup(<WikiItemCard item={item} locale="ko" timeZone="UTC" showEvidence minutesBase="/w/acme/minutes" />)
+    const scoped = renderToStaticMarkup(<WikiItemCard item={item} timeZone="UTC" showEvidence minutesBase="/w/acme/minutes" />)
     expect(scoped).toContain('href="/w/acme/minutes/minute-1?block=2&amp;hash=fedcba9876543210&amp;body=0123456789abcdef&amp;version=v-2"')
     expect(scoped).toContain('href="/w/acme/minutes/minute-2"')
     expect(scoped).not.toMatch(/href="\/minutes\//)
-    const fallback = renderToStaticMarkup(<WikiItemCard item={item} locale="ko" timeZone="UTC" showEvidence />)
+    const fallback = renderToStaticMarkup(<WikiItemCard item={item} timeZone="UTC" showEvidence />)
     expect(fallback).toContain('href="/minutes/minute-2"')
   })
 })

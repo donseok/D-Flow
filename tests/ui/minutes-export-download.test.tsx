@@ -8,7 +8,7 @@ import { createRoot, type Root } from 'react-dom/client'
 const mocks = vi.hoisted(() => ({ toast: vi.fn() }))
 
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (key: string) => key, locale: 'ko' }),
+  useLocale: () => ({ t: (key: string) => key }),
 }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: mocks.toast }) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))

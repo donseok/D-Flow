@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 // 경로가 /projects 여도 결과가 같아야 한다 — BrandMark 는 경로를 읽지 않는다(C §5.4, ★8)
 vi.mock('next/navigation', () => ({ usePathname: () => '/projects' }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 import { BrandMark } from '@/components/ui/BrandMark'
 
 const WID = '00000000-0000-0000-7e57-000000001711'

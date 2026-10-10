@@ -10,7 +10,7 @@ import { defaultVocab } from '@/lib/settings/vocab'
 
 const m = vi.hoisted(() => ({ update: vi.fn(), outcome: vi.fn(), migrate: vi.fn(), refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: m.refresh }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: m.update, updateWorkspaceSettings: vi.fn(), getSettingsCommandOutcome: m.outcome }))
 vi.mock('@/app/actions/vocab', () => ({ migrateVocabCode: m.migrate }))
 

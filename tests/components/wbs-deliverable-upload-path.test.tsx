@@ -27,7 +27,7 @@ vi.mock('@/lib/supabase/client', () => ({
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => realT('ko', k as Parameters<typeof realT>[1]) }),
+  useLocale: () => ({ t: (k: string) => realT(k as Parameters<typeof realT>[0]) }),
 }))
 vi.mock('@/components/app/TeamsProvider', () => ({ useTeamLabel: () => (c: string) => c, useTeamCodes: () => [], useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }) }))
 vi.mock('@/components/wbs/WbsAssigneeStagePanel', () => ({ WbsAssigneeStagePanel: () => null }))
@@ -77,6 +77,6 @@ describe('RowDetailPanel 산출물 첨부 — 저장 경로 규약', () => {
     await renderAndPick(null)
     expect(upload).not.toHaveBeenCalled()
     expect(recordAttachment).not.toHaveBeenCalled()
-    expect(container.textContent).toContain(realT('ko', 'wbs.attachNoWorkspace'))
+    expect(container.textContent).toContain(realT('wbs.attachNoWorkspace'))
   })
 })

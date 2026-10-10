@@ -17,7 +17,6 @@ import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { isHiddenProject, isProjectAdmin } from '@/lib/domain/authz'
 import { createServerClient } from '@/lib/supabase/server'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { PageHeader } from '@/components/app/PageHeader'
 import { DashboardView } from '@/components/dashboard/DashboardView'
 import { WbsRealtimeRefresh } from '@/components/wbs/WbsRealtimeRefresh'
@@ -33,7 +32,6 @@ import { wsHref } from '@/lib/workspace/paths'
 export default async function Dashboard({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'dashboard')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const locale = await getServerLocale()
   const [{ items, calendar, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, pc, mods, wsRef, hidden] = await Promise.all([
     getComputedWbs(projectId),
     listProjects(),
@@ -74,12 +72,12 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   after(() => recordProgressSnapshot(projectId, sb, { roots: items, today, timeZone: calendar.timezone }))
 
   const project = projects.find(p => p.id === projectId)
-  const projectName = project?.name ?? t(locale, 'dash.heroProjectFallback')
+  const projectName = project?.name ?? t('dash.heroProjectFallback')
   // 관리자 이상 — 회의 상세의 남의 회의 수정·취소와 AI 브리핑 생성이 같은 판정을 쓴다.
   const canManage = isProjectAdmin(membership, projectId)
-  const hero = <PageHeader title={`${projectName}${t(locale, 'dash.heroTitleSuffix')}`} />
+  const hero = <PageHeader title={`${projectName}${t('dash.heroTitleSuffix')}`} />
 
-  if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
+  if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} /></ProjectPageShell>
   // 대시보드는 core.level_labels 를 판정에 쓰지 않는다 — 보고서 모달의 1레벨 이름(표시 전용)만 읽고, 손상이면 중립 문구로 그린다(알림 없음 — 단계 설정 화면·WBS 가 알린다).
   // 키워드가 손상이면 마일스톤만 비우고 그 사실을 위에 보인다 — 다른 카드는 그린다.
   const levelLabels = pick(pc.cfg, 'core.level_labels')
@@ -104,11 +102,11 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
     <ProjectPageShell hero={hero}>
       {setupSteps && membership && <ProjectSetupChecklist key={`${membership.userId}:${projectId}`} variant="banner"
         projectId={projectId} userId={membership.userId} steps={setupSteps} />}
-      {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} kind={keywords.kind} locale={locale}
+      {!keywords.ok && <ConfigLoadError error={keywords.error} keyName={keywords.key} kind={keywords.kind}
         isAdmin={canManage} settingsHref={`/p/${projectId}/settings`} />}
-      {!categories.ok && <ConfigLoadError error={categories.error} keyName={categories.key} kind={categories.kind} locale={locale}
+      {!categories.ok && <ConfigLoadError error={categories.error} keyName={categories.key} kind={categories.kind}
         isAdmin={canManage} settingsHref={`/p/${projectId}/settings`} />}
-      {!severities.ok && <ConfigLoadError error={severities.error} keyName={severities.key} kind={severities.kind} locale={locale}
+      {!severities.ok && <ConfigLoadError error={severities.error} keyName={severities.key} kind={severities.kind}
         isAdmin={canManage} settingsHref={`/p/${projectId}/settings`} />}
       <DashboardView
         issueAreas={issueAreasOf(pc.cfg.areas.issue_area)}

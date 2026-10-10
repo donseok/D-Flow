@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { InboxPanel } from '@/components/app/InboxPanel'
 
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (k: string) => k, locale: 'ko', setLocale: () => {} }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 
 const base = {

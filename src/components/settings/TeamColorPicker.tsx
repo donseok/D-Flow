@@ -1,5 +1,5 @@
 'use client'
-// 팀 색 선택(공용 팀·프로젝트 팀 관리 화면 공용) — 테마 슬롯(category-1..8) 여덟 개에서만 고른다. 임의 hex 는 받지 않는다(다크 대비).
+// 팀 색 선택(공용 팀·프로젝트 팀 관리 화면 공용) — 테마 슬롯(category-1..8) 여덟 개에서만 고른다. 임의 hex 는 받지 않는다.
 // 닫힌 상태는 지금 색의 견본 단추 하나(보이는 크기 24px, 누르는 영역 44px — TOUCH_TARGET), 열면 그 아래 여덟 견본(각 44px 칸).
 // 목록은 표의 가로 스크롤(overflow-x-auto)에 잘리지 않게 body 포털 + fixed 로 띄운다(TeamMultiSelect 와 같은 이유). Esc·바깥 클릭·
 // 고르기로 닫히고 포커스는 단추로 돌아간다. 저장은 호출부(updateTeam·updateProjectTeam 의 colorSlot)가 한다.

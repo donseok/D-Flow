@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (k: string) => (k === 'min.tree.truncated' ? 'TRUNC {n}' : k), locale: 'ko' }),
+  useLocale: () => ({ t: (k: string) => (k === 'min.tree.truncated' ? 'TRUNC {n}' : k) }),
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('next/link', () => ({

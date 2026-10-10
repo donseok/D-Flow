@@ -6,13 +6,13 @@ import { newUuid } from '@/lib/domain/uuid'
 import { activeIssueAreas, type IssueAreaRef } from '@/lib/domain/issueAreas'
 import { codeExample, parseIdPolicy, type IdPolicy } from '@/lib/issues/idPolicy'
 import type { IssueAnalysisSetting } from '@/lib/settings/defs/project'
-import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t as translate, type DictKey} from '@/lib/i18n/dict'
 
-export function IssuePolicyEditor({ projectId, policy, revision, areas, year, canEdit, analysis, analysisEnabled, locale = 'ko' }: {
+export function IssuePolicyEditor({ projectId, policy, revision, areas, year, canEdit, analysis, analysisEnabled }: {
   projectId: string; policy: IdPolicy; revision: number; areas: readonly IssueAreaRef[]; year: number; canEdit: boolean
-  analysis: IssueAnalysisSetting; analysisEnabled: boolean; locale?: Locale
+  analysis: IssueAnalysisSetting; analysisEnabled: boolean;
 }) {
-  const t = (k: DictKey) => translate(locale, k)
+  const t = (k: DictKey) => translate(k)
   const router = useRouter()
   const [draft, setDraft] = useState<IdPolicy>(policy)
   const [baseline, setBaseline] = useState(policy)

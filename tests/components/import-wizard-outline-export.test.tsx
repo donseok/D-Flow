@@ -51,9 +51,9 @@ describe('ImportWizard 완료 화면 — 아웃라인 양식이면 펼침 내보
     await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await Promise.resolve() })
     await click(button('양식 분석하기')!)
     await click(button('가져오기 실행')!)
-    expect(container.textContent).toContain(t('ko', 'importWizard.doneCountSuffix'))
+    expect(container.textContent).toContain(t('importWizard.doneCountSuffix'))
   }
-  const exportButton = () => document.querySelector(`[aria-label="${t('ko', 'importWizard.exportProfileButton')}"]`)
+  const exportButton = () => document.querySelector(`[aria-label="${t('importWizard.exportProfileButton')}"]`)
 
   beforeEach(async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -80,27 +80,27 @@ describe('ImportWizard 완료 화면 — 아웃라인 양식이면 펼침 내보
     inspect = inspectBody(OUTLINE, null); executeResponse = () => done(true)
     await mount(); await runToDone()
     expect(exportButton()).toBeNull()
-    expect(container.textContent).toContain(t('ko', 'importWizard.exportProfileUnsupported'))
-    expect(container.textContent).not.toContain(t('ko', 'importWizard.exportProfileDesc'))
+    expect(container.textContent).toContain(t('importWizard.exportProfileUnsupported'))
+    expect(container.textContent).not.toContain(t('importWizard.exportProfileDesc'))
   })
   it('이번에 저장하지 않았어도 프로젝트의 저장 양식이 아웃라인이면 같다(라우트가 그 양식을 쓴다)', async () => {
     inspect = inspectBody(OUTLINE, OUTLINE); executeResponse = () => done(false)
     await mount(); await runToDone()
     expect(exportButton()).toBeNull()
-    expect(container.textContent).toContain(t('ko', 'importWizard.exportProfileUnsupported'))
-    expect(container.textContent).not.toContain(t('ko', 'importWizard.exportLayoutDesc'))
+    expect(container.textContent).toContain(t('importWizard.exportProfileUnsupported'))
+    expect(container.textContent).not.toContain(t('importWizard.exportLayoutDesc'))
   })
   it('아웃라인 파일이라도 저장하지 않았고 저장 양식이 없으면 표준 양식이라 버튼이 있다(대조)', async () => {
     inspect = inspectBody(OUTLINE, null); executeResponse = () => done(false)
     await mount(); await runToDone()
     expect(exportButton()).not.toBeNull()
-    expect(container.textContent).toContain(t('ko', 'importWizard.exportLayoutDesc'))
-    expect(container.textContent).not.toContain(t('ko', 'importWizard.exportProfileUnsupported'))
+    expect(container.textContent).toContain(t('importWizard.exportLayoutDesc'))
+    expect(container.textContent).not.toContain(t('importWizard.exportProfileUnsupported'))
   })
   it('열 계층 양식을 저장했으면 버튼과 "이 양식 그대로" 설명(대조)', async () => {
     inspect = inspectBody(COLUMNS, null); executeResponse = () => done(true)
     await mount(); await runToDone()
     expect(exportButton()).not.toBeNull()
-    expect(container.textContent).toContain(t('ko', 'importWizard.exportProfileDesc'))
+    expect(container.textContent).toContain(t('importWizard.exportProfileDesc'))
   })
 })

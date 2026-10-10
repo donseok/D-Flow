@@ -18,8 +18,8 @@ vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
   // 추가 정보(사용자 정의 필드) 문구만 진짜 ko 사전으로 푼다 — 이 파일의 나머지 단언은 키 그대로다
   const koKeys = /^(issue\.custom\.|wbs\.custom\.|issue\.filter\.all$)/
-  const tr = (key: string) => koKeys.test(key) ? t('ko', key as Parameters<typeof t>[1]) : key
-  return { useLocale: () => ({ locale: 'ko', t: tr }) }
+  const tr = (key: string) => koKeys.test(key) ? t(key as Parameters<typeof t>[0]) : key
+  return { useLocale: () => ({ t: tr }) }
 })
 vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({ toast: mocks.toast }),

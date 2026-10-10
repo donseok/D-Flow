@@ -60,13 +60,13 @@ describe('WikiDocumentEditor — 사용자별 로컬 초안', () => {
   const mount = (userId: string | null, topic = TOPIC, workspace: typeof WS | null = WS, policy = POLICY) =>
     act(async () => root.render(
       <ScopeProvider value={{ workspace, projectId: 'p1' }}>
-        <WikiDocumentEditor key={topic.bodyUpdatedAt} projectId="p1" locale="ko" topic={topic} canEdit userId={userId} timeZone="Asia/Seoul" draftPolicy={policy} />
+        <WikiDocumentEditor key={topic.bodyUpdatedAt} projectId="p1" topic={topic} canEdit userId={userId} timeZone="Asia/Seoul" draftPolicy={policy} />
       </ScopeProvider>,
     ))
   const button = (key: DictKey) =>
-    [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === t('ko', key))
+    [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === t(key))
   const click = (key: DictKey) => act(async () => button(key)!.click())
-  const hasBanner = () => container.textContent?.includes(t('ko', 'wiki.document.draftFound')) ?? false
+  const hasBanner = () => container.textContent?.includes(t('wiki.document.draftFound')) ?? false
   const textarea = () => container.querySelector('textarea')!
   async function typeBody(value: string) {
     await act(async () => {
@@ -158,7 +158,7 @@ describe('WikiDocumentEditor — 사용자별 로컬 초안', () => {
     await click('wiki.document.edit')
     await typeBody('내 본문')
     await click('wiki.document.save')
-    expect(container.textContent).toContain(t('ko', 'wiki.document.conflictHint'))
+    expect(container.textContent).toContain(t('wiki.document.conflictHint'))
 
     // 새로고침 — 남이 저장한 본문으로 편집기가 새로 뜬다(WikiTopicDetail 은 bodyUpdatedAt 을 key 로 쓴다).
     await mount('uA', { ...TOPIC, bodyMd: '남의 본문', bodyUpdatedAt: '2026-09-02T00:00:00.000Z' })
@@ -262,7 +262,7 @@ describe('WikiDocumentEditor — 사용자별 로컬 초안', () => {
       await mount('uA', TOPIC, WS, OFF)
       await click('wiki.document.edit')
       expect(hasBanner()).toBe(false)
-      expect(container.querySelector('[data-drafts-off]')?.textContent).toBe(t('ko', 'wiki.document.draftsOff'))
+      expect(container.querySelector('[data-drafts-off]')?.textContent).toBe(t('wiki.document.draftsOff'))
 
       await typeBody('고친 본문')
       await act(async () => { window.dispatchEvent(new Event('beforeunload')) })

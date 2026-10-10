@@ -18,7 +18,7 @@ vi.mock('@/app/actions/attachments', () => ({
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => realT('ko', k as Parameters<typeof realT>[1]) }),
+  useLocale: () => ({ t: (k: string) => realT(k as Parameters<typeof realT>[0]) }),
 }))
 vi.mock('@/components/app/TeamsProvider', () => ({ useTeamLabel: () => (c: string) => c, useTeamCodes: () => [], useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }) }))
 vi.mock('@/components/wbs/WbsAssigneeStagePanel', () => ({ WbsAssigneeStagePanel: () => null }))
@@ -78,11 +78,11 @@ describe('RowDetailPanel — 개요는 가로 2열', () => {
   it('산출물만 두 칸을 다 쓴다 — 길고 편집 입력이 열리는 항목이다', async () => {
     await render()
     const cells = [...container.querySelectorAll('dl > div')]
-    const deliverable = cells.find(c => c.querySelector('dt')?.textContent === realT('ko', 'wbs.colDeliverable'))
+    const deliverable = cells.find(c => c.querySelector('dt')?.textContent === realT('wbs.colDeliverable'))
     expect(deliverable).toBeTruthy()
     expect(deliverable!.className).toContain('col-span-2')
 
-    const status = cells.find(c => c.querySelector('dt')?.textContent === realT('ko', 'wbs.colStatus'))
+    const status = cells.find(c => c.querySelector('dt')?.textContent === realT('wbs.colStatus'))
     expect(status!.className).not.toContain('col-span-2')
   })
 
@@ -92,6 +92,6 @@ describe('RowDetailPanel — 개요는 가로 2열', () => {
     expect(dl.textContent).toContain('26.08.31')
     expect(dl.textContent).toContain('26.09.02')
     expect(dl.textContent).toContain('300%')
-    expect(dl.textContent).toContain(realT('ko', 'wbs.unassigned'))
+    expect(dl.textContent).toContain(realT('wbs.unassigned'))
   })
 })

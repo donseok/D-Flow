@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { jsonError } from '@/lib/api/http'
 import { guardCodeOf } from '@/lib/authz/errors'
-import { guardText } from '@/lib/i18n/serverText'
 import { getSession } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import { createDefaultChatToolRegistry } from '@/lib/ai/chat/default-registry'
@@ -93,7 +92,7 @@ export async function POST(req: NextRequest) {
     projectId: chatProjectHint(request),
     workspaceId: request.pageContext?.workspaceId ?? request.workspaceId,
   }, 'chatbot')
-  if (!mod.ok) return jsonError(guardText(tr, mod.error), mod.status, guardCodeOf(mod) === 'module_disabled' ? 'MODULE_DISABLED' : SCOPE_CODE[mod.status] ?? 'SCOPE_UNAVAILABLE')
+  if (!mod.ok) return jsonError(mod.error, mod.status, guardCodeOf(mod) === 'module_disabled' ? 'MODULE_DISABLED' : SCOPE_CODE[mod.status] ?? 'SCOPE_UNAVAILABLE')
   const now = new Date()
   // 종류(tools·legacy·command) 판정 전용 — 인자는 쓰지 않는다. 도구 경로는 아래에서 요청 범위 달력으로 다시 라우팅한다
   const plannedRoute = routeChatRequest(request, now, DEFAULT_REQUEST_CALENDAR)

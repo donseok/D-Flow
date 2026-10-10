@@ -10,7 +10,6 @@ import { ImportModes } from '@/components/import/ImportModes'
 import { ImportReceiptPanel, receiptStateOf } from '@/components/import/ImportReceiptPanel'
 import { getImportReceipt } from '@/app/actions/importReceipts'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick, pickCalendar } from '@/lib/settings/pick'
@@ -58,10 +57,10 @@ export default async function ImportWizardPage({ params, searchParams }: {
 }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'wbs')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const [projects, actor, locale, { receipt }] = await Promise.all([listProjects(), getActorForView(), getServerLocale(), searchParams])
+  const [projects, actor, { receipt }] = await Promise.all([listProjects(), getActorForView(), searchParams])
   const project = projects.find(p => p.id === projectId)
   const isAdmin = isProjectAdmin(actor, projectId)
-  const projectName = project?.name ?? t(locale, 'importWizard.projectFallback')
+  const projectName = project?.name ?? t('importWizard.projectFallback')
   // 비관리자는 위저드를 렌더하지 않으니(아래) 조회 자체를 건너뛴다 — 불필요한 쿼리 방지.
   const currentItemCount = isAdmin ? await fetchWbsItemCount(projectId) : null
   // ?receipt= — 같은 화면의 실행 기록(#23, 계획 P9). 관리자만(액션 가드와 같다), 값이 없으면 패널 없음
@@ -72,18 +71,18 @@ export default async function ImportWizardPage({ params, searchParams }: {
 
   return (
     <ProjectPageShell
-      hero={<PageHeader title={`${projectName} ${t(locale, 'importWizard.heroTitleSuffix')}`} description={t(locale, 'importWizard.heroDesc')} />}
+      hero={<PageHeader title={`${projectName} ${t('importWizard.heroTitleSuffix')}`} description={t('importWizard.heroDesc')} />}
     >
       {isAdmin ? (
         <div className="space-y-5">
-          {receiptState && <ImportReceiptPanel state={receiptState} locale={locale} timeZone={projectTz} />}
+          {receiptState && <ImportReceiptPanel state={receiptState} timeZone={projectTz} />}
           <ImportModes projectId={projectId} currentItemCount={currentItemCount} timeZone={projectTz} extraAxisLabel={extraAxisLabel} />
         </div>
       ) : (
         <EmptyState
           icon={Shield}
-          title={t(locale, 'importWizard.noPermissionTitle')}
-          description={t(locale, 'importWizard.noPermissionDesc')}
+          title={t('importWizard.noPermissionTitle')}
+          description={t('importWizard.noPermissionDesc')}
         />
       )}
     </ProjectPageShell>

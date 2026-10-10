@@ -34,7 +34,7 @@ describe('WikiSearch — ?q= 딥링크 자동 검색', () => {
 
   async function render(initialQuery: string) {
     await act(async () => {
-      root.render(<WikiSearch projectId="proj-1" locale="ko" initialQuery={initialQuery} />)
+      root.render(<WikiSearch projectId="proj-1" initialQuery={initialQuery} />)
       await new Promise(resolve => setTimeout(resolve, 0))
     })
   }
@@ -64,7 +64,7 @@ describe('WikiSearch — ?q= 딥링크 자동 검색', () => {
     // 같은 컴포넌트 트리에 다른 initialQuery 로 재렌더 — Next.js 가 searchParams 만 바뀐
     // 내비게이션에서 페이지 인스턴스를 재사용하는 상황을 흉내낸다(unmount 없음).
     await act(async () => {
-      root.render(<WikiSearch projectId="proj-1" locale="ko" initialQuery="두번째검색" />)
+      root.render(<WikiSearch projectId="proj-1" initialQuery="두번째검색" />)
       await new Promise(resolve => setTimeout(resolve, 0))
     })
     expect(searchCalls()).toHaveLength(1)
@@ -78,7 +78,7 @@ describe('WikiSearch — ?q= 딥링크 자동 검색', () => {
     fetchMock.mockClear()
 
     await act(async () => {
-      root.render(<WikiSearch projectId="proj-1" locale="ko" initialQuery="권한" />)
+      root.render(<WikiSearch projectId="proj-1" initialQuery="권한" />)
       await new Promise(resolve => setTimeout(resolve, 0))
     })
     expect(searchCalls()).toHaveLength(0)

@@ -14,7 +14,7 @@ import {
   UserRoundCog,
   type LucideIcon,
 } from 'lucide-react'
-import type { DictKey, Locale } from '@/lib/i18n/dict'
+import type { DictKey} from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 // 상태 판정은 순수 도메인 모듈에서 직접 가져온다. lib/data/wiki를 값으로 import하면
 // 클라이언트 번들에 서버 전용 supabase 클라이언트가 딸려 들어와 빌드가 깨진다.
@@ -28,7 +28,7 @@ import type {
 import { WikiItemActions } from './WikiItemActions'
 import { WikiTrackedLink } from './WikiTrackedLink'
 import { MINUTES_PERMALINK_BASE } from '@/lib/minutes/permalink'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 /**
  * 회의록 원문 블록 링크. lib/minutes/source의 minuteSourceHref와 같은 형식이지만 직접 만든다.
@@ -189,23 +189,23 @@ function displayedState(item: WikiItem): string {
   return lifecycle
 }
 
-function originalStateLabel(locale: Locale, item: WikiItem): string {
+function originalStateLabel(item: WikiItem): string {
   const state = displayedState(item)
-  if (!KNOWN_STATES.has(state)) return state || t(locale, 'wiki.state.unknown')
-  return t(locale, `wiki.state.${state}` as DictKey)
+  if (!KNOWN_STATES.has(state)) return state || t('wiki.state.unknown')
+  return t(`wiki.state.${state}` as DictKey)
 }
 
 /** 화면 어휘는 다섯 상태로 접고, 원래 세부 상태는 chip title에 보존한다. */
-function stateLabel(locale: Locale, item: WikiItem): string {
+function stateLabel(item: WikiItem): string {
   const state = displayedState(item)
-  if (isConflictedWikiItem(item)) return t(locale, 'wiki.state.conflict')
+  if (isConflictedWikiItem(item)) return t('wiki.state.conflict')
   if (['resolved', 'done', 'closed', 'superseded', 'withdrawn', 'reversed', 'archived'].includes(state)) {
-    return t(locale, 'wiki.state.ended')
+    return t('wiki.state.ended')
   }
-  if (state === 'open') return t(locale, 'wiki.state.open')
-  if (['tentative', 'proposed', 'on_hold'].includes(state)) return t(locale, 'wiki.state.discussing')
-  if (['active', 'confirmed'].includes(state)) return t(locale, 'wiki.state.active')
-  return t(locale, 'wiki.state.unknown')
+  if (state === 'open') return t('wiki.state.open')
+  if (['tentative', 'proposed', 'on_hold'].includes(state)) return t('wiki.state.discussing')
+  if (['active', 'confirmed'].includes(state)) return t('wiki.state.active')
+  return t('wiki.state.unknown')
 }
 
 function stateChip(item: WikiItem): string {
@@ -221,7 +221,6 @@ function stateChip(item: WikiItem): string {
 /** 위키 날짜 표기 — date-only('YYYY-MM-DD')는 변환하지 않고(UTC 로 그대로 찍기), instant 는 프로젝트 tz 로(스펙 SP5 D60, 계획 D-21d) */
 export function formatWikiDate(
   value: string | null | undefined,
-  locale: Locale,
   includeTime: boolean,
   timeZone: string,
 ): string {
@@ -229,7 +228,7 @@ export function formatWikiDate(
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
   const parsed = new Date(dateOnly ? `${value}T00:00:00Z` : value)
   if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat(intlLocale(locale), {
+  return new Intl.DateTimeFormat(KO_LOCALE, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -277,13 +276,11 @@ function changeSourceHref(change: WikiChangeEvent, base: string): string {
 
 export function WikiSourceLinks({
   sources,
-  locale,
   showEvidence = false,
   timeZone,
   minutesBase = MINUTES_PERMALINK_BASE,
 }: {
   sources: WikiSource[]
-  locale: Locale
   showEvidence?: boolean
   /** instant 를 찍을 시간대(프로젝트 calendar.timezone) */
   timeZone: string
@@ -299,12 +296,12 @@ export function WikiSourceLinks({
             href={sourceHref(source, minutesBase)}
             domain="minutes"
             className="group/source inline-flex max-w-full items-center gap-1.5 text-xs font-medium text-action hover:text-action-hover"
-            ariaLabel={`${source.minuteTitle ?? t(locale, 'wiki.viewSource')} ${t(locale, 'wiki.viewSource')}`}
+            ariaLabel={`${source.minuteTitle ?? t('wiki.viewSource')} ${t('wiki.viewSource')}`}
           >
             <FileText className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">
-              {source.minuteDate ? `${formatWikiDate(source.minuteDate, locale, false, timeZone)} · ` : ''}
-              {source.minuteTitle ?? t(locale, 'wiki.viewSource')}
+              {source.minuteDate ? `${formatWikiDate(source.minuteDate, false, timeZone)} · ` : ''}
+              {source.minuteTitle ?? t('wiki.viewSource')}
             </span>
             <ExternalLink className="h-3 w-3 shrink-0 opacity-60 transition group-hover/source:opacity-100" />
           </WikiTrackedLink>
@@ -317,7 +314,7 @@ export function WikiSourceLinks({
       ))}
       {sources.length > (showEvidence ? 4 : 2) && (
         <span className="text-meta text-fg-muted">
-          {t(locale, 'wiki.sourceCount').replace('{n}', String(sources.length))}
+          {t('wiki.sourceCount').replace('{n}', String(sources.length))}
         </span>
       )}
     </div>
@@ -326,14 +323,12 @@ export function WikiSourceLinks({
 
 export function WikiItemCard({
   item,
-  locale,
   showEvidence = false,
   curateProjectId,
   timeZone,
   minutesBase,
 }: {
   item: WikiItem
-  locale: Locale
   showEvidence?: boolean
   /** instant 를 찍을 시간대(프로젝트 calendar.timezone) */
   timeZone: string
@@ -358,32 +353,32 @@ export function WikiItemCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className={`chip ${meta.chip}`}>{t(locale, meta.labelKey)}</span>
-            <span className={`chip ${stateChip(item)}`} title={originalStateLabel(locale, item)}>{stateLabel(locale, item)}</span>
+            <span className={`chip ${meta.chip}`}>{t(meta.labelKey)}</span>
+            <span className={`chip ${stateChip(item)}`} title={originalStateLabel(item)}>{stateLabel(item)}</span>
             {item.autoUpdateLocked && (
               <span className="chip bg-surface-subtle text-fg-secondary">
                 <LockKeyhole className="h-3 w-3" />
-                {t(locale, 'wiki.locked')}
+                {t('wiki.locked')}
               </span>
             )}
           </div>
           <p className="mt-2 text-sm font-medium leading-6 text-fg">{item.statement}</p>
           {(owner || date) && (
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-fg-muted">
-              {owner && <span>{t(locale, 'wiki.ownerTeam')} · {owner}</span>}
+              {owner && <span>{t('wiki.ownerTeam')} · {owner}</span>}
               {date && (
                 <span className="inline-flex items-center gap-1">
                   <CalendarClock className="h-3 w-3" />
                   {item.dueDate
-                    ? t(locale, 'wiki.dueDate').replace('{date}', formatWikiDate(date, locale, false, timeZone))
-                    : t(locale, 'wiki.observedAt').replace('{date}', formatWikiDate(date, locale, false, timeZone))}
+                    ? t('wiki.dueDate').replace('{date}', formatWikiDate(date, false, timeZone))
+                    : t('wiki.observedAt').replace('{date}', formatWikiDate(date, false, timeZone))}
                 </span>
               )}
             </div>
           )}
-          <WikiSourceLinks sources={item.sources} locale={locale} showEvidence={showEvidence} timeZone={timeZone} minutesBase={minutesBase} />
+          <WikiSourceLinks sources={item.sources} showEvidence={showEvidence} timeZone={timeZone} minutesBase={minutesBase} />
           {curateProjectId && (
-            <WikiItemActions item={item} projectId={curateProjectId} locale={locale} />
+            <WikiItemActions item={item} projectId={curateProjectId} />
           )}
         </div>
       </div>
@@ -405,11 +400,11 @@ function changeStatement(change: WikiChangeEvent): string | null {
     ?? snapshotString(change.beforeSnapshot, ['statement', 'title', 'topic_title', 'topicTitle'])
 }
 
-function changeLabel(locale: Locale, type: string): string {
+function changeLabel(type: string): string {
   const key = normalized(type)
   return CHANGE_KEYS.has(key)
-    ? t(locale, `wiki.change.${key}` as DictKey)
-    : t(locale, 'wiki.change.other')
+    ? t(`wiki.change.${key}` as DictKey)
+    : t('wiki.change.other')
 }
 
 function changeTone(type: string): { dot: string; badge: string; icon: LucideIcon } {
@@ -434,14 +429,12 @@ function changeTone(type: string): { dot: string; badge: string; icon: LucideIco
 
 export function WikiChangeList({
   changes,
-  locale,
   limit,
   emptyText,
   timeZone,
   minutesBase = MINUTES_PERMALINK_BASE,
 }: {
   changes: WikiChangeEvent[]
-  locale: Locale
   limit?: number
   emptyText?: string
   /** instant 를 찍을 시간대(프로젝트 calendar.timezone) */
@@ -451,7 +444,7 @@ export function WikiChangeList({
 }) {
   const visible = typeof limit === 'number' ? changes.slice(0, limit) : changes
   if (visible.length === 0) {
-    return <p className="py-5 text-center text-sm text-fg-secondary">{emptyText ?? t(locale, 'wiki.noTimeline')}</p>
+    return <p className="py-5 text-center text-sm text-fg-secondary">{emptyText ?? t('wiki.noTimeline')}</p>
   }
 
   return (
@@ -467,15 +460,15 @@ export function WikiChangeList({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className={`chip ${tone.badge}`}>
                   <Icon className="h-3 w-3" />
-                  {changeLabel(locale, change.changeType)}
+                  {changeLabel(change.changeType)}
                 </span>
                 <time className="text-meta tabular-nums text-fg-muted">
-                  {formatWikiDate(change.createdAt, locale, true, timeZone)}
+                  {formatWikiDate(change.createdAt, true, timeZone)}
                 </time>
               </div>
               {statement && <p className="mt-2 text-sm font-medium leading-5 text-fg">{statement}</p>}
               <p className="mt-1 text-xs leading-5 text-fg-secondary">
-                {change.reason ?? t(locale, 'wiki.change.noReason')}
+                {change.reason ?? t('wiki.change.noReason')}
               </p>
               {change.minuteId && (
                 <WikiTrackedLink
@@ -485,8 +478,8 @@ export function WikiChangeList({
                 >
                   <FileText className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">
-                    {change.minuteDate ? `${formatWikiDate(change.minuteDate, locale, false, timeZone)} · ` : ''}
-                    {change.minuteTitle ?? t(locale, 'wiki.viewSource')}
+                    {change.minuteDate ? `${formatWikiDate(change.minuteDate, false, timeZone)} · ` : ''}
+                    {change.minuteTitle ?? t('wiki.viewSource')}
                   </span>
                   <ExternalLink className="h-3 w-3 shrink-0" />
                 </WikiTrackedLink>

@@ -1,8 +1,8 @@
 // 팀 색 순수 도메인 — JSX 없음. 칸반(도메인)·WBS·멤버 화면이 같은 슬롯을 쓴다.
 
-/** 팀 색 팔레트 — 저장 값(teams.color hex)과 화면 슬롯(category-1..8)의 대응표. 값은 테마 `category-N` 의 라이트 값과 같다.
- *  생성 순 자동 배정(`pickTeamColor`)과 관리 화면의 색 선택(`teamColorOfSlot`)이 이 표의 값만 저장한다 — 임의 hex 는 저장하지 않는다
- *  (다크 대비가 서지 않는다). 화면은 이 hex 를 그리지 않고 팔레트 자리로 슬롯을 고른다(`teamSlot` — SP4 D3). */
+/** 팀 색 팔레트 — 저장 값(teams.color hex)과 화면 슬롯(category-1..8)의 대응표. 값은 테마 `category-N` 의 값과 같다.
+ *  생성 순 자동 배정(`pickTeamColor`)과 관리 화면의 색 선택(`teamColorOfSlot`)이 이 표의 값만 저장한다 — 임의 hex 는 저장하지 않는다.
+ *  화면은 이 hex 를 그리지 않고 팔레트 자리로 슬롯을 고른다(`teamSlot` — SP4 D3). */
 export const TEAM_PALETTE = ['#4f46e5', '#0276a8', '#7c3aed', '#a65b00', '#0f766e', '#9d3b8c', '#5b6b00', '#3f5f7a'] as const
 
 /** 고를 수 있는 슬롯 번호(1~8) — 팔레트 자리 + 1 */
@@ -18,7 +18,7 @@ export function teamColorOfSlot(slot: unknown): string | null {
   return typeof slot === 'number' && Number.isInteger(slot) && slot >= 1 && slot <= TEAM_PALETTE.length ? TEAM_PALETTE[slot - 1] : null
 }
 
-/** 팀 화면 색 슬롯(SP4 D3) — 다크 짝이 있는 테마 토큰 category-1..8. 저장 hex 를 inline 으로 그리지 않는다(다크 대비). */
+/** 팀 화면 색 슬롯(SP4 D3) — 테마 토큰 category-1..8. 저장 hex 를 inline 으로 그리지 않는다. */
 export type TeamSlotStyle = { fg: string; bar: string; chip: string }
 /** 슬롯을 정하는 데 필요한 팀 필드 — Team 이 그대로 맞는다 */
 export type TeamColorRef = { id: string; code: string; color: string }
@@ -35,7 +35,7 @@ export const CATEGORY_SLOTS: readonly TeamSlotStyle[] = [
   { fg: 'text-category-8', bar: 'bg-category-8', chip: 'bg-category-8-weak text-category-8' },
 ]
 /** 그 범위의 팀 목록에 없는 code(비활성 팀 담당·다른 범위의 전용 팀·공급자가 없는 공유 화면) — 슬롯을 지어내면 같은 팀이 화면마다
- *  다른 색이 된다(계획 P1). 채움 위 글자는 category-fg 그대로 대비가 선다(라이트 흰 글자/gray-600, 다크 cobalt-950/ink-d200) */
+ *  다른 색이 된다(계획 P1). 채움 위 글자는 category-fg 그대로 대비가 선다(흰 글자/gray-600) */
 export const NEUTRAL_SLOT: TeamSlotStyle = { fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }
 
 function stableHash(s: string): number {

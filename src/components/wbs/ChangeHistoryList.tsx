@@ -69,7 +69,7 @@ export function ChangeHistoryList({ logs, timeZone, extraAxisLabel = null }: {
   const fieldScope = useCustomFieldScope()
   const customDef = (field: string): FieldDef | undefined =>
     field.startsWith(CUSTOM_LOG_PREFIX) ? fieldScope?.defs?.find(d => d.key === field.slice(CUSTOM_LOG_PREFIX.length)) : undefined
-  const customFormat = { locale: fieldScope?.locale ?? 'ko', yes: translate(fieldScope?.locale ?? 'ko', 'wbs.custom.yes'), no: translate(fieldScope?.locale ?? 'ko', 'wbs.custom.no'), empty: '—' }
+  const customFormat = { yes: translate('wbs.custom.yes'), no: translate('wbs.custom.no'), empty: '—' }
   const fieldLabel = (field: string) => field === 'biz' && extraAxisLabel ? extraAxisLabel
     : FIELD_KEY[field] ? t(FIELD_KEY[field])
     : field.startsWith(CUSTOM_LOG_PREFIX) ? customDef(field)?.label ?? field.slice(CUSTOM_LOG_PREFIX.length) : field

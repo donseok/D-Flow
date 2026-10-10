@@ -29,7 +29,7 @@ vi.mock('next/link', () => ({
   ),
 }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (key: string) => key, locale: 'ko' }),
+  useLocale: () => ({ t: (key: string) => key }),
 }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 vi.mock('@/app/actions/issues', () => ({

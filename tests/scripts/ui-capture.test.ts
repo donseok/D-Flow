@@ -227,20 +227,17 @@ describe('maskStyle·fontVerdict·shotFileName·parseArgs·fillPath', () => {
     expect(fontVerdict({ registered: 92, loaded: 0, loading: 0 })).toBe('fallback')
     expect(fontVerdict({ registered: 92, loaded: 2, loading: 1 })).toBe('fallback')
   })
-  it('파일명 — 키·크기·테마, 경로 문자는 거부', () => {
-    expect(shotFileName({ key: 'p-wbs', width: 1440, height: 900, theme: 'light' })).toBe('p-wbs-1440x900-light.png')
-    expect(() => shotFileName({ key: '/p/[id]', width: 1, height: 1, theme: 'light' })).toThrow(/키 형식/)
-    expect(() => shotFileName({ key: 'x', width: 1, height: 1, theme: 'sepia' })).toThrow(/테마/)
-    expect(() => shotFileName({ key: 'x', width: 1, height: 1, theme: 'dark' })).toThrow(/테마/)   // 라이트 전용(2026-10-10)
+  it('파일명 — 키·크기, 경로 문자는 거부', () => {
+    expect(shotFileName({ key: 'p-wbs', width: 1440, height: 900 })).toBe('p-wbs-1440x900.png')
+    expect(() => shotFileName({ key: '/p/[id]', width: 1, height: 1 })).toThrow(/키 형식/)
   })
   it('인자 — 기본값과 파싱, 모르는 인자·값 밖은 throw', () => {
-    expect(parseArgs([])).toMatchObject({ theme: ['light'], since: ['b4283c0'], routes: null, sizes: DEFAULT_SIZES.map((s) => [...s]) })
-    expect(parseArgs(['--label', 'ui0', '--theme', 'light', '--sizes', '1440x900', '--routes', 'root,p-wbs'])).toMatchObject({
-      label: 'ui0', theme: ['light'], sizes: [[1440, 900]], routes: ['root', 'p-wbs'],
+    expect(parseArgs([])).toMatchObject({ since: ['b4283c0'], routes: null, sizes: DEFAULT_SIZES.map((s) => [...s]) })
+    expect(parseArgs(['--label', 'ui0', '--sizes', '1440x900', '--routes', 'root,p-wbs'])).toMatchObject({
+      label: 'ui0', sizes: [[1440, 900]], routes: ['root', 'p-wbs'],
     })
     expect(() => parseArgs(['--nope'])).toThrow(/알 수 없는/)
-    expect(() => parseArgs(['--theme', 'sepia'])).toThrow(/light 뿐/)
-    expect(() => parseArgs(['--theme', 'light,dark'])).toThrow(/light 뿐/)   // 다크 축은 없다(라이트 전용 2026-10-10)
+    expect(() => parseArgs(['--theme', 'light'])).toThrow(/알 수 없는/)   // 테마 축은 없다(라이트 전용 2026-10-10)
     expect(() => parseArgs(['--since', 'UI-9'])).toThrow(/since/)
     expect(() => parseArgs(['--label', '../x'])).toThrow(/label/)
   })
@@ -720,7 +717,7 @@ describe('pixelDiffStats — 차이 픽셀 수·영역(UI-0 결정성 리뷰 P2 
 })
 
 describe('diffRows·rowVerdict·summarizeDiff — diff 의 행 매칭·판정·집계(D1·D2·D11·D15)', () => {
-  const row = (key: string, extra: Record<string, unknown> = {}) => ({ key, width: 1440, height: 900, theme: 'light', file: `${key}.png`, font: 'ok', idle: true,
+  const row = (key: string, extra: Record<string, unknown> = {}) => ({ key, width: 1440, height: 900, file: `${key}.png`, font: 'ok', idle: true,
     problems: [] as string[], finalPath: `/${key}`, ...extra })
   const zero = { ratio: 0, diffPixels: 0, bbox: null }
   it('행 매칭 — 둘 다 있는 쌍, 대상에만(new), 기준에만(missing — 부분 실행이 빠진 장을 같음처럼 숨기지 않는다)', () => {
@@ -752,19 +749,19 @@ describe('diffRows·rowVerdict·summarizeDiff — diff 의 행 매칭·판정·�
   })
   it('집계 — 판정별 수와 볼 목록(problem·diff·missing·new·near — near 도 오른다)', () => {
     const out = [
-      { key: 'a', width: 1440, height: 900, theme: 'light', ratio: 0, verdict: 'same' },
-      { key: 'b', width: 1440, height: 900, theme: 'light', ratio: 0.001, verdict: 'near' },
-      { key: 'p-agents', width: 768, height: 1024, theme: 'light', ratio: 0.00178, verdict: 'near', known: '머리글' },
-      { key: 'c', width: 390, height: 844, theme: 'light', ratio: 0.05, verdict: 'diff' },
-      { key: 'd', width: 390, height: 844, theme: 'light', ratio: 0, verdict: 'problem', reasons: ['대상:idle=false'] },
-      { key: 'e', width: 390, height: 844, theme: 'light', ratio: null, verdict: 'missing' },
-      { key: 'f', width: 390, height: 844, theme: 'light', ratio: null, verdict: 'new' },
-      { key: 'g', width: 390, height: 844, theme: 'light', ratio: null, verdict: 'skip-font' },
+      { key: 'a', width: 1440, height: 900, ratio: 0, verdict: 'same' },
+      { key: 'b', width: 1440, height: 900, ratio: 0.001, verdict: 'near' },
+      { key: 'p-agents', width: 768, height: 1024, ratio: 0.00178, verdict: 'near', known: '머리글' },
+      { key: 'c', width: 390, height: 844, ratio: 0.05, verdict: 'diff' },
+      { key: 'd', width: 390, height: 844, ratio: 0, verdict: 'problem', reasons: ['대상:idle=false'] },
+      { key: 'e', width: 390, height: 844, ratio: null, verdict: 'missing' },
+      { key: 'f', width: 390, height: 844, ratio: null, verdict: 'new' },
+      { key: 'g', width: 390, height: 844, ratio: null, verdict: 'skip-font' },
     ]
     const s = summarizeDiff(out)
     expect(s).toMatchObject({ compared: 8, same: 1, near: 2, diff: 1, problem: 1, missing: 1, new: 1, skipped: 1 })
-    expect(s.look).toEqual(['d@390x844/light problem 0.00% 대상:idle=false', 'c@390x844/light diff 5.00%', 'e@390x844/light missing —', 'f@390x844/light new —',
-      'p-agents@768x1024/light near 0.18% (알려진 잡음: 머리글)', 'b@1440x900/light near 0.10%'])
+    expect(s.look).toEqual(['d@390x844 problem 0.00% 대상:idle=false', 'c@390x844 diff 5.00%', 'e@390x844 missing —', 'f@390x844 new —',
+      'p-agents@768x1024 near 0.18% (알려진 잡음: 머리글)', 'b@1440x900 near 0.10%'])
   })
 })
 
@@ -850,27 +847,27 @@ describe('checks·sheet 의 순수 조각(UI-1 — 계획 판정 Q28)', () => {
   it('escapeHtml·sheetRows — 차이율 큰 순, 차이·axe 가 없으면 new·null', () => {
     expect(escapeHtml('<a href="x">&\'</a>')).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/a&gt;')
     const head = { rows: [
-      { key: 'a', width: 1440, height: 900, theme: 'light', file: 'a.png', h1Count: 1, problems: [] },
-      { key: 'b', width: 1440, height: 900, theme: 'light', file: 'b.png', h1Count: 0, problems: ['not-found'] },
-      { key: 'c', width: 390, height: 844, theme: 'light', file: 'c.png', h1Count: 1, problems: [] },
+      { key: 'a', width: 1440, height: 900, file: 'a.png', h1Count: 1, problems: [] },
+      { key: 'b', width: 1440, height: 900, file: 'b.png', h1Count: 0, problems: ['not-found'] },
+      { key: 'c', width: 390, height: 844, file: 'c.png', h1Count: 1, problems: [] },
     ] }
-    const rows = sheetRows(head, [{ key: 'a', width: 1440, height: 900, theme: 'light', ratio: 0, verdict: 'same' }, { key: 'b', width: 1440, height: 900, theme: 'light', ratio: 0.2, verdict: 'diff' }],
-      [{ key: 'b', width: 1440, height: 900, theme: 'light', violations: 3 }])
+    const rows = sheetRows(head, [{ key: 'a', width: 1440, height: 900, ratio: 0, verdict: 'same' }, { key: 'b', width: 1440, height: 900, ratio: 0.2, verdict: 'diff' }],
+      [{ key: 'b', width: 1440, height: 900, violations: 3 }])
     expect(rows.map((r) => [r.key, r.verdict, r.axe])).toEqual([['b', 'diff', 3], ['a', 'same', null], ['c', 'new', null]])
   })
   it('sheetRows·sheetSummary — 판정 다섯(same·near·diff·problem·missing)+new, 기준에만 있는 장도 행으로, 볼 목록 = diff·near·problem·missing(ui1-addendum §2)', () => {
     const head = { rows: [
-      { key: 'a', width: 1440, height: 900, theme: 'light', file: 'a.png', h1Count: 1, problems: [] },
-      { key: 'n', width: 1440, height: 900, theme: 'light', file: 'n.png', h1Count: 1, problems: [] },
-      { key: 'p', width: 1440, height: 900, theme: 'light', file: 'p.png', h1Count: 1, problems: ['click-failed'] },
-      { key: 's', width: 390, height: 844, theme: 'light', file: 's.png', h1Count: 1, problems: [] },
+      { key: 'a', width: 1440, height: 900, file: 'a.png', h1Count: 1, problems: [] },
+      { key: 'n', width: 1440, height: 900, file: 'n.png', h1Count: 1, problems: [] },
+      { key: 'p', width: 1440, height: 900, file: 'p.png', h1Count: 1, problems: ['click-failed'] },
+      { key: 's', width: 390, height: 844, file: 's.png', h1Count: 1, problems: [] },
     ] }
     const diff = [
-      { key: 'a', width: 1440, height: 900, theme: 'light', ratio: 0.01, verdict: 'diff', reasons: [] },
-      { key: 'n', width: 1440, height: 900, theme: 'light', ratio: 0.001, verdict: 'near', reasons: [] },
-      { key: 'p', width: 1440, height: 900, theme: 'light', ratio: 0, verdict: 'problem', reasons: ['대상:click-failed'] },
-      { key: 's', width: 390, height: 844, theme: 'light', ratio: 0, verdict: 'same', reasons: [] },
-      { key: 'gone', width: 1440, height: 900, theme: 'light', file: 'gone.png', ratio: null, verdict: 'missing', reasons: [] },
+      { key: 'a', width: 1440, height: 900, ratio: 0.01, verdict: 'diff', reasons: [] },
+      { key: 'n', width: 1440, height: 900, ratio: 0.001, verdict: 'near', reasons: [] },
+      { key: 'p', width: 1440, height: 900, ratio: 0, verdict: 'problem', reasons: ['대상:click-failed'] },
+      { key: 's', width: 390, height: 844, ratio: 0, verdict: 'same', reasons: [] },
+      { key: 'gone', width: 1440, height: 900, file: 'gone.png', ratio: null, verdict: 'missing', reasons: [] },
     ]
     const rows = sheetRows(head, diff, [])
     expect(rows.map((r) => [r.key, r.verdict])).toEqual([['a', 'diff'], ['n', 'near'], ['p', 'problem'], ['s', 'same'], ['gone', 'missing']])
@@ -888,21 +885,21 @@ describe('checks·sheet 의 순수 조각(UI-1 — 계획 판정 Q28)', () => {
   })
   it('axeTable — 모든 라벨의 행을 싣고 위반 많은 순으로(판정 Q45)', () => {
     const rows = axeTable([
-      { label: 'ui1', key: 'a', width: 1440, height: 900, theme: 'light', violations: 1 },
-      { label: 'ui2', key: 'a', width: 1440, height: 900, theme: 'light', violations: 4 },
-      { label: 'ui2', key: 'b', width: 1440, height: 900, theme: 'light', violations: 0 },
+      { label: 'ui1', key: 'a', width: 1440, height: 900, violations: 1 },
+      { label: 'ui2', key: 'a', width: 1440, height: 900, violations: 4 },
+      { label: 'ui2', key: 'b', width: 1440, height: 900, violations: 0 },
     ])
     expect(rows.map((r) => [r.label, r.key, r.violations])).toEqual([['ui2', 'a', 4], ['ui1', 'a', 1], ['ui2', 'b', 0]])
   })
   it('sheetRows 를 추가 라벨 절에 — 기준 없이 new, axe 는 풀에서 같은 장(키·크기)으로 찾는다(판정 Q45)', () => {
-    const extra = { rows: [{ key: 'a', width: 390, height: 844, theme: 'light', file: 'a-m.png', h1Count: 1, problems: [] }] }
-    const pool = [{ key: 'a', width: 1440, height: 900, theme: 'light', violations: 1 }, { key: 'a', width: 390, height: 844, theme: 'light', violations: 4 }]
+    const extra = { rows: [{ key: 'a', width: 390, height: 844, file: 'a-m.png', h1Count: 1, problems: [] }] }
+    const pool = [{ key: 'a', width: 1440, height: 900, violations: 1 }, { key: 'a', width: 390, height: 844, violations: 4 }]
     expect(sheetRows(extra, [], pool).map((r) => [r.verdict, r.axe])).toEqual([['new', 4]])
   })
   it('checksSummary — Tab 미도달·인쇄 글자 0 을 실패로(판정 Q43·Q45). 깜빡임·쇼케이스 다크 대조 절은 없다(라이트 전용 2026-10-10)', () => {
     const s = checksSummary({
-      tab: { rows: [{ key: 'p-wbs', theme: 'light', failed: 1, unreached: ['[data-row-id] button'] }, { key: 'p-dashboard', theme: 'light', failed: 0, unreached: [] }] },
-      print: { rows: [{ key: 'report-modal', theme: 'light', texts: 0, lowContrast: 0 }] },
+      tab: { rows: [{ key: 'p-wbs', failed: 1, unreached: ['[data-row-id] button'] }, { key: 'p-dashboard', failed: 0, unreached: [] }] },
+      print: { rows: [{ key: 'report-modal', texts: 0, lowContrast: 0 }] },
     })
     expect(s.tab?.map((r) => r.ok)).toEqual([false, true])
     expect(s.print?.[0].ok).toBe(false)
@@ -934,7 +931,7 @@ describe('pairPlan·pairRows — 옛 경로 캡처와 새 경로 캡처를 짝�
     // 짝 행이 목록에 없으면 계획에 올리지 않는다
     expect(pairPlan([{ key: 'x', pair: 'zz' }], doc)).toEqual([])
   })
-  const row = (key: string, extra: Record<string, unknown> = {}) => ({ key, width: 1440, height: 900, theme: 'light', file: `${key}.png`, font: 'ok', idle: true, problems: [] as string[], finalPath: `/${key}`, ...extra })
+  const row = (key: string, extra: Record<string, unknown> = {}) => ({ key, width: 1440, height: 900, file: `${key}.png`, font: 'ok', idle: true, problems: [] as string[], finalPath: `/${key}`, ...extra })
   it('같은 크기의 짝만 잇고, 짝 장이 없으면 unmatched(같음으로 숨기지 않는다)', () => {
     const A = [row('minutes'), row('minutes', { width: 768, height: 1024 }), row('meetings')]
     const B = [row('ws-minutes'), row('ws-minutes', { width: 390, height: 844 }), row('ws-home')]

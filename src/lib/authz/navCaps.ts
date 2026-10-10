@@ -24,7 +24,7 @@ export function navCapsFor(actor: Actor | null, scope: NavScopeRef): NavCaps {
   }
 }
 
-/** 범위 기준 역할의 사전 키 — 화면(계정 메뉴)은 이 키를 화면 언어로 푼다 */
+/** 범위 기준 역할의 사전 키 — 화면(계정 메뉴)은 이 키를 사전으로 푼다 */
 export type ScopeRoleKey = 'role.platformAdmin' | 'role.admin' | 'role.member' | 'role.viewer' | 'role.unknown'
 export function scopeRoleKey(actor: Actor | null, scope: NavScopeRef, degraded: boolean): ScopeRoleKey {
   if (!actor) return degraded ? 'role.unknown' : 'role.viewer'

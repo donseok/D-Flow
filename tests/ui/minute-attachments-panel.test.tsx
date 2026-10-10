@@ -13,7 +13,7 @@ const m = vi.hoisted(() => ({
   upload: vi.fn(), storageRemove: vi.fn(),
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: m.refresh }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: m.toast }) }))
 vi.mock('@/components/ui/Modal', () => ({
   Modal: ({ open, children }: { open: boolean; children: React.ReactNode }) => (open ? <div data-testid="modal">{children}</div> : null),

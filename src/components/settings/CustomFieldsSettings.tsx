@@ -6,14 +6,14 @@ import { backfillCustomField, getCustomFieldUsage, purgeCustomField, type FieldC
 import { FIELD_ENTITIES, FIELD_TYPES, orderedFields, parseFieldDefs, validateCustomValue, type FieldDef, type FieldEntity, type FieldLimits, type FieldType, type FieldValue } from '@/lib/domain/customFields'
 import { VOCAB_COLORS, type VocabColor } from '@/lib/settings/vocab'
 import { newUuid } from '@/lib/domain/uuid'
-import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t as translate, type DictKey} from '@/lib/i18n/dict'
 import { CustomFieldInput } from '@/components/fields/CustomFieldInput'
 
 type FieldState = { value: readonly FieldDef[] | null; error?: string; enabled: boolean }
-export function CustomFieldsSettings({ projectId, states, revision, canEdit, locale = 'ko' }: {
-  projectId: string; states: Record<FieldEntity, FieldState>; revision: number; canEdit: boolean; locale?: Locale
+export function CustomFieldsSettings({ projectId, states, revision, canEdit }: {
+  projectId: string; states: Record<FieldEntity, FieldState>; revision: number; canEdit: boolean;
 }) {
-  const tl = (k: DictKey) => translate(locale, k)
+  const tl = (k: DictKey) => translate(k)
   const [entity, setEntity] = useState<FieldEntity>('wbs_item')
   const [busy, setBusy] = useState(false)
   const names = { wbs_item: 'WBS', issue: tl('nav.issues'), weekly_row: tl('nav.weekly') }
@@ -25,18 +25,18 @@ export function CustomFieldsSettings({ projectId, states, revision, canEdit, loc
     <div role="tabpanel" id={`fields-${entity}`} aria-labelledby={`fields-tab-${entity}`}>
       {!states[entity].enabled ? <p role={states[entity].error ? "alert" : "status"} className="text-sm text-fg-secondary">{states[entity].error ?? tl('settings.fields.enableThisModuleToManage')}</p>
         : <FieldManager key={`${entity}-${revision}`} projectId={projectId} entity={entity} initial={states[entity].value} initialError={states[entity].error}
-          revision={revision} canEdit={canEdit} locale={locale} onBusy={setBusy} />}
+          revision={revision} canEdit={canEdit} onBusy={setBusy} />}
     </div>
   </div>
 }
 
 type BulkCommand = { kind: 'backfill'; input: FieldCommandInput & { value: FieldValue } } | { kind: 'purge'; input: FieldCommandInput & { expectedCount: number } }
-function FieldManager({ projectId, entity, initial, initialError, revision, canEdit, locale, onBusy }: {
+function FieldManager({ projectId, entity, initial, initialError, revision, canEdit, onBusy }: {
   projectId: string; entity: FieldEntity; initial: readonly FieldDef[] | null; initialError?: string
-  revision: number; canEdit: boolean; locale: Locale; onBusy: (busy: boolean) => void
+  revision: number; canEdit: boolean; onBusy: (busy: boolean) => void
 }) {
   const router = useRouter()
-  const tl = useCallback((k: DictKey) => translate(locale, k), [locale])
+  const tl = useCallback((k: DictKey) => translate(k), [])
   const [draft, setDraft] = useState<FieldDef[]>(() => orderedFields(initial ?? []))
   const [baseline, setBaseline] = useState(draft)
   const [origins, setOrigins] = useState<(string | null)[]>(draft.map(d => d.key))
@@ -192,7 +192,7 @@ function FieldManager({ projectId, entity, initial, initialError, revision, canE
           </div>)}
           <button type="button" className="btn" disabled={(field.options?.length ?? 0) >= 100} onClick={() => { let n = 1; while (field.options?.some(o => o.code === `option_${n}`)) n++; change({ options: [...field.options!, { code: `option_${n}`, label: tl('settings.fields.option').replace('{n}', String(n)), sort: field.options!.length, active: true }] }) }}>{tl('settings.fields.addOption')}</button>
         </fieldset>}
-        <div className="space-y-2"><CustomFieldInput def={field} value={field.default} label={tl('settings.fields.defaultValue')} locale={locale} disabled={locked} onChange={changeDefault} />
+        <div className="space-y-2"><CustomFieldInput def={field} value={field.default} label={tl('settings.fields.defaultValue')} disabled={locked} onChange={changeDefault} />
           <button type="button" className="btn" disabled={locked || field.default === undefined} onClick={() => changeDefault(undefined)}>{tl('settings.fields.clearDefault')}</button>
         </div>
         <p className="text-xs text-fg-secondary">{loadingUsage ? tl('settings.fields.loadingUsage') : count === null ? tl('settings.fields.usageUnavailable') : tl('settings.fields.rowsWithAValueMissing').replace('{total}', String(usage!.total)).replace('{count}', String(count)).replace('{missing}', String(missing))}</p>

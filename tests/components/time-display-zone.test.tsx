@@ -41,10 +41,6 @@ describe('승인 큐 — 보고 시각이 프로젝트 tz 를 따른다', () => 
     render(<ApprovalQueue queue={[q]} projectId="p1" isAdmin={false} onHub={() => {}} onChanged={() => {}} timeZone="America/Los_Angeles" />)
     expect(host.textContent).toMatch(/2026\. 10\. 3\./)
   })
-  it('locale 인자 — en-US 면 영어 꼴', () => {
-    render(<ApprovalQueue queue={[q]} projectId="p1" isAdmin={false} onHub={() => {}} onChanged={() => {}} timeZone="America/Los_Angeles" locale="en-US" />)
-    expect(host.textContent).toContain('10/3/2026')
-  })
   it('showTimeZone — 달력 손상으로 UTC 로 찍을 때 카드 시각 꼬리에 tz 이름(허브 머리와 같은 표기, A-5 리뷰 O6/N3)', () => {
     render(<ApprovalQueue queue={[q]} projectId="p1" isAdmin={false} onHub={() => {}} onChanged={() => {}} timeZone="UTC" showTimeZone />)
     expect(host.querySelector('[data-queue-card]')!.textContent).toContain('(UTC)')
@@ -72,12 +68,12 @@ describe('설정 이력 — stampIn(tz)', () => {
 
 describe('위키 날짜 — instant 는 tz, date-only 는 변환하지 않는다(D-21d)', () => {
   it('instant', () => {
-    expect(formatWikiDate(AT, 'ko', false, 'Asia/Seoul')).toContain('4')
-    expect(formatWikiDate(AT, 'ko', false, 'America/Los_Angeles')).toContain('3')
-    expect(formatWikiDate(AT, 'ko', false, 'Asia/Seoul')).not.toBe(formatWikiDate(AT, 'ko', false, 'America/Los_Angeles'))
+    expect(formatWikiDate(AT, false, 'Asia/Seoul')).toContain('4')
+    expect(formatWikiDate(AT, false, 'America/Los_Angeles')).toContain('3')
+    expect(formatWikiDate(AT, false, 'Asia/Seoul')).not.toBe(formatWikiDate(AT, false, 'America/Los_Angeles'))
   })
   it('date-only 는 tz 와 무관', () => {
-    expect(formatWikiDate('2026-10-04', 'ko', false, 'America/Los_Angeles')).toBe(formatWikiDate('2026-10-04', 'ko', false, 'Asia/Seoul'))
+    expect(formatWikiDate('2026-10-04', false, 'America/Los_Angeles')).toBe(formatWikiDate('2026-10-04', false, 'Asia/Seoul'))
   })
 })
 
@@ -88,7 +84,7 @@ describe('timeZone 은 필수 prop — 빠뜨리면 타입 오류(K7)', () => {
     // @ts-expect-error timeZone 이 없다
     const b = <SettingsHistoryList scope={{ projectId: 'p1' }} initial={{ ok: true, rows: [], nextBefore: null }} />
     // @ts-expect-error 넷째 인자(timeZone)가 없다
-    formatWikiDate(AT, 'ko', false)
+    formatWikiDate(AT, false)
     expect([a, b]).toHaveLength(2)
   })
 })

@@ -62,7 +62,7 @@ import {
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
-import { libText, denied, failureText } from '@/lib/i18n/serverText'
+import { denied } from '@/lib/i18n/serverText'
 
 export interface IssueActionResult {
   ok: boolean
@@ -133,11 +133,10 @@ export interface IssueMajorProcessesResult {
 
 /** 프로젝트 선택 후 폼에 표시할 등록 규칙을 읽는다. 저장할 때 다시 검증한다. */
 export async function fetchIssueEntryContext(projectId: string): Promise<{ ok: true; value: IssueEntryContext } | { ok: false; error: string }> {
-  const t = await serverTranslator()
   const guard = await requireProjectMember(projectId)
-  if (!guard.ok) return denied(guard, t)
+  if (!guard.ok) return denied(guard)
   const mod = await requireModule({ projectId }, 'issues')
-  if (!mod.ok) return denied(mod, t)
+  if (!mod.ok) return denied(mod)
   const context = await loadIssueEntryContext(projectId)
   return context.ok ? { ok: true, value: { ...context.value, canManageCustom: isProjectAdmin(guard.actor, projectId) } } : context
 }
@@ -146,9 +145,9 @@ export async function fetchIssueEntryContext(projectId: string): Promise<{ ok: t
 export async function fetchIssueMajorProcesses(projectId: string): Promise<IssueMajorProcessesResult> {
   const t = await serverTranslator()
   const user = await getSession()
-  if (!user || !projectId) return { ok: false, error: libText(t, ERR_ANON) }
+  if (!user || !projectId) return { ok: false, error: ERR_ANON }
   const mod = await requireModule({ projectId }, 'issue_analysis')                    // 분석 기준정보 관문
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('issue_major_processes')
@@ -177,9 +176,9 @@ export async function fetchIssueProjectMembers(projectId: string): Promise<Issue
   const t = await serverTranslator()
   // 조회 전용 — 담당자 후보 명단은 프로젝트 화면을 볼 수 있는 로그인 사용자면 읽을 수 있다.
   const user = await getSession()
-  if (!user || !projectId) return { ok: false, error: libText(t, ERR_ANON) }
+  if (!user || !projectId) return { ok: false, error: ERR_ANON }
   const mod = await requireModule({ projectId }, 'issues')
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const sb = await createServerClient()
   const { data, error } = await sb
     .from('project_members')
@@ -461,7 +460,7 @@ type IssueInputValidation =
 
 function validateInput(t: ServerTranslate, input: IssueInput, mode: IssueInputMode): IssueInputValidation {
   if (!input || typeof input.title !== 'string' || typeof input.body !== 'string') return { ok: false, error: t('srv.issues.issueInputFormatNotValid') }
-  if (input.areaId !== null && (typeof input.areaId !== 'string' || !UUID_RE.test(input.areaId))) return { ok: false, error: libText(t, ISSUE_DB_MESSAGES.ISSUE_AREA_NOT_FOUND) }
+  if (input.areaId !== null && (typeof input.areaId !== 'string' || !UUID_RE.test(input.areaId))) return { ok: false, error: ISSUE_DB_MESSAGES.ISSUE_AREA_NOT_FOUND }
   const title = input.title.trim()
   if (!title) return { ok: false, error: t('err.enterTitle') }
   if (title.length > TITLE_MAX) return { ok: false, error: fill(t('err.titleMustCharactersFewer'), { titleMax: TITLE_MAX }) }
@@ -498,7 +497,7 @@ function statusWriteFailure(t: ServerTranslate, error: { code?: string; message?
   }
   if (token === 'ISSUE_WORKFLOW_ISOLATION') {
     console.error('[issues] 상태 전환 격리 수준 거부', error)
-    return libText(t, ERR_ISSUE_RETRY)
+    return ERR_ISSUE_RETRY
   }
   return issueWriteFailure(t, error)
 }
@@ -506,9 +505,9 @@ function statusWriteFailure(t: ServerTranslate, error: { code?: string; message?
 function issueWriteFailure(t: ServerTranslate, error: { code?: string; message?: string }): string {
   console.error('[issues] 저장 실패', error)
   if (error.code === '40P01' || error.code === '55P03'
-      || (error.code === '23505' && error.message?.includes('issues_project_code_uidx'))) return libText(t, ERR_ISSUE_RETRY)
+      || (error.code === '23505' && error.message?.includes('issues_project_code_uidx'))) return ERR_ISSUE_RETRY
   const vocab = vocabWriteFailure(error)          // 어휘 트리거(B4) — 비활성 code·격리·설정 행 없음
-  if (vocab) return libText(t, vocab)
+  if (vocab) return vocab
   return rpcFailure(error, ISSUE_OWN_TOKENS, t)?.message ?? failWith('issues', error, t('srv.issues.couldNotSaveIssue'))
 }
 
@@ -529,23 +528,23 @@ async function checkEntry(
   }
   // 심각도·원천 = 이 프로젝트의 활성 어휘(B4). 값을 그대로 두는 수정은 비활성이어도 통과(트리거와 같은 규칙)
   const sevErr = vocabCodeError('issues.severities', ctx.vocab.severities, input.severity, existing?.severity)
-  if (sevErr) return libText(t, sevErr)
+  if (sevErr) return sevErr
   if (input.analysis) {
     const srcErr = vocabCodeError('issues.sources', ctx.vocab.sources, input.analysis.sourceType, existing?.sourceType)
-    if (srcErr) return libText(t, srcErr)
+    if (srcErr) return srcErr
   }
   if (input.analysis) {
     const mod = await requireModule({ projectId }, 'issue_analysis')
-    if (!mod.ok) return libText(t, mod.error)
-    if (ctx.rules.analysis === 'off') return libText(t, ERR_MODULE_DISABLED)
+    if (!mod.ok) return mod.error
+    if (ctx.rules.analysis === 'off') return ERR_MODULE_DISABLED
   }
-  if (!existing && ctx.rules.analysis === 'required' && !input.analysis) return libText(t, ISSUE_DB_MESSAGES.ISSUE_ANALYSIS_REQUIRED)
-  if (existing?.codeAreaId && input.areaId !== existing.codeAreaId) return libText(t, ISSUE_DB_MESSAGES.ISSUE_AREA_IMMUTABLE)
+  if (!existing && ctx.rules.analysis === 'required' && !input.analysis) return ISSUE_DB_MESSAGES.ISSUE_ANALYSIS_REQUIRED
+  if (existing?.codeAreaId && input.areaId !== existing.codeAreaId) return ISSUE_DB_MESSAGES.ISSUE_AREA_IMMUTABLE
   if (input.areaId) {
     const area = ctx.areas.find(area => area.id === input.areaId)
-    if (!area) return libText(t, ISSUE_DB_MESSAGES.ISSUE_AREA_NOT_FOUND)
-    if (!area.active && (!existing || input.areaId !== existing.areaId)) return libText(t, ISSUE_DB_MESSAGES.ISSUE_AREA_INACTIVE)
-  } else if (policyNeedsArea(ctx.policy) || input.analysis || (!existing && ctx.rules.areaRequired)) return libText(t, ISSUE_DB_MESSAGES.ISSUE_AREA_REQUIRED)
+    if (!area) return ISSUE_DB_MESSAGES.ISSUE_AREA_NOT_FOUND
+    if (!area.active && (!existing || input.areaId !== existing.areaId)) return ISSUE_DB_MESSAGES.ISSUE_AREA_INACTIVE
+  } else if (policyNeedsArea(ctx.policy) || input.analysis || (!existing && ctx.rules.areaRequired)) return ISSUE_DB_MESSAGES.ISSUE_AREA_REQUIRED
   return null
 }
 
@@ -676,41 +675,40 @@ async function resolveIssueMajorId(
  */
 type OwnerGate = { ok: true; isAdmin: boolean; userId: string } | { ok: false; error: string }
 async function adminOrOwnerGate(issueId: string): Promise<OwnerGate> {
-  const t = await serverTranslator()
   const found = await resolveProjectId('issues', issueId)
-  if (!found.ok) return { ok: false, error: libText(t, found.error) }
-  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }          // issues.project_id 는 not null — 풀지 못하면 중단(3원칙 ②)
+  if (!found.ok) return { ok: false, error: found.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // issues.project_id 는 not null — 풀지 못하면 중단(3원칙 ②)
   const g = await requireProjectAdmin(found.projectId)
   let pass: OwnerGate
   if (g.ok) pass = { ok: true, isAdmin: true, userId: g.actor.userId }
   else {
     let actor: Awaited<ReturnType<typeof getActor>> = null
     try { actor = await getActor() } catch { actor = null }
-    if (!actor) return { ok: false, error: libText(t, g.error) }
+    if (!actor) return { ok: false, error: g.error }
     pass = { ok: true, isAdmin: false, userId: actor.userId }
   }
   const mod = await requireModule({ projectId: found.projectId }, 'issues')   // 스펙 §4.2 — 작성자 판정은 호출부가 한다(관문은 그 전)
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   return pass
 }
 
 export async function createIssue(projectId: string, input: IssueInput): Promise<IssueActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'issues')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const checked = validateInput(t, input, 'normal-create')
-  if (!checked.ok) return { ok: false, error: libText(t, checked.error) }
+  if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
   const entryError = await checkEntry(projectId, value, undefined, isProjectAdmin(g.actor, projectId))
   if (entryError) return { ok: false, error: entryError }
   const user = await getSession()
-  if (!user) return { ok: false, error: libText(t, ERR_ANON) }
+  if (!user) return { ok: false, error: ERR_ANON }
 
   const sb = await createServerClient()
   const major = value.analysis ? await resolveIssueMajorId(sb, projectId, value.areaId!, value.analysis.majorName) : { ok: true as const, id: null }
-  if (!major.ok) return { ok: false, error: libText(t, major.error) }
+  if (!major.ok) return { ok: false, error: major.error }
   const { data, error } = await sb
     .from('issues')
     .insert({
@@ -892,9 +890,9 @@ export async function prepareMinuteIssueDraft(
 ): Promise<MinuteIssueDraftActionResult> {
   const t = await serverTranslator()
   const gate = await requireProjectMember(projectId)
-  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
+  if (!gate.ok) return { ok: false, error: gate.error }
   const mod = await requireModule({ projectId }, ['issues', 'minutes'])       // 회의록 블록 → 이슈 — 둘 다 켜져야. 꺼지면 초안 캐시·LLM 앞에서 끝난다
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
 
   const verified = await verifyMinuteIssueBlock(
     projectId, gate.actor.projectWorkspace.get(projectId), source, 'prepareMinuteIssueDraft', true)
@@ -904,7 +902,7 @@ export async function prepareMinuteIssueDraft(
     return { ok: false, error: t('srv.issues.selectBlockActualIssueContent') }
   }
   const loaded = await loadIssueEntryContext(projectId)
-  if (!loaded.ok) return failureText(t, loaded)
+  if (!loaded.ok) return loaded
   const [knownMajorProcesses, knownSubProcesses] = loaded.value.rules.analysis === 'off' ? [[], []] : await Promise.all([
     loadKnownMajorProcesses(projectId), loadKnownSubProcesses(projectId),
   ])
@@ -952,16 +950,16 @@ export async function createIssueFromMinuteBlock(
 ): Promise<IssueActionResult> {
   const t = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, ['issues', 'minutes'])
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const checked = validateInput(t, input, 'minute-create')
-  if (!checked.ok) return { ok: false, error: libText(t, checked.error) }
+  if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
   const entryError = await checkEntry(projectId, value, undefined, isProjectAdmin(g.actor, projectId))
   if (entryError) return { ok: false, error: entryError }
   const user = await getSession()
-  if (!user) return { ok: false, error: libText(t, ERR_ANON) }
+  if (!user) return { ok: false, error: ERR_ANON }
 
   const verified = await verifyMinuteIssueBlock(
     projectId, g.actor.projectWorkspace.get(projectId), source, 'createIssueFromMinuteBlock')
@@ -1043,9 +1041,9 @@ export async function createIssueFromMinuteBlock(
 export async function updateIssue(issueId: string, input: IssueInput): Promise<IssueActionResult> {
   const t = await serverTranslator()
   const gate = await adminOrOwnerGate(issueId)
-  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
+  if (!gate.ok) return { ok: false, error: gate.error }
   const checked = validateInput(t, input, 'update')
-  if (!checked.ok) return { ok: false, error: libText(t, checked.error) }
+  if (!checked.ok) return { ok: false, error: checked.error }
   const value = checked.value
 
   const sb = await createServerClient()
@@ -1055,10 +1053,10 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
     .select('project_id, created_by, area_id, code_area_id, major_id, source_type, severity')
     .eq('id', issueId)
     .maybeSingle()
-  if (curErr) return { ok: false, error: libText(t, ERR_LOOKUP) } // 소유권 판정의 입력이다 — 실패를 '없음'으로 위장하지 않는다
+  if (curErr) return { ok: false, error: ERR_LOOKUP } // 소유권 판정의 입력이다 — 실패를 '없음'으로 위장하지 않는다
   if (!cur) return { ok: false, error: t('err.issueNotFound') }
   const isOwner = (cur.created_by as string | null) === gate.userId
-  if (!gate.isAdmin && !isOwner) return { ok: false, error: libText(t, ERR_DENIED) }
+  if (!gate.isAdmin && !isOwner) return { ok: false, error: ERR_DENIED }
   const entryError = await checkEntry(cur.project_id as string, value, {
     areaId: (cur.area_id as string | null) ?? null, codeAreaId: (cur.code_area_id as string | null) ?? null,
     severity: (cur.severity as string | null) ?? null, sourceType: (cur.source_type as string | null) ?? null,
@@ -1084,7 +1082,7 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
       .maybeSingle()
     if (minuteLinkErr) {
       console.error('[updateIssue] 회의록 원천 링크 조회 실패:', minuteLinkErr.message)
-      return { ok: false, error: libText(t, ERR_LOOKUP) }
+      return { ok: false, error: ERR_LOOKUP }
     }
     if (!minuteLink) {
       return { ok: false, error: t('srv.issues.minutesSourceCanSetOnly') }
@@ -1093,7 +1091,7 @@ export async function updateIssue(issueId: string, input: IssueInput): Promise<I
 
   // Major 는 오분류 교정·레거시 백필을 위해 편집에서 바꿀 수 있다(code_area_id 와 달리 이슈 ID 와 무관).
   const major = value.analysis ? await resolveIssueMajorId(sb, cur.project_id as string, value.areaId!, value.analysis.majorName) : { ok: true as const, id: null }
-  if (!major.ok) return { ok: false, error: libText(t, major.error) }
+  if (!major.ok) return { ok: false, error: major.error }
 
   let write = sb
     .from('issues')
@@ -1134,12 +1132,12 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
   const t = await serverTranslator()
   // 진행 업데이트는 그 이슈가 속한 프로젝트의 멤버면 누구나 — 대상 프로젝트를 먼저 확정한다.
   const found = await resolveProjectId('issues', issueId)
-  if (!found.ok) return { ok: false, error: libText(t, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectMember(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
-  if (!found.projectId) return { ok: false, error: libText(t, ERR_LOOKUP) }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
+  if (!g.ok) return { ok: false, error: g.error }
+  if (!found.projectId) return { ok: false, error: ERR_LOOKUP }          // 플랫폼 관리자는 null 로도 가드를 지난다 — 풀지 못하면 중단(3원칙 ②)
   const mod = await requireModule({ projectId: found.projectId }, 'issues')
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (patch.status === undefined && patch.assigneeMemberIds === undefined) {
     return { ok: false, error: t('srv.issues.nothingChange') }
   }
@@ -1154,7 +1152,7 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
   const sb = await createServerClient()
   // 선조회 실패는 중단한다(3원칙 ② — 없는 이슈로 위장하지 않는다)
   const { data: cur, error: curErr } = await sb.from('issues').select('project_id, created_by, status_code, title').eq('id', issueId).maybeSingle()
-  if (curErr) return { ok: false, error: failWith('issues.updateIssueProgress', curErr, libText(t, ERR_LOOKUP)) }
+  if (curErr) return { ok: false, error: failWith('issues.updateIssueProgress', curErr, ERR_LOOKUP) }
   if (!cur) return { ok: false, error: t('err.issueNotFound') }
 
   // 담당자만 바꿔도 issues.updated_at 은 반드시 오른다 — AI 인덱스 신선도 가드의 입력(0041 헤더).
@@ -1218,14 +1216,14 @@ export async function updateIssueProgress(issueId: string, patch: IssueProgressP
 export async function deleteIssue(issueId: string): Promise<IssueActionResult> {
   const t = await serverTranslator()
   const gate = await adminOrOwnerGate(issueId)
-  if (!gate.ok) return { ok: false, error: libText(t, gate.error) }
+  if (!gate.ok) return { ok: false, error: gate.error }
 
   const sb = await createServerClient()
   const { data: cur, error: curErr } = await sb.from('issues').select('project_id, created_by').eq('id', issueId).maybeSingle()
-  if (curErr) return { ok: false, error: libText(t, ERR_LOOKUP) }
+  if (curErr) return { ok: false, error: ERR_LOOKUP }
   if (!cur) return { ok: false, error: t('err.issueNotFound') }
   const isOwner = (cur.created_by as string | null) === gate.userId
-  if (!gate.isAdmin && !isOwner) return { ok: false, error: libText(t, ERR_DENIED) }
+  if (!gate.isAdmin && !isOwner) return { ok: false, error: ERR_DENIED }
 
   // 첨부 정리(0068). 메타 행은 복합 FK cascade 로 사라지지만 버킷 객체는 영구 잔존한다.
   //

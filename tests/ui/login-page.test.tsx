@@ -29,7 +29,7 @@ vi.mock('next/link', () => ({
 // 사전 문구로 확인한다(공급자 없는 기본 t 는 키를 돌려준다)
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const dict = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
-  return { useLocale: () => ({ locale: 'ko', t: (k: Parameters<typeof dict.t>[1]) => dict.t('ko', k) }) }
+  return { useLocale: () => ({ t: (k: Parameters<typeof dict.t>[0]) => dict.t(k) }) }
 })
 
 import Login from '@/app/login/page'

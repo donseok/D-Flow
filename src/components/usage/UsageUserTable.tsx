@@ -6,12 +6,11 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import type { UsageUserRow } from '@/lib/domain/usage'
 import { WORKSPACE_ROLE_LABEL_KEY } from '@/lib/domain/authz'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import type { Locale } from '@/lib/i18n/dict'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
-function fmtDate(iso: string | null, timeZone: string, locale: Locale): string {
+function fmtDate(iso: string | null, timeZone: string): string {
   if (!iso) return '—'
-  return new Intl.DateTimeFormat(intlLocale(locale), { timeZone, dateStyle: 'medium' }).format(new Date(iso))
+  return new Intl.DateTimeFormat(KO_LOCALE, { timeZone, dateStyle: 'medium' }).format(new Date(iso))
 }
 
 const USER_PAGE_SIZE = 15
@@ -21,7 +20,7 @@ const USER_PAGE_SIZE = 15
  * last_sign_in_at 은 수집 시작 이전까지 소급되므로 배포 첫날부터 채워진다.
  */
 export function UsageUserTable({ rows, days, timeZone }: { rows: UsageUserRow[]; days: number; timeZone: string }) {
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const [page, setPage] = useState(1)
   const pageCount = Math.max(1, Math.ceil(rows.length / USER_PAGE_SIZE))
   const currentPage = Math.min(page, pageCount)
@@ -57,10 +56,10 @@ export function UsageUserTable({ rows, days, timeZone }: { rows: UsageUserRow[];
                 <td className="py-2 pr-3 text-fg-secondary">{r.email}</td>
                 <td className="py-2 pr-3 text-fg-secondary">{r.teamLabel ?? r.teamCode ?? '—'}</td>
                 <td className="py-2 pr-3 text-fg-secondary">{r.role ? t(WORKSPACE_ROLE_LABEL_KEY[r.role]) : '—'}</td>
-                <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.createdAt, timeZone, locale)}</td>
-                <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.lastSignInAt, timeZone, locale)}</td>
-                <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.lastActivityAt, timeZone, locale)}</td>
-                <td className="py-2 pr-3 text-right tabular-nums text-fg">{r.events.toLocaleString(intlLocale(locale))}</td>
+                <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.createdAt, timeZone)}</td>
+                <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.lastSignInAt, timeZone)}</td>
+                <td className="py-2 pr-3 tabular-nums text-fg-secondary">{fmtDate(r.lastActivityAt, timeZone)}</td>
+                <td className="py-2 pr-3 text-right tabular-nums text-fg">{r.events.toLocaleString(KO_LOCALE)}</td>
                 <td className="py-2 pr-3 text-right tabular-nums text-fg">{r.activeDays}</td>
               </tr>
             ))}

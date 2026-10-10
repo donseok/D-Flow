@@ -17,7 +17,7 @@ import { currentRuleDay } from '@/lib/domain/calendar'
 import { MeetingFormModal } from './MeetingFormModal'
 import { MeetingDetailModal } from './MeetingDetailModal'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
 type ViewKey = 'calendar' | 'list'
@@ -68,7 +68,7 @@ export function MeetingsView({
   categories: readonly MeetingCategoryDef[]
 }) {
   const router = useRouter()
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const searchParams = useSearchParams()
   const categoryMap = useMemo(() => ({ [projectId]: [...categories] }), [projectId, categories])
   // 이 화면은 프로젝트 하나에 고정돼 있어 두 불리언이 곧 그 프로젝트의 판정이다 — 항목마다 프로젝트가
@@ -129,7 +129,7 @@ export function MeetingsView({
         <div className="flex items-center gap-2">
           <button onClick={() => shift(-1)} className="chrome-icon" aria-label={t('meet.prevMonth')}><ChevronLeft className="h-4 w-4" /></button>
           <div className="min-w-[116px] text-center text-base font-bold tabular-nums text-fg">
-            {new Intl.DateTimeFormat(intlLocale(locale), { year: 'numeric', month: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
+            {new Intl.DateTimeFormat(KO_LOCALE, { year: 'numeric', month: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month0, 1)))}
           </div>
           <button onClick={() => shift(1)} className="chrome-icon" aria-label={t('meet.nextMonth')}><ChevronRight className="h-4 w-4" /></button>
           <button onClick={() => { setYear(initY); setMonth0((initM || 1) - 1) }} className="btn btn-ghost h-10">{t('meet.today')}</button>

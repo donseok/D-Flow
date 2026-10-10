@@ -5,15 +5,14 @@ import { ACCESS_ROLE, isProjectAdmin } from '@/lib/domain/authz'
 import { listAccounts } from '@/app/actions/accounts'
 import { listProjectsWithState } from '@/app/actions/project'
 import { PageHeader } from '@/components/app/PageHeader'
-import { getServerLocale } from '@/lib/i18n/server'
 import { t } from '@/lib/i18n/dict'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { AccountsManager } from '@/components/admin/AccountsManager'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 목록은 항상 최신(admin API) 조회
-/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '멤버·초대') */
-export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.wsMembers') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 사전에서 꺼낸다('멤버·초대') */
+export async function generateMetadata() { return { title: t('nav.wsMembers') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 export default async function AccountsAdminPage({ params, searchParams }: {
   params: Promise<{ slug: string }>; searchParams: Promise<{ project?: string }>
@@ -24,15 +23,15 @@ export default async function AccountsAdminPage({ params, searchParams }: {
   // 슬러그 워크스페이스의 관리자(D22 — 플랫폼 관리자 포함). 열화(actor null)·권한 없음은 그 워크스페이스 홈(D7)
   if (!actor || !canManageWorkspaceAccounts(actor, scope.ws.id)) redirect(wsHref(scope.ws.slug))
 
-  const [{ project }, list, locale] = await Promise.all([searchParams, listProjectsWithState(), getServerLocale()])
+  const [{ project }, list] = await Promise.all([searchParams, listProjectsWithState()])
   const canPlatformOps = actor.isSuperuser
-  const title = t(locale, 'nav.wsMembers')
+  const title = t('nav.wsMembers')
   if (list.degraded) {
     // 목록을 못 읽은 것을 '관리할 프로젝트가 없습니다'로 그리지 않는다(에러 3원칙 ① — 원인은 [listProjects] 로그)
     return (
       <div className="space-y-6">
         <PageHeader title={title} meta={scope.ws.name} />
-        <StatusMessage kind="partial_error" blocking title={t(locale, 'pages.accounts.projectsFailed')} detail={t(locale, 'pages.accounts.projectsFailedDetail')} />
+        <StatusMessage kind="partial_error" blocking title={t('pages.accounts.projectsFailed')} detail={t('pages.accounts.projectsFailedDetail')} />
       </div>
     )
   }
@@ -47,7 +46,7 @@ export default async function AccountsAdminPage({ params, searchParams }: {
     return (
       <div className="space-y-6">
         <PageHeader title={title} meta={scope.ws.name} />
-        <StatusMessage kind="empty" title={t(locale, 'pages.accounts.noProjects')} detail={t(locale, 'pages.accounts.noProjectsDetail')} />
+        <StatusMessage kind="empty" title={t('pages.accounts.noProjects')} detail={t('pages.accounts.noProjectsDetail')} />
       </div>
     )
   }
@@ -59,7 +58,7 @@ export default async function AccountsAdminPage({ params, searchParams }: {
     return (
       <div className="space-y-6">
         <PageHeader title={title} meta={scope.ws.name} />
-        <StatusMessage kind="partial_error" blocking title={t(locale, 'pages.accounts.listFailed')} detail={res.error} />
+        <StatusMessage kind="partial_error" blocking title={t('pages.accounts.listFailed')} detail={res.error} />
       </div>
     )
   }
@@ -71,7 +70,7 @@ export default async function AccountsAdminPage({ params, searchParams }: {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={title} meta={t(locale, 'pages.accounts.meta').replace('{total}', String(total)).replace('{admins}', String(admins)).replace('{members}', String(members)).replace('{ws}', () => scope.ws.name)} />
+      <PageHeader title={title} meta={t('pages.accounts.meta').replace('{total}', String(total)).replace('{admins}', String(admins)).replace('{members}', String(members)).replace('{ws}', () => scope.ws.name)} />
       <AccountsManager
         accounts={accounts}
         projectId={projectId}

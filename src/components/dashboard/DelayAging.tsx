@@ -3,14 +3,12 @@ import type { AgingModel } from '@/lib/domain/dashboard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { OwnerBadges, fmtDate } from '@/components/wbs/shared'
-import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
+import { t} from '@/lib/i18n/dict'
 import { CountBadge, MiniEmpty, Stat } from './bits'
 
 /** 기한(plannedEnd) 경과 미완료 작업 — 경과일 버킷 + Top 리스트(기존 ATTENTION 흡수). */
 export async function DelayAging({ aging }: { aging: AgingModel }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
 
   return (
     <SectionCard title={tr('dash.aging.title')} icon={AlertTriangle}

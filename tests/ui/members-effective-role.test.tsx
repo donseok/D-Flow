@@ -12,7 +12,6 @@ vi.mock('@/app/actions/projectInvites', () => ({ listProjectInvites: h.invites }
 vi.mock('@/app/actions/project', () => ({ listProjects: h.projects }))
 vi.mock('@/lib/data/workspaceRoles', () => ({ getWorkspaceRoleMap: h.roles }))
 vi.mock('next/navigation', () => ({ notFound: () => { throw new Error('404') }, useRouter: () => ({ refresh: vi.fn() }) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['common.save', 'common.cancel'] }))
 vi.mock('@/components/chat/BotPageContextProvider', () => ({ useBotPageContext: () => {} }))
 import MembersPage from '@/app/(app)/p/[projectId]/members/page'

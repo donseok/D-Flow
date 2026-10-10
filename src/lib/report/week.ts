@@ -7,8 +7,8 @@ import {
   type WeekStartRule, type WorkCalendar,
 } from '@/lib/domain/calendar'
 import { isValidIsoDate } from '@/lib/domain/validate'
-import { t, type Locale } from '@/lib/i18n/dict'
-import { intlLocale } from '@/lib/i18n/format'
+import { t} from '@/lib/i18n/dict'
+import { KO_LOCALE } from '@/lib/i18n/format'
 
 export type WeekCal = Pick<WorkCalendar, 'weekStart' | 'workingDays' | 'offDates' | 'workDates'>
 
@@ -43,15 +43,15 @@ export function sheetWeekMeta(cal: WeekCal, key: string): SheetWeekMeta {
   return { weekTag: t.weekTag, label: t.label, thisRange: t.range, nextRange: rangeOf(weekDisplayDays(cal, nextWeekKey(cal.weekStart, key))) }
 }
 
-/** 화면 표시 전용 주차 라벨(주차 이동 줄·빈 시트 안내) — '10월 2주차 (10/5~10/9)'. locale 은 호출부를 건드리지 않으려고 남긴 자리다(항상 'ko').
+/** 화면 표시 전용 주차 라벨(주차 이동 줄·빈 시트 안내) — '10월 2주차 (10/5~10/9)'.
  *  **저장·비교·파일 이름에 쓰지 않는다** — 문서 기본 제목(시트가 저장 값과 비교한다)·weekTag·보고서 라벨은
  *  제품 고정(개정 §2.9)이라 위 weekLabelTexts·sheetWeekMeta 의 값을 그대로 쓴다. */
-export function weekDisplayLabel(cal: WeekCal, key: string, locale: Locale = 'ko'): string {
+export function weekDisplayLabel(cal: WeekCal, key: string): string {
   const { year, month, ordinal } = weekLabelOf(cal.weekStart, key)
   const days = weekDisplayDays(cal, key)
   // 달 이름은 Intl 이 낸다('10월') — 달 이름 12개를 사전에 두지 않는다. date-only 라 UTC 로 고정(시간대 변환 없음)
-  const monthName = new Intl.DateTimeFormat(intlLocale(locale), { month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)))
-  return t(locale, 'weekly.week.labelWithRange')
+  const monthName = new Intl.DateTimeFormat(KO_LOCALE, { month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)))
+  return t('weekly.week.labelWithRange')
     .replace('{month}', () => monthName)
     .replace('{ordinal}', String(ordinal))
     .replace('{from}', mdOf(days[0]))

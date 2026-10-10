@@ -4,10 +4,10 @@ import { useRouter } from 'next/navigation'
 import { saveCustomFieldValues } from '@/app/actions/customFieldValues'
 import { formatCustomValue, orderedFields, type CustomValues, type FieldDef, type FieldEntity, type FieldValue } from '@/lib/domain/customFields'
 import { parseCustomValues, validateCustomValues, type FieldRowError } from '@/lib/domain/customFieldValues'
-import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t as translate, type DictKey} from '@/lib/i18n/dict'
 import { CustomFieldInput } from './CustomFieldInput'
 
-type Scope = { projectId: string; entity: FieldEntity; defs: FieldDef[] | null; canAdmin: boolean; locale: Locale }
+type Scope = { projectId: string; entity: FieldEntity; defs: FieldDef[] | null; canAdmin: boolean }
 const Context = createContext<Scope | null>(null)
 export function CustomFieldsProvider({ children, ...scope }: Scope & { children: ReactNode }) {
   return <Context.Provider value={scope}>{children}</Context.Provider>
@@ -19,11 +19,11 @@ const own = (v: object, k: string) => Object.prototype.hasOwnProperty.call(v, k)
 const FIELD_ERROR_KEY: Partial<Record<FieldRowError, DictKey>> = {
   required: 'fields.err.required', admin_only: 'fields.err.adminOnly', inactive: 'fields.err.inactive', inactive_option: 'fields.err.inactiveOption', unknown: 'fields.err.unknown',
 }
-export const customFieldErrorText = (code: FieldRowError, locale: Locale) => translate(locale, FIELD_ERROR_KEY[code] ?? 'fields.err.format')
+export const customFieldErrorText = (code: FieldRowError) => translate(FIELD_ERROR_KEY[code] ?? 'fields.err.format')
 export function CustomFieldValuesEditor({ rowId, values, canEdit }: { rowId: string; values: unknown; canEdit: boolean }) {
   const scope = useContext(Context)
   if (!scope) return null
-  const tr = (k: DictKey) => translate(scope.locale, k)
+  const tr = (k: DictKey) => translate(k)
   if (!scope.defs) return <p role="alert" className="text-sm text-danger">{tr('fields.defsInvalid')}</p>
   if (!scope.defs.length) return null
   const parsed = parseCustomValues(values)
@@ -32,7 +32,7 @@ export function CustomFieldValuesEditor({ rowId, values, canEdit }: { rowId: str
 }
 function Editor({ scope, rowId, values, canEdit }: { scope: Scope & { defs: FieldDef[] }; rowId: string; values: CustomValues; canEdit: boolean }) {
   const router = useRouter()
-  const tr = (k: DictKey) => translate(scope.locale, k)
+  const tr = (k: DictKey) => translate(k)
   const [base, setBase] = useState(values)
   const [draft, setDraft] = useState(values)
   const [pending, startTransition] = useTransition()
@@ -77,11 +77,11 @@ function Editor({ scope, rowId, values, canEdit }: { scope: Scope & { defs: Fiel
   return <section aria-label={tr('fields.title')} className="space-y-3 border-t border-border pt-4">
     <h3 className="text-xs font-semibold text-fg-secondary">{tr('fields.title')}</h3>
     {fields.map(def => <div key={def.key} className="min-w-0 space-y-1">
-      {editable(def) ? <CustomFieldInput def={def} value={draft[def.key]} label={`${def.label}${def.required ? ' *' : ''}`} locale={scope.locale} disabled={pending} onChange={v => change(def.key, v)} />
+      {editable(def) ? <CustomFieldInput def={def} value={draft[def.key]} label={`${def.label}${def.required ? ' *' : ''}`} disabled={pending} onChange={v => change(def.key, v)} />
         : <><p className="text-xs text-fg-secondary">{def.label}{!def.active ? tr('fields.inactiveSuffix') : ''}{def.editable_by === 'admin' && !scope.canAdmin ? tr('fields.adminOnlySuffix') : ''}</p>
-          <p className="whitespace-pre-wrap break-words text-sm text-fg">{formatCustomValue(def, draft[def.key], { locale: scope.locale, yes: tr('wbs.custom.yes'), no: tr('wbs.custom.no'), empty: '—' })}</p></>}
+          <p className="whitespace-pre-wrap break-words text-sm text-fg">{formatCustomValue(def, draft[def.key], { yes: tr('wbs.custom.yes'), no: tr('wbs.custom.no'), empty: '—' })}</p></>}
       {def.description && <p className="whitespace-pre-wrap break-words text-xs text-fg-muted">{def.description}</p>}
-      {errors[def.key] && <p role="alert" className="text-xs text-danger">{def.label}: {customFieldErrorText(errors[def.key], scope.locale)}</p>}
+      {errors[def.key] && <p role="alert" className="text-xs text-danger">{def.label}: {customFieldErrorText(errors[def.key])}</p>}
     </div>)}
     {stale && <p role="alert" className="text-xs text-danger">{tr('fields.stale')}</p>}
     {message && <p role="status" className="text-xs text-fg-secondary">{message}</p>}

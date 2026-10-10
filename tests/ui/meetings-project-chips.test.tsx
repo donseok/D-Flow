@@ -13,7 +13,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (key: string) => key }),
+  useLocale: () => ({ t: (key: string) => key }),
 }))
 vi.mock('@/app/actions/meetings', () => ({
   fetchMyMeetings: mocks.fetchMyMeetings,

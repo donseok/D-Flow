@@ -103,7 +103,7 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
 
   return <div className="space-y-4">
     <p className="text-xs leading-5 text-fg-secondary">{t('settings.logo.desc')}</p>
-    {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" locale="ko" keyName="branding.logo" message={invalidReason} isAdmin settingsHref="#workspace-general" />}
+    {invalidReason && needsRepair && <ConfigStateNotice kind="invalid" keyName="branding.logo" message={invalidReason} isAdmin settingsHref="#workspace-general" />}
     <div className="grid gap-3 sm:grid-cols-2">
       {SHOWN_SLOTS.map(slot => <div key={slot} className="space-y-2 rounded-xl border border-border p-3">
         <div className="text-sm font-semibold text-fg">{t(LABEL[slot])}</div>
@@ -147,9 +147,9 @@ export function LogoEditor({ workspaceId, revision, initialLogo, invalidReason }
         {conflict.logo && <button type="button" className="btn btn-ghost" onClick={() => { setDraft(conflict.logo!); setBaseline(conflict.logo!); setBaseRevision(conflict.revision); setNeedsRepair(false); setConflict(null) }}>{t('settings.conflict.useLatest')}</button>}
       </div>
     </div>}
-    {uploadError && <ConfigStateNotice kind="field" locale="ko" message={uploadError} />}
-    {fieldError && <ConfigStateNotice kind="field" locale="ko" message={fieldError} />}
-    {error && <ConfigStateNotice kind="patch" locale="ko" message={error} />}
+    {uploadError && <ConfigStateNotice kind="field" message={uploadError} />}
+    {fieldError && <ConfigStateNotice kind="field" message={fieldError} />}
+    {error && <ConfigStateNotice kind="patch" message={error} />}
     <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
         {uncertainPatch ? t('settings.workflow.retry') : t('settings.logo.save')}

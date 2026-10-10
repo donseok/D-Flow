@@ -10,7 +10,7 @@ import { WIKI_DOCUMENT_KINDS, type WikiDocumentKind } from '@/lib/domain/wiki'
 import { clearLegacyWikiDrafts, draftKey, legacyWikiDraftKey, readDraftWithMigration, settleLegacyDraft } from '@/lib/drafts/wikiDrafts'
 import { readDraftRaw, sweepExpiredDrafts, writeDraftRaw, type LocalDraftPolicy } from '@/lib/drafts/storage'
 import { useScope } from '@/components/app/ScopeContext'
-import type { DictKey, Locale } from '@/lib/i18n/dict'
+import type { DictKey} from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import { formatWikiDate } from './WikiShared'
 import { trackWikiEvent } from './wikiAnalytics'
@@ -113,7 +113,6 @@ function clearDraft(key: string | null): void {
 
 export function WikiDocumentEditor({
   projectId,
-  locale,
   userId,
   topic = null,
   canEdit = false,
@@ -123,7 +122,6 @@ export function WikiDocumentEditor({
   draftPolicy: draftPolicyProp,
 }: {
   projectId: string
-  locale: Locale
   /** 워크스페이스의 로컬 초안 정책(security.local_drafts). 서버가 못 읽었으면 DRAFTS_OFF_POLICY(초안 끔) */
   draftPolicy: LocalDraftPolicy
   /** 초안 저장 시각을 찍을 시간대(프로젝트 calendar.timezone) */
@@ -310,8 +308,8 @@ export function WikiDocumentEditor({
       setMessage({
         tone: 'error',
         text: result.conflict
-          ? t(locale, 'wiki.document.conflictHint')
-          : result.error ?? t(locale, 'wiki.document.saveFailed'),
+          ? t('wiki.document.conflictHint')
+          : result.error ?? t('wiki.document.saveFailed'),
       })
       return
     }
@@ -335,7 +333,7 @@ export function WikiDocumentEditor({
     setSnapshot(next)
     setTitle(next.title)
     setEditing(false)
-    setMessage({ tone: 'ok', text: t(locale, 'wiki.document.saved') })
+    setMessage({ tone: 'ok', text: t('wiki.document.saved') })
     router.refresh()
   }
 
@@ -351,11 +349,11 @@ export function WikiDocumentEditor({
     })
     setVerifying(false)
     if (!result.ok) {
-      setMessage({ tone: 'error', text: result.error ?? t(locale, 'wiki.document.verifyFailed') })
+      setMessage({ tone: 'error', text: result.error ?? t('wiki.document.verifyFailed') })
       return
     }
     trackWikiEvent('wiki_document_verified', path, { review_days: 90 })
-    setMessage({ tone: 'ok', text: t(locale, 'wiki.document.verified') })
+    setMessage({ tone: 'ok', text: t('wiki.document.verified') })
     router.refresh()
   }
 
@@ -363,53 +361,53 @@ export function WikiDocumentEditor({
     return (
       <div className="space-y-4">
         <DocumentVersionStatus currentVersionNo={null} viewingVersionNo={null} publicationState="draft" />
-        <p className="text-xs text-fg-secondary">{t(locale, 'wiki.document.editingDraft')}</p>
-        {!draftsOn && <p data-drafts-off className="text-xs text-fg-secondary">{t(locale, 'wiki.document.draftsOff')}</p>}
+        <p className="text-xs text-fg-secondary">{t('wiki.document.editingDraft')}</p>
+        {!draftsOn && <p data-drafts-off className="text-xs text-fg-secondary">{t('wiki.document.draftsOff')}</p>}
         {draft && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-pending/40 bg-pending-weak px-4 py-3">
             <p className="text-xs font-medium text-fg">
-              {t(locale, 'wiki.document.draftFound')}
+              {t('wiki.document.draftFound')}
               {draft.savedAt && (
                 <span className="ml-1.5 font-normal text-fg-secondary">
-                  {formatWikiDate(draft.savedAt, locale, false, timeZone)}
+                  {formatWikiDate(draft.savedAt, false, timeZone)}
                 </span>
               )}
             </p>
             <div className="flex shrink-0 gap-2">
               <button type="button" onClick={restoreDraft} className="btn btn-primary h-8 px-3 text-xs">
                 <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-                {t(locale, 'wiki.document.draftRestore')}
+                {t('wiki.document.draftRestore')}
               </button>
               <button type="button" onClick={discardDraft} className="btn btn-ghost h-8 px-3 text-xs">
-                {t(locale, 'wiki.document.draftDiscard')}
+                {t('wiki.document.draftDiscard')}
               </button>
             </div>
           </div>
         )}
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
           <label className="block">
-            <span className="mb-1 block text-meta font-semibold text-fg-secondary">{t(locale, 'wiki.document.titleLabel')}</span>
-            <input autoFocus={!topic} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} className="app-input" placeholder={t(locale, 'wiki.document.titlePlaceholder')} />
+            <span className="mb-1 block text-meta font-semibold text-fg-secondary">{t('wiki.document.titleLabel')}</span>
+            <input autoFocus={!topic} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} className="app-input" placeholder={t('wiki.document.titlePlaceholder')} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-meta font-semibold text-fg-secondary">{t(locale, 'wiki.document.kindLabel')}</span>
+            <span className="mb-1 block text-meta font-semibold text-fg-secondary">{t('wiki.document.kindLabel')}</span>
             <select value={kind} onChange={(event) => changeKind(event.target.value as WikiDocumentKind)} className="app-input">
-              {WIKI_DOCUMENT_KINDS.map((value) => <option key={value} value={value}>{t(locale, KIND_LABEL[value])}</option>)}
+              {WIKI_DOCUMENT_KINDS.map((value) => <option key={value} value={value}>{t(KIND_LABEL[value])}</option>)}
             </select>
           </label>
         </div>
         <label className="block">
           <span className="mb-1 flex flex-wrap items-center justify-between gap-2 text-meta font-semibold text-fg-secondary">
-            <span>{t(locale, 'wiki.document.bodyLabel')}</span>
-            <span className="font-normal text-fg-muted">{t(locale, 'wiki.document.markdownHint')}</span>
+            <span>{t('wiki.document.bodyLabel')}</span>
+            <span className="font-normal text-fg-muted">{t('wiki.document.markdownHint')}</span>
           </span>
-          <textarea value={bodyMd} onChange={(event) => setBodyMd(event.target.value)} rows={18} className="app-textarea min-h-80 resize-y font-mono text-[13px] leading-6" placeholder={t(locale, 'wiki.document.bodyPlaceholder')} />
+          <textarea value={bodyMd} onChange={(event) => setBodyMd(event.target.value)} rows={18} className="app-textarea min-h-80 resize-y font-mono text-[13px] leading-6" placeholder={t('wiki.document.bodyPlaceholder')} />
         </label>
         {/* 항상 노출한다 — 유형을 고른 뒤 한 줄이라도 쓰면 템플릿에 닿을 길이 없어져
             목차가 중요한 런북·결정 기록에서 구조를 손으로 다시 짜게 된다. */}
         <button type="button" onClick={applyTemplate} className="btn btn-ghost h-9 px-3 text-xs">
           <FilePlus2 className="h-3.5 w-3.5" aria-hidden />
-          {t(locale, bodyMd.trim() && !untouchedTemplate
+          {t(bodyMd.trim() && !untouchedTemplate
             ? 'wiki.document.appendTemplate'
             : 'wiki.document.applyTemplate')}
         </button>
@@ -417,11 +415,11 @@ export function WikiDocumentEditor({
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void save()} disabled={busy || !title.trim() || !bodyMd.trim()} className="btn btn-primary">
             <Save className="h-4 w-4" aria-hidden />
-            {busy ? t(locale, 'wiki.document.saving') : t(locale, 'wiki.document.save')}
+            {busy ? t('wiki.document.saving') : t('wiki.document.save')}
           </button>
           <button type="button" onClick={cancel} disabled={busy} className="btn btn-ghost">
             <X className="h-4 w-4" aria-hidden />
-            {t(locale, 'wiki.document.cancel')}
+            {t('wiki.document.cancel')}
           </button>
         </div>
       </div>
@@ -431,18 +429,18 @@ export function WikiDocumentEditor({
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-        <span className="chip bg-action-soft text-action">{t(locale, KIND_LABEL[snapshot.kind])}</span>
+        <span className="chip bg-action-soft text-action">{t(KIND_LABEL[snapshot.kind])}</span>
         <div className="flex flex-wrap gap-2">
           {canVerify && snapshot.bodyMd.trim() && (
             <button type="button" onClick={() => void verify()} disabled={verifying} className="btn btn-ghost h-9 px-3 text-xs">
               <BadgeCheck className="h-3.5 w-3.5" aria-hidden />
-              {verifying ? t(locale, 'wiki.document.verifying') : t(locale, 'wiki.document.verify')}
+              {verifying ? t('wiki.document.verifying') : t('wiki.document.verify')}
             </button>
           )}
           {canEdit && (
             <button type="button" onClick={() => { setMessage(null); setEditing(true) }} className="btn btn-primary h-9 px-3 text-xs">
               <Pencil className="h-3.5 w-3.5" aria-hidden />
-              {snapshot.bodyMd.trim() ? t(locale, 'wiki.document.edit') : t(locale, 'wiki.document.write')}
+              {snapshot.bodyMd.trim() ? t('wiki.document.edit') : t('wiki.document.write')}
             </button>
           )}
         </div>
@@ -466,9 +464,9 @@ export function WikiDocumentEditor({
       ) : (
         <div className="rounded-2xl border border-dashed border-border px-5 py-10 text-center">
           <FilePlus2 className="mx-auto h-6 w-6 text-fg-muted" aria-hidden />
-          <h3 className="mt-3 text-sm font-semibold text-fg">{t(locale, 'wiki.document.emptyTitle')}</h3>
-          <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-fg-secondary">{t(locale, 'wiki.document.emptyDesc')}</p>
-          {canEdit && <button type="button" onClick={() => setEditing(true)} className="btn btn-primary mt-4">{t(locale, 'wiki.document.write')}</button>}
+          <h3 className="mt-3 text-sm font-semibold text-fg">{t('wiki.document.emptyTitle')}</h3>
+          <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-fg-secondary">{t('wiki.document.emptyDesc')}</p>
+          {canEdit && <button type="button" onClick={() => setEditing(true)} className="btn btn-primary mt-4">{t('wiki.document.write')}</button>}
         </div>
       )}
     </div>

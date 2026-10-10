@@ -4,7 +4,7 @@
  *
  * 기본값은 B4 이전 상수(ATTENDANCE_META·MEETING_META·ISSUE_SEVERITY_META·ISSUE_SOURCE_TYPES·ISSUE_ANALYSIS_CAUSE_CATEGORIES)와
  * 같은 code·순서·색이다. DB 어휘 트리거(enforce_project_vocab)의 "키 없음 = 제품 기본값"도 같은 code 목록을 쓴다(tests/rls 패리티).
- * 라벨은 저장 문자열이다. 제품 기본 라벨 그대로면 화면은 사전(KO/EN)으로 그리고, 바꾼 라벨은 그대로 그린다(vocabLabel).
+ * 라벨은 저장 문자열이다. 제품 기본 라벨 그대로면 화면은 사전으로 그리고, 바꾼 라벨은 그대로 그린다(vocabLabel).
  *
  * SP5b(스펙 D1·D2) — 여섯째 키 `workflow.issue_statuses`(이슈 표시 상태). 의미 속성은 category(제품 고정 4범주 — 이슈 전이표·집계가 읽는다).
  * 전이 판정은 src/lib/domain/issueWorkflow.ts. 기본 4행은 code = 범주 code 라 옛 이슈(status 만 있던 행)가 그대로 유효하다.
@@ -208,7 +208,7 @@ export const activeVocab = <T extends VocabEntry>(list: readonly T[]): T[] => or
 export const vocabEntry = <T extends VocabEntry>(list: readonly T[], code: string | null | undefined): T | undefined =>
   code == null ? undefined : list.find(e => e.code === code)
 
-/** 제품 기본 라벨의 사전 키 — 저장 라벨이 기본 그대로면 화면 언어로 번역한다. 원인 분류는 사전 키가 없다(분석서 문구 그대로). */
+/** 제품 기본 라벨의 사전 키 — 저장 라벨이 기본 그대로면 사전 문구로 그린다. 원인 분류는 사전 키가 없다(분석서 문구 그대로). */
 const DICT: { readonly [K in VocabKey]?: (code: string) => string } = {
   'attendance.types': c => `att.type.${c}`,
   'meetings.categories': c => `meet.cat.${c}`,

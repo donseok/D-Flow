@@ -13,8 +13,8 @@ vi.mock('@/app/actions/wbs', () => ({ updateActual: h.actual, getWbsCellSnapshot
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn() }), useSearchParams: () => new URLSearchParams('') }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
-  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+  const ko = (k: string) => t(k as Parameters<typeof t>[0])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ t: ko }) }
 })
 vi.mock('@/components/app/TeamsProvider', () => ({ useTeamLabel: () => (c: string) => c, useTeamCodes: () => ['PMO'], useTeams: () => [], useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }) }))
 vi.mock('@/components/chat/BotPageContextProvider', () => ({ useBotPageContext: () => {} }))

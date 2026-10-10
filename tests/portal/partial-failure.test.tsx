@@ -14,11 +14,10 @@ vi.mock('@/lib/data/portal', () => ({
   getReviewRows: h.reviewRows, getUpcomingMeetings: h.upcoming, getRecentDocuments: h.docs, getWorkspaceAnnouncements: h.ann,
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => '/w/acme', notFound: () => { throw new Error('404') } }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
-  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+  const ko = (k: string) => t(k as Parameters<typeof t>[0])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ t: ko }) }
 })
 import Home from '@/app/(app)/w/[slug]/page'
 import { defaultPortalWidgets } from '@/lib/portal/widgets'

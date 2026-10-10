@@ -31,7 +31,6 @@ import { carryCustomFields, parseFieldDefs, type CustomValues } from '@/lib/doma
 import { parseCustomValues } from '@/lib/domain/customFieldValues'
 import { serverTranslator } from '@/lib/i18n/server'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
 
 export interface WeeklyActionResult {
   ok: boolean
@@ -140,9 +139,9 @@ export async function createWeeklyReport(
   const tr = await serverTranslator()
   // 회차(주차 문서) 생성은 시트의 구조를 만드는 일이라 관리자 몫 — 셀 편집(멤버)과 급이 다르다.
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, code: g.error, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, code: g.error, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')                    // 스펙 §4.2 — 가드 뒤·입력 검증 앞(P17)
-  if (!mod.ok) return { ok: false, code: mod.error, error: libText(tr, mod.error) }
+  if (!mod.ok) return { ok: false, code: mod.error, error: mod.error }
   if (typeof weekStartIso !== 'string' || !isValidIsoDate(weekStartIso)) return { ok: false, code: 'INVALID_INPUT', error: tr(ERR_WEEK_INPUT) }
   if (mapping !== undefined && !isCarryMappingShape(mapping)) return { ok: false, code: 'INVALID_INPUT', error: tr(ERR_MAPPING_INPUT) }
 
@@ -231,9 +230,9 @@ export async function saveWeeklyTitle(
 ): Promise<WeeklyActionResult> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')
-  if (!mod.ok) return { ok: false, error: libText(tr, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const t = title.trim()
   if (t.length > TITLE_MAX) return { ok: false, error: fill(tr('err.titleMustCharactersFewer'), { titleMax: TITLE_MAX }) }
   if (expected !== undefined && (typeof expected !== 'string' || expected.length > TITLE_MAX)) return { ok: false, error: tr('err.invalidRequest') }
@@ -297,9 +296,9 @@ export async function prepareWeeklyCellRewrite(
 ): Promise<WeeklyRewriteResult> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')                    // 입력 검증 앞 — AI 판정(aiAvailable)은 그대로 뒤에 있다
-  if (!mod.ok) return { ok: false, error: libText(tr, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (!Array.isArray(inputs) || inputs.length === 0)
     return { ok: false, error: tr('srv.weekly.nothingPolish') }
   if (inputs.length > WEEKLY_REWRITE_MAX_CELLS)
@@ -328,7 +327,7 @@ export async function prepareWeeklyCellRewrite(
   const sb = await createServerClient()
   const rowIds = [...new Set(inputs.map(input => input.rowId))]
   const scope = await rowAreasInProject(sb, projectId, rowIds)
-  if (!scope.ok) return { ok: false, error: libText(tr, scope.error) }
+  if (!scope.ok) return { ok: false, error: scope.error }
   if (rowIds.some(rowId => !scope.areaOf.has(rowId)))
     return { ok: false, error: tr(ERR_REWRITE_TARGET) }
   if (!(await aiAvailable({ projectId }, { module: 'weekly' })))
@@ -467,15 +466,15 @@ export async function saveWeeklyCell(
 ): Promise<WeeklyActionResult> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')
-  if (!mod.ok) return { ok: false, error: libText(tr, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (!isWeeklyCellKey(cellKey)) return { ok: false, error: tr('srv.weekly.invalidCell') }
   if (content.length > CELL_MAX) return { ok: false, error: fill(tr('srv.weekly.contentMustCharactersFewer'), { cellMax: CELL_MAX }) }
 
   const sb = await createServerClient()
   const scope = await rowAreasInProject(sb, projectId, [rowId])
-  if (!scope.ok) return { ok: false, error: libText(tr, scope.error) }
+  if (!scope.ok) return { ok: false, error: scope.error }
   // 소속이 아니면 '행 없음'과 같은 취급 — 남의 프로젝트 행의 존재를 알려 주지 않는다.
   if (!scope.areaOf.has(rowId)) return { ok: false, error: tr(ERR_ROW_GONE), gone: true }
   if (typeof expected === 'string') {
@@ -517,9 +516,9 @@ export async function saveWeeklyCells(
 ): Promise<WeeklyBatchResult> {
   const tr = await serverTranslator()
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'weekly')
-  if (!mod.ok) return { ok: false, error: libText(tr, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   if (edits.length === 0) return { ok: true }                                             // no-op — DB 접근 없음
   if (edits.length > BATCH_MAX) return { ok: false, error: tr('srv.weekly.tooManyCellsSaveOnce') } // dedupe 전 원본 길이 기준
   for (const e of edits) {
@@ -536,7 +535,7 @@ export async function saveWeeklyCells(
   // 배치 전체의 소속을 한 번에 확인한다(건별 왕복 회피). 소속 아닌 행은 삭제된 행과
   // 같은 취급으로 goneRowIds 에 넣어 스킵 — 부분 실패 시맨틱을 유지한다.
   const scope = await rowAreasInProject(sb, projectId, [...new Set([...deduped.values()].map(e => e.rowId))])
-  if (!scope.ok) return { ok: false, error: libText(tr, scope.error) }
+  if (!scope.ok) return { ok: false, error: scope.error }
   const goneRowIds: string[] = []
   const touchedReportIds = new Set<string>()
   // 행 단위 그룹핑 — 같은 행의 여러 cellKey 는 patch 하나로 합쳐 행당 1 update 로 보낸다.

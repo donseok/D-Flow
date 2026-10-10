@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: refreshFn, push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(''),
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/components/app/TeamsProvider', () => ({ useTeamLabel: () => (c: string) => c, useTeamCodes: () => ['PMO', 'ERP'], useTeams: () => [], useTeamSlot: () => () => ({ fg: 'text-neutral', bar: 'bg-neutral', chip: 'bg-neutral-weak text-neutral' }) }))
 vi.mock('@/components/chat/BotPageContextProvider', () => ({ useBotPageContext: () => {} }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: toastFn }) }))

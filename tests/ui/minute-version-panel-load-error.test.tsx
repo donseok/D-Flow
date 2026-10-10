@@ -10,7 +10,7 @@ import type { Minute } from '@/lib/domain/types'
 const refresh = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (k: string) => k, locale: 'ko' }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) =>

@@ -22,14 +22,14 @@ import type { StageLabels } from '@/lib/settings/defs/project'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { intlLocale } from '@/lib/i18n/format'
+import { KO_LOCALE } from '@/lib/i18n/format'
 import { fill } from '@/components/agents/labelKeys'
 import { HubStatusBar } from './HubStatusBar'
 import { AgentFrame, type HeroTile } from './AgentFrame'
 import { DelegationTable, type HubFilter } from './DelegationTable'
 import { ApprovalQueue } from './ApprovalQueue'
 
-const hhmmss = (iso: string, timeZone: string, locale = 'ko-KR') => new Date(iso).toLocaleTimeString(locale, { hour12: false, timeZone })
+const hhmmss = (iso: string, timeZone: string) => new Date(iso).toLocaleTimeString(KO_LOCALE, { hour12: false, timeZone })
 const EMPTY_REFS: string[] = [] // 매 렌더 새 리터럴이면 패널 readiness useMemo 가 매번 다시 돈다 — 모듈 상수로 고정.
 
 /** RowDetailPanel 이 요구하는 계산된 WBS 묶음 — WBS 페이지가 WbsGanttSheet 에 넘기는 것과 같은 데이터(서버 페이지가 로드). */
@@ -67,17 +67,14 @@ function flattenComputed(items: ComputedItem[]): ComputedItem[] {
   return out
 }
 
-export function AgentHubView({ initial, wbs, timeZone, locale: timeLocaleProp, showTimeZone = false }: {
+export function AgentHubView({ initial, wbs, timeZone, showTimeZone = false }: {
   initial: AgentHub; wbs: HubWbsBundle
   /** 시각을 찍을 시간대(프로젝트 calendar.timezone) — 서버가 내려준다 */
   timeZone: string
-  /** 시각 포맷의 locale — 없으면 화면 언어의 형식 태그(ko 는 'ko-KR'). 화면 사전 locale(useLocale)과는 다른 값이다 */
-  locale?: string
   /** 시각 뒤에 시간대 이름을 붙인다 — 프로젝트 달력을 못 읽어 기준 UTC 로 찍을 때(A-4 리뷰 N3, 라벨이 사실이게) */
   showTimeZone?: boolean
 }) {
-  const { locale, t } = useLocale()
-  const timeLocale = timeLocaleProp ?? intlLocale(locale)
+  const { t } = useLocale()
   const [hub, setHub] = useState(initial)
   const [error, setError] = useState<{ at: string; message: string } | null>(null)
   // 관리자는 프로젝트 전체를 관리하니 all, 멤버는 자기 담당부터.
@@ -173,8 +170,8 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocaleProp, s
       <div className="ml-auto flex items-center gap-2 text-xs text-fg-secondary">
         <span data-hub-stamp className={error ? 'text-warning' : ''}>
           {error
-            ? fill(t('agents.stamp.fail'), { time: `${hhmmss(error.at, timeZone, timeLocale)}${tzTag}`, message: error.message })
-            : fill(t('agents.stamp.ok'), { time: `${hhmmss(hub.fetchedAt, timeZone, timeLocale)}${tzTag}` })}
+            ? fill(t('agents.stamp.fail'), { time: `${hhmmss(error.at, timeZone)}${tzTag}`, message: error.message })
+            : fill(t('agents.stamp.ok'), { time: `${hhmmss(hub.fetchedAt, timeZone)}${tzTag}` })}
         </span>
         <button type="button" data-hub-refresh className="btn btn-ghost h-8 px-2 text-xs" onClick={() => { void refresh() }}>{t('agentHub.refresh')}</button>
       </div>
@@ -188,15 +185,15 @@ export function AgentHubView({ initial, wbs, timeZone, locale: timeLocaleProp, s
         {wbs.membersError && <RosterLoadError error={wbs.membersError} />}
         <DelegationTable rows={hub.rows} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} filter={filter} onFilter={setFilter}
           nowMs={nowMs} onHub={applyHub} onChanged={refresh} onSelect={setSelectedId} />
-        <ApprovalQueue queue={hub.queue} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} onHub={applyHub} onChanged={refresh} timeZone={timeZone} locale={timeLocale} showTimeZone={showTimeZone} />
+        <ApprovalQueue queue={hub.queue} projectId={hub.projectId} isAdmin={hub.viewer.isAdmin} onHub={applyHub} onChanged={refresh} timeZone={timeZone} showTimeZone={showTimeZone} />
         {selectedId && wbs.calendarError && (
           <div data-hub-detail-unavailable>
-            <ConfigLoadError error={wbs.calendarError.error} keyName={wbs.calendarError.key} locale={locale} />
+            <ConfigLoadError error={wbs.calendarError.error} keyName={wbs.calendarError.key} />
           </div>
         )}
         {selectedItem && wbs.levelLabels === null && (
           <div data-hub-detail-unavailable>
-            <ConfigLoadError error={wbs.levelsError?.error ?? ''} keyName={wbs.levelsError?.key ?? 'core.level_labels'} locale={locale} />
+            <ConfigLoadError error={wbs.levelsError?.error ?? ''} keyName={wbs.levelsError?.key ?? 'core.level_labels'} />
           </div>
         )}
         {/* [RF5] 근무일을 찾지 못하면 일정 계산을 건너뛴다 — 간트와 같은 문구로 그 사유를 보인다(A-3 리뷰 P3) */}

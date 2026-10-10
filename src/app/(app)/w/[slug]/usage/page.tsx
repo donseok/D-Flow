@@ -10,7 +10,6 @@ import { UsageTrendChart } from '@/components/usage/UsageTrendChart'
 import { MenuRankingCard } from '@/components/usage/MenuRankingCard'
 import { UsageUserTable } from '@/components/usage/UsageUserTable'
 import { UsageEventLog } from '@/components/usage/UsageEventLog'
-import { getServerLocale } from '@/lib/i18n/server'
 import { t } from '@/lib/i18n/dict'
 import {
   SESSION_GAP_MINUTES, USAGE_RETAIN_DAYS, addDaysIso, fillDailySeries, mergeUserRows,
@@ -28,8 +27,8 @@ import { requireCalendar } from '@/lib/calendar/load'
 import { wsHref } from '@/lib/workspace/paths'
 
 export const dynamic = 'force-dynamic' // 접속 지표는 항상 최신이어야 한다
-/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '사용 현황') */
-export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.usage') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 사전에서 꺼낸다('사용 현황') */
+export async function generateMetadata() { return { title: t('nav.usage') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 
 /** 접속 로그 표시 상한. 넘치면 화면이 그 사실을 밝힌다. */
 const EVENT_LIMIT = 200
@@ -43,9 +42,8 @@ export default async function UsagePage({ params, searchParams }: {
   if (!canViewUsage(scope.actor)) redirect(wsHref(scope.ws.slug))
   await requireModulePage({ workspaceId: scope.ws.id }, 'usage')
 
-  const [{ days, user, menu }, locale, wsCfg] = await Promise.all([
+  const [{ days, user, menu }, wsCfg] = await Promise.all([
     searchParams,
-    getServerLocale(),
     getWorkspaceConfig(scope.ws.id).catch(() => null),
   ])
   const period = parsePeriodDays(days)
@@ -88,21 +86,21 @@ export default async function UsagePage({ params, searchParams }: {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t(locale, 'nav.usage')} />
-      <UsageScopeChip workspaceName={scope.ws.name} locale={locale} />
+      <PageHeader title={t('nav.usage')} />
+      <UsageScopeChip workspaceName={scope.ws.name} />
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-fg-secondary">
-          {t(locale, 'pages.usage.periodNote').replace('{days}', String(period)).replace('{tz}', timezone).replace('{retain}', String(USAGE_RETAIN_DAYS))}
+          {t('pages.usage.periodNote').replace('{days}', String(period)).replace('{tz}', timezone).replace('{retain}', String(USAGE_RETAIN_DAYS))}
         </p>
-        <PeriodTabs base={usageBase} filter={filter} locale={locale} />
+        <PeriodTabs base={usageBase} filter={filter} />
       </div>
-      <UsageSummary summary={summary} days={period} sessions={sessions} timeZone={timezone} locale={locale} />
+      <UsageSummary summary={summary} days={period} sessions={sessions} timeZone={timezone} />
       <div className="grid gap-5 lg:grid-cols-2">
-        <UsageTrendChart series={series} locale={locale} />
-        <MenuRankingCard ranks={ranks} locale={locale} />
+        <UsageTrendChart series={series} />
+        <MenuRankingCard ranks={ranks} />
       </div>
       <UsageUserTable rows={userRows} days={period} timeZone={timezone} />
-      <UsageEventLog base={usageBase} events={events} names={names} limit={EVENT_LIMIT} locale={locale}
+      <UsageEventLog base={usageBase} events={events} names={names} limit={EVENT_LIMIT}
         menus={ranks.map(r => r.menuKey)} filter={filter} timeZone={timezone} />
     </div>
   )

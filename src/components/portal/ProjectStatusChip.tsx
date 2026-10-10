@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle2, Circle, CircleDot, CircleHelp, type LucideIcon } from 'lucide-react'
 import type { ProjectLifecycleStatus } from '@/lib/domain/project-status'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t, type DictKey} from '@/lib/i18n/dict'
 
 /** 프로젝트 생애 상태 칩(스펙 §6.1·§6.2) — weak 배경 + 본색 글 + 아이콘(색만으로 뜻을 전하지 않는다 — 글을 늘 함께). 새 토큰 이름만 */
 const TONE: Record<ProjectLifecycleStatus, { labelKey: DictKey; cls: string; Icon: LucideIcon }> = {
@@ -11,12 +11,12 @@ const TONE: Record<ProjectLifecycleStatus, { labelKey: DictKey; cls: string; Ico
   unknown: { labelKey: 'home.status_unknown', cls: 'bg-surface-subtle text-fg-secondary', Icon: CircleHelp },
 }
 
-export function ProjectStatusChip({ status, locale = 'ko' }: { status: ProjectLifecycleStatus; locale?: Locale }) {
+export function ProjectStatusChip({ status }: { status: ProjectLifecycleStatus }) {
   const { labelKey, cls, Icon } = TONE[status]
   return (
     <span data-project-status={status} className={`chip shrink-0 ${cls}`}>
       <Icon className="h-3 w-3 shrink-0" aria-hidden />
-      {t(locale, labelKey)}
+      {t(labelKey)}
     </span>
   )
 }

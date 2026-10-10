@@ -19,7 +19,6 @@ import { approveAgentCompletion, rejectAgentCompletion, requestAgentRework, unap
 import { setWbsStage } from '@/app/actions/wbsAssign'
 import type { AgentHub } from '@/lib/domain/agentHub'
 import { STAGE_CODES as DOMAIN_STAGE_CODES, type StageCode } from '@/lib/domain/stageLabels'
-import { libText } from '@/lib/i18n/serverText'
 
 const ERR_BAD = 'err.invalidRequest'
 const BULK_MAX = 200
@@ -28,9 +27,9 @@ export async function refreshAgentHub(projectId: string): Promise<{ ok: true; hu
   const t = await serverTranslator()
   if (!isUuidLike(projectId)) return { ok: false, error: t(ERR_BAD) }
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'agents')                    // 스펙 §4.2 — 가드 뒤·본문 앞(P17)
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   try {
     return { ok: true, hub: await getAgentHub(projectId, { userId: g.actor.userId, isAdmin: isProjectAdmin(g.actor, projectId) }, undefined, await serverTranslator()) }
   } catch (e) {
@@ -71,9 +70,9 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
     return { ok: false, error: t(ERR_BAD) }
   }
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'agents')
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const isAdmin = isProjectAdmin(g.actor, projectId)
   const wanted = new Map<string, boolean>()
   for (const c of changes) wanted.set(c.itemId, c.delegated)
@@ -101,7 +100,7 @@ export async function applyHubDelegations(projectId: string, changes: HubDelegat
   let actualChanged = false
   for (const itemId of ids) {
     const assignee = items.get(itemId)?.assignee_member_id ?? null
-    if (mine && !(assignee && mine.has(assignee))) { failed.push({ itemId, error: libText(t, ERR_NOT_ASSIGNEE) }); continue }
+    if (mine && !(assignee && mine.has(assignee))) { failed.push({ itemId, error: ERR_NOT_ASSIGNEE }); continue }
     const r = await applyDelegation(admin, {
       itemId, projectId, delegated: wanted.get(itemId) as boolean, actorUserId: g.actor.userId, isAdmin,
     })
@@ -288,9 +287,9 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
   // 본인·서브트리 관리자"로 판정한다(2026-09-14 담당자 본인, 2026-09-15 트랙 B 서브트리 관리자).
   // 중단·재개 요청은 아래서 별도로 좁힌다 — 남의 PC 러너를 세우거나 되살리는 관리 행위라 일반 멤버에겐 안 연다.
   const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'agents')
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   const isAdmin = isProjectAdmin(g.actor, projectId)
   const admin = createAdminClient()
 
@@ -334,7 +333,7 @@ export async function runHubProcessOp(projectId: string, op: HubProcessOp): Prom
     // expectedStage 는 있을 때만 넘긴다(옛 호출은 두 인자 그대로). 단계 충돌은 이 화면의 stale(다시 읽기)로 접는다 — 비교 화면이 없는 표다
     case 'stage': {
       const sr = op.expectedStage !== undefined ? await setWbsStage(op.itemId, op.stage, undefined, undefined, op.expectedStage) : await setWbsStage(op.itemId, op.stage)
-      r = sr.conflict ? { ok: false, error: libText(t, sr.error), stale: true } : sr
+      r = sr.conflict ? { ok: false, error: sr.error, stale: true } : sr
       break
     }
   }

@@ -21,7 +21,6 @@ vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: (...a: un
 vi.mock('@/app/actions/settings', () => ({ listSettingsHistory: (...a: unknown[]) => h.history(...a) }))
 vi.mock('@/app/actions/authzEvents', () => ({ listAuthzEvents: (...a: unknown[]) => h.events(...a) }))
 vi.mock('@/components/settings/AuthzEventsList', () => ({ AuthzEventsList: (p: Record<string, unknown>) => h.eventsList(p) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('next/navigation', () => ({ redirect: h.redirect }))
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a> }))
 vi.mock('@/components/ui/SectionCard', () => ({ SectionCard: ({ id, children }: { id: string; children: ReactNode }) => <section id={id}>{children}</section> }))

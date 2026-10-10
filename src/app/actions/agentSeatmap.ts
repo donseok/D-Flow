@@ -8,7 +8,6 @@ import { requireModule } from '@/lib/modules/gate'
 import { getSeatmap, type SeatmapOptions } from '@/lib/data/agentSeatmap'
 import { SEATMAP_SCOPES, type Seatmap, type SeatmapScope } from '@/lib/domain/seatmap'
 import { UUID_RE } from '@/lib/domain/validate'
-import { libText } from '@/lib/i18n/serverText'
 
 /**
  * 좌석표 재조회(30초 폴링). 페이지와 같은 게이트를 다시 검사한다 — 액션은 URL 로도 불릴 수 있다.
@@ -36,7 +35,7 @@ export async function refreshSeatmap(scope: SeatmapScope = 'mine', projectId?: s
   // 프로젝트 층이면 그 프로젝트, 전체 좌석표면 인자 워크스페이스. 층 행은 getSeatmap 이 다시 거른다(seatmapFloorIds).
   // 권한 판정(가드)을 지난 뒤에 둔다 — 남의 프로젝트·워크스페이스·형식이 틀린 id 는 설정을 읽기 전에 기존 문구로 끝난다
   const mod = opts.projectId ? await requireModule({ projectId: opts.projectId }, 'agents') : await requireModule({ workspaceId: opts.workspaceId! }, 'agents')
-  if (!mod.ok) return { ok: false, error: libText(t, mod.error) }
+  if (!mod.ok) return { ok: false, error: mod.error }
   try {
     return { ok: true, seatmap: await getSeatmap(actor, Date.now(), scope, { ...opts, t: await serverTranslator() }) }
   } catch (e) {

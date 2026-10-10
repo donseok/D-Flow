@@ -35,12 +35,11 @@ import { TeamsUnavailableError, projectOwnTeams, projectTeams } from '@/lib/team
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
-import { guardText, libText, libMessages } from '@/lib/i18n/serverText'
 
 /** replace 모드가 백업하지 않는 부수 효과를 명시 경고한다(B2 리뷰 이월).
  *  change_logs 는 wbs_items 의 on delete cascade 로 함께 지워지고(Q1 결정 — 백업은 트리뿐),
  *  holidays 는 replace_wbs 가 delete 하지 않고 upsert 만 한다(갱신되되 잔존 항목이 남을 수 있음). */
-const REPLACE_WARNINGS = [   // 사전 키 — 응답에 실을 때 요청의 언어로 푼다
+const REPLACE_WARNINGS = [   // 사전 키 — 응답에 실을 때 푼다
   'srv.api.importExecute.changeHistory',
   'srv.api.importExecute.holidaysNotDeletedOnlyUpdated',
 ] as const
@@ -59,7 +58,7 @@ const ERR_PROFILE_JSON = 'srv.api.importExecute.profileJsonFormatNotValid'
 const ERR_PROJECT_CONFIG = 'err.couldNotVerifyProjectSettings'
 const ERR_PROFILE_MISMATCH = 'srv.api.importExecute.profileMismatch'
 const errProfileUnverifiable = (tr: ServerTranslate, detail: string) =>
-  fill(tr('srv.api.importExecute.fileStructureCouldNotDetected'), { detail: libText(tr, detail) })
+  fill(tr('srv.api.importExecute.fileStructureCouldNotDetected'), { detail: detail })
 const ERR_LINK = 'srv.api.importExecute.fileSHierarchyErrors'
 const ERR_RECEIPT = 'srv.api.importExecute.couldNotVerifyPreviousRun'
 const ERR_TEAMS = 'srv.api.importExecute.couldNotVerifyTeamList'
@@ -147,7 +146,7 @@ export async function POST(req: NextRequest) {
 
   // #2 가드 — 401·403·404(타 워크스페이스·미존재 — 존재 은닉), 그 밖(권한 조회 실패)은 서버 사정이라 500
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return fail(denyStatus(g), guardCode(g), guardText(tr, g))
+  if (!g.ok) return fail(denyStatus(g), guardCode(g), g.error)
 
   // #3 프로파일·설정·저장 양식 대조
   let profileJson: unknown
@@ -157,7 +156,7 @@ export async function POST(req: NextRequest) {
     return fail(400, 'INVALID_INPUT', tr(ERR_PROFILE_JSON))
   }
   const validated = validateProfile(profileJson)
-  if (!validated.ok) return fail(400, 'INVALID_INPUT', libText(tr, validated.error))
+  if (!validated.ok) return fail(400, 'INVALID_INPUT', validated.error)
   // 팀 열 이름은 등록과 같은 정규화(trim — normalizeNewTeamCode)로 맞춘다(A2-1 리뷰 보안 P3). 마크 방식의 담당 code 는 이 이름이라, 원문 ' X' 로
   // 두면 대조·참조 판정(Z4)은 ' X' 로 보고 등록은 'X' 로 만들어 같은 code 분열이 생기고, 가져오기 RPC 는 ' X' 담당을 조용히 뺀다.
   // 감지기가 만든 프로파일은 이미 trim 돼 있다 — 손으로 고친 요청·저장 양식만 달라진다
@@ -201,7 +200,7 @@ export async function POST(req: NextRequest) {
 
   // #4 파싱·링크 — 팀 등록보다 먼저 통과시킨다: 검증에 실패하는 요청은 아무 부수효과도 남기지 않아야 한다(리뷰 Minor)
   const parsed = parseWithProfile(buf, profile)
-  if (!parsed.ok) return fail(400, 'INVALID_INPUT', libText(tr, parsed.error))
+  if (!parsed.ok) return fail(400, 'INVALID_INPUT', parsed.error)
   // 사용자 정의 필드 열(개정 §3.6.7) — 셀 값을 필드 유형의 값으로 바꾸고 TS 판정(validateCustomValue)으로 미리 검사해 행 단위 오류 표에
   // 싣는다. 관문은 그대로 DB 트리거다(#8 의 CUSTOM_FIELD_ — 정의가 그새 바뀐 경우 등). 정의 키가 손상이면 그 키의 오류로 멈춘다(정의 없음으로
   // 풀면 값이 전부 '모르는 필드'가 된다)
@@ -221,9 +220,9 @@ export async function POST(req: NextRequest) {
   }
   const linked = linkByDepth(rows, { legacyLevelLabels: resolveLegacyLevelLabels(profile) })
   if (!linked.ok) {
-    return fail(400, 'LINK_ERRORS', tr(ERR_LINK), { errors: libMessages(tr, [...linked.errors, ...customErrors].sort((a, b) => a.excelRow - b.excelRow)) })
+    return fail(400, 'LINK_ERRORS', tr(ERR_LINK), { errors: [...linked.errors, ...customErrors].sort((a, b) => a.excelRow - b.excelRow) })
   }
-  if (customErrors.length > 0) return fail(400, 'CUSTOM_FIELD_ERRORS', tr(ERR_CUSTOM_ROWS), { errors: libMessages(tr, customErrors) })
+  if (customErrors.length > 0) return fail(400, 'CUSTOM_FIELD_ERRORS', tr(ERR_CUSTOM_ROWS), { errors: [...customErrors] })
   // 휴일 충돌(SP5 D7·개정 §4.2.3) — RPC 는 그대로 받는다(갱신절이 work 행을 덮지 않는다 — 반환 형태 불변). 결과 화면이 그 날짜를 '건너뜀'으로
   // 보인다. 원천은 이미 읽은 해석기의 날짜 예외(cfg.holidays — 로더가 끝까지 읽었다)
   const skippedHolidays = skippedHolidaysOf(parsed.holidays, cfg.holidays)
@@ -310,7 +309,7 @@ export async function POST(req: NextRequest) {
       }
       // 워크스페이스는 폼 값이 아니라 가드 결과다. 슈퍼유저는 미존재 pid 도 가드를 통과하므로 없으면 404
       const workspaceId = g.actor.projectWorkspace.get(projectId)
-      if (!workspaceId) return fail(404, 'ERR_MISSING', guardText(tr, ERR_MISSING))
+      if (!workspaceId) return fail(404, 'ERR_MISSING', ERR_MISSING)
       // 전환이 실제로 복사하는 공용 팀 code(아래 ensureProjectTeams 의 copiedCodes) — 상속 프로젝트에서만 채운다
       let copiedCodes: string[] = []
       if (inheritsCommon) {

@@ -28,7 +28,6 @@ vi.mock('@/lib/authz/workspaceScope', () => ({
   loadWorkspaceScope: vi.fn(async (slug: string) => ({ ws: { id: slug === 'beta' ? WB : WA, slug, name: slug }, actor: m.actor.current, degraded: false, role: 'member' })),
 }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => ({ id: 'u1', email: 'alice@example.com' })) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async (): Promise<'ko'> => 'ko') }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: m.ProjectPageShell }))
 vi.mock('@/components/meetings/MyMeetingsView', () => ({ MyMeetingsView: m.MyMeetingsView }))
 

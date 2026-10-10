@@ -86,7 +86,7 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
   revision: number
 }) {
   const router = useRouter()
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const [pending, startTransition] = useTransition()
   const [table, setTable] = useState<CreditTable>(() => ({ ...(initial?.default ?? DEFAULT_STAGE_CREDITS.default) }))
   const [baseline, setBaseline] = useState<CreditTable>(() => ({ ...(initial?.default ?? DEFAULT_STAGE_CREDITS.default) }))
@@ -414,8 +414,8 @@ export function StageCreditSlider({ projectId, initial, initialPolicy = null, ed
         </label>
         <span className="text-meta text-fg-muted">{t('settings.creditPolicyHint')}</span>
       </div>
-      {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
-      {error && <div data-credit-error><ConfigStateNotice kind="patch" locale={locale} message={error} /></div>}
+      {fieldError && <ConfigStateNotice kind="field" message={fieldError} />}
+      {error && <div data-credit-error><ConfigStateNotice kind="patch" message={error} /></div>}
       {editable ? (
         <SettingsSaveBar summary={t('settings.creditsNoRetro')}>
           <button type="button" data-credit-save onClick={save} disabled={pending || (!dirty && !uncertainPatch) || !!conflict}

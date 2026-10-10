@@ -16,7 +16,7 @@ vi.mock('@/app/actions/issueUpdates', () => ({
   listIssueUpdates, addIssueUpdate, archiveIssueUpdate, unarchiveIssueUpdate, purgeIssueUpdate,
 }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => k }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 
 import { IssueUpdates } from '@/components/issues/IssueUpdates'

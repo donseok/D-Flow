@@ -77,7 +77,7 @@ export async function fetchAgentHubRows(admin: AdminClient, projectId: string, n
   return { project: project && { id: project.id, name: project.name }, agentProject, items, orders, reports, watchers, members, approvedItemIds, gate, queueApprovals, stageLabels: labelsMap.get(projectId) }
 }
 
-/** t — 착수 대기 사유의 화면 언어(페이지·허브 액션이 넘긴다). 없으면 한국어 */
+/** t — 착수 대기 사유의 사전 조회 함수(페이지·허브 액션이 넘긴다). 없으면 koTranslate */
 export async function getAgentHub(projectId: string, viewer: { userId: string; isAdmin: boolean }, nowMs = Date.now(), t?: Translate): Promise<AgentHub> {
   // 호출부(페이지·허브 액션)가 requireProjectMember(projectId) 를 통과한 뒤다 — 조회는 전부 이 projectId 로 좁힌다.
   const { admin } = adminFor({ projectId })

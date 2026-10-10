@@ -4,7 +4,6 @@ import { legacyChatProjectGate } from '@/lib/ai/legacyChatGate'
 import { requireScopedSessionModule } from '@/lib/modules/scopedSession'
 import { buildBotContext } from '@/lib/ai/knowledge'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +18,7 @@ export async function GET(req: NextRequest) {
   if (gate) return gate
   // 옛 챗도 chatbot 관문(스펙 §4.2 챗 위젯 행) — 프로젝트 없는 전체 질문은 ?workspaceId=(셸 범위, 소속 확인 — D26). 둘 다 없으면 400
   const mod = await requireScopedSessionModule({ projectId, workspaceId: req.nextUrl.searchParams.get('workspaceId') }, 'chatbot')
-  if (!mod.ok) return NextResponse.json({ error: libText(t, mod.error) }, { status: mod.status })
+  if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: mod.status })
   // 위젯 탐침(P12) — 관문만 지나고 문맥(service_role 분석)을 만들지 않는다
   if (req.nextUrl.searchParams.get('probe') === '1') return NextResponse.json({ ok: true })
 

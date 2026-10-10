@@ -8,7 +8,6 @@ import { serverTranslator } from '@/lib/i18n/server'
 import type { Translate } from '@/lib/i18n/translate'
 import { adminFor } from '@/lib/supabase/adminFor'
 import { createServerClient } from '@/lib/supabase/server'
-import { libText } from '@/lib/i18n/serverText'
 
 export interface AuthzEventView {
   id: number
@@ -52,11 +51,11 @@ async function lookup(table: 'profiles' | 'people' | 'projects', admin: ReturnTy
 }
 
 export async function listAuthzEvents(workspaceId: string, opts?: { limit?: number; before?: number }): Promise<AuthzEventsResult> {
-  // 오류 문구와 목록에 보이는 글자(종류·원인·요약·이름 자리 대체)는 요청의 화면 언어를 따른다 — 요청 범위 밖(단위 테스트)에서는 한국어
+  // 오류 문구와 목록에 보이는 글자(종류·원인·요약·이름 자리 대체)는 서버 사전에서 꺼낸다
   const t = await serverTranslator()
   if (typeof workspaceId !== 'string' || !isUuidLike(workspaceId)) return { ok: false, error: t('err.workspaceIdNotValid') }
   const g = await requireWorkspaceAdmin(workspaceId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   const r = await listAuthzEventRows(sb, { workspaceId, includePlatform: g.actor.isSuperuser, limit: opts?.limit, before: opts?.before })
   if (!r.ok) { console.error('[authz events] 이력 조회 실패', { workspaceId, cause: r.error }); return { ok: false, error: t(ERR_LOAD) } }

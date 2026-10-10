@@ -13,7 +13,7 @@ import {
 } from '@/lib/authz/errors'
 import { rpcFailure, tokenTable } from '@/lib/errors/dbFail'
 import { serverKoTranslate } from '@/lib/i18n/serverDict'
-import { denied, guardText, libText } from '@/lib/i18n/serverText'
+import { denied } from '@/lib/i18n/serverText'
 import { mapDbError } from '@/lib/settings/errors'
 import { wbsErrorKey } from '@/lib/wbs/actionErrors'
 
@@ -77,20 +77,9 @@ describe('denyStatus — 코드로 판정한다', () => {
 })
 
 describe('응답에 싣는 문구 — 받은 문구 그대로(제품은 한국어 전용)', () => {
-  it('guardText·denied·libText 는 가드 문구를 그대로 돌려준다', () => {
-    for (const code of CODES) {
-      const g = guardFail(code)
-      expect(guardText(t, g)).toBe(g.error)
-      expect(guardText(t, g.error)).toBe(g.error)
-      expect(libText(t, g.error)).toBe(g.error)
-    }
-    expect(denied(guardFail('denied'), t)).toEqual({ ok: false, error: ERR_DENIED })      // code 는 싣지 않는다 — 액션 계약 그대로
-    expect(denied({ ok: false, error: ERR_MISSING }, t)).toEqual({ ok: false, error: ERR_MISSING })
-  })
-
-  it('가드 문구가 아니어도 받은 그대로', () => {
-    expect(guardText(t, 'duplicate key value')).toBe('duplicate key value')
-    expect(libText(t, null)).toBeNull()
+  it('denied 는 가드 문구를 그대로 싣고 code 는 뺀다', () => {
+    expect(denied(guardFail('denied'))).toEqual({ ok: false, error: ERR_DENIED })      // code 는 싣지 않는다 — 액션 계약 그대로
+    expect(denied({ ok: false, error: ERR_MISSING })).toEqual({ ok: false, error: ERR_MISSING })
   })
 
   it('DB 오류 표의 가드 문구(message: ERR_DENIED)는 t 를 넘기든 아니든 같은 글자', () => {

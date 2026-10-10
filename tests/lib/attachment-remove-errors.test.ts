@@ -10,7 +10,7 @@ describe('removeErrorKey', () => {
     [ERR_ROW_REMOVE, 'common.attach.rowRemoveFailed'],
   ] as const)('도우미의 문구는 사전 키로 — 사전 문구는 그 문구와 같다', (text, key) => {
     expect(removeErrorKey(text)).toBe(key)
-    expect(t('ko', key)).toBe(text)
+    expect(t(key)).toBe(text)
   })
 
   it.each([undefined, '', '권한 없음', 'toString', 'constructor'])('그 밖의 문구(%s)는 null — 호출부가 받은 문구나 자기 화면의 일반 문구를 쓴다', (text) => {

@@ -33,7 +33,7 @@ export function teamOwnerLabel(mine: boolean, name: string | null | undefined, t
   return { kind: 'other', text: n ? fill(t('agents.owner.teamNamed'), { name: n }) : t('agents.owner.other') }
 }
 
-/** 작은 명찰 — 내 것은 브랜드 바탕, 남의 것은 표면색 바탕에 이름(대비는 라이트·다크 토큰이 맞춘다). */
+/** 작은 명찰 — 내 것은 브랜드 바탕, 남의 것은 표면색 바탕에 이름(대비는 토큰이 맞춘다). */
 export function OwnerTag({ owner, className = '' }: { owner: OwnerLabel; className?: string }) {
   const tone = owner.kind === 'mine'
     ? 'border-action bg-action text-action-fg'

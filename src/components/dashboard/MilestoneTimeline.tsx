@@ -3,8 +3,7 @@ import type { MilestonePoint, MilestoneStatus } from '@/lib/domain/dashboard'
 import { diffDaysCal, addDaysCal } from '@/lib/domain/dashboard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
-import { t, type DictKey } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
+import { t} from '@/lib/i18n/dict'
 import { CountBadge, MiniEmpty } from './bits'
 
 const MS_TONE: Record<MilestoneStatus, string> = { done: 'fill-success', overdue: 'fill-danger', upcoming: 'fill-action' }
@@ -51,8 +50,7 @@ function wrapName(name: string): string[] {
 export async function MilestoneTimeline({ points, startDate, endDate, today }: {
   points: MilestonePoint[]; startDate: string | null; endDate: string | null; today: string
 }) {
-  const locale = await getServerLocale()
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
 
   if (points.length === 0) {
     return (

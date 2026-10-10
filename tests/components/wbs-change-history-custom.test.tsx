@@ -33,7 +33,7 @@ describe('ChangeHistoryList — 사용자 정의 필드 이력', () => {
     const list = <ChangeHistoryList timeZone="Asia/Seoul" logs={logs} />
     act(() => {
       root.render(defs === 'none' ? list
-        : <CustomFieldsProvider projectId="p1" entity="wbs_item" defs={defs} canAdmin={false} locale="ko">{list}</CustomFieldsProvider>)
+        : <CustomFieldsProvider projectId="p1" entity="wbs_item" defs={defs} canAdmin={false}>{list}</CustomFieldsProvider>)
     })
   }
 

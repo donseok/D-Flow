@@ -11,7 +11,6 @@ import { ConfigKeyError } from '@/lib/settings/errors'
 import { getWeeklySheet, hasCarryOverSource } from '@/lib/data/weeklySheet'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { PageHeader } from '@/components/app/PageHeader'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
@@ -30,9 +29,8 @@ export default async function WeeklyPage({
   await requireModulePage({ projectId }, 'weekly')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const { week } = await searchParams
   // 주 키는 프로젝트 규칙이 정한다(SP5 D4·P9) — 설정을 먼저 읽고 키를 정한 뒤 시트를 읽는다(조회 한 단계가 직렬이 된다 — 과제 31b 가 잰다)
-  const [projects, locale, user, actor, pc] = await Promise.all([
+  const [projects, user, actor, pc] = await Promise.all([
     listProjects(),
-    getServerLocale(),
     getSession(),
     // 어포던스 게이팅용 — 조회 실패는 null(조회 전용)로 열화한다. 쓰기는 서버 액션 가드가 다시 판정.
     getActorForView(),
@@ -41,15 +39,15 @@ export default async function WeeklyPage({
   ])
   const projectName = projects.find(p => p.id === projectId)?.name ?? ''
   // 프레즌스 신원 — 표시명 규칙은 헤더와 동일(full_name → name → 이메일 아이디)
-  const me = user ? { id: user.id, name: displayNameFrom(user.user_metadata, user.email) ?? t(locale, 'pages.common.userFallback') } : null
+  const me = user ? { id: user.id, name: displayNameFrom(user.user_metadata, user.email) ?? t('pages.common.userFallback') } : null
   // 이 화면은 구글시트 복제 룩이 주인공 — 머리는 제목 한 줄만 둔다(공용 PageHeader).
-  const hero = <PageHeader title={`${projectName} ${t(locale, 'nav.weekly')}`} />
-  if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} locale={locale} /></ProjectPageShell>
+  const hero = <PageHeader title={`${projectName} ${t('nav.weekly')}`} />
+  if (!pc.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={pc.error} /></ProjectPageShell>
   let cal: WorkCalendar
   try { cal = requireCalendar(pc.cfg) } catch (e) {
     // 달력 키 손상 — 기본 규칙(일요일)으로 다른 주를 열지 않는다([RF4])
     if (e instanceof ConfigKeyError) {
-      return <ProjectPageShell hero={hero}><ConfigLoadError error={e.message} keyName={e.key} kind="invalid" locale={locale} /></ProjectPageShell>
+      return <ProjectPageShell hero={hero}><ConfigLoadError error={e.message} keyName={e.key} kind="invalid" /></ProjectPageShell>
     }
     throw e
   }
@@ -70,15 +68,14 @@ export default async function WeeklyPage({
         entity="weekly_row"
         defs={customFields.ok ? customFields.value : null}
         canAdmin={isProjectAdmin(actor, projectId)}
-        locale={locale}
       >
         <WeeklySheetView
           projectId={projectId}
           weekStart={weekStart}
           prevWeek={prevWeekKey(cal.weekStart, weekStart)}
           nextWeek={nextWeekKey(cal.weekStart, weekStart)}
-          // 주차 이동 줄·빈 시트 안내의 라벨만 화면 언어를 따른다. weekTitle 은 문서 기본 제목의 재료(저장 값과 비교 — 제품 고정)라 한국어 그대로
-          weekLabel={weekDisplayLabel(cal, weekStart, locale)}
+          // 주차 이동 줄·빈 시트 안내의 라벨은 사전 문구다. weekTitle 은 문서 기본 제목의 재료(저장 값과 비교 — 제품 고정)라 한국어 그대로
+          weekLabel={weekDisplayLabel(cal, weekStart)}
           weekTitle={wk.label}
           thisRange={wk.thisRange}
           nextRange={wk.nextRange}

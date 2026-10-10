@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   loadWorkspaceScope: vi.fn(), requireModulePage: vi.fn(async () => {}), getMinutesPage: vi.fn(async () => []), getMinutesExplorer: vi.fn(async () => ({ folders: [], leaves: [], total: 0, truncated: false })),
   getMinuteFavorites: vi.fn(async () => []), getSession: vi.fn(async () => ({ id: 'u1' })), getAccountPrefs: vi.fn(async () => ({})), listProjects: vi.fn(async (): Promise<{ id: string; name: string; workspace_id: string }[]> => []),
-  getServerLocale: vi.fn(async () => 'ko'), getMyProjectIds: vi.fn(async () => []), viewProps: vi.fn(),
+  getMyProjectIds: vi.fn(async () => []), viewProps: vi.fn(),
   hasMinutesWithoutTeam: vi.fn(async () => false),
   workspaceTeams: vi.fn(async (): Promise<unknown[]> => []), projectTeams: vi.fn(async (): Promise<unknown[]> => []),
   redirect: vi.fn((url: string) => { throw new Error(`REDIRECT ${url}`) }),
@@ -21,12 +21,11 @@ vi.mock('@/lib/data/minutes', () => ({
 vi.mock('@/lib/auth', () => ({ getSession: h.getSession }))
 vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: h.getAccountPrefs }))
 vi.mock('@/app/actions/project', () => ({ listProjects: h.listProjects }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: h.getServerLocale }))
 // 칩(MinutesProjectChip)은 useLocale 로 문구를 읽는다 — 공급자 밖 기본값은 키를 돌려주므로 진짜 ko 사전을 물린다
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  const ko = (k: string) => t('ko', k as Parameters<typeof t>[1])   // 렌더마다 같은 함수(effect 의존성 안정)
-  return { useLocale: () => ({ locale: 'ko', t: ko, setLocale: () => {} }) }
+  const ko = (k: string) => t(k as Parameters<typeof t>[0])   // 렌더마다 같은 함수(effect 의존성 안정)
+  return { useLocale: () => ({ t: ko }) }
 })
 vi.mock('@/lib/data/members', () => ({ getMyProjectIds: h.getMyProjectIds }))
 vi.mock('@/components/minutes/MinutesView', () => ({ MinutesView: (p: unknown) => { h.viewProps(p); return null } }))

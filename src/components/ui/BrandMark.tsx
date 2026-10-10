@@ -56,7 +56,7 @@ export function BrandGlyph({ size = 40, className = '', variant = 'monogram', ch
 /**
  * 글리프 + 워드마크. 기본은 글리프만, `withWordmark` 로 제품명 텍스트, `tagline` 으로 한 줄 태그라인.
  * 호출부가 제품 이름(워크스페이스 브랜딩 또는 env 브랜드)·마크 유무·워크스페이스 id 를 넘긴다 — 마크는 읽기 라우트 이미지로만 그린다.
- * 워드마크 텍스트 색은 토큰(text-fg/ink-subtle)이라 라이트/다크 모두 대응.
+ * 워드마크 텍스트 색은 토큰(text-fg/ink-subtle)이다.
  */
 export function BrandMark({
   productName,

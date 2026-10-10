@@ -44,7 +44,6 @@ describe('WikiSearch — 고정 헤드와 두 열 정렬', () => {
       root.render(
         <WikiSearch
           projectId="proj-1"
-          locale="ko"
           initialQuery={initialQuery}
           pageHero={<h1 data-testid="page-hero">Acme 프로젝트 Wiki</h1>}
         />,
@@ -158,7 +157,6 @@ describe('WikiSearch — 컴팩트 뷰포트에서도 검색 카드는 남는다
       root.render(
         <WikiSearch
           projectId="proj-1"
-          locale="ko"
           initialQuery=""
           pageHero={<h1 data-testid="page-hero">Acme 프로젝트 Wiki</h1>}
           adminSlot={<button type="button" data-testid="reindex">색인 갱신</button>}

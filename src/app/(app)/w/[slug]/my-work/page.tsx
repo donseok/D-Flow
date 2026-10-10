@@ -10,12 +10,10 @@ import { MyWorkTabNav, MyWorkInboxView, type MyWorkTabId } from '@/components/po
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { buttonClass } from '@/components/ui/buttonStyles'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
-import { translatorFor } from '@/lib/i18n/translate'
-import { failureTextIn } from '@/lib/i18n/serverText'
+import { koTranslate } from '@/lib/i18n/translate'
 
-/** 탭 제목 — 화면 언어를 따른다(ko 는 종전의 '내 업무') */
-export async function generateMetadata() { return { title: t(await getServerLocale(), 'nav.myWork') } } // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
+/** 탭 제목 — 사전에서 꺼낸다('내 업무') */
+export async function generateMetadata() { return { title: t('nav.myWork') } } // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
 const isKind = (k: string): k is MyWorkKind => (MY_WORK_KINDS as readonly string[]).includes(k)
 
 /**
@@ -33,7 +31,7 @@ export default async function MyWorkPage({
 }) {
   const { slug } = await params
   const scope = await loadWorkspaceScope(slug) // 첫 await — 비소속 404
-  const [q, locale] = await Promise.all([searchParams, getServerLocale()])
+  const q = await searchParams
 
   const tab: MyWorkTabId = q.tab === 'review' || q.tab === 'inbox' ? q.tab : 'work'
   const kinds =
@@ -46,18 +44,18 @@ export default async function MyWorkPage({
 
   const res =
     scope.actor && tab !== 'inbox'
-      ? failureTextIn(locale, await getMyWork(scope.ws.id, scope.actor, {
+      ? (await getMyWork(scope.ws.id, scope.actor, {
           kinds: kinds.length ? kinds : undefined,
           cursor,
           limit: 50,
           dueToday,
-        }))   // 로더의 실패 문구(lib 고정 문구)는 화면 언어로
+        }))
       : null
 
   let reviewCount: number | undefined
   if (scope.actor && typeof getPortalSummary === 'function') {
     try {
-      const summary = await getPortalSummary(scope.ws.id, scope.actor, { t: translatorFor(locale) })
+      const summary = await getPortalSummary(scope.ws.id, scope.actor, { t: koTranslate })
       if (summary?.review?.ok) reviewCount = summary.review.count
     } catch {}
   }
@@ -79,16 +77,16 @@ export default async function MyWorkPage({
   return (
     <PageFrame
       width="portal"
-      header={<PageHeader title={t(locale, 'nav.myWork')} />}
+      header={<PageHeader title={t('nav.myWork')} />}
       toolbar={
         <div className="space-y-3">
           <MyWorkTabNav slug={scope.ws.slug} currentTab={tab} reviewCount={reviewCount} />
           {tab === 'work' && (
-            <nav aria-label={t(locale, 'pages.myWork.kindNav')} className="flex flex-wrap gap-2">
-              {chip(null, false, t(locale, 'pages.myWork.chipAll'))}
-              {chip('wbs,issue', false, t(locale, 'pages.myWork.chipMine'))}
-              {chip(null, true, t(locale, 'pages.myWork.chipDueToday'))}
-              {MY_WORK_KINDS.map((k) => chip(k, false, t(locale, KIND_LABEL_KEY[k])))}
+            <nav aria-label={t('pages.myWork.kindNav')} className="flex flex-wrap gap-2">
+              {chip(null, false, t('pages.myWork.chipAll'))}
+              {chip('wbs,issue', false, t('pages.myWork.chipMine'))}
+              {chip(null, true, t('pages.myWork.chipDueToday'))}
+              {MY_WORK_KINDS.map((k) => chip(k, false, t(KIND_LABEL_KEY[k])))}
             </nav>
           )}
         </div>
@@ -99,15 +97,14 @@ export default async function MyWorkPage({
       ) : res?.ok ? (
         <div className="space-y-4 pb-8">
           <MyWorkList
-            locale={locale}
             rows={res.rows}
             failedKinds={res.failedKinds}
             empty={
               tab === 'review'
-                ? t(locale, 'pages.myWork.emptyReview')
+                ? t('pages.myWork.emptyReview')
                 : dueToday
-                ? t(locale, 'pages.myWork.emptyDueToday')
-                : t(locale, 'pages.myWork.empty')
+                ? t('pages.myWork.emptyDueToday')
+                : t('pages.myWork.empty')
             }
           />
           {res.nextCursor && (
@@ -120,7 +117,7 @@ export default async function MyWorkPage({
               })}
               className={buttonClass('ghost')}
             >
-              {t(locale, 'pages.common.more')}
+              {t('pages.common.more')}
             </Link>
           )}
         </div>
@@ -128,8 +125,8 @@ export default async function MyWorkPage({
         <StatusMessage
           kind="partial_error"
           blocking
-          title={t(locale, 'pages.myWork.loadFailed')}
-          detail={t(locale, res ? 'pages.common.refreshLater' : 'pages.myWork.noActorDetail')}
+          title={t('pages.myWork.loadFailed')}
+          detail={t(res ? 'pages.common.refreshLater' : 'pages.myWork.noActorDetail')}
         />
       )}
     </PageFrame>

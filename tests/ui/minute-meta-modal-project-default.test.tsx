@@ -7,7 +7,7 @@ import type { Minute } from '@/lib/domain/types'
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (k: string) => k, locale: 'ko' }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 const updateMinuteMeta = vi.fn<

@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => k }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 
 import { ProgressPopover } from '@/components/kanban/ProgressPopover'

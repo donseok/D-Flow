@@ -26,7 +26,7 @@ export function failWith(tag: string, err: unknown, message: string): string {
  */
 /** 사전 키로 적는 호출부 표 — 화면에 내보내는 문구는 key, 가드 문구(ERR_DENIED 등)는 message 에 상수로 적는다(그대로 나간다) */
 export type OwnTokenKeys = Readonly<Record<string, { status: number; code: string } & ({ key: ServerDictKey } | { message: string })>>
-/** 키 표를 요청의 화면 언어로 푼 문구 표 — rpcFailure 에 넘긴다 */
+/** 키 표를 서버 사전으로 푼 문구 표 — rpcFailure 에 넘긴다 */
 export function tokenTable(own: OwnTokenKeys, t: ServerTranslate): OwnTokenTable {
   return Object.fromEntries(Object.entries(own).map(([token, row]) => [token, { status: row.status, code: row.code, message: 'key' in row ? t(row.key) : row.message }]))
 }

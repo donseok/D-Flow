@@ -7,7 +7,7 @@ import { join } from 'node:path'
 // 실패 알림 대비(최종 리뷰 UI I-1) — delayed 글자는 delayed-weak 위 3.71:1 로 본문 AA 미만이다.
 // 글자는 ink, 위험색은 비텍스트 기준(3:1)인 아이콘에만 남긴다(티커 실패 칩 T12-4 와 같은 처리).
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
 

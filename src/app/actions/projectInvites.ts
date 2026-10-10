@@ -20,7 +20,6 @@ import {
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
-import { libText } from '@/lib/i18n/serverText'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 type AccessRole = 'admin' | 'member'
@@ -154,7 +153,7 @@ export async function listProjectInvites(
 ): Promise<{ ok: true; rows: InviteRow[] } | { ok: false; error: string }> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
 
   let admin: AdminClient
   try {
@@ -209,12 +208,12 @@ export async function createProjectInvite(
   // 모든 초대는 프로젝트 관리자 가드를 먼저 — 타 워크스페이스·미존재 프로젝트의 존재 은닉(404)이 여기서 끝난다.
   const accessRole = input?.accessRole ?? null
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   // 관리자 초대는 관리자 슬롯을 여는 경로 — 프로젝트 관리자 가드만으로 열리면 '관리자가 관리자를 늘린다'.
   // 그 프로젝트가 속한 워크스페이스의 관리자만 발급한다(위 가드를 통과했으니 projectWorkspace 에 키가 있다).
   if (isAdminAccessRole(accessRole)) {
     const w = await requireWorkspaceAdmin(g.actor.projectWorkspace.get(projectId) ?? null)
-    if (!w.ok) return { ok: false, error: libText(tr, w.error) }
+    if (!w.ok) return { ok: false, error: w.error }
   }
 
   // 입력 검증 → origin 확인까지는 DB 를 건드리지 않는다. 어차피 만들 수 없는 초대라면
@@ -416,7 +415,7 @@ export async function revokeProjectInvite(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const tr = await serverTranslator()
   const g = await requireProjectAdmin(projectId)
-  if (!g.ok) return { ok: false, error: libText(tr, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
 
   let admin: AdminClient
   try {

@@ -10,7 +10,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: string) => k }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/components/chat/BotPageContextProvider', () => ({ useBotPageContext: vi.fn() }))
 vi.mock('@/components/meetings/MeetingCalendar', () => ({ MeetingCalendar: () => <div data-testid="calendar" /> }))
 vi.mock('@/components/meetings/MeetingFormModal', () => ({ MeetingFormModal: () => null }))

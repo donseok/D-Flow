@@ -149,7 +149,7 @@ export const CONFIG_TEXT_KEY: Readonly<Record<string, ServerDictKey>> = {
   [ERR_WEEK_KEY]: 'err.config.weekKey',
   [ERR_AREAS_REQUIRED]: 'err.config.areasRequired',
 }
-/** 설정 계열 고정 문구를 요청의 화면 언어로 — 표에 없는 문구(키 이름이 붙은 문구 등)는 받은 그대로 */
+/** 설정 계열 고정 문구를 서버 사전의 문구로 — 표에 없는 문구(키 이름이 붙은 문구 등)는 받은 그대로 */
 export const configText = (t: ServerTranslate, message: string): string => textBy(t, CONFIG_TEXT_KEY, message)
 
 /** t(서버 번역 함수)를 넘기면 message 가 그 언어다(화면에 내보내는 액션·라우트). 넘기지 않으면 종전 한국어 — code·status·token 은 언어와 무관하다 */

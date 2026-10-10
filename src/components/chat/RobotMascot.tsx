@@ -1,6 +1,6 @@
 // AI 어시스턴트 마스코트 — 귀여운 로봇 얼굴 SVG. 크기는 className(h-_, w-_)으로 조절.
 // FAB·헤더 모두 어두운 배경 위에 올라가므로 밝은 메탈 헤드 + 브랜드 틸(#32b6ab) 포인트로 구성.
-// label 은 호출자가 로케일에 맞춰 준다(ASSISTANT_NAME[locale]) — 이 컴포넌트는 로케일을 모른다.
+// label 은 호출자가 준다(ASSISTANT_NAME.ko).
 export function RobotMascot({ className, label }: { className?: string; label: string }) {
   return (
     <svg viewBox="0 0 48 48" className={className} role="img" aria-label={label} fill="none">

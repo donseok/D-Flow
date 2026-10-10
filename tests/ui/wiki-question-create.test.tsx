@@ -21,7 +21,7 @@ describe('WikiQuestionCreateForm', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    await act(async () => { root.render(<WikiQuestionCreateForm projectId="project-1" topicId="topic-1" locale="ko" />) })
+    await act(async () => { root.render(<WikiQuestionCreateForm projectId="project-1" topicId="topic-1" />) })
   })
   afterEach(() => {
     act(() => root.unmount())

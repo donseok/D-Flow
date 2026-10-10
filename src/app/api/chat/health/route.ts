@@ -3,7 +3,6 @@ import { requireSuperuser } from '@/lib/authz'
 import { denyStatus } from '@/lib/authz/errors'
 import { assistantHealth } from '@/lib/ai/health'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText } from '@/lib/i18n/serverText'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +10,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const t = await serverTranslator()
   const g = await requireSuperuser()
-  if (!g.ok) return NextResponse.json({ error: libText(t, g.error) }, { status: denyStatus(g) })
+  if (!g.ok) return NextResponse.json({ error: g.error }, { status: denyStatus(g) })
   try {
     return NextResponse.json(await assistantHealth())
   } catch (e) {

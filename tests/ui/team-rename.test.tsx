@@ -12,7 +12,7 @@ import { t as dict, type DictKey } from '@/lib/i18n/dict'
 const h = vi.hoisted(() => ({ addTeam: vi.fn(), addProjectTeam: vi.fn(), updateTeam: vi.fn(), updateProjectTeam: vi.fn(), toast: vi.fn(), refresh: vi.fn() }))
 vi.mock('@/app/actions/teams', () => ({ addTeam: h.addTeam, updateTeam: h.updateTeam }))
 vi.mock('@/app/actions/projectTeams', () => ({ addProjectTeam: h.addProjectTeam, copyGlobalTeams: vi.fn(), updateProjectTeam: h.updateProjectTeam }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (k: DictKey) => dict('ko', k) }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: DictKey) => dict(k) }) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn() }) }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: h.toast }) }))
 

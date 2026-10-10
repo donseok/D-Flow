@@ -9,7 +9,6 @@ import { isProjectAdmin, isProjectMember } from '@/lib/domain/authz'
 import { listProjects } from '@/app/actions/project'
 import { createServerClient } from '@/lib/supabase/server'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 import { PageHeader } from '@/components/app/PageHeader'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { RosterLoadError } from '@/components/members/RosterLoadError'
@@ -23,12 +22,11 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 export default async function IssuesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'issues')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const [issues, roster, m, projects, locale, { user, myMemberIds, myMemberIdsFailed }, pc, entry] = await Promise.all([
+  const [issues, roster, m, projects, { user, myMemberIds, myMemberIdsFailed }, pc, entry] = await Promise.all([
     getIssues(projectId),
     getProjectRoster(projectId),
     getActorForView(),
     listProjects(),
-    getServerLocale(),
     // '내 담당' 필터용 — 계정 연결(people.user_id)로 찾은 내 활성 명단 행. 비로그인은 빈 배열.
     // resolveMemberIds 는 getSession 의 user 인자가 필요한 진짜 의존이라 체인은 유지하되,
     // 체인 전체를 Promise.all 의 한 항목으로 태워 다른 독립 조회와 왕복을 겹친다(직렬 2단 → 1단).
@@ -42,17 +40,17 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
     loadIssueEntryContext(projectId),
   ])
   // '오늘'의 tz = 프로젝트 달력(계획 D-22·D-21a) — 못 읽거나 손상이면 그 사유를 그린다(서울·UTC 로 대체하지 않는다)
-  if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} locale={locale} /></div>
+  if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} /></div>
   const cal = pickCalendar(pc.cfg)
-  if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} locale={locale} /></div>
+  if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} /></div>
   // 목록의 심각도 칩·정렬·필터 = 설정 어휘(B4). 등록 문맥(entry)과 따로 읽어 문맥이 실패해도 목록은 그린다
   const severities = pick(pc.cfg, 'issues.severities')
-  if (!severities.ok) return <div className="p-6"><ConfigLoadError error={severities.error} keyName={severities.key} kind={severities.kind} locale={locale} /></div>
+  if (!severities.ok) return <div className="p-6"><ConfigLoadError error={severities.error} keyName={severities.key} kind={severities.kind} /></div>
   const sources = pick(pc.cfg, 'issues.sources')
-  if (!sources.ok) return <div className="p-6"><ConfigLoadError error={sources.error} keyName={sources.key} kind={sources.kind} locale={locale} /></div>
+  if (!sources.ok) return <div className="p-6"><ConfigLoadError error={sources.error} keyName={sources.key} kind={sources.kind} /></div>
   // 표시 상태(SP5b) — 칩·선택지·두 층 필터. 키 손상이면 기본값으로 풀지 않는다(개정 §2.5)
   const statuses = pick(pc.cfg, 'workflow.issue_statuses')
-  if (!statuses.ok) return <div className="p-6"><ConfigLoadError error={statuses.error} keyName={statuses.key} kind={statuses.kind} locale={locale} /></div>
+  if (!statuses.ok) return <div className="p-6"><ConfigLoadError error={statuses.error} keyName={statuses.key} kind={statuses.kind} /></div>
   const customFields = pick(pc.cfg, 'fields.issue')
   const today = todayIn(cal.calendar.timezone, new Date())
   // 명단은 담당자 선택·이름 표시용 곁가지 — 실패해도 이슈는 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
@@ -60,14 +58,14 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
   const members = roster.ok ? roster.rows : []
 
   const project = projects.find(p => p.id === projectId)
-  const projectName = project?.name ?? t(locale, 'issue.projectFallback')
+  const projectName = project?.name ?? t('issue.projectFallback')
 
   return (
     <ProjectPageShell
       pinned={roster.ok ? undefined : <RosterLoadError error={roster.error} />}
-      hero={<PageHeader title={`${projectName} ${t(locale, 'issue.heroTitleSuffix')}`} description={t(locale, 'issue.heroDesc')} />}
+      hero={<PageHeader title={`${projectName} ${t('issue.heroTitleSuffix')}`} description={t('issue.heroDesc')} />}
     >
-      <CustomFieldsProvider projectId={projectId} entity="issue" defs={customFields.ok ? customFields.value : null} canAdmin={isProjectAdmin(m, projectId)} locale={locale}>
+      <CustomFieldsProvider projectId={projectId} entity="issue" defs={customFields.ok ? customFields.value : null} canAdmin={isProjectAdmin(m, projectId)}>
       <IssuesView
         customFields={customFields.ok ? customFields.value : null}
         entryContext={entry.ok ? entry.value : null}

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 /**
  * 링 게이지(자체 SVG, 서버 렌더 가능). pct null 이면 트랙만 — 0% 와 '대상 없음'을 구분한다.
- * 색은 Tailwind stroke-* 토큰 클래스(라이트/다크 자동). 중앙 콘텐츠는 children 으로 겹친다.
+ * 색은 Tailwind stroke-* 토큰 클래스다. 중앙 콘텐츠는 children 으로 겹친다.
  */
 export function RingGauge({ pct, size, stroke, toneClass = 'stroke-success', trackClass = 'stroke-border', label, children }: {
   pct: number | null

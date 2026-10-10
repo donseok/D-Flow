@@ -10,11 +10,11 @@ it('a parent form displays protected stored/default values without presenting an
   const defs:FieldDef[]=[{key:'approved',label:'Approved',description:'',type:'boolean',required:true,default:false,active:true,editable_by:'admin',show_in_list:false,searchable:false,sort:0}]
   const onChange=vi.fn()
   try{
-    act(()=>root.render(<CustomFieldDraft defs={defs} values={{}} base={{}} creating canAdmin={false} disabled={false} locale="ko" errors={{}} onChange={onChange} />))
+    act(()=>root.render(<CustomFieldDraft defs={defs} values={{}} base={{}} creating canAdmin={false} disabled={false} errors={{}} onChange={onChange} />))
     expect(c.textContent).toContain('아니오');expect(c.querySelector('select')).toBeNull()
-    act(()=>root.render(<CustomFieldDraft defs={defs} values={{approved:true}} base={{approved:false}} creating={false} canAdmin={false} disabled={false} locale="ko" errors={{}} onChange={onChange} />))
+    act(()=>root.render(<CustomFieldDraft defs={defs} values={{approved:true}} base={{approved:false}} creating={false} canAdmin={false} disabled={false} errors={{}} onChange={onChange} />))
     expect(c.textContent).toContain('아니오');expect(c.textContent).not.toContain('예');expect(onChange).not.toHaveBeenCalled()
-    act(()=>root.render(<CustomFieldDraft defs={defs} values={{approved:true}} base={{approved:false}} creating={false} canAdmin disabled locale="ko" errors={{}} onChange={onChange} />))
+    act(()=>root.render(<CustomFieldDraft defs={defs} values={{approved:true}} base={{approved:false}} creating={false} canAdmin disabled errors={{}} onChange={onChange} />))
     expect(c.querySelector('select')!.disabled).toBe(true)
   }finally{act(()=>root.unmount());c.remove()}
 })

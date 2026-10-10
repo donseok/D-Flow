@@ -24,7 +24,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); c.remove() })
 async function render(defs: FieldDef[] | null = [def()], enabled = true, canEdit = true) {
   const states = Object.fromEntries((['wbs_item', 'issue', 'weekly_row'] as FieldEntity[]).map(e => [e, { value: defs, enabled }])) as Record<FieldEntity, { value: FieldDef[] | null; enabled: boolean }>
-  await act(async () => { root.render(<CustomFieldsSettings projectId={P} states={states} revision={8} canEdit={canEdit} locale="ko" />) })
+  await act(async () => { root.render(<CustomFieldsSettings projectId={P} states={states} revision={8} canEdit={canEdit} />) })
 }
 const button = (text: string) => [...c.querySelectorAll('button')].find(b => b.textContent === text)!
 const input = (text: string) => { const label = [...c.querySelectorAll('label')].find(l => l.firstChild?.textContent === text)!; return label.querySelector<HTMLInputElement | HTMLSelectElement>('input,select,textarea')! }
@@ -113,17 +113,17 @@ describe('field settings contracts', () => {
 
 describe('typed shared value controls', () => {
   it.each(['text', 'multiline', 'number', 'date', 'boolean', 'select', 'multiselect'] as const)('%s renders a native typed control', async type => {
-    await act(async () => root.render(<CustomFieldInput def={def({ type, options: [{ code: 'a', label: 'A', active: true, sort: 0 }] })} value={undefined} onChange={vi.fn()} locale="ko" />))
+    await act(async () => root.render(<CustomFieldInput def={def({ type, options: [{ code: 'a', label: 'A', active: true, sort: 0 }] })} value={undefined} onChange={vi.fn()} />))
     expect(c.querySelector('input,select,textarea')).not.toBeNull()
     if (type !== 'multiselect') expect(c.querySelector('input,select,textarea')!.getAttribute('aria-label')).toBe('Quantity')
   })
   it('false is a value, and clearing it means absence rather than false', async () => {
-    const onChange = vi.fn(); await act(async () => root.render(<CustomFieldInput def={def({ type: 'boolean' })} value={false} onChange={onChange} locale="ko" />))
+    const onChange = vi.fn(); await act(async () => root.render(<CustomFieldInput def={def({ type: 'boolean' })} value={false} onChange={onChange} />))
     const select = c.querySelector('select')!; expect(select.value).toBe('false'); await change(select, ''); expect(onChange).toHaveBeenCalledWith(undefined)
     await change(select, 'true'); expect(onChange).toHaveBeenCalledWith(true)
   })
   it('inactive selected options stay readable; new selections are disabled', async () => {
-    await act(async () => root.render(<CustomFieldInput def={def({ type: 'select', options: [{ code: 'old', label: 'Old', active: false, sort: 0 }] })} value="old" onChange={vi.fn()} locale="ko" />))
+    await act(async () => root.render(<CustomFieldInput def={def({ type: 'select', options: [{ code: 'old', label: 'Old', active: false, sort: 0 }] })} value="old" onChange={vi.fn()} />))
     expect(c.querySelector('select')!.value).toBe('old'); expect(c.querySelector<HTMLOptionElement>('option[value="old"]')!.disabled).toBe(true); expect(c.textContent).toContain('비활성')
   })
 })

@@ -11,7 +11,6 @@ import { revalidatePath } from 'next/cache'
 import type { DeliverableAttachment } from '@/lib/domain/types'
 import { serverTranslator } from '@/lib/i18n/server'
 import { ERR_LOOKUP, ERR_DENIED, ERR_ANON } from '@/lib/authz/errors'
-import { libText } from '@/lib/i18n/serverText'
 
 const BUCKET = 'deliverables'
 
@@ -22,11 +21,10 @@ const BUCKET = 'deliverables'
 async function requireAttachPermission(itemId: string): Promise<
   { ok: true; projectId: string | null; userId: string } | { ok: false; error: string }
 > {
-  const t = await serverTranslator()
   const found = await resolveProjectId('wbs_items', itemId)
-  if (!found.ok) return { ok: false, error: libText(t, found.error) }
+  if (!found.ok) return { ok: false, error: found.error }
   const g = await requireProjectMember(found.projectId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const granted = { ok: true, projectId: found.projectId, userId: g.actor.userId } as const
   if (isProjectAdmin(g.actor, found.projectId)) return granted
 
@@ -34,10 +32,10 @@ async function requireAttachPermission(itemId: string): Promise<
   const { data: owners, error: ownErr } = await sb.from('item_owners').select('team_id').eq('wbs_item_id', itemId)
   if (ownErr || !owners) {
     console.error('[attachments] 담당 팀 조회 실패:', ownErr?.message)
-    return { ok: false, error: libText(t, ERR_LOOKUP) }
+    return { ok: false, error: ERR_LOOKUP }
   }
   const myTeamIds = actorTeamIdsFor(g.actor, found.projectId ?? '')
-  if (!owners.some(o => myTeamIds.includes(o.team_id as string))) return { ok: false, error: libText(t, ERR_DENIED) }
+  if (!owners.some(o => myTeamIds.includes(o.team_id as string))) return { ok: false, error: ERR_DENIED }
   return granted
 }
 
@@ -99,7 +97,7 @@ const ERR_LINK = 'err.couldNotCreateDownloadLink'
  */
 export async function getAttachmentUrl(itemId: string, attachmentId: string): Promise<AttachmentUrlResult> {
   const t = await serverTranslator()
-  if (!(await getSession())) return { ok: false, error: libText(t, ERR_ANON) }
+  if (!(await getSession())) return { ok: false, error: ERR_ANON }
   const sb = await createServerClient()
   const { data: row, error } = await sb.from('deliverable_attachments')
     .select('file_path, file_name').eq('id', attachmentId).eq('wbs_item_id', itemId).maybeSingle()
@@ -111,9 +109,9 @@ export async function getAttachmentUrl(itemId: string, attachmentId: string): Pr
   const { data: can, error: canErr } = await sb.rpc('can_attach', { item: itemId })
   if (canErr) {
     console.error('[getAttachmentUrl] 다운로드 권한 판정 실패:', canErr.message)
-    return { ok: false, error: libText(t, ERR_LOOKUP) }
+    return { ok: false, error: ERR_LOOKUP }
   }
-  if (can !== true) return { ok: false, error: libText(t, ERR_DENIED) }
+  if (can !== true) return { ok: false, error: ERR_DENIED }
   const { data: signed, error: signErr } = await sb.storage.from(BUCKET)
     .createSignedUrl(row.file_path as string, SIGNED_URL_TTL_SEC, { download: (row.file_name as string) || true })
   if (signErr || !signed?.signedUrl) {
@@ -130,21 +128,21 @@ export async function recordAttachment(
 ): Promise<{ ok: boolean; error?: string }> {
   const t = await serverTranslator()
   const g = await requireAttachPermission(itemId)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   const sb = await createServerClient()
   // 경로 검증 — scope 는 클라이언트 입력이 아니라 DB 의 항목 행(→ 프로젝트 → 워크스페이스)에서 얻는다.
   // 이게 없으면 첨부 권한이 있는 항목 하나로 임의 경로(타 프로젝트·타 워크스페이스)의 객체를 메타에 꽂을 수 있다.
   // 워크스페이스를 모르면 검증할 수 없으므로 중단한다(쓰기 전 선행 조회 실패는 중단).
   if (!g.projectId) {
     console.error('[recordAttachment] 항목의 프로젝트를 확정하지 못했습니다:', itemId)
-    return { ok: false, error: libText(t, ERR_LOOKUP) }
+    return { ok: false, error: ERR_LOOKUP }
   }
   const { data: proj, error: projErr } = await sb
     .from('projects').select('workspace_id').eq('id', g.projectId).maybeSingle()
   const workspaceId = (proj as { workspace_id?: string } | null)?.workspace_id
   if (projErr || !workspaceId) {
     console.error('[recordAttachment] 프로젝트 워크스페이스 조회 실패:', projErr?.message ?? 'no row')
-    return { ok: false, error: libText(t, ERR_LOOKUP) }
+    return { ok: false, error: ERR_LOOKUP }
   }
   if (!isDeliverablePathValid({ workspaceId, projectId: g.projectId }, itemId, file.filePath)) {
     return { ok: false, error: t('err.invalidFilePath') }
@@ -167,11 +165,11 @@ export async function removeAttachment(id: string): Promise<{ ok: boolean; error
     .from('deliverable_attachments').select('id, file_path, wbs_item_id').eq('id', id).maybeSingle()
   if (attErr) {
     console.error('[removeAttachment] 첨부 조회 실패:', attErr.message)
-    return { ok: false, error: libText(t, ERR_LOOKUP) }
+    return { ok: false, error: ERR_LOOKUP }
   }
   if (!att) return { ok: false, error: t('err.noAttachment') }
   const g = await requireAttachPermission(att.wbs_item_id as string)
-  if (!g.ok) return { ok: false, error: libText(t, g.error) }
+  if (!g.ok) return { ok: false, error: g.error }
   // 객체 삭제 → 행 삭제. 객체가 이미 없으면 행만 지우고, 남아 있으면(삭제 권한 불일치) 행을 남긴다(0011 H2-g 존재 확인 RPC).
   return removeStoredAttachment(sb, { kind: 'deliverable', id, filePath: att.file_path as string, tag: 'removeAttachment' })
 }

@@ -56,11 +56,10 @@ describe('sheetWeekMeta — 시트 머리(금주 범위·차주 범위)', () => 
 })
 
 describe('weekDisplayLabel — 화면 표시용 주차 라벨', () => {
-  it('시트 머리의 라벨·범위와 글자까지 같다(locale 인자는 있어도 없어도 같다)', () => {
+  it('시트 머리의 라벨·범위와 글자까지 같다', () => {
     for (const [cal, key] of [[calUtcMon, '2026-07-06'], [calUtcSun, '2026-06-28'], [calTransition, '2026-10-05']] as const) {
       const m = sheetWeekMeta(cal, key)
       expect(weekDisplayLabel(cal, key)).toBe(`${m.label} (${m.thisRange})`)
-      expect(weekDisplayLabel(cal, key, 'ko')).toBe(`${m.label} (${m.thisRange})`)
     }
   })
 })

@@ -37,7 +37,6 @@ vi.mock('@/lib/settings/projectConfig', async () => {
 vi.mock('@/app/actions/project', () => ({ listProjects: vi.fn(async () => []) }))
 vi.mock('@/lib/auth', () => ({ getSession: vi.fn(async () => null) }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn(async () => ({})) }))
-vi.mock('@/lib/i18n/server', () => ({ getServerLocale: vi.fn(async () => 'ko') }))
 vi.mock('@/components/app/ProjectPageShell', () => ({ ProjectPageShell: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/components/dashboard/DashboardView', () => ({ DashboardView: mocks.DashboardView }))
 vi.mock('@/components/wbs/WbsRealtimeRefresh', () => ({ WbsRealtimeRefresh: () => null }))

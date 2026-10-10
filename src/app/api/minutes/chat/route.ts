@@ -14,7 +14,6 @@ import { ancestorIdsOf, loadFolderSnapshot, seedRootIdOf } from '@/lib/minutes/f
 import { createServerClient } from '@/lib/supabase/server'
 import { teamCodesVisibleTo } from '@/lib/teams/source'
 import { serverTranslator } from '@/lib/i18n/server'
-import { libText, guardText } from '@/lib/i18n/serverText'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,14 +50,14 @@ export async function POST(req: NextRequest) {
       if (!minuteId) return NextResponse.json({ error: t('srv.api.minutesChat.minuteidRequired') }, { status: 400 })
       // 회의록 행의 워크스페이스로 minutes 관문(스펙 §4.2) — 볼 수 없는 행은 404, 조회 실패는 500(없는 회의록으로 위장하지 않는다)
       const s = await resolveScope('minutes', minuteId)
-      if (!s.ok) return NextResponse.json({ error: guardCodeOf(s) === 'missing' ? t('err.minutesNotFound') : guardText(t, s) }, { status: denyStatus(s) })
+      if (!s.ok) return NextResponse.json({ error: guardCodeOf(s) === 'missing' ? t('err.minutesNotFound') : s.error }, { status: denyStatus(s) })
       // 명단 밖 비공개 프로젝트의 회의록은 없는 회의록과 같은 404 — 본문을 답의 근거로 내보내지 않는다(FA1, 보관함 Q&A 와 같은 숨김).
       // 모듈 판정 전에 본다(꺼짐 404 와 구별되지 않게). 판정 실패는 던져 아래 catch 의 500(fail-closed)
       if (s.projectId && (await getHiddenProjectIds()).has(s.projectId)) {
         return NextResponse.json({ error: t('err.minutesNotFound') }, { status: 404 })
       }
       const mod = await requireModule({ workspaceId: s.workspaceId }, 'minutes')
-      if (!mod.ok) return NextResponse.json({ error: libText(t, mod.error) }, { status: denyStatus(mod) })
+      if (!mod.ok) return NextResponse.json({ error: mod.error }, { status: denyStatus(mod) })
       const stream = await streamDocAnswer({ minuteId, message, history, workspaceId: s.workspaceId })
       if (!stream) return NextResponse.json({ error: t('err.minutesNotFound') }, { status: 404 })
       return new Response(stream, { headers })
@@ -67,7 +66,7 @@ export async function POST(req: NextRequest) {
       // 보관함 전체 Q&A — 대상 행이 없어 요청의 워크스페이스(회의록 화면 범위, 소속 확인 — D26)로 minutes 관문. 없으면 400(추측하지 않는다).
       // 검색·AI 판정도 그 워크스페이스로 — 두 워크스페이스 소속자의 답에 다른 워크스페이스 회의록이 섞이지 않는다
       const g = await requireScopedSessionModule({ projectId: null, workspaceId: body.workspaceId }, 'minutes')
-      if (!g.ok) return NextResponse.json({ error: libText(t, g.error) }, { status: g.status })
+      if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.status })
       const workspaceId = g.workspaceId
       if (!workspaceId) return NextResponse.json({ error: t('err.couldNotVerifyWorkspace') }, { status: 400 })
       const f = body.filters ?? {}

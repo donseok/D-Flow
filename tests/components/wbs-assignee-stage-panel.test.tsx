@@ -27,7 +27,7 @@ vi.mock('@/app/actions/wbsAssign', () => ({
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => k }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 vi.mock('@/components/app/TeamsProvider', () => ({ useTeamCodes: () => ['PMO', 'ERP'] }))
 // WbsSpecPanel 은 이 테스트의 관심사가 아니다 — 자체 데이터 로드를 갖고 있어 no-op 처리한다.

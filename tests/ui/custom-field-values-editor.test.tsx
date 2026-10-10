@@ -14,7 +14,7 @@ beforeEach(() => { vi.clearAllMocks(); h.save.mockResolvedValue({ ok: true, valu
 afterEach(() => { act(() => root.unmount()); c.remove() })
 const button = (text: string) => [...c.querySelectorAll('button')].find(b => b.textContent === text)!
 async function render(values: unknown = { quantity: 0 }, defs: FieldDef[] | null = [def()], canEdit = true, canAdmin = false, rowId = 'row-one') {
-  await act(async () => { root.render(<CustomFieldsProvider projectId="project-one" entity="wbs_item" defs={defs} canAdmin={canAdmin} locale="ko"><CustomFieldValuesEditor rowId={rowId} values={values} canEdit={canEdit} /></CustomFieldsProvider>) })
+  await act(async () => { root.render(<CustomFieldsProvider projectId="project-one" entity="wbs_item" defs={defs} canAdmin={canAdmin}><CustomFieldValuesEditor rowId={rowId} values={values} canEdit={canEdit} /></CustomFieldsProvider>) })
 }
 async function change(value: string, name = 'Quantity') {
   await act(async () => { const el = c.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value); el.dispatchEvent(new Event('input', { bubbles: true })) })

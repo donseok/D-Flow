@@ -10,7 +10,7 @@ import { DEFAULT_ATTACHMENT_POLICY } from '@/lib/minutes/attachmentPolicy'
 
 const m = vi.hoisted(() => ({ updateProject: vi.fn(), updateWorkspace: vi.fn(), outcome: vi.fn(), refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: m.refresh }) }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k, locale: 'ko' }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (k: string) => k }) }))
 vi.mock('@/app/actions/settings', () => ({
   updateProjectSettings: m.updateProject, updateWorkspaceSettings: m.updateWorkspace, getSettingsCommandOutcome: m.outcome,
 }))

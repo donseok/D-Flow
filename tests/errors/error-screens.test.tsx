@@ -8,7 +8,7 @@ import { KO } from '@/lib/i18n/dict/ko'
 import { PAGE_MARKERS } from '../../scripts/lib/e2e.mjs'
 
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => (KO as Record<string, string>)[k] ?? k }),
+  useLocale: () => ({ t: (k: string) => (KO as Record<string, string>)[k] ?? k }),
 }))
 // 범위 오류 화면(위험 파일)은 이 테스트의 대상이 아니다 — 참조 ID 가 그 아래 붙는지만 본다
 vi.mock('@/components/app/ScopeError', () => ({ ScopeError: ({ reset }: { reset: () => void }) => <div data-scope-error><button onClick={reset}>다시 시도</button></div> }))

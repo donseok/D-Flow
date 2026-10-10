@@ -15,7 +15,7 @@ vi.mock('next/navigation', () => ({
 // D-day 템플릿 키만 실제 값으로 — 나머지 키는 그대로 돌려줘 열 존재를 키 이름으로 확인한다.
 const DICT: Record<string, string> = { 'issue.dday.left': 'D-{n}일', 'issue.dday.over': 'D+{n}일' }
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (key: string) => DICT[key] ?? key }),
+  useLocale: () => ({ t: (key: string) => DICT[key] ?? key }),
 }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => ({ toast: vi.fn() }) }))
 vi.mock('@/components/issues/IssueModals', () => ({

@@ -24,7 +24,7 @@ vi.mock('@/app/actions/attachments', () => ({
 vi.mock('@/lib/supabase/client', () => ({ createBrowserClient: () => ({}) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: 'ko', t: (k: string) => k }),
+  useLocale: () => ({ t: (k: string) => k }),
 }))
 
 import { RowDetailPanel } from '@/components/wbs/RowDetailPanel'

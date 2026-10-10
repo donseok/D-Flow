@@ -557,7 +557,7 @@ function RemoveMemberModal({ account, workspaceId, onClose }: { account: Account
       })
       .catch(() => { if (alive) setError(t('wsAccounts.requestFailed')) })
     return () => { alive = false }
-    // t 는 로캘이 바뀔 때만 달라진다 — 그때 미리보기를 다시 읽을 이유가 없다
+    // t 는 바뀌지 않는다(고정 사전) — 의존성에 넣지 않는다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId, workspaceId])
 

@@ -5,7 +5,6 @@ import { BrandGlyph } from '@/components/ui/BrandMark'
 import { BRAND } from '@/lib/branding'
 import { InviteRedeemCard } from '@/components/invite/InviteRedeemCard'
 import { t } from '@/lib/i18n/dict'
-import { getServerLocale } from '@/lib/i18n/server'
 
 // 초대의 취소·소비·만료가 다음 요청부터 즉시 반영되도록 정적 캐시 금지
 export const dynamic = 'force-dynamic'
@@ -23,7 +22,6 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   // 세션 판정은 InviteRedeemCard 가 마운트 후 서버 액션(getInviteSessionState)으로 물어본다 —
   // 액션은 쿠키를 쓸 수 있어 만료 토큰 갱신이 정상 동작한다.
   const res = await getInvitePreview(token)
-  const locale = await getServerLocale()
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-12">
@@ -31,8 +29,8 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <BrandGlyph size={48} />
           <div>
-            <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg">{t(locale, 'invite.pageTitle').replace('{product}', () => BRAND.productName)}</h1>
-            <p className="mt-1 text-sm text-fg-secondary">{t(locale, 'invite.pageLead')}</p>
+            <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg">{t('invite.pageTitle').replace('{product}', () => BRAND.productName)}</h1>
+            <p className="mt-1 text-sm text-fg-secondary">{t('invite.pageLead')}</p>
           </div>
         </div>
         <InviteRedeemCard

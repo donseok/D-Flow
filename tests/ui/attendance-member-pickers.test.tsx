@@ -22,7 +22,7 @@ vi.mock('@/components/providers/LocaleProvider', () => {
     'att.form.member': '멤버',
   }
   return {
-    useLocale: () => ({ locale: 'ko', t: (key: string) => labels[key] ?? key }),
+    useLocale: () => ({ t: (key: string) => labels[key] ?? key }),
   }
 })
 vi.mock('@/app/actions/attendance', () => ({

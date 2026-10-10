@@ -26,7 +26,7 @@ export const WBS_ACTION_ERRORS = {
 } as const
 
 const KEY: Readonly<Record<string, DictKey>> = Object.fromEntries(Object.entries(WBS_ACTION_ERRORS).map(([k, msg]) => [msg, `wbs.err.${k}` as DictKey]))
-/** 가드·관문 거부는 문구가 아니라 코드로 알아본다 — 액션이 그 문구를 화면 언어로 번역해 돌려줘도(i18n 4차) 같은 사전 문구를 고른다 */
+/** 가드·관문 거부는 문구가 아니라 코드로 알아본다 — 문구가 달라져도 같은 사전 문구를 고른다 */
 const GUARD_KEY: Readonly<Record<GuardCode, DictKey>> = {
   anon: 'wbs.err.anon', denied: 'wbs.err.denied', lookup: 'wbs.err.lookup', missing: 'wbs.err.missing', module_disabled: 'wbs.err.moduleOff',
 }

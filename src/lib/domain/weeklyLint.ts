@@ -666,7 +666,7 @@ const KIND_ORDER: Record<LintKind, number> = { duplicate: 0, nearDuplicate: 1, n
  *  부류를 바깥에 두고 이어붙이기만 하면, 위쪽 묶음에 정리 지적만 있고 아래쪽 묶음에 중복 지적이
  *  있을 때 아래 묶음이 목록 맨 앞으로 올라와 화면(시트) 순서와 어긋난다. 행·열까지 정렬 키에 넣는
  *  것은 중복 규칙만 열 바깥으로 도는 탓 — 한 묶음에 행이 여럿이면 그 부류만 순서가 튄다. */
-/** t — 지적 설명의 화면 언어(점검 패널이 넘긴다). 없으면 한국어(종전 출력 그대로). 제목(주간 4열 이름)은 제품 고정이라 따르지 않는다 */
+/** t — 지적 설명의 사전 조회 함수(점검 패널이 넘긴다). 없으면 koTranslate. 제목(주간 4열 이름)은 제품 고정이라 따르지 않는다 */
 export function lintWeeklySheet<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
   const groupRank = new Map(byGroup(rows, groupOf).map((g, i) => [g.key, i]))
   const rowRank = new Map(rows.map((r, i) => [r.id, i]))

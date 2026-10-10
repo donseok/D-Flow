@@ -9,7 +9,7 @@ import {
 import { addDaysIso } from '@/lib/domain/dates'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
-import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
+import { t} from '@/lib/i18n/dict'
 import { MiniEmpty } from './bits'
 import { RingGauge } from './RingGauge'
 
@@ -17,7 +17,7 @@ import { RingGauge } from './RingGauge'
  * 이슈 현황 카드(A안 · 링 게이지, 2026-08-28) — 큰 해결률 링 + KPI 2×2 + Mega 영역별 미니 링 타일.
  * 집계는 전부 domain/issueDashboard 가 하고 여기서는 표시만 한다(재계산 금지).
  * 색은 이슈관리 화면의 ISSUE_STATUS_META dot 토큰 그대로 — 두 화면의 색 언어를 맞춘다.
- * 동기 컴포넌트다(locale 은 DashboardView 가 한 번 읽어 내려준다) — renderToStaticMarkup 으로 검증 가능.
+ * 동기 컴포넌트다 — renderToStaticMarkup 으로 검증 가능.
  */
 
 /** 타일 상태 점 상한 — 넘치면 +N. 점 하나가 이슈 하나라 수십 건 영역에서 줄이 길어지는 것을 막는다. */
@@ -36,7 +36,7 @@ function StatusDots({ counts, total }: { counts: IssueStatusCounts; total: numbe
   )
 }
 
-export function IssueStatusCard({ issues, projectId, today, timeZone, locale, areas }: {
+export function IssueStatusCard({ issues, projectId, today, timeZone, areas }: {
   areas: readonly IssueAreaRef[]
   issues: DashboardIssue[]
   projectId: string
@@ -44,11 +44,10 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, locale, ar
   today: string
   /** 프로젝트 calendar.timezone — 해결 시각을 날짜로 바꾼다 */
   timeZone: string
-  locale: Locale
 }) {
-  const tr = (k: DictKey) => t(locale, k)
+  const tr = t
   const unit = tr('dash.unitCount')
-  const statusLabel = (s: IssueStatus) => t(locale, ISSUE_STATUS_META[s].labelKey)
+  const statusLabel = (s: IssueStatus) => t(ISSUE_STATUS_META[s].labelKey)
   const countsText = (c: IssueStatusCounts) =>
     ISSUE_STATUSES.filter(s => c[s] > 0).map(s => `${statusLabel(s)} ${c[s]}`).join(' · ')
 

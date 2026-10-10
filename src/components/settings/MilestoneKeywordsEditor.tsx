@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSettingsCommandOutcome, updateProjectSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
-import type { Locale } from '@/lib/i18n/dict'
 import { ConflictCompare } from './ConflictCompare'
 import { SettingsSaveBar } from './SettingsSaveBar'
 import { ConfigStateNotice } from './ConfigStateNotice'
@@ -13,8 +12,8 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 const lines = (text: string) => text.split(/\r?\n/).map(value => value.trim()).filter(Boolean)
 const display = (values: readonly string[]) => values.join('\n')
 
-export function MilestoneKeywordsEditor({ projectId, revision, initial, source, invalidReason, locale = 'ko' }: {
-  projectId: string; revision: number; initial: string[]; source: string; invalidReason?: string; locale?: Locale
+export function MilestoneKeywordsEditor({ projectId, revision, initial, source, invalidReason }: {
+  projectId: string; revision: number; initial: string[]; source: string; invalidReason?: string;
 }) {
   const { t } = useLocale()
   const router = useRouter()
@@ -83,11 +82,11 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
       <span className="text-xs text-fg-muted">{repair ? t('settings.notify.policy.corrupted') : source} {t('settings.appliesNowSuffix')}</span>
     </div>
     <p className="text-xs text-fg-secondary">{t('settings.milestoneKw.desc')}</p>
-    {repair && <ConfigStateNotice kind="invalid" locale={locale} keyName="core.milestone_keywords" message={invalidReason}
+    {repair && <ConfigStateNotice kind="invalid" keyName="core.milestone_keywords" message={invalidReason}
       isAdmin settingsHref="#milestone-keywords" />}
     <textarea id="milestone-keywords" className="app-textarea min-h-28 w-full text-sm" value={text}
       disabled={pending || !!uncertainPatch} onChange={event => { setText(event.target.value); setReviewing(false); setError(null); setFieldError(null); setNotice(null) }} placeholder={t('settings.milestoneKw.placeholder')} />
-    {fieldError && <ConfigStateNotice kind="field" locale={locale} message={fieldError} />}
+    {fieldError && <ConfigStateNotice kind="field" message={fieldError} />}
     <p className="text-meta text-fg-muted">{t('settings.milestoneKw.lowercase')}</p>
     {reviewing && !conflict && !uncertainPatch && <section aria-label={t('settings.review.title')} className="space-y-2 rounded-lg border border-border bg-surface-subtle p-3 text-sm">
       <h3 className="font-semibold text-fg">{t('settings.review.title')}</h3>
@@ -101,7 +100,7 @@ export function MilestoneKeywordsEditor({ projectId, revision, initial, source, 
     }]} latestAvailable={conflict.latest !== null}
       onMine={() => { setBaseline(display(conflict.latest ?? [])); setBaseRevision(conflict.revision); setReviewing(false); setConflict(null) }}
       onLatest={() => { const next = display(conflict.latest ?? []); setText(next); setBaseline(next); setBaseRevision(conflict.revision); setRepair(false); setReviewing(false); setConflict(null) }} />}
-    {error && <ConfigStateNotice kind="patch" locale={locale} message={error} />}
+    {error && <ConfigStateNotice kind="patch" message={error} />}
     <SettingsSaveBar notice={notice}>
       <button type="button" className="btn btn-primary" disabled={pending || (!dirty && !uncertainPatch) || !!conflict} onClick={save}>
         {uncertainPatch ? t('settings.workflow.retry') : reviewing ? t('settings.review.saveAfter') : t('settings.review.title')}

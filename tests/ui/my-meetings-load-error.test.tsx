@@ -18,7 +18,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => mocks.router,
   useSearchParams: () => new URLSearchParams(currentSearch),
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', t: (key: string) => key }) }))
+vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t: (key: string) => key }) }))
 vi.mock('@/app/actions/meetings', () => ({
   fetchMyMeetings: mocks.fetchMyMeetings,
   fetchMeetingDetail: vi.fn(async () => null),

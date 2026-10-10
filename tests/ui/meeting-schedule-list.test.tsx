@@ -9,7 +9,7 @@ vi.mock('@/components/meetings/MeetingDetailModal', () => ({
 }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await import('@/lib/i18n/dict')
-  return { useLocale: () => ({ locale: 'ko', setLocale: vi.fn(), t: (k: never) => t('ko', k) }) }
+  return { useLocale: () => ({ t: (k: never) => t(k) }) }
 })
 
 import { MeetingScheduleList } from '@/components/dashboard/MeetingScheduleList'
