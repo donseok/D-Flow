@@ -26,12 +26,17 @@ describe('MenuOrderEditor', () => {
     await act(async () => button.click())
   }
   it('그룹 안 순서만 바꾸고 안정 메뉴 id를 저장한다', async () => {
-    await click('내 작업 위로')
+    await click('내 업무 위로')
     await click('메뉴 설정 저장')
     const patch = update.mock.calls[0][1]
     expect(patch.expectedRevision).toBe(1)
     expect(patch.set['navigation.menu'].order.slice(0, 3)).toEqual(['ws.my_work', 'ws.home', 'ws.projects'])
     expect(refresh).toHaveBeenCalledOnce()
+  })
+  it('[BUG-25] 기본 이름(행 이름·placeholder)은 사이드바의 기본 라벨과 같다 — 전체 프로젝트·내 업무·개요', () => {
+    const placeholders = [...host.querySelectorAll<HTMLInputElement>('input[placeholder]')].map(i => i.placeholder)
+    expect(placeholders).toEqual(expect.arrayContaining(['전체 프로젝트', '내 업무', '개요']))
+    for (const old of ['프로젝트', '내 작업', '대시보드']) expect(placeholders).not.toContain(old)
   })
   it('이름을 바꿀 때 항목 id를 유지한다', async () => {
     const input = host.querySelector<HTMLInputElement>('input[aria-label="홈 메뉴 이름"]')!

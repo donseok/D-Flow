@@ -6,11 +6,10 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import type { UsageUserRow } from '@/lib/domain/usage'
 import { WORKSPACE_ROLE_LABEL_KEY } from '@/lib/domain/authz'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { KO_LOCALE, formatDayIn } from '@/lib/i18n/format'
 
 function fmtDate(iso: string | null, timeZone: string): string {
-  if (!iso) return '—'
-  return new Intl.DateTimeFormat(KO_LOCALE, { timeZone, dateStyle: 'medium' }).format(new Date(iso))
+  return formatDayIn(iso, timeZone)
 }
 
 const USER_PAGE_SIZE = 15

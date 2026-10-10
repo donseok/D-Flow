@@ -13,7 +13,7 @@ import { consumeChatNdjson, isSafeInternalBotHref } from './chatStream'
 import { QUICK_SUGGESTIONS } from '@/lib/ai/intent'
 import { parseScopePath } from '@/lib/nav/active'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatStampIn } from '@/lib/i18n/format'
 import type { DictKey} from '@/lib/i18n/dict'
 import { isCommandUtterance } from '@/lib/ai/commands/cue'
 import type { CommandProposal, CommandCandidate } from '@/lib/ai/commands/types'
@@ -868,9 +868,7 @@ function Bubble({
 
 /** 봇 답의 기준 시각 — 그 응답의 요청 범위 tz 로 찍는다(서울로 대체하지 않는다, 계획 D-21b) */
 function formatAsOf(value: string, timeZone: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(KO_LOCALE, { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(date)
+  return formatStampIn(value, timeZone, value)
 }
 
 function ProposalCard({

@@ -32,12 +32,16 @@ export function StageLabelsEditor({ projectId, value, revision, canEdit, invalid
   return (
     <div data-stage-labels-editor className="space-y-3">
       {invalid && <p role="alert" className="text-xs text-danger">{t('settings.workflow.stageLabelsInvalid')}</p>}
-      <div className="grid gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
         {STAGE_LABEL_SLOTS.map((k) => (
           <label key={k} className="flex flex-col gap-1 text-meta text-fg-secondary">
-            <span className="font-mono">{k === 'none' ? '—' : k}</span>
+            {/* 칸의 이름은 그 단계의 기본 이름이다 — 내부 코드(as·ip·im·xx)는 에이전트 문서와 맞춰 볼 때만 필요해 옆에 작게 둔다(BUG-26) */}
+            <span className="flex items-baseline gap-1.5 whitespace-nowrap">
+              <span className="font-semibold text-fg">{t(DEFAULT_KEY[k])}</span>
+              {k !== 'none' && <span className="font-mono text-fg-muted" title={t('settings.workflow.stageCodeTitle')}>{k}</span>}
+            </span>
             <input className="app-input h-9 text-xs" maxLength={20} value={draft[k]} placeholder={t(DEFAULT_KEY[k])} disabled={locked}
-              data-stage-label={k} aria-label={`${k} ${t(DEFAULT_KEY[k])}`}
+              data-stage-label={k} aria-label={t('settings.workflow.stageLabelOf').replace('{name}', t(DEFAULT_KEY[k]))}
               onChange={(e) => { const v = e.target.value; setDraft((d) => ({ ...d, [k]: v })); cmd.clear() }} />
           </label>
         ))}

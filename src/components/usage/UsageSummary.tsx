@@ -2,12 +2,10 @@ import { Activity, CalendarCheck, MousePointerClick, Users } from 'lucide-react'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { SESSION_GAP_MINUTES, type UsageSummary as Summary } from '@/lib/domain/usage'
 import { t} from '@/lib/i18n/dict'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { KO_LOCALE, formatStampIn } from '@/lib/i18n/format'
 
 function fmtDateTime(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat(KO_LOCALE, {
-    timeZone, dateStyle: 'medium', timeStyle: 'short',
-  }).format(new Date(iso))
+  return formatStampIn(iso, timeZone)
 }
 
 /**

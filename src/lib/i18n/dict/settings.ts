@@ -111,7 +111,6 @@ export const settingsKo = {
   'settings.nameOptional': '명칭(선택)',
   'settings.holidayNamePlaceholder': '예: 창립기념일',
   // ProjectInfoEditButton
-  'settings.invalidDateRange': '종료일은 시작일보다 빠를 수 없습니다.',
   'settings.saveFailed': '저장 실패',
   'settings.infoSaved': '기본 정보를 저장했습니다.',
   'settings.editInfoTitle': '기본 정보 편집',
@@ -218,7 +217,10 @@ export const settingsKo = {
   'settings.workflow.wbsTitle': 'WBS 승인 흐름', 'settings.workflow.wbsDesc': '개발 워크플로 항목의 단계 이름, 검수 대기에서 완료까지의 승인 단계, 후속 작업의 선행 기준입니다. 단계 자체(할당·작업 중·검수 대기·완료)는 바뀌지 않습니다.',
   'settings.workflow.stageLabelsInvalid': '저장된 단계 이름이 손상돼 기본 이름으로 표시합니다. 다시 저장하면 고쳐집니다.',
   'settings.workflow.stageLabelsHint': '비워 둔 칸은 기본 이름을 씁니다. 1~20자.',
+  'settings.workflow.stageCodeTitle': '내부 코드 — 에이전트 문서·내보내기에 쓰이는 고정 값입니다',
+  'settings.workflow.stageLabelOf': '{name} 단계의 표시 이름',
   'settings.workflow.save': '저장', 'settings.workflow.retry': '저장 결과 확인 및 재시도', 'settings.workflow.saved': '저장했습니다.',
+  'settings.workflow.stepCodeHead': '코드(내부 식별자)', 'settings.workflow.stepCodePh': '영문 코드',
   'settings.workflow.stepCode': '단계 코드', 'settings.workflow.stepLabel': '단계 이름', 'settings.workflow.stepApprover': '승인자',
   'settings.workflow.approverSubtree': '상위 담당자 또는 관리자', 'settings.workflow.approverAdmin': '프로젝트 관리자만',
   'settings.workflow.stepUp': '위로', 'settings.workflow.stepDown': '아래로', 'settings.workflow.stepRemove': '삭제', 'settings.workflow.stepAdd': '단계 추가',

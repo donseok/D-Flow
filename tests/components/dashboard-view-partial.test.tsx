@@ -240,7 +240,7 @@ describe('[BUG-34] SPI 카드 — 계획이 0 이면 편차도 SPI 와 같은 "�
     const spi = renderToStaticMarkup((await SpiPanel({ model, variance: null })) as ReactElement)
     expect(spi).not.toContain('%p')
     expect(spi).toContain('data-spi-no-plan')
-    expect(spi).toContain('오늘까지의 계획이 0% 라 SPI·편차를 내지 않습니다.')
+    expect(spi).toContain('오늘까지의 계획이 5% 미만이라 SPI·편차를 내지 않습니다.')
   })
   it('variance 가 수면 종전대로 부호 있는 %p', async () => {
     const spi = renderToStaticMarkup((await SpiPanel({ model, variance: -2.5 })) as ReactElement)

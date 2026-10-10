@@ -1,6 +1,7 @@
 import type { Status } from '@/lib/domain/types'
 import { useStageLabel } from './StageLabelsProvider'
 import { t as translate, type DictKey } from '@/lib/i18n/dict'
+import { formatYmd } from '@/lib/i18n/format'
 
 export const STATUS: Record<Status, { labelKey: DictKey; chip: string; bar: string; dot: string }> = {
   not_started: { labelKey: 'status.not_started', chip: 'bg-pending-weak text-pending', bar: 'bg-pending', dot: 'bg-pending' },
@@ -17,12 +18,12 @@ const DEPTH_CLASS = [
 ]
 const DEPTH_CLASS_FALLBACK = 'bg-surface-subtle text-fg-secondary' // depth 3+
 /* act 하위의 담당자별 분리 항목(임포트 시 자동 생성) 전용 표기 — 일반 배지와 시각 구분 */
-const SUB_ACT = { label: 'SUB-ACT', cls: 'bg-surface-subtle text-fg-secondary' }
+const SUB_ACT = { labelKey: 'wbs.badge.subAct' as DictKey, cls: 'bg-surface-subtle text-fg-secondary' }
 const koT = (k: DictKey) => translate(k)
 /** 배지 텍스트 — isOwnerSplit 이면 SUB-ACT, 아니면 프로젝트 단계 라벨 원문(levelLabels[depth]), 라벨 밖 깊이는 'N단'(SP4 — 옛 축약 규칙 삭제).
  * t 를 넘기지 않으면 ko 사전으로 읽는다(훅 밖 호출 — 서버·순수 함수). */
 export function levelBadgeText(depth: number, isOwnerSplit: boolean, levelLabels: readonly string[], t: (k: DictKey) => string = koT): string {
-  if (isOwnerSplit) return SUB_ACT.label
+  if (isOwnerSplit) return t(SUB_ACT.labelKey)
   return levelLabels[depth] ?? t('wbs.levelNth').replace('{n}', String(depth + 1))
 }
 
@@ -78,9 +79,9 @@ export function LevelBadge({
 
 export { OwnerBadges } from './OwnerBadges'
 
+/** 화면 날짜 표기 — 4자리 연도 'YYYY-MM-DD'(src/lib/i18n/format.ts 의 한 꼴, BUG-20). 예전의 2자리 연도('26.09.15')는 쓰지 않는다 */
 export function fmtDate(d: string | null): string {
-  if (!d) return '-'
-  return d.slice(2).replace(/-/g, '.') // 2026-09-15 -> 26.09.15
+  return formatYmd(d)
 }
 
 // 리프 수집은 도메인 계층(lib/domain/tree)이 단일 출처 — 여기선 재노출만.

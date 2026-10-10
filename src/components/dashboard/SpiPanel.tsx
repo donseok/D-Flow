@@ -1,6 +1,6 @@
 import { AlertTriangle, Gauge } from 'lucide-react'
 import type { TrendModel } from '@/lib/domain/trend'
-import { progressSignal, SPI_DONE_FLOOR, SPI_WARN_FLOOR, type Signal } from '@/lib/domain/dashboard'
+import { progressSignal, SPI_DONE_FLOOR, SPI_MIN_PLANNED_PCT, SPI_WARN_FLOOR, type Signal } from '@/lib/domain/dashboard'
 import { formatPp1 } from '@/lib/domain/format'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { t} from '@/lib/i18n/dict'
@@ -95,7 +95,7 @@ export async function SpiPanel({ model, variance, historyFailed = false }: {
           <Stat label={tr('dash.spi.varianceNow')} value={variance == null ? '—' : fmtPp(variance)} tone={variance == null ? 'text-fg' : SIG_TONE[progressSignal(variance)]} />
         </div>
         <div className="text-meta text-fg-muted">{tr('dash.spi.hint')}</div>
-        {variance == null && <div data-spi-no-plan className="text-meta text-fg-muted">{tr('dash.spi.noPlan')}</div>}
+        {variance == null && <div data-spi-no-plan className="text-meta text-fg-muted">{tr('dash.spi.noPlan').replace('{n}', String(SPI_MIN_PLANNED_PCT))}</div>}
       </div>
     </SectionCard>
   )

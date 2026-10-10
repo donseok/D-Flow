@@ -5,13 +5,10 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { MODULE_LABEL_KEY } from '@/lib/modules/labels'
-import type { DictKey } from '@/lib/i18n/dict'
 import { withObjectParticle } from '@/lib/i18n/particle'
 import type { ModuleId } from '@/lib/modules/defaults'
 import type { ShellProject } from '@/lib/data/portal'
 import { usePopover } from './usePopover'
-
-const STATUS_LABEL_KEY: Record<string, DictKey> = { ready: 'shell.status.ready', active: 'shell.status.active', done: 'shell.status.done', overdue: 'shell.status.overdue', unknown: 'shell.status.unknown' }
 
 /**
  * 프로젝트 전환기(★6, D41) — 셸이 가진 그 워크스페이스 목록을 클라이언트에서 거른다(⌘K 와 다르다). 고르면 서버가 같은 모듈 유지를 판정한다.
@@ -102,8 +99,10 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
               <div aria-hidden className="px-2 pb-0.5 pt-2 text-meta font-semibold text-fg-secondary">{s.label}</div>
               {s.items.map((p) => { n += 1; const i = n; return (
                 <div key={`${s.label}-${p.id}`} id={optId(i)} role="option" aria-selected={i === active} onMouseDown={(e) => { e.preventDefault(); void choose(p) }}
-                  className={`flex cursor-pointer items-center justify-between gap-2 rounded-(--radius-control) px-2 py-1.5 text-control ${i === active ? 'bg-surface-selected' : ''}`}>
-                  <span className="truncate">{p.name}</span><span className="shrink-0 text-meta text-fg-secondary">{STATUS_LABEL_KEY[p.status] ? t(STATUS_LABEL_KEY[p.status]) : p.status}</span>
+                  className={`flex cursor-pointer items-center rounded-(--radius-control) px-2 py-1.5 text-control ${i === active ? 'bg-surface-selected' : ''}`}>
+                  {/* 상태는 보이지 않는다 — 셸 목록은 진척을 읽지 않는 가벼운 조회라 날짜만으로 낸 상태가 프로젝트 목록·홈(WBS 진척 먼저)과 어긋났다(BUG-35 의 남은 불일치).
+                      전환기는 이름으로 고르는 자리다. 상태는 프로젝트 목록에서 본다 */}
+                  <span className="truncate">{p.name}</span>
                 </div>) })}
             </div>
           ))}

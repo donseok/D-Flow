@@ -52,19 +52,29 @@ export function ApprovalStepsEditor({ projectId, steps, distinct, gate, revision
 
   return (
     <div data-approval-steps-editor className="space-y-4">
+      {/* 열 머리 — 첫 칸의 'review' 같은 글자가 이름이 아니라 내부 코드임을 알린다(BUG-26). 한 줄 배치(xl)에서만 낸다 — 그 밑에서는 칸이 접힌다(칸마다 aria-label) */}
+      <div aria-hidden className="hidden grid-cols-[2rem_8rem_minmax(0,1fr)_11rem_8.5rem] gap-2 px-2 text-meta font-semibold text-fg-muted xl:grid">
+        <span />
+        <span>{t('settings.workflow.stepCodeHead')}</span>
+        <span>{t('settings.workflow.stepLabel')}</span>
+        <span>{t('settings.workflow.stepApprover')}</span>
+        <span />
+      </div>
       <ol className="space-y-2">
+        {/* 한 줄 다섯 칸은 xl 부터 — 설정 본문은 목차 옆이라 뷰포트 1054px 에서도 500px 남짓이다(sm 기준이면 이름 칸이 0 으로 눌리고 버튼 글자가 꺾였다, BUG-28) */}
         {rows.map((r, i) => (
-          <li key={i} data-approval-step={r.code || `new-${i}`} className="grid grid-cols-[2rem_1fr] items-start gap-2 rounded-lg border border-border bg-surface p-2 sm:grid-cols-[2rem_8rem_1fr_11rem_auto]">
+          <li key={i} data-approval-step={r.code || `new-${i}`} className="grid grid-cols-[2rem_1fr] items-start gap-2 rounded-lg border border-border bg-surface p-2 xl:grid-cols-[2rem_8rem_minmax(0,1fr)_11rem_8.5rem]">
             <span className="pt-2 text-center text-xs font-semibold tabular-nums text-fg-muted">{i + 1}</span>
             <input className="app-input h-9 font-mono text-xs" value={r.code} disabled={locked || r.fixed} maxLength={20} aria-label={t('settings.workflow.stepCode')}
-              placeholder="code" onChange={(e) => edit(i, { code: e.target.value.toLowerCase() })} />
-            <input className="app-input col-span-2 h-9 text-xs sm:col-span-1" value={r.label} disabled={locked} maxLength={20} aria-label={t('settings.workflow.stepLabel')}
+              placeholder={t('settings.workflow.stepCodePh')} onChange={(e) => edit(i, { code: e.target.value.toLowerCase() })} />
+            <input className="app-input col-span-2 h-9 text-xs xl:col-span-1" value={r.label} disabled={locked} maxLength={20} aria-label={t('settings.workflow.stepLabel')}
               placeholder={r.code === DEFAULT_STEP_CODE ? t('wbs.approveStepDefault') : t('settings.workflow.stepLabel')} onChange={(e) => edit(i, { label: e.target.value })} />
-            <select className="app-input col-span-2 h-9 text-xs sm:col-span-1" value={r.approver} disabled={locked} aria-label={t('settings.workflow.stepApprover')}
+            <select className="app-input col-span-2 h-9 text-xs xl:col-span-1" value={r.approver} disabled={locked} aria-label={t('settings.workflow.stepApprover')}
               onChange={(e) => edit(i, { approver: e.target.value as Approver })}>
               {APPROVERS.map((a) => <option key={a} value={a}>{t(APPROVER_KEY[a])}</option>)}
             </select>
-            <div className="col-span-2 flex gap-1 sm:col-span-1">
+            {/* 버튼 줄은 줄지 않는다 — 폭이 모자라면 '삭제'가 한 글자씩 세로로 꺾였다(BUG-28, 뷰포트 1054px) */}
+            <div className="col-span-2 flex shrink-0 gap-1 whitespace-nowrap xl:col-span-1">
               <button type="button" className="btn btn-ghost h-9 px-2 text-xs" disabled={locked || i === 0} onClick={() => move(i, -1)} aria-label={t('settings.workflow.stepUp')}>↑</button>
               <button type="button" className="btn btn-ghost h-9 px-2 text-xs" disabled={locked || i === rows.length - 1} onClick={() => move(i, 1)} aria-label={t('settings.workflow.stepDown')}>↓</button>
               <button type="button" className="btn btn-ghost h-9 px-2 text-xs text-danger" disabled={locked || rows.length <= 1}

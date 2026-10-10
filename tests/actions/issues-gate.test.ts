@@ -496,7 +496,7 @@ describe('입력 검증 — createIssue', () => {
       startDate: '2026-08-04',
       dueDate: '2026-08-03',
     })
-    expect(res).toMatchObject({ ok: false, error: '이슈 시작일은 목표 해결일보다 늦을 수 없습니다.' })
+    expect(res).toMatchObject({ ok: false, error: '시작일은 목표 해결일보다 늦을 수 없습니다.' })
     expect(createServerClient).not.toHaveBeenCalled()
   })
   it('담당자 상한(20명) 초과 거부 (DB 미도달)', async () => {

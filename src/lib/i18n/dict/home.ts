@@ -37,7 +37,6 @@ export const homeKo = {
   'home.fieldEnd': '종료일',
   'home.creating': '생성 중…',
   'home.createProject': '프로젝트 생성',
-  'home.errEndBeforeStart': '종료일은 시작일보다 빠를 수 없습니다.',
   'home.errCreateFailed': '프로젝트를 만들지 못했습니다.',
   // 프로젝트 내부 탭
   'home.projectMenu': '프로젝트 메뉴',
@@ -64,6 +63,12 @@ export const homeKo = {
   'home.nfTitle': '페이지를 찾을 수 없습니다',
   'home.nfDesc': '요청하신 페이지가 존재하지 않거나 이동되었습니다.',
   'home.nfHome': '홈으로 돌아가기',
+  // 꺼진 모듈의 화면(404 본문 자리 — 그 범위의 구성원에게만 보인다)
+  'home.moduleOff.title': '이 기능은 꺼져 있습니다',
+  'home.moduleOff.project': '{module} 기능은 이 프로젝트에서 꺼져 있습니다.',
+  'home.moduleOff.workspace': '{module} 기능은 이 워크스페이스에서 꺼져 있습니다.',
+  'home.moduleOff.askAdmin': '쓰려면 관리자에게 켜 달라고 요청하세요.',
+  'home.moduleOff.openSettings': '설정에서 켜기',
   // 포털 위젯 이름(SP3b UI-3 — src/lib/portal/widgets.ts 의 labelKey)
   'portal.widget.my_work': '내 업무', 'portal.widget.projects': '진행 중인 프로젝트', 'portal.widget.review': '검토 대기',
   'portal.widget.upcoming': '다가오는 회의', 'portal.widget.recent_docs': '최근 회의록', 'portal.widget.announcements': '공지',

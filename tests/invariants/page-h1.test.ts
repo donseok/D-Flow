@@ -17,6 +17,7 @@ const ALLOW: Record<string, number> = {
   'src/components/login/AuthCard.tsx': 1,               // 재설정 메일 요청·새 비밀번호 설정(/login/forgot·/login/reset)의 틀 — 화면마다 하나
   'src/app/invite/[token]/page.tsx': 1,
   'src/app/not-found.tsx': 1,
+  'src/components/errors/ModuleOffSwap.tsx': 1,         // 404 본문 자리의 꺼진 모듈 안내 — not-found 의 h1 을 대신 그린다(둘 중 하나만 — 한 화면에 하나)
   'src/components/errors/StandaloneError.tsx': 1,       // 셸 밖 오류 화면(src/app/error.tsx·global-error.tsx 가 같이 쓴다 — 한 화면에 하나)
 }
 describe('page-h1', () => {

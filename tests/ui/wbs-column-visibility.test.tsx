@@ -88,7 +88,7 @@ describe('WbsGanttSheet — 담당~계획% 열 숨기기', () => {
     expect(toggle().getAttribute('aria-expanded')).toBe('true')
     expect(toggle().textContent).toContain('wbs.hidePlanningColumns')
     HIDEABLE_COLS.forEach(key => expect(nodesFor(key)).toHaveLength(2))
-    expect(sheet().style.getPropertyValue('--wbs-left-w')).toBe('1198px')
+    expect(sheet().style.getPropertyValue('--wbs-left-w')).toBe('1238px')
   })
 
   it('숨기기를 누르면 지정한 7개 열만 감추고 경계 열과 간트 시작 위치를 당긴다', async () => {
@@ -108,6 +108,6 @@ describe('WbsGanttSheet — 담당~계획% 열 숨기기', () => {
     expect(toggle().getAttribute('aria-expanded')).toBe('true')
     expect(toggle().textContent).toContain('wbs.hidePlanningColumns')
     HIDEABLE_COLS.forEach(key => expect(nodesFor(key)).toHaveLength(2))
-    expect(sheet().style.getPropertyValue('--wbs-left-w')).toBe('1198px')
+    expect(sheet().style.getPropertyValue('--wbs-left-w')).toBe('1238px')
   })
 })

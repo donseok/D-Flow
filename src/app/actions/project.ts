@@ -27,6 +27,7 @@ import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, ki
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
+import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 
 export async function listProjects() {
   return (await listProjectsWithState()).projects
@@ -151,7 +152,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   if (!name) return invalidInput(t('srv.project.enterProjectName'))
   // 한쪽만 있어도 형식·실재를 본다 — 그냥 넘기면 RPC 의 22008(표에 없는 토큰)이 '설정을 불러오지 못해'로 나간다
   if ([input.startDate, input.endDate].some((d) => d && (typeof d !== 'string' || !isValidIsoDate(d)))) return invalidInput(t('err.dateFormatNotValid'))
-  if (!isValidDateRange(input.startDate || null, input.endDate || null)) return invalidInput(t('srv.project.endDateCannotEarlierStart'))
+  if (!isValidDateRange(input.startDate || null, input.endDate || null)) return invalidInput(dateOrderMessage(t))
   const labels = settingDef('project', 'core.level_labels')!.parse(input.levelLabels)
   if (!labels.ok) return invalidInput(configText(t, CONFIG_MESSAGES.CONFIG_INVALID), [{ key: 'core.level_labels', message: labels.error }])
   const copyFrom = input.copyFromProjectId ?? null
@@ -338,7 +339,7 @@ export async function updateProject(
       if (start === undefined) start = (cur.start_date as string | null) ?? null
       if (end === undefined) end = (cur.end_date as string | null) ?? null
     }
-    if (!isValidDateRange(start, end)) return { ok: false, error: t('srv.project.endDateCannotEarlierStart') }
+    if (!isValidDateRange(start, end)) return { ok: false, error: dateOrderMessage(t) }
   }
   const { error } = await sb.from('projects').update(patch).eq('id', projectId)
   if (error) return { ok: false, error: failWith('updateProject', error, t(ERR_PROJECT_SAVE)) }

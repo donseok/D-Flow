@@ -14,7 +14,7 @@ export const WBS_ACTION_ERRORS = {
   weightMin: '가중치는 0 이상이어야 함',
   nameRequired: '이름을 입력하세요',
   nameTooLong: '이름은 200자 이하로 입력하세요',
-  subActSibling: 'SUB-ACT 형제로는 일반 항목을 추가할 수 없습니다',
+  subActSibling: '팀 분담 항목이 있는 곳에는 일반 항목을 추가할 수 없습니다',
   itemLookup: '항목을 불러오지 못했습니다 — 잠시 후 다시 시도하세요.',
   childLookup: '하위 항목을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.',
   ownerLookup: '담당을 확인하지 못했습니다 — 잠시 후 다시 시도하세요.',

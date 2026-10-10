@@ -7,7 +7,7 @@ describe('levelBadge (§4.4 depth 기반)', () => {
     expect(levelBadgeText(0, false, LEGACY_3)).toBe('Phase')
     expect(levelBadgeText(1, false, LEGACY_3)).toBe('Task')
     expect(levelBadgeText(2, false, LEGACY_3)).toBe('Activity')
-    expect(levelBadgeText(2, true, LEGACY_3)).toBe('SUB-ACT')
+    expect(levelBadgeText(2, true, LEGACY_3)).toBe('팀 분담')
   })
   it('라벨이 프로토타입 이름이어도 그 글자 그대로', () => {
     expect(levelBadgeText(0, false, ['constructor', 'toString'])).toBe('constructor')

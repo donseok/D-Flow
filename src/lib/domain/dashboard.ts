@@ -45,7 +45,7 @@ export function scheduleModel(input: {
   if (overallActual >= 100) return { ...base, projectedEnd: null, slipDays: null, signal: 'green', label: 'done' }
   // 조기 가드 — SPI 불안정 구간은 정직하게 회색(초록 아님)
   const earlyFloor = Math.max(14, Math.round(totalDays * 0.15))
-  if (overallPlanned < 5 || elapsed < earlyFloor) {
+  if (overallPlanned < SPI_MIN_PLANNED_PCT || elapsed < earlyFloor) {
     return { ...base, projectedEnd: null, slipDays: null, signal: 'neutral', label: 'early' }
   }
   const spi = overallActual / overallPlanned            // planned ≥ 5 → 안전
@@ -108,13 +108,17 @@ export function dueSoonLeaves(leaves: ComputedItem[], today: string, days: numbe
     .sort((a, b) => (a.plannedEnd! < b.plannedEnd! ? -1 : a.plannedEnd! > b.plannedEnd! ? 1 : 0))
 }
 
+/** SPI·편차를 내는 계획의 바닥(%) — 그 밑은 분모가 너무 작아 수가 흔들린다(조기 가드). 추세(trend.ts)의 SPI·일정 모델·아래 편차가 같은 값을 쓴다 */
+export const SPI_MIN_PLANNED_PCT = 5
+
 /**
- * 화면에 보일 현재 편차(실적 − 계획, %p) — 계획이 아직 0 이면 null(화면은 '—').
+ * 화면에 보일 현재 편차(실적 − 계획, %p) — 계획이 SPI 를 내는 바닥(5%)에 못 미치면 null(화면은 '—').
  * SPI(실적÷계획)를 낼 수 없는 때에 편차만 '+15.0%p' 로 보이면 한 카드 안에서 말이 갈린다(사용자 테스트 BUG-34): 견줄 계획이 없으면
- * 앞섬·뒤처짐을 말할 수 없다. 계획이 0 보다 크면 그대로 낸다 — 신호·보고서가 쓰는 편차 계산(buildExecSummary)은 바꾸지 않는다.
+ * 앞섬·뒤처짐을 말할 수 없다. 처음에는 계획 0 만 막았는데, SPI 는 계획 5% 미만에서도 '—' 라 0 초과 5 미만 구간에서 같은 어긋남이 남았다 —
+ * SPI 와 같은 바닥으로 맞춘다. 신호·보고서가 쓰는 편차 계산(buildExecSummary)은 바꾸지 않는다.
  */
 export function varianceOrNull(actual: number, planned: number): number | null {
-  return planned > 0 ? round1(actual - planned) : null
+  return planned >= SPI_MIN_PLANNED_PCT ? round1(actual - planned) : null
 }
 
 /* ── 신호 경계 단일 출처 — SpiPanel(게이지 색)·riskSignals(위험 신호 엔진)가 이 값을 임포트한다.

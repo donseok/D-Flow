@@ -26,6 +26,7 @@ import { projectTeams } from '@/lib/teams/source'
 import { teamNameKey } from '@/lib/domain/teamName'
 import { serverTranslator } from '@/lib/i18n/server'
 import { fill } from '@/lib/i18n/translate'
+import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 
 /** 변경 이력 작성자의 이 프로젝트 권한 — 명단 access_role, 활성 명단 행이 없으면 viewer. */
 export type ChangeActorRole = 'admin' | 'member' | 'viewer'
@@ -558,7 +559,7 @@ export async function updateWbsFields(
   const ne = fields.plannedEnd === undefined ? undefined : (fields.plannedEnd || null)
   const finalStart = ns === undefined ? item.planned_start : ns
   const finalEnd = ne === undefined ? item.planned_end : ne
-  if (finalStart && finalEnd && finalStart > finalEnd) return { ok: false, error: tr('srv.wbs.startDateLaterEndDate') }
+  if (finalStart && finalEnd && finalStart > finalEnd) return { ok: false, error: dateOrderMessage(tr) }
   if ((ns !== undefined || ne !== undefined) && (!finalStart || !finalEnd)) {
     const { data: linked, error: linkedErr } = await sb
       .from('task_dependencies')

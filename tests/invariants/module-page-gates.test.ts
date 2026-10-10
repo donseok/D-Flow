@@ -25,6 +25,7 @@ const EXCLUDED: Record<string, string> = {
   'src/app/(app)/(global)/admin/ui-states/page.tsx': '플랫폼 진단 — 모듈 밖(SP3b D16)',
   'src/app/(app)/(global)/admin/workspaces/page.tsx': '플랫폼 관리(워크스페이스 목록·생성) — 모듈 밖',
   'src/app/(app)/w/[slug]/projects/page.tsx': '셸(프로젝트 목록)',
+  'src/app/(app)/p/[projectId]/page.tsx': '리졸버 — 프로젝트 뿌리 경로를 개요(core)로 redirect. 숨김 판정은 스스로 requireModulePage 를 부른다',
   'src/app/(app)/w/[slug]/settings/page.tsx': '워크스페이스 관리 화면 — 모듈을 허용하는 문이어서 자기 모듈 관문 밖(§5.2)',
   'src/app/(app)/w/[slug]/settings/integrations/page.tsx': '워크스페이스 연동 자격증명 관리 — 모듈 밖',
   'src/app/(app)/w/[slug]/page.tsx': '셸(워크스페이스 홈) — 모듈 밖, 원천마다 로더가 모듈을 본다(D39)',

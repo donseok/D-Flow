@@ -69,7 +69,7 @@ export function RenameWorkspaceDialog({ workspace, onClose, onRenamed }: {
       }>
       <form onSubmit={submit} className="space-y-3" noValidate>
         <Field label={t('platform.ws.fieldName')} description={fill(t('platform.ws.renameSlugNote'), { slug: workspace.slug })} error={error}>
-          {(c) => <input {...c} data-rename-input value={name} onChange={(e) => setName(e.target.value)} maxLength={WORKSPACE_NAME_MAX} autoComplete="off" autoFocus />}
+          {(c) => <input {...c} data-rename-input value={name} onChange={(e) => { setName(e.target.value); setError(null) }} maxLength={WORKSPACE_NAME_MAX} autoComplete="off" autoFocus />}
         </Field>
       </form>
     </Modal>

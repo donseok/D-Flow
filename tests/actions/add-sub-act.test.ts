@@ -152,7 +152,7 @@ describe('addSubAct 가드 ① — 대상은 리프여야 한다', () => {
       { id: 'child-1', parent_id: 'act-1', sort_order: 1, is_owner_split: false },
     ]
     const r = await addSubAct('act-1', 'PMO', 'primary')
-    expect(r).toEqual({ ok: false, error: 'SUB-ACT가 아닌 하위 항목이 있는 곳에는 추가할 수 없습니다' })
+    expect(r).toEqual({ ok: false, error: '팀 분담 항목이 아닌 하위 항목이 있는 곳에는 추가할 수 없습니다' })
     // 거부는 insert 이전 — wbs_items 는 늘지 않는다.
     expect(db.wbs_items).toHaveLength(2)
   })
@@ -221,7 +221,7 @@ describe('addSubAct 가드 ②', () => {
         planned_start: null, planned_end: null, is_owner_split: true },
     ]
     const r = await addSubAct('act-3', 'PMO', 'primary')
-    expect(r).toEqual({ ok: false, error: 'SUB-ACT 아래에는 추가할 수 없습니다' })
+    expect(r).toEqual({ ok: false, error: '팀 분담 항목 아래에는 추가할 수 없습니다' })
     expect(db.wbs_items).toHaveLength(1)
   })
 })
@@ -258,7 +258,7 @@ describe('addWbsItem 대칭 가드 — SUB-ACT 형제가 있으면 일반 항목
       { id: 'sib-1', project_id: 'p1', parent_id: 'parent-1', sort_order: 1, is_owner_split: true },
     ]
     const r = await addWbsItem('p1', 'parent-1', '새 항목')
-    expect(r).toEqual({ ok: false, error: 'SUB-ACT 형제로는 일반 항목을 추가할 수 없습니다' })
+    expect(r).toEqual({ ok: false, error: '팀 분담 항목이 있는 곳에는 일반 항목을 추가할 수 없습니다' })
     expect(db.wbs_items).toHaveLength(1)
   })
 

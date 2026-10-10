@@ -272,7 +272,7 @@ describe('WbsGanttSheet — 진척 돋보기', () => {
     expect(field('path').textContent).toBe('1')
     expect(field('owners').textContent).toContain('PMO')
     expect(field('status').textContent).toContain('status.in_progress')
-    expect(field('schedule').textContent).toContain('26.07.01 ~ 26.07.10')
+    expect(field('schedule').textContent).toContain('2026-07-01 ~ 2026-07-10')
     // 날짜는 돋보기 핵심 정보 — 본문보다 큰 강조 크기(text-xs 로 회귀 금지, 2026-08-21 피드백)
     expect(field('schedule').className).toContain('text-base')
     expect(field('schedule').className).toContain('font-semibold')
@@ -295,11 +295,11 @@ describe('WbsGanttSheet — 진척 돋보기', () => {
     expect((actualBar.firstElementChild as HTMLElement).style.width).toBe('48%')
   })
 
-  it('SUB-ACT(isOwnerSplit=true) 항목을 hover 하면 카드 배지가 SUB-ACT 로 뜬다', async () => {
+  it('SUB-ACT(isOwnerSplit=true) 항목을 hover 하면 카드 배지가 팀 분담 배지(wbs.badge.subAct)로 뜬다', async () => {
     await enable()
     hoverRow('s1')
 
     expect(card()?.dataset.itemId).toBe('s1')
-    expect(card()!.querySelector('.lvl-badge')?.textContent).toBe('SUB-ACT')
+    expect(card()!.querySelector('.lvl-badge')?.textContent).toBe('wbs.badge.subAct')
   })
 })

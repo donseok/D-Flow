@@ -331,8 +331,12 @@ describe('[BUG-34] varianceOrNull — 계획이 0 이면 편차를 내지 않는
     expect(varianceOrNull(15, 0)).toBeNull()
     expect(varianceOrNull(0, 0)).toBeNull()
   })
-  it('계획이 0 보다 크면 실적 − 계획(소수 1자리)', () => {
-    expect(varianceOrNull(15, 0.1)).toBe(14.9)
+  it('계획이 0 초과 5% 미만이어도 null — SPI 가 — 인 구간과 같은 바닥(BUG-34 잔여)', () => {
+    expect(varianceOrNull(15, 0.1)).toBeNull()
+    expect(varianceOrNull(3, 4.9)).toBeNull()
+  })
+  it('계획이 5% 이상이면 실적 − 계획(소수 1자리)', () => {
+    expect(varianceOrNull(15, 5)).toBe(10)
     expect(varianceOrNull(6.3, 8.3)).toBe(-2)
   })
 })

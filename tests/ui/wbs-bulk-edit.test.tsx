@@ -190,7 +190,7 @@ describe('WbsBulkEditDialog UI (UX-08, D6-§8-bulk)', () => {
     })
 
     const alert = document.querySelector('[role="alert"]')
-    expect(alert?.textContent).toContain('시작일이 종료일보다 늦을 수 없습니다.')
+    expect(alert?.textContent).toContain('시작일은 종료일보다 늦을 수 없습니다.')
     expect(wbsBulkActions.bulkUpdateWbsItems).not.toHaveBeenCalled()
   })
 

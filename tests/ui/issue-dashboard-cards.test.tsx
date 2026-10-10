@@ -83,10 +83,10 @@ describe('IssueStatusCard', () => {
     expect(html).toContain('href="/p/p1/issues"')
   })
 
-  it('캡션 기준일은 다른 날짜와 같은 서식(26.08.28)', () => {
+  it('캡션 기준일은 다른 날짜와 같은 서식(2026-08-28)', () => {
     const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} timeZone="Asia/Seoul" />)
-    expect(html).toContain('기준일 26.08.28')
-    expect(html).not.toContain('기준일 2026-08-28')
+    expect(html).toContain('기준일 2026-08-28')
+    expect(html).not.toContain('기준일 26.08.28')   // 2자리 연도 표기는 쓰지 않는다(BUG-20)
   })
 
   it('이슈 0건이면 빈 상태 문구만 — KPI 타일을 그리지 않는다', () => {
@@ -129,8 +129,8 @@ describe('IssueTrendCard', () => {
 
   it('x축에 첫 주와 마지막 주 시작일을 표기한다(12주)', () => {
     const html = renderToStaticMarkup(<IssueTrendCard issues={ISSUES} today={TODAY} weekStart={MON_RULES} timeZone="Asia/Seoul" />)
-    expect(html).toContain('26.06.08')
-    expect(html).toContain('26.08.24')
+    expect(html).toContain('2026-06-08')
+    expect(html).toContain('2026-08-24')
   })
 
   it('전량 해결(백로그 0)이어도 미해결 라벨은 축 위에 남고 면은 그려지지 않는다', () => {
@@ -176,7 +176,7 @@ describe('IssueQueueCard', () => {
 
   it('행 aria-label 에 심각도와 마감일이 들어간다(색·위치 없이도 읽히게)', () => {
     const html = renderToStaticMarkup(<IssueQueueCard issues={ISSUES} projectId="p1" today={TODAY} severities={SEVERITIES} />)
-    expect(html).toMatch(/aria-label="PI-00-001 작업지시 실적 수기 입력 지연, 높음, 14일 지연, 26\.08\.14"/)
+    expect(html).toMatch(/aria-label="PI-00-001 작업지시 실적 수기 입력 지연, 높음, 14일 지연, 2026-08-14"/)
   })
 
   it('상한을 넘으면 +N 과 이슈관리 링크를 보인다 — 조용히 자르지 않는다', () => {

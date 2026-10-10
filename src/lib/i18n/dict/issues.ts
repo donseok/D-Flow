@@ -165,7 +165,6 @@ export const issuesKo = {
   'issue.attach.count': '첨부 {n}개',
   'issue.attach.limit': '파일당 {mb}MB · 이슈당 {n}개까지',
   'issue.err.titleRequired': '제목을 입력하세요.',
-  'issue.err.dateRange': '시작일은 목표 해결일보다 늦을 수 없습니다.',
   'issue.err.areaRequired': '영역을 선택하세요.',
   'issue.err.majorRequired': 'Major Process를 입력하세요.',
   'issue.err.majorTooLong': 'Major Process는 {n}자 이하여야 합니다.',

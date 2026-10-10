@@ -205,7 +205,7 @@ describe('IssueFormModal 회의록 초안', () => {
     act(() => save.click())
 
     expect(onCreate).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('issue.err.dateRange')
+    expect(document.body.textContent).toContain('common.err.dateOrder')
   })
 
   it('저장 요청 중에는 취소로 닫거나 같은 요청을 중복 전송하지 않는다', async () => {

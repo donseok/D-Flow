@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSettingsCommandOutcome, updateWorkspaceSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { NAV_GROUP_OF, NAV_ITEM_IDS, type NavGroupId, type NavItemId } from '@/lib/nav/ids'
+import { NAV_DEFAULT_LABEL_KEY } from '@/lib/nav/registry'
 import type { NavMenuSetting } from '@/lib/settings/defs/workspace'
 import { newUuid } from '@/lib/domain/uuid'
 import { SettingsSaveBar } from './SettingsSaveBar'
@@ -18,15 +19,8 @@ const GROUPS: readonly { id: NavGroupId; label: DictKey }[] = [
   { id: 'p.collab', label: 'settings.menu.group.pCollab' }, { id: 'p.team', label: 'settings.menu.group.pTeam' },
   { id: 'p.settings', label: 'settings.menu.group.pSettings' },
 ]
-const NAMES: Record<NavItemId, DictKey> = {
-  'ws.home': 'nav.home', 'ws.my_work': 'agents.scope.mine', 'ws.projects': 'workspace.projects',
-  'ws.meetings': 'nav.meetings', 'ws.minutes': 'nav.minutes', 'ws.agents': 'nav.projectAgents',
-  'ws.portfolio': 'nav.portfolio', 'ws.usage': 'nav.usage', 'ws.members': 'settings.menu.item.members', 'ws.teams': 'att.col.team', 'ws.settings': 'nav.settings',
-  'ws.workspaces': 'nav.workspaces', 'ws.llm': 'nav.llm', 'ws.ui_states': 'settings.menu.item.uiStates',
-  'p.dashboard': 'settings.menu.item.dashboard', 'p.wbs': 'nav.wbs', 'p.issues': 'nav.issues', 'p.weekly': 'nav.weekly',
-  'p.meetings': 'nav.meetings', 'p.wiki': 'settings.menu.item.wiki', 'p.announcements': 'settings.menu.item.announcements',
-  'p.members': 'settings.menu.item.members', 'p.attendance': 'settings.menu.item.attendance', 'p.agents': 'nav.projectAgents', 'p.settings': 'nav.settings',
-}
+// 기본 이름은 사이드바와 같은 원천(nav/registry 의 NAV_DEFAULT_LABEL_KEY)에서 꺼낸다 — 여기 표를 따로 두지 않는다(BUG-25)
+const nameKey = (id: NavItemId): DictKey => NAV_DEFAULT_LABEL_KEY[id]
 const EMPTY: NavMenuSetting = { order: [], labels: {} }
 
 function ordered(menu: NavMenuSetting): NavItemId[] {
@@ -119,16 +113,16 @@ export function MenuOrderEditor({ workspaceId, revision, initialMenu, invalidRea
       <h3 className="mb-3 text-sm font-semibold text-fg">{t(group.label)}</h3>
       <div className="space-y-2">
         {displayOrder.filter(id => NAV_GROUP_OF[id] === group.id).map((id, index, siblings) => <div key={id} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-subtle p-2">
-          <span className="min-w-24 text-sm text-fg">{t(NAMES[id])}</span>
+          <span className="min-w-24 text-sm text-fg">{t(nameKey(id))}</span>
           <span className="text-meta text-fg-muted">{id}</span>
-          <input aria-label={t('settings.menu.nameOf').replace('{id}', t(NAMES[id]))} className="app-input ml-auto w-36 text-sm" maxLength={20}
-            placeholder={t(NAMES[id])} value={draft.labels[id] ?? ''} disabled={pending || !!uncertainPatch}
+          <input aria-label={t('settings.menu.nameOf').replace('{id}', t(nameKey(id)))} className="app-input ml-auto w-36 text-sm" maxLength={20}
+            placeholder={t(nameKey(id))} value={draft.labels[id] ?? ''} disabled={pending || !!uncertainPatch}
             onChange={event => { const value = event.target.value; setDraft(current => {
               const labels = { ...current.labels }; if (value) labels[id] = value; else delete labels[id]
               return { ...current, labels }
             }) }} />
-          <button type="button" className="btn btn-ghost" aria-label={t('settings.portalWidgets.up').replace('{id}', t(NAMES[id]))} disabled={pending || !!uncertainPatch || index === 0} onClick={() => move(id, -1)}>↑</button>
-          <button type="button" className="btn btn-ghost" aria-label={t('settings.portalWidgets.down').replace('{id}', t(NAMES[id]))} disabled={pending || !!uncertainPatch || index === siblings.length - 1} onClick={() => move(id, 1)}>↓</button>
+          <button type="button" className="btn btn-ghost" aria-label={t('settings.portalWidgets.up').replace('{id}', t(nameKey(id)))} disabled={pending || !!uncertainPatch || index === 0} onClick={() => move(id, -1)}>↑</button>
+          <button type="button" className="btn btn-ghost" aria-label={t('settings.portalWidgets.down').replace('{id}', t(nameKey(id)))} disabled={pending || !!uncertainPatch || index === siblings.length - 1} onClick={() => move(id, 1)}>↓</button>
         </div>)}
       </div>
     </section>)}

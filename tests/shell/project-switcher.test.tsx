@@ -24,6 +24,11 @@ describe('ProjectSwitcher(★6, D41)', () => {
     fireEvent.change(input, { target: { value: 'bor' } })
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([expect.stringContaining('Borealis'), expect.stringContaining('Borealis')])
   })
+  it('[추가 B] 항목에는 이름만 — 상태(준비·진행·완료·지연)를 보이지 않는다(셸 목록은 날짜만으로 판정해 프로젝트 목록·홈과 어긋났다)', () => {
+    render(<ProjectSwitcher currentProjectId="p1" projects={[P('p1', 'Aurora', 'ready'), P('p2', 'Borealis', 'overdue')]} favoriteIds={[]} recentIds={[]} />)
+    fireEvent.focus(screen.getByRole('combobox'))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Aurora', 'Borealis'])
+  })
   it('목록에 없는 즐겨찾기·최근 id 는 그리지 않는다(다른 워크스페이스·숨김 — W14)', () => {
     render(<ProjectSwitcher currentProjectId="p1" projects={projects} favoriteIds={['gone']} recentIds={['also-gone']} />)
     const input = screen.getByRole('combobox')

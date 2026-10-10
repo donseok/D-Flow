@@ -28,7 +28,7 @@ import type {
 import { WikiItemActions } from './WikiItemActions'
 import { WikiTrackedLink } from './WikiTrackedLink'
 import { MINUTES_PERMALINK_BASE } from '@/lib/minutes/permalink'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatDayIn, formatStampIn } from '@/lib/i18n/format'
 
 /**
  * 회의록 원문 블록 링크. lib/minutes/source의 minuteSourceHref와 같은 형식이지만 직접 만든다.
@@ -225,17 +225,9 @@ export function formatWikiDate(
   timeZone: string,
 ): string {
   if (!value) return ''
-  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
-  const parsed = new Date(dateOnly ? `${value}T00:00:00Z` : value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat(KO_LOCALE, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    ...(includeTime ? { hour: '2-digit', minute: '2-digit' } : {}),
-    // date-only 는 변환하지 않는다(UTC 로 그대로 찍기 — D-21d), instant 는 프로젝트 tz
-    timeZone: dateOnly ? 'UTC' : timeZone,
-  }).format(parsed)
+  // date-only 는 변환하지 않는다(그대로 찍기 — D-21d), instant 는 프로젝트 tz. 꼴은 화면 날짜의 한 꼴(format.ts)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  return includeTime ? formatStampIn(value, timeZone, value) : formatDayIn(value, timeZone, value)
 }
 
 function sourceHref(source: WikiSource, base: string): string {

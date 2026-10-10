@@ -185,7 +185,7 @@ describe('AssistantChat v2 스트림', () => {
     })
     expect(container.textContent).toContain('후속 답변')
     // 기준 시각은 응답이 실어 온 요청 범위 tz 로 찍고 그 이름을 붙인다(SP5 계획 D-21b)
-    expect(container.textContent).toContain('기준 26. 7. 19.')
+    expect(container.textContent).toContain('기준 2026-07-19')
     expect(container.textContent).toContain('(Asia/Seoul)')
   })
 })

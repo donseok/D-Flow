@@ -17,7 +17,7 @@ import { createBrowserClient } from '@/lib/supabase/client'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useToast } from '@/components/ui/Toast'
 import { Modal } from '@/components/ui/Modal'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatDayIn } from '@/lib/i18n/format'
 
 const BUCKET = 'minutes'
 
@@ -25,9 +25,7 @@ type PolicyState = { kind: 'loading' } | { kind: 'ok'; policy: AttachmentPolicy 
 type Preview = { fileName: string; url: string; kind: AttachmentPreviewKind }
 
 function fileDate(value: string, timeZone: string | null): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime()) || timeZone === null) return '—'
-  return new Intl.DateTimeFormat(KO_LOCALE, { year: 'numeric', month: 'short', day: 'numeric', timeZone }).format(date)
+  return formatDayIn(value, timeZone)
 }
 
 /**

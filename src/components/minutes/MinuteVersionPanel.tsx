@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { AlertTriangle, ChevronDown, ChevronUp, Download, FileText, History } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatStampIn } from '@/lib/i18n/format'
 
 export type MinuteVersionListItem = {
   id: string
@@ -35,17 +35,8 @@ export type MinuteVersionPanelProps = {
 }
 
 function versionDate(value: string, timeZone: string | null) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  if (timeZone === null) return '—'
-  return new Intl.DateTimeFormat(KO_LOCALE, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone,
-  }).format(date)
+  if (Number.isNaN(new Date(value).getTime())) return value
+  return formatStampIn(value, timeZone)
 }
 
 export function MinuteVersionPanel({

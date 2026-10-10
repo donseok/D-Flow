@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toast'
 import { updateProject } from '@/app/actions/project'
 import { isValidDateRange } from '@/lib/domain/validate'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 
 export function ProjectInfoEditButton({
   projectId, name, description, startDate, endDate,
@@ -22,7 +23,7 @@ export function ProjectInfoEditButton({
   const { toast } = useToast()
   const { t } = useLocale()
   const [open, setOpen] = useState(false)
-  const [pending, start] = useTransition()
+  const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
     name, description: description ?? '', start_date: startDate ?? '', end_date: endDate ?? '',
@@ -31,21 +32,31 @@ export function ProjectInfoEditButton({
   const save = () => {
     setError(null)
     if (!isValidDateRange(form.start_date || null, form.end_date || null)) {
-      setError(t('settings.invalidDateRange'))
+      setError(dateOrderMessage(t))
       return
     }
-    start(async () => {
-      const res = await updateProject(projectId, {
-        name: form.name,
-        description: form.description,
-        start_date: form.start_date || null,
-        end_date: form.end_date || null,
-      })
+    // 전환(useTransition) 안에서 액션을 기다린 뒤 refresh 를 부르면 이 화면에서는 갱신이 붙지 않았다(BUG-06 — 저장은 됐는데 카드가 옛 값).
+    // 액션은 그냥 기다리고, 끝난 뒤 전환 밖에서 refresh 를 던진다.
+    setPending(true)
+    void (async () => {
+      let res: { ok: boolean; error?: string }
+      try {
+        res = await updateProject(projectId, {
+          name: form.name,
+          description: form.description,
+          start_date: form.start_date || null,
+          end_date: form.end_date || null,
+        })
+      } catch {
+        res = { ok: false, error: t('settings.saveFailed') }
+      } finally {
+        setPending(false)
+      }
       if (!res.ok) { setError(res.error ?? t('settings.saveFailed')); return }
       setOpen(false)
       toast({ title: t('settings.infoSaved'), variant: 'success' })
       router.refresh()
-    })
+    })()
   }
 
   return (

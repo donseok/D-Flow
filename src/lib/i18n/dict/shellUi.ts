@@ -38,11 +38,6 @@ export const shellUiKo = {
   'shell.presence.title': '함께 보는 중: {names}',
   'shell.presence.me': '{name} (나)',
   // ProjectSwitcher.tsx
-  'shell.status.ready': '준비',
-  'shell.status.active': '진행',
-  'shell.status.done': '완료',
-  'shell.status.overdue': '지연',
-  'shell.status.unknown': '확인 불가',
   'shell.switcher.degraded': '설정을 불러오지 못해 개요를 열었습니다',
   'shell.switcher.favorites': '즐겨찾기',
   'shell.switcher.recent': '최근 방문',

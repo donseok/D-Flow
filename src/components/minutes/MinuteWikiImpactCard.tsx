@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { AlertTriangle, ArrowRight, BookOpen, CheckCircle2, Clock3, LoaderCircle } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatStampIn } from '@/lib/i18n/format'
 
 export type MinuteWikiSyncStatus =
   | 'unlinked'
@@ -112,17 +112,8 @@ function statusDescription(status: MinuteWikiSyncStatus) {
 }
 
 function processedDate(value: string, timeZone: string | null) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  if (timeZone === null) return '—'
-  return new Intl.DateTimeFormat(KO_LOCALE, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone,
-  }).format(date)
+  if (Number.isNaN(new Date(value).getTime())) return value
+  return formatStampIn(value, timeZone)
 }
 
 export function MinuteWikiImpactCard({

@@ -9,6 +9,7 @@ import { isValidDateRange } from '@/lib/domain/validate'
 import { validateLevelSettings } from '@/lib/domain/levelSettings'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { newUuid } from '@/lib/domain/uuid'
+import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 
 /**
  * 워크스페이스 홈의 "새 프로젝트 시작" 트리거 + 다이얼로그.
@@ -117,7 +118,7 @@ export function NewProjectModal({
     const trimmed = name.trim()
     if (!trimmed || busy || (mode === 'copy' && !sourceReady)) return
     if (!isValidDateRange(start || null, end || null)) {
-      setError(t('home.errEndBeforeStart'))
+      setError(dateOrderMessage(t))
       return
     }
     const labels = levels.split(/[,>\n]/).map(s => s.trim()).filter(Boolean)

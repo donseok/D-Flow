@@ -62,6 +62,7 @@ import {
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
+import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 import { denied } from '@/lib/i18n/serverText'
 
 export interface IssueActionResult {
@@ -476,7 +477,7 @@ function validateInput(t: ServerTranslate, input: IssueInput, mode: IssueInputMo
     return { ok: false, error: t('srv.issues.targetResolutionDateFormatNot') }
   }
   if (!validateIssueDateRange(input.startDate, input.dueDate)) {
-    return { ok: false, error: t('srv.issues.issueStartDateCannotLater') }
+    return { ok: false, error: dateOrderMessage(t, { end: 'issue.form.due' }) }
   }
 
   const analysis = input.analysis === null ? null : normalizeIssueAnalysisInput(

@@ -68,17 +68,17 @@ describe('WBS 계산·표시 묶음 — 화면', () => {
   describe('[BUG-12] 일정 롤업 — 표·간트', () => {
     it('일정 없는 상위 행은 하위의 min/max 를 연한 글자 + 툴팁으로 보인다', async () => {
       await sheet()
-      expect(cell('a', 'pstart').textContent).toBe('26.10.12')
-      expect(cell('a', 'pend').textContent).toBe('26.10.16')
+      expect(cell('a', 'pstart').textContent).toBe('2026-10-12')
+      expect(cell('a', 'pend').textContent).toBe('2026-10-16')
       expect(cell('a', 'pstart').getAttribute('data-derived')).toBe('true')
       expect(cell('a', 'pstart').getAttribute('title')).toBe('하위 작업에서 계산됨')
       // 두 단계 위(1. 착수준비)는 두 하위 전체: 10/12 ~ 27/3/10
-      expect([cell('p', 'pstart').textContent, cell('p', 'pend').textContent]).toEqual(['26.10.12', '27.03.10'])
+      expect([cell('p', 'pstart').textContent, cell('p', 'pend').textContent]).toEqual(['2026-10-12', '2027-03-10'])
     })
     it('직접 입력한 행은 파생 표시가 없다', async () => {
       await sheet()
       expect(cell('a1', 'pstart').getAttribute('data-derived')).toBeNull()
-      expect(cell('a1', 'pstart').textContent).toBe('26.10.12')
+      expect(cell('a1', 'pstart').textContent).toBe('2026-10-12')
     })
     it('간트에 요약 막대가 그려진다 — 파생 막대는 표시(옅게 + 툴팁)가 붙는다', async () => {
       await sheet()
@@ -201,7 +201,7 @@ describe('[BUG-23·05·12] 상세 패널 머리·개요', () => {
   })
   it('파생 일정은 계산된 값 + "하위 작업에서 계산됨", 기간 밖이면 그 안내', async () => {
     await mount(node({ id: 'i', name: '요약' }), { shown: { start: '2026-10-12', end: '2026-10-16', startDerived: true, endDerived: true }, numbers: new Map([['i', '1.1']]) })
-    expect(container.querySelector('[data-wbs-detail-schedule]')!.textContent).toBe('26.10.12 ~ 26.10.16')
+    expect(container.querySelector('[data-wbs-detail-schedule]')!.textContent).toBe('2026-10-12 ~ 2026-10-16')
     expect(container.querySelector('[data-wbs-detail-derived]')!.textContent).toBe('하위 작업에서 계산됨')
     expect(container.querySelector('[data-wbs-detail-number]')!.textContent).toBe('1.1')
     await mount(node({ id: 'i', name: '늦은 작업', plannedStart: '2027-03-01', plannedEnd: '2027-03-10' }), { outOfRange: true })

@@ -8,7 +8,7 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamLabel } from '@/components/app/TeamsProvider'
 import { SPEC_UPDATED_TOKEN } from '@/lib/domain/wbsSpecLog'
 import { t as translate, type DictKey } from '@/lib/i18n/dict'
-import { stampIn } from '@/lib/domain/calendar'
+import { formatStampIn } from '@/lib/i18n/format'
 import { useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
 import type { FieldDef } from '@/lib/domain/customFields'
 import { CUSTOM_LOG_PREFIX, formatCustomLogValue } from '@/lib/domain/customFieldValues'
@@ -38,11 +38,9 @@ function fmtValue(field: string, v: string | null, t: Tr): string {
   return field === 'actual_pct' ? `${v}%` : v
 }
 
-/** 'YYYY.MM.DD HH:mm' — 서버가 내려준 프로젝트 tz 의 벽시계(브라우저 tz 가 아니다 — 계획 P8, A-4 리뷰 N7) */
+/** 'YYYY-MM-DD HH:mm'(화면 날짜의 한 꼴) — 서버가 내려준 프로젝트 tz 의 벽시계(브라우저 tz 가 아니다 — 계획 P8, A-4 리뷰 N7) */
 function fmtAt(iso: string, timeZone: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return stampIn(timeZone, d).replace(/-/g, '.')
+  return formatStampIn(iso, timeZone, iso)
 }
 
 /** 저장 값(actorTeam)은 그때의 팀 code 다 — 글자만 지금의 팀 이름으로 보인다(목록 밖 팀은 code 그대로) */

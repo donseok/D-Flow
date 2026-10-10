@@ -35,11 +35,11 @@ describe('승인 큐 — 보고 시각이 프로젝트 tz 를 따른다', () => 
     orderId: 'o1', itemId: 'i1', code: 'T-1', name: '빌드', agent: 'alice', percent: 50, summary: '', links: [],
     reportedAt: AT, reportId: 'r1', assigneeMine: false, canManage: false, canApprove: false,
   }
-  it('서울 10. 4. / LA 10. 3.', () => {
+  it('서울 2026-10-04 / LA 2026-10-03', () => {
     render(<ApprovalQueue queue={[q]} projectId="p1" isAdmin={false} onHub={() => {}} onChanged={() => {}} timeZone="Asia/Seoul" />)
-    expect(host.textContent).toMatch(/2026\. 10\. 4\./)
+    expect(host.textContent).toContain('2026-10-04 08:30')
     render(<ApprovalQueue queue={[q]} projectId="p1" isAdmin={false} onHub={() => {}} onChanged={() => {}} timeZone="America/Los_Angeles" />)
-    expect(host.textContent).toMatch(/2026\. 10\. 3\./)
+    expect(host.textContent).toContain('2026-10-03 16:30')
   })
   it('showTimeZone — 달력 손상으로 UTC 로 찍을 때 카드 시각 꼬리에 tz 이름(허브 머리와 같은 표기, A-5 리뷰 O6/N3)', () => {
     render(<ApprovalQueue queue={[q]} projectId="p1" isAdmin={false} onHub={() => {}} onChanged={() => {}} timeZone="UTC" showTimeZone />)
@@ -100,26 +100,26 @@ describe('[RF1] DayPopover — date-only 의 요일은 브라우저 tz 와 무�
     it(`브라우저 tz ${tz} 에서 2026-10-04 는 일요일`, () => {
       process.env.TZ = tz          // Node 는 실행 중 TZ 대입을 반영한다 — 반영되지 않는 환경이어도 아래 단언은 isoDowOf(순수)라 같은 값이다
       render(<DayPopover anchor={{ date: '2026-10-04', rect: { top: 0, bottom: 10, left: 0 } }} count={2} onClose={() => {}}>x</DayPopover>)
-      expect(host.textContent).toContain('26.10.04')
+      expect(host.textContent).toContain('2026-10-04')
       expect(host.textContent).toMatch(/\(일\)/)
     })
   }
 })
 
 describe('A-4 리뷰 N7 — 브라우저 tz 로 찍던 표시 넷이 서버 tz 를 따른다', () => {
-  it('WBS 변경 이력 — 서울 2026.10.04 08:30 / LA 2026.10.03 16:30', () => {
+  it('WBS 변경 이력 — 서울 2026-10-04 08:30 / LA 2026-10-03 16:30', () => {
     const log = { id: 'l1', field: 'name', oldValue: 'a', newValue: 'b', at: AT, actorTeam: null, actorRole: null } as never
     render(<ChangeHistoryList logs={[log]} timeZone="Asia/Seoul" />)
-    expect(host.textContent).toContain('2026.10.04 08:30')
+    expect(host.textContent).toContain('2026-10-04 08:30')
     render(<ChangeHistoryList logs={[log]} timeZone="America/Los_Angeles" />)
-    expect(host.textContent).toContain('2026.10.03 16:30')
+    expect(host.textContent).toContain('2026-10-03 16:30')
   })
-  it('회의록 버전 — LA 면 10월 3일, 범위 달력을 못 읽으면(null) 시각 대신 —', () => {
+  it('회의록 버전 — LA 면 2026-10-03, 범위 달력을 못 읽으면(null) 시각 대신 —', () => {
     const v = { id: 'v1', versionNo: 1, createdAt: AT, createdByName: 'alice', fileName: 'a.md', title: null, bodyHash: 'h' } as never
     const expand = () => act(() => { [...host.querySelectorAll('button')].find(b => b.textContent?.includes('펼치기'))?.click() })
     render(<MinuteVersionPanel versions={[v]} currentVersionNo={1} timeZone="America/Los_Angeles" />)
     expand()
-    expect(host.textContent).toMatch(/10월 3일/)
+    expect(host.textContent).toContain('2026-10-03 16:30')
     act(() => root.unmount()); root = createRoot(host)
     render(<MinuteVersionPanel versions={[v]} currentVersionNo={1} timeZone={null} />)
     expand()

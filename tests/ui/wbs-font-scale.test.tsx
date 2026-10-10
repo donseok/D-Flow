@@ -351,7 +351,7 @@ describe('WbsGanttSheet — 표 글자 크기 3단계', () => {
     await hoverGanttBar()
 
     const baseline = layoutSnapshot()
-    expect(baseline.leftWidth).toBe('1198px')
+    expect(baseline.leftWidth).toBe('1238px')
     // 구분 열 삭제(2026-08-21) — 반납한 60px 는 작업명 열이 흡수(300→360)해 총폭은 동일하다.
     expect(baseline.headerWidths).toEqual([
       '44px',
@@ -359,8 +359,8 @@ describe('WbsGanttSheet — 표 글자 크기 3단계', () => {
       '128px',
       '76px',
       '150px',
-      '80px',
-      '80px',
+      '100px',   // 계획시작·계획종료 — 4자리 연도(YYYY-MM-DD)를 담는 폭(BUG-20)
+      '100px',
       '64px',
       '68px',
       '72px',

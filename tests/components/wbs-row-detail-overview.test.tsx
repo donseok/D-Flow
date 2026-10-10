@@ -89,8 +89,8 @@ describe('RowDetailPanel — 개요는 가로 2열', () => {
   it('값은 그대로 보인다 — 배치만 바뀌었지 항목이 사라지지 않았다', async () => {
     await render(computedItem({ weight: 3 }))
     const dl = container.querySelector('dl')!
-    expect(dl.textContent).toContain('26.08.31')
-    expect(dl.textContent).toContain('26.09.02')
+    expect(dl.textContent).toContain('2026-08-31')
+    expect(dl.textContent).toContain('2026-09-02')
     expect(dl.textContent).toContain('300%')
     expect(dl.textContent).toContain(realT('wbs.unassigned'))
   })

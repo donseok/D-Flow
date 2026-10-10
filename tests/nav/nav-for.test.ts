@@ -164,3 +164,22 @@ describe('navFor — 순수 함수: href·순수성', () => {
     expect(text).toMatch(/import type \{[^}]*NavMenuSetting[^}]*\} from '@\/lib\/settings\/registry'/)
   })
 })
+
+describe('[BUG-25] NAV_DEFAULT_LABEL_KEY — 메뉴 설정의 기본 이름과 사이드바 기본 라벨의 한 원천', () => {
+  it('모든 항목 id 에 기본 라벨 키가 있다', async () => {
+    const { NAV_DEFAULT_LABEL_KEY } = await import('@/lib/nav/registry')
+    const { NAV_ITEM_IDS } = await import('@/lib/nav/ids')
+    expect(Object.keys(NAV_DEFAULT_LABEL_KEY).sort()).toEqual([...NAV_ITEM_IDS].sort())
+  })
+  it('라벨 설정이 없을 때 navFor 가 내는 키와 같다', async () => {
+    const { NAV_DEFAULT_LABEL_KEY, navFor } = await import('@/lib/nav/registry')
+    const { MODULES } = await import('@/lib/modules/registry')
+    const caps = { isPlatformAdmin: true, isWorkspaceAdmin: true, isProjectAdmin: true, canViewUsage: true, canViewPortfolio: true, canCreateProject: true }
+    const effective = new Set(MODULES.map(m => m.id))
+    for (const scope of ['workspace', 'project'] as const) {
+      for (const item of navFor({ scope, base: '/x', effective, caps, menu: { order: [], labels: {} } }).flatMap(g => g.items)) {
+        expect(item.label).toEqual({ key: NAV_DEFAULT_LABEL_KEY[item.id] })
+      }
+    }
+  })
+})

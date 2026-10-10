@@ -4,7 +4,7 @@ import { computeTree, effectiveWeights, overallProgress } from './rollup'
 import { buildTree, collectLeaves, type BuildTreeOpts, type TreeNode } from './tree'
 import { isWorkingDay } from './calendar'
 import type { DayCal } from './progress'
-import { addDaysCal } from './dashboard'
+import { addDaysCal, SPI_MIN_PLANNED_PCT } from './dashboard'
 
 /** wbs_progress_snapshots 1행 (camelCase, 숫자 변환 완료 상태) */
 export interface SnapshotPoint { date: string; actual: number; planned: number }
@@ -177,7 +177,7 @@ export function buildTrend(input: {
 
   // SPI — 계획 5% 미만 시점 제외(scheduleModel 조기 가드와 동일 원칙)
   const spiSeries: SpiPoint[] = snaps
-    .filter(s => s.planned >= 5)
+    .filter(s => s.planned >= SPI_MIN_PLANNED_PCT)
     .map(s => ({ date: s.date, spi: Math.round((s.actual / s.planned) * 100) / 100 }))
   const currentSpi = spiSeries.length ? spiSeries[spiSeries.length - 1].spi : null
 

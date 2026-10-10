@@ -43,8 +43,9 @@ export function WorkspaceNameEditor({ workspaceId, slug, initialName }: { worksp
 
   return (
     <form onSubmit={submit} className="space-y-3" data-workspace-name-editor noValidate>
+      {/* 다시 입력하면 그 칸의 오류를 지운다 — 고친 뒤에도 옛 오류가 남지 않게(BUG-32). 저장할 때 다시 검증한다 */}
       <Field label={t('platform.ws.nameField.label')} description={t('platform.ws.nameField.desc').replace('{slug}', slug)} error={error}>
-        {(c) => <input {...c} value={name} onChange={(e) => { setName(e.target.value); setDone(false) }} maxLength={WORKSPACE_NAME_MAX} autoComplete="off" />}
+        {(c) => <input {...c} value={name} onChange={(e) => { setName(e.target.value); setDone(false); setError(null) }} maxLength={WORKSPACE_NAME_MAX} autoComplete="off" />}
       </Field>
       <div className="flex items-center gap-3">
         <button type="submit" className="btn btn-primary btn-sm" disabled={pending || !dirty}>

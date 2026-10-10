@@ -8,6 +8,7 @@ import { CustomFieldValuesEditor } from '@/components/fields/CustomFieldValuesEd
 // 진행 필드(상태·담당자·조치메모)는 멤버 전체, 전체 편집·삭제 버튼은 canEdit(작성자/pmo)만 노출 —
 // 서버 액션이 같은 규칙을 재검증한다(UI 노출은 편의일 뿐 보안 경계가 아니다).
 import { useEffect, useRef, useState, useTransition } from 'react'
+import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 import Link from 'next/link'
 import { IssueAreaSelect } from './IssueAreaSelect'
 import { policyNeedsArea } from '@/lib/issues/idPolicy'
@@ -490,6 +491,15 @@ export function IssueDetailModal({
 }
 
 /** 'AI 추천 일치' 안내 문구 — 세 분류 필드(mega/major/sub)가 같은 마크업을 공유한다. */
+/** 이슈 폼에서 검증 오류를 붙일 수 있는 칸 */
+type IssueField = 'title' | 'dates' | 'area' | 'major' | 'sub' | 'owner' | 'systems' | 'sourceType' | 'sourceDetail'
+
+/** 칸 바로 아래의 검증 오류 한 줄 */
+function FieldError({ show, message }: { show: boolean; message: string | null }) {
+  if (!show || !message) return null
+  return <span role="alert" className="mt-1 block text-xs font-medium text-danger">{message}</span>
+}
+
 function AiRecommendedHint({ show, text }: { show: boolean; text: string }) {
   if (!show) return null
   return <p className="mt-1 text-meta leading-4 text-action">{text}</p>
@@ -590,6 +600,25 @@ export function IssueFormModal({
   const [sourceType, setSourceType] = useState<IssueSourceType | ''>('')
   const [sourceDetail, setSourceDetail] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // 검증 오류가 난 칸(BUG-11) — 오류를 그 칸 바로 아래에 보이고 거기로 스크롤·초점을 옮긴다. 칸을 모르는 오류(서버 응답 등)는 아래 알림 상자로 간다.
+  const [errorField, setErrorField] = useState<IssueField | null>(null)
+  const [errorTick, setErrorTick] = useState(0)
+  const formRef = useRef<HTMLDivElement>(null)
+  const fail = (message: string, field: IssueField | null = null) => {
+    setError(message); setErrorField(field); setErrorTick(n => n + 1)
+  }
+  /** 그 칸을 고치면 그 칸의 오류를 지운다 — 고친 뒤에도 옛 오류가 남지 않게(BUG-32 와 같은 관용구) */
+  const edited = (field: IssueField) => { if (errorField === field) { setError(null); setErrorField(null) } }
+  useEffect(() => {
+    if (!errorTick) return
+    const root = formRef.current
+    const target = errorField
+      ? root?.querySelector<HTMLElement>(`[data-issue-field="${errorField}"]`)
+      : root?.querySelector<HTMLElement>('[data-issue-error]')
+    // 모달 본문은 길다(첨부 영역 아래에 알림이 있었다) — 오류가 난 자리를 화면에 들인다
+    target?.scrollIntoView?.({ block: 'center' })
+    if (errorField) target?.focus?.({ preventScroll: true })
+  }, [errorTick, errorField])
   const isEdit = initial !== null
   const attachScope = workspaceId ? { workspaceId, projectId } : null
   const minuteSourceLocked = (!isEdit && sourcePreview !== undefined)
@@ -659,6 +688,7 @@ export function IssueFormModal({
     setSourceType(seed.sourceType)
     setSourceDetail(seed.sourceDetail)
     setError(null)
+    setErrorField(null)
     submittingRef.current = false
   }, [open, seedKey, initial?.id, customDirty, customStale, pending])
 
@@ -695,8 +725,8 @@ export function IssueFormModal({
     fetchIssueEntryContext(projectId).then(result => {
       if (cancelled) return
       if (result.ok) setLoadedContext(result.value)
-      else setError(result.error)
-    }).catch(() => { if (!cancelled) setError(ENTRY_CONTEXT_FAILED) })
+      else { setError(result.error); setErrorField(null) }
+    }).catch(() => { if (!cancelled) { setError(ENTRY_CONTEXT_FAILED); setErrorField(null) } })
     return () => { cancelled = true }
   }, [open, projectId, entryContext])
   // 새 이슈의 기본 심각도·출처가 이 프로젝트에서 비활성이면(기본 'medium'·'other') 문맥이 도착한 때 한 번 활성 값으로 맞춘다
@@ -715,75 +745,75 @@ export function IssueFormModal({
   function submit() {
     if (submittingRef.current || !context) return
     if (!title.trim()) {
-      setError(t('issue.err.titleRequired'))
+      fail(t('issue.err.titleRequired'), 'title')
       return
     }
     if (!validateIssueDateRange(startDate || null, dueDate || null)) {
-      setError(t('issue.err.dateRange'))
+      fail(dateOrderMessage(t, { end: 'issue.form.due' }), 'dates')
       return
     }
     if (areaRequired && !areaId) {
-      setError(t('issue.err.areaRequired'))
+      fail(t('issue.err.areaRequired'), 'area')
       return
     }
     const normalizedMajorName = majorName.trim()
     if (includeAnalysis && !normalizedMajorName) {
-      setError(t('issue.err.majorRequired'))
+      fail(t('issue.err.majorRequired'), 'major')
       return
     }
     if (normalizedMajorName.length > ISSUE_MAJOR_NAME_MAX) {
-      setError(t('issue.err.majorTooLong').replace('{n}', String(ISSUE_MAJOR_NAME_MAX)))
+      fail(t('issue.err.majorTooLong').replace('{n}', String(ISSUE_MAJOR_NAME_MAX)), 'major')
       return
     }
     if (ISSUE_MAJOR_NAME_NUMBERED_RE.test(normalizedMajorName)) {
-      setError(t('issue.err.majorNumberedName'))
+      fail(t('issue.err.majorNumberedName'), 'major')
       return
     }
     const normalizedSubProcess = subProcess.trim()
     if (includeAnalysis && !normalizedSubProcess) {
-      setError(t('issue.err.subProcessRequired'))
+      fail(t('issue.err.subProcessRequired'), 'sub')
       return
     }
     if (normalizedSubProcess.length > ISSUE_SUB_PROCESS_MAX) {
-      setError(t('issue.err.subProcessTooLong').replace('{n}', String(ISSUE_SUB_PROCESS_MAX)))
+      fail(t('issue.err.subProcessTooLong').replace('{n}', String(ISSUE_SUB_PROCESS_MAX)), 'sub')
       return
     }
     const normalizedOwnerDepartment = ownerDepartment.trim()
     if (includeAnalysis && !normalizedOwnerDepartment) {
-      setError(t('issue.err.ownerDepartmentRequired'))
+      fail(t('issue.err.ownerDepartmentRequired'), 'owner')
       return
     }
     if (normalizedOwnerDepartment.length > ISSUE_OWNER_DEPARTMENT_MAX) {
-      setError(t('issue.err.ownerDepartmentTooLong').replace('{n}', String(ISSUE_OWNER_DEPARTMENT_MAX)))
+      fail(t('issue.err.ownerDepartmentTooLong').replace('{n}', String(ISSUE_OWNER_DEPARTMENT_MAX)), 'owner')
       return
     }
     const relatedSystems = normalizeRelatedSystems(relatedSystemsText)
     if (relatedSystems.length > ISSUE_RELATED_SYSTEMS_MAX) {
-      setError(t('issue.err.relatedSystemsTooMany').replace('{n}', String(ISSUE_RELATED_SYSTEMS_MAX)))
+      fail(t('issue.err.relatedSystemsTooMany').replace('{n}', String(ISSUE_RELATED_SYSTEMS_MAX)), 'systems')
       return
     }
     if (relatedSystems.some(system => system.length > ISSUE_RELATED_SYSTEM_MAX)) {
-      setError(t('issue.err.relatedSystemTooLong').replace('{n}', String(ISSUE_RELATED_SYSTEM_MAX)))
+      fail(t('issue.err.relatedSystemTooLong').replace('{n}', String(ISSUE_RELATED_SYSTEM_MAX)), 'systems')
       return
     }
     const normalizedSourceType = minuteSourceLocked ? 'minutes' : sourceType
     if (includeAnalysis && !normalizedSourceType) {
-      setError(t('issue.err.sourceTypeRequired'))
+      fail(t('issue.err.sourceTypeRequired'), 'sourceType')
       return
     }
     if (normalizedSourceType === 'minutes' && !minuteSourceLocked && !isEdit) {
-      setError(t('issue.err.minutesSourceOnly'))
+      fail(t('issue.err.minutesSourceOnly'), 'sourceType')
       return
     }
     const normalizedSourceDetail = sourceDetail.trim()
     if (normalizedSourceDetail.length > ISSUE_SOURCE_DETAIL_MAX) {
-      setError(t('issue.err.sourceDetailTooLong').replace('{n}', String(ISSUE_SOURCE_DETAIL_MAX)))
+      fail(t('issue.err.sourceDetailTooLong').replace('{n}', String(ISSUE_SOURCE_DETAIL_MAX)), 'sourceDetail')
       return
     }
     if (customWriteNeeded && (!customReady || customUnreadable || customStale)) return
     const custom = customWriteNeeded ? (isEdit ? validateCustomValues(customDefs,customDraft,customBase,customCanAdmin)
       : validateCustomInsertValues(customDefs,customDraft,customCanAdmin)) : null
-    if (custom && !custom.ok) {setCustomErrors(custom.errors);setError(t('issue.custom.checkValues'));return}
+    if (custom && !custom.ok) {setCustomErrors(custom.errors);fail(t('issue.custom.checkValues'));return}
     const input: IssueFormInput = {
       ...(custom?.ok && customDefs.length ? {custom:custom.value,...(isEdit ? {expectedCustom:customBase} : {})} : {}),
       title: title.trim(),
@@ -816,7 +846,7 @@ export function IssueFormModal({
             : await (onCreate ?? createIssue)(projectId, input)
         } catch (cause) {
           submittingRef.current = false
-          setError(cause instanceof Error && cause.message ? cause.message : t('issue.err.saveFailed'))
+          fail(cause instanceof Error && cause.message ? cause.message : t('issue.err.saveFailed'))
           return
         }
       }
@@ -849,7 +879,7 @@ export function IssueFormModal({
               const rest = pendingFiles.slice(up.doneCount)
               setPendingFiles(rest)
               submittingRef.current = false
-              setError(
+              fail(
                 up.error
                   ? `${t('issue.err.attachUploadFailed').replace('{name}', up.fileName)} ${up.error}`
                   : t('issue.err.attachPartial').replace('{n}', String(rest.length)),
@@ -863,7 +893,7 @@ export function IssueFormModal({
         router.refresh()
       } else {
         submittingRef.current = false
-        setError(res.error ?? t('issue.err.saveFailed'))
+        fail(res.error ?? t('issue.err.saveFailed'))
         if (res.conflict) {setCustomStale(true);router.refresh()}
       }
     })
@@ -878,11 +908,11 @@ export function IssueFormModal({
       footer={
         <div className="flex w-full items-center justify-end gap-2">
           <button onClick={closeIfIdle} disabled={pending} className="btn btn-ghost text-xs">{t('issue.form.cancel')}</button>
-          <button onClick={submit} disabled={pending || submittingRef.current || !context || needsAreaSetup || (customWriteNeeded && (!customReady || customUnreadable || customStale))} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
+          <button onClick={submit} disabled={pending || submittingRef.current || !context || !title.trim() || needsAreaSetup || (customWriteNeeded && (!customReady || customUnreadable || customStale))} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
         </div>
       }
     >
-      <div className="space-y-3">
+      <div ref={formRef} className="space-y-3">
         {!isEdit && sourcePreview && (
           <section
             aria-label={t('issue.analysis.minuteAutoLinked')}
@@ -913,8 +943,9 @@ export function IssueFormModal({
           </section>
         )}
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.form.title')}</span>
-          <input className="app-input" value={title} onChange={e => setTitle(e.target.value)} placeholder={t('issue.form.titlePh')} maxLength={200} />
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.form.title')} *</span>
+          <input className="app-input" data-issue-field="title" aria-invalid={errorField === 'title' || undefined} value={title} onChange={e => { setTitle(e.target.value); edited('title') }} placeholder={t('issue.form.titlePh')} maxLength={200} />
+          <FieldError show={errorField === 'title'} message={error} />
         </label>
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.form.body')}</span>
@@ -925,7 +956,10 @@ export function IssueFormModal({
             <h3 className="text-xs font-bold text-fg">{t(context.rules.analysis === 'off' ? 'issue.analysis.area' : 'issue.analysis.fieldsTitle')}</h3>
             {context.rules.analysis !== 'off' && <p className="mt-0.5 text-meta leading-5 text-fg-muted">{t('issue.analysis.fieldsDesc')}</p>}
           </div>
-          {showArea && <IssueAreaSelect areas={areas} value={areaId} onChange={setAreaId} required={areaRequired} disabled={megaLocked} canManage={canManage} projectId={projectId} />}
+          {showArea && <div data-issue-field="area" tabIndex={-1} className="outline-none">
+            <IssueAreaSelect areas={areas} value={areaId} onChange={v => { setAreaId(v); edited('area') }} required={areaRequired} disabled={megaLocked} canManage={canManage} projectId={projectId} />
+            <FieldError show={errorField === 'area'} message={error} />
+          </div>}
           <AiRecommendedHint show={matchesAiDraft(draft?.areaId, areaId)} text={t('issue.analysis.areaRecommended').replace('{code}', areas.find(a => a.id === draft?.areaId)?.code ?? '')} />
           {(context?.rules.analysis === 'optional' || (context?.rules.analysis === 'required' && isEdit && !initial?.majorId)) && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={analysisEnabled} onChange={e => setAnalysisEnabled(e.target.checked)} />{t('issue.analysis.enableFields')}</label>}
           {includeAnalysis && <fieldset className="grid gap-3 sm:grid-cols-2">
@@ -937,9 +971,12 @@ export function IssueFormModal({
                 required
                 maxLength={ISSUE_MAJOR_NAME_MAX}
                 list="issue-major-process-options"
-                onChange={e => setMajorName(e.target.value)}
+                data-issue-field="major"
+                aria-invalid={errorField === 'major' || undefined}
+                onChange={e => { setMajorName(e.target.value); edited('major') }}
                 placeholder={t('issue.analysis.majorProcessPh')}
               />
+              <FieldError show={errorField === 'major'} message={error} />
               {/* 같은 이름 재사용 = 기존 번호 유지가 체번 계약의 핵심이라, 선택된 Mega의
                   정본 목록(02.01 · 이름)을 자동완성으로 보여 준다. Mega 미선택 상태에서
                   타 Mega 후보를 골라 엉뚱한 영역에 신규 체번되는 것을 막기 위해 후보는
@@ -967,9 +1004,12 @@ export function IssueFormModal({
                 value={subProcess}
                 required
                 maxLength={ISSUE_SUB_PROCESS_MAX}
-                onChange={e => setSubProcess(e.target.value)}
+                data-issue-field="sub"
+                aria-invalid={errorField === 'sub' || undefined}
+                onChange={e => { setSubProcess(e.target.value); edited('sub') }}
                 placeholder={t('issue.analysis.subProcessPh')}
               />
+              <FieldError show={errorField === 'sub'} message={error} />
               <AiRecommendedHint
                 show={matchesAiDraft(draft?.analysis?.subProcess, subProcess)}
                 text={t('issue.analysis.subProcessRecommended')}
@@ -982,9 +1022,12 @@ export function IssueFormModal({
                 value={ownerDepartment}
                 required
                 maxLength={ISSUE_OWNER_DEPARTMENT_MAX}
-                onChange={e => setOwnerDepartment(e.target.value)}
+                data-issue-field="owner"
+                aria-invalid={errorField === 'owner' || undefined}
+                onChange={e => { setOwnerDepartment(e.target.value); edited('owner') }}
                 placeholder={t('issue.analysis.ownerDepartmentPh')}
               />
+              <FieldError show={errorField === 'owner'} message={error} />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">
@@ -993,9 +1036,12 @@ export function IssueFormModal({
               <input
                 className="app-input"
                 value={relatedSystemsText}
-                onChange={e => setRelatedSystemsText(e.target.value)}
+                data-issue-field="systems"
+                aria-invalid={errorField === 'systems' || undefined}
+                onChange={e => { setRelatedSystemsText(e.target.value); edited('systems') }}
                 placeholder={t('issue.analysis.relatedSystemsPh')}
               />
+              <FieldError show={errorField === 'systems'} message={error} />
               <span className="mt-1 block text-meta leading-4 text-fg-muted">{t('issue.analysis.relatedSystemsHint')}</span>
             </label>
             <label className="block">
@@ -1006,13 +1052,16 @@ export function IssueFormModal({
                 disabled={minuteSourceLocked}
                 required
                 aria-describedby={minuteSourceLocked ? 'issue-source-locked' : undefined}
-                onChange={e => setSourceType(e.target.value as IssueSourceType | '')}
+                data-issue-field="sourceType"
+                aria-invalid={errorField === 'sourceType' || undefined}
+                onChange={e => { setSourceType(e.target.value as IssueSourceType | ''); edited('sourceType') }}
               >
                 <option value="">{t('issue.analysis.sourceTypePlaceholder')}</option>
                 {sourceOptions.map(type => (
                   <option key={type} value={type}>{vocabLabel('issues.sources', sourceList, type, t)}</option>
                 ))}
               </select>
+              <FieldError show={errorField === 'sourceType'} message={error} />
               {minuteSourceLocked && (
                 <p id="issue-source-locked" className="mt-1 text-meta leading-4 text-action">
                   {t('issue.analysis.minuteAutoLinked')}
@@ -1027,9 +1076,12 @@ export function IssueFormModal({
                 className="app-input"
                 value={sourceDetail}
                 maxLength={ISSUE_SOURCE_DETAIL_MAX}
-                onChange={e => setSourceDetail(e.target.value)}
+                data-issue-field="sourceDetail"
+                aria-invalid={errorField === 'sourceDetail' || undefined}
+                onChange={e => { setSourceDetail(e.target.value); edited('sourceDetail') }}
                 placeholder={t('issue.analysis.sourceDetailPh')}
               />
+              <FieldError show={errorField === 'sourceDetail'} message={error} />
             </label>
           </fieldset>}
         </section>}
@@ -1049,7 +1101,9 @@ export function IssueFormModal({
               className="app-input"
               value={startDate}
               max={dueDate || undefined}
-              onChange={e => setStartDate(e.target.value)}
+              data-issue-field="dates"
+              aria-invalid={errorField === 'dates' || undefined}
+              onChange={e => { setStartDate(e.target.value); edited('dates') }}
             />
           </label>
           <label className="block">
@@ -1059,10 +1113,12 @@ export function IssueFormModal({
               className="app-input"
               value={dueDate}
               min={startDate || undefined}
-              onChange={e => setDueDate(e.target.value)}
+              aria-invalid={errorField === 'dates' || undefined}
+              onChange={e => { setDueDate(e.target.value); edited('dates') }}
             />
           </label>
         </div>
+        <FieldError show={errorField === 'dates'} message={error} />
         {/* 다중 선택 피커는 셀렉트보다 키가 커서 그리드 한 칸에 안 들어간다 — 전체 폭 배치 */}
         <div>
           <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.form.assignee')}</span>
@@ -1086,7 +1142,8 @@ export function IssueFormModal({
           disabled={pending}
           scope={attachScope}
         />
-        {error && <ErrorBox message={error === ENTRY_CONTEXT_FAILED ? t(ENTRY_CONTEXT_FAILED) : error} />}
+        {/* 칸을 아는 오류는 그 칸 아래에 이미 보인다 — 여기는 칸을 모르는 오류만(서버 응답·첨부) */}
+        {error && !errorField && <div data-issue-error><ErrorBox message={error === ENTRY_CONTEXT_FAILED ? t(ENTRY_CONTEXT_FAILED) : error} /></div>}
       </div>
     </Modal>
   )

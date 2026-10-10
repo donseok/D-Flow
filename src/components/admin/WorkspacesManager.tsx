@@ -58,6 +58,8 @@ export function WorkspacesManager({ rows, accountsHref }: {
 
   const errorText = (f: Failure) => t(`platform.ws.err.${f.code}` as DictKey)
   const fieldError = (field: WorkspaceCreateField) => (failure?.field === field ? errorText(failure) : null)
+  /** 그 칸을 다시 입력하면 그 칸의 오류를 지운다 — 고친 뒤에도 옛 오류가 남지 않게(BUG-32 와 같은 관용구). 제출 때 다시 검증한다 */
+  const editing = (field: WorkspaceCreateField) => setFailure((f) => (f?.field === field ? null : f))
   const toggle = (id: ModuleId) => setModules(NON_CORE_MODULES.filter((m) => (m === id ? !modules.includes(m) : modules.includes(m))))
 
   function submit(event: React.FormEvent) {
@@ -200,20 +202,20 @@ export function WorkspacesManager({ rows, accountsHref }: {
         <form onSubmit={submit} className="space-y-5 p-5 sm:p-6" noValidate>
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label={t('platform.ws.fieldName')} error={fieldError('name')}>
-              {(c) => <input {...c} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoComplete="off" />}
+              {(c) => <input {...c} value={name} onChange={(e) => { setName(e.target.value); editing('name') }} maxLength={80} autoComplete="off" />}
             </Field>
             <Field label={t('platform.ws.fieldSlug')} description={t('platform.ws.slugHint')} error={fieldError('slug')}>
-              {(c) => <input {...c} value={slug} onChange={(e) => setSlug(e.target.value)} maxLength={63} autoComplete="off" autoCapitalize="none" spellCheck={false} />}
+              {(c) => <input {...c} value={slug} onChange={(e) => { setSlug(e.target.value); editing('slug') }} maxLength={63} autoComplete="off" autoCapitalize="none" spellCheck={false} />}
             </Field>
             <Field label={t('platform.ws.fieldAdmin')} description={t('platform.ws.adminHint')} error={fieldError('adminEmail')}>
-              {(c) => <input {...c} type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} autoComplete="off" />}
+              {(c) => <input {...c} type="email" value={adminEmail} onChange={(e) => { setAdminEmail(e.target.value); editing('adminEmail') }} autoComplete="off" />}
             </Field>
             <Field label={t('platform.ws.fieldTimezone')} description={t('platform.ws.timezoneHint')} error={fieldError('timezone')}>
-              {(c) => <input {...c} value={timezone} onChange={(e) => setTimezone(e.target.value)} autoComplete="off" spellCheck={false} />}
+              {(c) => <input {...c} value={timezone} onChange={(e) => { setTimezone(e.target.value); editing('timezone') }} autoComplete="off" spellCheck={false} />}
             </Field>
             <div className="space-y-1.5 sm:col-span-2">
               <Field label={t('platform.ws.fieldDomains')} description={t('platform.ws.domainsHint')} error={fieldError('inviteDomains')}>
-                {(c) => <input {...c} data-invite-domains value={domains} onChange={(e) => setDomains(e.target.value)} placeholder="example.com" autoComplete="off" autoCapitalize="none" spellCheck={false} />}
+                {(c) => <input {...c} data-invite-domains value={domains} onChange={(e) => { setDomains(e.target.value); editing('inviteDomains') }} placeholder="example.com" autoComplete="off" autoCapitalize="none" spellCheck={false} />}
               </Field>
               {showSuggestion && (
                 <button type="button" data-domain-suggest className="btn btn-ghost h-8 px-3 text-xs"

@@ -45,6 +45,16 @@ export const NAV_NEEDS: Readonly<Partial<Record<NavItemId, keyof NavCaps>>> = {
   'ws.portfolio': 'canViewPortfolio', 'ws.usage': 'canViewUsage', 'p.settings': 'isProjectAdmin',
 }
 
+/**
+ * 항목의 기본 라벨(사전 키) — 사이드바가 라벨 설정이 없을 때 쓰는 그 키다(navFor 의 `{ key: e.labelKey }`). 메뉴 설정 화면의 "기본 이름"도
+ * 여기서 꺼낸다: 편집기가 자기 표를 따로 들고 있어 '프로젝트'↔'전체 프로젝트', '내 작업'↔'내 업무', '대시보드'↔'개요' 로 어긋났다(BUG-25).
+ * 층이 둘인 모듈(회의·에이전트)은 층마다 항목 id 가 다르다.
+ */
+export const NAV_DEFAULT_LABEL_KEY = Object.fromEntries([
+  ...MODULES.flatMap((m) => [m.nav?.project, m.nav?.workspace].flatMap((e) => (e ? [[e.id, e.labelKey] as const] : []))),
+  ...SHELL_NAV.map((s) => [s.id, s.labelKey] as const),
+]) as Readonly<Record<NavItemId, DictKey>>   // 25개 id 전부 — tests/nav/registry.test.ts 가 빠짐없음을 고정한다
+
 function hrefOf(base: string, segment: string): string {
   if (segment.startsWith('/')) return segment
   return segment ? `${base}/${segment}` : base

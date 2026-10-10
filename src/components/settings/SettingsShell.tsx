@@ -35,6 +35,26 @@ export function SettingsShell({ items, children }: { items: SettingsNavItem[]; c
     for (const it of items) { const el = document.getElementById(it.id); if (el) io.observe(el) }
     return () => io.disconnect()
   }, [items])
+  // 주소의 #구획 으로 들어오거나 해시가 바뀌면 그 구획을 보인다(BUG-29). 브라우저의 기본 해시 스크롤은 문서를 처음 받을 때 한 번뿐인데,
+  // 설정 본문은 로딩 폴백(loading.tsx) 뒤에 스트리밍으로 붙는다 — 그 시점에는 대상 요소가 아직 없어 맨 위에 머물렀다.
+  // 이 껍데기는 본문과 함께 붙으므로 마운트 때 한 번 더 찾는다. 다시 그리기(저장 뒤 refresh)마다 되돌아가지 않게 마운트·hashchange 에만 반응한다.
+  const itemsRef = useRef(items)
+  useEffect(() => { itemsRef.current = items }, [items])
+  useEffect(() => {
+    const go = () => {
+      let id = ''
+      try { id = decodeURIComponent(window.location.hash.slice(1)) } catch { return }   // 깨진 % 인코딩 — 무시
+      const el = id ? document.getElementById(id) : null
+      if (!el || !root.current?.contains(el)) return
+      el.scrollIntoView({ block: 'start' })                    // 구획의 scroll-mt·main 의 scroll-padding 이 고정 줄 밑으로 맞춘다
+      // 구획 안쪽 제목(#workspace-portal-widgets 등)이면 그 구획이 현재다
+      const owner = itemsRef.current.find((it) => it.id === id || document.getElementById(it.id)?.contains(el))
+      if (owner) setActive(owner.id)
+    }
+    const frame = requestAnimationFrame(go)                    // 첫 배치가 끝난 뒤(고정 줄 높이가 잡힌 뒤)
+    window.addEventListener('hashchange', go)
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('hashchange', go) }
+  }, [])
   useEffect(() => {                                            // 저장 바 높이 → --settings-save-bar-h(+ main 의 초점 스크롤 여백)
     const box = content.current
     if (!box || typeof ResizeObserver === 'undefined') return

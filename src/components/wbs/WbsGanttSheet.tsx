@@ -70,8 +70,9 @@ const PLAN_COLS: Col[] = [
   { key: 'status', w: 76 },
   { key: 'stage', w: 84 },
   { key: 'deliverable', w: 150 },
-  { key: 'pstart', w: 80 },
-  { key: 'pend', w: 80 },
+  // 날짜 칸은 'YYYY-MM-DD' 10자를 담는다(BUG-20) — 안쪽 여백 16 + 테두리 1 을 빼고 13px 고정폭 숫자 10자(약 76px)가 들어가야 한다
+  { key: 'pstart', w: 100 },
+  { key: 'pend', w: 100 },
   { key: 'weight', w: 64 },
   { key: 'pplan', w: 68 },
   { key: 'pactual', w: 72 },

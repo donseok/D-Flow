@@ -18,6 +18,7 @@ import { useDialogFocus } from '@/lib/ui/useDialogFocus'
 import { DirtyConfirmDialog } from '@/components/ui/DirtyConfirmDialog'
 import { useStageLabel } from './StageLabelsProvider'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 
 export interface WbsItemSummary {
   id: string
@@ -156,7 +157,7 @@ export function WbsBulkEditDialog({
 
     // 시작일 > 종료일 사전 검증
     if (startMode === 'set' && endMode === 'set' && startVal && endVal && startVal > endVal) {
-      setErrorMessage(t('wbs.bulk.errDateOrder'))
+      setErrorMessage(dateOrderMessage(t))
       return
     }
 

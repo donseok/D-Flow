@@ -9,7 +9,7 @@ import { useState } from 'react'
 import type { AgentHub, HubQueueEntry } from '@/lib/domain/agentHub'
 import { runHubProcessOp, type HubProcessOp } from '@/app/actions/agentHub'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatStampIn } from '@/lib/i18n/format'
 import { fill } from '@/components/agents/labelKeys'
 import { NOTE_PLACEHOLDER_KEY, OP_LABEL_KEY, OP_TITLE_KEY } from './labelKeys'
 
@@ -27,7 +27,7 @@ type Props = {
   showTimeZone?: boolean
 }
 
-const when = (iso: string, timeZone: string) => new Date(iso).toLocaleString(KO_LOCALE, { timeZone, hour12: false })
+const when = (iso: string, timeZone: string) => formatStampIn(iso, timeZone, iso)
 
 function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, showTimeZone = false }: { q: HubQueueEntry } & Omit<Props, 'queue'>) {
   const { t } = useLocale()

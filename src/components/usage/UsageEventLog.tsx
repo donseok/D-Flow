@@ -9,12 +9,13 @@ import { menuLabel } from '@/lib/domain/usageMenu'
 import { usageHref } from '@/lib/domain/usage'
 import type { UsageEventRow } from '@/lib/data/usage'
 import { t} from '@/lib/i18n/dict'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatStampIn } from '@/lib/i18n/format'
 
 function fmtDateTime(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat(KO_LOCALE, {
-    timeZone, dateStyle: 'short', timeStyle: 'medium',
-  }).format(new Date(iso))
+  // 접속 로그는 초까지 본다 — 화면 날짜의 한 꼴('YYYY-MM-DD HH:mm') 뒤에 초를 붙인다(tz 오프셋은 분 단위라 초는 tz 와 무관하다)
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return `${formatStampIn(d, timeZone)}:${String(d.getUTCSeconds()).padStart(2, '0')}`
 }
 
 const EVENT_PAGE_SIZE = 20

@@ -94,7 +94,7 @@ describe('WBS 기준일 초기 스크롤', () => {
   })
 
   it.each([
-    ['sheet' as const, 1464],
+    ['sheet' as const, 1504],
     ['timeline' as const, 874],
   ])('%s 모드 진입 즉시 기준일을 sticky 열 오른쪽 중앙에 배치한다', async (defaultView, expected) => {
     await act(async () => {
@@ -129,6 +129,6 @@ describe('WBS 기준일 초기 스크롤', () => {
     })
 
     expect(container.textContent).toContain('wbs.today')
-    expect(assignedScrollLeft).toEqual([408])
+    expect(assignedScrollLeft).toEqual([448])
   })
 })

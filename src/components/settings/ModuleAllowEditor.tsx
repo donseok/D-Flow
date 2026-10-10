@@ -134,12 +134,14 @@ export function ModuleAllowEditor({ workspaceId, initialAllowed, revision, inval
       <p className="text-sm leading-6 text-fg-secondary">{t('settings.moduleAllow.desc')}</p>
       {needsRepair && (invalidReason || requiredMissing) && <ConfigStateNotice kind={requiredMissing ? 'required' : 'invalid'}
         keyName="modules.allowed" message={invalidReason} isAdmin settingsHref="#workspace-modules" />}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {/* 두 열까지만 — 설정 본문은 목차 옆 최대 800px 이라 세 열이면 카드가 160px 로 줄어 이름이 한 글자씩 세로로 꺾였다(BUG-28).
+          이름은 줄바꿈하지 않고, 긴 내부 id(minutes_integration 등)가 대신 줄어든다 */}
+      <div className="grid gap-2 sm:grid-cols-2">
         {NON_CORE_MODULES.map(id => (
-          <label key={id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg">
-            <input type="checkbox" checked={selected.includes(id)} disabled={pending || !!uncertainPatch} onChange={() => toggle(id)} />
-            <span>{LABEL[id as keyof typeof LABEL]}</span>
-            <span className="ml-auto text-meta text-fg-muted">{id}</span>
+          <label key={id} className="flex min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg">
+            <input type="checkbox" className="shrink-0" checked={selected.includes(id)} disabled={pending || !!uncertainPatch} onChange={() => toggle(id)} />
+            <span className="shrink-0 whitespace-nowrap">{LABEL[id as keyof typeof LABEL]}</span>
+            <span className="ml-auto min-w-0 truncate text-meta text-fg-muted" title={id}>{id}</span>
           </label>
         ))}
       </div>

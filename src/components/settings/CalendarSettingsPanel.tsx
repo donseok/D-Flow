@@ -222,7 +222,8 @@ export function CalendarSettingsPanel(props: {
         onMine={chooseMine} onLatest={chooseLatest} latestAvailable={changed.every(k => !conflict.invalidKeys.includes(k))} />}
       {error && <ConfigStateNotice kind="patch" message={error} />}
       <SettingsSaveBar notice={notice} summary={t('settings.wsFields.changed').replace('{n}', String(changed.length))}>
-        {saveReason && <span id="calendar-save-reason" className="sr-only">{saveReason}</span>}
+        {/* 저장이 막힌 이유는 버튼 옆에 보인다 — 예전에는 화면 낭독기에만 읽혀(sr-only) 버튼만 꺼진 것처럼 보였다(BUG-31) */}
+        {saveReason && <span id="calendar-save-reason" className="text-meta text-danger">{saveReason}</span>}
         <button type="button" className="btn btn-primary" disabled={saveDisabled} onClick={save} aria-describedby={saveDescribedBy}>
           {uncertainPatch ? t('settings.workflow.retry') : t('common.save')}
         </button>

@@ -14,7 +14,7 @@ import {
 import type { ProjectActorView } from '@/lib/domain/authz'
 import { canGrantAdmin } from '@/lib/domain/roster'
 import { DEFAULT_INVITE_DAYS, MAX_INVITE_DAYS, inviteStatusLabel, type InviteStatus } from '@/lib/domain/invites'
-import { KO_LOCALE } from '@/lib/i18n/format'
+import { formatStampIn } from '@/lib/i18n/format'
 import type { DictKey } from '@/lib/i18n/dict'
 
 type AccessRole = 'admin' | 'member'
@@ -43,9 +43,7 @@ function canRevoke(s: InviteStatus): boolean {
 }
 
 function fmtDateTime(iso: string, timeZone: string | null): string {
-  const d = new Date(iso)
-  if (timeZone === null || Number.isNaN(d.getTime())) return '—'
-  return new Intl.DateTimeFormat(KO_LOCALE, { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(d)
+  return formatStampIn(iso, timeZone)
 }
 
 /**

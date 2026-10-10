@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Compass, Home } from 'lucide-react'
 import { t } from '@/lib/i18n/dict'
+import { ModuleOffSwap } from '@/components/errors/ModuleOffSwap'
 
 export default async function NotFound() {
   return (
@@ -11,20 +12,23 @@ export default async function NotFound() {
           aria-hidden
         />
 
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-action-soft text-action">
-          <Compass className="h-6 w-6" />
-        </span>
+        {/* 본문 자리 — 꺼진 모듈의 화면으로 들어온 구성원에게는 "꺼져 있습니다" 안내로 바뀐다(ModuleOffSwap — 서버가 확인해 줄 때만. BUG-22) */}
+        <ModuleOffSwap>
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-action-soft text-action">
+            <Compass className="h-6 w-6" />
+          </span>
 
-        <div
-          className="mt-6 text-[64px] font-black leading-none tracking-tight text-action sm:text-[80px]"
-        >
-          404
-        </div>
+          <div
+            className="mt-6 text-[64px] font-black leading-none tracking-tight text-action sm:text-[80px]"
+          >
+            404
+          </div>
 
-        <h1 className="mt-4 text-lg font-bold tracking-tight text-fg">{t('home.nfTitle')}</h1>
-        <p className="mt-2 text-sm leading-6 text-fg-secondary">
-          {t('home.nfDesc')}
-        </p>
+          <h1 className="mt-4 text-lg font-bold tracking-tight text-fg">{t('home.nfTitle')}</h1>
+          <p className="mt-2 text-sm leading-6 text-fg-secondary">
+            {t('home.nfDesc')}
+          </p>
+        </ModuleOffSwap>
 
         <Link href="/" className="btn btn-primary mt-7 w-full">
           <Home className="h-4 w-4" />

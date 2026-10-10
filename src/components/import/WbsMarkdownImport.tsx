@@ -76,14 +76,14 @@ export function WbsMarkdownImport({ projectId }: { projectId: string }) {
         <div data-md-preview className="space-y-3 rounded-xl border border-border bg-surface-subtle p-4">
           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
             <Info label={dictT('importWizard.md.kind')} value={preview.mode === 'skeleton' ? dictT('importWizard.md.kindSkeleton') : dictT('importWizard.md.kindModule')} />
-            <Info label="module" value={preview.module ?? '—'} />
+            <Info label={dictT('importWizard.md.module')} value={preview.module ?? '—'} />
             <Info
               label={dictT('importWizard.md.attach')}
               value={preview.mode === 'skeleton' ? dictT('importWizard.md.attachRoot') : `${preview.attach ?? '—'} → ${preview.attachRef ?? dictT('importWizard.md.attachUnresolved')}`}
               tone={preview.mode === 'skeleton' || preview.attachFound ? undefined : 'danger'}
             />
             <Info
-              label="levels"
+              label={dictT('importWizard.md.levels')}
               value={preview.levelsStatus === 'seed' ? dictT('importWizard.md.levelsSeed').replace('{n}', String(preview.fileLevels?.length)) : preview.levelsStatus === 'match' ? dictT('importWizard.md.levelsMatch') : dictT('importWizard.md.levelsMismatch')}
               tone={preview.levelsStatus === 'mismatch' ? 'danger' : undefined}
             />

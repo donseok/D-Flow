@@ -88,6 +88,10 @@ export const commonKo = {
   'common.err.signIn': '로그인이 필요합니다.',
   'common.err.lookup': '권한을 확인할 수 없어 중단했습니다. 잠시 후 다시 시도하세요.',
   'common.err.tryAgain': '잠시 후 다시 시도하세요.',
+  // 시작/종료 역전 — 프로젝트 기간·작업 일정·대량 수정·이슈가 이 한 문형을 쓴다(src/lib/i18n/dateOrder.ts — {start} 에 조사가 붙어 온다)
+  'common.err.dateOrder': '{start} {end}보다 늦을 수 없습니다.',
+  'common.date.start': '시작일',
+  'common.date.end': '종료일',
   // 첨부 삭제 실패 — 삭제 도우미(lib/attachments/removeErrors)의 두 문구와 같다. 이슈·산출물 첨부 패널이 함께 쓴다.
   'common.attach.objectRemoveFailed': '첨부 파일을 지우지 못했습니다 — 권한이나 저장소 상태를 확인한 뒤 다시 시도하세요.',
   'common.attach.rowRemoveFailed': '첨부 기록을 지우지 못했습니다 — 새로고침한 뒤 확인하세요.',
