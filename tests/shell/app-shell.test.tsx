@@ -59,6 +59,15 @@ describe('AppShell', () => {
     expect(main.firstElementChild?.hasAttribute('data-main-top-gap')).toBe(true)
     expect(main.firstElementChild?.getAttribute('aria-hidden')).toBe('true')
   })
+  // BUG-17(#418) — 브라우저 재현(2026-10-10): 슬롯이 main 의 직접 자식이면, 스트리밍 중 수화에서 슬롯 조각이 React 가 멈춘 직후 도착할 때
+  // main 이 다시 그려지며 서버 DOM 을 못 찾아 문서 전체가 클라이언트 렌더로 넘어간다(뒤따르는 $RS 가 자리를 잃는다). jsdom 의 수화는 그 경로를 타지 않아 구조로 고정한다.
+  it('본문 슬롯은 main 의 직접 자식이 아니다 — 사이에 컴포넌트 한 겹(MainSlot)이 있다', () => {
+    shell(base())
+    const fiberOf = (el: Element) => (el as unknown as Record<string, { return: { tag: number; stateNode: unknown; type: { name?: string } } }>)[Object.keys(el).find((k) => k.startsWith('__reactFiber$'))!]
+    const parent = fiberOf(document.querySelector('[data-body]')!).return
+    expect(parent.stateNode).not.toBe(document.querySelector('main#main-content'))
+    expect(parent.type.name).toBe('MainSlot')
+  })
   it('③ degraded 면 열화 알림, ④ configDegraded 면 role=alert 설정 실패 알림(관리자만 설정 링크)', () => {
     shell(base({ degraded: true, configDegraded: true, canEditSettings: true }))
     expect(document.querySelector('[data-degraded-notice]')).not.toBeNull()

@@ -75,7 +75,7 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
                 action={p.canEditSettings && known ? { label: t('shell.openSettings'), href: wsHref(p.workspace.slug, 'settings') } : undefined} />
             </div>
           )}
-          {children}
+          <MainSlot>{children}</MainSlot>
         </main>
         <div id="app-rail" className="contents" />
       </div>
@@ -84,3 +84,11 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
     </div>
   )
 }
+
+/**
+ * main 의 본문 자리 — 레이아웃 슬롯(children)을 main 바로 아래에 두지 않는다(BUG-17, #418).
+ * 슬롯은 스트리밍 중에는 아직 오지 않은 조각(lazy)일 수 있다. 그것이 요소의 직접 자식이면 React 는 그 요소(main)에서 멈췄다가 조각이 오면
+ * main 을 다시 그리는데, 수화 중에는 서버 DOM 을 가리키는 자리가 이미 main 안으로 들어가 있어 main 을 못 찾고 문서 전체를 클라이언트에서
+ * 다시 그린다(뒤따라 오는 스트리밍 조각은 자리를 잃는다). 컴포넌트 한 겹을 두면 멈추는 곳이 요소가 아니라 이 컴포넌트가 된다.
+ */
+function MainSlot({ children }: { children: ReactNode }) { return children }
