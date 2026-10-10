@@ -1,0 +1,84 @@
+{
+  "baseline_commit": "88026acf248403a6d5e22662506d43c7ea7cfaea",
+  "design_commit": "20d15328393964f11b637ab078729180eb9aaec2",
+  "files": [
+    {
+      "path": "src/app/login/page.tsx",
+      "before": "88b862732f7422663cb90083b3ef968c1815caa144c84f5c7bdb27c0b7c8859e",
+      "after": "9e4fa91a7dfbe8958169d874cc1c44d828f589f5e0639630f319986faf6fc808",
+      "group": "common"
+    },
+    {
+      "path": "src/components/agent-hub/AgentFrame.tsx",
+      "before": "03a4691cd087ce10930eaf266c2a613b629e356a9c2a69d70910b1ed54a87767",
+      "after": "29c5da5107d0193b98aec0fa6fde74dd637b05ade5ff91687caf7ccb57ae3acb",
+      "group": "common"
+    },
+    {
+      "path": "src/components/agents/seatmap.module.css",
+      "before": "8ac58c101257317e519cededbf6f65ba1380af40deaeed554c2f8503b922c5a0",
+      "after": "3d6bf7c6a4ad701dbcf98d002ee184789ac1fb0ba23438b1c220096ba07868f0",
+      "group": "common"
+    },
+    {
+      "path": "src/components/app/NavList.tsx",
+      "before": "d581842fa7ee86a777d7a4bc2ce8b19013f8355a8d690a3304bf4eca8d423530",
+      "after": "e512d79be56e3c7c9cf730a4d442de71b3e32aad0ac7fdf903fd52969c1d80bd",
+      "group": "common"
+    },
+    {
+      "path": "src/components/app/PageHeader.tsx",
+      "before": "a519e384269e8aba6ef35114f5c0ab7170a59ced858c7053c5a3262adb21c810",
+      "after": "65bcf6e943ba51933fd3ab194a47431f028ad057551ee41f0bc6ed47276cfe60",
+      "group": "common"
+    },
+    {
+      "path": "src/components/app/RightRail.tsx",
+      "before": "b2b0b52aed8069aa0b43784d341f4a9ee09acf19d2056fd2fcd9183175175f58",
+      "after": "21b8cfb0fbc6608b7b02d9c8222cdb8b36ee265327ba89b95cdfd37a9ff4122c",
+      "group": "common"
+    },
+    {
+      "path": "src/components/issues/IssuesView.tsx",
+      "before": "0da86d9822ed56b0a191df9b1a45395589cf4b104d92f27e6ce25b7ea3dedd25",
+      "after": "f74f0885d0b548093785fbe69149f2a91e5c7c1f75bc17e9103d2ad5c7efbb9e",
+      "group": "issues"
+    },
+    {
+      "path": "src/components/ui/Field.tsx",
+      "before": "5e2bb98e75fd8dfad9303ec206ea9eaecfdbb091eb1ae8bffd88c3721f104910",
+      "after": "ea6c5e32114c15e8ae78bc6ca4e66a7dc93c3e14ec8a83a15c637f9e41cb82e6",
+      "group": "common"
+    },
+    {
+      "path": "src/components/ui/Modal.tsx",
+      "before": "dc1b5c9ae7516f57b204467c0b01105a40653fb182c2d408ea8dcd42f4d5ec4e",
+      "after": "cfe4be076318add09f2a45767be1cdf88206a9ddfad3c21d76ac49ab73830db6",
+      "group": "common"
+    },
+    {
+      "path": "src/components/ui/SegmentedTabs.tsx",
+      "before": "52de10b3d0f32952aa2323f7028f4f96ee86174c9f995d6a15ae51e65ee2cc07",
+      "after": "26d4f810746d4bc7db2bf83ca9ccab61564f9e3689f7e9f94fc15eb2cbcc599b",
+      "group": "common"
+    },
+    {
+      "path": "src/lib/i18n/dict/issues.ts",
+      "before": "233ac8238fbcfef9c3c7b811e213597587580213cd95d0cc3b4390fb16efd55c",
+      "after": "be2309dacd501e8b88efff73a244960fccf9a1b89ef2ed61a100f9e5599ecaca",
+      "group": "issues"
+    },
+    {
+      "path": "tests/css/layers.test.ts",
+      "before": "d6955f516b8b1db7c22afd3ff6fef50b3ad8c435c9a0a9fbfb98288c6a49ea4b",
+      "after": "dbc20b08de493318f649ebfbd71315bd94a375f6a5e215edbd794c11bfa40006",
+      "group": "common"
+    },
+    {
+      "path": "tests/ui/segmented-tabs-keyboard.test.tsx",
+      "before": null,
+      "after": "97f871430dc555749b478221b9e765078781d36f0217d6776ed3772869792735",
+      "group": "common"
+    }
+  ]
+}
