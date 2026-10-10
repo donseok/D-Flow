@@ -129,7 +129,7 @@ export function RightRail({ occupant, title, onClose, sidebarWidth, width = RAIL
   const head = header === undefined ? (
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
       <h2 className="text-section text-fg">{title}</h2>
-      <button type="button" aria-label={t('common.close')} onClick={onClose} className="rounded-(--radius-control) p-2 hover:bg-surface-hover"><X size={16} aria-hidden /></button>
+      <button type="button" aria-label={t('common.close')} onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-(--radius-control) hover:bg-surface-hover"><X size={16} aria-hidden /></button>
     </div>
   ) : header
   const widthStyle = { '--rail-w': `${width}px` } as React.CSSProperties

@@ -24,6 +24,8 @@ export function NavList({ groups, activeId, collapsed, badges = {}, exclude = []
   badges?: Partial<Record<NavItemId, number | null>>; exclude?: readonly NavItemId[]
 }) {
   const { t } = useLocale()
+  const xl = useXl()
+  const iconOnly = collapsed === true || (collapsed === null && xl === false)
   const labelOf = (l: NavGroup['items'][number]['label']) => (typeof l === 'string' ? l : t(l.key))
   // 선호 없음 = CSS 로 1024~1279 숨김·1280+ 보임(정적 문자열 — 안전망 클래스와 같은 리터럴, D17 ②). 명시 선호는 조건부 렌더
   const textCls = collapsed === null ? 'hidden xl:inline' : ''
@@ -58,7 +60,7 @@ export function NavList({ groups, activeId, collapsed, badges = {}, exclude = []
                   {collapsed === null && shown && <><span className="hidden xl:inline-flex">{count}</span><span className="xl:hidden">{dot}</span></>}
                 </Link>
               )
-              return collapsed === true ? <Tooltip key={i.id} label={label} side="right">{link}</Tooltip> : link
+              return <Tooltip key={i.id} label={label} side="right" disabled={!iconOnly}>{link}</Tooltip>
             })}
           </div>
         )

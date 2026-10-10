@@ -1,11 +1,11 @@
 /* src/components/agents/seatmap.module.css — 좌석표 전용. 상태 변형 display 유틸을 쓰지 않는다(안전망). */
 .root {
-  --sm-paper: #F3F5F1; --sm-surface: #FFFFFF; --sm-ink: #1B252C; --sm-ink-2: #4B5A64; --sm-ink-3: #7E8B93;
+  --sm-paper: var(--color-canvas); --sm-surface: var(--color-surface); --sm-ink: var(--color-fg); --sm-ink-2: var(--color-fg-secondary); --sm-ink-3: var(--color-fg-muted);
   --sm-line: #C9D0CB; --sm-line-2: #E2E6E1; --sm-zone: #F7F8F5;
   --sm-band: #22394A; --sm-band-ink: #F2F6F8; --sm-band-muted: #9FB4C2;
   --sm-active: #5DB1E5; --sm-active-ink: #0B2436; --sm-active-soft: #E4F1FA;
   --sm-wait: #F0B068; --sm-wait-ink: #472705; --sm-wait-soft: #FBEDDC;
-  --sm-empty: #E3E7E2; --sm-empty-ink: #75828A; --sm-reject: #F4C7BE; --sm-reject-ink: #6A1C0F; --sm-reject-bar: #D8563E;
+  --sm-empty: #E3E7E2; --sm-empty-ink: var(--color-fg-secondary); --sm-reject: #F4C7BE; --sm-reject-ink: #6A1C0F; --sm-reject-bar: #D8563E;
   --sm-standby: #3F8F58; --sm-standby-soft: #DCEFE0; --sm-warn: #D8563E; --sm-warn-soft: #FBE4DF;
   --sm-shadow: 0 1px 2px rgba(20,30,36,.06), 0 8px 22px rgba(20,30,36,.06);
   /* 스프라이트 표시 칸 — 원본 셀은 136x124(public/sprites/manifest.json), 화면에는 3/4 로 그린다

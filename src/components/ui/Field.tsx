@@ -37,7 +37,7 @@ export function Field({ label, description, error, readOnly = false, disabled = 
     `disabled:cursor-not-allowed disabled:bg-surface-disabled disabled:text-fg-disabled read-only:bg-surface-subtle`
   return (
     <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-meta font-semibold text-fg-secondary">{label}</label>
+      <label htmlFor={id} className="block text-control font-semibold text-fg-secondary">{label}</label>
       {children({ id, 'aria-invalid': error ? true : undefined, 'aria-describedby': describedBy, readOnly: readOnly || undefined, disabled: disabled || undefined, className })}
       {description && <p id={descId} className="text-meta text-fg-secondary">{description}</p>}
       {error && <p id={errId} className="text-meta font-medium text-danger">{error}</p>}

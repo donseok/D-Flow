@@ -116,6 +116,7 @@ export default function Login() {
                     value={email}
                     onChange={event => setEmail(event.target.value)}
                     aria-invalid={!!error}
+                    aria-describedby={error ? 'login-error' : undefined}
                     required
                   />
                 </div>
@@ -130,17 +131,19 @@ export default function Login() {
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
                     placeholder="••••••••"
-                    className={`${inputBase} pl-10 pr-11`}
+                    className={`${inputBase} pl-10 pr-14`}
                     value={password}
                     onChange={event => setPassword(event.target.value)}
                     aria-invalid={!!error}
+                    aria-describedby={error ? 'login-error' : undefined}
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(previous => !previous)}
                     aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-fg-muted transition-colors duration-(--motion-fast) hover:text-fg"
+                    aria-pressed={showPassword}
+                    className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-(--radius-control) text-fg-muted transition-colors duration-(--motion-fast) hover:bg-surface-hover hover:text-fg"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -148,7 +151,7 @@ export default function Login() {
               </div>
 
               {error && (
-                <p role="alert" className="text-sm font-medium text-danger">{error}</p>
+                <p id="login-error" role="alert" className="text-body font-medium text-danger">{error}</p>
               )}
 
               <button type="submit" disabled={loading} className="btn btn-primary h-11 w-full">

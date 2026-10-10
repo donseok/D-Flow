@@ -22,11 +22,11 @@ describe('층 토큰', () => {
     expect(t).toContain('starting:opacity-0')
     expect(t).toContain('document.body')
   })
-  it('페이드는 배경·패널에 따로 건다 — 흐림을 가진 배경의 조상에 opacity 전환을 두면 전환 동안 backdrop-blur 가 꺼진다(U1b 리뷰 R2 P3)', () => {
+  it('페이드는 배경·패널에 따로 적용한다', () => {
     const t = read('src/components/ui/Modal.tsx')
     const tag = (re: RegExp) => t.match(re)?.[0] ?? ''
     const root = tag(/<div className="[^"]*\bz-\(--z-modal\)[^"]*"/)
-    const backdrop = tag(/<button className="[^"]*\bbackdrop-blur[^"]*"/)
+    const backdrop = tag(/<button className="[^"]*\bbg-black\/40[^"]*"/)
     const panel = tag(/<div ref=\{panelRef\}[^>]*className=\{`[^`]*`\}/)
     expect(root).not.toBe('')
     expect(root).not.toMatch(/starting:opacity|transition-opacity/)

@@ -31,8 +31,8 @@ export function AgentHero({ nav, projectName, title, lede, tiles, aside }: {
       <div className="relative z-10 min-w-0">
         {nav}
         <p className="mt-3.5 text-meta font-semibold text-fg-secondary">{projectName}</p>
-        <h1 className="text-[28px] font-extrabold leading-tight tracking-tight text-fg">{title}</h1>
-        <div data-agent-lede className="mt-1.5 text-[15px] text-fg-secondary [&_b]:text-fg [&_em]:not-italic [&_em]:text-warning">{lede}</div>
+        <h1 className="break-words text-title text-fg">{title}</h1>
+        <div data-agent-lede className="mt-1.5 text-body text-fg-secondary [&_b]:text-fg [&_em]:not-italic [&_em]:text-warning">{lede}</div>
       </div>
       <div className="relative z-10 flex min-w-0 flex-col gap-3">
         {aside}
@@ -42,7 +42,7 @@ export function AgentHero({ nav, projectName, title, lede, tiles, aside }: {
         <ul aria-label={t('agentHub.hero.tilesAria')} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
           {tiles.map(x => (
             <li key={x.key} className="rounded-(--radius-panel) border border-border bg-surface-subtle px-3 py-2.5">
-              <b data-hero-tile={x.key} className="block text-2xl font-extrabold leading-none tabular-nums" style={{ color: x.valueColor ?? x.color }}>{x.value}</b>
+              <b data-hero-tile={x.key} className="block text-kpi tabular-nums text-fg">{x.value}</b>
               <span className="mt-1.5 flex items-center gap-1.5 text-meta text-fg-secondary">
                 <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: x.color }} />{x.label}
               </span>
