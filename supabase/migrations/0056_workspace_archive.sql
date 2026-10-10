@@ -751,6 +751,7 @@ begin
     return;
   end if;
   select w.id into v_other from public.workspaces w where w.id <> v_ws order by w.id limit 1;
+  -- 워크스페이스가 하나뿐이면 대조군이 없다 — null 을 판정 함수에 넘기면 보관 전후의 null/false 가 갈려(빈 집합의 `null in (…)` 은 false) 거짓 경보가 난다. 그때는 대조를 건너뛴다
   select p.id into v_project from public.projects p where p.workspace_id = v_ws order by p.id limit 1;
   select m.user_id into v_member from public.workspace_members m where m.workspace_id = v_ws order by (m.role = 'admin') desc, m.user_id limit 1;
   select a.user_id into v_platform from public.platform_admins a order by a.user_id limit 1;
@@ -762,14 +763,14 @@ begin
         raise exception 'WORKSPACE_ARCHIVE_POSTCHECK: 세션 시늉이 먹지 않았다';
       end if;
       v_before := pg_catalog.concat_ws(',', public.is_ws_member(v_ws), v_ws in (select public.my_workspace_ids()));
-      v_other_before := pg_catalog.concat_ws(',', public.is_ws_member(v_other), public.is_ws_admin(v_other), v_other in (select public.my_workspace_ids()));
+      v_other_before := case when v_other is null then 'none' else pg_catalog.concat_ws(',', public.is_ws_member(v_other), public.is_ws_admin(v_other), v_other in (select public.my_workspace_ids())) end;
       update public.workspaces set archived_at = pg_catalog.now() where id = v_ws;
       v_during := pg_catalog.concat_ws(',', public.is_ws_member(v_ws), public.is_ws_admin(v_ws), v_ws in (select public.my_workspace_ids()),
         public.actor_is_workspace_admin(v_who, v_ws),
         (v_project is not null and public.is_project_admin(v_project)), (v_project is not null and public.is_project_member(v_project)),
         (v_project is not null and public.can_read_project(v_project)), (v_project is not null and public.actor_is_project_admin(v_who, v_project)),
         (v_project is not null and v_project in (select public.accessible_project_ids())));
-      v_other_during := pg_catalog.concat_ws(',', public.is_ws_member(v_other), public.is_ws_admin(v_other), v_other in (select public.my_workspace_ids()));
+      v_other_during := case when v_other is null then 'none' else pg_catalog.concat_ws(',', public.is_ws_member(v_other), public.is_ws_admin(v_other), v_other in (select public.my_workspace_ids())) end;
       raise exception using errcode = 'ARCH1', message = pg_catalog.concat_ws('|', v_before, v_during, v_other_before, v_other_during);
     exception when sqlstate 'ARCH1' then
       v := sqlerrm;   -- 하위 트랜잭션이 되돌려졌다 — 보관도, 세션 시늉도 남지 않는다
