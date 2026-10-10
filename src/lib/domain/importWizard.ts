@@ -24,6 +24,8 @@ export interface ExecuteResult {
   profileSave?: { ok: false; code: string; error: string }
   /** 근무 예외와 겹쳐 휴무로 덮지 않은 날짜(SP5 D7) — 있을 때만 */
   skippedHolidays?: SkippedHoliday[]
+  /** 이름·값이 없어 건너뛴 행 수(BUG-33) — 0 이면 싣지 않는다 */
+  skippedRows?: number
   warnings?: string[]
 }
 
@@ -107,7 +109,8 @@ export interface WizardState {
   profileSource: 'saved' | 'detected'
   profile: ExcelProfile | null
   mode: ImportMode
-  /** execute 의 saveProfile — 기본 켜짐, 저장 양식과 불일치면 inspectSuccess 가 끈다. */
+  /** execute 의 saveProfile — **기본 꺼짐**(BUG-04). 켜 둔 채 실행하면 잘못 감지된 양식이 프로젝트 기본 양식을 조용히 덮는다 —
+   *  저장은 사용자가 고른 때만 한다. */
   saveProfile: boolean
   busy: boolean
   error: string | null
@@ -130,6 +133,8 @@ export interface WizardState {
   preBackup: { generatedAt: string } | null
   /** 미리보기 — 감지 라우트의 휴일 충돌(SP5 D7). 파일을 바꾸면 비운다 */
   skippedHolidays: SkippedHoliday[]
+  /** 미리보기 — 감지 양식으로 읽었을 때 이 프로젝트에 없어 새로 만들 팀(BUG-10). null = 서버가 판정하지 못함(양식을 못 읽었거나 팀 조회 실패) */
+  newTeams: string[] | null
   result: ExecuteResult | null
 }
 
@@ -142,7 +147,7 @@ export const initialWizardState: WizardState = {
   profileSource: 'detected',
   profile: null,
   mode: 'append',
-  saveProfile: true,
+  saveProfile: false,
   busy: false,
   error: null,
   errors: null,
@@ -154,13 +159,15 @@ export const initialWizardState: WizardState = {
   intentKey: null,
   preBackup: null,
   skippedHolidays: [],
+  newTeams: null,
   result: null,
 }
 
 export type WizardAction =
   | { type: 'fileSelected'; fileName: string }
   | { type: 'inspectStart' }
-  | { type: 'inspectSuccess'; detection: DetectionResult; savedProfile: ExcelProfile | null; skippedHolidays?: SkippedHoliday[] }
+  | { type: 'inspectSuccess'; detection: DetectionResult; savedProfile: ExcelProfile | null; skippedHolidays?: SkippedHoliday[]; newTeams?: string[] | null }
+  | { type: 'gotoStep'; step: 'select' | 'review' }
   | { type: 'inspectFailure'; error: string }
   | { type: 'profileChanged'; profile: ExcelProfile }
   | { type: 'modeChanged'; mode: ImportMode }
@@ -247,14 +254,20 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
         detection: action.detection,
         savedProfile: action.savedProfile,
         ...choice,
-        // 불일치면 양식 저장은 기본 꺼짐 — 켜 둔 채 실행하면 감지 양식이 저장 양식을 조용히 덮어쓴다. 사용자가 켜면 저장한다.
-        saveProfile: choice.profileMismatch === null,
+        // 양식 저장은 늘 꺼진 채 시작한다(BUG-04) — 사용자가 켜면 저장한다
+        saveProfile: false,
         skippedHolidays: action.skippedHolidays ?? [],
+        newTeams: action.newTeams ?? null,
         error: null,
       }
     }
     case 'inspectFailure':
       return { ...state, busy: false, error: action.error }
+    case 'gotoStep':
+      // 단계 표시를 눌러 이동(BUG-30) — 끝낸 단계로만, 진행 상태(파일·감지·고친 양식·방식)는 그대로 둔다. 완료 뒤에는 움직이지 않는다
+      // (같은 파일을 다시 실행하면 새 명령이라 두 벌이 된다 — '다른 파일 가져오기'가 그 길이다)
+      if (!canGotoStep(state, action.step)) return state
+      return { ...state, step: action.step, error: null, ...NO_TEAMS_PROMPT }   // 행 오류 목록(errors)은 검토 화면의 것이라 남긴다
     case 'profileChanged':
       return { ...state, profile: action.profile }
     case 'modeChanged':
@@ -307,16 +320,51 @@ export function reducer(state: WizardState, action: WizardAction): WizardState {
 }
 
 
-/** 계층 방식 전환 — columns↔outline. 반대편에 없던 필드는 합리적 기본값으로 재구성한다.
- *  columns 로 돌아가면 name 은 다시 null(계층 열 자체가 이름의 출처 — profile.ts 규약). */
-export function switchHierarchyKind(profile: ExcelProfile, kind: 'columns' | 'outline'): ExcelProfile {
+/** 단계 표시로 그 단계에 갈 수 있는가(BUG-30) — 끝낸 단계만: 검토 중에는 파일 선택으로, 파일 선택으로 돌아온 뒤에는(감지 결과가 남아 있으면)
+ *  다시 검토로. 처리 중·완료 뒤에는 닫힌다 */
+export function canGotoStep(state: Pick<WizardState, 'step' | 'busy' | 'detection' | 'profile'>, step: 'select' | 'review'): boolean {
+  if (state.busy || state.step === 'done' || state.step === step) return false
+  return step === 'select' ? true : state.detection !== null && state.profile !== null
+}
+
+/** 다른 열이 가져간 논리 열 지정을 푼다 — 계층 열이 된 열을 시작일로도 읽는 일이 없게(미리보기는 계층을 먼저 그려 겹침이 보이지 않는다) */
+function releaseLogical(logical: ExcelProfile['logical'], taken: readonly number[]): ExcelProfile['logical'] {
+  const out = { ...logical }
+  for (const k of LOGICAL_KEYS) if (out[k] !== null && taken.includes(out[k] as number)) out[k] = null
+  return out
+}
+
+/** 계층 방식 전환 — columns↔outline(BUG-08). **이전 방식의 열을 끌고 가지 않는다**: 새 방식의 열은 감지기가 그 방식으로 찾아 둔 후보
+ *  (DetectionResult.hierarchyCandidates)에서 다시 시작한다. 예전에는 아웃라인 코드 열 하나를 그대로 계층 열로 삼아, 잘못 잡힌 '시작일' 이
+ *  계층 열로 남고 모든 행의 깊이가 0 이었다. 후보가 없으면 비워 둔다(columns: [] · name: null) — 사용자가 고르고, 고르기 전에는
+ *  실행이 닫힌다(profileBlocker). columns 로 가면 name 은 null(계층 열 자체가 이름의 출처 — profile.ts 규약). */
+export function switchHierarchyKind(
+  profile: ExcelProfile,
+  kind: 'columns' | 'outline',
+  candidates: DetectionResult['hierarchyCandidates'] = { columns: [], outline: null, name: null },
+): ExcelProfile {
   if (profile.hierarchy.kind === kind) return profile
   if (kind === 'outline') {
-    const column = profile.hierarchy.kind === 'columns' ? profile.hierarchy.columns[0] : 0
-    return { ...profile, hierarchy: { kind: 'outline', column } }
+    // 아웃라인 코드 열은 코드 논리 열과 같은 열일 수 있다(코드 열 값이 code 후보) — 풀지 않는다
+    return { ...profile, hierarchy: { kind: 'outline', column: candidates.outline ?? 0 }, logical: { ...profile.logical, name: candidates.name } }
   }
-  const column = profile.hierarchy.kind === 'outline' ? profile.hierarchy.column : 0
-  return { ...profile, hierarchy: { kind: 'columns', columns: [column] }, logical: { ...profile.logical, name: null } }
+  const columns = [...candidates.columns]
+  return { ...profile, hierarchy: { kind: 'columns', columns }, logical: { ...releaseLogical(profile.logical, columns), name: null } }
+}
+
+/** 열=계층의 계층 열 하나를 켜고 끈다 — 열 번호 오름차순(왼쪽이 얕은 단계 — 양식 검증의 규칙)으로 둔다. 켠 열의 논리 열 지정은 푼다 */
+export function toggleHierarchyColumn(profile: ExcelProfile, column: number): ExcelProfile {
+  if (profile.hierarchy.kind !== 'columns') return profile
+  const on = profile.hierarchy.columns.includes(column)
+  const columns = on ? profile.hierarchy.columns.filter(c => c !== column) : [...profile.hierarchy.columns, column].sort((a, b) => a - b)
+  return { ...profile, hierarchy: { kind: 'columns', columns }, logical: on ? profile.logical : releaseLogical(profile.logical, [column]) }
+}
+
+/** 이 양식으로는 실행할 수 없는 까닭 — 열=계층인데 계층 열이 없다 / 아웃라인인데 이름 열이 없다. 감지기는 못 찾은 열을 추정으로 채우지
+ *  않으므로(BUG-07) 사용자가 고를 때까지 실행을 닫는다. null = 실행할 수 있다 */
+export function profileBlocker(profile: ExcelProfile): 'hierarchyColumns' | 'nameColumn' | null {
+  if (profile.hierarchy.kind === 'columns') return profile.hierarchy.columns.length === 0 ? 'hierarchyColumns' : null
+  return profile.logical.name === null ? 'nameColumn' : null
 }
 
 /** 아웃라인 코드 열 편집. columns 모드에서는 무의미하므로 무시(호출부가 outline 일 때만 부른다). */

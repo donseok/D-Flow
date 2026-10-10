@@ -11,6 +11,7 @@ import {
   detectLogicalColumns,
   detectTeamColumns,
   OWNER_MARKS_IN_TEAM_HEADER,
+  WARN_NAME_NOT_FOUND,
 } from '@/lib/excel/detect'
 
 function makeBook(sheets: { name: string; aoa: unknown[][] }[]): ArrayBuffer {
@@ -207,7 +208,8 @@ describe('detectWorkbook — logical.name(리뷰 픽스)', () => {
     expect(res.result.warnings.some(w => w.includes("'이름' 열을 찾지 못해"))).toBe(false)
   })
 
-  it("outline + 별칭 미발견 — '코드,비고' 헤더는 코드 열 다음 열(1)로 폴백하고 경고+confidence 감점을 남긴다", () => {
+  // BUG-07 — 예전에는 '코드 열 바로 다음 열' 로 이름 열을 추정했다(코드 열을 잘못 잡은 날 종료일이 이름이 됐다). 못 찾으면 비워 두고 사용자가 고른다
+  it("outline + 별칭 미발견 — '코드,비고' 헤더는 이름 열을 추정하지 않는다: null + 직접 지정 경고 + uncertain", () => {
     const aliasAoa: unknown[][] = [
       ['코드', '비고', '업무명'],
       ['1', 'x', '준비'], ['1.1', 'y', '거버넌스'], ['2', 'z', '실행'],
@@ -220,9 +222,13 @@ describe('detectWorkbook — logical.name(리뷰 픽스)', () => {
     const fallbackRes = detectWorkbook(makeBook([{ name: 'Sheet1', aoa: fallbackAoa }]))
     expect(aliasRes.ok && fallbackRes.ok).toBe(true)
     if (!aliasRes.ok || !fallbackRes.ok) return
-    expect(fallbackRes.result.profile.logical.name).toBe(1) // hierarchy.column(0) + 1
-    expect(fallbackRes.result.warnings).toContain("'이름' 열을 찾지 못해 코드 열 다음 열로 추정했습니다 — 2단계에서 확인하세요")
-    // 폴백은 부분일치와 동일한 가중치로 confidence 를 깎는다 — 별칭으로 확정된 케이스보다 낮아야 한다.
+    expect(fallbackRes.result.profile.logical.name).toBeNull()
+    expect(fallbackRes.result.warnings).toContain(WARN_NAME_NOT_FOUND)
+    expect(fallbackRes.result.uncertain).toBe(true)
+    expect(fallbackRes.result.hierarchyCandidates).toEqual({ columns: [], outline: 0, name: null })
+    // 별칭으로 찾은 쪽은 확정이다
+    expect(aliasRes.result.profile.logical.name).toBe(2)
+    expect(aliasRes.result.uncertain).toBe(false)
     expect(fallbackRes.result.confidence.logical).toBeLessThan(aliasRes.result.confidence.logical)
   })
 

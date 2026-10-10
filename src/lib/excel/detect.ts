@@ -7,6 +7,7 @@ import type { ExcelProfile } from '@/lib/excel/profile'
 // 별칭 사전(논리·담당)은 엑셀 머리 낱말의 단일 출처에 있다(SP4 D38) — 팀 예약어가 같은 사전에서 파생한다. 기존 import 경로를 위해 재수출한다
 import { LOGICAL_ALIASES, TEAM_DIRECT_MARK, TEAM_HEADER_ALIASES, isHeaderWordMatch } from '@/lib/excel/headerWords'
 export { LOGICAL_ALIASES } from '@/lib/excel/headerWords'
+import { NOT_XLSX_ERROR, isDateCell, isXlsxBuffer, readSheetRows } from '@/lib/excel/sheetRows'
 
 export interface DetectionResult {
   sheetNames: string[]
@@ -14,6 +15,12 @@ export interface DetectionResult {
   confidence: { header: number; hierarchy: number; logical: number }  // 0~1
   preview: { headers: string[]; rows: unknown[][] }   // 헤더행 라벨 + 데이터 10행 원본
   warnings: string[]             // '가중치 열을 찾지 못했습니다' 등 — 빈 매핑은 null 로 두고 경고
+  /** 계층 방식별 후보(BUG-08) — 마법사가 방식을 바꿀 때 그 방식의 후보에서 다시 시작한다(이전 방식의 열을 끌고 가지 않는다).
+   *  columns = 열=계층 후보(없으면 []), outline = 아웃라인 코드 열 후보, name = 머리 낱말로 찾은 이름 열(아웃라인 전용) */
+  hierarchyCandidates: { columns: number[]; outline: number | null; name: number | null }
+  /** 구조를 확정하지 못했다(BUG-07·04) — 머리 행·계층 열·(아웃라인의) 이름 열 가운데 하나라도 못 찾았다. 추정으로 채우지 않았으므로
+   *  사용자가 2단계에서 직접 지정해야 하고, 고치지 않은 이 양식은 프로젝트 기본 양식으로 저장하지 않는다 */
+  uncertain: boolean
 }
 
 /** 담당 마크 방식(규칙 6)의 기본 마크 사전. */
@@ -56,8 +63,12 @@ export function pickSheets(sheetNames: string[]): { workSheetName: string; holid
 }
 
 /* ── 규칙 2: 헤더 행 — 상위 10행을 별칭 사전 히트 수로 스코어링. 동점·0점이면 tie=true. ── */
-export function detectHeaderRow(aoa: unknown[][], maxScan = 10, extraAxisLabel: string | null = null): { row: number; score: number; tie: boolean } {
-  const known = withExtraAxisAlias(ALL_ALIASES, extraAxisLabel)
+export function detectHeaderRow(
+  aoa: unknown[][], maxScan = 10, extraAxisLabel: string | null = null, levelLabels: readonly string[] = [],
+): { row: number; score: number; tie: boolean } {
+  // 프로젝트의 단계 이름도 머리 낱말이다(BUG-07) — 단계 이름만 있는 머리 행도 점수를 받는다
+  const levels = levelLabels.map((l) => l.trim().toLowerCase()).filter(Boolean)
+  const known = [...new Set([...withExtraAxisAlias(ALL_ALIASES, extraAxisLabel), ...levels])]
   const n = Math.min(maxScan, aoa.length)
   if (n === 0) return { row: 0, score: 0, tie: false }
   const scores: number[] = []
@@ -78,11 +89,12 @@ export function detectHeaderRow(aoa: unknown[][], maxScan = 10, extraAxisLabel: 
 /* ── 규칙 3: 열=계층 — 텍스트 열의 연속 구간 중 "행마다 비공백 정확히 1개" 비율 90%+ 인 최장 구간.
  *  후보 없으면 null(호출부가 아웃라인으로 넘어간다). 길이 1 구간은 "항상 채워진 단일 필드"(예: 산출물)와
  *  구별할 수 없으므로 제외한다 — 계층은 최소 2열 이상이어야 의미가 있다. ── */
-export function detectColumnHierarchy(dataRows: unknown[][]): { columns: number[]; ratio: number } | null {
+export function detectColumnHierarchy(dataRows: unknown[][], excluded: ReadonlySet<number> = new Set()): { columns: number[]; ratio: number } | null {
   if (dataRows.length === 0) return null
   const maxCol = dataRows.reduce((m, r) => Math.max(m, r.length), 0)
   const isTextColumn: boolean[] = []
-  for (let c = 0; c < maxCol; c++) isTextColumn[c] = dataRows.some(r => isTextCell(r[c]))
+  // excluded = 날짜로 읽히는 열 등 계층일 수 없는 열 — 글자로 적은 날짜('2026-10-20')도 글자 열이라 구간에 섞였다
+  for (let c = 0; c < maxCol; c++) isTextColumn[c] = !excluded.has(c) && dataRows.some(r => isTextCell(r[c]))
 
   const runs: [number, number][] = []
   let runStart: number | null = null
@@ -118,10 +130,13 @@ function exactlyOneRatio(dataRows: unknown[][], cols: number[]): number {
 }
 
 /* ── 규칙 4: 아웃라인 — ^\d+([.\-]\d+)*$ 매치 비율 80%+ 인 첫 열(왼쪽부터). ── */
-export function detectOutlineHierarchy(dataRows: unknown[][]): { column: number; ratio: number } | null {
+export function detectOutlineHierarchy(dataRows: unknown[][], excluded: ReadonlySet<number> = new Set()): { column: number; ratio: number } | null {
   if (dataRows.length === 0) return null
   const maxCol = dataRows.reduce((m, r) => Math.max(m, r.length), 0)
   for (let c = 0; c < maxCol; c++) {
+    // excluded = 날짜로 읽히는 열·머리가 다른 논리 열(시작·종료·가중치·실적%)인 열(BUG-07). 아웃라인 패턴은 숫자와 '.'·'-' 뿐이라
+    // 글자 날짜('2026-10-20')와 정수 열(가중치 50)이 그대로 걸린다
+    if (excluded.has(c)) continue
     let hit = 0
     for (const r of dataRows) if (OUTLINE_RE.test(cellText(r[c]))) hit++
     const ratio = hit / dataRows.length
@@ -148,6 +163,8 @@ export function detectLogicalColumns(
   headerLabels: string[],
   excluded: ReadonlySet<number> = new Set(),
   extraAxisLabel: string | null = null,
+  /** 날짜로 읽히는 열 — 코드·이름 후보에서 뺀다(BUG-07). 나머지 필드는 그대로 본다(시작·종료가 바로 이 열이다) */
+  dateLike: ReadonlySet<number> = new Set(),
 ): { logical: ExcelProfile['logical']; warnings: string[]; partialMatchCount: number } {
   const lower = headerLabels.map(v => v.toLowerCase())
   const warnings: string[] = []
@@ -159,16 +176,17 @@ export function detectLogicalColumns(
   for (const field of fields) {
     const own = LOGICAL_ALIASES[field].map(a => a.trim().toLowerCase())
     const aliases = field === 'extraAxis' ? withExtraAxisAlias(own, extraAxisLabel) : own
+    const barred = (c: number) => (field === 'code' || field === 'name') && dateLike.has(c)
     let found = -1
     for (let c = 0; c < lower.length; c++) {
-      if (claimed.has(c) || !lower[c]) continue
+      if (claimed.has(c) || !lower[c] || barred(c)) continue
       if (aliases.includes(lower[c])) { found = c; break }
     }
     let isPartial = false
     if (found < 0) {
       const partialAliases = aliases.filter(a => a.length >= MIN_PARTIAL_ALIAS_LEN)
       for (let c = 0; c < lower.length; c++) {
-        if (claimed.has(c) || lower[c].length < MIN_PARTIAL_ALIAS_LEN) continue
+        if (claimed.has(c) || lower[c].length < MIN_PARTIAL_ALIAS_LEN || barred(c)) continue
         if (partialAliases.some(a => lower[c].includes(a) || a.includes(lower[c]))) { found = c; isPartial = true; break }
       }
     }
@@ -229,12 +247,65 @@ export function detectTeamColumns(
   return { teamColumns: [], warnings: ['팀 열을 찾지 못했습니다'] }
 }
 
+/* ── 규칙 3′: 단계 이름 열(BUG-07) — 머리 낱말이 프로젝트의 단계 이름(core.level_labels)과 같은 열들. 둘 이상이고 단계 순서대로
+ *  왼쪽에서 오른쪽으로 놓였으면 그 열들이 계층이다(자료의 모양으로 추정하는 규칙 3 보다 먼저 — 머리가 말해 주는 사실이다).
+ *  비교는 머리 낱말 비교(대소문자·전각·앞뒤 공백 무시). 하나만 맞거나 순서가 뒤집혔으면 null(다음 규칙으로). ── */
+export function detectLevelLabelColumns(headerLabels: string[], levelLabels: readonly string[]): number[] | null {
+  const cols: number[] = []
+  for (const label of levelLabels) {
+    if (!label.trim()) continue
+    const c = headerLabels.findIndex((h, idx) => h !== '' && !cols.includes(idx) && isHeaderWordMatch(h, label))
+    if (c >= 0) cols.push(c)
+  }
+  if (cols.length < 2) return null
+  return cols.every((c, i) => i === 0 || c > cols[i - 1]) ? cols : null
+}
+
+/** 날짜 글자 — 'YYYY-MM-DD'·'YYYY.MM.DD'·'YYYY/MM/DD'(자리 수는 느슨하게). 코드·이름 후보에서 빼는 판정에만 쓴다(값 읽기는 toIso) */
+const DATE_TEXT_RE = /^\d{4}[-./]\d{1,2}[-./]\d{1,2}$/
+
+/** 날짜로 읽히는 열 — 값이 있는 칸의 절반 이상이 날짜 서식의 수이거나 날짜 글자인 열 */
+function dateLikeColumns(ws: XLSX.WorkSheet | undefined, dataRows: unknown[][], dataExcelRows: number[]): Set<number> {
+  const out = new Set<number>()
+  const maxCol = dataRows.reduce((m, r) => Math.max(m, r.length), 0)
+  for (let c = 0; c < maxCol; c++) {
+    let filled = 0
+    let dates = 0
+    dataRows.forEach((r, i) => {
+      const v = r[c]
+      if (isBlankCell(v)) return
+      filled++
+      if ((typeof v === 'string' && DATE_TEXT_RE.test(v.trim())) || (ws && isDateCell(ws, dataExcelRows[i], c))) dates++
+    })
+    if (filled > 0 && dates / filled >= 0.5) out.add(c)
+  }
+  return out
+}
+
+/** 머리 낱말이 그 필드들의 별칭과 정확히 같은 열 */
+function exactAliasColumns(headerLabels: string[], fields: readonly (keyof ExcelProfile['logical'])[]): Set<number> {
+  const words = fields.flatMap((f) => LOGICAL_ALIASES[f]).map((a) => a.trim().toLowerCase())
+  const out = new Set<number>()
+  headerLabels.forEach((h, c) => { if (h && words.includes(h.toLowerCase())) out.add(c) })
+  return out
+}
+
+export const WARN_HIERARCHY_NOT_FOUND = '계층 열을 찾지 못했습니다 — 2단계에서 계층 방식과 열을 직접 지정하세요'
+export const WARN_NAME_NOT_FOUND = "'이름' 열을 찾지 못했습니다 — 2단계에서 이름 열을 직접 지정하세요"
+
 /* ── 조립 ── */
-export function detectWorkbook(buf: ArrayBuffer, opts: { extraAxisLabel?: string | null } = {}): { ok: true; result: DetectionResult } | { ok: false; error: string } {
+export function detectWorkbook(
+  buf: ArrayBuffer,
+  opts: { extraAxisLabel?: string | null; /** 프로젝트의 단계 이름(core.level_labels) — 계층 열 후보로 먼저 쓴다 */ levelLabels?: readonly string[] } = {},
+): { ok: true; result: DetectionResult } | { ok: false; error: string } {
   const extraAxisLabel = opts.extraAxisLabel ?? null
+  const levelLabels = opts.levelLabels ?? []
+  // 엑셀이 아닌 파일은 여기서 끝낸다 — SheetJS 는 평문을 CSV 로 읽어 주므로 읽기 실패로는 걸러지지 않는다(BUG-04)
+  if (!isXlsxBuffer(buf)) return { ok: false, error: NOT_XLSX_ERROR }
   let wb: XLSX.WorkBook
   try {
-    wb = XLSX.read(buf, { type: 'array', cellDates: false })
+    // cellNF — 날짜 서식의 수(엑셀 날짜)를 알아보려면 서식 코드가 있어야 한다(dateLikeColumns)
+    wb = XLSX.read(buf, { type: 'array', cellDates: false, cellNF: true })
   } catch {
     return { ok: false, error: '워크북을 읽을 수 없습니다' }
   }
@@ -243,13 +314,13 @@ export function detectWorkbook(buf: ArrayBuffer, opts: { extraAxisLabel?: string
   if (!sheets) return { ok: false, error: '시트가 없습니다' }
   const { workSheetName, holidaySheetName } = sheets
 
-  const ws = wb.Sheets[workSheetName]
-  const aoa = ws ? XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false }) : []
+  const ws = wb.Sheets[workSheetName] as XLSX.WorkSheet | undefined
+  const { aoa, excelRows } = readSheetRows(ws)
 
   const warnings: string[] = []
 
   // 규칙 2
-  const headerRes = detectHeaderRow(aoa, 10, extraAxisLabel)
+  const headerRes = detectHeaderRow(aoa, 10, extraAxisLabel, levelLabels)
   const headerUnclear = headerRes.tie || headerRes.score === 0
   const headerRow = headerUnclear ? 0 : headerRes.row
   if (headerUnclear) warnings.push('헤더 행을 확실히 찾지 못했습니다 — 0행으로 가정합니다')
@@ -257,24 +328,34 @@ export function detectWorkbook(buf: ArrayBuffer, opts: { extraAxisLabel?: string
 
   const headerLabels = ((aoa[headerRow] ?? []) as unknown[]).map(cellText)
   const dataRows = aoa.slice(headerRow + 1)
+  const dateLike = dateLikeColumns(ws, dataRows, excelRows.slice(headerRow + 1))
 
-  // 규칙 3 → 4
+  // 규칙 3′ → 3 → 4. 두 방식의 후보를 다 구해 둔다 — 고른 방식은 하나지만 마법사가 방식을 바꾸면 다른 쪽 후보에서 시작한다(BUG-08)
+  const labelColumns = detectLevelLabelColumns(headerLabels, levelLabels)
+  const shapeColumns = labelColumns ? null : detectColumnHierarchy(dataRows, dateLike)
+  // 아웃라인 코드일 수 없는 열 — 날짜 열과, 머리가 다른 논리 열이라고 말하는 열
+  const notOutline = new Set<number>([...dateLike, ...exactAliasColumns(headerLabels, ['start', 'end', 'weight', 'actualPct'])])
+  const outlineCandidate = detectOutlineHierarchy(dataRows, notOutline)
+
   let hierarchy: ExcelProfile['hierarchy']
   let confidenceHierarchy: number
-  const colCandidate = detectColumnHierarchy(dataRows)
-  if (colCandidate) {
-    hierarchy = { kind: 'columns', columns: colCandidate.columns }
-    confidenceHierarchy = colCandidate.ratio
+  let hierarchyFound = true
+  if (labelColumns) {
+    hierarchy = { kind: 'columns', columns: labelColumns }
+    confidenceHierarchy = 1
+  } else if (shapeColumns) {
+    hierarchy = { kind: 'columns', columns: shapeColumns.columns }
+    confidenceHierarchy = shapeColumns.ratio
+  } else if (outlineCandidate) {
+    hierarchy = { kind: 'outline', column: outlineCandidate.column }
+    confidenceHierarchy = outlineCandidate.ratio
   } else {
-    const outlineCandidate = detectOutlineHierarchy(dataRows)
-    if (outlineCandidate) {
-      hierarchy = { kind: 'outline', column: outlineCandidate.column }
-      confidenceHierarchy = outlineCandidate.ratio
-    } else {
-      hierarchy = { kind: 'columns', columns: [leftmostTextColumn(headerLabels)] }
-      confidenceHierarchy = 0
-      warnings.push('계층 열을 확정하지 못했습니다 — 첫 텍스트 열로 가정합니다')
-    }
+    // 못 찾았다 — 양식의 모양(계층은 비울 수 없다)을 채우려고 첫 글자 열을 두지만 추정이 아니라 빈자리다: uncertain 으로 표시하고
+    // 사용자가 2단계에서 직접 지정한다
+    hierarchy = { kind: 'columns', columns: [leftmostTextColumn(headerLabels)] }
+    confidenceHierarchy = 0
+    hierarchyFound = false
+    warnings.push(WARN_HIERARCHY_NOT_FOUND)
   }
   const hierarchyColumns = new Set<number>(hierarchy.kind === 'columns' ? hierarchy.columns : [hierarchy.column])
   // outline 열은 코드 열과 동일 물리 열인 경우가 흔하다(Task 4 §6.4 — "코드 열 값이 code 후보").
@@ -282,24 +363,18 @@ export function detectWorkbook(buf: ArrayBuffer, opts: { extraAxisLabel?: string
   const logicalExcluded = hierarchy.kind === 'columns' ? hierarchyColumns : new Set<number>()
 
   // 규칙 5
-  const logicalRes = detectLogicalColumns(headerLabels, logicalExcluded, extraAxisLabel)
-  warnings.push(...logicalRes.warnings)
+  const logicalRes = detectLogicalColumns(headerLabels, logicalExcluded, extraAxisLabel, dateLike)
+  // '이름 열 없음' 경고는 아웃라인에서만 뜻이 있다 — 열=계층은 계층 열이 곧 이름이다. 아웃라인은 아래에서 더 분명한 문구로 낸다
+  warnings.push(...logicalRes.warnings.filter((w) => w !== `${FIELD_LABELS.name} 열을 찾지 못했습니다`))
 
   // name 열은 outline 계층에서만 유효하다(columns 계층은 계층 열 자체가 이름의 출처 — 리뷰 픽스).
-  // outline 인데 별칭으로 못 찾았으면 '코드 열 바로 다음 열' 관례로 폴백하되, 이건 확정이 아니라
-  // 추정이므로 부분일치와 동일하게 confidence 를 깎고 warning 을 남긴다(무검증 침묵 관례였던 것을
-  // 명시 열로 승격 + 실패 시에도 최소한 사람이 보게 만든다).
-  let nameCol = logicalRes.logical.name
-  let namePartial = 0
-  if (hierarchy.kind === 'columns') {
-    nameCol = null
-  } else if (nameCol === null) {
-    nameCol = hierarchy.column + 1
-    namePartial = 1
-    warnings.push("'이름' 열을 찾지 못해 코드 열 다음 열로 추정했습니다 — 2단계에서 확인하세요")
-  }
-  const logical: ExcelProfile['logical'] = { ...logicalRes.logical, name: nameCol }
-  const partialMatchCount = logicalRes.partialMatchCount + namePartial
+  // outline 인데 머리 낱말로 못 찾았으면 비워 둔다(BUG-07) — 예전에는 '코드 열 바로 다음 열' 로 추정해, 코드 열을 잘못 잡은 날
+  // 종료일이 이름이 됐다. 못 찾은 것은 사용자가 고른다.
+  const aliasName = logicalRes.logical.name
+  const nameMissing = hierarchy.kind === 'outline' && aliasName === null
+  if (nameMissing) warnings.push(WARN_NAME_NOT_FOUND)
+  const logical: ExcelProfile['logical'] = { ...logicalRes.logical, name: hierarchy.kind === 'columns' ? null : aliasName }
+  const partialMatchCount = logicalRes.partialMatchCount
 
   const matchedLogical = Object.values(logical).filter(v => v !== null).length
   const exactMatchedLogical = matchedLogical - partialMatchCount
@@ -333,6 +408,12 @@ export function detectWorkbook(buf: ArrayBuffer, opts: { extraAxisLabel?: string
     confidence: { header: confidenceHeader, hierarchy: confidenceHierarchy, logical: confidenceLogical },
     preview: { headers: headerLabels, rows: dataRows.slice(0, 10) },
     warnings,
+    hierarchyCandidates: {
+      columns: labelColumns ?? shapeColumns?.columns ?? [],
+      outline: outlineCandidate?.column ?? null,
+      name: aliasName,
+    },
+    uncertain: headerUnclear || !hierarchyFound || nameMissing,
   }
   return { ok: true, result }
 }

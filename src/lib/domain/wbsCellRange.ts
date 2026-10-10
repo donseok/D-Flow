@@ -6,6 +6,7 @@
 // 붙여넣기·지우기의 계획(planCellWrites)은 칸마다 쓸 수 있는지·값이 맞는지만 가린다 — 저장은 화면이 기존 액션으로 한다(새 저장 모델 없음).
 import type { GridCoord, GridModel } from './wbsGridNav'
 import { formatPct1, weightToPct } from './format'
+import { actualPctViolation, weightPctToFraction, weightViolation } from './wbsValueRules'
 import type { CustomValues, FieldDef, FieldValue } from './customFields'
 import { validateCustomValues, type FieldRowError } from './customFieldValues'
 
@@ -338,18 +339,18 @@ export function planCellWrites(
         if (!perms.weight) { skip('denied'); continue }
         const n = parseNumberCell(raw)
         if (!n.ok) { bad(n.reason); continue }
-        if (n.value !== null && n.value < 0) { bad('weightMin'); continue }
+        if (n.value !== null && weightViolation(n.value)) { bad('weightMin'); continue }
         // 화면 값(100 기준 2자리)과 같으면 쓰지 않는다 — %↔분수 왕복의 반올림값을 다시 저장하지 않는다(편집기의 무변경 판정과 같다)
         const shown = row.weight == null ? null : weightToPct(row.weight)
         if (n.value === shown) plan.unchanged++
-        else plan.writes.push({ kind: 'weight', rowId, col, value: n.value === null ? null : n.value / 100, expected: row.weight })
+        else plan.writes.push({ kind: 'weight', rowId, col, value: n.value === null ? null : weightPctToFraction(n.value), expected: row.weight })
       } else if (col === 'pactual') {
         if (row.children.length > 0) { skip('rollup'); continue }
         if (!perms.actual(rowId)) { skip('denied'); continue }
         const n = parseNumberCell(raw)
         if (!n.ok) { bad(n.reason); continue }
         if (n.value === null) { bad('required'); continue }   // 실적%는 비울 수 없다(편집기도 빈 값을 받지 않는다)
-        if (n.value < 0 || n.value > 100) { bad('range'); continue }
+        if (actualPctViolation(n.value)) { bad('range'); continue }
         if (n.value === Number(row.rolledActualPct)) plan.unchanged++
         else plan.writes.push({ kind: 'actual', rowId, col, value: n.value, expected: Number(row.rolledActualPct) })
       } else if (col.startsWith('cf:')) {

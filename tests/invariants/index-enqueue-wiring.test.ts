@@ -28,7 +28,8 @@ const WIRED: Readonly<Record<string, Readonly<Record<string, number>>>> = {
   'src/app/actions/wbsBulk.ts': { updateWbsItems: 1 },
   'src/lib/agent/workflowEvent.ts': { applyWorkflowEvent: 1 },
   'src/lib/agent/wbsImport.ts': { runWbsImport: 1 },
-  'src/app/api/import/execute/route.ts': { POST: 1 },
+  // POST 는 예외를 받아 같은 꼴의 응답으로 바꾸는 껍데기이고(BUG-01) 본문은 runImport 다
+  'src/app/api/import/execute/route.ts': { runImport: 1 },
   'src/app/actions/minutes.ts': { createMinute: 1, replaceMinuteBody: 1, recordMinuteFile: 1 },
   'src/app/api/v1/minutes/route.ts': { handleExisting: 1, insertNew: 1 },
 }

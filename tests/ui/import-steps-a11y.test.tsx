@@ -37,6 +37,24 @@ describe('가져오기 단계 표시 — 스크린리더 문구', () => {
     expect(spoken(el).trim()).toBe(sr)
     expect(el.textContent).toContain('2') // 원 안 숫자(눈에만)
   })
+  // BUG-30 — 끝낸 단계는 눌러서 돌아갈 수 있다. 누를 수 없는 단계는 예전처럼 글자뿐이다
+  it('onGoto 가 있으면 단계 표시가 버튼이다 — 이름에 어디로 가는지 실린다. 없으면 버튼이 아니다', () => {
+    const sr = stepSrText(tKo, 1, 3, tKo('importWizard.step1Label'), true)
+    const gotoLabel = tKo('importWizard.stepGoto').replace('{label}', tKo('importWizard.step1Label'))
+    expect(gotoLabel).toBe('파일 선택 단계로 돌아가기')
+    const el = mount(renderToString(<StepBadge n={1} total={3} label={tKo('importWizard.step1Label')} active={false} done srText={sr} onGoto={() => {}} gotoLabel={gotoLabel} />))
+    const button = el.querySelector('button[data-step-goto]')
+    expect(button).not.toBeNull()
+    expect(button?.getAttribute('type')).toBe('button')
+    expect(spoken(el)).toContain(sr)
+    expect(spoken(el)).toContain(gotoLabel)
+    const plain = mount(renderToString(<StepBadge n={2} total={3} label={tKo('importWizard.step2Label')} active done={false} srText={sr} />))
+    expect(plain.querySelector('button')).toBeNull()
+  })
+  it('마법사는 끝낸 단계에만 이동을 붙인다 — 판정은 canGotoStep(완료 뒤·처리 중에는 닫힌다)', () => {
+    const src = readFileSync('src/components/import/ImportWizard.tsx', 'utf8')
+    expect(src).toMatch(/key !== 'done' && canGotoStep\(state, key\) \? \(\) => dispatch\(\{ type: 'gotoStep', step: key \}\) : undefined/)
+  })
   it('마법사는 단계마다 완료 여부를 넣은 읽기 문구를 넘긴다', () => {
     const src = readFileSync('src/components/import/ImportWizard.tsx', 'utf8')
     expect(src).toMatch(/<StepBadge[^>]*srText=\{stepSrText\(t, i \+ 1, all\.length, t\(label\), done\)\}/)

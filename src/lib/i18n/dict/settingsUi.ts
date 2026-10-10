@@ -267,7 +267,8 @@ export const settingsUiKo = {
   'settings.areas.saved': '\'{code}\' 영역을 저장했습니다.',
   'settings.areas.rowsAdded': '이번 주 이후 주간 시트 {rowsAdded}곳에 이 영역 행을 더했습니다.',
   'settings.areas.count': '{label} {n}개',
-  'settings.areas.emptyLead': '아직 {label}이 없습니다. {empty}',
+  // {label} 은 조사까지 붙여 넣는다(이름이 설정값이라 받침이 정해져 있지 않다 — josa)
+  'settings.areas.emptyLead': '아직 {label} 없습니다. {empty}',
   'settings.areas.newOf': '새 {label}',
   'settings.areas.codeRule': ' · 영문 대문자·숫자 1~8자',
   'settings.areas.codeLocked': '코드는 바꿀 수 없습니다. 새 영역을 만들고 이전 영역을 비활성으로 두세요.',

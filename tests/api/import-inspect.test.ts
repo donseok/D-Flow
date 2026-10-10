@@ -12,8 +12,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: mocks.requireProjectAdmin }))
 vi.mock('@/lib/excel/detect', () => ({ detectWorkbook: mocks.detectWorkbook }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: mocks.getProjectConfig }))
+// 새로 만들 팀 미리보기(BUG-10)의 팀 원천 — 기본은 공용 팀 다섯(FIXTURE_TEAMS). 미리보기 읽기(parseWithProfile)는 실물이다
+vi.mock('@/lib/teams/source', async () => (await import('../helpers/teams-source-mock')).teamsSourceMock())
 
 import { POST } from '@/app/api/import/inspect/route'
+import { projectTeams, TeamsUnavailableError } from '@/lib/teams/source'
+import type { ExcelProfile } from '@/lib/excel/profile'
+import * as XLSXLib from 'xlsx'
 import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { makeActor } from '../fixtures/actor'
@@ -22,7 +27,7 @@ import { ERR_MISSING } from '@/lib/authz/errors'
 // UUID 형식 픽스처(agent-loop 교훈 — 'p1' 같은 비-UUID 를 쓰지 않는다).
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const ACTOR = makeActor()
-const FILE = new Blob(['x'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+const FILE = new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 
 function req(fields: Record<string, string | Blob>): Parameters<typeof POST>[0] {
   const form = new FormData()
@@ -37,6 +42,8 @@ function detectionResult(overrides: Partial<DetectionResult> = {}): DetectionRes
     confidence: { header: 1, hierarchy: 1, logical: 1 },
     preview: { headers: [], rows: [] },
     warnings: [],
+    hierarchyCandidates: { columns: [1, 2, 3], outline: null, name: null },
+    uncertain: false,
     ...overrides,
   }
 }
@@ -93,12 +100,28 @@ describe('POST /api/import/inspect', () => {
     expect(mocks.detectWorkbook).not.toHaveBeenCalled()
   })
 
-  it('시트 없음 — detectWorkbook 오류를 그대로 400, 설정 조회는 하지 않는다', async () => {
+  it('시트 없음 — detectWorkbook 오류를 그대로 400', async () => {
     mocks.detectWorkbook.mockReturnValue({ ok: false, error: '시트가 없습니다' })
     const res = await POST(req({ file: FILE, projectId: PROJECT_ID }))
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: '시트가 없습니다' })
+  })
+
+  // BUG-04 — 확장자만 .xlsx 인 글자 파일. SheetJS 가 CSV 로 읽어 주어 본문 글자가 열 이름인 "양식"으로 2단계까지 갔다
+  it('엑셀이 아닌 파일(ZIP 시그니처 없음) → 400 — 감지도 설정 조회도 하지 않는다', async () => {
+    const bogus = new Blob(['this is not a real xlsx file\n'])
+    const res = await POST(req({ file: bogus, projectId: PROJECT_ID }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toContain('유효한 엑셀(.xlsx) 파일이 아닙니다')
+    expect(mocks.detectWorkbook).not.toHaveBeenCalled()
     expect(mocks.getProjectConfig).not.toHaveBeenCalled()
+  })
+
+  it('감지에 프로젝트의 단계 이름(core.level_labels)과 추가 축 이름을 넘긴다 — 계층 열 후보로 쓴다(BUG-07)', async () => {
+    mocks.getProjectConfig.mockResolvedValue(makeProjectConfig({ 'core.level_labels': ['단계', '작업', '활동'] }))
+    await POST(req({ file: FILE, projectId: PROJECT_ID }))
+    expect(mocks.detectWorkbook).toHaveBeenCalledTimes(1)
+    expect(mocks.detectWorkbook.mock.calls[0][1]).toEqual({ extraAxisLabel: null, levelLabels: ['단계', '작업', '활동'] })
   })
 
   it('정상 감지 + 저장된 프로파일 없음(={}) → savedProfile null, DB 쓰기 없음', async () => {
@@ -180,3 +203,57 @@ describe('POST /api/import/inspect — 휴일 충돌 미리보기(SP5 D7·W16)',
     expect((await res.json()).skippedHolidays).toEqual([])
   })
 })
+
+/* ── BUG-10·33 — 감지 양식으로 읽어 본 미리보기: 새로 만들 팀, 건너뛸 행 ── */
+describe('POST /api/import/inspect — 새로 만들 팀·건너뛸 행 미리보기', () => {
+  /** 표준 양식(단계|작업|팀) — 팀 열은 팀명 직접 방식 */
+  const PROFILE: ExcelProfile = {
+    version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 0,
+    hierarchy: { kind: 'columns', columns: [0, 1] },
+    logical: { extraAxis: null, code: null, name: null, deliverable: null, start: null, end: null, weight: null, actualPct: null },
+    teamColumns: [[2, '*']], ownerMarks: { '●': 'primary', '△': 'support' },
+  }
+  const fileOf = (rows: unknown[][]) => {
+    const wb = XLSXLib.utils.book_new()
+    XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet([['단계', '작업', '팀', '메모'], ...rows]), 'WBS')
+    return new Blob([XLSXLib.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer])
+  }
+  beforeEach(() => {
+    mocks.detectWorkbook.mockReturnValue({ ok: true, result: detectionResult({ profile: PROFILE, preview: { headers: ['단계', '작업', '팀', '메모'], rows: [] } }) })
+    vi.mocked(projectTeams).mockResolvedValue([
+      { id: 't-dev', code: 'DEV', name: '플랫폼개발팀', color: '#6b7280', sortOrder: 0, active: true, progressVisible: true, projectId: null, workspaceId: 'ws' },
+    ])
+  })
+
+  it('프로젝트 팀의 code·이름(공백·대소문자 무시)과 맞는 글자는 새 팀이 아니다 — 맞지 않는 이름만 newTeams 에 든다', async () => {
+    const file = fileOf([['1. 준비', '', '', ''], ['', '화면설계', '플랫폼개발팀', ''], ['', 'DB설계', ' dev , 신규팀', ''], ['', '검수', '신규팀', '']])
+    const body = await (await POST(req({ file, projectId: PROJECT_ID }))).json()
+    expect(body.ok).toBe(true)
+    expect(body.newTeams).toEqual(['신규팀'])
+    expect(body.skippedRows).toBe(0)
+  })
+
+  it('이름도 값도 없는 행(양식 밖 메모만)은 건너뛸 행으로 센다', async () => {
+    const file = fileOf([['1. 준비', '', '', ''], ['', '', '', '메모만 있는 줄'], ['', '화면설계', 'DEV', '']])
+    const body = await (await POST(req({ file, projectId: PROJECT_ID }))).json()
+    expect(body).toMatchObject({ ok: true, newTeams: [], skippedRows: 1 })
+  })
+
+  it('팀 조회가 실패하면 newTeams 는 null 이다 — "새 팀 없음"([])으로 위장하지 않는다. 감지 결과는 그대로 돌려준다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(projectTeams).mockRejectedValue(new TeamsUnavailableError('boom'))
+    const res = await POST(req({ file: fileOf([['1. 준비', '', '', ''], ['', '화면설계', '신규팀', '']]), projectId: PROJECT_ID }))
+    expect(res.status).toBe(200)
+    const text = await res.text()
+    expect(JSON.parse(text)).toMatchObject({ ok: true, newTeams: null })
+    expect(text).not.toContain('boom')
+  })
+
+  it('감지 양식으로 읽지 못한 파일은 판정하지 않는다(null) — 팀을 조회하지 않는다', async () => {
+    mocks.detectWorkbook.mockReturnValue({ ok: true, result: detectionResult({ profile: { ...PROFILE, sheetName: '없는 시트' } }) })
+    const body = await (await POST(req({ file: fileOf([['1. 준비', '', '', '']]), projectId: PROJECT_ID }))).json()
+    expect(body).toMatchObject({ ok: true, newTeams: null, skippedRows: null })
+    expect(projectTeams).not.toHaveBeenCalled()
+  })
+})
+

@@ -23,7 +23,8 @@ import type { SkippedHoliday } from '@/lib/domain/holidayImport'
 import {
   reducer, initialWizardState, switchHierarchyKind, setOutlineColumn, setLogicalColumn,
   recordToRows, rowsToRecord, deriveMappedPreview, initialProfileChoice, executionIntentKey, commandIdFor,
-  preBackupReady, isDefinitiveFailure, expandedExportBlocked, type MarkRow, type ExecuteResult,
+  preBackupReady, isDefinitiveFailure, expandedExportBlocked, canGotoStep, toggleHierarchyColumn, profileBlocker,
+  type MarkRow, type ExecuteResult,
   type PreviewColumnRole, type ProfileMismatch, type ProfileMismatchField,
 } from '@/lib/domain/importWizard'
 
@@ -107,9 +108,15 @@ export function stepSrText(t: (k: DictKey) => string, n: number, total: number, 
 }
 
 /** 눈에 보이는 원 안 숫자·n/3·라벨은 aria-hidden — 스크린리더는 srText 한 줄만 읽는다("1 1/3 파일 선택" 처럼 숫자를 두 번 읽지 않게) */
-export function StepBadge({ n, total, label, active, done, srText }: { n: number; total: number; label: string; active: boolean; done: boolean; srText: string }) {
-  return (
-    <div className="flex items-center gap-2">
+export function StepBadge({ n, total, label, active, done, srText, onGoto, gotoLabel }: {
+  n: number; total: number; label: string; active: boolean; done: boolean; srText: string
+  /** 있으면 이 단계 표시가 버튼이다(BUG-30 — 끝낸 단계로 돌아가기). 없으면 글자뿐 */
+  onGoto?: () => void
+  /** 버튼의 이름("파일 선택 단계로 돌아가기") — onGoto 와 함께 온다 */
+  gotoLabel?: string
+}) {
+  const body = (
+    <>
       <span
         aria-hidden="true"
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
@@ -121,7 +128,15 @@ export function StepBadge({ n, total, label, active, done, srText }: { n: number
       <span aria-hidden="true" className="text-meta text-fg-muted tabular-nums">{n}/{total}</span>
       <span aria-hidden="true" className={`text-sm font-semibold ${active || done ? 'text-fg' : 'text-fg-muted'}`}>{label}</span>
       <span className="sr-only">{srText}</span>
-    </div>
+    </>
+  )
+  if (!onGoto) return <div className="flex items-center gap-2">{body}</div>
+  return (
+    <button type="button" onClick={onGoto} title={gotoLabel} data-step-goto
+      className="flex items-center gap-2 rounded-lg text-left transition hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-action)]">
+      {body}
+      {gotoLabel && <span className="sr-only">{gotoLabel}</span>}
+    </button>
   )
 }
 
@@ -160,6 +175,8 @@ export function ImportWizard({
   // 실행 의도의 지문 재료 — File 객체는 ref 에 두고, 지문에 드는 이름·크기·수정 시각만 상태로 둔다(렌더마다 키를 계산한다)
   const [fileMeta, setFileMeta] = useState<{ name: string; size: number; lastModified: number } | null>(null)
   const [backupBusy, setBackupBusy] = useState(false)
+  // 감지 양식으로 읽었을 때 건너뛸 행 수(BUG-33 — 미리보기). 실행 결과의 수가 최종이다
+  const [skippedRowsPreview, setSkippedRowsPreview] = useState(0)
   const markIdRef = useRef(0)
 
   const headers = state.detection?.preview.headers ?? []
@@ -182,6 +199,8 @@ export function ImportWizard({
   )
   // replace 는 지금 의도로 사전 백업 내려받기를 시작한 뒤에만 실행한다(D50 — 브라우저는 내려받기 완료를 알리지 않는다)
   const backupReady = state.mode !== 'replace' || preBackupReady(state, intentKey)
+  // 감지기는 못 찾은 열을 추정으로 채우지 않는다(BUG-07) — 계층 열·이름 열이 비어 있으면 사용자가 고를 때까지 실행을 닫는다
+  const blocker = profile ? profileBlocker(profile) : null
 
   function nextMarkId(): number {
     markIdRef.current += 1
@@ -196,6 +215,7 @@ export function ImportWizard({
     const file = e.target.files?.[0] ?? null
     fileRef.current = file
     setFileMeta(file ? { name: file.name, size: file.size, lastModified: file.lastModified } : null)
+    setSkippedRowsPreview(0)
     dispatch({ type: 'fileSelected', fileName: file?.name ?? '' })
   }
 
@@ -204,6 +224,7 @@ export function ImportWizard({
     setFileMeta(null)
     markIdRef.current = 0
     setMarkRows([])
+    setSkippedRowsPreview(0)
     dispatch({ type: 'reset' })
   }
 
@@ -254,7 +275,9 @@ export function ImportWizard({
         const detection = data.detection as DetectionResult
         const savedProfile = (data.savedProfile ?? null) as ExcelProfile | null
         const skippedHolidays = Array.isArray(data.skippedHolidays) ? (data.skippedHolidays as SkippedHoliday[]) : []
-        dispatch({ type: 'inspectSuccess', detection, savedProfile, skippedHolidays })
+        const newTeams = Array.isArray(data.newTeams) ? (data.newTeams as string[]) : null
+        setSkippedRowsPreview(typeof data.skippedRows === 'number' ? data.skippedRows : 0)
+        dispatch({ type: 'inspectSuccess', detection, savedProfile, skippedHolidays, newTeams })
         // 마크 행은 reducer 가 고른 출발 프로파일의 사전으로 — 불일치면 감지 결과다(Task 1b).
         const rows = recordToRows(initialProfileChoice(detection, savedProfile).profile.ownerMarks)
         setMarkRows(rows)
@@ -300,7 +323,7 @@ export function ImportWizard({
 
   async function runExecute(registerTeams: boolean) {
     const file = fileRef.current
-    if (!file || !profile || intentKey === null) return
+    if (!file || !profile || intentKey === null || profileBlocker(profile) !== null) return
     // replace 는 지금 의도의 사전 백업 내려받기를 시작한 뒤에만(D50) — 버튼이 이미 잠겨 있다, 여기는 이중 안전
     if (state.mode === 'replace' && !preBackupReady(state, intentKey)) return
     const commandId = beginIntent(intentKey)
@@ -374,9 +397,12 @@ export function ImportWizard({
         {([['select', 'importWizard.step1Label'], ['review', 'importWizard.step2Label'], ['done', 'importWizard.step3Label']] as const).map(([key, label], i, all) => {
           const at = all.findIndex(([k]) => k === state.step)
           const done = i < at || state.step === 'done'
+          // 끝낸 단계로 돌아가기(BUG-30) — 파일 선택 ↔ 확인 사이만. 진행 상태(파일·감지·고친 양식)는 그대로다. 완료 뒤에는 닫힌다
+          const goto = key !== 'done' && canGotoStep(state, key) ? () => dispatch({ type: 'gotoStep', step: key }) : undefined
           return (
             <li key={key} className={`flex items-center gap-3 ${i < all.length - 1 ? 'flex-1' : 'flex-none'}`} aria-current={i === at ? 'step' : undefined}>
-              <StepBadge n={i + 1} total={all.length} label={t(label)} active={i === at} done={done} srText={stepSrText(t, i + 1, all.length, t(label), done)} />
+              <StepBadge n={i + 1} total={all.length} label={t(label)} active={i === at} done={done} srText={stepSrText(t, i + 1, all.length, t(label), done)}
+                onGoto={goto} gotoLabel={goto ? t('importWizard.stepGoto').replace('{label}', t(label)) : undefined} />
               {i < all.length - 1 && <span aria-hidden className="h-px flex-1 bg-border" />}
             </li>
           )
@@ -451,6 +477,11 @@ export function ImportWizard({
                   {t('importWizard.useSavedProfileButton')}
                 </button>
               )}
+              {/* 맞지 않는 저장 양식을 지우는 곳(BUG-04) — 설정 화면의 '저장된 양식 비우기'. 여기서는 길만 알린다 */}
+              <p className="mt-3 text-xs leading-5 text-fg-muted">
+                {t('importWizard.mismatchClearHint')}{' '}
+                <Link href={`/p/${projectId}/settings`} className="font-semibold text-action underline-offset-2 hover:underline">{t('importWizard.mismatchClearLink')}</Link>
+              </p>
             </div>
           )}
           {state.detection.warnings.length > 0 && (
@@ -496,7 +527,7 @@ export function ImportWizard({
                       className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-action)]"
                       checked={active}
                       disabled={state.busy}
-                      onChange={() => updateProfile(switchHierarchyKind(profile, kind))}
+                      onChange={() => updateProfile(switchHierarchyKind(profile, kind, state.detection?.hierarchyCandidates))}
                       aria-label={label}
                     />
                     <span className="min-w-0">
@@ -537,9 +568,30 @@ export function ImportWizard({
                 </label>
               </div>
             ) : (
-              <p className="pl-4 text-xs leading-5 text-fg-muted">
-                {t('importWizard.columnsHint')}
-                {profile.hierarchy.columns.map(c => headers[c] || `#${c}`).join(', ')}
+              // 계층 열 고르기(BUG-08) — 예전에는 감지된 열을 글자로만 보여 고칠 수 없었다. 고른 열은 왼쪽부터 얕은 단계다
+              <fieldset className="space-y-2 pl-4" data-hierarchy-columns>
+                <legend className="mb-1 text-xs font-semibold text-fg-secondary">{t('importWizard.hierarchyColumnsPick')}</legend>
+                <p className="text-xs leading-5 text-fg-muted">{t('importWizard.hierarchyColumnsPickDesc')}</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                  {headers.map((h, i) => (
+                    <label key={i} className="flex items-center gap-1.5 text-sm text-fg">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded accent-[var(--color-action)]"
+                        checked={profile.hierarchy.kind === 'columns' && profile.hierarchy.columns.includes(i)}
+                        disabled={state.busy}
+                        onChange={() => updateProfile(toggleHierarchyColumn(profile, i))}
+                      />
+                      {h || `#${i}`}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            {blocker && (
+              <p role="alert" className="flex items-center gap-1.5 pl-4 text-xs font-medium text-danger">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                {t(blocker === 'hierarchyColumns' ? 'importWizard.hierarchyColumnsEmpty' : 'importWizard.nameColumnRequired')}
               </p>
             )}
 
@@ -685,7 +737,28 @@ export function ImportWizard({
               />
               {t('importWizard.saveProfileLabel')}
             </label>
+            {state.saveProfile && state.detection.uncertain && (
+              <p className="text-xs leading-5 text-fg-muted">{t('importWizard.saveProfileUncertainHint')}</p>
+            )}
           </div>
+
+          {/* 새로 만들 팀(BUG-10) — 감지 양식으로 읽은 팀 가운데 이 프로젝트에 없는 이름. 실행 때 등록 확인 창이 다시 묻는다 */}
+          {state.newTeams && state.newTeams.length > 0 && (
+            <div role="status" data-new-teams className="rounded-xl border border-pending/30 bg-pending-weak/40 p-3.5">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-pending">
+                <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.newTeamsTitle').replace('{n}', String(state.newTeams.length))}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-fg-secondary">{t('importWizard.newTeamsDesc')}</p>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {state.newTeams.map(team => <li key={team} className="badge bg-action-soft px-2 py-1 text-action">{team}</li>)}
+              </ul>
+            </div>
+          )}
+          {skippedRowsPreview > 0 && (
+            <p role="status" data-skipped-rows className="text-xs leading-5 text-fg-muted">
+              {t('importWizard.skippedRowsPreview').replace('{n}', String(skippedRowsPreview))}
+            </p>
+          )}
 
           <div className="card space-y-3 p-6">
             <h3 className="text-sm font-semibold text-fg">{t('importWizard.previewTitle')}</h3>
@@ -750,7 +823,7 @@ export function ImportWizard({
             <button type="button" className="btn btn-ghost" disabled={state.busy} onClick={startOver}>
               <RotateCcw className="h-4 w-4" />{t('importWizard.startOver')}
             </button>
-            <button type="button" className="btn btn-primary" disabled={state.busy || backupBusy || !backupReady} onClick={() => runExecute(false)}>
+            <button type="button" className="btn btn-primary" disabled={state.busy || backupBusy || !backupReady || blocker !== null} onClick={() => runExecute(false)}>
               {state.busy ? t('importWizard.executing') : t('importWizard.execute')}
             </button>
           </div>
@@ -791,9 +864,16 @@ export function ImportWizard({
                 <AlertTriangle className="h-3.5 w-3.5" />{t('importWizard.profileSaveFailedTitle')}
               </p>
               <p className="mt-1 text-xs leading-5 text-fg-secondary">
-                {t('importWizard.profileSaveFailedDesc').replace('{code}', state.result.profileSave.code)}
+                {state.result.profileSave.code === 'PROFILE_UNCERTAIN'
+                  ? t('importWizard.profileUncertainNotSaved')
+                  : t('importWizard.profileSaveFailedDesc').replace('{code}', state.result.profileSave.code)}
               </p>
             </div>
+          )}
+          {(state.result.skippedRows ?? 0) > 0 && (
+            <p role="status" data-skipped-rows className="text-xs leading-5 text-fg-secondary">
+              {t('importWizard.doneSkippedRows').replace('{n}', String(state.result.skippedRows))}
+            </p>
           )}
           {state.result.warnings && state.result.warnings.length > 0 && (
             <div role="status" className="rounded-xl border border-pending/30 bg-pending-weak/40 p-3.5">

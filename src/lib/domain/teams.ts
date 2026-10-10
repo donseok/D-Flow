@@ -1,4 +1,5 @@
 // 팀 기준정보 순수 도메인 — I/O 없음. 런타임 원천은 요청 범위 lib/teams/source.ts 하나(SP4).
+import { josa } from '@/lib/i18n/particle'
 import type { TeamView } from './authz'
 import type { TeamCode } from './types'
 import { EXCEL_HEADER_WORDS, isHeaderWordMatch } from '@/lib/excel/headerWords'
@@ -52,7 +53,7 @@ export function normalizeNewTeamCode(
   if (!code) return { ok: false, error: `${what === '팀 코드' ? '팀 코드를' : '팀 이름을'} 입력하세요.` }
   if (code.length > TEAM_CODE_MAX) return { ok: false, error: `${what === '팀 코드' ? '팀 코드는' : '팀 이름은'} ${TEAM_CODE_MAX}자 이하여야 합니다.` }
   if (reserved.some((w) => isHeaderWordMatch(w, code))) {
-    return { ok: false, error: `'${code}'는 엑셀 양식 예약어라 ${what === '팀 코드' ? '팀 코드로' : '팀 이름으로'} 쓸 수 없습니다.` }
+    return { ok: false, error: `${josa(`'${code}'`, '은/는')} 엑셀 양식 예약어라 ${what === '팀 코드' ? '팀 코드로' : '팀 이름으로'} 쓸 수 없습니다.` }
   }
   return { ok: true, code }
 }

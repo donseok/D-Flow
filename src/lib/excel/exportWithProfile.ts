@@ -105,7 +105,7 @@ export function buildAoaWithProfile(
     extraAxisLabel?: string | null
   },
   projectName = 'WBS',
-): { ok: true; aoa: unknown[][] } | { ok: false; error: string } {
+): { ok: true; aoa: unknown[][]; weightCol: number | null } | { ok: false; error: string } {
   const { expandSubActs, levelLabels, deep = 'reject', customFieldDefs, extraAxisLabel } = opts
 
   if (profile.hierarchy.kind === 'outline' && expandSubActs) {
@@ -290,8 +290,11 @@ export function buildAoaWithProfile(
     rows.push(row)
   }
 
-  return { ok: true, aoa: rows }
+  return { ok: true, aoa: rows, weightCol }
 }
+
+/** 가중치 칸의 엑셀 서식 — 분수 0.5 를 50.00% 로 보인다 */
+export const WEIGHT_NUMBER_FORMAT = '0.00%'
 
 /** 라벨 행 앞에 올 행 headerRow 개. detect·parse 는 blankrows:false 로 읽어 빈 행을 세지 않으므로 전부 비어 있지 않아야 한다.
  *  0 → 없음, 1 → [제목], 2 → [제목, 병합 타이틀](레거시 3행 헤더 — 바이트 불변), 3 이상 → 제목과 병합 타이틀 사이에 제목 반복 행.
@@ -329,6 +332,14 @@ export function buildWorkbookWithProfile(
 
   const wb = XLSX.utils.book_new()
   const wbsSheet = XLSX.utils.aoa_to_sheet(built.aoa, { cellDates: true })
+  // 가중치 칸은 % 서식으로 낸다 — 저장값은 분수(1 = 100%)라 엑셀이 화면과 같은 %(0.5 → 50.00%)로 보이고, 다시 가져오면 % 서식 칸은
+  // 값 그대로 읽혀(wbsValueRules.importedWeightScale) 1 을 넘는 가중치도 같은 값으로 돌아온다. 값(v)은 바꾸지 않는다
+  if (built.weightCol !== null) {
+    for (let r = 0; r < built.aoa.length; r++) {
+      const cell = wbsSheet[XLSX.utils.encode_cell({ r, c: built.weightCol })] as XLSX.CellObject | undefined
+      if (cell && cell.t === 'n') cell.z = WEIGHT_NUMBER_FORMAT
+    }
+  }
   XLSX.utils.book_append_sheet(wb, wbsSheet, profile.sheetName)
 
   if (profile.holidaySheetName) {

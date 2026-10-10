@@ -82,9 +82,13 @@ describe('parseWithProfile + linkByDepth — (a) 라운드트립 계약(LEGACY_E
     expect(linked.items.map(it => [it.plannedStart, it.plannedEnd])).toEqual(
       legacyLinked.items.map(it => [it.plannedStart, it.plannedEnd]))
   })
-  it('부가 확인 — 가중치·실적%·산출물·biz(Q3 extraAxis) 동일', () => {
-    expect(linked.items.map(it => [it.weight, it.actualPct, it.deliverable, it.biz])).toEqual(
-      legacyLinked.items.map(it => [it.weight, it.actualPct, it.deliverable, it.biz]))
+  it('부가 확인 — 실적%·산출물·biz(Q3 extraAxis) 동일, 가중치는 저장 단위(분수)로', () => {
+    expect(linked.items.map(it => [it.actualPct, it.deliverable, it.biz])).toEqual(
+      legacyLinked.items.map(it => [it.actualPct, it.deliverable, it.biz]))
+    // BUG-02 — 옛 파서(오라클)는 칸의 수를 그대로 돌려줬다(2 → 2 = 화면의 200%). 지금은 화면과 같은 % 로 읽어 분수로 저장한다:
+    // 이 픽스처의 가중치는 서식 없는 2 라 2% = 0.02 다(1 을 넘는 값이 있으면 그 파일은 % 로 읽는다 — wbsValueRules.importedWeightScale)
+    expect(linked.items.map(it => it.weight)).toEqual(
+      legacyLinked.items.map(it => (it.weight === null ? null : it.weight / 100)))
   })
   it('level 매핑 — hierarchy columns 3열이므로 레거시 phase/task/activity 와 동일', () => {
     expect(linked.items.map(it => it.level)).toEqual(legacyLinked.items.map(it => it.level))

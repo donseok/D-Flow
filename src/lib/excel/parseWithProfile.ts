@@ -8,6 +8,10 @@ import * as XLSX from 'xlsx'
 import type { ExcelProfile } from '@/lib/excel/profile'
 import type { ImportItem, ImportError } from '@/lib/excel/validate'
 import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
+import { NOT_XLSX_ERROR, isPercentCell, isXlsxBuffer, readSheetRows } from '@/lib/excel/sheetRows'
+import {
+  actualPctViolation, importedWeightScale, importedWeightToFraction, weightViolation, type ImportedWeightCell,
+} from '@/lib/domain/wbsValueRules'
 
 export interface ParsedRowN {
   depth: number                 // 0-based
@@ -81,10 +85,45 @@ function parseOwners(row: unknown[], profile: ExcelProfile): ParsedRowN['owners'
   return out
 }
 
+/** 가중치 칸 → { 값, % 서식 여부 }. 빈 칸·숫자가 아닌 글자는 null(종전대로). '50%' 글자는 엑셀의 % 서식 칸과 같은 뜻(0.5)으로 읽는다 */
+function weightCell(v: unknown, percentFormat: boolean): ImportedWeightCell | null {
+  if (typeof v === 'string' && v.trim().endsWith('%')) {
+    const n = toNum(v.trim().slice(0, -1))
+    return n === null ? null : { value: n / 100, percentFormat: true }
+  }
+  const n = toNum(v)
+  return n === null ? null : { value: n, percentFormat }
+}
+
+/** 이름(계층) 칸이 빈 행에 "읽을 값"이 있는가 — 양식이 읽는 칸(논리 열·팀 열·사용자 정의 열)만 본다. 양식 밖의 칸(비고·합계 줄·메모)은
+ *  어차피 읽지 않는 글자라 값으로 치지 않는다 */
+function hasMappedValue(r: unknown[], profile: ExcelProfile): boolean {
+  const cols = [
+    ...Object.values(profile.logical).filter((c): c is number => c !== null && c !== undefined),
+    ...profile.teamColumns.map(([c]) => c),
+    ...(profile.customColumns ?? []).map(([c]) => c),
+  ]
+  return cols.some((c) => !isBlankCell(r[c]))
+}
+
+export const ERR_NAME_BLANK = '작업명이 비어 있습니다'
+export const ERR_OUTLINE_CODE_BLANK = '아웃라인 코드가 비어 있습니다'
+
+/**
+ * 반환의 rowErrors·skippedRows(BUG-33) — 이름(계층) 칸이 빈 행의 처리:
+ *  · 양식이 읽는 칸에 값이 있으면(날짜·산출물·가중치…) 그 행은 **오류**다('엑셀 N행: 작업명이 비어 있습니다'). 조용히 버리면 사용자는
+ *    그 줄이 들어갔다고 믿는다.
+ *  · 읽는 칸이 전부 비었으면(양식 밖 메모만 있는 줄) 데이터가 아니다 — 건너뛰고 그 수(skippedRows)를 결과에 보인다.
+ *  · 칸이 전부 빈 줄은 SheetJS 가 행으로 주지 않는다(세지 않는다).
+ * rowErrors 가 있어도 ok: true 다 — 호출부가 링크 오류(linkByDepth)와 한 표로 모아 보인다.
+ * 가중치는 저장 단위(분수 — 1 = 100%)로 바꿔 돌려준다(wbsValueRules.ts 의 importedWeightScale).
+ */
 export function parseWithProfile(
   buf: ArrayBuffer,
   profile: ExcelProfile,
-): { ok: true; rows: ParsedRowN[]; holidays: { date: string; name: string }[] } | { ok: false; error: string } {
+): { ok: true; rows: ParsedRowN[]; holidays: { date: string; name: string }[]; rowErrors: ImportError[]; skippedRows: number }
+  | { ok: false; error: string } {
+  if (!isXlsxBuffer(buf)) return { ok: false, error: NOT_XLSX_ERROR }
   let wb: XLSX.WorkBook
   try {
     // cellDates:false — 날짜를 시리얼(정수)로 유지해 toIso 에서 타임존 무관 변환(위 참조).
@@ -97,13 +136,23 @@ export function parseWithProfile(
   const ws = wb.Sheets[profile.sheetName]
   // 시트명이 프로파일과 다르면 명시 에러(§6.1 — 구 파서의 '조용한 count:0' 문제를 여기서 되풀이하지 않는다).
   if (!ws) return { ok: false, error: `시트를 찾을 수 없습니다: ${profile.sheetName}` }
-  const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false })
+  // 행 순번(headerRow 의 기준)은 빈 행을 뺀 것이고, 오류에 싣는 행 번호는 엑셀의 실제 번호다(readSheetRows)
+  const { aoa, excelRows } = readSheetRows(ws)
 
   const rows: ParsedRowN[] = []
+  const rowErrors: ImportError[] = []
+  let skippedRows = 0
+  /** rows 와 같은 순서의 가중치 원본 — 파일의 배율을 정한 뒤 한꺼번에 저장 단위로 바꾼다 */
+  const weightCells: (ImportedWeightCell | null)[] = []
+  /** 이름 칸이 빈 행 — 읽는 칸에 값이 있으면 오류, 없으면 건너뜀 */
+  const blankNameRow = (r: unknown[], excelRow: number, message: string) => {
+    if (hasMappedValue(r, profile)) rowErrors.push({ excelRow, message })
+    else skippedRows++
+  }
   const dataStart = profile.headerRow + 1
   for (let i = dataStart; i < aoa.length; i++) {
     const r = (aoa[i] ?? []) as unknown[]
-    const excelRow = i + 1
+    const excelRow = excelRows[i]
 
     let depth: number
     let name: string
@@ -114,7 +163,7 @@ export function parseWithProfile(
       const cols = profile.hierarchy.columns
       const filledIdx: number[] = []
       cols.forEach((c, idx) => { if (!isBlankCell(r[c])) filledIdx.push(idx) })
-      if (filledIdx.length === 0) continue // 계층 열이 전부 빈 행 — 데이터 없음(구 파서의 '레벨 미판정 스킵'과 동일)
+      if (filledIdx.length === 0) { blankNameRow(r, excelRow, ERR_NAME_BLANK); continue }
       if (filledIdx.length >= 2) {
         // 2개 이상 채워짐 = 구조 오류. 단일 문자열 에러라 전체 파싱을 중단한다(행 번호는 메시지에 포함).
         return { ok: false, error: `${excelRow}행: 계층 열에 값이 2개 이상 채워짐(깊이를 판정할 수 없음)` }
@@ -123,20 +172,19 @@ export function parseWithProfile(
       name = String(r[cols[depth]] ?? '').trim()
     } else {
       const raw = String(r[profile.hierarchy.column] ?? '').trim()
-      if (raw === '') continue // 아웃라인 코드 없음 — 데이터 없는 행
+      // 리뷰 픽스: profile.logical.name 이 정본이다 — 명시 지정이 있으면 그 열을 쓴다. 지정이 없는 양식(이름 열 필드가 생기기 전에 저장된
+      // 아웃라인 양식)은 '코드 열 바로 오른쪽 열' 관례로 읽는다 — 감지기는 이 관례로 추정하지 않는다(BUG-07: 못 찾으면 사용자가 고른다)
+      const nameCol = profile.logical.name ?? (profile.hierarchy.column + 1)
+      name = String(r[nameCol] ?? '').trim()
+      if (raw === '') { blankNameRow(r, excelRow, name ? ERR_OUTLINE_CODE_BLANK : ERR_NAME_BLANK); continue }
       if (!OUTLINE_RE.test(raw)) {
         return { ok: false, error: `${excelRow}행: 아웃라인 코드 형식이 아님 — "${raw}"` }
       }
       // 깊이 = 구분자 수(0-based). '1' → 0, '1.1' → 1, '1.1.1.1' → 3.
       depth = (raw.match(/[.\-]/g) ?? []).length
       outlineCode = raw
-      // 리뷰 픽스: profile.logical.name 이 정본이다 — 명시 지정이 있으면 그 열을 쓴다.
-      // '코드 열 바로 오른쪽 열' 관례는 detect.ts 가 별칭으로도 못 찾았을 때만 쓰는 최후 폴백이었고,
-      // 그 폴백값이 여기까지 profile.logical.name 에 실려 온다(detectWorkbook 이 이미 채워 둔다).
-      // 이 함수 자체가 폴백을 다시 계산하는 건 프로파일이 아예 수동으로 만들어져 name 이 비어 있는
-      // 극단적 경우에 대한 방어일 뿐 — 정상 경로는 항상 profile.logical.name 을 그대로 신뢰한다.
-      const nameCol = profile.logical.name ?? (profile.hierarchy.column + 1)
-      name = String(r[nameCol] ?? '').trim()
+      // 코드는 있는데 이름이 없는 행 — 이름 없는 항목을 만들지 않는다
+      if (name === '') { rowErrors.push({ excelRow, message: ERR_NAME_BLANK }); continue }
     }
 
     let code: string | null = null
@@ -152,7 +200,7 @@ export function parseWithProfile(
       for (const [col, key] of profile.customColumns) {
         const raw = r[col]
         if (!isBlankCell(raw)) {
-          const cellObj = ws[XLSX.utils.encode_cell({ r: i, c: col })]
+          const cellObj = ws[XLSX.utils.encode_cell({ r: excelRow - 1, c: col })]
           const isDateCell = cellObj && (cellObj.t === 'd' || (typeof cellObj.z === 'string' && XLSX.SSF.is_date(cellObj.z)))
           if (isDateCell || raw instanceof Date) {
             const iso = toIso(raw)
@@ -183,17 +231,26 @@ export function parseWithProfile(
       deliverable: profile.logical.deliverable !== null ? cellStr(r[profile.logical.deliverable]) : null,
       plannedStart: profile.logical.start !== null ? toIso(r[profile.logical.start]) : null,
       plannedEnd: profile.logical.end !== null ? toIso(r[profile.logical.end]) : null,
-      weight: profile.logical.weight !== null ? toNum(r[profile.logical.weight]) : null,
+      weight: null,   // 아래에서 파일의 배율로 채운다
       actualPct: profile.logical.actualPct !== null ? toNum(r[profile.logical.actualPct]) : null,
       owners: parseOwners(r, profile),
       custom,
       excelRow,
     })
+    const wCol = profile.logical.weight
+    weightCells.push(wCol !== null ? weightCell(r[wCol], isPercentCell(ws, excelRow, wCol)) : null)
   }
+
+  // 가중치 — 파일 하나에 배율 하나(형제 비율 보존). 저장 단위는 분수(1 = 100%)다
+  const scale = importedWeightScale(weightCells.filter((c): c is ImportedWeightCell => c !== null))
+  rows.forEach((row, idx) => {
+    const cell = weightCells[idx]
+    row.weight = cell === null ? null : importedWeightToFraction(cell, scale)
+  })
 
   const holidays = readHolidaySheet(wb, profile.holidaySheetName)
 
-  return { ok: true, rows, holidays }
+  return { ok: true, rows, holidays, rowErrors, skippedRows }
 }
 
 /** Holiday 시트 — 첫 열이 날짜인 행만(toIso 가 날짜로 읽는 것). 시트 이름이 없거나 시트가 없으면 [] */
@@ -211,6 +268,7 @@ export function readHolidaySheet(wb: XLSX.WorkBook, sheetName: string | null): {
 
 /** 미리보기용(가져오기 감지 — SP5 D7) — 실행과 같은 읽기 규칙(cellDates:false). 워크북을 못 읽으면 null */
 export function readHolidaysFromBuffer(buf: ArrayBuffer, sheetName: string | null): { date: string; name: string }[] | null {
+  if (!isXlsxBuffer(buf)) return null
   let wb: XLSX.WorkBook
   try { wb = XLSX.read(buf, { type: 'array', cellDates: false }) } catch { return null }
   return readHolidaySheet(wb, sheetName)
@@ -244,6 +302,14 @@ export function linkByDepth(
     const { plannedStart: s, plannedEnd: e, depth: d } = r
     if ((s && !e) || (!s && e)) errors.push({ excelRow: r.excelRow, message: '시작/종료일 중 하나만 입력됨' })
     if (s && e && s > e) errors.push({ excelRow: r.excelRow, message: '시작일이 종료일보다 늦음' })
+    // 값 규칙 — 화면 편집과 같은 함수(wbsValueRules). 실적% 범위 밖은 DB CHECK 가 통째로 거부해 500 이 됐고(BUG-01),
+    // 음수 가중치는 그대로 저장됐다(BUG-09). 가중치는 저장 단위(분수)로 와 있어 사람이 적은 수를 문구에 싣지 않는다
+    if (r.actualPct !== null && actualPctViolation(r.actualPct)) {
+      errors.push({ excelRow: r.excelRow, message: `실적%는 0~100 범위여야 합니다(입력값 ${r.actualPct})` })
+    }
+    if (r.weight !== null && weightViolation(r.weight)) {
+      errors.push({ excelRow: r.excelRow, message: '가중치는 0 이상이어야 합니다' })
+    }
 
     // depth 가 스택보다 2단 이상 점프하면 부모를 특정할 수 없다(중간 깊이 행 누락).
     if (d > prevDepth + 1) {

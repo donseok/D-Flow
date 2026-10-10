@@ -650,8 +650,12 @@ export const serverUiKo = {
   'srv.api.importExecute.couldNotVerifyTeamList': '팀 목록을 확인하지 못해 중단했습니다. 잠시 후 다시 시도하세요.',
   'srv.api.importExecute.customFieldValuesErrors': '사용자 정의 필드 값에 오류가 있습니다 — 표시된 행을 고친 뒤 다시 실행하세요.',
   'srv.api.importExecute.customFieldValuesNotValid': '사용자 정의 필드 값이 올바르지 않아 가져오기를 멈췄습니다 — 파일의 사용자 정의 열(필수 값·형식·선택지)을 확인한 뒤 다시 실행하세요.',
+  'srv.api.importExecute.notXlsxFile': '유효한 엑셀(.xlsx) 파일이 아닙니다. 엑셀에서 .xlsx 로 저장한 파일을 올리세요.',
+  'srv.api.importExecute.noRowsFound': '가져올 데이터를 찾지 못했습니다 — 계층 방식과 열 지정이 이 파일과 맞는지 확인하세요. 아무것도 바꾸지 않았습니다.',
+  'srv.api.importExecute.valueRejected': '파일의 값 가운데 저장할 수 없는 값이 있어 가져오기를 멈췄습니다 — 실적%(0~100)·날짜·숫자 칸을 확인한 뒤 다시 실행하세요. 아무것도 바꾸지 않았습니다.',
+  'srv.api.importExecute.profileUncertainNotSaved': '이 파일의 구조를 확실히 감지하지 못해 양식을 저장하지 않았습니다 — 열 지정을 직접 고친 뒤 저장하세요.',
   'srv.api.importExecute.fileProjectProfileMissing': '파일/프로젝트/프로파일 누락',
-  'srv.api.importExecute.fileSHierarchyErrors': '파일의 계층 구조에 오류가 있습니다 — 표시된 행을 고친 뒤 다시 실행하세요.',
+  'srv.api.importExecute.fileSHierarchyErrors': '파일의 계층 구조나 값에 오류가 있습니다 — 표시된 행을 고친 뒤 다시 실행하세요. 아무것도 바꾸지 않았습니다.',
   'srv.api.importExecute.fileStructureCouldNotDetected': '파일 구조를 감지하지 못해 저장된 엑셀 양식과 대조할 수 없습니다: {detail} — 저장 양식으로 읽으려면 확인 후 다시 실행하세요.',
   'srv.api.importExecute.holidaysNotDeletedOnlyUpdated': '휴일은 삭제되지 않고 갱신만 됩니다.',
   'srv.api.importExecute.modeMustAppendReplace': 'mode는 \'append\' 또는 \'replace\' 여야 합니다',
@@ -662,6 +666,7 @@ export const serverUiKo = {
   'srv.api.importExecute.someTeamsNotRegistered': '등록되지 않은 팀이 있습니다 — 등록할지 확인한 뒤 다시 실행하세요.',
   // src/app/api/import/inspect/route.ts
   'srv.api.importInspect.customFieldSettingsCorrupted': '추가 필드 설정이 손상됨 — 사용자 정의 열을 제안하지 못했습니다',
+  'srv.api.importInspect.notXlsxFile': '유효한 엑셀(.xlsx) 파일이 아닙니다. 엑셀에서 .xlsx 로 저장한 파일을 올리세요.',
   'srv.api.importInspect.fileProjectMissing': '파일/프로젝트 누락',
   'srv.api.importInspect.savedProfileCorrupted': '저장된 프로파일이 손상됨',
   // src/app/api/issue-analysis/route.ts

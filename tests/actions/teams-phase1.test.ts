@@ -118,9 +118,9 @@ describe('이름·코드 규칙(순수)', () => {
     expect(bad({ name: '   ', reserved: [] })).toBe('팀 이름을 입력하세요.')
     expect(bad({ name: 42, reserved: [] })).toBe('팀 이름을 입력하세요.')
     expect(bad({ name: '가'.repeat(41), reserved: [] })).toBe('팀 이름은 40자 이하여야 합니다.')
-    expect(bad({ name: '산출물', reserved: EXCEL_HEADER_WORDS })).toBe("'산출물'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다.")
+    expect(bad({ name: '산출물', reserved: EXCEL_HEADER_WORDS })).toBe("'산출물'은 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다.")
     expect(bad({ name: '기획팀', code: 'X'.repeat(21), reserved: [] })).toBe('팀 코드는 20자 이하여야 합니다.')
-    expect(bad({ name: '기획팀', code: '산출물', reserved: EXCEL_HEADER_WORDS })).toBe("'산출물'는 엑셀 양식 예약어라 팀 코드로 쓸 수 없습니다.")
+    expect(bad({ name: '기획팀', code: '산출물', reserved: EXCEL_HEADER_WORDS })).toBe("'산출물'은 엑셀 양식 예약어라 팀 코드로 쓸 수 없습니다.")
     expect(bad({ name: '기획팀', code: 7, reserved: [] })).toBe('팀 코드가 올바르지 않습니다.')
   })
   it('이름 겹침 — 다른 팀의 code·이름과 대소문자·전각만 달라도 겹침. 이름이 자기 code 와 같은 낱말이면 code 판정에 맡긴다', () => {
@@ -154,7 +154,7 @@ describe('addTeam — 공용 팀: 이름과 코드를 따로', () => {
     expect(await addTeam(WS, '기획팀', 'ops')).toMatchObject({ ok: false, error: expect.stringContaining('다른 팀(OPS)') })
     expect(await addTeam(WS, '기획팀', '운영')).toMatchObject({ ok: false, error: expect.stringContaining('다른 팀(OPS)') })
     expect(await addTeam(WS, '기획팀', '산출물')).toMatchObject({ ok: false, error: expect.stringContaining('팀 코드로 쓸 수 없습니다') })
-    expect(await addTeam(WS, '운영', 'TEAM_B')).toEqual({ ok: false, error: "'운영'는 같은 범위의 다른 팀(OPS)의 코드·이름과 겹칩니다." })
+    expect(await addTeam(WS, '운영', 'TEAM_B')).toEqual({ ok: false, error: "'운영'은 같은 범위의 다른 팀(OPS)의 코드·이름과 겹칩니다." })
     expect(await addTeam(WS, 'ops', 'TEAM_B')).toMatchObject({ ok: false, error: expect.stringContaining('겹칩니다') })
     expect(h.rpc).not.toHaveBeenCalled()
   })
@@ -179,7 +179,7 @@ describe('addProjectTeam — 전용 팀: 이름과 코드를 따로', () => {
   })
   it('예약어는 그 프로젝트의 단계 이름까지 — 코드 칸에도 같다. 이름 겹침은 그 프로젝트 팀끼리', async () => {
     h.db.teams = [own('t-ops', 'OPS', { name: '운영' }), common('t-pub', 'PUB', { name: '공용 이름' })]
-    expect(await addProjectTeam(P, '기획팀', '작업')).toEqual({ ok: false, error: "'작업'는 엑셀 양식 예약어라 팀 코드로 쓸 수 없습니다." })
+    expect(await addProjectTeam(P, '기획팀', '작업')).toEqual({ ok: false, error: "'작업'은 엑셀 양식 예약어라 팀 코드로 쓸 수 없습니다." })
     expect(await addProjectTeam(P, '운영', 'TEAM_B')).toMatchObject({ ok: false, error: expect.stringContaining('다른 팀(OPS)') })
     expect(h.db.inserted).toEqual([])
     // 공용 팀의 이름과는 겹침을 보지 않는다(범위가 다르다 — 화면이 `이름 (code)` 로 가른다)

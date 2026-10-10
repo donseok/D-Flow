@@ -1,3 +1,4 @@
+import { josa } from '@/lib/i18n/particle'
 import type { createServerClient } from '@/lib/supabase/server'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { MINUTE_FOLDER_DEPTH_MAX, NO_TEAM } from '@/lib/domain/minutes'
@@ -216,7 +217,7 @@ export function normalizeFolderPath(
     // ③ 조용히 한쪽을 따르면 목록 필터(?team=)와 폴더 위치가 어긋난다
     return {
       ok: false,
-      error: `folder_path의 최상위 '${path[0]}'가 담당 '${teamCode}'와 다른 팀입니다.`,
+      error: `folder_path의 최상위 ${josa(`'${path[0]}'`, '이/가')} 담당 ${josa(`'${teamCode}'`, '과/와')} 다른 팀입니다.`,
       reason: `validation_failed: folder_path 최상위가 다른 팀(${path[0]})입니다.`,
     }
   }

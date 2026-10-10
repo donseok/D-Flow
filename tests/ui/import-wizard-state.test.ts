@@ -5,7 +5,8 @@ import type { DetectionResult } from '@/lib/excel/detect'
 import {
   initialWizardState, reducer, switchHierarchyKind, setOutlineColumn, setLogicalColumn,
   recordToRows, rowsToRecord, deriveMappedPreview, compareProfiles, executionIntentKey, commandIdFor,
-  preBackupReady, isDefinitiveFailure, type ExecuteResult, type MarkRow, type WizardState,
+  preBackupReady, isDefinitiveFailure, toggleHierarchyColumn, profileBlocker, canGotoStep,
+  type ExecuteResult, type MarkRow, type WizardState,
 } from '@/lib/domain/importWizard'
 
 const DETECTION: DetectionResult = {
@@ -14,6 +15,8 @@ const DETECTION: DetectionResult = {
   confidence: { header: 1, hierarchy: 1, logical: 1 },
   preview: { headers: ['Biz', '대', '중', '소'], rows: [] },
   warnings: [],
+  hierarchyCandidates: { columns: [1, 2, 3], outline: null, name: null },
+  uncertain: false,
 }
 
 describe('importWizard reducer — 상태 전이(§6.2)', () => {
@@ -180,11 +183,13 @@ describe('importWizard reducer — 불일치면 감지 결과가 기본, 저장 
     expect(reducer(chosen, { type: 'resetToDetected' })).toMatchObject({ profile: SHIFTED, profileSource: 'detected' })
   })
 
-  // 불일치 파일의 감지 양식을 기본으로 저장하면 프로젝트의 저장 양식이 조용히 덮어써진다 — 저장은 사용자가 켤 때만(T1b 리뷰 carry f).
-  it('inspectSuccess — 불일치면 양식 저장 기본값이 꺼진다. 저장 양식이 없거나 같으면 켜진 채다', () => {
+  // 감지 양식을 기본으로 저장하면 프로젝트의 저장 양식이 조용히 덮어써진다 — 저장은 사용자가 켤 때만(T1b 리뷰 carry f).
+  // BUG-04 — 불일치일 때만이 아니라 늘 꺼진 채 시작한다(잘못 감지된 양식이 기본 양식으로 저장돼 그 뒤의 파일마다 불일치 경고가 났다)
+  it('inspectSuccess — 양식 저장은 늘 꺼진 채 시작한다(불일치·저장 양식 없음·같은 구조 모두)', () => {
+    expect(initialWizardState.saveProfile).toBe(false)
     expect(reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: COLS }).saveProfile).toBe(false)
-    expect(reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: null }).saveProfile).toBe(true)
-    expect(reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: SHIFTED }).saveProfile).toBe(true)
+    expect(reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: null }).saveProfile).toBe(false)
+    expect(reducer(initialWizardState, { type: 'inspectSuccess', detection: DET_SHIFTED, savedProfile: SHIFTED }).saveProfile).toBe(false)
   })
 
   it('saveProfileChanged — 불일치여도 사용자가 켜면 저장한다', () => {
@@ -205,20 +210,117 @@ describe('importWizard reducer — 불일치면 감지 결과가 기본, 저장 
 })
 
 describe('switchHierarchyKind — columns↔outline 전환(§6.2 계층 방식 라디오)', () => {
-  it('columns → outline: 첫 계층 열을 아웃라인 코드 열 기본값으로 승계한다', () => {
-    const next = switchHierarchyKind(LEGACY_EXCEL_PROFILE_V1, 'outline')
-    expect(next.hierarchy).toEqual({ kind: 'outline', column: 1 })
+  // BUG-08 — 예전에는 이전 방식의 열을 끌고 갔다(columns → outline 은 첫 계층 열, outline → columns 는 코드 열 하나). 잘못 잡힌 '시작일' 이
+  // 계층 열로 남아 모든 행의 깊이가 0 이었다. 새 방식의 열은 감지기가 그 방식으로 찾은 후보에서 다시 시작한다
+  it('columns → outline: 아웃라인 후보 열·머리로 찾은 이름 열에서 시작한다(계층 열을 끌고 가지 않는다)', () => {
+    const next = switchHierarchyKind(LEGACY_EXCEL_PROFILE_V1, 'outline', { columns: [1, 2, 3], outline: 5, name: 6 })
+    expect(next.hierarchy).toEqual({ kind: 'outline', column: 5 })
+    expect(next.logical.name).toBe(6)
   })
 
-  it('outline → columns: name 을 다시 null 로 되돌린다(계층 열 자체가 이름의 출처 — profile.ts 규약)', () => {
-    const outlineProfile = { ...LEGACY_EXCEL_PROFILE_V1, hierarchy: { kind: 'outline' as const, column: 0 }, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, name: 1 } }
-    const next = switchHierarchyKind(outlineProfile, 'columns')
-    expect(next.hierarchy).toEqual({ kind: 'columns', columns: [0] })
+  it('outline → columns: 열=계층 후보에서 시작하고 name 은 null(계층 열 자체가 이름의 출처 — profile.ts 규약)', () => {
+    const outlineProfile = { ...LEGACY_EXCEL_PROFILE_V1, hierarchy: { kind: 'outline' as const, column: 7 }, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, name: 8 } }
+    const next = switchHierarchyKind(outlineProfile, 'columns', { columns: [1, 2, 3], outline: 7, name: 8 })
+    expect(next.hierarchy).toEqual({ kind: 'columns', columns: [1, 2, 3] })   // 아웃라인 코드 열(7)이 계층 열로 남지 않는다
     expect(next.logical.name).toBeNull()
+  })
+
+  it('후보가 없으면 비워 둔다 — 추정으로 채우지 않고, 고를 때까지 실행이 닫힌다(profileBlocker)', () => {
+    const outlineProfile = { ...LEGACY_EXCEL_PROFILE_V1, hierarchy: { kind: 'outline' as const, column: 7 }, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, name: 8 } }
+    const cols = switchHierarchyKind(outlineProfile, 'columns')
+    expect(cols.hierarchy).toEqual({ kind: 'columns', columns: [] })
+    expect(profileBlocker(cols)).toBe('hierarchyColumns')
+    const outline = switchHierarchyKind(LEGACY_EXCEL_PROFILE_V1, 'outline')
+    expect(outline.logical.name).toBeNull()
+    expect(profileBlocker(outline)).toBe('nameColumn')
+    expect(profileBlocker(LEGACY_EXCEL_PROFILE_V1)).toBeNull()
+    expect(profileBlocker(outlineProfile)).toBeNull()
+  })
+
+  it('계층 열이 된 열의 논리 열 지정은 푼다 — 같은 열을 계층과 시작일로 함께 읽지 않는다', () => {
+    const outlineProfile = { ...LEGACY_EXCEL_PROFILE_V1, hierarchy: { kind: 'outline' as const, column: 0 }, logical: { ...LEGACY_EXCEL_PROFILE_V1.logical, start: 2, name: 1 } }
+    const next = switchHierarchyKind(outlineProfile, 'columns', { columns: [1, 2], outline: 0, name: 1 })
+    expect(next.logical.start).toBeNull()
+    expect(next.logical.end).toBe(LEGACY_EXCEL_PROFILE_V1.logical.end)
   })
 
   it('같은 kind 로 전환하면 원본을 그대로 반환한다(무변화)', () => {
     expect(switchHierarchyKind(LEGACY_EXCEL_PROFILE_V1, 'columns')).toBe(LEGACY_EXCEL_PROFILE_V1)
+  })
+})
+
+describe('toggleHierarchyColumn — 열=계층의 계층 열 고르기(BUG-08)', () => {
+  const two = { ...LEGACY_EXCEL_PROFILE_V1, hierarchy: { kind: 'columns' as const, columns: [1, 3] } }
+  it('켜면 열 번호 오름차순으로 들어가고(왼쪽이 얕은 단계), 끄면 빠진다', () => {
+    expect(toggleHierarchyColumn(two, 2).hierarchy).toEqual({ kind: 'columns', columns: [1, 2, 3] })
+    expect(toggleHierarchyColumn(two, 0).hierarchy).toEqual({ kind: 'columns', columns: [0, 1, 3] })
+    expect(toggleHierarchyColumn(two, 3).hierarchy).toEqual({ kind: 'columns', columns: [1] })
+  })
+  it('켠 열의 논리 열 지정은 푼다, 끌 때는 건드리지 않는다', () => {
+    const withStart = { ...two, logical: { ...two.logical, start: 2 } }
+    expect(toggleHierarchyColumn(withStart, 2).logical.start).toBeNull()
+    expect(toggleHierarchyColumn(withStart, 3).logical.start).toBe(2)
+  })
+  it('아웃라인 방식에서는 무시한다', () => {
+    const outline = { ...LEGACY_EXCEL_PROFILE_V1, hierarchy: { kind: 'outline' as const, column: 0 } }
+    expect(toggleHierarchyColumn(outline, 2)).toBe(outline)
+  })
+})
+
+describe('계층 방식을 바꾼 뒤의 미리보기 깊이(BUG-08)', () => {
+  // 리포트의 재현: 감지가 '시작일'(3)을 아웃라인 코드 열로 잘못 잡은 상태에서 열=계층으로 바꾼다
+  const HEADERS = ['단계', '작업', '활동', '시작일', '종료일']
+  const ROWS: unknown[][] = [
+    ['2. 설계', '', '', '', ''],
+    ['', '2.1 화면설계', '', '2026-10-20', '2026-10-31'],
+    ['', '', '2.1.1 와이어프레임', '2026-10-20', '2026-10-24'],
+    ['', '2.2 DB설계', '', '2026-11-01', '2026-11-15'],
+  ]
+  const wrong = {
+    ...LEGACY_EXCEL_PROFILE_V1, headerRow: 0, teamColumns: [],
+    hierarchy: { kind: 'outline' as const, column: 3 },
+    logical: { extraAxis: null, code: null, name: 4, deliverable: null, start: null, end: null, weight: null, actualPct: null },
+  }
+  it('후보(단계·작업·활동)로 바꾸면 깊이가 0·1·2·1 로 다시 계산되고 시작일 열은 계층 표지를 잃는다', () => {
+    const next = switchHierarchyKind(wrong, 'columns', { columns: [0, 1, 2], outline: null, name: null })
+    const preview = deriveMappedPreview(HEADERS, ROWS, next)
+    expect(preview.rows.map(r => r.depth)).toEqual([0, 1, 2, 1])
+    expect(preview.columns.filter(c => c.role?.kind === 'hierarchy').map(c => c.label)).toEqual(['단계', '작업', '활동'])
+    expect(preview.columns[3].role).toBeNull()
+  })
+})
+
+describe('gotoStep — 단계 표시로 끝낸 단계에 돌아간다(BUG-30)', () => {
+  const inspected = reducer(reducer(initialWizardState, { type: 'fileSelected', fileName: 'a.xlsx' }), { type: 'inspectSuccess', detection: DETECTION, savedProfile: null })
+  it('검토 중에 파일 선택으로 — 파일·감지·고친 양식·방식이 그대로 남는다', () => {
+    const edited = reducer(reducer(inspected, { type: 'profileChanged', profile: setLogicalColumn(LEGACY_EXCEL_PROFILE_V1, 'weight', 9) }), { type: 'modeChanged', mode: 'replace' })
+    expect(canGotoStep(edited, 'select')).toBe(true)
+    const back = reducer(edited, { type: 'gotoStep', step: 'select' })
+    expect(back).toMatchObject({ step: 'select', fileName: 'a.xlsx', mode: 'replace' })
+    expect(back.detection).toBe(edited.detection)
+    expect(back.profile).toBe(edited.profile)
+    // 다시 검토로 — 감지 결과가 남아 있으므로 갈 수 있고, 고친 양식 그대로다
+    expect(canGotoStep(back, 'review')).toBe(true)
+    const again = reducer(back, { type: 'gotoStep', step: 'review' })
+    expect(again.step).toBe('review')
+    expect(again.profile).toBe(edited.profile)
+  })
+  it('아직 끝내지 않은 단계로는 가지 않는다 — 분석 전의 검토, 지금 있는 단계', () => {
+    const fresh = reducer(initialWizardState, { type: 'fileSelected', fileName: 'a.xlsx' })
+    expect(canGotoStep(fresh, 'review')).toBe(false)
+    expect(reducer(fresh, { type: 'gotoStep', step: 'review' })).toBe(fresh)
+    expect(canGotoStep(inspected, 'review')).toBe(false)
+  })
+  it('처리 중·완료 뒤에는 닫힌다 — 같은 파일을 다시 실행하면 두 벌이 된다', () => {
+    expect(canGotoStep({ ...inspected, busy: true }, 'select')).toBe(false)
+    const done = reducer(inspected, { type: 'executeSuccess', result: { commandId: 'c', kind: 'applied', count: 1, mode: 'append', reindexed: 0, profileSaved: false } })
+    expect(canGotoStep(done, 'select')).toBe(false)
+    expect(canGotoStep(done, 'review')).toBe(false)
+    expect(reducer(done, { type: 'gotoStep', step: 'review' })).toBe(done)
+  })
+  it('파일을 바꾸면 이전 감지가 사라져 검토로 돌아갈 수 없다', () => {
+    const back = reducer(inspected, { type: 'gotoStep', step: 'select' })
+    expect(canGotoStep(reducer(back, { type: 'fileSelected', fileName: 'b.xlsx' }), 'review')).toBe(false)
   })
 })
 

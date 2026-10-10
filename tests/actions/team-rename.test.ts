@@ -72,7 +72,7 @@ describe('checkTeamRename — 순수 규칙(D37·P5)', () => {
     expect(checkTeamRename({ ...base, name: '가'.repeat(40) }).ok).toBe(true)
   })
   it('예약어(머리 낱말·단계 이름)는 대소문자·전각을 무시하고 거부', () => {
-    expect(checkTeamRename({ ...base, name: '산출물' })).toEqual({ ok: false, error: "'산출물'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다." })
+    expect(checkTeamRename({ ...base, name: '산출물' })).toEqual({ ok: false, error: "'산출물'은 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다." })
     expect(checkTeamRename({ ...base, name: '단계' }).ok).toBe(false)
   })
   it('[RF1] 같은 범위 다른 팀의 code·name 과 겹치면 거부 — 대소문자·전각만 다른 것도', () => {

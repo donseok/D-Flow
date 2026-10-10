@@ -21,6 +21,7 @@ import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyV
 import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
 import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
+import { actualPctViolation, weightPctToFraction, weightViolation } from '@/lib/domain/wbsValueRules'
 import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText } from './shared'
 import { RowDetailPanel } from './RowDetailPanel'
 import { bulkUpdateWbsItems, createWbsBulkSnapshot, type WbsBulkSnapshotRow } from '@/app/actions/wbsBulk'
@@ -1170,7 +1171,7 @@ export function WbsGanttSheet({
       if (draft.trim() === '') return reject(t('wbs.toastEmpty'))
       const pct = Number(draft)
       if (Number.isNaN(pct)) return reject(t('wbs.toastNumbersOnly'))
-      if (pct < 0 || pct > 100) return reject(t('wbs.toastRange'))
+      if (actualPctViolation(pct)) return reject(t('wbs.toastRange'))
       const prevVal = rebase ? Number(rebase.latest ?? 0) : Number(editOriginal)
       mine = pct; base = prevVal
       sameValue = (a, b) => Number(a ?? 0) === Number(b ?? 0)
@@ -1194,9 +1195,9 @@ export function WbsGanttSheet({
       const origPct = editOriginal.trim() === '' ? '' : String(weightToPct(Number(editOriginal)))
       if (!rebase && draft.trim() === origPct) return cancel(after)
       const pv = draft.trim() === '' ? null : Number(draft)
-      if (pv != null && (!Number.isFinite(pv) || pv < 0)) return reject(t('wbs.toastWeightMin'))
+      if (pv != null && weightViolation(pv)) return reject(t('wbs.toastWeightMin'))
       const prevVal = rebase ? rebase.latest : editOriginal.trim() === '' ? null : Number(editOriginal)
-      const nextVal = pv == null ? null : pv / 100
+      const nextVal = pv == null ? null : weightPctToFraction(pv)
       mine = nextVal; base = prevVal
       sameValue = (a, b) => (a == null || b == null ? a == null && b == null : Number(a) === Number(b))
       show = v => (v == null ? '' : `${weightToPct(v)}%`)

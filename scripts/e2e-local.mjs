@@ -366,7 +366,7 @@ async function main() {
   same('B 명단', rosterB, [{ memberId: selfB, name: profile.display_name, email, accessRole: 'member', linked: true, teams: [...SP1_TEAMS.B] }])
   step('roster', { A: rosterA, B: rosterB, rows: rosterA.length + rosterB.length })
 
-  // ── 5. A 에 WBS 임포트 — 양식 다운로드 → 행 채우기 → inspect → execute (ImportWizard 와 같은 폼 필드·기본값: append, saveProfile)
+  // ── 5. A 에 WBS 임포트 — 양식 다운로드 → 행 채우기 → inspect → execute (ImportWizard 와 같은 폼 필드. 방식은 기본값 append, 양식 저장은 켠다 — 마법사의 기본은 꺼짐이다(2026-10-10 BUG-04))
   const team = SP1_TEAMS.A[0]
   const template = Buffer.from(await (await admin.http('GET', '/api/import/template')).arrayBuffer())
   writeFileSync(join(outDir, 'wbs-template.xlsx'), template)
@@ -396,7 +396,7 @@ async function main() {
   step('import-inspect', { hierarchy: profileDetected.hierarchy, teamColumns: profileDetected.teamColumns, warnings: inspected.detection.warnings })
 
   const execute = async (mode, commandId) => {
-    // ImportWizard 와 같은 폼 필드·기본값(append, saveProfile)에 명령 id(스펙 §4.4 #1 — SP4 A1). 3 단계에서 만든 프로젝트 팀이 이미 있어야 한다 — 409(needsTeams)면 실패
+    // ImportWizard 와 같은 폼 필드(append, 양식 저장은 명시로 켠다 — 마법사 기본은 꺼짐)에 명령 id(스펙 §4.4 #1 — SP4 A1). 3 단계에서 만든 프로젝트 팀이 이미 있어야 한다 — 409(needsTeams)면 실패
     const form = importForm({ file: filled, fileName: 'wbs-filled.xlsx', projectId: A.id, profile: profileDetected, mode, commandId, saveProfile: true, registerTeams: false })
     try {
       return (await admin.http('POST', '/api/import/execute', { body: form })).json()

@@ -220,7 +220,7 @@ describe('팀 추가 — 이름과 코드를 따로 받는다', () => {
     await click(addButton())
     expect(q('[role="alert"]')!.textContent).toContain('팀 이름을 입력하세요.')
     expect(h.addTeam).not.toHaveBeenCalled()
-    h.addTeam.mockResolvedValue({ ok: false, error: "'ops'는 같은 범위의 다른 팀(OPS)의 코드·이름과 겹칩니다." })
+    h.addTeam.mockResolvedValue({ ok: false, error: "'ops'은(는) 같은 범위의 다른 팀(OPS)의 코드·이름과 겹칩니다." })
     type(q<HTMLInputElement>('[data-team-add-name]')!, '운영')
     type(q<HTMLInputElement>('[data-team-add-code]')!, 'ops')
     await act(async () => {})

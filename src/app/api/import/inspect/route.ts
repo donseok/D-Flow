@@ -8,7 +8,10 @@ import { getProjectConfig, type ProjectConfig } from '@/lib/settings/projectConf
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 import { skippedHolidaysOf } from '@/lib/domain/holidayImport'
-import { readHolidaysFromBuffer } from '@/lib/excel/parseWithProfile'
+import { parseWithProfile, readHolidaysFromBuffer } from '@/lib/excel/parseWithProfile'
+import { isXlsxBuffer } from '@/lib/excel/sheetRows'
+import { resolveTeamRef } from '@/lib/domain/teamName'
+import { TeamsUnavailableError, projectTeams } from '@/lib/teams/source'
 import { withSuggestedCustomColumns } from '@/lib/excel/customColumns'
 import { createServerClient } from '@/lib/supabase/server'
 import { serverTranslator } from '@/lib/i18n/server'
@@ -34,8 +37,9 @@ export async function POST(req: NextRequest) {
   if (!g.ok) return NextResponse.json({ error: g.error }, { status: denyStatus(g) })
 
   const buf = await file.arrayBuffer()
-  let detected = detectWorkbook(buf)
-  if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
+  // 엑셀이 아닌 파일은 1단계에서 끝낸다(BUG-04) — 확장자만 .xlsx 인 글자 파일을 SheetJS 가 CSV 로 읽어 주어, 본문 글자가 열 이름인
+  // "양식"으로 2단계까지 갔다. 설정 조회보다 먼저 본다(읽을 수 없는 파일에 DB 를 쓰지 않는다)
+  if (!isXlsxBuffer(buf)) return NextResponse.json({ error: t('srv.api.importInspect.notXlsxFile') }, { status: 400 })
 
   let cfg: ProjectConfig
   try { cfg = await getProjectConfig(projectId) } catch (e) {
@@ -44,13 +48,16 @@ export async function POST(req: NextRequest) {
     throw e
   }
 
-  // 추가 축 이름(core.extra_axis_label)이 있으면 그 이름을 그 열의 머리 별칭으로 더해 다시 감지한다(내보내기가 그 이름으로 머리를 쓴다).
-  // 읽을 수 없는 파일은 위에서 설정 조회 없이 400 으로 끝난다 — 이름이 없거나 손상이면 첫 감지 그대로
+  // 감지는 프로젝트 설정을 안다 — 추가 축 이름(core.extra_axis_label)은 그 열의 머리 별칭(내보내기가 그 이름으로 머리를 쓴다), 단계 이름
+  // (core.level_labels)은 계층 열 후보(BUG-07 — 머리가 '단계·작업·활동' 인 표준 양식을 자료 모양으로 추정하지 않는다). 이름이 없거나
+  // 손상이면 그 선택지 없이 감지한다. 실행 라우트의 대조(detectLikeInspect)가 같은 선택지를 쓴다
   const extraAxisState = cfg.keys['core.extra_axis_label']
-  if (extraAxisState.status === 'set' && extraAxisState.value) {
-    detected = detectWorkbook(buf, { extraAxisLabel: extraAxisState.value })
-    if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
-  }
+  const levelState = cfg.keys['core.level_labels']
+  const detected = detectWorkbook(buf, {
+    extraAxisLabel: extraAxisState.status === 'set' ? extraAxisState.value : null,
+    levelLabels: levelState.status === 'set' || levelState.status === 'default' ? levelState.value : [],
+  })
+  if (!detected.ok) return NextResponse.json({ error: detected.error }, { status: 400 })
 
   // 감지 결과를 그대로 반환에 쓰되, warnings 는 아래서 덧붙일 수 있어 얕은 복제로 원본 배열을 보존한다.
   const detection = { ...detected.result, warnings: [...detected.result.warnings] }
@@ -84,6 +91,24 @@ export async function POST(req: NextRequest) {
   const fileHolidays = readHolidaysFromBuffer(buf, detection.profile.holidaySheetName) ?? []
   const skippedHolidays = skippedHolidaysOf(fileHolidays, cfg.holidays)
 
+  // 새로 만들 팀 미리보기(BUG-10) — 감지 양식으로 읽은 담당 팀 글자 가운데 이 프로젝트의 팀(code·이름, 앞뒤 공백·대소문자 무시)에 없는 것.
+  // 실행이 같은 대조(resolveTeamRef)로 최종 판정하고 등록 전에 확인 창을 띄운다 — 여기는 미리 알리는 값이다. 판정하지 못하면(양식으로
+  // 읽지 못함·팀 조회 실패) null: '없음'으로 위장하지 않고 화면이 그 사실을 말한다. 건너뛸 행 수(BUG-33)도 같은 읽기에서 나온다
+  let newTeams: string[] | null = null
+  let skippedRows: number | null = null
+  const parsedPreview = parseWithProfile(buf, detection.profile)
+  if (parsedPreview.ok) {
+    skippedRows = parsedPreview.skippedRows
+    try {
+      const teams = await projectTeams(projectId)
+      const fileTeams = [...new Set(parsedPreview.rows.flatMap((r) => r.owners.map((o) => o.team)))]
+      newTeams = fileTeams.filter((name) => resolveTeamRef(name, teams) === null)
+    } catch (e) {
+      if (!(e instanceof TeamsUnavailableError)) throw e
+      console.error('[import/inspect] 팀 조회 실패 — 새 팀 미리보기를 싣지 않는다:', e.message)
+    }
+  }
+
   try {
     const sb = await createServerClient()
     const { count: customCount } = await sb
@@ -98,5 +123,5 @@ export async function POST(req: NextRequest) {
     // 테스트 환경 또는 세션 없는 조회 등 실패 시에는 기존 감지 결과 보존
   }
 
-  return NextResponse.json({ ok: true, detection, savedProfile, profileMismatch, skippedHolidays })
+  return NextResponse.json({ ok: true, detection, savedProfile, profileMismatch, skippedHolidays, newTeams, skippedRows })
 }

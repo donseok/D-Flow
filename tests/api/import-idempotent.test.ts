@@ -119,7 +119,7 @@ function admin(opts: { import?: Resp; convert?: Resp } = {}) {
 }
 function req(fields: Record<string, string> = {}): Parameters<typeof POST>[0] {
   const form = new FormData()
-  form.append('file', new Blob(['x']))
+  form.append('file', new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])]))
   for (const [k, v] of Object.entries({
     projectId: P, profile: JSON.stringify(PROFILE), mode: 'append', saveProfile: 'false', registerTeams: 'false', commandId: CMD, ...fields,
   })) form.append(k, v)
@@ -132,9 +132,10 @@ const logged = (spy: { mock: { calls: unknown[][] } }, text: string) =>
 beforeEach(() => {
   vi.clearAllMocks()
   m.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ACTOR })
-  m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES')], holidays: [] })
+  m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES')], holidays: [] })
   m.resolveLegacyLevelLabels.mockReturnValue(false)
   m.linkByDepth.mockReturnValue({ ok: true, items: ITEMS })
+  m.detectWorkbook.mockReturnValue({ ok: true, result: { profile: PROFILE, warnings: [], preview: { headers: [], rows: [] }, uncertain: false } })
   m.splitLeafOwners.mockImplementation((items: unknown) => items)
   m.recordProgressSnapshot.mockResolvedValue(undefined)
   m.ingestProject.mockResolvedValue({ count: 2 })
@@ -168,16 +169,17 @@ describe('결과 종류와 응답 모양(#8·#9·#11)', () => {
     expect(body.warnings).toHaveLength(2)
     expect(body.warnings).toEqual(expect.arrayContaining([expect.stringContaining('휴일은 삭제되지 않고 갱신만 됩니다')]))
   })
-  it('영수증이 있으면(재전송) 팀 대조·등록·백업을 건너뛰고 RPC 의 duplicate — replace 라도 백업 없이 중복 경고 하나', async () => {
+  it('영수증이 있으면(재전송) 팀 등록·전환·백업을 건너뛰고 RPC 의 duplicate — replace 라도 백업 없이 중복 경고 하나', async () => {
     const { from } = session({ receipt: { data: { command_id: CMD }, error: null } })
     admin({ import: duplicate('replace', 4) })
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'QA')], holidays: [] })   // 미등록 팀이 있어도 대조하지 않는다
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'QA')], holidays: [] })   // 미등록 팀이 있어도 등록을 묻지 않는다
     const res = await POST(req({ mode: 'replace' }))
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
       ok: true, kind: 'duplicate', commandId: CMD, count: 4, mode: 'replace', reindexed: 2, profileSaved: false, warnings: [DUP_WARNING],
     })
-    expect(projectTeams).not.toHaveBeenCalled()
+    // 팀 목록은 읽는다(BUG-10 — 담당 팀 글자를 처음 실행과 같은 code 로 맞춰야 RPC 의 요약이 같다). 등록·전환은 하지 않는다
+    expect(projectTeams).toHaveBeenCalledWith(P)
     expect(m.ensureProjectTeams).not.toHaveBeenCalled()
     expect(from.mock.calls.map(([table]) => table)).toEqual(['command_receipts'])
   })
@@ -208,7 +210,7 @@ describe('결과 종류와 응답 모양(#8·#9·#11)', () => {
 })
 
 describe('미등록 팀(#6 — D4·D54·Q36)', () => {
-  beforeEach(() => { m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'QA')], holidays: [] }) })
+  beforeEach(() => { m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'QA')], holidays: [] }) })
 
   it('전용 팀 프로젝트 + registerTeams=false → 409 NEEDS_TEAMS(inheritsCommon:false·공용 목록 없음), 쓰기 없음', async () => {
     const { rpc } = admin()
@@ -265,20 +267,22 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     expect(m.parseWithProfile.mock.calls[0][1].teamColumns).toEqual([[2, 'RES'], [3, 'QA']])
     expect(rpc.mock.calls.map(([name]) => name)).toEqual(['import_wbs_cmd'])
   })
-  it('[Q5] 이 프로젝트 팀의 이름(개명)·code 와 대소문자만 다른 새 팀은 409·전환 앞에서 400 — 전환·등록·가져오기 없음(개명 규칙의 대칭)', async () => {
+  it('[Q5 → BUG-10] 이 프로젝트 팀의 이름(개명)·code 와 대소문자만 다른 글자는 새 팀이 아니라 그 팀이다 — 409·전환·등록 없이 그 팀의 code 로 가져온다', async () => {
     teamsAre(COMMON, [])
-    for (const name of ['연구팀', 'res']) {
-      m.parseWithProfile.mockReturnValue({ ok: true, rows: [row(name)], holidays: [] })
+    for (const name of ['연구팀', 'res', ' 연구팀 ']) {
+      m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row(name)], holidays: [] })
+      m.linkByDepth.mockReturnValue({ ok: true, items: [{ ...ITEMS[0], owners: [{ team: name, kind: 'primary' as const }] }] })
       const { rpc } = admin()
-      const res = await POST(req({ registerTeams: 'true', convertToken: convertConsentToken(COMMON, [name]) }))
-      expect(res.status, name).toBe(400)
-      expect(await res.json()).toMatchObject({ code: 'INVALID_TEAM_CODE', team: name })
-      expect(rpc).not.toHaveBeenCalled()
+      const res = await POST(req())
+      expect(res.status, name).toBe(200)
       expect(m.ensureProjectTeams).not.toHaveBeenCalled()
+      expect(rpc.mock.calls.map(([fn]) => fn)).toEqual(['import_wbs_cmd'])   // 전환(convert_inherited_teams) 없음
+      // 담당은 파일의 글자가 아니라 그 팀의 code 로 간다 — RPC 는 code 로 팀을 찾는다
+      expect((rpc.mock.calls[0][1] as { p_items: { owners: unknown }[] }).p_items[0].owners).toEqual([{ team: 'RES', kind: 'primary' }])
     }
   })
   it('[U4] 혼합 프로젝트에서 참조 중인 공용 QA 와 대소문자만 다른 qa 는 400(겹침 — 어느 팀과 겹치는지 싣는다), 등록·가져오기 없음', async () => {
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'qa')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'qa')], holidays: [] })
     m.referencedCommonTeamCodes.mockResolvedValue(new Map([['qa', 'QA']]))
     const { rpc } = admin()
     const res = await POST(req({ registerTeams: 'true' }))
@@ -290,7 +294,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     expect(rpc).not.toHaveBeenCalled()
   })
   it('[U4] 한 파일 안의 새 code 끼리 겹치면(ab·AB) 409·등록 앞에서 400 — 겹친 쌍을 싣는다', async () => {
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'ab'), row('AB')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'ab'), row('AB')], holidays: [] })
     const { rpc } = admin()
     const res = await POST(req({ registerTeams: 'true' }))
     expect(res.status).toBe(400)
@@ -354,7 +358,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     ['대소문자만 다른 머리 낱말(SP4 D38)', 'START'],
   ])('[R1] 상속 프로젝트 + 쓸 수 없는 미등록 팀(%s) → registerTeams 와 무관하게 400 INVALID_TEAM_CODE(그 팀) — 409·전환·등록·가져오기 없음', async (_n, bad) => {
     teamsAre(COMMON, [])
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', bad)], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', bad)], holidays: [] })
     const variants: Record<string, string>[] = [{}, { registerTeams: 'true' }, { registerTeams: 'true', convertToken: TOKEN }]
     for (const fields of variants) {
       const { rpc } = admin()
@@ -366,7 +370,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     }
   })
   it('[R1] 쓸 수 있는 팀과 섞여도 409 목록은 만들지 않는다 — 전용 팀 프로젝트도 같다(등록 가능한 이름만 확인 창에 오른다)', async () => {
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'QA', '산출물')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'QA', '산출물')], holidays: [] })
     const res = await POST(req())
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({ code: 'INVALID_TEAM_CODE', team: '산출물' })
@@ -375,7 +379,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
   // ── R2 — 전환 뒤 같은 요청의 담당은 전부 이 프로젝트의 전용 팀이다(비활성·미참조 공용 팀의 담당이 공용 id 로 들어가 분열하지 않는다) ──
   it('[R2] 상속 + 등록: 파일의 팀 code 전부를 전환 뒤 ensureProjectTeams 로 맞춘다(비활성 미참조 공용 OLD 도 전용 팀으로)', async () => {
     teamsAre(COMMON, [])
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'OLD', 'QA')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'OLD', 'QA')], holidays: [] })
     const { rpc } = admin()
     const res = await POST(req({ registerTeams: 'true', convertToken: convertConsentToken(COMMON, ['QA']) }))
     expect(res.status).toBe(200)
@@ -389,7 +393,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
   })
   it('[X4] 이 프로젝트가 참조 중인 비활성 공용 팀은 전환이 복사한다 — 그 code 는 복사로 넘긴다', async () => {
     teamsAre(COMMON, [])
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'OLD', 'QA')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'OLD', 'QA')], holidays: [] })
     m.referencedCommonTeamCodes.mockResolvedValue(new Map([['OLD', 'OLD']]))
     admin()
     expect((await POST(req({ registerTeams: 'true', convertToken: convertConsentToken(COMMON, ['QA']) }))).status).toBe(200)
@@ -400,7 +404,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     // 복사된 OPS 와 같은 낱말의 두 팀이 되던 길(A2-3 리뷰 보안 P3·정확성 P3)
     const commons = [...COMMON, team('ops', { id: 'common-ops-low', sortOrder: 3, active: false, projectId: null })]
     teamsAre(commons, [])
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'ops', 'QA')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'ops', 'QA')], holidays: [] })
     const { rpc } = admin()
     const res = await POST(req({ registerTeams: 'true', convertToken: convertConsentToken(commons, ['QA']) }))
     expect(res.status).toBe(400)
@@ -410,7 +414,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
   })
   it('[X4] 비활성 공용 팀의 참조 조회가 실패하면 전환 앞에서 503 — 무엇이 복사될지 모르는 채 전환하지 않는다(3원칙 ②)', async () => {
     teamsAre(COMMON, [])
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'OLD', 'QA')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'OLD', 'QA')], holidays: [] })
     m.referencedCommonTeamCodes.mockRejectedValue(new Error('relation boom'))
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { rpc } = admin()
@@ -424,7 +428,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
   })
   it('[X4] 파일에 비활성 공용 팀이 없으면 참조 조회를 하지 않는다', async () => {
     teamsAre(COMMON, [])
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'QA')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'QA')], holidays: [] })
     admin()
     expect((await POST(req({ registerTeams: 'true', convertToken: convertConsentToken(COMMON, ['QA']) }))).status).toBe(200)
     expect(m.referencedCommonTeamCodes).not.toHaveBeenCalled()
@@ -472,7 +476,7 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
 
   // ── R5 — 양식 저장이 요구하는 팀 열(표시 없는 새 팀 열 포함)을 등록 대상에 넣는다 ──────────────────────────────────────
   it('[R5] 양식을 저장하는 요청 — 헤더의 팀 열이 어느 행에도 표시되지 않았어도 미등록이면 needsTeams 에 든다(등록하면 교차 검증을 통과한다)', async () => {
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES')], holidays: [] })   // QA 열은 PROFILE 헤더에 있으나 표시 없음
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES')], holidays: [] })   // QA 열은 PROFILE 헤더에 있으나 표시 없음
     const { rpc } = admin()
     const res = await POST(req({ saveProfile: 'true' }))
     expect(res.status).toBe(409)
@@ -485,19 +489,19 @@ describe('미등록 팀(#6 — D4·D54·Q36)', () => {
     expect(done.profileSave).toBeUndefined()
   })
   it('[R5] 양식을 저장하지 않는 요청은 표시된 팀만 본다(저장 교차 검증이 없으니 빈 팀 열을 등록하라고 하지 않는다)', async () => {
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES')], holidays: [] })
     admin()
     expect((await POST(req({ saveProfile: 'false' }))).status).toBe(200)
   })
   it('[R5] 헤더의 팀 열이 이미 등록(비활성 포함)이면 새로 요구하지 않는다', async () => {
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES')], holidays: [] })
     teamsAre([OWN_RES, OWN_QA], [OWN_RES, OWN_QA])
     admin()
     expect((await POST(req({ saveProfile: 'true' }))).status).toBe(200)
     expect(m.ensureProjectTeams).not.toHaveBeenCalled()
   })
   it('[R5] 팀명 직접 방식의 표지(`*` — 담당 열 하나에 팀명이 든 양식)는 팀이 아니다 — 등록 대상·needsTeams 에 오르지 않는다(교차 검증과 같은 규칙)', async () => {
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES')], holidays: [] })
     teamsAre([OWN_RES], [OWN_RES])
     admin()
     const star: ExcelProfile = { ...PROFILE, teamColumns: [[2, '*']] }
@@ -534,7 +538,7 @@ describe('실패 순서(#5~#8) — 앞 단계가 실패하면 뒤 단계를 부�
   })
   it('팀 원천 실패(#6) → 503 TEAMS_UNAVAILABLE 재시도 가능 — 전환·등록·RPC 없음', async () => {
     vi.mocked(projectTeams).mockRejectedValue(new TeamsUnavailableError('팀 목록을 불러오지 못했습니다.', { cause: new Error('boom') }))
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'QA')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'QA')], holidays: [] })
     const { rpc } = admin()
     const res = await POST(req({ registerTeams: 'true' }))
     expect(res.status).toBe(503)
@@ -551,7 +555,7 @@ describe('실패 순서(#5~#8) — 앞 단계가 실패하면 뒤 단계를 부�
     ['입력 토큰(정상 경로 밖)', { message: 'TEAM_CONVERT_INVALID_INPUT', code: '22023' }, 500, 'TEAM_CONVERT_FAILED'],
   ] as const)('전환 RPC 실패(#6) — %s → %i, 등록·가져오기 없음', async (_n, err, status, code) => {
     teamsAre(COMMON, [])
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'QA')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'QA')], holidays: [] })
     const { rpc } = admin({ convert: { data: null, error: err } })
     const res = await POST(registerReq())
     expect(res.status).toBe(status)
@@ -564,7 +568,7 @@ describe('실패 순서(#5~#8) — 앞 단계가 실패하면 뒤 단계를 부�
     expect(rpc.mock.calls.map(([name]) => name)).toEqual(['convert_inherited_teams'])
   })
   it('팀 등록 실패(#6) → 500 TEAM_REGISTER_FAILED — 가져오기 없음', async () => {
-    m.parseWithProfile.mockReturnValue({ ok: true, rows: [row('RES', 'QA')], holidays: [] })
+    m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [row('RES', 'QA')], holidays: [] })
     m.ensureProjectTeams.mockResolvedValue({ ok: false, code: 'TEAM_REGISTER_FAILED', error: '팀을 등록하지 못했습니다. 잠시 후 다시 시도하세요.', team: 'QA' })
     const { rpc } = admin()
     const res = await POST(req({ registerTeams: 'true' }))

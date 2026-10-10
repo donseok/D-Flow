@@ -54,7 +54,7 @@ const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const COMMAND_ID = '44444444-4444-4444-8444-444444444444'
 // 라우트 진입 가드(requireProjectAdmin)를 통과한 액터 — 이 프로젝트는 워크스페이스 WS 소속이다.
 const ACTOR = makeActor({ projectWorkspace: new Map([[PROJECT_ID, WS]]) })
-const FILE = new Blob(['x'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+const FILE = new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 /** 합성 양식(3행 머리) — 계층 3열 + 팀 열 둘(RES·OPS). 옛 5팀 양식 상수는 쓰지 않는다(A2 가 fixture 로 옮긴다) */
 const PROFILE: ExcelProfile = {
   version: 1, sheetName: 'WBS', holidaySheetName: 'Holiday', headerRow: 2,
@@ -130,7 +130,7 @@ function makeAdminClient() {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ACTOR })
-  mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [] })
+  mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [ROW], holidays: [] })
   mocks.resolveLegacyLevelLabels.mockReturnValue(true)
   mocks.linkByDepth.mockReturnValue({ ok: true, items: [LINKED_ITEM] })
   mocks.splitLeafOwners.mockImplementation((items: unknown) => items)
@@ -244,7 +244,7 @@ describe('POST /api/import/execute — 검증 오류 400', () => {
   })
 
   it('미등록 팀 포함 + linkByDepth 구조 오류 → 팀 단계 전에 400 — 팀 대조·등록·영수증 확인 전부 미호출(검증 실패 요청은 부수효과를 남기지 않는다)', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [{ ...ROW, owners: [{ team: 'NEWTEAM', kind: 'primary' as const }] }], holidays: [] })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [{ ...ROW, owners: [{ team: 'NEWTEAM', kind: 'primary' as const }] }], holidays: [] })
     mocks.linkByDepth.mockReturnValue({ ok: false, errors: [{ excelRow: 5, message: '깊이 건너뜀' }] })
     const res = await POST(req(baseFields({ registerTeams: 'true' })))
     expect(res.status).toBe(400)
@@ -329,6 +329,169 @@ describe('POST /api/import/execute — 후처리(스냅샷·색인)', () => {
     const body = await res.json()
     expect(body.ok).toBe(true)
     expect(body.reindexed).toBe(0)
+  })
+})
+
+/* ── 사용자 테스트 버그 리포트(2026-10-10)의 가져오기 묶음 — 라우트의 배선 ── */
+describe('POST /api/import/execute — 버그 리포트 회귀(BUG-01·04·09·10·33)', () => {
+  const adminWith = (rpcResult: unknown) => {
+    const rpc = vi.fn<(fn: string, args: unknown) => Promise<unknown>>(async () => rpcResult)
+    const admin = { rpc, from: vi.fn((table: string) => { throw new Error(`unexpected table: ${table}`) }) }
+    mocks.createAdminClient.mockReturnValue(admin)
+    return admin
+  }
+
+  it('[BUG-04] 엑셀이 아닌 파일(ZIP 시그니처 없음) → 400 NOT_XLSX — 설정 조회·감지·파싱·DB 없음', async () => {
+    const bogus = new Blob(['this is not a real xlsx file\n'])
+    const res = await POST(req(baseFields({ file: bogus, saveProfile: 'true' })))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body).toMatchObject({ ok: false, code: 'NOT_XLSX' })
+    expect(body.error).toContain('유효한 엑셀(.xlsx) 파일이 아닙니다')
+    expect(mocks.getProjectConfig).not.toHaveBeenCalled()
+    expect(mocks.detectWorkbook).not.toHaveBeenCalled()
+    expect(mocks.parseWithProfile).not.toHaveBeenCalled()
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+    expect(mocks.writeProjectSettingsInternal).not.toHaveBeenCalled()
+  })
+
+  it('[BUG-01·09·33] 파서의 행 오류(이름 없는 행)와 링크·값 오류(실적% 범위·음수 가중치)는 한 표에 행 순으로 — 400 LINK_ERRORS, 쓰기 없음', async () => {
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [], skippedRows: 0, rowErrors: [{ excelRow: 8, message: '작업명이 비어 있습니다' }] })
+    mocks.linkByDepth.mockReturnValue({ ok: false, errors: [
+      { excelRow: 9, message: '가중치는 0 이상이어야 합니다' }, { excelRow: 7, message: '실적%는 0~100 범위여야 합니다(입력값 150)' },
+    ] })
+    const res = await POST(req(baseFields()))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ ok: false, code: 'LINK_ERRORS', errors: [
+      { excelRow: 7, message: '실적%는 0~100 범위여야 합니다(입력값 150)' },
+      { excelRow: 8, message: '작업명이 비어 있습니다' },
+      { excelRow: 9, message: '가중치는 0 이상이어야 합니다' },
+    ] })
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('[BUG-33] 링크는 통과했어도 파서의 행 오류가 있으면 400 — 이름 없는 행을 조용히 버리고 나머지만 넣지 않는다', async () => {
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [], skippedRows: 0, rowErrors: [{ excelRow: 8, message: '작업명이 비어 있습니다' }] })
+    const res = await POST(req(baseFields()))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'LINK_ERRORS', errors: [{ excelRow: 8, message: '작업명이 비어 있습니다' }] })
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('[BUG-33] 건너뛴 행 수는 결과에 싣는다 — 0 이면 싣지 않는다', async () => {
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [], rowErrors: [], skippedRows: 2 })
+    expect(await (await POST(req(baseFields()))).json()).toMatchObject({ ok: true, skippedRows: 2 })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [], rowErrors: [], skippedRows: 0 })
+    expect(await (await POST(req(baseFields()))).json()).not.toHaveProperty('skippedRows')
+  })
+
+  it.each(['append', 'replace'])('[BUG-04] 읽을 항목이 0건(%s) → 400 NO_ROWS "가져올 데이터를 찾지 못했습니다" — 성공이 아니고, 양식 저장·팀·백업·RPC 없음', async (mode) => {
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [], holidays: [], rowErrors: [], skippedRows: 3 })
+    mocks.linkByDepth.mockReturnValue({ ok: true, items: [] })
+    const res = await POST(req(baseFields({ mode, saveProfile: 'true' })))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body).toMatchObject({ ok: false, code: 'NO_ROWS', skippedRows: 3 })
+    expect(body.error).toContain('가져올 데이터를 찾지 못했습니다')
+    expect(mocks.writeProjectSettingsInternal).not.toHaveBeenCalled()
+    expect(projectTeams).not.toHaveBeenCalled()
+    expect(mocks.createServerClient).not.toHaveBeenCalled()
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('[BUG-04] 구조를 확정하지 못한 감지 양식을 고치지 않고 저장하려 하면 저장하지 않는다 — 가져오기는 성공, 사유는 PROFILE_UNCERTAIN', async () => {
+    mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile: PROFILE, warnings: ['계층 열을 찾지 못했습니다'], preview: { headers: [], rows: [] }, uncertain: true } })
+    const res = await POST(req(baseFields({ saveProfile: 'true' })))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({ ok: true, profileSaved: false, profileSave: { ok: false, code: 'PROFILE_UNCERTAIN' } })
+    expect(mocks.writeProjectSettingsInternal).not.toHaveBeenCalled()
+  })
+
+  it('[BUG-04] 구조를 확정하지 못했어도 사용자가 열 지정을 고친 양식은 저장한다 — 감지가 못 읽는 양식이야말로 저장해 둘 값이다', async () => {
+    mocks.writeProjectSettingsInternal.mockResolvedValue({ ok: true, status: 'applied', revision: 2, commandId: 'c' })
+    const guessed = { ...PROFILE, hierarchy: { kind: 'columns' as const, columns: [1] } }
+    mocks.detectWorkbook.mockReturnValue({ ok: true, result: { profile: guessed, warnings: [], preview: { headers: [], rows: [] }, uncertain: true } })
+    const body = await (await POST(req(baseFields({ saveProfile: 'true' })))).json()
+    expect(body).toMatchObject({ ok: true, profileSaved: true })
+    expect(mocks.writeProjectSettingsInternal).toHaveBeenCalledTimes(1)
+  })
+
+  it('[BUG-01] DB 가 값을 거부하면(23514 CHECK) 500 "잠시 후 다시" 가 아니라 422 VALUE_REJECTED — DB 원문은 응답에 싣지 않는다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    adminWith({ data: null, error: { code: '23514', message: 'new row for relation "wbs_items" violates check constraint "wbs_items_actual_pct_check"' } })
+    const res = await POST(req(baseFields()))
+    expect(res.status).toBe(422)
+    const text = await res.text()
+    expect(JSON.parse(text)).toMatchObject({ ok: false, code: 'VALUE_REJECTED' })
+    expect(text).toContain('저장할 수 없는 값')
+    expect(text).not.toContain('wbs_items_actual_pct_check')
+    expect(text).not.toContain('violates')
+    expect(mocks.recordProgressSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('[BUG-01] 모르는 DB 오류는 종전대로 500 IMPORT_FAILED 고정 문구(원문은 로그) — RPC 의 입력 토큰(22023)도 값 거부로 바꾸지 않는다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const error of [{ code: 'XX000', message: 'boom internal' }, { code: '22023', message: 'IMPORT_INVALID_INPUT' }]) {
+      adminWith({ data: null, error })
+      const res = await POST(req(baseFields()))
+      expect(res.status, error.code).toBe(500)
+      const text = await res.text()
+      expect(JSON.parse(text)).toMatchObject({ ok: false, code: 'IMPORT_FAILED' })
+      expect(text).not.toContain('boom')
+    }
+  })
+
+  it('[BUG-01] 처리 중 예외(throw)도 본문 없는 500 이 아니다 — { ok:false, code:IMPORT_FAILED, error: 고정 문구 }, 예외 글자는 로그로만', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.linkByDepth.mockImplementation(() => { throw new Error('secret stack: /Users/internal/path') })
+    const res = await POST(req(baseFields()))
+    expect(res.status).toBe(500)
+    const text = await res.text()
+    expect(JSON.parse(text)).toEqual({ ok: false, code: 'IMPORT_FAILED', error: '가져오기를 처리하지 못했습니다. 잠시 후 다시 시도하세요.' })
+    expect(text).not.toContain('secret')
+    expect(spy.mock.calls.flat().some((x) => x instanceof Error && x.message.includes('secret stack'))).toBe(true)
+  })
+
+  /* BUG-10 — 상속 프로젝트(전용 팀 0개)가 쓰는 워크스페이스 공용 팀: code DEV · 이름 플랫폼개발팀 */
+  describe('[BUG-10] 팀 글자의 대조', () => {
+    const COMMON: Team[] = [{ ...team('DEV', 0), id: 'common-dev', name: '플랫폼개발팀', projectId: null }, { ...team('OPS', 1), id: 'common-ops', name: '운영팀', projectId: null }]
+    const withOwners = (...names: string[]) => {
+      const owners = names.map((name, i) => ({ team: name, kind: (i === 0 ? 'primary' : 'support') as 'primary' | 'support' }))
+      mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [{ ...ROW, owners }], holidays: [], rowErrors: [], skippedRows: 0 })
+      mocks.linkByDepth.mockReturnValue({ ok: true, items: [{ ...LINKED_ITEM, owners }] })
+    }
+    beforeEach(() => {
+      vi.mocked(projectTeams).mockResolvedValue(COMMON)
+      vi.mocked(projectOwnTeams).mockResolvedValue([])
+      mocks.getProjectConfig.mockResolvedValue(cfgWith(undefined, COMMON.map(configTeam)))
+    })
+
+    it('리포트의 재현 — 엑셀에 공용 팀의 이름(플랫폼개발팀)을 적으면 그 팀(DEV)에 맞춘다: "겹칩니다" 400 도, 등록 확인 409 도, 전환도 없다', async () => {
+      withOwners('플랫폼개발팀')
+      const admin = adminWith({ data: { status: 'applied', mode: 'append', count: 1, command_id: COMMAND_ID }, error: null })
+      const res = await POST(req(baseFields()))
+      expect(res.status).toBe(200)
+      expect(mocks.ensureProjectTeams).not.toHaveBeenCalled()
+      expect(admin.rpc.mock.calls.map(([fn]) => fn)).toEqual(['import_wbs_cmd'])
+      const args = admin.rpc.mock.calls[0][1] as { p_items: { owners: unknown }[] }
+      expect(args.p_items[0].owners).toEqual([{ team: 'DEV', kind: 'primary' }])   // RPC 는 code 로 팀을 찾는다
+    })
+
+    it('앞뒤 공백·대소문자가 달라도 같은 팀이고, 같은 팀을 두 번 가리키면 하나로 합친다', async () => {
+      withOwners(' dev ', '플랫폼개발팀', '운영팀')
+      const admin = adminWith({ data: { status: 'applied', mode: 'append', count: 1, command_id: COMMAND_ID }, error: null })
+      expect((await POST(req(baseFields()))).status).toBe(200)
+      const args = admin.rpc.mock.calls[0][1] as { p_items: { owners: unknown }[] }
+      expect(args.p_items[0].owners).toEqual([{ team: 'DEV', kind: 'primary' }, { team: 'OPS', kind: 'support' }])
+    })
+
+    it('어느 팀도 아닌 이름만 새 팀이다 — 409 NEEDS_TEAMS 의 목록에는 그 이름만 오른다(기존 팀의 이름은 오르지 않는다)', async () => {
+      withOwners('플랫폼개발팀', '신규팀')
+      const res = await POST(req(baseFields()))
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ code: 'NEEDS_TEAMS', needsTeams: ['신규팀'], inheritsCommon: true })
+    })
   })
 })
 
@@ -423,7 +586,7 @@ describe('POST /api/import/execute — 저장 양식·파일 구조 불일치', 
 
 describe('POST /api/import/execute — 휴일 충돌(SP5 D7·W16)', () => {
   it('파일 휴일이 프로젝트의 근무 예외와 겹치면 결과에 skippedHolidays — RPC 에는 그대로 넘긴다(DB 갱신절이 work 행을 덮지 않는다)', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [{ date: '2026-10-10', name: '회사 휴일' }, { date: '2026-10-12', name: '회사 휴일 2' }] })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [ROW], holidays: [{ date: '2026-10-10', name: '회사 휴일' }, { date: '2026-10-12', name: '회사 휴일 2' }] })
     mocks.getProjectConfig.mockResolvedValue({ ...cfgWith(), holidays: [{ date: '2026-10-10', name: '대체 근무', kind: 'work' }] })
     const admin = makeAdminClient()
     mocks.createAdminClient.mockImplementation(() => admin)

@@ -16,7 +16,8 @@ function d(iso: string): Date {
   return new Date(y, m - 1, day, 12, 0, 0)
 }
 
-/** 예시 행 — 아웃라인 3층, 부모 기간은 자식을 덮고, 가중치는 형제 합 1.0, 실적% 는 비움(진도는 D-Flow 가 정본). */
+/** 예시 행 — 아웃라인 3층, 부모 기간은 자식을 덮고, 가중치는 형제 합 100%(값은 분수 — 아래에서 % 서식을 입혀 0.5 가 50% 로 보인다),
+ *  실적% 는 비움(진도는 D-Flow 가 정본). */
 export const TEMPLATE_ROWS: unknown[][] = [
   ['1',     '기반 구축',        '공통', '',                d('2026-09-01'), d('2026-09-12'), 1,   '', ''],
   ['1.1',   '초기화',           '공통', '',                d('2026-09-01'), d('2026-09-12'), 1,   '', ''],
@@ -41,7 +42,7 @@ export const TEMPLATE_GUIDE: string[][] = [
   ['2', '코드는 아웃라인 번호(1 / 1.1 / 1.1.1)로 계층을 나타냅니다. 최대 4단(1.1.1.1).'],
   ['3', '헤더 이름(코드·업무명·업무영역·산출물·시작일·종료일·가중치·실적%·담당)은 바꾸지 않습니다.'],
   ['4', '시작일·종료일은 날짜 셀 또는 YYYY-MM-DD 텍스트(예: 2026-09-01). 그 밖의 형식은 빈 날짜로 읽힙니다. 상위 행 기간은 하위를 덮게 적습니다.'],
-  ['5', '가중치는 형제끼리 합이 1이 되게(안 맞으면 형제 균등으로 봅니다).'],
+  ['5', '가중치는 화면과 같은 % 로 적습니다(50 또는 50% = 50%). 형제끼리의 비율로 쓰이므로 합이 100이 아니어도 됩니다. 비우면 형제 균등입니다.'],
   ['6', '담당 열에는 팀 이름(코드)을 적습니다. ●/△ 는 팀마다 열(머리 = 팀 이름)을 둘 때 씁니다.'],
   ['7', `실적% 는 비워 둡니다 — 진도는 ${BRAND.productName}에서 관리합니다.`],
   ['8', 'Holiday 시트에 회사 휴일(날짜, 이름)을 적으면 계획%가 영업일 기준으로 계산됩니다. 기본으로 들어 있는 휴일은 없습니다.'],
@@ -54,6 +55,12 @@ export function buildWbsTemplateWorkbook(productName: string = BRAND.productName
   for (const ref of Object.keys(ws)) {
     const cell = ws[ref] as { t?: string; z?: string }
     if (!ref.startsWith('!') && cell.t === 'd') cell.z = 'yyyy-mm-dd'
+  }
+  // 가중치 예시 칸은 % 서식 — 엑셀에서 50% 로 보이고, 가져오기는 % 서식 칸을 그 % 로 읽는다(wbsValueRules.importedWeightScale)
+  const weightCol = TEMPLATE_HEADER.indexOf('가중치')
+  for (let r = 1; r <= TEMPLATE_ROWS.length; r++) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c: weightCol })] as XLSX.CellObject | undefined
+    if (cell && cell.t === 'n') cell.z = '0%'
   }
   const hs = XLSX.utils.aoa_to_sheet([['날짜', '이름'], ...TEMPLATE_HOLIDAYS.map(([iso, name]) => [d(iso), name])], { cellDates: true })
   hs['!cols'] = [{ wch: 12 }, { wch: 16 }]

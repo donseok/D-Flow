@@ -50,9 +50,10 @@ describe('readHolidaysFromBuffer — 미리보기가 실행과 같은 규칙으�
   })
   it('시트 이름이 없으면 빈 목록, 워크북이 아니면 null', () => {
     expect(readHolidaysFromBuffer(book([['날짜', '이름']]), null)).toEqual([])
-    // 깨진 zip(xlsx 머리 PK 뒤가 망가짐)은 읽지 못한다 → null. 평문은 SheetJS 가 CSV 한 장(Sheet1)으로 읽으므로 Holiday 시트가 없다 → []
+    // 깨진 zip(xlsx 머리 PK 뒤가 망가짐)은 읽지 못한다 → null. 평문도 null 이다(BUG-04) — SheetJS 는 평문을 CSV 한 장으로 읽어 주지만
+    // 엑셀(.xlsx — ZIP)이 아닌 내용은 워크북으로 치지 않는다(isXlsxBuffer)
     expect(readHolidaysFromBuffer(new TextEncoder().encode('PK\x03\x04garbage-zip-bytes').buffer as ArrayBuffer, 'Holiday')).toBeNull()
-    expect(readHolidaysFromBuffer(new TextEncoder().encode('not a workbook').buffer as ArrayBuffer, 'Holiday')).toEqual([])
+    expect(readHolidaysFromBuffer(new TextEncoder().encode('not a workbook').buffer as ArrayBuffer, 'Holiday')).toBeNull()
   })
 })
 
@@ -60,12 +61,12 @@ describe('마법사 상태 — 미리보기의 건너뜀을 들고 다닌다', (
   it('초기 상태는 빈 목록, 파일을 바꾸면 비운다', () => {
     expect(initialWizardState.skippedHolidays).toEqual([])
     const skipped = [{ date: '2026-10-10', name: '회사 휴일', reason: 'work_exception' as const }]
-    const detection: DetectionResult = { sheetNames: ['WBS'], profile: LEGACY_EXCEL_PROFILE_V1, confidence: { header: 1, hierarchy: 1, logical: 1 }, preview: { headers: [], rows: [] }, warnings: [] }
+    const detection: DetectionResult = { sheetNames: ['WBS'], profile: LEGACY_EXCEL_PROFILE_V1, confidence: { header: 1, hierarchy: 1, logical: 1 }, preview: { headers: [], rows: [] }, warnings: [], hierarchyCandidates: { columns: [1, 2, 3], outline: null, name: null }, uncertain: false }
     const s1 = reducer(initialWizardState, { type: 'inspectSuccess', detection, savedProfile: null, skippedHolidays: skipped })
     expect(reducer(s1, { type: 'fileSelected', fileName: 'b.xlsx' }).skippedHolidays).toEqual([])
   })
   it('inspectSuccess 가 skippedHolidays 를 싣고, 없으면 빈 목록', () => {
-    const detection: DetectionResult = { sheetNames: ['WBS', 'Holiday'], profile: LEGACY_EXCEL_PROFILE_V1, confidence: { header: 1, hierarchy: 1, logical: 1 }, preview: { headers: [], rows: [] }, warnings: [] }
+    const detection: DetectionResult = { sheetNames: ['WBS', 'Holiday'], profile: LEGACY_EXCEL_PROFILE_V1, confidence: { header: 1, hierarchy: 1, logical: 1 }, preview: { headers: [], rows: [] }, warnings: [], hierarchyCandidates: { columns: [1, 2, 3], outline: null, name: null }, uncertain: false }
     const skipped = [{ date: '2026-10-10', name: '회사 휴일', reason: 'work_exception' as const }]
     expect(reducer(initialWizardState, { type: 'inspectSuccess', detection, savedProfile: null, skippedHolidays: skipped }).skippedHolidays).toEqual(skipped)
     expect(reducer(initialWizardState, { type: 'inspectSuccess', detection, savedProfile: null }).skippedHolidays).toEqual([])

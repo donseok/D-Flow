@@ -1,6 +1,7 @@
 // 팀 이름 규칙(SP4 D37·계획 P5) — 순수. code 는 불변이고 이름(teams.name)만 바꾼다. 비교는 NFKC·trim·소문자 — 봇 라우터가 대소문자를
 // 무시해 code·name 을 찾으므로(§4.2.2) 'ops' 와 'OPS' 를 두 팀 이름으로 두면 둘 다 모호해져 사람이 팀을 부를 수 없다. DB 제약은 없다 —
 // 동시 개명 경합과 범위가 다른 팀끼리의 겹침은 봇의 모호 거부가 맡는다(스펙 §10 K14).
+import { josa } from '@/lib/i18n/particle'
 import { isHeaderWordMatch } from '@/lib/excel/headerWords'
 import { normalizeNewTeamCode, TEAM_CODE_MAX } from './teams'
 
@@ -21,7 +22,7 @@ export function checkTeamRename(input: {
   const key = teamNameKey(name)
   const backToOwnCode = key === teamNameKey(input.selfCode)
   if (!backToOwnCode && input.reserved.some((w) => isHeaderWordMatch(w, name))) {
-    return { ok: false, error: `'${name}'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다.` }
+    return { ok: false, error: `${josa(`'${name}'`, '은/는')} 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다.` }
   }
   const clash = input.siblings.find((s) => s.id !== input.selfId && (teamNameKey(s.code) === key || teamNameKey(s.name) === key))
   if (clash) return { ok: false, error: `같은 범위의 다른 팀(${clash.code})의 코드·이름과 겹칩니다.` }
@@ -36,7 +37,7 @@ export function newTeamCodeClash(code: string, siblings: readonly { code: string
   const hit = siblings.find((s) => s.code !== code && (teamNameKey(s.code) === key || teamNameKey(s.name) === key))
   return hit ? hit.code : null
 }
-export const teamCodeClashError = (code: string, clash: string) => `'${code}'는 같은 범위의 다른 팀(${clash})의 코드·이름과 겹칩니다.`
+export const teamCodeClashError = (code: string, clash: string) => `${josa(`'${code}'`, '은/는')} 같은 범위의 다른 팀(${clash})의 코드·이름과 겹칩니다.`
 /** 새 code 목록의 첫 겹침 — 기존 팀(siblings)과, 그리고 앞서 통과한 새 code 끼리(A2-2 리뷰 보안 P3 — 한 번의 가져오기에 ab·AB 가 함께
  *  등록되던 길. 액션은 두 번째 추가에서 막혔다). 정확히 같은 code 는 겹침이 아니다(호출부의 "이미 있음"). 겹치면 { code, clash }, 아니면 null */
 export function firstNewCodeClash(codes: readonly string[], siblings: readonly { code: string; name: string }[]): { code: string; clash: string } | null {
@@ -72,7 +73,7 @@ export function checkNewTeam(input: { name: unknown; code?: unknown; reserved: r
   if (!name) return { ok: false, error: '팀 이름을 입력하세요.' }
   if ([...name].length > TEAM_NAME_MAX) return { ok: false, error: `팀 이름은 ${TEAM_NAME_MAX}자 이하여야 합니다.` }
   if (input.reserved.some((w) => isHeaderWordMatch(w, name))) {
-    return { ok: false, error: `'${name}'는 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다.` }
+    return { ok: false, error: `${josa(`'${name}'`, '은/는')} 엑셀 양식 예약어라 팀 이름으로 쓸 수 없습니다.` }
   }
   const given = typeof input.code === 'string' ? input.code.trim() : ''
   // 기본값은 입력한 이름 그대로에서 만든다(NFKC 로 바꾼 이름이 아니라) — 코드를 따로 적지 않던 때와 같은 값이 저장된다
@@ -108,4 +109,42 @@ export function checkTeamCodeChange(input: {
   const clash = newTeamCodeClash(norm.code, others)
   if (clash) return { ok: false, error: teamCodeClashError(norm.code, clash) }
   return { ok: true, code: norm.code, unchanged: false }
+}
+
+/** 파일(엑셀)의 팀 글자 → 이 프로젝트가 쓰는 팀의 code(BUG-10). 못 찾으면 null — 그때만 새 팀 후보다.
+ *  teams 는 그 프로젝트가 쓰는 팀(projectTeams — 전용 팀이 하나라도 있으면 전용 팀만, 없으면 상속하는 워크스페이스 공용 팀)이라
+ *  "프로젝트 전용 → 워크스페이스 공용(상속) → 없을 때만 신규" 순서가 된다. 대조는 ① code 가 정확히 같다 ② code 가 같은 낱말
+ *  (teamNameKey — 앞뒤 공백·대소문자·전각 무시) ③ 이름이 같은 낱말. 예전에는 ①만 봐서 팀 **이름**을 적은 파일('플랫폼개발팀', code 는 DEV)이
+ *  새 팀으로 넘어갔다가 자기 자신과의 겹침 오류로 통째로 실패했다. ②·③ 에서 서로 다른 팀 둘 이상이 맞으면(같은 낱말의 두 팀) 고르지 않는다
+ *  (null — 뒤의 겹침 판정이 사유를 말한다). 활성 팀을 먼저 본다 */
+export function resolveTeamRef(raw: string, teams: readonly { code: string; name: string; active?: boolean }[]): string | null {
+  const exact = teams.find((t) => t.code === raw)
+  if (exact) return exact.code
+  const key = teamNameKey(raw)
+  if (!key) return null
+  const pick = (hits: readonly { code: string; active?: boolean }[]): string | null => {
+    const active = hits.filter((t) => t.active !== false)
+    const pool = active.length > 0 ? active : hits
+    const codes = [...new Set(pool.map((t) => t.code))]
+    return codes.length === 1 ? codes[0] : null
+  }
+  const byCode = teams.filter((t) => teamNameKey(t.code) === key)
+  if (byCode.length > 0) return pick(byCode)
+  const byName = teams.filter((t) => teamNameKey(t.name) === key)
+  return byName.length > 0 ? pick(byName) : null
+}
+
+/** 행의 담당 팀 글자를 프로젝트 팀의 code 로 맞춘다 — 같은 팀을 두 번 가리키게 되면 하나로 합친다(주관이 이긴다: 복수 담당 분리가 같은 팀의
+ *  sub-act 를 둘 만들지 않게). 못 찾은 글자는 그대로 둔다(새 팀 후보) */
+export function resolveOwnerTeams<O extends { team: string; kind: 'primary' | 'support' }>(
+  owners: readonly O[], teams: readonly { code: string; name: string; active?: boolean }[],
+): O[] {
+  const out: O[] = []
+  for (const o of owners) {
+    const team = resolveTeamRef(o.team, teams) ?? o.team
+    const dup = out.findIndex((x) => x.team === team)
+    if (dup < 0) out.push({ ...o, team })
+    else if (o.kind === 'primary' && out[dup].kind !== 'primary') out[dup] = { ...out[dup], kind: 'primary' }
+  }
+  return out
 }

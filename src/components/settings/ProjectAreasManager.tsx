@@ -5,6 +5,7 @@
 // 저장은 upsertArea → RPC upsert_project_area — 활성 영역을 저장하면 이번 주 이후 주간 문서에 그 영역 행이 생긴다(rowsAdded).
 // 코드는 새 영역에서만 입력한다 — 이름으로 미리 채우고 고칠 수 있으며 저장 뒤 불변이다(트리거 project_areas_guard). 삭제 없음: 비활성이 삭제다.
 // SP3b 패턴 이행(상태 계약·빈 상태·글자 크기)은 SPU3 다(D52) — 지금 모양 그대로 기능만 붙인다.
+import { withSubjectParticle } from '@/lib/i18n/particle'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Plus } from 'lucide-react'
@@ -121,7 +122,7 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
 
       <div className="p-5 sm:p-6">
         {rows.length === 0 ? (
-          <p className="text-sm text-fg-muted">{tr('settings.areas.emptyLead').replace('{label}', String(label)).replace('{empty}', String(text.empty))}</p>
+          <p className="text-sm text-fg-muted">{tr('settings.areas.emptyLead').replace('{label}', withSubjectParticle(String(label))).replace('{empty}', String(text.empty))}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="data-table w-full min-w-[560px] text-sm">

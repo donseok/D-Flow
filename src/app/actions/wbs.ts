@@ -19,6 +19,7 @@ import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { AGENT_HELD_ORDER_STATUSES, stageLockedForHuman } from '@/lib/domain/agentWork'
 import { DEFAULT_APPROVAL_STEPS, actualHundredBlocked } from '@/lib/domain/approvalSteps'
 import { failWith } from '@/lib/errors/dbFail'
+import { actualPctViolation, weightViolation } from '@/lib/domain/wbsValueRules'
 import { WBS_ACTION_ERRORS as E } from '@/lib/wbs/actionErrors'
 import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, dbToken } from '@/lib/settings/errors'
 import { projectTeams } from '@/lib/teams/source'
@@ -151,7 +152,7 @@ export async function updateActual(
   newPct: number,
   expectedCurrent?: number | null,
 ): Promise<{ ok: boolean; error?: string; conflict?: boolean; latest?: number | null; code?: 'actual_locked' | 'approval_required' }> {
-  if (!Number.isFinite(newPct) || newPct < 0 || newPct > 100) return { ok: false, error: E.range }
+  if (typeof newPct !== 'number' || actualPctViolation(newPct)) return { ok: false, error: E.range }
   // projectId 를 인자로 받지 않으므로 판정 전에 대상 행에서 읽는다 — 조회 실패는 쓰기 중단 사유.
   const found = await resolveProjectId('wbs_items', itemId)
   if (!found.ok) return { ok: false, error: found.error }
@@ -252,7 +253,7 @@ export async function updateWeight(
   expectedCurrent?: number | null,
 ): Promise<{ ok: boolean; error?: string; conflict?: boolean; latest?: number | null }> {
   // isFinite: Infinity는 JSON 직렬화에서 null(균등)로 둔갑해 이력과 어긋나므로 차단
-  if (weight != null && (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0)) {
+  if (weight != null && (typeof weight !== 'number' || weightViolation(weight))) {
     return { ok: false, error: E.weightMin }
   }
   // 가중치는 구조/롤업에 영향 → 프로젝트 관리자 이상만 허용

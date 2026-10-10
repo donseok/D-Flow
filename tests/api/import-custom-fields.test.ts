@@ -40,7 +40,7 @@ import { makeActor, WS } from '../fixtures/actor'
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const COMMAND_ID = '44444444-4444-4444-8444-444444444444'
 const ACTOR = makeActor({ projectWorkspace: new Map([[PROJECT_ID, WS]]) })
-const FILE = new Blob(['x'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+const FILE = new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 const BASE_PROFILE: ExcelProfile = {
   version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 0,
   hierarchy: { kind: 'columns', columns: [0, 1] },
@@ -90,11 +90,12 @@ beforeEach(() => {
   mocks.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ACTOR })
   mocks.resolveLegacyLevelLabels.mockReturnValue(true)
   // 링크는 받은 행을 그대로 항목으로 — 검사가 바꾼 custom 이 RPC 까지 가는지 본다
-  mocks.linkByDepth.mockImplementation((rows: { name: string; custom?: unknown }[]) => ({ ok: true, items: rows.map((r, i) => ({ tempId: `t${i}`, name: r.name, ...(r.custom ? { custom: r.custom } : {}) })) }))
+  mocks.linkByDepth.mockImplementation((rows: { name: string; custom?: unknown }[]) => ({ ok: true, items: rows.map((r, i) => ({ tempId: `t${i}`, owners: [], name: r.name, ...(r.custom ? { custom: r.custom } : {}) })) }))
   mocks.splitLeafOwners.mockImplementation((items: unknown) => items)
   mocks.recordProgressSnapshot.mockResolvedValue(undefined)
   mocks.ingestProject.mockResolvedValue({ count: 0 })
   mocks.readHolidaysFromBuffer.mockReturnValue([])
+  mocks.parseWithProfile.mockReturnValue({ ok: false, error: '미리보기 읽기 없음(이 파일은 보지 않는다)' })
   mocks.createServerClient.mockImplementation(async () => sbClient())
   mocks.rpc.mockResolvedValue({ data: { status: 'applied', mode: 'append', count: 2, command_id: COMMAND_ID }, error: null })
   mocks.createAdminClient.mockImplementation(() => ({ rpc: mocks.rpc }))
@@ -149,7 +150,7 @@ describe('POST /api/import/inspect — 필드 열 제안', () => {
 
 describe('POST /api/import/execute — 필드 값 행 검사', () => {
   it('잘못된 값은 400 CUSTOM_FIELD_ERRORS — 엑셀 행 번호가 붙은 errors[] 이고 팀 등록·RPC 를 부르지 않는다', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, holidays: [], rows: [row(4, { qty: '많음' }), row(5, { qty: 1, result: '보류' }), row(6, { qty: 2 })] })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, holidays: [], rows: [row(4, { qty: '많음' }), row(5, { qty: 1, result: '보류' }), row(6, { qty: 2 })] })
     const res = await EXECUTE(req(executeFields()))
     expect(res.status).toBe(400)
     const body = await res.json()
@@ -163,7 +164,7 @@ describe('POST /api/import/execute — 필드 값 행 검사', () => {
   })
 
   it('계층 오류와 필드 값 오류는 한 표에 행 순으로 함께 실린다(LINK_ERRORS)', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, holidays: [], rows: [row(4, { qty: '많음' }), row(9)] })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, holidays: [], rows: [row(4, { qty: '많음' }), row(9)] })
     mocks.linkByDepth.mockReturnValue({ ok: false, errors: [{ excelRow: 9, message: '깊이 건너뜀' }, { excelRow: 2, message: '시작일이 종료일보다 늦음' }] })
     const body = await (await EXECUTE(req(executeFields()))).json()
     expect(body).toMatchObject({ ok: false, code: 'LINK_ERRORS' })
@@ -172,7 +173,7 @@ describe('POST /api/import/execute — 필드 값 행 검사', () => {
   })
 
   it('통과한 값은 필드 유형의 값(옵션 라벨 → code, 단위 붙은 숫자 → 숫자)으로 RPC 에 간다', async () => {
-    mocks.parseWithProfile.mockReturnValue({ ok: true, holidays: [], rows: [row(4, { qty: '12.5 m³', result: '통과' }), row(5)] })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, holidays: [], rows: [row(4, { qty: '12.5 m³', result: '통과' }), row(5)] })
     const res = await EXECUTE(req(executeFields()))
     expect(res.status).toBe(200)
     const items = (mocks.rpc.mock.calls[0][1] as { p_items: { name: string; custom?: unknown }[] }).p_items
@@ -182,13 +183,13 @@ describe('POST /api/import/execute — 필드 값 행 검사', () => {
 
   it('필드 열이 없는 파일은 정의를 읽지 않는다 — 손상된 정의 키가 무관한 가져오기를 막지 않는다', async () => {
     mocks.getProjectConfig.mockResolvedValue(cfg({}, true))
-    mocks.parseWithProfile.mockReturnValue({ ok: true, holidays: [], rows: [row(4)] })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, holidays: [], rows: [row(4)] })
     expect((await EXECUTE(req(executeFields({ profile: JSON.stringify(BASE_PROFILE) })))).status).toBe(200)
   })
 
   it('값이 있는데 정의 키가 손상이면 그 키의 오류로 멈춘다 — 값이 전부 "모르는 필드"가 되지 않는다', async () => {
     mocks.getProjectConfig.mockResolvedValue(cfg({}, true))
-    mocks.parseWithProfile.mockReturnValue({ ok: true, holidays: [], rows: [row(4, { qty: 1 })] })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, holidays: [], rows: [row(4, { qty: 1 })] })
     const res = await EXECUTE(req(executeFields()))
     const body = await res.json()
     expect(body).toMatchObject({ ok: false, code: 'CONFIG_INVALID' })
@@ -198,7 +199,7 @@ describe('POST /api/import/execute — 필드 값 행 검사', () => {
 
   it('사전 검사를 통과해도 DB 트리거가 거부하면(정의가 그새 바뀜) 종전대로 422 다 — 관문은 DB 다', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    mocks.parseWithProfile.mockReturnValue({ ok: true, holidays: [], rows: [row(4, { qty: 1 })] })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, holidays: [], rows: [row(4, { qty: 1 })] })
     mocks.rpc.mockResolvedValue({ data: null, error: { code: '23514', message: 'CUSTOM_FIELD_INACTIVE:qty' } })
     const res = await EXECUTE(req(executeFields()))
     expect(res.status).toBe(422)
@@ -207,7 +208,7 @@ describe('POST /api/import/execute — 필드 값 행 검사', () => {
 
   it('필드 열이 든 저장 양식 + 같은 구조의 파일은 확인 없이 진행한다(서버의 대조도 inspect 와 같은 제안을 쓴다)', async () => {
     mocks.getProjectConfig.mockResolvedValue(cfg({ 'fields.wbs_item': DEFS, 'wbs.excel_profile': PROFILE }))
-    mocks.parseWithProfile.mockReturnValue({ ok: true, holidays: [], rows: [row(4, { qty: 1 })] })
+    mocks.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, holidays: [], rows: [row(4, { qty: 1 })] })
     const res = await EXECUTE(req(executeFields({ useSavedProfile: 'true' })))
     expect(res.status).toBe(200)
   })

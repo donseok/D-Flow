@@ -107,7 +107,7 @@ const RES: Team = { id: 'own-res', code: 'RES', name: 'RES', color: '#6b7280', s
 function replaceRequest(): Parameters<typeof POST>[0] {
   const form = new FormData()
   for (const [k, v] of Object.entries({
-    file: new Blob(['x']), projectId: PROJECT_ID, profile: JSON.stringify(PROFILE), mode: 'replace', saveProfile: 'false', registerTeams: 'false',
+    file: new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])]), projectId: PROJECT_ID, profile: JSON.stringify(PROFILE), mode: 'replace', saveProfile: 'false', registerTeams: 'false',
     commandId: COMMAND_ID,
   })) form.append(k, v)
   return { formData: async () => form } as unknown as Parameters<typeof POST>[0]
@@ -130,7 +130,7 @@ const logged = (spy: { mock: { calls: unknown[][] } }, text: string) =>
 beforeEach(() => {
   vi.clearAllMocks()
   m.requireProjectAdmin.mockResolvedValue({ ok: true, actor: makeActor({ projectWorkspace: new Map([[PROJECT_ID, WS]]) }) })
-  m.parseWithProfile.mockReturnValue({ ok: true, rows: [ROW], holidays: [] })
+  m.parseWithProfile.mockReturnValue({ ok: true, rowErrors: [], skippedRows: 0, rows: [ROW], holidays: [] })
   m.resolveLegacyLevelLabels.mockReturnValue(false)
   m.linkByDepth.mockReturnValue({ ok: true, items: [ITEM] })
   m.splitLeafOwners.mockImplementation((items: unknown) => items)

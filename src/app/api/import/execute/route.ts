@@ -16,8 +16,9 @@ import { enqueueProjectIndexChange } from '@/lib/ai/index/enqueueChange'
 import { isUuidLike } from '@/lib/domain/agentWork'
 import { compareProfiles } from '@/lib/domain/importWizard'
 import { reservedTeamNames, validateNewTeamCodes, type Team } from '@/lib/domain/teams'
-import { firstNewCodeClash, teamCodeClashError } from '@/lib/domain/teamName'
+import { firstNewCodeClash, resolveOwnerTeams, resolveTeamRef, teamCodeClashError } from '@/lib/domain/teamName'
 import { detectWorkbook } from '@/lib/excel/detect'
+import { isXlsxBuffer } from '@/lib/excel/sheetRows'
 import { failWith, rpcFailure, type OwnTokenTable } from '@/lib/errors/dbFail'
 import {
   CONFIG_MESSAGES, configText, ConfigKeyError, ConfigUnavailableError, ERR_COMMAND_REUSED, ERR_CONFIG_UNAVAILABLE, configStatus, type ConfigCode,
@@ -69,6 +70,14 @@ const ERR_TEAM_REGISTER = 'srv.api.importExecute.couldNotRegisterTeamsImport'
 /** replace 백업을 읽지 못함 — 잘림·읽는 사이의 변경(count 불일치)·조회 오류 모두(SP4 D18·Q5) */
 const ERR_BACKUP_FAILED = 'srv.api.importExecute.couldNotCreatePreReplace'
 const ERR_IMPORT = 'srv.api.importExecute.couldNotProcessImport'
+/** 엑셀(.xlsx)이 아닌 파일 — ZIP 시그니처가 없다(BUG-04) */
+const ERR_NOT_XLSX = 'srv.api.importExecute.notXlsxFile'
+/** 읽을 항목이 0건 — 반영할 것이 없는 실행은 성공이 아니다(BUG-04) */
+const ERR_NO_ROWS = 'srv.api.importExecute.noRowsFound'
+/** 파일의 값을 DB 제약(CHECK·NOT NULL)이 거부함 — 사전 검증을 지난 값이 저장 규칙에 걸렸다. 다시 시도해도 같으므로 422(BUG-01) */
+const ERR_VALUE_REJECTED = 'srv.api.importExecute.valueRejected'
+/** 감지가 구조를 확정하지 못한 양식을 고치지 않고 저장하려 함 — 저장하지 않는다(BUG-04) */
+const ERR_PROFILE_UNCERTAIN = 'srv.api.importExecute.profileUncertainNotSaved'
 /** 파일의 사용자 정의 필드 값을 행 트리거(enforce_custom_fields)가 거부함 — CUSTOM_FIELD_<종류>[:키…](0040). 다시 시도해도 같으므로 422 */
 const ERR_CUSTOM_FIELD = 'srv.api.importExecute.customFieldValuesNotValid'
 /** 파일의 사용자 정의 필드 값이 TS 사전 검사에서 걸림 — 행 번호는 응답의 errors 에 싣는다(LINK_ERRORS 와 같은 표) */
@@ -98,11 +107,18 @@ function guardCode(g: GuardFailure): string {
 }
 
 /** RPC 오류 → 자기 표·55P03·mapDbError 의 판정(rpcFailure — 계획 P4). 셋 다 아니면 로그 + 500 고정 문구(원문은 failWith 가 로그로만) */
-function rpcFail(tr: ServerTranslate, tag: string, err: DbErrorLike, fallbackCode: string, fallback: string): NextResponse {
+function rpcFail(tr: ServerTranslate, tag: string, err: DbErrorLike, fallbackCode: string, fallback: string, valueRejected?: string): NextResponse {
   const f = rpcFailure(err, { ...RPC_TOKENS, COMMAND_REUSED: { ...RPC_TOKENS.COMMAND_REUSED, message: configText(tr, ERR_COMMAND_REUSED) } }, tr)
   if (f) {
     if (f.status >= 500) console.error(`[${tag}] ${f.token} → ${f.status}`)
     return fail(f.status, f.code, f.message)
+  }
+  // 값을 DB 제약이 거부함(23514 CHECK·23502 NOT NULL·22xxx 값 형식 — 22023 은 RPC 의 입력 토큰이라 뺀다) — 사전 검증(linkByDepth)을 지난
+  // 값이 저장 규칙에 걸렸다. 서버 사정이 아니라 파일의 값이라 500 '잠시 후 다시' 가 아니다(BUG-01 — 실적% 150 이 이 길로 500 이었다).
+  // 다시 보내도 같으므로 422(확정 실패 — 마법사가 새 명령 id 로 다시 시작한다). 어느 제약인지는 로그로만 남긴다
+  if (valueRejected && typeof err.code === 'string' && (err.code === '23514' || err.code === '23502' || /^22(?!023)/.test(err.code))) {
+    console.error(`[${tag}] 값 거부 ${err.code}: ${err.message} → 422`)
+    return fail(422, 'VALUE_REJECTED', valueRejected)
   }
   return fail(500, fallbackCode, failWith(tag, err, fallback))
 }
@@ -128,6 +144,16 @@ function activeCommon(teams: readonly Team[]): { code: string; name: string }[] 
  */
 export async function POST(req: NextRequest) {
   const tr = await serverTranslator()
+  try {
+    return await runImport(req, tr)
+  } catch (e) {
+    // 예상하지 못한 예외(BUG-01) — 프레임워크의 맨몸 500(본문 없음)으로 흘리지 않는다: 화면이 읽을 수 있는 같은 꼴({ ok: false, code, error })로
+    // 답하고, 원인은 로그에만 남긴다(failWith — DB 원문·스택을 응답에 싣지 않는다). 적용 여부를 모르므로 500 이다(같은 명령 id 로 재시도)
+    return fail(500, 'IMPORT_FAILED', failWith('import/execute 처리 중 예외', e, tr(ERR_IMPORT)))
+  }
+}
+
+async function runImport(req: NextRequest, tr: ServerTranslate): Promise<NextResponse> {
   // #1 폼·입력 검증 — 가드보다 먼저(agent-loop 교훈: 비 UUID 를 그대로 흘리면 가드·쿼리가 엉뚱한 에러로 새어나간다)
   const form = await req.formData()
   const file = form.get('file') as File | null
@@ -165,6 +191,28 @@ export async function POST(req: NextRequest) {
     teamColumns: validated.profile.teamColumns.map(([col, name]) => [col, name.trim()] as [number, string]),
   }
   const buf = await file.arrayBuffer()
+  // 엑셀이 아닌 파일은 대조·파싱 앞에서 끝낸다(BUG-04) — SheetJS 가 평문을 CSV 로 읽어 주므로 읽기 실패로는 걸러지지 않는다
+  if (!isXlsxBuffer(buf)) return fail(400, 'NOT_XLSX', tr(ERR_NOT_XLSX))
+
+  // 감지 선택지 — inspect 와 같아야 같은 감지 양식이 나온다: 추가 축 이름(그 열의 머리 별칭)·단계 이름(계층 열 후보, BUG-07)
+  const detectOpts = (c: ProjectConfig) => {
+    const extraAxisState = c.keys['core.extra_axis_label']
+    const levelState = c.keys['core.level_labels']
+    return {
+      extraAxisLabel: extraAxisState.status === 'set' ? extraAxisState.value : null,
+      levelLabels: levelState.status === 'set' || levelState.status === 'default' ? levelState.value : [],
+    }
+  }
+  /** 감지 양식 — inspect 와 같은 것(필드 열 제안 포함, §3.6.7). 파일 구조를 감지하지 못하면 그 오류 */
+  const detectLikeInspect = (c: ProjectConfig) => {
+    const detected = detectWorkbook(buf, detectOpts(c))
+    if (!detected.ok) return detected
+    const fieldState = c.keys['fields.wbs_item']
+    const detectedProfile = fieldState.status === 'set' || fieldState.status === 'default'
+      ? withSuggestedCustomColumns(detected.result.profile, detected.result.preview.headers, fieldState.value)
+      : detected.result.profile
+    return { ok: true as const, profile: detectedProfile, uncertain: detected.result.uncertain === true }
+  }
 
   // 저장 양식 대조(Task 1b) — 서버가 최종 관문이다(fail-closed). 저장 양식으로 읽는데(명시 플래그, 또는 좌표가 저장 양식과
   // 같은 프로파일) 파일 구조가 다르면 열이 밀려 오류 없이 틀린 값이 쓰인다. 마법사가 불일치를 보여 주고 사용자가 저장 양식을
@@ -184,16 +232,10 @@ export async function POST(req: NextRequest) {
     const usingSaved = form.get('useSavedProfile') === 'true' || compareProfiles(saved, profile) === null
     const confirmed = form.get('confirmProfileMismatch') === 'true'
     if (usingSaved && !confirmed) {
-      // inspect 와 같은 별칭으로 본다(추가 축 이름) — 다르면 그 이름으로 낸 파일이 늘 불일치다
-      const extraAxisState = cfg.keys['core.extra_axis_label']
-      const detected = detectWorkbook(buf, { extraAxisLabel: extraAxisState.status === 'set' ? extraAxisState.value : null })
+      // inspect 와 같은 선택지로 본다(추가 축 이름·단계 이름·필드 열 제안) — 다르면 그 이름으로 낸 파일이 늘 불일치다
+      const detected = detectLikeInspect(cfg)
       if (!detected.ok) return fail(409, 'PROFILE_MISMATCH', errProfileUnverifiable(tr, detected.error), { profileMismatch: null })
-      // 감지 양식은 inspect 와 같은 것이어야 한다 — 필드 열 제안(§3.6.7)을 같이 싣는다(안 실으면 필드 열이 든 저장 양식이 늘 불일치다)
-      const fieldState = cfg.keys['fields.wbs_item']
-      const detectedProfile = fieldState.status === 'set' || fieldState.status === 'default'
-        ? withSuggestedCustomColumns(detected.result.profile, detected.result.preview.headers, fieldState.value)
-        : detected.result.profile
-      const profileMismatch = compareProfiles(saved, detectedProfile)
+      const profileMismatch = compareProfiles(saved, detected.profile)
       if (profileMismatch) return fail(409, 'PROFILE_MISMATCH', tr(ERR_PROFILE_MISMATCH), { profileMismatch })
     }
   }
@@ -219,10 +261,15 @@ export async function POST(req: NextRequest) {
     customErrors = checked.errors
   }
   const linked = linkByDepth(rows, { legacyLevelLabels: resolveLegacyLevelLabels(profile) })
-  if (!linked.ok) {
-    return fail(400, 'LINK_ERRORS', tr(ERR_LINK), { errors: [...linked.errors, ...customErrors].sort((a, b) => a.excelRow - b.excelRow) })
+  // 행 오류는 한 표로 모은다 — 파서의 행 오류(이름 없는 행, BUG-33) + 링크·값 규칙(날짜·실적% 범위·음수 가중치, BUG-01·09) + 사용자 정의 필드
+  const rowErrors = [...parsed.rowErrors, ...(linked.ok ? [] : linked.errors)]
+  if (rowErrors.length > 0 || !linked.ok) {
+    return fail(400, 'LINK_ERRORS', tr(ERR_LINK), { errors: [...rowErrors, ...customErrors].sort((a, b) => a.excelRow - b.excelRow) })
   }
   if (customErrors.length > 0) return fail(400, 'CUSTOM_FIELD_ERRORS', tr(ERR_CUSTOM_ROWS), { errors: [...customErrors] })
+  // 읽을 항목이 없다(BUG-04) — 0건을 '가져오기 완료'로 답하지 않는다. replace 라면 트리만 지우고 끝났을 요청이다. 아무것도 쓰지 않는다
+  // (팀 등록·백업·RPC·양식 저장 전부 이 뒤다)
+  if (linked.items.length === 0) return fail(400, 'NO_ROWS', tr(ERR_NO_ROWS), { skippedRows: parsed.skippedRows })
   // 휴일 충돌(SP5 D7·개정 §4.2.3) — RPC 는 그대로 받는다(갱신절이 work 행을 덮지 않는다 — 반환 형태 불변). 결과 화면이 그 날짜를 '건너뜀'으로
   // 보인다. 원천은 이미 읽은 해석기의 날짜 예외(cfg.holidays — 로더가 끝까지 읽었다)
   const skippedHolidays = skippedHolidaysOf(parsed.holidays, cfg.holidays)
@@ -235,29 +282,37 @@ export async function POST(req: NextRequest) {
   if (receipt.error) return fail(503, 'RECEIPT_UNAVAILABLE', failWith('import/execute 영수증 확인', receipt.error, tr(ERR_RECEIPT)))
   const replayed = receipt.data !== null
 
+  // 담당 팀 글자 → 이 프로젝트 팀의 code(BUG-10) — 프로젝트가 쓰는 팀(전용, 없으면 상속 공용)의 code·이름과 낱말이 같으면(앞뒤 공백·
+  // 대소문자 무시) 그 팀이다. 못 찾은 글자만 새 팀 후보로 남는다. 같은 명령의 재전송도 같은 대조를 해야 한다 — RPC 의 요약(digest)은
+  // 항목의 담당까지 들어가므로, 대조를 건너뛰면 처음과 다른 본문이 되어 COMMAND_REUSED 가 된다. 팀을 모르면 멈춘다(3원칙 ②)
+  let teamSets: [Team[], Team[]]
+  try {
+    teamSets = await Promise.all([projectTeams(projectId), projectOwnTeams(projectId)])
+  } catch (e) {
+    if (e instanceof TeamsUnavailableError) return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 팀 조회', e, tr(ERR_TEAMS)))
+    throw e
+  }
+  const [teams, ownTeams] = teamSets
+  const items = linked.items.map((it) => ({ ...it, owners: resolveOwnerTeams(it.owners, teams) }))
+
   const admin = createAdminClient()
   /** #6 이 등록을 확인한 팀(새로 만든 것 + 이미 있던 것) — #10 교차 검증 기준의 다른 한쪽 */
   const registered: string[] = []
   // #6 팀 대조·등록(D4·D54) — 트랜잭션 밖: 전환은 그 RPC 한 트랜잭션, 팀 행은 각자 커밋(실패해도 만든 팀은 남는다 — 지금과 같은 성질).
   // 같은 명령의 재시도·동시 재전송은 전환이 already, 등록이 "이미 있음 = 성공"이라 500 이 아니고 #8 에서 duplicate 를 받는다.
   if (!replayed) {
-    let teamSets: [Team[], Team[]]
-    try {
-      teamSets = await Promise.all([projectTeams(projectId), projectOwnTeams(projectId)])
-    } catch (e) {
-      if (e instanceof TeamsUnavailableError) return fail(503, 'TEAMS_UNAVAILABLE', failWith('import/execute 팀 조회', e, tr(ERR_TEAMS)))
-      throw e
-    }
-    const [teams, ownTeams] = teamSets
     // 등록 = 그 프로젝트가 쓰는 팀(비활성 포함) — 비활성 팀의 담당도 대조를 통과한다(지금과 같다)
     const known = new Set(teams.map((t) => t.code))
     // 파일이 가리키는 팀 = 행의 담당 팀 + (양식을 저장하는 요청이면) 프로파일의 팀 열. 표시가 하나도 없는 새 팀 열도 양식 저장의 교차 검증
     // (#10 — 양식의 팀 열 ⊆ 프로젝트 팀)에는 걸리므로, 그 팀을 등록 대상에 넣어야 등록하면 저장이 통과한다(A1-5 R5). 저장하지 않는 요청은
     // 교차 검증이 없어 표시된 팀만 본다. 팀명 직접 방식의 표지 '*'(detect.ts — 담당 열 하나에 팀명이 든 양식)는 팀이 아니다 — 교차 검증
     // (validateConfig.ts)도 건너뛰고, 그 열의 팀은 행의 담당으로 이미 들어온다
+    // 양식의 팀 열 이름도 같은 대조를 거친다(팀 이름을 머리로 쓴 열이 새 팀으로 등록되지 않게)
     const fileTeams = [...new Set([
-      ...parsed.rows.flatMap((r) => r.owners.map((o) => o.team)),
-      ...(saveProfile ? profile.teamColumns.map(([, name]) => name).filter((name) => name !== TEAM_DIRECT_MARK) : []),
+      ...rows.flatMap((r) => resolveOwnerTeams(r.owners, teams).map((o) => o.team)),
+      ...(saveProfile
+        ? profile.teamColumns.map(([, name]) => name).filter((name) => name !== TEAM_DIRECT_MARK).map((name) => resolveTeamRef(name, teams) ?? name)
+        : []),
     ])]
     let unknownTeams = fileTeams.filter((t) => !known.has(t))
     // 전용 팀이 있는(비상속) 프로젝트가 이미 참조 중인 공용 팀 code 는 등록하지 않는다(A1 최종 리뷰 보안 P3 — Z4). 혼합 상태(전환 없이 첫 전용 팀을
@@ -380,7 +435,7 @@ export async function POST(req: NextRequest) {
 
   // #8 가져오기 — 항목·담당·휴일·영수증이 한 트랜잭션(D17). p_actor 는 가드 결과(D51), RPC 가 행위자 등급을 다시 판정한다
   const { data, error } = await admin.rpc('import_wbs_cmd', {
-    p_actor: g.actor.userId, p_project_id: projectId, p_mode: mode, p_items: splitLeafOwners(linked.items),
+    p_actor: g.actor.userId, p_project_id: projectId, p_mode: mode, p_items: splitLeafOwners(items),
     p_holidays: parsed.holidays, p_command_id: commandId,
   })
   if (error) {
@@ -389,7 +444,7 @@ export async function POST(req: NextRequest) {
       console.error(`[import/execute 가져오기] ${error.message} → 422`)
       return fail(422, 'CUSTOM_FIELD_INVALID', tr(ERR_CUSTOM_FIELD))
     }
-    return rpcFail(tr, 'import/execute 가져오기', error, 'IMPORT_FAILED', tr(ERR_IMPORT))
+    return rpcFail(tr, 'import/execute 가져오기', error, 'IMPORT_FAILED', tr(ERR_IMPORT), tr(ERR_VALUE_REJECTED))
   }
   const outcome = importOutcome(data)
   if (!outcome) return fail(500, 'IMPORT_FAILED', failWith('import/execute 가져오기 결과', data, tr(ERR_IMPORT)))
@@ -416,7 +471,17 @@ export async function POST(req: NextRequest) {
   // 미등록 팀이 든 첫 가져오기의 양식 저장이 늘 실패한다(Q36).
   let profileSaved = false
   let profileSave: { ok: false; code: string; error: string } | undefined
-  if (saveProfile) {
+  // 감지가 구조를 확정하지 못한 파일(머리 행·계층 열·이름 열을 못 찾음)의 감지 양식을 **고치지 않고** 저장하려는 요청은 저장하지 않는다
+  // (BUG-04 — 잘못 잡힌 양식이 프로젝트 기본 양식이 되면 그 뒤의 모든 파일이 불일치 경고를 낸다). 사용자가 2단계에서 열을 고친 양식은
+  // 감지 양식과 달라지므로 저장한다 — 감지가 못 읽는 양식이야말로 저장해 둘 값이다
+  const uncertainUnedited = (() => {
+    if (!saveProfile) return false
+    const detected = detectLikeInspect(cfg)
+    return !detected.ok || (detected.uncertain && compareProfiles(detected.profile, profile) === null)
+  })()
+  if (saveProfile && uncertainUnedited) {
+    profileSave = { ok: false, code: 'PROFILE_UNCERTAIN', error: tr(ERR_PROFILE_UNCERTAIN) }
+  } else if (saveProfile) {
     const teamCodes = [...new Set([...cfg.teams.filter((t) => t.active).map((t) => t.code), ...registered])]
     const checked = validateProjectConfig({ 'wbs.excel_profile': profile }, { treeMaxDepth: null, teamCodes, allowed: [], prevEnabled: null })
     if (!checked.ok) {
@@ -455,6 +520,7 @@ export async function POST(req: NextRequest) {
     profileSaved,
     ...(profileSave ? { profileSave } : {}),
     ...(skippedHolidays.length > 0 ? { skippedHolidays } : {}),
+    ...(parsed.skippedRows > 0 ? { skippedRows: parsed.skippedRows } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   })
 }
