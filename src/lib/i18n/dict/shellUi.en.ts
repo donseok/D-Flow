@@ -17,15 +17,15 @@ export const shellUiEn: Record<keyof typeof shellUiKo, string> = {
   'shell.crumb.label': 'Current location',
   // DegradedNotice.tsx
   'shell.degraded.title': 'Some information could not be loaded',
-  'shell.degraded.both': 'Permissions and the project list could not be read, so menus and lists may differ from the actual state. Your account and data have not changed — refresh in a moment. If this continues, let your administrator know.',
-  'shell.degraded.actor': 'Permissions could not be read, so menus and lists may differ from the actual state. Your account and data have not changed — refresh in a moment. If this continues, let your administrator know.',
-  'shell.degraded.projects': 'The project list could not be read, so menus and lists may differ from the actual state. Your account and data have not changed — refresh in a moment. If this continues, let your administrator know.',
+  'shell.degraded.both': 'Permissions and the project list could not be read, so menus and lists may differ from the actual state. Your account and data have not changed — refresh shortly. If this continues, contact an admin.',
+  'shell.degraded.actor': 'Permissions could not be read, so menus and lists may differ from the actual state. Your account and data have not changed — refresh shortly. If this continues, contact an admin.',
+  'shell.degraded.projects': 'The project list could not be read, so menus and lists may differ from the actual state. Your account and data have not changed — refresh shortly. If this continues, contact an admin.',
   // GlobalBar.tsx
   'shell.bar.openMenu': 'Open menu',
   'shell.bar.home': '{name} home',
   'shell.bar.scopeMenu': '{name} — open menu',
   'shell.bar.searchAria': 'Global search (⌘K)',
-  'shell.bar.searchHint': 'Search titles...',
+  'shell.bar.searchHint': 'Search titles…',
   'shell.bar.searchTitle': 'Search titles',
   // MobileNavDrawer.tsx · ProjectNav.tsx
   'shell.drawer.label': 'Menu',

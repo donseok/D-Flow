@@ -44,8 +44,8 @@ describe('field settings contracts', () => {
   it('entity tabs read only the selected owner; disabled and corrupt settings stay explicit', async () => {
     await render(); expect(h.usage).toHaveBeenCalledWith(P, 'wbs_item')
     await click('Issues'); expect(h.usage).toHaveBeenCalledWith(P, 'issue')
-    await click('Weekly report'); expect(c.textContent).toContain('Carry forward')
-    await render(null); expect(c.querySelector('[role="alert"]')?.textContent).toContain('invalid')
+    await click('Weekly report'); expect(c.textContent).toContain('Carry over to next week')
+    await render(null); expect(c.querySelector('[role="alert"]')?.textContent).toContain('corrupted')
     await render([], false); expect(c.textContent).toContain('Enable this module')
   })
   it('key identity is immutable after save, label is editable, and zero defaults survive', async () => {
@@ -73,25 +73,25 @@ describe('field settings contracts', () => {
   })
   it('deletion requires an exact count and sends revision/key/count atomically', async () => {
     await render(); await click('Delete field and values…'); expect(button('Permanently delete field').disabled).toBe(true)
-    await change(input('Value count to delete'), '0'); expect(button('Permanently delete field').disabled).toBe(true)
-    await change(input('Value count to delete'), '1'); await click('Permanently delete field')
+    await change(input('Number of values to delete'), '0'); expect(button('Permanently delete field').disabled).toBe(true)
+    await change(input('Number of values to delete'), '1'); await click('Permanently delete field')
     expect(h.purge.mock.calls[0]).toEqual([P, 'wbs_item', expect.objectContaining({ expectedRevision: 8, key: 'quantity', expectedCount: 1 })])
     expect(c.textContent).toContain('Field deleted.'); expect(c.textContent).toContain('No custom fields.')
   })
   it('stale deletion closes confirmation and reloads counts instead of assuming success', async () => {
     h.purge.mockResolvedValue({ ok: false, code: 'CONFIG_STALE', retryable: false, error: 'Count changed' })
-    await render(); await click('Delete field and values…'); await change(input('Value count to delete'), '1'); await click('Permanently delete field')
+    await render(); await click('Delete field and values…'); await change(input('Number of values to delete'), '1'); await click('Permanently delete field')
     expect(c.textContent).toContain('Count changed'); expect(button('Permanently delete field')).toBeUndefined(); expect(h.usage).toHaveBeenCalledTimes(2); expect(h.refresh).toHaveBeenCalled()
   })
   it('unknown bulk outcomes lock editing and retry the identical command', async () => {
     h.backfill.mockRejectedValueOnce(new Error('network')); await render(); await click('Fill missing values and make required')
     expect(input('Label').disabled).toBe(true); expect(button('Issues').disabled).toBe(true)
-    await click('Confirm or retry bulk change'); expect(h.backfill.mock.calls[1][2]).toEqual(h.backfill.mock.calls[0][2])
+    await click('Check the bulk change result and retry'); expect(h.backfill.mock.calls[1][2]).toEqual(h.backfill.mock.calls[0][2])
     expect(c.textContent).toContain('Filled 2 rows')
   })
   it('unknown setting outcomes hold the exact patch; receipt recovery prevents a second save', async () => {
     h.update.mockRejectedValueOnce(new Error('network')); await render(); await change(input('Label'), 'Count'); await click('Save field settings')
-    expect(input('Label').disabled).toBe(true); await click('Confirm or retry save')
+    expect(input('Label').disabled).toBe(true); await click('Check the save result and retry')
     expect(h.update.mock.calls[1][1]).toEqual(h.update.mock.calls[0][1])
     h.update.mockRejectedValueOnce(new Error('network')); h.outcome.mockResolvedValue({ ok: true, outcome: { status: 'applied', revision: 10 } })
     await change(input('Label'), 'More'); await click('Save field settings'); expect(c.textContent).toContain('Confirmed saved field settings')

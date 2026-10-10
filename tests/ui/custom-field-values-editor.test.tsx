@@ -48,15 +48,15 @@ describe('custom value form', () => {
   })
   it('distinguishes absent definitions from corrupt definitions and stored values', async () => {
     await render({}, []); expect(c.textContent).toBe('')
-    await render({}, null); expect(c.querySelector('[role="alert"]')!.textContent).toContain('settings are invalid')
-    await render(null); expect(c.querySelector('[role="alert"]')!.textContent).toContain('could not be read')
+    await render({}, null); expect(c.querySelector('[role="alert"]')!.textContent).toContain('Custom field settings could not be read')
+    await render(null); expect(c.querySelector('[role="alert"]')!.textContent).toContain('Custom field values could not be read')
     expect(h.save).not.toHaveBeenCalled()
   })
   it('preserves a dirty draft when a fresh server value arrives and cancels to that snapshot', async () => {
     await render(); await change('2'); await render({ quantity: 3 })
-    expect(c.querySelector<HTMLInputElement>('input')!.value).toBe('2'); expect(c.textContent).toContain('draft is preserved')
+    expect(c.querySelector<HTMLInputElement>('input')!.value).toBe('2'); expect(c.textContent).toContain('draft is kept')
     expect(button('Save custom fields').disabled).toBe(true); await click('Cancel')
-    expect(c.querySelector<HTMLInputElement>('input')!.value).toBe('3'); expect(c.textContent).not.toContain('draft is preserved')
+    expect(c.querySelector<HTMLInputElement>('input')!.value).toBe('3'); expect(c.textContent).not.toContain('draft is kept')
   })
   it('adopts a fresh snapshot when pristine and resets drafts on row switch', async () => {
     await render(); await render({ quantity: 3 }); expect(c.querySelector<HTMLInputElement>('input')!.value).toBe('3')
@@ -84,7 +84,7 @@ describe('custom value form', () => {
   })
   it('keeps an unknown outcome visible instead of announcing success', async () => {
     h.save.mockRejectedValue(new Error('transport')); await render(); await change('2'); await click('Save custom fields')
-    expect(c.textContent).toContain('response is unknown'); expect(c.textContent).not.toContain('values saved'); expect(h.refresh).toHaveBeenCalledOnce()
+    expect(c.textContent).toContain('Could not confirm the save response'); expect(c.textContent).not.toContain('Custom fields saved'); expect(h.refresh).toHaveBeenCalledOnce()
   })
   it('holds controls and prevents double submit during an unresolved save', async () => {
     let resolve!: (v: unknown) => void; h.save.mockReturnValue(new Promise(r => { resolve = r }))

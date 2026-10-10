@@ -34,7 +34,7 @@ describe('WBS 사전 — 담당팀/담당자 라벨', () => {
   it('담당(owners)은 담당팀으로 개명, 담당자(assignee)는 신설 — ko/en 키 패리티 유지', () => {
     expect(wbsKo['wbs.colOwners']).toBe('담당팀')
     expect(wbsKo['wbs.colAssignee']).toBe('담당자')
-    expect(wbsEn['wbs.colOwners']).toBe('Owner team')
+    expect(wbsEn['wbs.colOwners']).toBe('Owning team')
     expect(wbsEn['wbs.colAssignee']).toBe('Assignee')
   })
 })

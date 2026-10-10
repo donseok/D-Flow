@@ -8,7 +8,7 @@ describe('ConfigStateNotice', () => {
   it('영문 조회 오류에 서버의 한국어 원문을 싣지 않는다', async () => {
     await ensureEnLoaded()
     const html = renderToStaticMarkup(<ConfigLoadError locale="en" keyName="core.level_labels" error="설정 값이 올바르지 않습니다." />)
-    expect(html).toContain('Corrupt or missing setting: core.level_labels')
+    expect(html).toContain('Corrupted or empty setting: core.level_labels')
     expect(html).not.toContain('설정 값이 올바르지 않습니다.')
     expect(html).toContain('data-config-load-error')
   })

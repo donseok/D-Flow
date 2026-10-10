@@ -93,7 +93,7 @@ describe('도메인 검증 문구', () => {
     expect(r.ok).toBe(false)
     if (r.ok) return
     expect(libText(serverKoTranslate, r.error)).toBe(r.error)
-    expect(libText(en, r.error)).toBe(`'${word}' is a reserved word of the Excel template and cannot be used as a team name.`)
+    expect(libText(en, r.error)).toBe(`'${word}' is a reserved word of the Excel layout and cannot be used as a team name.`)
   })
 })
 

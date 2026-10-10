@@ -71,7 +71,7 @@ export const portalUiEn: Record<keyof typeof portalUiKo, string> = {
   'portalUi.projects.viewRows': 'Rows',
   'portalUi.projects.viewCards': 'Cards',
   'portalUi.projects.viewSaveFailed': 'Could not save the view setting',
-  'portalUi.fav.saveFailed': 'Could not save favorites. Try again in a moment.',
+  'portalUi.fav.saveFailed': 'Could not save favorites. Try again shortly.',
   'portalUi.fav.loadFailed': 'Could not load favorites',
   'portalUi.fav.full': 'You can have up to 20 favorites',
   'portalUi.fav.toggleAria': 'Favorite {name}',
