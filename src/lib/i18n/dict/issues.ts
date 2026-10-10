@@ -7,6 +7,8 @@ export const issuesKo = {
   'issue.new': '이슈 등록',
   'issue.edit': '이슈 수정',
   'issue.filter.all': '전체',
+  'issue.filter.reset': '필터 초기화',
+  'issue.view.label': '이슈 보기 방식',
   'issue.filter.mine': '내 담당',
   'issue.filter.mineFailed': '내 명단 정보를 불러오지 못해 \'내 담당\' 필터가 비어 보일 수 있습니다. 새로고침하세요.',
   'issue.filter.area': '영역 필터',

@@ -225,11 +225,23 @@ export function IssuesView({
   // 이슈별 전체 편집(canEditIssue — 작성자 또는 관리자)과는 다른 축이다.
   const canWrite = canEdit && !!entryContext
 
+  function resetFilters() {
+    setStatusFilter('all')
+    setStatusCodeFilter('all')
+    setSeverityFilter('all')
+    setAreaFilter('all')
+    setMineOnly(false)
+    setCustomKey('')
+    setCustomCriterion(undefined)
+    setPage(1)
+  }
+
   return (
     <div className="space-y-4">
       {/* 툴바: 필터 + 등록 */}
       <div className="flex flex-wrap items-center gap-2">
         <SegmentedTabs<IssueViewMode>
+          label={t('issue.view.label')}
           tabs={[
             { key: 'list', label: t('issue.view.list'), icon: List },
             { key: 'board', label: t('issue.view.board'), icon: Columns3 },
@@ -239,6 +251,7 @@ export function IssuesView({
           size="sm"
         />
         <SegmentedTabs
+          label={t('issue.col.status')}
           tabs={statusTabs}
           value={statusFilter}
           onChange={v => { setStatusFilter(v); setPage(1) }}
@@ -258,6 +271,7 @@ export function IssuesView({
           </select>
         )}
         <SegmentedTabs
+          label={t('issue.col.severity')}
           tabs={severityTabs}
           value={severityFilter}
           onChange={v => { setSeverityFilter(v); setPage(1) }}
@@ -298,6 +312,7 @@ export function IssuesView({
             label={filterDef.label} emptyLabel={t('issue.filter.all')} onChange={v => { setCustomCriterion(Array.isArray(v) && v.length === 0 ? undefined : v); setPage(1) }} /></div>}
         </div>}
         {myMemberIdsFailed && <StatusMessage compact kind="partial_error" title={t('issue.filter.mineFailed')} />}
+        {filtered && <button type="button" onClick={resetFilters} className="btn btn-ghost text-control">{t('issue.filter.reset')}</button>}
         {canEdit && entryError && <StatusMessage compact kind="partial_error" title={entryError} />}
         {canWrite && (
           <div className="ml-auto flex items-center gap-2">
@@ -403,9 +418,6 @@ export function IssuesView({
                     <tr
                       key={issue.id}
                       onClick={() => setViewingId(issue.id)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={e => { if (e.key === 'Enter') setViewingId(issue.id) }}
                       className="cursor-pointer border-b border-border/60 transition last:border-0 hover:bg-surface-hover focus:outline-none focus-visible:bg-surface-hover"
                     >
                       <td className="whitespace-normal break-all px-2.5 py-2.5 tabular-nums">
@@ -439,7 +451,8 @@ export function IssuesView({
                         )}
                       </td>
                       <td className="whitespace-normal break-words px-2.5 py-2.5 font-medium leading-5 text-fg" title={issue.title}>
-                        {issue.title}
+                        <button type="button" className="max-w-full break-words text-left hover:text-action"
+                          onClick={e => { e.stopPropagation(); setViewingId(issue.id) }}>{issue.title}</button>
                         {/* 첨부 배지는 제목 셀 안에 둔다(열 추가는 colgroup 폭 재배분이 따른다 — 위 주석).
                             셀에 이미 title 이 걸려 있어 배지에 자체 title 을 준다.
                             표시 토글은 JSX 조건부 렌더로 한다. 상태 변형 display 유틸은 globals.css 끝의
