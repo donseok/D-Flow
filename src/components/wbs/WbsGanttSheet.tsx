@@ -49,10 +49,13 @@ import { applyWbsChange } from '@/lib/domain/wbsRealtime'
 import { useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
 import { orderedFields } from '@/lib/domain/customFields'
 import { parseCustomValues } from '@/lib/domain/customFieldValues'
-import { WbsCustomFieldCell } from './WbsCustomFieldCell'
+import { WbsCustomFieldCell, cellEditableField } from './WbsCustomFieldCell'
 import { ConflictResolver } from '@/components/ui/ConflictResolver'
 import { editMove, extendRowRange, gridKeyAction, gridModel, shiftRowRange, type GridCoord, type RowRangeAnchor } from '@/lib/domain/wbsGridNav'
 import { useWbsGridNav, WBS_CELL_ATTR } from './useWbsGridNav'
+import { cellCopyText, type CopyLabels, type RangeItem } from '@/lib/domain/wbsCellRange'
+import { useWbsCellRange } from './useWbsCellRange'
+import { WbsCellRangeDialog } from './WbsCellRangeDialog'
 
 /* ── 컬럼 메타 (좌→우). frozen=true면 sticky 동결, sk=누적 left offset ──
    구분(LevelBadge) 열은 삭제됐다(2026-08-21 개편) — 계층은 들여쓰기·타이포·1단계 스트립이
@@ -1387,7 +1390,8 @@ export function WbsGanttSheet({
   /* ── 표 키보드(탐색 모드) — 표 래퍼 하나에서 받는다. 이동은 DOM 포커스만 옮기고 상태를 건드리지 않는다 ── */
   const canSelectRows = isAdmin && !readOnly
   /* 행 범위 선택(Shift+↑↓·Shift+Space) — 선택 자체는 체크박스·대량 작업 바와 같은 bulkSelection 하나다. 범위의 기준만 ref 에 둔다
-     (기준이 바뀐다고 다시 그릴 것은 없다). 셀 범위(개정 §5.9.2 의 직사각형 선택)는 다른 상태이고 아직 없다. */
+     (기준이 바뀐다고 다시 그릴 것은 없다). 셀 범위(개정 §5.9.2 의 직사각형 선택)는 다른 상태다 — 아래 cellRange(useWbsCellRange):
+     식별 열(번호·개요·작업명)의 Shift+↑↓ 는 여기 행 범위, 그 밖의 열의 Shift+방향키는 셀 범위다. */
   const rangeAnchorRef = useRef<RowRangeAnchor | null>(null)
   /** 한 행의 선택을 뒤집거나(checked 생략) 정한다 — 그 행이 다음 범위의 기준이 된다 */
   const setRowSelected = (id: string, checked?: boolean) => {
@@ -1424,6 +1428,58 @@ export function WbsGanttSheet({
     }
     return false
   }
+  /* ── 셀 범위(직사각형) 선택·복사·붙여넣기·지우기 — 범위는 훅의 ref 와 DOM 속성에 있다(상태가 아니다). 여기서는 재료만 넘긴다:
+     칸의 글자(복사), 칸을 쓸 수 있는지(지금 인라인 편집·대량 작업·상세 패널이 쓰는 판정 그대로), 저장에 필요한 범위 정보 ── */
+  const rangeItemOf = (id: string): RangeItem | undefined => {
+    const n = itemById.get(id)
+    if (!n) return undefined
+    // 사용자 정의 필드 칸과 같은 읽기 — 손상된 저장값은 null(그 행의 필드는 복사도 쓰기도 하지 않는다)
+    const parsed = parseCustomValues(n.custom ?? {})
+    return { ...n, custom: parsed.ok ? parsed.value : null }
+  }
+  const rangeLabels: CopyLabels<RangeItem> = {
+    rowNo: n => String((rowIndex.get(n.id) ?? 0) + 1),
+    outline: n => outlineNumbers.get(n.id) ?? '',
+    owners: n => (itemById.get(n.id)?.owners ?? []).map(o => teamLabelOf(o.team)).join(', '),
+    assignee: n => { const m = itemById.get(n.id)?.assigneeMemberId; return !m ? '' : memberNameById.get(m) ?? t('wbs.unknownActor') },
+    status: n => { const st = itemById.get(n.id)?.status; return st ? t(`status.${st}` as DictKey) : '' },
+    stage: n => itemById.get(n.id)?.stage?.toUpperCase() ?? '',   // 칩에 찍히는 글자(코드 두 자)
+    fieldDef: key => customListDefs.find(d => d.key === key),
+    bool: { yes: customFormat.yes, no: customFormat.no },
+  }
+  const rangeColLabel = (col: string): string => {
+    const keys: Record<string, DictKey> = {
+      outline: 'wbs.colOutline', name: 'wbs.colName', owners: 'wbs.colOwners', assignee: 'wbs.colAssignee', status: 'wbs.colStatus', stage: 'wbs.colStage',
+      deliverable: 'wbs.colDeliverable', pstart: 'wbs.colPlannedStart', pend: 'wbs.colPlannedEnd', weight: 'wbs.colWeight', pplan: 'wbs.colPlannedPct',
+      pactual: 'wbs.colActualPct', achieve: 'wbs.colAchievement',
+    }
+    if (col.startsWith('cf:')) return customListDefs.find(d => d.key === col.slice(3))?.label ?? col
+    return keys[col] ? t(keys[col]) : '#'
+  }
+  const cellRange = useWbsCellRange({
+    grid,
+    model: gridNav,
+    readOnly,
+    // 행을 고르는 화면은 React 가 aria-multiselectable 을 그린다 — 그 밖(조회 전용)은 범위가 있는 동안만 훅이 붙인다
+    ownsMultiselectable: !canSelectRows,
+    itemOf: rangeItemOf,
+    textOf: (rowId, col) => { const n = rangeItemOf(rowId); return n ? cellCopyText(n, col, rangeLabels) : '' },
+    perms: {
+      weight: canEditW,
+      dates: isAdmin && !readOnly,
+      actual: id => { const n = itemById.get(id); return !!n && !readOnly && canEditActual(n, actor, projectId) },
+      deliverable: id => { const n = itemById.get(id); return !!n && !readOnly && canEditDeliverable(n, actor, projectId) },
+      custom: id => { const n = itemById.get(id); return !!n && !readOnly && (isAdmin || canEditDeliverable(n, actor, projectId)) },
+      customDefs: fieldScope?.defs ?? [],
+      cellField: cellEditableField,
+      canAdminFields: fieldScope?.canAdmin === true,
+      bool: { yes: customFormat.yes, no: customFormat.no },
+    },
+    write: { projectId, admin: isAdmin, customDefs: fieldScope?.defs ?? [], canAdminFields: fieldScope?.canAdmin === true },
+    t,
+    notify: (kind, msg) => setToast({ kind, msg }),
+    refresh: () => router.refresh(),
+  })
   const onGridKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     // 한글 조합 중의 키는 조합의 것이다(개정 §5.8.4, Q04)
     if (e.nativeEvent.isComposing || e.keyCode === 229) return
@@ -1432,6 +1488,8 @@ export function WbsGanttSheet({
     if (target.closest('input:not([type="checkbox"]),select,textarea,[contenteditable="true"]')) return
     const at = grid.coordOf(target)
     if (!at) return
+    // 셀 범위의 키(데이터 열의 Shift+방향키·범위가 있을 때의 Esc·Delete) — 행 범위·행 선택 해제보다 먼저 본다
+    if (cellRange.handleKey(e, at)) return
     const sc = timelineScrollRef.current
     const pageRows = sc ? Math.floor(sc.clientHeight / ROW_H) - 2 : 10
     const action = gridKeyAction(gridNav, at, e.key, { ctrl: e.ctrlKey || e.metaKey, alt: e.altKey, shift: e.shiftKey }, pageRows)
@@ -1515,7 +1573,10 @@ export function WbsGanttSheet({
   /* ── 셀 helpers ── */
   const headBase =
     'box-border flex h-[var(--wbs-head-h)] min-w-0 shrink-0 items-center overflow-hidden whitespace-nowrap bg-surface-subtle px-2 font-semibold text-fg-secondary border-b border-border-input'
-  const cellBase = 'box-border flex h-full shrink-0 items-center border-b border-border px-2'
+  /* 셀 범위 표시(data-wbs-range — useWbsCellRange 가 DOM 에 쓴다): 칸 배경 위에 안쪽 그림자로 엷은 강조색을 덮는다. 배경 유틸(줄무늬·hover·플래시)과
+     같은 속성을 다투지 않아 어느 배경 위에서도 같은 농도로 보이고, 포커스 링(outline)은 그 위에 그대로 그려진다. 범위는 동결 열 밖의 칸뿐이라
+     sticky 열과 겹치지 않는다(가로로 밀리면 동결 열 아래로 들어가는 것은 다른 칸과 같다 — 끝 칸은 포커스 이동이 보이는 자리로 끌어온다) */
+  const cellBase = 'box-border flex h-full shrink-0 items-center border-b border-border px-2 data-[wbs-range]:shadow-[inset_0_0_0_999px_color-mix(in_srgb,var(--color-action)_16%,transparent)]'
 
   const headCell = (
     col: Col,
@@ -1904,7 +1965,9 @@ export function WbsGanttSheet({
             aria-multiselectable={canSelectRows || undefined}
             data-wbs-grid
             onKeyDown={onGridKeyDown}
-            onFocusCapture={grid.onFocusCapture}
+            onFocusCapture={e => { grid.onFocusCapture(e); cellRange.onFocusCapture(e) }}
+            onMouseDownCapture={cellRange.onMouseDownCapture}
+            onClickCapture={cellRange.onClickCapture}
           >
           {/* 헤더 행 (sticky top) */}
           <div role="row" aria-rowindex={1} className="sticky top-0 z-40 flex w-max">
@@ -2712,6 +2775,10 @@ export function WbsGanttSheet({
       )}
 
       {canSelectRows && <p ref={selectionLiveRef} role="status" aria-live="polite" data-wbs-selection-live className="sr-only" />}
+      {/* 셀 범위의 낭독(N행 × M열 선택·복사·붙여넣음·지움) — 조회 전용에서도 범위·복사는 되므로 늘 둔다. 글자는 훅이 DOM 에 쓴다(다시 그리지 않는다) */}
+      <p ref={cellRange.liveRef} role="status" aria-live="polite" data-wbs-range-live className="sr-only" />
+      <WbsCellRangeDialog job={cellRange.job} rowLabel={id => itemById.get(id)?.name ?? ''} colLabel={rangeColLabel}
+        onConfirm={cellRange.confirm} onClose={cellRange.close} />
       {isAdmin && !readOnly && (
         <WbsBulkBar selectedCount={bulkSelectedCount}
           totalCount={flatRows.length}
