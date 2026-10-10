@@ -59,6 +59,7 @@ export const libUiKo = {
   'portal.status.ready': '시작 전',
   'portal.status.doneWithWbs': '종료일 지남 · 완료 {done}/{total}',
   'portal.status.doneNoWbs': '종료일 지남 · WBS 없음',
+  'portal.status.doneEarly': '모든 작업 완료 {done}/{total}',
   'portal.status.overdue': '종료일 지남 · 미완료 {n}',
   'portal.status.noWbs': 'WBS 없음',
   'portal.status.activeOverdue': '완료 {done}/{total} · 기한 지난 작업 {n}',

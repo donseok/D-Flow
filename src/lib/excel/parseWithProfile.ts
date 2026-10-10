@@ -10,7 +10,7 @@ import type { ImportItem, ImportError } from '@/lib/excel/validate'
 import { TEAM_DIRECT_MARK } from '@/lib/excel/headerWords'
 import { NOT_XLSX_ERROR, isPercentCell, isXlsxBuffer, readSheetRows } from '@/lib/excel/sheetRows'
 import {
-  actualPctViolation, importedWeightScale, importedWeightToFraction, weightViolation, type ImportedWeightCell,
+  actualPctViolation, importedWeightScale, importedWeightToFraction, weightViolation, type ImportedWeightCell, WBS_NAME_MAX, wbsNameViolation,
 } from '@/lib/domain/wbsValueRules'
 
 export interface ParsedRowN {
@@ -309,6 +309,10 @@ export function linkByDepth(
     }
     if (r.weight !== null && weightViolation(r.weight)) {
       errors.push({ excelRow: r.excelRow, message: '가중치는 0 이상이어야 합니다' })
+    }
+    // 작업명 길이 — 화면·서버 액션과 같은 상한(BUG-23). 조용히 자르지 않고 그 행을 오류로 알린다(잘린 이름은 다른 작업처럼 보인다)
+    if (wbsNameViolation(r.name)) {
+      errors.push({ excelRow: r.excelRow, message: `작업명은 ${WBS_NAME_MAX}자 이하여야 합니다(${r.name.trim().length}자)` })
     }
 
     // depth 가 스택보다 2단 이상 점프하면 부모를 특정할 수 없다(중간 깊이 행 누락).

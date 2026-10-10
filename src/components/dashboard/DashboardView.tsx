@@ -6,8 +6,7 @@ import { ArrowRight, BarChart3 } from 'lucide-react'
 import type { Announcement, ComputedItem, Meeting, MeetingException } from '@/lib/domain/types'
 import type { SnapshotPoint } from '@/lib/domain/trend'
 import { buildTrend } from '@/lib/domain/trend'
-import { milestoneTimeline, type DashboardThresholds } from '@/lib/domain/dashboard'
-import { round1 } from '@/lib/domain/format'
+import { milestoneTimeline, varianceOrNull, type DashboardThresholds } from '@/lib/domain/dashboard'
 import { overallProgress } from '@/lib/domain/rollup'
 import type { DashboardIssue } from '@/lib/domain/issueDashboard'
 import { announcementMilestones, mergeMilestonePoints } from '@/lib/domain/announcements'
@@ -136,7 +135,8 @@ export async function DashboardView({
       items, snapshots, calendar: cal, startDate, endDate, today,
       opts: { subActTeamOrder: teamOrderMap(activeCodes(teams)) },
     })
-    return { variance: round1(actual - planned), trend }
+    // 계획이 0 이면 편차는 null — SPI 카드가 SPI 와 같은 '—' 로 보인다(BUG-34)
+    return { variance: varianceOrNull(actual, planned), trend }
   })() : null
   // 마일스톤 = WBS 리프 + 마일스톤 일자를 체크한 공지(0091). 공지도 타임라인의 시계(today = base_date 우선)를
   // 쓴다 — 한 카드에서 오늘 선과 D-day 가 두 시계로 갈리지 않게. 경영진 요약의 '다음 마일스톤' 타일은 WBS 만(현행 유지).

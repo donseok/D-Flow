@@ -62,6 +62,10 @@ export async function TrendChart({ model, today, historyFailed = false }: {
         {historyFailed
           ? <p role="alert" className="flex items-center gap-1.5 text-meta text-fg"><AlertTriangle aria-hidden className="h-3 w-3 shrink-0 text-danger" />{tr('dash.trend.historyFailed')}</p>
           : !model.hasHistory && <div className="text-meta text-fg-muted">{tr('dash.trend.noHistory')}</div>}
+        {/* 계획 곡선이 100% 에 닿지 않는 이유(BUG-34) — 일정 없는 작업은 계획%가 0 인 채 분모에 든다. 계산은 그대로 두고 알린다 */}
+        {model.unscheduledLeaves > 0 && (
+          <div data-trend-unscheduled className="text-meta text-fg-muted">{tr('dash.trend.unscheduled').replace('{n}', String(model.unscheduledLeaves))}</div>
+        )}
       </div>
     </SectionCard>
   )

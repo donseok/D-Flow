@@ -268,7 +268,8 @@ describe('WbsGanttSheet — 진척 돋보기', () => {
       lens.querySelector<HTMLElement>(`[data-lens-field="${name}"]`)!
 
     expect(field('name').textContent).toBe('ERP 전환 준비')
-    expect(field('path').textContent).toBe('1.1')
+    // 저장 code('1.1')가 아니라 트리 위치의 개요 번호 — 표의 번호 열과 같은 값이다(BUG-05)
+    expect(field('path').textContent).toBe('1')
     expect(field('owners').textContent).toContain('PMO')
     expect(field('status').textContent).toContain('status.in_progress')
     expect(field('schedule').textContent).toContain('26.07.01 ~ 26.07.10')

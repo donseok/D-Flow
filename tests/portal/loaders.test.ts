@@ -238,6 +238,26 @@ describe('getProjectRows v1(W5·W6, R1)', () => {
     }
     expect(m.completion).not.toHaveBeenCalled()
   })
+  it('[BUG-35] 상태는 WBS 진행에서 파생한다 — 시작일 전·기간 미설정이어도 진행 작업이 있으면 진행 중, 전부 끝냈으면 완료. 상태 필터도 같은 판정', async () => {
+    const projects = [
+      { ...PROJECTS[0], start_date: '2026-10-12', end_date: '2026-12-31' },      // 오늘(10/01)은 시작 전 — 리포트의 사례
+      { ...PROJECTS[1], start_date: null, end_date: null },                       // 기간 미설정 — 홈의 "진척 100% 인데 시작 전"
+    ]
+    const leaf = (id: string, pid: string, pct: number | null, stage: string | null = null) => ({ id, parent_id: null, project_id: pid, actual_pct: pct, planned_end: null, stage })
+    const rows = async (items: unknown[], status?: 'active' | 'ready' | 'done') => {
+      const r = await getProjectRows(WA, actor, { client: fake(tables({ projects, wbs_items: items })) as never, now: NOW, status })
+      return r.ok ? r.rows.map((x) => [x.id, x.status, x.statusReason]) : null
+    }
+    expect(await rows([leaf('a', P1, 40), leaf('b', P1, 0), leaf('c', P2, 100)])).toEqual([[P1, 'active', '완료 0/2'], [P2, 'done', '모든 작업 완료 1/1']])
+    // 실적이 0 이어도 진행 단계(작업 중)면 진행 중이다
+    expect(await rows([leaf('a', P1, 0, 'ip'), leaf('c', P2, 0, 'as')])).toEqual([[P1, 'active', '완료 0/1'], [P2, 'ready', '시작 전']])
+    // 아무것도 시작하지 않았으면 종전대로 시작 전
+    expect(await rows([leaf('a', P1, 0), leaf('c', P2, null)])).toEqual([[P1, 'ready', '시작 전'], [P2, 'ready', '시작 전']])
+    // 홈의 "진행 중인 프로젝트" 위젯·목록의 상태 필터가 쓰는 거르기 — 같은 판정이라 시작 전 필터에는 없다
+    expect(await rows([leaf('a', P1, 40), leaf('c', P2, 100)], 'active')).toEqual([[P1, 'active', '완료 0/1']])
+    expect(await rows([leaf('a', P1, 40), leaf('c', P2, 100)], 'ready')).toEqual([])
+    expect(await rows([leaf('a', P1, 40), leaf('c', P2, 100)], 'done')).toEqual([[P2, 'done', '모든 작업 완료 1/1']])
+  })
   it('잎이 1,000행을 넘어도 끝까지 센다(.range — D51, 서버 max_rows 흉내)', async () => {
     const leaves = Array.from({ length: 1_500 }, (_, i) => ({ id: `x${String(i).padStart(4, '0')}`, parent_id: null, project_id: P1, actual_pct: i < 300 ? 100 : 0, planned_end: '2026-11-30' }))
     const r = await getProjectRows(WA, actor, { client: fake(tables({ wbs_items: leaves }), { maxRows: 1_000 }) as never, now: NOW })

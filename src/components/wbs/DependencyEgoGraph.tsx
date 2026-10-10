@@ -59,6 +59,7 @@ const STATUS_BAR: Record<ComputedItem['status'], string> = {
 
 export function DependencyEgoGraph({
   item,
+  numbers,
   predecessors,
   successors,
   onOpen,
@@ -66,6 +67,8 @@ export function DependencyEgoGraph({
   t,
 }: {
   item: ComputedItem
+  /** 개요 번호(항목 id → 1.2.1) — 표의 번호 열과 같은 값. 저장 code 는 보이지 않는다(BUG-05) */
+  numbers?: ReadonlyMap<string, string>
   predecessors: EgoNode[]
   successors: EgoNode[]
   /** 더블클릭·Enter 로 그 작업의 상세를 연다. */
@@ -98,7 +101,7 @@ export function DependencyEgoGraph({
       >
         <Column width={COL_W} boardH={boardH} slots={predSlots} align="right">
           {predShown.map(node => (
-            <Node key={node.key} node={node} onOpen={onOpen} t={t} />
+            <Node key={node.key} node={node} number={node.item ? numbers?.get(node.item.id) : undefined} onOpen={onOpen} t={t} />
           ))}
           {predecessors.length > predShown.length && (
             <MoreChip count={predecessors.length - predShown.length} onClick={() => setExpanded(true)} t={t} />
@@ -119,7 +122,7 @@ export function DependencyEgoGraph({
             style={{ height: NODE_H }}
             aria-current="true"
           >
-            <div className="truncate text-meta leading-4 font-bold tabular-nums text-action">{item.code}</div>
+            <div className="truncate text-meta leading-4 font-bold tabular-nums text-action">{numbers?.get(item.id) ?? ''}</div>
             <div className="truncate text-xs font-semibold text-fg" title={item.name}>{item.name}</div>
             <div className="truncate text-meta leading-4 tabular-nums text-fg-secondary">
               {formatPct1(item.rolledActualPct)}%
@@ -137,7 +140,7 @@ export function DependencyEgoGraph({
 
         <Column width={COL_W} boardH={boardH} slots={succSlots} align="left">
           {succShown.map(node => (
-            <Node key={node.key} node={node} onOpen={onOpen} t={t} />
+            <Node key={node.key} node={node} number={node.item ? numbers?.get(node.item.id) : undefined} onOpen={onOpen} t={t} />
           ))}
           {successors.length > succShown.length && (
             <MoreChip count={successors.length - succShown.length} onClick={() => setExpanded(true)} t={t} />
@@ -224,9 +227,10 @@ function Edges({
 }
 
 function Node({
-  node, onOpen, t,
+  node, number, onOpen, t,
 }: {
   node: EgoNode
+  number?: string
   onOpen?: (id: string) => void
   t: (k: DictKey) => string
 }) {
@@ -253,7 +257,7 @@ function Node({
       <div className="min-w-0 flex-1 px-2 py-0.5">
         <div className="flex items-center gap-1">
           <span className="min-w-0 truncate text-meta leading-4 font-bold tabular-nums text-fg-muted">
-            {target?.code ?? node.fallbackLabel ?? ''}
+            {target ? (number ?? '') : (node.fallbackLabel ?? '')}
           </span>
           <span className="ml-auto shrink-0 rounded bg-surface-subtle px-1 text-meta leading-4 font-bold text-fg-secondary">
             {node.badge}

@@ -9,6 +9,8 @@ import { canSeeProject, workspaceRoleIn, type Actor } from '@/lib/domain/authz'
 import { SAFE_ID_RE } from '@/lib/domain/validate'
 import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
+import { loadOutlineNumbers } from '@/lib/data/wbsOutline'
+import { compareOutlineNumbers } from '@/lib/domain/wbsDerived'
 
 export interface SearchProjectItem {
   type: 'project'
@@ -20,7 +22,9 @@ export interface SearchProjectItem {
 export interface SearchWbsItem {
   type: 'wbs'
   id: string
-  code: string
+  /** 개요 번호(1.2.1) — 표의 번호 열과 같은 계산이다. 저장 열 code(가져오기의 추적 키 — 화면에서 추가한 항목은 이름의 첫 낱말)는
+   *  보이지 않는다(BUG-05). 번호를 내지 못했으면 빈 글자 — 이름만 보인다. */
+  number: string
   title: string
   projectId: string
   href: string
@@ -142,15 +146,22 @@ async function searchWbs(actor: Actor, projectId: string, pattern: string): Prom
       console.error('[searchTitles] wbs_items 조회 실패:', error.message)
       return failed(t)
     }
-    const rows = (data ?? []) as Array<{ id: string; code: string; name: string; project_id: string }>
-    const wbsItems = rows.filter((w) => w.project_id === projectId).map((w): SearchWbsItem => ({
+    const rows = ((data ?? []) as Array<{ id: string; code: string; name: string; project_id: string }>).filter((w) => w.project_id === projectId)
+    // 번호는 덧붙이는 정보다 — 내지 못하면 검색을 실패로 만들지 않고 이름만 보인다(틀린 번호·저장 code 를 대신 보이지 않는다). 사유는 로그에 남긴다
+    let numbers: Map<string, string> | null = null
+    if (rows.length > 0) {
+      try { numbers = await loadOutlineNumbers(supabase, projectId) } catch (e) {
+        console.error('[searchTitles] 개요 번호 계산 실패:', e instanceof Error ? e.message : e)
+      }
+    }
+    const wbsItems = rows.map((w): SearchWbsItem => ({
       type: 'wbs',
       id: w.id,
-      code: w.code,
+      number: numbers?.get(w.id) ?? '',
       title: w.name,
       projectId: w.project_id,
       href: wbsItemHref(w.project_id, w.id),
-    }))
+    })).sort((a, b) => compareOutlineNumbers(a.number, b.number))   // 표와 같은 순서(1 → 1.1 → 1.2 → 2). 번호 없는 것은 뒤로(받은 순서 유지)
     return { ok: true, projects: [], wbsItems }
   } catch (e) {
     console.error('[searchTitles] wbs_items 예외:', e instanceof Error ? e.message : e)

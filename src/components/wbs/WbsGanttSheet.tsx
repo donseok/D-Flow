@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation'
 import type { ComputedItem, ProjectMember, TaskDependency } from '@/lib/domain/types'
 import { actorFromView, isProjectAdmin, type ProjectActorView } from '@/lib/domain/authz'
 import { computeDependencySchedule, type TaskSchedule } from '@/lib/domain/dependencySchedule'
-import { centeredTimelineScrollLeft, groupGanttMilestones } from '@/lib/domain/ganttScale'
+import { centeredTimelineScrollLeft, ganttWeekSpans, groupGanttMilestones } from '@/lib/domain/ganttScale'
 import { milestoneTimeline, type MilestoneStatus } from '@/lib/domain/dashboard'
 import { calendarOf, isoDowOf, isWorkingDay, nextWeekKey, weekKeyOf, weekPeriodOf } from '@/lib/domain/calendar'
 import type { CalendarInput } from '@/lib/calendar/load'
 import { canEditActual, canEditWeight, canEditDeliverable, canAttachDeliverable } from '@/lib/domain/permissions'
 import { computeHideDone } from '@/lib/domain/hideDone'
-import { unsetWeightCount } from '@/lib/domain/rollup'
+import { weightWarnings } from '@/lib/domain/rollup'
+import { ganttAxisRange, nextDetailSelection, outOfProjectRangeIds, outlineNumbers as outlineNumbersOf, shownSchedules, type ShownSchedule } from '@/lib/domain/wbsDerived'
 import { updateActual, updateWeight, addWbsItem, getWbsCellSnapshot } from '@/app/actions/wbs'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
 import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
@@ -21,7 +22,7 @@ import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyV
 import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
 import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
-import { actualPctViolation, weightPctToFraction, weightViolation } from '@/lib/domain/wbsValueRules'
+import { actualPctViolation, weightPctToFraction, weightViolation, WBS_NAME_MAX } from '@/lib/domain/wbsValueRules'
 import { OwnerBadges, STATUS, StageChip, fmtDate, levelBadgeText } from './shared'
 import { RowDetailPanel } from './RowDetailPanel'
 import { bulkUpdateWbsItems, createWbsBulkSnapshot, type WbsBulkSnapshotRow } from '@/app/actions/wbsBulk'
@@ -691,19 +692,13 @@ export function WbsGanttSheet({
     return m
   }, [items])
 
-  // 개요 번호(1.2.1) — 저장 code 가 아니라 렌더 시점 트리 위치 파생(N단 세션 합의).
-  // code 는 재임포트 추적 키(external_ref 성격)라 웹에서 행 이동·추가 시 정렬과 어긋날 수 있다.
-  const outlineNumbers = useMemo(() => {
-    const m = new Map<string, string>()
-    const walk = (ns: ComputedItem[], prefix: string) =>
-      ns.forEach((n, i) => {
-        const num = prefix ? `${prefix}.${i + 1}` : String(i + 1)
-        m.set(n.id, num)
-        walk(n.children, num)
-      })
-    walk(items, '')
-    return m
-  }, [items])
+  // 개요 번호(1.2.1) — 저장 code 가 아니라 렌더 시점 트리 위치 파생(N단 세션 합의). 계산은 wbsDerived 한 곳이다 —
+  // 상세 패널·진척 돋보기·의존 그래프·검색이 같은 번호를 보인다(BUG-05). code 는 재임포트 추적 키라 화면에 보이지 않는다.
+  const outlineNumbers = useMemo(() => outlineNumbersOf(items), [items])
+  // 표시 일정(BUG-12) — 직접 입력이 없으면 하위의 min/max. 표·간트 막대·상세 패널이 같은 값을 쓴다(DB 에 쓰지 않는다)
+  const schedules = useMemo(() => shownSchedules(items), [items])
+  // 프로젝트 기간 밖 작업(BUG-14) — 저장은 막지 않고 알린다
+  const outOfRangeIds = useMemo(() => outOfProjectRangeIds(items, startDate, endDate), [items, startDate, endDate])
   // 1단계 스트립·경계선 — 노드 id → 루트(1단계) 순번(비순환). 스트립 색은 사용처에서
   // % L1_BAND.length 로 순환시키고, 1단계 경계 판정은 비순환 순번으로 해야
   // 팔레트를 한 바퀴 돈 인접 1단계 루트(0번째와 8번째)가 같은 그룹으로 오인되지 않는다.
@@ -759,7 +754,7 @@ export function WbsGanttSheet({
     return Number(weighted.reduce((sum, n) => sum + weightToPct(n.weight as number), 0).toFixed(2))
   }, [items])
   // 가중치를 비운 항목 수(SP4 D20) — 가중치를 가진 형제가 있는 그룹의 null 만 센다(그 그룹에서 1 = 같은 몫으로 계산된다). 모두 비운 그룹은 뜻이 같아 세지 않는다
-  const unsetWeights = useMemo(() => unsetWeightCount(items), [items])
+  const { unset: unsetWeights, overGroups: overWeightGroups } = useMemo(() => weightWarnings(items), [items])
   const dependencySchedule = useMemo(
     () => computeDependencySchedule(
       allFlatItems.map(item => ({
@@ -1019,8 +1014,39 @@ export function WbsGanttSheet({
   // itemById(전체 펼침 flatten 색인)가 모든 노드를 담고 있어 트리 재귀 탐색이 불필요하다.
   const selectedItem = selectedId ? itemById.get(selectedId) ?? null : null
   const selectRow = useCallback((id: string) => { setSelectedId(id); aiRail?.open('inspector') }, [aiRail])
-  const closeDetail = () => { setSelectedId(null); aiRail?.close('inspector') }
   const showDetail = !!selectedItem && (!aiRail || aiRail.occupant === 'inspector')
+  /* 오버레이로 뜬 상세 패널(좁은 화면)은 화면 전체를 덮는 막이 바깥 누름을 받아 닫는다 — 그래서 다른 행의 이름을 눌러도 패널이
+     닫히기만 하고 한 번 더 눌러야 했다(BUG-15). 막 아래에서 눌린 자리가 다른 행의 이름이면 닫지 않고 그 행으로 바꾼다.
+     눌린 자리는 누름(capture)에서 잠깐만 적어 둔다 — Esc·닫기 버튼으로 닫을 때 옛 좌표로 행을 바꾸지 않게 다음 틱에 지운다. */
+  const outsidePressRef = useRef<{ x: number; y: number } | null>(null)
+  useEffect(() => {
+    if (!showDetail) return
+    const onDown = (e: MouseEvent) => {
+      outsidePressRef.current = { x: e.clientX, y: e.clientY }
+      setTimeout(() => { outsidePressRef.current = null }, 0)
+    }
+    document.addEventListener('mousedown', onDown, true)
+    document.addEventListener('click', onDown, true)
+    return () => { document.removeEventListener('mousedown', onDown, true); document.removeEventListener('click', onDown, true) }
+  }, [showDetail])
+  const closeDetail = () => {
+    const at = outsidePressRef.current
+    outsidePressRef.current = null
+    if (at && typeof document.elementsFromPoint === 'function') {
+      // 패널 안(닫기 버튼 등)에서 누른 것이면 맨 위 요소가 패널이다 — 그때는 아래를 뒤지지 않는다
+      const stack = document.elementsFromPoint(at.x, at.y)
+      const inPanel = stack[0]?.closest('[data-rail="inspector"], [data-wbs-detail-panel]') != null
+      const hit = inPanel ? null : stack.map(el => el.closest<HTMLElement>('[data-wbs-open-detail]')).find(Boolean)
+      const id = hit?.dataset.wbsOpenDetail
+      if (id && rootRef.current?.contains(hit!) && nextDetailSelection(selectedId, id) !== null) { selectRow(id); return }
+    }
+    setSelectedId(null); aiRail?.close('inspector')
+  }
+  /** 행 이름 누름 — 열려 있는 그 행이면 닫고, 아니면 그 행으로(전환 포함) */
+  const toggleDetail = (id: string) => {
+    if (showDetail && nextDetailSelection(selectedId, id) === null) { setSelectedId(null); aiRail?.close('inspector') }
+    else selectRow(id)
+  }
 
   // 상세 패널의 선행·후속 항목 클릭 — 대상이 접힌 구간이나 완료 숨김 뒤에 있어도
   // 조상 경로를 임시로 펼쳐 표에서 같이 보이게 한 뒤 선택을 옮긴다(focus 딥링크와 같은 계열).
@@ -1041,9 +1067,8 @@ export function WbsGanttSheet({
     allDates.push(schedule.forecastStart, schedule.forecastEnd)
   })
   // WBS 진입 시 기준일 선을 항상 보여 줄 수 있도록 일정 범위 밖이어도 날짜 축에 포함한다.
-  const axisDates = [...allDates, today]
-  const rangeStart = axisDates.reduce((a, b) => (a < b ? a : b))
-  const rangeEnd = axisDates.reduce((a, b) => (a > b ? a : b))
+  // 프로젝트 기간도 축에 든다(BUG-14) — 작업이 기간 밖에 있어도, 기간 안에 작업이 없어도 둘 다 보이게: min(프로젝트 시작, 가장 이른 날) ~ max(프로젝트 종료, 가장 늦은 날)
+  const { start: rangeStart, end: rangeEnd } = ganttAxisRange([...allDates, today], startDate, endDate)!
   // 축 여백 — 계획 최댓값에서 축이 뚝 끊기면 마지막 주의 마일스톤 라벨이 잘리고 "끊긴
   // 느낌"이 든다(2026-08-21 피드백). 끝은 마지막 날이 속한 주의 다음 주 끝까지 덧대되(주 끝 = 그 프로젝트 규칙의 다음 키
   // 기간의 마지막 날, SP5 §4.4), 시작주는 시작날짜 그대로 시작한다(같은 날 후속 피드백 — 앞쪽 여백은 두지 않는다).
@@ -1069,17 +1094,8 @@ export function WbsGanttSheet({
       months.push({ ym, label: t(`wbs.month${Number(d.slice(5, 7))}` as DictKey), left: i * dayPx, width: dayPx })
     }
   })
-  const weeks: { label: string; sub: string; left: number; width: number }[] = []
-  for (let i = 0; i < days.length; i += 7) {
-    const w = Math.min(7, days.length - i)
-    const dd = days[i]
-    weeks.push({
-      label: 'W' + String(weeks.length + 1).padStart(2, '0'),
-      sub: `${Number(dd.slice(5, 7))}/${Number(dd.slice(8, 10))}`,
-      left: i * dayPx,
-      width: w * dayPx,
-    })
-  }
+  // 주 머리는 프로젝트의 주 시작 설정이 정한 주로 끊는다(BUG-16) — 주간보고와 같은 주 경계다. 축이 주 중간에서 시작하면 첫 칸이 짧다
+  const weeks = ganttWeekSpans(days, cal.weekStart).map(w => ({ label: w.label, sub: w.sub, left: w.startIndex * dayPx, width: w.length * dayPx }))
   // axisDates 가 today 를 항상 포함하므로 rangeStart ≤ today ≤ rangeEnd 가 구조적으로 보장된다
   // — 범위 밖 분기(null)는 성립할 수 없어 두지 않는다.
   const todayX = xOf(today) + dayPx / 2
@@ -1145,6 +1161,9 @@ export function WbsGanttSheet({
   // 서버의 현재 값을 보이고, '내 값으로 저장'을 고르면 그 값을 기대값으로 한 번만 다시 쓴다. 편집 원본을 몰래 바꾸지 않는다.
   // rebase: 비교에서 '내 값으로 저장'을 고른 재저장 — 사용자가 본 서버 값(최신)을 기대값으로 쓴다.
   // move: 키보드 확정(Enter·Tab) 뒤 옮겨 갈 방향 — 저장이 반영돼 편집기가 닫힐 때만 옮긴다(검증 실패·충돌·거부는 편집기에 남는다)
+  /* 숫자 칸은 들어갈 때 값 전체를 고른다(BUG-24) — 그대로 치면 옛 값을 덮는다('0' 뒤에 '150' 이 붙어 '0150' 이 되지 않는다).
+     type=number 는 Ctrl+A 도 듣지 않아 지우기가 번거롭다. 거부된 값도 다시 통째로 골라 바로 고쳐 치게 한다. */
+  const refocusEditor = () => { inputRef.current?.focus(); inputRef.current?.select() }
   const commit = async (via: 'enter' | 'blur', rebase?: { latest: number | null }, move?: 'down' | 'right' | 'left') => {
     if (!edit || busy) return
     // 비교가 떠 있는 동안의 blur(상자가 포커스를 가져간다)는 저장이 아니다
@@ -1158,7 +1177,7 @@ export function WbsGanttSheet({
       setInvalid(true)
       if (via === 'enter' || lastRejected.current !== draft) setToast({ kind: 'err', msg })
       lastRejected.current = draft
-      if (via === 'enter') inputRef.current?.focus()
+      if (via === 'enter') refocusEditor()
     }
     type SaveResult = { ok: boolean; error?: string; conflict?: boolean; latest?: number | null; code?: 'actual_locked' | 'approval_required' }
     let run: () => Promise<SaveResult>
@@ -1272,7 +1291,7 @@ export function WbsGanttSheet({
           error: { kind: 'not_applied', message: t('common.outcomeNotApplied') }
         })
         setToast({ kind: 'err', msg: t('common.outcomeNotApplied') })
-        if (via === 'enter') inputRef.current?.focus()
+        if (via === 'enter') refocusEditor()
         return
       }
       if (res.ok) {
@@ -1302,7 +1321,7 @@ export function WbsGanttSheet({
           error: { kind: 'server_reject', message: errMsg }
         })
         setToast({ kind: 'err', msg: errMsg })
-        if (via === 'enter') inputRef.current?.focus()
+        if (via === 'enter') refocusEditor()
       }
     } finally {
       setBusy(false)
@@ -1366,6 +1385,8 @@ export function WbsGanttSheet({
       autoFocus
       type="number"
       value={draft}
+      // 들어올 때마다 전체 선택(BUG-24) — autoFocus 의 첫 포커스와, 거부 뒤 다시 누른 포커스 둘 다
+      onFocus={e => e.currentTarget.select()}
       // disabled 는 포커스를 빼앗아 저장 실패 뒤 이어 고칠 수 없게 한다 — 읽기 전용으로만 잠근다.
       readOnly={busy}
       aria-busy={busy}
@@ -1870,6 +1891,7 @@ export function WbsGanttSheet({
         <div className="card mb-3 flex shrink-0 items-center gap-2 p-2.5">
           <input
             autoFocus
+            maxLength={WBS_NAME_MAX}
             value={addPhase}
             onChange={e => setAddPhase(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') submitAddPhase(); else if (e.key === 'Escape') setAddPhase(null) }}
@@ -1896,6 +1918,13 @@ export function WbsGanttSheet({
         canGenerate={isAdmin}
         topLevelLabel={topLevelLabel}
       />
+
+      {/* 프로젝트 기간 밖 작업(BUG-14) — 저장은 막지 않는다. 해당 행의 날짜 칸이 같은 색으로 표시된다 */}
+      {outOfRangeIds.size > 0 && (
+        <p data-wbs-out-of-range role="status" className="mb-2 rounded-(--radius-control) border border-warning bg-warning-weak px-3 py-1.5 text-xs font-medium text-warning">
+          {t('wbs.outOfRange').replace('{n}', String(outOfRangeIds.size)).replace('{start}', fmtDate(startDate ?? null)).replace('{end}', fmtDate(endDate ?? null))}
+        </p>
+      )}
 
       {/* ── 단일 스크롤 컨테이너 ── */}
       <div
@@ -2027,7 +2056,10 @@ export function WbsGanttSheet({
                     warn: Math.abs(rootWeightTotalPct - 100) > 0.01,
                   },
               unsetWeights > 0
-                ? <span data-unset-weight className="truncate font-semibold normal-case tabular-nums tracking-normal text-warning" title={t('wbs.unsetWeightTitle')}>{t('wbs.unsetWeight').replace('{n}', String(unsetWeights))}</span>
+                ? <span data-unset-weight data-weight-over={overWeightGroups > 0 || undefined} className="truncate font-semibold normal-case tabular-nums tracking-normal text-warning"
+                    title={overWeightGroups > 0 ? `${t('wbs.unsetWeightTitle')} ${t('wbs.weightOverTitle')}` : t('wbs.unsetWeightTitle')}>
+                    {overWeightGroups > 0 ? `${t('wbs.unsetWeight').replace('{n}', String(unsetWeights))} · ${t('wbs.weightOver')}` : t('wbs.unsetWeight').replace('{n}', String(unsetWeights))}
+                  </span>
                 : undefined,
             )}
             {showCol('pplan') && headCell(colOf('pplan'), t('wbs.colPlannedPct'), 'justify-end')}
@@ -2100,6 +2132,8 @@ export function WbsGanttSheet({
             const isCollapsed = effCollapsed.has(n.id)
             const isFlash = flashId === n.id
             const schedule = dependencySchedule.byId.get(n.id)
+            const shown = schedules.get(n.id) ?? OWN_SCHEDULE(n)
+            const outOfRange = outOfRangeIds.has(n.id)
             const isCritical = schedule?.critical ?? false
             const isDim = hideDone && hideDoneResult.dimIds.has(n.id)
             const rowNo = idx + 1
@@ -2261,9 +2295,10 @@ export function WbsGanttSheet({
                     <button
                       type="button"
                       tabIndex={-1}
+                      data-wbs-open-detail={n.id}
                       onClick={() => {
                         clearProgressLensSelection()
-                        selectRow(n.id)
+                        toggleDetail(n.id)
                       }}
                       className={`truncate text-left ${nameWeight} ${isCritical ? 'font-semibold text-critical' : ''} hover:text-action hover:underline`}
                       title={`${n.name} · ${
@@ -2370,10 +2405,13 @@ export function WbsGanttSheet({
                   <div
                     {...gridCell('pstart')}
                     data-wbs-col="pstart"
-                    className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-border justify-center tabular-nums text-fg-secondary ${cellBg}`}
+                    data-derived={shown.startDerived || undefined}
+                    data-out-of-range={outOfRange || undefined}
+                    title={dateCellTitle(shown.startDerived, outOfRange)}
+                    className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-border justify-center tabular-nums ${dateCellTone(shown.startDerived, outOfRange)} ${cellBg}`}
                     style={{ ...CELL_FOCUS, width: W('pstart') }}
                   >
-                    {fmtDate(n.plannedStart)}
+                    {fmtDate(shown.start)}
                   </div>
                 )}
                 {/* 계획종료 */}
@@ -2381,10 +2419,13 @@ export function WbsGanttSheet({
                   <div
                     {...gridCell('pend')}
                     data-wbs-col="pend"
-                    className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-border justify-center tabular-nums text-fg-secondary ${cellBg}`}
+                    data-derived={shown.endDerived || undefined}
+                    data-out-of-range={outOfRange || undefined}
+                    title={dateCellTitle(shown.endDerived, outOfRange)}
+                    className={`${cellBase} overflow-hidden whitespace-nowrap border-r border-border justify-center tabular-nums ${dateCellTone(shown.endDerived, outOfRange)} ${cellBg}`}
                     style={{ ...CELL_FOCUS, width: W('pend') }}
                   >
-                    {fmtDate(n.plannedEnd)}
+                    {fmtDate(shown.end)}
                   </div>
                 )}
                 {/* 가중치 — overflow-hidden: 표시 반올림을 우회하는 긴 값이 이웃 날짜 칸을 덮지 않게 */}
@@ -2515,14 +2556,16 @@ export function WbsGanttSheet({
                   className={`relative box-border h-full shrink-0 border-b border-border ${isFlash || progressLensActive ? 'bg-action-soft/60' : ''} group-hover:bg-action-soft`}
                   style={{ width: ganttW }}
                 >
-                  {n.plannedStart && n.plannedEnd && (
+                  {shown.start && shown.end && (
                     <Bar
                       n={n} schedule={schedule} xOf={xOf} dayPx={dayPx}
+                      start={shown.start} end={shown.end}
+                      derivedTitle={shown.startDerived || shown.endDerived ? `${t('wbs.derivedSchedule')} — ${fmtDate(shown.start)} ~ ${fmtDate(shown.end)}` : undefined}
                       onHover={hovering => setHoveredDepItemId(
                         // 떠날 때 무조건 null 로 두면, 옆 바로 옮겨간 뒤 도착한 leave 가 새 hover 를 지운다.
                         prev => (hovering ? n.id : prev === n.id ? null : prev),
                       )}
-                      onDragStart={isAdmin && !readOnly && n.depth > 0 ? e => {
+                      onDragStart={isAdmin && !readOnly && n.depth > 0 && n.plannedStart && n.plannedEnd ? e => {
                         e.stopPropagation()
                         const next = {
                           itemId: n.id,
@@ -2670,6 +2713,8 @@ export function WbsGanttSheet({
         >
           <WbsProgressLens
             item={progressLensItem}
+            number={progressLensItem ? outlineNumbers.get(progressLensItem.id) : undefined}
+            shown={progressLensItem ? schedules.get(progressLensItem.id) : undefined}
             parentPath={progressLensActiveId ? progressLensPathById.get(progressLensActiveId) ?? [] : []}
             pinned={!!progressLensPinnedId}
             onTogglePin={toggleProgressLensPin}
@@ -2753,6 +2798,9 @@ export function WbsGanttSheet({
       {showDetail && selectedItem && (
         <RowDetailPanel
           item={selectedItem}
+          numbers={outlineNumbers}
+          shown={schedules.get(selectedItem.id)}
+          outOfRange={outOfRangeIds.has(selectedItem.id)}
           timeZone={cal.timezone}
           allItems={allFlatItems}
           dependencies={dependencies}
@@ -2952,12 +3000,21 @@ function DependencyOverlay({
   )
 }
 
+/** 트리 밖 행(방어) — 자기 값 그대로 */
+const OWN_SCHEDULE = (n: ComputedItem): ShownSchedule => ({ start: n.plannedStart, end: n.plannedEnd, startDerived: false, endDerived: false })
+/** 날짜 칸의 글자색 — 기간 밖(경고)이 먼저, 하위에서 계산된 값은 연하게, 직접 입력은 평소 색 */
+const dateCellTone = (derived: boolean, outOfRange: boolean) => (outOfRange && !derived ? 'font-semibold text-warning' : derived ? 'italic text-fg-muted' : 'text-fg-secondary')
+const dateCellTitle = (derived: boolean, outOfRange: boolean) => (derived ? translate('wbs.derivedSchedule') : outOfRange ? translate('wbs.outOfRangeCell') : undefined)
+
 /* ── 간트 바 ── */
 function Bar({
   n,
   schedule,
   xOf,
   dayPx,
+  start,
+  end,
+  derivedTitle,
   onHover,
   onDragStart,
   isDragging = false,
@@ -2967,14 +3024,20 @@ function Bar({
   schedule?: TaskSchedule
   xOf: (d: string) => number
   dayPx: number
+  /** 표시 일정(BUG-12) — 직접 입력이 없는 상위 행은 하위의 min/max 다 */
+  start: string
+  end: string
+  /** 하위에서 계산된 일정이면 그 안내(툴팁). 막대를 옅게 그려 직접 입력한 일정과 구분한다 */
+  derivedTitle?: string
   /** 바 위에 마우스가 올라오고 내려갈 때 — 의존성 연결선 표시의 방아쇠. */
   onHover?: (hovering: boolean) => void
   onDragStart?: (e: React.MouseEvent) => void
   isDragging?: boolean
   dragOffsetPx?: number
 }) {
-  const left = xOf(n.plannedStart!)
-  const width = Math.max(dayPx * 0.5, xOf(n.plannedEnd!) + dayPx - left)
+  const left = xOf(start)
+  const width = Math.max(dayPx * 0.5, xOf(end) + dayPx - left)
+  const derivedCls = derivedTitle ? 'opacity-60' : ''
   const pct = Math.min(100, Math.max(0, n.rolledActualPct))
   const pctLabel = `${formatPct1(pct)}%`
   const showInside = width >= 54 && pct >= 45 && n.status !== 'done'
@@ -2999,7 +3062,9 @@ function Bar({
     return (
       <>
         <div
-          className={`absolute top-1/2 h-2.5 -translate-y-1/2 rounded-[3px] bg-phasebar ${critical ? 'ring-2 ring-critical ring-offset-1 ring-offset-surface' : ''}`}
+          data-derived-bar={derivedTitle ? '' : undefined}
+          title={derivedTitle}
+          className={`absolute top-1/2 h-2.5 -translate-y-1/2 rounded-[3px] bg-phasebar ${derivedCls} ${critical ? 'ring-2 ring-critical ring-offset-1 ring-offset-surface' : ''}`}
           style={{ left, width }}
           onMouseEnter={onHover ? () => onHover(true) : undefined}
           onMouseLeave={onHover ? () => onHover(false) : undefined}
@@ -3033,7 +3098,9 @@ function Bar({
       )}
       <div
         data-testid={`gantt-bar-${n.id}`}
-        className={`absolute top-1/2 h-3.5 -translate-y-1/2 overflow-visible rounded-full select-none ${
+        data-derived-bar={derivedTitle ? '' : undefined}
+        title={derivedTitle}
+        className={`absolute top-1/2 h-3.5 -translate-y-1/2 overflow-visible rounded-full select-none ${derivedCls} ${
           onDragStart ? 'cursor-grab active:cursor-grabbing' : ''
         } ${isDragging ? 'shadow-lg ring-2 ring-action z-30' : ''}`}
         style={{ left: left + (isDragging ? dragOffsetPx : 0), width }}

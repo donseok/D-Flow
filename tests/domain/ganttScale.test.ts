@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { buildGanttScale as buildGanttScaleReal, centeredTimelineScrollLeft, collectPlannedDates, groupGanttMilestones } from '@/lib/domain/ganttScale'
-import { calUtcSun } from '../helpers/calendarFixture'
+import { buildGanttScale as buildGanttScaleReal, centeredTimelineScrollLeft, collectPlannedDates, ganttWeekSpans, groupGanttMilestones } from '@/lib/domain/ganttScale'
+import type { WeekStartRule } from '@/lib/domain/calendar'
+import { calUtcSun, MON_RULES, SUN_RULES } from '../helpers/calendarFixture'
 
 // 과제 16 — 달력은 넷째 인자(필수). 이 파일의 기존 단언은 월~금 근무(UTC·일요일 규칙) 달력으로 같다
 const buildGanttScale = (dates: string[], today: string, dayPx: number) => buildGanttScaleReal(dates, today, dayPx, calUtcSun)
@@ -146,3 +147,29 @@ describe('groupGanttMilestones', () => {
     expect(out.map(m => m.tier)).toEqual([0, 1, 0])
   })
 })
+
+describe('[BUG-16] ganttWeekSpans — 주 머리는 주 시작 설정(calendar.week_start)의 주로 끊는다', () => {
+  const days = (from: string, n: number) => Array.from({ length: n }, (_, i) => new Date(Date.parse(`${from}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10))
+  it('리포트의 사례 — 축이 토요일(10/10)에 시작, 주 시작 일요일: W01 은 10/10 하루, W02 는 10/11(일)부터 7일', () => {
+    expect(ganttWeekSpans(days('2026-10-10', 16), SUN_RULES)).toEqual([
+      { label: 'W01', sub: '10/10', startIndex: 0, length: 1 },
+      { label: 'W02', sub: '10/11', startIndex: 1, length: 7 },
+      { label: 'W03', sub: '10/18', startIndex: 8, length: 7 },
+      { label: 'W04', sub: '10/25', startIndex: 15, length: 1 },
+    ])
+  })
+  it('주 시작 월요일이면 같은 축이 월요일(10/12)에 끊긴다 — 설정을 따른다', () => {
+    expect(ganttWeekSpans(days('2026-10-10', 10), MON_RULES).map(w => [w.sub, w.length])).toEqual([['10/10', 2], ['10/12', 7], ['10/19', 1]])
+  })
+  it('주간보고와 같은 주 경계 — 과도기 주(월→일, E = 10/11)는 6일', () => {
+    const rules: WeekStartRule[] = [{ day: 'monday', from: null }, { day: 'sunday', from: '2026-10-11' }]
+    expect(ganttWeekSpans(days('2026-10-05', 14), rules).map(w => [w.sub, w.length])).toEqual([['10/5', 6], ['10/11', 7], ['10/18', 1]])
+  })
+  it('buildGanttScale 에 주 시작을 넘기면 주 밴드가 그 경계다(생략하면 축 첫날부터 7일씩 — 옛 동작)', () => {
+    const withRule = buildGanttScaleReal(['2026-10-10', '2026-10-25'], '2026-10-10', 10, calUtcSun, SUN_RULES)
+    expect(withRule.weeks.map(w => [w.label, w.left, w.width])).toEqual([['W01', 0, 10], ['W02', 10, 70], ['W03', 80, 70], ['W04', 150, 10]])
+    expect(buildGanttScale(['2026-10-10', '2026-10-25'], '2026-10-10', 10).weeks.map(w => w.width)).toEqual([70, 70, 20])
+  })
+  it('빈 축은 빈 배열', () => { expect(ganttWeekSpans([], SUN_RULES)).toEqual([]) })
+})
+

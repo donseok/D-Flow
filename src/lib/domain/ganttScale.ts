@@ -2,7 +2,7 @@
  * 간트 타임라인 스케일 계산 (순수 함수). WBS·간트 통합 시트와 전용 간트 뷰가 공유한다.
  * 입력은 계획 일자 목록(ISO 'YYYY-MM-DD')과 기준일·일당 픽셀. DB/DOM 의존 없음.
  */
-import { isWorkingDay } from './calendar'
+import { isWorkingDay, weekKeyOf, type WeekStartRule } from './calendar'
 import type { DayCal } from './progress'
 import type { MilestonePoint, MilestoneStatus } from './dashboard'
 
@@ -25,7 +25,29 @@ function iso(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function buildGanttScale(dates: string[], today: string, dayPx: number, cal: DayCal): GanttScale {
+/** 간트 주 머리의 한 칸 — 축의 날짜 배열에서 몇 번째 날부터 며칠인가 */
+export interface GanttWeekSpan { label: string; sub: string; startIndex: number; length: number }
+
+/**
+ * 간트의 주 머리(W01·W02 …) — **프로젝트의 주 시작 설정(calendar.week_start)이 정한 주**로 끊는다(사용자 테스트 BUG-16).
+ * 예전에는 축의 첫날부터 7일씩 끊어, 축이 토요일에 시작하면 모든 주가 토요일에 시작했다(주간보고의 주와 어긋났다).
+ * 축은 주 중간에서 시작할 수 있으므로 첫 칸·끝 칸은 7일보다 짧을 수 있다. 번호는 축에서 보이는 순서(W01 = 축의 첫 주),
+ * 부제는 그 칸의 첫날(M/D)이다. 주 키는 주간보고와 같은 함수(weekKeyOf)라 과도기 주(6·8일)도 같은 경계로 끊긴다.
+ */
+export function ganttWeekSpans(days: readonly string[], weekStart: readonly WeekStartRule[]): GanttWeekSpan[] {
+  const out: GanttWeekSpan[] = []
+  let key: string | null = null
+  days.forEach((d, i) => {
+    const k = weekKeyOf(weekStart, d)
+    if (k === key) { out[out.length - 1].length++; return }
+    key = k
+    out.push({ label: 'W' + String(out.length + 1).padStart(2, '0'), sub: `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`, startIndex: i, length: 1 })
+  })
+  return out
+}
+
+/** weekStart 를 주면 주 머리가 그 설정의 주로 끊긴다(ganttWeekSpans). 생략하면 축 첫날부터 7일씩(옛 동작 — 설정을 모르는 호출부) */
+export function buildGanttScale(dates: string[], today: string, dayPx: number, cal: DayCal, weekStart?: readonly WeekStartRule[]): GanttScale {
   const valid = dates.filter(Boolean)
   // WBS 첫 화면에서 기준일을 항상 보여 줄 수 있도록 일정 밖이어도 축에 포함한다.
   const axisDates = [...valid, today]
@@ -50,8 +72,10 @@ export function buildGanttScale(dates: string[], today: string, dayPx: number, c
     else months.push({ ym, label: `${Number(d.slice(5, 7))}월`, left: i * dayPx, width: dayPx })
   })
 
-  const weeks: GanttScale['weeks'] = []
-  for (let i = 0; i < days.length; i += 7) {
+  const weeks: GanttScale['weeks'] = weekStart
+    ? ganttWeekSpans(days, weekStart).map(w => ({ label: w.label, sub: w.sub, left: w.startIndex * dayPx, width: w.length * dayPx }))
+    : []
+  for (let i = 0; !weekStart && i < days.length; i += 7) {
     const w = Math.min(7, days.length - i)
     const dd = days[i]
     weeks.push({

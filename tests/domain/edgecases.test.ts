@@ -102,7 +102,8 @@ describe('computeTree 4단+ 롤업 — 엑셀 3열 양식 밖(도메인 통과 �
   const rows: WbsRow[] = [
     row({ id: 'P', parentId: null, code: '1', sortOrder: 0 }),
     // 왼쪽 가지: Phase→Task→(엑셀엔 없는 4번째 실 레벨 'subtask')→Activity×2 — 깊이 4
-    row({ id: 'T1', parentId: 'P', code: '1-1', sortOrder: 0 }),
+    // T1·T2 는 같은 가중치(1:1) — 한쪽만 지정하면 미지정은 남은 몫(0)을 받는다(BUG-13 의 새 규칙). 이 스위트가 보는 것은 깊이가 다른 가지의 합산이다
+    row({ id: 'T1', parentId: 'P', code: '1-1', sortOrder: 0, weight: 1 }),
     row({ id: 'ST1', parentId: 'T1', code: '1-1-1', sortOrder: 0 }),
     row({
       id: 'A1', parentId: 'ST1', sortOrder: 0,
@@ -133,7 +134,7 @@ describe('computeTree 4단+ 롤업 — 엑셀 3열 양식 밖(도메인 통과 �
   })
   it('깊이가 다른 형제 가지(4단 vs 3단)가 공통 조상에서 올바르게 합산된다', () => {
     const p = tree[0]
-    // T1(75, weight null→1) · T2(50, weight 1) → (75*1+50*1)/2
+    // T1(75, weight 1) · T2(50, weight 1) → (75*1+50*1)/2
     expect(p.rolledActualPct).toBe(62.5)
     expect(p.achievement).toBe(63)
     expect(p.status).toBe('delayed')

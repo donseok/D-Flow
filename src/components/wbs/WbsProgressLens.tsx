@@ -4,12 +4,15 @@ import { CalendarRange, FileText, GripVertical, Pin, PinOff, Search } from 'luci
 import type { ComputedItem } from '@/lib/domain/types'
 import { formatPct1, formatPp1 } from '@/lib/domain/format'
 import type { DictKey } from '@/lib/i18n/dict'
+import type { ShownSchedule } from '@/lib/domain/wbsDerived'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { LevelBadge, OwnerBadges, STATUS, fmtDate } from './shared'
 
 export function WbsProgressLens({
   item,
+  number,
+  shown,
   parentPath,
   pinned,
   onTogglePin,
@@ -17,6 +20,10 @@ export function WbsProgressLens({
   dragHandleProps,
 }: {
   item: ComputedItem | null
+  /** 개요 번호(표의 번호 열과 같은 값) — 저장 code 는 보이지 않는다(BUG-05) */
+  number?: string
+  /** 표시 일정(BUG-12) — 직접 입력이 없는 상위 행은 하위의 min/max */
+  shown?: ShownSchedule
   parentPath: string[]
   pinned: boolean
   onTogglePin: () => void
@@ -41,7 +48,7 @@ export function WbsProgressLens({
 
   const variance = item.rolledActualPct - item.plannedPct
   const varianceTone = variance < 0 ? 'text-danger' : variance > 0 ? 'text-success' : 'text-fg-secondary'
-  const pathLabel = parentPath.length ? `${parentPath.join(' › ')} · ${item.code}` : item.code
+  const pathLabel = [parentPath.join(' › '), number ?? ''].filter(Boolean).join(' · ')
 
   return (
     <section
@@ -107,7 +114,7 @@ export function WbsProgressLens({
             {/* 날짜는 돋보기의 핵심 정보 — text-xs 는 작아서 안 보인다는 피드백(2026-08-21)으로 키움 */}
             <span data-lens-field="schedule" className="inline-flex items-center gap-1.5 text-base font-semibold tabular-nums text-fg">
               <CalendarRange aria-hidden className="h-4 w-4 text-fg-muted" />
-              {fmtDate(item.plannedStart)} ~ {fmtDate(item.plannedEnd)}
+              {fmtDate(shown ? shown.start : item.plannedStart)} ~ {fmtDate(shown ? shown.end : item.plannedEnd)}
             </span>
           </div>
 

@@ -5,7 +5,7 @@ import { ERR_ANON, ERR_LOOKUP, ERR_MISSING } from '@/lib/authz/errors'
 import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 
 type Row = Record<string, unknown>
-type Reply = { data: Row[] | Row | null; error: { message: string } | null }
+type Reply = { data: Row[] | Row | null; error: { message: string } | null; count?: number }
 interface Call { table: string; ops: Array<[string, ...unknown[]]> }
 
 const h = vi.hoisted(() => ({
@@ -27,7 +27,7 @@ function fakeClient() {
         return typeof r === 'function' ? r(call) : r
       }
       const chain: Record<string, unknown> = {}
-      for (const op of ['select', 'eq', 'ilike', 'or', 'order', 'limit', 'in']) {
+      for (const op of ['select', 'eq', 'ilike', 'or', 'order', 'limit', 'in', 'gt']) {
         chain[op] = (...args: unknown[]) => { call.ops.push([op, ...args]); return chain }
       }
       chain.maybeSingle = async () => { call.ops.push(['maybeSingle']); const r = reply(); return { data: Array.isArray(r.data) ? (r.data[0] ?? null) : r.data, error: r.error } }
@@ -49,6 +49,11 @@ const tables = () => calls().map((c) => c.table)
 const opsOf = (table: string, op: string) => calls().filter((c) => c.table === table).flatMap((c) => c.ops.filter((o) => o[0] === op))
 const setActor = (a: Actor | null) => { h.actor = a }
 const reply = (table: string, r: Reply | ((c: Call) => Reply)) => { (h.replies as Record<string, unknown>)[table] = r }
+
+/** wbs_items 는 두 번 읽힌다 — 찾기(or)와 번호를 매길 구조 읽기(id, parent_id, sort_order …). select 의 열로 가른다 */
+const isStructureRead = (c: Call) => c.ops.some((o) => o[0] === 'select' && String(o[1]).includes('parent_id'))
+const wbsReplies = (hits: Row[], structure: Row[]) => reply('wbs_items', (c) => (isStructureRead(c)
+  ? { data: structure, error: null, count: structure.length } : { data: hits, error: null }))
 
 describe('searchTitles server action (개정 §5.3.7, UX-04, SPU2)', () => {
   beforeEach(() => {
@@ -158,15 +163,45 @@ describe('searchTitles server action (개정 §5.3.7, UX-04, SPU2)', () => {
   describe('프로젝트 범위 — 그 프로젝트의 WBS 이름·코드만', () => {
     it('프로젝트 검색을 건너뛰고 해당 프로젝트의 WBS만 검색한다', async () => {
       reply('projects', { data: { id: 'p-2', is_private: false }, error: null })
-      reply('wbs_items', { data: [{ id: 'w-2', code: '2.0', name: 'Beta Task', project_id: 'p-2' }], error: null })
+      wbsReplies([{ id: 'w-2', code: '2.0', name: 'Beta Task', project_id: 'p-2' }], [{ id: 'w-2', parent_id: null, sort_order: 1, is_owner_split: false }])
       const res = await searchTitles({ workspaceId: WS, projectId: 'p-2', query: 'Beta', scope: 'project' })
       expect(res).toEqual({
         ok: true,
         projects: [],
-        wbsItems: [{ type: 'wbs', id: 'w-2', code: '2.0', title: 'Beta Task', projectId: 'p-2', href: '/p/p-2/wbs?focus=w-2' }],
+        // 번호는 저장 code('2.0')가 아니라 트리 위치다 — 루트 하나뿐이라 1 (BUG-05)
+        wbsItems: [{ type: 'wbs', id: 'w-2', number: '1', title: 'Beta Task', projectId: 'p-2', href: '/p/p-2/wbs?focus=w-2' }],
       })
-      expect(opsOf('wbs_items', 'eq')).toEqual([['eq', 'project_id', 'p-2']])
+      expect(opsOf('wbs_items', 'eq')).toEqual([['eq', 'project_id', 'p-2'], ['eq', 'project_id', 'p-2']])   // 찾기 + 구조 읽기 둘 다 그 프로젝트로 좁힌다
       expect(opsOf('wbs_items', 'or')).toEqual([['or', 'name.ilike.%Beta%,code.ilike.%Beta%']])
+    })
+
+    it('[BUG-05] 번호는 표와 같은 계산이다 — 화면에서 추가한 항목(code = 이름의 첫 낱말)도 1.1·1.1.1 로 나오고 표 순서로 놓인다', async () => {
+      reply('projects', { data: { id: 'p-2', is_private: false }, error: null })
+      wbsReplies(
+        [
+          { id: 'c', code: '현행', name: '현행 업무 인터뷰', project_id: 'p-2' },
+          { id: 'b', code: '요구사항', name: '요구사항 분석', project_id: 'p-2' },
+        ],
+        [
+          { id: 'a', parent_id: null, sort_order: 1, is_owner_split: false },
+          { id: 'b', parent_id: 'a', sort_order: 1, is_owner_split: false },
+          { id: 'c', parent_id: 'b', sort_order: 1, is_owner_split: false },
+          { id: 'd', parent_id: 'a', sort_order: 2, is_owner_split: false },
+        ],
+      )
+      const res = await searchTitles({ workspaceId: WS, projectId: 'p-2', query: '요', scope: 'project' })
+      expect(res.ok && res.wbsItems.map((w) => [w.number, w.title])).toEqual([['1.1', '요구사항 분석'], ['1.1.1', '현행 업무 인터뷰']])
+      expect(tables()).toEqual(['projects', 'wbs_items', 'wbs_items'])   // 담당 분리 행이 없으면 담당·팀을 읽지 않는다
+    })
+
+    it('[BUG-05] 번호를 내지 못하면(구조 읽기 실패) 검색은 성공이고 번호만 비운다 — 저장 code 로 대신하지 않는다', async () => {
+      reply('projects', { data: { id: 'p-2', is_private: false }, error: null })
+      reply('wbs_items', (c) => (isStructureRead(c)
+        ? { data: null, error: { message: 'boom' } }
+        : { data: [{ id: 'w-2', code: '요구사항', name: '요구사항 분석', project_id: 'p-2' }], error: null }))
+      const res = await searchTitles({ workspaceId: WS, projectId: 'p-2', query: '요구', scope: 'project' })
+      expect(res.ok && res.wbsItems).toEqual([{ type: 'wbs', id: 'w-2', number: '', title: '요구사항 분석', projectId: 'p-2', href: '/p/p-2/wbs?focus=w-2' }])
+      expect(console.error).toHaveBeenCalled()
     })
 
     it('다른 워크스페이스의 프로젝트는 거부한다 — 요청 워크스페이스와 프로젝트의 워크스페이스가 달라도 같다', async () => {

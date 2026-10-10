@@ -323,3 +323,17 @@ describe('dataHygiene (계획 데이터 품질)', () => {
     expect(m.clean).toBe(true)
   })
 })
+
+import { varianceOrNull } from '@/lib/domain/dashboard'
+
+describe('[BUG-34] varianceOrNull — 계획이 0 이면 편차를 내지 않는다(SPI 와 같은 "—")', () => {
+  it('계획 0 → null (리포트: SPI 는 — 인데 편차 +15.0%p)', () => {
+    expect(varianceOrNull(15, 0)).toBeNull()
+    expect(varianceOrNull(0, 0)).toBeNull()
+  })
+  it('계획이 0 보다 크면 실적 − 계획(소수 1자리)', () => {
+    expect(varianceOrNull(15, 0.1)).toBe(14.9)
+    expect(varianceOrNull(6.3, 8.3)).toBe(-2)
+  })
+})
+

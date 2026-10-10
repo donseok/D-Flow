@@ -3,7 +3,7 @@ import {
   addDaysCal, buildExecSummary, milestoneTimeline,
   type ExecSummary, type HygieneModel, type Signal, type MilestonePoint,
 } from './dashboard'
-import { projectLifecycleStatus, type ProjectLifecycleStatus } from './project-status'
+import { leafStarted, projectLifecycleStatus, type ProjectLifecycleStatus } from './project-status'
 import { collectLeaves } from './tree'
 import { round1 } from './format'
 import { detectRiskSignals, type RiskSeverity } from './riskSignals'
@@ -103,6 +103,8 @@ export function buildPortfolio(inputs: PortfolioProjectInput[]): PortfolioModel 
     const completion = {
       hasWbs: leaves.length > 0,
       allDone: leaves.length > 0 && leaves.every(l => l.status === 'done'),
+      // 프로젝트 목록·홈과 같은 판정(BUG-35) — 잎이 하나라도 진행됐으면 기간 전이어도 '진행 중'
+      anyStarted: leaves.some(l => leafStarted(l.rolledActualPct, l.stage)),
     }
     const lifecycle = projectLifecycleStatus(input.startDate, input.endDate, input.today, completion)
     const exec = buildExecSummary(

@@ -3,9 +3,10 @@
  * 한국어 서식 셋(시트 'M월 N주차'·파일명 'M월N주차'·보고서 'YYYY년 M월 N주차 (범위)')으로만 바꾼다 — 서식 셋이 이 파일의
  * weekLabelTexts 하나를 거친다. 범위는 표시 요일(기간 안 근무일, 0이면 기간 전체)의 첫날~끝날이다(5칸 고정 폐기). */
 import {
-  nextWeekKey, weekDisplayDays, weekKeyOf, weekLabelOf,
+  nextWeekKey, weekDisplayDays, weekKeyOf, weekLabelOf, weekPeriodOf,
   type WeekStartRule, type WorkCalendar,
 } from '@/lib/domain/calendar'
+import { addDaysIso } from '@/lib/domain/dates'
 import { isValidIsoDate } from '@/lib/domain/validate'
 import { t} from '@/lib/i18n/dict'
 import { KO_LOCALE } from '@/lib/i18n/format'
@@ -43,12 +44,17 @@ export function sheetWeekMeta(cal: WeekCal, key: string): SheetWeekMeta {
   return { weekTag: t.weekTag, label: t.label, thisRange: t.range, nextRange: rangeOf(weekDisplayDays(cal, nextWeekKey(cal.weekStart, key))) }
 }
 
-/** 화면 표시 전용 주차 라벨(주차 이동 줄·빈 시트 안내) — '10월 2주차 (10/5~10/9)'.
+/** 화면 표시 전용 주차 라벨(주차 이동 줄·빈 시트 안내) — '10월 1주차 (10/4~10/10)'.
+ *  범위는 **그 주의 기간 전체**다(주 시작 설정 calendar.week_start 가 정한 첫날~끝날, 과도기 주는 6·8일). 예전에는 표시 요일(근무일)의
+ *  첫날~끝날을 보여 '10/5~10/9' 였는데, 주 시작이 일요일인 프로젝트에서 설정을 따르지 않는 것처럼 보였고 토요일인 오늘이 "이번 주" 밖으로
+ *  읽혔다(사용자 테스트 BUG-16 — 주 키는 처음부터 설정을 따랐다. 헷갈린 것은 라벨이다). 근무일 범위는 시트의 열 머리
+ *  (금주실적·차주계획 — sheetWeekMeta 의 thisRange·nextRange)가 그대로 보인다.
  *  **저장·비교·파일 이름에 쓰지 않는다** — 문서 기본 제목(시트가 저장 값과 비교한다)·weekTag·보고서 라벨은
  *  제품 고정(개정 §2.9)이라 위 weekLabelTexts·sheetWeekMeta 의 값을 그대로 쓴다. */
 export function weekDisplayLabel(cal: WeekCal, key: string): string {
   const { year, month, ordinal } = weekLabelOf(cal.weekStart, key)
-  const days = weekDisplayDays(cal, key)
+  const period = weekPeriodOf(cal.weekStart, key)
+  const days = [period.start, addDaysIso(period.endExclusive, -1)]
   // 달 이름은 Intl 이 낸다('10월') — 달 이름 12개를 사전에 두지 않는다. date-only 라 UTC 로 고정(시간대 변환 없음)
   const monthName = new Intl.DateTimeFormat(KO_LOCALE, { month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)))
   return t('weekly.week.labelWithRange')

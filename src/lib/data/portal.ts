@@ -437,7 +437,7 @@ export interface ProjectRow {
   overdueOpen?: number | null
 }
 type PRowV1 = PRow & { description: string | null }
-type LeafRow = { id: string; parent_id: string | null; project_id: string; actual_pct: number | null; planned_end: string | null }
+type LeafRow = { id: string; parent_id: string | null; project_id: string; actual_pct: number | null; planned_end: string | null; stage: string | null }
 
 /**
  * 프로젝트 행 v1(W5·W6) — 상태의 '오늘'은 워크스페이스 tz(판정 R1 — 전체 프로젝트 화면의 상태 배지와 같은 판정). 진척은 그 워크스페이스의 볼 수 있는
@@ -481,14 +481,14 @@ const projectRowsBase = cache(async (workspaceId: string, actor: Actor, clientIn
     if (ids.length) {
       try {
         leaves = (await Promise.all(chunks(ids).map((part) => page<LeafRow>('프로젝트 진척', (f, t) => client.from('wbs_items')
-          .select('id, parent_id, project_id, actual_pct, planned_end', { count: 'exact' }).in('project_id', part).order('id').range(f, t))))).flat()
+          .select('id, parent_id, project_id, actual_pct, planned_end, stage', { count: 'exact' }).in('project_id', part).order('id').range(f, t))))).flat()
       } catch (e) {
         console.error('[portal] 프로젝트 진척 실패(진척·종료 판정을 모름으로)', workspaceId, errMsg(e))
         leaves = null
       }
     }
     const progress = leaves === null ? null
-      : projectProgressMap(leaves.map((i) => ({ id: i.id, parentId: i.parent_id, projectId: i.project_id, actualPct: i.actual_pct, plannedEnd: i.planned_end })), today)
+      : projectProgressMap(leaves.map((i) => ({ id: i.id, parentId: i.parent_id, projectId: i.project_id, actualPct: i.actual_pct, plannedEnd: i.planned_end, stage: i.stage })), today)
     const fav = new Set(prefs?.favoriteProjectIds ?? [])
     const all: ProjectRow[] = visible.map((p) => {
       const pr = progress ? progress[p.id] ?? null : null
@@ -496,7 +496,7 @@ const projectRowsBase = cache(async (workspaceId: string, actor: Actor, clientIn
         : projectLifecycleStatus(p.start_date, p.end_date, today, progress === null ? null : (pr ?? { hasWbs: false, allDone: false }))
       return {
         id: p.id, name: p.name, description: p.description ?? null, startDate: p.start_date, endDate: p.end_date, isFavorite: fav.has(p.id), status,
-        statusReason: today === null ? (t ?? koTranslate)('portal.status.todayUnknown') : statusReason(status, pr, t),
+        statusReason: today === null ? (t ?? koTranslate)('portal.status.todayUnknown') : statusReason(status, pr, t, !!p.end_date && today > p.end_date),
         progress: pr ? { done: pr.done, total: pr.total } : (progress === null ? null : { done: 0, total: 0 }), nextDue: pr?.nextDue ?? null,
         overdueOpen: pr ? pr.overdueOpen : (progress === null ? null : 0),
       }

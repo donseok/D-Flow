@@ -45,6 +45,8 @@ export const dashboardKo = {
   'dash.spi.velocity': '주간 증분',
   'dash.spi.varianceNow': '현재 편차',
   'dash.spi.hint': 'SPI = 실적÷계획 · 1.0 이상이면 계획보다 빠름',
+  'dash.spi.noPlan': '오늘까지의 계획이 0% 라 SPI·편차를 내지 않습니다.',
+  'dash.trend.unscheduled': '일정 미지정 {n}건은 계획에 반영되지 않습니다 — 계획 곡선이 100% 에 닿지 않습니다.',
   'dash.rank.title': '따라잡기 후보 (마감 전 편차)',
   'dash.rank.empty': '마감 전인데 계획보다 뒤처진 작업이 없습니다.',
   'dash.ms.title': '마일스톤 타임라인',

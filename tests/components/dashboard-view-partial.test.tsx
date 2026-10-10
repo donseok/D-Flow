@@ -191,7 +191,7 @@ describe('TrendChart — 이력 조회 실패', () => {
     plannedSeries: [{ date: '2026-09-01', pct: 0 }, { date: '2026-12-31', pct: 100 }],
     // 이력 0건일 때 buildTrend 가 합성하는 (축 시작,0)→(오늘,실적) 선
     actualSeries: [{ date: '2026-09-01', pct: 0 }, { date: TODAY, pct: 30 }],
-    spiSeries: [], currentSpi: null, velocityWeek: null, hasHistory: false,
+    spiSeries: [], currentSpi: null, velocityWeek: null, hasHistory: false, unscheduledLeaves: 0,
   }
   const html = async (historyFailed: boolean) =>
     renderToStaticMarkup((await TrendChart({ model, today: TODAY, historyFailed })) as ReactElement)
@@ -217,7 +217,7 @@ describe('이력 조회 실패 — TrendChart·SpiPanel 이 나란히 있어도 
     empty: false, axisStart: '2026-09-01', axisEnd: '2026-12-31',
     plannedSeries: [{ date: '2026-09-01', pct: 0 }, { date: '2026-12-31', pct: 100 }],
     actualSeries: [{ date: '2026-09-01', pct: 0 }, { date: TODAY, pct: 30 }],
-    spiSeries: [], currentSpi: null, velocityWeek: null, hasHistory: false,
+    spiSeries: [], currentSpi: null, velocityWeek: null, hasHistory: false, unscheduledLeaves: 0,
   }
   it('role="alert" 는 TrendChart 에만, SpiPanel 은 aria-live="off" 인 status', async () => {
     const trend = renderToStaticMarkup((await TrendChart({ model, today: TODAY, historyFailed: true })) as ReactElement)
@@ -226,5 +226,31 @@ describe('이력 조회 실패 — TrendChart·SpiPanel 이 나란히 있어도 
     expect(alerts(trend) + alerts(spi)).toBe(1)
     expect(alerts(trend)).toBe(1)
     expect(spi).toMatch(/role="status" aria-live="off"[^>]*>.*진척 이력을 불러오지 못해/)
+  })
+})
+
+describe('[BUG-34] SPI 카드 — 계획이 0 이면 편차도 SPI 와 같은 "—", 계획 곡선은 일정 미지정 건수를 알린다', () => {
+  const model: TrendModel = {
+    empty: false, axisStart: '2026-09-01', axisEnd: '2026-12-31',
+    plannedSeries: [{ date: '2026-09-01', pct: 0 }, { date: '2026-12-31', pct: 50 }],
+    actualSeries: [{ date: '2026-09-01', pct: 0 }, { date: TODAY, pct: 15 }],
+    spiSeries: [], currentSpi: null, velocityWeek: null, hasHistory: false, unscheduledLeaves: 3,
+  }
+  it('variance null → 편차 칸이 "—" 이고 이유 한 줄이 붙는다(+15.0%p 를 보이지 않는다)', async () => {
+    const spi = renderToStaticMarkup((await SpiPanel({ model, variance: null })) as ReactElement)
+    expect(spi).not.toContain('%p')
+    expect(spi).toContain('data-spi-no-plan')
+    expect(spi).toContain('오늘까지의 계획이 0% 라 SPI·편차를 내지 않습니다.')
+  })
+  it('variance 가 수면 종전대로 부호 있는 %p', async () => {
+    const spi = renderToStaticMarkup((await SpiPanel({ model, variance: -2.5 })) as ReactElement)
+    expect(spi).toContain('-2.5%p')
+    expect(spi).not.toContain('data-spi-no-plan')
+  })
+  it('일정 미지정 잎이 있으면 그래프 아래에 건수 주석, 없으면 없다', async () => {
+    const withNote = renderToStaticMarkup((await TrendChart({ model, today: TODAY })) as ReactElement)
+    expect(withNote).toContain('일정 미지정 3건은 계획에 반영되지 않습니다')
+    const none = renderToStaticMarkup((await TrendChart({ model: { ...model, unscheduledLeaves: 0 }, today: TODAY })) as ReactElement)
+    expect(none).not.toContain('data-trend-unscheduled')
   })
 })

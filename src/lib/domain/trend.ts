@@ -1,6 +1,6 @@
 import type { ComputedItem, WbsRow } from './types'
 import { round1 } from './format'
-import { computeTree, overallProgress, weightOf } from './rollup'
+import { computeTree, effectiveWeights, overallProgress } from './rollup'
 import { buildTree, collectLeaves, type BuildTreeOpts, type TreeNode } from './tree'
 import { isWorkingDay } from './calendar'
 import type { DayCal } from './progress'
@@ -21,11 +21,14 @@ export interface TrendModel {
   currentSpi: number | null
   velocityWeek: number | null  // 최근 7일 실적 증분(%p), 이력 부족 시 null
   hasHistory: boolean
+  /** 일정(시작·종료)이 없는 잎 작업 수(BUG-34) — 계획%가 늘 0 이라 계획 곡선의 분모에만 든다(곡선이 100% 에 닿지 않는 이유).
+   *  계산은 바꾸지 않는다(전체 계획%·보고서와 같은 수) — 그래프가 그 수를 주석으로 알린다 */
+  unscheduledLeaves: number
 }
 
 const EMPTY: TrendModel = {
   empty: true, axisStart: '', axisEnd: '', plannedSeries: [], actualSeries: [],
-  spiSeries: [], currentSpi: null, velocityWeek: null, hasHistory: false,
+  spiSeries: [], currentSpi: null, velocityWeek: null, hasHistory: false, unscheduledLeaves: 0,
 }
 
 /** ComputedItem 트리 → 평탄한 WbsRow[] — computeTree를 다른 날짜로 재실행하기 위한 입력. */
@@ -97,18 +100,25 @@ export function plannedCurve(
     const done = bizBetween(n.plannedStart, capped)
     return Math.min(100, Math.max(0, round1((done / total) * 100)))
   }
-  // computeNode 의 rolledPlanned 동치 — 형제 가중(null=1) 평균 + 단계별 round1
-  const nodePlanned = (n: TreeNode, date: string): number => {
-    if (n.children.length === 0) return ownPlanned(n, date)
-    const totalW = n.children.reduce((s, c) => s + weightOf(c.weight), 0) || 1
-    return round1(n.children.reduce((s, c) => s + weightOf(c.weight) * nodePlanned(c, date), 0) / totalW)
+  // computeNode 의 rolledPlanned·overallProgress 동치 — 같은 가중치 규칙(effectiveWeights) + 단계별 round1.
+  // 몫은 날짜와 무관하므로 그룹마다 한 번만 낸다(날짜당 O(N) 워크를 유지한다).
+  const shares = new Map<readonly TreeNode[], { ws: number[]; total: number }>()
+  const sharesOf = (group: readonly TreeNode[]) => {
+    let s = shares.get(group)
+    if (!s) {
+      const ws = effectiveWeights(group)
+      s = { ws, total: ws.reduce((a, w) => a + w, 0) || 1 }
+      shares.set(group, s)
+    }
+    return s
   }
-  // overallProgress 동치 — 루트도 weightOf(null = 1, 합 0 이면 1 로 나눔)
-  const totalEff = tree.reduce((s, r) => s + weightOf(r.weight), 0) || 1
-  return dates.map(date => ({
-    date,
-    pct: round1(tree.reduce((s, r) => s + weightOf(r.weight) * nodePlanned(r, date), 0) / totalEff),
-  }))
+  const groupPlanned = (group: readonly TreeNode[], date: string): number => {
+    const { ws, total } = sharesOf(group)
+    return round1(group.reduce((s, c, i) => s + ws[i] * nodePlanned(c, date), 0) / total)
+  }
+  const nodePlanned = (n: TreeNode, date: string): number =>
+    n.children.length === 0 ? ownPlanned(n, date) : groupPlanned(n.children, date)
+  return dates.map(date => ({ date, pct: groupPlanned(tree, date) }))
 }
 
 /** carry-forward 조회: date 이전(포함) 마지막 스냅샷의 실적. 없으면 null. */
@@ -134,7 +144,8 @@ export function buildTrend(input: {
   const { items, calendar, startDate, endDate, today, opts } = input
 
   // 축 — 프로젝트 기간 우선, 없으면 WBS leaf 날짜 min/max
-  const leafDates = collectLeaves(items)
+  const leaves = collectLeaves(items)
+  const leafDates = leaves
     .flatMap(l => [l.plannedStart, l.plannedEnd])
     .filter((d): d is string => d != null)
   const axisStart = startDate ?? (leafDates.length ? leafDates.reduce((a, b) => (a < b ? a : b)) : null)
@@ -178,5 +189,7 @@ export function buildTrend(input: {
   return {
     empty: false, axisStart, axisEnd, plannedSeries, actualSeries,
     spiSeries, currentSpi, velocityWeek, hasHistory: snaps.length > 0,
+    // plannedPct 의 가드와 같은 조건 — 시작·종료 가운데 하나라도 없으면 계획%는 0 이다
+    unscheduledLeaves: leaves.filter(l => !l.plannedStart || !l.plannedEnd).length,
   }
 }

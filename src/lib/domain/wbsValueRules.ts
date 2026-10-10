@@ -4,10 +4,20 @@
 // ── 단위(정본) ──
 // · 실적%(wbs_items.actual_pct): 0~100 의 % 값 그대로. 화면·엑셀·DB 가 같은 수다. DB CHECK(0~100)가 최종 관문이다.
 // · 가중치(wbs_items.weight): **분수로 저장한다 — 1 = 100%**(0.5 = 50%). 화면은 % 로 보이고 입력받는다(format.ts weightToPct —
-//   입력 60 → 저장 0.6 → 표시 60%). null = 형제 균등. 롤업은 형제 사이의 비율만 쓰므로 배율과 무관하지만, 표시는 배율을 그대로 드러낸다
-//   (50 을 그대로 저장하면 5000% 로 보인다).
+//   입력 60 → 저장 0.6 → 표시 60%). null = 미지정. 형제가 전부 지정됐으면 롤업은 형제 사이의 비율만 써서 배율과 무관하다. **일부만
+//   지정된 그룹은 배율이 뜻을 가진다** — 미지정 항목이 남은 몫 `1 − 지정 합`을 나눠 받기 때문이다(rollup.ts effectiveWeights, BUG-13).
+//   표시도 배율을 그대로 드러낸다(50 을 그대로 저장하면 5000% 로 보인다).
 // · 엑셀의 가중치 열은 "엑셀에 보이는 %" 로 읽는다(importedWeightScale) — 에이전트 가져오기(wbs.md 의 weight)는 계약이 동결이라 받은 수를
 //   그대로 저장한다(양수만 — src/lib/agent/wbsImport.ts). 두 경로 모두 저장 단위는 위의 분수다.
+
+/** 작업명의 최대 길이(BUG-23) — 화면 입력(maxLength)·서버 액션·엑셀 가져오기가 같은 값을 쓴다. 입력 칸의 maxLength 와 같은 단위(UTF-16 길이)다.
+ *  DB 에는 길이 제약이 없다 — 이 상한보다 긴 옛 이름은 그대로 읽히고(상세 패널은 두 줄로 줄여 보인다), 고쳐 저장할 때만 걸린다. */
+export const WBS_NAME_MAX = 200
+
+/** 작업명 길이 — 앞뒤 공백을 뺀 길이가 상한을 넘으면 'nameTooLong'. 빈 이름은 호출부의 다른 규칙(필수)이 본다 */
+export function wbsNameViolation(name: string): 'nameTooLong' | null {
+  return name.trim().length > WBS_NAME_MAX ? 'nameTooLong' : null
+}
 
 /** 규칙 위반 종류 — 문구는 호출부가 붙인다(화면은 사전, 가져오기는 행 오류 문구) */
 export type WbsValueViolation = 'range' | 'weightMin'

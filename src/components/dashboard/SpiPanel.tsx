@@ -23,9 +23,10 @@ const arcPath = (from: number, to: number) =>
   `M ${gx(angleOf(from), R)} ${gy(angleOf(from), R)} A ${R} ${R} 0 0 1 ${gx(angleOf(to), R)} ${gy(angleOf(to), R)}`
 
 /** SPI 반원 게이지 + 스파크라인 + 현재 SPI · 주간 증분 · 현재 편차 스탯.
- *  historyFailed = 진척 이력 조회 실패 — 이력으로 그리는 추세 줄(스파크라인) 대신 사유를 보인다. 현재 편차는 계획·실적으로 계산하므로 유지. */
+ *  historyFailed = 진척 이력 조회 실패 — 이력으로 그리는 추세 줄(스파크라인) 대신 사유를 보인다. 현재 편차는 계획·실적으로 계산하므로 유지.
+ *  variance null = 계획이 아직 0 이라 견줄 대상이 없다(dashboard.varianceOrNull) — SPI 와 같은 '—' 로 보인다(BUG-34). */
 export async function SpiPanel({ model, variance, historyFailed = false }: {
-  model: TrendModel; variance: number; historyFailed?: boolean
+  model: TrendModel; variance: number | null; historyFailed?: boolean
 }) {
   const tr = t
   const fmtPp = (n: number) => `${formatPp1(n)}%p`
@@ -91,9 +92,10 @@ export async function SpiPanel({ model, variance, historyFailed = false }: {
         {spark}
         <div className="grid grid-cols-2 gap-3">
           <Stat label={tr('dash.spi.current')} value={spi == null ? '—' : spi.toFixed(2)} tone={spiTone} />
-          <Stat label={tr('dash.spi.varianceNow')} value={fmtPp(variance)} tone={SIG_TONE[progressSignal(variance)]} />
+          <Stat label={tr('dash.spi.varianceNow')} value={variance == null ? '—' : fmtPp(variance)} tone={variance == null ? 'text-fg' : SIG_TONE[progressSignal(variance)]} />
         </div>
         <div className="text-meta text-fg-muted">{tr('dash.spi.hint')}</div>
+        {variance == null && <div data-spi-no-plan className="text-meta text-fg-muted">{tr('dash.spi.noPlan')}</div>}
       </div>
     </SectionCard>
   )

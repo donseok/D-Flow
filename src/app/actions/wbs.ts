@@ -19,7 +19,7 @@ import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { AGENT_HELD_ORDER_STATUSES, stageLockedForHuman } from '@/lib/domain/agentWork'
 import { DEFAULT_APPROVAL_STEPS, actualHundredBlocked } from '@/lib/domain/approvalSteps'
 import { failWith } from '@/lib/errors/dbFail'
-import { actualPctViolation, weightViolation } from '@/lib/domain/wbsValueRules'
+import { actualPctViolation, weightViolation, wbsNameViolation } from '@/lib/domain/wbsValueRules'
 import { WBS_ACTION_ERRORS as E } from '@/lib/wbs/actionErrors'
 import { configText, CONFIG_MESSAGES, ConfigKeyError, ConfigUnavailableError, dbToken } from '@/lib/settings/errors'
 import { projectTeams } from '@/lib/teams/source'
@@ -360,6 +360,7 @@ export async function addWbsItem(
   const g = await requireProjectAdmin(projectId)
   if (!g.ok) return { ok: false, error: g.error }
   if (!name.trim()) return { ok: false, error: E.nameRequired }
+  if (wbsNameViolation(name)) return { ok: false, error: E.nameTooLong }   // 화면 입력(maxLength)과 같은 상한 — 액션을 직접 불러도 같다(BUG-23)
   const sb = await createServerClient()
   let q = sb.from('wbs_items').select('sort_order, is_owner_split').eq('project_id', projectId)
   q = parentId ? q.eq('parent_id', parentId) : q.is('parent_id', null)
@@ -549,6 +550,8 @@ export async function updateWbsFields(
   const logs: { field: string; old: string | null; new: string | null }[] = []
   if (fields.name !== undefined) {
     if (!fields.name.trim()) return { ok: false, error: E.nameRequired }
+    // 이름을 실제로 바꿀 때만 본다 — 상한보다 긴 옛 이름을 둔 채 일정만 고치는 저장을 막지 않는다
+    if (fields.name.trim() !== item.name && wbsNameViolation(fields.name)) return { ok: false, error: E.nameTooLong }
     if (fields.name.trim() !== item.name) { patch.name = fields.name.trim(); logs.push({ field: 'name', old: item.name, new: fields.name.trim() }) }
   }
   const ns = fields.plannedStart === undefined ? undefined : (fields.plannedStart || null)

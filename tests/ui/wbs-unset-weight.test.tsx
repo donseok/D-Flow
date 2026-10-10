@@ -82,7 +82,16 @@ describe('WbsGanttSheet — 가중치 미지정 N개', () => {
   it('루트 [0.5, null, null] — 같은 형제 그룹의 null 둘 → "미지정 2개", 설명 title', async () => {
     await renderSheet([leaf('a', 0.5), leaf('b', null), leaf('c', null)])
     expect(unsetText()).toBe('미지정 2개')
-    expect(container.querySelector('[data-unset-weight]')!.getAttribute('title')).toContain('같은 몫')
+    // 툴팁이 지금 적용되는 계산 규칙을 적는다(BUG-13) — 비운 항목은 남은 몫을 나눠 받는다
+    const title = container.querySelector('[data-unset-weight]')!.getAttribute('title')!
+    expect(title).toContain('남은 몫')
+    expect(title).not.toContain('100% 초과')
+    expect(container.querySelector('[data-weight-over]')).toBeNull()
+  })
+  it('지정 합이 100% 를 넘은 섞인 그룹 — "합 100% 초과"를 같이 알린다(BUG-13)', async () => {
+    await renderSheet([leaf('a', 0.7), leaf('b', 0.6), leaf('c', null)])
+    expect(unsetText()).toBe('미지정 1개 · 합 100% 초과')
+    expect(container.querySelector('[data-weight-over]')!.getAttribute('title')).toContain('가중치 합 100% 초과')
   })
   it('합계 칸 곁 — 미지정 수가 보여도 합계(N%)는 그대로 보인다', async () => {
     await renderSheet([leaf('a', 0.5), leaf('b', null), leaf('c', null)])

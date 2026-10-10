@@ -179,3 +179,36 @@ describe('buildTrend — SPI / velocity', () => {
     expect(m.velocityWeek).toBeNull()
   })
 })
+
+describe('[BUG-34] 일정 미지정 잎 — 계획 곡선의 분모에는 들고(계산 불변) 건수는 모델이 알린다', () => {
+  const rows = [
+    row({ id: 'a', sortOrder: 1, plannedStart: '2026-01-01', plannedEnd: '2026-02-01', actualPct: 30 }),
+    row({ id: 'b', sortOrder: 2, plannedStart: null, plannedEnd: null }),
+    row({ id: 'c', sortOrder: 3, plannedStart: '2026-01-01', plannedEnd: null }),   // 한쪽만 — 계획%는 0 이다(plannedPct 의 가드)
+  ]
+  const m = buildTrend({ items: items(rows), snapshots: [], calendar: calUtcSun, startDate: '2026-01-01', endDate: '2026-04-10', today: TODAY, opts: OPTS })
+  it('unscheduledLeaves = 시작·종료 가운데 하나라도 없는 잎 수', () => { expect(m.unscheduledLeaves).toBe(2) })
+  it('계획 곡선은 종전 계산 그대로 — 일정 있는 잎 하나(1/3)만 차서 33.3 에서 멈춘다', () => {
+    expect(m.plannedSeries[m.plannedSeries.length - 1].pct).toBe(33.3)
+  })
+  it('전부 일정이 있으면 0', () => {
+    expect(buildTrend({ items: items(baseRows), snapshots: [], calendar: calUtcSun, startDate: '2026-01-01', endDate: '2026-04-10', today: TODAY, opts: OPTS }).unscheduledLeaves).toBe(0)
+  })
+})
+
+describe('[BUG-13] 계획 곡선도 같은 가중치 규칙 — 일부만 지정한 그룹의 미지정은 남은 몫', () => {
+  it('plannedCurve = plannedAt (섞인 가중치: 0.6·미지정, 합 초과: 0.7·0.6·미지정)', () => {
+    const mixed = [
+      row({ id: 'a', sortOrder: 1, weight: 0.6, plannedStart: '2026-01-01', plannedEnd: '2026-01-30' }),
+      row({ id: 'b', sortOrder: 2, weight: null, plannedStart: '2026-02-01', plannedEnd: '2026-03-30' }),
+      row({ id: 'b1', parentId: 'b', sortOrder: 1, weight: 0.7, plannedStart: '2026-02-01', plannedEnd: '2026-02-10' }),
+      row({ id: 'b2', parentId: 'b', sortOrder: 2, weight: 0.6, plannedStart: '2026-02-11', plannedEnd: '2026-02-20' }),
+      row({ id: 'b3', parentId: 'b', sortOrder: 3, weight: null, plannedStart: '2026-02-21', plannedEnd: '2026-03-30' }),
+    ]
+    const dates = ['2026-01-15', '2026-01-30', '2026-02-10', '2026-02-20', '2026-03-30']
+    expect(plannedCurve(mixed, dates, calUtcSun, OPTS)).toEqual(dates.map(date => ({ date, pct: plannedAt(mixed, date, calUtcSun, OPTS) })))
+    // a(60%)가 끝난 날 전체 계획은 60 — 옛 규칙(미지정 = 100%)이면 0.6/1.6 = 37.5 였다
+    expect(plannedAt(mixed, '2026-01-30', calUtcSun, OPTS)).toBe(60)
+  })
+})
+

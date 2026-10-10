@@ -56,11 +56,17 @@ describe('sheetWeekMeta — 시트 머리(금주 범위·차주 범위)', () => 
 })
 
 describe('weekDisplayLabel — 화면 표시용 주차 라벨', () => {
-  it('시트 머리의 라벨·범위와 글자까지 같다', () => {
-    for (const [cal, key] of [[calUtcMon, '2026-07-06'], [calUtcSun, '2026-06-28'], [calTransition, '2026-10-05']] as const) {
-      const m = sheetWeekMeta(cal, key)
-      expect(weekDisplayLabel(cal, key)).toBe(`${m.label} (${m.thisRange})`)
+  it('라벨은 시트 머리와 같고, 범위는 그 주의 기간 전체다 — 주 시작 설정이 정한 첫날~끝날(BUG-16)', () => {
+    // 월요일 시작: 7/6(월)~7/12(일). 일요일 시작: 6/28(일)~7/4(토). 과도기 주(월→일, E = 10-11): 10/5~10/10 의 6일
+    for (const [cal, key, range] of [[calUtcMon, '2026-07-06', '7/6~7/12'], [calUtcSun, '2026-06-28', '6/28~7/4'], [calTransition, '2026-10-05', '10/5~10/10']] as const) {
+      expect(weekDisplayLabel(cal, key)).toBe(`${sheetWeekMeta(cal, key).label} (${range})`)
     }
+  })
+  it('리포트의 사례 — 주 시작 일요일, 토요일(10/10)이 든 주는 10/4~10/10 이다(근무일 범위 10/5~10/9 는 열 머리의 것)', () => {
+    const key = normalizeWeekParam(calUtcSun.weekStart, '2026-10-10', '2026-10-10')
+    expect(key).toBe('2026-10-04')
+    expect(weekDisplayLabel(calUtcSun, key)).toContain('(10/4~10/10)')
+    expect(sheetWeekMeta(calUtcSun, key).thisRange).toBe('10/5~10/9')
   })
 })
 

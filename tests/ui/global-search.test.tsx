@@ -19,7 +19,7 @@ vi.mock('@/app/actions/globalSearch', () => ({
     if (query === 'throw') throw new Error('network')
     if (query === 'Alpha') {
       return scope === 'project'
-        ? { ok: true, projects: [], wbsItems: [{ type: 'wbs', id: 'w-1', code: '1.1', title: 'Alpha Item', projectId: 'p-1', href: '/p/p-1/wbs?focus=w-1' }] }
+        ? { ok: true, projects: [], wbsItems: [{ type: 'wbs', id: 'w-1', number: '1.1', title: 'Alpha Item', projectId: 'p-1', href: '/p/p-1/wbs?focus=w-1' }] }
         : { ok: true, projects: [{ type: 'project', id: 'p-1', name: 'Alpha Project', href: '/p/p-1/dashboard' }], wbsItems: [] }
     }
     return { ok: true, projects: [], wbsItems: [] }

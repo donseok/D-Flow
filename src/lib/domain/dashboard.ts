@@ -108,6 +108,15 @@ export function dueSoonLeaves(leaves: ComputedItem[], today: string, days: numbe
     .sort((a, b) => (a.plannedEnd! < b.plannedEnd! ? -1 : a.plannedEnd! > b.plannedEnd! ? 1 : 0))
 }
 
+/**
+ * 화면에 보일 현재 편차(실적 − 계획, %p) — 계획이 아직 0 이면 null(화면은 '—').
+ * SPI(실적÷계획)를 낼 수 없는 때에 편차만 '+15.0%p' 로 보이면 한 카드 안에서 말이 갈린다(사용자 테스트 BUG-34): 견줄 계획이 없으면
+ * 앞섬·뒤처짐을 말할 수 없다. 계획이 0 보다 크면 그대로 낸다 — 신호·보고서가 쓰는 편차 계산(buildExecSummary)은 바꾸지 않는다.
+ */
+export function varianceOrNull(actual: number, planned: number): number | null {
+  return planned > 0 ? round1(actual - planned) : null
+}
+
 /* ── 신호 경계 단일 출처 — SpiPanel(게이지 색)·riskSignals(위험 신호 엔진)가 이 값을 임포트한다.
  * 이전엔 각자 리터럴/미러 상수로 들고 있어, 경계를 조정하면 화면 색과 위험 신호가 서로 다른
  * 기준으로 갈라질 수 있었다. 값 변경은 여기 한 곳에서만 한다(값 자체는 종전과 동일). */
@@ -244,7 +253,7 @@ export function delayAging(leaves: ComputedItem[], today: string, limit = 8): Ag
 /* ── 데이터 위생 — 계획 데이터 품질(계획 데이터 거버넌스) ── */
 export interface HygieneModel { noOwner: number; noDates: number; mixedWeight: number; clean: boolean }
 
-/** mixedWeight: 형제 그룹에서 weight 가 일부만 null 이면 카운트. 롤업 규칙은 하나다(rollup.ts 의 가중치 규칙 — null = 1) — 이 경고는 '가중치 미지정 N개'(rollup.unsetWeightCount) 표시의 근거다. */
+/** mixedWeight: 형제 그룹에서 weight 가 일부만 null 이면 카운트. 롤업 규칙은 하나다(rollup.ts effectiveWeights — 섞인 그룹의 미지정은 남은 몫을 나눠 받는다) — 이 경고는 '가중치 미지정 N개'(rollup.unsetWeightCount) 표시의 근거다. */
 export function dataHygiene(items: ComputedItem[]): HygieneModel {
   const leaves = collectLeaves(items)
   const noOwner = leaves.filter(l => l.owners.length === 0).length

@@ -25,6 +25,8 @@ import { stampedFileName } from '@/lib/domain/minutes'
 import { formatWeightPct, formatPct1, fmtSize } from '@/lib/domain/format'
 import { DependencyEgoGraph, type EgoNode } from './DependencyEgoGraph'
 import { LevelBadge, OwnerBadges, STATUS, StatusChip, fmtDate } from './shared'
+import { WBS_NAME_MAX } from '@/lib/domain/wbsValueRules'
+import type { ShownSchedule } from '@/lib/domain/wbsDerived'
 import { WbsAssigneeStagePanel } from './WbsAssigneeStagePanel'
 import { ChangeHistoryList } from './ChangeHistoryList'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -35,6 +37,7 @@ import type { DictKey } from '@/lib/i18n/dict'
 const EMPTY_MEMBERS: ProjectMember[] = []
 // 매 렌더 새 리터럴이면 readiness useMemo 가 매번 다시 돈다 — 모듈 상수로 고정.
 const EMPTY_REFS: string[] = []
+const EMPTY_NUMBERS: ReadonlyMap<string, string> = new Map()
 
 /** WBS 행 상세 패널 — 읽기(개요/담당/일정/진척/산출물 + 변경 이력)
  *  + 관리자 편집(이름·일정·산출물 수정, 하위 추가, 순서 이동, 삭제). */
@@ -42,9 +45,15 @@ export function RowDetailPanel({
   item, allItems = [], dependencies = [], schedule, onClose, editable = false, canAttach = false,
   canEditDeliverable = false, projectId, workspaceId = null, levelLabels, maxDepth = null,
   members = EMPTY_MEMBERS, onSelectItem, unresolvedRefs = EMPTY_REFS, timeZone,
-  predecessorGate = 'reached', approvedItemIds, extraAxisLabel = null,
+  predecessorGate = 'reached', approvedItemIds, extraAxisLabel = null, numbers = EMPTY_NUMBERS, shown, outOfRange = false,
 }: {
   item: ComputedItem
+  /** 개요 번호(항목 id → 1.2.1) — 표의 번호 열과 같은 계산(wbsDerived.outlineNumbers)을 숙주가 넘긴다. 저장 code 는 보이지 않는다(BUG-05) */
+  numbers?: ReadonlyMap<string, string>
+  /** 표시 일정(BUG-12) — 직접 입력이 없으면 하위에서 계산한 값. 없으면 항목의 값 그대로 */
+  shown?: ShownSchedule
+  /** 직접 입력한 일정이 프로젝트 기간을 벗어났는가(BUG-14) */
+  outOfRange?: boolean
   allItems?: ComputedItem[]
   dependencies?: TaskDependency[]
   schedule?: TaskSchedule
@@ -408,9 +417,10 @@ export function RowDetailPanel({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <LevelBadge depth={item.depth} isOwnerSplit={item.isOwnerSplit} levelLabels={levelLabels} t={t} />
-              {item.code && <span className="text-meta font-semibold tabular-nums text-fg-muted">{item.code}</span>}
+              {numbers.get(item.id) && <span data-wbs-detail-number className="text-meta font-semibold tabular-nums text-fg-muted">{numbers.get(item.id)}</span>}
             </div>
-            <h2 className="mt-1.5 break-words text-[16px] font-bold leading-snug text-fg">{item.name}</h2>
+            {/* 긴 이름은 두 줄까지만 — 200자 이름이 머리를 여덟 줄로 늘려 본문을 가렸다(BUG-23). 전체 이름은 툴팁으로 */}
+            <h2 data-wbs-detail-title title={item.name} className="mt-1.5 line-clamp-2 break-all text-[16px] font-bold leading-snug text-fg">{item.name}</h2>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {editable && !editing && (
@@ -424,7 +434,7 @@ export function RowDetailPanel({
           {editing ? (
             <section className="space-y-3">
               <label className="block"><span className="mb-1 block text-meta font-semibold text-fg-secondary">{t('wbs.fieldName')}</span>
-                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="app-input" /></label>
+                <input value={form.name} maxLength={WBS_NAME_MAX} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="app-input" /></label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block"><span className="mb-1 block text-meta font-semibold text-fg-secondary">{t('wbs.colPlannedStart')}</span>
                   <input type="date" value={form.start} onChange={e => setForm(f => ({ ...f, start: e.target.value }))} className="app-input px-2 text-xs" /></label>
@@ -459,7 +469,13 @@ export function RowDetailPanel({
                   {item.owners.length ? <OwnerBadges owners={item.owners} /> : <span className="text-fg-muted">{t('wbs.unassigned')}</span>}
                 </DlRow>
                 <DlRow label={t('wbs.plannedSchedule')}>
-                  <span className="tabular-nums">{fmtDate(item.plannedStart)} ~ {fmtDate(item.plannedEnd)}</span>
+                  <span data-wbs-detail-schedule className="tabular-nums">
+                    <span className={shown?.startDerived ? 'italic text-fg-muted' : undefined}>{fmtDate(shown ? shown.start : item.plannedStart)}</span>
+                    {' ~ '}
+                    <span className={shown?.endDerived ? 'italic text-fg-muted' : undefined}>{fmtDate(shown ? shown.end : item.plannedEnd)}</span>
+                  </span>
+                  {(shown?.startDerived || shown?.endDerived) && <span data-wbs-detail-derived className="block text-meta text-fg-muted">{t('wbs.derivedSchedule')}</span>}
+                  {outOfRange && <span data-wbs-detail-out-of-range className="block text-meta font-semibold text-warning">{t('wbs.outOfRangeCell')}</span>}
                 </DlRow>
                 <DlRow label={t('wbs.colWeight')}>
                   <span className="tabular-nums">{item.weight == null ? t('wbs.weightEqualSiblings') : formatWeightPct(item.weight)}</span>
@@ -587,6 +603,7 @@ export function RowDetailPanel({
                 <div className="mt-2">
                   <DependencyEgoGraph
                     item={item}
+                    numbers={numbers}
                     predecessors={egoPredecessors}
                     successors={egoSuccessors}
                     onOpen={onSelectItem}
@@ -609,6 +626,7 @@ export function RowDetailPanel({
                         <DependencyRow
                           key={dep.id}
                           linked={itemById.get(dep.predecessorId) ?? null}
+                          number={numbers.get(dep.predecessorId)}
                           badge={`${dep.type}${dep.lagDays > 0 ? ` +${dep.lagDays}` : ''}`}
                           badgeTitle={dep.type === 'FS' ? t('wbs.fsLong') : t('wbs.ssLong')}
                           state={readiness.byDependencyId.get(dep.id) ?? 'unknown'}
@@ -650,6 +668,7 @@ export function RowDetailPanel({
                         <DependencyRow
                           key={dep.id}
                           linked={itemById.get(dep.successorId) ?? null}
+                          number={numbers.get(dep.successorId)}
                           badge={`${dep.type}${dep.lagDays > 0 ? ` +${dep.lagDays}` : ''}`}
                           badgeTitle={dep.type === 'FS' ? t('wbs.fsLong') : t('wbs.ssLong')}
                           state={null}
@@ -677,7 +696,7 @@ export function RowDetailPanel({
                         <select value={predecessorId} onChange={e => setPredecessorId(e.target.value)} className="app-input h-9 text-xs">
                           <option value="">{t('wbs.selectTask')}</option>
                           {predecessorCandidates.map(candidate => (
-                            <option key={candidate.id} value={candidate.id}>{candidate.code ? `${candidate.code} · ` : ''}{candidate.name}</option>
+                            <option key={candidate.id} value={candidate.id}>{numbers.get(candidate.id) ? `${numbers.get(candidate.id)} · ` : ''}{candidate.name}</option>
                           ))}
                         </select>
                       </label>
@@ -732,7 +751,7 @@ export function RowDetailPanel({
                     <p className="rounded-lg bg-pending-weak px-2.5 py-1.5 text-meta leading-snug text-pending">{t('wbs.addChildLeafWarn')}</p>
                   )}
                   <div className="flex gap-2">
-                    <input autoFocus value={addName} onChange={e => setAddName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addChild() }} placeholder={`${levelLabels[item.depth + 1] ?? t('wbs.itemFallback')} ${t('wbs.namePlaceholderSuffix')}`} className="app-input h-8 text-xs" />
+                    <input autoFocus value={addName} maxLength={WBS_NAME_MAX} onChange={e => setAddName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addChild() }} placeholder={`${levelLabels[item.depth + 1] ?? t('wbs.itemFallback')} ${t('wbs.namePlaceholderSuffix')}`} className="app-input h-8 text-xs" />
                     <button onClick={addChild} disabled={busy || !addName.trim()} className="btn btn-primary h-8 px-3 text-xs">{t('common.add')}</button>
                   </div>
                 </div>
@@ -820,7 +839,7 @@ export function RowDetailPanel({
   return (
     <div className="fixed inset-0 z-(--z-overlay)" role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-fg/20" onClick={onClose} aria-hidden />
-      <aside style={{ width: panelWidth, maxWidth: '100vw' }} className="absolute right-0 top-0 flex h-full flex-col bg-surface shadow-(--shadow-xl)">{body}</aside>
+      <aside data-wbs-detail-panel style={{ width: panelWidth, maxWidth: '100vw' }} className="absolute right-0 top-0 flex h-full flex-col bg-surface shadow-(--shadow-xl)">{body}</aside>
     </div>
   )
 }
@@ -1001,9 +1020,11 @@ function lastRefSegment(ref: string): string {
 /** 선행·후속 한 줄 — 이름(클릭 시 그 작업으로 상세 이동) · 진행 상태 · 관계 배지 · 삭제.
  *  이름만 버튼으로 두는 이유: 행 전체를 버튼으로 감싸면 삭제 버튼이 버튼 안에 중첩된다. */
 function DependencyRow({
-  linked, missingLabel, badge, badgeTitle, state, imported = false, onOpen, onRemove, removeDisabled, t,
+  linked, number, missingLabel, badge, badgeTitle, state, imported = false, onOpen, onRemove, removeDisabled, t,
 }: {
   linked: ComputedItem | null
+  /** 그 작업의 개요 번호(표의 번호 열과 같은 값 — 저장 code 가 아니다, BUG-05) */
+  number?: string
   /** linked 가 없을 때 이름 자리에 쓸 문자열. 없으면 '알 수 없는 작업'. */
   missingLabel?: string
   badge: string
@@ -1025,7 +1046,7 @@ function DependencyRow({
   const name = linked?.name ?? missingLabel ?? t('wbs.missingTask')
   const label = (
     <>
-      {linked?.code && <span className="mr-1 text-fg-muted">{linked.code}</span>}
+      {linked && number && <span className="mr-1 tabular-nums text-fg-muted">{number}</span>}
       {name}
     </>
   )

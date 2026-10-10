@@ -8,6 +8,7 @@ import { useEscHandler, ESC_PRIORITY } from '@/lib/ui/escStack'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { searchTitles, type SearchProjectItem, type SearchWbsItem } from '@/app/actions/globalSearch'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { wbsNumberedName } from '@/lib/domain/wbsDerived'
 import type { NavGroup } from '@/lib/nav/registry'
 
 /** 검색 대화상자가 보일 메뉴 — 사이드 내비와 같은 navFor 결과다(저장한 순서·이름 navigation.menu, 모듈·권한으로 걸러진 항목).
@@ -156,7 +157,8 @@ export function GlobalSearchDialog({
     ...wbsItems.map((w) => ({
       kind: 'wbs' as const,
       id: `wbs-${w.id}`,
-      title: `${w.code} ${w.title}`,
+      // 번호 + 이름 — 이름이 이미 그 번호로 시작하면("1. 착수준비") 번호를 다시 붙이지 않는다(BUG-05 의 "코드+이름" 중복)
+      title: wbsNumberedName(w.number, w.title),
       subtitle: t('search.sub.wbs'),
       href: w.href,
     })),
