@@ -102,4 +102,16 @@ describe('SyncStatus component', () => {
     await mount()
     expect(container.textContent).toContain('동기화됨')
   })
+  // 재테스트(2026-10-10): 시간대를 주지 않으면 UTC 로 적어 한국에서 9시간 어긋났다(20:42 저장이 11:42 로 보임)
+  it('저장 시각은 보는 사람의 시간대로 적는다 — 시간대를 주면 그 시간대', async () => {
+    const clock = (at: number, timeZone?: string) => new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone }).format(new Date(at))
+    const before = Date.now()
+    editSessionStore.setSession('s-1', 'wbs', 'i-1', 'saved')
+    const after = Date.now()
+    await mount()
+    // 분이 넘어가는 순간에 걸려도 통과하게 저장 앞뒤 시각을 둘 다 받는다
+    expect([clock(before), clock(after)].some((c) => container.textContent!.includes(c))).toBe(true)
+    await act(async () => root.render(<SyncStatus timeZone="Pacific/Kiritimati" />))
+    expect([clock(before, 'Pacific/Kiritimati'), clock(after, 'Pacific/Kiritimati')].some((c) => container.textContent!.includes(c))).toBe(true)
+  })
 })

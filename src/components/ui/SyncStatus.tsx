@@ -27,7 +27,9 @@ export function useSyncStatus(): SyncSummary {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
-function formatTime(timestamp: number | null, timeZone: string = 'UTC'): string {
+// 시간대를 주지 않으면 보는 사람 브라우저의 시간대다 — 방금 저장한 시각은 그 사람의 시계와 맞아야 한다(UTC 로 적으면 한국에서 9시간 어긋난다).
+// 서버는 lastSavedAt 이 없어 시각을 그리지 않으므로 수화 불일치가 생기지 않는다.
+function formatTime(timestamp: number | null, timeZone?: string): string {
   if (!timestamp) return ''
   return new Intl.DateTimeFormat(KO_LOCALE, {
     hour: '2-digit',
@@ -37,7 +39,7 @@ function formatTime(timestamp: number | null, timeZone: string = 'UTC'): string 
   }).format(new Date(timestamp))
 }
 
-export function SyncStatus({ className = '', timeZone = 'UTC' }: { className?: string; timeZone?: string }) {
+export function SyncStatus({ className = '', timeZone }: { className?: string; timeZone?: string }) {
   const summary = useSyncStatus()
   const { t } = useLocale()
 
