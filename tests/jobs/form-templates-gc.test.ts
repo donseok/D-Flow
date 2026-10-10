@@ -2,8 +2,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { INCOMING_GRACE_MS, runFormTemplatesGc, type IncomingGcClient } from '@/lib/forms/incomingGc'
 
-const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn() }))
+const mocks = vi.hoisted(() => ({ createAdminClient: vi.fn(), archivedWorkspaceIds: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminClient }))
+// 보관된 워크스페이스 목록(0056) — 라우트가 정리 전에 읽는다. 기본은 "보관된 워크스페이스 없음"
+vi.mock('@/lib/workspace/archived', () => ({ archivedWorkspaceIds: mocks.archivedWorkspaceIds }))
 
 import { GET } from '@/app/api/cron/form-templates-gc/route'
 
@@ -105,6 +107,19 @@ describe('runFormTemplatesGc', () => {
   })
 })
 
+describe('runFormTemplatesGc — 보관된 워크스페이스(0056)', () => {
+  const W2 = 'dddddddd-4444-4444-8444-444444444444'
+  it('건너뛸 워크스페이스의 파일은 목록도 읽지 않고 지우지도 않는다 — 다른 워크스페이스는 그대로 정리한다', async () => {
+    const stale = new Date(Date.now() - INCOMING_GRACE_MS - 60_000).toISOString()
+    const b = bucket([{ path: inc('a.pptx'), createdAt: stale }, { path: inc('b.pptx', 'weekly_report_pptx', W2), createdAt: stale }])
+    const res = await runFormTemplatesGc(b.client, Date.now(), new Set([W2]))
+    expect(res).toMatchObject({ ok: true, scanned: 1, deleted: 1, failed: 0 })
+    expect(b.removed.flat()).toEqual([inc('a.pptx')])
+    expect(b.store.has(inc('b.pptx', 'weekly_report_pptx', W2))).toBe(true)
+    expect(b.listed.some((p) => p.startsWith(`ws/${W2}`))).toBe(false)
+  })
+})
+
 describe('GET /api/cron/form-templates-gc', () => {
   const req = (headers: Record<string, string> = {}) => new Request('http://localhost/api/cron/form-templates-gc', { headers })
   const BEARER = { authorization: 'Bearer gc-secret' }
@@ -113,6 +128,31 @@ describe('GET /api/cron/form-templates-gc', () => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
     vi.stubEnv('CRON_SECRET', 'gc-secret')
+    mocks.archivedWorkspaceIds.mockResolvedValue(new Set())
+  })
+
+  it('보관된 워크스페이스(0056)는 건너뛴다 — 그 파일은 남고 수량에도 들지 않는다', async () => {
+    const stale = new Date(Date.now() - INCOMING_GRACE_MS - 60_000).toISOString()
+    const b = bucket([{ path: inc('old.pptx'), createdAt: stale }])
+    mocks.createAdminClient.mockReturnValue(b.client)
+    mocks.archivedWorkspaceIds.mockResolvedValue(new Set([W]))
+    const res = await GET(req(BEARER))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, scanned: 0, deleted: 0, failed: 0, skippedYoung: 0, skippedNoTime: 0 })
+    expect(b.removed).toEqual([])
+    expect(mocks.archivedWorkspaceIds).toHaveBeenCalledWith(b.client)
+  })
+
+  it('보관된 워크스페이스 목록을 못 읽으면 아무것도 지우지 않고 500 — 보관 여부를 모르는 채 지우지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const b = bucket([{ path: inc('old.pptx'), createdAt: new Date(Date.now() - INCOMING_GRACE_MS - 60_000).toISOString() }])
+    mocks.createAdminClient.mockReturnValue(b.client)
+    mocks.archivedWorkspaceIds.mockRejectedValue(new Error('workspaces down'))
+    const res = await GET(req(BEARER))
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'LIST_FAILED' })
+    expect(b.removed).toEqual([])
+    spy.mockRestore()
   })
 
   it('CRON_SECRET 미설정이면 404 — 클라이언트를 만들지 않는다', async () => {

@@ -30,6 +30,8 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   apply_workflow_event_cas: ['wbs_items', 'agent_work_orders', 'change_logs', 'wbs_stage_approvals'],
   apply_workflow_event_stage_cas: ['wbs_items', 'agent_work_orders', 'change_logs', 'wbs_stage_approvals'],
   apply_workspace_settings: ['workspace_settings', 'workspace_settings_history'],
+  // 0056 — 워크스페이스 보관. 본문이 쓰는 표는 workspaces 하나다(보관 기록 열만 고친다 — 모듈 표의 행은 건드리지 않는다)
+  archive_workspace: ['workspaces'],
   can_attach: [],
   // 팀 유연화 2단계 — 코드 변경은 팀 행과 그 팀 회의록의 사본 열(team_code)
   change_team_code: ['teams', 'minutes'],
@@ -56,6 +58,8 @@ export const RPC_TABLES: Readonly<Record<string, readonly string[]>> = {
   remove_workspace_member: ['workspace_members', 'project_invites', 'integration_credentials'],
   // 0055 — 워크스페이스 이름(행의 name 한 칸)
   rename_workspace: ['workspaces'],
+  // 0056 — 보관된 워크스페이스 복원. workspaces 의 보관 기록 열을 비우고 복원 시각·실행자를 적는다
+  restore_workspace: ['workspaces'],
   set_platform_admin: ['authz_commands', 'platform_admins'],
   set_workspace_role: ['authz_commands', 'workspace_members'],
   team_reference_counts: [], // 병합 미리보기 — 건수만 읽는다

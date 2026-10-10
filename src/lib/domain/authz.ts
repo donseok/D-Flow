@@ -40,6 +40,16 @@ export interface Actor {
   /** projectId → 내 팀 전부(project_member_teams). 대표 팀이 첫 원소.
    *  teamNames 는 teamCodes 와 같은 순서의 팀 이름 — 표시 전용이다(계정 메뉴의 소속). 판정·대조에는 쓰지 않는다. 없으면 code 로 보인다. */
   rosterTeams: ReadonlyMap<string, { teamIds: readonly string[]; teamCodes: readonly string[]; teamNames?: readonly string[] }>
+  /**
+   * 플랫폼 관리자의 "있는(보관 아닌) 워크스페이스" 전부 — buildActor 가 플랫폼 관리자에게만 싣는다(워크스페이스 보관, 0056).
+   * 플랫폼 관리자는 소속 맵과 무관하게 통과하므로, 이 집합이 있으면 그 밖의 워크스페이스와 projectWorkspace 에 없는 프로젝트를 "없음"으로 판정한다
+   * (보관된 워크스페이스는 플랫폼 관리자에게도 404 — 들어가 읽는 길은 복원이다). 없으면(화면용 복원 actorFromView·테스트 대역) 예전처럼 전부 통과다.
+   */
+  liveWorkspaceIds?: ReadonlySet<string>
+}
+/** 플랫폼 관리자에게 그 워크스페이스가 "없는 것"인가 — liveWorkspaceIds 를 실은 스냅샷에서만 판정한다 */
+function goneForSuperuser(actor: Actor, workspaceId: string): boolean {
+  return actor.liveWorkspaceIds !== undefined && !actor.liveWorkspaceIds.has(workspaceId)
 }
 
 /** 워크스페이스 관리자 승계와 명단 역할을 한 판정자로 계산한다(D37). */
@@ -65,7 +75,11 @@ export function effectiveRoleOfRow(row: { kind: 'account' | 'external'; userId: 
  */
 export function roleIn(actor: Actor | null, projectId: string | null): EffectiveRole | null {
   if (!actor) return null                                        // ① 비로그인
-  if (actor.isSuperuser) return 'superuser'                      // ② 플랫폼 관리자(pid null 포함)
+  if (actor.isSuperuser) {                                       // ② 플랫폼 관리자(pid null 포함)
+    // 보관된 워크스페이스의 프로젝트(와 없는 프로젝트)는 플랫폼 관리자에게도 없음이다 — buildActor 는 있는 프로젝트 전부를 싣는다(isHiddenProject 와 같은 근거)
+    if (projectId && actor.liveWorkspaceIds !== undefined && !actor.projectWorkspace.has(projectId)) return null
+    return 'superuser'
+  }
   if (!projectId) return 'viewer'                                // ③ 미지정 — fail-closed
   const wid = actor.projectWorkspace.get(projectId)
   if (!wid) return null                                          // ④ 타 워크스페이스·미존재 — 존재 은닉
@@ -96,7 +110,7 @@ export function isHiddenProject(actor: Actor | null, projectId: string, hiddenPr
 }
 export function workspaceRoleIn(actor: Actor | null, workspaceId: string): 'superuser' | WorkspaceRole | null {
   if (!actor) return null
-  if (actor.isSuperuser) return 'superuser'
+  if (actor.isSuperuser) return goneForSuperuser(actor, workspaceId) ? null : 'superuser'   // 보관·미존재는 플랫폼 관리자에게도 없음
   return actor.workspaceRoles.get(workspaceId) ?? null
 }
 export function isWorkspaceAdmin(actor: Actor | null, workspaceId: string | null | undefined): boolean {
@@ -107,7 +121,7 @@ export function isWorkspaceAdmin(actor: Actor | null, workspaceId: string | null
 export type WorkspaceGuardVerdict = 'ok' | 'missing' | 'denied'
 /** 워크스페이스 관리 가드의 순수 판정. 소속이 없거나 id 가 없으면 'missing'(존재 은닉 — 404), 멤버면 'denied'(403). */
 export function workspaceAdminVerdict(actor: Actor, workspaceId: string | null): WorkspaceGuardVerdict {
-  if (actor.isSuperuser) return 'ok'
+  if (actor.isSuperuser) return workspaceId && goneForSuperuser(actor, workspaceId) ? 'missing' : 'ok'   // 보관된 워크스페이스는 404(존재 은닉)
   if (!workspaceId) return 'missing'
   const r = actor.workspaceRoles.get(workspaceId)
   if (r === undefined) return 'missing'
@@ -312,7 +326,7 @@ export function hasAnyProjectRole(actor: Actor | null): boolean {
 /** 그 워크스페이스에 역할이 있는가 — 워크스페이스 관리자이거나, 그 워크스페이스 프로젝트 중 하나에 명단 권한. (0006 에서 폐기된 옛 전역 역할 판정의 워크스페이스판) */
 export function hasProjectRoleInWorkspace(actor: Actor | null, workspaceId: string | null | undefined): boolean {
   if (!actor) return false
-  if (actor.isSuperuser) return true
+  if (actor.isSuperuser) return !(workspaceId && goneForSuperuser(actor, workspaceId))
   if (!workspaceId) return false
   if (actor.workspaceRoles.get(workspaceId) === 'admin') return true
   for (const pid of actor.projectRoles.keys()) if (actor.projectWorkspace.get(pid) === workspaceId) return true

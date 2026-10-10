@@ -81,6 +81,7 @@ const baseCredRow = {
   name: 'minutes-test-token',
   token_prefix: token.prefix,
   token_hash: token.hash,
+  workspaces: { archived_at: null },
   scopes: [],
   project_ids: [P1, P3],
   default_project_id: P1,

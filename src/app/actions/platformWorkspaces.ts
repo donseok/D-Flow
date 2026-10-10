@@ -6,6 +6,8 @@
 // 스코프를 정할 id 가 없다 → service_role 클라이언트를 직접 만든다(docs/sp2-admin-client-audit.md '플랫폼').
 // 이름 변경(renameWorkspace)만 requireWorkspaceAdmin(wid) 이다 — 그 워크스페이스의 관리자도 자기 워크스페이스의 이름을 바꾼다(워크스페이스 설정 '일반').
 // 이름 변경·삭제는 RPC 한 번씩이다(0055 rename_workspace·delete_empty_workspace — 등급을 RPC 안에서 다시 판정한다).
+// 보관·복원(archivePlatformWorkspace·restorePlatformWorkspace)도 requireSuperuser + RPC 한 번씩이다(0056 archive_workspace·restore_workspace).
+// 보관된 워크스페이스는 세션에게 없는 것이다(플랫폼 관리자에게도 — 그 화면은 404). 이 목록만 service_role 로 읽어 "보관됨"으로 보인다.
 // DB 오류 원문은 로그로만 남기고 응답에는 사유 코드와 고정 문구만 싣는다(문구는 화면이 사전에서 고른다).
 import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
@@ -17,6 +19,7 @@ import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { SETTINGS_SCHEMA_VERSION, settingDef } from '@/lib/settings/registry'
 import { checkWorkspaceCreate, checkWorkspaceName, type WorkspaceCreateField, type WorkspaceCreateInputCode } from '@/lib/workspace/createInput'
 import { workspaceRemainingItems, type WorkspaceRemainingItem } from '@/lib/workspace/deleteRemaining'
+import { activeFirst, checkArchiveReason } from '@/lib/workspace/archiveInput'
 import { SLUG_RE } from '@/lib/workspace/constants'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { serverTranslator } from '@/lib/i18n/server'
@@ -31,6 +34,10 @@ export interface PlatformWorkspaceRow {
   projectCount: number
   /** 허용 모듈(비core). null = 설정을 읽지 못했거나 저장값이 손상 — 화면은 '확인 불가'로 그린다(빈 목록으로 위장하지 않는다) */
   allowedModules: ModuleId[] | null
+  /** 보관 시각(null = 활성). 보관된 워크스페이스는 멤버·관리자에게 없는 것이고, 그 화면은 플랫폼 관리자에게도 404 다 — 목록의 "열기" 대신 "복원"만 보인다 */
+  archivedAt: string | null
+  /** 보관 사유(선택 입력) */
+  archiveReason: string | null
 }
 export type PlatformWorkspaceListResult = { ok: true; rows: PlatformWorkspaceRow[] } | { ok: false; error: string }
 
@@ -52,8 +59,8 @@ export async function listPlatformWorkspaces(): Promise<PlatformWorkspaceListRes
   const admin = createAdminClient()
   try {
     const [workspaces, members, projects] = await Promise.all([
-      fetchAllPages<{ id: string; slug: string; name: string; created_at: string }>('워크스페이스', (from, to) =>
-        admin.from('workspaces').select('id, slug, name, created_at', { count: 'exact' }).order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)),
+      fetchAllPages<{ id: string; slug: string; name: string; created_at: string; archived_at: string | null; archive_reason: string | null }>('워크스페이스', (from, to) =>
+        admin.from('workspaces').select('id, slug, name, created_at, archived_at, archive_reason', { count: 'exact' }).order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, to)),
       fetchAllPages<{ workspace_id: string }>('워크스페이스 멤버', (from, to) =>
         admin.from('workspace_members').select('workspace_id', { count: 'exact' }).order('workspace_id', { ascending: true }).order('user_id', { ascending: true }).range(from, to)),
       fetchAllPages<{ workspace_id: string }>('프로젝트', (from, to) =>
@@ -69,7 +76,8 @@ export async function listPlatformWorkspaces(): Promise<PlatformWorkspaceListRes
     // 허용 모듈은 해석기(설정 표의 유일한 읽기 경로)로 읽는다. 한 워크스페이스의 설정이 손상돼도 목록 전체를 막지 않고 그 칸만 null 로 표시한다
     const allowed = await Promise.all(workspaces.map(async (w): Promise<ModuleId[] | null> => {
       try {
-        const key = (await getWorkspaceConfig(w.id, { client: admin })).keys['modules.allowed']
+        // 보관된 행의 설정도 읽는다(includeArchived) — 그 밖의 호출부에서는 보관이 곧 읽기 실패다
+        const key = (await getWorkspaceConfig(w.id, { client: admin, includeArchived: true })).keys['modules.allowed']
         return key.status === 'set' || key.status === 'default' ? [...key.value] : null
       } catch (e) {
         console.error('[platformWorkspaces] 허용 모듈 판독 실패', { workspaceId: w.id, cause: e instanceof Error ? e.message : e })
@@ -78,10 +86,14 @@ export async function listPlatformWorkspaces(): Promise<PlatformWorkspaceListRes
     }))
     return {
       ok: true,
-      rows: workspaces.map((w, i) => ({
+      // 활성 먼저, 보관된 것은 뒤(각 묶음 안은 만든 순). archived_at 이 문자열이 아니면(열이 없는 응답 등) 활성으로 읽지 않는다 —
+      // undefined 를 null 로 뭉개면 보관된 행에 "열기"가 보인다
+      rows: activeFirst(workspaces.map((w, i) => ({
         id: w.id, slug: w.slug, name: w.name, createdAt: w.created_at,
         memberCount: memberCount.get(w.id) ?? 0, projectCount: projectCount.get(w.id) ?? 0, allowedModules: allowed[i],
-      })),
+        archivedAt: w.archived_at === null ? null : String(w.archived_at),
+        archiveReason: typeof w.archive_reason === 'string' ? w.archive_reason : null,
+      }))),
     }
   } catch (e) {
     return { ok: false, error: failWith('platformWorkspaces', e, t(ERR_LIST)) }
@@ -249,4 +261,92 @@ export async function deletePlatformWorkspace(workspaceId: string, confirmSlug: 
   // 목록 화면과 전환기 목록(레이아웃 데이터)을 새로 읽게 한다
   revalidatePath('/', 'layout')
   return { ok: true, workspace: { slug: row.slug, name: row.name } }
+}
+
+/** 보관 거부 사유 — 문구는 사전(platform.ws.err.<code>, denied 는 archive_denied) */
+export type PlatformWorkspaceArchiveCode = 'denied' | 'slug_mismatch' | 'not_found' | 'reason_too_long' | 'archive_failed'
+export type PlatformWorkspaceArchiveResult =
+  | { ok: true; workspace: { slug: string; name: string }; archivedAt: string; unchanged: boolean }
+  | { ok: false; code: PlatformWorkspaceArchiveCode; error?: string }
+
+/**
+ * 워크스페이스 보관 — 플랫폼 관리자만. 보관 = 숨김 + 동결: 그 워크스페이스는 멤버·관리자에게 없는 것이 되고(화면 404·목록에서 빠짐) 그 범위의 쓰기는
+ * 전부 거부된다. 자료·토큰·초대·큐의 잡은 지우지 않는다 — 복원하면 그대로 돌아온다. 마지막 활성 워크스페이스도 보관할 수 있다.
+ * confirmSlug 는 확인 대화상자에서 사람이 직접 적은 주소다(RPC 가 그 id 의 주소와 대조한다). 이미 보관이면 쓰지 않고 그 사실을 돌려준다(unchanged).
+ * 쓰기는 archive_workspace RPC 한 번(0056 — 등급·주소·사유 길이를 RPC 가 다시 본다).
+ */
+export async function archivePlatformWorkspace(workspaceId: string, confirmSlug: string, reason?: string | null): Promise<PlatformWorkspaceArchiveResult> {
+  const t = await serverTranslator()
+  const g = await requireSuperuser()
+  if (!g.ok) return { ok: false, code: 'denied', error: libText(t, g.error) }
+  if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: 'not_found' }
+  // 주소는 다듬지 않는다 — 적은 글자 그대로 대조한다(형식 밖이면 DB 에 묻지 않는다)
+  if (typeof confirmSlug !== 'string' || !SLUG_RE.test(confirmSlug)) return { ok: false, code: 'slug_mismatch' }
+  const checked = checkArchiveReason(reason)
+  if (!checked.ok) return { ok: false, code: checked.code }
+  const admin = createAdminClient()
+  const { data, error } = await admin.rpc('archive_workspace', {
+    p_actor: g.actor.userId, p_workspace_id: workspaceId, p_expected_slug: confirmSlug, p_reason: checked.reason,
+  })
+  if (error) {
+    if (error.message.includes('WORKSPACE_SLUG_MISMATCH')) return { ok: false, code: 'slug_mismatch' }
+    if (error.message.includes('WORKSPACE_NOT_FOUND')) return { ok: false, code: 'not_found' }
+    if (error.message.includes('WORKSPACE_ARCHIVE_REASON_INVALID')) return { ok: false, code: 'reason_too_long' }
+    if (error.code === FORBIDDEN && error.message.includes('AUTHZ_FORBIDDEN')) return { ok: false, code: 'denied' }
+    console.error('[archivePlatformWorkspace] 워크스페이스 보관 실패:', error.code ?? '', error.message)
+    return { ok: false, code: 'archive_failed' }
+  }
+  const row = data as { status?: string; slug?: string; name?: string; archived_at?: string } | null
+  if (!row || (row.status !== 'archived' && row.status !== 'unchanged')
+      || typeof row.slug !== 'string' || typeof row.name !== 'string' || typeof row.archived_at !== 'string') {
+    // 성공인데 결과를 읽지 못했다 — 보관됐는지 모르는 채로 성공이라 하지 않는다
+    console.error('[archivePlatformWorkspace] RPC 결과 형태가 어긋났다')
+    return { ok: false, code: 'archive_failed' }
+  }
+  if (row.status === 'archived') {
+    // 누가 언제 접었는지는 행(archived_at·archived_by·archive_reason)에 남는다 — 서버 로그에는 id 와 실행자만(이름·주소·사유 본문은 남기지 않는다)
+    console.info('[archivePlatformWorkspace] 워크스페이스 보관', { workspaceId, actor: g.actor.userId, hasReason: checked.reason !== null })
+    // 목록 화면과 전환기 목록(레이아웃 데이터) — 그 워크스페이스가 모든 사람의 셸에서 빠진다
+    revalidatePath('/', 'layout')
+  }
+  return { ok: true, workspace: { slug: row.slug, name: row.name }, archivedAt: row.archived_at, unchanged: row.status === 'unchanged' }
+}
+
+/** 복원 거부 사유 — 문구는 사전(platform.ws.err.<code>, denied 는 restore_denied) */
+export type PlatformWorkspaceRestoreCode = 'denied' | 'not_found' | 'restore_failed'
+export type PlatformWorkspaceRestoreResult =
+  | { ok: true; workspace: { slug: string; name: string }; unchanged: boolean }
+  | { ok: false; code: PlatformWorkspaceRestoreCode; error?: string }
+
+/**
+ * 보관된 워크스페이스 복원 — 플랫폼 관리자만. 숨김·동결이 풀리고 멤버·토큰·초대·큐의 잡이 그대로 다시 동작한다.
+ * 이미 활성이면 쓰지 않고 그 사실을 돌려준다(unchanged). 쓰기는 restore_workspace RPC 한 번(0056).
+ */
+export async function restorePlatformWorkspace(workspaceId: string): Promise<PlatformWorkspaceRestoreResult> {
+  const t = await serverTranslator()
+  const g = await requireSuperuser()
+  if (!g.ok) return { ok: false, code: 'denied', error: libText(t, g.error) }
+  if (typeof workspaceId !== 'string' || !workspaceId) return { ok: false, code: 'not_found' }
+  const admin = createAdminClient()
+  const { data, error } = await admin.rpc('restore_workspace', { p_actor: g.actor.userId, p_workspace_id: workspaceId })
+  if (error) {
+    if (error.message.includes('WORKSPACE_NOT_FOUND')) return { ok: false, code: 'not_found' }
+    if (error.code === FORBIDDEN && error.message.includes('AUTHZ_FORBIDDEN')) return { ok: false, code: 'denied' }
+    console.error('[restorePlatformWorkspace] 워크스페이스 복원 실패:', error.code ?? '', error.message)
+    return { ok: false, code: 'restore_failed' }
+  }
+  const row = data as { status?: string; slug?: string; name?: string; previous?: { archived_at?: unknown; archived_by?: unknown } } | null
+  if (!row || (row.status !== 'restored' && row.status !== 'unchanged') || typeof row.slug !== 'string' || typeof row.name !== 'string') {
+    console.error('[restorePlatformWorkspace] RPC 결과 형태가 어긋났다')
+    return { ok: false, code: 'restore_failed' }
+  }
+  if (row.status === 'restored') {
+    // 복원하면 행의 보관 기록(시각·실행자·사유)이 비워진다 — 지워진 기록의 시각·실행자를 서버 로그에 남긴다(사유 본문은 남기지 않는다).
+    // 행에는 마지막 복원의 시각·실행자(restored_at·restored_by)가 남는다
+    console.info('[restorePlatformWorkspace] 워크스페이스 복원', {
+      workspaceId, actor: g.actor.userId, archivedAt: row.previous?.archived_at ?? null, archivedBy: row.previous?.archived_by ?? null,
+    })
+    revalidatePath('/', 'layout')
+  }
+  return { ok: true, workspace: { slug: row.slug, name: row.name }, unchanged: row.status === 'unchanged' }
 }

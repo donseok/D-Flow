@@ -23,7 +23,7 @@ const token = generateCredentialToken('agent_runner')
 const base = {
   id: ID, workspace_id: W1, kind: 'agent_runner', name: 'scoped', token_prefix: token.prefix, token_hash: token.hash,
   scopes: ['work:read', 'work:claim'], project_ids: [P1, P3], default_project_id: null, default_team_id: null,
-  team_map: {}, owner_user_id: U, enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z',
+  team_map: {}, owner_user_id: U, enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z', workspaces: { archived_at: null },
 }
 const actor: Actor = {
   userId: U, isSuperuser: true, workspaceRoles: new Map([[W1, 'member'], [W2, 'admin']]),

@@ -66,7 +66,7 @@ import {
   workspaceAdminAccountInput,
 } from './lib/e2e.mjs'
 import {
-  DUO, SP3B_B_TEAM, SP3B_MINUTE_B, cookieHeader, expectLocation, hiddenVerdict, issuesLinkVerdict, kanbanStubCase, legacyCases,
+  DUO, SP3B_B_TEAM, SP3B_MINUTE_B, archivedRowVerdict, cookieHeader, expectLocation, hiddenVerdict, issuesLinkVerdict, kanbanStubCase, legacyCases,
   shellBadgeVerdict, switcherVerdict,
 } from './lib/e2e.mjs'
 import {
@@ -194,6 +194,10 @@ const ACTIONS = {
   updateMinuteMeta: { filename: 'src/app/actions/minutes.ts', exportedName: 'updateMinuteMeta', worker: '/w/[slug]/minutes/[id]/page' },
   setMinuteShare: { filename: 'src/app/actions/minutes.ts', exportedName: 'setMinuteShare', worker: '/w/[slug]/minutes/[id]/page' },
   createPlatformWorkspace: { filename: 'src/app/actions/platformWorkspaces.ts', exportedName: 'createPlatformWorkspace', worker: '/admin/workspaces/page' },
+  // workspace-archive(0056) — 보관·복원과, 보관 중 거부를 볼 이름 바꾸기(같은 이름이면 쓰지 않는다 — 원상 확인에 쓴다)
+  archivePlatformWorkspace: { filename: 'src/app/actions/platformWorkspaces.ts', exportedName: 'archivePlatformWorkspace', worker: '/admin/workspaces/page' },
+  restorePlatformWorkspace: { filename: 'src/app/actions/platformWorkspaces.ts', exportedName: 'restorePlatformWorkspace', worker: '/admin/workspaces/page' },
+  renameWorkspace: { filename: 'src/app/actions/platformWorkspaces.ts', exportedName: 'renameWorkspace', worker: '/admin/workspaces/page' },
   removeWorkspaceMember: { filename: 'src/app/actions/accounts.ts', exportedName: 'removeWorkspaceMember', worker: '/w/[slug]/admin/accounts/page' },
   resetPassword: { filename: 'src/app/actions/accounts.ts', exportedName: 'resetPassword', worker: '/w/[slug]/admin/accounts/page' },
 }
@@ -2763,6 +2767,133 @@ async function main() {
       otherWorkspaceStillOn: JSON.stringify(out.b) === JSON.stringify(before.b),
       restored: restored && JSON.stringify(after) === JSON.stringify(before.a),
     })
+  }
+
+  // 27. workspace-archive — 워크스페이스 보관·복원(0056). 보관 = 숨김 + 동결, 자료는 그대로. 대조용 워크스페이스 B(e2e-other)를 보관해
+  //     그 관리자(bea)·두 곳 소속(duo)·플랫폼 관리자(admin)·세션 없는 경로(연동 API·공유 링크)가 모두 닫히는지 보고, 복원해 원상을 확인한다.
+  //     맨 끝에 둔다 — 앞 단계들이 B 를 쓴다. 중간에 실패해도 finally 가 복원한다(액션이 안 되면 service_role RPC 로 — B 를 보관된 채 남기지 않는다).
+  {
+    const page = '/admin/workspaces'
+    const slugB = OTHER_WORKSPACE.slug
+    const REASON = 'E2E 보관 확인'
+    const UPLOAD_TITLE = 'E2E 보관 중 업로드'
+    const detailB = `${wsPath(wsB, 'minutes')}/${minuteB}`
+    const [{ name: nameB }] = rows('워크스페이스 B 이름', await svc.from('workspaces').select('name').eq('id', wsB))
+    const opened = (res) => res.status === 200 && !notFoundRendered(res.html)
+    const beaScreens = async () => ({ projects: await raw(bea, wsPath(wsB, 'projects')), dashboard: await raw(bea, `/p/${C.id}/dashboard`) })
+    const anon = async (token) => {
+      const res = await fetch(`${origin}/share/minutes/${token}`, { redirect: 'manual' })
+      return { status: res.status, html: res.status >= 300 && res.status < 400 ? '' : await res.text() }
+    }
+    const apiB = (path, init = {}) => fetch(`${base}${path}`, { redirect: 'manual', ...init, headers: { authorization: `Bearer ${minutesTokenB}`, ...(init.headers ?? {}) } })
+    const metaB = async () => (await apiB(`/api/v1/minutes/meta?user_email=${encodeURIComponent(B_ADMIN.email)}`)).status
+    const uploadB = async () => (await apiB('/api/v1/minutes', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ user_email: B_ADMIN.email, date: meetingDate, team: SP3B_B_TEAM, title: UPLOAD_TITLE, body_markdown: '# 보관', external_id: `e2e:${randomUUID()}` }),
+    })).status
+    // bea 의 세션(JWT)으로 PostgREST 에 직접 — 화면을 거치지 않는 읽기·쓰기도 RLS 가 닫는지 본다
+    const sessionProjects = async () => {
+      const { data, error } = await bea.sb.from('projects').select('id').eq('workspace_id', wsB)
+      if (error) throw new Fail(`bea 세션의 프로젝트 조회 실패: ${error.message}`)
+      return data.length
+    }
+    const sessionWrite = async () => {
+      const { data, error } = await bea.sb.from('projects').update({ description: 'E2E 보관 중 쓰기' }).eq('id', C.id).select('id')
+      return { rows: data?.length ?? null, error: error?.message ?? null }
+    }
+    const descriptionOfC = async () => rows('C 설명', await svc.from('projects').select('description').eq('id', C.id))[0].description
+    const recordOf = async () => rows('보관 기록', await svc.from('workspaces')
+      .select('archived_at, archived_by, archive_reason, restored_at, restored_by').eq('id', wsB))[0]
+    const listHtml = async () => (await admin.http('GET', page)).text()
+
+    await bea.http('GET', detailB)
+    const on = (await bea.action(detailB, 'setMinuteShare', [minuteB, 'enable'])).result
+    if (!on?.ok || typeof on.token !== 'string' || !on.token) throw new Fail(`B 회의록 공유 켜기 실패: ${JSON.stringify({ ok: on?.ok ?? null, error: on?.error ?? null })}`)
+    const descriptionBefore = await descriptionOfC()
+    const before = {
+      bea: await beaScreens(), duo: await raw(duo, wsPath(wsA)), share: await anon(on.token), meta: await metaB(),
+      projects: await sessionProjects(), list: await listHtml(),
+    }
+    // 주소를 틀리게 적으면 보관하지 않는다(엉뚱한 행을 접지 않는다)
+    const wrongSlug = (await admin.action(page, 'archivePlatformWorkspace', [wsB, slugA, REASON])).result
+    // 플랫폼 관리자가 아니면 보관하지 못한다 — 그 워크스페이스의 관리자도. bea 는 /admin/workspaces 를 열 수 없어(404) 액션 주소가 없으므로 RPC 실행권으로 본다
+    const beaRpc = await bea.sb.rpc('archive_workspace', { p_actor: beaWs.userId, p_workspace_id: wsB, p_expected_slug: slugB, p_reason: null })
+
+    const notArchivedYet = (await recordOf()).archived_at === null   // 틀린 주소·bea 의 시도 뒤에도 그대로다
+
+    let archived = null, during = null, restoredBy = null
+    try {
+      archived = (await admin.action(page, 'archivePlatformWorkspace', [wsB, slugB, `  ${REASON}  `])).result
+      if (!archived?.ok) throw new Fail(`archivePlatformWorkspace 실패: ${JSON.stringify(archived)}`)
+      const upload = await uploadB()
+      during = {
+        record: await recordOf(),
+        again: (await admin.action(page, 'archivePlatformWorkspace', [wsB, slugB, '두 번째 사유'])).result,
+        bea: await beaScreens(),
+        adminHome: await raw(admin, wsPath(wsB)), adminProject: await raw(admin, `/p/${C.id}/dashboard`),
+        duo: await raw(duo, wsPath(wsA)),
+        share: await anon(on.token), meta: await metaB(), upload,
+        uploaded: rows('보관 중 올라간 회의록', await svc.from('minutes').select('id').eq('workspace_id', wsB).eq('title', UPLOAD_TITLE)).length,
+        projects: await sessionProjects(), write: await sessionWrite(), description: await descriptionOfC(),
+        rename: (await admin.action(page, 'renameWorkspace', [wsB, nameB])).result,
+        list: await listHtml(),
+      }
+    } finally {
+      let res = null
+      try { res = (await admin.action(page, 'restorePlatformWorkspace', [wsB])).result } catch (e) {
+        console.error('[workspace-archive] 복원 액션 실패 — service_role 로 복원한다:', e?.message ?? e)
+      }
+      if (res?.ok) restoredBy = res.unchanged ? 'action(unchanged)' : 'action'
+      else {
+        const { error } = await svc.rpc('restore_workspace', { p_actor: me.id, p_workspace_id: wsB })
+        if (error) throw new Fail(`복원 실패 — ${slugB} 가 보관된 채 남았다(수동 복원 필요): ${error.message}`)
+        restoredBy = 'service_role'
+      }
+    }
+    const after = {
+      record: await recordOf(), bea: await beaScreens(), duo: await raw(duo, wsPath(wsA)), share: await anon(on.token), meta: await metaB(),
+      projects: await sessionProjects(), rename: (await admin.action(page, 'renameWorkspace', [wsB, nameB])).result,
+      restoreAgain: (await admin.action(page, 'restorePlatformWorkspace', [wsB])).result, list: await listHtml(),
+    }
+    const off = (await bea.action(detailB, 'setMinuteShare', [minuteB, 'disable'])).result
+
+    const checks = {
+      cleanStart: opened(before.bea.projects) && opened(before.bea.dashboard) && opened(before.share) && before.share.html.includes(SP3B_MINUTE_B)
+        && before.meta === 200 && before.projects >= 1 && switcherVerdict(before.duo.html, true).length === 0
+        && archivedRowVerdict(before.list, slugB, false).length === 0,
+      wrongSlugRefused: wrongSlug?.ok === false && wrongSlug.code === 'slug_mismatch' && notArchivedYet,
+      workspaceAdminCannotArchive: !!beaRpc.error && notArchivedYet,   // 실행권이 없어 거부됐고 아무것도 바뀌지 않았다
+      archived: archived.unchanged === false && typeof during.record.archived_at === 'string' && during.record.archived_by === me.id
+        && during.record.archive_reason === REASON,
+      idempotent: during.again?.ok === true && during.again.unchanged === true && (await recordOf()).archive_reason !== '두 번째 사유',
+      // 그 워크스페이스의 관리자에게 없는 것이다 — 화면 404(소속 아님과 같은 꼴), 이름·프로젝트 이름이 본문에 없다
+      adminOfItHidden: hiddenVerdict(during.bea.projects, [nameB, C.name]).length === 0 && hiddenVerdict(during.bea.dashboard, [C.name]).length === 0,
+      // 플랫폼 관리자에게도 그 화면은 404 다(들어가 읽는 길은 복원이다)
+      platformAdminHidden: hiddenVerdict(during.adminHome, [nameB]).length === 0 && hiddenVerdict(during.adminProject, [C.name]).length === 0,
+      // 두 곳 소속이던 duo — 남은 소속이 하나라 전환기 트리거가 사라지고 B 의 이름이 셸에 없다
+      switcherGone: during.duo.status === 200 && switcherVerdict(during.duo.html, false).length === 0 && !during.duo.html.includes(nameB),
+      actionRefused: during.rename?.ok === false,
+      sessionReadsEmpty: during.projects === 0,
+      sessionWriteRefused: (during.write.rows === 0 || during.write.error !== null) && during.description === descriptionBefore,
+      apiRefused: during.meta === 401 && during.upload === 401 && during.uploaded === 0,
+      shareClosed: hiddenVerdict(during.share, [SP3B_MINUTE_B]).length === 0,
+      listedArchived: archivedRowVerdict(during.list, slugB, true).length === 0 && archivedRowVerdict(during.list, slugA, false).length === 0
+        && during.list.includes(REASON),
+      restored: restoredBy === 'action' && after.record.archived_at === null && after.record.archived_by === null && after.record.archive_reason === null
+        && typeof after.record.restored_at === 'string' && after.record.restored_by === me.id,
+      restoreIdempotent: after.restoreAgain?.ok === true && after.restoreAgain.unchanged === true,
+      backToNormal: opened(after.bea.projects) && opened(after.bea.dashboard) && opened(after.share) && after.share.html.includes(SP3B_MINUTE_B)
+        && after.meta === 200 && after.projects === before.projects && switcherVerdict(after.duo.html, true).length === 0
+        && after.rename?.ok === true && archivedRowVerdict(after.list, slugB, false).length === 0,
+      shareTurnedOff: off?.ok === true && off.enabled === false,
+    }
+    const status = {
+      during: { beaProjects: during.bea.projects.status, beaDashboard: during.bea.dashboard.status, adminHome: during.adminHome.status, adminProject: during.adminProject.status,
+        duo: during.duo.status, share: during.share.status, meta: during.meta, upload: during.upload, sessionProjects: during.projects, write: during.write, rename: during.rename },
+      after: { beaProjects: after.bea.projects.status, beaDashboard: after.bea.dashboard.status, share: after.share.status, meta: after.meta, sessionProjects: after.projects },
+    }
+    step('workspace-archive', { workspace: { id: wsB, slug: slugB }, reason: REASON, restoredBy, record: { during: during.record, after: after.record }, status, checks },
+      allOk(checks) ? undefined : `워크스페이스 보관·복원: ${JSON.stringify({ checks, restoredBy, status, wrongSlug, again: during.again, beaRpc: beaRpc.error?.code ?? null })}`)
   }
 }
 

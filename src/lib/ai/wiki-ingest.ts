@@ -10,6 +10,7 @@ import { wikiServiceEnabled } from '@/lib/modules/flags'
 import { serviceRoleConfigured } from '@/lib/supabase/env'
 import { projectTeams } from '@/lib/teams/source'
 import { interleaveByWorkspace, workspaceOfEmbed } from './wiki-fairness'
+import { archivedWorkspaceIds } from '@/lib/workspace/archived'
 import { activeCodes } from '@/lib/domain/teams'
 import {
   fnv1a64, isMarkableBlock, splitMinuteBlocks, type MinuteBlock,
@@ -1272,7 +1273,15 @@ export async function runWikiWorkerOnce(limit = 5): Promise<{
   // 철회 복구가 일반 단건 ingest보다 우선이다. 한 step이 한 LLM 호출 이하라 실행시간은
   // bounded하고, SQL keyset cursor가 500건을 넘는 프로젝트도 다음 cron에서 이어간다.
   // 재구성 중인 프로젝트를 워크스페이스끼리 번갈아 한 단계씩 돌린다 — 회의록이 많은 프로젝트 하나가 실행의 몫을 다 쓰지 못한다.
-  const rebuildTargets = await listRebuildTargets(admin, now)
+  // 보관된 워크스페이스(0056)의 잡은 선점 RPC 가 집지 않는다(행은 그대로 — 복원하면 이어진다). 여기서는 후보에서도 빼서, 집히지 않을 잡이
+  // 이번 실행의 몫(limit)과 후보 창을 차지하지 않게 한다. 목록을 못 읽으면 빼지 않고 돈다 — 정확성은 선점 RPC 가 지킨다.
+  let archived: string[] = []
+  try {
+    archived = [...await archivedWorkspaceIds(admin)]
+  } catch (error) {
+    console.error('[wiki] 보관된 워크스페이스 조회 실패 — 후보에서 빼지 못했다(선점이 건너뛴다):', safeJobError(error))
+  }
+  const rebuildTargets = await listRebuildTargets(admin, now, archived)
   // 한 프로젝트의 단계가 던져도 다른 워크스페이스의 차례는 돈다. 던진 오류는 끝에서 다시 던져 실패를 감추지 않는다(라우트는 500).
   let firstError: unknown = null
   if (rebuildTargets === null) {
@@ -1307,7 +1316,7 @@ export async function runWikiWorkerOnce(limit = 5): Promise<{
 
   const remaining = boundedLimit - attempted
   if (remaining > 0) {
-    const jobIds = await listPendingJobIds(admin, now, remaining)
+    const jobIds = await listPendingJobIds(admin, now, remaining, archived)
     for (const jobId of jobIds) {
       if (await processMinuteWikiJob(jobId)) completed += 1
     }
@@ -1325,12 +1334,14 @@ const WIKI_CANDIDATE_PASSES = 5
  * 번갈아 세운 목록. 읽지 못하면 null(호출부가 옛 전역 선점으로 돈다).
  */
 async function listRebuildTargets(
-  admin: ReturnType<typeof createAdminClient>, now: string,
+  admin: ReturnType<typeof createAdminClient>, now: string, skipWorkspaces: readonly string[] = [],
 ): Promise<Array<{ projectId: string; workspaceId: string | null }> | null> {
-  const { data, error } = await admin.from('wiki_project_rebuild_jobs')
+  let query = admin.from('wiki_project_rebuild_jobs')
     .select('project_id, projects!inner(workspace_id)')
     .in('status', ['pending', 'running'])
     .lte('run_after', now)
+  if (skipWorkspaces.length > 0) query = query.not('projects.workspace_id', 'in', `(${skipWorkspaces.join(',')})`)
+  const { data, error } = await query
     .order('run_after', { ascending: true })
     .order('updated_at', { ascending: true })
     .limit(WIKI_CANDIDATE_WINDOW)
@@ -1346,7 +1357,9 @@ async function listRebuildTargets(
  * 대기 중인 회의록 잡을 워크스페이스끼리 번갈아 limit 건 고른다. 한 창(WINDOW)이 한두 워크스페이스로 가득 차면 그 워크스페이스를
  * 빼고 다시 읽어, 큐가 아무리 깊어도 뒤에 선 워크스페이스의 잡이 후보에 든다. 첫 조회 실패는 던진다(조회 실패를 "잡 없음"으로 읽지 않는다).
  */
-async function listPendingJobIds(admin: ReturnType<typeof createAdminClient>, now: string, limit: number): Promise<number[]> {
+async function listPendingJobIds(
+  admin: ReturnType<typeof createAdminClient>, now: string, limit: number, skipWorkspaces: readonly string[] = [],
+): Promise<number[]> {
   const candidates: Array<{ id: number; workspaceId: string | null }> = []
   const seen: string[] = []
   for (let pass = 0; pass < WIKI_CANDIDATE_PASSES; pass += 1) {
@@ -1354,7 +1367,8 @@ async function listPendingJobIds(admin: ReturnType<typeof createAdminClient>, no
       .select('id, projects!inner(workspace_id)')
       .eq('status', 'pending')
       .lte('run_after', now)
-    if (seen.length > 0) query = query.not('projects.workspace_id', 'in', `(${seen.join(',')})`)
+    const excluded = [...skipWorkspaces, ...seen]   // 보관된 워크스페이스 + 앞 창에서 이미 본 워크스페이스
+    if (excluded.length > 0) query = query.not('projects.workspace_id', 'in', `(${excluded.join(',')})`)
     const { data, error } = await query.order('run_after', { ascending: true }).limit(WIKI_CANDIDATE_WINDOW)
     if (error) {
       if (pass === 0) throw new Error(`JOB_LIST:${error.code ?? 'UNKNOWN'}`)

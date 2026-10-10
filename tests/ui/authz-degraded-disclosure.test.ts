@@ -26,7 +26,9 @@ function table(name: string) {
     : name === 'workspace_members' ? mocks.workspaceMembers
       : name === 'project_members' ? mocks.projectMembers
         : name === 'projects' ? mocks.projects
-          : () => undefined
+          // 플랫폼 관리자만 읽는 "있는 워크스페이스" 축(0056) — 보관 아닌 w1 하나
+          : name === 'workspaces' ? () => ({ data: [{ id: 'w1', archived_at: null }], error: null })
+            : () => undefined
   const q: Record<string, unknown> = {}
   for (const m of ['select', 'eq', 'in', 'order', 'not', 'range']) q[m] = vi.fn(() => q)
   q.maybeSingle = vi.fn(() => resp())

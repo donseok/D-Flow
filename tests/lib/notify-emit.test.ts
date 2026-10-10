@@ -6,6 +6,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: mocks.config }))
 
 import { emitNotification } from '@/lib/notify/emit'
+import { WorkspaceArchivedError } from '@/lib/settings/errors'
 
 type Resp = { data?: unknown; error?: { code?: string; message: string } | null }
 
@@ -177,13 +178,33 @@ describe('emitNotification — 워크스페이스 알림 정책 notify.policy(�
     expect(inserted.notification_recipients).toBeUndefined()
     expect(client.from.mock.calls.map((c) => c[0])).toEqual(['projects'])
   })
-  it('필수 유형은 정책과 무관하게 발행한다 — 저장값이 끄라고 해도, 정책을 읽지도 않는다', async () => {
-    const { client, inserted } = admin(full())
+  it('필수 유형은 정책과 무관하게 발행한다 — 저장값이 끄라고 해도. 워크스페이스 설정은 보관 판정(0056) 때문에 읽는다', async () => {
+    const { inserted } = admin(full())
     mocks.config.mockResolvedValue(policyCfg({ 'work.reported': { enabled: false } }))
     expect(await emitIssue({ type: 'work.reported' })).toEqual({ ok: true, recipients: 1 })
     expect(inserted.notification_events).toHaveLength(1)
-    expect(mocks.config).not.toHaveBeenCalled()
-    expect(client.from.mock.calls.map((c) => c[0])).not.toContain('projects')
+    expect(mocks.config).toHaveBeenCalledTimes(1)
+  })
+  it('필수 유형 — 설정을 읽지 못해도 발행한다(로그 없이: 필수 유형은 정책이 필요 없다)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { inserted } = admin(full())
+    mocks.config.mockRejectedValue(new Error('settings down'))
+    expect(await emitIssue({ type: 'work.reported' })).toEqual({ ok: true, recipients: 1 })
+    expect(inserted.notification_events).toHaveLength(1)
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+  it('보관된 워크스페이스(0056) — 동결이다. 일반 유형도 필수 유형도 이벤트·수신자 행을 쓰지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const type of ['issue.assigned', 'work.reported'] as const) {
+      const { inserted } = admin(full())
+      mocks.config.mockRejectedValue(new WorkspaceArchivedError('ws-1'))
+      expect(await emitIssue({ type }), type).toEqual({ ok: true, recipients: 0, suppressed: true })
+      expect(inserted.notification_events, type).toBeUndefined()
+      expect(inserted.notification_recipients, type).toBeUndefined()
+    }
+    expect(spy).not.toHaveBeenCalled()   // 읽기 실패가 아니다 — 닫은 것이다
+    spy.mockRestore()
   })
   it('정책 읽기 실패 — 발행하고 로그를 남긴다(알림 유실보다 과발행)', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})

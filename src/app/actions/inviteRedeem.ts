@@ -92,6 +92,11 @@ interface ConsumedInvite {
   member_id: string
 }
 
+/** 초대 조회 열에 워크스페이스의 보관 시각을 더한다 — 이미 workspaces 임베드가 있으면(미리보기의 workspaces(name)) 그 안에 넣는다(같은 관계를 두 번 임베드하지 않는다) */
+function withArchivedEmbed(cols: string): string {
+  return cols.includes('workspaces(') ? cols.replace('workspaces(', 'workspaces(archived_at, ') : `${cols}, workspaces(archived_at)`
+}
+
 /**
  * 토큰으로 초대 1행 — DB 에는 해시만 있으므로 해시로 찾는다. 조회 실패(E17)와 미존재(E1)를 구분한다 —
  * 조회 실패를 '없음'으로 위장하면 DB 장애가 곧 '만료된 링크' 안내가 된다.
@@ -101,13 +106,19 @@ async function loadInvite<T>(
 ): Promise<{ ok: true; invite: T } | { ok: false; error: string }> {
   const tr = await serverTranslator()
   const { data, error } = await admin
-    .from('project_invites').select(cols).eq('token_hash', hashInviteToken(token)).maybeSingle()
+    .from('project_invites').select(withArchivedEmbed(cols)).eq('token_hash', hashInviteToken(token)).maybeSingle()
   if (error) {
     // 토큰은 로그에 남기지 않는다.
     console.error('[inviteRedeem] 초대 조회 실패:', error.message)
     return { ok: false, error: tr(E_LOOKUP) }
   }
   if (!data) return missedToken()
+  // 보관된 워크스페이스(0056)의 초대는 없는 것으로 답한다 — 확인·수락·가입 넷이 모두 이 함수를 지난다. 초대 행은 지우지 않으므로 복원하면 다시 쓸 수 있다.
+  // 토큰은 맞았으므로 틀린 토큰으로 세지 않는다(문구만 같다). 임베드가 null 이면 보관으로 본다(키가 없는 응답은 임베드를 싣지 않는 테스트 대역뿐이다).
+  // 임베드를 읽지 못했으면(키 없음·null·archived_at 없음) 보관으로 본다 — 모르면 닫는다(fail-closed)
+  const e = (data as { workspaces?: unknown }).workspaces as { archived_at?: unknown } | Array<{ archived_at?: unknown }> | null | undefined
+  const w = Array.isArray(e) ? e[0] : e
+  if (!w || w.archived_at !== null) return { ok: false, error: tr(E_NOT_FOUND) }
   return { ok: true, invite: data as unknown as T }
 }
 

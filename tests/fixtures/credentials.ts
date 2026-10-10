@@ -20,6 +20,8 @@ export interface CredentialRow {
   project_ids: string[] | null; default_project_id: string | null; default_team_id: string | null
   team_map: Record<string, string>; owner_user_id: string | null
   enabled: boolean; revoked_at: string | null; expires_at: string
+  /** 자격증명 조회가 함께 읽는 워크스페이스의 보관 시각(0056) — 못 읽으면(null·키 없음) 인증이 거부된다 */
+  workspaces?: { archived_at: string | null } | null
 }
 
 export interface TestCredential {
@@ -48,7 +50,7 @@ export function agentCredential(over: Partial<CredentialRow> = {}): TestCredenti
     id: CRED_ID, workspace_id: CRED_WS, kind: 'agent_runner', name: 'test-pat',
     token_prefix: t.prefix, token_hash: t.hash, scopes: ['work:read', 'work:claim'],
     project_ids: null, default_project_id: null, default_team_id: null, team_map: {},
-    owner_user_id: CRED_OWNER, enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z',
+    owner_user_id: CRED_OWNER, enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z', workspaces: { archived_at: null },
     ...over,
   })
 }
@@ -60,7 +62,7 @@ export function minutesCredential(over: Partial<CredentialRow> = {}): TestCreden
     id: CRED_ID, workspace_id: CRED_WS, kind: 'minutes_api', name: 'test-minutes',
     token_prefix: t.prefix, token_hash: t.hash, scopes: [],
     project_ids: null, default_project_id: null, default_team_id: null, team_map: {},
-    owner_user_id: null, enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z',
+    owner_user_id: null, enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z', workspaces: { archived_at: null },
     ...over,
   })
 }

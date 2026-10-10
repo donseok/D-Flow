@@ -18,10 +18,11 @@ export async function listAll(admin, prefix) {
 }
 
 /** ws/<wid>/p/<pid>/minute-files/<minute>/<파일> 만 내려간다 — 본문 minutes 세그먼트는 읽지도 않는다. */
-export async function listMinuteFileObjects(admin) {
+export async function listMinuteFileObjects(admin, skipWorkspaces = new Set()) {
   const folders = entries => entries.filter(e => e.id === null).map(e => e.name)
   const objects = []
   for (const w of folders(await listAll(admin, 'ws'))) {
+    if (skipWorkspaces.has(w)) continue   // 보관된 워크스페이스(0056) — 그 아래 파일은 읽지도 지우지도 않는다
     if (!folders(await listAll(admin, `ws/${w}`)).includes('p')) continue
     for (const p of folders(await listAll(admin, `ws/${w}/p`))) {
       if (!folders(await listAll(admin, `ws/${w}/p/${p}`)).includes('minute-files')) continue
@@ -60,8 +61,12 @@ async function refCount(admin, table, path) {
 export async function runSweep(admin, { apply, now = Date.now(), log = console.log, warn = console.error }) {
   let objects, files, versions
   try {
-    objects = await listMinuteFileObjects(admin)
-    files = await selectAll(admin, 'minute_files', 'id, file_path, role, deleted_at, purged_at')
+    // 보관된 워크스페이스(0056)는 건너뛴다 — 동결이라 고아 파일도 톰스톤도 그대로 둔다(복원 뒤의 실행이 치운다).
+    // 이 조회가 실패하면 아래 catch 가 읽기 실패로 돌려준다 — 아무것도 지우지 않는다(보관 여부를 모르는 채 지우지 않는다).
+    const archived = new Set((await selectAll(admin, 'workspaces', 'id', q => q.not('archived_at', 'is', null))).map(w => w.id))
+    const frozen = path => typeof path === 'string' && path.startsWith('ws/') && archived.has(path.split('/')[1])
+    objects = await listMinuteFileObjects(admin, archived)
+    files = (await selectAll(admin, 'minute_files', 'id, file_path, role, deleted_at, purged_at')).filter(f => !frozen(f.file_path))
     versions = await selectAll(admin, 'minute_versions', 'id, file_path', q => q.not('file_path', 'is', null))
   } catch (e) {
     return { ok: false, stage: 'read', error: e instanceof Error ? e.message : String(e) }

@@ -71,7 +71,11 @@ vi.mock('@/lib/supabase/server', () => ({
         for (const k of ['select', 'eq', 'in', 'limit', 'order', 'range']) b[k] = () => b
         b.maybeSingle = async () => r
         // buildActor 의 projects 는 페이지 + count 총합 대조(fetchAllPages) — 배열 응답에는 count 를 싣는다
-        b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(withCount(r)).then(res, rej)
+        // workspaces 는 두 꼴로 읽힌다 — 한 행 조회(maybeSingle, 위 tables)와 buildActor 의 "있는 워크스페이스" 목록(0056 — 플랫폼 관리자만, 페이지 + count)
+        const listed = table === 'workspaces'
+          ? { data: [{ id: 'ws-9', archived_at: null }, { id: '00000000-0000-0000-7e57-000000001773', archived_at: null }], error: null }
+          : r
+        b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(withCount(listed)).then(res, rej)
         return b
       },
     }

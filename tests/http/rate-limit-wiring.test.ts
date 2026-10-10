@@ -87,7 +87,7 @@ describe('초대 토큰', () => {
 
   it('있는 초대의 확인은 세지 않는다 — 만료된 초대를 몇 번을 열어도 막히지 않는다', async () => {
     freshIp()
-    const row = { workspace_id: 'w', email: 'a@example.com', expires_at: '2000-01-01T00:00:00Z', revoked_at: null, redeemed_at: null, team_ids: [], access_role: 'member', projects: null, workspaces: null }
+    const row = { workspace_id: 'w', email: 'a@example.com', expires_at: '2000-01-01T00:00:00Z', revoked_at: null, redeemed_at: null, team_ids: [], access_role: 'member', projects: null, workspaces: { name: 'W', archived_at: null } }
     h.admin.current = inviteAdmin({ data: row, error: null }).client
     for (let i = 0; i < RATE_RULES.inviteToken.limit + 5; i++) {
       const res = await getInvitePreview(TOKEN)
@@ -137,7 +137,7 @@ describe('외부·에이전트 API 자격증명', () => {
   const row = {
     id: '40000000-0000-4000-8000-000000000001', workspace_id: '10000000-0000-4000-8000-000000000001', kind: 'agent_runner', name: 't',
     token_prefix: pat.prefix, token_hash: pat.hash, scopes: ['work:read'], project_ids: null, default_project_id: null, default_team_id: null,
-    team_map: {}, owner_user_id: '30000000-0000-4000-8000-000000000001', enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z',
+    team_map: {}, owner_user_id: '30000000-0000-4000-8000-000000000001', enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z', workspaces: { archived_at: null },
   }
   function db(result: { data: unknown; error: unknown }) {
     const maybeSingle = vi.fn(async () => result)

@@ -6,7 +6,7 @@ import type { SupabaseServerClient } from '@/lib/repositories/supabase/common'
 // 비공개 프로젝트(0070)는 목록에선 숨겼는데 챗봇이 답하면 숨김이 무색해진다 — 스코프가 같은 규칙을 따르는지 검증.
 
 type R = { data: unknown; error: { message: string } | null }
-type Tables = Partial<Record<'platform_admins' | 'workspace_members' | 'project_members' | 'projects', R>>
+type Tables = Partial<Record<'platform_admins' | 'workspace_members' | 'project_members' | 'projects' | 'workspaces', R>>
 
 const PROJECTS = [
   { id: 'p-pub', workspace_id: 'ws-1', is_private: false },
@@ -25,6 +25,8 @@ function client(tables: Tables = {}) {
     workspace_members: { data: [{ workspace_id: 'ws-1', role: 'member' }], error: null },
     project_members: { data: [], error: null },
     projects: { data: PROJECTS, error: null },
+    // 플랫폼 관리자만 읽는 "있는 워크스페이스" 축(0056 — 보관된 것은 archived_at 이 찬다)
+    workspaces: { data: [{ id: 'ws-1', archived_at: null }, { id: 'ws-2', archived_at: null }], error: null },
     ...tables,
   }
   const from = vi.fn((table: string) => {
@@ -73,6 +75,21 @@ describe('accessScope — 워크스페이스 경계와 비공개 프로젝트 �
     expect(res.ok && [...res.scope.allowedProjectIds].sort()).toEqual(['p-other', 'p-priv', 'p-pub'])
     // 워크스페이스 축 입력(회의록 담당 팀)을 전 워크스페이스로 보게 플래그를 싣는다 — 멤버십이 없어 workspaceIds 는 비어 있다(16b).
     expect(res.ok && res.scope.isSuperuser).toBe(true)
+    expect(res.ok && res.scope.workspaceIds).toEqual([])
+  })
+  it('보관된 워크스페이스(0056)의 프로젝트는 플랫폼 관리자의 범위에서도 빠진다 — 검색·봇이 그 자료에 닿지 않는다', async () => {
+    const res = await resolve({
+      platform_admins: { data: { user_id: 'u1' }, error: null }, workspace_members: { data: [], error: null },
+      workspaces: { data: [{ id: 'ws-1', archived_at: null }, { id: 'ws-2', archived_at: '2026-10-10T00:00:00Z' }], error: null },
+    })
+    expect(res.ok && [...res.scope.allowedProjectIds].sort()).toEqual(['p-priv', 'p-pub'])
+    expect(res.ok && res.scope.projectWorkspace).toEqual({ 'p-pub': 'ws-1', 'p-priv': 'ws-1' })
+  })
+  it('보관된 워크스페이스의 멤버 — 소속도 프로젝트도 범위에 없다(admin 클라이언트 경로의 임베드 판정)', async () => {
+    const res = await resolve({
+      workspace_members: { data: [{ workspace_id: 'ws-1', role: 'admin', workspaces: { archived_at: '2026-10-10T00:00:00Z' } }], error: null },
+    })
+    expect(res.ok && res.scope.allowedProjectIds).toEqual([])
     expect(res.ok && res.scope.workspaceIds).toEqual([])
   })
   it('허용 프로젝트마다 워크스페이스를 싣는다 — 허용 밖 프로젝트의 것은 싣지 않는다(검색 범위의 원천)', async () => {

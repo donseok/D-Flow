@@ -10,7 +10,9 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: mocks.createAdminCli
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: mocks.getWorkspaceConfig }))
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }))
 
-import { createPlatformWorkspace, deletePlatformWorkspace, listPlatformWorkspaces, renameWorkspace } from '@/app/actions/platformWorkspaces'
+import {
+  archivePlatformWorkspace, createPlatformWorkspace, deletePlatformWorkspace, listPlatformWorkspaces, renameWorkspace, restorePlatformWorkspace,
+} from '@/app/actions/platformWorkspaces'
 import { NON_CORE_MODULES } from '@/lib/modules/defaults'
 import { SETTINGS_SCHEMA_VERSION } from '@/lib/settings/registry'
 
@@ -172,8 +174,8 @@ describe('createPlatformWorkspace', () => {
 
 describe('listPlatformWorkspaces', () => {
   const WS = [
-    { id: 'w1', slug: 'alpha', name: '알파', created_at: '2026-09-01T00:00:00Z' },
-    { id: 'w2', slug: 'beta', name: '베타', created_at: '2026-10-01T00:00:00Z' },
+    { id: 'w1', slug: 'alpha', name: '알파', created_at: '2026-09-01T00:00:00Z', archived_at: null, archive_reason: null },
+    { id: 'w2', slug: 'beta', name: '베타', created_at: '2026-10-01T00:00:00Z', archived_at: null, archive_reason: null },
   ]
   const rows = (c: Call): Result => {
     if (c.table === 'workspaces') return { data: WS, count: 2 }
@@ -192,9 +194,28 @@ describe('listPlatformWorkspaces', () => {
       keys: { 'modules.allowed': id === 'w1' ? { status: 'set', value: ['kanban'] } : { status: 'default', value: [], from: 'product' } },
     }))
     expect(await listPlatformWorkspaces()).toEqual({ ok: true, rows: [
-      { id: 'w1', slug: 'alpha', name: '알파', createdAt: '2026-09-01T00:00:00Z', memberCount: 2, projectCount: 1, allowedModules: ['kanban'] },
-      { id: 'w2', slug: 'beta', name: '베타', createdAt: '2026-10-01T00:00:00Z', memberCount: 1, projectCount: 0, allowedModules: [] },
+      { id: 'w1', slug: 'alpha', name: '알파', createdAt: '2026-09-01T00:00:00Z', memberCount: 2, projectCount: 1, allowedModules: ['kanban'], archivedAt: null, archiveReason: null },
+      { id: 'w2', slug: 'beta', name: '베타', createdAt: '2026-10-01T00:00:00Z', memberCount: 1, projectCount: 0, allowedModules: [], archivedAt: null, archiveReason: null },
     ] })
+  })
+  it('보관된 워크스페이스(0056)도 목록에 나온다 — 보관 시각·사유를 싣고, 활성이 먼저다. 설정은 includeArchived 로 읽는다', async () => {
+    const AT = '2026-10-09T01:02:03Z'
+    fakeAdmin((c) => c.table === 'workspaces'
+      ? { data: [{ ...WS[0], archived_at: AT, archive_reason: '계약 종료' }, WS[1]], count: 2 }
+      : rows(c))
+    mocks.getWorkspaceConfig.mockResolvedValue({ keys: { 'modules.allowed': { status: 'set', value: ['kanban'] } } })
+    const res = await listPlatformWorkspaces()
+    expect(res.ok && res.rows.map((r) => [r.slug, r.archivedAt, r.archiveReason, r.allowedModules])).toEqual([
+      ['beta', null, null, ['kanban']],
+      ['alpha', AT, '계약 종료', ['kanban']],
+    ])
+    for (const call of mocks.getWorkspaceConfig.mock.calls) expect(call[1]).toMatchObject({ includeArchived: true })
+  })
+  it('archived_at 을 읽지 못한 행(열 없는 응답)은 활성으로 그리지 않는다 — "열기"가 보관된 워크스페이스에 붙지 않게', async () => {
+    fakeAdmin((c) => c.table === 'workspaces' ? { data: [{ id: 'w1', slug: 'alpha', name: '알파', created_at: '2026-09-01T00:00:00Z' }], count: 1 } : rows(c))
+    mocks.getWorkspaceConfig.mockResolvedValue({ keys: { 'modules.allowed': { status: 'set', value: [] } } })
+    const res = await listPlatformWorkspaces()
+    expect(res.ok && res.rows[0].archivedAt).not.toBeNull()
   })
   it('한 워크스페이스의 설정이 손상·판독 실패여도 목록은 나오고 그 칸만 null(빈 목록으로 위장하지 않는다)', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -348,6 +369,121 @@ describe('deletePlatformWorkspace', () => {
       expect(await deletePlatformWorkspace(WS, 'empty-org'), JSON.stringify(data)).toEqual({ ok: false, code: 'delete_failed' })
     }
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+})
+
+describe('archivePlatformWorkspace (0056)', () => {
+  const WS = 'ws-9'
+  const AT = '2026-10-10T00:00:00+00:00'
+  const done = (status: 'archived' | 'unchanged') => ({ data: { status, slug: 'old-org', name: '옛 조직', archived_at: AT, archived_by: ACTOR, reason: null } })
+
+  it('플랫폼 관리자가 아니면 거부 — 그 워크스페이스의 관리자 가드로 열지 않는다', async () => {
+    mocks.requireSuperuser.mockResolvedValue({ ok: false, error: '권한 없음' })
+    expect(await archivePlatformWorkspace(WS, 'old-org')).toEqual({ ok: false, code: 'denied', error: '권한 없음' })
+    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+  it('확인 주소가 형식 밖이거나 사유가 500자를 넘으면 DB 에 묻지 않는다', async () => {
+    const { calls } = fakeAdmin(() => ({}))
+    for (const slug of ['', ' old-org', 'Old-Org', null, undefined]) {
+      expect(await archivePlatformWorkspace(WS, slug as never), String(slug)).toEqual({ ok: false, code: 'slug_mismatch' })
+    }
+    expect(await archivePlatformWorkspace('', 'old-org')).toEqual({ ok: false, code: 'not_found' })
+    expect(await archivePlatformWorkspace(WS, 'old-org', '가'.repeat(501))).toEqual({ ok: false, code: 'reason_too_long' })
+    expect(await archivePlatformWorkspace(WS, 'old-org', 42 as never)).toEqual({ ok: false, code: 'reason_too_long' })
+    expect(calls).toEqual([])
+  })
+  it('정상 — RPC 한 번(적은 주소 그대로, 사유는 다듬어서, 행위자는 가드 결과의 userId). 표를 직접 고치지 않는다', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const { calls } = fakeAdmin(() => done('archived'))
+    expect(await archivePlatformWorkspace(WS, 'old-org', '  계약 종료  ')).toEqual({ ok: true, workspace: { slug: 'old-org', name: '옛 조직' }, archivedAt: AT, unchanged: false })
+    expect(calls).toEqual([{ table: 'archive_workspace', op: 'rpc', filters: [], payload: { p_actor: ACTOR, p_workspace_id: WS, p_expected_slug: 'old-org', p_reason: '계약 종료' } }])
+    expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith('/', 'layout')
+    // 서버 로그에 흔적 — 이름·주소·사유 본문은 싣지 않는다
+    expect(info).toHaveBeenCalledOnce()
+    expect(JSON.stringify(info.mock.calls[0])).not.toMatch(/옛 조직|old-org|계약 종료/)
+    info.mockRestore()
+  })
+  it('사유를 비우면 null 로 넘긴다(선택 입력)', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const { calls } = fakeAdmin(() => done('archived'))
+    await archivePlatformWorkspace(WS, 'old-org', '   ')
+    await archivePlatformWorkspace(WS, 'old-org')
+    expect(calls.map((c) => (c.payload as { p_reason: unknown }).p_reason)).toEqual([null, null])
+    info.mockRestore()
+  })
+  it('이미 보관이면 성공(unchanged) — 다시 쓰지 않았으므로 레이아웃을 새로 읽히지 않는다', async () => {
+    fakeAdmin(() => done('unchanged'))
+    expect(await archivePlatformWorkspace(WS, 'old-org')).toMatchObject({ ok: true, unchanged: true, archivedAt: AT })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['WORKSPACE_SLUG_MISMATCH', '22023', 'slug_mismatch'],
+    ['WORKSPACE_NOT_FOUND', 'P0002', 'not_found'],
+    ['WORKSPACE_ARCHIVE_REASON_INVALID', '22023', 'reason_too_long'],
+    ['AUTHZ_FORBIDDEN', '42501', 'denied'],
+    ['connection reset', '08006', 'archive_failed'],
+  ])('RPC 오류 %s → %s(원문은 응답에 싣지 않는다)', async (message, code, expected) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fakeAdmin(() => ({ error: { message, code } }))
+    expect(await archivePlatformWorkspace(WS, 'old-org')).toEqual({ ok: false, code: expected })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+  it('성공인데 결과 형태가 어긋나면 실패로 알린다 — 보관됐는지 모르는 채 성공이라 하지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const data of [null, {}, { status: 'archived', slug: 'old-org' }, { status: 'deleted', slug: 'old-org', name: 'x', archived_at: AT }]) {
+      fakeAdmin(() => ({ data }))
+      expect(await archivePlatformWorkspace(WS, 'old-org')).toEqual({ ok: false, code: 'archive_failed' })
+    }
+    spy.mockRestore()
+  })
+})
+
+describe('restorePlatformWorkspace (0056)', () => {
+  const WS = 'ws-9'
+  it('플랫폼 관리자가 아니면 거부', async () => {
+    mocks.requireSuperuser.mockResolvedValue({ ok: false, error: '권한 없음' })
+    expect(await restorePlatformWorkspace(WS)).toEqual({ ok: false, code: 'denied', error: '권한 없음' })
+    expect(mocks.requireWorkspaceAdmin).not.toHaveBeenCalled()
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+  it('정상 — RPC 한 번, 레이아웃을 새로 읽힌다. 지워진 보관 기록의 시각·실행자를 서버 로그에 남긴다(사유 본문은 아니다)', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const { calls } = fakeAdmin(() => ({ data: {
+      status: 'restored', slug: 'old-org', name: '옛 조직', restored_at: '2026-10-11T00:00:00Z',
+      previous: { archived_at: '2026-10-10T00:00:00Z', archived_by: 'u-x', reason: '계약 종료' },
+    } }))
+    expect(await restorePlatformWorkspace(WS)).toEqual({ ok: true, workspace: { slug: 'old-org', name: '옛 조직' }, unchanged: false })
+    expect(calls).toEqual([{ table: 'restore_workspace', op: 'rpc', filters: [], payload: { p_actor: ACTOR, p_workspace_id: WS } }])
+    expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith('/', 'layout')
+    expect(info).toHaveBeenCalledOnce()
+    expect(JSON.stringify(info.mock.calls[0])).toContain('2026-10-10T00:00:00Z')
+    expect(JSON.stringify(info.mock.calls[0])).not.toMatch(/옛 조직|old-org|계약 종료/)
+    info.mockRestore()
+  })
+  it('이미 활성이면 성공(unchanged) — 레이아웃을 새로 읽히지 않는다', async () => {
+    fakeAdmin(() => ({ data: { status: 'unchanged', slug: 'old-org', name: '옛 조직' } }))
+    expect(await restorePlatformWorkspace(WS)).toEqual({ ok: true, workspace: { slug: 'old-org', name: '옛 조직' }, unchanged: true })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['WORKSPACE_NOT_FOUND', 'P0002', 'not_found'],
+    ['AUTHZ_FORBIDDEN', '42501', 'denied'],
+    ['connection reset', '08006', 'restore_failed'],
+  ])('RPC 오류 %s → %s', async (message, code, expected) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fakeAdmin(() => ({ error: { message, code } }))
+    expect(await restorePlatformWorkspace(WS)).toEqual({ ok: false, code: expected })
+    spy.mockRestore()
+  })
+  it('빈 id 는 DB 에 묻지 않는다. 결과 형태가 어긋나면 실패', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { calls } = fakeAdmin(() => ({ data: { status: 'restored' } }))
+    expect(await restorePlatformWorkspace('')).toEqual({ ok: false, code: 'not_found' })
+    expect(calls).toEqual([])
+    expect(await restorePlatformWorkspace(WS)).toEqual({ ok: false, code: 'restore_failed' })
     spy.mockRestore()
   })
 })

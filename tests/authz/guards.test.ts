@@ -31,10 +31,13 @@ function stubDb(opts: {
   platformAdmin?: boolean
   /** platform_admins.maybeSingle() 응답을 그대로 지정 — 모양이 어긋난 응답([]·{}·남의 행)을 흉내낸다. */
   platformAdminData?: unknown
-  wsRows?: { workspace_id: string; role: string }[]
-  projects?: { id: string; workspace_id: string }[]
+  /** workspaces 임베드(archived_at)를 실으면 보관 판정을 탄다 — 싣지 않으면 임베드 없는 응답(보관 아님) */
+  wsRows?: { workspace_id: string; role: string; workspaces?: { archived_at: string | null } | null }[]
+  projects?: { id: string; workspace_id: string; workspaces?: { archived_at: string | null } | null }[]
   roster?: RosterRow[]
-  errorOn?: 'platform_admins' | 'workspace_members' | 'projects' | 'project_members'
+  /** 플랫폼 관리자만 읽는 workspaces 축(0056 — 있는 워크스페이스). 주지 않으면 wsRows·projects 에 나온 워크스페이스 전부가 보관 아님으로 있다 */
+  workspaces?: { id: string; archived_at: string | null }[]
+  errorOn?: 'platform_admins' | 'workspace_members' | 'projects' | 'project_members' | 'workspaces'
 }) {
   mockClient.auth.getClaims.mockResolvedValue({ data: { claims: { sub: USER.id } } })
   const res = (table: string, data: unknown) => ({ data: opts.errorOn === table ? null : data, error: opts.errorOn === table ? { message: 'boom' } : null })
@@ -57,6 +60,11 @@ function stubDb(opts: {
       // PostgREST 에서 people 임베드가 !inner 가 아니면 .eq('people.user_id') 는 임베드만 거르고 행은 전부 돌려준다.
       // 스텁은 그 반대로 모델링한다 — inner 조인이 사라지면 '내 명단 행'을 못 찾아 명단 기대 테스트가 깨지게.
       if (table === 'project_members') return res(table, selected.includes('people!inner(') ? opts.roster ?? [] : [])
+      if (table === 'workspaces') {
+        const all = opts.workspaces ?? [...new Set([...(opts.wsRows ?? []).map(r => r.workspace_id), ...(opts.projects ?? []).map(r => r.workspace_id)])]
+          .map(id => ({ id, archived_at: null }))
+        return { ...res(table, all), count: opts.errorOn === table ? null : all.length }
+      }
       throw new Error(`예상치 못한 테이블: ${table}`)
     }
     for (const m of ['select', 'eq', 'in', 'not', 'is', 'order', 'range']) {
@@ -324,9 +332,11 @@ describe('requireProjectAdmin / requireProjectMember', () => {
     expect((await requireProjectAdmin(null)).ok).toBe(true)
   })
 
-  it('플랫폼 관리자는 미존재 pid 도 통과 — 존재 여부 판정은 호출부 몫', async () => {
-    stubDb({ platformAdmin: true })
-    expect((await requireProjectMember('px')).ok).toBe(true)
+  it('플랫폼 관리자에게도 없는 pid 는 ERR_MISSING — buildActor 가 있는 프로젝트 전부를 싣는다(보관된 워크스페이스의 프로젝트도 여기로 온다, 0056)', async () => {
+    stubDb({ platformAdmin: true, projects: [{ id: 'p1', workspace_id: 'w1' }] })
+    expect((await requireProjectMember('p1')).ok).toBe(true)
+    expect(await requireProjectMember('px')).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
+    expect(await requireProjectAdmin('px')).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
   })
 
   it('(g) 조회 실패는 통과시키지 않고 사유를 구분해 돌려준다', async () => {
@@ -357,9 +367,10 @@ describe('requireWorkspaceAdmin', () => {
     const r = await requireWorkspaceAdmin('w1')
     expect(r.ok && r.actor.userId).toBe('u1')
   })
-  it('플랫폼 관리자는 소속 없이도 통과', async () => {
-    stubDb({ platformAdmin: true })
+  it('플랫폼 관리자는 소속 없이도 통과 — 있는 워크스페이스에 한해서다(없는 id 는 ERR_MISSING)', async () => {
+    stubDb({ platformAdmin: true, workspaces: [{ id: 'w9', archived_at: null }] })
     expect((await requireWorkspaceAdmin('w9')).ok).toBe(true)
+    expect(await requireWorkspaceAdmin('w-none')).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
   })
   it('권한 조회 실패는 ERR_LOOKUP', async () => {
     stubDb({ ...WS_ADMIN, errorOn: 'workspace_members' })
@@ -420,5 +431,89 @@ describe('getActorForView — 화면 계층 열화', () => {
     mockClient.auth.getClaims.mockImplementation(() => { throw thrown })
     const { getActorForView } = await import('@/lib/authz')
     await expect(getActorForView()).rejects.toBe(thrown)
+  })
+})
+
+// 워크스페이스 보관(0056) — 보관된 워크스페이스는 스냅샷에 실리지 않는다. 그래서 가드 넷 가운데 범위를 받는 셋이 ERR_MISSING(404 — 소속 아님과 같은 꼴)이다.
+// 세션 클라이언트는 RLS 가 그 행을 이미 가리고(아래 '세션' 케이스 — 응답에 아예 없다), admin 클라이언트는 임베드 archived_at 이 유일한 선이다.
+describe('워크스페이스 보관 — 스냅샷과 가드', () => {
+  const AT = '2026-10-10T00:00:00Z'
+  const LIVE = { archived_at: null }
+  const GONE = { archived_at: AT }
+
+  it('admin 경로: 보관된 워크스페이스의 소속·프로젝트·명단은 싣지 않는다(다른 워크스페이스는 그대로)', async () => {
+    stubDb({
+      wsRows: [{ workspace_id: 'w1', role: 'admin', workspaces: GONE }, { workspace_id: 'w2', role: 'member', workspaces: LIVE }],
+      projects: [{ id: 'p1', workspace_id: 'w1', workspaces: GONE }, { id: 'p2', workspace_id: 'w2', workspaces: LIVE }],
+      roster: [row('p1', 'admin'), row('p2', 'member')],
+    })
+    const a = await actorFromUser(mockClient as never, 'u1')
+    expect([...a.workspaceRoles]).toEqual([['w2', 'member']])
+    expect([...a.projectWorkspace]).toEqual([['p2', 'w2']])
+    expect([...a.projectRoles]).toEqual([['p2', 'member']])
+    expect([...a.memberIds.keys()]).toEqual(['p2'])
+    // 보관된 워크스페이스는 프로젝트 조회의 범위에도 넣지 않는다
+    expect(callsOn('projects', 'in')).toEqual([['workspace_id', ['w2']]])
+  })
+
+  it('임베드가 null(워크스페이스 행이 보이지 않음)이면 보관으로 본다 — fail-closed', async () => {
+    stubDb({ wsRows: [{ workspace_id: 'w1', role: 'admin', workspaces: null }], projects: [{ id: 'p1', workspace_id: 'w1', workspaces: null }] })
+    const a = await actorFromUser(mockClient as never, 'u1')
+    expect(a.workspaceRoles.size).toBe(0)
+    expect(a.projectWorkspace.size).toBe(0)
+  })
+
+  it('보관된 워크스페이스의 관리자 — 워크스페이스 가드도 프로젝트 가드도 ERR_MISSING(권한 없음과 구분되지 않는다)', async () => {
+    stubDb({ wsRows: [{ workspace_id: 'w1', role: 'admin', workspaces: GONE }], projects: [{ id: 'p1', workspace_id: 'w1', workspaces: GONE }], roster: [row('p1', 'admin')] })
+    const missing = { ok: false, error: ERR_MISSING, code: 'missing' }
+    expect(await requireWorkspaceAdmin('w1')).toEqual(missing)
+    expect(await requireProjectAdmin('p1')).toEqual(missing)
+    expect(await requireProjectMember('p1')).toEqual(missing)
+  })
+
+  it('세션 경로: RLS 가 보관된 워크스페이스의 행을 가려 응답에 없다 — 같은 ERR_MISSING', async () => {
+    stubDb({ wsRows: [], projects: [], roster: [row('p1', 'admin')] })
+    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
+    expect(await requireProjectAdmin('p1')).toEqual({ ok: false, error: ERR_MISSING, code: 'missing' })
+  })
+
+  it('플랫폼 관리자도 보관된 워크스페이스에는 들어가지 못한다 — 워크스페이스·프로젝트 가드 ERR_MISSING, 플랫폼 가드는 그대로', async () => {
+    stubDb({
+      platformAdmin: true,
+      workspaces: [{ id: 'w1', archived_at: AT }, { id: 'w2', archived_at: null }],
+      projects: [{ id: 'p1', workspace_id: 'w1', workspaces: GONE }, { id: 'p2', workspace_id: 'w2', workspaces: LIVE }],
+    })
+    const missing = { ok: false, error: ERR_MISSING, code: 'missing' }
+    expect(await requireWorkspaceAdmin('w1')).toEqual(missing)
+    expect(await requireProjectAdmin('p1')).toEqual(missing)
+    expect(await requireProjectMember('p1')).toEqual(missing)
+    expect((await requireWorkspaceAdmin('w2')).ok).toBe(true)
+    expect((await requireProjectAdmin('p2')).ok).toBe(true)
+    expect((await requireSuperuser()).ok).toBe(true)          // 복원은 이 가드로 한다
+    expect((await requireProjectAdmin(null)).ok).toBe(true)   // 프로젝트 없는 판정은 그대로
+  })
+
+  it('플랫폼 관리자 — 임베드 없이 workspaces 축만으로도 보관된 워크스페이스의 프로젝트를 뺀다', async () => {
+    stubDb({
+      platformAdmin: true,
+      workspaces: [{ id: 'w1', archived_at: AT }, { id: 'w2', archived_at: null }],
+      projects: [{ id: 'p1', workspace_id: 'w1' }, { id: 'p2', workspace_id: 'w2' }],
+    })
+    const a = await getActor()
+    expect([...a!.projectWorkspace.keys()]).toEqual(['p2'])
+    expect([...a!.liveWorkspaceIds!]).toEqual(['w2'])
+  })
+
+  it('플랫폼 관리자가 아니면 workspaces 축을 읽지 않는다(liveWorkspaceIds 없음)', async () => {
+    stubDb({ ...WS_ADMIN })
+    const a = await getActor()
+    expect(a!.liveWorkspaceIds).toBeUndefined()
+    expect(executed).not.toContain('workspaces')
+  })
+
+  it('플랫폼 관리자의 workspaces 축 조회 실패는 통과시키지 않는다(ERR_LOOKUP)', async () => {
+    stubDb({ platformAdmin: true, errorOn: 'workspaces' })
+    expect(await requireWorkspaceAdmin('w1')).toEqual({ ok: false, error: ERR_LOOKUP, code: 'lookup' })
+    expect(await requireSuperuser()).toEqual({ ok: false, error: ERR_LOOKUP, code: 'lookup' })
   })
 })

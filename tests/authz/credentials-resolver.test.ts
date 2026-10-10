@@ -21,7 +21,7 @@ function row(kind: 'agent_runner' | 'minutes_api' = 'agent_runner') {
     id: ID, workspace_id: W, kind, name: 'test', token_prefix: token.prefix, token_hash: token.hash,
     scopes: kind === 'agent_runner' ? ['work:read'] : [], project_ids: [P], default_project_id: P,
     default_team_id: null, team_map: {}, owner_user_id: kind === 'agent_runner' ? U : null,
-    enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z',
+    enabled: true, revoked_at: null, expires_at: '2099-01-01T00:00:00Z', workspaces: { archived_at: null },
   }
 }
 
@@ -58,6 +58,46 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
+
+// 워크스페이스 보관(0056) — 토큰은 폐기하지 않고 인증 단계에서 거부한다(복원하면 다시 동작한다)
+describe('resolveCredential — 보관된 워크스페이스', () => {
+  const AT = '2026-10-10T00:00:00Z'
+  it.each(['agent_runner', 'minutes_api'] as const)('%s — 맞는 토큰이어도 401, 사용 시각을 갱신하지 않는다', async kind => {
+    const mock = db({ ...row(kind), workspaces: { archived_at: AT } })
+    const result = await resolveCredential(request(kind === 'agent_runner' ? pat.token : minutes.token), mock.admin, kind)
+    expect(result).toBeInstanceOf(NextResponse)
+    expect((result as NextResponse).status).toBe(401)
+    expect(await (result as NextResponse).json()).toEqual({ error: '인증이 필요합니다.', code: 'unauthorized' })   // 다른 인증 실패와 같은 응답 — 보관을 알리지 않는다
+    expect(mock.update).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['임베드 null(워크스페이스 행이 안 보임)', null],
+    ['임베드 없음', undefined],
+    ['archived_at 없는 임베드', {}],
+    ['배열 임베드의 보관 행', [{ archived_at: AT }]],
+  ])('보관 시각을 읽지 못한 응답도 닫는다 — %s', async (_name, workspaces) => {
+    const mock = db({ ...row(), workspaces })
+    expect((await resolveCredential(request(), mock.admin, 'agent_runner') as NextResponse).status).toBe(401)
+    expect(mock.update).not.toHaveBeenCalled()
+  })
+  it('보관 아님(archived_at null)은 통과한다 — 배열 임베드도', async () => {
+    for (const workspaces of [{ archived_at: null }, [{ archived_at: null }]]) {
+      const mock = db({ ...row(), workspaces })
+      expect(await resolveCredential(request(), mock.admin, 'agent_runner')).toMatchObject({ id: ID, workspaceId: W })
+    }
+  })
+  it('조회 열에 워크스페이스의 보관 시각을 싣는다', async () => {
+    const mock = db(row())
+    await resolveCredential(request(), mock.admin, 'agent_runner')
+    expect(mock.select).toHaveBeenCalledWith(expect.stringContaining('workspaces(archived_at)'))
+  })
+  it('맞는 토큰의 보관 거부는 요청 제한의 실패로 세지 않는다 — 몇 번을 보내도 429 가 되지 않는다', async () => {
+    for (let i = 0; i < 40; i++) {
+      const mock = db({ ...row(), workspaces: { archived_at: AT } })
+      expect((await resolveCredential(request(), mock.admin, 'agent_runner') as NextResponse).status, String(i)).toBe(401)
+    }
+  })
+})
 
 describe('resolveCredential — SP7 §5.1.3', () => {
   it.each(['agent_runner', 'minutes_api'] as const)('킬스위치 %s는 인증/DB 조회보다 먼저 404', async kind => {

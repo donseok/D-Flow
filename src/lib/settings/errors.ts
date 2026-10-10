@@ -174,6 +174,19 @@ export class ConfigUnavailableError extends Error {
   }
 }
 
+/**
+ * 보관된 워크스페이스(0056)의 설정을 읽으려 했다 — 설정을 읽지 못한 것과 같이 닫는다(ConfigUnavailableError 의 하위라 기존 fail-closed 갈래를 그대로 탄다:
+ * 모듈 관문은 거부, 워커의 3값 판정은 'unknown'). 따로 가르는 호출부는 instanceof 로 본다(색인·위키 워커가 잡을 실패로 세지 않고 미뤄 둘 때).
+ */
+export class WorkspaceArchivedError extends ConfigUnavailableError {
+  readonly workspaceId: string
+  constructor(workspaceId: string) {
+    super(`보관된 워크스페이스입니다: ${workspaceId}`)
+    this.name = 'WorkspaceArchivedError'
+    this.workspaceId = workspaceId
+  }
+}
+
 /** valueOf 가 invalid·required_missing 키에서 던진다 — 그 키를 쓰는 기능만 멈춘다 */
 export class ConfigKeyError extends Error {
   readonly code: 'CONFIG_INVALID' | 'CONFIG_REQUIRED'

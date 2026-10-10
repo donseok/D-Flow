@@ -28,6 +28,8 @@ vi.mock('@/lib/supabase/server', () => ({
       workspace_members: { data: [], error: null },
       project_members: { data: [], error: null },
       projects: { data: [{ id: 'p1', workspace_id: 'ws-9', is_private: false }], error: null },
+      // buildActor 가 플랫폼 관리자에게 읽는 "있는 워크스페이스" 축(0056)
+      workspaces: { data: [{ id: 'ws-9', archived_at: null }], error: null },
     }
     return {
       from: (table: string) => {

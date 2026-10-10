@@ -10,6 +10,7 @@ import { cache } from 'react'
 import { NOTIFICATION_CATALOG, type NotificationType } from '@/lib/domain/inbox'
 import { valueOf } from '@/lib/settings/registry'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
+import { WorkspaceArchivedError } from '@/lib/settings/errors'
 import type { ConfigReadClient } from '@/lib/settings/projectConfig'
 import { isNotifyTypeEnabled, type NotifyPolicy } from '@/lib/settings/defs/notify'
 
@@ -40,14 +41,19 @@ async function workspaceOfProject(client: ConfigReadClient, projectId: string): 
 export async function notifyPolicyAllows(
   client: ConfigReadClient, input: { type: NotificationType; projectId: string | null; workspaceId?: string },
 ): Promise<boolean> {
-  if (NOTIFICATION_CATALOG[input.type]?.required) return true
+  // 필수 유형은 정책으로 끌 수 없다 — 다만 보관된 워크스페이스(0056)에는 필수 유형도 발행하지 않으므로 워크스페이스 설정까지는 읽는다
+  const required = NOTIFICATION_CATALOG[input.type]?.required === true
   try {
     const projectId = input.projectId
     const workspaceId = projectId ? await once(`p:${projectId}`, () => workspaceOfProject(client, projectId)) : (input.workspaceId ?? null)
     if (!workspaceId) return true
-    const policy = await once<NotifyPolicy>(`w:${workspaceId}`, async () => valueOf(await getWorkspaceConfig(workspaceId, { client }), 'notify.policy'))
-    return isNotifyTypeEnabled(policy, input.type)
+    const config = await once(`c:${workspaceId}`, () => getWorkspaceConfig(workspaceId, { client }))   // 보관이면 WorkspaceArchivedError
+    if (required) return true
+    return isNotifyTypeEnabled(valueOf(config, 'notify.policy') as NotifyPolicy, input.type)
   } catch (e) {
+    // 보관된 워크스페이스 — 동결이다. 이벤트·수신자 행을 쓰지 않는다(정책을 못 읽은 것과 다르다: 이쪽은 닫는다)
+    if (e instanceof WorkspaceArchivedError) return false
+    if (required) return true
     // 조회 실패·값 손상(CONFIG_INVALID) 모두 여기로 — 발행하되 조용히 넘기지 않는다(표시 = 로깅)
     console.error('[notify] notify.policy 를 읽지 못해 정책 없이 발행한다:', input.type,
       JSON.stringify({ projectId: input.projectId, workspaceId: input.workspaceId ?? null }), e instanceof Error ? e.message : e)

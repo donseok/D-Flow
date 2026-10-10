@@ -40,13 +40,22 @@ function admin(opts: {
   rebuild?: Row[] | { error: { code: string } }
   pending?: (excluded: string[]) => Row[] | { error: { code: string } }
   steps?: Record<string, Array<'finished' | 'throw' | null>>
+  /** 보관된 워크스페이스(0056) — workspaces 조회의 응답. 'error' 면 그 조회가 실패한다 */
+  archived?: string[] | 'error'
 }) {
   const rebuildClaims: Array<string | null> = []
   const minuteClaims: number[] = []
   const pendingQueries: string[][] = []
+  const rebuildQueries: string[][] = []
   const from = vi.fn((table: string) => {
     let excluded: string[] = []
     const result = () => {
+      if (table === 'workspaces') {
+        if (opts.archived === 'error') return { data: null, error: { message: 'workspaces down' }, count: null }
+        const ids = opts.archived ?? []
+        return { data: ids.map((id) => ({ id })), error: null, count: ids.length }
+      }
+      if (table === 'wiki_project_rebuild_jobs') rebuildQueries.push(excluded)
       if (table === 'wiki_project_rebuild_jobs') return Array.isArray(opts.rebuild) ? { data: opts.rebuild, error: null } : { data: null, error: opts.rebuild?.error ?? null }
       if (table === 'wiki_processing_jobs' && pending) {
         pendingQueries.push(excluded)
@@ -59,8 +68,9 @@ function admin(opts: {
     const b: Record<string, unknown> = {
       select: () => b, in: () => b, lt: () => b, lte: () => b, order: () => b,
       eq: (column: string, value: unknown) => { if (column === 'status' && value === 'pending') pending = true; return b },
-      not: (_c: string, _op: string, value: string) => { excluded = value.replace(/[()]/g, '').split(',').filter(Boolean); return b },
-      limit: () => b,
+      // 제외 목록('(a,b)')만 기록한다 — workspaces 조회의 not('archived_at', 'is', null) 은 값이 문자열이 아니다
+      not: (_c: string, _op: string, value: string | null) => { if (typeof value === 'string') excluded = value.replace(/[()]/g, '').split(',').filter(Boolean); return b },
+      limit: () => b, range: () => b,
       then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(result()).then(res, rej),
     }
     return b
@@ -79,7 +89,7 @@ function admin(opts: {
     const result = { data, error }
     return { maybeSingle: async () => result, single: async () => result }
   })
-  return { from, rpc, rebuildClaims, minuteClaims, pendingQueries }
+  return { from, rpc, rebuildClaims, minuteClaims, pendingQueries, rebuildQueries }
 }
 
 const job = (id: number, workspace_id: string) => ({ id, projects: { workspace_id } })
@@ -134,6 +144,38 @@ describe('runWikiWorkerOnce — 워크스페이스 번갈아 돌기', () => {
     await expect(runWikiWorkerOnce(5)).rejects.toThrow('PROJECT_REBUILD_CLAIM:XX000')
     expect(a.rebuildClaims).toEqual(['pA1', 'pB1'])
     expect(a.minuteClaims).toEqual([9])                 // 뒤의 회의록 잡까지 돌고 나서 던진다
+  })
+
+  // 워크스페이스 보관(0056) — 선점 RPC 가 보관된 워크스페이스의 잡을 집지 않는다(행은 그대로 — 복원하면 이어진다). 워커는 후보에서도 빼서
+  // 집히지 않을 잡이 이번 실행의 몫과 후보 창을 차지하지 않게 한다.
+  it('보관된 워크스페이스의 잡은 후보에서 뺀다 — 대기 잡·재구성 둘 다, 첫 조회부터', async () => {
+    const a = admin({
+      archived: ['X'],
+      rebuild: [rebuild('pA1', 'A')], steps: { pA1: ['finished'] },
+      pending: (excluded) => (excluded.includes('X') ? [job(1, 'A'), job(2, 'B')] : [job(90, 'X'), job(91, 'X'), job(1, 'A'), job(2, 'B')]),
+    })
+    mocks.createAdminClient.mockReturnValue(a)
+    expect(await runWikiWorkerOnce(3)).toEqual({ attempted: 3, completed: 1 })
+    expect(a.rebuildQueries).toEqual([['X']])
+    expect(a.pendingQueries[0]).toEqual(['X'])
+    expect(a.minuteClaims).toEqual([1, 2])              // 보관된 워크스페이스의 잡(90·91)은 선점을 시도하지도 않는다 — 몫을 쓰지 않았다
+  })
+
+  it('보관된 워크스페이스가 없으면 후보 조회에 제외 조건을 붙이지 않는다', async () => {
+    const a = admin({ archived: [], rebuild: [], pending: () => [job(1, 'A')] })
+    mocks.createAdminClient.mockReturnValue(a)
+    await runWikiWorkerOnce(2)
+    expect(a.rebuildQueries).toEqual([[]])
+    expect(a.pendingQueries).toEqual([[]])
+  })
+
+  it('보관된 워크스페이스 목록을 못 읽어도 워커는 돈다 — 후보에서 빼지 못했을 뿐이고(로그), 집지 않는 것은 선점 RPC 가 지킨다', async () => {
+    const a = admin({ archived: 'error', pending: () => [job(90, 'X'), job(1, 'A')] })
+    mocks.createAdminClient.mockReturnValue(a)
+    expect(await runWikiWorkerOnce(2)).toEqual({ attempted: 2, completed: 0 })
+    expect(a.pendingQueries).toEqual([[]])
+    expect(a.minuteClaims).toEqual([90, 1])             // RPC 가 90 을 돌려주지 않는다(tests/rls/workspace-archive.test.ts 가 고정)
+    expect(vi.mocked(console.error).mock.calls.some((c) => String(c[0]).includes('보관된 워크스페이스 조회 실패'))).toBe(true)
   })
 
   it('재구성 후보를 읽지 못하면 옛 전역 선점으로 돈다(처리는 멈추지 않는다)', async () => {

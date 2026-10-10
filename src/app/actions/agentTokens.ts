@@ -55,10 +55,18 @@ export async function createAgentToken(input: {
   }
 
   const admin = createAdminClient()
-  let workspaceMemberships = admin.from('workspace_members').select('workspace_id').eq('user_id', uid)
+  // 보관된 워크스페이스(0056)의 소속은 세지 않는다 — 세면 "활성 하나 + 보관 하나"인 사람이 워크스페이스를 고르라는 거부를 받는다(그 워크스페이스는 보이지도 않는다).
+  // 보관된 워크스페이스를 직접 지정한 발급은 아래 모듈 관문(워크스페이스 설정 해석기)이 닫는다. 상한은 "둘 이상인가"만 가리면 되지만 보관분을 걸러 낸 뒤에 세야 해서 넉넉히 읽는다
+  let workspaceMemberships = admin.from('workspace_members').select('workspace_id, workspaces(archived_at)').eq('user_id', uid)
   if (input.workspaceId) workspaceMemberships = workspaceMemberships.eq('workspace_id', input.workspaceId)
-  const { data: rows, error: membershipErr } = await workspaceMemberships.limit(2)
+  const { data: allRows, error: membershipErr } = await workspaceMemberships.limit(50)
   if (membershipErr) return { ok: false, error: t('srv.agentTokens.couldNotVerifyWorkspaceMembership') }
+  const rows = ((allRows ?? []) as Array<{ workspace_id: unknown; workspaces?: unknown }>).filter((row) => {
+    if (!Object.hasOwn(row, 'workspaces')) return true   // 임베드를 싣지 않는 응답(테스트 대역) — 보관 판정은 모듈 관문이 다시 한다
+    const e = row.workspaces as { archived_at?: unknown } | Array<{ archived_at?: unknown }> | null
+    const w = Array.isArray(e) ? e[0] : e
+    return !!w && w.archived_at === null
+  })
   if (!rows || rows.length !== 1 || typeof rows[0].workspace_id !== 'string' || !rows[0].workspace_id) return { ok: false, error: t('srv.agentTokens.selectOneWorkspaceBelong') }
   const workspaceId = rows[0].workspace_id as string
   const gate = await requireModule({ workspaceId }, 'agents', { client: admin })

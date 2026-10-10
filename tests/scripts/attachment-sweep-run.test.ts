@@ -16,13 +16,15 @@ function fake(init: {
   objects: { name: string; createdAt: string }[]
   minute_files?: Row[]
   minute_versions?: Row[]
+  /** workspaces 표 — 보관된 워크스페이스(0056)는 archived_at 이 찬다. 주지 않으면 보관된 워크스페이스 없음 */
+  workspaces?: Row[]
   failList?: string
   failRemove?: Set<string>
   /** 재검증 시점에 참조가 생긴 경로(판정 뒤 확정된 업로드) */
   lateRefs?: Set<string>
 }) {
   const objects = new Map(init.objects.map(o => [o.name, o.createdAt]))
-  const tables: Record<string, Row[]> = { minute_files: init.minute_files ?? [], minute_versions: init.minute_versions ?? [] }
+  const tables: Record<string, Row[]> = { minute_files: init.minute_files ?? [], minute_versions: init.minute_versions ?? [], workspaces: init.workspaces ?? [] }
   const listed: string[] = []
   const removed: string[] = []
   const updates: { id: unknown; patch: Row }[] = []
@@ -104,6 +106,28 @@ describe('runSweep', () => {
     expect(f.removed.sort()).toEqual([att('orphan.pdf'), att('tomb.pdf')].sort())
     expect(f.updates.map(u => u.id).sort()).toEqual(['gone', 'tomb'])
     expect([...f.objects.keys()].sort()).toEqual([att('live.pdf'), body('body.md')].sort())
+  })
+
+  it('보관된 워크스페이스(0056)는 건너뛴다 — 그 고아·톰스톤은 그대로 두고 다른 워크스페이스만 정리한다', async () => {
+    const W2 = 'dddddddd-4444-4444-8444-444444444444'
+    const att2 = (n: string) => `ws/${W2}/p/${P}/minute-files/${M}/${n}`
+    const f = fake({
+      objects: [
+        { name: att('orphan.pdf'), createdAt: OLD },
+        { name: att2('orphan.pdf'), createdAt: OLD }, { name: att2('tomb.pdf'), createdAt: OLD },
+      ],
+      minute_files: [
+        { id: 'tomb2', file_path: att2('tomb.pdf'), role: 'attachment', deleted_at: OLD, purged_at: null },
+        { id: 'gone2', file_path: att2('gone.pdf'), role: 'attachment', deleted_at: OLD, purged_at: null },
+      ],
+      workspaces: [{ id: W, archived_at: null }, { id: W2, archived_at: '2026-10-01T00:00:00Z' }],
+    })
+    const res = await runSweep(f.client, { apply: true, now: NOW, ...quiet })
+    expect(res).toMatchObject({ ok: true, failures: 0, summary: { scannedObjects: 1, orphans: 1, tombstoneObjects: 0, tombstoneMarkOnly: 0 } })
+    expect(f.removed).toEqual([att('orphan.pdf')])
+    expect(f.updates).toEqual([])                                   // 보관된 워크스페이스의 톰스톤에 purged_at 을 적지 않는다
+    expect(f.listed.some(p => p.startsWith(`ws/${W2}`))).toBe(false)   // 그 접두는 읽지도 않는다
+    expect([...f.objects.keys()].sort()).toEqual([att2('orphan.pdf'), att2('tomb.pdf')].sort())
   })
 
   it('목록 읽기가 하나라도 실패하면 아무것도 지우지 않는다', async () => {

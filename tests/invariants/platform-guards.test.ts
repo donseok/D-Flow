@@ -4,6 +4,7 @@
 // passwordResetVerdict — 다른 워크스페이스에도 속한 계정·관리자 계정은 여전히 플랫폼 관리자만이다).
 // + 빈 워크스페이스 삭제 하나(0055 — 되돌릴 수 없는 조작이라 그 워크스페이스의 관리자에게 열지 않는다) = 13곳. 이름 변경(renameWorkspace)은
 // requireWorkspaceAdmin 이라 여기 없다.
+// + 워크스페이스 보관·복원 둘(0056 — 멤버 전원의 화면과 연동을 닫고 여는 조작이고, 보관된 워크스페이스는 그 관리자에게 보이지도 않는다) = 15곳.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -16,12 +17,13 @@ const EXPECTED = [
   'src/app/actions/llmConfig.ts#getLlmConfig', 'src/app/actions/llmConfig.ts#listLlmProfiles',
   'src/app/actions/llmConfig.ts#saveLlmConfig', 'src/app/actions/llmConfig.ts#testLlmConnection',
   'src/app/actions/llmConfig.ts#updateLlmProfile',
+  'src/app/actions/platformWorkspaces.ts#archivePlatformWorkspace',
   'src/app/actions/platformWorkspaces.ts#createPlatformWorkspace', 'src/app/actions/platformWorkspaces.ts#deletePlatformWorkspace',
-  'src/app/actions/platformWorkspaces.ts#listPlatformWorkspaces',
+  'src/app/actions/platformWorkspaces.ts#listPlatformWorkspaces', 'src/app/actions/platformWorkspaces.ts#restorePlatformWorkspace',
   'src/app/api/chat/health/route.ts#GET', 'src/app/api/wiki/reindex/route.ts#POST',
 ]
 
-describe('플랫폼 가드 13곳(D1 의 11 − 비밀번호 재설정 + 워크스페이스 목록·생성·삭제)', () => {
+describe('플랫폼 가드 15곳(D1 의 11 − 비밀번호 재설정 + 워크스페이스 목록·생성·삭제·보관·복원)', () => {
   it('requireSuperuser( 호출 = EXPECTED', () => {
     const hits: string[] = []
     for (const file of walk(ROOT)) {

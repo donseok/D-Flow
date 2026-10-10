@@ -23,12 +23,14 @@ function fake(init: {
   objects: { name: string; createdAt: string }[]
   minute_files?: Row[]
   minute_versions?: Row[]
+  /** workspaces 표 — 보관된 워크스페이스(0056)는 archived_at 이 찬다. 주지 않으면 보관된 워크스페이스 없음 */
+  workspaces?: Row[]
   failList?: string
   failTable?: string
   failRemove?: Set<string>
 }) {
   const objects = new Map(init.objects.map((o) => [o.name, o.createdAt]))
-  const tables: Record<string, Row[]> = { minute_files: init.minute_files ?? [], minute_versions: init.minute_versions ?? [] }
+  const tables: Record<string, Row[]> = { minute_files: init.minute_files ?? [], minute_versions: init.minute_versions ?? [], workspaces: init.workspaces ?? [] }
   const removed: string[] = []
   const updates: unknown[] = []
   const list = async (prefix: string, opts: { limit: number; offset: number }) => {
@@ -133,6 +135,7 @@ describe('GET /api/cron/minutes-attachments-gc', () => {
     ['버킷 목록', { failList: `ws/${W}/p/${P}/minute-files` }],
     ['minute_files 조회', { failTable: 'minute_files' }],
     ['minute_versions 조회', { failTable: 'minute_versions' }],
+    ['보관된 워크스페이스 조회(0056)', { failTable: 'workspaces' }],
   ])('%s 가 실패하면 500 READ_FAILED — 아무것도 지우거나 고치지 않는다', async (_name, fail) => {
     const base = scenario()
     const f = fake({ objects: [...base.objects].map(([name, createdAt]) => ({ name, createdAt })), minute_files: [

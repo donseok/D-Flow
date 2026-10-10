@@ -40,6 +40,7 @@ import {
 } from '../../scripts/lib/e2e.mjs'
 import {
   DUO, SP3B_B_TEAM, SWITCHER_MARK, expectLocation, hiddenVerdict, issuesLinkVerdict, legacyCases, shellBadgeVerdict, switcherVerdict,
+  archivedRowVerdict, workspaceRowHtml,
 } from '../../scripts/lib/e2e.mjs'
 
 const LOCAL_ENV = 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon\n'
@@ -1390,5 +1391,83 @@ describe('e2e-local.mjs — 설정 반영 완주 단계', () => {
     const section = src.slice(src.indexOf('// ── 26. 설정 반영 완주'))
     for (const check of ['otherProjectClean', 'otherProjectStaysSheet', 'otherWorkspaceKeeps', 'otherWorkspaceClean', 'otherWorkspaceUnchanged', 'nonMemberIs404',
       'otherProjectStillFiles', 'otherWorkspaceStillOn']) expect(section, check).toContain(`${check}:`)
+  })
+})
+
+// 워크스페이스 보관(0056) — E2E 의 workspace-archive 단계가 /admin/workspaces 목록에서 읽는 순수 판정.
+// 실제 화면의 표지와 맞는지는 tests/ui/workspaces-admin.test.tsx 가 같은 함수로 대조한다.
+describe('archivedRowVerdict — 목록 행의 보관 상태', () => {
+  const active = (slug: string) => `<tr data-workspace-row="${slug}"><td>이름</td><td><a href="/w/${slug}">열기</a>`
+    + '<button data-workspace-rename="">이름 바꾸기</button><button data-workspace-archive="">보관</button><button data-workspace-delete="">삭제</button></td></tr>'
+  const archived = (slug: string) => `<tr data-workspace-row="${slug}" data-workspace-archived="true"><td>이름</td><td>보관됨</td>`
+    + '<td><button data-workspace-restore="">복원</button><button data-workspace-delete="">삭제</button></td></tr>'
+  const table = (...rows: string[]) => `<table><tbody>${rows.join('')}</tbody></table>`
+
+  it('workspaceRowHtml — 그 slug 의 행만 잘라 낸다(이웃 행의 표지가 섞이지 않는다). 없으면 null', () => {
+    const html = table(active('alpha'), archived('beta'))
+    expect(workspaceRowHtml(html, 'alpha')).toContain('href="/w/alpha"')
+    expect(workspaceRowHtml(html, 'alpha')).not.toContain('data-workspace-restore')
+    expect(workspaceRowHtml(html, 'beta')).toContain('data-workspace-restore')
+    expect(workspaceRowHtml(html, 'gamma')).toBeNull()
+    expect(workspaceRowHtml(html, 'alph')).toBeNull()          // 접두가 같은 다른 slug 로 읽지 않는다
+  })
+  it('보관된 행 — 보관 표지·복원이 있고 열기·이름 바꾸기·보관이 없다. 삭제는 있다', () => {
+    const html = table(active('alpha'), archived('beta'))
+    expect(archivedRowVerdict(html, 'beta', true)).toEqual([])
+    expect(archivedRowVerdict(html, 'alpha', false)).toEqual([])
+  })
+  it('상태가 기대와 다르면 무엇이 어긋났는지 낸다', () => {
+    const html = table(active('alpha'), archived('beta'))
+    expect(archivedRowVerdict(html, 'alpha', true)).toEqual([
+      'alpha: 보관 표지이(가) 없다', 'alpha: 복원 단추이(가) 없다', 'alpha: 열기 링크이(가) 있다', 'alpha: 이름 바꾸기 단추이(가) 있다', 'alpha: 보관 단추이(가) 있다',
+    ])
+    expect(archivedRowVerdict(html, 'beta', false).length).toBe(5)
+    expect(archivedRowVerdict(html, 'gamma', true)).toEqual(['목록에 gamma 행이 없다'])
+  })
+  it('보관된 행에 열기 링크가 남아 있으면 잡는다 — 그 화면은 플랫폼 관리자에게도 404 다', () => {
+    const leaky = archived('beta').replace('<td>보관됨</td>', '<td><a href="/w/beta">열기</a></td>')
+    expect(archivedRowVerdict(table(leaky), 'beta', true)).toEqual(['beta: 열기 링크이(가) 있다'])
+  })
+  it('삭제 단추가 없으면 잡는다(보관된 워크스페이스도 비어 있으면 지울 수 있어야 한다)', () => {
+    expect(archivedRowVerdict(table(archived('beta').replace('<button data-workspace-delete="">삭제</button>', '')), 'beta', true)).toEqual(['beta: 삭제 단추이(가) 없다'])
+  })
+})
+
+describe('e2e-local.mjs — workspace-archive 단계(0056)', () => {
+  const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+  const section = src.slice(src.indexOf('// 27. workspace-archive'))
+  it('맨 끝 단계다 — 앞 단계들이 대조용 워크스페이스(B)를 쓰므로 그 뒤에 보관한다', () => {
+    expect(src.indexOf('// 27. workspace-archive')).toBeGreaterThan(src.lastIndexOf("settingStep('setting-local-drafts'"))
+    expect(section.match(/\bstep\('/g)).toHaveLength(1)
+    expect(section).toContain("step('workspace-archive',")
+    expect(src.slice(src.indexOf("step('workspace-archive',")).match(/\b(step|settingStep|sp3b)\('/g)).toHaveLength(1)   // 그 뒤에 다른 단계가 없다
+  })
+  it('반드시 복원한다 — finally 에서 복원 액션, 안 되면 service_role RPC, 그것도 안 되면 실패로 알린다(보관된 채 남기지 않는다)', () => {
+    expect(section).toMatch(/\} finally \{[\s\S]*?'restorePlatformWorkspace', \[wsB\][\s\S]*?svc\.rpc\('restore_workspace', \{ p_actor: me\.id, p_workspace_id: wsB \}\)[\s\S]*?보관된 채 남았다/)
+    expect(section).toContain("restored: restoredBy === 'action'")
+    // 보관하는 워크스페이스는 대조용 B 뿐이다 — 주 워크스페이스(A)를 보관하는 호출이 없다
+    expect(section).not.toMatch(/'archivePlatformWorkspace', \[wsA\b/)
+    expect(section.match(/'archivePlatformWorkspace', \[wsB, slugB,/g)).toHaveLength(2)        // 보관 + 멱등 확인
+    expect(section.match(/'archivePlatformWorkspace', \[wsB, slugA,/g)).toHaveLength(1)        // 틀린 주소(거부돼야 한다)
+  })
+  it('보는 것 — 관리자 화면 404·플랫폼 관리자 화면 404·전환기·서버 액션·세션 직접 읽기와 쓰기·연동 API·공유 링크·목록의 보관 표지·복원 뒤 원상', () => {
+    for (const check of ['cleanStart', 'wrongSlugRefused', 'workspaceAdminCannotArchive', 'archived', 'idempotent', 'adminOfItHidden', 'platformAdminHidden',
+      'switcherGone', 'actionRefused', 'sessionReadsEmpty', 'sessionWriteRefused', 'apiRefused', 'shareClosed', 'listedArchived', 'restored',
+      'restoreIdempotent', 'backToNormal', 'shareTurnedOff']) expect(section, check).toContain(`${check}:`)
+  })
+  it('새 액션 셋은 /admin/workspaces 에 묶여 있고 그 화면의 클라이언트 컴포넌트가 실제로 부른다', () => {
+    const dialogs = readFileSync('src/components/admin/WorkspaceRowDialogs.tsx', 'utf8')
+    const actions = readFileSync('src/app/actions/platformWorkspaces.ts', 'utf8')
+    for (const name of ['archivePlatformWorkspace', 'restorePlatformWorkspace', 'renameWorkspace']) {
+      expect(src, name).toContain(`${name}: { filename: 'src/app/actions/platformWorkspaces.ts', exportedName: '${name}', worker: '/admin/workspaces/page' }`)
+      expect(actions, name).toMatch(new RegExp(`^export async function ${name}\\(`, 'm'))
+      expect(dialogs, name).toMatch(new RegExp(`\\b${name}\\b`))
+    }
+    expect(readFileSync('src/components/admin/WorkspacesManager.tsx', 'utf8')).toContain("from './WorkspaceRowDialogs'")
+  })
+  it('공유 토큰·자격증명 토큰은 결과에 남기지 않는다 — 공유는 끝에 끈다', () => {
+    const stepCall = section.slice(section.indexOf("step('workspace-archive',"))
+    expect(stepCall).not.toMatch(/on\.token|minutesTokenB/)
+    expect(section).toContain("'setMinuteShare', [minuteB, 'disable']")
   })
 })

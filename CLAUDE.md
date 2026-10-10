@@ -155,7 +155,8 @@ null 이거나 명단에 없으면 조회 전용이다. 계정 없는 외부 인
 - 위 규칙의 전체 설계는 `docs/superpowers/specs/2026-09-23-generic-platform-design.md` §2(조직·권한 모델),
   SP1 구현 결정은 `docs/superpowers/specs/2026-09-24-sp1-org-core-design.md` 에 있다.
 - **워크스페이스 소속의 삭제는 `remove_workspace_member` 한 길이다**(0053·0054). 세션(authenticated)의 `workspace_members` DELETE 권한·정책은 0054 에서 회수됐다 — 직접 지우면 초대·토큰이 회수되지 않는다. INSERT·UPDATE(role 열) 세션 권한은 남아 있다(앱은 service_role 경로로 쓴다).
-- 워크스페이스 관리 가드는 `requireWorkspaceAdmin(wid)` — `requireSuperuser` 는 플랫폼 13곳(`tests/invariants/platform-guards.test.ts` — SP2 의 11곳에서 비밀번호 재설정을 뺀 10곳 + 워크스페이스 목록·생성 `src/app/actions/platformWorkspaces.ts` 둘)뿐이다. 비밀번호 재설정(`resetPassword`)은 `requireWorkspaceAdmin(wid)` + 대상 범위 판정(`passwordResetVerdict` — 관리자·다른 워크스페이스에도 속한 계정은 플랫폼 관리자만)이고, 워크스페이스에서 멤버를 빼는 길은 RPC `remove_workspace_member`(0053) 하나다. service_role 클라이언트를 새로 만들면 `docs/sp2-admin-client-audit.md` 에 분류를 적는다.
+- 워크스페이스 관리 가드는 `requireWorkspaceAdmin(wid)` — `requireSuperuser` 는 플랫폼 15곳(`tests/invariants/platform-guards.test.ts` — SP2 의 11곳에서 비밀번호 재설정을 뺀 10곳 + 워크스페이스 목록·생성·삭제·보관·복원 `src/app/actions/platformWorkspaces.ts` 다섯)뿐이다. 비밀번호 재설정(`resetPassword`)은 `requireWorkspaceAdmin(wid)` + 대상 범위 판정(`passwordResetVerdict` — 관리자·다른 워크스페이스에도 속한 계정은 플랫폼 관리자만)이고, 워크스페이스에서 멤버를 빼는 길은 RPC `remove_workspace_member`(0053) 하나다. service_role 클라이언트를 새로 만들면 `docs/sp2-admin-client-audit.md` 에 분류를 적는다.
+- **보관된 워크스페이스는 없는 것으로 판정한다**(0056 — `workspaces.archived_at`). 세션 경로는 RLS 의 뿌리 함수(`my_workspace_ids`·`is_ws_member`·`is_ws_admin`·`is_project_admin`·`can_read_project`)와 `buildActor` 가 닫고, RPC 안의 `actor_is_*` 재판정도 false 다. **service_role 로 워크스페이스 자료를 읽거나 쓰는 새 경로(크론·워커·세션 없는 API·공유·초대)는 스스로 보관을 걸러야 한다** — `src/lib/workspace/archived.ts` 의 판정을 쓰고, 못 읽으면 닫는다. 큐 잡은 선점 RPC 가 집지 않을 뿐 지우지 않는다(복원하면 이어서 돈다).
 
 ## 에러 처리 3원칙
 

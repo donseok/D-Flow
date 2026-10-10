@@ -39,9 +39,10 @@ async function listAll(client: IncomingGcClient, prefix: string): Promise<Storag
 
 const folders = (entries: StorageEntry[]) => entries.filter((e) => e.id === null).map((e) => e.name)
 
-async function listIncoming(client: IncomingGcClient): Promise<{ name: string; createdAt: string | null }[]> {
+async function listIncoming(client: IncomingGcClient, skipWorkspaces: ReadonlySet<string>): Promise<{ name: string; createdAt: string | null }[]> {
   const objects: { name: string; createdAt: string | null }[] = []
   for (const w of folders(await listAll(client, 'ws'))) {
+    if (skipWorkspaces.has(w)) continue   // 보관된 워크스페이스(0056) — 동결이라 그 아래 파일은 읽지도 지우지도 않는다
     if (!folders(await listAll(client, `ws/${w}`)).includes('p')) continue
     for (const p of folders(await listAll(client, `ws/${w}/p`))) {
       for (const kind of folders(await listAll(client, `ws/${w}/p/${p}`))) {
@@ -57,10 +58,13 @@ async function listIncoming(client: IncomingGcClient): Promise<{ name: string; c
   return objects
 }
 
-export async function runFormTemplatesGc(client: IncomingGcClient, now: number = Date.now()): Promise<IncomingGcResult> {
+/** skipWorkspaces: 건너뛸 워크스페이스 id(보관된 것 — 라우트가 archivedWorkspaceIds 로 읽어 넘긴다). 그 접두 아래는 목록도 읽지 않는다. */
+export async function runFormTemplatesGc(
+  client: IncomingGcClient, now: number = Date.now(), skipWorkspaces: ReadonlySet<string> = new Set(),
+): Promise<IncomingGcResult> {
   let objects: { name: string; createdAt: string | null }[]
   try {
-    objects = await listIncoming(client)
+    objects = await listIncoming(client, skipWorkspaces)
   } catch (e) {
     return { ok: false, stage: 'list', error: e instanceof Error ? e.message : String(e) }
   }

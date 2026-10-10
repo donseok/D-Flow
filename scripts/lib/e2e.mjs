@@ -899,6 +899,35 @@ export function hiddenVerdict({ status, html }, sentinels = []) {
   return p
 }
 
+/** /admin/workspaces 목록의 한 행(순수) — `data-workspace-row="<slug>"` 부터 그 행이 끝나는 곳(</tr>)까지. 행이 없으면 null
+ *  @param {string} html @param {string} slug @returns {string | null} */
+export function workspaceRowHtml(html, slug) {
+  const start = html.indexOf(`data-workspace-row="${slug}"`)
+  if (start < 0) return null
+  const end = html.indexOf('</tr>', start)
+  return end < 0 ? html.slice(start) : html.slice(start, end)
+}
+
+/**
+ * 워크스페이스 보관 상태의 목록 행 판정(순수, 0056) — 보관된 행은 "보관됨" 표지와 복원 단추가 있고 열기 링크·이름 바꾸기·보관 단추가 없다.
+ * 활성 행은 그 반대다. 삭제 단추는 두 상태 모두 있다(보관된 워크스페이스도 비어 있으면 지울 수 있다).
+ * @param {string} html /admin/workspaces 의 HTML @param {string} slug @param {boolean} expectArchived @returns {string[]} 문제 목록
+ */
+export function archivedRowVerdict(html, slug, expectArchived) {
+  const row = workspaceRowHtml(html, slug)
+  if (row === null) return [`목록에 ${slug} 행이 없다`]
+  const has = (mark) => row.includes(mark)
+  const p = []
+  const want = (mark, expected, what) => { if (has(mark) !== expected) p.push(`${slug}: ${what}${expected ? '이(가) 없다' : '이(가) 있다'}`) }
+  want('data-workspace-archived="true"', expectArchived, '보관 표지')
+  want('data-workspace-restore', expectArchived, '복원 단추')
+  want(`href="/w/${slug}"`, !expectArchived, '열기 링크')
+  want('data-workspace-rename', !expectArchived, '이름 바꾸기 단추')
+  want('data-workspace-archive=', !expectArchived, '보관 단추')
+  want('data-workspace-delete', true, '삭제 단추')
+  return p
+}
+
 /** 워크스페이스 전환기 트리거 판정(순수, E5·D4) — 소속 둘 이상이면 SSR HTML 에 트리거 표지가 있고, 하나면 이름만(표지 없음).
  *  개수는 보지 않는다 — 768~1023 에서 드로어를 연 상태는 같은 전환기를 한 번 더 마운트한다(U2b-4 이월)
  *  @param {string} html @param {boolean} expectList @returns {string[]} 문제 목록 */

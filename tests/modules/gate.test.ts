@@ -7,7 +7,7 @@ vi.mock('@/lib/modules/effective', () => ({ effectiveModules: m.effectiveModules
 vi.mock('@/lib/modules/effectiveMany', () => ({ effectiveModulesMany: m.effectiveModulesMany }))
 vi.mock('@/lib/authz', () => ({ getActor: m.getActor }))
 import { ERR_MODULE_DISABLED } from '@/lib/authz/errors'
-import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
+import { ConfigKeyError, ConfigUnavailableError, WorkspaceArchivedError } from '@/lib/settings/errors'
 import type { ModuleId } from '@/lib/modules/defaults'
 const { requireModule, requireSessionModule, moduleState, moduleSetFor, projectsWithModule, workspacesWithModule } =
   await vi.importActual<typeof import('@/lib/modules/gate')>('@/lib/modules/gate')
@@ -219,5 +219,45 @@ describe('목록형(스펙 §4.2 첫 문단)', () => {
     m.effectiveModules.mockImplementation(async (s: { workspaceId: string }) => (s.workspaceId === W2 ? eff('minutes_integration') : eff()))
     expect(await workspacesWithModule([WID, W2], 'minutes_integration', { client })).toEqual([W2])
     for (const w of [WID, W2]) expect(m.effectiveModules).toHaveBeenCalledWith({ workspaceId: w }, { client })
+  })
+})
+
+// 워크스페이스 보관(0056) — 설정 해석기가 보관을 WorkspaceArchivedError(ConfigUnavailableError 하위)로 던진다. 관문은 그것을 "읽지 못함"과 같이 닫는다:
+// 세션 없는 경로(외부 API·공유 링크·에이전트 API·워커)가 { client: admin } 으로 이 관문을 지나므로 RLS 없이도 동결이 걸린다.
+describe('보관된 워크스페이스 — 모듈 관문', () => {
+  const archived = () => new WorkspaceArchivedError(WID)
+  it('requireModule — 워크스페이스·프로젝트 범위 모두 거부(꺼진 모듈과 같은 응답: 404, 존재를 알리지 않는다)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.effectiveModules.mockRejectedValue(archived())
+    const denied = { ok: false, error: ERR_MODULE_DISABLED, code: 'module_disabled' }
+    expect(await requireModule({ workspaceId: WID }, 'minutes', { client })).toEqual(denied)
+    expect(await requireModule({ projectId: PID }, 'issues', { client })).toEqual(denied)
+    expect(await requireModule({ projectId: PID }, ['issues', 'minutes'], { client })).toEqual(denied)
+    spy.mockRestore()
+  })
+  it('core 모듈만 묻는 관문은 설정을 읽지 않는다 — 그 경로의 보관 판정은 가드(권한 스냅샷)와 자격증명 해석의 몫이다', async () => {
+    m.effectiveModules.mockRejectedValue(archived())
+    expect(await requireModule({ workspaceId: WID }, 'wbs', { client })).toEqual({ ok: true })
+    expect(m.effectiveModules).not.toHaveBeenCalled()
+  })
+  it("moduleState — 'off' 가 아니라 'unknown' 이다: 워커가 잡을 skipped 로 닫지 않는다(선점 RPC 가 보관된 워크스페이스의 잡을 애초에 집지 않는다)", async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.effectiveModules.mockRejectedValue(archived())
+    expect(await moduleState({ workspaceId: WID }, 'chatbot', { client })).toBe('unknown')
+    expect(await moduleState({ projectId: PID }, 'wiki', { client })).toBe('unknown')
+    spy.mockRestore()
+  })
+  it('목록형 — 보관된 워크스페이스·그 프로젝트는 빠진다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    m.effectiveModules.mockImplementation(async (scope: { workspaceId: string }) => {
+      if (scope.workspaceId === WID) throw archived()
+      return eff('minutes', 'issues')
+    })
+    expect(await workspacesWithModule([WID, 'ws-live'], 'minutes', { client })).toEqual(['ws-live'])
+    m.getProjectConfig.mockImplementation(async (pid: string) => ({ projectId: pid, workspaceId: pid === PID ? WID : 'ws-live' }))
+    expect(await projectsWithModule([PID, 'p-live'], 'issues', { client })).toEqual(['p-live'])
+    m.effectiveModulesMany.mockRejectedValue(archived())
+    expect(await projectsWithModule([PID], 'issues', { client, workspaceId: WID })).toEqual([])
+    spy.mockRestore()
   })
 })

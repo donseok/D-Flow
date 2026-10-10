@@ -191,26 +191,33 @@ describe('워커 접근 스코프', () => {
    *  countOff 는 count 를 실제 행 수와 어긋나게 한다(읽는 중 변경·잘림) */
   function scopeDb(options: {
     workspacesError?: unknown; projectsError?: unknown; projects?: Record<string, string[]>; maxRows?: number; countOff?: number
+    /** 보관된 워크스페이스(0056) — archived_at is null 필터가 걸렸을 때 목록에서 빠진다 */
+    archived?: string[]
   } = {}) {
     const projects = options.projects ?? { w1: ['p1', 'p2'], w2: ['p3'] }
     const ranges: Array<[string, number, number]> = []
+    const isFilters: Array<[string, string, unknown]> = []
     const from = vi.fn((table: string) => {
       let workspaceId = ''
+      let liveOnly = false
       const builder: Record<string, unknown> = {}
       builder.select = () => builder
+      builder.is = (column: string, value: unknown) => { isFilters.push([table, column, value]); if (column === 'archived_at' && value === null) liveOnly = true; return builder }
       builder.eq = (_column: string, value: string) => { workspaceId = value; return builder }
       builder.order = () => builder
       builder.range = async (start: number, end: number) => {
         ranges.push([table === 'workspaces' ? 'workspaces' : workspaceId, start, end])
         const error = table === 'workspaces' ? options.workspacesError : options.projectsError
         if (error) return { data: null, error, count: null }
-        const all = table === 'workspaces' ? ['w1', 'w2'] : (projects[workspaceId] ?? [])
+        const all = table === 'workspaces'
+          ? ['w1', 'w2'].filter((id) => !(liveOnly && options.archived?.includes(id)))
+          : (projects[workspaceId] ?? [])
         const page = all.slice(start, Math.min(end + 1, start + (options.maxRows ?? Infinity)))
         return { data: page.map((id) => ({ id })), error: null, count: all.length + (table === 'projects' ? options.countOff ?? 0 : 0) }
       }
       return builder
     })
-    return { from, ranges }
+    return { from, ranges, isFilters }
   }
   const manyIds = (n: number) => Array.from({ length: n }, (_, i) => `p${String(i + 1).padStart(3, '0')}`)
 
@@ -222,6 +229,14 @@ describe('워커 접근 스코프', () => {
     expect(db.ranges.map(([scope]) => scope)).toEqual(['workspaces', 'w1'])
     expect(workspacesWithModule).toHaveBeenCalledWith(['w1', 'w2'], 'chatbot', { client: db })
     expect(projectsWithModule).toHaveBeenCalledWith(['p1', 'p2'], 'chatbot', { client: db })
+  })
+
+  it('보관된 워크스페이스(0056)는 범위에 넣지 않는다 — 모듈 판정도, 프로젝트 조회도 하지 않는다', async () => {
+    const db = scopeDb({ archived: ['w1'] })
+    expect(await enabledIndexProjectIds(db as never)).toEqual({ ok: true, ids: ['p3'] })
+    expect(db.isFilters).toEqual([['workspaces', 'archived_at', null]])
+    expect(workspacesWithModule).toHaveBeenLastCalledWith(['w2'], 'chatbot', { client: db })
+    expect(db.ranges.map(([scope]) => scope)).toEqual(['workspaces', 'w2'])
   })
 
   it('두 워크스페이스의 프로젝트를 각각 읽어 합친다', async () => {

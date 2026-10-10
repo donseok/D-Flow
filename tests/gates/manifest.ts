@@ -147,6 +147,8 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('platformWorkspaces')}#createPlatformWorkspace`]: nul('superuser'),
   [`${A('platformWorkspaces')}#renameWorkspace`]: { ...nul('workspaceAdmin'), sample: [U, 'T'] },   // typeof workspaceId 가 가드 앞
   [`${A('platformWorkspaces')}#deletePlatformWorkspace`]: nul('superuser'),
+  [`${A('platformWorkspaces')}#archivePlatformWorkspace`]: nul('superuser'),
+  [`${A('platformWorkspaces')}#restorePlatformWorkspace`]: nul('superuser'),
   // ── llmConfig — 플랫폼
   [`${A('llmConfig')}#maskToken`]: nul('public', '순수 문자열 가림 — 서버 액션으로 노출된 순수 함수(데이터 없음)'),
   [`${A('llmConfig')}#listLlmProfiles`]: nul('superuser'),

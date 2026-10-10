@@ -140,7 +140,7 @@ export async function resolveCredential(req: Request, admin: Db, kind: Credentia
   let cred: ResolvedCredential
   try {
     const { data, error } = await admin.from('integration_credentials')
-      .select('id, workspace_id, kind, name, token_prefix, token_hash, scopes, project_ids, default_project_id, default_team_id, team_map, owner_user_id, enabled, revoked_at, expires_at')
+      .select('id, workspace_id, kind, name, token_prefix, token_hash, scopes, project_ids, default_project_id, default_team_id, team_map, owner_user_id, enabled, revoked_at, expires_at, workspaces(archived_at)')
       .eq('token_prefix', prefix).eq('kind', kind).maybeSingle()
     if (error) {
       console.error('[credentials] 자격증명 조회 실패(거절)')
@@ -152,6 +152,12 @@ export async function resolveCredential(req: Request, admin: Db, kind: Credentia
       !hashMatches(bearer, row.token_hash as string)) return denied()
     const resolved = resolvedRow(row, kind, prefix)
     if (!resolved) return unauthorized()
+    // 보관된 워크스페이스(0056)의 자격증명은 인증 단계에서 거부한다 — 토큰은 폐기하지 않으므로 복원하면 다시 동작한다.
+    // 토큰은 맞았으므로 실패 횟수로 세지 않고(요청 제한은 틀린 토큰만 센다), 응답은 다른 인증 실패와 같은 401 이다(보관 사실을 알리지 않는다).
+    // 보관 시각을 읽지 못했으면(임베드 없음·null·archived_at 없음) 보관으로 본다 — 인증은 모르면 닫는다(fail-closed).
+    const e = row.workspaces as { archived_at?: unknown } | Array<{ archived_at?: unknown }> | null | undefined
+    const w = Array.isArray(e) ? e[0] : e
+    if (!w || w.archived_at !== null) return unauthorized()
     cred = resolved
   } catch {
     console.error('[credentials] 자격증명 조회 예외(거절)')

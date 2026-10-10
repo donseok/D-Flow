@@ -96,7 +96,8 @@ export async function enabledIndexProjectIds(db: ConfigReadClient): Promise<{ ok
   let workspaceIds: string[]
   try {
     workspaceIds = (await fetchAllPages<{ id: string }>('워크스페이스', (from, to) =>
-      db.from('workspaces').select('id', { count: 'exact' }).order('id').range(from, to) as unknown as IdPage)).map((workspace) => workspace.id)
+      // 보관된 워크스페이스(0056)는 범위에 넣지 않는다 — 그 잡은 선점 RPC 도 집지 않는다(복원하면 다시 범위에 든다)
+      db.from('workspaces').select('id', { count: 'exact' }).is('archived_at', null).order('id').range(from, to) as unknown as IdPage)).map((workspace) => workspace.id)
   } catch (e) {
     console.error('[index-worker] 워크스페이스 조회 실패:', e instanceof Error ? e.message : e)
     return { ok: false }

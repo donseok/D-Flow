@@ -34,6 +34,8 @@ const INVITE = {
   expires_at: '2999-01-01T00:00:00.000Z',
   revoked_at: null,
   redeemed_at: null,
+  // 초대 조회는 워크스페이스의 보관 시각을 함께 읽는다(0056) — 못 읽으면 보관으로 닫는다
+  workspaces: { archived_at: null },
 }
 const INACTIVE_MSG = '비활성화된 인원입니다. 관리자에게 문의하세요.'
 const CONSUMED = [{ workspace_id: 'ws-1', project_id: PROJECT, member_id: 'm-1' }]
@@ -500,7 +502,7 @@ describe('redeemInviteWithSignup — 가입 + 합류', () => {
 describe('getInvitePreview', () => {
   const PREVIEW_ROW = {
     workspace_id: WS_ID,
-    workspaces: { name: 'Acme' },
+    workspaces: { name: 'Acme', archived_at: null },
     access_role: 'member',
     email: INVITE.email,
     expires_at: INVITE.expires_at,
@@ -534,7 +536,7 @@ describe('getInvitePreview', () => {
     expect(spies.profileEq).toHaveBeenCalledWith('email', INVITE.email)
     // 팀 없는 초대는 팀 조회도 하지 않는다.
     expect(spies.teamsIn).not.toHaveBeenCalled()
-    expect(spies.inviteSelect).toHaveBeenCalledWith('workspace_id, email, expires_at, revoked_at, redeemed_at, team_ids, access_role, projects(name, description), workspaces(name)')
+    expect(spies.inviteSelect).toHaveBeenCalledWith('workspace_id, email, expires_at, revoked_at, redeemed_at, team_ids, access_role, projects(name, description), workspaces(archived_at, name)')
   })
 
   it.each(['admin', null])('활성 초대의 권한 %s를 보존한다', async accessRole => {
@@ -678,5 +680,51 @@ describe('getInviteSessionState — 화면 분기용 세션 판정', () => {
     makeAdmin({ invite: { data: null, error: null } })
     expect(await getInviteSessionState(TOKEN))
       .toEqual({ ok: false, error: '초대를 찾을 수 없습니다.' })
+  })
+})
+
+// 워크스페이스 보관(0056) — 보관된 워크스페이스의 초대는 없는 것으로 답한다. 확인·세션 상태·수락·가입 넷이 모두 같은 조회(loadInvite)를 지난다.
+// 초대 행은 지우지 않으므로 복원하면 다시 쓸 수 있다.
+describe('보관된 워크스페이스의 초대', () => {
+  const NOT_FOUND = { ok: false, error: '초대를 찾을 수 없습니다.' }
+  const archived = { data: { ...INVITE, workspaces: { archived_at: '2026-10-10T00:00:00Z' } }, error: null }
+
+  it('수락 — 없는 초대와 같은 문구로 거부하고 소비 RPC·명단 조회에 닿지 않는다', async () => {
+    getSession.mockResolvedValue(USER)
+    const spies = makeAdmin({ invite: archived })
+    expect(await redeemInvite(TOKEN)).toEqual(NOT_FOUND)
+    expect(spies.rpc).not.toHaveBeenCalled()
+    expect(spies.existingEq).not.toHaveBeenCalled()
+    expect(spies.settingsEq).not.toHaveBeenCalled()
+  })
+
+  it('가입 수락 — 계정을 만들지 않는다', async () => {
+    getSession.mockResolvedValue(null)
+    const spies = makeAdmin({ invite: archived })
+    expect(await redeemInviteWithSignup(TOKEN, SIGNUP)).toEqual(NOT_FOUND)
+    expect(spies.createUser).not.toHaveBeenCalled()
+    expect(spies.rpc).not.toHaveBeenCalled()
+  })
+
+  it('확인(미리보기) — 프로젝트명·워크스페이스명·계정 유무를 돌려주지 않는다', async () => {
+    const spies = makeAdmin({ invite: archived })
+    expect(await getInvitePreview(TOKEN)).toEqual(NOT_FOUND)
+    expect(spies.profileEq).not.toHaveBeenCalled()
+  })
+
+  it('보관 시각을 읽지 못한 응답(임베드 없음·null)도 닫는다 — 모르면 통과시키지 않는다', async () => {
+    getSession.mockResolvedValue(USER)
+    for (const workspaces of [undefined, null, {}]) {
+      const spies = makeAdmin({ invite: { data: { ...INVITE, workspaces }, error: null } })
+      expect(await redeemInvite(TOKEN), JSON.stringify(workspaces)).toEqual(NOT_FOUND)
+      expect(spies.rpc).not.toHaveBeenCalled()
+    }
+  })
+
+  it('조회 열에 워크스페이스의 보관 시각을 싣는다', async () => {
+    getSession.mockResolvedValue(USER)
+    const spies = makeAdmin()
+    await redeemInvite(TOKEN)
+    expect(spies.inviteSelect).toHaveBeenCalledWith(expect.stringContaining('workspaces(archived_at)'))
   })
 })

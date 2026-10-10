@@ -387,3 +387,59 @@ describe('hasWorkspaceMembership — 실제 소속만(플랫폼 관리자 승계
     expect(hasWorkspaceMembership(null, W)).toBe(false)
   })
 })
+
+// 워크스페이스 보관(0056) — buildActor 는 보관된 워크스페이스의 소속·프로젝트를 싣지 않고, 플랫폼 관리자에게는 "있는 워크스페이스"(liveWorkspaceIds)를 싣는다.
+// 순수 판정은 그 스냅샷에서 보관을 "없음"으로 읽는다 — 권한 없음(denied)이 아니라 대상 없음(null·missing)이다(존재 은닉).
+describe('보관된 워크스페이스 — 플랫폼 관리자에게도 없음', () => {
+  const su = makeSuperuser({
+    workspaceRoles: new Map(), liveWorkspaceIds: new Set(['ws-live']),
+    projectWorkspace: new Map([['p-live', 'ws-live']]),
+  })
+  it('roleIn — 스냅샷에 없는 프로젝트(보관·미존재)는 null, 있는 프로젝트와 프로젝트 없는 판정은 superuser', () => {
+    expect(roleIn(su, 'p-archived')).toBe(null)
+    expect(roleIn(su, 'p-live')).toBe('superuser')
+    expect(roleIn(su, null)).toBe('superuser')
+    expect(isProjectAdmin(su, 'p-archived')).toBe(false)
+    expect(isProjectMember(su, 'p-archived')).toBe(false)
+    expect(isProjectAdmin(su, 'p-live')).toBe(true)
+    expect(isProjectAdmin(su, null)).toBe(true)
+  })
+  it('workspaceRoleIn·isWorkspaceAdmin·isWorkspaceMember·workspaceAdminVerdict — 보관된 워크스페이스는 없음', () => {
+    expect(workspaceRoleIn(su, 'ws-archived')).toBe(null)
+    expect(workspaceRoleIn(su, 'ws-live')).toBe('superuser')
+    expect(isWorkspaceAdmin(su, 'ws-archived')).toBe(false)
+    expect(isWorkspaceMember(su, 'ws-archived')).toBe(false)
+    expect(isWorkspaceAdmin(su, 'ws-live')).toBe(true)
+    expect(workspaceAdminVerdict(su, 'ws-archived')).toBe('missing')
+    expect(workspaceAdminVerdict(su, 'ws-live')).toBe('ok')
+    expect(workspaceAdminVerdict(su, null)).toBe('ok')                       // 워크스페이스 없는 플랫폼 조작은 그대로
+    expect(isWorkspaceAdmin(su, null)).toBe(true)
+  })
+  it('hasProjectRoleInWorkspace·isMinuteMember·canEditMinute — 보관된 워크스페이스의 회의록은 플랫폼 관리자도 고치지 못한다', () => {
+    expect(hasProjectRoleInWorkspace(su, 'ws-archived')).toBe(false)
+    expect(hasProjectRoleInWorkspace(su, 'ws-live')).toBe(true)
+    const inArchived = { created_by: su.userId, project_id: null, workspace_id: 'ws-archived' }
+    expect(isMinuteMember(su, inArchived)).toBe(false)
+    expect(canEditMinute(su, inArchived)).toBe(false)
+    expect(canEditMinute(su, { created_by: su.userId, project_id: 'p-archived', workspace_id: 'ws-archived' })).toBe(false)
+    expect(canEditMinute(su, { created_by: null, project_id: 'p-live', workspace_id: 'ws-live' })).toBe(true)
+  })
+  it('isHiddenProject — 보관된 워크스페이스의 프로젝트는 숨김이다(스냅샷에 없다)', () => {
+    expect(isHiddenProject(su, 'p-archived', hiddenIds())).toBe(true)
+    expect(isHiddenProject(su, 'p-live', hiddenIds())).toBe(false)
+  })
+  it('liveWorkspaceIds 가 없는 스냅샷(화면용 복원 actorFromView·테스트 대역)은 종전대로 전부 통과한다', () => {
+    const bare = makeSuperuser()
+    expect(roleIn(bare, 'p-any')).toBe('superuser')
+    expect(workspaceRoleIn(bare, 'ws-any')).toBe('superuser')
+    expect(workspaceAdminVerdict(bare, 'ws-any')).toBe('ok')
+    expect(hasProjectRoleInWorkspace(bare, 'ws-any')).toBe(true)
+  })
+  it('플랫폼 관리자가 아닌 사람 — 보관된 워크스페이스는 소속 맵에 없으므로 비소속과 같은 판정이다', () => {
+    const member = makeActor({ workspaceRoles: new Map([['ws-live', 'admin']]), projectWorkspace: new Map([['p-live', 'ws-live']]) })
+    expect(roleIn(member, 'p-archived')).toBe(null)
+    expect(workspaceRoleIn(member, 'ws-archived')).toBe(null)
+    expect(workspaceAdminVerdict(member, 'ws-archived')).toBe('missing')
+    expect(workspaceAdminVerdict(member, 'ws-live')).toBe('ok')
+  })
+})

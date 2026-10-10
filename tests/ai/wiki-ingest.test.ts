@@ -836,8 +836,8 @@ describe('runWikiWorkerOnce lease와 force 경합', () => {
     mocks.createAdminClient.mockReturnValue(admin)
 
     await expect(runWikiWorkerOnce(5)).resolves.toEqual({ attempted: 0, completed: 0 })
-    // 선점 만료 목록 · 재구성 후보 · 대기 잡 후보
-    expect(admin.from).toHaveBeenCalledTimes(3)
+    // 선점 만료 목록 · 보관된 워크스페이스(0056 — 후보에서 뺄 목록) · 재구성 후보 · 대기 잡 후보
+    expect(admin.from).toHaveBeenCalledTimes(4)
   })
 })
 
