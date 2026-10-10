@@ -15,9 +15,9 @@
  * 해시에 넣는다(경과일 등 매일 변하는 값은 표시 전용 metrics에만 존재).
  */
 import type { ComputedItem, InsightKind, TeamCode } from './types'
-import type { HygieneModel, Signal } from './dashboard'
+import type { DashboardThresholds, HygieneModel, Signal } from './dashboard'
 import {
-  DELAYED_RED_COUNT, SPI_WARN_FLOOR,
+  DEFAULT_DASHBOARD_THRESHOLDS, SPI_WARN_FLOOR,
   dataHygiene, delayAging, diffDaysCal, dueSoonLeaves, overallSignal, progressSignal,
 } from './dashboard'
 import { round1 } from './format'
@@ -80,6 +80,8 @@ export interface RiskSignalInput {
   minuteSignals: MinuteActionSignal[]
   /** 팀 집계 대상(활성 팀) — 호출처가 팀 마스터에서 주입한다(필수). */
   teams: readonly TeamCode[]
+  /** 그 프로젝트의 판정 기준(설정 dashboard.*) — 임박 창·지연 '위험' 건수. 없으면 제품 기본값(프로젝트를 가로지르는 화면) */
+  thresholds?: DashboardThresholds
 }
 
 export interface RiskSignalReport {
@@ -139,8 +141,8 @@ function detectDelayTrend(spiSeries: number[]): RiskSignal | null {
 /* ── ② 마감임박 + 진척 정체 — dueSoonLeaves 중 계획 대비 갭>0 ──
  * 갭은 round1로 감싼다(FP 노이즈가 >0 판정을 오염시키는 실버그 관례).
  * 심각도는 progressSignal 경계 재사용: 갭을 편차(-갭)로 뒤집어 red(>10%p) 여부만 본다. */
-function detectDeadlineStall(leaves: ComputedItem[], today: string): RiskSignal | null {
-  const stalled = dueSoonLeaves(leaves, today)
+function detectDeadlineStall(leaves: ComputedItem[], today: string, dueSoonDays: number): RiskSignal | null {
+  const stalled = dueSoonLeaves(leaves, today, dueSoonDays)
     .map(l => ({ item: l, gap: round1(l.plannedPct - l.rolledActualPct) }))
     .filter(e => e.gap > 0)
   if (stalled.length === 0) return null
@@ -150,7 +152,7 @@ function detectDeadlineStall(leaves: ComputedItem[], today: string): RiskSignal 
   return {
     id: 'deadline_stall', kind: 'deadline_stall', severity,
     title: '마감 임박 작업 진척 정체',
-    detail: `7일 내 마감 ${stalled.length}건이 계획 대비 뒤처져 있습니다(최대 ${Math.round(maxGap)}%p 갭).`,
+    detail: `${dueSoonDays}일 내 마감 ${stalled.length}건이 계획 대비 뒤처져 있습니다(최대 ${Math.round(maxGap)}%p 갭).`,
     metrics: { count: stalled.length, maxGapPp: maxGap, nearestEnd: stalled[0].item.plannedEnd! },
     evidence: stalled.slice(0, EVIDENCE_LIMIT).map(e => wbsRef(e.item)),
   }
@@ -159,7 +161,7 @@ function detectDeadlineStall(leaves: ComputedItem[], today: string): RiskSignal 
 /* ── ③ 담당 팀 과부하 — teamProgress와 동일한 소유 판정(primary·support 모두)으로 팀별 집계 ──
  * 발화: 지연 리프 ≥3 집중 또는 활성(미완료) 리프가 배정 팀 평균의 2배(표본 바닥 4건).
  * 심각도: 팀 내 지연 ≥4면 red(riskModel red 경계 DELAYED_RED_COUNT 공유), 그 외 amber. */
-function detectOwnerOverload(leaves: ComputedItem[], teams: readonly TeamCode[]): RiskSignal[] {
+function detectOwnerOverload(leaves: ComputedItem[], teams: readonly TeamCode[], delayedRedCount: number): RiskSignal[] {
   const perTeam = teams.map(team => {
     const assigned = leaves.filter(l => l.owners.some(o => o.team === team))
     return {
@@ -184,7 +186,7 @@ function detectOwnerOverload(leaves: ComputedItem[], teams: readonly TeamCode[])
     const nonDelayedActive = t.active.filter(l => l.status !== 'delayed')
     signals.push({
       id: `owner_overload:${t.team}`, kind: 'owner_overload',
-      severity: t.delayed.length >= DELAYED_RED_COUNT ? 'red' : 'amber',
+      severity: t.delayed.length >= delayedRedCount ? 'red' : 'amber',
       title: `담당 팀 과부하 — ${t.team}`,
       detail: `${t.team} 팀에 지연 ${t.delayed.length}건·활성 ${t.active.length}건이 집중돼 있습니다(배정 팀 평균 활성 ${round1(avgActive)}건).`,
       metrics: {
@@ -202,10 +204,10 @@ function detectOwnerOverload(leaves: ComputedItem[], teams: readonly TeamCode[])
 
 /* ── ④ 예정일 경과 누적 — delayAging 결과를 그대로 판정(경계 재정의 금지) ──
  * d15plus ≥1 → red, total ≥4 → red(riskModel 경계 DELAYED_RED_COUNT 공유), 그 외 total ≥1 → amber. */
-function detectOverdueAccumulation(leaves: ComputedItem[], today: string): RiskSignal | null {
+function detectOverdueAccumulation(leaves: ComputedItem[], today: string, delayedRedCount: number): RiskSignal | null {
   const aging = delayAging(leaves, today)
   if (aging.total === 0) return null
-  const severity: RiskSeverity = aging.d15plus >= 1 || aging.total >= DELAYED_RED_COUNT ? 'red' : 'amber'
+  const severity: RiskSeverity = aging.d15plus >= 1 || aging.total >= delayedRedCount ? 'red' : 'amber'
   return {
     id: 'overdue_accumulation', kind: 'overdue_accumulation', severity,
     title: '예정일 경과 작업 누적',
@@ -285,10 +287,11 @@ export function detectRiskSignals(input: RiskSignalInput): RiskSignalReport {
   const signals: RiskSignal[] = []
   const trend = detectDelayTrend(spiSeries)
   if (trend) signals.push(trend)
-  const stall = detectDeadlineStall(leaves, today)
+  const th = input.thresholds ?? DEFAULT_DASHBOARD_THRESHOLDS
+  const stall = detectDeadlineStall(leaves, today, th.dueSoonDays)
   if (stall) signals.push(stall)
-  signals.push(...detectOwnerOverload(leaves, input.teams))
-  const overdue = detectOverdueAccumulation(leaves, today)
+  signals.push(...detectOwnerOverload(leaves, input.teams, th.delayedRedCount))
+  const overdue = detectOverdueAccumulation(leaves, today, th.delayedRedCount)
   if (overdue) signals.push(overdue)
   const staleActions = detectMeetingActionStale(minuteSignals, realToday)
   if (staleActions) signals.push(staleActions)

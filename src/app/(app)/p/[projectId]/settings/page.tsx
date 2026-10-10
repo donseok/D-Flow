@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip, FolderInput } from 'lucide-react'
+import { Upload, CalendarDays, Settings, Shield, ListTree, Info, RefreshCw, Lock, Sparkles, Cpu, ArrowUpRight, Users, Bot, LayoutList, History, Paperclip, FolderInput, Gauge } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
@@ -31,6 +31,7 @@ import { issueCodeYear, type IdPolicy } from '@/lib/issues/idPolicy'
 import type { IssueAnalysisSetting } from '@/lib/settings/defs/project'
 import { LevelSettingsManager } from '@/components/settings/LevelSettingsManager'
 import { ExtraAxisLabelEditor } from '@/components/settings/ExtraAxisLabelEditor'
+import { DashboardThresholdsEditor } from '@/components/settings/DashboardThresholdsEditor'
 import { MilestoneKeywordsEditor } from '@/components/settings/MilestoneKeywordsEditor'
 import { StageCreditSlider } from '@/components/settings/StageCreditSlider'
 import type { ProjectSettingValue } from '@/lib/settings/registry'
@@ -221,6 +222,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   const attachmentPolicy = pc.ok ? pick(pc.cfg, 'minutes.attachments') : null
   // 외부 업로드의 폴더 자동 편철(minutes.auto_file_by_path) — 같은 '회의록' 범주. 손상 값도 스위치를 그린다(다시 저장해 고친다)
   const autoFile = pc.ok ? pick(pc.cfg, 'minutes.auto_file_by_path') : null
+  // 대시보드 판정 기준(dashboard.due_soon_days·dashboard.delayed_red_count) — core 모듈이라 관문이 없다. 손상 값도 편집기를 그린다(다시 저장해 고친다)
+  const dueSoonDays = pc.ok ? pick(pc.cfg, 'dashboard.due_soon_days') : null
+  const delayedRedCount = pc.ok ? pick(pc.cfg, 'dashboard.delayed_red_count') : null
   // 용어·분류(SP5 B4 묶음4) — 모듈이 켜진 키만. 손상 값도 편집기를 그린다(복구 경로). 판정 실패(unknown)는 그리지 않는다(fail-closed)
   const [attendanceState, meetingsState] = pc.ok
     ? await Promise.all([moduleState({ projectId }, 'attendance'), moduleState({ projectId }, 'meetings')])
@@ -386,6 +390,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
           <SectionCard searchText="core.extra_axis_label 추가 축 업무 분류 WBS" title={t('settings.core.extra_axis_label.label')} icon={ListTree}>
             <ExtraAxisLabelEditor key={`axis-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate}
               value={extraAxisState.status === 'set' ? extraAxisState.value : null} invalid={extraAxisState.status === 'invalid'} />
+          </SectionCard>
+        )}
+      {/* ── 대시보드 판정 기준 (관리자) — '임박' 일수·지연 '위험' 건수. 표시·판정 전용 ── */}
+        {isAdmin && dueSoonDays && delayedRedCount && (
+          <SectionCard searchText={`dashboard.due_soon_days dashboard.delayed_red_count threshold due soon delayed risk ${t('settings.dashboard.thresholds.title')} ${t('settings.dashboard.due_soon_days.label')} ${t('settings.dashboard.delayed_red_count.label')}`} title={t('settings.dashboard.thresholds.title')} icon={Gauge}>
+            <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t('settings.dashboard.thresholds.intro')}</p>
+            <DashboardThresholdsEditor key={`thresholds-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate}
+              dueSoonDays={dueSoonDays.ok ? dueSoonDays.value : null} delayedRedCount={delayedRedCount.ok ? delayedRedCount.value : null}
+              invalid={!dueSoonDays.ok || !delayedRedCount.ok} />
           </SectionCard>
         )}
       {/* ── 공개 범위 (슈퍼유저 전용) — 관리자에게도 열지 않는다(전역 가시성 정책은 전역 등급이 쥔다) ── */}

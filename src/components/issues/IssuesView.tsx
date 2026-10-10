@@ -40,7 +40,7 @@ const DEFAULT_PAGE_SIZE: PageSize = 20
 type IssueViewMode = 'list' | 'board'
 
 export function IssuesView({
-  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, myMemberIdsFailed = false, today, timeZone, entryContext, entryError, severities, sources, statuses, customFields = [],
+  issues, members, projectId, workspaceId = null, currentUserId, canEdit, isProjectAdmin, myMemberIds, myMemberIdsFailed = false, today, dueUrgentDays, timeZone, entryContext, entryError, severities, sources, statuses, customFields = [],
 }: {
   customFields?: FieldDef[] | null
   entryContext: IssueEntryContext | null
@@ -59,6 +59,8 @@ export function IssuesView({
   /** 내 명단 행 조회가 실패했다 — '내 담당' 필터가 비어 보이는 이유를 표시한다(빈 결과로 위장하지 않는다) */
   myMemberIdsFailed?: boolean
   today: string
+  /** 남은 일수를 강조할 '임박' 창(설정 dashboard.due_soon_days) — 없으면 제품 기본 7일 */
+  dueUrgentDays?: number
   /** 시각 표시의 시간대(프로젝트 calendar.timezone — 계획 P8) */
   timeZone: string
   /** 이 프로젝트의 심각도·출처(설정 어휘, SP5 B4) — 칩·정렬·필터·상세 라벨 */
@@ -343,6 +345,7 @@ export function IssuesView({
           areas={areas}
           assigneeLabel={assigneeLabel}
           today={today}
+          dueUrgentDays={dueUrgentDays}
           canMove={canEdit}
           onOpen={setViewingId}
         />
@@ -467,7 +470,7 @@ export function IssuesView({
                       <td className={`overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums ${overdue ? 'font-semibold text-danger' : 'text-fg-secondary'}`}>
                         {issue.dueDate ?? '—'}
                       </td>
-                      <td className={`overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums ${isDueUrgent(daysLeft) ? 'font-semibold text-danger' : 'text-fg-secondary'}`}>
+                      <td className={`overflow-hidden whitespace-nowrap px-2.5 py-2.5 tabular-nums ${isDueUrgent(daysLeft, dueUrgentDays) ? 'font-semibold text-danger' : 'text-fg-secondary'}`}>
                         {ddayText}
                       </td>
                       <td className="whitespace-normal break-words px-2.5 py-2.5 text-fg-secondary">

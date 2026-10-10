@@ -9,6 +9,7 @@ import { getActor } from '@/lib/authz'
 import { hasWorkspaceMembership } from '@/lib/domain/authz'
 import { serverTranslator } from '@/lib/i18n/server'
 import { fill } from '@/lib/i18n/translate'
+import { DEFAULT_DUE_SOON_DAYS } from '@/lib/domain/dashboard'
 
 export type NotificationItem = {
   id: string
@@ -40,12 +41,14 @@ function diffDays(from: string, to: string): number {
   return Math.round((b - a) / 86_400_000)
 }
 
-/** 활성 프로젝트의 알림 피드 — 지연 작업 + 마감 임박(7일 내) 작업. count는 안읽음 수. */
+/** 활성 프로젝트의 알림 피드 — 지연 작업 + 마감 임박(설정 dashboard.due_soon_days — 기본 7일 내) 작업. count는 안읽음 수. */
 export async function getNotifications(projectId: string): Promise<{ items: NotificationItem[]; count: number }> {
   const t = await serverTranslator()
   const user = await getSession()
   if (!user) return { items: [], count: 0 }
-  const { items, today } = await getComputedWbs(projectId)
+  const { items, today, thresholds } = await getComputedWbs(projectId)
+  // '임박' 창 = 그 프로젝트의 설정(dashboard.due_soon_days) — 대시보드와 같은 기준
+  const dueSoonDays = thresholds?.dueSoonDays ?? DEFAULT_DUE_SOON_DAYS
   const leaves = collectLeaves(items)
 
   const delayed: Omit<NotificationItem, 'read'>[] = leaves
@@ -62,7 +65,7 @@ export async function getNotifications(projectId: string): Promise<{ items: Noti
     }))
 
   const dueSoon: Omit<NotificationItem, 'read'>[] = leaves
-    .filter(l => l.status !== 'done' && l.status !== 'delayed' && l.plannedEnd && l.plannedEnd >= today && diffDays(today, l.plannedEnd) <= 7)
+    .filter(l => l.status !== 'done' && l.status !== 'delayed' && l.plannedEnd && l.plannedEnd >= today && diffDays(today, l.plannedEnd) <= dueSoonDays)
     .sort((a, b) => (a.plannedEnd ?? '').localeCompare(b.plannedEnd ?? ''))
     .map((l: ComputedItem) => ({
       id: `due-${l.id}`,

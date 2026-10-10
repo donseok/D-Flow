@@ -266,6 +266,15 @@ export const settingsKo = {
   'settings.views.default.label': '작업 계획 기본 보기', 'settings.views.default.desc': '작업 계획을 처음 열 때의 보기(표·간트·보드)입니다. 보드는 칸반이 켜져 있을 때만 고를 수 있습니다.',
   // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11
   'settings.minutes.attachments.label': '회의록 첨부 정책', 'settings.minutes.attachments.desc': '새 첨부의 용량·개수·형식과 미리보기를 정합니다. 기존 파일은 지우지 않으며 워크스페이스 값은 새 프로젝트에 한 번 복사됩니다.',
+  // 대시보드 판정 기준(dashboard.due_soon_days·dashboard.delayed_red_count) — 코드 상수였던 '임박 7일'·'지연 4건 이상 위험'의 설정화
+  'settings.dashboard.thresholds.title': '대시보드 판정 기준',
+  'settings.dashboard.thresholds.intro': '대시보드와 이슈 목록이 \'마감 임박\'과 \'위험\'을 판정하는 기준입니다. 저장한 데이터는 바뀌지 않고, 다음에 여는 화면부터 적용됩니다.',
+  'settings.dashboard.thresholds.invalid': '저장된 기준을 읽지 못해 지금은 기본값(7일·4건)으로 판정합니다. 값을 확인하고 다시 저장하세요.',
+  'settings.dashboard.thresholds.range': '마감 임박 기준은 1~{days}일, 위험 기준은 1~{count}건 사이의 정수로 입력하세요.',
+  'settings.dashboard.due_soon_days.label': '마감 임박 기준', 'settings.dashboard.due_soon_days.unit': '일 이내',
+  'settings.dashboard.due_soon_days.desc': '마감까지 남은 날이 이 일수 이하인 미완료 작업·이슈를 \'임박\'으로 봅니다. 대시보드의 임박 건수·지금 확인할 작업·지연·임박 이슈, 이슈 목록의 남은 일수 강조, 알림, AI 브리핑이 따릅니다. 기본 7일.',
+  'settings.dashboard.delayed_red_count.label': '지연 \'위험\' 기준', 'settings.dashboard.delayed_red_count.unit': '건 이상',
+  'settings.dashboard.delayed_red_count.desc': '지연 작업이 이 건수 이상이면 리스크 신호를 \'위험\'(빨강)으로, 그 미만 1건 이상이면 \'주의\'로 표시합니다. AI 브리핑의 위험 신호도 같은 기준을 씁니다. 기본 4건.',
   // 외부 업로드의 폴더 자동 편철(minutes.auto_file_by_path)
   'settings.minutes.auto_file_by_path.label': '외부 업로드 폴더 자동 정리',
   'settings.minutes.auto_file_by_path.desc': '연동 프로그램이 회의록과 함께 보낸 폴더 경로대로 회의록을 폴더에 넣습니다. 바꾼 뒤의 업로드부터 적용되고 이미 정리된 회의록은 옮기지 않습니다. 폴더 일괄 재정리 요청은 이 설정과 무관하게 동작합니다.',

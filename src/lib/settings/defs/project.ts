@@ -16,6 +16,7 @@ import {
   type IsoDow, type WeekStartDay, type WeekStartRule,
 } from '@/lib/domain/calendar'
 import { DEFAULT_ID_POLICY, parseIdPolicy, type IdPolicy } from '@/lib/issues/idPolicy'
+import { DEFAULT_DUE_SOON_DAYS, DELAYED_RED_COUNT, DELAYED_RED_COUNT_MAX, DUE_SOON_DAYS_MAX } from '@/lib/domain/dashboard'
 import { parseFieldDefs, type FieldDef } from '@/lib/domain/customFields'
 import { RESERVED_SOURCE, defaultVocab, parseVocab, vocabChangeError, type VocabKey, type VocabValues } from '../vocab'
 import { formSettingDef } from './forms'
@@ -138,6 +139,12 @@ export function copyWeekStartRules(src: readonly WeekStartRule[]): WeekStartRule
 
 export { WBS_VIEWS, DEFAULT_VIEWS, parseViewsDefault, type WbsView, type ViewsDefault } from '@/lib/wbs/view'
 
+/** 정수 범위 값(대시보드 판정 기준 둘) — 숫자 문자열·소수는 받지 않는다(조용히 반올림하지 않는다). */
+const parseIntIn = (min: number, max: number, what: string) => (raw: unknown): Parsed<number> =>
+  typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= min && raw <= max ? { ok: true, value: raw } : fail(`${what}은(는) ${min}~${max} 사이의 정수여야 합니다.`)
+export const parseDueSoonDays = parseIntIn(1, DUE_SOON_DAYS_MAX, '마감 임박 기준 일수')
+export const parseDelayedRedCount = parseIntIn(1, DELAYED_RED_COUNT_MAX, "지연 '위험' 기준 건수")
+
 export const PROJECT_DEFS = [
   defineSetting<'core.level_labels', string[]>({
     key: 'core.level_labels', scope: 'project', module: 'wbs', default: REQUIRED_ON_CREATE, explicit: true,
@@ -259,6 +266,18 @@ export const PROJECT_DEFS = [
     key: 'minutes.auto_file_by_path', scope: 'project', module: 'minutes', default: true,
     parse: (raw) => (typeof raw === 'boolean' ? { ok: true, value: raw } : fail('참/거짓이어야 합니다.')),
     widget: { kind: 'boolean' }, editor: 'project_admin', apply: 'immediate', impact: ['future_only'], sql: null,
+  }),
+  // 대시보드 판정 기준(2026-10-10 — 코드 상수의 설정화, 기본값 = 그 상수라 동작 변화 0). 표시·판정 전용이라 저장 데이터를 바꾸지 않는다(recompute).
+  // 읽는 곳: 대시보드(요약·지금 확인할 작업·지연·임박 이슈)·이슈 목록의 남은 일수 강조·알림 피드·AI 브리핑. 포트폴리오는 프로젝트 설정을 읽지 않아 기본값이다(개정 §2.1)
+  defineSetting<'dashboard.due_soon_days', number>({
+    key: 'dashboard.due_soon_days', scope: 'project', module: 'dashboard', default: DEFAULT_DUE_SOON_DAYS,
+    parse: parseDueSoonDays,
+    widget: { kind: 'custom', component: 'DashboardThresholdsEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['recompute'], sql: null,
+  }),
+  defineSetting<'dashboard.delayed_red_count', number>({
+    key: 'dashboard.delayed_red_count', scope: 'project', module: 'dashboard', default: DELAYED_RED_COUNT,
+    parse: parseDelayedRedCount,
+    widget: { kind: 'custom', component: 'DashboardThresholdsEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['recompute'], sql: null,
   }),
   vocabDef('attendance.types', 'attendance', ['enforce_project_vocab', 'settings_ref_check']),
   vocabDef('meetings.categories', 'meetings', ['enforce_project_vocab', 'settings_ref_check']),

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { AlertTriangle, CalendarClock } from 'lucide-react'
 import type { ComputedItem } from '@/lib/domain/types'
-import { delayAging, diffDaysCal, dueSoonLeaves, riskModel, varianceRanking } from '@/lib/domain/dashboard'
+import { DEFAULT_DASHBOARD_THRESHOLDS, delayAging, diffDaysCal, dueSoonLeaves, riskModel, varianceRanking, type DashboardThresholds } from '@/lib/domain/dashboard'
 import { collectLeaves } from '@/lib/domain/tree'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
@@ -21,19 +21,21 @@ const ROW_META: Record<Kind, { border: string; icon: string }> = {
 }
 
 /** 실행 가능한 리스크 목록 — 요약 타일의 숫자를 실제 WBS 작업으로 연결한다.
- *  기한 경과(지연)·7일 내 마감(임박)·계획 미달(뒤처짐)을 항상 함께 쌓아 보여준다.
+ *  기한 경과(지연)·임박 창 안의 마감(임박 — 설정 dashboard.due_soon_days, 기본 7일)·계획 미달(뒤처짐)을 항상 함께 쌓아 보여준다.
  *  배지의 지연 카운트(riskModel)는 status==='delayed' 기준이라 기한 경과분만으로는 설명되지 않는다 —
  *  나머지는 뒤처짐 행이 받아내므로, 뒤처짐을 조건부로 숨기면 배지 숫자가 목록에서 사라진다. */
-export function RiskWorklist({ items, projectId, today }: {
+export function RiskWorklist({ items, projectId, today, thresholds = DEFAULT_DASHBOARD_THRESHOLDS }: {
   items: ComputedItem[]; projectId: string; today: string;
+  /** 그 프로젝트의 판정 기준(설정 dashboard.*) — 임박 창·지연 '위험' 건수. 없으면 제품 기본값 */
+  thresholds?: DashboardThresholds
 }) {
   const tr = t
   const leaves = collectLeaves(items)
-  const risk = riskModel(items, today)
+  const risk = riskModel(items, today, thresholds)
 
   const overdue: Row[] = delayAging(leaves, today, 4).list
     .map(e => ({ item: e.item, kind: 'overdue' as const, overdue: e.overdue, dday: 0, gap: e.gap }))
-  const dueSoon: Row[] = dueSoonLeaves(leaves, today).slice(0, 4)
+  const dueSoon: Row[] = dueSoonLeaves(leaves, today, thresholds.dueSoonDays).slice(0, 4)
     .map(l => ({ item: l, kind: 'dueSoon' as const, overdue: 0, dday: diffDaysCal(today, l.plannedEnd!), gap: 0 }))
 
   // 지연·임박은 마감일 기준 상호배타(과거 vs 오늘·미래). 뒤처짐은 임박과 겹칠 수 있어 id로 제외한다.

@@ -6,7 +6,7 @@ import { ArrowRight, BarChart3 } from 'lucide-react'
 import type { Announcement, ComputedItem, Meeting, MeetingException } from '@/lib/domain/types'
 import type { SnapshotPoint } from '@/lib/domain/trend'
 import { buildTrend } from '@/lib/domain/trend'
-import { milestoneTimeline } from '@/lib/domain/dashboard'
+import { milestoneTimeline, type DashboardThresholds } from '@/lib/domain/dashboard'
 import { round1 } from '@/lib/domain/format'
 import { overallProgress } from '@/lib/domain/rollup'
 import type { DashboardIssue } from '@/lib/domain/issueDashboard'
@@ -27,7 +27,7 @@ import { TeamProgress } from './TeamProgress'
 import { IssueStatusCard } from './IssueStatusCard'
 import { IssueTrendCard } from './IssueTrendCard'
 import { IssueQueueCard } from './IssueQueueCard'
-import type { MeetingCategoryDef, SeverityDef } from '@/lib/settings/vocab'
+import type { IssueStatusDef, MeetingCategoryDef, SeverityDef } from '@/lib/settings/vocab'
 
 /** 경영진·관리자 대시보드 — 읽기 순서(2026-08-28 재배치): 어디까지 왔나(요약·마일스톤·S-Curve·팀별)
  *  → 앞으로 뭐가 있나(회의) → 이슈가 어떤 상태인가(현황·추이) → 맨 아래 조치 큐(WBS 큐·이슈 큐, 사용자 요청).
@@ -60,6 +60,8 @@ export async function DashboardView({
   minutesHref,
   meetingCategories,
   issueSeverities,
+  issueStatuses,
+  thresholds,
 }: {
   items: ComputedItem[]
   projectId: string
@@ -102,6 +104,10 @@ export async function DashboardView({
   /** 이 프로젝트의 회의 범주·이슈 심각도(설정 어휘) — 키가 손상이면 page 가 위에 사유를 띄우고 빈 목록(라벨 = code) */
   meetingCategories: readonly MeetingCategoryDef[]
   issueSeverities: readonly SeverityDef[]
+  /** 이 프로젝트의 이슈 표시 상태(설정 workflow.issue_statuses) — 이슈 현황 카드의 범주 이름·색. 손상·미전달이면 제품 기본 이름 */
+  issueStatuses?: readonly IssueStatusDef[]
+  /** 이 프로젝트의 판정 기준(설정 dashboard.due_soon_days·dashboard.delayed_red_count) — 미전달이면 제품 기본값(7일·4건) */
+  thresholds?: DashboardThresholds
 }) {
   const tr = t
 
@@ -156,7 +162,7 @@ export async function DashboardView({
           items={items} projectId={projectId} projectName={projectName}
           projectDescription={projectDescription} startDate={startDate} endDate={endDate}
           today={today} canGenerateBrief={canGenerateBrief}
-          milestoneKeywords={milestoneKeywords} topLevelLabel={topLevelLabel}
+          milestoneKeywords={milestoneKeywords} topLevelLabel={topLevelLabel} thresholds={thresholds}
         />
       ) : (
         <section className="card flex flex-wrap items-center justify-between gap-3 px-5 py-4">
@@ -196,10 +202,10 @@ export async function DashboardView({
           추이 카드는 표로 높이를 채워 좌측과 균형을 맞춘다(차트만 두면 아래가 빈다 — 목업 B안에서 확인).
           이슈 0건이면 현황 카드 하나만 빈 상태로 — 빈 카드를 나란히 두지 않는다. 조회 실패면 카드 대신 사유. */}
       {modules.issues && (issues === null ? issuesError : issues.length === 0 ? (
-        <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} />
+        <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} severities={issueSeverities} statuses={issueStatuses} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
-          <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} />
+          <IssueStatusCard areas={issueAreas} issues={issues} projectId={projectId} today={realToday} timeZone={cal.timezone} severities={issueSeverities} statuses={issueStatuses} />
           <IssueTrendCard issues={issues} today={realToday} weekStart={cal.weekStart} timeZone={cal.timezone} />
         </div>
       ))}
@@ -211,9 +217,9 @@ export async function DashboardView({
           WBS 가 없으면 바로 위 이슈 섹션(E)의 사유와 나란히 겹쳐 재시도 버튼·스크린리더 알림이 두 번이 된다. */}
       {(wbs || (modules.issues && issues !== null)) && (
         <div className={wbs && modules.issues ? 'grid gap-5 lg:grid-cols-2' : undefined}>
-          {wbs && <RiskWorklist items={items} projectId={projectId} today={today} />}
+          {wbs && <RiskWorklist items={items} projectId={projectId} today={today} thresholds={thresholds} />}
           {modules.issues && (issues === null ? issuesError
-            : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} severities={issueSeverities} />)}
+            : <IssueQueueCard issues={issues} projectId={projectId} today={realToday} severities={issueSeverities} dueSoonDays={thresholds?.dueSoonDays} />)}
         </div>
       )}
 

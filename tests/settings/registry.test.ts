@@ -1,4 +1,4 @@
-// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 48키 등록(SP7 minutes.auto_file_by_path, SP6 forms.* 넷, SP3b UI-3 portal.widgets·views.default 둘, SPU1 security.local_drafts, SP8 notify.policy 포함). 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
+// 설정 레지스트리(스펙 §3.6·§1.4·개정 §2.6) — 50키 등록(대시보드 판정 기준 dashboard.* 둘, SP7 minutes.auto_file_by_path, SP6 forms.* 넷, SP3b UI-3 portal.widgets·views.default 둘, SPU1 security.local_drafts, SP8 notify.policy 포함). 로드 단언, G0-4 의 네 선언은 형 검사만(등록하지 않는다), 사전 키.
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
@@ -17,7 +17,7 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 48키 — 워크스페이스 16, 프로젝트 32(SP7 minutes.auto_file_by_path + SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 둘 + SPU1 security.local_drafts + SP8 notify.policy)', () => {
+  it('정확히 50키 — 워크스페이스 16, 프로젝트 34(대시보드 판정 기준 dashboard.* 둘 + SP7 minutes.auto_file_by_path + SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 둘 + SPU1 security.local_drafts + SP8 notify.policy)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
       'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'portal.widgets', 'security.local_drafts', 'notify.policy', 'minutes.attachments', 'minutes.root_folders'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
@@ -26,6 +26,7 @@ describe('등록 키', () => {
       'calendar.timezone', 'calendar.working_days', 'calendar.week_start',
       'views.default',
       'issues.id_policy', 'issues.analysis', 'minutes.attachments', 'minutes.auto_file_by_path',
+      'dashboard.due_soon_days', 'dashboard.delayed_red_count',
       'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses', 'fields.wbs_item', 'fields.issue', 'fields.weekly_row',
       'forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'])
     for (const k of ['agents.stage_workflow', 'core.stage_credits']) {
@@ -50,6 +51,10 @@ describe('등록 키', () => {
     expect(row('modules.enabled')).toEqual(['project', 'project_admin', 'settings', 'custom', 'immediate', ['recompute']])
     expect(row('workflow.stage_credits')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['future_only']])
     expect(row('views.default')).toEqual(['project', 'project_admin', 'wbs', 'custom', 'immediate', ['none']])
+    // 대시보드 판정 기준 둘(2026-10-10) — 표시·판정 전용(recompute), 소유는 core 모듈 dashboard
+    expect(row('dashboard.due_soon_days')).toEqual(['project', 'project_admin', 'dashboard', 'custom', 'immediate', ['recompute']])
+    expect(row('dashboard.delayed_red_count')).toEqual(['project', 'project_admin', 'dashboard', 'custom', 'immediate', ['recompute']])
+    expect(settingDef('workspace', 'dashboard.due_soon_days')).toBeUndefined()
     // SP5 B2 — SP7 전까지 키 전체가 platform_admin(D21)
     expect(row('minutes.root_folders')).toEqual(['workspace', 'platform_admin', 'minutes', 'custom', 'immediate', ['future_only']])
     // SP5 B4 어휘 — 참조 검사가 있는 guarded, 소유 모듈은 그 어휘를 쓰는 기능

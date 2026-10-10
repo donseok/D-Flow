@@ -29,6 +29,8 @@ const expectedStatus: Record<string, string> = {
   'minutes.root_folders': 'verified',
   // 정본 §3.3 — 외부 업로드의 자동 편철(env 의 설정화). 정의·편집기·소비처(업로드 라우트)·테스트 — 기준 wired, 업로드 완주(E2E setting-auto-file)가 근거
   'minutes.auto_file_by_path': 'wired',
+  // 대시보드 판정 기준 둘(2026-10-10) — 정의·편집기·소비처·테스트 — 기준 wired. E2E 근거가 없어 내보내는 상태도 wired 다
+  'dashboard.due_soon_days': 'wired', 'dashboard.delayed_red_count': 'wired',
   // SP5b — 흐름 다섯(+크레딧 표). 정의·SQL·승인 액션(W1)·화면 주입·편집기(W2)·합성 S1/S3/S9-workflow(Z) 뒤 verified
   'workflow.credit_policy': 'verified', 'workflow.wbs_stage_labels': 'verified', 'workflow.approval_steps': 'verified',
   'workflow.approval_distinct_approvers': 'verified', 'workflow.predecessor_gate': 'verified',
@@ -40,9 +42,9 @@ const expectedStatus: Record<string, string> = {
 const PENDING_CUSTOM_WIDGETS: Readonly<Record<string, string>> = {}
 
 describe('설정 카탈로그 동기화', () => {
-  it('48정의(키 이름 44)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
+  it('50정의(키 이름 46)의 메타·마감 상태와 소비처·테스트 경로가 유효하다', () => {
     const defs = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS]
-    expect(defs).toHaveLength(48)
+    expect(defs).toHaveLength(50)
     expect(Object.keys(CATALOG_META).sort()).toEqual([...new Set(defs.map(def => def.key))].sort())
     expect(Object.fromEntries(defs.map(def => [def.key, baseStatusOf(def.key)]))).toEqual(expectedStatus)
     // 내보내는 상태 = 기준 상태에 E2E 근거를 얹은 것 — wired 이고 근거 줄이 있는 키만 verified 다(그 밖의 키는 기준 그대로)
@@ -57,8 +59,8 @@ describe('설정 카탈로그 동기화', () => {
 
   it('E2E 근거 — 승격은 wired 인 키만, 근거 단계가 그 스크립트에 이름으로 실재하고, 근거 스크립트가 테스트 칸에 적힌다(한 줄 = 한 키)', () => {
     const wired = Object.entries(expectedStatus).filter(([, status]) => status === 'wired').map(([key]) => key).sort()
-    // 닫힌 목록 — wired 로 남아 있던 열 키. 근거 줄은 이 안에서만 온다(stored 를 E2E 한 단계로 건너뛰어 올리지 않는다)
-    expect(wired).toEqual(['branding.accent', 'branding.logo', 'branding.product_name', 'core.extra_axis_label', 'minutes.auto_file_by_path',
+    // 닫힌 목록 — wired 로 남아 있던 열 키 + E2E 근거가 아직 없는 대시보드 판정 기준 둘. 근거 줄은 이 안에서만 온다(stored 를 E2E 한 단계로 건너뛰어 올리지 않는다)
+    expect(wired).toEqual(['branding.accent', 'branding.logo', 'branding.product_name', 'core.extra_axis_label', 'dashboard.delayed_red_count', 'dashboard.due_soon_days', 'minutes.auto_file_by_path',
       'navigation.menu', 'notify.policy', 'portal.widgets', 'security.local_drafts', 'views.default'])
     const steps = new Set<string>()
     for (const [key, evidence] of Object.entries(E2E_EVIDENCE)) {

@@ -16,6 +16,7 @@ import { IssuesView } from '@/components/issues/IssuesView'
 import { todayIn } from '@/lib/domain/calendar'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick, pickCalendar } from '@/lib/settings/pick'
+import { dashboardThresholdsOf } from '@/lib/settings/dashboardThresholds'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
@@ -67,6 +68,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
     >
       <CustomFieldsProvider projectId={projectId} entity="issue" defs={customFields.ok ? customFields.value : null} canAdmin={isProjectAdmin(m, projectId)}>
       <IssuesView
+        dueUrgentDays={dashboardThresholdsOf(pc.cfg).dueSoonDays}
         customFields={customFields.ok ? customFields.value : null}
         entryContext={entry.ok ? entry.value : null}
         entryError={entry.ok ? undefined : entry.error}

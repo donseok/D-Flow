@@ -91,9 +91,9 @@ describe('목록', () => {
     expect(new Set([...claimed, 'projects', 'unknown'])).toEqual(new Set(BOT_DOMAINS))
     expect([...byId.chatbot.botDomains]).toEqual([])
   })
-  it('settings — 48정의(SP7 minutes.auto_file_by_path·SP6 forms.* 넷·SP5c 필드 셋·SP5 달력·이슈·어휘·SP5b 흐름·SP3b portal.widgets·views.default·SPU1 security.local_drafts·SP8 notify.policy 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 13·settings 18 이다', () => {
+  it('settings — 50정의(대시보드 판정 기준 dashboard.* 둘·SP7 minutes.auto_file_by_path·SP6 forms.* 넷·SP5c 필드 셋·SP5 달력·이슈·어휘·SP5b 흐름·SP3b portal.widgets·views.default·SPU1 security.local_drafts·SP8 notify.policy 포함)가 소유 모듈에 정확히 한 번씩 있고, wbs 13·settings 18 이다', () => {
     const owned = MODULES.flatMap((m) => m.settings.map((s) => [m.id, s.key] as const))
-    expect(owned).toHaveLength(48)
+    expect(owned).toHaveLength(50)
     for (const [mid, key] of owned) {
       const def = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS].find((d) => d.key === key)!
       expect(def.module, key).toBe(mid)

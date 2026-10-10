@@ -116,9 +116,9 @@ export function dueDaysLeft(issue: Pick<Issue, 'dueDate' | 'status'>, today: str
   return diffDaysCal(today, issue.dueDate)
 }
 
-/** 남은일수 강조 여부 — DUE_URGENT_DAYS 이내(경과 포함). null 은 표시 대상이 아니므로 false. */
-export function isDueUrgent(daysLeft: number | null): boolean {
-  return daysLeft !== null && daysLeft <= DUE_URGENT_DAYS
+/** 남은일수 강조 여부 — urgentDays(그 프로젝트의 설정 dashboard.due_soon_days, 기본 DUE_URGENT_DAYS) 이내(경과 포함). null 은 표시 대상이 아니므로 false. */
+export function isDueUrgent(daysLeft: number | null, urgentDays: number = DUE_URGENT_DAYS): boolean {
+  return daysLeft !== null && daysLeft <= urgentDays
 }
 
 /** 기본 정렬: 미해결 우선 → 지연 우선 → 심각도(설정 rank 작은 것 먼저, 목록 밖 code 는 뒤) → 목표일 오름차순(없으면 뒤) → 최신 등록순. 원본 불변. */

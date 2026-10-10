@@ -1,5 +1,5 @@
 import type { ComputedItem } from '@/lib/domain/types'
-import { buildExecSummary, type Signal } from '@/lib/domain/dashboard'
+import { buildExecSummary, type DashboardThresholds, type Signal } from '@/lib/domain/dashboard'
 import { formatPct1, formatPp1 } from '@/lib/domain/format'
 import { t, type DictKey } from '@/lib/i18n/dict'
 import { fmtDate } from '@/components/wbs/shared'
@@ -20,6 +20,7 @@ export async function ExecSummary({
   milestoneKeywords,
   canGenerateBrief = false,
   topLevelLabel = null,
+  thresholds,
 }: {
   items: ComputedItem[]
   projectId: string
@@ -34,9 +35,11 @@ export async function ExecSummary({
   canGenerateBrief?: boolean
   /** 1레벨 단계 이름(core.level_labels 첫 값) — 보고서 모달의 진척 표 머리. 손상·미주입이면 null(모달이 중립 문구) */
   topLevelLabel?: string | null
+  /** 그 프로젝트의 판정 기준(설정 dashboard.*) — 임박 창·지연 '위험' 건수. 없으면 제품 기본값 */
+  thresholds?: DashboardThresholds
 }) {
   const tr = t
-  const s = buildExecSummary(items, { startDate, endDate, today }, milestoneKeywords)
+  const s = buildExecSummary(items, { startDate, endDate, today }, milestoneKeywords, thresholds)
 
   // 게이지 중앙 배지는 진척(실적 vs 계획) 판정만 반영한다. 큰 실적%·편차와 같은 위계라
   // 종합(worst-of)을 얹으면 "+0.3%p 앞서는데 위험"처럼 수치와 모순돼 읽힌다.

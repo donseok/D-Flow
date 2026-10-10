@@ -14,7 +14,7 @@ import { areaLabel, type IssueAreaRef } from '@/lib/domain/issueAreas'
 import { VOCAB_COLOR_CLASS, vocabLabel, vocabView, type IssueStatusDef, type SeverityDef } from '@/lib/settings/vocab'
 
 export function IssueBoard({
-  issues, statuses, severities, areas, assigneeLabel, today, canMove, onOpen,
+  issues, statuses, severities, areas, assigneeLabel, today, dueUrgentDays, canMove, onOpen,
 }: {
   /** 필터·정렬이 끝난 이슈 — 목록과 같은 집합을 받는다(필터는 보드에도 적용된다) */
   issues: Issue[]
@@ -24,6 +24,8 @@ export function IssueBoard({
   /** 담당자 표기(목록 셀과 같은 규칙) — 없으면 null */
   assigneeLabel: (issue: Issue) => string | null
   today: string
+  /** '임박' 창(설정 dashboard.due_soon_days) — 없으면 제품 기본 7일 */
+  dueUrgentDays?: number
   /** 프로젝트 멤버 이상 — 조회 전용에게는 이동 메뉴를 그리지 않는다(서버 updateIssueProgress 는 requireProjectMember) */
   canMove: boolean
   onOpen: (issueId: string) => void
@@ -113,7 +115,7 @@ export function IssueBoard({
                 const area = areas.find(a => a.id === issue.areaId)
                 const severity = vocabView('issues.severities', severities, issue.severity, t)
                 const daysLeft = dueDaysLeft(issue, today)
-                const urgent = isOverdue(issue, today) || isDueUrgent(daysLeft)
+                const urgent = isOverdue(issue, today) || isDueUrgent(daysLeft, dueUrgentDays)
                 const targets = canMove ? issueMoveTargets(statuses, issue) : []
                 const saving = savingIds.has(issue.id)
                 const open = menuFor === issue.id

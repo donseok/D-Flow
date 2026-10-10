@@ -348,7 +348,7 @@ export function KanbanBoard({
         return
       }
       editSessionStore.setSession(sessionId, 'kanban', card.id, 'saved')
-      setLiveMsg(t('kanban.liveStageChanged').replace('{name}', () => card.name).replace('{stage}', () => nextStage ?? t('wbs.stageNoneOption')))
+      setLiveMsg(t('kanban.liveStageChanged').replace('{name}', () => card.name).replace('{stage}', () => stageLabels?.[nextStageKey] || (nextStage === null ? t('wbs.stageNoneOption') : stageLabelKo(nextStage))))
       router.refresh()
     } catch {
       setStageOverride(prev => {

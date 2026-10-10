@@ -193,3 +193,44 @@ describe('IssueQueueCard', () => {
     expect(html).not.toContain('focus=')
   })
 })
+
+// 2026-10-10 — 설정이 있는데 카드가 무시하던 자리: 심각도(code 'high' 고정)·상태 이름(범주 기본 이름 고정)·임박 창(7일 고정)
+describe('이슈 카드가 프로젝트 설정을 따른다', () => {
+  const CUSTOM_SEVERITIES = [
+    { code: 'blocker', label: '차단', rank: 1, color: 'delayed' as const, active: true },
+    { code: 'normal', label: '일반', rank: 2, color: 'neutral' as const, active: true },
+  ]
+  it("심각도를 바꾼 프로젝트 — KPI 가 그 프로젝트의 최상위 심각도 이름으로 세고(예전엔 code 'high' 만 세어 늘 0)", () => {
+    const issues = [issue({ severity: 'blocker' }), issue({ severity: 'blocker', status: 'in_progress' }), issue({ severity: 'normal' })]
+    const text = textOf(renderToStaticMarkup(
+      <IssueStatusCard areas={TEST_AREAS} issues={issues} projectId="p1" today={TODAY} timeZone="Asia/Seoul" severities={CUSTOM_SEVERITIES} />))
+    expect(text).toMatch(/차단 · 미해결 2 /)
+    expect(text).not.toContain('심각 · 미해결')
+  })
+  it('상태 이름·색을 바꾼 프로젝트 — 범주에 활성 상태가 하나면 그 이름·색으로, 여럿이면 범주 기본 이름으로 그린다', () => {
+    const statuses = [
+      { code: 'open', label: '접수', category: 'open' as const, color: 'accent' as const, sort: 1, active: true },
+      { code: 'in_progress', label: '진행중', category: 'in_progress' as const, color: 'progress' as const, sort: 2, active: true },
+      { code: 'review', label: '검토중', category: 'in_progress' as const, color: 'pending' as const, sort: 3, active: true },
+      { code: 'resolved', label: '해결', category: 'resolved' as const, color: 'done' as const, sort: 4, active: true },
+      { code: 'on_hold', label: '보류', category: 'on_hold' as const, color: 'neutral' as const, sort: 5, active: true },
+    ]
+    const html = renderToStaticMarkup(
+      <IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} timeZone="Asia/Seoul" statuses={statuses} />)
+    const text = textOf(html)
+    expect(text).toMatch(/접수 3 /)          // 열림 범주 = 상태 하나 → 그 이름
+    expect(text).not.toMatch(/열림 3 /)
+    expect(text).toMatch(/진행중 1 /)        // 진행 범주 = 상태 둘 → 범주 기본 이름
+    expect(html).toContain('bg-warning')     // 접수의 색(accent)
+    // 넘기지 않으면 종전 표시 그대로
+    expect(textOf(renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} timeZone="Asia/Seoul" />))).toMatch(/열림 3 /)
+  })
+  it('임박 창 — 설정 일수 안의 마감만 조치 대기에 오르고, 빈 안내도 그 일수를 적는다', () => {
+    const soon = [issue({ id: 'd2', dueDate: '2026-08-30' }), issue({ id: 'd6', dueDate: '2026-09-03' })]
+    const focus = (html: string) => [...html.matchAll(/focus=([a-z0-9]+)/g)].map(m => m[1])
+    expect(focus(renderToStaticMarkup(<IssueQueueCard issues={soon} projectId="p1" today={TODAY} severities={SEVERITIES} />))).toEqual(['d2', 'd6'])
+    expect(focus(renderToStaticMarkup(<IssueQueueCard issues={soon} projectId="p1" today={TODAY} severities={SEVERITIES} dueSoonDays={3} />))).toEqual(['d2'])
+    expect(renderToStaticMarkup(<IssueQueueCard issues={[issue()]} projectId="p1" today={TODAY} severities={SEVERITIES} dueSoonDays={3} />)).toContain('3일 내 마감')
+    expect(renderToStaticMarkup(<IssueQueueCard issues={[issue()]} projectId="p1" today={TODAY} severities={SEVERITIES} />)).toContain('7일 내 마감')
+  })
+})

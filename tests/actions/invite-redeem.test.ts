@@ -516,6 +516,18 @@ describe('getInvitePreview', () => {
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
+  it('활성 초대는 그 워크스페이스가 정한 제품 이름을 싣는다(branding.product_name) — 초대 화면 제목이 메일 제목과 같은 이름을 쓴다', async () => {
+    makeAdmin({ invite: { data: PREVIEW_ROW, error: null }, settings: { data: wsRow({ 'branding.product_name': 'Acme PM' }), error: null } })
+    const res = await getInvitePreview(TOKEN)
+    expect(res.ok && res.preview.productName).toBe('Acme PM')
+  })
+  it('비활성(만료) 초대에는 제품 이름도 싣지 않는다 — 상태만', async () => {
+    makeAdmin({ invite: { data: { ...PREVIEW_ROW, expires_at: '2000-01-01T00:00:00.000Z' }, error: null }, settings: { data: wsRow({ 'branding.product_name': 'Acme PM' }), error: null } })
+    const res = await getInvitePreview(TOKEN)
+    expect(res.ok && res.preview.status).toBe('expired')
+    expect(res.ok && 'productName' in res.preview).toBe(false)
+  })
+
   it('전체 이메일 대신 마스킹된 주소만 돌려준다', async () => {
     const spies = makeAdmin({ invite: { data: PREVIEW_ROW, error: null } })
     const res = await getInvitePreview(TOKEN)
@@ -530,6 +542,8 @@ describe('getInvitePreview', () => {
         status: 'active',
         accountExists: false,
         teamNames: [],
+        // 제품 이름은 그 워크스페이스의 설정(branding.product_name) — 값이 없으면 배포 기본 이름
+        productName: 'D-Flow',
       },
     })
     // 계정 유무는 profiles(email) 단건 — 전 계정 목록을 훑지 않는다.

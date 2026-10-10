@@ -12,6 +12,8 @@ import { AGENT_TAG } from '@/lib/domain/seatmap'
 import { fetchAllByKeyset } from '@/lib/data/paging'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { requireCalendar } from '@/lib/calendar/load'
+import { dashboardThresholdsOf } from '@/lib/settings/dashboardThresholds'
+import type { DashboardThresholds } from '@/lib/domain/dashboard'
 import { todayIn, type WorkCalendar } from '@/lib/domain/calendar'
 
 // 같은 요청 내 layout+page 중복 호출을 1회로 dedupe(React cache).
@@ -30,6 +32,8 @@ export const getComputedWbs = cache(async (
   /** 이 프로젝트의 달력(근무 요일·날짜 예외·주 규칙·tz) — 과제 16 이 계산에 쓴다 */
   calendar: WorkCalendar
   today: string
+  /** 이 프로젝트의 판정 기준(설정 dashboard.* — 임박 창·지연 '위험' 건수). 이미 읽은 설정에서 꺼낸다 — 액션(React cache 밖)이 설정을 다시 읽지 않게 */
+  thresholds: DashboardThresholds
 }> => {
   const sb = await createServerClient()
   // 데이터 손실 경로(SP4 D18·Q5) — 두 표는 끝까지 읽는다(fetchAllByKeyset: 바뀌지 않는 키 다음부터 + count 대조). 한 응답은 max_rows(1000)
@@ -152,6 +156,7 @@ export const getComputedWbs = cache(async (
     holidays: [...calendar.offDates].sort(),
     calendar,
     today,
+    thresholds: dashboardThresholdsOf(cfg),
   }
 })
 

@@ -90,10 +90,21 @@ export function detectMilestones(items: ComputedItem[], today: string, keywords:
 export const delayedLeaves = (leaves: ComputedItem[]): ComputedItem[] =>
   leaves.filter(l => l.status === 'delayed')
 
-/** 미완료 & 오늘 이후 7일 내 마감 — DashboardView 인라인 정의와 동일(단일 출처). */
-export function dueSoonLeaves(leaves: ComputedItem[], today: string): ComputedItem[] {
+/**
+ * 대시보드 판정 기준(프로젝트 설정 dashboard.* — 2026-10-10). 기본값은 설정이 생기기 전의 코드 상수와 같다(동작 변화 0).
+ * - dueSoonDays: '마감 임박' 창 — 오늘(D-0)부터 D-N 까지(설정 dashboard.due_soon_days). 작업·이슈가 같은 값을 쓴다.
+ * - delayedRedCount: 지연 작업이 이 건수 이상이면 '위험'(설정 dashboard.delayed_red_count). 그 미만 1건 이상은 '주의'.
+ * 프로젝트를 가로지르는 화면(포트폴리오)은 프로젝트 설정을 읽지 않는다(개정 §2.1) — 인자를 넘기지 않아 이 기본값으로 판정한다.
+ */
+export interface DashboardThresholds { dueSoonDays: number; delayedRedCount: number }
+export const DEFAULT_DUE_SOON_DAYS = 7
+export const DUE_SOON_DAYS_MAX = 60
+export const DELAYED_RED_COUNT_MAX = 999
+
+/** 미완료 & 오늘 이후 days 일(기본 7) 내 마감 — DashboardView 인라인 정의와 동일(단일 출처). */
+export function dueSoonLeaves(leaves: ComputedItem[], today: string, days: number = DEFAULT_DUE_SOON_DAYS): ComputedItem[] {
   return leaves
-    .filter(l => l.status !== 'done' && l.plannedEnd != null && l.plannedEnd >= today && diffDaysCal(today, l.plannedEnd) <= 7)
+    .filter(l => l.status !== 'done' && l.plannedEnd != null && l.plannedEnd >= today && diffDaysCal(today, l.plannedEnd) <= days)
     .sort((a, b) => (a.plannedEnd! < b.plannedEnd! ? -1 : a.plannedEnd! > b.plannedEnd! ? 1 : 0))
 }
 
@@ -102,7 +113,8 @@ export function dueSoonLeaves(leaves: ComputedItem[], today: string): ComputedIt
  * 기준으로 갈라질 수 있었다. 값 변경은 여기 한 곳에서만 한다(값 자체는 종전과 동일). */
 export const SPI_DONE_FLOOR = 0.98   // SPI ≥ 0.98 → 정상(done 색)
 export const SPI_WARN_FLOOR = 0.9    // 0.9 ≤ SPI < 0.98 → 주의(warn), 미만은 지연(delayed)
-export const DELAYED_RED_COUNT = 4   // 지연 리프 4건 이상 → red (riskModel·위험 신호 공유)
+export const DELAYED_RED_COUNT = 4   // 지연 리프 4건 이상 → red (riskModel·위험 신호 공유) — 설정 dashboard.delayed_red_count 의 기본값
+export const DEFAULT_DASHBOARD_THRESHOLDS: DashboardThresholds = Object.freeze({ dueSoonDays: DEFAULT_DUE_SOON_DAYS, delayedRedCount: DELAYED_RED_COUNT })
 
 export interface RiskModel { delayed: number; dueSoon: number; topWeightDelayed: boolean; signal: Signal }
 
@@ -116,12 +128,12 @@ function topWeightPhaseDelayed(roots: ComputedItem[]): boolean {
   return top.status === 'delayed'
 }
 
-export function riskModel(roots: ComputedItem[], today: string): RiskModel {
+export function riskModel(roots: ComputedItem[], today: string, th: DashboardThresholds = DEFAULT_DASHBOARD_THRESHOLDS): RiskModel {
   const leaves = collectLeaves(roots)
   const delayed = delayedLeaves(leaves).length
-  const dueSoon = dueSoonLeaves(leaves, today).length
+  const dueSoon = dueSoonLeaves(leaves, today, th.dueSoonDays).length
   const topWeightDelayed = topWeightPhaseDelayed(roots)
-  let signal: Signal = delayed >= DELAYED_RED_COUNT ? 'red' : delayed >= 1 ? 'amber' : 'green'
+  let signal: Signal = delayed >= th.delayedRedCount ? 'red' : delayed >= 1 ? 'amber' : 'green'
   if (topWeightDelayed) signal = escalate(signal)
   return { delayed, dueSoon, topWeightDelayed, signal }
 }
@@ -147,6 +159,7 @@ export function buildExecSummary(
   items: ComputedItem[],
   opts: { startDate: string | null; endDate: string | null; today: string },
   milestoneKeywords: readonly string[],
+  thresholds: DashboardThresholds = DEFAULT_DASHBOARD_THRESHOLDS,
 ): ExecSummary {
   const { actual, planned } = overallProgress(items)
   // round1 없이 빼면 FP 노이즈(예: 6.3-8.3 = -2.000000000000001)가 progressSignal의
@@ -157,7 +170,7 @@ export function buildExecSummary(
     startDate: opts.startDate, endDate: opts.endDate, today: opts.today,
     overallActual: actual, overallPlanned: planned,
   })
-  const risk = riskModel(items, opts.today)
+  const risk = riskModel(items, opts.today, thresholds)
   const milestone = detectMilestones(items, opts.today, milestoneKeywords)
   const overall = { signal: overallSignal([progress.signal, schedule.signal, risk.signal, milestone.signal]) }
   return { overall, progress, schedule, risk, milestone }

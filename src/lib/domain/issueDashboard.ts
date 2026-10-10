@@ -1,12 +1,13 @@
 // 대시보드 이슈 현황 도메인 — 순수 함수만(I/O 없음). 카드 3종(현황·추이·조치 대기)이 소비한다.
 // 기준일(today)은 호출부가 **실제 오늘**(그 프로젝트 tz 의 todayIn)을 내려준다 — 공정율 base_date 가 아니다.
 // 이슈 기한은 실제 달력이라 회의·근태 카드와 같은 시계를 쓴다(DashboardView 섹션 D 주석).
-import type { Issue, IssueSeverity, IssueStatus } from './issues'
+import type { Issue, IssueStatus } from './issues'
 import { ISSUE_STATUSES, isOverdue } from './issues'
 import { areaLabel, type IssueAreaRef } from './issueAreas'
 import { addDaysIso } from './dates'
 import { currentRuleDay, startOfWeek, ymdIn, type WeekStartRule } from './calendar'
-import { diffDaysCal } from './dashboard'
+import { DEFAULT_DUE_SOON_DAYS, diffDaysCal } from './dashboard'
+import { DEFAULT_SEVERITIES } from '@/lib/settings/vocab'
 
 /** 대시보드가 쓰는 이슈 슬라이스 — getIssuesForDashboard(1쿼리)와 getIssues(전체) 둘 다 만족한다. */
 export type DashboardIssue = Pick<
@@ -14,8 +15,8 @@ export type DashboardIssue = Pick<
   'id' | 'code' | 'areaId' | 'title' | 'status' | 'severity' | 'dueDate' | 'resolvedAt' | 'createdAt'
 >
 
-/** 임박 = 오늘(D-0)부터 D-7까지 마감(RiskWorklist dueSoonLeaves 와 같은 창 — 달력일 8일). */
-export const DUE_SOON_DAYS = 7
+/** 임박 = 오늘(D-0)부터 D-7까지 마감(RiskWorklist dueSoonLeaves 와 같은 창 — 달력일 8일). 프로젝트 설정 dashboard.due_soon_days 의 기본값 */
+export const DUE_SOON_DAYS = DEFAULT_DUE_SOON_DAYS
 /** '최근 7일 해결' 창 — 오늘 포함 7일(today-6 ~ today). */
 export const RESOLVED_WINDOW_DAYS = 7
 /** 추이 차트 기본 창(주). */
@@ -23,7 +24,16 @@ export const TREND_WEEKS = 12
 /** 조치 대기 카드 표시 상한. 넘치는 건수는 hiddenCount 로 알린다(조용한 절단 금지). */
 export const QUEUE_LIMIT = 5
 
-const SEVERITY_ORDER: Record<IssueSeverity, number> = { high: 0, medium: 1, low: 2 }
+/** 심각도 순위의 원천 — 그 프로젝트의 설정 issues.severities(code·rank·active). 넘기지 않는 호출(옛 호출부·픽스처)은 제품 기본 3단계로 읽는다 */
+export type SeverityRank = { code: string; rank: number; active?: boolean }
+/**
+ * '가장 높은 심각도' = 활성 항목 중 rank 가 가장 작은 것(활성이 없으면 전체에서). 목록이 비면(설정을 못 읽음) null — 그 집계는 0 이다.
+ * 예전에는 code 'high' 를 직접 비교해, 심각도를 바꾼 프로젝트(critical·major… )의 '심각 · 미해결' 이 늘 0 이었다.
+ */
+export function topSeverity<T extends SeverityRank>(severities: readonly T[]): T | null {
+  const pool = severities.some(s => s.active !== false) ? severities.filter(s => s.active !== false) : severities
+  return pool.reduce<T | null>((top, s) => (top === null || s.rank < top.rank ? s : top), null)
+}
 const isUnresolved = (i: Pick<DashboardIssue, 'status'>) => i.status !== 'resolved'
 /** ISO 타임스탬프 → 그 프로젝트 tz 의 'YYYY-MM-DD'. 이미 날짜 문자열(date-only)이면 그대로 — 변환하지 않는다. */
 const zonedDate = (iso: string, timeZone: string) => (iso.length === 10 ? iso : ymdIn(timeZone, new Date(iso)))
@@ -37,20 +47,23 @@ export interface IssueKpis {
   unresolved: number
   /** 기한 경과(당일 제외) + 미해결 — domain/issues.isOverdue */
   overdue: number
-  /** 심각도 높음 + 미해결 */
+  /** 가장 높은 심각도(설정 issues.severities 의 rank 최소 활성 항목) + 미해결 */
   highUnresolved: number
   /** 최근 RESOLVED_WINDOW_DAYS 일(오늘 포함) 안에 해결된 건수 */
   resolved7d: number
 }
 
 /** timeZone = 그 프로젝트 calendar.timezone — 해결 시각(instant)을 날짜로 바꿀 때만 쓴다 */
-export function issueKpis(issues: DashboardIssue[], today: string, timeZone: string): IssueKpis {
+export function issueKpis(
+  issues: DashboardIssue[], today: string, timeZone: string, severities: readonly SeverityRank[] = DEFAULT_SEVERITIES,
+): IssueKpis {
+  const top = topSeverity(severities)?.code ?? null
   const windowStart = addDaysIso(today, -(RESOLVED_WINDOW_DAYS - 1))
   let unresolved = 0, overdue = 0, highUnresolved = 0, resolved7d = 0
   for (const i of issues) {
     if (isUnresolved(i)) {
       unresolved += 1
-      if (i.severity === 'high') highUnresolved += 1
+      if (top !== null && i.severity === top) highUnresolved += 1
     }
     if (isOverdue(i, today)) overdue += 1
     const rd = resolvedDate(i, timeZone)
@@ -150,15 +163,23 @@ export interface IssueQueueModel {
   hiddenCount: number
 }
 
-/** 지연(경과 많은 순) → 임박(가까운 순). 같은 일수면 심각도 높음 먼저. 지연·임박은 기한 기준 상호배타. */
-export function issueQueue(issues: DashboardIssue[], today: string, limit = QUEUE_LIMIT): IssueQueueModel {
-  const bySeverity = (a: IssueQueueRow, b: IssueQueueRow) => SEVERITY_ORDER[a.issue.severity] - SEVERITY_ORDER[b.issue.severity]
+/** 지연(경과 많은 순) → 임박(가까운 순). 같은 일수면 심각도 높은 것(설정 rank 가 작은 것) 먼저 — 목록 밖 code 는 뒤. 지연·임박은 기한 기준 상호배타. */
+export function issueQueue(
+  issues: DashboardIssue[], today: string, limit = QUEUE_LIMIT, severities: readonly SeverityRank[] = DEFAULT_SEVERITIES,
+  dueSoonDays: number = DUE_SOON_DAYS,
+): IssueQueueModel {
+  const rankOf = new Map(severities.map(s => [s.code, s.rank]))
+  // 목록 밖 code 끼리는 0(무한대 − 무한대 = NaN 을 내지 않는다 — 정렬이 깨진다)
+  const bySeverity = (a: IssueQueueRow, b: IssueQueueRow) => {
+    const ra = rankOf.get(a.issue.severity), rb = rankOf.get(b.issue.severity)
+    return ra === rb ? 0 : ra === undefined ? 1 : rb === undefined ? -1 : ra - rb
+  }
   const overdue: IssueQueueRow[] = issues
     .filter(i => isOverdue(i, today))
     .map(i => ({ issue: i, kind: 'overdue' as const, days: diffDaysCal(i.dueDate!, today) }))
     .sort((a, b) => b.days - a.days || bySeverity(a, b))
   const dueSoon: IssueQueueRow[] = issues
-    .filter(i => isUnresolved(i) && i.dueDate !== null && i.dueDate >= today && diffDaysCal(today, i.dueDate) <= DUE_SOON_DAYS)
+    .filter(i => isUnresolved(i) && i.dueDate !== null && i.dueDate >= today && diffDaysCal(today, i.dueDate) <= dueSoonDays)
     .map(i => ({ issue: i, kind: 'dueSoon' as const, days: diffDaysCal(today, i.dueDate!) }))
     .sort((a, b) => a.days - b.days || bySeverity(a, b))
   const all = [...overdue, ...dueSoon]

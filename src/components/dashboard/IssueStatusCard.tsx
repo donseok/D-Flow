@@ -3,9 +3,10 @@ import { CircleAlert } from 'lucide-react'
 import { ISSUE_STATUSES, ISSUE_STATUS_META, type IssueStatus } from '@/lib/domain/issues'
 import type { IssueAreaRef } from '@/lib/domain/issueAreas'
 import {
-  issueKpis, issueAreaBreakdown, issueStatusCounts, RESOLVED_WINDOW_DAYS,
+  issueKpis, issueAreaBreakdown, issueStatusCounts, topSeverity, RESOLVED_WINDOW_DAYS,
   type DashboardIssue, type IssueStatusCounts,
 } from '@/lib/domain/issueDashboard'
+import { DEFAULT_ISSUE_STATUSES, DEFAULT_SEVERITIES, VOCAB_COLOR_CLASS, vocabLabel, type IssueStatusDef, type SeverityDef } from '@/lib/settings/vocab'
 import { addDaysIso } from '@/lib/domain/dates'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
@@ -24,19 +25,38 @@ import { RingGauge } from './RingGauge'
 const DOT_CAP = 14
 
 /** 이슈 1건 = 점 1개(상태색, ISSUE_STATUSES 순). 색만으로 읽히지 않게 타일 title 이 건수를 글로 나른다. */
-function StatusDots({ counts, total }: { counts: IssueStatusCounts; total: number }) {
+function StatusDots({ counts, total, dotOf }: { counts: IssueStatusCounts; total: number; dotOf: (s: IssueStatus) => string }) {
   const dots: IssueStatus[] = []
   for (const s of ISSUE_STATUSES) for (let i = 0; i < counts[s] && dots.length < DOT_CAP; i += 1) dots.push(s)
   const rest = total - dots.length
   return (
     <div className="flex flex-wrap items-center gap-[3px]" aria-hidden>
-      {dots.map((s, i) => <i key={i} data-dot={s} className={`inline-block h-[7px] w-[7px] rounded-[2px] ${ISSUE_STATUS_META[s].dot}`} />)}
+      {dots.map((s, i) => <i key={i} data-dot={s} className={`inline-block h-[7px] w-[7px] rounded-[2px] ${dotOf(s)}`} />)}
       {rest > 0 && <span className="ml-0.5 text-meta font-semibold text-fg-muted">+{rest}</span>}
     </div>
   )
 }
 
-export function IssueStatusCard({ issues, projectId, today, timeZone, areas }: {
+/**
+ * 범주(제품 고정 4종)의 표시 — 집계는 범주로 하지만, 그 범주의 활성 상태가 하나뿐인 프로젝트(이름·색만 바꾼 흔한 경우)는 그 상태의 이름·색으로 그린다
+ * (설정 workflow.issue_statuses). 한 범주에 상태가 여럿이면 묶음 이름이 따로 없어 범주 기본 이름을 쓴다. 기본 정의 그대로면 종전 표시와 같다.
+ */
+function categoryView(statuses: readonly IssueStatusDef[] | undefined, tr: typeof t): (s: IssueStatus) => { label: string; dot: string } {
+  return (s) => {
+    const base = { label: tr(ISSUE_STATUS_META[s].labelKey), dot: ISSUE_STATUS_META[s].dot }
+    const inCat = (statuses ?? []).filter(d => d.active && d.category === s)
+    if (inCat.length !== 1) return base
+    const def = inCat[0], std = DEFAULT_ISSUE_STATUSES.find(d => d.code === s)
+    if (std && def.code === std.code && def.label === std.label && def.color === std.color) return base
+    return { label: vocabLabel('workflow.issue_statuses', inCat, def.code, tr), dot: VOCAB_COLOR_CLASS[def.color].dot }
+  }
+}
+
+export function IssueStatusCard({ issues, projectId, today, timeZone, areas, severities = DEFAULT_SEVERITIES, statuses }: {
+  /** 이 프로젝트의 이슈 표시 상태(설정 workflow.issue_statuses) — 범주 이름·색에 쓴다. 넘기지 않으면 제품 기본 이름 */
+  statuses?: readonly IssueStatusDef[]
+  /** 이 프로젝트의 이슈 심각도(설정 issues.severities) — '가장 높은 심각도 · 미해결' 칸의 기준과 이름. 넘기지 않으면 제품 기본 3단계 */
+  severities?: readonly SeverityDef[]
   areas: readonly IssueAreaRef[]
   issues: DashboardIssue[]
   projectId: string
@@ -47,11 +67,18 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, areas }: {
 }) {
   const tr = t
   const unit = tr('dash.unitCount')
-  const statusLabel = (s: IssueStatus) => t(ISSUE_STATUS_META[s].labelKey)
+  const viewOf = categoryView(statuses, tr)
+  const statusLabel = (s: IssueStatus) => viewOf(s).label
+  const dotOf = (s: IssueStatus) => viewOf(s).dot
   const countsText = (c: IssueStatusCounts) =>
     ISSUE_STATUSES.filter(s => c[s] > 0).map(s => `${statusLabel(s)} ${c[s]}`).join(' · ')
 
-  const kpi = issueKpis(issues, today, timeZone)
+  const kpi = issueKpis(issues, today, timeZone, severities)
+  // 기본 심각도(높음)면 종전 문구, 이름·단계를 바꾼 프로젝트는 그 프로젝트의 최상위 심각도 이름으로 적는다
+  const top = topSeverity(severities)
+  const defaultTop = DEFAULT_SEVERITIES.find(d => d.code === top?.code)
+  const topLabel = !top || (defaultTop && defaultTop.label === top.label)
+    ? tr('dash.issues.kpiHigh') : tr('dash.issues.kpiTop').replace('{label}', () => top.label)
   const all = issueStatusCounts(issues)
   const rows = issueAreaBreakdown(issues, areas)
   const resolvedPct = kpi.total ? Math.round((all.resolved / kpi.total) * 100) : 0
@@ -77,7 +104,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, areas }: {
   const kpis: { label: string; value: number; tone?: string }[] = [
     { label: tr('dash.issues.kpiUnresolved'), value: kpi.unresolved },
     { label: tr('dash.issues.kpiOverdue'), value: kpi.overdue, tone: kpi.overdue > 0 ? 'text-danger' : undefined },
-    { label: tr('dash.issues.kpiHigh'), value: kpi.highUnresolved, tone: kpi.highUnresolved > 0 ? 'text-warning' : undefined },
+    { label: topLabel, value: kpi.highUnresolved, tone: kpi.highUnresolved > 0 ? 'text-warning' : undefined },
     { label: tr('dash.issues.kpiResolved7d'), value: kpi.resolved7d, tone: 'text-success' },
   ]
 
@@ -140,7 +167,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, areas }: {
                       </div>
                     </div>
                   </div>
-                  {!empty && <StatusDots counts={r.counts} total={r.total} />}
+                  {!empty && <StatusDots counts={r.counts} total={r.total} dotOf={dotOf} />}
                 </div>
               )
             })}
@@ -152,7 +179,7 @@ export function IssueStatusCard({ issues, projectId, today, timeZone, areas }: {
           <span className="text-fg-muted">{tr('dash.issues.legendOrder')}</span>
           {ISSUE_STATUSES.map(s => (
             <span key={s} className="inline-flex items-center gap-1.5">
-              <span className={`h-2 w-2 rounded-[2px] ${ISSUE_STATUS_META[s].dot}`} aria-hidden />
+              <span className={`h-2 w-2 rounded-[2px] ${dotOf(s)}`} aria-hidden />
               <span>{statusLabel(s)}</span> <b className="font-semibold tabular-nums text-fg">{all[s]}</b>
             </span>
           ))}

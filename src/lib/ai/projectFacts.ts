@@ -12,6 +12,8 @@ import { getProjectMeetingData } from '@/lib/data/meetings'
 import { getProjectMinuteSignals } from '@/lib/data/minutes'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { valueOf } from '@/lib/settings/registry'
+import { dashboardThresholdsOf } from '@/lib/settings/dashboardThresholds'
+import type { DashboardThresholds } from '@/lib/domain/dashboard'
 import { createServerClient } from '@/lib/supabase/server'
 import { projectTeams } from '@/lib/teams/source'
 import { activeCodes } from '@/lib/domain/teams'
@@ -42,6 +44,8 @@ export interface ProjectFactsSource {
   milestoneKeywords: string[]
   /** 그 프로젝트의 활성 팀 코드(전용 팀, 없으면 그 워크스페이스의 공용 팀). */
   teams: TeamCode[]
+  /** 그 프로젝트의 판정 기준(설정 dashboard.* — 임박 창·지연 '위험' 건수). 대시보드와 같은 값 */
+  thresholds?: DashboardThresholds
 }
 
 /** 대시보드와 동일 소스 1회 병렬 로드. 프로젝트 행이 없으면(비멤버 RLS 포함) null. */
@@ -79,5 +83,6 @@ export async function loadProjectFacts(projectId: string): Promise<ProjectFactsS
     meetingExceptions: meetRes.exceptions,
     milestoneKeywords: valueOf(config.cfg, 'core.milestone_keywords'),
     teams,
+    thresholds: dashboardThresholdsOf(config.cfg),
   }
 }

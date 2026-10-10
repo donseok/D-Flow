@@ -22,14 +22,16 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   // 세션 판정은 InviteRedeemCard 가 마운트 후 서버 액션(getInviteSessionState)으로 물어본다 —
   // 액션은 쿠키를 쓸 수 있어 만료 토큰 갱신이 정상 동작한다.
   const res = await getInvitePreview(token)
+  // 제품 이름·모노그램은 초대한 워크스페이스의 설정(branding.product_name)을 따른다 — 활성 초대에서만 실려 온다. 그 밖(만료·취소·오류)은 배포 기본 이름
+  const productName = (res.ok && res.preview.productName) || BRAND.productName
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <BrandGlyph size={48} />
+          <BrandGlyph size={48} productName={productName} />
           <div>
-            <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg">{t('invite.pageTitle').replace('{product}', () => BRAND.productName)}</h1>
+            <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg">{t('invite.pageTitle').replace('{product}', () => productName)}</h1>
             <p className="mt-1 text-sm text-fg-secondary">{t('invite.pageLead')}</p>
           </div>
         </div>

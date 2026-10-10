@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { AlertTriangle, CalendarClock } from 'lucide-react'
 import { vocabView, type SeverityDef } from '@/lib/settings/vocab'
-import { issueQueue, type DashboardIssue, type IssueQueueKind } from '@/lib/domain/issueDashboard'
+import { DUE_SOON_DAYS, issueQueue, type DashboardIssue, type IssueQueueKind } from '@/lib/domain/issueDashboard'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
 import { t} from '@/lib/i18n/dict'
@@ -13,10 +13,12 @@ const ROW_META: Record<IssueQueueKind, { border: string; icon: string }> = {
 }
 
 /**
- * 지연·임박 이슈 — 실행 큐(RiskWorklist)의 이슈판. 기한 경과(경과 많은 순) → 7일 내 마감(가까운 순),
+ * 지연·임박 이슈 — 실행 큐(RiskWorklist)의 이슈판. 기한 경과(경과 많은 순) → 임박 창 안의 마감(가까운 순 — 설정 dashboard.due_soon_days, 기본 7일),
  * 행은 이슈관리 ?focus= 딥링크. 상한(QUEUE_LIMIT)을 넘는 건수는 +N 으로 알린다(조용한 절단 금지).
  */
-export function IssueQueueCard({ issues, projectId, today, severities }: {
+export function IssueQueueCard({ issues, projectId, today, severities, dueSoonDays = DUE_SOON_DAYS }: {
+  /** '임박' 창(설정 dashboard.due_soon_days) — 없으면 제품 기본 7일 */
+  dueSoonDays?: number
   issues: DashboardIssue[]
   projectId: string
   /** 실제 오늘(그 프로젝트 tz 의 todayIn). */
@@ -25,14 +27,14 @@ export function IssueQueueCard({ issues, projectId, today, severities }: {
   severities: readonly SeverityDef[]
 }) {
   const tr = t
-  const q = issueQueue(issues, today)
+  const q = issueQueue(issues, today, undefined, severities, dueSoonDays)
   const issuesHref = `/p/${projectId}/issues`
   const ddayText = (n: number) => (n <= 0 ? tr('dash.issues.dueToday') : `D-${n}${tr('dash.issues.ddaySuffix')}`)
 
   return (
     <SectionCard title={tr('dash.issues.queueTitle')} icon={AlertTriangle}
       actions={<span className="chip bg-danger-weak text-danger">{tr('dash.exec.delayed')} {q.overdueCount} · {tr('dash.exec.dueSoon')} {q.dueSoonCount}</span>}>
-      {q.rows.length === 0 ? <p className="text-sm text-fg-secondary">{tr('dash.issues.queueEmpty')}</p> : (
+      {q.rows.length === 0 ? <p className="text-sm text-fg-secondary">{tr('dash.issues.queueEmpty').replace('{n}', String(dueSoonDays))}</p> : (
         <div className="space-y-2">
           {q.rows.map(({ issue, kind, days }) => {
             const meta = ROW_META[kind]

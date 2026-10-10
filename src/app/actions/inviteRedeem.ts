@@ -13,6 +13,7 @@ import {
   validateSignupInput, type InviteStatus, type SignupInput,
 } from '@/lib/domain/invites'
 import { serverTranslator } from '@/lib/i18n/server'
+import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 type AccessRole = 'admin' | 'member'
@@ -212,6 +213,8 @@ export interface InvitePreview {
   accountExists: boolean
   /** 합류하면 오를 팀 이름(초대에 담은 순서 — 첫 팀이 대표 후보). 빈 배열 = 팀 없이 명단에만 오른다. */
   teamNames: string[]
+  /** 그 워크스페이스가 정한 제품 이름(설정 branding.product_name). 활성 초대에서만 — 비활성 링크·판독 실패는 싣지 않고 화면이 배포 기본 이름을 쓴다 */
+  productName?: string
 }
 
 interface PreviewRowRaw {
@@ -296,6 +299,8 @@ export async function getInvitePreview(
       status,
       accountExists: profile !== null,
       teamNames,
+      // 초대받은 사람이 처음 보는 화면 — 메일 제목과 같은 이름이어야 한다(판독 실패는 loadDisplayBranding 이 로그 뒤 배포 기본으로 내린다)
+      productName: (await loadDisplayBranding(row.workspace_id, admin)).productName,
     },
   }
 }
