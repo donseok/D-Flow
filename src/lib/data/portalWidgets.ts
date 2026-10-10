@@ -107,7 +107,8 @@ export async function getProjectProgress(workspaceId: string, actor: Actor, opts
 
 export interface WeekItem { kind: 'wbs' | 'issue' | 'meeting'; id: string; title: string; projectName: string; time: string | null; href: string }
 export interface WeekDay { date: string; label: string; isToday: boolean; items: WeekItem[] }
-const dayLabel = (iso: string) => new Intl.DateTimeFormat(KO_LOCALE, { timeZone: 'UTC', month: 'numeric', day: 'numeric', weekday: 'short' }).format(new Date(`${iso}T00:00:00Z`))
+// 날짜는 다른 화면과 같은 꼴(2026-10-10)로 적고 요일만 붙인다 — 로케일 날짜 꼴('10. 10.')을 섞지 않는다
+const dayLabel = (iso: string) => `${iso} (${new Intl.DateTimeFormat(KO_LOCALE, { timeZone: 'UTC', weekday: 'short' }).format(new Date(`${iso}T00:00:00Z`))})`
 /**
  * 이번 주(워크스페이스 달력의 시간대·주 시작)의 내 회의와 마감 — 날짜별. 마감은 내 업무 원천(왕복 0), 회의는 그 주 범위 한 번.
  * rows 는 항목 전부(0건 판정용), days 는 그 주의 모든 날(빈 날 포함 — 화면이 항목 있는 날만 그린다). 회의·마감 한쪽의 실패는 partial.

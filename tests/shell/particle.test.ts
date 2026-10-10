@@ -37,6 +37,14 @@ describe('withObjectParticle — 목적격 조사 을/를', () => {
     expect(josa('ISS-001', '으로/로')).toBe('ISS-001로')
     expect(josa('팀 9', '은/는')).toBe('팀 9는')
   })
+  it('홀로 선 로마자 대문자 한 글자는 글자 이름으로 읽는다 — L·R 은 ㄹ 받침, M·N 은 받침', () => {
+    expect(josa('“자동 재테스트 A”', '을/를')).toBe('“자동 재테스트 A”를')
+    expect(josa('1차 B', '은/는')).toBe('1차 B는')
+    expect(josa('구역 M', '이/가')).toBe('구역 M이')
+    expect(josa('구역 L', '으로/로')).toBe('구역 L로')
+    expect(josa('구역 N', '으로/로')).toBe('구역 N으로')
+    expect(josa('A', '과/와')).toBe('A와')
+  })
   it('읽는 법을 모르는 글자(로마자 등)·빈 문자열은 두 꼴을 함께 적는다 — 틀린 조사 하나를 단정하지 않는다', () => {
     expect(josa("'ops'", '은/는')).toBe("'ops'은(는)")
     expect(josa('DEV', '이/가')).toBe('DEV이(가)')

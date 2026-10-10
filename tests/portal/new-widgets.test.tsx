@@ -139,11 +139,11 @@ describe('새 위젯 — 내용', () => {
   })
   it('이번 주 일정 — 항목이 있는 날만, 오늘 표시, 회의는 시각·마감은 "마감"', async () => {
     const item = (kind: string, id: string, time: string | null) => ({ kind, id, title: `일정 ${id}`, projectName: 'Apollo', time, href: `/x/${id}` })
-    const days = [{ date: '2026-09-30', label: '9. 30. (수)', isToday: false, items: [] },
-      { date: '2026-10-01', label: '10. 1. (목)', isToday: true, items: [item('meeting', 'm1', '10:00'), item('meeting', 'm2', null), item('wbs', 'w1', null)] }]
+    const days = [{ date: '2026-09-30', label: '2026-09-30 (수)', isToday: false, items: [] },
+      { date: '2026-10-01', label: '2026-10-01 (목)', isToday: true, items: [item('meeting', 'm1', '10:00'), item('meeting', 'm2', null), item('wbs', 'w1', null)] }]
     h.week.mockResolvedValue({ ok: true, rows: days.flatMap((d) => d.items), days, partial: false })
     const w = widget(await render(), 'week_schedule')
-    expect(w).toContain('10. 1. (목)'); expect(w).not.toContain('9. 30. (수)'); expect(w).toContain('>오늘<')
+    expect(w).toContain('2026-10-01 (목)'); expect(w).not.toContain('2026-09-30 (수)'); expect(w).toContain('>오늘<')
     expect(w).toMatch(/10:00<\/span>[\s\S]*일정 m1/); expect(w).toMatch(/종일<\/span>[\s\S]*일정 m2/); expect(w).toMatch(/마감<\/span>[\s\S]*일정 w1/)
   })
   it('즐겨찾기 — 즐겨찾기만 거른 프로젝트 행으로 바로가기', async () => {
