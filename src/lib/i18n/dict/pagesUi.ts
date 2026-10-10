@@ -45,8 +45,8 @@ export const pagesUiKo = {
   'pages.home.noActor': '권한 정보를 읽지 못해 홈을 그리지 못했습니다',
   'pages.home.toSettings': '설정으로',
   'pages.home.widgetConfigFailed': '홈 위젯 설정을 읽지 못해 기본 배치로 보입니다',
-  'pages.home.prefsFailed': '개인 설정을 읽지 못해 위젯 숨김을 적용하지 못했습니다',
-  'pages.home.prefsFailedDetail': '새로고침 후 다시 시도하세요. 숨기기와 다시 보기는 잠시 사용할 수 없습니다.',
+  'pages.home.prefsFailed': '개인 설정을 읽지 못해 내 홈 구성 대신 기본 배치로 보입니다',
+  'pages.home.prefsFailedDetail': '새로고침 후 다시 시도하세요. 홈 구성은 잠시 사용할 수 없습니다.',
   'pages.home.modulesPartial': '일부 프로젝트의 기능 설정을 확인하지 못했습니다',
   // ── 연동 자격증명(/w/…/settings/integrations) ──
   'pages.integrations.title': '연동 자격증명',

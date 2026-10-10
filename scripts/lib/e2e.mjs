@@ -1107,7 +1107,9 @@ export const ACCENT_PROBE = '#6d28d9'
 /** 끄고 켜 볼 홈 위젯 — 모듈·검토자 조건이 없어 누구의 홈에나 늘 보이는 것 */
 export const PORTAL_PROBE_WIDGET = 'projects'
 /** 홈 위젯 id 의 레지스트리 순서 — src/lib/portal/widgets.ts 의 PORTAL_WIDGET_IDS 와 같아야 한다(테스트가 대조) */
-export const PORTAL_WIDGET_ORDER = Object.freeze(['my_work', 'projects', 'review', 'upcoming', 'recent_docs', 'announcements'])
+export const PORTAL_WIDGET_ORDER = Object.freeze(['my_work', 'projects', 'review', 'upcoming', 'recent_docs', 'announcements',
+  'due_work', 'my_issues', 'project_progress', 'week_schedule', 'favorites', 'quick_actions', 'memo', 'recent_changes', 'attendance_today', 'agents_status',
+  'weekly_reports', 'wiki_recent'])
 /** 메뉴 순서 확인 — 워크스페이스 주 그룹에서 기본은 홈이 프로젝트보다 앞이다. 이 순서를 뒤집고 앞 항목의 이름을 바꾼다 */
 export const MENU_PROBE_ORDER = Object.freeze(['ws.projects', 'ws.home'])
 /** 초안 정책 확인용 위키 문서의 종류 — 앱이 아는 문서 종류여야 한다(테스트가 대조) */
@@ -1131,6 +1133,20 @@ export function settingProbeNames(stamp) {
     meeting: `E2E 자동 편철 회의 ${tail}`,
     wikiTitle: `E2E 초안 정책 문서 ${tail}`,
   }
+}
+
+/**
+ * 개인 홈 구성의 확인용 값(widgets-personal 단계) — 기본 배치에 없는 위젯(quick_actions — 조건 없이 누구에게나 보인다)을 맨 앞·전체 폭으로 올리고,
+ * 기본 배치의 두 위젯은 순서를 뒤집어 반 폭으로 둔다(기본은 my_work → projects, 둘 다 전체 폭). removeId 는 그다음 저장에서 빼 볼 위젯이다.
+ * items 에 PORTAL_PROBE_WIDGET 이 들어 있어야 한다 — 관리자가 그 위젯을 끄면 개인 구성에 있어도 사라지는지를 본다(테스트가 대조).
+ */
+export const PORTAL_LAYOUT_PROBE = Object.freeze({
+  items: Object.freeze([Object.freeze({ id: 'quick_actions', size: 'full' }), Object.freeze({ id: 'projects', size: 'half' }), Object.freeze({ id: 'my_work', size: 'half' })]),
+  removeId: 'my_work',
+})
+/** 개인 설정에 넣을 홈 구성 값 @param {readonly { id: string, size: string }[]} items */
+export function portalLayoutOf(items) {
+  return { v: 1, items: items.map(({ id, size }) => ({ id, size })), known: [...PORTAL_WIDGET_ORDER] }
 }
 
 /** 홈 위젯 설정 값 — 그 위젯 하나만 끄고 나머지는 레지스트리 순서로 켠다 @param {string} offId */
@@ -1205,6 +1221,21 @@ export function navMenuProblems(items, label, expectApplied) {
 /** 홈에 그려진 위젯 id(문서 순서, 중복 없이) — WidgetFrame 의 section[data-widget] @param {string} html @returns {string[]} */
 export function widgetIdsOf(html) {
   return [...new Set([...String(html).matchAll(/<section\b[^>]*\bdata-widget="([^"]+)"/gi)].map((m) => m[1]))]
+}
+
+/**
+ * 홈 격자의 칸(문서 순서) — HomeGrid 의 [data-widget-cell][data-size]. 위젯 본문(section[data-widget])이 실제로 그려진 칸만 센다:
+ * 칸은 있는데 본문이 없으면(로더를 부르지 않았거나 조건으로 빠졌으면) 그 위젯은 홈에 없는 것이다.
+ * @param {string} html @returns {{ id: string, size: string }[]}
+ */
+export function widgetCellsOf(html) {
+  const drawn = new Set(widgetIdsOf(html))
+  const out = []
+  for (const m of String(html).matchAll(/<(?:div|li)\b[^>]*\bdata-widget-cell="([^"]+)"[^>]*>/gi)) {
+    const size = /\bdata-size="([^"]+)"/i.exec(m[0])?.[1] ?? ''
+    if (drawn.has(m[1]) && !out.some((c) => c.id === m[1])) out.push({ id: m[1], size })
+  }
+  return out
 }
 
 /**

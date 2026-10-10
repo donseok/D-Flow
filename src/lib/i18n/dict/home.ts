@@ -67,4 +67,28 @@ export const homeKo = {
   // 포털 위젯 이름(SP3b UI-3 — src/lib/portal/widgets.ts 의 labelKey)
   'portal.widget.my_work': '내 업무', 'portal.widget.projects': '진행 중인 프로젝트', 'portal.widget.review': '검토 대기',
   'portal.widget.upcoming': '다가오는 회의', 'portal.widget.recent_docs': '최근 회의록', 'portal.widget.announcements': '공지',
+  // 위젯 강화(2026-10-10)로 더한 위젯 — 갤러리에서 골라 올린다
+  'portal.widget.due_work': '지연·임박 작업', 'portal.widget.my_issues': '내 이슈', 'portal.widget.project_progress': '프로젝트 진척',
+  'portal.widget.week_schedule': '이번 주 일정', 'portal.widget.favorites': '즐겨찾기', 'portal.widget.quick_actions': '빠른 실행',
+  'portal.widget.memo': '메모', 'portal.widget.recent_changes': '최근 변경', 'portal.widget.attendance_today': '오늘의 근태',
+  'portal.widget.agents_status': '에이전트 현황', 'portal.widget.weekly_reports': '주간보고 현황', 'portal.widget.wiki_recent': '위키 최근 문서',
+  // 위젯 설명 한 줄(갤러리·워크스페이스 설정의 홈 위젯 — src/lib/portal/widgets.ts 의 descKey)
+  'portal.widgetDesc.my_work': '내 작업·이슈·검토·오늘 회의를 기한 순으로 모아 봅니다.',
+  'portal.widgetDesc.projects': '진행 중인 프로젝트의 상태와 다음 기한을 봅니다.',
+  'portal.widgetDesc.review': '내가 승인할 수 있는 에이전트 작업 보고를 봅니다.',
+  'portal.widgetDesc.upcoming': '내가 참석하는 앞으로 30일의 회의를 봅니다.',
+  'portal.widgetDesc.recent_docs': '최근에 고쳐진 회의록을 봅니다.',
+  'portal.widgetDesc.announcements': '내 프로젝트에 게시 중인 공지를 봅니다.',
+  'portal.widgetDesc.due_work': '내 담당 가운데 기한이 지났거나 7일 안에 닥치는 작업·이슈만 추려 봅니다.',
+  'portal.widgetDesc.my_issues': '내가 담당인 미해결 이슈를 심각도 높은 순으로 봅니다.',
+  'portal.widgetDesc.project_progress': '내가 속한 프로젝트의 완료 비율과 기한 지난 작업 수를 봅니다.',
+  'portal.widgetDesc.week_schedule': '이번 주의 내 회의와 마감을 날짜별로 봅니다.',
+  'portal.widgetDesc.favorites': '즐겨찾기한 프로젝트로 바로 갑니다.',
+  'portal.widgetDesc.quick_actions': '자주 가는 화면으로 바로 갑니다. 권한이 있는 것만 보입니다.',
+  'portal.widgetDesc.memo': '나만 보는 메모 한 칸입니다. 이 워크스페이스에만 저장됩니다.',
+  'portal.widgetDesc.recent_changes': '내 프로젝트에서 최근 14일 동안 바뀐 작업을 봅니다.',
+  'portal.widgetDesc.attendance_today': '내 프로젝트 사람들의 오늘 휴가·출장·재택을 봅니다.',
+  'portal.widgetDesc.agents_status': '에이전트가 일하는 중인 작업과 결정을 기다리는 작업 수를 봅니다.',
+  'portal.widgetDesc.weekly_reports': '내 프로젝트의 이번 주 주간보고가 만들어졌는지 봅니다.',
+  'portal.widgetDesc.wiki_recent': '최근에 바뀐 위키 문서와 답을 기다리는 질문 수를 봅니다.',
 } as const

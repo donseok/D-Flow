@@ -4,6 +4,8 @@ export const MY_WORK_KINDS: readonly MyWorkKind[] = ['wbs', 'issue', 'approval',
 export interface MyWorkRow {
   kind: MyWorkKind; id: string; title: string; projectId: string; projectName: string
   due: string | null; overdueDays: number | null; status: string; href: string
+  /** 이슈의 심각도 code(이슈 행만) — 내 이슈 위젯이 정렬·표시에 쓴다 */
+  severity?: string | null
 }
 const KIND_RANK: Record<MyWorkKind, number> = { wbs: 0, issue: 1, approval: 2, meeting: 3 }
 type Key = [string | null, MyWorkKind, string]

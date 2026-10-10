@@ -9,7 +9,7 @@ const ALL: Record<keyof UiPrefs, true> = {
   sidebarCollapsed: true, dashSections: true, minutesView: true, minuteFontSize: true, minutesExplorerLayout: true,
   wbsHideDone: true, wbsOutline: true, wbsGanttScale: true, notif: true,
   startPage: true, favoriteProjectIds: true, recentProjects: true, notifRead: true,
-  projectsView: true, portalHiddenWidgets: true,
+  projectsView: true, portalHiddenWidgets: true, portalLayout: true, portalMemo: true,
 }
 
 describe('두 목록 — 서로소이고 합집합 = UiPrefs 키', () => {
@@ -69,5 +69,29 @@ describe('UI-3 키(스펙 §5.6 — projectsView 계정, portalHiddenWidgets 워
     const r = splitPrefs({ portalHiddenWidgets: 'review' as never })
     expect(r.workspace).toEqual({}); expect(r.dropped).toContain('portalHiddenWidgets')
     expect(splitPrefs({ portalHiddenWidgets: [] }).workspace).toEqual({ portalHiddenWidgets: [] })     // 빈 배열 = 다시 보기(전부 보이기)
+  })
+})
+
+describe('위젯 강화 키(2026-10-10 — portalLayout·portalMemo, 둘 다 워크스페이스)', () => {
+  it('범위', () => { expect(WORKSPACE_PREF_KEYS).toContain('portalLayout'); expect(WORKSPACE_PREF_KEYS).toContain('portalMemo') })
+  it('홈 구성 — 정리한 값으로 저장하고(모르는 id·여분 칸 버림), null 은 지우기, 형태 밖이면 키를 버린다', () => {
+    expect(splitPrefs({ portalLayout: { v: 1, items: [{ id: 'memo', size: 'full' }, { id: 'nope', size: 'half' }], known: ['memo', 'x'] } as never }).workspace)
+      .toEqual({ portalLayout: { v: 1, items: [{ id: 'memo', size: 'full' }], known: ['memo'] } })
+    expect(splitPrefs({ portalLayout: null }).workspace).toEqual({ portalLayout: null })
+    const r = splitPrefs({ portalLayout: ['memo'] as never })
+    expect(r.workspace).toEqual({}); expect(r.dropped).toContain('portalLayout')
+  })
+  it('홈 구성 저장은 옛 숨김 비우기와 한 요청으로 간다', () => {
+    expect(splitPrefs({ portalLayout: { v: 1, items: [], known: [] }, portalHiddenWidgets: [] }).workspace)
+      .toEqual({ portalLayout: { v: 1, items: [], known: [] }, portalHiddenWidgets: [] })
+  })
+  it('메모 — 문자열·2,000자 안만', () => {
+    expect(splitPrefs({ portalMemo: '적어 둔 글' }).workspace).toEqual({ portalMemo: '적어 둔 글' })
+    const r = splitPrefs({ portalMemo: 'x'.repeat(2001) })
+    expect(r.workspace).toEqual({}); expect(r.dropped).toContain('portalMemo')
+    expect(splitPrefs({ portalMemo: 7 as never }).dropped).toContain('portalMemo')
+  })
+  it('읽기(mergePrefs) 도 두 키를 워크스페이스 값에서 꺼낸다', () => {
+    expect(mergePrefs({}, { portalMemo: '글', portalLayout: null })).toEqual({ portalMemo: '글', portalLayout: null })
   })
 })

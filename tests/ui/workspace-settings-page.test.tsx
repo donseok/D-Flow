@@ -46,6 +46,7 @@ import WorkspaceSettingsPage from '@/app/(app)/w/[slug]/settings/page'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
 import { WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 import { resolveKeys } from '@/lib/settings/resolve'
+import { PORTAL_WIDGET_IDS } from '@/lib/portal/widgets'
 
 const WID = '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
 const config = (values: Record<string, unknown> = {}) => ({
@@ -182,7 +183,8 @@ describe('/w/[slug]/settings 페이지', () => {
     const html = await render()
     expect(html).toContain('id="workspace-portal-widgets"')
     expect(h.widgetsEditor.mock.calls[0][0]).toMatchObject({ workspaceId: WID, revision: 7, invalidReason: undefined })
-    expect((h.widgetsEditor.mock.calls[0][0].initial as { id: string }[]).map((w) => w.id)).toEqual(['my_work', 'projects', 'review', 'upcoming', 'recent_docs', 'announcements'])
+    expect((h.widgetsEditor.mock.calls[0][0].initial as { id: string }[]).map((w) => w.id)).toEqual([...PORTAL_WIDGET_IDS])   // 레지스트리 전부(위젯 강화로 18종)
+    expect((h.widgetsEditor.mock.calls[0][0].initial as { id: string }[]).slice(0, 6).map((w) => w.id)).toEqual(['my_work', 'projects', 'review', 'upcoming', 'recent_docs', 'announcements'])
     h.widgetsEditor.mockClear()
     h.config.mockResolvedValue(config({ 'portal.widgets': 'oops' }))
     await render()

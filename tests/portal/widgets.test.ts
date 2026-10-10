@@ -1,87 +1,68 @@
-// 포털 위젯 레지스트리와 노출 식(스펙 §6.1) — 설정에서 켜짐 ∧ 개인 숨김 아님 ∧ 모듈(어느 프로젝트에서든 effective) ∧ 검토 조건
+// 포털 위젯 레지스트리와 워크스페이스 설정(portal.widgets)의 해석 — 스펙 §6.1 을 2026-10-10 위젯 강화로 넓힌 모델(열 고정 → 순서 + 크기)
 import { describe, expect, it } from 'vitest'
-import { PORTAL_WIDGETS, PORTAL_WIDGET_IDS, defaultPortalWidgets, isPortalReviewer, isPortalWidgetId, visibleWidgets, type PortalWidgetId } from '@/lib/portal/widgets'
-import type { ModuleId } from '@/lib/modules/defaults'
+import { t } from '@/lib/i18n/dict'
+import { isModuleId } from '@/lib/modules/defaults'
+import {
+  PORTAL_WIDGETS, PORTAL_WIDGET_IDS, defaultPortalWidgets, isPortalReviewer, isPortalWidgetId, parsePortalWidgets, portalWidgetDef, resolvePortalWidgets,
+} from '@/lib/portal/widgets'
 
-const ALL_ON = new Set<ModuleId>(['agents', 'meetings', 'minutes', 'announcements'])
-const ids = (slots: { id: PortalWidgetId }[]) => slots.map((s) => s.id)
-
-describe('PORTAL_WIDGETS — 제품 고정 열·모듈·검토 조건', () => {
-  it('여섯 위젯, 순서·열·모듈이 스펙 표와 같다', () => {
-    expect(PORTAL_WIDGETS.map((w) => [w.id, w.column, w.module, w.needs])).toEqual([
-      ['my_work', 'main', null, null], ['projects', 'main', null, null], ['review', 'side', 'agents', 'reviewer'],
-      ['upcoming', 'side', 'meetings', null], ['recent_docs', 'side', 'minutes', null], ['announcements', 'side', 'announcements', null],
+describe('PORTAL_WIDGETS — 닫힌 목록', () => {
+  it('앞 여섯은 종전 홈 그대로(순서·모듈·검토 조건) — 옛 저장값과 E2E 가 이 순서에 기댄다', () => {
+    expect(PORTAL_WIDGETS.slice(0, 6).map((w) => [w.id, w.size, w.module, w.needs, w.defaultOn])).toEqual([
+      ['my_work', 'full', null, null, true], ['projects', 'full', null, null, true], ['review', 'half', 'agents', 'reviewer', true],
+      ['upcoming', 'half', 'meetings', null, true], ['recent_docs', 'half', 'minutes', null, true], ['announcements', 'half', 'announcements', null, true],
     ])
     expect(PORTAL_WIDGET_IDS).toEqual(PORTAL_WIDGETS.map((w) => w.id))
   })
+  it('새로 더한 위젯은 기본 배치에 들지 않는다 — 기존 홈이 저절로 바뀌지 않는다', () => {
+    const added = PORTAL_WIDGETS.slice(6)
+    expect(added.map((w) => w.id)).toEqual(['due_work', 'my_issues', 'project_progress', 'week_schedule', 'favorites', 'quick_actions', 'memo',
+      'recent_changes', 'attendance_today', 'agents_status', 'weekly_reports', 'wiki_recent'])
+    expect(added.every((w) => w.defaultOn === false && w.needs === null)).toBe(true)
+    expect(Object.fromEntries(added.filter((w) => w.module).map((w) => [w.id, w.module]))).toEqual(
+      { my_issues: 'issues', attendance_today: 'attendance', agents_status: 'agents', weekly_reports: 'weekly', wiki_recent: 'wiki' })
+  })
+  it('모든 위젯에 이름·설명 문구가 있고 모듈은 실제 모듈 id 다', () => {
+    for (const w of PORTAL_WIDGETS) {
+      // 사전에 없는 키면 t 가 키를 그대로 돌려준다 — 문구가 키와 달라야 한다
+      expect(t(w.labelKey), w.labelKey).not.toBe(w.labelKey); expect(t(w.descKey), w.descKey).not.toBe(w.descKey)
+      if (w.module !== null) expect(isModuleId(w.module), w.id).toBe(true)
+    }
+    expect(new Set(PORTAL_WIDGET_IDS).size).toBe(PORTAL_WIDGET_IDS.length)
+  })
   it('setup_checklist 는 예약하지 않는다(SP9 — 스펙 §6.1 역할별 행)', () => { expect(PORTAL_WIDGET_IDS).not.toContain('setup_checklist') })
   it('isPortalWidgetId 는 레지스트리 id 만', () => {
-    expect(isPortalWidgetId('my_work')).toBe(true)
-    expect(isPortalWidgetId('setup_checklist')).toBe(false)
-    expect(isPortalWidgetId(1)).toBe(false)
+    expect(isPortalWidgetId('my_work')).toBe(true); expect(isPortalWidgetId('memo')).toBe(true)
+    expect(isPortalWidgetId('setup_checklist')).toBe(false); expect(isPortalWidgetId(1)).toBe(false)
+    expect(portalWidgetDef('memo').size).toBe('half')
   })
 })
 
-describe('visibleWidgets', () => {
-  const base = { setting: defaultPortalWidgets(), hidden: [] as PortalWidgetId[], moduleUnion: ALL_ON, reviewer: true }
-  it('기본 — main 둘, side 넷', () => {
-    const v = visibleWidgets(base)
-    expect(ids(v.main)).toEqual(['my_work', 'projects'])
-    expect(ids(v.side)).toEqual(['review', 'upcoming', 'recent_docs', 'announcements'])
-    expect(v.hiddenCount).toBe(0)
+describe('resolvePortalWidgets — 옛 형태·새 형태를 네 칸으로', () => {
+  it('옛 형태 { id, enabled } 는 크기·기본 배치를 레지스트리에서 받는다', () => {
+    const r = resolvePortalWidgets([{ id: 'projects', enabled: false }, { id: 'memo', enabled: true }])
+    expect(r[0]).toEqual({ id: 'projects', enabled: false, size: 'full', inDefault: true })
+    expect(r[1]).toEqual({ id: 'memo', enabled: true, size: 'half', inDefault: false })
   })
-  it('열 안의 순서는 설정 순서를 따른다(열 배치는 제품 고정)', () => {
-    const setting = [{ id: 'announcements', enabled: true }, { id: 'projects', enabled: true }, ...defaultPortalWidgets().filter((w) => !['announcements', 'projects'].includes(w.id))] as ReturnType<typeof defaultPortalWidgets>
-    const v = visibleWidgets({ ...base, setting })
-    expect(ids(v.main)).toEqual(['projects', 'my_work'])
-    expect(ids(v.side)[0]).toBe('announcements')
+  it('새 형태는 적힌 값을 쓴다 — 한 배열에 옛·새 항목이 섞여도 항목마다 해석한다', () => {
+    const r = resolvePortalWidgets([{ id: 'memo', enabled: true, size: 'full', inDefault: true }, { id: 'my_work', enabled: true }, { id: 'review', enabled: true, inDefault: false }])
+    expect(r.slice(0, 3)).toEqual([
+      { id: 'memo', enabled: true, size: 'full', inDefault: true }, { id: 'my_work', enabled: true, size: 'full', inDefault: true },
+      { id: 'review', enabled: true, size: 'half', inDefault: false },
+    ])
   })
-  it('설정에서 끈 위젯은 없다(숨김 수에 들지 않는다)', () => {
-    const setting = defaultPortalWidgets().map((w) => (w.id === 'upcoming' ? { ...w, enabled: false } : w))
-    const v = visibleWidgets({ ...base, setting })
-    expect(ids(v.side)).not.toContain('upcoming'); expect(v.hiddenCount).toBe(0)
+  it('빠진 id 는 레지스트리 순서로 뒤에(허용), 레지스트리 밖 id·중복은 버린다', () => {
+    const r = resolvePortalWidgets([{ id: 'nope', enabled: true }, { id: 'memo', enabled: true }, { id: 'memo', enabled: false }] as never)
+    expect(r.map((w) => w.id)).toEqual(['memo', ...PORTAL_WIDGET_IDS.filter((id) => id !== 'memo')])
+    expect(r[0].enabled).toBe(true); expect(r.every((w) => w.enabled)).toBe(true)
   })
-  it('개인 숨김은 빼고 수를 센다', () => {
-    const v = visibleWidgets({ ...base, hidden: ['projects', 'announcements'] })
-    expect(ids(v.main)).toEqual(['my_work']); expect(ids(v.side)).not.toContain('announcements'); expect(v.hiddenCount).toBe(2)
+  it('기본값을 해석하면 레지스트리 그대로다', () => {
+    expect(resolvePortalWidgets(defaultPortalWidgets())).toEqual(PORTAL_WIDGETS.map((w) => ({ id: w.id, enabled: true, size: w.size, inDefault: w.defaultOn })))
   })
-  it('모듈이 어디서도 effective 가 아니면 없다', () => {
-    const v = visibleWidgets({ ...base, moduleUnion: new Set<ModuleId>(['agents']) })
-    expect(ids(v.side)).toEqual(['review'])
-  })
-  it('검토자가 아니면 review 가 없다', () => { expect(ids(visibleWidgets({ ...base, reviewer: false }).side)).not.toContain('review') })
-  it('모듈 합집합을 읽지 못하면(null) 모듈 위젯은 숨기지 않고 module_unknown 으로 남긴다(Review Focus 5, W10)', () => {
-    const v = visibleWidgets({ ...base, moduleUnion: null })
-    expect(v.side.map((s) => [s.id, s.state])).toEqual([['review', 'module_unknown'], ['upcoming', 'module_unknown'], ['recent_docs', 'module_unknown'], ['announcements', 'module_unknown']])
-    expect(v.main.every((s) => s.state === 'show')).toBe(true)
-  })
-  it('숨긴 위젯이 모듈 꺼짐으로 어차피 안 보이면 숨김 수에 들지 않는다', () => {
-    const v = visibleWidgets({ ...base, hidden: ['upcoming'], moduleUnion: new Set<ModuleId>(['agents']) })
-    expect(v.hiddenCount).toBe(0)
-  })
-  // R9 ① — '검토자 아님'(false)과 '판정 불가'(null)를 가른다. null 이면 review 가 조용히 사라지지 않는다
-  it('합집합 실패 + 검토자 판정 불가(null) → review 는 module_unknown 으로 남는다', () => {
-    const v = visibleWidgets({ ...base, moduleUnion: null, reviewer: null })
-    expect(v.side.find((s) => s.id === 'review')).toEqual({ id: 'review', state: 'module_unknown' })
-  })
-  it('합집합 실패 + 검토자 아님(false) → review 없음', () => {
-    expect(ids(visibleWidgets({ ...base, moduleUnion: null, reviewer: false }).side)).not.toContain('review')
-  })
-  it('합집합을 읽었고 agents 가 어디서도 꺼져 있으면 reviewer null 이어도 review 없음', () => {
-    expect(ids(visibleWidgets({ ...base, moduleUnion: new Set<ModuleId>(['meetings']), reviewer: null }).side)).not.toContain('review')
-  })
-  // R9 P3 빈 갈래 셋(u3-2-review) — 지금 동작을 고정한다
-  it('검토자가 아니면서 개인 숨김에 review 가 있으면 숨김 수에 들지 않는다', () => {
-    expect(visibleWidgets({ ...base, reviewer: false, hidden: ['review'] }).hiddenCount).toBe(0)
-  })
-  it('합집합 실패 중 개인 숨김인 모듈 위젯은 숨김 수에 든다(다시 보기를 누르면 실패 카드로 보인다)', () => {
-    const v = visibleWidgets({ ...base, moduleUnion: null, hidden: ['upcoming'] })
-    expect(v.hiddenCount).toBe(1); expect(ids(v.side)).not.toContain('upcoming')
-  })
-  it('설정에 레지스트리 밖 id 가 섞여도 무시한다', () => {
-    const setting = [{ id: 'nope', enabled: true }, ...defaultPortalWidgets()] as unknown as ReturnType<typeof defaultPortalWidgets>
-    const v = visibleWidgets({ ...base, setting })
-    expect([...ids(v.main), ...ids(v.side)]).toEqual(PORTAL_WIDGET_IDS)
+  it('parse 를 거친 값과 거치지 않은 값의 해석이 같다', () => {
+    const raw = [{ id: 'upcoming', enabled: false }, { id: 'memo', enabled: true, size: 'full' }]
+    const parsed = parsePortalWidgets(raw)
+    expect(parsed.ok && resolvePortalWidgets(parsed.value)).toEqual(resolvePortalWidgets(raw as never))
   })
 })
 

@@ -13,7 +13,7 @@ import type { AreaKind, AreaTeamKind } from '@/lib/domain/areas'
 import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, valueOf, type ProjectSettingKey, type ProjectSettingValue } from './registry'
 import { ConfigUnavailableError, type ConfigKeyError } from './errors'
 import { calendarOrError, loadProjectHolidays, projectCalendarOf, type HolidayRow } from '@/lib/calendar/load'
-import type { WorkCalendar } from '@/lib/domain/calendar'
+import type { RequestCalendar, WorkCalendar } from '@/lib/domain/calendar'
 import { isRecord, resolveKeys, type KeyState } from './resolve'
 import type { VocabKey, VocabValues } from './vocab'
 
@@ -111,8 +111,17 @@ type TzRow = { project_id: string; values: unknown }
  * 조회 오류는 ConfigUnavailableError throw — 호출부가 원천 실패로 받는다.
  */
 export async function getProjectTimezones(projectIds: readonly string[], opts?: { client?: ConfigReadClient }): Promise<Map<string, string | null>> {
+  const cals = await getProjectCalendars(projectIds, opts)
+  return new Map([...cals].map(([id, cal]) => [id, cal ? cal.timezone : null]))
+}
+
+/**
+ * 여러 프로젝트의 달력(시간대 + 주 시작 규칙 — 휴일 없음). getProjectTimezones 의 본체다: 포털의 주간보고 위젯이 프로젝트마다 '이번 주'의 키를
+ * 그 프로젝트의 주 규칙으로 계산하려고 달력째 받는다(설정 행을 한 번 더 읽지 않게 같은 조회를 쓴다). 판정·null 규칙은 위 주석과 같다.
+ */
+export async function getProjectCalendars(projectIds: readonly string[], opts?: { client?: ConfigReadClient }): Promise<Map<string, RequestCalendar | null>> {
   const ids = [...new Set(projectIds)]
-  const out = new Map<string, string | null>()
+  const out = new Map<string, RequestCalendar | null>()
   if (!ids.length) return out
   const sb = opts?.client ?? (await createServerClient())
   let rows: TzRow[]
@@ -133,7 +142,7 @@ export async function getProjectTimezones(projectIds: readonly string[], opts?: 
     const { keys } = resolveKeys({ scope: 'project', id, values: r.values, defs: PROJECT_SETTINGS })
     const { calendar, calendarError } = calendarOrError(() => projectCalendarOf(keys as ProjectConfig['keys'], []))
     if (!calendar) console.error('[projectConfig] 프로젝트 달력 손상 — 그 프로젝트의 오늘은 모름', { projectId: id, key: calendarError?.key })
-    out.set(id, calendar ? calendar.timezone : null)
+    out.set(id, calendar ?? null)
   }
   return out
 }

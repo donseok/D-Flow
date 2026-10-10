@@ -262,7 +262,7 @@ export const settingsKo = {
   'settings.notify.policy.type.system.pat_expiring': '에이전트 토큰 만료 임박',
   'settings.notify.policy.type.system.import_result': '가져오기 결과',
   'settings.notify.policy.type.system.runner_stale': '에이전트 러너 응답 없음',
-  'settings.portal.widgets.label': '홈 위젯', 'settings.portal.widgets.desc': '워크스페이스 홈에 보일 위젯과 열 안의 순서를 정합니다. 사람마다 위젯을 숨길 수 있습니다.',
+  'settings.portal.widgets.label': '홈 위젯', 'settings.portal.widgets.desc': '이 워크스페이스에서 쓸 수 있는 홈 위젯과 기본 배치(순서·크기)를 정합니다. 구성원은 각자 홈을 구성할 수 있습니다.',
   'settings.views.default.label': '작업 계획 기본 보기', 'settings.views.default.desc': '작업 계획을 처음 열 때의 보기(표·간트·보드)입니다. 보드는 칸반이 켜져 있을 때만 고를 수 있습니다.',
   // SP5 B1 — 이슈 코드 규칙(issues.id_policy)·분석 분류 필수 여부(issues.analysis). 편집 화면은 과제 11
   'settings.minutes.attachments.label': '회의록 첨부 정책', 'settings.minutes.attachments.desc': '새 첨부의 용량·개수·형식과 미리보기를 정합니다. 기존 파일은 지우지 않으며 워크스페이스 값은 새 프로젝트에 한 번 복사됩니다.',

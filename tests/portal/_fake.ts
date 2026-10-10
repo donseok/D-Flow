@@ -37,7 +37,7 @@ export function fake(tables: Record<string, Row[]>, opts: { fail?: string | stri
           ? { data: null, error: { message: 'down' }, count: null }
           : { data: sorted().slice(a, Math.min(b + 1, a + maxRows)), error: null, count: counted ? rows.length : null }),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(fails.has(table)
-          ? { data: null, error: { message: 'down' } } : { data: sorted().slice(0, maxRows), error: null }).then(res, rej),
+          ? { data: null, error: { message: 'down' }, count: null } : { data: sorted().slice(0, maxRows), error: null, count: counted ? rows.length : null }).then(res, rej),
       }
       return q
     },

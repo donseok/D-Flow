@@ -121,7 +121,7 @@ const BASE_META: Readonly<Record<SettingKey, CatalogMeta>> = {
   // 2026-10-09 재점검: 소비처는 홈 하나이고 끊긴 자리가 없다(partial-failure 가 끔·순서·판독 실패를 고정).
   // 격리 완주: 로컬 E2E setting-portal-widgets(끈 위젯만 홈에서 사라지고 같은 계정이 여는 다른 워크스페이스 홈에는 남는다).
   // UI-3 의 사용자 화면 확인(docs/baseline/sp3b-ui.md — 대기 중)은 별도 UI 게이트다 — 이 상태가 그 기록을 대신하지 않는다
-  'portal.widgets': { consumers: ['src/app/(app)/w/[slug]/page.tsx', 'src/lib/portal/widgets.ts', 'src/components/settings/PortalWidgetsEditor.tsx'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts', 'tests/settings/portal-widgets-editor.test.tsx', 'tests/portal/partial-failure.test.tsx'], status: 'wired', sp: 'SP3b' },
+  'portal.widgets': { consumers: ['src/app/(app)/w/[slug]/page.tsx', 'src/lib/portal/widgets.ts', 'src/components/portal/HomeGrid.tsx', 'src/components/settings/PortalWidgetsEditor.tsx'], tests: ['tests/settings/portal-widgets-def.test.ts', 'tests/portal/widgets.test.ts', 'tests/portal/home-layout.test.ts', 'tests/portal/home-grid.test.tsx', 'tests/settings/portal-widgets-editor.test.tsx', 'tests/portal/partial-failure.test.tsx'], status: 'wired', sp: 'SP3b' },
   // SPU1(개정 §5.8.5) — 정의·편집기 LocalDraftsEditor·소비처(초안 저장소의 정책 판정 + 위키 편집기)·테스트. 다른 편집 표면이 초안을 쓰게 되면 같은 저장소를 지난다
   // SP8(개정 §4.10) — 정의·편집기·발행 관문(emit)·테스트. 합성 S7b(두 워크스페이스 격리)가 근거다(E2E_EVIDENCE).
   // 2026-10-09 재점검: 발행은 emit 한 곳이고 꺼진 유형은 이벤트·수신자 행을 쓰지 않는다(notify-emit '꺼진 유형은 발행하지 않는다',
@@ -234,5 +234,6 @@ export const PERSONAL_PREFS: readonly { key: string; desc: string; scope: '계�
   { key: 'notif', desc: '알림 토글', scope: '계정' }, { key: 'projectsView', desc: '프로젝트 목록 보기(행·카드)', scope: '계정' },
   { key: 'startPage', desc: '시작 화면', scope: '워크스페이스' }, { key: 'favoriteProjectIds', desc: '즐겨찾기 프로젝트(최대 20)', scope: '워크스페이스' },
   { key: 'recentProjects', desc: '최근 방문 프로젝트(최대 10)', scope: '워크스페이스' }, { key: 'notifRead', desc: '읽은 알림', scope: '워크스페이스' },
-  { key: 'portalHiddenWidgets', desc: '홈에서 숨긴 위젯', scope: '워크스페이스' },
+  { key: 'portalHiddenWidgets', desc: '홈에서 숨긴 위젯(옛 값 — 홈 구성에 흡수, 이행 때만 읽는다)', scope: '워크스페이스' },
+  { key: 'portalLayout', desc: '내 홈 구성(위젯·순서·크기)', scope: '워크스페이스' }, { key: 'portalMemo', desc: '홈 메모 위젯의 본문(2,000자)', scope: '워크스페이스' },
 ]

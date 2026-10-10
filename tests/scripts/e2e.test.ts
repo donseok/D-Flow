@@ -1211,11 +1211,12 @@ describe('e2e-local.mjs — 재점검 보강 단계', () => {
 // ── 설정 반영 완주(e2e-local 의 setting- 단계 · e2e-synthetic 의 S7b) — 러너는 .mjs 라 앱 상수를 import 하지 못한다. 러너가 적어 둔 값·표지가
 //    앱의 것과 같은지, 판정 함수가 앱이 실제로 내는 모양을 읽는지 여기서 맞댄다(카탈로그 상태 verified 의 근거 단계다 — catalog-meta 의 E2E_EVIDENCE).
 import {
-  ACCENT_PROBE, MENU_PROBE_ORDER, PORTAL_PROBE_WIDGET, PORTAL_WIDGET_ORDER, TINY_PNG_BASE64, WIKI_PROBE_KIND, accentRootOf, brandMarkPath, canonicalJson,
-  draftPoliciesOf, filedUnder, iconHrefsOf, navItemsOf, navMenuProbe, navMenuProblems, notifyIsolationChecks, portalWidgetsOff, productInTitle,
-  settingProbeNames, titlesOf, widgetIdsOf, wikiStepEnabled,
+  ACCENT_PROBE, MENU_PROBE_ORDER, PORTAL_LAYOUT_PROBE, PORTAL_PROBE_WIDGET, PORTAL_WIDGET_ORDER, TINY_PNG_BASE64, WIKI_PROBE_KIND, accentRootOf, brandMarkPath, canonicalJson,
+  draftPoliciesOf, filedUnder, iconHrefsOf, navItemsOf, navMenuProbe, navMenuProblems, notifyIsolationChecks, portalLayoutOf, portalWidgetsOff, productInTitle,
+  settingProbeNames, titlesOf, widgetCellsOf, widgetIdsOf, wikiStepEnabled,
 } from '../../scripts/lib/e2e.mjs'
-import { PORTAL_WIDGETS, PORTAL_WIDGET_IDS, parsePortalWidgets, visibleWidgets, type PortalWidgetSetting } from '@/lib/portal/widgets'
+import { PORTAL_WIDGETS, PORTAL_WIDGET_IDS, defaultPortalWidgets, parsePortalLayout, parsePortalWidgets, resolveHomeLayout, type PortalWidgetSetting } from '@/lib/portal/widgets'
+import { cleanPortalLayout } from '@/lib/portal/prefs'
 import { SHELL_NAV, navFor } from '@/lib/nav/registry'
 import { deriveAccent, parseAccentInput } from '@/lib/settings/accent'
 import { accentStyle } from '@/lib/settings/accentCss'
@@ -1241,9 +1242,49 @@ describe('설정 반영 완주 — 확인용 값은 앱의 설정 정의를 그�
     expect(PORTAL_WIDGETS.find((w) => w.id === PORTAL_PROBE_WIDGET)).toMatchObject({ module: null, needs: null })
     const value = portalWidgetsOff(PORTAL_PROBE_WIDGET) as PortalWidgetSetting   // .mjs 의 반환은 문자열 id — 앱의 형으로 좁힌다(값은 아래 parse 가 검사)
     expect(parsePortalWidgets(value)).toEqual({ ok: true, value })      // 저장 형태가 입력과 같다 — 러너가 저장값을 입력과 대조한다
-    const shown = visibleWidgets({ setting: value, hidden: [], moduleUnion: new Set(), reviewer: false })
-    expect([...shown.main, ...shown.side].map((s) => s.id)).not.toContain(PORTAL_PROBE_WIDGET)
+    // 옛 형태({ id, enabled }) 그대로 쓴다 — 위젯 강화(2026-10-10) 뒤에도 옛 형태는 받은 그대로 저장된다(하위 호환)
+    const shown = resolveHomeLayout({ setting: value, layout: null, moduleUnion: new Set(), reviewer: false })
+    expect(shown.slots.map((s) => s.id)).not.toContain(PORTAL_PROBE_WIDGET)
+    expect(shown.slots.map((s) => s.id)).toContain('my_work')                                       // 나머지 기본 배치는 그대로
+    expect(shown.gallery.map((s) => s.id)).not.toContain(PORTAL_PROBE_WIDGET)                         // 개인 구성으로도 올릴 수 없다
     expect(() => portalWidgetsOff('nope')).toThrow(/모르는 홈 위젯/)
+  })
+  // widgets-personal 단계(개인 홈 구성 — 위젯 강화 2026-10-10)의 확인용 값과 판독
+  it('개인 홈 구성 값 — 저장 경로가 그대로 받고, 기본 배치와 눈에 띄게 다르며, 관리자가 끄는 위젯을 품는다', () => {
+    const value = portalLayoutOf(PORTAL_LAYOUT_PROBE.items)
+    expect(cleanPortalLayout(value)).toEqual({ ok: true, value })                                    // POST /api/prefs 가 고치지 않고 저장한다
+    const none = { moduleUnion: new Set<never>(), reviewer: false as const }
+    const dflt = resolveHomeLayout({ setting: defaultPortalWidgets(), layout: null, ...none })
+    const mine = resolveHomeLayout({ setting: defaultPortalWidgets(), layout: parsePortalLayout(value), ...none })
+    expect(dflt.slots.map((s) => s.id)).toEqual(['my_work', 'projects'])                             // 모듈·검토 조건이 없는 계정의 기본 배치
+    expect(mine.slots.map(({ id, size }) => ({ id, size }))).toEqual(PORTAL_LAYOUT_PROBE.items.map((i) => ({ ...i })))
+    expect(dflt.slots.map((s) => s.id)).not.toContain(PORTAL_LAYOUT_PROBE.items[0].id)                // 맨 앞은 기본 배치에 없는 위젯(추가)
+    for (const i of PORTAL_LAYOUT_PROBE.items) expect(PORTAL_WIDGETS.find((w) => w.id === i.id), i.id).toMatchObject({ module: null, needs: null })
+    expect(PORTAL_LAYOUT_PROBE.items.map((i) => i.id)).toContain(PORTAL_PROBE_WIDGET)
+    expect(PORTAL_LAYOUT_PROBE.items.map((i) => i.id)).toContain(PORTAL_LAYOUT_PROBE.removeId)
+    expect(PORTAL_LAYOUT_PROBE.removeId).not.toBe(PORTAL_PROBE_WIDGET)
+    // 관리자가 그 위젯을 끄면 개인 구성에 있어도 빠진다
+    const off = resolveHomeLayout({ setting: portalWidgetsOff(PORTAL_PROBE_WIDGET) as PortalWidgetSetting, layout: parsePortalLayout(value), ...none })
+    expect(off.slots.map((s) => s.id)).toEqual(PORTAL_LAYOUT_PROBE.items.map((i) => i.id).filter((id) => id !== PORTAL_PROBE_WIDGET))
+  })
+  it('홈 격자 판독 — HomeGrid 의 [data-widget-cell][data-size] 를 문서 순서로, 본문이 그려진 칸만', () => {
+    const src = readFileSync('src/components/portal/HomeGrid.tsx', 'utf8')
+    expect(src).toContain('data-widget-cell={s.id} data-size={s.size}')
+    const cell = (id: string, size: string, body = true) => `<div data-widget-cell="${id}" data-size="${size}" class="min-w-0">${body ? `<section data-widget="${id}" aria-labelledby="widget-${id}"></section>` : ''}</div>`
+    expect(widgetCellsOf(`<div class="grid">${cell('quick_actions', 'full')}${cell('projects', 'half')}${cell('my_work', 'half')}</div>`))
+      .toEqual([{ id: 'quick_actions', size: 'full' }, { id: 'projects', size: 'half' }, { id: 'my_work', size: 'half' }])
+    expect(widgetCellsOf(`${cell('projects', 'half', false)}${cell('my_work', 'full')}`)).toEqual([{ id: 'my_work', size: 'full' }])   // 본문 없는 칸은 세지 않는다
+    expect(widgetCellsOf('<div class="x" data-size="half" data-widget-cell="memo"><section data-widget="memo"></section></div>')).toEqual([{ id: 'memo', size: 'half' }])   // 속성 순서 무관
+    expect(widgetCellsOf('<section data-widget="memo"></section>')).toEqual([])
+  })
+  it('widgets-personal 단계가 있고 쓰기는 개인 설정 라우트, 끝에 개인 구성을 지운다(되돌림은 finally)', () => {
+    const src = readFileSync('scripts/e2e-local.mjs', 'utf8')
+    const at = src.indexOf("step('widgets-personal'")
+    expect(at).toBeGreaterThan(src.indexOf("settingStep('setting-portal-widgets'"))
+    const block = src.slice(src.indexOf('// 26c-2. widgets-personal'), at)
+    expect(block).toContain('`${origin}/api/prefs`')
+    expect(block).toMatch(/finally \{\s+resetStatus = await savePrefs\(duo, wsA, \{ portalLayout: null, portalHiddenWidgets: \[\] \}\)/)
+    for (const check of ['orderAndSize', 'removedGone', 'adminOffHides', 'adminOnReturns', 'otherWorkspaceKeeps', 'otherUserKeeps', 'resetToDefault']) expect(block, check).toContain(`${check}:`)
   })
   it('메뉴 — 두 항목은 조건 없는 워크스페이스 주 그룹 항목이고 기본은 홈이 앞이다. 확인용 값은 그 순서를 뒤집고 첫 항목의 이름을 바꾼다', () => {
     const [first, second] = MENU_PROBE_ORDER.map((id) => SHELL_NAV.find((s) => s.id === id)!)

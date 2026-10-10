@@ -11,14 +11,31 @@ describe('parsePortalWidgets', () => {
     const r = parsePortalWidgets([{ id: 'announcements', enabled: false }, { id: 'my_work', enabled: true }])
     expect(r).toEqual({ ok: true, value: [
       { id: 'announcements', enabled: false }, { id: 'my_work', enabled: true },
-      { id: 'projects', enabled: true }, { id: 'review', enabled: true }, { id: 'upcoming', enabled: true }, { id: 'recent_docs', enabled: true },
+      ...PORTAL_WIDGET_IDS.filter((id) => id !== 'announcements' && id !== 'my_work').map((id) => ({ id, enabled: true })),
     ] })
+  })
+  // 위젯 강화(2026-10-10) — 옛 형태·새 형태를 둘 다 받고, 받은 칸만 그대로 돌려준다(옛 저장값을 고쳐 쓰지 않는다)
+  it('옛 형태 { id, enabled } 는 그대로 통과한다 — 저장 형태가 입력과 같다(하위 호환)', () => {
+    const old = PORTAL_WIDGET_IDS.map((id) => ({ id, enabled: id !== 'projects' }))
+    expect(parsePortalWidgets(old)).toEqual({ ok: true, value: old })
+  })
+  it('새 형태 { id, enabled, size, inDefault } — 두 칸은 항목마다 선택이고 섞여도 된다', () => {
+    const mixed = [{ id: 'memo', enabled: true, size: 'full', inDefault: true }, { id: 'my_work', enabled: true, inDefault: false }, { id: 'projects', enabled: false, size: 'half' },
+      ...PORTAL_WIDGET_IDS.filter((id) => !['memo', 'my_work', 'projects'].includes(id)).map((id) => ({ id, enabled: true }))]
+    expect(parsePortalWidgets(mixed)).toEqual({ ok: true, value: mixed })
+  })
+  it('새 칸의 값이 형태 밖이면 거부', () => {
+    expect(parsePortalWidgets([{ id: 'memo', enabled: true, size: 'wide' }]).ok).toBe(false)
+    expect(parsePortalWidgets([{ id: 'memo', enabled: true, size: null }]).ok).toBe(false)
+    expect(parsePortalWidgets([{ id: 'memo', enabled: true, inDefault: 'yes' }]).ok).toBe(false)
+    expect(parsePortalWidgets([{ id: 'memo', size: 'full', inDefault: true }]).ok).toBe(false)        // enabled 는 늘 필요하다
   })
   it('모르는 id·중복·모양 밖은 거부(던지지 않는다)', () => {
     expect(parsePortalWidgets([{ id: 'setup_checklist', enabled: true }]).ok).toBe(false)
     expect(parsePortalWidgets([{ id: 'my_work', enabled: true }, { id: 'my_work', enabled: false }]).ok).toBe(false)
     expect(parsePortalWidgets([{ id: 'my_work', enabled: 'yes' }]).ok).toBe(false)
     expect(parsePortalWidgets([{ id: 'my_work', enabled: true, extra: 1 }]).ok).toBe(false)
+    expect(parsePortalWidgets([{ id: 'my_work', enabled: true, column: 'main' }]).ok).toBe(false)     // 없어진 열 배치는 받지 않는다
     expect(parsePortalWidgets([null]).ok).toBe(false)
     expect(parsePortalWidgets({ my_work: true }).ok).toBe(false)
     expect(parsePortalWidgets(null).ok).toBe(false)

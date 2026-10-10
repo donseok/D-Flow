@@ -128,17 +128,18 @@ async function wbsRows(client: Db, actor: Actor, pids: string[], todays: Readonl
 
 async function issueRows(client: Db, actor: Actor, pids: string[], todays: ReadonlyMap<string, string | null>): Promise<MyWorkRow[]> {
   if (!pids.length || !myMemberIdsIn(actor, pids).length) return []
-  type R = { issue_id: string; issues: { id: string; title: string; status: string; due_date: string | null; project_id: string; projects: { name: string } | null } | null }
+  type R = { issue_id: string; issues: { id: string; title: string; status: string; severity: string | null; due_date: string | null; project_id: string; projects: { name: string } | null } | null }
   const rows = (await Promise.all(chunks(pids).map((ids) => {
     const mine = myMemberIdsIn(actor, ids)
     return mine.length ? page<R>('내 담당 이슈', (f, t) => client.from('issue_assignees')
-      .select('issue_id, issues!inner(id, title, status, due_date, project_id, projects!inner(name))', { count: 'exact' })
+      .select('issue_id, issues!inner(id, title, status, severity, due_date, project_id, projects!inner(name))', { count: 'exact' })
       .in('project_id', ids).in('member_id', mine).in('issues.status', [...OPEN_ISSUE]).order('issue_id').order('member_id').range(f, t)) : Promise.resolve([] as R[])
   }))).flat()
   const seen = new Set<string>()
   return rows.flatMap((r) => (r.issues && !seen.has(r.issues.id) && seen.add(r.issues.id) ? [{
     kind: 'issue' as const, id: r.issues.id, title: r.issues.title, projectId: r.issues.project_id, projectName: r.issues.projects?.name ?? '',
     due: r.issues.due_date, overdueDays: overdue(r.issues.due_date, todays.get(r.issues.project_id) as string), status: issueCategoryLabel(r.issues.status), href: `/p/${r.issues.project_id}/issues?focus=${r.issues.id}`,
+    severity: r.issues.severity ?? null,   // 내 이슈 위젯의 정렬·표시(같은 조회에 한 칸 — 왕복이 늘지 않는다)
   }] : []))
 }
 
@@ -432,6 +433,8 @@ export interface ProjectRow {
   progress: { done: number; total: number } | null
   /** 오늘 이후 미완 잎의 가장 이른 기한(워크스페이스 오늘 기준). 오늘을 모르면 null */
   nextDue: string | null
+  /** 기한이 지난 미완 잎 수(프로젝트 진척 위젯). null = 잎 조회 실패(모름). 오늘을 모르면 0 — 그때 상태가 '모름'이라 화면이 수를 그리지 않는다 */
+  overdueOpen?: number | null
 }
 type PRowV1 = PRow & { description: string | null }
 type LeafRow = { id: string; parent_id: string | null; project_id: string; actual_pct: number | null; planned_end: string | null }
@@ -443,21 +446,35 @@ type LeafRow = { id: string; parent_id: string | null; project_id: string; actua
 export async function getProjectRows(workspaceId: string, actor: Actor, opts: { q?: string; status?: ProjectLifecycleStatus; favoritesOnly?: boolean; cursor?: string | null; limit?: number } & Opts = {}):
   Promise<{ ok: true; rows: ProjectRow[]; nextCursor: string | null } | { ok: false; error: string }> {
   const limit = Math.min(Math.max(1, opts.limit ?? 20), LIMIT_MAX)
+  const base = await projectRowsBase(workspaceId, actor, opts.client, opts.now, opts.t, opts.q?.trim() ?? '')
+  if (!base.ok) return base
+  // 상태로 거르는데 오늘을 모르면 모든 행이 '모름'이라 거른 결과가 빈 목록으로 위장된다 — 실패로 알린다(3원칙 ①)
+  if (!base.todayKnown && opts.status) return { ok: false, error: '프로젝트를 불러오지 못했습니다.' }
+  if (!base.prefsKnown && opts.favoritesOnly) return { ok: false, error: '즐겨찾기를 불러오지 못했습니다.' }
+  const all = base.rows.filter((p) => (!opts.status || p.status === opts.status) && (!opts.favoritesOnly || p.isFavorite))
+  const start = opts.cursor ? all.findIndex((p) => p.id === opts.cursor) + 1 : 0
+  const slice = all.slice(start, start + limit)
+  return { ok: true, rows: slice, nextCursor: start + limit < all.length ? slice[slice.length - 1].id : null }
+}
+
+/**
+ * 프로젝트 행의 본체 — 그 워크스페이스의 볼 수 있는 프로젝트 전부(거르기·자르기 앞). 요청 범위로 메모한다(React cache — 인자 동일성: 홈은 같은
+ * client·now·t 를 넘긴다) — 홈에 '진행 중인 프로젝트'·'프로젝트 진척'·'즐겨찾기' 위젯이 함께 있어도 프로젝트·잎 조회는 한 번이다.
+ */
+const projectRowsBase = cache(async (workspaceId: string, actor: Actor, clientIn: Db | undefined, now: Date | undefined, t: Translate | undefined, q: string):
+  Promise<{ ok: true; rows: ProjectRow[]; todayKnown: boolean; prefsKnown: boolean } | { ok: false; error: string }> => {
   try {
-    const client = opts.client ?? (await createServerClient())
+    const client = clientIn ?? (await createServerClient())
     const [rows, prefs, today] = await Promise.all([
       page<PRowV1>('프로젝트 행', (f, t) => {
-        let q = client.from('projects').select('id, name, description, start_date, end_date, is_private', { count: 'exact' }).eq('workspace_id', workspaceId)
-        if (opts.q?.trim()) q = q.ilike('name', `%${opts.q.trim().replace(/[%_*\\]/g, (c) => `\\${c}`)}%`)
-        return q.order('name').order('id').range(f, t)
+        let query = client.from('projects').select('id, name, description, start_date, end_date, is_private', { count: 'exact' }).eq('workspace_id', workspaceId)
+        if (q) query = query.ilike('name', `%${q.replace(/[%_*\\]/g, (c) => `\\${c}`)}%`)
+        return query.order('name').order('id').range(f, t)
       }),
       // 개인 설정은 표시용(즐겨찾기 별) — 못 읽으면 별 없이 그리되, 즐겨찾기만 거르는 요청은 빈 목록으로 위장하지 않고 실패로(3원칙 ①)
       getWorkspacePrefs(workspaceId, { strict: true }).then((p) => p, (e: unknown) => { console.error('[portal] 프로젝트 행 — 개인 설정 조회 실패', workspaceId, errMsg(e)); return null }),
-      workspaceToday(client, workspaceId, opts.now ?? new Date()),
+      workspaceToday(client, workspaceId, now ?? new Date()),
     ])
-    // 상태로 거르는데 오늘을 모르면 모든 행이 '모름'이라 거른 결과가 빈 목록으로 위장된다 — 실패로 알린다(3원칙 ①)
-    if (today === null && opts.status) return { ok: false, error: '프로젝트를 불러오지 못했습니다.' }
-    if (prefs === null && opts.favoritesOnly) return { ok: false, error: '즐겨찾기를 불러오지 못했습니다.' }
     const visible = rows.filter((p) => canSeeProject(actor, p))
     const ids = visible.map((p) => p.id)
     let leaves: LeafRow[] | null = []
@@ -479,18 +496,17 @@ export async function getProjectRows(workspaceId: string, actor: Actor, opts: { 
         : projectLifecycleStatus(p.start_date, p.end_date, today, progress === null ? null : (pr ?? { hasWbs: false, allDone: false }))
       return {
         id: p.id, name: p.name, description: p.description ?? null, startDate: p.start_date, endDate: p.end_date, isFavorite: fav.has(p.id), status,
-        statusReason: today === null ? (opts.t ?? koTranslate)('portal.status.todayUnknown') : statusReason(status, pr, opts.t),
+        statusReason: today === null ? (t ?? koTranslate)('portal.status.todayUnknown') : statusReason(status, pr, t),
         progress: pr ? { done: pr.done, total: pr.total } : (progress === null ? null : { done: 0, total: 0 }), nextDue: pr?.nextDue ?? null,
+        overdueOpen: pr ? pr.overdueOpen : (progress === null ? null : 0),
       }
-    }).filter((p) => (!opts.status || p.status === opts.status) && (!opts.favoritesOnly || p.isFavorite))
-    const start = opts.cursor ? all.findIndex((p) => p.id === opts.cursor) + 1 : 0
-    const slice = all.slice(start, start + limit)
-    return { ok: true, rows: slice, nextCursor: start + limit < all.length ? slice[slice.length - 1].id : null }
+    })
+    return { ok: true, rows: all, todayKnown: today !== null, prefsKnown: prefs !== null }
   } catch (e) {
     console.error('[portal] 프로젝트 행 실패', workspaceId, errMsg(e))
     return { ok: false, error: '프로젝트를 불러오지 못했습니다.' }
   }
-}
+})
 
 /**
  * 그 워크스페이스 프로젝트의 게시 중 공지 — announcements 가 effective 이고 화면에서 볼 수 있는(비공개는 명단·워크스페이스 관리자만) 프로젝트만
@@ -533,3 +549,17 @@ export async function getWorkspaceAnnouncements(workspaceId: string, actor: Acto
     return { ok: false, error: '공지를 불러오지 못했습니다.' }
   }
 }
+
+/**
+ * 위젯 강화(2026-10-10)의 새 로더(src/lib/data/portalWidgets.ts)가 쓰는 판정 묶음 — 이 파일의 로더와 같은 요청 범위 원천(scopeOf)을 공유한다.
+ * on(module) = 그 모듈이 effective 이고 화면에서 볼 수 있는 프로젝트(비공개는 명단·워크스페이스 관리자만). failed = 모듈 판정이 일부 프로젝트에서 실패
+ * (그 프로젝트는 비core 모듈의 on 에서 빠진다 — 호출부가 partial 로 알린다). 판정 실패는 던진다(호출부가 자기 실패로 받는다).
+ */
+export async function portalScope(workspaceId: string, actor: Actor, client?: Db): Promise<{
+  c: Db; on(m: ModuleId): string[]; failed: boolean; todays(pids: readonly string[], now: Date): Promise<Map<string, string | null>>
+}> {
+  const sc = await scopeOf(workspaceId, actor, client)
+  const mods = modsOf(sc.pids, sc.many)
+  return { c: sc.c, on: (m) => mods.on(m).filter((p) => sc.visible.has(p)), failed: mods.failed, todays: (pids, now) => projectTodays(sc.c, pids, now) }
+}
+export { chunks as portalChunks, workspaceToday as portalWorkspaceToday }

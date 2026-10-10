@@ -4,6 +4,7 @@ import { renderAll } from './_render'
 const h = vi.hoisted(() => ({
   scope: vi.fn(), cfg: vi.fn(), prefs: vi.fn(), sets: vi.fn(), summary: vi.fn(), tz: vi.fn(),
   work: vi.fn(), projects: vi.fn(), reviewRows: vi.fn(), upcoming: vi.fn(), docs: vi.fn(), ann: vi.fn(), countReview: vi.fn(),
+  due: vi.fn(), issues: vi.fn(), progress: vi.fn(), week: vi.fn(), changes: vi.fn(), att: vi.fn(), agents: vi.fn(), weekly: vi.fn(), wiki: vi.fn(),
 }))
 vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.scope }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: h.cfg }))
@@ -12,6 +13,10 @@ vi.mock('@/app/actions/preferences', () => ({ getWorkspacePrefs: h.prefs }))
 vi.mock('@/lib/data/portal', () => ({
   workspaceModuleSets: h.sets, getPortalSummary: h.summary, getMyWork: h.work, getProjectRows: h.projects, countMyReview: h.countReview,
   getReviewRows: h.reviewRows, getUpcomingMeetings: h.upcoming, getRecentDocuments: h.docs, getWorkspaceAnnouncements: h.ann,
+}))
+vi.mock('@/lib/data/portalWidgets', () => ({
+  getDueWork: h.due, getMyIssues: h.issues, getProjectProgress: h.progress, getWeekSchedule: h.week, getRecentChanges: h.changes,
+  getAttendanceToday: h.att, getAgentsStatus: h.agents, getWeeklyReportStatus: h.weekly, getWikiRecent: h.wiki,
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => '/w/acme', notFound: () => { throw new Error('404') } }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
@@ -47,15 +52,20 @@ beforeEach(() => {
 const render = async (q: Record<string, string> = {}) => renderAll(await Home({ params: Promise.resolve({ slug: 'acme' }), searchParams: Promise.resolve(q) }))
 /** 그 href 의 <a> 가 aria-current="page" 인가(속성 순서 무관) */
 const current = (html: string, href: string) => (html.match(/<a\b[^>]*>/g) ?? []).some((a) => a.includes(`href="${href}"`) && a.includes('aria-current="page"'))
+/** 홈에 그려진 위젯 id(문서 순서) · 위젯 칸의 크기 */
+const shown = (html: string) => [...html.matchAll(/<section[^>]*data-widget="([^"]+)"/g)].map((m) => m[1])
+const sizes = (html: string) => Object.fromEntries([...html.matchAll(/<div[^>]*>/g)].map((m) => m[0]).filter((d) => d.includes('data-widget-cell='))
+  .map((d) => [d.match(/data-widget-cell="([^"]+)"/)![1], d.match(/data-size="([^"]+)"/)![1]]))
 const widget = (html: string, id: string) => html.match(new RegExp(`<section[^>]*data-widget="${id}"[\\s\\S]*?</section>`))?.[0] ?? ''
 
 describe('포털 v1 — 위젯별 부분 실패(⑥)', () => {
-  it('개인 설정 조회 실패는 홈을 유지하며 알리고 숨김 버튼을 막는다', async () => {
+  it('개인 설정 조회 실패는 홈을 기본 배치로 유지하며 알리고 홈 구성을 막는다(읽지 못한 값 위에 덮어쓰지 않는다)', async () => {
     h.prefs.mockRejectedValue(new Error('down'))
     const html = await render()
     expect(h.prefs).toHaveBeenCalledWith(WS.id, { strict: true })
-    expect(html).toContain('개인 설정을 읽지 못해 위젯 숨김을 적용하지 못했습니다')
-    expect(widget(html, 'my_work')).toContain('이 위젯 숨기기')
+    expect(html).toContain('개인 설정을 읽지 못해 내 홈 구성 대신 기본 배치로 보입니다')
+    expect(html).toMatch(/<button[^>]*data-home-edit[^>]*aria-disabled="true"|<button[^>]*aria-disabled="true"[^>]*data-home-edit/)
+    expect(html).toContain('개인 설정을 읽지 못해 지금은 홈을 구성할 수 없습니다')
     expect(widget(html, 'my_work')).not.toContain('partial_error')
   })
   it('로더 하나가 { ok: false } 면 그 위젯만 partial_error, 나머지는 그대로', async () => {
@@ -134,7 +144,7 @@ describe('포털 v1 — 위젯별 부분 실패(⑥)', () => {
   })
 })
 
-describe('포털 v1 — 머리·설정·숨김·탭', () => {
+describe('포털 v1 — 머리·설정·구성·탭', () => {
   it('머리 meta 에 날짜와 워크스페이스 시간대 이름(viewTimezone — 판정 R1), h1 하나', async () => {
     const html = await render()
     expect(h.tz).toHaveBeenCalledWith(WS.id)
@@ -153,24 +163,48 @@ describe('포털 v1 — 머리·설정·숨김·탭', () => {
     expect(nows.every((o) => o.now instanceof Date)).toBe(true)
     expect(new Set(nows.map((o) => o.now)).size).toBe(1)
   })
-  it('portal.widgets 에서 끈 위젯은 홈에 없다(설정 소비 — 숨김 수에도 들지 않는다)', async () => {
+  it('portal.widgets 에서 끈 위젯은 홈에 없다(설정 소비)', async () => {
     h.cfg.mockResolvedValue(cfgWith(defaultPortalWidgets().map((w) => (w.id === 'announcements' ? { ...w, enabled: false } : w))))
     const html = await render()
-    expect(html).not.toContain('data-widget="announcements"'); expect(html).not.toContain('숨긴 위젯')
+    expect(html).not.toContain('data-widget="announcements"')
     expect(h.ann).not.toHaveBeenCalled()                                           // 꺼진 위젯의 원천은 읽지 않는다
   })
-  it('portal.widgets 순서 — 열 안에서 설정 순서를 따른다', async () => {
+  it('portal.widgets 순서 — 설정 순서대로 놓는다(열 고정 없음 — 2026-10-10)', async () => {
     const order = ['announcements', 'upcoming', 'recent_docs', 'review', 'projects', 'my_work'].map((id) => ({ id, enabled: true }))
     h.cfg.mockResolvedValue(cfgWith(order))
     const html = await render()
-    expect(html.indexOf('data-widget="announcements"')).toBeLessThan(html.indexOf('data-widget="upcoming"'))
-    expect(html.indexOf('data-widget="projects"')).toBeLessThan(html.indexOf('data-widget="my_work"'))
+    expect(shown(html)).toEqual(['announcements', 'upcoming', 'recent_docs', 'review', 'projects', 'my_work'])
   })
-  it('숨긴 위젯 — 빠지고, 끝에 "숨긴 위젯 N개 다시 보기"', async () => {
+  it('기본 배치의 크기 — my_work·projects 는 전체 폭, 나머지는 반 폭(390 에서는 한 열)', async () => {
+    const html = await render()
+    expect(html).toContain('grid grid-cols-1 gap-6 lg:grid-cols-2')
+    expect(sizes(html)).toEqual({ my_work: 'full', projects: 'full', review: 'half', upcoming: 'half', recent_docs: 'half', announcements: 'half' })
+  })
+  it('옛 숨김 값은 잃지 않는다 — 기본 배치에서 그 위젯이 빠지고(이행), 옛 "다시 보기" 줄은 없다', async () => {
     h.prefs.mockResolvedValue({ portalHiddenWidgets: ['announcements', 'upcoming'] })
     const html = await render()
-    expect(html).not.toContain('data-widget="announcements"'); expect(html).toContain('숨긴 위젯 2개 다시 보기')
-    expect(widget(html, 'my_work')).toContain('aria-label="이 위젯 숨기기"')
+    expect(shown(html)).toEqual(['my_work', 'projects', 'review', 'recent_docs']); expect(html).not.toContain('숨긴 위젯')
+    expect(h.ann).not.toHaveBeenCalled(); expect(h.upcoming).not.toHaveBeenCalled()
+    expect(html).toContain('홈 구성')
+  })
+  it('개인 구성 — 내 순서·크기로 그리고, 올린 위젯의 로더만 부른다', async () => {
+    h.due.mockResolvedValue({ ok: true, rows: [], overdue: 0, soon: 0, partial: false })
+    h.prefs.mockResolvedValue({ portalLayout: { v: 1, items: [{ id: 'due_work', size: 'full' }, { id: 'memo', size: 'half' }, { id: 'my_work', size: 'half' }], known: [] } })
+    const html = await render()
+    expect(shown(html)).toEqual(['due_work', 'memo', 'my_work']); expect(sizes(html)).toEqual({ due_work: 'full', memo: 'half', my_work: 'half' })
+    expect(h.due).toHaveBeenCalledTimes(1); expect(h.work).toHaveBeenCalledTimes(1)
+    for (const f of [h.projects, h.reviewRows, h.upcoming, h.docs, h.ann, h.issues, h.week, h.changes]) expect(f).not.toHaveBeenCalled()
+  })
+  it('관리자가 끈 위젯은 개인 구성에 있어도 없다 — 원천도 읽지 않는다', async () => {
+    h.cfg.mockResolvedValue(cfgWith(defaultPortalWidgets().map((w) => (w.id === 'projects' ? { ...w, enabled: false } : w))))
+    h.prefs.mockResolvedValue({ portalLayout: { v: 1, items: [{ id: 'projects', size: 'full' }, { id: 'my_work', size: 'full' }], known: [] } })
+    const html = await render()
+    expect(shown(html)).toEqual(['my_work']); expect(h.projects).not.toHaveBeenCalled()
+  })
+  it('위젯을 모두 뺀 개인 구성 — 빈 홈과 안내(기본 배치로 되돌아가지 않는다)', async () => {
+    h.prefs.mockResolvedValue({ portalLayout: { v: 1, items: [], known: [] } })
+    const html = await render()
+    expect(shown(html)).toEqual([]); expect(html).toContain('홈에 올린 위젯이 없습니다'); expect(h.work).not.toHaveBeenCalled()
   })
   it('업무 위젯 탭 — ?tab=mine 이면 작업·이슈만 읽고 탭에 aria-current, 검토자가 아니면 검토 탭이 없다', async () => {
     const html = await render({ tab: 'mine' })

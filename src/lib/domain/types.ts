@@ -1,4 +1,4 @@
-import type { PortalWidgetId } from '@/lib/portal/widgets'
+import type { PortalLayout, PortalWidgetId } from '@/lib/portal/widgets'
 import type { CustomValues } from './customFields'
 import type { VocabByProject } from '@/lib/settings/vocab'
 
@@ -209,7 +209,9 @@ export interface UiPrefs {
   favoriteProjectIds?: string[]                                   // 워크스페이스 키 — 즐겨찾기(최대 20)
   recentProjects?: { id: string; at: string }[]                   // 워크스페이스 키 — 최근 방문(최대 10, 셸이 쓴다)
   projectsView?: 'rows' | 'cards'                                 // 계정 키 — 프로젝트 목록 보기(SP3b UI-3, 스펙 §6.2)
-  portalHiddenWidgets?: PortalWidgetId[]                          // 워크스페이스 키 — 홈에서 숨긴 위젯(스펙 §6.1)
+  portalHiddenWidgets?: PortalWidgetId[]                          // 워크스페이스 키 — 홈에서 숨긴 위젯(옛 값 — 홈 구성에 흡수, 이행 때만 읽는다)
+  portalLayout?: PortalLayout | null                              // 워크스페이스 키 — 내 홈 구성(위젯·순서·크기). null = 워크스페이스 기본 배치
+  portalMemo?: string                                             // 워크스페이스 키 — 홈 메모 위젯의 본문(2,000자)
 }
 
 /* ── 회의록 (minutes) ── */

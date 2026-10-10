@@ -192,7 +192,9 @@ export const WORKSPACE_DEFS = [
     ] },
     editor: 'workspace_admin', apply: 'immediate', impact: ['recompute'], sql: null,
   }),
-  // SP3b UI-3(스펙 §6.4 표 첫 행, D25) — 홈 위젯의 켜짐·열 안 순서. 열 배치·모듈·검토 조건은 위젯 레지스트리(src/lib/portal/widgets.ts)가 고정한다
+  // SP3b UI-3(스펙 §6.4 표 첫 행, D25) + 위젯 강화(2026-10-10) — 이 워크스페이스에서 쓸 수 있는 홈 위젯(enabled)과 기본 배치(순서·size·inDefault).
+  // 옛 형태 { id, enabled } 도 그대로 받는다(size·inDefault 는 레지스트리 기본). 모듈·검토 조건은 위젯 레지스트리(src/lib/portal/widgets.ts)가 고정하고,
+  // 구성원의 홈 구성은 개인 설정(portalLayout)이 이 위에 얹힌다
   defineSetting<'portal.widgets', PortalWidgetSetting>({
     key: 'portal.widgets', scope: 'workspace', module: 'settings', default: defaultPortalWidgets(),
     parse: parsePortalWidgets,

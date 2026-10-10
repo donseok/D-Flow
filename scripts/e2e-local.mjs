@@ -42,6 +42,8 @@
 //        (첫 진입 보기), setting-portal-widgets(홈 위젯), setting-product-name(세 범위 탭 제목), setting-accent(셸 스타일 블록), setting-logo
 //        (탭 아이콘·읽기 라우트), setting-menu(사이드 내비 순서·이름), setting-auto-file(외부 업로드의 folder_path 편철), setting-local-drafts
 //        (선택 — E2E_WIKI=1 이고 서버가 WIKI_SERVICE_ENABLED=true 일 때만. 위키 편집기에 내려가는 초안 정책). 알림 정책의 격리는 합성 게이트 S7b.
+//        widgets-personal(setting-portal-widgets 바로 뒤 — 개인 홈 구성: 위젯 추가·순서·크기 저장, 빼기, 관리자가 끈 위젯은 개인 구성에서도 사라짐,
+//        다른 사용자·다른 워크스페이스는 그대로, 끝에 기본 배치로 되돌림. 쓰기는 개인 설정 라우트 POST /api/prefs).
 // 브라우저 자동화는 비밀번호를 입력하지 못하므로 화면이 부르는 것과 같은 경로(서버 액션·API 라우트)를 직접 부른다.
 // 사용: db:reset → dev:bootstrap 직후(깨끗한 DB), 스크래치 워크트리에서 npm run env:local 뒤 러너와 같은 앱 주소·시크릿으로 3101 에 띄운 서버(A1 은 npm run dev, A2 부터 next build 뒤 npx next start -p 3101)가
 // 떠 있는 상태에서(3000 은 main 체크아웃의 사용자 dev 서버라 러너가 거부한다 — e2eBaseUrl)
@@ -85,8 +87,8 @@ import {
   healthProblems, minuteMetaPatch, notifyPolicyOf, recheckNames, securityHeaderProblems, settingPatch, workerProblems, workersEnabled,
 } from './lib/e2e.mjs'
 import {
-  ACCENT_PROBE, PORTAL_PROBE_WIDGET, TINY_PNG_BASE64, WIKI_PROBE_KIND, accentRootOf, brandMarkPath, canonicalJson, draftPoliciesOf, filedUnder, iconHrefsOf, navItemsOf,
-  navMenuProbe, navMenuProblems, portalWidgetsOff, productInTitle, settingProbeNames, titlesOf, widgetIdsOf, wikiStepEnabled,
+  ACCENT_PROBE, PORTAL_LAYOUT_PROBE, PORTAL_PROBE_WIDGET, TINY_PNG_BASE64, WIKI_PROBE_KIND, accentRootOf, brandMarkPath, canonicalJson, draftPoliciesOf, filedUnder, iconHrefsOf, navItemsOf,
+  navMenuProbe, navMenuProblems, portalLayoutOf, portalWidgetsOff, productInTitle, settingProbeNames, titlesOf, widgetCellsOf, widgetIdsOf, wikiStepEnabled,
 } from './lib/e2e.mjs'
 
 // --only sp3b-E3: 레인 B 캡처 시드·3201만 사용한다. 전체 러너의 비밀번호/외부 API 시크릿을 요구하지 않는다.
@@ -2592,6 +2594,53 @@ async function main() {
       otherWorkspaceKeeps: JSON.stringify(out.b) === JSON.stringify(before.b),
       restored: restored && JSON.stringify(after) === JSON.stringify(before.a),
     })
+  }
+
+  // 26c-2. widgets-personal — 개인 홈 구성(위젯 강화 2026-10-10). duo 가 A 의 홈을 구성하면(위젯 추가·순서·크기) 그대로 그려지고, 한 위젯을 빼면 사라진다.
+  //      관리자가 끈 위젯은 개인 구성에 있어도 사라졌다가 다시 켜면 제자리로 돌아온다. 같은 계정의 B 홈과 다른 계정(ana)의 A 홈은 그대로다.
+  //      쓰기는 화면이 부르는 것과 같은 개인 설정 라우트(POST /api/prefs — 본인 행), 끝에 개인 구성을 지워(null) 기본 배치로 되돌린다.
+  //      위젯 설정을 잠깐 끄는 쓰기는 26c 와 같은 설정 액션이다(portalTarget — 이 단계는 설정 키의 근거가 아니라 개인 구성의 근거다).
+  {
+    const portalTarget = workspaceKey(wsA, 'portal.widgets')
+    const homeOf = async (who, workspaceId) => widgetCellsOf(await screenOf(who, wsPath(workspaceId)))
+    const savePrefs = async (who, workspaceId, prefs) => {
+      const cookie = cookieHeader([...who.jar].map(([name, value]) => ({ name, value })))
+      const res = await fetch(`${origin}/api/prefs`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify({ workspaceId, prefs }) })
+      return res.status
+    }
+    const idsOf = (cells) => cells.map((c) => c.id)
+    const probe = PORTAL_LAYOUT_PROBE
+    const before = { duoA: await homeOf(duo, wsA), duoB: await homeOf(duo, wsB), anaA: await homeOf(ana, wsA) }
+    const out = {}
+    let resetStatus = null
+    try {
+      out.saveStatus = await savePrefs(duo, wsA, { portalLayout: portalLayoutOf(probe.items), portalHiddenWidgets: [] })
+      out.arranged = { duoA: await homeOf(duo, wsA), duoB: await homeOf(duo, wsB), anaA: await homeOf(ana, wsA) }
+      out.removeStatus = await savePrefs(duo, wsA, { portalLayout: portalLayoutOf(probe.items.filter((i) => i.id !== probe.removeId)) })
+      out.removed = await homeOf(duo, wsA)
+      const off = await withSetting(portalTarget, portalWidgetsOff(PORTAL_PROBE_WIDGET), async () => ({ duoA: await homeOf(duo, wsA), duoB: await homeOf(duo, wsB) }))
+      out.adminOff = off.out
+      out.settingRestored = off.restored
+      out.adminOn = await homeOf(duo, wsA)
+    } finally {
+      resetStatus = await savePrefs(duo, wsA, { portalLayout: null, portalHiddenWidgets: [] })
+    }
+    const after = await homeOf(duo, wsA)
+    const kept = probe.items.filter((i) => i.id !== probe.removeId)
+    const checks = {
+      cleanStart: !idsOf(before.duoA).includes(probe.items[0].id) && idsOf(before.duoA).includes(PORTAL_PROBE_WIDGET) && idsOf(before.duoA).includes(probe.removeId),
+      saved: out.saveStatus === 200 && out.removeStatus === 200,
+      orderAndSize: canonicalJson(out.arranged?.duoA) === canonicalJson(probe.items),
+      otherWorkspaceKeeps: canonicalJson(out.arranged?.duoB) === canonicalJson(before.duoB),
+      otherUserKeeps: canonicalJson(out.arranged?.anaA) === canonicalJson(before.anaA),
+      removedGone: canonicalJson(out.removed) === canonicalJson(kept),
+      adminOffHides: canonicalJson(out.adminOff?.duoA) === canonicalJson(kept.filter((i) => i.id !== PORTAL_PROBE_WIDGET)),
+      adminOffOtherWorkspaceKeeps: canonicalJson(out.adminOff?.duoB) === canonicalJson(before.duoB),
+      adminOnReturns: out.settingRestored === true && canonicalJson(out.adminOn) === canonicalJson(kept),
+      resetToDefault: resetStatus === 200 && canonicalJson(after) === canonicalJson(before.duoA),
+    }
+    step('widgets-personal', { layout: probe.items, removeId: probe.removeId, adminOffWidget: PORTAL_PROBE_WIDGET, before, ...out, resetStatus, after, checks },
+      allOk(checks) ? undefined : `개인 홈 구성: ${JSON.stringify({ checks, before, ...out, resetStatus, after }).slice(0, 2000)}`)
   }
 
   // 26d. setting-product-name — branding.product_name(워크스페이스 A). 세 범위(워크스페이스·프로젝트·전역)의 탭 제목이 그 이름으로 끝나고,
