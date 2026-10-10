@@ -7,7 +7,6 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ComputedItem, ProjectMember } from '@/lib/domain/types'
 import { wbsKo } from '@/lib/i18n/dict/wbs'
-import { wbsEn } from '@/lib/i18n/dict/wbs.en'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWeight: vi.fn(), addWbsItem: vi.fn() }))
@@ -31,11 +30,9 @@ function member(over: Partial<ProjectMember>): ProjectMember {
 }
 
 describe('WBS 사전 — 담당팀/담당자 라벨', () => {
-  it('담당(owners)은 담당팀으로 개명, 담당자(assignee)는 신설 — ko/en 키 패리티 유지', () => {
+  it('담당(owners)은 담당팀으로 개명, 담당자(assignee)는 신설', () => {
     expect(wbsKo['wbs.colOwners']).toBe('담당팀')
     expect(wbsKo['wbs.colAssignee']).toBe('담당자')
-    expect(wbsEn['wbs.colOwners']).toBe('Owning team')
-    expect(wbsEn['wbs.colAssignee']).toBe('Assignee')
   })
 })
 

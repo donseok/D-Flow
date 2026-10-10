@@ -1,5 +1,5 @@
 // 셸(src/components/app/**)의 화면 문구 — 컴포넌트에 박혀 있던 한국어 리터럴을 옮긴 것이다(ko 글자는 옮기기 전 그대로).
-// 모음에는 adminUi 가 펼쳐 싣는다. en 은 Record<keyof ko, string> 타입으로 키 패리티를 컴파일 타임에 강제한다.
+// 모음에는 adminUi 가 펼쳐 싣는다.
 export const shellUiKo = {
   // app/(app)/layout.tsx — 건너뛰기 링크
   'shell.skipToMain': '본문 바로가기',

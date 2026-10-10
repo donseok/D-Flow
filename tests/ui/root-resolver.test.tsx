@@ -6,14 +6,8 @@ vi.mock('@/lib/workspace/current', () => ({ readCurrentWorkspace: h.readCurrentW
 vi.mock('@/app/actions/preferences', () => ({ getWorkspacePrefs: h.getWorkspacePrefs }))
 vi.mock('@/lib/authz', () => ({ getActorViewState: h.getActorViewState }))
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
-// 소속 0 화면의 문구는 사전에서 온다 — 로캘은 루트가 쿠키에서 읽어 넘긴다(여기서는 바꿔 끼운다)
-const loc = vi.hoisted(() => ({ value: 'ko' as 'ko' | 'en' }))
-vi.mock('@/lib/i18n/server', async () => {
-  const { registerEn } = await import('@/lib/i18n/dict')
-  const { EN } = await import('@/lib/i18n/dict/en')
-  registerEn(EN)
-  return { getServerLocale: async () => loc.value }
-})
+// 소속 0 화면의 문구는 사전에서 온다
+vi.mock('@/lib/i18n/server', () => ({ getServerLocale: async () => 'ko' as const }))
 vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).movedKoLocale({ also: ['chrome.logout'] }))
 // 루트는 비공개 판정 catch 에서 unstable_rethrow 를 부른다(HH3) — 원본을 두고 redirect·useRouter 만 바꾼다
 vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), redirect: h.redirect, useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }))
@@ -91,15 +85,6 @@ describe('루트 리졸버', () => {
     h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: null })
     h.getActorViewState.mockResolvedValue({ actor: null, degraded: true })
     expect(renderToString(await Root())).not.toContain('/admin/workspaces')
-  })
-  it('소속 0 — 영어 로캘이면 영어 문구', async () => {
-    loc.value = 'en'
-    h.readCurrentWorkspace.mockResolvedValue({ ok: true, ws: null })
-    h.getActorViewState.mockResolvedValue({ actor: makeSuperuser({ workspaceRoles: new Map() }), degraded: false })
-    const html = renderToString(await Root())
-    loc.value = 'ko'
-    expect(html).toMatch(/<h1[^>]*>You do not belong to any workspace<\/h1>/)
-    expect(html).toContain('Create a workspace')
   })
   it('조회 오류는 소속 없음으로 위장하지 않는다 — 화면 전체 부분 실패', async () => {
     h.readCurrentWorkspace.mockResolvedValue({ ok: false, error: 'down' })

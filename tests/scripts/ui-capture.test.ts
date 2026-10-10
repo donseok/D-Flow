@@ -319,8 +319,8 @@ describe('ui-capture.routes.json', () => {
 
 describe('fixedPrefs — 실행 시작 선호값은 병합이 아니라 고정 객체로 덮는다(UI-0 결정성 리뷰 P2 — D4)', () => {
   it('계정 키만 — 히어로 접힘·마지막 프로젝트는 은퇴 키(D9), 그 밖의 UiPrefs 키는 없다(= 제품 기본값)', () => {
-    expect(fixedPrefs('light')).toEqual({ sidebarCollapsed: false, locale: 'ko', theme: 'light' })
-    expect(Object.keys(fixedPrefs('dark'))).toEqual(['sidebarCollapsed', 'locale', 'theme'])
+    expect(fixedPrefs('light')).toEqual({ sidebarCollapsed: false, theme: 'light' })
+    expect(Object.keys(fixedPrefs('dark'))).toEqual(['sidebarCollapsed', 'theme'])
   })
   it('워크스페이스 행 pin — 최근 방문 = 그 프로젝트, 고정 시각(결정적), 빈 id 는 멈춘다', () => {
     expect(startPin('p1')).toEqual({ recentProjects: [{ id: 'p1', at: PIN_AT }] })
@@ -329,8 +329,8 @@ describe('fixedPrefs — 실행 시작 선호값은 병합이 아니라 고정 �
   })
   it('새 컨텍스트에서 앱의 PrefsSync 가 적용·백필할 것이 없다 — 키 목록은 앱의 동기화 키(computePrefsSync)가 정한다', () => {
     for (const theme of ['light', 'dark'] as const) {
-      // 새 컨텍스트의 로컬값 — PrefsSync.readLocal: 사이드바 localStorage 없음 → false · 테마 = dflow-theme 쿠키 · 언어 쿠키 없음 → ko
-      expect(computePrefsSync(fixedPrefs(theme), { sidebarCollapsed: false, theme, locale: 'ko' }))
+      // 새 컨텍스트의 로컬값 — PrefsSync.readLocal: 사이드바 localStorage 없음 → false · 테마 = dflow-theme 쿠키
+      expect(computePrefsSync(fixedPrefs(theme), { sidebarCollapsed: false, theme }))
         .toEqual({ apply: {}, backfill: {} })
     }
   })
@@ -340,9 +340,9 @@ describe('fixedPrefs — 실행 시작 선호값은 병합이 아니라 고정 �
   })
   it('테마는 light|dark|system(checks flicker 의 system 패스 — ui1-addendum §5)', () => {
     expect(() => fixedPrefs('sepia')).toThrow(/테마/)
-    expect(fixedPrefs('system')).toEqual({ sidebarCollapsed: false, locale: 'ko', theme: 'system' })
+    expect(fixedPrefs('system')).toEqual({ sidebarCollapsed: false, theme: 'system' })
     // system 선호 + 쿠키 system 이면 새 컨텍스트에서 PrefsSync 가 적용·백필할 것이 없다(로컬값 theme = 쿠키 system)
-    expect(computePrefsSync(fixedPrefs('system'), { sidebarCollapsed: false, theme: 'system', locale: 'ko' })).toEqual({ apply: {}, backfill: {} })
+    expect(computePrefsSync(fixedPrefs('system'), { sidebarCollapsed: false, theme: 'system' })).toEqual({ apply: {}, backfill: {} })
   })
 })
 

@@ -9,11 +9,11 @@ const productName = pick(process.env.NEXT_PUBLIC_BRAND_NAME, DEFAULT_PRODUCT_NAM
 
 export const BRAND = {
   productName,
-  /** 한국어 태그라인. env 한 줄은 한 언어뿐이라 en 화면은 i18n `brand.tagline` 을 쓴다(BrandMark). */
+  /** 태그라인(env 로 교체 가능) */
   tagline: pick(process.env.NEXT_PUBLIC_BRAND_TAGLINE, '일하는 방식이 바뀌다'),
   /** 비면 로그인 화면에 저작권 줄을 그리지 않는다. */
   copyright: pick(process.env.NEXT_PUBLIC_BRAND_COPYRIGHT, ''),
 } as const
 
 /** AI 어시스턴트 표시명 — 고객 브랜드와 무관한 중립명. */
-export const ASSISTANT_NAME = { ko: 'AI 어시스턴트', en: 'AI Assistant' } as const
+export const ASSISTANT_NAME = { ko: 'AI 어시스턴트' } as const

@@ -8,7 +8,7 @@ import { getMinuteShare, setMinuteShare, type MinuteShareCode, type MinuteShareR
 import type { ShareOp } from '@/lib/minutes/share'
 import type { DictKey } from '@/lib/i18n/dict'
 
-/** 액션의 사유 코드 → 사전 키. 액션의 한국어 문구를 그대로 그리면 영어 화면에 한국어 한 줄이 뜬다. */
+/** 액션의 사유 코드 → 사전 키. 화면 문구의 출처는 사전 하나다 — 액션 문구를 그대로 그리지 않는다. */
 const CODE_KEY: Record<MinuteShareCode, DictKey> = {
   share_lookup: 'min.share.lookupFailed',
   share_save: 'min.share.saveFailed',

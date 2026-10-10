@@ -2,15 +2,13 @@
 // 셸 밖 오류 화면(src/app/error.tsx·global-error.tsx)과 참조 ID(개정 §5.10.3 — 지원용 참조 ID, 내부 구현은 노출하지 않는다).
 import { act } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render } from '../shell/_dom'
 import { KO } from '@/lib/i18n/dict/ko'
-import { EN } from '@/lib/i18n/dict/en'
 import { PAGE_MARKERS } from '../../scripts/lib/e2e.mjs'
 
-const locale = vi.hoisted(() => ({ value: 'ko' as 'ko' | 'en' }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: locale.value, setLocale: vi.fn(), t: (k: string) => (locale.value === 'en' ? (EN as Record<string, string>)[k] : (KO as Record<string, string>)[k]) ?? k }),
+  useLocale: () => ({ locale: 'ko', t: (k: string) => (KO as Record<string, string>)[k] ?? k }),
 }))
 // 범위 오류 화면(위험 파일)은 이 테스트의 대상이 아니다 — 참조 ID 가 그 아래 붙는지만 본다
 vi.mock('@/components/app/ScopeError', () => ({ ScopeError: ({ reset }: { reset: () => void }) => <div data-scope-error><button onClick={reset}>다시 시도</button></div> }))
@@ -28,7 +26,6 @@ const boom = (digest?: string) => Object.assign(new Error('SELECT * FROM secret_
 const ko = (k: keyof typeof KO) => KO[k]
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve() })
 
-beforeEach(() => { locale.value = 'ko'; document.cookie = 'dflow-locale=; max-age=0; path=/' })
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('src/app/error.tsx — 범위 밖 경로(/login·/invite·/share·루트)의 오류', () => {
@@ -61,12 +58,6 @@ describe('src/app/error.tsx — 범위 밖 경로(/login·/invite·/share·루�
     const { container } = render(<RootError error={boom()} reset={vi.fn()} />)
     expect(container.querySelector('[data-error-reference]')).toBeNull()
     expect(container.querySelector('h1')).not.toBeNull()
-  })
-  it('영어 로캘 — 사전의 en 문구', () => {
-    locale.value = 'en'
-    const { container } = render(<RootError error={boom(DIGEST)} reset={vi.fn()} />)
-    expect(container.querySelector('h1')!.textContent).toBe('This screen could not be loaded')
-    expect(container.querySelector('[data-error-reference]')!.textContent).toContain('Reference ID')
   })
 })
 
@@ -107,14 +98,6 @@ describe('src/app/global-error.tsx — 루트 레이아웃 오류', () => {
     const html = renderToStaticMarkup(<GlobalError error={boom(DIGEST)} reset={vi.fn()} />)
     expect(html).toContain("document.documentElement.classList.add('dark')")
   })
-  it('사전 공급자 없이도 로캘을 따른다 — 쿠키가 en 이면 영어 문구로 바꾼다', async () => {
-    document.cookie = 'dflow-locale=en; path=/'
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})   // <html> 을 div 안에 그리는 테스트 한정 경고
-    const { container } = render(<GlobalError error={boom(DIGEST)} reset={vi.fn()} />)
-    await flush(); await flush()
-    expect(container.querySelector('h1')!.textContent).toBe('This screen could not be loaded')
-    spy.mockRestore()
-  })
   it('전역 CSS 를 스스로 불러온다(레이아웃이 불러오던 것은 따라오지 않는다) — 의미 토큰 클래스를 쓴다', async () => {
     const { readFileSync } = await import('node:fs')
     const src = readFileSync('src/app/global-error.tsx', 'utf8')
@@ -134,10 +117,8 @@ describe('범위 오류 경계 넷 — ScopeError 아래에 참조 ID', () => {
   })
 })
 
-describe('사전 — 오류 화면 문구는 ko·en 둘 다 있다', () => {
+describe('사전 — 오류 화면 문구가 있다', () => {
   it.each(['error.title', 'error.retryHint', 'error.contactHint', 'error.retry', 'error.home', 'error.refLabel', 'error.refHint', 'error.refCopy', 'error.refCopied', 'error.refCopyLabel'] as const)('%s', (key) => {
     expect(KO[key]).toBeTruthy()
-    expect(EN[key]).toBeTruthy()
-    expect(EN[key]).not.toBe(KO[key])
   })
 })

@@ -142,7 +142,7 @@ export async function DashboardView({
     modules.announcements && announcements ? announcementMilestones(announcements, today) : [],
   )
   // 이중 시계 — WBS 진척은 today(base_date 우선), 회의·이슈는 실제 오늘(realToday — 페이지가 프로젝트 tz 로 내린다, 섹션 D~F 주석).
-  // 사유는 사전 문구 — 로더의 ERR_* 한국어 상수는 로그용이라 영어 화면에 그대로 싣지 않는다.
+  // 사유는 사전 문구 — 로더의 ERR_* 상수는 로그용이라 화면에 그대로 싣지 않는다.
   const issuesError = <LoadErrorNotice message={tr('common.loadFailed.issues')} />
 
   return (

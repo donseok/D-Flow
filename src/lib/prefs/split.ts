@@ -12,11 +12,12 @@ import { isProjectsView, parseHiddenWidgets } from '@/lib/portal/prefs'
 import { NOTIFICATION_CATALOG } from '@/lib/domain/inbox'
 
 export const ACCOUNT_PREF_KEYS = [
-  'theme', 'locale', 'sidebarCollapsed', 'dashSections', 'minutesView', 'minuteFontSize', 'minutesExplorerLayout',
+  'theme', 'sidebarCollapsed', 'dashSections', 'minutesView', 'minuteFontSize', 'minutesExplorerLayout',
   'wbsHideDone', 'wbsOutline', 'wbsGanttScale', 'notif', 'projectsView',
 ] as const satisfies readonly (keyof UiPrefs)[]
 export const WORKSPACE_PREF_KEYS = ['startPage', 'favoriteProjectIds', 'recentProjects', 'notifRead', 'portalHiddenWidgets'] as const satisfies readonly (keyof UiPrefs)[]
-export const RETIRED_PREF_KEYS = ['heroCollapsed', 'lastProjectId'] as const
+/** 폐기된 키 — 저장된 옛 값은 읽지 않는다. locale 은 한국어 전용 결정(2026-10-10)으로 폐기 */
+export const RETIRED_PREF_KEYS = ['heroCollapsed', 'lastProjectId', 'locale'] as const
 export const FAVORITES_MAX = 20
 export const RECENT_MAX = 10
 const START_PAGES = new Set(['home', 'my_work', 'projects', 'last_project'])
@@ -34,7 +35,6 @@ const isFiniteIn = (v: unknown, lo: number, hi: number): v is number => typeof v
 function cleanAccountValue(key: string, v: unknown): { ok: true; value: unknown } | { ok: false } {
   switch (key) {
     case 'theme': return isThemePref(v) ? { ok: true, value: v } : { ok: false }
-    case 'locale': return v === 'ko' || v === 'en' ? { ok: true, value: v } : { ok: false }
     case 'sidebarCollapsed': case 'wbsHideDone': case 'wbsOutline': return typeof v === 'boolean' ? { ok: true, value: v } : { ok: false }
     case 'minutesView': return v === 'list' || v === 'calendar' || v === 'tree' ? { ok: true, value: v } : { ok: false }
     case 'minutesExplorerLayout': return v === 'grid' || v === 'list' ? { ok: true, value: v } : { ok: false }

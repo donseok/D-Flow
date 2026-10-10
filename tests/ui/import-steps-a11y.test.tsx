@@ -4,14 +4,10 @@
 import { describe, expect, it } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { registerEn, t, type DictKey } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
+import { t, type DictKey } from '@/lib/i18n/dict'
 import { StepBadge, stepSrText } from '@/components/import/ImportWizard'
 
-registerEn(EN)
-const HANGUL = /[가-힣]/
 const tKo = (k: DictKey) => t('ko', k)
-const tEn = (k: DictKey) => t('en', k)
 
 /** 보조기술이 읽는 글 — aria-hidden 가지를 뺀 텍스트 */
 function spoken(node: Node): string {
@@ -40,11 +36,6 @@ describe('가져오기 단계 표시 — 스크린리더 문구', () => {
     const el = mount(renderToString(<StepBadge n={2} total={3} label={tKo('importWizard.step2Label')} active done={false} srText={sr} />))
     expect(spoken(el).trim()).toBe(sr)
     expect(el.textContent).toContain('2') // 원 안 숫자(눈에만)
-  })
-  it('영어 화면 — "Step 3 of 3: Result (done)", 한글 0자', () => {
-    const sr = stepSrText(tEn, 3, 3, tEn('importWizard.step3Label'), true)
-    expect(sr).toBe('Step 3 of 3: Result (done)')
-    expect(HANGUL.test(sr)).toBe(false)
   })
   it('마법사는 단계마다 완료 여부를 넣은 읽기 문구를 넘긴다', () => {
     const src = readFileSync('src/components/import/ImportWizard.tsx', 'utf8')

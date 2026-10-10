@@ -1,5 +1,4 @@
 // reportUi 화면 사전 — 업무 화면의 한국어 리터럴을 옮긴 자리(i18n 정리). 모음은 workUi.ts.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 // 접두어 둘: `reportUi.`(주간 보고서 모달 — 화면 요약이다. 내려받는 문서의 서식 글자는 lib/report 에 고정) · `doc.`(문서 버전·상태 표시).
 export const reportUiKo = {
   'reportUi.title': '주간 보고서',

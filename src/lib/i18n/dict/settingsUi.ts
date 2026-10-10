@@ -1,5 +1,5 @@
 // 설정 화면(src/components/settings/**)의 화면 문구 — 컴포넌트에 박혀 있던 한국어 리터럴을 옮긴 것이다(ko 글자는 옮기기 전 그대로).
-// 키 접두는 화면 단위다. en 은 Record<keyof ko, string> 타입으로 키 패리티를 컴파일 타임에 강제한다.
+// 키 접두는 화면 단위다.
 export const settingsUiKo = {
   // components/settings/StageCreditSlider.tsx
   'settings.review.title': '변경 내용 검토',

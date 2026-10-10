@@ -1,5 +1,4 @@
 // agentsUi 화면 사전 — 업무 화면의 한국어 리터럴을 옮긴 자리(i18n 정리). 모음은 workUi.ts.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 // 접두어 둘: agents.*(에이전트 스튜디오 — src/components/agents) · agentHub.*(위임·승인 — src/components/agent-hub).
 // 말풍선 대사(officeChatter)·경과 시간(ageLabel)·착수 대기 사유(waitReason)·모델 등급 이름(TIER_NAME)·단계 이름(stageLabels)은
 // src/lib 의 값이라 여기 없다.

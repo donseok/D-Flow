@@ -290,7 +290,7 @@ const RESET_DENIED: Record<Exclude<PasswordResetVerdict, 'ok'>, ServerDictKey | 
   target_admin: 'srv.accounts.onlyPlatformAdminCanReset',
   platform_only: 'srv.accounts.onlyPlatformAdminCanReset2',
 }
-/** 표의 값을 문구로 — 사전 키도, ERR_DENIED(가드 결과와 같은 문구 — `err.guard.denied`)도 요청의 화면 언어로 */
+/** 표의 값을 문구로 — 사전 키는 사전에서, ERR_DENIED(가드 결과와 같은 문구)는 그대로 */
 const deniedText = (t: ServerTranslate, v: ServerDictKey | typeof ERR_DENIED): string => v === ERR_DENIED ? libText(t, v) : t(v)
 const REMOVE_DENIED: Record<Exclude<MemberRemovalVerdict, 'ok'>, ServerDictKey | typeof ERR_DENIED> = {
   self: 'srv.accounts.cannotRemoveYourselfWorkspace',

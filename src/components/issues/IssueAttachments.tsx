@@ -140,7 +140,7 @@ export function IssueAttachments({ issueId, editable, pending, onPendingChange, 
     const res = await removeIssueAttachment(id)
     setBusy(false)
     if (!res.ok) {
-      // 삭제 도우미의 두 문구는 사전 문구로 — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
+      // 삭제 도우미의 두 문구는 사전 문구로 — 액션 문구를 그대로 싣지 않는다.
       const key = removeErrorKey(res.error)
       setErr(key ? t(key) : (res.error ?? t('issue.err.attachRemoveFailed')))
       return

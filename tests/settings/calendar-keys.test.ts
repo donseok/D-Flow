@@ -1,7 +1,6 @@
 // calendar.* 6키(SP5 스펙 §4.2·D6·D44·D54, 개정 §2.8.1·§2.8.2·§2.8.7) — 정의·seedFrom·편집(요일 하나 → 서버가 규칙 목록)·카탈로그·사전.
 import { describe, expect, it } from 'vitest'
 import { KO } from '@/lib/i18n/dict/ko'
-import { EN } from '@/lib/i18n/dict/en'
 import { CATALOG_META, PLANNED_KEYS } from '@/lib/settings/catalog-meta'
 import { copyWeekStartRules, weekStartToStored } from '@/lib/settings/defs/project'
 import { settingDef, type EditCtx } from '@/lib/settings/registry'
@@ -34,7 +33,7 @@ describe('정의 — 두 스코프에 같은 이름 셋(스펙 §4.2 정의 행)
     expect(w.kind).toBe('select')
     if (w.kind === 'select') {
       expect(w.options.map((o) => o.value)).toEqual([...WEEK_START_DAYS])
-      for (const o of w.options) { expect(KO[o.labelKey], o.labelKey).toBeTruthy(); expect((EN as Record<string, string>)[o.labelKey], o.labelKey).toBeTruthy() }
+      for (const o of w.options) expect(KO[o.labelKey], o.labelKey).toBeTruthy()
     }
     expect(settingDef('project', 'calendar.week_start')!.widget).toEqual({ kind: 'custom', component: 'WeekStartEditor' })
     expect(settingDef('project', 'calendar.timezone')!.widget).toEqual({ kind: 'custom', component: 'TimezoneSelect' })
@@ -91,10 +90,10 @@ describe('카탈로그·사전(D44 — 들어가는 체크포인트에서 planne
   it.each(KEYS)('%s — 메타는 SP5 A·verified(과제 29 — 정의·편집·소비처·테스트 네 연결)', (key) => {
     expect(CATALOG_META[key]).toMatchObject({ status: 'verified', sp: 'SP5 A' })
   })
-  it('라벨·설명 사전이 ko·en 둘 다 있다', () => {
+  it('라벨·설명이 사전에 있다', () => {
     for (const key of KEYS) for (const s of ['label', 'desc']) {
       const k = `settings.${key}.${s}` as keyof typeof KO
-      expect(KO[k], k).toBeTruthy(); expect((EN as Record<string, string>)[k], k).toBeTruthy()
+      expect(KO[k], k).toBeTruthy()
     }
   })
 })

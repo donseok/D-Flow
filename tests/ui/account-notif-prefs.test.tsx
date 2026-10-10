@@ -8,12 +8,11 @@ const h = vi.hoisted(() => ({ save: vi.fn() }))
 vi.mock('@/app/actions/preferences', () => ({ saveNotifPrefs: h.save }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { KO } = await import('@/lib/i18n/dict/ko')
-  return { useLocale: () => ({ t: (k: string) => (KO as Record<string, string>)[k] ?? k, locale: 'ko', setLocale: vi.fn() }) }
+  return { useLocale: () => ({ t: (k: string) => (KO as Record<string, string>)[k] ?? k, locale: 'ko' }) }
 })
 import { NotifPrefsSection } from '@/components/account/NotifPrefsSection'
 import { NOTIFICATION_CATALOG, type NotificationType } from '@/lib/domain/inbox'
 import { KO } from '@/lib/i18n/dict/ko'
-import { accountEn } from '@/lib/i18n/dict/account.en'
 import type { WorkspaceNotifyOff } from '@/lib/notify/workspaceOff'
 
 const TYPES = Object.keys(NOTIFICATION_CATALOG) as NotificationType[]
@@ -24,13 +23,12 @@ const mount = async (notif: Record<string, boolean> | null = {}, workspaceOff?: 
 const sw = (type: string) => container.querySelector<HTMLButtonElement>(`[role="switch"][data-notif-type="${type}"]`)!
 
 describe('/account 알림 유형 토글(SPU1, 개정 §4.10)', () => {
-  it('카탈로그의 모든 유형이 한 번씩 나오고 ko·en 라벨이 있다', async () => {
+  it('카탈로그의 모든 유형이 한 번씩 나오고 라벨이 있다', async () => {
     await mount()
     expect([...container.querySelectorAll('[role="switch"]')].map((el) => el.getAttribute('data-notif-type')).sort()).toEqual([...TYPES].sort())
     for (const type of TYPES) {
       const key = `account.notif.type.${type}`
       expect((KO as Record<string, string>)[key], key).toBeTruthy()
-      expect((accountEn as Record<string, string>)[key], key).toBeTruthy()
       expect(sw(type).getAttribute('aria-label')).toBe((KO as Record<string, string>)[key])
     }
   })
@@ -99,7 +97,6 @@ describe('/account 알림 유형 토글(SPU1, 개정 §4.10)', () => {
     expect(sw('issue.update').getAttribute('aria-checked')).toBe('true')
     await act(async () => sw('issue.update').click())
     expect(h.save.mock.calls).toEqual([[{ 'issue.update': false }]])
-    for (const k of ['all', 'some', 'note']) expect((accountEn as Record<string, string>)[`account.notif.wsOff.${k}`], k).toBeTruthy()
   })
   it('끈 워크스페이스가 없으면 안내를 그리지 않는다', async () => {
     await mount()

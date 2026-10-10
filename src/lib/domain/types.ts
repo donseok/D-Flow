@@ -198,7 +198,6 @@ export interface MeetingAttendeeInfo {
 export interface UiPrefs {
   sidebarCollapsed?: boolean
   theme?: ThemePref        // 선호 — 형식 밖 저장값은 읽는 쪽(isThemePref)이 '없음'으로 본다
-  locale?: 'ko' | 'en'
   dashSections?: string[]   // 대시보드 상세 아코디언에서 펼쳐 둔 그룹 id
   minutesView?: 'list' | 'calendar' | 'tree'   // 회의록 보관함 뷰 토글
   minuteFontSize?: number   // 회의록 뷰어 본문 글자크기(px, 12~28)

@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation'
 import {
   CheckCheck, EyeOff, LockKeyhole, LockKeyholeOpen, RotateCcw, ShieldCheck,
 } from 'lucide-react'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import { useToast } from '@/components/ui/Toast'
@@ -76,7 +75,6 @@ export function WikiItemActions({
   projectId: string
   locale: Locale
 }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const router = useRouter()
   const { toast } = useToast()
   const [pending, startTransition] = useTransition()

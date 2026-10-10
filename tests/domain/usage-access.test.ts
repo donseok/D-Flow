@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { canViewUsage } from '@/lib/authz/usageAccess'
 import { KO } from '@/lib/i18n/dict/ko'
-import { EN } from '@/lib/i18n/dict/en'
 import { makeActor } from '../fixtures/actor'
 
 const actor = (over: Parameters<typeof makeActor>[0]) => makeActor({ ...over })
@@ -20,8 +19,7 @@ describe('canViewUsage — 슈퍼유저 전용(2026-07-30 사용자 결정)', ()
 })
 
 describe('nav.usage 사전 키', () => {
-  it('ko/en 양쪽에 있다', () => {
+  it('사전에 있다', () => {
     expect(KO['nav.usage']).toBe('사용 현황')
-    expect(EN['nav.usage']).toBe('Usage')
   })
 })

@@ -154,7 +154,7 @@ export async function consumeRate(kind: RateKind): Promise<number> {
 }
 
 /** 429 응답 — 외부 API 의 오류 봉투({ error, code })에 Retry-After(초)를 싣는다. 문구는 IP 만으로 정해지므로 토큰에 대해 아무것도 말하지 않는다.
- *  화면·액션의 문구는 사전 키 `rateLimit.tooMany`(ko·en)다 — 외부 API 의 오류문은 다른 코드와 같이 한국어 고정이다. */
+ *  화면·액션의 문구는 사전 키 `rateLimit.tooMany` 다 — 외부 API 의 오류문은 다른 코드와 같이 한국어 고정이다. */
 export function rateLimitedResponse(retryAfterSeconds: number): NextResponse {
   return NextResponse.json({ error: MESSAGE, code: 'rate_limited' }, { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } })
 }

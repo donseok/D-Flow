@@ -4,6 +4,8 @@
 Next.js 15 (App Router) + Tailwind v4 + Supabase. 설계 정본: docs/superpowers/specs/2026-09-23-generic-platform-design.md,
 SP 별 스펙은 같은 폴더. 포크 규칙은 docs/fork-policy.md.
 
+제품은 한국어 전용이다(2026-10-10 결정). 문구는 사전(`src/lib/i18n/dict/*`)에 한국어로만 둔다 — 영어 사전·언어 전환을 다시 만들지 않는다.
+
 ## 원본 DB 금지 (최우선)
 
 wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`abtyahghvvkcriawffty`(원본 스테이징)에 접속하지 않는다.

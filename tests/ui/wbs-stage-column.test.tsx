@@ -7,7 +7,6 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ComputedItem } from '@/lib/domain/types'
 import { wbsKo } from '@/lib/i18n/dict/wbs'
-import { wbsEn } from '@/lib/i18n/dict/wbs.en'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWeight: vi.fn(), addWbsItem: vi.fn() }))
@@ -26,9 +25,8 @@ function item(over: Partial<ComputedItem>): ComputedItem {
 }
 
 describe('WBS 사전 — 단계 컬럼 헤더', () => {
-  it('ko 「단계」· en "Stage"', () => {
+  it('「단계」', () => {
     expect(wbsKo['wbs.colStage']).toBe('단계')
-    expect(wbsEn['wbs.colStage']).toBe('Stage')
   })
 })
 

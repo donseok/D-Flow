@@ -138,7 +138,6 @@
 | 설정 키 | 스코프 | 편집 주체 | 편집 UI/API | 저장소 | 기본값(출처) | 검증기 | 소비처 | 적용 시점 | 기존 데이터 영향 | 테스트 | 현재 상태 | 담당 SP |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `theme` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 시스템·라이트·다크 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
-| `locale` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | ko·en | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `sidebarCollapsed` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 사이드바 접기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `dashSections` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 대시보드 구역 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
 | `minutesView` | 개인·계정 | 본인 | 계정·화면 | 계정 개인 설정(자기 행) | 회의록 보기 | 개인 설정 API | 사용자 화면 | immediate | 표시만 | — | stored | SP3b / SPU1 |
@@ -177,7 +176,7 @@
 
 | 제한 | 현재 값 | 근거 | 재검토 조건 |
 | --- | --- | --- | --- |
-| UI 언어 | 한국어·영어 | `src/lib/i18n/dict.ts` `Locale` | 번역 추가 |
+| UI 언어 | 한국어 전용(2026-10-10 결정 — 영어 사전·언어 전환을 걷었다) | `src/lib/i18n/dict.ts` `Locale` | 다국어 요구가 다시 생기면 제품 결정부터 |
 | 보고서 생성 문구 | 한국어 | `src/lib/report/weekly.ts` | 출력 언어 요구 |
 | 보고 주기 | 주간 | `src/lib/report/week.ts` | 격주·월간 요구 |
 | WBS 단수 | 1~10 | `src/lib/domain/levelSettings.ts` `LEVEL_LABELS_MAX` | 깊이 정책 요구 |

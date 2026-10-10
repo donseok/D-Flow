@@ -2,7 +2,6 @@
 import { describe, expect, it } from 'vitest'
 import { WORKSPACE_REMAINING_KEYS, workspaceRemainingItems } from '@/lib/workspace/deleteRemaining'
 import { KO } from '@/lib/i18n/dict/ko'
-import { EN } from '@/lib/i18n/dict/en'
 
 describe('workspaceRemainingItems', () => {
   it('아는 표는 정해진 순서로 — 표 이름의 순서와 무관하다', () => {
@@ -29,11 +28,10 @@ describe('workspaceRemainingItems', () => {
   it('프로토타입 이름의 표는 아는 항목으로 읽지 않는다', () => {
     expect(workspaceRemainingItems({ constructor: 1 })).toEqual([{ key: 'other', count: 1, table: 'constructor' }])
   })
-  it('항목마다 ko·en 문구가 있다(other 포함)', () => {
+  it('항목마다 문구가 있다(other 포함)', () => {
     for (const key of [...WORKSPACE_REMAINING_KEYS, 'other']) {
       const k = `platform.ws.remaining.${key}` as keyof typeof KO
       expect(KO[k], k).toContain('{n}')
-      expect(EN[k as keyof typeof EN], k).toContain('{n}')
     }
   })
 })

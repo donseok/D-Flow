@@ -30,7 +30,7 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
   onChosen?: () => void
 }) {
   const router = useRouter(); const pathname = usePathname(); const sp = useSearchParams(); const { toast } = useToast()
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const listId = useId(); const [q, setQ] = useState(''); const [open, setOpen] = useState(false); const [active, setActive] = useState(0)
   const byId = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
   const sections = useMemo(() => {
@@ -61,10 +61,9 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
       router.push(body.href)
       if (body.degraded) toast({ title: t('shell.switcher.degraded'), variant: 'info' })
       else if (body.fallbackModule) {
-        // 조사('을/를')는 한국어에만 붙인다
         const key = MODULE_LABEL_KEY[body.fallbackModule]
         const name = key ? t(key) : body.fallbackModule
-        toast({ title: t('shell.switcher.fallback').replace('{module}', () => (locale === 'ko' ? withObjectParticle(name) : name)), variant: 'info' })
+        toast({ title: t('shell.switcher.fallback').replace('{module}', () => withObjectParticle(name)), variant: 'info' })
       }
     } catch (e) {
       console.error('[ProjectSwitcher] 전환 대상 판정 실패 — 개요로:', e instanceof Error ? e.message : e)

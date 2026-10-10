@@ -5,8 +5,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ComputedItem, DeliverableAttachment } from '@/lib/domain/types'
 import type { AttachmentList } from '@/app/actions/attachments'
-import { t as realT, registerEn } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
+import { t as realT } from '@/lib/i18n/dict'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -14,9 +13,8 @@ const { listAttachments, removeAttachment, getAttachmentUrl, L } = vi.hoisted(()
   listAttachments: vi.fn<(itemId: string) => Promise<AttachmentList>>(),
   getAttachmentUrl: vi.fn<(itemId: string, id: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>>(),
   removeAttachment: vi.fn<(id: string) => Promise<{ ok: boolean; error?: string }>>(),
-  L: { locale: 'ko' as 'ko' | 'en' },
+  L: { locale: 'ko' as const },
 }))
-registerEn(EN)
 vi.mock('@/app/actions/wbs', () => ({
   getChangeLogs: vi.fn().mockResolvedValue([]),
   updateWbsFields: vi.fn(), updateDeliverable: vi.fn(), addWbsItem: vi.fn(),
@@ -112,31 +110,26 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     expect(fileNode('plan.xlsx')).toBeTruthy()
   })
 
-  it('ok:false 의 서버 문구(한국어)를 그대로 보이지 않는다 — 영어 화면은 영어 사전 문구', async () => {
-    L.locale = 'en'
+  it('ok:false 는 사전 문구로 보인다', async () => {
     listAttachments.mockResolvedValueOnce({ ok: false, error: '첨부 목록을 불러오지 못했습니다.' })
     await render()
     const alert = section().querySelector('[role="alert"]')!
-    expect(alert.textContent).toContain(realT('en', 'wbs.attachLoadFail'))
-    expect(alert.textContent).not.toMatch(/[가-힣]/)
+    expect(alert.textContent).toContain(realT('ko', 'wbs.attachLoadFail'))
   })
 
   // 삭제 실패 — 같은 섹션의 목록 실패는 사전 문구인데 삭제 실패만 도우미의 한국어 문구가 그대로 떴다.
   it.each([
     ['객체 삭제 실패', ERR_OBJECT_REMOVE, 'common.attach.objectRemoveFailed'],
     ['기록 삭제 실패', ERR_ROW_REMOVE, 'common.attach.rowRemoveFailed'],
-  ] as const)('삭제 실패(%s)의 서버 문구(한국어)를 그대로 보이지 않는다 — 영어 화면은 영어 사전 문구', async (_name, error, key) => {
-    L.locale = 'en'
+  ] as const)('삭제 실패(%s)는 사전 문구로 보인다(도우미 문구와 같은 글자)', async (_name, error, key) => {
     listAttachments.mockResolvedValue({ ok: true, rows: [att()], download: 'allowed' })
     removeAttachment.mockResolvedValue({ ok: false, error })
     await render(true)
-    const del = section().querySelector(`button[aria-label="${realT('en', 'wbs.deleteAttachmentAria')}"]`) as HTMLButtonElement
+    const del = section().querySelector(`button[aria-label="${realT('ko', 'wbs.deleteAttachmentAria')}"]`) as HTMLButtonElement
     await act(async () => { del.click() })
     expect(removeAttachment).toHaveBeenCalledWith('att-1')
     const line = [...section().querySelectorAll('p')].find(p => p.className.includes('text-danger'))!
-    expect(line.textContent).toBe(realT('en', key))
-    expect(line.textContent).not.toMatch(/[가-힣]/)
-    // 한국어 화면은 종전 문구 그대로다
+    expect(line.textContent).toBe(realT('ko', key))
     expect(realT('ko', key)).toBe(error)
   })
 
@@ -182,7 +175,6 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
   })
 
   it('allowed — 링크 발급이 거부되면(권한 회수 등) 사전 문구로 알리고 창을 열지 않는다', async () => {
-    L.locale = 'en'
     listAttachments.mockResolvedValue({ ok: true, download: 'allowed', rows: [att()] })
     getAttachmentUrl.mockResolvedValue({ ok: false, error: '권한 없음' })
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
@@ -190,8 +182,7 @@ describe('RowDetailPanel — 산출물 첨부 목록의 정직성', () => {
     await render()
     await act(async () => { fileNode('plan.xlsx')!.click() })
     expect(open).not.toHaveBeenCalled()
-    expect(fileNode('plan.xlsx')!.closest('li')!.textContent).toContain(realT('en', 'wbs.attachLinkFail'))
-    expect(section().textContent).not.toMatch(/[가-힣]/)
+    expect(fileNode('plan.xlsx')!.closest('li')!.textContent).toContain(realT('ko', 'wbs.attachLinkFail'))
     open.mockRestore(); err.mockRestore()
   })
 

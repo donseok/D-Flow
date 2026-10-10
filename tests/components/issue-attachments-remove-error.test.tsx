@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-// 이슈 첨부 삭제 실패 — 삭제 도우미의 한국어 문구를 영어 화면에 그대로 싣지 않는다(H2 최종 리뷰). 액션 계약은 그대로 두고
+// 이슈 첨부 삭제 실패 — 삭제 도우미의 문구를 그대로 싣지 않고 사전 문구를 고른다(H2 최종 리뷰). 액션 계약은 그대로 두고
 // 그리는 자리에서 사전 문구를 고른다. 같은 섹션의 목록 실패는 이미 사전 문구다.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { t as realT, registerEn } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
+import { t as realT } from '@/lib/i18n/dict'
 import type { IssueAttachment } from '@/lib/domain/issueAttachments'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
@@ -14,9 +13,8 @@ const { listIssueAttachments, removeIssueAttachment, getIssueAttachmentUrl, L } 
   listIssueAttachments: vi.fn(),
   getIssueAttachmentUrl: vi.fn<(issueId: string, id: string) => Promise<{ ok: true; url: string } | { ok: false; error: string }>>(),
   removeIssueAttachment: vi.fn<(id: string) => Promise<{ ok: boolean; error?: string }>>(),
-  L: { locale: 'ko' as 'ko' | 'en' },
+  L: { locale: 'ko' as const },
 }))
-registerEn(EN)
 vi.mock('@/app/actions/issueAttachments', () => ({ listIssueAttachments, removeIssueAttachment, getIssueAttachmentUrl }))
 vi.mock('@/lib/issues/uploadIssueAttachments', () => ({ uploadIssueAttachments: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
@@ -60,14 +58,12 @@ describe('IssueAttachments — 삭제 실패 문구', () => {
   it.each([
     ['객체 삭제 실패', ERR_OBJECT_REMOVE, 'common.attach.objectRemoveFailed'],
     ['기록 삭제 실패', ERR_ROW_REMOVE, 'common.attach.rowRemoveFailed'],
-  ] as const)('%s — 영어 화면은 영어 사전 문구, 한국어 화면은 종전 문구 그대로', async (_name, error, key) => {
+  ] as const)('%s — 사전 문구로 보인다(도우미 문구와 같은 글자)', async (_name, error, key) => {
     removeIssueAttachment.mockResolvedValue({ ok: false, error })
-    L.locale = 'en'
     await render()
     await act(async () => { del().click() })
     expect(removeIssueAttachment).toHaveBeenCalledWith('a1')
-    expect(line()).toBe(realT('en', key))
-    expect(container.textContent).not.toMatch(/[가-힣]/)
+    expect(line()).toBe(realT('ko', key))
     expect(realT('ko', key)).toBe(error)
   })
 
@@ -94,15 +90,14 @@ describe('IssueAttachments — 삭제 실패 문구', () => {
     open.mockRestore()
   })
 
-  it('링크 발급 실패는 사전 문구로 — 영어 화면에 한국어 사유를 싣지 않는다', async () => {
-    L.locale = 'en'
+  it('링크 발급 실패는 사전 문구로 — 액션의 사유를 싣지 않는다', async () => {
     getIssueAttachmentUrl.mockResolvedValue({ ok: false, error: '첨부 없음' })
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     await render()
     await act(async () => { (container.querySelector('button[title="plan.pdf"]') as HTMLButtonElement).click() })
     expect(open).not.toHaveBeenCalled()
-    expect(line()).toBe(realT('en', 'issue.attach.linkFailed'))
+    expect(line()).toBe(realT('ko', 'issue.attach.linkFailed'))
     open.mockRestore(); err.mockRestore()
   })
 })

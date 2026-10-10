@@ -921,8 +921,8 @@ export async function freshSessions(env, grades) {
 }
 
 /** 실행 시작 선호값의 고정 키 — 계정 키(account_preferences, SP3b D9). PrefsSync 가 서버값과 맞추는 키(src/lib/prefs/sync.ts)를 새
- *  컨텍스트의 로컬값으로: 사이드바는 localStorage 가 없으니 펼침, 언어 쿠키가 없으니 한국어. 테마는 패스마다 따로 넣는다 */
-export const RUN_START_PREFS = Object.freeze({ sidebarCollapsed: false, locale: 'ko' })
+ *  컨텍스트의 로컬값으로: 사이드바는 localStorage 가 없으니 펼침. 테마는 패스마다 따로 넣는다 */
+export const RUN_START_PREFS = Object.freeze({ sidebarCollapsed: false })
 
 /** 워크스페이스 행 pin 의 고정 시각 — 결정적이어야 한다(실행 시각을 쓰면 행이 실행마다 바뀐다) */
 export const PIN_AT = '2026-01-01T00:00:00Z'

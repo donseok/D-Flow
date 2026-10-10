@@ -15,7 +15,6 @@ import type { AreaTeamKind, AreaTeamOption } from '@/lib/domain/areas'
 import { teamLabel } from '@/lib/domain/teamLabel'
 import type { ConfigArea } from '@/lib/settings/projectConfig'
 import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import { useToast } from '@/components/ui/Toast'
 import { SettingsSaveBar } from './SettingsSaveBar'
 
@@ -48,7 +47,6 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions, local
   const { toast } = useToast()
   const [draft, setDraft] = useState<Draft | null>(null)
   const [error, setError] = useState<string | null>(null)
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const tr = (k: DictKey) => translate(locale, k)   // 이 파일의 t 는 팀 변수다
   const [pending, startTransition] = useTransition()
   // 시트와 같은 순서(sortOrder, code, id) — 해석기는 sort_order 로만 정렬해 동률의 순서가 고정되지 않는다

@@ -1,7 +1,7 @@
 'use client'
 
-import { useRef, useState, type KeyboardEvent } from 'react'
-import { Check, KeyRound, Mail, User as UserIcon } from 'lucide-react'
+import { useState } from 'react'
+import { KeyRound, Mail, User as UserIcon } from 'lucide-react'
 import { PageHeader } from '@/components/app/PageHeader'
 import type { UiPrefs } from '@/lib/domain/types'
 import type { WorkspaceNotifyOff } from '@/lib/notify/workspaceOff'
@@ -10,11 +10,10 @@ import { NotifPrefsSection } from './NotifPrefsSection'
 import { ChangePasswordModal } from '@/components/account/ChangePasswordModal'
 import { MyTokensSection } from '@/components/account/MyTokensSection'
 import { ThemeRadioGroup } from '@/components/account/ThemeRadioGroup'
-import { rovingRadioIndex } from '@/components/account/rovingRadio'
 import { useLocale } from '@/components/providers/LocaleProvider'
 
 /**
- * 내 계정 — 결정 D. 구획: 프로필 정보 · 비밀번호 변경 · 화면(테마 3단·언어 — SP3b UI-1, 결정 #21) · 알림 유형 토글(SPU1, 개정 §4.10) · PAT 발급/관리.
+ * 내 계정 — 결정 D. 구획: 프로필 정보 · 비밀번호 변경 · 화면(테마 3단 — SP3b UI-1, 결정 #21. 언어 선택은 한국어 전용 결정(2026-10-10)으로 뺐다) · 알림 유형 토글(SPU1, 개정 §4.10) · PAT 발급/관리.
  * HeaderChrome 드롭다운의 비밀번호 변경 진입은 이 화면으로 이동했다(ChangePasswordModal 재사용).
  */
 export function AccountView({ email, displayName, projects, currentWorkspace = null, currentWorkspaceError = false, startPage = null, projectsView = 'rows', tokenWorkspaces = [], tokenWorkspaceError = false, notif = {}, workspaceOff = {} }: {
@@ -69,10 +68,6 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
             <div data-account-label className="mb-2 text-meta font-semibold text-fg-secondary">{t('chrome.theme')}</div>
             <ThemeRadioGroup />
           </div>
-          <div>
-            <div data-account-label className="mb-2 text-meta font-semibold text-fg-secondary">{t('chrome.language')}</div>
-            <LocaleRadioGroup />
-          </div>
         </div>
       </div>
 
@@ -83,45 +78,6 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
       <MyTokensSection projects={projects} workspaces={tokenWorkspaces} currentWorkspaceId={currentWorkspace?.id} workspaceError={tokenWorkspaceError} />
 
       <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
-    </div>
-  )
-}
-
-const LOCALES = [['ko', '한국어'], ['en', 'English']] as const
-
-/** 언어 — 전역 바에서 뺀 언어 선택의 유일한 자리(스펙 §4.2). 서버가 쿠키로 언어를 알아 첫 렌더부터 선택을 그린다 */
-function LocaleRadioGroup() {
-  const { locale, setLocale, t } = useLocale()
-  const refs = useRef<(HTMLButtonElement | null)[]>([])
-  const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
-    const next = rovingRadioIndex(e.key, i, LOCALES.length)
-    if (next === null) return
-    e.preventDefault()
-    setLocale(LOCALES[next][0])
-    refs.current[next]?.focus()
-  }
-  return (
-    <div role="radiogroup" aria-label={t('chrome.language')} className="grid max-w-sm grid-cols-2 gap-1 rounded-(--radius-control) border border-border bg-surface-subtle p-1">
-      {LOCALES.map(([value, label], i) => {
-        const on = locale === value
-        return (
-          <button
-            key={value}
-            ref={(el) => { refs.current[i] = el }}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            tabIndex={on ? 0 : -1}
-            data-locale-option={value}
-            onClick={() => { if (!on) setLocale(value) }}
-            onKeyDown={(e) => onKeyDown(e, i)}
-            className={`inline-flex h-8 items-center justify-center gap-1 rounded-(--radius-control) px-2 text-xs font-medium transition-colors duration-(--motion-fast) ${on ? 'bg-surface-selected text-action' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg'}`}
-          >
-            <Check className={`h-3.5 w-3.5 ${on ? '' : 'invisible'}`} aria-hidden />
-            {label}
-          </button>
-        )
-      })}
     </div>
   )
 }

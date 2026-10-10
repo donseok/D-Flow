@@ -1,5 +1,4 @@
 // 플랫폼 관리(워크스페이스 목록·생성)·소속 0 화면·셸 밖 오류 화면 사전.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 export const platformKo = {
   'nav.workspaces': '워크스페이스 관리',
   // 워크스페이스 목록(/admin/workspaces)

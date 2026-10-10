@@ -23,7 +23,7 @@ afterEach(() => {
 describe('queueUiPref', () => {
   it('연속 호출을 병합해 delay 후 /api/prefs 1회만 저장한다', () => {
     queueUiPref({ theme: 'dark' })
-    queueUiPref({ locale: 'en' })
+    queueUiPref({ sidebarCollapsed: true })
     expect(fetchMock).not.toHaveBeenCalled()
     vi.advanceTimersByTime(600)
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -32,7 +32,7 @@ describe('queueUiPref', () => {
     expect(init.method).toBe('POST')
     // keepalive: 페이지 이탈 직전의 저장도 유실되지 않는 계약
     expect((init as { keepalive?: boolean }).keepalive).toBe(true)
-    expect(JSON.parse(init.body as string)).toEqual({ prefs: { theme: 'dark', locale: 'en' } })
+    expect(JSON.parse(init.body as string)).toEqual({ prefs: { theme: 'dark', sidebarCollapsed: true } })
   })
 })
 

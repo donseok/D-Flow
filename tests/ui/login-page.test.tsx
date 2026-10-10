@@ -10,7 +10,6 @@ import { createRoot, type Root } from 'react-dom/client'
 const mocks = vi.hoisted(() => ({
   calls: [] as string[],
   signInWithPassword: vi.fn(),
-  locale: 'ko' as 'ko' | 'en',
 }))
 
 vi.mock('next/navigation', () => ({
@@ -27,12 +26,10 @@ vi.mock('@/lib/supabase/client', () => ({
 vi.mock('next/link', () => ({
   default: ({ children, href, ...rest }: { children: React.ReactNode; href: string }) => <a href={href} {...rest}>{children}</a>,
 }))
-// 사전 문구로 확인한다(공급자 없는 기본 t 는 키를 돌려준다). 로캘은 케이스가 고른다
+// 사전 문구로 확인한다(공급자 없는 기본 t 는 키를 돌려준다)
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const dict = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
-  const { EN } = await vi.importActual<typeof import('@/lib/i18n/dict/en')>('@/lib/i18n/dict/en')
-  dict.registerEn(EN)
-  return { useLocale: () => ({ locale: mocks.locale, setLocale: () => {}, t: (k: Parameters<typeof dict.t>[1]) => dict.t(mocks.locale, k) }) }
+  return { useLocale: () => ({ locale: 'ko', t: (k: Parameters<typeof dict.t>[1]) => dict.t('ko', k) }) }
 })
 
 import Login from '@/app/login/page'
@@ -51,7 +48,6 @@ describe('로그인 화면 제출', () => {
   beforeEach(() => {
     mocks.calls.length = 0
     mocks.signInWithPassword.mockReset()
-    mocks.locale = 'ko'
     window.location.hash = ''
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -114,7 +110,6 @@ describe('로그인 화면 — 비밀번호 분실 안내와 문구의 로캘', 
   let root: Root
   beforeEach(() => {
     mocks.calls.length = 0
-    mocks.locale = 'ko'
     window.location.hash = ''
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -140,15 +135,6 @@ describe('로그인 화면 — 비밀번호 분실 안내와 문구의 로캘', 
     expect(link.getAttribute('href')).toBe('/login/forgot')
     expect(container.textContent).toContain('아이디(이메일)를 잊으셨다면 관리자에게 문의하세요.')
     expect(container.textContent).not.toContain('또는 비밀번호를 잊으셨다면')
-  })
-
-  it('소개·폼 문구는 로캘을 따른다 — 영어 화면에 한국어 고정 문구가 남지 않는다', async () => {
-    mocks.locale = 'en'
-    await render({ mailReset: true, localDev: false })
-    const text = container.textContent ?? ''
-    for (const s of ['Plans, schedules and teams in one flow.', 'Sign in with your email and password.', 'Forgot your password?', 'Sign in']) expect(text).toContain(s)
-    for (const s of ['작업분류체계', '일정 관리', '팀 협업', '로그인하세요', '관리자에게 문의']) expect(text).not.toContain(s)
-    expect(container.querySelector('label[for="email"]')?.textContent).toBe('Email')
   })
 
   it('재설정 링크가 이 화면으로 떨어지면 조각을 그대로 들고 새 비밀번호 화면으로 넘긴다', async () => {

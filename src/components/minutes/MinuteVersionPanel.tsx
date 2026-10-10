@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { AlertTriangle, ChevronDown, ChevronUp, Download, FileText, History } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { LoadErrorNotice } from '@/components/ui/LoadErrorNotice'
+import type { Locale } from '@/lib/i18n/dict'
+import { intlLocale } from '@/lib/i18n/format'
 
 export type MinuteVersionListItem = {
   id: string
@@ -33,11 +35,11 @@ export type MinuteVersionPanelProps = {
   timeZone: string | null
 }
 
-function versionDate(value: string, locale: 'ko' | 'en', timeZone: string | null) {
+function versionDate(value: string, locale: Locale, timeZone: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   if (timeZone === null) return '—'
-  return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -98,7 +100,7 @@ export function MinuteVersionPanel({
     let error: string | null = null
     try {
       const res = await onDownload(versionId)
-      // 액션의 사유(한국어 고정 문구)는 서버 로그 몫 — 화면은 사전 문구 하나로(영어 화면에 날것 금지).
+      // 액션의 사유(한국어 고정 문구)는 서버 로그 몫 — 화면은 사전 문구 하나로.
       if (res.ok) window.open(res.url, '_blank', 'noopener,noreferrer')
       else error = t('min.err.download')
     } catch {

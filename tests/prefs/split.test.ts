@@ -6,7 +6,7 @@ const U = (n: number) => `00000000-0000-0000-7e57-0000000016${String(40 + n).pad
 
 /** UiPrefs 의 키 전부 — 타입이 새 키를 얻으면 이 목록을 고치라고 컴파일러가 알린다(Record<keyof UiPrefs, true>) */
 const ALL: Record<keyof UiPrefs, true> = {
-  theme: true, locale: true, sidebarCollapsed: true, dashSections: true, minutesView: true, minuteFontSize: true, minutesExplorerLayout: true,
+  theme: true, sidebarCollapsed: true, dashSections: true, minutesView: true, minuteFontSize: true, minutesExplorerLayout: true,
   wbsHideDone: true, wbsOutline: true, wbsGanttScale: true, notif: true,
   startPage: true, favoriteProjectIds: true, recentProjects: true, notifRead: true,
   projectsView: true, portalHiddenWidgets: true,

@@ -1,8 +1,5 @@
 // 공통 사전 — 크롬(사이드바/헤더)·공용 액션·상태 라벨.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 export const commonKo = {
-  // ko 화면의 태그라인 정본은 BRAND.tagline(env 교체 가능)이다. 이 값은 en 키 패리티와 기본값 일치용.
-  'brand.tagline': '일하는 방식이 바뀌다',
   'nav.home': '홈',
   'nav.workspace': '워크스페이스',
   'nav.project': '프로젝트',
@@ -49,7 +46,6 @@ export const commonKo = {
   'chrome.themeLight': '라이트',
   'chrome.themeDark': '다크',
   'chrome.display': '화면',
-  'chrome.language': '언어',
   'workspace.title': 'Planning cockpit',
   'workspace.desc': '일정, WBS, 팀 상태를 하나의 워크스페이스 톤으로 정리했습니다.',
   'workspace.projects': '프로젝트',

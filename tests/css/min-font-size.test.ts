@@ -117,7 +117,6 @@ export function capsCopyHits(file: string, text: string): string[] {
 /** 대문자 그대로 두는 사전 값 — 스타일이 아니라 표기 자체가 그 낱말인 것 */
 export const CAPS_COPY_ALLOW: { file: string; hit: string; why: string }[] = [
   { file: 'src/lib/i18n/dict/kanban.ts', hit: 'kanban.ddayToday=D-DAY', why: '마감 당일 표기 — D-3·D+2 와 같은 줄의 코드 표기다' },
-  { file: 'src/lib/i18n/dict/kanban.en.ts', hit: 'kanban.ddayToday=D-DAY', why: '위와 같다' },
 ]
 
 describe('대문자·넓은 자간 라벨 0건', () => {

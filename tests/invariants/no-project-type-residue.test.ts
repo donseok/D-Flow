@@ -49,16 +49,12 @@ const PROJECT_TYPE = /Process Innovation|\bPI\s*\(|\bPI\s*프로젝트/
 const PHASE_WORD = /\bPhase\b/
 const PHASE_ALLOW: Readonly<Record<string, string>> = {
   'src/lib/domain/levelSettings.ts': '단계 이름을 주입받지 못한 호출의 폴백 한 곳(FALLBACK_LEVEL_LABELS) — 옛 3단 표기를 그대로 둔다',
-  'src/lib/i18n/dict/home.en.ts': '새 프로젝트의 단계 이름 입력 예시(home.phLevels) — 사용자가 적을 값의 보기다',
   'src/components/agents/DetailPanel.tsx': '에이전트 좌석의 작업 국면 사다리(aria-label) — WBS 단계 이름이 아니다',
 }
 
-/** 사전의 영어 문구는 소문자 phase 도 본다 — 'By phase' 꼴로 1레벨을 부르던 자리 */
+/** 사전의 문구는 소문자 phase 도 본다 — 'By phase' 꼴로 1레벨을 부르던 자리 */
 const DICT_PHASE = /\bphases?\b/i
-const DICT_PHASE_ALLOW: Readonly<Record<string, string>> = {
-  'src/lib/i18n/dict/home.en.ts': PHASE_ALLOW['src/lib/i18n/dict/home.en.ts'],
-  'src/lib/i18n/dict/portfolio.en.ts': "'early phase' 는 프로젝트 기간의 초반이라는 뜻(일정 신호 설명)이다 — WBS 단계 이름이 아니다",
-}
+const DICT_PHASE_ALLOW: Readonly<Record<string, string>> = {}
 
 /** 대화형 답변 프롬프트의 언어 고정 — 프롬프트가 사는 두 폴더만 본다 */
 const KOREAN_ONLY = /한국어로/
@@ -70,7 +66,7 @@ describe('특정 프로젝트 유형의 잔재 — 사용자 노출 문자열·�
   it('src 를 실제로 걷는다(빈 목록으로 통과하지 않는다)', () => {
     const rel = FILES.map(f => relative(process.cwd(), f))
     expect(rel).toEqual(expect.arrayContaining([
-      'src/lib/ai/issue-analysis.ts', 'src/lib/ai/minute-issue-draft.ts', 'src/lib/i18n/dict/wbs.ts', 'src/lib/i18n/dict/kanban.en.ts',
+      'src/lib/ai/issue-analysis.ts', 'src/lib/ai/minute-issue-draft.ts', 'src/lib/i18n/dict/wbs.ts', 'src/lib/i18n/dict/kanban.ts',
       'src/components/report/ReportModal.tsx', 'src/lib/report/excel.ts',
     ]))
     expect(ALL.length).toBeGreaterThan(100)
@@ -121,12 +117,10 @@ describe('{level} 치환자 — 부르는 자리가 모두 치환한다', () => 
   const dictFiles = FILES.filter(f => relative(process.cwd(), f).startsWith('src/lib/i18n/dict/'))
   const keysIn = (file: string): string[] =>
     [...readFileSync(file, 'utf8').matchAll(/^\s*'([\w.]+)':\s*(['"`])(.*)\2,?\s*$/gm)].filter(m => m[3].includes('{level}')).map(m => m[1])
-  const koKeys = dictFiles.filter(f => !f.endsWith('.en.ts')).flatMap(keysIn).sort()
-  const enKeys = dictFiles.filter(f => f.endsWith('.en.ts')).flatMap(keysIn).sort()
+  const koKeys = dictFiles.flatMap(keysIn).sort()
 
-  it('치환자를 쓰는 키가 있고, 한국어·영어 사전이 같은 키에 치환자를 둔다', () => {
+  it('치환자를 쓰는 키가 있다', () => {
     expect(koKeys).toEqual(expect.arrayContaining(['kanban.byPhase', 'wbs.newPhasePlaceholder', 'wbs.weightTotalTitle']))
-    expect(enKeys).toEqual(koKeys)
   })
 
   it('그 키를 부르는 t(…) 는 바로 .replace(\'{level}\', …) 로 이어진다', () => {

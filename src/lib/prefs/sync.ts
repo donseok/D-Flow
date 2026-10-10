@@ -5,10 +5,9 @@ import { isThemePref, type ThemePref } from '@/lib/theme/policy'
 export type LocalPrefs = {
   sidebarCollapsed: boolean
   theme: ThemePref | null
-  locale: 'ko' | 'en'
 }
 
-const KEYS: (keyof LocalPrefs)[] = ['sidebarCollapsed', 'theme', 'locale']
+const KEYS: (keyof LocalPrefs)[] = ['sidebarCollapsed', 'theme']
 
 /**
  * 서버 값과 로컬 현재값을 비교해 UI에 적용할 것(apply)과 서버에 백필할 것(backfill)을 계산한다.

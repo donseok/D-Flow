@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { canViewAgents, seatmapProjectIds } from '@/lib/authz/agentsAccess'
 import { KO } from '@/lib/i18n/dict/ko'
-import { EN } from '@/lib/i18n/dict/en'
 import { makeActor as actor, WS } from '../fixtures/actor'
 
 // SP3b D21(§5.8) — 좌석표는 그 워크스페이스로 한정한다. canViewAgents 는 그 워크스페이스에 역할이 있는가, 층 목록은 그 워크스페이스 프로젝트만.
@@ -59,8 +58,8 @@ describe('seatmapProjectIds(actor, workspaceId) — 층 목록', () => {
 })
 
 describe('nav 사전 키', () => {
-  it('전역 좌석표와 프로젝트 에이전트 라벨이 ko/en 양쪽에 있다', () => {
-    expect(KO['nav.agents']).toBe('에이전트 현황'); expect(EN['nav.agents']).toBe('Agent status')   // D30 라벨
-    expect(KO['nav.projectAgents']).toBe('에이전트'); expect(EN['nav.projectAgents']).toBe('Agents')
+  it('전역 좌석표와 프로젝트 에이전트 라벨이 사전에 있다', () => {
+    expect(KO['nav.agents']).toBe('에이전트 현황')
+    expect(KO['nav.projectAgents']).toBe('에이전트')
   })
 })

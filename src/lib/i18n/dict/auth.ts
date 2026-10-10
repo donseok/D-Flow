@@ -1,5 +1,4 @@
 // 로그인 계열 화면(/login·/login/forgot·/login/reset) 사전 — 공개 화면이라 워크스페이스·프로젝트 낱말을 싣지 않는다.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 export const authKo = {
   // 소개(lg 이상의 왼쪽 카드)
   'login.pill': '프로젝트 관리',

@@ -2,20 +2,15 @@
 import { describe, expect, it } from 'vitest'
 import { ERR_OBJECT_REMOVE, ERR_ROW_REMOVE } from '@/lib/attachments/removeStoredAttachment'
 import { removeErrorKey } from '@/lib/attachments/removeErrors'
-import { t, registerEn } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
-
-registerEn(EN)
+import { t } from '@/lib/i18n/dict'
 
 describe('removeErrorKey', () => {
   it.each([
     [ERR_OBJECT_REMOVE, 'common.attach.objectRemoveFailed'],
     [ERR_ROW_REMOVE, 'common.attach.rowRemoveFailed'],
-  ] as const)('도우미의 문구는 사전 키로 — 한국어 사전 문구는 그 문구와 같고 영어 사전에는 한국어가 없다', (text, key) => {
+  ] as const)('도우미의 문구는 사전 키로 — 사전 문구는 그 문구와 같다', (text, key) => {
     expect(removeErrorKey(text)).toBe(key)
     expect(t('ko', key)).toBe(text)
-    expect(t('en', key)).not.toMatch(/[가-힣]/)
-    expect(t('en', key)).not.toBe(key)
   })
 
   it.each([undefined, '', '권한 없음', 'toString', 'constructor'])('그 밖의 문구(%s)는 null — 호출부가 받은 문구나 자기 화면의 일반 문구를 쓴다', (text) => {

@@ -10,7 +10,6 @@ import { WIKI_DOCUMENT_KINDS, type WikiDocumentKind } from '@/lib/domain/wiki'
 import { clearLegacyWikiDrafts, draftKey, legacyWikiDraftKey, readDraftWithMigration, settleLegacyDraft } from '@/lib/drafts/wikiDrafts'
 import { readDraftRaw, sweepExpiredDrafts, writeDraftRaw, type LocalDraftPolicy } from '@/lib/drafts/storage'
 import { useScope } from '@/components/app/ScopeContext'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 import { formatWikiDate } from './WikiShared'
@@ -39,35 +38,14 @@ const KIND_LABEL: Record<WikiDocumentKind, DictKey> = {
   reference: 'wiki.docKind.reference',
 }
 
-const TEMPLATE: Record<WikiDocumentKind, { ko: string; en: string }> = {
-  overview: {
-    ko: '## 목적\n\n이 프로젝트가 해결하는 문제를 적어 주세요.\n\n## 범위\n\n- 포함:\n- 제외:\n\n## 시작하기\n\n새 참여자가 가장 먼저 알아야 할 내용을 적어 주세요.',
-    en: '## Purpose\n\nDescribe the problem this project solves.\n\n## Scope\n\n- Included:\n- Excluded:\n\n## Getting started\n\nAdd what a new teammate should know first.',
-  },
-  decision: {
-    ko: '## 결정\n\n결론을 한 문장으로 적어 주세요.\n\n## 맥락\n\n왜 이 결정이 필요했는지 적어 주세요.\n\n## 검토한 선택지\n\n- 선택지 A:\n- 선택지 B:\n\n## 영향과 후속 작업\n\n- ',
-    en: '## Decision\n\nState the outcome in one sentence.\n\n## Context\n\nExplain why the decision was needed.\n\n## Options considered\n\n- Option A:\n- Option B:\n\n## Consequences and follow-ups\n\n- ',
-  },
-  how_to: {
-    ko: '## 언제 사용하나요?\n\n이 절차가 필요한 상황을 적어 주세요.\n\n## 준비 사항\n\n- \n\n## 절차\n\n1. \n2. \n3. \n\n## 완료 확인\n\n성공 여부를 확인하는 방법을 적어 주세요.',
-    en: '## When to use this\n\nDescribe when this procedure applies.\n\n## Prerequisites\n\n- \n\n## Steps\n\n1. \n2. \n3. \n\n## Verify completion\n\nExplain how to confirm success.',
-  },
-  runbook: {
-    ko: '## 증상\n\n관찰되는 현상을 적어 주세요.\n\n## 확인\n\n1. \n2. \n\n## 조치\n\n1. \n2. \n\n## 복구 확인\n\n- \n\n## 에스컬레이션\n\n담당자와 기준을 적어 주세요.',
-    en: '## Symptoms\n\nDescribe what is observed.\n\n## Diagnose\n\n1. \n2. \n\n## Remediate\n\n1. \n2. \n\n## Verify recovery\n\n- \n\n## Escalation\n\nAdd the owner and escalation criteria.',
-  },
-  faq: {
-    ko: '## 질문\n\n자주 반복되는 질문을 적어 주세요.\n\n## 답변\n\n짧고 직접적인 답을 적어 주세요.\n\n## 예외와 참고\n\n- ',
-    en: '## Question\n\nAdd a frequently repeated question.\n\n## Answer\n\nGive a short, direct answer.\n\n## Exceptions and references\n\n- ',
-  },
-  glossary: {
-    ko: '## 용어\n\n### 용어 이름\n\n정의와 프로젝트에서 사용하는 맥락을 적어 주세요.\n\n### 다른 용어\n\n정의를 적어 주세요.',
-    en: '## Terms\n\n### Term name\n\nAdd the definition and how the project uses it.\n\n### Another term\n\nAdd its definition.',
-  },
-  reference: {
-    ko: '## 요약\n\n참조할 핵심 내용을 적어 주세요.\n\n## 상세\n\n- \n\n## 관련 링크\n\n- ',
-    en: '## Summary\n\nAdd the key reference information.\n\n## Details\n\n- \n\n## Related links\n\n- ',
-  },
+const TEMPLATE: Record<WikiDocumentKind, string> = {
+  overview: '## 목적\n\n이 프로젝트가 해결하는 문제를 적어 주세요.\n\n## 범위\n\n- 포함:\n- 제외:\n\n## 시작하기\n\n새 참여자가 가장 먼저 알아야 할 내용을 적어 주세요.',
+  decision: '## 결정\n\n결론을 한 문장으로 적어 주세요.\n\n## 맥락\n\n왜 이 결정이 필요했는지 적어 주세요.\n\n## 검토한 선택지\n\n- 선택지 A:\n- 선택지 B:\n\n## 영향과 후속 작업\n\n- ',
+  how_to: '## 언제 사용하나요?\n\n이 절차가 필요한 상황을 적어 주세요.\n\n## 준비 사항\n\n- \n\n## 절차\n\n1. \n2. \n3. \n\n## 완료 확인\n\n성공 여부를 확인하는 방법을 적어 주세요.',
+  runbook: '## 증상\n\n관찰되는 현상을 적어 주세요.\n\n## 확인\n\n1. \n2. \n\n## 조치\n\n1. \n2. \n\n## 복구 확인\n\n- \n\n## 에스컬레이션\n\n담당자와 기준을 적어 주세요.',
+  faq: '## 질문\n\n자주 반복되는 질문을 적어 주세요.\n\n## 답변\n\n짧고 직접적인 답을 적어 주세요.\n\n## 예외와 참고\n\n- ',
+  glossary: '## 용어\n\n### 용어 이름\n\n정의와 프로젝트에서 사용하는 맥락을 적어 주세요.\n\n### 다른 용어\n\n정의를 적어 주세요.',
+  reference: '## 요약\n\n참조할 핵심 내용을 적어 주세요.\n\n## 상세\n\n- \n\n## 관련 링크\n\n- ',
 }
 
 function documentKind(value: string | null | undefined): WikiDocumentKind {
@@ -157,7 +135,6 @@ export function WikiDocumentEditor({
   canVerify?: boolean
   onDone?: () => void
 }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const router = useRouter()
   const [snapshot, setSnapshot] = useState({
     title: topic?.title ?? '',
@@ -170,7 +147,7 @@ export function WikiDocumentEditor({
   // 새 문서는 기본 유형의 템플릿으로 열어 둔다. 빈 mono textarea 앞에서 무엇을 쓸지
   // 몰라 그대로 닫는 것이 관찰된 이탈 지점이고, 유형 select 를 '바꿀' 때만 템플릿이
   // 들어오던 기존 동작은 기본값을 그대로 쓰는 다수에게 한 번도 발동하지 않았다.
-  const [bodyMd, setBodyMd] = useState(topic ? snapshot.bodyMd : TEMPLATE[initialKind][locale])
+  const [bodyMd, setBodyMd] = useState(topic ? snapshot.bodyMd : TEMPLATE[initialKind])
   const [kind, setKind] = useState<WikiDocumentKind>(snapshot.kind)
   const [editing, setEditing] = useState(!topic)
   const [busy, setBusy] = useState(false)
@@ -203,7 +180,7 @@ export function WikiDocumentEditor({
   // 초안이 쌓이고, 유형을 바꿔도 템플릿이 갈리지 않는다.
   const untouchedTemplate = !topic
     && title.trim() === ''
-    && WIKI_DOCUMENT_KINDS.some((value) => bodyMd === TEMPLATE[value][locale])
+    && WIKI_DOCUMENT_KINDS.some((value) => bodyMd === TEMPLATE[value])
   const dirty = !untouchedTemplate
     && (title.trim() !== snapshot.title.trim() || bodyMd !== snapshot.bodyMd)
   // 남은 초안을 사람이 처리(복구·폐기·저장·새로 쓰기)하기 전에는 !dirty 여도 지우지 않는다 — 지우면
@@ -261,7 +238,7 @@ export function WikiDocumentEditor({
   function changeKind(next: WikiDocumentKind) {
     setKind(next)
     // 아직 손대지 않은 템플릿이거나 빈 본문이면 새 유형의 템플릿으로 갈아 끼운다.
-    if (!bodyMd.trim() || untouchedTemplate) setBodyMd(TEMPLATE[next][locale])
+    if (!bodyMd.trim() || untouchedTemplate) setBodyMd(TEMPLATE[next])
   }
 
   function applyTemplate() {
@@ -269,8 +246,8 @@ export function WikiDocumentEditor({
     // 버튼 하나에 두지 않기 위해서다.
     setBodyMd((current) => (
       current.trim() && !untouchedTemplate
-        ? `${current.replace(/\s*$/, '')}\n\n${TEMPLATE[kind][locale]}`
-        : TEMPLATE[kind][locale]
+        ? `${current.replace(/\s*$/, '')}\n\n${TEMPLATE[kind]}`
+        : TEMPLATE[kind]
     ))
   }
 

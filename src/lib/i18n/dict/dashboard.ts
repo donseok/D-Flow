@@ -1,7 +1,6 @@
 // dashboard 화면 사전 — 이 파일은 dashboard 영역 담당만 수정한다.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 // 단위 접미사(unit*, *Suffix)는 JSX에서 `{n}{t('dash.unit…')}` 식으로 숫자 뒤에 붙여 조합한다.
-// ko는 붙여 쓰고(예: '3건') en은 값에 선행 공백을 포함한다(예: '3 items') — BUG-03 건수 표기 유지.
+// 건수는 붙여 쓴다(예: '3건') — BUG-03 건수 표기 유지.
 export const dashboardKo = {
   // 히어로(page.tsx)
   'dash.heroProjectFallback': '프로젝트',

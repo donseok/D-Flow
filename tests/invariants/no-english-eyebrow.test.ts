@@ -3,7 +3,6 @@
 // ③ className 리터럴에 `eyebrow` 가 든 요소의 글자, ④ 한국어 사전에서 키 이름에 eyebrow 가 든 문구.
 // TS 파서로 리터럴(문자열·템플릿 조각·JSX 글자)만 본다. 함수 호출의 인자(사전 키 `t('…')`·치환 자리 `'{n}'`)와 비교의 피연산자는 문구가 아니라 보지 않는다.
 // 한글이 섞인 문구는 통과하고, 영문 낱말만 있는 문구가 걸린다. 고유 낱말은 PROPER 에, 파일 예외는 ALLOW 에(파일:사유) 닫힌 목록으로 둔다.
-// 영어 화면의 머리말이 필요하면 리터럴이 아니라 사전(`*.en.ts`)에 둔다 — 영어 사전은 검사하지 않는다.
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
@@ -89,7 +88,7 @@ describe('영문 머리말(eyebrow) — 한국어 화면에 되돌아오지 않�
   it('한국어 사전의 머리말 문구(키 이름에 eyebrow)는 영문이 아니다', () => {
     const hits: string[] = []
     let seen = 0
-    for (const f of walk(join(SRC, 'lib/i18n/dict'), undefined, /\.ts$/).filter(f => !f.endsWith('.en.ts'))) {
+    for (const f of walk(join(SRC, 'lib/i18n/dict'), undefined, /\.ts$/)) {
       for (const m of readFileSync(f, 'utf8').matchAll(/'([\w.]*eyebrow[\w.]*)':\s*'([^']*)'/gi)) {
         seen++
         if (isEnglishCaption(m[2])) hits.push(`${relative(process.cwd(), f)}: ${m[1]} = ${m[2]}`)

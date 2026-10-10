@@ -1,6 +1,6 @@
 // lib 에서 만들어져 화면에 그대로 보이던 한국어(라벨 상수·문구 생성 함수)와 페이지 탭 제목의 사전.
 // lib 의 한국어 상수는 서버 출력(저장·색인·알림·AI 프롬프트)용으로 그대로 남고, 화면은 옆의 `*_KEY` 표로 이 사전을 읽는다.
-// 모음에는 adminUi 가 펼쳐 싣는다. en 은 Record<keyof ko, string> 타입으로 키 패리티를 컴파일 타임에 강제한다.
+// 모음에는 adminUi 가 펼쳐 싣는다.
 export const libUiKo = {
   // lib/modules/labels.ts — MODULE_LABEL
   'module.dashboard': '개요',

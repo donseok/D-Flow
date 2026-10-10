@@ -10,7 +10,6 @@ vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ t:
 vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: (...a: unknown[]) => h.update(...a), getSettingsCommandOutcome: (...a: unknown[]) => h.outcome(...a) }))
 import { MinutesAutoFileEditor } from '@/components/settings/MinutesAutoFileEditor'
 import { settingsKo } from '@/lib/i18n/dict/settings'
-import { settingsEn } from '@/lib/i18n/dict/settings.en'
 
 const KEY = 'minutes.auto_file_by_path'
 const OK = { ok: true, kind: 'applied', commandId: 'c', revision: 9, rebased: false }
@@ -80,11 +79,10 @@ describe('MinutesAutoFileEditor', () => {
     expect(el.querySelector('[data-minutes-auto-file-save]')).toBeNull()
   })
 
-  it('문구는 ko·en 둘 다 있다', () => {
+  it('문구가 사전에 있다', () => {
     for (const suffix of ['label', 'desc', 'switch', 'on', 'off', 'onHint', 'offHint', 'invalid']) {
       const k = `settings.${KEY}.${suffix}`
       expect((settingsKo as Record<string, string>)[k], `ko ${k}`).toBeTruthy()
-      expect((settingsEn as Record<string, string>)[k], `en ${k}`).toBeTruthy()
     }
   })
 })

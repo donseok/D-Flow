@@ -1,7 +1,6 @@
 'use client'
 
 import Image from 'next/image'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import { BRAND } from '@/lib/branding'
 import { resolveBrandMark, type BrandMarkChoice } from '@/lib/settings/brandMark'
 
@@ -76,7 +75,6 @@ export function BrandMark({
   tagline?: boolean
   className?: string
 }) {
-  const { t, locale } = useLocale()
   const choice = resolveBrandMark(productName, hasMark && workspaceId ? `/api/brand/${workspaceId}/mark` : null)
   if (!withWordmark) return <BrandGlyph size={size} className={className} choice={choice} productName={productName} />
 
@@ -89,8 +87,7 @@ export function BrandMark({
         </span>
         {tagline && (
           <span className="block text-fg-muted" style={{ fontSize: Math.round(size * 0.26) }}>
-            {/* ko 는 BRAND.tagline(env 로 교체 가능). env 한 줄은 한 언어뿐이라 en 은 번역 사전을 쓴다. */}
-            {locale === 'en' ? t('brand.tagline') : BRAND.tagline}
+            {BRAND.tagline}
           </span>
         )}
       </span>

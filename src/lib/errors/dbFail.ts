@@ -2,7 +2,6 @@
  *    고정 문구만 싣는다. 토큰은 기존 dbToken·mapDbError(src/lib/settings/errors.ts)를 그대로 쓰고 그 표는 늘리지 않는다 — SP3a 규칙:
  *    정상 경로에서 나올 수 없는 토큰(입력 토큰·COMMAND_ID_REQUIRED·*_ISOLATION)은 어느 표에도 없어 null 이고, 호출부가 failWith 로
  *    로그 + 고정 문구(500)를 낸다. SP4 의 새 정상 경로 토큰(PROJECT_NOT_FOUND 404·*_FORBIDDEN 403 등)은 호출부 자기 표다. ── */
-import { guardTextBy } from '@/lib/authz/errors'
 import { ERR_CONFIG_BUSY, configText, dbToken, kindOfCode, mapDbError, type DbErrorLike } from '@/lib/settings/errors'
 import type { ServerDictKey, ServerTranslate } from '@/lib/i18n/serverDict'   // 타입만 — 서버 사전을 값으로 끌어오지 않는다
 
@@ -25,19 +24,18 @@ export function failWith(tag: string, err: unknown, message: string): string {
  * WEEKLY_AREAS_REQUIRED 409·COMMAND_REUSED 422 …, 재시도 여부는 SP3a kindOfCode). 셋 다 아니면 null — 호출부가 failWith 로
  * 로그 + 고정 문구. 결과에 원문을 싣지 않는다.
  */
-/** 사전 키로 적는 호출부 표 — 화면에 내보내는 문구는 key, 가드 문구(ERR_DENIED 등)는 message 에 상수로 적는다(tokenTable·rpcFailure 가 `err.guard.*` 로 푼다) */
+/** 사전 키로 적는 호출부 표 — 화면에 내보내는 문구는 key, 가드 문구(ERR_DENIED 등)는 message 에 상수로 적는다(그대로 나간다) */
 export type OwnTokenKeys = Readonly<Record<string, { status: number; code: string } & ({ key: ServerDictKey } | { message: string })>>
 /** 키 표를 요청의 화면 언어로 푼 문구 표 — rpcFailure 에 넘긴다 */
 export function tokenTable(own: OwnTokenKeys, t: ServerTranslate): OwnTokenTable {
-  return Object.fromEntries(Object.entries(own).map(([token, row]) => [token, { status: row.status, code: row.code, message: 'key' in row ? t(row.key) : guardTextBy(t, row.message) }]))
+  return Object.fromEntries(Object.entries(own).map(([token, row]) => [token, { status: row.status, code: row.code, message: 'key' in row ? t(row.key) : row.message }]))
 }
 
 export function rpcFailure(err: DbErrorLike, own: OwnTokenTable, t?: ServerTranslate): RpcFailure | null {
   const token = dbToken(err.message)
   if (Object.hasOwn(own, token)) {
     const row = own[token]
-    // 호출부 표의 가드 문구(message: ERR_DENIED·ERR_MISSING)는 여기서 화면 언어로 — 그 밖의 문구는 호출부가 이미 풀어 넘긴 것이다(tokenTable)
-    return { status: row.status, code: row.code, message: t ? guardTextBy(t, row.message) : row.message, retryable: row.status === 503, token }
+    return { status: row.status, code: row.code, message: row.message, retryable: row.status === 503, token }
   }
   if (err.code === LOCK_TIMEOUT) return { status: 503, code: 'CONFIG_BUSY', message: t ? configText(t, ERR_CONFIG_BUSY) : ERR_CONFIG_BUSY, retryable: true, token: LOCK_TIMEOUT }
   const mapped = mapDbError(err, t)

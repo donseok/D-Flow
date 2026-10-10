@@ -330,7 +330,7 @@ describe('사용자 도메인 단위 테스트 슈트 (User Domain Unit Tests)',
   describe('3. 사용자 선호도 및 UI 설정 (User Preferences)', () => {
     it('계정 선호도 키와 워크스페이스 선호도 키 화이트리스트를 검증한다', () => {
       expect(ACCOUNT_PREF_KEYS).toContain('theme')
-      expect(ACCOUNT_PREF_KEYS).toContain('locale')
+      expect(ACCOUNT_PREF_KEYS).not.toContain('locale')   // 한국어 전용 결정(2026-10-10)으로 폐기
       expect(ACCOUNT_PREF_KEYS).toContain('sidebarCollapsed')
       expect(WORKSPACE_PREF_KEYS).toContain('startPage')
       expect(WORKSPACE_PREF_KEYS).toContain('favoriteProjectIds')
@@ -340,7 +340,6 @@ describe('사용자 도메인 단위 테스트 슈트 (User Domain Unit Tests)',
     it('계정 선호도와 워크스페이스 선호도를 분리하고 알 수 없는 키를 식별한다', () => {
       const raw = {
         theme: 'dark' as const,
-        locale: 'ko' as const,
         sidebarCollapsed: true,
         startPage: 'my_work' as const,
         favoriteProjectIds: [
@@ -355,7 +354,6 @@ describe('사용자 도메인 단위 테스트 슈트 (User Domain Unit Tests)',
 
       expect(account).toEqual({
         theme: 'dark',
-        locale: 'ko',
         sidebarCollapsed: true,
       })
 
@@ -404,12 +402,12 @@ describe('사용자 도메인 단위 테스트 슈트 (User Domain Unit Tests)',
     })
 
     it('계정 설정과 워크스페이스 설정을 안전하게 병합(mergePrefs)한다', () => {
-      const acc = { theme: 'system' as const, locale: 'ko' as const }
+      const acc = { theme: 'system' as const, sidebarCollapsed: true }
       const ws = { startPage: 'home' as const, favoriteProjectIds: ['p-fav'] }
 
       const merged = mergePrefs(acc, ws)
       expect(merged.theme).toBe('system')
-      expect(merged.locale).toBe('ko')
+      expect(merged.sidebarCollapsed).toBe(true)
       expect(merged.startPage).toBe('home')
       expect(merged.favoriteProjectIds).toEqual(['p-fav'])
     })

@@ -234,11 +234,11 @@ describe('사용자 여정 E2E 테스트 슈트 (End-to-End User Journey Tests)'
     }
     mocks.createServerClient.mockResolvedValue(mockServerDb)
 
-    // 3-1. Bob이 테마와 언어 설정을 저장 (계정 범위)
-    const prefRes1 = await saveUiPrefs({ theme: 'dark', locale: 'ko', sidebarCollapsed: false })
+    // 3-1. Bob이 테마와 사이드바 설정을 저장 (계정 범위)
+    const prefRes1 = await saveUiPrefs({ theme: 'dark', sidebarCollapsed: false })
     expect(prefRes1.ok).toBe(true)
     expect(bobAccountPrefs.theme).toBe('dark')
-    expect(bobAccountPrefs.locale).toBe('ko')
+    expect(bobAccountPrefs.sidebarCollapsed).toBe(false)
 
     // 3-2. Bob이 워크스페이스 시작 페이지 및 즐겨찾기 프로젝트 설정 (워크스페이스 범위)
     const prefRes2 = await saveUiPrefs(

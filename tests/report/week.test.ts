@@ -3,8 +3,6 @@
 // 2026-07-06 주가 '7월1주차' → '7월2주차'(같은 주가 생성일에 따라 둘로 갈리던 일이 사라진다).
 import { describe, expect, it } from 'vitest'
 import { normalizeWeekParam, sheetWeekMeta, weekDisplayLabel, weekLabelTexts } from '@/lib/report/week'
-import { registerEn } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
 import { calendarOf, nextWeekKey, prevWeekKey, type WeekStartRule } from '@/lib/domain/calendar'
 import { MON_RULES, SUN_RULES, calUtcMon, calUtcSun } from '../helpers/calendarFixture'
 
@@ -57,22 +55,13 @@ describe('sheetWeekMeta — 시트 머리(금주 범위·차주 범위)', () => 
   })
 })
 
-describe('weekDisplayLabel — 화면 표시만 언어를 따른다(저장·파일 이름·기본 제목은 한국어 그대로)', () => {
-  registerEn(EN)   // 서버 렌더와 같은 상태(server.ts 가 등록한다)
-  it('locale 이 없거나 ko 면 종전 표기와 글자까지 같다', () => {
+describe('weekDisplayLabel — 화면 표시용 주차 라벨', () => {
+  it('시트 머리의 라벨·범위와 글자까지 같다(locale 인자는 있어도 없어도 같다)', () => {
     for (const [cal, key] of [[calUtcMon, '2026-07-06'], [calUtcSun, '2026-06-28'], [calTransition, '2026-10-05']] as const) {
       const m = sheetWeekMeta(cal, key)
       expect(weekDisplayLabel(cal, key)).toBe(`${m.label} (${m.thisRange})`)
       expect(weekDisplayLabel(cal, key, 'ko')).toBe(`${m.label} (${m.thisRange})`)
     }
-  })
-  it('en — 달 이름 · Week N (M/D–M/D)', () => {
-    expect(weekDisplayLabel(calTransition, '2026-10-05', 'en')).toBe('Oct · Week 2 (10/5–10/9)')
-    expect(weekDisplayLabel(calUtcSun, '2026-06-28', 'en')).toBe('Jul · Week 1 (6/29–7/3)')
-  })
-  it('en 을 넘겨도 제품 고정 값(weekTag·기본 제목 재료)은 바뀌지 않는다 — 다른 함수다', () => {
-    weekDisplayLabel(calUtcMon, '2026-07-06', 'en')
-    expect(sheetWeekMeta(calUtcMon, '2026-07-06')).toEqual({ weekTag: '7월2주차', label: '7월 2주차', thisRange: '7/6~7/10', nextRange: '7/13~7/17' })
   })
 })
 

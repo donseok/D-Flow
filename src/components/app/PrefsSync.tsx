@@ -5,20 +5,16 @@ import { computePrefsSync, type LocalPrefs } from '@/lib/prefs/sync'
 import { queueUiPref } from '@/lib/prefs/debouncedSave'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { readStoredPreference } from '@/lib/theme/policy'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import { dispatchSidebarToggle, SIDEBAR_STORAGE_KEY } from '@/components/app/sidebarState'
 
 /**
- * 현재 로컬 상태를 LocalPrefs 로 읽는다. 테마는 저장된 **선호**(localStorage → 쿠키, 없으면 null — D10: 해석값을 백필하지 않는다),
- * 언어는 쿠키에서 직접 읽는다 — context 값은 렌더 시점 초기값이라 effect 시점에 stale 하다.
+ * 현재 로컬 상태를 LocalPrefs 로 읽는다. 테마는 저장된 **선호**(localStorage → 쿠키, 없으면 null — D10: 해석값을 백필하지 않는다).
  */
 function readLocal(): LocalPrefs {
   let sidebarCollapsed = false
   try { sidebarCollapsed = localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1' } catch {}
   const theme = readStoredPreference()
-  const cookieLocale = document.cookie.match(/(?:^|; )dflow-locale=([^;]+)/)?.[1]
-  const locale: 'ko' | 'en' = cookieLocale === 'en' ? 'en' : 'ko'
-  return { sidebarCollapsed, theme, locale }
+  return { sidebarCollapsed, theme }
 }
 
 /**
@@ -30,7 +26,6 @@ function readLocal(): LocalPrefs {
  */
 export function PrefsSync({ server }: { server: UiPrefs }) {
   const { setPreference } = useTheme()
-  const { setLocale } = useLocale()
   const done = useRef(false)
 
   useEffect(() => {
@@ -40,11 +35,10 @@ export function PrefsSync({ server }: { server: UiPrefs }) {
     const { apply, backfill } = computePrefsSync(server, local)
     // 적용: 각 설정의 기존 변경 경로 재사용(같은 값이면 computePrefsSync 가 이미 걸러냄).
     if (apply.theme) setPreference(apply.theme)
-    if (apply.locale !== undefined) setLocale(apply.locale)
     if (apply.sidebarCollapsed !== undefined) dispatchSidebarToggle(apply.sidebarCollapsed)
     // 백필: 서버에 없던 키를 현재 로컬값으로 1회 저장(debounce 병합).
     if (Object.keys(backfill).length) queueUiPref(backfill)
-    // 마운트 1회만. setPreference/setLocale 은 안정적 콜백이고 로컬 상태는 readLocal 이 DOM/쿠키에서 직접 읽음.
+    // 마운트 1회만. setPreference 는 안정적 콜백이고 로컬 상태는 readLocal 이 DOM/쿠키에서 직접 읽음.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

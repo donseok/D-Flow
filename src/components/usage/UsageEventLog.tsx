@@ -8,7 +8,6 @@ import { MiniEmpty } from '@/components/dashboard/bits'
 import { menuLabel } from '@/lib/domain/usageMenu'
 import { usageHref } from '@/lib/domain/usage'
 import type { UsageEventRow } from '@/lib/data/usage'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 import { intlLocale } from '@/lib/i18n/format'
 
@@ -37,7 +36,6 @@ export function UsageEventLog({ base, events, names, limit, locale, menus, filte
   /** 시각을 찍을 시간대(IANA) — 서버가 내려준다(기본값 없음) */
   timeZone: string
 }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const [page, setPage] = useState(1)
   const pageCount = Math.max(1, Math.ceil(events.length / EVENT_PAGE_SIZE))
   const currentPage = Math.min(page, pageCount)

@@ -1,5 +1,4 @@
 // members 화면 사전 — 이 파일은 members 영역 담당만 수정한다.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 // 명단 표·추가 폼(components/roster/*)의 문구는 컴포넌트에 있다 — 서버 액션·RPC 오류 문구와 같은 한국어 원문이라서.
 
 export const membersKo = {

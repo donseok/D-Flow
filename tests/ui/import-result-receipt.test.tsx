@@ -3,15 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
 import { ImportReceiptPanel, receiptStateOf } from '@/components/import/ImportReceiptPanel'
 import { ImportRunSummary } from '@/components/import/ImportRunSummary'
-import { registerEn, t, type DictKey } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
-
-// 영문 단언이 한국어 폴백으로 통과하지 않게 — 서버(i18n/server)가 하는 EN 등록을 테스트에서도 한다(패널은 서버 컴포넌트).
-registerEn(EN)
+import { t, type DictKey } from '@/lib/i18n/dict'
 
 const PID = '00000000-0000-0000-7e57-000000001aa0'
 const CMD = '00000000-0000-4000-8000-000000001aa1'
-const HANGUL = /[가-힣]/
 const receipt = { commandId: CMD, mode: 'replace' as const, count: 42, createdAt: '2026-10-02T01:02:03+00:00' }
 const tKo = (k: DictKey) => t('ko', k)
 
@@ -44,12 +39,6 @@ describe('?receipt= 패널', () => {
     const html = renderToString(<ImportReceiptPanel state={{ kind: 'found', receipt }} locale="ko" timeZone={null} />)
     expect(html).toContain('>—<')
     expect(html).not.toContain('2026-10-02 10:02')
-  })
-  it('영어 화면 — 네 상태 모두 한글 0자(SP3a CR-13 꼴)', () => {
-    for (const state of [{ kind: 'found', receipt }, { kind: 'missing' }, { kind: 'invalid' }, { kind: 'error' }] as const) {
-      const html = renderToString(<ImportReceiptPanel state={state} locale="en" timeZone="UTC" />)
-      expect(HANGUL.test(html.replace(/<[^>]*>/g, '')), state.kind).toBe(false)
-    }
   })
   it('[RF4] 나쁜 값 — 없음이면 패널 없음, 배열·uuid 아님은 액션을 부르지 않는다', async () => {
     const read = vi.fn()

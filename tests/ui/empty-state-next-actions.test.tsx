@@ -10,7 +10,7 @@ vi.mock('@/app/actions/wbs', () => ({ updateActual: vi.fn(), updateWeight: vi.fn
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { t } = await vi.importActual<typeof import('@/lib/i18n/dict')>('@/lib/i18n/dict')
-  const api = { locale: 'ko' as const, setLocale: () => {}, t: (k: Parameters<typeof t>[1]) => t('ko', k) }
+  const api = { locale: 'ko' as const, t: (k: Parameters<typeof t>[1]) => t('ko', k) }
   return { useLocale: () => api }
 })
 vi.mock('@/components/wbs/RowDetailPanel', () => ({ RowDetailPanel: () => null }))
@@ -22,9 +22,6 @@ vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
 import { WbsGanttSheet } from '@/components/wbs/WbsGanttSheet'
 import { DashboardView } from '@/components/dashboard/DashboardView'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { t } from '@/lib/i18n/dict'
-import { registerEn } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
 import { calInputUtcMon } from '../helpers/calendarFixture'
 import { makeProjectActorView } from '../fixtures/actor'
 import { dashboardProps } from './_dashboard-fixture'
@@ -88,15 +85,5 @@ describe('개요 빈 상태 — 작업 계획으로 가는 버튼', () => {
     expect(html).toContain('작업 계획으로 가기')
     expect(html).toContain('작업을 직접 추가하거나 엑셀로 가져오면')
     expect(html).not.toContain('설정에서 WBS 엑셀을 가져오면')
-  })
-})
-
-describe('문구 — ko·en 모두 "직접 추가하거나 엑셀로 가져오기"', () => {
-  it('영어 사전도 엑셀 업로드만 말하지 않는다', () => {
-    registerEn(EN)
-    expect(t('en', 'wbs.emptyNoItemsHint')).toBe('Add tasks directly or import them from Excel to see them here.')
-    expect(t('en', 'dash.emptyDesc')).toMatch(/Add tasks directly or import them from Excel/)
-    expect(t('en', 'wbs.emptyAddTask')).toBe('Add task')
-    expect(t('en', 'wbs.emptyImportExcel')).toBe('Import from Excel')
   })
 })

@@ -7,12 +7,8 @@ vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
 }))
 
-import { registerEn } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
 import { IssueStatusCard } from '@/components/dashboard/IssueStatusCard'
 
-// 영문 단언이 한국어 폴백으로 통과하지 않게 — 서버(i18n/server)가 하는 EN 등록을 테스트에서도 한다.
-registerEn(EN)
 import { IssueTrendCard } from '@/components/dashboard/IssueTrendCard'
 import { IssueQueueCard } from '@/components/dashboard/IssueQueueCard'
 import { MON_RULES } from '../helpers/calendarFixture'
@@ -97,13 +93,6 @@ describe('IssueStatusCard', () => {
     const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={[]} projectId="p1" today={TODAY} locale="ko" timeZone="Asia/Seoul" />)
     expect(html).toContain('등록된 이슈가 없습니다')
     expect(html).not.toContain('최근 7일 해결')
-  })
-
-  it('영문 로케일도 주입된 프로젝트 영역 이름을 그대로 쓰고 안내는 영문 사전을 쓴다', () => {
-    const html = renderToStaticMarkup(<IssueStatusCard areas={TEST_AREAS} issues={ISSUES} projectId="p1" today={TODAY} locale="en" timeZone="Asia/Seoul" />)
-    expect(html).toContain('기준관리')
-    expect(html).toContain('Total 6 items')
-    expect(textOf(html)).toContain('Resolution rate by area')
   })
 
   it('타일 상태 점은 ISSUE_STATUSES 순(열림→진행중→해결→보류)이고 title·sr-only 가 건수를 글로 나른다', () => {

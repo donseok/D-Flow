@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   getProjectMeetingData: vi.fn(),
   getAnnouncements: vi.fn(),
   getActorForView: vi.fn(),
-  getServerLocale: vi.fn(async (): Promise<'ko' | 'en'> => 'ko'),
+  getServerLocale: vi.fn(async (): Promise<'ko'> => 'ko'),
   // 셸은 받은 props 를 기록하고 pinned·본문만 그린다 — 머리는 props 로 검사한다.
   ProjectPageShell: vi.fn(({ pinned, children }: { pinned?: ReactNode; children: ReactNode }) => <>{pinned}{children}</>),
   MeetingsView: vi.fn<(props: Record<string, unknown>) => null>(() => null),
@@ -51,11 +51,9 @@ import MeetingsPage from '@/app/(app)/p/[projectId]/meetings/page'
 import AnnouncementsPage from '@/app/(app)/p/[projectId]/announcements/page'
 import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
 import { ERR_ANNOUNCEMENTS_LOAD } from '@/lib/data/announcements'
-import { registerEn, t } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
+import { t } from '@/lib/i18n/dict'
 import { PageHeader } from '@/components/app/PageHeader'
 
-registerEn(EN)
 
 const params = Promise.resolve({ projectId: PID })
 /** 셸에 넘긴 머리(PageHeader)의 props 전체 — 제목·설명 말고는 없어야 한다(조회 결과에서 나온 수치가 실리지 않는다). */
@@ -85,14 +83,6 @@ describe('회의 화면 — 회의 조회 실패', () => {
     expect(headerProps()).toEqual(MEET_HEADER)
   })
 
-  it('영어 화면이면 사유는 영어 사전 문구 — 로더의 한국어 ERR_MEETINGS_LOAD 가 새지 않는다', async () => {
-    mocks.getServerLocale.mockResolvedValueOnce('en')
-    mocks.getProjectMeetingData.mockResolvedValue({ ok: false, error: ERR_MEETINGS_LOAD })
-    const html = renderToStaticMarkup((await MeetingsPage({ params })) as ReactElement)
-    expect(html).toContain(t('en', 'common.loadFailed.meetings'))
-    expect(html).not.toContain(ERR_MEETINGS_LOAD)
-  })
-
   it('정상은 사유 없이 회의를 넘기고 머리는 제목·설명 그대로', async () => {
     mocks.getProjectMeetingData.mockResolvedValue({ ok: true, meetings: [], exceptions: [] })
     const html = renderToStaticMarkup((await MeetingsPage({ params })) as ReactElement)
@@ -110,14 +100,6 @@ describe('공지 화면 — 공지 조회 실패', () => {
     expect(html).toContain(t('ko', 'common.loadFailed.announcements'))
     expect(mocks.AnnouncementsView).not.toHaveBeenCalled()
     expect(headerProps()).toEqual(ANN_HEADER)
-  })
-
-  it('영어 화면이면 사유는 영어 사전 문구 — 로더의 한국어 ERR_ANNOUNCEMENTS_LOAD 가 새지 않는다', async () => {
-    mocks.getServerLocale.mockResolvedValueOnce('en')
-    mocks.getAnnouncements.mockResolvedValue({ ok: false, error: ERR_ANNOUNCEMENTS_LOAD })
-    const html = renderToStaticMarkup((await AnnouncementsPage({ params })) as ReactElement)
-    expect(html).toContain(t('en', 'common.loadFailed.announcements'))
-    expect(html).not.toContain(ERR_ANNOUNCEMENTS_LOAD)
   })
 
   it('정상은 사유 없이 공지를 넘기고 머리는 제목·설명 그대로', async () => {

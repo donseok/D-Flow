@@ -38,9 +38,9 @@ beforeEach(() => {
 
 describe('saveUiPrefs — 계정 키는 account_preferences, 워크스페이스 키는 그 워크스페이스 행(D9)', () => {
   it('계정 키 병합 upsert', async () => {
-    h.createServerClient.mockResolvedValue(db({ account_preferences: { locale: 'en' } }))
+    h.createServerClient.mockResolvedValue(db({ account_preferences: { sidebarCollapsed: true } }))
     expect(await saveUiPrefs({ theme: 'dark' })).toEqual({ ok: true })
-    expect(h.ops).toEqual([['account_preferences', { locale: 'en', theme: 'dark' }, null, { onConflict: 'user_id' }]])
+    expect(h.ops).toEqual([['account_preferences', { sidebarCollapsed: true, theme: 'dark' }, null, { onConflict: 'user_id' }]])
     expect(h.eqs).toEqual({ account_preferences: [['user_id', 'u1']] })
   })
   it('워크스페이스 키는 본문의 workspaceId 행에만(쿠키를 읽지 않는다 — Review Focus 4)', async () => {

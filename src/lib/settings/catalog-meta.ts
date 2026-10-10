@@ -223,7 +223,7 @@ export const PLANNED_KEYS: readonly { key: string; scope: SettingScope; sp: stri
 /** 개인 설정(개정 §2.8.5) — 계정 키는 계정 행, 워크스페이스 키는 그 워크스페이스의 개인 행(SP3b D9 — 키 목록의 정본은 prefs 의 split.ts).
  *  표 이름을 여기 적지 않는다 — 설정 해석기 쪽 파일은 개인 설정 저장소 이름을 원문에 두지 않는다(tests/settings/project-isolation) */
 export const PERSONAL_PREFS: readonly { key: string; desc: string; scope: '계정' | '워크스페이스' }[] = [
-  { key: 'theme', desc: '시스템·라이트·다크', scope: '계정' }, { key: 'locale', desc: 'ko·en', scope: '계정' },
+  { key: 'theme', desc: '시스템·라이트·다크', scope: '계정' },
   { key: 'sidebarCollapsed', desc: '사이드바 접기', scope: '계정' }, { key: 'dashSections', desc: '대시보드 구역', scope: '계정' },
   { key: 'minutesView', desc: '회의록 보기', scope: '계정' }, { key: 'minuteFontSize', desc: '회의록 글자 크기', scope: '계정' },
   { key: 'minutesExplorerLayout', desc: '회의록 탐색기 배치', scope: '계정' }, { key: 'wbsHideDone', desc: 'WBS 완료 숨김', scope: '계정' },

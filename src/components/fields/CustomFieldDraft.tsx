@@ -2,14 +2,12 @@
 import { CustomFieldInput } from './CustomFieldInput'
 import { formatCustomValue, orderedFields, type CustomValues, type FieldDef, type FieldValue } from '@/lib/domain/customFields'
 import type { FieldRowError } from '@/lib/domain/customFieldValues'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
 /** Controlled fields for a parent form's single atomic row save. */
 export function CustomFieldDraft({ defs, values, base, canAdmin, creating, disabled, locale, errors, onChange }: {
   defs: FieldDef[]; values: CustomValues; base: CustomValues; canAdmin: boolean; creating: boolean; disabled: boolean; locale: Locale
   errors: Record<string, FieldRowError>; onChange: (key: string, value: FieldValue | undefined) => void
 }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const tr = (k: DictKey) => translate(locale, k)
   const fields = orderedFields(defs).filter(d => d.active || Object.hasOwn(values,d.key) || Object.hasOwn(base,d.key))
   if (!fields.length) return null

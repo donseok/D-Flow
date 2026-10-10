@@ -1,4 +1,5 @@
-// 화면 파일(src/components·src/app 의 .tsx)에 한국어 리터럴이 되돌아오지 못하게 한다 — 영어 로캘에서 한국어가 새는 것을 막는다(i18n 1·2차).
+// 화면 파일(src/components·src/app 의 .tsx)에 한국어 리터럴이 되돌아오지 못하게 한다(i18n 1·2차).
+// 제품은 한국어 전용이지만(2026-10-10 결정) 문구는 화면 파일에 흩지 않고 한 곳에 모은다 — 사전을 문자열 표로 쓴다.
 // 화면 글자는 사전(src/lib/i18n/dict/*)에 두고 `useLocale().t`(서버 화면은 `t(locale, …)`)로 읽는다.
 // TS 파서로 리터럴(문자열·템플릿 조각·JSX 글자)만 본다 — 주석은 보지 않는다. 다음은 검사 대상이 아니다:
 //   · `console.*(…)` 의 인자와 `throw …` 문(개발자용 문구), `data-*` 속성 값(표지)
@@ -10,8 +11,6 @@ import { join, relative } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { walk } from './_walk'
-import { KO } from '@/lib/i18n/dict/ko'
-import { EN } from '@/lib/i18n/dict/en'
 
 const ROOT = process.cwd()
 const DIRS = ['src/components', 'src/app']
@@ -29,8 +28,7 @@ const ALLOW: Readonly<Record<string, { why: string; max: number }>> = {
   'src/components/kanban/KanbanBoard.tsx': { why: '도메인이 만드는 한국어 컬럼 제목 → 사전 키 대응 표의 키(COLUMN_TITLE_KEY)', max: 9 },
   'src/app/(app)/p/[projectId]/settings/page.tsx': { why: '설정 검색 색인 낱말(searchText — 화면에 보이지 않는다, ko·en 낱말 혼합)', max: 22 },
   'src/app/(app)/w/[slug]/settings/page.tsx': { why: '설정 검색 색인 낱말(searchText — 화면에 보이지 않는다, ko·en 낱말 혼합)', max: 9 },
-  // ── 번역하지 않는 글자 ──
-  'src/components/account/AccountView.tsx': { why: '언어 선택의 언어 이름(한국어 — 그 언어로 적는다)', max: 1 },
+  // ── 옮기지 않는 글자 ──
   'src/components/admin/UiStatesShowcase.tsx': { why: '플랫폼 관리자용 상태 견본 화면의 견본 문구(점검 화면 — 옮기지 않는다)', max: 119 },
   // ── 미이전(다음 차) ──
   'src/app/layout.tsx': { why: '미이전 — 루트 레이아웃(UI 위험 파일)의 정적 metadata 설명', max: 1 },
@@ -78,7 +76,7 @@ describe('화면 파일의 한국어 리터럴 — 사전을 거치지 않는 �
     expect(HITS.has('src/components/admin/UiStatesShowcase.tsx')).toBe(true)
   })
 
-  it('예외 목록 밖의 .tsx 에 한국어 리터럴이 없다 — 사전 키로 옮긴다(ko·en 둘 다)', () => {
+  it('예외 목록 밖의 .tsx 에 한국어 리터럴이 없다 — 사전 키로 옮긴다', () => {
     const found: string[] = []
     for (const [file, hits] of HITS) {
       if (file in ALLOW) continue
@@ -116,21 +114,5 @@ describe('화면 파일의 한국어 리터럴 — 사전을 거치지 않는 �
       if (window.confirm('지울까요?')) run()
       const c = \`완료 \${done}/\${total}\``
     expect(koreanLiterals('sample.tsx', sample).map(h => h.text)).toEqual(['"제목"', '글자', '건', '} 이름`', "'저장했습니다'", "'지울까요?'", '`완료 ${'])
-  })
-})
-
-describe('사전 — ko·en 의 키 집합이 같다', () => {
-  it('한쪽에만 있는 키가 없다(영어 화면에 한국어 폴백이 섞이지 않는다)', () => {
-    const ko = new Set(Object.keys(KO)), en = new Set(Object.keys(EN))
-    const onlyKo = [...ko].filter(k => !en.has(k)), onlyEn = [...en].filter(k => !ko.has(k))
-    expect(onlyKo, `ko 에만: ${onlyKo.slice(0, 20).join(', ')}`).toEqual([])
-    expect(onlyEn, `en 에만: ${onlyEn.slice(0, 20).join(', ')}`).toEqual([])
-  })
-
-  it('치환 자리({이름})의 집합이 ko·en 에서 같다(한쪽에서 값이 빠지지 않는다)', () => {
-    const slots = (s: string) => [...new Set(s.match(/\{\w+\}/g) ?? [])].sort().join(',')
-    const en = EN as Record<string, string>
-    const diff = Object.entries(KO as Record<string, string>).filter(([k, v]) => k in en && slots(v) !== slots(en[k])).map(([k, v]) => `${k}: ko[${slots(v)}] en[${slots(en[k])}]`)
-    expect(diff, diff.join('\n')).toEqual([])
   })
 })

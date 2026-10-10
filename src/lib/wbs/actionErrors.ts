@@ -1,6 +1,6 @@
 // WBS 실적·가중치·Phase 추가 액션이 돌려주는 고정 문구와 그 사전 키(SP4 D21·D52 — H2 src/lib/attachments/removeErrors.ts 꼴).
 // 서버 전용 코드가 없는 모듈이라 클라이언트가 import 한다. 액션은 한국어 문구를 돌려주고(계약 { ok, error } 유지), 화면은 그리는 자리에서
-// 사전 문구를 고른다 — 받은 문구를 그대로 그리면 영어 화면에 한국어가 뜬다. 표에 없는 문구는 null — 화면의 일반 키로 떨어진다.
+// 사전 문구를 고른다 — 화면 문구의 출처는 사전 하나다. 표에 없는 문구는 null — 화면의 일반 키로 떨어진다.
 import type { DictKey } from '@/lib/i18n/dict'
 import { guardCodeOf, type GuardCode } from '@/lib/authz/errors'
 

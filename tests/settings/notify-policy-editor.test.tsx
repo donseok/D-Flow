@@ -7,12 +7,11 @@ vi.mock('@/app/actions/settings', () => ({ updateWorkspaceSettings: h.update, up
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: h.refresh }) }))
 vi.mock('@/components/providers/LocaleProvider', async () => {
   const { KO } = await import('@/lib/i18n/dict/ko')
-  return { useLocale: () => ({ t: (k: string) => (KO as Record<string, string>)[k] ?? k, locale: 'ko', setLocale: vi.fn() }) }
+  return { useLocale: () => ({ t: (k: string) => (KO as Record<string, string>)[k] ?? k, locale: 'ko' }) }
 })
 import { NotifyPolicyEditor } from '@/components/settings/NotifyPolicyEditor'
 import { NOTIFICATION_CATALOG, type NotificationType } from '@/lib/domain/inbox'
 import { KO } from '@/lib/i18n/dict/ko'
-import { settingsEn } from '@/lib/i18n/dict/settings.en'
 
 const WS = '00000000-0000-0000-7e57-000000001920'
 const TYPES = Object.keys(NOTIFICATION_CATALOG) as NotificationType[]
@@ -118,27 +117,21 @@ describe('NotifyPolicyEditor', () => {
     await waitFor(() => expect(h.update).toHaveBeenCalledTimes(1))
     expect(h.update.mock.calls[0][1].set).toEqual({ 'notify.policy': {} })
   })
-  it('카탈로그의 모든 유형에 정책용 이름이 ko·en 둘 다 있고, 받는 사람 시점 문구("나에게"·"me")가 아니다', () => {
+  it('카탈로그의 모든 유형에 정책용 이름이 있고, 받는 사람 시점 문구("나에게")가 아니다', () => {
     for (const type of TYPES) {
       const key = `settings.notify.policy.type.${type}`
       const ko = (KO as Record<string, string>)[key]
-      const en = (settingsEn as Record<string, string>)[key]
       expect(ko, key).toBeTruthy()
-      expect(en, key).toBeTruthy()
       expect(ko, key).not.toMatch(/나에게|나를|내가/)
-      expect(en, key).not.toMatch(/\b(me|my|I)\b/)
     }
     // 카탈로그에서 빠진 유형의 문구가 사전에 남지 않는다
     const prefix = 'settings.notify.policy.type.'
-    for (const dict of [KO as Record<string, string>, settingsEn as Record<string, string>]) {
-      expect(Object.keys(dict).filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length)).sort()).toEqual([...TYPES].sort())
-    }
+    expect(Object.keys(KO).filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length)).sort()).toEqual([...TYPES].sort())
   })
-  it('편집기 문구는 ko·en 사전에 둘 다 있다', () => {
+  it('편집기 문구가 사전에 있다', () => {
     for (const k of ['label', 'desc', 'requiredReason', 'personalNote', 'allOn', 'offList', 'corrupted', 'save', 'saveRetry']) {
       const key = `settings.notify.policy.${k}`
       expect((KO as Record<string, string>)[key], key).toBeTruthy()
-      expect((settingsEn as Record<string, string>)[key], key).toBeTruthy()
     }
   })
 })

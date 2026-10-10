@@ -28,6 +28,7 @@ import type {
 import { WikiItemActions } from './WikiItemActions'
 import { WikiTrackedLink } from './WikiTrackedLink'
 import { MINUTES_PERMALINK_BASE } from '@/lib/minutes/permalink'
+import { intlLocale } from '@/lib/i18n/format'
 
 /**
  * 회의록 원문 블록 링크. lib/minutes/source의 minuteSourceHref와 같은 형식이지만 직접 만든다.
@@ -228,7 +229,7 @@ export function formatWikiDate(
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
   const parsed = new Date(dateOnly ? `${value}T00:00:00Z` : value)
   if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

@@ -120,7 +120,7 @@ export async function getChangeLogs(itemId: string): Promise<ChangeLogEntry[]> {
  *  'use server' 파일이라 export 하지 않는다. */
 const ACTUAL_LOCKED_MSG = '완료는 승인 버튼으로 처리합니다 — 에이전트 관할 작업(위임됨·작업 중·검수 대기)은 99% 까지 입력할 수 있습니다. 직접 완료하려면 위임을 끄세요.'
 /** 잠금 거부 — 두 자리(앱 판정·DB 가드)가 같은 결과를 낸다. code 는 화면이 사전 문구(wbs.actualLocked)를 고르는 사유다:
- *  문구를 그대로 그리면 영어 화면에 한국어 토스트가 뜬다. 문구는 챗봇 등 code 를 모르는 호출부를 위해 그대로 싣는다. */
+ *  화면 문구의 출처는 사전 하나다. 문구는 챗봇 등 code 를 모르는 호출부를 위해 그대로 싣는다. */
 const ACTUAL_LOCKED = { ok: false, error: ACTUAL_LOCKED_MSG, code: 'actual_locked' } as const
 
 // DB 원문은 로그로만(SP4 D21) — 응답에는 기능별 고정 문구. 실적·가중치·Phase 추가(updateActual·updateWeight·addWbsItem)가 쓰는 문구는

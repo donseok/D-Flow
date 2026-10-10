@@ -13,7 +13,6 @@ vi.mock('next/link', () => ({ default: ({ children, href }: { children: ReactNod
 vi.mock('@/app/actions/importBackup', () => ({ getWbsBackup: vi.fn() }))   // 마법사가 import 하는 서버 액션 — 이 테스트는 append 만 돈다
 
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
-import { ensureEnLoaded } from '@/lib/i18n/dict'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ImportWizard } from '@/components/import/ImportWizard'
 
@@ -81,7 +80,7 @@ describe('ImportWizard — 저장 양식·파일 구조 불일치', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     await act(async () => root.render(
-      <LocaleProvider initialLocale="ko"><ToastProvider>
+      <LocaleProvider><ToastProvider>
         <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} timeZone="UTC" />
       </ToastProvider></LocaleProvider>,
     ))
@@ -157,25 +156,4 @@ describe('ImportWizard — 저장 양식·파일 구조 불일치', () => {
     expect(container.textContent).toContain('저장된 양식과 대조할 수 없습니다')
   })
 
-  it('영어 화면에서는 409 PROFILE_MISMATCH 사유를 영어로 보인다', async () => {
-    await ensureEnLoaded()   // EN 사전은 지연 청크다
-    act(() => root.unmount())
-    root = createRoot(container)
-    await act(async () => root.render(
-      <LocaleProvider initialLocale="en"><ToastProvider>
-        <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} timeZone="UTC" />
-      </ToastProvider></LocaleProvider>,
-    ))
-    executeResponse = () => new Response(
-      JSON.stringify({ code: 'PROFILE_MISMATCH', error: '저장된 엑셀 양식과 파일 구조가 다릅니다(서버)', profileMismatch: MISMATCH }),
-      { status: 409 },
-    )
-    const input = container.querySelector<HTMLInputElement>('input[type=file]')!
-    Object.defineProperty(input, 'files', { value: [new File(['x'], 'wbs.xlsx')], configurable: true })
-    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); await Promise.resolve() })
-    await click(button('Analyze layout')!)
-    await click(button('Run import')!)
-    expect(document.body.textContent).not.toContain('(서버)')
-    expect(container.textContent).toContain('would take values from the wrong columns')
-  })
 })

@@ -1,6 +1,6 @@
 // 서버가 만들어 화면에 그대로 보이는 문구(서버 액션·내부 API 의 error·message·warning·notice)에 한국어 리터럴이 되돌아오지 못하게 한다(i18n 3차).
-// 문구는 사전(src/lib/i18n/dict/serverUi*.ts)에 두고 `const t = await serverTranslator()` 로 읽는다 — 요청의 로캘 쿠키를 따르고,
-// 요청 범위 밖(워커·단위 테스트)에서는 한국어다. TS 파서로 본다(주석은 보지 않는다):
+// 제품은 한국어 전용이지만(2026-10-10 결정) 문구는 리터럴로 흩지 않고 사전(src/lib/i18n/dict/serverUi.ts) 한 곳에 둔다 —
+// `const t = await serverTranslator()` 로 읽는다. TS 파서로 본다(주석은 보지 않는다):
 //   ① `error`·`message`·`warning`·`notice` 속성의 값에 한국어 문자열 리터럴(템플릿 포함)이 직접 온다 — `a ? '…' : '…'`·`x ?? '…'`·`'…' + y` 도 따라가 본다.
 //      호출 인자는 보지 않는다(`failWith('로그 머리', err, t(…))` 의 머리는 로그다).
 //   ② 내부 API 라우트의 응답 도우미(`jsonError`·`apiFail`·`apiBadRequest`·`apiInternalError`)에 한국어 리터럴을 직접 넘긴다.
@@ -12,12 +12,8 @@ import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { walk } from './_walk'
 import { KO } from '@/lib/i18n/dict/ko'
-import { EN } from '@/lib/i18n/dict/en'
-import { SERVER_EN, SERVER_KO, serverKoTranslate, serverTranslatorFor } from '@/lib/i18n/serverDict'
-import { libText } from '@/lib/i18n/serverText'
+import { SERVER_KO, serverKoTranslate } from '@/lib/i18n/serverDict'
 import { CONFIG_MESSAGES, CONFIG_TEXT_KEY, IN_USE_KO, configText, inUseFieldErrors, mapDbError } from '@/lib/settings/errors'
-import { REASON_TEXT, SKIPPED_WARN, ERR_TRANSITION_RPC } from '@/lib/agent/workflowEvent'
-import * as teamOps from '@/lib/teams/teamOps'
 import { ERR_DENIED } from '@/lib/authz/errors'
 
 const ROOT = process.cwd()
@@ -107,149 +103,43 @@ describe('서버 문구 — 액션·내부 API 의 error·message·warning·noti
   })
 })
 
-/** 문구 자리에 감싸지 않고 와도 되는 lib 상수의 출처 — 화면이 문구 → 키 표로 직접 고르는 문구. 가드 결과(@/lib/authz/errors)는 4차부터 예외가 아니다(libText·guardText 로 감싼다) */
-const RAW_CONST_SOURCES: ReadonlySet<string> = new Set(['@/lib/wbs/actionErrors', '@/lib/attachments/removeErrors'])
-/** 표에 상수를 그대로 실어 두고 쓰는 자리에서 푸는 곳(닫힌 목록) */
-const RAW_CONST_ALLOW: Readonly<Record<string, { why: string; names: readonly string[] }>> = {
-  'src/app/actions/projectAreas.ts': { why: 'AREA_TOKENS 표의 message — 응답에 실을 때 libText(tr, f.message) 로 푼다. 가드 문구는 rpcFailure·tokenTable 이 guardTextBy 로 푼다', names: ['ERR_AREA_CODE_IMMUTABLE', 'ERR_ISSUE_AREA_CODE', 'ERR_DENIED', 'ERR_MISSING'] },
-  'src/app/api/import/execute/route.ts': { why: 'RPC_TOKENS 표의 message — rpcFail 이 configText 로, 가드 문구는 rpcFailure(err, own, tr) 가 guardTextBy 로 풀어 넘긴다', names: ['ERR_COMMAND_REUSED', 'ERR_DENIED', 'ERR_MISSING'] },
-  'src/app/actions/projectTeams.ts': { why: 'CONVERT_TOKENS 표의 가드 문구 — rpcFailure(err, own, t) 가 guardTextBy 로 푼다', names: ['ERR_DENIED', 'ERR_MISSING'] },
-  'src/app/actions/weekly.ts': { why: 'CREATE_TOKENS 표의 가드 문구 — rpcFailure(err, own, tr) 가 guardTextBy 로 푼다', names: ['ERR_DENIED', 'ERR_MISSING'] },
-}
-
-/** 문구 속성의 값으로 감싸지 않은 채 오는 lib 의 대문자 상수(`ERR_X`·`REASON_TEXT.x`) — [이름, 출처] */
-function rawLibConstants(file: string, source: string): [string, string][] {
-  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
-  const from = new Map<string, string>()
-  for (const st of sf.statements) {
-    if (ts.isImportDeclaration(st) && ts.isStringLiteral(st.moduleSpecifier) && st.importClause?.namedBindings && ts.isNamedImports(st.importClause.namedBindings)) {
-      for (const el of st.importClause.namedBindings.elements) from.set(el.name.text, st.moduleSpecifier.text)
-    }
-  }
-  const out: [string, string][] = []
-  const direct = (e: ts.Expression): void => {
-    const id = ts.isIdentifier(e) ? e : (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e)) && ts.isIdentifier(e.expression) ? e.expression : null
-    if (id) { const src = from.get(id.text); if (/^[A-Z][A-Z0-9_]+$/.test(id.text) && src?.startsWith('@/lib/')) out.push([id.text, src]); return }
-    if (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isNonNullExpression(e)) return direct(e.expression)
-    if (ts.isConditionalExpression(e)) { direct(e.whenTrue); direct(e.whenFalse); return }
-    if (ts.isBinaryExpression(e)) { direct(e.left); direct(e.right) }
-  }
-  const visit = (n: ts.Node): void => {
-    if (ts.isPropertyAssignment(n) && PROPS.has(n.name.getText(sf))) direct(n.initializer)
-    ts.forEachChild(n, visit)
-  }
-  visit(sf)
-  return out
-}
-
-describe('서버 문구 — lib 의 한국어 문구 상수를 감싸지 않고 응답에 싣지 않는다', () => {
-  const RAW = new Map<string, [string, string][]>()
-  for (const f of FILES) {
-    const hits = rawLibConstants(f, readFileSync(f, 'utf8')).filter(([, src]) => !RAW_CONST_SOURCES.has(src))
-    if (hits.length) RAW.set(relative(ROOT, f), hits)
-  }
-
-  it('문구 속성에 오는 lib 상수는 libText·configText·textBy 로 감싼다(가드 결과·화면 대응 표의 문구는 예외)', () => {
-    const found: string[] = []
-    for (const [file, hits] of RAW) for (const [name, src] of hits) {
-      if (RAW_CONST_ALLOW[file]?.names.includes(name)) continue
-      found.push(`${file}: ${name} (${src})`)
-    }
-    expect(found, found.join('\n')).toEqual([])
-  })
-
-  it('예외는 실제로 쓰이고 있다(죽은 예외 금지)', () => {
-    const dead = Object.entries(RAW_CONST_ALLOW).flatMap(([file, { names }]) => names.filter(n => !RAW.get(file)?.some(([name]) => name === n)).map(n => `${file}: ${n}`))
-    expect(dead, dead.join('\n')).toEqual([])
-  })
-
-  it('검사식 — 맨 상수·표 접근은 잡고, 감싼 것·지역 상수·소문자 이름은 잡지 않는다', () => {
-    const sample = `
-      import { ERR_TEAM_MERGE } from '@/lib/teams/teamOps'
-      import { REASON_TEXT } from '@/lib/agent/workflowEvent'
-      import { ERR_DENIED } from '@/lib/authz/errors'
-      const ERR_LOCAL = 'srv.x'
-      const a = { error: ERR_TEAM_MERGE, warning: ok ? REASON_TEXT.conflict : libText(t, ERR_TEAM_MERGE), message: ERR_DENIED, notice: t(ERR_LOCAL) }`
-    expect(rawLibConstants('sample.ts', sample)).toEqual([['ERR_TEAM_MERGE', '@/lib/teams/teamOps'], ['REASON_TEXT', '@/lib/agent/workflowEvent'], ['ERR_DENIED', '@/lib/authz/errors']])
-  })
-})
-
-describe('lib 고정 문구 — 상수는 한국어 그대로, 화면에 내보낼 때 사전에서 거꾸로 찾는다', () => {
-  const en = serverTranslatorFor('en')
-  const libKeys = (Object.entries(SERVER_KO) as [string, string][]).filter(([k]) => k.startsWith('srv.lib.'))
-
-  it('사전의 srv.lib.* 문구는 lib 원문에 그대로 있다(lib 문구를 고치면 사전도 같이 고친다 — 어긋나면 영어 화면에 한국어가 샌다)', () => {
-    expect(libKeys.length).toBeGreaterThan(100)
-    const sources = walk(join(ROOT, 'src/lib'), undefined, /\.tsx?$/).filter(f => !f.includes('/i18n/dict/')).map(f => readFileSync(f, 'utf8')).filter(s => HANGUL.test(s))
-    // 원문의 따옴표 이스케이프(\\')를 풀어 대조한다
-    const flat = sources.map(s => s.replace(/\\'/g, "'")).join('\n')
-    const gone = libKeys.filter(([, text]) => !flat.includes(text)).map(([k, text]) => `${k}: ${text}`)
-    expect(gone, gone.join('\n')).toEqual([])
-  })
-
-  it('libText 는 표에 있는 문구(가드 결과 포함)를 요청의 언어로 바꾸고, 없는 문구·빈 값은 그대로 둔다', () => {
-    expect(libText(en, ERR_TRANSITION_RPC)).not.toMatch(HANGUL)
-    expect(libText(serverKoTranslate, ERR_TRANSITION_RPC)).toBe(ERR_TRANSITION_RPC)
-    expect(libText(en, ERR_DENIED)).toBe('No permission')     // 가드 결과도 푼다(4차 — 비교는 guardCodeOf 로 옮겨졌다)
-    expect(libText(serverKoTranslate, ERR_DENIED)).toBe(ERR_DENIED)
-    expect(libText(en, 'duplicate key value')).toBe('duplicate key value')
-    expect(libText(en, null)).toBeNull()
-    expect(libText(en, undefined)).toBeUndefined()
-  })
-
-  it('이름으로 가져다 쓰는 lib 문구 표는 빠짐없이 영어로 풀린다(워크플로 사유·경고, 팀 조작)', () => {
-    const texts = [
-      ...Object.entries(REASON_TEXT).filter(([code]) => code !== 'item_not_found').map(([, v]) => v),   // '항목 없음' 은 화면이 wbsErrorKey 로 고른다
-      ...Object.values(SKIPPED_WARN),
-      ...Object.entries(teamOps).filter(([name, v]) => /^(ERR|NOTICE)_/.test(name) && typeof v === 'string').map(([, v]) => v as string),
-    ]
-    expect(texts.length).toBeGreaterThan(30)
-    const leaked = texts.filter(text => HANGUL.test(libText(en, text) ?? ''))
-    expect(leaked, leaked.join('\n')).toEqual([])
-  })
-
-  it('설정 계열 고정 문구(CONFIG_MESSAGES·mapDbError)는 configText·t 인자로 영어가 되고, 인자를 넘기지 않으면 종전 한국어다', () => {
+describe('설정 계열 고정 문구 — 상수와 서버 사전(err.config.*)의 글자가 같다', () => {
+  it('CONFIG_MESSAGES 의 문구는 모두 사전 키가 있고, configText·mapDbError 는 t 를 넘기든 아니든 같은 글자를 낸다', () => {
     for (const text of Object.values(CONFIG_MESSAGES)) {
       expect(Object.hasOwn(CONFIG_TEXT_KEY, text), text).toBe(true)
-      expect(configText(en, text)).not.toMatch(HANGUL)
+      expect(configText(serverKoTranslate, text)).toBe(text)
     }
     const busy = { code: '40P01', message: 'deadlock detected' }
     expect(mapDbError(busy)?.message).toBe(CONFIG_MESSAGES.CONFIG_BUSY)
-    expect(mapDbError(busy, en)?.message).not.toMatch(HANGUL)
-    expect(mapDbError({ message: 'WEEKLY_AREAS_REQUIRED: x' }, en)?.message).not.toMatch(HANGUL)
-    expect(mapDbError({ message: 'WORKFLOW_COLUMNS_RPC_ONLY' }, en)?.message).toBe('No permission')   // 가드 문구도 화면 언어로(4차)
+    expect(mapDbError(busy, serverKoTranslate)?.message).toBe(CONFIG_MESSAGES.CONFIG_BUSY)
+    expect(mapDbError({ message: 'WORKFLOW_COLUMNS_RPC_ONLY' }, serverKoTranslate)?.message).toBe(ERR_DENIED)
     expect(mapDbError({ message: 'WORKFLOW_COLUMNS_RPC_ONLY' })?.message).toBe(ERR_DENIED)
   })
 })
 
-describe('서버 사전 — 클라이언트 번들에 실리지 않고, ko·en 이 맞는다', () => {
-  const SERVER_MODULES = /from '(@\/lib\/i18n\/|\.\.?\/(dict\/)?)(serverDict|serverText|server|serverUi|serverUi\.en)'/
+describe('서버 사전 — 클라이언트 번들에 실리지 않는다', () => {
+  const SERVER_MODULES = /from '(@\/lib\/i18n\/|\.\.?\/(dict\/)?)(serverDict|serverText|server|serverUi)'/
   /** 값 import 만 — `import type …` 은 번들에 남지 않는다 */
   const valueImports = (source: string): string[] => source.split('\n').filter(l => /^\s*import\b/.test(l) && !/^\s*import type\b/.test(l) && SERVER_MODULES.test(l))
 
-  it('서버 키와 공용 키는 겹치지 않고, 공용 사전(ko.ts·en.ts)에는 서버 문구가 없다', () => {
-    const both = Object.keys(SERVER_KO).filter(k => k in KO || k in EN)
+  it('서버 키와 공용 키는 겹치지 않고, 공용 사전(ko.ts)에는 서버 문구가 없다', () => {
+    const both = Object.keys(SERVER_KO).filter(k => k in KO)
     expect(both, both.join(', ')).toEqual([])
-    expect(Object.keys(SERVER_KO).length).toBeGreaterThan(800)
+    expect(Object.keys(SERVER_KO).length).toBeGreaterThan(500)
   })
 
-  it('ko·en 의 키 집합과 치환 자리({이름})가 같다', () => {
-    const ko = SERVER_KO as Record<string, string>, en = SERVER_EN as Record<string, string>
-    expect(Object.keys(ko).filter(k => !(k in en))).toEqual([])
-    expect(Object.keys(en).filter(k => !(k in ko))).toEqual([])
-    const slots = (s: string) => [...new Set(s.match(/\{\w+\}/g) ?? [])].sort().join(',')
-    const diff = Object.entries(ko).filter(([k, v]) => slots(v) !== slots(en[k])).map(([k, v]) => `${k}: ko[${slots(v)}] en[${slots(en[k])}]`)
-    expect(diff, diff.join('\n')).toEqual([])
-  })
-
-  it('폴백(요청 범위 밖)도 서버 키를 한국어 문구로 푼다 — 키가 그대로 새지 않는다', () => {
+  it('서버 번역 함수는 서버 키도 공용 키도 문구로 푼다 — 키가 그대로 새지 않는다', () => {
     expect(serverKoTranslate('err.config.busy')).toBe(CONFIG_MESSAGES.CONFIG_BUSY)
-    expect(serverTranslatorFor('en')('err.config.busy')).not.toMatch(HANGUL)
-    expect(serverKoTranslate('common.none')).toBe(KO['common.none'])   // 공용 키도 같은 함수로
+    expect(serverKoTranslate('common.none')).toBe(KO['common.none'])
   })
 
-  it('클라이언트 쪽 사전 진입점(dict.ts·dict/ko.ts·dict/en.ts·translate.ts)은 서버 사전·서버 번역 모듈을 가져오지 않는다', () => {
-    for (const f of ['src/lib/i18n/dict.ts', 'src/lib/i18n/dict/ko.ts', 'src/lib/i18n/dict/en.ts', 'src/lib/i18n/translate.ts', 'src/lib/i18n/format.ts', 'src/lib/i18n/particle.ts']) {
+  it('영어 사전 파일을 다시 만들지 않는다(제품은 한국어 전용 — 2026-10-10 결정)', () => {
+    const en = walk(join(ROOT, 'src/lib/i18n'), undefined, /\.ts$/).filter(f => /(\.en\.ts|\/en\.ts)$/.test(f)).map(f => relative(ROOT, f))
+    expect(en).toEqual([])
+  })
+
+  it('클라이언트 쪽 사전 진입점(dict.ts·dict/ko.ts·translate.ts)은 서버 사전·서버 번역 모듈을 가져오지 않는다', () => {
+    for (const f of ['src/lib/i18n/dict.ts', 'src/lib/i18n/dict/ko.ts', 'src/lib/i18n/translate.ts', 'src/lib/i18n/format.ts', 'src/lib/i18n/particle.ts']) {
       expect(readFileSync(join(ROOT, f), 'utf8').split('\n').filter(l => /^\s*import\b/.test(l) && SERVER_MODULES.test(l)), f).toEqual([])
     }
   })
@@ -263,64 +153,16 @@ describe('서버 사전 — 클라이언트 번들에 실리지 않고, ko·en �
   })
 
   it('서버 사전을 값으로 가져오는 곳은 서버 전용 모듈뿐이다(src 전체 — 닫힌 목록)', () => {
-    const importers = walk(join(ROOT, 'src')).filter(f => /from '[^']*(serverDict|dict\/serverUi(\.en)?|\.\/serverUi(\.en)?)'/.test(
+    const importers = walk(join(ROOT, 'src')).filter(f => /from '[^']*(serverDict|dict\/serverUi|\.\/serverUi)'/.test(
       readFileSync(f, 'utf8').split('\n').filter(l => !/^\s*import type\b/.test(l)).join('\n'))).map(f => relative(ROOT, f)).sort()
-    expect(importers).toEqual(['src/lib/i18n/server.ts', 'src/lib/i18n/serverDict.ts', 'src/lib/i18n/serverText.ts'])
-    for (const f of ['src/lib/i18n/serverDict.ts', 'src/lib/i18n/serverText.ts']) expect(readFileSync(join(ROOT, f), 'utf8'), f).toMatch(/^import 'server-only'$/m)
+    expect(importers).toEqual(['src/lib/i18n/server.ts', 'src/lib/i18n/serverDict.ts'])
+    expect(readFileSync(join(ROOT, 'src/lib/i18n/serverDict.ts'), 'utf8')).toMatch(/^import 'server-only'$/m)
+    expect(readFileSync(join(ROOT, 'src/lib/i18n/serverText.ts'), 'utf8')).toMatch(/^import 'server-only'$/m)
   })
 
-  it('설정의 사용 중 거부 문구 — 한국어 폴백 틀과 서버 사전의 글자가 같고, t 를 넘기면 영어다', () => {
+  it('설정의 사용 중 거부 문구 — 폴백 틀과 서버 사전의 글자가 같다', () => {
     for (const [key, text] of Object.entries(IN_USE_KO)) expect((SERVER_KO as Record<string, string>)[key], key).toBe(text)
     const detail = JSON.stringify({ key: 'attendance.types', code: 'x', count: 3, reason: 'removed' })
-    expect(inUseFieldErrors(detail)[0].message).toMatch(HANGUL)
-    expect(inUseFieldErrors(detail, serverTranslatorFor('en'))[0].message).not.toMatch(HANGUL)
-  })
-})
-
-describe('값이 끼는 lib 문구 — 틀(srv.libt.*)로 싣고, 내보낼 때 받은 문구를 틀에 맞춰 요청의 언어로 옮긴다(i18n 4차)', () => {
-  const en = serverTranslatorFor('en')
-  const SLOT = /\{(\w+)\}/g
-  const templates = (Object.entries(SERVER_KO) as [keyof typeof SERVER_KO, string][]).filter(([k]) => k.startsWith('srv.libt.'))
-  const sample = (template: string, vars: Record<string, string>) => template.replace(SLOT, (m, name: string) => vars[name] ?? m)
-  const varsOf = (template: string) => Object.fromEntries([...new Set([...template.matchAll(SLOT)].map(m => m[1]))].map((name, i) => [name, `v${i + 1}x`]))
-
-  it('틀마다 값 자리가 있고, ko·en 의 값 자리 이름이 같다', () => {
-    expect(templates.length).toBeGreaterThan(80)
-    for (const [key, ko] of templates) {
-      const names = (s: string) => [...new Set([...s.matchAll(SLOT)].map(m => m[1]))].sort()
-      expect(names(ko).length, key).toBeGreaterThan(0)
-      expect(names(SERVER_EN[key]), key).toEqual(names(ko))
-    }
-  })
-
-  it('틀의 글자 조각은 lib 원문에 그대로 있다(lib 문구를 고치면 틀도 같이 고친다 — 어긋나면 영어 화면에 한국어가 샌다)', () => {
-    const flat = walk(join(ROOT, 'src/lib'), undefined, /\.tsx?$/).filter(f => !f.includes('/i18n/dict/')).map(f => readFileSync(f, 'utf8')).filter(s => HANGUL.test(s)).join('\n').replace(/\\'/g, "'")
-    const gone: string[] = []
-    for (const [key, ko] of templates) for (const piece of ko.split(SLOT).filter((_, i) => i % 2 === 0)) {
-      if (piece.trim().length >= 2 && !flat.includes(piece)) gone.push(`${key}: ${piece}`)
-    }
-    expect(gone, gone.join('\n')).toEqual([])
-  })
-
-  it('틀로 만든 문구는 한국어 로캘에서 한 글자도 바뀌지 않고, 영어 로캘에서는 같은 값이 낀 영어 틀이 된다(틀끼리 가로채지 않는다)', () => {
-    const wrong: string[] = []
-    for (const [key, ko] of templates) {
-      const vars = varsOf(ko)
-      const message = sample(ko, vars)
-      if (libText(serverKoTranslate, message) !== message) wrong.push(`${key}: ko 가 바뀜 — ${libText(serverKoTranslate, message)}`)
-      const out = libText(en, message)
-      if (out !== sample(SERVER_EN[key], vars)) wrong.push(`${key}: en 이 다름 — ${out}`)
-      if (HANGUL.test(out)) wrong.push(`${key}: en 에 한글 — ${out}`)
-    }
-    expect(wrong, wrong.join('\n')).toEqual([])
-  })
-
-  it('낀 값이 다시 lib 문구면 그것도 푼다 — 틀에 없는 문구·DB 원문은 그대로', () => {
-    const inner = SERVER_KO['srv.lib.customFields.fieldListCanHoldUp']
-    const outer = sample(SERVER_KO['srv.libt.customFields.defaultValueInvalid'], { key: 'budget', error: inner })
-    expect(libText(en, outer)).toBe(`budget: the default value is invalid (${SERVER_EN['srv.lib.customFields.fieldListCanHoldUp']}).`)
-    expect(libText(serverKoTranslate, outer)).toBe(outer)
-    expect(libText(en, 'duplicate key value violates unique constraint "x"')).toBe('duplicate key value violates unique constraint "x"')
-    expect(libText(en, '틀에 없는 한국어 문장입니다.')).toBe('틀에 없는 한국어 문장입니다.')
+    expect(inUseFieldErrors(detail, serverKoTranslate)[0].message).toBe(inUseFieldErrors(detail)[0].message)
   })
 })

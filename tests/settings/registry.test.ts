@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import { MODULE_IDS } from '@/lib/modules/defaults'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { KO } from '@/lib/i18n/dict/ko'
-import { EN } from '@/lib/i18n/dict/en'
 import {
   DEPLOY_DEFAULT_KEYS, KEY_PATTERN, PROJECT_SETTINGS, REQUIRED_ON_CREATE, RETIRED_KEYS, SETTINGS_SCHEMA_VERSION, WORKSPACE_SETTINGS,
   assertRegistry, defineSetting, settingDef, type Parsed, type SettingDef,
@@ -359,12 +358,11 @@ describe('카탈로그 메타와 사전', () => {
     expectWired('minutes.auto_file_by_path')
     expect(PLANNED_KEYS).toEqual([])
   })
-  it('키마다 라벨·설명 사전 키가 ko·en 둘 다 있다', () => {
+  it('키마다 라벨·설명 사전 키가 있다', () => {
     for (const k of KEYS) {
       for (const suffix of ['label', 'desc']) {
         const dictKey = `settings.${k}.${suffix}` as keyof typeof KO
         expect(KO[dictKey], dictKey).toBeTruthy()
-        expect((EN as Record<string, string>)[dictKey], dictKey).toBeTruthy()
       }
     }
   })

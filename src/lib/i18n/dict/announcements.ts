@@ -1,5 +1,4 @@
 // announcements 화면 사전 — 이 파일은 announcements 영역 담당만 수정한다.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 export const announcementsKo = {
   'ann.heroTitleSuffix': '공지사항',
   'ann.heroDesc': '프로젝트 공지를 한곳에서 작성하고 확인하세요. 고정 공지는 항상 맨 위에 표시됩니다.',

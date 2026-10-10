@@ -7,9 +7,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
-const mocks = vi.hoisted(() => ({ queueUiPref: vi.fn(), setLocale: vi.fn() }))
+const mocks = vi.hoisted(() => ({ queueUiPref: vi.fn() }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueUiPref: mocks.queueUiPref }))
-vi.mock('@/components/providers/LocaleProvider', () => ({ useLocale: () => ({ locale: 'ko', setLocale: mocks.setLocale, t: (k: string) => k }) }))
 
 import { ThemeProvider } from '@/components/providers/ThemeProvider'
 import { PrefsSync } from '@/components/app/PrefsSync'
@@ -20,7 +19,7 @@ let container: HTMLDivElement
 let root: Root
 beforeEach(() => {
   localStorage.clear(); document.cookie = 'dflow-theme=; max-age=0; path=/'; document.documentElement.classList.remove('dark')
-  mocks.queueUiPref.mockClear(); mocks.setLocale.mockClear()
+  mocks.queueUiPref.mockClear()
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container)
 })
 afterEach(() => { act(() => root.unmount()); container.remove(); vi.unstubAllGlobals() })

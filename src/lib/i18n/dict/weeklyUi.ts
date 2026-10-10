@@ -1,5 +1,4 @@
 // weeklyUi 화면 사전 — 업무 화면의 한국어 리터럴을 옮긴 자리(i18n 정리). 모음은 workUi.ts.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 // 주간 시트의 핵심 4열 이름(WEEKLY_CELL_LABEL)과 2단 머리(금주실적·차주계획 × 내용·이슈 및 주요 이벤트)는 제품 고정이라 여기 없다.
 export const weeklyUiKo = {
   // 이월 매핑 창(CarryMappingModal)

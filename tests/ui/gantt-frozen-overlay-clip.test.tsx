@@ -73,7 +73,7 @@ describe('간트 오버레이 동결 열 클리핑', () => {
 
   const renderSheet = () =>
     render(
-      <LocaleProvider initialLocale="ko">
+      <LocaleProvider>
         <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={items}
           calendar={calInputUtcMon}

@@ -304,7 +304,7 @@ export function RowDetailPanel({
 
   const addChild = () => {
     if (!canChild || !addName?.trim()) return
-    // addWbsItem 은 사전 표의 문구만 돌려준다(SP4 D52 — 받은 한국어를 그리면 영어 화면에 샌다)
+    // addWbsItem 은 사전 표의 문구만 돌려준다(SP4 D52 — 받은 문구를 그대로 그리지 않는다)
     run(() => addWbsItem(projectId, item.id, addName.trim()), () => setAddName(null), 'wbs.toastAddFail')
   }
   const addSub = () => {
@@ -918,7 +918,7 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
     const res = await removeAttachment(id)
     setBusy(false)
     if (!res.ok) {
-      // 삭제 도우미의 두 문구는 사전 문구로 — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
+      // 삭제 도우미의 두 문구는 사전 문구로 — 액션 문구를 그대로 싣지 않는다.
       const key = removeErrorKey(res.error)
       setErr(key ? t(key) : (res.error ?? t('wbs.deleteFail')))
       return
@@ -941,7 +941,7 @@ function AttachmentSection({ itemId, canAttach, projectId, workspaceId }: {
       {list == null ? (
         <p className="text-sm text-fg-muted">{t('common.loading')}</p>
       ) : !list.ok ? (
-        // 던졌든 ok:false 든 화면 문구는 사전의 한 문구 — 액션의 한국어 사유(list.error)를 영어 화면에 싣지 않는다.
+        // 던졌든 ok:false 든 화면 문구는 사전의 한 문구 — 액션의 사유(list.error)를 그대로 싣지 않는다.
         <LoadErrorNotice message={t('wbs.attachLoadFail')} onRetry={retry} busy={retrying} />
       ) : list.rows.length === 0 ? (
         <p className="text-sm text-fg-muted">{canAttach ? t('wbs.noAttachmentsAdd') : t('wbs.noAttachments')}</p>

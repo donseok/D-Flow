@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation'
 import { saveCustomFieldValues } from '@/app/actions/customFieldValues'
 import { formatCustomValue, orderedFields, type CustomValues, type FieldDef, type FieldEntity, type FieldValue } from '@/lib/domain/customFields'
 import { parseCustomValues, validateCustomValues, type FieldRowError } from '@/lib/domain/customFieldValues'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
 import { CustomFieldInput } from './CustomFieldInput'
 
@@ -22,7 +21,6 @@ const FIELD_ERROR_KEY: Partial<Record<FieldRowError, DictKey>> = {
 }
 export const customFieldErrorText = (code: FieldRowError, locale: Locale) => translate(locale, FIELD_ERROR_KEY[code] ?? 'fields.err.format')
 export function CustomFieldValuesEditor({ rowId, values, canEdit }: { rowId: string; values: unknown; canEdit: boolean }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 범위(scope)의 locale 을 따른다
   const scope = useContext(Context)
   if (!scope) return null
   const tr = (k: DictKey) => translate(scope.locale, k)
@@ -33,7 +31,6 @@ export function CustomFieldValuesEditor({ rowId, values, canEdit }: { rowId: str
   return <Editor key={rowId} scope={scope as Scope & { defs: FieldDef[] }} rowId={rowId} values={parsed.value} canEdit={canEdit} />
 }
 function Editor({ scope, rowId, values, canEdit }: { scope: Scope & { defs: FieldDef[] }; rowId: string; values: CustomValues; canEdit: boolean }) {
-  useLocale()   // 위와 같다(구독만)
   const router = useRouter()
   const tr = (k: DictKey) => translate(scope.locale, k)
   const [base, setBase] = useState(values)

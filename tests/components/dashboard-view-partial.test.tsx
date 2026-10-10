@@ -11,7 +11,7 @@ import type { TrendModel } from '@/lib/domain/trend'
 // 대시보드 부분 표시 — WBS 가 비어도 회의·이슈·공지는 그리고, 조회 실패한 위젯은 '0건'·'데이터 없음' 대신 사유를 둔다.
 // DashboardView 는 async 서버 컴포넌트라 renderToStaticMarkup 을 바로 쓸 수 없다 — 돌려준 요소 트리를 순회해
 // 자식 컴포넌트의 타입(함수 참조)을 모은다. 자식은 실행되지 않는다(팀 원천 호출 여부는 뷰 자신의 것만 잡힌다).
-const mocks = vi.hoisted(() => ({ projectTeams: vi.fn(async () => []), getServerLocale: vi.fn(async (): Promise<'ko' | 'en'> => 'ko') }))
+const mocks = vi.hoisted(() => ({ projectTeams: vi.fn(async () => []), getServerLocale: vi.fn(async (): Promise<'ko'> => 'ko') }))
 vi.mock('@/lib/teams/source', () => ({ projectTeams: mocks.projectTeams }))
 vi.mock('@/lib/i18n/server', () => ({ getServerLocale: mocks.getServerLocale }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: vi.fn() }))
@@ -30,16 +30,11 @@ import { TeamProgress } from '@/components/dashboard/TeamProgress'
 import { IssueStatusCard } from '@/components/dashboard/IssueStatusCard'
 import { IssueTrendCard } from '@/components/dashboard/IssueTrendCard'
 import { IssueQueueCard } from '@/components/dashboard/IssueQueueCard'
-import { ERR_ISSUES_LOAD } from '@/lib/data/issues'
-import { ERR_ANNOUNCEMENTS_LOAD } from '@/lib/data/announcements'
-import { ERR_MEETINGS_LOAD } from '@/lib/data/meetings'
-import { registerEn, t, type DictKey } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
+import { t, type DictKey } from '@/lib/i18n/dict'
 import { calInputUtcMon, calUtcSun } from '../helpers/calendarFixture'
 import { MEET_CATS, SEVERITIES } from '../fixtures/vocab'
 
-// 사유는 사전 문구(ko·en)로 보인다 — 로더의 ERR_* 한국어 상수는 로그·시험용(최종 리뷰 UI M-1).
-registerEn(EN)
+// 사유는 사전 문구로 보인다 — 로더의 ERR_* 상수는 로그·시험용(최종 리뷰 UI M-1).
 const ko = (k: DictKey) => t('ko', k)
 const ISSUES_FAILED = ko('common.loadFailed.issues')
 
@@ -174,18 +169,6 @@ describe('DashboardView — 조회 실패는 0건으로 위장하지 않는다',
     const types = typesIn(tree)
     expect(types.has(MeetingSchedule)).toBe(false)
     expect(elsOf(tree, LoadErrorNotice).map(n => n.props.message)).toEqual([ko('common.loadFailed.meetings')])
-  })
-
-  it('영어 화면이면 세 사유 모두 영어 사전 문구 — 로더의 한국어 ERR_* 가 그대로 새지 않는다', async () => {
-    mocks.getServerLocale.mockResolvedValueOnce('en')
-    const tree = await view({ issues: null, announcements: null, meetings: null })
-    const messages = elsOf(tree, LoadErrorNotice).map(n => n.props.message)
-    expect(messages).toEqual([
-      t('en', 'common.loadFailed.announcements'), t('en', 'common.loadFailed.meetings'),
-      t('en', 'common.loadFailed.issues'), t('en', 'common.loadFailed.issues'),
-    ])
-    for (const raw of [ERR_ISSUES_LOAD, ERR_ANNOUNCEMENTS_LOAD, ERR_MEETINGS_LOAD]) expect(messages).not.toContain(raw)
-    for (const m of messages) expect(m).not.toMatch(/[가-힣]/)
   })
 
   it('공지·회의 실패도 빈 것으로 치지 않는다 — WBS·이슈가 비어도 빈 상태로 빠지지 않는다', async () => {

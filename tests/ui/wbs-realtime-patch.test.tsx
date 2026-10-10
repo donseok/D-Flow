@@ -82,7 +82,7 @@ afterEach(() => {
 async function mount() {
   await act(async () => {
     root.render(
-      <LocaleProvider initialLocale="ko">
+      <LocaleProvider>
         <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']}
           items={tree()} calendar={calInputUtcMon} today={TODAY} actorView={null}
           projectId="a1b2c3d4-0000-4000-8000-000000000001" readOnly initialCollapsed={[]}

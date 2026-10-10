@@ -72,12 +72,9 @@ describe('ScheduleManager — Excel 내보내기 안내(A-5 리뷰 O9)', () => {
 })
 
 describe('설정 사전 — 지운 절 이름을 가리키지 않는다(A-5 리뷰 O9)', () => {
-  it("baseDatePolicyDesc 는 ‘달력’ 절을 가리키고 옛 ‘일정 기준 및 공휴일’ 이 없다(ko·en)", async () => {
+  it("baseDatePolicyDesc 는 ‘달력’ 절을 가리키고 옛 ‘일정 기준 및 공휴일’ 이 없다", async () => {
     const { settingsKo } = await import('@/lib/i18n/dict/settings')
-    const { settingsEn } = await import('@/lib/i18n/dict/settings.en')
     expect(settingsKo['settings.baseDatePolicyDesc']).toContain('‘달력’')
     expect(settingsKo['settings.baseDatePolicyDesc']).not.toContain('일정 기준 및 공휴일')
-    expect(settingsEn['settings.baseDatePolicyDesc']).toContain("'Calendar'")
-    expect(settingsEn['settings.baseDatePolicyDesc']).not.toContain('Schedule baseline and holidays')
   })
 })

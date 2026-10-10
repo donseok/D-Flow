@@ -7,13 +7,11 @@ import { activeIssueAreas, type IssueAreaRef } from '@/lib/domain/issueAreas'
 import { codeExample, parseIdPolicy, type IdPolicy } from '@/lib/issues/idPolicy'
 import type { IssueAnalysisSetting } from '@/lib/settings/defs/project'
 import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
-import { useLocale } from '@/components/providers/LocaleProvider'
 
 export function IssuePolicyEditor({ projectId, policy, revision, areas, year, canEdit, analysis, analysisEnabled, locale = 'ko' }: {
   projectId: string; policy: IdPolicy; revision: number; areas: readonly IssueAreaRef[]; year: number; canEdit: boolean
   analysis: IssueAnalysisSetting; analysisEnabled: boolean; locale?: Locale
 }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const t = (k: DictKey) => translate(locale, k)
   const router = useRouter()
   const [draft, setDraft] = useState<IdPolicy>(policy)

@@ -17,9 +17,7 @@ vi.mock('@/app/actions/importBackup', () => ({ getWbsBackup: vi.fn() }))
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ImportWizard } from '@/components/import/ImportWizard'
-import { registerEn, t } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
-registerEn(EN)
+import { t } from '@/lib/i18n/dict'
 
 const LOGICAL = { extraAxis: null, code: null, name: 1, deliverable: 2, start: 3, end: 4, weight: null, actualPct: 5 }
 const OUTLINE: ExcelProfile = {
@@ -73,7 +71,7 @@ describe('ImportWizard 완료 화면 — 아웃라인 양식이면 펼침 내보
     vi.unstubAllGlobals()
   })
   const mount = () => act(async () => root.render(
-    <LocaleProvider initialLocale="ko"><ToastProvider>
+    <LocaleProvider><ToastProvider>
       <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} timeZone="UTC" />
     </ToastProvider></LocaleProvider>,
   ))

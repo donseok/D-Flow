@@ -1,5 +1,5 @@
-// 사용자 정의 roving 라디오의 방향키 규칙(APG 라디오 그룹) — 테마·언어 두 그룹이 같은 함수를 쓴다(U1c 리뷰 R1 P3).
-// 언어는 지금 두 칸이라 ←/↑ 를 +1 로 잘못 해도 결과가 같다 — 세 칸으로 규칙 자체를 고정한다.
+// 사용자 정의 roving 라디오의 방향키 규칙(APG 라디오 그룹) — 계정 화면의 라디오 그룹이 같은 함수를 쓴다(U1c 리뷰 R1 P3).
+// 두 칸짜리 그룹은 ←/↑ 를 +1 로 잘못 해도 결과가 같다 — 세 칸으로 규칙 자체를 고정한다.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -16,8 +16,8 @@ describe('rovingRadioIndex', () => {
     expect(rovingRadioIndex('Tab', 0, 3)).toBeNull()
     expect(rovingRadioIndex(' ', 0, 3)).toBeNull()
   })
-  it('테마·언어 두 그룹이 이 함수를 쓴다(제 손으로 % 를 계산하지 않는다)', () => {
-    for (const f of ['src/components/account/ThemeRadioGroup.tsx', 'src/components/account/AccountView.tsx']) {
+  it('테마·시작 화면 그룹이 이 함수를 쓴다(제 손으로 % 를 계산하지 않는다)', () => {
+    for (const f of ['src/components/account/ThemeRadioGroup.tsx', 'src/components/account/WorkspacePrefsSection.tsx']) {
       const src = readFileSync(join(process.cwd(), f), 'utf8')
       expect(src, f).toContain('rovingRadioIndex(')
       expect(src, f).not.toMatch(/\(i [+-] 1( \+ n)?\) %/)

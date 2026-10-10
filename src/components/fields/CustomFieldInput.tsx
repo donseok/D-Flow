@@ -1,7 +1,6 @@
 'use client'
 import { useId } from 'react'
 import type { FieldDef, FieldValue } from '@/lib/domain/customFields'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import { t as translate, type DictKey, type Locale } from '@/lib/i18n/dict'
 
 /** Seven typed controls, shared by field defaults and row editors. Absence stays distinct from false/0. */
@@ -9,7 +8,6 @@ export function CustomFieldInput({ def, value, onChange, disabled = false, label
   def: FieldDef; value: FieldValue | undefined; onChange: (value: FieldValue | undefined) => void
   disabled?: boolean; label?: string; emptyLabel?: string; locale?: Locale
 }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const id = useId()
   const tr = (k: DictKey) => translate(locale, k)
   const name = label ?? def.label

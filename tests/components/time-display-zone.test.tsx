@@ -28,7 +28,7 @@ let host: HTMLDivElement
 let root: Root
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
 afterEach(() => { act(() => root.unmount()); host.remove() })
-const render = (node: ReactNode) => act(() => root.render(<LocaleProvider initialLocale="ko">{node}</LocaleProvider>))
+const render = (node: ReactNode) => act(() => root.render(<LocaleProvider>{node}</LocaleProvider>))
 
 describe('승인 큐 — 보고 시각이 프로젝트 tz 를 따른다', () => {
   const q: HubQueueEntry = {

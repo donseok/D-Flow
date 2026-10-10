@@ -7,13 +7,11 @@ import { createRoot, hydrateRoot, type Root } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
-const mocks = vi.hoisted(() => ({ queueUiPref: vi.fn(), setLocale: vi.fn(), locale: 'ko' as 'ko' | 'en' }))
+const mocks = vi.hoisted(() => ({ queueUiPref: vi.fn() }))
 vi.mock('@/lib/prefs/debouncedSave', () => ({ queueUiPref: mocks.queueUiPref }))
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ locale: mocks.locale, setLocale: mocks.setLocale,
-    t: (k: string) => (mocks.locale === 'en'
-      ? { 'chrome.theme': 'Theme', 'chrome.themeSystem': 'System', 'chrome.themeLight': 'Light', 'chrome.themeDark': 'Dark', 'chrome.display': 'Display', 'chrome.language': 'Language' }
-      : { 'chrome.theme': '화면 테마', 'chrome.themeSystem': '시스템', 'chrome.themeLight': '라이트', 'chrome.themeDark': '다크', 'chrome.display': '화면', 'chrome.language': '언어' } as Record<string, string>)[k] ?? k }),
+  useLocale: () => ({ locale: 'ko',
+    t: (k: string) => ({ 'chrome.theme': '화면 테마', 'chrome.themeSystem': '시스템', 'chrome.themeLight': '라이트', 'chrome.themeDark': '다크', 'chrome.display': '화면' } as Record<string, string>)[k] ?? k }),
 }))
 vi.mock('@/components/account/MyTokensSection', () => ({ MyTokensSection: () => null }))
 vi.mock('@/components/account/ChangePasswordModal', () => ({ ChangePasswordModal: () => null }))
@@ -26,7 +24,7 @@ let container: HTMLDivElement
 let root: Root | null
 beforeEach(() => {
   localStorage.clear(); document.cookie = 'dflow-theme=; max-age=0; path=/'; document.documentElement.classList.remove('dark')
-  mocks.queueUiPref.mockClear(); mocks.setLocale.mockClear(); mocks.locale = 'ko'
+  mocks.queueUiPref.mockClear()
   container = document.createElement('div'); document.body.appendChild(container); root = null
 })
 afterEach(() => { if (root) act(() => root!.unmount()); container.remove(); vi.restoreAllMocks() })
@@ -115,26 +113,11 @@ describe('/account 화면 구역', () => {
     root = createRoot(container)
     await act(async () => root!.render(<ThemeProvider><AccountView email="alice@example.com" displayName="alice" projects={[]} /></ThemeProvider>))
   }
-  it('화면 구역에 테마 3단과 언어가 있다', async () => {
+  it('화면 구역에는 테마 3단만 있다 — 언어 선택은 없다(제품은 한국어 전용, 2026-10-10 결정)', async () => {
     await mountAccount()
     const section = container.querySelector('[data-account-display]')!
-    expect(section.querySelector('[role="radiogroup"][aria-label="화면 테마"]')).not.toBeNull()
-    expect([...section.querySelectorAll('[role="radiogroup"][aria-label="언어"] [role="radio"]')].map((r) => r.textContent)).toEqual(['한국어', 'English'])
-  })
-  // 언어를 바꾸는 바로 그 카드에서 두 언어가 섞이지 않는다 — 제목·소제목·라디오 그룹 이름이 모두 사전에서 온다(U1c 리뷰 R1 P3)
-  it.each([
-    ['ko', ['화면', '화면 테마', '언어'], ['화면 테마', '언어']],
-    ['en', ['Display', 'Theme', 'Language'], ['Theme', 'Language']],
-  ] as const)('%s — 카드 제목·소제목·aria-label 이 그 언어', async (locale, headings, groups) => {
-    mocks.locale = locale
-    await mountAccount()
-    const section = container.querySelector('[data-account-display]')!
-    expect([...section.querySelectorAll('h2, [data-account-label]')].map((e) => e.textContent)).toEqual(headings)
-    expect([...section.querySelectorAll('[role="radiogroup"]')].map((g) => g.getAttribute('aria-label'))).toEqual(groups)
-  })
-  it('언어 선택은 setLocale 로(쿠키·서버 저장·새로 고침은 LocaleProvider 몫)', async () => {
-    await mountAccount()
-    await act(async () => container.querySelector<HTMLButtonElement>('[data-locale-option="en"]')!.click())
-    expect(mocks.setLocale).toHaveBeenCalledWith('en')
+    expect([...section.querySelectorAll('h2, [data-account-label]')].map((e) => e.textContent)).toEqual(['화면', '화면 테마'])
+    expect([...section.querySelectorAll('[role="radiogroup"]')].map((g) => g.getAttribute('aria-label'))).toEqual(['화면 테마'])
+    expect(container.querySelector('[data-locale-option]')).toBeNull()
   })
 })

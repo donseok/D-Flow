@@ -17,7 +17,7 @@ describe('account_preferences RLS·권한', () => {
     await asUser(pool, ME, async (c) => {
       await c.query(`insert into public.account_preferences (user_id, prefs) values ($1, '{"theme":"dark"}') on conflict (user_id) do update set prefs = excluded.prefs`, [ME])
       expect((await c.query('select prefs from public.account_preferences where user_id = $1', [ME])).rows).toEqual([{ prefs: { theme: 'dark' } }])
-      const u = await c.query(`update public.account_preferences set prefs = prefs || '{"locale":"en"}', updated_at = now() where user_id = $1`, [ME])
+      const u = await c.query(`update public.account_preferences set prefs = prefs || '{"sidebarCollapsed":true}', updated_at = now() where user_id = $1`, [ME])
       expect(u.rowCount).toBe(1)
     })
   })

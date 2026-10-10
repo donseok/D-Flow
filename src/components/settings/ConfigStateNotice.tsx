@@ -16,14 +16,13 @@ export function ConfigStateNotice({ kind, locale, keyName, message, settingsHref
   kind: NoticeKind; locale: Locale; keyName?: string | null; message?: string
   settingsHref?: string; isAdmin?: boolean; compact?: boolean
 }) {
-  const ko = locale === 'ko'
   const title = kind === 'unavailable' ? t(locale, 'settings.configLoadFailed')
     : kind === 'required' ? t(locale, 'settings.state.required')
       : kind === 'invalid' ? t(locale, 'settings.state.invalid')
         : kind === 'disabled' ? t(locale, 'settings.state.disabled')
           : kind === 'field' ? t(locale, 'settings.state.field')
             : t(locale, 'settings.state.patch')
-  const detailText = kind === 'unavailable' ? (ko ? CONFIG_MESSAGES.CONFIG_UNAVAILABLE : 'The settings could not be loaded.') : message
+  const detailText = kind === 'unavailable' ? CONFIG_MESSAGES.CONFIG_UNAVAILABLE : message
   const canRecover = RECOVERABLE.has(kind) && isAdmin && !!settingsHref
   const askAdmin = RECOVERABLE.has(kind) && !canRecover
   const detail = (keyName || detailText || askAdmin) ? <>

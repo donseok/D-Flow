@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEv
 import { useRouter } from 'next/navigation'
 import { Download, Eye, FileText, Loader2, Paperclip, Plus, RotateCw, Trash2, X } from 'lucide-react'
 import type { MinuteFile } from '@/lib/domain/types'
-import type { DictKey } from '@/lib/i18n/dict'
+import type { DictKey, Locale } from '@/lib/i18n/dict'
 import { stampedFileName } from '@/lib/domain/minutes'
 import { makeStoragePath } from '@/lib/domain/storagePath'
 import type { AttachmentPolicy, AttachmentPreviewKind } from '@/lib/minutes/attachmentPolicy'
@@ -17,16 +17,17 @@ import { createBrowserClient } from '@/lib/supabase/client'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useToast } from '@/components/ui/Toast'
 import { Modal } from '@/components/ui/Modal'
+import { intlLocale } from '@/lib/i18n/format'
 
 const BUCKET = 'minutes'
 
 type PolicyState = { kind: 'loading' } | { kind: 'ok'; policy: AttachmentPolicy } | { kind: 'failed'; error: string }
 type Preview = { fileName: string; url: string; kind: AttachmentPreviewKind }
 
-function fileDate(value: string, locale: 'ko' | 'en', timeZone: string | null): string {
+function fileDate(value: string, locale: Locale, timeZone: string | null): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime()) || timeZone === null) return '—'
-  return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone }).format(date)
+  return new Intl.DateTimeFormat(intlLocale(locale), { year: 'numeric', month: 'short', day: 'numeric', timeZone }).format(date)
 }
 
 /**

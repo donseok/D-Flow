@@ -1,5 +1,4 @@
 // 회의록 기반 프로젝트 Wiki 화면 사전.
-// en은 Record<keyof ko, string>으로 ko/en 키 패리티를 컴파일 타임에 강제한다.
 export const wikiKo = {
   'nav.wiki': '프로젝트 Wiki',
   'wiki.projectFallback': '프로젝트',

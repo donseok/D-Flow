@@ -1,5 +1,4 @@
-// 한국어 병합 테이블 — 클라이언트 공통 청크에 정적 포함되는 유일한 사전.
-// EN 은 dict.ts 의 지연 등록(registry)으로만 로드된다(../dict.ts 참조).
+// 화면 문구 병합 테이블 — 클라이언트 공통 청크에 정적 포함된다. 제품은 한국어 전용이라 사전은 이것 하나다(../dict.ts 참조).
 import { commonKo } from './common'
 import { settingsKo } from './settings'
 import { dashboardKo } from './dashboard'

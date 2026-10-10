@@ -4,7 +4,6 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { LocaleProvider } from "@/components/providers/LocaleProvider";
 import { ToastProvider } from "@/components/ui/Toast";
-import { getServerLocale } from "@/lib/i18n/server";
 import { BRAND } from "@/lib/branding";
 import { noFlashScript } from "@/lib/theme/policy";
 
@@ -16,11 +15,9 @@ export const metadata: Metadata = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  // 쿠키 기반 locale — 서버 렌더 본문과 클라이언트 크롬이 같은 언어로 시작한다.
-  const locale = await getServerLocale();
   const nonce = (await headers()).get("x-nonce") ?? undefined; // CSP nonce(미들웨어) — 미들웨어가 돌지 않는 경로(/login 등)에서는 없다
   return (
-    <html lang={locale} suppressHydrationWarning>
+    <html lang="ko" suppressHydrationWarning>
       <head>
         {/* 다크 FOUC 방지 — 페인트 전에 선호(localStorage → 쿠키 → 미설정 기본)를 <html> 에 반영한다(D10) */}
         <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: noFlashScript() }} />
@@ -38,7 +35,7 @@ export default async function RootLayout({
       </head>
       <body className="font-sans antialiased">
         <ThemeProvider>
-          <LocaleProvider initialLocale={locale}>
+          <LocaleProvider>
             <ToastProvider>{children}</ToastProvider>
           </LocaleProvider>
         </ThemeProvider>

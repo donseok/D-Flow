@@ -1,20 +1,17 @@
 // @vitest-environment jsdom
 // 행 상세 패널의 하위 항목 추가(addWbsItem) 실패 문구 — 액션의 한국어 고정 문구를 사전 키로 바꿔 그린다(SP4 D21·D52, 계획 P12 —
-// B-3 리뷰 P3: WBS 시트·칸반만 매핑되고 이 패널은 받은 문구를 그대로 그려 영어 화면에 한국어가 떴다). 표 밖 문구는 '추가 실패' 일반 키.
+// B-3 리뷰 P3: WBS 시트·칸반만 매핑되고 이 패널은 받은 문구를 그대로 그렸다). 표 밖 문구는 '추가 실패' 일반 키.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ComputedItem } from '@/lib/domain/types'
-import { registerEn, t, type DictKey } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
+import { t, type DictKey } from '@/lib/i18n/dict'
 import { WBS_ACTION_ERRORS } from '@/lib/wbs/actionErrors'
 import { withTeams } from '../fixtures/teams'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
-registerEn(EN)
 
-const HANGUL = /[가-힣]/
-let locale: 'ko' | 'en' = 'en'
+const locale = 'ko' as const
 const addWbsItem = vi.fn(async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true }))
 vi.mock('@/app/actions/wbs', () => ({
   getChangeLogs: vi.fn(async () => []),
@@ -49,7 +46,6 @@ describe('RowDetailPanel — 하위 항목 추가 실패 문구(사전 매핑)',
   let root: Root
 
   beforeEach(() => {
-    locale = 'en'
     addWbsItem.mockReset()
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -81,20 +77,17 @@ describe('RowDetailPanel — 하위 항목 추가 실패 문구(사전 매핑)',
     return [...container.querySelectorAll('p.mt-2.font-medium.text-danger')].map((p) => p.textContent ?? '')
   }
 
-  it('표의 문구(SUB-ACT 형제)는 영어 화면에서 그 사전 문구 — 한글 0자', async () => {
+  it('표의 문구(SUB-ACT 형제)는 그 사전 문구로 보인다', async () => {
     const shown = await addChildFailing(WBS_ACTION_ERRORS.subActSibling)
-    expect(shown).toEqual([t('en', 'wbs.err.subActSibling')])
-    expect(HANGUL.test(shown.join(''))).toBe(false)
+    expect(shown).toEqual([t('ko', 'wbs.err.subActSibling')])
   })
 
   it('표 밖 문구는 받은 문구를 그리지 않고 추가 실패 일반 문구', async () => {
     const shown = await addChildFailing('표에 없는 서버 문구 — 원문')
-    expect(shown).toEqual([t('en', 'wbs.toastAddFail')])
-    expect(HANGUL.test(shown.join(''))).toBe(false)
+    expect(shown).toEqual([t('ko', 'wbs.toastAddFail')])
   })
 
-  it('한국어 화면은 표의 문구를 그대로 보인다', async () => {
-    locale = 'ko'
+  it('표의 문구는 사전 문구와 같은 글자다', async () => {
     const shown = await addChildFailing(WBS_ACTION_ERRORS.nameRequired)
     expect(shown).toEqual([WBS_ACTION_ERRORS.nameRequired])
   })

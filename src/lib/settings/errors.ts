@@ -5,7 +5,7 @@
  * 표에 없는 토큰은 null 이다: 호출부가 원문을 로깅하고 500 으로 드러낸다(표시 = 로깅). 정상 경로에서 나올 수 없는 토큰
  * (COPY_TARGET_NOT_EMPTY·SETTINGS_ROW_REQUIRED·SETTINGS_ACTOR_REQUIRED·COMMAND_ID_REQUIRED·*_ISOLATION·HISTORY_IMMUTABLE)은 그래서 없다.
  */
-import { ERR_DENIED, guardTextBy } from '@/lib/authz/errors'
+import { ERR_DENIED } from '@/lib/authz/errors'
 // 서버 사전은 타입으로만 안다 — 이 모듈은 클라이언트(ConfigStateNotice)도 가져오므로 값으로 끌어오면 서버 문구가 번들에 실린다
 import type { ServerDictKey, ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill, textBy } from '@/lib/i18n/translate'
@@ -154,7 +154,7 @@ export const configText = (t: ServerTranslate, message: string): string => textB
 
 /** t(서버 번역 함수)를 넘기면 message 가 그 언어다(화면에 내보내는 액션·라우트). 넘기지 않으면 종전 한국어 — code·status·token 은 언어와 무관하다 */
 export function mapDbError(err: DbErrorLike, t?: ServerTranslate): MappedDbError | null {
-  const say = (message: string): string => t ? guardTextBy(t, configText(t, message)) : message   // 표의 가드 문구(ERR_DENIED)도 화면 언어로
+  const say = (message: string): string => t ? configText(t, message) : message
   const detail = err.details ?? null
   if (err.code === '40P01') return { code: 'CONFIG_BUSY', status: 503, message: say(ERR_CONFIG_BUSY), token: '40P01', fieldKey: null, detail }
   const token = dbToken(err.message)

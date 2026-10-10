@@ -15,9 +15,7 @@ vi.mock('@/app/actions/importBackup', () => ({ getWbsBackup: vi.fn() }))   // �
 import { LocaleProvider } from '@/components/providers/LocaleProvider'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ImportWizard } from '@/components/import/ImportWizard'
-import { registerEn, t } from '@/lib/i18n/dict'
-import { EN } from '@/lib/i18n/dict/en'
-registerEn(EN)
+import { t } from '@/lib/i18n/dict'
 
 const DETECTED: ExcelProfile = {
   version: 1, sheetName: 'WBS', holidaySheetName: null, headerRow: 2,
@@ -65,7 +63,7 @@ describe('ImportWizard — 양식 저장 실패 경고(W5)', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     await act(async () => root.render(
-      <LocaleProvider initialLocale="ko"><ToastProvider>
+      <LocaleProvider><ToastProvider>
         <ImportWizard projectId="11111111-1111-4111-8111-111111111111" currentItemCount={0} timeZone="UTC" />
       </ToastProvider></LocaleProvider>,
     ))
@@ -87,7 +85,7 @@ describe('ImportWizard — 양식 저장 실패 경고(W5)', () => {
     // 변경 이력을 또 지운다(FM-14)
     expect(status!.textContent).toContain(t('ko', 'importWizard.saveProfileLabel'))
     expect(status!.textContent).not.toMatch(/설정 화면에서 다시 저장|다시 시도/)
-    for (const locale of ['ko', 'en'] as const) expect(t(locale, 'importWizard.profileSaveFailedDesc')).toContain(t(locale, 'importWizard.saveProfileLabel'))
+    expect(t('ko', 'importWizard.profileSaveFailedDesc')).toContain(t('ko', 'importWizard.saveProfileLabel'))
     // 저장 양식이 없으면 라우트가 표준 양식으로 낸다(409 는 더 없다) — 버튼은 양식 저장 여부와 무관하게 보이고 설명만 다르다
     expect(document.querySelector(`[aria-label="${t('ko', 'importWizard.exportProfileButton')}"]`)).not.toBeNull()
     expect(container.textContent).toContain(t('ko', 'importWizard.exportLayoutDesc'))

@@ -1,6 +1,5 @@
 'use client'
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import { useRouter } from 'next/navigation'
 import { getSettingsCommandOutcome, updateProjectSettings, type SettingsPatch } from '@/app/actions/settings'
 import { backfillCustomField, getCustomFieldUsage, purgeCustomField, type FieldCommandInput, type FieldUsage } from '@/app/actions/customFields'
@@ -14,7 +13,6 @@ type FieldState = { value: readonly FieldDef[] | null; error?: string; enabled: 
 export function CustomFieldsSettings({ projectId, states, revision, canEdit, locale = 'ko' }: {
   projectId: string; states: Record<FieldEntity, FieldState>; revision: number; canEdit: boolean; locale?: Locale
 }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const tl = (k: DictKey) => translate(locale, k)
   const [entity, setEntity] = useState<FieldEntity>('wbs_item')
   const [busy, setBusy] = useState(false)
@@ -38,7 +36,6 @@ function FieldManager({ projectId, entity, initial, initialError, revision, canE
   revision: number; canEdit: boolean; locale: Locale; onBusy: (busy: boolean) => void
 }) {
   const router = useRouter()
-  useLocale()   // 위와 같다(구독만). 이 파일의 t 는 반복 변수로도 쓰여 tl 로 부른다
   const tl = useCallback((k: DictKey) => translate(locale, k), [locale])
   const [draft, setDraft] = useState<FieldDef[]>(() => orderedFields(initial ?? []))
   const [baseline, setBaseline] = useState(draft)

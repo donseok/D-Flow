@@ -27,6 +27,8 @@ import {
 } from '@/lib/domain/issueUpdates'
 import { DEFAULT_ISSUE_STATUSES, vocabLabel, type IssueStatusDef } from '@/lib/settings/vocab'
 import type { ProjectMember } from '@/lib/domain/types'
+import type { Locale } from '@/lib/i18n/dict'
+import { intlLocale } from '@/lib/i18n/format'
 
 /** 기본으로 펴는 건수 — 모달 본문이 max-h-[70vh] 스크롤 박스라 전량을 펴면 푸터가 밀린다. */
 const VISIBLE_DEFAULT = 5
@@ -45,9 +47,9 @@ export interface IssueUpdatesProps {
   statuses?: readonly IssueStatusDef[]
 }
 
-function fmtAt(iso: string, locale: string, timeZone: string): string {
+function fmtAt(iso: string, locale: Locale, timeZone: string): string {
   const d = new Date(iso)
-  return d.toLocaleString(locale === 'en' ? 'en-US' : 'ko-KR', {
+  return d.toLocaleString(intlLocale(locale), {
     month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone,
   })
 }

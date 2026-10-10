@@ -23,7 +23,6 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   // 세션 판정은 InviteRedeemCard 가 마운트 후 서버 액션(getInviteSessionState)으로 물어본다 —
   // 액션은 쿠키를 쓸 수 있어 만료 토큰 갱신이 정상 동작한다.
   const res = await getInvitePreview(token)
-  // 화면 언어 쿠키만 읽는다(세션 쿠키가 아니다 — 위 P8 과 무관)
   const locale = await getServerLocale()
 
   return (

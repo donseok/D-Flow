@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { RotateCcw } from 'lucide-react'
 import { restoreWikiDocumentRevision } from '@/app/actions/wiki'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import type { Locale } from '@/lib/i18n/dict'
 import { t } from '@/lib/i18n/dict'
 
@@ -23,7 +22,6 @@ export function WikiRevisionRestoreButton({
   expectedUpdatedAt: string | null
   locale: Locale
 }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)

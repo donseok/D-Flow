@@ -1,5 +1,4 @@
 // pagesUi 화면 사전 — 업무 화면의 한국어 리터럴을 옮긴 자리(i18n 정리). 모음은 workUi.ts.
-// en은 Record<keyof ko, string> 타입으로 ko와의 키 패리티를 컴파일 타임에 강제한다.
 export const pagesUiKo = {
   // ── 공통 ──
   'pages.common.more': '더 보기',

@@ -30,7 +30,7 @@ describe('ClearExcelProfileButton', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     await act(async () => root.render(
-      <LocaleProvider initialLocale="ko"><ToastProvider><ClearExcelProfileButton projectId={PID} revision={3} /></ToastProvider></LocaleProvider>,
+      <LocaleProvider><ToastProvider><ClearExcelProfileButton projectId={PID} revision={3} /></ToastProvider></LocaleProvider>,
     ))
   })
   afterEach(() => { act(() => root.unmount()); document.body.innerHTML = '' })

@@ -1295,7 +1295,7 @@ export function WbsGanttSheet({
         lastRejected.current = null
       } else {
         sheetUndoManager.rejectPending(sessionId)
-        // 잠금 거부는 사유 코드로, 나머지는 액션 문구를 사전 키로 바꿔 고른다(SP4 D21) — 액션 문구(한국어)를 영어 화면에 그대로 싣지 않는다.
+        // 잠금 거부는 사유 코드로, 나머지는 액션 문구를 사전 키로 바꿔 고른다(SP4 D21) — 액션 문구를 그대로 싣지 않는다.
         const errMsg = res.code === 'actual_locked' ? t('wbs.actualLocked') : res.code === 'approval_required' ? t('wbs.err.approvalRequired') : wbsToastText(t, res.error, 'wbs.toastSaveFail')
         editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'failed', {
           error: { kind: 'server_reject', message: errMsg }

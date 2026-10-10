@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ArrowRight, BookOpen, Sparkles } from 'lucide-react'
-import { useLocale } from '@/components/providers/LocaleProvider'
 import { t, type DictKey, type Locale } from '@/lib/i18n/dict'
 import {
   highlightSegments,
@@ -66,7 +65,6 @@ export function WikiSearchResults({ state, locale, query, projectId }: {
   query: string
   projectId: string
 }) {
-  useLocale()   // 영어 사전이 늦게 실리면 다시 그리게 구독만 한다 — 글자는 넘겨받은 locale 을 따른다
   const [summary, setSummary] = useState<SummaryState>({ kind: 'idle' })
   const [selected, setSelected] = useState<number | null>(null)
   const [corpus, setCorpus] = useState<CorpusState>({ kind: 'loading' })

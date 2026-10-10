@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { AlertTriangle, ArrowRight, BookOpen, CheckCircle2, Clock3, LoaderCircle } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import type { Locale } from '@/lib/i18n/dict'
+import { intlLocale } from '@/lib/i18n/format'
 
 export type MinuteWikiSyncStatus =
   | 'unlinked'
@@ -110,11 +112,11 @@ function statusDescription(status: MinuteWikiSyncStatus) {
   }
 }
 
-function processedDate(value: string, locale: 'ko' | 'en', timeZone: string | null) {
+function processedDate(value: string, locale: Locale, timeZone: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   if (timeZone === null) return '—'
-  return new Intl.DateTimeFormat(locale === 'ko' ? 'ko-KR' : 'en-US', {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
