@@ -25,7 +25,7 @@ export function SectionCard({
           )}
           <div>
             {eyebrow && <div className="text-meta font-semibold text-fg-muted">{eyebrow}</div>}
-            <h3 className={`${eyebrow ? 'mt-0.5 ' : ''}text-sm font-semibold tracking-tight text-fg`}>{title}</h3>
+            <h3 className={`${eyebrow ? 'mt-0.5 ' : ''}text-section text-fg`}>{title}</h3>
           </div>
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}

@@ -41,26 +41,29 @@
 :root {
   color-scheme: light;   /* 라이트 전용(2026-10-10) — OS 가 다크여도 폼 컨트롤·스크롤바를 브라우저가 어둡게 칠하지 않는다 */
 
-  --p-gray-0: #FFFFFF;  --p-gray-25: #F5F7FA;  --p-gray-50: #F0F3F8;
+  /* 2026-10-10 디자인 정비(사용자 승인 시안) — 잉크를 짙게, 동작 파랑을 선명하게. gray-400(입력 경계)은 시안의 #8491A5 가
+     canvas·surface-subtle 위에서 3:1 에 못 미쳐(2.95·2.84) 색상을 지킨 채 #7F8CA0 으로 내렸다(tests/css/contrast-tokens) */
+  --p-gray-0: #FFFFFF;  --p-gray-25: #F4F6FA;  --p-gray-50: #F0F3F8;
   --p-gray-75: #EEF2F7;  --p-gray-100: #EDF0F4;  --p-gray-150: #E3E8EF;
-  --p-gray-200: #DCE2EA;  --p-gray-400: #7B8798;  --p-gray-450: #788394;
-  --p-gray-500: #606E82;  --p-gray-600: #526074;  --p-gray-900: #17212F;
-  --p-cobalt-50: #EDF2FF;  --p-cobalt-600: #315CDB;  --p-cobalt-700: #274CC5;
-  --p-cobalt-800: #2142AB;  --p-mint-700: #0B7A8A;
+  --p-gray-200: #E1E6EE;  --p-gray-400: #7F8CA0;  --p-gray-450: #788394;
+  --p-gray-500: #5D6B82;  --p-gray-600: #475467;  --p-gray-900: #101828;
+  --p-cobalt-50: #EAF0FF;  --p-cobalt-600: #2456E6;  --p-cobalt-700: #1C47C9;
+  --p-cobalt-800: #173BA8;  --p-mint-700: #0B7A8A;
 }
 
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, system-ui, -apple-system, "Noto Sans KR", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", monospace;
 
-  /* 글자 크기(D14, 개정 §5.5.6) — 새 코드는 이 여덟만. 기본 text-xs·text-sm 의 행간은 그대로 */
-  --text-title: 1.5rem;       --text-title--line-height: 2rem;        --text-title--font-weight: 600;
-  --text-title-sm: 1.375rem;  --text-title-sm--line-height: 1.875rem; --text-title-sm--font-weight: 600;
+  /* 글자 크기(D14, 개정 §5.5.6) — 새 코드는 이 여덟만. 기본 text-xs·text-sm 의 행간은 그대로.
+     제목·지표(title·title-sm·kpi)는 굵기 700·자간 -0.02em 이다(2026-10-10 디자인 정비) — 굵기와 자간으로 위계를 세운다 */
+  --text-title: 1.5rem;       --text-title--line-height: 2rem;        --text-title--font-weight: 700;  --text-title--letter-spacing: -0.02em;
+  --text-title-sm: 1.375rem;  --text-title-sm--line-height: 1.875rem; --text-title-sm--font-weight: 700;  --text-title-sm--letter-spacing: -0.02em;
   --text-section: 1rem;       --text-section--line-height: 1.5rem;    --text-section--font-weight: 600;
   --text-body: 0.875rem;      --text-body--line-height: 1.375rem;
   --text-control: 0.875rem;   --text-control--line-height: 1.25rem;
   --text-meta: 0.75rem;       --text-meta--line-height: 1.125rem;
-  --text-kpi: 1.75rem;        --text-kpi--line-height: 2.125rem;      --text-kpi--font-weight: 600;
+  --text-kpi: 1.875rem;       --text-kpi--line-height: 2.25rem;       --text-kpi--font-weight: 700;  --text-kpi--letter-spacing: -0.02em;
   --text-doc: 1rem;           --text-doc--line-height: 1.625rem;
 
   /* 표면·글자·경계·동작(개정 §5.5.3) */
@@ -86,14 +89,14 @@
   --color-action-soft: var(--p-cobalt-50);
 
   /* 상태 6종 — 본색·weak(개정 §5.5.4) */
-  --color-success: #197455;
-  --color-success-weak: #E6F4EE;
-  --color-warning: #8A5B13;
-  --color-warning-weak: #FBF1DE;
-  --color-danger: #B93845;
-  --color-danger-weak: #FBEAEC;
-  --color-progress: #1F6FA8;
-  --color-progress-weak: #E5F0F8;
+  --color-success: #0F7B55;
+  --color-success-weak: #E3F5EC;
+  --color-warning: #9A5A00;
+  --color-warning-weak: #FFF2D9;
+  --color-danger: #C62F3E;
+  --color-danger-weak: #FDECEE;
+  --color-progress: #1668B0;
+  --color-progress-weak: #E4F0FB;
   --color-pending: var(--p-gray-500);
   --color-pending-weak: var(--p-gray-75);
   --color-neutral: var(--p-gray-600);
@@ -162,7 +165,10 @@
   /* 페이지 안 고정 요소의 위 간격(D54) — PageFrame 이 도구 줄 높이로 덮어 쓴다. 여기 기본값은 PageFrame 밖 화면에서 top-(--frame-sticky-top) 를 0 으로 푼다 */
   --frame-sticky-top: 0px;
 
-  /* 그림자 — 주 표면에는 없다. 떠 있는 층만(개정 §5.5.5) */
+  /* 그림자 — 주 표면 카드는 옅은 한 겹(--shadow-card), 떠 있는 층은 깊은 그림자(개정 §5.5.5).
+     "주 표면에는 그림자가 없다"던 10/09 결정은 2026-10-10 사용자 승인 시안으로 바뀌었다 — 바탕(canvas)과 흰 표면을 경계선 + 1px 그림자로 가른다.
+     카드 밖의 주 표면(셸·표·시트)에는 여전히 그림자를 두지 않는다 */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05);
   --shadow-popover: 0 8px 24px -8px rgb(17 21 28 / 0.18);
   --shadow-modal: 0 24px 56px -16px rgb(17 21 28 / 0.28);
 
@@ -234,8 +240,9 @@ textarea {
 /*  재사용 컴포넌트 클래스                                              */
 /* ------------------------------------------------------------------ */
 @layer components {
+  /* 주 표면 카드 — 경계선 + 옅은 그림자 한 겹(2026-10-10 디자인 정비: 바탕과 흰 표면을 가른다). 떠 있는 층의 깊은 그림자와는 다른 토큰이다 */
   .card {
-    @apply rounded-(--radius-panel) border border-border bg-surface;
+    @apply rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card);
   }
 
   .panel-soft {
@@ -357,8 +364,9 @@ textarea {
   .btn-primary {
     @apply bg-action text-action-fg hover:bg-action-hover active:bg-action-pressed;
   }
+  /* 보조 버튼 — 흰 바탕 + 경계, 잉크 글자 500(2026-10-10 디자인 정비). 주 버튼(채움 600)과 굵기로도 갈린다 */
   .btn-ghost {
-    @apply border border-border bg-surface text-fg-secondary hover:border-border-input hover:bg-surface-subtle hover:text-fg;
+    @apply border border-border bg-surface font-medium text-fg hover:border-border-input hover:bg-surface-subtle;
   }
 
   /* 둥근 헤더 크롬 아이콘 버튼 */
@@ -370,26 +378,27 @@ textarea {
   .badge {
     @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium leading-none;
   }
+  /* 상태 알약 — weak 배경 + 본색 글자 600(2026-10-10 디자인 정비). 색은 호출부가 짝 토큰으로 준다 */
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium leading-none;
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold leading-none;
   }
   .lvl-badge {
     @apply inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-semibold leading-none;
   }
 
-  /* 세그먼트 뷰 탭 */
+  /* 세그먼트 뷰 탭 — 옅은 표면 홈 + 흰 선택 칸(2026-10-10 디자인 정비). 선택은 색만이 아니라 체크(::before)·굵기로도 알린다 */
   .seg {
-    @apply inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1;
+    @apply inline-flex items-center gap-1 rounded-xl bg-surface-subtle p-1;
   }
   .seg-item {
-    @apply inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-fg-secondary transition duration-150 hover:bg-surface-subtle hover:text-fg;
+    @apply inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-fg-secondary transition duration-150 hover:text-fg;
   }
   .seg-item::before {
     content: "✓" / "";
     visibility: hidden;
   }
   .seg-item-active {
-    @apply bg-surface-selected font-semibold text-action hover:bg-surface-selected hover:text-action;
+    @apply bg-surface font-semibold text-fg shadow-(--shadow-card);
   }
   .seg-item-active::before {
     visibility: visible;
@@ -397,20 +406,43 @@ textarea {
 
   /* KPI 카드 (히어로 우측 레일 / 그리드) */
   .kpi-card {
-    @apply rounded-(--radius-panel) border border-border bg-surface p-5 transition-[border-color,box-shadow] duration-(--motion-fast) hover:border-border-input/70;
+    @apply rounded-(--radius-panel) border border-border bg-surface p-5 shadow-(--shadow-card) transition-[border-color,box-shadow] duration-(--motion-fast) hover:border-border-input/70;
   }
 
   /* 히어로 카드 — 평면 표면(D13). 어두운 그라데이션 위 밝은 글자 전제를 버렸다 */
   .hero-card {
-    @apply relative isolate overflow-hidden rounded-(--radius-panel) border border-border bg-surface text-fg;
+    @apply relative isolate overflow-hidden rounded-(--radius-panel) border border-border bg-surface text-fg shadow-(--shadow-card);
   }
 
   /* 사이드바 항목 — 밝은 표면(개정 §5.5.5). 13px 은 UI-2b 가 내비를 다시 쓸 때 */
   .side-link {
     @apply flex items-center gap-3 rounded-(--radius-control) px-3 py-2 text-[13px] font-medium text-fg-secondary transition-[color,background-color] duration-(--motion-fast) hover:bg-surface-hover hover:text-fg;
   }
+  /* 선택 항목 — action-soft 배경 + action-hover 글자 600(2026-10-10 디자인 정비). 실제 내비는 NavList 가 같은 조합을 쓴다 */
   .side-link-active {
-    @apply bg-surface-selected text-fg;
+    @apply bg-action-soft font-semibold text-action-hover hover:bg-action-soft hover:text-action-hover;
+  }
+
+  /* 목록형 표(2026-10-10 디자인 정비) — <table> 에 단다. 머리줄은 옅은 표면 + 12px 600 보조 글자, 본문 줄은 44px, 숫자·날짜는 폭이 같은 숫자꼴.
+     첫 칸의 왼쪽 여백은 머리줄 배경이 글자에 붙지 않게 하는 기본값이다 — 칸이 직접 단 px-*·pl-* 유틸이 이긴다(utilities 층).
+     WBS 시트·간트·주간 시트처럼 밀도가 설계된 격자에는 달지 않는다 */
+  .data-table {
+    font-variant-numeric: tabular-nums;
+  }
+  .data-table > thead > tr {
+    @apply border-b border-border bg-surface-subtle text-left text-meta font-semibold text-fg-secondary;
+  }
+  .data-table > thead > tr > th {
+    @apply font-semibold;
+  }
+  .data-table > tbody > tr {
+    @apply h-11;
+  }
+  .data-table > :is(thead, tbody) > tr > :is(th, td):first-child {
+    @apply pl-3;
+  }
+  .data-table > :is(thead, tbody) > tr > :is(th, td):last-child {
+    @apply pr-3;
   }
 
   /* 동결 컬럼 우측 경계 */

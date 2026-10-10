@@ -35,9 +35,9 @@ export function UsageUserTable({ rows, days, timeZone }: { rows: UsageUserRow[];
     <SectionCard title={t('usage.users.title')} icon={Users}
       actions={<span className="badge bg-action-soft text-action">{t('usage.users.count').replace('{n}', String(rows.length))}</span>}>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[880px] text-sm">
+        <table className="data-table w-full min-w-[880px] text-sm">
           <thead>
-            <tr className="border-b border-border text-xs font-semibold text-fg-muted">
+            <tr>
               <th className="py-2 pr-3 text-left">{t('usage.users.colName')}</th>
               <th className="py-2 pr-3 text-left">{t('usage.users.colEmail')}</th>
               <th className="py-2 pr-3 text-left">{t('usage.users.colTeam')}</th>

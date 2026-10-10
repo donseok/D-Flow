@@ -50,7 +50,7 @@ export function NavList({ groups, activeId, collapsed, badges = {}, exclude = []
               const link = (
                 <Link key={i.id} href={i.href} data-nav-item={i.id} aria-current={active ? 'page' : undefined}
                   aria-label={shown ? `${label} ${shown}` : label}
-                  className={`relative flex h-9 items-center gap-2.5 rounded-(--radius-control) px-3 text-control ${active ? 'bg-surface-selected font-semibold text-fg' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg'}`}>
+                  className={`relative flex h-9 items-center gap-2.5 rounded-(--radius-control) px-3 text-control ${active ? 'bg-action-soft font-semibold text-action-hover' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg'}`}>
                   <Icon size={NAV_ICON_SIZE.menu} strokeWidth={NAV_ICON_STROKE} aria-hidden className="shrink-0" />
                   {collapsed !== true && <span className={`min-w-0 flex-1 truncate ${textCls}`}>{label}</span>}
                   {collapsed === true && dot}

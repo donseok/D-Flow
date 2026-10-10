@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 
 /** accent 표본 10종(SP3b 스펙 §4.6) — 빨강·초록 근처 넷은 거부, 나머지는 통과(tests/settings/accent.test.ts 와 같은 표) */
 const ACCENT_SAMPLES: readonly (readonly [nameKey: DictKey, hex: string])[] = [
-  ['pages.uiStates.accent.cobalt', '#315cdb'], ['pages.uiStates.accent.red1', '#e03131'], ['pages.uiStates.accent.red2', '#c2255c'], ['pages.uiStates.accent.green1', '#2b8a3e'], ['pages.uiStates.accent.green2', '#0ca678'],
+  ['pages.uiStates.accent.cobalt', '#2456e6'], ['pages.uiStates.accent.red1', '#e03131'], ['pages.uiStates.accent.red2', '#c2255c'], ['pages.uiStates.accent.green1', '#2b8a3e'], ['pages.uiStates.accent.green2', '#0ca678'],
   ['pages.uiStates.accent.veryLight', '#ffe066'], ['pages.uiStates.accent.veryDark', '#1b1f3b'], ['pages.uiStates.accent.lowChroma', '#8a6f73'], ['pages.uiStates.accent.purple', '#7048e8'], ['pages.uiStates.accent.orange', '#f76707'],
 ]
 

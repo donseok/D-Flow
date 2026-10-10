@@ -64,7 +64,7 @@ export default function Login() {
     <div className="flex min-h-screen bg-canvas text-fg">
       {/* ── 좌측 소개(lg 이상) ─────────────────────────────── */}
       <div className="hidden flex-1 items-center justify-center lg:flex">
-        <div className="mx-10 flex h-[calc(100vh-5rem)] w-full max-w-xl flex-col items-center justify-center rounded-(--radius-panel) border border-border bg-surface p-12">
+        <div className="mx-10 flex h-[calc(100vh-5rem)] w-full max-w-xl flex-col items-center justify-center rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card) p-12">
           <div className="mx-auto mb-8 w-fit">
             <BrandGlyph size={80} />
           </div>
@@ -101,7 +101,7 @@ export default function Login() {
             <p className="text-body text-fg-secondary">{t('login.lead')}</p>
           </div>
 
-          <div className="w-full rounded-(--radius-panel) border border-border bg-surface p-6 sm:p-8">
+          <div className="w-full rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card) p-6 sm:p-8">
             <form onSubmit={submit} className="space-y-4">
               <div>
                 <label htmlFor="email" className="mb-2 block text-meta font-semibold text-fg-secondary">{t('login.email')}</label>

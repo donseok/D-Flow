@@ -27,10 +27,10 @@ function PrefRadioGroup<T extends string>({ label, choices, initial, save }: {
     if (next === null) return
     e.preventDefault(); select(choices[next][0]); refs.current[next]?.focus()
   }
-  return <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1 rounded-(--radius-control) border border-border bg-surface-subtle p-1">
+  return <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1 rounded-(--radius-control) bg-surface-subtle p-1">
     {choices.map(([v, text], i) => <button key={v} ref={el => { refs.current[i] = el }} type="button" role="radio" aria-checked={v === value} tabIndex={v === value ? 0 : -1}
       onClick={() => select(v)} onKeyDown={e => onKeyDown(e, i)}
-      className={`inline-flex h-8 items-center justify-center gap-1 rounded-(--radius-control) px-2 text-xs font-medium transition-colors duration-(--motion-fast) ${v === value ? 'bg-surface-selected text-action' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg'}`}>
+      className={`inline-flex h-8 items-center justify-center gap-1 rounded-(--radius-control) px-2 text-xs font-medium transition-colors duration-(--motion-fast) ${v === value ? 'bg-surface font-semibold text-fg shadow-(--shadow-card)' : 'text-fg-secondary hover:text-fg'}`}>
       <Check className={`h-3.5 w-3.5 ${v === value ? '' : 'invisible'}`} aria-hidden />{t(text)}
     </button>)}
   </div>

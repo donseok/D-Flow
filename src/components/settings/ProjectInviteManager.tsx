@@ -283,9 +283,9 @@ export function ProjectInviteManager({ projectId, rows, loadError, teamOptions, 
         <p className="text-sm text-fg-muted">{t('settings.invite.empty')}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="data-table w-full min-w-[720px] text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
+              <tr>
                 <th className="py-2 pr-3">{t('login.email')}</th>
                 <th className="py-2 pr-3">{t('settings.invite.access')}</th>
                 <th className="py-2 pr-3">{t('att.col.team')}</th>

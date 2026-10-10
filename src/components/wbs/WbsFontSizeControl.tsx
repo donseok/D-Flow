@@ -28,7 +28,7 @@ export function WbsFontSizeControl({
       data-current-scale={scale}
       role="group"
       aria-label={t('wbs.fontSize')}
-      className="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface px-0.5 shadow-sm"
+      className="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface px-0.5"
     >
       <button
         type="button"

@@ -74,9 +74,9 @@ export function UsageEventLog({ base, events, names, limit, menus, filter, timeZ
           : translate('usage.log.empty')} />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="data-table w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="border-b border-border text-xs font-semibold text-fg-muted">
+              <tr>
                 <th className="py-2 pr-3 text-left">{translate('usage.log.colTime')}</th>
                 <th className="py-2 pr-3 text-left">{translate('usage.log.colUser')}</th>
                 <th className="py-2 pr-3 text-left">{translate('usage.log.colMenu')}</th>

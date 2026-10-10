@@ -147,7 +147,7 @@ export function HomeGrid({ workspaceId, slots, gallery, defaults, personal, canE
       <span role="status" aria-live="polite" className="sr-only">{live}</span>
 
       {galleryOpen && (
-        <section id="home-widget-gallery" aria-label={t('portalUi.edit.galleryTitle')} className="mb-6 rounded-(--radius-panel) border border-border bg-surface p-4.5">
+        <section id="home-widget-gallery" aria-label={t('portalUi.edit.galleryTitle')} className="mb-6 rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card) p-4.5">
           <h2 className="mb-3 text-section text-fg">{t('portalUi.edit.galleryTitle')}</h2>
           {gallery.length === 0 ? <StatusMessage kind="empty" compact title={t('portalUi.edit.galleryEmpty')} /> : (
             <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">

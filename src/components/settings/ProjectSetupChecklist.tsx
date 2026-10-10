@@ -62,7 +62,7 @@ export function ProjectSetupChecklist({ projectId, userId, steps, variant = 'pan
     if (!ready || saved.hidden || progress.next === null) return null
     return (
       <section aria-label={t('setup.banner.label')} data-setup-banner
-        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-(--radius-panel) border border-border bg-surface px-4 py-2.5 text-sm">
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card) px-4 py-2.5 text-sm">
         <span className="font-semibold text-fg">{t('setup.banner.label')}</span>
         <span className="tabular-nums text-fg-secondary">{fill(t('setup.progress'), { done: progress.done, total: progress.total })}</span>
         <a href={setupStepHref(projectId, progress.next)} data-setup-next
@@ -90,7 +90,7 @@ export function ProjectSetupChecklist({ projectId, userId, steps, variant = 'pan
   }
   const allDone = progress.done === progress.total
   return (
-    <section aria-label={t('setup.title')} data-setup-panel className="space-y-3 rounded-(--radius-panel) border border-border bg-surface p-4">
+    <section aria-label={t('setup.title')} data-setup-panel className="space-y-3 rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card) p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold text-fg">
           {t('setup.title')} <span className="ml-1 text-sm font-medium tabular-nums text-fg-secondary">{fill(t('setup.progress'), { done: progress.done, total: progress.total })}</span>

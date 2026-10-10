@@ -88,9 +88,9 @@ export function TeamsManager({ teams, workspaceId }: {
           <EmptyState icon={Users} title={tr('settings.teams.emptyTitle')} description={tr('settings.teams.emptyDescCommon')} />
         ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] whitespace-nowrap text-sm">
+          <table className="data-table w-full min-w-[760px] whitespace-nowrap text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-fg-muted">
+              <tr>
                 <th className="py-2 pr-3">{tr('wsTeams.colOrder')}</th>
                 <th className="px-2.5 py-2">{tr('settings.teams.colColor')}</th>
                 <th className="py-2 pr-3">{tr('settings.teams.colName')}</th>

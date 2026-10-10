@@ -178,9 +178,9 @@ export function VocabEditor({ projectId, vocabKey, value, invalid = false, revis
     {invalid && !repaired && <p role="alert" className="rounded-lg bg-danger-weak px-3 py-2 text-sm text-danger">{tr('settings.vocab.invalid')}</p>}
     {/* relative — 머리의 sr-only(절대 위치) 칸이 이 스크롤 상자를 빠져나가 문서 폭을 밀지 않게(390 실측) */}
     <div className="relative overflow-x-auto">
-      <table className="w-full min-w-[560px] border-collapse text-sm">
+      <table className="data-table w-full min-w-[560px] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-meta leading-4 font-semibold text-fg-muted">
+          <tr>
             <th className="px-2 py-2">{tr('settings.vocab.order')}</th>
             <th className="px-2 py-2">{tr('settings.vocab.code')}</th>
             <th className="px-2 py-2">{tr('settings.vocab.label')}</th>

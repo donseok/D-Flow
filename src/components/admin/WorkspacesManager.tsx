@@ -100,9 +100,9 @@ export function WorkspacesManager({ rows, accountsHref }: {
             <StatusMessage kind="empty" title={t('platform.ws.emptyTitle')} detail={t('platform.ws.emptyDesc')} />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-sm">
+              <table className="data-table w-full min-w-[960px] text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
+                  <tr>
                     <th className="py-2 pr-3">{t('platform.ws.colName')}</th>
                     <th className="py-2 pr-3">{t('platform.ws.colSlug')}</th>
                     <th className="py-2 pr-3">{t('platform.ws.colStatus')}</th>

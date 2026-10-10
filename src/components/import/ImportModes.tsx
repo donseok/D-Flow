@@ -22,17 +22,17 @@ export function ImportModes({ projectId, currentItemCount, timeZone, extraAxisLa
   const [mode, setMode] = useState<'md' | 'xlsx'>('md')
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 rounded-xl bg-surface-subtle p-1 w-fit" role="tablist">
+      <div className="seg w-fit" role="tablist">
         <button
           role="tab" aria-selected={mode === 'md'} data-mode-md
-          className={`btn ${mode === 'md' ? 'btn-primary' : 'btn-ghost'}`}
+          className={`seg-item ${mode === 'md' ? 'seg-item-active' : ''}`}
           onClick={() => setMode('md')}
         >
           <FileText className="h-3.5 w-3.5" />{t('importWizard.modeTabMd')}
         </button>
         <button
           role="tab" aria-selected={mode === 'xlsx'} data-mode-xlsx
-          className={`btn ${mode === 'xlsx' ? 'btn-primary' : 'btn-ghost'}`}
+          className={`seg-item ${mode === 'xlsx' ? 'seg-item-active' : ''}`}
           onClick={() => setMode('xlsx')}
         >
           <FileSpreadsheet className="h-3.5 w-3.5" />{t('importWizard.modeTabXlsx')}

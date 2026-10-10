@@ -353,7 +353,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
   let leafSeq = 0
 
   return (
-    <section aria-label={t('agentHub.table.aria')} className="rounded-xl border border-border bg-surface p-3">
+    <section aria-label={t('agentHub.table.aria')} className="rounded-xl border border-border bg-surface shadow-(--shadow-card) p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1" role="group" aria-label={t('agents.scope.aria')}>{seg('mine', t('agentHub.filter.mine'))}{seg('all', t('agents.scope.all'))}</div>

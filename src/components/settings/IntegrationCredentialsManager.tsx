@@ -212,9 +212,9 @@ export function IntegrationCredentialsManager({
   const teamMap = new Map(teams.map(t => [t.id, t.name || t.code]))
 
   function getStatus(c: WorkspaceCredentialItem) {
-    if (c.revoked_at || !c.enabled) return { label: t('settings.cred.statusRevoked'), color: 'bg-muted text-muted-foreground' }
+    if (c.revoked_at || !c.enabled) return { label: t('settings.cred.statusRevoked'), color: 'bg-surface-subtle text-fg-secondary' }
     const isExpired = new Date(c.expires_at).getTime() < Date.now()
-    if (isExpired) return { label: t('settings.cred.statusExpired'), color: 'bg-destructive/10 text-destructive border-destructive/20' }
+    if (isExpired) return { label: t('settings.cred.statusExpired'), color: 'bg-danger-weak text-danger border-danger/20' }
     return { label: t('settings.forms.active'), color: 'bg-success-weak text-success border-success/20' }
   }
 
@@ -223,18 +223,18 @@ export function IntegrationCredentialsManager({
       {/* 헤더 및 발급 버튼 */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight text-foreground flex items-center gap-2">
-            <KeyRound className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold tracking-tight text-fg flex items-center gap-2">
+            <KeyRound className="h-5 w-5 text-action" />
             {t('settings.cred.title')}
           </h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-fg-secondary">
             {t('settings.cred.desc')}
           </p>
         </div>
         <button
           type="button"
           onClick={handleOpenIssue}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-action px-3.5 py-2 text-sm font-medium text-action-fg transition hover:bg-action-hover focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2"
         >
           <Plus className="h-4 w-4" />
           {t('settings.cred.issueMinutes')}
@@ -248,8 +248,8 @@ export function IntegrationCredentialsManager({
           onClick={() => setFilterKind('all')}
           className={`border-b-2 px-4 py-2 font-medium transition ${
             filterKind === 'all'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
+              ? 'border-action text-action'
+              : 'border-transparent text-fg-secondary hover:text-fg'
           }`}
         >
           {t('settings.cred.tabAll').replace('{n}', String(credentials.length))}
@@ -259,8 +259,8 @@ export function IntegrationCredentialsManager({
           onClick={() => setFilterKind('minutes_api')}
           className={`border-b-2 px-4 py-2 font-medium transition ${
             filterKind === 'minutes_api'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
+              ? 'border-action text-action'
+              : 'border-transparent text-fg-secondary hover:text-fg'
           }`}
         >
           {t('settings.cred.tabMinutes').replace('{n}', String(credentials.filter(c => c.kind === 'minutes_api').length))}
@@ -270,8 +270,8 @@ export function IntegrationCredentialsManager({
           onClick={() => setFilterKind('agent_runner')}
           className={`border-b-2 px-4 py-2 font-medium transition ${
             filterKind === 'agent_runner'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
+              ? 'border-action text-action'
+              : 'border-transparent text-fg-secondary hover:text-fg'
           }`}
         >
           {t('settings.cred.tabAgents').replace('{n}', String(credentials.filter(c => c.kind === 'agent_runner').length))}
@@ -280,7 +280,7 @@ export function IntegrationCredentialsManager({
 
       {/* 목록 뷰 */}
       {loading ? (
-        <div className="flex justify-center py-12 text-sm text-muted-foreground">
+        <div className="flex justify-center py-12 text-sm text-fg-secondary">
           {t('settings.cred.loading')}
         </div>
       ) : filteredCredentials.length === 0 ? (
@@ -294,10 +294,10 @@ export function IntegrationCredentialsManager({
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div className="overflow-hidden rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card)">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground">
+            <table className="data-table w-full text-left text-sm">
+              <thead>
                 <tr>
                   <th scope="col" className="px-4 py-3">{t('settings.cred.colKindName')}</th>
                   <th scope="col" className="px-4 py-3">{t('settings.cred.colPrefix')}</th>
@@ -313,7 +313,7 @@ export function IntegrationCredentialsManager({
                   const isRevocable = !c.revoked_at && c.enabled
 
                   return (
-                    <tr key={c.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={c.id} className="hover:bg-surface-hover transition-colors">
                       <td className="px-4 py-3.5">
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5">
@@ -324,21 +324,21 @@ export function IntegrationCredentialsManager({
                             }`}>
                               {c.kind === 'minutes_api' ? t('settings.cred.kindMinutes') : t('nav.projectAgents')}
                             </span>
-                            <span className="font-semibold text-foreground">{c.name}</span>
+                            <span className="font-semibold text-fg">{c.name}</span>
                           </div>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-fg-secondary">
                             {t('settings.cred.issuedOn').replace('{v}', String(c.created_at ? c.created_at.slice(0, 10) : ''))}
                           </span>
                         </div>
                       </td>
 
-                      <td className="px-4 py-3.5 font-mono text-xs text-muted-foreground">
-                        <div className="inline-flex items-center gap-1.5 rounded bg-muted/60 px-2 py-1">
+                      <td className="px-4 py-3.5 font-mono text-xs text-fg-secondary">
+                        <div className="inline-flex items-center gap-1.5 rounded bg-surface-subtle px-2 py-1">
                           <span>{c.token_prefix}...</span>
                           <button
                             type="button"
                             onClick={() => copyToken(c.token_prefix)}
-                            className="text-muted-foreground hover:text-foreground"
+                            className="text-fg-secondary hover:text-fg"
                             title={t('settings.cred.copyPrefix')}
                           >
                             <Copy className="h-3 w-3" />
@@ -346,19 +346,19 @@ export function IntegrationCredentialsManager({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                      <td className="px-4 py-3.5 text-xs text-fg-secondary">
                         {c.kind === 'agent_runner' ? (
                           <div className="flex flex-col">
-                            <span className="font-medium text-foreground">{c.owner_name || t('min.hl.unnamed')}</span>
+                            <span className="font-medium text-fg">{c.owner_name || t('min.hl.unnamed')}</span>
                             <span>{c.owner_email || t('settings.cred.noEmail')}</span>
                           </div>
                         ) : (
                           <div className="flex flex-col gap-0.5">
                             <span>
                               {c.project_ids === null ? (
-                                <span className="font-medium text-foreground">{t('nav.allProjects')}</span>
+                                <span className="font-medium text-fg">{t('nav.allProjects')}</span>
                               ) : (
-                                <span className="font-medium text-foreground">
+                                <span className="font-medium text-fg">
                                   {t('settings.cred.projectCount').replace('{n}', String(c.project_ids.length)).replace('{v}', String(c.project_ids.map(id => projectMap.get(id) || id).slice(0, 2).join(', '))).replace('{v2}', String(c.project_ids.length > 2 ? t('settings.cred.moreCount').replace('{n}', String(c.project_ids.length - 2)) : ''))}
                                 </span>
                               )}
@@ -383,7 +383,7 @@ export function IntegrationCredentialsManager({
                         </span>
                       </td>
 
-                      <td className="px-4 py-3.5 text-xs text-muted-foreground">
+                      <td className="px-4 py-3.5 text-xs text-fg-secondary">
                         <div className="flex flex-col">
                           <span>{t('settings.cred.used')} {c.last_used_at ? c.last_used_at.slice(0, 16).replace('T', ' ') : t('settings.cred.unused')}</span>
                           <span>{t('settings.cred.expiresOn').replace('{v}', String(c.expires_at ? c.expires_at.slice(0, 10) : ''))}</span>
@@ -395,13 +395,13 @@ export function IntegrationCredentialsManager({
                           <button
                             type="button"
                             onClick={() => setRevokingCred(c)}
-                            className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium text-destructive transition hover:bg-destructive/10"
+                            className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium text-danger transition hover:bg-danger-weak"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             {t('settings.cred.revoke')}
                           </button>
                         ) : (
-                          <span className="text-xs text-muted-foreground">{t('settings.cred.statusRevoked')}</span>
+                          <span className="text-xs text-fg-secondary">{t('settings.cred.statusRevoked')}</span>
                         )}
                       </td>
                     </tr>
@@ -422,14 +422,14 @@ export function IntegrationCredentialsManager({
         >
           <div className="space-y-4 py-2">
             {issueError && (
-              <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
+              <div className="rounded-lg bg-danger-weak p-3 text-sm text-danger border border-danger/20">
                 {issueError}
               </div>
             )}
 
             <div>
-              <label htmlFor="token-name" className="block text-sm font-medium text-foreground">
-                {t('settings.cred.tokenName')} <span className="text-destructive">*</span>
+              <label htmlFor="token-name" className="block text-sm font-medium text-fg">
+                {t('settings.cred.tokenName')} <span className="text-danger">*</span>
               </label>
               <input
                 id="token-name"
@@ -438,16 +438,16 @@ export function IntegrationCredentialsManager({
                 onChange={e => setName(e.target.value)}
                 placeholder={t('settings.cred.tokenNamePh')}
                 maxLength={64}
-                className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="mt-1 block w-full rounded-md border border-border-input bg-surface px-3 py-2 text-sm focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
               />
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-fg-secondary">
                 {t('settings.cred.tokenNameHint')}
               </p>
             </div>
 
             {/* 허용 프로젝트 범위 */}
             <div>
-              <label className="block text-sm font-medium text-foreground">{t('settings.cred.scopeTitle')}</label>
+              <label className="block text-sm font-medium text-fg">{t('settings.cred.scopeTitle')}</label>
               <div className="mt-2 space-y-2">
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -455,7 +455,7 @@ export function IntegrationCredentialsManager({
                     name="project-scope"
                     checked={allProjects}
                     onChange={() => setAllProjects(true)}
-                    className="text-primary focus:ring-primary"
+                    className="text-action focus:ring-border-focus"
                   />
                   <span>{t('settings.cred.scopeAll')}</span>
                 </label>
@@ -465,26 +465,26 @@ export function IntegrationCredentialsManager({
                     name="project-scope"
                     checked={!allProjects}
                     onChange={() => setAllProjects(false)}
-                    className="text-primary focus:ring-primary"
+                    className="text-action focus:ring-border-focus"
                   />
                   <span>{t('settings.cred.scopeSome')}</span>
                 </label>
               </div>
 
               {!allProjects && (
-                <div className="mt-3 max-h-36 overflow-y-auto rounded-md border border-input p-2 space-y-1 bg-muted/20">
+                <div className="mt-3 max-h-36 overflow-y-auto rounded-md border border-border-input p-2 space-y-1 bg-surface-subtle">
                   {projects.length === 0 ? (
-                    <p className="text-xs text-muted-foreground p-2">{t('settings.cred.noProjects')}</p>
+                    <p className="text-xs text-fg-secondary p-2">{t('settings.cred.noProjects')}</p>
                   ) : (
                     projects.map(p => (
-                      <label key={p.id} className="flex items-center gap-2 text-xs py-1 px-1.5 rounded hover:bg-muted/40 cursor-pointer">
+                      <label key={p.id} className="flex items-center gap-2 text-xs py-1 px-1.5 rounded hover:bg-surface-hover cursor-pointer">
                         <input
                           type="checkbox"
                           checked={selectedProjects.includes(p.id)}
                           onChange={() => handleToggleProject(p.id)}
-                          className="rounded text-primary focus:ring-primary"
+                          className="rounded text-action focus:ring-border-focus"
                         />
-                        <span className="font-medium text-foreground">{p.name}</span>
+                        <span className="font-medium text-fg">{p.name}</span>
                       </label>
                     ))
                   )}
@@ -494,14 +494,14 @@ export function IntegrationCredentialsManager({
 
             {/* 기본 프로젝트 선택 */}
             <div>
-              <label htmlFor="default-project" className="block text-sm font-medium text-foreground">
+              <label htmlFor="default-project" className="block text-sm font-medium text-fg">
                 {t('settings.cred.defaultProjectLabel')}
               </label>
               <select
                 id="default-project"
                 value={defaultProjectId}
                 onChange={e => setDefaultProjectId(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="mt-1 block w-full rounded-md border border-border-input bg-surface px-3 py-2 text-sm focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
               >
                 <option value="">{t('settings.cred.defaultProjectNone')}</option>
                 {(allProjects ? projects : projects.filter(p => selectedProjects.includes(p.id))).map(p => (
@@ -510,21 +510,21 @@ export function IntegrationCredentialsManager({
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-fg-secondary">
                 {t('settings.cred.defaultProjectHint')}
               </p>
             </div>
 
             {/* 기본 팀 선택 */}
             <div>
-              <label htmlFor="default-team" className="block text-sm font-medium text-foreground">
+              <label htmlFor="default-team" className="block text-sm font-medium text-fg">
                 {t('settings.cred.defaultTeamLabel')}
               </label>
               <select
                 id="default-team"
                 value={defaultTeamId}
                 onChange={e => setDefaultTeamId(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="mt-1 block w-full rounded-md border border-border-input bg-surface px-3 py-2 text-sm focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
               >
                 <option value="">{t('settings.cred.notSet')}</option>
                 {teams.map(t => (
@@ -533,7 +533,7 @@ export function IntegrationCredentialsManager({
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-fg-secondary">
                 {t('settings.cred.defaultTeamHint')}
               </p>
             </div>
@@ -541,16 +541,16 @@ export function IntegrationCredentialsManager({
             {/* 팀 코드 매핑 */}
             <div>
               <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-foreground">{t('settings.cred.teamMapLabel')}</label>
+                <label className="block text-sm font-medium text-fg">{t('settings.cred.teamMapLabel')}</label>
                 <button
                   type="button"
                   onClick={handleAddMapping}
-                  className="text-xs text-primary font-medium hover:underline flex items-center gap-1"
+                  className="text-xs text-action font-medium hover:underline flex items-center gap-1"
                 >
                   <Plus className="h-3 w-3" /> {t('settings.cred.addMapping')}
                 </button>
               </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-xs text-fg-secondary">
                 {t('settings.cred.teamMapHint')}
               </p>
 
@@ -563,13 +563,13 @@ export function IntegrationCredentialsManager({
                         value={m.code}
                         onChange={e => handleUpdateMapping(idx, 'code', e.target.value)}
                         placeholder={t('settings.cred.externalCodePh')}
-                        className="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="flex-1 rounded-md border border-border-input bg-surface px-2.5 py-1.5 text-xs focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
                       />
-                      <span className="text-muted-foreground text-xs">→</span>
+                      <span className="text-fg-secondary text-xs">→</span>
                       <select
                         value={m.teamId}
                         onChange={e => handleUpdateMapping(idx, 'teamId', e.target.value)}
-                        className="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="flex-1 rounded-md border border-border-input bg-surface px-2.5 py-1.5 text-xs focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
                       >
                         {teams.map(t => (
                           <option key={t.id} value={t.id}>
@@ -580,7 +580,7 @@ export function IntegrationCredentialsManager({
                       <button
                         type="button"
                         onClick={() => handleRemoveMapping(idx)}
-                        className="p-1 text-muted-foreground hover:text-destructive"
+                        className="p-1 text-fg-secondary hover:text-danger"
                         title={t('common.delete')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -593,14 +593,14 @@ export function IntegrationCredentialsManager({
 
             {/* 만료 기간 */}
             <div>
-              <label htmlFor="token-expires" className="block text-sm font-medium text-foreground">
+              <label htmlFor="token-expires" className="block text-sm font-medium text-fg">
                 {t('settings.cred.validity')}
               </label>
               <select
                 id="token-expires"
                 value={expiresDays}
                 onChange={e => setExpiresDays(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="mt-1 block w-full rounded-md border border-border-input bg-surface px-3 py-2 text-sm focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
               >
                 {EXPIRES_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>
@@ -616,7 +616,7 @@ export function IntegrationCredentialsManager({
                 type="button"
                 onClick={() => setIssueOpen(false)}
                 disabled={issuing}
-                className="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition"
+                className="rounded-lg border border-border-input bg-surface px-4 py-2 text-sm font-medium text-fg hover:bg-surface-hover transition"
               >
                 {t('common.cancel')}
               </button>
@@ -624,7 +624,7 @@ export function IntegrationCredentialsManager({
                 type="button"
                 onClick={submitIssue}
                 disabled={issuing}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-action px-4 py-2 text-sm font-medium text-action-fg hover:bg-action-hover transition disabled:opacity-50"
               >
                 {issuing ? t('settings.cred.issuing') : t('settings.cred.issue')}
               </button>
@@ -652,24 +652,24 @@ export function IntegrationCredentialsManager({
             </div>
 
             <div>
-              <span className="block text-xs font-semibold text-muted-foreground">{t('settings.cred.tokenName')}</span>
-              <span className="text-sm font-medium text-foreground">{issuedResult.name}</span>
+              <span className="block text-xs font-semibold text-fg-secondary">{t('settings.cred.tokenName')}</span>
+              <span className="text-sm font-medium text-fg">{issuedResult.name}</span>
             </div>
 
             <div>
-              <span className="block text-xs font-semibold text-muted-foreground mb-1">{t('settings.cred.bearer')}</span>
+              <span className="block text-xs font-semibold text-fg-secondary mb-1">{t('settings.cred.bearer')}</span>
               <div className="relative">
                 <input
                   type="text"
                   readOnly
                   value={issuedResult.token}
-                  className="w-full rounded-md border border-input bg-muted/40 font-mono text-xs px-3 py-2 pr-12 text-foreground select-all"
+                  className="w-full rounded-md border border-border-input bg-surface-subtle font-mono text-xs px-3 py-2 pr-12 text-fg select-all"
                   onClick={e => (e.target as HTMLInputElement).select()}
                 />
                 <button
                   type="button"
                   onClick={() => copyToken(issuedResult.token)}
-                  className="absolute right-1.5 top-1.5 inline-flex items-center gap-1 rounded bg-background border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted transition"
+                  className="absolute right-1.5 top-1.5 inline-flex items-center gap-1 rounded bg-surface border border-border px-2 py-1 text-xs font-medium text-fg hover:bg-surface-hover transition"
                 >
                   {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
                   <span>{copied ? t('settings.invite.copied') : t('settings.cred.copy')}</span>
@@ -681,7 +681,7 @@ export function IntegrationCredentialsManager({
               <button
                 type="button"
                 onClick={() => setIssuedResult(null)}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition"
+                className="rounded-lg bg-action px-4 py-2 text-sm font-medium text-action-fg hover:bg-action-hover transition"
               >
                 {t('settings.cred.confirmClose')}
               </button>
@@ -698,8 +698,8 @@ export function IntegrationCredentialsManager({
           title={t('settings.cred.revokeTitle')}
         >
           <div className="space-y-4 py-2">
-            <div className="rounded-lg bg-destructive/10 p-3.5 text-sm text-destructive border border-destructive/20 flex gap-2.5">
-              <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
+            <div className="rounded-lg bg-danger-weak p-3.5 text-sm text-danger border border-danger/20 flex gap-2.5">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-danger" />
               <div>
                 <p className="font-semibold">{t('settings.cred.revokeAsk')}</p>
                 <p className="text-xs mt-1">
@@ -713,7 +713,7 @@ export function IntegrationCredentialsManager({
                 type="button"
                 onClick={() => setRevokingCred(null)}
                 disabled={revoking}
-                className="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition"
+                className="rounded-lg border border-border-input bg-surface px-4 py-2 text-sm font-medium text-fg hover:bg-surface-hover transition"
               >
                 {t('common.cancel')}
               </button>
@@ -721,7 +721,7 @@ export function IntegrationCredentialsManager({
                 type="button"
                 onClick={confirmRevoke}
                 disabled={revoking}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 transition disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger/90 transition disabled:opacity-50"
               >
                 {revoking ? t('settings.cred.revoking') : t('settings.cred.revokeGo')}
               </button>

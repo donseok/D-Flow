@@ -7,12 +7,12 @@ const HEX = /^#[0-9a-f]{6}$/
 
 describe('deriveAccent', () => {
   it('제품 action 색에서 세트 하나(light)를 만든다 — 대비 하한을 지키고 전부 소문자 hex. 다크 세트는 없다(라이트 전용 2026-10-10)', () => {
-    const r = deriveAccent('#315CDB')
+    const r = deriveAccent(ACCENT_TOKENS.light.action.toUpperCase())
     expect(r.ok).toBe(true)
     if (!r.ok) return
     const { light, base } = r.value
     expect(Object.keys(r.value).sort()).toEqual(['base', 'light'])
-    expect(base).toBe('#315cdb')
+    expect(base).toBe(ACCENT_TOKENS.light.action)
     for (const v of Object.values(light)) expect(v).toMatch(HEX)
     expect(light.fg).toBe('#ffffff')
     expect(contrastRatio(light.fg, light.bg)).toBeGreaterThanOrEqual(4.5)
@@ -50,7 +50,7 @@ describe('deriveAccent', () => {
     expect(deriveAccent('#31')).toMatchObject({ ok: false })
   })
   it('OKLCH 왕복 — hex → oklch → hex 가 같다(색역 안)', () => {
-    for (const hex of ['#315cdb', '#000000', '#ffffff', '#197455']) expect(oklchToHex(hexToOklch(hex)!)).toBe(hex)
+    for (const hex of ['#315cdb', '#2456e6', '#000000', '#ffffff', '#197455', '#0f7b55']) expect(oklchToHex(hexToOklch(hex)!)).toBe(hex)
   })
 })
 
@@ -86,21 +86,22 @@ describe('parseAccentInput·parseAccentValue', () => {
 })
 
 // 표본 10종(SP3b 스펙 §4.6·§4.7, 계획 판정 Q26) — 빨강·초록 근처 넷은 거부, 나머지는 통과. 임계 20°·0.08 은 이 표로 확정했다.
-// 경계: #2b8a3e 는 success 와 18.0° 라 거부(hue 임계의 하한 쪽), #f76707 은 danger 와 25.4° 라 통과(상한 쪽).
-// #8a6f73 은 hue 로는 거부 구간(danger 와 10.9°)이지만 C 0.035 ≤ 0.08 이라 통과 — chroma 임계를 실제로 시험한다.
+// 경계: #2b8a3e 는 success 와 15.5° 라 거부(hue 임계의 하한 쪽), #f76707 은 danger 와 23.6° 라 통과(상한 쪽).
+// #8a6f73 은 hue 로는 거부 구간(danger 와 12.8°)이지만 C 0.035 ≤ 0.08 이라 통과 — chroma 임계를 실제로 시험한다.
+// 거리 값은 2026-10-10 디자인 정비로 상태색(danger #c62f3e·success #0f7b55)이 바뀐 뒤 다시 잰 것이다(옛 값 18.0°·25.4°·10.9°) — 열 표본의 통과·거부는 그대로다.
 // 레인 A 알림 8: C 의 AccentEditor·저장 테스트는 hue 거리 15°~30° 이거나 거리 20° 미만이면서 C 0.03~0.15 인 색을 표본으로 쓰지 않는다.
 describe('accent 표본 10종 — 임계 확정', () => {
   it.each([
-    ['코발트(기본)', '#315cdb', true],
+    ['코발트(기본)', '#2456e6', true],
     ['빨강 근처 1', '#e03131', false],
     ['빨강 근처 2', '#c2255c', false],
-    ['초록 근처 1 — hue 경계 18.0°', '#2b8a3e', false],
+    ['초록 근처 1 — hue 경계 15.5°', '#2b8a3e', false],
     ['초록 근처 2', '#0ca678', false],
     ['아주 밝은 색', '#ffe066', true],
     ['아주 어두운 색', '#1b1f3b', true],
     ['채도 낮은 회색 — chroma 경계', '#8a6f73', true],
     ['보라', '#7048e8', true],
-    ['주황 — hue 경계 25.4°', '#f76707', true],
+    ['주황 — hue 경계 23.6°', '#f76707', true],
   ] as const)('%s %s → 통과 %s', (_name, hex, ok) => {
     const r = deriveAccent(hex)
     expect(r.ok).toBe(ok)
@@ -114,7 +115,7 @@ describe('accent 표본 10종 — 임계 확정', () => {
   it('거부 이유의 hue 정보 — 빨강 근처는 danger 와의 거리', () => {
     const r = deriveAccent('#e03131')
     expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.hue).toEqual({ status: 'danger', distance: expect.closeTo(7.4, 0), min: 20 })
+    if (!r.ok) expect(r.hue).toEqual({ status: 'danger', distance: expect.closeTo(5.5, 0), min: 20 })
   })
 })
 

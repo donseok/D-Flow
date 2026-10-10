@@ -47,7 +47,7 @@ export function ReportButton({
         onClick={() => setOpen(true)}
         className={
           variant === 'surface'
-            ? 'inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-fg shadow-sm transition hover:bg-surface-subtle'
+            ? 'inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-fg transition hover:bg-surface-subtle'
             // 'hero' — 히어로가 밝은 표면이 된 뒤(D13·E8)의 주 동작 버튼. 옛 흰 반투명(어두운 히어로 전제)은 흰 위에서 사라진다
             : 'btn btn-primary'
         }

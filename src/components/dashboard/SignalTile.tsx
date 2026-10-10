@@ -15,7 +15,7 @@ export function SignalTile({ label, value, sub, signal, statusText }: {
   return (
     <div className={`rounded-2xl border border-border border-t-2 ${m.borderTop} bg-surface-subtle/50 px-4 py-3.5`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-meta font-semibold text-fg-muted">{label}</span>
+        <span className="text-meta font-medium text-fg-secondary">{label}</span>
         <span className={`inline-flex items-center gap-1 text-meta font-semibold ${m.text}`}>
           <Icon className="h-3.5 w-3.5" aria-hidden />{statusText}
         </span>

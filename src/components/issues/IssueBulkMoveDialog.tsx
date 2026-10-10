@@ -133,9 +133,9 @@ export function IssueBulkMoveDialog({
 
         {rows.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[520px] border-collapse text-[13px]">
+            <table className="data-table w-full min-w-[520px] border-collapse text-[13px]">
               <thead>
-                <tr className="border-b border-border bg-surface-subtle text-left text-xs font-semibold text-fg-muted">
+                <tr>
                   <th className="px-2.5 py-2">{t('issue.bulk.col.issue')}</th>
                   <th className="px-2.5 py-2">{t('issue.bulk.col.current')}</th>
                   <th className="px-2.5 py-2">{t('issue.bulk.col.result')}</th>

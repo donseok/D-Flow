@@ -49,6 +49,7 @@ describe('비색 토큰 값(스펙 §4.1 블록 6·D56)', () => {
     ['--z-modal', '150'], ['--z-toast', '200'], ['--z-skip', '250'], ['--radius-control', '8px'], ['--radius-panel', '12px'], ['--control-h', '36px'],
     ['--motion-fast', '110ms'], ['--motion-menu', '140ms'], ['--motion-panel', '180ms'], ['--icon-menu', '18px'], ['--icon-toolbar', '16px'],
     ['--shadow-sm', '0 0 #0000'], ['--shadow-md', '0 0 #0000'], ['--shadow-lg', 'var(--shadow-popover)'], ['--shadow-xl', 'var(--shadow-modal)'],
+    ['--shadow-card', '0 1px 2px rgb(16 24 40 / 0.05)'],
   ])('%s = %s', (n, v) => { expect(val(n)).toBe(v) })
   it('층 사다리는 오름차순이다', () => {
     const z = ['sticky', 'shell', 'rail', 'popover', 'overlay', 'fullscreen', 'modal', 'toast', 'skip'].map((k) => Number(val(`--z-${k}`)))
@@ -56,6 +57,14 @@ describe('비색 토큰 값(스펙 §4.1 블록 6·D56)', () => {
   })
   it('옛 --shadow-sm·md 는 "그림자 없음"이되 none 이 아니다 — shadow-[var(--shadow-sm)] 의 box-shadow 쉼표 목록에 none 이 들면 선언 전체가 무효(IACVT)라 같은 요소의 ring 까지 사라진다(U1a 리뷰 R2 P2, Tailwind 의 shadow-none 과 같은 0 0 #0000)', () => {
     for (const n of ['--shadow-sm', '--shadow-md']) expect(val(n)).not.toMatch(/\bnone\b/)
+  })
+  it('주 표면 카드는 옅은 그림자 한 겹(--shadow-card)을 단다 — "주 표면 그림자 없음"(10/09)을 2026-10-10 사용자 승인 시안이 바꿨다. 떠 있는 층 토큰을 카드에 쓰지 않는다', () => {
+    const comps = top.filter((b) => b.prelude === '@layer components').flatMap((b) => topBlocks(b.body))
+    for (const sel of ['.card', '.kpi-card', '.hero-card', '.seg-item-active']) {
+      const body = comps.find((b) => b.prelude === sel)?.body ?? ''
+      expect(body, sel).toMatch(/\bshadow-\(--shadow-card\)/)
+      expect(body, sel).not.toMatch(/--shadow-(?:popover|modal)/)
+    }
   })
   it('.freeze-edge 그림자는 토큰이다 — fg 를 섞지 않는다(U1a 리뷰 R1 P3)', () => {
     expect(val('--shadow-freeze-edge')).toBeDefined()

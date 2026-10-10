@@ -27,9 +27,10 @@ export function KpiCard({
     <div className="kpi-card">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-meta font-semibold text-fg-muted">{label}</div>
-          <div className={`mt-1.5 text-kpi font-semibold leading-none tabular-nums tracking-tight ${tw.value}`}>{value}</div>
-          {sub && <div className="mt-1.5 text-xs text-fg-secondary leading-normal">{sub}</div>}
+          {/* 라벨은 보조 글자 500, 값은 text-kpi(30/36·700·자간 -0.02em — 굵기·자간·행간은 토큰이 준다), 보조 설명은 흐린 글자(2026-10-10 디자인 정비) */}
+          <div className="text-meta font-medium text-fg-secondary">{label}</div>
+          <div className={`mt-1.5 text-kpi tabular-nums ${tw.value}`}>{value}</div>
+          {sub && <div className="mt-1.5 text-meta tabular-nums text-fg-muted">{sub}</div>}
         </div>
         {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tw.iconWrap}`}><Icon className="h-4 w-4" /></span>}
       </div>

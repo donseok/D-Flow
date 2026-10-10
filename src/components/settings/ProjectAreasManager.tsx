@@ -124,9 +124,9 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
           <p className="text-sm text-fg-muted">{tr('settings.areas.emptyLead').replace('{label}', String(label)).replace('{empty}', String(text.empty))}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
+            <table className="data-table w-full min-w-[560px] text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-fg-muted">
+                <tr>
                   <th className="py-2 pr-3">{text.order}</th>
                   <th className="py-2 pr-3">{text.code}</th>
                   <th className="py-2 pr-3">{text.name}</th>

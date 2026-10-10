@@ -18,7 +18,7 @@ export function MyWorkList({ rows, failedKinds, empty }: { rows: MyWorkRow[]; fa
         <StatusMessage kind="partial_error" compact title={t('portalUi.work.partialFailed').replace('{kinds}', failedKinds.map((k) => t(KIND_LABEL_KEY[k])).join('·'))} />
       )}
       {rows.length === 0 ? (empty ? <StatusMessage kind="empty" compact title={empty} /> : null) : (
-        <ul className="divide-y divide-border rounded-(--radius-panel) border border-border bg-surface">
+        <ul className="divide-y divide-border rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card)">
           {rows.map((r) => {
             const Icon = KIND_ICON[r.kind]
             return (

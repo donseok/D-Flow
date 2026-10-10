@@ -37,9 +37,9 @@ export function PortfolioTable({ rows, leadersDegraded }: {
     <SectionCard title={tr('pf.table.title')} icon={Briefcase}
       actions={<CountBadge n={rows.length} unit={tr('pf.unit')} />}>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] text-left text-xs">
+        <table className="data-table w-full min-w-[980px] text-left text-xs">
           <thead>
-            <tr className="border-b border-border text-meta leading-4 text-fg-muted">
+            <tr>
               <th className={th}>{tr('pf.col.signal')}</th>
               <th className={th}>{tr('pf.col.project')}</th>
               <th className={th}>{tr('pf.col.progress')}</th>

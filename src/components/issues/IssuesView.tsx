@@ -352,7 +352,7 @@ export function IssuesView({
       ) : visible.length > 0 ? (
         <div className="card overflow-hidden p-0">
           <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full table-fixed border-collapse text-[13px]" style={listFields.length ? { minWidth: 1100 + 160 * listFields.length } : undefined}>
+            <table className="data-table min-w-[1100px] w-full table-fixed border-collapse text-[13px]" style={listFields.length ? { minWidth: 1100 + 160 * listFields.length } : undefined}>
               {/* Core widths retain their proportions; custom columns receive 160px each. */}
               <colgroup>
                 <col style={{ width: `${11 * 1100 / (1100 + 160 * listFields.length)}%` }} />
@@ -368,7 +368,7 @@ export function IssuesView({
                 {listFields.map(d => <col key={d.key} style={{ width: `${16000 / (1100 + 160 * listFields.length)}%` }} />)}
               </colgroup>
               <thead>
-                <tr className="whitespace-nowrap border-b border-border/80 bg-surface-subtle text-left text-meta leading-4 font-semibold text-fg-muted">
+                <tr className="whitespace-nowrap">
                   <th className="px-2.5 py-2.5">
                     {/* 선택 칸은 첫 열 안에 둔다 — 열을 더하면 colgroup 폭을 다시 나눠야 한다(위 주석) */}
                     <span className="flex items-center gap-2">

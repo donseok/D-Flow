@@ -6,9 +6,10 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readGlobals, stripComments, tokenMaps, topBlocks } from './lib/cssTokens'
 
-export const SCALE: Record<string, [size: string, lineHeight: string, weight?: string]> = {
-  title: ['1.5rem', '2rem', '600'], 'title-sm': ['1.375rem', '1.875rem', '600'], section: ['1rem', '1.5rem', '600'], body: ['0.875rem', '1.375rem'],
-  control: ['0.875rem', '1.25rem'], meta: ['0.75rem', '1.125rem'], kpi: ['1.75rem', '2.125rem', '600'], doc: ['1rem', '1.625rem'],
+// 2026-10-10 디자인 정비(사용자 승인 시안): 제목·지표(title·title-sm·kpi)는 굵기 700·자간 -0.02em, kpi 는 30/36.
+export const SCALE: Record<string, [size: string, lineHeight: string, weight?: string, letterSpacing?: string]> = {
+  title: ['1.5rem', '2rem', '700', '-0.02em'], 'title-sm': ['1.375rem', '1.875rem', '700', '-0.02em'], section: ['1rem', '1.5rem', '600'], body: ['0.875rem', '1.375rem'],
+  control: ['0.875rem', '1.25rem'], meta: ['0.75rem', '1.125rem'], kpi: ['1.875rem', '2.25rem', '700', '-0.02em'], doc: ['1rem', '1.625rem'],
 }
 const SMALL_OR_CAPS = /text-\[(?:9|10|10\.5|11)px\]|\buppercase\b|tracking-\[0\.1\d?em\]|tracking-wide(?:st|r)?\b/
 /** 공용 컴포넌트 다섯(D14) */
@@ -19,10 +20,11 @@ export const COMPONENTS: string[] = [
 describe('글자 크기 8단계(@theme)', () => {
   const theme = tokenMaps().theme
   const v = (n: string) => theme.find((d) => d.name === n)?.value
-  it.each(Object.entries(SCALE))('text-%s', (name, [size, lh, w]) => {
+  it.each(Object.entries(SCALE))('text-%s', (name, [size, lh, w, ls]) => {
     expect(v(`--text-${name}`)).toBe(size)
     expect(v(`--text-${name}--line-height`)).toBe(lh)
     expect(v(`--text-${name}--font-weight`)).toBe(w)
+    expect(v(`--text-${name}--letter-spacing`)).toBe(ls)
   })
 })
 

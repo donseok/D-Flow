@@ -13,7 +13,7 @@ export function WidgetFrame({ id, title, more, tabs, note, children }: {
   note?: ReactNode; children: ReactNode
 }) {
   return (
-    <section data-widget={id} aria-labelledby={`widget-${id}`} className="h-full min-w-0 rounded-(--radius-panel) border border-border/80 bg-surface p-4.5">
+    <section data-widget={id} aria-labelledby={`widget-${id}`} className="h-full min-w-0 rounded-(--radius-panel) border border-border bg-surface p-4.5 shadow-(--shadow-card)">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 id={`widget-${id}`} className="text-section text-fg">{title}</h2>
         {tabs}

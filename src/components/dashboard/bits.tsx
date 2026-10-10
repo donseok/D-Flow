@@ -46,7 +46,7 @@ export function MiniEmpty({ text }: { text: string }) {
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: string; tone?: string }) {
   return (
     <div className="rounded-xl border border-border/80 bg-surface-subtle/50 px-4 py-3">
-      <div className="text-meta font-semibold text-fg-muted">{label}</div>
+      <div className="text-meta font-medium text-fg-secondary">{label}</div>
       <div className={`mt-1 text-xl font-bold tabular-nums leading-none tracking-tight ${tone ?? 'text-fg'}`}>{value}</div>
       {sub && <div className="mt-1 text-meta text-fg-secondary">{sub}</div>}
     </div>

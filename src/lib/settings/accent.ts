@@ -2,7 +2,8 @@
 // 저장하고(edit.toStored), 저장값은 parseAccentValue 가 모양만 본다. 거부 응답은 실패한 쌍과 대비값을 싣는다.
 // 제품이 라이트 전용(2026-10-10)이라 세트는 light 하나다 — 옛 저장값의 dark 세트는 읽을 때 버린다(parseAccentValue).
 // 임계값(D30): 상태색과 hue 거리 20° 미만이면서 C > 0.08 이면 거부 — SP3b UI-1 이 표본 10종으로 20°·0.08 유지를 확정했다
-// (tests/settings/accent.test.ts 의 표: 흔한 초록 #2b8a3e 18.0° 거부 · 주황 #f76707 25.4° 통과가 경계, 실현 가능 구간 hue (18.0°, 25.4°]).
+// (tests/settings/accent.test.ts 의 표: 흔한 초록 #2b8a3e 15.5° 거부 · 주황 #f76707 23.6° 통과가 경계, 실현 가능 구간 hue (15.5°, 23.6°] —
+// 2026-10-10 디자인 정비로 상태색이 바뀐 뒤 다시 잰 거리다. 옛 값은 18.0°·25.4° 였고 20° 는 여전히 구간 안이다).
 import { ACCENT_TOKENS } from './accentTokens'
 
 export type Hex = string

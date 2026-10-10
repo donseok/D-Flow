@@ -45,9 +45,9 @@ function accentStyle(set: AccentSet): CSSProperties {
 
 /** 글자 크기 8단계(개정 §5.5.6) — 클래스 이름은 Tailwind 가 읽도록 글자 그대로 적는다. 가장 작은 글자는 보조 메타 12px 이다 */
 const TYPE_SCALE: { cls: string; name: string; spec: string }[] = [
-  { cls: 'text-title', name: '페이지 제목', spec: '24/32 · 600' },
-  { cls: 'text-title-sm', name: '페이지 제목(모바일)', spec: '22/30 · 600' },
-  { cls: 'text-kpi', name: 'KPI 숫자', spec: '28/34 · 600' },
+  { cls: 'text-title', name: '페이지 제목', spec: '24/32 · 700' },
+  { cls: 'text-title-sm', name: '페이지 제목(모바일)', spec: '22/30 · 700' },
+  { cls: 'text-kpi', name: 'KPI 숫자', spec: '30/36 · 700' },
   { cls: 'text-section', name: '섹션 제목', spec: '16/24 · 600' },
   { cls: 'text-doc', name: '문서 본문', spec: '16/26 · 400' },
   { cls: 'text-body', name: '본문', spec: '14/22 · 400' },

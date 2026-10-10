@@ -11,8 +11,8 @@ export function ProjectProgress({ row: p }: { row: ProjectRow }) {
   </span> : <span className="text-meta text-fg-secondary">{t('portalUi.projects.progressUnknown')}</span>
 }
 export function ProjectRowsTable({ rows }: { rows: ProjectRow[] }) {
-  return <div className="max-w-full overflow-x-auto rounded-(--radius-panel) border border-border bg-surface">
-    <table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b border-border text-left text-meta font-semibold text-fg-secondary">
+  return <div className="max-w-full overflow-x-auto rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card)">
+    <table className="data-table w-full min-w-[720px] text-sm"><thead><tr>
       <th scope="col" className="w-12 px-3 py-2"><span className="sr-only">{t('portalUi.projects.colFavorite')}</span><span aria-hidden>☆</span></th>
       <th scope="col" className="px-3 py-2">{t('portalUi.projects.colName')}</th><th scope="col" className="px-3 py-2">{t('portalUi.projects.colStatus')}</th><th scope="col" className="px-3 py-2">{t('portalUi.projects.colPeriod')}</th><th scope="col" className="px-3 py-2">{t('portalUi.projects.colProgress')}</th>
     </tr></thead><tbody className="divide-y divide-border">{rows.map(p => <tr key={p.id} className="hover:bg-surface-hover">

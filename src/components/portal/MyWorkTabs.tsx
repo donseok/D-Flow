@@ -85,7 +85,7 @@ export function MyWorkInboxView() {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-surface overflow-hidden shadow-xs">
+    <div className="overflow-hidden rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card)">
       <InboxPanel
         items={inbox}
         derived={notifs.filter((n) => !n.read)}

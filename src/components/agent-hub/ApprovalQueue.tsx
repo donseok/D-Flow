@@ -113,7 +113,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, showTime
 export function ApprovalQueue({ queue, ...rest }: Props) {
   const { t } = useLocale()
   return (
-    <section aria-label={t('agents.state.wait')} className="rounded-xl border border-border bg-surface p-3">
+    <section aria-label={t('agents.state.wait')} className="rounded-xl border border-border bg-surface shadow-(--shadow-card) p-3">
       <h2 className="mb-2 text-xs font-semibold text-fg-muted">{t('agents.state.wait')} {queue.length > 0 && <span className="ml-1 tabular-nums text-fg">{queue.length}</span>}</h2>
       {queue.length === 0
         ? <p className="text-xs text-fg-secondary">{t('agentHub.queue.empty')}</p>

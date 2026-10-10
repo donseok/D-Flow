@@ -69,14 +69,14 @@ export function SettingsShell({ items, children }: { items: SettingsNavItem[]; c
   }, [children])
 
   return <div ref={root} style={{ '--settings-save-bar-h': '0px' } as CSSProperties} className="grid items-start gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-    <aside className="space-y-3 rounded-(--radius-panel) border border-border bg-surface p-4 lg:sticky lg:top-[calc(var(--frame-sticky-top)+1rem)]" aria-label={t('settings.shell.toc')}>
+    <aside className="space-y-3 rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card) p-4 lg:sticky lg:top-[calc(var(--frame-sticky-top)+1rem)]" aria-label={t('settings.shell.toc')}>
       <label htmlFor="settings-search" className="block text-meta font-semibold text-fg">{t('settings.shell.search')}</label>
       <input id="settings-search" type="search" className="app-input w-full text-sm" value={query}
         onChange={event => setQuery(event.target.value)} placeholder={t('settings.shell.searchPh')} />
       <nav aria-label={t('settings.shell.categories')} className="flex flex-wrap gap-1 lg:flex-col">
         {items.map(item => <a key={item.id} href={`#${item.id}`} aria-current={active === item.id ? 'location' : undefined}
           onClick={() => setActive(item.id)}
-          className={`rounded-(--radius-control) px-3 py-2 text-sm ${active === item.id ? 'bg-surface-selected font-semibold text-fg' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg'}`}>
+          className={`rounded-(--radius-control) px-3 py-2 text-sm ${active === item.id ? 'bg-action-soft font-semibold text-action-hover' : 'text-fg-secondary hover:bg-surface-hover hover:text-fg'}`}>
           {item.label}
         </a>)}
       </nav>

@@ -169,7 +169,7 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
         </td>
         <EffectiveRoleCell member={member} effective={effective} />
         <td className="py-2 pr-3">
-          <label className="inline-flex items-center gap-1.5 text-xs text-fg-secondary">
+          <label className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-fg-secondary">
             <input type="checkbox" aria-label={tr('roster.aria.active').replace('{who}', () => String(who))} checked={draft.active} disabled={pending}
               onChange={e => set('active', e.target.checked)} />
             {tr('roster.active')}
@@ -177,7 +177,7 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
         </td>
         <td className="py-2">
           <span className="flex items-center gap-1.5">
-            <button type="button" className="btn btn-primary h-8 px-3 text-xs" disabled={pending || !dirty} onClick={save}>
+            <button type="button" className="btn btn-primary h-8 px-3 text-xs whitespace-nowrap" disabled={pending || !dirty} onClick={save}>
               {pending ? tr('roster.saving') : tr('common.save')}
             </button>
             {confirmDelete ? (

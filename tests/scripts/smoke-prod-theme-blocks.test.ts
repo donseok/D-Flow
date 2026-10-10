@@ -22,7 +22,7 @@ describe('smoke:prod — 원색·비색 :root 블록(N2)', () => {
   const prim = re('ROOT_PRIMITIVE_RE')
   const nonColor = re('ROOT_NONCOLOR_RE')
   it('빌드 산출 모양을 알아본다', () => {
-    expect(prim.test('}:root{color-scheme:light;--p-gray-0:#fff;--p-gray-25:#f5f7fa}')).toBe(true)
+    expect(prim.test('}:root{color-scheme:light;--p-gray-0:#fff;--p-gray-25:#f4f6fa}')).toBe(true)
     expect(nonColor.test('}:root{--z-sticky:20;--z-modal:150;--z-toast:200;--control-h:36px;--radius-control:8px}')).toBe(true)
   })
   it('블록이 없거나 다른 블록의 선언만 있으면 잡는다', () => {

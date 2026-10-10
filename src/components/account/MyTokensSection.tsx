@@ -140,9 +140,9 @@ export function MyTokensSection({ projects, workspaces = [], currentWorkspaceId,
             <EmptyState icon={KeyRound} title={t('account.pat.empty')} description={t('account.pat.emptyDesc')} />
           ) : (
             <div className="w-full min-w-0 max-w-full overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
+              <table className="data-table w-full min-w-[560px] text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
+                  <tr>
                     <th className="py-2 pr-3">{t('account.pat.colName')}</th>
                     <th className="py-2 pr-3">prefix</th>
                     <th className="py-2 pr-3">{t('account.pat.scopes')}</th>

@@ -13,7 +13,7 @@ export function AuthCard({ title, lead, children }: { title: string; lead?: stri
           <h1 className="text-title text-fg">{title}</h1>
           {lead && <p className="text-body text-fg-secondary">{lead}</p>}
         </div>
-        <div className="w-full rounded-(--radius-panel) border border-border bg-surface p-6 sm:p-8">{children}</div>
+        <div className="w-full rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card) p-6 sm:p-8">{children}</div>
       </div>
     </div>
   )

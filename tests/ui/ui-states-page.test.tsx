@@ -39,7 +39,7 @@ describe('/admin/ui-states', () => {
     const samples = [...light.querySelectorAll<HTMLElement>('[data-accent-sample]')]
     expect(samples).toHaveLength(10)
     expect(samples.filter((s) => s.dataset.accentOk === 'true')).toHaveLength(6)
-    const ok = samples.find((s) => s.dataset.accentSample === '#315cdb')!
+    const ok = samples.find((s) => s.dataset.accentSample === '#2456e6')!
     for (const v of ['--color-action', '--color-action-fg', '--color-action-hover', '--color-action-pressed', '--color-action-soft', '--color-border-focus']) {
       expect(ok.getAttribute('style')).toContain(`${v}:`)
     }

@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { reloadPortalPage } from '@/lib/portal/reload'
-import { Button } from '@/components/ui/Button'
 import { flushUiPrefs, queueUiPref } from '@/lib/prefs/debouncedSave'
 import type { ProjectsView } from '@/lib/portal/prefs'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -19,9 +18,16 @@ export function ProjectsViewToggle({ view }: { view: ProjectsView }) {
     setBusy(false)
   }
 
-  return <span className="inline-flex gap-1" role="group" aria-label={t('portalUi.projects.viewAria')}>
-    <Button variant={selected === 'rows' ? 'primary' : 'ghost'} aria-pressed={selected === 'rows'} disabled={busy} onClick={() => void select('rows')}>{t('portalUi.projects.viewRows')}</Button>
-    <Button variant={selected === 'cards' ? 'primary' : 'ghost'} aria-pressed={selected === 'cards'} disabled={busy} onClick={() => void select('cards')}>{t('portalUi.projects.viewCards')}</Button>
+  // 보기 전환은 공용 세그먼트 모양(.seg — 옅은 홈 + 흰 선택 칸, 2026-10-10 디자인 정비). 선택은 aria-pressed·체크(::before)·굵기로 알린다
+  const item = (v: ProjectsView, label: string) => (
+    <button type="button" aria-pressed={selected === v} disabled={busy} onClick={() => void select(v)}
+      className={`seg-item disabled:cursor-not-allowed disabled:opacity-50 ${selected === v ? 'seg-item-active' : ''}`}>{label}</button>
+  )
+  return <span className="inline-flex items-center gap-2">
+    <span className="seg" role="group" aria-label={t('portalUi.projects.viewAria')}>
+      {item('rows', t('portalUi.projects.viewRows'))}
+      {item('cards', t('portalUi.projects.viewCards'))}
+    </span>
     {error && <span role="alert" className="text-meta text-danger">{t('portalUi.projects.viewSaveFailed')}</span>}
   </span>
 }

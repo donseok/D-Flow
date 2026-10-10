@@ -156,9 +156,9 @@ export function MeetingsView({
       ) : (
         <div className="card overflow-hidden p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table className="data-table w-full min-w-[640px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-border bg-surface-subtle text-left text-meta leading-4 font-semibold text-fg-muted">
+                <tr>
                   <th className="px-4 py-3">{t('meet.col.date')}</th>
                   <th className="px-4 py-3">{t('meet.col.time')}</th>
                   <th className="px-4 py-3">{t('meet.col.title')}</th>

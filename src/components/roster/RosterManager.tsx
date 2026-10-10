@@ -75,9 +75,9 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
   return (
     <div className="space-y-4">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[880px] text-sm">
+        <table className="data-table w-full min-w-[880px] text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-xs font-semibold text-fg-muted">
+            <tr>
               <th className="py-2 pr-3">{tr('roster.col.name')}</th>
               <th className="py-2 pr-3">{tr('roster.col.email')}</th>
               <th className="py-2 pr-3">{tr('roster.col.teams')}</th>
