@@ -242,6 +242,22 @@ export function MeetingFormModal({
       // 갱신하는 onSaved 로 보내야 한다 — onClose 로 빠지면 방금 만든 회의가 목록에 없다.
       onClose={locked ? onSaved : onClose}
       title={initial ? t('meet.editMeeting') : t('meet.addMeeting')}
+      // 검증 오류·발송 결과는 저장 버튼 바로 위에 고정한다 — 긴 폼의 맨 아래에 두면 스크롤 밖이라 저장을 눌러도 반응이 없는 것처럼 보였다(2026-10-11 사용자 테스트).
+      // 잠금 대상(fieldset) 밖이라 disabled:opacity-60 으로 흐려지지 않는다.
+      notice={outcome?.kind === 'panel' ? (
+        <p role="alert" className={`flex items-start gap-1.5 rounded-lg px-3 py-2 text-xs font-medium ${
+          outcome.tone === 'error' ? 'bg-danger-weak text-danger' : 'bg-pending-weak text-warning'
+        }`}>
+          {outcome.tone === 'error'
+            ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
+          {outcome.message}
+        </p>
+      ) : err ? (
+        <p role="alert" className="flex items-center gap-1.5 rounded-lg bg-danger-weak px-3 py-2 text-xs font-medium text-danger">
+          <AlertTriangle className="h-4 w-4 shrink-0" />{err}
+        </p>
+      ) : undefined}
       footer={
         locked ? (
           <button onClick={onSaved} className="btn btn-primary">{t('common.close')}</button>
@@ -397,26 +413,8 @@ export function MeetingFormModal({
             <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.body')}</span>
             <textarea value={form.body} onChange={e => set('body', e.target.value)} rows={3} placeholder={t('meet.form.bodyPlaceholder')} className="app-textarea" />
           </label>
-
-          {err && (
-            <p className="flex items-center gap-1.5 rounded-lg bg-danger-weak px-3 py-2 text-xs font-medium text-danger">
-              <AlertTriangle className="h-4 w-4 shrink-0" />{err}
-            </p>
-          )}
         </div>
       </fieldset>
-
-      {/* 잠금 대상 밖에 둔다 — fieldset 안이면 disabled:opacity-60 으로 흐려져 정작 읽어야 할 글이 안 읽힌다. */}
-      {outcome?.kind === 'panel' && (
-        <p className={`mt-4 flex items-start gap-1.5 rounded-lg px-3 py-2 text-xs font-medium ${
-          outcome.tone === 'error' ? 'bg-danger-weak text-danger' : 'bg-pending-weak text-warning'
-        }`}>
-          {outcome.tone === 'error'
-            ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
-          {outcome.message}
-        </p>
-      )}
     </Modal>
   )
 }

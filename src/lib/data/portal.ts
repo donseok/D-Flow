@@ -38,6 +38,7 @@ import { CORE_MODULES, WORKSPACE_SCOPED, type ModuleId } from '@/lib/modules/def
 import { MY_WORK_KINDS, compareMyWork, mergeMyWork, openLeafIds, type MyWorkKind, type MyWorkRow } from '@/lib/portal/myWork'
 import { isDueToday, summarize, type PortalSummary } from '@/lib/portal/summary'
 import { projectProgressMap, statusReason } from '@/lib/portal/projectProgress'
+import { realDueDate } from '@/lib/domain/farDate'
 
 type Db = Awaited<ReturnType<typeof createServerClient>>
 /** t — 화면에 그대로 보이는 사유 한 줄(요약 칸·프로젝트 현황)의 번역 함수. 없으면 한국어 */
@@ -497,7 +498,7 @@ const projectRowsBase = cache(async (workspaceId: string, actor: Actor, clientIn
       return {
         id: p.id, name: p.name, description: p.description ?? null, startDate: p.start_date, endDate: p.end_date, isFavorite: fav.has(p.id), status,
         statusReason: today === null ? (t ?? koTranslate)('portal.status.todayUnknown') : statusReason(status, pr, t, !!p.end_date && today > p.end_date),
-        progress: pr ? { done: pr.done, total: pr.total } : (progress === null ? null : { done: 0, total: 0 }), nextDue: pr?.nextDue ?? null,
+        progress: pr ? { done: pr.done, total: pr.total } : (progress === null ? null : { done: 0, total: 0 }), nextDue: realDueDate(pr?.nextDue),
         overdueOpen: pr ? pr.overdueOpen : (progress === null ? null : 0),
       }
     })

@@ -12,6 +12,7 @@ import { TeamMultiSelect, type TeamOption } from './TeamMultiSelect'
 import { useTeamLabel } from '@/components/app/TeamsProvider'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
+import { useLeaveGuard } from '@/lib/ui/useLeaveGuard'
 
 export const ROSTER_COLUMNS = 9
 
@@ -127,6 +128,8 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
 
   const who = member.name
   const { t: tr } = useLocale()
+  // 행마다 저장 버튼이 따로라 입력만 하고 떠나면 조용히 사라졌다 — 저장 전 이탈을 묻는다
+  useLeaveGuard(dirty, tr('common.unsavedChangesDesc'))
   const unlinked = member.kind === 'external'
   return (
     <>
@@ -175,7 +178,8 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
             {tr('roster.active')}
           </label>
         </td>
-        <td className="py-2">
+        {/* 표가 좁은 화면에서 가로로 스크롤돼도 저장 버튼은 오른쪽에 붙어 보인다 — 스크롤 밖에 있어 저장을 놓치던 자리 */}
+        <td data-roster-actions className="sticky right-0 border-l border-border bg-surface py-2 pl-2">
           <span className="flex items-center gap-1.5">
             <button type="button" className="btn btn-primary h-8 px-3 text-xs whitespace-nowrap" disabled={pending || !dirty} onClick={save}>
               {pending ? tr('roster.saving') : tr('common.save')}

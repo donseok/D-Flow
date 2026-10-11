@@ -38,6 +38,9 @@ export async function SpiPanel({ model, variance, historyFailed = false }: {
 
   // 반원 게이지 — 상태색 호 + 바늘 + 중앙 큰 숫자. 바늘이 숫자를 지나도 읽히게 표면색 할로를 두른다.
   const needle = spi == null ? null : angleOf(spi)
+  // 게이지는 0.5~1.5 만 그린다 — 벗어난 값은 바늘이 끝에 붙어 멈추므로, 끝 눈금에 표시하고 아래에 한 줄로 알린다(숫자는 실제 값 그대로)
+  const over = spi != null && spi > 1.5
+  const under = spi != null && spi < 0.5
   const gauge = (
     <svg viewBox={`0 0 ${GW} ${GH}`} className="mx-auto h-auto w-full max-w-[280px]"
       role="img" aria-label={`${tr('dash.spi.current')} ${spi == null ? '—' : spi.toFixed(2)}`}>
@@ -47,8 +50,8 @@ export async function SpiPanel({ model, variance, historyFailed = false }: {
       )}
       <line x1={CX} x2={CX} y1={CY - R - 9} y2={CY - R + 9} className="stroke-border-input" strokeWidth={2} />
       <text x={CX} y={CY - R - 14} textAnchor="middle" fontSize={10} className="fill-fg-muted">1.0</text>
-      <text x={CX - R} y={CY + 16} textAnchor="middle" fontSize={10} className="fill-fg-muted">0.5</text>
-      <text x={CX + R} y={CY + 16} textAnchor="middle" fontSize={10} className="fill-fg-muted">1.5</text>
+      <text x={CX - R} y={CY + 16} textAnchor="middle" fontSize={10} fontWeight={under ? 700 : 400} className={under ? 'fill-fg' : 'fill-fg-muted'}>{under ? tr('dash.spi.under') : '0.5'}</text>
+      <text x={CX + R} y={CY + 16} textAnchor="middle" fontSize={10} fontWeight={over ? 700 : 400} className={over ? 'fill-fg' : 'fill-fg-muted'}>{over ? tr('dash.spi.over') : '1.5'}</text>
       {needle != null && (
         <g>
           <line x1={CX} y1={CY} x2={gx(needle, R - 18)} y2={gy(needle, R - 18)}
@@ -89,6 +92,7 @@ export async function SpiPanel({ model, variance, historyFailed = false }: {
     <SectionCard title={tr('dash.spi.title')} icon={Gauge}>
       <div className="space-y-4">
         {gauge}
+        {(over || under) && <p data-spi-out-of-range className="text-center text-meta text-fg-secondary">{tr('dash.spi.outOfRange')}</p>}
         {spark}
         <div className="grid grid-cols-2 gap-3">
           <Stat label={tr('dash.spi.current')} value={spi == null ? '—' : spi.toFixed(2)} tone={spiTone} />

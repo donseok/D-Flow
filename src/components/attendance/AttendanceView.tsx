@@ -102,6 +102,8 @@ export function AttendanceView({
   const [deleting, setDeleting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [formErr, setFormErr] = useState<string | null>(null)
+  // 확인이 필요한 저장(같은 날 기존 기록 교체·쉬는 날 등록)을 한 번 알린 입력 — 같은 입력으로 다시 저장을 누르면 그대로 저장한다
+  const [formWarn, setFormWarn] = useState<{ key: string; text: string } | null>(null)
   const [form, setForm] = useState<{ memberId: string; date: string; type: AttendanceType; note: string }>({
     memberId: members[0]?.id ?? '',
     date: initialDate,
@@ -204,6 +206,7 @@ export function AttendanceView({
     setEditingId(null)
     setForm({ memberId: members[0]?.id ?? '', date: initialDate, type: defaultType, note: '' })
     setFormErr(null)
+    setFormWarn(null)
     setConfirmingDelete(false)
     setOpen(true)
   }
@@ -213,6 +216,7 @@ export function AttendanceView({
     setEditingId(r.id)
     setForm({ memberId: r.memberId, date: r.date, type: r.type, note: r.note ?? '' })
     setFormErr(null)
+    setFormWarn(null)
     setConfirmingDelete(false)
     setOpen(true)
   }
@@ -231,6 +235,21 @@ export function AttendanceView({
   async function submit() {
     if (!form.memberId) { setFormErr(t('att.err.selectMember')); return }
     if (!form.date) { setFormErr(t('att.err.selectDate')); return }
+    // 저장은 사람·날짜당 한 건이라 같은 날 다시 등록하면 기존 기록이 바뀐다 — 조용히 덮어쓰지 않고 먼저 알린다. 쉬는 날 등록도 같다(2026-10-11 사용자 테스트).
+    // 같은 종류로 다시 저장하는 것은 바뀌는 것이 없어 묻지 않는다(메모만 고쳐진다)
+    const existing = records.find(r => r.memberId === form.memberId && r.date === form.date && r.id !== editingId && r.type !== form.type)
+    const restDay = !calendarDayInfo(form.date, calendar, holidayNames).working
+    const warnKey = `${form.memberId}|${form.date}|${form.type}`
+    if ((existing || restDay) && formWarn?.key !== warnKey) {
+      const parts = [
+        existing ? t('att.warn.replace').replace('{old}', typeLabel(existing.type)).replace('{new}', typeLabel(form.type)) : '',
+        restDay ? t('att.warn.restDay').replace('{date}', fmtDate(form.date)) : '',
+      ].filter(Boolean)
+      setFormErr(null)
+      setFormWarn({ key: warnKey, text: `${parts.join(' ')} ${t('att.warn.again')}` })
+      return
+    }
+    setFormWarn(null)
     setSaving(true)
     setFormErr(null)
     const res = await upsertAttendance(projectId, {
@@ -504,7 +523,8 @@ export function AttendanceView({
           {editingId && (
             <p className="text-meta leading-5 text-fg-muted">{t('att.form.lockedHint')}</p>
           )}
-          {formErr && <p className="text-xs font-medium text-danger">{formErr}</p>}
+          {formErr && <p role="alert" className="text-xs font-medium text-danger">{formErr}</p>}
+          {!formErr && formWarn && <p role="alert" data-att-warn className="rounded-lg bg-warning-weak px-3 py-2 text-xs font-medium text-warning">{formWarn.text}</p>}
         </div>
       </Modal>
 

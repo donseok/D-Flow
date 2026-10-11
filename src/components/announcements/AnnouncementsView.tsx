@@ -428,6 +428,12 @@ export function AnnouncementFormModal({
       onClose={onClose}
       title={isEdit ? t('ann.edit') : t('ann.write')}
       size="lg"
+      notice={error ? (
+        <div role="alert" className="flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-weak px-3 py-2.5 text-xs font-medium text-danger">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {error}
+        </div>
+      ) : undefined}
       footer={
         <>
           <button onClick={onClose} className="btn btn-ghost" disabled={pending}>
@@ -441,7 +447,7 @@ export function AnnouncementFormModal({
     >
       <div className="space-y-4">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('ann.form.title')}</span>
+          <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('ann.form.title')} *</span>
           <input
             className="app-input"
             value={title}
@@ -489,7 +495,7 @@ export function AnnouncementFormModal({
           </span>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-meta font-medium text-fg-muted">{t('ann.form.publishFrom')}</span>
+              <span className="mb-1 block text-meta font-medium text-fg-muted">{t('ann.form.publishFrom')} *</span>
               <input
                 type="date"
                 className="app-input"
@@ -499,7 +505,7 @@ export function AnnouncementFormModal({
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-meta font-medium text-fg-muted">{t('ann.form.publishTo')}</span>
+              <span className="mb-1 block text-meta font-medium text-fg-muted">{t('ann.form.publishTo')} *</span>
               <input
                 type="date"
                 className="app-input"
@@ -555,13 +561,6 @@ export function AnnouncementFormModal({
             placeholder={t('ann.form.bodyPh')}
           />
         </label>
-
-        {error && (
-          <div className="flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-weak px-3 py-2.5 text-xs font-medium text-danger">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            {error}
-          </div>
-        )}
       </div>
     </Modal>
   )

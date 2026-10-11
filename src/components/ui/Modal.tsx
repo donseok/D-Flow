@@ -26,7 +26,7 @@ export function ModalCloseButton({ onClick, label }: { onClick?: () => void; lab
 
 /** 접근성 모달 — Escape/백드롭 닫기 + 포커스 트랩/복원. dirty 시 이탈 확인(D6-§7-exit). */
 export function Modal({
-  open, onClose, title, eyebrow, children, footer, size = 'md',
+  open, onClose, title, eyebrow, children, footer, notice, size = 'md',
   dirty = false, dirtyConfirmTitle, dirtyConfirmDesc,
 }: {
   open: boolean
@@ -35,6 +35,8 @@ export function Modal({
   eyebrow?: string
   children: ReactNode
   footer?: ReactNode
+  /** 저장 버튼 바로 위에 고정해 보이는 알림(검증 오류·저장 결과). 본문은 길면 스크롤되므로 본문 맨 아래에 두면 버튼을 눌러도 아무 일이 없는 것처럼 보인다 */
+  notice?: ReactNode
   size?: 'sm' | 'md' | 'lg'
   /** 폼 수정 사항이 있는지 여부 (true일 경우 닫기 시 확인 다이얼로그 노출) */
   dirty?: boolean
@@ -137,6 +139,7 @@ export function Modal({
               <ModalCloseButton onClick={requestClose} label={t('common.close')} />
             </div>
             <div className="min-h-0 max-h-[70vh] overflow-y-auto px-6 py-5">{children}</div>
+            {notice && <div data-modal-notice className="shrink-0 border-t border-border/70 px-6 py-3">{notice}</div>}
             {footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/70 bg-surface-subtle/40 px-6 py-4">{footer}</div>}
           </div>
         </div>,

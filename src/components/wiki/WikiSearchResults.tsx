@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ArrowRight, BookOpen, Sparkles } from 'lucide-react'
+import { readableIndexText } from '@/lib/wiki/readableIndexText'
 import { t, type DictKey} from '@/lib/i18n/dict'
 import {
   highlightSegments,
@@ -117,7 +118,8 @@ export function WikiSearchResults({ state, query, projectId }: {
     }
   }
 
-  const hits = state.kind === 'done' ? state.hits.slice(0, MAX_BULLETS) : []
+  // 화면에 보이는 본문은 코드 대신 이름으로(상태: in_progress → 진행중) — 요약 요청에 보내는 원문은 그대로다
+  const hits = (state.kind === 'done' ? state.hits.slice(0, MAX_BULLETS) : []).map(hit => ({ ...hit, content: readableIndexText(hit.content) }))
   const selectedHit = selected !== null ? hits[selected] ?? null : null
 
   // 결과 두 열(왼쪽 목록 · 오른쪽 읽기 패널) — idle 여부로 감싸개만 갈린다(아래 두 갈래)

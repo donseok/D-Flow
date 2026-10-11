@@ -59,6 +59,7 @@ export const kanbanKo = {
   'kanban.progressDesc': '이 작업의 실적%를 선택하세요.',
   'kanban.progressCustom': '직접 입력(1~99)',
   'kanban.progressApply': '적용',
+  'kanban.progressRange': '1~99 사이의 값을 입력하세요. 완료(100%)는 카드를 완료 칸으로 옮깁니다.',
   // 되돌림 확인
   'kanban.resetTitle': '진척을 0%로 되돌릴까요?',
   'kanban.resetDesc': '현재 진척이 사라지고 ‘시작전’으로 이동합니다.',

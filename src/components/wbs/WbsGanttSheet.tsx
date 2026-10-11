@@ -1835,8 +1835,8 @@ export function WbsGanttSheet({
             aria-label={t('wbs.newPhaseAria').replace('{level}', topLevelLabel)}
             className="app-input h-9 flex-1 text-sm"
           />
-          <button onClick={submitAddPhase} disabled={addBusy || !addPhase.trim()} className="btn btn-primary h-9 px-4 text-xs">{addBusy ? t('wbs.adding') : t('common.add')}</button>
-          <button onClick={() => setAddPhase(null)} className="btn btn-ghost h-9 px-3 text-xs">{t('common.cancel')}</button>
+          <button onClick={submitAddPhase} disabled={addBusy || !addPhase.trim()} className="btn btn-primary h-9 shrink-0 whitespace-nowrap px-4 text-xs">{addBusy ? t('wbs.adding') : t('common.add')}</button>
+          <button onClick={() => setAddPhase(null)} className="btn btn-ghost h-9 shrink-0 whitespace-nowrap px-3 text-xs">{t('common.cancel')}</button>
         </div>
       )}
 
@@ -1857,7 +1857,7 @@ export function WbsGanttSheet({
 
       {/* 프로젝트 기간 밖 작업(BUG-14) — 저장은 막지 않는다. 해당 행의 날짜 칸이 같은 색으로 표시된다 */}
       {outOfRangeIds.size > 0 && (
-        <p data-wbs-out-of-range role="status" className={`mb-2 rounded-(--radius-control) border border-warning bg-warning-weak px-3 py-1.5 text-xs font-medium text-warning`}>
+        <p data-wbs-out-of-range role="status" className="mb-2 rounded-(--radius-control) border border-warning bg-warning-weak px-3 py-1.5 text-xs font-medium text-warning">
           {t('wbs.outOfRange').replace('{n}', String(outOfRangeIds.size)).replace('{start}', fmtDate(startDate ?? null)).replace('{end}', fmtDate(endDate ?? null))}
         </p>
       )}

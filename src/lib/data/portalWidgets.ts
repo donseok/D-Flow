@@ -24,6 +24,7 @@ import { getProjectCalendars, getProjectVocabs } from '@/lib/settings/projectCon
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { DEFAULT_SEVERITIES, type AttendanceTypeDef } from '@/lib/settings/vocab'
 import type { createServerClient } from '@/lib/supabase/server'
+import { realDueDate } from '@/lib/domain/farDate'
 
 type Db = Awaited<ReturnType<typeof createServerClient>>
 type Opts = { client?: Db; now?: Date; t?: Translate; limit?: number }
@@ -97,7 +98,7 @@ export async function getProjectProgress(workspaceId: string, actor: Actor, opts
   const rows: ProgressSummaryRow[] = res.rows.filter((p) => own.has(p.id)).map((p) => ({
     id: p.id, name: p.name, status: p.status, statusReason: p.statusReason, done: p.progress?.done ?? 0, total: p.progress?.total ?? 0,
     pct: p.progress && p.progress.total > 0 ? Math.floor((p.progress.done / p.progress.total) * 100) : null,
-    overdueOpen: p.overdueOpen ?? null, nextDue: p.nextDue,
+    overdueOpen: p.overdueOpen ?? null, nextDue: realDueDate(p.nextDue),
   }))
   rows.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (a.pct ?? 101) - (b.pct ?? 101) || a.name.localeCompare(b.name, KO_LOCALE))
   return { ok: true, rows: rows.slice(0, cap(opts.limit, 6, 20)), total: rows.length }

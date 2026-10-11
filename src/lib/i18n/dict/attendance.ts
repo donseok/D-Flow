@@ -39,6 +39,9 @@ export const attendanceKo = {
   'att.err.selectMember': '멤버를 선택하세요.',
   'att.err.selectDate': '날짜를 선택하세요.',
   'att.err.saveFailed': '저장에 실패했습니다.',
+  'att.warn.replace': '이 날짜에는 이미 ‘{old}’ 기록이 있습니다. 저장하면 ‘{new}’(으)로 바뀝니다.',
+  'att.warn.restDay': '{date}은(는) 쉬는 날입니다.',
+  'att.warn.again': '맞으면 저장을 한 번 더 누르세요.',
   'att.err.deleteFailed': '삭제에 실패했습니다.',
   // 달력 칸의 쉬는 날 보조 단서(색 말고 — A-5 리뷰 O4): 이름 없는 쉬는 날의 작은 표지·보조기기 문구
   'att.restMark': '쉼',

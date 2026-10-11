@@ -28,7 +28,7 @@ describe('ProgressPopover', () => {
     expect(onSubmit).toHaveBeenCalledWith(50)
   })
 
-  it('직접입력이 범위를 초과하면 99로 클램프되어 onSubmit 된다', async () => {
+  it('직접입력이 범위(1~99)를 벗어나면 조용히 고치지 않고 거부한다 — 표의 실적% 입력과 같은 규칙', async () => {
     const onSubmit = vi.fn()
     await act(async () => root.render(
       <ProgressPopover open title="t" initial={30} onSubmit={onSubmit} onClose={() => {}} />,
@@ -43,7 +43,16 @@ describe('ProgressPopover', () => {
     })
     const apply = [...document.body.querySelectorAll('button')].find(b => b.textContent?.trim() === 'kanban.progressApply')!
     await act(async () => apply.click())
-    expect(onSubmit).toHaveBeenCalledWith(99)
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toBe('kanban.progressRange')
+    // 값을 고치면 안내가 사라지고, 범위 안의 값은 그대로 적용된다
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, '75')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(document.body.querySelector('[role="alert"]')).toBeNull()
+    await act(async () => apply.click())
+    expect(onSubmit).toHaveBeenCalledWith(75)
   })
 })
 
