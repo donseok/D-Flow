@@ -24,7 +24,7 @@ describe('sticky-offset', () => {
   })
   it('z-10 고정 줄 아래로 흐르는 내용의 높은 층(z-20·z-30)은 isolate 상자 안에 가둔다 — 주간 시트(채움형 스크롤 상자)·회의록 탐색기', () => {
     // 고정 줄을 z-10 으로 내리면(도구 줄 --z-sticky 아래) 뒤 형제의 z-30 배지·z-20 메뉴 버튼이 스크롤 중 그 줄을 덮는다(옛 z-40 의 이유)
-    expect(readFileSync('src/components/weekly/WeeklySheetView.tsx', 'utf8')).toContain('<div className="isolate min-h-0 flex-1 overflow-auto">')
+    expect(readFileSync('src/components/weekly/WeeklySheetView.tsx', 'utf8')).toContain('className="isolate min-h-0 flex-1 overflow-auto"')
     expect(readFileSync('src/components/minutes/MinutesExplorer.tsx', 'utf8')).toMatch(/data-minutes-explorer\s+className="isolate /)
   })
   it('예외 목록의 파일이 실제로 있다(낡은 예외 금지)', () => {

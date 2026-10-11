@@ -80,7 +80,7 @@ export function SheetCell(p: SheetCellProps) {
         ref={ref} value={p.value} rows={3} aria-label={p.ariaLabel} data-sheet-cell="1"
         readOnly={p.readOnly}
         style={{ caretColor: p.editing && !p.readOnly ? 'var(--color-fg)' : 'transparent' }}
-        className={`block min-h-full w-full resize-none select-text rounded-none border-0 bg-transparent p-1.5 text-[13px] leading-[1.5] text-fg outline-none focus:relative focus:z-10 focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-border-focus ${p.editing ? 'cursor-text' : 'cursor-cell'} ${p.editing ? 'shadow-md' : ''}`}
+        className={`block min-h-full w-full resize-none select-text rounded-none border-0 bg-transparent p-2 text-body text-fg outline-none focus:relative focus:z-10 focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-border-focus ${p.editing ? 'cursor-text' : 'cursor-cell'} ${p.editing ? 'shadow-md' : ''}`}
         onChange={e => p.onChange(e.target.value)}
         onBlur={p.onBlur}
         onFocus={p.onFocus}

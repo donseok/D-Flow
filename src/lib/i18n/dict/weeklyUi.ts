@@ -1,6 +1,8 @@
 // weeklyUi 화면 사전 — 업무 화면의 한국어 리터럴을 옮긴 자리(i18n 정리). 모음은 workUi.ts.
 // 주간 시트의 핵심 4열 이름(WEEKLY_CELL_LABEL)과 2단 머리(금주실적·차주계획 × 내용·이슈 및 주요 이벤트)는 제품 고정이라 여기 없다.
 export const weeklyUiKo = {
+  'weekly.sheet.region': '주간업무 편집 표',
+  'weekly.sheet.scrollHint': '표를 좌우로 밀어 이번 주 실적과 다음 주 계획을 확인하세요.',
   // 이월 매핑 창(CarryMappingModal)
   'weekly.carry.title': '이월할 내용의 업무영역 고르기',
   'weekly.carry.submit': '이 매핑으로 이월',

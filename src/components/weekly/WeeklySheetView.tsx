@@ -915,7 +915,8 @@ export function WeeklySheetView({
         aiRewriteDisabled={!hasFocusedCell}
         onLint={() => setLintOpen(true)}
       />
-      <div className="isolate min-h-0 flex-1 overflow-auto">
+      <p className="text-meta text-fg-secondary lg:hidden">{t('weekly.sheet.scrollHint')}</p>
+      <div className="isolate min-h-0 flex-1 overflow-auto" role="region" aria-label={t('weekly.sheet.region')} tabIndex={0}>
         <div className={`min-w-[1240px] rounded-(--radius-panel) bg-surface p-1.5 ring-1 ring-border/80 ${grid.dragging === 'fill' ? 'cursor-crosshair select-none' : grid.dragging === 'select' ? 'cursor-cell select-none' : ''}`}>
           {/* 제목 행 — 레퍼런스 시트의 B1. 자유 편집(''이면 기본 제목 합성). key로 주차 전환 시 초기화 */}
           <TitleEditor
