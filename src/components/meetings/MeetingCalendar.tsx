@@ -4,12 +4,13 @@ import { useMemo, useState } from 'react'
 import type { MeetingOccurrence } from '@/lib/domain/types'
 import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
-import { calendarDayInfo, monthMatrix, weekdayColumns, type CalendarView } from '@/lib/domain/attendance'
+import { calendarDayInfo, monthWeeks, weekdayColumns, type CalendarView } from '@/lib/domain/attendance'
 import { currentRuleDay } from '@/lib/domain/calendar'
 import { occurrencesByDate, sortOccurrences } from '@/lib/domain/meetings'
 import { vocabColor, vocabOf, type VocabByProject } from '@/lib/settings/vocab'
 import { DayPopover, type DayPopoverAnchor } from '@/components/ui/DayPopover'
 import { RestDayMark } from '@/components/calendar/RestDayMark'
+import { useMonthFit, visibleChips } from '@/components/calendar/useMonthFit'
 
 function OccurrenceChip({ o, onSelect, t, projectDotClass, categories }: {
   o: MeetingOccurrence
@@ -57,14 +58,16 @@ export function MeetingCalendar({
   // 첫 열 = 오늘 적용되는 규칙의 시작 요일(SP5 §4.4) — 보는 달과 무관하다. 페이지의 조회 범위도 같은 규칙이다
   const firstDay = currentRuleDay(calendar.weekStart, todayIso)
   const columns = useMemo(() => weekdayColumns(firstDay), [firstDay])
-  const matrix = useMemo(() => monthMatrix(year, month0, firstDay), [year, month0, firstDay])
+  // 그 달의 주만 그린다(4~6줄) — 줄 높이는 화면 높이를 주 수로 나눠 스크롤 없이 한 달이 한 화면에 든다
+  const matrix = useMemo(() => monthWeeks(year, month0, firstDay), [year, month0, firstDay])
+  const fit = useMonthFit(matrix.length, 4)
   const byDate = useMemo(() => occurrencesByDate(occurrences), [occurrences])
   const ym = `${year}-${String(month0 + 1).padStart(2, '0')}`
   const moreOcc = more ? sortOccurrences(byDate[more.date] ?? []) : []
 
   return (
     <div className="card overflow-hidden p-0">
-      <div className="grid grid-cols-7 gap-px bg-border">
+      <div ref={fit.gridRef} data-cal-grid data-weeks={matrix.length} className="grid grid-cols-7 gap-px bg-border">
         {columns.map(c => (
           <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-meta ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>
             {t(`att.weekday.${c.key}` as DictKey)}
@@ -76,8 +79,10 @@ export function MeetingCalendar({
           const dayNum = Number(cell.slice(8, 10))
           const dayOcc = sortOccurrences(byDate[cell] ?? [])
           const info = calendarDayInfo(cell, calendar, holidayNames)
+          const shown = visibleChips(dayOcc.length, fit.rowsPerCell)
           return (
-            <div key={cell} data-date={cell} className={`min-h-[104px] p-1.5 ${info.working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'}`}>
+            <div key={cell} data-date={cell} style={fit.rowHeight === null ? undefined : { height: fit.rowHeight }}
+              className={`p-1.5 ${fit.rowHeight === null ? 'min-h-[104px]' : 'overflow-hidden'} ${info.working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'}`}>
               {/* 좁은 화면(sm 미만)은 이름이 날짜 아래 한 줄을 통째로 쓰고 줄바꿈, sm 이상은 날짜 옆 한 줄 말줄임(title 로 전체) */}
               <div className="flex flex-wrap items-center justify-between gap-x-1 px-0.5 sm:flex-nowrap">
                 <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-action text-action-fg' : info.working ? 'text-fg' : 'text-fg-secondary'}`}>
@@ -91,10 +96,10 @@ export function MeetingCalendar({
                 {!info.working && <RestDayMark named={!!info.name} mark={t('att.restMark')} label={t('att.restDay')} />}
               </div>
               <div className="mt-1 space-y-1">
-                {dayOcc.slice(0, 3).map(o => (
+                {dayOcc.slice(0, shown).map(o => (
                   <OccurrenceChip key={o.occurrenceId} o={o} t={t} onSelect={onSelectOccurrence} projectDotClass={projectDotClass} categories={categories} />
                 ))}
-                {dayOcc.length > 3 && (
+                {dayOcc.length > shown && (
                   <button
                     onClick={e => {
                       const r = e.currentTarget.getBoundingClientRect()
@@ -102,7 +107,7 @@ export function MeetingCalendar({
                     }}
                     className="w-full rounded-md px-1 py-0.5 text-left text-meta font-medium text-fg-muted transition hover:bg-surface-subtle hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                   >
-                    +{dayOcc.length - 3}{t('meet.moreSuffix')}
+                    +{dayOcc.length - shown}{t('meet.moreSuffix')}
                   </button>
                 )}
               </div>

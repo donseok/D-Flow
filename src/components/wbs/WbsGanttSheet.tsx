@@ -195,26 +195,6 @@ function ancestorPath(items: ComputedItem[], id: string): string[] | null {
   }
   return walk(items, [])
 }
-/* 검색: 매칭 노드 + 조상 id 집합 */
-function buildMatch(items: ComputedItem[], q: string): Set<string> {
-  const keep = new Set<string>()
-  const walk = (n: ComputedItem, anc: string[]): boolean => {
-    const self = n.name.toLowerCase().includes(q)
-    let child = false
-    n.children.forEach(c => {
-      if (walk(c, [...anc, n.id])) child = true
-    })
-    if (self || child) {
-      keep.add(n.id)
-      anc.forEach(a => keep.add(a))
-      return true
-    }
-    return false
-  }
-  items.forEach(n => walk(n, []))
-  return keep
-}
-
 export function WbsGanttSheet({
   items: serverItems,
   dependencies = EMPTY_DEPENDENCIES,
@@ -358,7 +338,6 @@ export function WbsGanttSheet({
   const rootRef = useRef<HTMLDivElement>(null)
   const timelineScrollRef = useRef<HTMLDivElement>(null)
   const centeredViewRef = useRef<string | null>(null)
-  const [query, setQuery] = useState('')
   const [bulkSelection, setBulkSelection] = useState<Set<string>>(new Set())
   const [pasteSnapshot, setPasteSnapshot] = useState<{ rows: WbsBulkSnapshotRow[]; columns: WbsPasteField[] } | null>(null)
   const [bulkSnapshot, setBulkSnapshot] = useState<{ rows: WbsBulkSnapshotRow[]; selectedIds: string[] } | null>(null)
@@ -451,7 +430,7 @@ export function WbsGanttSheet({
     projectId,
     selectedEntity: selectedId ? { type: 'wbs_item', id: selectedId } : null,
     view: timelineFocus ? 'timeline' : 'sheet',
-    search: query || null,
+    search: null,
   })
   // 접속자 프레즌스 — 같은 프로젝트 WBS 메뉴에 머무는 사용자(주간 시트 접속자 아바타와 동일 UX).
   // 본인은 presence 동기화 전에도 즉시 보이게 로컬로 선두 고정(주간 시트와 동일한 사용자 결정).
@@ -736,15 +715,11 @@ export function WbsGanttSheet({
     return n
   }, [collapsed, forcedOpen])
 
-  const q = query.trim().toLowerCase()
-  const matchKeep = useMemo(() => (q ? buildMatch(items, q) : null), [items, q])
   const flatRows = useMemo(() => {
-    // 검색이 우선 — 완료 작업도 검색으로 찾을 수 있어야 하므로 숨김 미적용(스펙 §결정 사항)
-    if (matchKeep) return flatten(items, new Set()).filter(n => matchKeep.has(n.id))
     const rows = flatten(items, effCollapsed)
     if (!hideDone) return rows
     return rows.filter(n => !hideDoneResult.hiddenIds.has(n.id) || hideExempt.has(n.id))
-  }, [items, effCollapsed, matchKeep, hideDone, hideDoneResult, hideExempt])
+  }, [items, effCollapsed, hideDone, hideDoneResult, hideExempt])
   const allFlatItems = useMemo(() => flatten(items, new Set()), [items])
   // 가중치 헤더 밑 합계 — 1레벨(Phase) 가중치의 합. 가중치는 형제 그룹 안에서만 의미가 있어
   // '전체 합'이 성립하는 층은 루트뿐이다(하위까지 더하면 그룹 수만큼 100%가 쌓인다).
@@ -887,11 +862,11 @@ export function WbsGanttSheet({
   const parentById = useMemo(() => new Map(allFlatItems.map(n => [n.id, n.parentId])), [allFlatItems])
   const gridNav = useMemo(
     () => gridModel(
-      flatRows.map(n => ({ id: n.id, parentId: n.parentId, expandable: !matchKeep && n.children.length > 0, expanded: !effCollapsed.has(n.id) })),
+      flatRows.map(n => ({ id: n.id, parentId: n.parentId, expandable: n.children.length > 0, expanded: !effCollapsed.has(n.id) })),
       visibleCols.map(c => c.key),
       'name',
     ),
-    [flatRows, visibleCols, matchKeep, effCollapsed],
+    [flatRows, visibleCols, effCollapsed],
   )
   const grid = useWbsGridNav({ model: gridNav, parentOf: id => parentById.get(id), scrollerRef: timelineScrollRef })
   const { setActive: setActiveCell, focusCell } = grid
@@ -1722,16 +1697,6 @@ export function WbsGanttSheet({
             <span className="sr-only">{t('wbs.board')}</span>
           </div>
         )}
-        <div className="relative min-w-0 flex-1 sm:flex-none">
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder={t('wbs.searchPlaceholder')}
-            aria-label={t('wbs.searchAria')}
-            className="app-input h-9 w-full pl-9 text-base sm:w-40 sm:text-control"
-          />
-          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-muted" />
-        </div>
         {/* 컴팩트에서 열린 툴바의 닫기 버튼 — 플로팅 버튼과 같은 토글 시맨틱 */}
         {compact && (
           <button
@@ -1842,7 +1807,7 @@ export function WbsGanttSheet({
           <ListChecks className="h-3.5 w-3.5" />
           {showLabels && <span data-btn-label>{t('wbs.hideDone')}</span>}
           {/* N = 접힘 무관 '감춘 작업 수'. 검색 중엔 숨김이 일시 미적용이라 거짓 신호 방지 위해 생략 */}
-          {hideDone && !q && <span className="tabular-nums">· {hideDoneResult.hiddenCount}</span>}
+          {hideDone && <span className="tabular-nums">· {hideDoneResult.hiddenCount}</span>}
         </button>
         <WbsFontSizeControl
           scale={fontScale.scale}
@@ -2617,19 +2582,15 @@ export function WbsGanttSheet({
               role="status"
             >
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-action-soft text-action" aria-hidden>
-                <Icon name={items.length === 0 ? 'folder' : q ? 'search' : 'eyeOff'} />
+                <Icon name={items.length === 0 ? 'folder' : 'eyeOff'} />
               </span>
               <span className="text-sm font-medium text-fg-secondary">
-                {items.length === 0
-                  ? t('wbs.emptyNoItems')
-                  : q
-                    ? `${t('wbs.noResultsPrefix')}${query.trim()}${t('wbs.noResultsSuffix')}`
-                    : t('wbs.allDoneHidden')}
+                {items.length === 0 ? t('wbs.emptyNoItems') : t('wbs.allDoneHidden')}
               </span>
               <span className="text-[12px] text-fg-muted">
-                {items.length === 0 ? t('wbs.emptyNoItemsHint') : q ? t('wbs.noResultsHint') : t('wbs.allDoneHiddenHint')}
+                {items.length === 0 ? t('wbs.emptyNoItemsHint') : t('wbs.allDoneHiddenHint')}
               </span>
-              {items.length > 0 && !q && (
+              {items.length > 0 && (
                 <button type="button" onClick={toggleHideDone} className="btn btn-ghost mt-1 h-8 px-3 text-xs">
                   {t('wbs.showDone')}
                 </button>

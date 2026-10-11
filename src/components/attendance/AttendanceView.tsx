@@ -18,13 +18,14 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { DayPopover, type DayPopoverAnchor } from '@/components/ui/DayPopover'
 import { fmtDate } from '@/components/wbs/shared'
 import {
-  calendarDayInfo, monthMatrix, recordsByDate, weekdayColumns, type CalendarView,
+  calendarDayInfo, monthWeeks, recordsByDate, weekdayColumns, type CalendarView,
 } from '@/lib/domain/attendance'
 import { currentRuleDay } from '@/lib/domain/calendar'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { memberBelongsToTeam, type MemberPickerView } from '@/lib/domain/memberPicker'
 import { upsertAttendance, removeAttendance } from '@/app/actions/attendance'
 import { useBotPageContext } from '@/components/chat/BotPageContextProvider'
+import { useMonthFit, visibleChips } from '@/components/calendar/useMonthFit'
 import { RestDayMark } from '@/components/calendar/RestDayMark'
 import { formatYearMonth } from '@/lib/i18n/format'
 
@@ -140,7 +141,9 @@ export function AttendanceView({
   // 첫 열 = 오늘 적용되는 규칙의 시작 요일(SP5 §4.4) — 보는 달과 무관하다
   const firstDay = currentRuleDay(calendar.weekStart, initialDate)
   const columns = useMemo(() => weekdayColumns(firstDay), [firstDay])
-  const matrix = useMemo(() => monthMatrix(year, month0, firstDay), [year, month0, firstDay])
+  // 그 달의 주만 그린다(4~6줄) — 줄 높이는 화면 높이를 주 수로 나눠 스크롤 없이 한 달이 한 화면에 든다
+  const matrix = useMemo(() => monthWeeks(year, month0, firstDay), [year, month0, firstDay])
+  const fit = useMonthFit(view === 'calendar' ? matrix.length : 0, 4)
   const ym = `${year}-${String(month0 + 1).padStart(2, '0')}`
   const monthEnd = `${ym}-${String(new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate()).padStart(2, '0')}`
   useBotPageContext({
@@ -314,7 +317,7 @@ export function AttendanceView({
 
       {view === 'calendar' ? (
         <div className="card overflow-hidden p-0">
-          <div className="grid grid-cols-7 gap-px bg-border">
+          <div ref={fit.gridRef} data-cal-grid data-weeks={matrix.length} className="grid grid-cols-7 gap-px bg-border">
             {columns.map(c => (
               <div key={c.key} data-cal-head data-working={calendar.workingDays.has(c.iso)} className={`bg-surface-subtle py-2 text-center text-meta ${calendar.workingDays.has(c.iso) ? 'font-semibold text-fg' : 'font-normal text-fg-muted'}`}>{t(`att.weekday.${c.key}` as DictKey)}</div>
             ))}
@@ -325,8 +328,10 @@ export function AttendanceView({
               const dayRecs = byDate[cell] ?? []
               // 쉬는 날 = 근무 요일 + 날짜 예외에서만(한국 특일 오버레이 없음 — 사용자 결정 5), 이름은 holidays.name
               const info = calendarDayInfo(cell, calendar, holidayNames)
+              const shown = visibleChips(dayRecs.length, fit.rowsPerCell)
               return (
-                <div key={cell} data-date={cell} className={`min-h-[96px] p-1.5 ${info.working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'}`}>
+                <div key={cell} data-date={cell} style={fit.rowHeight === null ? undefined : { height: fit.rowHeight }}
+                  className={`p-1.5 ${fit.rowHeight === null ? 'min-h-[96px]' : 'overflow-hidden'} ${info.working ? 'bg-surface' : 'bg-weekend'} ${inMonth ? '' : 'opacity-40'}`}>
                   {/* 좁은 화면(sm 미만)은 이름이 날짜 아래 한 줄을 통째로 쓰고 줄바꿈, sm 이상은 날짜 옆 한 줄 말줄임(title 로 전체) */}
                   <div className="flex flex-wrap items-center justify-between gap-x-1 px-0.5 sm:flex-nowrap">
                     <span className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-xs font-semibold tabular-nums ${isToday ? 'bg-action text-action-fg' : info.working ? 'text-fg' : 'text-fg-secondary'}`}>
@@ -340,8 +345,8 @@ export function AttendanceView({
                     {!info.working && <RestDayMark named={!!info.name} mark={t('att.restMark')} label={t('att.restDay')} />}
                   </div>
                   <div className="mt-1 space-y-1">
-                    {dayRecs.slice(0, 3).map(r => renderRecChip(r))}
-                    {dayRecs.length > 3 && (
+                    {dayRecs.slice(0, shown).map(r => renderRecChip(r))}
+                    {dayRecs.length > shown && (
                       <button
                         onClick={e => {
                           const r = e.currentTarget.getBoundingClientRect()
@@ -349,7 +354,7 @@ export function AttendanceView({
                         }}
                         className="w-full rounded-md px-1 py-0.5 text-left text-meta font-medium text-fg-muted transition hover:bg-surface-subtle hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                       >
-                        +{dayRecs.length - 3}{t('att.moreSuffix')}
+                        +{dayRecs.length - shown}{t('att.moreSuffix')}
                       </button>
                     )}
                   </div>

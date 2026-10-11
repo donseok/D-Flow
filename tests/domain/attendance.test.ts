@@ -156,3 +156,20 @@ describe('calendarViewOf·holidayNamesOf — 서버 페이지의 달력 props', 
     expect(holidayNamesOf([{ date: '2026-10-05', name: '창립기념일' }, { date: '2026-10-10', name: '  ' }])).toEqual({ '2026-10-05': '창립기념일' })
   })
 })
+
+describe('monthWeeks — 그 달의 날짜가 든 주만', () => {
+  it('2026-02(일요일 시작, 1일이 일요일·28일) = 딱 4주', async () => {
+    const { monthWeeks } = await import('@/lib/domain/attendance')
+    const w = monthWeeks(2026, 1, 'sunday')
+    expect(w).toHaveLength(4)
+    expect(w[0][0]).toBe('2026-02-01'); expect(w[3][6]).toBe('2026-02-28')
+  })
+  it('2026-10(일요일 시작) = 5주, 2026-08(일요일 시작, 1일이 토요일) = 6주 — 앞뒤 달의 날짜는 걸친 주에만 남는다', async () => {
+    const { monthWeeks } = await import('@/lib/domain/attendance')
+    const oct = monthWeeks(2026, 9, 'sunday')
+    expect(oct).toHaveLength(5)
+    expect(oct[0][0]).toBe('2026-09-27'); expect(oct[4][6]).toBe('2026-10-31')
+    expect(monthWeeks(2026, 7, 'sunday')).toHaveLength(6)
+    for (const week of [...oct, ...monthWeeks(2026, 7, 'sunday')]) expect(week).toHaveLength(7)
+  })
+})

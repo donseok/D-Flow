@@ -46,6 +46,12 @@ export function monthMatrix(year: number, month0: number, firstDay: WeekStartDay
   return Array.from({ length: 6 }, (_, w) => Array.from({ length: 7 }, (_, d) => addDaysIso(start, w * 7 + d)))
 }
 
+/** 그 달의 날짜가 하나라도 든 주만(4~6줄) — 화면의 달력은 이 줄만 그린다. 6×7 그리드의 뒤쪽에 통째로 다음 달인 주를 떼어 낸 것 */
+export function monthWeeks(year: number, month0: number, firstDay: WeekStartDay): string[][] {
+  const ym = fmtUTC(new Date(Date.UTC(year, month0, 1))).slice(0, 7)
+  return monthMatrix(year, month0, firstDay).filter(week => week.some(d => d.startsWith(ym)))
+}
+
 /** 그리드의 첫 칸·마지막 칸 — 회의 조회 범위(페이지·뷰)가 같은 그리드를 쓰게 한다 */
 export function monthGridRange(year: number, month0: number, firstDay: WeekStartDay): [string, string] {
   const m = monthMatrix(year, month0, firstDay)

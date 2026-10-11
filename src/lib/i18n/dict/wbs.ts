@@ -7,8 +7,6 @@ export const wbsKo = {
     '계획·실적·가중 롤업과 FS/SS 의존성, 지연 영향, 크리티컬 패스를 한 화면에서 관리합니다.',
   // 툴바
   'wbs.board': '작업 보드',
-  'wbs.searchPlaceholder': '작업명 검색…',
-  'wbs.searchAria': '작업명 검색',
   // 툴바 라벨은 한 줄 유지를 위해 최소 글자 — 상세 설명은 각 버튼 title로 제공한다
   'wbs.expandAll': '전체 펼치기',
   'wbs.collapseAll': '전체 접기',
@@ -177,9 +175,6 @@ export const wbsKo = {
   'wbs.emptyNoItemsHint': '작업을 직접 추가하거나 엑셀로 가져오면 여기에 표시됩니다.',
   'wbs.emptyAddTask': '작업 추가',
   'wbs.emptyImportExcel': '엑셀로 가져오기',
-  'wbs.noResultsPrefix': '‘',
-  'wbs.noResultsSuffix': '’에 대한 결과가 없습니다',
-  'wbs.noResultsHint': '검색어를 바꾸거나 지워보세요.',
   'wbs.allDoneHidden': '모든 작업이 완료되어 숨겨졌습니다',
   'wbs.allDoneHiddenHint': '완료 숨김을 끄면 전체 작업이 다시 표시됩니다.',
   'wbs.showDone': '숨기기 해제',
