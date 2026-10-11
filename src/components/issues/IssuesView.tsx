@@ -366,7 +366,48 @@ export function IssuesView({
         />
       ) : visible.length > 0 ? (
         <div className="card overflow-hidden p-0">
-          <div className="overflow-x-auto">
+          <div className="md:hidden" data-testid="issue-mobile-list">
+            {canEdit && <label className="flex min-h-11 cursor-pointer items-center gap-3 border-b border-border px-4 text-control text-fg-secondary">
+              <input type="checkbox" className="h-4 w-4" checked={pageAllSelected} onChange={togglePage} />
+              {t('issue.bulk.selectPage')}
+            </label>}
+            <ul className="divide-y divide-border">
+              {paged.map(issue => {
+                const area = areas.find(item => item.id === issue.areaId)
+                const severity = vocabView('issues.severities', severities, issue.severity, t)
+                const custom = parseCustomValues(issue.custom)
+                return <li key={issue.id} className="space-y-3 p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 break-words text-meta font-semibold text-fg-secondary">{issue.code}</span>
+                    {canEdit && <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-(--radius-control) hover:bg-surface-hover">
+                      <input type="checkbox" className="h-4 w-4" checked={selectedIds.has(issue.id)} onChange={() => toggleSelected(issue.id)}
+                        aria-label={t('issue.bulk.select').replace('{code}', issue.code)} />
+                    </label>}
+                  </div>
+                  <button type="button" onClick={() => setViewingId(issue.id)}
+                    className="block min-h-11 w-full break-words text-left text-section text-fg hover:text-action">{issue.title}</button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <IssueStatusPill category={issue.status} code={issue.statusCode} defs={statusDefs} />
+                    <span className={`chip text-meta ${severity.chip}`}>{severity.label}</span>
+                    <span className="break-words text-meta text-fg-secondary">{area ? `${area.code} · ${area.name}` : areaLabel(undefined, issue.areaId)}</span>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-3 text-body">
+                    <div className="min-w-0"><dt className="text-meta text-fg-muted">{t('issue.col.assignee')}</dt><dd className="break-words text-fg">{assigneeLabel(issue) ?? t('issue.unassigned')}</dd></div>
+                    <div className="min-w-0"><dt className="text-meta text-fg-muted">{t('issue.col.endDate')}</dt><dd className={`tabular-nums ${isOverdue(issue, today) ? 'font-semibold text-danger' : 'text-fg'}`}>{issue.dueDate ?? '—'}</dd></div>
+                  </dl>
+                  <details className="text-body text-fg-secondary">
+                    <summary className="min-h-11 cursor-pointer py-3 text-control text-action">{t('issue.mobile.details')}</summary>
+                    <dl className="grid grid-cols-2 gap-3 pt-1">
+                      <div><dt className="text-meta text-fg-muted">{t('issue.col.startDate')}</dt><dd className="tabular-nums">{issue.startDate ?? '—'}</dd></div>
+                      <div><dt className="text-meta text-fg-muted">{t('issue.col.created')}</dt><dd className="break-words">{issue.createdByName ?? '—'}</dd></div>
+                      {listFields.map(field => <div key={field.key} className="col-span-2 min-w-0"><dt className="text-meta text-fg-muted">{field.label}</dt><dd className="whitespace-pre-wrap break-words">{custom.ok ? formatCustomValue(field, custom.value[field.key], customFormat) : <span role="status">{t('issue.custom.unreadableValue')}</span>}</dd></div>)}
+                    </dl>
+                  </details>
+                </li>
+              })}
+            </ul>
+          </div>
+          <div className="hidden overflow-x-auto md:block" tabIndex={0} role="region" aria-label={t('issue.view.list')}>
             <table className="data-table min-w-[1100px] w-full table-fixed border-collapse text-[13px]" style={listFields.length ? { minWidth: 1100 + 160 * listFields.length } : undefined}>
               {/* Core widths retain their proportions; custom columns receive 160px each. */}
               <colgroup>

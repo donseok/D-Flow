@@ -64,6 +64,24 @@ describe('IssuesView — 보기 전환·일괄 상태 이동', () => {
   })
   const rowState = (id: string) => q(`[data-bulk-row="${id}"]`)?.getAttribute('data-bulk-state')
 
+  it('좁은 화면 목록과 표는 선택 상태를 공유하고 제목 버튼으로 상세를 연다', async () => {
+    await render([statusIssue('a', 'intake')])
+    const mobile = container.querySelector<HTMLElement>('[data-testid="issue-mobile-list"]')!
+    const checkbox = mobile.querySelector<HTMLInputElement>('li input[type="checkbox"]')!
+    await act(async () => checkbox.click())
+    expect(container.querySelector<HTMLInputElement>('[data-testid="issue-select"]')!.checked).toBe(true)
+    expect(q('[data-testid="issue-bulk-count"]')?.textContent).toContain('issue.bulk.selected')
+    await act(async () => mobile.querySelector<HTMLButtonElement>('li button')!.click())
+    expect(q('[data-detail="a"]')).not.toBeNull()
+  })
+
+  it('조회 전용의 좁은 화면 목록은 선택 도구를 제공하지 않는다', async () => {
+    await render([statusIssue('a', 'intake')], false)
+    const mobile = container.querySelector('[data-testid="issue-mobile-list"]')!
+    expect(mobile.querySelector('input[type="checkbox"]')).toBeNull()
+    expect(mobile.querySelector('button')).not.toBeNull()
+  })
+
   it('보기 전환 — 보드를 누르면 보드를 그리고 URL 에 ?view=board 를 남긴다', async () => {
     await render([statusIssue('a', 'intake')])
     expect(container.querySelector('table')).not.toBeNull()
