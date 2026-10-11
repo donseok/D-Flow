@@ -14,6 +14,7 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 import { ProjectCrumbSwitcher, ProjectSwitcher } from './ProjectSwitcher'
 import { MobileNavDrawer } from './MobileNavDrawer'
 import { DegradedNotice } from './DegradedNotice'
+import { RefreshFlush } from './RefreshFlush'
 import { useShellEnv } from './ShellEnv'
 import { useSidebarCollapsed } from './sidebarState'
 import { useShellState } from './ShellStateProvider'
@@ -68,6 +69,7 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
         <main id="main-content" className="app-main relative flex min-w-0 flex-1 flex-col px-4 pb-4 sm:px-5 lg:px-6">
           {/* 위 간격은 패딩이 아니라 자리로 — sticky 는 스크롤 상자의 패딩 안쪽에 붙어 pt 만큼 위로 내용이 비친다(D54) */}
           <div aria-hidden="true" data-main-top-gap className="h-4 shrink-0" />
+          <RefreshFlush />
           {(p.degraded || p.projectsFailed) && <div className="shrink-0"><DegradedNotice actorFailed={p.degraded} projectsFailed={p.projectsFailed} /></div>}
           {p.configDegraded && (
             <div data-config-degraded className="mb-3 shrink-0 rounded-(--radius-panel) border border-border bg-surface px-3">
