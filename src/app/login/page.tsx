@@ -46,7 +46,9 @@ export default function Login() {
     try {
       const { error: authError } = await createBrowserClient().auth.signInWithPassword({ email, password })
       if (authError) {
-        setError(t('login.err.credentials'))
+        // 인증 서버에 닿지 못한 실패는 던져지지 않고 오류 값(status 0)으로 온다 — 비밀번호 오류로 안내하지 않는다
+        const unreachable = authError.name === 'AuthRetryableFetchError' || authError.status === 0 || (authError.status ?? 0) >= 500
+        setError(t(unreachable ? (localDev ? 'login.err.unreachableDev' : 'login.err.unreachable') : 'login.err.credentials'))
         setLoading(false)
       } else {
         router.push('/')

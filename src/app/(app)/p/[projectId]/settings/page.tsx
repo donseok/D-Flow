@@ -60,6 +60,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { ClearExcelProfileButton } from '@/components/settings/ClearExcelProfileButton'
 import { assistantIndexStatus, type IndexStatus } from '@/lib/ai/health'
 import { t, type DictKey} from '@/lib/i18n/dict'
+import { nameBeforeWorkspaceWord } from '@/lib/workspace/constants'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { ModuleToggleEditor } from '@/components/settings/ModuleToggleEditor'
@@ -150,6 +151,8 @@ async function loadTeams(projectId: string, workspaceId: string) {
   }
 }
 
+/** 탭 제목 — 화면 이름만 낸다(프로젝트 이름은 싣지 않는다 — 레이아웃의 존재 은닉과 같은 이유) */
+export async function generateMetadata() { return { title: t('nav.settings') } }
 export default async function SettingsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'settings')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
@@ -349,7 +352,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         >
         {workspaceLink && (
           <Link href={`/w/${encodeURIComponent(workspaceLink.slug)}/settings`} className="mb-4 inline-flex text-sm font-medium text-action hover:underline">
-            {t('pages.projSettings.wsSettingsLink').replace('{name}', () => workspaceLink.name)}
+            {t('pages.projSettings.wsSettingsLink').replace('{name}', () => nameBeforeWorkspaceWord(workspaceLink.name))}
           </Link>
         )}
         <dl className="-mt-1">

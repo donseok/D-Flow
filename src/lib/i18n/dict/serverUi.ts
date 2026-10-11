@@ -435,6 +435,7 @@ export const serverUiKo = {
   'srv.project.createRequestNotDelivered': '생성 요청이 전달되지 못했습니다.',
   'srv.project.enterProjectName': '프로젝트명을 입력하세요.',
   'srv.project.enterProjectName2': '프로젝트명을 입력하세요',
+  'srv.project.nameTooLong': '프로젝트명은 100자 이하의 한 줄이어야 합니다.',
   'srv.project.requestId': '{configInvalid}: 요청 번호',
   'srv.project.serverDoesNotKnowSetting': '이 서버가 모르는 설정 항목입니다.',
   'srv.project.sourceProjectSSettingsCorrupted': '원본 프로젝트의 설정이 손상되어 복사할 수 없습니다.',

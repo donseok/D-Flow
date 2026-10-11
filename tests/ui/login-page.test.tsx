@@ -97,6 +97,13 @@ describe('로그인 화면 제출', () => {
     expect(text).not.toMatch(/Supabase|Docker|로컬/)
   })
 
+  it('인증 서버에 닿지 못한 실패가 오류 값으로 와도(던져지지 않는다 — status 0) 비밀번호 오류로 안내하지 않는다(DF-004)', async () => {
+    mocks.signInWithPassword.mockResolvedValue({ error: { name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' } })
+    await submit()
+    expect(mocks.calls).toEqual([])
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('인증 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.')
+  })
+
   it('로컬 개발에서만 로컬 DB 확인 안내를 덧붙인다', async () => {
     mocks.signInWithPassword.mockRejectedValue(new TypeError('Failed to fetch'))
     await submit({ mailReset: false, localDev: true })

@@ -9,9 +9,12 @@ import { requireModulePage } from '@/lib/modules/pageGate'
 import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pickCalendar } from '@/lib/settings/pick'
 import { koTranslate } from '@/lib/i18n/translate'
+import { t } from '@/lib/i18n/dict'
 
 export const dynamic = 'force-dynamic' // 좌석은 항상 최신이어야 한다
 
+/** 탭 제목 — 화면 이름만 낸다(프로젝트 이름은 싣지 않는다 — 레이아웃의 존재 은닉과 같은 이유) */
+export async function generateMetadata() { return { title: t('nav.projectAgents') } }
 /**
  * 프로젝트 스튜디오 — 이 프로젝트 층 하나를 전역 좌석표와 같은 규칙·폴링으로 그린다(2026-09-14 스튜디오 분리 스펙 §6-3).
  * 멤버 이상만 — 허브와 같은 게이트. 로더가 접근 범위와 다시 교집합을 낸다.

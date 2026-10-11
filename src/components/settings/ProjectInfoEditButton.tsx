@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { updateProject } from '@/app/actions/project'
 import { isValidDateRange } from '@/lib/domain/validate'
+import { PROJECT_NAME_MAX } from '@/lib/domain/project-status'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 
@@ -74,7 +75,7 @@ export function ProjectInfoEditButton({
         <div className="space-y-4">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.projectName')} *</span>
-            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="app-input" placeholder={t('settings.projectNamePlaceholder')} />
+            <input value={form.name} maxLength={PROJECT_NAME_MAX} onChange={e => setForm({ ...form, name: e.target.value })} className="app-input" placeholder={t('settings.projectNamePlaceholder')} />
           </label>
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.description')}</span>

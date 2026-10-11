@@ -80,6 +80,9 @@ export function IssueBoard({
   }
 
   return (
+    <>
+    {/* 열이 넷 이상이면 노트북 폭에서 오른쪽 열이 화면 밖이다 — 잘린 것이 아니라 밀어서 본다는 것을 알린다(DF-023) */}
+    {columns.length > 3 && <p data-issue-board-scroll-hint className="mb-2 text-meta text-fg-secondary xl:hidden">{t('issue.board.scrollHint')}</p>}
     <div data-issue-board className="flex items-start gap-4 overflow-x-auto pb-2">
       {columns.map(col => {
         const limit = shown[col.code] ?? ISSUE_BOARD_PAGE
@@ -223,5 +226,6 @@ export function IssueBoard({
       })}
       <div aria-live="polite" className="sr-only">{liveMsg}</div>
     </div>
+    </>
   )
 }

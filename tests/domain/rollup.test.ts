@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeNode, computeTree, effectiveWeights, overallProgress, weightWarnings } from '@/lib/domain/rollup'
+import { computeNode, computeTree, effectiveWeights, overallProgress, weightWarnings, zeroShareItemIds } from '@/lib/domain/rollup'
 import type { BuildTreeOpts } from '@/lib/domain/tree'
 import type { WbsRow } from '@/lib/domain/types'
 import { teamOrderMap } from '@/lib/domain/teams'
@@ -113,6 +113,16 @@ describe('가중치 규칙 — 루트·하위 같은 함수(effectiveWeights, �
       row({ id: 'B1', parentId: 'B', weight: 3 }), row({ id: 'B2', parentId: 'B', weight: 1 }),                                                                   // 전부 지정 — 비율이라 합을 따지지 않는다
     ], '2026-03-02', calUtcSun, OPTS)
     expect(weightWarnings(roots)).toEqual({ unset: 2, overGroups: 1 })
+    expect([...zeroShareItemIds(roots)]).toEqual(['C'])
+  })
+  it('weightWarnings — 지정 합이 정확히 100% 인 섞인 그룹도 남은 몫이 없다(DF-002: 새로 더한 항목이 몫 0 이 되어 상위가 완료로 계산된다)', () => {
+    const roots = computeTree([
+      row({ id: 'A', name: 'A', sortOrder: 1, weight: 0.6, actualPct: 100 }), row({ id: 'B', name: 'B', sortOrder: 2, weight: 0.4, actualPct: 100 }),
+      row({ id: 'C', name: 'C', sortOrder: 3, actualPct: 20 }),
+    ], '2026-03-02', calUtcSun, OPTS)
+    expect(overallProgress(roots).actual).toBe(100)          // 계산 규칙은 그대로다 — 알림만 넓힌다
+    expect(weightWarnings(roots)).toEqual({ unset: 1, overGroups: 1 })
+    expect([...zeroShareItemIds(roots)]).toEqual(['C'])
   })
   it('W9 — overallProgress(roots) = 가상 루트의 computeNode(무작위 트리 30종, 혼재 가중치 포함)', () => {
     let seed = 7

@@ -12,6 +12,7 @@ import { NON_CORE_MODULES, type ModuleId } from '@/lib/modules/defaults'
 import { MODULE_LABEL_KEY } from '@/lib/modules/labels'
 import { checkWorkspaceCreate, splitDomainsInput, suggestedInviteDomain, type WorkspaceCreateField } from '@/lib/workspace/createInput'
 import { wsHref } from '@/lib/workspace/paths'
+import { nameBeforeWorkspaceWord } from '@/lib/workspace/constants'
 import { ArchiveWorkspaceDialog, DeleteWorkspaceDialog, RenameWorkspaceDialog, RestoreWorkspaceDialog } from './WorkspaceRowDialogs'
 
 /** '{n}' 꼴 자리 채우기 — 사전 문구의 수·이름 */
@@ -149,22 +150,22 @@ export function WorkspacesManager({ rows, accountsHref }: {
                         <span className="inline-flex items-center gap-3 whitespace-nowrap">
                           {w.archivedAt === null ? (
                             <>
-                              <Link href={wsHref(w.slug)} aria-label={fill(t('platform.ws.openLabel'), { name: w.name })}
+                              <Link href={wsHref(w.slug)} aria-label={fill(t('platform.ws.openLabel'), { name: nameBeforeWorkspaceWord(w.name) })}
                                 className="font-semibold text-action hover:underline">{t('platform.ws.open')}</Link>
-                              <button type="button" data-workspace-rename aria-label={fill(t('platform.ws.renameLabel'), { name: w.name })}
+                              <button type="button" data-workspace-rename aria-label={fill(t('platform.ws.renameLabel'), { name: nameBeforeWorkspaceWord(w.name) })}
                                 onClick={() => { setRowNotice(null); setDialog({ kind: 'rename', row: w }) }}
                                 className="font-semibold text-action hover:underline">{t('platform.ws.rename')}</button>
-                              <button type="button" data-workspace-archive aria-label={fill(t('platform.ws.archiveLabel'), { name: w.name })}
+                              <button type="button" data-workspace-archive aria-label={fill(t('platform.ws.archiveLabel'), { name: nameBeforeWorkspaceWord(w.name) })}
                                 onClick={() => { setRowNotice(null); setDialog({ kind: 'archive', row: w }) }}
                                 className="font-semibold text-action hover:underline">{t('platform.ws.archive')}</button>
                             </>
                           ) : (
                             // 보관된 행 — 그 화면은 플랫폼 관리자에게도 404 라 "열기"·"이름 바꾸기"를 두지 않는다. 복원과 삭제(비어 있으면)만
-                            <button type="button" data-workspace-restore aria-label={fill(t('platform.ws.restoreLabel'), { name: w.name })}
+                            <button type="button" data-workspace-restore aria-label={fill(t('platform.ws.restoreLabel'), { name: nameBeforeWorkspaceWord(w.name) })}
                               onClick={() => { setRowNotice(null); setDialog({ kind: 'restore', row: w }) }}
                               className="font-semibold text-action hover:underline">{t('platform.ws.restore')}</button>
                           )}
-                          <button type="button" data-workspace-delete aria-label={fill(t('platform.ws.deleteLabel'), { name: w.name })}
+                          <button type="button" data-workspace-delete aria-label={fill(t('platform.ws.deleteLabel'), { name: nameBeforeWorkspaceWord(w.name) })}
                             onClick={() => { setRowNotice(null); setDialog({ kind: 'delete', row: w }) }}
                             className="font-semibold text-danger hover:underline">{t('common.delete')}</button>
                         </span>
@@ -252,7 +253,7 @@ export function WorkspacesManager({ rows, accountsHref }: {
           )}
           {created && (
             <p role="status" className="text-sm text-fg">
-              {fill(t('platform.ws.created'), { name: created.name })}{' '}
+              {fill(t('platform.ws.created'), { name: nameBeforeWorkspaceWord(created.name) })}{' '}
               <Link href={wsHref(created.slug)} className="font-semibold text-action hover:underline">{t('platform.ws.open')}</Link>
             </p>
           )}

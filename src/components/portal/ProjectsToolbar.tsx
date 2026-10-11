@@ -15,7 +15,7 @@ export function ProjectsToolbar({ slug, q, status, favoritesOnly, view }: { slug
     <nav aria-label={t('portalUi.projects.statusAria')} className="flex flex-wrap gap-2">
       {([[undefined, 'portalUi.projects.statusAll'], ...statuses] as const).map(([value, label]) => <Link key={value ?? 'all'} href={wsHref(slug, 'projects', { ...keep, status: value })} aria-current={status === value ? 'page' : undefined} className={`rounded-full border px-2.5 py-1 text-meta ${status === value ? 'border-action bg-action-soft font-semibold text-action' : 'border-border text-fg-secondary hover:bg-surface-hover'}`}>{t(label)}</Link>)}
     </nav>
-    <Link href={wsHref(slug, 'projects', { ...keep, fav: favoritesOnly ? undefined : '1' })} aria-current={favoritesOnly ? 'page' : undefined} className="text-meta text-action underline">{t('portalUi.projects.favoritesOnly')}</Link>
+    <Link href={wsHref(slug, 'projects', { ...keep, fav: favoritesOnly ? undefined : '1' })} aria-current={favoritesOnly ? 'page' : undefined} className={`rounded-full border px-2.5 py-1 text-meta ${favoritesOnly ? 'border-action bg-action-soft font-semibold text-action' : 'border-border text-fg-secondary hover:bg-surface-hover'}`}>{t('portalUi.projects.favoritesOnly')}</Link>
     <ProjectsViewToggle view={view} />
   </div>
 }

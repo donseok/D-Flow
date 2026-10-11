@@ -17,6 +17,7 @@ import { rowLabel, visibleRows, type WeeklyArea } from '@/lib/domain/weeklySheet
 import { customSearchText, type CustomValues, type FieldDef, type FieldEntity } from '@/lib/domain/customFields'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { teamNameWithCode } from '@/lib/domain/teamLabel'
+import { wbsDisplayTitle } from '@/lib/domain/wbsTitle'
 
 export const CURRENT_INDEX_VERSION = 1
 export const INDEX_CHUNKER_VERSION = 'md1500-v1'
@@ -160,7 +161,7 @@ async function loadWbsItem(client: SupabaseKnowledgeClient, job: ClaimedIndexJob
   const customValues = (row.custom && typeof row.custom === 'object' ? row.custom : {}) as CustomValues
   const customLines = customSearchText(customDefs, customValues)
   const text = joinLines([
-    `# WBS ${code} ${name}`.trim(),
+    `# WBS ${wbsDisplayTitle(code, name)}`.trim(),
     str(row.biz) ? `구분: ${str(row.biz)}` : null,
     str(row.deliverable) ? `산출물: ${str(row.deliverable)}` : null,
     plannedStart || plannedEnd ? `계획 기간: ${plannedStart ?? '미정'} ~ ${plannedEnd ?? '미정'}` : null,
@@ -172,7 +173,7 @@ async function loadWbsItem(client: SupabaseKnowledgeClient, job: ClaimedIndexJob
     ok: true,
     data: await toSnapshot({
       job,
-      title: `${code} ${name}`.trim(),
+      title: wbsDisplayTitle(code, name),
       text,
       href: `/p/${encodeURIComponent(job.projectId ?? '')}/wbs?focus=${encodeURIComponent(job.entityId)}`,
       team: primaryOwnerTeam(row.item_owners),

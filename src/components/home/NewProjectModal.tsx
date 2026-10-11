@@ -6,6 +6,7 @@ import { Plus, FolderPlus } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { createProject, getProjectCopySource } from '@/app/actions/project'
 import { isValidDateRange } from '@/lib/domain/validate'
+import { PROJECT_NAME_MAX } from '@/lib/domain/project-status'
 import { validateLevelSettings } from '@/lib/domain/levelSettings'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { newUuid } from '@/lib/domain/uuid'
@@ -48,6 +49,8 @@ export function NewProjectModal({
   const sourceRequest = useRef(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 날짜 순서 경고는 날짜를 고치면 바로 걷는다 — 다음 제출까지 남아 있으면 고친 값이 아직 틀린 것처럼 읽힌다. 다른 오류는 건드리지 않는다
+  const clearDateError = () => setError(cur => (cur === dateOrderMessage(t) ? null : cur))
   // 요청 번호 — 모달이 열릴 때 하나 만들어 재시도에도 같은 값을 쓴다(결과 불명 재전송이 중복 생성이 되지 않게)
   const [commandId, setCommandId] = useState(() => newUuid())
 
@@ -211,6 +214,7 @@ export function NewProjectModal({
               className="app-input"
               placeholder={t('home.phName')}
               value={name}
+              maxLength={PROJECT_NAME_MAX}
               onChange={e => setName(e.target.value)}
               autoFocus
               onKeyDown={e => {
@@ -251,11 +255,11 @@ export function NewProjectModal({
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('home.fieldStart')}</span>
-              <input type="date" className="app-input px-2.5 text-sm" value={start} onChange={e => setStart(e.target.value)} />
+              <input type="date" className="app-input px-2.5 text-sm" value={start} onChange={e => { setStart(e.target.value); clearDateError() }} />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('home.fieldEnd')}</span>
-              <input type="date" className="app-input px-2.5 text-sm" value={end} min={start || undefined} onChange={e => setEnd(e.target.value)} />
+              <input type="date" className="app-input px-2.5 text-sm" value={end} min={start || undefined} onChange={e => { setEnd(e.target.value); clearDateError() }} />
             </label>
           </div>
 

@@ -76,7 +76,7 @@ describe('/w/[slug]/admin/accounts — 슬러그 워크스페이스 관리자(D2
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(makeSuperuser({ projectWorkspace: new Map([[P1, WS.id]]) })))
     const su = await renderAccounts()
     expect(su).not.toContain('SUPERUSER')
-    expect(su).toContain('Acme · 계정 1 · 관리자 0 · 멤버 0')
+    expect(su).toContain('Acme · 계정 1 · 관리자 1 · 멤버 0')
     expect(h.managerProps).toHaveBeenLastCalledWith(expect.objectContaining({ canPlatformOps: true, accounts: [expect.objectContaining({ isPlatformAdmin: true })] }))
   })
   it('계정 목록 조회 실패는 표준 오류 상태로 표시한다', async () => {

@@ -3,6 +3,7 @@ import { buildExecSummary, type DashboardThresholds, type Signal } from '@/lib/d
 import { formatPct1, formatPp1 } from '@/lib/domain/format'
 import { t, type DictKey } from '@/lib/i18n/dict'
 import { fmtDate } from '@/components/wbs/shared'
+import { realDueDate } from '@/lib/domain/farDate'
 import { ProgressGauge } from './ProgressGauge'
 import { SignalTile } from './SignalTile'
 import { ReportButton } from '@/components/report/ReportButton'
@@ -63,7 +64,7 @@ export async function ExecSummary({
     ? (s.milestone.overdue ? tr('dash.exec.overdue') : `D-${s.milestone.dday}`)
     : tr('dash.exec.noMilestone')
   const msSub = hasMs
-    ? `${s.milestone.name}${s.milestone.date ? ` · ${fmtDate(s.milestone.date)}` : ''}`
+    ? `${s.milestone.name}${realDueDate(s.milestone.date) ? ` · ${fmtDate(s.milestone.date)}` : ''}`
     : null
 
   return (

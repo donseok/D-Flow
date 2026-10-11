@@ -72,3 +72,10 @@ export function computeCompletionMap(rows: CompletionRow[]): Record<string, Proj
   }
   return map
 }
+
+/** 프로젝트 이름의 상한 — 머리·브레드크럼·삭제 확인(이름 전체를 다시 입력)이 감당하는 길이. 입력란 maxLength 와 서버 검증이 같이 쓴다 */
+export const PROJECT_NAME_MAX = 100
+/** 다듬은 이름이 상한 안의 한 줄인가(빈 이름은 호출자가 따로 본다) */
+export function isProjectNameWithinLimit(name: string): boolean {
+  return name.length <= PROJECT_NAME_MAX && !/[\r\n\t]/.test(name)
+}

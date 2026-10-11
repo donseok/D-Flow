@@ -14,6 +14,8 @@ import { wsHref } from '@/lib/workspace/paths'
 import { workspaceRefById } from '@/lib/workspace/resolve'
 import { loadLocalDraftPolicy } from '@/lib/drafts/policy'
 
+/** 탭 제목 — 화면 이름만 낸다(프로젝트 이름은 싣지 않는다 — 레이아웃의 존재 은닉과 같은 이유) */
+export async function generateMetadata() { return { title: t('nav.wiki') } }
 export default async function WikiTopicPage({
   params,
 }: {

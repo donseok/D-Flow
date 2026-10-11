@@ -45,7 +45,7 @@ export function RowDetailPanel({
   item, allItems = [], dependencies = [], schedule, onClose, editable = false, canAttach = false,
   canEditDeliverable = false, projectId, workspaceId = null, levelLabels, maxDepth = null,
   members = EMPTY_MEMBERS, onSelectItem, unresolvedRefs = EMPTY_REFS, timeZone,
-  predecessorGate = 'reached', approvedItemIds, extraAxisLabel = null, numbers = EMPTY_NUMBERS, shown, outOfRange = false,
+  predecessorGate = 'reached', approvedItemIds, extraAxisLabel = null, numbers = EMPTY_NUMBERS, shown, outOfRange = false, zeroShare = false, onDeleted,
 }: {
   item: ComputedItem
   /** 개요 번호(항목 id → 1.2.1) — 표의 번호 열과 같은 계산(wbsDerived.outlineNumbers)을 숙주가 넘긴다. 저장 code 는 보이지 않는다(BUG-05) */
@@ -54,6 +54,10 @@ export function RowDetailPanel({
   shown?: ShownSchedule
   /** 직접 입력한 일정이 프로젝트 기간을 벗어났는가(BUG-14) */
   outOfRange?: boolean
+  /** 형제의 가중치 합이 이미 100% 이상이라 이 미지정 항목의 몫이 0 이다 — '남은 몫 균등' 대신 0% 를 알린다 */
+  zeroShare?: boolean
+  /** 삭제가 끝났다 — 패널은 닫히므로 숙주가 완료를 알린다(토스트) */
+  onDeleted?: (name: string) => void
   allItems?: ComputedItem[]
   dependencies?: TaskDependency[]
   schedule?: TaskSchedule
@@ -320,7 +324,9 @@ export function RowDetailPanel({
     if (!subTeam) return
     run(() => addSubAct(item.id, subTeam, subKind), () => { setSubOpen(false); setSubTeam(null); setSubKind('primary') })
   }
-  const doDelete = () => run(() => deleteWbsItem(item.id), () => onClose())
+  // 지워지는 하위 수 — 확인 문구가 범위를 말한다(삭제는 되돌릴 수 없다: 하위·이력·첨부·의존성이 함께 지워진다)
+  const descendantCount = (function count(n: ComputedItem): number { return n.children.reduce((s, c) => s + 1 + count(c), 0) })(item)
+  const doDelete = () => { const name = item.name; run(() => deleteWbsItem(item.id), () => { onDeleted?.(name); onClose() }) }
   // 순서 이동은 내가 본 자리(부모·sort_order·맞바꿀 이웃)를 싣는다(SPU1, 개정 §5.8). 그새 남이 순서를 바꿨으면 서버가 옮기지 않는다 —
   // 비교할 '값'이 없는 조작이라 알리고 다시 읽는다(낡은 화면에서 한 번 더 누르면 엉뚱한 이웃과 바뀐다)
   async function move(dir: 'up' | 'down') {
@@ -478,7 +484,9 @@ export function RowDetailPanel({
                   {outOfRange && <span data-wbs-detail-out-of-range className="block text-meta font-semibold text-warning">{t('wbs.outOfRangeCell')}</span>}
                 </DlRow>
                 <DlRow label={t('wbs.colWeight')}>
-                  <span className="tabular-nums">{item.weight == null ? t('wbs.weightEqualSiblings') : formatWeightPct(item.weight)}</span>
+                  {item.weight == null && zeroShare
+                    ? <span data-weight-zero-share className="font-semibold tabular-nums text-warning" title={t('wbs.weightZeroShareTitle')}>{t('wbs.weightZeroShare')}</span>
+                    : <span className="tabular-nums">{item.weight == null ? t('wbs.weightEqualSiblings') : formatWeightPct(item.weight)}</span>}
                 </DlRow>
                 <DlRow label={t('wbs.colDeliverable')} span>
                   {delivEditing ? (
@@ -798,7 +806,7 @@ export function RowDetailPanel({
               )}
               {confirmDel && (
                 <div className="mt-2 flex items-center gap-2 rounded-lg bg-danger-weak px-3 py-2 text-xs text-danger">
-                  <span className="flex-1">{t('wbs.deleteConfirm')}</span>
+                  <span className="flex-1" data-wbs-delete-confirm>{descendantCount > 0 ? t('wbs.deleteConfirmChildren').replace('{n}', String(descendantCount)) : t('wbs.deleteConfirm')}</span>
                   <button onClick={doDelete} disabled={busy} className="btn h-7 bg-danger px-2.5 text-xs text-danger-fg">{t('common.delete')}</button>
                   <button onClick={() => setConfirmDel(false)} className="btn btn-ghost h-7 px-2.5 text-xs">{t('common.cancel')}</button>
                 </div>

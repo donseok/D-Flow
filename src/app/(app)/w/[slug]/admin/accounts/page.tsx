@@ -65,8 +65,9 @@ export default async function AccountsAdminPage({ params, searchParams }: {
   // 플랫폼 관리자 여부는 플랫폼 관리자에게만 싣는다 — 워크스페이스 관리자 화면의 RSC 페이로드에 남기지 않는다
   const accounts = canPlatformOps ? res.rows : res.rows.map((a) => ({ ...a, isPlatformAdmin: false }))
   const total = accounts.length
-  const admins = accounts.filter((a) => a.accessRole === ACCESS_ROLE.admin).length
-  const members = accounts.filter((a) => a.accessRole === ACCESS_ROLE.member).length
+  // 머리 집계는 표의 첫 역할 열(워크스페이스 등급)과 같은 것을 센다 — 고른 프로젝트의 명단 권한을 세면 표와 어긋난다
+  const admins = accounts.filter((a) => a.workspaceRole === 'admin').length
+  const members = accounts.filter((a) => a.workspaceRole === 'member').length
 
   return (
     <div className="space-y-6">

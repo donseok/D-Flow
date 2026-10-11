@@ -42,9 +42,9 @@ describe('선행 기준 배선(D21)', () => {
     expect(hits.length).toBeGreaterThanOrEqual(2)
     for (const h of hits) expect(h.text, h.at).toMatch(/\bgate:/)
   })
-  it('evaluateStartReadiness 호출부(상세 패널)는 gate 를 다섯째 인자로 넘긴다', () => {
+  it('evaluateStartReadiness 호출부(상세 패널·시트의 실적 저장 안내)는 gate 를 다섯째 인자로 넘긴다', () => {
     const hits = calls('evaluateStartReadiness')
-    expect(hits.map((h) => h.at.split(':')[0])).toEqual(['src/components/wbs/RowDetailPanel.tsx'])
+    expect(hits.map((h) => h.at.split(':')[0]).sort()).toEqual(['src/components/wbs/RowDetailPanel.tsx', 'src/components/wbs/WbsGanttSheet.tsx'])
     for (const h of hits) expect(h.text, h.at).toMatch(/predecessorGate/)
   })
   it('RowDetailPanel 숙주 둘은 선행 기준·승인 축을 넘긴다', () => {

@@ -30,6 +30,7 @@ import { customSearchLines } from '@/lib/domain/customFields'
 import type { ToolTeamSource } from './teamSource'
 import type { ToolFieldSource } from './fieldSource'
 import type { ToolLevelSource } from './levelSource'
+import { wbsDisplayTitle } from '@/lib/domain/wbsTitle'
 
 const WBS_CAPABILITY = 'wbs:read' as const
 
@@ -118,7 +119,7 @@ function flatten(items: ComputedItem[]): FlatItem[] {
   const out: FlatItem[] = []
   const visit = (nodes: ComputedItem[], parentPath: string) => {
     for (const item of nodes) {
-      const label = item.code ? `${item.code} ${item.name}` : item.name
+      const label = wbsDisplayTitle(item.code, item.name)
       const path = parentPath ? `${parentPath} > ${label}` : label
       out.push({ item, path })
       visit(item.children, path)
@@ -196,7 +197,7 @@ function itemSource(projectId: string, record: WbsToolItemRecord): BotSource {
     entityType: 'wbs_item',
     entityId: record.id,
     projectId,
-    title: record.code ? `${record.code} ${record.name}` : record.name,
+    title: wbsDisplayTitle(record.code, record.name),
     href: wbsItemHref(projectId, record.id),
     updatedAt: record.updatedAt,
     excerpt: shortExcerpt(record.path, record.biz, record.deliverable),

@@ -229,7 +229,7 @@ function AnnouncementRow({
             {item.title}
           </span>
           {item.body && (
-            <span className="mt-1 line-clamp-2 block text-[13px] leading-5 text-fg-secondary">{item.body}</span>
+            <span className="mt-1 line-clamp-2 block whitespace-pre-line text-[13px] leading-5 text-fg-secondary">{item.body}</span>
           )}
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2 text-meta tabular-nums text-fg-muted">
             <span>

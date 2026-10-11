@@ -108,7 +108,7 @@ export const adminUiKo = {
   'home.newProject.startCopy': '기존 프로젝트에서 복사',
   'home.newProject.copySource': '복사 원본 프로젝트',
   'home.newProject.selectProject': '프로젝트를 선택하세요',
-  'home.newProject.copyNote': '복사합니다: 설정 값·팀·업무영역. 복사하지 않습니다: 멤버·WBS·회의록·이슈.',
+  'home.newProject.copyNote': '복사합니다: 설정 값·팀·업무영역·양식 템플릿. 복사하지 않습니다: 멤버·WBS·회의·회의록·이슈·공지·주간보고·위키.',
   // components/roster/RosterManager.tsx
   'roster.adminRowLocked': '관리자 행은 워크스페이스 관리자만 수정할 수 있습니다.',
   'roster.addedExisting': '기존 인물 {name}을(를) 추가했습니다.',

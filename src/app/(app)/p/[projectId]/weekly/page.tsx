@@ -19,6 +19,8 @@ import { CustomFieldsProvider } from '@/components/fields/CustomFieldValuesEdito
 import { pick } from '@/lib/settings/pick'
 import { requireModulePage } from '@/lib/modules/pageGate'
 
+/** 탭 제목 — 화면 이름만 낸다(프로젝트 이름은 싣지 않는다 — 레이아웃의 존재 은닉과 같은 이유) */
+export async function generateMetadata() { return { title: t('nav.weekly') } }
 export default async function WeeklyPage({
   params, searchParams,
 }: {

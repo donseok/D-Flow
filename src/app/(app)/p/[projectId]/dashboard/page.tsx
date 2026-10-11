@@ -30,6 +30,8 @@ import { moduleSetFor } from '@/lib/modules/gate'
 import { workspaceRefById } from '@/lib/workspace/resolve'
 import { wsHref } from '@/lib/workspace/paths'
 
+/** 탭 제목 — 화면 이름만 낸다(프로젝트 이름은 싣지 않는다 — 레이아웃의 존재 은닉과 같은 이유) */
+export async function generateMetadata() { return { title: t('nav.dashboard') } }
 export default async function Dashboard({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'dashboard')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)

@@ -11,7 +11,8 @@ import { calendarOf, isoDowOf, isWorkingDay, nextWeekKey, weekKeyOf, weekPeriodO
 import type { CalendarInput } from '@/lib/calendar/load'
 import { canEditActual, canEditWeight, canEditDeliverable, canAttachDeliverable } from '@/lib/domain/permissions'
 import { computeHideDone } from '@/lib/domain/hideDone'
-import { weightWarnings } from '@/lib/domain/rollup'
+import { weightWarnings, zeroShareItemIds } from '@/lib/domain/rollup'
+import { evaluateStartReadiness } from '@/lib/domain/dependencyReadiness'
 import { ganttAxisRange, nextDetailSelection, outOfProjectRangeIds, outlineNumbers as outlineNumbersOf, shownSchedules, type ShownSchedule } from '@/lib/domain/wbsDerived'
 import { updateActual, updateWeight, addWbsItem, getWbsCellSnapshot } from '@/app/actions/wbs'
 import { wbsToastText } from '@/lib/wbs/actionErrors'
@@ -423,7 +424,7 @@ export function WbsGanttSheet({
   const [cellConflict, setCellConflict] = useState<CellConflict | null>(null)
   const cellConflictRef = useRef<CellConflict | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
+  const [toast, setToast] = useState<{ kind: 'ok' | 'warn' | 'err'; msg: string } | null>(null)
   useBotPageContext({
     domain: 'wbs',
     projectId,
@@ -730,6 +731,21 @@ export function WbsGanttSheet({
   }, [items])
   // 가중치를 비운 항목 수(SP4 D20) — 가중치를 가진 형제가 있는 그룹의 null 만 센다(그 그룹에서 1 = 같은 몫으로 계산된다). 모두 비운 그룹은 뜻이 같아 세지 않는다
   const { unset: unsetWeights, overGroups: overWeightGroups } = useMemo(() => weightWarnings(items), [items])
+  const zeroShareIds = useMemo(() => zeroShareItemIds(items), [items])
+  // 이 작업의 선행 가운데 아직 충족되지 않은 건수 — 상세 패널의 "선행 N건 대기 중"과 같은 판정·같은 입력이다
+  const predecessorsWaiting = (id: string): number => {
+    const item = allFlatItems.find(c => c.id === id)
+    if (!item) return 0
+    const approved = new Set(approvedItemIds ?? [])
+    const byId = new Map(allFlatItems.map(c => [c.id, { ...c, orderApproved: approved.has(c.id) }]))
+    return evaluateStartReadiness(
+      { id: item.id, rolledActualPct: item.rolledActualPct, stage: item.stage ?? null },
+      dependencies.filter(dep => dep.successorId === id),
+      byId,
+      unresolvedDepends[id] ?? EMPTY_REFS,
+      predecessorGate,
+    ).waitingCount
+  }
   const dependencySchedule = useMemo(
     () => computeDependencySchedule(
       allFlatItems.map(item => ({
@@ -1214,6 +1230,11 @@ export function WbsGanttSheet({
       sheetUndoManager.confirmActive(sessionId)
       // D6-§5-motion: 셀 저장 성공 토스트는 제거하고 조용한 헤더 SyncStatus로 흡수
       editSessionStore.setSession(sessionId, 'wbs_cell', `${id}:${field}`, 'saved')
+      // 선행이 끝나지 않은 작업의 실적을 올렸다 — 막지는 않는다(화면에서 그은 의존성은 아무것도 막지 않는다). 저장됐다는 것과 함께 알리기만 한다(DF-005)
+      if (field === 'actual' && Number(mine ?? 0) > Number(base ?? 0)) {
+        const waiting = predecessorsWaiting(id)
+        if (waiting > 0) setToast({ kind: 'warn', msg: t('wbs.toastPredecessorWaiting').replace('{n}', String(waiting)) })
+      }
       router.refresh()
       if (after) pendingFocusRef.current = after
       setEdit(null)
@@ -2113,7 +2134,8 @@ export function WbsGanttSheet({
             const editingActual = edit?.id === n.id && edit.field === 'actual'
             const editableW = canEditW
             const editableA = canEditActual(n, actor, projectId) && !readOnly
-            const weightLabel = n.weight == null ? t('wbs.weightEqual') : formatWeightPct(n.weight)
+            const zeroShare = zeroShareIds.has(n.id)   // 형제 합이 이미 100% — '균등'이라 적으면 몫이 있는 것처럼 읽힌다
+            const weightLabel = n.weight == null ? t(zeroShare ? 'wbs.weightZeroShare' : 'wbs.weightEqual') : formatWeightPct(n.weight)
 
             const frozen = (key: string, z = 20): React.CSSProperties => {
               const c = colOf(key)
@@ -2380,9 +2402,9 @@ export function WbsGanttSheet({
                     !editingWeight &&
                     startEdit(n.id, 'weight', n.weight == null ? '' : String(weightToPct(n.weight)), n.weight == null ? '' : String(n.weight))
                   }
-                  title={editableW ? t('wbs.editWeightTitle') : undefined}
+                  title={zeroShare ? t('wbs.weightZeroShareTitle') : editableW ? t('wbs.editWeightTitle') : undefined}
                 >
-                  {editingWeight ? editInput(weightLabel, 'weight') : weightLabel}
+                  {editingWeight ? editInput(weightLabel, 'weight') : zeroShare ? <span data-weight-zero-share className="font-semibold text-warning">{weightLabel}</span> : weightLabel}
                 </div>}
                 {/* 계획% */}
                 {showCol('pplan') && (
@@ -2719,7 +2741,7 @@ export function WbsGanttSheet({
       {toast && (
         <div
           className={`fixed right-6 z-50 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${bulkSelection.size > 0 ? 'bottom-36' : 'bottom-6'} ${
-            toast.kind === 'ok' ? 'bg-success text-success-fg' : 'bg-danger text-danger-fg'
+            toast.kind === 'ok' ? 'bg-success text-success-fg' : toast.kind === 'warn' ? 'bg-warning text-warning-fg' : 'bg-danger text-danger-fg'
           }`}
           role={toast.kind === 'err' ? 'alert' : 'status'}
         >
@@ -2733,6 +2755,8 @@ export function WbsGanttSheet({
           numbers={outlineNumbers}
           shown={schedules.get(selectedItem.id)}
           outOfRange={outOfRangeIds.has(selectedItem.id)}
+          zeroShare={zeroShareIds.has(selectedItem.id)}
+          onDeleted={name => setToast({ kind: 'ok', msg: t('wbs.toastDeleted').replace('{name}', () => name) })}
           timeZone={cal.timezone}
           allItems={allFlatItems}
           dependencies={dependencies}

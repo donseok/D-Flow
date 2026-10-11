@@ -16,6 +16,8 @@ function parseQuery(value: string | string[] | undefined): string {
   return typeof value === 'string' && value.length <= 200 ? value : ''
 }
 
+/** 탭 제목 — 화면 이름만 낸다(프로젝트 이름은 싣지 않는다 — 레이아웃의 존재 은닉과 같은 이유) */
+export async function generateMetadata() { return { title: t('nav.wiki') } }
 export default async function ProjectWikiPage({
   params,
   searchParams,

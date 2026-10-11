@@ -19,7 +19,7 @@ const WEIGHT_EPS = 1e-9
  *  - 전부 미지정 → 균등(각 1).
  *  - 전부 지정 → 지정값의 비율(합이 1 이 아니어도 된다 — 3:1 은 75:25).
  *  - 일부만 지정 → 지정값은 그대로, 미지정 항목은 남은 몫 `max(0, 1 − 지정 합)` 을 균등하게 나눈다.
- *    지정 합이 1 을 넘으면 미지정 몫은 0 이다(화면이 "가중치 합 100% 초과"를 알린다 — weightWarnings).
+ *    지정 합이 1 이상이면 미지정 몫은 0 이다(화면이 "남은 몫 없음"을 알린다 — weightWarnings·zeroShareItemIds).
  * 명시 0 은 0 이다. 음수는 저장되지 않지만(wbsValueRules) 옛 데이터가 있으면 0 으로 본다 — 몫이 음수면 평균이 범위를 벗어난다.
  * 전체 공정율(루트)·하위 롤업·계획 곡선(trend.ts)·주간 보고 점유율(report/weekly.ts)이 이 함수 하나를 쓴다. 위험 신호의 최상위 가중
  * 루트 판정(dashboard.ts topWeightPhaseDelayed — null = 0)은 진척 숫자가 아니라 "어느 루트가 가장 무거운가"라 이것을 쓰지 않는다.
@@ -87,9 +87,15 @@ export function unsetWeightCount(roots: readonly ComputedItem[]): number {
   return weightWarnings(roots).unset
 }
 
+/** 섞인 그룹(일부만 지정)에서 미지정 항목의 몫이 0 인가 — effectiveWeights 의 `rest < WEIGHT_EPS` 와 같은 식(지정 합이 100% 이상) */
+function noShareLeft(set: readonly { weight: number | null }[]): boolean {
+  return Math.max(0, 1 - set.reduce((s, x) => s + Math.max(0, x.weight!), 0)) < WEIGHT_EPS
+}
+
 /**
- * 가중치 알림 재료 — unset: 섞인 그룹의 미지정 항목 수, overGroups: 일부만 지정했는데 지정 합이 이미 100% 를 넘은 그룹 수
- * (그 그룹의 미지정 항목은 몫이 0 이라 진척에 반영되지 않는다 — "가중치 합 100% 초과"). 전부 지정한 그룹은 비율이라 합을 따지지 않는다.
+ * 가중치 알림 재료 — unset: 섞인 그룹의 미지정 항목 수, overGroups: 일부만 지정했는데 지정 합이 이미 100% 이상이라 남은 몫이 없는 그룹 수
+ * (그 그룹의 미지정 항목은 몫이 0 이라 진척에 반영되지 않는다 — "남은 몫 없음"). 합이 정확히 100% 인 그룹도 센다: 형제 합이 100% 인 곳에
+ * 새 항목을 더하면 그 항목이 몫 0 이 되어, 지연이어도 상위가 완료로 계산된다(사용자 테스트 DF-002). 전부 지정한 그룹은 비율이라 합을 따지지 않는다.
  */
 export function weightWarnings(roots: readonly ComputedItem[]): { unset: number; overGroups: number } {
   let unset = 0
@@ -98,10 +104,22 @@ export function weightWarnings(roots: readonly ComputedItem[]): { unset: number;
     const set = g.filter((x) => x.weight != null)
     if (set.length > 0 && set.length < g.length) {
       unset += g.length - set.length
-      if (set.reduce((s, x) => s + Math.max(0, x.weight!), 0) > 1 + WEIGHT_EPS) overGroups++
+      if (noShareLeft(set)) overGroups++
     }
     for (const x of g) if (x.children.length) group(x.children)
   }
   group(roots)
   return { unset, overGroups }
+}
+
+/** 몫이 0 인 미지정 항목의 id — 섞인 그룹의 지정 합이 100% 이상일 때 그 그룹의 미지정 항목들. 표·상세가 '균등'이 아니라 '0%'로 알린다 */
+export function zeroShareItemIds(roots: readonly ComputedItem[]): Set<string> {
+  const ids = new Set<string>()
+  const group = (g: readonly ComputedItem[]) => {
+    const set = g.filter((x) => x.weight != null)
+    if (set.length > 0 && set.length < g.length && noShareLeft(set)) for (const x of g) if (x.weight == null) ids.add(x.id)
+    for (const x of g) if (x.children.length) group(x.children)
+  }
+  group(roots)
+  return ids
 }

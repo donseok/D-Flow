@@ -4,3 +4,9 @@ export interface WorkspaceRef { id: string; slug: string; name: string }
 /** 0003_org_core.sql 의 workspaces.slug check 와 같은 식. 디코드·소문자화하지 않는다 — 형식 밖은 없는 워크스페이스다 */
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,62}$/
 export const WS_COOKIE = 'dflow-ws'
+
+/** '{name} 워크스페이스 …' 꼴 문구에 넣을 이름 — 이름이 이미 '워크스페이스'로 끝나면 그 말을 떼어 '기본 워크스페이스 워크스페이스'가 되지 않게 한다 */
+export function nameBeforeWorkspaceWord(name: string): string {
+  const cut = name.replace(/\s*워크스페이스\s*$/, '')
+  return cut || name
+}

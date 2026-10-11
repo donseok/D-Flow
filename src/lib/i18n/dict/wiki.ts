@@ -105,7 +105,7 @@ export const wikiKo = {
   'wiki.reindex.done': '갱신 완료',
   'wiki.reindex.quotaExhausted': '임베딩 무료 한도 소진 — {n}건 남음. 내일 다시 누르면 이어집니다.',
   'wiki.reindex.failed': '갱신 중 오류가 발생했습니다.',
-  'wiki.reindex.status': '문서 {docs} · 대기 {pending} · 임베딩 {embedded}/{chunks}',
+  'wiki.reindex.status': '전체 색인(모든 프로젝트) — 문서 {docs} · 대기 {pending} · 임베딩 {embedded}/{chunks}',
 
   'wiki.resultCount': '{shown} / {total}건 표시',
   'wiki.showMore': '{n}건 더 보기',

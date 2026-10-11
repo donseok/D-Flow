@@ -8,6 +8,7 @@ import { ERR_WORKSPACE_REQUIRED } from '@/lib/authz/workspace'
 import { ERR_DENIED } from '@/lib/authz/errors'
 import { canSeeProject } from '@/lib/domain/authz'
 import { isUuidLike, isValidDateRange, isValidIsoDate } from '@/lib/domain/validate'
+import { isProjectNameWithinLimit } from '@/lib/domain/project-status'
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
@@ -150,6 +151,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
   if (typeof input.commandId !== 'string' || !isUuidLike(input.commandId)) return invalidInput(fill(t('srv.project.requestId'), { configInvalid: configText(t, CONFIG_MESSAGES.CONFIG_INVALID) }))
   const name = typeof input.name === 'string' ? input.name.trim() : ''
   if (!name) return invalidInput(t('srv.project.enterProjectName'))
+  if (!isProjectNameWithinLimit(name)) return invalidInput(t('srv.project.nameTooLong'))
   // 한쪽만 있어도 형식·실재를 본다 — 그냥 넘기면 RPC 의 22008(표에 없는 토큰)이 '설정을 불러오지 못해'로 나간다
   if ([input.startDate, input.endDate].some((d) => d && (typeof d !== 'string' || !isValidIsoDate(d)))) return invalidInput(t('err.dateFormatNotValid'))
   if (!isValidDateRange(input.startDate || null, input.endDate || null)) return invalidInput(dateOrderMessage(t))
@@ -320,6 +322,7 @@ export async function updateProject(
   const patch: Record<string, unknown> = {}
   if (fields.name !== undefined) {
     if (!fields.name.trim()) return { ok: false, error: t('srv.project.enterProjectName2') }
+    if (!isProjectNameWithinLimit(fields.name.trim())) return { ok: false, error: t('srv.project.nameTooLong') }
     patch.name = fields.name.trim()
   }
   if (fields.description !== undefined) patch.description = fields.description?.trim() || null

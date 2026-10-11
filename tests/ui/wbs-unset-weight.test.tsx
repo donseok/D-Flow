@@ -88,10 +88,17 @@ describe('WbsGanttSheet — 가중치 미지정 N개', () => {
     expect(title).not.toContain('100% 초과')
     expect(container.querySelector('[data-weight-over]')).toBeNull()
   })
-  it('지정 합이 100% 를 넘은 섞인 그룹 — "합 100% 초과"를 같이 알린다(BUG-13)', async () => {
+  it('지정 합이 100% 를 넘은 섞인 그룹 — "남은 몫 없음"을 같이 알린다(BUG-13)', async () => {
     await renderSheet([leaf('a', 0.7), leaf('b', 0.6), leaf('c', null)])
-    expect(unsetText()).toBe('미지정 1개 · 합 100% 초과')
-    expect(container.querySelector('[data-weight-over]')!.getAttribute('title')).toContain('가중치 합 100% 초과')
+    expect(unsetText()).toBe('미지정 1개 · 남은 몫 없음')
+    expect(container.querySelector('[data-weight-over]')!.getAttribute('title')).toContain('진척에 반영되지 않습니다')
+  })
+  it('지정 합이 정확히 100% 인 그룹에 비운 항목 — 머리 알림과 그 행의 "균등 (0%)"(DF-002)', async () => {
+    await renderSheet([leaf('a', 0.6), leaf('b', 0.4), leaf('c', null)])
+    expect(unsetText()).toBe('미지정 1개 · 남은 몫 없음')
+    const zero = container.querySelectorAll('[data-weight-zero-share]')
+    expect(zero).toHaveLength(1)
+    expect(zero[0].textContent).toBe('균등 (0%)')
   })
   it('합계 칸 곁 — 미지정 수가 보여도 합계(N%)는 그대로 보인다', async () => {
     await renderSheet([leaf('a', 0.5), leaf('b', null), leaf('c', null)])

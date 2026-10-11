@@ -5,6 +5,7 @@ import { DEFAULT_DASHBOARD_THRESHOLDS, delayAging, diffDaysCal, dueSoonLeaves, r
 import { collectLeaves } from '@/lib/domain/tree'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
+import { realDueDate } from '@/lib/domain/farDate'
 import { t, type DictKey} from '@/lib/i18n/dict'
 
 type Kind = 'overdue' | 'dueSoon' | 'behind'
@@ -65,7 +66,7 @@ export function RiskWorklist({ items, projectId, today, thresholds = DEFAULT_DAS
                 {kind === 'dueSoon'
                   ? <span className="chip shrink-0 bg-warning/10 font-semibold text-warning">{ddayText(dday, tr)}</span>
                   : <span className="shrink-0 text-xs text-fg-secondary">{detail}</span>}
-                {item.plannedEnd && <span className="shrink-0 text-xs text-fg-muted">{fmtDate(item.plannedEnd)}</span>}
+                {realDueDate(item.plannedEnd) && <span className="shrink-0 text-xs text-fg-muted">{fmtDate(item.plannedEnd)}</span>}
               </Link>
             )
           })}

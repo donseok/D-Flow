@@ -118,7 +118,7 @@ export function RosterManager({ projectId, rows, teamOptions, actorView, canEdit
               disabled={pending} onChange={e => { setName(e.target.value); setAddError(null); setDuplicate(null); setAdded(null) }} />
             <input className="app-input h-8 w-56 text-xs" aria-label={tr('roster.add.emailLabel')} placeholder={tr('roster.add.emailPlaceholder')}
               value={email} disabled={pending} onChange={e => { setEmail(e.target.value); setAddError(null); setDuplicate(null); setAdded(null) }} />
-            <button type="submit" className="btn btn-primary h-8 px-3 text-xs" disabled={pending}>
+            <button type="submit" className="btn btn-primary h-8 px-3 text-xs" disabled={pending || !name.trim()}>
               {pending ? tr('roster.adding') : tr('roster.add')}
             </button>
           </div>
