@@ -11,6 +11,7 @@
 import { llmOverrideSync } from './llm-override'
 import { DEFAULT_GEMINI_BASE_URL, DEFAULT_OPENAI_BASE_URL } from './endpoints'
 import { KNOWLEDGE_EMBEDDING_DIMENSIONS } from '@/lib/ai/index/types'
+import { DEFAULT_GEMINI_MODEL } from './models'
 
 export type AiProvider = 'gemini' | 'openai'
 
@@ -40,17 +41,10 @@ function envLlmConfig(): LlmConfig {
     provider: 'gemini',
     apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
     baseUrl: process.env.GEMINI_BASE_URL || DEFAULT_GEMINI_BASE_URL,
-    // gemini-3.7-flash = 현행 최신 안정판(GA 2026-08-13) + 무료 티어 지원.
-    // 2026-08-18 실측: generateContent 200, 컨텍스트 1,048,576/65,536 로 3.5-flash 와 동일,
-    // 단가는 절반($0.75/$3.75 도입가 vs 3.5-flash $1.50/$9.00) — 청킹·프롬프트 예산은 손댈 것이 없다.
-    // ⚠️ 3.7 은 temperature/topP/topK 를 **에러 없이 무시**한다(2026-07-21 deprecated). 3.5-flash 는
-    //    아직 먹혔으므로, 모델만 갈아끼우면 예외 없이 출력 성격이 바뀐다. 방어선은 llm.ts 의
-    //    geminiGenerationConfig() 세대 분기이고 tests/ai/llm-generation-config.test.ts 가 못박는다.
-    // Pro 계열은 여전히 무료 쿼터 0 이다(2026-08-18 실측: gemini-3.1-pro-preview → 429,
-    //    quotaId 'GenerateContentInputTokensPerModelPerDay-FreeTier' limit 0). gemini-3.7-pro 는 없다.
-    // (gemini-flash-latest 별칭은 이제 3.7-flash 를 가리킨다 — 실측 modelVersion 확인.
-    //  별칭은 예고 없이 세대가 바뀌므로 기본값으로는 쓰지 않는다. GEMINI_MODEL 로 오버라이드)
-    model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
+    // 공식 모델 문서(2026-10-11 확인): 3.8 Flash는 low/medium/high를 지원하며 minimal은 미지원.
+    // https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash
+    // llm.ts의 3.x 요청 파라미터를 유지한다. 별칭 대신 모델 ID를 고정한다.
+    model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
   }
 }
 

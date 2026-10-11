@@ -326,6 +326,7 @@ export const adminUiKo = {
   'llm.profile.apiKey': 'API 키',
   'llm.profile.keyKeepHint': '현재: {mask} — 비워두면 기존 키 유지',
   'llm.profile.keyEmptyHint': '키가 필요 없는 서버(Ollama·LM Studio)는 비워 두세요.',
+  'llm.profile.geminiKeyHint': 'Google AI Studio에서 발급한 API 키를 입력하세요. 프로필을 만든 뒤 활성 LLM에서 이 프로필을 선택하고 저장하면 적용됩니다.',
   'llm.profile.hideKey': 'API 키 숨기기',
   'llm.profile.showKey': 'API 키 표시',
   'llm.profile.maxTokens': '최대 출력 토큰 (선택)',

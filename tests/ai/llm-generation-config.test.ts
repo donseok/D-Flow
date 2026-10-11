@@ -55,8 +55,8 @@ afterEach(() => {
 })
 
 describe('geminiGenerationConfig — 모델 세대별 전송 파라미터', () => {
-  // 3.7 은 2026-08-18 기준 기본 모델이다. 여기가 깨지면 전 AI 경로의 출력 성격이 바뀐다.
-  for (const model of ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite']) {
+  // 3.8은 2026-10-11부터 기본 모델이다. 여기가 깨지면 전 AI 경로의 출력 성격이 바뀐다.
+  for (const model of ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite']) {
     it(`${model}: temperature·topP·topK 를 보내지 않고 thinkingLevel 로만 제어한다`, async () => {
       const cfg = await sentConfigFor(model)
       expect(cfg.temperature).toBeUndefined()
@@ -69,8 +69,8 @@ describe('geminiGenerationConfig — 모델 세대별 전송 파라미터', () =
     })
   }
 
-  it('3.7 은 minimal 을 지원하지 않으므로 thinkingLevel 을 minimal 로 보내지 않는다', async () => {
-    const cfg = await sentConfigFor('gemini-3.7-flash')
+  it('3.8은 minimal을 지원하지 않으므로 thinkingLevel을 minimal로 보내지 않는다', async () => {
+    const cfg = await sentConfigFor('gemini-3.8-flash')
     expect(cfg.thinkingConfig?.thinkingLevel).not.toBe('minimal')
   })
 

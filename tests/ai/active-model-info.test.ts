@@ -60,7 +60,7 @@ describe('activeModelInfo — 지금 실제로 쓰이는 모델', () => {
     expect(info.source).toBe('env')
     expect(info.provider).toBe('gemini')
     // 기본값을 올릴 때 이 단언이 같이 깨지는 것이 정상이다(조용한 변경 방지).
-    expect(info.llm).toBe('gemini-3.7-flash')
+    expect(info.llm).toBe('gemini-3.8-flash')
     expect(info.embedding).toBe('gemini-embedding-001')
     expect(info.embeddingDim).toBe(768)
   })
@@ -104,7 +104,7 @@ describe('activeModelInfo — 지금 실제로 쓰이는 모델', () => {
     await setState({ mode: 'none', active_profile_id: null })
     const info = await activeModelInfo()
     expect(info.source).toBe('none')
-    expect(info.llm).toBe('gemini-3.7-flash') // 껐을 뿐 설정은 그대로 — 되돌릴 때 뭐가 켜지는지 보여야 한다
+    expect(info.llm).toBe('gemini-3.8-flash') // 껐을 뿐 설정은 그대로 — 되돌릴 때 뭐가 켜지는지 보여야 한다
   })
 
   it('⚠️ API 키·토큰을 절대 싣지 않는다', async () => {

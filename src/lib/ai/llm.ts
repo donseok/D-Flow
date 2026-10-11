@@ -48,7 +48,7 @@ export async function generateAnswer(
 
 /**
  * 429(무료 쿼터)·5xx 로 주 모델이 답을 못 줄 때 순서대로 시도할 폴백 모델.
- * 무료 티어 쿼터는 모델별로 별도 버킷이라, 주 모델(gemini-3.7-flash)이 분당 한도에
+ * 무료 티어 쿼터는 모델별로 별도 버킷이라, 주 모델(gemini-3.8-flash)이 분당 한도에
  * 걸려도 아래 모델들은 여유가 있다(2026-08-18 두 모델 모두 thinkingLevel 포함 200 확인).
  * - gemini-3.5-flash-lite: 3.x 세대(thinkingLevel 분기). 최저 단가·최저 지연이라 1순위 폴백.
  * - gemini-3.6-flash: 3.x 세대. 3.7 과 동급 품질·동일 단가의 직전 안정판.

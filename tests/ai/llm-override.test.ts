@@ -68,7 +68,7 @@ describe('llm-override 해석 규칙', () => {
       baseUrl: DEFAULT_GEMINI_BASE_URL,
       // provider.ts 의 현행 기본값. 기본 모델을 올릴 때 여기가 같이 깨지는 것이 정상이다
       // (기본값이 조용히 바뀌는 것을 막는 자물쇠).
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.8-flash',
     })
     expect(hasLLM()).toBe(true)
   })

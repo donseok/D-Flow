@@ -5,6 +5,7 @@ import { Eye, EyeOff, KeyRound, Pencil, PlugZap, Plus, Server, Trash2 } from 'lu
 import { Modal } from '@/components/ui/Modal'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
+import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/models'
 import {
   createLlmProfile, deleteLlmProfile, listLlmProfiles, testLlmConnection, updateLlmProfile,
   type LlmProfileInput, type LlmProfileMasked,
@@ -95,7 +96,7 @@ export function LlmProfilesModal({
     setProvider(p?.provider ?? 'gemini')
     setName(p?.name ?? '')
     setBaseUrl(p?.base_url ?? '')
-    setModel(p?.model ?? '')
+    setModel(p?.model ?? DEFAULT_GEMINI_MODEL)
     setApiKey('') // 기존 키는 되채우지 않는다(마스킹만 안내) — 빈값 = 유지
     setShowKey(false)
     setMaxOut(p?.max_output_tokens != null ? String(p.max_output_tokens) : '')
@@ -126,6 +127,10 @@ export function LlmProfilesModal({
     setPresetId(p.id)
     setProvider(p.provider)
     setBaseUrl(p.baseUrl)
+    // 새 프로필의 자동 기본값만 제공자에 맞춘다. 사용자가 입력한 모델과 기존 프로필은 유지한다.
+    if (!editing && (!model || model === DEFAULT_GEMINI_MODEL)) {
+      setModel(p.provider === 'gemini' ? DEFAULT_GEMINI_MODEL : '')
+    }
     setTestResult(null)
   }
 
@@ -321,7 +326,7 @@ export function LlmProfilesModal({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t('llm.profile.model')}>
-              <input className="app-input font-mono" value={model} onChange={(e) => setModel(e.target.value)} placeholder="gemini-3.7-flash" />
+              <input className="app-input font-mono" value={model} onChange={(e) => setModel(e.target.value)} placeholder={DEFAULT_GEMINI_MODEL} />
             </Field>
             <Field label={t('llm.profile.baseUrl')} hint={t('llm.profile.baseUrlHint')}>
               <input className="app-input font-mono" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="http://localhost:11434/v1" />
@@ -330,7 +335,7 @@ export function LlmProfilesModal({
 
           <Field
             label={t('llm.profile.apiKey')}
-            hint={editing?.has_token ? t('llm.profile.keyKeepHint').replace('{mask}', () => String(editing.auth_token_masked)) : t('llm.profile.keyEmptyHint')}
+            hint={editing?.has_token ? t('llm.profile.keyKeepHint').replace('{mask}', () => String(editing.auth_token_masked)) : provider === 'gemini' ? t('llm.profile.geminiKeyHint') : t('llm.profile.keyEmptyHint')}
           >
             <div className="relative">
               <input
@@ -338,7 +343,7 @@ export function LlmProfilesModal({
                 type={showKey ? 'text' : 'password'}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder={editing?.has_token ? (editing.auth_token_masked ?? '') : 'sk-…'}
+                placeholder={editing?.has_token ? (editing.auth_token_masked ?? '') : provider === 'gemini' ? 'AIza…' : 'sk-…'}
                 autoComplete="off"
               />
               <button
