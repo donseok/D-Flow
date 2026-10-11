@@ -1727,7 +1727,7 @@ export function WbsGanttSheet({
             onChange={e => setQuery(e.target.value)}
             placeholder={t('wbs.searchPlaceholder')}
             aria-label={t('wbs.searchAria')}
-            className="app-input h-9 w-full pl-9 text-[13px] sm:w-40"
+            className="app-input h-9 w-full pl-9 text-base sm:w-40 sm:text-control"
           />
           <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-muted" />
         </div>
@@ -1749,7 +1749,7 @@ export function WbsGanttSheet({
           className={
             compact
               ? 'flex w-full flex-wrap items-center gap-1.5'
-              : 'flex min-w-0 flex-1 flex-wrap items-center gap-2'
+              : 'flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-1'
           }
         >
         {/* 레벨 펼침 버튼 그룹은 작업명 헤더 셀 안으로 옮겼다(2026-09-15, §항목2) —

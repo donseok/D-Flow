@@ -19,7 +19,7 @@ export function WbsFontSizeControl({
   canIncrease: boolean
 }) {
   const { t } = useLocale()
-  const buttonClass = 'inline-flex h-7 w-7 items-center justify-center rounded-md font-bold text-fg-secondary transition '
+  const buttonClass = 'inline-flex h-9 w-9 items-center justify-center rounded-md font-bold text-fg-secondary transition '
     + 'hover:bg-surface-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent'
 
   return (
@@ -28,7 +28,7 @@ export function WbsFontSizeControl({
       data-current-scale={scale}
       role="group"
       aria-label={t('wbs.fontSize')}
-      className="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface px-0.5"
+      className="inline-flex min-h-10 shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface px-0.5"
     >
       <button
         type="button"
@@ -47,7 +47,7 @@ export function WbsFontSizeControl({
         onClick={onReset}
         title={t('wbs.fontReset')}
         aria-label={`${t('wbs.fontCurrent')}: ${scale}% — ${t('wbs.fontReset')}`}
-        className="inline-flex h-7 min-w-10 items-center justify-center rounded-md px-1 text-meta tabular-nums text-fg-secondary transition hover:bg-surface-subtle hover:text-fg"
+        className="inline-flex h-9 min-w-11 items-center justify-center rounded-md px-1 text-control tabular-nums text-fg-secondary transition hover:bg-surface-subtle hover:text-fg"
       >
         <span aria-live="polite">{scale}%</span>
       </button>

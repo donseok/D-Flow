@@ -737,7 +737,7 @@ export function MinuteViewer({
             </nav>
           </div>
           <span className="text-sm tabular-nums text-fg-secondary">{minute.minuteDate}</span>
-          <h1 className="min-w-0 flex-1 truncate text-lg font-bold text-fg">{minute.title}</h1>
+          <h1 className="min-w-0 flex-1 basis-full break-words text-title text-fg lg:basis-64">{minute.title}</h1>
 
           <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
             {bodyFile ? (
@@ -778,7 +778,7 @@ export function MinuteViewer({
             <button onClick={() => setFocus(f => !f)}
               title={focus ? t('min.focus.off') : t('min.focus.on')}
               aria-label={focus ? t('min.focus.off') : t('min.focus.on')} aria-pressed={focus}
-              className={`inline-flex items-center gap-1 text-xs ${focus ? 'text-action' : 'text-fg-secondary hover:text-fg'}`}>
+              className={`btn btn-ghost inline-flex items-center gap-1 text-control ${focus ? 'text-action' : 'text-fg-secondary hover:text-fg'}`}>
               {focus ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               {t('min.focus.on')}
             </button>

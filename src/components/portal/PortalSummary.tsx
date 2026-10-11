@@ -12,14 +12,14 @@ import { t} from '@/lib/i18n/dict'
 export function PortalSummary({ slug, summary, showReview }: { slug: string; summary: Summary; showReview: boolean }) {
   const cell = (id: keyof Summary, label: string, query: Record<string, string>, c: SummaryCell) => (
     <Link key={id} data-summary={id} href={wsHref(slug, 'my-work', query)} title={c.ok ? undefined : c.reason}
-      className="flex min-w-36 flex-1 flex-col gap-1 rounded-(--radius-panel) border border-border bg-surface px-5 py-4 shadow-(--shadow-card) hover:bg-surface-hover">
+      className="flex min-w-0 flex-col gap-1 rounded-(--radius-panel) border border-border bg-surface px-3 py-3 shadow-(--shadow-card) hover:bg-surface-hover sm:px-5 sm:py-4">
       <span className="text-meta font-medium text-fg-secondary">{label}</span>
       <span className="text-kpi tabular-nums text-fg">{c.ok ? c.count : '—'}</span>
       {!c.ok && <span className="sr-only">{c.reason}</span>}
     </Link>
   )
   return (
-    <nav aria-label={t('portalUi.summary.aria')} className="mb-6 flex flex-wrap gap-3">
+    <nav aria-label={t('portalUi.summary.aria')} className={`mb-6 grid gap-2 sm:gap-3 ${showReview ? 'grid-cols-3' : 'grid-cols-2'}`}>
       {cell('mine', t('portalUi.summary.mine'), { kind: 'wbs,issue' }, summary.mine)}
       {showReview && cell('review', t('portalUi.summary.review'), { kind: 'approval' }, summary.review)}
       {cell('dueToday', t('portalUi.summary.dueToday'), { due: 'today' }, summary.dueToday)}

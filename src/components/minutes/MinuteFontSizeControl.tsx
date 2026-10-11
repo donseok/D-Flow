@@ -16,7 +16,7 @@ export function MinuteFontSizeControl({
   canInc: boolean
 }) {
   const { t } = useLocale()
-  const btn = 'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-fg-secondary transition '
+  const btn = 'inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-fg-secondary transition '
     + 'hover:bg-surface-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent'
 
   return (
@@ -29,8 +29,8 @@ export function MinuteFontSizeControl({
       </button>
       <button type="button" onClick={onReset}
         title={t('min.fs.reset')} aria-label={`${t('min.fs.current')}: ${size}px — ${t('min.fs.reset')}`}
-        className="inline-flex h-7 min-w-[2rem] cursor-pointer items-center justify-center rounded-md px-1
-                   text-xs tabular-nums text-fg-secondary transition hover:bg-surface-subtle hover:text-fg">
+        className="inline-flex h-9 min-w-11 cursor-pointer items-center justify-center rounded-md px-1
+                   text-control tabular-nums text-fg-secondary transition hover:bg-surface-subtle hover:text-fg">
         <span aria-live="polite">{size}</span>
       </button>
       <button type="button" onClick={onInc} disabled={!canInc}
