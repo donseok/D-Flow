@@ -64,7 +64,6 @@ describe('WBS 컴팩트 압축', () => {
   it('컴팩트: 버튼 글자 라벨이 사라지고 아이콘만 남되 title 은 유지된다', async () => {
     stubMq(true)
     await render()
-    await act(async () => container.querySelector<HTMLButtonElement>('[data-wbs-toolbar-toggle]')!.click()) // 툴바 열기
     expect(container.querySelectorAll('[data-wbs-toolbar] [data-btn-label]')).toHaveLength(0)
     for (const sel of ['[data-wbs-progress-lens-toggle]', '[data-wbs-hide-done-toggle]', '[data-wbs-fullscreen-toggle]', '[data-wbs-weekly-report]']) {
       const btn = container.querySelector<HTMLElement>(sel)
@@ -83,43 +82,13 @@ describe('WBS 컴팩트 압축', () => {
     }
   })
 
-  it('컴팩트: 툴바가 통째로 사라지고 플로팅 토글로 열고 닫는다', async () => {
+  it('컴팩트: 툴바는 늘 보이고 펼치기/접기 토글이 없다(2026-10-11 — 토글 제거)', async () => {
     stubMq(true)
     await render()
-    // 기본: 툴바 없음, 플로팅 토글만
-    expect(container.querySelector('[data-wbs-toolbar]')).toBeNull()
-    const open = container.querySelector<HTMLButtonElement>('[data-wbs-toolbar-toggle]')
-    expect(open).not.toBeNull()
-    expect(open!.getAttribute('aria-expanded')).toBe('false')
-
-    // 열면: 툴바 + 전체 컨트롤 등장
-    await act(async () => open!.click())
     expect(container.querySelector('[data-wbs-toolbar]')).not.toBeNull()
     expect(container.querySelector('[data-wbs-toolbar-rest]')).not.toBeNull()
     expect(container.querySelector('[data-wbs-progress-lens-toggle]')).not.toBeNull()
-    const close = container.querySelector<HTMLButtonElement>('[data-wbs-toolbar-toggle]')!
-    expect(close.getAttribute('aria-expanded')).toBe('true')
-
-    // 닫으면 원상복구
-    await act(async () => close.click())
-    expect(container.querySelector('[data-wbs-toolbar]')).toBeNull()
-  })
-
-  it('컴팩트: 기간 밖 안내는 플로팅 토글이 뜨는 자리만큼 오른쪽을 비우고, 토글은 이름을 갖는다', async () => {
-    const renderOut = () => act(async () => root.render(
-      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1' })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} startDate="2026-08-01" endDate="2026-08-31" />,
-    ))
-    const bannerCls = () => container.querySelector<HTMLElement>('[data-wbs-out-of-range]')!.className.split(' ')
-    stubMq(true)
-    await renderOut()
-    const open = container.querySelector<HTMLButtonElement>('[data-wbs-toolbar-toggle]')!
-    expect(open.getAttribute('aria-label')).toBeTruthy()
-    expect(bannerCls()).toContain('pr-12')
-    // 툴바를 열면 플로팅 버튼이 사라지므로 평소 여백으로 돌아온다
-    await act(async () => open.click())
-    expect(bannerCls()).toContain('pr-3')
-    expect(bannerCls()).not.toContain('pr-12')
-    expect(container.querySelector<HTMLButtonElement>('[data-wbs-toolbar-toggle]')!.getAttribute('aria-label')).toBeTruthy()
+    expect(container.querySelector('[data-wbs-toolbar-toggle]')).toBeNull()
   })
 
   it('0001~9999년 일정이 있어도 그려진다 — 간트 축은 기준일 둘레로 잘린다', async () => {
@@ -161,12 +130,11 @@ describe('WBS 컴팩트 압축', () => {
     expect(container.querySelector('[data-wbs-col="deliverable"][data-wbs-col-kind="header"]')).not.toBeNull()
   })
 
-  it('태블릿(폭 640~1023): 툴바는 걷히되 열 폭·계획 열은 데스크톱 그대로', async () => {
+  it('태블릿(폭 640~1023): 범례는 걷히되 열 폭·계획 열은 데스크톱 그대로', async () => {
     stubMqTier('tablet')
     await render()
-    // 크롬 압축은 걸린다 — 툴바 없음 + 플로팅 토글 + 범례 없음
-    expect(container.querySelector('[data-wbs-toolbar]')).toBeNull()
-    expect(container.querySelector('[data-wbs-toolbar-toggle]')).not.toBeNull()
+    // 크롬 압축은 걸린다 — 범례 없음(툴바는 늘 보인다)
+    expect(container.querySelector('[data-wbs-toolbar]')).not.toBeNull()
     expect(container.querySelector('[data-wbs-legend]')).toBeNull()
     // 열 축소는 안 걸린다 — 작업명 360px + 계획 열 표시
     const nameHead = container.querySelector<HTMLElement>('[data-wbs-col="name"][data-wbs-col-kind="header"]')
@@ -174,11 +142,10 @@ describe('WBS 컴팩트 압축', () => {
     expect(container.querySelector('[data-wbs-col="deliverable"][data-wbs-col-kind="header"]')).not.toBeNull()
   })
 
-  it('랩탑(1024×768): 높이가 낮아 컴팩트 — 툴바가 걷힌다', async () => {
+  it('랩탑(1024×768): 높이가 낮아 컴팩트 — 범례가 걷힌다(툴바는 남는다)', async () => {
     stubViewport(1024, 768)
     await render()
-    expect(container.querySelector('[data-wbs-toolbar]')).toBeNull()
-    expect(container.querySelector('[data-wbs-toolbar-toggle]')).not.toBeNull()
+    expect(container.querySelector('[data-wbs-toolbar]')).not.toBeNull()
     expect(container.querySelector('[data-wbs-legend]')).toBeNull()
   })
 

@@ -1159,7 +1159,7 @@ describe('UI-3 라우트 행', () => {
   it('인스펙터 행은 레일 표지를 기대하고, 전체 화면 행은 토글 뒤 그 안의 행을 연다', () => {
     for (const k of ['p-wbs-inspector', 'p-wbs-inspector-collapsed', 'p-wbs-fullscreen-inspector', 'p-wbs-fullscreen-inspector-compact']) expect(key(k)?.expect, k).toContain('[data-rail="inspector"]')
     expect(key('p-wbs-fullscreen-inspector')?.clicks).toEqual(['[data-wbs-fullscreen-toggle]', '[data-wbs-fullscreen="open"] [data-row-id] [data-wbs-col="name"] button[title]'])
-    expect(key('p-wbs-fullscreen-inspector-compact')?.clicks?.slice(0, 2)).toEqual(['[data-wbs-toolbar-toggle]', '[data-wbs-fullscreen-toggle]'])
+    expect(key('p-wbs-fullscreen-inspector-compact')?.clicks?.slice(0, 1)).toEqual(['[data-wbs-fullscreen-toggle]'])
   })
   it('옛 칸반 행은 UI-3 까지(스텁이 된다 — D36), 키로 찍으면 머리는 보드로 간다', () => {
     expect(key('p-kanban')?.until).toBe('UI-3')

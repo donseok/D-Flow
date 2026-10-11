@@ -19,7 +19,7 @@ import { classifyCasOutcome, editSessionStore } from '@/lib/sync/editSession'
 import { sheetUndoManager } from '@/lib/sync/sheetUndo'
 import { queueWbsCollapse, queueUiPref } from '@/lib/prefs/debouncedSave'
 import { matchesNarrowViewport, useCompactViewport, useNarrowViewport, useRoomyViewport } from '@/lib/hooks/useCompactViewport'
-import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, SlidersHorizontal, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize2, Minimize2, FileText, Flag, ListChecks, ChevronRight, Hash, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
 import { Icon } from '@/components/ui/Icon'
 import { weightToPct, formatWeightPct, formatPct1 } from '@/lib/domain/format'
 import { actualPctViolation, weightPctToFraction, weightViolation, WBS_NAME_MAX } from '@/lib/domain/wbsValueRules'
@@ -376,7 +376,6 @@ export function WbsGanttSheet({
   const [hideDone, setHideDone] = useState(initialHideDone)
   // 모바일 툴바 접힘 — 좁은 화면에서 컨트롤이 3줄을 차지해 표를 가리므로 기본 접힘.
   // sm 이상에서는 CSS(sm:flex)가 항상 펼치므로 이 상태는 모바일에서만 의미 있다.
-  const [toolbarOpen, setToolbarOpen] = useState(false)
   // focus 딥링크가 숨겨진 구간을 가리킬 때의 임시 노출 — forcedOpen 과 같은 계열(계정 저장 무접촉)
   const [hideExempt, setHideExempt] = useState<Set<string>>(() => new Set())
   const toggleHideDone = () => {
@@ -1672,23 +1671,7 @@ export function WbsGanttSheet({
       {/* 전체 화면 안 레일 자리(D56) — 열린 동안 우측 레일(AI·인스펙터)이 전체 화면 층 아래로 숨지 않게 여기로 포털된다(RightRail 의 useRailHost) */}
       <div className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${fullscreen ? 'px-3 py-3 sm:px-6 sm:py-5' : ''}`}>
       {/* ── 툴바 ── */}
-      {/* 컴팩트: 툴바를 통째로 걷고 플로팅 버튼으로 연다 — 접힌 한 줄(검색+토글)조차 표 공간을
-          먹는다는 피드백(2026-08-21). 분기는 JS(compact)로만 — CSS 반응형 display 유틸은
-          unlayered 안전망에 져서 못 쓴다. */}
-      {compact && !toolbarOpen && (
-        <button
-          type="button"
-          data-wbs-toolbar-toggle
-          onClick={() => setToolbarOpen(true)}
-          aria-expanded={false}
-          title={t('wbs.toolbarToggleTitle')}
-          aria-label={t('wbs.toolbarToggleTitle')}
-          className="btn absolute right-1 top-1 z-[60] h-8 border border-border bg-surface/95 px-2.5 text-xs shadow-[var(--shadow-sm)] backdrop-blur-sm"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-        </button>
-      )}
-      {(!compact || toolbarOpen) && (
+      {/* 툴바는 컴팩트에서도 늘 보인다 — 펼치기/접기 토글은 없앴다(2026-10-11 사용자 요청). 컴팩트는 글자 라벨만 숨긴다 */}
       <div data-wbs-toolbar className="card mb-1.5 flex w-full min-w-0 max-w-full shrink-0 flex-wrap items-center gap-1.5 overflow-hidden p-1.5 sm:mb-3 sm:gap-2 sm:p-2.5">
         {/* 제목 글자는 툴바 가로폭을 아껴 두 줄 줄바꿈을 막으려고 뺐다. 아이콘만 남기고 이름은 title·sr-only 로 유지 */}
         {!compact && (
@@ -1696,20 +1679,6 @@ export function WbsGanttSheet({
             <span title={t('wbs.board')} className="flex h-8 w-8 items-center justify-center rounded-xl bg-action-soft text-action"><Icon name="grid" className="h-4 w-4" /></span>
             <span className="sr-only">{t('wbs.board')}</span>
           </div>
-        )}
-        {/* 컴팩트에서 열린 툴바의 닫기 버튼 — 플로팅 버튼과 같은 토글 시맨틱 */}
-        {compact && (
-          <button
-            type="button"
-            data-wbs-toolbar-toggle
-            onClick={() => setToolbarOpen(false)}
-            aria-expanded
-            title={t('wbs.toolbarToggleTitle')}
-          aria-label={t('wbs.toolbarToggleTitle')}
-            className="btn h-9 border border-border-focus bg-action-soft px-3 text-xs text-action"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-          </button>
         )}
         <div
           data-wbs-toolbar-rest
@@ -1852,7 +1821,6 @@ export function WbsGanttSheet({
         </div>
         </div>
       </div>
-      )}
 
       {/* 새 Phase 입력 (관리자) */}
       {addPhase != null && (
@@ -1888,9 +1856,8 @@ export function WbsGanttSheet({
       />
 
       {/* 프로젝트 기간 밖 작업(BUG-14) — 저장은 막지 않는다. 해당 행의 날짜 칸이 같은 색으로 표시된다 */}
-      {/* 컴팩트에서 툴바가 접혀 있으면 플로팅 열기 버튼이 이 줄의 오른쪽 위에 뜬다 — 문구가 그 밑으로 들어가지 않게 자리를 비운다 */}
       {outOfRangeIds.size > 0 && (
-        <p data-wbs-out-of-range role="status" className={`mb-2 rounded-(--radius-control) border border-warning bg-warning-weak py-1.5 pl-3 text-xs font-medium text-warning ${compact && !toolbarOpen ? 'pr-12' : 'pr-3'}`}>
+        <p data-wbs-out-of-range role="status" className={`mb-2 rounded-(--radius-control) border border-warning bg-warning-weak px-3 py-1.5 text-xs font-medium text-warning`}>
           {t('wbs.outOfRange').replace('{n}', String(outOfRangeIds.size)).replace('{start}', fmtDate(startDate ?? null)).replace('{end}', fmtDate(endDate ?? null))}
         </p>
       )}

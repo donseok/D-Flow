@@ -16,7 +16,6 @@ export const wbsKo = {
   'wbs.expandToLevel': '이 레벨까지 펼치기 —',
   'wbs.colOutline': '번호',
   'wbs.outlineToggleTitle': '개요 번호 열 표시/숨김',
-  'wbs.toolbarToggleTitle': '도구 모음 펼치기/접기',
   'wbs.ganttZoomOut': '간트 축소',
   'wbs.ganttZoomIn': '간트 확대',
   'wbs.ganttZoomGroup': '간트 배율',
