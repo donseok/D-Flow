@@ -1148,9 +1148,8 @@ function WeekNav({
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        {presence}
-        <div className="flex flex-wrap items-center gap-2">
+      {presence && <div className="ml-auto">{presence}</div>}
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {/* 내보내기 전에 점검하는 순서가 자연스러워 왼쪽에 둔다. */}
           {onAiRewrite && (
             <button
@@ -1167,7 +1166,6 @@ function WeekNav({
           {onLint && <button type="button" className="btn btn-ghost" onClick={onLint}>{t('weekly.lint.title')}</button>}
           <ExportSummaryPptButton projectId={projectId} />
           <ExportPptButton projectId={projectId} weekStart={weekStart} disabled={exportDisabled} onBeforeExport={onBeforeExport} />
-        </div>
       </div>
     </div>
   )
@@ -1207,8 +1205,8 @@ function ExportSummaryPptButton({ projectId }: { projectId: string }) {
     }
   }
   return (
-    <button className="btn btn-ghost" disabled={busy} onClick={onExport}>
-      <Download className="mr-1 h-4 w-4" />{t('weekly.export.summary')}
+    <button className="btn btn-ghost" aria-label={t('weekly.export.summary')} disabled={busy} onClick={onExport}>
+      <Download className="mr-1 h-4 w-4" aria-hidden /><span className="hidden sm:inline">{t('weekly.export.summary')}</span><span className="sm:hidden">{t('weekly.export.summaryShort')}</span>
     </button>
   )
 }
@@ -1236,8 +1234,8 @@ function ExportPptButton({ projectId, weekStart, disabled, onBeforeExport }: {
     }
   }
   return (
-    <button className="btn btn-primary" disabled={disabled || busy} onClick={onExport}>
-      <Download className="mr-1 h-4 w-4" />{t('weekly.export.detail')}
+    <button className="btn btn-primary" aria-label={t('weekly.export.detail')} disabled={disabled || busy} onClick={onExport}>
+      <Download className="mr-1 h-4 w-4" aria-hidden /><span className="hidden sm:inline">{t('weekly.export.detail')}</span><span className="sm:hidden">{t('weekly.export.detailShort')}</span>
     </button>
   )
 }

@@ -115,5 +115,7 @@ export const weeklyUiKo = {
   'weekly.export.failed': 'PPT 생성 실패',
   'weekly.export.errorStatus': '오류 ({status})',
   'weekly.export.summary': '주간보고서 요약(PPT)',
+  'weekly.export.summaryShort': '요약 PPT',
   'weekly.export.detail': '주간보고서 상세(PPT)',
+  'weekly.export.detailShort': '상세 PPT',
 } as const
