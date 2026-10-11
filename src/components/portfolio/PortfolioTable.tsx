@@ -36,8 +36,8 @@ export function PortfolioTable({ rows, leadersDegraded }: {
   return (
     <SectionCard title={tr('pf.table.title')} icon={Briefcase}
       actions={<CountBadge n={rows.length} unit={tr('pf.unit')} />}>
-      <div className="overflow-x-auto">
-        <table className="data-table w-full min-w-[980px] text-left text-xs">
+      <div className="overflow-x-auto" role="region" aria-label={tr('pf.table.title')} tabIndex={0}>
+        <table className="data-table w-full min-w-[980px] text-left text-body">
           <thead>
             <tr>
               <th className={th}>{tr('pf.col.signal')}</th>
@@ -90,7 +90,7 @@ export function PortfolioTable({ rows, leadersDegraded }: {
                     <Link href={`/p/${row.projectId}/dashboard`}
                       className="inline-flex items-center gap-1.5 font-semibold text-fg hover:text-action hover:underline">
                       {row.isPrivate && <Lock className="h-3 w-3 shrink-0 text-fg-muted" aria-label={tr('pf.private')} />}
-                      <span className="truncate">{row.name}</span>
+                      <span className="break-words">{row.name}</span>
                     </Link>
                     {row.baseDate && (
                       <div className="mt-0.5 text-meta text-fg-muted">{tr('pf.baseDate')} {fmtDate(row.baseDate)}</div>

@@ -58,7 +58,6 @@ export const ALLOW: Allowed[] = [
   { file: 'src/components/dashboard/SpiPanel.tsx', hit: 'fontSize 10px', n: 3, use: 'SPI 반원 게이지의 눈금 0.5·1.0·1.5(SVG)', why: 'viewBox 단위 눈금 — 게이지 바깥 좁은 여백에 놓인다' },
   { file: 'src/components/dashboard/MilestoneTimeline.tsx', hit: 'fontSize 10px', n: 1, use: '마일스톤 타임라인의 이름 라벨(SVG, FS_NAME)', why: 'viewBox 단위 — 줄바꿈·겹침 회피 계산(textWidth·MAX_LINE_W)이 이 크기에 묶여 있다' },
   { file: 'src/components/dashboard/MilestoneTimeline.tsx', hit: 'fontSize 9px', n: 2, use: '마일스톤 타임라인의 날짜·오늘 라벨(SVG, FS_SUB)', why: '위와 같은 배치 계산에 묶인 보조 라벨' },
-  { file: 'src/components/portfolio/PortfolioMilestoneBoard.tsx', hit: 'fontSize 9px', n: 2, use: '포트폴리오 마일스톤 보드의 월 눈금·오늘(SVG)', why: 'viewBox 단위 축 눈금 — 머리 높이 18 에 맞춰져 있다' },
 ]
 
 /** WBS 글자 배율 변수 가운데 100% 에서 12px 미만인 것 — 간트 눈금·막대·표지 도형(위 목록의 폴백과 같은 자리) */

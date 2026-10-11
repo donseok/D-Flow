@@ -7,23 +7,10 @@ import { CountBadge, MiniEmpty } from '@/components/dashboard/bits'
 import { fmtDate } from '@/components/wbs/shared'
 import { projectColorClass } from '@/lib/domain/projectColors'
 import { t} from '@/lib/i18n/dict'
+import { portfolioMonthTicks } from '@/lib/domain/portfolioTimeline'
 
 const MS_TONE: Record<MilestoneStatus, string> = { done: 'fill-success', overdue: 'fill-danger', upcoming: 'fill-action' }
 const W = 960, PL = 10, PR = 10, ROW_H = 26, BASE = 13
-
-/** 축 범위 안의 매월 1일 (헤더 눈금) */
-function monthTicks(axisStart: string, axisEnd: string): string[] {
-  const ticks: string[] = []
-  let [y, m] = axisStart.split('-').map(Number)
-  if (axisStart.slice(8) !== '01') { m += 1; if (m > 12) { m = 1; y += 1 } }
-  for (;;) {
-    const d = `${y}-${String(m).padStart(2, '0')}-01`
-    if (d > axisEnd) break
-    ticks.push(d)
-    m += 1; if (m > 12) { m = 1; y += 1 }
-  }
-  return ticks
-}
 
 /** 전 프로젝트 마일스톤을 공통 시간축 위에 프로젝트당 1행으로. 상세 라벨은 dot 툴팁. */
 export function PortfolioMilestoneBoard({ rows, milestones, today }: {
@@ -58,7 +45,7 @@ export function PortfolioMilestoneBoard({ rows, milestones, today }: {
   const total = diffDaysCal(axisStart, axisEnd)
   const x = (d: string) => PL + (Math.min(total, Math.max(0, diffDaysCal(axisStart, d))) / total) * (W - PL - PR)
   const todayIn = today >= axisStart && today <= axisEnd
-  const ticks = monthTicks(axisStart, axisEnd)
+  const ticks = portfolioMonthTicks(axisStart, axisEnd)
   const projectIds = board.map(r => r.projectId)
 
   return (
@@ -69,21 +56,16 @@ export function PortfolioMilestoneBoard({ rows, milestones, today }: {
           {/* 헤더: 월 눈금 + 오늘 */}
           <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-2">
             <div />
-            <svg viewBox={`0 0 ${W} 18`} className="h-auto w-full" aria-hidden>
-              {ticks.map(d => (
-                <g key={d}>
-                  <line x1={x(d)} x2={x(d)} y1={12} y2={18} className="stroke-border" strokeWidth={1} />
-                  <text x={x(d)} y={9} textAnchor="middle" fontSize={9} className="fill-fg-muted">
-                    {d.slice(2, 7).replace('-', '.')}
-                  </text>
-                </g>
-              ))}
+            <div className="relative h-12 text-meta tabular-nums text-fg-secondary" aria-hidden>
+              {ticks.map(d => <span key={d} className="absolute top-1 whitespace-nowrap" style={{ left: `${x(d) / W * 100}%`, transform: 'translateX(-50%)' }}>
+                {d.slice(0, 7).replace('-', '.')}
+              </span>)}
               {todayIn && (
-                <text x={x(today)} y={9} textAnchor="middle" fontSize={9} className="fill-danger font-semibold">
+                <span className="absolute bottom-1 whitespace-nowrap font-semibold text-danger" style={{ left: `${x(today) / W * 100}%`, transform: 'translateX(-50%)' }}>
                   {fmtDate(today)}
-                </text>
+                </span>
               )}
-            </svg>
+            </div>
           </div>
           {board.map(row => (
             <div key={row.projectId} className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-2 border-t border-border/60">
