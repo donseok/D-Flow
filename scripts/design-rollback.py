@@ -16,10 +16,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true', help='Restore after full preflight; default is check only')
     parser.add_argument('--reapply', action='store_true', help='Restore recorded design version instead of baseline')
-    parser.add_argument('--group', choices=['common', 'issues'], help='Restore only one independent change group')
+    parser.add_argument('--group', help='Restore only one recorded change group')
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / 'docs/design-ux/rollback-manifest.json').read_text())
+    groups = sorted({entry['group'] for entry in manifest['files']})
+    if args.group and args.group not in groups:
+        parser.error(f'Unknown group; choose from: {", ".join(groups)}')
     pending = []
     for entry in manifest['files']:
         if args.group and entry['group'] != args.group:

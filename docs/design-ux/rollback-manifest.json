@@ -1,6 +1,6 @@
 {
   "baseline_commit": "88026acf248403a6d5e22662506d43c7ea7cfaea",
-  "design_commit": "20d15328393964f11b637ab078729180eb9aaec2",
+  "design_commit": "29001ea76b47a2d2f64e0c2f24b53ea1292fff0e",
   "files": [
     {
       "path": "src/app/login/page.tsx",
@@ -12,6 +12,12 @@
       "path": "src/components/agent-hub/AgentFrame.tsx",
       "before": "03a4691cd087ce10930eaf266c2a613b629e356a9c2a69d70910b1ed54a87767",
       "after": "29c5da5107d0193b98aec0fa6fde74dd637b05ade5ff91687caf7ccb57ae3acb",
+      "group": "common"
+    },
+    {
+      "path": "src/components/agent-hub/DelegationTable.tsx",
+      "before": "ecfd66c642f93b6ebfd08630b0a70be42dc7f4187840be398430b2fb143ccc5a",
+      "after": "68d9ccc33a116f7cd976be003acb9463d9a810c70e1d53e721c254d278e5854b",
       "group": "common"
     },
     {
@@ -41,8 +47,38 @@
     {
       "path": "src/components/issues/IssuesView.tsx",
       "before": "0da86d9822ed56b0a191df9b1a45395589cf4b104d92f27e6ce25b7ea3dedd25",
-      "after": "f74f0885d0b548093785fbe69149f2a91e5c7c1f75bc17e9103d2ad5c7efbb9e",
+      "after": "af8304964eabb089ebbd5ee4b7787a6c57dd347dc3d7bb270f9ae3c833fd9b78",
       "group": "issues"
+    },
+    {
+      "path": "src/components/minutes/MinuteFontSizeControl.tsx",
+      "before": "89c924354b981df9462e1e76e333a32f44a79e00410855e7b0ee2f46543c659b",
+      "after": "7925caa54969133d26d23b556459c26096627c46f4babb5294008576387f2bf6",
+      "group": "documents"
+    },
+    {
+      "path": "src/components/minutes/MinuteViewer.tsx",
+      "before": "bac3675626ae677666b602902cfc0dfa1e04c3f5c72269b844d489197eb5cda0",
+      "after": "def4b918e27fab75ec19447adc0fbd507989103eb03b0449e6542e7bafeef019",
+      "group": "documents"
+    },
+    {
+      "path": "src/components/portal/PortalSummary.tsx",
+      "before": "2342ef5f84964ecc74161bf33eebc14aecaf2ffc091c686a97e6d668f61d3ce0",
+      "after": "09175037590715c10689a64df9347235e370682eb54233a4c1e94f4361d7065d",
+      "group": "common"
+    },
+    {
+      "path": "src/components/portfolio/PortfolioMilestoneBoard.tsx",
+      "before": "7a7edd7bd1e8fdc3a2223fa6947a44eb42f6c23821d043af6c2415849cd19ca7",
+      "after": "2ad8c835d06d7f95856211e9901ed43d7bf68d38319e9e1aa665fa093b704124",
+      "group": "portfolio"
+    },
+    {
+      "path": "src/components/portfolio/PortfolioTable.tsx",
+      "before": "4ba27de755b4aec867970cc144cd1272c18dd125766325925c49233d18469fd2",
+      "after": "5a45e4d259a11c86b26a3b95798b4f85173383a60a02d9a79803b9812d8e7804",
+      "group": "portfolio"
     },
     {
       "path": "src/components/ui/Field.tsx",
@@ -57,16 +93,64 @@
       "group": "common"
     },
     {
+      "path": "src/components/ui/SectionCard.tsx",
+      "before": "3df006709e28a40c50c5d720510348dba525a22731f908e4e7def3300c7d17fe",
+      "after": "ade628abfa5b11086358da49d055e5e2367a4f994850a4f4801aed4d9af1bbe5",
+      "group": "common"
+    },
+    {
       "path": "src/components/ui/SegmentedTabs.tsx",
       "before": "52de10b3d0f32952aa2323f7028f4f96ee86174c9f995d6a15ae51e65ee2cc07",
       "after": "26d4f810746d4bc7db2bf83ca9ccab61564f9e3689f7e9f94fc15eb2cbcc599b",
       "group": "common"
     },
     {
+      "path": "src/components/wbs/WbsFontSizeControl.tsx",
+      "before": "470c3c5f326886d5a4143f50c04490756b3e5816727be8285c40089479267eeb",
+      "after": "35a2d0b6fc00aa2eab64c3800f6b7da3a21564d7463786e53da8f328a60f1f1e",
+      "group": "wbs"
+    },
+    {
+      "path": "src/components/wbs/WbsGanttSheet.tsx",
+      "before": "77ead197bc7217d6f3c4fb12864eef902fe9f7babbf37fb050199ffb87efa531",
+      "after": "6484acdbf8e80cbda1b5ca3a1487de7c992dda9119594dfae89209aa73ffa8fb",
+      "group": "wbs"
+    },
+    {
+      "path": "src/components/weekly/SheetCell.tsx",
+      "before": "a7c785549a5e06cf5984f7c4c648094ad5e64812c24eae53a0611871acf0138c",
+      "after": "73c8f2da5130da86423e915049ecd0f8cf89954b185e9763e6906c10b80af859",
+      "group": "weekly"
+    },
+    {
+      "path": "src/components/weekly/WeeklySheetView.tsx",
+      "before": "cce42c3486ded16616bc4e302880fdd0488553449cb123ff22c341c4d65748a7",
+      "after": "3cb256e3761822a8230096fedfbedb88cb394e8fc2b9bbebffb99b2ff1466ee4",
+      "group": "weekly"
+    },
+    {
+      "path": "src/lib/domain/calendar.ts",
+      "before": "2c358158f78b95bd213568f24bca62fbbe4f24f0f42af5b689321850457c8e67",
+      "after": "77ec4458a8d3f96a13ceb192f400a00dc2512a02aa07f5699b3a7a492a8874a5",
+      "group": "performance"
+    },
+    {
+      "path": "src/lib/domain/portfolioTimeline.ts",
+      "before": null,
+      "after": "7682700d13e5077d418f398981c83e6de59e26c48215503fc58c20b5f768d5ed",
+      "group": "portfolio"
+    },
+    {
       "path": "src/lib/i18n/dict/issues.ts",
       "before": "233ac8238fbcfef9c3c7b811e213597587580213cd95d0cc3b4390fb16efd55c",
-      "after": "be2309dacd501e8b88efff73a244960fccf9a1b89ef2ed61a100f9e5599ecaca",
+      "after": "166114ae678d0f90c72ba3a95b210563abd413770e19d24e091cf52089f31cd8",
       "group": "issues"
+    },
+    {
+      "path": "src/lib/i18n/dict/weeklyUi.ts",
+      "before": "14ab959c0385d75ddfff9b74c841e3b89fba2ebe35f360a77d6f5af5bc80bad2",
+      "after": "2e5e6a2a41929da5df58e6d2c315269af06e89fc86050db131820061cee6d8d2",
+      "group": "weekly"
     },
     {
       "path": "tests/css/layers.test.ts",
@@ -75,10 +159,52 @@
       "group": "common"
     },
     {
+      "path": "tests/css/min-font-size.test.ts",
+      "before": "7140ca4294cac6fe7022012654618cbf435e053ea72ccc8a15bc4f5d3a27c966",
+      "after": "8e4b9ff5124ebe96c7e1c509855544576f2ae0f1f83b0d73b6439e130627951c",
+      "group": "portfolio"
+    },
+    {
+      "path": "tests/css/sticky-offset.test.ts",
+      "before": "378e76bf2a95db4eb102e205400690fb317c92eab28686b0c2aec65de71cab0d",
+      "after": "1ad8808ed56bd2ccd441d7a4b6c6e33d474afe98ef021b4288f65ebeee0501f5",
+      "group": "weekly"
+    },
+    {
+      "path": "tests/domain/portfolio-timeline.test.ts",
+      "before": null,
+      "after": "a91664fd99f5f310ee278ef8b0b6c31eae1b18b4aa5e311b33601bc4e3582e7e",
+      "group": "portfolio"
+    },
+    {
+      "path": "tests/domain/working-days-large-range.test.ts",
+      "before": null,
+      "after": "e5961a989a4b1345c6122a4a8158c0ffae786a58049c078086edda63f17ab7ae",
+      "group": "performance"
+    },
+    {
+      "path": "tests/ui/issue-bulk-move.test.tsx",
+      "before": "9f580a9f5a5a7f7ee17494dbc4f12b851f05faabac9afb5c4c0c0c58c0fe5af7",
+      "after": "649cc53c4625402a430124d1fdcd4fa2c4d16c06f5bfeee014a0452f02b6a44c",
+      "group": "issues"
+    },
+    {
       "path": "tests/ui/segmented-tabs-keyboard.test.tsx",
       "before": null,
       "after": "97f871430dc555749b478221b9e765078781d36f0217d6776ed3772869792735",
       "group": "common"
+    },
+    {
+      "path": "tests/ui/sp4-screens.test.ts",
+      "before": "88ec96a7c4975dd6976a4f6dd7e42eac13ce8b7f2f3dfd77143d21c45353abe8",
+      "after": "5d7e04241211a2aa0e3ccbb79ad7cff9a28c8ba97c205888ddbe0e3815a7bcb4",
+      "group": "weekly"
+    },
+    {
+      "path": "tests/ui/wbs-mobile-compact.test.tsx",
+      "before": "ea61d9d9d3eadcebb9f28c22c15cf93c4d5c5ed2bb6e7ef6a243040b1c7a536d",
+      "after": "3d91f4c62bd9c84262255eaaeb7fa131a7df6f5a4d7c9cf5a563682fe006b4f5",
+      "group": "wbs"
     }
   ]
 }
