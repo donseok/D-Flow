@@ -1707,6 +1707,7 @@ export function WbsGanttSheet({
           onClick={() => setToolbarOpen(true)}
           aria-expanded={false}
           title={t('wbs.toolbarToggleTitle')}
+          aria-label={t('wbs.toolbarToggleTitle')}
           className="btn absolute right-1 top-1 z-[60] h-8 border border-border bg-surface/95 px-2.5 text-xs shadow-[var(--shadow-sm)] backdrop-blur-sm"
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -1739,6 +1740,7 @@ export function WbsGanttSheet({
             onClick={() => setToolbarOpen(false)}
             aria-expanded
             title={t('wbs.toolbarToggleTitle')}
+          aria-label={t('wbs.toolbarToggleTitle')}
             className="btn h-9 border border-border-focus bg-action-soft px-3 text-xs text-action"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -1921,8 +1923,9 @@ export function WbsGanttSheet({
       />
 
       {/* 프로젝트 기간 밖 작업(BUG-14) — 저장은 막지 않는다. 해당 행의 날짜 칸이 같은 색으로 표시된다 */}
+      {/* 컴팩트에서 툴바가 접혀 있으면 플로팅 열기 버튼이 이 줄의 오른쪽 위에 뜬다 — 문구가 그 밑으로 들어가지 않게 자리를 비운다 */}
       {outOfRangeIds.size > 0 && (
-        <p data-wbs-out-of-range role="status" className="mb-2 rounded-(--radius-control) border border-warning bg-warning-weak px-3 py-1.5 text-xs font-medium text-warning">
+        <p data-wbs-out-of-range role="status" className={`mb-2 rounded-(--radius-control) border border-warning bg-warning-weak py-1.5 pl-3 text-xs font-medium text-warning ${compact && !toolbarOpen ? 'pr-12' : 'pr-3'}`}>
           {t('wbs.outOfRange').replace('{n}', String(outOfRangeIds.size)).replace('{start}', fmtDate(startDate ?? null)).replace('{end}', fmtDate(endDate ?? null))}
         </p>
       )}

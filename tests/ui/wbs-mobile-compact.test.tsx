@@ -105,6 +105,23 @@ describe('WBS 컴팩트 압축', () => {
     expect(container.querySelector('[data-wbs-toolbar]')).toBeNull()
   })
 
+  it('컴팩트: 기간 밖 안내는 플로팅 토글이 뜨는 자리만큼 오른쪽을 비우고, 토글은 이름을 갖는다', async () => {
+    const renderOut = () => act(async () => root.render(
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'p1' })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} startDate="2026-08-01" endDate="2026-08-31" />,
+    ))
+    const bannerCls = () => container.querySelector<HTMLElement>('[data-wbs-out-of-range]')!.className.split(' ')
+    stubMq(true)
+    await renderOut()
+    const open = container.querySelector<HTMLButtonElement>('[data-wbs-toolbar-toggle]')!
+    expect(open.getAttribute('aria-label')).toBeTruthy()
+    expect(bannerCls()).toContain('pr-12')
+    // 툴바를 열면 플로팅 버튼이 사라지므로 평소 여백으로 돌아온다
+    await act(async () => open.click())
+    expect(bannerCls()).toContain('pr-3')
+    expect(bannerCls()).not.toContain('pr-12')
+    expect(container.querySelector<HTMLButtonElement>('[data-wbs-toolbar-toggle]')!.getAttribute('aria-label')).toBeTruthy()
+  })
+
   it('일반: 툴바는 항상 보이고 토글 버튼이 없다', async () => {
     stubMq(false)
     await render()

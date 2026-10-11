@@ -432,7 +432,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                     <span data-hub-name style={{ paddingLeft: `${r.depth * 16}px` }} className="flex min-w-0 items-center gap-1">
                       {!r.isLeaf && (
                         <button type="button" data-hub-fold aria-expanded={!folded.has(r.itemId)} aria-label={fill(t('agentHub.fold.aria'), { code: r.code })}
-                          onClick={() => setFolded(s2 => setWith(s2, r.itemId, !s2.has(r.itemId)))} className="shrink-0 text-fg-muted hover:text-fg">
+                          onClick={() => setFolded(s2 => setWith(s2, r.itemId, !s2.has(r.itemId)))} className="-my-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-muted hover:text-fg">
                           {folded.has(r.itemId) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                         </button>
                       )}
@@ -444,7 +444,7 @@ export function DelegationTable({ rows, projectId, isAdmin, filter, onFilter, no
                         <button type="button" data-hub-prompt-edit aria-label={fill(t('agentHub.prompt.editAria'), { code: r.code })} disabled={isBusy}
                           onClick={() => { setEditing(r.itemId); setDraft(r.prompt ?? '') }}
                           title={r.prompt ? fill(t('agentHub.prompt.title'), { prompt: r.prompt }) : t('agentHub.prompt.emptyTitle')}
-                          className={cls('shrink-0 hover:text-fg', r.prompt ? 'text-action' : 'text-fg-muted')}>
+                          className={cls('-my-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded hover:text-fg', r.prompt ? 'text-action' : 'text-fg-muted')}>
                           <Pencil className="h-3 w-3" />
                         </button>
                       )}

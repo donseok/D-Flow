@@ -54,7 +54,8 @@ describe('#25 주간 — 채움형·상태·글자', () => {
   })
   it('[RF3] 시트 상자가 스스로 스크롤한다(main 이 닫혀도 아래 행·채우기 핸들에 닿는다), 주 이동 줄은 sticky 가 아니다', () => {
     const src = read('src/components/weekly/WeeklySheetView.tsx')
-    expect(src).toContain('<div className="isolate min-h-0 flex-1 overflow-auto">')
+    // 스크롤 상자는 키보드로도 들어갈 수 있게 region·tabIndex 가 붙는다 — 스크롤 계약은 클래스가 정한다
+    expect(src).toContain('<div className="isolate min-h-0 flex-1 overflow-auto" role="region"')
     expect(src).not.toContain('top-(--frame-sticky-top)')
     expect(src.match(/className="flex h-full min-h-0 flex-col gap-3(?: overflow-y-auto)?"/g)?.length).toBe(3)
   })
