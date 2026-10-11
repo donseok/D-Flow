@@ -182,8 +182,26 @@ export function isWorkingDay(date: string, cal: DayRules): boolean {
 /** start~end 양끝 포함 근무일 수. end < start 면 0 */
 export function workingDaysBetween(start: string, end: string, cal: DayRules): number {
   if (end < start) return 0
-  let n = 0
-  for (let d = start; d <= end; d = addDaysIso(d, 1)) if (isWorkingDay(d, cal)) n++
+  // Count whole weeks directly. A far-future deadline must not enumerate millions
+  // of dates or cross the four-digit year boundary in a string comparison loop.
+  const startMs = Date.parse(`${start}T00:00:00Z`)
+  const endMs = Date.parse(`${end}T00:00:00Z`)
+  const days = Math.floor((endMs - startMs) / 86_400_000) + 1
+  if (!Number.isFinite(days) || days < 1) return 0
+  let n = Math.floor(days / 7) * cal.workingDays.size
+  const dow = new Date(startMs).getUTCDay()
+  for (let i = 0; i < days % 7; i++) {
+    const weekday = ((dow + i + 6) % 7 + 1) as IsoDow
+    if (cal.workingDays.has(weekday)) n++
+  }
+  // Explicit work days override off days, matching isWorkingDay's precedence.
+  for (const date of new Set([...cal.offDates, ...cal.workDates])) {
+    if (date < start || date > end) continue
+    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay()
+    const normallyWorking = cal.workingDays.has((weekday === 0 ? 7 : weekday) as IsoDow)
+    const actuallyWorking = cal.workDates.has(date) || (!cal.offDates.has(date) && normallyWorking)
+    n += Number(actuallyWorking) - Number(normallyWorking)
+  }
   return n
 }
 
