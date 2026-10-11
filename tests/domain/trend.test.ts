@@ -212,3 +212,38 @@ describe('[BUG-13] 계획 곡선도 같은 가중치 규칙 — 일부만 지정
   })
 })
 
+
+describe('극단적으로 긴 일정(0001~9999년) — 유한한 연산으로 끝난다', () => {
+  // 실제 DB 에 이런 일정이 있었다: 하루씩 세는 누적 인덱스가 9999-12-31 을 넘으면 날짜 문자열이 다섯 자리 해가 되어
+  // 문자열 비교가 끝나지 않았고, 운영 현황 화면 하나가 서버 전체를 멈췄다.
+  const extreme = [
+    row({ id: 'far', plannedStart: '0001-01-01', plannedEnd: '9999-12-31' }),
+    row({ id: 'near', plannedStart: '2026-01-05', plannedEnd: '2026-03-27' }),
+  ]
+  const dates = ['0001-01-01', '2026-01-05', '2026-02-20', '2026-03-27', '5000-06-15', '9999-12-31']
+
+  it('plannedCurve 는 끝나고, 그 수는 plannedAt 과 같다(휴무·특정일 근무 달력 포함)', () => {
+    const cal = calWithOff(['2026-02-16', '2026-02-17'])
+    const rows = flattenRows(computeTree(extreme, TODAY, cal, OPTS))
+    expect(plannedCurve(rows, dates, cal, OPTS)).toEqual(dates.map(date => ({ date, pct: plannedAt(rows, date, cal, OPTS) })))
+  })
+
+  it('buildTrend 는 축이 9999년에 닿아도 끝나고, 샘플 수는 한정된다(시작·종료·오늘 포함)', () => {
+    const m = buildTrend({ items: items(extreme), snapshots: [], calendar: calUtcSun, startDate: '0001-01-01', endDate: '9999-12-31', today: TODAY, opts: OPTS })
+    expect(m.empty).toBe(false)
+    expect(m.plannedSeries.length).toBeLessThanOrEqual(52 * 20 + 3)
+    const ds = m.plannedSeries.map(p => p.date)
+    expect(ds[0]).toBe('0001-01-01')
+    expect(ds[ds.length - 1]).toBe('9999-12-31')
+    expect(ds).toContain(TODAY)
+    expect(m.plannedSeries[m.plannedSeries.length - 1].pct).toBe(100)
+  })
+
+  it('보통 기간의 주 단위 샘플은 그대로다(7일 간격 + 종료일)', () => {
+    const m = buildTrend({ items: items(baseRows), snapshots: [], calendar: calUtcSun, startDate: '2026-01-01', endDate: '2026-04-10', today: '2026-05-01', opts: OPTS })
+    expect(m.plannedSeries.map(p => p.date)).toEqual([
+      '2026-01-01', '2026-01-08', '2026-01-15', '2026-01-22', '2026-01-29', '2026-02-05', '2026-02-12', '2026-02-19',
+      '2026-02-26', '2026-03-05', '2026-03-12', '2026-03-19', '2026-03-26', '2026-04-02', '2026-04-09', '2026-04-10',
+    ])
+  })
+})

@@ -2,9 +2,9 @@ import type { ComputedItem, WbsRow } from './types'
 import { round1 } from './format'
 import { computeTree, effectiveWeights, overallProgress } from './rollup'
 import { buildTree, collectLeaves, type BuildTreeOpts, type TreeNode } from './tree'
-import { isWorkingDay } from './calendar'
+import { isWorkingDay, workingDaysBetween } from './calendar'
 import type { DayCal } from './progress'
-import { addDaysCal, SPI_MIN_PLANNED_PCT } from './dashboard'
+import { addDaysCal, diffDaysCal, SPI_MIN_PLANNED_PCT } from './dashboard'
 
 /** wbs_progress_snapshots 1행 (camelCase, 숫자 변환 완료 상태) */
 export interface SnapshotPoint { date: string; actual: number; planned: number }
@@ -76,10 +76,16 @@ export function plannedCurve(
   }
   const rangeLo = bounds.length ? bounds.reduce((a, b) => (a < b ? a : b)) : null
   const rangeHi = bounds.length ? bounds.reduce((a, b) => (a > b ? a : b)) : null
+  // 인덱스는 구간이 CUM_INDEX_MAX_DAYS 이하일 때만 만든다. 0001~9999년 같은 일정이 하나라도 있으면 수백만 일을 세게 되고,
+  // 9999-12-31 다음 날은 ISO 문자열이 다섯 자리 해로 넘어가 문자열 비교(d <= rangeHi)가 끝나지 않는다 — 서버가 멈춘다.
+  // 그런 구간은 날짜를 세지 않는 workingDaysBetween 으로 직접 낸다(같은 수, 날짜당 비용만 더 든다).
   const cum = new Map<string, number>()
-  if (rangeLo !== null && rangeHi !== null) {
+  const span = rangeLo !== null && rangeHi !== null ? diffDaysCal(rangeLo, rangeHi) : 0
+  const indexed = rangeLo !== null && span <= CUM_INDEX_MAX_DAYS
+  if (indexed) {
     let acc = 0
-    for (let d = rangeLo; d <= rangeHi; d = addDaysCal(d, 1)) {
+    for (let i = 0; i <= span; i++) {
+      const d = addDaysCal(rangeLo, i)
       if (isWorkingDay(d, cal)) acc++
       cum.set(d, acc)
     }
@@ -87,6 +93,7 @@ export function plannedCurve(
   // workingDaysBetween(a,b) 동치: 양끝 포함, b<a 는 0 (진입 날짜는 모두 feed 되어 cum 에 존재)
   const bizBetween = (a: string, b: string): number => {
     if (b < a) return 0
+    if (!indexed) return workingDaysBetween(a, b, cal)
     return (cum.get(b) ?? 0) - (cum.get(a) ?? 0) + (isWorkingDay(a, cal) ? 1 : 0)
   }
 
@@ -120,6 +127,11 @@ export function plannedCurve(
     n.children.length === 0 ? ownPlanned(n, date) : groupPlanned(n.children, date)
   return dates.map(date => ({ date, pct: groupPlanned(tree, date) }))
 }
+
+/** 누적 인덱스를 만드는 최대 구간(일) — 50년. 그보다 길면 구간마다 직접 센다 */
+const CUM_INDEX_MAX_DAYS = 366 * 50
+/** 계획 곡선의 최대 주 단위 샘플 수 — 20년치. 축이 그보다 길면 간격을 주의 배수로 넓힌다 */
+const TREND_MAX_SAMPLES = 52 * 20
 
 /** carry-forward 조회: date 이전(포함) 마지막 스냅샷의 실적. 없으면 null. */
 function actualAt(sorted: SnapshotPoint[], date: string): number | null {
@@ -155,7 +167,10 @@ export function buildTrend(input: {
   // 계획 누적곡선 — 주 단위 샘플 + 종료일 + (구간 내) 오늘
   const rows = flattenRows(items)
   const sampleDates = new Set<string>()
-  for (let d = axisStart; d <= axisEnd; d = addDaysCal(d, 7)) sampleDates.add(d)
+  // 날짜 문자열을 비교하며 돌지 않는다 — 9999년 끝을 넘으면 비교가 끝나지 않는다. 일수로 횟수를 정한다
+  const axisDays = diffDaysCal(axisStart, axisEnd)
+  const stepDays = 7 * Math.max(1, Math.ceil(axisDays / 7 / TREND_MAX_SAMPLES))
+  for (let off = 0; off <= axisDays; off += stepDays) sampleDates.add(addDaysCal(axisStart, off))
   sampleDates.add(axisEnd)
   if (today >= axisStart && today <= axisEnd) sampleDates.add(today)
   const plannedSeries = plannedCurve(rows, [...sampleDates].sort(), calendar, opts)
