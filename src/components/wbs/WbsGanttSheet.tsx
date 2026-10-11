@@ -1069,7 +1069,7 @@ export function WbsGanttSheet({
   })
   // WBS 진입 시 기준일 선을 항상 보여 줄 수 있도록 일정 범위 밖이어도 날짜 축에 포함한다.
   // 프로젝트 기간도 축에 든다(BUG-14) — 작업이 기간 밖에 있어도, 기간 안에 작업이 없어도 둘 다 보이게: min(프로젝트 시작, 가장 이른 날) ~ max(프로젝트 종료, 가장 늦은 날)
-  const { start: rangeStart, end: rangeEnd } = ganttAxisRange([...allDates, today], startDate, endDate)!
+  const { start: rangeStart, end: rangeEnd } = ganttAxisRange([...allDates, today], startDate, endDate, today)!
   // 축 여백 — 계획 최댓값에서 축이 뚝 끊기면 마지막 주의 마일스톤 라벨이 잘리고 "끊긴
   // 느낌"이 든다(2026-08-21 피드백). 끝은 마지막 날이 속한 주의 다음 주 끝까지 덧대되(주 끝 = 그 프로젝트 규칙의 다음 키
   // 기간의 마지막 날, SP5 §4.4), 시작주는 시작날짜 그대로 시작한다(같은 날 후속 피드백 — 앞쪽 여백은 두지 않는다).

@@ -53,6 +53,10 @@ export interface DependencySchedule {
 }
 
 const DAY_MS = 86_400_000
+/** 예상 일정을 내는 작업 기간의 상한(근무일) — 약 100년 */
+const MAX_SCHEDULE_DURATION = 26_100
+/** 예상 일정을 내는 계획 종료일의 상한(미포함) — 그 뒤로는 지연을 더하면 네 자리 해를 넘을 수 있다 */
+const MAX_SCHEDULE_END = '9000-01-01'
 
 function parse(date: string): Date {
   return new Date(`${date}T00:00:00Z`)
@@ -140,7 +144,9 @@ function computeScheduleUnchecked(
       continue
     }
     const duration = workingDaysBetween(task.plannedStart, task.plannedEnd, cal)
-    if (duration <= 0) {
+    // 예상 일정은 근무일을 한 걸음씩 옮겨 낸다 — 0001~9999년 같은 기간은 수백만 걸음이라 화면을 몇 초씩 막고,
+    // 9999년을 넘는 날짜는 ISO 문자열로 적을 수 없어 RangeError 로 화면이 죽는다. 그런 작업은 예상 일정을 내지 않는다(계획일은 그대로 보인다).
+    if (duration <= 0 || duration > MAX_SCHEDULE_DURATION || task.plannedEnd >= MAX_SCHEDULE_END) {
       unscheduledTaskIds.add(task.id)
       continue
     }

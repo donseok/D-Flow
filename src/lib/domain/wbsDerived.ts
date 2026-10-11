@@ -126,16 +126,35 @@ export function outOfProjectRangeIds<T extends ScheduleNode<T>>(
   return out
 }
 
+/** 간트 축이 이 일수를 넘으면 기준일 둘레로 자른다 — 약 10년 */
+export const GANTT_AXIS_MAX_DAYS = 3660
+/** 자를 때 기준일 앞뒤로 남기는 일수 — 2년씩 */
+export const GANTT_AXIS_WINDOW_DAYS = 730
+const axisMs = (d: string) => Date.parse(`${d}T00:00:00Z`)
+const axisIso = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+
 /**
  * 간트 축 범위(BUG-14) — min(프로젝트 시작, 가장 이른 날) ~ max(프로젝트 종료, 가장 늦은 날).
  * dates 는 작업 일정·예측 일정·기준일처럼 축에 보여야 하는 날짜 전부다. 하나도 없으면 null.
+ *
+ * anchor(기준일)를 주면 축 길이에 상한이 생긴다: 범위가 GANTT_AXIS_MAX_DAYS 를 넘으면 anchor 앞뒤 GANTT_AXIS_WINDOW_DAYS 로 자른다.
+ * 축은 하루가 한 칸이라, 0001-01-01~9999-12-31 같은 일정 하나가 수백만 칸을 만들어 화면을 죽였다(실제 DB 에서 발생).
+ * 잘린 쪽으로 뻗은 막대는 축 끝에서 잘려 보인다 — 날짜 칸의 값은 그대로다.
  */
 export function ganttAxisRange(
   dates: readonly (string | null | undefined)[], projectStart: string | null | undefined, projectEnd: string | null | undefined,
+  anchor?: string,
 ): { start: string; end: string } | null {
   const all = [...dates, projectStart, projectEnd].filter((d): d is string => !!d)
   if (all.length === 0) return null
-  return { start: all.reduce((a, b) => (a < b ? a : b)), end: all.reduce((a, b) => (a > b ? a : b)) }
+  const start = all.reduce((a, b) => (a < b ? a : b))
+  const end = all.reduce((a, b) => (a > b ? a : b))
+  if (!anchor) return { start, end }
+  const DAY = 86_400_000
+  if ((axisMs(end) - axisMs(start)) / DAY <= GANTT_AXIS_MAX_DAYS) return { start, end }
+  const lo = Math.max(axisMs(start), axisMs(anchor) - GANTT_AXIS_WINDOW_DAYS * DAY)
+  const hi = Math.min(axisMs(end), axisMs(anchor) + GANTT_AXIS_WINDOW_DAYS * DAY)
+  return { start: axisIso(lo), end: axisIso(hi) }
 }
 
 /** 상세 패널이 열린 채 행 이름을 눌렀을 때(BUG-15) — 다른 행이면 그 행으로 전환, 같은 행이면 닫는다(null) */

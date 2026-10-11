@@ -52,3 +52,22 @@ describe('[RF5] 근무일을 3,660일 안에 찾지 못하면', () => {
     expect(computeDependencySchedule(tasks, [dep('ab', 'A', 'B')], '2026-01-05', weekdays).calendarError).toBeNull()
   })
 })
+
+describe('극단적으로 긴 일정 — 예상 일정을 내지 않고 끝난다', () => {
+  // 실제 DB 에 0001-01-01~9999-12-31 작업이 있었다: 근무일을 수백만 걸음 옮기다 9999년을 넘겨 RangeError 로 작업 계획·에이전트 화면이 죽었다
+  const t = (id: string, plannedStart: string, plannedEnd: string) => ({ id, plannedStart, plannedEnd, actualPct: 0 })
+
+  it('0001~9999년 작업과 9999년에 걸친 짧은 작업은 unscheduled, 나머지는 평소대로 계산된다', () => {
+    const started = Date.now()
+    const r = computeDependencySchedule(
+      [t('FAR', '0001-01-01', '9999-12-31'), t('EDGE', '9999-12-01', '9999-12-31'), t('A', '2026-10-05', '2026-10-09'), t('B', '2026-10-12', '2026-10-16')],
+      [dep('d1', 'A', 'B'), dep('d2', 'FAR', 'B')], '2026-10-01', weekdays,
+    )
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect([...r.unscheduledTaskIds].sort()).toEqual(['EDGE', 'FAR'])
+    expect(r.calendarError).toBeNull()
+    expect(r.byId.has('A')).toBe(true)
+    expect(r.byId.has('B')).toBe(true)
+    expect(r.invalidDependencyIds).toEqual(new Set(['d2']))
+  })
+})

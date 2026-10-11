@@ -122,6 +122,18 @@ describe('WBS 컴팩트 압축', () => {
     expect(container.querySelector<HTMLButtonElement>('[data-wbs-toolbar-toggle]')!.getAttribute('aria-label')).toBeTruthy()
   })
 
+  it('0001~9999년 일정이 있어도 그려진다 — 간트 축은 기준일 둘레로 잘린다', async () => {
+    stubMq(false)
+    await act(async () => root.render(
+      <WbsGanttSheet levelLabels={['Phase', 'Task', 'Activity']} items={[item({ id: 'far', plannedStart: '0001-01-01', plannedEnd: '9999-12-31' })]} calendar={calInputUtcMon} today="2026-07-03" actorView={null} projectId="p1" readOnly initialCollapsed={[]} startDate="2026-07-01" endDate="2026-08-31" />,
+    ))
+    const sheet = container.querySelector<HTMLElement>('[style*="--gantt-day"]')!
+    expect(sheet).not.toBeNull()
+    // 축 = 기준일 앞뒤 2년(+ 끝의 주 여백) — 하루 한 칸이므로 날짜 눈금 수가 그 안이다
+    expect(container.querySelectorAll('[data-wbs-out-of-range]')).toHaveLength(1)
+    expect(container.querySelectorAll('*').length).toBeLessThan(20000)
+  })
+
   it('일반: 툴바는 항상 보이고 토글 버튼이 없다', async () => {
     stubMq(false)
     await render()

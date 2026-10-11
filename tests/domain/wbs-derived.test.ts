@@ -123,6 +123,12 @@ describe('[BUG-14] 프로젝트 기간 밖 작업·간트 축 범위', () => {
     expect(ganttAxisRange(['2026-11-01', '2026-11-10'], '2026-10-12', '2026-12-31')).toEqual({ start: '2026-10-12', end: '2026-12-31' })
     expect(ganttAxisRange(['2026-11-01', null], null, undefined)).toEqual({ start: '2026-11-01', end: '2026-11-01' })
     expect(ganttAxisRange([], null, null)).toBeNull()
+    // 기준일을 주면 축 길이에 상한이 생긴다 — 0001~9999년 일정 하나가 수백만 칸을 만들지 않게 기준일 앞뒤 2년으로 자른다
+    expect(ganttAxisRange(['0001-01-01', '9999-12-31', '2026-10-11'], '2026-10-12', '2026-11-30', '2026-10-11')).toEqual({ start: '2024-10-11', end: '2028-10-10' })
+    // 한쪽만 먼 일정이면 그쪽만 잘린다
+    expect(ganttAxisRange(['2026-09-01', '9999-12-31'], null, null, '2026-10-11')).toEqual({ start: '2026-09-01', end: '2028-10-10' })
+    // 상한(약 10년) 안의 긴 프로젝트는 그대로다
+    expect(ganttAxisRange(['2020-01-01', '2029-12-31'], null, null, '2026-10-11')).toEqual({ start: '2020-01-01', end: '2029-12-31' })
   })
 })
 
