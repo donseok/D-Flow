@@ -165,7 +165,9 @@ describe('RosterManager', () => {
     render([member()])
     act(() => byLabel<HTMLButtonElement>('alice 삭제').click())
     expect(removeRosterMember).not.toHaveBeenCalled()
-    await act(async () => button('삭제 확인').click())
+    // 확인은 대상·영향을 적은 모달이 받는다(body 로 올려 그린다)
+    expect(document.body.textContent).toContain('팀 구성에서 삭제합니다')
+    await act(async () => document.body.querySelector<HTMLButtonElement>('[data-roster-delete-confirm]')!.click())
     expect(removeRosterMember).toHaveBeenCalledWith('m-alice')
   })
 

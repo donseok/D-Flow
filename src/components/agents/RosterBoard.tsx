@@ -372,7 +372,7 @@ function Profile({ desk, host, nowMs, timeZone }: { desk: RosterDesk; host: Rost
       {seat?.state === 'BLOCKED' && (
         <section className="rounded-2xl border border-[#F0B068] bg-[color-mix(in_srgb,#F0B068_12%,var(--color-surface))] p-3">
           <h3 className="text-xs font-bold text-fg">{t('agents.roster.needDecision')}</h3>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-fg-secondary">{seat.note ?? t('agents.roster.noBlockNote')}</p>
+          <p className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-sm text-fg-secondary">{seat.note ?? t('agents.roster.noBlockNote')}</p>
           <p className="mt-2 text-meta text-fg-muted">{t('agents.roster.answerWhere')}</p>
         </section>
       )}

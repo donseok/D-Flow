@@ -827,7 +827,7 @@ function Bubble({
   return (
     <div data-chat-role={role} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
+        className={`max-w-[88%] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
           isUser
             ? 'rounded-br-md bg-action text-action-fg'
             : 'rounded-bl-md border border-border-focus/30 bg-action-soft/50 text-fg'

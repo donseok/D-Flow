@@ -10,6 +10,7 @@ import { BrandGlyph } from '@/components/ui/BrandMark'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useLoginEnv } from '@/components/login/LoginEnv'
 import { recoveryFragment } from '@/lib/auth/recoveryLink'
+import { safeNextPath } from '@/lib/auth/nextPath'
 
 /* 로그인 — 의미 토큰만 쓴다(SP3b UI-1, 스펙 §4.4). 평면 표면·단색 주 버튼, 부유 장식·방사 그라데이션 없음.
    공개 화면의 브랜드는 env(BRAND_*) 그대로다. 가시 h1 은 모든 크기에서 하나다. 문구는 사전(auth)이다. */
@@ -51,7 +52,8 @@ export default function Login() {
         setError(t(unreachable ? (localDev ? 'login.err.unreachableDev' : 'login.err.unreachable') : 'login.err.credentials'))
         setLoading(false)
       } else {
-        router.push('/')
+        // 가려던 자리가 있으면 그리로(미들웨어가 ?next= 로 실어 보낸다) — 이 사이트 안의 경로만 받는다
+        router.push(safeNextPath(new URLSearchParams(window.location.search).get('next')))
         // 클라이언트 라우터 캐시(staleTimes.dynamic 30초)에 같은 브라우저 직전 사용자의 RSC 페이로드가 남아 있을 수 있다.
         router.refresh()
       }

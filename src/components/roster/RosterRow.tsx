@@ -13,6 +13,7 @@ import { useTeamLabel } from '@/components/app/TeamsProvider'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { DictKey } from '@/lib/i18n/dict'
 import { useLeaveGuard } from '@/lib/ui/useLeaveGuard'
+import { Modal } from '@/components/ui/Modal'
 
 export const ROSTER_COLUMNS = 9
 
@@ -184,17 +185,10 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
             <button type="button" className="btn btn-primary h-8 px-3 text-xs whitespace-nowrap" disabled={pending || !dirty} onClick={save}>
               {pending ? tr('roster.saving') : tr('common.save')}
             </button>
-            {confirmDelete ? (
-              <>
-                <button type="button" className="btn btn-ghost h-8 px-2 text-xs text-danger" disabled={pending} onClick={remove}>{tr('roster.confirmDelete')}</button>
-                <button type="button" className="btn btn-ghost h-8 px-2 text-xs" disabled={pending} onClick={() => setConfirmDelete(false)}>{tr('common.cancel')}</button>
-              </>
-            ) : (
-              <button type="button" className="btn btn-ghost h-8 px-2 text-xs" aria-label={tr('roster.aria.delete').replace('{who}', () => String(who))} disabled={pending}
-                onClick={() => setConfirmDelete(true)}>
-                <Trash2 className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            )}
+            <button type="button" className="btn btn-ghost h-8 px-2 text-xs" aria-label={tr('roster.aria.delete').replace('{who}', () => String(who))} disabled={pending}
+              onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            </button>
           </span>
         </td>
       </tr>
@@ -205,6 +199,23 @@ export function RosterEditRow({ projectId, member, effective = { kind: 'unknown'
           </td>
         </tr>
       )}
+      {/* 누구를 지우고 무엇이 따라가는지 적어 묻는다 — 줄 안의 '삭제 확인' 두 글자만으로는 대상·영향을 알 수 없었다(2026-10-12 UAT TEAM-10) */}
+      <Modal
+        open={confirmDelete}
+        onClose={() => { if (!pending) setConfirmDelete(false) }}
+        size="sm"
+        title={tr('roster.delete.title')}
+        footer={
+          <>
+            <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => setConfirmDelete(false)}>{tr('common.cancel')}</button>
+            <button type="button" data-roster-delete-confirm className="btn bg-danger text-danger-fg hover:brightness-105 disabled:opacity-50" disabled={pending} onClick={remove}>{tr('roster.confirmDelete')}</button>
+          </>
+        }
+      >
+        <p className="text-sm leading-6 text-fg-secondary">
+          <strong className="break-words text-fg">{who}</strong>{tr('roster.delete.desc')}
+        </p>
+      </Modal>
     </>
   )
 }

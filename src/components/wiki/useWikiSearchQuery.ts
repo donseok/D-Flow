@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { WIKI_QUERY_MAX_CHARS } from '@/lib/domain/searchView'
 
 const SYNC_DEBOUNCE_MS = 400
 
@@ -34,7 +35,8 @@ export function useWikiSearchQuery(
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const url = new URL(window.location.href)
-      if (query.trim()) url.searchParams.set('q', query)
+      // 상한을 넘는 값은 주소에 싣지 않는다 — 서버가 ?q= 를 200자까지만 받는다(넘으면 통째로 버린다)
+      if (query.trim()) url.searchParams.set('q', query.slice(0, WIKI_QUERY_MAX_CHARS))
       else url.searchParams.delete('q')
       if (url.href !== window.location.href) window.history.replaceState(null, '', url)
     }, SYNC_DEBOUNCE_MS)

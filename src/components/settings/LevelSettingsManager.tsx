@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
 import { getSettingsCommandOutcome, updateProjectSettings, type SettingsCommandResult, type SettingsPatch } from '@/app/actions/settings'
 import { newUuid } from '@/lib/domain/uuid'
-import { LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
+import { LEVEL_LABEL_MAX_CHARS, LEVEL_LABELS_MAX } from '@/lib/domain/levelSettings'
 import { ConfigStateNotice } from './ConfigStateNotice'
 import { ConflictCompare } from './ConflictCompare'
 import { SettingsSaveBar } from './SettingsSaveBar'
@@ -88,6 +88,7 @@ export function LevelSettingsManager({ projectId, levelLabels, revision }: {
               data-level-label
               className="app-input h-8 flex-1 text-sm"
               value={label}
+              maxLength={LEVEL_LABEL_MAX_CHARS}
               onChange={(e) => setLabels(labels.map((l, j) => (j === i ? e.target.value : l)))}
               disabled={pending}
             />

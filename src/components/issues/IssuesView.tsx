@@ -110,8 +110,23 @@ export function IssuesView({
 
   // 페이징 — 필터를 바꾸면 1페이지로 돌아간다(안 그러면 결과가 줄었을 때 빈 페이지가 보인다).
   // 목록 자체가 줄어드는 경우(삭제·refresh)는 렌더 시점 clamp 로 잡는다.
-  const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
-  const [page, setPage] = useState(1)
+  // 쪽 번호·쪽 크기는 주소(?page=·?size=)에 남긴다 — 화면 상태로만 두면 새로고침·링크 공유에 1쪽으로 돌아갔다(2026-10-12 UAT QRY-12).
+  // 모르는 값은 기본으로 읽고, 기본값은 주소에 싣지 않는다. 범위를 넘는 쪽은 아래 렌더 시점 clamp 가 잡는다.
+  const [pageSize, setPageSize] = useState<PageSize>(() => {
+    const raw = searchParams.get('size')
+    return PAGE_SIZES.find(size => String(size) === raw) ?? DEFAULT_PAGE_SIZE
+  })
+  const [page, setPage] = useState(() => {
+    const raw = Number(searchParams.get('page'))
+    return Number.isInteger(raw) && raw >= 1 ? raw : 1
+  })
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (page > 1) url.searchParams.set('page', String(page)); else url.searchParams.delete('page')
+    if (pageSize !== DEFAULT_PAGE_SIZE) url.searchParams.set('size', String(pageSize)); else url.searchParams.delete('size')
+    // replaceState — 서버를 다시 태우지 않고 히스토리도 늘리지 않는다(위키 검색어 동기화와 같은 방식)
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url)
+  }, [page, pageSize])
   // 딥링크 ?focus= — 최초 마운트에서 해당 이슈 상세를 연다. 무효 id 는 조용히 무시(공지·회의 관례).
   // viewing 은 id 만 상태로 갖고 issues 에서 파생한다 — conflict 후 router.refresh() 로 issues 가 새
   // 참조로 갱신되면 모달도 자동으로 최신값을 반영한다(객체 state 로 들고 있으면 refresh 가 못 미친다).
@@ -129,11 +144,29 @@ export function IssuesView({
   // 포함) 다시 돌게 되고, 그 순간부터 위 재오픈 가드가 닫힌 모달을 닫힌 채로 두는 유일한
   // 장치가 된다. 이 줄을 바꾸려면 그 결과를 먼저 이해할 것.
   useEffect(() => {
-    if (focusParam === null) { consumedFocus.current = null; return }
+    if (focusParam === null) {
+      // 주소에서 focus 가 빠졌다(뒤로 가기) — 그 주소로 열려 있던 상세를 닫는다. 뒤로 가기가 화면을 떠나지 않고 모달만 닫는다
+      if (consumedFocus.current !== null) setViewingId(null)
+      consumedFocus.current = null
+      return
+    }
     if (consumedFocus.current === focusParam) return
     consumedFocus.current = focusParam
     setViewingId(focusParam)
   }, [focusParam])
+  /**
+   * 상세를 열며 주소에 ?focus= 를 싣는다 — 링크 공유·북마크·뒤로 가기 닫기(2026-10-12 UAT DPL-01·NAV-03).
+   * pushState 라 서버를 다시 태우지 않는다(Next 가 useSearchParams 를 맞춘다). 이미 다른 이슈가 열려 있으면 히스토리를 늘리지 않고 바꾼다.
+   */
+  function openDetail(id: string) {
+    setViewingId(id)
+    const url = new URL(window.location.href)
+    const replacing = url.searchParams.has('focus')
+    url.searchParams.set('focus', id)
+    consumedFocus.current = id
+    if (replacing) window.history.replaceState(window.history.state, '', url)
+    else window.history.pushState(window.history.state, '', url)
+  }
   const viewing = useMemo(
     () => (viewingId ? issues.find(i => i.id === viewingId) ?? null : null),
     [issues, viewingId],
@@ -362,7 +395,7 @@ export function IssuesView({
           today={today}
           dueUrgentDays={dueUrgentDays}
           canMove={canEdit}
-          onOpen={setViewingId}
+          onOpen={openDetail}
         />
       ) : visible.length > 0 ? (
         <div className="card overflow-hidden p-0">
@@ -384,7 +417,7 @@ export function IssuesView({
                         aria-label={t('issue.bulk.select').replace('{code}', issue.code)} />
                     </label>}
                   </div>
-                  <button type="button" onClick={() => setViewingId(issue.id)}
+                  <button type="button" onClick={() => openDetail(issue.id)}
                     className="block min-h-11 w-full break-words text-left text-section text-fg hover:text-action">{issue.title}</button>
                   <div className="flex flex-wrap items-center gap-2">
                     <IssueStatusPill category={issue.status} code={issue.statusCode} defs={statusDefs} />
@@ -458,7 +491,7 @@ export function IssuesView({
                   return (
                     <tr
                       key={issue.id}
-                      onClick={() => setViewingId(issue.id)}
+                      onClick={() => openDetail(issue.id)}
                       className="cursor-pointer border-b border-border/60 transition last:border-0 hover:bg-surface-hover focus:outline-none focus-visible:bg-surface-hover"
                     >
                       <td className="whitespace-normal break-all px-2.5 py-2.5 tabular-nums">
@@ -493,7 +526,7 @@ export function IssuesView({
                       </td>
                       <td className="whitespace-normal break-words px-2.5 py-2.5 font-medium leading-5 text-fg" title={issue.title}>
                         <button type="button" className="max-w-full break-words text-left hover:text-action"
-                          onClick={e => { e.stopPropagation(); setViewingId(issue.id) }}>{issue.title}</button>
+                          onClick={e => { e.stopPropagation(); openDetail(issue.id) }}>{issue.title}</button>
                         {/* 첨부 배지는 제목 셀 안에 둔다(열 추가는 colgroup 폭 재배분이 따른다 — 위 주석).
                             셀에 이미 title 이 걸려 있어 배지에 자체 title 을 준다.
                             표시 토글은 JSX 조건부 렌더로 한다. 상태 변형 display 유틸은 globals.css 끝의

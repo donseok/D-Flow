@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronLeft, ChevronRight, CalendarDays, List, Plus, CalendarX2 } from 'lucide-react'
@@ -95,6 +95,37 @@ export function MeetingsView({
   const [editing, setEditing] = useState<Meeting | null>(initialEdit)
   const [detailOcc, setDetailOcc] = useState<MeetingOccurrence | null>(initialEdit ? null : initialFocus)
 
+  // 상세를 열며 주소에 ?focus=&date= 를 싣는다 — 링크 공유·북마크·뒤로 가기 닫기(2026-10-12 UAT DPL-02·NAV-03).
+  // pushState 라 서버를 다시 태우지 않는다. 읽는 쪽은 위 딥링크 해석(resolveFocusOccurrence)과 같은 두 값이다.
+  const focusParam = searchParams.get('focus')
+  const pushedFocus = useRef(false)
+  function openDetail(o: MeetingOccurrence) {
+    setDetailOcc(o)
+    const url = new URL(window.location.href)
+    const replacing = url.searchParams.has('focus')
+    url.searchParams.set('focus', o.seriesId)
+    url.searchParams.set('date', o.occurrenceDate)
+    url.searchParams.delete('edit')
+    pushedFocus.current = true
+    if (replacing) window.history.replaceState(window.history.state, '', url)
+    else window.history.pushState(window.history.state, '', url)
+  }
+  /** 닫으면 주소에서 걷는다 — 남아 있으면 새로고침에 같은 회의가 다시 열린다 */
+  function closeDetail() {
+    setDetailOcc(null)
+    pushedFocus.current = false
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('focus')) return
+    for (const key of ['focus', 'date', 'edit']) url.searchParams.delete(key)
+    window.history.replaceState(window.history.state, '', url)
+  }
+  // 뒤로 가기로 주소에서 focus 가 빠지면 화면을 떠나지 않고 상세만 닫는다
+  useEffect(() => {
+    if (focusParam !== null || !pushedFocus.current) return
+    pushedFocus.current = false
+    setDetailOcc(null)
+  }, [focusParam])
+
   // 조회 범위 = 달력 그리드(첫 열 = 오늘 적용되는 규칙의 시작 요일) — 페이지의 첫 조회도 같은 규칙이다
   const firstDay = currentRuleDay(calendar.weekStart, todayIso)
   const [gridStart, gridEnd] = useMemo(() => monthGridRange(year, month0, firstDay), [year, month0, firstDay])
@@ -120,7 +151,7 @@ export function MeetingsView({
     setYear(base.getUTCFullYear()); setMonth0(base.getUTCMonth())
   }
   const onSaved = () => { setFormOpen(false); setEditing(null); router.refresh() }
-  const openEditFromDetail = (m: Meeting) => { setDetailOcc(null); setEditing(m); setFormOpen(true) }
+  const openEditFromDetail = (m: Meeting) => { closeDetail(); setEditing(m); setFormOpen(true) }
 
   return (
     <div className="space-y-4">
@@ -150,7 +181,7 @@ export function MeetingsView({
       </div>
 
       {view === 'calendar' ? (
-        <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={setDetailOcc} calendar={calendar} holidayNames={holidayNames} categories={categoryMap} />
+        <MeetingCalendar year={year} month0={month0} todayIso={todayIso} occurrences={occurrences} onSelectOccurrence={openDetail} calendar={calendar} holidayNames={holidayNames} categories={categoryMap} />
       ) : listRows.length === 0 ? (
         loadFailed ? null : <EmptyState icon={CalendarX2} title={t('meet.empty.title')} description={t('meet.empty.desc')} />
       ) : (
@@ -170,8 +201,8 @@ export function MeetingsView({
                 {listRows.map(o => {
                   const meta = vocabView('meetings.categories', categories, o.category, t)
                   return (
-                    <tr key={o.occurrenceId} onClick={() => setDetailOcc(o)} role="button" tabIndex={0}
-                      onKeyDown={e => { if (e.key === 'Enter') setDetailOcc(o) }}
+                    <tr key={o.occurrenceId} onClick={() => openDetail(o)} role="button" tabIndex={0}
+                      onKeyDown={e => { if (e.key === 'Enter') openDetail(o) }}
                       className="cursor-pointer border-b border-border/70 last:border-0 transition hover:bg-surface-subtle focus:outline-none focus-visible:bg-surface-subtle">
                       <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-fg">{fmtDate(o.occurrenceDate)}</td>
                       <td className="whitespace-nowrap px-4 py-3 tabular-nums text-fg-secondary">{o.startTime ?? t('meet.allDay')}</td>
@@ -191,7 +222,7 @@ export function MeetingsView({
         canManage={canManage} categories={categories} onClose={() => { setFormOpen(false); setEditing(null) }} onSaved={onSaved} />
       <MeetingDetailModal open={!!detailOcc} occurrence={detailOcc}
         currentUserId={currentUserId} isAdmin={canManage}
-        onClose={() => setDetailOcc(null)} onEditSeries={openEditFromDetail} onChanged={() => router.refresh()} categories={categoryMap} />
+        onClose={closeDetail} onEditSeries={openEditFromDetail} onChanged={() => router.refresh()} categories={categoryMap} />
     </div>
   )
 }

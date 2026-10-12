@@ -11,6 +11,8 @@ import { activeVocab, vocabColor, vocabLabel, vocabShort, type AttendanceTypeDef
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes, useTeamLabel } from '@/components/app/TeamsProvider'
 import { Modal } from '@/components/ui/Modal'
+import { useModalDirty } from '@/lib/ui/useModalDirty'
+import { ATTENDANCE_NOTE_MAX } from '@/lib/domain/attendance'
 import { ASSISTANT_NAME } from '@/lib/branding'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { MemberPickerViewToggle, MemberSelectOptions } from '@/components/members/MemberPicker'
@@ -197,6 +199,8 @@ export function AttendanceView({
     setYear(base.getUTCFullYear())
     setMonth0(base.getUTCMonth())
   }
+  const formDirty = useModalDirty(open, form, [editingId])
+
   function goToday() {
     setYear(initY)
     setMonth0((initM || 1) - 1)
@@ -426,12 +430,12 @@ export function AttendanceView({
                       </td>
                       <td className="max-w-[12rem] truncate px-4 py-3 text-fg-secondary" title={mem?.teams[0]?.code ? teamLabelOf(mem.teams[0].code) : undefined}>{mem?.teams[0]?.code ? teamLabelOf(mem.teams[0].code) : '-'}</td>
                       <td className="px-4 py-3">
-                        <span className={`chip ${meta.chip}`}>
+                        <span className={`chip whitespace-nowrap ${meta.chip}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
                           {typeLabel(r.type)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-fg-secondary">{r.note || '-'}</td>
+                      <td className="max-w-[24rem] px-4 py-3 text-fg-secondary"><span className="line-clamp-2 [overflow-wrap:anywhere]" title={r.note ?? undefined}>{r.note || '-'}</span></td>
                     </tr>
                   )
                 })}
@@ -445,6 +449,7 @@ export function AttendanceView({
       <Modal
         open={open && !confirmingDelete}
         onClose={() => setOpen(false)}
+        dirty={formDirty && !saving}
         title={editingId ? t('att.editRecord') : t('att.addRecord')}
         footer={
           <>
@@ -516,6 +521,7 @@ export function AttendanceView({
               value={form.note}
               onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
               rows={2}
+              maxLength={ATTENDANCE_NOTE_MAX}
               placeholder={t('att.form.notePlaceholder')}
               className="app-textarea"
             />

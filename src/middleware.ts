@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { CSP_HEADER, CSP_REPORT_ONLY_HEADER, buildCsp, cspModeOf } from '@/lib/http/securityHeaders'
+import { nextParamFor } from '@/lib/auth/nextPath'
 
 /** 요청마다 새 nonce(128비트 난수의 base64) — 엣지 런타임이라 Web Crypto 만 쓴다 */
 function newNonce(): string {
@@ -58,7 +59,11 @@ export async function middleware(req: NextRequest) {
   const isLogin = req.nextUrl.pathname.startsWith('/login')
   if (!data?.claims && !isLogin) {
     // 리다이렉트에도 갱신 쿠키를 실어 보낸다 — 안 실으면 방금 갱신된 세션이 유실된다.
-    const redirect = NextResponse.redirect(new URL('/login', req.url))
+    // 가려던 자리를 실어 보낸다 — 로그인 화면이 성공 뒤 그리로 돌려보낸다(화면 이동 GET 만. 서버 액션 POST 는 돌아갈 화면이 아니다)
+    const login = new URL('/login', req.url)
+    const next = req.method === 'GET' ? nextParamFor(req.nextUrl.pathname, req.nextUrl.search) : null
+    if (next) login.searchParams.set('next', next)
+    const redirect = NextResponse.redirect(login)
     res.cookies.getAll().forEach(c => redirect.cookies.set(c))
     return redirect
   }

@@ -111,7 +111,7 @@ describe('WBS 표 — 셀 범위 선택·복사·붙여넣기·지우기', () =>
   }
   const dialog = () => document.querySelector<HTMLElement>('[data-wbs-range-dialog]')
   const sum = (key: string) => dialog()?.querySelector(`[data-wbs-range-sum="${key}"]`)?.textContent ?? null
-  const toast = () => container.querySelector('[role="status"].fixed, [role="alert"].fixed')?.textContent ?? null
+  const toast = () => document.body.querySelector('[role="status"].fixed, [role="alert"].fixed')?.textContent ?? null
 
   describe('범위 선택 — 키보드', () => {
     it('데이터 열의 Shift+→↓ — 기준 칸부터 직사각형. 칸에 data-wbs-range·aria-selected 가 붙고 포커스가 끝 칸으로 간다', async () => {

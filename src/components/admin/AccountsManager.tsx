@@ -225,14 +225,29 @@ function PlatformAdminCell({ account, isSelf }: { account: AccountRow; isSelf: b
   const { toast } = useToast()
   const [pending, startTransition] = useTransition()
   const selfLocked = isSelf && account.isPlatformAdmin
+  // 플랫폼 전체 권한이 한 번의 클릭으로 바뀌지 않게 한 번 묻는다(2026-10-12 UAT ACC-05)
+  const [confirming, setConfirming] = useState(false)
 
   return (
+    <>
     <button
       data-platform-admin-toggle
       className={`chip ${account.isPlatformAdmin ? 'bg-success-weak text-success' : 'bg-surface-subtle text-fg-muted'} disabled:opacity-50`}
       disabled={pending || selfLocked}
       title={selfLocked ? t(SELF_PLATFORM_HINT_KEY) : account.isPlatformAdmin ? t('wsAccounts.platform.unset') : t('wsAccounts.platform.set')}
-      onClick={() => startTransition(async () => {
+      onClick={() => setConfirming(true)}
+    >
+      <ShieldCheck className="h-3 w-3" />{account.isPlatformAdmin ? t('wsAccounts.platformAdmin') : t('wsAccounts.platform.assign')}
+    </button>
+    <Modal
+      open={confirming}
+      onClose={() => { if (!pending) setConfirming(false) }}
+      size="sm"
+      title={account.isPlatformAdmin ? t('wsAccounts.platform.unset') : t('wsAccounts.platform.set')}
+      footer={
+        <>
+          <button className="btn btn-ghost" disabled={pending} onClick={() => setConfirming(false)}>{t('common.cancel')}</button>
+          <button data-platform-admin-confirm className="btn btn-primary" disabled={pending} onClick={() => startTransition(async () => {
         try {
           const res = await setPlatformAdmin(account.id, !account.isPlatformAdmin)
           if (res.ok) {
@@ -246,11 +261,21 @@ function PlatformAdminCell({ account, isSelf }: { account: AccountRow; isSelf: b
           }
         } catch {
           toast({ title: t('wsAccounts.changeFailed'), description: t('wsAccounts.requestFailedShort'), variant: 'error' })
+        } finally {
+          setConfirming(false)
         }
-      })}
+      })}>
+            {account.isPlatformAdmin ? t('wsAccounts.platform.unsetRun') : t('wsAccounts.platform.setRun')}
+          </button>
+        </>
+      }
     >
-      <ShieldCheck className="h-3 w-3" />{account.isPlatformAdmin ? t('wsAccounts.platformAdmin') : t('wsAccounts.platform.assign')}
-    </button>
+      <p className="text-sm leading-6 text-fg-secondary">
+        <strong className="break-all text-fg">{account.email}</strong>
+        {account.isPlatformAdmin ? t('wsAccounts.platform.unsetConfirm') : t('wsAccounts.platform.setConfirm')}
+      </p>
+    </Modal>
+    </>
   )
 }
 

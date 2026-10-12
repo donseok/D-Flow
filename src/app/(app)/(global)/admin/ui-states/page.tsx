@@ -18,6 +18,7 @@ const ACCENT_SAMPLES: readonly (readonly [nameKey: DictKey, hex: string])[] = [
  * 컴포넌트 상태 점검(D16) — (global) 라우트 그룹: 레이아웃이 없어 UI-1 에서는 지금 셸 아래 뜨고, UI-2b 가 (global)/layout 을 더한다.
  * 플랫폼 진단이라 모듈 관문 밖이다(페이지 관문 불변식 제외 목록 — 사유 "플랫폼 진단 — 모듈 밖").
  */
+export async function generateMetadata() { return { title: t('nav.uiStates') } }   // (global) 레이아웃의 템플릿이 ' | {제품}' 을 붙인다
 export default async function UiStatesPage() {
   const actor = await getActorForView()
   if (!canViewUiStates(actor)) notFound()

@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { AlertTriangle } from 'lucide-react'
 import { getActorForView } from '@/lib/authz'
 import { canManageLlmConfig } from '@/lib/authz/llmConfigAccess'
@@ -10,10 +10,13 @@ import { t } from '@/lib/i18n/dict'
 
 export const dynamic = 'force-dynamic' // 설정·프로필은 항상 최신 DB 값을 읽는다
 
+/** 탭 제목 — (global) 레이아웃의 템플릿이 ' | {제품}' 을 붙인다 */
+export async function generateMetadata() { return { title: t('nav.llm') } }
 export default async function LlmConfigAdminPage() {
   // 슈퍼유저 전용 — 판정은 canManageLlmConfig 한 곳에서. 어포던스(헤더 메뉴)도 같은 판정을 쓴다.
+  // 권한 없음은 다른 플랫폼 화면(워크스페이스 관리·상태 점검)과 같이 404 다 — 여기만 조용히 홈으로 보내 차단 방식이 갈렸다(2026-10-12 UAT PERM-12)
   const actor = await getActorForView()
-  if (!canManageLlmConfig(actor)) redirect('/')
+  if (!canManageLlmConfig(actor)) notFound()
 
   // 설정값(무엇을 저장했나)과 별개로 **지금 서버가 해석한 실제 모델**을 함께 읽는다.
   // 둘이 갈리는 경우가 있다(env 오버라이드·프로필이 임베딩을 안 덮음) — 그게 관리자가 알아야 할 것이다.

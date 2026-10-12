@@ -2,6 +2,9 @@ import type { AttendanceRecord } from '@/lib/domain/types'
 import { addDaysIso } from './dates'
 import { isWorkingDay, startOfWeek, type IsoDow, type WeekStartDay, type WorkCalendar } from './calendar'
 
+/** 근태 비고의 길이 상한 — 입력창(maxLength)과 서버 액션이 같은 값을 쓴다 */
+export const ATTENDANCE_NOTE_MAX = 500
+
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }

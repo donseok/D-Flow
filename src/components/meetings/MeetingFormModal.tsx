@@ -7,6 +7,7 @@ import type { Meeting, MeetingCategory, MeetingRecurrence, ProjectMember } from 
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useToast } from '@/components/ui/Toast'
 import { Modal } from '@/components/ui/Modal'
+import { useModalDirty } from '@/lib/ui/useModalDirty'
 import { RECURRENCE_ORDER } from '@/lib/domain/meetings'
 import { activeVocab, vocabLabel, type MeetingCategoryDef } from '@/lib/settings/vocab'
 import { MeetingAttendeePicker } from './MeetingAttendeePicker'
@@ -103,6 +104,8 @@ export function MeetingFormModal({
   }, [open, initial, todayIso])
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm(f => ({ ...f, [k]: v }))
+  // 저장이 끝나 결과 패널이 뜬 뒤(outcome)에는 버릴 입력이 없다 — 닫을 때 묻지 않는다
+  const dirty = useModalDirty(open, form, [initial, todayIso]) && !outcome
   // 새 회의에서 범주를 바꾸면 공지 체크도 그 범주의 기본값으로 따라간다(수정 폼은 공지 등록이 없다)
   const changeCategory = (code: string) => setForm(f => ({
     ...f, category: code,
@@ -238,6 +241,7 @@ export function MeetingFormModal({
   return (
     <Modal
       open={open}
+      dirty={dirty}
       // 결과 패널이 떠 있으면 회의는 이미 저장됐다. Escape·X·백드롭으로 닫아도 목록을
       // 갱신하는 onSaved 로 보내야 한다 — onClose 로 빠지면 방금 만든 회의가 목록에 없다.
       onClose={locked ? onSaved : onClose}
@@ -275,7 +279,7 @@ export function MeetingFormModal({
         <div className="space-y-4">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('meet.form.title')}</span>
-            <input value={form.title} onChange={e => set('title', e.target.value)} placeholder={t('meet.form.titlePlaceholder')} className="app-input" />
+            <input value={form.title} onChange={e => set('title', e.target.value)} maxLength={200} placeholder={t('meet.form.titlePlaceholder')} className="app-input" />
           </label>
 
           <div className="grid grid-cols-2 gap-3">

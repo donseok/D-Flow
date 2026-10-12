@@ -70,6 +70,7 @@
 | src/lib/agent/subtreeManager.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤에 myMemberIds·isSubtreeManager 를 pid·itemId 로 판정한다 |
 | src/lib/ai/brief.ts | 세션 가드 뒤 id 스코프 | 호출부(프로젝트 화면·가드된 액션)의 projectId 로 project_ai_briefs 를 읽고 쓴다. RLS 쓰기 정책이 없어 가드가 유일한 관문이다 |
 | src/lib/ai/ensure-index.ts | 세션 가드 뒤 id 스코프 | 호출부(레거시 챗 /api/chat·/api/chat/stream — legacyChatProjectGate 가 볼 수 있는 프로젝트만 통과시킨다, 최종 리뷰 F7)가 가드한 projectId 로 wbs_embeddings 수를 세고 색인한다. 색인 자체는 ingestProject 의 RLS 관문 뒤에만 쓴다 |
+| src/lib/ai/index/drainSoon.ts | 플랫폼 | 형만 import 한다. 증분 색인 등록(enqueueChange)이 넘긴 클라이언트로 색인 큐를 한 배치 소비한다(스케줄 잡 ai-index 와 같은 조립 — 켜진 프로젝트 범위·모듈 판정·선점 RPC). 사용자에게 행을 돌려주지 않는 색인 배치이고 워커 플래그가 꺼지면 아무것도 하지 않는다 |
 | src/lib/ai/index/enqueueChange.ts | 세션 가드 뒤 id 스코프 | 증분 색인 등록(SP8). 색인 대상을 쓰는 액션·라우트가 가드·모듈 관문·쓰기 성공 뒤에 넘긴 projectId·엔티티 id 로 ai_index_jobs 에 잡을 넣는다(등록 RPC upsert_ai_index_jobs — service_role 전용). 넣기 전에 그 프로젝트·워크스페이스의 chatbot 모듈을 판정하고(꺼짐·모름은 넣지 않는다), 회의록은 id 로 범위(project_id·workspace_id)만 읽는다. 배포에서 챗봇을 쓸 수 없으면 클라이언트를 만들지 않는다. 사용자에게 행을 돌려주지 않는다 |
 | src/lib/ai/health.ts | 플랫폼 | assistantHealth 는 전역 스키마·RPC 프로빙이라 행을 노출하지 않는다. assistantIndexStatus 는 projectId 로 카운트만 한다 |
 | src/lib/ai/ingest.ts | 세션 가드 뒤 id 스코프 | 호출부(reindex·import/execute·reindexProjectAction 은 requireProjectAdmin, 자가 치유는 레거시 챗 관문)가 가드한 projectId 로 쓴다. 쓰기 전에 RLS 로 프로젝트 행을 확인한다(getProjectName — 볼 수 없으면 throw, 최종 리뷰 F7 심층 방어). 그 뒤에만 그 프로젝트의 팀(요청 범위 원천 projectTeams — 세션)을 읽고 wbs_embeddings 를 upsert·stale 삭제한다 |

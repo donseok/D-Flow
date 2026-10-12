@@ -35,6 +35,11 @@ export function ModuleOffSwap({ children }: { children: ReactNode }) {
     return () => { cancelled = true }
   }, [pathname])
 
+  // 탭 제목 — 404 는 그 화면의 metadata(개요·작업 계획…)를 그대로 물려받는다. 없는 화면의 탭에 원래 화면 이름이 남지 않게 덮는다(2026-10-12 UAT URL-13)
+  useEffect(() => {
+    document.title = t(off ? 'home.moduleOff.title' : 'home.nfTitle')
+  }, [off])
+
   if (!off) return <>{children}</>
   return (
     <div data-module-off={off.module} data-module-off-layer={off.layer}>

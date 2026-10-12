@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AlertTriangle, CalendarRange, Flag, Megaphone, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { useModalDirty } from '@/lib/ui/useModalDirty'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -107,7 +108,8 @@ export function AnnouncementsView({
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div>
           <h2 className="text-sm font-semibold text-fg">
-            {t('ann.boardTitle')} · {scoped.length}{t('ann.unitCount')}
+            {/* 분류로 거르면 그 분류의 건수를 보여준다 — 머리 건수가 전체 기준이라 목록과 어긋났다(2026-10-12 UAT NOTI-17) */}
+            {t('ann.boardTitle')} · {filter === 'all' ? scoped.length : `${visible.length}/${scoped.length}`}{t('ann.unitCount')}
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -229,7 +231,8 @@ function AnnouncementRow({
             {item.title}
           </span>
           {item.body && (
-            <span className="mt-1 line-clamp-2 block whitespace-pre-line text-[13px] leading-5 text-fg-secondary">{item.body}</span>
+            // `block` 을 같이 쓰면 line-clamp 의 display(-webkit-box)를 덮어 말줄임이 풀린다 — 긴 본문이 카드 하나를 화면 몇 배로 늘렸다(2026-10-12 UAT NOTI-15)
+            <span className="mt-1 line-clamp-3 whitespace-pre-line [overflow-wrap:anywhere] text-[13px] leading-5 text-fg-secondary">{item.body}</span>
           )}
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2 text-meta tabular-nums text-fg-muted">
             <span>
@@ -338,7 +341,7 @@ function ReadModal({
               {item.publishFrom} ~ {item.publishTo}
             </div>
           )}
-          <p className="whitespace-pre-wrap text-sm leading-6 text-fg">{item.body || '—'}</p>
+          <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-6 text-fg">{item.body || '—'}</p>
         </div>
       )}
     </Modal>
@@ -388,6 +391,8 @@ export function AnnouncementFormModal({
     setError(null)
   }, [open, initial, today])
 
+  const dirty = useModalDirty(open, { title, body, category, isPinned, publishFrom, publishTo, showMilestone, milestoneDate }, [initial, today])
+
   function submit() {
     if (!title.trim()) {
       setError(t('ann.err.titleRequired'))
@@ -428,6 +433,7 @@ export function AnnouncementFormModal({
       onClose={onClose}
       title={isEdit ? t('ann.edit') : t('ann.write')}
       size="lg"
+      dirty={dirty && !pending}
       notice={error ? (
         <div role="alert" className="flex items-center gap-2 rounded-xl border border-danger/40 bg-danger-weak px-3 py-2.5 text-xs font-medium text-danger">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />

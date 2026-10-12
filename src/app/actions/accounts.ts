@@ -168,7 +168,15 @@ async function createOne(
     email_confirm: true, // SMTP 없이 즉시 로그인 가능하도록 확인 처리
     user_metadata: givenName ? { full_name: givenName } : {},
   })
-  if (createErr || !created?.user) return { ok: false, error: createErr?.message ?? t('srv.accounts.couldNotCreateAccount') }
+  if (createErr || !created?.user) {
+    // 인증 서버의 영문 원문을 그대로 내지 않는다(2026-10-12 UAT ACC-03) — 아는 사유는 한국어로, 모르는 사유는 로그에 남기고 일반 문구로
+    const code = (createErr as { code?: string } | null)?.code
+    if (code === 'email_exists' || /already been registered/i.test(createErr?.message ?? '')) {
+      return { ok: false, error: t('srv.accounts.emailAlreadyRegistered') }
+    }
+    console.error('[createAccount] 계정 생성 실패:', createErr?.message ?? '(응답에 사용자 없음)')
+    return { ok: false, error: t('srv.accounts.couldNotCreateAccount') }
+  }
   const userId = created.user.id
 
   let createdPersonId: string | null = null

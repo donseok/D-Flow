@@ -178,7 +178,7 @@ export function WikiSearchResults({ state, query, projectId }: {
                         )}
                       </span>
                       <span className="mt-1 block truncate text-sm font-semibold text-fg">{hit.title}</span>
-                      <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-fg-secondary">
+                      <span className="mt-0.5 line-clamp-2 [overflow-wrap:anywhere] text-[13px] leading-5 text-fg-secondary">
                         {marked(snippetOf(hit.content, 200, query), query)}
                       </span>
                     </button>
@@ -216,7 +216,7 @@ export function WikiSearchResults({ state, query, projectId }: {
                   {selectedHit.matchedBy.length > 0 && <span>{selectedHit.matchedBy.join(' · ')}</span>}
                 </div>
                 <div className="border-t border-border" />
-                <div className="max-h-[26rem] overflow-y-auto whitespace-pre-wrap text-[13.5px] leading-7 text-fg-secondary">
+                <div className="max-h-[26rem] overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] text-[13.5px] leading-7 text-fg-secondary">
                   {marked(selectedHit.content, query)}
                 </div>
                 <div className="mt-auto pt-2">
@@ -306,7 +306,7 @@ export function WikiSearchResults({ state, query, projectId }: {
       )}
       {summary.kind === 'done' && (
         <div className="rounded-xl border border-border-focus bg-action-soft p-3.5">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-fg">{summary.answer}</p>
+          <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-6 text-fg">{summary.answer}</p>
         </div>
       )}
 

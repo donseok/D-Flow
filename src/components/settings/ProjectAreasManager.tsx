@@ -189,7 +189,7 @@ export function ProjectAreasManager({ projectId, kind, areas, teamOptions }: {
               </label>
               <label className="flex flex-col gap-1 text-xs text-fg-secondary">
                 {text.order}
-                <input className="app-input" type="number" step={1} value={draft.sortOrder} data-area-order
+                <input className="app-input" type="number" min={0} step={1} value={draft.sortOrder} data-area-order
                   onChange={e => setDraft({ ...draft, sortOrder: e.target.value })} disabled={pending} />
               </label>
             </div>

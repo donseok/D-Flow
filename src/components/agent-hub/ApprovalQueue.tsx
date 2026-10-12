@@ -71,7 +71,7 @@ function QueueCard({ q, projectId, isAdmin, onHub, onChanged, timeZone, showTime
             .replace('{label}', q.approval.label ?? t('wbs.approveStepDefault'))}
         </p>
       )}
-      {q.summary && <p className="mt-1 whitespace-pre-wrap text-xs text-fg">{q.summary}</p>}
+      {q.summary && <p className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-xs text-fg">{q.summary}</p>}
       {q.links.length > 0 && (
         <ul className="mt-1 flex flex-wrap gap-2 text-meta">
           {q.links.map((l, i) => <li key={i}><a href={l.url} target="_blank" rel="noreferrer" className="text-action underline-offset-2 hover:underline">{l.label ?? l.url}</a></li>)}

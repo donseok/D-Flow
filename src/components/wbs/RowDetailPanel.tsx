@@ -760,7 +760,7 @@ export function RowDetailPanel({
                   )}
                   <div className="flex gap-2">
                     <input autoFocus value={addName} maxLength={WBS_NAME_MAX} onChange={e => setAddName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addChild() }} placeholder={`${levelLabels[item.depth + 1] ?? t('wbs.itemFallback')} ${t('wbs.namePlaceholderSuffix')}`} className="app-input h-8 text-xs" />
-                    <button onClick={addChild} disabled={busy || !addName.trim()} className="btn btn-primary h-8 px-3 text-xs">{t('common.add')}</button>
+                    <button onClick={addChild} disabled={busy || !addName.trim()} className="btn btn-primary h-8 shrink-0 whitespace-nowrap px-3 text-xs">{t('common.add')}</button>
                   </div>
                 </div>
               )}

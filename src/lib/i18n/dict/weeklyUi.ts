@@ -50,7 +50,7 @@ export const weeklyUiKo = {
   // 점검 패널(WeeklyLintPanel) — 지적의 제목·설명은 도메인(lib/domain/weeklyLint)이 만든다
   'weekly.lint.title': '주간보고 점검',
   'weekly.lint.count': '{n}건',
-  'weekly.lint.empty': '점검할 내용이 없습니다.',
+  'weekly.lint.empty': '고칠 곳을 찾지 못했습니다. 이 점검은 업무영역 안의 중복 문구·번호 매김·글머리 표기만 봅니다.',
   'weekly.lint.apply': '적용',
   'weekly.lint.kind.duplicate': '완전 중복',
   'weekly.lint.kind.nearDuplicate': '유사 중복',

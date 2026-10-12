@@ -172,8 +172,13 @@ export function NewProjectModal({
         open={open}
         onClose={close}
         title={t('common.newProject')}
+        // 오류는 버튼 바로 위에 고정한다 — 본문 맨 아래에 두면 스크롤 밖이라 눌러도 반응이 없는 것처럼 보였다(2026-10-12 UAT UX-04)
+        notice={error ? (
+          <p role="alert" className="rounded-xl border border-danger/30 bg-danger-weak px-3 py-2 text-xs font-medium text-danger">{error}</p>
+        ) : undefined}
         footer={
           <>
+            {(!name.trim() || !levels.trim()) && <span className="mr-auto text-xs text-fg-muted">{t('home.newProject.createHint')}</span>}
             <button type="button" className="btn btn-ghost" onClick={close} disabled={busy}>
               {t('common.cancel')}
             </button>
@@ -263,9 +268,6 @@ export function NewProjectModal({
             </label>
           </div>
 
-          {error && (
-            <p role="alert" className="rounded-xl border border-danger/30 bg-danger-weak px-3 py-2 text-xs font-medium text-danger">{error}</p>
-          )}
         </div>
       </Modal>
     </>

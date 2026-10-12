@@ -174,7 +174,7 @@ export function MeetingDetailModal({
           <div>
             <div className="mb-1.5 text-xs font-semibold text-fg-secondary">{t('meet.detail.body')}</div>
             {loading ? <div className="text-xs text-fg-muted">…</div>
-              : detail?.meeting.body ? <p className="whitespace-pre-wrap text-sm leading-6 text-fg-secondary">{detail.meeting.body}</p>
+              : detail?.meeting.body ? <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-6 text-fg-secondary">{detail.meeting.body}</p>
               : <div className="text-xs text-fg-muted">{t('meet.detail.noBody')}</div>}
           </div>
         </div>

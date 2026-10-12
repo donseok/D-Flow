@@ -94,7 +94,7 @@ describe('WBS focus 점프(대시보드 액션 큐 → WBS 위치 이동)', () =
     ))
     expect(rowCount(container)).toBe(3)
     expect(scrollIntoView).not.toHaveBeenCalled()
-    const alert = container.querySelector('[role="alert"]')
+    const alert = document.body.querySelector('[role="alert"]')   // 토스트는 body 로 올려 그린다(portal)
     expect(alert).not.toBeNull()
     expect(alert!.textContent).toBe('wbs.focusNotFound')
   })

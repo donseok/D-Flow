@@ -260,7 +260,7 @@ export function IssueAnalysisModal({
                     return (
                       <article key={`${area.areaCode}-${index}`} className="rounded-xl border border-border bg-surface p-3">
                         <div className="text-sm font-semibold text-fg">{opportunity.title}</div>
-                        <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-fg-secondary">
+                        <p className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-xs leading-5 text-fg-secondary">
                           {opportunity.description}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-1">

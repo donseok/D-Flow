@@ -251,7 +251,7 @@ export function IssueUpdates({ issueId, canWrite, currentUserId, isProjectAdmin,
                     </p>
                   ) : (
                     <p
-                      className={`mt-1 whitespace-pre-wrap text-[13px] leading-5 ${
+                      className={`mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-[13px] leading-5 ${
                         archived ? 'text-fg-secondary line-through decoration-fg-muted/50' : 'text-fg'
                       }`}
                     >

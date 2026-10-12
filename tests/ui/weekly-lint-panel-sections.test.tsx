@@ -103,7 +103,7 @@ describe('주간보고 점검 패널 — 구분 단위', () => {
   it('지적이 없으면 구분 묶음도 없다', () => {
     show([mkRow('r1', 'HQ', 1, { thisContent: '가\n나' })])
     expect(sections()).toHaveLength(0)
-    expect(document.body.textContent).toContain('점검할 내용이 없습니다')
+    expect(document.body.textContent).toContain('고칠 곳을 찾지 못했습니다')
   })
 
   it('적용 버튼은 그 지적의 편집을 그대로 넘긴다', () => {

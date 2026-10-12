@@ -297,7 +297,7 @@ export function WbsSpecPanel({ itemId, editable }: { itemId: string; editable: b
           ) : loaded.agentPrompt ? (
             <div>
               <div className="mb-1 text-meta font-semibold text-fg-secondary">{t('wbs.specAgentPromptLabel')}</div>
-              <p className="whitespace-pre-wrap text-xs text-fg">{loaded.agentPrompt}</p>
+              <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-xs text-fg">{loaded.agentPrompt}</p>
             </div>
           ) : null}
           {refErr && <p className="text-xs font-medium text-danger" role="alert">{refErr}</p>}
@@ -473,7 +473,7 @@ function WbsAgentOrderStatus({ itemId, editable, refreshKey }: { itemId: string;
           {order.reports.map(r => (
             <li key={r.id} className="rounded-md border border-border/60 p-1.5 text-xs">
               <div className="text-meta text-fg-muted">{r.created_at} · {r.agent} · {r.kind} · {r.percent}%</div>
-              <p className="whitespace-pre-wrap text-fg">{r.summary}</p>
+              <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-fg">{r.summary}</p>
               {r.links.length > 0 && (
                 <div className="mt-0.5 text-meta">
                   {t('wbs.agentOrderLinks')}: {r.links.map((l, i) => (

@@ -83,7 +83,8 @@ export const serverUiKo = {
   'srv.accounts.chooseProjectGrantAccess': '권한을 줄 프로젝트를 지정하세요.',
   'srv.accounts.couldNotAssignSuperuserRole': '슈퍼유저로 지정하지 못했습니다.',
   'srv.accounts.couldNotChangeWorkspaceRole': '워크스페이스 권한을 바꾸지 못했습니다.',
-  'srv.accounts.couldNotCreateAccount': '계정 생성 실패',
+  'srv.accounts.couldNotCreateAccount': '계정을 만들지 못했습니다. 잠시 후 다시 시도하세요.',
+  'srv.accounts.emailAlreadyRegistered': '이미 등록된 이메일입니다. 다른 이메일을 쓰거나 기존 계정을 확인하세요.',
   'srv.accounts.couldNotLinkAccountPerson': '인물에 계정을 연결하지 못했습니다.',
   'srv.accounts.couldNotLoadAccountPermissions': '계정 권한 정보를 불러오지 못했습니다.',
   'srv.accounts.couldNotRemoveAccountWorkspace': '워크스페이스에서 제거하지 못했습니다.',
@@ -159,6 +160,7 @@ export const serverUiKo = {
   'srv.attendance.couldNotVerifyMemberRequest': '대상 멤버를 확인할 수 없어 중단했습니다.',
   'srv.attendance.memberDateRequired': '멤버와 날짜는 필수입니다',
   'srv.attendance.notMemberProject': '이 프로젝트의 멤버가 아닙니다.',
+  'srv.attendance.noteTooLong': '비고는 {max}자 이하여야 합니다.',
   // src/app/actions/authzEvents.ts
   'srv.authzEvents.couldNotLoadPermissionChange': '권한 변경 이력을 불러오지 못했습니다.',
   // src/app/actions/branding.ts

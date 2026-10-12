@@ -15,6 +15,7 @@ import { policyNeedsArea } from '@/lib/issues/idPolicy'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, ExternalLink, FileText, Pencil, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { useModalDirty } from '@/lib/ui/useModalDirty'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import {
   createIssue, deleteIssue, fetchIssueEntryContext, fetchIssueMajorProcesses, updateIssue, updateIssueProgress,
@@ -314,9 +315,12 @@ export function IssueDetailModal({
               </>
             )}
           </div>
-          <button onClick={saveProgress} disabled={pending || !dirty} className="btn btn-primary text-xs">
-            {t('issue.detail.saveProgress')}
-          </button>
+          {/* 조회 권한에는 진행 저장을 내지 않는다 — 눌러야 '권한 없음'을 알게 되던 것(2026-10-12 UAT PERM-11). 서버 가드는 그대로다 */}
+          {canWrite && (
+            <button onClick={saveProgress} disabled={pending || !dirty} className="btn btn-primary text-xs">
+              {t('issue.detail.saveProgress')}
+            </button>
+          )}
         </div>
       }
     >
@@ -364,7 +368,7 @@ export function IssueDetailModal({
           {issue.body && (
             <div>
               <div className="mb-1 text-meta font-semibold text-fg-muted">{t('issue.detail.body')}</div>
-              <p className="whitespace-pre-wrap text-sm leading-6 text-fg">{issue.body}</p>
+              <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-6 text-fg">{issue.body}</p>
             </div>
           )}
 
@@ -383,7 +387,7 @@ export function IssueDetailModal({
               </div>
               <div>
                 <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.subProcess')}</dt>
-                <dd className="mt-0.5 whitespace-pre-wrap text-fg">{issue.subProcess || '—'}</dd>
+                <dd className="mt-0.5 whitespace-pre-wrap [overflow-wrap:anywhere] text-fg">{issue.subProcess || '—'}</dd>
               </div>
               <div>
                 <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.ownerDepartment')}</dt>
@@ -407,7 +411,7 @@ export function IssueDetailModal({
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-meta font-semibold text-fg-muted">{t('issue.analysis.sourceDetail')}</dt>
-                <dd className="mt-0.5 whitespace-pre-wrap text-fg">{issue.sourceDetail || '—'}</dd>
+                <dd className="mt-0.5 whitespace-pre-wrap [overflow-wrap:anywhere] text-fg">{issue.sourceDetail || '—'}</dd>
               </div></>}
             </dl>
           </section>}
@@ -440,7 +444,7 @@ export function IssueDetailModal({
                         {t('issue.source.open')}<ExternalLink className="h-3.5 w-3.5" aria-hidden />
                       </Link>
                     </div>
-                    <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-fg-secondary">
+                    <p className="mt-2 line-clamp-3 whitespace-pre-wrap [overflow-wrap:anywhere] text-xs leading-5 text-fg-secondary">
                       {source.excerpt}
                     </p>
                   </div>
@@ -467,10 +471,11 @@ export function IssueDetailModal({
 
           <div className="space-y-3 rounded-2xl border border-border bg-surface-subtle p-4">
             <div className="text-meta font-semibold text-fg-muted">{t('issue.detail.progress')}</div>
+            {!canWrite && <p className="text-xs text-fg-muted">{t('issue.detail.readOnly')}</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.detail.status')}</span>
-                <select className="app-input" value={status} onChange={e => setStatus(e.target.value)}>
+                <select className="app-input" value={status} onChange={e => setStatus(e.target.value)} disabled={!canWrite}>
                   {statusOptions.map(s => (
                     <option key={s} value={s}>{vocabLabel('workflow.issue_statuses', statusDefs, s, t)}</option>
                   ))}
@@ -480,7 +485,11 @@ export function IssueDetailModal({
             {/* 다중 선택 피커는 셀렉트보다 키가 커서 반 칸에 안 들어간다 — 전체 폭 배치 */}
             <div>
               <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('issue.form.assignee')}</span>
-              <IssueAssigneePicker members={members} selected={assignees} onChange={setAssignees} />
+              {canWrite
+                ? <IssueAssigneePicker members={members} selected={assignees} onChange={setAssignees} />
+                : assigneeChips.length > 0
+                  ? <div className="flex flex-wrap gap-1.5">{assigneeChips.map(a => <span key={a.id} className="chip bg-surface text-fg-secondary">{a.label}</span>)}</div>
+                  : <span className="text-xs text-fg-muted">—</span>}
             </div>
             {error && <ErrorBox message={error === ENTRY_CONTEXT_FAILED ? t(ENTRY_CONTEXT_FAILED) : error} />}
           </div>
@@ -648,6 +657,9 @@ export function IssueFormModal({
   const seedKey = JSON.stringify(issueFormSeed(initial, draft, sourcePreview))
   const coreSeedSeen = useRef<string | null>(null)
   const coreRowSeen = useRef<string | null>(null)
+
+  // 버릴 입력의 기준은 제목·내용·첨부다 — 분류 칸은 AI 추천이 열린 뒤에 채우므로 넣으면 손대지 않은 폼도 바뀐 것으로 읽힌다
+  const formDirty = useModalDirty(open, { title, body, files: pendingFiles.length }, [initial])
 
   function closeIfIdle() {
     // 원자 생성 요청이 끝나기 전에 폼이 닫혔다가 다른 블록으로 다시 열리면, 이전
@@ -903,10 +915,12 @@ export function IssueFormModal({
     <Modal
       open={open}
       onClose={closeIfIdle}
+      dirty={formDirty && !pending}
       title={isEdit ? t('issue.edit') : t('issue.new')}
       size="lg"
       footer={
         <div className="flex w-full items-center justify-end gap-2">
+          {!title.trim() && <span className="mr-auto text-xs text-fg-muted">{t('issue.form.saveHintTitle')}</span>}
           <button onClick={closeIfIdle} disabled={pending} className="btn btn-ghost text-xs">{t('issue.form.cancel')}</button>
           <button onClick={submit} disabled={pending || submittingRef.current || !context || !title.trim() || needsAreaSetup || (customWriteNeeded && (!customReady || customUnreadable || customStale))} className="btn btn-primary text-xs">{t('issue.form.save')}</button>
         </div>

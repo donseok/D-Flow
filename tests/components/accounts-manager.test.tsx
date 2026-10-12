@@ -78,6 +78,11 @@ describe('AccountsManager', () => {
   }
   const headers = () => Array.from(container.querySelectorAll('th')).map(th => th.textContent?.trim() ?? '')
   const row = (id: string) => container.querySelector<HTMLTableRowElement>(`tr[data-account-row="${id}"]`)!
+  /** 플랫폼 관리자 토글 — 칩을 누르면 확인 모달이 뜨고(2026-10-12 UAT ACC-05), 그 확인을 눌러야 액션이 나간다 */
+  async function togglePlatformAdmin(id: string) {
+    await click(row(id).querySelector('[data-platform-admin-toggle]')!)
+    await click(document.body.querySelector('[data-platform-admin-confirm]')!)
+  }
   async function click(el: Element) {
     await act(async () => { (el as HTMLElement).click() })
   }
@@ -229,10 +234,10 @@ describe('AccountsManager', () => {
   it('플랫폼 관리자 토글은 setPlatformAdmin(userId, 반대값) 을 부르고 오류를 그대로 보여 준다', async () => {
     const msg = '마지막 슈퍼유저(플랫폼 관리자)는 해제할 수 없습니다. 다른 슈퍼유저를 먼저 지정하세요.'
     render()
-    await click(row('u-alice').querySelector('[data-platform-admin-toggle]')!)
+    await togglePlatformAdmin('u-alice')
     expect(setPlatformAdmin).toHaveBeenCalledWith('u-alice', true)
     setPlatformAdmin.mockResolvedValue({ ok: false, error: msg })
-    await click(row('u-dave').querySelector('[data-platform-admin-toggle]')!)
+    await togglePlatformAdmin('u-dave')
     expect(setPlatformAdmin).toHaveBeenLastCalledWith('u-dave', false)
     expect(toast).toHaveBeenLastCalledWith(expect.objectContaining({ description: msg, variant: 'error' }))
   })
@@ -246,9 +251,16 @@ describe('AccountsManager', () => {
   ])('플랫폼 관리자 변경이 거부되면(%s) 문구를 보이고 표를 다시 읽는다', async (msg) => {
     setPlatformAdmin.mockResolvedValue({ ok: false, error: msg })
     render()
-    await click(row('u-dave').querySelector('[data-platform-admin-toggle]')!)
+    await togglePlatformAdmin('u-dave')
     expect(toast).toHaveBeenLastCalledWith(expect.objectContaining({ description: msg, variant: 'error' }))
     expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('플랫폼 관리자 토글은 확인을 받기 전에는 액션을 부르지 않는다 — 대상 계정을 적어 묻는다', async () => {
+    render()
+    await click(row('u-alice').querySelector('[data-platform-admin-toggle]')!)
+    expect(setPlatformAdmin).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('플랫폼 관리자로 지정합니다')
   })
 
   it('본인 행의 플랫폼 관리자 토글은 비활성 — 스스로 해제할 수 없다는 안내', async () => {

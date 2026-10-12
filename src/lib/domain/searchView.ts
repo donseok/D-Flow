@@ -59,6 +59,23 @@ export function stripLeadingMeta(content: string): string {
 const MIN_QUERY_TOKEN_CHARS = 2
 
 /**
+ * 검색어 길이 상한 — 서버(/api/wiki/search 의 MAX_QUERY_CHARS)·딥링크(?q=) 판정과 같은 값이다.
+ * 입력창이 이 값으로 막고(maxLength), 붙여넣기·딥링크로 넘어온 값도 화면 쪽에서 같은 길이로 자른다
+ * (2026-10-12 UAT WIKI-07 — 상한 없는 입력창에 5천 자를 넣으면 주소 동기화·강조가 그 길이를 그대로 받았다).
+ */
+export const WIKI_QUERY_MAX_CHARS = 200
+/** 강조·스니펫이 보는 질의 토큰 수의 상한 — 본문 길이 × 토큰 수로 도는 탐색을 묶는다 */
+const MAX_QUERY_TOKENS = 24
+
+function queryTokens(query: string | undefined): string[] {
+  return (query ?? '')
+    .slice(0, WIKI_QUERY_MAX_CHARS)
+    .split(/\s+/)
+    .filter(token => token.length >= MIN_QUERY_TOKEN_CHARS)
+    .slice(0, MAX_QUERY_TOKENS)
+}
+
+/**
  * 검색 결과 스니펫 정제. `query` 를 주면 매칭 토큰 주변을 중심으로 창을 잘라
  * 관련 문장을 보여준다 — 청크 앞부분만 자르면 질의어가 청크 중간에 있을 때
  * 질문과 무관한 도입부만 노출되는 문제가 있었다.
@@ -70,7 +87,7 @@ export function snippetOf(content: string, maxChars = 200, query?: string): stri
   const base = collapse(stripLeadingMeta(content)) || collapse(content)
 
   if (query) {
-    const tokens = query.split(/\s+/).filter(token => token.length >= MIN_QUERY_TOKEN_CHARS)
+    const tokens = queryTokens(query)
     const lowerBase = base.toLowerCase()
     for (const token of tokens) {
       const matchIndex = lowerBase.indexOf(token.toLowerCase())
@@ -98,9 +115,7 @@ export interface HighlightSegment {
  */
 export function highlightSegments(content: string, query?: string): HighlightSegment[] {
   if (!content) return []
-  const tokens = (query ?? '')
-    .split(/\s+/)
-    .filter(token => token.length >= MIN_QUERY_TOKEN_CHARS)
+  const tokens = queryTokens(query)
   if (tokens.length === 0) return [{ text: content, hit: false }]
 
   const lower = content.toLowerCase()

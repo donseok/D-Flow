@@ -1,4 +1,5 @@
 'use client'
+import { createPortal } from 'react-dom'
 import type { PredecessorGate } from '@/lib/domain/agentWork'
 import { useCallback, useState, useEffect, useId, useLayoutEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -1380,6 +1381,8 @@ export function WbsGanttSheet({
       ref={inputRef}
       autoFocus
       type="number"
+      // 판정은 commit 이 한다(범위 밖이면 토스트) — 여기는 스핀 버튼·모바일 자판이 범위를 알게 하는 보강이다
+      min={0} max={field === 'actual' ? 100 : undefined} step="any"
       value={draft}
       // 들어올 때마다 전체 선택(BUG-24) — autoFocus 의 첫 포커스와, 거부 뒤 다시 누른 포커스 둘 다
       onFocus={e => e.currentTarget.select()}
@@ -2738,15 +2741,18 @@ export function WbsGanttSheet({
       </div>
       )}
 
-      {toast && (
+      {/* body 로 올려 그린다 — 시트 안에 두면 조상의 overflow 에 오른쪽이 잘렸다. 자리는 떠 있는 AI 버튼(bottom-16·52px) 위,
+          폭은 화면을 넘지 않게 묶는다(2026-10-12 UAT UX-03) */}
+      {toast && typeof document !== 'undefined' && createPortal(
         <div
-          className={`fixed right-6 z-50 rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${bulkSelection.size > 0 ? 'bottom-36' : 'bottom-6'} ${
+          className={`fixed right-6 z-(--z-toast) max-w-[min(calc(100vw-3rem),360px)] break-words rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${bulkSelection.size > 0 ? 'bottom-36' : 'bottom-32'} ${
             toast.kind === 'ok' ? 'bg-success text-success-fg' : toast.kind === 'warn' ? 'bg-warning text-warning-fg' : 'bg-danger text-danger-fg'
           }`}
           role={toast.kind === 'err' ? 'alert' : 'status'}
         >
           {toast.msg}
-        </div>
+        </div>,
+        document.body,
       )}
 
       {showDetail && selectedItem && (

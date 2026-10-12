@@ -38,7 +38,8 @@ export function validateArea(
   if (typeof input.sortOrder !== 'number' || !Number.isInteger(input.sortOrder)) return { ok: false, error: '순서는 정수여야 합니다.' }
   // RPC(upsert_project_area)의 순서 형식 `^-?[0-9]{1,9}$` 과 같은 한도 — 넘으면 RPC 가 22023 AREA_INVALID_INPUT 을 내 "잠시 후 다시"류 결함
   // 문구가 됐다(A1-4 권한 리뷰 P3 — A2 이월 Z5 F-3). 입력 단계에서 사람이 고칠 수 있는 문구로 막는다
-  if (Math.abs(input.sortOrder) > AREA_SORT_ORDER_MAX) return { ok: false, error: `순서는 -${AREA_SORT_ORDER_MAX}~${AREA_SORT_ORDER_MAX} 사이여야 합니다.` }
+  // 음수는 받지 않는다 — 뜻 없이 목록 맨 위로 올라가는 값이라 오타와 구별되지 않는다(2026-10-12 UAT PSET-11)
+  if (input.sortOrder < 0 || input.sortOrder > AREA_SORT_ORDER_MAX) return { ok: false, error: `순서는 0~${AREA_SORT_ORDER_MAX} 사이의 정수여야 합니다.` }
   if (existing.some(a => a.kind === input.kind && a.code === code && a.id !== input.id)) {
     return { ok: false, error: `'${code}' 코드가 이미 있습니다.` }
   }

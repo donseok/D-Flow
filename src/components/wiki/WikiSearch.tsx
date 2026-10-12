@@ -4,7 +4,7 @@ import { Search, Send, Sparkles } from 'lucide-react'
 import { ProjectPageShell } from '@/components/app/ProjectPageShell'
 import { WikiSearchResults } from './WikiSearchResults'
 import { useWikiSearchQuery } from './useWikiSearchQuery'
-import { toSearchViewState, type SearchViewState } from '@/lib/domain/searchView'
+import { toSearchViewState, WIKI_QUERY_MAX_CHARS, type SearchViewState } from '@/lib/domain/searchView'
 import { t, type DictKey} from '@/lib/i18n/dict'
 
 // 사용자가 지정한 옛 WikiAskPanel 디자인의 추천 칩과 같은 자리 — 문구만 검색용으로 바꿨다.
@@ -26,7 +26,8 @@ export function WikiSearch({ projectId, initialQuery, pageHero, adminSlot }: {
   const seq = useRef(0)
 
   const run = useCallback(async (next: string) => {
-    const trimmed = next.trim()
+    // 서버가 받는 길이로 맞춘다 — 강조·요약에 내려가는 값과 실제로 찾은 값이 같아야 한다
+    const trimmed = next.slice(0, WIKI_QUERY_MAX_CHARS).trim()
     if (!trimmed) { setState({ kind: 'idle' }); setSubmittedQuery(''); return }
     setSubmittedQuery(trimmed)
     const mine = ++seq.current
@@ -35,7 +36,7 @@ export function WikiSearch({ projectId, initialQuery, pageHero, adminSlot }: {
       const res = await fetch('/api/wiki/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, q: next }),
+        body: JSON.stringify({ projectId, q: trimmed }),
       })
       const body = await res.json().catch(() => null)
       // 내가 보낸 요청이 더는 최신이 아니면 결과를 버린다.
@@ -63,7 +64,9 @@ export function WikiSearch({ projectId, initialQuery, pageHero, adminSlot }: {
   // 입력을 비우면 검색 이전으로 되돌린다. 빈 질의에서는 제출 버튼이 비활성이라 run('') 이
   // 불릴 길이 없어, 이 처리가 없으면 지운 질의의 결과가 그대로 남는다
   // (type="search" 의 네이티브 × 를 눌러도 마찬가지).
-  const changeQuery = useCallback((value: string) => {
+  const changeQuery = useCallback((raw: string) => {
+    // maxLength 는 타이핑만 막는다 — 붙여넣기·자동 입력으로 넘어온 값도 여기서 자른다
+    const value = raw.slice(0, WIKI_QUERY_MAX_CHARS)
     setQuery(value)
     if (value.trim()) return
     seq.current++   // 진행 중인 응답이 도착해도 되살아나지 않게 무효화한다
@@ -115,6 +118,7 @@ export function WikiSearch({ projectId, initialQuery, pageHero, adminSlot }: {
             <input
               type="search"
               value={query}
+              maxLength={WIKI_QUERY_MAX_CHARS}
               onChange={event => changeQuery(event.target.value)}
               onKeyDown={event => {
                 if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault()

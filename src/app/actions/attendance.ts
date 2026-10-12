@@ -5,6 +5,7 @@ import { ERR_LOOKUP } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { revalidatePath } from 'next/cache'
 import type { AttendanceType } from '@/lib/domain/types'
+import { ATTENDANCE_NOTE_MAX } from '@/lib/domain/attendance'
 import { checkProjectVocab, vocabWriteFailure } from '@/lib/settings/vocabGuard'
 import { serverTranslator } from '@/lib/i18n/server'
 
@@ -32,6 +33,9 @@ export async function upsertAttendance(
     return { ok: false, error: t('srv.attendance.couldNotVerifyMemberRequest') }
   }
   if (!member) return { ok: false, error: t('srv.attendance.notMemberProject') }
+  if ((input.note ?? '').length > ATTENDANCE_NOTE_MAX) {
+    return { ok: false, error: t('srv.attendance.noteTooLong').replace('{max}', String(ATTENDANCE_NOTE_MAX)) }
+  }
   // 유형 = 이 프로젝트의 활성 근태 유형(설정 attendance.types, B4). 경합은 DB 트리거가 닫는다
   const typeErr = await checkProjectVocab(projectId, 'attendance.types', input.type)
   if (typeErr) return { ok: false, error: typeErr }

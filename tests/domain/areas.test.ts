@@ -34,8 +34,11 @@ describe('validateArea', () => {
     expect(validateArea(base({ sortOrder: '1' as unknown as number }), [])).toEqual({ ok: false, error: '순서는 정수여야 합니다.' })
     // RPC 형식(최대 아홉 자리)과 같은 한도 — 넘으면 결함 문구가 아니라 입력 문구로(A2 이월 Z5 F-3)
     expect(validateArea(base({ sortOrder: 999_999_999 }), []).ok).toBe(true)
-    expect(validateArea(base({ sortOrder: -999_999_999 }), []).ok).toBe(true)
-    expect(validateArea(base({ sortOrder: 1e9 }), [])).toEqual({ ok: false, error: '순서는 -999999999~999999999 사이여야 합니다.' })
+    expect(validateArea(base({ sortOrder: 0 }), []).ok).toBe(true)
+    // 음수는 받지 않는다(2026-10-12 UAT PSET-11 — -5 가 검증 없이 저장돼 목록 맨 위로 올라갔다)
+    expect(validateArea(base({ sortOrder: -1 }), [])).toEqual({ ok: false, error: '순서는 0~999999999 사이의 정수여야 합니다.' })
+    expect(validateArea(base({ sortOrder: -999_999_999 }), []).ok).toBe(false)
+    expect(validateArea(base({ sortOrder: 1e9 }), [])).toEqual({ ok: false, error: '순서는 0~999999999 사이의 정수여야 합니다.' })
     expect(validateArea(base({ sortOrder: -1e10 }), []).ok).toBe(false)
   })
 

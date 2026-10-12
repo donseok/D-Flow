@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic' // 목록·수는 항상 최신 DB 값을
  * 플랫폼 관리자만(나머지·권한 조회 열화 = 404, ui-states 관례). 판정은 canManageWorkspaces 한 곳이고 목록·생성 액션이 requireSuperuser 로 다시 가드한다.
  * 플랫폼 관리라 모듈 관문 밖이다(페이지 관문 불변식 제외 목록).
  */
+export async function generateMetadata() { return { title: t('nav.workspaces') } }   // (global) 레이아웃의 템플릿이 ' | {제품}' 을 붙인다
 export default async function WorkspacesAdminPage() {
   const actor = await getActorForView()
   if (!canManageWorkspaces(actor)) notFound()

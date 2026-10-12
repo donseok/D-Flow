@@ -972,7 +972,8 @@ export function WeeklySheetView({
                 <tr key={r.id}>
                   <td className="border border-border-input px-1 py-1.5 text-center align-middle text-[13px] font-bold text-fg">
                     <div className="flex flex-col items-center justify-center gap-1">
-                      <div>{rowName}</div>
+                      {/* 긴 영역 이름은 칸 안에서 줄을 바꾼다 — 공백 없는 60자 이름이 표 밖으로 나가 사이드바까지 덮었다(2026-10-12 UAT WK-14) */}
+                      <div className="w-full min-w-0 [overflow-wrap:anywhere]">{rowName}</div>
                       {customDefs.length > 0 && (
                         <button
                           type="button"

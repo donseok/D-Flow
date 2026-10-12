@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { GitCompareArrows, RefreshCw } from 'lucide-react'
 import type { CellAddr } from '@/lib/domain/sheetSelection'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { WEEKLY_CELL_MAX } from '@/lib/domain/weeklySheet'
 import { CELL_PEERS_MAX, presenceColor, presenceStyle, type PresencePeer } from '@/lib/domain/sheetPresence'
 
 /** editing = 저장 전 초안(배지 없음), conflict = 다른 사람이 먼저 바꿔 쓰지 않았다(비교 대기 — SPU1) */
@@ -78,7 +79,7 @@ export function SheetCell(p: SheetCellProps) {
       {/* 배경(L0)은 <td>가 담당 → textarea는 bg-transparent라 틴트가 비쳐 보임(§0). */}
       <textarea
         ref={ref} value={p.value} rows={3} aria-label={p.ariaLabel} data-sheet-cell="1"
-        readOnly={p.readOnly}
+        readOnly={p.readOnly} maxLength={WEEKLY_CELL_MAX}
         style={{ caretColor: p.editing && !p.readOnly ? 'var(--color-fg)' : 'transparent' }}
         className={`block min-h-full w-full resize-none select-text rounded-none border-0 bg-transparent p-2 text-body text-fg outline-none focus:relative focus:z-10 focus:outline focus:outline-2 focus:-outline-offset-1 focus:outline-border-focus ${p.editing ? 'cursor-text' : 'cursor-cell'} ${p.editing ? 'shadow-md' : ''}`}
         onChange={e => p.onChange(e.target.value)}

@@ -30,6 +30,13 @@ export function ProjectInfoEditButton({
     name, description: description ?? '', start_date: startDate ?? '', end_date: endDate ?? '',
   })
 
+  // 열 때마다 저장된 값으로 다시 채운다 — 닫아도 입력이 남아, 다시 열어 모르고 저장하면 버린 줄 알았던 값이 들어갔다(2026-10-12 UAT PSET-04)
+  const openFresh = () => {
+    setForm({ name, description: description ?? '', start_date: startDate ?? '', end_date: endDate ?? '' })
+    setError(null)
+    setOpen(true)
+  }
+
   const save = () => {
     setError(null)
     if (!isValidDateRange(form.start_date || null, form.end_date || null)) {
@@ -62,10 +69,11 @@ export function ProjectInfoEditButton({
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="btn btn-ghost h-9 px-3 text-[13px]">
+      <button onClick={openFresh} className="btn btn-ghost h-9 px-3 text-[13px]">
         <Pencil className="h-3.5 w-3.5" />{t('common.edit')}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={t('settings.editInfoTitle')}
+        notice={error ? <p role="alert" className="text-xs font-medium text-danger">{error}</p> : undefined}
         footer={
           <>
             <button onClick={() => setOpen(false)} className="btn btn-ghost h-9 px-4">{t('common.cancel')}</button>
@@ -85,7 +93,6 @@ export function ProjectInfoEditButton({
             <label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.startDate')}</span><input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="app-input px-2 text-xs" /></label>
             <label className="block"><span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('settings.endDate')}</span><input type="date" value={form.end_date} min={form.start_date || undefined} onChange={e => setForm({ ...form, end_date: e.target.value })} className="app-input px-2 text-xs" /></label>
           </div>
-          {error && <p className="text-xs font-medium text-danger">{error}</p>}
         </div>
       </Modal>
     </>

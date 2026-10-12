@@ -144,7 +144,7 @@ describe('WbsGanttSheet — 셀 저장 충돌과 응답 유실(Q05·Q10)', () =>
     expect(dialog()).toBeNull()
     expect(h.actual).toHaveBeenCalledTimes(1)
     expect(h.refresh).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain('wbs.toastYourValue: 60')
+    expect(document.body.textContent).toContain('wbs.toastYourValue: 60')
   })
 
   it('Q10 — 응답을 잃었고 서버 값이 내 값(60)이면 반영된 것이다. 다시 보내지 않는다', async () => {
@@ -165,7 +165,7 @@ describe('WbsGanttSheet — 셀 저장 충돌과 응답 유실(Q05·Q10)', () =>
     expect(h.actual).toHaveBeenCalledTimes(1)
     expect(input('Actual')?.value).toBe('60')
     expect(session('actual')).toBe('failed')
-    expect(container.textContent).toContain('common.outcomeNotApplied')
+    expect(document.body.textContent).toContain('common.outcomeNotApplied')
     expect(sheetUndoManager.canUndo()).toBe(false)
     h.actual.mockResolvedValueOnce({ ok: true })
     await act(async () => { input('Actual')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
@@ -189,7 +189,7 @@ describe('WbsGanttSheet — 셀 저장 충돌과 응답 유실(Q05·Q10)', () =>
     expect(input('Actual')?.value).toBe('60')
     expect(session('actual')).toBe('outcome_unknown')
     expect(editSessionStore.getSummary().outcomeUnknownCount).toBe(1)
-    expect(container.textContent).toContain('common.outcomeUnknown')
+    expect(document.body.textContent).toContain('common.outcomeUnknown')
     // 다시 저장하면 같은 기대값(50)의 CAS 다 — 앞선 저장이 반영돼 있었다면 서버가 충돌로 답하고(값 60), 화면은 그것을 반영으로 읽는다
     h.actual.mockResolvedValueOnce({ ok: false, conflict: true, error: 'x', latest: 60 })
     await act(async () => { input('Actual')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })

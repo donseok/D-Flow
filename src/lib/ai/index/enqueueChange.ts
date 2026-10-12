@@ -3,6 +3,7 @@ import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { moduleDef } from '@/lib/modules/registry'
 import { INDEX_BACKFILL_ENTITY_TYPE, type IndexBackfillDomain } from './backfill'
+import { drainIndexQueueSoon } from './drainSoon'
 import { enqueueIndexMutationBestEffort } from './enqueue'
 import { createIndexJobModuleGate, keepEnabledMutations } from './moduleGate'
 import { createSupabaseIndexJobQueue, type SupabaseKnowledgeClient } from './pgvector'
@@ -247,6 +248,8 @@ async function enqueueNow(changes: readonly IndexChange[]): Promise<void> {
       })
       await enqueueIndexMutationBestEffort(queue, batch)
     }
+    // 넣은 잡을 스케줄까지 기다리지 않고 바로 소비한다(워커 플래그가 켜진 배포에서만 — drainSoon.ts)
+    if (kept.length > 0) await drainIndexQueueSoon(admin)
   } catch (e) {
     console.error('[assistant] 색인 변경 등록 예외(무시하고 계속):', e instanceof Error ? e.message : e)
   }

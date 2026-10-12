@@ -2,6 +2,8 @@
  *  라벨과 max_depth 를 따로 관리하면 불일치가 생기므로 묶는다(스펙 2026-08-21-wbs-nlevel-md-contract §구현 범위 1). */
 
 export const LEVEL_LABELS_MAX = 10
+/** 단계 이름 한 칸의 길이 상한 — 표 머리·단계 토글에 그대로 실리는 이름이라 길면 화면이 밀린다(2026-10-12 UAT PSET-06) */
+export const LEVEL_LABEL_MAX_CHARS = 20
 
 /** 단계 이름을 주입받지 못한 호출의 폴백(옛 3단 표기) — 주간 모델·임베딩 문서가 같은 값을 쓴다. `core.level_labels` 는 생성 때 필수라
  *  레지스트리 기본값이 없다(REQUIRED_ON_CREATE). 운영 경로는 늘 프로젝트 설정을 넘기므로 이 값은 무인자 호출(시험·집계 전용)에서만 보인다. */
@@ -45,6 +47,8 @@ export function validateLevelSettings(input: LevelSettingsInput): LevelSettingsR
   }
   const emptyIdx = labels.findIndex((l) => l === '')
   if (emptyIdx >= 0) return { ok: false, error: `${emptyIdx + 1}번째 단계 이름이 비어 있습니다.` }
+  const longIdx = labels.findIndex((l) => l.length > LEVEL_LABEL_MAX_CHARS)
+  if (longIdx >= 0) return { ok: false, error: `${longIdx + 1}번째 단계 이름은 ${LEVEL_LABEL_MAX_CHARS}자 이하여야 합니다.` }
   if (new Set(labels).size !== labels.length) {
     return { ok: false, error: '단계 이름이 중복됩니다.' }
   }

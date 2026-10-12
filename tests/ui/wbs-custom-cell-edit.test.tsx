@@ -167,7 +167,7 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
     expect(editor('qty')).toBeNull()
     expect(cell('qty').textContent).toBe('1')
     expect(h.refresh).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain('값이나 편집 권한이 바뀌었습니다.')
+    expect(document.body.textContent).toContain('값이나 편집 권한이 바뀌었습니다.')
   })
 
   it('그 밖의 저장 실패는 입력을 지킨다 — 편집기가 남고 값은 바뀌지 않는다', async () => {
@@ -179,7 +179,7 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
     expect(editor('qty')?.value).toBe('7')
     expect(editor('qty')?.getAttribute('aria-invalid')).toBe('true')
     expect(h.refresh).not.toHaveBeenCalled()
-    expect(container.textContent).toContain('추가 정보를 저장하지 못했습니다.')
+    expect(document.body.textContent).toContain('추가 정보를 저장하지 못했습니다.')
   })
 
   it('정의 위반(범위 밖 숫자)은 서버로 보내지 않는다', async () => {
@@ -324,7 +324,7 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
       expect(h.save).toHaveBeenCalledTimes(1)
       expect(editor('qty')?.value).toBe('7')
       expect(editor('qty')?.getAttribute('aria-invalid')).toBe('true')
-      expect(container.textContent).toContain('저장되지 않았습니다')
+      expect(document.body.textContent).toContain('저장되지 않았습니다')
     })
 
     it('Q10 — 응답을 잃었고 이 칸이 제3의 값이면 비교로, 결과 조회도 실패하면 입력을 지킨 채 알린다', async () => {
@@ -339,7 +339,7 @@ describe('WbsGanttSheet — 사용자 정의 필드 셀 편집', () => {
       await key(editor('qty')!, 'Enter')
       expect(h.save).toHaveBeenCalledTimes(2)
       expect(editor('qty')?.value).toBe('7')
-      expect(container.textContent).toContain('저장 결과를 확인하지 못했습니다')
+      expect(document.body.textContent).toContain('저장 결과를 확인하지 못했습니다')
     })
   })
 
