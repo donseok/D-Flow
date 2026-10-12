@@ -6,7 +6,7 @@ vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.scope }))
 vi.mock('@/lib/data/portal', () => ({ getProjectRows: h.rows, listWorkspaceProjects: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/lib/calendar/viewZone', () => ({ viewTimezone: h.zone }))
 vi.mock('@/app/actions/preferences', () => ({ getAccountPrefs: h.acc, getWorkspacePrefs: h.wsp }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }), usePathname: () => '/w/acme/projects', useSearchParams: () => new URLSearchParams() }))
+vi.mock('next/navigation', () => ({ redirect: (href: string) => { throw new Error(`REDIRECT:${href}`) }, useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }), usePathname: () => '/w/acme/projects', useSearchParams: () => new URLSearchParams() }))
 vi.mock('@/components/home/NewProjectModal', () => ({ NewProjectModal: (p: { defaultOpen?: boolean }) => <button data-new-project data-open={String(!!p.defaultOpen)}>새 프로젝트</button> }))
 import Page from '@/app/(app)/w/[slug]/projects/page'
 
@@ -39,9 +39,9 @@ describe('/w/[slug]/projects v1(스펙 §6.2)', () => {
     await render({ q: 'ac%', status: 'overdue', fav: '1' })
     expect(h.rows).toHaveBeenCalledWith(WS.id, member, { q: 'ac%', status: 'overdue', favoritesOnly: true, cursor: null, limit: 50, t: expect.any(Function) })   // t — 현황 사유 한 줄의 화면 언어
   })
-  it('모르는 상태 값은 무시한다', async () => {
-    await render({ status: 'bogus' })
-    expect(h.rows).toHaveBeenCalledWith(WS.id, member, expect.objectContaining({ status: undefined }))
+  it('모르는 상태 값은 주소에서 걷어 전체 목록으로 보낸다 — 다른 쿼리는 지킨다(2026-10-12 UAT QRY-01)', async () => {
+    await expect(render({ status: 'bogus', q: 'a', fav: '1' })).rejects.toThrow('REDIRECT:/w/acme/projects?q=a&fav=1')
+    expect(h.rows).not.toHaveBeenCalled()
   })
   it('50행을 넘으면 더 보기 — 다른 쿼리를 지킨다', async () => {
     h.rows.mockResolvedValue({ ok: true, rows: [row('00000000-0000-0000-7e57-000000001861')], nextCursor: 'c1' })

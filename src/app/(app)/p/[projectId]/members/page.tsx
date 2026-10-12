@@ -41,7 +41,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
   // 초대 조회 실패가 명단 본체를 막으면 안 된다(섹션 안 에러 문구로 흡수).
   // 초대 만료·합류 시각의 tz = 프로젝트 달력(초대 칸은 관리자만 보므로 그때만 읽는다). 실패는 초대 칸에만 사유를 그린다.
   const wid = m?.projectWorkspace.get(projectId) ?? null
-  const [roster, invites, pc, wsRoles, inviteDomainNotice] = await Promise.all([
+  const [roster, invites, pc, wsRoles, inviteDomainNotice, teams] = await Promise.all([
     canEdit ? listRoster(projectId) : getProjectRoster(projectId),
     canEdit ? listProjectInvites(projectId) : null,
     canEdit ? loadProjectConfigForPage(projectId) : null,
@@ -49,6 +49,8 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
     // 초대 허용 도메인이 비어 있으면(새 워크스페이스의 기본 상태) 발급이 전부 거부된다 — 거부되기 전에 초대 칸에 미리 알린다.
     // 초대 칸은 관리자만 보므로 그때만 읽는다. 읽지 못하면 null(안내 없음 — 로더가 로그를 남긴다)
     canEdit ? loadInviteDomainNotice(m, wid) : null,
+    // 팀 후보도 같은 묶음에서 읽는다 — 따로 기다리면 왕복이 한 단 늘어난다(2026-10-12 UAT PRF-02). 실패는 그대로 던져진다(아래 주석)
+    canEdit ? projectTeams(projectId) : null,
   ])
   // 초대 발급·취소는 달력과 무관하다 — 달력 손상·설정 조회 실패는 시각 칸만 사유로 둔다(A-4 리뷰 N6)
   const inviteCal = pc?.ok ? pickCalendar(pc.cfg) : null
@@ -60,7 +62,7 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
   // 팀 후보 = 이 프로젝트에서 고를 수 있는 활성 팀(프로젝트 팀이 있으면 그것만, 없으면 공용) — 요청 범위 원천(세션 RLS, 레이아웃과 같은
   // 요청 캐시). 편집(명단 행·초대)에만 쓰므로 관리자에게만 싣는다 — 읽기 전용 표는 행이 가진 팀 코드로 그린다.
   // 읽기 실패는 던진다(오류 경계) — 빈 후보로 명단 편집을 열면 저장이 팀을 지운다
-  const teamOptions = canEdit ? (await projectTeams(projectId)).filter(x => x.active).map(x => ({ id: x.id, code: x.code })) : []
+  const teamOptions = (teams ?? []).filter(x => x.active).map(x => ({ id: x.id, code: x.code }))
 
   return (
     <ProjectPageShell

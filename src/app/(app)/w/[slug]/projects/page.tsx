@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { getProjectRows, listWorkspaceProjects } from '@/lib/data/portal'
 import { getAccountPrefs, getWorkspacePrefs } from '@/app/actions/preferences'
@@ -35,6 +36,8 @@ export default async function ProjectsPage({ params, searchParams }: {
   if (!zone.ok) return <ConfigLoadError error={zone.error} keyName={zone.key} kind="invalid" />
   const status = (STATUSES as readonly string[]).includes(sp.status ?? '') ? sp.status as (typeof STATUSES)[number] : undefined
   const q = sp.q?.trim() || undefined, favoritesOnly = sp.fav === '1'
+  // 모르는 ?status= 는 '전체'로 읽되 주소에서도 걷는다 — 남겨 두면 전체 목록에 없는 필터가 걸린 주소가 공유된다(2026-10-12 UAT QRY-01)
+  if (sp.status !== undefined && !status) redirect(wsHref(ws.slug, 'projects', { q, fav: favoritesOnly ? '1' : undefined, new: sp.new === '1' ? '1' : undefined }))
   const [res, acc, wsPrefs] = await Promise.all([
     getProjectRows(ws.id, actor, { q, status, favoritesOnly, cursor: sp.cursor ?? null, limit: 50, t: koTranslate }),
     getAccountPrefs(),

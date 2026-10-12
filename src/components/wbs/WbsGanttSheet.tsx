@@ -1370,9 +1370,18 @@ export function WbsGanttSheet({
   async function submitAddPhase() {
     if (!addPhase?.trim() || addBusy) return
     setAddBusy(true)
-    const res = await addWbsItem(projectId, null, addPhase.trim())
+    const name = addPhase.trim()
+    // 같은 이름은 막지 않는다(WBS 에서는 흔하다) — 다만 같은 자리에 같은 이름이 이미 있으면 실수일 수 있어 추가 뒤에 알린다(2026-10-12 UAT WBS-07)
+    const sameName = items.some(i => i.name.trim() === name)
+    const res = await addWbsItem(projectId, null, name)
     setAddBusy(false)
-    if (res.ok) { setAddPhase(null); setToast({ kind: 'ok', msg: t('wbs.toastPhaseAdded').replace('{level}', topLevelLabel) }); router.refresh() }
+    if (res.ok) {
+      setAddPhase(null)
+      setToast(sameName
+        ? { kind: 'warn', msg: t('wbs.toastPhaseAddedSameName').replace('{level}', topLevelLabel) }
+        : { kind: 'ok', msg: t('wbs.toastPhaseAdded').replace('{level}', topLevelLabel) })
+      router.refresh()
+    }
     else setToast({ kind: 'err', msg: wbsToastText(t, res.error, 'wbs.toastAddFail') })
   }
 

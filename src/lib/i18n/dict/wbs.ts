@@ -72,6 +72,7 @@ export const wbsKo = {
   'wbs.stageXxNeedsApproval': '승인 단계가 둘 이상이라 완료는 검수 대기에서 단계 승인으로만 됩니다.',
   'wbs.actualLocked': '완료는 승인 버튼으로 처리합니다 — 에이전트 관할 작업(위임됨·작업 중·검수 대기)은 99% 까지 입력할 수 있습니다. 직접 완료하려면 위임을 끄세요.',
   'wbs.toastPhaseAdded': '{level} 항목을 추가했습니다',
+  'wbs.toastPhaseAddedSameName': '{level} 항목을 추가했습니다. 같은 이름의 항목이 이미 있습니다 — 중복이면 하나를 지우세요.',
   'wbs.toastAddFail': '추가 실패',
   'wbs.focusNotFound': '이동하려는 작업을 찾을 수 없습니다 (삭제되었거나 목록이 바뀌었습니다)',
   // 컬럼 헤더

@@ -62,8 +62,10 @@ function fromRecord(r: Record<string, unknown>): WeeklySheetRow {
 
 export function WeeklySheetView({
   projectId, weekStart, prevWeek, nextWeek, weekLabel, weekTitle, thisRange, nextRange, projectName,
-  report, areas, initialRows, hasCarrySource, me, canEditCells, canCreateRound,
+  report, areas, initialRows, hasCarrySource, me, canEditCells, canCreateRound, outOfProjectPeriod = false,
 }: {
+  /** 이 주차가 프로젝트 기간 밖인지 — 빈 시트 안내에 경고 한 줄을 단다 */
+  outOfProjectPeriod?: boolean
   projectId: string
   weekStart: string
   /** 이전·다음 주 키 — 서버가 프로젝트 규칙의 키 함수로 계산한다(과도기 주 6·8일, D35). 클라이언트는 ±7일로 다시 계산하지 않는다 */
@@ -837,6 +839,9 @@ export function WeeklySheetView({
                 ? t('weekly.empty.detailAdmin').replace('{n}', String(activeAreaNames.length)).replace('{names}', () => activeAreaNames.join('·'))
                 : t('weekly.empty.detailMember')}
             />
+            {canCreateRound && outOfProjectPeriod && (
+              <p role="note" className="rounded-lg bg-pending-weak px-3 py-2 text-xs font-medium text-warning">{t('weekly.empty.outOfPeriod')}</p>
+            )}
             {canCreateRound && (
               <div className="flex gap-2">
                 {hasCarrySource && (

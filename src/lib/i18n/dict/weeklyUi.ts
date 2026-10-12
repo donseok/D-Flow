@@ -94,6 +94,7 @@ export const weeklyUiKo = {
   'weekly.empty.detailMember': '아직 이 주차의 시트가 만들어지지 않았습니다. 주차 시트 생성은 프로젝트 관리자가 합니다.',
   'weekly.empty.startCarry': '이전 주차에서 이월해 시작',
   'weekly.empty.startBlank': '기본 시트로 시작',
+  'weekly.empty.outOfPeriod': '이 주차는 프로젝트 기간 밖입니다. 만든 시트는 지울 수 없으니 주차를 다시 확인하세요.',
   'weekly.noRows.title': '{week} 시트에 업무영역 행이 없습니다',
   'weekly.noRows.detailAdmin': '프로젝트 설정의 팀·업무영역에서 활성 영역을 저장하면 이번 주 이후 시트에 행이 생깁니다.',
   'weekly.noRows.detailMember': '프로젝트 관리자가 업무영역에서 활성 영역을 저장하면 이번 주 이후 시트에 행이 생깁니다.',

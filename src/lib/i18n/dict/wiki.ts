@@ -98,7 +98,10 @@ export const wikiKo = {
   'wiki.pane.source': '원문',
 
   // 슈퍼유저 전용 색인 수동 갱신 스트립 — 자동 배치(크론) 제거 후 필요할 때만 누르는 버튼.
-  'wiki.reindex.button': '색인 갱신',
+  'wiki.reindex.button': '전체 색인 갱신',
+  'wiki.reindex.confirmTitle': '전체 색인 갱신',
+  'wiki.reindex.confirmDesc': '이 프로젝트만이 아니라 모든 프로젝트의 회의록·이슈·WBS·공지·주간업무를 다시 색인합니다. 문서가 많으면 오래 걸리고 임베딩 호출 비용이 듭니다. 도중에 중지할 수 있습니다.',
+  'wiki.reindex.confirmRun': '갱신 시작',
   'wiki.reindex.stop': '중지',
   'wiki.reindex.running': '색인 중… 처리 {n}건',
   'wiki.reindex.repairing': '임베딩 채우는 중… {a}/{b}',

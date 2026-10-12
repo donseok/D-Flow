@@ -48,8 +48,11 @@ describe('WikiReindexButton', () => {
   }
 
   async function clickButton() {
+    // 버튼은 범위(모든 프로젝트)를 적은 확인 모달을 먼저 띄운다(2026-10-12 UAT WIKI-09) — 확인까지 눌러야 갱신이 시작된다
+    await act(async () => { container.querySelector<HTMLButtonElement>('button')!.click() })
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('button')!.click()
+      const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(b => b.textContent === '갱신 시작')!
+      confirm.click()
       // enqueue→step(들)→repair(들) 체인이 실제 setTimeout(300ms) 간격을 두므로
       // 넉넉히 흘려보낸다.
       await new Promise(resolve => setTimeout(resolve, 50))

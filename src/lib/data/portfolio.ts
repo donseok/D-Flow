@@ -41,10 +41,13 @@ export async function getPortfolioInputs(workspaceId: string, realToday: string)
   // PM(리더) = 명단의 프로젝트 관리자(access_role='admin', 활성 행·활성 인물 — 권한 축과 같다) — IN 한 방(getProjectsCompletion 선례).
   // 이름은 people 이 정본이라 임베드로 읽고, 정렬은 DB collation 대신 가나다순(compareKoreanName)으로 한다.
   // 표시 전용이라 실패해도 throw 하지 않지만, '리더 없음'으로 위장하지 않도록 플래그로 신호한다.
+  // 리더·스냅샷·프로젝트별 WBS 는 서로 기다릴 이유가 없다 — 셋을 동시에 띄워 한 번에 기다린다(2026-10-12 UAT PRF-01: 줄 세워 읽어
+  // 프로젝트 2건에 3초가 걸렸다). 결과를 합치는 일은 셋이 모두 끝난 뒤에 한다.
   const sb = await createServerClient()
   let leadersDegraded = false
   const leadersByProject = new Map<string, string[]>()
-  if (ids.length) {
+  const loadLeaders = async () => {
+    if (!ids.length) return
     const { data, error } = await sb
       .from('project_members')
       .select('project_id, people!inner(display_name, active)')
@@ -71,7 +74,8 @@ export async function getPortfolioInputs(workspaceId: string, realToday: string)
   // (getComputedWbs 의 item_owners 와 같은 꼴 — 계획 P15). 실패·잘림·읽는 사이 변경은 로그만: 추세 화살표·지연 추세 신호가 비표기될 뿐
   // 합성되지 않는다(getSnapshots 의 '조용한 거짓 차트 금지' 관례와 같은 결). 일부만 읽은 행은 쓰지 않는다.
   const snapshotsByProject = new Map<string, SnapshotPoint[]>()
-  if (ids.length) {
+  const loadSnapshots = async () => {
+    if (!ids.length) return
     type SnapRow = { project_id: string; snap_date: string; actual_pct: unknown; planned_pct: unknown }
     const since = addDaysCal(realToday, -SNAPSHOT_WINDOW_DAYS)
     try {
@@ -94,9 +98,20 @@ export async function getPortfolioInputs(workspaceId: string, realToday: string)
     }
   }
 
-  const inputs = await Promise.all(projects.map(async (p): Promise<PortfolioProjectInput> => {
+  // 팀과 WBS 를 함께 격리한다(SP4 A2 P19) — 팀 읽기가 try 밖이면 한 프로젝트의 실패로 전사 화면이 멈춘다. 팀은 getComputedWbs 안의
+  // 팀 읽기와 같은 요청 캐시 키(projectTeams(pid) — 클라이언트 인자 없음)라 왕복이 늘지 않는다.
+  const loadWbs = (p: (typeof projects)[number]) =>
+    Promise.all([projectTeams(p.id), getComputedWbs(p.id)])
+      .then(([teams, wbs]) => ({ teams: activeCodes(teams), today: wbs.today, items: wbs.items, milestoneKeywords: portfolioMilestoneKeywords() }))
+      .catch((e: unknown) => {
+        console.error(`[portfolio] 프로젝트 로드 실패 — 행을 degraded 로 표시: ${p.name}(${p.id})`, e)
+        return { teams: [] as string[], today: realToday, items: null, milestoneKeywords: [] as readonly string[] }
+      })
+  const [loaded] = await Promise.all([Promise.all(projects.map(loadWbs)), loadLeaders(), loadSnapshots()])
+
+  const inputs = projects.map((p, i): PortfolioProjectInput => {
     const row = p as typeof p & { base_date?: string | null; is_private?: boolean }
-    const base = {
+    return {
       projectId: p.id, name: p.name,
       isPrivate: row.is_private === true,
       startDate: p.start_date ?? null, endDate: p.end_date ?? null,
@@ -104,17 +119,9 @@ export async function getPortfolioInputs(workspaceId: string, realToday: string)
       leaders: leadersByProject.get(p.id) ?? [],
       snapshots: snapshotsByProject.get(p.id) ?? [],
       realToday,
+      ...loaded[i],
     }
-    // 팀과 WBS 를 함께 격리한다(SP4 A2 P19) — 팀 읽기가 try 밖이면 한 프로젝트의 실패로 전사 화면이 멈춘다. 팀은 getComputedWbs 안의
-    // 팀 읽기와 같은 요청 캐시 키(projectTeams(pid) — 클라이언트 인자 없음)라 왕복이 늘지 않는다.
-    try {
-      const [teams, wbs] = await Promise.all([projectTeams(p.id), getComputedWbs(p.id)])
-      return { ...base, teams: activeCodes(teams), today: wbs.today, items: wbs.items, milestoneKeywords: portfolioMilestoneKeywords() }
-    } catch (e) {
-      console.error(`[portfolio] 프로젝트 로드 실패 — 행을 degraded 로 표시: ${p.name}(${p.id})`, e)
-      return { ...base, teams: [], today: realToday, items: null, milestoneKeywords: [] }
-    }
-  }))
+  })
 
   return { inputs, leadersDegraded, listDegraded }
 }

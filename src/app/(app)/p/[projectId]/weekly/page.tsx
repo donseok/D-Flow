@@ -61,6 +61,10 @@ export default async function WeeklyPage({
     hasCarryOverSource(projectId, weekStart),
   ])
   const areas = pc.cfg.areas.weekly_section
+  // 이 주차가 프로젝트 기간과 겹치지 않는지 — 빈 시트 안내에서 만들기 전에 알린다(막지는 않는다: 착수 전 준비·종료 뒤 정리 주차가 있다)(2026-10-12 UAT WK-07)
+  const period = projects.find(p => p.id === projectId)
+  const nextKey = nextWeekKey(cal.weekStart, weekStart)
+  const weekOutsideProject = !!period && ((!!period.end_date && weekStart > period.end_date) || (!!period.start_date && nextKey <= period.start_date))
   const customFields = pick(pc.cfg, 'fields.weekly_row')
 
   return (
@@ -90,6 +94,7 @@ export default async function WeeklyPage({
           me={me}
           canEditCells={isProjectMember(actor, projectId)}
           canCreateRound={isProjectAdmin(actor, projectId)}
+          outOfProjectPeriod={weekOutsideProject}
         />
       </CustomFieldsProvider>
     </ProjectPageShell>

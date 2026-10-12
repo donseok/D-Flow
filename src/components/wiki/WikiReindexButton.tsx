@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { t} from '@/lib/i18n/dict'
+import { Modal } from '@/components/ui/Modal'
 
 type ReindexAction = 'status' | 'enqueue' | 'step' | 'repair'
 
@@ -55,6 +56,7 @@ async function callReindex<T>(action: ReindexAction): Promise<{ ok: true; data: 
 export function WikiReindexButton() {
   const [status, setStatus] = useState<StatusResult | null>(null)
   const [run, setRun] = useState<RunState>({ kind: 'idle' })
+  const [confirming, setConfirming] = useState(false)
   const stopRef = useRef(false)
 
   async function refreshStatus(): Promise<StatusResult | null> {
@@ -151,7 +153,7 @@ export function WikiReindexButton() {
 
       <button
         type="button"
-        onClick={() => void runReindex()}
+        onClick={() => setConfirming(true)}
         disabled={running}
         className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-subtle px-2.5 text-xs text-fg-secondary transition hover:bg-surface-hover hover:text-fg disabled:opacity-50"
       >
@@ -167,6 +169,21 @@ export function WikiReindexButton() {
           {t('wiki.reindex.stop')}
         </button>
       )}
+      {/* 프로젝트 화면의 버튼이지만 범위는 모든 프로젝트다 — 누르기 전에 범위를 적어 묻는다(2026-10-12 UAT WIKI-09) */}
+      <Modal
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        size="sm"
+        title={t('wiki.reindex.confirmTitle')}
+        footer={
+          <>
+            <button type="button" className="btn btn-ghost" onClick={() => setConfirming(false)}>{t('common.cancel')}</button>
+            <button type="button" className="btn btn-primary" onClick={() => { setConfirming(false); void runReindex() }}>{t('wiki.reindex.confirmRun')}</button>
+          </>
+        }
+      >
+        <p className="text-sm leading-6 text-fg-secondary">{t('wiki.reindex.confirmDesc')}</p>
+      </Modal>
     </div>
   )
 }
