@@ -15,7 +15,9 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`a
 
 ## 개발 환경 — 로컬 우선
 
-원격 스테이징·운영 Supabase·Vercel 은 아직 없다(첫 배포 SP 에서 생성). 개발·검증은 로컬 Supabase(Docker)로 완결한다.
+운영 원격은 2026-10-14 첫 배포로 생겼다 — Vercel 프로젝트 `d-flow`(https://d-flow-eight.vercel.app, GitHub 연결 — `main` push 가 곧 운영 배포)와
+Supabase `dflow-prod`(ref `aivjcfoeshnhqdrfteyq`, 무료 플랜). 좌표·환경변수·적용 때 겪은 함정은 `docs/runbook-staging.md` §5.
+원격 스테이징은 없다 — 개발·검증은 여전히 로컬 Supabase(Docker)로 완결하고, 운영 DB 를 개발 대상으로 쓰지 않는다.
 
 - 전제: Docker 런타임(Docker Desktop 또는 colima)이 실행 중이어야 한다. `supabase` CLI 설치를 확인한다 — 검증한 버전은 2.75 다.
 - `supabase/config.toml` 에서 analytics 를 껐다(colima 호환 — 로그 수집기가 colima 에서 docker 소켓을 마운트하지 못한다).
@@ -50,19 +52,20 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`a
   (2026-07-27 사고 때 vitest 2438건이 전부 통과했다). Vercel Preview 에서 눈으로 봐야 한다.
   ```bash
   git switch -c ui/<주제>
-  git push -u origin HEAD      # 사람 확인 후 push. Preview URL 에서 화면 확인(원격 Preview 가 생긴 뒤 기준)
+  git push -u origin HEAD      # 사람 확인 후 push. Preview URL 에서 화면 확인(Preview 환경변수가 생긴 뒤 기준)
   git switch main && git merge ui/<주제> && git push   # ff 머지도 괜찮다. 여기도 push 는 사람 확인 후
   ```
   pre-push 훅(G2)은 **"원격 어디에도 올라간 적 없는 UI 커밋"** 이 main 으로 가는 것만 막는다.
   브랜치로 한 번이라도 push 했다면 Preview 를 받은 것이므로 ff 머지든 `--no-ff` 든 통과한다
-  (이 문단은 원격 Preview 가 있는 이후 기준 — 지금은 바로 아래 ⚠️ 참고).
+  (이 문단은 쓸 수 있는 Preview 가 있는 이후 기준 — 지금은 바로 아래 ⚠️ 참고).
 
-  ⚠️ **지금은 원격 Preview 가 없다** — Vercel 프로젝트가 아직 없어 push 해도 눈으로 확인할 URL 이 생기지 않는다.
-  눈확인은 로컬 `npm run dev` 로 하고, 트레일러는 `Preview-checked: local <YYYY-MM-DD HH:MM> — <확인 화면>` 을 남긴다.
-  (원격 Preview 가 생기면 원래 규칙으로 복귀한다.)
+  ⚠️ **지금은 쓸 수 있는 Preview 가 없다** — Vercel 프로젝트는 생겼지만(2026-10-14) 환경변수를 Production 에만 넣어서, 브랜치 push 로 생기는
+  Preview 배포에는 Supabase 좌표가 없다(Preview 가 운영 DB 를 보게 할지 미결정). 눈확인은 로컬 `npm run dev` 로 하고,
+  트레일러는 `Preview-checked: local <YYYY-MM-DD HH:MM> — <확인 화면>` 을 남긴다. (Preview 환경이 정해지면 원래 규칙으로 복귀한다.)
 
 - 마이그레이션 리허설: 로컬 `npm run db:reset` 초록 → 트레일러 `Staging-verified: local db reset <일시>`(G4).
-- `git push --force origin main` 금지. push 는 사람 확인 후.
+- `git push --force origin main` 금지. push 는 사람 확인 후. **`main` push 는 운영 배포다** — 마이그레이션이 든 push 는
+  운영 DB 에 먼저 적용하고(`npm run db:apply … --target prod`) 올린다. 코드가 먼저 나가면 운영이 없는 스키마를 찾는다.
 
 ### pre-push 훅
 
@@ -79,11 +82,11 @@ wbs-web 의 Supabase `rglfgrwwwwdqejohdnty`(원본 운영, 고객 데이터)·`a
 검사 대상은 **이번 push 로 원격에 처음 올라가는 커밋**(`--not --remotes`)뿐이다. 브랜치에 `origin/main` 을 머지해도 남의 커밋이 검사에 끌려들어오지 않는다.
 
 빌드/테스트는 이 훅이 돌리지 않는다. GitHub Actions(`.github/workflows/ci.yml`)가 push/PR 뒤에 lint·test·build 와
-db 기준선 대조를 돌리지만 사후 검사라 push 를 막지는 못한다(원격 Vercel 은 아직 없다). push 전에 `npm run lint`·
+db 기준선 대조를 돌리지만 사후 검사라 push 를 막지는 못한다(Vercel 은 Actions 결과를 기다리지 않고 `main` 을 바로 배포한다). push 전에 `npm run lint`·
 `npm run test`·`npm run build` 를 직접 돌리고, push 뒤 Actions 결과를 확인한다.
 긴급 우회는 `SKIP_GUARD=1 git push`(G5 는 예외). (SP0 의 첫 push 는 squash 루트가 G1 에 걸려 SKIP_GUARD=1 과 1회성 강제 교체로
-올렸다 — docs/fork-policy.md. 그 뒤로는 `main` force push 금지가 그대로다.) (`smoke:prod` 로 배포 후 재확인하는 절차는 첫 배포
-이후에나 쓸 수 있다.)
+올렸다 — docs/fork-policy.md. 그 뒤로는 `main` force push 금지가 그대로다.) (배포 뒤에는 `SMOKE_URL=https://d-flow-eight.vercel.app npm run smoke:prod`
+로 재확인한다.)
 
 ---
 
@@ -105,7 +108,8 @@ unlayered 규칙은 특이성과 무관하게 모든 named layer 를 이긴다. 
 ## 데이터
 
 - 새 마이그레이션에는 `supabase/rollbacks/NNNN_<이름>_rollback.sql` 을 함께 만든다(`supabase/migrations/` 에 두면 CLI 가 같이 적용한다).
-- `supabase db push` 는 쓰지 않는다. 원격 적용은 `npm run db:apply -- <파일> --target staging|prod`(원격이 생긴 뒤).
+- `supabase db push` 는 쓰지 않는다. 원격 적용은 `PROD_REF=aivjcfoeshnhqdrfteyq npm run db:apply -- <파일> --target prod`(파일 하나씩 — 스테이징은 아직 없다).
+  적용 뒤 `supabase_migrations.schema_migrations` 에 그 번호의 행을 넣는다(db:apply 는 이력을 남기지 않는다 — `docs/runbook-staging.md` §5).
 - 번호는 파일 단위로 유일(`tests/invariants/migration-files.test.ts`).
 - 테스트·리허설은 마이그레이션을 번호가 아니라 **접미로** 찾는다(`*_weekly_areas.sql` 꼴 — 머지 직전에 번호가 바뀌어도 rename 이 내용 변경 0 이
   되게). 리허설 파일도 접미 이름(`supabase/rehearsal/<번호>_<이름>_*.sql`)이고 본문에 번호를 쓰지 않는다.
@@ -177,13 +181,13 @@ npm run db:start          # 로컬 Supabase 기동(Docker)
 npm run db:reset          # 기준선+마이그레이션+seed 재적용 — 스키마 변경 검증
 npm run env:local         # supabase status 결과로 .env.local 생성
 npm run dev:bootstrap     # 첫 슈퍼유저 생성(db:reset 뒤에도 다시)
-npm run remote:bootstrap -- --target staging|prod   # 원격 생긴 뒤. 빈 원격 DB 의 첫 플랫폼 관리자·첫 워크스페이스(이미 있으면 아무것도 안 함 — docs/runbook-selfhost.md)
+npm run remote:bootstrap -- --target staging|prod   # PROD_REF 필요. 빈 원격 DB 의 첫 플랫폼 관리자·첫 워크스페이스(이미 있으면 아무것도 안 함 — docs/runbook-selfhost.md)
 npm run settings:verify   # 로컬 DB 의 설정 값이 레지스트리를 통과하는지(리허설·체크포인트)
 npm run dev
 npm run build
 npm run lint
 npm run test
 npm run db:stop           # 로컬 Supabase 정지
-npm run smoke:prod        # 첫 배포 후. 프로덕션 스모크
-npm run mark:good         # 첫 배포 후. known-good 태그
+npm run smoke:prod        # SMOKE_URL=https://d-flow-eight.vercel.app 필요. 프로덕션 스모크
+npm run mark:good         # SMOKE_URL 필요. known-good 태그(아직 돌려 보지 않았다)
 ```

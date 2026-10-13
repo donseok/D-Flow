@@ -7,7 +7,8 @@
 
 ## 로컬 시작
 
-원격 스테이징·운영·Vercel 프로젝트는 아직 없다 — 개발·검증은 전부 로컬에서 완결한다. Docker
+운영은 Vercel(`d-flow`)과 Supabase(`dflow-prod`)에 배포돼 있다(2026-10-14, `docs/runbook-staging.md` §5). 원격 스테이징은
+없다 — 개발·검증은 전부 로컬에서 완결한다. Docker
 런타임(Docker Desktop 또는 colima)과 Supabase CLI가 필요하다.
 
 ```bash

@@ -1,9 +1,9 @@
 # 런북 — 롤백
 
-> **D-Flow 현황(2026-09-24)** — 원격 스테이징·운영·Vercel 프로젝트가 아직 없다(첫 배포 SP에서
-> 생성한다). 아래 본문 중 "프로덕션 배포" 관련 절차(Vercel Instant Rollback·`smoke:prod`·
-> `mark:good`)는 **원격이 생긴 뒤에나 실행 가능**하며, 지금 실행 가능한 것은 §1(로컬 DB
-> 롤백)뿐이다. 이 문서는 원본 리포의 원격 사고 기록이 아니라 D-Flow 자신의
+> **D-Flow 현황(2026-10-14)** — 운영 원격이 생겼다(Vercel `d-flow`·Supabase `dflow-prod`, 좌표는
+> `docs/runbook-staging.md` §5). 스테이징은 없다. 아래 "프로덕션 배포" 관련 절차 가운데 실제 운영에서 돌려 본 것은
+> `smoke:prod` 뿐이고(2026-10-14 통과), Vercel Instant Rollback·`mark:good`·원격 DB 롤백은 **아직 돌려 보지 않았다**.
+> 이 문서는 원본 리포의 원격 사고 기록이 아니라 D-Flow 자신의
 > 절차이고, 원본의 DB 좌표에는 접속하지 않는다(`CLAUDE.md` "원본 DB 금지",
 > `docs/fork-policy.md`).
 

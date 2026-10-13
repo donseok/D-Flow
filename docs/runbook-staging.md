@@ -1,16 +1,15 @@
 # 스테이징 운영 runbook
 
-> **D-Flow 현황(2026-09-24)** — 원격 스테이징·운영·Vercel 프로젝트가 아직 없다(첫 배포 SP에서
-> 생성한다). 아래는 **원본 리포의 원격 스테이징 기록이 아니라 D-Flow 자신의 절차**다.
-> 지금은 로컬 Supabase가 유일한 환경이므로, 마이그레이션 "스테이징 리허설"은 로컬
-> `npm run db:reset`으로 한다. 원본의 원격 DB(금지 ref 목록: `CLAUDE.md` "원본 DB 금지"·
+> **D-Flow 현황(2026-10-14)** — 운영 원격이 생겼다(Vercel `d-flow`·Supabase `dflow-prod` — §5). **원격 스테이징은
+> 여전히 없다.** 아래는 **원본 리포의 원격 스테이징 기록이 아니라 D-Flow 자신의 절차**다.
+> 마이그레이션 "스테이징 리허설"은 지금도 로컬 `npm run db:reset`으로 하고, 통과한 뒤 운영에 적용한다(§5). 원본의 원격 DB(금지 ref 목록: `CLAUDE.md` "원본 DB 금지"·
 > `scripts/lib/targets.mjs` FORBIDDEN_REFS)에는 접속하지 않는다(`docs/fork-policy.md`).
 
 ---
 
 ## 1. 지금의 "스테이징"은 로컬 Supabase다
 
-원격이 생기기 전까지는 빈 로컬 Postgres에 기준선부터 처음부터 재적용하는 것이 유일한
+원격 스테이징이 생기기 전까지는 빈 로컬 Postgres에 기준선부터 처음부터 재적용하는 것이 유일한
 리허설 수단이다.
 
 ```bash
@@ -40,9 +39,9 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 5. push는 사람 확인 후(`CLAUDE.md`) — G4 pre-push 훅이 이 트레일러(또는 범위 내 빈 커밋
    트레일러)를 요구한다.
 
-원격이 생긴 뒤에는 `npm run db:apply -- <파일> --target staging|prod`로 원격 적용 단계가
-추가된다(`scripts/db-apply.mjs`) — 지금은 `--target local`을 거부하고 원격 ref
-(`STAGING_REF`/`PROD_REF`)가 없으면 즉시 에러로 멈춘다(`scripts/lib/targets.mjs`).
+그 다음이 운영 적용이다 — `PROD_REF=<ref> npm run db:apply -- <파일> --target prod`(`scripts/db-apply.mjs`, 절차는 §5).
+`--target local`은 거부하고 원격 ref(`STAGING_REF`/`PROD_REF`)가 없으면 즉시 에러로 멈춘다(`scripts/lib/targets.mjs`).
+**`main` push 는 운영 배포이므로 운영 적용이 push 보다 먼저다.**
 
 ---
 
@@ -51,8 +50,8 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 - `npm run env:local` — `supabase status` 결과로 `.env.local`을 채운다. 지금은 사실상 이것만
   쓴다.
 - `npm run env:staging` / `npm run env:prod` — `.env.local.staging` / `.env.local.prod` 파일이
-  있어야 동작한다. **아직 아무도 만든 적이 없다** — 원격이 생기기 전까지 실행하면
-  "원격 staging은 아직 없다"는 에러로 실패한다(의도된 동작, `scripts/env-swap.mjs`).
+  있어야 동작한다. **아직 아무도 만든 적이 없다**(운영 원격이 생긴 뒤에도 — 로컬 dev 를 운영 DB 에 붙이지 않는다).
+  파일이 없으면 에러로 실패한다(의도된 동작, `scripts/env-swap.mjs`).
 - `npm run dev`의 predev 가드(`scripts/check-env-target.mjs`)는 `.env.local`이 원본 리포의
   DB 좌표를 가리키면 **우회 불가로 차단**한다 — 파일에 원본 ref가 섞여 들어오는 사고를 막기
   위함이다.
@@ -67,12 +66,49 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 
 ---
 
-## 5. 원격 인프라가 생긴 뒤
+## 5. 운영 원격 (2026-10-14 첫 배포)
 
-첫 배포 SP에서 Vercel·원격 Supabase(스테이징/운영)를 만들면, 이 문서는 그 실좌표·동기화
-절차(운영→스테이징 복제, `staging_reader` 역할, Vercel Ignored Build Step 등)로 다시 채운다.
-지금 그 절차의 옛 기록은 `docs/superpowers/**`에만 있고, 원본 리포의 기록일 뿐 이 리포의
-실행 절차가 아니다.
+| 항목 | 값 |
+|---|---|
+| Vercel | 팀 `leedonseoks-projects`(Hobby) · 프로젝트 `d-flow` · https://d-flow-eight.vercel.app · 리전 `icn1` |
+| 배포 | GitHub `donseok/D-Flow` 연결 — `main` push = 운영 배포, 그 밖의 브랜치 push = Preview 배포 |
+| Supabase | `dflow-prod` · ref `aivjcfoeshnhqdrfteyq` · 조직 `dflow-staging`(무료 플랜) · 서울 |
+| 스키마 | 기준선 + 0001~0058 (첫 배포 시점) |
+
+비밀값(DB 비밀번호·`CRON_SECRET`)은 리포에 없다 — 배포한 사람의 PC 와 Vercel 환경변수에만 있다.
+
+**Vercel 환경변수 — Production 에만 넣었다**: `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY`·`SUPABASE_SERVICE_ROLE_KEY`·`CRON_SECRET`.
+`APP_ENV` 는 `next.config.ts` 가 `VERCEL_ENV` 에서 옮긴다. AI 키·SMTP·초대 허용 도메인·기능 스위치(`.env.local.example`)는 넣지 않았다 — 그 기능들은 꺼져 있다.
+**Preview 에는 환경변수가 없다**(Preview 가 운영 DB 를 보게 할지 미결정) — 그래서 Preview 배포는 눈확인에 쓸 수 없고 `CLAUDE.md` 의 로컬 확인 규칙이 그대로다.
+
+**Supabase Auth**: Site URL·허용 리다이렉트를 운영 주소로 맞췄고(비밀번호 재설정 메일의 링크), 공개 가입(`disable_signup`)을 껐다 — 앱은 `signUp` 을 쓰지 않는다.
+
+**무료 플랜의 제약**: 7일 동안 접속이 없으면 프로젝트가 일시정지되고(대시보드에서 다시 켠다), 자동 백업이 없다(`docs/runbook-backup.md`).
+
+### 마이그레이션을 운영에 적용하는 순서
+
+1. 로컬 `npm run db:reset` 초록(§2).
+2. `PROD_REF=aivjcfoeshnhqdrfteyq npm run db:apply -- supabase/migrations/NNNN_이름.sql --target prod` — 파일 하나씩, 번호 순으로. 대상 ref 를 다시 입력받는다.
+3. 이력 기록 — db:apply 는 `supabase_migrations.schema_migrations` 를 쓰지 않는다. 첫 배포 때 이 표를 손으로 만들고 0000~0058 을 넣었다
+   (`version text primary key, statements text[], name text` — CLI 가 만드는 꼴). 새 번호도 같은 방법으로 넣는다(대시보드 SQL 편집기):
+   `insert into supabase_migrations.schema_migrations(version, name) values ('NNNN', '이름');`
+4. 그 뒤에 `main` 을 push 한다(push = 운영 배포).
+5. `SMOKE_URL=https://d-flow-eight.vercel.app npm run smoke:prod`.
+
+### 첫 배포 때 겪은 것 (새 원격을 만들 때 다시 만난다)
+
+- **`realtime.messages` 가 처음에는 없다.** 새 Supabase 프로젝트는 Realtime 에 누군가 한 번 접속해야 그 표를 만든다 — `0001_storage_realtime.sql` 이
+  42P01 로 멈춘다. anon 키로 채널을 하나 구독했다 끊은 뒤 다시 적용했다.
+- **`alter table realtime.messages enable row level security` 는 클라우드에서 42501**(표의 소유자가 `supabase_realtime_admin`)이다. 클라우드는 이미
+  RLS 가 켜져 있으므로(`pg_class.relrowsecurity` 로 확인) 그 한 줄을 뺀 사본으로 0001 을 적용했다. 리포의 파일은 그대로다(로컬 리셋에는 그 줄이 필요하다).
+- **`vercel deploy --prod` 는 쓸 수 없었다** — 작업 트리의 파일이 15000개 한도를 넘는다. 첫 배포는 Vercel API(`POST /v13/deployments` 의
+  `gitSource`)로 `main` 을 지정해 띄웠고, 그 뒤로는 push 가 배포한다.
+- **`vercel link` 는 `.env.local` 끝에 `VERCEL_OIDC_TOKEN` 을 덧붙인다.** 로컬 대상 판정(predev 가드)에는 영향이 없다.
+- 무료 플랜의 활성 프로젝트 한도(2개)는 조직별이 아니라 계정별이다.
+
+**아직 하지 않은 것**: 원격 스테이징, 운영→스테이징 복제, `mark:good`, 운영 대상 백업·복구 리허설, `docs/runbook-selfhost.md` 의
+"원격 호스팅 첫 배포 때 확인할 것"(로그인한 화면의 CSP 헤더·nonce — 계정이 생긴 뒤 확인). 원본 리포의 옛 절차 기록은
+`docs/superpowers/**`에만 있고 이 리포의 실행 절차가 아니다.
 
 원격 DB 에 마이그레이션을 적용한 직후에는 로그인할 계정이 없다. 첫 플랫폼 관리자와 첫 워크스페이스는
 `npm run remote:bootstrap -- --target staging`(운영은 `--target prod`)으로 만든다 — `STAGING_REF`/`PROD_REF` 로 대상을
@@ -86,7 +122,7 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 
 | 항목 | 문서 · 경로 |
 |---|---|
-| 프로덕션 롤백(원격 생긴 뒤) | `docs/runbook-rollback.md` |
+| 프로덕션 롤백 | `docs/runbook-rollback.md` |
 | 백업·복구 | `docs/runbook-backup.md` |
 | 첫 부트스트랩·헬스체크·오류 참조 ID | `docs/runbook-selfhost.md` |
 | 포크 정책·금지 DB ref | `docs/fork-policy.md` |
