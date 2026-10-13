@@ -91,6 +91,15 @@ describe('sortOccurrences', () => {
     const occ = expandMeetings(m, [], '2026-07-10', '2026-07-10')
     expect(sortOccurrences(occ).map(o => o.seriesId)).toEqual(['a', 'b', 'c'])
   })
+
+  it('같은 시각의 제목 순서는 실행 환경의 기본 로케일을 따르지 않는다 — 서버(en-US)와 브라우저(ko-KR)가 같은 순서여야 한다', () => {
+    const m = [
+      mtg('latin', '2026-07-10', { title: 'E2E 킥오프' }),
+      mtg('hangul', '2026-07-10', { title: '모바일 점검 주간 회의' }),
+    ]
+    const occ = expandMeetings(m, [], '2026-07-10', '2026-07-10')
+    expect(sortOccurrences(occ).map(o => o.seriesId)).toEqual(['hangul', 'latin'])
+  })
 })
 
 describe('occurrencesByDate', () => {

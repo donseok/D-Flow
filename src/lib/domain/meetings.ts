@@ -1,3 +1,4 @@
+import { KO_LOCALE } from '@/lib/i18n/format'
 import type { Meeting, MeetingException, MeetingOccurrence, MeetingRecurrence } from '@/lib/domain/types'
 import { addDaysIso } from './dates'
 import { compareKoreanName } from './nameSort'
@@ -114,7 +115,8 @@ export function sortOccurrences(occ: MeetingOccurrence[]): MeetingOccurrence[] {
     const aAll = a.startTime === null, bAll = b.startTime === null
     if (aAll !== bAll) return aAll ? -1 : 1
     if (a.startTime && b.startTime && a.startTime !== b.startTime) return a.startTime < b.startTime ? -1 : 1
-    return a.title.localeCompare(b.title)
+    // 로케일을 고정한다 — 비우면 서버(en-US)와 브라우저(ko-KR)의 순서가 달라 같은 시각의 회의가 하이드레이션에서 어긋난다(#418)
+    return a.title.localeCompare(b.title, KO_LOCALE)
   })
 }
 
