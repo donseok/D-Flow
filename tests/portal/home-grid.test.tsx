@@ -8,6 +8,7 @@ vi.mock('@/lib/prefs/debouncedSave', () => ({ postPrefsNow: h.save }))
 vi.mock('@/lib/portal/reload', () => ({ reloadPortalPage: h.reload }))
 vi.mock('@/components/providers/LocaleProvider', async () => (await import('../helpers/locale-mock')).koLocale())
 import { HomeGrid, type HomeGalleryItem, type HomeGridSlot } from '@/components/portal/HomeGrid'
+import { HomeEditButton } from '@/components/portal/HomeEditButton'
 import type { LayoutItem, PortalWidgetId, WidgetSize } from '@/lib/portal/widgets'
 
 const TITLE: Partial<Record<PortalWidgetId, string>> = { my_work: '내 업무', projects: '진행 중인 프로젝트', upcoming: '다가오는 회의', memo: '메모', due_work: '지연·임박 작업' }
@@ -16,7 +17,8 @@ const SLOTS = [slot('my_work', 'full'), slot('projects', 'full'), slot('upcoming
 const GALLERY: HomeGalleryItem[] = (['my_work', 'projects', 'upcoming', 'memo', 'due_work'] as const).map((id) => ({ id, title: TITLE[id]!, desc: `${TITLE[id]} 설명`, size: id === 'my_work' || id === 'projects' ? 'full' : 'half', isNew: id === 'due_work' }))
 const DEFAULTS: LayoutItem[] = [{ id: 'my_work', size: 'full' }, { id: 'projects', size: 'full' }, { id: 'upcoming', size: 'half' }]
 const mount = (over: Partial<Parameters<typeof HomeGrid>[0]> = {}) =>
-  render(<HomeGrid workspaceId="ws" slots={SLOTS} gallery={GALLERY} defaults={DEFAULTS} personal={false} canEdit {...over} />)
+  // '홈 구성' 버튼은 페이지 머리에 놓인다(HomeEditButton) — 화면처럼 격자와 함께 그린다
+  render(<><HomeEditButton canEdit={over.canEdit ?? true} /><HomeGrid workspaceId="ws" slots={SLOTS} gallery={GALLERY} defaults={DEFAULTS} personal={false} canEdit {...over} /></>)
 const btn = (name: string | RegExp) => screen.getByRole('button', { name }) as HTMLButtonElement
 const cells = () => [...document.querySelectorAll('[data-widget-cell]')].map((el) => `${el.getAttribute('data-widget-cell')}:${el.getAttribute('data-size')}`)
 const live = () => document.querySelector('[aria-live="polite"]')!.textContent

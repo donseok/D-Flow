@@ -1,12 +1,13 @@
 'use client'
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, GripVertical, LayoutGrid, Plus, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, GripVertical, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { IconButton } from '@/components/ui/IconButton'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { postPrefsNow } from '@/lib/prefs/debouncedSave'
 import { reloadPortalPage } from '@/lib/portal/reload'
+import { registerHomeOpener, setHomeEditing } from './HomeEditButton'
 import {
   dropLayoutItem, gridCells, moveLayoutItem, sameLayout, type LayoutItem, type PortalLayout, type PortalWidgetId, type WidgetSize,
 } from '@/lib/portal/widgets'
@@ -50,7 +51,8 @@ export function HomeGrid({ workspaceId, slots, gallery, defaults, personal, canE
   useEffect(() => {
     if (!focusKey) return
     // 공용 버튼은 ref 를 받지 않는다 — 자리 표식(data-fk)으로 찾는다. 키는 위젯 id(닫힌 목록)와 고정 낱말뿐이라 선택자에 그대로 쓴다
-    root.current?.querySelector<HTMLElement>(`[data-fk="${focusKey}"]`)?.focus()
+    // '홈 구성' 버튼은 격자 밖(페이지 머리)에 있다 — 격자 안에 없으면 문서에서 찾는다
+    ;(root.current?.querySelector<HTMLElement>(`[data-fk="${focusKey}"]`) ?? document.querySelector<HTMLElement>(`[data-fk="${focusKey}"]`))?.focus()
     setFocusKey(null)
   }, [focusKey, draft, editing, galleryOpen])
 
@@ -103,8 +105,11 @@ export function HomeGrid({ workspaceId, slots, gallery, defaults, personal, canE
     setDragId(null); setOverId(null)
   }
 
-  const open = () => { setDraft(initial); setUseDefault(false); setFailed(false); setGalleryOpen(false); setEditing(true); setLive(''); setFocusKey('add') }
-  const cancel = () => { setDraft(initial); setUseDefault(false); setFailed(false); setGalleryOpen(false); setEditing(false); setLive(t('portalUi.edit.liveCancelled')); setFocusKey('open') }
+  const open = () => { if (!canEdit) return; setDraft(initial); setUseDefault(false); setFailed(false); setGalleryOpen(false); setEditing(true); setHomeEditing(true); setLive(''); setFocusKey('add') }
+  const cancel = () => { setDraft(initial); setUseDefault(false); setFailed(false); setGalleryOpen(false); setEditing(false); setHomeEditing(false); setLive(t('portalUi.edit.liveCancelled')); setFocusKey('open') }
+  // 머리의 '홈 구성' 버튼(HomeEditButton)이 이 격자를 연다 — 여는 함수는 그릴 때마다 새 초안 기준이라 매번 다시 등록한다
+  useEffect(() => { registerHomeOpener(open); return () => registerHomeOpener(null) })
+  useEffect(() => () => setHomeEditing(false), [])
   const reset = () => { setDraft(defaults); setUseDefault(true); setFailed(false); setLive(t('portalUi.edit.liveReset')) }
   const save = async () => {
     if (saving || !dirty) return
@@ -119,11 +124,6 @@ export function HomeGrid({ workspaceId, slots, gallery, defaults, personal, canE
   if (!editing) {
     return (
       <div ref={root} data-home-grid>
-        {/* 격자의 도구 줄 — 요약과 격자 사이에 혼자 뜬 주 버튼처럼 보이지 않게 조용한 모양으로 격자에 붙인다 */}
-        <div className="-mt-2 mb-2 flex flex-wrap items-center justify-end gap-2">
-          <Button data-fk="open" data-home-edit variant="ghost" icon={<LayoutGrid className="h-4 w-4" aria-hidden />} disabled={!canEdit}
-            disabledReason={canEdit ? undefined : t('portalUi.edit.unavailable')} onClick={open}>{t('portalUi.edit.open')}</Button>
-        </div>
         <span role="status" className="sr-only">{live}</span>
         {slots.length === 0
           ? <StatusMessage kind="empty" title={t('portalUi.edit.empty')} detail={t('portalUi.edit.emptyHint')} />

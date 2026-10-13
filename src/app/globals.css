@@ -231,6 +231,16 @@ textarea {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 터치 기기의 입력칸 글자는 16px — iOS Safari 는 16px 미만 입력칸에 초점이 가면 화면을 확대하고 되돌리지 않는다(2026-10-13 모바일 점검).
+   칸마다 단 text-sm·text-meta 유틸(utilities 층)을 이겨야 하므로 @layer 밖에 둔다. 칸의 높이·여백은 그대로다 */
+@media (pointer: coarse) {
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']),
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
@@ -423,17 +433,18 @@ textarea {
     @apply bg-action-soft font-semibold text-action-hover hover:bg-action-soft hover:text-action-hover;
   }
 
-  /* 목록형 표(2026-10-10 디자인 정비) — <table> 에 단다. 머리줄은 옅은 표면 + 12px 600 보조 글자, 본문 줄은 44px, 숫자·날짜는 폭이 같은 숫자꼴.
+  /* 목록형 표(2026-10-10 디자인 정비) — <table> 에 단다. 머리줄은 옅은 표면 + 12px 600 본문 글자색(2026-10-13 — 보조 글자색은 작은 글자에서 흐려 보였다), 본문 줄은 44px, 숫자·날짜는 폭이 같은 숫자꼴.
      첫 칸의 왼쪽 여백은 머리줄 배경이 글자에 붙지 않게 하는 기본값이다 — 칸이 직접 단 px-*·pl-* 유틸이 이긴다(utilities 층).
      WBS 시트·간트·주간 시트처럼 밀도가 설계된 격자에는 달지 않는다 */
   .data-table {
     font-variant-numeric: tabular-nums;
   }
   .data-table > thead > tr {
-    @apply border-b border-border bg-surface-subtle text-left text-meta font-semibold text-fg-secondary;
+    @apply border-b border-border bg-surface-subtle text-left text-meta font-semibold text-fg;
   }
   .data-table > thead > tr > th {
-    @apply font-semibold;
+    /* 머리글은 꺾지 않는다 — 좁은 열에서 한 글자씩 세로로 떨어졌다(2026-10-13, 폰 폭의 명단 표 '이메일') */
+    @apply whitespace-nowrap font-semibold;
   }
   .data-table > tbody > tr {
     @apply h-11;

@@ -25,6 +25,7 @@ import { StatusMessage } from '@/components/ui/StatusMessage'
 import { PortalSummary } from '@/components/portal/PortalSummary'
 import { WidgetSlotView, safe, type HomeTab, type QuickLink, type WidgetCtx, type WidgetData } from '@/components/portal/PortalWidgets'
 import { HomeGrid } from '@/components/portal/HomeGrid'
+import { HomeEditButton } from '@/components/portal/HomeEditButton'
 
 /** 탭 제목 — 사전에서 꺼낸다('홈') */
 export async function generateMetadata() { return { title: t('nav.home') } }   // 레이아웃 템플릿이 ' · {워크스페이스} | {제품}' 을 붙인다(V6)
@@ -119,7 +120,7 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
   }
   const settingsAction = wsAdmin ? { label: t('pages.home.toSettings'), href: `${wsHref(ws.slug, 'settings')}#workspace-menu` } : undefined
   return (
-    <PageFrame width="portal" header={header}>
+    <PageFrame width="portal" header={<PageHeader title={t('nav.home')} meta={meta} primaryAction={<HomeEditButton canEdit={prefs !== null} />} />}>
       {!cfg.ok && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t('pages.home.widgetConfigFailed')} action={settingsAction} /></div>}
       {prefs === null && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t('pages.home.prefsFailed')} detail={t('pages.home.prefsFailedDetail')} /></div>}
       {mods.ok && mods.partial && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t('pages.home.modulesPartial')} /></div>}

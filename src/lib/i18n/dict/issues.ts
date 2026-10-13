@@ -1,7 +1,7 @@
 // issues 화면 사전 — 이 파일은 issues 영역 담당만 수정한다.
 // nav.issues 만 예외로 dict/common.ts 의 nav 블록에 있다(전 nav.* 키 집중 관례).
 export const issuesKo = {
-  'issue.heroTitleSuffix': '이슈관리',
+  'issue.heroTitleSuffix': '이슈',   // 메뉴 이름(nav.issues)과 같은 말
   'issue.board.scrollHint': '보드를 좌우로 밀어 나머지 상태 열을 확인하세요.',
   'issue.heroDesc': '프로젝트 리스크와 장애물을 담당자·기한과 함께 추적하고 해결까지 관리하세요.',
   'issue.projectFallback': '프로젝트',

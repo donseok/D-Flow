@@ -1,7 +1,7 @@
 export const meetingsKo = {
   'meet.heroTitleSuffix': '회의',
   'meet.heroDesc': '회의 일정과 참석자를 달력으로 관리합니다.',
-  'meet.myHeroTitle': '내 회의',
+  'meet.myHeroTitle': '회의 일정',   // 메뉴 이름(nav.myMeetings)과 같은 말
   'meet.myHeroDesc': '내가 주최하거나 참석하는 모든 프로젝트의 회의입니다.',
   'meet.kpi.today': '오늘',
   'meet.kpi.todaySub': '오늘 예정된 회의',
