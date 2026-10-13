@@ -342,8 +342,9 @@ export function MinutesView({
               placeholder={t('min.search.placeholder')}
               className="app-input h-9 w-full pl-8 sm:w-40" />
           </div>
-          <div data-minutes-toolbar-actions className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
-            <div className="flex shrink-0 items-center gap-1.5">
+          {/* max-w-full — 없으면 이 묶음이 한 줄 폭으로 버텨 폰에서 오른쪽 버튼('리스트'·'등록')이 화면 밖으로 잘린다 */}
+          <div data-minutes-toolbar-actions className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5">
+            <div className="flex max-w-full flex-wrap items-center gap-1.5">
               <SegmentedTabs<ViewKey>
                 tabs={[{ key: 'tree', label: t('min.view.tree'), icon: ListTree },
                        { key: 'calendar', label: t('min.view.calendar'), icon: CalendarDays }]}

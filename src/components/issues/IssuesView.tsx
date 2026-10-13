@@ -326,7 +326,7 @@ export function IssuesView({
         <button
           onClick={() => { setMineOnly(v => !v); setPage(1) }}
           aria-pressed={mineOnly}
-          className={`chip cursor-pointer border transition ${mineOnly ? 'border-action bg-action-soft text-action font-semibold' : 'border-border bg-surface text-fg-secondary hover:text-fg hover:border-border-input'}`}
+          className={`inline-flex h-9 cursor-pointer items-center rounded-(--radius-control) border px-3 text-xs transition ${mineOnly ? 'border-action bg-action-soft text-action font-semibold' : 'border-border bg-surface text-fg-secondary hover:text-fg hover:border-border-input'}`}
         >
           {t('issue.filter.mine')}
         </button>
