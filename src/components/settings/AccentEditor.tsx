@@ -85,7 +85,7 @@ export function AccentEditor({ workspaceId, revision, initialAccent, invalidReas
       <label htmlFor="workspace-accent" className="text-sm text-fg">{t('settings.accent.base')}</label>
       <input id="workspace-accent" className="app-input w-32 font-mono text-sm" value={draft ?? ''} placeholder={ACCENT_TOKENS.light.action} maxLength={7}
         disabled={pending || !!uncertainPatch} onChange={event => setDraft(event.target.value || null)} />
-      <input type="color" aria-label={t('settings.accent.pick')} value={/^#[0-9a-fA-F]{6}$/.test(draft ?? '') ? draft! : ACCENT_TOKENS.light.action}
+      <input type="color" className="h-9 w-10 shrink-0 cursor-pointer rounded-lg border border-border bg-surface p-1 disabled:cursor-not-allowed disabled:opacity-60" aria-label={t('settings.accent.pick')} value={/^#[0-9a-fA-F]{6}$/.test(draft ?? '') ? draft! : ACCENT_TOKENS.light.action}
         disabled={pending || !!uncertainPatch} onChange={event => setDraft(event.target.value)} />
       <button type="button" className="btn btn-ghost" disabled={pending || !!uncertainPatch || draft === null}
         onClick={() => setDraft(null)}>{t('settings.accent.reset')}</button>

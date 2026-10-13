@@ -1,6 +1,5 @@
 // 전사 포트폴리오 화면 사전.
 export const portfolioKo = {
-  'pf.title': '전사 포트폴리오',
   'pf.listDegraded': '프로젝트 목록 조회에 실패했습니다 — 아래 표가 불완전할 수 있습니다. 서버 로그를 확인하세요.',
   'pf.kpi.projects': '프로젝트',
   'pf.kpi.signals': '신호 분포',

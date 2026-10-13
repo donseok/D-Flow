@@ -149,7 +149,6 @@ export function WorkspaceFieldsEditor({ workspaceId, revision, fields }: {
           <input id={`workspace-${field.key}`} className="app-input w-full text-sm" value={String(draft[field.key])}
             disabled={pending || !!uncertainPatch} onChange={e => edit(field.key, e.target.value)} />}
       {fieldErrors[field.key] && <ConfigStateNotice kind="field" message={fieldErrors[field.key]} />}
-      <p className="text-meta text-fg-muted">{field.key}</p>
     </div>)}
     {conflict && <ConflictCompare rows={changed.map(f => ({ key: f.key, label: f.label,
       mine: String(draft[f.key]), latest: conflict.invalidKeys.includes(f.key) ? t('settings.notify.policy.corrupted') : String(inputValue(f, conflict.values[f.key])),

@@ -4,7 +4,7 @@
 export const dashboardKo = {
   // 히어로(page.tsx)
   'dash.heroProjectFallback': '프로젝트',
-  'dash.heroTitleSuffix': ' 운영 현황',
+  'dash.heroTitleSuffix': ' 개요',   // 메뉴 이름(nav.dashboard)과 같은 말
   // 단위/공통 접미사
   'dash.unitCount': '건',
   'dash.unitDays': '일',

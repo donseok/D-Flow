@@ -49,7 +49,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
 
   return (
     <div className="space-y-6 pb-10">
-      <PageHeader title={t('pf.title')} />
+      <PageHeader title={t('nav.portfolio')} />
       {listDegraded && (
         <div className="rounded-xl border border-danger/40 bg-danger-weak px-4 py-3 text-xs font-medium text-danger">
           {t('pf.listDegraded')}
