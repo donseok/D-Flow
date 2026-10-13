@@ -14,11 +14,11 @@ interface Row { item: ComputedItem; kind: Kind; overdue: number; dday: number; g
 // 임박 배지 문구 — D-0은 '오늘 마감', 그 외 'D-N 임박'. (지연·뒤처짐은 각자 우측 텍스트를 따로 씀)
 const ddayText = (n: number, tr: (k: DictKey) => string) => (n <= 0 ? tr('dash.issues.dueToday') : `D-${n}${tr('dash.issues.ddaySuffix')}`)
 
-// 행 스타일 — 지연=빨강 틴트, 임박=주황 틴트로 카드 안에서 즉시 구분. 뒤처짐은 기본 라인.
-const ROW_META: Record<Kind, { border: string; icon: string }> = {
-  overdue: { border: 'border-danger/40', icon: 'text-danger' },
-  dueSoon: { border: 'border-warning/40', icon: 'text-warning' },
-  behind: { border: 'border-border', icon: 'text-warning' },
+// 행 스타일 — 지연=빨강·임박/뒤처짐=주황 아이콘으로 구분한다. 행마다 테두리 상자를 두르지 않는다(카드 안의 카드 — 구분선으로 나눈다).
+const ROW_META: Record<Kind, { icon: string }> = {
+  overdue: { icon: 'text-danger' },
+  dueSoon: { icon: 'text-warning' },
+  behind: { icon: 'text-warning' },
 }
 
 /** 실행 가능한 리스크 목록 — 요약 타일의 숫자를 실제 WBS 작업으로 연결한다.
@@ -53,14 +53,14 @@ export function RiskWorklist({ items, projectId, today, thresholds = DEFAULT_DAS
     <SectionCard title={tr('dash.risk.title')} icon={AlertTriangle}
       actions={<span className="chip bg-danger-weak text-danger">{tr('dash.risk.badge').replace('{delayed}', String(risk.delayed)).replace('{dueSoon}', String(risk.dueSoon))}</span>}>
       {rows.length === 0 ? <p className="text-sm text-fg-secondary">{tr('dash.risk.empty')}</p> : (
-        <div className="space-y-2">
+        <div className="-my-1 divide-y divide-border">
           {rows.map(({ item, kind, overdue, dday, gap }) => {
             const meta = ROW_META[kind]
             const detail = kind === 'overdue' ? `${overdue}${tr('dash.overdueSuffix')}` : kind === 'behind' ? tr('dash.risk.behind').replace('{n}', String(Math.round(gap))) : null
             const aria = kind === 'dueSoon' ? tr('dash.risk.ariaDueSoon').replace('{dday}', ddayText(dday, tr)).replace('{name}', () => item.name) : `${item.name}, ${detail}`
             return (
               <Link key={item.id} href={`/p/${projectId}/wbs?focus=${item.id}`} aria-label={aria}
-                className={`flex items-center gap-3 rounded-xl border ${meta.border} px-3 py-2.5 hover:bg-surface-subtle`}>
+                className={`flex items-center gap-3 rounded-lg px-1 py-2.5 hover:bg-surface-subtle`}>
                 <CalendarClock className={`h-4 w-4 shrink-0 ${meta.icon}`} />
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{item.name}</span>
                 {kind === 'dueSoon'

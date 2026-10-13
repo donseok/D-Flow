@@ -448,7 +448,7 @@ export function WikiChangeList({
         return (
           <li key={change.id} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 py-3 first:pt-0 last:pb-0">
             <span className={`relative z-10 mt-1.5 h-[15px] w-[15px] rounded-full border-[4px] border-surface ${tone.dot}`} />
-            <div className="min-w-0 rounded-xl border border-border/70 bg-surface-subtle/60 px-3.5 py-3">
+            <div className="min-w-0 rounded-xl bg-surface-subtle px-3.5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className={`chip ${tone.badge}`}>
                   <Icon className="h-3 w-3" />

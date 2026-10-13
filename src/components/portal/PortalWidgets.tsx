@@ -106,7 +106,7 @@ export function WidgetSlotView({ slot, ctx }: { slot: Pick<WidgetSlot, 'id' | 's
       const tab = (key: HomeTab, label: string) => <Link key={key} href={wsHref(ctx.slug, '', { tab: key })} aria-current={ctx.tab === key ? 'page' : undefined}
         className={`chip ${ctx.tab === key ? 'bg-surface-selected text-fg' : 'text-fg-secondary hover:bg-surface-hover'}`}>{label}</Link>
       const tabs = <nav aria-label={t('portalUi.widget.workTabsAria')} className="flex gap-1">{tab('all', t('portalUi.widget.tabAll'))}{tab('mine', t('portalUi.widget.tabMine'))}{ctx.reviewTab && tab('review', t('portalUi.widget.tabReview'))}</nav>
-      return frame(wrap(<Body p={d.my_work} empty="" selfEmpty>{(r) => <MyWorkList rows={r.rows} failedKinds={r.failedKinds} empty={t('portalUi.widget.workEmpty')} />}</Body>),
+      return frame(wrap(<Body p={d.my_work} empty="" selfEmpty>{(r) => <MyWorkList bare rows={r.rows} failedKinds={r.failedKinds} empty={t('portalUi.widget.workEmpty')} />}</Body>),
         { tabs, more: { href: wsHref(ctx.slug, 'my-work'), label: t('portalUi.widget.workMore') } })
     }
     case 'projects':
@@ -121,7 +121,7 @@ export function WidgetSlotView({ slot, ctx }: { slot: Pick<WidgetSlot, 'id' | 's
           </Link></li>)}</ul>}</Body>), { more: { href: wsHref(ctx.slug, 'projects'), label: t('common.viewAll') } })
     case 'review':
       if (!d.review) return null
-      return frame(wrap(<Body p={d.review} empty={t('portalUi.widget.reviewEmpty')}>{(r) => <MyWorkList rows={r.rows} failedKinds={[]} empty="" />}</Body>),
+      return frame(wrap(<Body p={d.review} empty={t('portalUi.widget.reviewEmpty')}>{(r) => <MyWorkList bare rows={r.rows} failedKinds={[]} empty="" />}</Body>),
         { more: { href: wsHref(ctx.slug, 'my-work', { kind: 'approval' }), label: t('portalUi.widget.reviewMore') } })
     case 'upcoming':
       if (!d.upcoming) return null

@@ -76,15 +76,16 @@ export default function Login() {
             <Sparkles className="h-3.5 w-3.5 text-action" aria-hidden />
             {t('login.pill')}
           </div>
-          <p className="mt-6 text-center text-[clamp(2rem,3.6vw,3rem)] font-semibold leading-tight text-fg">{BRAND.tagline}</p>
+          <p className="mt-6 text-center text-title text-fg">{BRAND.tagline}</p>
           <p className="mx-auto mt-5 max-w-sm text-center text-body text-fg-secondary">
             {t('login.intro1')}
             <br />
             {t('login.intro2')}
           </p>
-          <div className="mx-auto mt-10 grid max-w-sm grid-cols-3 gap-4">
+          {/* 설명일 뿐 누르는 것이 아니다 — 카드 모양(테두리·배경)을 주지 않고 세로 선으로만 나눈다 */}
+          <div className="mx-auto mt-10 grid max-w-sm grid-cols-3 divide-x divide-border border-t border-border pt-6">
             {FEATURES.map(f => (
-              <div key={f.title} className="rounded-(--radius-panel) border border-border bg-surface-subtle p-4 text-center">
+              <div key={f.title} className="px-3 text-center">
                 <p className="text-section text-fg">{t(f.title)}</p>
                 <p className="mt-1 text-meta text-fg-secondary">{t(f.sub)}</p>
               </div>
@@ -99,7 +100,7 @@ export default function Login() {
         <div className="w-full max-w-md">
           <div className="mb-8 flex flex-col items-center gap-3 text-center lg:items-start lg:text-left">
             <span className="lg:hidden"><BrandGlyph size={56} /></span>
-            <h1 className="text-title text-fg">{BRAND.productName}</h1>
+            <h1 className="text-kpi text-fg">{BRAND.productName}</h1>
             {/* env 태그라인 — lg 이상은 소개 카드가 보인다(스펙 E14 "env 브랜드는 그대로") */}
             <p className="text-body text-fg-secondary lg:hidden">{BRAND.tagline}</p>
             <p className="text-body text-fg-secondary">{t('login.lead')}</p>
@@ -171,7 +172,7 @@ export default function Login() {
                   </Link>
                 </p>
               )}
-              <p className="pt-1 text-center text-meta text-fg-muted">
+              <p className="pt-1 text-center text-body text-fg-secondary">
                 {t(mailReset ? 'login.helpWithMail' : 'login.helpNoMail')}
               </p>
             </form>

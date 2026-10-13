@@ -6,10 +6,10 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import { fmtDate } from '@/components/wbs/shared'
 import { t} from '@/lib/i18n/dict'
 
-// 행 스타일 — 지연=빨강 틴트, 임박=주황 틴트(RiskWorklist ROW_META 미러).
-const ROW_META: Record<IssueQueueKind, { border: string; icon: string }> = {
-  overdue: { border: 'border-danger/40', icon: 'text-danger' },
-  dueSoon: { border: 'border-warning/40', icon: 'text-warning' },
+// 행 스타일 — 지연=빨강·임박=주황 아이콘(RiskWorklist ROW_META 미러). 행마다 테두리 상자를 두르지 않는다.
+const ROW_META: Record<IssueQueueKind, { icon: string }> = {
+  overdue: { icon: 'text-danger' },
+  dueSoon: { icon: 'text-warning' },
 }
 
 /**
@@ -35,7 +35,7 @@ export function IssueQueueCard({ issues, projectId, today, severities, dueSoonDa
     <SectionCard title={tr('dash.issues.queueTitle')} icon={AlertTriangle}
       actions={<span className="chip bg-danger-weak text-danger">{tr('dash.exec.delayed')} {q.overdueCount} · {tr('dash.exec.dueSoon')} {q.dueSoonCount}</span>}>
       {q.rows.length === 0 ? <p className="text-sm text-fg-secondary">{tr('dash.issues.queueEmpty').replace('{n}', String(dueSoonDays))}</p> : (
-        <div className="space-y-2">
+        <div className="-my-1 divide-y divide-border">
           {q.rows.map(({ issue, kind, days }) => {
             const meta = ROW_META[kind]
             const sev = vocabView('issues.severities', severities, issue.severity, tr)
@@ -49,7 +49,7 @@ export function IssueQueueCard({ issues, projectId, today, severities, dueSoonDa
             return (
               <Link key={issue.id} href={`${issuesHref}?focus=${issue.id}`}
                 aria-label={`${code} ${issue.title}, ${sevLabel}, ${detail}${due ? `, ${due}` : ''}`}
-                className={`flex items-center gap-2.5 rounded-xl border ${meta.border} px-3 py-2.5 hover:bg-surface-subtle`}>
+                className={`flex items-center gap-2.5 rounded-lg px-1 py-2.5 hover:bg-surface-subtle`}>
                 <CalendarClock className={`h-4 w-4 shrink-0 ${meta.icon}`} />
                 <span className="hidden shrink-0 text-meta font-semibold tabular-nums text-fg-muted sm:inline">{code}</span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{issue.title}</span>
@@ -62,7 +62,7 @@ export function IssueQueueCard({ issues, projectId, today, severities, dueSoonDa
             )
           })}
           {q.hiddenCount > 0 && (
-            <div className="flex items-center justify-between pt-1 text-xs text-fg-muted">
+            <div className="flex items-center justify-between px-1 pt-2.5 text-xs text-fg-muted">
               <span className="chip bg-surface-subtle text-fg-muted">+{q.hiddenCount}</span>
               <Link href={issuesHref} className="font-semibold text-action hover:underline">{tr('dash.issues.moreInList')} →</Link>
             </div>

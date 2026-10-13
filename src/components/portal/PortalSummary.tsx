@@ -14,7 +14,8 @@ export function PortalSummary({ slug, summary, showReview }: { slug: string; sum
     <Link key={id} data-summary={id} href={wsHref(slug, 'my-work', query)} title={c.ok ? undefined : c.reason}
       className="flex min-w-0 flex-col gap-1 rounded-(--radius-panel) border border-border bg-surface px-3 py-3 shadow-(--shadow-card) hover:bg-surface-hover sm:px-5 sm:py-4">
       <span className="text-meta font-medium text-fg-secondary">{label}</span>
-      <span className="text-kpi tabular-nums text-fg">{c.ok ? c.count : '—'}</span>
+      {/* 0 은 흐리게 — 할 일이 없는 칸이 화면에서 가장 큰 글자로 눈을 끌지 않게 */}
+      <span className={`text-kpi tabular-nums ${c.ok && c.count === 0 ? 'text-fg-muted' : 'text-fg'}`}>{c.ok ? c.count : '—'}</span>
       {!c.ok && <span className="sr-only">{c.reason}</span>}
     </Link>
   )

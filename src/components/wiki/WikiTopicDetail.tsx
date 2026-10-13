@@ -165,7 +165,7 @@ function OpenLoops({ items, questions, projectId, topicId, canCurate, canAnswer,
   return (
     <div className="space-y-3">
       {questions.map((question) => (
-        <article key={question.id} className="rounded-xl border border-border bg-surface px-4 py-3 shadow-[var(--shadow-sm)]">
+        <article key={question.id} className="rounded-xl bg-surface-subtle px-4 py-3">
           <div className="flex items-center gap-2"><CircleHelp className="h-4 w-4 text-pending" aria-hidden /><span className="chip bg-pending-weak text-pending">{t('wiki.kind.question')}</span></div>
           <p className="mt-2 text-sm font-medium leading-6 text-fg">{question.question}</p>
           <p className="mt-1 text-meta text-fg-muted">{formatWikiDate(question.createdAt, false, timeZone)}</p>
@@ -291,9 +291,9 @@ export function WikiTopicDetail({
             <p className="mt-1.5 text-sm text-fg-secondary">{topic.ownerTeam ?? t('wiki.noOwner')}<span className="mx-2 text-border-focus">·</span>{t('wiki.updatedAt')} {formatWikiDate(topic.bodyUpdatedAt ?? topic.lastChangedAt, false, timeZone)}</p>
           </div>
           <div className="grid shrink-0 grid-cols-3 gap-2">
-            <div className="rounded-xl border border-border/70 bg-surface-subtle px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-fg">{sourceCount(items)}</div><div className="text-meta text-fg-muted">{t('wiki.trust.sources')}</div></div>
-            <div className="rounded-xl border border-warning/20 bg-pending-weak px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-pending">{openItems.length}</div><div className="text-meta text-pending">{t('wiki.state.open')}</div></div>
-            <div className={`rounded-xl border px-3 py-2 text-center ${conflictCount > 0 ? 'border-danger/20 bg-danger-weak' : 'border-success/20 bg-success-weak'}`}><div className={`text-lg font-bold tabular-nums ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{conflictCount}</div><div className={`text-meta ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{t('wiki.state.conflict')}</div></div>
+            <div className="rounded-xl bg-surface-subtle px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-fg">{sourceCount(items)}</div><div className="text-meta text-fg-muted">{t('wiki.trust.sources')}</div></div>
+            <div className="rounded-xl bg-pending-weak px-3 py-2 text-center"><div className="text-lg font-bold tabular-nums text-pending">{openItems.length}</div><div className="text-meta text-pending">{t('wiki.state.open')}</div></div>
+            <div className={`rounded-xl px-3 py-2 text-center ${conflictCount > 0 ? 'bg-danger-weak' : 'bg-success-weak'}`}><div className={`text-lg font-bold tabular-nums ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{conflictCount}</div><div className={`text-meta ${conflictCount > 0 ? 'text-danger' : 'text-success'}`}>{t('wiki.state.conflict')}</div></div>
           </div>
         </div>
       </section>
@@ -358,7 +358,7 @@ export function WikiTopicDetail({
               <h4 className="text-xs font-semibold text-fg">{t('wiki.history.documentRevisions')}</h4>
               <ol className="mt-2 space-y-2">
                 {(data.revisions ?? []).map((revision) => (
-                  <li key={revision.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-border bg-surface-subtle/55 px-3 py-2 text-xs">
+                  <li key={revision.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-surface-subtle px-3 py-2 text-xs">
                     <span className="font-semibold text-fg">v{revision.versionNo} · {revision.title}</span>
                     {revision.editedByName && <span className="text-fg-secondary">{revision.editedByName}</span>}
                     <time className={canWriteMemory ? 'text-fg-muted' : 'ml-auto text-fg-muted'}>{formatWikiDate(revision.createdAt, true, timeZone)}</time>

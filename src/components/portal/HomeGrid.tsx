@@ -119,8 +119,9 @@ export function HomeGrid({ workspaceId, slots, gallery, defaults, personal, canE
   if (!editing) {
     return (
       <div ref={root} data-home-grid>
-        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
-          <Button data-fk="open" data-home-edit variant="secondary" icon={<LayoutGrid className="h-4 w-4" aria-hidden />} disabled={!canEdit}
+        {/* 격자의 도구 줄 — 요약과 격자 사이에 혼자 뜬 주 버튼처럼 보이지 않게 조용한 모양으로 격자에 붙인다 */}
+        <div className="-mt-2 mb-2 flex flex-wrap items-center justify-end gap-2">
+          <Button data-fk="open" data-home-edit variant="ghost" icon={<LayoutGrid className="h-4 w-4" aria-hidden />} disabled={!canEdit}
             disabledReason={canEdit ? undefined : t('portalUi.edit.unavailable')} onClick={open}>{t('portalUi.edit.open')}</Button>
         </div>
         <span role="status" className="sr-only">{live}</span>
