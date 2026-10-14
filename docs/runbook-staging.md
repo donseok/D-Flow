@@ -73,12 +73,19 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 | Vercel | 팀 `leedonseoks-projects`(Hobby) · 프로젝트 `d-flow` · https://d-flow-eight.vercel.app · 리전 `icn1` |
 | 배포 | GitHub `donseok/D-Flow` 연결 — `main` push = 운영 배포, 그 밖의 브랜치 push = Preview 배포 |
 | Supabase | `dflow-prod` · ref `aivjcfoeshnhqdrfteyq` · 조직 `dflow-staging`(무료 플랜) · 서울 |
-| 스키마 | 기준선 + 0001~0058 (첫 배포 시점) |
+| 스키마 | 기준선 + 0001~0059 (첫 배포 0058, 0059 `workspace_mail_settings` 2026-10-15) |
 
 비밀값(DB 비밀번호·`CRON_SECRET`)은 리포에 없다 — 배포한 사람의 PC 와 Vercel 환경변수에만 있다.
 
-**Vercel 환경변수 — Production 에만 넣었다**: `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY`·`SUPABASE_SERVICE_ROLE_KEY`·`CRON_SECRET`.
+**Vercel 환경변수 — Production 에만 넣었다**: `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY`·`SUPABASE_SERVICE_ROLE_KEY`·`CRON_SECRET`,
+그리고 `NEXT_PUBLIC_APP_URL=https://d-flow-eight.vercel.app`(2026-10-15 — 회의 안내·초대 메일 링크의 기준 주소. 빌드 때 굳으므로 바꾸면 다시 배포한다).
 `APP_ENV` 는 `next.config.ts` 가 `VERCEL_ENV` 에서 옮긴다. AI 키·SMTP·초대 허용 도메인·기능 스위치(`.env.local.example`)는 넣지 않았다 — 그 기능들은 꺼져 있다.
+
+**메일 발송(2026-10-15)**: 회의 안내·초대 메일은 워크스페이스 설정 › 메일 발송에 저장한 계정으로 나간다(표 `workspace_mail_settings`, 0059 — service_role 전용,
+비밀번호는 평문 저장이고 지키는 것은 권한뿐이다). 우선순위는 워크스페이스 설정 → env `SMTP_*` → 미설정이다. 운영에는 `SMTP_*` 를 넣지 않았으므로
+설정을 저장하지 않은 워크스페이스는 메일을 보내지 않는다. 계정을 바꾸는 데 재배포가 필요 없다. 로그인 화면의 비밀번호 재설정 링크는 여전히 env `SMTP_*`
+(`mailConfigured()`)로만 판정하므로 숨겨진 채다 — 재설정 메일을 열려면 Supabase Auth 의 SMTP 와 env `SMTP_*` 를 따로 정한다(`docs/runbook-selfhost.md`).
+
 **Preview 에는 환경변수가 없다**(Preview 가 운영 DB 를 보게 할지 미결정) — 그래서 Preview 배포는 눈확인에 쓸 수 없고 `CLAUDE.md` 의 로컬 확인 규칙이 그대로다.
 
 **Supabase Auth**: Site URL·허용 리다이렉트를 운영 주소로 맞췄고(비밀번호 재설정 메일의 링크), 공개 가입(`disable_signup`)을 껐다 — 앱은 `signUp` 을 쓰지 않는다.
