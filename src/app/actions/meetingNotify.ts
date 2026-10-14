@@ -1,12 +1,13 @@
 'use server'
 import { getSession } from '@/lib/auth'
-import { getActor, requireProjectAdmin, resolveProjectId } from '@/lib/authz'
+import { getActor, requireProjectAdmin, resolveScope } from '@/lib/authz'
 import { ERR_LOOKUP, ERR_DENIED, ERR_ANON } from '@/lib/authz/errors'
 import { getMeetingDetail } from '@/lib/data/meetings'
 import { requireModule } from '@/lib/modules/gate'
 import { classifyRecipients, MAX_EXTRA_EMAILS } from '@/lib/mail/recipients'
 import { renderMeetingInvite, type InviteKind } from '@/lib/mail/meetingInvite'
 import { getTransport } from '@/lib/mail/transport'
+import { smtpErrorMessage } from '@/lib/mail/errors'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { pick } from '@/lib/settings/pick'
 import { vocabLabel, type VocabValues } from '@/lib/settings/vocab'
@@ -17,7 +18,6 @@ import { displayNameFrom } from '@/lib/domain/display-name'
 import { sortByKoreanName } from '@/lib/domain/nameSort'
 import type { MeetingNotifyResult } from '@/lib/mail/outcome'
 import { serverTranslator } from '@/lib/i18n/server'
-import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
 
 const NONE = { sentTo: [] as string[], skipped: [] as MeetingNotifyResult['skipped'] }
@@ -28,16 +28,6 @@ function resolveAppUrl(): string | null {
   if (explicit) return explicit
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()
   return vercel ? `https://${vercel}` : null
-}
-
-/** SMTP 원문 에러에는 계정·호스트 정보가 섞인다. 사용자에게는 사유만 전한다. */
-function toUserMessage(tr: ServerTranslate, e: unknown): string {
-  const code = (e as { code?: string } | null)?.code
-  if (code === 'EAUTH') return tr('err.mailAccountAuthenticationFailed')
-  if (code === 'ETIMEDOUT' || code === 'ESOCKET' || code === 'ECONNECTION') {
-    return tr('err.couldNotConnectMailServer')
-  }
-  return tr('err.errorOccurredWhileSendingMail')
 }
 
 /**
@@ -55,15 +45,17 @@ export async function notifyMeetingSaved(
   extraEmails: string[] = [],
 ): Promise<MeetingNotifyResult> {
   const tr = await serverTranslator()
-  // 발송 대상 회의의 프로젝트를 먼저 확정한다 — 관리자 판정의 기준이 그 프로젝트다.
-  const found = await resolveProjectId('meetings', meetingId)
-  if (!found.ok) return { ok: false, error: found.error, ...NONE }
-  const g = await requireProjectAdmin(found.projectId)
+  // 발송 대상 회의의 프로젝트·워크스페이스를 먼저 함께 확정한다 — 관리자 판정의 기준은 그 프로젝트, 발송 계정의 기준은
+  // 그 워크스페이스의 메일 설정이다. 못 읽으면 가드 전에 멈춘다(3원칙 ② — 워크스페이스를 모른 채 env 계정으로 보내지 않는다).
+  const scope = await resolveScope('meetings', meetingId)
+  if (!scope.ok) return { ok: false, error: scope.error, ...NONE }
+  if (!scope.projectId) return { ok: false, error: ERR_LOOKUP, ...NONE }
+  const projectId = scope.projectId
+  const g = await requireProjectAdmin(projectId)
   let actor: Awaited<ReturnType<typeof getActor>> = null
   try { actor = g.ok ? g.actor : await getActor() } catch { actor = null }
   if (!g.ok && !actor) return { ok: false, error: g.error, ...NONE }
-  if (!found.projectId) return { ok: false, error: ERR_LOOKUP, ...NONE }
-  const mod = await requireModule({ projectId: found.projectId }, 'meetings')   // 스펙 §4.2 — 가드 뒤·입력 검증·발송 앞(P17)
+  const mod = await requireModule({ projectId }, 'meetings')   // 스펙 §4.2 — 가드 뒤·입력 검증·발송 앞(P17)
   if (!mod.ok) return { ok: false, error: mod.error, ...NONE }
 
   // 서버 액션 인자는 클라이언트가 임의로 만든다 — 타입과 개수를 여기서 다시 못박는다.
@@ -92,17 +84,17 @@ export async function notifyMeetingSaved(
   // 빈 To 로 SMTP 를 때리면 계정 평판만 깎인다.
   if (valid.length === 0) return { ok: true, sentTo: [], skipped }
 
-  let fromName: string | undefined
   // 메일의 '구분' = 그 프로젝트의 회의 범주 라벨(설정, B4). 못 읽으면 code 를 쓴다(메일 발송을 막지 않는다 — 로그만)
   let categories: VocabValues['meetings.categories'] = []
   try {
-    const project = await getProjectConfig(found.projectId)
-    const cats = pick(project, 'meetings.categories')
+    const cats = pick(await getProjectConfig(projectId), 'meetings.categories')
     if (cats.ok) categories = cats.value
     else console.error('[notifyMeetingSaved] 회의 범주 설정 손상 — 메일 구분은 code:', cats.error)
-    fromName = (await loadDisplayBranding(project.workspaceId)).mailFromName
-  } catch (error) { console.error('[notifyMeetingSaved] 브랜딩·범주 조회 실패:', error) }
-  const transport = getTransport(fromName)
+  } catch (error) { console.error('[notifyMeetingSaved] 범주 조회 실패:', error) }
+  // 발신 표시명은 회의가 속한 워크스페이스의 브랜딩 — 못 읽으면 loadDisplayBranding 이 기본 이름으로 내린다(로그는 그쪽)
+  const fromName = (await loadDisplayBranding(scope.workspaceId)).mailFromName
+  // 발송 계정: 그 워크스페이스의 메일 설정 → 배포 env → 미설정. 조회 실패·보관·잘못된 설정은 ok:false 문구로 온다(transport.ts)
+  const transport = await getTransport({ workspaceId: scope.workspaceId, fromName })
   if (!transport.ok) return { ok: false, error: transport.error, sentTo: [], skipped }
 
   const { subject, html, text } = renderMeetingInvite({
@@ -138,6 +130,6 @@ export async function notifyMeetingSaved(
     }
   } catch (e) {
     console.error(`[notifyMeetingSaved:${kind}] 발송 실패:`, e)
-    return { ok: false, error: toUserMessage(tr, e), sentTo: [], skipped }
+    return { ok: false, error: smtpErrorMessage(tr, e), sentTo: [], skipped }
   }
 }

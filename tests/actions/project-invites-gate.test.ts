@@ -14,7 +14,8 @@ const { createAdminClient, requireProjectAdmin, requireWorkspaceAdmin, getTransp
     createAdminClient: vi.fn(guardThrow),
     requireProjectAdmin: vi.fn(),
     requireWorkspaceAdmin: vi.fn(),
-    getTransport: vi.fn(() => ({ ok: true, send })),
+    // 비동기 — 초대의 워크스페이스 메일 설정(없으면 배포 env)으로 계정을 고른다
+    getTransport: vi.fn<(opts: { workspaceId: string | null; fromName?: string }) => Promise<unknown>>(async () => ({ ok: true, send })),
     send,
     guardThrow,
   }
@@ -504,7 +505,7 @@ describe('createProjectInvite 성공 경로 — 저장·링크·메일', () => {
     }), error: null } })
     createAdminClient.mockReturnValue(client as never)
     expect(await createProjectInvite(P1, VALID)).toMatchObject({ ok: true, mailed: true })
-    expect(getTransport).toHaveBeenCalledWith('한빛 초대팀')
+    expect(getTransport).toHaveBeenCalledWith({ workspaceId: 'ws-1', fromName: '한빛 초대팀' })
     expect(send.mock.calls[0]![0].subject).toContain('[한빛 플로우]')
   })
 
@@ -675,6 +676,30 @@ describe('createProjectInvite 성공 경로 — 저장·링크·메일', () => {
     if (!res.ok) throw new Error('발급이 실패했다')
     expect(res.row.id).toBe(INSERTED_ID)
     expect(res.url).toContain('/invite/')
+  })
+
+  // 워크스페이스 메일 설정 조회 실패·잘못된 설정·호스트 거부는 getTransport 가 ok:false 로 낸다 — 초대는 이미 유효하므로 살리고 문구만 올린다.
+  it('트랜스포트를 쓸 수 없으면 초대는 살리고 그 문구를 mailError 로 — 발송은 시도하지 않는다', async () => {
+    const { client, insert } = createClient()
+    createAdminClient.mockReturnValue(client as never)
+    getTransport.mockResolvedValueOnce({ ok: false, error: '메일 설정을 불러오지 못했습니다(목).' })
+    const res = await createProjectInvite(P1, VALID)
+    expect(res).toMatchObject({ ok: true, mailed: false, mailError: '메일 설정을 불러오지 못했습니다(목).' })
+    expect(insert).toHaveBeenCalledTimes(1)
+    expect(getTransport).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: 'ws-1' }))
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('EAUTH 는 자격증명을 싣지 않는 공용 문구로 바꾼다(smtpErrorMessage)', async () => {
+    const { client } = createClient()
+    createAdminClient.mockReturnValue(client as never)
+    send.mockRejectedValue(Object.assign(new Error('535-5.7.8 Username and Password not accepted'), { code: 'EAUTH' }))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await createProjectInvite(P1, VALID)
+    spy.mockRestore()
+    expect(res).toMatchObject({ ok: true, mailed: false, mailError: '메일 계정 인증에 실패했습니다. 관리자에게 문의하세요.' })
+    if (!res.ok) throw new Error('발급이 실패했다')
+    expect(res.mailError).not.toContain('Password')
   })
 })
 

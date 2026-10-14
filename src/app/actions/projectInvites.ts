@@ -9,6 +9,7 @@ import { ACCESS_ROLE, isAdminAccessRole } from '@/lib/domain/authz'
 import { displayNameFrom } from '@/lib/domain/display-name'
 import { hashInviteToken } from '@/lib/domain/inviteToken'
 import { getTransport } from '@/lib/mail/transport'
+import { smtpErrorMessage } from '@/lib/mail/errors'
 import { renderInviteMail } from '@/lib/mail/projectInvite'
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
@@ -105,16 +106,6 @@ function inviteOrigin(): string | null {
   const raw = process.env.NEXT_PUBLIC_APP_URL?.trim()
   if (!raw) return null
   return raw.replace(/\/+$/, '')
-}
-
-/** SMTP 원문 에러에는 계정·호스트 정보가 섞인다(meetingNotify 와 같은 이유). */
-function toMailMessage(tr: ServerTranslate, e: unknown): string {
-  const code = (e as { code?: string } | null)?.code
-  if (code === 'EAUTH') return tr('err.mailAccountAuthenticationFailed')
-  if (code === 'ETIMEDOUT' || code === 'ESOCKET' || code === 'ECONNECTION') {
-    return tr('err.couldNotConnectMailServer')
-  }
-  return tr('err.errorOccurredWhileSendingMail')
 }
 
 type RawInvite = {
@@ -366,7 +357,9 @@ async function sendInviteMail(
 ): Promise<{ mailed: boolean; mailError?: string }> {
   const tr = await serverTranslator()
   const branding = await loadDisplayBranding(i.workspaceId, admin)
-  const transport = getTransport(branding.mailFromName)
+  // 발송 계정: 초대의 워크스페이스 메일 설정 → 배포 env → 미설정. 조회 실패·잘못된 설정·호스트 거부도 ok:false 문구로 온다 —
+  // 초대는 이미 저장돼 유효하므로 발급을 되돌리지 않고 mailError 로만 올린다.
+  const transport = await getTransport({ workspaceId: i.workspaceId, fromName: branding.mailFromName })
   if (!transport.ok) return { mailed: false, mailError: transport.error }
 
   // 초대한 사람의 이름·주소는 본문 한 줄과 Reply-To 에만 쓰인다. 못 읽어도 발송은 계속한다.
@@ -399,7 +392,7 @@ async function sendInviteMail(
     return { mailed: true }
   } catch (e) {
     console.error('[createProjectInvite] 메일 발송 실패:', e)
-    return { mailed: false, mailError: toMailMessage(tr, e) }
+    return { mailed: false, mailError: smtpErrorMessage(tr, e) }
   }
 }
 
