@@ -83,13 +83,24 @@ function smtpSettingsFor(v: NormalizedMailSettings, password: string) {
   }))
 }
 
+type SetterQuery = { data: unknown; error: { message: string } | null }
+
+/** 조회가 { error } 대신 reject(또는 동기 throw)해도 { error } 꼴로 — 설정자 칸 하나 때문에 설정 화면 전체를 실패시키지 않는다 */
+async function settleQuery(run: () => PromiseLike<SetterQuery>): Promise<SetterQuery> {
+  try {
+    return await run()
+  } catch (e) {
+    return { data: null, error: { message: e instanceof Error ? e.message : 'unknown' } }
+  }
+}
+
 /** 비밀번호를 넣은 사람 — 표시 이름과 지금 이 워크스페이스 관리자인지. 계정이 지워졌으면(on delete set null) 관리자가 아니다. 조회 실패는 'unknown'(3원칙) */
 async function passwordSetter(tr: ServerTranslate, admin: AdminClient, wid: string, userId: string | null):
   Promise<{ name: string; isAdmin: boolean | 'unknown' }> {
   if (userId === null) return { name: tr('srv.mailSettings.setterDeleted'), isAdmin: false }
   const [profile, member] = await Promise.all([
-    admin.from('profiles').select('display_name').eq('user_id', userId).maybeSingle(),
-    admin.from('workspace_members').select('role').eq('workspace_id', wid).eq('user_id', userId).maybeSingle(),
+    settleQuery(() => admin.from('profiles').select('display_name').eq('user_id', userId).maybeSingle()),
+    settleQuery(() => admin.from('workspace_members').select('role').eq('workspace_id', wid).eq('user_id', userId).maybeSingle()),
   ])
   let name: string
   if (profile.error) {

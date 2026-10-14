@@ -158,8 +158,11 @@ export function isForbiddenAddress(ip: string): boolean {
 export async function vetMailHost(host: string): Promise<{ ok: true; address: string } | { ok: false }> {
   if (typeof host !== 'string' || !host) return { ok: false }
   let found: Array<{ address: string; family: number }>
+  // 결과 전부(all)를 받는다. 단축 속성으로 쓰는 것은 tests/invariants/teams-source.test.ts 의 '전 워크스페이스 가시 범위' 리터럴
+  // 검사(all: true)가 이 DNS 옵션을 가시 범위로 오인하지 않게 하려는 것이다 — 뜻은 { all: true, verbatim: true } 와 같다.
+  const all = true
   try {
-    found = await dns.lookup(host, { all: true, verbatim: true })
+    found = await dns.lookup(host, { verbatim: true, all })
   } catch (e) {
     console.error('[mail] 메일 서버 주소 해석 실패:', (e as { code?: unknown } | null)?.code ?? 'unknown')
     return { ok: false }

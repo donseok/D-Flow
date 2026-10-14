@@ -79,13 +79,20 @@ function chainOf(result: QueryResult, calls: unknown[][]): Chain {
 }
 
 /** 액션이 만지는 세 표만 아는 가짜 service_role 클라이언트 */
-function makeAdmin(o: { profile?: QueryResult; member?: QueryResult; write?: QueryResult; upsert?: QueryResult } = {}) {
+function makeAdmin(o: { profile?: QueryResult; member?: QueryResult; write?: QueryResult; upsert?: QueryResult; setterFails?: 'reject' | 'throw' } = {}) {
   const calls = { upsert: [] as unknown[][], update: [] as unknown[][], delete: [] as unknown[][], profiles: [] as unknown[][], members: [] as unknown[][] }
   const upsert = vi.fn<(...a: unknown[]) => Chain>(() => chainOf(o.upsert ?? { data: null, error: null }, calls.upsert))
   const update = vi.fn<(...a: unknown[]) => Chain>(() => chainOf(o.write ?? { data: [{ workspace_id: WS }], error: null }, calls.update))
   const del = vi.fn(() => chainOf(o.write ?? { data: [{ workspace_id: WS }], error: null }, calls.delete))
   const from = vi.fn((table: string) => {
     if (table === 'workspace_mail_settings') return { upsert, update, delete: del }
+    // 설정자 조회가 { error } 대신 reject(fetch 실패 등)하거나 동기 throw 하는 경우
+    if ((table === 'profiles' || table === 'workspace_members') && o.setterFails === 'throw') throw new Error('from 동기 실패')
+    if ((table === 'profiles' || table === 'workspace_members') && o.setterFails === 'reject') {
+      const c = chainOf({ data: null, error: null }, [])
+      c.maybeSingle = () => Promise.reject(new Error('fetch failed'))   // eq 가 돌려주는 바로 그 객체를 바꾼다
+      return c
+    }
     if (table === 'profiles') return chainOf(o.profile ?? { data: { display_name: '김설정' }, error: null }, calls.profiles)
     if (table === 'workspace_members') return chainOf(o.member ?? { data: { role: 'admin' }, error: null }, calls.members)
     throw new Error('예상치 못한 표 접근: ' + table)
@@ -191,6 +198,20 @@ describe('getWorkspaceMailSettings — 보기·상태·비밀번호 설정자', 
     expect(await getWorkspaceMailSettings(WS)).toMatchObject({ ok: true, passwordSetterIsAdmin: false })
     makeAdmin({ member: { data: null, error: { message: 'boom' } } })
     expect(await getWorkspaceMailSettings(WS)).toMatchObject({ ok: true, passwordSetterIsAdmin: 'unknown' })
+  })
+
+  it('설정자 조회가 { error } 대신 reject·throw 해도 던지지 않는다 — 이름은 확인 불가, 관리자 여부는 unknown', async () => {
+    h.loadWorkspaceMailRow.mockResolvedValue({ kind: 'row', row: storedRow() })
+    for (const setterFails of ['reject', 'throw'] as const) {
+      makeAdmin({ setterFails })
+      expect(await getWorkspaceMailSettings(WS)).toMatchObject({
+        ok: true,
+        settings: { host: 'smtp.acme.com', hasPassword: true },
+        passwordSetBy: serverKoTranslate('srv.mailSettings.setterUnavailable'),
+        passwordSetAt: '2026-10-01T00:00:00.000Z',
+        passwordSetterIsAdmin: 'unknown',
+      })
+    }
   })
 
   it('설정자 계정이 지워졌으면(password_set_by null) 삭제된 계정·false, 이름 조회 실패는 확인 불가 문구', async () => {
