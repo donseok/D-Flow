@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Settings2, Palette, Mail, Menu, History, CalendarDays, Paperclip, FolderTree, KeyRound, ShieldCheck, Bell } from 'lucide-react'
+import { Settings2, Palette, Mail, Menu, History, CalendarDays, Paperclip, FolderTree, KeyRound, ShieldCheck, Bell, Send } from 'lucide-react'
 import { listSettingsHistory } from '@/app/actions/settings'
 import { listAuthzEvents } from '@/app/actions/authzEvents'
+import { getWorkspaceMailSettings } from '@/app/actions/mailSettings'
 import { workspacePageAccess } from '@/lib/settings/workspacePageAccess'
 import { wsHref } from '@/lib/workspace/paths'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
@@ -16,6 +17,7 @@ import { MenuOrderEditor } from '@/components/settings/MenuOrderEditor'
 import { PortalWidgetsEditor } from '@/components/settings/PortalWidgetsEditor'
 import { LocalDraftsEditor } from '@/components/settings/LocalDraftsEditor'
 import { NotifyPolicyEditor } from '@/components/settings/NotifyPolicyEditor'
+import { MailSettingsEditor } from '@/components/settings/MailSettingsEditor'
 import { SettingsHistoryList } from '@/components/settings/SettingsHistoryList'
 import { AuthzEventsList } from '@/components/settings/AuthzEventsList'
 import { SettingsShell } from '@/components/settings/SettingsShell'
@@ -79,7 +81,11 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   // 달력 절(스펙 D36·§5.1 A 둘째 행) — 손상 키도 편집기를 그린다(복구 경로). '오늘'은 tz 가 유효할 때만
   const calendarFields = workspaceCalendarFieldsOf(config.keys)
   const calendarToday = calendarFields.timezone.value ? todayIn(calendarFields.timezone.value, new Date()) : null
-  const [history, authzEvents] = await Promise.all([listSettingsHistory({ workspaceId: access.id }), listAuthzEvents(access.id)])
+  // 메일 발송(설계 2026-10-15 §4) — 액션이 requireWorkspaceAdmin 을 다시 건다. 실패는 그 섹션만 오류로 그리고, 화면이 원문을 싣지 않으므로 여기서 남긴다(3원칙 ①)
+  const [history, authzEvents, mail] = await Promise.all([
+    listSettingsHistory({ workspaceId: access.id }), listAuthzEvents(access.id), getWorkspaceMailSettings(access.id),
+  ])
+  if (!mail.ok) console.error('[workspace settings] 메일 설정 조회 실패:', { workspaceId: access.id, cause: mail.error })
   // 이력 시각의 tz = 워크스페이스 달력. 손상이면 이력 칸에만 사유를 그린다 — 달력을 고치는 화면이 이 페이지다(계획 D-21a)
   const historyCal = pickCalendar(config)
   const historyCalError = historyCal.ok ? null
@@ -89,6 +95,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
     <PageFrame header={<PageHeader title={pageTitle} meta={access.name} />}>
       <SettingsShell items={[
         { id: 'workspace-general', label: t('pages.settingsNav.general') }, { id: 'workspace-modules', label: t('pages.wsSettings.nav.modulesAi') },
+        { id: 'workspace-mail', label: t('pages.wsSettings.nav.mail') },
         { id: 'workspace-invites', label: t('pages.wsSettings.nav.invites') }, { id: 'workspace-calendar', label: t('pages.settingsNav.calendar') }, { id: 'workspace-minutes', label: t('pages.settingsNav.minutes') }, { id: 'workspace-minute-roots', label: t('pages.wsSettings.nav.minuteRoots') }, { id: 'workspace-menu', label: t('pages.wsSettings.nav.menu') }, { id: 'workspace-notify', label: t('pages.wsSettings.nav.notify') }, { id: 'workspace-security', label: t('pages.wsSettings.nav.security') },
         { id: 'workspace-history', label: t('pages.settingsNav.history') },
       ]}>
@@ -132,6 +139,13 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
             </div>
           </div>
         </div>
+      </SectionCard>
+      {/* 메일 발송(설계 2026-10-15 §4) — 회의 안내·초대 메일의 발신 계정. searchText 는 영어 낱말만(이 파일의 한국어 리터럴 상한 9 — SettingsShell 이 화면 글자도 검색한다).
+          조회 실패는 이 섹션만 ConfigLoadError — 다른 섹션은 그대로 그린다 */}
+      <SectionCard id="workspace-mail" searchText="mail smtp gmail email app-password" eyebrow={t('pages.wsSettings.nav.mail')} title={t('pages.wsSettings.mailTitle')} icon={Send}>
+        {mail.ok
+          ? <MailSettingsEditor workspaceId={access.id} initial={mail} timeZone={historyCal.ok ? historyCal.calendar.timezone : null} />
+          : <ConfigLoadError error={mail.error} />}
       </SectionCard>
       <SectionCard id="workspace-invites" searchText="invites.allowed_domains" eyebrow={t('pages.wsSettings.nav.invites')} title={t('pages.wsSettings.invitesTitle')} icon={Mail}>
         <div className="space-y-4">

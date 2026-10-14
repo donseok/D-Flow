@@ -15,11 +15,14 @@ const h = vi.hoisted(() => ({
   widgetsEditor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
   draftsEditor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
   notifyEditor: vi.fn<(p: Record<string, unknown>) => null>(() => null),
+  mail: vi.fn(),
+  mailEditor: vi.fn<(p: Record<string, unknown>) => ReactNode>(() => <div data-mail-editor="" />),
 }))
 vi.mock('@/lib/settings/workspacePageAccess', () => ({ workspacePageAccess: (...a: unknown[]) => h.access(...a) }))
 vi.mock('@/lib/settings/workspaceConfig', () => ({ getWorkspaceConfig: (...a: unknown[]) => h.config(...a) }))
 vi.mock('@/app/actions/settings', () => ({ listSettingsHistory: (...a: unknown[]) => h.history(...a) }))
 vi.mock('@/app/actions/authzEvents', () => ({ listAuthzEvents: (...a: unknown[]) => h.events(...a) }))
+vi.mock('@/app/actions/mailSettings', () => ({ getWorkspaceMailSettings: (...a: unknown[]) => h.mail(...a) }))
 vi.mock('@/components/settings/AuthzEventsList', () => ({ AuthzEventsList: (p: Record<string, unknown>) => h.eventsList(p) }))
 vi.mock('next/navigation', () => ({ redirect: h.redirect }))
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a> }))
@@ -36,6 +39,7 @@ vi.mock('@/components/settings/MenuOrderEditor', () => ({ MenuOrderEditor: () =>
 vi.mock('@/components/settings/PortalWidgetsEditor', () => ({ PortalWidgetsEditor: (p: Record<string, unknown>) => h.widgetsEditor(p) }))
 vi.mock('@/components/settings/LocalDraftsEditor', () => ({ LocalDraftsEditor: (p: Record<string, unknown>) => h.draftsEditor(p) }))
 vi.mock('@/components/settings/NotifyPolicyEditor', () => ({ NotifyPolicyEditor: (p: Record<string, unknown>) => h.notifyEditor(p) }))
+vi.mock('@/components/settings/MailSettingsEditor', () => ({ MailSettingsEditor: (p: Record<string, unknown>) => h.mailEditor(p) }))
 vi.mock('@/components/settings/SettingsHistoryList', () => ({ SettingsHistoryList: () => null }))
 vi.mock('@/components/settings/AttachmentPolicyEditor', () => ({ AttachmentPolicyEditor: (p: Record<string, unknown>) => h.attEditor(p) }))
 vi.mock('@/components/settings/RootFoldersEditor', () => ({ RootFoldersEditor: (p: Record<string, unknown>) => h.rootEditor(p) }))
@@ -55,6 +59,8 @@ const config = (values: Record<string, unknown> = {}) => ({
 })
 const access = (over: Record<string, unknown> = {}) => ({ id: WID, slug: 'alpha', name: 'Alpha', isSuperuser: false, isAdmin: true, ...over })
 const render = async () => renderToStaticMarkup((await WorkspaceSettingsPage({ params: Promise.resolve({ slug: 'alpha' }) })) as ReactElement)
+/** 메일 설정 조회 성공 — 저장된 행 없음·env 도 없음(설계 §3 getWorkspaceMailSettings 의 보기) */
+const MAIL_NONE = { ok: true, settings: null, status: { source: 'none' }, passwordSetBy: null, passwordSetAt: null, passwordSetterIsAdmin: null }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -62,6 +68,7 @@ beforeEach(() => {
   h.config.mockResolvedValue(config())
   h.history.mockResolvedValue({ ok: true, rows: [], nextBefore: null })
   h.events.mockResolvedValue({ ok: true, rows: [], nextBefore: null })
+  h.mail.mockResolvedValue(MAIL_NONE)
 })
 
 describe('/w/[slug]/settings 페이지', () => {
@@ -75,13 +82,14 @@ describe('/w/[slug]/settings 페이지', () => {
     h.access.mockResolvedValue(access({ isAdmin: false }))
     await expect(render()).rejects.toThrow('NEXT_REDIRECT /w/alpha')
     expect(h.config).not.toHaveBeenCalled()
+    expect(h.mail).not.toHaveBeenCalled()
   })
 
-  it('열 범주 목차를 스펙 순서로 낸다(달력 — SP5 과제 26, 회의록 첨부 — SP5 B3 과제 9, 회의록 폴더 — SP5 B2, 알림 — SP8 알림 정책, 보안 — SPU1 로컬 초안)', async () => {
+  it('열한 범주 목차를 스펙 순서로 낸다(달력 — SP5 과제 26, 회의록 첨부 — SP5 B3 과제 9, 회의록 폴더 — SP5 B2, 알림 — SP8 알림 정책, 보안 — SPU1 로컬 초안, 메일 발송 — 2026-10-15 설계 §4)', async () => {
     await render()
     expect(h.shell.mock.calls[0][0].items).toEqual([
       { id: 'workspace-general', label: '일반' }, { id: 'workspace-modules', label: '모듈·AI' },
-      { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' },
+      { id: 'workspace-mail', label: '메일 발송' }, { id: 'workspace-invites', label: '초대' }, { id: 'workspace-calendar', label: '달력' },
       { id: 'workspace-minutes', label: '회의록' }, { id: 'workspace-minute-roots', label: '회의록 폴더' },
       { id: 'workspace-menu', label: '메뉴' }, { id: 'workspace-notify', label: '알림' }, { id: 'workspace-security', label: '보안' }, { id: 'workspace-history', label: '기록' },
     ])
@@ -155,6 +163,7 @@ describe('/w/[slug]/settings 페이지', () => {
     h.config.mockRejectedValue(new ConfigUnavailableError('db down'))
     expect(await render()).toContain('data-load-error')
     expect(error).toHaveBeenCalledWith('[workspace settings] 설정 조회 실패:', expect.objectContaining({ workspaceId: WID }))
+    expect(h.mail).not.toHaveBeenCalled()
     error.mockRestore()
   })
 
@@ -220,5 +229,41 @@ describe('/w/[slug]/settings 페이지', () => {
     h.config.mockResolvedValue(config({ 'notify.policy': { 'work.reported': { enabled: false } } }))
     await render()
     expect(h.notifyEditor.mock.calls[0][0]).toMatchObject({ initial: null, invalidReason: '필수 알림은 끌 수 없습니다: work.reported' })
+  })
+
+  it('메일 발송 범주 — 이 워크스페이스 id 로 조회하고, 성공 결과(비밀번호 없는 보기)를 편집기에 그대로 넘긴다. 섹션은 모듈 뒤·초대 앞', async () => {
+    const view = {
+      ok: true,
+      settings: { preset: 'gmail', host: 'smtp.gmail.com', port: 465, secure: true, username: 'ops@example.com', fromAddress: null, hasPassword: true },
+      status: { source: 'workspace', valid: true, fromAddress: 'ops@example.com' },
+      passwordSetBy: '김관리', passwordSetAt: '2026-10-15T01:00:00.000Z', passwordSetterIsAdmin: true,
+    }
+    h.mail.mockResolvedValue(view)
+    const html = await render()
+    expect(h.mail).toHaveBeenCalledTimes(1)
+    expect(h.mail).toHaveBeenCalledWith(WID)
+    expect(h.mailEditor).toHaveBeenCalledTimes(1)
+    expect(h.mailEditor.mock.calls[0][0]).toEqual({ workspaceId: WID, initial: view, timeZone: 'UTC' }) // 기본 config 의 CAL_FIELDS_UTC_SUN(UTC) — 범위 tz 를 넘긴다
+    expect(html).toMatch(/<section id="workspace-mail"><div data-mail-editor/)
+    expect(html.indexOf('id="workspace-mail"')).toBeGreaterThan(html.indexOf('id="workspace-modules"'))
+    expect(html.indexOf('id="workspace-mail"')).toBeLessThan(html.indexOf('id="workspace-invites"'))
+    expect(html).not.toContain('data-load-error')
+  })
+
+  it('메일 설정 조회가 실패하면 그 섹션 안에만 ConfigLoadError 를 그리고 로그를 남긴다 — 다른 섹션은 그대로 그린다(3원칙 ①)', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.mail.mockResolvedValue({ ok: false, error: '메일 설정을 불러오지 못했습니다.' })
+    const html = await render()
+    expect(h.mailEditor).not.toHaveBeenCalled()
+    const section = html.match(/<section id="workspace-mail">([\s\S]*?)<\/section>/)?.[1] ?? ''
+    expect(section).toContain('data-load-error')
+    expect(html.match(/data-load-error/g)).toHaveLength(1)   // 다른 섹션은 오류로 바뀌지 않는다
+    for (const id of ['workspace-general', 'workspace-modules', 'workspace-invites', 'workspace-calendar', 'workspace-notify', 'workspace-security', 'workspace-history']) {
+      expect(html, id).toContain(`id="${id}"`)
+    }
+    expect(h.notifyEditor).toHaveBeenCalledTimes(1)
+    expect(h.eventsList).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('[workspace settings] 메일 설정 조회 실패:', expect.objectContaining({ workspaceId: WID, cause: '메일 설정을 불러오지 못했습니다.' }))
+    error.mockRestore()
   })
 })
