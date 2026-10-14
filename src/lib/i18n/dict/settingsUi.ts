@@ -499,4 +499,13 @@ export const settingsUiKo = {
   'settings.cred.revokeGo': '자격증명 회수',
   // components/settings/IntegrationCredentialsManager.tsx
   'settings.cred.projectCount': '{n}개 프로젝트 ({v}{v2})',
+  // lib/mail/settingsInput.ts — 발송 메일 설정 입력의 거부 사유(reasonKey). 폼(MailSettingsEditor)과 서버 액션(mailSettings.ts)이 같은 키를 쓴다
+  'mailSettings.reason.preset_invalid': '발송 방식을 고르세요(Gmail 또는 직접 입력).',
+  'mailSettings.reason.address_invalid': 'Gmail 주소가 이메일 형식이 아닙니다.',
+  'mailSettings.reason.host_invalid': '서버 주소는 도메인 이름으로 입력하세요 — IP 주소·localhost 는 쓸 수 없습니다.',
+  'mailSettings.reason.port_invalid': '포트는 25·465·587·2525 중 하나입니다.',
+  'mailSettings.reason.tls_mismatch': '포트와 보안 연결이 맞지 않습니다 — 465 는 SSL, 587·25 는 STARTTLS 입니다.',
+  'mailSettings.reason.username_required': '계정을 입력하세요.',
+  'mailSettings.reason.from_invalid': '보내는 주소가 이메일 형식이 아닙니다 — 계정이 이메일 주소가 아니면 보내는 주소를 입력하세요.',
+  'mailSettings.reason.password_required': '비밀번호를 입력하세요 — 서버 주소나 계정을 바꾸면 비밀번호도 다시 넣어야 합니다.',
 } as const
