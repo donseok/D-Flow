@@ -298,3 +298,9 @@ insert into public.integration_credentials(id,workspace_id,kind,name,token_prefi
 values('00000000-0000-0000-7e57-00000000f701','00000000-0000-0000-7e57-00000000aa01',
 'minutes_api','rls-minutes','RlsMinutesA1',repeat('a',64),'2099-01-01T00:00:00Z')
 on conflict(id) do nothing;
+
+-- 워크스페이스 발송 메일 설정(*_workspace_mail_settings): 서비스 전용 표도 전수 교차 탐침이 실제 A 행을 검사한다 — 행이 없으면 빈 검사가 된다.
+-- 검사 제약을 통과하는 값(직접 입력·2525·STARTTLS). workspace-mail-settings.test.ts 의 "A 행" 케이스가 이 값을 본다
+insert into public.workspace_mail_settings(workspace_id,preset,host,port,secure,username,password)
+values('00000000-0000-0000-7e57-00000000aa01','custom','smtp.rls.invalid',2525,false,'rls-user','rls-pass')
+on conflict(workspace_id) do nothing;
