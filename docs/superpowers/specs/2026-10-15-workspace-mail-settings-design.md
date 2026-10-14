@@ -42,8 +42,9 @@ create table public.workspace_mail_settings (
   updated_by       uuid references auth.users(id) on delete set null,
   updated_at       timestamptz not null default now(),
   -- resolveSmtpSettings 가 값을 trim 해서 본다 — DB 도 공백뿐인 값을 받지 않는다(행이 'unset' 으로 읽히는 일이 없게)
-  constraint workspace_mail_settings_login check (length(btrim(username)) > 0 and length(btrim(password)) > 0),
-  constraint workspace_mail_settings_from check (from_address is null or length(btrim(from_address)) > 0),
+  -- 공백 아닌 글자가 하나는 있어야 한다(\S). btrim 은 스페이스만 걷어 탭·줄바꿈뿐인 값을 통과시키므로 쓰지 않는다
+  constraint workspace_mail_settings_login check (username ~ '\S' and password ~ '\S'),
+  constraint workspace_mail_settings_from check (from_address is null or from_address ~ '\S'),
   -- 포트와 보안 연결의 짝: 465 는 SSL, 587·25 는 STARTTLS(secure=false). 2525 는 어느 쪽이든
   constraint workspace_mail_settings_tls check (not (port = 465 and not secure) and not (port in (587, 25) and secure)),
   -- Gmail 프리셋은 서버 값을 고정한다(화면이 넣는 값 그대로)
