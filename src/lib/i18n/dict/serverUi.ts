@@ -313,6 +313,8 @@ export const serverUiKo = {
   'srv.llmConfig.savedButCouldNotApplied': '저장은 됐지만 즉시 반영에 실패했습니다 — 최대 1분 내 자동 반영됩니다.',
   'srv.llmConfig.selectPreset': '프리셋을 선택하세요',
   'srv.llmConfig.settingsNotValid': '유효하지 않은 설정입니다',
+  // src/app/actions/mailSettings.ts·src/lib/mail/errors.ts — 워크스페이스 메일 설정(테스트 발송 결과·SMTP 오류)
+  'srv.mailSettings.testAuthFailed': '메일 계정 인증에 실패했습니다. Gmail 이면 계정 비밀번호가 아니라 앱 비밀번호(16자리)를 넣었는지 확인하세요.',
   // src/app/actions/meetingNotify.ts
   'srv.meetingNotify.upExtraRecipientEmailsCan': '추가 수신 이메일은 최대 {maxExtraEmails}개까지 입력할 수 있습니다.',
   // src/app/actions/meetings.ts
