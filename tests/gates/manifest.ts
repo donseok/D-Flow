@@ -158,6 +158,12 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('llmConfig')}#getLlmConfig`]: nul('superuser'),
   [`${A('llmConfig')}#saveLlmConfig`]: nul('superuser'),
   [`${A('llmConfig')}#testLlmConnection`]: nul('superuser'),
+  // ── mailSettings — 워크스페이스 발송 메일 설정(설계 2026-10-15 §3, core). 가드 앞은 SAFE_ID_RE 뿐 — W('ws-1')가 가드에 닿는다.
+  //    둘째 인자 {} 는 가드 뒤 normalizeMailSettingsInput 에서 실패한다 — 가드 통과 실행에서도 SMTP 연결을 시도하지 않는다. 클라이언트는 adminFor(감사표 행 없음)
+  [`${A('mailSettings')}#getWorkspaceMailSettings`]: { ...nul('workspaceAdmin'), sample: [W] },
+  [`${A('mailSettings')}#saveWorkspaceMailSettings`]: { ...nul('workspaceAdmin'), sample: [W, {}] },
+  [`${A('mailSettings')}#deleteWorkspaceMailSettings`]: { ...nul('workspaceAdmin'), sample: [W] },
+  [`${A('mailSettings')}#sendWorkspaceTestMail`]: { ...nul('workspaceAdmin'), sample: [W, {}] },
   // ── meetingNotify
   [`${A('meetingNotify')}#notifyMeetingSaved`]: { guard: 'projectAdmin', module: 'meetings', note: '관리자 또는 주최자', sample: [U, 'created', []], ownerBranch: '관리자 가드 거부 뒤 getActor 로 합류 — 주최자 비교는 관문 뒤' },
   // ── meetings

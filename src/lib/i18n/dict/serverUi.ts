@@ -315,6 +315,17 @@ export const serverUiKo = {
   'srv.llmConfig.settingsNotValid': '유효하지 않은 설정입니다',
   // src/app/actions/mailSettings.ts·src/lib/mail/errors.ts — 워크스페이스 메일 설정(테스트 발송 결과·SMTP 오류)
   'srv.mailSettings.testAuthFailed': '메일 계정 인증에 실패했습니다. Gmail 이면 계정 비밀번호가 아니라 앱 비밀번호(16자리)를 넣었는지 확인하세요.',
+  'srv.mailSettings.saveFailed': '메일 설정을 저장하지 못했습니다. 잠시 뒤 다시 시도하세요.',
+  'srv.mailSettings.deleteFailed': '메일 설정을 삭제하지 못했습니다. 잠시 뒤 다시 시도하세요.',
+  'srv.mailSettings.nothingToDelete': '지울 설정이 없습니다.',
+  'srv.mailSettings.settingsUnusable': '입력한 값으로는 메일을 보낼 수 없습니다. 보내는 주소와 계정을 확인하세요.',
+  'srv.mailSettings.testNoRecipient': '로그인한 계정의 메일 주소를 확인할 수 없어 테스트 메일을 보내지 않았습니다.',
+  'srv.mailSettings.testRecipientRejected': '메일 서버가 받는 주소({to})를 거부했습니다.',
+  'srv.mailSettings.testSubject': '[{product}] 메일 발송 테스트',
+  'srv.mailSettings.testBody': '워크스페이스 메일 발송 설정을 확인하려고 보낸 테스트 메일입니다. 이 메일을 받았다면 설정이 올바릅니다.',
+  'srv.mailSettings.setterDeleted': '삭제된 계정',
+  'srv.mailSettings.setterNoName': '이름 없음',
+  'srv.mailSettings.setterUnavailable': '이름 확인 불가',
   // src/app/actions/meetingNotify.ts
   'srv.meetingNotify.upExtraRecipientEmailsCan': '추가 수신 이메일은 최대 {maxExtraEmails}개까지 입력할 수 있습니다.',
   // src/app/actions/meetings.ts
