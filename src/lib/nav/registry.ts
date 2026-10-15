@@ -36,6 +36,8 @@ export const SHELL_NAV: readonly ShellNavEntry[] = [
   { id: 'ws.settings', labelKey: 'nav.settings', icon: 'Settings', segment: 'settings', group: 'ws.ops', order: 50, scope: 'workspace', needs: 'isWorkspaceAdmin' },
   // 워크스페이스 목록·생성(개정 §5.3.2) — 아이콘은 표(navIcons)에 이미 있는 이름을 쓴다(프로젝트 층의 개요와 같은 그림이지만 워크스페이스 층 메뉴에는 하나뿐이다)
   { id: 'ws.workspaces', labelKey: 'nav.workspaces', icon: 'LayoutDashboard', segment: '/admin/workspaces', group: 'ws.platform', order: 5, scope: 'workspace', needs: 'isPlatformAdmin' },
+  // 플랫폼 관리자 목록·지정·해제(2026-10-15) — 아이콘은 표(navIcons)에 있는 이름(UI 위험 파일을 고치지 않는다)
+  { id: 'ws.platform_admins', labelKey: 'nav.platformAdmins', icon: 'UserCog', segment: '/admin/platform-admins', group: 'ws.platform', order: 7, scope: 'workspace', needs: 'isPlatformAdmin' },
   { id: 'ws.llm', labelKey: 'nav.llm', icon: 'Cpu', segment: '/admin/llm-config', group: 'ws.platform', order: 10, scope: 'workspace', needs: 'isPlatformAdmin' },
   { id: 'ws.ui_states', labelKey: 'nav.uiStates', icon: 'SwatchBook', segment: '/admin/ui-states', group: 'ws.platform', order: 20, scope: 'workspace', needs: 'isPlatformAdmin' },
 ]
@@ -53,7 +55,7 @@ export const NAV_NEEDS: Readonly<Partial<Record<NavItemId, keyof NavCaps>>> = {
 export const NAV_DEFAULT_LABEL_KEY = Object.fromEntries([
   ...MODULES.flatMap((m) => [m.nav?.project, m.nav?.workspace].flatMap((e) => (e ? [[e.id, e.labelKey] as const] : []))),
   ...SHELL_NAV.map((s) => [s.id, s.labelKey] as const),
-]) as Readonly<Record<NavItemId, DictKey>>   // 25개 id 전부 — tests/nav/registry.test.ts 가 빠짐없음을 고정한다
+]) as Readonly<Record<NavItemId, DictKey>>   // 26개 id 전부 — tests/nav/registry.test.ts 가 빠짐없음을 고정한다
 
 function hrefOf(base: string, segment: string): string {
   if (segment.startsWith('/')) return segment

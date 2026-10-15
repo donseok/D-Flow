@@ -1,6 +1,7 @@
 // 플랫폼 관리(워크스페이스 목록·생성)·소속 0 화면·셸 밖 오류 화면 사전.
 export const platformKo = {
   'nav.workspaces': '워크스페이스 관리',
+  'nav.platformAdmins': '플랫폼 관리자',
   // 워크스페이스 목록(/admin/workspaces)
   'platform.ws.title': '워크스페이스 관리',
   'platform.ws.desc': '이 배포의 모든 워크스페이스를 보고 새 워크스페이스를 만듭니다.',
@@ -130,6 +131,30 @@ export const platformKo = {
   'platform.ws.err.archive_failed': '워크스페이스를 보관하지 못했습니다. 바뀐 것은 없습니다. 잠시 뒤 다시 시도하세요.',
   'platform.ws.err.restore_denied': '플랫폼 관리자만 워크스페이스를 복원할 수 있습니다.',
   'platform.ws.err.restore_failed': '워크스페이스를 복원하지 못했습니다. 바뀐 것은 없습니다. 잠시 뒤 다시 시도하세요.',
+  // 플랫폼 관리자(/admin/platform-admins)
+  'platformAdmins.title': '플랫폼 관리자',
+  'platformAdmins.desc': '모든 워크스페이스와 플랫폼 운영 화면(워크스페이스 관리·LLM 설정·사용 현황)을 다루는 계정입니다.',
+  'platformAdmins.listTitle': '플랫폼 관리자 {n}명',
+  'platformAdmins.colName': '이름',
+  'platformAdmins.colEmail': '이메일',
+  'platformAdmins.colGrantedBy': '지정한 사람',
+  'platformAdmins.colGrantedAt': '지정 일시',
+  'platformAdmins.colActions': '작업',
+  'platformAdmins.noProfile': '(프로필 없음)',
+  'platformAdmins.unset': '해제',
+  'platformAdmins.unsetTitle': '플랫폼 관리자 해제',
+  'platformAdmins.add': '플랫폼 관리자 추가',
+  'platformAdmins.emailLabel': '계정 이메일',
+  'platformAdmins.find': '찾기',
+  'platformAdmins.finding': '찾는 중…',
+  'platformAdmins.already': '이미 플랫폼 관리자입니다.',
+  'platformAdmins.noWorkspaces': '소속 워크스페이스 없음',
+  'platformAdmins.archived': '(보관됨)',
+  'platformAdmins.grant': '지정',
+  'platformAdmins.notFound': '이 이메일의 계정이 없습니다. 워크스페이스 › 멤버·초대에서 먼저 계정을 만드세요.',
+  'platformAdmins.goAccounts': '멤버·초대로 가기',
+  'platformAdmins.listError': '플랫폼 관리자 목록을 불러오지 못했습니다',
+  'platformAdmins.listErrorDetail': '잠시 뒤 다시 시도하세요. 계속되면 서버 로그의 [listPlatformAdmins] 를 확인하세요.',
   // 소속 0 화면(/)
   'platform.noWs.title': '소속된 워크스페이스가 없습니다',
   'platform.noWs.inviteHint': '워크스페이스 관리자에게 초대를 요청하세요. 받은 초대 링크를 열면 워크스페이스에 합류합니다.',
