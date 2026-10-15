@@ -480,6 +480,26 @@ describe('sendWorkspaceTestMail — 저장 전 값으로 본인에게만', () =>
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('new-secret')
   })
 
+  it('입력 검사는 지났지만 발송 판정이 거부하면(저장 비밀번호가 공백뿐인 손상 행을 재사용) 입력 오류 문구 — env 로 내려가지 않고 DNS·트랜스포트 미도달', async () => {
+    const a = makeAdmin()
+    h.loadWorkspaceMailRow.mockResolvedValue({ kind: 'row', row: storedRow({ password: '   ' }) })
+    const unusable = { ok: false, error: serverKoTranslate('srv.mailSettings.settingsUnusable') }
+    expect(await sendWorkspaceTestMail(WS, { ...CUSTOM, password: '' })).toEqual(unusable)
+    expect(h.vetMailHost).not.toHaveBeenCalled()
+    expect(h.transportFromSettings).not.toHaveBeenCalled()
+    // 저장도 같은 판정으로 막는다 — 쓰지 않는다
+    expect(await saveWorkspaceMailSettings(WS, { ...CUSTOM, password: '' })).toEqual(unusable)
+    expect(a.update).not.toHaveBeenCalled()
+    expect(a.upsert).not.toHaveBeenCalled()
+  })
+
+  it('트랜스포트를 만들지 못하면(ok:false) 그 문구를 돌려주고 보내지 않는다', async () => {
+    makeAdmin()
+    h.transportFromSettings.mockReturnValueOnce({ ok: false, error: '트랜스포트 실패(목)' } as never)
+    expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: false, error: '트랜스포트 실패(목)' })
+    expect(h.send).not.toHaveBeenCalled()
+  })
+
   it('메일 서버가 본인 주소를 거부하면 실패 문구', async () => {
     makeAdmin()
     h.send.mockResolvedValue({ rejected: [ME.toUpperCase()] })

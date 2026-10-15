@@ -47,7 +47,7 @@ vi.mock('@/components/settings/CalendarSettingsPanel', () => ({ CalendarSettings
 vi.mock('@/components/settings/ConfigLoadError', () => ({ ConfigLoadError: ({ error }: { error: string }) => <p data-load-error>{error}</p> }))
 
 import WorkspaceSettingsPage from '@/app/(app)/w/[slug]/settings/page'
-import { ConfigUnavailableError } from '@/lib/settings/errors'
+import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import { WORKSPACE_SETTINGS } from '@/lib/settings/registry'
 import { resolveKeys } from '@/lib/settings/resolve'
 import { PORTAL_WIDGET_IDS } from '@/lib/portal/widgets'
@@ -248,6 +248,15 @@ describe('/w/[slug]/settings 페이지', () => {
     expect(html.indexOf('id="workspace-mail"')).toBeGreaterThan(html.indexOf('id="workspace-modules"'))
     expect(html.indexOf('id="workspace-mail"')).toBeLessThan(html.indexOf('id="workspace-invites"'))
     expect(html).not.toContain('data-load-error')
+  })
+
+  it('워크스페이스 달력이 손상이면 메일 편집기는 그대로 그리고 timeZone 은 null — 비밀번호 설정 시각은 편집기가 모른다고 보인다', async () => {
+    h.config.mockResolvedValue({ ...config(), calendar: null, calendarError: new ConfigKeyError('CONFIG_INVALID', 'calendar.timezone') })
+    const html = await render()
+    expect(h.mailEditor).toHaveBeenCalledTimes(1)
+    expect(h.mailEditor.mock.calls[0][0]).toEqual({ workspaceId: WID, initial: MAIL_NONE, timeZone: null })
+    const section = html.match(/<section id="workspace-mail">([\s\S]*?)<\/section>/)?.[1] ?? ''
+    expect(section).not.toContain('data-load-error')   // 달력 손상은 메일 섹션을 오류로 바꾸지 않는다(기록 범주만)
   })
 
   it('메일 설정 조회가 실패하면 그 섹션 안에만 ConfigLoadError 를 그리고 로그를 남긴다 — 다른 섹션은 그대로 그린다(3원칙 ①)', async () => {

@@ -23,6 +23,9 @@ vi.mock('@/lib/authz', () => ({ requireProjectAdmin, resolveScope, getActor }))
 vi.mock('@/lib/data/meetings', () => ({ getMeetingDetail: vi.fn() }))
 vi.mock('@/lib/mail/transport', () => ({ getTransport }))
 vi.mock('@/lib/settings/displayBranding', () => ({ loadDisplayBranding }))
+// 프로젝트 설정(회의 범주)은 기본으로 실패시킨다 — 실패해도 발송이 범주 code 로 이어지는지를 이 파일이 본다
+const { getProjectConfig } = vi.hoisted(() => ({ getProjectConfig: vi.fn() }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig }))
 
 import { getSession } from '@/lib/auth'
 import { getMeetingDetail } from '@/lib/data/meetings'
@@ -49,6 +52,7 @@ function asAnon() {
 
 beforeEach(() => {
   getTransport.mockClear(); send.mockReset(); loadDisplayBranding.mockClear()
+  getProjectConfig.mockReset(); getProjectConfig.mockRejectedValue(new Error('프로젝트 설정 조회 실패(목)'))
   requireProjectAdmin.mockReset(); getActor.mockReset(); resolveScope.mockReset()
   resolveScope.mockResolvedValue({ ok: true, projectId: 'p1', workspaceId: 'w1' })
   // getMeetingDetail 은 '호출되지 않았다' 를 단언하므로 매 테스트 초기화한다.
@@ -103,6 +107,7 @@ describe('notifyMeetingSaved 권한 게이트', () => {
   })
 
   it('범위는 읽었지만 프로젝트가 비어 있으면 가드 전에 판정 불가로 멈춘다', async () => {
+    // 실제 회의는 여기 닿지 않는다 — resolveScope 가 meetings 를 projects!inner 로 읽어 프로젝트 없는 행은 '없음'이 된다. 방어 계약 테스트다
     resolveScope.mockResolvedValue({ ok: true, projectId: null, workspaceId: 'w1' })
     const res = await notifyMeetingSaved('m1', 'created')
     expect(res).toMatchObject({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
@@ -145,14 +150,18 @@ describe('notifyMeetingSaved 권한 게이트', () => {
 })
 
 describe('notifyMeetingSaved 발송', () => {
-  // 프로젝트 설정(getProjectConfig)은 이 파일에서 목하지 않아 실패한다 — 범주는 code 로 내려가도
+  // 프로젝트 설정(getProjectConfig)은 beforeEach 에서 명시적으로 실패시킨다 — 범주는 code 로 내려가도
   // 발신 표시명·발송 계정은 resolveScope 의 워크스페이스로 정해진다(프로젝트 설정 조회에 묶이지 않는다).
   it('트랜스포트는 회의가 속한 워크스페이스의 메일 설정과 발신 표시명으로 고른다', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.mocked(getMeetingDetail).mockResolvedValue(
       detail([{ id: 'a1', name: '박영희', email: 'y@example.com' }]) as never)
     send.mockResolvedValue({ rejected: [] })
     const res = await notifyMeetingSaved('m1', 'created')
     expect(res).toMatchObject({ ok: true, sentTo: ['박영희'] })
+    expect(getProjectConfig).toHaveBeenCalledWith('p1')
+    expect(err).toHaveBeenCalledWith('[notifyMeetingSaved] 범주 조회 실패:', expect.any(Error))
+    err.mockRestore()
     expect(loadDisplayBranding).toHaveBeenCalledWith('w1')
     expect(getTransport).toHaveBeenCalledTimes(1)
     expect(getTransport).toHaveBeenCalledWith({ workspaceId: 'w1', fromName: '한빛 회의' })

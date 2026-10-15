@@ -267,11 +267,28 @@ describe('reasonKey — 사유 코드 → 공용 사전 문구', () => {
 
 describe('클라이언트 공용 — settingsInput 은 server-only 모듈을 값으로 끌어오지 않는다', () => {
   const ROOT = process.cwd()
-  /** 값 import 의 대상 경로('@/…'·상대) — import type 은 번들에 남지 않으므로 뺀다 */
-  const valueImports = (src: string): string[] => src.split('\n')
-    .filter(l => /^\s*import\b/.test(l) && !/^\s*import type\b/.test(l))
-    .map(l => /from\s+'([^']+)'|^\s*import\s+'([^']+)'/.exec(l))
-    .flatMap(m => (m ? [m[1] ?? m[2]] : []))
+  /** 값으로 끌어오는 대상 경로 — 파일 전체에서 `import … from`·`export … from`(여러 줄 꼴 포함)·부수효과 `import '…'`·동적 `import('…')`,
+   *  홑·겹따옴표 모두. `import type`·`export type` 은 번들에 남지 않으므로 뺀다(`import { type A, b }` 는 값으로 센다 — 더 엄격한 쪽) */
+  const valueImports = (src: string): string[] => [
+    /^\s*(?:import|export)\s+(?!type\b)[^;'"=()]*?\bfrom\s*['"]([^'"]+)['"]/gm,
+    /^\s*import\s*['"]([^'"]+)['"]/gm,
+    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+  ].flatMap(re => [...src.matchAll(re)].map(m => m[1]))
+
+  it('판정기 표본 — 여러 줄·겹따옴표·re-export·동적 import 를 보고, type 전용은 뺀다', () => {
+    const src = [
+      `import {`, `  a,`, `  b,`, `} from "@/lib/multi"`,
+      `import x from '@/lib/single'`,
+      `import 'server-only'`,
+      `export { c } from './re'`,
+      `export * from "../star"`,
+      `const m = await import('@/lib/dyn')`,
+      `import type { T } from '@/lib/typeonly'`,
+      `export type { U } from '@/lib/typeexport'`,
+      `export const label = 'from here'`,
+    ].join('\n')
+    expect(valueImports(src).sort()).toEqual(['../star', './re', '@/lib/dyn', '@/lib/multi', '@/lib/single', 'server-only'].sort())
+  })
   const resolve = (spec: string, from: string): string | null => {
     const base = spec.startsWith('@/') ? join(ROOT, 'src', spec.slice(2)) : spec.startsWith('.') ? join(dirname(from), spec) : null
     if (!base) return null

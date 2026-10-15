@@ -127,7 +127,8 @@ describe('② 검사 제약', () => {
   it('공백뿐인 계정·비밀번호는 23514 workspace_mail_settings_login — 행이 미설정으로 읽히는 일이 없다', async () => {
     await asService(pool, async (c) => {
       await c.query('set local role service_role')
-      for (const over of [{ username: '   ' }, { username: '' }, { password: ' \t ' }, { password: '' }] as Partial<Row>[]) {
+      // 줄바꿈·탭만인 값도 공백이다(제약의 \S 는 공백류 전부를 뺀다)
+      for (const over of [{ username: '   ' }, { username: '' }, { username: '\n' }, { password: ' \t ' }, { password: '' }] as Partial<Row>[]) {
         expect(await pgError(c, INSERT, values(F.wsB, over)), JSON.stringify(over))
           .toMatchObject({ code: '23514', constraint: 'workspace_mail_settings_login' })
       }
@@ -149,6 +150,7 @@ describe('② 검사 제약', () => {
       [{ host: '' }, 'workspace_mail_settings_host'],
       [{ host: `${'a'.repeat(250)}.com` }, 'workspace_mail_settings_host'],
       [{ from_address: '  ' }, 'workspace_mail_settings_from'],
+      [{ from_address: '\t' }, 'workspace_mail_settings_from'],
       [{ preset: 'outlook' }, 'workspace_mail_settings_preset_check'],
     ]
     await asService(pool, async (c) => {
