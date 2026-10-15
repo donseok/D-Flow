@@ -44,9 +44,9 @@ RPC `upsert_project_member`(0011 ④ `PROJECT_MEMBER_ADMIN_SLOT`), RLS `admin_wr
 
 ```ts
 export interface PlatformAdminRow {
-  userId: string; email: string; name: string
+  userId: string; email: string | null; name: string | null   // null = 프로필 없음 — 화면이 '(프로필 없음)'으로 그린다
   grantedAt: string                      // platform_admins.granted_at
-  grantedBy: { userId: string; email: string; name: string } | null   // granted_by 가 null(지운 계정·시드)이면 null
+  grantedBy: { userId: string; email: string | null; name: string | null } | null   // granted_by 가 null(지운 계정·시드)이면 null
 }
 listPlatformAdmins(): Promise<{ ok: true; rows: PlatformAdminRow[] } | { ok: false; error: string }>
 
