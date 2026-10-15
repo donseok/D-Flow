@@ -53,7 +53,7 @@ listPlatformAdmins(): Promise<{ ok: true; rows: PlatformAdminRow[] } | { ok: fal
 export interface PlatformAdminCandidate {
   userId: string; email: string; name: string
   isPlatformAdmin: boolean
-  workspaces: { name: string; role: 'admin' | 'member'; archived: boolean }[]   // 보관된 것도 싣는다 — 화면이 이름 뒤에 '(보관됨)'을 붙인다. 판단 근거 표시용
+  workspaces: { name: string; role: 'admin' | 'member'; archived: boolean }[]   // 보관된 것도 싣는다 — 화면이 이름 뒤에 '(보관됨)'을 붙인다. 판단 근거 표시용. 이름 가나다순
 }
 findAccountByEmail(email: string): Promise<
   { ok: true; account: PlatformAdminCandidate | null } | { ok: false; error: string }>
@@ -71,7 +71,7 @@ findAccountByEmail(email: string): Promise<
 ### 2.3 화면 — `src/components/admin/PlatformAdminsManager.tsx` (신규, client)
 
 - 머리: 제목 '플랫폼 관리자', 설명 '모든 워크스페이스와 플랫폼 운영 화면(워크스페이스 관리·LLM 설정·사용 현황)을 다루는 계정입니다.'
-- 표: 이름 · 이메일 · 지정한 사람 · 지정일(날짜만) · 동작(해제).
+- 표: 이름 · 이메일 · 지정한 사람 · 지정 일시('YYYY-MM-DD HH:mm', 현재 워크스페이스의 달력 tz — 운영은 `calendar.timezone` 서울. 못 읽으면 UTC. 머리에 tz 이름을 보인다) · 동작(해제).
   - 본인 행의 해제 버튼은 잠그고 툴팁 '다른 플랫폼 관리자가 해제합니다'(기존 `SELF_PLATFORM_HINT_KEY` 재사용).
   - 해제는 확인 창(기존 `wsAccounts.platform.unsetConfirm` 문구 재사용) → `setPlatformAdmin(id, false)` → 성공 토스트·`router.refresh()`. 실패는 액션 문구를 그대로 토스트
     (마지막 한 명 = `srv.accounts.lastSuperuser`).
@@ -81,6 +81,10 @@ findAccountByEmail(email: string): Promise<
   - 없음: '이 이메일의 계정이 없습니다. 워크스페이스 › 멤버·초대에서 먼저 계정을 만드세요.' + 현재 워크스페이스의 멤버 화면 링크
     (페이지가 `readCurrentWorkspace()` 로 `accountsHref` 를 넘긴다 — `/admin/workspaces` 와 같은 꼴, 없으면 링크 없이 문구만).
   - 조회 실패: 오류 문구(입력 유지).
+  - 지정·해제 모달은 **성공했을 때만 닫는다** — 거부·예외면 토스트(사유)와 `router.refresh()` 를 하고 모달·찾은 결과는 남긴다(다시 누르거나 취소).
+  - 지정 일시의 tz 는 **페이지가** 현재 워크스페이스의 달력(`viewTimezone`)에서 읽어 넘긴다 — 고정 시간대 리터럴은 `no-runtime-constants`(D45, 예외 0)가 코드에서 막는다.
+    워크스페이스가 없거나 달력을 못 읽으면 UTC(로그를 남긴다)이고 화면은 열린다.
+  - 찾기가 끝나면(성공·없음·오류·예외) 이메일 입력에 포커스를 되돌린다. 찾기 결과는 `role="status"`, 오류는 `role="alert"`.
 - 목록 조회 실패는 페이지가 `StatusMessage kind="partial_error" blocking` 으로 그린다(표를 그리지 않는다).
 - 문구는 사전 `src/lib/i18n/dict/adminUi.ts` 에 `platformAdmins.*` 키로 한국어만.
 

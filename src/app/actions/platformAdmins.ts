@@ -6,6 +6,7 @@ import { requireSuperuser } from '@/lib/authz'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canonicalEmail } from '@/lib/domain/email'
 import { isWorkspaceAdminRole } from '@/lib/domain/authz'
+import { compareKoreanName } from '@/lib/domain/nameSort'
 import { serverTranslator } from '@/lib/i18n/server'
 
 /** email·name 이 null = 프로필 행이 없다(계정 삭제 경합·시드). 행은 빼지 않는다 — 빼면 관리자 수가 틀린다 */
@@ -84,5 +85,7 @@ export async function findAccountByEmail(
     const w = Array.isArray(m.workspaces) ? m.workspaces[0] : m.workspaces
     return { name: w.name, role: isWorkspaceAdminRole(m.role) ? 'admin' as const : 'member' as const, archived: w.archived_at !== null }
   })
+    // 쿼리 반환 순서는 정해지지 않았다 — 열 때마다 소속 목록이 뒤바뀌지 않게 이름 가나다순으로 고정한다
+    .sort((a, b) => compareKoreanName(a.name, b.name))
   return { ok: true, account: { userId: p.user_id, email: p.email, name: p.display_name, isPlatformAdmin: !!pa.data, workspaces } }
 }

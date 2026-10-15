@@ -45,13 +45,14 @@ describe('listPlatformAdmins', () => {
 
   it('지정 일시 순 목록 + 지정한 사람 — 프로필 없는 행도 빠지지 않는다(null)', async () => {
     requireSuperuser.mockResolvedValue({ ok: true, actor: SU })
+    const platformAdmins = chain({ data: [
+      { user_id: 'u-su', granted_by: null, granted_at: '2026-10-14T00:00:00Z' },
+      { user_id: 'u-b', granted_by: 'u-su', granted_at: '2026-10-15T00:00:00Z' },
+      { user_id: 'u-gone', granted_by: 'u-x', granted_at: '2026-10-15T01:00:00Z' },
+    ], error: null })
     createAdminClient.mockReturnValue({
       from: vi.fn((t: string) => {
-        if (t === 'platform_admins') return chain({ data: [
-          { user_id: 'u-su', granted_by: null, granted_at: '2026-10-14T00:00:00Z' },
-          { user_id: 'u-b', granted_by: 'u-su', granted_at: '2026-10-15T00:00:00Z' },
-          { user_id: 'u-gone', granted_by: 'u-x', granted_at: '2026-10-15T01:00:00Z' },
-        ], error: null })
+        if (t === 'platform_admins') return platformAdmins
         if (t === 'profiles') return chain({ data: [
           { user_id: 'u-su', email: 'su@example.com', display_name: '수퍼' },
           { user_id: 'u-b', email: 'b@example.com', display_name: '비' },
@@ -64,6 +65,9 @@ describe('listPlatformAdmins', () => {
       { userId: 'u-b', email: 'b@example.com', name: '비', grantedAt: '2026-10-15T00:00:00Z', grantedBy: { userId: 'u-su', email: 'su@example.com', name: '수퍼' } },
       { userId: 'u-gone', email: null, name: null, grantedAt: '2026-10-15T01:00:00Z', grantedBy: { userId: 'u-x', email: null, name: null } },
     ] })
+    // '지정 일시 순'은 서버 쿼리의 정렬이다(같은 시각이면 user_id 로 순서를 고정한다)
+    expect(platformAdmins.order).toHaveBeenNthCalledWith(1, 'granted_at')
+    expect(platformAdmins.order).toHaveBeenNthCalledWith(2, 'user_id')
   })
 
   it.each(['platform_admins', 'profiles'])('%s 조회 실패는 { ok: false } — 빈 목록으로 위장하지 않는다', async (bad) => {
@@ -107,9 +111,25 @@ describe('findAccountByEmail', () => {
     const { profiles } = client()
     expect(await findAccountByEmail('  Bob@Example.COM ')).toEqual({ ok: true, account: {
       userId: 'u-b', email: 'bob@example.com', name: '밥', isPlatformAdmin: false,
-      workspaces: [{ name: '알파', role: 'admin', archived: false }, { name: '베타', role: 'member', archived: true }],
+      // 소속은 이름 가나다순 — ㅂ(베타)이 ㅇ(알파)보다 앞이다(조회 결과는 알파·베타 순으로 왔다)
+      workspaces: [{ name: '베타', role: 'member', archived: true }, { name: '알파', role: 'admin', archived: false }],
     } })
     expect(profiles.eq).toHaveBeenCalledWith('email', 'bob@example.com')
+  })
+
+  it('소속 워크스페이스는 이름 가나다순으로 돌려준다 — 쿼리 반환 순서에 기대지 않는다', async () => {
+    requireSuperuser.mockResolvedValue({ ok: true, actor: SU })
+    client({ members: { data: [
+      { role: 'member', workspaces: { name: '하늘', archived_at: null } },
+      { role: 'admin', workspaces: { name: '가람', archived_at: '2026-10-01T00:00:00Z' } },
+      { role: 'member', workspaces: { name: '나래', archived_at: null } },
+    ], error: null } })
+    const res = await findAccountByEmail('bob@example.com')
+    expect(res.ok && res.account?.workspaces).toEqual([
+      { name: '가람', role: 'admin', archived: true },
+      { name: '나래', role: 'member', archived: false },
+      { name: '하늘', role: 'member', archived: false },
+    ])
   })
 
   it('이미 플랫폼 관리자면 isPlatformAdmin true', async () => {
@@ -140,6 +160,7 @@ describe('findAccountByEmail', () => {
     client(o)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await findAccountByEmail('bob@example.com')).toEqual({ ok: false, error: '계정을 조회하지 못했습니다. 잠시 뒤 다시 시도하세요.' })
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('[findAccountByEmail]'), 'boom')   // 표시 = 로깅(3원칙 ①)
     spy.mockRestore()
   })
 })
