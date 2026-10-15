@@ -187,10 +187,10 @@ describe('계정 서버액션 권한 게이트', () => {
   it('listAccounts 는 권한 거부를 빈 배열로 위장하지 않는다 — 멤버는 거부, 다른 워크스페이스 관리자는 존재 은닉', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     signedInAs(WS_MEMBER)
-    expect(await listAccounts(P1)).toEqual({ ok: false, error: ERR_DENIED })
+    expect(await listAccounts({ workspaceId: WS, projectId: P1 })).toEqual({ ok: false, error: ERR_DENIED })
     expect(requireWorkspaceAdmin).toHaveBeenCalledWith(WS)
     signedInAs(OTHER_WS_ADMIN)
-    expect(await listAccounts(P1)).toEqual({ ok: false, error: ERR_MISSING })
+    expect(await listAccounts({ workspaceId: WS, projectId: P1 })).toEqual({ ok: false, error: ERR_MISSING })
     spy.mockRestore()
     expect(createAdminClient).not.toHaveBeenCalled()
   })
@@ -434,6 +434,17 @@ describe('bulkCreateAccounts — 이메일, 권한, 초기비번[, 이름]', () 
     expect(c.q.workspace_members.insert).toHaveBeenCalledWith(expect.objectContaining({ role: 'member' }))
     expect(c.rpc).not.toHaveBeenCalled()
   })
+
+  it('프로젝트 없이(null) 일괄 추가 — 권한이 적힌 줄은 줄 오류, 명단 재검증(/p/…/members)을 부르지 않는다', async () => {
+    signedInAs(WS_ADMIN)
+    accountClient()
+    const { revalidatePath } = await import('next/cache')
+    vi.mocked(revalidatePath).mockClear()   // 모킹 호출 기록은 테스트 사이에 비워지지 않는다 — 앞 테스트의 /p/p1/members 가 섞이지 않게
+    const res = await bulkCreateAccounts(WS, 'a@example.com,admin,password1,에이', null)
+    expect(res.ok).toBe(true)
+    expect(res.results).toEqual([expect.objectContaining({ ok: false, error: '권한을 줄 프로젝트를 지정하세요.' })])
+    expect(revalidatePath).not.toHaveBeenCalledWith(expect.stringContaining('/p/'))
+  })
 })
 
 const CMD = expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
@@ -580,7 +591,7 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
         throw new Error('예상치 못한 테이블 접근: ' + t)
       }),
     } as never)
-    const res = await listAccounts(P1)
+    const res = await listAccounts({ workspaceId: WS, projectId: P1 })
     expect(res).toEqual({
       ok: true,
       workspaceId: WS,
@@ -601,7 +612,7 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
       }),
     } as never)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await listAccounts(P1)
+    const res = await listAccounts({ workspaceId: WS, projectId: P1 })
     spy.mockRestore()
     expect(res).toEqual({ ok: false, error: '계정 권한 정보를 불러오지 못했습니다.' })
   })
@@ -626,7 +637,7 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
         throw new Error('예상치 못한 테이블 접근: ' + t)
       }),
     } as never)
-    const res = await listAccounts(P1)
+    const res = await listAccounts({ workspaceId: WS, projectId: P1 })
     expect(res.ok && res.rows.map(r => r.id)).toEqual(['u1'])
     expect(res.ok && res.workspaceId).toBe(WS)
   })
@@ -642,7 +653,7 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
         throw new Error('예상치 못한 테이블 접근: ' + t)
       }),
     } as never)
-    const res = await listAccounts(P1)
+    const res = await listAccounts({ workspaceId: WS, projectId: P1 })
     expect(res.ok && res.rows.map(r => [r.id, r.isPlatformAdmin])).toEqual([['u1', false]])
   })
 
@@ -667,8 +678,39 @@ describe('listAccounts — profiles + platform_admins + workspace_members + 그 
         throw new Error('예상치 못한 테이블 접근: ' + t)
       }),
     } as never)
-    const res = await listAccounts(P1)
+    const res = await listAccounts({ workspaceId: WS, projectId: P1 })
     expect(res.ok && res.rows.map(r => r.id)).toEqual(['u1', 'u-r'])
+  })
+
+  it('프로젝트 없이 — 워크스페이스 소속만, 명단(project_members)을 읽지 않고 accessRole 은 모두 null', async () => {
+    signedInAs(WS_ADMIN)
+    createAdminClient.mockReturnValue({
+      from: vi.fn((t: string) => {
+        if (t === 'profiles') return chain({ data: [{ user_id: 'u1', email: 'kim@example.com', display_name: '김관리', created_at: '2026-09-01T00:00:00Z' }], count: 1, error: null })
+        if (t === 'platform_admins') return chain({ data: [], error: null })
+        if (t === 'workspace_members') return chain({ data: [{ user_id: 'u1', workspace_id: WS, role: 'admin' }], count: 1, error: null })
+        throw new Error('예상치 못한 테이블 접근: ' + t)
+      }),
+    } as never)
+    const res = await listAccounts({ workspaceId: WS })
+    expect(res.ok && res.rows.map(r => [r.id, r.accessRole])).toEqual([['u1', null]])
+    expect(res.ok && res.workspaceId).toBe(WS)
+  })
+
+  it('다른 워크스페이스의 프로젝트 id 는 ERR_MISSING — 명단을 읽지 않는다(존재 은닉)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    signedInAs(makeActor({ userId: 'u-wsa', workspaceRoles: new Map([[WS, 'admin']]), projectWorkspace: new Map([[P1, WS], ['p-b', WS_B]]) }))
+    expect(await listAccounts({ workspaceId: WS, projectId: 'p-b' })).toEqual({ ok: false, error: ERR_MISSING })
+    spy.mockRestore()
+    expect(createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('워크스페이스 id 가 없으면 가드 전에 거부한다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    signedInAs(SU)
+    expect(await listAccounts({ workspaceId: '' })).toEqual({ ok: false, error: '워크스페이스를 지정해야 합니다.' })
+    spy.mockRestore()
+    expect(requireWorkspaceAdmin).not.toHaveBeenCalled()
   })
 })
 

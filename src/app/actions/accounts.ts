@@ -4,7 +4,7 @@
 // 다른 워크스페이스에도 속한 계정·관리자 계정은 플랫폼 관리자만. 판정은 domain/authz 의 passwordResetVerdict). 0003 이후 계정 = auth.users + profiles + workspace_members + people(연결),
 // 프로젝트 권한 = 명단 행 access_role(RPC upsert_project_member_cmd 로만 쓴다). 옛 전역 소속·프로젝트 역할 표는 0003 에서 폐지됐다.
 import { revalidatePath } from 'next/cache'
-import { requireProjectMember, requireSuperuser, requireWorkspaceAdmin } from '@/lib/authz'
+import { requireSuperuser, requireWorkspaceAdmin } from '@/lib/authz'
 import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { loadAccountTargets } from '@/lib/authz/accountsAccess'
 import { authzCommandError, newAuthzCommandId, parseAuthzResult } from '@/lib/authz/commands'
@@ -258,9 +258,12 @@ export async function createAccount(input: AccountInput & { workspaceId: string 
   return res
 }
 
-/** 한 줄 = 계정 하나. 워크스페이스 등급은 member, 행의 권한은 projectId 프로젝트의 권한('viewer' = 명단 없이 조회 전용). */
+/**
+ * 한 줄 = 계정 하나. 워크스페이스 등급은 member, 행의 권한은 projectId 프로젝트의 권한('viewer' = 명단 없이 조회 전용).
+ * projectId 는 선택 — null 이면(프로젝트 없는 워크스페이스) 권한이 적힌 줄은 줄 오류('viewer' 만 계정이 만들어진다).
+ */
 export async function bulkCreateAccounts(
-  workspaceId: string, text: string, projectId: string,
+  workspaceId: string, text: string, projectId: string | null,
 ): Promise<{ ok: boolean; error?: string; results: BulkResultRow[] }> {
   const t = await serverTranslator()
   if (!isWorkspaceIdInput(workspaceId)) return { ok: false, error: ERR_WORKSPACE_REQUIRED, results: [] }
@@ -284,7 +287,7 @@ export async function bulkCreateAccounts(
     results.push({ lineNo: line.lineNo, email: line.email!, ok: res.ok, error: res.error })
   }
   revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
-  revalidatePath(`/p/${projectId}/members`)
+  if (projectId) revalidatePath(`/p/${projectId}/members`)
   return { ok: true, results }
 }
 
@@ -562,25 +565,24 @@ export async function setWorkspaceRole(
 /**
  * 계정 목록. **권한 거부·조회 실패를 빈 배열로 돌려주지 않는다** — 이 화면은 그 자체가 권한 정보라
  * '계정 0개'·'관리자 0명'이 곧 오정보가 되고, 관리자가 그걸 근거로 권한을 다시 부여하는 쓰기까지 유발한다.
- * workspaceId 는 조회 대상 프로젝트의 워크스페이스 — 화면의 워크스페이스 등급 변경(setWorkspaceRole)이 쓴다.
- * 판정은 그 워크스페이스의 관리자. 프로젝트 가드를 먼저 걸어 타 워크스페이스·미존재 프로젝트를 404 로 숨긴 뒤,
- * 그 프로젝트의 워크스페이스(액터 스냅샷)로 워크스페이스 가드를 건다 — DB 조회는 두 가드를 넘은 뒤에만.
+ * 기준은 워크스페이스다(그 워크스페이스의 관리자). projectId 는 선택 — 있으면 그 프로젝트의 명단 권한 열을 채우고 명단 계정도 보이며,
+ * 그 프로젝트가 이 워크스페이스의 것이 아니면 404 로 숨긴다(W11). 없으면 명단을 읽지 않고 accessRole 은 모두 null(프로젝트 없는 워크스페이스).
  */
 export async function listAccounts(
-  projectId: string,
+  input: { workspaceId: string; projectId?: string | null },
 ): Promise<{ ok: true; rows: AccountRow[]; workspaceId: string } | { ok: false; error: string }> {
   const t = await serverTranslator()
+  const workspaceId = input?.workspaceId
+  const projectId = input?.projectId ?? null
   const deny = (error: string) => {
-    console.error('[listAccounts] 게이트 거부:', error, 'projectId=', projectId)
+    console.error('[listAccounts] 게이트 거부:', error, 'workspaceId=', workspaceId, 'projectId=', projectId)
     return { ok: false as const, error }
   }
-  const pg = await requireProjectMember(projectId)
-  if (!pg.ok) return deny(pg.error)
-  // 슈퍼유저는 roleIn 이 프로젝트 존재 전에 통과시킨다 — 스냅샷에 없으면(미존재) 여기서 404.
-  const workspaceId = pg.actor.projectWorkspace.get(projectId)
-  if (!workspaceId) return deny(ERR_MISSING)
+  if (!isWorkspaceIdInput(workspaceId)) return deny(ERR_WORKSPACE_REQUIRED)
+  if (projectId !== null && typeof projectId !== 'string') return deny(ERR_MISSING)
   const g = await requireWorkspaceAdmin(workspaceId)
   if (!g.ok) return deny(g.error)
+  if (projectId !== null && !projectInWorkspace(g.actor, projectId, workspaceId)) return deny(ERR_MISSING)
   const admin = createAdminClient()
   const fail = (what: string, message: string | undefined) => {
     console.error(`[listAccounts] ${what} 조회 실패:`, message ?? 'unknown')
@@ -596,7 +598,10 @@ export async function listAccounts(
   const [platform, wsMembers, roster] = await Promise.all([
     admin.from('platform_admins').select('user_id'),
     admin.from('workspace_members').select('user_id, role').eq('workspace_id', workspaceId),
-    admin.from('project_members').select('access_role, active, people!inner(user_id, active)').eq('project_id', projectId),
+    // 프로젝트가 없으면 명단을 읽지 않는다 — 권한 열이 없는 화면이다
+    projectId
+      ? admin.from('project_members').select('access_role, active, people!inner(user_id, active)').eq('project_id', projectId)
+      : Promise.resolve({ data: [] as unknown[], error: null }),
   ])
   if (platform.error || !platform.data) return fail('플랫폼 관리자', platform.error?.message)
   if (wsMembers.error || !wsMembers.data) return fail('워크스페이스 소속', wsMembers.error?.message)

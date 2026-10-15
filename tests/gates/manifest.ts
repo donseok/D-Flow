@@ -46,13 +46,13 @@ const SESSION_SELF = '로그인만 — 자기 행(user_id)만 읽고 쓴다'
 export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   // ── accounts(D) — 플랫폼·워크스페이스 관리
   [`${A('accounts')}#createAccount`]: { ...nul('workspaceAdmin'), sample: [{ workspaceId: U }] },   // 빈 workspaceId 는 가드 앞(isWorkspaceIdInput)에서 막힌다
-  [`${A('accounts')}#bulkCreateAccounts`]: { ...nul('workspaceAdmin'), sample: [U, '', ''] },   // typeof workspaceId 가 가드 앞
+  [`${A('accounts')}#bulkCreateAccounts`]: { ...nul('workspaceAdmin'), sample: [U, '', null] },   // typeof workspaceId 가 가드 앞
   [`${A('accounts')}#resetPassword`]: { ...nul('workspaceAdmin'), sample: [U, U, 'password1'] },   // 빈 workspaceId 는 가드 앞
   [`${A('accounts')}#previewWorkspaceMemberRemoval`]: { ...nul('workspaceAdmin'), sample: [U, U] },
   [`${A('accounts')}#removeWorkspaceMember`]: { ...nul('workspaceAdmin'), sample: [U, U] },
   [`${A('accounts')}#setPlatformAdmin`]: nul('superuser'),
   [`${A('accounts')}#setWorkspaceRole`]: { ...nul('workspaceAdmin'), sample: [U, U, 'member'] },
-  [`${A('accounts')}#listAccounts`]: nul('workspaceAdmin'),
+  [`${A('accounts')}#listAccounts`]: { ...nul('workspaceAdmin'), sample: [{ workspaceId: U }] },   // 빈 workspaceId 는 가드 앞(isWorkspaceIdInput)에서 막힌다
   // ── authzEvents — 권한 변경 이력 읽기(SP3a Phase D) — 워크스페이스 관리자, 플랫폼 행은 플랫폼 관리자에게만
   [`${A('authzEvents')}#listAuthzEvents`]: { ...nul('workspaceAdmin'), sample: [U] },
   // ── agentHub — 허브(agents)

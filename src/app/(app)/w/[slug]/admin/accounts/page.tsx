@@ -51,7 +51,7 @@ export default async function AccountsAdminPage({ params, searchParams }: {
     )
   }
 
-  const res = await listAccounts(projectId)
+  const res = await listAccounts({ workspaceId: scope.ws.id, projectId })
   if (res.ok && res.workspaceId !== scope.ws.id) notFound()               // 슬러그와 다른 워크스페이스의 명단을 이 주소로 보이지 않는다
   if (!res.ok) {
     // 조용한 빈 화면 금지 — 원인을 그대로 보여준다(표시 = 로깅).

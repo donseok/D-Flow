@@ -35,7 +35,7 @@ describe('/w/[slug]/admin/accounts — 슬러그 워크스페이스 관리자(D2
   it('워크스페이스 관리자가 연다 — 후보는 그 워크스페이스 프로젝트만, 플랫폼 조작은 렌더하지 않는다', async () => {
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(wsAdmin))
     await renderAccounts({ project: PB })
-    expect(h.listAccounts).toHaveBeenCalledWith(P1)               // 다른 워크스페이스 pid 는 후보가 아니다(W11)
+    expect(h.listAccounts).toHaveBeenCalledWith({ workspaceId: WS.id, projectId: P1 })   // 다른 워크스페이스 pid 는 후보가 아니다(W11)
     expect(h.managerProps).toHaveBeenCalledWith(expect.objectContaining({ projects: [{ id: P1, name: 'Apollo' }], canPlatformOps: false }))
   })
   it('플랫폼 관리자에게만 플랫폼 조작', async () => {
@@ -46,8 +46,8 @@ describe('/w/[slug]/admin/accounts — 슬러그 워크스페이스 관리자(D2
   it('플랫폼 관리자도 ?project= 로 다른 워크스페이스 프로젝트를 이 주소에서 고를 수 없다(W11)', async () => {
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(makeSuperuser({ projectWorkspace: new Map([[P1, WS.id], [PB, 'ws-b']]) })))
     await accounts({ project: PB })
-    expect(h.listAccounts).toHaveBeenCalledWith(P1)
-    expect(h.listAccounts).not.toHaveBeenCalledWith(PB)
+    expect(h.listAccounts).toHaveBeenCalledWith({ workspaceId: WS.id, projectId: P1 })
+    expect(h.listAccounts).not.toHaveBeenCalledWith(expect.objectContaining({ projectId: PB }))
   })
   it('멤버 → /w/acme, 응답의 워크스페이스가 다르면 404, 관리할 프로젝트 0 → 빈 상태', async () => {
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(makeActor({ workspaceRoles: new Map([[WS.id, 'member']]) })))
