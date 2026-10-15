@@ -57,3 +57,16 @@ export function parseTsv(text: string): string[][] {
   }
   return rows
 }
+
+/** 시트가 쓴 복사본의 표식 형식 — 한 열 여러 행의 복사본은 일반 여러 줄 텍스트와 text/plain 모양이 같아서 이것으로 가른다. */
+export const SHEET_CLIPBOARD_TYPE = 'application/x-dflow-sheet'
+
+/**
+ * 붙여넣을 클립보드 → 셀 격자. 표에서 온 복사본만 TSV 로 펼친다 — 시트 표식, 탭(여러 열), HTML 표(엑셀·구글시트의 한 열 복사).
+ * 그 밖의 일반 텍스트(셀 안에서 긁어 복사한 여러 줄 등)는 줄바꿈을 품은 **한 셀**이다 — 줄마다 아래 행으로 펼치지 않고,
+ * 따옴표도 인용으로 읽지 않는다. 줄 끝은 `\n` 으로 맞추고 끝의 빈 줄은 버린다.
+ */
+export function cellsFromClipboard(text: string, src: { types: readonly string[]; html: string }): string[][] {
+  if (src.types.includes(SHEET_CLIPBOARD_TYPE) || text.includes('\t') || /<table[\s>]/i.test(src.html)) return parseTsv(text)
+  return [[text.replace(/\r\n?/g, '\n').replace(/\n+$/, '')]]
+}

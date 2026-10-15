@@ -6,7 +6,7 @@ import {
   pasteEdits, fillEdits, clearEdits, reconcileSelection,
   type CellAddr, type GridRect, type SelectionState, type SheetGridRow,
 } from '@/lib/domain/sheetSelection'
-import { serializeTsv, parseTsv } from '@/lib/domain/sheetClipboard'
+import { serializeTsv, cellsFromClipboard, SHEET_CLIPBOARD_TYPE } from '@/lib/domain/sheetClipboard'
 import { isNewlineChord } from '@/lib/domain/sheetChords'
 import { type WeeklyCellKey, type WeeklyCellEdit } from '@/lib/domain/weeklySheet'
 import { useLocale } from '@/components/providers/LocaleProvider'
@@ -160,9 +160,8 @@ export function useSheetGrid({
     setLive(fill(tRef.current('weekly.grid.cleared'), { n: edits.length }))
   }, [runBatch, readOnly])
 
-  const doPasteText = useCallback((text: string, anchor: CellAddr) => {
+  const doPasteValues = useCallback((values: string[][], anchor: CellAddr) => {
     if (readOnly) return
-    const values = parseTsv(text)
     const { edits, clippedRows, clippedCols } = pasteEdits(rowIdsRef.current, anchor, values)
     // 시트는 업무영역마다 1행이라 행을 늘릴 수단이 없다 — 실행 가능한 대안(위쪽 행부터
     // 붙여넣기 / 셀 안에서 줄바꿈)을 안내한다. 행 수는 실제 시트에서 읽는다 — 영역이 늘 때마다 안내문이 거짓말을 하지 않게.
@@ -232,6 +231,7 @@ export function useSheetGrid({
     if (!r) return
     e.preventDefault()
     e.clipboardData.setData('text/plain', serializeTsv(valuesInRect(rowsRef.current, r)))
+    e.clipboardData.setData(SHEET_CLIPBOARD_TYPE, '1') // 붙여넣기가 이 복사본을 TSV 로 읽게 — 한 열 여러 행은 일반 여러 줄 텍스트와 모양이 같다
   }, [])
 
   const onCellCut = useCallback((e: React.ClipboardEvent) => {
@@ -240,6 +240,7 @@ export function useSheetGrid({
     if (!r) return
     e.preventDefault()
     e.clipboardData.setData('text/plain', serializeTsv(valuesInRect(rowsRef.current, r)))
+    e.clipboardData.setData(SHEET_CLIPBOARD_TYPE, '1') // 붙여넣기가 이 복사본을 TSV 로 읽게 — 한 열 여러 행은 일반 여러 줄 텍스트와 모양이 같다
     doClear(r) // 복사 + 원본 비우기 = 하나의 undo 엔트리(AC4.6)
   }, [doClear])
 
@@ -252,8 +253,10 @@ export function useSheetGrid({
     const ids = rowIdsRef.current
     const r = rectFromAddrs(ids, selRef.current.anchor, selRef.current.active)
     const anchor: CellAddr = r ? { rowId: ids[r.top], col: CONTENT_COLS[r.left] } : selRef.current.active
-    doPasteText(text, anchor)
-  }, [doPasteText, toast])
+    // 표에서 온 복사본만 행·열로 펼친다 — 셀 안에서 긁어 온 여러 줄 텍스트는 고른 칸 하나에 그대로 넣는다
+    const values = cellsFromClipboard(text, { types: Array.from(e.clipboardData.types ?? []), html: e.clipboardData.getData('text/html') })
+    doPasteValues(values, anchor)
+  }, [doPasteValues, toast])
 
   // ── 마우스 ──
   const onCellMouseDown = useCallback((e: React.MouseEvent, addr: CellAddr) => {

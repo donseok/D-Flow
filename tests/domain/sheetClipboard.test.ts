@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { serializeTsv, parseTsv } from '@/lib/domain/sheetClipboard'
+import { serializeTsv, parseTsv, cellsFromClipboard, SHEET_CLIPBOARD_TYPE } from '@/lib/domain/sheetClipboard'
 
 describe('serializeTsv', () => {
   it('단순 격자 — 탭·개행 구분', () => {
@@ -110,5 +110,33 @@ describe('적대적 경계 케이스', () => {
     expect(parseTsv('a\n')).toEqual([['a']]) // 마지막 단일 빈 셀은 후행 개행으로 흡수됨(의도)
     // 다열 마지막 행은 유실 없음
     expect(parseTsv(serializeTsv([['a', 'b'], ['', '']]))).toEqual([['a', 'b'], ['', '']])
+  })
+})
+
+describe('cellsFromClipboard — 표 복사본만 펼치고 일반 텍스트는 한 셀', () => {
+  const plain = { types: ['text/plain'], html: '' }
+  it('셀 안에서 긁어 복사한 여러 줄 텍스트는 줄바꿈을 품은 한 셀이다(아래 행으로 펼치지 않는다)', () => {
+    expect(cellsFromClipboard(' - 개선 과제의 정의서 작성\n - 현 프로세스 정의 추가 예정', plain))
+      .toEqual([[' - 개선 과제의 정의서 작성\n - 현 프로세스 정의 추가 예정']])
+  })
+  it('일반 텍스트의 \\r\\n·\\r 은 \\n 으로, 끝의 빈 줄은 버린다', () => {
+    expect(cellsFromClipboard('줄1\r\n줄2\r줄3\n\n', plain)).toEqual([['줄1\n줄2\n줄3']])
+  })
+  it('일반 텍스트는 따옴표를 인용으로 읽지 않는다', () => {
+    expect(cellsFromClipboard('"확인" 완료\n다음 줄', plain)).toEqual([['"확인" 완료\n다음 줄']])
+  })
+  it('시트가 쓴 복사본(표식)은 한 열 여러 행이어도 TSV 로 펼친다', () => {
+    const text = serializeTsv([['가'], ['나']])
+    expect(cellsFromClipboard(text, { types: ['text/plain', SHEET_CLIPBOARD_TYPE], html: '' })).toEqual([['가'], ['나']])
+  })
+  it('탭이 있으면 TSV 다(엑셀·구글시트 여러 열)', () => {
+    expect(cellsFromClipboard('a\tb\nc\td', plain)).toEqual([['a', 'b'], ['c', 'd']])
+  })
+  it('HTML 표가 같이 오면(엑셀·구글시트 한 열 복사) 행으로 펼친다', () => {
+    expect(cellsFromClipboard('a\r\nb\r\n', { types: ['text/plain', 'text/html'], html: '<html><body><table><tr><td>a</td></tr><tr><td>b</td></tr></table></body></html>' }))
+      .toEqual([['a'], ['b']])
+  })
+  it('한 줄 텍스트는 그대로 한 셀', () => {
+    expect(cellsFromClipboard('60', plain)).toEqual([['60']])
   })
 })
