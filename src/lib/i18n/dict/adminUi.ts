@@ -220,6 +220,7 @@ export const adminUiKo = {
   'wsAccounts.colName': '이름',
   'wsAccounts.colWsRole': '워크스페이스 역할',
   'wsAccounts.colProjectAccess': '이 프로젝트 권한',
+  'wsAccounts.noProjectNotice': '아직 프로젝트가 없어 프로젝트 권한은 표시하지 않습니다. 프로젝트를 만든 뒤 명단에서 권한을 줍니다.',
   'wsAccounts.platformAdmin': '플랫폼 관리자',
   'wsAccounts.colCreated': '생성일',
   'wsAccounts.changeOnRoster': '명단 화면에서 변경',

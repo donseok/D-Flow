@@ -64,8 +64,6 @@ export const pagesUiKo = {
   // ── 멤버·초대(/w/…/admin/accounts) ──
   'pages.accounts.projectsFailed': '프로젝트 목록을 불러오지 못했습니다',
   'pages.accounts.projectsFailedDetail': '잠시 뒤 새로고침하세요. 계속되면 관리자에게 알려 주세요.',
-  'pages.accounts.noProjects': '관리할 프로젝트가 없습니다',
-  'pages.accounts.noProjectsDetail': '이 워크스페이스에 프로젝트를 만든 뒤 계정과 권한을 지정할 수 있습니다.',
   'pages.accounts.listFailed': '계정 목록을 불러오지 못했습니다',
   'pages.accounts.meta': '{ws} · 계정 {total} · 관리자 {admins} · 멤버 {members}',
   // ── 사용 현황(/w/…/usage) ──

@@ -70,10 +70,10 @@ describe('AccountsManager', () => {
     container.remove()
   })
 
-  function render(rows: AccountRow[] = [account(), BOB, CAROL, DAVE], platformOps = true) {
+  function render(rows: AccountRow[] = [account(), BOB, CAROL, DAVE], platformOps = true, projectId: string | null = 'p-1') {
     act(() => {
-      root.render(<AccountsManager accounts={rows} projectId="p-1" workspaceId="ws-1"
-        projects={[{ id: 'p-1', name: 'Acme' }]} canPlatformOps={platformOps} currentUserId="u-bob" />)
+      root.render(<AccountsManager accounts={rows} projectId={projectId} workspaceId="ws-1"
+        projects={projectId ? [{ id: 'p-1', name: 'Acme' }] : []} canPlatformOps={platformOps} currentUserId="u-bob" />)
     })
   }
   const headers = () => Array.from(container.querySelectorAll('th')).map(th => th.textContent?.trim() ?? '')
@@ -280,6 +280,18 @@ describe('AccountsManager', () => {
     expect(cell.closest('a')?.getAttribute('href')).toBe('/p/p-1/members')
     expect(row('u-bob').querySelector('[data-access-role]')!.textContent).toContain('조회')
     expect(row('u-carol').querySelector('select')).toBeNull()
+  })
+
+  it('프로젝트가 없으면 — 프로젝트 권한 열이 없고 안내 한 줄, 계정 추가 모달에 권한 선택이 없다', async () => {
+    render(undefined, true, null)
+    expect(headers()).not.toContain('이 프로젝트 권한')
+    expect(container.querySelector('[data-access-role]')).toBeNull()
+    expect(container.textContent).toContain('아직 프로젝트가 없어 프로젝트 권한은 표시하지 않습니다.')
+    const addBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('계정 추가'))!
+    await click(addBtn)
+    const labels = Array.from(document.body.querySelectorAll('label span')).map(s => s.textContent?.trim())
+    expect(labels).not.toContain('이 프로젝트 권한')
+    expect(labels).toContain('워크스페이스 역할')
   })
 
   it('계정 추가의 프로젝트 관리자 옵션은 워크스페이스 관리자도 고를 수 있다 — 서버 규칙(requireWorkspaceAdmin)과 같다(U2a-4 T3)', async () => {

@@ -49,14 +49,17 @@ describe('/w/[slug]/admin/accounts — 슬러그 워크스페이스 관리자(D2
     expect(h.listAccounts).toHaveBeenCalledWith({ workspaceId: WS.id, projectId: P1 })
     expect(h.listAccounts).not.toHaveBeenCalledWith(expect.objectContaining({ projectId: PB }))
   })
-  it('멤버 → /w/acme, 응답의 워크스페이스가 다르면 404, 관리할 프로젝트 0 → 빈 상태', async () => {
+  it('멤버 → /w/acme', async () => {
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(makeActor({ workspaceRoles: new Map([[WS.id, 'member']]) })))
     await expect(accounts()).rejects.toThrow('NEXT_REDIRECT:/w/acme')
+  })
+  it('관리할 프로젝트 0 → 빈 상태가 아니라 워크스페이스 계정 표(projectId null)', async () => {
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(wsAdmin))
-    h.listAccounts.mockResolvedValue({ ok: true, rows: [], workspaceId: 'ws-b' })
-    await expect(accounts()).rejects.toThrow('NEXT_NOT_FOUND')
     h.listProjectsWithState.mockResolvedValue({ projects: [], degraded: false })
-    expect(renderToString(await accounts())).toContain('관리할 프로젝트가 없습니다')
+    const html = await renderAccounts()
+    expect(html).not.toContain('관리할 프로젝트가 없습니다')
+    expect(h.listAccounts).toHaveBeenCalledWith({ workspaceId: WS.id, projectId: null })
+    expect(h.managerProps).toHaveBeenCalledWith(expect.objectContaining({ projectId: null, projects: [] }))
   })
   it('프로젝트 목록 조회 실패는 "관리할 프로젝트가 없습니다"로 위장하지 않는다 — 실패 표시, 명단 로더 미호출(U2a-4 T2)', async () => {
     h.loadWorkspaceScope.mockResolvedValue(scopeOf(wsAdmin))

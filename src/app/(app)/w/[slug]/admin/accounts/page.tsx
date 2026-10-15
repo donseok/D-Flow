@@ -1,4 +1,4 @@
-import { notFound, redirect } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canManageWorkspaceAccounts } from '@/lib/authz/accountsAccess'
 import { ACCESS_ROLE, isProjectAdmin } from '@/lib/domain/authz'
@@ -37,22 +37,13 @@ export default async function AccountsAdminPage({ params, searchParams }: {
   }
   const projects = list.projects
   // 후보 = 그 워크스페이스의, 내가 관리자인 프로젝트. 목록의 첫 항목으로 정하면 B 프로젝트 관리자가 들어왔을 때 A 가 기본값이 되어
-  // 게이트에 거부당하고 화면은 그 거부를 '계정 0개'로 보여준다. 다른 워크스페이스 pid 는 ?project= 로도 고를 수 없다(W11)
+  // 게이트에 거부당하고 화면은 그 거부를 '계정 0개'로 보여준다. 다른 워크스페이스 pid 는 ?project= 로도 고를 수 없다(W11).
+  // 후보가 없으면(프로젝트 없는 워크스페이스) 프로젝트 없이 워크스페이스 계정만 그린다 — 계정 추가·등급·재설정이 막히지 않게.
   const managed = (projects as { id: string; name: string; workspace_id?: string }[])
     .filter((p) => p.workspace_id === scope.ws.id && isProjectAdmin(actor, p.id))
-  const projectId = managed.some((p) => p.id === project) ? project! : managed[0]?.id
-  if (!projectId) {
-    // 역할을 부여할 대상이 없다 — 다른 화면으로 튕기지 않고 그 사실을 보여 준다
-    return (
-      <div className="space-y-6">
-        <PageHeader title={title} meta={scope.ws.name} />
-        <StatusMessage kind="empty" title={t('pages.accounts.noProjects')} detail={t('pages.accounts.noProjectsDetail')} />
-      </div>
-    )
-  }
+  const projectId = managed.some((p) => p.id === project) ? project! : (managed[0]?.id ?? null)
 
   const res = await listAccounts({ workspaceId: scope.ws.id, projectId })
-  if (res.ok && res.workspaceId !== scope.ws.id) notFound()               // 슬러그와 다른 워크스페이스의 명단을 이 주소로 보이지 않는다
   if (!res.ok) {
     // 조용한 빈 화면 금지 — 원인을 그대로 보여준다(표시 = 로깅).
     return (

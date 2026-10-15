@@ -47,8 +47,8 @@ function randomPassword(): string {
 
 export function AccountsManager({ accounts, projectId, workspaceId, projects, canPlatformOps, currentUserId }: {
   accounts: AccountRow[]
-  /** 역할 열·역할 변경이 대상으로 삼는 프로젝트 */
-  projectId: string
+  /** 역할 열·역할 변경이 대상으로 삼는 프로젝트. null = 워크스페이스에 관리할 프로젝트가 없다 — 권한 열·권한 선택을 그리지 않는다 */
+  projectId: string | null
   /** 그 프로젝트의 워크스페이스 — 워크스페이스 등급 열·변경과 새 계정(단건·일괄) 소속의 대상 */
   workspaceId: string
   projects: { id: string; name: string }[]
@@ -77,7 +77,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
           {projects.length > 1 && (
             <select
               className="app-input h-9 w-auto text-xs"
-              value={projectId}
+              value={projectId ?? ''}
               onChange={(e) => router.push(scope?.workspace
                 ? wsHref(scope.workspace.slug, 'admin/accounts', { project: e.target.value })
                 : `/admin/accounts?project=${encodeURIComponent(e.target.value)}`)}
@@ -96,6 +96,9 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
       </div>
 
       <div className="p-5 sm:p-6">
+        {projectId === null && (
+          <p data-no-project-notice className="mb-4 text-sm text-fg-secondary">{t('wsAccounts.noProjectNotice')}</p>
+        )}
         {accounts.length === 0 ? (
           <EmptyState
             icon={UserRound}
@@ -111,7 +114,7 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                   <th className="py-2 pr-3">{t('wsAccounts.colEmail')}</th>
                   <th className="py-2 pr-3">{t('wsAccounts.colName')}</th>
                   <th className="py-2 pr-3">{t('wsAccounts.colWsRole')}</th>
-                  <th className="py-2 pr-3">{t('wsAccounts.colProjectAccess')}</th>
+                  {projectId !== null && <th className="py-2 pr-3">{t('wsAccounts.colProjectAccess')}</th>}
                   {canPlatformOps && <th className="py-2 pr-3">{t('wsAccounts.platformAdmin')}</th>}
                   <th className="py-2 pr-3">{t('wsAccounts.colCreated')}</th>
                   <th className="py-2 pr-3 text-right">{t('wsAccounts.colActions')}</th>
@@ -125,17 +128,19 @@ export function AccountsManager({ accounts, projectId, workspaceId, projects, ca
                     <td className="py-2.5 pr-3">
                       <WorkspaceRoleCell account={a} workspaceId={workspaceId} />
                     </td>
-                    <td className="py-2.5 pr-3">
-                      {/* 프로젝트 권한은 명단 행의 권한이다(0003) — 팀·역할과 한 행이라 명단 화면에서만 바꾼다. */}
-                      <Link href={`/p/${projectId}/members`} title={t('wsAccounts.changeOnRoster')} data-access-role className={`chip ${
-                        accountRole(a) === 'admin' ? 'bg-action-soft text-action'
-                          : accountRole(a) === 'member' ? 'bg-progress-weak text-progress'
-                            : 'bg-surface-subtle text-fg-muted'
-                      }`}>
-                        {accountRole(a) === 'admin' ? <UserCog className="h-3 w-3" /> : accountRole(a) === 'member' ? <UserRound className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                        {t(ROLE_LABEL_KEY[accountRole(a)])}
-                      </Link>
-                    </td>
+                    {projectId !== null && (
+                      <td className="py-2.5 pr-3">
+                        {/* 프로젝트 권한은 명단 행의 권한이다(0003) — 팀·역할과 한 행이라 명단 화면에서만 바꾼다. */}
+                        <Link href={`/p/${projectId}/members`} title={t('wsAccounts.changeOnRoster')} data-access-role className={`chip ${
+                          accountRole(a) === 'admin' ? 'bg-action-soft text-action'
+                            : accountRole(a) === 'member' ? 'bg-progress-weak text-progress'
+                              : 'bg-surface-subtle text-fg-muted'
+                        }`}>
+                          {accountRole(a) === 'admin' ? <UserCog className="h-3 w-3" /> : accountRole(a) === 'member' ? <UserRound className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                          {t(ROLE_LABEL_KEY[accountRole(a)])}
+                        </Link>
+                      </td>
+                    )}
                     {canPlatformOps && (
                       <td className="py-2.5 pr-3">
                         <PlatformAdminCell account={a} isSelf={a.id === currentUserId} />
@@ -316,7 +321,7 @@ function WorkspaceRoleSelect({ value, onChange }: {
 }
 
 function AddAccountModal({ open, onClose, projectId, workspaceId }: {
-  open: boolean; onClose: () => void; projectId: string; workspaceId: string
+  open: boolean; onClose: () => void; projectId: string | null; workspaceId: string
 }) {
   const router = useRouter()
   const { toast } = useToast()
@@ -343,7 +348,7 @@ function AddAccountModal({ open, onClose, projectId, workspaceId }: {
       try {
         const res = await createAccount({
           email: email.trim(), password, name: name.trim() || null, workspaceRole: wsRole,
-          projectId, accessRole: role === 'viewer' ? null : role, workspaceId,
+          projectId, accessRole: projectId && role !== 'viewer' ? role : null, workspaceId,
         })
         if (res.ok) {
           toast({ title: t('wsAccounts.created'), description: email.trim(), variant: 'success' })
@@ -374,13 +379,15 @@ function AddAccountModal({ open, onClose, projectId, workspaceId }: {
         <Field label={t('wsAccounts.field.name')}>
           <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('wsAccounts.field.namePlaceholder')} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid gap-3 ${projectId ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <Field label={t('wsAccounts.colWsRole')}>
             <WorkspaceRoleSelect value={wsRole} onChange={setWsRole} />
           </Field>
-          <Field label={t('wsAccounts.colProjectAccess')}>
-            <RoleSelect value={role} onChange={setRole} />
-          </Field>
+          {projectId && (
+            <Field label={t('wsAccounts.colProjectAccess')}>
+              <RoleSelect value={role} onChange={setRole} />
+            </Field>
+          )}
         </div>
         <Field label={t('wsAccounts.field.initialPw')}>
           <div className="flex gap-2">
@@ -395,7 +402,7 @@ function AddAccountModal({ open, onClose, projectId, workspaceId }: {
 }
 
 function BulkAddModal({ open, onClose, projectId, workspaceId }: {
-  open: boolean; onClose: () => void; projectId: string; workspaceId: string
+  open: boolean; onClose: () => void; projectId: string | null; workspaceId: string
 }) {
   const router = useRouter()
   const { t } = useLocale()
