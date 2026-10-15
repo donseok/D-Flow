@@ -37,7 +37,7 @@ RPC `upsert_project_member`(0011 ④ `PROJECT_MEMBER_ADMIN_SLOT`), RLS `admin_wr
   (`canManageWorkspaces` 를 빌려 쓰지 않는다). 플랫폼 관리라 모듈 관문 밖이다(페이지 관문 불변식의 제외 목록에 더한다).
 - 메뉴: `SHELL_NAV` 에 `{ id: 'ws.platform_admins', labelKey: 'nav.platformAdmins', icon: 'UserCog', segment: '/admin/platform-admins', group: 'ws.platform', order: 7, scope: 'workspace', needs: 'isPlatformAdmin' }`.
   아이콘은 `navIcons.ts` 에 이미 있는 `UserCog` 를 쓴다 — UI 위험 파일(`src/components/app/*`)을 고치지 않는다. 항목 id 는 `src/lib/nav/ids.ts` 에 더하고,
-  `NAV_DEFAULT_LABEL_KEY` 개수를 고정하는 테스트(`tests/nav/registry.test.ts`)를 고친다.
+  `NAV_DEFAULT_LABEL_KEY` 개수를 고정하는 테스트(`tests/nav/nav-for.test.ts`)를 고친다.
 - 소속이 없는 플랫폼 관리자의 시작 화면(`NoWorkspaceView`)에도 링크를 둘지: 두지 않는다(YAGNI — 메뉴는 워크스페이스 층에 있고 소속 0 은 첫 설치 직후뿐이다).
 
 ### 2.2 서버 액션 — `src/app/actions/platformAdmins.ts` (신규)
@@ -71,7 +71,7 @@ findAccountByEmail(email: string): Promise<
 ### 2.3 화면 — `src/components/admin/PlatformAdminsManager.tsx` (신규, client)
 
 - 머리: 제목 '플랫폼 관리자', 설명 '모든 워크스페이스와 플랫폼 운영 화면(워크스페이스 관리·LLM 설정·사용 현황)을 다루는 계정입니다.'
-- 표: 이름 · 이메일 · 지정한 사람 · 지정 일시 · 동작(해제).
+- 표: 이름 · 이메일 · 지정한 사람 · 지정일(날짜만) · 동작(해제).
   - 본인 행의 해제 버튼은 잠그고 툴팁 '다른 플랫폼 관리자가 해제합니다'(기존 `SELF_PLATFORM_HINT_KEY` 재사용).
   - 해제는 확인 창(기존 `wsAccounts.platform.unsetConfirm` 문구 재사용) → `setPlatformAdmin(id, false)` → 성공 토스트·`router.refresh()`. 실패는 액션 문구를 그대로 토스트
     (마지막 한 명 = `srv.accounts.lastSuperuser`).
@@ -112,7 +112,8 @@ listAccounts(input: { workspaceId: string; projectId?: string | null }): Promise
   - '프로젝트 권한' 열을 그리지 않는다(머리·셀 모두).
   - 표 위에 안내 한 줄: '아직 프로젝트가 없어 프로젝트 권한은 표시하지 않습니다. 프로젝트를 만든 뒤 명단에서 권한을 줍니다.'
   - 계정 추가 모달은 프로젝트 권한 선택을 숨기고 `projectId: null, accessRole: null` 로 보낸다(서버는 이미 허용한다).
-  - 일괄 추가 모달은 그대로 보낸다 — 줄에 권한이 적혀 있으면 서버(`createOne`)가 이미 줄별로 `srv.accounts.chooseProjectGrantAccess` 를 돌려준다(확인함 — 조용히 버리지 않는다).
+  - 일괄 추가 모달은 그대로 보내되 안내를 바꾼다 — 프로젝트가 없으면 권한 칸에 `admin`·`member` 를 쓴 줄은 서버(`createOne`)가 줄별로 `srv.accounts.chooseProjectGrantAccess` 로 거부하고(조용히 버리지 않는다)
+    고를 프로젝트도 없으므로, 모달은 'viewer 만 쓸 수 있다' 는 안내와 `viewer` 를 쓴 예시·placeholder 를 보인다(`wsAccounts.bulk.*NoProject`). 프로젝트가 있을 때의 안내는 그대로다.
     `bulkCreateAccounts(workspaceId, text, projectId)` 의 셋째 인자는 `string | null` 로 넓히고, null 이면 `revalidatePath(`/p/${projectId}/members`)` 를 건너뛴다.
 - 프로젝트가 있을 때의 동작·마크업은 바꾸지 않는다.
 

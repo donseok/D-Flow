@@ -20,7 +20,7 @@
 | 파일 | 분류 | 근거 |
 |---|---|---|
 | src/app/(app)/w/[slug]/settings/integrations/page.tsx | 세션 가드 뒤 id 스코프 | workspacePageAccess(wid) 로 워크스페이스 관리자 이상을 확인한 뒤 그 wid 로 연동 자격증명을 조회한다 |
-| src/app/actions/accounts.ts | 세션 가드 뒤 id 스코프 | create·bulk·setWorkspaceRole·listAccounts·removeWorkspaceMember·previewWorkspaceMemberRemoval 는 requireWorkspaceAdmin(wid) 뒤에 그 wid(listAccounts 는 pid)로 좁힌다. resetPassword 도 requireWorkspaceAdmin(wid) 뒤 — 대상의 등급 축만은 전역으로 읽는다(loadAccountTargets: 다른 워크스페이스 소속까지 봐야 경계를 가른다, D1 계정 전역). setPlatformAdmin 은 requireSuperuser 다 |
+| src/app/actions/accounts.ts | 세션 가드 뒤 id 스코프 | create·bulk·setWorkspaceRole·listAccounts·removeWorkspaceMember·previewWorkspaceMemberRemoval 는 requireWorkspaceAdmin(wid) 뒤에 그 wid 로 좁힌다(listAccounts 도 wid 로 좁히고, 선택 인자 pid 는 그 wid 의 프로젝트인지 확인한다). resetPassword 도 requireWorkspaceAdmin(wid) 뒤 — 대상의 등급 축만은 전역으로 읽는다(loadAccountTargets: 다른 워크스페이스 소속까지 봐야 경계를 가른다, D1 계정 전역). setPlatformAdmin 은 requireSuperuser 다 |
 | src/lib/authz/accountsAccess.ts | 세션 가드 뒤 id 스코프 | 형만 import 한다. loadAccountTargets 는 넘겨받은 계정 id 들의 platform_admins·workspace_members 를 전 워크스페이스에서 읽는다(계정 조작 판정의 입력 — 값은 서버 안에서만 쓰고 판정 결과만 내린다). 호출부는 requireWorkspaceAdmin 뒤의 resetPassword·listAccounts 둘 |
 | src/app/actions/agentHub.ts | 세션 가드 뒤 id 스코프 | requireProjectMember(pid) 뒤. 항목·주문은 id 로 읽고 project_id === pid 인지 다시 확인한 뒤에 쓴다 |
 | src/app/actions/agentTokens.ts | 세션 가드 뒤 id 스코프 | 세션 사용자 = owner_user_id 로만 발급·폐기·목록 처리한다. PAT 의 project_id 는 쓰는 시점에 라우트가 멤버십으로 판정한다 |

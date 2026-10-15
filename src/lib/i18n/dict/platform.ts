@@ -138,7 +138,7 @@ export const platformKo = {
   'platformAdmins.colName': '이름',
   'platformAdmins.colEmail': '이메일',
   'platformAdmins.colGrantedBy': '지정한 사람',
-  'platformAdmins.colGrantedAt': '지정 일시',
+  'platformAdmins.colGrantedAt': '지정일',
   'platformAdmins.colActions': '작업',
   'platformAdmins.noProfile': '(프로필 없음)',
   'platformAdmins.unset': '해제',

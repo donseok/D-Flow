@@ -446,14 +446,24 @@ function BulkAddModal({ open, onClose, projectId, workspaceId }: {
       <div className="space-y-4">
         <div className="rounded-xl bg-surface-subtle px-3.5 py-3 text-xs leading-5 text-fg-secondary">
           {t('wsAccounts.bulk.help1')}<b>{t('wsAccounts.bulk.helpFormat')}</b>{t('wsAccounts.bulk.help2')}<br />
-          {t('wsAccounts.bulk.accessLabel')}<code>admin · member · viewer</code>{t('wsAccounts.bulk.accessNote')}<br />
-          {t('wsAccounts.bulk.exampleLabel')}<code>{t('wsAccounts.bulk.example')}</code>
+          {/* 프로젝트가 없으면 admin·member 줄은 서버가 줄마다 거부한다 — 고를 프로젝트도 없으니 viewer 기준으로 안내한다 */}
+          {projectId === null ? (
+            <>
+              {t('wsAccounts.bulk.accessLabel')}<code>viewer</code>{t('wsAccounts.bulk.accessNoteNoProject')}<br />
+              {t('wsAccounts.bulk.exampleLabel')}<code>{t('wsAccounts.bulk.exampleNoProject')}</code>
+            </>
+          ) : (
+            <>
+              {t('wsAccounts.bulk.accessLabel')}<code>admin · member · viewer</code>{t('wsAccounts.bulk.accessNote')}<br />
+              {t('wsAccounts.bulk.exampleLabel')}<code>{t('wsAccounts.bulk.example')}</code>
+            </>
+          )}
         </div>
         <textarea
           className="app-input min-h-[160px] font-mono text-[13px]"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={t('wsAccounts.bulk.placeholder')}
+          placeholder={t(projectId === null ? 'wsAccounts.bulk.placeholderNoProject' : 'wsAccounts.bulk.placeholder')}
         />
         {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
         {results && (

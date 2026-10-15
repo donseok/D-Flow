@@ -95,6 +95,37 @@ describe('PlatformAdminsManager', () => {
     expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'error', description: expect.stringContaining('마지막 슈퍼유저') }))
     expect(mocks.refresh).toHaveBeenCalled()
   })
+  it('해제 요청이 예외로 끝나도(throw) 오류를 토스트하고 refresh — 낡은 표를 남기지 않는다', async () => {
+    mocks.setPlatformAdmin.mockRejectedValue(new Error('network'))
+    const { container } = mount()
+    act(() => { container.querySelector<HTMLButtonElement>('[data-platform-admin-row="u-b"] [data-platform-admin-unset]')!.click() })
+    act(() => { document.body.querySelector<HTMLButtonElement>('[data-platform-admin-confirm]')!.click() })
+    await flush()
+    expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'error', description: KO['wsAccounts.requestFailedShort'] }))
+    expect(mocks.refresh).toHaveBeenCalled()
+  })
+  it('표의 지정 열은 날짜만 보이므로 머리글이 "지정일"이다', () => {
+    const { container } = mount()
+    const heads = Array.from(container.querySelectorAll('th')).map((th) => th.textContent?.trim())
+    expect(heads).toContain('지정일')
+    expect(heads).not.toContain('지정 일시')
+    expect(container.querySelector('[data-platform-admin-row="u-b"]')!.textContent).toContain('2026-10-15')
+  })
+  it('추가 — 찾는 동안 이메일 입력은 잠겨 이전 이메일의 결과가 늦게 뜨지 않는다', async () => {
+    let resolveFind!: (v: unknown) => void
+    mocks.findAccountByEmail.mockReturnValueOnce(new Promise((r) => { resolveFind = r }))
+    const { container } = mount()
+    act(() => { button(container, KO['platformAdmins.add']).click() })
+    const input = document.body.querySelector<HTMLInputElement>('[data-platform-admin-email]')!
+    setValue(input, 'late@example.com')
+    expect(input.disabled).toBe(false)
+    act(() => { button(document.body, KO['platformAdmins.find']).click() })
+    await flush()
+    expect(input.disabled).toBe(true)
+    await act(async () => { resolveFind({ ok: true, account: null }); await Promise.resolve(); await Promise.resolve() })
+    expect(input.disabled).toBe(false)
+    expect(document.body.textContent).toContain(KO['platformAdmins.notFound'])
+  })
   it('추가 — 찾기: 지정 가능한 계정이면 소속을 보이고 지정 → setPlatformAdmin(id, true)', async () => {
     mocks.findAccountByEmail.mockResolvedValue({ ok: true, account: {
       userId: 'u-c', email: 'c@example.com', name: '씨', isPlatformAdmin: false,

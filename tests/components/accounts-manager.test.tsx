@@ -310,4 +310,31 @@ describe('AccountsManager', () => {
     await click(btn)
     expect(document.body.textContent).toContain('이메일, 권한, 초기비번[, 이름]')
   })
+
+  it('일괄 추가 안내 — 프로젝트가 있으면 선택한 프로젝트의 권한 안내와 member 예시를 그대로 보인다', async () => {
+    render()
+    const btn = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('일괄 추가'))!
+    await click(btn)
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('선택한 프로젝트의 권한입니다')
+    expect(text).toContain('admin · member · viewer')
+    expect(text).toContain('hong@company.com, member, password1, 홍길동')
+    expect(text).not.toContain('아직 프로젝트가 없어 권한 칸에는')
+    expect(document.body.querySelector('textarea')!.getAttribute('placeholder')).toContain('user1@company.com, member, password1')
+  })
+
+  it('일괄 추가 안내 — 프로젝트가 없으면 viewer 만 쓸 수 있다고 알리고 예시·placeholder 도 viewer 로 쓴다', async () => {
+    render(undefined, true, null)
+    const btn = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('일괄 추가'))!
+    await click(btn)
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('아직 프로젝트가 없어 권한 칸에는 viewer 만 쓸 수 있습니다. 프로젝트를 만든 뒤 명단에서 권한을 줍니다.')
+    expect(text).not.toContain('선택한 프로젝트의 권한입니다')
+    expect(text).not.toContain('admin · member · viewer')
+    const example = Array.from(document.body.querySelectorAll('code')).find(c => c.textContent?.includes('hong@company.com'))!
+    expect(example.textContent).toBe('hong@company.com, viewer, password1, 홍길동')
+    const placeholder = document.body.querySelector('textarea')!.getAttribute('placeholder')!
+    expect(placeholder).not.toMatch(/\bmember\b|\badmin\b/)
+    expect(placeholder).toContain('viewer')
+  })
 })

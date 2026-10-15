@@ -73,7 +73,7 @@ export function PlatformAdminsManager({ rows, currentUserId, accountsHref }: {
   )
 }
 
-/** 지정·해제 한 번 — 성공·실패 모두 refresh 한다(거부는 표가 낡았다는 신호다: 다른 관리자가 먼저 바꿨거나 마지막 한 명이 됐다) */
+/** 지정·해제 한 번 — 성공·거부·예외 모두 refresh 한다(거부는 표가 낡았다는 신호다: 다른 관리자가 먼저 바꿨거나 마지막 한 명이 됐다. 예외는 결과를 모르니 다시 읽는다) */
 function useToggle() {
   const router = useRouter()
   const { t } = useLocale()
@@ -84,10 +84,10 @@ function useToggle() {
       const res = await setPlatformAdmin(userId, value)
       if (res.ok) toast({ title: value ? t('wsAccounts.platform.setDone') : t('wsAccounts.platform.unsetDone'), description: label, variant: 'success' })
       else toast({ title: t('wsAccounts.changeFailed'), description: res.error, variant: 'error' })
-      router.refresh()
     } catch {
       toast({ title: t('wsAccounts.changeFailed'), description: t('wsAccounts.requestFailedShort'), variant: 'error' })
     } finally {
+      router.refresh() // 성공·거부·예외 어느 쪽이든 — 예외도 서버에서 반영됐을 수 있어 낡은 표를 남기지 않는다
       done()
     }
   })
@@ -152,7 +152,7 @@ function AddModal({ open, onClose, accountsHref }: { open: boolean; onClose: () 
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('platformAdmins.emailLabel')}</span>
           <div className="flex gap-2">
-            <input data-platform-admin-email className="app-input" type="email" value={email} autoFocus
+            <input data-platform-admin-email className="app-input" type="email" value={email} autoFocus disabled={finding}
               onChange={(e) => { setEmail(e.target.value); setLookup({ kind: 'idle' }) }}
               onKeyDown={(e) => { if (e.key === 'Enter' && email.trim() && !busy) find() }} placeholder="user@company.com" />
             <button className="btn btn-ghost shrink-0" disabled={busy || !email.trim()} onClick={find}>

@@ -55,7 +55,7 @@ export const NAV_NEEDS: Readonly<Partial<Record<NavItemId, keyof NavCaps>>> = {
 export const NAV_DEFAULT_LABEL_KEY = Object.fromEntries([
   ...MODULES.flatMap((m) => [m.nav?.project, m.nav?.workspace].flatMap((e) => (e ? [[e.id, e.labelKey] as const] : []))),
   ...SHELL_NAV.map((s) => [s.id, s.labelKey] as const),
-]) as Readonly<Record<NavItemId, DictKey>>   // 26개 id 전부 — tests/nav/registry.test.ts 가 빠짐없음을 고정한다
+]) as Readonly<Record<NavItemId, DictKey>>   // 26개 id 전부 — tests/nav/nav-for.test.ts 가 빠짐없음을 고정한다
 
 function hrefOf(base: string, segment: string): string {
   if (segment.startsWith('/')) return segment
