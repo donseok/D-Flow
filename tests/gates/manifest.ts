@@ -142,6 +142,9 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('issues')}#deleteIssue`]: { guard: 'projectAdmin', module: 'issues', note: '관리자 또는 작성자', sample: [U], ownerBranch: 'adminOrOwnerGate — 작성자 비교는 호출부' },
   // ── passwordReset — 비밀번호 분실(로그인 전 화면)
   [`${A('passwordReset')}#requestPasswordReset`]: nul('public', '로그인 전 — 재설정 메일 요청. 계정 존재 여부와 무관하게 같은 응답이고 표를 읽지 않는다(인증 서버 호출만)'),
+  // ── platformAdmins — 플랫폼(플랫폼 관리자 목록·이메일로 계정 찾기. 지정·해제는 accounts#setPlatformAdmin)
+  [`${A('platformAdmins')}#listPlatformAdmins`]: nul('superuser'),
+  [`${A('platformAdmins')}#findAccountByEmail`]: nul('superuser'),
   // ── platformWorkspaces — 플랫폼(워크스페이스 목록·생성·삭제, 개정 §5.3.2) + 이름 변경(그 워크스페이스의 관리자)
   [`${A('platformWorkspaces')}#listPlatformWorkspaces`]: nul('superuser'),
   [`${A('platformWorkspaces')}#createPlatformWorkspace`]: nul('superuser'),

@@ -11,6 +11,15 @@ export function canManageWorkspaceAccounts(actor: Actor | null, workspaceId: str
   return !!workspaceId && isWorkspaceAdmin(actor, workspaceId)
 }
 
+/**
+ * 플랫폼 관리자 관리 화면(/admin/platform-admins) — 플랫폼 관리자만. 페이지가 이 판정으로 404 를 가르고, 목록·찾기 액션은
+ * requireSuperuser 로, 지정·해제는 setPlatformAdmin(requireSuperuser → RPC set_platform_admin) 이 다시 가드한다.
+ * actor 가 null(권한 조회 실패)이면 거짓 — fail-closed.
+ */
+export function canManagePlatformAdmins(actor: Pick<Actor, 'isSuperuser'> | null): boolean {
+  return actor?.isSuperuser === true
+}
+
 type AdminClient = ReturnType<typeof createAdminClient>
 /** `.in('user_id', …)` 한 번에 싣는 id 수 — uuid 100개가 주소 길이 한도 안이다 */
 const ID_CHUNK = 100

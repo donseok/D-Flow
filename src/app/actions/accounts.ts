@@ -524,6 +524,7 @@ export async function setPlatformAdmin(userId: string, value: boolean): Promise<
   // 해제의 0행 = 이미 슈퍼유저가 아니다. 조용한 no-op 을 성공으로 보고하지 않는다. (지정의 0행은 이미 지정된 것 — 멱등)
   if (!value && result.matched === 0) return { ok: false, error: t('srv.accounts.accountNotSuperuser') }
   revalidatePath('/(app)/w/[slug]/admin/accounts', 'page')
+  revalidatePath('/admin/platform-admins')
   return { ok: true }
 }
 

@@ -431,6 +431,9 @@ export const serverUiKo = {
   'srv.notifications.dDue': 'D-{diffDays} · {plannedEnd} 마감',
   'srv.notifications.daysLateProgress': '{diffDays}일 지연 · 실적 {rolledActualPct}%',
   'srv.notifications.progress': '실적 {rolledActualPct}%',
+  // src/app/actions/platformAdmins.ts
+  'srv.platformAdmins.listFailed': '플랫폼 관리자 목록을 불러오지 못했습니다.',
+  'srv.platformAdmins.lookupFailed': '계정을 조회하지 못했습니다. 잠시 뒤 다시 시도하세요.',
   // src/app/actions/platformWorkspaces.ts
   'srv.platformWorkspaces.couldNotLoadWorkspaceList': '워크스페이스 목록을 불러오지 못했습니다.',
   // src/app/actions/project.ts
