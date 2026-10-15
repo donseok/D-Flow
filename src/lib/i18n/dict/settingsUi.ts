@@ -525,7 +525,7 @@ export const settingsUiKo = {
   'mailSettings.gmail.appPassword': '앱 비밀번호',
   'mailSettings.gmail.howto': 'Google 계정 › 보안에서 2단계 인증을 켠 뒤 앱 비밀번호를 만들어 붙여 넣으세요. 4자씩 띄운 공백은 지우지 않아도 됩니다.',
   'mailSettings.gmail.dedicated': '발송 한도·평판이 이 계정에 쌓이고 앱 비밀번호는 메일함 전체를 여는 값이므로 발송 전용 계정을 권합니다.',
-  'mailSettings.sendsNotice': '이 계정으로 회의 안내(일반 멤버인 회의 작성자 포함, 참석자 외 외부 주소 최대 20개/회)와 초대 메일이 나갑니다.',
+  'mailSettings.sendsNotice': '이 계정으로 회의 안내(일반 멤버인 회의 작성자 포함, 참석자 외 외부 주소 최대 {max}개/회)와 초대 메일이 나갑니다.',
   'mailSettings.custom.host': '서버 주소',
   'mailSettings.custom.port': '포트',
   'mailSettings.custom.secure': '보안 연결',

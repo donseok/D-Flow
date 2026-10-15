@@ -11,7 +11,7 @@ import { smtpErrorMessage } from '@/lib/mail/errors'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { pick } from '@/lib/settings/pick'
 import { vocabLabel, type VocabValues } from '@/lib/settings/vocab'
-import { t} from '@/lib/i18n/dict'
+import { t } from '@/lib/i18n/dict'
 
 import { loadDisplayBranding } from '@/lib/settings/displayBranding'
 import { displayNameFrom } from '@/lib/domain/display-name'

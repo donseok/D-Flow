@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/Toast'
 import type { DictKey } from '@/lib/i18n/dict'
 import { formatStampIn } from '@/lib/i18n/format'
 import { fill } from '@/lib/i18n/translate'
+import { MAX_EXTRA_EMAILS } from '@/lib/mail/recipients'
 import {
   MAIL_PORTS, canReusePassword, normalizeMailSettingsInput, reasonKey,
   type MailPreset, type MailSettingsInput,
@@ -99,6 +100,7 @@ function MailSettingsForm({ workspaceId, initial, timeZone = null }: EditorProps
   const busy = pending || deletePending
 
   const view = statusView(initial.status, t)
+  const sendsNotice = fill(t('mailSettings.sendsNotice'), { max: MAX_EXTRA_EMAILS })
   const tone = TONE_CLASS[view.tone]
   const StatusIcon = view.tone === 'ok' ? CheckCircle2 : view.tone === 'bad' ? AlertTriangle : Info
 
@@ -152,7 +154,9 @@ function MailSettingsForm({ workspaceId, initial, timeZone = null }: EditorProps
         setPassword('')
         toast({ title: t('mailSettings.saved'), variant: 'success' })
         router.refresh()
-      } catch {
+      } catch (e) {
+        // 표시 = 로깅. 오류 원문만 — 입력값(비밀번호)은 싣지 않는다
+        console.error(`[MailSettingsEditor] ${kind === 'test' ? '테스트 발송' : '저장'} 요청 실패:`, e instanceof Error ? e.message : 'unknown')
         setError(t('wsAccounts.requestFailed'))
       } finally {
         setAction(null)
@@ -171,7 +175,8 @@ function MailSettingsForm({ workspaceId, initial, timeZone = null }: EditorProps
         setPassword('')
         toast({ title: t('mailSettings.deleted'), variant: 'success' })
         router.refresh()
-      } catch {
+      } catch (e) {
+        console.error('[MailSettingsEditor] 삭제 요청 실패:', e instanceof Error ? e.message : 'unknown')
         setConfirming(false)
         setError(t('wsAccounts.requestFailed'))
       }
@@ -244,7 +249,7 @@ function MailSettingsForm({ workspaceId, initial, timeZone = null }: EditorProps
           <p className="text-xs leading-5 text-fg-secondary">{t('mailSettings.gmail.howto')}</p>
           <div className="flex items-start gap-2.5 rounded-xl border border-border bg-pending-weak px-3.5 py-3">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-pending" aria-hidden />
-            <p className="text-xs leading-5 text-fg">{t('mailSettings.sendsNotice')} {t('mailSettings.gmail.dedicated')}</p>
+            <p className="text-xs leading-5 text-fg">{sendsNotice} {t('mailSettings.gmail.dedicated')}</p>
           </div>
         </div>
       ) : (
@@ -280,7 +285,7 @@ function MailSettingsForm({ workspaceId, initial, timeZone = null }: EditorProps
                 value={fromAddress} onChange={(e) => { setFromAddress(e.target.value); clearMessages() }} disabled={busy} />
             </Row>
           </div>
-          <p className="text-xs leading-5 text-fg-secondary">{t('mailSettings.sendsNotice')}</p>
+          <p className="text-xs leading-5 text-fg-secondary">{sendsNotice}</p>
         </div>
       )}
 

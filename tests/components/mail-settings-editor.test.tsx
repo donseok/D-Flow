@@ -6,6 +6,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { GetMailSettingsResult } from '@/app/actions/mailSettings'
 import { t } from '@/lib/i18n/dict'
+import { MAX_EXTRA_EMAILS } from '@/lib/mail/recipients'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -89,7 +90,7 @@ describe('MailSettingsEditor', () => {
     const cases: Array<[string, Status, string, string]> = [
       ['workspace-valid', { source: 'workspace', valid: true, fromAddress: 'ops@gmail.com' }, '이 워크스페이스 설정으로 발송 중', 'ops@gmail.com'],
       ['workspace-invalid', { source: 'workspace', valid: false }, '저장된 설정이 올바르지 않습니다', '지금은 메일이 나가지 않습니다'],
-      ['env-valid', { source: 'env', valid: true, fromAddress: 'env@example.com' }, '서버 환경변수 설정으로 발송 중', ''],
+      ['env-valid', { source: 'env', valid: true, fromAddress: 'env@example.com' }, '서버 환경변수', '설정으로 발송 중'],
       ['env-invalid', { source: 'env', valid: false }, '서버 환경변수의 메일 설정이 올바르지 않습니다', '이 화면에서 저장하면'],
       ['none', { source: 'none' }, '메일 발송이 설정되지 않았습니다', '초대 메일이 나가지 않습니다'],
     ]
@@ -137,6 +138,14 @@ describe('MailSettingsEditor', () => {
       expect($('#smtp-username')).not.toBeNull()
       expect($('#smtp-host')).toBeNull()
       expect(container.textContent).toContain('발송 전용 계정을 권합니다')
+    })
+    it('발송 안내의 외부 주소 한도는 회의 안내의 한도(MAX_EXTRA_EMAILS)로 채운다 — 두 방식 모두', async () => {
+      render(NONE)
+      expect(container.textContent).toContain(`외부 주소 최대 ${MAX_EXTRA_EMAILS}개/회`)
+      expect(container.textContent).not.toContain('{max}')
+      await pickCustom()
+      expect(container.textContent).toContain(`외부 주소 최대 ${MAX_EXTRA_EMAILS}개/회`)
+      expect(container.textContent).not.toContain('{max}')
     })
     it('직접 입력으로 바꾸면 서버·포트·보안·계정·보내는 주소 칸이 생긴다', async () => {
       render(NONE)
@@ -258,11 +267,34 @@ describe('MailSettingsEditor', () => {
       expect($('[role="alert"]')!.textContent).toBe('서버 오류 문구')
       expect(refresh).not.toHaveBeenCalled()
     })
-    it('액션이 던지면 요청 실패 문구', async () => {
+    it('액션이 던지면 요청 실패 문구 — 로그에 남기고(비밀번호 없이) 버튼을 다시 쓸 수 있다', async () => {
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {})
       saveWorkspaceMailSettings.mockRejectedValue(new Error('network'))
       render(GMAIL)
+      typeInto($<HTMLInputElement>('#smtp-password')!, 'typed-secret')
       await click($('[data-mail-save]'))
       expect($('[role="alert"]')!.textContent).toBe(t('wsAccounts.requestFailed'))
+      expect(err).toHaveBeenCalledWith(expect.stringContaining('[MailSettingsEditor]'), 'network')
+      expect(JSON.stringify(err.mock.calls)).not.toContain('typed-secret')
+      expect($<HTMLButtonElement>('[data-mail-save]')!.disabled).toBe(false)
+      expect($<HTMLButtonElement>('[data-mail-test]')!.disabled).toBe(false)
+      err.mockRestore()
+    })
+    it('저장이 실패하면(오류 결과·던짐) 입력한 비밀번호를 지우지 않는다 — 다시 누르면 그대로 보낸다', async () => {
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+      saveWorkspaceMailSettings.mockResolvedValue({ ok: false, error: '서버 오류 문구' })
+      render(GMAIL)
+      typeInto($<HTMLInputElement>('#smtp-password')!, 'new-app-pw')
+      await click($('[data-mail-save]'))
+      expect($<HTMLInputElement>('#smtp-password')!.value).toBe('new-app-pw')
+      saveWorkspaceMailSettings.mockRejectedValue(new Error('network'))
+      await click($('[data-mail-save]'))
+      expect($<HTMLInputElement>('#smtp-password')!.value).toBe('new-app-pw')
+      saveWorkspaceMailSettings.mockResolvedValue({ ok: true })
+      await click($('[data-mail-save]'))
+      expect(saveWorkspaceMailSettings).toHaveBeenLastCalledWith('w-1', { preset: 'gmail', address: 'ops@gmail.com', password: 'new-app-pw' })
+      expect($<HTMLInputElement>('#smtp-password')!.value).toBe('')
+      err.mockRestore()
     })
   })
 
@@ -282,6 +314,20 @@ describe('MailSettingsEditor', () => {
       await click($('[data-mail-test]'))
       expect($('[role="alert"]')!.textContent).toBe('인증 실패 문구')
     })
+    it('액션이 던지면 요청 실패 문구 — 로그에 남기고 버튼을 다시 쓸 수 있다(보내는 중 표시가 남지 않는다)', async () => {
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+      sendWorkspaceTestMail.mockRejectedValue(new Error('network'))
+      render(GMAIL)
+      await click($('[data-mail-test]'))
+      expect($('[role="alert"]')!.textContent).toBe(t('wsAccounts.requestFailed'))
+      expect($('[data-mail-notice]')).toBeNull()
+      expect(err).toHaveBeenCalledWith(expect.stringContaining('[MailSettingsEditor]'), 'network')
+      const test = $<HTMLButtonElement>('[data-mail-test]')!
+      expect(test.disabled).toBe(false)
+      expect(test.textContent).toContain(t('mailSettings.test'))
+      expect($<HTMLButtonElement>('[data-mail-save]')!.disabled).toBe(false)
+      err.mockRestore()
+    })
   })
 
   describe('설정 삭제', () => {
@@ -299,6 +345,19 @@ describe('MailSettingsEditor', () => {
       expect(deleteWorkspaceMailSettings).toHaveBeenCalledWith('w-1')
       expect(refresh).toHaveBeenCalled()
       expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: '메일 발송 설정을 삭제했습니다.' }))
+    })
+    it('삭제 액션이 던지면 대화상자를 닫고 요청 실패 문구 — 로그에 남기고 버튼을 다시 쓸 수 있다', async () => {
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+      deleteWorkspaceMailSettings.mockRejectedValue(new Error('network'))
+      render(GMAIL)
+      await click($('[data-mail-delete]'))
+      await click(document.querySelector('[data-mail-delete-confirm]'))
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
+      expect($('[role="alert"]')!.textContent).toBe(t('wsAccounts.requestFailed'))
+      expect(err).toHaveBeenCalledWith(expect.stringContaining('[MailSettingsEditor]'), 'network')
+      expect(refresh).not.toHaveBeenCalled()
+      for (const sel of ['[data-mail-delete]', '[data-mail-save]', '[data-mail-test]']) expect($<HTMLButtonElement>(sel)!.disabled, sel).toBe(false)
+      err.mockRestore()
     })
     it('삭제 실패는 대화상자를 닫고 문구를 보인다', async () => {
       deleteWorkspaceMailSettings.mockResolvedValue({ ok: false, error: '지울 설정이 없습니다.' })
