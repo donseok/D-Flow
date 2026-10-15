@@ -57,12 +57,26 @@ function Row({ htmlFor, label, hint, children }: { htmlFor: string; label: strin
   )
 }
 
-export function MailSettingsEditor({ workspaceId, initial, timeZone = null }: {
+type EditorProps = {
   workspaceId: string
   initial: Initial
   /** 비밀번호 설정 시각을 찍을 tz(워크스페이스 달력) — 없거나 손상이면 시각 칸은 '—' */
   timeZone?: string | null
-}) {
+}
+
+/** 저장 행의 지문 — 행이 바뀌면(저장·삭제 뒤 router.refresh) 폼을 새로 띄워 칸을 새 initial 로 다시 맞춘다. 행 없음은 'none' */
+function storedFingerprint(initial: Initial): string {
+  const s = initial.settings
+  return s ? JSON.stringify([s.preset, s.host, s.port, s.secure, s.username, s.fromAddress, initial.passwordSetAt]) : 'none'
+}
+
+export function MailSettingsEditor(props: EditorProps) {
+  // 칸 상태는 첫 initial 로만 시작한다 — 지문을 key 로 걸어, 지운 값·저장 전 입력이 새로 그린 뒤에도 남지 않게 한다.
+  // 행이 그대로인 새로 그리기(다른 설정 칸 저장 등)는 지문이 같아 입력 중인 값을 지우지 않는다
+  return <MailSettingsForm key={storedFingerprint(props.initial)} {...props} />
+}
+
+function MailSettingsForm({ workspaceId, initial, timeZone = null }: EditorProps) {
   const { t } = useLocale()
   const router = useRouter()
   const { toast } = useToast()
