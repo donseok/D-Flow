@@ -40,7 +40,7 @@ import {
 } from '@/app/actions/mailSettings'
 import { reasonKey, type MailSettingsInput } from '@/lib/mail/settingsInput'
 import type { WorkspaceMailRow } from '@/lib/mail/workspaceSmtp'
-import { MAIL_HOST_NOT_ALLOWED, MAIL_SETTINGS_UNAVAILABLE } from '@/lib/mail/transport'
+import { MAIL_HOST_NOT_ALLOWED, MAIL_HOST_UNUSABLE_AT_SEND, MAIL_SETTINGS_UNAVAILABLE } from '@/lib/mail/transport'
 import { smtpErrorMessage } from '@/lib/mail/errors'
 import { serverKoTranslate } from '@/lib/i18n/serverDict'
 import { workspaceAdminVerdict, type Actor } from '@/lib/domain/authz'
@@ -352,6 +352,8 @@ describe('saveWorkspaceMailSettings — 새 비밀번호·유지·재사용 거�
   it('직접 입력 서버가 사설·예약 대역으로 풀리면(검사가 던져도) 저장하지 않고 MAIL_HOST_NOT_ALLOWED — 정규화한 이름으로 묻는다', async () => {
     const a = makeAdmin()
     h.vetMailHost.mockResolvedValue({ ok: false })
+    // 저장은 주소를 고칠 관리자에게 — 발송 경로 문구(MAIL_HOST_UNUSABLE_AT_SEND)가 아니다
+    expect(MAIL_HOST_NOT_ALLOWED).not.toBe(MAIL_HOST_UNUSABLE_AT_SEND)
     expect(await saveWorkspaceMailSettings(WS, { ...CUSTOM, host: 'SMTP.Internal.Acme.com.' })).toEqual({ ok: false, error: MAIL_HOST_NOT_ALLOWED })
     expect(h.vetMailHost).toHaveBeenCalledWith('smtp.internal.acme.com')
 
@@ -453,10 +455,12 @@ describe('sendWorkspaceTestMail — 저장 전 값으로 본인에게만', () =>
     expect(h.transportFromSettings).not.toHaveBeenCalled()
   })
 
-  it('서버 주소가 사설·예약 대역으로 풀리면 MAIL_HOST_NOT_ALLOWED — 연결하지 않는다', async () => {
+  it('서버 주소가 사설·예약 대역으로 풀리면 MAIL_HOST_NOT_ALLOWED(발송 경로 문구가 아니다) — 연결하지 않는다', async () => {
     makeAdmin()
     h.vetMailHost.mockResolvedValue({ ok: false })
-    expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: false, error: MAIL_HOST_NOT_ALLOWED })
+    const r = await sendWorkspaceTestMail(WS, CUSTOM)
+    expect(r).toEqual({ ok: false, error: MAIL_HOST_NOT_ALLOWED })
+    expect(r).not.toEqual({ ok: false, error: MAIL_HOST_UNUSABLE_AT_SEND })
     expect(h.transportFromSettings).not.toHaveBeenCalled()
   })
 

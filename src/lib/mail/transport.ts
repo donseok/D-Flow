@@ -29,9 +29,15 @@ export const SMTP_MISCONFIGURED = '메일 발송 설정이 올바르지 않습�
 export const MAIL_SETTINGS_UNAVAILABLE = '메일 발송 설정을 확인하지 못했습니다. 잠시 후 다시 시도하세요.'
 /**
  * 워크스페이스 행의 서버 주소가 사설·예약 대역으로 풀리거나 풀리지 않았다(설계 §2.4). 두 사유를 한 문구로 둔다 —
- * 나누면 저장·테스트 발송이 어떤 내부 이름이 사설 주소로 풀리는지 알려 주는 통로가 된다
+ * 나누면 저장·테스트 발송이 어떤 내부 이름이 사설 주소로 풀리는지 알려 주는 통로가 된다.
+ * 주소를 직접 고칠 수 있는 워크스페이스 관리자용(저장·테스트 발송)이다 — 발송 경로는 MAIL_HOST_UNUSABLE_AT_SEND.
  */
 export const MAIL_HOST_NOT_ALLOWED = '이 메일 서버 주소는 쓸 수 없습니다. 주소를 찾지 못했거나 내부망 주소입니다 — 주소가 맞는지 확인하세요.'
+/**
+ * 같은 거부의 발송 경로(getTransport — 회의 안내·초대) 문구. 보내는 사람은 메일 설정을 고칠 수 없는 일반 멤버일 수 있어
+ * 고칠 사람을 가리킨다. 여기서도 두 사유를 가르지 않는다
+ */
+export const MAIL_HOST_UNUSABLE_AT_SEND = '워크스페이스 메일 설정의 서버 주소를 쓸 수 없어 메일을 보내지 못했습니다. 워크스페이스 관리자에게 알리세요.'
 
 /** 발송 설정의 출처와 유효성 — 설정 화면의 상태 줄과 발송(getTransport)이 같은 규칙으로 낸다 */
 export type MailStatus =
@@ -218,6 +224,6 @@ export async function getTransport(opts: { workspaceId: string | null; fromName?
   }
   if (s.source === 'env') return transportFromSettings(s.r.settings, { fromName: opts.fromName })
   const vet = await vetOrDeny(s.r.settings.host)
-  if (!vet.ok) return { ok: false, error: MAIL_HOST_NOT_ALLOWED }
+  if (!vet.ok) return { ok: false, error: MAIL_HOST_UNUSABLE_AT_SEND }
   return transportFromSettings(s.r.settings, { fromName: opts.fromName, connectTo: vet.address })
 }

@@ -25,7 +25,7 @@ vi.mock('@/lib/mail/workspaceSmtp', async (importOriginal) => ({
 
 import {
   getTransport, resolveMailStatus, resolveSmtpSettings, statusFromLoad, transportFromSettings,
-  MAIL_SETTINGS_UNAVAILABLE, type SmtpSettings,
+  MAIL_HOST_NOT_ALLOWED, MAIL_HOST_UNUSABLE_AT_SEND, MAIL_SETTINGS_UNAVAILABLE, type SmtpSettings,
 } from '@/lib/mail/transport'
 import type { WorkspaceMailLoad } from '@/lib/mail/workspaceSmtp'
 import { BRAND } from '@/lib/branding'
@@ -37,6 +37,7 @@ const env = (over: Record<string, string>) => { for (const k of KEYS) vi.stubEnv
 const NOT_CONFIGURED = '메일 발송이 설정되지 않았습니다.'
 const MISCONFIGURED = '메일 발송 설정이 올바르지 않습니다. 관리자에게 문의하세요.'
 const HOST_NOT_ALLOWED = '이 메일 서버 주소는 쓸 수 없습니다. 주소를 찾지 못했거나 내부망 주소입니다 — 주소가 맞는지 확인하세요.'
+const HOST_UNUSABLE_AT_SEND = '워크스페이스 메일 설정의 서버 주소를 쓸 수 없어 메일을 보내지 못했습니다. 워크스페이스 관리자에게 알리세요.'
 
 const WID = '11111111-1111-4111-8111-111111111111'
 const IP = '203.0.113.10'
@@ -315,18 +316,25 @@ describe('getTransport — 워크스페이스 설정(설계 §2.1 규칙 1–4·
     expect(createTransport).not.toHaveBeenCalled()
   })
 
-  it('서버 주소가 검사에서 거부되면 MAIL_HOST_NOT_ALLOWED — 접속하지 않는다', async () => {
+  it('서버 주소가 검사에서 거부되면 발송 경로 문구(MAIL_HOST_UNUSABLE_AT_SEND) — 관리자용 문구가 아니고, 접속하지 않는다', async () => {
     loadWorkspaceMailRow.mockResolvedValue({ kind: 'row', row: row() })
     vetMailHost.mockResolvedValue({ ok: false })
-    expect(await getTransport({ workspaceId: WID })).toEqual({ ok: false, error: HOST_NOT_ALLOWED })
+    const tx = await getTransport({ workspaceId: WID })
+    expect(tx).toEqual({ ok: false, error: HOST_UNUSABLE_AT_SEND })
+    expect(tx).not.toEqual({ ok: false, error: HOST_NOT_ALLOWED })
     expect(createTransport).not.toHaveBeenCalled()
+  })
+
+  it('두 거부 문구는 리터럴 상수로 고정된다 — 저장·테스트 발송은 관리자용, 발송은 고칠 사람을 가리킨다', () => {
+    expect(MAIL_HOST_NOT_ALLOWED).toBe(HOST_NOT_ALLOWED)
+    expect(MAIL_HOST_UNUSABLE_AT_SEND).toBe(HOST_UNUSABLE_AT_SEND)
   })
 
   it('주소 검사 자체가 던져도 거부로 닫는다', async () => {
     loadWorkspaceMailRow.mockResolvedValue({ kind: 'row', row: row() })
     vetMailHost.mockRejectedValue(Object.assign(new Error('getaddrinfo ENOTFOUND smtp.example.org'), { code: 'ENOTFOUND' }))
     const tx = await getTransport({ workspaceId: WID })
-    expect(tx).toEqual({ ok: false, error: HOST_NOT_ALLOWED })
+    expect(tx).toEqual({ ok: false, error: HOST_UNUSABLE_AT_SEND })
     expect(JSON.stringify(tx)).not.toContain('ENOTFOUND')
     expect(createTransport).not.toHaveBeenCalled()
   })
