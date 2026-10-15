@@ -385,6 +385,12 @@ export function useSheetGrid({
 
     if (cur.editing) {
       // ── 편집 모드 ──
+      // macOS의 네이티브 Ctrl+A는 줄 시작으로 이동하므로 OS에 맡기지 않는다.
+      if (mod && !e.altKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault()
+        e.currentTarget.select()
+        return
+      }
       if (isNewlineChord(e)) { // 셀 내 줄바꿈 — Alt/⌥·Ctrl·⌘ + Enter 모두 허용
         e.preventDefault()
         const el = e.currentTarget
@@ -410,7 +416,7 @@ export function useSheetGrid({
         setSel(s => ({ ...s, editing: false }))
         return
       }
-      // 그 외(문자·방향키·Backspace/Delete·Ctrl+A/C/X/V/Z)는 네이티브 textarea에 위임.
+      // 그 외(문자·방향키·Backspace/Delete·Ctrl+C/X/V/Z)는 네이티브 textarea에 위임.
       return
     }
 

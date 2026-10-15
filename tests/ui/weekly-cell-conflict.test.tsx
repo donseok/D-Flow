@@ -78,6 +78,27 @@ afterEach(async () => {
 })
 
 describe('WeeklySheetView — 셀 저장의 값 CAS(Q05)', () => {
+  it.each([{ ctrlKey: true }, { metaKey: true }])('편집 중 전체 선택 후 반복 입력은 기존 내용을 대체하고 마지막 값만 저장한다 (%j)', async mods => {
+    await act(async () => { cell().focus() })
+    await key('F2')
+    await typeInto('반복테스1\n두 번째 줄')
+    for (const next of ['반복테스2', '반복테스3']) {
+      const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true, ...mods })
+      await act(async () => { cell().dispatchEvent(event) })
+      expect(event.defaultPrevented).toBe(true)
+      expect(cell().selectionStart).toBe(0)
+      expect(cell().selectionEnd).toBe(cell().value.length)
+      // jsdom은 키 입력의 기본 삽입을 구현하지 않아 실제 선택 범위에 문자를 대입한다.
+      const el = cell()
+      await typeInto(el.value.slice(0, el.selectionStart) + next + el.value.slice(el.selectionEnd))
+      expect(cell().value).toBe(next)
+    }
+    await flush()
+    expect(h.cell).toHaveBeenCalledTimes(1)
+    expect(h.cell).toHaveBeenLastCalledWith('p1', 'r1', 'this_content', '반복테스3', '50')
+    expect(session()).toBe('saved')
+  })
+
   it('저장은 편집을 시작할 때의 값(내가 확인한 서버 값)을 기대값으로 싣는다', async () => {
     await typeInto('60')
     expect(session()).toBe('editing')
