@@ -90,6 +90,24 @@ export function mailConfigured(): boolean {
 type SmtpSelection = { source: 'workspace' | 'env'; r: ReturnType<typeof resolveSmtpSettings> } | { error: string }
 
 /**
+ * 행 조회 결과 → 발송 설정(설계 §2.1 규칙 1–3). env 는 호출 시점의 process.env 를 읽는다. 갈래를 빠짐없이 적는다 —
+ * 모르는 결과는 env 로 내려가지 않고 닫는다(fail-closed). null = 워크스페이스 없는 발송(env 만).
+ */
+function selectFromLoad(load: WorkspaceMailLoad | null): SmtpSelection {
+  if (load === null) return { source: 'env', r: resolveSmtpSettings(process.env) }
+  switch (load.kind) {
+    case 'row': return { source: 'workspace', r: resolveSmtpSettings(rowToSmtpEnv(load.row)) }
+    case 'none': return { source: 'env', r: resolveSmtpSettings(process.env) }
+    case 'archived': return { error: MAIL_SETTINGS_UNAVAILABLE }
+    default: {
+      const unknownKind: never = load
+      console.error('[mail] 워크스페이스 메일 설정 조회 결과를 모른다:', (unknownKind as { kind?: unknown })?.kind)
+      return { error: MAIL_SETTINGS_UNAVAILABLE }
+    }
+  }
+}
+
+/**
  * 발송 설정 고르기 — 설계 §2.1 판정 규칙 한 벌(resolveMailStatus·getTransport 가 같이 쓴다). 캐시하지 않는다(저장한 다음 발송부터 바로 쓰인다).
  *  1. 행이 있으면 그 행만 본다 — unset 이든 invalid 든 env 로 내려가지 않는다(관리자가 정한 계정을 조용히 다른 계정으로 바꾸지 않는다).
  *  2. 보관된 워크스페이스의 행 → 보내지 않는다(env 로도 내려가지 않는다).
@@ -97,24 +115,19 @@ type SmtpSelection = { source: 'workspace' | 'env'; r: ReturnType<typeof resolve
  *  4. 조회 실패(uuid 가 아닌 id 로 adminFor 가 throw 한 것 포함) → MAIL_SETTINGS_UNAVAILABLE — 미설정으로 위장하지 않는다.
  */
 async function selectSmtp(workspaceId: string | null): Promise<SmtpSelection> {
-  if (workspaceId !== null) {
-    let load: WorkspaceMailLoad
-    try {
-      const { admin } = adminFor({ workspaceId })
-      load = await loadWorkspaceMailRow(admin, workspaceId)
-    } catch (e) {
-      console.error('[mail] 워크스페이스 메일 설정 조회 실패:', e instanceof Error ? e.message : 'unknown')
-      return { error: MAIL_SETTINGS_UNAVAILABLE }
-    }
-    if (load.kind === 'archived') return { error: MAIL_SETTINGS_UNAVAILABLE }
-    if (load.kind === 'row') return { source: 'workspace', r: resolveSmtpSettings(rowToSmtpEnv(load.row)) }
+  if (workspaceId === null) return selectFromLoad(null)
+  let load: WorkspaceMailLoad
+  try {
+    const { admin } = adminFor({ workspaceId })
+    load = await loadWorkspaceMailRow(admin, workspaceId)
+  } catch (e) {
+    console.error('[mail] 워크스페이스 메일 설정 조회 실패:', e instanceof Error ? e.message : 'unknown')
+    return { error: MAIL_SETTINGS_UNAVAILABLE }
   }
-  return { source: 'env', r: resolveSmtpSettings(process.env) }
+  return selectFromLoad(load)
 }
 
-/** 설정 화면의 상태 줄. DNS 검사·연결은 하지 않는다(발송 때만) */
-export async function resolveMailStatus(workspaceId: string | null): Promise<MailStatus | { error: string }> {
-  const s = await selectSmtp(workspaceId)
+function statusOf(s: SmtpSelection): MailStatus | { error: string } {
   if ('error' in s) return { error: s.error }
   if (s.r.ok) {
     return s.source === 'workspace'
@@ -123,6 +136,19 @@ export async function resolveMailStatus(workspaceId: string | null): Promise<Mai
   }
   if (s.source === 'workspace') return { source: 'workspace', valid: false }
   return s.r.kind === 'unset' ? { source: 'none' } : { source: 'env', valid: false }
+}
+
+/** 설정 화면의 상태 줄. DNS 검사·연결은 하지 않는다(발송 때만) */
+export async function resolveMailStatus(workspaceId: string | null): Promise<MailStatus | { error: string }> {
+  return statusOf(await selectSmtp(workspaceId))
+}
+
+/**
+ * 이미 읽은 행 조회 결과로 상태 줄 — resolveMailStatus 와 같은 판정이다. 설정 화면(getWorkspaceMailSettings)이 행을 한 번만 읽어
+ * 보기와 상태가 같은 행을 말하게 한다. 조회·DNS 는 하지 않는다(env 는 호출 시점에 읽는다)
+ */
+export function statusFromLoad(load: WorkspaceMailLoad): MailStatus | { error: string } {
+  return statusOf(selectFromLoad(load))
 }
 
 /** DNS 검사 — 검사 자체가 던져도 거부로 닫는다(해석 오류 원문은 싣지 않는다). 테스트 발송(actions/mailSettings.ts)도 이것을 쓴다 */
@@ -138,15 +164,14 @@ export async function vetOrDeny(host: string): Promise<{ ok: true; address: stri
  * `from` 은 이 모듈이 소유한다(호출자가 바꿀 수 없다).
  */
 export function transportFromSettings(settings: SmtpSettings, opts: { fromName?: string; connectTo?: string } = {}): Transport {
-  const s = settings
   const fromName = mailFromName(opts.fromName)
   const tx = nodemailer.createTransport({
-    host: opts.connectTo ?? s.host,
-    port: s.port,
-    secure: s.secure,
-    requireTLS: s.requireTLS,
-    ...(s.auth ? { auth: s.auth } : {}),
-    ...(opts.connectTo ? { tls: { servername: s.host } } : {}),
+    host: opts.connectTo ?? settings.host,
+    port: settings.port,
+    secure: settings.secure,
+    requireTLS: settings.requireTLS,
+    ...(settings.auth ? { auth: settings.auth } : {}),
+    ...(opts.connectTo ? { tls: { servername: settings.host } } : {}),
     connectionTimeout: TIMEOUT_MS,
     greetingTimeout: TIMEOUT_MS,
     socketTimeout: TIMEOUT_MS,
@@ -156,7 +181,7 @@ export function transportFromSettings(settings: SmtpSettings, opts: { fromName?:
     ok: true,
     send: async (msg) => {
       const info = await tx.sendMail({
-        from: { name: fromName, address: s.fromAddress },
+        from: { name: fromName, address: settings.fromAddress },
         to: msg.to,
         replyTo: msg.replyTo ?? undefined,
         subject: msg.subject,
@@ -183,7 +208,8 @@ export async function getTransport(opts: { workspaceId: string | null; fromName?
   const s = await selectSmtp(opts.workspaceId)
   if ('error' in s) return { ok: false, error: s.error }
   if (!s.r.ok) {
-    if (s.source === 'workspace') console.error('[mail] 워크스페이스 메일 설정 오류:', s.r.reason)
+    // 워크스페이스 행의 사유는 종류만 — resolveSmtpSettings 의 reason 은 env 키 이름(SMTP_*)으로 적혀 행에는 맞지 않는다
+    if (s.source === 'workspace') console.error('[mail] 워크스페이스 메일 설정 행이 발송 규칙을 통과하지 못했다:', s.r.kind)
     else if (s.r.kind === 'invalid') console.error('[mail] SMTP 설정 오류:', s.r.reason)
     return { ok: false, error: s.source === 'env' && s.r.kind === 'unset' ? SMTP_NOT_CONFIGURED : SMTP_MISCONFIGURED }
   }

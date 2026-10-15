@@ -319,6 +319,7 @@ export const serverUiKo = {
   'srv.mailSettings.deleteFailed': '메일 설정을 삭제하지 못했습니다. 잠시 뒤 다시 시도하세요.',
   'srv.mailSettings.nothingToDelete': '지울 설정이 없습니다.',
   'srv.mailSettings.settingsUnusable': '입력한 값으로는 메일을 보낼 수 없습니다. 보내는 주소와 계정을 확인하세요.',
+  'srv.mailSettings.testRateLimited': '테스트 메일을 너무 자주 보냈습니다. 잠시 후 다시 시도하세요.',
   'srv.mailSettings.testNoRecipient': '로그인한 계정의 메일 주소를 확인할 수 없어 테스트 메일을 보내지 않았습니다.',
   'srv.mailSettings.testRecipientRejected': '메일 서버가 받는 주소({to})를 거부했습니다.',
   'srv.mailSettings.testSubject': '[{product}] 메일 발송 테스트',

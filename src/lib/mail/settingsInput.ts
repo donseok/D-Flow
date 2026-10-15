@@ -36,11 +36,14 @@ const fail = (code: MailSettingsReason): NormalizeResult => ({ ok: false, code }
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** 서버 주소 → 저장 꼴(소문자·끝 점 하나 제거·퓨니코드 — 설계 §2.4). IP 리터럴·단일 레이블(localhost)·IPv6·
- *  URL 구분자(: / ? #)가 섞인 값은 null. 단일 레이블은 toAsciiHostname 도 거르지만 규칙을 여기서 한 번 더 드러낸다 */
+ *  URL 구분자(: / ? #)가 섞인 값은 null. 단일 레이블은 toAsciiHostname 도 거르지만 규칙을 여기서 한 번 더 드러낸다.
+ *  localhost 아래 이름(*.localhost)도 null — RFC 6761 이 루프백으로 예약한 이름이다(발송 직전 DNS 검사도 거르지만 저장부터 막는다) */
 function normalizeHost(raw: string): string | null {
   const v = raw.trim().toLowerCase().replace(/\.$/, '')
   if (!v || !v.includes('.')) return null
-  return toAsciiHostname(v)
+  const host = toAsciiHostname(v)
+  if (host === null || host === 'localhost' || host.endsWith('.localhost')) return null
+  return host
 }
 
 /** 숫자 또는 숫자만인 문자열 → 표준 포트 넷 중 하나. 아니면 null */
@@ -55,7 +58,7 @@ function normalizePort(raw: unknown): number | null {
  * - Gmail: address·password 만 읽는다. host=smtp.gmail.com·port=465·secure=true·username=주소(trim·소문자)·from_address=null(→ 계정).
  *   비밀번호의 공백은 모두 지운다(구글이 앱 비밀번호를 4자씩 띄워 보여준다). 주소 도메인은 묻지 않는다(Google Workspace 도메인도 같은 서버다).
  * - 직접 입력: secure 가 불리언이 아니면 포트로 정한다(465 → SSL, 나머지 → STARTTLS). 465+평문·587/25+SSL 은 tls_mismatch.
- *   계정은 trim 만 한다(대소문자를 가리는 서버가 있다). 보내는 주소를 비우면 계정이 이메일 형식이어야 한다 — 아니면 발송 판정이 invalid 로 읽는다.
+ *   계정은 trim 만 하고 대소문자는 입력 그대로 저장한다(서버에 보내는 값을 바꾸지 않는다 — 비밀번호 재사용 비교는 대소문자를 가리지 않는다, canReusePassword). 보내는 주소를 비우면 계정이 이메일 형식이어야 한다 — 아니면 발송 판정이 invalid 로 읽는다.
  *   비밀번호는 trim(발송 판정이 trim 해서 읽는다 — 앞뒤 공백은 어차피 쓰이지 않는다).
  * - 비밀번호가 비면 null — 저장값 재사용 후보다. 재사용 가부(password_required)는 canReusePassword 로 호출자가 정한다.
  */

@@ -15,6 +15,12 @@ const CALL = new RegExp(`\\b(?:${REMOVED.join('|')})\\s*\\(`)
 /** 전 워크스페이스 가시 범위({ all: true })를 만들 수 있는 유일한 파일 — 플랫폼 관리자 판정(teamViewOfScope) */
 const ALL_VIEW_OWNER = 'src/lib/domain/authz.ts'
 const ALL_VIEW = /\ball\s*:\s*true\b/
+/** 가시 범위가 아닌 뜻의 `all: true` — 파일과 그 줄의 모양을 같이 적는다(같은 파일의 다른 줄·다른 파일은 그대로 잡는다).
+ *  워크스페이스 메일 설정의 발송 직전 서버 주소 검사가 DNS 결과 전부를 받는 옵션이다 — 팀 가시 범위와 무관하다 */
+const ALL_TRUE_UNRELATED: ReadonlyArray<readonly [file: string, line: RegExp]> = [
+  ['src/lib/mail/workspaceSmtp.ts', /\bdns\.lookup\(host, \{ all: true, verbatim: true \}\)/],
+]
+const unrelatedAllTrue = (h: string) => ALL_TRUE_UNRELATED.some(([f, re]) => h.startsWith(`${f}:`) && re.test(h))
 /** walk 의 기본 확장자(.ts/.tsx)는 scripts 의 .mjs 를 미리 걸러 버린다 — 확장자를 walk 에 넘긴다(B-1 리뷰 F1) */
 const codeFiles = (dir: string) => walk(join(CWD, dir), undefined, /\.(ts|tsx|mjs)$/)
 const hits = (files: string[], re: RegExp) => files.flatMap((f) => codeLines(readFileSync(f, 'utf8'), f)
@@ -38,8 +44,10 @@ describe('팀 원천 — 요청 범위 하나(SP4 B)', () => {
     expect(hits(codeFiles('src'), CALL)).toEqual([])
   }, 20_000)
   it(`전 워크스페이스 가시 범위({ all: true })는 ${ALL_VIEW_OWNER} 에서만 만든다`, () => {
-    expect(hits(codeFiles('src'), ALL_VIEW).filter((h) => !h.startsWith(`${ALL_VIEW_OWNER}:`))).toEqual([])
+    expect(hits(codeFiles('src'), ALL_VIEW).filter((h) => !h.startsWith(`${ALL_VIEW_OWNER}:`) && !unrelatedAllTrue(h))).toEqual([])
     expect(hits([join(CWD, ALL_VIEW_OWNER)], ALL_VIEW).length).toBeGreaterThan(0)
+    // 허용 항목마다 실제로 그 줄이 하나씩 있다 — 코드가 바뀌어 허용이 빈 항목으로 남지 않게
+    for (const [f, re] of ALL_TRUE_UNRELATED) expect(hits([join(CWD, f)], ALL_VIEW).filter((h) => re.test(h)), f).toHaveLength(1)
   }, 20_000)
   it('판정기 표본', () => {
     expect(OLD_REF.test(`import { x } from '@/lib/${OLD_MODULE}'`)).toBe(true)
@@ -49,6 +57,9 @@ describe('팀 원천 — 요청 범위 하나(SP4 B)', () => {
     expect(CALL.test('teamsForWorkspaceSync(w)')).toBe(false)
     expect(ALL_VIEW.test('view = isSuperuser ? { all: true } : x')).toBe(true)
     expect(ALL_VIEW.test('{ overall: trueish }')).toBe(false)
+    expect(unrelatedAllTrue('src/lib/mail/workspaceSmtp.ts:180: const r = await dns.lookup(host, { all: true, verbatim: true })')).toBe(true)
+    expect(unrelatedAllTrue('src/lib/mail/workspaceSmtp.ts:9: const view = { all: true }')).toBe(false)
+    expect(unrelatedAllTrue('src/lib/teams/source.ts:9: dns.lookup(host, { all: true, verbatim: true })')).toBe(false)
     // scripts 는 거의 .mjs 다 — 목록이 그것을 실제로 담아야 scripts 검사가 선다(B-1 리뷰 F1)
     expect(codeFiles('scripts').some((f) => f.endsWith('.mjs'))).toBe(true)
   })

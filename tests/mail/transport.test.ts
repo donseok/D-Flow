@@ -24,9 +24,10 @@ vi.mock('@/lib/mail/workspaceSmtp', async (importOriginal) => ({
 }))
 
 import {
-  getTransport, resolveMailStatus, resolveSmtpSettings, transportFromSettings,
+  getTransport, resolveMailStatus, resolveSmtpSettings, statusFromLoad, transportFromSettings,
   MAIL_SETTINGS_UNAVAILABLE, type SmtpSettings,
 } from '@/lib/mail/transport'
+import type { WorkspaceMailLoad } from '@/lib/mail/workspaceSmtp'
 import { BRAND } from '@/lib/branding'
 
 // 새 키를 모두 '' 로 스텁한다 — 개발자 셸·.env.local 의 값이 테스트로 새지 않게.
@@ -257,6 +258,17 @@ describe('getTransport — 워크스페이스 설정(설계 §2.1 규칙 1–4·
     const logged = err.mock.calls.flat().join(' ')
     expect(logged).not.toContain('ws-secret')
     expect(logged).not.toContain('env-pw')
+    // 워크스페이스 행의 사유는 env 키 이름(SMTP_*)으로 적지 않는다 — 행 판정이라는 것과 사유 종류만
+    expect(logged).not.toContain('SMTP_')
+    expect(logged).toMatch(/워크스페이스 메일 설정 행.*(unset|invalid)/)
+  })
+
+  it('모르는 조회 결과(kind)는 닫는다 — env 로 내려가지 않고 MAIL_SETTINGS_UNAVAILABLE', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    env(ENV_OK)
+    loadWorkspaceMailRow.mockResolvedValue({ kind: 'mystery' })
+    expect(await getTransport({ workspaceId: WID })).toEqual({ ok: false, error: MAIL_SETTINGS_UNAVAILABLE })
+    expect(createTransport).not.toHaveBeenCalled()
   })
 
   it('보관된 워크스페이스의 행 — 보내지 않고 env 로도 내려가지 않는다(보관 사실은 드러내지 않는 문구)', async () => {
@@ -367,6 +379,40 @@ describe('resolveMailStatus — 화면 상태 줄과 발송이 같은 규칙', (
     loadWorkspaceMailRow.mockRejectedValueOnce(new Error('조회 실패'))
     expect(await resolveMailStatus(WID)).toEqual({ error: MAIL_SETTINGS_UNAVAILABLE })
     expect(await resolveMailStatus('ws-1')).toEqual({ error: MAIL_SETTINGS_UNAVAILABLE })
+  })
+})
+
+describe('statusFromLoad — 이미 읽은 행 조회 결과로 상태 줄(설정 화면이 행을 한 번만 읽는다)', () => {
+  it('행이면 그 행만 본다 — env 가 유효해도 workspace 판정, 조회·DNS 를 하지 않는다', () => {
+    env(ENV_OK)
+    expect(statusFromLoad({ kind: 'row', row: row({ from_address: 'noreply@example.org' }) }))
+      .toEqual({ source: 'workspace', valid: true, fromAddress: 'noreply@example.org' })
+    expect(statusFromLoad({ kind: 'row', row: row({ username: ' ', password: ' ' }) })).toEqual({ source: 'workspace', valid: false })
+    expect(loadWorkspaceMailRow).not.toHaveBeenCalled()
+    expect(vetMailHost).not.toHaveBeenCalled()
+  })
+
+  it('행이 없으면 env 판정 — 없으면 none, 유효하면 env·valid, 잘못이면 env·invalid', () => {
+    expect(statusFromLoad({ kind: 'none' })).toEqual({ source: 'none' })
+    env(ENV_OK)
+    expect(statusFromLoad({ kind: 'none' })).toEqual({ source: 'env', valid: true, fromAddress: 'env@example.com' })
+    env({ ...ENV_OK, SMTP_PORT: '465', SMTP_SECURE: 'false' })
+    expect(statusFromLoad({ kind: 'none' })).toEqual({ source: 'env', valid: false })
+  })
+
+  it('보관·모르는 결과는 { error } — 미설정으로 위장하지 않는다', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    env(ENV_OK)
+    expect(statusFromLoad({ kind: 'archived' })).toEqual({ error: MAIL_SETTINGS_UNAVAILABLE })
+    expect(statusFromLoad({ kind: 'mystery' } as unknown as WorkspaceMailLoad)).toEqual({ error: MAIL_SETTINGS_UNAVAILABLE })
+  })
+
+  it('resolveMailStatus 와 같은 판정이다 — 같은 행이면 같은 결과', async () => {
+    env(ENV_OK)
+    for (const load of [{ kind: 'row', row: row() }, { kind: 'row', row: row({ username: 'apikey' }) }, { kind: 'none' }, { kind: 'archived' }] as WorkspaceMailLoad[]) {
+      loadWorkspaceMailRow.mockResolvedValueOnce(load)
+      expect(await resolveMailStatus(WID)).toEqual(statusFromLoad(load))
+    }
   })
 })
 

@@ -96,6 +96,16 @@ describe('normalizeMailSettingsInput — 직접 입력', () => {
     expect(code(custom({ host }))).toBe('host_invalid')
   })
 
+  it.each(['smtp.localhost', 'SMTP.LocalHost.', 'a.b.localhost'])(
+    'localhost 아래 이름(RFC 6761 — 언제나 루프백)이면 host_invalid: %j', (host) => {
+      expect(code(custom({ host }))).toBe('host_invalid')
+    })
+
+  it.each(['localhost.example.com', 'mylocalhost.com', 'smtp.notlocalhost'])('localhost 를 품었을 뿐인 이름은 통과: %j', (host) => {
+    const r = normalizeMailSettingsInput(custom({ host }))
+    expect(r.ok && r.value.host).toBe(host)
+  })
+
   it('서버 주소가 문자열이 아니면 host_invalid', () => {
     expect(code(custom({ host: 42 }))).toBe('host_invalid')
     expect(code(custom({ host: undefined }))).toBe('host_invalid')

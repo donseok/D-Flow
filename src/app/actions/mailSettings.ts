@@ -5,13 +5,14 @@ import { requireWorkspaceAdmin } from '@/lib/authz'
 import { isWorkspaceAdminRole } from '@/lib/domain/authz'
 import { SAFE_ID_RE } from '@/lib/domain/validate'
 import { adminFor, type AdminClient } from '@/lib/supabase/adminFor'
+import { consumeRateBy } from '@/lib/http/rateLimit'
 import {
   canReusePassword, normalizeMailSettingsInput, reasonKey,
   type MailPreset, type MailSettingsInput, type NormalizedMailSettings,
 } from '@/lib/mail/settingsInput'
-import { loadWorkspaceMailRow, rowToSmtpEnv, type WorkspaceMailRow } from '@/lib/mail/workspaceSmtp'
+import { loadWorkspaceMailRow, rowToSmtpEnv, type WorkspaceMailLoad, type WorkspaceMailRow } from '@/lib/mail/workspaceSmtp'
 import {
-  MAIL_HOST_NOT_ALLOWED, MAIL_SETTINGS_UNAVAILABLE, resolveMailStatus, resolveSmtpSettings, transportFromSettings, vetOrDeny,
+  MAIL_HOST_NOT_ALLOWED, MAIL_SETTINGS_UNAVAILABLE, resolveSmtpSettings, statusFromLoad, transportFromSettings, vetOrDeny,
   type MailStatus,
 } from '@/lib/mail/transport'
 import { smtpErrorMessage } from '@/lib/mail/errors'
@@ -51,15 +52,25 @@ function scopedAdmin(wid: string, where: string): { ok: true; admin: AdminClient
   }
 }
 
-/** 저장된 행. 조회 실패는 미설정으로 위장하지 않는다(3원칙 ①). 보관 응답은 가드(buildActor, 0056)가 먼저 닫으므로 여기 오면 모르는 상태 — 닫는다 */
+/** 저장된 행. 조회 실패는 미설정으로 위장하지 않는다(3원칙 ①). 보관 응답은 가드(buildActor, 0056)가 먼저 닫으므로 여기 오면 모르는 상태 — 닫는다.
+ *  모르는 조회 결과도 닫는다(없음으로 읽지 않는다) */
 async function loadStored(admin: AdminClient, wid: string, where: string): Promise<{ ok: true; row: WorkspaceMailRow | null } | Fail> {
+  let r: WorkspaceMailLoad
   try {
-    const r = await loadWorkspaceMailRow(admin, wid)
-    if (r.kind === 'archived') return { ok: false, error: MAIL_SETTINGS_UNAVAILABLE }
-    return { ok: true, row: r.kind === 'row' ? r.row : null }
+    r = await loadWorkspaceMailRow(admin, wid)
   } catch (e) {
     console.error(`[${where}] 메일 설정 조회 실패:`, e instanceof Error ? e.message : e)
     return { ok: false, error: MAIL_SETTINGS_UNAVAILABLE }
+  }
+  switch (r.kind) {
+    case 'row': return { ok: true, row: r.row }
+    case 'none': return { ok: true, row: null }
+    case 'archived': return { ok: false, error: MAIL_SETTINGS_UNAVAILABLE }
+    default: {
+      const unknownKind: never = r
+      console.error(`[${where}] 메일 설정 조회 결과를 모른다:`, (unknownKind as { kind?: unknown })?.kind)
+      return { ok: false, error: MAIL_SETTINGS_UNAVAILABLE }
+    }
   }
 }
 
@@ -121,7 +132,7 @@ async function passwordSetter(tr: ServerTranslate, admin: AdminClient, wid: stri
   return { name, isAdmin }
 }
 
-/** 설정 화면 — 비밀번호를 뺀 보기 + 발송 상태 + 비밀번호 설정자 */
+/** 설정 화면 — 비밀번호를 뺀 보기 + 발송 상태 + 비밀번호 설정자. 행은 한 번만 읽고 보기와 상태를 그 한 행에서 낸다(statusFromLoad) */
 export async function getWorkspaceMailSettings(wid: string): Promise<GetMailSettingsResult> {
   const tr = await serverTranslator()
   if (!isWorkspaceIdArg(wid)) return { ok: false, error: tr('err.invalidWorkspace') }
@@ -130,17 +141,12 @@ export async function getWorkspaceMailSettings(wid: string): Promise<GetMailSett
   const a = scopedAdmin(wid, 'getWorkspaceMailSettings')
   if (!a.ok) return a
 
-  const [stored, status] = await Promise.all([
-    loadStored(a.admin, wid, 'getWorkspaceMailSettings'),
-    resolveMailStatus(wid).catch((e: unknown): { error: string } => {
-      console.error('[getWorkspaceMailSettings] 발송 상태 판정 실패:', e instanceof Error ? e.message : e)
-      return { error: MAIL_SETTINGS_UNAVAILABLE }
-    }),
-  ])
+  const stored = await loadStored(a.admin, wid, 'getWorkspaceMailSettings')
   if (!stored.ok) return stored
+  const row = stored.row
+  const status = statusFromLoad(row ? { kind: 'row', row } : { kind: 'none' })
   if ('error' in status) return { ok: false, error: status.error }
 
-  const row = stored.row
   if (!row) return { ok: true, settings: null, status, passwordSetBy: null, passwordSetAt: null, passwordSetterIsAdmin: null }
   const setter = await passwordSetter(tr, a.admin, wid, row.password_set_by)
   return {
@@ -157,7 +163,7 @@ export async function getWorkspaceMailSettings(wid: string): Promise<GetMailSett
 }
 
 /**
- * 저장 — 검증 → (빈 비밀번호면 저장값 재사용 판정) → 쓰기. 새 비밀번호를 넣었을 때만 password_set_by·password_set_at 을 바꾼다(설계 §1.1).
+ * 저장 — 검증 → (빈 비밀번호면 저장값 재사용 판정) → 발송 판정 → 서버 주소 검사(직접 입력만, §2.4) → 쓰기. 새 비밀번호를 넣었을 때만 password_set_by·password_set_at 을 바꾼다(설계 §1.1).
  * DB 오류는 code·message 만 로그한다 — 검사 제약 위반의 details 에는 행 값(비밀번호 포함)이 실린다.
  */
 export async function saveWorkspaceMailSettings(
@@ -182,6 +188,9 @@ export async function saveWorkspaceMailSettings(
   const pw = pickPassword(tr, v, stored)
   if (!pw.ok) return pw
   if (!smtpSettingsFor(v, pw.password).ok) return { ok: false, error: tr('srv.mailSettings.settingsUnusable') }
+  // 발송 때 거부될 서버(사설·예약 대역으로 풀리거나 풀리지 않는 이름)는 저장하지 않는다 — 저장하면 상태 줄은 '발송 중'인데 메일은 나가지 않는다.
+  // 발송과 같은 검사(vetOrDeny — 던져도 거부). Gmail 은 고정 공인 서버(GMAIL_HOST)라 묻지 않는다 — 해석 장애가 기본 방식의 저장을 막지 않게
+  if (v.preset === 'custom' && !(await vetOrDeny(v.host)).ok) return { ok: false, error: MAIL_HOST_NOT_ALLOWED }
 
   const now = new Date().toISOString()
   const base = {
@@ -235,7 +244,9 @@ export async function deleteWorkspaceMailSettings(wid: string): Promise<{ ok: tr
 
 /**
  * 테스트 메일 — 저장 전 폼 값으로 로그인한 **본인 주소에만** 1통(설계 §3). 수신자를 입력으로 받지 않는다(임의 주소 발송 통로 차단).
- * 순서: 가드 → 검증 → 본인 주소 → 재사용 규칙 → 발송 판정(env 로 내려가지 않는다) → 서버 주소 검사(§2.4) → 트랜스포트 → 발송.
+ * 순서: 가드 → 요청 제한 → 검증 → 본인 주소 → 재사용 규칙 → 발송 판정(env 로 내려가지 않는다) → 서버 주소 검사(§2.4) → 트랜스포트 → 발송.
+ * 요청 제한은 행위자(사용자 id) 단위로 요청마다 센다(RATE_RULES.mailTestSend) — 관리자가 넣은 서버로 매번 접속하므로 SMTP 도달·자격 증명
+ * 확인 통로로 몰아 쓰지 못하게. 가드 뒤라 권한 없는 요청은 세지 않고, 검증 앞이라 틀린 입력도 센다.
  */
 export async function sendWorkspaceTestMail(
   wid: string, input: MailSettingsInput,
@@ -244,6 +255,7 @@ export async function sendWorkspaceTestMail(
   if (!isWorkspaceIdArg(wid)) return { ok: false, error: tr('err.invalidWorkspace') }
   const g = await requireWorkspaceAdmin(wid)
   if (!g.ok) return { ok: false, error: g.error }
+  if (consumeRateBy('mailTestSend', g.actor.userId) > 0) return { ok: false, error: tr('srv.mailSettings.testRateLimited') }
   const n = normalizeMailSettingsInput(input)
   if (!n.ok) return { ok: false, error: tr(reasonKey(n.code)) }
   const v = n.value

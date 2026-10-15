@@ -140,7 +140,8 @@ export function transportFromSettings(settings: SmtpSettings, opts?: { fromName?
 ### 2.4 SMTP 서버 주소 검사(워크스페이스 행만)
 
 관리자가 넣은 호스트로 서버(Vercel)가 직접 접속하므로 내부망 탐침 통로가 되지 않게 한다.
-- 저장 시(§3): 호스트를 `toAsciiHostname(host.trim().toLowerCase().replace(/\.$/, ''))`(`src/lib/domain/hostname.ts`)로 정규화하고 null 이면 거부 — IP 리터럴·`localhost` 같은 단일 레이블·IPv6 가 걸린다. 사유 코드 `host_invalid`.
+- 저장 시(§3): 호스트를 `toAsciiHostname(host.trim().toLowerCase().replace(/\.$/, ''))`(`src/lib/domain/hostname.ts`)로 정규화하고 null 이면 거부 — IP 리터럴·`localhost` 같은 단일 레이블·IPv6 가 걸린다. `*.localhost`(RFC 6761)도 거부. 사유 코드 `host_invalid`.
+  직접 입력이면 이어서 발송 때와 같은 DNS 검사(`vetOrDeny`)를 지나야 저장한다 — 거부면 `MAIL_HOST_NOT_ALLOWED`, 아무것도 쓰지 않는다(상태 줄이 '발송 중'인데 메일이 나가지 않는 행을 남기지 않는다). Gmail 은 고정 공인 서버라 묻지 않는다.
 - 발송 시: `dns.promises.lookup(host, { all: true, verbatim: true })` 결과가 비었거나 하나라도 0.0.0.0/8·127/8·10/8·172.16/12·192.168/16·169.254/16·100.64/10·::1·fc00::/7·fe80::/10·::ffff: 매핑 사설 IPv4 면 거부한다.
   해석 오류 원문은 싣지 않는다. 로컬 개발 예외(`isLocalDevEnv`)를 워크스페이스 행에 두지 않는다 — 로컬 시험은 env(inbucket)로 한다.
 
@@ -169,7 +170,7 @@ export function transportFromSettings(settings: SmtpSettings, opts?: { fromName?
 - **비밀번호 빈칸 = 저장값 재사용**은 아래가 모두 맞을 때만이다(아니면 `password_required`):
   저장된 행이 있다, 정규화된 새 host 가 저장된 host 와 같다, 정규화된 새 username(trim·소문자)이 저장된 username(trim·소문자)과 같다.
   Gmail 은 host·username 이 고정되므로 이 한 규칙이 Gmail↔직접 입력 사이의 재사용도 막는다. 저장과 테스트 발송이 같은 규칙을 쓴다.
-- 테스트 발송 순서: 가드 → `normalizeMailSettingsInput` → 비밀번호 재사용 규칙 → `resolveSmtpSettings(rowToSmtpEnv(row))`(실패면 입력 오류 문구, env 로 내려가지 않는다)
+- 테스트 발송 순서: 가드 → 요청 제한(행위자 단위 10분 10회, `src/lib/http/rateLimit.ts` 의 `mailTestSend`·`consumeRateBy` — SMTP 도달·자격 증명 확인 통로 차단) → `normalizeMailSettingsInput` → 비밀번호 재사용 규칙 → `resolveSmtpSettings(rowToSmtpEnv(row))`(실패면 입력 오류 문구, env 로 내려가지 않는다)
   → `vetMailHost` → `transportFromSettings(settings, { fromName: 워크스페이스 발신 표시명, connectTo })` → `getSession()` 사용자 이메일로 발송 → `smtpErrorMessage(…, { test: true })`.
   수신자를 입력으로 받지 않는다 — 이 화면이 임의 주소 발송 통로가 되지 않게(이 규칙은 테스트 발송 경로에 대한 것이다. 회의 안내는 기존 제한 — 작성자·관리자 관문, 회당 외부 주소 20개, 주소 검증 — 그대로다).
 - `passwordSetterIsAdmin`: `password_set_by` 가 null 이거나 그 사람이 지금 이 워크스페이스 관리자가 아니면 false, 조회 실패면 'unknown'(3원칙).

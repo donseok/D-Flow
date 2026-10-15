@@ -143,6 +143,8 @@ describe('isForbiddenAddress — 사설·예약 대역(순수)', () => {
     '64:ff9b::10.0.0.1', '64:ff9b::7f00:1', '64:ff9b::a9fe:a9fe', '64:ff9b:0:0:0:0:c0a8:101',
     '2002:a00:1::', '2002:7f00:1::1', '2002:a9fe:a9fe:1:2:3:4:5', '2002:c0a8:101::',
     '::ffff:0:10.0.0.1', '::ffff:0:7f00:1', '::ffff:0:169.254.169.254',
+    // NAT64 지역 사용 접두(64:ff9b:1::/48, RFC 8215) — 끝 32비트에 품은 IPv4
+    '64:ff9b:1::10.0.0.1', '64:ff9b:1::7f00:1', '64:ff9b:1:abcd::a9fe:a9fe', '64:ff9b:1:0:0:0:c0a8:101',
   ])('%s 는 거부', (ip) => {
     expect(isForbiddenAddress(ip)).toBe(true)
   })
@@ -152,6 +154,7 @@ describe('isForbiddenAddress — 사설·예약 대역(순수)', () => {
     '100.63.255.255', '100.128.0.1', '169.253.255.255', '11.0.0.1', '126.255.255.255', '128.0.0.1', '223.255.255.255',
     '2001:4860:4860::8888', '2a00:1450:400c:c06::6c', 'fbff::1', '::ffff:8.8.8.8', '::ffff:808:808',
     '64:ff9b::8.8.8.8', '64:ff9b::808:808', '2002:808:808::1', '::ffff:0:8.8.8.8',
+    '64:ff9b:1::8.8.8.8', '64:ff9b:1:abcd::808:808',
   ])('%s 는 통과(공인)', (ip) => {
     expect(isForbiddenAddress(ip)).toBe(false)
   })
@@ -165,7 +168,7 @@ describe('isForbiddenAddress — 사설·예약 대역(순수)', () => {
 describe('vetMailHost — 발송 직전 DNS 검사', () => {
   beforeEach(() => { h.lookup.mockReset() })
 
-  it('공인 주소로만 풀리면 통과하고 첫 주소를 연결 대상으로 돌려준다 — all·verbatim 으로 묻는다', async () => {
+  it('공인 주소로만 풀리면 통과하고 IPv4 주소를 연결 대상으로 돌려준다(IPv4 우선) — all·verbatim 으로 묻는다', async () => {
     h.lookup.mockResolvedValue([{ address: '142.250.4.108', family: 4 }, { address: '2404:6800:4008:c00::6c', family: 6 }])
     await expect(vetMailHost('smtp.gmail.com')).resolves.toEqual({ ok: true, address: '142.250.4.108' })
     expect(h.lookup).toHaveBeenCalledWith('smtp.gmail.com', { all: true, verbatim: true })
@@ -191,7 +194,7 @@ describe('vetMailHost — 발송 직전 DNS 검사', () => {
     await expect(vetMailHost('internal.acme.test')).resolves.toEqual({ ok: false })
   })
 
-  it('저장 때 통과한 이름(smtp.localhost)도 루프백으로 풀리면 여기서 거부 — 이름이 아니라 해석된 주소로 본다', async () => {
+  it('저장 때 이름 검사를 지난 이름(이름 검사 전에 저장된 smtp.localhost 등)도 루프백으로 풀리면 여기서 거부 — 이름이 아니라 해석된 주소로 본다', async () => {
     h.lookup.mockResolvedValue([{ address: '::1', family: 6 }, { address: '127.0.0.1', family: 4 }])
     await expect(vetMailHost('smtp.localhost')).resolves.toEqual({ ok: false })
   })

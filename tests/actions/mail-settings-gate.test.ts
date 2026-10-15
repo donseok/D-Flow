@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // 가드 · adminFor · 세션 · 메일 설정 행/DNS · 트랜스포트 · 브랜딩 모킹(tests/actions/project-invites-gate.test.ts 관례).
 // vi.mock 팩토리는 최상단으로 호이스팅되므로 스파이는 vi.hoisted 로 먼저 만든다.
@@ -46,6 +46,7 @@ import { serverKoTranslate } from '@/lib/i18n/serverDict'
 import { workspaceAdminVerdict, type Actor } from '@/lib/domain/authz'
 import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { makeActor, WS } from '../fixtures/actor'
+import { RATE_RULES } from '@/lib/http/rateLimit'
 
 const ADMIN = makeActor({ userId: 'u-admin', workspaceRoles: new Map([[WS, 'admin']]) })
 const MEMBER = makeActor({ userId: 'u-member' })   // WS 의 member — 워크스페이스 관리자 아님
@@ -125,6 +126,8 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
+afterEach(() => { vi.unstubAllEnvs() })
+
 describe('메일 설정 액션 — 가드와 범위', () => {
   it('워크스페이스 관리자가 아니면 네 액션 모두 거부 — adminFor·세션·DNS·트랜스포트 미도달', async () => {
     signedInAs(MEMBER)
@@ -163,14 +166,38 @@ describe('메일 설정 액션 — 가드와 범위', () => {
   })
 })
 describe('getWorkspaceMailSettings — 보기·상태·비밀번호 설정자', () => {
-  it('저장된 행이 없으면 settings null · 설정자 세 칸 null, 상태는 resolveMailStatus 그대로', async () => {
+  it('저장된 행이 없으면 settings null · 설정자 세 칸 null, 상태는 env 판정(env 도 없으면 none)', async () => {
+    for (const k of ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS']) vi.stubEnv(k, '')
     makeAdmin()
-    h.resolveMailStatus.mockResolvedValue({ source: 'none' })
     expect(await getWorkspaceMailSettings(WS)).toEqual({
       ok: true, settings: null, status: { source: 'none' }, passwordSetBy: null, passwordSetAt: null, passwordSetterIsAdmin: null,
     })
-    expect(h.resolveMailStatus).toHaveBeenCalledWith(WS)
+    vi.stubEnv('SMTP_HOST', 'smtp.env.example'); vi.stubEnv('SMTP_USER', 'env@example.com'); vi.stubEnv('SMTP_PASS', 'env-pw')
+    expect(await getWorkspaceMailSettings(WS)).toMatchObject({ ok: true, settings: null, status: { source: 'env', valid: true, fromAddress: 'env@example.com' } })
     expect(h.adminFor).toHaveBeenCalledWith({ workspaceId: WS })
+  })
+
+  it('행을 한 번만 읽고 보기와 상태를 같은 행에서 낸다 — 두 번째 조회가 다른 행을 줘도 섞이지 않는다', async () => {
+    makeAdmin()
+    h.loadWorkspaceMailRow
+      .mockResolvedValueOnce({ kind: 'row', row: storedRow({ from_address: 'first@acme.com' }) })
+      .mockResolvedValueOnce({ kind: 'row', row: storedRow({ host: 'smtp.second.com', from_address: 'second@acme.com' }) })
+    const r = await getWorkspaceMailSettings(WS)
+    expect(r).toMatchObject({
+      ok: true,
+      settings: { host: 'smtp.acme.com', fromAddress: 'first@acme.com' },
+      status: { source: 'workspace', valid: true, fromAddress: 'first@acme.com' },
+    })
+    expect(h.loadWorkspaceMailRow).toHaveBeenCalledTimes(1)
+    expect(h.resolveMailStatus).not.toHaveBeenCalled()
+  })
+
+  it('저장된 행이 발송 규칙을 어기면(손상) 보기는 그대로, 상태는 workspace·invalid', async () => {
+    makeAdmin()
+    h.loadWorkspaceMailRow.mockResolvedValue({ kind: 'row', row: storedRow({ username: 'apikey' }) })
+    expect(await getWorkspaceMailSettings(WS)).toMatchObject({
+      ok: true, settings: { username: 'apikey' }, status: { source: 'workspace', valid: false },
+    })
   })
 
   it('행이 있으면 비밀번호를 뺀 보기 + 설정자 이름·시각·관리자 여부 — 응답 어디에도 비밀번호가 없다', async () => {
@@ -180,7 +207,7 @@ describe('getWorkspaceMailSettings — 보기·상태·비밀번호 설정자', 
     expect(r).toEqual({
       ok: true,
       settings: { preset: 'custom', host: 'smtp.acme.com', port: 587, secure: false, username: 'mailer@acme.com', fromAddress: 'noreply@acme.com', hasPassword: true },
-      status: { source: 'workspace', valid: true, fromAddress: 'mailer@acme.com' },
+      status: { source: 'workspace', valid: true, fromAddress: 'noreply@acme.com' },
       passwordSetBy: '김설정', passwordSetAt: '2026-10-01T00:00:00.000Z', passwordSetterIsAdmin: true,
     })
     expect(JSON.stringify(r)).not.toContain('stored-secret')
@@ -225,14 +252,13 @@ describe('getWorkspaceMailSettings — 보기·상태·비밀번호 설정자', 
     expect(await getWorkspaceMailSettings(WS)).toMatchObject({ ok: true, passwordSetBy: serverKoTranslate('srv.mailSettings.setterUnavailable') })
   })
 
-  it('행 조회 실패·보관 응답·상태 판정 실패는 조회 실패 — 미설정으로 위장하지 않는다', async () => {
+  it('행 조회 실패·보관 응답·모르는 조회 결과는 조회 실패 — 미설정으로 위장하지 않는다', async () => {
     makeAdmin()
     h.loadWorkspaceMailRow.mockRejectedValue(new Error('db down'))
     expect(await getWorkspaceMailSettings(WS)).toEqual({ ok: false, error: MAIL_SETTINGS_UNAVAILABLE })
     h.loadWorkspaceMailRow.mockResolvedValue({ kind: 'archived' })
     expect(await getWorkspaceMailSettings(WS)).toEqual({ ok: false, error: MAIL_SETTINGS_UNAVAILABLE })
-    h.loadWorkspaceMailRow.mockResolvedValue({ kind: 'none' })
-    h.resolveMailStatus.mockResolvedValue({ error: MAIL_SETTINGS_UNAVAILABLE })
+    h.loadWorkspaceMailRow.mockResolvedValue({ kind: 'mystery' })
     expect(await getWorkspaceMailSettings(WS)).toEqual({ ok: false, error: MAIL_SETTINGS_UNAVAILABLE })
   })
 })
@@ -321,6 +347,41 @@ describe('saveWorkspaceMailSettings — 새 비밀번호·유지·재사용 거�
     expect(logged).not.toContain('new-secret')
     expect(logged).not.toContain('stored-secret')
     expect(JSON.stringify([r1, r2])).not.toContain('constraint')
+  })
+
+  it('직접 입력 서버가 사설·예약 대역으로 풀리면(검사가 던져도) 저장하지 않고 MAIL_HOST_NOT_ALLOWED — 정규화한 이름으로 묻는다', async () => {
+    const a = makeAdmin()
+    h.vetMailHost.mockResolvedValue({ ok: false })
+    expect(await saveWorkspaceMailSettings(WS, { ...CUSTOM, host: 'SMTP.Internal.Acme.com.' })).toEqual({ ok: false, error: MAIL_HOST_NOT_ALLOWED })
+    expect(h.vetMailHost).toHaveBeenCalledWith('smtp.internal.acme.com')
+
+    h.loadWorkspaceMailRow.mockResolvedValue({ kind: 'row', row: storedRow() })
+    expect(await saveWorkspaceMailSettings(WS, { ...CUSTOM, password: '' })).toEqual({ ok: false, error: MAIL_HOST_NOT_ALLOWED })
+
+    h.vetMailHost.mockRejectedValue(Object.assign(new Error('getaddrinfo ENOTFOUND smtp.acme.com'), { code: 'ENOTFOUND' }))
+    const r = await saveWorkspaceMailSettings(WS, CUSTOM)
+    expect(r).toEqual({ ok: false, error: MAIL_HOST_NOT_ALLOWED })
+    expect(JSON.stringify(r)).not.toContain('ENOTFOUND')
+
+    expect(a.upsert).not.toHaveBeenCalled()
+    expect(a.update).not.toHaveBeenCalled()
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it('서버 주소 검사는 입력·비밀번호 검사를 지난 뒤에만 — 틀린 입력·비밀번호 필요는 DNS 를 묻지 않는다', async () => {
+    makeAdmin()
+    expect((await saveWorkspaceMailSettings(WS, { ...CUSTOM, port: 8025 })).ok).toBe(false)
+    expect(await saveWorkspaceMailSettings(WS, { ...CUSTOM, password: '' })).toEqual({ ok: false, error: PASSWORD_REQUIRED })
+    expect(await saveWorkspaceMailSettings(WS, { ...CUSTOM, username: 'apikey' })).toEqual({ ok: false, error: serverKoTranslate(reasonKey('from_invalid')) })
+    expect(h.vetMailHost).not.toHaveBeenCalled()
+  })
+
+  it('Gmail 은 고정 공인 서버라 저장 때 묻지 않는다 — 해석 장애가 기본 방식의 저장을 막지 않는다', async () => {
+    const a = makeAdmin()
+    h.vetMailHost.mockResolvedValue({ ok: false })
+    expect(await saveWorkspaceMailSettings(WS, GMAIL)).toEqual({ ok: true })
+    expect(h.vetMailHost).not.toHaveBeenCalled()
+    expect(a.upsert).toHaveBeenCalledTimes(1)
   })
 
   it('재사용 저장값 조회가 실패하면 쓰지 않고 조회 실패 문구 — 비밀번호 필요로 위장하지 않는다', async () => {
@@ -425,5 +486,55 @@ describe('sendWorkspaceTestMail — 저장 전 값으로 본인에게만', () =>
     const r = await sendWorkspaceTestMail(WS, CUSTOM)
     expect(r).toMatchObject({ ok: false })
     expect((r as { error: string }).error).toContain(ME)
+  })
+})
+
+describe('sendWorkspaceTestMail — 행위자 단위 요청 제한(SMTP 도달·자격 증명 확인 통로 차단)', () => {
+  // 단위 테스트의 전역 끔(tests/setup/rate-limit.ts)을 이 묶음에서만 푼다. 카운터는 모듈 안에 이어지므로 테스트마다 새 사용자 id 를 쓴다
+  let n = 0
+  const freshAdmin = () => { n += 1; const a = makeActor({ userId: `u-limit-${n}`, workspaceRoles: new Map([[WS, 'admin']]) }); signedInAs(a); return a }
+  const LIMITED = serverKoTranslate('srv.mailSettings.testRateLimited')
+  beforeEach(() => { delete process.env.RATE_LIMIT })
+  afterEach(() => { process.env.RATE_LIMIT = 'off' })
+
+  it('한도만큼 보내면 그 사람은 창이 끝날 때까지 막힌다 — 막힌 요청은 세션·범위 클라이언트·DNS·트랜스포트에 닿지 않는다', async () => {
+    freshAdmin()
+    makeAdmin()
+    for (let i = 0; i < RATE_RULES.mailTestSend.limit; i++) expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: true, to: ME })
+    for (const f of [h.adminFor, h.getSession, h.vetMailHost, h.transportFromSettings, h.send]) f.mockClear()
+    expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: false, error: LIMITED })
+    for (const f of [h.adminFor, h.getSession, h.vetMailHost, h.transportFromSettings, h.send]) expect(f).not.toHaveBeenCalled()
+  })
+
+  it('키는 IP 가 아니라 사용자 — 다른 관리자는 영향을 받지 않는다', async () => {
+    freshAdmin()
+    makeAdmin()
+    for (let i = 0; i < RATE_RULES.mailTestSend.limit; i++) await sendWorkspaceTestMail(WS, CUSTOM)
+    expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: false, error: LIMITED })
+    freshAdmin()
+    expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: true, to: ME })
+  })
+
+  it('순서 — 가드 → 제한 → 입력 검증: 거부된 요청은 세지 않고, 틀린 입력은 센다', async () => {
+    const who = freshAdmin()
+    signedInAs(makeActor({ userId: who.userId }))   // 같은 사람이 관리자가 아니면 가드에서 끝난다(세지 않는다)
+    for (let i = 0; i < RATE_RULES.mailTestSend.limit + 5; i++) expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: false, error: ERR_DENIED })
+    signedInAs(who)
+    makeAdmin()
+    expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: true, to: ME })
+    for (let i = 1; i < RATE_RULES.mailTestSend.limit; i++) {
+      expect(await sendWorkspaceTestMail(WS, { ...CUSTOM, port: 8025 })).toEqual({ ok: false, error: serverKoTranslate(reasonKey('port_invalid')) })
+    }
+    expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: false, error: LIMITED })
+  })
+
+  it('저장·조회·삭제는 테스트 발송 한도와 무관하다', async () => {
+    freshAdmin()
+    makeAdmin()
+    for (let i = 0; i < RATE_RULES.mailTestSend.limit; i++) await sendWorkspaceTestMail(WS, CUSTOM)
+    expect(await sendWorkspaceTestMail(WS, CUSTOM)).toEqual({ ok: false, error: LIMITED })
+    expect(await saveWorkspaceMailSettings(WS, CUSTOM)).toEqual({ ok: true })
+    expect((await getWorkspaceMailSettings(WS)).ok).toBe(true)
+    expect(await deleteWorkspaceMailSettings(WS)).toEqual({ ok: true })
   })
 })

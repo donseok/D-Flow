@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { isLocalDevEnv } from '@/lib/domain/appEnv'
 
 // 요청 제한(앱 계층) — 로그인 없이 닿는 길의 대입 시도를 늦춘다: 초대 토큰·공유 링크·비밀번호 재설정 요청·외부/에이전트 API 의 토큰 인증.
+// 로그인한 관리자가 서버 밖으로 접속시키는 길(워크스페이스 메일 설정의 테스트 발송)은 IP 가 아니라 행위자(사용자 id)로 센다 — consumeRateBy.
 // 미들웨어 전체에 걸지 않고 그 길의 핸들러·액션이 이 파일의 도우미를 부른다(한도·키 규칙은 여기 한 곳).
 //
 // 저장소는 **프로세스 메모리의 고정 창 카운터**다(새 인프라·새 표 없음 — 정본 §5.7 은 외부 API 의 429 를 비목표로 두었고, 저장소를 정한 스펙이 없다).
@@ -37,6 +38,9 @@ export const RATE_RULES = {
   /** CSP 위반 보고(/api/csp-report) — 실패가 아니라 요청 수(무인증 수집이라 요청마다 로그 한 줄이 될 수 있다). 위반이 많은 화면 하나가 수십 건을
    *  보내므로 넉넉히 잡는다 — 넘친 보고는 버려도 된다(같은 위반은 다음 창에 다시 온다) */
   cspReport: { limit: 120, windowMs: TEN_MINUTES },
+  /** 워크스페이스 메일 설정의 테스트 발송 — 실패가 아니라 요청 수, 키는 행위자(사용자 id). 요청마다 관리자가 넣은 서버로 접속하므로
+   *  SMTP 도달·자격 증명 확인 통로(오라클)로 몰아 쓰지 못하게 한다. 설정을 맞추며 몇 번 보내는 정상 사용은 닿지 않는다 */
+  mailTestSend: { limit: 10, windowMs: TEN_MINUTES },
 } as const satisfies Record<string, RateRule>
 export type RateKind = keyof typeof RATE_RULES
 
@@ -150,6 +154,16 @@ export async function consumeRate(kind: RateKind): Promise<number> {
   const h = await nextHeaders()
   const wait = rateLimitedFor(kind, h)
   if (wait === 0) noteRateFailureFor(kind, h)
+  return wait
+}
+
+/** 행위자 단위로 요청마다 세는 대상(테스트 발송)용 — 키는 IP 가 아니라 subject(가드가 확정한 사용자 id). 막혀 있으면 남은 초, 아니면 세고 0.
+ *  헤더를 읽지 않는다. 키 공간은 IP 키와 접두로 갈린다(`<kind>:user:<id>`) */
+export function consumeRateBy(kind: RateKind, subject: string): number {
+  if (!enabled()) return 0
+  const key = `${kind}:user:${subject}`
+  const wait = limiter.retryAfter(key, RATE_RULES[kind])
+  if (wait === 0) limiter.hit(key, RATE_RULES[kind])
   return wait
 }
 
