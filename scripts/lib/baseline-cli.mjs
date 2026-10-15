@@ -102,6 +102,24 @@ export function execFailureMessage(what, error, { timeoutMs, lines = 5, width = 
 }
 
 /**
+ * baseline-diff 의 docker 호출. 대조할 컨테이너는 부를 때마다 getContainer() 로 읽고, 아직 정하지 않았으면(빈 값) exec 에 닿기 전에
+ * 멈춘다 — 메인 스택으로 조용히 가지 않게. exec 는 execFileSync 꼴(file, args, options), fail 은 메시지 → 던질 오류다.
+ */
+export function makeDocker({ getContainer, exec, timeoutMs, fail }) {
+  return function docker(what, argv) {
+    const container = getContainer()
+    if (!container) throw fail(`로컬 ${what}: 대조할 DB 컨테이너를 아직 정하지 않았다(dbContainer() 전에 불렀다)`)
+    try {
+      return exec('docker', argv, {
+        encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs, killSignal: 'SIGKILL',
+      })
+    } catch (e) {
+      throw fail(execFailureMessage(`로컬 ${what}(${container})`, e, { timeoutMs }))
+    }
+  }
+}
+
+/**
  * DSN → libpq 접속값. 비밀번호는 userinfo 자리에만 허용한다(표시·걸러내기 경로가 그것만 다룬다).
  * 오류 메시지에는 DSN 을 싣지 않는다.
  */

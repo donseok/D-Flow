@@ -7,7 +7,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DIFF_USAGE, DUMP_ARGS, UsageError, catalogArgs, execFailureMessage, parseDiffArgs } from './lib/baseline-cli.mjs'
+import { DIFF_USAGE, DUMP_ARGS, UsageError, catalogArgs, makeDocker, parseDiffArgs } from './lib/baseline-cli.mjs'
 import {
   CATALOG_SQL, EXTENSION_DEPS_SQL, LOCAL_PREFLIGHT_SQL, auditOutputs, baselineExtensions, baselineMigrationProblem, checkRoundTrip,
   diffCatalog, diffDumps, diffExtensions, renderLiveCatalogSnapshot, roundTripResidue,
@@ -29,16 +29,10 @@ const readRepo = (p) => readFileSync(repo(p), 'utf8')
 // process.exit 는 부르지 않는다 — 파이프(CI 로그·tee)로 나가는 큰 보고가 다 쓰이기 전에 잘린다. exitCode 를 두고 자연 종료한다.
 class Fail extends Error {}
 
-function docker(what, argv) {
-  if (!DB_CONTAINER) throw new Fail(`로컬 ${what}: 대조할 DB 컨테이너를 아직 정하지 않았다(dbContainer() 전에 불렀다)`)
-  try {
-    return execFileSync('docker', argv, {
-      encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'], timeout: DOCKER_TIMEOUT_MS, killSignal: 'SIGKILL',
-    })
-  } catch (e) {
-    throw new Fail(execFailureMessage(`로컬 ${what}(${DB_CONTAINER})`, e, { timeoutMs: DOCKER_TIMEOUT_MS }))
-  }
-}
+// 정하기 전 호출의 거부는 makeDocker 가 한다 — 컨테이너는 부를 때마다 DB_CONTAINER 에서 읽는다
+const docker = makeDocker({
+  getContainer: () => DB_CONTAINER, exec: execFileSync, timeoutMs: DOCKER_TIMEOUT_MS, fail: (message) => new Fail(message),
+})
 function dbJson(what, sql) {
   const out = docker(what, ['exec', DB_CONTAINER, 'psql', '-U', 'postgres', ...catalogArgs(sql)]).trim()
   try { return JSON.parse(out) } catch { throw new Fail(`로컬 ${what} 출력이 JSON 이 아니다(${out.length}자)`) }

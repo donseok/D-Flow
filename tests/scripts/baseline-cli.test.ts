@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
   UsageError, parseArgs, parseDiffArgs, execFailureMessage, parseDsn, checkReaderRole, validateRehearseHost, validateOutDir, checkRawSource,
-  PGOPTIONS, catalogArgs, presenceOf, containerStateOf, runSucceeded,
+  PGOPTIONS, catalogArgs, presenceOf, containerStateOf, runSucceeded, makeDocker,
 } from '../../scripts/lib/baseline-cli.mjs'
 
 describe('parseArgs — 운영 접속은 --execute 로만', () => {
@@ -282,12 +282,57 @@ describe('baseline-diff 의 DB 컨테이너 — SUPABASE_DB_CONTAINER 를 듣는
     expect(r.stderr).toContain('54622')
   })
 
-  it('하드코딩한 메인 컨테이너 이름도 기본값도 없다 — 컨테이너는 dbContainer() 한 곳에서만 정하고, 정하기 전의 docker 호출은 멈춘다', () => {
+  it('하드코딩한 메인 컨테이너 이름도 기본값도 없다 — 컨테이너는 dbContainer() 한 곳에서만 정하고, docker 는 그 값을 부를 때마다 읽는다', () => {
     const src = readFileSync(join(process.cwd(), 'scripts/baseline-diff.mjs'), 'utf8')
     expect(src).not.toMatch(/['"`]supabase_db_d-flow['"`]/)
     expect(src).not.toMatch(/MAIN_STACK/)
     expect(src).toMatch(/import \{ dbContainer \} from '\.\.\/supabase\/rehearsal\/compare-catalog\.mjs'/)
     expect(src).toMatch(/^let DB_CONTAINER = null$/m)
-    expect(src).toMatch(/function docker\(what, argv\) \{\n\s+if \(!DB_CONTAINER\) throw new Fail\(/)
+    // 정하기 전 호출의 거부는 아래 makeDocker 행동 테스트가 본다 — 여기서는 그 공장에 이 변수를 물렸는지만
+    expect(src).toMatch(/^const docker = makeDocker\(\{\n\s+getContainer: \(\) => DB_CONTAINER, exec: execFileSync, timeoutMs: DOCKER_TIMEOUT_MS,/m)
+    expect(src).not.toMatch(/execFileSync\('docker'/)
+  })
+})
+
+describe('makeDocker — 대조할 컨테이너를 정하기 전에는 docker 에 닿지 않는다', () => {
+  class Fail extends Error {}
+  const setup = (exec: (...a: unknown[]) => unknown) => {
+    let container: string | null = null
+    const calls: unknown[][] = []
+    const docker = makeDocker({
+      getContainer: () => container, timeoutMs: 180_000, fail: (m: string) => new Fail(m),
+      exec: (...a: unknown[]) => { calls.push(a); return exec(...a) },
+    })
+    return { docker, calls, set: (c: string) => { container = c } }
+  }
+
+  it('정하기 전 호출은 Fail 로 멈추고 exec 를 부르지 않는다', () => {
+    const t = setup(() => 'never')
+    expect(() => t.docker('이미지 확인', ['container', 'inspect'])).toThrow(Fail)
+    expect(() => t.docker('이미지 확인', ['container', 'inspect'])).toThrow('로컬 이미지 확인: 대조할 DB 컨테이너를 아직 정하지 않았다(dbContainer() 전에 불렀다)')
+    expect(t.calls).toEqual([])
+  })
+
+  it('정한 뒤에는 docker 를 시간 제한·SIGKILL 로 부르고 stdout 을 돌려준다 — 컨테이너는 부를 때 읽는다', () => {
+    const t = setup(() => 'ok\n')
+    t.set('supabase_db_x')
+    expect(t.docker('pg_dump', ['exec', 'supabase_db_x', 'pg_dump'])).toBe('ok\n')
+    expect(t.calls).toHaveLength(1)
+    const [file, argv, opts] = t.calls[0]
+    expect(file).toBe('docker')
+    expect(argv).toEqual(['exec', 'supabase_db_x', 'pg_dump'])
+    expect(opts).toMatchObject({ encoding: 'utf8', timeout: 180_000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'] })
+  })
+
+  it('exec 실패는 컨테이너 이름을 담은 execFailureMessage 로 Fail 을 던진다', () => {
+    const err = Object.assign(new Error('Command failed: docker exec … SQL'), { code: 'ETIMEDOUT', signal: 'SIGKILL', status: null })
+    const t = setup(() => { throw err })
+    t.set('supabase_db_x')
+    let thrown: unknown
+    try { t.docker('카탈로그', ['exec', 'supabase_db_x', 'psql']) } catch (e) { thrown = e }
+    expect(thrown).toBeInstanceOf(Fail)
+    expect((thrown as Error).message).toBe(execFailureMessage('로컬 카탈로그(supabase_db_x)', err, { timeoutMs: 180_000 }))
+    expect((thrown as Error).message).toContain('supabase_db_x')
+    expect((thrown as Error).message).not.toContain('Command failed')
   })
 })
