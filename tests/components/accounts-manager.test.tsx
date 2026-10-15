@@ -19,8 +19,10 @@ type Preview = { ok: true; preview: { projects: number; invites: number; tokens:
 const previewWorkspaceMemberRemoval = vi.fn<(...a: unknown[]) => Promise<Preview>>(async () => ({ ok: true, preview: { projects: 2, invites: 1, tokens: 0 } }))
 const removeWorkspaceMember = vi.fn<(...a: unknown[]) => Promise<Res>>(async () => ({ ok: true }))
 
+const createAccount = vi.fn<(...a: unknown[]) => Promise<Res>>(async () => ({ ok: true }))
+
 vi.mock('@/app/actions/accounts', () => ({
-  createAccount: vi.fn(), bulkCreateAccounts: vi.fn(),
+  createAccount: (...a: unknown[]) => createAccount(...a), bulkCreateAccounts: vi.fn(),
   resetPassword: (...a: unknown[]) => resetPassword(...a),
   previewWorkspaceMemberRemoval: (...a: unknown[]) => previewWorkspaceMemberRemoval(...a),
   removeWorkspaceMember: (...a: unknown[]) => removeWorkspaceMember(...a),
@@ -60,6 +62,7 @@ describe('AccountsManager', () => {
   beforeEach(() => {
     setWorkspaceRole.mockClear(); setWorkspaceRole.mockResolvedValue({ ok: true })
     setPlatformAdmin.mockClear(); setPlatformAdmin.mockResolvedValue({ ok: true })
+    createAccount.mockClear(); createAccount.mockResolvedValue({ ok: true })
     refresh.mockClear(); toast.mockClear()
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -336,5 +339,70 @@ describe('AccountsManager', () => {
     const placeholder = document.body.querySelector('textarea')!.getAttribute('placeholder')!
     expect(placeholder).not.toMatch(/\bmember\b|\badmin\b/)
     expect(placeholder).toContain('viewer')
+  })
+  it('프로젝트가 있으면 "프로젝트가 없다" 안내(data-no-project-notice)가 없다', () => {
+    render()
+    expect(container.querySelector('[data-no-project-notice]')).toBeNull()
+    act(() => root.unmount()); root = createRoot(container)
+    render(undefined, true, null)
+    expect(container.querySelector('[data-no-project-notice]')).not.toBeNull()   // 대조 — 프로젝트가 없을 때만 보인다
+  })
+
+  // 머리 칸과 본문 칸의 개수가 어긋나면 열이 밀려 보인다 — 프로젝트 권한 열·플랫폼 관리자 열은 조건부로 함께 사라지고 나타난다
+  it.each([
+    ['프로젝트 있음 · 플랫폼 관리자', 'p-1', true],
+    ['프로젝트 있음 · 워크스페이스 관리자', 'p-1', false],
+    ['프로젝트 없음 · 플랫폼 관리자', null, true],
+    ['프로젝트 없음 · 워크스페이스 관리자', null, false],
+  ] as const)('표의 머리 칸 수와 행의 칸 수가 같다 — %s', (_name, projectId, platformOps) => {
+    render(undefined, platformOps, projectId)
+    const ths = container.querySelectorAll('thead th').length
+    const firstRow = container.querySelector<HTMLTableRowElement>('tbody tr')!
+    expect(ths).toBeGreaterThan(0)
+    expect(firstRow.querySelectorAll('td')).toHaveLength(ths)
+  })
+
+  describe('계정 추가 제출 — createAccount 에 넘기는 프로젝트·권한', () => {
+    const setInput = (el: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value)
+      act(() => { el.dispatchEvent(new Event('input', { bubbles: true })) })
+    }
+    const field = (label: string) =>
+      Array.from(document.body.querySelectorAll('label')).find(l => l.querySelector('span')?.textContent?.trim() === label)!
+    async function openAndFill() {
+      const addBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('계정 추가'))!
+      await click(addBtn)
+      setInput(field('이메일 (로그인 아이디)').querySelector('input')!, 'new@example.com')
+      setInput(field('초기 비밀번호 (8자 이상)').querySelector('input')!, 'password1')
+    }
+    const submit = async () => {
+      const btn = Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.trim() === '계정 만들기')!
+      await click(btn)
+      await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    }
+
+    it('프로젝트가 없으면 projectId: null, accessRole: null 로 부른다', async () => {
+      render(undefined, true, null)
+      await openAndFill()
+      await submit()
+      expect(createAccount).toHaveBeenCalledTimes(1)
+      expect(createAccount).toHaveBeenCalledWith({
+        email: 'new@example.com', password: 'password1', name: null, workspaceRole: 'member',
+        projectId: null, accessRole: null, workspaceId: 'ws-1',
+      })
+    })
+
+    it('프로젝트가 있고 권한을 "관리자"로 고르면 projectId: p-1, accessRole: admin 으로 부른다', async () => {
+      render()
+      await openAndFill()
+      const select = field('이 프로젝트 권한').querySelector('select')!
+      act(() => { select.value = 'admin'; select.dispatchEvent(new Event('change', { bubbles: true })) })
+      await submit()
+      expect(createAccount).toHaveBeenCalledTimes(1)
+      expect(createAccount).toHaveBeenCalledWith({
+        email: 'new@example.com', password: 'password1', name: null, workspaceRole: 'member',
+        projectId: 'p-1', accessRole: 'admin', workspaceId: 'ws-1',
+      })
+    })
   })
 })
