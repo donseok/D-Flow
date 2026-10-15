@@ -12,8 +12,11 @@ import {
   CATALOG_SQL, EXTENSION_DEPS_SQL, LOCAL_PREFLIGHT_SQL, auditOutputs, baselineExtensions, baselineMigrationProblem, checkRoundTrip,
   diffCatalog, diffDumps, diffExtensions, renderLiveCatalogSnapshot, roundTripResidue,
 } from './lib/baseline.mjs'
+import { MAIN_STACK, dbContainer } from '../supabase/rehearsal/compare-catalog.mjs'
 
-const DB_CONTAINER = 'supabase_db_d-flow'
+// 대조할 DB 컨테이너 — SUPABASE_DB_CONTAINER(전용 스택), 비었으면 메인 스택(supabase_db_d-flow, CI 도 이것). 리허설 도구와 같은 판정(dbContainer —
+// 그 컨테이너의 DB 포트가 LOCAL_DB_URL 포트와 같을 때만)이라 셸에 남은 값 하나로 다른 스택을 대조하지 않는다. --snapshot 은 docker 를 쓰지 않아 compare 에서만 정한다
+let DB_CONTAINER = MAIN_STACK.container
 // 멈춘 DB 가 CI 잡을 붙잡지 않게. SIGKILL 은 docker 클라이언트만 끊는다 — 컨테이너 안의 psql·pg_dump 는 끝날 때까지 남을 수
 // 있다(로컬 전용 DB 라 해는 없다).
 const DOCKER_TIMEOUT_MS = 180_000
@@ -49,6 +52,7 @@ function writeSnapshot() {
 }
 
 function compare(rawDir) {
+  try { DB_CONTAINER = dbContainer() } catch (e) { throw new Fail(e.message) }
   const image = docker('이미지 확인', ['container', 'inspect', '--format', '{{.Config.Image}}', DB_CONTAINER]).trim()
   const pre = dbJson('사전 확인', LOCAL_PREFLIGHT_SQL)
   console.log(`로컬 DB  ${pre.server} · 이미지 ${image} · 마이그레이션 ${pre.migrations.join(', ') || '없음'}`)

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
@@ -261,5 +262,29 @@ describe('runSucceeded — CLI 종료 코드만 믿지 않는다(start -a 는 �
     expect(runSucceeded({ code: null, error: null, timedOut: false, state: exited0 })).toBe(false)
     expect(runSucceeded({ code: 0, error: null, timedOut: true, state: exited0 })).toBe(false)
     expect(runSucceeded({ code: 0, error: new Error('spawn'), timedOut: false, state: exited0 })).toBe(false)
+  })
+})
+
+describe('baseline-diff 의 DB 컨테이너 — SUPABASE_DB_CONTAINER 를 듣는다(전용 스택), 판정은 리허설 도구의 dbContainer', () => {
+  const run = (env: Record<string, string>) => spawnSync(process.execPath, ['scripts/baseline-diff.mjs'], {
+    cwd: process.cwd(), encoding: 'utf8', env: { PATH: process.env.PATH ?? '', NODE_ENV: 'test', ...env },
+  })
+
+  it('꼴이 아닌 컨테이너 이름은 docker 에 닿기 전에 멈춘다(종료 1) — 값을 듣는다는 증거', () => {
+    const r = run({ SUPABASE_DB_CONTAINER: 'supabase_db_x;rm' })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('SUPABASE_DB_CONTAINER')
+  })
+
+  it('이름이 비었고 LOCAL_DB_URL 이 전용 스택 포트면 메인 컨테이너로 내려가지 않고 멈춘다', () => {
+    const r = run({ SUPABASE_DB_CONTAINER: '', LOCAL_DB_URL: 'postgresql://postgres:postgres@127.0.0.1:54622/postgres' })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('54622')
+  })
+
+  it('하드코딩한 메인 컨테이너 이름이 남아 있지 않다 — 기본값은 MAIN_STACK 에서 온다', () => {
+    const src = readFileSync(join(process.cwd(), 'scripts/baseline-diff.mjs'), 'utf8')
+    expect(src).not.toMatch(/['"`]supabase_db_d-flow['"`]/)
+    expect(src).toMatch(/import \{ MAIN_STACK, dbContainer \} from '\.\.\/supabase\/rehearsal\/compare-catalog\.mjs'/)
   })
 })
