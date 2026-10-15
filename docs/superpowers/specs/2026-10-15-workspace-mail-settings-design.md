@@ -126,7 +126,7 @@ export function transportFromSettings(settings: SmtpSettings, opts?: { fromName?
 - `getTransport` 는 §2.1 판정으로 설정을 고른 뒤 `transportFromSettings` 로 만든다. 결과 문구: workspace·invalid 와 env·invalid 는 `SMTP_MISCONFIGURED`,
   none 은 `SMTP_NOT_CONFIGURED`, `{ error }` 는 그 문구. 'unset → SMTP_NOT_CONFIGURED' 는 env 경로에만 해당한다.
 - 워크스페이스 행일 때만 연결 전에 `vetMailHost`(§2.4)를 지나고, 통과한 IP 를 `connectTo` 로 넘긴다 — nodemailer 의 `host` 는 그 IP, `name`·`tls.servername` 은 원래 호스트(재해석·DNS 리바인딩 차단, 인증서 검사는 원래 이름).
-  거부되면 `MAIL_HOST_NOT_ALLOWED`('이 메일 서버 주소는 쓸 수 없습니다.'). env 경로(운영자가 정한 값, 로컬 inbucket 127.0.0.1)는 이 검사를 받지 않는다.
+  거부되면 `MAIL_HOST_NOT_ALLOWED`('이 메일 서버 주소는 쓸 수 없습니다. 주소를 찾지 못했거나 내부망 주소입니다 — 주소가 맞는지 확인하세요.' — 사설·예약 대역과 해석 실패를 한 문구로 둔다, §2.4). env 경로(운영자가 정한 값, 로컬 inbucket 127.0.0.1)는 이 검사를 받지 않는다.
 - `from` 은 지금처럼 `{ name: mailFromName(fromName), address: settings.fromAddress }` 로 이 파일이 고정한다.
 - `mailConfigured()`(동기, env 판정)는 그대로 둔다.
 
@@ -143,6 +143,9 @@ export function transportFromSettings(settings: SmtpSettings, opts?: { fromName?
 - 저장 시(§3): 호스트를 `toAsciiHostname(host.trim().toLowerCase().replace(/\.$/, ''))`(`src/lib/domain/hostname.ts`)로 정규화하고 null 이면 거부 — IP 리터럴·`localhost` 같은 단일 레이블·IPv6 가 걸린다. `*.localhost`(RFC 6761)도 거부. 사유 코드 `host_invalid`.
   직접 입력이면 이어서 발송 때와 같은 DNS 검사(`vetOrDeny`)를 지나야 저장한다 — 거부면 `MAIL_HOST_NOT_ALLOWED`, 아무것도 쓰지 않는다(상태 줄이 '발송 중'인데 메일이 나가지 않는 행을 남기지 않는다). Gmail 은 고정 공인 서버라 묻지 않는다.
 - 발송 시: `dns.promises.lookup(host, { all: true, verbatim: true })` 결과가 비었거나 하나라도 0.0.0.0/8·127/8·10/8·172.16/12·192.168/16·169.254/16·100.64/10·::1·fc00::/7·fe80::/10·::ffff: 매핑 사설 IPv4 면 거부한다.
+  IPv4 를 품은 다른 IPv6 꼴(NAT64 64:ff9b::/96·6to4 2002::/16·변환 ::ffff:0:a.b.c.d)은 품은 IPv4 로 보고, NAT64 지역 사용 접두 64:ff9b:1::/48(RFC 8215)은
+  IPv4 의 자리가 망마다 달라(RFC 6052) 통째로 거부한다 — 전체 목록은 `isForbiddenAddress` 주석. 해석 오류·5초 시간 초과도 거부한다.
+  거부 사유(사설·예약 대역으로 풀림 / 풀리지 않음)는 응답에서 가르지 않는다 — 나누면 저장·테스트 발송이 어떤 내부 이름이 사설 주소로 풀리는지 알려 주는 통로가 된다.
   해석 오류 원문은 싣지 않는다. 로컬 개발 예외(`isLocalDevEnv`)를 워크스페이스 행에 두지 않는다 — 로컬 시험은 env(inbucket)로 한다.
 
 ### 2.5 SMTP 오류 문구 한 곳으로
@@ -159,7 +162,7 @@ export function transportFromSettings(settings: SmtpSettings, opts?: { fromName?
 | 액션 | 하는 일 |
 |---|---|
 | `getWorkspaceMailSettings(wid)` | 비밀번호를 뺀 보기 + `status: MailStatus` + `passwordSetBy`(표시 이름)·`passwordSetAt`·`passwordSetterIsAdmin`(true / false / 'unknown') |
-| `saveWorkspaceMailSettings(wid, input)` | 검증 → upsert. `updated_by`=`g.actor.userId`. 새 비밀번호를 넣었을 때만 `password_set_by`·`password_set_at` 갱신 |
+| `saveWorkspaceMailSettings(wid, input)` | 가드 → `normalizeMailSettingsInput` → 비밀번호 재사용 규칙 → `resolveSmtpSettings` 로 쓸 수 있는 설정인지 → 직접 입력이면 서버 주소 검사(§2.4 `vetOrDeny`, 거부면 `MAIL_HOST_NOT_ALLOWED` 로 아무것도 쓰지 않는다. Gmail 은 건너뛴다) → upsert. `updated_by`=`g.actor.userId`. 새 비밀번호를 넣었을 때만 `password_set_by`·`password_set_at` 갱신 |
 | `deleteWorkspaceMailSettings(wid)` | 행 삭제(`.select('workspace_id')` 로 영향 행 확인 — 0행이면 "지울 설정이 없습니다") → env(있으면)로 돌아간다 |
 | `sendWorkspaceTestMail(wid, input)` | 저장 전 폼 값으로 **로그인한 본인 메일 주소에만** 1통 |
 
@@ -177,7 +180,7 @@ export function transportFromSettings(settings: SmtpSettings, opts?: { fromName?
 - 응답·로그·오류 어디에도 비밀번호를 싣지 않는다. 보기 형의 필드에 password 가 없다.
 
 열거 게이트(`tests/gates/manifest.ts`): 네 항목 `getWorkspaceMailSettings`·`deleteWorkspaceMailSettings` 는 `{ ...nul('workspaceAdmin'), sample: [W] }`,
-`saveWorkspaceMailSettings`·`sendWorkspaceTestMail` 는 `{ ...nul('workspaceAdmin'), sample: [W, {}] }` — 둘째 인자 `{}` 는 가드 뒤 `normalizeMailSettingsInput` 에서 실패하는 값이라
+`saveWorkspaceMailSettings`·`sendWorkspaceTestMail` 는 `{ ...nul('workspaceAdmin'), sample: [W, {}] }` — 둘째 인자 `{}` 는 `normalizeMailSettingsInput`(저장은 가드 바로 뒤, 테스트 발송은 가드 → 요청 제한 다음)에서 실패하는 값이라
 deny 하네스가 본문을 돌려도 실제 SMTP 연결을 시도하지 않는다. 액션·발송 경로가 모두 `adminFor` 를 쓰므로 service_role 감사표에는 새 행이 없다.
 
 ## 4. 화면 — 워크스페이스 설정 › 메일 발송
@@ -202,7 +205,8 @@ deny 하네스가 본문을 돌려도 실제 SMTP 연결을 시도하지 않는�
   6. 버튼 — **테스트 메일 보내기**(내 주소로, 저장 전 값으로) · **저장** · **설정 삭제**(확인 대화상자, 저장된 행이 있을 때만).
   7. 발신 표시명은 '일반' 섹션의 메일 발신 이름을 쓴다는 한 줄.
 - 사전: 목차·섹션 제목은 `pagesUi.ts`(`pages.wsSettings.nav.mail`·`pages.wsSettings.mailTitle`), 편집기 문구와 `normalizeMailSettingsInput` 사유 코드 문구는 공용 `settingsUi.ts`(폼과 서버가 같은 키),
-  서버만 내는 문구(테스트 발송 결과·SMTP 오류·`MAIL_SETTINGS_UNAVAILABLE`·`MAIL_HOST_NOT_ALLOWED`)는 `serverUi.ts` 의 `srv.mailSettings.*`. 같은 키를 두 사전에 두지 않는다.
+  서버만 내는 문구(테스트 발송 결과·요청 제한·SMTP 오류)는 `serverUi.ts` 의 `srv.mailSettings.*`. 같은 키를 두 사전에 두지 않는다.
+  `MAIL_SETTINGS_UNAVAILABLE`·`MAIL_HOST_NOT_ALLOWED` 는 사전 키가 아니라 `transport.ts` 의 리터럴 상수다(`SMTP_NOT_CONFIGURED` 와 같은 방식 — 서버 사전을 값으로 import 하는 파일은 닫혀 있다).
 - 상태 변형 display 유틸(`group-hover:flex` 등)은 쓰지 않는다.
 
 ## 5. 오류 처리
@@ -213,7 +217,8 @@ deny 하네스가 본문을 돌려도 실제 SMTP 연결을 시도하지 않는�
 | 보관된 워크스페이스의 행(발송 시) | 발송하지 않고 env 로 내려가지 않는다. 문구는 `MAIL_SETTINGS_UNAVAILABLE`(보관 사실을 드러내지 않는다) |
 | 저장된 행이 규칙 위반(손상·공백) | 발송 시 `SMTP_MISCONFIGURED`(env 로 내려가지 않는다), 상태 줄 workspace·invalid |
 | env 설정이 규칙 위반 | 발송 시 `SMTP_MISCONFIGURED`, 상태 줄 env·invalid |
-| 서버 주소가 사설·예약 대역으로 풀림 | `MAIL_HOST_NOT_ALLOWED` |
+| 서버 주소가 사설·예약 대역으로 풀리거나 풀리지 않음(오타·DNS 장애·시간 초과) — 직접 입력 저장·테스트 발송·발송 | `MAIL_HOST_NOT_ALLOWED` 한 문구(두 사유를 가르지 않는다, §2.4) |
+| 테스트 발송 요청 제한(행위자 단위 10분 10회) 초과 | `srv.mailSettings.testRateLimited` — 입력 검증·연결 전에 거절 |
 | 저장 입력 오류 | 사유 문구(주소 형식·호스트·포트·보안 짝·비밀번호 필요) |
 | 테스트 발송 실패 | 인증 실패(앱 비밀번호 확인) / 서버 연결 실패 / 기타 |
 | 본인 메일 주소를 모름 | 테스트 발송 거부 문구 |
