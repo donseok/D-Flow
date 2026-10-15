@@ -26,7 +26,7 @@ import { getInvitePreview, getInviteSessionState, redeemInvite, redeemInviteWith
 import { requestPasswordReset } from '@/app/actions/passwordReset'
 import { generateCredentialToken } from '@/lib/agent/token'
 import { resolveCredential } from '@/lib/authz/credentials'
-import { RATE_RULES } from '@/lib/http/rateLimit'
+import { RATE_MAX_KEYS, RATE_RULES, consumeRateBy, noteRateFailureFor } from '@/lib/http/rateLimit'
 import { resolveMinutesPrincipal } from '@/lib/minutes/externalApi'
 import SharedMinutePage from '@/app/share/minutes/[token]/page'
 
@@ -207,5 +207,19 @@ describe('외부·에이전트 API 자격증명', () => {
       const res = await resolveCredential(req(ip, 'x'), db({ data: null, error: null }).admin, 'agent_runner')
       expect(res instanceof NextResponse && res.status).toBe(404)
     }
+  })
+})
+
+describe('행위자 단위 카운터(consumeRateBy)', () => {
+  it('IP 키가 상한을 넘게 쏟아져도 사용자의 카운트는 밀려나지 않는다 — 저장소가 따로다', () => {
+    const user = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    for (let i = 0; i < RATE_RULES.mailTestSend.limit; i++) expect(consumeRateBy('mailTestSend', user)).toBe(0)
+    expect(consumeRateBy('mailTestSend', user)).toBeGreaterThan(0)
+    // 무인증 요청이 꾸민 IP 로 키를 상한보다 많이 만든다 — 한 저장소였다면 가장 오래된 사용자 키가 먼저 버려진다
+    for (let i = 0; i <= RATE_MAX_KEYS; i++) {
+      const ip = `churn-${i}`
+      noteRateFailureFor('inviteToken', { get: (name) => (name === 'x-forwarded-for' ? ip : null) })
+    }
+    expect(consumeRateBy('mailTestSend', user)).toBeGreaterThan(0)
   })
 })

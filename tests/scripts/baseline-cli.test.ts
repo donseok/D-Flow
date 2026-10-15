@@ -282,9 +282,12 @@ describe('baseline-diff 의 DB 컨테이너 — SUPABASE_DB_CONTAINER 를 듣는
     expect(r.stderr).toContain('54622')
   })
 
-  it('하드코딩한 메인 컨테이너 이름이 남아 있지 않다 — 기본값은 MAIN_STACK 에서 온다', () => {
+  it('하드코딩한 메인 컨테이너 이름도 기본값도 없다 — 컨테이너는 dbContainer() 한 곳에서만 정하고, 정하기 전의 docker 호출은 멈춘다', () => {
     const src = readFileSync(join(process.cwd(), 'scripts/baseline-diff.mjs'), 'utf8')
     expect(src).not.toMatch(/['"`]supabase_db_d-flow['"`]/)
-    expect(src).toMatch(/import \{ MAIN_STACK, dbContainer \} from '\.\.\/supabase\/rehearsal\/compare-catalog\.mjs'/)
+    expect(src).not.toMatch(/MAIN_STACK/)
+    expect(src).toMatch(/import \{ dbContainer \} from '\.\.\/supabase\/rehearsal\/compare-catalog\.mjs'/)
+    expect(src).toMatch(/^let DB_CONTAINER = null$/m)
+    expect(src).toMatch(/function docker\(what, argv\) \{\n\s+if \(!DB_CONTAINER\) throw new Fail\(/)
   })
 })

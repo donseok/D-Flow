@@ -12,11 +12,12 @@ import {
   CATALOG_SQL, EXTENSION_DEPS_SQL, LOCAL_PREFLIGHT_SQL, auditOutputs, baselineExtensions, baselineMigrationProblem, checkRoundTrip,
   diffCatalog, diffDumps, diffExtensions, renderLiveCatalogSnapshot, roundTripResidue,
 } from './lib/baseline.mjs'
-import { MAIN_STACK, dbContainer } from '../supabase/rehearsal/compare-catalog.mjs'
+import { dbContainer } from '../supabase/rehearsal/compare-catalog.mjs'
 
 // 대조할 DB 컨테이너 — SUPABASE_DB_CONTAINER(전용 스택), 비었으면 메인 스택(supabase_db_d-flow, CI 도 이것). 리허설 도구와 같은 판정(dbContainer —
-// 그 컨테이너의 DB 포트가 LOCAL_DB_URL 포트와 같을 때만)이라 셸에 남은 값 하나로 다른 스택을 대조하지 않는다. --snapshot 은 docker 를 쓰지 않아 compare 에서만 정한다
-let DB_CONTAINER = MAIN_STACK.container
+// 그 컨테이너의 DB 포트가 LOCAL_DB_URL 포트와 같을 때만)이라 셸에 남은 값 하나로 다른 스택을 대조하지 않는다. --snapshot 은 docker 를 쓰지 않아 compare 에서만 정한다 —
+// 기본값을 두지 않는다. 정하기 전에 docker 를 부르면 메인 스택으로 조용히 가지 않고 멈춘다
+let DB_CONTAINER = null
 // 멈춘 DB 가 CI 잡을 붙잡지 않게. SIGKILL 은 docker 클라이언트만 끊는다 — 컨테이너 안의 psql·pg_dump 는 끝날 때까지 남을 수
 // 있다(로컬 전용 DB 라 해는 없다).
 const DOCKER_TIMEOUT_MS = 180_000
@@ -29,6 +30,7 @@ const readRepo = (p) => readFileSync(repo(p), 'utf8')
 class Fail extends Error {}
 
 function docker(what, argv) {
+  if (!DB_CONTAINER) throw new Fail(`로컬 ${what}: 대조할 DB 컨테이너를 아직 정하지 않았다(dbContainer() 전에 불렀다)`)
   try {
     return execFileSync('docker', argv, {
       encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'], timeout: DOCKER_TIMEOUT_MS, killSignal: 'SIGKILL',

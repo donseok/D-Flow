@@ -36,7 +36,7 @@ const env = (over: Record<string, string>) => { for (const k of KEYS) vi.stubEnv
 
 const NOT_CONFIGURED = '메일 발송이 설정되지 않았습니다.'
 const MISCONFIGURED = '메일 발송 설정이 올바르지 않습니다. 관리자에게 문의하세요.'
-const HOST_NOT_ALLOWED = '이 메일 서버 주소는 쓸 수 없습니다.'
+const HOST_NOT_ALLOWED = '이 메일 서버 주소는 쓸 수 없습니다. 주소를 찾지 못했거나 내부망 주소입니다 — 주소가 맞는지 확인하세요.'
 
 const WID = '11111111-1111-4111-8111-111111111111'
 const IP = '203.0.113.10'

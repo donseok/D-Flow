@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { isLocalDevEnv } from '@/lib/domain/appEnv'
 
 // 요청 제한(앱 계층) — 로그인 없이 닿는 길의 대입 시도를 늦춘다: 초대 토큰·공유 링크·비밀번호 재설정 요청·외부/에이전트 API 의 토큰 인증.
-// 로그인한 관리자가 서버 밖으로 접속시키는 길(워크스페이스 메일 설정의 테스트 발송)은 IP 가 아니라 행위자(사용자 id)로 센다 — consumeRateBy.
+// 로그인한 관리자가 서버 밖으로 접속시키는 길(워크스페이스 메일 설정의 테스트 발송)은 IP 가 아니라 행위자(사용자 id)로 센다 — consumeRateBy(저장소도 따로).
 // 미들웨어 전체에 걸지 않고 그 길의 핸들러·액션이 이 파일의 도우미를 부른다(한도·키 규칙은 여기 한 곳).
 //
 // 저장소는 **프로세스 메모리의 고정 창 카운터**다(새 인프라·새 표 없음 — 정본 §5.7 은 외부 API 의 429 를 비목표로 두었고, 저장소를 정한 스펙이 없다).
@@ -128,6 +128,8 @@ export function rateLimitEnabled(env: { RATE_LIMIT?: string; APP_ENV?: string; N
 }
 
 const limiter = createRateLimiter()
+/** 행위자(사용자 id) 키 전용 저장소 — 상한·버림 규칙은 같다. IP 키와 한 저장소면 무인증 요청이 꾸민 IP 로 키를 쏟아부어 사용자 카운트를 밀어내(초기화해) 버린다 */
+const userLimiter = createRateLimiter()
 // 이름을 적어 읽는다 — next.config.ts 가 APP_ENV 를 빌드 때 이 식에 박는다
 const enabled = () => rateLimitEnabled({ RATE_LIMIT: process.env.RATE_LIMIT, APP_ENV: process.env.APP_ENV, NODE_ENV: process.env.NODE_ENV })
 const keyOf = (kind: RateKind, h: HeaderBag) => `${kind}:${clientIp(h)}`
@@ -158,12 +160,12 @@ export async function consumeRate(kind: RateKind): Promise<number> {
 }
 
 /** 행위자 단위로 요청마다 세는 대상(테스트 발송)용 — 키는 IP 가 아니라 subject(가드가 확정한 사용자 id). 막혀 있으면 남은 초, 아니면 세고 0.
- *  헤더를 읽지 않는다. 키 공간은 IP 키와 접두로 갈린다(`<kind>:user:<id>`) */
+ *  헤더를 읽지 않는다. IP 키와 저장소가 따로다(userLimiter) — IP 쪽 키가 상한을 넘어도 이 카운트는 밀려나지 않는다 */
 export function consumeRateBy(kind: RateKind, subject: string): number {
   if (!enabled()) return 0
   const key = `${kind}:user:${subject}`
-  const wait = limiter.retryAfter(key, RATE_RULES[kind])
-  if (wait === 0) limiter.hit(key, RATE_RULES[kind])
+  const wait = userLimiter.retryAfter(key, RATE_RULES[kind])
+  if (wait === 0) userLimiter.hit(key, RATE_RULES[kind])
   return wait
 }
 

@@ -129,8 +129,9 @@ function v6Groups(ip: string): number[] | null {
  * 연결하면 안 되는 주소인가(순수). 형태를 모르는 값은 거부한다(fail-closed).
  * IPv6: ::(미지정)·::1·fc00::/7(고유 로컬)·fe80::/10(링크 로컬)·ff00::/8(멀티캐스트), 그리고 IPv4 를 품은 꼴 —
  * ::ffff:a.b.c.d(매핑)·::a.b.c.d(호환, :: 와 ::1 도 여기 든다)·::ffff:0:a.b.c.d(변환)·64:ff9b::/96(NAT64 잘 알려진 접두)·
- * 64:ff9b:1::/48(NAT64 지역 사용 접두, RFC 8215 — 끝 32비트)·2002::/16(6to4 — 16~47비트) — 은 품은 IPv4 를 위 대역으로 본다
- * (NAT64·6to4 경로가 있는 망에서 사설 IPv4 로 닿는다).
+ * 2002::/16(6to4 — 16~47비트) — 은 품은 IPv4 를 위 대역으로 본다(NAT64·6to4 경로가 있는 망에서 사설 IPv4 로 닿는다).
+ * 64:ff9b:1::/48(NAT64 지역 사용 접두, RFC 8215)은 통째로 거부한다 — 그 망이 정한 접두 길이에 따라 IPv4 가 RFC 6052 의 어느 자리에든
+ * 들어갈 수 있어 끝 32비트만 봐서는 품은 주소를 알 수 없다.
  */
 export function isForbiddenAddress(ip: string): boolean {
   const kind = isIP(ip.split('%')[0])
@@ -151,8 +152,8 @@ export function isForbiddenAddress(ip: string): boolean {
   if (embedsV4) return v4Forbidden(tailV4)
   const translated = g.slice(0, 4).every((x) => x === 0) && g[4] === 0xffff && g[5] === 0   // ::ffff:0:a.b.c.d
   const nat64 = g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)    // 64:ff9b::/96
-  const nat64Local = g[0] === 0x64 && g[1] === 0xff9b && g[2] === 1                       // 64:ff9b:1::/48
-  if (translated || nat64 || nat64Local) return v4Forbidden(tailV4)
+  if (translated || nat64) return v4Forbidden(tailV4)
+  if (g[0] === 0x64 && g[1] === 0xff9b && g[2] === 1) return true                        // 64:ff9b:1::/48
   if (g[0] === 0x2002) return v4Forbidden(((g[1] << 16) | g[2]) >>> 0)                  // 2002::/16
   return false
 }
