@@ -128,7 +128,8 @@ function v6Groups(ip: string): number[] | null {
 /**
  * 연결하면 안 되는 주소인가(순수). 형태를 모르는 값은 거부한다(fail-closed).
  * IPv6: ::(미지정)·::1·fc00::/7(고유 로컬)·fe80::/10(링크 로컬)·ff00::/8(멀티캐스트), 그리고 IPv4 를 품은 꼴 —
- * ::ffff:a.b.c.d(매핑)·::a.b.c.d(호환, :: 와 ::1 도 여기 든다) — 은 품은 IPv4 를 위 대역으로 본다.
+ * ::ffff:a.b.c.d(매핑)·::a.b.c.d(호환, :: 와 ::1 도 여기 든다)·::ffff:0:a.b.c.d(변환)·64:ff9b::/96(NAT64 잘 알려진 접두)·
+ * 2002::/16(6to4 — 16~47비트) — 은 품은 IPv4 를 위 대역으로 본다(NAT64·6to4 경로가 있는 망에서 사설 IPv4 로 닿는다).
  */
 export function isForbiddenAddress(ip: string): boolean {
   const kind = isIP(ip.split('%')[0])
@@ -144,13 +145,21 @@ export function isForbiddenAddress(ip: string): boolean {
   if ((g[0] & 0xfe00) === 0xfc00) return true                    // fc00::/7
   if ((g[0] & 0xffc0) === 0xfe80) return true                    // fe80::/10
   if ((g[0] & 0xff00) === 0xff00) return true                    // ff00::/8
+  const tailV4 = ((g[6] << 16) | g[7]) >>> 0
   const embedsV4 = g.slice(0, 5).every((x) => x === 0) && (g[5] === 0xffff || g[5] === 0)
-  if (embedsV4) return v4Forbidden(((g[6] << 16) | g[7]) >>> 0)
+  if (embedsV4) return v4Forbidden(tailV4)
+  const translated = g.slice(0, 4).every((x) => x === 0) && g[4] === 0xffff && g[5] === 0   // ::ffff:0:a.b.c.d
+  const nat64 = g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)    // 64:ff9b::/96
+  if (translated || nat64) return v4Forbidden(tailV4)
+  if (g[0] === 0x2002) return v4Forbidden(((g[1] << 16) | g[2]) >>> 0)                  // 2002::/16
   return false
 }
 
+/** DNS 해석 시간 한도 — 넘으면 거부로 닫는다(멈춘 리졸버가 발송·테스트 발송을 붙잡지 않게) */
+const LOOKUP_TIMEOUT_MS = 5_000
+
 /**
- * 발송 직전 DNS 검사 — 결과가 비었거나 하나라도 금지 대역이면 거부. 통과하면 연결할 IP(IPv4 우선, 없으면 첫 결과)를 돌려준다 —
+ * 발송 직전 DNS 검사 — 결과가 비었거나 하나라도 금지 대역이면 거부. 해석이 LOOKUP_TIMEOUT_MS 안에 끝나지 않아도 거부. 통과하면 연결할 IP(IPv4 우선, 없으면 첫 결과)를 돌려준다 —
  * verbatim 순서라 IPv6 가 먼저 올 수 있지만 Vercel 함수는 IPv6 로 나가지 못하는 경우가 많고, IP 고정 접속은 nodemailer 의 대체 시도를 건너뛴다.
  * 호출자가 그 IP 로 접속해(재해석·DNS 리바인딩 차단) 인증서는 원래 이름으로 검사한다(transport.ts connectTo).
  * 해석 오류 원문은 결과에 싣지 않는다(서버 로그에 오류 코드만). 로컬 개발 예외는 두지 않는다 — 로컬 시험은 env(inbucket)로 한다.
@@ -161,11 +170,24 @@ export async function vetMailHost(host: string): Promise<{ ok: true; address: st
   // 결과 전부(all)를 받는다. 단축 속성으로 쓰는 것은 tests/invariants/teams-source.test.ts 의 '전 워크스페이스 가시 범위' 리터럴
   // 검사(all: true)가 이 DNS 옵션을 가시 범위로 오인하지 않게 하려는 것이다 — 뜻은 { all: true, verbatim: true } 와 같다.
   const all = true
+  // 타이머는 unref·clearTimeout — 대기 중에도 끝난 뒤에도 프로세스를 붙잡지 않는다. 늦게 끝난 해석의 거부는 race 가 받아 둔다
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), LOOKUP_TIMEOUT_MS)
+    timer.unref?.()
+  })
   try {
-    found = await dns.lookup(host, { verbatim: true, all })
+    const r = await Promise.race([dns.lookup(host, { verbatim: true, all }), timeout])
+    if (r === 'timeout') {
+      console.error('[mail] 메일 서버 주소 해석 실패:', 'timeout')
+      return { ok: false }
+    }
+    found = r
   } catch (e) {
     console.error('[mail] 메일 서버 주소 해석 실패:', (e as { code?: unknown } | null)?.code ?? 'unknown')
     return { ok: false }
+  } finally {
+    clearTimeout(timer)
   }
   if (!Array.isArray(found) || found.length === 0) return { ok: false }
   if (found.some((a) => typeof a?.address !== 'string' || isForbiddenAddress(a.address))) return { ok: false }

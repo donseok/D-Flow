@@ -139,6 +139,10 @@ describe('isForbiddenAddress — 사설·예약 대역(순수)', () => {
     '::', '::1', 'fc00::1', 'fd12:3456::1', 'fe80::1', 'fe80::1%eth0', 'febf::1', 'ff02::1',
     '::ffff:10.0.0.1', '::ffff:127.0.0.1', '::ffff:169.254.169.254', '::ffff:a00:1', '::ffff:7f00:1',
     '::10.0.0.1', '0:0:0:0:0:ffff:192.168.1.1',
+    // IPv4 를 품은 다른 꼴 — NAT64 잘 알려진 접두(64:ff9b::/96)·6to4(2002::/16, 16~47비트)·IPv4 변환(::ffff:0:a.b.c.d)
+    '64:ff9b::10.0.0.1', '64:ff9b::7f00:1', '64:ff9b::a9fe:a9fe', '64:ff9b:0:0:0:0:c0a8:101',
+    '2002:a00:1::', '2002:7f00:1::1', '2002:a9fe:a9fe:1:2:3:4:5', '2002:c0a8:101::',
+    '::ffff:0:10.0.0.1', '::ffff:0:7f00:1', '::ffff:0:169.254.169.254',
   ])('%s 는 거부', (ip) => {
     expect(isForbiddenAddress(ip)).toBe(true)
   })
@@ -147,6 +151,7 @@ describe('isForbiddenAddress — 사설·예약 대역(순수)', () => {
     '8.8.8.8', '1.1.1.1', '74.125.140.108', '172.15.255.255', '172.32.0.1', '192.167.255.255', '192.169.0.1',
     '100.63.255.255', '100.128.0.1', '169.253.255.255', '11.0.0.1', '126.255.255.255', '128.0.0.1', '223.255.255.255',
     '2001:4860:4860::8888', '2a00:1450:400c:c06::6c', 'fbff::1', '::ffff:8.8.8.8', '::ffff:808:808',
+    '64:ff9b::8.8.8.8', '64:ff9b::808:808', '2002:808:808::1', '::ffff:0:8.8.8.8',
   ])('%s 는 통과(공인)', (ip) => {
     expect(isForbiddenAddress(ip)).toBe(false)
   })
@@ -203,6 +208,50 @@ describe('vetMailHost — 발송 직전 DNS 검사', () => {
     expect(r).toEqual({ ok: false })
     expect(err).toHaveBeenCalledWith(expect.any(String), 'ENOTFOUND')
     err.mockRestore()
+  })
+
+  it('해석이 5초 안에 끝나지 않으면 거부 — 결과에 리졸버 문구를 싣지 않는다', async () => {
+    vi.useFakeTimers()
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      h.lookup.mockReturnValue(new Promise(() => {}))   // 끝나지 않는 해석
+      let settled: unknown = 'pending'
+      void vetMailHost('slow.acme.test').then((r) => { settled = r })
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(settled).toBe('pending')
+      await vi.advanceTimersByTimeAsync(1)
+      expect(settled).toEqual({ ok: false })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      err.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('제때 끝난 해석은 타이머를 남기지 않는다(프로세스를 붙잡지 않는다)', async () => {
+    vi.useFakeTimers()
+    try {
+      h.lookup.mockResolvedValue([{ address: '142.250.4.108', family: 4 }])
+      await expect(vetMailHost('smtp.gmail.com')).resolves.toEqual({ ok: true, address: '142.250.4.108' })
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('해석 타이머는 unref — 대기 중에도 이벤트 루프를 붙잡지 않는다', async () => {
+    const unref = vi.fn()
+    const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void) => {
+      void fn
+      return { unref } as unknown as ReturnType<typeof setTimeout>
+    }) as unknown as typeof setTimeout)
+    try {
+      h.lookup.mockResolvedValue([{ address: '142.250.4.108', family: 4 }])
+      await expect(vetMailHost('smtp.gmail.com')).resolves.toEqual({ ok: true, address: '142.250.4.108' })
+      expect(unref).toHaveBeenCalledTimes(1)
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('빈 호스트는 해석하지 않고 거부', async () => {

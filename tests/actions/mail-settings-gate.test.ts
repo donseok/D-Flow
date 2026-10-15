@@ -399,6 +399,15 @@ describe('sendWorkspaceTestMail — 저장 전 값으로 본인에게만', () =>
     expect(h.transportFromSettings).not.toHaveBeenCalled()
   })
 
+  it('서버 주소 검사 자체가 던져도 MAIL_HOST_NOT_ALLOWED 결과로 닫는다 — 액션 예외로 새지 않고 해석 오류 원문도 싣지 않는다', async () => {
+    makeAdmin()
+    h.vetMailHost.mockRejectedValue(Object.assign(new Error('getaddrinfo ENOTFOUND smtp.acme.com'), { code: 'ENOTFOUND' }))
+    const r = await sendWorkspaceTestMail(WS, CUSTOM)
+    expect(r).toEqual({ ok: false, error: MAIL_HOST_NOT_ALLOWED })
+    expect(JSON.stringify(r)).not.toContain('ENOTFOUND')
+    expect(h.transportFromSettings).not.toHaveBeenCalled()
+  })
+
   it('발송 오류는 smtpErrorMessage(test) 문구 — SMTP 원문·비밀번호를 싣지 않는다', async () => {
     makeAdmin()
     const err = Object.assign(new Error('535 bad credentials for mailer@acme.com / new-secret'), { code: 'EAUTH', responseCode: 535 })

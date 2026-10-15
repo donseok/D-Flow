@@ -125,8 +125,8 @@ export async function resolveMailStatus(workspaceId: string | null): Promise<Mai
   return s.r.kind === 'unset' ? { source: 'none' } : { source: 'env', valid: false }
 }
 
-/** DNS 검사 — 검사 자체가 던져도 거부로 닫는다(해석 오류 원문은 싣지 않는다) */
-async function vetOrDeny(host: string): Promise<{ ok: true; address: string } | { ok: false }> {
+/** DNS 검사 — 검사 자체가 던져도 거부로 닫는다(해석 오류 원문은 싣지 않는다). 테스트 발송(actions/mailSettings.ts)도 이것을 쓴다 */
+export async function vetOrDeny(host: string): Promise<{ ok: true; address: string } | { ok: false }> {
   try { return await vetMailHost(host) } catch { return { ok: false } }
 }
 

@@ -9,9 +9,9 @@ import {
   canReusePassword, normalizeMailSettingsInput, reasonKey,
   type MailPreset, type MailSettingsInput, type NormalizedMailSettings,
 } from '@/lib/mail/settingsInput'
-import { loadWorkspaceMailRow, rowToSmtpEnv, vetMailHost, type WorkspaceMailRow } from '@/lib/mail/workspaceSmtp'
+import { loadWorkspaceMailRow, rowToSmtpEnv, type WorkspaceMailRow } from '@/lib/mail/workspaceSmtp'
 import {
-  MAIL_HOST_NOT_ALLOWED, MAIL_SETTINGS_UNAVAILABLE, resolveMailStatus, resolveSmtpSettings, transportFromSettings,
+  MAIL_HOST_NOT_ALLOWED, MAIL_SETTINGS_UNAVAILABLE, resolveMailStatus, resolveSmtpSettings, transportFromSettings, vetOrDeny,
   type MailStatus,
 } from '@/lib/mail/transport'
 import { smtpErrorMessage } from '@/lib/mail/errors'
@@ -265,8 +265,8 @@ export async function sendWorkspaceTestMail(
   const resolved = smtpSettingsFor(v, pw.password)
   if (!resolved.ok) return { ok: false, error: tr('srv.mailSettings.settingsUnusable') }
 
-  // 관리자가 넣은 호스트로 서버가 직접 접속한다 — 사설·예약 대역으로 풀리면 연결하지 않고, 통과한 IP 로만 붙는다(재해석 차단)
-  const vet = await vetMailHost(resolved.settings.host)
+  // 관리자가 넣은 호스트로 서버가 직접 접속한다 — 사설·예약 대역으로 풀리면(검사가 던져도) 연결하지 않고, 통과한 IP 로만 붙는다(재해석 차단)
+  const vet = await vetOrDeny(resolved.settings.host)
   if (!vet.ok) return { ok: false, error: MAIL_HOST_NOT_ALLOWED }
 
   const branding = await loadDisplayBranding(wid, a.admin)
