@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { renderGenerated } from '../../scripts/manual-build.mjs'
 import { manualChapters } from '@/lib/manual/chapters'
+import { findIgnoredHeadings } from '@/lib/manual/parse'
 
 const ROOT = process.cwd()
 const chapters = manualChapters()
@@ -34,7 +35,19 @@ describe('사용자 매뉴얼 본문', () => {
       if (hash) expect(target?.sections.some((s) => s.id === decodeURIComponent(hash)), `${c.file}: ${href}`).toBe(true)
     }
   })
-  it.each(chapters.map((c) => [c.file, c] as const))('%s — 개발 용어를 쓰지 않는다', (_f, c) => {
-    for (const re of BANNED) expect(c.body, `${c.file}: ${re}`).not.toMatch(re)
+  it.each(chapters.map((c) => [c.file, c] as const))('%s — 개발 용어를 쓰지 않는다(본문·제목·요약)', (_f, c) => {
+    for (const re of BANNED) {
+      expect(c.body, `${c.file} 본문: ${re}`).not.toMatch(re)
+      expect(c.title, `${c.file} title: ${re}`).not.toMatch(re)
+      expect(c.summary, `${c.file} summary: ${re}`).not.toMatch(re)
+    }
+  })
+  it.each(chapters.map((c) => [c.file, c] as const))('%s — 절 id 가 장 안에서 유일하다', (_f, c) => {
+    const ids = c.sections.map((s) => s.id)
+    expect(new Set(ids).size, `${c.file}: ${ids.join(', ')}`).toBe(ids.length)
+  })
+  it.each(chapters.map((c) => [c.file, c] as const))('%s — 해석기가 세지 않는 제목 모양이 없다(밑줄 제목·들여쓴 ##)', (_f, c) => {
+    // 화면은 ##·### 에만 앵커를 단다. 밑줄 제목(===·---)이나 들여쓴 ## 는 마크다운이 제목으로 그려도 목차·검색에 빠진다.
+    expect(findIgnoredHeadings(c.body), c.file).toEqual([])
   })
 })

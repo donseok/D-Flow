@@ -8,7 +8,9 @@ export interface ManualHit { slug: string; chapterTitle: string; sectionId: stri
 
 export function normalizeQuery(q: string | string[] | undefined): string {
   const v = Array.isArray(q) ? q[0] : q
-  return (v ?? '').replace(/\s+/g, ' ').trim().slice(0, MANUAL_QUERY_MAX)
+  const spaced = (v ?? '').replace(/\s+/g, ' ').trim()
+  // 글자 단위(코드 포인트)로 자른다 — 서로게이트 쌍 가운데를 자르면 주소에 실을 때 encodeURIComponent 가 던진다. 자른 끝의 공백은 다시 뗀다
+  return [...spaced].slice(0, MANUAL_QUERY_MAX).join('').trim()
 }
 
 function excerptOf(text: string, term: string): string {
@@ -19,8 +21,10 @@ function excerptOf(text: string, term: string): string {
   return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '')
 }
 
+/** limit 가 0 이하(또는 숫자가 아님)이면 결과 없음 — slice 의 음수 끝 인덱스로 뒤쪽이 잘려 나가지 않게 한다 */
 export function searchManual(chapters: readonly ManualChapter[], query: string, limit = 30): ManualHit[] {
-  const terms = query.toLowerCase().split(' ').filter(Boolean)
+  if (!(limit > 0)) return []
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
   if (terms.length === 0) return []
   const scored: { hit: ManualHit; score: number; rank: number }[] = []
   let rank = 0

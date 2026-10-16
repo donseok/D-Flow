@@ -17,6 +17,13 @@ describe('normalizeQuery', () => {
     expect(normalizeQuery('   ')).toBe('')
     expect(normalizeQuery('가'.repeat(150))).toHaveLength(MANUAL_QUERY_MAX)
   })
+  it('자른 끝의 공백은 다시 떼고, 서로게이트 쌍 가운데를 자르지 않는다', () => {
+    const cut = normalizeQuery('가'.repeat(MANUAL_QUERY_MAX - 1) + ' 나다라')
+    expect(cut).toBe('가'.repeat(MANUAL_QUERY_MAX - 1))
+    const emoji = normalizeQuery('😀'.repeat(150))
+    expect([...emoji]).toHaveLength(MANUAL_QUERY_MAX)
+    expect(() => encodeURIComponent(emoji)).not.toThrow()
+  })
 })
 
 describe('searchManual', () => {
@@ -38,5 +45,55 @@ describe('searchManual', () => {
     expect(searchManual(CH, '')).toEqual([])
     expect(searchManual(CH, '없는낱말')).toEqual([])
     expect(searchManual(CH, '다', 1)).toHaveLength(1)
+  })
+  it('limit 가 0 이하이거나 숫자가 아니면 결과가 없다(음수가 slice 끝 인덱스로 새지 않는다)', () => {
+    expect(searchManual(CH, '다', 0)).toEqual([])
+    expect(searchManual(CH, '다', -1)).toEqual([])
+    expect(searchManual(CH, '다', Number.NaN)).toEqual([])
+    expect(searchManual(CH, '다', 2).length).toBeGreaterThan(1)
+  })
+  it('낱말은 어떤 공백(탭·개행·여러 칸)으로 나눠도 같다', () => {
+    expect(searchManual(CH, '붙여넣기\t한\n칸')).toEqual(searchManual(CH, '붙여넣기 한 칸'))
+    expect(searchManual(CH, '붙여넣기   한 칸')).toHaveLength(1)
+  })
+  it('본문 없는 부모 절도 제목으로 찾는다', () => {
+    const chs = [mk('08-parent.md', '장', '## 부모\n\n### 자식\n\n내용입니다.\n')]
+    const hits = searchManual(chs, '부모')
+    expect(hits).toHaveLength(1)
+    expect(hits[0]).toMatchObject({ slug: 'parent', sectionId: '부모', sectionTitle: '부모' })
+    expect(searchManual(chs, '자식')[0]).toMatchObject({ sectionId: '자식' })
+  })
+})
+
+describe('searchManual — 순위', () => {
+  it('제목에 낱말이 든 절이 순서가 뒤여도 본문에만 든 절보다 앞선다', () => {
+    const chs = [
+      mk('01-a.md', '첫째 장', '## 개요\n\n여기서도 복사를 말합니다.\n'),
+      mk('02-b.md', '둘째 장', '## 복사하기\n\n방법을 설명합니다. 복사 버튼을 누르세요.\n'),
+    ]
+    const hits = searchManual(chs, '복사')
+    expect(hits.map((h) => h.slug)).toEqual(['b', 'a'])
+    expect(hits[0].sectionTitle).toBe('복사하기')
+  })
+  it('장 제목에 든 경우도 본문에만 든 절보다 앞선다', () => {
+    const chs = [
+      mk('01-a.md', '첫째 장', '## 개요\n\n여기서도 복사를 말합니다.\n'),
+      mk('02-b.md', '복사 안내', '## 개요\n\n내용입니다. 복사.\n'),
+    ]
+    expect(searchManual(chs, '복사').map((h) => h.slug)).toEqual(['b', 'a'])
+  })
+  it('점수가 같으면 장 순서·절 순서를 따른다', () => {
+    const chs = [
+      mk('01-a.md', '첫째 장', '## 가\n\n복사 하나.\n\n## 나\n\n복사 둘.\n'),
+      mk('02-b.md', '둘째 장', '## 다\n\n복사 셋.\n'),
+    ]
+    expect(searchManual(chs, '복사').map((h) => h.sectionId)).toEqual(['가', '나', '다'])
+  })
+  it('낱말이 둘 다 제목에 든 절이 하나만 든 절보다 앞선다', () => {
+    const chs = [
+      mk('01-a.md', '장', '## 복사\n\n붙여넣기도 합니다.\n'),
+      mk('02-b.md', '장', '## 복사 붙여넣기\n\n설명.\n'),
+    ]
+    expect(searchManual(chs, '복사 붙여넣기').map((h) => h.sectionTitle)).toEqual(['복사 붙여넣기', '복사'])
   })
 })
