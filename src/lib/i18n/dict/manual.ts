@@ -2,7 +2,7 @@
 export const manualKo = {
   'nav.help': '사용자 매뉴얼',
   'manual.title': '사용자 매뉴얼',
-  'manual.desc': 'D-Flow 의 화면과 기능을 처음부터 차근차근 설명합니다. 목차에서 장을 고르거나 낱말로 찾아보세요.',
+  'manual.desc': 'D-Flow의 화면과 기능을 처음부터 차근차근 설명합니다. 목차에서 장을 고르거나 낱말로 찾아보세요.',
   'manual.viewer': '{audience} 기준으로 볼 수 있는 장을 보여 줍니다.',
   'manual.viewerUncertain': '권한 정보를 불러오지 못해 일반 사용자용 장만 보여 줍니다. 잠시 뒤 새로 고쳐 보세요.',
   'manual.audience.member': '일반 사용자',

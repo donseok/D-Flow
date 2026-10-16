@@ -177,8 +177,10 @@ describe('/help/[chapter] — 장 화면', () => {
     expect(headingIds).toEqual(sections.map((s) => s.id))
     const toc = c.querySelector('nav[aria-label="이 장의 내용"]')!
     const tocHrefs = hrefs(toc, 'a')
-    expect(tocHrefs).toEqual(sections.map((s) => `#${encodeURIComponent(s.id)}`))
-    expect(tocHrefs.map((h) => decodeURIComponent(h!.slice(1)))).toEqual(headingIds)
+    // 목차는 큰 절(##)만 싣는다 — 긴 장은 소절까지 합치면 50줄 가까이 돼 본문이 한참 밀린다(2026-10-16 눈확인)
+    const top = sections.filter((s) => s.depth === 2)
+    expect(tocHrefs).toEqual(top.map((s) => `#${encodeURIComponent(s.id)}`))
+    for (const id of tocHrefs.map((h) => decodeURIComponent(h!.slice(1)))) expect(headingIds).toContain(id)
   })
 
   it('h1 은 화면 머리의 장 제목 하나뿐이고, 본문의 # 은 그리지 않는다', async () => {

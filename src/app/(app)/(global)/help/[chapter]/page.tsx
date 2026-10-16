@@ -31,6 +31,8 @@ export default async function ManualChapterPage({ params }: { params: Promise<{ 
   const i = visible.findIndex((c) => c.slug === chapter.slug)
   const prev = i > 0 ? visible[i - 1] : null
   const next = i >= 0 && i < visible.length - 1 ? visible[i + 1] : null
+  // '이 장의 내용'은 큰 절(##)만 — 긴 장은 소절까지 합치면 50줄 가까이 돼 본문이 한참 밀린다(2026-10-16 눈확인). 소절은 본문에서 앵커로 그대로 간다
+  const tocSections = chapter.sections.filter((s) => s.depth === 2)
   return (
     <div className="space-y-6">
       <PageHeader
@@ -49,12 +51,12 @@ export default async function ManualChapterPage({ params }: { params: Promise<{ 
               {withAudience('manual.aboveAudience', chapter.audience)}
             </p>
           )}
-          {chapter.sections.length > 0 && (
+          {tocSections.length > 0 && (
             <nav aria-label={t('manual.toc')} className="rounded-(--radius-panel) border border-border bg-surface p-4">
               <p className="mb-2 text-control font-semibold text-fg">{t('manual.toc')}</p>
-              <ol className="space-y-1">
-                {chapter.sections.map((s) => (
-                  <li key={s.id} className={s.depth === 3 ? 'pl-4' : undefined}>
+              <ol className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                {tocSections.map((s) => (
+                  <li key={s.id}>
                     <a href={`#${encodeURIComponent(s.id)}`} className="text-control text-action underline-offset-2 hover:underline">{s.title}</a>
                   </li>
                 ))}
