@@ -27,3 +27,12 @@ describe('C3 — 내 업무 화면의 첫 탭 이름', () => {
     expect(t('portalUi.tabs.work')).toBe(t('nav.myWork'))
   })
 })
+
+describe('C5 — 공개 범위 카드 문구는 비공개의 실제 동작(직접 링크 404)을 말한다', () => {
+  it('"링크 직접 접근은 막지 않는다"는 낡은 문구가 없다', () => {
+    const text = t('settings.privacyDesc1') + t('settings.privacyDescStrong') + t('settings.privacyDesc2')
+    expect(text).not.toContain('막는 잠금은 아닙니다')
+    expect(text).toContain('404')
+    expect(text).toContain('워크스페이스 관리자')
+  })
+})

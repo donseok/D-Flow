@@ -410,7 +410,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               invalid={!dueSoonDays.ok || !delayedRedCount.ok} />
           </SectionCard>
         )}
-      {/* ── 공개 범위 (슈퍼유저 전용) — 관리자에게도 열지 않는다(전역 가시성 정책은 전역 등급이 쥔다) ── */}
+      {/* ── 공개 범위 (플랫폼 관리자에게만 보인다 — SP3a 스펙 §9 #9 의 기본값). 서버(setProjectPrivacy)는 프로젝트 관리자도 허용한다: 화면 노출만 더 좁다 ── */}
         {isSuperuser && (
           <SectionCard
             searchText="프로젝트 공개 범위 비공개"
