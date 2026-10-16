@@ -251,7 +251,7 @@ describe('/help/[chapter] — 장 화면', () => {
   })
   it('장 목록 영역과 이전·다음 묶음은 이름이 있는 랜드마크다', async () => {
     const c = await chapterPage(MEMBER, 'weekly')
-    expect(c.querySelector('aside')!.getAttribute('aria-label')).toBe('매뉴얼 목차')
+    expect(Array.from(c.querySelectorAll('nav[aria-label="매뉴얼 목차"]'))).toHaveLength(2)   // 넓은 화면용 목록·좁은 화면용 접힘 목록(한 번에 하나만 보인다)
     expect(c.querySelector('[data-manual-pager]')!.getAttribute('aria-label')).toBe('이전·다음 장')
   })
 })

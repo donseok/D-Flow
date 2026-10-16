@@ -33,7 +33,7 @@
 
 ### 2.3 `/help/<장>` — 장 화면
 - 넓은 화면: 왼쪽에 장 목록(부별, 현재 장 강조), 가운데 본문. 좁은 화면: 장 목록은 본문 위 접힘 목록.
-- 본문 맨 위: 장 제목, 대상 표지, "이 장의 내용" 절 목록(앵커 링크).
+- 본문 맨 위: 장 제목, 대상 표지, "이 장의 내용" 큰 절(##) 목록(앵커 링크, 넓은 화면은 두 열) — 소절(###)은 본문에서 앵커로 간다(긴 장은 소절까지 싣자 50줄 가까이 돼 본문이 밀렸다, 로컬 눈확인 2026-10-16).
 - 본문 아래: 이전 장 / 다음 장 링크(보이는 장 기준), "매뉴얼 처음으로".
 - 보는 사람 등급보다 높은 장을 주소로 직접 열면 숨기지 않고 보여 주되 "이 장은 ○○용입니다 — 지금 등급에서는 이 기능이 보이지 않을 수 있습니다" 안내를 붙인다(매뉴얼은 비밀이 아니다 — 목차 숨김은 편의다).
 - 없는 장은 404.
@@ -103,17 +103,18 @@
   - `search.ts` — 보이는 장들에서 낱말 찾기(공백으로 나눈 낱말 모두 포함, 대소문자 무시), 결과는 장·절·발췌.
 
 ### 4.2 등급 판정
-- `src/lib/domain/authz.ts` 에 순수 함수 `manualAudienceOf(actor: Actor | null): ManualAudience`(규칙 §2.4, null → member). 액션이 아니라 판정 위치 규칙(판정은 domain/authz·authz/** 두 곳)에 맞춘다.
+- `src/lib/authz/manualAccess.ts` 에 `manualAudienceOf(actor: Actor | null): ManualAudience`(규칙 §2.4, null → member)와 화면용 `manualViewer`(열화·actor 없음 → member + uncertain + 로그). 판정 위치 규칙(판정은 domain/authz·authz/** 두 곳)에 맞춘다.
 - 페이지는 `getActorViewState()` 의 actor 로 판정한다. `degraded` 거나 actor 가 없으면 member + 안내 + `console.error`.
 
 ### 4.3 화면
 - `src/app/(app)/(global)/help/page.tsx`(첫 화면·검색), `src/app/(app)/(global)/help/[chapter]/page.tsx`(장). 둘 다 서버 컴포넌트.
-- `src/components/manual/`: `ManualArticle`(react-markdown + remark-gfm — 이미 의존성, 제목에 앵커 id, 내부 링크는 next/link, 표·인용 블록 모양), `ManualChapterNav`(부별 장 목록), `ManualSearchResults`.
+- `src/components/manual/`: `ManualArticle`(react-markdown + remark-gfm — 이미 의존성, 제목에 앵커 id, 내부 링크는 next/link, 표·인용 블록 모양), `ManualChapterNav`(부별 장 목록), `ManualSearch`(찾기 양식과 결과를 함께), `ManualBadge`(대상 등급 표지).
 - 화면 글자(제목·안내·등급 이름·부 이름·검색 문구)는 사전 `src/lib/i18n/dict/` 의 `manual.*` 키. 본문은 내용 파일(사전 아님 — `src/components`·`src/app` 밖이라 한국어 리터럴 검사 대상이 아니다).
 - `globals.css` 는 건드리지 않는다 — 본문 모양은 컴포넌트에서 기존 토큰 클래스로 준다.
 
 ### 4.4 메뉴
 - 내비 id `ws.help` 추가(26 → 27): `src/lib/nav/ids.ts`(목록·그룹 `ws.main`), `src/lib/nav/registry.ts` SHELL_NAV `{ id: 'ws.help', labelKey: 'nav.help', icon: 'BookOpenText', segment: '/help', group: 'ws.main', order: 90, scope: 'workspace', needs: null }`, 사전 `nav.help` = "사용자 매뉴얼". 플랫폼 관리자 화면을 더할 때와 같은 파생 지점(메뉴 설정 검증·사용 현황 메뉴 표·`ui-capture.routes.json`·모듈 페이지 관문 예외·내비 테스트의 개수)을 같이 고친다.
+- 사용 현황 집계: `ws.help` 는 `'unknown'`(기타)로 센다 — 매뉴얼 방문은 따로 집계하지 않는다(집계 키를 늘리지 않는 관례).
 - 계정 메뉴 `src/components/app/AccountMenu.tsx` 에 `/help` 링크 — **UI 위험 파일**이므로 브랜치 작업, 로컬 눈확인 뒤 `Preview-checked: local …` 트레일러(CLAUDE.md).
 
 ### 4.5 오류 처리

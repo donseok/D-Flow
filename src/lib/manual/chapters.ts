@@ -1,4 +1,5 @@
 /* ── 사용자 매뉴얼 장 목록 — 생성 모듈을 한 번 해석해 순서대로 둔다. 해석 오류는 throw(빈 매뉴얼로 위장하지 않는다 — 테스트가 먼저 잡는다). ── */
+import 'server-only'   // 본문 전체(수백 KB)가 클라이언트 번들로 새지 않게 — 서버 화면만 이 모듈을 쓴다
 import { MANUAL_SOURCES } from '@/content/manual/chapters.generated'
 import { audienceRank, parseChapter, type ManualAudience, type ManualChapter } from './parse'
 

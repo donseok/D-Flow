@@ -41,9 +41,9 @@ export default async function ManualChapterPage({ params }: { params: Promise<{ 
         meta={chapter.audience !== 'member' ? <ManualBadge audience={chapter.audience} /> : undefined}
       />
       <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start">
-        <aside aria-label={t('manual.chapters')} className={NAV_STICKY}>
+        <div className={NAV_STICKY}>
           <ManualChapterNav chapters={visible} current={chapter.slug} />
-        </aside>
+        </div>
         <article className="min-w-0 space-y-6">
           {viewer.uncertain && <StatusMessage kind="partial_error" title={t('manual.viewerUncertain')} compact />}
           {!canSee(viewer.audience, chapter.audience) && (
