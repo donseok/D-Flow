@@ -16,8 +16,8 @@ import {
   type KanbanColumn, type ProgressBucket, type QuickFilters, type FlowStageKey,
 } from '@/lib/domain/kanban'
 import { isStageCode, stageLabelKo, type StageCode } from '@/lib/domain/stageLabels'
-import { type ApprovalStepDef, DEFAULT_STEP_CODE } from '@/lib/domain/approvalSteps'
-import { setWbsStage, approveWbsStep } from '@/app/actions/wbsAssign'
+import { type ApprovalStepDef } from '@/lib/domain/approvalSteps'
+import { setWbsStage, approveWbsStep, getWbsAssigneeStage } from '@/app/actions/wbsAssign'
 import { resolveDrop } from '@/lib/domain/kanban-drop'
 import { statusOf } from '@/lib/domain/progress'
 import { updateActual, getWbsCellSnapshot } from '@/app/actions/wbs'
@@ -375,9 +375,26 @@ export function KanbanBoard({
     editSessionStore.setSession(sessionId, 'kanban', card.id, 'saving')
 
     try {
-      const stepCode = approvalSteps?.[0]?.code ?? DEFAULT_STEP_CODE
-      const res = await approveWbsStep(card.id, stepCode)
+      // 대기 단계는 서버가 판독한 것을 쓴다(WBS 상세 패널과 같은 원천) — 칸반은 라운드의 승인 원장·스냅샷을 모른다.
+      // 설정의 첫 단계를 보내면 다단계 승인의 둘째 단계부터는 서버가 stale 로 거절한다(B1).
+      const st = await getWbsAssigneeStage(card.id)
+      if (st === null || (st.stage === 'im' && !st.approval)) {
+        // 쓰기 전 선행 조회 실패 — 짐작한 단계로 보내지 않고 멈춘다(3원칙 ②)
+        const errMsg = t('kanban.approvalStateUnavailable')
+        toast({ title: t('kanban.saveFailedTitle'), description: errMsg, variant: 'error' })
+        editSessionStore.setSession(sessionId, 'kanban', card.id, 'failed', { error: { kind: 'server_reject', message: errMsg } })
+        return
+      }
+      if (st.stage !== 'im' || !st.approval) {
+        // 그새 검수 대기에서 벗어났다 — 승인할 것이 없다. 다시 그린다
+        toast({ title: t('common.changedMeanwhile'), variant: 'error' })
+        editSessionStore.removeSession(sessionId)
+        router.refresh()
+        return
+      }
+      const res = await approveWbsStep(card.id, st.approval.step)
       if (!res.ok) {
+        if (res.stale) router.refresh()   // 그 사이 다른 단계가 승인됐다 — 새 단계로 다시 그린다
         const errMsg = res.error || t('kanban.errChange')
         toast({
           title: t('kanban.saveFailedTitle'),
