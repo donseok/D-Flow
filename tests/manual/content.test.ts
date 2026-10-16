@@ -13,7 +13,7 @@ const BANNED = [/\bRPC\b/, /\bRLS\b/, /service_role/, /\bSupabase\b/i, /\bsupaba
 
 describe('사용자 매뉴얼 본문', () => {
   it('생성 파일이 원본과 같다(다르면 npm run manual:build)', () => {
-    expect(readFileSync(join(ROOT, 'src/content/manual/chapters.generated.ts'), 'utf8')).toBe(renderGenerated(ROOT))
+    expect(readFileSync(join(ROOT, 'src/content/manual/chapters.generated.json'), 'utf8')).toBe(renderGenerated(ROOT))
   })
   it('장이 있고 slug·순서가 유일하다', () => {
     expect(chapters.length).toBeGreaterThan(0)

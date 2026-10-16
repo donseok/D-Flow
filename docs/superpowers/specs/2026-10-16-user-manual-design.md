@@ -95,7 +95,7 @@
   ---
   ```
   장의 주소 조각(slug) = 파일 이름에서 번호를 뺀 것(`06-weekly` → `weekly`). 순서 = 번호.
-- 런타임에 파일을 읽지 않는다 — `scripts/manual-build.mjs`(`npm run manual:build`)가 원본을 모아 `src/content/manual/chapters.generated.ts`(원문 문자열 배열)를 만들고 그 파일을 커밋한다. 배포 번들이 파일 추적에 기대지 않는다(인증 뒤 화면이라 배포 뒤 curl 로 확인할 수 없어서 런타임 fs 를 피한다).
+- 런타임에 파일을 읽지 않는다 — `scripts/manual-build.mjs`(`npm run manual:build`)가 원본을 모아 `src/content/manual/chapters.generated.json`(원문 문자열 배열 — .ts 로 두면 본문의 시간대 예시가 D45 고정 시간대 검사에 걸려 JSON 으로 두고 `chapters.generated.ts` 가 한 줄로 읽는다)를 만들고 그 파일을 커밋한다. 배포 번들이 파일 추적에 기대지 않는다(인증 뒤 화면이라 배포 뒤 curl 로 확인할 수 없어서 런타임 fs 를 피한다).
 - `tests/manual/content.test.ts`: 생성 파일이 원본과 같은지(다르면 "npm run manual:build 를 돌리세요"), 머리말 필수 칸·값, slug 유일, 장 안 `/help/…` 링크와 `#앵커` 가 실제로 있는지, 본문이 비지 않았는지, 금지어(개발 용어 목록) 검사.
 - 파서·색인은 순수 모듈 `src/lib/manual/`:
   - `parse.ts` — 머리말 해석, 절(제목 `##`·`###`) 추출과 앵커(한글 보존 slug, 장 안에서 유일), 검색용 평문.
