@@ -148,6 +148,15 @@ describe('riskModel', () => {
     expect(riskModel([r], today).signal).toBe('amber')
     expect(riskModel([r], today).delayed).toBe(2)
   })
+  it('C1 — atRisk 는 지연∪임박을 작업 id 로 한 번만 센다(뒤처졌지만 마감 전인 작업은 둘 다에 든다)', () => {
+    const both = leaf({ id: 'both', status: 'delayed', plannedEnd: '2026-07-10' })        // 지연 + 임박
+    const onlyDelayed = leaf({ id: 'od', status: 'delayed', plannedEnd: '2026-06-01' })    // 지연(마감 경과)
+    const onlySoon = leaf({ id: 'os', status: 'in_progress', plannedEnd: '2026-07-09' })   // 임박
+    const r = riskModel([phase({ children: [both, onlyDelayed, onlySoon] })], today)
+    expect(r.delayed).toBe(2)
+    expect(r.dueSoon).toBe(2)
+    expect(r.atRisk).toBe(3)
+  })
   it('지연 4+ → red', () => {
     const r = phase({ children: Array.from({ length: 4 }, () => leaf({ status: 'delayed' })) })
     expect(riskModel([r], today).signal).toBe('red')

@@ -129,7 +129,8 @@ export const SPI_WARN_FLOOR = 0.9    // 0.9 ≤ SPI < 0.98 → 주의(warn), 미
 export const DELAYED_RED_COUNT = 4   // 지연 리프 4건 이상 → red (riskModel·위험 신호 공유) — 설정 dashboard.delayed_red_count 의 기본값
 export const DEFAULT_DASHBOARD_THRESHOLDS: DashboardThresholds = Object.freeze({ dueSoonDays: DEFAULT_DUE_SOON_DAYS, delayedRedCount: DELAYED_RED_COUNT })
 
-export interface RiskModel { delayed: number; dueSoon: number; topWeightDelayed: boolean; signal: Signal }
+/** atRisk — 지연 ∪ 마감임박을 작업 id 로 중복 없이 센 건수. 지연(상태)과 임박(마감일)은 서로 배타가 아니다: 계획보다 뒤처졌지만 마감이 아직 안 지난 작업은 둘 다에 든다. */
+export interface RiskModel { delayed: number; dueSoon: number; atRisk: number; topWeightDelayed: boolean; signal: Signal }
 
 const escalate = (s: Signal): Signal => (s === 'green' ? 'amber' : s === 'amber' ? 'red' : s)
 
@@ -143,12 +144,15 @@ function topWeightPhaseDelayed(roots: ComputedItem[]): boolean {
 
 export function riskModel(roots: ComputedItem[], today: string, th: DashboardThresholds = DEFAULT_DASHBOARD_THRESHOLDS): RiskModel {
   const leaves = collectLeaves(roots)
-  const delayed = delayedLeaves(leaves).length
-  const dueSoon = dueSoonLeaves(leaves, today, th.dueSoonDays).length
+  const delayedList = delayedLeaves(leaves)
+  const dueSoonList = dueSoonLeaves(leaves, today, th.dueSoonDays)
+  const delayed = delayedList.length
+  const dueSoon = dueSoonList.length
+  const atRisk = new Set([...delayedList, ...dueSoonList].map(l => l.id)).size
   const topWeightDelayed = topWeightPhaseDelayed(roots)
   let signal: Signal = delayed >= th.delayedRedCount ? 'red' : delayed >= 1 ? 'amber' : 'green'
   if (topWeightDelayed) signal = escalate(signal)
-  return { delayed, dueSoon, topWeightDelayed, signal }
+  return { delayed, dueSoon, atRisk, topWeightDelayed, signal }
 }
 
 const RANK: Record<Signal, number> = { neutral: -1, green: 0, amber: 1, red: 2 }
