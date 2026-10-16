@@ -371,6 +371,16 @@ export function actorFromView(view: ProjectActorView | null, projectId: string):
 }
 
 /**
+ * 업무 흐름 단계 조정 자격(화면 어포던스 — 칸반 흐름 보기의 단계 이동) — 서버 setWbsStage(완료 xx 밖)의 requireSubtreeManagerOrAdmin 과
+ * 같은 축: 관리자, 또는 멤버 이상이면서 그 항목의 서브트리 관리자(strict 조상의 담당자 — domain/seatmap isSubtreeManagerOf).
+ * 조회 전용 명단(access_role null)은 서브트리 관리자여도 아니다(서버는 requireProjectMember 가 먼저 막는다). 담당 팀 소속은 근거가 아니다.
+ * 완료(xx) 지정·단계 승인은 canApproveCompletion 의 축이다(guardStepApproval).
+ */
+export function canAdjustWorkflowStage(r: { isAdmin: boolean; isMember: boolean; subtreeManager: boolean }): boolean {
+  return r.isAdmin || (r.isMember && r.subtreeManager)
+}
+
+/**
  * 완료 승인 자격(화면 어포던스·결재 배지·포털 '검토') — 서버 가드와 같은 축(SP5b D18·S20 — seatmap 에서 옮겨 왔다, seatmap 은 재수출).
  * 기본: 관리자, 또는 서브트리 관리자이면서 그 리프의 담당자 본인도 그 주문을 claim 한 계정도 아닌 사람(제7부 AUTH-07a — requireCompletionApprover).
  * 다단계 승인(SP5b) 재료: pendingStepApprover 가 'admin' 이면 관리자만(requireProjectAdmin), approvedThisRound(서로 다른 승인자 설정에서

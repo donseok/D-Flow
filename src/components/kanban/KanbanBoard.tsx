@@ -4,7 +4,8 @@ import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent } from '
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Layers, Users, Columns3, Search, Inbox, GitBranch } from 'lucide-react'
 import type { ComputedItem } from '@/lib/domain/types'
-import { actorFromView, isProjectAdmin, type ProjectActorView } from '@/lib/domain/authz'
+import { actorFromView, canAdjustWorkflowStage, canApproveCompletion, isProjectAdmin, isProjectMember, type ProjectActorView } from '@/lib/domain/authz'
+import { isSubtreeManagerOf, type AncestorLike } from '@/lib/domain/seatmap'
 import { canEditActual } from '@/lib/domain/permissions'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -16,7 +17,7 @@ import {
   type KanbanColumn, type ProgressBucket, type QuickFilters, type FlowStageKey,
 } from '@/lib/domain/kanban'
 import { isStageCode, stageLabelKo, type StageCode } from '@/lib/domain/stageLabels'
-import { type ApprovalStepDef } from '@/lib/domain/approvalSteps'
+import { type ApprovalStepDef, type Approver, DEFAULT_APPROVAL_STEPS } from '@/lib/domain/approvalSteps'
 import { setWbsStage, approveWbsStep, getWbsAssigneeStage } from '@/app/actions/wbsAssign'
 import { resolveDrop } from '@/lib/domain/kanban-drop'
 import { statusOf } from '@/lib/domain/progress'
@@ -160,6 +161,40 @@ export function KanbanBoard({
   const isFlow = mode === 'flow'
   const editable = !readOnly && (isProgress || isFlow)
   const cardEditable = (card: ComputedItem) => editable && canEditActual(card, actor, projectId)
+
+  // 흐름 보기의 단계 이동·승인은 실적 편집(담당 팀)과 다른 축이다 — 서버 setWbsStage 는 requireSubtreeManagerOrAdmin,
+  // 승인·완료(xx) 지정은 guardStepApproval(대기 단계의 승인자 → 관리자, 또는 자기 승인 금지가 붙은 서브트리 관리자)이 판정한다(B2).
+  // 화면도 같은 순수 판정(canAdjustWorkflowStage·canApproveCompletion·isSubtreeManagerOf)으로 단추를 연다. 서버가 최종 관문이다.
+  const ancestorById = useMemo(() => {
+    const m = new Map<string, AncestorLike>()
+    const walk = (ns: ComputedItem[]) => ns.forEach(x => { m.set(x.id, { id: x.id, parent_id: x.parentId, assignee_member_id: x.assigneeMemberId ?? null }); walk(x.children) })
+    walk(items)
+    return m
+  }, [items])
+  const myMemberIds = useMemo(() => new Set(actorView?.memberId ? [actorView.memberId] : []), [actorView])
+  const flowSteps = approvalSteps ?? DEFAULT_APPROVAL_STEPS
+  const flowRights = (card: ComputedItem) => {
+    if (readOnly || !isFlow) return { adjust: false, approve: false, toDone: false }
+    const isAdmin = isProjectAdmin(actor, projectId)
+    const isMember = isProjectMember(actor, projectId)
+    const subtreeManager = isMember && isSubtreeManagerOf(card.id, ancestorById, myMemberIds)
+    // 대기 단계의 승인자 — 검수 대기(im)면 라운드의 대기 단계를 화면이 모르므로, 관리자 밖에 열린 단계가 하나도 없을 때만 'admin' 으로 본다
+    // (실제 대기 단계는 누를 때 서버에서 읽고, 서버가 다시 판정한다). 그 밖의 단계에서 완료 지정은 새 라운드의 첫 단계로 판정된다.
+    const pendingStepApprover: Approver | undefined = card.stage === 'im'
+      ? (flowSteps.some(s => s.approver === 'subtree_or_admin') ? undefined : 'admin')
+      : flowSteps[0]?.approver ?? 'admin'
+    const approve = canApproveCompletion({
+      isAdmin, subtreeManager,
+      assigneeMine: !!card.assigneeMemberId && myMemberIds.has(card.assigneeMemberId),
+      claimedByMe: false, pendingStepApprover,
+    })
+    return {
+      adjust: canAdjustWorkflowStage({ isAdmin, isMember, subtreeManager }),
+      approve,
+      // 승인 단계가 둘 이상이면 완료(xx)는 단계 승인으로만 간다 — 서버가 approval_required 로 거절할 선택지를 권하지 않는다(WBS 상세 패널과 같다)
+      toDone: approve && flowSteps.length < 2,
+    }
+  }
 
   // 최초 방문 코치마크 — 진행 뷰(편집 가능) 진입 시 1회, localStorage 플래그로 재노출 방지.
   const COACH_KEY = 'kanban.coach.v1'
@@ -595,11 +630,12 @@ export function KanbanBoard({
                   </div>
                 ) : (
                   col.cards.map(card => {
-                    const canEdit = cardEditable(card)
+                    const flow = flowRights(card)
+                    const canEdit = isFlow ? flow.adjust || flow.approve : cardEditable(card)
                     const canDrag = canEdit && isProgress
                     const b = bucketOf(card.rolledActualPct)
                     const curStage = (card.stage && isStageCode(card.stage)) ? card.stage : 'none'
-                    const stageOpts = isFlow ? FLOW_STAGE_KEYS.map(k => {
+                    const stageOpts = isFlow ? FLOW_STAGE_KEYS.filter(k => k === curStage || (k === 'xx' ? flow.toDone : flow.adjust)).map(k => {
                       const titles: Record<FlowStageKey, string> = {
                         none: stageLabels?.none || stageLabelKo(null),
                         as: stageLabels?.as || stageLabelKo('as'),
@@ -629,10 +665,10 @@ export function KanbanBoard({
                         draggable={canDrag}
                         editable={canEdit}
                         stageOptions={stageOpts}
-                        onMoveStage={canEdit && isFlow ? (k) => void handleMoveStage(card, k as FlowStageKey) : undefined}
+                        onMoveStage={(flow.adjust || flow.toDone) ? (k) => void handleMoveStage(card, k as FlowStageKey) : undefined}
                         bucketOptions={bucketOpts}
                         onMoveBucket={canEdit && isProgress ? (k) => handleMoveBucket(card, k) : undefined}
-                        onApprove={canEdit && isFlow && card.stage === 'im' ? () => void handleApproveStep(card) : undefined}
+                        onApprove={flow.approve && card.stage === 'im' ? () => void handleApproveStep(card) : undefined}
                         dragging={draggingId === card.id}
                         saving={savingIds.has(card.id)}
                         failed={failedMoves[card.id] ? {

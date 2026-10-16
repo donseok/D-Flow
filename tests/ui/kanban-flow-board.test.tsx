@@ -302,6 +302,78 @@ describe('KanbanBoard — 흐름 승인은 서버가 판독한 대기 단계로 
   })
 })
 
+describe('KanbanBoard — 흐름 단추 노출은 서버 가드와 같은 근거다(B2)', () => {
+  let container: HTMLDivElement, root: Root
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+  const q = (id: string) => container.querySelector(`[data-testid="${id}"]`) as HTMLButtonElement | null
+  /** 상위 작업(Phase, 담당 m-lead) 아래 검수 대기 리프(담당 leafAssignee, 담당 팀 PMO) */
+  const tree = (leafAssignee: string | null) => [n('Phase', { assigneeMemberId: 'm-lead' }, [
+    n('TaskIm', { parentId: 'Phase', stage: 'im', rolledActualPct: 90, assigneeMemberId: leafAssignee }),
+  ])]
+  async function render(actorView: Parameters<typeof KanbanBoard>[0]['actorView'], items: ComputedItem[], approvalSteps?: ApprovalStepDef[]) {
+    await act(async () => {
+      root.render(<KanbanBoard projectId="p1" items={items} actorView={actorView} today="2026-07-25" approvalSteps={approvalSteps ?? null} />)
+    })
+  }
+  const TEAM_MEMBER = makeProjectActorView({ userId: 'u-team', projectRole: 'member', memberId: 'm-team', rosterTeamIds: ['t-pmo'], rosterTeamCodes: ['PMO'], primaryTeamCode: 'PMO' })
+  const LEAD = makeProjectActorView({ userId: 'u-lead', projectRole: 'member', memberId: 'm-lead' })
+  const LEAD_VIEW_ONLY = makeProjectActorView({ userId: 'u-lead', projectRole: null, memberId: 'm-lead' })
+
+  it('담당 팀 멤버라도 관리자·상위 작업 담당자가 아니면 단계 이동·승인 단추가 없다(서버가 거절할 단추를 보이지 않는다)', async () => {
+    await render(TEAM_MEMBER, tree('m-dev'))
+    expect(q('kanban-card-move-trigger')).toBeNull()
+    expect(q('kanban-card-approve-btn')).toBeNull()
+  })
+
+  it('상위 작업 담당자(서브트리 관리자)는 담당 팀이 아니어도 단계 이동·승인을 할 수 있다', async () => {
+    await render(LEAD, tree('m-dev'))
+    expect(q('kanban-card-move-trigger')).not.toBeNull()
+    expect(q('kanban-card-approve-btn')).not.toBeNull()
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-xx')).not.toBeNull()
+  })
+
+  it('상위 작업 담당자가 그 리프의 담당자이기도 하면 승인(과 완료 지정)은 없다 — 자기 승인 금지', async () => {
+    await render(LEAD, tree('m-lead'))
+    expect(q('kanban-card-move-trigger')).not.toBeNull()
+    expect(q('kanban-card-approve-btn')).toBeNull()
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-ip')).not.toBeNull()
+    expect(q('kanban-card-move-stage-xx')).toBeNull()
+  })
+
+  it('승인 단계가 모두 관리자 승인이면 상위 작업 담당자에게 승인 단추가 없다', async () => {
+    await render(LEAD, tree('m-dev'), [{ code: 'review', label: null, approver: 'admin' }])
+    expect(q('kanban-card-approve-btn')).toBeNull()
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-xx')).toBeNull()
+  })
+
+  it('승인 단계가 둘 이상이면 완료(xx) 직행 선택지가 없다 — 서버가 approval_required 로 거절한다', async () => {
+    await render(ADMIN, [n('TaskIp', { stage: 'ip', rolledActualPct: 50 })], [
+      { code: 'lead', label: '팀장 승인', approver: 'subtree_or_admin' },
+      { code: 'pm', label: 'PM 최종 승인', approver: 'admin' },
+    ])
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-im')).not.toBeNull()
+    expect(q('kanban-card-move-stage-xx')).toBeNull()
+  })
+
+  it('조회 전용 명단(역할 없음)은 상위 작업 담당자여도 단추가 없다', async () => {
+    await render(LEAD_VIEW_ONLY, tree('m-dev'))
+    expect(q('kanban-card-move-trigger')).toBeNull()
+    expect(q('kanban-card-approve-btn')).toBeNull()
+  })
+})
+
 describe('KanbanCard — 이동 메뉴 및 승인 액션', () => {
   let container: HTMLDivElement, root: Root
 
