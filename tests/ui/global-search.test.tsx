@@ -298,7 +298,7 @@ describe('GlobalSearchDialog 컴포넌트 (⌘K 검색 & 네비게이션)', () =
     it('셸이 내리지 않은 항목은 없다 — 꺼진 모듈·권한 없는 화면이 검색에만 뜨지 않는다', async () => {
       const nav = { workspace: navFor({ scope: 'workspace', base: '/w/workspace-alpha', effective: new Set(), caps: { ...CAPS, isWorkspaceAdmin: false, canViewPortfolio: false }, menu: { order: [], labels: {} } }), project: null }
       await render({ nav })
-      expect(titles()).toEqual(['홈', '내 업무', '전체 프로젝트'])
+      expect(titles()).toEqual(['홈', '내 업무', '전체 프로젝트', '사용자 매뉴얼'])   // 사용자 매뉴얼은 모든 등급·모듈 구성에서 보인다
     })
 
     it('프로젝트 범위에서는 프로젝트 메뉴, 범위를 워크스페이스로 바꾸면 워크스페이스 메뉴', async () => {

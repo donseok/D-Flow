@@ -30,10 +30,10 @@ beforeEach(() => {
 afterEach(() => { process.env = { ...saved } })
 
 describe('navFor — 순수 함수: 레지스트리 전수 대조', () => {
-  it('셸 10 ∪ 모듈 nav 16 = NAV_ITEM_IDS 26, 중복 없음, 그룹·층 일치', () => {
+  it('셸 11 ∪ 모듈 nav 16 = NAV_ITEM_IDS 27, 중복 없음, 그룹·층 일치', () => {
     const all = [...SHELL_NAV.map((s) => s.id), ...moduleNav.map((x) => x.e.id)]
-    expect(all).toHaveLength(26)
-    expect(new Set(all).size).toBe(26)
+    expect(all).toHaveLength(27)
+    expect(new Set(all).size).toBe(27)
     expect([...all].sort()).toEqual([...NAV_ITEM_IDS].sort())
     for (const s of SHELL_NAV) { expect(s.group).toBe(NAV_GROUP_OF[s.id]); expect(s.id.startsWith(s.scope === 'workspace' ? 'ws.' : 'p.'), s.id).toBe(true) }
     for (const { e } of moduleNav) expect(e.group, e.id).toBe(NAV_GROUP_OF[e.id])
@@ -77,7 +77,7 @@ describe.each(SYNTHETIC_CONFIGS)('navFor — 순수 함수: 합성 구성 $id', 
       const id = MODULES.find((x) => x.id === m)!.nav!.workspace!.id
       expect(got.includes(id), `${c.id} ${id}`).toBe(effective.has(m))
     }
-    for (const shell of ['ws.home', 'ws.my_work', 'ws.projects', 'ws.members', 'ws.teams', 'ws.settings', 'ws.workspaces', 'ws.platform_admins', 'ws.llm', 'ws.ui_states'] as const) expect(got).toContain(shell)
+    for (const shell of ['ws.home', 'ws.my_work', 'ws.projects', 'ws.help', 'ws.members', 'ws.teams', 'ws.settings', 'ws.workspaces', 'ws.platform_admins', 'ws.llm', 'ws.ui_states'] as const) expect(got).toContain(shell)
   })
 })
 
@@ -98,10 +98,21 @@ describe('navFor — 순수 함수: caps', () => {
     expect(m.find((g) => g.group === 'ws.ops')!.items.map((i) => i.id)).toEqual(['ws.members', 'ws.teams', 'ws.settings'])
     expect(m.find((g) => g.group === 'ws.platform')!.items.map((i) => i.id)).toEqual(['ws.workspaces', 'ws.platform_admins', 'ws.llm', 'ws.ui_states'])
   })
-  it('항상 보이는 항목 — effective = core 만·caps 없음이면 ws.main 셋과 p.dashboard·p.wbs·p.members. isProjectAdmin 이면 p.settings', () => {
-    expect(ids(navFor({ scope: 'workspace', base: '/w/acme', effective: CORE, caps: NONE, menu: EMPTY_MENU }))).toEqual(['ws.home', 'ws.my_work', 'ws.projects'])
+  it('항상 보이는 항목 — effective = core 만·caps 없음이면 ws.main 넷(사용자 매뉴얼 포함)과 p.dashboard·p.wbs·p.members. isProjectAdmin 이면 p.settings', () => {
+    expect(ids(navFor({ scope: 'workspace', base: '/w/acme', effective: CORE, caps: NONE, menu: EMPTY_MENU }))).toEqual(['ws.home', 'ws.my_work', 'ws.projects', 'ws.help'])
     expect(ids(navFor({ scope: 'project', base: '/p/P', effective: CORE, caps: NONE, menu: EMPTY_MENU }))).toEqual(['p.dashboard', 'p.wbs', 'p.members'])
     expect(ids(navFor({ scope: 'project', base: '/p/P', effective: CORE, caps: { ...NONE, isProjectAdmin: true }, menu: EMPTY_MENU }))).toContain('p.settings')
+  })
+  it('사용자 매뉴얼(ws.help)은 모든 등급·모듈 구성에서 보이고, /help 절대 경로를 가리키며, 프로젝트 층에는 없다', () => {
+    for (const caps of [NONE, ALL, { ...NONE, isProjectAdmin: true }, { ...NONE, isWorkspaceAdmin: true }, { ...NONE, isPlatformAdmin: true }]) {
+      for (const effective of [CORE, full]) {
+        const m = navFor({ scope: 'workspace', base: '/w/acme', effective, caps, menu: EMPTY_MENU })
+        const item = m.flatMap((g) => g.items).find((i) => i.id === 'ws.help')
+        expect(item, JSON.stringify(caps)).toMatchObject({ href: '/help', icon: 'BookOpenText', label: { key: 'nav.help' } })
+        expect(m.find((g) => g.items.some((i) => i.id === 'ws.help'))!.group).toBe('ws.main')
+      }
+    }
+    expect(ids(navFor({ scope: 'project', base: '/p/P', effective: full, caps: ALL, menu: EMPTY_MENU }))).not.toContain('ws.help')
   })
   // 스펙 §4.5 표의 '필요 caps' 열 — cap 하나만 켜서 짝을 가른다(두 cap 을 함께 켜면 어느 cap 이 어느 항목을 여는지 바뀌어도 초록이다)
   it.each([

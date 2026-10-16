@@ -56,6 +56,8 @@
     { "key": "admin-ui-states", "path": "/admin/ui-states", "file": "(app)/(global)/admin/ui-states/page.tsx", "grade": "platformAdmin", "tags": [], "since": "UI-1" },
     { "key": "p-root", "path": "/p/{pid}", "file": "(app)/p/[projectId]/page.tsx", "grade": "member", "tags": ["P"], "since": "C", "expectFinal": "/p/{pid}/dashboard" },
     { "key": "admin-workspaces", "path": "/admin/workspaces", "file": "(app)/(global)/admin/workspaces/page.tsx", "grade": "platformAdmin", "tags": [], "since": "C" },
+    { "key": "help", "path": "/help", "file": "(app)/(global)/help/page.tsx", "grade": "member", "tags": [], "since": "C" },
+    { "key": "help-chapter", "path": "/help/getting-started", "file": "(app)/(global)/help/[chapter]/page.tsx", "grade": "member", "tags": [], "since": "C" },
     { "key": "admin-platform-admins", "path": "/admin/platform-admins", "file": "(app)/(global)/admin/platform-admins/page.tsx", "grade": "platformAdmin", "tags": [], "since": "C" },
     { "key": "not-found", "path": "/ui-capture-missing", "grade": "member", "tags": [], "since": "UI-1" },
     { "key": "mobile-menu", "path": "/w/{wsSlug}/projects", "grade": "member", "tags": [], "since": "UI-1", "click": "[aria-label=\"메뉴 열기\"]" },

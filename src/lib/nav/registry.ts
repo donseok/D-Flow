@@ -31,6 +31,8 @@ export const SHELL_NAV: readonly ShellNavEntry[] = [
   { id: 'ws.home', labelKey: 'nav.home', icon: 'LayoutGrid', segment: '', group: 'ws.main', order: 10, scope: 'workspace', needs: null },
   { id: 'ws.my_work', labelKey: 'nav.myWork', icon: 'ListChecks', segment: 'my-work', group: 'ws.main', order: 20, scope: 'workspace', needs: null },
   { id: 'ws.projects', labelKey: 'nav.allProjects', icon: 'FolderOpen', segment: 'projects', group: 'ws.main', order: 30, scope: 'workspace', needs: null },
+  // 사용자 매뉴얼(2026-10-16) — 모든 등급, 끌 수 없다. 전역 화면(/help)이라 절대 경로. 아이콘은 표(navIcons)에 있는 이름(UI 위험 파일을 고치지 않는다)
+  { id: 'ws.help', labelKey: 'nav.help', icon: 'BookOpenText', segment: '/help', group: 'ws.main', order: 90, scope: 'workspace', needs: null },
   { id: 'ws.members', labelKey: 'nav.wsMembers', icon: 'UserCog', segment: 'admin/accounts', group: 'ws.ops', order: 30, scope: 'workspace', needs: 'isWorkspaceAdmin' },
   { id: 'ws.teams', labelKey: 'nav.wsTeams', icon: 'Users', segment: 'admin/teams', group: 'ws.ops', order: 40, scope: 'workspace', needs: 'isWorkspaceAdmin' },
   { id: 'ws.settings', labelKey: 'nav.settings', icon: 'Settings', segment: 'settings', group: 'ws.ops', order: 50, scope: 'workspace', needs: 'isWorkspaceAdmin' },
@@ -55,7 +57,7 @@ export const NAV_NEEDS: Readonly<Partial<Record<NavItemId, keyof NavCaps>>> = {
 export const NAV_DEFAULT_LABEL_KEY = Object.fromEntries([
   ...MODULES.flatMap((m) => [m.nav?.project, m.nav?.workspace].flatMap((e) => (e ? [[e.id, e.labelKey] as const] : []))),
   ...SHELL_NAV.map((s) => [s.id, s.labelKey] as const),
-]) as Readonly<Record<NavItemId, DictKey>>   // 26개 id 전부 — tests/nav/nav-for.test.ts 가 빠짐없음을 고정한다
+]) as Readonly<Record<NavItemId, DictKey>>   // 27개 id 전부 — tests/nav/nav-for.test.ts 가 빠짐없음을 고정한다
 
 function hrefOf(base: string, segment: string): string {
   if (segment.startsWith('/')) return segment

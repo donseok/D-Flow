@@ -24,6 +24,8 @@ const EXCLUDED: Record<string, string> = {
   'src/app/(app)/w/[slug]/admin/teams/page.tsx': '셸 — 모듈 밖(워크스페이스 관리)',
   'src/app/(app)/(global)/admin/ui-states/page.tsx': '플랫폼 진단 — 모듈 밖(SP3b D16)',
   'src/app/(app)/(global)/admin/workspaces/page.tsx': '플랫폼 관리(워크스페이스 목록·생성) — 모듈 밖',
+  'src/app/(app)/(global)/help/page.tsx': '사용자 매뉴얼 — 모듈 밖, 로그인만',
+  'src/app/(app)/(global)/help/[chapter]/page.tsx': '사용자 매뉴얼 — 모듈 밖, 로그인만',
   'src/app/(app)/(global)/admin/platform-admins/page.tsx': '플랫폼 관리(플랫폼 관리자 목록·지정) — 모듈 밖',
   'src/app/(app)/w/[slug]/projects/page.tsx': '셸(프로젝트 목록)',
   'src/app/(app)/p/[projectId]/page.tsx': '리졸버 — 프로젝트 뿌리 경로를 개요(core)로 redirect. 숨김 판정은 스스로 requireModulePage 를 부른다',

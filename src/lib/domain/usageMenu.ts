@@ -49,7 +49,7 @@ export const USAGE_MENUS: readonly UsageMenu[] = [
 
 /** 항목 id → 사용 현황 키(D27) — 기존 키를 그대로 써 과거 집계와 이어진다. 새 키는 ws-home·my-work 둘. 표에 없는 id 는 타입 오류 */
 export const USAGE_KEY_OF: Readonly<Record<NavItemId, string>> = {
-  'ws.home': 'ws-home', 'ws.my_work': 'my-work', 'ws.projects': 'projects',
+  'ws.home': 'ws-home', 'ws.my_work': 'my-work', 'ws.projects': 'projects', 'ws.help': 'unknown',   // 사용자 매뉴얼 — 집계 키를 늘리지 않는다
   'ws.meetings': 'my-meetings', 'ws.minutes': 'minutes', 'ws.agents': 'seatmap',
   'ws.portfolio': 'portfolio', 'ws.usage': 'usage', 'ws.members': 'admin-accounts', 'ws.teams': 'admin-teams', 'ws.settings': 'settings',
   'ws.workspaces': 'unknown', 'ws.platform_admins': 'unknown', 'ws.llm': 'admin-llm', 'ws.ui_states': 'unknown',   // 플랫폼 관리·진단 화면 — 집계 키를 늘리지 않는다(새 키는 둘뿐, 스펙 §5.7)

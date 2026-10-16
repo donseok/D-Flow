@@ -22,6 +22,7 @@ import { portfolioKo } from './portfolio'
 import { platformKo } from './platform'
 import { authKo } from './auth'
 import { adminUiKo } from './adminUi'
+import { manualKo } from './manual'
 
 export const KO = {
   ...commonKo,
@@ -47,4 +48,5 @@ export const KO = {
   ...platformKo,
   ...authKo,
   ...adminUiKo,
+  ...manualKo,
 } as const
