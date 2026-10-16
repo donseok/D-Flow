@@ -164,7 +164,7 @@ export const agentsUiKo = {
   'agents.roster.nowDoing': '지금 하는 일',
   'agents.roster.needDecision': '결정이 필요합니다',
   'agents.roster.noBlockNote': '에이전트가 사유를 남기지 않았습니다.',
-  'agents.roster.answerWhere': '답은 위임·승인 탭이나 에이전트 스튜디오의 이 좌석에서 합니다.',
+  'agents.roster.answerWhere': '이 화면에는 답을 적는 칸이 없습니다. 답은 이 작업을 돌리는 작업 PC 의 에이전트 세션(팀원 탭·창, 또는 팀장 세션)에서 합니다. 작업을 멈춰야 하면 평면도나 상태 레인에서 이 좌석을 눌러 ‘중단’을 씁니다.',
   'agents.roster.awayNow': '지금은 {reason}',
   'agents.roster.emptySeat': '아무도 앉지 않은 자리입니다. 팀장이 다음 위임을 이 자리에 배정합니다.',
   'agents.roster.lastSignal': '마지막 신호 · {age}',
