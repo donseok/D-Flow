@@ -20,6 +20,16 @@ describe('AccountMenu(★10)', () => {
     expect(document.activeElement).toBe(trigger)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+  it('사용자 매뉴얼 링크(/help)가 내 계정 다음에 있고, 누르면 팝오버가 닫힌다 — 프로젝트 안(사이드바가 프로젝트 메뉴)에서도 여는 길', () => {
+    render(<AccountMenu identity={{ displayName: 'alice', roleLabel: '멤버', teamCodes: null }} />)
+    fireEvent.click(screen.getByRole('button', { name: /alice/ }))
+    const links = [...screen.getByRole('dialog').querySelectorAll('a')].map((a) => a.getAttribute('href'))
+    expect(links).toEqual(['/account', '/help'])
+    const manual = screen.getByText('사용자 매뉴얼').closest('a')!
+    expect(manual.getAttribute('href')).toBe('/help')
+    fireEvent.click(manual)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
   it('로그아웃은 signOutAndClear 하나로(W16)', () => {
     render(<AccountMenu identity={{ displayName: null, roleLabel: '멤버', teamCodes: null }} />)
     fireEvent.click(screen.getByRole('button', { name: /멤버/ }))

@@ -8,6 +8,7 @@ export const shellUiKo = {
   'shell.account.menuLabel': '{name} — 계정 메뉴',
   'shell.account.dialog': '계정',
   'shell.account.mine': '내 계정',
+  'shell.account.manual': '사용자 매뉴얼',
   // AppShell.tsx
   'shell.configDegraded': '설정을 불러오지 못해 메뉴 일부를 숨겼습니다.',
   'shell.openSettings': '설정 열기',

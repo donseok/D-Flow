@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { KeyRound, LogOut, User } from 'lucide-react'
+import { BookOpenText, KeyRound, LogOut, User } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { identityTeamLabel } from '@/lib/domain/identityTeams'
@@ -37,6 +37,10 @@ export function AccountMenu({ identity }: { identity: ShellIdentity | null }) {
           </div>
           <Link href="/account" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-3 text-control text-fg-secondary hover:bg-surface-hover hover:text-fg">
             <KeyRound size={16} aria-hidden />{t('shell.account.mine')}
+          </Link>
+          {/* 사용자 매뉴얼(2026-10-16) — 프로젝트 안에서는 사이드바가 프로젝트 메뉴라 ws.help 가 없다. 어느 화면에서든 여는 길 */}
+          <Link href="/help" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-3 text-control text-fg-secondary hover:bg-surface-hover hover:text-fg">
+            <BookOpenText size={16} aria-hidden />{t('shell.account.manual')}
           </Link>
           <button type="button" onClick={() => void signOutAndClear(router)} className="flex w-full items-center gap-2 border-t border-border px-4 py-3 text-left text-control text-fg-secondary hover:bg-surface-hover hover:text-danger">
             <LogOut size={16} aria-hidden />{t('chrome.logout')}
