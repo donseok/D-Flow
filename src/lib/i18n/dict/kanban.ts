@@ -77,6 +77,8 @@ export const kanbanKo = {
   // 카드 이동 메뉴·실패 복구·낭독 알림
   'kanban.liveStageChanged': '{name} 단계 변경: {stage}',
   'kanban.liveApproved': '{name} 승인 완료',
+  'kanban.liveApprovedStep': '{name} {step} 승인됨({index}/{total}단계) — 다음 단계 승인을 기다립니다',
+  'kanban.approvalStepDefault': '검토',
   'kanban.approvalStateUnavailable': '승인 대기 단계를 확인하지 못해 승인하지 않았습니다. 잠시 뒤 다시 시도하세요.',
   'kanban.moveMenuAria': '{name} 이동 메뉴',
   'kanban.moveSelectAria': '{name} 이동 선택',

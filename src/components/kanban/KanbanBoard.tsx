@@ -429,7 +429,8 @@ export function KanbanBoard({
         router.refresh()
         return
       }
-      const res = await approveWbsStep(card.id, st.approval.step)
+      const approved = st.approval
+      const res = await approveWbsStep(card.id, approved.step)
       if (!res.ok) {
         if (res.stale) router.refresh()   // 그 사이 다른 단계가 승인됐다 — 새 단계로 다시 그린다
         const errMsg = res.error || t('kanban.errChange')
@@ -444,7 +445,11 @@ export function KanbanBoard({
         return
       }
       editSessionStore.setSession(sessionId, 'kanban', card.id, 'saved')
-      setLiveMsg(t('kanban.liveApproved').replace('{name}', () => card.name))
+      // 다단계 승인의 중간 단계면(서버가 remaining > 0) 카드는 아직 완료가 아니다 — 단계 하나가 승인됐다고 낭독한다
+      setLiveMsg((res.remaining ?? 0) > 0
+        ? t('kanban.liveApprovedStep').replace('{name}', () => card.name).replace('{step}', () => approved.label ?? t('kanban.approvalStepDefault'))
+            .replace('{index}', () => String(approved.index)).replace('{total}', () => String(approved.total))
+        : t('kanban.liveApproved').replace('{name}', () => card.name))
       router.refresh()
     } catch {
       const errMsg = t('kanban.saveFailedTitle')

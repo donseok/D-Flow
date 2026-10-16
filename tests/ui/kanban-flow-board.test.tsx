@@ -32,9 +32,11 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: refreshFn, push: vi.fn() }),
   useSearchParams: () => new URLSearchParams('group=flow'),
 }))
-vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (k: string) => k }),
-}))
+vi.mock('@/components/providers/LocaleProvider', async () => {
+  // 낭독 문구(kanban.live*)만 사전 글자로 푼다 — 자리표시자 치환까지 확인해야 하기 때문. 나머지 키는 키 그대로
+  const { KO } = await import('@/lib/i18n/dict/ko')
+  return { useLocale: () => ({ t: (k: string) => (k.startsWith('kanban.live') || k === 'kanban.approvalStepDefault' ? (KO as Record<string, string>)[k] : k) }) }
+})
 vi.mock('@/components/app/TeamsProvider', () => ({
   useTeamCodes: () => ['PMO', 'DEV'],
   useTeams: () => [],
@@ -274,6 +276,25 @@ describe('KanbanBoard — 흐름 승인은 서버가 판독한 대기 단계로 
     await clickApprove()
     expect(getWbsAssigneeStageMock).toHaveBeenCalledWith('TaskIm')
     expect(approveWbsStepMock).toHaveBeenCalledWith('TaskIm', 'pm')
+  })
+
+  const liveText = () => container.querySelector('.sr-only[aria-live="polite"]')?.textContent
+
+  it('다단계 승인의 중간 단계를 승인하면(remaining > 0) 낭독은 "승인 완료"가 아니라 그 단계가 승인됐다고 알린다', async () => {
+    getWbsAssigneeStageMock.mockResolvedValue({ assigneeMemberId: null, stage: 'im', devWorkflow: true, delegated: false, canDevWorkflow: true,
+      approval: { step: 'lead', index: 1, total: 2, label: '팀장 승인' } })
+    approveWbsStepMock.mockResolvedValueOnce({ ok: true, remaining: 1 } as never)
+    await clickApprove()
+    expect(liveText()).toContain('팀장 승인')
+    expect(liveText()).toContain('1/2단계')
+    expect(liveText()).not.toContain('승인 완료')
+  })
+
+  it('마지막 단계를 승인하면(remaining 없음) "승인 완료"로 낭독한다', async () => {
+    getWbsAssigneeStageMock.mockResolvedValue({ assigneeMemberId: null, stage: 'im', devWorkflow: true, delegated: false, canDevWorkflow: true,
+      approval: { step: 'pm', index: 2, total: 2, label: 'PM 최종 승인' } })
+    await clickApprove()
+    expect(liveText()).toBe('TaskIm 승인 완료')
   })
 
   it('대기 단계를 읽지 못하면 승인을 보내지 않고 실패를 알린다(쓰기 전 선행 조회 실패는 중단)', async () => {
