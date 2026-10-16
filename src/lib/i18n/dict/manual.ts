@@ -21,6 +21,7 @@ export const manualKo = {
   'manual.prev': '이전 장',
   'manual.next': '다음 장',
   'manual.home': '매뉴얼 처음으로',
+  'manual.pager': '이전·다음 장',
   'manual.aboveAudience': '이 장은 {audience}용입니다. 지금 등급에서는 여기 나오는 화면이나 버튼이 보이지 않을 수 있습니다.',
   'manual.search.label': '매뉴얼에서 찾기',
   'manual.search.placeholder': '예: 주간보고 붙여넣기',

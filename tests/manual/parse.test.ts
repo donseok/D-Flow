@@ -137,6 +137,12 @@ describe('parseChapter — 표', () => {
     const ch = parseChapter(FILE, fm(`## 표\n\n${table}`))
     expect(ch.blocks[0].text).toBe('단축키 설명 Ctrl+V 붙여넣기')
   })
+  it('짧은 구분 칸(|--|·|-|·:-:)도 검색 평문에 새지 않는다', () => {
+    for (const sep of ['|--|--|', '|-|-|', '| :-: | -: |']) {
+      const ch = parseChapter(FILE, fm(`## 표\n\n| 가 | 나 |\n${sep}\n| 1 | 2 |\n`))
+      expect(ch.blocks[0].text, sep).toBe('가 나 1 2')
+    }
+  })
   it('정렬 표시(:---:)·바깥 파이프 없는 구분 줄도 버린다', () => {
     const t1 = parseChapter(FILE, fm('## 표\n\n| 가 | 나 |\n| :--- | ---: |\n| 1 | 2 |\n')).blocks[0].text
     const t2 = parseChapter(FILE, fm('## 표\n\n가 | 나\n--- | ---\n1 | 2\n')).blocks[0].text

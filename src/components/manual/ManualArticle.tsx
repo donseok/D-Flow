@@ -20,6 +20,7 @@ export function ManualArticle({ body }: { body: string }) {
     h2: ({ children }) => <h2 id={slug(textOf(children))} className="scroll-mt-20">{children}</h2>,
     h3: ({ children }) => <h3 id={slug(textOf(children))} className="scroll-mt-20">{children}</h3>,
     a: ({ href, children }) => {
+      if (!href) return <span>{children}</span>   // 안전하지 않은 주소(javascript: 등)는 react-markdown 이 비운다 — 링크로 그리지 않는다
       if (href?.startsWith('/') && !href.startsWith('//')) return <Link href={href}>{children}</Link>
       if (href?.startsWith('#')) return <a href={href}>{children}</a>
       return <a href={href} target="_blank" rel="noreferrer">{children}</a>

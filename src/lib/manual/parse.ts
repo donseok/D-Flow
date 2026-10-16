@@ -55,7 +55,7 @@ function fail(file: string, msg: string): never {
 }
 
 /** 표 구분 줄(`|---|:---:|`)과 가로줄(`---`) — 검색 평문에 넣지 않는다 */
-const TABLE_SEP_RE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/
+const TABLE_SEP_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/   // GFM 은 구분 칸의 - 하나도 인정한다
 
 /** 마크다운 한 줄 → 검색용 평문(표기 기호 제거) */
 function plainLine(line: string): string {

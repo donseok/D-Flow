@@ -39,7 +39,7 @@ export default async function ManualChapterPage({ params }: { params: Promise<{ 
         meta={chapter.audience !== 'member' ? <ManualBadge audience={chapter.audience} /> : undefined}
       />
       <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start">
-        <aside className={NAV_STICKY}>
+        <aside aria-label={t('manual.chapters')} className={NAV_STICKY}>
           <ManualChapterNav chapters={visible} current={chapter.slug} />
         </aside>
         <article className="min-w-0 space-y-6">
@@ -66,13 +66,13 @@ export default async function ManualChapterPage({ params }: { params: Promise<{ 
               <ManualArticle body={chapter.body} />
             </div>
           </div>
-          <nav data-manual-pager="" aria-label={t('manual.title')} className="grid gap-3 sm:grid-cols-3">
+          <nav data-manual-pager="" aria-label={t('manual.pager')} className="grid gap-3 sm:grid-cols-3">
             {prev ? (
               <Link href={`/help/${prev.slug}`} className={PAGER_LINK}>
                 <span className="text-meta text-fg-muted">{t('manual.prev')}</span>
                 <span className="text-control font-semibold text-fg">{prev.title}</span>
               </Link>
-            ) : <span aria-hidden />}
+            ) : <span aria-hidden className="hidden sm:block" />}
             <Link href="/help" className={`${PAGER_LINK} sm:items-center`}>
               <span className="text-control font-semibold text-fg">{t('manual.home')}</span>
             </Link>
@@ -81,7 +81,7 @@ export default async function ManualChapterPage({ params }: { params: Promise<{ 
                 <span className="text-meta text-fg-muted">{t('manual.next')}</span>
                 <span className="text-control font-semibold text-fg">{next.title}</span>
               </Link>
-            ) : <span aria-hidden />}
+            ) : <span aria-hidden className="hidden sm:block" />}
           </nav>
         </article>
       </div>

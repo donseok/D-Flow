@@ -30,7 +30,7 @@ export function ManualSearch({ q, hits }: { q: string; hits: ManualHit[] | null 
           {hits.length > 0 ? (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-section text-fg">{t('manual.search.results').replace('{q}', () => q).replace('{n}', String(hits.length))}</h2>
+                <h2 className="text-section text-fg">{t('manual.search.results').replace('{n}', String(hits.length)).replace('{q}', () => q)}</h2>
                 <Link href="/help" className="text-control font-semibold text-action underline underline-offset-2 hover:text-action-hover">{t('manual.search.clear')}</Link>
               </div>
               <ol className="divide-y divide-border rounded-(--radius-panel) border border-border bg-surface">

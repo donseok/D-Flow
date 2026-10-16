@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   sources: [
     { file: '01-getting-started.md', raw: [
       '---', 'title: 시작하기', 'part: start', 'audience: member', 'summary: 처음 쓰는 분을 위한 안내입니다.', '---', '',
-      '처음이라면 [주간보고](/help/weekly)를 보고, 막히면 [외부 안내](https://example.com/guide)를 참고하세요. 절 바로가기는 [마무리](#마무리)입니다.', '',
+      '처음이라면 [주간보고](/help/weekly)를 보고, 막히면 [외부 안내](https://example.com/guide)를 참고하세요. 절 바로가기는 [마무리](#마무리)입니다. [위험한 주소](javascript:alert(1))는 링크가 아니다.', '',
       '## 로그인', '', '로그인 방법입니다.', '',
       '## 마무리', '', '끝까지 읽으셨습니다.', '',
       '## 도움 받기', '',
@@ -243,5 +243,13 @@ describe('/help/[chapter] — 장 화면', () => {
     expect(hash.hasAttribute('target')).toBe(false)
     expect(decodeURIComponent(hash.getAttribute('href')!.slice(1))).toBe('마무리')
     expect(body.querySelector('h2[id="마무리"]')).not.toBeNull()   // 본문 안의 # 링크가 가리키는 제목이 실제로 있다
+    // 안전하지 않은 주소는 react-markdown 이 비운다 — 빈 href 링크(새 창으로 현재 화면을 여는)로 그리지 않고 글자만 남긴다
+    expect(body.textContent).toContain('위험한 주소')
+    expect(Array.from(body.querySelectorAll('a')).some((a) => !a.getAttribute('href'))).toBe(false)
+  })
+  it('장 목록 영역과 이전·다음 묶음은 이름이 있는 랜드마크다', async () => {
+    const c = await chapterPage(MEMBER, 'weekly')
+    expect(c.querySelector('aside')!.getAttribute('aria-label')).toBe('매뉴얼 목차')
+    expect(c.querySelector('[data-manual-pager]')!.getAttribute('aria-label')).toBe('이전·다음 장')
   })
 })
