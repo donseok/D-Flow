@@ -42,6 +42,20 @@ describe('명단 실효 역할 열(P7-6.3, D37)', () => {
     expect((html.match(/확인 불가/g) ?? []).length).toBe(3)                    // 계정 행 셋, 외부 인력은 명단 역할
     expect(err).toHaveBeenCalled(); err.mockRestore()
   })
+  it('비활성 행은 명단 권한을 실효 역할로 보이지 않는다 — 비활성 명단 행은 권한을 주지 않는다(B6, buildActor 는 활성 행만 센다). 워크스페이스 관리자 승계는 행과 무관하게 남는다', async () => {
+    h.roster.mockResolvedValue({ ok: true, rows: [
+      mem('r5', { userId: 'uz', accessRole: 'member', active: false }),
+      mem('r6', { userId: 'uy', accessRole: 'admin', active: false }),
+      mem('r7', { userId: 'ua', accessRole: 'member', active: false }),
+    ] })
+    h.roles.mockResolvedValue({ ok: true, map: new Map([['uz', 'member'], ['uy', 'member'], ['ua', 'admin']]) })
+    const html = await render()
+    const cell = (id: string) => html.match(new RegExp(`data-effective-role="${id}"[^>]*>([\\s\\S]*?)</td>`))![1]
+    // 비활성 행의 사람은 명단 권한이 없는 사람과 같다(roleIn — 명단 역할 없음 → 워크스페이스 승계 또는 조회 전용)
+    expect(cell('r5')).toContain('조회 전용'); expect(cell('r5')).not.toContain('멤버')
+    expect(cell('r6')).toContain('조회 전용'); expect(cell('r6')).not.toContain('관리자')
+    expect(cell('r7')).toContain('관리자'); expect(cell('r7')).toContain('워크스페이스 관리자에서 상속')
+  })
   it('역할 조회는 숨김 판정 뒤(숨김 프로젝트면 부르지 않는다)', async () => {
     h.state.mockResolvedValue({ actor: { ...viewer, projectWorkspace: new Map() }, degraded: false })
     await expect(render()).rejects.toThrow('404'); expect(h.roles).not.toHaveBeenCalled()
