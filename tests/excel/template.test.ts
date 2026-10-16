@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as XLSX from 'xlsx'
 import { detectWorkbook } from '@/lib/excel/detect'
-import { parseWithProfile } from '@/lib/excel/parseWithProfile'
+import { linkByDepth, parseWithProfile, type ParsedRowN } from '@/lib/excel/parseWithProfile'
 import { buildWbsTemplateWorkbook, TEMPLATE_HEADER, TEMPLATE_ROWS } from '@/lib/excel/template'
 
 /** 양식 ↔ 감지기 정합 — 양식을 그대로 올리면 마법사가 손대지 않고 100% 잡아야 한다. 감지기가 바뀌면 여기가 깨진다. */
@@ -65,5 +65,20 @@ describe('wbs.xlsx 양식', () => {
     const wb = XLSX.read(buf, { type: 'array' })
     const guide = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets['작성법'], { header: 1 })
     expect(guide.find((r) => r[0] === '6')?.[1]).toBe('담당 열에는 팀 이름(코드)을 적습니다. ●/△ 는 팀마다 열(머리 = 팀 이름)을 둘 때 씁니다.')
+  })
+  it('C6 — 작성법 2행은 가져오기가 받는 단수를 사실대로 말한다(상한 4단이 아니다)', () => {
+    const wb = XLSX.read(buf, { type: 'array' })
+    const guide = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets['작성법'], { header: 1 })
+    const text = String(guide.find((r) => r[0] === '2')?.[1])
+    expect(text).not.toContain('최대 4단')
+    expect(text).toContain('최대 10개')
+    // 사실 확인: 링커는 단수에 상한을 두지 않는다 — 7단 코드(깊이 0~6)도 한 줄로 이어진다
+    const rows: ParsedRowN[] = Array.from({ length: 7 }, (_, d) => ({
+      depth: d, code: null, name: `n${d}`, extraAxis: null, deliverable: null, plannedStart: null, plannedEnd: null,
+      weight: null, actualPct: null, owners: [], excelRow: d + 2,
+    }))
+    const linked = linkByDepth(rows)
+    expect(linked.ok).toBe(true)
+    if (linked.ok) expect(linked.items.map((i) => i.code)).toEqual(['1', '1.1', '1.1.1', '1.1.1.1', '1.1.1.1.1', '1.1.1.1.1.1', '1.1.1.1.1.1.1'])
   })
 })

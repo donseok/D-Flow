@@ -32,7 +32,7 @@ export const portfolioKo = {
   'pf.signal.amber': '주의',
   'pf.signal.red': '위험',
   'pf.signal.neutral': '판단 불가',
-  'pf.status.ready': '준비',
+  'pf.status.ready': '시작 전',
   'pf.status.active': '진행중',
   'pf.status.overdue': '지연 종료',
   'pf.status.done': '완료',

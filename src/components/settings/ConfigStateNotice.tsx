@@ -1,5 +1,6 @@
 import { t} from '@/lib/i18n/dict'
 import { CONFIG_MESSAGES } from '@/lib/settings/errors'
+import { settingKeyLabel } from '@/lib/settings/keyLabel'
 import { StatusMessage, type StatusKind } from '@/components/ui/StatusMessage'
 
 export type NoticeKind = 'unavailable' | 'invalid' | 'required' | 'field' | 'patch' | 'disabled'
@@ -26,7 +27,7 @@ export function ConfigStateNotice({ kind, keyName, message, settingsHref, isAdmi
   const canRecover = RECOVERABLE.has(kind) && isAdmin && !!settingsHref
   const askAdmin = RECOVERABLE.has(kind) && !canRecover
   const detail = (keyName || detailText || askAdmin) ? <>
-    {keyName && <span className="block">{t('settings.configLoadFailedKey').replace('{key}', keyName)}</span>}
+    {keyName && <span className="block" title={keyName}>{t('settings.configLoadFailedKey').replace('{key}', () => settingKeyLabel(keyName))}</span>}
     {detailText && <span className="block">{detailText}</span>}
     {askAdmin && <span className="block">{t('settings.state.askAdmin')}</span>}
   </> : undefined

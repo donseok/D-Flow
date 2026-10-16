@@ -5,6 +5,7 @@ import { listSettingsHistory, type SettingsHistoryResult, type SettingsHistorySc
 import { stampIn } from '@/lib/domain/calendar'
 import type { DictKey } from '@/lib/i18n/dict'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { settingKeyLabel } from '@/lib/settings/keyLabel'
 
 type T = (k: DictKey) => string
 
@@ -43,7 +44,7 @@ export function SettingsHistoryList({ scope, initial, timeZone }: {
     {rows.length > 0 && <ol className="divide-y divide-border">
       {rows.map(row => <li key={row.id} className="space-y-2 py-4 first:pt-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <strong className="text-sm text-fg">{row.key}</strong>
+          <strong className="text-sm text-fg" title={row.key}>{settingKeyLabel(row.key)}</strong>
           <span className="text-xs text-fg-secondary">{t('settings.history.revisionAt').replace('{revision}', String(row.revision)).replace('{changedAt}', String(formatDate(row.changedAt, timeZone, t)))}</span>
         </div>
         <p className="text-xs text-fg-secondary">{row.changedByName} · {SOURCE[row.source] ? t(SOURCE[row.source]) : row.source}{row.copiedFrom ? t('settings.history.copiedFrom').replace('{copiedFrom}', String(row.copiedFrom)) : ''}</p>

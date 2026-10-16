@@ -92,7 +92,7 @@ export async function ExecSummary({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <SignalTile label={tr('dash.exec.scheduleLabel')} value={schedValue} sub={schedSub}
             signal={s.schedule.signal} statusText={statusWord(s.schedule.signal, tr)} />
-          <SignalTile label={tr('dash.exec.riskLabel')} value={`${s.risk.delayed + s.risk.dueSoon}${tr('dash.unitCount')}`}
+          <SignalTile label={tr('dash.exec.riskLabel')} value={`${s.risk.atRisk}${tr('dash.unitCount')}`}
             sub={`${tr('dash.exec.delayed')} ${s.risk.delayed} · ${tr('dash.exec.dueSoon')} ${s.risk.dueSoon}`}
             signal={s.risk.signal} statusText={statusWord(s.risk.signal, tr)} />
           <SignalTile label={tr('dash.exec.milestoneLabel')} value={msValue} sub={msSub}

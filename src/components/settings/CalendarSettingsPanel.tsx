@@ -172,7 +172,6 @@ export function CalendarSettingsPanel(props: {
     ? <ConfigStateNotice kind="invalid" keyName={k} message={s.error} isAdmin={canEdit} settingsHref={href} />
     : null
   const fieldNotice = (k: Key) => fieldErrors[k] ? <ConfigStateNotice kind="field" message={fieldErrors[k]} /> : null
-  const keyLine = (k: Key) => <p className="text-meta text-fg-muted">{k}</p>
   const head = (k: Key, s: CalendarFieldState<unknown>, applies: string, labelFor?: string) => (
     <div className="flex flex-wrap items-center justify-between gap-2">
       {labelFor
@@ -197,7 +196,6 @@ export function CalendarSettingsPanel(props: {
           scheduled={isProject ? scheduled : null} currentDay={currentDay ?? undefined} review={isProject && weekChanged ? review : null}
           onClear={baseline.weekDay === '' && draft.weekDay !== '' ? () => edit({ weekDay: '' }, 'calendar.week_start') : undefined} />
         {fieldNotice('calendar.week_start')}
-        {keyLine('calendar.week_start')}
       </section>
 
       <section className="space-y-2 border-b border-border pb-4" data-field="calendar.working_days" aria-label={t(LABEL['calendar.working_days'])}>
@@ -205,7 +203,6 @@ export function CalendarSettingsPanel(props: {
         {corruptNotice('calendar.working_days', props.workingDays, '#calendar-working-days')}
         <WorkingDaysEditor value={draft.workingDays} onChange={days => edit({ workingDays: days }, 'calendar.working_days')} disabled={inputsLocked} />
         {fieldNotice('calendar.working_days')}
-        {keyLine('calendar.working_days')}
       </section>
 
       <section className="space-y-2" data-field="calendar.timezone" aria-label={t(LABEL['calendar.timezone'])}>
@@ -214,7 +211,6 @@ export function CalendarSettingsPanel(props: {
         <TimezoneSelect value={draft.timezone} onChange={tz => edit({ timezone: tz }, 'calendar.timezone')} disabled={inputsLocked}
           suggestion={suggestion && suggestion !== draft.timezone.trim() && !inputsLocked ? { label: t('settings.calendarPanel.suggestTz').replace('{suggestion}', String(suggestion)), value: suggestion } : null} />
         {fieldNotice('calendar.timezone')}
-        {keyLine('calendar.timezone')}
       </section>
 
       {conflict && <ConflictCompare rows={changed.map(k => ({ key: k, label: t(LABEL[k]), mine: String(stored(draft, k)),

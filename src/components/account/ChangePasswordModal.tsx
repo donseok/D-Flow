@@ -6,6 +6,7 @@ import { useLocale } from '@/components/providers/LocaleProvider'
 import { useToast } from '@/components/ui/Toast'
 import { isValidPassword } from '@/lib/domain/accounts'
 import { createBrowserClient } from '@/lib/supabase/client'
+import { reauthErrorKey, updateErrorKey } from '@/lib/auth/passwordChangeError'
 
 /**
  * 로그인한 본인의 비밀번호 변경 — 기존/신규 두 칸만. 저장 시 즉시 적용.
@@ -40,13 +41,18 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
         const { error: reauth } = await sb.auth.signInWithPassword({ email, password: current })
         if (reauth) {
           const code = (reauth as { code?: string }).code
-          setError(code === 'invalid_credentials'
-            ? t('account.pw.err.currentWrong')
-            : t('account.pw.err.reauthFailed').replace('{message}', () => String(reauth.message)))
+          if (code !== 'invalid_credentials') console.error('[ChangePasswordModal] 기존 비밀번호 확인 실패:', code ?? reauth.name, reauth.message)
+          setError(t(reauthErrorKey(code)))
           return
         }
         const { error: updErr } = await sb.auth.updateUser({ password: next })
-        if (updErr) { setError(updErr.message); return }
+        if (updErr) {
+          // 인증 서버의 원문은 화면에 내지 않는다 — 알려진 코드는 문구로 바꾸고 원문은 콘솔에만 남긴다
+          const code = (updErr as { code?: string }).code
+          console.error('[ChangePasswordModal] 비밀번호 변경 실패:', code ?? updErr.name, updErr.message)
+          setError(t(updateErrorKey(code)))
+          return
+        }
         toast({ title: t('account.pw.changed'), variant: 'success' })
         onClose()
       } catch {

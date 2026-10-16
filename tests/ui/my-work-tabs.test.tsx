@@ -78,7 +78,7 @@ describe('MyWorkTabNav & MyWorkInboxView (개정 §5.9.1, SPU2)', () => {
     const reviewTab = tabs[1]
     const inboxTab = tabs[2]
 
-    expect(workTab.textContent).toContain('내 작업')
+    expect(workTab.textContent).toContain('내 업무')
     expect(workTab.getAttribute('aria-selected')).toBe('false')
 
     expect(reviewTab.textContent).toContain('검토 대기')
