@@ -4,7 +4,7 @@ import { getMinuteFavorites, getMinutesExplorer, getMinutesPage, hasMinutesWitho
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { UUID_RE } from '@/lib/domain/validate'
-import { adminWorkspaceIdList, hasProjectRoleInWorkspace } from '@/lib/domain/authz'
+import { adminWorkspaceIdList, hasProjectRoleInWorkspace, isProjectMember } from '@/lib/domain/authz'
 import { identityTeamCodes } from '@/lib/domain/identityTeams'
 import { getMyProjectIds } from '@/lib/data/members'
 import { getAccountPrefs } from '@/app/actions/preferences'
@@ -100,6 +100,7 @@ export default async function MinutesPage({ params, searchParams }: {
           initialView={initialView} projects={projects} defaultTeam={identityTeamCodes(m, scope.ws.id)[0] ?? null}
           currentUserId={user?.id ?? null} adminWorkspaceIds={adminWorkspaceIdList(m)} canEdit={hasProjectRoleInWorkspace(m, scope.ws.id)}
           myProjectIds={myProjectIds}
+          memberProjectIds={[...(m?.projectWorkspace.keys() ?? [])].filter((pid) => isProjectMember(m, pid))}
           projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
           noProjectWorkspace={{ ok: true, workspaceId: scope.ws.id }}
           isSuperuser={m?.isSuperuser ?? false}

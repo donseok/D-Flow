@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useMinuteLinks } from './minuteLinks'
 import {
   BookOpenText, CheckSquare, ChevronDown, ChevronRight, ExternalLink, FileText, Folder, FolderOpen,
-  FolderPlus, MoreHorizontal, Paperclip, Square, Star,
+  MoreHorizontal, Paperclip, Square, Star,
 } from 'lucide-react'
 import type {
   ExplorerLeaf, FolderNode, MeetingCategory, Minute, MinuteFolder,
@@ -86,7 +86,7 @@ export function MinutesExplorer({
   folders, leaves, favorites, onToggleFavorite, onRetryFavorites,
   layout, currentUserId, adminWorkspaceIds = [], isSuperuser = false,
   onChanged, onFolderSelect, projects = [],
-  myProjectIds = null, meetingCategories,
+  myProjectIds = null, meetingCategories, canCreateFolder = false, memberProjectIds = [],
 }: {
   folders: MinuteFolder[]
   leaves: ExplorerLeaf[]
@@ -108,6 +108,10 @@ export function MinutesExplorer({
   myProjectIds?: string[] | null
   /** 연결 회의 프로젝트별 회의 범주(ExplorerData.meetingCategories) — 없으면 칩은 code */
   meetingCategories?: VocabByProject<'meetings.categories'>
+  /** 이 워크스페이스에 역할이 있는가(조회 전용 아님) — 서버 createMinuteFolder 의 hasProjectRoleInWorkspace 미러. 하위 폴더 추가 어포던스의 전제 */
+  canCreateFolder?: boolean
+  /** 멤버 이상인 프로젝트 id(관리자 승계 포함) — 프로젝트 폴더 아래 추가는 그 프로젝트 멤버만(서버 isProjectMember 미러). 슈퍼유저는 isSuperuser 로 합류 */
+  memberProjectIds?: string[]
 }) {
   const { t } = useLocale()
   const { toast } = useToast()
@@ -217,6 +221,10 @@ export function MinutesExplorer({
   const canManageFolder = (f: MinuteFolder) =>
     (f.createdBy !== null && f.createdBy === currentUserId)
     || isSuperuser || (f.workspaceId != null && adminWorkspaceIds.includes(f.workspaceId))
+  // 하위 폴더 추가 = 서버 createMinuteFolder 와 같은 식: 그 워크스페이스에 역할(canCreateFolder) + 프로젝트 폴더면 그 프로젝트 멤버 이상.
+  // 작성자·관리자 여부와 무관하다(개명·삭제·이동만 canManageFolder). 최상위 폴더는 서버가 항상 거부하므로 어포던스가 없다(W18)
+  const canAddSubFolder = (f: MinuteFolder) =>
+    canCreateFolder && (f.projectId == null || isSuperuser || memberProjectIds.includes(f.projectId))
   // 이동·일괄 지정 어포던스(D40) = 서버 checkOwner 와 같은 canEditMinute — 서버가 회의록의 project_id 그대로 판정해 싣는다.
   // 리프의 projectId 는 회의 폴백이 섞인 귀속 프로젝트라, 그것으로 판정하면 회의 프로젝트의 관리자에게 열리고 서버가 거부한다
   const canMoveLeaf = (l: ExplorerLeaf) => l.canEdit === true
@@ -485,7 +493,7 @@ export function MinutesExplorer({
             <span className="min-w-0 flex-1 truncate text-[13px]">{f.name}</span>
             <span className="shrink-0 text-xs tabular-nums text-fg-secondary">{node.totalCount}</span>
           </button>
-          {canManageFolder(f) && (
+          {(canManageFolder(f) || canAddSubFolder(f)) && (
             <div className="relative shrink-0">
               <button onClick={() => setMenuFor(cur => (cur === f.id ? null : f.id))}
                 aria-label={t('min.fold.menuAria')} aria-expanded={menuFor === f.id}
@@ -499,19 +507,19 @@ export function MinutesExplorer({
                   <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-border bg-surface p-1 shadow-[var(--shadow-md)]">
                     {/* 팀 루트 시드(편철 앵커)만 개명·삭제 불가 — 하위 폴더는 개명·삭제가
                         업로드·수정 모달의 하위 구분 옵션에 그대로 반영된다(서버 가드와 동일 기준) */}
-                    {!isLockedRootFolder(f) && (
+                    {canManageFolder(f) && !isLockedRootFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'rename', folder: f }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-fg hover:bg-surface-subtle">
                         {t('min.fold.rename')}
                       </button>
                     )}
-                    {folderDepthOf(folders, f.id) < MINUTE_FOLDER_DEPTH_MAX && (
+                    {canAddSubFolder(f) && folderDepthOf(folders, f.id) < MINUTE_FOLDER_DEPTH_MAX && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'create', parentId: f.id }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-fg hover:bg-surface-subtle">
                         {t('min.fold.addSub')}
                       </button>
                     )}
-                    {!isLockedRootFolder(f) && (
+                    {canManageFolder(f) && !isLockedRootFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'delete', folder: f }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-danger hover:bg-surface-subtle">
                         {t('min.fold.delete')}
@@ -598,12 +606,6 @@ export function MinutesExplorer({
               <FolderOpen aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
               <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{t('min.exp.all')}</span>
               <span className="shrink-0 text-xs tabular-nums text-fg-secondary">{total}</span>
-            </button>
-            <button onClick={() => setManage({ mode: 'create', parentId: null })}
-              aria-label={t('min.fold.new')} title={t('min.fold.new')}
-              className="shrink-0 rounded-md p-1 text-fg-muted transition-colors duration-100 hover:bg-surface-subtle hover:text-fg">
-              <FolderPlus aria-hidden className="h-4 w-4" />
-              <span className="sr-only">{t('min.fold.new')}</span>
             </button>
           </div>
           {/* 탐색기 최상위 = 프로젝트 그룹(0076) — 그룹 하나(전부 미지정)뿐이면 헤더 하나 아래
