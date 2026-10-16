@@ -390,7 +390,7 @@ export const settingsKo = {
   'settings.teams.codeEdit': '{name} 코드 바꾸기',
   'settings.teams.codeDialogTitle': '팀 코드 바꾸기',
   'settings.teams.codeDialogDesc': "'{name}' 팀의 코드 {code} 를 바꿉니다. 작업 담당·명단·업무영역·회의록은 그대로 이어집니다.",
-  'settings.teams.codeDialogWarn': '이미 엑셀로 내보낸 파일의 팀 열은 옛 코드입니다 — 그 파일을 다시 가져오면 팀 열이 맞지 않을 수 있습니다. 저장해 둔 엑셀 양식의 팀 열, 세부업무 이름, 변경 이력, 회의록의 지난 버전에 적힌 옛 코드도 바뀌지 않습니다.',
+  'settings.teams.codeDialogWarn': '이미 엑셀로 내보낸 파일의 팀 열은 옛 코드입니다 — 그 파일을 다시 가져오면 팀 열이 맞지 않을 수 있습니다. 세부업무 이름, 변경 이력, 회의록의 지난 버전에 적힌 옛 코드도 바뀌지 않습니다. 저장해 둔 엑셀 양식의 팀 열은 새 코드로 함께 맞추며, 맞추지 못한 프로젝트가 있으면 알려 드립니다.',
   'settings.teams.codeNewLabel': '새 코드',
   'settings.teams.codeSave': '코드 바꾸기',
   'settings.teams.codeSaving': '바꾸는 중…',

@@ -36,3 +36,12 @@ describe('C5 — 공개 범위 카드 문구는 비공개의 실제 동작(직�
     expect(text).toContain('워크스페이스 관리자')
   })
 })
+
+describe('C7 — 팀 코드 바꾸기 경고는 저장해 둔 엑셀 양식을 서버가 맞춘다는 사실과 어긋나지 않는다', () => {
+  it('양식의 팀 열을 "바뀌지 않는다"고 하지 않고 함께 맞춘다고 말한다', () => {
+    const warn = t('settings.teams.codeDialogWarn')
+    const unchanged = warn.slice(0, warn.indexOf('바뀌지 않습니다.') + 8)
+    expect(unchanged).not.toContain('저장해 둔 엑셀 양식')
+    expect(warn).toContain('저장해 둔 엑셀 양식의 팀 열은 새 코드로 함께 맞추며')
+  })
+})
