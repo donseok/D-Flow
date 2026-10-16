@@ -410,8 +410,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
               invalid={!dueSoonDays.ok || !delayedRedCount.ok} />
           </SectionCard>
         )}
-      {/* ── 공개 범위 (플랫폼 관리자에게만 보인다 — SP3a 스펙 §9 #9 의 기본값). 서버(setProjectPrivacy)는 프로젝트 관리자도 허용한다: 화면 노출만 더 좁다 ── */}
-        {isSuperuser && (
+      {/* ── 공개 범위 — 프로젝트 관리자(서버 setProjectPrivacy = requireProjectAdmin 과 같은 기준). 2026-10-16 결정으로 SP3a §9 #9 기본값(플랫폼 관리자만)을 고쳤다:
+            비공개는 명단 밖 멤버에게 숨기는 것이라 명단을 정하는 프로젝트 관리자의 몫이고, 워크스페이스·플랫폼 관리자는 여전히 본다(canSeeProject) ── */}
+        {isAdmin && (
           <SectionCard
             searchText="프로젝트 공개 범위 비공개"
             title={t('settings.privacyTitle')}

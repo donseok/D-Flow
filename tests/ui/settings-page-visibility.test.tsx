@@ -107,13 +107,14 @@ describe('설정 페이지 — 표시 조건(스펙 §5.1·§9 #7·#8·#9)', () 
     h.actor.mockResolvedValue(makeMemberActor('p1'))
     await expect(render()).rejects.toThrow('NEXT_REDIRECT')
   })
-  it('공개 범위 스위치는 플랫폼 관리자에게만 보인다(#9 — 서버 권한은 SP2 대로)', async () => {
-    await render()
-    expect(h.privacy).not.toHaveBeenCalled()
+  it('공개 범위 스위치는 프로젝트 관리자에게 보인다 — 서버(setProjectPrivacy = requireProjectAdmin)와 같은 기준(2026-10-16 결정, #9 기본값 개정)', async () => {
+    await render()   // 기본 행위자 = 그 프로젝트의 관리자(플랫폼 관리자 아님)
+    expect(h.privacy).toHaveBeenCalledTimes(1)
+    expect(h.privacy.mock.calls[0][0]).toMatchObject({ projectId: 'p1' })
+    h.privacy.mockClear()
     h.actor.mockResolvedValue(makeSuperuser({ projectRoles: new Map([['p1', 'admin']]), projectWorkspace: new Map([['p1', WS]]) }))
     await render()
     expect(h.privacy).toHaveBeenCalledTimes(1)
-    expect(h.privacy.mock.calls[0][0]).toMatchObject({ projectId: 'p1' })
   })
   it('주간 업무영역과 이슈 영역 편집기를 각각의 종류와 함께 표시한다(SP4 D26·SP5 B1)', async () => {
     h.actor.mockResolvedValue(makeSuperuser({ projectRoles: new Map([['p1', 'admin']]), projectWorkspace: new Map([['p1', WS]]) }))
