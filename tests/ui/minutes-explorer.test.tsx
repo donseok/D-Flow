@@ -200,8 +200,28 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
     // 시드(createdBy null) PMO 행: 메뉴 없음 / 본인 소유 생산계획·APS 회의: 메뉴 있음
     const menuBtns = [...container.querySelectorAll('button[aria-label="min.fold.menuAria"]')]
     expect(menuBtns.length).toBe(2)
-    await mount({ isSuperuser: true })
+    await mount({ isSuperuser: true, canCreateFolder: true })
     expect([...container.querySelectorAll('button[aria-label="min.fold.menuAria"]')].length).toBe(3)
+    // 하위 폴더를 만들 수 없는 관리자(역할 없음)에게 팀 시드 행은 개명·삭제도 추가도 없다 — 빈 메뉴를 내지 않는다
+    await mount({ isSuperuser: true })
+    expect([...container.querySelectorAll('button[aria-label="min.fold.menuAria"]')].length).toBe(2)
+  })
+
+  it('최대 깊이 폴더에서는 일반 멤버(추가만 가능)에게 ⋯ 단추가 없다 — 빈 메뉴를 내지 않는다', async () => {
+    // 5단 사슬: 맨 아래(깊이 5)는 더 못 만든다. 남의 폴더라 개명·삭제도 없다
+    const chain = [
+      folder('d1', 'D1', null, 0, 'u2'), folder('d2', 'D2', 'd1', 0, 'u2'), folder('d3', 'D3', 'd2', 0, 'u2'),
+      folder('d4', 'D4', 'd3', 0, 'u2'), folder('d5', 'D5', 'd4', 0, 'u2'),
+    ]
+    await mount({ folders: chain, leaves: [], canCreateFolder: true })
+    const rowOf = (name: string) => [...container.querySelectorAll('li')].filter(li => li.querySelector(':scope > div')?.textContent?.includes(name)).pop()
+    const menuIn = (name: string) => rowOf(name)?.querySelector(':scope > div button[aria-label="min.fold.menuAria"]') ?? null
+    expect(rowOf('D5')).toBeTruthy()
+    expect(menuIn('D4')).not.toBeNull()   // 깊이 4 아래에는 한 단 더 만들 수 있다
+    expect(menuIn('D5')).toBeNull()       // 깊이 5: 추가 불가 + 개명·삭제 권한 없음 → 단추 자체가 없다
+    // 같은 깊이여도 내가 만든 폴더면 개명·삭제가 있어 메뉴가 선다
+    await mount({ folders: chain.map(f => f.id === 'd5' ? { ...f, createdBy: 'u1' } : f), leaves: [], canCreateFolder: true })
+    expect(menuIn('D5')).not.toBeNull()
   })
 
   it('폴더 관리는 작성자 ∨ 그 폴더 워크스페이스 관리자(0006) — 프로젝트 관리자만으로는 열리지 않는다', async () => {
@@ -215,7 +235,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
     await mount({ folders: fs, leaves: [], adminWorkspaceIds: ['w2'] })     // 다른 워크스페이스 관리자
     expect(menus()).toBe(0)
     await mount({ folders: fs, leaves: [], adminWorkspaceIds: ['w1'] })     // 그 워크스페이스 관리자
-    expect(menus()).toBe(2)
+    expect(menus()).toBe(1)                                                 // 남의 폴더만 — 시드 PMO 는 개명·삭제 불가에 추가 권한(canCreateFolder)도 없어 빈 메뉴가 되므로 단추가 없다
     expect(dropTarget('f-x').getAttribute('draggable')).toBe('true')
   })
 

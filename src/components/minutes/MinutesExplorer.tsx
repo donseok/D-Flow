@@ -223,8 +223,12 @@ export function MinutesExplorer({
     || isSuperuser || (f.workspaceId != null && adminWorkspaceIds.includes(f.workspaceId))
   // 하위 폴더 추가 = 서버 createMinuteFolder 와 같은 식: 그 워크스페이스에 역할(canCreateFolder) + 프로젝트 폴더면 그 프로젝트 멤버 이상.
   // 작성자·관리자 여부와 무관하다(개명·삭제·이동만 canManageFolder). 최상위 폴더는 서버가 항상 거부하므로 어포던스가 없다(W18)
+  // 최대 깊이의 폴더 아래에는 더 못 만든다 — 깊이 제한도 이 식에 넣어, 메뉴에 보일 항목이 없는 '…' 단추를 내지 않게 한다
   const canAddSubFolder = (f: MinuteFolder) =>
     canCreateFolder && (f.projectId == null || isSuperuser || memberProjectIds.includes(f.projectId))
+    && folderDepthOf(folders, f.id) < MINUTE_FOLDER_DEPTH_MAX
+  // 개명·삭제는 팀 루트 시드(편철 앵커)에는 없다 — 관리 권한이 있어도 시드 폴더만으로는 메뉴 항목이 없다
+  const canRenameOrDeleteFolder = (f: MinuteFolder) => canManageFolder(f) && !isLockedRootFolder(f)
   // 이동·일괄 지정 어포던스(D40) = 서버 checkOwner 와 같은 canEditMinute — 서버가 회의록의 project_id 그대로 판정해 싣는다.
   // 리프의 projectId 는 회의 폴백이 섞인 귀속 프로젝트라, 그것으로 판정하면 회의 프로젝트의 관리자에게 열리고 서버가 거부한다
   const canMoveLeaf = (l: ExplorerLeaf) => l.canEdit === true
@@ -493,7 +497,7 @@ export function MinutesExplorer({
             <span className="min-w-0 flex-1 truncate text-[13px]">{f.name}</span>
             <span className="shrink-0 text-xs tabular-nums text-fg-secondary">{node.totalCount}</span>
           </button>
-          {(canManageFolder(f) || canAddSubFolder(f)) && (
+          {(canRenameOrDeleteFolder(f) || canAddSubFolder(f)) && (
             <div className="relative shrink-0">
               <button onClick={() => setMenuFor(cur => (cur === f.id ? null : f.id))}
                 aria-label={t('min.fold.menuAria')} aria-expanded={menuFor === f.id}
@@ -507,19 +511,19 @@ export function MinutesExplorer({
                   <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-border bg-surface p-1 shadow-[var(--shadow-md)]">
                     {/* 팀 루트 시드(편철 앵커)만 개명·삭제 불가 — 하위 폴더는 개명·삭제가
                         업로드·수정 모달의 하위 구분 옵션에 그대로 반영된다(서버 가드와 동일 기준) */}
-                    {canManageFolder(f) && !isLockedRootFolder(f) && (
+                    {canRenameOrDeleteFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'rename', folder: f }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-fg hover:bg-surface-subtle">
                         {t('min.fold.rename')}
                       </button>
                     )}
-                    {canAddSubFolder(f) && folderDepthOf(folders, f.id) < MINUTE_FOLDER_DEPTH_MAX && (
+                    {canAddSubFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'create', parentId: f.id }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-fg hover:bg-surface-subtle">
                         {t('min.fold.addSub')}
                       </button>
                     )}
-                    {canManageFolder(f) && !isLockedRootFolder(f) && (
+                    {canRenameOrDeleteFolder(f) && (
                       <button onClick={() => { setMenuFor(null); setManage({ mode: 'delete', folder: f }) }}
                         className="block w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-danger hover:bg-surface-subtle">
                         {t('min.fold.delete')}
