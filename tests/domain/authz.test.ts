@@ -4,7 +4,7 @@ import {
   toProjectActorView, actorFromView, canSeeProject, workspaceRoleIn, isWorkspaceAdmin, isWorkspaceMember, hasWorkspaceMembership,
   isAdminAccessRole, hasProjectRoleInWorkspace, adminWorkspaceIdList, workspaceAdminVerdict,
   isHiddenProject, ACCESS_ROLE, WORKSPACE_ROLE, isMinuteMember, canEditMinute,
-  isAnyWorkspaceAdmin,
+  isAnyWorkspaceAdmin, canAdjustWorkflowStage,
 } from '@/lib/domain/authz'
 import { makeActor, makeAdminActor, makeMemberActor, makeSuperuser, hiddenIds } from '../fixtures/actor'
 
@@ -441,5 +441,18 @@ describe('보관된 워크스페이스 — 플랫폼 관리자에게도 없음',
     expect(workspaceRoleIn(member, 'ws-archived')).toBe(null)
     expect(workspaceAdminVerdict(member, 'ws-archived')).toBe('missing')
     expect(workspaceAdminVerdict(member, 'ws-live')).toBe('ok')
+  })
+})
+
+describe('canAdjustWorkflowStage — setWbsStage 의 requireSubtreeManagerOrAdmin 과 같은 축', () => {
+  it('관리자는 서브트리 관리자가 아니어도 된다', () => {
+    expect(canAdjustWorkflowStage({ isAdmin: true, isMember: true, subtreeManager: false })).toBe(true)
+  })
+  it('멤버는 서브트리 관리자일 때만 — 담당 팀 소속은 근거가 아니다', () => {
+    expect(canAdjustWorkflowStage({ isAdmin: false, isMember: true, subtreeManager: true })).toBe(true)
+    expect(canAdjustWorkflowStage({ isAdmin: false, isMember: true, subtreeManager: false })).toBe(false)
+  })
+  it('조회 전용(멤버 아님)은 서브트리 관리자여도 아니다', () => {
+    expect(canAdjustWorkflowStage({ isAdmin: false, isMember: false, subtreeManager: true })).toBe(false)
   })
 })

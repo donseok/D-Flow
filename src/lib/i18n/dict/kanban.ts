@@ -16,7 +16,7 @@ export const kanbanKo = {
   'kanban.topLevelFallback': '최상위 단계',
   'kanban.byOwner': '담당자별',
   'kanban.byStatus': '상태별',
-  'kanban.searchPlaceholder': '작업명·담당자 검색',
+  'kanban.searchPlaceholder': '작업명·코드·담당 팀 검색',
   'kanban.saving': '저장 중…',
   // 컬럼/보드
   'kanban.unassigned': '미배정',
@@ -77,6 +77,7 @@ export const kanbanKo = {
   // 카드 이동 메뉴·실패 복구·낭독 알림
   'kanban.liveStageChanged': '{name} 단계 변경: {stage}',
   'kanban.liveApproved': '{name} 승인 완료',
+  'kanban.approvalStateUnavailable': '승인 대기 단계를 확인하지 못해 승인하지 않았습니다. 잠시 뒤 다시 시도하세요.',
   'kanban.moveMenuAria': '{name} 이동 메뉴',
   'kanban.moveSelectAria': '{name} 이동 선택',
   'kanban.moveSaveFailed': '이동 저장에 실패했습니다.',

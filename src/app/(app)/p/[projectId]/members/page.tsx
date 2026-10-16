@@ -58,7 +58,10 @@ export default async function MembersPage({ params }: { params: Promise<{ projec
   const inviteTzError = inviteCal ? (inviteCal.ok ? null : inviteCal.error) : pc && !pc.ok ? pc.error : null
   const rows = roster.ok ? roster.rows : []
   if (!wsRoles.ok) console.error('[members] 워크스페이스 역할 조회 실패 — 실효 역할 확인 불가', projectId, wsRoles.error)
-  const effectiveRoles = Object.fromEntries(rows.map(row => [row.id, effectiveRoleOfRow(row, wsRoles.ok ? wsRoles.map : null)]))
+  // 비활성 명단 행은 권한을 주지 않는다(buildActor·myMemberIds 는 활성 행만 센다) — 그 사람의 실효 역할은 명단 권한이 없는 사람과 같다.
+  // 판정은 그대로 effectiveRoleOfRow 이고, 비활성 행의 명단 권한만 빼고 넘긴다(표시 — B6). 워크스페이스 관리자 승계는 그대로 남는다
+  const effectiveRoles = Object.fromEntries(rows.map(row => [row.id,
+    effectiveRoleOfRow(row.active ? row : { ...row, accessRole: null }, wsRoles.ok ? wsRoles.map : null)]))
   // 팀 후보 = 이 프로젝트에서 고를 수 있는 활성 팀(프로젝트 팀이 있으면 그것만, 없으면 공용) — 요청 범위 원천(세션 RLS, 레이아웃과 같은
   // 요청 캐시). 편집(명단 행·초대)에만 쓰므로 관리자에게만 싣는다 — 읽기 전용 표는 행이 가진 팀 코드로 그린다.
   // 읽기 실패는 던진다(오류 경계) — 빈 후보로 명단 편집을 열면 저장이 팀을 지운다

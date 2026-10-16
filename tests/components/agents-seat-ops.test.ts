@@ -124,3 +124,16 @@ describe('사유 — 서버가 비면 거부하는 op', () => {
     expect(reject.why).toContain('에이전트가 사유를 읽고')
   })
 })
+
+describe('결정 대기(BLOCKED) 안내는 답하는 길을 사실대로 말한다(B4)', () => {
+  it('웹에는 결정 대기 좌석에 답을 적는 op 가 없다 — 그래서 안내가 위임·승인 탭·좌석을 답하는 곳으로 가리키지 않는다', async () => {
+    const ops = opsFor({ state: 'BLOCKED', canManage: true, assigneeMine: true, canApprove: true })
+    // 중단(확인만)뿐 — 사유·답을 받는 op(needsNote)가 없다
+    expect(ops.map(o => o.spec.kind)).toEqual(['stop'])
+    expect(ops.some(o => o.spec.needsNote)).toBe(false)
+    const { t } = await import('@/lib/i18n/dict')
+    const text = t('agents.roster.answerWhere')
+    expect(text).not.toMatch(/위임·승인 탭|좌석에서 합니다/)
+    expect(text).toMatch(/에이전트 세션/)
+  })
+})

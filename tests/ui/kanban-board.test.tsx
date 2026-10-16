@@ -205,3 +205,35 @@ describe('KanbanBoard — 진행 모드 기본', () => {
     expect(document.body.textContent).toContain('kanban.progressTitle')
   })
 })
+
+describe('칸반 검색칸 — 안내가 실제 검색 대상(작업명·코드·담당 팀)과 같다(B3)', () => {
+  let container: HTMLDivElement, root: Root
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  it('담당 팀 코드로 찾는다 — 안내 문구는 사람(담당자)이 아니라 담당 팀을 말한다', async () => {
+    const { t } = await import('@/lib/i18n/dict')
+    const actor = makeProjectActorView({ projectRole: 'admin', memberId: 'm1' })
+    await act(async () => {
+      root.render(<KanbanBoard projectId="p1" items={[n('A', { owners: [{ team: 'PMO', kind: 'primary' }] }), n('B', { owners: [{ team: 'ERP', kind: 'primary' }] })]}
+        actorView={actor} today="2026-07-15" />)
+    })
+    const input = container.querySelector('input[aria-label="kanban.searchPlaceholder"]') as HTMLInputElement
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    await act(async () => {
+      setValue.call(input, 'ERP')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    const names = [...container.querySelectorAll('[data-card-body] p.font-semibold')].map(p => p.textContent)
+    expect(names).toEqual(['B'])
+    expect(t('kanban.searchPlaceholder')).toContain('팀')
+    expect(t('kanban.searchPlaceholder')).not.toContain('담당자')
+  })
+})

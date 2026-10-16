@@ -12,16 +12,18 @@ import type { ApprovalStepDef } from '@/lib/domain/approvalSteps'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
-const { toastFn, refreshFn, setWbsStageMock, approveWbsStepMock } = vi.hoisted(() => ({
+const { toastFn, refreshFn, setWbsStageMock, approveWbsStepMock, getWbsAssigneeStageMock } = vi.hoisted(() => ({
   toastFn: vi.fn(),
   refreshFn: vi.fn(),
   setWbsStageMock: vi.fn(async () => ({ ok: true })),
   approveWbsStepMock: vi.fn(async () => ({ ok: true })),
+  getWbsAssigneeStageMock: vi.fn(async (): Promise<unknown> => null),
 }))
 
 vi.mock('@/app/actions/wbsAssign', () => ({
   setWbsStage: (...a: unknown[]) => setWbsStageMock(...(a as [])),
   approveWbsStep: (...a: unknown[]) => approveWbsStepMock(...(a as [])),
+  getWbsAssigneeStage: (...a: unknown[]) => getWbsAssigneeStageMock(...(a as [])),
 }))
 vi.mock('@/app/actions/wbs', () => ({
   updateActual: vi.fn(async () => ({ ok: true })),
@@ -235,6 +237,140 @@ describe('KanbanBoard — 흐름(flow) 모드 화면', () => {
       await openMenu()
       expect(byId('kanban-card-move-stage-ip').disabled).toBe(true)
     })
+  })
+})
+
+describe('KanbanBoard — 흐름 승인은 서버가 판독한 대기 단계로 요청한다(B1)', () => {
+  let container: HTMLDivElement, root: Root
+  beforeEach(() => {
+    approveWbsStepMock.mockClear()
+    getWbsAssigneeStageMock.mockReset()
+    toastFn.mockClear()
+    refreshFn.mockClear()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+  const steps2: ApprovalStepDef[] = [
+    { code: 'lead', label: '팀장 승인', approver: 'subtree_or_admin' },
+    { code: 'pm', label: 'PM 최종 승인', approver: 'admin' },
+  ]
+  async function clickApprove() {
+    await act(async () => {
+      root.render(<KanbanBoard projectId="p1" items={[n('TaskIm', { stage: 'im', rolledActualPct: 90 })]} actorView={ADMIN} today="2026-07-25" approvalSteps={steps2} />)
+    })
+    const btn = container.querySelector('[data-testid="kanban-card-approve-btn"]') as HTMLButtonElement
+    expect(btn).toBeTruthy()
+    await act(async () => { btn.click() })
+  }
+
+  it('첫 단계가 이미 승인돼 둘째 단계가 대기 중이면 둘째 단계 code 로 승인한다(첫 단계로 보내지 않는다)', async () => {
+    getWbsAssigneeStageMock.mockResolvedValue({ assigneeMemberId: null, stage: 'im', devWorkflow: true, delegated: false, canDevWorkflow: true,
+      approval: { step: 'pm', index: 2, total: 2, label: 'PM 최종 승인' } })
+    await clickApprove()
+    expect(getWbsAssigneeStageMock).toHaveBeenCalledWith('TaskIm')
+    expect(approveWbsStepMock).toHaveBeenCalledWith('TaskIm', 'pm')
+  })
+
+  it('대기 단계를 읽지 못하면 승인을 보내지 않고 실패를 알린다(쓰기 전 선행 조회 실패는 중단)', async () => {
+    getWbsAssigneeStageMock.mockResolvedValue(null)
+    await clickApprove()
+    expect(approveWbsStepMock).not.toHaveBeenCalled()
+    expect(toastFn).toHaveBeenCalledWith(expect.objectContaining({ variant: 'error' }))
+  })
+
+  it('그새 검수 대기에서 벗어났으면 승인하지 않고 "그새 바뀜"을 알린 뒤 다시 읽는다', async () => {
+    getWbsAssigneeStageMock.mockResolvedValue({ assigneeMemberId: null, stage: 'xx', devWorkflow: true, delegated: false, canDevWorkflow: true, approval: null })
+    await clickApprove()
+    expect(approveWbsStepMock).not.toHaveBeenCalled()
+    expect(toastFn).toHaveBeenCalledWith({ title: 'common.changedMeanwhile', variant: 'error' })
+    expect(refreshFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('서버가 단계가 바뀌었다(stale)고 하면 다시 읽는다', async () => {
+    getWbsAssigneeStageMock.mockResolvedValue({ assigneeMemberId: null, stage: 'im', devWorkflow: true, delegated: false, canDevWorkflow: true,
+      approval: { step: 'lead', index: 1, total: 2, label: '팀장 승인' } })
+    approveWbsStepMock.mockResolvedValueOnce({ ok: false, stale: true, error: '서버 문구' } as never)
+    await clickApprove()
+    expect(approveWbsStepMock).toHaveBeenCalledWith('TaskIm', 'lead')
+    expect(toastFn).toHaveBeenCalledWith(expect.objectContaining({ variant: 'error' }))
+    expect(refreshFn).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('KanbanBoard — 흐름 단추 노출은 서버 가드와 같은 근거다(B2)', () => {
+  let container: HTMLDivElement, root: Root
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+  const q = (id: string) => container.querySelector(`[data-testid="${id}"]`) as HTMLButtonElement | null
+  /** 상위 작업(Phase, 담당 m-lead) 아래 검수 대기 리프(담당 leafAssignee, 담당 팀 PMO) */
+  const tree = (leafAssignee: string | null) => [n('Phase', { assigneeMemberId: 'm-lead' }, [
+    n('TaskIm', { parentId: 'Phase', stage: 'im', rolledActualPct: 90, assigneeMemberId: leafAssignee }),
+  ])]
+  async function render(actorView: Parameters<typeof KanbanBoard>[0]['actorView'], items: ComputedItem[], approvalSteps?: ApprovalStepDef[]) {
+    await act(async () => {
+      root.render(<KanbanBoard projectId="p1" items={items} actorView={actorView} today="2026-07-25" approvalSteps={approvalSteps ?? null} />)
+    })
+  }
+  const TEAM_MEMBER = makeProjectActorView({ userId: 'u-team', projectRole: 'member', memberId: 'm-team', rosterTeamIds: ['t-pmo'], rosterTeamCodes: ['PMO'], primaryTeamCode: 'PMO' })
+  const LEAD = makeProjectActorView({ userId: 'u-lead', projectRole: 'member', memberId: 'm-lead' })
+  const LEAD_VIEW_ONLY = makeProjectActorView({ userId: 'u-lead', projectRole: null, memberId: 'm-lead' })
+
+  it('담당 팀 멤버라도 관리자·상위 작업 담당자가 아니면 단계 이동·승인 단추가 없다(서버가 거절할 단추를 보이지 않는다)', async () => {
+    await render(TEAM_MEMBER, tree('m-dev'))
+    expect(q('kanban-card-move-trigger')).toBeNull()
+    expect(q('kanban-card-approve-btn')).toBeNull()
+  })
+
+  it('상위 작업 담당자(서브트리 관리자)는 담당 팀이 아니어도 단계 이동·승인을 할 수 있다', async () => {
+    await render(LEAD, tree('m-dev'))
+    expect(q('kanban-card-move-trigger')).not.toBeNull()
+    expect(q('kanban-card-approve-btn')).not.toBeNull()
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-xx')).not.toBeNull()
+  })
+
+  it('상위 작업 담당자가 그 리프의 담당자이기도 하면 승인(과 완료 지정)은 없다 — 자기 승인 금지', async () => {
+    await render(LEAD, tree('m-lead'))
+    expect(q('kanban-card-move-trigger')).not.toBeNull()
+    expect(q('kanban-card-approve-btn')).toBeNull()
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-ip')).not.toBeNull()
+    expect(q('kanban-card-move-stage-xx')).toBeNull()
+  })
+
+  it('승인 단계가 모두 관리자 승인이면 상위 작업 담당자에게 승인 단추가 없다', async () => {
+    await render(LEAD, tree('m-dev'), [{ code: 'review', label: null, approver: 'admin' }])
+    expect(q('kanban-card-approve-btn')).toBeNull()
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-xx')).toBeNull()
+  })
+
+  it('승인 단계가 둘 이상이면 완료(xx) 직행 선택지가 없다 — 서버가 approval_required 로 거절한다', async () => {
+    await render(ADMIN, [n('TaskIp', { stage: 'ip', rolledActualPct: 50 })], [
+      { code: 'lead', label: '팀장 승인', approver: 'subtree_or_admin' },
+      { code: 'pm', label: 'PM 최종 승인', approver: 'admin' },
+    ])
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-im')).not.toBeNull()
+    expect(q('kanban-card-move-stage-xx')).toBeNull()
+  })
+
+  it('조회 전용 명단(역할 없음)은 상위 작업 담당자여도 단추가 없다', async () => {
+    await render(LEAD_VIEW_ONLY, tree('m-dev'))
+    expect(q('kanban-card-move-trigger')).toBeNull()
+    expect(q('kanban-card-approve-btn')).toBeNull()
   })
 })
 

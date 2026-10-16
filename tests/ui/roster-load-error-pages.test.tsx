@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => {
     getMinuteDetail: vi.fn(),
     getMinuteVersions: vi.fn(),
     getSession: vi.fn(),
+    getAttendanceRecords: vi.fn(),
     WbsGanttSheet: view(),
     AgentHubView: view(),
     AttendanceView: view(),
@@ -54,7 +55,7 @@ vi.mock('@/lib/settings/projectConfig', async (importOriginal) => {
   }
 })
 vi.mock('@/lib/data/agentHub', () => ({ getAgentHub: vi.fn(async () => ({})) }))
-vi.mock('@/lib/data/attendance', () => ({ getAttendanceRecords: vi.fn(async () => []) }))
+vi.mock('@/lib/data/attendance', () => ({ getAttendanceRecords: mocks.getAttendanceRecords }))
 vi.mock('@/lib/data/meetings', () => ({
   getProjectMeetingData: vi.fn(async () => ({ ok: true, meetings: [], exceptions: [] })),
   resolveMemberIds: vi.fn(async () => []),
@@ -119,8 +120,29 @@ beforeEach(() => {
   mocks.getMinuteDetail.mockResolvedValue(minuteDetail())
   mocks.getMinuteVersions.mockResolvedValue({ ok: true, rows: [] })
   mocks.getSession.mockResolvedValue(null)
+  mocks.getAttendanceRecords.mockResolvedValue({ ok: true, records: [] })
 })
 afterEach(() => errSpy.mockRestore())
+
+describe('attendance 페이지 — 근태 조회 실패(B5)', () => {
+  it('조회 실패를 "아직 등록된 근태가 없습니다"로 그리지 않고 막는 오류로 띄운다 — 빈 달력·입력 화면을 그리지 않는다', async () => {
+    const { t } = await import('@/lib/i18n/dict')
+    mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [ALICE] })
+    mocks.getAttendanceRecords.mockResolvedValue({ ok: false, error: '근태 기록을 불러오지 못했습니다.' })
+    const html = renderToStaticMarkup((await AttendancePage({ params })) as ReactElement)
+    expect(html).toContain('role="alert"')
+    expect(html).toContain(t('att.loadFailed'))
+    expect(html).not.toContain(t('att.empty.all'))
+    expect(mocks.AttendanceView).not.toHaveBeenCalled()
+  })
+  it('정상은 기록을 그대로 넘긴다', async () => {
+    const rec = { id: 'r1', projectId: PID, memberId: 'm1', date: '2026-10-01', type: 'leave', note: null }
+    mocks.getProjectRoster.mockResolvedValue({ ok: true, rows: [ALICE] })
+    mocks.getAttendanceRecords.mockResolvedValue({ ok: true, records: [rec] })
+    renderToStaticMarkup((await AttendancePage({ params })) as ReactElement)
+    expect(lastProps(mocks.AttendanceView).records).toEqual([rec])
+  })
+})
 
 describe.each(shellPages)('$name 페이지 — 명단 조회 실패', ({ name, view, render }) => {
   it('실패는 사유를 경고로 띄우고 로그를 남긴다 — 본문은 그대로 그린다', async () => {

@@ -17,6 +17,7 @@ export const attendanceKo = {
   'att.clickToEdit': '클릭하여 수정',
   // '+N건' 조합용 접미사 — JSX에서 {n} 뒤에 붙인다.
   'att.moreSuffix': '건',
+  'att.loadFailed': '근태 기록을 불러오지 못했습니다',
   'att.empty.title': '근태 기록이 없습니다',
   'att.empty.all': '아직 등록된 근태가 없습니다.',
   'att.empty.member': '선택한 멤버의 근태 기록이 없습니다.',
