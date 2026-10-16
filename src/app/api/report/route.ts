@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
     if (roots.has('sections')) {
       const sheet = await getWeeklySheet(projectId, ref!.weekStart)
       const fieldKeys = roots.has('custom') ? activeFieldKeys(valueOf(cfg, 'fields.weekly_row')) : []
-      sections = weeklyCatalogSections(sheet?.rows ?? [], areas, fieldKeys)
+      sections = weeklyCatalogSections(sheet?.rows ?? [], areas, fieldKeys, valueOf(cfg, 'weekly.columns'))
     }
 
     let aiComment: ReturnType<typeof aiCommentItem>[] | undefined

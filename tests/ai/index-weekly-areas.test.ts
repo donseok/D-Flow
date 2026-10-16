@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { vi } from 'vitest'
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: vi.fn(async () => makeProjectConfig()) }))
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
+import { describe, expect, it } from 'vitest'
 import { createSupabaseIndexContentLoader } from '@/lib/ai/index/content'
 
 // 주간 색인 로더(스펙 §4.1.6) — 행은 영역 id 로 묶이고 머리는 영역 이름이다. 지운 열(section·module·sort_order)을 읽지 않는다.
@@ -51,7 +54,7 @@ describe('주간 색인 로더 — 영역 이름 머리·시트 순서', () => {
     expect(content.indexOf('## 실험')).toBeGreaterThan(-1)
     expect(content.indexOf('## 실험')).toBeLessThan(content.indexOf('## 운영'))
     expect(content.indexOf('## 운영')).toBeLessThan(content.indexOf('## 옛 영역 (비활성)'))
-    expect(content).toContain('금주 업무: 실험 설계')
+    expect(content).toContain('금주실적 내용: 실험 설계')
     const rowSelect = String((built.rows.select as ReturnType<typeof vi.fn>).mock.calls[0][0])
     expect(rowSelect).not.toMatch(/\b(section|module|sort_order)\b/)
     expect(built.areas.eq).toHaveBeenCalledWith('kind', 'weekly_section')

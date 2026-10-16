@@ -5,7 +5,7 @@ import { Modal } from '@/components/ui/Modal'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { KO_LOCALE } from '@/lib/i18n/format'
-import { orderAreas, WEEKLY_CELL_LABEL, WEEKLY_CELL_MAX, type WeeklyArea } from '@/lib/domain/weeklySheet'
+import { orderAreas, WEEKLY_CELL_LABEL, WEEKLY_CELL_MAX, type WeeklyCellKey, type WeeklyArea } from '@/lib/domain/weeklySheet'
 import { CARRY_SKIP, type CarryMapping, type CarryOverflow, type CarryPending } from '@/lib/domain/weeklyCarry'
 
 /** 이월 매핑 라운드의 대기 영역을 모은다(스펙 §5.1·D31) — 넘침만 돌아온 응답(대기 목록이 빔)에도 사용자가 고칠 줄이 창에
@@ -20,7 +20,8 @@ export function mergeCarrySources(prev: readonly CarryPending[], next: readonly 
  *  선택지는 지금 활성인 주간 영역(영역 순)과 '옮기지 않음'이다. 대기 영역을 모두 고르기 전에는 보내지 않는다 — 빠진 영역은
  *  서버가 다시 대기로 돌려준다. 고른 값의 뜻(지금 활성인 이 프로젝트 영역인지)은 서버의 carryOverRows 가 판정한다.
  *  화면은 라운드마다 key 로 창을 새로 연다 — 고른 값의 초기값은 mapping(직전 라운드에 보낸 매핑)에서만 온다. */
-export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}, busy, onSubmit, onClose }: {
+export function CarryMappingModal({ labels = WEEKLY_CELL_LABEL, open, pending, overflow, areas, mapping = {}, busy, onSubmit, onClose }: {
+  labels?: Record<WeeklyCellKey, string>
   open: boolean
   /** 고를 영역(지금 비활성인 원본 영역) — 화면이 라운드마다 모은 목록(mergeCarrySources) */
   pending: readonly CarryPending[]
@@ -70,7 +71,7 @@ export function CarryMappingModal({ open, pending, overflow, areas, mapping = {}
               <ul className="mt-1 list-disc pl-5">
                 {overflow.map(o => (
                   <li key={`${o.areaId}:${o.cell}`} data-carry-overflow={o.areaId}>
-                    {o.areaName} · {WEEKLY_CELL_LABEL[o.cell]} {t('weekly.unit.chars').replace('{n}', o.length.toLocaleString(KO_LOCALE))}
+                    {o.areaName} · {labels[o.cell]} {t('weekly.unit.chars').replace('{n}', o.length.toLocaleString(KO_LOCALE))}
                   </li>
                 ))}
               </ul>

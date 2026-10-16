@@ -290,7 +290,7 @@ describe('단일 반복 양식은 그대로다 — 이 변경 전 엔진의 출�
       })),
     } as unknown as CatalogModel
     const out = await slidesOf(await renderPptx(new Uint8Array(await readFile(defaultFormAssetPath('weekly_report_pptx'))), weekly, {}, options))
-    expect(out.map(sha)).toEqual(['e5079598417204c0', '1db90d0572a1ac4b', '567d522226657a82', '532cc25e93c3d63b'])
+    expect(out.map(sha)).toEqual(['e5079598417204c0', '32f0cdc32bdb4d11', '80a3e0dfe08361ba', 'c81466c5e50bd6d3'])
   })
 
   it('이 변경 전에 저장된 스캔으로 재스캔 없이 활성화 판정을 지나고, 지금 스캔도 같은 값이다', async () => {

@@ -35,7 +35,9 @@ function groupFindings(findings: LintFinding[]): { key: string; label: string; i
  *  점검은 묶음(groupOf — 호출부가 정한다) 안에서만 이뤄지므로(도메인 규칙) 목록도 묶음별로 묶어 보여준다.
  *  rows 는 화면 순서 그대로 넘긴다 — 묶음·행 순서가 이 순서를 따른다.
  *  저장은 부모가 넘긴 onApply(=runBatch)가 담당한다. 이 컴포넌트는 I/O를 하지 않는다. */
-export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, canApply = true, onClose, onApply, onGoToCell }: {
+export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, columns, labels, canApply = true, onClose, onApply, onGoToCell }: {
+  columns?: readonly WeeklyCellKey[]
+  labels?: Record<WeeklyCellKey, string>
   open: boolean
   rows: readonly R[]
   /** 점검 묶음 — 키로 견주고 이름을 머리에 쓴다. PPT 페이지 단위와 같은 키여야 한다(스펙 D22) */
@@ -49,7 +51,7 @@ export function WeeklyLintPanel<R extends LintRow>({ open, rows, groupOf, canApp
   // 열려 있는 동안 rows(또는 groupOf)가 바뀔 때마다 재계산 — 적용 직후에도, 타인의 Realtime 수정에도 목록이 따라간다.
   // 묶음 수만큼의 행 × 4열이라 비용은 무시할 만하다. 닫혀 있으면 계산하지 않는다.
   const { t } = useLocale()
-  const findings = useMemo(() => (open ? lintWeeklySheet(rows, groupOf, t) : []), [open, rows, groupOf, t])
+  const findings = useMemo(() => (open ? lintWeeklySheet(rows, groupOf, t, columns).map(f => ({ ...f, title: labels?.[f.cellKey] ?? f.title })) : []), [open, rows, groupOf, t, columns, labels])
   const groups = useMemo(() => groupFindings(findings), [findings])
 
   return (

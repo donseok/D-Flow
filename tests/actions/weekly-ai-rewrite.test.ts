@@ -1,3 +1,4 @@
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
 }))
 
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: vi.fn(async () => makeProjectConfig()) }))
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }))
 vi.mock('@/lib/authz', () => ({
   requireProjectMember: mocks.requireProjectMember,
@@ -150,7 +152,7 @@ describe('prepareWeeklyCellRewrite', () => {
     expect(system).toContain('한국어 프로젝트 주간업무 보고서 편집자')
     expect(JSON.parse(messages[0].content)).toEqual({ cells: [
       { id: 'c0', section: '실험', field: '금주실적 내용', content: inputs[0].content },
-      { id: 'c1', section: '데이터 (비활성)', field: '금주 이슈·이벤트', content: inputs[1].content },
+      { id: 'c1', section: '데이터 (비활성)', field: '금주실적 이슈 및 주요 이벤트', content: inputs[1].content },
     ] })
     expect(options).toEqual({
       timeoutMs: 15_000,

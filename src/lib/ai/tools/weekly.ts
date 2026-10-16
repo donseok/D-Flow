@@ -1,3 +1,4 @@
+import { DEFAULT_WEEKLY_COLUMNS, type WeeklyColumn } from '@/lib/domain/weeklyColumns'
 import { weeklyHref } from '@/lib/ai/chat/deep-links'
 import type {
   ProjectSettingsRepository,
@@ -6,7 +7,7 @@ import type {
   WeeklySheetSnapshot,
 } from '@/lib/repositories/types'
 import { resolveTeamsForProject, type Team } from '@/lib/domain/teams'
-import { areasForTeam, orderAreas, rowLabel, type WeeklyArea } from '@/lib/domain/weeklySheet'
+import { weeklyTextCells, areasForTeam, orderAreas, rowLabel, type WeeklyArea } from '@/lib/domain/weeklySheet'
 import type { ProjectConfig } from '@/lib/settings/projectConfig'
 import { calendarOrError, requireCalendar } from '@/lib/calendar/load'
 import { weekKeyOf, type WeekStartRule } from '@/lib/domain/calendar'
@@ -68,6 +69,8 @@ async function projectWeekContext(settings: SettingsReader, projectId: string):
   if (!configResult.ok) return { ok: false, result: repositoryFailure(configResult) }
   const cal = calendarOrError(() => requireCalendar(configResult.data))
   if (!cal.calendar) return { ok: false, result: invalidArgument('프로젝트의 달력 설정이 손상되어 주간업무를 조회할 수 없습니다.') }
+  const columns = pick(configResult.data, 'weekly.columns')
+  if (!columns.ok) return { ok: false, result: invalidArgument('주간보고 항목 설정을 읽지 못했습니다.') }
   return { ok: true, cfg: configResult.data, rules: cal.calendar.weekStart }
 }
 
@@ -149,6 +152,13 @@ function rowSource(row: WeeklyRepositoryRow, projectId: string, weekStart: strin
   }
 }
 
+function projectRows(rows: readonly WeeklyRepositoryRow[], cfg: ProjectConfig): WeeklyRepositoryRow[] {
+  const columns = pick(cfg, 'weekly.columns')
+  if (!columns.ok) return [] // projectWeekContext already refuses invalid definitions
+  if (JSON.stringify(columns.value) === JSON.stringify(DEFAULT_WEEKLY_COLUMNS)) return [...rows]
+  return rows.map(row => ({ ...row, ...weeklyTextCells(row, columns.value as WeeklyColumn[]) }))
+}
+
 export function createGetWeeklySheetTool(
   repository: WeeklyRepository,
   settings: SettingsReader,
@@ -196,7 +206,7 @@ export function createGetWeeklySheetTool(
       const { areas } = repoResult.data
       const areaById = new Map(areas.map(area => [area.id, area]))
       const needle = query?.toLocaleLowerCase('ko-KR')
-      const matched = repoResult.data.rows.filter(row => {
+      const matched = projectRows(repoResult.data.rows, wk.cfg).filter(row => {
         if (teamFilter.areaIds && !teamFilter.areaIds.has(row.areaId)) return false
         if (!matchesSection(areaById.get(row.areaId), section || undefined)) return false
         if (!needle) return true
@@ -394,8 +404,8 @@ export function createCompareWeeklySheetsTool(
       const areaById = new Map(areas.map(area => [area.id, area]))
       const rank = new Map(orderAreas(areas).map((area, index) => [area.id, index]))
       const rankOf = (areaId: string): number => rank.get(areaId) ?? Number.MAX_SAFE_INTEGER
-      const fromRows = aggregateRows(fromResult.data?.rows ?? [])
-      const toRows = aggregateRows(toResult.data?.rows ?? [])
+      const fromRows = aggregateRows(projectRows(fromResult.data?.rows ?? [], wk.cfg))
+      const toRows = aggregateRows(projectRows(toResult.data?.rows ?? [], wk.cfg))
       const needle = query?.toLocaleLowerCase('ko-KR')
       const keys = [...new Set([...fromRows.keys(), ...toRows.keys()])]
       const compared = keys.flatMap(areaId => {

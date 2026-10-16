@@ -1,3 +1,5 @@
+import type { WeeklyColumn } from '@/lib/domain/weeklyColumns'
+import { weeklyField } from '@/lib/domain/weeklySheet'
 /**
  * 주간 카탈로그 객체 (정본 §4.5.1·§4.5.4).
  * 모델·서술·시트는 루트가 있을 때만 채운다. 없는 루트는 빈 값이다.
@@ -48,7 +50,20 @@ export function weeklyCatalogSections(
   rows: readonly WeeklySheetRow[],
   areas: readonly WeeklyArea[],
   fieldKeys: readonly string[],
+  columns?: readonly WeeklyColumn[],
 ): WeeklyCatalogSection[] {
+  if (columns) {
+    const base = weeklyCatalogSections(rows, areas, fieldKeys)
+    return base.flatMap(section => columns.map(column => {
+      const area = areas.find(a => a.code === section.code)!
+      const own = rows.filter(r => r.areaId === area.id)
+      return { ...section, name: `${section.name} · ${column.label}`,
+        this_content: joined(own, weeklyField(`this_${column.id}`), false),
+        next_content: joined(own, weeklyField(`next_${column.id}`), false),
+        this_issue: [], next_issue: [],
+      }
+    }))
+  }
   const ordered = orderAreas(areas)
   const active = ordered.filter((area) => area.active)
   const inactive = ordered.filter((area) => !area.active && rows.some((row) => row.areaId === area.id && hasContent(row, ALL_CELLS)))

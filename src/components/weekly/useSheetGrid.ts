@@ -62,6 +62,8 @@ export interface SheetGridApi {
 }
 
 interface UseSheetGridArgs {
+  columns?: readonly WeeklyCellKey[]
+  labels?: Record<WeeklyCellKey, string>
   rows: readonly SheetGridRow[]
   enabled: boolean
   /**
@@ -84,7 +86,7 @@ interface UseSheetGridArgs {
 }
 
 export function useSheetGrid({
-  rows, enabled, readOnly, cellRefs, runBatch, requestUndo, requestRedo, beginEdit, endEdit, toast,
+  rows, columns = CONTENT_COLS, labels = COL_LABEL, enabled, readOnly, cellRefs, runBatch, requestUndo, requestRedo, beginEdit, endEdit, toast,
 }: UseSheetGridArgs): SheetGridApi {
   const rowIds = useMemo(() => rows.map(r => r.id), [rows])
   const rowsRef = useRef(rows)
@@ -96,7 +98,7 @@ export function useSheetGrid({
   const tRef = useRef(translate)
   tRef.current = translate
 
-  const first: CellAddr = { rowId: rowIds[0] ?? '', col: CONTENT_COLS[0] }
+  const first: CellAddr = { rowId: rowIds[0] ?? '', col: columns[0] }
   const [sel, setSel] = useState<SelectionState>({ active: first, anchor: first, editing: false })
   const selRef = useRef(sel)
   selRef.current = sel
@@ -115,18 +117,18 @@ export function useSheetGrid({
     [],
   )
 
-  const rect = useMemo(() => rectFromAddrs(rowIds, sel.anchor, sel.active), [rowIds, sel.anchor, sel.active])
+  const rect = useMemo(() => rectFromAddrs(rowIds, sel.anchor, sel.active, columns), [rowIds, sel.anchor, sel.active, columns])
 
   // 선택 변경 방송(§7 aria-live). 단일 셀은 위치, 범위는 규모.
   useEffect(() => {
     if (!enabled) return
-    const r = rectFromAddrs(rowIdsRef.current, sel.anchor, sel.active)
+    const r = rectFromAddrs(rowIdsRef.current, sel.anchor, sel.active, columns)
     if (!r) return
     const rowsN = r.bottom - r.top + 1
     const colsN = r.right - r.left + 1
     const t = tRef.current
-    setLive(rowsN * colsN <= 1 ? fill(t('weekly.grid.cellSelected'), { col: COL_LABEL[sel.active.col] }) : fill(t('weekly.grid.rangeSelected'), { rows: rowsN, cols: colsN }))
-  }, [sel.active, sel.anchor, enabled])
+    setLive(rowsN * colsN <= 1 ? fill(t('weekly.grid.cellSelected'), { col: labels[sel.active.col] }) : fill(t('weekly.grid.rangeSelected'), { rows: rowsN, cols: colsN }))
+  }, [sel.active, sel.anchor, enabled, columns, labels])
 
   // 활성 셀 실 포커스(Design B). 사용자 상호작용(armed) 후에만 — 초기 마운트/리렌더가 포커스를 앗지 않게.
   useEffect(() => {
@@ -154,15 +156,15 @@ export function useSheetGrid({
   // ── 배치 오퍼레이션(선택 기하 + 도메인 fn → runBatch) ──
   const doClear = useCallback((r: GridRect) => {
     if (readOnly) return
-    const edits = clearEdits(rowsRef.current, rowIdsRef.current, r)
+    const edits = clearEdits(rowsRef.current, rowIdsRef.current, r, columns)
     if (edits.length === 0) return // 이미 빈 셀만 — no-op(AC5.4)
     runBatch(edits, { undoable: true })
     setLive(fill(tRef.current('weekly.grid.cleared'), { n: edits.length }))
-  }, [runBatch, readOnly])
+  }, [runBatch, readOnly, columns])
 
   const doPasteValues = useCallback((values: string[][], anchor: CellAddr) => {
     if (readOnly) return
-    const { edits, clippedRows, clippedCols } = pasteEdits(rowIdsRef.current, anchor, values)
+    const { edits, clippedRows, clippedCols } = pasteEdits(rowIdsRef.current, anchor, values, columns)
     // 시트는 업무영역마다 1행이라 행을 늘릴 수단이 없다 — 실행 가능한 대안(위쪽 행부터
     // 붙여넣기 / 셀 안에서 줄바꿈)을 안내한다. 행 수는 실제 시트에서 읽는다 — 영역이 늘 때마다 안내문이 거짓말을 하지 않게.
     const t = tRef.current
@@ -180,32 +182,32 @@ export function useSheetGrid({
     // 선택을 붙여넣은 범위로 확장(앵커 기준 실제 반영된 폭/높이)
     const ids = rowIdsRef.current
     const aRow = ids.indexOf(anchor.rowId)
-    const aCol = CONTENT_COLS.indexOf(anchor.col)
+    const aCol = columns.indexOf(anchor.col)
     const rowsN = Math.min(values.length, ids.length - aRow)
     const maxW = values.slice(0, rowsN).reduce((m, l) => Math.max(m, l.length), 0) // 행-클립으로 버려진 라인 제외(F5)
-    const colsN = Math.min(maxW, CONTENT_COLS.length - aCol)
+    const colsN = Math.min(maxW, columns.length - aCol)
     if (aRow >= 0 && aCol >= 0 && rowsN >= 1 && colsN >= 1) {
       const endAddr: CellAddr = {
         rowId: ids[Math.min(aRow + rowsN - 1, ids.length - 1)],
-        col: CONTENT_COLS[Math.min(aCol + colsN - 1, CONTENT_COLS.length - 1)],
+        col: columns[Math.min(aCol + colsN - 1, columns.length - 1)],
       }
       setSel({ active: endAddr, anchor, editing: false })
     }
     setLive(fill(t('weekly.grid.pasted'), { n: edits.length }))
-  }, [runBatch, toast, readOnly])
+  }, [runBatch, toast, readOnly, columns])
 
   const doFill = useCallback((source: GridRect, target: GridRect) => {
     if (readOnly) return
-    const edits = fillEdits(rowsRef.current, rowIdsRef.current, source, target)
+    const edits = fillEdits(rowsRef.current, rowIdsRef.current, source, target, columns)
     if (edits.length === 0) return
     runBatch(edits, { undoable: true })
     // 선택 = 원본 ∪ 대상(§2.3) — target이 원본을 포함하도록 계산됨.
     const ids = rowIdsRef.current
-    const anchorAddr: CellAddr = { rowId: ids[target.top], col: CONTENT_COLS[target.left] }
-    const activeAddr: CellAddr = { rowId: ids[target.bottom], col: CONTENT_COLS[target.right] }
+    const anchorAddr: CellAddr = { rowId: ids[target.top], col: columns[target.left] }
+    const activeAddr: CellAddr = { rowId: ids[target.bottom], col: columns[target.right] }
     setSel({ active: activeAddr, anchor: anchorAddr, editing: false })
     setLive(fill(tRef.current('weekly.grid.filled'), { n: edits.length }))
-  }, [runBatch, readOnly])
+  }, [runBatch, readOnly, columns])
 
   // ── 드래그(select/fill) 전역 종료 리스너 ── (doFill 정의 후 배선 — mouseup에 최신 fillPreview 반영)
   useEffect(() => {
@@ -227,22 +229,22 @@ export function useSheetGrid({
   // ── 클립보드 이벤트(권한 프롬프트 없이 동작하는 1차 경로) ──
   const onCellCopy = useCallback((e: React.ClipboardEvent) => {
     if (selRef.current.editing) return // 편집 모드: 셀 내 텍스트 네이티브 복사에 양보
-    const r = rectFromAddrs(rowIdsRef.current, selRef.current.anchor, selRef.current.active)
+    const r = rectFromAddrs(rowIdsRef.current, selRef.current.anchor, selRef.current.active, columns)
     if (!r) return
     e.preventDefault()
-    e.clipboardData.setData('text/plain', serializeTsv(valuesInRect(rowsRef.current, r)))
+    e.clipboardData.setData('text/plain', serializeTsv(valuesInRect(rowsRef.current, r, columns)))
     e.clipboardData.setData(SHEET_CLIPBOARD_TYPE, '1') // 붙여넣기가 이 복사본을 TSV 로 읽게 — 한 열 여러 행은 일반 여러 줄 텍스트와 모양이 같다
-  }, [])
+  }, [columns])
 
   const onCellCut = useCallback((e: React.ClipboardEvent) => {
     if (selRef.current.editing) return
-    const r = rectFromAddrs(rowIdsRef.current, selRef.current.anchor, selRef.current.active)
+    const r = rectFromAddrs(rowIdsRef.current, selRef.current.anchor, selRef.current.active, columns)
     if (!r) return
     e.preventDefault()
-    e.clipboardData.setData('text/plain', serializeTsv(valuesInRect(rowsRef.current, r)))
+    e.clipboardData.setData('text/plain', serializeTsv(valuesInRect(rowsRef.current, r, columns)))
     e.clipboardData.setData(SHEET_CLIPBOARD_TYPE, '1') // 붙여넣기가 이 복사본을 TSV 로 읽게 — 한 열 여러 행은 일반 여러 줄 텍스트와 모양이 같다
     doClear(r) // 복사 + 원본 비우기 = 하나의 undo 엔트리(AC4.6)
-  }, [doClear])
+  }, [doClear, columns])
 
   const onCellPaste = useCallback((e: React.ClipboardEvent) => {
     if (selRef.current.editing) return
@@ -251,12 +253,12 @@ export function useSheetGrid({
     if (!text) { toast({ title: tRef.current('weekly.grid.pasteFailed'), description: tRef.current('weekly.grid.clipboardFailed'), variant: 'error' }); return }
     // 앵커 = 선택 범위 좌상단(구글시트 동일) — 드래그 방향(active 위치)과 무관.
     const ids = rowIdsRef.current
-    const r = rectFromAddrs(ids, selRef.current.anchor, selRef.current.active)
-    const anchor: CellAddr = r ? { rowId: ids[r.top], col: CONTENT_COLS[r.left] } : selRef.current.active
+    const r = rectFromAddrs(ids, selRef.current.anchor, selRef.current.active, columns)
+    const anchor: CellAddr = r ? { rowId: ids[r.top], col: columns[r.left] } : selRef.current.active
     // 표에서 온 복사본만 행·열로 펼친다 — 셀 안에서 긁어 온 여러 줄 텍스트는 고른 칸 하나에 그대로 넣는다
     const values = cellsFromClipboard(text, { types: Array.from(e.clipboardData.types ?? []), html: e.clipboardData.getData('text/html') })
     doPasteValues(values, anchor)
-  }, [doPasteValues, toast])
+  }, [doPasteValues, toast, columns])
 
   // ── 마우스 ──
   const onCellMouseDown = useCallback((e: React.MouseEvent, addr: CellAddr) => {
@@ -290,7 +292,7 @@ export function useSheetGrid({
       if (!source) return
       const ids = rowIdsRef.current
       const er = ids.indexOf(addr.rowId)
-      const ec = CONTENT_COLS.indexOf(addr.col)
+      const ec = columns.indexOf(addr.col)
       if (er < 0 || ec < 0) return
       // 축 고정: source 밖으로의 이동 우세축만 채움(AC7.2)
       const dRow = er < source.top ? source.top - er : er > source.bottom ? er - source.bottom : 0
@@ -303,7 +305,7 @@ export function useSheetGrid({
       }
       setFillPreview(target)
     }
-  }, [])
+  }, [columns])
 
   const onCellDoubleClick = useCallback(() => {
     // 편집 진입·캐럿 배치는 onCellMouseDown(e.detail>=2)가 네이티브로 처리(F10) — 여기선 드래그 잔여만 정리.
@@ -314,13 +316,13 @@ export function useSheetGrid({
   const onFillHandleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    const r = rectFromAddrs(rowIdsRef.current, selRef.current.anchor, selRef.current.active)
+    const r = rectFromAddrs(rowIdsRef.current, selRef.current.anchor, selRef.current.active, columns)
     if (!r) return
     fillSourceRef.current = r
     setFillPreview(r)
     dragModeRef.current = 'fill'
     setDragging('fill')
-  }, [])
+  }, [columns])
 
   // 그리드 밖에서의 셀 이동 — armed를 세워야 활성 셀 포커스 effect가 동작한다.
   // F7 가드(그리드 밖에 포커스가 있으면 훔치지 않음)를 우회하려고 여기서 직접 focus까지 한다.
@@ -404,13 +406,13 @@ export function useSheetGrid({
       if (e.key === 'Enter') {
         e.preventDefault()
         endEdit(cur.active, { cancel: false })
-        setSingle(moveActive(ids, cur.active, e.shiftKey ? -1 : 1, 0), false)
+        setSingle(moveActive(ids, cur.active, e.shiftKey ? -1 : 1, 0, columns), false)
         return
       }
       if (e.key === 'Tab') {
         e.preventDefault()
         endEdit(cur.active, { cancel: false })
-        setSingle(advanceActive(ids, cur.active, e.shiftKey ? 'prev' : 'next'), false)
+        setSingle(advanceActive(ids, cur.active, e.shiftKey ? 'prev' : 'next', columns), false)
         return
       }
       if (e.key === 'Escape') {
@@ -431,33 +433,33 @@ export function useSheetGrid({
     if (mod && (e.key === 'a' || e.key === 'A')) { // 전체 내용 셀 선택(v1)
       e.preventDefault()
       if (ids.length) {
-        setSel({ anchor: { rowId: ids[0], col: CONTENT_COLS[0] },
-          active: { rowId: ids[ids.length - 1], col: CONTENT_COLS[CONTENT_COLS.length - 1] }, editing: false })
+        setSel({ anchor: { rowId: ids[0], col: columns[0] },
+          active: { rowId: ids[ids.length - 1], col: columns[columns.length - 1] }, editing: false })
       }
       return
     }
-    if (mod && e.key === 'Home') { e.preventDefault(); setSingle({ rowId: ids[0], col: CONTENT_COLS[0] }); return }
-    if (mod && e.key === 'End') { e.preventDefault(); setSingle({ rowId: ids[ids.length - 1], col: CONTENT_COLS[CONTENT_COLS.length - 1] }); return }
+    if (mod && e.key === 'Home') { e.preventDefault(); setSingle({ rowId: ids[0], col: columns[0] }); return }
+    if (mod && e.key === 'End') { e.preventDefault(); setSingle({ rowId: ids[ids.length - 1], col: columns[columns.length - 1] }); return }
 
     switch (e.key) {
       case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': {
         e.preventDefault()
         const d = e.key === 'ArrowUp' ? [-1, 0] : e.key === 'ArrowDown' ? [1, 0] : e.key === 'ArrowLeft' ? [0, -1] : [0, 1]
-        const nextActive = moveActive(ids, cur.active, d[0], d[1])
+        const nextActive = moveActive(ids, cur.active, d[0], d[1], columns)
         if (e.shiftKey) setSel({ active: nextActive, anchor: cur.anchor, editing: false })
         else setSingle(nextActive)
         return
       }
       case 'Tab':
         e.preventDefault()
-        setSingle(advanceActive(ids, cur.active, e.shiftKey ? 'prev' : 'next'))
+        setSingle(advanceActive(ids, cur.active, e.shiftKey ? 'prev' : 'next', columns))
         return
       case 'Enter':
         // 오케스트레이터 판정: Nav Enter = 편집 진입(값 유지, 캐럿 끝) — 구글시트 파리티.
         // Shift+Enter는 위로 이동 유지.
         e.preventDefault()
-        if (e.shiftKey) { setSingle(moveActive(ids, cur.active, -1, 0)); return }
-        if (readOnly) { setSingle(moveActive(ids, cur.active, 1, 0)); return } // 편집 없이 아래로만 이동
+        if (e.shiftKey) { setSingle(moveActive(ids, cur.active, -1, 0, columns)); return }
+        if (readOnly) { setSingle(moveActive(ids, cur.active, 1, 0, columns)); return } // 편집 없이 아래로만 이동
         beginEdit(cur.active, false)
         setSel(s => ({ active: s.active, anchor: s.active, editing: true })) // 편집 진입 = 선택을 활성 1셀로 축소(§1.4)
         {
@@ -477,7 +479,7 @@ export function useSheetGrid({
         return
       case 'Backspace': case 'Delete': {
         e.preventDefault()
-        const r = rectFromAddrs(ids, cur.anchor, cur.active)
+        const r = rectFromAddrs(ids, cur.anchor, cur.active, columns)
         if (r) doClear(r)
         return
       }
@@ -497,7 +499,7 @@ export function useSheetGrid({
       const el = e.currentTarget
       nativeSet(el, '') // 기존 값 비움 — 이어질 네이티브 문자가 빈 셀에 착지(덮어쓰기)
     }
-  }, [setSingle, beginEdit, endEdit, doClear, requestUndo, requestRedo, cellRefs, readOnly])
+  }, [setSingle, beginEdit, endEdit, doClear, requestUndo, requestRedo, cellRefs, readOnly, columns])
 
   return {
     sel, rect, fillPreview, dragging, live,

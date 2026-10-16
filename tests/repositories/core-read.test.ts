@@ -107,7 +107,7 @@ describe('strict Supabase repositories', () => {
       ['a-ops', 2, true, [{ teamId: 't-ops', kind: 'primary' }]], ['a-exp', 1, true, []], ['a-old', 0, false, []],
     ])
     const rowSelect = String((rows.select as ReturnType<typeof vi.fn>).mock.calls[0][0])
-    expect(rowSelect).toBe('id, report_id, area_id, this_content, this_issue, next_content, next_issue, updated_at, custom')
+    expect(rowSelect).toBe('id, report_id, area_id, this_content, this_issue, next_content, next_issue, updated_at, cells, custom')
     expect(rowSelect).not.toMatch(/\b(section|module|sort_order)\b/)
     expect(rows.eq).toHaveBeenCalledWith('report_id', 'wr1')
     expect(rows.eq).toHaveBeenCalledWith('project_id', 'p1')

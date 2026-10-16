@@ -1,3 +1,4 @@
+import { WeeklyColumnsEditor } from '@/components/settings/WeeklyColumnsEditor'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -646,6 +647,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
 
         {isAdmin && pc.ok && fieldStates && <div id="project-fields" className="scroll-mt-24 space-y-5">
           <SectionCard searchText="fields.wbs_item fields.issue fields.weekly_row 추가 필드 custom fields" title={t('pages.projSettings.nav.fields')} icon={LayoutList}>
+            {fieldModules[2] === 'on' && (() => {
+              const columns = pick(pc.cfg, 'weekly.columns')
+              return <div className="mb-6 space-y-3"><h3 className="font-semibold">{t('settings.weekly.columns.label')}</h3>
+                <WeeklyColumnsEditor key={`weekly-columns-${revision}`} projectId={projectId} value={columns.ok ? columns.value : null} revision={revision} canEdit={canMutate} />
+              </div>
+            })()}
             <CustomFieldsSettings key={`${projectId}-fields-${revision}`} projectId={projectId} states={fieldStates} revision={revision} canEdit={canMutate} />
           </SectionCard>
         </div>}

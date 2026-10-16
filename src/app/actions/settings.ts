@@ -292,6 +292,10 @@ function projectAdapter(t: ServerTranslate, projectId: string, now: Date): Scope
     rpc: (admin, x) => admin.rpc('apply_project_settings', { p_project_id: projectId, p_expected_revision: x.expectedRevision, p_command_id: x.commandId,
       p_set: x.set, p_unset: x.unset, p_actor: x.actor, p_schema_version: SETTINGS_SCHEMA_VERSION, p_source: 'edit' }),
     afterApplied: async (admin, prev, set, actor) => {
+      if ('weekly.columns' in set) {
+        const result = await enqueueCustomFieldsReindex(admin, projectId, 'weekly_row')
+        if (!result.ok) return { ok: false, what: 'AI 색인 갱신', error: t('srv.settings.waitingIndexRefreshRetry') }
+      }
       if ('modules.enabled' in set) {
         const prevEnabled = (stateValue(prev.keys['modules.enabled']) as ModuleId[] | undefined) ?? null
         const next = set['modules.enabled'] as ModuleId[]

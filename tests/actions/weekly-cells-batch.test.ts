@@ -1,3 +1,4 @@
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // saveWeeklyCells 의 배치 왕복 구조를 본다 — 행 단위 그룹핑(같은 행 여러 셀 = 1 update),
@@ -9,6 +10,7 @@ const { requireProjectMember, requireProjectAdmin, requireSuperuser, resolveProj
 const { createServerClient } = vi.hoisted(() => ({
   createServerClient: vi.fn(async () => { throw new Error('mock 미설정 상태로 createServerClient 호출') }),
 }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: vi.fn(async () => makeProjectConfig()) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/authz', () => ({ requireProjectMember, requireProjectAdmin, requireSuperuser, resolveProjectId, getActor }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient }))

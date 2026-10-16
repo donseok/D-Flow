@@ -1,5 +1,7 @@
 /* ── 주간업무 시트 도메인(순수) — 행 타입(영역 id 로 묶인다)·셀 키·영역 순서·라벨·서버 병합. I/O 없음. 이월은 weeklyCarry.ts. ── */
 import type { ConfigArea, ConfigTeam } from '@/lib/settings/projectConfig'
+import type { WeeklyColumnKey } from './weeklyColumns'
+import { weeklyValues } from './weeklyColumns'
 import type { CustomValues } from './customFields'
 
 /** 셀 1개 상한 — 서버 액션·클라이언트 클램프·이월 병합이 공유하는 단일 출처. */
@@ -7,9 +9,9 @@ export const WEEKLY_CELL_MAX = 20000
 
 /** 셀 저장 가능한 DB 열 화이트리스트 — 구조 열(report_id·project_id·area_id)은 세션이 쓰지 못한다(열 권한 — 스펙 D27). */
 export const WEEKLY_CELL_KEYS = ['this_content', 'this_issue', 'next_content', 'next_issue'] as const
-export type WeeklyCellKey = (typeof WEEKLY_CELL_KEYS)[number]
+export type WeeklyCellKey = WeeklyColumnKey
 export function isWeeklyCellKey(v: string): v is WeeklyCellKey {
-  return (WEEKLY_CELL_KEYS as readonly string[]).includes(v)
+  return typeof v === 'string' && /^(this|next)_[a-z][a-z0-9_]{0,31}$/.test(v)
 }
 
 export const CELL_FIELD = {
@@ -17,11 +19,15 @@ export const CELL_FIELD = {
   next_content: 'nextContent', next_issue: 'nextIssue',
 } as const satisfies Record<WeeklyCellKey, keyof WeeklyCells>
 
+export function weeklyField(key: WeeklyCellKey): keyof WeeklyCells {
+  return (CELL_FIELD as Partial<Record<WeeklyCellKey, keyof WeeklyCells>>)[key] ?? key
+}
+
 /** 열 표시 라벨 — 그리드 헤더(COLS)의 단일 출처. */
 export const WEEKLY_CELL_LABEL = {
   this_content: '금주실적 내용', this_issue: '금주 이슈·이벤트',
   next_content: '차주계획 내용', next_issue: '차주 이슈·이벤트',
-} as const satisfies Record<WeeklyCellKey, string>
+} as Record<WeeklyCellKey, string>
 
 /** 멀티셀 변이의 최소 단위 — 붙여넣기·범위삭제·채우기·undo·배치 액션이 공유. 고유성 키는 `${rowId}:${cellKey}`. */
 export interface WeeklyCellEdit {
@@ -38,8 +44,8 @@ export function applyServerRow<R extends { id: string } & WeeklyCells>(
   local: R, server: R, dirty: ReadonlySet<string>,
 ): R {
   const merged: R = { ...server }
-  for (const key of WEEKLY_CELL_KEYS) {
-    const field = CELL_FIELD[key]
+  for (const key of new Set<WeeklyCellKey>([...WEEKLY_CELL_KEYS, ...Object.keys(weeklyValues(local)), ...Object.keys(weeklyValues(server))] as WeeklyCellKey[])) {
+    const field = weeklyField(key)
     if (dirty.has(`${server.id}:${key}`)) (merged as WeeklyCells)[field] = (local as WeeklyCells)[field]
   }
   return merged
@@ -50,6 +56,7 @@ export function applyServerRow<R extends { id: string } & WeeklyCells>(
 
 /** 주간 행의 내용 네 칸 */
 export interface WeeklyCells {
+  [key: WeeklyColumnKey]: string
   thisContent: string
   thisIssue: string
   nextContent: string
@@ -83,7 +90,7 @@ export function orderAreas<A extends Pick<WeeklyArea, 'id' | 'code' | 'sortOrder
 /** "내용 있음" — 주어진 칸 가운데 trim() 이 빈 문자열이 아닌 것이 있는가(스펙 D32·Q37). 이월의 대기 판정은 NEXT_CELLS, 표시·시드
  *  보존은 ALL_CELLS 로 부른다 — 이월·표시·시드가 이 술어 하나만 쓴다(마이그레이션 이관은 다듬지 않는 다른 술어다 — 보존이 목적) */
 export function hasContent(row: Partial<WeeklyCells>, cells: readonly (keyof WeeklyCells)[]): boolean {
-  return cells.some((c) => (row[c] ?? '').trim() !== '')
+  return cells.some((c) => (row[c] ?? '').trim() !== '') || (cells === ALL_CELLS && Object.values(weeklyValues(row)).some(v => !!v?.trim()))
 }
 
 /** 시트·점검·PPT·봇이 보이는 행(스펙 D32) — 활성 영역의 행(영역 순) → 내용 있는 비활성 영역의 행(영역 순) → 내용 있는 모르는 영역의
@@ -181,4 +188,13 @@ export function areaGroupOf(
   areas: readonly Pick<WeeklyArea, 'id' | 'name' | 'active'>[],
 ): (row: { areaId: string }) => { key: string; label: string } {
   return (row) => ({ key: row.areaId, label: rowLabel(row, areas) })
+}
+
+/** Text projection for consumers that expose one text block per period. */
+export function weeklyTextCells(row: WeeklyCells, columns: readonly import('./weeklyColumns').WeeklyColumn[]): WeeklyCells {
+  const period = (side: 'this' | 'next') => columns.flatMap(c => {
+    const value = row[weeklyField(`${side}_${c.id}`)] ?? ''
+    return value.trim() ? [`[${c.label}]\n${value}`] : []
+  }).join('\n\n')
+  return { thisContent: period('this'), thisIssue: '', nextContent: period('next'), nextIssue: '' }
 }

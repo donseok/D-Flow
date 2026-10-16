@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation'
 import { ChevronLeft, ChevronRight, Download, Sparkles } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import {
-  areaGroupOf, mergeRefreshedRows, mergeServerRow, orderAreas, rowLabel, WEEKLY_CELL_KEYS, WEEKLY_CELL_MAX,
-  WEEKLY_CELL_LABEL, CELL_FIELD,
+  areaGroupOf, mergeRefreshedRows, mergeServerRow, orderAreas, rowLabel, WEEKLY_CELL_MAX,
+  weeklyField,
   type WeeklyArea, type WeeklySheetRow, type WeeklyCellKey, type WeeklyCellEdit,
 } from '@/lib/domain/weeklySheet'
 import { type CellAddr } from '@/lib/domain/sheetSelection'
@@ -39,6 +39,7 @@ import { parseCustomValues } from '@/lib/domain/customFieldValues'
 import { CustomFieldValuesEditor, useCustomFieldScope } from '@/components/fields/CustomFieldValuesEditor'
 import { Modal } from '@/components/ui/Modal'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { DEFAULT_WEEKLY_COLUMNS, weeklyColumnKeys, weeklyColumnLabels, weeklyValues, type WeeklyColumn } from '@/lib/domain/weeklyColumns'
 import type { DictKey } from '@/lib/i18n/dict'
 
 /** 헤더 동기화 표시(§5.8.3)로 올리는 셀 상태 — error 는 실패, 응답을 잃은 저장은 outcome_unknown */
@@ -47,12 +48,11 @@ const DEBOUNCE_MS = 1500
 const CELL_MAX = WEEKLY_CELL_MAX // 셀 1개 상한(도메인 단일 출처) — 배치 로컬 클램프용
 const BATCH_MAX = 500    // 한 배치 최대 edit 수(BE와 동일) — 사전 검사용
 
-const COLS: { key: WeeklyCellKey; label: string }[] =
-  WEEKLY_CELL_KEYS.map(key => ({ key, label: WEEKLY_CELL_LABEL[key] }))
 
 /** DB 행 payload(snake) → WeeklySheetRow. Realtime payload 매핑용(영역 id — 스펙 §4.1.7). */
 function fromRecord(r: Record<string, unknown>): WeeklySheetRow {
   return {
+    ...weeklyValues(r.cells),
     id: String(r.id), reportId: String(r.report_id), areaId: String(r.area_id ?? ''),
     thisContent: String(r.this_content ?? ''), thisIssue: String(r.this_issue ?? ''),
     nextContent: String(r.next_content ?? ''), nextIssue: String(r.next_issue ?? ''),
@@ -62,10 +62,11 @@ function fromRecord(r: Record<string, unknown>): WeeklySheetRow {
 
 export function WeeklySheetView({
   projectId, weekStart, prevWeek, nextWeek, weekLabel, weekTitle, thisRange, nextRange, projectName,
-  report, areas, initialRows, hasCarrySource, me, canEditCells, canCreateRound, outOfProjectPeriod = false,
+  columns = DEFAULT_WEEKLY_COLUMNS, report, areas, initialRows, hasCarrySource, me, canEditCells, canCreateRound, outOfProjectPeriod = false,
 }: {
   /** 이 주차가 프로젝트 기간 밖인지 — 빈 시트 안내에 경고 한 줄을 단다 */
   outOfProjectPeriod?: boolean
+  columns?: WeeklyColumn[]
   projectId: string
   weekStart: string
   /** 이전·다음 주 키 — 서버가 프로젝트 규칙의 키 함수로 계산한다(과도기 주 6·8일, D35). 클라이언트는 ±7일로 다시 계산하지 않는다 */
@@ -88,10 +89,14 @@ export function WeeklySheetView({
   /** 주차 문서(회차) 생성 자격 = isProjectAdmin. createWeeklyReport 의 requireProjectAdmin 미러. */
   canCreateRound: boolean
 }) {
+  const cellKeys = useMemo(() => weeklyColumnKeys(columns), [columns])
+  const cellLabels = useMemo(() => weeklyColumnLabels(columns), [columns])
+  const COLS = useMemo(() => cellKeys.map(key => ({ key, label: cellLabels[key] })), [cellKeys, cellLabels])
+  const normalizeRows = useCallback((rs: WeeklySheetRow[]) => rs.map(r => Object.assign(Object.fromEntries(cellKeys.map(k => [weeklyField(k), ''])), r) as WeeklySheetRow), [cellKeys])
   const router = useRouter()
   const { toast } = useToast()
   const { t } = useLocale()
-  const [rows, setRows] = useState<WeeklySheetRow[]>(initialRows)
+  const [rows, setRows] = useState<WeeklySheetRow[]>(() => normalizeRows(initialRows))
   const fieldScope = useCustomFieldScope()
   const customDefs = useMemo(() => fieldScope?.defs ?? [], [fieldScope?.defs])
   const customListDefs = useMemo(
@@ -169,7 +174,7 @@ export function WeeklySheetView({
   // 삭제된 행의 dirty 키·디바운스 타이머·저장 상태 정리 — 잔류하면 flushPendingSaves가
   // 영영 비지 않아 주간보고 PPT 내보내기가 세션 내내 차단된다(리뷰 확정 결함).
   const cleanupRowKeys = useCallback((rowId: string) => {
-    for (const key of WEEKLY_CELL_KEYS) {
+    for (const key of cellKeys) {
       const k = `${rowId}:${key}`
       dirtyRef.current.delete(k)
       retriedRef.current.delete(k)
@@ -182,12 +187,12 @@ export function WeeklySheetView({
     }
     setConflictQueue(q => (q.some(k => k.startsWith(`${rowId}:`)) ? q.filter(k => !k.startsWith(`${rowId}:`)) : q))
     setStatus(s => {
-      if (!WEEKLY_CELL_KEYS.some(key => `${rowId}:${key}` in s)) return s
+      if (!cellKeys.some(key => `${rowId}:${key}` in s)) return s
       const next = { ...s }
-      for (const key of WEEKLY_CELL_KEYS) delete next[`${rowId}:${key}`]
+      for (const key of cellKeys) delete next[`${rowId}:${key}`]
       return next
     })
-  }, [])
+  }, [cellKeys])
 
   // 서버 refetch(라우터 refresh) 반영 — dirty 셀은 로컬 유지(스펙 §5). 같은 문서 안에서는 지금 보이는 행을 빼지 않는다(D32 —
   // 다시 거른 집합에서 빠진 행은 그새 마지막 칸이 빈 비활성 영역 행이다. 행 삭제는 실시간 DELETE 가 맡는다).
@@ -200,8 +205,8 @@ export function WeeklySheetView({
       const serverIds = new Set(initialRows.map(r => r.id))
       for (const l of rowsRef.current) if (!serverIds.has(l.id)) cleanupRowKeys(l.id)
     }
-    setRows(local => mergeRefreshedRows(sameReport ? local : [], initialRows, areasRef.current, dirtyRef.current))
-  }, [initialRows, reportId, cleanupRowKeys])
+    setRows(local => mergeRefreshedRows(sameReport ? local : [], normalizeRows(initialRows), areasRef.current, dirtyRef.current))
+  }, [initialRows, reportId, cleanupRowKeys, normalizeRows])
 
   // 주차/프로젝트 전환(reportId 변경) 시 편집 레이어 세션 초기화 — 컴포넌트가 key 없이 유지되므로
   // 잔존 시 주차 B에서 Ctrl+Z가 주차 A의 rowId를 서버로 되돌려 화면 밖 데이터를 파괴한다(F1, 블로킹).
@@ -238,7 +243,7 @@ export function WeeklySheetView({
             if (oldId) { cleanupRowKeys(oldId); setRows(rs => rs.filter(r => r.id !== oldId)) }
             return
           }
-          const server = fromRecord(payload.new as Record<string, unknown>)
+          const server = normalizeRows([fromRecord(payload.new as Record<string, unknown>)])[0]
           // 표시 집합은 페이지를 읽을 때 정했다 — 다시 계산하지 않는다(D32). 모르는 영역의 행(D44)과 비활성으로 아는 영역의 빈 새 행
           // (그새 재활성 — RPC 는 활성 영역에만 행을 넣는다)은 그리지 않고 영역 목록을 다시 받는다. refresh 판정은 '없는 행'에만 걸리고
           // 병합이 그런 행을 더하는 일은 없으므로 렌더 시점의 rowsRef 로 충분하다.
@@ -253,7 +258,7 @@ export function WeeklySheetView({
         router.refresh()
       })
     return () => { sb.removeChannel(channel) }
-  }, [reportId, router, cleanupRowKeys])
+  }, [reportId, router, cleanupRowKeys, normalizeRows])
 
   // 칸을 dirty 로 — 처음 dirty 가 되는 순간의 값(= 서버에서 받은 값)을 기대값으로 잡아 둔다. 낙관 적용보다 먼저 부른다.
   const markDirty = useCallback((k: string, current: string) => {
@@ -293,7 +298,7 @@ export function WeeklySheetView({
     if (conflictRef.current.has(k)) return // 비교에서 정하기 전에는 다시 보내지 않는다(입력은 남아 있다)
     // 그 칸의 단건 저장이 가는 중이면 겹쳐 보내지 않는다 — 같은 기대값의 두 저장은 뒤엣것이 앞엣것과 충돌한다. 응답 처리가 달라진 값을 이어 보낸다
     if (cellFlightRef.current.has(k)) return
-    const sent = row[CELL_FIELD[key]]
+    const sent = row[weeklyField(key)]
     const expected = baseRef.current.get(k)
     cellFlightRef.current.add(k)
     noteSent(k, sent)
@@ -304,7 +309,7 @@ export function WeeklySheetView({
       .catch((): WeeklyActionResult => { unknownRef.current.add(k); return { ok: false, error: t('weekly.sheet.networkError') } })
       .then(res => {
       cellFlightRef.current.delete(k)
-      const now = rowsRef.current.find(r => r.id === rowId)?.[CELL_FIELD[key]]
+      const now = rowsRef.current.find(r => r.id === rowId)?.[weeklyField(key)]
       const saved = () => {
         retriedRef.current.delete(k)
         unknownRef.current.delete(k)
@@ -368,10 +373,10 @@ export function WeeklySheetView({
   const onCellChange = (rowId: string, key: WeeklyCellKey, value: string) => {
     if (!canEditCells) return // 조회 전용 — 로컬 값도 바꾸지 않는다(저장되지 않은 편집이 남으면 화면이 거짓말을 한다)
     const k = `${rowId}:${key}`
-    markDirty(k, rowsRef.current.find(r => r.id === rowId)?.[CELL_FIELD[key]] ?? '')
+    markDirty(k, rowsRef.current.find(r => r.id === rowId)?.[weeklyField(key)] ?? '')
     // 저장 전 초안 — 헤더가 '동기화됨'을 보이지 않게 한다(§5.8.3). 충돌 표시는 지우지 않는다
     setStatus(s => (s[k] === 'editing' || s[k] === 'conflict' ? s : { ...s, [k]: 'editing' }))
-    setRows(rs => rs.map(r => (r.id === rowId ? { ...r, [CELL_FIELD[key]]: value } : r)))
+    setRows(rs => rs.map(r => (r.id === rowId ? { ...r, [weeklyField(key)]: value } : r)))
     const prev = timersRef.current.get(k)
     if (prev) clearTimeout(prev)
     timersRef.current.set(k, setTimeout(() => commit(rowId, key), DEBOUNCE_MS))
@@ -411,7 +416,7 @@ export function WeeklySheetView({
       if (!dirtyRef.current.has(k) || conflictRef.current.has(k)) continue
       const row = rowsRef.current.find(r => r.id === e.rowId)
       if (!row) continue
-      out.push({ rowId: e.rowId, cellKey: e.cellKey, content: row[CELL_FIELD[e.cellKey]] })
+      out.push({ rowId: e.rowId, cellKey: e.cellKey, content: row[weeklyField(e.cellKey)] })
     }
     return out
   }, [])
@@ -435,7 +440,7 @@ export function WeeklySheetView({
     if (opts.undoable) {
       for (const e of edits) {
         const row = rowsRef.current.find(r => r.id === e.rowId)
-        if (row) before.push({ rowId: e.rowId, cellKey: e.cellKey, content: row[CELL_FIELD[e.cellKey]] })
+        if (row) before.push({ rowId: e.rowId, cellKey: e.cellKey, content: row[weeklyField(e.cellKey)] })
       }
     }
     // ① per-cell 디바운스/재시도 타이머 클리어(회귀 #1)
@@ -451,14 +456,14 @@ export function WeeklySheetView({
     for (const e of edits) {
       const k = `${e.rowId}:${e.cellKey}`
       if (e.expected !== undefined) { baseRef.current.set(k, e.expected); dirtyRef.current.add(k) }
-      else markDirty(k, rowsRef.current.find(r => r.id === e.rowId)?.[CELL_FIELD[e.cellKey]] ?? '')
+      else markDirty(k, rowsRef.current.find(r => r.id === e.rowId)?.[weeklyField(e.cellKey)] ?? '')
     }
     // ③ 로컬 rows 낙관 적용 + status 'saving'(textarea 자동 높이는 value 변화로 재계산, 회귀 #7)
     setRows(rs => rs.map(r => {
       const mine = edits.filter(e => e.rowId === r.id)
       if (mine.length === 0) return r
       const next = { ...r }
-      for (const e of mine) next[CELL_FIELD[e.cellKey]] = e.content
+      for (const e of mine) next[weeklyField(e.cellKey)] = e.content
       return next
     }))
     setStatus(s => { const n = { ...s }; for (const e of edits) { const k = `${e.rowId}:${e.cellKey}`; if (!conflictRef.current.has(k)) n[k] = 'saving' } return n })
@@ -517,7 +522,7 @@ export function WeeklySheetView({
               const [rowId, key] = k.split(':') as [string, WeeklyCellKey]
               if (gone.has(rowId) || unsaved.has(k)) continue
               unknownRef.current.delete(k)
-              const now = rowsRef.current.find(r => r.id === rowId)?.[CELL_FIELD[key]]
+              const now = rowsRef.current.find(r => r.id === rowId)?.[weeklyField(key)]
               if (now === sv) { dirtyRef.current.delete(k); baseRef.current.delete(k); sentRef.current.delete(k); setStatus(s => ({ ...s, [k]: 'saved' })) }
               else baseRef.current.set(k, sv)
               // 다르면(비행 중 재편집) dirty 유지 — per-cell 타이머가 마저 저장(단건 commit과 동형). 기대값은 방금 쓴 값
@@ -612,7 +617,7 @@ export function WeeklySheetView({
     dirtyRef.current.delete(k)
     baseRef.current.delete(k)
     sentRef.current.delete(k)
-    setRows(rs => rs.map(r => (r.id === rowId ? { ...r, [CELL_FIELD[key]]: latest } : r)))
+    setRows(rs => rs.map(r => (r.id === rowId ? { ...r, [weeklyField(key)]: latest } : r)))
     setStatus(s => { if (!(k in s)) return s; const n = { ...s }; delete n[k]; return n })
     router.refresh() // dirty 인 동안 막아 둔 실시간 값이 더 있었을 수 있다 — 서버 값을 다시 받는다
   }
@@ -639,7 +644,7 @@ export function WeeklySheetView({
     const k = `${addr.rowId}:${addr.col}`
     if (editSessionRef.current?.key === k) return // 같은 셀에 진행 중 세션 — baseline 재캡처 금지(R-1: IME 폴백 등 재진입 레이스 구조적 차단)
     const row = rowsRef.current.find(r => r.id === addr.rowId)
-    editSessionRef.current = { key: k, baseline: row ? row[CELL_FIELD[addr.col]] : '', wasDirty: dirtyRef.current.has(k) }
+    editSessionRef.current = { key: k, baseline: row ? row[weeklyField(addr.col)] : '', wasDirty: dirtyRef.current.has(k) }
   }, [])
 
   // 편집 세션 종료 — cancel=원값 복원(회귀 #12), commit=변경 시 undo 크기1 push(AC6.5) + 즉시 저장.
@@ -648,12 +653,12 @@ export function WeeklySheetView({
     const sess = editSessionRef.current
     if (!sess || sess.key !== k) return // 이미 소비됨/다른 셀
     editSessionRef.current = null
-    const cur = rowsRef.current.find(r => r.id === addr.rowId)?.[CELL_FIELD[addr.col]] ?? ''
+    const cur = rowsRef.current.find(r => r.id === addr.rowId)?.[weeklyField(addr.col)] ?? ''
     if (opts.cancel) {
       if (cur !== sess.baseline) {
         // 로컬 원값 복원 + 서버 재영속화(AC3.2). 편집 세션 중 1.5s 디바운스 commit이 이미 입력값을 서버에
         // 저장했을 수 있고, 그러면 자기 Realtime 에코가 dirty 없음으로 입력값을 재채택해 취소가 무효화된다.
-        setRows(rs => rs.map(r => (r.id === addr.rowId ? { ...r, [CELL_FIELD[addr.col]]: sess.baseline } : r)))
+        setRows(rs => rs.map(r => (r.id === addr.rowId ? { ...r, [weeklyField(addr.col)]: sess.baseline } : r)))
         markDirty(k, cur) // 재영속화 우선 — wasDirty=false여도 dirty를 지우지 않는다. 기대값은 지금 값(그새 저장됐다면 서버가 가진 값)
         const t = timersRef.current.get(k); if (t) clearTimeout(t)
         // 0ms 지연: 위 setRows 플러시 후 rowsRef가 baseline을 반영한 다음 commit이 그 값을 전송하게 하는 장치.
@@ -683,7 +688,7 @@ export function WeeklySheetView({
   }, [endEdit, commit])
 
   const grid = useSheetGrid({
-    rows, enabled: !!report && rows.length > 0, readOnly: !canEditCells, cellRefs,
+    rows, columns: cellKeys, labels: cellLabels, enabled: !!report && rows.length > 0, readOnly: !canEditCells, cellRefs,
     runBatch, requestUndo, requestRedo, beginEdit, endEdit, toast,
   })
 
@@ -735,20 +740,20 @@ export function WeeklySheetView({
       toast({ title: t('weekly.ai.selectFirstTitle'), description: t('weekly.ai.selectFirstDesc'), variant: 'info' })
       return
     }
-    const targets = buildWeeklyRewriteSelection(rowsRef.current, grid.rect, r => rowLabel(r, areasRef.current))
+    const targets = buildWeeklyRewriteSelection(rowsRef.current, grid.rect, r => rowLabel(r, areasRef.current), cellKeys, cellLabels)
     if (targets.length === 0) {
       toast({ title: t('weekly.ai.noContentTitle'), description: t('weekly.ai.noContentDesc'), variant: 'info' })
       return
     }
     setAiItems([])
     void requestAiRewrite(targets)
-  }, [grid.rect, hasFocusedCell, requestAiRewrite, toast, t])
+  }, [grid.rect, hasFocusedCell, requestAiRewrite, toast, t, cellKeys, cellLabels])
 
   const retryAiRewrite = useCallback(() => {
     const latest = aiTargetsRef.current.flatMap(target => {
       const row = rowsRef.current.find(candidate => candidate.id === target.rowId)
       if (!row) return []
-      const original = row[CELL_FIELD[target.cellKey]]
+      const original = row[weeklyField(target.cellKey)]
       return original.trim() ? [{ ...target, original }] : []
     })
     if (latest.length === 0) {
@@ -857,7 +862,7 @@ export function WeeklySheetView({
           </div>
         )}
         {carry && carry.weekStart === weekStart && (
-          <CarryMappingModal
+          <CarryMappingModal labels={cellLabels}
             key={carry.round}
             open
             pending={carry.sources}
@@ -894,7 +899,7 @@ export function WeeklySheetView({
 
   // ── 구글시트 복제 룩: 종이(surface) + 얇은 테두리 + 옅은 2단 헤더 + 병합 셀.
   //    시트도 테마 토큰을 따른다(SP4 B, D52).
-  // 2단 머리의 금주실적·차주계획 × 내용·이슈 및 주요 이벤트(핵심 4열)와 기본 제목(▣ 주간업무보고)은 제품 고정이다 — 사전으로 옮기지 않는다(개정 §2.9)
+  // 항목은 프로젝트 설정 순서대로 두 주차 묶음에 표시한다.
   const HDR = 'border border-border-input bg-surface-subtle px-1 py-1.5 text-center text-[13px] font-bold text-fg'
 
   // 선택/채우기 사각 — 셀 단위 틴트·외곽선·핸들을 선언적으로 그린다(측정 없음, 회귀 #7).
@@ -922,7 +927,7 @@ export function WeeklySheetView({
       />
       <p className="text-meta text-fg-secondary lg:hidden">{t('weekly.sheet.scrollHint')}</p>
       <div className="isolate min-h-0 flex-1 overflow-auto" role="region" aria-label={t('weekly.sheet.region')} tabIndex={0}>
-        <div className={`min-w-[1240px] rounded-(--radius-panel) bg-surface p-1.5 ring-1 ring-border/80 ${grid.dragging === 'fill' ? 'cursor-crosshair select-none' : grid.dragging === 'select' ? 'cursor-cell select-none' : ''}`}>
+        <div style={{ minWidth: Math.max(1240, 160 + cellKeys.length * 240) }} className={`min-w-[1240px] rounded-(--radius-panel) bg-surface p-1.5 ring-1 ring-border/80 ${grid.dragging === 'fill' ? 'cursor-crosshair select-none' : grid.dragging === 'select' ? 'cursor-cell select-none' : ''}`}>
           {/* 제목 행 — 레퍼런스 시트의 B1. 자유 편집(''이면 기본 제목 합성). key로 주차 전환 시 초기화 */}
           <TitleEditor
             key={report.id}
@@ -939,34 +944,26 @@ export function WeeklySheetView({
             }}
             onReload={() => router.refresh()}
           />
-          {/* 업무영역 1단(영역마다 1행) + 내용 4열. 행 구조 편집은 없다 — 영역 추가·비활성은 프로젝트 설정의 업무영역에서. */}
-          {/* 열 폭: 업무영역 10% · 금주 내용 27% · 금주 이슈 19% · 차주 내용 26% · 차주 이슈 18%(합 100). colgroup 안에는 주석·공백을
-              두지 않는다 — 공백 텍스트 노드가 colgroup 의 자식이 되면 hydration 오류가 난다. */}
+          {/* 업무영역당 1행, 프로젝트에서 정한 항목을 두 기간에 반복한다. */}
           <table className="w-full table-fixed border-collapse bg-surface text-[13px] text-fg">
             <colgroup>
               {[
                 <col key="__area" className="w-[10%]" />,
-                <col key="__thisContent" className="w-[27%]" />,
-                <col key="__thisIssue" className="w-[19%]" />,
-                <col key="__nextContent" className="w-[26%]" />,
-                <col key="__nextIssue" className="w-[18%]" />,
+                ...cellKeys.map(k => <col key={k} style={{ width: `${90 / cellKeys.length}%` }} />),
                 ...customListDefs.map(d => <col key={`cf:${d.key}`} className="w-[140px]" />),
               ]}
             </colgroup>
             <thead>
               <tr>
                 <th rowSpan={2} className={HDR}>{t('weekly.sheet.areaHeader')}</th>
-                <th colSpan={2} className={HDR}>금주실적({thisRange})</th>
-                <th colSpan={2} className={HDR}>차주계획({nextRange})</th>
+                <th colSpan={columns.length} className={HDR}>금주실적({thisRange})</th>
+                <th colSpan={columns.length} className={HDR}>차주계획({nextRange})</th>
                 {customListDefs.map(d => (
                   <th key={d.key} rowSpan={2} className={HDR}>{d.label}</th>
                 ))}
               </tr>
               <tr>
-                <th className={HDR}>내용</th>
-                <th className={HDR}>이슈 및 주요 이벤트</th>
-                <th className={HDR}>내용</th>
-                <th className={HDR}>이슈 및 주요 이벤트</th>
+                {cellKeys.map(k => <th key={k} className={HDR}>{columns.find(c => k === `this_${c.id}` || k === `next_${c.id}`)!.label}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -1004,7 +1001,7 @@ export function WeeklySheetView({
                       <td key={c.key} className={`h-px border border-border-input p-0 align-top ${bg}`}>
                         <SheetCell
                           addr={addr}
-                          value={r[CELL_FIELD[c.key]]}
+                          value={r[weeklyField(c.key)] ?? ''}
                           ariaLabel={`${c.label}, ${rowName}`}
                           status={status[`${r.id}:${c.key}`]}
                           isActive={active}
@@ -1073,6 +1070,8 @@ export function WeeklySheetView({
         </div>
       </div>
       <WeeklyLintPanel
+        columns={cellKeys}
+        labels={cellLabels}
         open={lintOpen}
         rows={rows}
         groupOf={lintGroupOf}
@@ -1101,7 +1100,7 @@ export function WeeklySheetView({
           <ConflictResolver
             open={open}
             target={row ? rowLabel(row, areas) : undefined}
-            fields={open ? [{ key, label: WEEKLY_CELL_LABEL[key], mine: row![CELL_FIELD[key]], latest: latest!, base: baseRef.current.get(k!) }] : []}
+            fields={open ? [{ key, label: cellLabels[key], mine: row![weeklyField(key)], latest: latest!, base: baseRef.current.get(k!) }] : []}
             onKeepMine={() => k && keepMine(k)}
             onTakeLatest={() => k && takeLatest(k)}
             onContinue={() => k && dequeue(k)}

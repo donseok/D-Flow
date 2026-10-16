@@ -66,6 +66,8 @@ export default async function WeeklyPage({
   const nextKey = nextWeekKey(cal.weekStart, weekStart)
   const weekOutsideProject = !!period && ((!!period.end_date && weekStart > period.end_date) || (!!period.start_date && nextKey <= period.start_date))
   const customFields = pick(pc.cfg, 'fields.weekly_row')
+  const columns = pick(pc.cfg, 'weekly.columns')
+  if (!columns.ok) return <ProjectPageShell hero={hero}><ConfigLoadError error={columns.error} keyName={columns.key} kind={columns.kind} /></ProjectPageShell>
 
   return (
     <ProjectPageShell hero={hero} variant="fill">
@@ -76,6 +78,8 @@ export default async function WeeklyPage({
         canAdmin={isProjectAdmin(actor, projectId)}
       >
         <WeeklySheetView
+          key={`${projectId}:${weekStart}:${JSON.stringify(columns.value)}`}
+          columns={columns.value}
           projectId={projectId}
           weekStart={weekStart}
           prevWeek={prevWeekKey(cal.weekStart, weekStart)}

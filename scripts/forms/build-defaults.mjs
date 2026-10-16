@@ -34,8 +34,8 @@ const THEME = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme x
 function weeklySlides(width) {
   const title = '{{report.project_name}} · 주간보고'
   const subtitle = '{{report.week_label}} | 계획 {{kpi.plan}} · 실적 {{kpi.actual}}'
-  const headers = ['구분', '금주 실적', '차주 계획', '이슈']
-  const cells = ['{{#slide sections}}{{.name}}', '{{.this_content}}', '{{.next_content}}', '{{.this_issue}}']
+  const headers = ['업무영역 · 항목', '금주 실적', '차주 계획']
+  const cells = ['{{#slide sections}}{{.name}}', '{{.this_content}}', '{{.next_content}}']
   const head = `${shape(2, title, .5, .3, width, .6, 2600)}${shape(3, subtitle, .5, 1, width, .4, 1600)}`
   return [slideXml(head), slideXml(`${head}${table(headers, cells, width)}`)]
 }
@@ -107,10 +107,10 @@ async function workbook(kind) {
   sheet.addRow([weekly ? '{{report.project_name}} · 주간보고' : '{{project.name}} · WBS'])
   sheet.addRow(weekly ? ['{{report.week_label}}', '{{report.week_range}}'] : ['기간', '{{project.start_date}}', '~', '{{project.end_date}}'])
   sheet.addRow(['계획', '{{kpi.plan}}', '실적', '{{kpi.actual}}'])
-  const headers = weekly ? ['구분', '금주 실적', '차주 계획', '금주 이슈', '차주 이슈'] : ['번호', '단계', '작업명', '산출물', '담당', '시작일', '종료일', '계획 (%)', '실적 (%)', '상태']
+  const headers = weekly ? ['업무영역 · 항목', '금주 실적', '차주 계획'] : ['번호', '단계', '작업명', '산출물', '담당', '시작일', '종료일', '계획 (%)', '실적 (%)', '상태']
   sheet.addRow(headers)
   sheet.addRow(weekly
-    ? ['{{#rows sections}}{{.name}}', '{{.this_content}}', '{{.next_content}}', '{{.this_issue}}', '{{.next_issue}}{{/rows}}']
+    ? ['{{#rows sections}}{{.name}}', '{{.this_content}}', '{{.next_content}}{{/rows}}']
     : ['{{#rows wbs_items}}{{.no}}', '{{.level_label}}', '{{.name}}', '{{.deliverable}}', '{{.owner_text}}', '{{.planned_start}}', '{{.planned_end}}', '{{.planned_pct}}', '{{.actual_pct}}', '{{.status_label}}{{/rows}}'])
   sheet.mergeCells(1, 1, 1, headers.length)
   if (!weekly) {

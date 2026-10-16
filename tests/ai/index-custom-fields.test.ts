@@ -1,3 +1,4 @@
+import { DEFAULT_WEEKLY_COLUMNS } from '@/lib/domain/weeklyColumns'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const configMock = vi.hoisted(() => ({
@@ -14,6 +15,7 @@ vi.mock('@/lib/settings/projectConfig', () => ({
     workspaceId: 'ws-1',
     revision: 1,
     keys: {
+      'weekly.columns': { status: 'default', value: DEFAULT_WEEKLY_COLUMNS },
       'fields.wbs_item': { status: 'set', value: configMock.defs.wbs },
       'fields.issue': { status: 'set', value: configMock.defs.issue },
       'fields.weekly_row': { status: 'set', value: configMock.defs.weekly },
@@ -365,7 +367,7 @@ describe('AI 색인 본문 사용자 정의 필드 반영', () => {
       if (!res.ok || !res.data) throw new Error('스냅샷 실패')
       const content = res.data.documents.map(d => d.content).join('\n')
       expect(content).toContain('## 개발본부')
-      expect(content).toContain('금주 업무: API 개발 완료')
+      expect(content).toContain('금주실적 내용: API 개발 완료')
       expect(content).toContain('목표 달성: 예')
     })
 

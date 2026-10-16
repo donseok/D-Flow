@@ -103,7 +103,7 @@ describe('WeeklySheetView — 여러 줄 텍스트 붙여넣기', () => {
     expect(cb.types).toContain('application/x-dflow-sheet')
     expect(cb.getData('text/plain')).toBe('\n기존')
     // 같은 범위를 다음 열(금주 이슈) 맨 위에 붙여넣는다
-    const issue = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="금주 이슈·이벤트, 조업"]')!
+    const issue = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="금주실적 이슈 및 주요 이벤트, 조업"]')!
     await act(async () => { issue.focus() })
     await fire('paste', issue, cb)
     expect(h.cells).toHaveBeenCalledTimes(1)

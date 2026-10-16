@@ -173,6 +173,7 @@ export interface WeeklyReportRecord {
 
 /** 주간 행(SP4) — 구분 문자열이 아니라 영역 id 로 묶인다. 행 순서는 저장소가 시트와 같은 규칙(visibleRows)으로 정한다. */
 export interface WeeklyRepositoryRow {
+  [key: `this_${string}` | `next_${string}`]: string
   id: string
   reportId: string
   areaId: string

@@ -17,7 +17,7 @@ const ALL = [...WORKSPACE_SETTINGS, ...PROJECT_SETTINGS] as readonly SettingDef[
 const KEYS = ALL.map((d) => d.key)
 
 describe('등록 키', () => {
-  it('정확히 50키 — 워크스페이스 16, 프로젝트 34(대시보드 판정 기준 dashboard.* 둘 + SP7 minutes.auto_file_by_path + SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 둘 + SPU1 security.local_drafts + SP8 notify.policy)', () => {
+  it('정확히 51키 — 워크스페이스 16, 프로젝트 35(대시보드 판정 기준 dashboard.* 둘 + SP7 minutes.auto_file_by_path + SP3a §3.6 표 + SP5 A calendar.* 두 스코프 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B2 최상위 폴더 + SP5b 이슈 상태 + SP5b W1 흐름 다섯 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 둘 + SPU1 security.local_drafts + SP8 notify.policy)', () => {
     expect(WORKSPACE_SETTINGS.map((d) => d.key)).toEqual(['modules.allowed', 'ai.enabled', 'invites.allowed_domains', 'branding.product_name',
       'branding.logo', 'branding.accent', 'branding.mail_from_name', 'navigation.menu', 'calendar.timezone', 'calendar.working_days', 'calendar.week_start', 'portal.widgets', 'security.local_drafts', 'notify.policy', 'minutes.attachments', 'minutes.root_folders'])
     expect(PROJECT_SETTINGS.map((d) => d.key)).toEqual(['core.level_labels', 'core.extra_axis_label', 'core.milestone_keywords',
@@ -27,7 +27,7 @@ describe('등록 키', () => {
       'views.default',
       'issues.id_policy', 'issues.analysis', 'minutes.attachments', 'minutes.auto_file_by_path',
       'dashboard.due_soon_days', 'dashboard.delayed_red_count',
-      'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses', 'fields.wbs_item', 'fields.issue', 'fields.weekly_row',
+      'attendance.types', 'meetings.categories', 'issues.severities', 'issues.sources', 'issues.cause_categories', 'workflow.issue_statuses', 'fields.wbs_item', 'fields.issue', 'weekly.columns', 'fields.weekly_row',
       'forms.weekly_report_pptx', 'forms.weekly_report_xlsx', 'forms.issue_analysis_pptx', 'forms.wbs_export_xlsx'])
     for (const k of ['agents.stage_workflow', 'core.stage_credits']) {
       expect(KEYS, k).not.toContain(k)

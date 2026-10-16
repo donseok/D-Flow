@@ -120,7 +120,7 @@ describe('WeeklySheetView — 영역 라벨과 실시간 병합', () => {
     typeInto(cell(), '내가 쓰는 중')
     act(() => h.onChange!({ eventType: 'UPDATE', new: { ...record(row('r1', 'a-exp', '남이 저장한 값')), this_issue: '서버 이슈' } }))
     expect(cell().value).toBe('내가 쓰는 중')
-    expect(container.querySelector<HTMLTextAreaElement>('textarea[aria-label="금주 이슈·이벤트, 실험"]')!.value).toBe('서버 이슈')
+    expect(container.querySelector<HTMLTextAreaElement>('textarea[aria-label="금주실적 이슈 및 주요 이벤트, 실험"]')!.value).toBe('서버 이슈')
   })
 
   it('입력 중인 칸은 같은 문서의 새로고침(서버가 새 props 를 내려줌)에도 내 입력이 남는다', () => {

@@ -1,5 +1,18 @@
 // settings 화면 사전 — 이 파일은 settings 영역 담당만 수정한다.
 export const settingsKo = {
+  'settings.weeklyColumns.hint': '금주실적과 차주계획에 같은 항목이 표시됩니다. 이월을 켜면 이전 차주계획이 새 주의 금주실적으로 복사됩니다.',
+  'settings.weeklyColumns.invalid': '항목 설정을 읽지 못했습니다. 항목을 구성하고 저장해 주세요.',
+  'settings.weeklyColumns.itemName': '{n}번째 항목 이름',
+  'settings.weeklyColumns.carry': '이월',
+  'settings.weeklyColumns.up': '{name} 위로',
+  'settings.weeklyColumns.down': '{name} 아래로',
+  'settings.weeklyColumns.removeLabel': '{name} 삭제',
+  'settings.weeklyColumns.remove': '삭제',
+  'settings.weeklyColumns.add': '항목 추가',
+  'settings.weeklyColumns.retry': '저장 결과 다시 확인',
+  'settings.weeklyColumns.save': '저장',
+  'settings.weeklyColumns.saved': '저장했습니다.',
+  'settings.weeklyColumns.footnote': '1~{max}개 항목 · 이름 변경과 순서 이동은 입력된 값을 유지합니다. 삭제한 항목은 표와 이월 대상에서 제외됩니다.',
   // 공통 이름
   'settings.projectFallback': '프로젝트',
   'settings.tbd': '미정',
@@ -262,6 +275,8 @@ export const settingsKo = {
   'settings.workflow.stepsHint': '단계 구성·순서는 다음 검수부터, 이름·승인자는 바로 적용됩니다. 검수 중인 단계는 지울 수 없습니다.',
   'settings.workflow.stepCodeHint': '단계 코드는 영소문자로 시작하는 1~20자(영소문자·숫자·_)입니다.',
   'settings.workflow.credit_policy.label': '크레딧 단위·간격', 'settings.workflow.credit_policy.desc': '단계 실적 크레딧의 단위(1 또는 5)와 단계 사이 최소 간격입니다. 다음 전이부터 적용됩니다.',
+  'settings.weekly.columns.label': '주간보고 작성 항목',
+  'settings.weekly.columns.desc': '금주실적과 차주계획에 사용할 항목의 이름, 순서와 이월 여부를 프로젝트별로 정합니다.',
   'settings.workflow.wbs_stage_labels.label': '단계 이름', 'settings.workflow.wbs_stage_labels.desc': '개발 워크플로 단계(미착수·할당됨·작업 중·검수 대기·완료)의 표시 이름입니다. 비워 두면 기본 이름을 씁니다.',
   'settings.workflow.approval_steps.label': '승인 단계', 'settings.workflow.approval_steps.desc': '검수 대기에서 완료까지 거치는 승인(1~3단계)과 단계별 승인자입니다. 단계 구성은 다음 검수부터, 이름·승인자는 바로 적용됩니다.',
   'settings.workflow.approval_distinct_approvers.label': '단계마다 다른 승인자', 'settings.workflow.approval_distinct_approvers.desc': '한 검수에서 같은 사람이 두 단계를 승인하지 못하게 합니다.',

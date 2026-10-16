@@ -1,6 +1,6 @@
 import { cellsInRect, type GridRect } from './sheetSelection'
 import {
-  CELL_FIELD, WEEKLY_CELL_LABEL,
+  weeklyField, WEEKLY_CELL_LABEL, WEEKLY_CELL_KEYS,
   type WeeklyCellEdit, type WeeklyCellKey, type WeeklyCells,
 } from './weeklySheet'
 
@@ -25,18 +25,20 @@ export function buildWeeklyRewriteSelection<R extends { id: string } & WeeklyCel
   rows: readonly R[],
   rect: GridRect,
   labelOf: (row: R) => string,
+  columns: readonly WeeklyCellKey[] = WEEKLY_CELL_KEYS,
+  labels: Record<WeeklyCellKey, string> = WEEKLY_CELL_LABEL,
 ): WeeklyRewriteTarget[] {
   const byId = new Map(rows.map(row => [row.id, row]))
-  return cellsInRect(rows.map(row => row.id), rect).flatMap(({ rowId, col }) => {
+  return cellsInRect(rows.map(row => row.id), rect, columns).flatMap(({ rowId, col }) => {
     const row = byId.get(rowId)
     if (!row) return []
-    const original = row[CELL_FIELD[col]]
+    const original = row[weeklyField(col)] ?? ''
     if (!original.trim()) return []
     return [{
       rowId,
       cellKey: col,
       section: labelOf(row),
-      label: WEEKLY_CELL_LABEL[col],
+      label: labels[col],
       original,
     }]
   })
@@ -57,7 +59,7 @@ export function prepareApplicableWeeklyRewriteEdits<R extends { id: string } & W
   for (const candidate of candidates) {
     const address = `${candidate.rowId}:${candidate.cellKey}`
     const row = byId.get(candidate.rowId)
-    if (seen.has(address) || !row || row[CELL_FIELD[candidate.cellKey]] !== candidate.original)
+    if (seen.has(address) || !row || row[weeklyField(candidate.cellKey)] !== candidate.original)
       return { ok: false }
     seen.add(address)
     if (candidate.content.trim() && candidate.content !== candidate.original) {

@@ -82,7 +82,7 @@ describe('getWeeklySheet — 쿼리 모양(스펙 §4.1.2·Q35·W21)', () => {
     await getWeeklySheet('p1', '2026-09-21')
     expect(calls.map(c => c.table)).toEqual(['weekly_reports', 'weekly_report_rows'])
     expect(calls[0].eq).toEqual([['project_id', 'p1'], ['week_start', '2026-09-21']])
-    expect(calls[1].select).toBe('id, report_id, area_id, this_content, this_issue, next_content, next_issue, custom')
+    expect(calls[1].select).toBe('id, report_id, area_id, this_content, this_issue, next_content, next_issue, custom, cells')
     expect(calls[1].select).not.toMatch(/!inner|weekly_reports\(|\bsection\b|\bmodule\b|sort_order/)
     expect(calls[1].eq).toEqual([['report_id', 'rep-1'], ['project_id', 'p1']])
     expect(calls[1].ordered).toBe(0)

@@ -1,3 +1,5 @@
+import { weeklyColumnKeys, weeklyColumnLabels, weeklyValues } from '@/lib/domain/weeklyColumns'
+import { pick } from '@/lib/settings/pick'
 import { chunkMarkdown } from '@/lib/ai/chunk'
 import { embedDocuments } from '@/lib/ai/embeddings'
 import { embedConfig } from '@/lib/ai/provider'
@@ -13,7 +15,7 @@ import {
   type IndexContentSnapshot,
   type KnowledgeDocumentInput,
 } from './types'
-import { rowLabel, visibleRows, type WeeklyArea } from '@/lib/domain/weeklySheet'
+import { weeklyField, rowLabel, visibleRows, type WeeklyArea, type WeeklyCells } from '@/lib/domain/weeklySheet'
 import { customSearchText, type CustomValues, type FieldDef, type FieldEntity } from '@/lib/domain/customFields'
 import { getProjectConfig } from '@/lib/settings/projectConfig'
 import { teamNameWithCode } from '@/lib/domain/teamLabel'
@@ -197,7 +199,7 @@ async function loadWeeklyReport(client: SupabaseKnowledgeClient, job: ClaimedInd
   // 지운 열(section·module·sort_order)을 고르면 열 drop 뒤 조회 전체가 42703 으로 실패한다(런타임에서만 드러난다).
   const [rowsResult, areasResult, customDefs] = await Promise.all([
     client.from('weekly_report_rows')
-      .select('area_id, this_content, this_issue, next_content, next_issue, updated_at, custom')
+      .select('area_id, this_content, this_issue, next_content, next_issue, updated_at, custom, cells')
       .eq('report_id', job.entityId)
       .eq('project_id', report.project_id),
     client.from('project_areas')
@@ -217,6 +219,7 @@ async function loadWeeklyReport(client: SupabaseKnowledgeClient, job: ClaimedInd
     teams: [],
   }))
   const rows = visibleRows((Array.isArray(rowsResult.data) ? rowsResult.data as Row[] : []).map(row => ({
+    ...weeklyValues(row.cells),
     areaId: str(row.area_id) ?? '',
     thisContent: str(row.this_content) ?? '',
     thisIssue: str(row.this_issue) ?? '',
@@ -226,16 +229,19 @@ async function loadWeeklyReport(client: SupabaseKnowledgeClient, job: ClaimedInd
     updatedAt: row.updated_at,
   })), areas)
 
+  let weeklyCfg
+  try { weeklyCfg = await getProjectConfig(job.projectId as string, { client: client as never }) }
+  catch { return { ok: false, errorCode: 'WEEKLY_COLUMNS_READ_FAILED', retryable: true } }
+  const columnState = pick(weeklyCfg, 'weekly.columns')
+  if (!columnState.ok) return { ok: false, errorCode: 'WEEKLY_COLUMNS_INVALID', retryable: false }
+  const columns = columnState.value
+  const labels = weeklyColumnLabels(columns)
   const weekStart = safeDate(report.week_start)
   const lines: Array<string | null> = [`# 주간업무 ${weekStart ?? ''}`.trim()]
   let latest = safeTimestamp(report.updated_at)
   for (const row of rows) {
-    const cells = [
-      ['금주 업무', row.thisContent],
-      ['금주 이슈', row.thisIssue],
-      ['차주 업무', row.nextContent],
-      ['차주 이슈', row.nextIssue],
-    ].filter((cell): cell is [string, string] => Boolean(cell[1] && cell[1].trim()))
+    const cells = weeklyColumnKeys(columns).map(key => [labels[key], (row as WeeklyCells)[weeklyField(key)] ?? ''])
+      .filter((cell): cell is [string, string] => Boolean(cell[1]?.trim()))
     const customText = customSearchText(customDefs, row.custom ?? {})
     if (!cells.length && !customText) continue
     lines.push(`## ${rowLabel(row, areas)}`)

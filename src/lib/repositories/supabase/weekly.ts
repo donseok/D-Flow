@@ -1,3 +1,4 @@
+import { weeklyValues } from '@/lib/domain/weeklyColumns'
 import {
   repositoryError,
   repositoryOk,
@@ -15,12 +16,13 @@ const REPORT_COLUMNS = 'id, project_id, week_start, title, updated_at'
 // 주간 행은 영역 id 로 묶인다(SP4) — 지운 열(section·module·sort_order)을 고르면 PostgREST 가 42703 으로 조회 전체를 실패시킨다
 const ROW_COLUMNS = [
   'id', 'report_id', 'area_id', 'this_content', 'this_issue', 'next_content', 'next_issue', 'updated_at',
-  'custom', // 사용자 정의 필드 값 — 주간 읽기 도구가 searchable 필드를 덧붙인다(SP5c §3.6.9)
+  'cells', 'custom', // 사용자 정의 필드 값 — 주간 읽기 도구가 searchable 필드를 덧붙인다(SP5c §3.6.9)
 ].join(', ')
 const AREA_COLUMNS = 'id, code, name, sort_order, active, area_teams(team_id, kind)'
 
 function mapRow(row: Row): WeeklyRepositoryRow {
   return {
+    ...weeklyValues(row.cells),
     id: row.id as string,
     reportId: row.report_id as string,
     areaId: row.area_id as string,
@@ -42,6 +44,7 @@ function customOf(raw: unknown): WeeklyRepositoryRow['custom'] {
 function mapArea(row: Row): WeeklyArea {
   const teams = Array.isArray(row.area_teams) ? (row.area_teams as Row[]) : []
   return {
+    ...weeklyValues(row.cells),
     id: row.id as string,
     code: (row.code as string) ?? '',
     name: (row.name as string) ?? '',

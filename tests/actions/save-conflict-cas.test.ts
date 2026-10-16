@@ -1,3 +1,4 @@
+import { makeProjectConfig } from '../helpers/projectConfigFixture'
 // 저장 충돌의 서버 계약(SPU1 — 개정 §5.8, Q05·Q10). 기대값이 서버의 현재 값과 다르면 쓰지 않고(쓰기 0) 그 현재 값을 돌려준다 — 화면이 내
 // 값과 나란히 보이고 고르게 한다. 주간 셀은 값 CAS 를 새로 받는다(읽은 updated_at 을 조건으로 쓴다 — 읽기와 쓰기 사이의 끼어들기도 잡는다).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -5,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   createServerClient: vi.fn(), requireProjectMember: vi.fn(), requireProjectAdmin: vi.fn(), resolveProjectId: vi.fn(), requireModule: vi.fn(),
 }))
+vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: vi.fn(async () => makeProjectConfig()) }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/server', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/server')>()), after: vi.fn() }))
 vi.mock('@/lib/authz', () => ({

@@ -1,3 +1,4 @@
+import { DEFAULT_WEEKLY_COLUMNS, parseWeeklyColumns, type WeeklyColumn } from '@/lib/domain/weeklyColumns'
 // 프로젝트 키 31개(SP3a 표 + SP5 A calendar.* 셋 + SP5 B1 issues.* 둘 + B4 어휘 다섯 + B3 minutes.attachments + SP5b 흐름 다섯 + SP5b 이슈 상태 + SP5c 필드 셋 + SP6 forms.* 넷 + SP3b UI-3 views.default). 소유 모듈과 값 형태의 정본은 개정 §2.8.2.
 import { DEFAULT_VIEWS, parseViewsDefault, type ViewsDefault } from '@/lib/wbs/view'
 import { DEFAULT_ATTACHMENT_POLICY, parseAttachmentPolicy, type AttachmentPolicy } from '@/lib/minutes/attachmentPolicy'
@@ -301,6 +302,11 @@ export const PROJECT_DEFS = [
     widget: { kind: 'custom', component: 'CustomFieldsSettings' }, editor: 'project_admin', apply: 'immediate', impact: ['guarded'],
     sql: { readers: ['enforce_custom_fields', 'custom_fields_ref_check', 'settings_ref_check'] },
     reindexOn: ['label', 'searchable', 'options.label'] as const,
+  }),
+  defineSetting<'weekly.columns', WeeklyColumn[]>({
+    key: 'weekly.columns', scope: 'project', module: 'weekly', default: DEFAULT_WEEKLY_COLUMNS,
+    parse: parseWeeklyColumns,
+    widget: { kind: 'custom', component: 'WeeklyColumnsEditor' }, editor: 'project_admin', apply: 'immediate', impact: ['none'], sql: null,
   }),
   defineSetting<'fields.weekly_row', FieldDef[]>({
     key: 'fields.weekly_row', scope: 'project', module: 'weekly', default: [],

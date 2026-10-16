@@ -607,6 +607,8 @@ export const serverUiKo = {
   'srv.weekly.couldNotVerifyTargetSave': '대상을 확인할 수 없어 저장을 중단했습니다.',
   'srv.weekly.customFieldValuesCarryOver': '이월할 추가 정보 값이 지금의 필드 설정과 맞지 않아 주차 시트를 만들지 못했습니다. 프로젝트 설정의 추가 필드를 확인하세요.',
   'srv.weekly.emptyCellsCannotPolishedAi': '빈 셀은 AI로 다듬을 수 없습니다.',
+  'srv.weekly.columnUnknown': '프로젝트 설정에 없는 주간보고 항목입니다. 새로고침해 주세요.',
+  'srv.weekly.columnsUnavailable': '주간보고 항목 설정을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.',
   'srv.weekly.invalidCell': '잘못된 셀입니다.',
   'srv.weekly.invalidCellIncluded': '잘못된 셀이 포함되어 있습니다.',
   'srv.weekly.invalidTarget': '잘못된 대상입니다.',

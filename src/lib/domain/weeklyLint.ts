@@ -16,7 +16,7 @@
 
 import { fill, koTranslate, type Translate } from '@/lib/i18n/translate'
 import {
-  CELL_FIELD, WEEKLY_CELL_KEYS, WEEKLY_CELL_LABEL,
+  weeklyField, WEEKLY_CELL_KEYS, WEEKLY_CELL_LABEL,
   type WeeklyCellEdit, type WeeklyCellKey, type WeeklyCells,
 } from './weeklySheet'
 
@@ -264,18 +264,18 @@ function removeLines(content: string, drop: ReadonlySet<number>): { content: str
  *  단, **들여쓴 줄은 검사에서 뺀다.** 비교는 글머리·번호를 떼고 하기 때문에, 항목마다 달아 둔
  *  `- 완료` 같은 상태줄이 서로 '같은 줄'로 보여 뒤쪽 항목의 상태줄이 통째로 지워진다.
  *  들여쓴 줄은 바로 위 항목에 딸린 것이라 문맥이 다르다 — 같은 글자여도 중복이 아니다. */
-export function lintDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
+export function lintDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate, columns: readonly WeeklyCellKey[] = WEEKLY_CELL_KEYS): LintFinding[] {
   const out: LintFinding[] = []
 
   for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
     const byId = new Map(group.map(r => [r.id, r]))
 
-    for (const cellKey of WEEKLY_CELL_KEYS) {
+    for (const cellKey of columns) {
       // (구획, 정규화 줄) → 등장 위치들. 묶음이 sortOrder 순이고 구획은 줄 순서를 나눠 가지므로
       // 배열 앞쪽이 곧 화면에서 위쪽이다(첫 등장만 남기는 규칙이 이 순서에 기댄다).
       const groups = new Map<string, { norm: string; hits: { rowId: string; line: number }[] }>()
       for (const row of group) {
-        const lines = toLines(row[CELL_FIELD[cellKey]])
+        const lines = toLines((row[weeklyField(cellKey)] ?? ''))
         // 들여쓰기 기준은 구획이 아니라 셀 전체로 잰다 — 구획별로 재면 머리글(보통 0칸)이 빠지면서
         // 그동안 제외되던 들여쓴 줄이 통째로 삭제 대상에 새로 들어온다. 이 변경의 취지는 지적을
         // 줄이는 것이지 늘리는 것이 아니다.
@@ -307,7 +307,7 @@ export function lintDuplicates<R extends LintRow>(rows: readonly R[], groupOf: L
         }
         let headersGone = 0
         const edits: WeeklyCellEdit[] = [...dropByRow].map(([rowId, drop]) => {
-          const { content, headers } = removeLines(byId.get(rowId)![CELL_FIELD[cellKey]], drop)
+          const { content, headers } = removeLines(byId.get(rowId)![weeklyField(cellKey)], drop)
           headersGone += headers
           return { rowId, cellKey, content }
         })
@@ -321,7 +321,7 @@ export function lintDuplicates<R extends LintRow>(rows: readonly R[], groupOf: L
           section,
           rowId: edits[0].rowId,
           cellKey,
-          title: WEEKLY_CELL_LABEL[cellKey],
+          title: WEEKLY_CELL_LABEL[cellKey] ?? cellKey,
           // 어느 줄이 사라지는지 적용 '전에' 보이게 한다 — 셀 안 반복까지 잡게 된 뒤로는
           // 지울 줄을 눈으로 고르지 못하면 사용자가 되돌릴 수 없는 삭제에 동의하는 셈이 된다.
           // 머리글까지 지워지는 경우를 문구에 반드시 드러낸다 — "2번째 줄을 지웁니다"라고만 적어 놓고
@@ -377,17 +377,17 @@ export function lineSimilarity(a: string, b: string): number {
  *  유사한 두 줄은 다르다 — "진행 중 60%"와 "진행 중 70%"에서 남길 쪽은 사람만 안다.
  *  기계가 앞줄을 지우면 최신 값이, 뒷줄을 지우면 정정된 값이 사라질 수 있다.
  *  그래서 이 지적은 위치를 보여 주고 셀로 데려가는 데서 멈춘다. */
-export function lintNearDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
+export function lintNearDuplicates<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate, columns: readonly WeeklyCellKey[] = WEEKLY_CELL_KEYS): LintFinding[] {
   const out: LintFinding[] = []
 
   for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
-    for (const cellKey of WEEKLY_CELL_KEYS) {
+    for (const cellKey of columns) {
       // 구획별로, 정규화 줄의 첫 등장만 모은다. 같은 줄의 2번째 이후 등장은 규칙 ①이 지운다.
       // 첫 등장 판정(seen)도 구획 안에서 한다 — 시트 전체로 한 벌만 두면 `[현장]`에 먼저 나온 줄이
       // `[설계]`의 같은 줄을 잡아먹어, 그 구획 안의 진짜 유사 쌍이 통째로 사라진다.
       const buckets = new Map<string, { firsts: { norm: string; rowId: string; line: number }[]; seen: Set<string> }>()
       for (const row of group) {
-        const lines = toLines(row[CELL_FIELD[cellKey]])
+        const lines = toLines((row[weeklyField(cellKey)] ?? ''))
         const top = topLevelIndent(lines) // 규칙 ①과 같은 기준(셀 전체)
         for (const block of splitCellBlocks(lines)) {
           const bk = blockKeyOf(block.name)
@@ -469,7 +469,7 @@ export function lintNearDuplicates<R extends LintRow>(rows: readonly R[], groupO
             // 이동 목표는 맨 뒤에 등장한 줄 — 대개 나중에 붙여 넣거나 고쳐 쓴 쪽이라 볼 확률이 높다.
             rowId: ms[ms.length - 1].rowId,
             cellKey,
-            title: WEEKLY_CELL_LABEL[cellKey],
+            title: WEEKLY_CELL_LABEL[cellKey] ?? cellKey,
             detail,
             edits: [],
           })
@@ -483,11 +483,11 @@ export function lintNearDuplicates<R extends LintRow>(rows: readonly R[], groupO
 /** 시트 전체에서 다수결로 정한 번호 구분자. 번호 줄이 없으면 null(규칙 전체 침묵).
  *  보고서 겉모습 문제라 글머리 기호처럼 시트 전체 기준이고, 동수면 . 이 이긴다.
  *  한 종류뿐이어도 그 값을 반환한다 — 그 표기를 존중하되 공백 정규화의 기준으로 쓴다. */
-function dominantNumberSep(rows: readonly LintRow[]): '.' | ')' | null {
+function dominantNumberSep(rows: readonly LintRow[], columns: readonly WeeklyCellKey[]): '.' | ')' | null {
   let dot = 0, paren = 0
   for (const row of rows) {
-    for (const cellKey of WEEKLY_CELL_KEYS) {
-      for (const line of toLines(row[CELL_FIELD[cellKey]])) {
+    for (const cellKey of columns) {
+      for (const line of toLines((row[weeklyField(cellKey)] ?? ''))) {
         const ln = parseListNum(line.trimStart())
         if (!ln || ln.rest === '') continue // 본문 없는 접두(`1.` 단독)는 항목이 아니다 — 다수결에 세지 않는다.
         if (ln.sep === '.') dot++
@@ -503,14 +503,14 @@ function dominantNumberSep(rows: readonly LintRow[]): '.' | ')' | null {
  *  1..n 이 아닐 때만 하고, 표기(구분자 시트 다수결·번호 뒤 공백 1칸)는 번호 줄 1개부터
  *  맞춘다. 구분자만 시트 전체 기준이다(묶음 단위 원칙의 의도된 예외 — 글머리 기호와 동일).
  *  순서와 표기를 한 규칙이 소유해야 같은 줄을 두 지적이 서로 다르게 고치는 충돌이 없다. */
-export function lintNumbering<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
-  const sep = dominantNumberSep(rows)
+export function lintNumbering<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate, columns: readonly WeeklyCellKey[] = WEEKLY_CELL_KEYS): LintFinding[] {
+  const sep = dominantNumberSep(rows, columns)
   if (sep === null) return []
   const out: LintFinding[] = []
   for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
     for (const row of group) {
-      for (const cellKey of WEEKLY_CELL_KEYS) {
-        const content = row[CELL_FIELD[cellKey]]
+      for (const cellKey of columns) {
+        const content = (row[weeklyField(cellKey)] ?? '')
         const lines = toLines(content)
 
         const numberedAt = (idx: readonly number[]) => numberedLines(lines, idx)
@@ -574,7 +574,7 @@ export function lintNumbering<R extends LintRow>(rows: readonly R[], groupOf: Li
           section,
           rowId: row.id,
           cellKey,
-          title: WEEKLY_CELL_LABEL[cellKey],
+          title: WEEKLY_CELL_LABEL[cellKey] ?? cellKey,
           detail: notes.join(', '),
           edits: [{ rowId: row.id, cellKey, content: next.join('\n') }],
         })
@@ -585,11 +585,11 @@ export function lintNumbering<R extends LintRow>(rows: readonly R[], groupOf: Li
 }
 
 /** 시트 전체에서 가장 많이 쓰인 글머리 기호. 종류가 하나뿐이면 통일할 것이 없으므로 null. */
-function dominantBullet(rows: readonly LintRow[]): string | null {
+function dominantBullet(rows: readonly LintRow[], columns: readonly WeeklyCellKey[]): string | null {
   const count = new Map<string, number>()
   for (const row of rows) {
-    for (const cellKey of WEEKLY_CELL_KEYS) {
-      for (const line of toLines(row[CELL_FIELD[cellKey]])) {
+    for (const cellKey of columns) {
+      for (const line of toLines((row[weeklyField(cellKey)] ?? ''))) {
         const m = BULLET_PREFIX.exec(line.replace(/　/g, ' ').trimStart())
         if (m) count.set(m[1], (count.get(m[1]) ?? 0) + 1)
       }
@@ -633,13 +633,13 @@ function formatCell(content: string, bullet: string | null, t: Translate): Forma
 /** 규칙 ③ — 글머리 기호 통일. 셀당 지적 1건.
  *  보고서 겉모습을 맞추는 검사라 시트 전체 다수결을 기준으로 삼는다
  *  (묶음별 다수결이 아니다 — 번호 표기 통일과 더불어 묶음 단위 원칙의 의도된 예외). */
-export function lintFormat<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
-  const bullet = dominantBullet(rows)
+export function lintFormat<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate, columns: readonly WeeklyCellKey[] = WEEKLY_CELL_KEYS): LintFinding[] {
+  const bullet = dominantBullet(rows, columns)
   const out: LintFinding[] = []
   for (const { key: groupKey, label: section, rows: group } of byGroup(rows, groupOf)) {
     for (const row of group) {
-      for (const cellKey of WEEKLY_CELL_KEYS) {
-        const content = row[CELL_FIELD[cellKey]]
+      for (const cellKey of columns) {
+        const content = (row[weeklyField(cellKey)] ?? '')
         const { next, notes } = formatCell(content, bullet, t)
         if (next === content || notes.length === 0) continue
         out.push({
@@ -649,7 +649,7 @@ export function lintFormat<R extends LintRow>(rows: readonly R[], groupOf: LintG
           section,
           rowId: row.id,
           cellKey,
-          title: WEEKLY_CELL_LABEL[cellKey],
+          title: WEEKLY_CELL_LABEL[cellKey] ?? cellKey,
           detail: notes.join(', '),
           edits: [{ rowId: row.id, cellKey, content: next }],
         })
@@ -667,14 +667,14 @@ const KIND_ORDER: Record<LintKind, number> = { duplicate: 0, nearDuplicate: 1, n
  *  있을 때 아래 묶음이 목록 맨 앞으로 올라와 화면(시트) 순서와 어긋난다. 행·열까지 정렬 키에 넣는
  *  것은 중복 규칙만 열 바깥으로 도는 탓 — 한 묶음에 행이 여럿이면 그 부류만 순서가 튄다. */
 /** t — 지적 설명의 사전 조회 함수(점검 패널이 넘긴다). 없으면 koTranslate. 제목(주간 4열 이름)은 제품 고정이라 따르지 않는다 */
-export function lintWeeklySheet<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate): LintFinding[] {
+export function lintWeeklySheet<R extends LintRow>(rows: readonly R[], groupOf: LintGroupOf<R>, t: Translate = koTranslate, columns: readonly WeeklyCellKey[] = WEEKLY_CELL_KEYS): LintFinding[] {
   const groupRank = new Map(byGroup(rows, groupOf).map((g, i) => [g.key, i]))
   const rowRank = new Map(rows.map((r, i) => [r.id, i]))
-  const cellRank = new Map(WEEKLY_CELL_KEYS.map((k, i) => [k, i]))
+  const cellRank = new Map(columns.map((k, i) => [k, i]))
   const at = (f: LintFinding) => groupRank.get(f.groupKey) ?? groupRank.size
   return [
-    ...lintDuplicates(rows, groupOf, t), ...lintNearDuplicates(rows, groupOf, t),
-    ...lintNumbering(rows, groupOf, t), ...lintFormat(rows, groupOf, t),
+    ...lintDuplicates(rows, groupOf, t, columns), ...lintNearDuplicates(rows, groupOf, t, columns),
+    ...lintNumbering(rows, groupOf, t, columns), ...lintFormat(rows, groupOf, t, columns),
   ].sort((a, b) =>
     at(a) - at(b)
     || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]

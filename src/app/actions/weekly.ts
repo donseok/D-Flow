@@ -1,4 +1,6 @@
 'use server'
+import { weeklyColumnKeys, weeklyColumnLabels, weeklyValues } from '@/lib/domain/weeklyColumns'
+import { valueOf } from '@/lib/settings/registry'
 import { revalidatePath } from 'next/cache'
 import { createServerClient } from '@/lib/supabase/server'
 import { adminFor } from '@/lib/supabase/adminFor'
@@ -7,7 +9,7 @@ import { ERR_DENIED, ERR_MISSING } from '@/lib/authz/errors'
 import { weekKeyOf } from '@/lib/domain/calendar'
 import { requireCalendar } from '@/lib/calendar/load'
 import {
-  isWeeklyCellKey, rowLabel, WEEKLY_CELL_LABEL, WEEKLY_CELL_MAX,
+  isWeeklyCellKey, rowLabel, WEEKLY_CELL_KEYS, WEEKLY_CELL_MAX,
   type WeeklyCellEdit, type WeeklyCellKey,
 } from '@/lib/domain/weeklySheet'
 import {
@@ -155,7 +157,9 @@ export async function createWeeklyReport(
     throw e
   }
   let weekStart: string
+  let columns: Awaited<ReturnType<typeof configuredWeeklyColumns>>
   try {
+    columns = valueOf(cfg, 'weekly.columns')
     // 주 키는 그 프로젝트 규칙의 키(SP5 P9) — 트리거(WEEK_KEY_INVALID)는 마지막 방어다(D8)
     weekStart = weekKeyOf(requireCalendar(cfg).weekStart, weekStartIso)
   } catch (e) {
@@ -195,7 +199,7 @@ export async function createWeeklyReport(
         const parsed = parseCustomValues(prevCustom)
         return parsed.ok ? carryCustomFields(defs, parsed.value) : {}
       }
-      const carried = carryOverRows(src.rows, areas, mapping, carryFn)
+      const carried = carryOverRows(src.rows, areas, mapping, carryFn, columns)
       if (!carried.ok) return { ok: false, code: 'CARRY_PENDING', pending: carried.pending, overflow: carried.overflow }
       // 이월 값(custom)은 시드에 실려 RPC 의 행 INSERT 와 한 트랜잭션에 쓰인다(0043) — 따로 쓰지 않는다
       seed = seedOf(carried.rows)
@@ -324,6 +328,13 @@ export async function prepareWeeklyCellRewrite(
   if (totalChars > WEEKLY_REWRITE_MAX_TOTAL_CHARS)
     return { ok: false, error: tr('srv.weekly.selectedContentTooLong') }
 
+  let rewriteLabels: Record<WeeklyCellKey, string>
+  try {
+    const columns = await configuredWeeklyColumns(projectId)
+    rewriteLabels = weeklyColumnLabels(columns)
+    const allowed = new Set(weeklyColumnKeys(columns))
+    if (inputs.some(i => !allowed.has(i.cellKey))) return { ok: false, error: tr('srv.weekly.columnUnknown') }
+  } catch { return { ok: false, error: tr('srv.weekly.columnsUnavailable') } }
   const sb = await createServerClient()
   const rowIds = [...new Set(inputs.map(input => input.rowId))]
   const scope = await rowAreasInProject(sb, projectId, rowIds)
@@ -346,7 +357,7 @@ export async function prepareWeeklyCellRewrite(
   const promptCells = inputs.map((input, index) => ({
     id: `c${index}`,
     section: rowLabel({ areaId: scope.areaOf.get(input.rowId) as string }, areas),
-    field: WEEKLY_CELL_LABEL[input.cellKey],
+    field: rewriteLabels[input.cellKey],
     content: input.content,
   }))
   const prompt = buildWeeklyRewritePrompt(promptCells)
@@ -426,29 +437,48 @@ const CAS_ATTEMPTS = 3
  * 필터에 싣지 않는다). 0행이면 다시 읽어 가린다: 행이 없으면 gone, 값이 달라졌으면 그 칸은 충돌, 같은 행의 다른 칸만 바뀌었으면(내 다른 칸
  * 저장 포함) 한 번 더. 세션 열 권한은 내용 네 칸뿐이라 `updated_at` 은 조건에만 쓴다(값은 트리거가 채운다 — Q13).
  */
+async function configuredWeeklyColumns(projectId: string) {
+  const cfg = await getProjectConfig(projectId)
+  return valueOf(cfg, 'weekly.columns')
+}
+async function validateWeeklyKeys(projectId: string, keys: string[]): Promise<string | null> {
+  const tr = await serverTranslator()
+  try {
+    const allowed = new Set(weeklyColumnKeys(await configuredWeeklyColumns(projectId)))
+    return keys.every(k => allowed.has(k as WeeklyCellKey)) ? null : tr('srv.weekly.columnUnknown')
+  } catch (e) {
+    console.error('[weekly] 항목 설정 조회 실패:', e)
+    return tr('srv.weekly.columnsUnavailable')
+  }
+}
+
 async function casUpdateWeeklyRow(
   sb: Awaited<ReturnType<typeof createServerClient>>, projectId: string, rowId: string,
   patch: Record<string, string>, expected: Partial<Record<WeeklyCellKey, string>>,
 ): Promise<WeeklyCasResult> {
   for (let attempt = 0; attempt < CAS_ATTEMPTS; attempt++) {
     const { data: now, error: readErr } = await sb.from('weekly_report_rows')
-      .select('id, report_id, updated_at, this_content, this_issue, next_content, next_issue')
+      .select('id, report_id, updated_at, this_content, this_issue, next_content, next_issue, cells')
       .eq('id', rowId)
       .eq('project_id', projectId)
       .maybeSingle()
     if (readErr) return { kind: 'error', failure: readErr }   // 쓰기 전 선행 조회 실패 = 중단(3원칙)
     if (!now) return { kind: 'gone' }
-    const row = now as Record<string, string | null>
+    const row = now as Record<string, unknown>
+    const cells = weeklyValues(row.cells)
     const conflicts: Partial<Record<WeeklyCellKey, string>> = {}
     const writable: Record<string, string> = {}
     for (const [key, content] of Object.entries(patch) as Array<[WeeklyCellKey, string]>) {
       const want = expected[key]
-      if (want !== undefined && (row[key] ?? '') !== want) conflicts[key] = row[key] ?? ''
+      const latest = (WEEKLY_CELL_KEYS as readonly string[]).includes(key) ? String(row[key] ?? '') : cells[key] ?? ''
+      if (want !== undefined && latest !== want) conflicts[key] = latest
       else writable[key] = content
     }
     if (Object.keys(writable).length === 0) return { kind: 'done', conflicts }
+    const dynamic = Object.fromEntries(Object.entries(writable).filter(([k]) => !(WEEKLY_CELL_KEYS as readonly string[]).includes(k)))
+    const stored = Object.fromEntries(Object.entries(writable).filter(([k]) => (WEEKLY_CELL_KEYS as readonly string[]).includes(k)))
     const { data, error } = await sb.from('weekly_report_rows')
-      .update(writable)    // updated_at 없음 — 트리거가 채운다(Q13)
+      .update({ ...stored, ...(Object.keys(dynamic).length ? { cells: { ...cells, ...dynamic } } : {}) })    // updated_at 없음 — 트리거가 채운다(Q13)
       .eq('id', rowId)
       .eq('updated_at', row.updated_at as string)
       .select('id, report_id')
@@ -472,13 +502,15 @@ export async function saveWeeklyCell(
   if (!isWeeklyCellKey(cellKey)) return { ok: false, error: tr('srv.weekly.invalidCell') }
   if (content.length > CELL_MAX) return { ok: false, error: fill(tr('srv.weekly.contentMustCharactersFewer'), { cellMax: CELL_MAX }) }
 
+  const keyError = await validateWeeklyKeys(projectId, [cellKey])
+  if (keyError) return { ok: false, error: keyError }
   const sb = await createServerClient()
   const scope = await rowAreasInProject(sb, projectId, [rowId])
   if (!scope.ok) return { ok: false, error: scope.error }
   // 소속이 아니면 '행 없음'과 같은 취급 — 남의 프로젝트 행의 존재를 알려 주지 않는다.
   if (!scope.areaOf.has(rowId)) return { ok: false, error: tr(ERR_ROW_GONE), gone: true }
-  if (typeof expected === 'string') {
-    const r = await casUpdateWeeklyRow(sb, projectId, rowId, { [cellKey]: content }, { [cellKey]: expected })
+  if (typeof expected === 'string' || !(WEEKLY_CELL_KEYS as readonly string[]).includes(cellKey)) {
+    const r = await casUpdateWeeklyRow(sb, projectId, rowId, { [cellKey]: content }, typeof expected === 'string' ? { [cellKey]: expected } : {})
     if (r.kind === 'error') return { ok: false, error: failWith('weekly/cell', r.failure, tr(ERR_CELL_SAVE)) }
     if (r.kind === 'gone') return { ok: false, error: tr(ERR_ROW_GONE), gone: true }
     const latest = r.conflicts[cellKey as WeeklyCellKey]
@@ -527,6 +559,9 @@ export async function saveWeeklyCells(
     if (!e.rowId) return { ok: false, error: tr('srv.weekly.invalidTarget') }
   }
 
+  const keyError = await validateWeeklyKeys(projectId, edits.map(e => e.cellKey))
+  if (keyError) return { ok: false, error: keyError }
+
   // 방어적 dedupe — 같은 `${rowId}:${cellKey}`는 마지막이 이겨(last-wins) 적용값을 결정적으로.
   const deduped = new Map<string, WeeklyCellEdit>()
   for (const e of edits) deduped.set(`${e.rowId}:${e.cellKey}`, e)
@@ -562,8 +597,8 @@ export async function saveWeeklyCells(
     const results = await Promise.all(chunk.map(async ([rowId, patch]) => {
       try {
         const expected = expectedOf.get(rowId)
-        if (expected) {
-          const r = await casUpdateWeeklyRow(sb, projectId, rowId, patch, expected)
+        if (expected || Object.keys(patch).some(k => !(WEEKLY_CELL_KEYS as readonly string[]).includes(k))) {
+          const r = await casUpdateWeeklyRow(sb, projectId, rowId, patch, expected ?? {})
           if (r.kind === 'error') return { rowId, failure: r.failure, gone: false }
           if (r.kind === 'gone') return { rowId, failure: null, gone: true }
           return { rowId, reportId: r.reportId, failure: null, gone: false, latest: r.conflicts }

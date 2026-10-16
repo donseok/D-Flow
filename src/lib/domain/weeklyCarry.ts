@@ -1,10 +1,11 @@
+import { DEFAULT_WEEKLY_COLUMNS, type WeeklyColumn, type WeeklyColumnKey, weeklyValues } from './weeklyColumns'
 /* ── 주간 이월 계약(SP4 스펙 §4.1.1 이월 규칙 표, D31·D33·Q37) — 순수. 원본(가장 최근 이전 문서)의 차주계획이 새 문서의 금주실적
  *    초안이 된다. 영역 id 로 옮긴다 — 활성 영역은 자기 자리로, 지금 비활성인 영역의 대기 내용은 명시 매핑(다른 활성 영역 또는 'skip')
  *    으로만. 첫 영역·폴백 흡수·절단·원본 수정은 없다. 넘치면(20,000자) 거부한다 — 개정 §4.3.3 의 "상한에서 자름"과 다르다(E25).
  *    옛 구분 기반 이월(weeklySheet.ts 의 carryOverRows)은 지웠다 — 이 모듈이 유일한 이월 규칙이다. ── */
 import type { CustomValues } from './customFields'
 import {
-  NEXT_CELLS, UNKNOWN_AREA_LABEL, WEEKLY_CELL_MAX, hasContent, orderAreas,
+  weeklyField, UNKNOWN_AREA_LABEL, WEEKLY_CELL_MAX, hasContent, orderAreas,
   type NewWeeklyRow, type WeeklyArea, type WeeklyCellKey, type WeeklyCells,
 } from './weeklySheet'
 
@@ -41,7 +42,17 @@ export function carryOverRows(
   areas: readonly WeeklyArea[],
   mapping: CarryMapping = {},
   carryCustom: (custom: unknown) => CustomValues = () => ({}),
+  columns: readonly WeeklyColumn[] = DEFAULT_WEEKLY_COLUMNS,
 ): CarryOverResult {
+  const nextKeys = columns.filter(c => c.carryOver).map(c => `next_${c.id}` as WeeklyColumnKey)
+  const nextFields = nextKeys.map(weeklyField)
+  function appendCells(target: WeeklyCells, source: WeeklyCells) {
+    for (const key of nextKeys) {
+      const field = weeklyField(key.replace(/^next_/, 'this_') as WeeklyColumnKey)
+      const content = append(target[field] ?? '', source[weeklyField(key)] ?? '')
+      if (content || field in target) target[field] = content
+    }
+  }
   const ordered = orderAreas(areas)
   const rank = new Map(ordered.map((a, i) => [a.id, i]))
   const rankOf = (id: string): number => rank.get(id) ?? ordered.length
@@ -55,37 +66,37 @@ export function carryOverRows(
   prev.forEach((r, i) => {
     const own = slot.get(r.areaId)
     if (own) {                                       // 활성 영역 X — 자기 자리로
-      own.thisContent = append(own.thisContent, r.nextContent)
-      own.thisIssue = append(own.thisIssue, r.nextIssue)
+      appendCells(own, r)
       const carried = carryCustom(r.custom)
       if (Object.keys(carried).length > 0) {
         own.custom = { ...(own.custom || {}), ...carried }
       }
       return
     }
-    if (!hasContent(r, NEXT_CELLS)) return           // 비활성·모르는 영역이고 대기 내용 없음 — 무시
+    if (!hasContent(r, nextFields)) return           // 비활성·모르는 영역이고 대기 내용 없음 — 무시
     const dest = Object.hasOwn(mapping, r.areaId) ? mapping[r.areaId] : undefined
     if (dest === CARRY_SKIP) return                  // 옮기지 않음
     if (dest !== undefined && activeIds.has(dest)) { moves.push({ from: r.areaId, to: dest, i, row: r }); return }
     const cells = waiting.get(r.areaId) ?? new Set<keyof WeeklyCells>()   // 매핑 없음·무효 — (다시) 대기, 오류 아님
-    for (const c of NEXT_CELLS) if (hasContent(r, [c])) cells.add(c)
+    for (const c of nextFields) if (hasContent(r, [c])) cells.add(c)
     waiting.set(r.areaId, cells)
   })
 
   // 매핑된 대기 내용 — Y 자신의 이월분 뒤에, 원본 영역의 영역 순서대로(같은 영역은 원본 행 순)
   for (const m of [...moves].sort((a, b) => rankOf(a.from) - rankOf(b.from) || a.i - b.i)) {
     const y = slot.get(m.to)!
-    y.thisContent = append(y.thisContent, m.row.nextContent)
-    y.thisIssue = append(y.thisIssue, m.row.nextIssue)
+    appendCells(y, m.row)
   }
 
   const pending: CarryPending[] = [...waiting]
     .sort(([a], [b]) => rankOf(a) - rankOf(b))
-    .map(([areaId, cells]) => ({ areaId, areaName: nameOf(areaId), cells: NEXT_CELLS.filter((c) => cells.has(c)) }))
+    .map(([areaId, cells]) => ({ areaId, areaName: nameOf(areaId), cells: nextFields.filter((c) => cells.has(c)) }))
   const overflow: CarryOverflow[] = []
   for (const r of rows) {
-    for (const [field, cell] of [['thisContent', 'this_content'], ['thisIssue', 'this_issue']] as const) {
-      if (r[field].length > WEEKLY_CELL_MAX) overflow.push({ areaId: r.areaId, areaName: nameOf(r.areaId), cell, length: r[field].length })
+    for (const key of nextKeys) {
+      const cell = key.replace(/^next_/, 'this_') as WeeklyColumnKey
+      const content = r[weeklyField(cell)] ?? ''
+      if (content.length > WEEKLY_CELL_MAX) overflow.push({ areaId: r.areaId, areaName: nameOf(r.areaId), cell, length: content.length })
     }
   }
   return pending.length > 0 || overflow.length > 0 ? { ok: false, pending, overflow } : { ok: true, rows }
@@ -94,9 +105,10 @@ export function carryOverRows(
 /** RPC create_weekly_report 의 p_seed 모양 — 영역 id + 네 칸(snake) + 이월할 사용자 정의 값(custom — 값이 있을 때만). RPC 가 행과 같은
  *  INSERT 에 싣고 행 트리거가 판정한다(0043 — 개정 §4.3.3, SP4 E28). 빈 custom 은 싣지 않는다(필수 필드 기본값은 트리거 몫) */
 export function seedOf(rows: readonly NewWeeklyRow[]): {
-  area_id: string; this_content: string; this_issue: string; next_content: string; next_issue: string; custom?: Record<string, unknown>
+  area_id: string; this_content: string; this_issue: string; next_content: string; next_issue: string; custom?: Record<string, unknown>; cells?: Partial<Record<WeeklyColumnKey, string>>
 }[] {
   return rows.map((r) => ({
+    ...(Object.keys(weeklyValues(r)).length ? { cells: weeklyValues(r) } : {}),
     area_id: r.areaId, this_content: r.thisContent, this_issue: r.thisIssue, next_content: r.nextContent, next_issue: r.nextIssue,
     ...(r.custom && Object.keys(r.custom).length > 0 ? { custom: { ...r.custom } } : {}),
   }))

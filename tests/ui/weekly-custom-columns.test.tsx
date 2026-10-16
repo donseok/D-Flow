@@ -1,3 +1,4 @@
+import type { WeeklyColumn } from '@/lib/domain/weeklyColumns'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
@@ -60,10 +61,11 @@ describe('WeeklySheetView — 사용자 정의 필드 열 및 편집 모달', ()
     vi.restoreAllMocks()
   })
 
-  async function render(defs: FieldDef[] | null, row: WeeklySheetRow) {
+  async function render(defs: FieldDef[] | null, row: WeeklySheetRow, columns?: WeeklyColumn[]) {
     await act(async () => root.render(
       <CustomFieldsProvider projectId="p1" entity="weekly_row" defs={defs} canAdmin={false}>
         <WeeklySheetView
+          columns={columns}
           projectId="p1" weekStart="2026-09-21" weekLabel="9월 4주차" weekTitle="9월 4주차"
           prevWeek="2026-09-14" nextWeek="2026-09-28"
           thisRange="9/21~9/25" nextRange="9/28~10/2" projectName="Acme"
@@ -73,6 +75,22 @@ describe('WeeklySheetView — 사용자 정의 필드 열 및 편집 모달', ()
       </CustomFieldsProvider>,
     ))
   }
+
+  it('프로젝트 항목 수와 순서대로 금주·차주 입력 칸과 접근성 이름을 만든다', async () => {
+    const columns: WeeklyColumn[] = [
+      { id: 'release', label: '배포', carryOver: true },
+      { id: 'customer', label: '고객 협의', carryOver: false },
+      { id: 'delivery', label: '산출물', carryOver: true },
+    ]
+    await render([], { ...mkRow('r1'), this_release: '배포 완료', next_delivery: '설계서' }, columns)
+    const headers = Array.from(container.querySelectorAll('thead tr:last-child th')).map(th => th.textContent)
+    expect(headers).toEqual(['배포', '고객 협의', '산출물', '배포', '고객 협의', '산출물'])
+    expect(Array.from(container.querySelectorAll('thead tr:first-child th')).slice(1).map(th => th.getAttribute('colspan'))).toEqual(['3', '3'])
+    expect(container.querySelectorAll('tbody td')).toHaveLength(7)
+    expect(container.querySelector('[aria-label="금주실적 배포, 실험"]')).not.toBeNull()
+    expect(container.textContent).toContain('배포 완료')
+    expect(container.textContent).toContain('설계서')
+  })
 
   it('show_in_list 활성 필드만 헤더와 셀을 만들고 0·false 를 그대로 보인다', async () => {
     const defs = [
