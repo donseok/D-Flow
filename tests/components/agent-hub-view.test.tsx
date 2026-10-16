@@ -50,6 +50,7 @@ vi.mock('@/components/wbs/RowDetailPanel', () => ({
 import { AgentHubView } from '@/components/agent-hub/AgentHubView'
 import { calInputUtcMon } from '../helpers/calendarFixture'
 import { t as translate } from '@/lib/i18n/dict'
+import { settingKeyLabel } from '@/lib/settings/keyLabel'
 
 const NOW = Date.parse('2026-09-14T09:00:00Z')
 const hub = (over: Partial<AgentHub> = {}): AgentHub => ({
@@ -142,7 +143,9 @@ describe('AgentHubView', () => {
     await act(async () => { (host.querySelector('[data-hub-row="a1"] [data-hub-open="a1"]') as HTMLButtonElement).click() })
     expect(host.querySelector('[data-detail-panel]')).toBeNull()
     const notice = host.querySelector('[data-hub-detail-unavailable] [data-config-load-error]')
-    expect(notice?.textContent).toContain('core.level_labels')
+    expect(notice?.textContent).toContain(settingKeyLabel('core.level_labels'))   // 보이는 글자는 설정 이름, 원시 키는 title 로만
+    expect(notice?.textContent).not.toContain('core.level_labels')
+    expect(notice?.querySelector('[title="core.level_labels"]')).not.toBeNull()
     expect(host.querySelector('section[aria-label="에이전트 상태"]')).not.toBeNull()
   })
   it('달력이 손상(calendarError)이면 허브(킬스위치·표·큐)는 그리고, 이름을 누르면 패널 자리에 그 키 사유 — 갱신 시각은 기준 tz 를 적는다(A-4 리뷰 N3)', async () => {
@@ -154,7 +157,10 @@ describe('AgentHubView', () => {
     expect(host.querySelector('[data-config-load-error]')).toBeNull()
     await act(async () => { (host.querySelector('[data-hub-row="a1"] [data-hub-open="a1"]') as HTMLButtonElement).click() })
     expect(host.querySelector('[data-detail-panel]')).toBeNull()
-    expect(host.querySelector('[data-hub-detail-unavailable] [data-config-load-error]')?.textContent).toContain('calendar.timezone')
+    const calNotice = host.querySelector('[data-hub-detail-unavailable] [data-config-load-error]')
+    expect(calNotice?.textContent).toContain(settingKeyLabel('calendar.timezone'))   // 보이는 글자는 설정 이름, 원시 키는 title 로만
+    expect(calNotice?.textContent).not.toContain('calendar.timezone')
+    expect(calNotice?.querySelector('[title="calendar.timezone"]')).not.toBeNull()
   })
   it('실시간 신호를 받으면 허브를 재조회한다 — 연속 신호는 1회로 접는다', async () => {
     // 승인 대기 카드는 주문 상태·보고 본문·서브트리 관리자 판정으로 조립된다. 트리거 페이로드

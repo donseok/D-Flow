@@ -12,6 +12,7 @@ vi.mock('@/app/actions/settings', () => ({ updateProjectSettings: (...a: unknown
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }))
 import { ModuleToggleEditor } from '@/components/settings/ModuleToggleEditor'
 import type { ProjectModuleOption } from '@/components/settings/ModuleToggleEditor'
+import { settingKeyLabel } from '@/lib/settings/keyLabel'
 
 const options: ProjectModuleOption[] = [
   { id: 'agents', label: '에이전트', allowed: true, available: true },
@@ -77,6 +78,9 @@ describe('ModuleToggleEditor', () => {
   })
   it('필수 프로젝트 모듈 설정 누락을 목록 자리에서 알린다', () => {
     act(() => root.render(<ModuleToggleEditor key="missing" projectId="p" revision={3} initialEnabled={null} requiredMissing options={options} />))
-    expect(host.querySelector('[data-config-state="required"]')?.textContent).toContain('modules.enabled')
+    const required = host.querySelector('[data-config-state="required"]')
+    expect(required?.textContent).toContain(settingKeyLabel('modules.enabled'))   // 보이는 글자는 설정 이름, 원시 키는 title 로만
+    expect(required?.textContent).not.toContain('modules.enabled')
+    expect(required?.querySelector('[title="modules.enabled"]')).not.toBeNull()
   })
 })

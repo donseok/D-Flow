@@ -19,6 +19,7 @@ vi.mock('@/app/actions/settings', () => ({
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }))
 
 import { ModuleAllowEditor } from '@/components/settings/ModuleAllowEditor'
+import { settingKeyLabel } from '@/lib/settings/keyLabel'
 
 describe('ModuleAllowEditor', () => {
   let host: HTMLDivElement
@@ -113,7 +114,10 @@ describe('ModuleAllowEditor', () => {
   it('필수 허용 목록 누락을 표시하고 저장 후 복구 안내를 숨긴다', async () => {
     preview.mockResolvedValueOnce({ ok: true, revision: 1, before: null, impact: null })      // 저장값이 없으면 서버도 before 를 null 로 낸다
     act(() => root.render(<ModuleAllowEditor key="missing" workspaceId="ws" initialAllowed={null} requiredMissing revision={1} />))
-    expect(host.querySelector('[data-config-state="required"]')?.textContent).toContain('modules.allowed')
+    const required = host.querySelector('[data-config-state="required"]')
+    expect(required?.textContent).toContain(settingKeyLabel('modules.allowed'))   // 보이는 글자는 설정 이름, 원시 키는 title 로만
+    expect(required?.textContent).not.toContain('modules.allowed')
+    expect(required?.querySelector('[title="modules.allowed"]')).not.toBeNull()
     await click('변경 내용 검토')
     await click('변경 저장')
     expect(host.querySelector('[data-config-state="required"]')).toBeNull()
