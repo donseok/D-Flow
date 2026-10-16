@@ -1196,8 +1196,10 @@ async function downloadPpt(url: string, fallbackName: string, toast: ReturnType<
   URL.revokeObjectURL(objectUrl)
 }
 
-/** 주간보고요약 PPT — WBS 기반 요약 보고서(WBS 메뉴 보고서 모달의 PPT와 동일 산출물)를 이
- *  페이지에서 바로 다운로드. 시트 데이터를 읽지 않으므로 flush·시트 유무와 무관하게 항상 활성. */
+/** 주간보고요약 PPT — /api/report 를 week 없이 부른다. 요약과 상세(아래 ExportPptButton)는 **같은 양식**(forms.weekly_report_pptx —
+ *  없으면 제품 기본 양식)을 채우고, 서버에는 source 분기가 없다(source=sheet 는 무시된다). 다른 것은 둘뿐이다:
+ *  기준 주 — week 가 없으면 프로젝트 달력의 '오늘이 속한 주'(상세는 화면에 열린 주)이고, 저장 대기 — 상세는 미저장 셀을 먼저 flush 한 뒤 받지만
+ *  요약은 flush 하지 않아 시트 유무·저장 대기와 무관하게 늘 활성이다(서버는 저장된 시트를 읽는다). */
 function ExportSummaryPptButton({ projectId }: { projectId: string }) {
   const { toast } = useToast()
   const { t } = useLocale()
@@ -1217,7 +1219,8 @@ function ExportSummaryPptButton({ projectId }: { projectId: string }) {
   )
 }
 
-/** 주간보고 PPT — 프로젝트의 주간 PPT 양식(forms.weekly_report_pptx — 없으면 제품 기본 양식)을 채워 다운로드.
+/** 주간보고 PPT(상세) — 프로젝트의 주간 PPT 양식(forms.weekly_report_pptx — 없으면 제품 기본 양식)을 화면에 열린 주(week)로 채워 다운로드.
+ *  요약 버튼과 같은 /api/report 양식이다(source=sheet 는 서버가 쓰지 않는다).
  *  fetch로 받아 400(빈 시트 등)을 Toast로 안내(스펙 §7). onBeforeExport로 미저장 셀을 먼저
  *  flush — false(중단)면 fetch 없이 종료. */
 function ExportPptButton({ projectId, weekStart, disabled, onBeforeExport }: {

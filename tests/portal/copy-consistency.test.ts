@@ -45,3 +45,10 @@ describe('C7 — 팀 코드 바꾸기 경고는 저장해 둔 엑셀 양식을 �
     expect(warn).toContain('저장해 둔 엑셀 양식의 팀 열은 새 코드로 함께 맞추며')
   })
 })
+
+describe('C8 — 간트 범례 안내는 실제 보기 스위치의 이름을 가리킨다', () => {
+  it('"시트 편집" 단추는 없다 — 안내가 보기 스위치의 표 이름을 쓴다', () => {
+    expect(t('wbs.legendHintTimeline')).toContain(`‘${t('wbs.view.sheet')}’`)
+    expect(t('wbs.legendHintTimeline')).not.toContain('시트 편집')
+  })
+})
