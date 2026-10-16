@@ -16,7 +16,7 @@ export const kanbanKo = {
   'kanban.topLevelFallback': '최상위 단계',
   'kanban.byOwner': '담당자별',
   'kanban.byStatus': '상태별',
-  'kanban.searchPlaceholder': '작업명·담당자 검색',
+  'kanban.searchPlaceholder': '작업명·코드·담당 팀 검색',
   'kanban.saving': '저장 중…',
   // 컬럼/보드
   'kanban.unassigned': '미배정',
