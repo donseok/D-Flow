@@ -21,3 +21,9 @@ describe('C2 — 프로젝트 상태 이름 통일', () => {
     expect([t('portalUi.projects.statusActive'), t('portalUi.projects.statusOverdue'), t('portalUi.projects.statusReady')]).toEqual(['진행중', '지연 종료', '시작 전'])
   })
 })
+
+describe('C3 — 내 업무 화면의 첫 탭 이름', () => {
+  it('메뉴 이름(nav.myWork)과 같다', () => {
+    expect(t('portalUi.tabs.work')).toBe(t('nav.myWork'))
+  })
+})

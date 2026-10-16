@@ -13,7 +13,7 @@ export const portalUiKo = {
   'portalUi.work.noDue': '기한 없음',
   'portalUi.work.overdueDays': ' · {n}일 지남',
   'portalUi.tabs.aria': '내 업무 탭',
-  'portalUi.tabs.work': '내 작업',
+  'portalUi.tabs.work': '내 업무',
   'portalUi.tabs.review': '검토 대기',
   'portalUi.tabs.inbox': '알림',
   // 위젯
