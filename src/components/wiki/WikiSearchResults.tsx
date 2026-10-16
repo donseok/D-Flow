@@ -284,8 +284,9 @@ export function WikiSearchResults({ state, query, projectId }: {
             <Sparkles className="h-3.5 w-3.5" aria-hidden />
             {t('wiki.search2.summarize')}
           </button>
+          {/* 건수 = 화면에 실제로 보이는 수(MAX_BULLETS 로 자른 hits) — 서버 후보(최대 20)가 아니다 */}
           <span className="text-xs text-fg-muted">
-            {t('wiki.search2.count').replace('{n}', String(state.hits.length))}
+            {t('wiki.search2.count').replace('{n}', String(hits.length))}
           </span>
         </div>
       )}

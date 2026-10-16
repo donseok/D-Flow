@@ -39,7 +39,7 @@ function monthRangeOf(year: number, month0: number): [string, string] {
 
 export function MinutesView({
   scope, initialMinutes, initialTree = null, todayIso, initialView, projects, currentUserId, adminWorkspaceIds = [], canEdit, defaultTeam,
-  initialFavorites = null, explorerLayout = 'grid', myProjectIds = null,
+  initialFavorites = null, explorerLayout = 'grid', myProjectIds = null, memberProjectIds = [],
   isSuperuser = false, projectWorkspaces = {}, noProjectWorkspace = null, calendar,
   teamOptions = [], initialTeamId = null, hasNoTeamMinutes = false,
 }: {
@@ -65,6 +65,8 @@ export function MinutesView({
   explorerLayout?: ExplorerLayout
   /** 내가 멤버로 등록된 프로젝트 id — 업로드·수정 모달의 프로젝트 기본 선택 근거. */
   myProjectIds?: string[] | null
+  /** 멤버 이상인 프로젝트 id(서버 isProjectMember 미러) — 프로젝트 폴더 아래 하위 폴더 추가 어포던스의 근거 */
+  memberProjectIds?: string[]
   /** 업로드 저장 경로 scope — 프로젝트 → 워크스페이스(actor.projectWorkspace). */
   projectWorkspaces?: Record<string, string>
   /** 업로드 저장 경로 scope — 프로젝트 미지정 회의록의 워크스페이스(화면의 슬러그 워크스페이스, D26). */
@@ -457,6 +459,7 @@ export function MinutesView({
               currentUserId={currentUserId} adminWorkspaceIds={adminWorkspaceIds}
               isSuperuser={isSuperuser}
               projects={projects} myProjectIds={myProjectIds}
+              canCreateFolder={canEdit} memberProjectIds={memberProjectIds}
               meetingCategories={typeof treeState === 'object' ? treeState.meetingCategories : undefined}
               onChanged={() => { void loadTree(); router.refresh() }}
               onFolderSelect={id => { uploadFolderRef.current = id }} />

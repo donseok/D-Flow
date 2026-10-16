@@ -167,7 +167,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
   })
 
   it('팀 기본 폴더(PMO)는 관리자 메뉴에서도 개명·삭제 숨김 — 하위 폴더 추가만(0043)', async () => {
-    await mount({ isSuperuser: true })
+    await mount({ isSuperuser: true, canCreateFolder: true })
     const menuBtn = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="min.fold.menuAria"]')]
       .find(b => b.closest('li')?.textContent?.includes('PMO'))!
     await act(async () => menuBtn.click())
@@ -184,7 +184,7 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
 
   it('시드 하위 구분(품질)은 개명·삭제 노출 — 하위 구분이 실폴더 동적 유도로 바뀌어 앵커 보호 해제', async () => {
     const fs = [folder('f-mes', 'MES', null, 2), folder('f-q', '품질', 'f-mes', 0)]
-    await mount({ isSuperuser: true, folders: fs, leaves: [] })
+    await mount({ isSuperuser: true, canCreateFolder: true, folders: fs, leaves: [] })
     // 품질 자신의 행 li(중첩 안쪽)만 매칭 — MES 행 li 는 하위 li 를 포함하므로 'MES' 부재로 가른다
     const qBtn = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="min.fold.menuAria"]')]
       .find(b => b.closest('li')?.textContent?.includes('품질') && !b.closest('li')?.textContent?.includes('MES'))!
@@ -219,11 +219,61 @@ describe('MinutesExplorer v2 (폴더 디렉토리)', () => {
     expect(dropTarget('f-x').getAttribute('draggable')).toBe('true')
   })
 
-  it('새 폴더 버튼 → 생성 모달 열림, 이동 버튼 → 픽커 열림 후 moveMinuteToFolder 호출·onChanged', async () => {
+  it('전체 옆에 최상위 새 폴더 버튼이 없다 — 서버 createMinuteFolder 가 루트 생성을 항상 거부한다(W18)', async () => {
+    await mount({ isSuperuser: true, canCreateFolder: true })
+    expect(container.querySelector('button[aria-label="min.fold.new"]')).toBeNull()
+  })
+
+  it('하위 폴더 추가는 서버 가드와 같은 길 — 역할 있는 일반 멤버는 남의 폴더에도 추가만 열린다', async () => {
+    const fs = [
+      { ...folder('f-pmo', 'PMO', null, 0), workspaceId: 'w1' },
+      { ...folder('f-x', '남의 폴더', 'f-pmo', 5, 'u2'), workspaceId: 'w1' },
+    ]
+    const menuBtns = () => [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="min.fold.menuAria"]')]
+    await mount({ folders: fs, leaves: [] })                      // 역할 없음(조회 전용) — 서버 hasProjectRoleInWorkspace 거부
+    expect(menuBtns().length).toBe(0)
+    await mount({ folders: fs, leaves: [], canCreateFolder: true })   // 워크스페이스에 역할이 있는 멤버
+    expect(menuBtns().length).toBe(2)                              // 시드 PMO 와 남의 폴더 모두
+    const xBtn = menuBtns().find(b => b.closest('li')?.textContent?.includes('남의 폴더') && !b.closest('li')?.textContent?.includes('PMO'))!
+    await act(async () => xBtn.click())
+    const li = xBtn.closest('li')!
+    expect(li.textContent).toContain('min.fold.addSub')
+    expect(li.textContent).not.toContain('min.fold.rename')        // 개명·삭제는 작성자/관리자만(RLS)
+    expect(li.textContent).not.toContain('min.fold.delete')
+    expect(dropTarget('f-x').getAttribute('draggable')).not.toBe('true')   // 이동도 그대로 닫힘
+  })
+
+  it('프로젝트 폴더의 하위 추가는 그 프로젝트의 멤버 이상에게만 — 서버 isProjectMember 미러', async () => {
+    const fs = [
+      { ...folder('f-pmo', 'PMO', null, 0), workspaceId: 'w1', projectId: 'p1' },
+    ]
+    const menus = () => container.querySelectorAll('button[aria-label="min.fold.menuAria"]').length
+    await mount({ folders: fs, leaves: [], projects: [{ id: 'p1', name: 'P1' }], myProjectIds: ['p1'], canCreateFolder: true })
+    expect(menus()).toBe(0)                                        // 다른 프로젝트 멤버 — 서버가 거부
+    await mount({ folders: fs, leaves: [], projects: [{ id: 'p1', name: 'P1' }], myProjectIds: ['p1'], canCreateFolder: true, memberProjectIds: ['p2'] })
+    expect(menus()).toBe(0)
+    await mount({ folders: fs, leaves: [], projects: [{ id: 'p1', name: 'P1' }], myProjectIds: ['p1'], canCreateFolder: true, memberProjectIds: ['p1'] })
+    expect(menus()).toBe(1)
+  })
+
+  it('폴더 만들기 창 확인 버튼은 만들기, 이름 바꾸기 창은 저장 — 업로드 글자를 쓰지 않는다', async () => {
+    await mount({ isSuperuser: true, canCreateFolder: true })
+    const planBtn = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="min.fold.menuAria"]')]
+      .find(b => b.closest('li')?.textContent?.includes('생산계획'))!
+    await act(async () => planBtn.click())
+    await act(async () => buttonByText('min.fold.addSub').click())
+    expect(dialog().textContent).toContain('min.fold.create')
+    expect(dialog().textContent).not.toContain('min.form.save')
+    await act(async () => dialogButtonByText('min.fold.cancel').click())
+    await act(async () => planBtn.click())
+    await act(async () => buttonByText('min.fold.rename').click())
+    expect(dialog().textContent).toContain('min.fold.save')
+    expect(dialog().textContent).not.toContain('min.form.save')
+    await act(async () => dialogButtonByText('min.fold.cancel').click())
+  })
+
+  it('이동 버튼 → 픽커 열림 후 moveMinuteToFolder 호출·onChanged', async () => {
     await mount()
-    await act(async () => buttonByText('min.fold.new').click())
-    expect(dialog().textContent).toContain('min.fold.name')          // FolderManageModal
-    await act(async () => dialogButtonByText('min.fold.cancel').click())  // 없으면 Esc 대체 — 구현의 닫기 버튼 텍스트에 맞춤
     // 이동: m1 카드의 '...' 메뉴 → [폴더 이동] (작성자 u1)
     const menuBtn = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="min.exp.leafMenuAria"]')]
       .find(b => b.closest('article')?.textContent?.includes('APS 인터뷰'))!

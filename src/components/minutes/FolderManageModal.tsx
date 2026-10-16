@@ -46,7 +46,7 @@ export function FolderManageModal({
           <button onClick={onClose} className="btn">{t('min.fold.cancel')}</button>
           <button onClick={() => void submit()} disabled={busy || (mode !== 'delete' && !name.trim())}
             className={mode === 'delete' ? 'btn bg-danger text-danger-fg hover:bg-danger' : 'btn btn-primary'}>
-            {busy ? t('min.form.saving') : mode === 'delete' ? t('min.fold.delete') : t('min.form.save')}
+            {busy ? t('min.fold.working') : mode === 'delete' ? t('min.fold.delete') : mode === 'create' ? t('min.fold.create') : t('min.fold.save')}
           </button>
         </div>
       }>
