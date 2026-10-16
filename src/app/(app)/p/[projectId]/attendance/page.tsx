@@ -13,6 +13,7 @@ import { loadProjectConfigForPage } from '@/lib/settings/pageConfig'
 import { pick, pickCalendar } from '@/lib/settings/pick'
 import { ConfigLoadError } from '@/components/settings/ConfigLoadError'
 import { requireModulePage } from '@/lib/modules/pageGate'
+import { StatusMessage } from '@/components/ui/StatusMessage'
 
 /** 탭 제목 — 화면 이름만 낸다(프로젝트 이름은 싣지 않는다 — 레이아웃의 존재 은닉과 같은 이유) */
 export async function generateMetadata() { return { title: t('nav.attendance') } }
@@ -35,15 +36,26 @@ export default async function AttendancePage({ params }: { params: Promise<{ pro
   const types = pick(pc.cfg, 'attendance.types')
   if (!types.ok) return <div className="p-6"><ConfigLoadError error={types.error} keyName={types.key} kind={types.kind} /></div>
   const today = todayIn(cal.calendar.timezone, new Date())
+  const pinned = roster.ok ? undefined : <RosterLoadError error={roster.error} />
+  const hero = <PageHeader title={t('att.title')} description={t('att.desc')} />
+  // 근태 조회 실패는 "아직 등록된 근태가 없습니다"로 그리지 않는다(3원칙 ①) — 빈 달력 위에서 입력하면 있는 기록을 못 본 채 겹쳐 쓴다.
+  // 로그는 로더(getAttendanceRecords)가 남긴다.
+  if (!records.ok) {
+    return (
+      <ProjectPageShell pinned={pinned} hero={hero}>
+        <StatusMessage kind="partial_error" blocking title={t('att.loadFailed')} detail={t('pages.common.refreshLater')} />
+      </ProjectPageShell>
+    )
+  }
 
   return (
     <ProjectPageShell
-      pinned={roster.ok ? undefined : <RosterLoadError error={roster.error} />}
-      hero={<PageHeader title={t('att.title')} description={t('att.desc')} />}
+      pinned={pinned}
+      hero={hero}
     >
       <AttendanceView
         projectId={projectId}
-        records={records}
+        records={records.records}
         members={members}
         initialDate={today}
         canEdit={isProjectMember(m, projectId)}

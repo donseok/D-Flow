@@ -176,6 +176,10 @@ async function loadWeeklyModel(
     console.error(`[report] 명단 조회 실패로 보고서를 만들지 않는다: project=${projectId}`)
     return { ok: false, res: jsonError(roster.error, 503) }
   }
+  if (!attendance.ok) {
+    console.error(`[report] 근태 조회 실패로 보고서를 만들지 않는다: project=${projectId}`)
+    return { ok: false, res: jsonError(attendance.error, 503) }
+  }
   if (!meetRes.ok) {
     console.error(`[report] 회의 조회 실패로 보고서를 만들지 않는다: project=${projectId}`)
     return { ok: false, res: jsonError(meetRes.error, 503) }
@@ -197,7 +201,7 @@ async function loadWeeklyModel(
   const now = new Date()
   const model = buildWeeklyReportModel(wbs.items, project, today, {
     members: roster.rows,
-    attendance,
+    attendance: attendance.records,
     generatedAt: stampIn(wbs.calendar.timezone, now),
     meetings: meetRes.meetings,
     meetingExceptions: meetRes.exceptions,
