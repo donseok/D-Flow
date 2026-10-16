@@ -17,7 +17,7 @@ import {
   type KanbanColumn, type ProgressBucket, type QuickFilters, type FlowStageKey,
 } from '@/lib/domain/kanban'
 import { isStageCode, stageLabelKo, type StageCode } from '@/lib/domain/stageLabels'
-import { type ApprovalStepDef, type Approver, DEFAULT_APPROVAL_STEPS } from '@/lib/domain/approvalSteps'
+import { type ApprovalStepDef, type Approver } from '@/lib/domain/approvalSteps'
 import { setWbsStage, approveWbsStep, getWbsAssigneeStage } from '@/app/actions/wbsAssign'
 import { resolveDrop } from '@/lib/domain/kanban-drop'
 import { statusOf } from '@/lib/domain/progress'
@@ -172,12 +172,14 @@ export function KanbanBoard({
     return m
   }, [items])
   const myMemberIds = useMemo(() => new Set(actorView?.memberId ? [actorView.memberId] : []), [actorView])
-  const flowSteps = approvalSteps ?? DEFAULT_APPROVAL_STEPS
+  // 승인 단계 설정을 못 읽었으면(null) 기본 단일 단계로 짐작하지 않는다 — 승인 단추와 완료(xx) 지정을 닫는다(fail-closed). 서버는 어차피 실제 설정으로 다시 판정한다.
+  const flowSteps = approvalSteps
   const flowRights = (card: ComputedItem) => {
     if (readOnly || !isFlow) return { adjust: false, approve: false, toDone: false }
     const isAdmin = isProjectAdmin(actor, projectId)
     const isMember = isProjectMember(actor, projectId)
     const subtreeManager = isMember && isSubtreeManagerOf(card.id, ancestorById, myMemberIds)
+    if (!flowSteps) return { adjust: canAdjustWorkflowStage({ isAdmin, isMember, subtreeManager }), approve: false, toDone: false }
     // 대기 단계의 승인자 — 검수 대기(im)면 라운드의 대기 단계를 화면이 모르므로, 관리자 밖에 열린 단계가 하나도 없을 때만 'admin' 으로 본다
     // (실제 대기 단계는 누를 때 서버에서 읽고, 서버가 다시 판정한다). 그 밖의 단계에서 완료 지정은 새 라운드의 첫 단계로 판정된다.
     const pendingStepApprover: Approver | undefined = card.stage === 'im'

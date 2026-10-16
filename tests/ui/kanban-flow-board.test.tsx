@@ -8,7 +8,7 @@ import {
   formatApprovalStepsSubtitle,
   FLOW_STAGE_KEYS,
 } from '@/lib/domain/kanban'
-import type { ApprovalStepDef } from '@/lib/domain/approvalSteps'
+import { DEFAULT_APPROVAL_STEPS, type ApprovalStepDef } from '@/lib/domain/approvalSteps'
 
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -318,9 +318,9 @@ describe('KanbanBoard — 흐름 단추 노출은 서버 가드와 같은 근거
   const tree = (leafAssignee: string | null) => [n('Phase', { assigneeMemberId: 'm-lead' }, [
     n('TaskIm', { parentId: 'Phase', stage: 'im', rolledActualPct: 90, assigneeMemberId: leafAssignee }),
   ])]
-  async function render(actorView: Parameters<typeof KanbanBoard>[0]['actorView'], items: ComputedItem[], approvalSteps?: ApprovalStepDef[]) {
+  async function render(actorView: Parameters<typeof KanbanBoard>[0]['actorView'], items: ComputedItem[], approvalSteps: ApprovalStepDef[] | null = DEFAULT_APPROVAL_STEPS.map(x => ({ ...x }))) {
     await act(async () => {
-      root.render(<KanbanBoard projectId="p1" items={items} actorView={actorView} today="2026-07-25" approvalSteps={approvalSteps ?? null} />)
+      root.render(<KanbanBoard projectId="p1" items={items} actorView={actorView} today="2026-07-25" approvalSteps={approvalSteps} />)
     })
   }
   const TEAM_MEMBER = makeProjectActorView({ userId: 'u-team', projectRole: 'member', memberId: 'm-team', rosterTeamIds: ['t-pmo'], rosterTeamCodes: ['PMO'], primaryTeamCode: 'PMO' })
@@ -365,6 +365,21 @@ describe('KanbanBoard — 흐름 단추 노출은 서버 가드와 같은 근거
     await act(async () => { q('kanban-card-move-trigger')!.click() })
     expect(q('kanban-card-move-stage-im')).not.toBeNull()
     expect(q('kanban-card-move-stage-xx')).toBeNull()
+  })
+
+  it('승인 단계 설정을 못 읽었으면(null) 승인 단추와 완료(xx) 선택지를 닫는다 — 기본 단일 단계로 짐작하지 않는다', async () => {
+    await render(ADMIN, [n('TaskIm', { stage: 'im', rolledActualPct: 90 })], null)
+    expect(q('kanban-card-approve-btn')).toBeNull()
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-ip')).not.toBeNull()   // 단계 이동 자체는 설정과 무관하다
+    expect(q('kanban-card-move-stage-xx')).toBeNull()
+  })
+
+  it('승인 단계 설정이 있으면(단일 기본 단계) 같은 관리자에게 승인 단추와 완료(xx) 선택지가 열린다', async () => {
+    await render(ADMIN, [n('TaskIm', { stage: 'im', rolledActualPct: 90 })])
+    expect(q('kanban-card-approve-btn')).not.toBeNull()
+    await act(async () => { q('kanban-card-move-trigger')!.click() })
+    expect(q('kanban-card-move-stage-xx')).not.toBeNull()
   })
 
   it('조회 전용 명단(역할 없음)은 상위 작업 담당자여도 단추가 없다', async () => {
