@@ -15,6 +15,15 @@ function html(state: Parameters<typeof WikiSearchResults>[0]['state'], query = '
 }
 
 describe('WikiSearchResults', () => {
+  it('결과 건수는 화면에 실제로 보이는 수와 같다 — 서버가 20건을 줘도 목록 상한(8) 밖은 세지 않는다', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ ...hit, entityId: `m${i}`, title: `회의 ${i}` }))
+    const out = html({ kind: 'done', hits: many, degraded: false })
+    expect(out).toContain('결과 8건')
+    expect(out).not.toContain('결과 12건')
+    expect(out).toContain('회의 7')
+    expect(out).not.toContain('회의 8')
+  })
+
   it('결과와 출처 배지를 보여준다', () => {
     const out = html({ kind: 'done', hits: [hit], degraded: false })
     expect(out).toContain('정례 회의')
