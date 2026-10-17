@@ -229,6 +229,8 @@ describe('weekly_areas ⑩ 카탈로그 — 정책·열 권한', () => {
             and has_column_privilege('authenticated', c.oid, a.attnum, p.priv)
           order by c.relname, a.attname, p.priv`)
       expect(rows).toEqual([
+        // 0060: project-configured weekly cells JSON column, validated by weekly_cells_validate.
+        { t: 'weekly_report_rows', col: 'cells', priv: 'UPDATE' },
         // SP5c: a single custom JSON column, validated by the key-level permission trigger.
         { t: 'weekly_report_rows', col: 'custom', priv: 'UPDATE' },
         { t: 'weekly_report_rows', col: 'next_content', priv: 'UPDATE' },
@@ -750,6 +752,9 @@ describe('⑫ 사후검사 — 마이그레이션의 블록을 그대로 돌린�
     // Current SP5c columns/permissions are checked in custom-fields.test.ts. DDL rolls back.
     await c.query('drop trigger weekly_report_rows_custom_fields_trg on public.weekly_report_rows')
     await c.query('alter table public.weekly_report_rows drop column custom')
+    // 0060 added cells (+ its validation trigger) after SP4; strip them the same way.
+    await c.query('drop trigger weekly_cells_validate on public.weekly_report_rows')
+    await c.query('alter table public.weekly_report_rows drop column cells')
     for (const m of mutate) await c.query(m)
     return pgError(c, blocks()[0])
   })
