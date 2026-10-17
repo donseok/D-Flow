@@ -45,6 +45,7 @@ import type { DictKey } from '@/lib/i18n/dict'
 /** 헤더 동기화 표시(§5.8.3)로 올리는 셀 상태 — error 는 실패, 응답을 잃은 저장은 outcome_unknown */
 const SESSION_STATUS: Record<CellStatus, EditStatus> = { editing: 'editing', saving: 'saving', saved: 'saved', error: 'failed', conflict: 'conflict' }
 const DEBOUNCE_MS = 1500
+const SAVED_HIDE_MS = 800 // 셀 우측 상단 '저장됨' 배지 유지 시간(배치 완료 칩과 동일)
 const CELL_MAX = WEEKLY_CELL_MAX // 셀 1개 상한(도메인 단일 출처) — 배치 로컬 클램프용
 const BATCH_MAX = 500    // 한 배치 최대 edit 수(BE와 동일) — 사전 검사용
 
@@ -124,6 +125,7 @@ export function WeeklySheetView({
   const [status, setStatus] = useState<Record<string, CellStatus>>({}) // key = `${rowId}:${cellKey}`
   const dirtyRef = useRef<Set<string>>(new Set())
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const savedTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const retriedRef = useRef<Set<string>>(new Set())
   // ── 값 CAS(SPU1, 개정 §5.8 — 무통보 덮어쓰기 0건) ──
   // baseRef: 칸이 dirty 가 될 때의 값 = 내가 마지막으로 확인한 서버 값. 저장은 이것을 기대값으로 보낸다(다르면 서버가 쓰지 않는다).
@@ -171,6 +173,25 @@ export function WeeklySheetView({
     else cellRefs.current.delete(key)
   }, [])
 
+  const clearSavedTimer = useCallback((k: string) => {
+    const t = savedTimersRef.current.get(k)
+    if (t) { clearTimeout(t); savedTimersRef.current.delete(k) }
+  }, [])
+
+  const markCellSaved = useCallback((k: string) => {
+    clearSavedTimer(k)
+    setStatus(s => ({ ...s, [k]: 'saved' }))
+    savedTimersRef.current.set(k, setTimeout(() => {
+      savedTimersRef.current.delete(k)
+      setStatus(s => {
+        if (s[k] !== 'saved') return s
+        const next = { ...s }
+        delete next[k]
+        return next
+      })
+    }, SAVED_HIDE_MS))
+  }, [clearSavedTimer])
+
   // 삭제된 행의 dirty 키·디바운스 타이머·저장 상태 정리 — 잔류하면 flushPendingSaves가
   // 영영 비지 않아 주간보고 PPT 내보내기가 세션 내내 차단된다(리뷰 확정 결함).
   const cleanupRowKeys = useCallback((rowId: string) => {
@@ -184,6 +205,8 @@ export function WeeklySheetView({
       unknownRef.current.delete(k)
       const t = timersRef.current.get(k)
       if (t) { clearTimeout(t); timersRef.current.delete(k) }
+      clearSavedTimer(k)
+      editSessionStore.removeSession(`weekly:${k}`)
     }
     setConflictQueue(q => (q.some(k => k.startsWith(`${rowId}:`)) ? q.filter(k => !k.startsWith(`${rowId}:`)) : q))
     setStatus(s => {
@@ -192,7 +215,7 @@ export function WeeklySheetView({
       for (const key of cellKeys) delete next[`${rowId}:${key}`]
       return next
     })
-  }, [cellKeys])
+  }, [cellKeys, clearSavedTimer])
 
   // 서버 refetch(라우터 refresh) 반영 — dirty 셀은 로컬 유지(스펙 §5). 같은 문서 안에서는 지금 보이는 행을 빼지 않는다(D32 —
   // 다시 거른 집합에서 빠진 행은 그새 마지막 칸이 빈 비활성 영역 행이다. 행 삭제는 실시간 DELETE 가 맡는다).
@@ -267,13 +290,14 @@ export function WeeklySheetView({
   }, [])
   // 충돌 — 쓰지 않았다. 입력은 dirty 로 둔 채(실시간 값이 덮지 않는다) 비교 상자를 띄우고, 그 칸의 되돌리기 이력을 버린다(§5.8.6)
   const raiseConflict = useCallback((k: string, latest: string) => {
+    clearSavedTimer(k)
     conflictRef.current.set(k, latest)
     unknownRef.current.delete(k)
     retriedRef.current.delete(k)
     undoRef.current = dropUndoCells(undoRef.current, new Set([k]))
     setStatus(s => ({ ...s, [k]: 'conflict' }))
     setConflictQueue(q => (q.includes(k) ? q : [...q, k]))
-  }, [])
+  }, [clearSavedTimer])
   const noteSent = useCallback((k: string, value: string) => {
     const set = sentRef.current.get(k)
     if (set) set.add(value)
@@ -302,6 +326,7 @@ export function WeeklySheetView({
     const expected = baseRef.current.get(k)
     cellFlightRef.current.add(k)
     noteSent(k, sent)
+    clearSavedTimer(k)
     setStatus(s => ({ ...s, [k]: 'saving' }))
     // .catch: 오프라인·전송 계층 예외를 ok:false로 흡수 → 아래 error/재시도 경로로 합류(미포착 시 dirty·상태 영구 잔류, F2).
     // 응답을 잃은 저장은 반영됐을 수도 있다 — 보낸 값을 적어 두고, 재시도(같은 기대값의 CAS)가 그 값을 만나면 반영으로 가린다(Q10).
@@ -313,7 +338,7 @@ export function WeeklySheetView({
       const saved = () => {
         retriedRef.current.delete(k)
         unknownRef.current.delete(k)
-        if (now === sent) { dirtyRef.current.delete(k); baseRef.current.delete(k); sentRef.current.delete(k); setStatus(s => ({ ...s, [k]: 'saved' })) }
+        if (now === sent) { dirtyRef.current.delete(k); baseRef.current.delete(k); sentRef.current.delete(k); markCellSaved(k) }
         else { baseRef.current.set(k, sent); commit(rowId, key) } // 전송 중 재수정 — dirty 유지한 채 재저장(기대값은 방금 쓴 값)
       }
       if (!res.ok) {
@@ -339,7 +364,7 @@ export function WeeklySheetView({
       }
       saved()
     })
-  }, [projectId, toast, cleanupRowKeys, canEditCells, settleConflict, noteSent, t])
+  }, [projectId, toast, cleanupRowKeys, canEditCells, settleConflict, noteSent, t, clearSavedTimer, markCellSaved])
 
   // PPT 내보내기 직전 미저장 셀 flush — export fetch와 blur commit이 경합하면 서버가
   // 저장 전 스냅샷으로 PPT를 만들 수 있다. 남은 dirty 키를 즉시 commit(디바운스 우회)하고
@@ -374,6 +399,7 @@ export function WeeklySheetView({
     if (!canEditCells) return // 조회 전용 — 로컬 값도 바꾸지 않는다(저장되지 않은 편집이 남으면 화면이 거짓말을 한다)
     const k = `${rowId}:${key}`
     markDirty(k, rowsRef.current.find(r => r.id === rowId)?.[weeklyField(key)] ?? '')
+    clearSavedTimer(k)
     // 저장 전 초안 — 헤더가 '동기화됨'을 보이지 않게 한다(§5.8.3). 충돌 표시는 지우지 않는다
     setStatus(s => (s[k] === 'editing' || s[k] === 'conflict' ? s : { ...s, [k]: 'editing' }))
     setRows(rs => rs.map(r => (r.id === rowId ? { ...r, [weeklyField(key)]: value } : r)))
@@ -448,6 +474,7 @@ export function WeeklySheetView({
       const k = `${e.rowId}:${e.cellKey}`
       const t = timersRef.current.get(k)
       if (t) { clearTimeout(t); timersRef.current.delete(k) }
+      clearSavedTimer(k)
       retriedRef.current.delete(k)
     }
     // ② dirty 마킹(반드시 ③ 낙관 적용보다 먼저 — 인바운드 Realtime 클로버링 방지, 회귀 #2)
@@ -523,7 +550,7 @@ export function WeeklySheetView({
               if (gone.has(rowId) || unsaved.has(k)) continue
               unknownRef.current.delete(k)
               const now = rowsRef.current.find(r => r.id === rowId)?.[weeklyField(key)]
-              if (now === sv) { dirtyRef.current.delete(k); baseRef.current.delete(k); sentRef.current.delete(k); setStatus(s => ({ ...s, [k]: 'saved' })) }
+              if (now === sv) { dirtyRef.current.delete(k); baseRef.current.delete(k); sentRef.current.delete(k); markCellSaved(k) }
               else baseRef.current.set(k, sv)
               // 다르면(비행 중 재편집) dirty 유지 — per-cell 타이머가 마저 저장(단건 commit과 동형). 기대값은 방금 쓴 값
             }
@@ -532,7 +559,7 @@ export function WeeklySheetView({
               setTimeout(() => {
                 setBatchChip(c => (c && c.phase === 'saved' ? null : c))
                 if (batchInFlightRef.current === 0) setBatchActive(false)
-              }, 800)
+              }, SAVED_HIDE_MS)
             }
           } else {
             setStatus(s => { const n = { ...s }; for (const k of sent.keys()) n[k] = 'error'; return n }) // dirty 유지
@@ -553,7 +580,7 @@ export function WeeklySheetView({
         })
     }
     send(edits, 0)
-  }, [projectId, toast, cleanupRowKeys, rebuildForRetry, canEditCells, markDirty, settleConflict, commit, noteSent, t])
+  }, [projectId, toast, cleanupRowKeys, rebuildForRetry, canEditCells, markDirty, settleConflict, commit, noteSent, t, clearSavedTimer, markCellSaved])
 
   const retryBatch = useCallback(() => {
     const failed = lastFailedBatchRef.current
@@ -614,6 +641,7 @@ export function WeeklySheetView({
     dequeue(k)
     if (latest === undefined) return
     const t = timersRef.current.get(k); if (t) { clearTimeout(t); timersRef.current.delete(k) }
+    clearSavedTimer(k)
     dirtyRef.current.delete(k)
     baseRef.current.delete(k)
     sentRef.current.delete(k)
@@ -623,7 +651,8 @@ export function WeeklySheetView({
   }
   const openCompare = (k: string) => { if (conflictRef.current.has(k)) setConflictQueue(q => [k, ...q.filter(x => x !== k)]) }
 
-  // 셀 상태를 헤더 동기화 표시로 올린다(§5.8.3 — 미저장·저장 중·실패·충돌이 있으면 '동기화됨'이 아니다). 사라진 칸은 걷는다
+  // 셀 상태를 헤더 동기화 표시로 올린다(§5.8.3 — 미저장·저장 중·실패·충돌이 있으면 '동기화됨'이 아니다).
+  // 셀 배지의 '저장됨'이 SAVED_HIDE_MS 뒤 걷혀도 헤더 세션의 'saved'(lastSavedAt)는 유지하고, 미저장 취소·충돌 수용(prev !== 'saved')만 걷는다.
   const syncedStatusRef = useRef<Record<string, CellStatus>>({})
   useEffect(() => {
     const prev = syncedStatusRef.current
@@ -632,7 +661,7 @@ export function WeeklySheetView({
       const state: EditStatus = st === 'error' && unknownRef.current.has(k) ? 'outcome_unknown' : SESSION_STATUS[st]
       editSessionStore.setSession(`weekly:${k}`, 'weekly_cell', k, state)
     }
-    for (const k of Object.keys(prev)) if (!(k in status)) editSessionStore.removeSession(`weekly:${k}`)
+    for (const k of Object.keys(prev)) if (!(k in status) && prev[k] !== 'saved') editSessionStore.removeSession(`weekly:${k}`)
     syncedStatusRef.current = status
   }, [status])
   useEffect(() => () => {
@@ -810,6 +839,8 @@ export function WeeklySheetView({
     aiRequestRef.current += 1
     for (const t of timersRef.current.values()) clearTimeout(t)
     timersRef.current.clear()
+    for (const t of savedTimersRef.current.values()) clearTimeout(t)
+    savedTimersRef.current.clear()
     if (batchShowTimerRef.current) clearTimeout(batchShowTimerRef.current)
   }, [])
 

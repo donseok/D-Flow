@@ -99,15 +99,19 @@ describe('WeeklySheetView — 셀 저장의 값 CAS(Q05)', () => {
     expect(session()).toBe('saved')
   })
 
-  it('저장은 편집을 시작할 때의 값(내가 확인한 서버 값)을 기대값으로 싣는다', async () => {
+  it('저장은 편집을 시작할 때의 값(내가 확인한 서버 값)을 기대값으로 싣고, 셀의 저장됨 배지는 잠시 후 걷힌다', async () => {
     await typeInto('60')
     expect(session()).toBe('editing')
     expect(editSessionStore.getSummary().isFullySynced).toBe(false)
     await flush()
     expect(h.cell).toHaveBeenCalledTimes(1)
     expect(h.cell).toHaveBeenCalledWith('p1', 'r1', 'this_content', '60', '50')
+    expect(container.textContent).toContain('저장됨')
     expect(session()).toBe('saved')
     expect(editSessionStore.getSummary().isFullySynced).toBe(true)
+    await flush(800)
+    expect(container.textContent).not.toContain('저장됨')
+    expect(session()).toBe('saved')
   })
 
   it('이어 쓴 저장의 기대값은 방금 내가 쓴 값이다', async () => {
