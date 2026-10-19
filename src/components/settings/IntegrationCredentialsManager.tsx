@@ -234,7 +234,7 @@ export function IntegrationCredentialsManager({
         <button
           type="button"
           onClick={handleOpenIssue}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-action px-3.5 py-2 text-sm font-medium text-action-fg transition hover:bg-action-hover focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2"
+          className="btn btn-primary"
         >
           <Plus className="h-4 w-4" />
           {t('settings.cred.issueMinutes')}
@@ -246,7 +246,7 @@ export function IntegrationCredentialsManager({
         <button
           type="button"
           onClick={() => setFilterKind('all')}
-          className={`border-b-2 px-4 py-2 font-medium transition ${
+          className={`inline-flex h-(--control-h) items-center border-b-2 px-4 font-medium transition ${
             filterKind === 'all'
               ? 'border-action text-action'
               : 'border-transparent text-fg-secondary hover:text-fg'
@@ -257,7 +257,7 @@ export function IntegrationCredentialsManager({
         <button
           type="button"
           onClick={() => setFilterKind('minutes_api')}
-          className={`border-b-2 px-4 py-2 font-medium transition ${
+          className={`inline-flex h-(--control-h) items-center border-b-2 px-4 font-medium transition ${
             filterKind === 'minutes_api'
               ? 'border-action text-action'
               : 'border-transparent text-fg-secondary hover:text-fg'
@@ -268,7 +268,7 @@ export function IntegrationCredentialsManager({
         <button
           type="button"
           onClick={() => setFilterKind('agent_runner')}
-          className={`border-b-2 px-4 py-2 font-medium transition ${
+          className={`inline-flex h-(--control-h) items-center border-b-2 px-4 font-medium transition ${
             filterKind === 'agent_runner'
               ? 'border-action text-action'
               : 'border-transparent text-fg-secondary hover:text-fg'
@@ -438,7 +438,7 @@ export function IntegrationCredentialsManager({
                 onChange={e => setName(e.target.value)}
                 placeholder={t('settings.cred.tokenNamePh')}
                 maxLength={64}
-                className="mt-1 block w-full rounded-md border border-border-input bg-surface px-3 py-2 text-sm focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+                className="app-input mt-1 block w-full"
               />
               <p className="mt-1 text-xs text-fg-secondary">
                 {t('settings.cred.tokenNameHint')}
@@ -501,7 +501,7 @@ export function IntegrationCredentialsManager({
                 id="default-project"
                 value={defaultProjectId}
                 onChange={e => setDefaultProjectId(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-border-input bg-surface px-3 py-2 text-sm focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+                className="app-select mt-1 block w-full"
               >
                 <option value="">{t('settings.cred.defaultProjectNone')}</option>
                 {(allProjects ? projects : projects.filter(p => selectedProjects.includes(p.id))).map(p => (
@@ -524,7 +524,7 @@ export function IntegrationCredentialsManager({
                 id="default-team"
                 value={defaultTeamId}
                 onChange={e => setDefaultTeamId(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-border-input bg-surface px-3 py-2 text-sm focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+                className="app-select mt-1 block w-full"
               >
                 <option value="">{t('settings.cred.notSet')}</option>
                 {teams.map(t => (
@@ -600,7 +600,7 @@ export function IntegrationCredentialsManager({
                 id="token-expires"
                 value={expiresDays}
                 onChange={e => setExpiresDays(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-border-input bg-surface px-3 py-2 text-sm focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
+                className="app-select mt-1 block w-full"
               >
                 {EXPIRES_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>
@@ -616,7 +616,7 @@ export function IntegrationCredentialsManager({
                 type="button"
                 onClick={() => setIssueOpen(false)}
                 disabled={issuing}
-                className="rounded-lg border border-border-input bg-surface px-4 py-2 text-sm font-medium text-fg hover:bg-surface-hover transition"
+                className="btn btn-secondary"
               >
                 {t('common.cancel')}
               </button>
@@ -624,7 +624,7 @@ export function IntegrationCredentialsManager({
                 type="button"
                 onClick={submitIssue}
                 disabled={issuing}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-action px-4 py-2 text-sm font-medium text-action-fg hover:bg-action-hover transition disabled:opacity-50"
+                className="btn btn-primary"
               >
                 {issuing ? t('settings.cred.issuing') : t('settings.cred.issue')}
               </button>
@@ -681,7 +681,7 @@ export function IntegrationCredentialsManager({
               <button
                 type="button"
                 onClick={() => setIssuedResult(null)}
-                className="rounded-lg bg-action px-4 py-2 text-sm font-medium text-action-fg hover:bg-action-hover transition"
+                className="btn btn-primary"
               >
                 {t('settings.cred.confirmClose')}
               </button>
@@ -713,7 +713,7 @@ export function IntegrationCredentialsManager({
                 type="button"
                 onClick={() => setRevokingCred(null)}
                 disabled={revoking}
-                className="rounded-lg border border-border-input bg-surface px-4 py-2 text-sm font-medium text-fg hover:bg-surface-hover transition"
+                className="btn btn-secondary"
               >
                 {t('common.cancel')}
               </button>
@@ -721,7 +721,7 @@ export function IntegrationCredentialsManager({
                 type="button"
                 onClick={confirmRevoke}
                 disabled={revoking}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger/90 transition disabled:opacity-50"
+                className="btn btn-danger"
               >
                 {revoking ? t('settings.cred.revoking') : t('settings.cred.revokeGo')}
               </button>

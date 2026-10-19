@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { KeyRound, Mail, User as UserIcon } from 'lucide-react'
+import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import type { UiPrefs } from '@/lib/domain/types'
 import type { WorkspaceNotifyOff } from '@/lib/notify/workspaceOff'
@@ -35,39 +36,39 @@ export function AccountView({ email, displayName, projects, currentWorkspace = n
   const { t } = useLocale()
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6">
-      <PageHeader title={t('account.title')} />
-
-      <div className="card p-5 sm:p-6">
-        <h2 className="mt-0.5 text-sm font-semibold text-fg">{t('account.profile')}</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
-            <UserIcon className="h-4 w-4 text-fg-muted" />
-            <div className="min-w-0">
-              <div className="text-meta text-fg-secondary">{t('account.name')}</div>
-              <div className="truncate text-sm text-fg">{displayName ?? '—'}</div>
+    <PageFrame header={<PageHeader title={t('account.title')} />}>
+      <div className="w-full min-w-0 max-w-full space-y-6 pb-6">
+        <div className="card p-5 sm:p-6">
+          <h2 className="mt-0.5 text-sm font-semibold text-fg">{t('account.profile')}</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
+              <UserIcon className="h-4 w-4 text-fg-muted" />
+              <div className="min-w-0">
+                <div className="text-meta text-fg-secondary">{t('account.name')}</div>
+                <div className="truncate text-sm text-fg">{displayName ?? '—'}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
+              <Mail className="h-4 w-4 text-fg-muted" />
+              <div className="min-w-0">
+                <div className="text-meta text-fg-secondary">{t('account.email')}</div>
+                <div className="truncate text-sm text-fg">{email ?? '—'}</div>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-subtle px-3.5 py-3">
-            <Mail className="h-4 w-4 text-fg-muted" />
-            <div className="min-w-0">
-              <div className="text-meta text-fg-secondary">{t('account.email')}</div>
-              <div className="truncate text-sm text-fg">{email ?? '—'}</div>
-            </div>
-          </div>
+          <button onClick={() => setPwOpen(true)} className="btn btn-ghost mt-4">
+            <KeyRound className="h-4 w-4" />{t('account.pw.change')}
+          </button>
         </div>
-        <button onClick={() => setPwOpen(true)} className="btn btn-ghost mt-4">
-          <KeyRound className="h-4 w-4" />{t('account.pw.change')}
-        </button>
+
+        <WorkspacePrefsSection key={currentWorkspace?.id ?? 'none'} currentWorkspace={currentWorkspace} currentWorkspaceError={currentWorkspaceError} startPage={startPage} projectsView={projectsView} />
+
+        <NotifPrefsSection notif={notif} workspaceOff={workspaceOff} />
+
+        <MyTokensSection projects={projects} workspaces={tokenWorkspaces} currentWorkspaceId={currentWorkspace?.id} workspaceError={tokenWorkspaceError} />
+
+        <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
       </div>
-
-      <WorkspacePrefsSection key={currentWorkspace?.id ?? 'none'} currentWorkspace={currentWorkspace} currentWorkspaceError={currentWorkspaceError} startPage={startPage} projectsView={projectsView} />
-
-      <NotifPrefsSection notif={notif} workspaceOff={workspaceOff} />
-
-      <MyTokensSection projects={projects} workspaces={tokenWorkspaces} currentWorkspaceId={currentWorkspace?.id} workspaceError={tokenWorkspaceError} />
-
-      <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
-    </div>
+    </PageFrame>
   )
 }

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getActorForView } from '@/lib/authz'
 import { canViewUiStates } from '@/lib/authz/uiStatesAccess'
 import { deriveAccent } from '@/lib/settings/accent'
+import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { UiStatesShowcase, type AccentSample } from '@/components/admin/UiStatesShowcase'
 import { t, type DictKey } from '@/lib/i18n/dict'
@@ -24,9 +25,10 @@ export default async function UiStatesPage() {
   if (!canViewUiStates(actor)) notFound()
   const samples: AccentSample[] = ACCENT_SAMPLES.map(([nameKey, hex]) => ({ name: t(nameKey), hex, result: deriveAccent(hex) }))
   return (
-    <div className="space-y-6">
-      <PageHeader title={t('nav.uiStates')} />
-      <UiStatesShowcase samples={samples} />
-    </div>
+    <PageFrame header={<PageHeader title={t('nav.uiStates')} />}>
+      <div className="space-y-6 pb-6">
+        <UiStatesShowcase samples={samples} />
+      </div>
+    </PageFrame>
   )
 }

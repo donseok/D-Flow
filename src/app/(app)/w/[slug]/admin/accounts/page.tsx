@@ -4,6 +4,7 @@ import { canManageWorkspaceAccounts } from '@/lib/authz/accountsAccess'
 import { ACCESS_ROLE, isProjectAdmin } from '@/lib/domain/authz'
 import { listAccounts } from '@/app/actions/accounts'
 import { listProjectsWithState } from '@/app/actions/project'
+import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { t } from '@/lib/i18n/dict'
 import { StatusMessage } from '@/components/ui/StatusMessage'
@@ -29,10 +30,11 @@ export default async function AccountsAdminPage({ params, searchParams }: {
   if (list.degraded) {
     // 목록을 못 읽은 것을 '관리할 프로젝트가 없습니다'로 그리지 않는다(에러 3원칙 ① — 원인은 [listProjects] 로그)
     return (
-      <div className="space-y-6">
-        <PageHeader title={title} meta={scope.ws.name} />
-        <StatusMessage kind="partial_error" blocking title={t('pages.accounts.projectsFailed')} detail={t('pages.accounts.projectsFailedDetail')} />
-      </div>
+      <PageFrame header={<PageHeader title={title} meta={scope.ws.name} />}>
+        <div className="space-y-6 pb-6">
+          <StatusMessage kind="partial_error" blocking title={t('pages.accounts.projectsFailed')} detail={t('pages.accounts.projectsFailedDetail')} />
+        </div>
+      </PageFrame>
     )
   }
   const projects = list.projects
@@ -47,10 +49,11 @@ export default async function AccountsAdminPage({ params, searchParams }: {
   if (!res.ok) {
     // 조용한 빈 화면 금지 — 원인을 그대로 보여준다(표시 = 로깅).
     return (
-      <div className="space-y-6">
-        <PageHeader title={title} meta={scope.ws.name} />
-        <StatusMessage kind="partial_error" blocking title={t('pages.accounts.listFailed')} detail={res.error} />
-      </div>
+      <PageFrame header={<PageHeader title={title} meta={scope.ws.name} />}>
+        <div className="space-y-6 pb-6">
+          <StatusMessage kind="partial_error" blocking title={t('pages.accounts.listFailed')} detail={res.error} />
+        </div>
+      </PageFrame>
     )
   }
   // 플랫폼 관리자 여부는 플랫폼 관리자에게만 싣는다 — 워크스페이스 관리자 화면의 RSC 페이로드에 남기지 않는다
@@ -61,16 +64,17 @@ export default async function AccountsAdminPage({ params, searchParams }: {
   const members = accounts.filter((a) => a.workspaceRole === 'member').length
 
   return (
-    <div className="space-y-6">
-      <PageHeader title={title} meta={t('pages.accounts.meta').replace('{total}', String(total)).replace('{admins}', String(admins)).replace('{members}', String(members)).replace('{ws}', () => scope.ws.name)} />
-      <AccountsManager
-        accounts={accounts}
-        projectId={projectId}
-        workspaceId={res.workspaceId}
-        projects={managed.map(p => ({ id: p.id, name: p.name }))}
-        canPlatformOps={canPlatformOps}
-        currentUserId={actor.userId}
-      />
-    </div>
+    <PageFrame header={<PageHeader title={title} meta={t('pages.accounts.meta').replace('{total}', String(total)).replace('{admins}', String(admins)).replace('{members}', String(members)).replace('{ws}', () => scope.ws.name)} />}>
+      <div className="space-y-6 pb-6">
+        <AccountsManager
+          accounts={accounts}
+          projectId={projectId}
+          workspaceId={res.workspaceId}
+          projects={managed.map(p => ({ id: p.id, name: p.name }))}
+          canPlatformOps={canPlatformOps}
+          currentUserId={actor.userId}
+        />
+      </div>
+    </PageFrame>
   )
 }

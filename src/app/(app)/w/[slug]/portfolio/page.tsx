@@ -6,6 +6,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { getPortfolioInputs } from '@/lib/data/portfolio'
 import { buildPortfolio } from '@/lib/domain/portfolio'
+import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { PortfolioKpis } from '@/components/portfolio/PortfolioKpis'
 import { PortfolioTable } from '@/components/portfolio/PortfolioTable'
@@ -48,17 +49,18 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
   })
 
   return (
-    <div className="space-y-6 pb-10">
-      <PageHeader title={t('nav.portfolio')} />
-      {listDegraded && (
-        <div className="rounded-xl border border-danger/40 bg-danger-weak px-4 py-3 text-xs font-medium text-danger">
-          {t('pf.listDegraded')}
-        </div>
-      )}
-      <PortfolioKpis totals={model.totals} />
-      <PortfolioTable rows={model.rows} leadersDegraded={leadersDegraded} />
-      {/* 통합 축의 오늘 마커는 실제 오늘 — 행별 마일스톤 상태(dday)는 각 프로젝트 today 로 이미 판정됨 */}
-      <PortfolioMilestoneBoard rows={model.rows} milestones={model.milestones} today={realToday} />
-    </div>
+    <PageFrame header={<PageHeader title={t('nav.portfolio')} />}>
+      <div className="space-y-6 pb-6">
+        {listDegraded && (
+          <div className="rounded-xl border border-danger/40 bg-danger-weak px-4 py-3 text-xs font-medium text-danger">
+            {t('pf.listDegraded')}
+          </div>
+        )}
+        <PortfolioKpis totals={model.totals} />
+        <PortfolioTable rows={model.rows} leadersDegraded={leadersDegraded} />
+        {/* 통합 축의 오늘 마커는 실제 오늘 — 행별 마일스톤 상태(dday)는 각 프로젝트 today 로 이미 판정됨 */}
+        <PortfolioMilestoneBoard rows={model.rows} milestones={model.milestones} today={realToday} />
+      </div>
+    </PageFrame>
   )
 }

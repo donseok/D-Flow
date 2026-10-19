@@ -33,9 +33,9 @@ export default async function ProjectOfficePage({ params }: { params: Promise<{ 
   ])
   if (office.projectName === null) notFound()
   // 시각·사무실 대사의 tz = 프로젝트 달력(계획 D-21a·D-21e) — 못 읽거나 손상이면 그 사유를 그린다(서울·UTC 로 대체하지 않는다)
-  if (!pc.ok) return <div className="p-6"><ConfigLoadError error={pc.error} /></div>
+  if (!pc.ok) return <div className="py-6"><ConfigLoadError error={pc.error} /></div>
   const cal = pickCalendar(pc.cfg)
-  if (!cal.ok) return <div className="p-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} /></div>
+  if (!cal.ok) return <div className="py-6"><ConfigLoadError error={cal.error} keyName={cal.key} kind={cal.kind} /></div>
   // 공통 헤더(탭·요약·타일)는 뷰가 그린다 — 타일이 30초 폴링을 따라가야 한다(AgentFrame).
   return <SeatmapView initial={office.seatmap} projectId={projectId} projectName={office.projectName} timeZone={cal.calendar.timezone} />
 }

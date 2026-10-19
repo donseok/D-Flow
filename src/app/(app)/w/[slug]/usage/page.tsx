@@ -2,6 +2,7 @@ import { after } from 'next/server'
 import { redirect } from 'next/navigation'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canViewUsage } from '@/lib/authz/usageAccess'
+import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { UsageScopeChip } from '@/components/usage/UsageScopeChip'
 import { PeriodTabs } from '@/components/usage/PeriodTabs'
@@ -85,23 +86,24 @@ export default async function UsagePage({ params, searchParams }: {
   after(() => purgeOldUsageEvents())
 
   return (
-    <div className="space-y-6">
-      <PageHeader title={t('nav.usage')} />
-      <UsageScopeChip workspaceName={scope.ws.name} />
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-fg-secondary">
-          {t('pages.usage.periodNote').replace('{days}', String(period)).replace('{tz}', timezone).replace('{retain}', String(USAGE_RETAIN_DAYS))}
-        </p>
-        <PeriodTabs base={usageBase} filter={filter} />
+    <PageFrame header={<PageHeader title={t('nav.usage')} />}>
+      <div className="space-y-6 pb-6">
+        <UsageScopeChip workspaceName={scope.ws.name} />
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-fg-secondary">
+            {t('pages.usage.periodNote').replace('{days}', String(period)).replace('{tz}', timezone).replace('{retain}', String(USAGE_RETAIN_DAYS))}
+          </p>
+          <PeriodTabs base={usageBase} filter={filter} />
+        </div>
+        <UsageSummary summary={summary} days={period} sessions={sessions} timeZone={timezone} />
+        <div className="grid gap-5 lg:grid-cols-2">
+          <UsageTrendChart series={series} />
+          <MenuRankingCard ranks={ranks} />
+        </div>
+        <UsageUserTable rows={userRows} days={period} timeZone={timezone} />
+        <UsageEventLog base={usageBase} events={events} names={names} limit={EVENT_LIMIT}
+          menus={ranks.map(r => r.menuKey)} filter={filter} timeZone={timezone} />
       </div>
-      <UsageSummary summary={summary} days={period} sessions={sessions} timeZone={timezone} />
-      <div className="grid gap-5 lg:grid-cols-2">
-        <UsageTrendChart series={series} />
-        <MenuRankingCard ranks={ranks} />
-      </div>
-      <UsageUserTable rows={userRows} days={period} timeZone={timezone} />
-      <UsageEventLog base={usageBase} events={events} names={names} limit={EVENT_LIMIT}
-        menus={ranks.map(r => r.menuKey)} filter={filter} timeZone={timezone} />
-    </div>
+    </PageFrame>
   )
 }

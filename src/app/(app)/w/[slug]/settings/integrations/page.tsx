@@ -41,21 +41,25 @@ export default async function WorkspaceIntegrationsPage({
   return (
     <PageFrame
       header={
-        <div className="space-y-2">
-          <div className="flex items-center gap-1.5 text-xs text-fg-secondary">
-            <Link
-              href={wsHref(access.slug, 'settings')}
-              className="inline-flex items-center gap-1 hover:text-fg transition-colors"
-            >
-              <ChevronLeft className="size-3.5" />
-              {t('pages.integrations.back')}
-            </Link>
-          </div>
-          <PageHeader title={t('pages.integrations.title')} meta={access.name} />
-        </div>
+        <PageHeader
+          title={t('pages.integrations.title')}
+          meta={
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <Link
+                href={wsHref(access.slug, 'settings')}
+                className="inline-flex items-center gap-1 hover:text-fg transition-colors"
+              >
+                <ChevronLeft className="size-3.5" />
+                {t('pages.integrations.back')}
+              </Link>
+              <span aria-hidden>·</span>
+              <span>{access.name}</span>
+            </span>
+          }
+        />
       }
     >
-      <div className="max-w-5xl mx-auto py-2">
+      <div className="pb-6">
         <IntegrationCredentialsManager
           workspaceId={access.id}
           projects={projects}

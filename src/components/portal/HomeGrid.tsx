@@ -148,7 +148,7 @@ export function HomeGrid({ workspaceId, slots, gallery, defaults, personal, canE
       <span role="status" aria-live="polite" className="sr-only">{live}</span>
 
       {galleryOpen && (
-        <section id="home-widget-gallery" aria-label={t('portalUi.edit.galleryTitle')} className="mb-6 rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card) p-4.5">
+        <section id="home-widget-gallery" aria-label={t('portalUi.edit.galleryTitle')} className="mb-6 rounded-(--radius-panel) border border-border bg-surface shadow-(--shadow-card) p-5">
           <h2 className="mb-3 text-section text-fg">{t('portalUi.edit.galleryTitle')}</h2>
           {gallery.length === 0 ? <StatusMessage kind="empty" compact title={t('portalUi.edit.galleryEmpty')} /> : (
             <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
@@ -210,7 +210,7 @@ export function HomeGrid({ workspaceId, slots, gallery, defaults, personal, canE
                   {/* 편집 중에는 본문을 누를 수 없다(inert) — 링크를 따라가다 초안을 잃지 않게. 조작은 위의 묶음이 전부다 */}
                   {slot
                     ? <div inert className="pointer-events-none opacity-70">{slot.node}</div>
-                    : <div data-widget-placeholder={item.id} className="rounded-(--radius-panel) border border-dashed border-border-input bg-surface p-4.5">
+                    : <div data-widget-placeholder={item.id} className="rounded-(--radius-panel) border border-dashed border-border-input bg-surface p-5">
                         <p className="text-section text-fg">{title}</p>
                         <p className="mt-1 text-meta text-fg-secondary">{metaOf.get(item.id)?.desc}</p>
                         <p className="mt-3 text-meta text-fg-muted">{t('portalUi.edit.placeholder')}</p>

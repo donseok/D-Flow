@@ -6,6 +6,7 @@ import { readCurrentWorkspace } from '@/lib/workspace/current'
 import { wsHref } from '@/lib/workspace/paths'
 import { viewTimezone } from '@/lib/calendar/viewZone'
 import { listPlatformAdmins } from '@/app/actions/platformAdmins'
+import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { PlatformAdminsManager } from '@/components/admin/PlatformAdminsManager'
@@ -42,14 +43,15 @@ export default async function PlatformAdminsPage() {
   const accountsHref = cur.ok && cur.ws ? wsHref(cur.ws.slug, 'admin/accounts') : null
   const timeZone = res.ok ? await displayTimezone(cur.ok && cur.ws ? cur.ws.id : null) : 'UTC'   // 목록이 없으면 쓸 데가 없다
   return (
-    <div className="space-y-6">
-      <PageHeader title={t('platformAdmins.title')} description={t('platformAdmins.desc')} />
-      {res.ok ? (
-        <PlatformAdminsManager rows={res.rows} currentUserId={actor.userId} accountsHref={accountsHref} timeZone={timeZone} />
-      ) : (
-        // 조회 실패를 '관리자 0명'으로 그리지 않는다(3원칙 ①) — 원인은 서버 로그에 남았다
-        <StatusMessage kind="partial_error" blocking title={t('platformAdmins.listError')} detail={t('platformAdmins.listErrorDetail')} />
-      )}
-    </div>
+    <PageFrame header={<PageHeader title={t('platformAdmins.title')} description={t('platformAdmins.desc')} />}>
+      <div className="space-y-6 pb-6">
+        {res.ok ? (
+          <PlatformAdminsManager rows={res.rows} currentUserId={actor.userId} accountsHref={accountsHref} timeZone={timeZone} />
+        ) : (
+          // 조회 실패를 '관리자 0명'으로 그리지 않는다(3원칙 ①) — 원인은 서버 로그에 남았다
+          <StatusMessage kind="partial_error" blocking title={t('platformAdmins.listError')} detail={t('platformAdmins.listErrorDetail')} />
+        )}
+      </div>
+    </PageFrame>
   )
 }

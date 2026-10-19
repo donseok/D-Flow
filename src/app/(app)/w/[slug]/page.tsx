@@ -56,7 +56,7 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
   const header = <PageHeader title={t('nav.home')} meta={meta} />
   const actor = scope.actor
   if (!actor) {
-    return <PageFrame width="portal" header={header}>
+    return <PageFrame header={header}>
       <StatusMessage kind="partial_error" blocking title={t('pages.home.noActor')} detail={t('pages.common.refreshLater')} />
     </PageFrame>                                                                  // 열화 — 로더를 부르지 않는다(fail-closed)
   }
@@ -120,7 +120,7 @@ export default async function WorkspaceHome({ params, searchParams }: { params: 
   }
   const settingsAction = wsAdmin ? { label: t('pages.home.toSettings'), href: `${wsHref(ws.slug, 'settings')}#workspace-menu` } : undefined
   return (
-    <PageFrame width="portal" header={<PageHeader title={t('nav.home')} meta={meta} primaryAction={<HomeEditButton canEdit={prefs !== null} />} />}>
+    <PageFrame header={<PageHeader title={t('nav.home')} meta={meta} primaryAction={<HomeEditButton canEdit={prefs !== null} />} />}>
       {!cfg.ok && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t('pages.home.widgetConfigFailed')} action={settingsAction} /></div>}
       {prefs === null && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t('pages.home.prefsFailed')} detail={t('pages.home.prefsFailedDetail')} /></div>}
       {mods.ok && mods.partial && <div className="mb-4"><StatusMessage kind="partial_error" compact title={t('pages.home.modulesPartial')} /></div>}

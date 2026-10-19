@@ -76,7 +76,6 @@ export default async function MyWorkPage({
 
   return (
     <PageFrame
-      width="portal"
       header={<PageHeader title={t('nav.myWork')} />}
       toolbar={
         <div className="space-y-3">

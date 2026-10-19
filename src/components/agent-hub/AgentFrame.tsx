@@ -27,7 +27,7 @@ export function AgentHero({ nav, projectName, title, lede, tiles, aside }: {
   const barTiles = tiles.filter(x => x.bar !== false && x.value > 0)
   const total = barTiles.reduce((n, x) => n + x.value, 0)
   return (
-    <header data-agent-hero className="hero-card grid items-center gap-7 px-7 py-5 [grid-template-columns:minmax(0,1fr)_minmax(0,560px)]">
+    <header data-agent-hero className="hero-card grid items-center gap-6 px-6 py-5 [grid-template-columns:minmax(0,1fr)_minmax(0,560px)]">
       <div className="relative z-10 min-w-0">
         {nav}
         <p className="mt-3.5 text-meta font-semibold text-fg-secondary">{projectName}</p>

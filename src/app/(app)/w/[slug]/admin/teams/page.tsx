@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { canManageTeams } from '@/lib/authz/teamsAccess'
 import { listTeamsAdmin } from '@/app/actions/teams'
+import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { TeamsManager } from '@/components/admin/TeamsManager'
 import { wsHref } from '@/lib/workspace/paths'
@@ -23,22 +24,24 @@ export default async function TeamsAdminPage({ params }: { params: Promise<{ slu
   const teams = list.rows
 
   return (
-    <div className="space-y-6">
-      <PageHeader title={t('pages.teams.title')} description={t('pages.teams.desc')} />
-      <TeamsManager teams={teams} workspaceId={scope.ws.id} />
-    </div>
+    <PageFrame header={<PageHeader title={t('pages.teams.title')} description={t('pages.teams.desc')} />}>
+      <div className="space-y-6 pb-6">
+        <TeamsManager teams={teams} workspaceId={scope.ws.id} />
+      </div>
+    </PageFrame>
   )
 }
 
 /** 목록을 못 읽었을 때 — 빈 목록 대신 원인을 보여 준다. detail 은 있을 때만 둘째 줄. */
 function TeamsLoadError({ title, detail }: { title: string; detail?: string }) {
   return (
-    <div className="space-y-6">
-      <PageHeader title={t('pages.teams.title')} description={t('pages.teams.desc')} />
-      <div className="card p-6" role="alert">
-        <p className="text-sm font-semibold text-danger">{title}</p>
-        {detail && <p className="mt-1 text-xs leading-5 text-fg-secondary">{detail}</p>}
+    <PageFrame header={<PageHeader title={t('pages.teams.title')} description={t('pages.teams.desc')} />}>
+      <div className="space-y-6 pb-6">
+        <div className="card p-6" role="alert">
+          <p className="text-sm font-semibold text-danger">{title}</p>
+          {detail && <p className="mt-1 text-xs leading-5 text-fg-secondary">{detail}</p>}
+        </div>
       </div>
-    </div>
+    </PageFrame>
   )
 }

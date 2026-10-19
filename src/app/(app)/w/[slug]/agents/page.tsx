@@ -26,7 +26,7 @@ export default async function AgentsPage({ params }: { params: Promise<{ slug: s
     // 화면의 tz — 이 워크스페이스의 달력(화면이 이름을 적는다, 계획 D-21c)
     viewTimezone(scope.ws.id),
   ])
-  if (!vz.ok) return <div className="p-6"><ConfigLoadError error={vz.error} kind="invalid" keyName={vz.key} /></div>
+  if (!vz.ok) return <div className="py-6"><ConfigLoadError error={vz.error} kind="invalid" keyName={vz.key} /></div>
   // 문서형(D19) — 손으로 준 h-full 틀을 두지 않는다. 헤더·층 칩은 SeatmapView 가 공통 헤더(AgentFrame)로 그린다
   return <SeatmapView initial={seatmap} workspaceId={scope.ws.id} timeZone={vz.timeZone} />
 }

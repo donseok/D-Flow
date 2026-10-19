@@ -90,7 +90,7 @@ export function WikiSearch({ projectId, initialQuery, pageHero, adminSlot }: {
   // (회귀: 랩탑에서 검색창·칩이 통째로 사라짐). 페이지 제목(pageHero)은
   // 다른 화면과 같이 `hero` 로 두어 컴팩트에서 걷힌다 — 헤더 브레드크럼이 위치를 보여준다.
   const searchCard = (
-    <section className="hero-card overflow-hidden px-5 py-4 sm:px-7 sm:py-5" aria-labelledby="wiki-search-title">
+    <section className="hero-card overflow-hidden px-5 py-4 sm:px-6 sm:py-5" aria-labelledby="wiki-search-title">
       {/* 2분할 개편(2026-08-17): 결과 그리드가 카드 전폭을 쓰도록 max-w-3xl 을 풀었다.
           높이 압축(2026-08-19): 이 카드는 c635f14 이후 고정 히어로라 화면에서 차지한
           높이만큼 결과·읽기 패널이 영구히 줄어든다. 아이브로우·제목·설명 3단 세로
@@ -126,10 +126,10 @@ export function WikiSearch({ projectId, initialQuery, pageHero, adminSlot }: {
               placeholder={t('wiki.search2.placeholder')}
               aria-label={t('wiki.search2.placeholder')}
               disabled={busy}
-              className="h-11 w-full rounded-(--radius-control) border border-border-input bg-surface pl-11 pr-4 text-sm text-fg outline-none transition-[border-color] duration-(--motion-fast) placeholder:text-fg-muted focus:border-border-focus focus:ring-2 focus:ring-border-focus/25 disabled:opacity-70"
+              className="h-(--control-h) w-full rounded-(--radius-control) border border-border-input bg-surface pl-11 pr-4 text-sm text-fg outline-none transition-[border-color] duration-(--motion-fast) placeholder:text-fg-muted focus:border-border-focus focus:ring-2 focus:ring-border-focus/25 disabled:opacity-70"
             />
           </div>
-          <button type="submit" disabled={busy || !query.trim()} className="btn btn-primary h-11 rounded-2xl px-5">
+          <button type="submit" disabled={busy || !query.trim()} className="btn btn-primary px-5">
             {busy ? t('wiki.ask.working') : t('wiki.ask.submit')}
             <Send className="h-4 w-4" aria-hidden />
           </button>

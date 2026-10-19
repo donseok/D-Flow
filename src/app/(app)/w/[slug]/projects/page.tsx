@@ -30,7 +30,7 @@ export default async function ProjectsPage({ params, searchParams }: {
   const sp = await searchParams
   const { ws, actor } = scope
   const header = (create?: ReactNode) => <PageHeader title={t('nav.allProjects')} meta={ws.name} primaryAction={create} />
-  if (!actor) return <PageFrame width="portal" header={header()}><StatusMessage kind="partial_error" blocking title={t('pages.projects.noActor')} /></PageFrame>
+  if (!actor) return <PageFrame header={header()}><StatusMessage kind="partial_error" blocking title={t('pages.projects.noActor')} /></PageFrame>
   // 기존 달력 손상 경로를 보존한다. 잘못된 시간대로 상태를 지어내지 않는다(R6).
   const zone = await viewTimezone(scope.ws.id)
   if (!zone.ok) return <ConfigLoadError error={zone.error} keyName={zone.key} kind="invalid" />
@@ -48,7 +48,7 @@ export default async function ProjectsPage({ params, searchParams }: {
   const create = canCreate ? <NewProjectModal workspaceId={ws.id} workspaceName={ws.name} copyCandidates={copy?.ok ? copy.rows.map(p => ({ id: p.id, name: p.name })) : []} defaultOpen={sp.new === '1'} /> : undefined
   const view = acc.projectsView === 'cards' ? 'cards' : 'rows'
   const keep = { q, status, fav: favoritesOnly ? '1' : undefined }
-  return <PageFrame width="portal" header={header(create)} toolbar={<ProjectsToolbar slug={ws.slug} q={q ?? ''} status={status} favoritesOnly={favoritesOnly} view={view} />}>
+  return <PageFrame header={header(create)} toolbar={<ProjectsToolbar slug={ws.slug} q={q ?? ''} status={status} favoritesOnly={favoritesOnly} view={view} />}>
     {copy && !copy.ok && <StatusMessage kind="partial_error" compact title={t('pages.projects.copyFailed')} />}
     {wsPrefs === null && <StatusMessage kind="partial_error" compact title={t('pages.projects.favoritesFailed')} detail={t('pages.projects.favoritesFailedDetail')} />}
     <FavoritesProvider key={ws.id} workspaceId={ws.id} initial={wsPrefs === null ? null : wsPrefs.favoriteProjectIds ?? []}>

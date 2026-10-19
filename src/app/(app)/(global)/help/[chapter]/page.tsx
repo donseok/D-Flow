@@ -4,6 +4,7 @@ import { getActorViewState } from '@/lib/authz'
 import { manualViewer } from '@/lib/authz/manualAccess'
 import { canSee, manualChapter, visibleChapters } from '@/lib/manual/chapters'
 import { t } from '@/lib/i18n/dict'
+import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { ManualArticle } from '@/components/manual/ManualArticle'
@@ -34,13 +35,16 @@ export default async function ManualChapterPage({ params }: { params: Promise<{ 
   // '이 장의 내용'은 큰 절(##)만 — 긴 장은 소절까지 합치면 50줄 가까이 돼 본문이 한참 밀린다(2026-10-16 눈확인). 소절은 본문에서 앵커로 그대로 간다
   const tocSections = chapter.sections.filter((s) => s.depth === 2)
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={chapter.title}
-        description={chapter.summary}
-        meta={chapter.audience !== 'member' ? <ManualBadge audience={chapter.audience} /> : undefined}
-      />
-      <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start">
+    <PageFrame
+      header={
+        <PageHeader
+          title={chapter.title}
+          description={chapter.summary}
+          meta={chapter.audience !== 'member' ? <ManualBadge audience={chapter.audience} /> : undefined}
+        />
+      }
+    >
+      <div className="grid gap-6 pb-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start">
         <div className={NAV_STICKY}>
           <ManualChapterNav chapters={visible} current={chapter.slug} />
         </div>
@@ -87,6 +91,6 @@ export default async function ManualChapterPage({ params }: { params: Promise<{ 
           </nav>
         </article>
       </div>
-    </div>
+    </PageFrame>
   )
 }

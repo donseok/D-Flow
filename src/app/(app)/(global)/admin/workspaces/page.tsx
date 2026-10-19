@@ -5,6 +5,7 @@ import { t } from '@/lib/i18n/dict'
 import { readCurrentWorkspace } from '@/lib/workspace/current'
 import { wsHref } from '@/lib/workspace/paths'
 import { listPlatformWorkspaces } from '@/app/actions/platformWorkspaces'
+import { PageFrame } from '@/components/app/PageFrame'
 import { PageHeader } from '@/components/app/PageHeader'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { WorkspacesManager } from '@/components/admin/WorkspacesManager'
@@ -24,14 +25,15 @@ export default async function WorkspacesAdminPage() {
   // 계정 관리 화면은 워크스페이스마다 있다 — 첫 관리자 계정이 없을 때 안내할 곳은 지금 워크스페이스의 것(소속이 없거나 못 읽으면 링크 없이 문구만)
   const accountsHref = cur.ok && cur.ws ? wsHref(cur.ws.slug, 'admin/accounts') : null
   return (
-    <div className="space-y-6">
-      <PageHeader title={t('platform.ws.title')} description={t('platform.ws.desc')} />
-      {res.ok ? (
-        <WorkspacesManager rows={res.rows} accountsHref={accountsHref} />
-      ) : (
-        // 조회 실패를 '워크스페이스 0개'로 그리지 않는다(3원칙 ①) — 원인은 서버 로그에 남았다
-        <StatusMessage kind="partial_error" blocking title={t('platform.ws.listError')} detail={t('platform.ws.listErrorDetail')} />
-      )}
-    </div>
+    <PageFrame header={<PageHeader title={t('platform.ws.title')} description={t('platform.ws.desc')} />}>
+      <div className="space-y-6 pb-6">
+        {res.ok ? (
+          <WorkspacesManager rows={res.rows} accountsHref={accountsHref} />
+        ) : (
+          // 조회 실패를 '워크스페이스 0개'로 그리지 않는다(3원칙 ①) — 원인은 서버 로그에 남았다
+          <StatusMessage kind="partial_error" blocking title={t('platform.ws.listError')} detail={t('platform.ws.listErrorDetail')} />
+        )}
+      </div>
+    </PageFrame>
   )
 }
