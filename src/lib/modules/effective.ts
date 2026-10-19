@@ -4,7 +4,7 @@
  * requireModule(Phase B)이 받아 fail-closed 로 닫는다. 요청 안 캐시 하나(react cache). 프로세스 전역 캐시 없음.
  * projectConfig 를 받으면 다시 읽지 않는다(관문 — 라우트·액션·워커는 react cache 밖이다).
  */
-import { cache } from 'react'
+import { requestCache as cache } from '@/lib/server/requestCache'
 import { getWorkspaceConfig } from '@/lib/settings/workspaceConfig'
 import { getProjectConfig, type ConfigReadClient, type ProjectConfig } from '@/lib/settings/projectConfig'
 import { ConfigUnavailableError, ERR_CONFIG_UNAVAILABLE } from '@/lib/settings/errors'

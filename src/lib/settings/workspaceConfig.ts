@@ -1,6 +1,6 @@
 // 워크스페이스 설정 해석기(스펙 §3.5) — 조회 하나. 배포 기본값 env 셋(INVITE_ALLOWED_DOMAINS·NEXT_PUBLIC_BRAND_NAME·MAIL_FROM_NAME)은
 // 정의의 deployDefault 가 읽고 resolveKeys 가 'deploy' 출처로 표시한다. 0행·오류는 throw(fail-closed — modules.*·ai.enabled·초대 도메인이 이 위에 선다).
-import { cache } from 'react'
+import { requestCache as cache } from '@/lib/server/requestCache'
 import { createServerClient } from '@/lib/supabase/server'
 import { SETTINGS_SCHEMA_VERSION, WORKSPACE_SETTINGS, type WorkspaceSettingKey, type WorkspaceSettingValue } from './registry'
 import { ConfigUnavailableError, WorkspaceArchivedError, type ConfigKeyError } from './errors'
@@ -52,6 +52,6 @@ async function load(workspaceId: string, client: ConfigReadClient | undefined, i
 const loadCached = cache(load)
 /** includeArchived: 보관된 워크스페이스의 설정도 읽는다 — 플랫폼 관리 목록(/admin/workspaces)이 보관된 행의 허용 모듈을 보일 때만 쓴다.
  *  그 밖의 호출부는 넘기지 않는다(보관 = 읽기 실패 — 닫힘). */
-export function getWorkspaceConfig(workspaceId: string, opts?: { client?: ConfigReadClient; includeArchived?: boolean }): Promise<WorkspaceConfig> {
-  return loadCached(workspaceId, opts?.client, opts?.includeArchived === true)
+export async function getWorkspaceConfig(workspaceId: string, opts?: { client?: ConfigReadClient; includeArchived?: boolean }): Promise<WorkspaceConfig> {
+  return loadCached(workspaceId, opts?.client ?? await createServerClient(), opts?.includeArchived === true)
 }

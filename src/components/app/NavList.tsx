@@ -1,5 +1,5 @@
 'use client'
-import Link from 'next/link'
+import { NavigationLink as Link } from './NavigationLink'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'

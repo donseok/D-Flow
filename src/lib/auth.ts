@@ -1,10 +1,9 @@
-import { cache } from 'react'
+import { requestCache as cache } from '@/lib/server/requestCache'
 import { createServerClient } from './supabase/server'
 import { displayNameFrom } from './domain/display-name'
 
-// cache(): 같은 요청 안의 중복 호출을 1회로 접는다. HTTP 자체는 auth-js·Next 의
-// fetch dedupe 가 이미 합치지만, 클라이언트 생성·파싱 오버헤드와 호출 그래프의
-// 단수 계산을 단순하게 유지하는 위생 조치다(2026-08-18 성능 감사).
+// 같은 요청 안의 세션 조회는 한 번만 한다. RSC 는 React cache, /api/shell 같은
+// 명시적 읽기 요청은 요청 캐시를 사용한다. 다른 요청에서는 사용자 상태를 새로 검증한다.
 export const getSession = cache(async () => {
   const sb = await createServerClient()
   const { data } = await sb.auth.getUser()

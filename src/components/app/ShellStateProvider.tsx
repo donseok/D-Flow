@@ -9,7 +9,7 @@
 //  - 배지 셋(myWorkReview·projectApprovals·projectUnreadAnnouncements)은 서버가 실패를 null 로 낸다 — 0 으로 바꾸지 않는다(3원칙 ①)
 //  - 프로젝트를 벗어나면 파생 알림을 비우고 로딩 플래그를 리셋한다(공유 게이트 loading = inboxLoading || notifLoading 이 갇히지 않게)
 //  - 응답 실패는 알림함만 failed 로 표시하고 나머지는 직전 값을 유지(옛 catch 시맨틱). 늦게 온 옛 응답은 시퀀스로 버린다
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import type { NotificationItem } from '@/app/actions/notifications'
 import type { InboxItem } from '@/app/actions/inbox'
@@ -47,6 +47,8 @@ export function scopeMatchesPath(pathname: string | null, slug: string | null, p
 }
 const NO_BADGES: ShellBadges = { myWorkReview: null, projectApprovals: null, projectUnreadAnnouncements: null }
 const Ctx = createContext<ShellState | null>(null)
+const BadgesCtx = createContext<ShellBadges>(NO_BADGES)
+const sameBadges = (a: ShellBadges, b: ShellBadges) => a.myWorkReview === b.myWorkReview && a.projectApprovals === b.projectApprovals && a.projectUnreadAnnouncements === b.projectUnreadAnnouncements
 
 export function ShellStateProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -61,31 +63,44 @@ export function ShellStateProvider({ children }: { children: React.ReactNode }) 
   const [badges, setBadges] = useState<ShellBadges>(NO_BADGES)
   // 내비게이션 연타 시 늦게 도착한 이전 응답이 최신 상태를 덮지 않도록 시퀀스로 가드.
   const seq = useRef(0)
+  const active = useRef<AbortController | null>(null)
+  const loadedScope = useRef<string | null>(null)
+  const requestedScope = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     const id = ++seq.current
-    setInboxLoading(true)
-    if (projectId) setNotifLoading(true)
-    else { setNotifs([]); setNotifLoading(false) }
-    if (!wsId) setBadges(NO_BADGES)
-    else if (!projectId) setBadges((b) => ({ ...b, projectApprovals: null, projectUnreadAnnouncements: null }))
+    active.current?.abort()
+    const controller = new AbortController()
+    active.current = controller
+    const scopeKey = `${wsId ?? ''}:${projectId ?? ''}`
+    const changed = requestedScope.current !== scopeKey
+    requestedScope.current = scopeKey
+    // 같은 범위의 백그라운드 갱신은 이미 읽은 패널을 로딩 화면으로 되돌리지 않는다.
+    setInboxLoading(loadedScope.current !== scopeKey)
+    setNotifLoading(!!projectId && loadedScope.current !== scopeKey)
+    if (changed) {
+      setNotifs([])
+      setBadges(NO_BADGES)
+    }
     try {
       const qs = new URLSearchParams()
       if (wsId) qs.set('ws', wsId)
       if (projectId) qs.set('project', projectId)
-      const res = await fetch(`/api/shell?${qs.toString()}`, { cache: 'no-store' })
+      const res = await fetch(`/api/shell?${qs.toString()}`, { cache: 'no-store', signal: controller.signal })
       if (!res.ok) throw new Error(`shell ${res.status}`)
       const data: ShellPayload = await res.json()
       if (id !== seq.current) return
+      loadedScope.current = scopeKey
       setInbox(data.inbox.items)
       setInboxFailed(data.inbox.failed === true)
       // notifications null = 서버측 파생 알림 실패·범위 밖 — 프로젝트 안이면 직전 값 유지(옛 catch(() => {}) 시맨틱)
       if (projectId && data.notifications) setNotifs(data.notifications.items)
-      setBadges(wsId ? data.badges ?? NO_BADGES : NO_BADGES)
+      const nextBadges = wsId ? data.badges ?? NO_BADGES : NO_BADGES
+      setBadges((current) => sameBadges(current, nextBadges) ? current : nextBadges)
     } catch {
-      if (id === seq.current) setInboxFailed(true)
+      if (id === seq.current && !controller.signal.aborted) setInboxFailed(true)
     } finally {
-      if (id === seq.current) { setInboxLoading(false); setNotifLoading(false) }
+      if (id === seq.current) { active.current = null; setInboxLoading(false); setNotifLoading(false) }
     }
   }, [wsId, projectId])
 
@@ -95,17 +110,27 @@ export function ShellStateProvider({ children }: { children: React.ReactNode }) 
   const scopeSlug = scope?.workspace?.slug ?? null
   useEffect(() => {
     const t = setTimeout(() => { void load() }, scopeMatchesPath(pathname, scopeSlug, projectId) ? 0 : SCOPE_WAIT_MS)
-    return () => clearTimeout(t)
+    return () => { clearTimeout(t); seq.current += 1; active.current?.abort(); active.current = null }
   }, [pathname, load, scopeSlug, projectId])
 
   const refresh = useCallback(() => { void load() }, [load])
-  // 실시간 배지 갱신 — 향상 계층(구독 실패해도 내비게이션당 재조회가 대신 채운다).
-  useInboxRealtime(refresh)
+  // 연속 broadcast 는 한 조회로 합친다. 구독 콜백의 정체성은 범위 이동과 무관하다.
+  const refreshRef = useRef(refresh)
+  useEffect(() => { refreshRef.current = refresh }, [refresh])
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refreshRealtime = useCallback(() => {
+    if (realtimeTimer.current) clearTimeout(realtimeTimer.current)
+    realtimeTimer.current = setTimeout(() => { realtimeTimer.current = null; refreshRef.current() }, 150)
+  }, [])
+  useEffect(() => () => { if (realtimeTimer.current) clearTimeout(realtimeTimer.current) }, [pathname])
+  useInboxRealtime(refreshRealtime)
 
+  const value = useMemo(() => ({ inbox, setInbox, inboxLoading, inboxFailed, notifs, setNotifs, notifLoading, badges, refresh }),
+    [inbox, inboxLoading, inboxFailed, notifs, notifLoading, badges, refresh])
   return (
-    <Ctx.Provider value={{ inbox, setInbox, inboxLoading, inboxFailed, notifs, setNotifs, notifLoading, badges, refresh }}>
-      {children}
-    </Ctx.Provider>
+    <BadgesCtx.Provider value={badges}>
+      <Ctx.Provider value={value}>{children}</Ctx.Provider>
+    </BadgesCtx.Provider>
   )
 }
 
@@ -114,3 +139,6 @@ export function useShellState(): ShellState {
   if (!v) throw new Error('useShellState 는 ShellStateProvider 안에서만 호출할 수 있습니다')
   return v
 }
+
+/** 내비게이션은 알림 목록·로딩 상태를 구독하지 않는다. */
+export function useShellBadges(): ShellBadges { return useContext(BadgesCtx) }

@@ -17,6 +17,7 @@ import { getActorViewState } from '@/lib/authz'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
 import { isHiddenProject, isWorkspaceMember, type Actor } from '@/lib/domain/authz'
 import { UUID_RE } from '@/lib/domain/validate'
+import { withRequestCache } from '@/lib/server/requestCache'
 
 const nullOnFail = <T,>(label: string, p: Promise<T>): Promise<T | null> =>
   p.catch((e: unknown) => { console.error(`[shell] ${label} 실패:`, e instanceof Error ? e.message : e); return null })
@@ -29,7 +30,11 @@ async function actorOrNull(): Promise<Actor | null> {
   }
 }
 
-export async function GET(req: NextRequest) {
+export function GET(req: NextRequest) {
+  return withRequestCache(() => loadShellState(req))
+}
+
+async function loadShellState(req: NextRequest) {
   const q = req.nextUrl.searchParams
   const wsRaw = uuidOrNull(q.get('ws'))
   const projectRaw = uuidOrNull(q.get('project'))

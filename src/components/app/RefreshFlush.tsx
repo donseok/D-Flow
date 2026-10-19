@@ -17,10 +17,12 @@ export function RefreshFlush() {
   const [, wake] = useState(0)
   useEffect(() => {
     const original = window.fetch
+    let alive = true
     const timers = new Set<ReturnType<typeof setTimeout>>()
     const isRscRequest = (input: RequestInfo | URL, init?: RequestInit): boolean => {
       try {
         const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+        if (headers.has('next-router-prefetch') || headers.has('next-router-segment-prefetch') || headers.get('purpose') === 'prefetch') return false
         return headers.has('next-action') || headers.has('rsc')
       } catch { return false }
     }
@@ -28,6 +30,10 @@ export function RefreshFlush() {
       const pending = original(input, init)
       if (isRscRequest(input, init)) {
         void pending.then(() => {
+          if (!alive) return
+          // 여러 RSC 조각·응답이 겹쳐도 깨우기 타이머는 마지막 응답의 세 개만 둔다.
+          timers.forEach(clearTimeout)
+          timers.clear()
           for (const ms of WAKE_AT) {
             const id = setTimeout(() => { timers.delete(id); wake(n => n + 1) }, ms)
             timers.add(id)
@@ -38,6 +44,7 @@ export function RefreshFlush() {
     }
     window.fetch = patched
     return () => {
+      alive = false
       if (window.fetch === patched) window.fetch = original
       timers.forEach(clearTimeout)
     }

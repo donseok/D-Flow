@@ -1,4 +1,4 @@
-import { cache } from 'react'
+import { requestCache as cache } from '@/lib/server/requestCache'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '../supabase/server'
 import { roleIn, workspaceAdminVerdict, type Actor, type ProjectRole } from '../domain/authz'

@@ -1,4 +1,4 @@
-import { cache } from 'react'
+import { requestCache as cache } from '@/lib/server/requestCache'
 import { unstable_rethrow } from 'next/navigation'
 import { createServerClient } from '../supabase/server'
 import { getActorForView } from './index'

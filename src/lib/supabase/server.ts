@@ -1,8 +1,9 @@
 import { createServerClient as create } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { requestCache } from '@/lib/server/requestCache'
 
-export async function createServerClient() {
+export const createServerClient = requestCache(async () => {
   const cookieStore = await cookies()
   return create(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,7 +22,7 @@ export async function createServerClient() {
       },
     },
   )
-}
+})
 
 /**
  * 인증 메일(비밀번호 재설정)을 요청하는 익명 클라이언트 — 세션·쿠키를 만지지 않는다(로그인 전 화면의 서버 액션이 쓴다).

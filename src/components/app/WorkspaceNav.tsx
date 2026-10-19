@@ -1,5 +1,5 @@
 'use client'
-import Link from 'next/link'
+import { NavigationLink as Link } from './NavigationLink'
 import { Plus } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import type { NavGroup, NavItemId } from '@/lib/nav/registry'

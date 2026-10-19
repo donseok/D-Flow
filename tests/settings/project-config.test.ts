@@ -7,6 +7,7 @@ import { valueOf } from '@/lib/settings/registry'
 import { ConfigKeyError, ConfigUnavailableError } from '@/lib/settings/errors'
 import { DEFAULT_STAGE_CREDITS } from '@/lib/domain/stageCredits'
 import { keysetTable } from '../helpers/keysetTable'
+import { withRequestCache } from '@/lib/server/requestCache'
 
 const PID = '00000000-0000-4000-8000-00000000aa01'
 const WID = '00000000-0000-4000-8000-00000000bb01'
@@ -36,6 +37,19 @@ const row = (values: Record<string, unknown>, extra: Record<string, unknown> = {
 const ok = (data: unknown): Res => ({ data, error: null })
 
 beforeEach(() => { mocks.createServerClient.mockReset(); vi.restoreAllMocks() })
+
+it('요청 내 기본 클라이언트와 명시적 같은 클라이언트는 설정·영역·팀·휴일을 한 번만 읽는다', async () => {
+  const { client, calls, holidays } = fakeClient({ settings: row({ 'core.level_labels': ['작업'] }), areas: ok([]), teams: ok([]) })
+  mocks.createServerClient.mockResolvedValue(client)
+  await withRequestCache(async () => {
+    const [a, b, c] = await Promise.all([getProjectConfig(PID), getProjectConfig(PID, { client }), getProjectConfig(PID)])
+    expect(a).toBe(b); expect(b).toBe(c)
+    expect(calls.map(c => c.table)).toEqual(['project_settings', 'project_areas', 'teams'])
+    expect(holidays.log).toHaveLength(1)
+  })
+  await withRequestCache(() => getProjectConfig(PID, { client }))
+  expect(calls.filter(c => c.table === 'project_settings')).toHaveLength(2)
+})
 
 describe('getProjectConfig', () => {
   it('저장값은 set, 없는 키는 product 기본값, 필수 키 없음은 required_missing. 조회는 셋이고 teams 는 워크스페이스 공용도 싣는다', async () => {

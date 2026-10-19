@@ -5,7 +5,7 @@
  * 캐시는 요청 범위의 react cache 하나(키 = projectId, client). 모듈 수준 Map·전역 캐시를 두지 않는다(project-isolation 테스트).
  * 이 파일은 @/lib/modules 의 값을 import 하지 않는다(타입만 — tests/modules/registry.test.ts).
  */
-import { cache } from 'react'
+import { requestCache as cache } from '@/lib/server/requestCache'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '@/lib/supabase/server'
 import { fetchAllPages, type PageResult } from '@/lib/data/paging'
@@ -96,8 +96,8 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
 }
 
 const loadCached = cache(load)
-export function getProjectConfig(projectId: string, opts?: { client?: ConfigReadClient }): Promise<ProjectConfig> {
-  return loadCached(projectId, opts?.client)
+export async function getProjectConfig(projectId: string, opts?: { client?: ConfigReadClient }): Promise<ProjectConfig> {
+  return loadCached(projectId, opts?.client ?? await createServerClient())
 }
 
 /** in() 한 번에 실을 프로젝트 id 수(요청 URL 길이 — effectiveMany 와 같은 값) */

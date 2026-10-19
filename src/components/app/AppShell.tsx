@@ -17,7 +17,7 @@ import { DegradedNotice } from './DegradedNotice'
 import { RefreshFlush } from './RefreshFlush'
 import { useShellEnv } from './ShellEnv'
 import { useSidebarCollapsed } from './sidebarState'
-import { useShellState } from './ShellStateProvider'
+import { useShellBadges } from './ShellStateProvider'
 
 /**
  * 범위 셸(D2, 개정 §5.4.1) — 전역 바는 전체 폭, main 이 유일한 세로 스크롤(.app-main 클래스 본문 — overflow·scrollbar 유틸 없음, D19), 레일 자리 #app-rail.
@@ -29,7 +29,7 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
   const { t } = useLocale()
   const env = useShellEnv()
   const [collapsed, setCollapsed] = useSidebarCollapsed(env.sidebarCollapsed)
-  const { badges } = useShellState()
+  const badges = useShellBadges()
   const aiButton = useAiRailButton()
   const [drawer, setDrawer] = useState(false)
   const closeDrawer = useCallback(() => setDrawer(false), [])

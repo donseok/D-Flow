@@ -5,11 +5,11 @@ import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from './_dom'
 
-const h = vi.hoisted(() => ({ pathname: '/w/acme', scope: null as null | { workspace: { id: string; slug?: string } | null; projectId: string | null } }))
+const h = vi.hoisted(() => ({ realtime: null as null | (() => void), pathname: '/w/acme', scope: null as null | { workspace: { id: string; slug?: string } | null; projectId: string | null } }))
 vi.mock('next/navigation', () => ({ usePathname: () => h.pathname }))
 vi.mock('@/components/app/ShellScope', () => ({ useShellScope: () => h.scope }))
-vi.mock('@/lib/hooks/useInboxRealtime', () => ({ useInboxRealtime: () => {} }))
-import { ShellStateProvider, scopeMatchesPath, useShellState } from '@/components/app/ShellStateProvider'
+vi.mock('@/lib/hooks/useInboxRealtime', () => ({ useInboxRealtime: (refresh: () => void) => { h.realtime = refresh } }))
+import { ShellStateProvider, scopeMatchesPath, useShellState, useShellBadges } from '@/components/app/ShellStateProvider'
 
 const WA = '00000000-0000-0000-7e57-000000001771', P = '00000000-0000-0000-7e57-000000001772'
 let seen: ReturnType<typeof useShellState> | null = null
@@ -95,5 +95,62 @@ describe('ShellStateProvider(새 계약)', () => {
     expect(scopeMatchesPath(`/p/${P}/wbs`, 'acme', P)).toBe(true); expect(scopeMatchesPath(`/p/${P}/wbs`, 'acme', null)).toBe(false)
     expect(scopeMatchesPath('/w/acme/minutes', 'acme', null)).toBe(true); expect(scopeMatchesPath('/w/acme', 'acme', P)).toBe(false); expect(scopeMatchesPath('/w/bravo', 'acme', null)).toBe(false)
     expect(scopeMatchesPath('/account', null, null)).toBe(true)
+  })
+})
+
+
+describe('셸 갱신 최적화', () => {
+  it('알림 목록·loading 갱신과 같은 배지는 내비 소비자를 다시 렌더하지 않는다', async () => {
+    h.scope = { workspace: { id: WA, slug: 'acme' }, projectId: null }
+    let renders = 0
+    function BadgesReader() { useShellBadges(); renders += 1; return null }
+    render(<ShellStateProvider><Reader /><BadgesReader /></ShellStateProvider>)
+    await flush()
+    const before = renders
+    act(() => seen!.refresh())
+    await flush()
+    expect(renders).toBe(before)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('같은 범위를 다시 읽는 동안 기존 인박스를 로딩 화면으로 바꾸지 않는다', async () => {
+    h.scope = { workspace: { id: WA, slug: 'acme' }, projectId: null }
+    const r = render(<ShellStateProvider><Reader /></ShellStateProvider>); await flush()
+    fetchMock.mockImplementationOnce(() => new Promise(() => {}))
+    h.pathname = '/w/acme/minutes'
+    r.rerender(<ShellStateProvider><Reader /></ShellStateProvider>); await flush()
+    expect(seen!.inboxLoading).toBe(false)
+    expect(seen!.inbox).toHaveLength(1)
+  })
+
+  it('새 범위가 스트리밍 중이면 이전 요청을 취소하고 늦은 결과를 채택하지 않는다', async () => {
+    h.scope = { workspace: { id: WA, slug: 'acme' }, projectId: null }
+    let finish = () => {}
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve({ ok: true, json: async () => payload() }) }))
+    const r = render(<ShellStateProvider><Reader /></ShellStateProvider>); await flush()
+    const signal = fetchMock.mock.calls[0][1].signal as AbortSignal
+    h.pathname = `/p/${P}/wbs`
+    r.rerender(<ShellStateProvider><Reader /></ShellStateProvider>)
+    expect(signal.aborted).toBe(true)
+    await act(async () => finish())
+    expect(seen!.inbox).toEqual([])
+    expect(seen!.badges.myWorkReview).toBeNull()
+    r.unmount()
+  })
+
+  it('연속 실시간 이벤트는 한 번만 재조회하고 구독 콜백은 이동해도 바뀌지 않는다', async () => {
+    vi.useFakeTimers()
+    try {
+      h.scope = { workspace: { id: WA, slug: 'acme' }, projectId: null }
+      const r = render(<ShellStateProvider><Reader /></ShellStateProvider>)
+      await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+      const callback = h.realtime!
+      act(() => { callback(); callback(); callback() })
+      await act(async () => { await vi.advanceTimersByTimeAsync(151) })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      h.pathname = '/w/acme/minutes'
+      r.rerender(<ShellStateProvider><Reader /></ShellStateProvider>)
+      expect(h.realtime).toBe(callback)
+    } finally { vi.useRealTimers() }
   })
 })
