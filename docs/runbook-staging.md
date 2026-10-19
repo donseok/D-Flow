@@ -79,7 +79,11 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 
 **Vercel 환경변수 — Production 에만 넣었다**: `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY`·`SUPABASE_SERVICE_ROLE_KEY`·`CRON_SECRET`,
 그리고 `NEXT_PUBLIC_APP_URL=https://d-flow-eight.vercel.app`(2026-10-15 — 회의 안내·초대 메일 링크의 기준 주소. 빌드 때 굳으므로 바꾸면 다시 배포한다).
-`APP_ENV` 는 `next.config.ts` 가 `VERCEL_ENV` 에서 옮긴다. AI 키·SMTP·초대 허용 도메인·기능 스위치(`.env.local.example`)는 넣지 않았다 — 그 기능들은 꺼져 있다.
+`APP_ENV` 는 `next.config.ts` 가 `VERCEL_ENV` 에서 옮긴다. AI 키·SMTP·초대 허용 도메인·아래 에이전트 API 외 기능 스위치(`.env.local.example`)는 넣지 않았다 — 그 기능들은 꺼져 있다.
+
+**에이전트 API(2026-10-19)**: Vercel `d-flow` 의 **Production** 환경에 `AGENT_API_ENABLED=true` 를 추가했다. 개인 액세스 토큰 발급과
+에이전트 외부 API를 활성화하는 서버 설정이며, 변경 후 새 운영 배포가 필요하다. 인증은 발급한 PAT 를 사용하고 `AGENT_API_SECRET` 은 사용하지 않는다.
+토큰 발급은 기존 워크스페이스 소속·`agents` 모듈 검사, API 사용은 토큰 스코프·프로젝트 권한 검사를 그대로 따른다. Preview·Development 환경에는 추가하지 않았다.
 
 **메일 발송(2026-10-15)**: 회의 안내·초대 메일은 워크스페이스 설정 › 메일 발송에 저장한 계정으로 나간다(표 `workspace_mail_settings`, 0059 — service_role 전용,
 비밀번호는 평문 저장이고 지키는 것은 권한뿐이다). 우선순위는 워크스페이스 설정 → env `SMTP_*` → 미설정이다. 운영에는 `SMTP_*` 를 넣지 않았으므로
