@@ -61,3 +61,24 @@ describe('회의록 목록 들여쓰기', () => {
       .toBe("'⚑ ' attr(data-issue-count) ' · ▤ ' attr(data-wbs-count)")
   })
 })
+
+describe('회의록 문단 배지·선 — 첫 줄을 가리지 않고 선은 하나', () => {
+  it('배지(-top-2 = 0.5rem 위로 걸친다)가 달리는 블록은 그만큼 첫 줄을 내린다 — :where 라 pre·머메이드처럼 제 여백이 더 큰 블록은 제 값이 이긴다', () => {
+    for (const badge of ['.minutes-md [data-hl-count]::after', '.minutes-md [data-issue-count]::before', '.minutes-md [data-wbs-count]:where(:not([data-issue-count]))::before']) {
+      expect(declarationsOf(badge), badge).toMatch(/\babsolute -top-2 right-1\b/)
+    }
+    expect(declOf('.minutes-md :where([data-hl-count], [data-issue-count], [data-wbs-count])', 'padding-top')).toBe('0.5rem')
+    expect(declOf('.minutes-md pre', 'padding')).toBe('0.85em')
+  })
+
+  it('등록된(WBS) AI 마킹 블록은 선이 하나 — 마킹 선을 초록으로 바꾸고 안쪽 초록 선을 끈다. 이슈가 걸리면 이슈 꼴(파랑) 그대로', () => {
+    const both = '.minutes-md [data-wbs-count]:where([data-ins]:not([data-issue-count]))'
+    expect(declOf(both, 'border-left-color')).toBe('var(--color-success)')
+    expect(declOf(both, 'box-shadow')).toBe('none')
+    // 인용문은 마킹 색 규칙(blockquote[data-ins=…])이 한 단계 높아 따로 둔다
+    expect(declOf('.minutes-md blockquote[data-wbs-count]:where([data-ins]:not([data-issue-count]))', 'border-left-color')).toBe('var(--color-success)')
+    // 이 규칙들은 임시 선택 표시(안쪽 파란 선)보다 앞에 있다 — 같은 특이성이라 선택 중 표시가 이긴다
+    expect(css.indexOf(both)).toBeLessThan(css.indexOf(".minutes-md [data-active-selection='true']"))
+    expect(declOf('.minutes-md [data-issue-count]', 'box-shadow')).toBe('inset 3px 0 var(--color-progress)')
+  })
+})
