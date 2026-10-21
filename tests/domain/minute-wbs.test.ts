@@ -100,6 +100,42 @@ describe('scoreParentCandidates', () => {
   it('겹치는 낱말이 없으면 빈 목록', () => {
     expect(scoreParentCandidates('회의 메모', OPTIONS)).toEqual([])
   })
+
+  describe('경로의 개요 번호는 낱말로 세지 않는다 — 회의 날짜가 x.10 번 위치를 추천하지 않는다', () => {
+    const options = [
+      option('d10', '1 설계 › 1.10 알림 설계', ['푸시 알림 발송']),
+      option('login', '2 개발 › 2.1 로그인', ['소셜 로그인 연동']),
+    ]
+
+    it.each(['10/21', '10.21', '2026-10-21'])('날짜 %s', date => {
+      expect(scoreParentCandidates(`로그인 오류 수정 ${date}까지`, options)).toEqual(['login'])
+      expect(scoreParentCandidates(`${date} 회의 결과 공유`, options)).toEqual([])
+    })
+
+    it('번호만 걷고 이름 속 숫자는 낱말로 남긴다', () => {
+      const named = [option('closing', '4 2026 결산'), option('v2', '3 연동 › 3.2 API v2 전환')]
+      expect(scoreParentCandidates('2026 회계 마감', named)).toEqual(['closing'])
+      expect(scoreParentCandidates('v2 응답 형식 확인', named)).toEqual(['v2'])
+    })
+  })
+
+  describe('조사가 붙은 낱말 — 글 낱말이 후보 낱말로 시작하면 겹침이다', () => {
+    it('"로그인을" 이 경로의 "로그인" 을 잡는다', () => {
+      const options = [option('design', '1 설계', ['화면 설계']), option('login', '2 개발 › 2.1 로그인', ['소셜 로그인 연동'])]
+      expect(scoreParentCandidates('로그인을 다음 주까지 고친다', options)).toEqual(['login'])
+    })
+
+    it('"API를" 이 하위 이름의 "API" 를 잡는다(1점)', () => {
+      expect(scoreParentCandidates('API를 정리', [option('none', '1 운영'), option('api', '3 연동', ['API 개발'])])).toEqual(['api'])
+    })
+
+    it('후보 낱말은 줄이지 않는다 — 글 낱말 "로그" 는 "로그인" 을 잡지 못하고, 한 글자 후보 낱말은 끝내 겹치지 않는다', () => {
+      expect(scoreParentCandidates('로그 수집', [option('login', '2 개발 › 2.1 로그인')])).toEqual([])
+      expect(scoreParentCandidates('앱을 고친다', [option('one-char', '1 앱', ['웹 앱'])])).toEqual([])
+      // 글자는 UTF-16 단위가 아니라 코드 포인트로 센다 — 서로게이트 쌍 한 글자('𠀀')도 한 글자다
+      expect(scoreParentCandidates('𠀀를 고친다', [option('astral', '1 𠀀')])).toEqual([])
+    })
+  })
 })
 
 describe('fallbackWbsName', () => {

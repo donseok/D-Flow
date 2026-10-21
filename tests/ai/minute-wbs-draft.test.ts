@@ -25,7 +25,21 @@ describe('parseMinuteWbsDraftResponse', () => {
     ['코드펜스로 감싼', ['```json', body, '```'].join('\n')],
     ['서두가 붙은', `요청하신 작업 초안입니다.\n${body}`],
     ['서두·꼬리에 대괄호가 섞인 코드펜스', ['초안 [AI]:', '```json', body, '```', '[끝]'].join('\n')],
+    ['설명 울타리 다음 JSON 울타리', ['```text', '아래 [설명]을 참고하세요.', '```', '```json', body, '```'].join('\n')],
+    ['설명 울타리 다음 울타리 없는 배열', ['```text', '아래 [설명]을 참고하세요.', '```', body].join('\n')],
+    ['닫히지 않은 울타리', ['```json', body].join('\n')],
+    ['대괄호 든 서두(인용 표시 [1]·[AI 초안])', `참고 [1], [AI 초안]:\n${body}`],
+    ['한 줄 울타리', `\`\`\`${body}\`\`\``],
   ])('%s 응답에서 배열을 꺼낸다', (_name, raw) => {
+    expect(parse(raw)).toEqual([PARSED0])
+  })
+
+  it.each([
+    ['그대로', `{"rows":${body}}`],
+    ['서두가 붙은', `결과: {"rows":${body}}`],
+    ['울타리 안', ['```json', `{"rows":${body}}`, '```'].join('\n')],
+    ['배열 아닌 속성이 곁든', `{"rows":${body},"note":"초안"}`],
+  ])('객체 포장 {"rows":[…]} 은 어느 길로 와도 그 배열로 읽는다 — %s', (_name, raw) => {
     expect(parse(raw)).toEqual([PARSED0])
   })
 
@@ -70,12 +84,27 @@ describe('parseMinuteWbsDraftResponse', () => {
     expect(rows?.[1]).toEqual({ row: 1, name: '', parentIds: ['p-pay'], plannedEnd: null, assigneeMemberId: null })
   })
 
+  it('JSON 문자열 안의 괄호·탈출한 따옴표는 짝을 셀 때 세지 않는다', () => {
+    const name = '긴급] "{따옴표" 수정'
+    expect(parse(`결과:\n${JSON.stringify([{ ...ROW0, name }])}`)).toEqual([{ ...PARSED0, name }])
+  })
+
+  it('울타리를 차례로 먼저 본다 — 울타리 밖 글의 예시 배열보다 뒤 JSON 울타리의 답이 이긴다', () => {
+    const example = JSON.stringify([{ row: 1, name: '예시', parents: [], end: null, assignee: null }])
+    const raw = ['```text', '설명입니다.', '```', `예시 형식: ${example}`, '```json', body, '```'].join('\n')
+    expect(parse(raw)).toEqual([PARSED0])
+  })
+
   it.each([
-    ['객체', JSON.stringify(ROW0)],
+    ['줄 하나짜리 객체(포장이 아니다)', JSON.stringify(ROW0)],
+    ['parents 가 빈 줄 하나짜리 객체', JSON.stringify({ ...ROW0, parents: [] })],
+    ['배열 값 속성이 둘인 객체', `{"rows":${body},"skipped":[]}`],
     ['대괄호 없는 글', '등록할 작업이 없습니다.'],
     ['깨진 배열', '[{"row":0,"name":"로그인'],
+    ['완성된 줄 뒤에서 잘린 응답', JSON.stringify([ROW0, { row: 1, name: '결제 연동', parents: ['p-pay'], end: '2026-11-30', assignee: null }]).slice(0, -25)],
+    ['줄 객체가 없는 배열', '참고 문헌 [1] 참조'],
     ['JSON null', 'null'],
-  ])('배열이 아닌 응답(%s)은 null', (_name, raw) => {
+  ])('줄 배열을 찾을 수 없는 응답(%s)은 null', (_name, raw) => {
     expect(parse(raw)).toBeNull()
   })
 })

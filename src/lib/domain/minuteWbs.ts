@@ -17,6 +17,9 @@ export interface MinuteWbsTreeRow { id: string; parentId: string | null; name: s
 /** 고를 수 있는 부모 — path 는 "1 설계 › 1.2 인증" 꼴(번호 + 이름을 ' › ' 로) */
 export interface MinuteWbsParentOption { id: string; path: string; depth: number; leaf: boolean; actualPct: number | null; assigneeMemberId: string | null; dependencyCount: number; childNames: string[] }
 
+/** 경로 조각 사이 — pathOf 가 잇고 scoreParentCandidates 가 다시 가른다 */
+const PATH_SEPARATOR = ' › '
+
 /**
  * 하위 작업을 넣을 수 있는 위치 — 수동 「하위 추가」와 RPC(create_wbs_items_from_minute)가 거부하는 곳을 미리 뺀다:
  * SUB-ACT 자신, 직접 하위에 SUB-ACT 가 있는 부모, 흐름이 켜진 작업, 진행 중인 에이전트 주문이 있는 작업, 깊이 상한(canAddChild)에 닿은 항목.
@@ -40,7 +43,7 @@ export function pickableParents(rows: readonly MinuteWbsTreeRow[], opts: { maxDe
       const no = opts.numbers.get(at.id)
       labels.push(no ? `${no} ${at.name}` : at.name)
     }
-    return labels.reverse().join(' › ')
+    return labels.reverse().join(PATH_SEPARATOR)
   }
   const options: MinuteWbsParentOption[] = []
   for (const row of rows) {
@@ -67,6 +70,8 @@ export function recommendableParents(options: readonly MinuteWbsParentOption[]):
 }
 
 const WORD_SPLIT_RE = /[^\p{L}\p{N}]+/u
+/** 경로 조각 머리의 개요 번호("1.10 ") — 이름이 아니라 위치라 낱말로 세지 않는다(회의 날짜 10/21 의 '10' 과 엇맞지 않게) */
+const OUTLINE_NUMBER_RE = /^\d+(?:\.\d+)*\s+/
 /** limit 을 주지 않을 때 — 폴백 추천은 상위 3개(설계 §4.2) */
 const SCORE_LIMIT_DEFAULT = 3
 
@@ -74,19 +79,36 @@ function wordsOf(value: string): Set<string> {
   return new Set(value.toLowerCase().split(WORD_SPLIT_RE).filter(word => Array.from(word).length >= 2))
 }
 
-/** 결정형 점수 — 2글자 이상 낱말(공백·구두점 분리, 소문자)의 겹침 수, 경로 겹침 2점·하위 이름 겹침 1점. 0점은 뺀다. 상위 limit 개 id */
+/** 경로의 이름만 — 조각마다 머리의 개요 번호를 걷는다. 이름 속 숫자("API v2"·"2026 결산")는 남는다 */
+function pathNames(path: string): string {
+  return path.split(PATH_SEPARATOR).map(segment => segment.replace(OUTLINE_NUMBER_RE, '')).join(' ')
+}
+
+/** 글 낱말마다 앞부분 전부(UTF-16 두 단위부터 — 후보 낱말은 두 글자 이상이라 그보다 짧을 수 없다). 후보 낱말이 여기 있으면 "글 낱말이 그것과 같거나 그것으로 시작한다" */
+function prefixesOf(words: ReadonlySet<string>): Set<string> {
+  const prefixes = new Set<string>()
+  for (const word of words) {
+    for (let end = 2; end <= word.length; end++) prefixes.add(word.slice(0, end))
+  }
+  return prefixes
+}
+
+/**
+ * 결정형 점수 — 2글자 이상 낱말(공백·구두점 분리, 소문자)의 겹침 수, 경로 겹침 2점·하위 이름 겹침 1점. 0점은 뺀다. 상위 limit 개 id.
+ * 겹침 = 글 낱말이 후보 낱말과 같거나 그것으로 시작한다(조사 붙은 '로그인을'·'API를' 이 '로그인'·'api' 를 잡는다 — 후보 낱말은 줄이지 않는다).
+ * 후보 낱말 하나는 경로·하위 이름 쪽마다 한 번만 센다. 경로는 개요 번호를 빼고 이름만 본다.
+ */
 export function scoreParentCandidates(text: string, options: readonly MinuteWbsParentOption[], limit?: number): string[] {
-  const words = wordsOf(text)
-  if (words.size === 0) return []
+  const textPrefixes = prefixesOf(wordsOf(text))
+  if (textPrefixes.size === 0) return []
+  const overlap = (candidateWords: ReadonlySet<string>): number => {
+    let count = 0
+    for (const word of candidateWords) if (textPrefixes.has(word)) count += 1
+    return count
+  }
   const scored: { id: string; score: number }[] = []
   for (const option of options) {
-    const pathWords = wordsOf(option.path)
-    const childWords = wordsOf(option.childNames.join(' '))
-    let score = 0
-    for (const word of words) {
-      if (pathWords.has(word)) score += 2
-      if (childWords.has(word)) score += 1
-    }
+    const score = 2 * overlap(wordsOf(pathNames(option.path))) + overlap(wordsOf(option.childNames.join(' ')))
     if (score > 0) scored.push({ id: option.id, score })
   }
   // 정렬은 안정 정렬 — 동점은 입력(트리) 순서를 지킨다

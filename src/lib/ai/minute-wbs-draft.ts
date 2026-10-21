@@ -44,14 +44,67 @@ export function buildMinuteWbsDraftPrompt(input: MinuteWbsDraftPromptInput): str
 
 export interface MinuteWbsAiRow { row: number; name: string; parentIds: string[]; plannedEnd: string | null; assigneeMemberId: string | null }
 
-/** 응답의 JSON — 코드펜스가 있으면 그 안만 본다. 통째로 JSON 이 아니면(서두·꼬리) 첫 '['~마지막 ']' 구간을 읽는다. 못 읽으면 undefined */
-function extractJson(raw: string): unknown {
-  const fenced = /```[^\n]*\n([\s\S]*?)```/.exec(raw)?.[1]
-  const text = (fenced ?? raw).trim()
-  try { return JSON.parse(text) } catch { /* 서두·꼬리가 붙은 응답 — 대괄호 구간만 다시 읽는다 */ }
-  const start = text.indexOf('['), end = text.lastIndexOf(']')
-  if (start < 0 || end < start) return undefined
-  try { return JSON.parse(text.slice(start, end + 1)) } catch { return undefined }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * 줄 배열로 읽을 값 — 배열이면 그대로, 'row' 키 없이 배열 값 속성이 정확히 하나인 객체({"rows":[…]})면 그 배열. 어느 길로 찾은 값이든 이 규칙 하나다.
+ * 줄 하나짜리 객체({row, parents:[…]})는 포장이 아니다. 배열은 비었거나 객체를 하나라도 담아야 한다 — 글 속 인용 표시 "[1]"·잘린 응답 속 parents 배열을 줄 배열로 읽지 않는다.
+ */
+function rowArrayOf(value: unknown): unknown[] | null {
+  const wrapped = isRecord(value) && !('row' in value) ? Object.values(value).filter(Array.isArray) : []
+  const list = Array.isArray(value) ? value : wrapped.length === 1 ? wrapped[0] : null
+  return list && (list.length === 0 || list.some(isRecord)) ? list : null
+}
+
+/** start 의 여는 괄호와 짝인 닫는 괄호의 위치 — JSON 문자열 안의 괄호·탈출 문자를 따른다. 짝이 없거나 엇갈리면 -1 */
+function closingIndex(text: string, start: number): number {
+  const expected: string[] = []
+  let inString = false
+  for (let i = start; i < text.length; i++) {
+    const char = text[i]
+    if (inString) {
+      if (char === '\\') i++
+      else if (char === '"') inString = false
+    } else if (char === '"') inString = true
+    else if (char === '[') expected.push(']')
+    else if (char === '{') expected.push('}')
+    else if (char === ']' || char === '}') {
+      if (expected.pop() !== char) return -1
+      if (expected.length === 0) return i
+    }
+  }
+  return -1
+}
+
+/** 글의 맨 바깥 균형 잡힌 [...]·{...} 구간을 앞에서부터 읽어 줄 배열이 되는 첫 값. 짝 없는 괄호(글 속 기호·잘린 응답)는 다음 글자부터 다시 본다 */
+function firstRowArray(text: string): unknown[] | null {
+  let at = 0
+  while (at < text.length) {
+    if (text[at] !== '[' && text[at] !== '{') { at++; continue }
+    const end = closingIndex(text, at)
+    if (end < 0) { at++; continue }
+    try {
+      const rows = rowArrayOf(JSON.parse(text.slice(at, end + 1)))
+      if (rows) return rows
+    } catch { /* JSON 이 아닌 괄호 구간(글 속 "[참고]") */ }
+    at = end + 1 // 맨 바깥 구간만 본다 — 쓸 수 없는 값의 속은 들여다보지 않는다
+  }
+  return null
+}
+
+/**
+ * 응답의 줄 배열 — 코드펜스 안을 차례로 본 뒤(설명 울타리 다음 JSON 울타리) 응답 전체를 본다(울타리 없는·닫히지 않은·한 줄 울타리).
+ * 전체를 볼 때 울타리 표시(```)는 걷을 필요가 없다 — 괄호·따옴표만 읽으므로 그대로 지나간다. 못 찾으면 null
+ */
+function extractRowArray(raw: string): unknown[] | null {
+  const fenced = Array.from(raw.matchAll(/```[\w-]*[ \t]*\r?\n([\s\S]*?)```/g), match => match[1])
+  for (const text of [...fenced, raw]) {
+    const rows = firstRowArray(text)
+    if (rows) return rows
+  }
+  return null
 }
 
 /** 앞뒤 공백을 빼고 공백을 접어 작업명 상한(WBS_NAME_MAX) 안으로 — 서로게이트 쌍은 가르지 않는다(도메인 fallbackWbsName 과 같은 상한 규칙) */
@@ -67,17 +120,17 @@ function clampWbsName(value: string): string {
 }
 
 /**
- * 관용 파싱(코드펜스·서두 제거 → 첫 '['~마지막 ']'). 모르는 row·후보 밖 parent·명단 밖 member·형식 밖 날짜는 버린다. 배열이 아니면 null.
+ * 관용 파싱 — 코드펜스 안을 차례로, 그다음 응답 전체에서 맨 바깥의 균형 잡힌 [...]·{...} 를 찾아(문자열 안의 괄호는 세지 않는다)
+ * 줄 배열(또는 {"rows":[…]} 포장)이 되는 첫 값을 읽는다. 모르는 row·후보 밖 parent·명단 밖 member·형식 밖 날짜는 버린다. 줄 배열을 찾지 못하면 null.
  * 줄은 row 가 [0, rowCount) 의 정수일 때만 남고(같은 row 는 첫 줄만), 나머지 칸은 못 쓰면 그 칸만 비운다 — name 이 문자열이 아니면 ''(호출자가 폴백 이름으로 채운다).
  */
 export function parseMinuteWbsDraftResponse(raw: string, allow: { rowCount: number; candidateIds: ReadonlySet<string>; memberIds: ReadonlySet<string> }): MinuteWbsAiRow[] | null {
-  const parsed = extractJson(raw)
-  if (!Array.isArray(parsed)) return null
+  const parsed = extractRowArray(raw)
+  if (!parsed) return null
   const seen = new Set<number>()
   const rows: MinuteWbsAiRow[] = []
-  for (const item of parsed) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
-    const value = item as Record<string, unknown>
+  for (const value of parsed) {
+    if (!isRecord(value)) continue
     const row = value.row
     if (typeof row !== 'number' || !Number.isInteger(row) || row < 0 || row >= allow.rowCount || seen.has(row)) continue
     seen.add(row)
