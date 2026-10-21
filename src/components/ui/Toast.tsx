@@ -65,19 +65,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         role="region"
         aria-label={t('ui.toastRegion')}
       >
+        {/* dismiss 는 고정 함수 — 카드마다 새 화살표를 넘기면 다른 토스트가 오갈 때마다 모든 카드의 시간이 처음부터 다시 돈다 */}
         {toasts.map(item => (
-          <ToastCard key={item.id} item={item} onDismiss={() => dismiss(item.id)} />
+          <ToastCard key={item.id} item={item} onDismiss={dismiss} />
         ))}
       </div>
     </ToastContext.Provider>
   )
 }
 
-function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
+function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: (id: number) => void }) {
   const { t } = useLocale()
   const [shown, setShown] = useState(false)
   const meta = VARIANT[item.variant ?? 'info']
   const Icon = meta.icon
+  const close = useCallback(() => onDismiss(item.id), [onDismiss, item.id])
 
   // 진입 애니메이션 (prefers-reduced-motion 은 globals 의 transition 0.01ms 규칙으로 자동 처리)
   useEffect(() => {
@@ -85,16 +87,20 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
     return () => cancelAnimationFrame(id)
   }, [])
 
-  // 자동 소멸 — 마우스를 올리거나 초점이 안에 있으면(링크·닫기로 Tab) 일시정지
+  // 자동 소멸 — 마우스가 위에 있거나 초점이 안에 있으면(링크·닫기로 Tab) 멈춘다. 둘 다 풀려야 처음부터 다시 센다
   const delay = item.action ? ACTION_DISMISS_MS : AUTO_DISMISS_MS
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hovered = useRef(false)
+  const focused = useRef(false)
   const stop = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
+    timer.current = null
   }, [])
   const start = useCallback(() => {
     stop()
-    timer.current = setTimeout(onDismiss, delay)
-  }, [onDismiss, stop, delay])
+    if (hovered.current || focused.current) return
+    timer.current = setTimeout(close, delay)
+  }, [close, stop, delay])
   useEffect(() => {
     start()
     return stop
@@ -104,10 +110,15 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
     <div
       role="status"
       aria-live="polite"
-      onMouseEnter={stop}
-      onMouseLeave={start}
-      onFocus={stop}
-      onBlur={start}
+      onMouseEnter={() => { hovered.current = true; stop() }}
+      onMouseLeave={() => { hovered.current = false; start() }}
+      onFocus={() => { focused.current = true; stop() }}
+      onBlur={event => {
+        // 카드 안에서 링크 → 닫기로 옮겨 가는 것은 떠난 것이 아니다
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+        focused.current = false
+        start()
+      }}
       className={`card pointer-events-auto flex items-start gap-3 p-3.5 pr-2.5 transition duration-200 ${
         shown ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
       }`}
@@ -122,7 +133,7 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
         {item.action && (
           <Link
             href={item.action.href}
-            onClick={onDismiss}
+            onClick={close}
             className="pointer-events-auto mt-1 inline-flex min-h-6 items-center text-meta font-semibold text-action underline underline-offset-2 hover:text-action-hover"
           >
             {item.action.label}
@@ -130,7 +141,7 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
         )}
       </div>
       <button
-        onClick={onDismiss}
+        onClick={close}
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted transition hover:bg-surface-subtle hover:text-fg ${TOUCH_TARGET}`}
         aria-label={t('ui.toastDismiss')}
       >

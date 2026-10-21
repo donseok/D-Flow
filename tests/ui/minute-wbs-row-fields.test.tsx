@@ -74,6 +74,9 @@ describe('MinuteWbsRowFields', () => {
     if (!label) throw new Error(`label ${key} 없음`)
     return label.querySelector<T>('input, select')!
   }
+  /** 글자 마디가 정확히 s 인 요소 — 'min.wbs.parent' 가 parentRoot·parentSearch·parentRecommended 의 앞부분에 속지 않게 */
+  const exactText = (s: string) => [...container.querySelectorAll('*')]
+    .filter(el => [...el.childNodes].some(n => n.nodeType === Node.TEXT_NODE && n.textContent === s))
   const confirmBox = () => [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
     .find(c => c.closest('label')?.textContent?.includes('min.wbs.leafConfirm')) ?? null
   const text = () => container.textContent ?? ''
@@ -99,7 +102,7 @@ describe('MinuteWbsRowFields', () => {
     const name = field<HTMLInputElement>('min.wbs.name')
     expect(name.value).toBe('로그인 API 개발')
     expect(name.maxLength).toBe(WBS_NAME_MAX)
-    expect(text()).toContain('min.wbs.parent')
+    expect(exactText('min.wbs.parent')).toHaveLength(1)   // 「넣을 위치」 이름표 — 지우면 실패한다
     const checked = container.querySelector<HTMLInputElement>('[data-wbs-parent-choices] input[type="radio"]:checked')!
     expect(checked.value).toBe('a')
     const end = field<HTMLInputElement>('min.wbs.plannedEnd')

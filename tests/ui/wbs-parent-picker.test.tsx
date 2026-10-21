@@ -3,7 +3,7 @@
 // 추천 위치(≤3)가 「추천」 칩과 함께 맨 위 라디오로 나오고 첫 추천이 미리 골라진다. 「다른 위치 찾기…」를 펼치면 고를 수 있는 위치 전부
 // (하위 없는 작업 포함 — · 표시)를 경로로 거른다. 맨 위(최상위, WBS_ROOT_PARENT)는 위치 후보가 없어도 늘 고를 수 있다.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { act } from 'react'
+import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { WBS_ROOT_PARENT, type MinuteWbsParentOption } from '@/lib/domain/minuteWbs'
 import { ESC_PRIORITY, escStack } from '@/lib/ui/escStack'
@@ -46,9 +46,17 @@ describe('WbsParentPicker — 추천 우선 라디오 + 다른 위치 찾기', (
       <WbsParentPicker options={OPTIONS} value={null} recommendedIds={[]} onChange={onChange} {...props} />,
     ))
   }
+  /** 값을 쥔 부모 — 고르면 값이 바뀐다(줄 편집 칸·등록 창처럼) */
+  function Stateful({ initial, ...rest }: Omit<Props, 'value' | 'onChange'> & { initial: string | null }) {
+    const [value, setValue] = useState(initial)
+    return <WbsParentPicker {...rest} value={value} onChange={next => { onChange(next); setValue(next) }} />
+  }
   const choices = () => [...container.querySelectorAll<HTMLInputElement>('[data-wbs-parent-choices] input[type="radio"]')]
   const results = () => [...container.querySelectorAll<HTMLInputElement>('[data-wbs-parent-results] input[type="radio"]')]
+  const result = (id: string) => container.querySelector<HTMLInputElement>(`[data-wbs-parent-results] input[type="radio"][value="${id}"]`)!
   const labelOf = (input: HTMLInputElement) => input.closest('label')!.textContent ?? ''
+  const chipOf = (input: HTMLInputElement) => input.closest('label')!.querySelector('.chip')!
+  const classes = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/)
   const searchToggle = () => [...container.querySelectorAll('button')].find(b => b.textContent?.includes('min.wbs.parentSearch')) ?? null
   const searchInput = () => container.querySelector<HTMLInputElement>('input[type="search"]')
   async function type(el: HTMLInputElement, value: string) {
@@ -64,6 +72,11 @@ describe('WbsParentPicker — 추천 우선 라디오 + 다른 위치 찾기', (
     for (const r of radios.slice(0, 3)) expect(labelOf(r)).toContain('min.wbs.parentRecommended')
     expect(labelOf(radios[3])).not.toContain('min.wbs.parentRecommended')
     expect(radios.map(r => r.checked)).toEqual([true, false, false, false])
+    // 골라진 줄(bg-surface-selected)과 칩(bg-action-soft)은 같은 색이다 — 골라진 줄의 칩은 흰 바탕 + 테두리로 알약 모양을 지킨다
+    expect(classes(radios[0].closest('label')!)).toContain('bg-surface-selected')
+    expect(classes(chipOf(radios[0]))).toEqual(expect.arrayContaining(['bg-surface', 'ring-1']))
+    expect(classes(chipOf(radios[0]))).not.toContain('bg-action-soft')
+    expect(classes(chipOf(radios[1]))).toContain('bg-action-soft')
     // 화면에 골라진 라디오와 부모 상태가 어긋나지 않게 — 미선택(null)이면 첫 추천을 한 번 올린다
     expect(onChange).toHaveBeenCalledTimes(1)
     expect(onChange).toHaveBeenCalledWith('b')
@@ -75,6 +88,7 @@ describe('WbsParentPicker — 추천 우선 라디오 + 다른 위치 찾기', (
     expect(radios.map(r => r.value)).toEqual(['a', 'b', 'a1', WBS_ROOT_PARENT])
     expect(radios.map(r => r.checked)).toEqual([false, false, true, false])
     expect(labelOf(radios[2])).toContain('·')   // 하위 없는 작업 표시
+    expect(radios[2].closest('label')!.querySelector('.sr-only')?.textContent).toContain('min.wbs.parentLeaf')
     expect(labelOf(radios[2])).not.toContain('min.wbs.parentRecommended')
     expect(onChange).not.toHaveBeenCalled()
   })
@@ -101,6 +115,11 @@ describe('WbsParentPicker — 추천 우선 라디오 + 다른 위치 찾기', (
     expect(hits.every(r => labelOf(r).includes('인증'))).toBe(true)
     expect(labelOf(hits[1])).toContain('·')
     expect(labelOf(hits[0])).not.toContain('·')
+    // · 는 눈으로만 — 화면 낭독에는 「하위 없음」 글로, 마우스에는 title 로 알린다
+    const dot = [...hits[1].closest('label')!.querySelectorAll('[aria-hidden]')].find(el => el.textContent === '·')!
+    expect(dot.getAttribute('title')).toBe('min.wbs.parentLeaf')
+    expect(hits[1].closest('label')!.querySelector('.sr-only')?.textContent).toContain('min.wbs.parentLeaf')
+    expect(hits[0].closest('label')!.querySelector('.sr-only')).toBeNull()
     expect(hits[0].checked).toBe(true)   // 지금 값은 검색 목록에서도 골라진 채
     await act(async () => hits[2].click())
     expect(onChange).toHaveBeenLastCalledWith('e')
@@ -125,6 +144,73 @@ describe('WbsParentPicker — 추천 우선 라디오 + 다른 위치 찾기', (
     } finally {
       unregister()
     }
+  })
+
+  it('한글 조합 중에는 목록이 비지 않는다 — 덜 된 글자(ㅇ·읹·인즈)에 min.wbs.parentNone 으로 뒤집히지 않고, 조합이 끝나면 온 낱말로 거른다', async () => {
+    await mount({ recommendedIds: ['a'], value: 'a' })
+    await act(async () => searchToggle()!.click())
+    const search = searchInput()!
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+    const composition = (type: 'compositionstart' | 'compositionend', data: string) =>
+      act(() => { search.dispatchEvent(new CompositionEvent(type, { bubbles: true, data })) })
+    // 조합 중 input — 값에 조합 중인 글자가 든다(isComposing)
+    const composingInput = (value: string) =>
+      act(() => { setter.call(search, value); search.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true, data: value.slice(-1) })) })
+
+    composition('compositionstart', '')
+    for (const partial of ['ㅇ', '이', '인', '읹', '인즈', '인증']) {
+      composingInput(partial)
+      expect(container.textContent, partial).not.toContain('min.wbs.parentNone')
+      expect(results().length, partial).toBeGreaterThan(0)
+    }
+    composition('compositionend', '인증')
+    expect(search.value).toBe('인증')
+    expect(results().map(r => r.value)).toEqual(['a', 'a1', 'e'])
+
+    // 조합을 마친 글이 정말 아무것도 못 맞히면 그때는 min.wbs.parentNone
+    composition('compositionstart', '')
+    composingInput('인증없')
+    expect(container.textContent).not.toContain('min.wbs.parentNone')
+    composition('compositionend', '없')
+    expect(results()).toEqual([])
+    expect(container.textContent).toContain('min.wbs.parentNone')
+  })
+
+  it('찾기를 펼친 동안에는 위 라디오 줄이 그대로다 — 고를 때마다 줄이 끼거나 빠져 목록이 포인터 밑에서 밀리지 않게. 접으면 지금 값이 위로 올라온다', async () => {
+    await act(async () => root.render(<Stateful options={OPTIONS} recommendedIds={['a']} initial="a" />))
+    const top = () => choices().map(r => r.value)
+    const toggle = searchToggle()!
+    await act(async () => toggle.click())
+    expect(top()).toEqual(['a', WBS_ROOT_PARENT])
+
+    await act(async () => result('e').click())          // 추천 밖을 고른다
+    expect(onChange).toHaveBeenLastCalledWith('e')
+    expect(top()).toEqual(['a', WBS_ROOT_PARENT])        // 위에 줄이 끼지 않는다
+    expect(result('e').checked).toBe(true)
+    expect(choices().some(r => r.checked)).toBe(false)
+
+    await act(async () => choices()[0].click())         // 추천으로 돌아간다
+    expect(top()).toEqual(['a', WBS_ROOT_PARENT])
+    await act(async () => result('d').click())
+    expect(top()).toEqual(['a', WBS_ROOT_PARENT])
+
+    await act(async () => toggle.click())                // 접으면 지금 값(d)이 위 라디오로
+    expect(top()).toEqual(['a', 'd', WBS_ROOT_PARENT])
+    expect(choices().map(r => r.checked)).toEqual([false, true, false])
+  })
+
+  it('펼칠 때 이미 있던 추천 밖 값의 줄은 펼친 동안 남는다 — 추천을 골라도 빠지지 않고, 접으면 빠진다', async () => {
+    await act(async () => root.render(<Stateful options={OPTIONS} recommendedIds={['a']} initial="d" />))
+    const top = () => choices().map(r => r.value)
+    expect(top()).toEqual(['a', 'd', WBS_ROOT_PARENT])
+    const toggle = searchToggle()!
+    await act(async () => toggle.click())
+    await act(async () => choices()[0].click())
+    expect(onChange).toHaveBeenLastCalledWith('a')
+    expect(top()).toEqual(['a', 'd', WBS_ROOT_PARENT])
+    expect(choices().map(r => r.checked)).toEqual([true, false, false])
+    await act(async () => toggle.click())
+    expect(top()).toEqual(['a', WBS_ROOT_PARENT])
   })
 
   it('맞는 위치가 없으면 목록 대신 min.wbs.parentNone', async () => {

@@ -70,6 +70,41 @@ describe('Toast — 링크(action)', () => {
     expect(cards()).toHaveLength(0)
   })
 
+  it('초점이 안에 있으면 마우스가 들어왔다 나가도, 다른 토스트가 오가도 닫히지 않는다 — 초점이 떠나야 다시 센다', () => {
+    act(() => api.toast(LINKED))
+    const card = cards()[0]
+    const link = container.querySelector<HTMLAnchorElement>('a[href="/p/p1/wbs?focus=w1"]')!
+    act(() => link.focus())
+    // 마우스가 지나간다 — 초점이 남아 있으니 멈춤도 남는다
+    act(() => { card.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body })) })
+    act(() => { card.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })) })
+    wait(10_000)
+    expect(cards()).toHaveLength(1)
+    // 다른 토스트가 와서 제 시간에 닫힌다 — 공급자가 다시 그려져도 초점 있는 토스트의 멈춤은 풀리지 않는다
+    act(() => api.toast({ title: 'min.share.copied' }))
+    expect(cards()).toHaveLength(2)
+    wait(3500)
+    expect(cards()).toHaveLength(1)
+    expect(cards()[0].textContent).toContain('min.wbs.created')
+    wait(20_000)
+    expect(cards()).toHaveLength(1)
+    act(() => link.blur())
+    wait(7999)
+    expect(cards()).toHaveLength(1)
+    wait(1)
+    expect(cards()).toHaveLength(0)
+  })
+
+  it('다른 토스트가 와도 먼저 뜬 토스트의 시간을 처음부터 다시 세지 않는다', () => {
+    act(() => api.toast({ title: 'min.share.copied' }))
+    wait(2000)
+    act(() => api.toast({ title: 'min.share.copyFailed', variant: 'error' }))
+    wait(1500)   // 첫 토스트는 3,500ms 째 — 닫힌다
+    expect(cards().map(c => c.textContent)).toEqual([expect.stringContaining('min.share.copyFailed')])
+    wait(2000)   // 둘째는 3,500ms 째
+    expect(cards()).toHaveLength(0)
+  })
+
   it('초점이 토스트 안에 있는 동안은 닫히지 않고, 초점이 떠나면 다시 8,000ms 를 센다', () => {
     act(() => api.toast(LINKED))
     const link = container.querySelector<HTMLAnchorElement>('a[href="/p/p1/wbs?focus=w1"]')!

@@ -308,6 +308,7 @@ export const minutesKo = {
   'min.wbs.parentPlaceholder': '위치를 골라 주세요',
   'min.wbs.parentRoot': '맨 위(최상위)',
   'min.wbs.parentNone': '고를 수 있는 위치가 없습니다',
+  'min.wbs.parentLeaf': '하위 없음',
   'min.wbs.leafNotice': '이 작업은 하위 작업이 생겨 묶음 항목으로 바뀝니다.',
   'min.wbs.leafActual': '실적 {n}%가 지워지고 하위 작업의 진척으로 계산됩니다.',
   'min.wbs.leafAssignee': '담당자는 이 작업에만 남고 새 하위 작업에는 붙지 않습니다.',
