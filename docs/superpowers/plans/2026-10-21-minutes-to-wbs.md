@@ -97,7 +97,9 @@ export interface MinuteWbsParentOption { id: string; path: string; depth: number
 export function pickableParents(rows: readonly MinuteWbsTreeRow[], opts: { maxDepth: number | null; numbers: ReadonlyMap<string, string>; activeOrderItemIds: ReadonlySet<string>; dependencyCounts: ReadonlyMap<string, number> }): MinuteWbsParentOption[]
 /** AI 후보 = 하위가 이미 있는 것만(leaf=false) */
 export function recommendableParents(options: readonly MinuteWbsParentOption[]): MinuteWbsParentOption[]
-/** 결정형 점수 — 2글자 이상 낱말(공백·구두점 분리, 소문자)의 겹침 수, 경로 겹침 2점·하위 이름 겹침 1점. 0점은 뺀다. 상위 limit 개 id */
+/** 결정형 점수 — 2글자 이상 낱말(공백·구두점 분리, 소문자)의 겹침 수, 경로 겹침 2점·하위 이름 겹침 1점. 0점은 뺀다. 상위 limit 개 id.
+ *  (리뷰 수정) 경로 낱말은 각 구간의 개요 번호 접두를 뺀 이름에서만 뽑는다(회의 날짜 10/21 이 x.10 을 추천하지 않게).
+ *  겹침 = 본문 토큰이 후보 낱말과 같거나 그 낱말로 시작할 때(조사 붙은 '로그인을' 이 '로그인' 과 겹침). */
 export function scoreParentCandidates(text: string, options: readonly MinuteWbsParentOption[], limit?: number): string[]
 /** 결정형 작업명 — insightLabel(trim) 있으면 그것, 없으면 첫 줄(마크다운 글머리·번호·'#' 제거), 공백 접기, 200자 상한 */
 export function fallbackWbsName(text: string, insightLabel?: string | null): string
