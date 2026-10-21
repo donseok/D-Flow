@@ -14,7 +14,6 @@ const m = vi.hoisted(() => ({
   getComputedWbs: vi.fn(),
   getProjectConfig: vi.fn(),
   levelDepthOf: vi.fn(),
-  getProjectRoster: vi.fn(),
   verify: vi.fn(),
   applyWorkflowEvent: vi.fn(),
   emitNotification: vi.fn(),
@@ -35,7 +34,6 @@ vi.mock('next/cache', () => ({ revalidatePath: m.revalidatePath }))
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: m.after }))
 vi.mock('@/lib/data/wbs', () => ({ getComputedWbs: m.getComputedWbs }))
 vi.mock('@/lib/settings/projectConfig', () => ({ getProjectConfig: m.getProjectConfig, levelDepthOf: m.levelDepthOf }))
-vi.mock('@/lib/data/members', () => ({ getProjectRoster: m.getProjectRoster }))
 vi.mock('@/lib/minutes/verifySource', async (orig) => ({
   ...(await orig<typeof import('@/lib/minutes/verifySource')>()), verifyMinuteIssueBlock: m.verify,
 }))
@@ -50,6 +48,7 @@ import { requireModule } from '@/lib/modules/gate'
 import { ERR_DENIED, ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import { serverKoTranslate as t } from '@/lib/i18n/serverDict'
 import { minuteIssueSourceExcerpt } from '@/lib/minutes/verifySource'
+import { minuteSelectionKeyHash } from '@/lib/minutes/selection'
 import { makeMinuteIssueSourceKey, type MinuteIssueSourceInput } from '@/lib/domain/issueMinuteSource'
 import {
   fallbackWbsName, recommendableParents, scoreParentCandidates, type MinuteWbsCreateRow, type MinuteWbsParentOption,
@@ -66,8 +65,13 @@ const BODY = ['# 개발 회의', '', '로그인 API 개발은 김철수가 10월
 const BODY_HASH = fnv1a64(BODY)
 const BLOCKS = splitMinuteBlocks(BODY)
 const LABELS: Record<number, string> = { 1: '로그인 API 개발', 2: '권한 화면 시안 검토' }
+// 회의록·버전 id 는 uuid 꼴이어야 액션 입력 검증을 지난다(RPC 인자가 uuid 다)
+const MINUTE = '30000000-0000-4000-8000-000000000001'
+const VERSION = '30000000-0000-4000-8000-000000000002'
+const OTHER_MINUTE = '30000000-0000-4000-8000-000000000003'
+const OTHER_VERSION = '30000000-0000-4000-8000-000000000004'
 const source = (index: number, kind: MinuteIssueSourceInput['kind'] = 'action', over: Partial<MinuteIssueSourceInput> = {}): MinuteIssueSourceInput => ({
-  minuteId: 'minute-1', minuteVersionId: 'version-1', bodyHash: BODY_HASH, blockIndex: BLOCKS[index].index, blockHash: BLOCKS[index].hash, kind, ...over,
+  minuteId: MINUTE, minuteVersionId: VERSION, bodyHash: BODY_HASH, blockIndex: BLOCKS[index].index, blockHash: BLOCKS[index].hash, kind, ...over,
 })
 const S1 = source(1)
 const S2 = source(2)
@@ -126,10 +130,18 @@ const PREPARE_TABLES: Record<string, Resp> = {
   ] },
   minute_insights: { data: [{ block_index: 1, label: '10월 31일까지 로그인 API' }] },
   minute_versions: { data: { minute_date: '2026-10-21' } },
+  // 담당자 후보의 원천 — 활성 명단 행 + 활성 인물만(박영희는 가나다순으로 김철수 뒤). 휴면(사람 비활성)·퇴사(명단 행 비활성)는 빠져야 한다
+  project_members: { data: [
+    { id: 'm-2', active: true, people: { display_name: '박영희', active: true } },
+    { id: 'm-1', active: true, people: { display_name: '김철수', active: true } },
+    { id: 'm-dormant', active: true, people: { display_name: '휴면 인물', active: false } },
+    { id: 'm-gone', active: false, people: { display_name: '퇴사자', active: true } },
+  ] },
 }
+const MEMBERS = [{ id: 'm-1', name: '김철수' }, { id: 'm-2', name: '박영희' }]
 
-function verified(s: MinuteIssueSourceInput, block: MinuteBlock = BLOCKS[s.blockIndex]) {
-  return { ok: true as const, value: { storedBodyHash: BODY_HASH, block, insightLabel: s.kind === 'manual' ? null : LABELS[s.blockIndex] ?? null, draftContextText: '', selectionExcerpt: null } }
+function verified(s: MinuteIssueSourceInput, block: MinuteBlock = BLOCKS[s.blockIndex], selectionExcerpt: string | null = null) {
+  return { ok: true as const, value: { storedBodyHash: BODY_HASH, block, insightLabel: s.kind === 'manual' ? null : LABELS[s.blockIndex] ?? null, draftContextText: '', selectionExcerpt } }
 }
 
 let session: ReturnType<typeof sessionClient>
@@ -149,7 +161,6 @@ beforeEach(() => {
   m.getComputedWbs.mockResolvedValue({ items: TREE, dependencies: DEPENDENCIES })
   m.getProjectConfig.mockResolvedValue({})
   m.levelDepthOf.mockReturnValue(3)
-  m.getProjectRoster.mockResolvedValue({ ok: true, rows: [{ id: 'm-1', name: '김철수', active: true }, { id: 'm-gone', name: '퇴사자', active: false }] })
   m.verify.mockImplementation(async (_pid: string, _ws: string | undefined, s: MinuteIssueSourceInput) => verified(s))
   m.applyWorkflowEvent.mockResolvedValue({ ok: true, actualChanged: false })
   m.emitNotification.mockResolvedValue({ ok: true })
@@ -193,9 +204,9 @@ describe('prepareMinuteWbsDrafts', () => {
   })
 
   it('소스의 회의록·버전·본문이 섞이면 sourceMixed — 원문 검증 전에 멈춘다', async () => {
-    const mixed = await prepareMinuteWbsDrafts(PROJECT, [S1, source(2, 'action', { minuteId: 'minute-2' })])
+    const mixed = await prepareMinuteWbsDrafts(PROJECT, [S1, source(2, 'action', { minuteId: OTHER_MINUTE })])
     expect(mixed).toEqual({ ok: false, error: t('srv.minuteWbs.sourceMixed') })
-    const version = await prepareMinuteWbsDrafts(PROJECT, [S1, source(2, 'action', { minuteVersionId: 'version-2' })])
+    const version = await prepareMinuteWbsDrafts(PROJECT, [S1, source(2, 'action', { minuteVersionId: OTHER_VERSION })])
     expect(version).toEqual({ ok: false, error: t('srv.minuteWbs.sourceMixed') })
     expect(m.verify).not.toHaveBeenCalled()
   })
@@ -204,6 +215,15 @@ describe('prepareMinuteWbsDrafts', () => {
     const r = await prepareMinuteWbsDrafts(PROJECT, [source(1, 'risk')])
     expect(r).toEqual({ ok: false, error: t('srv.issues.minutesSourceInformationNotValid') })
     expect(m.verify).not.toHaveBeenCalled()
+  })
+
+  it('회의록 id·버전 id 가 uuid 꼴이 아니면 원문 정보 오류 — 원문 검증·DB 에 닿지 않는다', async () => {
+    for (const bad of [{ minuteId: 'minute-1' }, { minuteVersionId: 'version-1' }, { minuteId: 42 as unknown as string }]) {
+      expect(await prepareMinuteWbsDrafts(PROJECT, [S1, source(2, 'action', bad)]), JSON.stringify(bad))
+        .toEqual({ ok: false, error: t('srv.issues.minutesSourceInformationNotValid') })
+    }
+    expect(m.verify).not.toHaveBeenCalled()
+    expect(m.createServerClient).not.toHaveBeenCalled()
   })
 
   it('원문 검증은 WBS 문구 갈래로 부르고, 그 거부를 그대로 돌려준다', async () => {
@@ -239,9 +259,8 @@ describe('prepareMinuteWbsDrafts', () => {
   })
 
   it('명단·연결·회의록 정보를 못 읽으면 그 사유로 멈춘다', async () => {
-    m.getProjectRoster.mockResolvedValue({ ok: false, error: '명단을 불러오지 못했습니다.' })
+    m.createServerClient.mockResolvedValue(sessionClient({ ...PREPARE_TABLES, project_members: { error: { message: 'boom' } } }).client)
     expect(await prepareMinuteWbsDrafts(PROJECT, [S1])).toEqual({ ok: false, error: t('srv.minuteWbs.rosterUnavailable') })
-    m.getProjectRoster.mockResolvedValue({ ok: true, rows: [] })
 
     m.createServerClient.mockResolvedValue(sessionClient({ ...PREPARE_TABLES, wbs_item_links: { error: { message: 'boom' } } }).client)
     expect(await prepareMinuteWbsDrafts(PROJECT, [S1])).toEqual({ ok: false, error: t('srv.minuteWbs.linksUnavailable') })
@@ -260,7 +279,7 @@ describe('prepareMinuteWbsDrafts', () => {
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.value.mode).toBe('ai')
-    expect(r.value.members).toEqual([{ id: 'm-1', name: '김철수' }])
+    expect(r.value.members).toEqual(MEMBERS)
     expect(r.value.rows).toEqual([
       { row: 0, blockIndex: 1, blockHash: BLOCKS[1].hash, excerpt: minuteBlockDraftText(BLOCKS[1]), name: '로그인 API 개발',
         parentIds: [ID.auth], plannedEnd: '2026-10-31', assigneeMemberId: 'm-1', registered: null },
@@ -282,31 +301,73 @@ describe('prepareMinuteWbsDrafts', () => {
     expect(payload.minuteDate).toBe('2026-10-21')
     expect(payload.rows.map(row => [row.row, row.insightLabel, row.deadlineLabel])).toEqual([[0, '로그인 API 개발', '10월 31일까지 로그인 API'], [1, '권한 화면 시안 검토', null]])
     expect(payload.candidates.map(c => c.id).sort()).toEqual([ID.dev, ID.auth, ID.member, ID.test].sort())
-    expect(payload.members).toEqual([{ id: 'm-1', name: '김철수' }])
+    expect(payload.members).toEqual(MEMBERS)
     expect(payload.exampleNames).toEqual(['로그인 화면 설계', '회원 목록 화면', '성능 테스트', '운영', '배포 자동화'])
     // 읽기는 세션 클라이언트(RLS)만 — service_role 을 만들지 않는다
     expect(m.createAdminClient).not.toHaveBeenCalled()
     const links = session.queries.find(q => q.table === 'wbs_item_links')
-    expect(links?.calls).toEqual(expect.arrayContaining([['eq', ['minute_id', 'minute-1']], ['eq', ['project_id', PROJECT]], ['order', ['created_at', { ascending: true }]]]))
+    expect(links?.calls).toEqual(expect.arrayContaining([['eq', ['minute_id', MINUTE]], ['eq', ['project_id', PROJECT]], ['order', ['created_at', { ascending: true }]]]))
     const orders = session.queries.find(q => q.table === 'agent_work_orders')
     expect(orders?.calls).toEqual(expect.arrayContaining([['eq', ['project_id', PROJECT]], ['in', ['status', ['ready', 'claimed', 'reported']]]]))
   })
 
-  it('AI 가 일부 줄만 주거나 이름이 비면 그 줄은 통째로 결정형으로 채운다 — 쓸 만한 줄이 하나도 없으면 fallback', async () => {
+  it('AI 줄은 칸 단위로 채운다 — 이름이 비면 이름만 결정형이고 위치·종료일·담당자는 AI 값(위치까지 비면 결정형 상위 3)', async () => {
     m.generateAnswer.mockResolvedValue(JSON.stringify([
-      { row: 0, name: 'AI 작업명', parents: [ID.auth], end: null, assignee: null },
-      { row: 1, name: '', parents: [ID.member], end: '2026-11-01', assignee: 'm-1' },
+      { row: 0, name: '', parents: [ID.member], end: '2026-11-01', assignee: 'm-1' },
+      { row: 1, name: '', parents: [], end: '2026-11-07', assignee: 'm-2' },
     ]))
     const r = await prepareMinuteWbsDrafts(PROJECT, [S1, S2])
     expect(r.ok && r.value.mode).toBe('ai')
     expect(r.ok && r.value.rows.map(row => [row.name, row.parentIds, row.plannedEnd, row.assigneeMemberId])).toEqual([
-      ['AI 작업명', [ID.auth], null, null],
+      [LABELS[1], [ID.member], '2026-11-01', 'm-1'],
+      [LABELS[2], [ID.test, ID.auth, ID.member], '2026-11-07', 'm-2'],
+    ])
+  })
+
+  it('이름을 낸 AI 줄의 빈 위치는 "확신 없음" 그대로 두고, AI 가 주지 않은 줄은 통째로 결정형이다', async () => {
+    m.generateAnswer.mockResolvedValue(JSON.stringify([{ row: 0, name: 'AI 작업명', parents: [], end: null, assignee: null }]))
+    const r = await prepareMinuteWbsDrafts(PROJECT, [S1, S2])
+    expect(r.ok && r.value.mode).toBe('ai')
+    expect(r.ok && r.value.rows.map(row => [row.name, row.parentIds, row.plannedEnd, row.assigneeMemberId])).toEqual([
+      ['AI 작업명', [], null, null],
       [LABELS[2], [ID.test, ID.auth, ID.member], null, null],
     ])
+  })
+
+  it('AI 가 아무 칸도 채우지 않은 줄만 돌려주면 mode fallback(결정형 초안과 같다)', async () => {
     m.generateAnswer.mockResolvedValue(JSON.stringify([{ row: 1, name: '', parents: [], end: null, assignee: null }]))
-    const none = await prepareMinuteWbsDrafts(PROJECT, [S1, S2])
-    expect(none.ok && none.value.mode).toBe('fallback')
-    expect(none.ok && none.value.rows.map(row => row.name)).toEqual([LABELS[1], LABELS[2]])
+    const r = await prepareMinuteWbsDrafts(PROJECT, [S1, S2])
+    expect(r.ok && r.value.mode).toBe('fallback')
+    expect(r.ok && r.value.rows.map(row => [row.name, row.parentIds])).toEqual([[LABELS[1], [ID.auth, ID.dev, ID.member]], [LABELS[2], [ID.test, ID.auth, ID.member]]])
+  })
+
+  it('담당자 후보는 활성 명단 행이면서 활성 인물만(가나다순) — 사람이 비활성이면 후보에도 AI 허용 목록에도 없다', async () => {
+    m.generateAnswer.mockResolvedValue(JSON.stringify([
+      { row: 0, name: '로그인 API 개발', parents: [], end: null, assignee: 'm-dormant' },
+      { row: 1, name: '권한 화면 시안 검토', parents: [], end: null, assignee: 'm-2' },
+    ]))
+    const r = await prepareMinuteWbsDrafts(PROJECT, [S1, S2])
+    expect(r.ok && r.value.members).toEqual(MEMBERS)
+    expect(r.ok && r.value.rows.map(row => row.assigneeMemberId)).toEqual([null, 'm-2'])
+    expect(promptPayload().members).toEqual(MEMBERS)
+    const roster = session.queries.find(q => q.table === 'project_members')
+    expect(roster?.calls).toEqual(expect.arrayContaining([['eq', ['project_id', PROJECT]], ['eq', ['active', true]], ['eq', ['people.active', true]]]))
+    expect(roster?.calls.find(([k]) => k === 'select')?.[1][0]).toContain('people!inner(')
+  })
+
+  it('드래그 선택 줄 — 발췌·프롬프트 원문은 검증된 선택 발췌이고, 기한 라벨은 선택이 걸친 블록(끝 블록까지)에서만 모은다', async () => {
+    const SELECTED = '김철수가 10월 31일까지 맡는다.\n권한 화면 시안 검토'
+    const selection = source(1, 'manual', { selection: { text: SELECTED, endBlockIndex: 2, endBlockHash: BLOCKS[2].hash } })
+    m.verify.mockImplementation(async (_p: string, _w: string | undefined, s: MinuteIssueSourceInput) => verified(s, BLOCKS[s.blockIndex], s.selection ? SELECTED : null))
+    session = sessionClient({ ...PREPARE_TABLES, minute_insights: { data: [
+      { block_index: 0, label: '범위 밖(제목)' }, { block_index: 1, label: '10월 31일까지' }, { block_index: 2, label: '11월 7일까지' },
+    ] } })
+    m.createServerClient.mockResolvedValue(session.client)
+    const r = await prepareMinuteWbsDrafts(PROJECT, [selection])
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.value.rows[0]).toMatchObject({ blockIndex: 1, blockHash: BLOCKS[1].hash, excerpt: minuteIssueSourceExcerpt(SELECTED), name: fallbackWbsName(SELECTED, null) })
+    expect(promptPayload().rows).toEqual([{ row: 0, text: SELECTED, insightLabel: null, deadlineLabel: '10월 31일까지 / 11월 7일까지' }])
   })
 
   it('generateAnswer 가 null 이면 mode fallback — 이름은 fallbackWbsName, 위치는 결정형 점수 상위 3', async () => {
@@ -380,7 +441,10 @@ describe('createWbsItemsFromMinute', () => {
       [[row(), row({ source: S2, parentId: '__root__' })], t('err.invalidRequest'), 1],
       [[row({ assigneeMemberId: 'm-1' })], t('err.invalidRequest'), 0],
       [[row({ source: source(1, 'risk') })], t('srv.issues.minutesSourceInformationNotValid'), 0],
-      [[row(), row({ source: source(2, 'action', { minuteVersionId: 'version-2' }) })], t('srv.minuteWbs.sourceMixed'), undefined],
+      // 회의록 id·버전 id 는 uuid 꼴(RPC 인자가 uuid) — 그 줄 번호와 함께
+      [[row(), row({ source: source(2, 'action', { minuteId: 'minute-1' }) })], t('srv.issues.minutesSourceInformationNotValid'), 1],
+      [[row({ source: source(1, 'action', { minuteVersionId: 'version-1' }) })], t('srv.issues.minutesSourceInformationNotValid'), 0],
+      [[row(), row({ source: source(2, 'action', { minuteVersionId: OTHER_VERSION }) })], t('srv.minuteWbs.sourceMixed'), undefined],
     ]
     for (const [rows, error, at] of cases) {
       expect(await createWbsItemsFromMinute(PROJECT, rows)).toEqual(at === undefined ? { ok: false, error } : { ok: false, error, row: at })
@@ -425,21 +489,38 @@ describe('createWbsItemsFromMinute', () => {
     expect(rpc).toHaveBeenCalledWith('create_wbs_items_from_minute', {
       p_project_id: PROJECT,
       p_actor: USER,
-      p_minute_id: 'minute-1',
-      p_minute_version_id: 'version-1',
+      p_minute_id: MINUTE,
+      p_minute_version_id: VERSION,
       p_body_hash: BODY_HASH,
       p_max_depth: 3,
       p_rows: [
         { name: '로그인 API 개발', parent_id: ID.auth, planned_start: null, planned_end: '2026-10-31', assignee_member_id: ASSIGNEE,
           block_index: long.index, block_hash: long.hash, excerpt: longExcerpt, source_kind: 'action',
-          source_key: makeMinuteIssueSourceKey({ minuteVersionId: 'version-1', blockIndex: long.index, blockHash: long.hash, kind: 'action', selectionHash: null }),
+          source_key: makeMinuteIssueSourceKey({ minuteVersionId: VERSION, blockIndex: long.index, blockHash: long.hash, kind: 'action', selectionHash: null }),
           confirm_parent_leaf: false },
         { name: '권한 화면 시안 검토', parent_id: ID.perf, planned_start: null, planned_end: null, assignee_member_id: null,
           block_index: 2, block_hash: BLOCKS[2].hash, excerpt: minuteBlockDraftText(BLOCKS[2]), source_kind: 'action',
-          source_key: makeMinuteIssueSourceKey({ minuteVersionId: 'version-1', blockIndex: 2, blockHash: BLOCKS[2].hash, kind: 'action', selectionHash: null }),
+          source_key: makeMinuteIssueSourceKey({ minuteVersionId: VERSION, blockIndex: 2, blockHash: BLOCKS[2].hash, kind: 'action', selectionHash: null }),
           confirm_parent_leaf: true },
       ],
     })
+  })
+
+  it('드래그 선택 줄 — 발췌는 검증된 선택 발췌(4,000자 상한)이고 원문 키에 선택 hash 가 실린다', async () => {
+    const SELECTED = `김철수가 10월 31일까지 맡는다.\n${'다'.repeat(4_500)}`
+    const selection = source(1, 'manual', { selection: { text: SELECTED, endBlockIndex: 2, endBlockHash: BLOCKS[2].hash } })
+    m.verify.mockImplementation(async (_p: string, _w: string | undefined, s: MinuteIssueSourceInput) => verified(s, BLOCKS[s.blockIndex], SELECTED))
+    rpc.mockResolvedValueOnce({ data: [{ row: 0, item_id: 'item-0', code: '김철수가' }], error: null })
+    const r = await createWbsItemsFromMinute(PROJECT, [row({ source: selection })])
+    expect(r).toEqual({ ok: true, items: [{ row: 0, itemId: 'item-0', code: '김철수가' }] })
+    const pRows = (rpc.mock.calls[0][1] as { p_rows: Record<string, unknown>[] }).p_rows
+    expect(pRows[0].excerpt).toBe(minuteIssueSourceExcerpt(SELECTED))
+    expect((pRows[0].excerpt as string).length).toBeLessThanOrEqual(4_000)
+    expect(pRows[0]).toMatchObject({
+      block_index: 1, block_hash: BLOCKS[1].hash, source_kind: 'manual',
+      source_key: makeMinuteIssueSourceKey({ minuteVersionId: VERSION, blockIndex: 1, blockHash: BLOCKS[1].hash, kind: 'manual', selectionHash: minuteSelectionKeyHash(SELECTED) }),
+    })
+    expect(pRows[0].source_key).toContain(':sel:')
   })
 
   it('RPC 의 줄 거부 토큰은 그 문구와 줄 번호로 — WBS_PARENT_LEAF_UNCONFIRMED · detail 1', async () => {

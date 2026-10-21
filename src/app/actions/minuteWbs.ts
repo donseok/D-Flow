@@ -18,7 +18,7 @@ import {
 } from '@/lib/ai/minute-wbs-draft'
 import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import { getComputedWbs } from '@/lib/data/wbs'
-import { getProjectRoster } from '@/lib/data/members'
+import { personOf } from '@/lib/data/memberSelect'
 import { fetchAllByKeyset } from '@/lib/data/paging'
 import { recordProgressSnapshot } from '@/lib/data/snapshots'
 import { getProjectConfig, levelDepthOf } from '@/lib/settings/projectConfig'
@@ -37,6 +37,7 @@ import {
 import { outlineNumbers } from '@/lib/domain/wbsDerived'
 import { wbsNameViolation } from '@/lib/domain/wbsValueRules'
 import { isUuidLike, isValidIsoDate } from '@/lib/domain/validate'
+import { sortByKoreanName } from '@/lib/domain/nameSort'
 import type { ComputedItem } from '@/lib/domain/types'
 import { failWith, rpcFailure, tokenTable, type OwnTokenKeys } from '@/lib/errors/dbFail'
 import { serverTranslator } from '@/lib/i18n/server'
@@ -85,13 +86,16 @@ type Verified = VerifiedMinuteIssueBlock
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
+const isUuidText = (v: unknown): v is string => typeof v === 'string' && isUuidLike(v)
+
 /**
- * 원문 묶음 — 줄마다 manual·action 만(등록 RPC 의 source_kind. risk 는 WBS 연결에 없다), 그리고 모두 같은 회의록·버전·본문.
- * 원문의 나머지 모양(앵커·선택)은 verifyMinuteIssueBlock 이 본다.
+ * 원문 묶음 — 줄마다 manual·action 만(등록 RPC 의 source_kind. risk 는 WBS 연결에 없다)·회의록 id 와 버전 id 는 uuid 꼴(RPC 인자가 uuid 다),
+ * 그리고 모두 같은 회의록·버전·본문. 원문의 나머지 모양(앵커·선택)은 verifyMinuteIssueBlock 이 본다.
  */
 function sourceProblem(t: ServerTranslate, sources: readonly unknown[]): Fail | null {
   for (const [row, source] of sources.entries()) {
-    if (!isRecord(source) || !(MINUTE_WBS_SOURCE_KINDS as readonly unknown[]).includes(source.kind)) {
+    if (!isRecord(source) || !(MINUTE_WBS_SOURCE_KINDS as readonly unknown[]).includes(source.kind)
+        || !isUuidText(source.minuteId) || !isUuidText(source.minuteVersionId)) {
       return { ok: false, error: t('srv.issues.minutesSourceInformationNotValid'), row }
     }
   }
@@ -185,15 +189,24 @@ async function loadActiveOrderItemIds(t: ServerTranslate, sb: Session, projectId
   }
 }
 
-/** 담당자 후보 — 이 프로젝트의 활성 명단(설계 §4.4). 등록 RPC 가 활성 인물까지 다시 본다 */
-async function loadMembers(t: ServerTranslate, projectId: string): Promise<Loaded<{ id: string; name: string }[]>> {
-  try {
-    const roster = await getProjectRoster(projectId)
-    if (!roster.ok) return { ok: false, error: failWith('minuteWbs.roster', roster.error, t('srv.minuteWbs.rosterUnavailable')) }
-    return { ok: true, value: roster.rows.filter((member) => member.active).map((member) => ({ id: member.id, name: member.name })) }
-  } catch (e) {
-    return { ok: false, error: failWith('minuteWbs.roster', e, t('srv.minuteWbs.rosterUnavailable')) }
-  }
+/**
+ * 담당자 후보 — 이 프로젝트의 활성 명단 행이면서 활성 인물(설계 §4.4). 등록 RPC(0061 의 WBS_ASSIGNEE_INVALID)·setWbsAssignee 의 선행 조회와
+ * 같은 조건이다 — 명단 행만 활성인 비활성 인물을 후보로 내보이면 고른 뒤 등록이 그 줄에서 막힌다. 순서는 명단 화면과 같은 가나다순.
+ */
+async function loadMembers(t: ServerTranslate, sb: Session, projectId: string): Promise<Loaded<{ id: string; name: string }[]>> {
+  const { data, error } = await sb.from('project_members')
+    .select('id, active, people!inner(display_name, active)')
+    .eq('project_id', projectId)
+    .eq('active', true)
+    .eq('people.active', true)
+  if (error) return { ok: false, error: failWith('minuteWbs.roster', error, t('srv.minuteWbs.rosterUnavailable')) }
+  // 두 조건을 응답에서도 다시 본다 — 임베드 필터가 빠진 응답이 비활성 인물을 후보로 내보내지 않게(fail-closed)
+  const members = ((data ?? []) as Record<string, unknown>[]).flatMap((row) => {
+    const person = personOf(row)
+    return row.active === true && person !== null && person.active === true && typeof person.display_name === 'string'
+      ? [{ id: String(row.id), name: person.display_name }] : []
+  })
+  return { ok: true, value: sortByKoreanName(members, (member) => member.name) }
 }
 
 type Registered = { itemId: string; code: string; name: string }
@@ -280,7 +293,7 @@ export async function prepareMinuteWbsDrafts(projectId: string, sources: MinuteI
     loadMaxDepth(t, projectId),
     loadTree(t, projectId),
     loadActiveOrderItemIds(t, sb, projectId),
-    loadMembers(t, projectId),
+    loadMembers(t, sb, projectId),
     loadRegistered(t, sb, projectId, sources[0].minuteId),
     loadMinuteContext(t, sb, sources[0], values[0].storedBodyHash),
     aiAvailable({ projectId }, { module: 'minutes' }),
@@ -321,8 +334,9 @@ export async function prepareMinuteWbsDrafts(projectId: string, sources: MinuteI
       rowCount: inputs.length, candidateIds: new Set(promptCandidates.map((c) => c.id)), memberIds: new Set(members.value.map((member) => member.id)),
     })
   }
-  // 작업명이 빈 AI 줄은 쓰지 않는다 — 그 줄은 통째로 결정형(이름·위치 상위 3, 종료일·담당자 없음)
-  const aiByRow = new Map((aiRows ?? []).filter((r) => r.name !== '').map((r) => [r.row, r]))
+  // 칸 단위로 채운다 — AI 가 준 칸은 그대로 쓰고 빈 칸만 결정형으로: 줄이 없으면 통째로(이름·위치 상위 3, 종료일·담당자 없음), 이름이 비면
+  // 이름만, 위치는 이름도 위치도 비었을 때만 결정형 상위 3(이름을 낸 AI 줄의 빈 위치는 "확신 없음"이라 그대로 둔다 — 화면이 마지막 위치를 쓴다)
+  const aiByRow = new Map((aiRows ?? []).map((r) => [r.row, r]))
   const rows: MinuteWbsDraftRow[] = inputs.map((input) => {
     const ai = aiByRow.get(input.row)
     return {
@@ -330,14 +344,16 @@ export async function prepareMinuteWbsDrafts(projectId: string, sources: MinuteI
       blockIndex: input.v.block.index,
       blockHash: input.v.block.hash,
       excerpt: minuteIssueSourceExcerpt(input.text),
-      name: ai ? ai.name : input.fallbackName,
-      parentIds: ai ? ai.parentIds : scoreParentCandidates(input.scoreText, candidates, FALLBACK_PARENTS_MAX),
-      plannedEnd: ai ? ai.plannedEnd : null,
-      assigneeMemberId: ai ? ai.assigneeMemberId : null,
+      name: ai?.name || input.fallbackName,
+      parentIds: ai && (ai.name !== '' || ai.parentIds.length > 0) ? ai.parentIds : scoreParentCandidates(input.scoreText, candidates, FALLBACK_PARENTS_MAX),
+      plannedEnd: ai?.plannedEnd ?? null,
+      assigneeMemberId: ai?.assigneeMemberId ?? null,
       registered: registered.value.get(input.v.block.hash) ?? null,
     }
   })
-  return { ok: true, value: { rows, parents, members: members.value, mode: aiByRow.size > 0 ? 'ai' : 'fallback' } }
+  // AI 가 한 칸이라도 채운 줄이 있으면 ai — 빈 줄만 돌아왔으면 결정형 초안과 같으므로 fallback(화면이 확인 안내를 띄운다)
+  const contributed = [...aiByRow.values()].some((r) => r.name !== '' || r.parentIds.length > 0 || r.plannedEnd !== null || r.assigneeMemberId !== null)
+  return { ok: true, value: { rows, parents, members: members.value, mode: contributed ? 'ai' : 'fallback' } }
 }
 
 /** 줄 입력 — 작업명(앞뒤 공백을 뺀 1~200자), 날짜(없음 또는 실재하는 YYYY-MM-DD, 시작 ≤ 종료), 위치·담당자(없음 또는 uuid), 말단 확인(참거짓) */
