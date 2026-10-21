@@ -44,6 +44,8 @@ vi.mock('@/lib/notify/emit', () => ({ emitNotification: m.emitNotification }))
 vi.mock('@/lib/agent/ensureOrder', () => ({ ensureOrderForWorkflowLeaf: m.ensureOrderForWorkflowLeaf }))
 vi.mock('@/lib/ai/index/enqueueChange', () => ({ enqueueIndexChange: m.enqueueIndexChange }))
 vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: m.recordProgressSnapshot }))
+// 셋업의 전역 기본 mock(tests/setup/minute-wbs-sources.ts — 읽기 액션을 '연결 없음'으로 대역)을 걷는다. 이 파일은 진짜 세 액션을 본다
+vi.unmock('@/app/actions/minuteWbs')
 
 import { createWbsItemsFromMinute, getWbsItemMinuteSources, prepareMinuteWbsDrafts } from '@/app/actions/minuteWbs'
 import { requireModule } from '@/lib/modules/gate'
@@ -611,6 +613,10 @@ describe('getWbsItemMinuteSources', () => {
     id: 'link-1', minute_id: 'minute-1', minute_version_id: 'version-1', minute_version_no: 3, minute_title_snapshot: '개발 회의',
     minute_date_snapshot: '2026-10-21', body_hash: BODY_HASH, block_index: 1, block_hash: BLOCKS[1].hash, excerpt_snapshot: '로그인 API 개발', created_at: '2026-10-21T01:00:00Z',
   }
+
+  it('셋업의 전역 대역이 아니라 진짜 액션을 본다(vi.unmock — tests/setup/minute-wbs-sources.ts)', () => {
+    expect(vi.isMockFunction(getWbsItemMinuteSources)).toBe(false)
+  })
 
   it('명단 밖 조회 전용(로그인 + RLS 가 항목을 보여 줌)도 연결을 만든 순서대로 받는다 — 멤버·관리자 가드를 부르지 않는다', async () => {
     m.requireProjectMember.mockResolvedValue({ ok: false, error: ERR_DENIED })   // 명단 없음 — 멤버 가드를 불렀다면 거부됐을 것

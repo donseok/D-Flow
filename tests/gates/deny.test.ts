@@ -17,6 +17,8 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn(), 
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: vi.fn() }))
 vi.mock('@/lib/ai/llm', () => ({ generateAnswer: vi.fn(async () => null), generateAnswerStream: vi.fn(async () => null) }))
 vi.mock('@/lib/notify/emit', () => ({ emitNotification: vi.fn(async () => ({ ok: true })) }))
+// 셋업의 전역 기본 mock(tests/setup/minute-wbs-sources.ts — 회의록 원문 읽기 액션을 '연결 없음'으로 대역)을 걷는다 — 이 파일은 진짜 액션의 가드·관문을 본다
+vi.unmock('@/app/actions/minuteWbs')
 import { ERR_ANON, ERR_DENIED, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
 import type { ModuleId } from '@/lib/modules/defaults'
 import { MODULE_TABLE_OWNER } from './_tables'

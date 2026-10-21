@@ -10,7 +10,8 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, 'tests/rls/**'],
     // 모듈 관문의 전역 기본 mock(스펙 D10) — tests/setup/module-gate.ts 머리 주석
     // 요청 제한은 단위 테스트에서 끈다 — tests/setup/rate-limit.ts 머리 주석
-    setupFiles: ['tests/setup/module-gate.ts', 'tests/setup/rate-limit.ts'],
+    // WBS 상세 패널의 회의록 원문 읽기는 기본 '연결 없음' — tests/setup/minute-wbs-sources.ts 머리 주석
+    setupFiles: ['tests/setup/module-gate.ts', 'tests/setup/rate-limit.ts', 'tests/setup/minute-wbs-sources.ts'],
     // CSS 모듈 import(seatmap.module.css)가 프로젝트 postcss.config.mjs(문자열 플러그인 표기,
     // Next 전용 로더가 해석)를 vite 가 그대로 돌리려다 죽는다. jsdom 테스트는 실제 스타일 계산이
     // 필요 없으므로 CSS 처리를 끄고 클래스명 그대로 돌려주는 기본 프록시를 쓴다.
