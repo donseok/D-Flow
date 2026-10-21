@@ -84,13 +84,20 @@ function pathNames(path: string): string {
   return path.split(PATH_SEPARATOR).map(segment => segment.replace(OUTLINE_NUMBER_RE, '')).join(' ')
 }
 
-/** 글 낱말마다 앞부분 전부(UTF-16 두 단위부터 — 후보 낱말은 두 글자 이상이라 그보다 짧을 수 없다). 후보 낱말이 여기 있으면 "글 낱말이 그것과 같거나 그것으로 시작한다" */
-function prefixesOf(words: ReadonlySet<string>): Set<string> {
-  const prefixes = new Set<string>()
-  for (const word of words) {
-    for (let end = 2; end <= word.length; end++) prefixes.add(word.slice(0, end))
+/**
+ * 정렬된 글 낱말 가운데 word 와 같거나 word 로 시작하는 것이 있는가. 같은 앞부분을 가진 문자열은 정렬 순서에서 한데 붙어
+ * word 이상인 첫 자리부터 이어지므로, 그 첫 자리(이진 탐색) 하나만 보면 된다. 앞부분을 모두 만들어 두면 끊김 없는 긴 낱말
+ * 하나(회의록 본문은 10만 자까지)에 메모리가 길이의 제곱으로 늘어 서버가 죽는다 — 여기서는 글 크기만큼만 쓴다.
+ */
+function hasWordStartingWith(sortedWords: readonly string[], word: string): boolean {
+  let lo = 0
+  let hi = sortedWords.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (sortedWords[mid] < word) lo = mid + 1
+    else hi = mid
   }
-  return prefixes
+  return lo < sortedWords.length && sortedWords[lo].startsWith(word)
 }
 
 /**
@@ -99,11 +106,12 @@ function prefixesOf(words: ReadonlySet<string>): Set<string> {
  * 후보 낱말 하나는 경로·하위 이름 쪽마다 한 번만 센다. 경로는 개요 번호를 빼고 이름만 본다.
  */
 export function scoreParentCandidates(text: string, options: readonly MinuteWbsParentOption[], limit?: number): string[] {
-  const textPrefixes = prefixesOf(wordsOf(text))
-  if (textPrefixes.size === 0) return []
+  // 기본 정렬은 UTF-16 단위 순 — hasWordStartingWith 의 비교(<)·startsWith 와 같은 순서다
+  const textWords = [...wordsOf(text)].sort()
+  if (textWords.length === 0) return []
   const overlap = (candidateWords: ReadonlySet<string>): number => {
     let count = 0
-    for (const word of candidateWords) if (textPrefixes.has(word)) count += 1
+    for (const word of candidateWords) if (hasWordStartingWith(textWords, word)) count += 1
     return count
   }
   const scored: { id: string; score: number }[] = []

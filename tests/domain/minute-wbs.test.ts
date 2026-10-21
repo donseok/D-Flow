@@ -135,6 +135,20 @@ describe('scoreParentCandidates', () => {
       // 글자는 UTF-16 단위가 아니라 코드 포인트로 센다 — 서로게이트 쌍 한 글자('𠀀')도 한 글자다
       expect(scoreParentCandidates('𠀀를 고친다', [option('astral', '1 𠀀')])).toEqual([])
     })
+
+    it('끊김 없는 10만 자 낱말이 든 글도 그 낱말이 없을 때와 결과가 같다 — 앞부분을 모두 만들어 두지 않는다(메모리가 낱말 길이의 제곱으로 늘지 않는다)', () => {
+      const options = Array.from({ length: 50 }, (_, i) =>
+        option(`o${i}`, `${i + 1} 개발 › ${i + 1}.1 ${i % 5 === 0 ? '로그인' : `기능${i}`}`, [`하위 작업 ${i}`, i % 7 === 0 ? '배포 일정' : '문서 정리']))
+      const sentence = '로그인 오류를 다음 주 배포 일정까지 고친다'
+      const long = 'a'.repeat(100_000)
+      const expected = scoreParentCandidates(sentence, options, 50)
+
+      expect(expected.slice(0, 3)).toEqual(['o0', 'o35', 'o5'])
+      expect(scoreParentCandidates(`${sentence}\n${long}`, options, 50)).toEqual(expected)
+      expect(scoreParentCandidates(`${long} ${sentence}`, options, 50)).toEqual(expected)
+      // 긴 낱말도 겹침 판정에 그대로 든다 — 그 낱말은 후보 낱말 'aaa' 로 시작한다
+      expect(scoreParentCandidates(long, [...options, option('a-word', '99 aaa 처리')])).toEqual(['a-word'])
+    })
   })
 })
 
