@@ -431,6 +431,20 @@ describe('③ 표 — 트리거·정책·권한·롤백', () => {
     expect(await seen(F.users.dual)).toBe(1)
   })
 
+  it('읽기 정책 — 명단 밖 워크스페이스 멤버(cy)도 A 연결을 읽는다(조회 전용 화면의 근거), 다른 워크스페이스 멤버(ben)는 0', async () => {
+    // 회의록 화면의 문단 표시·WBS 상세의 「회의록 원문」은 세션 읽기다 — 정책이 명단(project_members)이 아니라 범위(accessible_project_ids)를 본다
+    const inA = (user: string) => asUser(pool, user, (c) =>
+      num(c, 'select count(*) as n from public.wbs_item_links where project_id = $1', [A]))
+    // 전제: A 의 연결은 픽스처 한 행이고, cy 는 A 명단에 없다(인물 → 명단 행 0)
+    await asService(pool, async (c) => {
+      expect(await num(c, 'select count(*) as n from public.wbs_item_links where project_id = $1', [A])).toBe(1)
+      expect(await num(c, `select count(*) as n from public.project_members m join public.people p on p.id = m.person_id
+                           where m.project_id = $1 and p.user_id = $2`, [A, F.users.aLoose])).toBe(0)
+    })
+    expect(await inA(F.users.aLoose)).toBe(1)
+    expect(await inA(F.users.bMember)).toBe(0)
+  })
+
   it('실행권·DEFINER·search_path·authenticated 쓰기 불가', async () => {
     const { rows: [shape] } = await pool.query(
       `select has_function_privilege('anon', p.oid, 'EXECUTE') as anon, has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth,
