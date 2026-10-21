@@ -17,7 +17,7 @@ import { escStack } from '@/lib/ui/escStack'
 // 키를 돌려주되 {n} 이 든 문구는 자리를 남긴다 — 호출부가 숫자를 채우는지 본다
 vi.mock('@/components/providers/LocaleProvider', () => ({
   useLocale: () => ({
-    t: (key: string) => (/^min\.wbs\.(selectedCount|submitN|rowFailed|leafActual|leafDeps)$/.test(key) ? `${key} {n}` : key),
+    t: (key: string) => (/^min\.wbs\.(selectedCount|submitN|rowFailed|rowIncomplete|leafActual|leafDeps)$/.test(key) ? `${key} {n}` : key),
   }),
 }))
 vi.mock('next/link', () => ({
@@ -138,12 +138,12 @@ async function pickFromSearch(scope: HTMLElement, id: string) {
   await click(scope.querySelector<HTMLInputElement>(`[data-wbs-parent-results] input[type="radio"][value="${id}"]`)!)
 }
 const rootRadio = (scope: ParentNode) => scope.querySelector<HTMLInputElement>(`input[type="radio"][value="${WBS_ROOT_PARENT}"]`)!
-/** 회색 — 그 범위에 opacity-NN 클래스가 있는가(찾기 단추의 disabled:opacity-50 같은 상태 변형은 세지 않는다) */
+/** 불투명도로 흐렸는가 — 그 범위에 opacity-NN 클래스가 있는가(찾기 단추의 disabled:opacity-50 같은 상태 변형은 세지 않는다) */
 const greyed = (scope: Element) =>
   [scope, ...scope.querySelectorAll('*')].some(element => [...element.classList].some(name => /^opacity-\d+$/.test(name)))
 
 describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
-  it('처음 체크는 추천 위치가 있고 아직 등록되지 않은 줄뿐 — 등록된 줄은 회색·체크 불가·작업 계획 링크(칸 없음), 머리에 선택 수', async () => {
+  it('처음 체크는 추천 위치가 있고 아직 등록되지 않은 줄뿐 — 등록된 줄은 흐리게·체크 불가·작업 계획 링크(칸 없음), 머리에 선택 수', async () => {
     await mount()
     expect(dialog()).not.toBeNull()
     expect(rowCheck(0).checked).toBe(true)
@@ -153,11 +153,12 @@ describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
     expect(rowCheck(3).checked).toBe(false)
     expect(rowCheck(3).disabled).toBe(true)
 
-    // 등록된 줄 — 회색(opacity), 등록됨 표시, 작업 계획의 그 작업으로 가는 링크, 고칠 칸은 없다
+    // 등록된 줄 — 흐린 글자색(불투명도는 대비를 깎아 쓰지 않는다), 등록됨 표시, 작업 계획의 그 작업으로 가는 링크, 고칠 칸은 없다
     expect(row(3).hasAttribute('data-registered')).toBe(true)
-    expect(greyed(row(3))).toBe(true)
+    expect(greyed(row(3))).toBe(false)
+    const mutedName = [...row(3).querySelectorAll('.text-fg-muted')].find(element => element.textContent?.includes('백업 정책 정리'))
+    expect(mutedName?.textContent).toContain('2.1.3')
     expect(row(3).textContent).toContain('min.wbs.registered')
-    expect(row(3).textContent).toContain('2.1.3')
     const planLink = row(3).querySelector('a')!
     expect(planLink.getAttribute('href')).toBe('/p/project-1/wbs?focus=item-9')
     expect(planLink.textContent).toContain('min.wbs.viewInPlan')
@@ -168,6 +169,17 @@ describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
     expect(row(0).hasAttribute('data-registered')).toBe(false)
     expect(greyed(row(0))).toBe(false)
 
+    // 줄 번호는 보이고 읽힌다(알림이 「N번째 줄」로 부른다) — 체크 상자의 이름은 번호와 작업명
+    const rowNumber = [...row(2).querySelectorAll('span')].find(span => span.textContent === '3')!
+    expect(rowNumber).not.toBeUndefined()
+    expect(rowNumber.closest('[aria-hidden]')).toBeNull()
+    expect(rowCheck(0).getAttribute('aria-label')).toBe('1. 로그인 API 개발')
+    expect(rowCheck(3).getAttribute('aria-label')).toBe('4. 백업 정책 정리')
+
+    // 선택 수는 알림 영역(role=status)이라 체크가 바뀔 때 읽힌다
+    const count = dialog().querySelector('[role="status"]')!
+    expect(count.getAttribute('aria-live')).toBe('polite')
+    expect(count.textContent).toBe('min.wbs.selectedCount 2')
     expect(dialog().textContent).toContain('min.wbs.selectedCount 2')
     expect(submitButton().textContent).toContain('min.wbs.submitN 2')
     expect(submitButton().disabled).toBe(false)
@@ -184,14 +196,18 @@ describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
     expect(dialog().textContent).not.toContain('min.wbs.fallbackMode')
   })
 
-  it('원문은 접혀 있다가 줄의 「원문」을 누르면 그 줄만 펼쳐진다', async () => {
+  it('원문은 접혀 있다가 줄의 「원문」을 누르면 그 줄만, 머리 바로 아래(칸들 위)에 펼쳐진다 — 단추 이름에 줄 번호가 든다', async () => {
     await mount()
     const toggle = buttonByText(row(0), 'min.wbs.excerpt')!
+    expect(toggle.getAttribute('aria-label')).toBe('min.wbs.excerpt 1')
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     expect(row(0).textContent).not.toContain('김민수가 10/31 까지 로그인 API 를 개발한다.')
     await click(toggle)
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    expect(row(0).textContent).toContain('김민수가 10/31 까지 로그인 API 를 개발한다.')
+    const excerpt = document.getElementById(toggle.getAttribute('aria-controls')!)!
+    expect(excerpt.textContent).toBe('김민수가 10/31 까지 로그인 API 를 개발한다.')
+    const fields = row(0).querySelector('[role="group"]')!
+    expect(excerpt.compareDocumentPosition(fields) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(row(1).textContent).not.toContain('문단 1 원문')
     // 등록된 줄도 원문을 볼 수 있다(어느 문단인지)
     await click(buttonByText(row(3), 'min.wbs.excerpt')!)
@@ -225,7 +241,15 @@ describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
     expect(pickedParent(row(0))).toBe('leaf-1')
     expect(pickedParent(row(1))).toBe('parent-2')
 
-    // 다른 말단(leaf-2)을 고르면 체크된 줄 0·1 이 그 위치 — 확인은 풀리고, 체크 안 된 줄 2·등록된 줄 3 은 그대로
+    // 첫 줄과 같은 말단(leaf-1)을 고르면 — 위치가 그대로인 첫 줄은 확인이 남고, 위치가 바뀐 둘째 줄만 확인을 새로 받는다
+    await pickFromSearch(panel, 'leaf-1')
+    expect(pickedParent(row(0))).toBe('leaf-1')
+    expect(pickedParent(row(1))).toBe('leaf-1')
+    expect(confirmBox(row(0))!.checked).toBe(true)
+    expect(confirmBox(row(1))!.checked).toBe(false)
+    expect(submitButton().disabled).toBe(true)
+
+    // 다른 말단(leaf-2)을 고르면 체크된 줄 0·1 이 그 위치 — 둘 다 확인이 풀리고, 체크 안 된 줄 2·등록된 줄 3 은 그대로
     await pickFromSearch(panel, 'leaf-2')
     expect(pickedParent(row(0))).toBe('leaf-2')
     expect(pickedParent(row(1))).toBe('leaf-2')
@@ -250,6 +274,43 @@ describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
     ])
   })
 
+  it('「위치 한꺼번에 바꾸기」의 선택은 체크된 줄의 위치를 따른다 — 서로 다르면 비고, 새로 체크한 줄에는 같은 위치를 다시 골라 넣는다', async () => {
+    await mount()
+    await click(buttonByText(dialog(), 'min.wbs.changeParentAll')!)
+    // 체크된 줄 0·1 의 위치가 다르다(parent-1·parent-2) — 아무것도 골라져 있지 않다
+    expect(pickedParent(bulkPanel()!)).toBeNull()
+
+    await pickFromSearch(bulkPanel()!, 'parent-2')
+    expect(pickedParent(row(0))).toBe('parent-2')
+    expect(pickedParent(row(1))).toBe('parent-2')
+    expect(pickedParent(bulkPanel()!)).toBe('parent-2')
+
+    // 위치 없는 줄 2 를 체크하면 다시 갈라진다 — 선택이 빈다
+    await click(rowCheck(2))
+    expect(pickedParent(bulkPanel()!)).toBeNull()
+    // 같은 위치를 다시 고르면 새로 체크한 줄에도 들어간다
+    await pickFromSearch(bulkPanel()!, 'parent-2')
+    expect(pickedParent(row(2))).toBe('parent-2')
+    expect(pickedParent(bulkPanel()!)).toBe('parent-2')
+
+    // 한 줄을 제 칸에서 바꿔도 갈라진다 — 선택이 빈다(펼친 창을 다시 열어도 옛 값이 남지 않는다)
+    await click(rootRadio(row(1)))
+    expect(pickedParent(bulkPanel()!)).toBeNull()
+    const toggle = buttonByText(dialog(), 'min.wbs.changeParentAll')!
+    await click(toggle)
+    await click(toggle)
+    expect(pickedParent(bulkPanel()!)).toBeNull()
+  })
+
+  it('이 화면에서 마지막으로 고른 위치가 있으면 추천 없는 줄은 그 위치로 채워지되 체크되지는 않는다(처음 체크는 추천이 있는 줄만)', async () => {
+    await mount({ lastParentId: 'parent-2' })
+    expect(pickedParent(row(2))).toBe('parent-2')
+    expect(row(2).textContent).not.toContain('min.wbs.parentPlaceholder')
+    expect(rowCheck(2).checked).toBe(false)
+    expect(pickedParent(row(0))).toBe('parent-1')
+    expect(dialog().textContent).toContain('min.wbs.selectedCount 2')
+  })
+
   it('체크가 하나도 없으면 등록 단추와 한꺼번에 바꾸기가 막히고 min.wbs.nothingSelected — 체크된 줄 하나라도 위치·이름이 없으면 막힌다', async () => {
     const { onSubmit } = await mount()
     await click(rowCheck(0))
@@ -270,14 +331,21 @@ describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
     expect(submitButton().disabled).toBe(true)
     await click(submitButton())
     expect(onSubmit).not.toHaveBeenCalled()
+    // 알림 칸이 막고 있는 줄을 짚는다 — 누르면 그 줄의 작업명 칸으로 간다
+    const hint = buttonByText(dialog(), 'min.wbs.rowIncomplete')!
+    expect(hint.textContent).toBe('min.wbs.rowIncomplete 3')
+    await click(hint)
+    expect(document.activeElement).toBe(field<HTMLInputElement>(row(2), 'min.wbs.name'))
     // 맨 위를 고르면 열린다
     await click(rootRadio(row(2)))
     expect(submitButton().disabled).toBe(false)
+    expect(buttonByText(dialog(), 'min.wbs.rowIncomplete')).toBeNull()
 
-    // 체크된 줄의 이름이 비면(공백만도) 막히고, 그 줄을 빼면 다시 열린다(체크 안 된 줄은 보지 않는다)
+    // 체크된 줄의 이름이 비면(공백만도) 막히고(그 줄을 짚는다), 그 줄을 빼면 다시 열린다(체크 안 된 줄은 보지 않는다)
     await click(rowCheck(0))
     await typeInto(field<HTMLInputElement>(row(0), 'min.wbs.name'), '   ')
     expect(submitButton().disabled).toBe(true)
+    expect(buttonByText(dialog(), 'min.wbs.rowIncomplete')!.textContent).toBe('min.wbs.rowIncomplete 1')
     await click(rowCheck(0))
     expect(submitButton().disabled).toBe(false)
   })
@@ -371,6 +439,17 @@ describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
     expect(row(2).hasAttribute('data-row-failed')).toBe(true)
     expect(row(1).hasAttribute('data-row-failed')).toBe(false)
     expect(row(2).textContent).toContain('넣을 위치의 하위 작업이 그새 사라졌습니다.')
+    // 그 줄의 체크 상자(줄의 첫 초점)가 invalid 이고 사유를 설명으로 읽힌다 — 칸 묶음으로 바로 와도 사유가 읽힌다. 다른 줄은 아니다
+    const reasonOf = (element: Element) => document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ?? ''
+    expect(rowCheck(2).getAttribute('aria-invalid')).toBe('true')
+    expect(rowCheck(2).getAttribute('aria-label')).toBe('3. 서버 증설 검토(1차)')
+    expect(reasonOf(rowCheck(2))).toContain('넣을 위치의 하위 작업이 그새 사라졌습니다.')
+    const failedGroup = row(2).querySelector('[role="group"]')!
+    expect(failedGroup.getAttribute('aria-label')).toBe('3. 서버 증설 검토(1차)')
+    expect(reasonOf(failedGroup)).toContain('넣을 위치의 하위 작업이 그새 사라졌습니다.')
+    expect(rowCheck(1).hasAttribute('aria-invalid')).toBe(false)
+    expect(rowCheck(1).hasAttribute('aria-describedby')).toBe(false)
+    expect(row(1).querySelector('[role="group"]')!.hasAttribute('aria-describedby')).toBe(false)
     const alert = dialog().querySelector('[role="alert"]')!
     expect(alert.textContent).toContain('min.wbs.rowFailed 3')
     expect(alert.textContent).toContain('넣을 위치의 하위 작업이 그새 사라졌습니다.')

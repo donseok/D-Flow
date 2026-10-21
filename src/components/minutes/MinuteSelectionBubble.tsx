@@ -58,7 +58,8 @@ function rangeTextWithin(range: Range, el: HTMLElement): string {
  * 스크롤·리사이즈는 rAF 로 위치만 추적한다. 선택 해제 시 즉시 소멸.
  */
 export function MinuteSelectionBubble({
-  bodyRef, blocks, disabled, busy, wbsBusy = false, canCreateWbs = true, onCreateIssue, onCreateWbs, onDismiss, onTargetChange,
+  bodyRef, blocks, disabled, busy, wbsBusy = false, canCreateIssue = true, canCreateWbs = true, onCreateIssue, onCreateWbs, onDismiss,
+  onTargetChange,
 }: {
   bodyRef: RefObject<HTMLDivElement | null>
   blocks: MinuteBlock[]
@@ -66,6 +67,8 @@ export function MinuteSelectionBubble({
   busy: boolean
   /** WBS 초안 준비 중 — 두 단추를 막고 WBS 단추가 「작업 초안 준비 중…」(busy 는 이슈 쪽) */
   wbsBusy?: boolean
+  /** false = 이슈 단추를 보이되 막는다(문구는 그대로 — 다른 흐름이 준비 중일 때) */
+  canCreateIssue?: boolean
   /** false = WBS 단추를 보이되 막는다 */
   canCreateWbs?: boolean
   onCreateIssue: (target: MinuteSelectionTarget) => void
@@ -222,7 +225,7 @@ export function MinuteSelectionBubble({
     >
       <button
         onClick={() => onCreateIssue(state.target)}
-        disabled={busy || wbsBusy}
+        disabled={busy || wbsBusy || !canCreateIssue}
         className={`btn btn-primary h-9 min-w-0 flex-1 shadow-[var(--shadow-lg)]${pad}`}
       >
         {busy

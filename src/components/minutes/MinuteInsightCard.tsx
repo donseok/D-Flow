@@ -27,7 +27,7 @@ const KIND_CHIP: Record<InsightKind, { chip: string; dot: string }> = {
 
 export function MinuteInsightCard({
   minuteId, insights, highlights, blocks, bodyHash, onJump, linkedIssues = [], details,
-  linkedWbsItems = [], canBulkWbs = false, wbsBusy = false, onBulkWbs,
+  linkedWbsItems = [], canBulkWbs = false, wbsBusy = false, bulkDisabled = false, onBulkWbs,
 }: {
   minuteId: string
   insights: MinuteInsight[]
@@ -43,6 +43,8 @@ export function MinuteInsightCard({
   canBulkWbs?: boolean
   /** 한꺼번에 초안을 준비하는 중 — 단추가 「작업 초안 준비 중…」으로 막힌다 */
   wbsBusy?: boolean
+  /** 다른 등록(이슈 초안·문단 한 건)을 준비하는 중 — 단추를 막기만 한다(문구는 그대로) */
+  bulkDisabled?: boolean
   onBulkWbs?: () => void
 }) {
   const { t } = useLocale()
@@ -108,7 +110,7 @@ export function MinuteInsightCard({
         <span className="ml-auto flex items-center gap-2">
           {/* 「액션」 문단 전부를 WBS 작업으로(§3.2) — 보일지는 뷰어가 정한다(canBulkWbs) */}
           {canBulkWbs && onBulkWbs && (
-            <button type="button" onClick={onBulkWbs} disabled={wbsBusy} className="btn btn-ghost h-8 px-2.5 text-xs">
+            <button type="button" onClick={onBulkWbs} disabled={wbsBusy || bulkDisabled} className="btn btn-ghost h-8 px-2.5 text-xs">
               {wbsBusy
                 ? <LoaderCircle aria-hidden className="h-3.5 w-3.5 animate-spin" />
                 : <ListPlus aria-hidden className="h-3.5 w-3.5" />}

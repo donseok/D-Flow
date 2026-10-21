@@ -190,7 +190,10 @@ export function MinuteViewer({
   // 회의록 문단 → WBS 작업(설계 2026-10-21-minutes-to-wbs §3.1) — 이슈 흐름과 같은 뼈대: 요청 번호로 낡은 준비 응답을 버리고,
   // 고정 프로젝트면 바로 준비, 아니면 같은 선택 창을 pickerFor='wbs'(관리자인 같은 워크스페이스 프로젝트만)로 먼저 띄운다.
   const [wbsOrigin, setWbsOrigin] = useState<IssueOrigin | null>(null)
-  const [wbsBusy, setWbsBusy] = useState(false)
+  // 준비 중인 WBS 흐름 — 'single'(문단·선택 한 건) / 'bulk'(요약 카드의 한꺼번에). 「작업 초안 준비 중…」은 그 흐름의 단추에만 쓰고,
+  // 다른 등록 단추(이슈 포함)는 막기만 한다 — 두 준비가 겹쳐 창 둘이 열리지 않게
+  const [wbsBusyKind, setWbsBusyKind] = useState<'single' | 'bulk' | null>(null)
+  const wbsBusy = wbsBusyKind !== null
   const [wbsModal, setWbsModal] = useState<WbsModalState | null>(null)
   // 추천이 없는 줄의 처음 위치 — 이 화면에서 마지막으로 고른 위치(설계 §4.2, 저장하지 않는다). 맨 위면 WBS_ROOT_PARENT.
   // 다른 프로젝트의 id 일 수 있다 — 등록 창은 위치 후보에 없는 id 를 위치로 치지 않는다
@@ -488,6 +491,8 @@ export function MinuteViewer({
 
   async function beginIssueCreateFrom(origin: IssueOrigin) {
     const requestId = ++issueProjectRequestRef.current
+    // 앞 요청을 대신한다 — 그 요청의 finally 는 낡아서 플래그를 건드리지 않으므로 여기서 내린다(남으면 한꺼번에 등록이 막힌 채로 남는다)
+    issuePrepareInFlightRef.current = false
     setIssueBusy(false)
     if (!currentVersion) {
       toast({ title: t('min.issue.versionMissing'), variant: 'error' })
@@ -661,7 +666,9 @@ export function MinuteViewer({
       setProjectPickerOpen(false)
       return
     }
+    // 이슈 준비를 버린다 — 낡은 요청의 finally 는 플래그를 내리지 않으므로 취소하는 쪽이 내린다(onSelectionDismiss 와 같다)
     issueProjectRequestRef.current += 1
+    issuePrepareInFlightRef.current = false
     setIssueBusy(false)
     setProjectPickerOpen(false)
     setPreparedIssueDraft(null)
@@ -678,7 +685,7 @@ export function MinuteViewer({
   function cancelWbsPrepare() {
     wbsRequestRef.current += 1
     wbsPrepareInFlightRef.current = false
-    setWbsBusy(false)
+    setWbsBusyKind(null)
     setWbsOrigin(null)
   }
 
@@ -689,7 +696,9 @@ export function MinuteViewer({
    */
   async function beginWbsCreateFrom(origin: IssueOrigin) {
     const requestId = ++wbsRequestRef.current
-    setWbsBusy(false)
+    // 앞 요청을 대신한다 — 그 요청의 finally 는 낡아서 플래그를 건드리지 않으므로 여기서 내린다
+    wbsPrepareInFlightRef.current = false
+    setWbsBusyKind(null)
     const source = wbsSourceFor(origin)
     if (!source) {
       toast({ title: t('min.wbs.prepareFailed'), variant: 'error' })
@@ -703,7 +712,7 @@ export function MinuteViewer({
       openWbsProjectPicker(null)
       return
     }
-    setWbsBusy(true)
+    setWbsBusyKind('single')
     wbsPrepareInFlightRef.current = true
     let drafts: MinuteWbsDrafts | null = null
     try {
@@ -719,7 +728,7 @@ export function MinuteViewer({
       // requestId 가 낡았다면 취소 주체가 이미 정리했다 — 새 요청의 플래그를 건드리지 않는다
       if (wbsRequestRef.current === requestId) {
         wbsPrepareInFlightRef.current = false
-        setWbsBusy(false)
+        setWbsBusyKind(null)
       }
     }
     if (wbsRequestRef.current !== requestId) return
@@ -772,7 +781,7 @@ export function MinuteViewer({
       setWbsProjectError(t('min.wbs.prepareFailed'))
       return
     }
-    setWbsBusy(true)
+    setWbsBusyKind(bulkSources ? 'bulk' : 'single')
     try {
       const result = await prepareMinuteWbsDrafts(requestedProjectId, sources)
       if (wbsRequestRef.current !== requestId) return
@@ -788,19 +797,20 @@ export function MinuteViewer({
       console.error('[MinuteViewer] WBS 초안 준비 요청 실패:', cause)
       setWbsProjectError(t('min.wbs.prepareFailed'))
     } finally {
-      if (wbsRequestRef.current === requestId) setWbsBusy(false)
+      if (wbsRequestRef.current === requestId) setWbsBusyKind(null)
     }
   }
 
   /**
-   * AI 요약의 「액션」 문단 전부 → 한꺼번에 등록 창(설계 §3.2). beginWbsCreateFrom 의 뼈대 그대로 — 요청 번호로 낡은 응답을 버리고(문단에서
-   * 시작한 한 건 준비와 번호를 함께 써서 나중 것만 창을 연다), 고정 프로젝트면 준비(prepareMinuteWbsDrafts — 액션 문단마다 한 줄, kind 'action')
-   * 뒤 창을, 아니면 선택 창을 먼저 연다(continueWbsWithProject 가 이 앵커들로 준비한다). 준비 실패는 토스트 — 창은 열지 않는다.
+   * AI 요약의 「액션」 문단 전부 → 한꺼번에 등록 창(설계 §3.2). beginWbsCreateFrom 의 뼈대 그대로 — 요청 번호(한 건 준비와 같이 쓴다)로 낡은
+   * 응답을 버리고, 고정 프로젝트면 준비(prepareMinuteWbsDrafts — 액션 문단마다 한 줄, kind 'action') 뒤 창을, 아니면 선택 창을 먼저 연다
+   * (continueWbsWithProject 가 이 앵커들로 준비한다). 준비 실패는 토스트 — 창은 열지 않는다.
    * 할 일이 없으면(이슈 초안 준비 중·버전 없음·액션 없음) 진행 중인 WBS 준비를 건드리지 않고 끝낸다.
    */
   async function beginWbsBulk() {
-    // 이슈 초안을 준비하는 중에는 시작하지 않는다 — 이슈 폼과 등록 창이 겹쳐 열리지 않게
-    if (issuePrepareInFlightRef.current) return
+    // 이슈 초안을 준비하는 중에는 시작하지 않는다(이슈 폼과 등록 창이 겹쳐 열리지 않게). 카드 단추가 그동안 막혀 보이는 조건(bulkDisabled)과
+    // 같은 상태로 판정한다 — 단추가 열려 보이는데 눌러도 아무 일이 없는 일이 없게
+    if (issueBusy) return
     if (!currentVersion) {
       toast({ title: t('min.wbs.prepareFailed'), variant: 'error' })
       return
@@ -812,14 +822,14 @@ export function MinuteViewer({
     }
     const requestId = ++wbsRequestRef.current
     wbsPrepareInFlightRef.current = false
-    setWbsBusy(false)
+    setWbsBusyKind(null)
     setWbsOrigin(null)
     setPopover(null)
     if (!fixedProjectId) {
       openWbsProjectPicker(sources)
       return
     }
-    setWbsBusy(true)
+    setWbsBusyKind('bulk')
     wbsPrepareInFlightRef.current = true
     let drafts: MinuteWbsDrafts | null = null
     try {
@@ -835,7 +845,7 @@ export function MinuteViewer({
       // requestId 가 낡았다면 취소 주체가 이미 정리했다 — 새 요청의 플래그를 건드리지 않는다
       if (wbsRequestRef.current === requestId) {
         wbsPrepareInFlightRef.current = false
-        setWbsBusy(false)
+        setWbsBusyKind(null)
       }
     }
     if (wbsRequestRef.current !== requestId || !drafts) return
@@ -1126,7 +1136,9 @@ export function MinuteViewer({
         <MinuteInsightCard
           minuteId={minute.id} insights={annotations.insights} highlights={annotations.highlights}
           blocks={blocks} bodyHash={bodyHash} onJump={jumpTo} linkedIssues={activeLinkedIssues}
-          linkedWbsItems={activeLinkedWbs} canBulkWbs={canBulkWbs} wbsBusy={wbsBusy}
+          linkedWbsItems={activeLinkedWbs} canBulkWbs={canBulkWbs} wbsBusy={wbsBusyKind === 'bulk'}
+          // 다른 준비(이슈 초안·문단 한 건) 중에는 막기만 한다 — 보이는 그대로 누를 수 없다(beginWbsBulk 의 판정과 같은 상태)
+          bulkDisabled={issueBusy || wbsBusyKind === 'single'}
           onBulkWbs={wbsEnabled ? () => { void beginWbsBulk() } : undefined}
           details={
             <>
@@ -1181,15 +1193,18 @@ export function MinuteViewer({
           state={popover} mine={myIndexes.has(popover.blockIndex)}
           names={popNames} insKinds={popKinds} busy={hlBusy || issueBusy || wbsBusy}
           linkedIssues={popLinkedIssues} issueBusy={issueBusy}
-          canCreateIssue={!blocks[popover.blockIndex]?.headingDepth}
-          linkedWbsItems={popLinkedWbs} wbsBusy={wbsBusy}
-          canCreateWbs={!blocks[popover.blockIndex]?.headingDepth}
+          // 한꺼번에 준비 중에는 문단의 두 등록을 막기만 한다 — 「작업 초안 준비 중…」은 그 흐름의 단추(요약 카드)에만
+          canCreateIssue={!blocks[popover.blockIndex]?.headingDepth && wbsBusyKind !== 'bulk'}
+          linkedWbsItems={popLinkedWbs} wbsBusy={wbsBusyKind === 'single'}
+          canCreateWbs={!blocks[popover.blockIndex]?.headingDepth && wbsBusyKind !== 'bulk'}
           onCreateWbs={wbsEnabled ? beginWbsCreate : undefined}
           onToggle={() => void onToggleHighlight()}
           onCreateIssue={() => void beginIssueCreate()}
           onClose={() => {
             if (issueBusy) {
+              // 이슈 준비를 버린다 — 낡은 요청의 finally 는 플래그를 내리지 않으므로 여기서 내린다
               issueProjectRequestRef.current += 1
+              issuePrepareInFlightRef.current = false
               setIssueBusy(false)
               setPreparedIssueDraft(null)
               setIssueOrigin(null)
@@ -1208,7 +1223,10 @@ export function MinuteViewer({
           blocks={blocks}
           disabled={issueFormOpen || projectPickerOpen || wbsModal !== null}
           busy={issueBusy}
-          wbsBusy={wbsBusy}
+          wbsBusy={wbsBusyKind === 'single'}
+          // 한꺼번에 준비 중에는 두 단추를 막기만 한다(준비 중 문구는 요약 카드 단추에만)
+          canCreateIssue={wbsBusyKind !== 'bulk'}
+          canCreateWbs={wbsBusyKind !== 'bulk'}
           onCreateIssue={onSelectionIssue}
           onCreateWbs={wbsEnabled ? onSelectionWbs : undefined}
           onTargetChange={target => setSelectionPreview(

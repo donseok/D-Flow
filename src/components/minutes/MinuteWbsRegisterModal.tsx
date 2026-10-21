@@ -65,12 +65,19 @@ function createRow(state: MinuteWbsRowState, source: MinuteIssueSourceInput): Mi
 }
 
 /**
- * 등록한 줄들의 공통 위치 값 — 맨 위는 WBS_ROOT_PARENT(맨 위도 고른 위치다), 서로 다르면 null. 뷰어가 「마지막으로 고른 위치」로 기억해
- * 추천이 없는 다음 줄의 처음 위치로 쓴다(설계 §4.2)
+ * 줄들의 공통 위치 값 — 맨 위는 WBS_ROOT_PARENT(맨 위도 고른 위치다), 서로 다르거나 줄이 없으면 null. 등록 뒤에는 뷰어가 「마지막으로 고른
+ * 위치」로 기억해 추천이 없는 다음 줄의 처음 위치로 쓰고(설계 §4.2), 한꺼번에 창에서는 「위치 한꺼번에 바꾸기」가 체크된 줄의 이 값을 보인다
  */
 function sharedParentValue(states: readonly MinuteWbsRowState[]): string | null {
   const first = states[0]?.parentValue ?? null
   return states.every(state => state.parentValue === first) ? first : null
+}
+
+/** 한꺼번에 창의 그 줄을 화면 안으로 — 줄이 많아 스크롤 밖일 수 있다. 그 줄의 요소를 돌려준다 */
+function revealRow(list: HTMLElement | null, index: number): HTMLElement | null {
+  const target = list?.querySelector<HTMLElement>(`[data-wbs-row="${index}"]`) ?? null
+  if (target && typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'nearest' })
+  return target
 }
 
 export function MinuteWbsRegisterModal({ open, mode, projectId, drafts, sources, lastParentId, onClose, onSubmit, onCreated }: {
@@ -93,8 +100,6 @@ export function MinuteWbsRegisterModal({ open, mode, projectId, drafts, sources,
   // 한꺼번에 — 처음 체크는 아직 등록되지 않았고 추천 위치가 있는 줄(설계 §3.2). 등록된 줄은 체크할 수 없다
   const [checked, setChecked] = useState<boolean[]>(() => drafts.rows.map(draft => !draft.registered && draft.parentIds.length > 0))
   const [bulkParentOpen, setBulkParentOpen] = useState(false)
-  // 「위치 한꺼번에 바꾸기」에서 마지막으로 고른 값 — 선택기가 무엇을 골랐는지 보이기만 한다(줄은 고르는 순간 바뀐다)
-  const [bulkParentValue, setBulkParentValue] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   // 상태(pending)는 커밋 뒤에야 단추를 막는다 — 같은 틱의 두 번째 누름은 동기 ref 로 막는다(이중 등록 방지)
@@ -104,11 +109,15 @@ export function MinuteWbsRegisterModal({ open, mode, projectId, drafts, sources,
   // 체크도 입력이다 — 바꾼 체크를 버리고 닫을지도 묻는다
   const dirty = useModalDirty(open, { rows, checked })
 
-  // 거부된 줄을 화면 안으로 — 한꺼번에 창은 줄이 많아 그 줄이 스크롤 밖일 수 있다
+  /** 막고 있는 줄로 — 보이게 하고 그 줄의 첫 칸(작업명)에 초점을 둔다(위치·확인 칸은 그 아래로 이어진다) */
+  function focusRow(index: number) {
+    revealRow(listRef.current, index)
+      ?.querySelector<HTMLElement>('[role="group"] input:not([type="checkbox"]), [role="group"] select')?.focus()
+  }
+
+  // 거부된 줄을 화면 안으로
   useEffect(() => {
-    if (failure?.row == null) return
-    const target = listRef.current?.querySelector<HTMLElement>(`[data-wbs-row="${failure.row}"]`)
-    if (target && typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'nearest' })
+    if (failure?.row != null) revealRow(listRef.current, failure.row)
   }, [failure])
 
   function updateRow(index: number, next: MinuteWbsRowState) {
@@ -129,7 +138,6 @@ export function MinuteWbsRegisterModal({ open, mode, projectId, drafts, sources,
 
   /** 「위치 한꺼번에 바꾸기」 — 체크된 줄 전부에 같은 위치. 위치가 바뀐 줄은 말단 확인을 다시 받는다(같은 값이면 그대로 — 줄 칸과 같은 규칙) */
   function applyBulkParent(value: string) {
-    setBulkParentValue(value)
     setRows(prev => prev.map((row, i) => (checked[i] && !drafts.rows[i]?.registered
       ? { ...row, parentValue: value, confirmParentLeaf: value === row.parentValue && row.confirmParentLeaf }
       : row)))
@@ -186,7 +194,12 @@ export function MinuteWbsRegisterModal({ open, mode, projectId, drafts, sources,
     // 보낼 줄 = 체크된 줄(등록된 줄은 체크될 수 없지만 한 번 더 뺀다). 화면 순서 = 회의록 문단 순서 = 같은 위치에 붙는 순서(설계 §3.2)
     const checkedIndexes = drafts.rows.flatMap((draft, index) => (checked[index] && !draft.registered ? [index] : []))
     const ready = canSubmit(checkedIndexes, rows, sources, drafts.parents)
+    // 등록 단추를 막고 있는 첫 줄 — 알림 칸이 그 줄을 짚는다(작업명·위치·말단 확인 중 빠진 것)
+    const blockingRow = checkedIndexes.find(index => !canSubmit([index], rows, sources, drafts.parents))
     const bulkOpen = bulkParentOpen && checkedIndexes.length > 0
+    // 「위치 한꺼번에 바꾸기」가 보이는 값 — 체크된 줄이 모두 같은 위치일 때만 그 위치(따로 기억하지 않는다). 줄을 고치거나 새 줄을 체크해
+    // 갈라지면 비므로, 같은 위치를 다시 골라도 바뀐다(새로 체크한 줄에 들어간다)
+    const bulkParentValue = checkedIndexes.length > 0 ? sharedParentValue(checkedIndexes.map(index => rows[index])) : null
     return (
       <Modal
         open={open}
@@ -206,6 +219,12 @@ export function MinuteWbsRegisterModal({ open, mode, projectId, drafts, sources,
           </p>
         ) : checkedIndexes.length === 0 ? (
           <p className="text-sm text-fg-secondary">{t('min.wbs.nothingSelected')}</p>
+        ) : blockingRow !== undefined ? (
+          // 어느 줄이 막는지 — 누르면 그 줄로 간다
+          <button type="button" onClick={() => focusRow(blockingRow)}
+            className="text-left text-sm text-fg-secondary underline decoration-dotted underline-offset-2 hover:text-fg">
+            {fill(t('min.wbs.rowIncomplete'), { n: blockingRow + 1 })}
+          </button>
         ) : undefined}
         footer={
           <>
@@ -228,7 +247,8 @@ export function MinuteWbsRegisterModal({ open, mode, projectId, drafts, sources,
                 {t('min.wbs.changeParentAll')}
                 <ChevronDown aria-hidden className={`h-4 w-4 ${bulkOpen ? 'rotate-180' : ''}`} />
               </button>
-              <span className="ml-auto text-sm font-semibold tabular-nums text-fg">
+              {/* 체크·자동 체크로 바뀌는 수를 화면 낭독기에도 알린다 */}
+              <span role="status" aria-live="polite" className="ml-auto text-sm font-semibold tabular-nums text-fg">
                 {fill(t('min.wbs.selectedCount'), { n: checkedIndexes.length })}
               </span>
             </div>
@@ -306,9 +326,9 @@ export function MinuteWbsRegisterModal({ open, mode, projectId, drafts, sources,
 }
 
 /**
- * 한꺼번에 창의 줄 하나 — 머리(체크·줄 번호·「원문」 펼침), 칸 전부(MinuteWbsRowFields), 펼친 원문, 거부 사유.
- * 등록된 줄은 회색 머리(체크 불가·이미 만든 작업)와 작업 계획 링크만 — 칸이 없다(다시 올리지 않는다, 설계 §3.2).
- * 390px 에서도 칸이 줄 폭을 다 쓰도록 체크는 왼쪽 단이 아니라 머리 줄에 둔다.
+ * 한꺼번에 창의 줄 하나 — 머리(체크·줄 번호·「원문」 펼침), 펼친 원문(머리 바로 아래), 칸 전부(MinuteWbsRowFields), 거부 사유.
+ * 등록된 줄은 흐린 머리(체크 불가·이미 만든 작업 — 글자는 대비를 지키는 색)와 작업 계획 링크만 — 칸이 없다(다시 올리지 않는다, 설계 §3.2).
+ * 390px 에서도 칸이 줄 폭을 다 쓰도록 체크는 왼쪽 단이 아니라 머리 줄에 둔다. 알림이 줄을 번호로 부르므로 번호는 보이고 읽힌다.
  */
 function BulkRow({
   index, draft, state, checked, failedMessage, pending, projectId, parents, members, onCheckedChange, onChange,
@@ -329,10 +349,12 @@ function BulkRow({
   const { t } = useLocale()
   const [excerptOpen, setExcerptOpen] = useState(false)
   const excerptId = useId()
+  const reasonId = useId()
   const registered = draft.registered
   const failed = failedMessage !== null
-  // 체크 상자의 이름 — 만들 작업명(비었으면 초안 이름, 그것도 없으면 칸 이름)
-  const checkLabel = registered ? registered.name : state.name.trim() || draft.name || t('min.wbs.name')
+  const rowNo = index + 1
+  // 줄의 이름 — 줄 번호(알림이 「N번째 줄」로 부른다)와 만들 작업명(비었으면 초안 이름, 그것도 없으면 칸 이름). 체크 상자와 칸 묶음이 함께 쓴다
+  const rowLabel = `${rowNo}. ${registered ? registered.name : state.name.trim() || draft.name || t('min.wbs.name')}`
   const frame = failed
     ? 'border-danger/40 bg-danger-weak/30'
     : registered ? 'border-border bg-surface-subtle' : 'border-border'
@@ -341,28 +363,31 @@ function BulkRow({
     <li data-wbs-row={index} data-row-failed={failed || undefined} data-registered={registered ? '' : undefined}
       className={`rounded-lg border p-3 ${frame}`}>
       <div className="flex items-start gap-2">
-        <div className={`flex min-w-0 flex-1 items-start gap-2${registered ? ' opacity-60' : ''}`}>
+        <div className="flex min-w-0 flex-1 items-start gap-2">
           {/* 누르는 영역을 넓힌다 — 줄 번호까지 체크를 바꾼다 */}
           <label className={`-m-1.5 inline-flex shrink-0 items-center gap-2 rounded-(--radius-control) p-1.5 ${registered || pending ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-            <input type="checkbox" data-wbs-row-check checked={checked} disabled={pending || !!registered} aria-label={checkLabel}
+            {/* 거부된 줄이면 줄의 첫 초점인 체크 상자가 invalid 와 사유를 읽힌다(RPC 는 줄만 알려 주고 어느 칸인지는 모른다) */}
+            <input type="checkbox" data-wbs-row-check checked={checked} disabled={pending || !!registered} aria-label={rowLabel}
+              aria-invalid={failed || undefined} aria-describedby={failed ? reasonId : undefined}
               onChange={event => onCheckedChange(event.target.checked)} className="h-4 w-4" />
-            <span aria-hidden className="text-meta font-medium tabular-nums text-fg-muted">{index + 1}</span>
+            <span className="text-meta font-medium tabular-nums text-fg-muted">{rowNo}</span>
           </label>
           {registered && (
-            <span className="min-w-0 flex-1 break-words text-sm text-fg">
+            // 흐리게 — 불투명도 대신 대비를 지키는 글자색으로(fg-muted 는 이 바탕에서 4.8:1)
+            <span className="min-w-0 flex-1 break-words text-sm text-fg-muted">
               <span className="mr-1.5 font-semibold">{registered.code}</span>
               {registered.name}
             </span>
           )}
         </div>
         <button type="button" aria-expanded={excerptOpen} aria-controls={excerptOpen ? excerptId : undefined}
-          onClick={() => setExcerptOpen(value => !value)}
+          aria-label={`${t('min.wbs.excerpt')} ${rowNo}`} onClick={() => setExcerptOpen(value => !value)}
           className="inline-flex shrink-0 items-center gap-1 rounded-(--radius-control) px-1.5 py-1 text-meta font-medium text-fg-secondary hover:bg-surface-hover hover:text-fg">
           {t('min.wbs.excerpt')}
           <ChevronDown aria-hidden className={`h-3.5 w-3.5 ${excerptOpen ? 'rotate-180' : ''}`} />
         </button>
       </div>
-      {registered ? (
+      {registered && (
         // 이미 만든 작업 — 새 탭으로 연다(이 창에서 고친 다른 줄을 잃지 않게)
         <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta">
           <span className="font-semibold text-fg-muted">{t('min.wbs.registered')}</span>
@@ -372,18 +397,23 @@ function BulkRow({
             <ExternalLink aria-hidden className="h-3 w-3" />
           </Link>
         </p>
-      ) : (
-        <div className="mt-3">
-          <MinuteWbsRowFields state={state} draft={draft} parents={parents} members={members} onChange={onChange} disabled={pending} />
-        </div>
       )}
+      {/* 펼친 원문은 머리 바로 아래 — 누른 「원문」 곁에 열린다 */}
       {excerptOpen && (
-        <p id={excerptId} className="mt-3 whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-subtle px-3 py-2 text-sm text-fg-secondary">
+        <p id={excerptId}
+          className={`mt-2 whitespace-pre-wrap break-words rounded-lg border border-border px-3 py-2 text-sm text-fg-secondary ${registered ? 'bg-surface' : 'bg-surface-subtle'}`}>
           {draft.excerpt}
         </p>
       )}
+      {!registered && (
+        // 칸 묶음 — 줄 번호·작업명으로 이름 붙여 여러 줄 사이에서도 어느 줄의 칸인지 읽히게. 거부된 줄이면 칸으로 바로 와도 사유가 읽힌다
+        // (aria-invalid 는 group 역할이 받지 않는다 — invalid 는 체크 상자가 싣는다)
+        <div role="group" aria-label={rowLabel} aria-describedby={failed ? reasonId : undefined} className="mt-3">
+          <MinuteWbsRowFields state={state} draft={draft} parents={parents} members={members} onChange={onChange} disabled={pending} />
+        </div>
+      )}
       {failed && (
-        <p className="mt-2 flex items-start gap-1.5 text-sm text-danger">
+        <p id={reasonId} className="mt-2 flex items-start gap-1.5 text-sm text-danger">
           <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="min-w-0 break-words">{failedMessage}</span>
         </p>

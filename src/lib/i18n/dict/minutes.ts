@@ -329,5 +329,6 @@ export const minutesKo = {
   'min.wbs.createdN': '작업 {n}건을 등록했습니다',
   'min.wbs.rowFailed': '{n}번째 줄에서 멈췄습니다',
   'min.wbs.nothingSelected': '등록할 줄을 골라 주세요',
+  'min.wbs.rowIncomplete': '{n}번째 줄의 작업명·위치·확인을 채워 주세요',
   'min.wbs.noAction': '액션 항목이 없습니다',
 }
