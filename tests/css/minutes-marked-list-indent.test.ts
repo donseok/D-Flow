@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest'
 
 /**
  * 회의록 목록의 글머리 기호(점·번호)가 목록 상자 밖으로 나가지 않아야 한다.
- * 목록 상자 가장자리에는 hover 테두리([data-mblock]:hover outline)와 마킹·이슈 좌측 선이 그려진다.
+ * 목록 상자 가장자리에는 hover 테두리([data-mblock]:hover outline)와 마킹·이슈·WBS 좌측 선이 그려진다.
  *
- * 1) 마킹은 루트 블록 단위라 목록이면 <ul>/<ol> 전체에 data-ins / data-issue-count 가 붙는다.
+ * 1) 마킹은 루트 블록 단위라 목록이면 <ul>/<ol> 전체에 data-ins / data-issue-count / data-wbs-count 가 붙는다.
  *    `.minutes-md [data-ins]` 의 padding-left(0.6em)는 `.minutes-md ul` 보다 특이성이 높아 목록
  *    들여쓰기를 덮고, 바깥쪽(outside) 기호가 3px 좌측 선 위에 얹혔다(2026-09-10 제보).
  * 2) 번호 폭은 자릿수마다 늘어난다(Pretendard 16px 실측 "9. " 1.093em · "35. " 1.692em ·
@@ -50,9 +50,9 @@ describe('회의록 목록 들여쓰기', () => {
     expect(Number(m![2])).toBeGreaterThanOrEqual(MARKER_GROWTH_PER_DIGIT_EM)
   })
 
-  it('마킹·이슈 연결된 목록은 목록 들여쓰기 + 마킹 여백만큼 민다 — 기호가 좌측 선에 얹히지 않게', () => {
+  it('마킹·이슈·WBS 연결된 목록은 목록 들여쓰기 + 마킹 여백만큼 민다 — 기호가 좌측 선에 얹히지 않게', () => {
     expect(markIndent).toBe('0.6em')
-    expect(declOf('.minutes-md :is(ul, ol):is([data-ins], [data-issue-count])', 'padding-left'))
+    expect(declOf('.minutes-md :is(ul, ol):is([data-ins], [data-issue-count], [data-wbs-count])', 'padding-left'))
       .toBe(`calc(var(--list-indent) + ${markIndent})`)
   })
 })

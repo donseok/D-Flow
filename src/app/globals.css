@@ -351,9 +351,25 @@ textarea {
   }
   .minutes-md [data-issue-count][data-hl-count]::before { right: 3rem; }
 
+  /* WBS 연결 블록 — 이슈 연결과 같은 꼴(좌측 선 + 배지)을 초록으로. 클릭하면 블록 팝오버의 「연결된 작업」에서 작업을 연다.
+     이슈도 걸린 블록에는 붙지 않는다 — :where 로 특이성을 이슈 규칙과 같게 둬 목록 특례·임시 선택 표시가 그대로 이긴다. */
+  .minutes-md [data-wbs-count]:where(:not([data-issue-count])) {
+    @apply relative;
+    box-shadow: inset 3px 0 var(--color-success);
+    padding-left: 0.6em;
+  }
+  .minutes-md [data-wbs-count]:where(:not([data-issue-count]))::before {
+    content: '▤ ' attr(data-wbs-count);
+    @apply absolute -top-2 right-1 rounded-full bg-success px-1.5 py-0.5 text-meta font-bold leading-none text-success-fg;
+  }
+  .minutes-md [data-wbs-count][data-hl-count]::before { right: 3rem; }
+  /* 이슈와 WBS 가 함께 걸린 블록 — ::before 는 요소당 하나(::after 는 인원 배지)라 배지를 둘 띄울 수 없다.
+     이슈 꼴(파란 선·배지 색)은 그대로 두고 그 배지 하나에 두 수를 함께 적는다. */
+  .minutes-md [data-issue-count][data-wbs-count]::before { content: '⚑ ' attr(data-issue-count) ' · ▤ ' attr(data-wbs-count); }
+
   /* 목록 특례 — 마킹은 루트 블록 단위라 <ul>/<ol> 전체에 붙는다. 위 padding-left(0.6em)가
      목록 들여쓰기(--list-indent)를 덮으면 바깥쪽 글머리 기호가 좌측 선 위에 얹히므로, 둘을 더해 민다. */
-  .minutes-md :is(ul, ol):is([data-ins], [data-issue-count]) { padding-left: calc(var(--list-indent) + 0.6em); }
+  .minutes-md :is(ul, ol):is([data-ins], [data-issue-count], [data-wbs-count]) { padding-left: calc(var(--list-indent) + 0.6em); }
 
   /* 현재 사용자가 지정 중인 하이라이트/이슈 영역 — 저장된 마킹과 구분되는 임시 표시.
      블록 전체에 적용해 표·목록·제목도 같은 영역으로 인식되게 한다. */
