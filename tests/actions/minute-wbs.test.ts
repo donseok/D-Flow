@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fnv1a64, minuteBlockDraftText, splitMinuteBlocks, type MinuteBlock } from '@/lib/minutes/blocks'
 
 const m = vi.hoisted(() => ({
+  getSession: vi.fn(),
   requireProjectAdmin: vi.fn(),
   requireProjectMember: vi.fn(),
   resolveProjectId: vi.fn(),
@@ -24,6 +25,7 @@ const m = vi.hoisted(() => ({
   after: vi.fn(),
 }))
 
+vi.mock('@/lib/auth', () => ({ getSession: m.getSession }))
 vi.mock('@/lib/authz', () => ({ requireProjectAdmin: m.requireProjectAdmin, requireProjectMember: m.requireProjectMember, resolveProjectId: m.resolveProjectId }))
 vi.mock('@/lib/supabase/server', () => ({ createServerClient: m.createServerClient }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: m.createAdminClient }))
@@ -45,7 +47,7 @@ vi.mock('@/lib/data/snapshots', () => ({ recordProgressSnapshot: m.recordProgres
 
 import { createWbsItemsFromMinute, getWbsItemMinuteSources, prepareMinuteWbsDrafts } from '@/app/actions/minuteWbs'
 import { requireModule } from '@/lib/modules/gate'
-import { ERR_DENIED, ERR_MISSING, ERR_MODULE_DISABLED } from '@/lib/authz/errors'
+import { ERR_ANON, ERR_DENIED, ERR_LOOKUP, ERR_MISSING, ERR_MODULE_DISABLED, guardCodeOf } from '@/lib/authz/errors'
 import { serverKoTranslate as t } from '@/lib/i18n/serverDict'
 import { minuteIssueSourceExcerpt } from '@/lib/minutes/verifySource'
 import { minuteSelectionKeyHash } from '@/lib/minutes/selection'
@@ -149,6 +151,7 @@ let session: ReturnType<typeof sessionClient>
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => {})
+  m.getSession.mockResolvedValue({ id: USER, email: 'user@example.com' })
   m.requireProjectAdmin.mockResolvedValue({ ok: true, actor: ADMIN })
   m.requireProjectMember.mockResolvedValue({ ok: true, actor: MEMBER })
   m.resolveProjectId.mockResolvedValue({ ok: true, projectId: PROJECT })
@@ -609,30 +612,9 @@ describe('getWbsItemMinuteSources', () => {
     minute_date_snapshot: '2026-10-21', body_hash: BODY_HASH, block_index: 1, block_hash: BLOCKS[1].hash, excerpt_snapshot: '로그인 API 개발', created_at: '2026-10-21T01:00:00Z',
   }
 
-  it('항목의 프로젝트를 못 정하면 그 사유 그대로', async () => {
-    m.resolveProjectId.mockResolvedValue({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
-    expect(await getWbsItemMinuteSources(ITEM)).toEqual({ ok: false, error: '권한을 확인할 수 없어 중단했습니다.' })
-    m.resolveProjectId.mockResolvedValue({ ok: true, projectId: null })
-    expect(await getWbsItemMinuteSources(ITEM)).toEqual({ ok: false, error: ERR_MISSING })
-    expect(m.requireProjectMember).not.toHaveBeenCalled()
-    expect(m.createServerClient).not.toHaveBeenCalled()
-  })
-
-  it('uuid 가 아닌 항목 id 는 조회 전에 거부', async () => {
-    expect(await getWbsItemMinuteSources('not-a-uuid')).toEqual({ ok: false, error: t('err.invalidRequest') })
-    expect(m.resolveProjectId).not.toHaveBeenCalled()
-  })
-
-  it('가드·모듈 관문이 거부하면 읽지 않는다', async () => {
-    m.requireProjectMember.mockResolvedValue({ ok: false, error: ERR_DENIED })
-    expect(await getWbsItemMinuteSources(ITEM)).toEqual({ ok: false, error: ERR_DENIED })
-    m.requireProjectMember.mockResolvedValue({ ok: true, actor: MEMBER })
-    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
-    expect(await getWbsItemMinuteSources(ITEM)).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
-    expect(m.createServerClient).not.toHaveBeenCalled()
-  })
-
-  it('멤버면 세션 클라이언트로 그 항목의 연결을 만든 순서대로 읽어 WbsItemMinuteSource 로', async () => {
+  it('명단 밖 조회 전용(로그인 + RLS 가 항목을 보여 줌)도 연결을 만든 순서대로 받는다 — 멤버·관리자 가드를 부르지 않는다', async () => {
+    m.requireProjectMember.mockResolvedValue({ ok: false, error: ERR_DENIED })   // 명단 없음 — 멤버 가드를 불렀다면 거부됐을 것
+    m.requireProjectAdmin.mockResolvedValue({ ok: false, error: ERR_DENIED })
     session = sessionClient({ wbs_item_links: { data: [LINK_ROW] } })
     m.createServerClient.mockResolvedValue(session.client)
     const r = await getWbsItemMinuteSources(ITEM)
@@ -640,12 +622,48 @@ describe('getWbsItemMinuteSources', () => {
       linkId: 'link-1', minuteId: 'minute-1', minuteVersionId: 'version-1', minuteVersionNo: 3, minuteTitle: '개발 회의', minuteDate: '2026-10-21',
       bodyHash: BODY_HASH, blockIndex: 1, blockHash: BLOCKS[1].hash, excerpt: '로그인 API 개발', createdAt: '2026-10-21T01:00:00Z',
     }] })
+    expect(m.getSession).toHaveBeenCalledTimes(1)
+    expect(m.requireProjectMember).not.toHaveBeenCalled()
+    expect(m.requireProjectAdmin).not.toHaveBeenCalled()
     expect(m.resolveProjectId).toHaveBeenCalledWith('wbs_items', ITEM)
-    expect(m.requireProjectMember).toHaveBeenCalledWith(PROJECT)
     expect(requireModule).toHaveBeenCalledWith({ projectId: PROJECT }, 'minutes')
     expect(session.queries.map(q => q.table)).toEqual(['wbs_item_links'])
-    expect(session.queries[0].calls).toEqual(expect.arrayContaining([['eq', ['wbs_item_id', ITEM]], ['order', ['created_at', { ascending: true }]]]))
+    expect(session.queries[0].calls).toEqual(expect.arrayContaining([
+      ['eq', ['wbs_item_id', ITEM]], ['eq', ['project_id', PROJECT]], ['order', ['created_at', { ascending: true }]],
+    ]))
     expect(m.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('로그인하지 않았으면 거부 — 항목·관문·연결에 닿지 않는다', async () => {
+    m.getSession.mockResolvedValue(null)
+    expect(await getWbsItemMinuteSources(ITEM)).toEqual({ ok: false, error: ERR_ANON })
+    expect(m.resolveProjectId).not.toHaveBeenCalled()
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(m.createServerClient).not.toHaveBeenCalled()
+  })
+
+  it('세션이 읽지 못하는 항목은 없는 항목과 같은 답(ERR_MISSING) — 존재를 드러내지 않고, 관문·연결에 닿지 않는다', async () => {
+    m.resolveProjectId.mockResolvedValue({ ok: false, error: ERR_MISSING, code: 'missing' })   // RLS 가 가린 항목 = 없는 항목
+    expect(await getWbsItemMinuteSources(ITEM)).toEqual({ ok: false, error: ERR_MISSING })
+    m.resolveProjectId.mockResolvedValue({ ok: false, error: ERR_LOOKUP, code: 'lookup' })   // 판정 불가는 그 사유 그대로
+    expect(await getWbsItemMinuteSources(ITEM)).toEqual({ ok: false, error: ERR_LOOKUP })
+    m.resolveProjectId.mockResolvedValue({ ok: true, projectId: null })
+    expect(await getWbsItemMinuteSources(ITEM)).toEqual({ ok: false, error: ERR_MISSING })
+    expect(requireModule).not.toHaveBeenCalled()
+    expect(m.createServerClient).not.toHaveBeenCalled()
+  })
+
+  it('회의록 모듈이 꺼지면 관문의 거부 그대로(module_disabled — 상세 패널은 이 코드에서 구역을 닫는다), 연결을 읽지 않는다', async () => {
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    const r = await getWbsItemMinuteSources(ITEM)
+    expect(r).toEqual({ ok: false, error: ERR_MODULE_DISABLED })
+    expect(guardCodeOf(r.ok ? null : r)).toBe('module_disabled')
+    expect(m.createServerClient).not.toHaveBeenCalled()
+  })
+
+  it('uuid 가 아닌 항목 id 는 조회 전에 거부', async () => {
+    expect(await getWbsItemMinuteSources('not-a-uuid')).toEqual({ ok: false, error: t('err.invalidRequest') })
+    expect(m.resolveProjectId).not.toHaveBeenCalled()
   })
 
   it('읽기 실패는 sourcesUnavailable(빈 목록으로 그리지 않는다)', async () => {

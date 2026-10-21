@@ -8,8 +8,9 @@ import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireProjectAdmin, requireProjectMember, resolveProjectId } from '@/lib/authz'
-import { ERR_MISSING } from '@/lib/authz/errors'
+import { getSession } from '@/lib/auth'
+import { requireProjectAdmin, resolveProjectId } from '@/lib/authz'
+import { ERR_ANON, ERR_MISSING } from '@/lib/authz/errors'
 import { requireModule } from '@/lib/modules/gate'
 import { aiAvailable } from '@/lib/modules/aiAvailable'
 import { generateAnswer } from '@/lib/ai/llm'
@@ -486,16 +487,21 @@ export async function createWbsItemsFromMinute(projectId: string, rows: MinuteWb
   return { ok: true, items }
 }
 
-/** WBS 작업 상세의 「회의록 원문」 — 그 작업의 연결을 만든 순서대로(세션 클라이언트 — 그 프로젝트를 볼 수 있는 사람만, 이슈 연결과 같은 RLS) */
+/**
+ * WBS 작업 상세의 「회의록 원문」 — 그 작업의 연결을 만든 순서대로. 산출물 목록(attachments.ts listAttachments)과 같은 읽기다: 로그인 +
+ * 세션 클라이언트(RLS) — 항목을 읽을 수 있는 사람이면 명단 밖 조회 전용도 보고(상세 패널을 여는 사람 그대로), 못 읽는 항목은 없는 항목과
+ * 같은 답이다(존재를 드러내지 않는다). 연결 표의 읽기 정책(wbs_item_links_ws_read)도 그 프로젝트를 볼 수 있는 사람이다.
+ * 회의록 모듈이 꺼졌으면 관문의 거부(module_disabled) 그대로 — 화면은 그 코드에서 구역을 닫는다.
+ */
 export async function getWbsItemMinuteSources(itemId: string): Promise<WbsItemMinuteSourcesResult> {
   const t = await serverTranslator()
   if (typeof itemId !== 'string' || !isUuidLike(itemId)) return { ok: false, error: t('err.invalidRequest') }
+  if (!(await getSession())) return { ok: false, error: ERR_ANON }
+  // 항목의 프로젝트 — 세션 클라이언트(RLS)로 읽는다. 못 읽는 항목은 없는 항목과 같은 ERR_MISSING 이다
   const resolved = await resolveProjectId('wbs_items', itemId)
   if (!resolved.ok) return { ok: false, error: resolved.error }
   if (resolved.projectId === null) return { ok: false, error: ERR_MISSING }
   const projectId = resolved.projectId
-  const g = await requireProjectMember(projectId)
-  if (!g.ok) return { ok: false, error: g.error }
   const mod = await requireModule({ projectId }, 'minutes')
   if (!mod.ok) return { ok: false, error: mod.error }
 
