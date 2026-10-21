@@ -17,5 +17,6 @@ export const MODULE_TABLE_OWNER: Readonly<Record<string, ModuleId>> = {
   agent_lead_leases: 'agents', agent_watchers: 'agents',
   minutes: 'minutes', minute_folders: 'minutes', minute_files: 'minutes', minute_highlights: 'minutes',
   minute_insights: 'minutes', minute_versions: 'minutes', minute_favorites: 'minutes', minute_embeddings: 'minutes',
+  wbs_item_links: 'minutes',   // 회의록 문단 → WBS 작업 연결(0061) — 쓰기는 회의록 관문 뒤의 등록 RPC 하나
   usage_events: 'usage',
 }

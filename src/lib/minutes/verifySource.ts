@@ -11,8 +11,24 @@ import {
   MINUTE_SELECTION_MAX_BLOCK_SPAN, MINUTE_SELECTION_MAX_CHARS, matchMinuteSelection,
 } from '@/lib/minutes/selection'
 import { serverTranslator } from '@/lib/i18n/server'
+import type { ServerDictKey, ServerTranslate } from '@/lib/i18n/serverDict'
 
 const BLOCK_HASH_RE = /^[0-9a-f]{16}$/i
+
+/** 검증 문구의 갈래 — 'wbs'(WBS 등록)는 대상(이슈)을 말하는 문구만 WBS 문구로 바꾼다. 대상이 없는 문구(형식·조회 실패·선택 대조)는 그대로다 */
+export type MinuteSourceWording = 'issue' | 'wbs'
+const WBS_WORDING: Readonly<Partial<Record<ServerDictKey, ServerDictKey>>> = {
+  'err.minutesNotFound': 'srv.minuteWbs.minuteNotFound',
+  'srv.issues.issuesCannotCreatedArchivedMinutes': 'srv.minuteWbs.minuteArchived',
+  'srv.issues.minutesIssueBelongDifferentProjects': 'srv.minuteWbs.minuteProjectMismatch',
+  // 다른 워크스페이스의 프로젝트 없는 회의록 — 등록 RPC 도 MINUTE_NOT_FOUND 로 같게 답한다(그 회의록의 상태를 드러내지 않는다)
+  'srv.issues.minutesAnotherWorkspaceCannotCreate': 'srv.minuteWbs.minuteNotFound',
+  'srv.issues.minutesSourceVersionNotFound': 'srv.minuteWbs.versionNotFound',
+  'srv.issues.minutesSourceVersionChanged': 'srv.minuteWbs.bodyStale',
+  'srv.issues.selectRangeActualIssueContent': 'srv.minuteWbs.headingRange',
+}
+const wordingOf = (base: ServerTranslate, wording: MinuteSourceWording): ServerTranslate =>
+  wording === 'wbs' ? (key) => base(WBS_WORDING[key] ?? key) : base
 
 export interface VerifiedMinuteIssueBlock {
   storedBodyHash: string
@@ -112,6 +128,7 @@ function validMinuteIssueSource(source: MinuteIssueSourceInput): boolean {
  * 회의록 기반 초안 생성과 최종 저장이 같은 불변 원문 검증을 공유한다.
  * 클라이언트는 버전/블록 앵커만 제시하며, 실제 AI 입력·저장 스냅샷은 여기서 찾은 블록만 사용한다.
  * projectWorkspaceId 는 대상 프로젝트의 워크스페이스(가드를 통과한 actor 의 스냅샷) — 프로젝트 없는 회의록은 이것과 같아야 한다.
+ * wording 은 거부 문구의 갈래 — WBS 등록은 'wbs' 를 넘긴다(판정은 같다).
  */
 export async function verifyMinuteIssueBlock(
   projectId: string,
@@ -119,8 +136,9 @@ export async function verifyMinuteIssueBlock(
   source: MinuteIssueSourceInput,
   logLabel: string,
   includeInsight = false,
+  wording: MinuteSourceWording = 'issue',
 ): Promise<MinuteIssueBlockVerification> {
-  const t = await serverTranslator()
+  const t = wordingOf(await serverTranslator(), wording)
   // 상한 초과는 형식 오류가 아니라 사용자가 고칠 수 있는 입력이다 — 오도 문구와 분리한다.
   if (
     source.selection

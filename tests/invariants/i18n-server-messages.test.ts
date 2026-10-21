@@ -59,6 +59,8 @@ function serverMessageLiterals(file: string, source: string): Hit[] {
 const FILES = [
   ...walk(join(ROOT, 'src/app/actions'), undefined, /\.ts$/),
   ...INTERNAL_API.flatMap(d => walk(join(ROOT, 'src/app/api', d), undefined, /route\.ts$/)),
+  // 액션 밖으로 옮긴 회의록 원문 검증 — 이슈·WBS 등록 액션이 그 error 를 그대로 돌려준다(옮기기 전처럼 계속 본다)
+  join(ROOT, 'src/lib/minutes/verifySource.ts'),
 ]
 const HITS = new Map<string, Hit[]>()
 for (const f of FILES) {

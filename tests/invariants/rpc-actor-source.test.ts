@@ -101,6 +101,8 @@ const HELPER_CALLERS: Readonly<Record<string, HelperSpec>> = {
           why: '주문 검토 액션 — loadOrderForAdmin·loadOrderForReview 가 requireProjectAdmin 결과의 g.actor.userId 를 actor 로 돌려준다(두 단계)',
         },
       },
+      // 회의록 → WBS 등록 — 담당자를 지정한 줄의 배정 전이(setWbsAssignee 와 같은 도우미). requireProjectAdmin 직접
+      'src/app/actions/minuteWbs.ts': { count: 1 },
       'src/app/api/v1/agent/work/[id]/claim/route.ts': {
         count: 1, except: { expr: 'loaded.userId', count: 1, why: '에이전트 토큰 라우트 — loadGatedOrderForUser 가 토큰 주체로 해석한 사용자' },
       },

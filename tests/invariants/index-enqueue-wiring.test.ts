@@ -31,6 +31,8 @@ const WIRED: Readonly<Record<string, Readonly<Record<string, number>>>> = {
   // POST 는 예외를 받아 같은 꼴의 응답으로 바꾸는 껍데기이고(BUG-01) 본문은 runImport 다
   'src/app/api/import/execute/route.ts': { runImport: 1 },
   'src/app/actions/minutes.ts': { createMinute: 1, replaceMinuteBody: 1, recordMinuteFile: 1 },
+  // 회의록 → WBS 등록 — RPC 한 번으로 만든 작업 전부를 한 번에(배열)
+  'src/app/actions/minuteWbs.ts': { createWbsItemsFromMinute: 1 },
   'src/app/api/v1/minutes/route.ts': { handleExisting: 1, insertNew: 1 },
 }
 

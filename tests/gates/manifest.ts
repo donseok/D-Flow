@@ -208,6 +208,10 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('minutes')}#ensureMinuteInsightsAction`]: { guard: 'session', module: 'minutes', note: '행의 범위 멤버(requireMinuteMember)', sample: [U], deny: { status: 'unavailable', error: ERR_MODULE_DISABLED } },
   [`${A('minutes')}#getMinuteShare`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U] },
   [`${A('minutes')}#setMinuteShare`]: { guard: 'session', module: 'minutes', note: 'requireActor + 행', sample: [U, 'enable'] },
+  // ── minuteWbs — 회의록 → WBS 등록(WBS 는 core 라 관문은 회의록 하나). 준비·등록은 프로젝트 관리자, 작업 상세의 원문 연결은 멤버(항목의 프로젝트)
+  [`${A('minuteWbs')}#prepareMinuteWbsDrafts`]: { guard: 'projectAdmin', module: 'minutes', sample: [P, []] },
+  [`${A('minuteWbs')}#createWbsItemsFromMinute`]: { guard: 'projectAdmin', module: 'minutes', sample: [P, []] },
+  [`${A('minuteWbs')}#getWbsItemMinuteSources`]: { guard: 'projectMember', module: 'minutes', sample: [U] },   // isUuidLike 가 가드 앞
   // ── notifications·preferences — 셸
   [`${A('notifications')}#getNotifications`]: nul('session', '셸 파생 알림 — 로그인 + RLS'),
   [`${A('notifications')}#markAllNotificationsRead`]: nul('session', SESSION_SELF),
