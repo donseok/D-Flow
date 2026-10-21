@@ -29,6 +29,7 @@ import { WBS_NAME_MAX } from '@/lib/domain/wbsValueRules'
 import type { ShownSchedule } from '@/lib/domain/wbsDerived'
 import { WbsAssigneeStagePanel } from './WbsAssigneeStagePanel'
 import { ChangeHistoryList } from './ChangeHistoryList'
+import { WbsMinuteSourceSection } from './WbsMinuteSourceSection'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { useTeamCodes, useTeamLabel, useTeamSlot } from '@/components/app/TeamsProvider'
 import { RightRail, useRightRailOptional, useShellSidebarWidth, useRailMode } from '@/components/app/RightRail'
@@ -819,6 +820,9 @@ export function RowDetailPanel({
 
           {/* 산출물 첨부 */}
           <AttachmentSection itemId={item.id} canAttach={canAttach} projectId={projectId} workspaceId={workspaceId} />
+
+          {/* 회의록 원문 — 이 작업을 등록한 회의록 문단(연결이 없으면 그리지 않는다) */}
+          <WbsMinuteSourceSection itemId={item.id} />
 
           {/* 변경 이력 */}
           <ChangeHistoryList logs={logs} timeZone={timeZone} extraAxisLabel={extraAxisLabel} />

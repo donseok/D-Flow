@@ -244,6 +244,12 @@ export const wbsKo = {
   'wbs.attachDownloadDenied': '다운로드는 담당 팀과 관리자만 할 수 있습니다.',
   'wbs.attachDownloadUnknown': '다운로드 권한을 확인하지 못했습니다 — 다시 시도하세요.',
   'wbs.attachLinkFail': '링크 생성 실패',
+  // 회의록 원문 — 이 작업을 등록한 회의록 문단(설계 2026-10-21-minutes-to-wbs §3). empty 는 계약에 둔 예비 문구다(구역은 연결이 없으면 그리지 않는다)
+  'wbs.minuteSource.title': '회의록 원문',
+  'wbs.minuteSource.open': '원문 위치 보기',
+  'wbs.minuteSource.version': '{n}판',
+  'wbs.minuteSource.empty': '연결된 회의록이 없습니다',
+  'wbs.minuteSource.error': '회의록 원문을 불러오지 못했습니다',
   // 담당자·단계 패널(§2.5) — 로스터 축 개인 담당자, Task 단계 편집
   'wbs.assigneeStagePanelTitle': '담당·단계',
   'wbs.assigneeLabel': '담당자',

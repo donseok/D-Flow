@@ -715,6 +715,7 @@ export const serverUiKo = {
   'srv.api.importExecute.fileSHierarchyErrors': '파일의 계층 구조나 값에 오류가 있습니다 — 표시된 행을 고친 뒤 다시 실행하세요. 아무것도 바꾸지 않았습니다.',
   'srv.api.importExecute.fileStructureCouldNotDetected': '파일 구조를 감지하지 못해 저장된 엑셀 양식과 대조할 수 없습니다: {detail} — 저장 양식으로 읽으려면 확인 후 다시 실행하세요.',
   'srv.api.importExecute.holidaysNotDeletedOnlyUpdated': '휴일은 삭제되지 않고 갱신만 됩니다.',
+  'srv.api.importExecute.minuteLinks': '회의록 원문 연결(wbs_item_links)도 교체 시 함께 삭제되어 복구할 수 없습니다.',
   'srv.api.importExecute.modeMustAppendReplace': 'mode는 \'append\' 또는 \'replace\' 여야 합니다',
   'srv.api.importExecute.profileJsonFormatNotValid': '프로파일 JSON 형식이 올바르지 않습니다',
   'srv.api.importExecute.requestId': '요청 번호(commandId)가 없거나 형식이 올바르지 않습니다 — 화면을 새로 고친 뒤 다시 실행하세요.',

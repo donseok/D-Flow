@@ -160,14 +160,16 @@ describe('결과 종류와 응답 모양(#8·#9·#11)', () => {
     }]])
     expect(receiptFilters).toEqual([['actor', ACTOR.userId], ['command_id', CMD], ['kind', 'wbs_import']])
   })
-  it('replace applied — 끝까지 읽은 백업과 교체 경고 둘', async () => {
+  it('replace applied — 끝까지 읽은 백업과 교체 경고 셋(변경 이력·휴일·회의록 원문 연결)', async () => {
     admin({ import: applied('replace', 3) })
     const body = await (await POST(req({ mode: 'replace' }))).json()
     expect(body).toMatchObject({ ok: true, kind: 'applied', count: 3, mode: 'replace' })
     expect(body.backup.rows).toEqual(BACKUP_ROWS)
     expect(typeof body.backup.generatedAt).toBe('string')
-    expect(body.warnings).toHaveLength(2)
+    expect(body.warnings).toHaveLength(3)
     expect(body.warnings).toEqual(expect.arrayContaining([expect.stringContaining('휴일은 삭제되지 않고 갱신만 됩니다')]))
+    // wbs_items 를 지우면 회의록 원문 연결(wbs_item_links)도 CASCADE 로 함께 사라진다(설계 2026-10-21-minutes-to-wbs §5.6)
+    expect(body.warnings).toEqual(expect.arrayContaining(['회의록 원문 연결(wbs_item_links)도 교체 시 함께 삭제되어 복구할 수 없습니다.']))
   })
   it('영수증이 있으면(재전송) 팀 등록·전환·백업을 건너뛰고 RPC 의 duplicate — replace 라도 백업 없이 중복 경고 하나', async () => {
     const { from } = session({ receipt: { data: { command_id: CMD }, error: null } })

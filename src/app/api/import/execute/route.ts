@@ -39,10 +39,12 @@ import { fill } from '@/lib/i18n/translate'
 
 /** replace 모드가 백업하지 않는 부수 효과를 명시 경고한다(B2 리뷰 이월).
  *  change_logs 는 wbs_items 의 on delete cascade 로 함께 지워지고(Q1 결정 — 백업은 트리뿐),
- *  holidays 는 replace_wbs 가 delete 하지 않고 upsert 만 한다(갱신되되 잔존 항목이 남을 수 있음). */
+ *  holidays 는 replace_wbs 가 delete 하지 않고 upsert 만 한다(갱신되되 잔존 항목이 남을 수 있음).
+ *  wbs_item_links(회의록 원문 연결, 0061)도 wbs_items 의 on delete cascade 로 함께 지워진다(설계 2026-10-21-minutes-to-wbs §5.6). */
 const REPLACE_WARNINGS = [   // 사전 키 — 응답에 실을 때 푼다
   'srv.api.importExecute.changeHistory',
   'srv.api.importExecute.holidaysNotDeletedOnlyUpdated',
+  'srv.api.importExecute.minuteLinks',
 ] as const
 /** 같은 명령 id 의 재전송이 이미 적용된 replace 를 만났다 — 이번 응답에는 백업이 없다(SP4 §4.4 #9·D50·K9) */
 const DUPLICATE_REPLACE_WARNING =
