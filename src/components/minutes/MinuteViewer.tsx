@@ -22,6 +22,7 @@ import {
   createIssueFromMinuteBlock, fetchIssueProjectMembers, prepareMinuteIssueDraft,
   type IssueActionResult, type IssueInput, type MinuteIssueSourceInput,
 } from '@/app/actions/issues'
+import { createWbsItemsFromMinute, prepareMinuteWbsDrafts } from '@/app/actions/minuteWbs'
 import {
   fnv1a64, isMarkableBlock, minuteBlockDraftText, splitMinuteBlocks, type BlockMarks,
 } from '@/lib/minutes/blocks'
@@ -51,11 +52,13 @@ import {
   type IssueMinuteSourceKind,
   type MinuteLinkedIssue,
 } from '@/lib/domain/issueMinuteSource'
-import { activeLinkedWbsItems, type MinuteLinkedWbsItem } from '@/lib/domain/minuteWbs'
+import { activeLinkedWbsItems, type MinuteLinkedWbsItem, type MinuteWbsDrafts } from '@/lib/domain/minuteWbs'
+import { fill } from '@/lib/i18n/translate'
 import {
   buildFallbackMinuteIssueDraft, type MinuteIssueDraft,
 } from '@/lib/ai/minute-issue-draft'
 import { IssueFormModal, type IssueFormDraft } from '@/components/issues/IssueModals'
+import { MinuteWbsRegisterModal } from './MinuteWbsRegisterModal'
 
 const EMPTY_WIKI_IMPACT: MinuteWikiImpactCardProps = {
   status: 'unlinked',
@@ -72,8 +75,9 @@ const EMPTY_WIKI_IMPACT: MinuteWikiImpactCardProps = {
 const EMPTY_LINKED_ISSUES: MinuteLinkedIssue[] = []
 const EMPTY_LINKED_WBS_ITEMS: MinuteLinkedWbsItem[] = []
 const EMPTY_PROJECT_WORKSPACES: Record<string, string> = {}
+const EMPTY_WBS_ADMIN_PROJECT_IDS: string[] = []
 
-/** 이슈 등록의 원천 — 블록 팝오버(블록 전체)와 드래그 선택(부분 발췌)이 같은 상태 기계를 공유한다. */
+/** 이슈·WBS 등록의 원천 — 블록 팝오버(블록 전체)와 드래그 선택(부분 발췌)이 같은 상태 기계를 공유한다. */
 type IssueOrigin =
   | { type: 'block'; index: number }
   | {
@@ -87,11 +91,18 @@ type IssueOrigin =
       excerpt: string
     }
 
+/**
+ * 열린 WBS 등록 창 — 준비 액션의 초안과 그 초안을 만든 원문 앵커(prepareMinuteWbsDrafts 에 보낸 배열 그대로, 같은 순서).
+ * 등록 줄의 source 는 이 앵커다(창이 원문을 다시 만들지 않는다). 한꺼번에(bulk)는 beginWbsBulk 가 연다.
+ */
+type WbsModalState = { mode: 'single' | 'bulk'; projectId: string; drafts: MinuteWbsDrafts; sources: MinuteIssueSourceInput[] }
+
 export function MinuteViewer({
   minute, files, filesError = null, canManage, annotations, userId, projects, sourceAnchor = null,
   initialFontSize = null, versions = [], versionsError = null, wikiImpact = EMPTY_WIKI_IMPACT,
   historicalVersion = null, issueMembers = [], issueMembersError = null, linkedIssues = EMPTY_LINKED_ISSUES,
-  linkedWbsItems = EMPTY_LINKED_WBS_ITEMS, folderPath = null, timeZone,
+  linkedWbsItems = EMPTY_LINKED_WBS_ITEMS, linkedWbsItemsError = null, wbsAdminProjectIds = EMPTY_WBS_ADMIN_PROJECT_IDS,
+  folderPath = null, timeZone,
   myProjectIds = null, projectWorkspaces = EMPTY_PROJECT_WORKSPACES,
 }: {
   minute: Minute
@@ -175,6 +186,20 @@ export function MinuteViewer({
   // 클로저는 아직 busy=true 로 보이고 dismiss 취소가 방금 연 폼의 origin 을 지워
   // issueFormOpen=true·issueBlock=null 유령 상태(폼 미렌더 + 버블 영구 비활성)를 만든다.
   const issuePrepareInFlightRef = useRef(false)
+  // 회의록 문단 → WBS 작업(설계 2026-10-21-minutes-to-wbs §3.1) — 이슈 흐름과 같은 뼈대: 요청 번호로 낡은 준비 응답을 버리고,
+  // 고정 프로젝트면 바로 준비, 아니면 같은 선택 창을 pickerFor='wbs'(관리자인 같은 워크스페이스 프로젝트만)로 먼저 띄운다.
+  const [wbsOrigin, setWbsOrigin] = useState<IssueOrigin | null>(null)
+  const [wbsBusy, setWbsBusy] = useState(false)
+  const [wbsModal, setWbsModal] = useState<WbsModalState | null>(null)
+  // 추천이 없는 줄의 처음 위치 — 이 화면에서 마지막으로 고른 위치(설계 §4.2, 저장하지 않는다). 다른 프로젝트의 id 일 수 있다 —
+  // 등록 창은 위치 후보에 없는 id 를 위치로 치지 않는다
+  const [lastWbsParentId, setLastWbsParentId] = useState<string | null>(null)
+  const [pickerFor, setPickerFor] = useState<'issue' | 'wbs'>('issue')
+  const [wbsProjectId, setWbsProjectId] = useState('')
+  const [wbsProjectError, setWbsProjectError] = useState<string | null>(null)
+  const wbsRequestRef = useRef(0)
+  // 준비 진행 중 — 취소 경로(팝오버 닫기·버블 이탈)는 issuePrepareInFlightRef 와 같은 이유로 상태가 아니라 이 동기 ref 로 판정한다
+  const wbsPrepareInFlightRef = useRef(false)
 
   const blocks = useMemo(() => splitMinuteBlocks(minute.bodyMd), [minute.bodyMd])
   const { activeToc, jumpTo } = useMinuteTocSpy(blocks, bodyRef, { flash: true })
@@ -197,6 +222,17 @@ export function MinuteViewer({
     () => activeLinkedWbsItems(linkedWbsItems, blocks),
     [blocks, linkedWbsItems],
   )
+  const fixedProjectId = minute.projectId ?? minute.meetingProjectId ?? ''
+  // 프로젝트 없는 회의록의 WBS 선택 창 후보 — 관리자인 프로젝트 중 이 회의록의 워크스페이스 것만(서버가 다른 워크스페이스를 거부한다, 설계 §3.1)
+  const wbsPickerProjects = useMemo(() => {
+    const admin = new Set(wbsAdminProjectIds)
+    return projects.filter(project =>
+      admin.has(project.id) && !!minute.workspaceId && projectWorkspaces[project.id] === minute.workspaceId)
+  }, [minute.workspaceId, projectWorkspaces, projects, wbsAdminProjectIds])
+  // 「WBS로 등록」을 여는가 — 현재 버전·보관 아님·연결 목록을 읽음("등록됨" 판정의 근거, 계획 "설계와의 차이")·관리자
+  // (고정 프로젝트면 그 프로젝트의, 아니면 같은 워크스페이스에서 하나라도)
+  const wbsEnabled = !historicalVersion && !minute.archivedAt && !linkedWbsItemsError
+    && (fixedProjectId ? wbsAdminProjectIds.includes(fixedProjectId) : wbsPickerProjects.length > 0)
   const sourceBlockIndex = useMemo(
     () => sourceAnchor ? resolveMinuteSourceBlock(blocks, bodyHash, sourceAnchor) : null,
     [blocks, bodyHash, sourceAnchor],
@@ -313,11 +349,12 @@ export function MinuteViewer({
     for (const [idx, count] of wbsCounts) {
       m[idx] = { ...m[idx], wbsCount: count }
     }
-    // 저장된 마킹과 구분되는 현재 작업 영역 — 이슈 폼을 열어도 지정 범위를 유지한다.
-    const activeRange = issueOrigin
-      ? issueOrigin.type === 'selection'
-        ? { startIndex: issueOrigin.startIndex, endIndex: issueOrigin.endIndex }
-        : { startIndex: issueOrigin.index, endIndex: issueOrigin.index }
+    // 저장된 마킹과 구분되는 현재 작업 영역 — 이슈 폼·WBS 등록 창을 열어도 지정 범위를 유지한다.
+    const activeOrigin = issueOrigin ?? wbsOrigin
+    const activeRange = activeOrigin
+      ? activeOrigin.type === 'selection'
+        ? { startIndex: activeOrigin.startIndex, endIndex: activeOrigin.endIndex }
+        : { startIndex: activeOrigin.index, endIndex: activeOrigin.index }
       : popover
         ? { startIndex: popover.blockIndex, endIndex: popover.blockIndex }
         : selectionPreview
@@ -327,7 +364,7 @@ export function MinuteViewer({
       }
     }
     return m
-  }, [activeLinkedIssues, activeLinkedWbs, insights, issueOrigin, myIndexes, others, popover, selectionPreview])
+  }, [activeLinkedIssues, activeLinkedWbs, insights, issueOrigin, myIndexes, others, popover, selectionPreview, wbsOrigin])
 
   // 블록 클릭 → 팝오버 (이벤트 위임 — 링크/버튼/드래그 선택 제외, 스펙 §6.4)
   const onBodyClick = useCallback((e: React.MouseEvent) => {
@@ -443,7 +480,6 @@ export function MinuteViewer({
     setIssueOrigin(origin)
     setPreparedIssueDraft(null)
     setIssueProjectError(null)
-    const fixedProjectId = minute.projectId ?? minute.meetingProjectId ?? ''
     if (fixedProjectId) {
       // 담당자 명단을 못 읽었으면 폼을 열지 않는다 — 프로젝트를 고르는 흐름(continueWithProject)의 membersFailed 와 같은 규칙.
       if (issueMembersError) {
@@ -502,6 +538,7 @@ export function MinuteViewer({
     window.getSelection()?.removeAllRanges()
     setIssueProjectId('')
     setIssueMemberOptions([])
+    setPickerFor('issue')
     setProjectPickerOpen(true)
   }
 
@@ -518,6 +555,10 @@ export function MinuteViewer({
   // 선택 흐름의 prepare 진행 중 사용자가 버블을 떠나면(바깥 클릭·선택 해제) 요청을 취소해
   // 뒤늦게 도착한 응답이 이슈 폼을 돌발 오픈하지 않게 한다(팝오버 onClose 와 같은 원칙).
   function onSelectionDismiss() {
+    // WBS 준비도 같은 규칙 — 선택에서 시작한 준비만, 등록 창·선택 창이 열리기 전까지만 취소한다
+    if (wbsPrepareInFlightRef.current && wbsOrigin?.type === 'selection' && !wbsModal && !projectPickerOpen) {
+      cancelWbsPrepare()
+    }
     // 진행 중 판정은 동기 ref 로만 한다 — selectionchange 가 커밋을 앞지르면 issueBusy
     // 클로저는 낡은 true 라서, 완료된 요청을 취소하며 방금 연 폼의 origin 을 지운다.
     if (!issuePrepareInFlightRef.current || issueOrigin?.type !== 'selection') return
@@ -591,11 +632,153 @@ export function MinuteViewer({
   }
 
   function closeProjectPicker() {
+    if (pickerFor === 'wbs') {
+      cancelWbsPrepare()
+      setProjectPickerOpen(false)
+      return
+    }
     issueProjectRequestRef.current += 1
     setIssueBusy(false)
     setProjectPickerOpen(false)
     setPreparedIssueDraft(null)
     setIssueOrigin(null)
+  }
+
+  /** WBS 원문 앵커 — 이슈와 같은 앵커이되 kind 는 늘 manual('action' 은 한꺼번에 등록 몫, 'risk' 는 WBS 연결 종류가 아니다) */
+  function wbsSourceFor(origin: IssueOrigin): MinuteIssueSourceInput | null {
+    const source = issueSourceInputFor(origin)
+    return source && { ...source, kind: 'manual' }
+  }
+
+  /** 준비 중인 WBS 요청을 버린다 — 뒤늦은 응답이 창을 열지 않게(요청 번호) 하고 문단의 작업 영역 표시도 걷는다 */
+  function cancelWbsPrepare() {
+    wbsRequestRef.current += 1
+    wbsPrepareInFlightRef.current = false
+    setWbsBusy(false)
+    setWbsOrigin(null)
+  }
+
+  /**
+   * 문단(또는 선택 발췌) 하나 → WBS 등록 창. beginIssueCreateFrom 의 뼈대 그대로 — 요청 번호로 낡은 응답을 버리고, 고정 프로젝트면
+   * 준비(prepareMinuteWbsDrafts — 줄 1개) 뒤 창을, 아니면 선택 창(pickerFor='wbs')을 먼저 연다. 준비 실패는 토스트로 알리고 창을 열지
+   * 않는다 — 위치 후보 없이는 창을 열 수 없어 클라이언트 폴백이 없다(계획 "설계와의 차이").
+   */
+  async function beginWbsCreateFrom(origin: IssueOrigin) {
+    const requestId = ++wbsRequestRef.current
+    setWbsBusy(false)
+    const source = wbsSourceFor(origin)
+    if (!source) {
+      toast({ title: t('min.wbs.prepareFailed'), variant: 'error' })
+      setPopover(null)
+      return
+    }
+    setWbsOrigin(origin)
+    if (!fixedProjectId) {
+      setPopover(null)
+      window.getSelection()?.removeAllRanges()
+      // 후보가 하나뿐이면 미리 골라 둔다 — 사람은 「계속」만 누른다
+      setWbsProjectId(wbsPickerProjects.length === 1 ? wbsPickerProjects[0].id : '')
+      setWbsProjectError(null)
+      setPickerFor('wbs')
+      setProjectPickerOpen(true)
+      return
+    }
+    setWbsBusy(true)
+    wbsPrepareInFlightRef.current = true
+    let drafts: MinuteWbsDrafts | null = null
+    try {
+      const result = await prepareMinuteWbsDrafts(fixedProjectId, [source])
+      if (wbsRequestRef.current !== requestId) return
+      if (result.ok) drafts = result.value
+      else toast({ title: t('min.wbs.prepareFailed'), description: result.error, variant: 'error' })
+    } catch (cause) {
+      if (wbsRequestRef.current !== requestId) return
+      console.error('[MinuteViewer] WBS 초안 준비 요청 실패:', cause)
+      toast({ title: t('min.wbs.prepareFailed'), variant: 'error' })
+    } finally {
+      // requestId 가 낡았다면 취소 주체가 이미 정리했다 — 새 요청의 플래그를 건드리지 않는다
+      if (wbsRequestRef.current === requestId) {
+        wbsPrepareInFlightRef.current = false
+        setWbsBusy(false)
+      }
+    }
+    if (wbsRequestRef.current !== requestId) return
+    setPopover(null)
+    if (!drafts) {
+      setWbsOrigin(null)
+      return
+    }
+    // 선택 흐름은 창이 열리면 선택을 해제해 버블을 정리한다(블록 흐름에는 영향 없음)
+    window.getSelection()?.removeAllRanges()
+    setWbsModal({ mode: 'single', projectId: fixedProjectId, drafts, sources: [source] })
+  }
+
+  function beginWbsCreate() {
+    if (!popover) return
+    void beginWbsCreateFrom({ type: 'block', index: popover.blockIndex })
+  }
+
+  function onSelectionWbs(target: MinuteSelectionTarget) {
+    if (!target.excerpt) return
+    void beginWbsCreateFrom({ type: 'selection', ...target })
+  }
+
+  /** 프로젝트 없는 회의록 — 선택 창에서 고른 프로젝트로 준비한다. 실패는 선택 창 안에 사유로(다른 프로젝트를 고르거나 다시 시도) */
+  async function continueWbsWithProject() {
+    if (!wbsProjectId) {
+      setWbsProjectError(t('min.issue.projectRequired'))
+      return
+    }
+    const requestedProjectId = wbsProjectId
+    const requestId = ++wbsRequestRef.current
+    setWbsProjectError(null)
+    const source = wbsOrigin ? wbsSourceFor(wbsOrigin) : null
+    if (!source) {
+      setWbsProjectError(t('min.wbs.prepareFailed'))
+      return
+    }
+    setWbsBusy(true)
+    try {
+      const result = await prepareMinuteWbsDrafts(requestedProjectId, [source])
+      if (wbsRequestRef.current !== requestId) return
+      if (!result.ok) {
+        setWbsProjectError(result.error || t('min.wbs.prepareFailed'))
+        return
+      }
+      setProjectPickerOpen(false)
+      setWbsModal({ mode: 'single', projectId: requestedProjectId, drafts: result.value, sources: [source] })
+    } catch (cause) {
+      if (wbsRequestRef.current !== requestId) return
+      console.error('[MinuteViewer] WBS 초안 준비 요청 실패:', cause)
+      setWbsProjectError(t('min.wbs.prepareFailed'))
+    } finally {
+      if (wbsRequestRef.current === requestId) setWbsBusy(false)
+    }
+  }
+
+  // 한꺼번에 등록(설계 §3.2 — AI 요약의 「액션」 항목 전부, kind 'action') — 다음 단계가 몸체를 채우고 요약 카드 단추에 잇는다.
+  // 같은 창을 mode 'bulk' 로 연다(setWbsModal). 그때까지는 부르는 곳이 없다
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function beginWbsBulk() {}
+
+  function closeWbsModal() {
+    setWbsModal(null)
+    setWbsOrigin(null)
+  }
+
+  /** 등록 성공 — 「작업 계획에서 보기」(첫 작업으로 focus) 토스트, 마지막 위치 기억, 창 닫기, 연결 표시를 새로 읽는다 */
+  function onWbsCreated(target: WbsModalState, items: { row: number; itemId: string; code: string }[], parentId: string | null) {
+    const first = items[0]
+    toast({
+      title: target.mode === 'bulk' ? fill(t('min.wbs.createdN'), { n: items.length }) : t('min.wbs.created'),
+      variant: 'success',
+      ...(first && {
+        action: { label: t('min.wbs.viewInPlan'), href: `/p/${target.projectId}/wbs?focus=${encodeURIComponent(first.itemId)}` },
+      }),
+    })
+    setLastWbsParentId(parentId)
+    closeWbsModal()
+    router.refresh()
   }
 
   function createLinkedIssue(projectId: string, input: IssueInput) {
@@ -718,6 +901,13 @@ export function MinuteViewer({
   const popLinkedIssues = popover
     ? activeLinkedIssues.filter(link => link.blockIndex === popover.blockIndex)
     : []
+  const popLinkedWbs = popover
+    ? activeLinkedWbs.filter(link => link.blockIndex === popover.blockIndex)
+    : []
+  // 공유 선택 창 — 이슈는 모든 프로젝트·이슈 문구, WBS 는 관리자인 같은 워크스페이스 프로젝트·WBS 제목
+  const pickerWbs = pickerFor === 'wbs'
+  const pickerBusy = pickerWbs ? wbsBusy : issueBusy
+  const pickerError = pickerWbs ? wbsProjectError : issueProjectError
 
   return (
     // 폭은 레이아웃 main(헤더와 동일 px 스케일)에 맡긴다 — 자체 max-w/패딩을 두면 헤더 기준선보다 안쪽으로 좁아짐
@@ -808,6 +998,8 @@ export function MinuteViewer({
           </div>
         </div>
         {err && <p className="text-sm text-danger">{err}</p>}
+        {/* 연결된 작업을 못 읽으면 "등록됨"을 판정할 수 없어 WBS 등록을 닫는다 — 연결 없음으로 보이지 않게 사유를 둔다 */}
+        {linkedWbsItemsError && <p role="alert" className="text-sm text-danger">{t('min.wbs.linksUnavailable')}</p>}
       </div>
 
       <div className="px-4 py-2">
@@ -897,9 +1089,12 @@ export function MinuteViewer({
       {popover && (
         <MinuteBlockPopover
           state={popover} mine={myIndexes.has(popover.blockIndex)}
-          names={popNames} insKinds={popKinds} busy={hlBusy || issueBusy}
+          names={popNames} insKinds={popKinds} busy={hlBusy || issueBusy || wbsBusy}
           linkedIssues={popLinkedIssues} issueBusy={issueBusy}
           canCreateIssue={!blocks[popover.blockIndex]?.headingDepth}
+          linkedWbsItems={popLinkedWbs} wbsBusy={wbsBusy}
+          canCreateWbs={!blocks[popover.blockIndex]?.headingDepth}
+          onCreateWbs={wbsEnabled ? beginWbsCreate : undefined}
           onToggle={() => void onToggleHighlight()}
           onCreateIssue={() => void beginIssueCreate()}
           onClose={() => {
@@ -909,6 +1104,8 @@ export function MinuteViewer({
               setPreparedIssueDraft(null)
               setIssueOrigin(null)
             }
+            // 준비 중에 닫으면 요청을 버린다 — 뒤늦은 응답이 창을 돌발로 열지 않게(이슈와 같은 원칙, 판정은 동기 ref)
+            if (wbsPrepareInFlightRef.current) cancelWbsPrepare()
             setPopover(null)
           }}
         />
@@ -918,9 +1115,11 @@ export function MinuteViewer({
         <MinuteSelectionBubble
           bodyRef={bodyRef}
           blocks={blocks}
-          disabled={issueFormOpen || projectPickerOpen}
+          disabled={issueFormOpen || projectPickerOpen || wbsModal !== null}
           busy={issueBusy}
+          wbsBusy={wbsBusy}
           onCreateIssue={onSelectionIssue}
+          onCreateWbs={wbsEnabled ? onSelectionWbs : undefined}
           onTargetChange={target => setSelectionPreview(
             target ? { startIndex: target.startIndex, endIndex: target.endIndex } : null,
           )}
@@ -931,7 +1130,7 @@ export function MinuteViewer({
       <Modal
         open={projectPickerOpen}
         onClose={closeProjectPicker}
-        title={t('min.issue.projectTitle')}
+        title={pickerWbs ? t('min.wbs.projectTitle') : t('min.issue.projectTitle')}
         size="sm"
         footer={
           <div className="flex w-full justify-end gap-2">
@@ -941,35 +1140,63 @@ export function MinuteViewer({
             >
               {t('common.cancel')}
             </button>
-            <button onClick={() => void continueWithProject()} disabled={issueBusy} className="btn btn-primary text-xs">
-              {issueBusy ? t('min.issue.summarizing') : t('min.issue.continue')}
+            <button onClick={() => void (pickerWbs ? continueWbsWithProject() : continueWithProject())} disabled={pickerBusy}
+              className="btn btn-primary text-xs">
+              {pickerBusy
+                ? (pickerWbs ? t('min.wbs.preparing') : t('min.issue.summarizing'))
+                : t('min.issue.continue')}
             </button>
           </div>
         }
       >
         <div className="space-y-3">
-          <p className="text-sm leading-6 text-fg-secondary">{t('min.issue.projectDesc')}</p>
+          {/* 설명 문구는 이슈 것뿐이다 — WBS 는 제목(min.wbs.projectTitle)이 말한다. 후보가 없으면(그새 권한이 바뀜) 그 사유 */}
+          {!pickerWbs && <p className="text-sm leading-6 text-fg-secondary">{t('min.issue.projectDesc')}</p>}
+          {pickerWbs && wbsPickerProjects.length === 0 && (
+            <p className="text-sm leading-6 text-fg-secondary">{t('min.wbs.noAdminProject')}</p>
+          )}
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-fg-secondary">{t('min.form.project')}</span>
             <select
               className="app-input"
-              value={issueProjectId}
-              disabled={issueBusy}
+              value={pickerWbs ? wbsProjectId : issueProjectId}
+              disabled={pickerBusy}
               onChange={e => {
+                if (pickerWbs) {
+                  wbsRequestRef.current += 1
+                  setWbsProjectId(e.target.value)
+                  setWbsProjectError(null)
+                  return
+                }
                 issueProjectRequestRef.current += 1
                 setIssueProjectId(e.target.value)
                 setIssueProjectError(null)
               }}
             >
               <option value="">{t('min.form.projectNone')}</option>
-              {projects.map(project => (
+              {(pickerWbs ? wbsPickerProjects : projects).map(project => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
             </select>
           </label>
-          {issueProjectError && <p className="text-sm text-danger">{issueProjectError}</p>}
+          {pickerError && <p className="text-sm text-danger">{pickerError}</p>}
         </div>
       </Modal>
+
+      {/* 열 때마다 새로 마운트한다(wbsModal null → 값) — 줄 상태는 마운트 때 초안에서 채운다 */}
+      {wbsModal && (
+        <MinuteWbsRegisterModal
+          open
+          mode={wbsModal.mode}
+          projectId={wbsModal.projectId}
+          drafts={wbsModal.drafts}
+          sources={wbsModal.sources}
+          lastParentId={lastWbsParentId}
+          onClose={closeWbsModal}
+          onSubmit={rows => createWbsItemsFromMinute(wbsModal.projectId, rows)}
+          onCreated={(items, parentId) => onWbsCreated(wbsModal, items, parentId)}
+        />
+      )}
 
       {issueBlock && (
         <IssueFormModal

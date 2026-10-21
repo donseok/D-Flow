@@ -175,6 +175,32 @@ describe('/w/[slug]/minutes/[id] — 연결된 WBS 작업·등록 가능 프로�
     expect(h.viewerProps).toHaveBeenCalledWith(expect.objectContaining({ linkedWbsItems: [], linkedWbsItemsError: null }))
   })
 
+  it('회의록 모듈이 꺼졌으면 등록 가능 프로젝트도 비운다 — 관리자여도 단추가 보이지 않고(준비가 모듈 관문에서 막힌다), 조회 실패도 사유로 넘기지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    h.moduleSetFor.mockResolvedValue(new Set(['dashboard', 'wbs', 'members', 'settings', 'issues', 'wiki']))
+    h.listProjects.mockResolvedValue([{ id: PID, name: 'P' }])
+    h.getMinuteLinkedWbsItems.mockResolvedValue({ ok: false, error: '연결된 작업 목록을 읽지 못했습니다.' })
+    h.loadWorkspaceScope.mockResolvedValue({
+      ws: WA, actor: makeActor({ isSuperuser: true, workspaceRoles: new Map([[WA.id, 'admin']]) }), degraded: false, role: 'admin',
+    })
+    await run()
+    expect(h.viewerProps).toHaveBeenCalledWith(expect.objectContaining({
+      linkedWbsItems: [], linkedWbsItemsError: null, wbsAdminProjectIds: [],
+    }))
+    // 꺼진 범위의 실패는 화면에 쓰이지 않는다 — WBS 등록을 막는다는 페이지 로그도 남기지 않는다(로더 자신의 로그는 따로)
+    expect(spy.mock.calls.filter(([msg]) => String(msg).includes('WBS'))).toEqual([])
+    spy.mockRestore()
+  })
+
+  it('대조 — 회의록 모듈이 켜졌으면 같은 관리자에게 등록 가능 프로젝트가 실린다', async () => {
+    h.listProjects.mockResolvedValue([{ id: PID, name: 'P' }])
+    h.loadWorkspaceScope.mockResolvedValue({
+      ws: WA, actor: makeActor({ isSuperuser: true, workspaceRoles: new Map([[WA.id, 'admin']]) }), degraded: false, role: 'admin',
+    })
+    await run()
+    expect(h.viewerProps).toHaveBeenCalledWith(expect.objectContaining({ wbsAdminProjectIds: [PID] }))
+  })
+
   it('조회 실패는 빈 목록과 사유로 넘기고 로그를 남긴다 — "연결 없음"으로 그리지 않는다', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     h.getMinuteLinkedWbsItems.mockResolvedValue({ ok: false, error: '연결된 작업 목록을 읽지 못했습니다.' })

@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import { CircleAlert, LoaderCircle } from 'lucide-react'
+import { CircleAlert, ListPlus, LoaderCircle } from 'lucide-react'
 import { isMarkableBlock, type MinuteBlock } from '@/lib/minutes/blocks'
 import {
   MINUTE_SELECTION_MAX_BLOCK_SPAN, MINUTE_SELECTION_MAX_CHARS, MINUTE_SELECTION_MIN_CHARS,
@@ -53,18 +53,24 @@ function rangeTextWithin(range: Range, el: HTMLElement): string {
 }
 
 /**
- * 본문 드래그 선택 근처에 뜨는 '이슈로 등록' 버블 — 블록 팝오버(클릭)와 상보적인 진입점.
+ * 본문 드래그 선택 근처에 뜨는 '이슈로 등록'(관리자면 'WBS로 등록'도) 버블 — 블록 팝오버(클릭)와 상보적인 진입점.
  * 선택 확정은 pointerup/keyup 에서만 판정해 드래그 중 재배치 깜빡임을 피하고,
  * 스크롤·리사이즈는 rAF 로 위치만 추적한다. 선택 해제 시 즉시 소멸.
  */
 export function MinuteSelectionBubble({
-  bodyRef, blocks, disabled, busy, onCreateIssue, onDismiss, onTargetChange,
+  bodyRef, blocks, disabled, busy, wbsBusy = false, canCreateWbs = true, onCreateIssue, onCreateWbs, onDismiss, onTargetChange,
 }: {
   bodyRef: RefObject<HTMLDivElement | null>
   blocks: MinuteBlock[]
   disabled: boolean
   busy: boolean
+  /** WBS 초안 준비 중 — 두 단추를 막고 WBS 단추가 「작업 초안 준비 중…」(busy 는 이슈 쪽) */
+  wbsBusy?: boolean
+  /** false = WBS 단추를 보이되 막는다 */
+  canCreateWbs?: boolean
   onCreateIssue: (target: MinuteSelectionTarget) => void
+  /** 있으면 「WBS로 등록」을 옆에 둔다(버블 폭 180 → 300) — 뷰어가 WBS 등록을 열 수 있을 때만 넘긴다 */
+  onCreateWbs?: (target: MinuteSelectionTarget) => void
   /** 현재 선택된 블록 범위를 본문에 임시 하이라이트로 반영한다. */
   onTargetChange?: (target: MinuteSelectionTarget | null) => void
   /** 표출 중이던 버블이 바깥 클릭·선택 해제로 사라질 때 — 진행 중 요청 취소의 신호. */
@@ -195,30 +201,45 @@ export function MinuteSelectionBubble({
   }, [disabled, readTarget])
 
   if (!state) return null
-  const W = 180
+  // 단추 둘이면 넓힌다 — 각 단추는 반씩, 준비 중 문구가 넘치면 말줄임
+  const twoButtons = onCreateWbs !== undefined
+  const W = twoButtons ? 300 : 180
   const H = 44
   const center = state.rect.left + state.rect.width / 2
   const left = Math.min(Math.max(8, center - W / 2), window.innerWidth - W - 8)
   const below = state.rect.bottom + 6 + H < window.innerHeight
   const top = below ? state.rect.bottom + 6 : Math.max(8, state.rect.top - 6 - H)
+  const pad = twoButtons ? ' px-3' : ''
   return (
     <div
       ref={boxRef}
       style={{ position: 'fixed', top, left, width: W }}
-      className="z-[95]"
+      className="z-[95] flex gap-1.5"
       // 버튼 mousedown 이 브라우저 기본 동작으로 선택을 해제하는 것을 막는다.
       onPointerDown={event => event.preventDefault()}
     >
       <button
         onClick={() => onCreateIssue(state.target)}
-        disabled={busy}
-        className="btn btn-primary h-9 w-full shadow-[var(--shadow-lg)]"
+        disabled={busy || wbsBusy}
+        className={`btn btn-primary h-9 min-w-0 flex-1 shadow-[var(--shadow-lg)]${pad}`}
       >
         {busy
-          ? <LoaderCircle className="h-4 w-4 animate-spin" />
-          : <CircleAlert className="h-4 w-4" />}
-        {busy ? t('min.issue.summarizing') : t('min.sel.create')}
+          ? <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" />
+          : <CircleAlert className="h-4 w-4 shrink-0" />}
+        <span className="truncate">{busy ? t('min.issue.summarizing') : t('min.sel.create')}</span>
       </button>
+      {onCreateWbs && (
+        <button
+          onClick={() => onCreateWbs(state.target)}
+          disabled={busy || wbsBusy || !canCreateWbs}
+          className={`btn btn-ghost h-9 min-w-0 flex-1 shadow-[var(--shadow-lg)]${pad}`}
+        >
+          {wbsBusy
+            ? <LoaderCircle aria-hidden className="h-4 w-4 shrink-0 animate-spin" />
+            : <ListPlus aria-hidden className="h-4 w-4 shrink-0" />}
+          <span className="truncate">{wbsBusy ? t('min.wbs.preparing') : t('min.wbs.create')}</span>
+        </button>
+      )}
     </div>
   )
 }

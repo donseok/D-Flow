@@ -66,12 +66,14 @@ export default async function MinuteDetailPage({
   const linkedIssues = mods.has('issues') ? linkedIssuesRaw : []
   // 회의록 문단 → WBS 작업 연결(설계 2026-10-21-minutes-to-wbs §3.3·§5.6) — 연결 표는 회의록 모듈 소유라 그 범위에서 회의록이 켜졌을 때만 싣는다.
   // 못 읽으면 빈 목록이 아니라 사유를 넘긴다 — "등록됨"을 판정할 수 없으므로 뷰어가 WBS 등록을 열지 않고 사유를 보인다(§8).
-  const linkedWbsItems = mods.has('minutes') && linkedWbs.ok ? linkedWbs.rows : []
-  const linkedWbsItemsError = linkedWbs.ok ? null : linkedWbs.error
-  if (!linkedWbs.ok) console.error(`[minutes] 연결된 WBS 작업 조회 실패 — 회의록 ${id} 에서 WBS 등록을 막고 사유를 알린다`)
+  // 꺼진 범위는 연결도 사유도 등록 가능 프로젝트도 싣지 않는다 — 준비 액션이 모듈 관문에서 막히므로 단추를 보이지 않는다.
+  const wbsOn = mods.has('minutes')
+  const linkedWbsItems = wbsOn && linkedWbs.ok ? linkedWbs.rows : []
+  const linkedWbsItemsError = wbsOn && !linkedWbs.ok ? linkedWbs.error : null
+  if (linkedWbsItemsError !== null) console.error(`[minutes] 연결된 WBS 작업 조회 실패 — 회의록 ${id} 에서 WBS 등록을 막고 사유를 알린다`)
   // WBS 로 등록할 수 있는 프로젝트 — 액션 가드(requireProjectAdmin)와 같은 판정(플랫폼 관리자는 전부, 워크스페이스 관리자는 승계)을
   // 보이는 프로젝트(listProjects) 안에서만. 권한을 모르면(actor null — 열화) 없음: 등록 단추를 열지 않는다.
-  const wbsAdminProjectIds: string[] = m
+  const wbsAdminProjectIds: string[] = m && wbsOn
     ? (m.isSuperuser ? projects.map(p => p.id) : adminProjectIds(m).filter(pid => projects.some(p => p.id === pid)))
     : []
   if (!detail) notFound()
