@@ -10,6 +10,21 @@ export interface MinuteIssueSourceKeyInput {
   selectionHash?: string | null
 }
 
+export interface MinuteIssueSourceInput {
+  minuteId: string
+  minuteVersionId: string
+  bodyHash: string
+  blockIndex: number
+  blockHash: string
+  kind: IssueMinuteSourceKind
+  /** 드래그 선택 등록일 때만 존재. blockIndex/blockHash 는 시작 블록 앵커가 된다. */
+  selection?: {
+    text: string
+    endBlockIndex: number
+    endBlockHash: string
+  }
+}
+
 export interface IssueMinuteSource {
   id: string
   issueId: string
