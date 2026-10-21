@@ -215,6 +215,8 @@ export function MinuteSelectionBubble({
   const pad = twoButtons ? ' px-3' : ''
   // 단추 둘이면 반쪽 폭(약 100px)에 준비 중 문구(「작업 초안 준비 중…」·「핵심 내용 정리 중…」)가 들어가도록 글자를 줄인다
   const label = twoButtons ? 'truncate text-xs' : 'truncate'
+  // 막힌 단추 — 본문 위에 떠 있어 .btn 의 불투명도(disabled:opacity-50)로 흐리면 밑의 글이 비친다. 불투명한 막힌 표면·글자색으로 바꾼다
+  const solidDisabled = ' disabled:opacity-100 disabled:border-border disabled:bg-surface-disabled disabled:text-fg-disabled'
   return (
     <div
       ref={boxRef}
@@ -226,7 +228,7 @@ export function MinuteSelectionBubble({
       <button
         onClick={() => onCreateIssue(state.target)}
         disabled={busy || wbsBusy || !canCreateIssue}
-        className={`btn btn-primary h-9 min-w-0 flex-1 shadow-[var(--shadow-lg)]${pad}`}
+        className={`btn btn-primary h-9 min-w-0 flex-1 shadow-[var(--shadow-lg)]${pad}${solidDisabled}`}
       >
         {busy
           ? <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" />
@@ -237,7 +239,7 @@ export function MinuteSelectionBubble({
         <button
           onClick={() => onCreateWbs(state.target)}
           disabled={busy || wbsBusy || !canCreateWbs}
-          className={`btn btn-ghost h-9 min-w-0 flex-1 shadow-[var(--shadow-lg)]${pad}`}
+          className={`btn btn-ghost h-9 min-w-0 flex-1 shadow-[var(--shadow-lg)]${pad}${solidDisabled}`}
         >
           {wbsBusy
             ? <LoaderCircle aria-hidden className="h-4 w-4 shrink-0 animate-spin" />

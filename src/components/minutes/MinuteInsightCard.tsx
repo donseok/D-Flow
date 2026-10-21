@@ -8,7 +8,7 @@ import {
 import type { InsightKind, MinuteHighlight, MinuteInsight } from '@/lib/domain/types'
 import type { MinuteBlock } from '@/lib/minutes/blocks'
 import type { MinuteLinkedIssue } from '@/lib/domain/issueMinuteSource'
-import type { MinuteLinkedWbsItem } from '@/lib/domain/minuteWbs'
+import { displayWbsCode, type MinuteLinkedWbsItem } from '@/lib/domain/minuteWbs'
 import { IssueStatusPill } from '@/components/ui/StatusPill'
 import {
   INS_PRIORITY, insightCardState, topHighlightedBlocks, visibleInsights,
@@ -99,9 +99,10 @@ export function MinuteInsightCard({
               {t('min.issue.count').replace('{n}', String(linkedIssues.length))}
             </button>
           )}
-          {/* 연결된 WBS 작업 수(설계 2026-10-21-minutes-to-wbs §3.3) — 누르면 펼쳐 「연결된 작업」 목록을 보인다 */}
+          {/* 연결된 WBS 작업 수(설계 2026-10-21-minutes-to-wbs §3.3) — 누르면 펼쳐 「연결된 작업」 목록을 보인다. 색은 본문 배지와 같은 성공(초록) —
+              파란 「액션 N」 옆에서 둘째 액션 수로 읽히지 않게 */}
           {linkedWbsItems.length > 0 && (
-            <button onClick={() => setOpen(true)} className="chip bg-action-soft text-action">
+            <button onClick={() => setOpen(true)} className="chip bg-success-weak text-success">
               <ListChecks className="h-3 w-3" aria-hidden />
               {fill(t('min.wbs.count'), { n: linkedWbsItems.length })}
             </button>
@@ -212,27 +213,31 @@ export function MinuteInsightCard({
               <div className="border-t border-border pt-2">
                 <p className="eyebrow mb-1.5">{t('min.wbs.linked')}</p>
                 <ul className="space-y-1.5">
-                  {linkedWbsItems.map(item => (
-                    <li key={item.linkId} className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => onJump(item.blockIndex)}
-                        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs text-fg hover:bg-surface-subtle"
-                      >
-                        <ListChecks className="h-3.5 w-3.5 shrink-0 text-action" aria-hidden />
-                        <span className="shrink-0 font-semibold text-action">{item.code}</span>
-                        <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                        <span className="shrink-0 text-meta text-action">{t('min.issue.jump')}</span>
-                      </button>
-                      <Link
-                        href={`/p/${item.projectId}/wbs?focus=${encodeURIComponent(item.itemId)}`}
-                        title={t('min.wbs.viewInPlan')}
-                        aria-label={t('min.wbs.viewInPlan')}
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-surface-subtle hover:text-action"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                      </Link>
-                    </li>
-                  ))}
+                  {linkedWbsItems.map(item => {
+                    // 코드가 이름의 첫 낱말·화자 이름표면 같은 글이 두 번 보이므로 적지 않는다
+                    const code = displayWbsCode(item.code, item.name)
+                    return (
+                      <li key={item.linkId} className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => onJump(item.blockIndex)}
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs text-fg hover:bg-surface-subtle"
+                        >
+                          <ListChecks className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
+                          {code && <span className="shrink-0 font-semibold text-success">{code}</span>}
+                          <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                          <span className="shrink-0 text-meta text-action">{t('min.issue.jump')}</span>
+                        </button>
+                        <Link
+                          href={`/p/${item.projectId}/wbs?focus=${encodeURIComponent(item.itemId)}`}
+                          title={t('min.wbs.viewInPlan')}
+                          aria-label={t('min.wbs.viewInPlan')}
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-surface-subtle hover:text-action"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                        </Link>
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
             )}

@@ -331,4 +331,10 @@ export const minutesKo = {
   'min.wbs.nothingSelected': '등록할 줄을 골라 주세요',
   'min.wbs.rowIncomplete': '{n}번째 줄의 작업명·위치·확인을 채워 주세요',
   'min.wbs.noAction': '액션 항목이 없습니다',
+  'min.wbs.listBlockNote': '목록 {n}개 항목이 작업 하나로 등록됩니다. 항목별로 등록하려면 문단에서 항목을 끌어 선택하세요',
+  'min.wbs.duplicateBlock': '같은 내용의 문단이 앞에 있어 함께 등록하지 않습니다',
+  'min.wbs.linksLoadFailed': '연결된 작업 목록을 읽지 못했습니다',
+  'min.wbs.plannedStart': '계획 시작일',
+  'min.wbs.dateOrder': '시작일은 종료일보다 앞이어야 합니다',
+  'min.wbs.parentSearchHint': '번호나 이름으로 찾기',
 }

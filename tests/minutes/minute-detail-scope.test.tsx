@@ -1,7 +1,7 @@
 // /w/[slug]/minutes/[id](스펙 §4.2 2행, D6·P20) — 첫 await 은 슬러그 판정, 행의 워크스페이스가 슬러그와 다르면 404, 관문은 행의 워크스페이스.
 // 연결 이슈·위키 영향은 그 회의록의 프로젝트(없으면 워크스페이스)에서 모듈이 켜졌을 때만 싣는다.
 import { renderToString } from 'react-dom/server'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   loadWorkspaceScope: vi.fn(), requireModulePage: vi.fn(async () => {}), moduleSetFor: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock('@/lib/authz/workspaceScope', () => ({ loadWorkspaceScope: h.loadWorkspa
 vi.mock('@/lib/authz/visibility', () => ({ getHiddenProjectIds: h.getHiddenProjectIds }))
 vi.mock('@/lib/modules/pageGate', () => ({ requireModulePage: h.requireModulePage }))
 vi.mock('@/lib/modules/gate', () => ({ moduleSetFor: h.moduleSetFor }))
-vi.mock('next/navigation', () => ({ notFound: h.notFound }))
+vi.mock('next/navigation', () => ({ notFound: h.notFound, unstable_rethrow: vi.fn() }))
 vi.mock('@/lib/data/minutes', () => ({
   getMinuteDetail: h.getMinuteDetail, getMinuteAnnotations: vi.fn(async () => ({ highlights: [], insights: [] })),
   getMinuteVersions: h.getMinuteVersions, getMinuteWikiImpact: h.getMinuteWikiImpact,
@@ -216,6 +216,91 @@ describe('/w/[slug]/minutes/[id] — 연결된 WBS 작업·등록 가능 프로�
     await run()
     expect(spy.mock.calls.filter(([msg]) => String(msg).includes('WBS'))).toEqual([])
     spy.mockRestore()
+  })
+
+  describe('명단 밖 비공개 프로젝트의 연결은 싣지 않는다 — 연결 표의 범위 읽기는 워크스페이스의 비공개 프로젝트도 보여 준다(F4)', () => {
+    const HIDDEN = '00000000-0000-0000-7e57-00000000168a'
+    const hiddenWbs = { ...WBS_LINK, linkId: 'l2', itemId: 'w2', projectId: HIDDEN }
+    const issueIn = (projectId: string) => ({ linkId: `i-${projectId}`, projectId })
+    afterEach(() => { h.getMinuteLinkedIssues.mockResolvedValue([{ id: 'i1' }]) })
+
+    it('작업·이슈 연결 둘 다 숨긴 프로젝트의 행을 뺀다 — 보이는 프로젝트의 행은 그대로', async () => {
+      h.getMinuteDetail.mockResolvedValue(detail(WA.id, null))
+      h.getHiddenProjectIds.mockResolvedValue(new Set([HIDDEN]))
+      h.getMinuteLinkedWbsItems.mockResolvedValue({ ok: true, rows: [WBS_LINK, hiddenWbs] })
+      h.getMinuteLinkedIssues.mockResolvedValue([issueIn(PID), issueIn(HIDDEN)] as never)
+      await run()
+      expect(lastViewerProps().linkedWbsItems).toEqual([WBS_LINK])
+      expect(lastViewerProps().linkedWbsItemsError).toBeNull()
+      expect(lastViewerProps().linkedIssues).toEqual([issueIn(PID)])
+    })
+
+    it('비공개 판정을 못 하면 연결을 싣지 않고 사유로 넘긴다 — 오류 경계로 보내지 않는다(fail-closed, 본문은 그대로 연다)', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      h.getMinuteDetail.mockResolvedValue(detail(WA.id, null))   // 프로젝트 없는 회의록 — 상세 숨김(FA1)의 판정은 부르지 않는다
+      h.getHiddenProjectIds.mockRejectedValue(new Error('hidden down'))
+      h.getMinuteLinkedIssues.mockResolvedValue([issueIn(PID)] as never)
+      await run()
+      expect(h.viewerProps).toHaveBeenCalledTimes(1)
+      expect(lastViewerProps().linkedWbsItems).toEqual([])
+      expect(lastViewerProps().linkedWbsItemsError).toBe('연결된 작업 목록을 읽지 못했습니다.')
+      expect(lastViewerProps().linkedIssues).toEqual([])
+      expect(spy).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`\\[minutes\\].*${MID}`)), expect.anything())
+      spy.mockRestore()
+    })
+  })
+
+  describe('?version= 이 지금 판이면 평소 화면 — 「원문 위치 보기」·이슈 원문 링크가 읽기 전용 지난 판 화면에 갇히지 않게(E6)', () => {
+    const V1 = '00000000-0000-0000-7e57-00000000168b', V2 = '00000000-0000-0000-7e57-00000000168c'
+    const runWith = async (version: string) =>
+      renderToString(await MinuteDetailPage({ params: Promise.resolve({ slug: 'acme', id: MID }), searchParams: Promise.resolve({ version, block: '0', hash: 'abcdef0123456789', body: 'abcdef0123456789' }) }))
+    const versionBody = (id: string, versionNo: number) => ({
+      id, versionNo, bodyMd: `옛 본문 ${versionNo}`, bodyHash: 'h', title: `옛 제목 ${versionNo}`, minuteDate: '2026-10-01', teamCode: null,
+      meetingId: null, projectId: PID, meetingOccurrenceDate: null, createdAt: '2026-10-01T00:00:00Z',
+    })
+    const ANNOTATIONS = { highlights: [{ id: 'hl-1' }], insights: [] }
+
+    beforeEach(async () => {
+      h.getMinuteVersions.mockResolvedValue({ ok: true, rows: [{ id: V2, versionNo: 2 }, { id: V1, versionNo: 1 }] } as never)
+      const minutes = await import('@/lib/data/minutes')
+      vi.mocked(minutes.getMinuteAnnotations).mockResolvedValue(ANNOTATIONS as never)
+    })
+    afterEach(async () => {
+      const minutes = await import('@/lib/data/minutes')
+      vi.mocked(minutes.getMinuteAnnotations).mockResolvedValue({ highlights: [], insights: [] })
+      h.getMinuteVersions.mockResolvedValue({ ok: true, rows: [] })
+    })
+
+    it('지금 판(V2)을 가리키면 지난 판 표시 없이 지금 회의록·주석·관리 권한으로 연다 — 앵커는 그대로 넘긴다', async () => {
+      await run()
+      const plain = lastViewerProps()
+      h.getMinuteVersionBody.mockResolvedValue(versionBody(V2, 2))
+      await runWith(V2)
+      expect(h.getMinuteVersionBody).toHaveBeenCalledWith(MID, V2)   // 있는 판인지는 그대로 본다(없으면 404)
+      const props = lastViewerProps()
+      expect(props.historicalVersion).toBeNull()
+      expect(props.minute).toEqual(detail(WA.id).minute)
+      expect(props.annotations).toEqual(ANNOTATIONS)
+      expect(props.canManage).toBe(plain.canManage)
+      expect(props.sourceAnchor).toEqual({ blockIndex: 0, blockHash: 'abcdef0123456789', bodyHash: 'abcdef0123456789' })
+    })
+
+    it('옛 판(V1)이면 지금처럼 지난 판 화면(읽기 전용)', async () => {
+      h.getMinuteVersionBody.mockResolvedValue(versionBody(V1, 1))
+      await runWith(V1)
+      const props = lastViewerProps()
+      expect(props.historicalVersion).toEqual({ id: V1, versionNo: 1 })
+      expect((props.minute as { bodyMd?: string }).bodyMd).toBe('옛 본문 1')
+      expect(props.annotations).toEqual({ highlights: [], insights: [] })
+      expect(props.canManage).toBe(false)
+    })
+
+    it('버전 목록을 못 읽으면 지금 판인지 알 수 없어 지난 판 화면 그대로(읽기 전용 쪽이 안전)', async () => {
+      h.getMinuteVersions.mockResolvedValue({ ok: false, error: '버전 목록을 불러오지 못했습니다.' } as never)
+      h.getMinuteVersionBody.mockResolvedValue(versionBody(V2, 2))
+      await runWith(V2)
+      expect(lastViewerProps().historicalVersion).toEqual({ id: V2, versionNo: 2 })
+    })
   })
 
   describe('wbsAdminProjectIds — 액션 가드(requireProjectAdmin)와 같은 판정, 보이는 프로젝트(listProjects) 안에서만', () => {

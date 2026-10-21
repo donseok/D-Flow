@@ -2,7 +2,8 @@
 
 // 회의록 → WBS 등록 창의 「넣을 위치」(설계 docs/superpowers/specs/2026-10-21-minutes-to-wbs-design.md §4.2).
 // 추천 위치(≤3, 「추천」 칩)와 지금 고른 위치를 라디오로 먼저 보이고, 「다른 위치 찾기…」를 펼치면 고를 수 있는 위치 전부
-// (하위 없는 작업 포함 — 앞에 ·, 낭독은 「하위 없음」)를 경로(번호·이름)로 거른다. 맨 위(최상위)는 위치 후보가 없어도 늘 고를 수 있다.
+// (하위 없는 작업 포함 — 앞에 ·, 낭독은 「하위 없음」)를 경로(번호·이름)로 거른다. 맨 위(최상위)는 위치 후보가 없어도 늘 고를 수 있되
+// 위 묶음의 마지막(추천·지금 값 다음)이고 스스로 골라지지 않는다 — 값이 맨 위일 때만(사람이 골랐거나 이 화면이 기억한 선택, 설계 §4.2).
 // 값: null = 아직 안 고름, WBS_ROOT_PARENT = 맨 위(제출 때 parentId null), 그 밖 = 위치 id. 모르는 id 는 고르지 않은 것으로 본다.
 // 펼친 동안 화면이 흔들리지 않게 — 위 라디오 줄은 펼칠 때 모양으로 두고, 한글 조합 중의 덜 된 글자는 목록을 비우지 않는다.
 
@@ -126,6 +127,7 @@ export function WbsParentPicker({ options, value, recommendedIds, onChange, disa
       {searchOpen && options.length > 0 && (
         <div ref={panelRef} id={panelId} className="space-y-1.5">
           <input ref={searchRef} type="search" value={query} disabled={disabled} aria-label={t('min.wbs.parentSearch')}
+            placeholder={t('min.wbs.parentSearchHint')}
             onChange={event => {
               const next = event.target.value
               setQuery(next)

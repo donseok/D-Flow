@@ -494,9 +494,11 @@ describe('MinuteViewer 문단 → WBS 작업(한 건)', () => {
     expect(lastPopover().onCreateWbs).toBeUndefined()
   })
 
-  it('연결된 작업 목록을 못 읽었으면 단추가 없고 머리에 사유가 보인다', async () => {
+  it('연결된 작업 목록을 못 읽었으면 단추가 없고 머리에 사유(알림)가 보인다 — 조회 전용 안내는 겹쳐 띄우지 않는다', async () => {
     await mountViewer({ linkedWbsItemsError: '연결된 작업 목록을 읽지 못했습니다.' })
     expect(container.textContent).toContain('min.wbs.linksUnavailable')
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('min.wbs.linksUnavailable')
+    expect(container.textContent).not.toContain('min.wbs.linksLoadFailed')
     clickBlock(0)
     expect(popover()).not.toBeNull()
     expect(wbsButton()).toBeNull()
@@ -505,22 +507,28 @@ describe('MinuteViewer 문단 → WBS 작업(한 건)', () => {
   it('정상이면 머리에 연결 목록 사유가 없다', async () => {
     await mountViewer()
     expect(container.textContent).not.toContain('min.wbs.linksUnavailable')
+    expect(container.textContent).not.toContain('min.wbs.linksLoadFailed')
   })
 
-  it('연결 목록을 못 읽어도 원래 등록할 수 없던 화면(관리자 아님·지난 버전·보관된 회의록)에는 사유를 띄우지 않는다', async () => {
+  it('연결 목록을 못 읽으면 원래 등록할 수 없던 화면(관리자 아님·지난 버전·보관된 회의록)에는 등록을 닫았다는 알림 대신 조용한 안내(status)를 둔다 — 표시가 말없이 사라지지 않게', async () => {
     const error = '연결된 작업 목록을 읽지 못했습니다.'
+    const loadFailed = () => [...container.querySelectorAll('[role="status"]')].find(el => el.textContent === 'min.wbs.linksLoadFailed') ?? null
     await mountViewer({ linkedWbsItemsError: error, wbsAdminProjectIds: [] })
     expect(container.textContent).not.toContain('min.wbs.linksUnavailable')
+    expect(loadFailed()).not.toBeNull()
+    expect(container.querySelector('[role="alert"]')).toBeNull()
 
     act(() => root.unmount())
     root = createRoot(container)
     await mountViewer({ linkedWbsItemsError: error, historicalVersion: { id: 'version-1', versionNo: 1 } })
     expect(container.textContent).not.toContain('min.wbs.linksUnavailable')
+    expect(loadFailed()).not.toBeNull()
 
     act(() => root.unmount())
     root = createRoot(container)
     await mountViewer({ linkedWbsItemsError: error, minute: { ...minute, archivedAt: '2026-10-21T00:00:00Z' } })
     expect(container.textContent).not.toContain('min.wbs.linksUnavailable')
+    expect(loadFailed()).not.toBeNull()
   })
 
   it('제목 줄은 단추가 막힌다(이슈와 같은 규칙)', async () => {
@@ -747,6 +755,18 @@ describe('MinuteViewer 드래그 선택 → WBS 작업', () => {
     expect(wbsDialog()).not.toBeNull()
   })
 
+  it('막힌 버블 단추는 비치지 않는다 — 불투명도 대신 막힌 표면·글자색(본문 글이 단추 밑으로 비쳐 보이지 않게)', async () => {
+    mocks.prepareMinuteWbsDrafts.mockReturnValueOnce(new Promise(() => {}))
+    await mountViewer()
+    selectInFirstParagraph()
+    await act(async () => { bubbleWbsButton()!.click() })
+    for (const button of [buttonByText(container, 'min.wbs.preparing')!, buttonByText(container, 'min.sel.create')!]) {
+      expect(button.disabled).toBe(true)
+      const classes = button.className.split(/\s+/)
+      expect(classes).toEqual(expect.arrayContaining(['disabled:opacity-100', 'disabled:bg-surface-disabled', 'disabled:text-fg-disabled']))
+    }
+  })
+
   it('선택 준비 중 버블을 벗어나면 요청을 취소한다 — 뒤늦은 응답이 창을 열지 않는다', async () => {
     const pending = deferred<{ ok: true; value: MinuteWbsDrafts }>()
     mocks.prepareMinuteWbsDrafts.mockReturnValueOnce(pending.promise)
@@ -858,6 +878,51 @@ describe('MinuteBlockPopover — 연결된 작업·「WBS로 등록」(실제 �
     expect(container.textContent).toContain('min.wbs.linked')
     expect(container.querySelector('a')?.getAttribute('href')).toBe('/p/project-1/wbs?focus=item-1')
   })
+
+  it('코드가 이름의 첫 낱말이거나 화자 이름표(「김민수:」)면 코드 줄 없이 이름만 — 겹쳐 보이지 않게', async () => {
+    await renderPopover({ linkedWbsItems: [
+      { ...link('1', 0, 'h'), code: '회원가입', name: '회원가입 이메일 인증 개선 시안 준비' },
+      { ...link('2', 0, 'h'), code: '김민수:', name: '김민수: 로그인 오류 로그 분석' },
+    ] })
+    const spans = [...container.querySelectorAll('a')].map(anchor => [...anchor.querySelectorAll('span span')].map(span => span.textContent))
+    expect(spans).toEqual([['회원가입 이메일 인증 개선 시안 준비'], ['김민수: 로그인 오류 로그 분석']])
+  })
+
+  describe('위로 뒤집을 때의 높이 — 잰 높이로 문단 바로 위에 붙는다(E5)', () => {
+    const LOW = { blockIndex: 0, rect: { top: 600, bottom: 620, left: 40, width: 200 } }   // 창 높이 768 — 아래 자리가 모자라 위로 뒤집힌다
+    type RectCarrier = { getBoundingClientRect: () => DOMRect }
+    let original: () => DOMRect
+    beforeEach(() => { original = HTMLElement.prototype.getBoundingClientRect })
+    afterEach(() => { (HTMLElement.prototype as RectCarrier).getBoundingClientRect = original })
+
+    it('어림값은 칸마다 실제에 가깝다 — 연결 목록 하나마다 120 을 더하지 않는다', async () => {
+      const { estimatePopoverHeight } = await vi.importActual<PopoverModule>('@/components/minutes/MinuteBlockPopover')
+      const bare = { kinds: 0, linkedIssues: 0, linkedWbs: 0, wbsButton: false, names: 0 }
+      expect(estimatePopoverHeight(bare)).toBeLessThan(320)
+      expect(estimatePopoverHeight({ ...bare, linkedIssues: 1 }) - estimatePopoverHeight(bare)).toBeLessThan(120)
+      expect(estimatePopoverHeight({ ...bare, linkedWbs: 1 }) - estimatePopoverHeight(bare)).toBeLessThan(120)
+      // 목록은 둘까지만 보이고 「외 N건」 한 줄 — 연결이 늘어도 어림값이 끝없이 늘지 않는다
+      expect(estimatePopoverHeight({ ...bare, linkedWbs: 9 })).toBe(estimatePopoverHeight({ ...bare, linkedWbs: 3 }))
+    })
+
+    it('그린 뒤 잰 높이로 다시 놓는다 — 아래 끝이 문단 위 6px 에 붙는다', async () => {
+      ;(HTMLElement.prototype as RectCarrier).getBoundingClientRect = function (this: HTMLElement) {
+        const height = this.classList.contains('z-[95]') ? 180 : 0
+        return { top: 0, bottom: height, left: 0, right: 0, width: 300, height, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+      }
+      await renderPopover({ state: LOW, onCreateWbs: vi.fn(), linkedWbsItems: [link('1', 0, 'h')], linkedIssues: [] })
+      const box = container.querySelector<HTMLElement>('.z-\\[95\\]')!
+      expect(box.style.top).toBe(`${600 - 6 - 180}px`)
+    })
+
+    it('잴 수 없으면(높이 0) 어림값으로 놓는다', async () => {
+      const { estimatePopoverHeight } = await vi.importActual<PopoverModule>('@/components/minutes/MinuteBlockPopover')
+      await renderPopover({ state: LOW, onCreateWbs: vi.fn(), linkedWbsItems: [link('1', 0, 'h')] })
+      const box = container.querySelector<HTMLElement>('.z-\\[95\\]')!
+      const estimate = estimatePopoverHeight({ kinds: 0, linkedIssues: 0, linkedWbs: 1, wbsButton: true, names: 0 })
+      expect(box.style.top).toBe(`${600 - 6 - estimate}px`)
+    })
+  })
 })
 
 describe('MinuteViewer AI 요약 카드 → WBS 한꺼번에 등록', () => {
@@ -930,6 +995,32 @@ describe('MinuteViewer AI 요약 카드 → WBS 한꺼번에 등록', () => {
     expect(mocks.toast).toHaveBeenCalledWith({ title: 'min.wbs.noAction', variant: 'info' })
     expect(mocks.prepareMinuteWbsDrafts).not.toHaveBeenCalled()
     expect(bulkDialog()).toBeNull()
+  })
+
+  it('액션 문단이 모두 이 프로젝트에 등록됐으면 단추가 없다(회색 줄뿐인 「0건 등록」 창을 열지 않는다) — 그래도 불리면 min.wbs.noAction 토스트만', async () => {
+    const actionLink = (linkId: string, index: number, projectId = 'project-1') =>
+      ({ ...link(linkId, index, blocks[index].hash), projectId, sourceKind: 'action' as const })
+    await mountViewer({ ...withActions, linkedWbsItems: [actionLink('0', 0), actionLink('2', 2)] })
+    expect(lastCard().canBulkWbs).toBe(false)
+    expect(bulkButton()).toBeNull()
+    await act(async () => { forceBulk()!.click() })
+    expect(mocks.toast).toHaveBeenCalledWith({ title: 'min.wbs.noAction', variant: 'info' })
+    expect(mocks.prepareMinuteWbsDrafts).not.toHaveBeenCalled()
+
+    // 하나라도 남았으면 단추가 있고, 창에는 액션 문단 전부를 싣는다(등록된 줄은 창이 회색으로 보인다)
+    act(() => root.unmount())
+    root = createRoot(container)
+    mocks.prepareMinuteWbsDrafts.mockResolvedValueOnce({ ok: true, value: bulkDrafts() })
+    await mountViewer({ ...withActions, linkedWbsItems: [actionLink('0', 0)] })
+    expect(lastCard().canBulkWbs).toBe(true)
+    await act(async () => { bulkButton()!.click() })
+    expect(mocks.prepareMinuteWbsDrafts).toHaveBeenCalledWith('project-1', [actionSource(0), actionSource(2)])
+
+    // 다른 프로젝트에 걸린 연결은 이 프로젝트의 「등록됨」이 아니다
+    act(() => root.unmount())
+    root = createRoot(container)
+    await mountViewer({ ...withActions, linkedWbsItems: [actionLink('0', 0, 'project-9'), actionLink('2', 2, 'project-9')] })
+    expect(lastCard().canBulkWbs).toBe(true)
   })
 
   it('관리자가 아니거나 연결 목록을 못 읽었거나 보관된 회의록이면 단추가 없다(onBulkWbs 도 없다)', async () => {
@@ -1094,6 +1185,20 @@ describe('MinuteViewer AI 요약 카드 → WBS 한꺼번에 등록', () => {
       }))
     })
 
+    it('등록됨은 고를 수 있는 프로젝트마다 본다 — 한 프로젝트에만 등록됐으면 단추가 있고, 고를 수 있는 프로젝트 모두에 등록됐으면 없다', async () => {
+      const linkIn = (linkId: string, index: number, projectId: string) =>
+        ({ ...link(linkId, index, blocks[index].hash), projectId, sourceKind: 'action' as const })
+      await mountViewer({ ...loose, linkedWbsItems: [linkIn('a0', 0, 'project-1'), linkIn('a2', 2, 'project-1')] })
+      expect(lastCard().canBulkWbs).toBe(true)
+
+      act(() => root.unmount())
+      root = createRoot(container)
+      await mountViewer({ ...loose, linkedWbsItems: [
+        linkIn('a0', 0, 'project-1'), linkIn('a2', 2, 'project-1'), linkIn('b0', 0, 'project-2'), linkIn('b2', 2, 'project-2'),
+      ] })
+      expect(lastCard().canBulkWbs).toBe(false)
+    })
+
     it('한꺼번에 준비 중에 선택 창을 닫으면 요청을 버린다 — 늦은 응답이 bulk 창을 열지 않는다', async () => {
       const pending = deferred<{ ok: true; value: MinuteWbsDrafts }>()
       mocks.prepareMinuteWbsDrafts.mockReturnValueOnce(pending.promise)
@@ -1243,5 +1348,28 @@ describe('MinuteInsightCard — 한꺼번에 단추·작업 칩·연결된 작�
     expect(container.textContent).not.toContain('min.wbs.count')
     act(() => { buttonByText(container, 'min.insight.expand')!.click() })
     expect(container.textContent).not.toContain('min.wbs.linked')
+  })
+
+  it('「작업 N」 칩과 목록의 표시는 본문 배지와 같은 성공(초록) 색 — 액션(파랑) 칩과 헷갈리지 않게', async () => {
+    await renderCard({ linkedWbsItems: [link('1', 2, blocks[2].hash)] })
+    const chip = buttonByText(container, 'min.wbs.count 1')!
+    expect(chip.className).toContain('bg-success-weak')
+    expect(chip.className).toContain('text-success')
+    expect(chip.className).not.toContain('text-action')
+    act(() => { chip.click() })
+    const row = buttonByText(container, '작업 1')!
+    expect(row.querySelector('svg')!.getAttribute('class')).toContain('text-success')
+    expect(row.querySelector('.font-semibold')!.className).toContain('text-success')
+  })
+
+  it('목록의 코드는 이름과 겹치면 숨긴다(코드 = 이름 첫 낱말·화자 이름표)', async () => {
+    await renderCard({ linkedWbsItems: [
+      { ...link('1', 2, blocks[2].hash), code: '회원', name: '회원 데이터 이관 스크립트 점검' },
+      { ...link('2', 0, blocks[0].hash), code: '2.1.4', name: '로그인 API 개발' },
+    ] })
+    act(() => { buttonByText(container, 'min.wbs.count 2')!.click() })
+    const codes = [...container.querySelectorAll('li button .font-semibold')].map(el => el.textContent)
+    expect(codes).toEqual(['2.1.4'])
+    expect(container.textContent).toContain('회원 데이터 이관 스크립트 점검')
   })
 })

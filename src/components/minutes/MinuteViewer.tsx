@@ -306,8 +306,16 @@ export function MinuteViewer({
         kind: 'action',
       }))
   }, [blocks, bodyHash, currentVersion, insights, minute.id])
-  // 요약 카드의 「WBS로 한꺼번에 등록」 — 한 건 등록을 열 수 있고(프로젝트 없는 회의록은 선택 창 뒤) 액션 문단이 하나라도 있을 때
-  const canBulkWbs = wbsEnabled && actionSources.length > 0
+  // 아직 등록되지 않은 액션 문단이 있는가 — "등록됨"은 문단 내용(hash)·그 프로젝트의 연결로 본다(설계 §5.6, 창의 회색 줄과 같은 판정).
+  // 고정 프로젝트면 그 프로젝트, 프로젝트 없는 회의록이면 고를 수 있는 프로젝트마다 — 어느 하나에라도 남은 문단이 있으면 연다
+  const hasUnregisteredAction = useMemo(() => {
+    const targets = fixedProjectId ? [fixedProjectId] : wbsPickerProjects.map(project => project.id)
+    const linked = new Set(activeLinkedWbs.map(link => `${link.projectId}:${link.blockHash}`))
+    return actionSources.some(source => targets.some(projectId => !linked.has(`${projectId}:${source.blockHash}`)))
+  }, [actionSources, activeLinkedWbs, fixedProjectId, wbsPickerProjects])
+  // 요약 카드의 「WBS로 한꺼번에 등록」 — 한 건 등록을 열 수 있고(프로젝트 없는 회의록은 선택 창 뒤) 아직 등록되지 않은 액션 문단이 하나라도
+  // 있을 때. 모두 등록됐으면 단추를 숨긴다 — 회색 줄뿐인 창(「0건 등록」)을 열지 않는다
+  const canBulkWbs = wbsEnabled && hasUnregisteredAction
   const issueAnchorIndex = issueOrigin === null
     ? null
     : issueOrigin.type === 'block' ? issueOrigin.index : issueOrigin.startIndex
@@ -805,7 +813,8 @@ export function MinuteViewer({
    * AI 요약의 「액션」 문단 전부 → 한꺼번에 등록 창(설계 §3.2). beginWbsCreateFrom 의 뼈대 그대로 — 요청 번호(한 건 준비와 같이 쓴다)로 낡은
    * 응답을 버리고, 고정 프로젝트면 준비(prepareMinuteWbsDrafts — 액션 문단마다 한 줄, kind 'action') 뒤 창을, 아니면 선택 창을 먼저 연다
    * (continueWbsWithProject 가 이 앵커들로 준비한다). 준비 실패는 토스트 — 창은 열지 않는다.
-   * 할 일이 없으면(이슈 초안 준비 중·버전 없음·액션 없음) 진행 중인 WBS 준비를 건드리지 않고 끝낸다.
+   * 할 일이 없으면(이슈 초안 준비 중·버전 없음·남은 액션 없음) 진행 중인 WBS 준비를 건드리지 않고 끝낸다. 창에는 액션 문단 전부를 싣는다 —
+   * 이미 등록된 줄은 창이 회색으로 보인다(준비 액션은 그 줄을 다듬지 않는다).
    */
   async function beginWbsBulk() {
     // 이슈 초안을 준비하는 중에는 시작하지 않는다(이슈 폼과 등록 창이 겹쳐 열리지 않게). 카드 단추가 그동안 막혀 보이는 조건(bulkDisabled)과
@@ -816,7 +825,8 @@ export function MinuteViewer({
       return
     }
     const sources = actionSources
-    if (sources.length === 0) {
+    // 단추를 숨기는 조건(canBulkWbs)과 같다 — 액션 문단이 없거나 모두 등록됐으면 창을 열지 않는다
+    if (sources.length === 0 || !hasUnregisteredAction) {
       toast({ title: t('min.wbs.noAction'), variant: 'info' })
       return
     }
@@ -1095,9 +1105,11 @@ export function MinuteViewer({
           </div>
         </div>
         {err && <p className="text-sm text-danger">{err}</p>}
-        {/* 연결된 작업을 못 읽으면 "등록됨"을 판정할 수 없어 WBS 등록을 닫는다 — 등록할 수 있었던 사람에게만 사유를 둔다(조회 전용 멤버·지난 버전·
-            보관된 회의록에는 원래 등록이 없다. 문단 표시·목록은 누구에게나 빠지고, 조회 실패는 서버가 로그로 남긴다) */}
+        {/* 연결된 작업을 못 읽으면 "등록됨"을 판정할 수 없어 WBS 등록을 닫는다 — 등록할 수 있었던 사람에게는 그 사유를 알림으로 둔다.
+            원래 등록이 없는 화면(조회 전용 멤버·지난 버전·보관된 회의록)에도 문단 표시·연결된 작업 목록이 빠지므로, 말없이 사라지지 않게
+            조용한 안내(status)를 둔다(에러 처리 3원칙 ① — 조회 실패를 "연결 없음"으로 그리지 않는다). 조회 실패는 서버가 로그로 남긴다 */}
         {linkedWbsItemsError && wbsCouldRegister && <p role="alert" className="text-sm text-danger">{t('min.wbs.linksUnavailable')}</p>}
+        {linkedWbsItemsError && !wbsCouldRegister && <p role="status" className="text-sm text-fg-secondary">{t('min.wbs.linksLoadFailed')}</p>}
       </div>
 
       <div className="px-4 py-2">

@@ -32,9 +32,9 @@ const DRAFT: MinuteWbsDraftRow = {
 }
 
 describe('rowStateFromDraft', () => {
-  it('위치는 첫 추천(parentIds[0]) — 마지막으로 고른 위치보다 앞선다. 초안 값은 그대로, 확인은 false', () => {
+  it('위치는 첫 추천(parentIds[0]) — 마지막으로 고른 위치보다 앞선다. 초안 값은 그대로, 계획 시작일은 비우고(채우지 않는다 — 설계 §4.3), 확인은 false', () => {
     expect(rowStateFromDraft(DRAFT, null)).toEqual({
-      name: '로그인 API 개발', parentValue: 'a', plannedEnd: '2026-10-31', assigneeMemberId: 'm1', confirmParentLeaf: false,
+      name: '로그인 API 개발', parentValue: 'a', plannedStart: '', plannedEnd: '2026-10-31', assigneeMemberId: 'm1', confirmParentLeaf: false,
     })
     expect(rowStateFromDraft(DRAFT, 'last').parentValue).toBe('a')
   })
@@ -42,7 +42,7 @@ describe('rowStateFromDraft', () => {
   it('추천이 없으면 마지막으로 고른 위치, 그것도 없으면 null — 빈 날짜·담당자는 빈 글자(입력 칸의 값)', () => {
     const bare: MinuteWbsDraftRow = { ...DRAFT, parentIds: [], plannedEnd: null, assigneeMemberId: null }
     expect(rowStateFromDraft(bare, 'last')).toEqual({
-      name: '로그인 API 개발', parentValue: 'last', plannedEnd: '', assigneeMemberId: '', confirmParentLeaf: false,
+      name: '로그인 API 개발', parentValue: 'last', plannedStart: '', plannedEnd: '', assigneeMemberId: '', confirmParentLeaf: false,
     })
     expect(rowStateFromDraft(bare, null).parentValue).toBeNull()
   })
@@ -183,6 +183,37 @@ describe('MinuteWbsRowFields', () => {
     expect(emitted.at(-1)).toMatchObject({ parentValue: WBS_ROOT_PARENT, confirmParentLeaf: false })
     expect(text()).not.toContain('min.wbs.parentPlaceholder')
     expect(text()).not.toContain('min.wbs.leafNotice')
+  })
+
+  it('계획 시작일은 한 건 창에서만(showPlannedStart) — 한꺼번에 줄에는 없다(설계 §3.2 종료일만)', async () => {
+    await mount(rowStateFromDraft(DRAFT, null))
+    expect(() => field('min.wbs.plannedStart')).toThrow()
+
+    function SingleHarness() {
+      const [state, setState] = useState(rowStateFromDraft(DRAFT, null))
+      return <MinuteWbsRowFields state={state} draft={DRAFT} parents={PARENTS} members={MEMBERS} showPlannedStart
+        onChange={next => { emitted.push(next); setState(next) }} />
+    }
+    await act(async () => root.render(<SingleHarness />))
+    const start = field<HTMLInputElement>('min.wbs.plannedStart')
+    expect(start.type).toBe('date')
+    expect(start.value).toBe('')
+    await type(start, '2026-10-20')
+    expect(emitted.at(-1)).toMatchObject({ plannedStart: '2026-10-20', plannedEnd: '2026-10-31' })
+    expect(text()).not.toContain('min.wbs.dateOrder')
+    expect(start.hasAttribute('aria-invalid')).toBe(false)
+
+    // 시작이 종료보다 늦으면 안내 — 시작 칸이 invalid 이고 안내를 설명으로 읽힌다. 같은 날은 된다(서버 규칙: 시작 ≤ 종료)
+    await type(start, '2026-11-02')
+    expect(text()).toContain('min.wbs.dateOrder')
+    expect(start.getAttribute('aria-invalid')).toBe('true')
+    expect(document.getElementById(start.getAttribute('aria-describedby') ?? '')?.textContent).toBe('min.wbs.dateOrder')
+    await type(start, '2026-10-31')
+    expect(text()).not.toContain('min.wbs.dateOrder')
+    // 종료일이 비면 순서를 따지지 않는다
+    await type(field<HTMLInputElement>('min.wbs.plannedEnd'), '')
+    await type(start, '2026-12-01')
+    expect(text()).not.toContain('min.wbs.dateOrder')
   })
 
   it('disabled 면 칸이 모두 잠긴다', async () => {

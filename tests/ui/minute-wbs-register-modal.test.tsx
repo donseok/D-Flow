@@ -17,7 +17,7 @@ import { escStack } from '@/lib/ui/escStack'
 // 키를 돌려주되 {n} 이 든 문구는 자리를 남긴다 — 호출부가 숫자를 채우는지 본다
 vi.mock('@/components/providers/LocaleProvider', () => ({
   useLocale: () => ({
-    t: (key: string) => (/^min\.wbs\.(selectedCount|submitN|rowFailed|rowIncomplete|leafActual|leafDeps)$/.test(key) ? `${key} {n}` : key),
+    t: (key: string) => (/^min\.wbs\.(selectedCount|submitN|rowFailed|rowIncomplete|leafActual|leafDeps|listBlockNote)$/.test(key) ? `${key} {n}` : key),
   }),
 }))
 vi.mock('next/link', () => ({
@@ -483,6 +483,81 @@ describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
     spy.mockRestore()
   })
 
+  it('등록된 줄의 머리 — 코드가 이름의 첫 낱말이면(등록 규칙) 코드를 따로 적지 않는다(「백업 백업 정책 정리」로 더듬지 않게)', async () => {
+    const drafts: MinuteWbsDrafts = { ...DRAFTS, rows: DRAFTS.rows.map((draft, index) =>
+      (index === 3 ? { ...draft, registered: { itemId: 'item-9', code: '백업', name: '백업 정책 정리' } } : draft)) }
+    await mount({ drafts })
+    const header = [...row(3).querySelectorAll('.text-fg-muted')].find(element => element.textContent?.includes('백업 정책 정리'))!
+    expect(header.textContent).toBe('백업 정책 정리')
+    expect(header.querySelector('.font-semibold')).toBeNull()
+  })
+
+  it('목록·표 문단(항목 여럿) 줄은 처음에 체크하지 않고, 항목 수와 「항목별로는 끌어 선택」 안내를 단다', async () => {
+    const drafts: MinuteWbsDrafts = { ...DRAFTS, rows: DRAFTS.rows.map((draft, index) => (index === 1 ? { ...draft, listItems: 3 } : draft)) }
+    await mount({ drafts })
+    // 추천 위치가 있어도 체크하지 않는다 — 목록 전체가 작업 하나가 되는지 사람이 보고 고른다
+    expect(rowCheck(0).checked).toBe(true)
+    expect(rowCheck(1).checked).toBe(false)
+    expect(rowCheck(1).disabled).toBe(false)
+    expect(row(1).textContent).toContain('min.wbs.listBlockNote 3')
+    expect(row(0).textContent).not.toContain('min.wbs.listBlockNote')
+    expect(dialog().textContent).toContain('min.wbs.selectedCount 1')
+    // 사람이 체크하면 보낼 수 있다
+    await click(rowCheck(1))
+    expect(dialog().textContent).toContain('min.wbs.selectedCount 2')
+    expect(submitButton().disabled).toBe(false)
+  })
+
+  it('같은 묶음의 앞 줄과 같은 문단(duplicate)은 체크할 수 없고 안내만 — 칸이 없다(함께 등록하면 등록이 막힌다)', async () => {
+    const drafts: MinuteWbsDrafts = { ...DRAFTS, rows: DRAFTS.rows.map((draft, index) =>
+      (index === 1 ? { ...draft, duplicate: true, blockHash: DRAFTS.rows[0].blockHash } : draft)) }
+    const { onSubmit } = await mount({ drafts })
+    expect(rowCheck(1).checked).toBe(false)
+    expect(rowCheck(1).disabled).toBe(true)
+    expect(row(1).textContent).toContain('min.wbs.duplicateBlock')
+    expect(row(1).querySelector('[role="group"]')).toBeNull()
+    await click(rowCheck(1))
+    expect(rowCheck(1).checked).toBe(false)
+    // 「위치 한꺼번에 바꾸기」도 이 줄을 건드리지 않고, 보내는 줄에 들지 않는다
+    onSubmit.mockResolvedValueOnce({ ok: true, items: [{ row: 0, itemId: 'item-1', code: '2.1.4' }] })
+    await click(submitButton())
+    await settle()
+    expect((onSubmit.mock.calls[0][0] as MinuteWbsCreateRow[]).map(line => line.source.blockIndex)).toEqual([0])
+  })
+
+  it('거부 code 가 말단 확인 재요청(WBS_PARENT_LEAF_UNCONFIRMED)이면 그 줄의 위치를 하위 없는 작업으로 고쳐 안내·확인을 띄운다 — 확인해야 다시 보낸다', async () => {
+    const { onSubmit, onCreated } = await mount()
+    onSubmit
+      .mockResolvedValueOnce({ ok: false, error: '넣을 위치의 하위 작업이 그새 사라졌습니다.', row: 1, code: 'WBS_PARENT_LEAF_UNCONFIRMED' })
+      .mockResolvedValueOnce({ ok: true, items: [{ row: 0, itemId: 'item-1', code: '2.1.4' }, { row: 1, itemId: 'item-2', code: '3.2.1' }] })
+    expect(confirmBox(row(1))).toBeNull()
+    await click(submitButton())
+    await settle()
+    // 보낸 줄 1(화면 줄 1)의 위치 parent-2 가 이제 하위 없는 작업 — 안내·확인이 나오고 확인 전에는 막힌다(다른 위치의 줄 0 은 그대로)
+    expect(row(1).textContent).toContain('min.wbs.leafNotice')
+    expect(confirmBox(row(1))!.checked).toBe(false)
+    expect(confirmBox(row(0))).toBeNull()
+    expect(submitButton().disabled).toBe(true)
+    await click(confirmBox(row(1))!)
+    expect(submitButton().disabled).toBe(false)
+    await click(submitButton())
+    await settle()
+    expect(onSubmit).toHaveBeenLastCalledWith([
+      expect.objectContaining({ source: SOURCES[0], parentId: 'parent-1', confirmParentLeaf: false }),
+      expect.objectContaining({ source: SOURCES[1], parentId: 'parent-2', confirmParentLeaf: true }),
+    ])
+    expect(onCreated).toHaveBeenCalledTimes(1)
+  })
+
+  it('다른 거부 code(또는 code 없음)는 위치를 고치지 않는다', async () => {
+    const { onSubmit } = await mount()
+    onSubmit.mockResolvedValueOnce({ ok: false, error: '이미 등록된 문단입니다.', row: 1, code: 'MINUTE_BLOCK_ALREADY_LINKED' })
+    await click(submitButton())
+    await settle()
+    expect(row(1).textContent).not.toContain('min.wbs.leafNotice')
+    expect(submitButton().disabled).toBe(false)
+  })
+
   it('체크만 바꿔도 닫을 때 버릴지 묻는다(dirty 에 체크 상태가 든다)', async () => {
     const { onClose } = await mount()
     // 기준값은 열린 다음 틱에 잡힌다(useModalDirty)
@@ -491,5 +566,64 @@ describe('MinuteWbsRegisterModal — 한꺼번에(bulk)', () => {
     act(() => { dialog().querySelector<HTMLButtonElement>('button[aria-label="common.close"]')!.click() })
     expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull()
     expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('MinuteWbsRegisterModal — 한 건(single)', () => {
+  const singleDialog = () => document.body.querySelector<HTMLElement>('[role="dialog"][aria-label="min.wbs.title"]')!
+  const singleSubmit = () => buttonByText(singleDialog(), 'min.wbs.submit')!
+  async function mountSingle(draft: Partial<MinuteWbsDraftRow> = {}) {
+    const drafts: MinuteWbsDrafts = { ...DRAFTS, rows: [{ ...DRAFTS.rows[0], ...draft }] }
+    return mount({ mode: 'single', drafts, sources: [SOURCES[0]] })
+  }
+
+  it('계획 시작일을 넣을 수 있다(비워 두면 null) — 시작이 종료보다 늦으면 안내가 나오고 등록이 막힌다(설계 §3.1·§4.3)', async () => {
+    const { onSubmit } = await mountSingle()
+    onSubmit.mockResolvedValue({ ok: true, items: [{ row: 0, itemId: 'item-1', code: '2.1.4' }] })
+    const start = field<HTMLInputElement>(singleDialog(), 'min.wbs.plannedStart')
+    expect(start.value).toBe('')
+    expect(field<HTMLInputElement>(singleDialog(), 'min.wbs.plannedEnd').value).toBe('2026-10-31')
+
+    await typeInto(start, '2026-11-05')
+    expect(singleDialog().textContent).toContain('min.wbs.dateOrder')
+    expect(singleSubmit().disabled).toBe(true)
+    await click(singleSubmit())
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    await typeInto(start, '2026-10-20')
+    expect(singleDialog().textContent).not.toContain('min.wbs.dateOrder')
+    expect(singleSubmit().disabled).toBe(false)
+    await click(singleSubmit())
+    await settle()
+    expect(onSubmit).toHaveBeenCalledWith([expect.objectContaining({ plannedStart: '2026-10-20', plannedEnd: '2026-10-31' })])
+  })
+
+  it('계획 시작일을 비우면 null 로 보낸다', async () => {
+    const { onSubmit } = await mountSingle()
+    onSubmit.mockResolvedValue({ ok: true, items: [{ row: 0, itemId: 'item-1', code: '2.1.4' }] })
+    await click(singleSubmit())
+    await settle()
+    expect(onSubmit).toHaveBeenCalledWith([expect.objectContaining({ plannedStart: null })])
+  })
+
+  it('목록 문단(항목 여럿)이면 한 건 창에도 항목 수와 안내를 단다 — 막지는 않는다', async () => {
+    await mountSingle({ listItems: 2 })
+    expect(singleDialog().textContent).toContain('min.wbs.listBlockNote 2')
+    expect(singleSubmit().disabled).toBe(false)
+  })
+
+  it('말단 확인 재요청(code)이면 한 건 창도 위치를 하위 없는 작업으로 고쳐 확인을 받는다', async () => {
+    const { onSubmit } = await mountSingle()
+    onSubmit
+      .mockResolvedValueOnce({ ok: false, error: '넣을 위치의 하위 작업이 그새 사라졌습니다.', row: 0, code: 'WBS_PARENT_LEAF_UNCONFIRMED' })
+      .mockResolvedValueOnce({ ok: true, items: [{ row: 0, itemId: 'item-1', code: '2.1.4' }] })
+    await click(singleSubmit())
+    await settle()
+    expect(singleDialog().textContent).toContain('min.wbs.leafNotice')
+    expect(singleSubmit().disabled).toBe(true)
+    await click(confirmBox(singleDialog())!)
+    await click(singleSubmit())
+    await settle()
+    expect(onSubmit).toHaveBeenLastCalledWith([expect.objectContaining({ parentId: 'parent-1', confirmParentLeaf: true })])
   })
 })

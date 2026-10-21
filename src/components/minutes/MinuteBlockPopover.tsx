@@ -1,16 +1,35 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { CircleAlert, ExternalLink, Highlighter, ListPlus, LoaderCircle, Users } from 'lucide-react'
 import type { InsightKind } from '@/lib/domain/types'
 import type { MinuteLinkedIssue } from '@/lib/domain/issueMinuteSource'
-import type { MinuteLinkedWbsItem } from '@/lib/domain/minuteWbs'
+import { displayWbsCode, type MinuteLinkedWbsItem } from '@/lib/domain/minuteWbs'
 import { IssueStatusPill } from '@/components/ui/StatusPill'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { fill } from '@/lib/i18n/translate'
 
 /** 연결된 작업 목록에 바로 보이는 수 — 나머지는 「외 N건」(연결된 이슈와 같은 꼴) */
 const LINKED_WBS_SHOWN = 2
+/** 연결된 이슈 목록에 바로 보이는 수 */
+const LINKED_ISSUES_SHOWN = 2
+
+/** 칸마다의 어림 높이(px) — 안쪽 여백 p-3·테두리, 인사이트 칩 줄, h-9 단추, 구역 가름(mt-2 border-t pt-2), 목록 머리·항목·「외 N건」, 명단 */
+const EST = { frame: 26, kinds: 24, button: 36, divider: 17, listLabel: 24, listItem: 60, listMore: 24, listGap: 8, names: 62 }
+
+/**
+ * 팝오버의 어림 높이 — 잰 높이가 없을 때(첫 그리기·잴 수 없는 환경)만 쓴다. 칸마다 실제 높이에 가깝게 더한다: 예전 어림(320 + 목록마다 120)은
+ * 실제보다 커서 위로 뒤집을 때 팝오버가 문단에서 165~260px 떠 있었다. 목록은 둘까지만 보이고 나머지는 「외 N건」 한 줄이다
+ */
+export function estimatePopoverHeight(c: { kinds: number; linkedIssues: number; linkedWbs: number; wbsButton: boolean; names: number }): number {
+  const list = (n: number, shown: number) =>
+    (n > 0 ? EST.listLabel + Math.min(n, shown) * EST.listItem + (n > shown ? EST.listMore : 0) + EST.listGap : 0)
+  const wbsSection = c.wbsButton || c.linkedWbs > 0
+  return EST.frame + (c.kinds > 0 ? EST.kinds : 0) + EST.button
+    + EST.divider + list(c.linkedIssues, LINKED_ISSUES_SHOWN) + EST.button
+    + (wbsSection ? EST.divider + list(c.linkedWbs, LINKED_WBS_SHOWN) + (c.wbsButton ? EST.button : 0) : 0)
+    + (c.names > 0 ? EST.divider + EST.names : 0)
+}
 
 const KIND_CHIP: Record<InsightKind, string> = {
   decision: 'bg-success-weak text-success',
@@ -68,11 +87,27 @@ export function MinuteBlockPopover({
     }
   }, [onClose])
 
+  // 그린 뒤의 실제 높이 — 위로 뒤집을 때 이 높이로 놓아 아래 끝이 문단 바로 위에 붙는다. 높이를 바꾸는 내용(문단·인사이트 칩·연결 목록·
+  // WBS 단추·명단)이 바뀌면 다시 잰다. 같은 값이면 상태를 바꾸지 않아 다시 그리지 않는다. 잴 수 없으면(0) 어림값을 쓴다
+  const [measuredH, setMeasuredH] = useState<number | null>(null)
+  const contentKey = [
+    state.blockIndex, insKinds.join(), linkedIssues.map(issue => issue.linkId).join(), linkedWbsItems.map(item => item.linkId).join(),
+    onCreateWbs !== undefined, names.join('\u0000'),
+  ].join('|')
+  useLayoutEffect(() => {
+    const height = boxRef.current?.getBoundingClientRect().height ?? 0
+    const next = height > 0 ? Math.ceil(height) : null
+    setMeasuredH(prev => (prev === next ? prev : next))
+  }, [contentKey])
+
   const W = 300
   const wbsSection = onCreateWbs !== undefined || linkedWbsItems.length > 0
-  // 연결 이슈·WBS 구역이 붙으면 내용이 늘어난다. 화면 밖 플립 기준은 최대 높이로 잡고 카드 자체는 스크롤한다.
+  // 화면 밖 플립 기준 높이 — 잰 높이, 없으면 칸별 어림. 화면보다 크면 카드 자체가 스크롤한다(max-h)
   const H = Math.min(
-    320 + (linkedIssues.length > 0 ? 120 : 0) + (wbsSection ? 56 : 0) + (linkedWbsItems.length > 0 ? 120 : 0),
+    measuredH ?? estimatePopoverHeight({
+      kinds: insKinds.length, linkedIssues: linkedIssues.length, linkedWbs: linkedWbsItems.length,
+      wbsButton: onCreateWbs !== undefined, names: names.length,
+    }),
     window.innerHeight - 16,
   )
   const left = Math.min(Math.max(8, state.rect.left), window.innerWidth - W - 8)
@@ -103,7 +138,7 @@ export function MinuteBlockPopover({
             <div className="mb-2">
               <p className="mb-1.5 text-meta font-semibold text-fg-muted">{t('min.issue.linked')}</p>
               <div className="space-y-1.5">
-                {linkedIssues.slice(0, 2).map(issue => {
+                {linkedIssues.slice(0, LINKED_ISSUES_SHOWN).map(issue => {
                   return (
                     <Link
                       key={issue.linkId}
@@ -124,9 +159,9 @@ export function MinuteBlockPopover({
                     </Link>
                   )
                 })}
-                {linkedIssues.length > 2 && (
+                {linkedIssues.length > LINKED_ISSUES_SHOWN && (
                   <p className="px-1 text-meta text-fg-muted">
-                    {t('min.issue.more').replace('{n}', String(linkedIssues.length - 2))}
+                    {t('min.issue.more').replace('{n}', String(linkedIssues.length - LINKED_ISSUES_SHOWN))}
                   </p>
                 )}
               </div>
@@ -152,20 +187,24 @@ export function MinuteBlockPopover({
               <div className={onCreateWbs ? 'mb-2' : undefined}>
                 <p className="mb-1.5 text-meta font-semibold text-fg-muted">{t('min.wbs.linked')}</p>
                 <div className="space-y-1.5">
-                  {linkedWbsItems.slice(0, LINKED_WBS_SHOWN).map(item => (
-                    <Link
-                      key={item.linkId}
-                      href={`/p/${item.projectId}/wbs?focus=${encodeURIComponent(item.itemId)}`}
-                      onClick={onClose}
-                      className="flex items-center gap-2 rounded-xl border border-border bg-surface-subtle px-2.5 py-2 text-xs text-fg transition hover:border-action/40 hover:text-action"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{item.code}</span>
-                        <span className="mt-0.5 block truncate text-meta text-fg-secondary">{item.name}</span>
-                      </span>
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    </Link>
-                  ))}
+                  {linkedWbsItems.slice(0, LINKED_WBS_SHOWN).map(item => {
+                    // 코드가 이름의 첫 낱말·화자 이름표면 같은 글이 두 번 보이므로 이름만(이름이 첫 줄)
+                    const code = displayWbsCode(item.code, item.name)
+                    return (
+                      <Link
+                        key={item.linkId}
+                        href={`/p/${item.projectId}/wbs?focus=${encodeURIComponent(item.itemId)}`}
+                        onClick={onClose}
+                        className="flex items-center gap-2 rounded-xl border border-border bg-surface-subtle px-2.5 py-2 text-xs text-fg transition hover:border-action/40 hover:text-action"
+                      >
+                        <span className="min-w-0 flex-1">
+                          {code && <span className="block truncate font-medium">{code}</span>}
+                          <span className={code ? 'mt-0.5 block truncate text-meta text-fg-secondary' : 'block truncate font-medium'}>{item.name}</span>
+                        </span>
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      </Link>
+                    )
+                  })}
                   {linkedWbsItems.length > LINKED_WBS_SHOWN && (
                     <p className="px-1 text-meta text-fg-muted">
                       {fill(t('min.wbs.more'), { n: linkedWbsItems.length - LINKED_WBS_SHOWN })}

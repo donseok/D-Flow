@@ -108,6 +108,9 @@ describe('WbsParentPicker — 추천 우선 라디오 + 다른 위치 찾기', (
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
     const search = searchInput()!
     expect(document.activeElement).toBe(search)   // 펼치면 검색 칸으로 — 바로 칠 수 있게
+    // 무엇으로 찾는지 칸 안에 보인다(번호나 이름) — 이름표(aria-label)는 그대로
+    expect(search.placeholder).toBe('min.wbs.parentSearchHint')
+    expect(search.getAttribute('aria-label')).toBe('min.wbs.parentSearch')
     expect(results().map(r => r.value)).toEqual(OPTIONS.map(o => o.id))
     await type(search, '인증')
     const hits = results()
@@ -234,6 +237,32 @@ describe('WbsParentPicker — 추천 우선 라디오 + 다른 위치 찾기', (
     await mount({ recommendedIds: ['a'], value: WBS_ROOT_PARENT })
     expect(choices().map(r => [r.value, r.checked])).toEqual([['a', false], [WBS_ROOT_PARENT, true]])
     expect(onChange).not.toHaveBeenCalled()   // 맨 위도 고른 값이다 — 첫 추천으로 덮지 않는다
+  })
+
+  it('맨 위(최상위)는 위 묶음의 마지막(추천·지금 값 다음)이고 스스로 골라지지 않는다 — 값이 맨 위일 때만(사람이 골랐거나 기억한 선택) 골라진 채', async () => {
+    const top = () => choices().map(r => r.value)
+    const checked = () => choices().filter(r => r.checked).map(r => r.value)
+    // 추천 셋 + 추천 밖 지금 값 — 맨 위는 그 뒤
+    await mount({ recommendedIds: ['a', 'b', 'c'], value: 'e' })
+    expect(top()).toEqual(['a', 'b', 'c', 'e', WBS_ROOT_PARENT])
+    expect(checked()).toEqual(['e'])
+    // 추천이 없고 값도 없으면 아무것도 고르지 않는다 — 맨 위가 하나뿐인 라디오여도 미리 고르지 않고 부모 상태도 건드리지 않는다
+    onChange.mockClear()
+    await mount({ recommendedIds: [], value: null })
+    expect(top()).toEqual([WBS_ROOT_PARENT])
+    expect(checked()).toEqual([])
+    await mount({ options: [], recommendedIds: [], value: null })
+    expect(checked()).toEqual([])
+    expect(onChange).not.toHaveBeenCalled()
+    // 추천이 있으면 첫 추천(맨 위가 아니다)
+    await mount({ recommendedIds: ['b'], value: null })
+    expect(onChange).toHaveBeenLastCalledWith('b')
+    expect(onChange).not.toHaveBeenCalledWith(WBS_ROOT_PARENT)
+    // 기억한 맨 위(값 = WBS_ROOT_PARENT)는 그대로 골라진 채 — 추천으로 덮지 않는다(설계 §4.2)
+    onChange.mockClear()
+    await mount({ recommendedIds: [], value: WBS_ROOT_PARENT })
+    expect(checked()).toEqual([WBS_ROOT_PARENT])
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('옵션이 0개면 min.wbs.parentNone — 찾을 것이 없어 찾기 단추도 없고, 맨 위는 그래도 고를 수 있다', async () => {
