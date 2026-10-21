@@ -54,5 +54,10 @@ describe('회의록 목록 들여쓰기', () => {
     expect(markIndent).toBe('0.6em')
     expect(declOf('.minutes-md :is(ul, ol):is([data-ins], [data-issue-count], [data-wbs-count])', 'padding-left'))
       .toBe(`calc(var(--list-indent) + ${markIndent})`)
+    // WBS 선은 이슈 블록을 비켜 간다 — :where 라 특이성이 이슈 규칙과 같아 위 목록 특례가 이긴다. 여백이 마킹과 같아야 위 calc 가 맞는다.
+    expect(declOf('.minutes-md [data-wbs-count]:where(:not([data-issue-count]))', 'padding-left')).toBe(markIndent)
+    // 이슈와 WBS 가 함께 걸린 블록은 ::before 가 하나뿐이라 이슈 배지 하나에 두 수를 함께 적는다
+    expect(declOf('.minutes-md [data-issue-count][data-wbs-count]::before', 'content'))
+      .toBe("'⚑ ' attr(data-issue-count) ' · ▤ ' attr(data-wbs-count)")
   })
 })

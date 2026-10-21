@@ -702,6 +702,7 @@ export function ImportWizard({
                       : t('importWizard.replaceWarnDelete')}
                   </li>
                   <li>{t('importWizard.replaceWarnChangeLogs')}</li>
+                  <li>{t('importWizard.replaceWarnMinuteLinks')}</li>
                   <li>{t('importWizard.replaceWarnHolidays')}</li>
                   <li>{t('importWizard.replaceWarnBackup')}</li>
                 </ul>

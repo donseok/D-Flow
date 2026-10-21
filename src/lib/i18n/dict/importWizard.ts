@@ -65,6 +65,9 @@ export const importWizardKo = {
   'importWizard.replaceWarnDeleteCountPrefix': '현재 WBS 항목 ',
   'importWizard.replaceWarnDeleteCountSuffix': '개를 삭제한 뒤 파일 내용으로 다시 채웁니다.',
   'importWizard.replaceWarnChangeLogs': '변경 이력(change_logs)은 함께 삭제되며 백업에도 포함되지 않아 복구할 수 없습니다.',
+  // 회의록에서 등록한 작업의 원문 연결 — wbs_items 를 따라 CASCADE 로 지워진다(설계 2026-10-21-minutes-to-wbs §5.6). 실행 결과의 경고
+  // (srv.api.importExecute.minuteLinks)와 같은 사실을 실행 전 빨간 상자에서도 알린다
+  'importWizard.replaceWarnMinuteLinks': '회의록 원문 연결(wbs_item_links)도 함께 삭제되며 백업에도 포함되지 않아 복구할 수 없습니다.',
   'importWizard.replaceWarnHolidays': '휴일은 삭제되지 않고 갱신만 됩니다.',
   'importWizard.replaceWarnBackup': '실행하기 전에 아래에서 지금 트리의 백업 파일을 먼저 내려받아야 합니다. 실행이 끝나면 교체 직전 백업도 한 번 더 내려받습니다.',
   'importWizard.preBackupTitle': '실행 전 백업',
