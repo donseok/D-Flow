@@ -61,6 +61,7 @@ vi.mock('@/lib/data/meetings', () => ({
   resolveMemberIds: vi.fn(async () => []),
 }))
 vi.mock('@/lib/data/issues', () => ({ getIssues: vi.fn(async () => []), getMinuteLinkedIssues: vi.fn(async () => []) }))
+vi.mock('@/lib/data/wbsLinks', () => ({ getMinuteLinkedWbsItems: vi.fn(async () => ({ ok: true, rows: [] })) }))
 vi.mock('@/lib/data/minutes', () => ({
   getMinuteDetail: mocks.getMinuteDetail,
   getMinuteAnnotations: vi.fn(async () => ({ highlights: [], insights: [] })),

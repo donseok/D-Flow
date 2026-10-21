@@ -6,12 +6,13 @@ import {
 import { getSession } from '@/lib/auth'
 import { loadWorkspaceScope } from '@/lib/authz/workspaceScope'
 import { getHiddenProjectIds } from '@/lib/authz/visibility'
-import { canEditMinute } from '@/lib/domain/authz'
+import { adminProjectIds, canEditMinute } from '@/lib/domain/authz'
 import { listProjects } from '@/app/actions/project'
 import { getAccountPrefs } from '@/app/actions/preferences'
 import { MinuteViewer } from '@/components/minutes/MinuteViewer'
 import { parseMinuteSourceAnchor } from '@/lib/minutes/source'
 import { getMinuteLinkedIssues } from '@/lib/data/issues'
+import { getMinuteLinkedWbsItems } from '@/lib/data/wbsLinks'
 import { getProjectRoster, getMyProjectIds } from '@/lib/data/members'
 import { requireModulePage } from '@/lib/modules/pageGate'
 import { minuteScopeTimezone } from '@/lib/minutes/timeFix.server'
@@ -55,14 +56,24 @@ export default async function MinuteDetailPage({
   // P20 — 연결 이슈·위키 영향은 그 회의록의 프로젝트(없으면 워크스페이스)에서 모듈이 켜졌을 때만. 판정 실패는 core 만(= 숨김, 로그는 moduleSetFor)
   const modScope = head.minute.projectId ? { projectId: head.minute.projectId } : { workspaceId: head.minute.workspaceId }
   // prefs 는 기존 병렬 묶음에 합류 — 직렬 왕복 단수는 그대로다(스펙 §4.5)
-  const [detail, annotations, versions, requestedVersion, user, projects, prefs, linkedIssuesRaw, mods] = await Promise.all([
+  const [detail, annotations, versions, requestedVersion, user, projects, prefs, linkedIssuesRaw, linkedWbs, mods] = await Promise.all([
     getMinuteDetail(id), getMinuteAnnotations(id), getMinuteVersions(id, wsHref(scope.ws.slug, 'minutes')),
     requestedVersionId ? getMinuteVersionBody(id, requestedVersionId) : Promise.resolve(null),
-    getSession(), listProjects(), getAccountPrefs(), getMinuteLinkedIssues(id),
+    getSession(), listProjects(), getAccountPrefs(), getMinuteLinkedIssues(id), getMinuteLinkedWbsItems(id),
     moduleSetFor(modScope),
   ])
   const m = scope.actor
   const linkedIssues = mods.has('issues') ? linkedIssuesRaw : []
+  // 회의록 문단 → WBS 작업 연결(설계 2026-10-21-minutes-to-wbs §3.3·§5.6) — 연결 표는 회의록 모듈 소유라 그 범위에서 회의록이 켜졌을 때만 싣는다.
+  // 못 읽으면 빈 목록이 아니라 사유를 넘긴다 — "등록됨"을 판정할 수 없으므로 뷰어가 WBS 등록을 열지 않고 사유를 보인다(§8).
+  const linkedWbsItems = mods.has('minutes') && linkedWbs.ok ? linkedWbs.rows : []
+  const linkedWbsItemsError = linkedWbs.ok ? null : linkedWbs.error
+  if (!linkedWbs.ok) console.error(`[minutes] 연결된 WBS 작업 조회 실패 — 회의록 ${id} 에서 WBS 등록을 막고 사유를 알린다`)
+  // WBS 로 등록할 수 있는 프로젝트 — 액션 가드(requireProjectAdmin)와 같은 판정(플랫폼 관리자는 전부, 워크스페이스 관리자는 승계)을
+  // 보이는 프로젝트(listProjects) 안에서만. 권한을 모르면(actor null — 열화) 없음: 등록 단추를 열지 않는다.
+  const wbsAdminProjectIds: string[] = m
+    ? (m.isSuperuser ? projects.map(p => p.id) : adminProjectIds(m).filter(pid => projects.some(p => p.id === pid)))
+    : []
   if (!detail) notFound()
   if (requestedVersionId && !requestedVersion) notFound()
   const issueProjectId = detail.minute.projectId ?? detail.minute.meetingProjectId ?? null
@@ -123,6 +134,7 @@ export default async function MinuteDetailPage({
       wikiImpact={wikiImpact}
       historicalVersion={historicalVersion}
       issueMembers={issueMembers} issueMembersError={issueMembersError} linkedIssues={linkedIssues}
+      linkedWbsItems={linkedWbsItems} linkedWbsItemsError={linkedWbsItemsError} wbsAdminProjectIds={wbsAdminProjectIds}
       folderPath={folderPath} myProjectIds={myProjectIds}
       projectWorkspaces={Object.fromEntries(m?.projectWorkspace ?? [])}
       timeZone={timeZone}

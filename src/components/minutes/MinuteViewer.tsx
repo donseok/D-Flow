@@ -51,6 +51,7 @@ import {
   type IssueMinuteSourceKind,
   type MinuteLinkedIssue,
 } from '@/lib/domain/issueMinuteSource'
+import { activeLinkedWbsItems, type MinuteLinkedWbsItem } from '@/lib/domain/minuteWbs'
 import {
   buildFallbackMinuteIssueDraft, type MinuteIssueDraft,
 } from '@/lib/ai/minute-issue-draft'
@@ -66,8 +67,10 @@ const EMPTY_WIKI_IMPACT: MinuteWikiImpactCardProps = {
  * `linkedIssues = []` 기본값을 인라인으로 두면 **렌더마다 새 배열**이라 activeLinkedIssues →
  * marks 의 useMemo 가 연쇄로 다시 돌고, MarkdownView 의 memo 가 뚫려 글자크기 1px 조절마다
  * 본문 전체가 재파싱된다(스펙 §3 성능 계약, tests/ui/minute-font-size.test.tsx 가 가드).
+ * `linkedWbsItems` 도 같다(activeLinkedWbs → marks).
  */
 const EMPTY_LINKED_ISSUES: MinuteLinkedIssue[] = []
+const EMPTY_LINKED_WBS_ITEMS: MinuteLinkedWbsItem[] = []
 const EMPTY_PROJECT_WORKSPACES: Record<string, string> = {}
 
 /** 이슈 등록의 원천 — 블록 팝오버(블록 전체)와 드래그 선택(부분 발췌)이 같은 상태 기계를 공유한다. */
@@ -87,7 +90,8 @@ type IssueOrigin =
 export function MinuteViewer({
   minute, files, filesError = null, canManage, annotations, userId, projects, sourceAnchor = null,
   initialFontSize = null, versions = [], versionsError = null, wikiImpact = EMPTY_WIKI_IMPACT,
-  historicalVersion = null, issueMembers = [], issueMembersError = null, linkedIssues = EMPTY_LINKED_ISSUES, folderPath = null, timeZone,
+  historicalVersion = null, issueMembers = [], issueMembersError = null, linkedIssues = EMPTY_LINKED_ISSUES,
+  linkedWbsItems = EMPTY_LINKED_WBS_ITEMS, folderPath = null, timeZone,
   myProjectIds = null, projectWorkspaces = EMPTY_PROJECT_WORKSPACES,
 }: {
   minute: Minute
@@ -110,6 +114,12 @@ export function MinuteViewer({
   /** 고정 프로젝트(issueMembers)의 명단 조회 실패 사유 — 있으면 빈 담당자 목록으로 이슈 폼을 열지 않는다. */
   issueMembersError?: string | null
   linkedIssues?: MinuteLinkedIssue[]
+  /** 이 회의록 문단에 연결된 WBS 작업(모든 버전) — 표시는 현재 본문의 문단 내용(block hash)으로 맞춘 것만(activeLinkedWbsItems). */
+  linkedWbsItems?: MinuteLinkedWbsItem[]
+  /** 연결된 작업 조회 실패 사유 — 있으면 linkedWbsItems 는 [] 이고 "등록됨"을 판정할 수 없으므로 WBS 등록을 열지 않는다. */
+  linkedWbsItemsError?: string | null
+  /** WBS 로 등록할 수 있는(관리자인) 프로젝트 id — 서버가 액션 가드(requireProjectAdmin)와 같은 판정으로 내려준다. */
+  wbsAdminProjectIds?: string[]
   /** 소속 폴더의 root-first 경로명. null = 미분류이거나 경로 해석 실패(둘은 렌더에서 구분). */
   folderPath?: string[] | null
   /** 버전·처리 시각의 시간대 — 회의록 범위 tz(서버가 정한다, 계획 P8). null 이면 범위 달력을 읽지 못한 것(시각 '—') */
@@ -181,6 +191,12 @@ export function MinuteViewer({
       && link.bodyHash === bodyHash
       && blocks[link.blockIndex]?.hash === link.blockHash)
   }, [blocks, bodyHash, currentVersion?.id, historicalVersion?.id, linkedIssues])
+  // WBS 연결은 버전이 아니라 문단 내용으로 판정한다(설계 2026-10-21-minutes-to-wbs §5.6) — 이슈(버전 id·본문 hash 가 모두 맞아야)와 달리
+  // 오타만 고친 새 버전에서도 같은 문단이면 "등록됨"이고, 연결은 그 문단의 지금 블록 index 로 옮겨 붙는다.
+  const activeLinkedWbs = useMemo(
+    () => activeLinkedWbsItems(linkedWbsItems, blocks),
+    [blocks, linkedWbsItems],
+  )
   const sourceBlockIndex = useMemo(
     () => sourceAnchor ? resolveMinuteSourceBlock(blocks, bodyHash, sourceAnchor) : null,
     [blocks, bodyHash, sourceAnchor],
@@ -290,6 +306,13 @@ export function MinuteViewer({
     for (const [idx, count] of issueCounts) {
       m[idx] = { ...m[idx], issueCount: count }
     }
+    const wbsCounts = new Map<number, number>()
+    for (const link of activeLinkedWbs) {
+      wbsCounts.set(link.blockIndex, (wbsCounts.get(link.blockIndex) ?? 0) + 1)
+    }
+    for (const [idx, count] of wbsCounts) {
+      m[idx] = { ...m[idx], wbsCount: count }
+    }
     // 저장된 마킹과 구분되는 현재 작업 영역 — 이슈 폼을 열어도 지정 범위를 유지한다.
     const activeRange = issueOrigin
       ? issueOrigin.type === 'selection'
@@ -304,7 +327,7 @@ export function MinuteViewer({
       }
     }
     return m
-  }, [activeLinkedIssues, insights, issueOrigin, myIndexes, others, popover, selectionPreview])
+  }, [activeLinkedIssues, activeLinkedWbs, insights, issueOrigin, myIndexes, others, popover, selectionPreview])
 
   // 블록 클릭 → 팝오버 (이벤트 위임 — 링크/버튼/드래그 선택 제외, 스펙 §6.4)
   const onBodyClick = useCallback((e: React.MouseEvent) => {

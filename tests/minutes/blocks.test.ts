@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
+import type { Root } from 'mdast'
 import {
-  splitMinuteBlocks, fnv1a64, isMarkableBlock, minuteBlockDraftText,
+  splitMinuteBlocks, fnv1a64, isMarkableBlock, minuteBlockDraftText, remarkAnnotateBlocks, type BlockMarks,
 } from '@/lib/minutes/blocks'
+import { MarkdownView } from '@/components/minutes/MarkdownView'
 
 describe('fnv1a64', () => {
   it('결정적이며 16자리 hex', () => {
@@ -123,5 +130,42 @@ describe('splitMinuteBlocks', () => {
   it('빈 문서 → 빈 배열', () => {
     expect(splitMinuteBlocks('')).toEqual([])
     expect(splitMinuteBlocks('   \n  ')).toEqual([])
+  })
+})
+
+// 회의록→WBS(설계 2026-10-21-minutes-to-wbs §3.3) — 문단에 연결된 작업 수를 이슈 수(data-issue-count)와 같은 꼴로 스탬프한다.
+describe('remarkAnnotateBlocks — 연결된 WBS 작업 수(wbsCount)', () => {
+  /** 블록마다 스탬프된 hProperties — 렌더러(react-markdown)가 그대로 요소 속성으로 옮긴다 */
+  function stamped(md: string, marks: BlockMarks) {
+    const tree = unified().use(remarkParse).use(remarkGfm).parse(md) as Root
+    remarkAnnotateBlocks(marks)(tree)
+    return tree.children.map(node => (node.data as { hProperties?: Record<string, unknown> } | undefined)?.hProperties)
+  }
+
+  it('remarkAnnotateBlocks({ 0: { wbsCount: 2 } }) 는 그 블록에 data-wbs-count=2 를 단다 — 다른 블록은 앵커만', () => {
+    const [first, second] = stamped('첫 문단\n\n둘째 문단', { 0: { wbsCount: 2 } })
+    expect(first).toEqual({ 'data-mblock': 0, 'data-wbs-count': 2 })
+    expect(second).toEqual({ 'data-mblock': 1 })
+  })
+
+  it('이슈 수와 함께 단다 — 두 배지는 따로다', () => {
+    const [first] = stamped('문단', { 0: { issueCount: 1, wbsCount: 3 } })
+    expect(first).toEqual({ 'data-mblock': 0, 'data-issue-count': 1, 'data-wbs-count': 3 })
+  })
+
+  it('0 은 달지 않는다(이슈 수와 같은 규칙) — 배지가 "0"으로 뜨지 않게', () => {
+    const [first] = stamped('문단', { 0: { wbsCount: 0 } })
+    expect(first).toEqual({ 'data-mblock': 0 })
+  })
+
+  it('렌더 — 문단 요소에 data-wbs-count="2" 가 실린다', () => {
+    const html = renderToStaticMarkup(createElement(MarkdownView, { content: '로그인 API 개발', marks: { 0: { wbsCount: 2 } } }))
+    expect(html).toMatch(/<p[^>]*data-wbs-count="2"/)
+  })
+
+  it('코드 블록 — data-wbs-count 도 앵커처럼 pre 로 옮기고 code 에는 남기지 않는다(MarkdownView ANCHOR_KEYS)', () => {
+    const html = renderToStaticMarkup(createElement(MarkdownView, { content: '```js\nlogin()\n```', marks: { 0: { wbsCount: 3 } } }))
+    expect(html).toMatch(/<pre[^>]*data-wbs-count="3"/)
+    expect(html).not.toMatch(/<code[^>]*data-wbs-count/)
   })
 })
