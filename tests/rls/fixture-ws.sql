@@ -132,6 +132,10 @@ insert into public.wiki_item_sources (id, wiki_item_id, minute_id, minute_versio
 insert into public.issue_links (id, issue_id, project_id, minute_id, minute_version_id, minute_version_no, minute_title_snapshot, minute_date_snapshot, body_hash, block_index, block_hash, excerpt_snapshot) values
   ('00000000-0000-0000-7e57-000000001110', '00000000-0000-0000-7e57-000000001102', '00000000-0000-0000-7e57-0000000000c1', '00000000-0000-0000-7e57-000000001103', '00000000-0000-0000-7e57-000000001104', 1, 'RLS 회의록', '2026-09-01', 'rls-h', 0, 'rls-b', 'rls 발췌')
   on conflict do nothing;
+-- 회의록 문단 ↔ WBS 작업 연결(*_minute_wbs_links) — A 리프(aErp) ↔ 위 회의록. minute-wbs-links.test.ts 의 읽기 정책·롤백 거부 케이스가 이 행을 본다
+insert into public.wbs_item_links (id, wbs_item_id, project_id, minute_id, minute_version_id, minute_version_no, minute_title_snapshot, minute_date_snapshot, body_hash, block_index, block_hash, excerpt_snapshot, source_kind) values
+  ('00000000-0000-0000-7e57-00000000112d', '00000000-0000-0000-7e57-0000000000f1', '00000000-0000-0000-7e57-0000000000c1', '00000000-0000-0000-7e57-000000001103', '00000000-0000-0000-7e57-000000001104', 1, 'RLS 회의록', '2026-09-01', 'rls-h', 0, 'rls-w', 'rls 발췌', 'manual')
+  on conflict do nothing;
 insert into public.issue_updates (id, issue_id, project_id, body, author_name) values
   ('00000000-0000-0000-7e57-000000001111', '00000000-0000-0000-7e57-000000001102', '00000000-0000-0000-7e57-0000000000c1', 'RLS 경과', 'alice') on conflict do nothing;
 insert into public.issue_attachments (id, issue_id, project_id, file_name, file_path) values
