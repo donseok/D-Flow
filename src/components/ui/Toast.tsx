@@ -9,13 +9,15 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import Link from 'next/link'
 import { CheckCircle2, AlertTriangle, Info, X, type LucideIcon } from 'lucide-react'
 import { useLocale } from '@/components/providers/LocaleProvider'
 import { TOUCH_TARGET } from './touchTarget'
 
 type ToastVariant = 'success' | 'error' | 'info'
 
-type ToastInput = { title: string; description?: string; variant?: ToastVariant }
+/** action — 다음 화면으로 가는 링크 하나(예: 등록 뒤 「작업 계획에서 보기」). 누르면 토스트도 닫힌다 */
+type ToastInput = { title: string; description?: string; variant?: ToastVariant; action?: { label: string; href: string } }
 type ToastItem = ToastInput & { id: number }
 
 type ToastApi = { toast: (t: ToastInput) => void }
@@ -30,6 +32,8 @@ export function useToast(): ToastApi {
 }
 
 const AUTO_DISMISS_MS = 3500
+/** 링크가 달린 토스트 — 읽고 누를 틈을 더 준다 */
+const ACTION_DISMISS_MS = 8000
 
 const VARIANT: Record<ToastVariant, { icon: LucideIcon; iconWrap: string }> = {
   success: { icon: CheckCircle2, iconWrap: 'bg-success-weak text-success' },
@@ -81,15 +85,16 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
     return () => cancelAnimationFrame(id)
   }, [])
 
-  // 자동 소멸 — 마우스를 올리면 일시정지
+  // 자동 소멸 — 마우스를 올리거나 초점이 안에 있으면(링크·닫기로 Tab) 일시정지
+  const delay = item.action ? ACTION_DISMISS_MS : AUTO_DISMISS_MS
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stop = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
   }, [])
   const start = useCallback(() => {
     stop()
-    timer.current = setTimeout(onDismiss, AUTO_DISMISS_MS)
-  }, [onDismiss, stop])
+    timer.current = setTimeout(onDismiss, delay)
+  }, [onDismiss, stop, delay])
   useEffect(() => {
     start()
     return stop
@@ -101,6 +106,8 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
       aria-live="polite"
       onMouseEnter={stop}
       onMouseLeave={start}
+      onFocus={stop}
+      onBlur={start}
       className={`card pointer-events-auto flex items-start gap-3 p-3.5 pr-2.5 transition duration-200 ${
         shown ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
       }`}
@@ -112,6 +119,15 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
       <div className="min-w-0 flex-1 pt-0.5">
         <div className="text-sm font-semibold text-fg">{item.title}</div>
         {item.description && <div className="mt-0.5 text-xs leading-5 text-fg-secondary">{item.description}</div>}
+        {item.action && (
+          <Link
+            href={item.action.href}
+            onClick={onDismiss}
+            className="pointer-events-auto mt-1 inline-flex min-h-6 items-center text-meta font-semibold text-action underline underline-offset-2 hover:text-action-hover"
+          >
+            {item.action.label}
+          </Link>
+        )}
       </div>
       <button
         onClick={onDismiss}
