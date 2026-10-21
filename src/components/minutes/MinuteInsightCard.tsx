@@ -2,16 +2,20 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronDown, ChevronUp, CircleAlert, ExternalLink, Sparkles } from 'lucide-react'
+import {
+  ChevronDown, ChevronUp, CircleAlert, ExternalLink, ListChecks, ListPlus, LoaderCircle, Sparkles,
+} from 'lucide-react'
 import type { InsightKind, MinuteHighlight, MinuteInsight } from '@/lib/domain/types'
 import type { MinuteBlock } from '@/lib/minutes/blocks'
 import type { MinuteLinkedIssue } from '@/lib/domain/issueMinuteSource'
+import type { MinuteLinkedWbsItem } from '@/lib/domain/minuteWbs'
 import { IssueStatusPill } from '@/components/ui/StatusPill'
 import {
   INS_PRIORITY, insightCardState, topHighlightedBlocks, visibleInsights,
 } from '@/lib/minutes/annotations'
 import { ensureMinuteInsightsAction } from '@/app/actions/minutes'
 import { useLocale } from '@/components/providers/LocaleProvider'
+import { fill } from '@/lib/i18n/translate'
 
 /** kind 칩 색 — 결정=done/액션=progress/기한=accent-warning/리스크=delayed (스펙 §6.2, StatusPill 패턴). */
 const KIND_CHIP: Record<InsightKind, { chip: string; dot: string }> = {
@@ -23,6 +27,7 @@ const KIND_CHIP: Record<InsightKind, { chip: string; dot: string }> = {
 
 export function MinuteInsightCard({
   minuteId, insights, highlights, blocks, bodyHash, onJump, linkedIssues = [], details,
+  linkedWbsItems = [], canBulkWbs = false, wbsBusy = false, onBulkWbs,
 }: {
   minuteId: string
   insights: MinuteInsight[]
@@ -32,6 +37,13 @@ export function MinuteInsightCard({
   onJump: (blockIndex: number) => void
   linkedIssues?: MinuteLinkedIssue[]
   details?: ReactNode
+  /** 이 회의록 문단에 연결된 WBS 작업 — 지금 문단 위치로 옮긴 것(뷰어의 activeLinkedWbs). 볼 수 있는 연결만 온다(RLS) */
+  linkedWbsItems?: MinuteLinkedWbsItem[]
+  /** 「WBS로 한꺼번에 등록」을 보이는가 — 뷰어가 판정한다(등록할 수 있는 사람·현재 버전·액션 문단 하나 이상). 카드는 다시 거르지 않는다 */
+  canBulkWbs?: boolean
+  /** 한꺼번에 초안을 준비하는 중 — 단추가 「작업 초안 준비 중…」으로 막힌다 */
+  wbsBusy?: boolean
+  onBulkWbs?: () => void
 }) {
   const { t } = useLocale()
   const router = useRouter()
@@ -68,7 +80,8 @@ export function MinuteInsightCard({
 
   return (
     <div className="card shrink-0 px-4 py-2">
-      <div className="flex items-center gap-2">
+      {/* 좁은 폭에서는 줄을 넘긴다 — 한꺼번에 등록 단추가 붙으면 한 줄에 다 들어가지 않는다 */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <Sparkles className="h-4 w-4 text-action" />
         <span className="text-sm font-bold text-fg">{t('min.insight.title')}</span>
         <span className="flex flex-wrap items-center gap-1.5">
@@ -84,12 +97,30 @@ export function MinuteInsightCard({
               {t('min.issue.count').replace('{n}', String(linkedIssues.length))}
             </button>
           )}
+          {/* 연결된 WBS 작업 수(설계 2026-10-21-minutes-to-wbs §3.3) — 누르면 펼쳐 「연결된 작업」 목록을 보인다 */}
+          {linkedWbsItems.length > 0 && (
+            <button onClick={() => setOpen(true)} className="chip bg-action-soft text-action">
+              <ListChecks className="h-3 w-3" aria-hidden />
+              {fill(t('min.wbs.count'), { n: linkedWbsItems.length })}
+            </button>
+          )}
         </span>
-        <button onClick={() => setOpen(o => !o)}
-          className="ml-auto inline-flex items-center gap-1 text-xs text-fg-secondary hover:text-fg">
-          {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          {open ? t('min.insight.collapse') : t('min.insight.expand')}
-        </button>
+        <span className="ml-auto flex items-center gap-2">
+          {/* 「액션」 문단 전부를 WBS 작업으로(§3.2) — 보일지는 뷰어가 정한다(canBulkWbs) */}
+          {canBulkWbs && onBulkWbs && (
+            <button type="button" onClick={onBulkWbs} disabled={wbsBusy} className="btn btn-ghost h-8 px-2.5 text-xs">
+              {wbsBusy
+                ? <LoaderCircle aria-hidden className="h-3.5 w-3.5 animate-spin" />
+                : <ListPlus aria-hidden className="h-3.5 w-3.5" />}
+              {wbsBusy ? t('min.wbs.preparing') : t('min.wbs.bulkButton')}
+            </button>
+          )}
+          <button onClick={() => setOpen(o => !o)}
+            className="inline-flex items-center gap-1 text-xs text-fg-secondary hover:text-fg">
+            {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            {open ? t('min.insight.collapse') : t('min.insight.expand')}
+          </button>
+        </span>
       </div>
 
       {open && (
@@ -171,6 +202,35 @@ export function MinuteInsightCard({
                       </li>
                     )
                   })}
+                </ul>
+              </div>
+            )}
+            {/* 연결된 WBS 작업 — 연결된 이슈와 같은 꼴: 줄을 누르면 원문 위치로, 오른쪽 링크는 작업 계획의 그 작업(focus) */}
+            {linkedWbsItems.length > 0 && (
+              <div className="border-t border-border pt-2">
+                <p className="eyebrow mb-1.5">{t('min.wbs.linked')}</p>
+                <ul className="space-y-1.5">
+                  {linkedWbsItems.map(item => (
+                    <li key={item.linkId} className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => onJump(item.blockIndex)}
+                        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-xs text-fg hover:bg-surface-subtle"
+                      >
+                        <ListChecks className="h-3.5 w-3.5 shrink-0 text-action" aria-hidden />
+                        <span className="shrink-0 font-semibold text-action">{item.code}</span>
+                        <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                        <span className="shrink-0 text-meta text-action">{t('min.issue.jump')}</span>
+                      </button>
+                      <Link
+                        href={`/p/${item.projectId}/wbs?focus=${encodeURIComponent(item.itemId)}`}
+                        title={t('min.wbs.viewInPlan')}
+                        aria-label={t('min.wbs.viewInPlan')}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-muted hover:bg-surface-subtle hover:text-action"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                      </Link>
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}

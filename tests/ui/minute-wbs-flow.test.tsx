@@ -2,6 +2,8 @@
 // 회의록 문단 하나 → WBS 작업(설계 docs/superpowers/specs/2026-10-21-minutes-to-wbs-design.md §3.1) — 뷰어 조율·등록 창(한 건)·팝오버·선택 버블.
 // 이슈 등록 흐름(minute-issue-draft-flow.test.tsx)의 mock·stub 을 따르되 본문은 실제 MarkdownView 로 그린다 — 문단 표시(data-wbs-count)가
 // 연결된 작업(linkedWbsItems → activeLinkedWbs → marks)에서 끝까지 찍히는지 본다. 등록 창은 실제 컴포넌트다(빈 칸 null·맨 위 null·단추 조건).
+// 한꺼번에 등록(§3.2)은 요약 카드 stub 의 「wbs-bulk」 단추에서 시작한다 — 액션 문단 전부(kind action·제목 줄 제외·문단 순서) → bulk 창 → 등록.
+// 실제 요약 카드의 단추·칩·연결된 작업 목록은 아래 describe 가 vi.importActual 로 따로 본다.
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -31,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   refresh: vi.fn(),
   popoverProps: [] as Array<Record<string, unknown>>,
+  cardProps: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('next/navigation', () => ({
@@ -41,9 +44,11 @@ vi.mock('next/link', () => ({
     <a href={href} {...rest}>{children}</a>
   ),
 }))
-// 키를 돌려주되 「외 {n}건」은 자리를 남긴다 — 호출부가 숫자를 채우는지 본다
+// 키를 돌려주되 {n} 이 든 문구(「외 {n}건」·「작업 {n}건을 등록했습니다」 …)는 자리를 남긴다 — 호출부가 숫자를 채우는지 본다
 vi.mock('@/components/providers/LocaleProvider', () => ({
-  useLocale: () => ({ t: (key: string) => (key === 'min.wbs.more' ? `${key} {n}` : key) }),
+  useLocale: () => ({
+    t: (key: string) => (/^min\.wbs\.(more|count|createdN|selectedCount|submitN|rowFailed)$/.test(key) ? `${key} {n}` : key),
+  }),
 }))
 vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({ toast: mocks.toast }),
@@ -61,7 +66,21 @@ vi.mock('@/app/actions/minuteWbs', () => ({
 vi.mock('@/components/minutes/useMinuteTocSpy', () => ({
   useMinuteTocSpy: () => ({ activeToc: null, jumpTo: vi.fn() }),
 }))
-vi.mock('@/components/minutes/MinuteInsightCard', () => ({ MinuteInsightCard: () => null }))
+// 요약 카드는 stub — 받은 props 를 남기고, 「WBS로 한꺼번에 등록」은 canBulkWbs 일 때만(준비 중이면 막힌 채) 그린다(실제 카드와 같은 규칙).
+// 「wbs-bulk-force」 는 단추가 없을 때도 onBulkWbs 를 불러 보는 시험용 길이다(뷰어가 스스로도 막는지)
+vi.mock('@/components/minutes/MinuteInsightCard', () => ({
+  MinuteInsightCard: (props: { canBulkWbs?: boolean; wbsBusy?: boolean; onBulkWbs?: () => void }) => {
+    mocks.cardProps.push(props as unknown as Record<string, unknown>)
+    return (
+      <div data-testid="insight-card">
+        {props.canBulkWbs && (
+          <button data-testid="wbs-bulk" disabled={props.wbsBusy} onClick={props.onBulkWbs}>bulk</button>
+        )}
+        {props.onBulkWbs && <button data-testid="wbs-bulk-force" onClick={props.onBulkWbs}>force</button>}
+      </div>
+    )
+  },
+}))
 vi.mock('@/components/minutes/MinuteToc', () => ({ MinuteToc: () => null }))
 vi.mock('@/components/minutes/MinuteChatPanel', () => ({ MinuteChatPanel: () => null }))
 vi.mock('@/components/minutes/MinuteMetaModal', () => ({ MinuteMetaModal: () => null }))
@@ -158,6 +177,34 @@ const link = (linkId: string, blockIndex: number, blockHash: string): MinuteLink
   minuteVersionId: 'version-1', bodyHash: 'old-body-hash', blockIndex, blockHash, sourceKind: 'manual',
 })
 
+/** AI 요약의 「액션」 항목 — 한꺼번에 등록의 원천(설계 §3.2) */
+const actionInsight = (id: string, blockIndex: number, extra: Partial<MinuteInsight> = {}): MinuteInsight => ({
+  id, minuteId: 'minute-1', bodyHash, kind: 'action', label: `액션 ${blockIndex}`, blockIndex, blockHash: blocks[blockIndex].hash, ...extra,
+})
+/**
+ * 요약 — 액션은 문단 2·0(순서가 섞여 온다), 제목 줄 1 의 액션(준비가 제목 줄을 묶음째 거부하므로 뺀다), 위험(액션이 아니다),
+ * 옛 본문의 액션(지금 본문의 요약이 아니다 — visibleInsights 가 뺀다)
+ */
+const BULK_INSIGHTS: MinuteInsight[] = [
+  actionInsight('a2', 2), actionInsight('a0', 0), actionInsight('a1', 1), riskInsight,
+  actionInsight('stale', 2, { bodyHash: 'old-body-hash' }),
+]
+const actionSource = (index: number) => ({ ...blockSource(index), kind: 'action' })
+
+/** 한꺼번에 준비 응답 — 문단 0·2 두 줄, 둘 다 parent-1 추천 */
+function bulkDrafts(rest: Partial<MinuteWbsDrafts> = {}): MinuteWbsDrafts {
+  return {
+    rows: [0, 2].map((index, row) => ({
+      row, blockIndex: index, blockHash: blocks[index].hash, excerpt: blocks[index].text, name: `작업 ${index}`,
+      parentIds: ['parent-1'], plannedEnd: null, assigneeMemberId: null, registered: null,
+    })),
+    parents: PARENTS,
+    members: [{ id: 'member-1', name: '김민수' }],
+    mode: 'ai',
+    ...rest,
+  }
+}
+
 let container: HTMLDivElement
 let root: Root
 
@@ -168,6 +215,7 @@ beforeEach(() => {
     mocks.prepareMinuteWbsDrafts, mocks.createWbsItemsFromMinute, mocks.toast, mocks.refresh,
   ]) fn.mockReset()
   mocks.popoverProps.length = 0
+  mocks.cardProps.length = 0
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -267,6 +315,11 @@ describe('MinuteViewer 문단 → WBS 작업(한 건)', () => {
     expect(field<HTMLInputElement>(dialog, 'min.wbs.name').value).toBe('로그인 API 개발')
     expect(dialog.textContent).toContain('min.wbs.excerpt')
     expect(dialog.textContent).toContain(blocks[0].text)
+    // 원문 상자는 스크롤되는 영역 — 키보드로도 닿고(tabIndex 0) 이름이 있다(axe scrollable-region-focusable)
+    const excerpt = dialog.querySelector<HTMLElement>('[role="region"][aria-label="min.wbs.excerpt"]')!
+    expect(excerpt).not.toBeNull()
+    expect(excerpt.tabIndex).toBe(0)
+    expect(excerpt.textContent).toContain(blocks[0].text)
     expect(dialog.textContent).not.toContain('min.wbs.fallbackMode')
     expect(submitButton().disabled).toBe(false)
 
@@ -359,6 +412,29 @@ describe('MinuteViewer 문단 → WBS 작업(한 건)', () => {
     expect(submitButton().disabled).toBe(true)
   })
 
+  it('맨 위로 등록하면 맨 위를 마지막 위치로 기억한다 — 앞서 기억한 위치를 비우지 않고 맨 위로 바꾼다(추천 없는 다음 등록이 맨 위로 열린다)', async () => {
+    mocks.createWbsItemsFromMinute
+      .mockResolvedValueOnce({ ok: true, items: [{ row: 0, itemId: 'item-4', code: '2.1.5' }] })
+      .mockResolvedValueOnce({ ok: true, items: [{ row: 0, itemId: 'item-5', code: '6' }] })
+    await mountViewer()
+
+    // parent-1 로 등록(기억) → 다음은 맨 위로 등록
+    await openWbsModal(0, draftsFor(0))
+    await act(async () => { submitButton().click() })
+    await settle()
+    const second = await openWbsModal(2, draftsFor(2))
+    act(() => { second.querySelector<HTMLInputElement>(`input[type="radio"][value="${WBS_ROOT_PARENT}"]`)!.click() })
+    await act(async () => { submitButton().click() })
+    await settle()
+    expect(mocks.createWbsItemsFromMinute).toHaveBeenLastCalledWith('project-1', [expect.objectContaining({ source: blockSource(2), parentId: null })])
+
+    // 추천 없는 다음 등록 — 맨 위가 골라져 있고(빈 칸이 아니다) 바로 등록할 수 있다
+    const third = await openWbsModal(0, draftsFor(0, { parentIds: [] }))
+    expect(third.querySelector<HTMLInputElement>('input[type="radio"]:checked')?.value).toBe(WBS_ROOT_PARENT)
+    expect(third.textContent).not.toContain('min.wbs.parentPlaceholder')
+    expect(submitButton().disabled).toBe(false)
+  })
+
   it('거부 — 줄 번호가 있으면 그 줄을 빨갛게, 사유를 보이고 입력은 그대로 둔다(창도 열린 채). 줄과 무관한 거부·요청 실패도 사유를 보인다', async () => {
     mocks.createWbsItemsFromMinute
       .mockResolvedValueOnce({ ok: false, error: '넣을 위치의 하위 작업이 그새 사라졌습니다.', row: 0 })
@@ -422,6 +498,22 @@ describe('MinuteViewer 문단 → WBS 작업(한 건)', () => {
 
   it('정상이면 머리에 연결 목록 사유가 없다', async () => {
     await mountViewer()
+    expect(container.textContent).not.toContain('min.wbs.linksUnavailable')
+  })
+
+  it('연결 목록을 못 읽어도 원래 등록할 수 없던 화면(관리자 아님·지난 버전·보관된 회의록)에는 사유를 띄우지 않는다', async () => {
+    const error = '연결된 작업 목록을 읽지 못했습니다.'
+    await mountViewer({ linkedWbsItemsError: error, wbsAdminProjectIds: [] })
+    expect(container.textContent).not.toContain('min.wbs.linksUnavailable')
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    await mountViewer({ linkedWbsItemsError: error, historicalVersion: { id: 'version-1', versionNo: 1 } })
+    expect(container.textContent).not.toContain('min.wbs.linksUnavailable')
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    await mountViewer({ linkedWbsItemsError: error, minute: { ...minute, archivedAt: '2026-10-21T00:00:00Z' } })
     expect(container.textContent).not.toContain('min.wbs.linksUnavailable')
   })
 
@@ -566,8 +658,28 @@ describe('MinuteViewer 프로젝트 없는 회의록 → WBS 선택 창', () => 
     await act(async () => { buttonByText(picker, 'min.issue.continue')!.click() })
     await settle()
 
-    expect(picker.textContent).toContain('담당자 명단을 읽지 못해 등록 창을 열 수 없습니다.')
+    // 사유는 알림으로 읽힌다(role="alert")
+    expect(picker.querySelector('[role="alert"]')?.textContent).toContain('담당자 명단을 읽지 못해 등록 창을 열 수 없습니다.')
     expect(wbsDialog()).toBeNull()
+  })
+
+  it('선택 창의 준비 중에 창을 닫으면 요청을 버린다 — 늦은 응답이 등록 창을 열지 않는다', async () => {
+    const pending = deferred<{ ok: true; value: MinuteWbsDrafts }>()
+    mocks.prepareMinuteWbsDrafts.mockReturnValueOnce(pending.promise)
+    await mountViewer({ minute: looseMinute, projects, projectWorkspaces, wbsAdminProjectIds: ['project-1'] })
+
+    clickBlock(0)
+    act(() => { wbsButton()!.click() })
+    const picker = pickerDialog('min.wbs.projectTitle')!
+    await act(async () => { buttonByText(picker, 'min.issue.continue')!.click() })
+    expect(mocks.prepareMinuteWbsDrafts).toHaveBeenCalledTimes(1)
+    expect(buttonByText(picker, 'min.wbs.preparing')).not.toBeNull()
+
+    act(() => { buttonByText(picker, 'common.cancel')!.click() })
+    expect(pickerDialog('min.wbs.projectTitle')).toBeNull()
+    await act(async () => { pending.resolve({ ok: true, value: draftsFor(0) }); await pending.promise })
+    expect(wbsDialog()).toBeNull()
+    expect(mocks.toast).not.toHaveBeenCalled()
   })
 
   it('같은 워크스페이스에 관리자인 프로젝트가 없으면 단추가 없다 — 이슈 선택 창은 그대로 모든 프로젝트를 보인다', async () => {
@@ -642,6 +754,26 @@ describe('MinuteViewer 드래그 선택 → WBS 작업', () => {
     expect(wbsDialog()).toBeNull()
   })
 
+  it('지난 버전·보관된 회의록에서는 「WBS로 등록」이 없다 — 문단을 눌러도 팝오버가 없고, 골라도 버블이 없다', async () => {
+    await mountViewer({ historicalVersion: { id: 'version-1', versionNo: 1 } })
+    clickBlock(0)
+    expect(popover()).toBeNull()
+    expect(wbsButton()).toBeNull()
+    selectInFirstParagraph()
+    expect(bubbleWbsButton()).toBeNull()
+    expect(buttonByText(container, 'min.sel.create')).toBeNull()
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    await mountViewer({ minute: { ...minute, archivedAt: '2026-10-21T00:00:00Z' } })
+    clickBlock(0)
+    expect(popover()).toBeNull()
+    expect(wbsButton()).toBeNull()
+    selectInFirstParagraph()
+    expect(bubbleWbsButton()).toBeNull()
+    expect(buttonByText(container, 'min.sel.create')).toBeNull()
+  })
+
   it('관리자가 아니거나 연결 목록을 못 읽었으면 버블은 이슈 단추 하나(폭 180)', async () => {
     await mountViewer({ wbsAdminProjectIds: [] })
     selectInFirstParagraph()
@@ -707,5 +839,344 @@ describe('MinuteBlockPopover — 연결된 작업·「WBS로 등록」(실제 �
     expect(buttonByText(container, 'min.wbs.createAnother')).toBeNull()
     expect(container.textContent).toContain('min.wbs.linked')
     expect(container.querySelector('a')?.getAttribute('href')).toBe('/p/project-1/wbs?focus=item-1')
+  })
+})
+
+describe('MinuteViewer AI 요약 카드 → WBS 한꺼번에 등록', () => {
+  const bulkButton = () => container.querySelector<HTMLButtonElement>('[data-testid="wbs-bulk"]')
+  const forceBulk = () => container.querySelector<HTMLButtonElement>('[data-testid="wbs-bulk-force"]')
+  const bulkDialog = () => document.body.querySelector<HTMLElement>('[role="dialog"][aria-label="min.wbs.bulkTitle"]')
+  const lastCard = () => mocks.cardProps.at(-1)!
+  const withActions = { annotations: { highlights: [], insights: BULK_INSIGHTS } }
+  const twoItems = [{ row: 0, itemId: 'item-1', code: '2.1.4' }, { row: 1, itemId: 'item-2', code: '2.1.5' }]
+
+  it('「WBS로 한꺼번에 등록」 → 액션 문단 전부(제목 줄·옛 본문 제외, 문단 순서, kind action)로 준비 1회 → bulk 창 → 등록 → createdN 토스트·refresh, 공통 위치를 기억한다', async () => {
+    const pending = deferred<{ ok: true; value: MinuteWbsDrafts }>()
+    mocks.prepareMinuteWbsDrafts.mockReturnValueOnce(pending.promise)
+    mocks.createWbsItemsFromMinute.mockResolvedValueOnce({ ok: true, items: twoItems })
+    await mountViewer(withActions)
+
+    expect(lastCard().canBulkWbs).toBe(true)
+    await act(async () => { bulkButton()!.click() })
+
+    expect(mocks.prepareMinuteWbsDrafts).toHaveBeenCalledTimes(1)
+    expect(mocks.prepareMinuteWbsDrafts).toHaveBeenCalledWith('project-1', [actionSource(0), actionSource(2)])
+    // 준비 중에는 카드 단추가 막히고 창은 아직 없다
+    expect(lastCard().wbsBusy).toBe(true)
+    expect(bulkButton()!.disabled).toBe(true)
+    expect(bulkDialog()).toBeNull()
+
+    await act(async () => { pending.resolve({ ok: true, value: bulkDrafts() }); await pending.promise })
+    const dialog = bulkDialog()!
+    expect(dialog).not.toBeNull()
+    expect(lastCard().wbsBusy).toBe(false)
+    expect(dialog.textContent).toContain('min.wbs.selectedCount 2')
+
+    await act(async () => { buttonByText(dialog, 'min.wbs.submitN')!.click() })
+    await settle()
+    expect(mocks.createWbsItemsFromMinute).toHaveBeenCalledTimes(1)
+    expect(mocks.createWbsItemsFromMinute).toHaveBeenCalledWith('project-1', [
+      {
+        source: actionSource(0), name: '작업 0', parentId: 'parent-1',
+        plannedStart: null, plannedEnd: null, assigneeMemberId: null, confirmParentLeaf: false,
+      },
+      {
+        source: actionSource(2), name: '작업 2', parentId: 'parent-1',
+        plannedStart: null, plannedEnd: null, assigneeMemberId: null, confirmParentLeaf: false,
+      },
+    ])
+    expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'min.wbs.createdN 2',
+      variant: 'success',
+      action: { label: 'min.wbs.viewInPlan', href: '/p/project-1/wbs?focus=item-1' },
+    })
+    expect(mocks.refresh).toHaveBeenCalledTimes(1)
+    expect(bulkDialog()).toBeNull()
+
+    // 두 줄의 공통 위치(parent-1)를 마지막 위치로 기억한다 — 추천 없는 다음 한 건 등록이 그 위치로 열린다
+    const single = await openWbsModal(2, draftsFor(2, { parentIds: [] }))
+    expect(single.querySelector<HTMLInputElement>('input[type="radio"]:checked')?.value).toBe('parent-1')
+  })
+
+  it('액션 항목이 없으면(위험·제목 줄 액션·옛 본문 요약뿐) 단추가 없다 — 그래도 불리면 min.wbs.noAction 토스트만, 준비하지 않는다', async () => {
+    await mountViewer({
+      annotations: {
+        highlights: [],
+        insights: [riskInsight, actionInsight('a1', 1), actionInsight('stale', 2, { bodyHash: 'old-body-hash' })],
+      },
+    })
+    expect(lastCard().canBulkWbs).toBe(false)
+    expect(bulkButton()).toBeNull()
+
+    await act(async () => { forceBulk()!.click() })
+    expect(mocks.toast).toHaveBeenCalledWith({ title: 'min.wbs.noAction', variant: 'info' })
+    expect(mocks.prepareMinuteWbsDrafts).not.toHaveBeenCalled()
+    expect(bulkDialog()).toBeNull()
+  })
+
+  it('관리자가 아니거나 연결 목록을 못 읽었거나 보관된 회의록이면 단추가 없다(onBulkWbs 도 없다)', async () => {
+    await mountViewer({ ...withActions, wbsAdminProjectIds: [] })
+    expect(lastCard().canBulkWbs).toBe(false)
+    expect(lastCard().onBulkWbs).toBeUndefined()
+    expect(bulkButton()).toBeNull()
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    await mountViewer({ ...withActions, linkedWbsItemsError: '연결된 작업 목록을 읽지 못했습니다.' })
+    expect(lastCard().canBulkWbs).toBe(false)
+    expect(lastCard().onBulkWbs).toBeUndefined()
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    await mountViewer({ ...withActions, minute: { ...minute, archivedAt: '2026-10-21T00:00:00Z' } })
+    expect(lastCard().canBulkWbs).toBe(false)
+  })
+
+  it('준비 실패 — 사유 토스트(min.wbs.prepareFailed), 창은 열지 않는다. 요청이 reject 돼도 같다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.prepareMinuteWbsDrafts
+      .mockResolvedValueOnce({ ok: false, error: '제목 줄은 WBS 작업으로 등록할 수 없습니다.' })
+      .mockRejectedValueOnce(new Error('network down'))
+    await mountViewer(withActions)
+
+    await act(async () => { bulkButton()!.click() })
+    await settle()
+    expect(mocks.toast).toHaveBeenLastCalledWith({
+      title: 'min.wbs.prepareFailed', description: '제목 줄은 WBS 작업으로 등록할 수 없습니다.', variant: 'error',
+    })
+    expect(bulkDialog()).toBeNull()
+    expect(lastCard().wbsBusy).toBe(false)
+
+    await act(async () => { bulkButton()!.click() })
+    await settle()
+    expect(mocks.toast).toHaveBeenLastCalledWith({ title: 'min.wbs.prepareFailed', variant: 'error' })
+    expect(bulkDialog()).toBeNull()
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('준비 중에 문단 팝오버를 열고 닫아도 한꺼번에 준비는 이어진다(팝오버가 버리는 것은 그 문단의 준비뿐) — 창이 열리면 열린 팝오버는 닫힌다', async () => {
+    const pending = deferred<{ ok: true; value: MinuteWbsDrafts }>()
+    mocks.prepareMinuteWbsDrafts.mockReturnValueOnce(pending.promise)
+    await mountViewer(withActions)
+
+    await act(async () => { bulkButton()!.click() })
+    clickBlock(0)
+    expect(popover()).not.toBeNull()
+    act(() => { container.querySelector<HTMLButtonElement>('[data-testid="close-minute-popover"]')!.click() })
+    expect(popover()).toBeNull()
+    expect(lastCard().wbsBusy).toBe(true)
+
+    clickBlock(2)
+    expect(popover()).not.toBeNull()
+    await act(async () => { pending.resolve({ ok: true, value: bulkDrafts() }); await pending.promise })
+    expect(bulkDialog()).not.toBeNull()
+    expect(popover()).toBeNull()
+  })
+
+  it('낡은 요청 — 한꺼번에 준비 중에 문단에서 한 건 등록을 시작하면 한꺼번에의 늦은 응답은 버리고 한 건 창만 연다', async () => {
+    const bulk = deferred<{ ok: true; value: MinuteWbsDrafts }>()
+    const single = deferred<{ ok: true; value: MinuteWbsDrafts }>()
+    mocks.prepareMinuteWbsDrafts.mockReturnValueOnce(bulk.promise).mockReturnValueOnce(single.promise)
+    await mountViewer(withActions)
+
+    await act(async () => { bulkButton()!.click() })
+    clickBlock(2)
+    act(() => { wbsButton()!.click() })
+    expect(mocks.prepareMinuteWbsDrafts).toHaveBeenLastCalledWith('project-1', [blockSource(2)])
+
+    await act(async () => { bulk.resolve({ ok: true, value: bulkDrafts() }); await bulk.promise })
+    expect(bulkDialog()).toBeNull()
+    await act(async () => { single.resolve({ ok: true, value: draftsFor(2) }); await single.promise })
+    expect(wbsDialog()).not.toBeNull()
+    expect(bulkDialog()).toBeNull()
+  })
+
+  it('낡은 요청 — 한꺼번에 준비가 늦게 실패하거나 reject 돼도(그새 한 건 등록을 시작함) 토스트를 띄우지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const lateFailure = deferred<{ ok: false; error: string }>()
+    const lateReject = deferred<{ ok: true; value: MinuteWbsDrafts }>()
+    const single = deferred<{ ok: true; value: MinuteWbsDrafts }>()
+    mocks.prepareMinuteWbsDrafts
+      .mockReturnValueOnce(lateFailure.promise)
+      .mockReturnValueOnce(single.promise)
+      .mockReturnValueOnce(lateReject.promise)
+      .mockReturnValueOnce(new Promise(() => {}))
+    await mountViewer(withActions)
+
+    // ① 한꺼번에 → 문단 2 한 건 시작 → 한꺼번에의 늦은 실패는 버린다 → 한 건 창만 열린다
+    await act(async () => { bulkButton()!.click() })
+    clickBlock(2)
+    act(() => { wbsButton()!.click() })
+    await act(async () => { lateFailure.resolve({ ok: false, error: '늦은 실패' }); await lateFailure.promise })
+    expect(mocks.toast).not.toHaveBeenCalled()
+    await act(async () => { single.resolve({ ok: true, value: draftsFor(2) }); await single.promise })
+    expect(wbsDialog()).not.toBeNull()
+    act(() => { buttonByText(wbsDialog()!, 'common.cancel')!.click() })
+    expect(wbsDialog()).toBeNull()
+
+    // ② 한꺼번에 → 문단 0 한 건 시작(응답 없음) → 한꺼번에가 늦게 reject 돼도 토스트·로그 없이 버린다
+    await act(async () => { bulkButton()!.click() })
+    clickBlock(0)
+    act(() => { wbsButton()!.click() })
+    await act(async () => { lateReject.reject(new Error('network down')); await lateReject.promise.catch(() => {}) })
+    expect(mocks.toast).not.toHaveBeenCalled()
+    expect(spy).not.toHaveBeenCalled()
+    expect(bulkDialog()).toBeNull()
+    spy.mockRestore()
+  })
+
+  it('이슈 초안을 준비하는 중에는 한꺼번에 등록을 시작하지 않는다 — 이슈 폼과 등록 창이 겹쳐 열리지 않게', async () => {
+    const issueDraft = deferred<{ ok: false; error: string }>()
+    mocks.prepareMinuteIssueDraft.mockReturnValueOnce(issueDraft.promise)
+    await mountViewer(withActions)
+
+    clickBlock(0)
+    act(() => { container.querySelector<HTMLButtonElement>('[data-testid="create-minute-issue"]')!.click() })
+    expect(mocks.prepareMinuteIssueDraft).toHaveBeenCalledTimes(1)
+    await act(async () => { bulkButton()!.click() })
+    expect(mocks.prepareMinuteWbsDrafts).not.toHaveBeenCalled()
+    expect(lastCard().wbsBusy).toBe(false)
+    await act(async () => { issueDraft.resolve({ ok: false, error: '이슈 초안 실패' }); await issueDraft.promise })
+    expect(bulkDialog()).toBeNull()
+  })
+
+  it('요약 카드는 연결된 작업을 지금 문단 위치로 받는다(activeLinkedWbs — 맞는 문단이 없는 연결은 빠진다)', async () => {
+    await mountViewer({ linkedWbsItems: [link('1', 0, blocks[2].hash), link('3', 0, 'gone-hash')] })
+    const received = lastCard().linkedWbsItems as MinuteLinkedWbsItem[]
+    expect(received.map(item => [item.linkId, item.blockIndex])).toEqual([['1', 2]])
+  })
+
+  describe('프로젝트 없는 회의록 — 선택 창 뒤 한꺼번에', () => {
+    const looseMinute: Minute = { ...minute, projectId: null, ownProjectId: null, meetingProjectId: null }
+    const projects = [{ id: 'project-1', name: '프로젝트 A' }, { id: 'project-2', name: '프로젝트 B' }]
+    const projectWorkspaces = { 'project-1': 'ws-1', 'project-2': 'ws-1' }
+    const loose = { ...withActions, minute: looseMinute, projects, projectWorkspaces, wbsAdminProjectIds: ['project-1', 'project-2'] }
+    const pickerDialog = () => document.body.querySelector<HTMLElement>('[role="dialog"][aria-label="min.wbs.projectTitle"]')
+
+    it('선택 창을 먼저 띄우고, 고른 프로젝트로 액션 문단 전부를 준비해 bulk 창을 연다 — 등록·토스트도 그 프로젝트', async () => {
+      mocks.prepareMinuteWbsDrafts.mockResolvedValueOnce({ ok: true, value: bulkDrafts() })
+      mocks.createWbsItemsFromMinute.mockResolvedValueOnce({ ok: true, items: twoItems })
+      await mountViewer(loose)
+      expect(lastCard().canBulkWbs).toBe(true)
+
+      await act(async () => { bulkButton()!.click() })
+      const picker = pickerDialog()!
+      expect(picker).not.toBeNull()
+      expect(mocks.prepareMinuteWbsDrafts).not.toHaveBeenCalled()
+      await chooseOption(picker.querySelector<HTMLSelectElement>('select')!, 'project-2')
+      await act(async () => { buttonByText(picker, 'min.issue.continue')!.click() })
+      await settle()
+
+      expect(mocks.prepareMinuteWbsDrafts).toHaveBeenCalledWith('project-2', [actionSource(0), actionSource(2)])
+      expect(pickerDialog()).toBeNull()
+      const dialog = bulkDialog()!
+      expect(dialog).not.toBeNull()
+      await act(async () => { buttonByText(dialog, 'min.wbs.submitN')!.click() })
+      await settle()
+      expect(mocks.createWbsItemsFromMinute).toHaveBeenCalledWith('project-2', [
+        expect.objectContaining({ source: actionSource(0) }), expect.objectContaining({ source: actionSource(2) }),
+      ])
+      expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'min.wbs.createdN 2', action: { label: 'min.wbs.viewInPlan', href: '/p/project-2/wbs?focus=item-1' },
+      }))
+    })
+
+    it('한꺼번에 준비 중에 선택 창을 닫으면 요청을 버린다 — 늦은 응답이 bulk 창을 열지 않는다', async () => {
+      const pending = deferred<{ ok: true; value: MinuteWbsDrafts }>()
+      mocks.prepareMinuteWbsDrafts.mockReturnValueOnce(pending.promise)
+      await mountViewer(loose)
+
+      await act(async () => { bulkButton()!.click() })
+      const picker = pickerDialog()!
+      await chooseOption(picker.querySelector<HTMLSelectElement>('select')!, 'project-1')
+      await act(async () => { buttonByText(picker, 'min.issue.continue')!.click() })
+      expect(mocks.prepareMinuteWbsDrafts).toHaveBeenCalledWith('project-1', [actionSource(0), actionSource(2)])
+
+      act(() => { buttonByText(picker, 'common.cancel')!.click() })
+      expect(pickerDialog()).toBeNull()
+      await act(async () => { pending.resolve({ ok: true, value: bulkDrafts() }); await pending.promise })
+      expect(bulkDialog()).toBeNull()
+      expect(mocks.toast).not.toHaveBeenCalled()
+    })
+
+    it('한꺼번에의 선택 창을 닫은 뒤 문단에서 시작한 한 건 등록은 그 문단만 준비한다(한꺼번에의 원문을 이어 쓰지 않는다)', async () => {
+      mocks.prepareMinuteWbsDrafts.mockResolvedValueOnce({ ok: true, value: draftsFor(0) })
+      await mountViewer(loose)
+
+      await act(async () => { bulkButton()!.click() })
+      act(() => { buttonByText(pickerDialog()!, 'common.cancel')!.click() })
+      expect(pickerDialog()).toBeNull()
+
+      clickBlock(0)
+      act(() => { wbsButton()!.click() })
+      const picker = pickerDialog()!
+      await chooseOption(picker.querySelector<HTMLSelectElement>('select')!, 'project-1')
+      await act(async () => { buttonByText(picker, 'min.issue.continue')!.click() })
+      await settle()
+      expect(mocks.prepareMinuteWbsDrafts).toHaveBeenCalledTimes(1)
+      expect(mocks.prepareMinuteWbsDrafts).toHaveBeenCalledWith('project-1', [blockSource(0)])
+      expect(wbsDialog()).not.toBeNull()
+      expect(bulkDialog()).toBeNull()
+    })
+  })
+})
+
+describe('MinuteInsightCard — 한꺼번에 단추·작업 칩·연결된 작업(실제 컴포넌트)', () => {
+  type CardModule = typeof import('@/components/minutes/MinuteInsightCard')
+  // 지금 본문의 요약(ready) — 비었거나 낡은 요약이면 카드가 스스로 다시 만들러 간다(self-heal)
+  const FRESH = [actionInsight('a0', 0)]
+
+  async function renderCard(props: Partial<Parameters<CardModule['MinuteInsightCard']>[0]> = {}) {
+    const { MinuteInsightCard } = await vi.importActual<CardModule>('@/components/minutes/MinuteInsightCard')
+    await act(async () => {
+      root.render(
+        <MinuteInsightCard minuteId="minute-1" insights={FRESH} highlights={[]} blocks={blocks} bodyHash={bodyHash}
+          onJump={vi.fn()} {...props} />,
+      )
+    })
+  }
+
+  it('canBulkWbs 면 머리에 「WBS로 한꺼번에 등록」 — 누르면 onBulkWbs, 준비 중이면 「작업 초안 준비 중…」으로 막힌다', async () => {
+    const onBulkWbs = vi.fn()
+    await renderCard({ canBulkWbs: true, onBulkWbs })
+    const button = buttonByText(container, 'min.wbs.bulkButton')!
+    expect(button).not.toBeNull()
+    expect(button.disabled).toBe(false)
+    act(() => { button.click() })
+    expect(onBulkWbs).toHaveBeenCalledTimes(1)
+
+    await renderCard({ canBulkWbs: true, onBulkWbs, wbsBusy: true })
+    expect(buttonByText(container, 'min.wbs.bulkButton')).toBeNull()
+    expect(buttonByText(container, 'min.wbs.preparing')!.disabled).toBe(true)
+  })
+
+  it('canBulkWbs 가 아니면(관리자 아님·액션 없음 — 뷰어가 판정한다) 단추가 없다', async () => {
+    await renderCard({ onBulkWbs: vi.fn() })
+    expect(buttonByText(container, 'min.wbs.bulkButton')).toBeNull()
+    expect(buttonByText(container, 'min.wbs.preparing')).toBeNull()
+  })
+
+  it('연결된 작업이 있으면 머리에 「작업 N」 칩 — 누르면 펼쳐 「연결된 작업」: 줄은 원문 위치로, 링크는 작업 계획의 그 작업', async () => {
+    const onJump = vi.fn()
+    await renderCard({ onJump, linkedWbsItems: [link('1', 2, blocks[2].hash), link('2', 0, blocks[0].hash)] })
+    expect(container.textContent).not.toContain('min.wbs.linked')
+    const chip = buttonByText(container, 'min.wbs.count 2')!
+    expect(chip).not.toBeNull()
+    act(() => { chip.click() })
+
+    expect(container.textContent).toContain('min.wbs.linked')
+    const planLinks = [...container.querySelectorAll('a')].filter(anchor => anchor.getAttribute('aria-label') === 'min.wbs.viewInPlan')
+    expect(planLinks.map(anchor => anchor.getAttribute('href')))
+      .toEqual(['/p/project-1/wbs?focus=item-1', '/p/project-1/wbs?focus=item-2'])
+    act(() => { buttonByText(container, '작업 1')!.click() })
+    expect(onJump).toHaveBeenCalledWith(2)
+  })
+
+  it('연결된 작업이 없으면 칩도 목록도 없다', async () => {
+    await renderCard()
+    expect(container.textContent).not.toContain('min.wbs.count')
+    act(() => { buttonByText(container, 'min.insight.expand')!.click() })
+    expect(container.textContent).not.toContain('min.wbs.linked')
   })
 })

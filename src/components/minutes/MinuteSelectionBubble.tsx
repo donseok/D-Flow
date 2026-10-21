@@ -210,6 +210,8 @@ export function MinuteSelectionBubble({
   const below = state.rect.bottom + 6 + H < window.innerHeight
   const top = below ? state.rect.bottom + 6 : Math.max(8, state.rect.top - 6 - H)
   const pad = twoButtons ? ' px-3' : ''
+  // 단추 둘이면 반쪽 폭(약 100px)에 준비 중 문구(「작업 초안 준비 중…」·「핵심 내용 정리 중…」)가 들어가도록 글자를 줄인다
+  const label = twoButtons ? 'truncate text-xs' : 'truncate'
   return (
     <div
       ref={boxRef}
@@ -226,7 +228,7 @@ export function MinuteSelectionBubble({
         {busy
           ? <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" />
           : <CircleAlert className="h-4 w-4 shrink-0" />}
-        <span className="truncate">{busy ? t('min.issue.summarizing') : t('min.sel.create')}</span>
+        <span className={label}>{busy ? t('min.issue.summarizing') : t('min.sel.create')}</span>
       </button>
       {onCreateWbs && (
         <button
@@ -237,7 +239,7 @@ export function MinuteSelectionBubble({
           {wbsBusy
             ? <LoaderCircle aria-hidden className="h-4 w-4 shrink-0 animate-spin" />
             : <ListPlus aria-hidden className="h-4 w-4 shrink-0" />}
-          <span className="truncate">{wbsBusy ? t('min.wbs.preparing') : t('min.wbs.create')}</span>
+          <span className={label}>{wbsBusy ? t('min.wbs.preparing') : t('min.wbs.create')}</span>
         </button>
       )}
     </div>
