@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { MinuteBlock } from '@/lib/minutes/blocks'
 import {
   activeLinkedWbsItems,
+  displayWbsCode,
   fallbackWbsName,
   pickableParents,
   recommendableParents,
@@ -181,6 +182,47 @@ describe('fallbackWbsName', () => {
 
   it('남는 글이 없으면 빈 문자열 — 화면에서 사람이 작업명을 넣는다', () => {
     expect(fallbackWbsName('- [ ]\n\n')).toBe('')
+  })
+
+  describe('첫 줄 머리의 화자 이름표(「이름: 」)를 걷는다 — 이름이 작업명·코드가 되지 않게', () => {
+    it.each([
+      ['화자 이름표', '김민수: 로그인 오류 로그 분석', '로그인 오류 로그 분석'],
+      ['전각 콜론', '김민수： 로그인 오류 로그 분석', '로그인 오류 로그 분석'],
+      ['콜론 앞 공백', '김민수 : 로그인 오류 로그 분석', '로그인 오류 로그 분석'],
+      ['짧은 머리말도 같은 꼴이면 걷는다', '주의: 배포 전 점검', '배포 전 점검'],
+      ['글머리 뒤의 이름표', '- 박서준: 회원 데이터 이관 스크립트 점검', '회원 데이터 이관 스크립트 점검'],
+      ['강조한 이름표', '**이지은**: 이메일 인증 시안 준비\n둘째 줄', '이메일 인증 시안 준비'],
+      ['둘째 줄 이름표는 첫 줄과 무관', '회의 정리\n김민수: 로그 분석', '회의 정리'],
+    ])('%s', (_name, text, expected) => {
+      expect(fallbackWbsName(text)).toBe(expected)
+    })
+
+    it.each([
+      ['이름표만 있는 줄은 그대로(남는 글이 없다)', '김민수:', '김민수:'],
+      ['콜론 뒤에 공백이 없으면 걷지 않는다(주소)', 'https://example.com/a 확인', 'https://example.com/a 확인'],
+      ['시각(10:30)은 이름표가 아니다', '10:30 회의 시작', '10:30 회의 시작'],
+      ['머리가 20자를 넘으면 이름표로 보지 않는다', `${'가'.repeat(21)}: 본문`, `${'가'.repeat(21)}: 본문`],
+    ])('%s', (_name, text, expected) => {
+      expect(fallbackWbsName(text)).toBe(expected)
+    })
+
+    it('요약 라벨이 있으면 라벨 그대로(라벨에는 이름표를 걷지 않는다)', () => {
+      expect(fallbackWbsName('김민수: 로그인 오류', '참고: 로그 분석')).toBe('참고: 로그 분석')
+    })
+  })
+})
+
+describe('displayWbsCode — 연결된 작업 목록의 코드(이름과 겹치면 숨긴다)', () => {
+  it.each([
+    ['코드가 이름의 첫 낱말(등록·수동 추가 규칙)', '회원가입', '회원가입 이메일 인증 개선 시안 준비', null],
+    ['대소문자·앞뒤 공백은 보지 않는다', ' API ', 'api 연동 정리', null],
+    ['코드가 콜론으로 끝나면(화자 이름표) 숨긴다', '김민수:', '김민수: 로그인 오류 로그 분석', null],
+    ['이름과 무관해도 콜론으로 끝나면 숨긴다', '참고:', '로그인 오류', null],
+    ['빈 코드', '  ', '로그인 오류', null],
+    ['사람이 고친 개요 번호 꼴의 코드는 보인다', '2.1.4', '로그인 API 개발', '2.1.4'],
+    ['이름이 코드로 시작하지 않으면 보인다', 'LOGIN-1', '로그인 API 개발', 'LOGIN-1'],
+  ])('%s', (_name, code, name, expected) => {
+    expect(displayWbsCode(code, name)).toBe(expected)
   })
 })
 

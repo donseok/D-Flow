@@ -11,6 +11,11 @@ export const MINUTE_WBS_SOURCE_KINDS = ['manual', 'action'] as const
 export type MinuteWbsSourceKind = (typeof MINUTE_WBS_SOURCE_KINDS)[number]
 export const WBS_ROOT_PARENT = '__root__'                  // 선택기의 "맨 위" 값 — 제출 때 parentId null 로 바꾼다
 export const MINUTE_WBS_PROMPT_CANDIDATES_MAX = 80
+/**
+ * 등록 거부 토큰 — 준비 때 하위가 있던 위치가 그새 하위를 잃었다(등록 RPC 의 WBS_PARENT_LEAF_UNCONFIRMED). 등록 액션이 결과의 code 로 돌려주고,
+ * 창은 이 code 에서 그 위치를 하위 없는 작업으로 고쳐 영향 안내와 확인을 다시 받는다(설계 §5.3)
+ */
+export const MINUTE_WBS_LEAF_UNCONFIRMED = 'WBS_PARENT_LEAF_UNCONFIRMED'
 
 /** 트리 한 줄 — getComputedWbs 의 ComputedItem 에서 뽑는다(depth 0-based) */
 export interface MinuteWbsTreeRow { id: string; parentId: string | null; name: string; isOwnerSplit: boolean; actualPct: number | null; assigneeMemberId: string | null; devWorkflow: boolean; depth: number }
@@ -149,19 +154,50 @@ function plainLine(line: string): string {
     .trim()
 }
 
-/** 결정형 작업명 — insightLabel(trim) 있으면 그것, 없으면 첫 줄(마크다운 글머리·번호·'#' 제거), 공백 접기, 200자 상한 */
+/** 줄 머리의 화자 이름표 — 공백·콜론 없는 짧은 토막(20자 이하) + 콜론 + 공백(「김민수: 」·「주의： 」). 콜론 뒤 공백이 없으면(주소·시각 10:30) 아니다 */
+const SPEAKER_LABEL_RE = /^[^\s:：]{1,20}\s*[:：]\s+/
+
+/** 화자 이름표를 걷는다 — 걷고 남는 글이 없으면 그대로(이름표만 있는 줄) */
+function stripSpeakerLabel(line: string): string {
+  const head = SPEAKER_LABEL_RE.exec(line)
+  if (!head) return line
+  const rest = line.slice(head[0].length).trim()
+  return rest || line
+}
+
+/**
+ * 결정형 작업명 — insightLabel(trim) 있으면 그것, 없으면 첫 줄(마크다운 글머리·번호·'#' 제거 뒤 머리의 화자 이름표 「이름: 」도 걷는다 —
+ * 이름이 작업명과 그 첫 토큰인 코드가 되지 않게), 공백 접기, 200자 상한. 이름표는 마크다운을 걷은 뒤 본다(「- 김민수: …」·「**김민수**: …」)
+ */
 export function fallbackWbsName(text: string, insightLabel?: string | null): string {
   const label = insightLabel?.trim()
   if (label) return clampWbsName(label)
   // 걷고 나서 빈 줄(빈 체크 상자 등)은 건너뛴다. 끝까지 남는 글이 없으면 '' — 화면에서 사람이 작업명을 넣는다
   for (const line of text.split(/\r?\n/)) {
     const plain = plainLine(line)
-    if (plain) return clampWbsName(plain)
+    if (plain) return clampWbsName(stripSpeakerLabel(plain))
   }
   return ''
 }
 
-export interface MinuteWbsDraftRow { row: number; blockIndex: number; blockHash: string; excerpt: string; name: string; parentIds: string[]; plannedEnd: string | null; assigneeMemberId: string | null; registered: { itemId: string; code: string; name: string } | null }
+/**
+ * 연결된 작업 목록에 보일 코드 — 등록 RPC·수동 추가는 코드를 이름의 첫 토큰으로 지어 코드와 이름을 나란히 쓰면 같은 글이 두 번 보인다
+ * (「회원가입 회원가입 이메일 …」). 이름이 코드로 시작하면(대소문자·앞뒤 공백 무시) 또는 코드가 콜론으로 끝나면(화자 이름표 「김민수:」) 숨긴다(null).
+ * 사람이 고친 코드(「2.1.4」)는 그대로 보인다
+ */
+export function displayWbsCode(code: string, name: string): string | null {
+  const shown = code.trim()
+  if (!shown || /[:：]$/.test(shown)) return null
+  return name.trim().toLocaleLowerCase().startsWith(shown.toLocaleLowerCase()) ? null : shown
+}
+
+/**
+ * 등록 창의 줄 초안. registered = 그 문단에 이 프로젝트의 연결이 이미 있다(첫 연결의 작업).
+ * duplicate = 한꺼번에 묶음에서 앞 줄과 같은 문단(같은 hash — 글자가 같은 두 문단)이라 함께 등록할 수 없다(등록 RPC 가 둘째 줄을 막는다).
+ * listItems = 원천이 문단 전체인데 그 문단이 여러 항목의 목록·표다(항목 수, 2 이상만) — 한 작업으로 묶인다는 안내의 재료.
+ * 등록됨·duplicate 줄(한꺼번에)은 다듬지 않은 껍데기다 — 이름은 결정형, 위치·종료일·담당자는 비었다
+ */
+export interface MinuteWbsDraftRow { row: number; blockIndex: number; blockHash: string; excerpt: string; name: string; parentIds: string[]; plannedEnd: string | null; assigneeMemberId: string | null; registered: { itemId: string; code: string; name: string } | null; duplicate?: boolean; listItems?: number }
 export interface MinuteWbsDrafts { rows: MinuteWbsDraftRow[]; parents: MinuteWbsParentOption[]; members: { id: string; name: string }[]; mode: 'ai' | 'fallback' }
 export interface MinuteWbsCreateRow { source: MinuteIssueSourceInput; name: string; parentId: string | null; plannedStart: string | null; plannedEnd: string | null; assigneeMemberId: string | null; confirmParentLeaf: boolean }
 export interface MinuteLinkedWbsItem { linkId: string; itemId: string; code: string; name: string; projectId: string; minuteVersionId: string; bodyHash: string; blockIndex: number; blockHash: string; sourceKind: MinuteWbsSourceKind }

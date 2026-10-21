@@ -60,10 +60,51 @@ describe('parseMinuteWbsDraftResponse', () => {
       { row: 1, name: '결제 연동', parents: 'p-auth', end: '2026/10/31', assignee: 3 },
     ])
 
+    // 줄 1 의 parents 는 배열이 아니라 위치를 하나도 쓸 수 없다 — 「확신 없음([])」과 갈라 버린 사실을 싣는다(호출자가 결정형 점수로 채운다)
     expect(parse(raw)).toEqual([
       { row: 0, name: '로그인 API 개발', parentIds: ['p-auth'], plannedEnd: null, assigneeMemberId: null },
+      { row: 1, name: '결제 연동', parentIds: [], plannedEnd: null, assigneeMemberId: null, parentsRejected: true },
+    ])
+  })
+
+  it('준 위치가 모두 후보 밖이면 parentsRejected — 빈 배열(확신 없음)·하나라도 남은 줄·위치를 안 준 줄에는 없다', () => {
+    const raw = JSON.stringify([
+      { row: 0, name: '로그인 API 개발', parents: ['p-unknown', 'not-a-candidate'], end: null, assignee: null },
+      { row: 1, name: '결제 연동', parents: [], end: null, assignee: null },
+    ])
+    expect(parse(raw)).toEqual([
+      { row: 0, name: '로그인 API 개발', parentIds: [], plannedEnd: null, assigneeMemberId: null, parentsRejected: true },
       { row: 1, name: '결제 연동', parentIds: [], plannedEnd: null, assigneeMemberId: null },
     ])
+    const partial = parse(JSON.stringify([{ ...ROW0, parents: ['p-unknown', 'p-pay'] }, { row: 1, name: '결제 연동' }]))
+    expect(partial).toEqual([
+      { ...PARSED0, parentIds: ['p-pay'] },
+      { row: 1, name: '결제 연동', parentIds: [], plannedEnd: null, assigneeMemberId: null },
+    ])
+  })
+
+  describe('잘린 응답 — 끝까지 닫힌 줄 객체만 살린다(출력 상한에 걸려 배열이 닫히지 않아도 앞 줄들은 쓴다)', () => {
+    const ROW1 = { row: 1, name: '결제 연동', parents: ['p-pay'], end: '2026-11-30', assignee: null }
+    const PARSED1 = { row: 1, name: '결제 연동', parentIds: ['p-pay'], plannedEnd: '2026-11-30', assigneeMemberId: null }
+    const full = JSON.stringify([ROW0, ROW1])
+
+    it.each([
+      ['둘째 줄 가운데서', full.slice(0, -25), [PARSED0]],
+      ['둘째 줄의 문자열 안에서(괄호·따옴표가 섞인 이름)', `${JSON.stringify([{ ...ROW0, name: '긴급] "{확인" 수정' }]).slice(0, -1)},{"row":1,"name":"결제 [연`,
+        [{ ...PARSED0, name: '긴급] "{확인" 수정' }]],
+      ['쉼표 바로 뒤에서', `${full.slice(0, full.indexOf('},{') + 2)}`, [PARSED0]],
+      ['닫는 대괄호만 빠진', full.slice(0, -1), [PARSED0, PARSED1]],
+      ['닫히지 않은 울타리 안에서', ['```json', full.slice(0, -25)].join('\n'), [PARSED0]],
+      ['객체 포장 안에서', `{"rows":${full.slice(0, -25)}`, [PARSED0]],
+      ['서두 뒤에서', `요청하신 초안입니다 [초안]:\n${full.slice(0, -25)}`, [PARSED0]],
+    ])('%s', (_name, raw, expected) => {
+      expect(parse(raw)).toEqual(expected)
+    })
+
+    it('끝까지 닫힌 응답이 있으면 그것이 먼저다 — 앞의 잘린 예시 배열을 살리지 않는다', () => {
+      const raw = `예시: [{"row":1,"name":"예시"\n${JSON.stringify([ROW0])}`
+      expect(parse(raw)).toEqual([PARSED0])
+    })
   })
 
   it('parents 는 후보 안의 id 만 앞에서부터 최대 3개', () => {
@@ -100,9 +141,9 @@ describe('parseMinuteWbsDraftResponse', () => {
     ['parents 가 빈 줄 하나짜리 객체', JSON.stringify({ ...ROW0, parents: [] })],
     ['배열 값 속성이 둘인 객체', `{"rows":${body},"skipped":[]}`],
     ['대괄호 없는 글', '등록할 작업이 없습니다.'],
-    ['깨진 배열', '[{"row":0,"name":"로그인'],
-    ['완성된 줄 뒤에서 잘린 응답', JSON.stringify([ROW0, { row: 1, name: '결제 연동', parents: ['p-pay'], end: '2026-11-30', assignee: null }]).slice(0, -25)],
+    ['깨진 배열(닫힌 줄 객체가 하나도 없다)', '[{"row":0,"name":"로그인'],
     ['줄 객체가 없는 배열', '참고 문헌 [1] 참조'],
+    ['닫히지 않은 배열 속 객체 아닌 원소', '[1, 2, 3'],
     ['JSON null', 'null'],
   ])('줄 배열을 찾을 수 없는 응답(%s)은 null', (_name, raw) => {
     expect(parse(raw)).toBeNull()

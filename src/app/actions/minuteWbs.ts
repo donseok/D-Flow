@@ -17,6 +17,7 @@ import { generateAnswer } from '@/lib/ai/llm'
 import {
   MINUTE_WBS_DRAFT_SYSTEM_PROMPT, buildMinuteWbsDraftPrompt, parseMinuteWbsDraftResponse, type MinuteWbsAiRow,
 } from '@/lib/ai/minute-wbs-draft'
+import { cachedMinuteWbsDraft } from '@/lib/ai/minute-wbs-draft-cache'
 import { enqueueIndexChange } from '@/lib/ai/index/enqueueChange'
 import { getComputedWbs } from '@/lib/data/wbs'
 import { personOf } from '@/lib/data/memberSelect'
@@ -27,11 +28,12 @@ import { applyWorkflowEvent } from '@/lib/agent/workflowEvent'
 import { ensureOrderForWorkflowLeaf } from '@/lib/agent/ensureOrder'
 import { emitNotification } from '@/lib/notify/emit'
 import { minuteIssueSourceExcerpt, verifyMinuteIssueBlock, type VerifiedMinuteIssueBlock } from '@/lib/minutes/verifySource'
-import { minuteBlockDraftText } from '@/lib/minutes/blocks'
+import { fnv1a64, minuteBlockDraftText, type MinuteBlock } from '@/lib/minutes/blocks'
+import { INS_PRIORITY } from '@/lib/minutes/annotations'
 import { minuteSelectionKeyHash } from '@/lib/minutes/selection'
 import { makeMinuteIssueSourceKey, type MinuteIssueSourceInput } from '@/lib/domain/issueMinuteSource'
 import {
-  MINUTE_WBS_PROMPT_CANDIDATES_MAX, MINUTE_WBS_ROWS_MAX, MINUTE_WBS_SOURCE_KINDS, fallbackWbsName, pickableParents, recommendableParents,
+  MINUTE_WBS_LEAF_UNCONFIRMED, MINUTE_WBS_PROMPT_CANDIDATES_MAX, MINUTE_WBS_ROWS_MAX, MINUTE_WBS_SOURCE_KINDS, fallbackWbsName, pickableParents, recommendableParents,
   scoreParentCandidates, type MinuteWbsCreateRow, type MinuteWbsDraftRow, type MinuteWbsDrafts, type MinuteWbsParentOption,
   type MinuteWbsTreeRow, type WbsItemMinuteSource,
 } from '@/lib/domain/minuteWbs'
@@ -45,7 +47,8 @@ import { serverTranslator } from '@/lib/i18n/server'
 import type { ServerTranslate } from '@/lib/i18n/serverDict'
 
 export type MinuteWbsDraftsResult = { ok: true; value: MinuteWbsDrafts } | { ok: false; error: string }
-export type MinuteWbsCreateResult = { ok: true; items: { row: number; itemId: string; code: string }[] } | { ok: false; error: string; row?: number }
+/** 거부의 code — 등록 RPC 의 토큰(MINUTE_WBS_LEAF_UNCONFIRMED 등). 창이 문구를 해석하지 않고 갈래를 판단한다. 토큰이 없는 거부에는 없다 */
+export type MinuteWbsCreateResult = { ok: true; items: { row: number; itemId: string; code: string }[] } | { ok: false; error: string; row?: number; code?: string }
 export type WbsItemMinuteSourcesResult = { ok: true; rows: WbsItemMinuteSource[] } | { ok: false; error: string }
 
 /** 진행 중인 에이전트 주문 — 활성 유일 인덱스(agent_work_orders_active_per_item_uidx)·등록 RPC 의 WBS_PARENT_WORKFLOW 와 같은 집합 */
@@ -58,6 +61,18 @@ const PROMPT_SCORED_PER_ROW = 20
 const EXAMPLE_NAMES_MAX = 20
 /** 폴백 위치 추천 수(설계 §4.2) */
 const FALLBACK_PARENTS_MAX = 3
+/**
+ * AI 출력 상한 — 줄 수를 따라 는다. 바닥은 4,096: thinking 토큰도 이 상한에 들어 1,200 일 때 답이 잘린 실측이 있다(llm.ts geminiGenerationConfig).
+ * 줄마다 200 을 더하고 8,192(이슈 초안의 상한)에서 멈춘다 — 30줄 가까운 묶음에서 배열이 잘려 전부 결정형으로 떨어지지 않게
+ */
+const DRAFT_TOKENS_BASE = 4_096
+const DRAFT_TOKENS_PER_ROW = 200
+const DRAFT_TOKENS_MAX = 8_192
+const draftTokenBudget = (rows: number): number => Math.min(DRAFT_TOKENS_MAX, DRAFT_TOKENS_BASE + DRAFT_TOKENS_PER_ROW * rows)
+/** AI 초안 캐시 키의 판 — 프롬프트 모양(별칭 등)이 바뀌면 올린다 */
+const DRAFT_CACHE_VERSION = 'minute-wbs-draft-v1'
+/** 문단의 요약 라벨을 고르는 순서 — 할 일(액션)이 먼저, 그다음 요약 표시의 우선순위(위험 → 기한 → 결정) */
+const LABEL_KINDS: readonly string[] = ['action', ...INS_PRIORITY.filter((kind) => kind !== 'action')]
 
 /** 등록 RPC(create_wbs_items_from_minute)의 사유 토큰 → 문구. 표에 없는 것(MINUTE_WBS_ISOLATION·색인 날 23505 등)은 createFailed 다 */
 const RPC_TOKENS: OwnTokenKeys = {
@@ -74,7 +89,7 @@ const RPC_TOKENS: OwnTokenKeys = {
   WBS_PARENT_SUB_ACT: { status: 409, code: 'WBS_PARENT_SUB_ACT', key: 'srv.minuteWbs.parentSubAct' },
   WBS_PARENT_WORKFLOW: { status: 409, code: 'WBS_PARENT_WORKFLOW', key: 'srv.minuteWbs.parentWorkflow' },
   WBS_PARENT_DEPTH: { status: 409, code: 'WBS_PARENT_DEPTH', key: 'srv.minuteWbs.parentDepth' },
-  WBS_PARENT_LEAF_UNCONFIRMED: { status: 409, code: 'WBS_PARENT_LEAF_UNCONFIRMED', key: 'srv.minuteWbs.parentLeafUnconfirmed' },
+  [MINUTE_WBS_LEAF_UNCONFIRMED]: { status: 409, code: MINUTE_WBS_LEAF_UNCONFIRMED, key: 'srv.minuteWbs.parentLeafUnconfirmed' },
   WBS_DATE_RANGE_INVALID: { status: 400, code: 'WBS_DATE_RANGE_INVALID', key: 'srv.minuteWbs.dateRange' },
   WBS_ASSIGNEE_INVALID: { status: 400, code: 'WBS_ASSIGNEE_INVALID', key: 'srv.minuteWbs.assigneeInvalid' },
   MINUTE_BLOCK_ALREADY_LINKED: { status: 409, code: 'MINUTE_BLOCK_ALREADY_LINKED', key: 'srv.minuteWbs.alreadyLinked' },
@@ -230,18 +245,34 @@ async function loadRegistered(t: ServerTranslate, sb: Session, projectId: string
   return { ok: true, value: byHash }
 }
 
-type MinuteContext = { minuteDate: string; deadlines: { blockIndex: number; label: string }[] }
-/** AI 가 날짜를 해석할 회의 날짜와 같은 본문의 「기한」 항목(설계 §4.3) */
+/** 같은 본문의 요약 항목 하나 — 문단(index·hash)·종류·라벨 */
+type InsightLabel = { blockIndex: number; blockHash: string; kind: string; label: string }
+type MinuteContext = { minuteDate: string; insights: InsightLabel[] }
+/**
+ * AI 가 날짜를 해석할 회의 날짜와 같은 본문(body_hash)의 요약 항목 — 「기한」은 날짜 재료(설계 §4.3), 나머지는 문단 등록 줄의 라벨(§4.1 —
+ * 원문 검증은 action 이 아닌 줄의 라벨을 싣지 않는다). 한 번에 읽는다
+ */
 async function loadMinuteContext(t: ServerTranslate, sb: Session, head: MinuteIssueSourceInput, storedBodyHash: string): Promise<Loaded<MinuteContext>> {
   const [version, insights] = await Promise.all([
     sb.from('minute_versions').select('minute_date').eq('id', head.minuteVersionId).eq('minute_id', head.minuteId).maybeSingle(),
-    sb.from('minute_insights').select('block_index, label').eq('minute_id', head.minuteId).eq('body_hash', storedBodyHash).eq('kind', 'deadline'),
+    sb.from('minute_insights').select('block_index, block_hash, kind, label').eq('minute_id', head.minuteId).eq('body_hash', storedBodyHash),
   ])
   const problem = version.error ?? insights.error ?? (version.data ? null : new Error('minute_versions 행 없음'))
   if (problem) return { ok: false, error: failWith('minuteWbs.minute', problem, t('srv.minuteWbs.minuteContextUnavailable')) }
-  const deadlines = ((insights.data ?? []) as Record<string, unknown>[]).flatMap((r) =>
-    (typeof r.label === 'string' && r.label.trim() ? [{ blockIndex: Number(r.block_index), label: r.label.trim() }] : []))
-  return { ok: true, value: { minuteDate: String((version.data as Record<string, unknown>).minute_date ?? ''), deadlines } }
+  const rows = ((insights.data ?? []) as Record<string, unknown>[]).flatMap((r) =>
+    (typeof r.label === 'string' && r.label.trim() && typeof r.kind === 'string'
+      ? [{ blockIndex: Number(r.block_index), blockHash: String(r.block_hash ?? ''), kind: r.kind, label: r.label.trim() }]
+      : []))
+  return { ok: true, value: { minuteDate: String((version.data as Record<string, unknown>).minute_date ?? ''), insights: rows } }
+}
+
+/** 문단의 요약 라벨 — 같은 본문에서 그 문단(index·hash 가 모두 맞는)에 붙은 요약을 LABEL_KINDS 순서로. 없으면 null */
+function blockLabelOf(insights: readonly InsightLabel[], block: MinuteBlock): string | null {
+  for (const kind of LABEL_KINDS) {
+    const hit = insights.find((i) => i.kind === kind && i.blockIndex === block.index && i.blockHash === block.hash)
+    if (hit) return hit.label
+  }
+  return null
 }
 
 /** 프롬프트 후보 — 줄마다의 결정형 상위를 순위별로 번갈아 앞에 두고(줄마다 1순위부터), 남은 자리는 트리 순서로 채운다 */
@@ -256,11 +287,11 @@ function promptCandidatesOf(scored: readonly string[][], candidates: readonly Mi
   return [...picked].slice(0, MINUTE_WBS_PROMPT_CANDIDATES_MAX).flatMap((id) => byId.get(id) ?? [])
 }
 
-/** AI 한 번 — 못 쓰는 응답(null·예외·못 읽음)은 null 이고 결정형 초안으로 간다 */
+/** AI 한 번 — 못 쓰는 응답(null·예외·못 읽음)은 null 이고 결정형 초안으로 간다. 출력 상한은 줄 수(allow.rowCount)를 따른다 */
 async function draftWithAi(prompt: string, allow: Parameters<typeof parseMinuteWbsDraftResponse>[1]): Promise<MinuteWbsAiRow[] | null> {
   try {
     const raw = await generateAnswer(MINUTE_WBS_DRAFT_SYSTEM_PROMPT, [{ role: 'user', content: prompt }], {
-      timeoutMs: 20_000, maxOutputTokens: 4_096, allowModelFallback: false, retries: 0, retryRateLimit: false,
+      timeoutMs: 20_000, maxOutputTokens: draftTokenBudget(allow.rowCount), allowModelFallback: false, retries: 0, retryRateLimit: false,
     })
     if (raw === null) return null
     const parsed = parseMinuteWbsDraftResponse(raw, allow)
@@ -311,50 +342,90 @@ export async function prepareMinuteWbsDrafts(projectId: string, sources: MinuteI
     maxDepth: maxDepth.value, numbers: tree.value.numbers, activeOrderItemIds: orders.value, dependencyCounts: tree.value.dependencyCounts,
   })
   const candidates = recommendableParents(parents)
+  const deadlines = context.value.insights.filter((i) => i.kind === 'deadline')
+  const actionHashes = new Set<string>()
   const inputs = values.map((v, row) => {
     const source = sources[row]
     const text = rowText(v)
-    const fallbackName = fallbackWbsName(text, v.insightLabel)
+    // 문단 등록(manual)은 원문 검증이 라벨을 싣지 않는다 — 같은 본문의 그 문단 요약에서 찾는다(설계 §4.1). 선택 등록은 선택한 글이 원문이다
+    const label = v.insightLabel ?? (source.selection ? null : blockLabelOf(context.value.insights, v.block))
+    const fallbackName = fallbackWbsName(text, label)
     const last = source.selection ? source.selection.endBlockIndex : source.blockIndex
-    const deadlines = context.value.deadlines.filter((d) => d.blockIndex >= source.blockIndex && d.blockIndex <= last).map((d) => d.label)
-    // 결정형 점수의 글 = 작업명 + 문단(설계 §4.2)
-    return { row, v, text, fallbackName, scoreText: `${fallbackName}\n${text}`, deadlineLabel: deadlines.length ? deadlines.join(' / ') : null }
+    const deadlineLabels = deadlines.filter((d) => d.blockIndex >= source.blockIndex && d.blockIndex <= last).map((d) => d.label)
+    const registeredItem = registered.value.get(v.block.hash) ?? null
+    // 한꺼번에(action) 줄 — 이미 등록된 문단(창이 회색으로 막는다)과 앞 줄과 같은 문단(같은 hash — 등록 RPC 가 둘째 줄을 막는다)은 다듬지 않는다.
+    // 문단 등록(manual)은 등록된 문단이어도 다듬는다(「WBS로 하나 더 등록」)
+    const duplicate = source.kind === 'action' && registeredItem === null && actionHashes.has(v.block.hash)
+    if (source.kind === 'action') actionHashes.add(v.block.hash)
+    return {
+      row, v, text, label, fallbackName, registeredItem, duplicate,
+      shell: source.kind === 'action' && (registeredItem !== null || duplicate),
+      // 결정형 점수의 글 = 작업명 + 문단(설계 §4.2)
+      scoreText: `${fallbackName}\n${text}`,
+      deadlineLabel: deadlineLabels.length ? deadlineLabels.join(' / ') : null,
+      // 문단 전체가 원천인데 여러 항목의 목록·표면 그 수 — 한 작업으로 묶인다는 안내(선택은 목록의 일부일 수 있어 싣지 않는다)
+      listItems: !source.selection && (v.block.items ?? 0) >= 2 ? v.block.items : undefined,
+    }
   })
+  // 다듬을 줄 — AI 프롬프트·결정형 점수는 이 줄들만(줄 번호는 이 목록의 자리로 다시 매긴다)
+  const drafted = inputs.filter((input) => !input.shell)
+  const promptRowOf = new Map(drafted.map((input, at) => [input.row, at]))
 
-  let aiRows: MinuteWbsAiRow[] | null = null
-  if (llm) {
-    const promptCandidates = promptCandidatesOf(inputs.map((input) => scoreParentCandidates(input.scoreText, candidates, PROMPT_SCORED_PER_ROW)), candidates)
+  // AI 줄(프롬프트 자리 → 줄, 위치·담당자는 실제 id). 다듬을 줄이 없으면 부르지 않는다
+  let aiByPromptRow: ReadonlyMap<number, MinuteWbsAiRow> = new Map()
+  if (llm && drafted.length > 0) {
+    const promptCandidates = promptCandidatesOf(drafted.map((input) => scoreParentCandidates(input.scoreText, candidates, PROMPT_SCORED_PER_ROW)), candidates)
+    // 별칭 — uuid 대신 c1…·m1…(응답이 짧아져 큰 묶음도 출력 상한에 덜 걸린다). 응답은 별칭으로 읽고 이 요청의 실제 id 로 되돌린다
+    const candidateIdOf = new Map(promptCandidates.map((c, at) => [`c${at + 1}`, c.id]))
+    const memberIdOf = new Map(members.value.map((member, at) => [`m${at + 1}`, member.id]))
     const prompt = buildMinuteWbsDraftPrompt({
       minuteDate: context.value.minuteDate,
-      rows: inputs.map((input) => ({ row: input.row, text: clip(input.text, PROMPT_ROW_TEXT_MAX), insightLabel: input.v.insightLabel, deadlineLabel: input.deadlineLabel })),
-      candidates: promptCandidates.map((c) => ({ id: c.id, path: c.path, childNames: c.childNames })),
-      members: members.value,
+      rows: drafted.map((input, at) => ({ row: at, text: clip(input.text, PROMPT_ROW_TEXT_MAX), insightLabel: input.label, deadlineLabel: input.deadlineLabel })),
+      candidates: promptCandidates.map((c, at) => ({ id: `c${at + 1}`, path: c.path, childNames: c.childNames })),
+      members: members.value.map((member, at) => ({ id: `m${at + 1}`, name: member.name })),
       exampleNames: tree.value.exampleNames,
     })
-    aiRows = await draftWithAi(prompt, {
-      rowCount: inputs.length, candidateIds: new Set(promptCandidates.map((c) => c.id)), memberIds: new Set(members.value.map((member) => member.id)),
-    })
+    // 같은 프롬프트(줄 원문·후보·명단·회의 날짜)면 인스턴스 캐시의 별칭 줄을 쓴다(설계 §7) — AI 를 쓸 수 없을 때는 보지 않는다(이 갈래 밖)
+    const cacheKey = [DRAFT_CACHE_VERSION, projectId, sources[0].minuteVersionId, fnv1a64(prompt)].join(':')
+    const aliasRows = await cachedMinuteWbsDraft(cacheKey, () => draftWithAi(prompt, {
+      rowCount: drafted.length, candidateIds: new Set(candidateIdOf.keys()), memberIds: new Set(memberIdOf.keys()),
+    }))
+    aiByPromptRow = new Map((aliasRows ?? []).map((r) => [r.row, {
+      ...r,
+      parentIds: r.parentIds.flatMap((alias) => candidateIdOf.get(alias) ?? []),
+      assigneeMemberId: r.assigneeMemberId === null ? null : memberIdOf.get(r.assigneeMemberId) ?? null,
+    }]))
   }
   // 칸 단위로 채운다 — AI 가 준 칸은 그대로 쓰고 빈 칸만 결정형으로: 줄이 없으면 통째로(이름·위치 상위 3, 종료일·담당자 없음), 이름이 비면
-  // 이름만, 위치는 이름도 위치도 비었을 때만 결정형 상위 3(이름을 낸 AI 줄의 빈 위치는 "확신 없음"이라 그대로 둔다 — 화면이 마지막 위치를 쓴다)
-  const aiByRow = new Map((aiRows ?? []).map((r) => [r.row, r]))
+  // 이름만, 위치는 이름도 위치도 비었을 때만 결정형 상위 3(이름을 낸 AI 줄의 빈 위치는 "확신 없음"이라 그대로 둔다 — 화면이 마지막 위치를 쓴다).
+  // AI 가 준 위치가 모두 후보 밖이었으면(parentsRejected) 그 줄의 위치도 결정형 상위 3
   const rows: MinuteWbsDraftRow[] = inputs.map((input) => {
-    const ai = aiByRow.get(input.row)
-    return {
+    const base = {
       row: input.row,
       blockIndex: input.v.block.index,
       blockHash: input.v.block.hash,
       excerpt: minuteIssueSourceExcerpt(input.text),
+      registered: input.registeredItem,
+      ...(input.duplicate ? { duplicate: true } : {}),
+      ...(input.listItems !== undefined ? { listItems: input.listItems } : {}),
+    }
+    // 다듬지 않은 줄(등록됨·같은 문단) — 창이 막는 줄이라 이름(결정형)만 싣는다
+    if (input.shell) return { ...base, name: input.fallbackName, parentIds: [], plannedEnd: null, assigneeMemberId: null }
+    const at = promptRowOf.get(input.row)
+    const ai = at === undefined ? undefined : aiByPromptRow.get(at)
+    const aiParents = ai && !ai.parentsRejected && (ai.name !== '' || ai.parentIds.length > 0) ? ai.parentIds : null
+    return {
+      ...base,
       name: ai?.name || input.fallbackName,
-      parentIds: ai && (ai.name !== '' || ai.parentIds.length > 0) ? ai.parentIds : scoreParentCandidates(input.scoreText, candidates, FALLBACK_PARENTS_MAX),
+      parentIds: aiParents ?? scoreParentCandidates(input.scoreText, candidates, FALLBACK_PARENTS_MAX),
       plannedEnd: ai?.plannedEnd ?? null,
       assigneeMemberId: ai?.assigneeMemberId ?? null,
-      registered: registered.value.get(input.v.block.hash) ?? null,
     }
   })
-  // AI 가 한 칸이라도 채운 줄이 있으면 ai — 빈 줄만 돌아왔으면 결정형 초안과 같으므로 fallback(화면이 확인 안내를 띄운다)
-  const contributed = [...aiByRow.values()].some((r) => r.name !== '' || r.parentIds.length > 0 || r.plannedEnd !== null || r.assigneeMemberId !== null)
-  return { ok: true, value: { rows, parents, members: members.value, mode: contributed ? 'ai' : 'fallback' } }
+  // AI 가 한 칸이라도 채운 줄이 있으면 ai — 빈 줄만 돌아왔으면 결정형 초안과 같으므로 fallback(화면이 확인 안내를 띄운다).
+  // 다듬을 줄이 하나도 없었으면 결정형 초안도 없다 — 안내를 띄우지 않는다(ai)
+  const contributed = [...aiByPromptRow.values()].some((r) => r.name !== '' || r.parentIds.length > 0 || r.plannedEnd !== null || r.assigneeMemberId !== null)
+  return { ok: true, value: { rows, parents, members: members.value, mode: drafted.length === 0 || contributed ? 'ai' : 'fallback' } }
 }
 
 /** 줄 입력 — 작업명(앞뒤 공백을 뺀 1~200자), 날짜(없음 또는 실재하는 YYYY-MM-DD, 시작 ≤ 종료), 위치·담당자(없음 또는 uuid), 말단 확인(참거짓) */
@@ -449,7 +520,9 @@ export async function createWbsItemsFromMinute(projectId: string, rows: MinuteWb
     const message = failWith('minuteWbs.create', error, mapped?.message ?? t('srv.minuteWbs.createFailed'))
     // 줄 거부는 detail 이 줄 번호(0부터)다. 색인의 날 23505 는 'Key (…)' 세부라 줄이 아니다
     const row = /^\d+$/.test(error.details ?? '') ? Number(error.details) : undefined
-    return row !== undefined && row < rows.length ? { ok: false, error: message, row } : { ok: false, error: message }
+    // 토큰(code)도 돌려준다 — 창이 문구를 해석하지 않고 갈래를 판단한다(MINUTE_WBS_LEAF_UNCONFIRMED 면 그 위치를 하위 없는 작업으로 고쳐 확인을 받는다)
+    const code = mapped ? { code: mapped.code } : {}
+    return row !== undefined && row < rows.length ? { ok: false, error: message, row, ...code } : { ok: false, error: message, ...code }
   }
   const items = createdItems(data, rows.length)
   if (!items) return { ok: false, error: failWith('minuteWbs.create', new Error('RPC 반환 모양이 계약과 다르다'), t('srv.minuteWbs.createFailed')) }

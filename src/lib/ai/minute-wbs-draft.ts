@@ -42,7 +42,11 @@ export function buildMinuteWbsDraftPrompt(input: MinuteWbsDraftPromptInput): str
   ].join('\n')
 }
 
-export interface MinuteWbsAiRow { row: number; name: string; parentIds: string[]; plannedEnd: string | null; assigneeMemberId: string | null }
+/**
+ * AI 가 낸 줄 하나. parentsRejected = 위치를 주긴 했는데(빈 배열이 아닌 값) 쓸 수 있는 후보 id 가 하나도 없었다 — 「확신 없음([])」과 달리
+ * 호출자가 결정형 점수로 채운다. 그런 줄에만 붙는다(true)
+ */
+export interface MinuteWbsAiRow { row: number; name: string; parentIds: string[]; plannedEnd: string | null; assigneeMemberId: string | null; parentsRejected?: true }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -95,8 +99,35 @@ function firstRowArray(text: string): unknown[] | null {
 }
 
 /**
+ * 잘린 응답의 줄 — 출력 상한에 걸려 닫히지 않은 배열 '[' 안에서 끝까지 닫힌 줄 객체만 앞에서부터 모은다(닫히지 않은 첫 객체에서 멈춘다).
+ * 닫힌 '[' 는 건너뛴다(정상 경로가 이미 보았다 — 글 속 「[참고]」 등). 객체를 하나도 못 모으면 다음 '[' 를 본다. 못 찾으면 null
+ */
+function salvageRowArray(text: string): unknown[] | null {
+  for (let start = text.indexOf('['); start >= 0; start = text.indexOf('[', start + 1)) {
+    if (closingIndex(text, start) >= 0) continue
+    const rows: unknown[] = []
+    let at = start + 1
+    while (at < text.length) {
+      if (/[\s,]/.test(text[at])) { at++; continue }
+      if (text[at] !== '{') break
+      const end = closingIndex(text, at)
+      if (end < 0) break
+      try {
+        rows.push(JSON.parse(text.slice(at, end + 1)))
+      } catch {
+        break
+      }
+      at = end + 1
+    }
+    if (rows.length > 0) return rows
+  }
+  return null
+}
+
+/**
  * 응답의 줄 배열 — 코드펜스 안을 차례로 본 뒤(설명 울타리 다음 JSON 울타리) 응답 전체를 본다(울타리 없는·닫히지 않은·한 줄 울타리).
- * 전체를 볼 때 울타리 표시(```)는 걷을 필요가 없다 — 괄호·따옴표만 읽으므로 그대로 지나간다. 못 찾으면 null
+ * 전체를 볼 때 울타리 표시(```)는 걷을 필요가 없다 — 괄호·따옴표만 읽으므로 그대로 지나간다. 끝까지 닫힌 배열이 없으면 잘린 배열에서
+ * 닫힌 줄만 살린다(큰 묶음이 출력 상한에 걸려도 앞 줄들은 쓴다). 못 찾으면 null
  */
 function extractRowArray(raw: string): unknown[] | null {
   const fenced = Array.from(raw.matchAll(/```[\w-]*[ \t]*\r?\n([\s\S]*?)```/g), match => match[1])
@@ -104,7 +135,7 @@ function extractRowArray(raw: string): unknown[] | null {
     const rows = firstRowArray(text)
     if (rows) return rows
   }
-  return null
+  return salvageRowArray(raw)
 }
 
 /** 앞뒤 공백을 빼고 공백을 접어 작업명 상한(WBS_NAME_MAX) 안으로 — 서로게이트 쌍은 가르지 않는다(도메인 fallbackWbsName 과 같은 상한 규칙) */
@@ -121,8 +152,10 @@ function clampWbsName(value: string): string {
 
 /**
  * 관용 파싱 — 코드펜스 안을 차례로, 그다음 응답 전체에서 맨 바깥의 균형 잡힌 [...]·{...} 를 찾아(문자열 안의 괄호는 세지 않는다)
- * 줄 배열(또는 {"rows":[…]} 포장)이 되는 첫 값을 읽는다. 모르는 row·후보 밖 parent·명단 밖 member·형식 밖 날짜는 버린다. 줄 배열을 찾지 못하면 null.
+ * 줄 배열(또는 {"rows":[…]} 포장)이 되는 첫 값을 읽는다. 그런 값이 없으면 잘린 배열에서 끝까지 닫힌 줄만 살린다.
+ * 모르는 row·후보 밖 parent·명단 밖 member·형식 밖 날짜는 버린다. 줄 배열을 찾지 못하면 null.
  * 줄은 row 가 [0, rowCount) 의 정수일 때만 남고(같은 row 는 첫 줄만), 나머지 칸은 못 쓰면 그 칸만 비운다 — name 이 문자열이 아니면 ''(호출자가 폴백 이름으로 채운다).
+ * 위치를 줬는데 하나도 못 쓰면 parentsRejected 를 붙인다(빈 배열 []·위치를 안 준 줄은 「확신 없음」이라 붙이지 않는다).
  */
 export function parseMinuteWbsDraftResponse(raw: string, allow: { rowCount: number; candidateIds: ReadonlySet<string>; memberIds: ReadonlySet<string> }): MinuteWbsAiRow[] | null {
   const parsed = extractRowArray(raw)
@@ -135,12 +168,15 @@ export function parseMinuteWbsDraftResponse(raw: string, allow: { rowCount: numb
     if (typeof row !== 'number' || !Number.isInteger(row) || row < 0 || row >= allow.rowCount || seen.has(row)) continue
     seen.add(row)
     const parents = Array.isArray(value.parents) ? value.parents : []
+    const parentIds = [...new Set(parents.filter((id): id is string => typeof id === 'string' && allow.candidateIds.has(id)))].slice(0, PARENTS_MAX)
+    const offered = value.parents != null && !(Array.isArray(value.parents) && value.parents.length === 0)
     rows.push({
       row,
       name: typeof value.name === 'string' ? clampWbsName(value.name) : '',
-      parentIds: [...new Set(parents.filter((id): id is string => typeof id === 'string' && allow.candidateIds.has(id)))].slice(0, PARENTS_MAX),
+      parentIds,
       plannedEnd: typeof value.end === 'string' && isValidIsoDate(value.end) ? value.end : null,
       assigneeMemberId: typeof value.assignee === 'string' && allow.memberIds.has(value.assignee) ? value.assignee : null,
+      ...(offered && parentIds.length === 0 ? { parentsRejected: true as const } : {}),
     })
   }
   return rows

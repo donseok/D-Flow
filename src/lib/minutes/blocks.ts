@@ -15,6 +15,8 @@ export interface MinuteBlock {
   draftText?: string
   rendered: boolean      // 제자리 렌더 여부 (html·footnoteDefinition·definition 은 false)
   headingDepth?: number  // heading 이면 1~6
+  /** 목록이면 최상위 항목 수, 표면 머리 줄을 뺀 본문 줄 수 — 블록 하나가 여러 항목을 묶는다는 표시(회의록 → WBS 등록 안내). 다른 블록에는 없다 */
+  items?: number
 }
 
 // 제자리에 렌더되지 않는 mdast 루트 노드 타입 — raw HTML(rehype-raw 미사용), 각주 정의(문서 끝 이동), 링크 정의
@@ -96,6 +98,8 @@ export function splitMinuteBlocks(bodyMd: string): MinuteBlock[] {
       draftText: draftTextOf(node, rendered),
       rendered,
       ...(node.type === 'heading' ? { headingDepth: node.depth } : {}),
+      ...(node.type === 'list' ? { items: node.children.length } : {}),
+      ...(node.type === 'table' ? { items: Math.max(0, node.children.length - 1) } : {}),
     }
   })
 }

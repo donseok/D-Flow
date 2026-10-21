@@ -92,6 +92,23 @@ describe('splitMinuteBlocks', () => {
     expect(block.hash).toBe(fnv1a64(block.text))
   })
 
+  it('목록·표 블록은 항목 수(items)를 단다 — 목록은 최상위 항목, 표는 머리 줄을 뺀 본문 줄. 다른 블록에는 없다', () => {
+    const blocks = splitMinuteBlocks([
+      '- 첫 할 일\n  - 딸린 항목\n- 둘째 할 일\n- 셋째 할 일',
+      '',
+      '1. 하나',
+      '',
+      '| 담당 | 할 일 |\n|---|---|\n| 김 | 로그 분석 |\n| 이 | 시안 준비 |',
+      '',
+      '| 머리만 |\n|---|',
+      '',
+      '문단',
+    ].join('\n'))
+    expect(blocks.map(block => block.items)).toEqual([3, 1, 2, 0, undefined])
+    // 앵커 계약(text·hash)은 그대로다
+    expect(blocks[0].hash).toBe(fnv1a64(blocks[0].text))
+  })
+
   it('해시는 공백 변화에 안정 (정규화: trim + 연속 공백/개행 → 스페이스 1개)', () => {
     const a = splitMinuteBlocks('결정  사항\n확정')[0]
     const b = splitMinuteBlocks('결정 사항 확정')[0]
