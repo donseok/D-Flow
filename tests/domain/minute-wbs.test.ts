@@ -158,6 +158,12 @@ describe('fallbackWbsName', () => {
     expect(fallbackWbsName('- [ ] 원문 첫 줄', '  로그인   API 개발  ')).toBe('로그인 API 개발')
   })
 
+  it('표·목록을 끌어 고른 선택(항목·행이 줄로 나뉜 발췌)은 첫 줄만 이름이 된다 — 칸 사이는 공백이라 읽을 수 있다', () => {
+    // 발췌는 서버 원문 excerptText 에서 온다(tests/minutes/selection.test.ts) — 예전에는 「이서연와이어프레임 작성2026-10-30박지훈…」 한 덩어리였다
+    expect(fallbackWbsName('이서연 와이어프레임 작성 2026-10-30\n박지훈 컴포넌트 목록 정리 2026-10-30')).toBe('이서연 와이어프레임 작성 2026-10-30')
+    expect(fallbackWbsName('릴리스 목표일은 12월 11일이다.\n외부 연동은 2차로 미룬다.')).toBe('릴리스 목표일은 12월 11일이다.')
+  })
+
   it('라벨이 없거나 비었으면 첫 줄에서 글머리·체크 상자·강조를 걷는다', () => {
     expect(fallbackWbsName('- [ ] **로그인** API\n둘째 줄')).toBe('로그인 API')
     expect(fallbackWbsName('- [ ] **로그인** API\n둘째 줄', null)).toBe('로그인 API')

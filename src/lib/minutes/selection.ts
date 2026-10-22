@@ -65,7 +65,10 @@ export function matchMinuteSelection(
   for (let index = startIndex; index <= endIndex; index += 1) {
     const candidate = blocks[index]
     if (!candidate || !isMarkableBlock(candidate)) continue
-    const original = candidate.text
+    // 발췌를 자를 원문 — 항목·행 경계가 들어 있는 excerptText. 공백을 뺀 글자가 text 와 다르면(있어서는 안 되는 어긋남) 예전처럼 text 로 자른다
+    const original = candidate.excerptText && stripSelectionWhitespace(candidate.excerptText) === stripSelectionWhitespace(candidate.text)
+      ? candidate.excerptText
+      : candidate.text
     const posMap: number[] = []
     let stripped = ''
     for (let i = 0; i < original.length; i += 1) {

@@ -56,8 +56,8 @@ describe('matchMinuteSelection', () => {
   })
   it('표 셀을 가로지르는 선택(탭·개행 차이)을 공백 제거 대조로 흡수한다', () => {
     const res = matchMinuteSelection(blocks, 3, blocks[3].hash, 3, blocks[3].hash, 'CRM\t지연')
-    // 발췌는 서버 원문(mdast 평문 — 표는 셀이 무간격으로 이어진다) 기준으로 재구성된다.
-    expect(res).toEqual({ ok: true, excerpt: 'CRM지연' })
+    // 발췌는 서버 원문(excerptText — 표 칸 사이는 공백, 행 사이는 줄바꿈) 기준으로 재구성된다.
+    expect(res).toEqual({ ok: true, excerpt: 'CRM 지연' })
   })
   it('공백을 조작한 선택도 발췌는 서버 원문 간격으로 복원된다(위조 차단)', () => {
     // '전송누락' 처럼 공백을 지워 보내도 저장 발췌는 원문 '전송 누락' 간격을 따른다.
@@ -115,5 +115,60 @@ describe('matchMinuteSelection', () => {
     )
     expect(res.ok).toBe(true)
     expect(performance.now() - startedAt).toBeLessThan(500)
+  })
+})
+
+describe('matchMinuteSelection — 목록·표 안의 선택은 항목·행·칸 경계가 발췌에 남는다', () => {
+  const ACTIONS = [
+    '# 액션',
+    '',
+    '| 담당 | 할 일 | 기한 |',
+    '| --- | --- | --- |',
+    '| 이서연 | 와이어프레임 작성 | 2026-10-30 |',
+    '| 박지훈 | 컴포넌트 목록 정리 | 2026-10-30 |',
+    '',
+    '- 릴리스 목표일은 12월 11일이다.',
+    '- 외부 연동은 2차로 미룬다.',
+    '  - 알림 메일은 제외한다.',
+  ].join('\n')
+  const parts = splitMinuteBlocks(ACTIONS)
+  // parts: 0=heading, 1=table, 2=list
+  const select = (index: number, raw: string) => matchMinuteSelection(parts, index, parts[index].hash, index, parts[index].hash, raw)
+
+  it('표 두 행을 고르면 행은 줄로, 칸은 공백으로 나뉜다', () => {
+    // 브라우저가 칸 사이에 탭을, 행 사이에 개행을 넣든 말든 발췌는 서버 원문에서 만든다
+    const res = select(1, '이서연\t와이어프레임 작성\t2026-10-30\n박지훈\t컴포넌트 목록 정리')
+    expect(res).toEqual({ ok: true, excerpt: '이서연 와이어프레임 작성 2026-10-30\n박지훈 컴포넌트 목록 정리' })
+  })
+  it('목록 항목 사이는 줄로 나뉘고 딸린 항목도 자기 줄이다', () => {
+    const res = select(2, '릴리스 목표일은 12월 11일이다.외부 연동은 2차로 미룬다.알림 메일은 제외한다.')
+    expect(res).toEqual({
+      ok: true,
+      excerpt: '릴리스 목표일은 12월 11일이다.\n외부 연동은 2차로 미룬다.\n알림 메일은 제외한다.',
+    })
+  })
+  it('구분자가 늘어도 공백을 뺀 글자는 같아 조회 키(selectionHash)는 그대로다', () => {
+    const raw = '이서연 와이어프레임 작성 2026-10-30박지훈 컴포넌트 목록 정리'
+    const res = select(1, raw)
+    expect(res.ok).toBe(true)
+    if (res.ok) expect(minuteSelectionKeyHash(res.excerpt)).toBe(minuteSelectionKeyHash(raw))
+  })
+  it('클라이언트가 칸·항목 경계를 바꿔 보내도 발췌의 줄은 서버 원문의 경계에서만 나뉜다(위조 차단)', () => {
+    const res = select(1, '이서연와이어프레임\n작성2026-10-30\n\n박지훈')
+    expect(res).toEqual({ ok: true, excerpt: '이서연 와이어프레임 작성 2026-10-30\n박지훈' })
+  })
+  it('excerptText 가 없는 블록(과거·수기 객체)은 text 로 자른다', () => {
+    const legacy = parts.map((block) => {
+      const copy = { ...block }
+      delete copy.excerptText
+      return copy
+    })
+    const res = matchMinuteSelection(legacy, 1, legacy[1].hash, 1, legacy[1].hash, '이서연 와이어프레임 작성')
+    expect(res).toEqual({ ok: true, excerpt: '이서연와이어프레임 작성' })
+  })
+  it('excerptText 의 글자가 text 와 다르면 믿지 않고 text 로 자른다', () => {
+    const broken = parts.map(block => (block.index === 1 ? { ...block, excerptText: '다른 글자 다른 글자' } : block))
+    const res = matchMinuteSelection(broken, 1, broken[1].hash, 1, broken[1].hash, '이서연 와이어프레임 작성')
+    expect(res).toEqual({ ok: true, excerpt: '이서연와이어프레임 작성' })
   })
 })

@@ -13,6 +13,12 @@ export interface MinuteBlock {
   text: string           // includeHtml:false 추출 후 정규화
   /** 이슈 초안용 표시 텍스트. hash/text 계약은 유지하면서 목록·표 항목 경계를 보존한다. */
   draftText?: string
+  /**
+   * 드래그 선택 발췌를 자르는 서버 원문 — text 와 공백을 뺀 글자가 같고(selection.ts 의 대조가 그 위에서 돈다) 목록 항목·표 행 사이는 줄바꿈,
+   * 표 칸 사이는 공백이 들어 있다. text 는 이 경계를 붙여 쓰므로(「CRM지연」) 발췌가 「이서연로그인…작성2026-10-30박지훈…」처럼 읽을 수 없게 된다.
+   * 해시는 text 로만 만든다 — 이 필드는 해시·앵커에 관여하지 않는다. 과거/수기 블록 객체에는 없다(그때는 text 로 자른다).
+   */
+  excerptText?: string
   rendered: boolean      // 제자리 렌더 여부 (html·footnoteDefinition·definition 은 false)
   headingDepth?: number  // heading 이면 1~6
   /** 목록이면 최상위 항목 수, 표면 머리 줄을 뺀 본문 줄 수 — 블록 하나가 여러 항목을 묶는다는 표시(회의록 → WBS 등록 안내). 다른 블록에는 없다 */
@@ -80,6 +86,21 @@ function draftTextOf(node: RootContent, rendered: boolean): string {
   return rendered ? normalizeDraft(draftNodeText(node)) : ''
 }
 
+/**
+ * mdastToString(includeHtml:false) 와 같은 글자를 같은 순서로 모으되 목록 항목·표 행 사이에 줄바꿈, 표 칸 사이에 공백을 넣는다 —
+ * 공백만 다르므로 공백을 뺀 글자열은 text 와 같다(tests/minutes/blocks.test.ts 가 고정한다). '|'·글머리 같은 표시는 넣지 않는다(글자가 달라진다).
+ */
+function excerptNodeText(node: Nodes): string {
+  if (node.type === 'html') return ''
+  if ('value' in node && typeof node.value === 'string') return node.value
+  if (node.type === 'image' || node.type === 'imageReference') return node.alt ?? ''
+  if (node.type === 'table' || node.type === 'list') return node.children.map(excerptNodeText).join('\n')
+  if (node.type === 'tableRow') return node.children.map(excerptNodeText).join(' ')
+  if (node.type === 'listItem') return node.children.map(excerptNodeText).filter(Boolean).join('\n')
+  if ('children' in node) return node.children.map(excerptNodeText).join('')
+  return ''
+}
+
 // 서버·클라이언트가 동일 파이프라인을 공유 — react-markdown 내부(remark-parse + remarkPlugins)와 같은 조합
 function parseRoot(bodyMd: string): Root {
   return unified().use(remarkParse).use(remarkGfm).parse(bodyMd) as Root
@@ -96,6 +117,7 @@ export function splitMinuteBlocks(bodyMd: string): MinuteBlock[] {
       hash: fnv1a64(text),
       text,
       draftText: draftTextOf(node, rendered),
+      excerptText: rendered ? normalizeDraft(excerptNodeText(node)) : '',
       rendered,
       ...(node.type === 'heading' ? { headingDepth: node.depth } : {}),
       ...(node.type === 'list' ? { items: node.children.length } : {}),

@@ -186,3 +186,63 @@ describe('remarkAnnotateBlocks — 연결된 WBS 작업 수(wbsCount)', () => {
     expect(html).not.toMatch(/<code[^>]*data-wbs-count/)
   })
 })
+
+describe('splitMinuteBlocks — excerptText(드래그 선택 발췌의 원문)', () => {
+  const RICH = [
+    '# 제목 `코드`',
+    '',
+    '문단 **강조**와 [링크](https://example.com) 그리고 ![그림 설명](a.png)',
+    '줄바꿈 뒤 글',
+    '',
+    '- [x] 끝낸 일',
+    '- 첫 항목',
+    '  - 딸린 항목 하나',
+    '  - 딸린 항목 둘',
+    '- 둘째 항목',
+    '',
+    '1. 하나',
+    '2. 둘',
+    '',
+    '| 담당 | 할 일 | 기한 |',
+    '| --- | --- | --- |',
+    '| 이서연 | 와이어프레임 작성 | 2026-10-30 |',
+    '| 박지훈 | 컴포넌트 `목록` 정리 | 2026-10-30 |',
+    '',
+    '> 인용 첫 줄',
+    '> 인용 둘째 줄',
+    '',
+    '```js',
+    'login()',
+    '```',
+    '',
+    '<div>raw html</div>',
+    '',
+    '각주 참조[^1]',
+    '',
+    '[^1]: 각주 본문',
+  ].join('\n')
+  const rich = splitMinuteBlocks(RICH)
+  const strip = (value: string) => value.replace(/\s+/g, '')
+
+  it('모든 블록에서 공백을 뺀 글자가 text 와 같다 — 발췌 대조(selection.ts)가 그 위에서 돈다', () => {
+    expect(rich.length).toBeGreaterThan(8)
+    for (const block of rich) {
+      expect(strip(block.excerptText ?? '<없음>'), `블록 ${block.index}`).toBe(strip(block.text))
+    }
+  })
+  it('렌더되지 않는 블록은 비어 있다', () => {
+    for (const block of rich.filter(b => !b.rendered)) expect(block.excerptText).toBe('')
+  })
+  it('목록은 항목마다, 표는 행마다 줄이 나뉘고 표 칸 사이는 공백이다', () => {
+    const list = rich.find(b => b.items === 3)
+    expect(list?.excerptText).toBe('끝낸 일\n첫 항목\n딸린 항목 하나\n딸린 항목 둘\n둘째 항목')
+    const table = rich.find(b => b.items === 2 && b.text.startsWith('담당'))
+    expect(table?.excerptText).toBe('담당 할 일 기한\n이서연 와이어프레임 작성 2026-10-30\n박지훈 컴포넌트 목록 정리 2026-10-30')
+  })
+  it('앵커 계약(text·hash)은 그대로다 — text 는 경계를 붙여 쓰고 해시는 text 로만 만든다', () => {
+    const table = rich.find(b => b.items === 2 && b.text.startsWith('담당'))
+    // 변경 전부터 있던 text — 칸·행 경계가 붙어 있다(「담당할 일기한이서연…」). 이 값이 바뀌면 해시가 바뀌어 기존 연결·요약이 끊긴다
+    expect(table?.text).toBe('담당할 일기한이서연와이어프레임 작성2026-10-30박지훈컴포넌트 목록 정리2026-10-30')
+    for (const block of rich) expect(block.hash).toBe(fnv1a64(block.text))
+  })
+})
