@@ -23,9 +23,15 @@ import {
   type IssueActionResult, type IssueInput, type MinuteIssueSourceInput,
 } from '@/app/actions/issues'
 import { createWbsItemsFromMinute, prepareMinuteWbsDrafts } from '@/app/actions/minuteWbs'
+import { prepareMinuteDesignSpec, prepareMinuteMockup } from '@/app/actions/minuteMockup'
+import { MinuteMockupModal, type BlueprintTab } from './MinuteMockupModal'
+import type { DesignSpec, MockupSpec } from '@/lib/domain/mockup'
 import {
   fnv1a64, isMarkableBlock, minuteBlockDraftText, splitMinuteBlocks, type BlockMarks,
 } from '@/lib/minutes/blocks'
+import {
+  matchMinuteSelection,
+} from '@/lib/minutes/selection'
 import { INS_PRIORITY, hlTier, visibleHighlights, visibleInsights } from '@/lib/minutes/annotations'
 import { resolveMinuteSourceBlock, type MinuteSourceAnchor } from '@/lib/minutes/source'
 import { compareKoreanName } from '@/lib/domain/nameSort'
@@ -195,6 +201,19 @@ export function MinuteViewer({
   const [wbsBusyKind, setWbsBusyKind] = useState<'single' | 'bulk' | null>(null)
   const wbsBusy = wbsBusyKind !== null
   const [wbsModal, setWbsModal] = useState<WbsModalState | null>(null)
+  // 회의록 → 프로그램 설계서 추출·화면 목업 생성(저장 없음) — 요약 카드·문단 팝오버·선택 버블 세 곳에서 연다. 요청 번호로 낡은 응답을 버린다
+  const [blueprintBusy, setBlueprintBusy] = useState<{
+    tab: BlueprintTab
+    origin: 'insight' | 'block' | 'selection'
+  } | null>(null)
+  const [blueprintModal, setBlueprintModal] = useState<{
+    initialTab: BlueprintTab
+    source: MinuteIssueSourceInput
+    spec?: DesignSpec | null
+    mockup?: MockupSpec | null
+  } | null>(null)
+  const blueprintRequestRef = useRef(0)
+  const blueprintInFlightRef = useRef<{ origin: 'insight' | 'block' | 'selection' } | null>(null)
   // 추천이 없는 줄의 처음 위치 — 이 화면에서 마지막으로 고른 위치(설계 §4.2, 저장하지 않는다). 맨 위면 WBS_ROOT_PARENT.
   // 다른 프로젝트의 id 일 수 있다 — 등록 창은 위치 후보에 없는 id 를 위치로 치지 않는다
   const [lastWbsParentId, setLastWbsParentId] = useState<string | null>(null)
@@ -240,6 +259,51 @@ export function MinuteViewer({
     && (fixedProjectId ? wbsAdminProjectIds.includes(fixedProjectId) : wbsPickerProjects.length > 0)
   // 「WBS로 등록」을 여는가 — 연결 목록까지 읽었어야 한다("등록됨" 판정의 근거, 계획 "설계와의 차이")
   const wbsEnabled = wbsCouldRegister && !linkedWbsItemsError
+  // 설계서 추출·화면 목업 — 고정 프로젝트가 있는 현재 버전·보관 아닌 회의록에서 프로젝트 멤버 누구나 연다
+  const blueprintEnabled = !historicalVersion && !minute.archivedAt && Boolean(fixedProjectId)
+  // 요약 카드(회의록 전체)에서 설계서·목업을 뽑을 때 쓰는 원문 앵커 — 첫 마킹 가능 문단부터 끝까지 묶는다. 상한 초과는 서버에서 명시적으로 거부한다
+  const wholeMinuteSource = useMemo<MinuteIssueSourceInput | null>(() => {
+    if (!currentVersion) return null
+    const firstIndex = blocks.findIndex(b => isMarkableBlock(b))
+    if (firstIndex < 0) return null
+    const first = blocks[firstIndex]
+    let endIndex = firstIndex
+    let hasNonHeading = !first.headingDepth
+    const parts: string[] = [minuteBlockDraftText(first)]
+    const maxIndex = blocks.length - 1
+    for (let idx = firstIndex + 1; idx <= maxIndex; idx += 1) {
+      const candidate = blocks[idx]
+      if (!candidate || !isMarkableBlock(candidate)) continue
+      const text = minuteBlockDraftText(candidate)
+      parts.push(text)
+      endIndex = idx
+      if (!candidate.headingDepth) hasNonHeading = true
+    }
+    if (!hasNonHeading) return null
+    if (endIndex === firstIndex) {
+      return {
+        minuteId: minute.id,
+        minuteVersionId: currentVersion.id,
+        bodyHash,
+        blockIndex: first.index,
+        blockHash: first.hash,
+        kind: 'manual',
+      }
+    }
+    const end = blocks[endIndex]
+    const joined = parts.join('\n')
+    const match = matchMinuteSelection(blocks, first.index, first.hash, end.index, end.hash, joined)
+    if (!match.ok) return null
+    return {
+      minuteId: minute.id,
+      minuteVersionId: currentVersion.id,
+      bodyHash,
+      blockIndex: first.index,
+      blockHash: first.hash,
+      kind: 'manual',
+      selection: { text: joined, endBlockIndex: end.index, endBlockHash: end.hash },
+    }
+  }, [blocks, bodyHash, currentVersion, minute.id])
   const sourceBlockIndex = useMemo(
     () => sourceAnchor ? resolveMinuteSourceBlock(blocks, bodyHash, sourceAnchor) : null,
     [blocks, bodyHash, sourceAnchor],
@@ -591,6 +655,9 @@ export function MinuteViewer({
   // 선택 흐름의 prepare 진행 중 사용자가 버블을 떠나면(바깥 클릭·선택 해제) 요청을 취소해
   // 뒤늦게 도착한 응답이 이슈 폼을 돌발 오픈하지 않게 한다(팝오버 onClose 와 같은 원칙).
   function onSelectionDismiss() {
+    if (blueprintInFlightRef.current?.origin === 'selection' && !blueprintModal) {
+      cancelBlueprintPrepare()
+    }
     // WBS 준비도 같은 규칙 — 선택에서 시작한 준비만, 등록 창·선택 창이 열리기 전까지만 취소한다
     if (wbsPrepareInFlightRef.current && wbsOrigin?.type === 'selection' && !wbsModal && !projectPickerOpen) {
       cancelWbsPrepare()
@@ -755,6 +822,89 @@ export function MinuteViewer({
     void beginWbsCreateFrom({ type: 'block', index: popover.blockIndex })
   }
 
+  function cancelBlueprintPrepare() {
+    blueprintRequestRef.current += 1
+    blueprintInFlightRef.current = null
+    setBlueprintBusy(null)
+  }
+
+  async function beginBlueprintFrom(
+    tab: BlueprintTab,
+    originKind: 'insight' | 'block' | 'selection',
+    source: MinuteIssueSourceInput | null,
+  ) {
+    if (
+      !fixedProjectId || issueBusy || wbsBusy || blueprintBusy !== null
+      || issuePrepareInFlightRef.current || wbsPrepareInFlightRef.current || blueprintInFlightRef.current !== null
+    ) return
+    const failKey = tab === 'spec' ? 'min.spec.failed' : 'min.mockup.failed'
+    if (!source) {
+      toast({ title: t(failKey), variant: 'error' })
+      setPopover(null)
+      return
+    }
+    const requestId = ++blueprintRequestRef.current
+    blueprintInFlightRef.current = { origin: originKind }
+    setBlueprintBusy({ tab, origin: originKind })
+    const normalizedSource: MinuteIssueSourceInput = { ...source, kind: 'manual' }
+    try {
+      if (tab === 'spec') {
+        const result = await prepareMinuteDesignSpec(fixedProjectId, normalizedSource)
+        if (blueprintRequestRef.current !== requestId) return
+        if (result.ok) {
+          setPopover(null)
+          window.getSelection()?.removeAllRanges()
+          setBlueprintModal({ initialTab: 'spec', source: normalizedSource, spec: result.value })
+        } else {
+          toast({ title: t('min.spec.failed'), description: result.error, variant: 'error' })
+        }
+      } else {
+        const result = await prepareMinuteMockup(fixedProjectId, normalizedSource)
+        if (blueprintRequestRef.current !== requestId) return
+        if (result.ok) {
+          setPopover(null)
+          window.getSelection()?.removeAllRanges()
+          setBlueprintModal({ initialTab: 'mockup', source: normalizedSource, mockup: result.value })
+        } else {
+          toast({ title: t('min.mockup.failed'), description: result.error, variant: 'error' })
+        }
+      }
+    } catch (cause) {
+      if (blueprintRequestRef.current !== requestId) return
+      console.error('[MinuteViewer] 설계서·목업 생성 요청 실패:', cause)
+      toast({ title: t(failKey), variant: 'error' })
+    } finally {
+      if (blueprintRequestRef.current === requestId) {
+        blueprintInFlightRef.current = null
+        setBlueprintBusy(null)
+      }
+    }
+  }
+
+  function onSelectionSpec(target: MinuteSelectionTarget) {
+    if (!target.excerpt) return
+    const source = issueSourceInputFor({ type: 'selection', ...target })
+    void beginBlueprintFrom('spec', 'selection', source)
+  }
+
+  function onSelectionMockup(target: MinuteSelectionTarget) {
+    if (!target.excerpt) return
+    const source = issueSourceInputFor({ type: 'selection', ...target })
+    void beginBlueprintFrom('mockup', 'selection', source)
+  }
+
+  function beginBlockSpec() {
+    if (!popover) return
+    const source = issueSourceInputFor({ type: 'block', index: popover.blockIndex })
+    void beginBlueprintFrom('spec', 'block', source)
+  }
+
+  function beginBlockMockup() {
+    if (!popover) return
+    const source = issueSourceInputFor({ type: 'block', index: popover.blockIndex })
+    void beginBlueprintFrom('mockup', 'block', source)
+  }
+
   function onSelectionWbs(target: MinuteSelectionTarget) {
     if (!target.excerpt) return
     void beginWbsCreateFrom({ type: 'selection', ...target })
@@ -817,9 +967,9 @@ export function MinuteViewer({
    * 이미 등록된 줄은 창이 회색으로 보인다(준비 액션은 그 줄을 다듬지 않는다).
    */
   async function beginWbsBulk() {
-    // 이슈 초안을 준비하는 중에는 시작하지 않는다(이슈 폼과 등록 창이 겹쳐 열리지 않게). 카드 단추가 그동안 막혀 보이는 조건(bulkDisabled)과
+    // 이슈 초안이나 설계서·목업을 준비하는 중에는 시작하지 않는다(이슈 폼·스튜디오 창과 등록 창이 겹쳐 열리지 않게). 카드 단추가 그동안 막혀 보이는 조건(bulkDisabled)과
     // 같은 상태로 판정한다 — 단추가 열려 보이는데 눌러도 아무 일이 없는 일이 없게
-    if (issueBusy) return
+    if (issueBusy || blueprintBusy !== null) return
     if (!currentVersion) {
       toast({ title: t('min.wbs.prepareFailed'), variant: 'error' })
       return
@@ -1149,9 +1299,13 @@ export function MinuteViewer({
           minuteId={minute.id} insights={annotations.insights} highlights={annotations.highlights}
           blocks={blocks} bodyHash={bodyHash} onJump={jumpTo} linkedIssues={activeLinkedIssues}
           linkedWbsItems={activeLinkedWbs} canBulkWbs={canBulkWbs} wbsBusy={wbsBusyKind === 'bulk'}
-          // 다른 준비(이슈 초안·문단 한 건) 중에는 막기만 한다 — 보이는 그대로 누를 수 없다(beginWbsBulk 의 판정과 같은 상태)
-          bulkDisabled={issueBusy || wbsBusyKind === 'single'}
+          // 다른 준비(이슈 초안·문단 한 건·설계서/목업) 중에는 막기만 한다 — 보이는 그대로 누를 수 없다(beginWbsBulk 의 판정과 같은 상태)
+          bulkDisabled={issueBusy || wbsBusyKind === 'single' || blueprintBusy !== null}
           onBulkWbs={wbsEnabled ? () => { void beginWbsBulk() } : undefined}
+          specBusy={blueprintBusy?.origin === 'insight' && blueprintBusy.tab === 'spec'}
+          mockupBusy={blueprintBusy?.origin === 'insight' && blueprintBusy.tab === 'mockup'}
+          onExtractSpec={blueprintEnabled && wholeMinuteSource ? () => { void beginBlueprintFrom('spec', 'insight', wholeMinuteSource) } : undefined}
+          onCreateMockup={blueprintEnabled && wholeMinuteSource ? () => { void beginBlueprintFrom('mockup', 'insight', wholeMinuteSource) } : undefined}
           details={
             <>
               <MinuteVersionPanel
@@ -1203,13 +1357,18 @@ export function MinuteViewer({
       {popover && (
         <MinuteBlockPopover
           state={popover} mine={myIndexes.has(popover.blockIndex)}
-          names={popNames} insKinds={popKinds} busy={hlBusy || issueBusy || wbsBusy}
+          names={popNames} insKinds={popKinds} busy={hlBusy || issueBusy || wbsBusy || blueprintBusy !== null}
           linkedIssues={popLinkedIssues} issueBusy={issueBusy}
           // 한꺼번에 준비 중에는 문단의 두 등록을 막기만 한다 — 「작업 초안 준비 중…」은 그 흐름의 단추(요약 카드)에만
-          canCreateIssue={!blocks[popover.blockIndex]?.headingDepth && wbsBusyKind !== 'bulk'}
+          canCreateIssue={!blocks[popover.blockIndex]?.headingDepth && wbsBusyKind !== 'bulk' && blueprintBusy === null}
           linkedWbsItems={popLinkedWbs} wbsBusy={wbsBusyKind === 'single'}
-          canCreateWbs={!blocks[popover.blockIndex]?.headingDepth && wbsBusyKind !== 'bulk'}
+          canCreateWbs={!blocks[popover.blockIndex]?.headingDepth && wbsBusyKind !== 'bulk' && blueprintBusy === null}
           onCreateWbs={wbsEnabled ? beginWbsCreate : undefined}
+          specBusy={blueprintBusy?.origin === 'block' && blueprintBusy.tab === 'spec'}
+          mockupBusy={blueprintBusy?.origin === 'block' && blueprintBusy.tab === 'mockup'}
+          canCreateBlueprint={!blocks[popover.blockIndex]?.headingDepth && wbsBusyKind !== 'bulk'}
+          onExtractSpec={blueprintEnabled ? beginBlockSpec : undefined}
+          onCreateMockup={blueprintEnabled ? beginBlockMockup : undefined}
           onToggle={() => void onToggleHighlight()}
           onCreateIssue={() => void beginIssueCreate()}
           onClose={() => {
@@ -1224,6 +1383,7 @@ export function MinuteViewer({
             // 이 문단에서 시작한 준비 중에 닫으면 요청을 버린다 — 뒤늦은 응답이 창을 돌발로 열지 않게(이슈와 같은 원칙, 판정은 동기 ref).
             // 요약 카드에서 시작한 한꺼번에 준비(wbsOrigin 없음)는 팝오버와 무관하다 — 준비 중에 문단을 눌렀다 닫아도 이어 간다
             if (wbsPrepareInFlightRef.current && wbsOrigin?.type === 'block') cancelWbsPrepare()
+            if (blueprintInFlightRef.current?.origin === 'block') cancelBlueprintPrepare()
             setPopover(null)
           }}
         />
@@ -1233,14 +1393,19 @@ export function MinuteViewer({
         <MinuteSelectionBubble
           bodyRef={bodyRef}
           blocks={blocks}
-          disabled={issueFormOpen || projectPickerOpen || wbsModal !== null}
+          disabled={issueFormOpen || projectPickerOpen || wbsModal !== null || blueprintModal !== null}
           busy={issueBusy}
           wbsBusy={wbsBusyKind === 'single'}
-          // 한꺼번에 준비 중에는 두 단추를 막기만 한다(준비 중 문구는 요약 카드 단추에만)
-          canCreateIssue={wbsBusyKind !== 'bulk'}
-          canCreateWbs={wbsBusyKind !== 'bulk'}
+          // 한꺼번에 준비 중에는 단추들을 막기만 한다(준비 중 문구는 요약 카드 단추에만)
+          canCreateIssue={wbsBusyKind !== 'bulk' && blueprintBusy === null}
+          canCreateWbs={wbsBusyKind !== 'bulk' && blueprintBusy === null}
+          canCreateBlueprint={wbsBusyKind !== 'bulk' && (blueprintBusy === null || blueprintBusy.origin === 'selection')}
           onCreateIssue={onSelectionIssue}
           onCreateWbs={wbsEnabled ? onSelectionWbs : undefined}
+          onExtractSpec={blueprintEnabled ? onSelectionSpec : undefined}
+          onCreateMockup={blueprintEnabled ? onSelectionMockup : undefined}
+          specBusy={blueprintBusy?.origin === 'selection' && blueprintBusy.tab === 'spec'}
+          mockupBusy={blueprintBusy?.origin === 'selection' && blueprintBusy.tab === 'mockup'}
           onTargetChange={target => setSelectionPreview(
             target ? { startIndex: target.startIndex, endIndex: target.endIndex } : null,
           )}
@@ -1316,6 +1481,17 @@ export function MinuteViewer({
           onClose={closeWbsModal}
           onSubmit={rows => createWbsItemsFromMinute(wbsModal.projectId, rows)}
           onCreated={(items, parentId) => onWbsCreated(wbsModal, items, parentId)}
+        />
+      )}
+
+      {blueprintModal && fixedProjectId && (
+        <MinuteMockupModal
+          initialTab={blueprintModal.initialTab}
+          designSpec={blueprintModal.spec ?? null}
+          spec={blueprintModal.mockup ?? null}
+          onLoadSpec={(feedback, currentDraft) => prepareMinuteDesignSpec(fixedProjectId, blueprintModal.source, feedback, currentDraft)}
+          onLoadMockup={(feedback, currentDraft) => prepareMinuteMockup(fixedProjectId, blueprintModal.source, feedback, currentDraft)}
+          onClose={() => setBlueprintModal(null)}
         />
       )}
 

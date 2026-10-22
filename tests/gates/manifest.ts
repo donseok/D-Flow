@@ -212,6 +212,9 @@ export const ACTION_GATES: Readonly<Record<string, GateEntry>> = {
   [`${A('minuteWbs')}#prepareMinuteWbsDrafts`]: { guard: 'projectAdmin', module: 'minutes', sample: [P, []] },
   [`${A('minuteWbs')}#createWbsItemsFromMinute`]: { guard: 'projectAdmin', module: 'minutes', sample: [P, []] },
   [`${A('minuteWbs')}#getWbsItemMinuteSources`]: { guard: 'session', module: 'minutes', note: '로그인 + 세션 RLS(wbs 원문 연결 — listAttachments 와 같다. 명단 밖 조회 전용도 읽는다) + 항목 프로젝트의 회의록 관문', sample: [U] },   // isUuidLike 가 가드 앞
+  // ── minuteMockup — 회의록 → 프로그램 설계서 추출·와이어프레임 목업(저장 없음). 프로젝트 멤버 이상 + 회의록 관문
+  [`${A('minuteMockup')}#prepareMinuteDesignSpec`]: { guard: 'projectMember', module: 'minutes', sample: [P, {}] },
+  [`${A('minuteMockup')}#prepareMinuteMockup`]: { guard: 'projectMember', module: 'minutes', sample: [P, {}] },
   // ── notifications·preferences — 셸
   [`${A('notifications')}#getNotifications`]: nul('session', '셸 파생 알림 — 로그인 + RLS'),
   [`${A('notifications')}#markAllNotificationsRead`]: nul('session', SESSION_SELF),

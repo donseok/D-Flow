@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ChevronDown, ChevronUp, CircleAlert, ExternalLink, ListChecks, ListPlus, LoaderCircle, Sparkles,
+  ChevronDown, ChevronUp, CircleAlert, ExternalLink, FileText, LayoutTemplate, ListChecks, ListPlus, LoaderCircle, Sparkles,
 } from 'lucide-react'
 import type { InsightKind, MinuteHighlight, MinuteInsight } from '@/lib/domain/types'
 import type { MinuteBlock } from '@/lib/minutes/blocks'
@@ -28,6 +28,7 @@ const KIND_CHIP: Record<InsightKind, { chip: string; dot: string }> = {
 export function MinuteInsightCard({
   minuteId, insights, highlights, blocks, bodyHash, onJump, linkedIssues = [], details,
   linkedWbsItems = [], canBulkWbs = false, wbsBusy = false, bulkDisabled = false, onBulkWbs,
+  specBusy = false, mockupBusy = false, onExtractSpec, onCreateMockup,
 }: {
   minuteId: string
   insights: MinuteInsight[]
@@ -46,6 +47,10 @@ export function MinuteInsightCard({
   /** 다른 등록(이슈 초안·문단 한 건)을 준비하는 중 — 단추를 막기만 한다(문구는 그대로) */
   bulkDisabled?: boolean
   onBulkWbs?: () => void
+  specBusy?: boolean
+  mockupBusy?: boolean
+  onExtractSpec?: () => void
+  onCreateMockup?: () => void
 }) {
   const { t } = useLocale()
   const router = useRouter()
@@ -108,10 +113,36 @@ export function MinuteInsightCard({
             </button>
           )}
         </span>
-        <span className="ml-auto flex items-center gap-2">
+        <span className="ml-auto flex flex-wrap items-center gap-2">
+          {onExtractSpec && (
+            <button
+              type="button"
+              onClick={onExtractSpec}
+              disabled={wbsBusy || bulkDisabled || specBusy || mockupBusy}
+              className="btn btn-ghost h-8 px-2.5 text-xs"
+            >
+              {specBusy
+                ? <LoaderCircle aria-hidden className="h-3.5 w-3.5 animate-spin" />
+                : <FileText aria-hidden className="h-3.5 w-3.5" />}
+              {specBusy ? t('min.spec.preparing') : t('min.spec.create')}
+            </button>
+          )}
+          {onCreateMockup && (
+            <button
+              type="button"
+              onClick={onCreateMockup}
+              disabled={wbsBusy || bulkDisabled || specBusy || mockupBusy}
+              className="btn btn-ghost h-8 px-2.5 text-xs"
+            >
+              {mockupBusy
+                ? <LoaderCircle aria-hidden className="h-3.5 w-3.5 animate-spin" />
+                : <LayoutTemplate aria-hidden className="h-3.5 w-3.5" />}
+              {mockupBusy ? t('min.mockup.preparing') : t('min.mockup.create')}
+            </button>
+          )}
           {/* 「액션」 문단 전부를 WBS 작업으로(§3.2) — 보일지는 뷰어가 정한다(canBulkWbs) */}
           {canBulkWbs && onBulkWbs && (
-            <button type="button" onClick={onBulkWbs} disabled={wbsBusy || bulkDisabled} className="btn btn-ghost h-8 px-2.5 text-xs">
+            <button type="button" onClick={onBulkWbs} disabled={wbsBusy || bulkDisabled || specBusy || mockupBusy} className="btn btn-ghost h-8 px-2.5 text-xs">
               {wbsBusy
                 ? <LoaderCircle aria-hidden className="h-3.5 w-3.5 animate-spin" />
                 : <ListPlus aria-hidden className="h-3.5 w-3.5" />}

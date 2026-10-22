@@ -427,6 +427,11 @@ export const serverUiKo = {
   'srv.minutes.topLevelFolderCannotUse': '팀 이름과 같은 이름은 최상위 폴더에 쓸 수 없습니다.',
   'srv.minutes.totalAttachmentSizeLimitThese': '이 회의록의 첨부 총용량 한도를 넘었습니다.',
   'srv.minutes.upCanAssignedOnce': '한 번에 {minutesProjectBulkMax}건까지 지정할 수 있습니다.',
+  // src/app/actions/minuteMockup.ts — 회의록 → 프로그램 설계서 추출·와이어프레임 목업
+  'srv.minuteMockup.sourceInvalid': '회의록 원문 정보가 올바르지 않습니다.',
+  'srv.minuteMockup.aiUnavailable': 'AI 를 쓸 수 없어 설계서·목업을 만들 수 없습니다.',
+  'srv.minuteMockup.specFailed': '프로그램 설계서를 추출하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
+  'srv.minuteMockup.generateFailed': '목업을 만들지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
   // src/app/actions/minuteWbs.ts — 회의록 → WBS 등록(src/lib/minutes/verifySource.ts 의 WBS 문구도 여기 키를 쓴다)
   'srv.minuteWbs.rowsInvalid': '등록할 줄이 비었거나 30건을 넘습니다.',
   'srv.minuteWbs.forbidden': '프로젝트 관리자만 WBS로 등록할 수 있습니다.',

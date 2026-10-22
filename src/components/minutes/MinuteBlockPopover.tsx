@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { CircleAlert, ExternalLink, Highlighter, ListPlus, LoaderCircle, Users } from 'lucide-react'
+import { CircleAlert, ExternalLink, FileText, Highlighter, LayoutTemplate, ListPlus, LoaderCircle, Users } from 'lucide-react'
 import type { InsightKind } from '@/lib/domain/types'
 import type { MinuteLinkedIssue } from '@/lib/domain/issueMinuteSource'
 import { displayWbsCode, type MinuteLinkedWbsItem } from '@/lib/domain/minuteWbs'
@@ -47,6 +47,7 @@ export interface PopoverState {
 export function MinuteBlockPopover({
   state, mine, names, insKinds, busy, linkedIssues, issueBusy = false,
   canCreateIssue = true, linkedWbsItems, wbsBusy = false, canCreateWbs = true, onCreateWbs,
+  specBusy = false, mockupBusy = false, canCreateBlueprint = true, onExtractSpec, onCreateMockup,
   onToggle, onCreateIssue, onClose,
 }: {
   state: PopoverState
@@ -65,6 +66,11 @@ export function MinuteBlockPopover({
   canCreateWbs?: boolean
   /** 없으면 「WBS로 등록」 단추가 없다(관리자가 아님·연결 목록 조회 실패 등 — 뷰어의 wbsEnabled) */
   onCreateWbs?: () => void
+  specBusy?: boolean
+  mockupBusy?: boolean
+  canCreateBlueprint?: boolean
+  onExtractSpec?: () => void
+  onCreateMockup?: () => void
   onToggle: () => void
   onCreateIssue: () => void
   onClose: () => void
@@ -169,7 +175,7 @@ export function MinuteBlockPopover({
           )}
           <button
             onClick={onCreateIssue}
-            disabled={issueBusy || wbsBusy || !canCreateIssue}
+            disabled={issueBusy || wbsBusy || specBusy || mockupBusy || !canCreateIssue}
             className="btn btn-primary h-9 w-full"
           >
             {issueBusy
@@ -216,7 +222,7 @@ export function MinuteBlockPopover({
             {onCreateWbs && (
               <button
                 onClick={onCreateWbs}
-                disabled={wbsBusy || issueBusy || !canCreateWbs}
+                disabled={wbsBusy || issueBusy || specBusy || mockupBusy || !canCreateWbs}
                 className="btn btn-ghost h-9 w-full"
               >
                 {wbsBusy
@@ -225,6 +231,36 @@ export function MinuteBlockPopover({
                 {wbsBusy
                   ? t('min.wbs.preparing')
                   : linkedWbsItems.length > 0 ? t('min.wbs.createAnother') : t('min.wbs.create')}
+              </button>
+            )}
+          </div>
+        )}
+        {(onExtractSpec || onCreateMockup) && (
+          <div className="mt-2 flex gap-1.5 border-t border-border pt-2">
+            {onExtractSpec && (
+              <button
+                type="button"
+                onClick={onExtractSpec}
+                disabled={wbsBusy || issueBusy || specBusy || mockupBusy || !canCreateBlueprint}
+                className="btn btn-ghost h-9 min-w-0 flex-1 px-2.5 text-xs"
+              >
+                {specBusy
+                  ? <LoaderCircle aria-hidden className="h-4 w-4 shrink-0 animate-spin" />
+                  : <FileText aria-hidden className="h-4 w-4 shrink-0" />}
+                <span className="truncate">{specBusy ? t('min.spec.preparing') : t('min.spec.create')}</span>
+              </button>
+            )}
+            {onCreateMockup && (
+              <button
+                type="button"
+                onClick={onCreateMockup}
+                disabled={wbsBusy || issueBusy || specBusy || mockupBusy || !canCreateBlueprint}
+                className="btn btn-ghost h-9 min-w-0 flex-1 px-2.5 text-xs"
+              >
+                {mockupBusy
+                  ? <LoaderCircle aria-hidden className="h-4 w-4 shrink-0 animate-spin" />
+                  : <LayoutTemplate aria-hidden className="h-4 w-4 shrink-0" />}
+                <span className="truncate">{mockupBusy ? t('min.mockup.preparing') : t('min.mockup.create')}</span>
               </button>
             )}
           </div>
