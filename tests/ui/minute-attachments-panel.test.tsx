@@ -45,6 +45,8 @@ async function render(props: Partial<React.ComponentProps<typeof MinuteAttachmen
 }
 const text = () => container.textContent ?? ''
 const button = (label: string) => [...container.querySelectorAll('button')].find(b => b.textContent === label || b.getAttribute('aria-label')?.startsWith(label))
+// 목록은 본문 자리를 아끼려고 기본으로 접혀 있다 — 파일을 보려면 먼저 펼친다
+async function expand() { await act(async () => { button('min.att.expand')!.click() }) }
 async function pick(...files: File[]) {
   const input = container.querySelector<HTMLInputElement>('input[type="file"]')!
   Object.defineProperty(input, 'files', { value: files, configurable: true })
@@ -67,6 +69,9 @@ describe('MinuteAttachmentsPanel', () => {
   it('목록에 등록자·크기, 정책 안내에 사용량을 보인다 — 정책은 회의록 id 로만 묻는다', async () => {
     await render()
     expect(m.fetchPolicy).toHaveBeenCalledWith(MID)
+    expect(text()).toContain('min.att.usage')
+    expect(text()).not.toContain('도면.png') // 접힌 채로는 머리 한 줄만
+    await expand()
     expect(text()).toContain('도면.png')
     expect(text()).toContain('512 B')
     expect(text()).toContain('min.att.by')
@@ -77,6 +82,7 @@ describe('MinuteAttachmentsPanel', () => {
 
   it('권한 없는 사용자에게는 추가·삭제를 그리지 않는다', async () => {
     await render({ canManage: false })
+    await expand()
     expect(container.querySelector('input[type="file"]')).toBeNull()
     expect(button('min.att.delete')).toBeUndefined()
     expect(button('min.att.download')).toBeTruthy()
@@ -106,6 +112,9 @@ describe('MinuteAttachmentsPanel', () => {
     expect(m.record).toHaveBeenCalledWith(MID, expect.objectContaining({ role: 'attachment', fileName: '메모.txt', filePath: path }))
     expect(m.refresh).toHaveBeenCalled()
     expect(text()).not.toContain('메모.txt')
+    // 올리기가 끝나면 방금 올린 파일이 보이게 목록을 펼친다(접힌 채로면 올렸는지 알 수 없다)
+    expect(button('min.att.collapse')).toBeTruthy()
+    expect(text()).toContain('도면.png')
   })
 
   it('확정 거부면 올린 객체를 지우고 실패로 남긴다 — 재시도는 새 경로로', async () => {
@@ -134,6 +143,7 @@ describe('MinuteAttachmentsPanel', () => {
   it('삭제 실패면 목록에 남기고 사유를 보인다', async () => {
     m.remove.mockResolvedValue({ ok: false, error: '첨부 기록을 지우지 못했습니다 — 새로고침한 뒤 확인하세요.' })
     await render()
+    await expand()
     await act(async () => { button('min.att.delete')!.click() })
     await act(async () => { button('min.att.deleteConfirm')!.click() })
     expect(m.remove).toHaveBeenCalledWith('f1')
@@ -145,6 +155,7 @@ describe('MinuteAttachmentsPanel', () => {
   it('삭제 성공이면 토스트 + 새로고침', async () => {
     m.remove.mockResolvedValue({ ok: true })
     await render()
+    await expand()
     await act(async () => { button('min.att.delete')!.click() })
     await act(async () => { button('min.att.deleteConfirm')!.click() })
     expect(m.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'min.att.deleteDone' }))
@@ -154,6 +165,7 @@ describe('MinuteAttachmentsPanel', () => {
   it('미리보기: 서버가 허용한 이미지만 img 로 연다, 거부는 사유', async () => {
     m.previewUrl.mockResolvedValueOnce({ ok: true, url: 'https://storage.example.com/s', kind: 'image' })
     await render()
+    await expand()
     await act(async () => { button('min.att.preview')!.click() })
     expect(container.querySelector('[data-testid="modal"] img')?.getAttribute('src')).toBe('https://storage.example.com/s')
     m.previewUrl.mockResolvedValueOnce({ ok: false, error: '미리 볼 수 없는 파일입니다. 내려받아 확인하세요.' })
@@ -165,10 +177,54 @@ describe('MinuteAttachmentsPanel', () => {
     let resolve!: (v: unknown) => void
     m.previewUrl.mockReturnValueOnce(new Promise(r => { resolve = r }))
     await render()
+    await expand()
     await act(async () => { button('min.att.preview')!.click() })
     act(() => root.unmount())
     await act(async () => { resolve({ ok: true, url: 'https://storage.example.com/s', kind: 'image' }) })
     expect(container.querySelector('img')).toBeNull()
     root = createRoot(container)
+  })
+
+  it('파일이 있으면 머리 한 줄에 개수·용량과 안내가 있고, 펼치기·접기로 목록을 여닫는다', async () => {
+    await render()
+    const toggle = () => button('min.att.expand') ?? button('min.att.collapse')
+    expect(container.querySelectorAll('h2').length).toBe(1)
+    expect(container.querySelector('ul')).toBeNull()
+    expect(text()).toContain('min.att.policyHint') // 정책 안내는 별도 문단이 아니라 머리 줄 안
+    expect(toggle()?.getAttribute('aria-expanded')).toBe('false')
+    await expand()
+    expect(container.querySelector('ul')).not.toBeNull()
+    expect(toggle()?.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle()?.getAttribute('aria-controls')).toBe(container.querySelector('ul')!.id)
+    await act(async () => { button('min.att.collapse')!.click() })
+    expect(container.querySelector('ul')).toBeNull()
+    expect(text()).not.toContain('도면.png')
+  })
+
+  it('첨부가 없으면 한 줄이다 — 드롭 안내가 머리 줄 안에 들어가고 접기 단추·목록은 없다', async () => {
+    await render({ files: [] })
+    expect(container.querySelector('ul')).toBeNull()
+    expect(button('min.att.expand')).toBeUndefined()
+    expect(button('min.att.collapse')).toBeUndefined()
+    const header = container.querySelector('h2')!.parentElement!
+    expect(header.textContent).toContain('min.att.drop')
+    expect(header.textContent).toContain('min.att.policyHint')
+    expect(container.querySelectorAll('section > p').length).toBe(0) // 안내 문단이 따로 붙지 않는다
+  })
+
+  it('조회 전용 사용자의 빈 상태는 머리 줄에 빈 안내만', async () => {
+    await render({ files: [], canManage: false })
+    expect(container.querySelector('h2')!.parentElement!.textContent).toContain('min.att.empty')
+    expect(container.querySelector('input[type="file"]')).toBeNull()
+  })
+
+  it('올리는 중·실패한 항목은 접혀 있어도 보인다', async () => {
+    m.record.mockResolvedValueOnce({ ok: false, error: '확정하지 못했습니다.' })
+    await render()
+    await pick(new File(['x'], '메모.txt'))
+    expect(button('min.att.expand')).toBeTruthy() // 여전히 접힘
+    expect(text()).toContain('메모.txt')
+    expect(text()).toContain('확정하지 못했습니다.')
+    expect(text()).not.toContain('도면.png')
   })
 })

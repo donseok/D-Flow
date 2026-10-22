@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Eye, FileText, Loader2, Paperclip, Plus, RotateCw, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Download, Eye, FileText, Loader2, Paperclip, Plus, RotateCw, Trash2, X } from 'lucide-react'
 import type { MinuteFile } from '@/lib/domain/types'
 import type { DictKey} from '@/lib/i18n/dict'
 import { stampedFileName } from '@/lib/domain/minutes'
@@ -58,6 +58,9 @@ export function MinuteAttachmentsPanel({
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
+  // 파일 목록 펼침 — 본문 읽는 자리를 아끼려고 접어 두고 머리 한 줄(개수·용량)만 보인다. 올리는 중·실패한 항목은 접혀 있어도 늘 보이고,
+  // 올리기가 끝나면 방금 올린 파일이 보이게 펼친다
+  const [expanded, setExpanded] = useState(false)
   // 대기열 항목의 원본 File — 상태(직렬화 가능한 값)와 분리해 보관한다. 재시도도 같은 File 을 새 경로로 다시 올린다.
   const filesRef = useRef(new Map<string, File>())
   const aliveRef = useRef(true)
@@ -128,6 +131,7 @@ export function MinuteAttachmentsPanel({
         filesRef.current.delete(item.key)
         if (!aliveRef.current) return
         setQueue(q => drop(q, item.key, { force: true }))
+        setExpanded(true)
         router.refresh()
       } catch (e) {
         console.error('[MinuteAttachmentsPanel] 첨부 업로드 실패:', e)
@@ -185,11 +189,26 @@ export function MinuteAttachmentsPanel({
   }
 
   const remaining = pol ? Math.max(0, pol.maxCount - usage.count) : null
+  const listOpen = expanded && files.length > 0
+  const listId = `min-att-list-${minuteId}`
+  // 머리 줄에 붙는 안내 — 정책(파일당 한도·허용 형식)·꺼짐 사유·빈 상태/드롭 안내를 문단 여럿이 아니라 한 줄의 글로 잇는다
+  const hintParts: string[] = []
+  if (pol && canManage && pol.enabled) {
+    hintParts.push(t('min.att.policyHint').replace('{size}', formatBytes(pol.maxFileBytes)))
+    if (pol.allowedExtensions !== null) {
+      hintParts.push(pol.allowedExtensions.length > 0
+        ? t('min.att.extHint').replace('{exts}', pol.allowedExtensions.join(', '))
+        : t('min.att.extNone'))
+    }
+  }
+  if (pol && canManage && !pol.enabled) hintParts.push(t('min.att.disabled'))
+  if (!filesError && files.length === 0 && queue.length === 0) hintParts.push(canAdd ? t('min.att.drop') : t('min.att.empty'))
+  const hint = hintParts.join(' · ')
 
   return (
     <section
       aria-labelledby={`min-att-${minuteId}`}
-      className={`card shrink-0 space-y-2 px-4 py-3 ${dragOver ? 'ring-2 ring-action' : ''}`}
+      className={`card shrink-0 space-y-2 px-4 py-2 ${dragOver ? 'ring-2 ring-action' : ''}`}
       onDragOver={canAdd ? e => { e.preventDefault(); setDragOver(true) } : undefined}
       onDragLeave={canAdd ? () => setDragOver(false) : undefined}
       onDrop={canAdd ? onDrop : undefined}
@@ -206,37 +225,32 @@ export function MinuteAttachmentsPanel({
           </span>
         )}
         {policy.kind === 'loading' && <span className="text-xs text-fg-muted">{t('min.att.policyLoading')}</span>}
-        {canAdd && (
-          <label className={`btn ml-auto h-8 cursor-pointer px-2.5 text-xs ${remaining === 0 ? 'pointer-events-none opacity-50' : ''}`}
-            aria-disabled={remaining === 0}>
-            <Plus aria-hidden className="h-3.5 w-3.5" />{t('min.att.add')}
-            <input type="file" multiple className="sr-only" onChange={onPick} disabled={remaining === 0}
-              accept={pol?.allowedExtensions ? pol.allowedExtensions.map(e => `.${e}`).join(',') : undefined} />
-          </label>
-        )}
+        {hint && <span title={hint} className="min-w-0 flex-1 basis-48 truncate text-xs text-fg-muted">{hint}</span>}
+        <span className="ml-auto flex items-center gap-1.5">
+          {canAdd && (
+            <label className={`btn h-7 cursor-pointer px-2.5 text-xs ${remaining === 0 ? 'pointer-events-none opacity-50' : ''}`}
+              aria-disabled={remaining === 0}>
+              <Plus aria-hidden className="h-3.5 w-3.5" />{t('min.att.add')}
+              <input type="file" multiple className="sr-only" onChange={onPick} disabled={remaining === 0}
+                accept={pol?.allowedExtensions ? pol.allowedExtensions.map(e => `.${e}`).join(',') : undefined} />
+            </label>
+          )}
+          {files.length > 0 && (
+            <button type="button" onClick={() => setExpanded(open => !open)} aria-expanded={listOpen} aria-controls={listOpen ? listId : undefined}
+              className="btn btn-ghost h-7 gap-1 px-2 text-xs text-fg-secondary">
+              {listOpen ? <ChevronUp aria-hidden className="h-3.5 w-3.5" /> : <ChevronDown aria-hidden className="h-3.5 w-3.5" />}
+              {listOpen ? t('min.att.collapse') : t('min.att.expand')}
+            </button>
+          )}
+        </span>
       </div>
 
-      {pol && canManage && pol.enabled && (
-        <p className="text-xs text-fg-muted">
-          {t('min.att.policyHint').replace('{size}', formatBytes(pol.maxFileBytes))}
-          {pol.allowedExtensions !== null && (
-            <> · {pol.allowedExtensions.length > 0
-              ? t('min.att.extHint').replace('{exts}', pol.allowedExtensions.join(', '))
-              : t('min.att.extNone')}</>
-          )}
-        </p>
-      )}
-      {pol && canManage && !pol.enabled && <p className="text-xs text-fg-secondary">{t('min.att.disabled')}</p>}
       {policy.kind === 'failed' && canManage && <p role="alert" className="text-xs text-danger">{policy.error}</p>}
       {filesError && <p role="alert" className="text-sm text-danger">{t('min.detail.filesLoadFailed')}</p>}
 
-      {!filesError && files.length === 0 && queue.length === 0 && (
-        <p className="text-xs text-fg-muted">{canAdd ? t('min.att.drop') : t('min.att.empty')}</p>
-      )}
-
-      {(files.length > 0 || queue.length > 0) && (
-        <ul className="divide-y divide-border rounded-md border border-border">
-          {files.map(f => (
+      {(listOpen || queue.length > 0) && (
+        <ul id={listId} className="divide-y divide-border rounded-md border border-border">
+          {listOpen && files.map(f => (
             <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
               <FileText aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" />
               <button type="button" onClick={() => void onDownload(f)} disabled={busyId === f.id}

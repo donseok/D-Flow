@@ -134,6 +134,8 @@ export const minutesKo = {
   'min.att.policyLoading': '첨부 설정 확인 중…',
   'min.att.empty': '첨부된 파일이 없습니다.',
   'min.att.add': '파일 추가',
+  'min.att.expand': '펼치기',
+  'min.att.collapse': '접기',
   'min.att.drop': '여기에 파일을 놓아 첨부',
   'min.att.download': '내려받기',
   'min.att.preview': '미리보기',
