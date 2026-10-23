@@ -35,6 +35,14 @@ describe('/w/[slug]/projects v1(스펙 §6.2)', () => {
     const html = await render()
     expect(html).not.toContain('<table'); expect(html).toContain('data-project-card')
   })
+  it('카드는 어디를 눌러도 열린다 — 이름 링크가 카드 전체를 덮고(after:inset-0) 즐겨찾기 별은 그 위에 따로 있다', async () => {
+    h.acc.mockResolvedValue({ projectsView: 'cards' })
+    const html = await render()
+    const card = html.match(/<article[^>]*data-project-card[^>]*>[\s\S]*?<\/article>/)?.[0] ?? ''
+    expect(card).toMatch(/<article[^>]*class="relative /)   // 늘린 링크의 기준(위치 맥락)
+    expect(card).toMatch(/<a class="[^"]*after:absolute[^"]*after:inset-0[^"]*" href="\/p\/00000000-0000-0000-7e57-000000001861\/dashboard"/)
+    expect(card).toMatch(/<div class="relative z-10"><button[^>]*aria-pressed/)   // 별이 링크 덮개 위에서 따로 눌린다
+  })
   it('검색·상태·즐겨찾기만은 서버 쿼리로 로더에', async () => {
     await render({ q: 'ac%', status: 'overdue', fav: '1' })
     expect(h.rows).toHaveBeenCalledWith(WS.id, member, { q: 'ac%', status: 'overdue', favoritesOnly: true, cursor: null, limit: 50, t: expect.any(Function) })   // t — 현황 사유 한 줄의 화면 언어
