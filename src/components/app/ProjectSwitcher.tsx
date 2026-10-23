@@ -20,9 +20,11 @@ export interface ProjectSwitcherProps {
   projectsFailed?: boolean
 }
 
-export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recentIds, projectsFailed = false, inPopover = false, onChosen }: ProjectSwitcherProps & {
+export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recentIds, projectsFailed = false, inPopover = false, dropUp = false, onChosen }: ProjectSwitcherProps & {
   /** 브레드크럼 대화상자 안(AA1) — 열자마자 입력에 초점, 목록은 떠 있지 않고 입력 아래에 이어 그린다 */
   inPopover?: boolean
+  /** 목록을 입력칸 위로 연다 — 사이드바 맨 아래(워크스페이스 범위의 프로젝트 콤보)처럼 아래에 자리가 없는 곳. 목록이 스크롤 상자 밖으로 잘리지 않는다 */
+  dropUp?: boolean
   /** 하나를 골라 이동을 시작했을 때(대화상자를 닫는다) */
   onChosen?: () => void
 }) {
@@ -90,7 +92,7 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
       {open && (
         <div id={listId} role="listbox" aria-label={t('nav.project')} className={inPopover
           ? 'mt-1 max-h-80 overflow-y-auto p-1'
-          : 'absolute left-1 right-1 top-full z-(--z-popover) mt-1 max-h-80 overflow-y-auto rounded-(--radius-panel) border border-border bg-surface-raised p-1 shadow-(--shadow-popover)'}>
+          : `absolute left-1 right-1 ${dropUp ? 'bottom-full mb-1' : 'top-full mt-1'} z-(--z-popover) max-h-80 overflow-y-auto rounded-(--radius-panel) border border-border bg-surface-raised p-1 shadow-(--shadow-popover)`}>
           {projectsFailed
             ? <div data-projects-failed className="px-2 py-1.5 text-meta text-danger">{t('pages.accounts.projectsFailed')}</div>
             : sections.length === 0 && <div className="px-2 py-1.5 text-meta text-fg-secondary">{t('shell.switcher.noMatch')}</div>}

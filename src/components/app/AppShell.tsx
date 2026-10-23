@@ -45,6 +45,10 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
   const projectSwitcher = p.scope === 'project' && known
     ? <ProjectSwitcher currentProjectId={p.project?.id ?? null} projects={p.projects} favoriteIds={p.favoriteIds} recentIds={p.recentIds} projectsFailed={p.projectsFailed} />
     : null
+  // 워크스페이스 범위 사이드바의 프로젝트 콤보 — 프로젝트 범위 사이드바와 같은 전환기(워크스페이스 범위에서 고르면 그 프로젝트의 개요로 간다). 프로젝트가 없으면 두지 않는다
+  const workspaceProjectCombo = p.scope !== 'project' && known && p.projects.length > 0
+    ? <ProjectSwitcher currentProjectId={null} projects={p.projects} favoriteIds={p.favoriteIds} recentIds={p.recentIds} projectsFailed={p.projectsFailed} dropUp />
+    : null
   // 브레드크럼의 프로젝트 칸(AA1) — 768 이상 늘 있다(사이드바가 64px 레일인 1024~1279·명시 접힘에서도 프로젝트를 바꿀 수 있게)
   const projectCrumb = p.scope === 'project' && known && projectName
     ? <ProjectCrumbSwitcher currentName={projectName} currentProjectId={p.project?.id ?? null} projects={p.projects} favoriteIds={p.favoriteIds} recentIds={p.recentIds} projectsFailed={p.projectsFailed} />
@@ -63,8 +67,8 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
       <div className="flex min-h-0 flex-1">
         {p.groups.length > 0 && (p.scope === 'project'
           ? <ProjectNav groups={p.groups} pathname={pathname} workspaceHome={known ? home : null} projectSwitcher={projectSwitcher} badges={navBadges} collapsed={collapsed} onToggleCollapsed={setCollapsed} />
-          : <WorkspaceNav groups={p.groups} pathname={navPath} slug={p.workspace.slug} projects={p.projects} favoriteIds={p.favoriteIds}
-              recentIds={p.recentIds} projectsFailed={p.projectsFailed} canCreateProject={p.canEditSettings} badges={navBadges} collapsed={collapsed} onToggleCollapsed={setCollapsed} />)}
+          : <WorkspaceNav groups={p.groups} pathname={navPath} slug={p.workspace.slug} projectSwitcher={workspaceProjectCombo}
+              projectsFailed={p.projectsFailed} canCreateProject={p.canEditSettings} badges={navBadges} collapsed={collapsed} onToggleCollapsed={setCollapsed} />)}
         {/* relative — main 이 스크롤 상자이자 절대 위치의 기준이다. 기준이 아니면 본문 깊숙한 sr-only(position:absolute)가 문서 기준으로 놓여 문서 자체가 길어지고 스크롤이 둘이 된다 */}
         <main id="main-content" className="app-main relative flex min-w-0 flex-1 flex-col px-4 pb-4 sm:px-5 lg:px-6">
           {/* 위 간격은 패딩이 아니라 자리로 — sticky 는 스크롤 상자의 패딩 안쪽에 붙어 pt 만큼 위로 내용이 비친다(D54) */}

@@ -13,35 +13,44 @@ const pj = navFor({ scope: 'project', base: '/p/p1', effective: all, caps, menu:
 const ariaCurrentHref = (html: string, href: string) =>
   new RegExp(`href="${href}"[^>]*aria-current="page"|aria-current="page"[^>]*href="${href}"`).test(html)
 
-const SP = (id: string, name: string) => ({ id, name, status: 'active' as const, isAdmin: false })
 const nav = (over: Partial<Parameters<typeof WorkspaceNav>[0]> = {}) => renderToString(
-  <WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{}} collapsed={false} {...over} />)
+  <WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projectsFailed={false} canCreateProject={false} badges={{}} collapsed={false} {...over} />)
+// 프로젝트 콤보는 라우터 훅을 쓰는 전환기라 슬롯으로 받는다(ProjectNav 와 같은 꼴) — 여기서는 자리 표시만 넣는다
+const combo = <div data-combo />
 
 describe('WorkspaceNav', () => {
-  it('활성 항목 하나에만 aria-current, 즐겨찾기 5·최근 3·전체 보기·새 프로젝트', () => {
-    const fav = Array.from({ length: 7 }, (_, i) => SP(`f${i}`, `즐겨찾기 ${i}`))
-    const rec = Array.from({ length: 5 }, (_, i) => SP(`r${i}`, `최근 ${i}`))
-    const html = nav({ pathname: '/w/acme/minutes/x', projects: [...fav, ...rec], favoriteIds: fav.map((p) => p.id), recentIds: rec.map((p) => p.id), canCreateProject: true, badges: { 'ws.my_work': 3 } })
+  it('활성 항목 하나에만 aria-current, 프로젝트 콤보·전체 보기·새 프로젝트', () => {
+    const html = nav({ pathname: '/w/acme/minutes/x', projectSwitcher: combo, canCreateProject: true, badges: { 'ws.my_work': 3 } })
     expect(html.match(/aria-current="page"/g)).toHaveLength(1)
     expect(ariaCurrentHref(html, '/w/acme/minutes')).toBe(true)
-    expect((html.match(/data-fav-project/g) ?? []).length).toBe(5)
-    expect((html.match(/data-recent-project/g) ?? []).length).toBe(3)
+    expect(html).toContain('data-combo')
     expect(html).toContain('href="/w/acme/projects?new=1"'); expect(html).toContain('href="/w/acme/projects"')
     expect(html).toContain('>3<')
   })
-  it('최근 방문은 즐겨찾기와 겹치는 것을 빼고 센다', () => {
-    const html = nav({ projects: [SP('a', 'A'), SP('b', 'B')], favoriteIds: ['a'], recentIds: ['a', 'b'] })
-    expect((html.match(/data-recent-project/g) ?? []).length).toBe(1)
+  it('즐겨찾기·최근 링크 행은 더 그리지 않는다 — 콤보 하나로 줄였다', () => {
+    const html = nav({ projectSwitcher: combo })
+    expect(html).not.toContain('data-fav-project'); expect(html).not.toContain('data-recent-project')
+  })
+  it('콤보는 메뉴 바로 아래 구분선 안(바로가기 영역)에 있고 전체 보기 링크보다 앞이다', () => {
+    const html = nav({ projectSwitcher: combo })
+    expect(html).toMatch(/border-t[^>]*>[\s\S]*data-combo[\s\S]*href="\/w\/acme\/projects"/)
+  })
+  it('프로젝트가 없고(콤보 없음) 만들 권한도 목록 실패도 없으면 바로가기 영역 자체를 두지 않는다', () => {
+    const html = nav()
+    // 메뉴 항목에도 /w/acme/projects 링크가 있으므로 링크가 아니라 바로가기 영역의 컨테이너(구분선 + 위 간격)로 본다
+    expect(html).not.toContain('data-combo'); expect(html).not.toContain('mt-3 space-y-0.5 border-t')
     expect(html).not.toContain('projects?new=1')
   })
-  it('W14 — 목록(현재 워크스페이스의 가시 프로젝트)에 없는 즐겨찾기·최근 id 는 그리지 않는다(이름도 목록에서만)', () => {
-    const html = nav({ projects: [SP('a', 'Apollo')], favoriteIds: ['other-ws', 'a'], recentIds: ['hidden'] })
-    expect((html.match(/data-fav-project/g) ?? []).length).toBe(1)
-    expect(html).not.toContain('data-recent-project'); expect(html).not.toContain('other-ws'); expect(html).not.toContain('hidden"')
+  it('새 프로젝트는 만들 권한이 있을 때만', () => {
+    expect(nav({ projectSwitcher: combo })).not.toContain('projects?new=1')
+    expect(nav({ projectSwitcher: combo, canCreateProject: true })).toContain('projects?new=1')
   })
-  it('목록 조회 실패면 즐겨찾기 자리에 실패 한 줄(빈 목록으로 위장하지 않는다 — U2b-2 권한 리뷰 Y3)', () => {
-    const html = nav({ projectsFailed: true, favoriteIds: ['a'] })
+  it('목록 조회 실패면 콤보 자리에 실패 한 줄(빈 목록으로 위장하지 않는다 — U2b-2 권한 리뷰 Y3)', () => {
+    const html = nav({ projectsFailed: true })
     expect(html).toContain('프로젝트 목록을 불러오지 못했습니다'); expect(html).toContain('data-projects-failed')
+  })
+  it('접힘(true)이면 콤보를 그리지 않는다 — 64px 레일에 입력창을 두지 않는다', () => {
+    expect(nav({ projectSwitcher: combo, collapsed: true })).not.toContain('data-combo')
   })
   it('배지 null 은 그리지 않는다(0 으로 위장 금지)', () => {
     expect(nav({ badges: { 'ws.my_work': null } })).not.toContain('data-nav-badge')
@@ -74,17 +83,17 @@ describe('접힘·접근성 세부(U2b-2 충실도 리뷰 Z2·Z3·Z11)', () => {
   })
   it('Z3 — 접힘 상태와 무관하게 내비 링크·워크스페이스 홈은 접근 가능한 이름(aria-label)을 늘 갖는다', () => {
     for (const collapsed of [null, true, false] as const) {
-      const w = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{}} collapsed={collapsed} />)
+      const w = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projectsFailed={false} canCreateProject={false} badges={{}} collapsed={collapsed} />)
       for (const a of links(w).filter((l) => l.includes('data-nav-item'))) expect(a, `${collapsed}: ${a}`).toMatch(/aria-label="[^"]+"/)
       const p = renderToString(<ProjectNav groups={pj} pathname="/p/p1/wbs" workspaceHome="/w/acme" projectSwitcher={null} badges={{}} collapsed={collapsed} />)
       for (const a of links(p)) expect(a, `${collapsed}: ${a}`).toMatch(/aria-label="[^"]+"/)
     }
   })
   it('Z11 — 사이드바는 nav 랜드마크를 갖고, 배지는 99+·tabular-nums, 접힘(true)이면 아이콘 모서리 점(숫자는 sr-only)', () => {
-    const open = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{ 'ws.my_work': 120 }} collapsed={false} />)
+    const open = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projectsFailed={false} canCreateProject={false} badges={{ 'ws.my_work': 120 }} collapsed={false} />)
     expect(open).toMatch(/<nav [^>]*aria-label="[^"]+"/)
     expect(open).toMatch(/data-nav-badge[^>]*tabular-nums[^>]*>99\+</)
-    const closed = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projects={[]} favoriteIds={[]} recentIds={[]} projectsFailed={false} canCreateProject={false} badges={{ 'ws.my_work': 3 }} collapsed />)
+    const closed = renderToString(<WorkspaceNav groups={ws} pathname="/w/acme" slug="acme" projectsFailed={false} canCreateProject={false} badges={{ 'ws.my_work': 3 }} collapsed />)
     expect(closed).toContain('data-nav-badge-dot'); expect(closed).not.toMatch(/data-nav-badge[^-]/)
     expect(closed).toMatch(/<span class="sr-only">3<\/span>/)
   })
