@@ -12,15 +12,16 @@ import { usePopover } from './usePopover'
 
 /**
  * 프로젝트 전환기(★6, D41) — 셸이 가진 그 워크스페이스 목록을 클라이언트에서 거른다(⌘K 와 다르다). 고르면 서버가 같은 모듈 유지를 판정한다.
- * 즐겨찾기·최근 id 는 목록(현재 워크스페이스의 가시 프로젝트)에 있는 것만 그린다 — 다른 워크스페이스·숨김 프로젝트 id 는 조용히 빠진다(W14).
+ * 즐겨찾기 id 는 목록(현재 워크스페이스의 가시 프로젝트)에 있는 것만 그린다 — 다른 워크스페이스·숨김 프로젝트 id 는 조용히 빠진다(W14).
+ * 최근 방문 묶음은 두지 않는다(2026-10-23 결정 — 즐겨찾기와 전체면 충분하다). 방문 기록은 서버가 계속 남긴다(queueProjectVisit).
  */
 export interface ProjectSwitcherProps {
-  currentProjectId: string | null; projects: ShellProject[]; favoriteIds: string[]; recentIds: string[]
+  currentProjectId: string | null; projects: ShellProject[]; favoriteIds: string[]
   /** 셸 목록 조회 실패 — '일치하는 프로젝트가 없습니다' 대신 실패 문구(3원칙 ①) */
   projectsFailed?: boolean
 }
 
-export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recentIds, projectsFailed = false, inPopover = false, dropUp = false, onChosen }: ProjectSwitcherProps & {
+export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, projectsFailed = false, inPopover = false, dropUp = false, onChosen }: ProjectSwitcherProps & {
   /** 브레드크럼 대화상자 안(AA1) — 열자마자 입력에 초점, 목록은 떠 있지 않고 입력 아래에 이어 그린다 */
   inPopover?: boolean
   /** 목록을 입력칸 위로 연다 — 사이드바 맨 아래(워크스페이스 범위의 프로젝트 콤보)처럼 아래에 자리가 없는 곳. 목록이 스크롤 상자 밖으로 잘리지 않는다 */
@@ -38,10 +39,9 @@ export function ProjectSwitcher({ currentProjectId, projects, favoriteIds, recen
     const pick = (ids: string[]) => ids.map((id) => byId.get(id)).filter((p): p is ShellProject => !!p && match(p))
     return [
       { label: t('shell.switcher.favorites'), items: pick(favoriteIds) },
-      { label: t('shell.switcher.recent'), items: pick(recentIds.filter((id) => !favoriteIds.includes(id))) },
       { label: t('shell.switcher.all'), items: projects.filter(match) },
     ].filter((s) => s.items.length > 0)
-  }, [q, projects, favoriteIds, recentIds, byId, t])
+  }, [q, projects, favoriteIds, byId, t])
   const flat = sections.flatMap((s) => s.items.map((p) => ({ section: s.label, p })))
   const optId = (i: number) => `${listId}-o${i}`
 

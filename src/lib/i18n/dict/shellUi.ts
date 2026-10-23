@@ -41,7 +41,6 @@ export const shellUiKo = {
   // ProjectSwitcher.tsx
   'shell.switcher.degraded': '설정을 불러오지 못해 개요를 열었습니다',
   'shell.switcher.favorites': '즐겨찾기',
-  'shell.switcher.recent': '최근 방문',
   'shell.switcher.all': '전체',
   'shell.switcher.cannotOpen': '이 프로젝트를 열 수 없습니다',
   'shell.switcher.fallback': '이 프로젝트에서는 {module} 사용하지 않아 개요를 열었습니다.',

@@ -90,7 +90,7 @@ describe('AppShell', () => {
     const nav = last(h.wsNav)
     expect(nav).toEqual(expect.objectContaining({ pathname: '/w/acme/minutes', slug: 'acme', projectsFailed: false, badges: { 'ws.my_work': 3 } }))
     // 프로젝트 콤보 — 프로젝트 범위 사이드바와 같은 전환기. 즐겨찾기·최근 id 와 목록을 그대로 받고 현재 프로젝트는 없다(W14 해석은 전환기 안)
-    expect(nav.projectSwitcher.props).toEqual(expect.objectContaining({ currentProjectId: null, favoriteIds: [P2], recentIds: [P1], projectsFailed: false }))
+    expect(nav.projectSwitcher.props).toEqual(expect.objectContaining({ currentProjectId: null, favoriteIds: [P2], projectsFailed: false }))
     expect(nav.projectSwitcher.props.projects.map((p: { id: string }) => p.id)).toEqual([P1, P2])
     const bar = last(h.globalBar)
     expect(bar.crumbs).toEqual({ scope: 'workspace', workspace: { name: 'Acme', href: '/w/acme' }, project: null, screen: '회의 기록' })
@@ -109,7 +109,7 @@ describe('AppShell', () => {
     expect(document.querySelector('[data-p-nav]')).not.toBeNull(); expect(document.querySelector('[data-p-switcher]')).not.toBeNull()
     expect(last(h.pNav).badges).toEqual({ 'p.agents': 2, 'p.announcements': null })
     expect(last(h.pNav).workspaceHome).toBe('/w/acme')
-    expect(last(h.pSwitcher)).toEqual(expect.objectContaining({ currentProjectId: P1, favoriteIds: [P2], recentIds: [P1], projectsFailed: false }))
+    expect(last(h.pSwitcher)).toEqual(expect.objectContaining({ currentProjectId: P1, favoriteIds: [P2], projectsFailed: false }))
     expect(last(h.globalBar).crumbs).toEqual({ scope: 'project', workspace: { name: 'Acme', href: '/w/acme' }, project: { name: '하나', href: `/p/${P1}/dashboard` }, screen: 't:nav.dashboard' })
     // 전역 검색(⌘K)에는 사이드 내비와 같은 해석 결과를 내린다 — 프로젝트 범위는 두 메뉴(프로젝트·워크스페이스), 제품 이름은 셸의 브랜드
     expect(last(h.globalBar).searchNav).toEqual({ workspace: wsGroups, project: pGroups })

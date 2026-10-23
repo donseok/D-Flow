@@ -43,15 +43,15 @@ export function AppShell({ children, ...p }: ShellProps & { children: ReactNode 
   const projectName = p.project ? p.project.name || t('nav.project') : null
   const wsSwitcher = known ? <WorkspaceSwitcher current={p.workspace} workspaces={p.workspaces} viewingAsPlatformAdmin={p.viewingAsPlatformAdmin} /> : null
   const projectSwitcher = p.scope === 'project' && known
-    ? <ProjectSwitcher currentProjectId={p.project?.id ?? null} projects={p.projects} favoriteIds={p.favoriteIds} recentIds={p.recentIds} projectsFailed={p.projectsFailed} />
+    ? <ProjectSwitcher currentProjectId={p.project?.id ?? null} projects={p.projects} favoriteIds={p.favoriteIds} projectsFailed={p.projectsFailed} />
     : null
   // 워크스페이스 범위 사이드바의 프로젝트 콤보 — 프로젝트 범위 사이드바와 같은 전환기(워크스페이스 범위에서 고르면 그 프로젝트의 개요로 간다). 프로젝트가 없으면 두지 않는다
   const workspaceProjectCombo = p.scope !== 'project' && known && p.projects.length > 0
-    ? <ProjectSwitcher currentProjectId={null} projects={p.projects} favoriteIds={p.favoriteIds} recentIds={p.recentIds} projectsFailed={p.projectsFailed} dropUp />
+    ? <ProjectSwitcher currentProjectId={null} projects={p.projects} favoriteIds={p.favoriteIds} projectsFailed={p.projectsFailed} dropUp />
     : null
   // 브레드크럼의 프로젝트 칸(AA1) — 768 이상 늘 있다(사이드바가 64px 레일인 1024~1279·명시 접힘에서도 프로젝트를 바꿀 수 있게)
   const projectCrumb = p.scope === 'project' && known && projectName
-    ? <ProjectCrumbSwitcher currentName={projectName} currentProjectId={p.project?.id ?? null} projects={p.projects} favoriteIds={p.favoriteIds} recentIds={p.recentIds} projectsFailed={p.projectsFailed} />
+    ? <ProjectCrumbSwitcher currentName={projectName} currentProjectId={p.project?.id ?? null} projects={p.projects} favoriteIds={p.favoriteIds} projectsFailed={p.projectsFailed} />
     : null
   const navBadges = p.scope === 'project'
     ? { 'p.agents': badges.projectApprovals, 'p.announcements': badges.projectUnreadAnnouncements }
