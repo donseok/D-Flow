@@ -18,12 +18,21 @@ async function compute(
 ): Promise<ReadonlySet<ModuleId>> {
   // 프로젝트 없이 받은 프로젝트 설정은 프로그래밍 오류다 — 조용히 무시하면 프로젝트 토글과 CR-5 검사가 둘 다 빠진다(관문은 로그 뒤 닫힘)
   if (projectConfig && !projectId) throw new Error('[effectiveModules] projectConfig 는 projectId 와 함께')
-  const ws = await getWorkspaceConfig(workspaceId, { client })
+  // 워크스페이스 설정과 프로젝트 설정은 서로를 기다릴 이유가 없다(둘 다 id 만으로 읽는다) — 예전에는 워크스페이스 설정을 끝낸 뒤 프로젝트 설정을 읽어
+  // 범위 레이아웃의 모듈 판정이 직렬 두 단계 + 프로젝트 설정 안의 두 단계였다. 관문이 프로젝트 설정을 이미 읽어 넘기면(projectConfig) 그것을 쓴다.
+  // 한쪽이 실패해도 다른 쪽 약속이 처리되지 않은 거절로 남지 않게 둘 다 받아 두고(allSettled) 워크스페이스 설정의 실패를 먼저 던진다 — 예전 순서와 같다.
+  const [wsR, pcfgR] = await Promise.allSettled([
+    getWorkspaceConfig(workspaceId, { client }),
+    projectId ? (projectConfig ? Promise.resolve(projectConfig) : getProjectConfig(projectId, { client })) : Promise.resolve(undefined),
+  ])
+  if (wsR.status === 'rejected') throw wsR.reason
+  const ws = wsR.value
   const allowed = new Set(valueOf(ws, 'modules.allowed'))          // invalid 면 ConfigKeyError throw(fail-closed)
   let optional = MODULES.filter((m) => !m.core && m.envAvailable() && allowed.has(m.id)).map((m) => m.id)
   if (valueOf(ws, 'ai.enabled') === false) optional = optional.filter((id) => !AI_MODULES.includes(id))
   if (projectId) {
-    const pcfg = projectConfig ?? await getProjectConfig(projectId, { client })   // P27 — 관문이 이미 읽었으면 다시 읽지 않는다
+    if (pcfgR.status === 'rejected') throw pcfgR.reason
+    const pcfg = pcfgR.value as ProjectConfig   // P27 — 관문이 이미 읽었으면 다시 읽지 않는다(위에서 같은 단계로 읽었다)
     // 프로젝트의 워크스페이스가 정본이다(CR-5) — 어긋나면 다른 워크스페이스의 허용 목록으로 판정하게 되므로 닫는다(관문은 모르면 닫힘)
     if (pcfg.projectId !== projectId || pcfg.workspaceId !== workspaceId) {
       throw new ConfigUnavailableError(`${ERR_CONFIG_UNAVAILABLE} (프로젝트 ${projectId} 가 워크스페이스 ${workspaceId} 소속이 아니다)`)

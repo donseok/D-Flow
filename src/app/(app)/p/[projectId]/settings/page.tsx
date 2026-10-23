@@ -161,7 +161,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
   // WBS 트리는 읽지 않는다 — 트리에서 쓰던 표시용 스탯(과업 수 KPI)을 머리 교체(SP3b UI-3 — PageHeader)와 함께 지웠다.
   // 날짜 예외는 설정 해석기(pc.cfg.holidays)가 읽는다.
   const [projects, actor] = await Promise.all([
-    listProjects(),
+    listProjects(projectId),
     getActorForView(),
   ])
   const project = (projects as ProjectRow[]).find(p => p.id === projectId)

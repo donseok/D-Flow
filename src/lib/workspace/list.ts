@@ -2,6 +2,7 @@
  *  prefsWorkspaceId·0006 백필과 같은 규칙이라 첫 행이 "가장 먼저 가입한 소속"이다. 전환기 목록·현재 워크스페이스 해석의 원천 */
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
+import { getRequestClaims } from '@/lib/supabase/claims'
 import type { WorkspaceRole } from '@/lib/domain/authz'
 import type { WorkspaceRef } from './resolve'
 
@@ -12,7 +13,7 @@ export const listMyWorkspaces = cache(async (): Promise<{ ok: true; rows: MyWork
   // 신원은 getActor 와 같은 원천(getClaims 의 sub)이다. 인증 호출의 오류를 "비로그인 = 소속 0"으로 바꾸면 장애가 "소속이 없습니다" 화면으로
   // 위장된다(U2a-1 보안 리뷰 P2) — 오류는 ok:false, claims 가 없을 때만 빈 목록.
   const db = await createServerClient()
-  const { data: auth, error: authErr } = await db.auth.getClaims()
+  const { data: auth, error: authErr } = await getRequestClaims(db)
   if (authErr) {
     console.error('[workspace] 인증 조회 실패:', authErr.message)
     return { ok: false, error: authErr.message }

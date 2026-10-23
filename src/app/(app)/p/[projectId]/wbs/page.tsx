@@ -45,15 +45,18 @@ export default async function WbsPage({
   const sp = await searchParams
   const one = (key: string) => typeof sp[key] === 'string' ? sp[key] as string : undefined
   const focus = one('focus')
-  const [{ items, dependencies, unresolvedDepends, calendar, today }, actor, projects, initialCollapsed, user, pc, uiPrefs, roster] = await Promise.all([
+  const [{ items, dependencies, unresolvedDepends, calendar, today }, actor, projects, initialCollapsed, user, pc, uiPrefs, roster, approvedItemIds] = await Promise.all([
     getComputedWbs(projectId),
     getActorForView(),
-    listProjects(),
+    listProjects(projectId),
     getWbsCollapse(projectId),
     getSession(),
     loadProjectConfigForPage(projectId),
     getAccountPrefs(),
     getProjectRoster(projectId),
+    // 승인 주문 축(SP5b D21) — agents 가 꺼진 프로젝트는 주문 표를 읽지 않는다(승인 축 = false). 예전에는 위 묶음이 끝난 뒤 직렬로 읽어
+    // 화면 하나의 직렬 단계가 하나 늘었다 — 모듈 상태는 관문(requireModulePage)이 이미 읽은 요청 캐시라 같은 묶음에서 돈다.
+    moduleState({ projectId }, 'agents').then((state) => (state === 'on' ? getApprovedItemIds(projectId) : [])),
   ])
   // 명단은 담당자 선택·이름 표시용 곁가지 — 실패해도 간트는 그리되, 빈 선택 목록이 '0명' 으로 읽히지 않게 사유를 띄운다.
   if (!roster.ok) console.error(`[wbs] 명단 조회 실패(project=${projectId}) — 담당자 목록 없이 그리고 경고를 띄운다`)
@@ -89,7 +92,6 @@ export default async function WbsPage({
   // 승인 단계(SP5b) — 검수 대기(im) 열 부제 표시 등에 사용
   const approvalSteps = pick(pc.cfg, 'workflow.approval_steps')
   if (!gate.ok) console.error(`[wbs] 선행 기준 손상(project=${projectId}) — final 로 판정한다`)
-  const approvedItemIds = (await moduleState({ projectId }, 'agents')) === 'on' ? await getApprovedItemIds(projectId) : []
 
   // R5: 기존 머리(PageHeader)·ProjectPageShell을 유지하고 화면 소유의 주 동작만 곁에 배치한다.
   const header = <div className="flex items-center"><div className="min-w-0 flex-1">{hero}</div>

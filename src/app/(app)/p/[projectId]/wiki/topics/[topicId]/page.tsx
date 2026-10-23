@@ -25,7 +25,7 @@ export default async function WikiTopicPage({
   await requireModulePage({ projectId }, 'wiki')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const [data, projects, membership, pc] = await Promise.all([
     getWikiTopicDetail(projectId, topicId),
-    listProjects(),
+    listProjects(projectId),
     getActorForView(),
     loadProjectConfigForPage(projectId),
   ])

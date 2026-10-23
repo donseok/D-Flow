@@ -31,7 +31,7 @@ export default async function MeetingsPage({ params }: { params: Promise<{ proje
     getProjectRoster(projectId),
     actorP,
     getSession(),
-    listProjects(),
+    listProjects(projectId),
     loadProjectConfigForPage(projectId),
     // D53 — '이 프로젝트 회의록' 은 회의록 모듈이 켜졌을 때만(판정 실패는 core 만 = 숨김, 로그는 moduleSetFor)
     moduleSetFor({ projectId }),

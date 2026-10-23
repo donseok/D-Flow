@@ -29,7 +29,7 @@ export default async function IssuesPage({ params }: { params: Promise<{ project
     getIssues(projectId),
     getProjectRoster(projectId),
     getActorForView(),
-    listProjects(),
+    listProjects(projectId),
     // '내 담당' 필터용 — 계정 연결(people.user_id)로 찾은 내 활성 명단 행. 비로그인은 빈 배열.
     // resolveMemberIds 는 getSession 의 user 인자가 필요한 진짜 의존이라 체인은 유지하되,
     // 체인 전체를 Promise.all 의 한 항목으로 태워 다른 독립 조회와 왕복을 겹친다(직렬 2단 → 1단).

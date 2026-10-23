@@ -37,7 +37,7 @@ export default async function Dashboard({ params }: { params: Promise<{ projectI
   await requireModulePage({ projectId }, 'dashboard')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
   const [{ items, calendar, today }, projects, annRes, snapRes, meetRes, issuesRes, sb, user, { actor: membership, degraded }, pc, mods, wsRef, hidden] = await Promise.all([
     getComputedWbs(projectId),
-    listProjects(),
+    listProjects(projectId),
     getAnnouncements(projectId),
     getSnapshots(projectId),
     getProjectMeetingData(projectId),

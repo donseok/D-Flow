@@ -59,7 +59,7 @@ export default async function ImportWizardPage({ params, searchParams }: {
 }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'wbs')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const [projects, actor, { receipt }] = await Promise.all([listProjects(), getActorForView(), searchParams])
+  const [projects, actor, { receipt }] = await Promise.all([listProjects(projectId), getActorForView(), searchParams])
   const project = projects.find(p => p.id === projectId)
   const isAdmin = isProjectAdmin(actor, projectId)
   const projectName = project?.name ?? t('importWizard.projectFallback')

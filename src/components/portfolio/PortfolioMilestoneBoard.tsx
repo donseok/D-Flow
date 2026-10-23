@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { NavigationLink as Link } from '@/components/app/NavigationLink'
 import { Flag } from 'lucide-react'
 import type { PortfolioMilestone, PortfolioRow } from '@/lib/domain/portfolio'
 import { diffDaysCal, addDaysCal, type MilestoneStatus } from '@/lib/domain/dashboard'

@@ -30,8 +30,13 @@ import type { ServerTranslate } from '@/lib/i18n/serverDict'
 import { fill } from '@/lib/i18n/translate'
 import { dateOrderMessage } from '@/lib/i18n/dateOrder'
 
-export async function listProjects() {
-  return (await listProjectsWithState()).projects
+/**
+ * `projectId` 를 주면 그 프로젝트 한 줄만 읽는다 — 프로젝트 화면 10곳이 목록 전체를 `select *` 로 읽고 `find(p => p.id === projectId)` 한 줄만 썼다
+ * (프로젝트가 늘면 화면마다 읽는 양이 같이 늘었다). 보이는 규칙(RLS·canSeeProject)은 그대로이고 결과가 그 한 줄(또는 빈 배열)일 뿐이라
+ * 호출부의 `find` 가 그대로 맞는다. 형식이 uuid 가 아니면 빈 배열 — 조회하지 않는다(서버 액션 입력이라 타입을 믿지 않는다).
+ */
+export async function listProjects(projectId?: string) {
+  return (await listProjectsWithState(projectId)).projects
 }
 
 /**
@@ -41,13 +46,13 @@ export async function listProjects() {
  * REST 장애 때 화면이 후자를 전자로 그려 '첫 프로젝트를 만들어 보세요' 를
  * 띄웠다 — 데이터가 멀쩡한데 신규 가입자 화면처럼 보였다. 로그는 남았지만 표시가 없었다.
  */
-export async function listProjectsWithState() {
+export async function listProjectsWithState(projectId?: string) {
   // 인증 재확인은 getActorViewState 안의 getUser 가 겸한다 — 별도 getSession 선행 게이트를
   // 두면 그 한 번의 왕복이 모든 호출부(레이아웃 포함)의 직렬 1단이 된다(2026-08-18 성능 감사).
   // 비로그인: actor 가 null(degraded=false)이고 fetchProjects 는 RLS(authenticated 읽기)로
   // 빈 배열이므로 종전의 { projects: [], degraded: false } 와 동일한 결과가 된다.
   // (조기 반환이 Promise.all 뒤로 옮겨져 버려지는 프라미스가 없다 — unhandled rejection 흡수 불필요.)
-  const [{ data, error }, actorState] = await Promise.all([fetchProjects(), getActorViewState()])
+  const [{ data, error }, actorState] = await Promise.all([fetchProjects(typeof projectId === 'string' ? projectId : undefined), getActorViewState()])
   const actor = actorState.actor
   if (!actor && !actorState.degraded) return { projects: [] as ProjectRow[], degraded: false }
   // 순수 표시용 조회라 폴백([])을 유지한다 — throw 하면 (app)/layout.tsx 가 호출하므로
@@ -66,9 +71,12 @@ type ProjectRow = NonNullable<Awaited<ReturnType<typeof fetchProjects>>['data']>
 // cache(): 레이아웃과 페이지(예: wiki)가 같은 요청에서 listProjectsWithState 를 각자 불러도
 // projects 조회는 1회만 나간다. 'use server' 파일의 export 는 async 함수여야 하므로
 // 모듈 내부 헬퍼에만 래핑한다.
-const fetchProjects = cache(async () => {
+const fetchProjects = cache(async (projectId?: string) => {
   const sb = await createServerClient()
-  return sb.from('projects').select('*').order('created_at', { ascending: false })
+  if (projectId === undefined) return sb.from('projects').select('*').order('created_at', { ascending: false })
+  // 한 프로젝트 — 형식 밖 id 는 질의를 만들지 않고 0행으로(PostgREST 에 잘못된 uuid 를 보내 22P02 를 만들지 않는다)
+  if (!isUuidLike(projectId)) return { data: [], error: null }
+  return sb.from('projects').select('*').eq('id', projectId).order('created_at', { ascending: false })
 })
 
 export interface CreateProjectInput {

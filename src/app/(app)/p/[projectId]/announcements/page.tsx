@@ -21,7 +21,7 @@ export default async function AnnouncementsPage({ params }: { params: Promise<{ 
     getAnnouncements(projectId),
     getAnnouncementSeenAt(projectId),
     getActorForView(),
-    listProjects(),
+    listProjects(projectId),
     loadProjectConfigForPage(projectId),
   ])
 

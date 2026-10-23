@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { NavigationLink as Link } from '@/components/app/NavigationLink'
 import { Briefcase, Lock, ArrowRight, AlertTriangle } from 'lucide-react'
 import type { PortfolioRow } from '@/lib/domain/portfolio'
 import type { ProjectLifecycleStatus } from '@/lib/domain/project-status'

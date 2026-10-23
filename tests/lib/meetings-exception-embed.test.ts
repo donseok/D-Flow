@@ -37,7 +37,7 @@ function makeSb(opts: {
   /** 예외 폴백 조회의 응답 — 함수면 요청한 범위(range)를 받아 그 페이지를 돌려준다. */
   exceptions?: Reply | ((from: number, to: number) => Reply)
   members?: Reply | Promise<Reply>
-  /** auth.getUser 의 오류(SP5 B2 — D39). 없으면 오류 없음 */
+  /** getClaims 가 토큰을 검증하지 못한 경우(만료·서명 불일치) — claims 없이 오류로 온다. 없으면 오류 없음 */
   authError?: { name: string; message: string }
 }) {
   const selects: string[] = []
@@ -60,9 +60,11 @@ function makeSb(opts: {
   }
   const sb = {
     auth: {
-      getUser: async () => ({ data: { user: opts.user ?? null }, error: opts.authError ?? null }),
-      // getActor 는 getClaims 로 세션을 본다(2026-09-14) — getUser 는 getSession 경로용으로 남긴다.
-      getClaims: async () => ({ data: opts.user ? { claims: { sub: opts.user.id, email: opts.user.email } } : null }),
+      // getSession(lib/auth)·getActor 모두 getClaims 로 세션을 본다 — JWT 서명을 로컬에서 검증하므로 인증 서버를 부르지 않는다.
+      getClaims: async () => ({
+        data: opts.user && !opts.authError ? { claims: { sub: opts.user.id, email: opts.user.email ?? undefined, user_metadata: {} } } : null,
+        error: opts.authError ?? null,
+      }),
     },
     from: (table: string) => {
       tables.push(table)
@@ -234,15 +236,12 @@ describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
     expect(tables).not.toContain('meetings')
   })
 
-  it('세션 없음(AuthSessionMissingError)만 비로그인이다 — 인증 확인 실패는 빈 달력이 아니라 실패(SP5 B2 — D39)', async () => {
-    makeSb({ user: null, meetings: () => OK([]), authError: { name: 'AuthSessionMissingError', message: 'Auth session missing!' } })
+  it('토큰을 검증하지 못하면(만료·서명 불일치) 비로그인으로 닫힌다 — 회의를 조회하지 않는다(fail-closed)', async () => {
+    // 예전(SP5 B2 D39)에는 인증 서버(getUser) 장애를 빈 달력이 아니라 실패로 구분했다. 지금 세션은 JWT 로컬 검증이라 그 장애 경로가 없다 —
+    // 남는 실패는 토큰 검증 불가뿐이고, 그것은 비로그인과 같이 아무것도 읽지 않는다.
+    const { tables } = makeSb({ user: { id: 'u1', email: null }, meetings: () => OK([]), authError: { name: 'AuthInvalidJwtError', message: 'invalid JWT' } })
     expect(await getMyMeetings(MWS, '2026-07-02', '2026-07-31')).toEqual({ ok: true, meetings: [], exceptions: [], categories: {} })
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { tables } = makeSb({ user: null, meetings: () => OK([]), authError: { name: 'AuthRetryableFetchError', message: 'fetch failed' } })
-    expect(await getMyMeetings(MWS, '2026-07-03', '2026-07-31')).toMatchObject({ ok: false })
     expect(tables).not.toContain('meetings')
-    expect(err).toHaveBeenCalled()
-    err.mockRestore()
   })
 
   it('멤버 조회를 기다리지 않고 회의 조회를 함께 띄운다', async () => {
@@ -257,7 +256,7 @@ describe('getMyMeetings — 멤버 조회 병렬화 + 임베드', () => {
     const p = getMyMeetings(MWS, '2026-07-01', '2026-07-31')
     // 멤버 응답을 아직 주지 않았는데도 회의 select 가 이미 나가 있어야 병렬이다.
     // (직렬이었다면 멤버가 풀릴 때까지 meetings 는 시작조차 못 한다.)
-    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    await new Promise(r => setTimeout(r, 0))   // 세션 확인(getSession)이 먼저 끝나야 두 조회가 뜬다 — 마이크로태스크 몇 번이 아니라 한 틱을 준다
     expect(selects.length).toBe(1)
     releaseMembers(OK([]))
     await p

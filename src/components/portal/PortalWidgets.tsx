@@ -1,5 +1,5 @@
 import { Suspense, use, type ReactNode } from 'react'
-import Link from 'next/link'
+import { NavigationLink as Link } from '@/components/app/NavigationLink'
 import { StatusMessage } from '@/components/ui/StatusMessage'
 import { WidgetError } from './WidgetError'
 import { WidgetFrame } from './WidgetFrame'

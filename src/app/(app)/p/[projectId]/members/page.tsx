@@ -25,7 +25,7 @@ export async function generateMetadata() { return { title: t('nav.members') } }
 export default async function MembersPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   await requireModulePage({ projectId }, 'members')   // 스펙 §4.2 1행 — 꺼지면 notFound(), 로더보다 앞(R14)
-  const [{ actor: m, degraded }, projects, hidden] = await Promise.all([getActorViewState(), listProjects(), getHiddenProjectIds()])
+  const [{ actor: m, degraded }, projects, hidden] = await Promise.all([getActorViewState(), listProjects(projectId), getHiddenProjectIds()])
   // 존재 은닉을 페이지가 다시 판정한다 — 레이아웃과 페이지는 병렬로 렌더돼 레이아웃의 notFound 가 이 페이지의 조회를 멈추지
   // 않고, 여기서 만든 RSC 페이로드는 404 digest 옆에 그대로 실린다. 아래 팀 후보도 게이트 뒤에서만 읽는다. 권한 조회 실패(degraded)는
   // 레이아웃처럼 404 로 위장하지 않는다(actor 가 null 이라 canEdit 도 거짓 — 팀을 읽지 않는다).

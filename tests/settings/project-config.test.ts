@@ -44,11 +44,18 @@ it('요청 내 기본 클라이언트와 명시적 같은 클라이언트는 설
   await withRequestCache(async () => {
     const [a, b, c] = await Promise.all([getProjectConfig(PID), getProjectConfig(PID, { client }), getProjectConfig(PID)])
     expect(a).toBe(b); expect(b).toBe(c)
-    expect(calls.map(c => c.table)).toEqual(['project_settings', 'project_areas', 'teams'])
+    // workspace_settings 는 모듈 관문이 이어서 읽을 것을 미리 띄운 것이다(소속 워크스페이스가 정해진 단계에서 영역·팀과 함께) — 한 번뿐이다
+    expect(calls.map(c => c.table)).toEqual(['project_settings', 'workspace_settings', 'project_areas', 'teams'])
     expect(holidays.log).toHaveLength(1)
   })
   await withRequestCache(() => getProjectConfig(PID, { client }))
   expect(calls.filter(c => c.table === 'project_settings')).toHaveLength(2)
+})
+
+it('클라이언트를 직접 넘기는 경로(워커·API)는 워크스페이스 설정을 미리 읽지 않는다 — 요청 캐시가 없어 읽기만 늘어난다', async () => {
+  const { client, calls } = fakeClient({ settings: row({ 'core.level_labels': ['작업'] }), areas: ok([]), teams: ok([]) })
+  await withRequestCache(() => getProjectConfig(PID, { client }))
+  expect(calls.map(c => c.table)).toEqual(['project_settings', 'project_areas', 'teams'])
 })
 
 describe('getProjectConfig', () => {

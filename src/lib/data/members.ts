@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth'
 import { ROSTER_SELECT, mapRosterRows } from '@/lib/data/memberSelect'
 import type { ProjectMember } from '@/lib/domain/types'
 
@@ -46,10 +47,9 @@ export const getProjectRoster = cache(async (
  * 둘을 같은 폴백으로 처리하지만, 그건 그쪽의 판단이고 여기서 실패를 '소속 없음'으로 위장하지는 않는다.
  */
 export const getMyProjectIds = cache(async (): Promise<string[] | null> => {
-  const sb = await createServerClient()
-  const { data: u } = await sb.auth.getUser()
-  const user = u.user
+  const user = await getSession()
   if (!user) return null
+  const sb = await createServerClient()
   const { data, error } = await sb
     .from('project_members')
     .select('project_id, people!inner(user_id, active)')

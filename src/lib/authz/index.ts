@@ -1,6 +1,7 @@
 import { requestCache as cache } from '@/lib/server/requestCache'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient } from '../supabase/server'
+import { getRequestClaims } from '../supabase/claims'
 import { roleIn, workspaceAdminVerdict, type Actor, type ProjectRole } from '../domain/authz'
 import { buildActor } from './buildActor'
 import { readScope, type ProjectScopedTable, type ScopeResult } from './scope'
@@ -26,7 +27,7 @@ export const getActor = cache(async (): Promise<Actor | null> => {
   // 왕복(0.1초 안팎)을 강제했고, 서버 액션은 요청 하나가 곧 가드 하나라 그 비용이 클릭마다 그대로 붙었다
   // (2026-09-14 허브 체크 지연 개선). 세션이 없거나 토큰이 무효·만료(갱신 실패)면 claims 가 없다 → 비로그인(null).
   // 권한 축(워크스페이스·명단)은 캐시하지 않고 매번 새로 읽는다 — 멤버에서 빠진 사람이 TTL 동안 남는 일이 없게.
-  const { data } = await sb.auth.getClaims()
+  const { data } = await getRequestClaims(sb)   // 요청당 한 번만 검증한다(세션·소속과 나눈다)
   const userId = data?.claims?.sub
   if (!userId) return null
   // 4축(플랫폼 관리자·워크스페이스·프로젝트·명단)은 buildActor 가 병렬로 읽는다 — actorFromUser 와 같은 조립.

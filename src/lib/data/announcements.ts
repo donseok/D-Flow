@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth'
 import type { Announcement, AnnouncementCategory } from '@/lib/domain/types'
 
 export const ERR_ANNOUNCEMENTS_LOAD = '공지를 불러오지 못했습니다.'
@@ -39,13 +40,13 @@ export const getAnnouncements = cache(async (
 
 /** 현재 사용자의 읽음 워터마크(마지막으로 공지 목록을 본 시각). 없으면 null. */
 export const getAnnouncementSeenAt = cache(async (projectId: string): Promise<string | null> => {
+  const user = await getSession()
+  if (!user) return null
   const sb = await createServerClient()
-  const { data: u } = await sb.auth.getUser()
-  if (!u.user) return null
   const { data, error } = await sb
     .from('announcement_seen')
     .select('last_seen_at')
-    .eq('user_id', u.user.id)
+    .eq('user_id', user.id)
     .eq('project_id', projectId)
     .maybeSingle()
 

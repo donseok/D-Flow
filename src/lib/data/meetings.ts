@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { createServerClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth'
 import { compareKoreanName } from '@/lib/domain/nameSort'
 import { UUID_RE } from '@/lib/domain/validate'
 import { ROSTER_SELECT, personOf, toRosterMember } from '@/lib/data/memberSelect'
@@ -251,16 +252,12 @@ export const getMyMeetings = cache(async (
   gridStartIso: string,
   gridEndIso: string,
 ): Promise<MyMeetingsResult> => {
-  const sb = await createServerClient()
-  const { data: u, error: authError } = await sb.auth.getUser()
-  // 세션이 없는 것(AuthSessionMissingError)만 비로그인이다 — 인증 서버 장애·토큰 검증 실패를 '내 회의 없음'으로 보이지 않는다(SP5 B2 — D39)
-  if (authError && authError.name !== 'AuthSessionMissingError') {
-    console.error('[getMyMeetings] 인증 확인 실패 — 호출부가 내 회의 달력 대신 사유를 보인다:', authError.name, authError.message)
-    return { ok: false, error: ERR_MEETINGS_LOAD }
-  }
-  const user = u.user
+  // 세션 없음만 비로그인이다 — getSession 은 토큰 서명을 로컬로 검증하므로(인증 서버를 부르지 않는다) 서버 장애로 실패할 일이 없고,
+  // 검증을 못 한 토큰은 비로그인으로 닫힌다(예전의 '인증 서버 장애를 내 회의 없음으로 보이지 않는다'는 그 장애가 사라졌다 — SP5 B2 D39)
+  const user = await getSession()
   const uid = user?.id ?? null
   if (!user || !uid) return { ok: true, meetings: [], exceptions: [], categories: {} }
+  const sb = await createServerClient()
 
   // 프로젝트를 가로지르는 조회라 로그에 실을 id 가 없다 — 어느 달력 범위였는지를 싣는다.
   // 두 인자는 서버 액션(fetchMyMeetings)을 거쳐 오므로 형식이 보장되지 않는다: 날짜 꼴이 아니면 그대로 찍지 않는다.

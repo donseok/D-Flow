@@ -13,6 +13,7 @@ import type { AreaKind, AreaTeamKind } from '@/lib/domain/areas'
 import { PROJECT_SETTINGS, SETTINGS_SCHEMA_VERSION, valueOf, type ProjectSettingKey, type ProjectSettingValue } from './registry'
 import { ConfigUnavailableError, type ConfigKeyError } from './errors'
 import { calendarOrError, loadProjectHolidays, projectCalendarOf, type HolidayRow } from '@/lib/calendar/load'
+import { getWorkspaceConfig } from './workspaceConfig'
 import type { RequestCalendar, WorkCalendar } from '@/lib/domain/calendar'
 import { isRecord, resolveKeys, type KeyState } from './resolve'
 import type { VocabKey, VocabValues } from './vocab'
@@ -59,6 +60,11 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
   if (!isRecord(row.values)) throw new ConfigUnavailableError(`프로젝트 설정 values 가 객체가 아닙니다: ${projectId}`)
   const values = row.values
   const workspaceId = row.projects.workspace_id
+  // 모듈 관문(effectiveModules)이 이어서 그 워크스페이스의 설정을 읽는다 — 소속이 막 정해졌으니 영역·팀·휴일 조회와 같은 단계에서 미리 띄운다.
+  // 요청 캐시가 같은 키(워크스페이스·요청 클라이언트)로 이어지는 읽기에 이 약속을 그대로 내주므로 관문 하나가
+  // project_settings → 영역·팀·휴일 → workspace_settings 세 단계 직렬이던 것이 둘로 준다. 실패는 여기서 삼킨다 — 같은 약속을 받은 호출부가 자기 실패 처리를 탄다.
+  // 요청 클라이언트를 쓰는 세션 경로만 한다(워커·API 처럼 클라이언트를 직접 넘기는 경로는 요청 캐시가 없어 읽기만 늘어난다).
+  if (client && sessionClients.has(client)) getWorkspaceConfig(workspaceId, { client }).catch(() => undefined)
   const [a, t, holidays] = await Promise.all([
     sb.from('project_areas').select('id, kind, code, name, sort_order, active, area_teams(team_id, kind)')
       .eq('project_id', projectId).order('sort_order'),
@@ -96,8 +102,13 @@ async function load(projectId: string, client: ConfigReadClient | undefined): Pr
 }
 
 const loadCached = cache(load)
+/** 호출부가 클라이언트를 넘기지 않아 요청 기본 클라이언트(createServerClient)가 쓰인 경우의 그 클라이언트 — load 가 선행 읽기를 할지 가른다.
+ *  캐시 키(프로젝트·클라이언트)를 바꾸지 않으려고 인자가 아니라 표시로 둔다(같은 클라이언트를 명시해 불러도 한 번만 읽는다 — tests/settings/project-config.test.ts). */
+const sessionClients = new WeakSet<object>()
 export async function getProjectConfig(projectId: string, opts?: { client?: ConfigReadClient }): Promise<ProjectConfig> {
-  return loadCached(projectId, opts?.client ?? await createServerClient())
+  const sb = opts?.client ?? await createServerClient()
+  if (opts?.client === undefined) sessionClients.add(sb)
+  return loadCached(projectId, sb)
 }
 
 /** in() 한 번에 실을 프로젝트 id 수(요청 URL 길이 — effectiveMany 와 같은 값) */

@@ -146,12 +146,12 @@ const LOG_KEY_LEN = 40
 
 /** 프로젝트의 WBS 접힘 id 배열(행 없으면 null). 미로그인 시 null. */
 export async function getWbsCollapse(projectId: string): Promise<string[] | null> {
+  const user = await getSession()
+  if (!user) return null
   const sb = await createServerClient()
-  const { data: u } = await sb.auth.getUser()
-  if (!u.user) return null
   const { data, error } = await sb
     .from('user_wbs_state').select('collapsed')
-    .eq('user_id', u.user.id).eq('project_id', projectId).maybeSingle()
+    .eq('user_id', user.id).eq('project_id', projectId).maybeSingle()
   // 표시용 조회 — 실패 시 접힘 상태만 기본값으로 복귀(데이터 손상 없음)이라 로깅 후 폴백 유지.
   if (error) console.error('[getWbsCollapse] 조회 실패:', error.message)
   return (data?.collapsed as string[]) ?? null
@@ -159,11 +159,11 @@ export async function getWbsCollapse(projectId: string): Promise<string[] | null
 
 /** 프로젝트의 WBS 접힘 상태 upsert. 미로그인 시 no-op. */
 export async function saveWbsCollapse(projectId: string, ids: string[]): Promise<void> {
+  const user = await getSession()
+  if (!user) return
   const sb = await createServerClient()
-  const { data: u } = await sb.auth.getUser()
-  if (!u.user) return
   const { error } = await sb.from('user_wbs_state').upsert(
-    { user_id: u.user.id, project_id: projectId, collapsed: ids, updated_at: new Date().toISOString() },
+    { user_id: user.id, project_id: projectId, collapsed: ids, updated_at: new Date().toISOString() },
     { onConflict: 'user_id,project_id' },
   )
   if (error) console.error('[saveWbsCollapse] 저장 실패:', error.message)

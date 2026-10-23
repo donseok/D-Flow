@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { NavigationLink as Link } from '@/components/app/NavigationLink'
 import { CalendarClock, CircleAlert, ListChecks, ShieldCheck, type LucideIcon } from 'lucide-react'
 import type { MyWorkKind, MyWorkRow } from '@/lib/portal/myWork'
 import { StatusMessage } from '@/components/ui/StatusMessage'

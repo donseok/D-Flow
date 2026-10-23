@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { NavigationLink as Link } from '@/components/app/NavigationLink'
 import { t} from '@/lib/i18n/dict'
 import type { ProjectRow } from '@/lib/data/portal'
 import { FavoriteToggle } from './FavoriteToggle'

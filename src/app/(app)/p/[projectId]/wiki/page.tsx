@@ -34,7 +34,7 @@ export default async function ProjectWikiPage({
   // 요청에서 이미 부른 조회를 재사용하므로 이 화면의 projects 3중 조회가 1회로 준다.
   const [{ actor, degraded }, projectsState] = await Promise.all([
     getActorViewState(),
-    listProjectsWithState(),
+    listProjectsWithState(projectId),
   ])
 
   // 권한 조회 실패를 "없는 페이지" 로 위장하지 않는다 — 장애와 접근 불가는 다르다.

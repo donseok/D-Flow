@@ -32,7 +32,7 @@ export default async function WeeklyPage({
   const { week } = await searchParams
   // 주 키는 프로젝트 규칙이 정한다(SP5 D4·P9) — 설정을 먼저 읽고 키를 정한 뒤 시트를 읽는다(조회 한 단계가 직렬이 된다 — 과제 31b 가 잰다)
   const [projects, user, actor, pc] = await Promise.all([
-    listProjects(),
+    listProjects(projectId),
     getSession(),
     // 어포던스 게이팅용 — 조회 실패는 null(조회 전용)로 열화한다. 쓰기는 서버 액션 가드가 다시 판정.
     getActorForView(),

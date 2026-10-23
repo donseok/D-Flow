@@ -60,7 +60,12 @@ export default async function ProjectLayout({ children, params }: { children: Re
   if (!degraded && isHiddenProject(actor, projectId, hidden)) notFound()
   if (!mine.ok) throw new Error(`소속 목록을 불러오지 못했습니다: ${mine.error}`)
   const wid = actor?.projectWorkspace.get(projectId) ?? null
-  const ref = wid ? await workspaceRefById(wid) : null
+  // 내 소속 목록(mine)에 그 워크스페이스가 있으면 거기서 읽는다 — 같은 행(id·slug·name, 세션 RLS)이라 조회 하나(직렬 한 단계)가 줄어든다.
+  // 소속이 아닌 플랫폼 관리자 보기만 id 로 따로 읽는다.
+  const mineWs = wid ? mine.rows.find((r) => r.id === wid) : undefined
+  const ref = wid
+    ? mineWs ? { ok: true as const, ws: { id: mineWs.id, slug: mineWs.slug, name: mineWs.name } } : await workspaceRefById(wid)
+    : null
   if (ref && !ref.ok && ref.kind === 'unavailable') throw new Error(`워크스페이스를 조회하지 못했습니다: ${ref.error}`)
   if (!ref || !ref.ok) {
     if (ref) console.error('[project layout] 프로젝트의 워크스페이스 행이 보이지 않는다 — 내비 없이 그린다:', projectId)

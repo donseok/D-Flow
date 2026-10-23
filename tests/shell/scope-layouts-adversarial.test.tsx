@@ -179,12 +179,13 @@ describe('/p/[projectId] 레이아웃 — 숨김·열화', () => {
     expect(h.loadShell).not.toHaveBeenCalled(); expect(h.wsQueries).toEqual([]); expect(h.shellScope).not.toHaveBeenCalled()
   })
   it('프로젝트의 워크스페이스 행이 안 보이면(missing) 최소 셸 — 남의 이름·내비를 싣지 않는다', async () => {
-    h.ws = [B]
+    // 소속 목록(mine)에 없는 워크스페이스 — 이때만 프로젝트 레이아웃이 id 로 따로 읽는다(소속이면 mine 의 행을 쓴다, workspaceRefById 를 부르지 않는다)
+    h.ws = [B]; h.members = []
     renderToString(await proj(PA))
     expect(h.minimalShell).toHaveBeenCalled(); expect(h.loadShell).not.toHaveBeenCalled()
   })
   it('워크스페이스 조회 오류는 오류 경계', async () => {
-    h.wsError = 'down'
+    h.wsError = 'down'; h.members = []   // 소속 목록에 없을 때만 id 조회를 한다
     await expect(proj(PA)).rejects.toThrow(/조회하지 못했습니다/); expect(h.notFound).not.toHaveBeenCalled()
   })
   it('소속 멤버는 셸 — 칩 없음·게시 저장소에 쓴다', async () => {

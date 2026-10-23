@@ -13,7 +13,8 @@ function client(result: Result, user: { id: string; email?: string } | null = { 
   for (const m of ['select', 'eq', 'in']) q[m] = vi.fn((...args: unknown[]) => { calls.push([m, args]); return q })
   q.then = (resolve: (v: Result) => unknown, reject: (r: unknown) => unknown) => Promise.resolve(result).then(resolve, reject)
   const from = vi.fn(() => q)
-  mocks.createServerClient.mockResolvedValue({ from, auth: { getUser: async () => ({ data: { user } }) } })
+  // getSession 은 getClaims(JWT 로컬 검증)로 사용자를 만든다 — 세션이 없으면 data 가 null
+  mocks.createServerClient.mockResolvedValue({ from, auth: { getClaims: async () => ({ data: user ? { claims: { sub: user.id, email: user.email, user_metadata: {} } } : null, error: null }) } })
   return { from, calls }
 }
 
