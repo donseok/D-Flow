@@ -158,7 +158,9 @@ N단에서 **Phase 층으로 승격**된다.
 
 ### 스킬 전략 (2026-08-21 사용자 결정 — 신규 스킬)
 
-- **기존 `dflow-wbs` 는 동결** — 운영 중인 3~4단 흐름을 건드리지 않는다.
+- ~~기존 `dflow-wbs` 는 동결~~ → **2026-10-19 해제**: `dflow-wbs`(3~4단)도 이 계약의 표기(frontmatter levels·체크박스 Task·
+  한 줄 상세 필드)로 출력한다 — attach 없는 단일 파일이라 웹 업로드에서 골격과 같은 경로(levels 시드)로 올라간다.
+  옛 표기(`### TSK-` 헤딩) 파일은 웹 탭이 읽지 못하고 `dflow-export`(API)로만 올라간다.
 - **신규 스킬 `dflow-wbs-nlevel`** 이 이 계약(N단·levels frontmatter·progress·upload)을 구현한다.
   역할 분리는 스킬 분리가 아니라 **모드**: `--skeleton`(PMO 골격 + PL 배포 킷) / PL 모드(기본 —
   골격 파일에서 levels·키를 읽어 정합 강제, attach 자동 기입). 권한 강제는 스킬이 아니라
@@ -195,27 +197,24 @@ levels:
   - { name: WP,        prefix: WP,  progress: rollup, report: weekly }
   - { name: Activity,  prefix: ACT, progress: rollup, optional: true }
   - { name: Task,      prefix: TSK, progress: input }
-  - { name: SubTask,   prefix: STK, progress: checklist, optional: true,
-      upload: fold }   # 노드로 안 올리고 부모 Task 의 acceptance 로 접어 올림
+  - { name: SubTask,   prefix: STK, progress: checklist, optional: true, upload: fold }
 
 # input 층의 stage → 진도 크레딧 (category 별)
 credits:
   default: { 대기: 0, 설계: 20, 구현중: 50, 구현완료: 70, 테스트완료: 90, 검수완료: 100 }
-  if:      { 대기: 0, 구현중: 30, 구현완료: 50, 연동검증: 100 }   # I/F 는 연동돼야 절반 이상
-  doc:     { 미착수: 0, 작성중: 30, 제출: 50, 검수완료: 100 }      # 선행 산출물용
+  if:      { 대기: 0, 구현중: 30, 구현완료: 50, 연동검증: 100 }
+  doc:     { 미착수: 0, 작성중: 30, 제출: 50, 검수완료: 100 }
 ---
 
 # WBS — Acme
 
 ## PH-01: 분석
 
-### SYS-OP: 생산운영
-
-#### WP-AN-OP: 생산운영 요건정의
+### WP-AN-OP: 생산운영 요건정의
 - [ ] TSK-AN-001: 생산운영 AS-IS 분석서        @PL-A  w:5  ~2026-09-19  credit:doc
 - [ ] TSK-AN-002: 입고/출고 요건정의서          @PL-A  w:5  ~2026-09-26  credit:doc
 - [ ] TSK-AN-003: L2 I/F 요건 목록             @carol   w:3  ~2026-09-26  credit:doc
-- [M] 분석 완료 보고회                          ~2026-09-30              # progress:none — 마일스톤
+- [M] TSK-AN-OP-90: 분석 완료 보고회            ~2026-09-30
 
 ## PH-03: 구축
 
@@ -225,9 +224,9 @@ credits:
 
 ##### WP-IN-PR: 프로세스
 
-###### ACT-IN-PR-1: 실적 관리                                # Activity — 그룹핑 전용, 입력 금지
+###### ACT-IN-PR-1: 실적 관리
 - [ ] TSK-IN-001: 입고 실적 수집 프로세스       @alice  w:5  ~2026-10-17
-  - [ ] STK-IN-001-1: 계량기 연계 확인                   # checklist — 집계 불개입
+  - [ ] STK-IN-001-1: 계량기 연계 확인
   - [ ] STK-IN-001-2: 중복 수신 방어 로직
   - [x] STK-IN-001-3: 실적 테이블 설계 리뷰
 - [ ] TSK-IN-002: 입고 실적 정정               @alice  w:3  ~2026-10-24
@@ -237,7 +236,7 @@ credits:
 - [ ] TSK-IN-011: 입고 판정 프로세스            @alice  w:5  ~2026-10-31
 - [ ] TSK-IN-012: 판정 예외 처리               @alice  w:2  ~2026-10-31
 
-##### WP-IN-UI: 화면                                          # Activity 생략 — Task 직결 (혼재 OK)
+##### WP-IN-UI: 화면
 - [ ] TSK-IN-101: 입고 작업 현황 화면           @bob  w:3  ~2026-10-17
 - [ ] TSK-IN-102: 입고 실적 조회 화면           @bob  w:2  ~2026-10-24
 - [ ] TSK-IN-103: 입고 수동 보정 화면           @bob  w:3  ~2026-10-31
@@ -275,6 +274,28 @@ credits:
 ```
 <!-- example:end -->
 
+샘플 읽는 법 (샘플 안에는 `#` 주석을 쓰지 않는다 — 아래 「쓰기 규칙」 참조):
+
+- SubTask(STK)는 노드로 안 올리고 부모 Task 의 acceptance 로 접어 올린다 (`upload: fold`). 집계에는 들어가지 않는다 (checklist).
+- Activity(ACT)는 그룹핑 전용이고 진도 입력은 없다. `WP-IN-UI` 처럼 Activity 를 건너뛰고 Task 를 바로 붙여도 된다 (혼재 허용).
+- `[M]` 줄은 마일스톤 (`progress: none`)이다. 반드시 ID 를 쓴다.
+- `credits` 의 `if` 는 I/F 용이다. 연동돼야 절반 이상으로 본다. `doc` 은 선행 산출물용이다.
+- 샘플의 담당(`@PL-A` 등)은 가명이다. 실제 파일에는 이메일을 쓴다 — 아래 「쓰기 규칙」.
+
+## 쓰기 규칙 (두 파서 공통)
+
+스킬 파서(`wbs-nlevel-parse.mjs`)와 웹 파서(`src/lib/wbsmd/parse.ts`)는 둘 다 줄 단위로 읽는다. 아래를 지킨다.
+
+- **`levels` 항목은 한 줄에 하나** 쓴다. `{ … }` 를 여러 줄로 나누면 그 줄을 읽지 못해 층이 빠진다 (예: STK 층이 없어져 fold 가 안 되고, `credits` 구간도 끊긴다).
+- **필드 값은 한 줄만** 쓴다. `- acceptance:` 아래로 이어 쓴 줄은 읽지 않는다. 여러 항목은 한 줄에 ` / ` 로 잇는다.
+- **글머리표는 `-` 만** 쓴다. `*`·`+` 와 번호 목록은 항목으로 읽지 않는다.
+- **줄 끝에 `# 주석`을 붙이지 않는다.** 일반 노드에서는 제목에 섞여 DB 에 들어가고, `[M]` 줄에서는 ID·제목 판정이 깨져 오류가 난다. 설명이 필요하면 `<!-- … -->` 를 별도 줄에 쓴다. frontmatter 에서는 줄 전체가 `#` 로 시작하는 주석만 쓴다.
+- **필드 키는 `category`·`domain`·`model`·`priority`·`tags`·`depends`·`prd-ref`·`entry-point`·`requirements`·`acceptance` 열 가지뿐**이다. `spec`·`note` 는 두 파서 모두 읽지 않고 버린다.
+- **`priority` 는 `critical`·`high`·`medium`·`low` 중 하나**, `w:` 가중치는 0 보다 큰 수다.
+- **`module` 은 frontmatter 에 반드시 있고** `^[A-Za-z0-9_-]{1,32}$` 형식이다 (골격·PL 모두). 웹 적용은 module 이 없거나 형식이 틀리면 거부한다.
+- **담당 `@` 는 이메일로 쓴다.** 서버는 프로젝트 명단의 이메일로만 매칭한다 — 이름은 업로드는 되지만 미매칭으로 남는다.
+- ID 는 파일 안에서 유일해야 한다. 같은 ID 를 두 번 쓰지 않는다.
+
 ## 표기 규약 (파서 계약)
 
 | 표기 | 의미 |
@@ -302,7 +323,7 @@ credits:
 3. ✅ **import 계약 v2.2** (2026-08-22 랜딩) — 서버: 원본 리포 0089 마이그레이션(level_idx·milestone·credit_key·
    if_id + RPC p_attach_id, 스테이징 리허설 완료) + import 라우트(levels 시드/일치 검증·attach 해석·
    input 층 발행 일반화·종료일 단독 schedule) + `GET /api/v1/wbs/structure`(PL 서버 직조회).
-   스킬: `wbs-nlevel-parse.py`(validate/export — fold 접기·마일스톤·토큰 파싱, pytest 18건) +
+   스킬: `wbs-nlevel-parse.mjs`(validate/export — fold 접기·마일스톤·토큰 파싱. 처음엔 python 판, 2026-10 node 로 이식) +
    SKILL.md 조회 사슬·업로드 절차. D-Flow 는 이 스키마를 기준선(0000)에 포함한다.
 4. ⏸ **stage→크레딧·weight 롤업** — 데이터(weight·credit_key·level_idx)는 3에서 랜딩됨. 계산·표시만 남음.
 

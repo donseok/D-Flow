@@ -3,3 +3,7 @@ docs/baseline/*.md text eol=lf
 # 매뉴얼 본문 묶음(chapters.generated.json)은 원본 .md 와 바이트 단위로 맞댄다 — Windows 체크아웃에서 CRLF 로 바뀌지 않게.
 src/content/manual/*.md text eol=lf
 src/content/manual/chapters.generated.json text eol=lf
+# dflow-* 스킬 — 스크립트 줄끝 고정(Windows CRLF 체크아웃에서 node·sh 가 깨지지 않게)
+.claude/skills/** text eol=lf
+# dflow-wbs 시험용 python zip 픽스처: 바이트 그대로 보관한다(위 text eol=lf 변환 금지 — 뒤에 둬야 이긴다). 생성법은 해당 폴더 README.md.
+.claude/skills/dflow-wbs/tests/golden/py-zips/*.xlsx binary

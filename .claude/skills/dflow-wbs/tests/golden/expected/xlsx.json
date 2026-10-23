@@ -1,0 +1,512 @@
+{
+ "generatedWith": "Python 3.9.6",
+ "write": {
+  "basic": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>2</v></c></row><row r=\"2\"><c r=\"A2\" t=\"s\"><v>3</v></c><c r=\"B2\" t=\"s\"><v>4</v></c><c r=\"C2\"><v>1</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"5\" uniqueCount=\"5\"><si><t>ID</t></si><si><t>제목</t></si><si><t>수량</t></si><si><t>A</t></si><si><t>x</t></si></sst>"
+   }
+  },
+  "pretty-json": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c></row><row r=\"2\"><c r=\"A2\"><v>1</v></c><c r=\"B2\"><v>2.5</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"2\" uniqueCount=\"2\"><si><t>a</t></si><si><t>b</t></si></sst>"
+   }
+  },
+  "escape": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>2</v></c><c r=\"D1\" t=\"s\"><v>3</v></c><c r=\"E1\" t=\"s\"><v>4</v></c><c r=\"F1\" t=\"s\"><v>5</v></c><c r=\"G1\" t=\"s\"><v>6</v></c><c r=\"H1\" t=\"s\"><v>7</v></c></row><row r=\"2\"><c r=\"A2\" t=\"s\"><v>8</v></c><c r=\"B2\" t=\"s\"><v>9</v></c><c r=\"C2\" t=\"s\"><v>10</v></c><c r=\"D2\" t=\"s\"><v>11</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"12\" uniqueCount=\"12\"><si><t>a&amp;b</t></si><si><t>&lt;t&gt;</t></si><si><t>&quot;q&quot;</t></si><si><t>&#x27;s&#x27;</t></si><si><t>&amp;amp;</t></si><si><t>&amp;lt;</t></si><si><t>&amp;#x27;</t></si><si><t>&lt;![CDATA[x]]&gt;</t></si><si><t>Q&amp;A &lt;b&gt;&quot;x&quot;&lt;/b&gt; &#x27;y&#x27;</t></si><si><t>a &amp;&amp; b</t></si><si><t>&gt;&gt;</t></si><si><t></t></si></sst>"
+   }
+  },
+  "unicode": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>2</v></c><c r=\"D1\" t=\"s\"><v>3</v></c><c r=\"E1\" t=\"s\"><v>4</v></c><c r=\"F1\" t=\"s\"><v>5</v></c><c r=\"G1\" t=\"s\"><v>6</v></c><c r=\"H1\" t=\"s\"><v>7</v></c><c r=\"I1\" t=\"s\"><v>8</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"9\" uniqueCount=\"9\"><si><t>한글 제목</t></si><si><t>😀 emoji 🎉</t></si><si><t>é é</t></si><si><t>a b</t></si><si><t>tab\there</t></si><si><t>line1\nline2</t></si><si><t>cr\rhere</t></si><si><t> nbsp</t></si><si><t>漢字かな</t></si></sst>"
+   }
+  },
+  "empty-strings": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>0</v></c></row><row r=\"2\"><c r=\"A2\" t=\"s\"><v>0</v></c><c r=\"B2\" t=\"s\"><v>0</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"1\" uniqueCount=\"1\"><si><t></t></si></sst>"
+   }
+  },
+  "spaces": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>2</v></c><c r=\"D1\" t=\"s\"><v>3</v></c><c r=\"E1\" t=\"s\"><v>4</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"5\" uniqueCount=\"5\"><si><t> lead</t></si><si><t>trail </t></si><si><t> </t></si><si><t>a  b</t></si><si><t>\t</t></si></sst>"
+   }
+  },
+  "dedupe": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>0</v></c></row><row r=\"2\"><c r=\"A2\" t=\"s\"><v>1</v></c><c r=\"B2\" t=\"s\"><v>0</v></c><c r=\"C2\" t=\"s\"><v>2</v></c></row><row r=\"3\"><c r=\"A3\" t=\"s\"><v>2</v></c><c r=\"B3\" t=\"s\"><v>2</v></c><c r=\"C3\" t=\"s\"><v>2</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"3\" uniqueCount=\"3\"><si><t>a</t></si><si><t>b</t></si><si><t>c</t></si></sst>"
+   }
+  },
+  "numbers-int": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\"><v>0</v></c><c r=\"B1\"><v>-1</v></c><c r=\"C1\"><v>12</v></c><c r=\"D1\"><v>17</v></c><c r=\"E1\"><v>12345678901234567890123</v></c><c r=\"F1\"><v>0</v></c><c r=\"G1\"><v>-98765432109876543210</v></c><c r=\"H1\"><v>9007199254740993</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"0\" uniqueCount=\"0\"></sst>"
+   }
+  },
+  "numbers-float": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\"><v>1.0</v></c><c r=\"B1\"><v>0.5</v></c><c r=\"C1\"><v>1e-05</v></c><c r=\"D1\"><v>100000.0</v></c><c r=\"E1\"><v>1e+16</v></c><c r=\"F1\"><v>1.5e+300</v></c><c r=\"G1\"><v>0.1</v></c><c r=\"H1\"><v>123456789.12345679</v></c><c r=\"I1\"><v>-2.5e-07</v></c><c r=\"J1\"><v>1e+22</v></c><c r=\"K1\"><v>5e-324</v></c><c r=\"L1\"><v>-0.0</v></c><c r=\"M1\"><v>0.0001</v></c><c r=\"N1\"><v>1e-05</v></c><c r=\"O1\"><v>123456789012345.6</v></c><c r=\"P1\"><v>1234567890123456.8</v></c><c r=\"Q1\"><v>2500.0</v></c><c r=\"R1\"><v>100.0</v></c><c r=\"S1\"><v>1000000000000000.0</v></c><c r=\"T1\"><v>0.0001</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"0\" uniqueCount=\"0\"></sst>"
+   }
+  },
+  "numbers-nonfinite": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\"><v>inf</v></c><c r=\"B1\"><v>-inf</v></c><c r=\"C1\"><v>nan</v></c><c r=\"D1\"><v>inf</v></c><c r=\"E1\"><v>-inf</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"0\" uniqueCount=\"0\"></sst>"
+   }
+  },
+  "non-string": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>2</v></c><c r=\"D1\" t=\"s\"><v>3</v></c><c r=\"E1\" t=\"s\"><v>4</v></c><c r=\"F1\" t=\"s\"><v>5</v></c><c r=\"G1\" t=\"s\"><v>6</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"7\" uniqueCount=\"7\"><si><t>True</t></si><si><t>False</t></si><si><t>None</t></si><si><t>[1, &#x27;a&#x27;, None, True, 1.5]</t></si><si><t>{&#x27;k&#x27;: &#x27;v&#x27;, &#x27;n&#x27;: [1.0, 2]}</t></si><si><t>[&quot;it&#x27;s&quot;, &#x27;say &quot;hi&quot;&#x27;, &#x27;both \\&#x27; and &quot;&#x27;]</t></si><si><t>x</t></si></sst>"
+   }
+  },
+  "empty-list": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"0\" uniqueCount=\"0\"></sst>"
+   }
+  },
+  "empty-rows": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"></row><row r=\"2\"><c r=\"A2\" t=\"s\"><v>0</v></c></row><row r=\"3\"></row><row r=\"4\"></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"1\" uniqueCount=\"1\"><si><t>a</t></si></sst>"
+   }
+  },
+  "ragged": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>2</v></c></row><row r=\"2\"><c r=\"A2\" t=\"s\"><v>3</v></c></row><row r=\"3\"><c r=\"A3\"><v>1</v></c><c r=\"B3\"><v>2</v></c><c r=\"C3\"><v>3</v></c><c r=\"D3\"><v>4</v></c><c r=\"E3\"><v>5</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"4\" uniqueCount=\"4\"><si><t>a</t></si><si><t>b</t></si><si><t>c</t></si><si><t>1</t></si></sst>"
+   }
+  },
+  "cols-26": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>2</v></c><c r=\"D1\" t=\"s\"><v>3</v></c><c r=\"E1\" t=\"s\"><v>4</v></c><c r=\"F1\" t=\"s\"><v>5</v></c><c r=\"G1\" t=\"s\"><v>6</v></c><c r=\"H1\" t=\"s\"><v>7</v></c><c r=\"I1\" t=\"s\"><v>8</v></c><c r=\"J1\" t=\"s\"><v>9</v></c><c r=\"K1\" t=\"s\"><v>10</v></c><c r=\"L1\" t=\"s\"><v>11</v></c><c r=\"M1\" t=\"s\"><v>12</v></c><c r=\"N1\" t=\"s\"><v>13</v></c><c r=\"O1\" t=\"s\"><v>14</v></c><c r=\"P1\" t=\"s\"><v>15</v></c><c r=\"Q1\" t=\"s\"><v>16</v></c><c r=\"R1\" t=\"s\"><v>17</v></c><c r=\"S1\" t=\"s\"><v>18</v></c><c r=\"T1\" t=\"s\"><v>19</v></c><c r=\"U1\" t=\"s\"><v>20</v></c><c r=\"V1\" t=\"s\"><v>21</v></c><c r=\"W1\" t=\"s\"><v>22</v></c><c r=\"X1\" t=\"s\"><v>23</v></c><c r=\"Y1\" t=\"s\"><v>24</v></c><c r=\"Z1\" t=\"s\"><v>25</v></c></row><row r=\"2\"><c r=\"A2\"><v>0</v></c><c r=\"B2\"><v>1</v></c><c r=\"C2\"><v>2</v></c><c r=\"D2\"><v>3</v></c><c r=\"E2\"><v>4</v></c><c r=\"F2\"><v>5</v></c><c r=\"G2\"><v>6</v></c><c r=\"H2\"><v>7</v></c><c r=\"I2\"><v>8</v></c><c r=\"J2\"><v>9</v></c><c r=\"K2\"><v>10</v></c><c r=\"L2\"><v>11</v></c><c r=\"M2\"><v>12</v></c><c r=\"N2\"><v>13</v></c><c r=\"O2\"><v>14</v></c><c r=\"P2\"><v>15</v></c><c r=\"Q2\"><v>16</v></c><c r=\"R2\"><v>17</v></c><c r=\"S2\"><v>18</v></c><c r=\"T2\"><v>19</v></c><c r=\"U2\"><v>20</v></c><c r=\"V2\"><v>21</v></c><c r=\"W2\"><v>22</v></c><c r=\"X2\"><v>23</v></c><c r=\"Y2\"><v>24</v></c><c r=\"Z2\"><v>25</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"26\" uniqueCount=\"26\"><si><t>c0</t></si><si><t>c1</t></si><si><t>c2</t></si><si><t>c3</t></si><si><t>c4</t></si><si><t>c5</t></si><si><t>c6</t></si><si><t>c7</t></si><si><t>c8</t></si><si><t>c9</t></si><si><t>c10</t></si><si><t>c11</t></si><si><t>c12</t></si><si><t>c13</t></si><si><t>c14</t></si><si><t>c15</t></si><si><t>c16</t></si><si><t>c17</t></si><si><t>c18</t></si><si><t>c19</t></si><si><t>c20</t></si><si><t>c21</t></si><si><t>c22</t></si><si><t>c23</t></si><si><t>c24</t></si><si><t>c25</t></si></sst>"
+   }
+  },
+  "wbs-18-cols": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\" t=\"s\"><v>1</v></c><c r=\"C1\" t=\"s\"><v>2</v></c><c r=\"D1\" t=\"s\"><v>3</v></c><c r=\"E1\" t=\"s\"><v>4</v></c><c r=\"F1\" t=\"s\"><v>5</v></c><c r=\"G1\" t=\"s\"><v>6</v></c><c r=\"H1\" t=\"s\"><v>7</v></c><c r=\"I1\" t=\"s\"><v>8</v></c><c r=\"J1\" t=\"s\"><v>9</v></c><c r=\"K1\" t=\"s\"><v>10</v></c><c r=\"L1\" t=\"s\"><v>11</v></c><c r=\"M1\" t=\"s\"><v>12</v></c><c r=\"N1\" t=\"s\"><v>13</v></c><c r=\"O1\" t=\"s\"><v>14</v></c><c r=\"P1\" t=\"s\"><v>15</v></c><c r=\"Q1\" t=\"s\"><v>16</v></c><c r=\"R1\" t=\"s\"><v>17</v></c></row><row r=\"2\"><c r=\"A2\" t=\"s\"><v>18</v></c><c r=\"B2\" t=\"s\"><v>19</v></c><c r=\"C2\" t=\"s\"><v>20</v></c><c r=\"D2\" t=\"s\"><v>21</v></c><c r=\"E2\" t=\"s\"><v>21</v></c><c r=\"F2\" t=\"s\"><v>21</v></c><c r=\"G2\" t=\"s\"><v>22</v></c><c r=\"H2\" t=\"s\"><v>23</v></c><c r=\"I2\" t=\"s\"><v>21</v></c><c r=\"J2\" t=\"s\"><v>24</v></c><c r=\"K2\" t=\"s\"><v>25</v></c><c r=\"L2\"><v>21</v></c><c r=\"M2\" t=\"s\"><v>21</v></c><c r=\"N2\" t=\"s\"><v>21</v></c><c r=\"O2\" t=\"s\"><v>21</v></c><c r=\"P2\" t=\"s\"><v>21</v></c><c r=\"Q2\"><v>0</v></c><c r=\"R2\" t=\"s\"><v>21</v></c></row><row r=\"3\"><c r=\"A3\" t=\"s\"><v>26</v></c><c r=\"B3\" t=\"s\"><v>27</v></c><c r=\"C3\" t=\"s\"><v>28</v></c><c r=\"D3\" t=\"s\"><v>29</v></c><c r=\"E3\" t=\"s\"><v>30</v></c><c r=\"F3\" t=\"s\"><v>31</v></c><c r=\"G3\" t=\"s\"><v>22</v></c><c r=\"H3\" t=\"s\"><v>23</v></c><c r=\"I3\" t=\"s\"><v>32</v></c><c r=\"J3\" t=\"s\"><v>24</v></c><c r=\"K3\" t=\"s\"><v>33</v></c><c r=\"L3\"><v>3</v></c><c r=\"M3\" t=\"s\"><v>34</v></c><c r=\"N3\" t=\"s\"><v>35</v></c><c r=\"O3\" t=\"s\"><v>36</v></c><c r=\"P3\" t=\"s\"><v>37</v></c><c r=\"Q3\"><v>0</v></c><c r=\"R3\" t=\"s\"><v>38</v></c></row><row r=\"4\"><c r=\"A4\" t=\"s\"><v>39</v></c></row></sheetData></worksheet>",
+    "xl/sharedStrings.xml": "<?xml version=\"1.0\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"40\" uniqueCount=\"40\"><si><t>번호</t></si><si><t>레벨</t></si><si><t>ID</t></si><si><t>category</t></si><si><t>domain</t></si><si><t>model</t></si><si><t>상태 코드</t></si><si><t>상태</t></si><si><t>담당</t></si><si><t>시작일</t></si><si><t>종료일</t></si><si><t>영업일</t></si><si><t>depends</t></si><si><t>entry-point</t></si><si><t>prd-ref</t></si><si><t>tags</t></si><si><t>진척(파생)</t></si><si><t>note</t></si><si><t>1</t></si><si><t>WP</t></si><si><t>WP-01</t></si><si><t></t></si><si><t>[ ]</t></si><si><t>대기</t></si><si><t>2026-10-01</t></si><si><t>2026-10-31</t></si><si><t>2</t></si><si><t>TSK</t></si><si><t>TSK-01</t></si><si><t>dev</t></si><si><t>mdm</t></si><si><t>sonnet</t></si><si><t>a@b.com</t></si><si><t>2026-10-05</t></si><si><t>TSK-00</t></si><si><t>/mdm/term</t></si><si><t>PRD-3.1</t></si><si><t>agent,fe</t></si><si><t>R&amp;D &lt;검토&gt; &quot;따옴표&quot; &#x27;x&#x27;</t></si><si><t>import 전 검수용이다 — wbs.md 기준이며 D&#x27;Flow 실적·배정은 반영되지 않는다.</t></si></sst>"
+   }
+  },
+  "big-3000": {
+   "names": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
+    "xl/sharedStrings.xml"
+   ],
+   "parts": {
+    "[Content_Types].xml": "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/></Types>",
+    "_rels/.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+    "xl/workbook.xml": "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+    "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/></Relationships>",
+    "xl/worksheets/sheet1.xml": {
+     "sha256": "844d8ae8ab9cf1387bd287fa06350475aeaeb95237ab226fb136fd057453f62b",
+     "length": 1756363
+    },
+    "xl/sharedStrings.xml": {
+     "sha256": "181ae4c43cfdd0e13cae3ab53670d530e846063a0796aca9b43666ebd19a969d",
+     "length": 322421
+    }
+   }
+  }
+ },
+ "read": {
+  "shared-basic": {
+   "status": 0,
+   "stdout": "[{\"id\": \"a1\", \"제목\": \"한글\"}, {\"id\": \"12\", \"제목\": \"\"}]\n"
+  },
+  "stored-method": {
+   "status": 0,
+   "stdout": "[{\"id\": \"a1\", \"제목\": \"한글\"}, {\"id\": \"12\", \"제목\": \"\"}]\n"
+  },
+  "rich-text-and-phonetic": {
+   "status": 0,
+   "stdout": "[{\"name\": \"Hello world\"}, {\"name\": \"漢字かんじ\"}]\n"
+  },
+  "inline-strings": {
+   "status": 0,
+   "stdout": "[{\"h1\": \"x & y <z>\", \"h2\": \"ab cd\"}, {\"h1\": \"\", \"h2\": \"\"}]\n"
+  },
+  "multi-sheet": {
+   "status": 0,
+   "stdout": "[{\"h\": \"first-sheet\"}]\n"
+  },
+  "sheet-name-order": {
+   "status": 0,
+   "stdout": "[{\"h\": \"v10\"}]\n"
+  },
+  "cell-types": {
+   "status": 0,
+   "stdout": "[{\"n\": \"1.5E-3\", \"type\": \"abc\"}, {\"n\": \"1\", \"type\": \"#DIV/0!\"}, {\"n\": \"\", \"type\": \"\"}, {\"n\": null, \"type\": null}, {\"n\": \"  7 \", \"type\": \"0.1\"}]\n"
+  },
+  "wide-columns": {
+   "status": 0,
+   "stdout": "[{\"a\": \"v-a\", \"b\": \"\", \"z\": \"\", \"aa\": \"v-aa\", \"ab\": \"v-ab\", \"ba\": \"\"}, {\"a\": \"\", \"b\": \"\", \"z\": \"v-z\", \"aa\": \"\", \"ab\": \"\", \"ba\": \"\"}]\n"
+  },
+  "prefixed-namespace": {
+   "status": 0,
+   "stdout": "[{\"h\": \"v\"}]\n"
+  },
+  "foreign-namespace-ignored": {
+   "status": 0,
+   "stdout": "[{\"h\": \"yes\"}]\n"
+  },
+  "entities-cdata-charrefs": {
+   "status": 0,
+   "stdout": "[{\"h\": \"a <b> & \\\"q\\\" 's' A😀가\"}, {\"h\": \"x<raw & >y\"}, {\"h\": \"kl\"}]\n"
+  },
+  "crlf-and-whitespace-in-text": {
+   "status": 0,
+   "stdout": "[{\"h\": \"  line1\\nline2\\nline3\\n  \"}, {\"h\": \"tab\\there\"}]\n"
+  },
+  "utf8-bom": {
+   "status": 0,
+   "stdout": "[{\"id\": \"a1\", \"제목\": \"한글\"}, {\"id\": \"12\", \"제목\": \"\"}]\n"
+  },
+  "utf16-bom-sheet": {
+   "status": 0,
+   "stdout": "[{\"id\": \"a1\", \"제목\": \"한글\"}, {\"id\": \"12\", \"제목\": \"\"}]\n"
+  },
+  "header-only": {
+   "status": 0,
+   "stdout": "[]\n"
+  },
+  "duplicate-and-empty-headers": {
+   "status": 0,
+   "stdout": "[{\"a\": \"3\", \"\": \"2\", \"null\": \"4\"}]\n"
+  },
+  "null-header-cell": {
+   "status": 0,
+   "stdout": "[{\"null\": \"1\", \"b\": \"2\"}]\n"
+  },
+  "empty-first-row": {
+   "status": 0,
+   "stdout": "[{}, {}]\n"
+  },
+  "no-shared-strings-file": {
+   "status": 0,
+   "stdout": "[{\"k\": \"v\"}]\n"
+  },
+  "extra-parts-and-dirs": {
+   "status": 0,
+   "stdout": "[{\"id\": \"a1\", \"제목\": \"한글\"}, {\"id\": \"12\", \"제목\": \"\"}]\n"
+  },
+  "quirky-xml-syntax": {
+   "status": 0,
+   "stdout": "[{\"h\": \"\"}]\n"
+  },
+  "negative-and-spaced-index": {
+   "status": 0,
+   "stdout": "[{\"h\": \"last\"}, {\"h\": \"first\"}, {\"h\": \"last\"}]\n"
+  },
+  "rows-out-of-order-and-gaps": {
+   "status": 0,
+   "stdout": "[{\"late\": \"h\"}, {\"late\": \"mid\"}]\n"
+  },
+  "same-column-twice-in-row": {
+   "status": 0,
+   "stdout": "[{\"h\": \"second\"}]\n"
+  },
+  "big-9000-cells": {
+   "status": 0,
+   "stdout": {
+    "sha256": "ca43da1c199df3b0e6e60beb7850875b33b8dcf3d16b71202882eddf6d831480",
+    "length": 186715
+   }
+  },
+  "error-no-sheet": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-no-rows": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-broken-xml-unclosed": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-broken-xml-truncated": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-junk-after-root": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-two-roots-text": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-shared-index-out-of-range": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-shared-index-not-int": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-shared-index-empty": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-cell-without-r": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-cell-lowercase-r": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-control-char": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-unknown-entity": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-bare-ampersand": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-unbound-prefix": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-mismatched-tags": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-attribute-without-quotes": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-duplicate-attribute": {
+   "status": 1,
+   "stdout": ""
+  },
+  "error-shared-strings-broken": {
+   "status": 1,
+   "stdout": ""
+  }
+ },
+ "badzip": {
+  "not-a-zip": {
+   "status": 1
+  },
+  "empty-file": {
+   "status": 1
+  },
+  "truncated-zip": {
+   "status": 1
+  },
+  "only-eocd-garbage": {
+   "status": 1
+  }
+ }
+}

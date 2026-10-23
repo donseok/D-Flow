@@ -13,7 +13,7 @@ git clone git@github.com:<your-org>/dflow-kit.git ~/dflow-kit
 ~/dflow-kit/install.sh ~/project/<내 리포>
 ```
 
-install.sh 가 하는 일: 의존 명령 점검(git curl jq python3 gh) → `<리포>/.claude/skills/dflow-*` 복사 →
+install.sh 가 하는 일: 의존 명령 점검(git curl jq gh node) → `<리포>/.claude/skills/dflow-*` 복사 →
 `.env` 초안 + `.gitignore` 보강 → `.claude/settings.json` 에 워커 허용 목록 병합(git 은 이 PC 의 절대경로) → 다음 단계 안내.
 
 그 다음 사람이 할 일:
@@ -49,7 +49,7 @@ cd ~/dflow-kit && git pull && ./install.sh ~/project/<내 리포>
 
 ## 의존
 
-git · curl · jq · python3 · gh(GitHub CLI, `done --auto-links` 와 리포 생성용). macOS: `brew install jq gh`.
+git · curl · jq · gh(GitHub CLI, `done --auto-links` 와 리포 생성용) · node 18.17+(dflow-wbs-nlevel·dflow-export 스크립트). macOS: `brew install jq gh node`.
 
 ## Windows(Git Bash)
 

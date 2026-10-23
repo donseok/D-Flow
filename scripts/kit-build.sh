@@ -1,7 +1,7 @@
 #!/bin/sh
 # kit-build.sh — D-Flow 정본(.claude/skills/dflow-*)에서 dflow-kit 배포 킷을 조립한다.
 # 사용법: scripts/kit-build.sh <출력 폴더>   (예: ~/dflow-kit — 그 폴더가 git 리포면 커밋·push 는 사람이)
-# 출력: <출력>/skills/dflow-* · install.sh · .env.example · README.md · VERSION
+# 출력: <출력>/skills/dflow-* · skills/_shared · install.sh · .env.example · README.md · VERSION
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -16,6 +16,13 @@ for s in $SKILLS; do
   cp -R "$ROOT/.claude/skills/$s" "$OUT/skills/$s"
   find "$OUT/skills/$s" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
   find "$OUT/skills/$s" -name '.pytest_cache' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+done
+
+# 공용 node 헬퍼·문체 가이드 — dflow-export·dflow-wbs-nlevel 의 .mjs 스크립트가 ../../_shared/node 를 import 한다(2026-10-19).
+rm -rf "$OUT/skills/_shared" && mkdir -p "$OUT/skills/_shared"
+for d in node style; do
+  [ -d "$ROOT/.claude/skills/_shared/$d" ] || { echo "정본 공용 폴더 없음: _shared/$d" >&2; exit 2; }
+  cp -R "$ROOT/.claude/skills/_shared/$d" "$OUT/skills/_shared/$d"
 done
 
 cp "$ROOT/kit/install.sh" "$OUT/install.sh"; chmod +x "$OUT/install.sh"

@@ -9,16 +9,17 @@ import { walk } from './_walk'
 const ROOT = join(process.cwd(), '.claude/skills/dflow-wbs-nlevel')
 const RESIDUE = /\b(?:ERP|MES|L2)(?:IF)?\b|LINE-|생산운영|생산계획|물류|공정(?:명|별|\s?축|\s?WP)/
 const EXAMPLE_BLOCK = /<!-- example:start -->[\s\S]*?<!-- example:end -->/g
-const SKIP_DIRS = new Set(['__pycache__', '.pytest_cache'])
+// tests/ 는 시험 고정 자료(동결한 옛 문서 사본·python 골든)라 규범이 아니다 — 걷지 않는다.
+const SKIP_DIRS = new Set(['__pycache__', '.pytest_cache', 'tests'])
 
 describe('배포 스킬 dflow-wbs-nlevel — 도메인 중립', () => {
-  const files = walk(ROOT, SKIP_DIRS, /\.(md|py)$/)
+  const files = walk(ROOT, SKIP_DIRS, /\.(md|py|mjs)$/)
 
   it('스킬 산문·스크립트를 모두 걷는다(빈 목록으로 통과하지 않는다)', () => {
     const rel = files.map(f => relative(ROOT, f))
     expect(rel).toEqual(expect.arrayContaining([
       'SKILL.md', 'references/wbs-nlevel-md-contract.md', 'references/skeleton-sample.md',
-      'scripts/wbs-nlevel-parse.py', 'scripts/test_wbs_nlevel_parse.py',
+      'references/contract-summary.md', 'scripts/wbs-nlevel-parse.mjs',
     ]))
   })
 

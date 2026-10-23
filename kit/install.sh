@@ -12,15 +12,14 @@ TARGET="${1:-}"
 TARGET=$(cd "$TARGET" && pwd)
 [ -d "$TARGET/.git" ] || echo "경고: $TARGET 은 git 리포가 아니다 — dflow-dev 는 git 리포 루트에서만 동작한다." >&2
 
-# 1) 의존 점검 — dflow.sh(curl·jq), poll.sh(jq), nlevel/export 스크립트(python3 또는 python), done --auto-links(gh)
+# 1) 의존 점검 — dflow.sh(curl·jq), poll.sh(jq), nlevel/export 스크립트(node 18.17+), done --auto-links(gh)
 #    Windows 는 Git Bash(Git for Windows) 에서 실행한다. dflow-team 은 powershell.exe 도 쓴다(프로세스 시작 시각).
 missing=""
-for c in git curl jq gh; do command -v "$c" >/dev/null 2>&1 || missing="$missing $c"; done
-command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || missing="$missing python3"
+for c in git curl jq gh node; do command -v "$c" >/dev/null 2>&1 || missing="$missing $c"; done
 if [ -n "$missing" ]; then
   echo "필요한 명령이 없다:$missing" >&2
   echo "  macOS: brew install${missing}" >&2
-  echo "  Windows(Git Bash): winget 또는 scoop 으로 설치${missing} (python3 은 python 으로 대신할 수 있다)" >&2
+  echo "  Windows(Git Bash): winget 또는 scoop 으로 설치${missing}" >&2
   exit 2
 fi
 
@@ -31,6 +30,15 @@ for s in "$KIT_DIR"/skills/dflow-*; do
   rm -rf "$TARGET/.claude/skills/$name"
   cp -R "$s" "$TARGET/.claude/skills/$name"
 done
+# 공용 node 헬퍼·문체 가이드 — dflow-export·dflow-wbs-nlevel 스크립트가 쓴다(스킬 폴더와 같은 규칙으로 통째 갱신)
+if [ -d "$KIT_DIR/skills/_shared" ]; then
+  mkdir -p "$TARGET/.claude/skills/_shared"
+  for d in "$KIT_DIR"/skills/_shared/*; do
+    name=$(basename "$d")
+    rm -rf "$TARGET/.claude/skills/_shared/$name"
+    cp -R "$d" "$TARGET/.claude/skills/_shared/$name"
+  done
+fi
 chmod +x "$TARGET"/.claude/skills/dflow-work/scripts/dflow.sh "$TARGET"/.claude/skills/dflow-poll/scripts/poll.sh
 
 # 3) .env 초안 + .gitignore

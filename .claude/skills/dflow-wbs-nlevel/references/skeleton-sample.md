@@ -1,6 +1,6 @@
 ---
 project: Acme
-module: acme-skel                # 골격 — 시스템 키·levels 의 정본
+module: acme-skel
 start_date: 2026-09-01
 
 # levels 정본 — PL 파일은 이 블록을 복사한다(불일치 = 업로드 거부).

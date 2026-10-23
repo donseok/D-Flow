@@ -1,0 +1,1591 @@
+{
+  "empty": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [],
+    "inside": []
+  },
+  "newline": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0
+    ],
+    "inside": [
+      false
+    ]
+  },
+  "no-fence": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      4,
+      9
+    ],
+    "inside": [
+      false,
+      false,
+      false
+    ]
+  },
+  "simple": {
+    "matches": [
+      4,
+      13
+    ],
+    "ranges": [
+      [
+        4,
+        13
+      ]
+    ],
+    "offsets": [
+      0,
+      4,
+      8,
+      13,
+      17
+    ],
+    "inside": [
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "tilde": {
+    "matches": [
+      0,
+      8
+    ],
+    "ranges": [
+      [
+        0,
+        8
+      ]
+    ],
+    "offsets": [
+      0,
+      4,
+      8
+    ],
+    "inside": [
+      true,
+      true,
+      false
+    ]
+  },
+  "mixed": {
+    "matches": [
+      0,
+      8,
+      16,
+      20
+    ],
+    "ranges": [
+      [
+        0,
+        8
+      ],
+      [
+        16,
+        20
+      ]
+    ],
+    "offsets": [
+      0,
+      4,
+      8,
+      12,
+      16,
+      20
+    ],
+    "inside": [
+      true,
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "four-backtick": {
+    "matches": [
+      0,
+      7,
+      16,
+      20
+    ],
+    "ranges": [
+      [
+        0,
+        7
+      ],
+      [
+        16,
+        20
+      ]
+    ],
+    "offsets": [
+      0,
+      7,
+      11,
+      16,
+      20
+    ],
+    "inside": [
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "indent3": {
+    "matches": [
+      0,
+      11
+    ],
+    "ranges": [
+      [
+        0,
+        11
+      ]
+    ],
+    "offsets": [
+      0,
+      7,
+      11
+    ],
+    "inside": [
+      true,
+      true,
+      false
+    ]
+  },
+  "indent4": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      8,
+      12
+    ],
+    "inside": [
+      false,
+      false,
+      false
+    ]
+  },
+  "info-string": {
+    "matches": [
+      0,
+      22
+    ],
+    "ranges": [
+      [
+        0,
+        22
+      ]
+    ],
+    "offsets": [
+      0,
+      18,
+      22
+    ],
+    "inside": [
+      true,
+      true,
+      false
+    ]
+  },
+  "unclosed": {
+    "matches": [
+      4
+    ],
+    "ranges": [],
+    "offsets": [
+      0,
+      4,
+      8
+    ],
+    "inside": [
+      false,
+      false,
+      false
+    ]
+  },
+  "odd": {
+    "matches": [
+      0,
+      6,
+      12
+    ],
+    "ranges": [
+      [
+        0,
+        6
+      ]
+    ],
+    "offsets": [
+      0,
+      4,
+      6,
+      10,
+      12,
+      16
+    ],
+    "inside": [
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "eof-fence": {
+    "matches": [
+      2
+    ],
+    "ranges": [],
+    "offsets": [
+      0,
+      2
+    ],
+    "inside": [
+      false,
+      false
+    ]
+  },
+  "crlf-raw": {
+    "matches": [
+      3,
+      13
+    ],
+    "ranges": [
+      [
+        3,
+        13
+      ]
+    ],
+    "offsets": [
+      0,
+      3,
+      8,
+      13
+    ],
+    "inside": [
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "cr-only": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      2,
+      6,
+      10
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "unicode-breaks": {
+    "matches": [
+      30,
+      36
+    ],
+    "ranges": [
+      [
+        30,
+        36
+      ]
+    ],
+    "offsets": [
+      0,
+      2,
+      6,
+      8,
+      12,
+      14,
+      18,
+      20,
+      24,
+      26,
+      30,
+      34,
+      36
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "fs-gs": {
+    "matches": [
+      12,
+      18
+    ],
+    "ranges": [
+      [
+        12,
+        18
+      ]
+    ],
+    "offsets": [
+      0,
+      2,
+      6,
+      8,
+      12,
+      16,
+      18
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "list": {
+    "matches": [
+      6,
+      22
+    ],
+    "ranges": [
+      [
+        6,
+        22
+      ]
+    ],
+    "offsets": [
+      0,
+      6,
+      16,
+      22,
+      28
+    ],
+    "inside": [
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "korean": {
+    "matches": [
+      5,
+      17
+    ],
+    "ranges": [
+      [
+        5,
+        17
+      ]
+    ],
+    "offsets": [
+      0,
+      5,
+      9,
+      17,
+      21
+    ],
+    "inside": [
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "file clean.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      6,
+      7,
+      21,
+      25,
+      26,
+      39,
+      40,
+      63,
+      81,
+      94,
+      108,
+      159,
+      160,
+      190,
+      191,
+      213,
+      232,
+      253,
+      267,
+      308,
+      309,
+      322
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file crlf.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      7,
+      9,
+      24,
+      29,
+      31,
+      45,
+      47,
+      71,
+      90,
+      104,
+      119,
+      171,
+      173,
+      204,
+      206,
+      229,
+      249,
+      271,
+      286,
+      328,
+      330,
+      344
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file bom.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      7,
+      8,
+      22,
+      26,
+      27,
+      40,
+      41,
+      64,
+      82,
+      95,
+      109,
+      160,
+      161,
+      191,
+      192,
+      214,
+      233,
+      254,
+      268,
+      309,
+      310,
+      323
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file bom-crlf.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      8,
+      10,
+      25,
+      30,
+      32,
+      46,
+      48,
+      72,
+      91,
+      105,
+      120,
+      172,
+      174,
+      205,
+      207,
+      230,
+      250,
+      272,
+      287,
+      329,
+      331,
+      345
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file problem.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      6,
+      7,
+      21,
+      22,
+      45,
+      63,
+      84,
+      98,
+      99,
+      132,
+      133,
+      155,
+      180,
+      193,
+      207
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file four.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      6,
+      7,
+      21,
+      35,
+      36,
+      57,
+      58,
+      76,
+      77,
+      101,
+      119,
+      132,
+      146,
+      177,
+      178,
+      193,
+      209,
+      221,
+      222,
+      244,
+      262,
+      286,
+      300,
+      326,
+      327,
+      340,
+      354,
+      355,
+      374,
+      375,
+      402,
+      420,
+      444,
+      458
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file fenced.md": {
+    "matches": [
+      117,
+      170
+    ],
+    "ranges": [
+      [
+        117,
+        170
+      ]
+    ],
+    "offsets": [
+      0,
+      6,
+      7,
+      20,
+      21,
+      44,
+      62,
+      75,
+      89,
+      90,
+      116,
+      117,
+      125,
+      156,
+      170,
+      174,
+      175,
+      206,
+      207,
+      230,
+      248,
+      261,
+      275
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file phantom.md": {
+    "matches": [
+      148,
+      203
+    ],
+    "ranges": [
+      [
+        148,
+        203
+      ]
+    ],
+    "offsets": [
+      0,
+      6,
+      7,
+      21,
+      22,
+      46,
+      61,
+      74,
+      88,
+      114,
+      115,
+      147,
+      148,
+      160,
+      203,
+      207,
+      208,
+      231,
+      246,
+      259,
+      273
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file indented.md": {
+    "matches": [
+      121,
+      174
+    ],
+    "ranges": [
+      [
+        121,
+        174
+      ]
+    ],
+    "offsets": [
+      0,
+      6,
+      7,
+      20,
+      21,
+      44,
+      62,
+      75,
+      89,
+      90,
+      114,
+      115,
+      121,
+      131,
+      158,
+      174,
+      180,
+      181,
+      212,
+      213,
+      236,
+      254,
+      267,
+      281
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file unclosed.md": {
+    "matches": [
+      146
+    ],
+    "ranges": [],
+    "offsets": [
+      0,
+      6,
+      7,
+      20,
+      21,
+      44,
+      62,
+      75,
+      89,
+      120,
+      121,
+      145,
+      146,
+      154,
+      179,
+      180,
+      203,
+      221,
+      234,
+      248
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file mispaired.md": {
+    "matches": [
+      109,
+      309,
+      325
+    ],
+    "ranges": [
+      [
+        109,
+        309
+      ]
+    ],
+    "offsets": [
+      0,
+      6,
+      7,
+      19,
+      20,
+      37,
+      55,
+      68,
+      82,
+      108,
+      109,
+      117,
+      130,
+      131,
+      148,
+      166,
+      179,
+      193,
+      219,
+      220,
+      237,
+      255,
+      268,
+      282,
+      308,
+      309,
+      317,
+      325
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "file mispaired-noacc.md": {
+    "matches": [
+      83,
+      283,
+      299
+    ],
+    "ranges": [
+      [
+        83,
+        283
+      ]
+    ],
+    "offsets": [
+      0,
+      6,
+      7,
+      19,
+      20,
+      37,
+      55,
+      68,
+      82,
+      83,
+      91,
+      104,
+      105,
+      122,
+      140,
+      153,
+      167,
+      193,
+      194,
+      211,
+      229,
+      242,
+      256,
+      282,
+      283,
+      291,
+      299
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "file empty.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [],
+    "inside": []
+  },
+  "file blank.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      1,
+      2
+    ],
+    "inside": [
+      false,
+      false,
+      false
+    ]
+  },
+  "file no-task.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      12,
+      13
+    ],
+    "inside": [
+      false,
+      false,
+      false
+    ]
+  },
+  "file headings.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      6,
+      7,
+      20,
+      21,
+      25,
+      46,
+      64,
+      87,
+      88,
+      119,
+      137,
+      160,
+      161,
+      184,
+      202,
+      225,
+      226,
+      262,
+      287,
+      308,
+      332,
+      355,
+      379,
+      383,
+      415,
+      437,
+      475,
+      499,
+      522,
+      537,
+      555,
+      579,
+      601,
+      606
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file meta.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      6,
+      7,
+      28,
+      38,
+      59,
+      73,
+      102,
+      119,
+      143,
+      145,
+      162,
+      195,
+      212,
+      253,
+      283,
+      284,
+      308,
+      326,
+      360,
+      377,
+      378,
+      403,
+      419,
+      436,
+      437,
+      464,
+      479,
+      496,
+      497,
+      523,
+      536
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file lineno.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      31,
+      48,
+      49,
+      50,
+      67
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file cap.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      18,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file tilde.md": {
+    "matches": [
+      43,
+      70
+    ],
+    "ranges": [
+      [
+        43,
+        70
+      ]
+    ],
+    "offsets": [
+      0,
+      6,
+      7,
+      25,
+      42,
+      43,
+      47,
+      52,
+      70,
+      74,
+      75,
+      93
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file four-backtick.md": {
+    "matches": [
+      43,
+      71
+    ],
+    "ranges": [
+      [
+        43,
+        71
+      ]
+    ],
+    "offsets": [
+      0,
+      6,
+      7,
+      25,
+      42,
+      43,
+      48,
+      53,
+      71,
+      76,
+      77,
+      95
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file indent3.md": {
+    "matches": [
+      43,
+      73
+    ],
+    "ranges": [
+      [
+        43,
+        73
+      ]
+    ],
+    "offsets": [
+      0,
+      6,
+      7,
+      25,
+      42,
+      43,
+      50,
+      55,
+      73,
+      80,
+      81,
+      99
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file indent4.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      6,
+      7,
+      25,
+      42,
+      43,
+      51,
+      56,
+      74,
+      82,
+      83,
+      101
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "file no-trailing-newline.md": {
+    "matches": [],
+    "ranges": [],
+    "offsets": [
+      0,
+      6,
+      7,
+      21,
+      25,
+      26,
+      39,
+      40,
+      63,
+      81,
+      94,
+      108,
+      159,
+      160,
+      190,
+      191,
+      213,
+      232,
+      253,
+      267,
+      308,
+      309,
+      322
+    ],
+    "inside": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  }
+}

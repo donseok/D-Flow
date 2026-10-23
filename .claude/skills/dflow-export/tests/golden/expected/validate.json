@@ -1,0 +1,417 @@
+{
+  "file clean.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"clean.md\"\n}\n",
+    "stderr": ""
+  },
+  "file crlf.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"crlf.md\"\n}\n",
+    "stderr": ""
+  },
+  "file bom.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"bom.md\"\n}\n",
+    "stderr": ""
+  },
+  "file bom-crlf.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"bom-crlf.md\"\n}\n",
+    "stderr": ""
+  },
+  "file problem.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"total\": 3,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "file four.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 3\n  },\n  \"issues\": [],\n  \"target\": \"four.md\"\n}\n",
+    "stderr": ""
+  },
+  "file fenced.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"vague_action\": 3,\n    \"total\": 3,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"배포\",\n      \"context\": \"### TSK-01-01: 배포 스크립트\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"배포\",\n      \"context\": \"# 배포 스크립트 예시 — 헤딩이 아니라 코드 주석이다\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"deploy\",\n      \"context\": \"echo \\\"deploy\\\"\"\n    }\n  ],\n  \"target\": \"fenced.md\"\n}\n",
+    "stderr": ""
+  },
+  "file phantom.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"total\": 1,\n    \"task_count\": 3\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-99-99-99\",\n      \"line\": 14,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"phantom.md\"\n}\n",
+    "stderr": ""
+  },
+  "file indented.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"vague_action\": 2,\n    \"total\": 2,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"배포\",\n      \"context\": \"### TSK-01-01: 배포 스크립트\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"deploy\",\n      \"context\": \"echo \\\"deploy\\\"\"\n    }\n  ],\n  \"target\": \"indented.md\"\n}\n",
+    "stderr": ""
+  },
+  "file unclosed.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"vague_action\": 1,\n    \"total\": 1,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"배포\",\n      \"context\": \"### TSK-01-01: 배포 스크립트\"\n    }\n  ],\n  \"target\": \"unclosed.md\"\n}\n",
+    "stderr": ""
+  },
+  "file mispaired.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 3\n  },\n  \"issues\": [],\n  \"target\": \"mispaired.md\"\n}\n",
+    "stderr": ""
+  },
+  "file mispaired-noacc.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"total\": 1,\n    \"task_count\": 3\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"mispaired-noacc.md\"\n}\n",
+    "stderr": ""
+  },
+  "file empty.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 0\n  },\n  \"issues\": [],\n  \"target\": \"empty.md\"\n}\n",
+    "stderr": ""
+  },
+  "file blank.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 0\n  },\n  \"issues\": [],\n  \"target\": \"blank.md\"\n}\n",
+    "stderr": ""
+  },
+  "file no-task.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 0\n  },\n  \"issues\": [],\n  \"target\": \"no-task.md\"\n}\n",
+    "stderr": ""
+  },
+  "file vague.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"depends_unknown\": 2,\n    \"vague_action\": 5,\n    \"missing_acceptance\": 2,\n    \"total\": 9,\n    \"task_count\": 6\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-09-09' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'none' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"### TSK-01-01: 구현 시험\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"본문: 로그인 기능을 구현한다.\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"본문: 응답 99% 이하 구현\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 29,\n      \"type\": \"vague_action\",\n      \"verb\": \"정리\",\n      \"context\": \"### TSK-01-02: 정리\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 29,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"본문: 구현\"\n    },\n    {\n      \"task\": \"TSK-01-04\",\n      \"line\": 44,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-05\",\n      \"line\": 53,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"vague.md\"\n}\n",
+    "stderr": ""
+  },
+  "file headings.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 5,\n    \"total\": 5,\n    \"task_count\": 10\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-07\",\n      \"line\": 22,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-08\",\n      \"line\": 23,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-09\",\n      \"line\": 24,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-10\",\n      \"line\": 25,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-13\",\n      \"line\": 32,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"headings.md\"\n}\n",
+    "stderr": ""
+  },
+  "file meta.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"depends_unknown\": 1,\n    \"total\": 1,\n    \"task_count\": 5\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 3,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-01-06;TSK-01-07' which is not in WBS\"\n    }\n  ],\n  \"target\": \"meta.md\"\n}\n",
+    "stderr": ""
+  },
+  "file lineno.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"lineno.md\"\n}\n",
+    "stderr": ""
+  },
+  "file cap.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"vague_action\": 3,\n    \"total\": 3,\n    \"task_count\": 1\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 1,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"구현 1\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 1,\n      \"type\": \"vague_action\",\n      \"verb\": \"배포\",\n      \"context\": \"배포 2\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 1,\n      \"type\": \"vague_action\",\n      \"verb\": \"검증\",\n      \"context\": \"검증 3\"\n    }\n  ],\n  \"target\": \"cap.md\"\n}\n",
+    "stderr": ""
+  },
+  "file tilde.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"total\": 1,\n    \"task_count\": 3\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 8,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"tilde.md\"\n}\n",
+    "stderr": ""
+  },
+  "file four-backtick.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"total\": 1,\n    \"task_count\": 3\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 8,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"four-backtick.md\"\n}\n",
+    "stderr": ""
+  },
+  "file indent3.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"total\": 1,\n    \"task_count\": 3\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 8,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"indent3.md\"\n}\n",
+    "stderr": ""
+  },
+  "file indent4.md": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"total\": 1,\n    \"task_count\": 3\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 8,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"indent4.md\"\n}\n",
+    "stderr": ""
+  },
+  "file no-trailing-newline.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"no-trailing-newline.md\"\n}\n",
+    "stderr": ""
+  },
+  "file problem.md + dev-config": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"test_unmapped\": 1,\n    \"total\": 4,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 12,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'unknown_domain' not in dev-config.domains\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "file meta.md + dev-config": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"depends_unknown\": 1,\n    \"test_unmapped\": 2,\n    \"total\": 3,\n    \"task_count\": 5\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 3,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-01-06;TSK-01-07' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 3,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain '줄바꿈이 낀 키' not in dev-config.domains\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 16,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'Backend' not in dev-config.domains\"\n    }\n  ],\n  \"target\": \"meta.md\"\n}\n",
+    "stderr": ""
+  },
+  "file vague.md + dev-config": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"depends_unknown\": 2,\n    \"vague_action\": 5,\n    \"missing_acceptance\": 2,\n    \"total\": 9,\n    \"task_count\": 6\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-09-09' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'none' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"### TSK-01-01: 구현 시험\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"본문: 로그인 기능을 구현한다.\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"본문: 응답 99% 이하 구현\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 29,\n      \"type\": \"vague_action\",\n      \"verb\": \"정리\",\n      \"context\": \"### TSK-01-02: 정리\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 29,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"본문: 구현\"\n    },\n    {\n      \"task\": \"TSK-01-04\",\n      \"line\": 44,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-05\",\n      \"line\": 53,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"vague.md\"\n}\n",
+    "stderr": ""
+  },
+  "file headings.md + dev-config": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 5,\n    \"total\": 5,\n    \"task_count\": 10\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-07\",\n      \"line\": 22,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-08\",\n      \"line\": 23,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-09\",\n      \"line\": 24,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-10\",\n      \"line\": 25,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-13\",\n      \"line\": 32,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    }\n  ],\n  \"target\": \"headings.md\"\n}\n",
+    "stderr": ""
+  },
+  "file clean.md + dev-config": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"clean.md\"\n}\n",
+    "stderr": ""
+  },
+  "--wbs=값 형태": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"clean.md\"\n}\n",
+    "stderr": ""
+  },
+  "옵션 순서 바꿈": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"test_unmapped\": 1,\n    \"total\": 4,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 12,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'unknown_domain' not in dev-config.domains\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "경로 ./sub//wbs.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"sub/wbs.md\"\n}\n",
+    "stderr": ""
+  },
+  "경로 sub/wbs.md": {
+    "status": 0,
+    "stdout": "{\n  \"ok\": true,\n  \"summary\": {\n    \"total\": 0,\n    \"task_count\": 2\n  },\n  \"issues\": [],\n  \"target\": \"sub/wbs.md\"\n}\n",
+    "stderr": ""
+  },
+  "한글 경로": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"total\": 3,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    }\n  ],\n  \"target\": \"한글/wbs.md\"\n}\n",
+    "stderr": ""
+  },
+  "한글 경로 dev-config": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"test_unmapped\": 1,\n    \"total\": 4,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 12,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'unknown_domain' not in dev-config.domains\"\n    }\n  ],\n  \"target\": \"한글/wbs.md\"\n}\n",
+    "stderr": ""
+  },
+  "없는 파일": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"wbs not found: nope.md\"}\n"
+  },
+  "없는 한글 파일(ensure_ascii)": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"wbs not found: \\uc5c6\\uc74c/\\uc5c6\\uc74c.md\"}\n"
+  },
+  "없는 파일 ./x//y": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"wbs not found: x/y.md\"}\n"
+  },
+  "폴더를 wbs 로": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"wbs not found: sub\"}\n"
+  },
+  "빈 경로": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"wbs not found: .\"}\n"
+  },
+  "dev-config 잘못된 JSON": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)\"}\n"
+  },
+  "dev-config 빈 문자열(없는 것으로 취급)": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"total\": 3,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "dev-config 오류문구 0: \"{\\\"a\\\":1,}\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting property name enclosed in double quotes: line 1 column 8 (char 7)\"}\n"
+  },
+  "dev-config 오류문구 1: \"[1 2]\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting ',' delimiter: line 1 column 4 (char 3)\"}\n"
+  },
+  "dev-config 오류문구 2: \"\\\"abc\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Unterminated string starting at: line 1 column 1 (char 0)\"}\n"
+  },
+  "dev-config 오류문구 3: \"{'a':1}\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)\"}\n"
+  },
+  "dev-config 오류문구 4: \"{\\\"a\\\" 1}\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting ':' delimiter: line 1 column 6 (char 5)\"}\n"
+  },
+  "dev-config 오류문구 5: \"{\\\"a\\\":}\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting value: line 1 column 6 (char 5)\"}\n"
+  },
+  "dev-config 오류문구 6: \"[1,]\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting value: line 1 column 4 (char 3)\"}\n"
+  },
+  "dev-config 오류문구 7: \"{\\\"a\\\":1} x\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Extra data: line 1 column 9 (char 8)\"}\n"
+  },
+  "dev-config 오류문구 8: \"nul\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting value: line 1 column 1 (char 0)\"}\n"
+  },
+  "dev-config 오류문구 9: \"[\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting value: line 1 column 2 (char 1)\"}\n"
+  },
+  "dev-config 오류문구 10: \"{\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)\"}\n"
+  },
+  "dev-config 오류문구 11: \"-\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting value: line 1 column 1 (char 0)\"}\n"
+  },
+  "dev-config 오류문구 12: \"01\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Extra data: line 1 column 2 (char 1)\"}\n"
+  },
+  "dev-config 오류문구 13: \"{\\\"a\\\":\\\"\\\\x\\\"}\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Invalid \\\\escape: line 1 column 7 (char 6)\"}\n"
+  },
+  "dev-config 오류문구 14: \"{\\\"a\\\":\\\"\\\\u12\\\"}\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Invalid \\\\uXXXX escape: line 1 column 8 (char 7)\"}\n"
+  },
+  "dev-config 오류문구 15: \"{\\\"a\\\":\\\"\\n\\\"}\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Invalid control character at: line 1 column 7 (char 6)\"}\n"
+  },
+  "dev-config 오류문구 16: \"\\n\\n{bad\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting property name enclosed in double quotes: line 3 column 2 (char 3)\"}\n"
+  },
+  "dev-config 오류문구 17: \"{\\\"한글\\\": }\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting value: line 1 column 8 (char 7)\"}\n"
+  },
+  "dev-config 오류문구 18: \"😀\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting value: line 1 column 1 (char 0)\"}\n"
+  },
+  "dev-config 오류문구 19: \"[1,\\n2,\\n  x]\"": {
+    "status": 2,
+    "stdout": "",
+    "stderr": "{\"ok\": false, \"error\": \"--dev-config-json parse error: Expecting value: line 3 column 3 (char 9)\"}\n"
+  },
+  "dev-config domains 목록": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"test_unmapped\": 1,\n    \"total\": 4,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 12,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'unknown_domain' not in dev-config.domains\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "dev-config domains 문자열(부분 문자열 포함)": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"test_unmapped\": 1,\n    \"total\": 4,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 12,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'unknown_domain' not in dev-config.domains\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "dev-config {} (모두 미매핑)": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"test_unmapped\": 2,\n    \"vague_action\": 1,\n    \"total\": 5,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'backend' not in dev-config.domains\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 12,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'unknown_domain' not in dev-config.domains\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "dev-config null (없는 것으로 취급)": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"total\": 3,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "dev-config NaN 값": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"test_unmapped\": 1,\n    \"total\": 4,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 12,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'unknown_domain' not in dev-config.domains\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "dev-config 큰 중첩": {
+    "status": 1,
+    "stdout": "{\n  \"ok\": false,\n  \"summary\": {\n    \"missing_acceptance\": 1,\n    \"depends_unknown\": 1,\n    \"vague_action\": 1,\n    \"test_unmapped\": 1,\n    \"total\": 4,\n    \"task_count\": 2\n  },\n  \"issues\": [\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"missing_acceptance\",\n      \"detail\": \"no 'acceptance' field or '수락 기준/Acceptance' subsection\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"depends_unknown\",\n      \"detail\": \"depends references 'TSK-99-99' which is not in WBS\"\n    },\n    {\n      \"task\": \"TSK-01-01\",\n      \"line\": 5,\n      \"type\": \"vague_action\",\n      \"verb\": \"구현\",\n      \"context\": \"설명만 있고 acceptance 없음. API 구현 진행.\"\n    },\n    {\n      \"task\": \"TSK-01-02\",\n      \"line\": 12,\n      \"type\": \"test_unmapped\",\n      \"detail\": \"domain 'unknown_domain' not in dev-config.domains\"\n    }\n  ],\n  \"target\": \"problem.md\"\n}\n",
+    "stderr": ""
+  },
+  "dev-config 배열(python traceback)": {
+    "status": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "dev-config 문자열(python traceback)": {
+    "status": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "dev-config 숫자(python traceback)": {
+    "status": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "dev-config domains null(python traceback)": {
+    "status": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "dev-config domains 숫자(python traceback)": {
+    "status": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "dev-config 배열이어도 default 도메인만이면 통과": {
+    "status": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "인자 없음": {
+    "status": 2,
+    "stdout": "",
+    "stderr": ""
+  },
+  "알 수 없는 명령": {
+    "status": 2,
+    "stdout": "",
+    "stderr": ""
+  },
+  "--wbs 누락": {
+    "status": 2,
+    "stdout": "",
+    "stderr": ""
+  },
+  "--wbs 값 없음": {
+    "status": 2,
+    "stdout": "",
+    "stderr": ""
+  },
+  "알 수 없는 옵션": {
+    "status": 2,
+    "stdout": "",
+    "stderr": ""
+  },
+  "남는 위치 인자": {
+    "status": 2,
+    "stdout": "",
+    "stderr": ""
+  },
+  "--help": {
+    "status": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "validate --help": {
+    "status": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+}

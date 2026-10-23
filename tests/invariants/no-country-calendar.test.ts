@@ -24,7 +24,9 @@ function scanned(): { path: string; text: string }[] {
     ...walk(join(ROOT, 'src'), undefined, /\.(ts|tsx|mjs|js)$/),
     ...walk(join(ROOT, 'scripts'), undefined, /\.(ts|mjs|js|cjs)$/),
   ].map((p) => ({ path: relative(ROOT, p), text: readFileSync(p, 'utf8') }))
-  const skills = walk(join(ROOT, '.claude/skills'), new Set(['__pycache__', '.pytest_cache', 'node_modules']), /\.(md|py|mjs|js|ts)$/)
+  // 스킬의 tests/ 는 날짜 경계 고정 자료(연말 넘김·윤일·최소 날짜 같은 next_business_day·schedule 검사 입력)라 달력 상수가 아니다 —
+  // 2026-12-31→2027-01-01 같은 경계값이 고정 공휴일 월·일과 겹쳐 오탐이 된다. 스킬 스크립트·문서는 그대로 본다.
+  const skills = walk(join(ROOT, '.claude/skills'), new Set(['__pycache__', '.pytest_cache', 'node_modules', 'tests']), /\.(md|py|mjs|js|ts)$/)
     .map((p) => {
       const raw = readFileSync(p, 'utf8')
       // 스킬 문서의 예시 코드 블록은 뺀다 — 줄 수는 유지(줄 번호가 원문과 맞게)
