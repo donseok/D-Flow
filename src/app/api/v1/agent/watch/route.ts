@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isUuidLike } from '@/lib/domain/agentWork'
+import { HOLDER_RE } from '@/lib/agent/leadLease'
 import { WATCHER_TTL_MS } from '@/lib/domain/seatState'
 import {
   agentActorFromPrincipal, patProjectAllowed, apiBadRequest, apiFail, apiInternalError, apiNotFound, requireScope, resolveAgentPrincipal, type AgentPrincipal,
@@ -34,14 +35,24 @@ export interface ResumeRequest {
  * 조회에 실패하면 빈 배열로 위장하지 않고 null 을 돌려준다 — 호출자는 "요청 없음"과 구별해야 한다.
  */
 async function loadResumeRequests(
-  admin: ReturnType<typeof createAdminClient>, userId: string, projectId: string | null, principal: AgentPrincipal, allowedProjectIds: ReadonlySet<string>,
+  admin: ReturnType<typeof createAdminClient>, userId: string, projectId: string | null, principal: AgentPrincipal, allowedProjectIds: ReadonlySet<string>, holder: string | null,
 ): Promise<ResumeRequest[] | null> {
+  // holder 가 쥔 유효 lease 로 먼저 좁혀 다른 프로젝트의 요청이 limit 을 채우지 않게 한다.
+  let leased: Set<string> | null = null
+  if (holder !== null) {
+    const { data, error } = await admin.from('agent_lead_leases').select('project_id')
+      .eq('user_id', userId).eq('holder', holder).gt('expires_at', new Date().toISOString())
+    if (error) { console.error('[agent-api] lease 조회 실패:', error.message); return null }
+    leased = new Set(((data ?? []) as Array<{ project_id: string }>).map(r => r.project_id))
+    if (leased.size === 0) return []
+  }
   let q = admin
     .from('agent_work_orders')
     .select('id, project_id, wbs_item_id, claimed_by, resume_requested_at, resume_requested_host, projects!inner(workspace_id)')
     .eq('claimed_by_user_id', userId).eq('status', 'claimed')
     .not('resume_requested_at', 'is', null)
   if (projectId !== null) q = q.eq('project_id', projectId)
+  if (leased !== null) q = q.in('project_id', [...leased])
   q = q.eq('projects.workspace_id', principal.credential.workspaceId)
   if (principal.credential.projectIds !== null) q = q.in('project_id', [...principal.credential.projectIds])
   const { data, error } = await q.order('resume_requested_at', { ascending: true }).limit(RESUME_MAX)
@@ -49,7 +60,7 @@ async function loadResumeRequests(
   const rows = ((data ?? []) as Array<{
     id: string; project_id: string; wbs_item_id: string | null; claimed_by: string | null
     resume_requested_at: string; resume_requested_host: string | null
-  }>).filter(r => allowedProjectIds.has(r.project_id))
+  }>).filter(r => allowedProjectIds.has(r.project_id) && (leased === null || leased.has(r.project_id)))
   if (rows.length === 0) return []
   // 팀장이 표로 보고할 때 TSK 코드가 있어야 사람이 어느 작업인지 안다 — 행이 소수라 한 번 더 읽는다.
   const itemIds = [...new Set(rows.map(r => r.wbs_item_id).filter((x): x is string => x !== null))]
@@ -91,6 +102,11 @@ export async function POST(req: NextRequest) {
   const bodyProject = b.project_id === undefined || b.project_id === null ? null : b.project_id
   if (bodyProject !== null && (typeof bodyProject !== 'string' || !isUuidLike(bodyProject))) {
     return apiBadRequest('project_id 형식이 올바르지 않습니다.')
+  }
+
+  const holder = b.holder === undefined || b.holder === null ? null : b.holder
+  if (holder !== null && (typeof holder !== 'string' || !HOLDER_RE.test(holder))) {
+    return apiBadRequest('holder 형식이 올바르지 않습니다.')
   }
 
   try {
@@ -153,7 +169,7 @@ export async function POST(req: NextRequest) {
     const { error: gcErr } = await admin
       .from('agent_watchers').delete().eq('workspace_id', principal.credential.workspaceId).lt('last_seen_at', new Date(now.getTime() - STALE_ROW_MS).toISOString())
     if (gcErr) console.error('[agent-api] watch 오래된 행 정리 실패:', gcErr.message)
-    const loaded = await loadResumeRequests(admin, principal.userId, projectId, principal, new Set([...actor.projectWorkspace.keys()].filter(pid => isProjectMember(actor, pid) && patProjectAllowed(principal, pid))))
+    const loaded = await loadResumeRequests(admin, principal.userId, projectId, principal, new Set([...actor.projectWorkspace.keys()].filter(pid => isProjectMember(actor, pid) && patProjectAllowed(principal, pid))), holder)
     const onIds = loaded === null ? null : new Set(await projectsWithModule(loaded.map((r) => r.project_id), 'agents', { client: admin, workspaceId: principal.credential.workspaceId }))
     const resume = loaded === null ? null : loaded.filter((r) => onIds!.has(r.project_id) && patProjectAllowed(principal, r.project_id) && isProjectMember(actor, r.project_id))   // 목록형 — 꺼진 프로젝트의 재개 요청은 싣지 않는다
     return NextResponse.json({

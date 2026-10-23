@@ -1,6 +1,16 @@
-# D-Flow Agent API 계약 v2.4
+# D-Flow Agent API 계약 v2.5
 
-`contract_version: "2.4"` — v1(전역 시크릿) 계약은 불변 유지, v2는 PAT 축 추가. v2.1은 stage 워크플로 재설계(0082) 반영, v2.2는 그 뒤 버전을 안 올린 채 넓혀온 세 필드를 뒤늦게 반영. v2.3은 단계 전이 원자화(0096)·실적 크레딧·선행 충족 세 축을 반영. v2.4는 `/me` 에 토큰 이름·prefix 를 더했다.
+`contract_version: "2.5"` — v1(전역 시크릿) 계약은 불변 유지, v2는 PAT 축 추가. v2.1은 stage 워크플로 재설계(0082) 반영, v2.2는 그 뒤 버전을 안 올린 채 넓혀온 세 필드를 뒤늦게 반영. v2.3은 단계 전이 원자화(0096)·실적 크레딧·선행 충족 세 축을 반영. v2.4는 `/me` 에 토큰 이름·prefix 를 더했다.
+
+## v2.5 변경점 (2026-10-23 — D-Flow 이식, 원본 wbs-web 2026-09-23)
+
+- `POST /api/v1/agent/lead/lease` 신설 — 신원+프로젝트당 `/dflow-team` 팀장 하나. 본문 `op`:
+  - `acquire` `{projects, holder, host, agent, takeover?}` → 200 `{ok, leases:[{project_id, generation, expires_at}]}` · 409 `lead_lease_held` + `held:[{project_id, host, agent, expires_at}]`
+  - `renew` `{holder, leases:[{project_id, generation}]}` → 200 `{ok, expires_at, lost:[project_id]}` — 멤버에서 빠졌거나 agents 가 꺼진 프로젝트는 `lost`
+  - `release` `{holder, leases}` → 200 `{ok, released}`
+  - `holder` = `<PC ID uuid>:<리포 경로 cksum>`. TTL 180초. PAT 전용, `work:claim`.
+  - D-Flow 차이: 자격증명 범위 밖·멤버 아님·agents 꺼짐은 404 다(원본은 403 `forbidden_role`).
+- `POST /api/v1/agent/watch` 에 선택 필드 `holder` — 주면 `resume_requests` 를 그 holder 로 쥔 유효 lease 의 프로젝트로 거른다. lease 조회 실패는 `resume_requests: null`.
 
 ## v2.4 변경점 (2026-09-18)
 
@@ -105,10 +115,10 @@ stage 워크플로 재설계(마이그레이션 0082)를 계약에 반영. **엔
 ```json
 { "ok": true, "user_email": "a@b.c", "token_name": "맥북 에어", "token_prefix": "OxMb1D1097Qz",
   "scopes": ["work:read"], "kind": "user_pat",
-  "token_expires_at": "2026-11-08T00:00:00Z", "contract_version": "2.4",
+  "token_expires_at": "2026-11-08T00:00:00Z", "contract_version": "2.5",
   "projects": [{ "id": "<uuid>", "name": "…", "role": "admin|member|superuser" }] }
 ```
-응답의 `contract_version`은 `src/lib/agent/externalApi.ts`의 `AGENT_CONTRACT_VERSION` 상수 값이다 — 현재 `"2.4"`. 스킬은 **major 만** 비교한다(`dflow.sh` 의 `CONTRACT_VERSION`): 서버가 minor 를 올리는 것은 additive 라 정상이고, 등호로 보면 상향 때마다 전 세션이 오경보를 본다.
+응답의 `contract_version`은 `src/lib/agent/externalApi.ts`의 `AGENT_CONTRACT_VERSION` 상수 값이다 — 현재 `"2.5"`. 스킬은 **major 만** 비교한다(`dflow.sh` 의 `CONTRACT_VERSION`): 서버가 minor 를 올리는 것은 additive 라 정상이고, 등호로 보면 상향 때마다 전 세션이 오경보를 본다.
 `projects`는 에이전트 모듈이 켜진 프로젝트(프로젝트 설정 › 모듈·메뉴의 에이전트) ∩ 토큰 범위(워크스페이스·프로젝트 한정) ∩ 내가 멤버인 프로젝트만. 켜고 끄는 입구는 그 설정 하나다 — 새 프로젝트는 켜진 채 만들어지고, 관리자가 끈 프로젝트는 은닉된다. 따로 등록하는 단계는 없다.
 
 `GET /agent/work/mine` 200:

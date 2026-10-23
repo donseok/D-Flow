@@ -86,7 +86,7 @@ export function agentRoleFromActor(actor: Actor, projectId: string): 'superuser'
   return r === 'viewer' ? null : r
 }
 
-export const AGENT_CONTRACT_VERSION = '2.4'
+export const AGENT_CONTRACT_VERSION = '2.5'
 
 /** 에이전트 API 의 신원은 integration_credentials(kind='agent_runner') 행 하나뿐이다(SP7 §5.1.4 — 레거시 시크릿 principal 삭제). */
 export type AgentPrincipal = {

@@ -377,6 +377,7 @@ export const ROUTE_GATES: Readonly<Record<string, GateEntry>> = {
   [`${R('track')}#POST`]: sess('usage', 'tests/actions/usage-track-gate.test.ts', '로그인 claims — 경로의 프로젝트, 없으면 본문 workspaceId(소속 확인), 둘 다 없으면 400(D26, 과제 34). 꺼지면 200 skipped(P19)'),
   [`${R('v1/agent/me')}#GET`]: agent(),
   [`${R('v1/agent/watch')}#POST`]: agent(),
+  [`${R('v1/agent/lead/lease')}#POST`]: agent(),
   [`${R('v1/agent/work/[id]/claim')}#POST`]: agent(),
   [`${R('v1/agent/work/[id]/heartbeat')}#POST`]: agent(),
   [`${R('v1/agent/work/[id]/release')}#POST`]: agent(),

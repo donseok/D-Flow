@@ -341,7 +341,14 @@ git push origin main
 
 - GitHub Actions(lint·test·build) 결과를 확인한다.
 - Vercel 배포가 끝나면 `SMOKE_URL=https://d-flow-eight.vercel.app npm run smoke:prod`.
-- 키 없이 `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://d-flow-eight.vercel.app/api/v1/agent/lead/lease` → **401**(예전 404).
+- 키 없이 **정상 acquire 본문을 보내** 401을 확인한다(예전 404). 본문을 생략하면 인증 전에 JSON 파싱에서 400이므로 라우트 인증 확인이 되지 않는다.
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' \
+    -X POST https://d-flow-eight.vercel.app/api/v1/agent/lead/lease \
+    -H 'Content-Type: application/json' \
+    -d '{"op":"acquire","projects":["11111111-1111-4111-8111-111111111111"],"holder":"11111111-1111-4111-8111-111111111111:12345","host":"smoke","agent":"smoke/lead"}'
+  # → 401
+  ```
 
 ## 4. 팀장 PC 에서 확인 (`oranda`)
 

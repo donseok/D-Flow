@@ -120,19 +120,19 @@ describe('목록 — 꺼진 프로젝트의 행 생략', () => {
   })
 })
 
-/** 위임 확인(deny.routes.test.ts)이 이 파일에서 각 라우트의 import 경로 문자열을 찾는다 — 11개 */
+/** 위임 확인(deny.routes.test.ts)이 이 파일에서 각 라우트의 import 경로 문자열을 찾는다 — 12개 */
 const V1_ROUTES = [
   '@/app/api/v1/agent/work/route', '@/app/api/v1/agent/work/[id]/route', '@/app/api/v1/agent/work/[id]/claim/route',
   '@/app/api/v1/agent/work/[id]/heartbeat/route', '@/app/api/v1/agent/work/[id]/release/route', '@/app/api/v1/agent/work/[id]/report/route',
   '@/app/api/v1/wbs/import/route', '@/app/api/v1/wbs/structure/route', '@/app/api/v1/agent/me/route', '@/app/api/v1/agent/work/mine/route',
-  '@/app/api/v1/agent/watch/route',
+  '@/app/api/v1/agent/watch/route', '@/app/api/v1/agent/lead/lease/route',
 ] as const
 
 // 판정 호출의 자리(정적). 여덟 per-project 핸들러와 work/mine 은 HEAD 에서 이미 참이다 — 과제 18 의 변경은 requireAgentProject 안이라
 // 여기서는 자리가 옮겨지지 않게 고정만 한다(회귀 방지). me·watch 줄은 과제 18 이 더하는 호출이라 구현 전에 FAIL 이다.
 // 실행 확인은 세 라우트 테스트(wbs-structure 404·me-route 행 생략·watch-route 404)의 새 케이스가, 핸들러별 판정 호출은 deny.routes 의
-// AST(MODULE_ROUTE_GATES)가 맡는다. V1_ROUTES 의 경로 문자열 11개는 deny.routes 의 delegatedStatic 확인이 이 파일에서 찾는다
-describe('v1 에이전트 핸들러 11 — 관문의 자리', () => {
+// AST(MODULE_ROUTE_GATES)가 맡는다. V1_ROUTES 의 경로 문자열 12개는 deny.routes 의 delegatedStatic 확인이 이 파일에서 찾는다
+describe('v1 에이전트 핸들러 12 — 관문의 자리', () => {
   const file = (m: string) => `src/${m.slice(2)}.ts`
   it.each(V1_ROUTES.slice(0, 8))('%s — requireAgentProject 또는 loadGatedOrderForUser 를 지난다(모듈 꺼짐 → 404)', (m) => {
     expect(readFileSync(file(m), 'utf8')).toMatch(/requireAgentProject\(|loadGatedOrderForUser\(/)
@@ -141,6 +141,7 @@ describe('v1 에이전트 핸들러 11 — 관문의 자리', () => {
     expect(readFileSync(file(V1_ROUTES[8]), 'utf8')).toMatch(/projectsWithModule\(/)
     expect(readFileSync(file(V1_ROUTES[9]), 'utf8')).toMatch(/accessibleProjectIds\(/)
     expect(readFileSync(file(V1_ROUTES[10]), 'utf8')).toMatch(/requireModule\(/)
+    expect(readFileSync(file(V1_ROUTES[11]), 'utf8')).toMatch(/projectsWithModule\(/)
   })
 })
 

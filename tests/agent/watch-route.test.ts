@@ -42,7 +42,7 @@ function useAdmin(queues: Record<string, Resp[]>, calls: Record<string, unknown[
       b.upsert = (payload: unknown, opts: unknown) => { (calls[`${table}:upsert`] ??= []).push([payload, opts]); return b }
       b.delete = () => { (calls[`${table}:delete`] ??= []).push(true); return b }
       b.update = () => b
-      for (const k of ['eq', 'lt', 'in', 'limit', 'order', 'not']) b[k] = () => b
+      for (const k of ['eq', 'lt', 'gt', 'in', 'limit', 'order', 'not']) b[k] = (...args: unknown[]) => { (calls[`${table}:${k}`] ??= []).push(args); return b }
       b.maybeSingle = async () => ({ data: resp.data ?? null, error: resp.error ?? null })
       b.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: resp.data ?? null, error: resp.error ?? null }).then(r)
       return b
@@ -304,5 +304,67 @@ describe('POST /agent/watch — 감시 프로젝트는 PAT 소유자가 볼 수 
     vi.mocked(requireModule).mockImplementation(async (s) => 'workspaceId' in s ? { ok: false, error: ERR_MODULE_DISABLED } : { ok: true })
     useAdmin(runnerQueues(), calls)
     expect((await post({ agent: 'hong/mbp/lead' })).status).toBe(404)
+  })
+})
+
+
+describe('POST /agent/watch — holder (계약 2.5)', () => {
+  const H = '0123abcd-0000-4000-8000-00000000abcd:12345'
+  const order = (project_id: string) => ({
+    id: project_id, project_id, wbs_item_id: null, claimed_by: 'a',
+    resume_requested_at: '2026-10-23T00:00:00Z', resume_requested_host: 'mbp',
+  })
+  it.each(['bad', 123, ''])('holder 형식 오류 %j → 400, DB 없음', async holder => {
+    expect((await post({ agent: 'a', holder })).status).toBe(400)
+    expect(mocks.createAdminClient).not.toHaveBeenCalled()
+  })
+  it.each([undefined, null])('holder %j → 기존 응답, lease 조회 없음', async holder => {
+    const admin = useAdmin({ ...runnerQueues(), agent_work_orders: [{ data: [order(P1)] }] })
+    const body = await (await post({ agent: 'a', holder })).json()
+    expect(body.resume_requests).toHaveLength(1)
+    expect(body.resume_requests_error).toBeUndefined()
+    expect(admin.from).not.toHaveBeenCalledWith('agent_lead_leases')
+  })
+  it('유효 lease 가 없으면 주문 조회 없이 빈 배열', async () => {
+    const calls: Record<string, unknown[]> = {}
+    const admin = useAdmin({ ...runnerQueues(), agent_lead_leases: [{ data: [] }] }, calls)
+    const body = await (await post({ agent: 'a', holder: H })).json()
+    expect(body.resume_requests).toEqual([])
+    expect(admin.from).not.toHaveBeenCalledWith('agent_work_orders')
+    expect(calls['agent_lead_leases:eq']).toEqual([['user_id', U], ['holder', H]])
+    const expires = calls['agent_lead_leases:gt'][0] as [string, string]
+    expect(expires[0]).toBe('expires_at')
+    expect(Number.isFinite(Date.parse(expires[1]))).toBe(true)
+  })
+  it('lease 프로젝트로 DB 를 먼저 좁히고, 결과에도 같은 집합을 다시 적용한다', async () => {
+    mocks.buildActor.mockResolvedValue(makeMemberActor(P1, [], {
+      userId: U, projectWorkspace: new Map([[P1, WS], [P2, WS]]),
+      projectRoles: new Map<string, ProjectRole>([[P1, 'member'], [P2, 'member']]),
+    }))
+    const calls: Record<string, unknown[]> = {}
+    useAdmin({ ...runnerQueues(), agent_lead_leases: [{ data: [{ project_id: P2 }] }],
+      agent_work_orders: [{ data: [order(P1), order(P2)] }],
+    }, calls)
+    const body = await (await post({ agent: 'a', holder: H })).json()
+    expect(body.resume_requests.map((r: { project_id: string }) => r.project_id)).toEqual([P2])
+    expect(calls['agent_work_orders:in']).toContainEqual(['project_id', [P2]])
+    expect(calls['agent_work_orders:limit']).toEqual([[50]])
+  })
+  it('lease 조회 실패 → null + resume_requests_error, 주문 조회 없음, 로그', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const admin = useAdmin({ ...runnerQueues(), agent_lead_leases: [{ error: { message: 'lease down' } }] })
+      const res = await post({ agent: 'a', holder: H })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ resume_requests: null, resume_requests_error: '재개 요청 조회에 실패했습니다.' })
+      expect(admin.from).not.toHaveBeenCalledWith('agent_work_orders')
+      expect(spy).toHaveBeenCalledWith('[agent-api] lease 조회 실패:', 'lease down')
+    } finally { spy.mockRestore() }
+  })
+  it('agents 관문 거부 때 lease 조회도 하지 않는다', async () => {
+    vi.mocked(requireModule).mockResolvedValue({ ok: false, error: ERR_MODULE_DISABLED })
+    const admin = useAdmin(runnerQueues())
+    expect((await post({ agent: 'a', holder: H })).status).toBe(404)
+    expect(admin.from).not.toHaveBeenCalledWith('agent_lead_leases')
   })
 })
