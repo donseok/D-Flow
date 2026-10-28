@@ -44,6 +44,10 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [rev, setRev] = useState(revision)
+  // 설정 페이지는 이 컴포넌트를 revision 으로 remount 하지 않는다(알림이 refresh 때 사라지지 않게). 대신 서버가 준 revision 이
+  // 바뀌면(다른 절의 저장·다른 사람의 변경·방금 명령의 반영) 여기서 CAS 기준을 따라간다 — 알림과 입력 중인 매핑 값은 그대로 둔다.
+  const [seenRevision, setSeenRevision] = useState(revision)
+  if (revision !== seenRevision) { setSeenRevision(revision); setRev(revision) }
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [unmapped, setUnmapped] = useState<{ kind: FormKind; templateId: string; tokens: string[] } | null>(null)

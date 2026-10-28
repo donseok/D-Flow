@@ -146,6 +146,36 @@ describe('FormTemplatesManager', () => {
     expect(m.refresh).toHaveBeenCalled()
   })
 
+  it('서버가 새 revision 을 내려줘도 알림은 남고, 다음 명령은 새 revision 으로 보낸다', async () => {
+    // 설정 페이지는 이 컴포넌트를 revision 으로 remount 하지 않는다 — 활성화 뒤 router.refresh() 가 새 revision 을 가져와도
+    // "등록하고 활성화했습니다 … 표를 연결했습니다" 알림이 남아야 한다. CAS 기준(rev)은 props 를 따라간다.
+    m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
+    m.upload.mockResolvedValue({ error: null })
+    m.register.mockResolvedValue(registered({
+      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주', next: '금주' }, removedRows: 0 },
+    }))
+    m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 8 })
+    await render()
+    await pickFile()
+    expect(container.querySelector('[role=status]')?.textContent).toContain('슬라이드 5')
+    // refresh 가 돌아온 모습: 같은 트리에 새 revision 과 새 목록이 내려온다
+    await render({ revision: 8, kinds: [kind([row({ id: TID, version: 3, active: true }), row({ id: 'dddddddd-4444-4444-8444-444444444444', version: 2 })])] })
+    expect(container.querySelector('[role=status]')?.textContent).toContain('슬라이드 5')
+    // 다른 사람이 revision 을 9 로 올린 뒤의 해제는 9 를 기준으로 보낸다
+    await render({ revision: 9, kinds: [kind([row({ id: TID, version: 3, active: true })])] })
+    m.deactivate.mockResolvedValue({ ok: true, status: 'applied', revision: 10 })
+    await click(button('해제'))
+    expect(m.deactivate.mock.calls[0][2].expectedRevision).toBe(9)
+  })
+
+  it('설정 페이지는 양식 관리 컴포넌트를 revision 으로 remount 하지 않는다', async () => {
+    const page = (await import('node:fs')).readFileSync('src/app/(app)/p/[projectId]/settings/page.tsx', 'utf8')
+    const line = page.split('\n').find((l) => l.includes('<FormTemplatesManager '))
+    expect(line).toBeDefined()
+    expect(line).toMatch(/key=\{projectId\}/)
+    expect(line).not.toMatch(/revision\}`/)
+  })
+
   it('등록 뒤 활성화가 미매핑으로 막히면 매핑 상자를 열고 등록은 됐다고 알린다', async () => {
     m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
     m.upload.mockResolvedValue({ error: null })

@@ -641,7 +641,9 @@ export default async function SettingsPage({ params }: { params: Promise<{ proje
         {isAdmin && pc.ok && formKinds && <div id="project-forms" className="scroll-mt-24 space-y-5">
           <SectionCard searchText="forms 양식 템플릿 보고서 pptx xlsx 업로드 매핑 자리표시자" title={t('pages.projSettings.formsTitle')} icon={Upload}>
             <p className="-mt-2 mb-4 text-xs leading-5 text-fg-secondary">{t('pages.projSettings.formsDesc')}</p>
-            <FormTemplatesManager key={`${projectId}-${revision}`} projectId={projectId} revision={revision} canEdit={canMutate} kinds={formKinds} />
+            {/* revision 을 key 에 넣지 않는다 — 넣으면 활성화·업로드 뒤 router.refresh() 가 새 revision 을 가져오는 순간 remount 돼
+                "등록하고 활성화했습니다 … 슬라이드 N 의 표를 연결했습니다" 알림이 사라진다. revision 동기화는 컴포넌트 안에서 한다. */}
+            <FormTemplatesManager key={projectId} projectId={projectId} revision={revision} canEdit={canMutate} kinds={formKinds} />
           </SectionCard>
         </div>}
 
