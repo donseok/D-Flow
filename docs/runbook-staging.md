@@ -73,7 +73,7 @@ npm run dev:bootstrap     # db:reset은 계정도 지운다 — 첫 슈퍼유저
 | Vercel | 팀 `leedonseoks-projects`(Hobby) · 프로젝트 `d-flow` · https://d-flow-eight.vercel.app · 리전 `icn1` |
 | 배포 | GitHub `donseok/D-Flow` 연결 — `main` push = 운영 배포, 그 밖의 브랜치 push = Preview 배포 |
 | Supabase | `dflow-prod` · ref `aivjcfoeshnhqdrfteyq` · 조직 `dflow-staging`(무료 플랜) · 서울 |
-| 스키마 | 기준선 + 0001~0059 (첫 배포 0058, 0059 `workspace_mail_settings` 2026-10-15) |
+| 스키마 | 기준선 + 0001~0061 (첫 배포 0058, 0059 `workspace_mail_settings` 2026-10-15, 0060 `weekly_columns`·0061 `minute_wbs_links` — 2026-10-28 Management API 조회로 적용 확인) |
 
 비밀값(DB 비밀번호·`CRON_SECRET`)은 리포에 없다 — 배포한 사람의 PC 와 Vercel 환경변수에만 있다.
 

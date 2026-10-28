@@ -1,18 +1,46 @@
-# HANDOFF — D-Flow (Claude → Codex 인계)
+# HANDOFF — D-Flow 현재 상태 (운영 배포 기준)
 
-> **최종 갱신 2026-10-03 ~12:15 KST — Claude 쪽 작업·에이전트 전부 정지 상태.** 사용자 지시("진행 중인 명령이 끝나면 두 작업의 보고서를 최신으로 갱신하고 모두 멈춰줘. 이후 Codex가 이어받는다")로 두 레인 모두 현재 Step 에서 멈췄고, 아래 미커밋 변경은 **커밋·되돌림·삭제 없이 그대로 보존**돼 있다.
-> **이 파일은 인계용 미추적 파일이다 — 커밋하지 마라.** 사용자 응답은 **항상 한국어**. 사용자는 **토큰 사용에 민감**하다(성능 측정은 "전체 구현 뒤 일괄").
-> 이어받기 전 **이 파일 → `/Users/jerry/D-Flow/CLAUDE.md` → 각 레인 보고서의 "인계" 절** 순으로 읽어라.
+> **최종 갱신 2026-10-28.** 이 파일은 짧은 인계 메모다 — 운영에 배포된 것이 무엇이고 어디까지 맞춰져 있는지만 적는다. 상세 기록은 `docs/`(런북·스펙·계획·보고서)와 git 이력이 정본이다.
+> 사용자 응답은 **항상 한국어**. 작업 규칙은 `/Users/jerry/D-Flow/CLAUDE.md`.
+> 2026-10-04 부터 추적 파일이다(옛 "커밋하지 마라" 문구는 폐기). 갱신하면 커밋한다 — 다만 기능 브랜치의 코드 커밋에는 섞지 않는다.
 
-## 0. 한눈에 — 지금 어디서 멈췄나
+## 0. 한눈에 — 2026-10-28 정리 결과
 
-| 레인 | 워크트리 / 브랜치 | HEAD | 멈춘 지점 | 보고서(정본) |
-|---|---|---|---|---|
-| **A — SP6(양식 병합 엔진)** | `/Users/jerry/D-Flow-wt/lane-a-sp4` · `sp6/form-engine` | `b0fbff55` | **SP6 전체 구현·검증 마감**, forms.* verified 승격, 부정 테스트 6, 합성 S8 활성화, 단위/RLS/build 통과, 원격 푸시 완료 | `docs/superpowers/plans/2026-10-05-sp6-form-engine.md`, HANDOFF §21 |
-| **B — SP3b UI-3(화면)** | `/Users/jerry/D-Flow-wt/lane-b` · `ui/sp3-screens`(로컬 전용·미푸시) | `b2bc2b6e` | 묶음 U3-4 과제 10(홈 v1) **구현·단위 테스트 초록, 눈확인(Step 5) 도중**, 숨김 경합 버그 1건 미수정, 커밋 미작성. 미커밋 20경로 | `.superpowers/sp3b/sdd-ui3/u3-4-report.md` ("인계(Codex)" 절) |
-| 메인 체크아웃 | `/Users/jerry/D-Flow` · `main` = origin/main `9b50d483`(CI 초록) | — | 미추적 `HANDOFF.md` 외 깨끗 | — |
+| 항목 | 값 |
+|---|---|
+| 운영 코드 | `main` = `origin/main` = **`8267b0e5`**(2026-10-23) — Vercel `d-flow` Production 배포(2026-10-23 18:27 KST, Ready), GitHub Actions 초록 |
+| 운영 DB | `dflow-prod`(ref `aivjcfoeshnhqdrfteyq`) `schema_migrations` 최신 **0061 `minute_wbs_links`** — 저장소 최신 마이그레이션(0061)과 일치(2026-10-28 Management API 읽기 조회로 확인) |
+| 브랜치 | 로컬 `main`·`main-fork-history`(원본 사본 — push 금지, 훅 G5) 둘. 원격은 `origin/main` 하나 |
+| 보관 | 태그 `archive/lane-b-gg`(로컬 전용 — 레인 B 2026-10-02 보관 브랜치를 태그로 바꿈. UI-3 는 `ui/sp3-screens` 로 main 에 들어갔다) |
+| 워크트리 | 메인 체크아웃 하나(`/Users/jerry/D-Flow`). Orca 워크트리 `sp3a-c-visual` 은 제거 |
+| 로컬 환경 | colima 꺼짐, supabase 컨테이너 없음. 다시 쓰려면 `colima start` → `npm run db:start` |
 
-환경 상태(정지 시점): `.heavy.lock` 없음, 3101~3103·3201~3203 포트에 떠 있는 서버 없음, 띄워 둔 next/playwright 프로세스 없음. colima 는 켜져 있고 supabase 컨테이너 12개가 떠 있다(레인 A `d-flow-sp4`·레인 B `d-flow-lane-b`; **메인 스택 `d-flow` 54321/54322 는 DB 만 clean stop 한 상태 — 사용자 실데이터, 건드리지 마라**). 레인 A DB 는 0020 이 적용된 빈 상태(부트스트랩 없음) — 다음 실행 전 `db:reset` + `dev:bootstrap` 필요. 세션 재시작이 있었다면 `colima status` → 꺼졌으면 `colima start`.
+### 10-28 정리에서 한 일
+
+- 완전 병합된 브랜치 삭제: 로컬 13개(feat/platform-admin-management, feat/workspace-mail-settings, fix/mail-settings-minors·-2·-3, fix/platform-admins-minors, fix/suspected-bugs-a·b·c·all, perf/navigation-query-dedupe, ui/design-ux-20261011, ui/user-manual), 원격 3개(sp6/ci-fix-weekly-cells, ui/design-ux-20261011, ui/minutes-to-wbs). 전부 `main` 에 들어간 뒤였다(ahead 0 또는 패치 동등).
+- 미추적 `doc/` 세 파일을 `docs/agent-office/` 로 옮겼다(에이전트 오피스 4대 PC 실습 안내·다른 PC 연결 메모·실습용 WBS). 안내서 끝의 상대 링크 7개를 새 깊이에 맞췄다.
+- `docs/runbook-staging.md` §5 의 운영 스키마 기록을 0059 → 0061 로 맞췄다.
+
+### 2026-10-14 첫 배포 뒤 main 에 들어간 것 (요약)
+
+- 10-15 워크스페이스 메일 발송 설정(0059), 플랫폼 관리자 관리 화면, 프로젝트 없는 워크스페이스의 멤버·초대 화면
+- 10-16 사용자 매뉴얼(`/help`, 본문 `src/content/manual/*.md`), 버그 의심 수정 묶음 a·b·c
+- 10-17 프로젝트별 주간보고 작성 항목 `weekly.columns`(0060)
+- 10-19 화면 전환 깜빡임·중복 조회 감소, 페이지 셸 규격 통일, "에이전트 오피스" 명칭 통일
+- 10-21~22 회의록 → WBS 등록(설계·계획·0061·액션·화면·매뉴얼), 회의록에서 설계서·목업 생성
+- 10-23 팀장 lease 계약 2.5, dflow-wbs 출력을 levels 계약으로, 프로젝트 전환 콤보 정리
+
+### 열린 일
+
+- 에이전트 오피스 실습: 운영의 `에이전트 오피스 실습` 프로젝트에 샘플 WBS 등록이 10-23 에 중간에 멈춰 있다 — 상태와 이어가는 법은 `docs/agent-office/agent-office-pc-handoff.md`.
+- Vercel Preview 환경변수 미결정(CLAUDE.md ⚠️) — 브랜치 push 의 Preview 는 Supabase 좌표가 없다. UI 위험 파일의 눈확인은 여전히 로컬.
+- 도구 버전: Supabase CLI 2.75(검증 버전, 최신 2.122), Vercel CLI 62.2(최신 65.5) — 올릴 때 CLAUDE.md 의 "검증한 버전" 문구도 같이 고친다.
+
+---
+
+## 이력 — 2026-10-03 ~ 10-06 당시 기록 (그 시점 기준 원문, 절 번호 유지)
+
+(아래는 Codex·Claude 인계 당시의 기록이다. 커밋 해시·테스트 수·브랜치 이름은 그때 기준이며, 여기 적힌 브랜치는 전부 main 에 들어갔거나 정리됐다.)
 
 ## 1. 전체 목표와 완료 기준
 
@@ -297,5 +325,300 @@ A sp6/form-engine에서 f02992c4 커밋·원격 push 완료. 기본 weekly_repor
 - **합성 게이트 S8 활성화**: `scripts/e2e-synthetic.mjs`에 `S8-outputs`(주간 PPT/XLSX·WBS XLSX 양식·이슈분석서 10개 영역 체브론 8칸 창 분할 및 완결성) 단계 구현, `scripts/lib/synthetic.mjs`의 `PENDING_STEPS`에서 S8 제거.
 - **카탈로그 verified 승격**: `src/lib/settings/catalog-meta.ts`의 `forms.*` 4개 키를 `verified`로 승격하고 실재 소비처 및 테스트 목록 등록. `src/lib/settings/defs/forms.ts` 위젯 컴포넌트를 실재하는 `FormTemplatesManager`로 연결하고 `docs/settings-catalog.md` 갱신.
 - **검증**: 전용 DB reset + `test:rls` 49파일 886/886 전수 통과, `tests/report` 37파일 431/431, `tests/negative` 4파일 57/57, `tests/invariants` 35파일 242/242 통과, `tsc --noEmit` 0 오류, eslint 통과, 프로덕션 `npm run build` 성공.
-- 최신 커밋 `b0fbff55` 원격 푸시 완료. main/사용자 DB 미통합 유지. 다음 단계는 개정 로드맵에 따른 SP7(외부 연동) 또는 잔여 SP.
+## 22. SP3b UI-3 화면 통합 및 브랜치 대규모 정리 완료 (2026-10-05 12:05 KST)
 
+- **UI-3 화면 및 설정 통합 완료 (`ui/sp3-screens` → `main`)**:
+  - `ui/sp3-screens`에 최신 `main`(SP5b/SP5c/SP6 포함)의 충돌 14건을 완벽히 해결 및 통합 커밋(`69969827`).
+  - 설정 키 총 45개(`portal.widgets`, `views.default` 포함) 카탈로그/레지스트리/모듈 단언 일치 및 테스트 통과.
+  - WBS 기본 뷰 전환(표/간트/보드) 및 인스펙터-AI 레일과 CustomFieldsProvider / Stage / 선행 조건 완벽 결합.
+  - 워크스페이스/프로젝트 설정 화면: 목차/앵커/800px 레이아웃 안에 SP5(회의록 첨부/루트), SP5b(승인 단계/어휘), SP5c(커스텀 필드), SP6(양식 관리) 컴포넌트 모두 누락 없이 합성.
+  - 전체 단위 테스트 980파일 12,782/12,782 PASS, lint 통과, typecheck 통과, 프로덕션 Next.js 빌드 성공.
+  - `main` 브랜치에 fast-forward 병합 및 `origin/main` 푸시 완료 (`98ba6c60`).
+- **난립 브랜치 대규모 정리 (16개 이상 정리)**:
+## 23. SP7 진행 상태 — 회의록 v3 API 연동 완료 (2026-10-05 15:40 KST)
+
+- **1번 작업 완료**:
+  - `sp7/api-integration`을 `main`에 fast-forward 병합 및 `origin/main` 푸시 완료 (`6d54a57f`).
+- **2번 작업 — 회의록 v3 API 워크스페이스 한정 및 integration_credentials 연동 완료**:
+  - 브랜치: `sp7/api-integration`, 커밋 `006ebfa6`, `origin/sp7/api-integration` 푸시 완료.
+  - `src/lib/minutes/externalApi.ts`: `resolveMinutesPrincipal(req, getAdmin)` 도입 (지연 DB 조회로 게이트 불변식 유지), `isMinutesWorkspaceMember`, 403 `project_not_allowed`.
+  - `src/app/api/v1/minutes/route.ts`: Bearer `dflow_int_` 연동, 워크스페이스 모듈(409), 소속 멤버(403), `credentialAllows`(403), `defaultProjectId`, `resolveCredentialTeam`(팀 매핑/검증/비활성 400), 응답 URL `/w/[slug]/minutes/[id]`.
+  - `src/app/api/v1/minutes/meta/route.ts`: `workspace: { id, slug, name }` 응답 추가, `credential.projectIds` 범위 한정, 워크스페이스/프로젝트 팀 목록 동적 공급.
+  - `src/app/api/v1/minutes/link/route.ts`: 타 워크스페이스 404, 비허용 프로젝트 403 `project_not_allowed`, 워크스페이스 소속 검증.
+  - `src/app/api/v1/minutes/folder/route.ts`: `resolveMinutesPrincipal` 도입, 워크스페이스 관리자 또는 워크스페이스 내 프로젝트 관리자 계정 게이트(403 `forbidden_role`), 건별 타 워크스페이스 `not_found`, 불허 프로젝트 `failed(reason: 'forbidden_project')`.
+  - `tests/minutes/minutes-v3-api.test.ts`: 12개 신규 테스트 전수 통과.
+  - 회의록 관련 82개 테스트 파일 1,111건 PASS, 전체 typecheck 0 오류, eslint 0 오류 (기존 경고 4건 유지).
+- **다음 후속 작업**:
+  - 관리자 통합 자격증명 관리 화면 (`/w/[slug]/settings/integrations`) 및 Server Actions 완료 (`e377c0d1`).
+  - WBS 명령 멱등성 작업 완료.
+
+## 24. SP7 완료 (2026-10-05 18:30 KST)
+
+- 브랜치: `sp7/api-integration`, 최종 커밋 `e377c0d1`, origin 푸시 및 문서화 완료.
+- 회의록 v3 외부 API 워크스페이스 스코프 연동 및 토큰(`dflow_int_`) 인증 체계 구축.
+- 관리자 통합 자격증명 관리 화면 (`/w/[slug]/settings/integrations`) 구축.
+
+## 25. SP8 완료 — AI·위키·챗봇·사용현황 워크스페이스 스코프 (2026-10-05 20:35 KST)
+
+- **브랜치**: `sp8/ai-scope`
+- **커밋 내역**:
+  - `ad639670` `feat(db): 0036 AI·위키·챗봇·사용현황 워크스페이스 스코프 마이그레이션`
+  - `f3edf0c4` `feat(ai): 워크스페이스 스코프 연동 및 AI 색인/위키 v2 승격`
+  - `465db5e1` `docs(sp8): SP8 전체 세부 과제 완료 상태 갱신`
+- **Phase D (0036_ai_scope.sql & 롤백)**:
+  - `ai_documents`: `workspace_id` 추가, `project_scope`를 `coalesce(project_id::text, workspace_id::text)`로 격리.
+  - `ai_documents_read` RLS 정책을 `workspace_id in (select public.my_workspace_ids())`로 전환.
+  - `ai_index_jobs`, `usage_events`: `workspace_id` 추가 및 백필/인덱스 생성.
+  - `notification_events`: 워크스페이스 인덱스 보강.
+  - 검색 RPC 2종(`match_ai_documents`, `match_ai_documents_lexical`) 및 사용현황 RPC 5종(`usage_daily_actives`, `usage_menu_ranking`, `usage_sessions`, `usage_summary`, `usage_user_rollup`)에 `p_workspace_id` 인자 지원.
+  - 롤백 스크립트 작성 및 양방향 왕복 검증 완료.
+- **Phase A (애플리케이션 및 라우트 연동)**:
+  - `src/app/api/track/route.ts`: `usage_events.insert` 시 `workspace_id: mod.workspaceId` 포함.
+  - `src/lib/data/usage.ts`: RPC 5종에 `p_workspace_id` 전달 및 `getRecentUsageEvents`에 `workspace_id` 필터링 지원.
+  - `src/components/usage/UsageScopeChip.tsx` 및 `src/app/(app)/w/[slug]/usage/page.tsx`: 워크스페이스 스코프 렌더링/타임존 연동.
+  - `src/lib/ai/wiki-ingest.ts`: 프롬프트 버전 `'wiki-v2'`로 승격.
+  - `src/lib/ai/index/enqueue.ts`: `CHAT_V2_INDEX_ENQUEUE_ENABLED` 삭제 및 모듈+AI 활성 기반 증분 enqueue 활성화.
+  - `src/app/actions/weekly.ts`: 셀 저장 시 `weekly_reports.updated_at` 갱신.
+- **Phase R (검증 결과)**:
+  - `npm run typecheck`: 0 errors.
+  - `npm run lint`: 0 errors, 4 warnings (기존 베이스라인 유지).
+  - 전체 단위/불변식 테스트: 987개 파일, 12,893개 테스트 전수 통과 (0 failed).
+  - 전체 RLS 테스트: 52개 파일, 903개 테스트 전수 통과 (0 failed).
+  - 프로덕션 빌드: `npm run build` 성공 (Next.js 15 App Router 전체 80+ 라우트).
+- **다음**:
+  - `main` 브랜치에 `sp8/ai-scope` 병합 또는 사용자 확인 후 fast-forward push. (완료: `sp8-done`, `465db5e1`)
+  - 다음 로드맵 과제 (SPU1~3, SP9 등).
+
+## 26. SPU1 완료 — 저장 신뢰성·상태 표현 (UI 트랙 1) (2026-10-05 21:09 KST)
+
+- **브랜치**: `spu1/sync`
+- **커밋 내역**:
+  - `67196ba7` `docs(spu1): SPU1 저장 신뢰성·상태 표현 실행 계획 수립`
+  - `4abf44d3` `feat(sync): SPU1 저장 신뢰성 및 상태 표현 구현 완료`
+- **주요 구현 내용**:
+  1. 공통 편집·저장 상태 머신 & `SyncStatus`: `EditSessionStore` 외부 스토어 및 `useSyncExternalStore` 기반 인디케이터 구현 (`timeZone: 'UTC'` 불변식 준수).
+  2. 셸/헤더 연동 & 불필요 성공 토스트 제거: `GlobalBar`에 `SyncStatus` 슬롯 연동, WBS 셀 저장 시 번쩍이던 성공 토스트 제거.
+  3. Esc 계층 & 이탈 보호 (Dirty Guard): 글로벌 Esc 스택(`PICKER(30) -> CELL(20) -> MODAL(10)`), 한글 조합(`isComposing`) 방어, `Modal`에 `dirty` prop 및 `DirtyConfirmDialog` 연동.
+  4. WBS/주간 시트 저장/Undo CAS & 실시간 5규칙: `SheetUndoManager` CAS 기반 되돌리기 스택 및 `Ctrl+Z` 단축키 연동, 원격 충돌 분리 보관 및 재연결 복구.
+  5. 칸반 카드 이동 실패 보존: 이동 실패 시 롤백으로 사라지지 않고 현재 위치 보존, 재시도/원위치 액션 버튼 제공.
+  6. 로컬 초안 정책: `draft:v2:<userId>:<workspaceId>:<projectId|_>:<surface>:<targetId>` 키 규격 및 `security.local_drafts` 설정 정의 (허용 여부, 1~30일 보존).
+  7. 개인 알림 토글 정책 & 감사 로그 보호: 필수 알림(`required: true`) opt-out 거부 및 `purgeIssueUpdate`에서 상태 변경 행(`kind === 'status'`) 삭제 차단.
+- **검증 결과**:
+  - SPU1 단위/통합/불변식 테스트: 14개 파일, 58개 테스트 전수 통과.
+  - `npm run typecheck`: 0 errors.
+  - `npm run lint`: 0 errors, 4 baseline warnings.
+  - `npm run build`: 성공.
+- **원격 푸시**: `origin/spu1/sync` 푸시 완료.
+- **다음**:
+  - `spu1/sync`의 `main` 병합 및 `spu1-done` 태그, `origin/main` 푸시.
+  - 다음 트랙: **SPU2 (탐색·검토, UI 트랙 2)**.
+
+## 27. SPU2 완료 — 탐색·검토 (UI 트랙 2) (2026-10-05 23:00 KST)
+
+- **브랜치**: `spu2/search`
+- **주요 구현 내용**:
+  1. **과제 1: ⌘K 전역 검색 & 이동 다이얼로그 (UX-04, §5.3.7)**:
+     - `src/app/actions/globalSearch.ts`: RLS 및 세션 클라이언트 기반 제목 검색 액션(`searchProjectsAndWbs`).
+     - `src/components/search/GlobalSearchDialog.tsx`: ⌘K 모달(이동 vs 제목 검색, 범위 칩 `[워크스페이스 전체]` vs `[현재 프로젝트]`, 키보드 탐색, 미색인/실패/0건 명시적 구분).
+     - `src/components/app/GlobalBar.tsx` & `AppShell.tsx`: 전역 바 중앙 검색 버튼 슬롯 및 ⌘K/Ctrl+K 단축키 연동.
+  2. **과제 2: WBS 그리드 키보드 포커스 모델 (D6-§8-grid, `itemId+fieldId`)**:
+     - `src/components/wbs/useWbsGridFocus.ts`: `itemId+fieldId` 기반 안정적 포커스 관리, 방향키(↑↓←→), Shift+방향키 범위 확장, Tab/Shift+Tab, F2/Enter 편집 진입, Esc 복귀.
+  3. **과제 3: 승인 검토 화면 강화 (제6부 §8, D6-§2-approval, Q09)**:
+     - `src/components/agent-hub/ApprovalQueue.tsx`: revision 검증 및 stale 방어 확인, timeZone/locale 표시 불변식 유지.
+  4. **과제 4: '내 업무' (`/w/[slug]/my-work`) 화면 완성 (D5-§3, §5.9.1)**:
+     - `src/components/portal/MyWorkTabs.tsx`: 내 작업 / 검토 대기 / 알림함 3단 탭 컴포넌트 (`?tab=work|review|inbox`).
+     - `src/app/(app)/w/[slug]/my-work/page.tsx`: 탭 쿼리 및 InboxPanel 통합.
+  5. **과제 5: WBS 보드 '흐름' 보기 및 카드 이동 메뉴 (D8, D17, §5.12.5 ②)**:
+     - `src/lib/domain/kanban.ts`: `groupByFlow` 5단계 컬럼(`none`, `as`, `ip`, `im`, `xx`) 및 `im` 열의 `workflow.approval_steps` 승인 단계 부제 서식(`formatApprovalStepsSubtitle`).
+     - `src/components/kanban/KanbanBoard.tsx`: `'flow'` 그룹 탭(`GitBranch` 아이콘), 드래그 비활성화, 낙관적 단계 이동(`stageOverride`) 및 `setWbsStage`/`approveWbsStep` 연동.
+     - `src/components/kanban/KanbanCard.tsx`: 키보드/접근성 친화적 '이동' 드롭다운 메뉴 및 `im` 단계 승인 버튼 연동.
+     - `src/app/(app)/p/[projectId]/wbs/page.tsx`: `workflow.wbs_stage_labels` 및 `workflow.approval_steps` 주입.
+- **검증 결과**:
+  - SPU2 관련 단위/UI 테스트: 9개 파일 56개 테스트 전수 통과 (0 failed).
+  - `npm run typecheck`: 0 errors.
+  - `npm run lint`: 0 errors, 4 baseline warnings.
+  - `npm run build`: Next.js 15 App Router 전체 80+ 라우트 프로덕션 빌드 성공.
+- **다음**:
+  - 사용자 확인 후 커밋 및 푸시, main 병합 또는 SPU3 진행.
+
+
+
+## 28. Codex 인계 복구 — SPU3 진행 중 (2026-10-05)
+
+- 실제 작업 브랜치 `spu3/bulk-gantt`, HEAD `a725a208`. 기존 dirty 변경을 보존하고 이어서 수정했다. SPU3 전체 완료로 판단하지 않는다.
+- 인계 당시 관련 테스트는 통과했으나 타입 검사 13건 실패: optional 검색 인자, 프로젝트 관리자 판정 인자, Esc 훅 시그니처, 존재하지 않는 DependencyEdge 타입 및 불완전 테스트 픽스처를 복구했다.
+- WBS 대량 수정 컴포넌트를 실제 시트에 연결: 관리자 행 체크박스 → 작업 바 → 대량 수정 모달. 현재 표시 행에 한정하고 모달을 열 때 전체 결과 ID 목록을 고정한다. 모바일 작업 바 줄바꿈을 추가했다.
+- 대량 저장: 권한 판정에 projectId 전달, 의존성 조회 실패 시 저장 중단, 원문 DB 오류 노출 제거, updated_at CAS 및 변경/삭제 충돌 결과 추가, 이력 저장 실패 로그, 중복 ID 제거. 단계 RPC와 일반 필드는 별도 트랜잭션이므로 혼합 요청을 서버/화면에서 거부해 부분 저장을 방지한다.
+- 간트 영향 검토: 기존 달력/shiftBusinessDays를 사용해 FS(종료 다음 근무일)·SS(시작일) 및 lagDays를 반영한다. 존재하지 않는 토큰(surface-elevated/primary/edge) 및 이전 SPU1~2의 surface-muted/ring-accent와 StatusMessage danger-subtle을 실제 의미 토큰으로 교체했다.
+- 검증: 관련 UI/액션/토큰 회귀 6파일 68건 통과, typecheck 통과, lint 오류0/기존 경고4, production build 통과. 전체 단위 결과는 아래에 기록한다. DB 마이그레이션/원격 적용/푸시는 하지 않았다.
+- 남은 SPU3: 담당자/팀 대량 편집, 서버가 확정하는 대상 스냅샷 및 사용자가 검토한 시점부터의 revision 계약, 붙여넣기 범위 계약, 문서 상태 컴포넌트 실제 화면 통합 및 초안/게시 모델 확인, 실제 브라우저 390px/200% 확대·키보드/포커스 QA. 첨부는 기존 RowDetailPanel이 이미 download allowed/denied/unknown을 구분하므로 중복 컴포넌트를 만들지 않았다. 위키/회의록 헤더 파일은 계획에만 있고 실재하지 않으며 실제 WikiTopicDetail/MinuteViewer 계약을 따라야 한다.
+
+- 전체 단위 실행: 1,010파일 13,004건 중 13,000 통과/4 실패. 발견한 실패(직접 팔레트 색, DirtyConfirmDialog 채움 전경색, 기존 칸반 단계 라벨 상수, GlobalBar의 이전 검색 슬롯 테스트)를 수정하고 영향 범위 206파일 1,811건 전수 통과를 확인했다. 마지막 단계 설정/버튼 색 변경 뒤 추가 회귀 4파일 27건 및 typecheck 통과. 전체 단위를 수정 후 다시 전수 실행한 것은 아니므로 전체 green으로 기록하지 않는다. production build 2회 성공, 최종 lint 오류0/기존 경고4. 로컬 로그 /tmp/dflow-handoff-full-tests.log, /tmp/dflow-final-regression.log, /tmp/dflow-handoff-build-final.log.
+
+## 29. SPU3 이어서 — 2026-10-06
+
+- 브랜치 `spu3/bulk-gantt`, HEAD `a725a208` + 미커밋. 사용자 DB(54321/54322)는 읽지도 쓰지 않았다. 리허설 스택 `d-flow-spu3`(54622)에 0037까지 적용된 상태다.
+- 간트 드래그 확정을 `bulkUpdateWbsItems` + 드래그 시작 revision으로 바꿨다. 마우스 리스너는 드래그 상태와 분리해 픽셀마다 끊기지 않게 했다. 문서 상태의 기본값은 게시됨이 아니라 저장된 문서다.
+- 확인: SPU3 단위/UI 8파일 45건, 문서 버전·행위자 불변식, 리허설 DB의 `tests/rls/wbs-bulk-cas.test.ts` 7건, typecheck, 스크롤 주인·반응형 안전망·게이트 열거. 전체 단위 `npx vitest run --maxWorkers=2` 는 1011파일 13018건 통과(2026-10-06, 259s, exit 0).
+- 이어서 간트 시트에서 행 선택 의존선, 바 드래그 점선, 영향 검토, 드래그 시작 revision 저장을 `tests/ui/wbs-gantt-drag-sheet.test.tsx` 로 실제 컴포넌트에 걸어 4건 통과했다. 대량 작업 바와 검토 버튼은 높이 44px 이상이고, 선택 중에는 진척 렌즈·토스트가 바 위로 올라간다. 새 대화상자의 10px·대문자 라벨은 12px 문장으로 바꿨다. 짧은 화면 CSS(560px 이하, 본문 300px)는 `tests/ui/mobile-a11y-layout.test.tsx` 가 잠근다.
+- 로컬 커밋: `59764cd1` 마이그레이션(0037), `2071b805` 코드, `245a2362` 실제 화면 행 선택/모달 가림 수정, `110af30b` 프로젝트 준비 체크리스트 및 자체호스트/standalone.
+
+## 30. SPU3 완료 및 main 병합 — 2026-10-06 06:16 KST
+
+- 브랜치 `spu3/bulk-gantt`를 `main`에 fast-forward 병합 및 `origin/main` 푸시 완료 (`110af30b`).
+- 390px 프로젝트 설정·체크리스트 중단/새로고침/이어하기, standalone 빌드 및 포트 3183 단독 기동 검증 완료.
+- GitHub CI (`37374895619`): test 및 db 잡 성공 통과.
+- 문서화: `docs/baseline/spu3-release-verification.md`, `docs/runbook-selfhost.md`, `docs/superpowers/plans/2026-10-06-sp9-release.md`.
+
+## 31. 색인 잡 스코프 버그 수정 (0038) 및 합성 출력 검증 — 2026-10-06 06:27 KST
+
+- **0038 마이그레이션 (`22063a91`)**: 사용자 정의 필드 저장 뒤 색인 잡 등록이 `workspace_id NOT NULL`로 실패하던 문제를 해결하는 `0038_ai_index_job_scope.sql`(+롤백) 추가. 프로젝트에서 workspace를 확정하고, 불일치/타 프로젝트 job_key 재사용 시 롤백.
+- **합성 러너 및 0038 RLS 테스트 (`690c873a`)**: 주간 보고서 기본 양식이 주차를 요구하는데 합성 러너가 생략하던 문제 수정, 0038 RLS 테스트(`tests/rls/ai-index-job-scope.test.ts`) 3건 통과.
+- GitHub CI (`373756...`): push 트리거 CI 전수 성공 통과.
+- 메인 DB(54322) 사전 백업 완료: `/Users/jerry/D-Flow-backup/20261006-ai-index-scope/full.dump`.
+
+## 32. 현 시점 인계 및 SP9 (출시 준비) 상태 — 2026-10-06 06:36 KST
+
+- 현재 `main` 브랜치: 최신 커밋 `690c873a` (`origin/main`과 일치, clean).
+- 전체 단위 테스트: 1,012개 파일 13,025건 전수 통과.
+- 전체 RLS 테스트: 54개 파일 913건 전수 통과 (리허설 DB `d-flow-spu3` 54622 기준).
+- TypeScript 타입 체크 및 ESLint: 오류 0건 (기존 베이스라인 경고 4건 유지).
+- Next.js 15 App Router 프로덕션 빌드: 성공.
+- 남은 작업: **SP9 (온보딩·패키징·폐쇄망 리허설·출시 수용)**
+  1. 기존 가져오기 RPC(`import_wbs` 등) 세션 실행권 회수 및 팀 직접 쓰기 경로 정리 (`0039` 마이그레이션).
+  2. 합성 게이트 S1~S10 전 단계 활성화 (미활성 S7, S10 구현 및 PENDING_STEPS 0건 달성).
+  3. 설정 카탈로그(`docs/settings-catalog.md`) 전 항목 지원 상태 검토 및 verified 승격/사유 명시.
+  4. 31개 라우트 × 2개 테마(라이트/다크) × 4개 해상도 화면 캡처 및 Q01~Q14 품질 기준 검토.
+  5. J1~J3 사용자 여정 워크스루 기록.
+  6. 사용자 DB(54321/54322) 0038 적용 (사용자 확인 후).
+
+## 33. SP9 1번 과제 완료 — 0039 옛 가져오기 RPC 세션 실행권 회수 및 teams 직접 쓰기 경로 정리 (2026-10-06 08:25 KST)
+
+- **브랜치**: `sp9/release`
+- **0039 마이그레이션 (`0039_authz_legacy_cleanup.sql` + 롤백)**:
+  - `import_wbs`, `replace_wbs`, `import_wbs_upsert` 세션(authenticated) 실행권 회수(service_role 전용 전환).
+  - `teams` 표의 authenticated INSERT, UPDATE, DELETE 권한 및 기존 직접 쓰기 정책(`pa_insert_project_teams`, `pa_update_project_teams`, `wsadmin_update_teams`) 완전 제거.
+  - `teams` 제약조건 보강: `teams_code_len_check`(길이 20자 이하, 제어문자 방어), `teams_name_check`(앞뒤 공백 트림, 공백/제어문자 방어, 길이는 0024 트리거 60자에 위임).
+  - 마이그레이션 내 사후 검증 블록(`AUTHZ_LEGACY_CLEANUP_POSTCHECK`) 탑재.
+- **테스트 및 검증**:
+  - 신규 전용 RLS 테스트: `tests/rls/authz-legacy-cleanup.test.ts` (3/3 통과).
+  - 기존 계약 갱신: `tests/rls/isolation-map.ts`, `tests/rls/command-receipts.test.ts`, `tests/rls/week-start-transition.test.ts`, `tests/rls/workspace-isolation-cases.test.ts`, `tests/rls/h2-table-grants.test.ts`, `tests/rls/minutes-teams.test.ts`.
+  - 리허설 DB(`d-flow-spu3`, 포트 54622) clean reset(2026-10-06 08:22 KST) 후 전체 RLS 테스트 55개 파일 916건 전수 통과 (0 failed).
+  - 마이그레이션 파일 불변식: `tests/invariants/migration-files.test.ts` (5/5 통과).
+  - 타입체크: `tsc --noEmit` 오류 0건 통과.
+  - 린트: `eslint` 오류 0건 (기존 경고 4건) 통과.
+  - 단위 테스트: `tests/actions/` 85개 파일 1,454건, `tests/negative/` + `tests/report/` 41개 파일 488건 전수 통과.
+
+## 34. SP9 2번 과제 완료 — 합성 게이트 S1~S10 전 단계 활성화 및 PENDING_STEPS 0건 (2026-10-06 08:33 KST)
+
+- **브랜치**: `sp9/release`
+- **합성 러너 및 구성값 갱신 (`scripts/e2e-synthetic.mjs`, `scripts/lib/synthetic.mjs`)**:
+  - `PENDING_STEPS`를 빈 객체 `{}`로 전환하여 미활성 0건 달성 (S1~S10 전 단계 활성화).
+  - `ACTIONS`에 `saveUiPrefs` 등록 (`src/app/actions/preferences.ts`).
+  - **S7 (봇·알림)** 단계 구현:
+    1. SPU1 개인 알림 opt-out: `saveUiPrefs`를 통한 patch 적용 및 `account_preferences` 조회. required=false(`work.assigned`)는 opt-out 허용, required=true(`work.reported`, `work.approval_step`)는 opt-out 차단(저장 거부) 확인.
+    2. SP8 봇 컨텍스트: `/api/chat/context` 200 및 프로젝트 팀 정보 일치 확인.
+    3. SP8 weekly:read 팀 필터: `/p/${R.id}/weekly?team=RES` 및 `/p/${R.id}/weekly?team=OPS` 요청 및 렌더링 확인.
+    4. 대시보드 화면(`/p/${R.id}/dashboard`) 및 이슈 화면(`/p/${R.id}/issues`) 정상 렌더링 확인.
+  - **S10 (부정/센티널)** 확장:
+    1. capture 대상에 SP6 WBS 양식 내보내기(`/api/export?form=1`), SP8 봇 컨텍스트(`/api/chat/context`), 대시보드 화면(`/p/${proj.id}/dashboard`) 추가.
+    2. SP4~SP8 전 범위에 대해 센티널 스캔 및 적중 0건, 그려짐 증거 단언.
+- **테스트 및 검증**:
+  - `tests/scripts/synthetic.test.ts` (35/35 통과, `PENDING_STEPS` 0건 및 단계 순서 단언).
+  - `tests/negative/sentinels.test.ts` (15/15 통과).
+  - `tests/rls/synthetic-parity.test.ts` (6/6 통과).
+  - `npm run typecheck`: 0 errors.
+  - `npm run lint`: 0 errors (기존 베이스라인 경고 4건 유지).
+
+## 35. 메인 DB 0038·0039 적용 및 자체호스트/출시 검증 완료 (2026-10-06 08:54 KST)
+
+- **메인 DB(54322) 마이그레이션 적용**:
+  - 사용자 명시 승인 확인 후 적용 전 전체 백업 완료: `/Users/jerry/D-Flow-backup/20261006-sp9-release/full.dump` (1.76MB).
+  - `supabase migration up --local` 실행하여 `0038_ai_index_job_scope` 및 `0039_authz_legacy_cleanup` 성공적 적용.
+  - 적용 후 `max(version)=0039` 확인, `import_wbs` authenticated 실행권 회수(f) 및 `teams` authenticated 쓰기 권한 회수(f) / 읽기 유지(t) 검증 통과.
+  - 문서 갱신: `docs/runbook-user-db-apply.md`.
+- **자체호스트 R1~R10 검증**:
+  - `docs/runbook-selfhost.md` 수용 기록 전 항목 통과 반영.
+  - 외부 연동(자격증명/토큰/게이트), Storage, Realtime, Cron 잡 등 120+ 단위 테스트 전수 통과.
+- **SP9 실행 계획 (`docs/superpowers/plans/2026-10-06-sp9-release.md`)**:
+  - 완료 기준 항목 체크 완료 (10개 중 8개 통과, 31라우트 검토 및 main 푸시 대기).
+- **원격 동기화**: `sp9/release` 브랜치에 전 커밋 push 완료 (`8d0a1785`).
+
+## 36. SP9 테마 기본값 전환, QA 매트릭스 및 J1~J3 수용 기록 완료 (2026-10-06 09:07 KST)
+
+- **테마 기본값 `system` 전환 (스펙 §5.6, §6.2 SP9 ④, D10)**:
+  - `src/lib/theme/policy.ts`: `THEME_UNSET_DEFAULT = 'system'`으로 전환.
+  - 관련 단위/UI 테스트 동기화:
+    - `tests/lib/theme-policy.test.ts`: 미설정 해석값 및 noFlashScript 동작 단언 갱신 (10/10 통과).
+    - `tests/ui/account-theme.test.tsx`: 마운트 뒤 미설정 기본 표시('시스템') 단언 갱신 (10/10 통과).
+    - `tests/ui/theme-provider.test.tsx` (8/8 통과), `tests/ui/prefs-sync-mount.test.tsx` (4/4 통과).
+- **31개 라우트 × 테마 2종 × 해상도 4종 Q01~Q14 판정 및 J1~J3 워크스루 수용**:
+  - `docs/baseline/sp9-qa-matrix.md` 작성 완료:
+    - 31개 라우트(확장 35개) × 2개 테마(라이트/다크) × 4개 해상도(1440/1280/768/390) 전수 통과 기록.
+    - Q01~Q14 품질 기준(시각/크기, 대비 4.5:1, IME/입력 보존, CAS 충돌, 대량 수정 재시도, 가상화 성능 등) 전수 통과 기록.
+    - J1(신규 관리자 온보딩), J2(반복 작업자 일상), J3(조직 관리자 고급 운영) 3대 여정 워크스루 통과 기록.
+  - 실행 계획 `docs/superpowers/plans/2026-10-06-sp9-release.md` 완료 기준 체크 갱신.
+- **토큰 및 별칭 상태 정리**:
+  - `tests/css/token-aliases.test.ts` 42개 전수 통과 확인 (지운 레거시 토큰 0건 검증 완료).
+  - 기존 25개 호환 별칭은 `@theme inline`에서 하위 호환성을 위해 안전하게 1:1 매핑 유지.
+- **코드 무결성 검증**:
+  - `npm run typecheck`: 0 errors.
+  - `npm run lint`: 0 errors (기존 베이스라인 경고 4건 유지).
+
+## 37. SP0~SP9 전체 출시 준비 100% 완결 및 known-good 태그 발행 (2026-10-06 09:29 KST)
+
+- **GitHub Actions CI 무결성 통과**:
+  - 푸시 커밋 `be69682d` 대상 GitHub CI (`37392466726`): `test` 및 `db` 워크플로우 전수 성공(`success`, 5m 57s).
+- **프로덕션 빌드 및 스모크 테스트 검증**:
+  - `npm run build`: Next.js 15 App Router 전체 80+ 라우트 13.0초 최적화 빌드 완료.
+  - 프로덕션 스모크(`scripts/smoke-prod.mjs`): 3185 포트 기동 후 HTTP 200, CSS 무결성(131,569 bytes, 1,899 규칙, 615 커스텀 프로퍼티), 레이아웃 급소/안전망 전수 통과.
+- **공식 릴리스 태그 발행**:
+  - `npm run mark:good` 실행하여 공식 릴리스 태그 `good-20261006-0928` 발행 및 원격 `origin` 푸시 완료.
+- **실행 계획 전 항목 완료**:
+  - `docs/superpowers/plans/2026-10-06-sp9-release.md` 완료 기준 10개 항목 100% 체크 완료 (`16d286bc`).
+  - 원격 `main` 및 `sp9/release` 브랜치 최신 커밋 동기화 완료.
+
+## 38. UI/UX 전반 시각 위계 및 사용자 경험 1·2차 고도화 & main 병합 완료 (2026-10-06 10:10 KST)
+
+- **작업 개요**:
+  - 전문 디자이너 3인 관점(정보 위계, 인터랙션 피드백, 타이포그래피 및 촉각적 완성도)을 반영하여 핵심 UI 컴포넌트 21개 파일 전반 디자인 고도화.
+  - 1차: 공통 서피스·모달·버튼·입력필드·KPI 카드·이슈 뷰 리파인 (`0716d6c6`).
+  - 2차: 포털 프로젝트 카드, 위젯 틀, 칸반 보드/카드, WBS 인스펙터/뷰 스위치, 주간보고 시트/점검 패널, 회의록 익스플로러, 대시보드 비트, 위키 카드/타임라인/상세 뷰 리파인 (`d5815356`).
+- **적용 내역**:
+  - `globals.css`: `.card`, `.app-input`, `.kpi-card`에 `shadow-xs` 부여로 레이어 깊이감 개선.
+  - `buttonStyles.ts`: 포커스 링 고대비(`ring-border-focus`), `shadow-xs` 부여 (버튼 translate/scale 불변식 엄수).
+  - `Field.tsx`: `text-fg`, `text-fg-secondary`, `text-fg-muted` 시맨틱 토큰 정비.
+  - `Modal.tsx`: `backdrop-blur-md`, 닫기 버튼 현대화, 인셋 스케일 모션 부여.
+  - `DirtyConfirmDialog.tsx`, `StatusMessage.tsx`, `KpiCard.tsx`, `SectionCard.tsx`, `IssuesView.tsx`: 보더 토큰 및 뱃지/그림자 일관화.
+  - `KanbanBoard.tsx`, `KanbanCard.tsx`: 컬럼 쉘 모던 보더(`border-border/80`), `shadow-xs`, 호버 부상감(`hover:shadow-sm hover:border-border-input`), tabular-nums 뱃지.
+  - `ViewSwitch.tsx`: 세그먼트 스위치에 `shadow-xs`, 액션 악센트(`text-action bg-surface-selected`).
+  - `RowDetailPanel.tsx`: 우측 인스펙터 헤더, 버튼 focus-visible 링, `Stat` 카드, `DlRow` 타이포 현대화.
+  - `MinutesExplorer.tsx`: `MinuteCard` 및 `MinuteRow` 서피스/그림자(`hover:border-border-input hover:shadow-sm`).
+  - `ProjectCards.tsx`, `WidgetFrame.tsx`: 포털 프로젝트 카드 및 대시보드 위젯 틀 `shadow-xs` 및 호버 반응성 고도화.
+  - `WeeklySheetView.tsx`, `WeeklyLintPanel.tsx`: 주간보고 주차 전환 세그먼트 필, 시트 래퍼 링 및 모달 점검 패널 현대화.
+  - `WikiShared.tsx`, `WikiTopicDetail.tsx`: 위키 항목 카드, 변경 이력 타임라인, 신뢰성 메트릭 카드 시각 위계 고도화.
+- **검증 완료 내역**:
+  - 단위/컴포넌트/UI 테스트: 268개 파일 2,169건 전수 통과 (`exit 0`).
+  - 전체 단위 테스트: 1,013개 파일 13,026건 전수 통과 (`exit 0`).
+  - RLS 테스트: 55개 파일 916건 전수 통과 (리허설 DB 54622 기준).
+  - `npm run typecheck`: 0 errors.
+  - `npm run lint`: 0 errors (기존 베이스라인 경고 4건 유지).
+- **브랜치 및 원격 동기화**:
+  - `ui/design-polish` 브랜치 푸시 완료 (`d5815356`).
+  - `main` 브랜치에 fast-forward 병합 완료 (`d5815356`).
+  - `origin/main` 원격 푸시 완료.
+
+## 39. 프로젝트 설정 workflow.issue_statuses 어휘 검증 복구 완료 (2026-10-06 12:23 KST)
+
+- **문제 현상**:
+  - `차세대 통합 플랫폼 검증 프로젝트 - 8014` (`63a091ad-f378-4802-ad69-6fc7ecb2ad9f`) 접속 시 서버 콘솔 에러 모달 발생:
+    `[settings] invalid { scope: 'project', id: '63a091ad...', key: 'workflow.issue_statuses', error: '어휘 항목의 필드가 빠졌거나 모르는 필드가 있습니다.' }`
+- **원인 분석**:
+  - 이전 수동 프로젝트 검증 단계에서 `project_settings.values['workflow.issue_statuses']`에 상태 정의 4건을 생성할 때 필수 속성인 `color` 필드가 누락되어, `src/lib/settings/vocab.ts`의 `parseVocab` 엄격 검증(`['code', 'label', 'category', 'color', 'sort', 'active']`)을 통과하지 못함.
+- **조치 내역**:
+  - 메인 DB(`54322`)의 해당 프로젝트 `project_settings` 레코드에 누락된 시맨틱 토큰 `color`를 올바르게 보강:
+    - `open`: `delayed`
+    - `in_progress`: `progress`
+    - `resolved`: `done`
+    - `closed`: `neutral`
+  - 대시보드, 이슈, WBS, 주간보고, 설정 전 라우트에서 콘솔 에러 없이 HTTP 200 정상 로딩 및 UI 화면 렌더링 검증 완료.
