@@ -12,7 +12,7 @@ const KINDS = new Set<PlaceholderKind>(['value', 'rows', 'slide', 'items'])
 export type ActivationAssessment =
   | { ok: true }
   | { ok: false; code: 'UNMAPPED'; error: string; unmapped: string[] }
-  | { ok: false; code: 'TYPE_MISMATCH' | 'SCAN' | 'RESCAN' | 'SHAPE'; error: string }
+  | { ok: false; code: 'TYPE_MISMATCH' | 'SCAN' | 'RESCAN' | 'SHAPE' | 'NO_PLACEHOLDERS'; error: string }
 
 const ERR_UNMAPPED = '매핑되지 않은 자리표시자가 있어 활성화할 수 없습니다.'
 const ERR_TYPE = '자리표시자 종류와 경로 타입이 맞지 않아 활성화할 수 없습니다.'
@@ -20,6 +20,8 @@ const ERR_SCAN = '양식 스캔에 오류가 있어 활성화할 수 없습니�
 const ERR_RESCAN = '양식 스캔이 현재 엔진과 다릅니다. 파일을 다시 등록하세요.'
 const ERR_UNSCANNED = '자리표시자 스캔은 양식 엔진이 생긴 뒤에 합니다. 그때 파일을 다시 등록하세요.'
 const ERR_SHAPE = '양식 스캔 결과를 읽지 못했습니다. 파일을 다시 등록하세요.'
+// 자리표시자가 하나도 없는 파일은 활성화해도 올린 파일이 그대로 나온다(2026-10-28 부산운영팀 양식 사고) — 활성화 자체를 막는다.
+const ERR_NO_PLACEHOLDERS = '자리표시자({{…}})가 하나도 없어 활성화할 수 없습니다 — 활성화해도 올린 파일이 그대로 나옵니다. 표 머리글을 "구분 | 금주 실적 | 차주 계획" 또는 "금주 실적 | 차주 계획" 꼴로 두거나 자리표시자를 넣어 다시 올리세요.'
 
 function isPlaceholder(v: unknown): v is Placeholder {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
@@ -54,7 +56,8 @@ function readReport(raw: unknown, kind: FormKind): { ok: true; report: ScanRepor
 
 /**
  * 스캔 토큰이 자동 경로 또는 mapping 으로 카탈로그에 닿는지, 블록/값 타입이 맞는지.
- * RECOMMENDED_MISSING 은 경고라 막지 않는다. 저장된 severity error 도 막는다(등록 거부 사유가 행에 남은 경우).
+ * RECOMMENDED_MISSING 은 경고라 막지 않지만, 자리표시자가 하나도 없으면 막는다(올린 파일이 그대로 나올 뿐이다).
+ * 저장된 severity error 도 막는다(등록 거부 사유가 행에 남은 경우).
  */
 export function assessFormActivation(
   kind: FormKind,
@@ -68,6 +71,7 @@ export function assessFormActivation(
     return { ok: false, code: read.code, error: read.code === 'RESCAN' ? (unscanned ? ERR_UNSCANNED : ERR_RESCAN) : ERR_SHAPE }
   }
   if (read.report.issues.some((i) => i.severity === 'error')) return { ok: false, code: 'SCAN', error: ERR_SCAN }
+  if (read.report.placeholders.length === 0) return { ok: false, code: 'NO_PLACEHOLDERS', error: ERR_NO_PLACEHOLDERS }
   const issues = validatePlaceholders(read.report.placeholders, kind, mapping, activeCustomKeys)
   const errors = issues.filter((i) => i.severity === 'error')
   const mismatch = errors.filter((i) => i.code === 'TYPE_MISMATCH')

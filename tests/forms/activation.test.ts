@@ -30,6 +30,11 @@ describe('양식 활성화 완전성(정본 §4.7.3)', () => {
     const r = assessFormActivation('weekly_report_pptx', report([ph('{{sections}}', 'sections')]), {})
     expect(r).toMatchObject({ ok: false, code: 'TYPE_MISMATCH' })
   })
+  it('자리표시자가 하나도 없으면 활성화하지 않는다 — 활성화해도 올린 파일이 그대로 나온다', () => {
+    const r = assessFormActivation('weekly_report_pptx', report([]), {})
+    expect(r).toMatchObject({ ok: false, code: 'NO_PLACEHOLDERS', error: expect.stringContaining('그대로 나옵니다') })
+    expect(assessFormActivation('weekly_report_xlsx', { ...report([]), format: 'xlsx' }, {})).toMatchObject({ ok: false, code: 'NO_PLACEHOLDERS' })
+  })
   it('저장된 스캔 오류는 활성화하지 않는다', () => {
     const r = assessFormActivation('weekly_report_pptx', report(
       [ph('{{report.project_name}}', 'report.project_name')],

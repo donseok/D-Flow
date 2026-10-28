@@ -26,7 +26,8 @@ import { FormTemplatesManager, type FormKindState } from '@/components/settings/
 
 const PID = 'bbbbbbbb-2222-4222-8222-222222222222'
 const TID = 'cccccccc-3333-4333-8333-333333333333'
-const setting = { template_id: null, mapping: { '{{a}}': 'project.name' }, options: {} } as unknown as FormKindState['setting']
+const options = { max_lines_per_cell: 15, max_rows_per_slide: 5, item_cap: 0, empty_text: '', continuation_label: '(계속)' }
+const setting = { template_id: null, mapping: { '{{a}}': 'project.name' }, options } as unknown as FormKindState['setting']
 const row = (over: Partial<FormKindState['templates'][number]> = {}) => ({
   id: TID, version: 2, fileName: '주간.pptx', sizeBytes: 2048, active: false, createdAt: '2026-10-05T00:00:00Z', errors: 0, warnings: 1, ...over,
 })
@@ -121,7 +122,7 @@ describe('FormTemplatesManager', () => {
     m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
     m.upload.mockResolvedValue({ error: null })
     m.register.mockResolvedValue(registered({
-      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주 (10/05~10/16)', next: '금주 (10/19~10/23)' }, removedRows: 0 },
+      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주 (10/05~10/16)', next: '금주 (10/19~10/23)' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 5 },
     }))
     m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 8 })
     await render()
@@ -130,6 +131,49 @@ describe('FormTemplatesManager', () => {
     expect(status).toContain('슬라이드 5')
     expect(status).toContain('전주 (10/05~10/16)')
     expect(status).toContain('업무영역')
+    expect(status).toContain('한 장에 5줄')
+    // 표본 행 수가 현재 설정과 같으면 설정을 건드리지 않는다
+    expect(m.update).not.toHaveBeenCalled()
+  })
+
+  it('양식의 표본 행 수가 설정과 다르면 한 장당 줄 수를 먼저 저장하고 새 revision 으로 활성화한다', async () => {
+    m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
+    m.upload.mockResolvedValue({ error: null })
+    m.register.mockResolvedValue(registered({
+      autoTokens: { slide: 2, columns: { name: null, this: 0, next: 1 }, headers: { name: '', this: '금주 (10/05~10/16) 실적', next: '차주 (10/19~10/23) 계획' }, removedRows: 1, removedSlides: 10, rowsPerSlide: 2 },
+    }))
+    m.update.mockResolvedValue({ ok: true, revision: 8 })
+    m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 9 })
+    await render()
+    await pickFile()
+    const patch = m.update.mock.calls[0][1]
+    expect(patch.expectedRevision).toBe(7)
+    expect(patch.set['forms.weekly_report_pptx']).toEqual({ ...setting, options: { ...options, max_rows_per_slide: 2 } })
+    expect(m.activate.mock.calls[0][2].expectedRevision).toBe(8)
+    const status = container.querySelector('[role=status]')?.textContent ?? ''
+    expect(status).toContain('두 열 표')
+    expect(status).toContain('[영역 이름]')
+    expect(status).toContain('한 장에 2줄')
+    expect(status).toContain('슬라이드 10장은 지웠습니다')
+    // 뒤이은 명령은 활성화가 돌려준 revision 으로 간다
+    m.deactivate.mockResolvedValue({ ok: true, status: 'applied', revision: 10 })
+    await render({ kinds: [kind([row({ active: true })])] })
+    await click(button('해제'))
+    expect(m.deactivate.mock.calls[0][2].expectedRevision).toBe(9)
+  })
+
+  it('한 장당 줄 수 저장에 실패하면 활성화하지 않고 등록만 됐다고 알린다', async () => {
+    m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
+    m.upload.mockResolvedValue({ error: null })
+    m.register.mockResolvedValue(registered({
+      autoTokens: { slide: 2, columns: { name: null, this: 0, next: 1 }, headers: { name: '', this: '금주 실적', next: '차주 계획' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 2 },
+    }))
+    m.update.mockResolvedValue({ ok: false, error: '설정 저장 실패' })
+    await render()
+    await pickFile()
+    expect(m.activate).not.toHaveBeenCalled()
+    expect(container.querySelector('[role=alert]')?.textContent).toContain('줄 수')
+    expect(m.refresh).toHaveBeenCalled()
   })
 
   it('자리표시자가 없는 양식은 활성화하지 않고 자리가 없다고 알린다', async () => {
@@ -152,7 +196,7 @@ describe('FormTemplatesManager', () => {
     m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
     m.upload.mockResolvedValue({ error: null })
     m.register.mockResolvedValue(registered({
-      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주', next: '금주' }, removedRows: 0 },
+      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주', next: '금주' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 5 },
     }))
     m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 8 })
     await render()

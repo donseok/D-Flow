@@ -301,7 +301,7 @@ describe('registerFormTemplate — 자리표시자 없는 주간 PPT 의 표 자
     const r = await registerFormTemplate(P, 'weekly_report_pptx', incoming, '주간업무보고서.pptx')
     expect(r).toMatchObject({
       ok: true, version: 1, warnings: [], placeholderCount: 4,
-      autoTokens: { slide: 1, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '금주 실적', next: '차주 계획' }, removedRows: 0 },
+      autoTokens: { slide: 1, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '금주 실적', next: '차주 계획' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 1 },
     })
     const dest = `ws/ws-1/p/${P}/weekly_report_pptx/v1.pptx`
     expect(calls).toEqual([`upload ${dest} application/vnd.openxmlformats-officedocument.presentationml.presentation upsert=false`, `remove ${incoming}`])
