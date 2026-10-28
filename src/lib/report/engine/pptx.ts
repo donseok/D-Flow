@@ -686,7 +686,8 @@ async function expandSlides(zip: JSZip, renderer: Renderer, base: Ctx): Promise<
   return out.map((slide, index) => ({ ...slide, ctx: { ...slide.ctx, page: index + 1, pageCount } }))
 }
 
-async function deckOrder(zip: JSZip): Promise<string[]> {
+/** 덱 순서의 슬라이드 파트 경로 — presentation.xml 의 sldIdLst, 없으면 번호순. forms/autoTokens 도 쓴다. */
+export async function deckOrder(zip: JSZip): Promise<string[]> {
   const pres = zip.file('ppt/presentation.xml')
   const rels = zip.file('ppt/_rels/presentation.xml.rels')
   if (pres && rels) {

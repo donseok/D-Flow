@@ -201,6 +201,8 @@ export const serverUiKo = {
   'srv.formTemplates.templateSettingCorruptedCannotActivated': '양식 설정이 손상되어 활성화할 수 없습니다.',
   'srv.formTemplates.uploadFileAgain': '업로드를 다시 하세요.',
   'srv.formTemplates.uploadedFilePathDoesNot': '올린 파일의 경로가 이 프로젝트의 양식과 맞지 않습니다.',
+  'srv.formTemplates.noPlaceholders': '자리표시자({{…}})가 없어 보고서 내용이 들어갈 자리가 없습니다. 활성화하면 올린 파일이 그대로 나옵니다. 표 머리글을 "구분 | 금주 실적 | 차주 계획" 꼴로 두면 자동으로 연결됩니다.',
+  'srv.formTemplates.autoTokensScanFailed': '표를 자동으로 연결했지만 그 결과를 읽지 못했습니다. 파일을 다시 올리세요.',
   // src/app/actions/globalSearch.ts
   'srv.globalSearch.couldNotSearch': '검색하지 못했습니다. 잠시 후 다시 시도하세요.',
   // src/app/actions/importBackup.ts

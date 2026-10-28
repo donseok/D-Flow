@@ -71,8 +71,37 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
         if (upErr) { setError(t('settings.forms.uploadFailed')); return }
         const reg = await registerFormTemplate(projectId, kind, prepared.path, file.name)
         if (!reg.ok) { setError(reg.error); return }
+        const version = String(reg.version)
+        // 자리표시자가 없으면 활성화해도 내용이 들어갈 자리가 없다 — 켜지 않고 이유를 알린다(목록은 새로 읽어 "경고 1" 이 보이게)
+        if (reg.placeholderCount === 0) {
+          setNotice(''); setError(t('settings.forms.noPlaceholders').replace('{version}', version)); router.refresh()
+          return
+        }
         const warn = reg.warnings.length ? t('settings.forms.warnCount').replace('{n}', String(reg.warnings.length)) : ''
-        done(t('settings.forms.registered').replace('{version}', String(reg.version)).replace('{warn}', String(warn)))
+        // 등록되면 바로 활성화한다 — 올린 사람은 그 양식으로 보고서를 받고 싶어 올린 것이다. 미매핑이면 기존 매핑 상자로 넘어간다.
+        let activated: FormCommandResult
+        try {
+          activated = await activateFormTemplate(projectId, reg.templateId, { expectedRevision: rev, commandId: newUuid() })
+        } catch {
+          done(t('settings.forms.registered').replace('{version}', version).replace('{warn}', warn))
+          setError(t('settings.forms.stateFailed'))
+          return
+        }
+        if (activated.ok) {
+          const auto = reg.autoTokens
+            ? t('settings.forms.autoLinked').replace('{slide}', String(reg.autoTokens.slide))
+              .replace('{name}', reg.autoTokens.headers.name).replace('{this}', reg.autoTokens.headers.this).replace('{next}', reg.autoTokens.headers.next)
+            : ''
+          done(t('settings.forms.registeredActivated').replace('{version}', version).replace('{warn}', warn).replace('{auto}', auto), activated.revision)
+          return
+        }
+        if (activated.unmapped?.length) {
+          setUnmapped({ kind, templateId: reg.templateId, tokens: activated.unmapped })
+          done(t('settings.forms.registeredNeedsMapping').replace('{version}', version))
+          return
+        }
+        done(t('settings.forms.registered').replace('{version}', version).replace('{warn}', warn))
+        setError(activated.error)
       } catch {
         setError(t('settings.forms.registerFailed'))
       }

@@ -90,22 +90,70 @@ describe('FormTemplatesManager', () => {
     expect(container.querySelector<HTMLInputElement>('input[type=file]')!.disabled).toBe(true)
   })
 
-  it('업로드는 준비 → Storage → 등록 순서로 진행하고 Storage 실패 때 등록하지 않는다', async () => {
+  const pickFile = async () => {
+    const file = new File([new Uint8Array(10)], '새.pptx')
+    const el = container.querySelector<HTMLInputElement>('input[type=file]')!
+    Object.defineProperty(el, 'files', { value: [file], configurable: true })
+    await act(async () => { el.dispatchEvent(new Event('change', { bubbles: true })) })
+  }
+  const registered = (over: Record<string, unknown> = {}) => ({ ok: true, templateId: TID, version: 3, path: 'p', warnings: [], placeholderCount: 4, ...over })
+
+  it('업로드는 준비 → Storage → 등록 → 활성화 순서로 진행하고 Storage 실패 때 등록하지 않는다', async () => {
     m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
     m.upload.mockResolvedValueOnce({ error: { message: 'x' } }).mockResolvedValueOnce({ error: null })
-    m.register.mockResolvedValue({ ok: true, templateId: TID, version: 3, path: 'p', warnings: [] })
+    m.register.mockResolvedValue(registered())
+    m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 8 })
     await render()
-    const file = new File([new Uint8Array(10)], '새.pptx')
-    const pick = async () => {
-      const el = container.querySelector<HTMLInputElement>('input[type=file]')!
-      Object.defineProperty(el, 'files', { value: [file], configurable: true })
-      await act(async () => { el.dispatchEvent(new Event('change', { bubbles: true })) })
-    }
-    await pick()
+    await pickFile()
     expect(m.register).not.toHaveBeenCalled()
     expect(container.querySelector('[role=alert]')?.textContent).toContain('올리지 못했습니다')
-    await pick()
+    await pickFile()
     expect(m.register).toHaveBeenCalledWith(PID, 'weekly_report_pptx', 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx', '새.pptx')
-    expect(container.querySelector('[role=status]')?.textContent).toContain('v3')
+    // 등록되면 바로 활성화한다 — 현재 revision 과 새 명령 id 로
+    expect(m.activate).toHaveBeenCalledWith(PID, TID, { expectedRevision: 7, commandId: expect.stringMatching(/^[0-9a-f-]{36}$/) })
+    const status = container.querySelector('[role=status]')?.textContent ?? ''
+    expect(status).toContain('v3')
+    expect(status).toContain('활성화')
+    expect(m.refresh).toHaveBeenCalled()
+  })
+
+  it('표를 자동으로 연결한 양식은 어느 슬라이드의 어떤 머리글을 이었는지 알려준다', async () => {
+    m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
+    m.upload.mockResolvedValue({ error: null })
+    m.register.mockResolvedValue(registered({
+      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주 (10/05~10/16)', next: '금주 (10/19~10/23)' }, removedRows: 0 },
+    }))
+    m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 8 })
+    await render()
+    await pickFile()
+    const status = container.querySelector('[role=status]')?.textContent ?? ''
+    expect(status).toContain('슬라이드 5')
+    expect(status).toContain('전주 (10/05~10/16)')
+    expect(status).toContain('업무영역')
+  })
+
+  it('자리표시자가 없는 양식은 활성화하지 않고 자리가 없다고 알린다', async () => {
+    m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
+    m.upload.mockResolvedValue({ error: null })
+    m.register.mockResolvedValue(registered({ placeholderCount: 0, warnings: [{ code: 'NO_PLACEHOLDERS', message: '서버 문구' }] }))
+    await render()
+    await pickFile()
+    expect(m.activate).not.toHaveBeenCalled()
+    const alert = container.querySelector('[role=alert]')?.textContent ?? ''
+    expect(alert).toContain('v3')
+    expect(alert).toContain('자리표시자')
+    expect(container.querySelector('[role=status]')).toBeNull()
+    expect(m.refresh).toHaveBeenCalled()
+  })
+
+  it('등록 뒤 활성화가 미매핑으로 막히면 매핑 상자를 열고 등록은 됐다고 알린다', async () => {
+    m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
+    m.upload.mockResolvedValue({ error: null })
+    m.register.mockResolvedValue(registered())
+    m.activate.mockResolvedValue({ ok: false, code: 'UNMAPPED', error: '매핑되지 않은 자리표시자가 있어 활성화할 수 없습니다.', unmapped: ['{{b}}'] })
+    await render()
+    await pickFile()
+    expect(container.querySelector('input[aria-label="{{b}} 경로"]')).not.toBeNull()
+    expect(container.querySelector('[role=status]')?.textContent).toContain('연결하면 활성화')
   })
 })

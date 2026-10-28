@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import JSZip from 'jszip'
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 import { makeAdminActor } from '../fixtures/actor'
 import { requireModule } from '@/lib/modules/gate'
@@ -186,9 +187,13 @@ describe('registerFormTemplate', () => {
     }))
     const r = await registerFormTemplate(P, 'weekly_report_pptx', incoming, 'Weekly.PPTX')
     expect(requireModule).toHaveBeenCalledWith({ projectId: P }, 'weekly')
-    expect(r).toMatchObject({ ok: true, version: 3, path: `ws/ws-1/p/${P}/weekly_report_pptx/v3.pptx`, warnings: [] })
+    // 자리표시자가 0개면 등록은 되지만 '내용이 들어갈 자리 없음' 경고가 결과와 스캔 기록 양쪽에 남는다(화면의 "경고 1")
+    expect(r).toMatchObject({ ok: true, version: 3, path: `ws/ws-1/p/${P}/weekly_report_pptx/v3.pptx`, placeholderCount: 0, warnings: [{ code: 'NO_PLACEHOLDERS', message: expect.stringContaining('자리표시자') }] })
+    expect(r).not.toHaveProperty('autoTokens')
     expect(moved).toEqual([`${incoming} -> ws/ws-1/p/${P}/weekly_report_pptx/v3.pptx`])
-    expect(inserted[0]).toMatchObject({ active: false, uploaded_by: 'u-admin', version: 3, placeholders: { engineVersion: 'forms-engine.v1', format: 'pptx', placeholders: [], issues: [] } })
+    expect(inserted[0]).toMatchObject({ active: false, uploaded_by: 'u-admin', version: 3, placeholders: {
+      engineVersion: 'forms-engine.v1', format: 'pptx', placeholders: [], issues: [{ code: 'RECOMMENDED_MISSING', severity: 'warning', message: expect.stringContaining('자리표시자') }],
+    } })
     expect(inserted[0].placeholders).not.toHaveProperty('tokenScan')
   })
 
@@ -255,6 +260,77 @@ describe('registerFormTemplate', () => {
       },
     }))
     expect(await registerFormTemplate(P, 'weekly_report_pptx', incoming, 'a.pptx')).toMatchObject({ ok: false, code: 'FORM_SCAN' })
+    expect(removed).toEqual([[incoming]])
+  })
+})
+
+describe('registerFormTemplate — 자리표시자 없는 주간 PPT 의 표 자동 연결', () => {
+  const incoming = `ws/ws-1/p/${P}/weekly_report_pptx/incoming/${T}.pptx`
+  const tc = (text: string, extra = '') => `<a:tc${extra}><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="ko-KR" sz="900"/><a:t>${text}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>`
+  const tableSlide = `<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree><p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="7" name="표"/></p:nvGraphicFramePr>`
+    + `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr/><a:tblGrid><a:gridCol w="1000000"/><a:gridCol w="4000000"/><a:gridCol w="4000000"/></a:tblGrid>`
+    + `<a:tr h="200000">${tc('구분')}${tc('금주 실적')}${tc('차주 계획')}</a:tr><a:tr h="3000000">${tc('운영팀')}${tc('[MES] 보세공장 전환')}${tc('[MES] 운영계 반영')}</a:tr>`
+    + `</a:tbl></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>`
+  const bytesWithTable = () => storedZip([
+    { name: '[Content_Types].xml', data: '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/></Types>' },
+    { name: 'ppt/presentation.xml', data: '<p:presentation/>' },
+    { name: 'ppt/slides/slide1.xml', data: tableSlide },
+  ])
+
+  it('"구분 | 금주 실적 | 차주 계획" 표를 찾아 토큰을 넣은 바이트를 v<n> 에 올리고 incoming 을 지운다 — move 가 아니다', async () => {
+    const calls: string[] = []
+    let uploaded: Uint8Array | null = null
+    const inserted: { placeholders?: { placeholders?: { token: string }[]; issues?: unknown[] } }[] = []
+    h.adminFor.mockImplementation(() => ({
+      admin: {
+        storage: { from: () => ({
+          info: async () => ({ data: { created_at: new Date().toISOString() }, error: null }),
+          download: async () => ({ data: bytesWithTable(), error: null }),
+          upload: async (path: string, body: Uint8Array, opts: { contentType?: string; upsert?: boolean }) => {
+            calls.push(`upload ${path} ${opts.contentType} upsert=${opts.upsert}`); uploaded = body; return { data: { path }, error: null }
+          },
+          move: async (from: string, to: string) => { calls.push(`move ${from} -> ${to}`); return { data: {}, error: null } },
+          remove: async (paths: string[]) => { calls.push(`remove ${paths.join(',')}`); return { data: [], error: null } },
+        }) },
+        from: () => ({
+          select: () => ({ eq: () => ({ eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }) }) }),
+          insert: (row: typeof inserted[number]) => ({ select: () => ({ single: async () => { inserted.push(row); return { data: { id: 'x' }, error: null } } }) }),
+        }),
+      },
+    }))
+    const r = await registerFormTemplate(P, 'weekly_report_pptx', incoming, '주간업무보고서.pptx')
+    expect(r).toMatchObject({
+      ok: true, version: 1, warnings: [], placeholderCount: 4,
+      autoTokens: { slide: 1, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '금주 실적', next: '차주 계획' }, removedRows: 0 },
+    })
+    const dest = `ws/ws-1/p/${P}/weekly_report_pptx/v1.pptx`
+    expect(calls).toEqual([`upload ${dest} application/vnd.openxmlformats-officedocument.presentationml.presentation upsert=false`, `remove ${incoming}`])
+    expect(uploaded).not.toBeNull()
+    const slide1 = await (await JSZip.loadAsync(uploaded!)).file('ppt/slides/slide1.xml')!.async('string')
+    expect(slide1).toContain('{{#rows sections}}{{.name}}')
+    expect(slide1).toContain('<a:tr h="200000">')  // 데이터 행 높이는 머리글 행에 맞춘다
+    expect(inserted[0].placeholders?.placeholders?.map((p) => p.token)).toEqual(['{{#rows sections}}', '{{.name}}', '{{.this_content}}', '{{.next_content}}'])
+    expect(inserted[0].placeholders?.issues).toEqual([])
+  })
+
+  it('토큰을 넣은 파일을 올리지 못하면 행을 만들지 않고 incoming 을 지운다', async () => {
+    const removed: string[][] = []
+    h.adminFor.mockImplementation(() => ({
+      admin: {
+        storage: { from: () => ({
+          info: async () => ({ data: { created_at: new Date().toISOString() }, error: null }),
+          download: async () => ({ data: bytesWithTable(), error: null }),
+          upload: async () => ({ data: null, error: { message: 'bucket full' } }),
+          move: async () => { throw new Error('move 는 부르지 않는다') },
+          remove: async (paths: string[]) => { removed.push(paths); return { data: [], error: null } },
+        }) },
+        from: () => ({
+          select: () => ({ eq: () => ({ eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }) }) }),
+          insert: () => { throw new Error('insert 는 부르지 않는다') },
+        }),
+      },
+    }))
+    expect(await registerFormTemplate(P, 'weekly_report_pptx', incoming, 'a.pptx')).toMatchObject({ ok: false, code: 'CONFIG_UNAVAILABLE' })
     expect(removed).toEqual([[incoming]])
   })
 })

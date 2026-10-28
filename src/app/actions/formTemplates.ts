@@ -11,7 +11,8 @@ import { adminFor } from '@/lib/supabase/adminFor'
 import { failWith, rpcFailure, tokenTable, type OwnTokenKeys } from '@/lib/errors/dbFail'
 import { isUuidLike } from '@/lib/domain/validate'
 import { assessFormActivation } from '@/lib/forms/activation'
-import { FORM_FORMAT, FORM_TEMPLATE_MAX_BYTES, type FormKind } from '@/lib/report/engine/types'
+import { FORM_FORMAT, FORM_TEMPLATE_MAX_BYTES, type FormFormat, type FormKind, type ScanReport } from '@/lib/report/engine/types'
+import { autoTokenizeTemplate, type AutoTokenDetection } from '@/lib/report/forms/autoTokens'
 import { scanFormTemplate } from '@/lib/report/engine/scan'
 import { validateFormPackage } from '@/lib/report/engine/validate'
 import { ConfigUnavailableError } from '@/lib/settings/errors'
@@ -37,6 +38,10 @@ const ERR_REUPLOAD = 'srv.formTemplates.uploadFileAgain'
 const ERR_PATH = 'srv.formTemplates.uploadedFilePathDoesNot'
 const INCOMING_TTL_MS = 24 * 60 * 60 * 1000
 const BUCKET = 'form-templates'
+const FORM_MIME: Record<FormFormat, string> = {
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
 
 const FIELD_KEY: Record<FormKind, ProjectSettingKey> = {
   weekly_report_pptx: 'fields.weekly_row',
@@ -53,8 +58,15 @@ const TOKENS: OwnTokenKeys = {
 }
 
 export type FormPrepareResult = { ok: true; path: string } | { ok: false; error: string }
+export type FormRegisterWarning = { code: 'ROUNDTRIP_LOSS' | 'NO_PLACEHOLDERS'; message: string }
 export type FormRegisterResult =
-  | { ok: true; templateId: string; version: number; path: string; warnings: { code: 'ROUNDTRIP_LOSS'; message: string }[] }
+  | {
+    ok: true; templateId: string; version: number; path: string; warnings: FormRegisterWarning[]
+    /** 저장된 파일의 자리표시자 수. 0 이면 활성화해도 내용이 들어갈 자리가 없다(화면은 자동 활성화하지 않는다) */
+    placeholderCount: number
+    /** 자리표시자 없는 주간 PPT 에서 표를 찾아 토큰을 넣었을 때 — 어느 슬라이드의 어떤 머리글을 연결했는지 */
+    autoTokens?: AutoTokenDetection
+  }
   | { ok: false; error: string; code?: string }
 export type FormCommand = { expectedRevision: number; commandId: string }
 export type FormCommandResult =
@@ -276,6 +288,28 @@ export async function registerFormTemplate(
     await bucket.remove([incomingPath])
     return { ok: false, code: 'FORM_SCAN', error: tr('srv.formTemplates.templatePlaceholderSyntaxStructureErrors') }
   }
+  // 자리표시자가 0개인 주간 PPT 는 "구분 | 실적 | 계획" 표를 찾아 첫 데이터 행에 토큰을 넣는다(계획 2026-10-28-weekly-form-auto-tokens.md).
+  // 바뀐 바이트가 저장 대상이고, 다시 스캔한 결과가 행에 남는다 — 그 뒤 활성화·렌더는 토큰 양식과 똑같다.
+  let stored = bytes
+  let autoTokens: AutoTokenDetection | undefined
+  if (scanned.placeholders.length === 0) {
+    const tokened = await autoTokenizeTemplate(bytes, formKind)
+    if (tokened.changed) {
+      const rescanned = await scanFormTemplate(tokened.bytes, ext)
+      if (rescanned.issues.some((i) => i.severity === 'error')) {
+        await bucket.remove([incomingPath])
+        return { ok: false, code: 'FORM_SCAN', error: tr('srv.formTemplates.autoTokensScanFailed') }
+      }
+      stored = tokened.bytes
+      scanned = rescanned
+      autoTokens = tokened.detection
+    }
+  }
+  // 그래도 0개면 등록은 하되 "자리 없음" 경고를 스캔 기록에 남긴다 — 설정 화면의 "경고 1" 이 되고, 결과의 warnings 로도 돌려준다.
+  const noPlaceholders = scanned.placeholders.length === 0
+  const report: ScanReport = noPlaceholders
+    ? { ...scanned, issues: [...scanned.issues, { code: 'RECOMMENDED_MISSING', severity: 'warning', message: tr('srv.formTemplates.noPlaceholders') }] }
+    : scanned
   const latest = await admin.from('form_templates').select('version').eq('project_id', projectId).eq('form_kind', formKind)
     .order('version', { ascending: false }).limit(1).maybeSingle()
   if (latest.error) {
@@ -285,23 +319,36 @@ export async function registerFormTemplate(
   const version = (typeof latest.data?.version === 'number' && Number.isSafeInteger(latest.data.version) && latest.data.version >= 1)
     ? latest.data.version + 1 : 1
   const dest = `ws/${workspaceId}/p/${projectId}/${formKind}/v${version}.${ext}`
-  const moved = await bucket.move(incomingPath, dest)
-  if (moved.error) {
-    await bucket.remove([incomingPath])
-    return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('formTemplates.register', moved.error, tr(ERR_REGISTER)) }
+  if (stored !== bytes) {
+    // 토큰을 넣은 바이트는 새 객체로 올리고 원본 incoming 은 지운다(move 는 원본 그대로를 옮긴다).
+    const up = await bucket.upload(dest, stored, { upsert: false, contentType: FORM_MIME[ext] })
+    if (up.error) {
+      await bucket.remove([incomingPath])
+      return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('formTemplates.register', up.error, tr(ERR_REGISTER)) }
+    }
+    const gone = await bucket.remove([incomingPath])
+    if (gone.error) console.error('[formTemplates] incoming 정리 실패 — gc 워커가 24시간 뒤 지운다:', incomingPath, gone.error.message)
+  } else {
+    const moved = await bucket.move(incomingPath, dest)
+    if (moved.error) {
+      await bucket.remove([incomingPath])
+      return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('formTemplates.register', moved.error, tr(ERR_REGISTER)) }
+    }
   }
   const id = crypto.randomUUID()
-  const placeholders = scanned
   const inserted = await admin.from('form_templates').insert({
     id, project_id: projectId, form_kind: formKind, file_name: fileName, storage_path: dest,
-    size_bytes: bytes.length, version, placeholders, active: false, uploaded_by: g.actor.userId,
+    size_bytes: stored.length, version, placeholders: report, active: false, uploaded_by: g.actor.userId,
   }).select('id').single()
   if (inserted.error || !inserted.data) {
     await bucket.remove([dest])
     return { ok: false, code: 'CONFIG_UNAVAILABLE', error: failWith('formTemplates.register', inserted.error ?? new Error('insert'), tr(ERR_REGISTER)) }
   }
   revalidatePath(`/p/${projectId}`, 'layout')
-  return { ok: true, templateId: id, version, path: dest, warnings: checked.warnings }
+  const warnings: FormRegisterWarning[] = noPlaceholders
+    ? [...checked.warnings, { code: 'NO_PLACEHOLDERS', message: tr('srv.formTemplates.noPlaceholders') }]
+    : [...checked.warnings]
+  return { ok: true, templateId: id, version, path: dest, warnings, placeholderCount: scanned.placeholders.length, ...(autoTokens ? { autoTokens } : {}) }
 }
 
 function ERR_PACKAGE_SIZE(tr: ServerTranslate): string { return tr('srv.formTemplates.couldNotReadTemplateFile') }
