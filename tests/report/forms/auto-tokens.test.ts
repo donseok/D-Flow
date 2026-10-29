@@ -116,6 +116,7 @@ describe('autoTokenizeTemplate — 주간 PPT 표 자동 연결', () => {
       linesPerCell: Math.floor((2410558 - 91440) / (9 * 12700 * 1.2)),
       datedHeaders: 2,
       lineStyles: [],  // 구분 열 표는 줄 서식을 배우지 않는다(영역마다 한 줄 — sections)
+      leaveTable: null,
     })
     const xml = await slideXml(r.bytes, 1)
     const trs = rows(xml)
@@ -191,6 +192,7 @@ describe('autoTokenizeTemplate — 주간 PPT 표 자동 연결', () => {
       linesPerCell: Math.floor(((2250347 + 2741109) / 2 - 91440) / (9 * 12700 * 1.2)),
       datedHeaders: 2,
       lineStyles: ['title', 'item'],  // 보기 칸의 "[a] …" 제목 줄과 "- 세부" 줄
+      leaveTable: null,
     })
     const trs = rows(await slideXml(r.bytes, 1))
     expect(trs).toHaveLength(2)

@@ -13,12 +13,13 @@ import { cellLines, sheetLineText } from '../sheetNarrative'
 import { subLineText } from '../xml'
 import type { ExtraNarrativeSlide } from '../aiComment'
 import type { NarrativeGroup, NarrativeModel } from '../narrative'
-import type { WeeklyReportModel } from '../weekly'
+import type { LeaveRow, WeeklyReportModel } from '../weekly'
 import type {
   WeeklyCatalogAiCommentItem,
   WeeklyCatalogModel,
   WeeklyCatalogSection,
   WeeklyCatalogTask,
+  WeeklyCatalogLeaveItem,
 } from './types'
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -173,6 +174,45 @@ function ranges(days: readonly string[]): { ymd: string; mmdd: string } {
   }
 }
 
+/** 표시 요일 칸의 날짜(일) — 'week_day1'…'week_day7' 꼴로, 칸이 모자라면 '' */
+type DayKey<P extends string> = `${P}${1 | 2 | 3 | 4 | 5 | 6 | 7}`
+function dayFields<P extends 'week_day' | 'next_week_day'>(prefix: P, days: readonly string[]): Record<DayKey<P>, string> {
+  return Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((n) => [`${prefix}${n}`, days[n - 1] ? String(Number(days[n - 1].slice(8, 10))) : ''])) as Record<DayKey<P>, string>
+}
+
+/** 날짜 목록 → '10/07', '10/12 ~ 14', '10/30 ~ 11/02' — 표시 요일에서 이어진 날은 묶는다 */
+export function leaveDatesText(dates: readonly string[], days: readonly string[]): string {
+  const idx = dates.map((d) => days.indexOf(d)).filter((i) => i >= 0).sort((a, b) => a - b)
+  const runs: number[][] = []
+  for (const i of idx) {
+    const last = runs[runs.length - 1]
+    if (last && last[last.length - 1] === i - 1) last.push(i)
+    else runs.push([i])
+  }
+  const md = (d: string) => `${d.slice(5, 7)}/${d.slice(8, 10)}`
+  return runs.map((run) => {
+    const a = days[run[0]]
+    const b = days[run[run.length - 1]]
+    if (a === b) return md(a)
+    return a.slice(5, 7) === b.slice(5, 7) ? `${md(a)} ~ ${b.slice(8, 10)}` : `${md(a)} ~ ${md(b)}`
+  }).join(', ')
+}
+
+function leaveItems(rows: readonly LeaveRow[], days: readonly string[]): WeeklyCatalogLeaveItem[] {
+  return rows.map((row) => {
+    const cells = Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((n) => [`d${n}`, row.perDay[n - 1] ? row.typeShort : '']))
+    return {
+      team: row.team, kind: row.typeLabel, member: row.memberName, title: row.title,
+      dates: leaveDatesText(row.dates, days), note: '', ...cells,
+    } as WeeklyCatalogLeaveItem
+  })
+}
+
+/** '김민준 매니저(연차 10/27), 최진혁(반차 10/28 ~ 29)' — 사람이 휴가 표 첫 줄에 적던 꼴 */
+function leaveSummary(rows: readonly LeaveRow[], days: readonly string[]): string {
+  return rows.map((row) => `${row.memberName}${row.title ? ` ${row.title}` : ''}(${row.typeLabel} ${leaveDatesText(row.dates, days)})`).join(', ')
+}
+
 function groupsOf(groups: NarrativeGroup[]): WeeklyCatalogModel['wbs_groups']['curr'] {
   return groups.map((group) => ({ title: group.phase, num: group.num, lines: group.items.map(subLineText) }))
 }
@@ -207,6 +247,7 @@ export function buildWeeklyCatalog(input: {
     week_end: '', week_days: [], week_range: '', prev_week_range: '', next_week_range: '',
     week_range_ymd: '', prev_week_range_ymd: '', next_week_range_ymd: '',
     week_range_mmdd: '', prev_week_range_mmdd: '', next_week_range_mmdd: '',
+    ...dayFields('week_day', []), ...dayFields('next_week_day', []),
     week_start: '', today: '', generated_at: '', description: '',
   }
   return {
@@ -224,6 +265,7 @@ export function buildWeeklyCatalog(input: {
       next_week_range: model.meta.nextWeekRange,
       week_range_ymd: thisR.ymd, prev_week_range_ymd: prevR.ymd, next_week_range_ymd: nextR.ymd,
       week_range_mmdd: thisR.mmdd, prev_week_range_mmdd: prevR.mmdd, next_week_range_mmdd: nextR.mmdd,
+      ...dayFields('week_day', model.meta.weekDays), ...dayFields('next_week_day', model.meta.nextWeekDays ?? []),
       week_start: model.meta.weekStart,
       today: model.meta.today,
       generated_at: model.meta.generatedAt,
@@ -250,6 +292,12 @@ export function buildWeeklyCatalog(input: {
     },
     sections: input.sections ?? [],
     tasks: input.tasks ?? [],
+    leaves: {
+      this_week: model ? leaveItems(model.leaves?.thisWeek ?? [], model.meta.weekDays) : [],
+      next_week: model ? leaveItems(model.leaves?.nextWeek ?? [], model.meta.nextWeekDays ?? []) : [],
+      this_week_summary: model ? leaveSummary(model.leaves?.thisWeek ?? [], model.meta.weekDays) : '',
+      next_week_summary: model ? leaveSummary(model.leaves?.nextWeek ?? [], model.meta.nextWeekDays ?? []) : '',
+    },
     wbs_groups: {
       prev: narrative ? groupsOf(narrative.prev) : [],
       curr: narrative ? groupsOf(narrative.curr) : [],

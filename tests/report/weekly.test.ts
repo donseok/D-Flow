@@ -239,6 +239,30 @@ describe('buildWeeklyReportModel — 워크로드/근태', () => {
     expect(() => buildWeeklyReportModelReal(items, project, '2026-06-30', { members, attendance, teams: TEST_TEAMS, calendar: calSeoulMon }))
       .toThrow(/attendanceTypes/)
   })
+  it('휴가 표 — 휴가로 집계하는 유형과 이름에 훈련이 든 유형만, 사람·유형마다 한 줄(요일 칸·날짜·직함·대표 팀)', () => {
+    const types = [...ATT_TYPES,
+      { code: 'drill', label: '예비군훈련', short: '훈련', color: 'brand' as const, counts_as: 'work' as const, selectable: true, sort: 11, active: true }]
+    const people = [{ ...members[0], title: '매니저' }, members[1]]
+    const at = (id: string, memberId: string, date: string, type: string): AttendanceRecord => ({ id, projectId: 'p', memberId, date, type, note: null })
+    const lm = buildWeeklyReportModel(items, project, '2026-06-30', {
+      members: people, attendanceTypes: types,
+      attendance: [
+        at('1', 'mem1', '2026-06-30', 'annual'), at('2', 'mem1', '2026-07-01', 'annual'), at('3', 'mem1', '2026-07-02', 'half'),
+        at('4', 'mem2', '2026-07-01', 'trip'),   // 출장은 휴가가 아니다
+        at('5', 'mem2', '2026-06-29', 'work'),
+        at('6', 'mem2', '2026-07-07', 'drill'), at('7', 'mem2', '2026-07-08', 'annual'),
+      ],
+    })
+    expect(lm.leaves.thisWeek.map((r) => [r.memberName, r.title, r.team, r.typeLabel, r.typeShort, r.dates, r.perDay])).toEqual([
+      ['홍길동', '매니저', '가공', '연차', '연차', ['2026-06-30', '2026-07-01'], [false, true, true, false, false]],
+      ['홍길동', '매니저', '가공', '반차', '반차', ['2026-07-02'], [false, false, false, true, false]],
+    ])
+    // 유형 순서는 근태 유형의 sort — 연차(3) 다음 예비군훈련(11)
+    expect(lm.leaves.nextWeek.map((r) => [r.memberName, r.title, r.typeLabel, r.dates])).toEqual([
+      ['김철수', '', '연차', ['2026-07-08']],
+      ['김철수', '', '예비군훈련', ['2026-07-07']],
+    ])
+  })
   it('주입 팀이 결과에 반영된다 — 팀 마스터가 바뀌면 워크로드도 따라온다(하드코딩 폴백 없음)', () => {
     // 기본 5팀에 없는 팀을 주입하면 워크로드 행에 그대로 나타나야 한다(내부 상수로 되돌아가지 않음).
     const injected = buildWeeklyReportModelReal(items, project, '2026-06-30', {

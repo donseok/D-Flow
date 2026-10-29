@@ -122,6 +122,26 @@ export interface WeeklyAttendance {
   nextWeek: AttendanceRow[]
 }
 
+/**
+ * 휴가 한 줄 — 한 사람의 한 휴가 유형(연차·반차·병가·훈련 등). 회사 주간보고 "휴가/훈련" 표의 꼴(사람 · 유형 · 요일 칸 칠하기).
+ * 휴가 유형 = 근태 유형 가운데 집계 분류가 휴가(counts_as 'leave')이거나 이름에 훈련·예비군·민방위가 든 것.
+ */
+export interface LeaveRow {
+  memberName: string
+  title: string              // 직함(명단의 title) — 없으면 ''
+  team: string               // 대표 팀 이름 — 없으면 ''
+  typeCode: string
+  typeLabel: string          // 유형 이름(연차·반차 …)
+  typeShort: string          // 유형 약칭
+  dates: string[]            // 그 주 표시 요일 가운데 이 유형인 날('YYYY-MM-DD')
+  perDay: boolean[]          // 표시 요일과 같은 칸
+}
+
+export interface WeeklyLeaves {
+  thisWeek: LeaveRow[]
+  nextWeek: LeaveRow[]
+}
+
 export interface MeetingRow {
   date: string               // '7/6(월)'
   dateIso: string            // 'YYYY-MM-DD' — 같은 회의의 반복 회차를 날짜 구간으로 병합할 때 사용(narrative)
@@ -192,6 +212,8 @@ export interface WeeklyReportModel {
   workload: WorkloadRow[]
   issues: IssueRow[]
   attendance: WeeklyAttendance
+  /** 휴가 표용(사람 · 유형별) — 근태 기록에서 */
+  leaves: WeeklyLeaves
   meetings: WeeklyMeetings
   announcements: WeeklyAnnouncements
   wbs: WbsFlatRow[]
@@ -453,6 +475,25 @@ export function buildWeeklyReportModel(
     thisWeek: buildAttendance(weekDays),
     nextWeek: buildAttendance(nextWeekDays),
   }
+  const leaveTypes = [...attTypes]
+    .filter(e => e.counts_as === 'leave' || /훈련|예비군|민방위/.test(e.label))
+    .sort((a, b) => a.sort - b.sort)
+  const buildLeaves = (days: string[]): LeaveRow[] => {
+    const rows: LeaveRow[] = []
+    for (const m of members) {
+      for (const type of leaveTypes) {
+        const perDay = days.map(day => recByMemberDate.get(`${m.id}|${day}`) === type.code)
+        if (!perDay.some(Boolean)) continue
+        rows.push({
+          memberName: m.name, title: m.title ?? '', team: m.teams?.[0]?.name ?? '',
+          typeCode: type.code, typeLabel: type.label, typeShort: vocabShort(attTypes, type.code),
+          dates: days.filter((_, i) => perDay[i]), perDay,
+        })
+      }
+    }
+    return rows
+  }
+  const leaveModel: WeeklyLeaves = { thisWeek: buildLeaves(weekDays), nextWeek: buildLeaves(nextWeekDays) }
 
   // ── 회의일정 (금주/차주) — 반복 회의를 주간 범위로 전개, 취소 회차 제외 ──
   const occ = expandMeetings(opts.meetings ?? [], opts.meetingExceptions ?? [], weekStart, nextWeekEnd)
@@ -533,7 +574,7 @@ export function buildWeeklyReportModel(
       prevWeekStart, prevWeekDays, prevWeekRange,
       totalLeaves: total, phaseCount: roots.length, topLevelLabel: levelLabels[0] ?? FALLBACK_LEVEL_LABELS[0],
     },
-    kpi, phases, planActual, workload, issues, attendance: attendanceModel, meetings, announcements, wbs, dev, devOwnerSummary,
+    kpi, phases, planActual, workload, issues, attendance: attendanceModel, leaves: leaveModel, meetings, announcements, wbs, dev, devOwnerSummary,
   }
 }
 

@@ -4,7 +4,7 @@ import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
 import type { WeeklyArea } from '@/lib/domain/weeklySheet'
 import { subLineText } from '@/lib/report/xml'
 import type { WeeklyReportModel } from '@/lib/report/weekly'
-import { buildWeeklyCatalog, splitTaskBlocks, weeklyCatalogSections, weeklyCatalogTasks } from '@/lib/report/catalog/weeklyBuild'
+import { buildWeeklyCatalog, leaveDatesText, splitTaskBlocks, weeklyCatalogSections, weeklyCatalogTasks } from '@/lib/report/catalog/weeklyBuild'
 import { calUtcMon } from '../../helpers/calendarFixture'
 
 function area(code: string, active: boolean, sort: number): WeeklyArea {
@@ -89,6 +89,45 @@ describe('buildWeeklyCatalog', () => {
     expect(catalog.report.week_range_mmdd).toBe('10/05~10/05')
     expect(catalog.report.next_week_range_mmdd).toBe('10/12~10/16')
     expect(catalog.tasks).toEqual([])
+  })
+
+  it('휴가 — 차주·금주 줄(요일 칸에 유형 약칭)과 사람이 적던 꼴의 요약, 요일 날짜(일)', () => {
+    const days = ['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30']
+    const next = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06']
+    const model = {
+      meta: { weekStart: '2026-10-26', weekDays: days, nextWeekDays: next, weekRange: '', nextWeekRange: '', prevWeekRange: '' },
+      kpi: {}, attendance: { thisWeek: [], nextWeek: [] }, meetings: { thisWeek: [], nextWeek: [], total: 0 },
+      announcements: { prevWeek: [], thisWeek: [] }, issues: [], phases: [], planActual: [], workload: [], wbs: [],
+      leaves: {
+        thisWeek: [
+          { memberName: '하정철', title: '매니저', team: '부산운영팀', typeCode: 'annual', typeLabel: '연차', typeShort: '연', dates: ['2026-10-27'], perDay: [false, true, false, false, false] },
+          { memberName: '김수형', title: '', team: '부산운영팀', typeCode: 'annual', typeLabel: '연차', typeShort: '연', dates: ['2026-10-28', '2026-10-29', '2026-10-30'], perDay: [false, false, true, true, true] },
+        ],
+        nextWeek: [
+          { memberName: '최진혁', title: '', team: '부산운영팀', typeCode: 'half', typeLabel: '반차', typeShort: '반', dates: ['2026-11-02', '2026-11-04'], perDay: [true, false, true, false, false] },
+        ],
+      },
+    } as unknown as WeeklyReportModel
+    const catalog = buildWeeklyCatalog({ model, calendar: calUtcMon })
+    expect(catalog.leaves.this_week_summary).toBe('하정철 매니저(연차 10/27), 김수형(연차 10/28 ~ 30)')
+    expect(catalog.leaves.next_week).toEqual([{
+      team: '부산운영팀', kind: '반차', member: '최진혁', title: '', dates: '11/02, 11/04', note: '',
+      d1: '반', d2: '', d3: '반', d4: '', d5: '', d6: '', d7: '',
+    }])
+    expect(catalog.leaves.next_week_summary).toBe('최진혁(반차 11/02, 11/04)')
+    expect([catalog.report.week_day1, catalog.report.week_day5, catalog.report.week_day6]).toEqual(['26', '30', ''])
+    expect([catalog.report.next_week_day1, catalog.report.next_week_day5]).toEqual(['2', '6'])
+    // 휴가 기록이 없는 모델(옛 모양)도 빈 값
+    const bare = buildWeeklyCatalog({ model: { ...model, leaves: undefined } as unknown as WeeklyReportModel, calendar: calUtcMon })
+    expect(bare.leaves).toEqual({ this_week: [], next_week: [], this_week_summary: '', next_week_summary: '' })
+  })
+
+  it('leaveDatesText — 표시 요일에서 이어진 날은 묶고, 달이 바뀌면 끝에도 달을 적는다', () => {
+    const days = ['2026-10-28', '2026-10-29', '2026-10-30', '2026-11-02', '2026-11-03']
+    expect(leaveDatesText(['2026-10-29'], days)).toBe('10/29')
+    expect(leaveDatesText(['2026-10-28', '2026-10-29', '2026-10-30'], days)).toBe('10/28 ~ 30')
+    expect(leaveDatesText(['2026-10-30', '2026-11-02'], days)).toBe('10/30 ~ 11/02')  // 주말을 건너 이어진 표시 요일
+    expect(leaveDatesText(['2026-11-03', '2026-10-28'], days)).toBe('10/28, 11/03')
   })
 
   it('모델이 없으면 범위 값은 비고 tasks 는 넘긴 그대로다', () => {

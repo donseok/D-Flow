@@ -21,7 +21,7 @@ export function catalogRoots(placeholders: readonly Placeholder[], mapping: Rend
 /** 주간 모델 로더 한 묶음이 채우는 루트 (정본 §4.5.4 표). */
 export const WEEKLY_MODEL_ROOTS = [
   'report', 'kpi', 'phases', 'plan_actual', 'workload', 'wbs_rows', 'wbs_groups',
-  'issues', 'issues_detail', 'events', 'meetings', 'announcements', 'attendance',
+  'issues', 'issues_detail', 'events', 'meetings', 'announcements', 'attendance', 'leaves',
 ] as const
 
 export function needsWeeklyModel(roots: ReadonlySet<string>): boolean {

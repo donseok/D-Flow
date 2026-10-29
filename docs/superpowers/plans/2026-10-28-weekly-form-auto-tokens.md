@@ -77,3 +77,16 @@
 - 구분 열 표(sections)는 바꾸지 않는다(서식·배치 학습은 두 열 표만).
 
 검증: 운영 이번 주 글 + 원본 양식 → 줄 서식·배치가 원본 장과 같은 꼴(Quick Look 이미지 비교), 22줄 건은 한 장 전체. 전체 테스트 16,183건.
+
+
+## 5차(2026-10-29) — 인원현황 휴가 표를 근태 기록으로
+
+사용자: "인원현황 휴가는 근태 기록으로 채우게 해줘". 원본 13장 "3. 휴가/훈련" 표: 머리글 셋(팀구분·구분·담당자 rowSpan 3 | "계획" gridSpan 5 → 월~금 → 날짜 19~23 | 비고), 표 폭 전체 요약 줄("하정철 매니저(휴가 10/07), …" — 금주 실적), 사람 줄(팀 칸 rowSpan, 구분 "휴가", 담당자, 휴가 요일 칸 바탕 4F81BD).
+
+결정:
+- 주간 모델 `leaves`(this/next): 사람 × 휴가 유형(counts_as 'leave' 또는 이름에 훈련·예비군·민방위) — 직함(명단 title)·대표 팀·유형 이름/약칭·날짜·요일 칸.
+- 카탈로그 `leaves.{this,next}_week`(list<record>: team·kind·member·title·dates·note·d1~d7)·`leaves.{this,next}_week_summary`, `report.(next_)week_day1~7`(표시 요일 날짜). 루트 leaves 는 주간 모델 로더 묶음.
+- 자동 연결 `detectLeaveTable`: 머리글의 요일 한 글자 칸 셋 이상 연속 + 담당자·구분 열 + 구분 보기 값의 휴가 낱말(교육/출장 격자 배제). 묶음 머리글이 실적·금주면 금주, 아니면 차주. 날짜 줄 → day 토큰, 전폭 요약 줄 → this_week_summary, 첫 사람 줄 → `{{#rows leaves.next_week}}` 토큰 줄(나머지 보기 줄 삭제).
+- `engine/cellMarks`(tcPr extLst, uri {9A3D6B21-…}): fill(글자가 있으면 배운 색으로 칠하고 글자 삭제), merge(위아래 같은 글자 rowSpan/vMerge), rows(그 블록의 한 장당 행 수 10 — max_rows_per_slide 2 가 인원현황 장을 복제하지 않게). 칠하기·합치기는 expandRows 의 마지막 fillValues 뒤(그 단계가 런 없는 문단에 빈 런을 넣어 빈 칸이 18pt 로 커지던 문제).
+
+운영: 이 프로젝트 근태 기록은 0건(10/29) — 배포 뒤에는 사람 줄 없이 머리글·빈 요약만 나온다. 근태 메뉴에서 입력하면 채워진다.

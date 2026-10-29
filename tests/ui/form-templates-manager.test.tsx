@@ -140,7 +140,7 @@ describe('FormTemplatesManager', () => {
     m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
     m.upload.mockResolvedValue({ error: null })
     m.register.mockResolvedValue(registered({
-      autoTokens: { slide: 2, columns: { name: null, this: 0, next: 1 }, headers: { name: '', this: '금주 (10/05~10/16) 실적', next: '차주 (10/19~10/23) 계획' }, removedRows: 1, removedSlides: 10, rowsPerSlide: 2, linesPerCell: 12, datedHeaders: 2 },
+      autoTokens: { slide: 2, columns: { name: null, this: 0, next: 1 }, headers: { name: '', this: '금주 (10/05~10/16) 실적', next: '차주 (10/19~10/23) 계획' }, removedRows: 1, removedSlides: 10, rowsPerSlide: 2, linesPerCell: 12, datedHeaders: 2, lineStyles: ['title', 'label'], leaveTable: { slide: 13, days: 5, week: 'next' } },
     }))
     m.update.mockResolvedValue({ ok: true, revision: 8 })
     m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 9 })
@@ -155,6 +155,9 @@ describe('FormTemplatesManager', () => {
     expect(status).toContain('업무 건마다 한 줄')
     expect(status).toContain('한 장에 2줄씩, 한 칸에 12줄')
     expect(status).toContain('보고 주차 날짜')
+    expect(status).toContain('줄 서식')
+    expect(status).toContain('슬라이드 13의 휴가 표는 근태 기록으로')
+    expect(status).toContain('차주 휴가인 요일 칸')
     expect(status).toContain('슬라이드 10장은 지웠습니다')
     // 뒤이은 명령은 활성화가 돌려준 revision 으로 간다
     m.deactivate.mockResolvedValue({ ok: true, status: 'applied', revision: 10 })

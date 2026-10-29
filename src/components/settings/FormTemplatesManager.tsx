@@ -115,6 +115,7 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
               + t('settings.forms.autoLinkedRows').replace('{rows}', String(auto.rowsPerSlide)).replace('{lines}', String(auto.linesPerCell))
               + (auto.datedHeaders > 0 ? t('settings.forms.autoLinkedDates') : '')
               + ((auto.lineStyles?.length ?? 0) > 0 ? t('settings.forms.autoLinkedStyles') : '')
+              + (auto.leaveTable ? t('settings.forms.autoLinkedLeave').replace('{slide}', String(auto.leaveTable.slide)).replace('{week}', t(auto.leaveTable.week === 'next' ? 'settings.forms.weekNext' : 'settings.forms.weekThis')) : '')
               + (auto.removedSlides > 0 ? t('settings.forms.autoLinkedRemovedSlides').replace('{n}', String(auto.removedSlides)) : '')
           }
           done(t('settings.forms.registeredActivated').replace('{version}', version).replace('{warn}', warn).replace('{auto}', autoText), activated.revision)

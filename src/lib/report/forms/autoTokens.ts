@@ -19,6 +19,7 @@
 import JSZip from 'jszip'
 import { deckOrder } from '../engine/pptx'
 import { attachPalette, learnPalette, type LineKind, type LinePalette } from '../engine/lineStyles'
+import { attachCellMark, cellFillOf, setCellFill } from '../engine/cellMarks'
 import type { FormKind } from '../engine/types'
 import { escapeXml } from '../xml'
 
@@ -41,6 +42,8 @@ export interface AutoTokenDetection {
   datedHeaders: number
   /** 보기 칸에서 배운 줄 서식 종류(두 열 표만 — 제목·항목 이름·세부·하위 등) */
   lineStyles: LineKind[]
+  /** 근태 기록으로 채우도록 연결한 휴가 표 — 덱 순서 1-based 슬라이드, 요일 칸 수, 격자가 차주(계획)인지 */
+  leaveTable: { slide: number; days: number; week: 'this' | 'next' } | null
 }
 
 export type AutoTokenResult =
@@ -424,6 +427,121 @@ async function removeSlides(zip: JSZip, paths: string[]): Promise<void> {
   }
 }
 
+/* ── 휴가 표(요일 격자) ───────────────────────────────────────────────────────── */
+
+const DOW = new Set(['월', '화', '수', '목', '금', '토', '일'])
+const LEAVE_WORD = /휴가|연차|반차|병가|훈련|경조|예비군|민방위/
+/** 사람이 적은 한 장의 휴가 줄 수보다 많으면 장을 복제한다 — 그 장에는 다른 표도 있어 넉넉히 둔다 */
+const LEAVE_ROWS_PER_SLIDE = 10
+const DEFAULT_LEAVE_FILL = '<a:solidFill><a:schemeClr val="accent1"/></a:solidFill>'
+
+interface LeaveFound {
+  table: Table
+  headerCount: number
+  dayCols: number[]
+  dateRow: number
+  cols: { team: number | null; kind: number; name: number; note: number | null }
+  summaryRow: number
+  personRows: number[]
+  week: 'this' | 'next'
+}
+
+/**
+ * 회사 양식의 "휴가/훈련" 표 — 머리글에 월~금 요일 칸(가로로 이어진 한 글자 칸 셋 이상)과 담당자·구분 열이 있고,
+ * 구분 열 보기 값에 휴가 낱말(휴가·연차·반차·병가·훈련 …)이 있는 표. 교육/출장 격자(구분 "출장및교육")는 아니다.
+ */
+function detectLeaveTable(table: Table): LeaveFound | null {
+  const colCount = table.widths.length
+  if (colCount < 5 || table.rows.length < 3) return null
+  let dayRow = -1
+  let dayCols: number[] = []
+  for (let r = 0; r < Math.min(4, table.rows.length) && dayRow < 0; r += 1) {
+    const cells = table.rows[r].cells
+    for (let c = 0; c < cells.length; c += 1) {
+      const run: number[] = []
+      while (c + run.length < cells.length && DOW.has(compact(cells[c + run.length].text)) && !cells[c + run.length].hMerge) run.push(c + run.length)
+      if (run.length >= 3) { dayRow = r; dayCols = run; break }
+    }
+  }
+  if (dayRow < 0) return null
+  const next = table.rows[dayRow + 1]
+  const dateRow = next && dayCols.every((c) => /^\d{1,2}$/.test(compact(next.cells[c]?.text ?? ''))) ? dayRow + 1 : -1
+  const headerCount = Math.max(headerRowCount(table.rows), dayRow + 1, dateRow + 1)
+  if (headerCount >= table.rows.length) return null
+  const headerText: string[] = Array.from({ length: colCount }, () => '')
+  for (const row of table.rows.slice(0, headerCount)) {
+    row.cells.forEach((cell, col) => {
+      if (col < colCount && !cell.hMerge && !cell.vMerge && cell.text) headerText[col] = headerText[col] ? `${headerText[col]} ${cell.text}` : cell.text
+    })
+  }
+  const find = (re: RegExp) => { const i = headerText.findIndex((t, col) => !dayCols.includes(col) && re.test(compact(t))); return i < 0 ? null : i }
+  const name = find(/^(?:담당자|성명|이름|대상자)/)
+  const kind = find(/^(?:구분|유형|종류)/)
+  if (name === null || kind === null) return null
+  const team = find(/팀/)
+  const note = find(/^비고/)
+  const data = table.rows.slice(headerCount).map((row, i) => ({ row, index: headerCount + i }))
+  const summary = data.find(({ row }) => row.cells[0] && row.cells[0].span >= colCount - 1)
+  const persons = data.filter(({ row }) => row !== summary?.row && row.cells.length >= colCount && !(row.cells[0]?.span >= colCount - 1))
+  if (!persons.length) return null
+  if (!persons.some(({ row }) => LEAVE_WORD.test(row.cells[kind]?.text ?? ''))) return null
+  // 요일 칸 위 묶음 머리글이 "계획·차주·예정" 이면 차주, "실적·금주" 면 금주(기본 차주 — 사람이 다음 주 휴가 계획을 칠한다)
+  const group = table.rows.slice(0, dayRow).flatMap((row) => row.cells.filter((cell, col) => col <= dayCols[0] && col + cell.span > dayCols[0] && cell.text).map((cell) => compact(cell.text)))
+  const week = group.some((t) => /실적|금주/.test(t)) && !group.some((t) => /계획|차주|예정/.test(t)) ? 'this' : 'next'
+  return { table, headerCount, dayCols, dateRow, cols: { team, kind, name, note }, summaryRow: summary?.index ?? -1, personRows: persons.map((p) => p.index), week }
+}
+
+function rewriteLeaveTable(f: LeaveFound): string {
+  const { table, dayCols, cols, week } = f
+  const listPath = week === 'next' ? 'leaves.next_week' : 'leaves.this_week'
+  const dayPrefix = week === 'next' ? 'report.next_week_day' : 'report.week_day'
+  // 칠한 요일 칸의 바탕 — 보기 사람 줄의 요일 칸에서 가장 흔한 색
+  const fills = new Map<string, number>()
+  for (const r of f.personRows) for (const c of dayCols) {
+    const fill = cellFillOf(table.rows[r].cells[c]?.xml ?? '')
+    if (fill) fills.set(fill, (fills.get(fill) ?? 0) + 1)
+  }
+  const onFill = [...fills.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? DEFAULT_LEAVE_FILL
+  const rows = table.rows.map((row, r) => {
+    if (r === f.dateRow) {
+      let xml = row.xml
+      dayCols.forEach((c, i) => { const cell = row.cells[c]; if (cell) xml = xml.replace(cell.xml, setCellParagraphs(cell.xml, [`{{${dayPrefix}${i + 1}}}`])) })
+      return xml
+    }
+    if (r === f.summaryRow) {
+      const cell = row.cells[0]
+      return row.xml.replace(cell.xml, setCellParagraphs(cell.xml, ['{{leaves.this_week_summary}}']))
+    }
+    return row.xml
+  })
+  const sample = table.rows[f.personRows[0]]
+  const tokenOf = (col: number): string | null => {
+    if (col === cols.team) return '{{.team}}'
+    if (col === cols.kind) return '{{.kind}}'
+    if (col === cols.name) return '{{.member}}'
+    if (col === cols.note) return '{{.note}}'
+    const d = dayCols.indexOf(col)
+    return d >= 0 ? `{{.d${d + 1}}}` : null
+  }
+  const cells = sample.cells.map((cell, col) => {
+    const token = tokenOf(col)
+    let xml = stripVertical(setCellParagraphs(cell.xml, [`${col === 0 ? `{{#rows ${listPath}}}` : ''}${token ?? ''}`]))
+    if (dayCols.includes(col)) xml = attachCellMark(setCellFill(xml, null), { fill: onFill, ...(col === 0 ? { rows: LEAVE_ROWS_PER_SLIDE } : {}) })
+    else if (col === cols.team) xml = attachCellMark(xml, { merge: true, ...(col === 0 ? { rows: LEAVE_ROWS_PER_SLIDE } : {}) })
+    else if (col === 0) xml = attachCellMark(xml, { rows: LEAVE_ROWS_PER_SLIDE })
+    return xml
+  })
+  const open = /^<a:tr\b[^>]*>/.exec(sample.xml)?.[0] ?? '<a:tr>'
+  const tokenRow = `${open}${cells.join('')}</a:tr>`
+  const firstPerson = f.personRows[0]
+  // 사람 줄 보기는 첫 줄만 토큰 줄로 남기고 나머지는 지운다(요약 줄·머리글은 그대로)
+  const out = rows.map((xml, r) => (r === firstPerson ? tokenRow : f.personRows.includes(r) ? '' : xml)).join('')
+  const first = table.xml.indexOf(table.rows[0].xml)
+  const lastRow = table.rows[table.rows.length - 1]
+  const last = table.xml.lastIndexOf(lastRow.xml) + lastRow.xml.length
+  return table.xml.slice(0, first) + out + table.xml.slice(last)
+}
+
 /**
  * 자리표시자가 없는 `weekly_report_pptx` 양식의 주간 내용 표를 찾아 토큰을 넣은 바이트를 돌려준다.
  * 토큰이 하나라도 있는 양식·다른 종류·맞는 표 없음은 바꾸지 않는다.
@@ -483,6 +601,19 @@ export async function autoTokenizeTemplate(bytes: Uint8Array, kind: FormKind): P
   const { xml: tableXml, removedRows, datedHeaders } = rewriteTable(chosen, palette)
   const slide = slides[chosen.slideIndex]
   zip.file(chosen.slidePath, slide.xml.replace(chosen.table.xml, tableXml))
+  // 근태 기록으로 채울 휴가 표(되풀이해 지우는 슬라이드 밖에서 처음 찾은 것)
+  let leaveTable: AutoTokenDetection['leaveTable'] = null
+  for (const [i, s] of slides.entries()) {
+    if (duplicates.includes(s.path) || leaveTable) continue
+    for (const table of s.tables) {
+      const found = detectLeaveTable(table)
+      if (!found) continue
+      const current = await zip.file(s.path)!.async('string')
+      zip.file(s.path, current.replace(table.xml, rewriteLeaveTable(found)))
+      leaveTable = { slide: i + 1, days: found.dayCols.length, week: found.week }
+      break
+    }
+  }
   await removeSlides(zip, duplicates)
   const out = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })
   return {
@@ -498,6 +629,7 @@ export async function autoTokenizeTemplate(bytes: Uint8Array, kind: FormKind): P
       linesPerCell: linesPerCellOf(chosen),
       datedHeaders,
       lineStyles: (Object.keys(palette) as LineKind[]),
+      leaveTable,
     },
   }
 }

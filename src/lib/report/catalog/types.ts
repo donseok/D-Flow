@@ -53,6 +53,9 @@ export interface WeeklyCatalogReport {
   week_range_mmdd: string
   prev_week_range_mmdd: string
   next_week_range_mmdd: string
+  /** 표시 요일의 날짜(일) — 요일 격자 머리글용. 칸이 없으면 '' (week_day1 = 그 주 첫 표시 요일) */
+  week_day1: string; week_day2: string; week_day3: string; week_day4: string; week_day5: string; week_day6: string; week_day7: string
+  next_week_day1: string; next_week_day2: string; next_week_day3: string; next_week_day4: string; next_week_day5: string; next_week_day6: string; next_week_day7: string
   week_start: string // 'YYYY-MM-DD'
   today: string      // 'YYYY-MM-DD'
   generated_at: string
@@ -137,6 +140,17 @@ export interface WeeklyCatalogAttendanceItem {
   count: number
 }
 
+/** 휴가 표 한 줄 — 한 사람의 한 휴가 유형. d1~d7 = 표시 요일 칸(그 날이면 유형 약칭, 아니면 '') */
+export interface WeeklyCatalogLeaveItem {
+  team: string
+  kind: string
+  member: string
+  title: string
+  dates: string
+  note: string
+  d1: string; d2: string; d3: string; d4: string; d5: string; d6: string; d7: string
+}
+
 export interface WeeklyCatalogPhaseItem {
   name: string
   weight_pct: number
@@ -203,6 +217,13 @@ export interface WeeklyCatalogModel {
   kpi: WeeklyCatalogKpi
   sections: WeeklyCatalogSection[]
   tasks: WeeklyCatalogTask[]
+  leaves: {
+    this_week: WeeklyCatalogLeaveItem[]
+    next_week: WeeklyCatalogLeaveItem[]
+    /** '김민준 매니저(연차 10/27), 최진혁(반차 10/28 ~ 29)' */
+    this_week_summary: string
+    next_week_summary: string
+  }
   wbs_groups: {
     prev: WeeklyCatalogWbsGroupItem[]
     curr: WeeklyCatalogWbsGroupItem[]

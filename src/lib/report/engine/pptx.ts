@@ -5,6 +5,7 @@
  * 바이트를 다시 scan 해 severity error 가 있으면 부분 출력 없이 멈춘다.
  */
 import { applyLineStyles, rowLayoutOf } from './lineStyles'
+import { applyCellFills, mergeMarkedCells, rowCapOf } from './cellMarks'
 import JSZip from 'jszip'
 import { formatCatalogValue, resolveCatalogPath } from '../catalog'
 import type { CatalogModel } from '../catalog/types'
@@ -161,7 +162,9 @@ class Renderer {
       if (list.length === 0) return ''
       return list.map((item) => this.renderRowPiece(row, parsed.token, { item, literals: null, suffix: '' }, ctx)).join('')
     })
-    return this.fillValues(/\{\{#items[ \t]/.test(out) ? this.expandItems(out, ctx) : out, ctx)
+    // 칸 표시(cellMarks)는 행을 다 그리고 값까지 채운 뒤에 — 칠하기(빈 런 정리 포함)는 칸마다, 세로 합치기는 표 단위로.
+    // fillValues 가 런 없는 문단에 빈 런을 넣으므로 그 뒤여야 빈 칸이 기본 글자 크기로 커지지 않는다.
+    return mergeMarkedCells(applyCellFills(this.fillValues(/\{\{#items[ \t]/.test(out) ? this.expandItems(out, ctx) : out, ctx)))
   }
 
   private renderRowPiece(row: string, token: string, piece: RowPiece, ctx: Ctx): string {
@@ -345,8 +348,10 @@ class Renderer {
     if (list.length === 0) return [[]]
     const layout = rowLayoutOf(row)
     if (layout) return this.packRowBlock(row, token, list, ctx, layout)
+    const cap = rowCapOf(row)
     const pieces = list.flatMap((item) => this.splitRowItem(row, token, item, ctx))
-    const max = this.options.max_rows_per_slide
+    // 칸 표시가 한 장당 행 수를 정한 블록(한 장에 다른 표와 같이 있는 휴가 표 등)은 그 값을 쓴다
+    const max = cap ?? this.options.max_rows_per_slide
     if (pieces.length <= max) return [pieces]
     const pages: RowPiece[][] = []
     for (let i = 0; i < pieces.length; i += max) pages.push(pieces.slice(i, i + max))

@@ -74,6 +74,16 @@ const ATTENDANCE_ITEM_FIELDS: Record<string, CatalogFieldMeta> = {
   '.count': { path: '.count', type: 'int', description: '근태 합계' },
 }
 
+const LEAVE_ITEM_FIELDS: Record<string, CatalogFieldMeta> = {
+  '.team': { path: '.team', type: 'text', description: '대표 팀 이름' },
+  '.kind': { path: '.kind', type: 'text', description: '휴가 유형 이름(연차·반차 …)' },
+  '.member': { path: '.member', type: 'text', description: '구성원 이름' },
+  '.title': { path: '.title', type: 'text', description: '직함' },
+  '.dates': { path: '.dates', type: 'text', description: '휴가 날짜 (예: 10/27 ~ 28)' },
+  '.note': { path: '.note', type: 'text', description: '비고(빈 값)' },
+  ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map((n) => [`.d${n}`, { path: `.d${n}`, type: 'text', description: `표시 요일 ${n}번째 칸 — 그 날이면 유형 약칭, 아니면 빈 값` } as CatalogFieldMeta])),
+}
+
 const PHASE_ITEM_FIELDS: Record<string, CatalogFieldMeta> = {
   '.name': { path: '.name', type: 'text', description: '단계명' },
   '.weight_pct': { path: '.weight_pct', type: 'pct1', description: '가중치 비율' },
@@ -163,6 +173,10 @@ export const WEEKLY_CATALOG_FIELDS: Record<string, CatalogFieldMeta> = {
   'report.next_week_range_ymd': { path: 'report.next_week_range_ymd', type: 'text', description: '차주 범위 (YYYY.MM.DD~YYYY.MM.DD)' },
   'report.week_range_mmdd': { path: 'report.week_range_mmdd', type: 'text', description: '금주 범위 (예: 10/26~10/30, 두 자리)' },
   'report.prev_week_range_mmdd': { path: 'report.prev_week_range_mmdd', type: 'text', description: '전주 범위 (MM/DD~MM/DD)' },
+  ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7].flatMap((n) => [
+    [`report.week_day${n}`, { path: `report.week_day${n}`, type: 'text', description: `금주 ${n}번째 표시 요일의 날짜(일)` } as CatalogFieldMeta],
+    [`report.next_week_day${n}`, { path: `report.next_week_day${n}`, type: 'text', description: `차주 ${n}번째 표시 요일의 날짜(일)` } as CatalogFieldMeta],
+  ])),
   'report.next_week_range_mmdd': { path: 'report.next_week_range_mmdd', type: 'text', description: '차주 범위 (MM/DD~MM/DD)' },
   'report.week_start': { path: 'report.week_start', type: 'date', description: '주차 시작일 (주 키, YYYY-MM-DD)' },
   'report.today': { path: 'report.today', type: 'date', description: '기준일 (YYYY-MM-DD)' },
@@ -214,6 +228,12 @@ export const WEEKLY_CATALOG_FIELDS: Record<string, CatalogFieldMeta> = {
   // announcements
   'announcements.prev_week': { path: 'announcements.prev_week', type: 'list<record>', description: '전주 공지 목록', recordFields: ANNOUNCEMENT_ITEM_FIELDS },
   'announcements.this_week': { path: 'announcements.this_week', type: 'list<record>', description: '금주 공지 목록', recordFields: ANNOUNCEMENT_ITEM_FIELDS },
+
+  // leaves — 휴가 표(사람 · 유형별, 요일 칸)
+  'leaves.this_week': { path: 'leaves.this_week', type: 'list<record>', description: '금주 휴가 목록', recordFields: LEAVE_ITEM_FIELDS },
+  'leaves.next_week': { path: 'leaves.next_week', type: 'list<record>', description: '차주 휴가 목록', recordFields: LEAVE_ITEM_FIELDS },
+  'leaves.this_week_summary': { path: 'leaves.this_week_summary', type: 'text', description: '금주 휴가 요약 (예: 김민준 매니저(연차 10/27))' },
+  'leaves.next_week_summary': { path: 'leaves.next_week_summary', type: 'text', description: '차주 휴가 요약' },
 
   // attendance
   'attendance.this_week': { path: 'attendance.this_week', type: 'list<record>', description: '금주 근태 목록', recordFields: ATTENDANCE_ITEM_FIELDS },
