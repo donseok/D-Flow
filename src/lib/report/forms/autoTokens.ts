@@ -18,6 +18,7 @@
  */
 import JSZip from 'jszip'
 import { deckOrder } from '../engine/pptx'
+import { attachPalette, learnPalette, type LineKind, type LinePalette } from '../engine/lineStyles'
 import type { FormKind } from '../engine/types'
 import { escapeXml } from '../xml'
 
@@ -38,6 +39,8 @@ export interface AutoTokenDetection {
   linesPerCell: number
   /** 머리글 날짜를 자리표시자로 바꾼 칸 수 */
   datedHeaders: number
+  /** 보기 칸에서 배운 줄 서식 종류(두 열 표만 — 제목·항목 이름·세부·하위 등) */
+  lineStyles: LineKind[]
 }
 
 export type AutoTokenResult =
@@ -248,7 +251,7 @@ function stripVertical(cellXml: string): string {
   return cellXml.replace(/^<a:tc\b([^>]*)>/, (_m, attrs: string) => `<a:tc${attrs.replace(/\s(?:rowSpan|vMerge)="[^"]*"/g, '')}>`)
 }
 
-function rewriteTable(c: Found): { xml: string; removedRows: number; datedHeaders: number } {
+function rewriteTable(c: Found, palette: LinePalette = {}): { xml: string; removedRows: number; datedHeaders: number } {
   const { table, headerCount, dataRow, columns } = c
   const headerRows = table.rows.slice(0, headerCount)
   const data = table.rows[dataRow]
@@ -256,7 +259,14 @@ function rewriteTable(c: Found): { xml: string; removedRows: number; datedHeader
   const tokens: Record<number, string[]> = columns.name === null
     ? { [columns.this]: ['{{#rows tasks}}{{.this_tagged}}'], [columns.next]: ['{{.next_tagged}}'] }
     : { [columns.name]: ['{{#rows sections}}{{.name}}'], [columns.this]: ['{{.this_content}}'], [columns.next]: ['{{.next_content}}'] }
-  const cells = data.cells.map((cell, col) => stripVertical(col in tokens ? setCellParagraphs(cell.xml, tokens[col]) : cell.xml))
+  const cells = data.cells.map((cell, col) => {
+    if (!(col in tokens)) return stripVertical(cell.xml)
+    const tokened = stripVertical(setCellParagraphs(cell.xml, tokens[col]))
+    if (columns.name !== null) return tokened
+    // 한 장의 데이터 영역 = 보기 데이터 행 높이의 합 — 엔진이 건을 이 영역에 담고 행 높이를 나눈다
+    const area = c.table.rows.slice(c.dataRow).reduce((sum, r) => sum + r.h, 0)
+    return attachPalette(tokened, palette, area > 0 ? { area, fontSize: sampleFontSize(c) } : undefined)
+  })
   const h = sampleRowHeight(c) || data.h
   const openTag = /^<a:tr\b[^>]*>/.exec(data.xml)?.[0] ?? '<a:tr>'
   const newOpen = /\bh="\d+"/.test(openTag) ? openTag.replace(/\bh="\d+"/, `h="${h}"`) : openTag
@@ -452,7 +462,25 @@ export async function autoTokenizeTemplate(bytes: Uint8Array, kind: FormKind): P
     duplicates.push(s.path)
   }
 
-  const { xml: tableXml, removedRows, datedHeaders } = rewriteTable(chosen)
+  // 두 열 표는 보기 칸(고른 표 + 되풀이해 지우는 표의 데이터 행, 내용 두 열)에서 줄 종류별 서식을 배운다
+  let palette: LinePalette = {}
+  if (chosen.columns.name === null) {
+    const samples: string[] = []
+    const collect = (table: Table, headerCount: number) => {
+      for (const row of table.rows.slice(headerCount)) {
+        for (const col of [chosen.columns.this, chosen.columns.next]) if (row.cells[col]) samples.push(row.cells[col].xml)
+      }
+    }
+    collect(chosen.table, chosen.headerCount)
+    for (const path of duplicates) {
+      for (const table of slides.find((s) => s.path === path)?.tables ?? []) {
+        const found = detectTable(table)
+        if (found?.signature === chosen.signature) collect(table, found.headerCount)
+      }
+    }
+    palette = learnPalette(samples)
+  }
+  const { xml: tableXml, removedRows, datedHeaders } = rewriteTable(chosen, palette)
   const slide = slides[chosen.slideIndex]
   zip.file(chosen.slidePath, slide.xml.replace(chosen.table.xml, tableXml))
   await removeSlides(zip, duplicates)
@@ -469,6 +497,7 @@ export async function autoTokenizeTemplate(bytes: Uint8Array, kind: FormKind): P
       rowsPerSlide: Math.max(1, chosen.table.rows.length - chosen.headerCount),
       linesPerCell: linesPerCellOf(chosen),
       datedHeaders,
+      lineStyles: (Object.keys(palette) as LineKind[]),
     },
   }
 }

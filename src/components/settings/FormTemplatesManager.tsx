@@ -114,6 +114,7 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
               .replace('{slide}', String(auto.slide)).replace('{name}', auto.headers.name).replace('{this}', auto.headers.this).replace('{next}', auto.headers.next)
               + t('settings.forms.autoLinkedRows').replace('{rows}', String(auto.rowsPerSlide)).replace('{lines}', String(auto.linesPerCell))
               + (auto.datedHeaders > 0 ? t('settings.forms.autoLinkedDates') : '')
+              + ((auto.lineStyles?.length ?? 0) > 0 ? t('settings.forms.autoLinkedStyles') : '')
               + (auto.removedSlides > 0 ? t('settings.forms.autoLinkedRemovedSlides').replace('{n}', String(auto.removedSlides)) : '')
           }
           done(t('settings.forms.registeredActivated').replace('{version}', version).replace('{warn}', warn).replace('{auto}', autoText), activated.revision)

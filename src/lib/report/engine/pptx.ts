@@ -4,6 +4,7 @@
  * render 인자에는 저장된 스캔이 없어 TEMPLATE_DRIFT 대조는 하지 않는다.
  * 바이트를 다시 scan 해 severity error 가 있으면 부분 출력 없이 멈춘다.
  */
+import { applyLineStyles, rowLayoutOf } from './lineStyles'
 import JSZip from 'jszip'
 import { formatCatalogValue, resolveCatalogPath } from '../catalog'
 import type { CatalogModel } from '../catalog/types'
@@ -28,7 +29,8 @@ const P_RE = /<a:p\b[^>]*>[\s\S]*?<\/a:p>/g
 
 interface Run { rPr: string; text: string }
 interface ItemSlice { items: unknown[] | null; extra: string | null }
-interface RowPiece { item: unknown; literals: string[] | null; suffix: string }
+/** lines = 그 조각의 가장 긴 칸 줄 수(추정), height = 줄 배치(rowLayout)가 정한 행 높이(EMU) */
+interface RowPiece { item: unknown; literals: string[] | null; suffix: string; lines?: number; height?: number }
 interface PlannedPage {
   continuation: string
   itemSlices?: Array<ItemSlice | undefined>
@@ -165,14 +167,16 @@ class Renderer {
   private renderRowPiece(row: string, token: string, piece: RowPiece, ctx: Ctx): string {
     const stripped = row.replace(/\{\{#rows[ \t]+[\s\S]*?\}\}/, '').replace(/\{\{\/rows\}\}/, '')
     const child: Ctx = { ...ctx, scope: [...ctx.scope, token], items: [...ctx.items, piece.item] }
-    if (!piece.literals) return this.renderFragment(stripped, child)
+    // 양식에서 배운 줄 서식(lineStyles — 자동 연결이 칸 확장에 둔다)이 있으면 그려진 칸의 줄마다 입히고, 줄 배치가 정한 행 높이를 쓴다
+    const sized = (xml: string) => (piece.height ? withRowHeight(xml, piece.height) : xml)
+    if (!piece.literals) return sized(applyLineStyles(this.renderFragment(stripped, child)))
     let index = 0
-    return stripped.replace(/<a:tc\b[^>]*>[\s\S]*?<\/a:tc>/g, (cell) => {
+    return sized(applyLineStyles(stripped.replace(/<a:tc\b[^>]*>[\s\S]*?<\/a:tc>/g, (cell) => {
       const literal = piece.literals?.[index] ?? ''
       const text = index === 0 && piece.suffix ? (literal ? `${literal} ${piece.suffix}` : piece.suffix) : literal
       index += 1
       return replaceCellText(cell, text)
-    })
+    })))
   }
 
   private expandItems(xml: string, ctx: Ctx): string {
@@ -282,7 +286,8 @@ class Renderer {
     let count = 1
     for (const pages of itemPlans) count = Math.max(count, pages.length)
     for (const pages of rowPlans) count = Math.max(count, pages.length)
-    const splitCells = rowPlans.some((pages) => pages.some((page) => page.some((piece) => piece.literals)))
+    // 줄 나눔이 있거나 행 높이를 정한 조각(rowLayout)이 있으면 한 장이어도 조각 그대로 그린다
+    const splitCells = rowPlans.some((pages) => pages.some((page) => page.some((piece) => piece.literals || piece.height)))
     if (count === 1 && !splitCells) return [{ continuation: '' }]
     return Array.from({ length: count }, (_, index) => {
       const itemSlices = itemPlans.map((pages) => {
@@ -291,7 +296,7 @@ class Renderer {
         return pages[index]
       })
       const rowPieces = rowPlans.map((pages) => {
-        const split = pages.some((page) => page.some((piece) => piece.literals))
+        const split = pages.some((page) => page.some((piece) => piece.literals || piece.height))
         if (index === 0 && pages.length <= 1 && !split) return undefined
         if (index >= pages.length) return []
         return pages[index]
@@ -338,6 +343,8 @@ class Renderer {
   private paginateRowBlock(row: string, token: string, path: string, ctx: Ctx): RowPiece[][] {
     const list = this.blockList(token, path, ctx)
     if (list.length === 0) return [[]]
+    const layout = rowLayoutOf(row)
+    if (layout) return this.packRowBlock(row, token, list, ctx, layout)
     const pieces = list.flatMap((item) => this.splitRowItem(row, token, item, ctx))
     const max = this.options.max_rows_per_slide
     if (pieces.length <= max) return [pieces]
@@ -346,13 +353,46 @@ class Renderer {
     return pages
   }
 
-  private splitRowItem(row: string, token: string, item: unknown, ctx: Ctx): RowPiece[] {
+  /**
+   * 줄 배치(rowLayout — 자동 연결이 양식의 보기 칸 크기에서 잰 한 장의 데이터 영역)가 있는 행: 사람이 한 장을 쓰는 꼴로 놓는다.
+   * 조각을 한 장의 줄 수(영역 ÷ 줄 높이)까지, 한 장 max_rows_per_slide 개까지 차례로 담고, 한 장보다 긴 건만 줄 경계에서 나눈다.
+   * 행 높이는 그 장의 영역을 나눈다 — 모두 고르게 들어가면 같은 높이(사람의 반씩 나눈 칸), 넘치는 건은 그만큼 크게, 혼자면 한 장 전체.
+   */
+  private packRowBlock(row: string, token: string, list: unknown[], ctx: Ctx, layout: { area: number; line: number; pad: number }): RowPiece[][] {
+    const capacity = Math.max(1, Math.floor((layout.area - layout.pad) / layout.line))
+    const pieces = list.flatMap((item) => this.splitRowItem(row, token, item, ctx, capacity))
+    const max = this.options.max_rows_per_slide
+    const pages: RowPiece[][] = []
+    let page: RowPiece[] = []
+    let used = 0
+    for (const piece of pieces) {
+      const need = Math.max(1, piece.lines ?? 1)
+      if (page.length && (page.length >= max || used + need > capacity)) { pages.push(page); page = []; used = 0 }
+      page.push(piece)
+      used += need
+    }
+    if (page.length) pages.push(page)
+    return pages.map((items) => {
+      const needs = items.map((piece) => Math.max(1, piece.lines ?? 1) * layout.line + layout.pad)
+      const even = layout.area / items.length
+      const big = needs.map((need) => need > even)
+      const rest = layout.area - needs.reduce((sum, need, i) => sum + (big[i] ? need : 0), 0)
+      const others = big.filter((b) => !b).length
+      return items.map((piece, i) => ({
+        ...piece,
+        height: Math.round(big[i] ? needs[i] : Math.max(needs[i], others ? rest / others : even)),
+      }))
+    })
+  }
+
+  private splitRowItem(row: string, token: string, item: unknown, ctx: Ctx, budgetOverride?: number): RowPiece[] {
     const child: Ctx = { ...ctx, scope: [...ctx.scope, token], items: [...ctx.items, item] }
     const stripped = row.replace(/\{\{#rows[ \t]+[\s\S]*?\}\}/, '').replace(/\{\{\/rows\}\}/, '')
     const cells = [...stripped.matchAll(/<a:tc\b[^>]*>[\s\S]*?<\/a:tc>/g)].map((match) => match[0])
     const texts = cells.map((cell) => this.cellText(cell, child))
-    const budget = this.options.max_lines_per_cell
-    if (!texts.some((value) => visualLines(value) > budget)) return [{ item, literals: null, suffix: '' }]
+    const budget = budgetOverride ?? this.options.max_lines_per_cell
+    const lines = Math.max(0, ...texts.map((value) => visualLines(value)))
+    if (!texts.some((value) => visualLines(value) > budget)) return [{ item, literals: null, suffix: '', lines }]
     const chunks = texts.map((value) => {
       if (visualLines(value) <= budget) return [value]
       // 문단(줄) 경계에서 나눈다 — 셀 안 목록이든 여러 줄 값이든 한 줄이 두 행에 찢기지 않는다(2026-10-29: 주간보고 칸이
@@ -367,6 +407,7 @@ class Renderer {
       item,
       literals: chunks.map((chunk) => chunk[index] ?? ''),
       suffix: `${this.options.continuation_label} ${index + 1}/${count}`,
+      lines: Math.max(0, ...chunks.map((chunk) => visualLines(chunk[index] ?? ''))),
     }))
   }
 
@@ -461,6 +502,10 @@ function fillPlain(raw: string, resolve: (token: string, path: string) => string
     text = text.slice(0, tok.start) + value + text.slice(tok.end)
   }
   return text
+}
+
+function withRowHeight(rowXml: string, height: number): string {
+  return rowXml.replace(/^<a:tr\b[^>]*>/, (open) => (/\bh="\d+"/.test(open) ? open.replace(/\bh="\d+"/, `h="${height}"`) : open.replace(/>$/, ` h="${height}">`)))
 }
 
 function replaceCellText(cell: string, text: string): string {

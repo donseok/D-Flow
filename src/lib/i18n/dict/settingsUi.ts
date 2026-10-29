@@ -215,6 +215,7 @@ export const settingsUiKo = {
   'settings.forms.autoLinkedNoName': ' 슬라이드 {slide}의 "{this}"·"{next}" 두 열 표를 찾아 업무 건마다 한 줄씩(왼쪽 금주 실적 · 오른쪽 같은 건의 차주 계획) 채우도록 연결했습니다. 건은 주간보고 칸의 빈 줄이나 "[분류] 제목" 줄로 나눕니다.',
   'settings.forms.autoLinkedRows': ' 양식대로 한 장에 {rows}줄씩, 한 칸에 {lines}줄까지 넣습니다.',
   'settings.forms.autoLinkedDates': ' 머리글의 날짜는 보고 주차 날짜로 바뀝니다.',
+  'settings.forms.autoLinkedStyles': ' 보기 칸의 줄 서식(제목·● 항목 이름·– 세부·ㄴ 하위)을 배워 웹 내용에 그대로 입히고, 건이 길면 한 장에 하나만 둡니다.',
   'settings.forms.autoLinkedRemovedSlides': ' 같은 표를 되풀이한 슬라이드 {n}장은 지웠습니다 — 보고서를 만들 때 필요한 만큼 다시 늘어납니다.',
   'settings.forms.rowsOptionFailed': '양식 v{version} 을 등록했지만 한 장당 줄 수·칸당 줄 수 설정을 저장하지 못해 활성화하지 않았습니다. 목록에서 활성화를 누르면 현재 설정대로 씁니다.',
   'settings.forms.registeredNeedsMapping': '양식 v{version} 을 등록했습니다. 아래 자리표시자를 연결하면 활성화됩니다.',
