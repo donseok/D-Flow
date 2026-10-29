@@ -124,6 +124,21 @@ describe('PptxFormEngine §4.4.6 overflow', () => {
     expect(await slidesOf(await renderPptx(bytes, weekly({ report: {}, sections: [{ name, code: '끝' }] }), {}, options))).toHaveLength(1)
   })
 
+  it('여러 줄 값 칸은 줄(문단) 경계에서 나눈다 — 한 줄이 두 행에 찢기지 않는다', async () => {
+    const table = `<p:graphicFrame><a:graphic><a:tbl><a:tr>${cell('{{#rows tasks}}{{.this_tagged}}')}${cell('{{.next_tagged}}{{/rows}}')}</a:tr></a:tbl></a:graphic></p:graphicFrame>`
+    const bytes = await pack({ 'ppt/slides/slide1.xml': slide(table) })
+    // 한 줄은 26자 남짓(전각 기준)에서 접힌다 — 각 줄 2칸씩, 예산 5칸이면 두 줄 + 두 줄 + 한 줄로 나뉘어야 한다
+    const line = (n: number) => `${n}번 줄 ${'가'.repeat(24)}`
+    const [only] = await slidesOf(await renderPptx(bytes, weekly({
+      report: {}, tasks: [{ this_tagged: [line(1), line(2), line(3), line(4), line(5)], next_tagged: ['계획'] }],
+    }), {}, { ...options, max_lines_per_cell: 5 }))
+    const rows = [...only.matchAll(/<a:tr\b[\s\S]*?<\/a:tr>/g)].map((m) => texts(m[0]))
+    expect(rows).toHaveLength(3)
+    // 각 행의 첫 칸은 온전한 줄들뿐이다 — 접힌 꼬리만 다음 행으로 넘어간 문단이 없다
+    const firstCells = rows.map((row) => row.filter((t) => /번 줄/.test(t)).map((t) => t.replace(/ \(계속\) \d+\/\d+$/, '')))
+    expect(firstCells).toEqual([[line(1), line(2)], [line(3), line(4)], [line(5)]])
+  })
+
   it('값 토큰 단독은 넘침으로 슬라이드를 만들지 않는다', async () => {
     const bytes = await pack({
       'ppt/slides/slide1.xml': slide(shape('4', '<a:p><a:r><a:t>{{report.project_name}}</a:t></a:r></a:p>')),

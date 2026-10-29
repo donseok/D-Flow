@@ -4,7 +4,7 @@ import type { WeeklySheetRow } from '@/lib/domain/weeklySheet'
 import type { WeeklyArea } from '@/lib/domain/weeklySheet'
 import { subLineText } from '@/lib/report/xml'
 import type { WeeklyReportModel } from '@/lib/report/weekly'
-import { buildWeeklyCatalog, weeklyCatalogSections } from '@/lib/report/catalog/weeklyBuild'
+import { buildWeeklyCatalog, splitTaskBlocks, weeklyCatalogSections, weeklyCatalogTasks } from '@/lib/report/catalog/weeklyBuild'
 import { calUtcMon } from '../../helpers/calendarFixture'
 
 function area(code: string, active: boolean, sort: number): WeeklyArea {
@@ -82,5 +82,65 @@ describe('buildWeeklyCatalog', () => {
     expect(catalog.report.week_year).not.toBe(model.meta.isoYear)
     expect(catalog.report.week_days).toEqual([{ date: weekStart, dow: 1 }])
     expect(catalog.wbs_groups.curr[0].lines).toEqual([subLineText('할 일'), subLineText('- 이미')])
+    // 회사 양식 머리글용 범위 — 표시 요일 첫날~끝날, 전주·차주는 달력의 이웃 주(월~금)
+    expect(catalog.report.week_range_ymd).toBe('2026.10.05~2026.10.05')
+    expect(catalog.report.next_week_range_ymd).toBe('2026.10.12~2026.10.16')
+    expect(catalog.report.prev_week_range_ymd).toBe('2026.09.28~2026.10.02')
+    expect(catalog.report.week_range_mmdd).toBe('10/05~10/05')
+    expect(catalog.report.next_week_range_mmdd).toBe('10/12~10/16')
+    expect(catalog.tasks).toEqual([])
+  })
+
+  it('모델이 없으면 범위 값은 비고 tasks 는 넘긴 그대로다', () => {
+    const tasks = weeklyCatalogTasks([row('a', { thisContent: '한 건' })], [area('a', true, 0)])
+    const catalog = buildWeeklyCatalog({ tasks })
+    expect(catalog.report.week_range_ymd).toBe('')
+    expect(catalog.report.next_week_range_mmdd).toBe('')
+    expect(catalog.tasks).toBe(tasks)
+  })
+})
+
+describe('splitTaskBlocks · weeklyCatalogTasks — 업무 건 단위', () => {
+  it('빈 줄과 "[분류] 제목" 줄에서 건을 나누고, 들여쓰기·글머리 글자는 그대로 둔다(탭은 공백 넷)', () => {
+    const text = '[생산계획] 간트 연동\n  ▪ 목적 : 연계\n\t–  개발\n[통합관제] 크레인 제한\n ㄴ 유효성\n\n\n세 번째 건\n   - 세부\n'
+    expect(splitTaskBlocks(text)).toEqual([
+      ['[생산계획] 간트 연동', '  ▪ 목적 : 연계', '    –  개발'],
+      ['[통합관제] 크레인 제한', ' ㄴ 유효성'],
+      ['세 번째 건', '   - 세부'],
+    ])
+    // 들여쓴 "[" 줄(두 칸 이상)은 건 안의 줄이다
+    expect(splitTaskBlocks('[A] 제목\n  [참고] 안쪽')).toEqual([['[A] 제목', '  [참고] 안쪽']])
+    expect(splitTaskBlocks('\n  \n')).toEqual([])
+  })
+
+  it('같은 제목의 금주·차주 건을 한 항목으로 묶고, 짝 없는 차주 건은 영역 끝에, 글 없는 영역은 건이 없다', () => {
+    const areas = [area('q', true, 1), area('empty', true, 2), area('g', true, 3), area('off', false, 4)]
+    const rows = [
+      row('q', { thisContent: '[생산계획] 간트\n–  개발\n\n[통합관제] 크레인', nextContent: '[통합관제]  크레인\n–  반영\n\n[신규] 다음 주만' }),
+      row('empty'),
+      row('g', { thisContent: '세로고정 상차', nextContent: '' }),
+      row('off', { nextContent: '비활성이지만 글이 있다' }),
+    ]
+    const tasks = weeklyCatalogTasks(rows, areas)
+    expect(tasks.map((t) => [t.code, t.title, t.this_content, t.next_content])).toEqual([
+      ['q', '[생산계획] 간트', ['[생산계획] 간트', '–  개발'], []],
+      ['q', '[통합관제] 크레인', ['[통합관제] 크레인'], ['[통합관제]  크레인', '–  반영']],
+      ['q', '[신규] 다음 주만', [], ['[신규] 다음 주만']],
+      ['g', '세로고정 상차', ['세로고정 상차'], []],
+      ['off', '비활성이지만 글이 있다', [], ['비활성이지만 글이 있다']],
+    ])
+    // 제목에 [분류] 가 없으면 [영역 이름] 을 붙인 줄이 tagged 다
+    expect(tasks[3].this_tagged).toEqual(['[g] 세로고정 상차'])
+    expect(tasks[0].this_tagged).toEqual(tasks[0].this_content)
+    expect(tasks[3].next_tagged).toEqual([])
+  })
+
+  it('작성 항목이 있으면 첫 항목의 칸을 쓰고, 한 영역의 여러 행은 건으로 이어 붙인다', () => {
+    const tasks = weeklyCatalogTasks(
+      [row('a', { thisContent: '첫 행 건' }), { ...row('a', { thisContent: '둘째 행 건' }), id: 'a-row-2' }],
+      [area('a', true, 0)],
+      [{ id: 'content', label: '내용', carryOver: true }, { id: 'issue', label: '이슈', carryOver: false }],
+    )
+    expect(tasks.map((t) => t.title)).toEqual(['첫 행 건', '둘째 행 건'])
   })
 })

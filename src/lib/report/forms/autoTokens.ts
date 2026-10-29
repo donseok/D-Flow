@@ -3,13 +3,16 @@
  *
  * 회사 양식은 대개 "구분 | 전주(실적) | 금주(계획)" 또는 "구분 | 금주 실적 | 차주 계획" 표 하나에 주간 내용을 적는다.
  * 그런 표를 머리글 낱말·열 너비·가로 병합으로 찾아 첫 데이터 행의 세 칸에 `{{#rows sections}}{{.name}}` ·
- * `{{.this_content}}` · `{{.next_content}}` 를 넣는다. 구분 열이 없는 "금주 실적 | 차주 계획" 두 열 표는 내용 칸의
- * 첫 문단에 `[{{.name}}]` 을 두어 영역 이름을 내용 앞에 적는다(사람이 "[생산계획] …" 처럼 쓰던 꼴).
+ * `{{.this_content}}` · `{{.next_content}}` 를 넣는다(영역마다 한 줄 — sections).
+ * 구분 열이 없는 "금주 실적 | 차주 계획" 두 열 표는 사람이 **업무 건마다 한 줄**(왼쪽 실적 · 오른쪽 같은 건의 계획)로 쓰는
+ * 꼴이라 `{{#rows tasks}}{{.this_tagged}}` · `{{.next_tagged}}` 를 넣는다(tasks — 영역 글을 빈 줄·"[분류] 제목" 줄로 나눈 건).
+ * 고른 표의 내용 열 머리글에 적힌 날짜 범위("2026.10.05~2026.10.16", "10/05~10/16")는 그 주 날짜 자리표시자로 바꾼다.
  * 그 뒤는 기존 토큰 엔진(정본 §4.4)이 그대로 채운다 — 등록 때 한 번 바꾸고 저장하므로 렌더·활성화·매핑 경로는 바뀌지 않는다.
  *
  * 양식에 적힌 보기 내용은 패턴일 뿐이다: 첫 데이터 행 뒤의 행은 지우고, 같은 표를 되풀이한 뒤 슬라이드(사람이 쪽을
- * 나눠 쓴 것)도 지운다 — 보고서를 만들 때 엔진이 필요한 만큼 행·슬라이드를 다시 늘린다. 표본 데이터 행 수는
- * `rowsPerSlide` 로 돌려줘 등록 화면이 한 장당 줄 수(options.max_rows_per_slide)로 쓴다.
+ * 나눠 쓴 것)도 지운다 — 보고서를 만들 때 엔진이 필요한 만큼 행·슬라이드를 다시 늘린다. 표본 데이터 행 수와 그 행 높이로 잰
+ * 칸당 줄 수는 `rowsPerSlide`·`linesPerCell` 로 돌려줘 등록 화면이 options.max_rows_per_slide·max_lines_per_cell 로 쓴다.
+ * 데이터 행 높이는 표본 행 높이의 평균이다 — 사람이 한 장을 나눠 쓰던 칸 크기 그대로.
  *
  * 규칙은 결정형이다(같은 파일이면 같은 결과). 못 찾으면 `changed:false` 로 사유를 돌려주고 파일을 건드리지 않는다.
  */
@@ -21,7 +24,7 @@ import { escapeXml } from '../xml'
 export interface AutoTokenDetection {
   /** 덱 순서 1-based 슬라이드 번호 */
   slide: number
-  /** 0-based 열 번호 — 구분 열이 없으면 name 은 null(영역 이름은 내용 칸 첫 문단의 [이름]) */
+  /** 0-based 열 번호 — 구분 열이 없으면 name 은 null(업무 건 단위 — tasks) */
   columns: { name: number | null; this: number; next: number }
   /** 머리글 글자(공백 정리) — 안내 문구에 쓴다. 구분 열이 없으면 name 은 '' */
   headers: { name: string; this: string; next: string }
@@ -31,6 +34,10 @@ export interface AutoTokenDetection {
   removedSlides: number
   /** 양식의 표본 데이터 행 수(1 이상) — 한 장당 줄 수(options.max_rows_per_slide)로 쓴다 */
   rowsPerSlide: number
+  /** 표본 행 높이·글자 크기로 잰 칸당 글 줄 수 — options.max_lines_per_cell 로 쓴다 */
+  linesPerCell: number
+  /** 머리글 날짜를 자리표시자로 바꾼 칸 수 */
+  datedHeaders: number
 }
 
 export type AutoTokenResult =
@@ -241,25 +248,106 @@ function stripVertical(cellXml: string): string {
   return cellXml.replace(/^<a:tc\b([^>]*)>/, (_m, attrs: string) => `<a:tc${attrs.replace(/\s(?:rowSpan|vMerge)="[^"]*"/g, '')}>`)
 }
 
-function rewriteTable(c: Found): { xml: string; removedRows: number } {
+function rewriteTable(c: Found): { xml: string; removedRows: number; datedHeaders: number } {
   const { table, headerCount, dataRow, columns } = c
   const headerRows = table.rows.slice(0, headerCount)
   const data = table.rows[dataRow]
-  // 구분 열이 없으면 영역 이름은 내용 칸의 첫 문단에 [이름] 으로 — 사람이 "[생산계획] …" 처럼 쓰던 꼴. 차주 칸도 같은 이름을 앞세운다.
+  // 구분 열이 없으면 업무 건마다 한 줄 — 건 제목에 [분류] 가 없을 때만 [영역 이름] 이 앞에 붙는다(this_tagged)
   const tokens: Record<number, string[]> = columns.name === null
-    ? { [columns.this]: ['{{#rows sections}}[{{.name}}]', '{{.this_content}}'], [columns.next]: ['[{{.name}}]', '{{.next_content}}'] }
+    ? { [columns.this]: ['{{#rows tasks}}{{.this_tagged}}'], [columns.next]: ['{{.next_tagged}}'] }
     : { [columns.name]: ['{{#rows sections}}{{.name}}'], [columns.this]: ['{{.this_content}}'], [columns.next]: ['{{.next_content}}'] }
   const cells = data.cells.map((cell, col) => stripVertical(col in tokens ? setCellParagraphs(cell.xml, tokens[col]) : cell.xml))
-  const headerHeights = headerRows.map((r) => r.h).filter((h) => h > 0)
-  const h = headerHeights.length ? Math.min(...headerHeights) : data.h
+  const h = sampleRowHeight(c) || data.h
   const openTag = /^<a:tr\b[^>]*>/.exec(data.xml)?.[0] ?? '<a:tr>'
   const newOpen = /\bh="\d+"/.test(openTag) ? openTag.replace(/\bh="\d+"/, `h="${h}"`) : openTag
   const newData = `${newOpen}${cells.join('')}</a:tr>`
   const first = table.xml.indexOf(table.rows[0].xml)
   const lastRow = table.rows[table.rows.length - 1]
   const last = table.xml.lastIndexOf(lastRow.xml) + lastRow.xml.length
-  const xml = table.xml.slice(0, first) + headerRows.map((r) => r.xml).join('') + newData + table.xml.slice(last)
-  return { xml, removedRows: table.rows.length - dataRow - 1 }
+  const dated = tokenizeHeaderDates(headerRows, columns)
+  const xml = table.xml.slice(0, first) + dated.rows.join('') + newData + table.xml.slice(last)
+  return { xml, removedRows: table.rows.length - dataRow - 1, datedHeaders: dated.count }
+}
+
+/** 표본 데이터 행 높이의 평균(EMU) — 0 이면 높이를 모른다 */
+function sampleRowHeight(c: Found): number {
+  const heights = c.table.rows.slice(c.dataRow).map((r) => r.h).filter((h) => h > 0)
+  return heights.length ? Math.round(heights.reduce((a, b) => a + b, 0) / heights.length) : 0
+}
+
+/** 표본 칸 글자 크기(1/100pt) — 데이터 행 내용 칸의 첫 rPr sz, 없으면 12pt */
+function sampleFontSize(c: Found): number {
+  const data = c.table.rows[c.dataRow]
+  for (const col of [c.columns.this, c.columns.next]) {
+    const sz = /<a:rPr\b[^>]*\bsz="(\d+)"/.exec(data.cells[col]?.xml ?? '')?.[1]
+    if (sz) return Number(sz)
+  }
+  return 1200
+}
+
+/** 칸당 글 줄 수 — 행 높이에서 위아래 여백(0.1in)을 빼고 줄 높이(글자 크기 × 1.2)로 나눈다. 3~60 */
+function linesPerCellOf(c: Found): number {
+  const h = sampleRowHeight(c)
+  if (!h) return 15
+  const lineEmu = (sampleFontSize(c) / 100) * 12700 * 1.2
+  return Math.min(60, Math.max(3, Math.floor((h - 91440) / lineEmu)))
+}
+
+const YMD_RANGE = /\d{4}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}\s*~\s*\d{4}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}/
+const MD_RANGE = /(\d{1,2})\s*\/\s*(\d{1,2})\s*~\s*(\d{1,2})\s*\/\s*(\d{1,2})/
+
+/** 머리글 글자의 날짜 범위 → 그 열의 주 날짜 자리표시자(서식 유지: YYYY.MM.DD · MM/DD · M/D) */
+function dateToken(text: string, side: 'this' | 'next'): { from: string; token: string } | null {
+  const prefix = side === 'this' ? 'report.week_range' : 'report.next_week_range'
+  const ymd = YMD_RANGE.exec(text)
+  if (ymd) return { from: ymd[0], token: `{{${prefix}_ymd}}` }
+  const md = MD_RANGE.exec(text)
+  if (md) {
+    const padded = [md[1], md[2], md[3], md[4]].every((part) => part.length === 2)
+    return { from: md[0], token: padded ? `{{${prefix}_mmdd}}` : `{{${prefix}}}` }
+  }
+  return null
+}
+
+/**
+ * 내용 두 열 머리글의 날짜 범위를 자리표시자로 — 금주(실적) 열은 그 주, 차주(계획) 열은 다음 주.
+ * 날짜가 한 런 안에 있으면 그 런만 고치고, 여러 런에 걸치면(`(10`·`/05~10/16`·`)`) 그 문단의 런을 첫 런 서식 하나로 합친다.
+ */
+function tokenizeHeaderDates(rows: Row[], columns: Found['columns']): { rows: string[]; count: number } {
+  let count = 0
+  const out = rows.map((row) => {
+    let xml = row.xml
+    for (const [col, side] of [[columns.this, 'this'], [columns.next, 'next']] as const) {
+      const cell = row.cells[col]
+      if (!cell || cell.hMerge || cell.vMerge) continue
+      const fixed = cell.xml.replace(P_RE, (p) => {
+        const runs = [...p.matchAll(/<a:r\b[^>]*>([\s\S]*?)<\/a:r>/g)]
+        for (const run of runs) {
+          const t = /<a:t>([^<]*)<\/a:t>/.exec(run[1])
+          if (!t) continue
+          const hit = dateToken(decodeXml(t[1]), side)
+          if (!hit) continue
+          count += 1
+          const text = decodeXml(t[1]).replace(hit.from, hit.token)
+          return p.replace(run[0], run[0].replace(t[0], `<a:t>${escapeXml(text)}</a:t>`))
+        }
+        if (/<a:br\b/.test(p) || !runs.length) return p
+        const whole = runs.map((r) => decodeXml(/<a:t>([^<]*)<\/a:t>/.exec(r[1])?.[1] ?? '')).join('')
+        const hit = dateToken(whole, side)
+        if (!hit) return p
+        count += 1
+        const rPr = /<a:rPr\b[^>]*\/>|<a:rPr\b[^>]*>[\s\S]*?<\/a:rPr>/.exec(runs[0][1])?.[0] ?? ''
+        const merged = `<a:r>${rPr}<a:t>${escapeXml(whole.replace(hit.from, hit.token))}</a:t></a:r>`
+        const start = p.indexOf(runs[0][0])
+        const lastRun = runs[runs.length - 1]
+        const end = p.indexOf(lastRun[0], start) + lastRun[0].length
+        return p.slice(0, start) + merged + p.slice(end)
+      })
+      if (fixed !== cell.xml) xml = xml.replace(cell.xml, fixed)
+    }
+    return xml
+  })
+  return { rows: out, count }
 }
 
 function escapeRe(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
@@ -364,7 +452,7 @@ export async function autoTokenizeTemplate(bytes: Uint8Array, kind: FormKind): P
     duplicates.push(s.path)
   }
 
-  const { xml: tableXml, removedRows } = rewriteTable(chosen)
+  const { xml: tableXml, removedRows, datedHeaders } = rewriteTable(chosen)
   const slide = slides[chosen.slideIndex]
   zip.file(chosen.slidePath, slide.xml.replace(chosen.table.xml, tableXml))
   await removeSlides(zip, duplicates)
@@ -379,6 +467,8 @@ export async function autoTokenizeTemplate(bytes: Uint8Array, kind: FormKind): P
       removedRows,
       removedSlides: duplicates.length,
       rowsPerSlide: Math.max(1, chosen.table.rows.length - chosen.headerCount),
+      linesPerCell: linesPerCellOf(chosen),
+      datedHeaders,
     },
   }
 }

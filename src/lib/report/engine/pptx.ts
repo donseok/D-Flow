@@ -353,11 +353,10 @@ class Renderer {
     const texts = cells.map((cell) => this.cellText(cell, child))
     const budget = this.options.max_lines_per_cell
     if (!texts.some((value) => visualLines(value) > budget)) return [{ item, literals: null, suffix: '' }]
-    const chunks = texts.map((value, index) => {
+    const chunks = texts.map((value) => {
       if (visualLines(value) <= budget) return [value]
-      if (!hasItemsBlock(cells[index])) return splitIssueAnalysisTextForRows(value, FULLWIDTH_PER_LINE, budget)
-      // 셀 안 목록은 문단(항목 줄) 경계에서 나눈다 — 표 밖 {{#items}} 의 paginateLines 와 같은 규칙이라 항목 한 줄이
-      // 두 행에 찢기지 않는다. 한 문단이 혼자 예산을 넘을 때만 그 문단을 글자 단위로 더 나눈다.
+      // 문단(줄) 경계에서 나눈다 — 셀 안 목록이든 여러 줄 값이든 한 줄이 두 행에 찢기지 않는다(2026-10-29: 주간보고 칸이
+      // "… 24Hr 가동 / 지원" 처럼 문장 중간에서 잘려 다음 행에 "지원" 만 남던 문제). 한 문단이 혼자 예산을 넘을 때만 글자 단위로 더 나눈다.
       return paginateLines(value.split('\n'), budget).map((lines) => lines.join('\n')).flatMap((page) => (
         visualLines(page) > budget ? splitIssueAnalysisTextForRows(page, FULLWIDTH_PER_LINE, budget) : [page]
       ))

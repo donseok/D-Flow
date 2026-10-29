@@ -32,6 +32,16 @@ const WEEKLY_SECTION_FIELDS: Record<string, CatalogFieldMeta> = {
   '.next_issue': { path: '.next_issue', type: 'list<text>', description: '차주 이슈 목록' },
 }
 
+const WEEKLY_TASK_FIELDS: Record<string, CatalogFieldMeta> = {
+  '.code': { path: '.code', type: 'text', description: '영역 코드' },
+  '.area': { path: '.area', type: 'text', description: '영역 이름' },
+  '.title': { path: '.title', type: 'text', description: '업무 건 제목(첫 줄)' },
+  '.this_content': { path: '.this_content', type: 'list<text>', description: '그 건의 금주 실적 줄 목록(들여쓰기 그대로)' },
+  '.next_content': { path: '.next_content', type: 'list<text>', description: '그 건의 차주 계획 줄 목록(들여쓰기 그대로)' },
+  '.this_tagged': { path: '.this_tagged', type: 'list<text>', description: '금주 실적 — 첫 줄에 [분류] 가 없으면 [영역 이름] 을 붙인다' },
+  '.next_tagged': { path: '.next_tagged', type: 'list<text>', description: '차주 계획 — 첫 줄에 [분류] 가 없으면 [영역 이름] 을 붙인다' },
+}
+
 const WBS_GROUP_ITEM_FIELDS: Record<string, CatalogFieldMeta> = {
   '.title': { path: '.title', type: 'text', description: '그룹 제목' },
   '.num': { path: '.num', type: 'int', description: '그룹 번호' },
@@ -148,6 +158,12 @@ export const WEEKLY_CATALOG_FIELDS: Record<string, CatalogFieldMeta> = {
   'report.week_range': { path: 'report.week_range', type: 'text', description: '금주 표시 요일 범위 (예: 6/29~7/3)' },
   'report.prev_week_range': { path: 'report.prev_week_range', type: 'text', description: '전주 표시 요일 범위' },
   'report.next_week_range': { path: 'report.next_week_range', type: 'text', description: '차주 표시 요일 범위' },
+  'report.week_range_ymd': { path: 'report.week_range_ymd', type: 'text', description: '금주 범위 (예: 2026.10.26~2026.10.30)' },
+  'report.prev_week_range_ymd': { path: 'report.prev_week_range_ymd', type: 'text', description: '전주 범위 (YYYY.MM.DD~YYYY.MM.DD)' },
+  'report.next_week_range_ymd': { path: 'report.next_week_range_ymd', type: 'text', description: '차주 범위 (YYYY.MM.DD~YYYY.MM.DD)' },
+  'report.week_range_mmdd': { path: 'report.week_range_mmdd', type: 'text', description: '금주 범위 (예: 10/26~10/30, 두 자리)' },
+  'report.prev_week_range_mmdd': { path: 'report.prev_week_range_mmdd', type: 'text', description: '전주 범위 (MM/DD~MM/DD)' },
+  'report.next_week_range_mmdd': { path: 'report.next_week_range_mmdd', type: 'text', description: '차주 범위 (MM/DD~MM/DD)' },
   'report.week_start': { path: 'report.week_start', type: 'date', description: '주차 시작일 (주 키, YYYY-MM-DD)' },
   'report.today': { path: 'report.today', type: 'date', description: '기준일 (YYYY-MM-DD)' },
   'report.generated_at': { path: 'report.generated_at', type: 'text', description: '보고서 생성 일시' },
@@ -177,6 +193,9 @@ export const WEEKLY_CATALOG_FIELDS: Record<string, CatalogFieldMeta> = {
     recordFields: WEEKLY_SECTION_FIELDS,
     customEntity: 'weekly_row',
   },
+
+  // tasks[] — 영역 글을 업무 건으로 나눠 금주·차주를 묶은 목록
+  'tasks': { path: 'tasks', type: 'list<record>', description: '주간보고 업무 건 목록(한 건 = 금주 실적·차주 계획 한 쌍)', recordFields: WEEKLY_TASK_FIELDS },
 
   // wbs_groups
   'wbs_groups.prev': { path: 'wbs_groups.prev', type: 'list<record>', description: '전주 WBS 그룹 목록', recordFields: WBS_GROUP_ITEM_FIELDS },

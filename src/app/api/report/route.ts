@@ -25,7 +25,7 @@ import { stampIn } from '@/lib/domain/calendar'
 import { engineFor } from '@/lib/report/engine'
 import { scanFormTemplate } from '@/lib/report/engine/scan'
 import { FORM_FORMAT, FormRenderError, formatLocation, type FormKind } from '@/lib/report/engine/types'
-import { buildWeeklyCatalog, aiCommentItem, weeklyCatalogSections } from '@/lib/report/catalog/weeklyBuild'
+import { buildWeeklyCatalog, aiCommentItem, weeklyCatalogSections, weeklyCatalogTasks } from '@/lib/report/catalog/weeklyBuild'
 import { FormTemplateLoadError, loadFormTemplate } from '@/lib/report/forms/loadTemplate'
 import { loadReportProject } from '@/lib/report/forms/project'
 import { catalogRoots, needsWeeklyModel } from '@/lib/report/forms/roots'
@@ -83,7 +83,8 @@ export async function GET(req: NextRequest) {
     if (!project) return jsonError(t('err.projectNotFound'), 404)
 
     const wantsModel = needsWeeklyModel(roots)
-    const wbs = wantsModel || roots.has('sections') ? await getComputedWbs(projectId) : null
+    const wantsSheet = roots.has('sections') || roots.has('tasks')
+    const wbs = wantsModel || wantsSheet ? await getComputedWbs(projectId) : null
     const ref = wbs ? weeklyReference(calendar, wbs.today, weekRaw) : null
 
     let weeklyModel: WeeklyReportModel | undefined
@@ -94,10 +95,14 @@ export async function GET(req: NextRequest) {
     }
 
     let sections: ReturnType<typeof weeklyCatalogSections> | undefined
-    if (roots.has('sections')) {
+    let tasks: ReturnType<typeof weeklyCatalogTasks> | undefined
+    if (wantsSheet) {
       const sheet = await getWeeklySheet(projectId, ref!.weekStart)
-      const fieldKeys = roots.has('custom') ? activeFieldKeys(valueOf(cfg, 'fields.weekly_row')) : []
-      sections = weeklyCatalogSections(sheet?.rows ?? [], areas, fieldKeys, valueOf(cfg, 'weekly.columns'))
+      if (roots.has('sections')) {
+        const fieldKeys = roots.has('custom') ? activeFieldKeys(valueOf(cfg, 'fields.weekly_row')) : []
+        sections = weeklyCatalogSections(sheet?.rows ?? [], areas, fieldKeys, valueOf(cfg, 'weekly.columns'))
+      }
+      if (roots.has('tasks')) tasks = weeklyCatalogTasks(sheet?.rows ?? [], areas, valueOf(cfg, 'weekly.columns'))
     }
 
     let aiComment: ReturnType<typeof aiCommentItem>[] | undefined
@@ -112,6 +117,7 @@ export async function GET(req: NextRequest) {
       narrative: weeklyModel ? buildWeeklyNarrative(weeklyModel) : undefined,
       calendar,
       sections,
+      tasks,
       aiComment,
     }) satisfies CatalogModel
     const body = await engineFor(format).render(loaded.bytes, model, setting.mapping, setting.options)

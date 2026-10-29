@@ -45,6 +45,14 @@ export interface WeeklyCatalogReport {
   week_range: string
   prev_week_range: string
   next_week_range: string
+  /** 회사 양식 머리글 날짜 서식 — 'YYYY.MM.DD~YYYY.MM.DD'(표시 요일 첫날~끝날) */
+  week_range_ymd: string
+  prev_week_range_ymd: string
+  next_week_range_ymd: string
+  /** 'MM/DD~MM/DD'(두 자리 채움) */
+  week_range_mmdd: string
+  prev_week_range_mmdd: string
+  next_week_range_mmdd: string
   week_start: string // 'YYYY-MM-DD'
   today: string      // 'YYYY-MM-DD'
   generated_at: string
@@ -77,6 +85,24 @@ export interface WeeklyCatalogSection {
   next_issue: string[]
   /** SP5c 사용자 정의 필드 (그 구분 안 행 순서대로 list<text>) */
   custom: Record<string, string[]>
+}
+
+/**
+ * 주간보고 업무 건 — 영역의 금주·차주 글을 빈 줄 또는 "[분류] 제목" 줄로 나눈 덩어리.
+ * 같은 제목의 금주 건과 차주 건을 한 항목으로 묶는다(회사 양식의 "한 줄 = 한 건, 왼쪽 실적 · 오른쪽 계획" 꼴).
+ * 줄은 사람이 적은 들여쓰기를 그대로 둔다(sections 의 단계 들여쓰기 정규화와 다르다).
+ */
+export interface WeeklyCatalogTask {
+  /** 영역 코드·이름 */
+  code: string
+  area: string
+  /** 건 제목(첫 줄, 앞뒤 공백 정리) */
+  title: string
+  this_content: string[]
+  next_content: string[]
+  /** 첫 줄이 "[" 로 시작하지 않으면 "[영역 이름] " 을 붙인 줄 — 구분 열이 없는 양식용 */
+  this_tagged: string[]
+  next_tagged: string[]
 }
 
 export interface WeeklyCatalogWbsGroupItem {
@@ -176,6 +202,7 @@ export interface WeeklyCatalogModel {
   report: WeeklyCatalogReport
   kpi: WeeklyCatalogKpi
   sections: WeeklyCatalogSection[]
+  tasks: WeeklyCatalogTask[]
   wbs_groups: {
     prev: WeeklyCatalogWbsGroupItem[]
     curr: WeeklyCatalogWbsGroupItem[]

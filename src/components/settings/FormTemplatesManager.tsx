@@ -82,15 +82,16 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
           return
         }
         const warn = reg.warnings.length ? t('settings.forms.warnCount').replace('{n}', String(reg.warnings.length)) : ''
-        // 표를 자동으로 연결한 양식은 그 양식의 표본 행 수를 한 장당 줄 수로 쓴다 — 사람이 한 장에 그만큼 쓰던 패턴이다.
+        // 표를 자동으로 연결한 양식은 그 양식의 표본 행 수·칸 크기를 한 장당 줄 수·칸당 글 줄 수로 쓴다 — 사람이 한 장에 그만큼 쓰던 패턴이다.
         // 매핑 저장과 같은 길(설정 갱신 → 새 revision 으로 활성화). 설정 저장에 실패하면 활성화하지 않고 알린다.
         let revision = rev
         const auto = reg.autoTokens
         const current = kinds.find((k) => k.kind === kind)?.setting
-        if (auto && current && current.options.max_rows_per_slide !== auto.rowsPerSlide) {
+        if (auto && current && (current.options.max_rows_per_slide !== auto.rowsPerSlide || current.options.max_lines_per_cell !== auto.linesPerCell)) {
+          const options = { ...current.options, max_rows_per_slide: auto.rowsPerSlide, max_lines_per_cell: auto.linesPerCell }
           const patch = {
             expectedRevision: rev, commandId: newUuid(), unset: [] as never[],
-            set: { [`forms.${kind}`]: { ...current, options: { ...current.options, max_rows_per_slide: auto.rowsPerSlide } } },
+            set: { [`forms.${kind}`]: { ...current, options } },
           }
           const saved = await updateProjectSettings(projectId, patch as never)
           if (!saved.ok) { setNotice(''); setError(t('settings.forms.rowsOptionFailed').replace('{version}', version)); router.refresh(); return }
@@ -111,7 +112,8 @@ export function FormTemplatesManager({ projectId, revision, canEdit, kinds }: {
           if (auto) {
             autoText = t(auto.columns.name === null ? 'settings.forms.autoLinkedNoName' : 'settings.forms.autoLinked')
               .replace('{slide}', String(auto.slide)).replace('{name}', auto.headers.name).replace('{this}', auto.headers.this).replace('{next}', auto.headers.next)
-              + t('settings.forms.autoLinkedRows').replace('{rows}', String(auto.rowsPerSlide))
+              + t('settings.forms.autoLinkedRows').replace('{rows}', String(auto.rowsPerSlide)).replace('{lines}', String(auto.linesPerCell))
+              + (auto.datedHeaders > 0 ? t('settings.forms.autoLinkedDates') : '')
               + (auto.removedSlides > 0 ? t('settings.forms.autoLinkedRemovedSlides').replace('{n}', String(auto.removedSlides)) : '')
           }
           done(t('settings.forms.registeredActivated').replace('{version}', version).replace('{warn}', warn).replace('{auto}', autoText), activated.revision)

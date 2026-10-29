@@ -4,7 +4,7 @@ import { weeklyField } from '@/lib/domain/weeklySheet'
  * 주간 카탈로그 객체 (정본 §4.5.1·§4.5.4).
  * 모델·서술·시트는 루트가 있을 때만 채운다. 없는 루트는 빈 값이다.
  */
-import { isoDowOf, weekLabelOf, type WorkCalendar } from '@/lib/domain/calendar'
+import { isoDowOf, nextWeekKey, prevWeekKey, weekDisplayDays, weekLabelOf, type WorkCalendar } from '@/lib/domain/calendar'
 import type { FieldValue } from '@/lib/domain/customFields'
 import { weightToPct } from '@/lib/domain/format'
 import type { Status } from '@/lib/domain/types'
@@ -18,6 +18,7 @@ import type {
   WeeklyCatalogAiCommentItem,
   WeeklyCatalogModel,
   WeeklyCatalogSection,
+  WeeklyCatalogTask,
 } from './types'
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -83,6 +84,95 @@ export function weeklyCatalogSections(
   })
 }
 
+/** 업무 건 나누기용 줄 — 빈 줄 경계는 남기고(연속 빈 줄은 하나), 탭은 공백 넷, 사람이 적은 들여쓰기는 그대로 */
+function rawLines(text: string): string[] {
+  return cellLines(text.replace(/\t/g, '    '))
+}
+
+/** 건의 시작 줄 — 들여쓰기 한 칸 이하에서 "[" 로 시작하는 줄("[생산계획] …") */
+function isTitleLine(line: string): boolean {
+  return /^\s?\[/.test(line)
+}
+
+/** 빈 줄 또는 "[분류] 제목" 줄에서 건을 나눈다. 앞뒤 빈 줄은 버린다. */
+export function splitTaskBlocks(text: string): string[][] {
+  const blocks: string[][] = []
+  let block: string[] = []
+  const flush = () => {
+    while (block.length && block[block.length - 1].trim() === '') block.pop()
+    if (block.length) blocks.push(block)
+    block = []
+  }
+  for (const line of rawLines(text)) {
+    if (line.trim() === '') { flush(); continue }
+    if (isTitleLine(line) && block.length) flush()
+    block.push(line)
+  }
+  flush()
+  return blocks
+}
+
+const titleKey = (block: readonly string[]): string => (block[0] ?? '').replace(/\s+/g, ' ').trim()
+
+function tagged(block: readonly string[], area: string): string[] {
+  if (!block.length || block[0].trimStart().startsWith('[')) return [...block]
+  return [`[${area}] ${block[0].trimStart()}`, ...block.slice(1)]
+}
+
+/**
+ * 영역 글을 업무 건으로 나눠 금주·차주를 묶는다 — 같은 제목(첫 줄)의 금주 건과 차주 건이 한 항목이고,
+ * 짝이 없는 금주 건은 차주가 비고, 짝이 없는 차주 건은 그 영역의 끝에 금주 없이 붙는다. 글이 없는 영역은 건이 없다.
+ * 작성 항목(weekly.columns)이 있으면 첫 항목의 칸을 쓴다(sections 의 "영역 · 항목" 과 달리 건은 항목으로 늘리지 않는다).
+ */
+export function weeklyCatalogTasks(
+  rows: readonly WeeklySheetRow[],
+  areas: readonly WeeklyArea[],
+  columns?: readonly WeeklyColumn[],
+): WeeklyCatalogTask[] {
+  const first = columns?.[0]
+  const thisField = first ? weeklyField(`this_${first.id}`) : 'thisContent'
+  const nextField = first ? weeklyField(`next_${first.id}`) : 'nextContent'
+  const text = (own: readonly WeeklySheetRow[], field: keyof WeeklyCells) =>
+    own.map((row) => String(row[field] ?? '')).filter((value) => value.trim() !== '').join('\n\n')
+  const ordered = orderAreas(areas)
+  const out: WeeklyCatalogTask[] = []
+  for (const area of ordered) {
+    const own = rows.filter((row) => row.areaId === area.id)
+    const thisBlocks = splitTaskBlocks(text(own, thisField))
+    const nextBlocks = splitTaskBlocks(text(own, nextField))
+    if (!area.active && !thisBlocks.length && !nextBlocks.length) continue
+    const used = new Set<number>()
+    const push = (thisBlock: string[], nextBlock: string[]) => out.push({
+      code: area.code,
+      area: area.name,
+      title: titleKey(thisBlock.length ? thisBlock : nextBlock),
+      this_content: thisBlock,
+      next_content: nextBlock,
+      this_tagged: tagged(thisBlock, area.name),
+      next_tagged: tagged(nextBlock, area.name),
+    })
+    for (const block of thisBlocks) {
+      const key = titleKey(block)
+      const match = nextBlocks.findIndex((candidate, index) => !used.has(index) && titleKey(candidate) === key)
+      if (match >= 0) used.add(match)
+      push(block, match >= 0 ? nextBlocks[match] : [])
+    }
+    nextBlocks.forEach((block, index) => { if (!used.has(index)) push([], block) })
+  }
+  return out
+}
+
+const pad2 = (n: string) => n.padStart(2, '0')
+/** 'YYYY-MM-DD' 표시 요일 목록 → 'YYYY.MM.DD~YYYY.MM.DD' · 'MM/DD~MM/DD'. 비면 '' */
+function ranges(days: readonly string[]): { ymd: string; mmdd: string } {
+  if (!days.length) return { ymd: '', mmdd: '' }
+  const [a, b] = [days[0], days[days.length - 1]].map((d) => d.split('-'))
+  return {
+    ymd: `${a[0]}.${pad2(a[1])}.${pad2(a[2])}~${b[0]}.${pad2(b[1])}.${pad2(b[2])}`,
+    mmdd: `${pad2(a[1])}/${pad2(a[2])}~${pad2(b[1])}/${pad2(b[2])}`,
+  }
+}
+
 function groupsOf(groups: NarrativeGroup[]): WeeklyCatalogModel['wbs_groups']['curr'] {
   return groups.map((group) => ({ title: group.phase, num: group.num, lines: group.items.map(subLineText) }))
 }
@@ -102,14 +192,21 @@ export function buildWeeklyCatalog(input: {
   narrative?: NarrativeModel
   calendar?: WorkCalendar
   sections?: WeeklyCatalogSection[]
+  tasks?: WeeklyCatalogTask[]
   aiComment?: WeeklyCatalogAiCommentItem[]
 }): WeeklyCatalogModel {
   const model = input.model
   const narrative = input.narrative
   const label = model && input.calendar ? weekLabelOf(input.calendar.weekStart, model.meta.weekStart) : null
+  const cal = input.calendar
+  const thisR = model ? ranges(model.meta.weekDays) : ranges([])
+  const nextR = model && cal ? ranges(weekDisplayDays(cal, nextWeekKey(cal.weekStart, model.meta.weekStart))) : ranges([])
+  const prevR = model && cal ? ranges(weekDisplayDays(cal, prevWeekKey(cal.weekStart, model.meta.weekStart))) : ranges([])
   const emptyReport = {
     project_name: '', week_label: '', week_tag: '', week_year: 0, week_month: 0, week_ordinal: 0,
     week_end: '', week_days: [], week_range: '', prev_week_range: '', next_week_range: '',
+    week_range_ymd: '', prev_week_range_ymd: '', next_week_range_ymd: '',
+    week_range_mmdd: '', prev_week_range_mmdd: '', next_week_range_mmdd: '',
     week_start: '', today: '', generated_at: '', description: '',
   }
   return {
@@ -125,6 +222,8 @@ export function buildWeeklyCatalog(input: {
       week_range: model.meta.weekRange,
       prev_week_range: model.meta.prevWeekRange,
       next_week_range: model.meta.nextWeekRange,
+      week_range_ymd: thisR.ymd, prev_week_range_ymd: prevR.ymd, next_week_range_ymd: nextR.ymd,
+      week_range_mmdd: thisR.mmdd, prev_week_range_mmdd: prevR.mmdd, next_week_range_mmdd: nextR.mmdd,
       week_start: model.meta.weekStart,
       today: model.meta.today,
       generated_at: model.meta.generatedAt,
@@ -150,6 +249,7 @@ export function buildWeeklyCatalog(input: {
       done_this_week: 0, done_ratio: 0, in_progress_ratio: 0, delayed_ratio: 0, phase_count: 0, total_leaves: 0,
     },
     sections: input.sections ?? [],
+    tasks: input.tasks ?? [],
     wbs_groups: {
       prev: narrative ? groupsOf(narrative.prev) : [],
       curr: narrative ? groupsOf(narrative.curr) : [],

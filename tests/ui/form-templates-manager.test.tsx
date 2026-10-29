@@ -122,7 +122,7 @@ describe('FormTemplatesManager', () => {
     m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
     m.upload.mockResolvedValue({ error: null })
     m.register.mockResolvedValue(registered({
-      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주 (10/05~10/16)', next: '금주 (10/19~10/23)' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 5 },
+      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주 (10/05~10/16)', next: '금주 (10/19~10/23)' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 5, linesPerCell: 15, datedHeaders: 0 },
     }))
     m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 8 })
     await render()
@@ -131,16 +131,16 @@ describe('FormTemplatesManager', () => {
     expect(status).toContain('슬라이드 5')
     expect(status).toContain('전주 (10/05~10/16)')
     expect(status).toContain('업무영역')
-    expect(status).toContain('한 장에 5줄')
+    expect(status).toContain('한 장에 5줄씩, 한 칸에 15줄')
     // 표본 행 수가 현재 설정과 같으면 설정을 건드리지 않는다
     expect(m.update).not.toHaveBeenCalled()
   })
 
-  it('양식의 표본 행 수가 설정과 다르면 한 장당 줄 수를 먼저 저장하고 새 revision 으로 활성화한다', async () => {
+  it('양식의 표본 행 수·칸 크기가 설정과 다르면 한 장당 줄 수·칸당 줄 수를 먼저 저장하고 새 revision 으로 활성화한다', async () => {
     m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
     m.upload.mockResolvedValue({ error: null })
     m.register.mockResolvedValue(registered({
-      autoTokens: { slide: 2, columns: { name: null, this: 0, next: 1 }, headers: { name: '', this: '금주 (10/05~10/16) 실적', next: '차주 (10/19~10/23) 계획' }, removedRows: 1, removedSlides: 10, rowsPerSlide: 2 },
+      autoTokens: { slide: 2, columns: { name: null, this: 0, next: 1 }, headers: { name: '', this: '금주 (10/05~10/16) 실적', next: '차주 (10/19~10/23) 계획' }, removedRows: 1, removedSlides: 10, rowsPerSlide: 2, linesPerCell: 12, datedHeaders: 2 },
     }))
     m.update.mockResolvedValue({ ok: true, revision: 8 })
     m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 9 })
@@ -148,12 +148,13 @@ describe('FormTemplatesManager', () => {
     await pickFile()
     const patch = m.update.mock.calls[0][1]
     expect(patch.expectedRevision).toBe(7)
-    expect(patch.set['forms.weekly_report_pptx']).toEqual({ ...setting, options: { ...options, max_rows_per_slide: 2 } })
+    expect(patch.set['forms.weekly_report_pptx']).toEqual({ ...setting, options: { ...options, max_rows_per_slide: 2, max_lines_per_cell: 12 } })
     expect(m.activate.mock.calls[0][2].expectedRevision).toBe(8)
     const status = container.querySelector('[role=status]')?.textContent ?? ''
     expect(status).toContain('두 열 표')
-    expect(status).toContain('[영역 이름]')
-    expect(status).toContain('한 장에 2줄')
+    expect(status).toContain('업무 건마다 한 줄')
+    expect(status).toContain('한 장에 2줄씩, 한 칸에 12줄')
+    expect(status).toContain('보고 주차 날짜')
     expect(status).toContain('슬라이드 10장은 지웠습니다')
     // 뒤이은 명령은 활성화가 돌려준 revision 으로 간다
     m.deactivate.mockResolvedValue({ ok: true, status: 'applied', revision: 10 })
@@ -166,7 +167,7 @@ describe('FormTemplatesManager', () => {
     m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
     m.upload.mockResolvedValue({ error: null })
     m.register.mockResolvedValue(registered({
-      autoTokens: { slide: 2, columns: { name: null, this: 0, next: 1 }, headers: { name: '', this: '금주 실적', next: '차주 계획' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 2 },
+      autoTokens: { slide: 2, columns: { name: null, this: 0, next: 1 }, headers: { name: '', this: '금주 실적', next: '차주 계획' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 2, linesPerCell: 12, datedHeaders: 0 },
     }))
     m.update.mockResolvedValue({ ok: false, error: '설정 저장 실패' })
     await render()
@@ -196,7 +197,7 @@ describe('FormTemplatesManager', () => {
     m.prepare.mockResolvedValue({ ok: true, path: 'ws/w/p/p/weekly_report_pptx/incoming/f.pptx' })
     m.upload.mockResolvedValue({ error: null })
     m.register.mockResolvedValue(registered({
-      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주', next: '금주' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 5 },
+      autoTokens: { slide: 5, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '전주', next: '금주' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 5, linesPerCell: 15, datedHeaders: 0 },
     }))
     m.activate.mockResolvedValue({ ok: true, status: 'applied', revision: 8 })
     await render()

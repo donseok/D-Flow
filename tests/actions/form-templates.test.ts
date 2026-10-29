@@ -301,14 +301,14 @@ describe('registerFormTemplate — 자리표시자 없는 주간 PPT 의 표 자
     const r = await registerFormTemplate(P, 'weekly_report_pptx', incoming, '주간업무보고서.pptx')
     expect(r).toMatchObject({
       ok: true, version: 1, warnings: [], placeholderCount: 4,
-      autoTokens: { slide: 1, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '금주 실적', next: '차주 계획' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 1 },
+      autoTokens: { slide: 1, columns: { name: 0, this: 1, next: 2 }, headers: { name: '구분', this: '금주 실적', next: '차주 계획' }, removedRows: 0, removedSlides: 0, rowsPerSlide: 1, linesPerCell: Math.floor((3000000 - 91440) / (9 * 12700 * 1.2)), datedHeaders: 0 },
     })
     const dest = `ws/ws-1/p/${P}/weekly_report_pptx/v1.pptx`
     expect(calls).toEqual([`upload ${dest} application/vnd.openxmlformats-officedocument.presentationml.presentation upsert=false`, `remove ${incoming}`])
     expect(uploaded).not.toBeNull()
     const slide1 = await (await JSZip.loadAsync(uploaded!)).file('ppt/slides/slide1.xml')!.async('string')
     expect(slide1).toContain('{{#rows sections}}{{.name}}')
-    expect(slide1).toContain('<a:tr h="200000">')  // 데이터 행 높이는 머리글 행에 맞춘다
+    expect(slide1).toContain('<a:tr h="3000000">')  // 데이터 행 높이는 표본 데이터 행(들)의 평균
     expect(inserted[0].placeholders?.placeholders?.map((p) => p.token)).toEqual(['{{#rows sections}}', '{{.name}}', '{{.this_content}}', '{{.next_content}}'])
     expect(inserted[0].placeholders?.issues).toEqual([])
   })

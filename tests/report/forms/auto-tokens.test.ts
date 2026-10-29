@@ -1,10 +1,12 @@
 // 자리표시자 없는 주간보고 PPT 양식의 표 자동 연결(계획 2026-10-28-weekly-form-auto-tokens.md).
-// 머리글 낱말·열 너비·가로 병합으로 "구분 | 실적 | 계획" 표를 찾아 첫 데이터 행에 {{#rows sections}} 토큰을 넣는다.
+// 머리글 낱말·열 너비·가로 병합으로 "구분 | 실적 | 계획" 표를 찾아 첫 데이터 행에 {{#rows sections}} 토큰을,
+// 구분 열이 없는 "금주 실적 | 차주 계획" 두 열 표에는 업무 건 단위 {{#rows tasks}} 토큰을 넣는다. 머리글 날짜는 그 주 자리표시자로.
 import { describe, expect, it } from 'vitest'
 import JSZip from 'jszip'
 import { autoTokenizeTemplate } from '@/lib/report/forms/autoTokens'
 import { scanFormTemplate } from '@/lib/report/engine/scan'
 import { deckOrder, renderPptx } from '@/lib/report/engine/pptx'
+import { weeklyCatalogTasks } from '@/lib/report/catalog/weeklyBuild'
 import type { CatalogModel } from '@/lib/report/catalog/types'
 import type { RenderOptions } from '@/lib/report/engine/types'
 
@@ -98,7 +100,7 @@ const weekly = (sections: { name: string; this_content: string[]; next_content: 
   ({ report: { project_name: '부산운영팀' }, kpi: {}, sections }) as unknown as CatalogModel
 
 describe('autoTokenizeTemplate — 주간 PPT 표 자동 연결', () => {
-  it('"구분 | 전주 | 금주" 표의 첫 데이터 행에 토큰을 넣고 표본 행을 지우고 행 높이를 머리글에 맞춘다', async () => {
+  it('"구분 | 전주 | 금주" 표의 첫 데이터 행에 토큰을 넣고 표본 행을 지우고, 행 높이를 표본 행 평균에 맞추고 머리글 날짜를 바꾼다', async () => {
     const bytes = await pack([slide(title(2, '본부 주요 업무') + busanTable())])
     const r = await autoTokenizeTemplate(bytes, 'weekly_report_pptx')
     expect(r.changed).toBe(true)
@@ -110,13 +112,17 @@ describe('autoTokenizeTemplate — 주간 PPT 표 자동 연결', () => {
       removedRows: 1,
       removedSlides: 0,
       rowsPerSlide: 2,
+      // 표본 행 평균 높이 (4521115+300000)/2 에서 여백을 빼고 9pt 줄 높이로 나눈다
+      linesPerCell: Math.floor((2410558 - 91440) / (9 * 12700 * 1.2)),
+      datedHeaders: 2,
     })
     const xml = await slideXml(r.bytes, 1)
     const trs = rows(xml)
     expect(trs).toHaveLength(3)
-    expect(cellTexts(trs[0])).toEqual(['구분', '전주 (41,42주차, 10/05~10/16)', '금주 (43주차, 10/19~10/23)', '일시', ''])
+    // 두 자리 "MM/DD~MM/DD" 는 같은 서식의 자리표시자로 — 실적 열은 그 주, 계획 열은 다음 주
+    expect(cellTexts(trs[0])).toEqual(['구분', '전주 (41,42주차, {{report.week_range_mmdd}})', '금주 (43주차, {{report.next_week_range_mmdd}})', '일시', ''])
     expect(cellTexts(trs[2])).toEqual(['{{#rows sections}}{{.name}}', '{{.this_content}}', '{{.next_content}}', '26/01/01', '26/12/31'])
-    expect(/<a:tr h="232392">/.test(trs[2])).toBe(true)
+    expect(/<a:tr h="2410558">/.test(trs[2])).toBe(true)
     // 토큰 런은 원래 첫 런의 서식을 입고, 머리글·일시 칸은 그대로다
     expect(trs[2]).toContain('<a:rPr lang="ko-KR" sz="900" b="0"/><a:t>{{.this_content}}</a:t>')
     expect(trs[2]).toContain('<a:tcPr anchor="ctr"/>')
@@ -125,6 +131,8 @@ describe('autoTokenizeTemplate — 주간 PPT 표 자동 연결', () => {
     const scanned = await scanFormTemplate(r.bytes, 'pptx')
     expect(scanned.issues.filter((i) => i.severity === 'error')).toEqual([])
     expect(scanned.placeholders.map((p) => [p.token, p.kind, p.scope, p.location.table])).toEqual([
+      ['{{report.week_range_mmdd}}', 'value', [], { row: 0, col: 1 }],
+      ['{{report.next_week_range_mmdd}}', 'value', [], { row: 0, col: 2 }],
       ['{{#rows sections}}', 'rows', [], { row: 2, col: 0 }],
       ['{{.name}}', 'value', ['{{#rows sections}}'], { row: 2, col: 0 }],
       ['{{.this_content}}', 'value', ['{{#rows sections}}'], { row: 2, col: 1 }],
@@ -168,7 +176,7 @@ describe('autoTokenizeTemplate — 주간 PPT 표 자동 연결', () => {
     expect(await autoTokenizeTemplate(await pack([slide(title(2, '표지'))]), 'weekly_report_pptx')).toEqual({ changed: false, reason: 'no_table' })
   })
 
-  it('구분 열이 없는 "금주 실적 | 차주 계획" 두 열 표는 내용 칸 첫 문단에 [영역 이름] 을 두고, 표본 행 수를 한 장당 줄 수로 돌려준다', async () => {
+  it('구분 열이 없는 "금주 실적 | 차주 계획" 두 열 표는 업무 건(tasks) 단위로 잇고, 표본 행 수·칸 크기를 줄 수로 돌려준다', async () => {
     const r = await autoTokenizeTemplate(await pack([slide(title(2, '주간 업무') + twoColTable('생산계획', '통합관제'))]), 'weekly_report_pptx')
     expect(r.changed).toBe(true)
     if (!r.changed) return
@@ -179,16 +187,20 @@ describe('autoTokenizeTemplate — 주간 PPT 표 자동 연결', () => {
       removedRows: 1,
       removedSlides: 0,
       rowsPerSlide: 2,
+      linesPerCell: Math.floor(((2250347 + 2741109) / 2 - 91440) / (9 * 12700 * 1.2)),
+      datedHeaders: 2,
     })
     const trs = rows(await slideXml(r.bytes, 1))
     expect(trs).toHaveLength(2)
-    expect(cellTexts(trs[1])).toEqual(['{{#rows sections}}[{{.name}}]\n{{.this_content}}', '[{{.name}}]\n{{.next_content}}'])
+    expect(cellTexts(trs[0])).toEqual(['금주 ({{report.week_range_ymd}}) 실적', '차주 ({{report.next_week_range_ymd}}) 계획'])
+    expect(cellTexts(trs[1])).toEqual(['{{#rows tasks}}{{.this_tagged}}', '{{.next_tagged}}'])
+    expect(/<a:tr h="2495728">/.test(trs[1])).toBe(true)
     // 보기 내용은 패턴일 뿐 — 데이터 행의 글자와 표본 행은 남지 않는다
     expect(trs[1]).not.toContain('생산계획')
     expect(trs.join('')).not.toContain('통합관제')
     const scanned = await scanFormTemplate(r.bytes, 'pptx')
     expect(scanned.issues.filter((i) => i.severity === 'error')).toEqual([])
-    expect([...scanned.placeholders.map((p) => p.token)].sort()).toEqual(['{{#rows sections}}', '{{.name}}', '{{.name}}', '{{.next_content}}', '{{.this_content}}'])
+    expect(scanned.placeholders.map((p) => p.token)).toEqual(['{{report.week_range_ymd}}', '{{report.next_week_range_ymd}}', '{{#rows tasks}}', '{{.this_tagged}}', '{{.next_tagged}}'])
   })
 
   it('월 단위 머리글(금월 | 차월) 표는 주간 표로 보지 않고, 구분 열이 있는 표를 두 열 표보다 앞세운다', async () => {
@@ -231,7 +243,7 @@ describe('autoTokenizeTemplate — 주간 PPT 표 자동 연결', () => {
     expect([...types.matchAll(/PartName="([^"]+)"/g)].map((m) => m[1])).toEqual(['/ppt/slides/slide1.xml', '/ppt/slides/slide2.xml', '/ppt/slides/slide5.xml'])
     expect(await out.file('docProps/app.xml')!.async('string')).toContain('<Slides>3</Slides>')
     // 남긴 표에는 토큰, 뒤 슬라이드(교육/출장)는 그대로
-    expect(await slideXml(r.bytes, 2)).toContain('{{#rows sections}}')
+    expect(await slideXml(r.bytes, 2)).toContain('{{#rows tasks}}')
     expect(await slideXml(r.bytes, 5)).toContain('휴가')
     // 머리글이 다른 표가 사이에 끼면 되풀이가 아니다
     const mixed = await autoTokenizeTemplate(await pack([slide(twoColTable('a', 'b')), slide(busanTable()), slide(twoColTable('c', 'd'))]), 'weekly_report_pptx')
@@ -239,30 +251,44 @@ describe('autoTokenizeTemplate — 주간 PPT 표 자동 연결', () => {
     expect(mixed.changed && mixed.detection.removedSlides).toBe(0)
   })
 
-  it('두 열 표는 엔진이 [영역 이름] 뒤에 화면 내용을 채우고 양식의 줄 수마다 다음 슬라이드로 잇는다', async () => {
+  it('두 열 표는 엔진이 웹 내용을 업무 건마다 한 줄(같은 건의 금주·차주 나란히)로 채우고 양식의 줄 수마다 다음 슬라이드로 잇는다', async () => {
     const r = await autoTokenizeTemplate(await pack([slide(twoColTable('a', 'b'))]), 'weekly_report_pptx')
     expect(r.changed).toBe(true)
     if (!r.changed) return
-    const sections = [
-      { name: '품질설계', this_content: ['[생산계획] 간트 연동', '- 모니터링'], next_content: ['운영계 반영'] },
-      { name: 'APS', this_content: ['스케줄 개선'], next_content: [] },
-      { name: '물류L2', this_content: [], next_content: ['준비'] },
+    const areas = [
+      { id: 'q', code: '001', name: '품질설계', sortOrder: 1, active: true, teams: [] },
+      { id: 'y', code: '002', name: '야드관리', sortOrder: 2, active: true, teams: [] },
+      { id: 'g', code: '003', name: '구내운송', sortOrder: 3, active: true, teams: [] },
     ]
-    const out = await renderPptx(r.bytes, weekly(sections), {}, { ...options, max_rows_per_slide: r.detection.rowsPerSlide })
+    const sheet = [
+      { id: '1', reportId: 'w', areaId: 'q', thisContent: '[생산계획] 간트 연동\n  ▪ 일정 : 09/14 ~ 10/23\n–  프로그램 개발', nextContent: '[생산계획] 간트 연동\n–  운영계 반영', thisIssue: '', nextIssue: '' },
+      { id: '2', reportId: 'w', areaId: 'y', thisContent: '', nextContent: '', thisIssue: '', nextIssue: '' },
+      { id: '3', reportId: 'w', areaId: 'g', thisContent: '세로고정 상차 순서 조정\n 담당자 : 유남\n\n[구내운송] C61 게이트 편성', nextContent: '[구내운송] 출하차량 입문 개선', thisIssue: '', nextIssue: '' },
+    ]
+    const tasks = weeklyCatalogTasks(sheet as never, areas as never)
+    const model = {
+      report: { week_range_ymd: '2026.10.26~2026.10.30', next_week_range_ymd: '2026.11.02~2026.11.06' }, kpi: {}, sections: [], tasks,
+    } as unknown as CatalogModel
+    const out = await renderPptx(r.bytes, model, {}, { ...options, max_rows_per_slide: r.detection.rowsPerSlide, max_lines_per_cell: r.detection.linesPerCell })
     const zip = await JSZip.loadAsync(out)
     const order = await deckOrder(zip)
     expect(order).toHaveLength(2)
     const texts = await Promise.all(order.map((n) => zip.file(n)!.async('string')))
     const first = rows(texts[0])
     expect(first).toHaveLength(1 + 2)
-    expect(cellTexts(first[1])).toEqual(['[품질설계]\n[생산계획] 간트 연동\n- 모니터링', '[품질설계]\n운영계 반영'])
-    expect(cellTexts(first[2])[0]).toBe('[APS]\n스케줄 개선')
-    expect(cellTexts(first[2])[1]).toContain('[APS]')
-    expect(rows(texts[1])).toHaveLength(1 + 1)
-    expect(cellTexts(rows(texts[1])[1])[1]).toBe('[물류L2]\n준비')
+    expect(cellTexts(first[0])).toEqual(['금주 (2026.10.26~2026.10.30) 실적', '차주 (2026.11.02~2026.11.06) 계획'])
+    // 같은 제목의 금주·차주 건이 한 줄 — 사람이 적은 들여쓰기 그대로, 영역 이름표 없이
+    expect(cellTexts(first[1])).toEqual(['[생산계획] 간트 연동\n  ▪ 일정 : 09/14 ~ 10/23\n–  프로그램 개발', '[생산계획] 간트 연동\n–  운영계 반영'])
+    // 제목에 [분류] 가 없으면 [영역 이름] 을 붙인다. 글이 없는 영역(야드관리)은 줄이 없다
+    expect(cellTexts(first[2])).toEqual(['[구내운송] 세로고정 상차 순서 조정\n 담당자 : 유남', ''])
+    const second = rows(texts[1])
+    expect(second).toHaveLength(1 + 2)
+    expect(cellTexts(second[1])).toEqual(['[구내운송] C61 게이트 편성', ''])
+    expect(cellTexts(second[2])).toEqual(['', '[구내운송] 출하차량 입문 개선'])
     for (const x of texts) {
       expect(x).not.toContain('{{')
       expect(x).not.toContain('이번 주 한 일')
+      expect(x).not.toContain('야드관리')
     }
   })
 
