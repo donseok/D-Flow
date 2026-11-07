@@ -283,3 +283,31 @@ describe('replaceMinuteBody — 녹취 보정 경고를 결과에 싣고 새 판
     expect('timeFixWarning' in res).toBe(false)
   })
 })
+
+describe('replaceMinuteBody — 파일 없이 본문 직접 저장', () => {
+  it('본문을 그대로 새 버전으로 저장하고 파일 포인터를 비운다', async () => {
+    const { applyScopeTimeFix } = await import('@/lib/minutes/timeFix.server')
+    vi.mocked(applyScopeTimeFix).mockClear()
+    createServerClient.mockResolvedValue(fakeDb({ data: row() }).client)
+    const rpc = vi.fn(() => ({ single: async () => ({ data: { version_id: 'v2', wiki_rebuild_required: false }, error: null }) }))
+    adminMocks.createAdminClient.mockReturnValue({ rpc })
+    const body = '# 회의록\n수정한 내용과 현지 시각'
+    expect(await replaceMinuteBody(M, body)).toMatchObject({ ok: true })
+    expect(applyScopeTimeFix).not.toHaveBeenCalled()
+    expect(rpc).toHaveBeenCalledWith('commit_minute_body_version', expect.objectContaining({
+      p_body_md: body, p_file_name: null, p_file_path: null, p_file_size: null, p_file_mime: null,
+    }))
+  })
+
+  it('보관된 회의록은 직접 편집도 거부한다', async () => {
+    createServerClient.mockResolvedValue(fakeDb({ data: row({ archived_at: '2026-11-01T00:00:00Z' }) }).client)
+    expect(await replaceMinuteBody(M, '수정')).toMatchObject({ ok: false })
+    expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+  })
+
+  it('소유 권한이 없는 사용자의 직접 편집은 거부한다', async () => {
+    createServerClient.mockResolvedValue(fakeDb({ data: row({ created_by: 'other' }) }).client)
+    expect(await replaceMinuteBody(M, '수정')).toMatchObject({ ok: false })
+    expect(adminMocks.createAdminClient).not.toHaveBeenCalled()
+  })
+})

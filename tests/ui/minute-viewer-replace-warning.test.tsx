@@ -81,3 +81,21 @@ describe('MinuteViewer — 본문 교체의 녹취 보정 경고(a6 리뷰 Q2)',
     expect(m.refresh).toHaveBeenCalled()
   })
 })
+
+it('상세 화면에서 본문을 수정해 저장하면 편집 창을 닫고 내용을 다시 읽는다', async () => {
+  m.replaceMinuteBody.mockResolvedValueOnce({ ok: true })
+  const edit = [...container.querySelectorAll('button')].find(b => b.textContent === 'min.body.edit')!
+  await act(async () => edit.click())
+  const input = document.querySelector('textarea')!
+  expect(input.value).toBe(minute.bodyMd)
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, '수정 후 저장')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const save = [...document.querySelectorAll('button')].find(b => b.textContent === 'min.meta.save')!
+  await act(async () => save.click())
+  expect(m.replaceMinuteBody).toHaveBeenCalledWith(MID, '수정 후 저장')
+  expect(m.upload).not.toHaveBeenCalled()
+  expect(document.querySelector('textarea')).toBeNull()
+  expect(m.refresh).toHaveBeenCalledOnce()
+})

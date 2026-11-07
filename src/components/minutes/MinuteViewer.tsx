@@ -41,6 +41,7 @@ import { useToast } from '@/components/ui/Toast'
 import { Modal } from '@/components/ui/Modal'
 import { MarkdownView } from './MarkdownView'
 import { MinuteMetaModal } from './MinuteMetaModal'
+import { MinuteBodyEditModal } from './MinuteBodyEditModal'
 import { MinuteShareModal } from './MinuteShareModal'
 import { MinuteChatPanel } from './MinuteChatPanel'
 import { MinuteInsightCard } from './MinuteInsightCard'
@@ -157,6 +158,7 @@ export function MinuteViewer({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [metaOpen, setMetaOpen] = useState(false)
+  const [bodyEditOpen, setBodyEditOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [focus, setFocus] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -1230,6 +1232,7 @@ export function MinuteViewer({
                 <button onClick={() => setShareOpen(true)} className="btn h-8 px-2.5 text-xs">
                   <Share2 className="h-3.5 w-3.5" />{t('min.share.button')}
                 </button>
+                <button onClick={() => setBodyEditOpen(true)} className="btn h-8 px-2.5 text-xs">{t('min.body.edit')}</button>
                 <button onClick={() => setMetaOpen(true)} className="btn h-8 px-2.5 text-xs">{t('min.detail.edit')}</button>
                 <label className="btn h-8 cursor-pointer px-2.5 text-xs">
                   {t('min.detail.replaceBody')}
@@ -1527,6 +1530,11 @@ export function MinuteViewer({
       {metaOpen && (
         <MinuteMetaModal open onClose={() => setMetaOpen(false)} onSaved={() => { setMetaOpen(false); router.refresh() }}
           minute={minute} projects={projects} myProjectIds={myProjectIds} />
+      )}
+
+      {bodyEditOpen && (
+        <MinuteBodyEditModal minute={minute} onClose={() => setBodyEditOpen(false)}
+          onSaved={() => { setBodyEditOpen(false); router.refresh() }} />
       )}
 
       <MinuteShareModal open={shareOpen} onClose={() => setShareOpen(false)} minuteId={minute.id} />

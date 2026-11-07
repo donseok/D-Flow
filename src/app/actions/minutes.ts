@@ -745,10 +745,10 @@ export async function fetchMinuteFoldersLite(workspaceId?: string): Promise<Minu
   return folders.filter(f => on.has(f.workspaceId) && (f.projectId === null || !hidden.has(f.projectId)))
 }
 
-/** 본문 교체 — 클라이언트가 새 .md 를 Storage 업로드한 뒤 호출. 기존 body 파일 0건 허용(복구 경로). */
+/** 본문 저장 — 파일 업로드 또는 직접 편집. 파일이 없으면 입력한 본문 그대로 새 버전을 만든다. */
 export async function replaceMinuteBody(
   id: string, bodyMd: string,
-  file: { fileName: string; filePath: string; size: number; mime: string },
+  file?: { fileName: string; filePath: string; size: number; mime: string },
 ): Promise<MinuteActionResult> {
   const t = await serverTranslator()
   const g = await requireActor()
@@ -756,14 +756,14 @@ export async function replaceMinuteBody(
   const user = await getSession()
   if (!user) return { ok: false, error: ERR_ANON }
   if (bodyMd.length > 100_000) return { ok: false, error: t('err.bodyMust100000Characters') }
-  if (!/\.(md|markdown)$/i.test(file.fileName)) return { ok: false, error: t('srv.minutes.onlyMdFilesAllowed') }
+  if (file && !/\.(md|markdown)$/i.test(file.fileName)) return { ok: false, error: t('srv.minutes.onlyMdFilesAllowed') }
   const sb = await createServerClient()
   // minute_date 는 녹취 보정의 fallbackDate — 소유권 확인과 같은 왕복에 싣는다
   const own = await checkOwner(sb, id, g.actor, { extra: 'minute_date' })
   if (!own.ok) return { ok: false, error: own.error }
   const { projectId } = own.scope
   // 경로 scope 는 DB 의 회의록 행(워크스페이스·현재 프로젝트, resolveScope) — 클라이언트 입력을 믿지 않는다.
-  if (!isMinuteFilePathValid(own.scope, id, file.filePath, 'minutes')) {
+  if (file && !isMinuteFilePathValid(own.scope, id, file.filePath, 'minutes')) {
     return { ok: false, error: t('err.invalidFilePath') }
   }
   // 녹취툴 산출물이면 시간 줄을 UTC → 회의록 범위 tz 로 보정 — DB·재매칭·재인제스트 전부 보정본 사용(스펙 D13 ④)
@@ -773,7 +773,10 @@ export async function replaceMinuteBody(
     return { ok: false, error: ERR_LOOKUP }
   }
   // 보정은 업로드를 막지 않는다(A-4 리뷰 N4) — 보정 대상일 때만 범위 달력을 읽고, 못 읽거나 시각이 범위 밖이면 원문 그대로 + 경고
-  const { fix, warning: timeFixWarning } = await applyScopeTimeFix(bodyMd, { projectId: own.scope.projectId, workspaceId: own.scope.workspaceId }, minuteDate)
+  // 직접 편집한 본문은 이미 화면의 현지 시각이다 — 업로드용 UTC 보정을 다시 적용하지 않는다.
+  const { fix, warning: timeFixWarning } = file
+    ? await applyScopeTimeFix(bodyMd, { projectId: own.scope.projectId, workspaceId: own.scope.workspaceId }, minuteDate)
+    : { fix: { body: bodyMd, corrected: false, from: undefined, to: undefined, tz: undefined }, warning: undefined }
   if (fix.corrected) console.info(`[minutes] 본문 교체 시간 보정 적용: ${fix.from} → ${fix.to} (${fix.tz}, id=${id})`)
   const body = fix.body
 
@@ -786,10 +789,10 @@ export async function replaceMinuteBody(
     p_minute_id: id,
     p_body_md: body,
     p_body_hash: fnv1a64(body),
-    p_file_name: file.fileName,
-    p_file_path: file.filePath,
-    p_file_size: file.size,
-    p_file_mime: file.mime,
+    p_file_name: file?.fileName ?? null,
+    p_file_path: file?.filePath ?? null,
+    p_file_size: file?.size ?? null,
+    p_file_mime: file?.mime ?? null,
     p_actor_id: user.id,
     p_actor_name: displayNameFrom(user.user_metadata, user.email),
   }).single()
