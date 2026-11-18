@@ -1,0 +1,118 @@
+
+<nav class="topnav" aria-label="장 이동">
+  <a href="#overview">한눈에</a><a href="#cast">1 등장</a><a href="#lifecycle">2 일생</a><a href="#setup">3 준비</a><a href="#first-run">4 첫 실습</a><a href="#screens">5 화면</a><a href="#approve">6 결재</a><a href="#scale">7 넓히기</a><a href="#commands">8 명령</a><a href="#trouble">9 막힐 때</a><a href="#stop">10 멈추기</a><a href="#checklist">11 체크</a><a href="#changes">바뀐 점</a>
+</nav>
+<div class="layout">
+<nav class="toc" aria-label="목차">
+  <p>목차</p>
+  <a href="#overview"><span class="n">0</span>한눈에 보기</a>
+  <a href="#cast"><span class="n">1</span>등장하는 것들</a>
+  <a href="#lifecycle"><span class="n">2</span>작업 하나의 일생</a>
+  <a href="#setup"><span class="n">3</span>한 번만 하는 준비</a>
+  <a href="#first-run"><span class="n">4</span>첫 실습: 작업 하나</a>
+  <a href="#screens"><span class="n">5</span>화면 읽는 법</a>
+  <a href="#approve"><span class="n">6</span>결재하기</a>
+  <a href="#scale"><span class="n">7</span>넓히기</a>
+  <a href="#commands"><span class="n">8</span>명령 모음</a>
+  <a href="#trouble"><span class="n">9</span>막혔을 때</a>
+  <a href="#stop"><span class="n">10</span>멈추고 정리하기</a>
+  <a href="#checklist"><span class="n">11</span>체크리스트</a>
+  <a href="#changes"><span class="n">+</span>안내서와 바뀐 점</a>
+</nav>
+<main>
+
+<header class="hero chapter" id="overview">
+  <p class="eyebrow">D-FLOW 사용 설명서 · 에이전트</p>
+  <h1>D-Flow 에이전트 사용 설명서</h1>
+  <p class="lede">웹에서 작업을 맡기면 개발 PC의 Claude Code가 받아서 개발하고 보고합니다. 사람은 에이전트 오피스에서 진행을 지켜보다가 결과를 결재합니다. 이 설명서는 그 한 바퀴를 그림으로 따라갑니다.</p>
+  <ul class="meta" aria-label="기준">
+    <li>기준 코드 main 27ea3db5</li><li>서버 계약 2.5</li><li>운영 d-flow-eight.vercel.app</li><li>2026-11-19</li>
+  </ul>
+  <div class="quick">
+    <a class="primary" href="#setup">처음이면 3장 준비부터</a>
+    <a href="#first-run">준비가 끝났으면 4장 첫 실습</a>
+    <a href="#trouble">막혔으면 9장</a>
+  </div>
+
+  <figure class="fig">
+    <p class="fig-t">한 바퀴: 맡기기 → 착수 → 개발 → 보고 → 결재 → 합치기</p>
+    <p class="scroll-hint">← 그림을 옆으로 밀어 보세요 →</p>
+    <div class="fig-scroll">
+    <svg class="sv" viewBox="0 0 1000 392" role="img" aria-label="웹에서 담당자를 정하고 위임하면, 개발 PC 가 /dflow-dev 로 작업을 받아 설계부터 정리까지 개발하고, 1분마다 신호를 보내 에이전트 오피스에 진행이 보인다. 개발이 끝나면 agent 브랜치를 GitHub 에 push 하고 완료 보고를 올린다. 웹에서 승인하면 PC 의 /dflow-merge 가 승인된 브랜치를 main 에 합치고, 반려하면 PC 가 사유를 읽고 다시 개발한다.">
+      <defs>
+        <marker id="ov-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="ov-a-pc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-pc" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="ov-a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-warn" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="ov-a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="ov-a-mute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-mute" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <!-- 줄(레인) -->
+      <rect class="lane-web" x="0" y="34" width="1000" height="112" rx="10"/>
+      <rect class="lane-pc" x="0" y="152" width="1000" height="112" rx="10"/>
+      <rect class="lane-gh" x="0" y="270" width="1000" height="112" rx="10"/>
+      <text class="b t-web" x="16" y="84">D-Flow 웹</text><text class="sm" x="16" y="102">관리자 브라우저</text>
+      <text class="b t-pc" x="16" y="202">개발 PC</text><text class="sm" x="16" y="220">Claude Code</text>
+      <text class="b" x="16" y="320">GitHub</text><text class="sm" x="16" y="338">코드 저장소</text>
+      <!-- 열 머리 -->
+      <g>
+        <circle class="num" cx="155" cy="16" r="9"/><text class="num-t" x="155" y="20" text-anchor="middle">1</text><text class="b" x="169" y="21">맡기기</text>
+        <circle class="num" cx="306" cy="16" r="9"/><text class="num-t" x="306" y="20" text-anchor="middle">2</text><text class="b" x="320" y="21">착수</text>
+        <circle class="num" cx="453" cy="16" r="9"/><text class="num-t" x="453" y="20" text-anchor="middle">3</text><text class="b" x="467" y="21">개발</text>
+        <circle class="num" cx="600" cy="16" r="9"/><text class="num-t" x="600" y="20" text-anchor="middle">4</text><text class="b" x="614" y="21">보고</text>
+        <circle class="num" cx="747" cy="16" r="9"/><text class="num-t" x="747" y="20" text-anchor="middle">5</text><text class="b" x="761" y="21">결재</text>
+        <circle class="num" cx="888" cy="16" r="9"/><text class="num-t" x="888" y="20" text-anchor="middle">6</text><text class="b" x="902" y="21">합치기</text>
+      </g>
+      <!-- 상자 -->
+      <rect class="bx-web" x="123" y="59" width="124" height="62" rx="8"/>
+      <text class="b" x="185" y="86" text-anchor="middle">담당자 지정</text><text class="sm" x="185" y="104" text-anchor="middle">+ 위임 체크</text>
+      <rect class="bx-web" x="417" y="59" width="124" height="62" rx="8"/>
+      <text class="b" x="479" y="86" text-anchor="middle">에이전트 오피스</text><text class="sm" x="479" y="104" text-anchor="middle">진행이 보임</text>
+      <rect class="bx-web" x="711" y="59" width="124" height="62" rx="8"/>
+      <text class="b" x="765" y="86" text-anchor="middle">승인 · 반려</text><text class="sm" x="765" y="104" text-anchor="middle">사람이 결재</text>
+      <circle class="stamp" cx="822" cy="68" r="12"/><text class="stamp-t" x="822" y="72" text-anchor="middle">결재</text>
+      <rect class="bx-pc" x="270" y="177" width="124" height="62" rx="8"/>
+      <text class="b mono" x="332" y="204" text-anchor="middle">/dflow-dev</text><text class="sm" x="332" y="222" text-anchor="middle">주문 받아 착수</text>
+      <rect class="bx-pc" x="417" y="177" width="124" height="62" rx="8"/>
+      <text class="b" x="479" y="204" text-anchor="middle">설계 → 구현</text><text class="sm" x="479" y="222" text-anchor="middle">→ 검증 → 정리</text>
+      <rect class="bx-pc" x="564" y="177" width="124" height="62" rx="8"/>
+      <text class="b" x="626" y="204" text-anchor="middle">완료 보고</text><text class="sm" x="626" y="222" text-anchor="middle">push 가 먼저</text>
+      <rect class="bx-warn" x="711" y="177" width="124" height="62" rx="8"/>
+      <text class="b t-warn" x="773" y="204" text-anchor="middle">반려되면</text><text class="sm" x="773" y="222" text-anchor="middle">사유 읽고 3부터</text>
+      <rect class="bx-pc" x="858" y="177" width="124" height="62" rx="8"/>
+      <text class="b mono" x="920" y="204" text-anchor="middle">/dflow-merge</text><text class="sm" x="920" y="222" text-anchor="middle">승인된 것만</text>
+      <rect class="bx-gh" x="564" y="295" width="124" height="62" rx="8"/>
+      <text class="b mono" x="626" y="322" text-anchor="middle">agent/… 브랜치</text><text class="xs" x="626" y="340" text-anchor="middle">작업마다 하나</text>
+      <rect class="bx-gh" x="858" y="295" width="124" height="62" rx="8"/>
+      <text class="b mono" x="920" y="322" text-anchor="middle">main</text><text class="xs" x="920" y="340" text-anchor="middle">여기에 합쳐짐</text>
+      <!-- 화살표 -->
+      <path class="ln" d="M247 90 H300 V176" marker-end="url(#ov-a)"/>
+      <text class="sm" x="308" y="134">작업 주문</text>
+      <path class="ln ln-pc" d="M394 208 H416" marker-end="url(#ov-a-pc)"/>
+      <path class="ln ln-pc dash" d="M479 177 V122" marker-end="url(#ov-a-pc)"/>
+      <text class="sm t-pc" x="487" y="153">1분마다 신호</text>
+      <path class="ln ln-pc" d="M541 208 H563" marker-end="url(#ov-a-pc)"/>
+      <path class="ln" d="M626 239 V294" marker-end="url(#ov-a)"/>
+      <text class="sm" x="634" y="272">push</text>
+      <path class="ln ln-pc" d="M626 177 V90 H710" marker-end="url(#ov-a-pc)"/>
+      <text class="sm t-pc" x="634" y="140">완료 보고</text>
+      <path class="ln ln-warn dash" d="M773 121 V176" marker-end="url(#ov-a-warn)"/>
+      <text class="sm t-warn" x="781" y="153">반려</text>
+      <path class="ln ln-ok" d="M835 90 H920 V176" marker-end="url(#ov-a-ok)"/>
+      <text class="sm t-ok" x="858" y="82">승인</text>
+      <path class="ln" d="M920 239 V294" marker-end="url(#ov-a)"/>
+      <text class="sm" x="928" y="272">합침</text>
+      <path class="ln ln-mute dash" d="M688 326 H857" marker-end="url(#ov-a-mute)"/>
+      <text class="xs" x="773" y="318" text-anchor="middle">승인된 브랜치를</text>
+    </svg>
+    </div>
+    <figcaption>세 줄은 일이 일어나는 장소입니다. 웹은 PC를 켜 주지 않습니다. PC에서 세션을 직접 실행해야 2번이 시작됩니다. 5번의 승인만으로는 코드가 main에 들어가지 않고, 6번 <code>/dflow-merge</code>가 따로 합칩니다.</figcaption>
+  </figure>
+
+  <h3 id="places">어디서 하는 일인지 이 표시로 구분합니다</h3>
+  <ul class="places">
+    <li><span><span class="pl pl-admin">웹 · 관리자</span></span>관리자 계정으로 로그인한 브라우저입니다. 설정, 위임, 승인을 합니다.</li>
+    <li><span><span class="pl pl-dev">웹 · 개발 계정</span></span>개발 PC 주인 계정으로 로그인한 브라우저입니다. 토큰만 여기서 발급합니다.</li>
+    <li><span><span class="pl pl-term"><span class="g">$</span>PC · 터미널</span></span>개발 PC의 터미널(Windows는 WSL Ubuntu)입니다. <code>git</code>, <code>sh</code>, <code>npm</code> 명령을 칩니다.</li>
+    <li><span><span class="pl pl-claude"><span class="g">/</span>PC · Claude Code</span></span>저장소 폴더에서 연 Claude Code 입력칸입니다. <code>/dflow-dev</code> 같은 명령을 칩니다.</li>
+  </ul>
+</header>

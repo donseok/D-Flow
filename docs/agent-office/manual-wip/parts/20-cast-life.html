@@ -1,0 +1,223 @@
+
+<section class="chapter" id="cast">
+  <header>
+    <h2><span class="no">01</span>등장하는 것들</h2>
+    <p class="lede">사람 계정 둘, 연결 키 하나, 개발 PC 한 대, 저장소 하나가 나옵니다. 첫 실습에는 이 다섯이면 충분합니다.</p>
+  </header>
+  <div class="cast">
+    <div class="castc"><h4>관리자 계정 <span class="pl pl-admin">웹 · 관리자</span></h4><p>지금 쓰는 내 계정입니다. 에이전트 기능을 켜고, 작업을 맡기고, 결과를 승인합니다. 프로젝트 관리자 이상이면 됩니다.</p></div>
+    <div class="castc"><h4>개발 계정 <span class="pl pl-dev">웹 · 개발 계정</span></h4><p>개발 PC 한 대마다 하나 만듭니다(예: 개발-Mac1). 프로젝트 권한은 「멤버」입니다. 이 계정이 작업의 담당자이면서 토큰의 주인입니다.</p></div>
+    <div class="castc"><h4>개인 액세스 토큰(PAT)</h4><p>개발 계정이 발급하는 연결 키입니다. 개발 PC의 <code>.env</code> 파일에 넣습니다. 전체 값은 발급 직후 한 번만 보입니다.</p></div>
+    <div class="castc"><h4>개발 PC + D-Flow 킷 <span class="pl pl-claude"><span class="g">/</span>PC</span></h4><p>Claude Code가 실제로 코드를 쓰는 곳입니다. D-Flow 킷(스킬 7개와 신호 훅)을 개발 저장소에 설치합니다.</p></div>
+    <div class="castc"><h4>개발 저장소 <span class="pl pl-gh">GitHub</span></h4><p>개발할 코드가 있는 저장소입니다. 실습에서는 <code>office-demo</code>를 씁니다. 작업마다 <code>agent/…</code> 브랜치가 생기고, 승인된 것만 main에 합칩니다.</p></div>
+    <div class="castc"><h4>D-Flow 서버</h4><p><code>https://d-flow-eight.vercel.app</code>. 작업 주문을 내주고 신호와 보고를 받습니다. PC가 몇 대든 모두 이 한 곳에 붙습니다. PC에 서버나 DB를 설치하지 않습니다.</p></div>
+  </div>
+
+  <h3>네 고리가 한 계정으로 이어져야 합니다</h3>
+  <p>PC가 작업을 가져가려면 아래 네 칸이 모두 <b>같은 개발 계정</b>이어야 합니다. 하나라도 어긋나면 그 아래의 증상이 나옵니다.</p>
+  <figure class="fig">
+    <ol class="chain">
+      <li><div class="lk"><b>명단의 멤버</b><span>개발 계정이 실습 프로젝트 「팀 구성」 명단에 권한 「멤버」로 있습니다.</span></div><div class="brk">끊기면: 담당자 목록에 안 나옵니다. PC 요청은 403 「그 프로젝트의 멤버 이상만 실행할 수 있습니다.」</div></li>
+      <li><div class="lk"><b>작업의 담당자</b><span>그 작업의 「담당자」가 이 계정입니다. 담당팀이 아니라 사람입니다.</span></div><div class="brk">끊기면: 403 「담당자만 착수할 수 있습니다.」 자동 감시는 아예 집지 않습니다.</div></li>
+      <li><div class="lk"><b>토큰의 주인</b><span>이 계정으로 로그인해 발급한 PAT입니다. 스코프 두 칸을 모두 체크했습니다.</span></div><div class="brk">끊기면: 조회 스코프가 빠지면 403 <code>insufficient_scope</code>, 만료·폐기·복사 실수면 401입니다.</div></li>
+      <li><div class="lk"><b>PC의 .env</b><span>그 토큰과 실습 프로젝트 ID가 개발 저장소의 <code>.env</code>에 들어 있습니다.</span></div><div class="brk">끊기면: 다른 프로젝트 작업은 <code>PROJECT_MISMATCH</code>로 착수를 거부하고, 목록이 비어 보입니다.</div></li>
+    </ol>
+    <figcaption>담당자가 없는 작업도 그 프로젝트 멤버의 토큰이면 손으로 착수할 수는 있습니다. 하지만 자동 감시(<code>/dflow-poll</code>·<code>/dflow-team</code>)는 「내 담당」 작업만 집습니다. 그래서 담당자를 꼭 정합니다.</figcaption>
+  </figure>
+
+  <div class="callout note">
+    <span class="tag">왜 계정을 나누나요</span>
+    <p>관리자 계정의 토큰을 PC에 쓰지 않습니다. 개발 계정은 「멤버」라서 승인 권한이 없고, 누가 무엇을 개발했는지가 계정으로 남습니다. 관리자는 규칙상 자기가 담당하거나 착수한 작업도 승인할 수 있습니다. 그래서 개발과 결재를 계정으로 갈라 두는 편이 안전합니다.</p>
+  </div>
+
+  <h3>계정은 세 종류이고, 서로 따로입니다</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>종류</th><th>하는 일</th><th>몇 개 필요한가</th></tr></thead>
+    <tbody>
+      <tr><td><b>D-Flow 계정·토큰</b></td><td>누가 어떤 작업을 개발하는지 구별합니다.</td><td>PC마다 개발 계정 하나 + 승인용 관리자 계정</td></tr>
+      <tr><td><b>Claude Code 로그인</b></td><td>PC에서 AI 개발 도구를 씁니다.</td><td>각 서비스의 이용 조건대로</td></tr>
+      <tr><td><b>GitHub 로그인</b></td><td>코드를 받고, 작업 브랜치를 올리고, 합칩니다.</td><td>실습 저장소에 쓰기 권한이 있으면 됨</td></tr>
+    </tbody>
+  </table></div>
+  <p>D-Flow 개발 계정을 넷 만든다고 Claude나 GitHub 계정을 넷 만들 필요는 없습니다. 다만 동시에 돌리는 수가 늘면 AI 사용량도 늘어납니다.</p>
+</section>
+
+<section class="chapter" id="lifecycle">
+  <header>
+    <h2><span class="no">02</span>작업 하나의 일생</h2>
+    <p class="lede">작업에는 '작업 주문'이 하나씩 붙습니다. 주문은 아래 네 칸을 차례로 지나고, 칸마다 누구 차례인지가 정해져 있습니다. 같은 칸을 화면마다 다른 이름으로 부르니 이름 짝을 같이 봐 두세요.</p>
+  </header>
+
+  <figure class="fig">
+    <p class="fig-t">주문 한 건이 지나가는 길</p>
+    <p class="scroll-hint">← 그림을 옆으로 밀어 보세요 →</p>
+    <div class="fig-scroll">
+    <svg class="sv" viewBox="0 0 1000 600" role="img" aria-label="주문은 대기(미착수)에서 PC 의 착수로 작업 중이 되고, PC 가 push 한 뒤 완료 보고를 올리면 승인 대기가 되며, 웹에서 승인하면 승인됨이 된다. 승인 대기에서 반려하면 반려·재작업이 되어 PC 가 고친 뒤 다시 보고한다. 승인됨에서 승인 취소하면 승인 대기로, 재작업 요청하면 반려·재작업으로 간다. 작업 중이나 대기 상태에서 웹이 중단하거나 위임을 해제하면 취소됨이 된다. PC 가 반납하면 대기로 돌아간다. 승인 뒤 코드는 PC 의 /dflow-merge 가 main 에 합친다.">
+      <defs>
+        <marker id="lc-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="lc-a-pc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-pc" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="lc-a-web" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-web" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="lc-a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-warn" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="lc-a-mute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-mute" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <!-- 위쪽 되돌이 -->
+      <path class="ln ln-mute" d="M330 95 V64 H160 V94" marker-end="url(#lc-a-mute)"/>
+      <text class="sm" x="245" y="56" text-anchor="middle">반납 · PC</text>
+      <path class="ln ln-web" d="M870 95 V64 H660 V94" marker-end="url(#lc-a-web)"/>
+      <text class="sm t-web" x="765" y="56" text-anchor="middle">승인 취소 · 웹</text>
+      <!-- 큰 길 네 칸 -->
+      <rect class="bx-dash" x="30" y="95" width="170" height="110" rx="10"/>
+      <text class="xs mono" x="186" y="114" text-anchor="end">RD</text>
+      <text class="lg" x="44" y="128">대기(미착수)</text>
+      <text class="sm" x="44" y="152">오피스: 빈자리</text>
+      <text class="sm" x="44" y="172">WBS: 착수 전 · 0%</text>
+      <text class="xs" x="44" y="192">PC가 가져가기를 기다림</text>
+      <rect class="bx-pc" x="290" y="95" width="170" height="110" rx="10"/>
+      <text class="xs mono" x="446" y="114" text-anchor="end">CL</text>
+      <text class="lg" x="304" y="128">작업 중</text>
+      <text class="sm" x="304" y="152">오피스: 업무 중 등</text>
+      <text class="sm" x="304" y="172">WBS: 작업 중 · 30%</text>
+      <text class="xs" x="304" y="192">PC가 개발하는 중</text>
+      <rect class="bx-web" x="550" y="95" width="170" height="110" rx="10"/>
+      <text class="xs mono" x="706" y="114" text-anchor="end">RP</text>
+      <text class="lg" x="564" y="128">승인 대기</text>
+      <text class="sm" x="564" y="152">오피스: 승인 대기</text>
+      <text class="sm" x="564" y="172">WBS: 검수 대기 · 80%</text>
+      <text class="xs" x="564" y="192">사람이 결재할 차례</text>
+      <rect class="bx-ok" x="810" y="95" width="170" height="110" rx="10"/>
+      <text class="xs mono" x="966" y="114" text-anchor="end">AP</text>
+      <text class="lg" x="824" y="128">승인됨</text>
+      <text class="sm" x="824" y="152">오피스: 머지 완료</text>
+      <text class="sm" x="824" y="172">WBS: 완료 · 100%</text>
+      <text class="xs" x="824" y="192">PC에서 합칠 차례</text>
+      <path class="ln ln-pc" d="M200 150 H289" marker-end="url(#lc-a-pc)"/>
+      <text class="sm b t-pc" x="245" y="141" text-anchor="middle">착수</text><text class="xs" x="245" y="167" text-anchor="middle">PC</text>
+      <path class="ln ln-pc" d="M460 150 H549" marker-end="url(#lc-a-pc)"/>
+      <text class="sm b t-pc" x="505" y="141" text-anchor="middle">완료 보고</text><text class="xs" x="505" y="167" text-anchor="middle">PC · push 필수</text>
+      <path class="ln ln-web" d="M720 150 H809" marker-end="url(#lc-a-web)"/>
+      <text class="sm b t-web" x="765" y="141" text-anchor="middle">승인</text><text class="xs" x="765" y="167" text-anchor="middle">웹</text>
+      <!-- 작업 중의 신호 갈래 -->
+      <path class="ln ln-mute" d="M375 205 V222"/>
+      <rect class="bx" x="290" y="222" width="170" height="122" rx="10"/>
+      <text class="xs" x="300" y="238">작업 중일 때 신호로 갈림</text>
+      <rect class="f-active st-none" x="300" y="246" width="150" height="18" rx="9"/>
+      <text class="xs on-seat b" x="375" y="259" text-anchor="middle">업무 중 · 신호 5분 안</text>
+      <rect class="f-active st-warn" x="300" y="270" width="150" height="18" rx="9"/>
+      <text class="xs on-seat b" x="375" y="283" text-anchor="middle">무응답 · 5분 넘게 없음</text>
+      <rect class="f-empty st-warn" x="300" y="294" width="150" height="18" rx="9"/>
+      <text class="xs on-seat b" x="375" y="307" text-anchor="middle">끊김 · 30분 넘게 없음</text>
+      <rect class="f-active st-none" x="300" y="318" width="150" height="18" rx="9"/>
+      <text class="xs on-seat b" x="375" y="331" text-anchor="middle">결정 대기 · 사람 답 기다림</text>
+      <!-- 반려·재작업 -->
+      <rect class="f-reject st-warn" x="550" y="392" width="170" height="100" rx="10"/>
+      <text class="xs mono on-seat" x="706" y="410" text-anchor="end">CL</text>
+      <text class="lg on-seat" x="564" y="422">반려·재작업</text>
+      <text class="sm on-seat" x="564" y="444">오피스: 반려 · 재작업</text>
+      <text class="sm on-seat" x="564" y="464">WBS: 작업 중 · 50%</text>
+      <text class="xs on-seat" x="564" y="482">PC가 사유 읽고 고침</text>
+      <path class="ln ln-warn" d="M610 205 V391" marker-end="url(#lc-a-warn)"/>
+      <text class="sm b t-warn" x="602" y="292" text-anchor="end">반려</text><text class="xs" x="602" y="308" text-anchor="end">사유 필수 · 웹</text>
+      <path class="ln ln-pc" d="M660 392 V206" marker-end="url(#lc-a-pc)"/>
+      <text class="sm b t-pc" x="668" y="292">다시 완료 보고</text><text class="xs" x="668" y="308">PC</text>
+      <path class="ln ln-warn dash" d="M850 205 V442 H721" marker-end="url(#lc-a-warn)"/>
+      <text class="sm b t-warn" x="858" y="300">재작업 요청</text><text class="xs" x="858" y="316">사유 필수 · 웹</text>
+      <!-- 취소됨 -->
+      <rect class="bx-dash" x="290" y="470" width="170" height="100" rx="10"/>
+      <text class="xs mono" x="446" y="488" text-anchor="end">CX</text>
+      <text class="lg" x="304" y="500">취소됨</text>
+      <text class="sm" x="304" y="522">오피스: 좌석 사라짐</text>
+      <text class="sm" x="304" y="542">WBS: 착수 전 · 0%</text>
+      <text class="xs" x="304" y="560">다시 맡기면 새 주문</text>
+      <path class="ln" d="M375 344 V469" marker-end="url(#lc-a)"/>
+      <text class="sm b" x="383" y="402">중단 · 위임 해제</text><text class="xs" x="383" y="418">웹</text>
+      <path class="ln" d="M115 205 V520 H289" marker-end="url(#lc-a)"/>
+      <text class="sm b" x="123" y="402">위임 해제</text><text class="xs" x="123" y="418">웹</text>
+      <!-- 합치기 -->
+      <path class="ln ln-mute dash" d="M955 205 V499" marker-end="url(#lc-a-mute)"/>
+      <rect class="bx-dash" x="790" y="500" width="190" height="86" rx="10"/>
+      <text class="b mono" x="804" y="526">/dflow-merge · PC</text>
+      <text class="sm" x="804" y="546">승인된 브랜치를 main 에</text>
+      <text class="sm" x="804" y="566">서버에는 기록되지 않음</text>
+    </svg>
+    </div>
+    <figcaption>오른쪽 위의 RD·CL·RP·AP·CX는 터미널 <code>dflow.sh list</code>에 나오는 상태 글자입니다. 실적 %는 기본값이며 프로젝트 설정에서 바꿀 수 있습니다. 진행 막대도 이 실적을 따르므로 착수 30 → 보고 80 → 승인 100으로 한 번에 뜁니다.</figcaption>
+  </figure>
+
+  <h3>같은 상태, 화면마다 다른 이름</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>위임·승인 표</th><th>에이전트 오피스 좌석</th><th>WBS 단계 · 실적</th><th class="c">터미널</th><th>다음 차례</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill p-ready">대기(미착수)</span></td><td><span class="pill p-ready">빈자리</span></td><td>착수 전 · 0%</td><td class="c mono">RD</td><td>PC</td></tr>
+      <tr><td><span class="pill p-active">작업 중</span> <span class="pill p-stale">무응답</span> <span class="pill p-offline">끊김</span> <span class="pill p-blocked">결정 대기</span></td><td>같은 이름(작업 중은 「업무 중」)</td><td>작업 중 · 30%</td><td class="c mono">CL</td><td>PC</td></tr>
+      <tr><td><span class="pill p-reject">반려·재작업</span></td><td><span class="pill p-reject">반려 · 재작업</span></td><td>작업 중 · 50%</td><td class="c mono">CL</td><td>PC</td></tr>
+      <tr><td><span class="pill p-wait">승인 대기</span></td><td><span class="pill p-wait">승인 대기</span></td><td>검수 대기 · 80%</td><td class="c mono">RP</td><td>사람</td></tr>
+      <tr><td><span class="pill p-done">승인됨</span></td><td><span class="pill p-done">머지 완료</span> <small>최근 7일만</small></td><td>완료 · 100%</td><td class="c mono">AP</td><td>PC의 합치기</td></tr>
+      <tr><td><small>표에서 사라짐</small></td><td><small>좌석이 사라짐</small></td><td>착수 전 · 0%</td><td class="c mono">CX</td><td>끝</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout warn">
+    <span class="tag">이름에 속지 마세요</span>
+    <p>오피스의 「머지 완료」는 웹에서 <b>승인됐다는 뜻</b>입니다. 코드가 main에 들어갔는지는 서버가 모릅니다. 승인 뒤 PC에서 <code>/dflow-merge</code>를 돌려야 실제로 합쳐집니다(<a href="#merge">6장</a>).</p>
+  </div>
+
+  <h3 id="signals">작업 중일 때는 '신호'로 상태가 갈립니다</h3>
+  <p>개발 PC의 heartbeat 훅은 Claude Code가 도구를 쓸 때마다 불리지만, 서버로는 작업 하나당 <b>1분에 한 번만</b> 보냅니다. 에이전트가 질문을 띄우고 답을 기다리면 도구를 쓰지 않으니 신호도 멈춥니다.</p>
+  <figure class="fig">
+    <p class="fig-t">마지막 신호 뒤 시간이 얼마나 지났나</p>
+    <p class="scroll-hint">← 그림을 옆으로 밀어 보세요 →</p>
+    <div class="fig-scroll">
+    <svg class="sv" viewBox="0 0 1000 205" role="img" aria-label="작업 좌석은 마지막 신호 뒤 5분까지 업무 중, 5분을 넘으면 무응답, 30분을 넘으면 끊김으로 보인다. 팀장과 단독 감시는 마지막 감시 신호 뒤 70분까지 감시 중으로 보이고 그 뒤에는 사라진다.">
+      <text class="b" x="16" y="66">작업 좌석</text><text class="xs" x="16" y="84">마지막 신호 뒤</text>
+      <rect class="f-active" x="200" y="50" width="108.6" height="28" rx="4"/>
+      <text class="sm b on-seat" x="254.3" y="69" text-anchor="middle">업무 중</text>
+      <rect class="f-warnwash" x="308.6" y="50" width="542.8" height="28"/>
+      <text class="sm b t-warn" x="580" y="69" text-anchor="middle">무응답 · 5분 넘게 신호 없음</text>
+      <rect class="f-empty" x="851.4" y="50" width="108.6" height="28" rx="4"/>
+      <text class="sm b on-seat" x="905.7" y="69" text-anchor="middle">끊김</text>
+      <g>
+        <line class="tick" x1="200" y1="80" x2="200" y2="86"/><text class="xs" x="200" y="99" text-anchor="middle">0분</text>
+        <line class="tick" x1="308.6" y1="80" x2="308.6" y2="86"/><text class="xs" x="308.6" y="99" text-anchor="middle">5분</text>
+        <line class="tick" x1="417.1" y1="80" x2="417.1" y2="86"/><text class="xs" x="417.1" y="99" text-anchor="middle">10분</text>
+        <line class="tick" x1="525.7" y1="80" x2="525.7" y2="86"/><text class="xs" x="525.7" y="99" text-anchor="middle">15분</text>
+        <line class="tick" x1="634.3" y1="80" x2="634.3" y2="86"/><text class="xs" x="634.3" y="99" text-anchor="middle">20분</text>
+        <line class="tick" x1="742.9" y1="80" x2="742.9" y2="86"/><text class="xs" x="742.9" y="99" text-anchor="middle">25분</text>
+        <line class="tick" x1="851.4" y1="80" x2="851.4" y2="86"/><text class="xs" x="851.4" y="99" text-anchor="middle">30분</text>
+        <line class="tick" x1="960" y1="80" x2="960" y2="86"/><text class="xs" x="960" y="99" text-anchor="middle">35분</text>
+      </g>
+      <text class="b" x="16" y="152">팀장 · 단독 감시</text><text class="xs" x="16" y="170">마지막 감시 신호 뒤</text>
+      <rect class="f-okwash" x="200" y="136" width="709.3" height="28" rx="4"/>
+      <text class="sm b t-ok" x="554.7" y="155" text-anchor="middle">감시 중으로 보임</text>
+      <rect class="f-empty" x="909.3" y="136" width="50.7" height="28" rx="4"/>
+      <text class="xs on-seat" x="934.7" y="154" text-anchor="middle">사라짐</text>
+      <g>
+        <line class="tick" x1="200" y1="166" x2="200" y2="172"/><text class="xs" x="200" y="185" text-anchor="middle">0분</text>
+        <line class="tick" x1="504" y1="166" x2="504" y2="172"/><text class="xs" x="504" y="185" text-anchor="middle">30분</text>
+        <line class="tick" x1="808" y1="166" x2="808" y2="172"/><text class="xs" x="808" y="185" text-anchor="middle">60분</text>
+        <line class="tick" x1="909.3" y1="166" x2="909.3" y2="172"/><text class="xs" x="903" y="185" text-anchor="end">70분</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>두 줄은 눈금이 다릅니다(위 35분, 아래 75분). 팀장(<code>/dflow-team</code>)은 늦어도 30분마다, 단독 감시(<code>/dflow-poll</code>)는 기본 5분마다 감시 신호를 보냅니다. 「결정 대기」는 시간이 지나도 무응답으로 바뀌지 않습니다.</figcaption>
+  </figure>
+  <ul>
+    <li><span class="pill p-blocked">결정 대기</span>는 에이전트가 직접 "사람 결정이 필요하다"고 알린 상태입니다. 주로 <code>/dflow-team</code> 팀원이 보냅니다. 답은 웹이 아니라 <b>그 작업을 돌리는 PC의 세션</b>에서 합니다.</li>
+    <li>수동 <code>/dflow-dev</code>는 질문을 PC 화면에 바로 띄웁니다. 답을 기다리는 동안 신호가 없으니 5분 뒤 「무응답」으로 보일 수 있습니다. PC 앞에서 답하면 다시 「업무 중」이 됩니다.</li>
+    <li>훅을 설치하지 않으면 단계가 끝날 때의 진행 보고 말고는 신호가 없어, 긴 단계 중에 「무응답」이 됩니다(<a href="#hook">3장 C4</a>).</li>
+  </ul>
+
+  <h3 id="why-waiting">맡겼는데 왜 아직 「대기」일까 — 사유 칸은 이 순서로 정해집니다</h3>
+  <figure class="fig">
+    <div class="dtree">
+      <div class="dq"><div class="q">이 작업을 <b>위임</b>했나요?</div><div class="no">아니오 →</div><div class="r"><span><span class="pill p-why">위임 필요</span></span><span>위임 체크를 켭니다.</span></div></div>
+      <div class="dyes">예 ↓</div>
+      <div class="dq"><div class="q"><b>선행 작업</b>이 끝났나요? <small>프로젝트 설정의 「선행 작업 기준」대로 봅니다.</small></div><div class="no">아니오 →</div><div class="r"><span><span class="pill p-why">선행 대기</span> <small>막힘</small></span><span>선행 작업을 먼저 끝냅니다.</span></div></div>
+      <div class="dyes">예 ↓</div>
+      <div class="dq"><div class="q">담당자 계정의 <b>감시 에이전트</b>(<code>/dflow-poll</code> 또는 <code>/dflow-team</code>)가 켜져 있나요?</div><div class="no">아니오 →</div><div class="r"><span><span class="pill p-why">에이전트 꺼짐</span> <small>막힘</small></span><span>수동 <code>/dflow-dev</code>만 쓰면 착수 전까지 늘 이렇게 보입니다. 정상입니다.</span></div></div>
+      <div class="dyes">예 ↓</div>
+      <div class="dq"><div class="q">그 감시 에이전트에 <b>빈자리</b>가 있나요?</div><div class="no">아니오 →</div><div class="r"><span><span class="pill p-why">에이전트 바쁨</span></span><span>자리가 나면 저절로 시작합니다.</span></div></div>
+      <div class="dyes">예 ↓</div>
+      <div class="dend"><span class="pill p-soft">착수 대기</span> 다음 확인 주기에 가져갑니다.</div>
+    </div>
+    <figcaption>위임·승인 화면 위쪽의 「막힘」 숫자에는 사람이 손써야 풀리는 「선행 대기」와 「에이전트 꺼짐」만 셉니다. 사유 칩을 누르면 줄 아래에 설명이 펼쳐집니다.</figcaption>
+  </figure>
+</section>
